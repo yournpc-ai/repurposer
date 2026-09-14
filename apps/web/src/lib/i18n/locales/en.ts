@@ -1058,6 +1058,16 @@ const en = {
       transcript: "Transcript",
       researchBrief: "Research brief",
       document: "Document",
+      // 词表 v3 fallback labels (ADR-076, C1 休眠键): a node's TYPE name
+      // when it carries no builder/LLM summary — generic medium words,
+      // never business names (业务身份 = spec.summary / spec.tool 的座位).
+      nodeType: {
+        text: "Text",
+        table: "Table",
+        image: "Image",
+        video: "Video",
+        audio: "Audio",
+      },
       // 状态原地表达 (ADR-057 §5 — state speaks in place, the caption's
       // right slot stays empty): the un-run node's dashed region reads its
       // own quotation; queued / skipped / failed / stale are quiet labels.

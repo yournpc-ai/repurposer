@@ -32,6 +32,11 @@ const edgeTypes = { flow: FlowEdge }
  * class names the product medium (graph_fill._frame_class_of — clip family
  * = media, text family = prose). */
 function productionPort(n: FlowNode): OutPortType {
+  // 词表 v3 媒介直出 (ADR-076, C1 休眠兼容 — the server stamps no new-type
+  // rows yet): the node type IS its production medium; text/table read
+  // prose, the three media name themselves. Legacy branches unchanged.
+  if (n.kind === "video" || n.kind === "audio" || n.kind === "image") return n.kind
+  if (n.kind === "text" || n.kind === "table") return "text"
   if (n.kind === "asset") {
     const t = n.asset?.type ?? (n.spec?.asset_type as string | undefined)
     if (t === "audio") return "audio"

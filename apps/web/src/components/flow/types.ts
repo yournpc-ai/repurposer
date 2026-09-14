@@ -94,6 +94,9 @@ export interface FlowNode {
     params?: Record<string, unknown> | null
     role?: string | null
     text?: string | null
+    /** 能力原型 (ADR-076 词表 v3): generator / editor / manual — the
+     * program region's form; absent on pre-v3 rows. */
+    prototype?: "generator" | "editor" | "manual"
     [key: string]: unknown
   }
   /** The node's product region: its joined visible product rows (created_at

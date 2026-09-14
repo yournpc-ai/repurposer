@@ -204,12 +204,16 @@ export function ResultsCanvas({
           order: i,
         }
       }
-      // generator / processor / agent — the graph card.
+      // generator / processor / agent — the graph card. 词表 v3 媒介值
+      // (ADR-076, C1 休眠) falls through here too: kind passthrough, the
+      // card dispatch re-derives the anatomy; the label falls back to the
+      // medium's own word (nodeType.*, legacy kinds miss the key and land
+      // on the default — 业务身份 = spec.summary 的座位, ADR-058 二源律).
       const outputs = n.outputs ?? []
       return {
         id: n.id,
         kind: n.kind,
-        label: spec.summary ?? n.kind,
+        label: spec.summary ?? t(`results.canvas.nodeType.${n.kind}`, { defaultValue: n.kind }),
         status: n.state,
         spec,
         outputs,
@@ -496,7 +500,14 @@ export function ResultsCanvas({
       nodes.filter(
         (n) =>
           n.status === "draft" &&
-          (n.kind === "generator" || n.kind === "processor" || n.kind === "agent"),
+          // 词表 v3 过渡并集 (ADR-076, C1 休眠): v3 rows by capability
+          // prototype (only generator/editor consume); the legacy three
+          // kinds stay the fallback for pre-v3 rows.
+          (n.spec?.prototype === "generator" ||
+            n.spec?.prototype === "editor" ||
+            n.kind === "generator" ||
+            n.kind === "processor" ||
+            n.kind === "agent"),
       ),
     [nodes],
   )
@@ -595,11 +606,18 @@ export function ResultsCanvas({
         }
       }
     }
-    // Only the runnable kinds carry a price — asset/document nodes never
-    // re-run (and in our topology are never downstream of a generator).
+    // Only the runnable nodes carry a price (词表 v3 过渡并集, ADR-076:
+    // prototype generator/editor 或 legacy 三 kind) — asset/document/manual
+    // nodes never re-run (and in our topology are never downstream of a
+    // generator).
     const affected = [...seen].flatMap((id) => {
       const n = nodeById.get(id)
-      return n && (n.kind === "generator" || n.kind === "processor" || n.kind === "agent")
+      return n &&
+        (n.spec?.prototype === "generator" ||
+          n.spec?.prototype === "editor" ||
+          n.kind === "generator" ||
+          n.kind === "processor" ||
+          n.kind === "agent")
         ? [n]
         : []
     })

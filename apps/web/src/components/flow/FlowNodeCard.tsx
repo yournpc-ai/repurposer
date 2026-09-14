@@ -1539,8 +1539,15 @@ function GraphCard({
           // (the confirmation pins its product as the revision focus);
           // a queued/running node is executing its program (the wiring op
           // rejects it too), a draft has no product to pin (K5 owns it).
+          // ADR-076 过渡闸门 (one truth with the write door's EditPromptOp):
+          // the executing body's presence (spec.tool) marks an editable
+          // program — a tool-less document never offers the wash; the legacy
+          // two-kind fallback covers pre-v3 unstamped rows. 直改暂停期
+          // (b367e94) 只驱动 hover wash 诚实.
           editable={
-            (node.kind === "generator" || node.kind === "agent") &&
+            (!!node.spec?.tool ||
+              node.kind === "generator" ||
+              node.kind === "agent") &&
             outputs.length > 0 &&
             node.status !== "queued" &&
             node.status !== "running"
@@ -1730,7 +1737,13 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
   if (bornIndex !== undefined) bornLatchRef.current = bornIndex
   const born = bornLatchRef.current
   const isGraphCard =
-    node.kind === "generator" || node.kind === "processor" || node.kind === "agent"
+    node.kind === "generator" ||
+    node.kind === "processor" ||
+    node.kind === "agent" ||
+    // 词表 v3 媒介三值 (ADR-076, C1 休眠): the media card by type.
+    node.kind === "video" ||
+    node.kind === "image" ||
+    node.kind === "audio"
   return (
     <div
       className={cn(
@@ -1757,7 +1770,9 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
       >
       {node.kind === "step" ? (
         <StepCard node={node} />
-      ) : node.kind === "document" ? (
+      ) : node.kind === "document" || node.kind === "text" || node.kind === "table" ? (
+        // 词表 v3 (ADR-076, C1 休眠): text/table derive the 全文卡 anatomy —
+        // the table card's own anatomy lands with the UI batch (C5).
         <DocumentCard node={node} draftConfirm={draftConfirm} />
       ) : isGraphCard ? (
         <GraphCard

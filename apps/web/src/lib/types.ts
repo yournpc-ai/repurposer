@@ -260,7 +260,23 @@ export interface WorkflowStep {
  * orthogonal dimension; edges are typed flows (the port law: in = the
  * consumption region's bottom-left, out = the production region's
  * top-right). */
-export type GraphNodeKind = "asset" | "document" | "generator" | "processor" | "agent"
+// 词表 v3 过渡并集 (ADR-076, C1 休眠兼容): the legacy five kinds stay until
+// the server stamps the new vocabulary; the five MEDIUM values are generic
+// workflow-node concepts (never business words — 业务身份 = spec.summary +
+// spec.tool). Card anatomy derives from type directly (text/table → the
+// document card, image/video/audio → the media card); the program region
+// derives from spec.prototype.
+export type GraphNodeKind =
+  | "asset"
+  | "document"
+  | "generator"
+  | "processor"
+  | "agent"
+  | "text"
+  | "table"
+  | "image"
+  | "video"
+  | "audio"
 
 export type GraphNodeState =
   | "draft"
@@ -305,6 +321,11 @@ export interface GraphNode {
     title?: string | null
     output_ids?: string[]
     frame_class?: string | null
+    /** 能力原型 (ADR-076, stamped at birth; absent on pre-v3 rows):
+     * generator = 散文程序 (the PROMPT region carries the user's verbatim
+     * words) / editor = 参数程序 (the lever row) / manual = no program
+     * region. Drives the program region's form, never execution semantics. */
+    prototype?: "generator" | "editor" | "manual"
     [key: string]: unknown
   }
   /** 画布定居取景: the settled frame {x, y, w, h} — server-assigned once,

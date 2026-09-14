@@ -1007,6 +1007,16 @@ const zh: Resources = {
       transcript: "转写稿",
       researchBrief: "调研简报",
       document: "文档",
+      // 词表 v3 回退标签（ADR-076，C1 休眠键）：节点没有 builder/LLM 命名时
+      // 读 TYPE 名——通用媒介词，永不是业务名（业务身份 = spec.summary /
+      // spec.tool 的座位）。
+      nodeType: {
+        text: "文本",
+        table: "表格",
+        image: "图片",
+        video: "视频",
+        audio: "音频",
+      },
       // 状态原地表达（ADR-057 §5——状态在卡内说话，caption 右槽恒空）：未运行
       // 节点虚线空区读自己的估价；排队 / 跳过 / 失败 / 可重跑是安静标签。
       draftBody: "运行后生成",

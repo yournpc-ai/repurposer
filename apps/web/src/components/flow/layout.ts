@@ -23,6 +23,15 @@ export const FLOW_NODE_SIZE: Record<FlowNodeKind, { width: number; height: numbe
   generator: { width: 280, height: 268 },
   processor: { width: 280, height: 268 },
   agent: { width: 340, height: 268 },
+  // 词表 v3 媒介五值 (ADR-076, C1 休眠 — the Record's completeness forces
+  // these rows; the graph canvas's server-settled frame supersedes them
+  // regardless): text/table inherit the document lane (全文卡 anatomy),
+  // image/video/audio the legacy generator card's box (media anatomy).
+  text: { width: 340, height: 280 },
+  table: { width: 340, height: 280 },
+  image: { width: 280, height: 268 },
+  video: { width: 280, height: 268 },
+  audio: { width: 280, height: 268 },
 }
 
 /** The results canvas's product card (ADR-041 D5 大卡, 2026-08-17 二轮走查
@@ -259,7 +268,7 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
         : PRODUCT_LABEL_PX + 190 + PRODUCT_TOOLBAR_PX,
     }
   }
-  if (node.kind === "document") {
+  if (node.kind === "document" || node.kind === "text" || node.kind === "table") {
     // 全文卡律 + 封顶滚动律: height = the full text's need CAPPED at
     // DOCUMENT_MAX_H — the body scrolls past the cap, so the render never
     // outgrows the reservation (new frames are born with exactly this via
@@ -267,13 +276,15 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
     // taller than the cap — extra whitespace, never overlap). The confirm
     // anatomy is reserved only while the book is actually draft (post-Start
     // the card fills less — the frame's +88 is a reservation, not a mandate).
+    // 词表 v3 (ADR-076, C1 休眠): text/table take this document anatomy.
     const text = (node.spec?.text as string | undefined) ?? ""
     const confirm = node.spec?.role === "task_book" && node.status === "draft"
     // Floor + cap (DOCUMENT_MIN_H / MAX_H, one law with the server mirror):
     // the body scrolls past the cap; short texts fill the floor with air.
     return { width, height: Math.min(Math.max(documentTextHeight(text, confirm), DOCUMENT_MIN_H), DOCUMENT_MAX_H) }
   }
-  // generator / processor / agent: product region + program region + bar.
+  // generator / processor / agent + 词表 v3 媒介三值 (video/image/audio,
+  // C1 休眠): product region + program region + bar.
   const outputs = node.outputs ?? []
   if (outputs.length === 0) {
     // Draft / queued / running / quiet-done body (the dashed region reads
