@@ -63,6 +63,7 @@ from app.models.tables import Asset, GraphEdge, GraphNode, Output, Project, Work
 from app.pipeline import graph_fill
 from app.pipeline.graph_fill import (
     _fill_key_for_step,
+    _split_station_estimate,
     _stamp_graph_core,
     stamp_transcript_node,
     sync_graph_node_for_step,
@@ -820,6 +821,136 @@ async def test_materialize_folds_into_the_translate_family(monkeypatch):
         for e in db.edges
     )
     assert not [e for e in db.edges if str(e.from_node) == str(fake_producer)]
+
+
+# ---- 两站估价归位 (批 A4/C3, 评审修正 P0-D) ----------------------------------
+
+
+def test_station_estimate_split_shapes():
+    """token 段归 doc / units 段归 asm / None 直传: translate 的纯 token
+    报价 → doc 全量 + asm None (「估价随运行」); dub 的混合体 → token 段
+    + units 段 (voice_clones 是配音产物的声纹单位)."""
+    token_only = {"prompt_tokens": [100, 200], "completion_tokens": [50, 80], "units": {}}
+    doc, asm = _split_station_estimate(token_only)
+    assert doc == token_only
+    assert asm is None
+    hybrid = {
+        "prompt_tokens": [10, 20],
+        "completion_tokens": [30, 40],
+        "units": {"tts_chars": 500.0, "voice_clones": 1.0},
+    }
+    doc, asm = _split_station_estimate(hybrid)
+    assert doc == {"prompt_tokens": [10, 20], "completion_tokens": [30, 40], "units": {}}
+    assert asm == {
+        "prompt_tokens": [0, 0],
+        "completion_tokens": [0, 0],
+        "units": {"tts_chars": 500.0, "voice_clones": 1.0},
+    }
+    assert _split_station_estimate(None) == (None, None)
+
+
+def test_station_split_folds_back_to_the_step_level_fold():
+    """hold 不变性 (铁律): step.estimate 零改动 — 两站拆分后的两段 fold 回
+    原整份 (draft 确认拍总额不破, §3.5.5-6; voice_clones min-1 钳制同律)."""
+    from app.pipeline.graph import fold_estimates
+
+    translate_est = {"prompt_tokens": [100, 200], "completion_tokens": [50, 80], "units": {}}
+    dub_est = {
+        "prompt_tokens": [10, 20],
+        "completion_tokens": [30, 40],
+        "units": {"tts_chars": 500.0, "voice_clones": 1.0},
+    }
+    whole = fold_estimates([translate_est, dub_est])
+    parts = []
+    for est in (translate_est, dub_est):
+        parts.extend(_split_station_estimate(est))
+    assert fold_estimates(parts) == whole
+
+
+@pytest.mark.asyncio
+async def test_two_station_estimate_seats_and_requote_on_reuse():
+    """两站各归其座: stamp 时 doc 站揣 token 段 (capture-0 账面 — units 恒
+    {}), asm 站揣 units 段或 None; reuse 重盖章时 doc 的 estimate 同步重报
+    (与 asm 的 estimate 刷新同律)."""
+    project = Project(id=_PROJECT_ID)
+    run = WorkflowRun(id=uuid4(), project_id=_PROJECT_ID, context={})
+    # translate: 纯 token 报价 → doc 全量, asm None.
+    translate = WorkflowStep(
+        id=uuid4(),
+        kind="translate_clip",
+        seq=1,
+        spec={"target_language": "fr"},
+        estimate={"prompt_tokens": [100, 200], "completion_tokens": [50, 80], "units": {}},
+    )
+    translate.inputs = []
+    db = _StubDb(steps=[translate], assets=[_asset()])
+    await _stamp_graph_core(
+        db, project, [translate], run=run, ui_language="en", draft=False, book_text=None
+    )
+    asm = next(n for n in db.nodes if n.kind == "video")
+    doc = next(n for n in db.nodes if n.kind == "table")
+    assert doc.spec["estimate"] == translate.estimate
+    assert doc.spec["estimate"]["units"] == {}  # capture-0 账面结构
+    assert asm.spec["estimate"] is None  # 「估价随运行」(ADR-063 诚实面)
+    # dub: 混合体 → doc = token 段, asm = units 段 (voice_clones 归 asm).
+    dub = WorkflowStep(
+        id=uuid4(),
+        kind="dub_clip",
+        seq=2,
+        spec={"target_language": "de"},
+        estimate={
+            "prompt_tokens": [10, 20],
+            "completion_tokens": [30, 40],
+            "units": {"tts_chars": 500.0, "voice_clones": 1.0},
+        },
+    )
+    dub.inputs = [str(translate.id)]
+    db2 = _StubDb(nodes=list(db.nodes), edges=list(db.edges), steps=[dub], assets=[])
+    await _stamp_graph_core(
+        db2, project, [dub], run=run, ui_language="en", draft=False, book_text=None
+    )
+    dub_asm = next(
+        n for n in db2.nodes
+        if n.kind == "video" and (n.spec or {}).get("tool") == "dub_clip"
+    )
+    dub_doc = next(
+        n for n in db2.nodes
+        if n.kind == "table" and (n.spec or {}).get("role") == "dub_script"
+    )
+    assert dub_doc.spec["estimate"] == {
+        "prompt_tokens": [10, 20], "completion_tokens": [30, 40], "units": {}
+    }
+    assert dub_asm.spec["estimate"] == {
+        "prompt_tokens": [0, 0], "completion_tokens": [0, 0],
+        "units": {"tts_chars": 500.0, "voice_clones": 1.0},
+    }
+    # reuse 重报: 同 fill_key 再盖章 — doc 的 estimate 随新编译重报 (token
+    # 段刷新; 账面结构恒 capture-0), asm 复用分支同样揣拆分后的 units 段.
+    dub_v2 = WorkflowStep(
+        id=uuid4(),
+        kind="dub_clip",
+        seq=2,
+        spec={"target_language": "de"},
+        estimate={
+            "prompt_tokens": [12, 22],
+            "completion_tokens": [32, 42],
+            "units": {"tts_chars": 600.0, "voice_clones": 1.0},
+        },
+    )
+    dub_v2.inputs = []
+    db3 = _StubDb(
+        nodes=list(db2.nodes), edges=list(db2.edges), steps=[dub_v2], assets=[]
+    )
+    await _stamp_graph_core(
+        db3, project, [dub_v2], run=run, ui_language="en", draft=False, book_text=None
+    )
+    assert dub_doc.spec["estimate"] == {
+        "prompt_tokens": [12, 22], "completion_tokens": [32, 42], "units": {}
+    }
+    assert dub_asm.spec["estimate"] == {
+        "prompt_tokens": [0, 0], "completion_tokens": [0, 0],
+        "units": {"tts_chars": 600.0, "voice_clones": 1.0},
+    }
 
 
 # ---- sync back-write: v3 文本回写 + 两站双站镜像 (批 C2b) ---------------------

@@ -855,7 +855,19 @@ async def _stamp_graph_core(
             (s for s in fam_steps if s.kind not in _FOLDED_KINDS and s.kind != "verify"),
             fam_steps[0],
         )
-        estimate = _family_estimate(fam_steps)
+        # The doc-station declaration drives two per-family branches below
+        # (the companion block + the estimate split) — resolve it once.
+        head_cls = NODE_KINDS.get(head.kind)
+        doc_role = str(head_cls.doc_station or "") if head_cls is not None else ""
+        family_estimate = _family_estimate(fam_steps)
+        # 两站估价拆分 (批 A4/C3, 评审修正 P0-D): doc 站 = token 段 (译者就是
+        # 文档站的工序), asm 站 = units 段或 None (translate 的 asm 编译期
+        # None = 「估价随运行」; voice_clones 归 asm——配音产物的声纹单位).
+        # step.estimate 一律不动 — create_run 的 hold fold 步骤级报价不变.
+        doc_estimate: dict | None = None
+        estimate = family_estimate
+        if doc_role:
+            doc_estimate, estimate = _split_station_estimate(family_estimate)
         # 评审修正 P0-A (prompt 闸门随词表改判): the #doc companion is not a
         # family (文本站无 prompt 位, ADR-072 ③ — it is stamped in the
         # companion block below, never here); deterministic modifiers carry
@@ -905,8 +917,6 @@ async def _stamp_graph_core(
         # step_ids / output_ids — the persistent editable cue artifact is
         # its whole content (spec.role = the doc_station declaration).
         doc_node_id: UUID | None = None
-        head_cls = NODE_KINDS.get(head.kind)
-        doc_role = str(head_cls.doc_station or "") if head_cls is not None else ""
         if doc_role:
             doc_key = f"{key}#doc"
             existing_doc = by_fill_key.get(doc_key)
@@ -916,6 +926,12 @@ async def _stamp_graph_core(
                 # only the v3 marker refreshes (read-face mapping兜底归批 C4).
                 if (existing_doc.spec or {}).get("prototype") != "manual":
                     existing_doc.spec = {**(existing_doc.spec or {}), "prototype": "manual"}
+                # 两站估价归位 (C3): the doc's token section re-quotes with
+                # every stamp, same law as the asm's estimate refresh.
+                if (existing_doc.spec or {}).get("estimate") != doc_estimate:
+                    existing_doc.spec = {
+                        **(existing_doc.spec or {}), "estimate": doc_estimate
+                    }
             else:
                 doc_node_id = uuid4()
                 ops.append(
@@ -931,6 +947,9 @@ async def _stamp_graph_core(
                             # cue text lands mid-run and the client grows
                             # content-height inside it, never outgrowing it.
                             "frame_class": "text",
+                            # C3 两站估价: the translator's token section
+                            # lives on the doc station (capture-0 units).
+                            "estimate": doc_estimate,
                         },
                     }
                 )
@@ -1301,6 +1320,33 @@ def _family_estimate(fam_steps: list[WorkflowStep]) -> dict | None:
 
     quoted = [s.estimate for s in fam_steps if s.estimate]
     return fold_estimates(quoted) if quoted else None
+
+
+def _split_station_estimate(estimate: dict | None) -> tuple[dict | None, dict | None]:
+    """两站估价拆分 (批 A4/C3, 评审修正 P0-D): a doc-station family's folded
+    quotation splits into the DOC station's token section (the translator's
+    work — the cue rows' price; translate 全量, dub 的 prompt/completion
+    段) and the ASM station's mechanical-units section (tts_chars /
+    voice_clones — the voiced product's units). translate quotes tokens
+    only → its asm is None (the compile-time-unquotable render fan-out =
+    「估价随运行」, ADR-063 诚实面). step.estimate itself is never touched
+    — create_run's hold folds the step-level quotation (不变性), and the
+    two sections fold back to the original whole (draft 确认拍总额不破,
+    §3.5.5-6)."""
+    if not estimate:
+        return None, None
+    doc = {
+        "prompt_tokens": list(estimate.get("prompt_tokens") or [0, 0]),
+        "completion_tokens": list(estimate.get("completion_tokens") or [0, 0]),
+        "units": {},
+    }
+    units = estimate.get("units") or {}
+    asm = (
+        {"prompt_tokens": [0, 0], "completion_tokens": [0, 0], "units": dict(units)}
+        if units
+        else None
+    )
+    return doc, asm
 
 
 def _task_book_text(steps: list[WorkflowStep]) -> str | None:
