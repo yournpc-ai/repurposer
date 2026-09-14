@@ -1533,7 +1533,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Decision**:
 
-1. **节点三族 + 内部层**：画布可见节点收敛为**源（asset）/ 文档（document）/ 装配（assemble）**三族；旧五型的 generator/processor/agent 之分（= 节点内部怎么实现）退役为出生史维度，不再决定卡种。分类轴 = 流程位置 × 程序本质（无程序 / 参数程序 / 散文程序）。
+1. **节点三族 + 内部层**：画布可见节点收敛为**源（asset）/ 文档（document）/ 装配（assemble）**三族；旧五型的 generator/processor/agent 之分（= 节点内部怎么实现）退役为出生史维度，不再决定卡种。分类轴 = 流程位置 × 程序本质（无程序 / 参数程序 / 散文程序）。**（2026-09-14 ADR-076 修订：「三族」收窄为卡面解剖族——全文卡/表格卡/媒体卡；节点身份词表不取源/文档/装配三词，改 type = 媒介五值 text/table/image/video/audio，「程序本质」升格为 prototype 属性 generator/editor/manual；业务身份归 label/tool。）**
 2. **文档族两解剖**：**散文档**（transcript / 译文 / 配音稿 / post / article / research brief——文字层直改，封顶滚动 + 选区引用现成）与**表格档**（结构化行列，单元格级确定性修改）。**两层诚实模型**：文字层可改、时间轴层冻结（词级时间戳不动；时间轴错了走素材 reprocess）；改字 → 下游 stale 徽标（机制现成）。
 3. **翻译/配音两站拆分**：`translate_clip` / `dub_clip` 各拆为「文本站（文档节点：译文/配音稿，语言杠杆，**无 prompt 位**）→ 装配站（字幕/配音成片卡）」。红利：翻错一个词改文字、**只重渲染不重买翻译**；估价更诚实（翻译 token 记文档站、渲染记装配站）。
 4. **分镜表升格为表格档节点**（clips 链：transcript → 分镜表 → clips 装配卡）——回答「为什么是这三条」；用户原话挂分镜表（选段决策发生处），clips 卡纯化为装配族；单元格改 = 确定性 op（删行 = 弃选、改时间窗 = 重切）。
@@ -1543,7 +1543,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 8. **PROMPT 区 = 散文程序节点挂用户原话**：`TaskItem` 加可选 `instruction`（router 逐任务**逐字摘录**用户原话——copy verbatim 永不改写，无枚举则 null）；无原话 = 区域不出现（`compose_spec_prompt` 参数回声整体退役，legacy 行读容忍）。散文修订恒走 chat；卡面散文直改（ADR-057 K4）语义不变。
 9. **样式覆写地基**（迟早会做样式修改）：默认样式 = persona 皮肤块（ADR-038 不变）；单点覆写 = 产物/节点 spec 级 `style_overrides` 键（数据层本批留好，UI 后做，形态 = 面板/overlay 非杠杆行）。
 10. **锚点测量污染修复**：出生动画（`flow-node-born` transform）不再包端口层——NodePorts 移出动画容器（或动画结束 `updateNodeInternals`），挂载期测量失真断根。
-11. **generator 不预留地基**：其他平台的 text/generator 之分 = 作者维度；我们的文档族散文程序（+ no-material lift + writer agent 群）已吸收之，作者身份 = 出生史徽标（model_facts 同源）不是卡种。未来「纯 prompt 生媒体」= 装配族 + 散文程序，矩阵已有其格。
+11. **generator 不预留地基**：其他平台的 text/generator 之分 = 作者维度；我们的文档族散文程序（+ no-material lift + writer agent 群）已吸收之，作者身份 = 出生史徽标（model_facts 同源）不是卡种。未来「纯 prompt 生媒体」= 装配族 + 散文程序，矩阵已有其格。**（2026-09-14 ADR-076 翻案：generator/editor 地基落成——prototype 三值随 stamp 入 spec，卡面程序区按 prototype 组装（editor 卡组件层无 prompt 槽，参数回声根灭）；「作者身份不作卡种」由「业务身份归 label/tool」继承——纯 prompt 生媒体 = 媒介×generator，矩阵有其格不变。）**
 12. **MiniMax 三不抄**：「添加节点」菜单（图由 chat 生，手动布线永不开放）、多轨时间线剪辑（L3 铁律，导出剪映）、ComfyUI 工作流（开放式编排，拓扑代码定 ADR-028 不变）。
 
 **Consequences**: 批次切分 = 管线拆分批（两站 + materialize 折叠，先于 UI）→ 图模型批（book 下线 / ctx 退役 / 分镜表节点 / modifier 杠杆 / 三族 kind 词汇）→ UI 批（三族卡面 / 表格档 / 杠杆行 / 锚点修复）。prompt 面有改动（TaskItem.instruction 摘录规则）——prompt gate 必过。配方卡图形态全部改写（8 张逐张归位，见简报）；`FlowNode` kind 词汇前后端同改；legacy 数据（旧五型行 / ctx 边 / 书节点行）读容忍。**翻案注记**：ADR-057 K5（任务书 = 图上 document 节点）与 ADR-063 判词①（卡内 draft confirm）被本条 ⑤ 翻案；实施落地时 `CHAT_ARCHITECTURE.md` §5 与 `AGENT_ARCHITECTURE.md` §3/§4.5 的注记改写为现在时正文，本 ADR 保留决策史。
@@ -1605,3 +1605,26 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Consequences**: 用户的 1:1 链从 280×158 黑边条变成 340×340 正形卡（媒体面积 ~4.6 倍），真 16:9 源 400×225；无尺寸旧行外观不变。渲染契约 / prompt 面零改动（prompt gate 无新增义务）。验证归用户（compileall / tsc / 纯函数 pytest）。
 
 **Related**: ADR-057（定居取景 / 零投影——帧律与测量镜像的座位）、ADR-072（节点五型——素材节点同律的依据）、ADR-074（同日走查批——本批是其第二轮取证）
+
+------
+
+## ADR-076: 画布词表 v3——type = 媒介五值、prototype = 能力原型三值、业务身份归 label/tool
+
+**Status**: Decided (2026-09-14，用户三参照五轮收敛拍板——ChatCut 功能菜单 / ElevenLabs「添加节点」（图像·视频·音频·文本 筛选 tab + 直白业务能力词菜单项）/ MiniMax Design「添加节点」（文本/表格/图片/视频/音频 媒介列表）；施工落点 = 简报 `docs/tasks/graph-canvas-three-families.md` §3.5）
+
+**Context**: 画布三族批（ADR-072）批 A3 主体动工前的词表评审，五轮收敛：① `kind` 一词双义（`step.kind` = 工具名 N-35 vs 图节点 kind = 族）必须拆；② 节点身份词表先后两案被否——抽象案（源/文档/装配三词）「不直接」、业务案（post/captions/dubbing 业务词）「越层」——用户判词：**type 怎么可能和业务强绑定；type 是通用工作流流程节点概念，「能用于表达 xxx 业务」但本身不 named after 业务**（ElevenLabs 的媒介 tab = type 本身，菜单项 = type 上配置出的业务能力；MiniMax 的媒介列表同构互证）；③ generator/editor 之分是真实产品轴——编辑链配方卡的 PROMPT 参数回声 = editor 卡上挂了不属于它的部件——作为**能力原型**地基落成，缺省值定名 `manual`；④ `prototype` 属性名由用户亲定（不用 nature）。
+
+**Decision**:
+
+1. **三轴词表，各管一件事，谁也不越界**：
+   - **`type`**（graph_nodes 列，kind→type 改名 + 值迁移）：通用媒介概念——**`text` / `table` / `image` / `video` / `audio` 五值**（MiniMax 媒介划分；与 ADR-072 判词② 文档两解剖合体：散文档 = text、表格档 = table）。决定卡面解剖（全文卡 / 表格卡 / 媒体卡）与框架律。
+   - **`prototype`**（spec 键，stamp 写入）：能力原型——**`generator`**（散文程序：PROMPT 区 = 用户原话，散文修订）/ **`editor`**（参数程序：杠杆行 + 原话指令行）/ **`manual`**（无程序区：改动 = 直操内容本体——文字层直改 / reprocess / 删除）。决定程序区形态，**不改变执行语义**（估价折叠 / 修订通道 / 版本分页不变）。
+   - **业务身份 = label + tool**：`spec.summary`（builder/LLM 写的卡名，ADR-058 二源律①）与 `spec.tool`（执行体）承载「翻译字幕 · DE」「撰写社交帖子」——type 能表达什么业务由这层说，type 词表恒五值、永不长业务词。
+2. **映射律**（全节点落位，含 ChatCut/ElevenLabs 终局验证）：上传素材 = 媒介×manual；转写稿 = text×manual；帖子/文章/调研简报 = text×generator；译文稿/配音稿/分镜表 = table×manual（文字层直改是唯一改点）；切片/字幕成片/配音成片 = video×editor；金句卡/轮图 = image×generator；文生视频/图/音乐、MG 动画、口型同步、视频超分、对话剪辑 = 媒介×generator/editor——ChatCut 六入口与 ElevenLabs 十四入口无一格填不进。
+3. **结构红利**：`spec.frame_class` 退役（type 即框架类：text→全文框架数学、table→行数驱动、video/image→ADR-075 画幅分档；旧行 frame_class 留作读容忍）；端口法则媒介化——**video 节点恒 offers {video, audio, text}**（素材与成片同律：翻译一个已翻译的视频天然合法；金句卡谎称 offers video 的旧粒度谎言根灭），text/table offers {text}，image offers {image, text}，accepts 按 prototype 分（editor 收媒介+text、generator 收 text、manual 不收）；卡种 = type 直出、chrome = prototype 直出，无第三轴（不设 spec.card）。
+4. **词界与闸门**：`step.kind` 保留 = 工具名（N-35 不动），图节点的族词改称 `type`，双义消除；`spec.role` 降为内部出生证（transcript 级联删除 / task_book +88 框架额），不驱动卡面身份，批 B1 随书节点收编；EditPromptOp 终态闸门 = `prototype == "generator"`，过渡期（批 B4 set_param 落地前）保持 spec.tool 存在性闸门——editor 的修订路不能提前断；type 值随工具注册表声明（NodeBase 类属性 + 启动自检收编），禁平行映射表。
+5. **MiniMax 三不抄不变**（ADR-072 判词⑫）：「添加节点」菜单永不开放——type 词表的消费方 = 卡面身份 / 图标 / 端口 / i18n /（未来）能力画廊派生，不是添加入口。
+
+**Consequences**: 施工 = 简报 §3.5 的 C1→C6 批次（词表迁移含其中：列改名走 Alembic；legacy 五值行映射——asset→按 asset_type 落媒介值+manual；document+role→text；generator/processor/agent→按 tool 落媒介值+各自 prototype；三个 morph modifier→`modifier` 旧词随 B4 退役；materialize→`materialize` 过渡词随历史清理收）。翻译/配音两站的文档站恒 type=table、prototype=manual。配方画廊 generate/edit 分组徽标与能力路线（MG 动画 / 文生媒体 / 对话剪辑工具）入 PROGRESS 需求池，不占本批。收口时本文 §4.5 注记与 CHAT_ARCH §5、DIALOG_WORKFLOW §2.2 同批改现在时。
+
+**Related**: ADR-072（判词①⑪由本条修订——解剖三族保留、身份词表与 generator 地基按本条落地）/ ADR-057（图即产品对象）/ ADR-058（二源律——label 的座位）/ ADR-067（端口法则媒介化）/ ADR-075（画幅分档——video/image 的框架律）
