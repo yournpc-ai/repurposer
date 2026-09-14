@@ -512,6 +512,288 @@ class IntentResult(BaseModel):
     pending_disposition: Literal["answer", "skip", "none"] = "none"
 
 
+# ---------------------------------------------------------------------------
+# Chat tool params (ADR-077 判词② — 判决 union 的机械翻译)
+# ---------------------------------------------------------------------------
+# The verdict unions above (InferredIntent / IntentResult) translated into
+# tool-call parameters: the type field = the tool's name, the per-state
+# fields = the params. The ADR-071 ⑤ signpost INVERTS on this wire: under
+# json_object the schema never reached the model (prompt literals were the
+# only spec); under native tool_calls these models compile into the tool
+# schemas the provider sees — the Field descriptions here ARE model-facing
+# documentation, keep them in lockstep with the system templates.
+#
+# Speech moved channels: prose / summary / answer text ride the content
+# channel (it streams — the typewriter law holds natively), so these models
+# carry NO speech field. A misplaced "prose"/"type"/"kind" habit key is
+# read-tolerated at the loop boundary (agents/tool_loop.py), never here.
+# The envelope seats ride the call they belong to: brief / material_text on
+# the book-path tools, pending_disposition on the chat-path tools.
+
+
+def _tolerate_null_keys(data: Any, *keys: str) -> Any:
+    """Null-means-skip tolerance (打字机律牙①'s tool form): the model writes
+    null when it means to skip a field — dropping the key lets the default
+    apply instead of rejecting the call (a rejection burns a loop
+    iteration)."""
+    if isinstance(data, dict):
+        data = dict(data)
+        for key in keys:
+            if data.get(key) is None:
+                data.pop(key, None)
+    return data
+
+
+def _drop_bad_brief(data: Any) -> Any:
+    """校验分层律 (ADR-064) at the tool boundary: the brief ledger is
+    ADVISORY bookkeeping — if it still fails shape after its own
+    normalization, drop the field and let the call live (never spend a loop
+    iteration on bookkeeping). Logged, never silent."""
+    if isinstance(data, dict) and data.get("brief") is not None:
+        try:
+            BriefLedger.model_validate(data["brief"])
+        except Exception:
+            logger.warning(
+                "brief_ledger_dropped",
+                brief=json.dumps(data["brief"], default=str)[:500],
+            )
+            data = dict(data)
+            data["brief"] = None
+    return data
+
+
+class BookAskArgs(BaseModel):
+    """``ask_user`` params, book path — the 提问机器's one-question shape
+    (QuestionProposal minus the prose, which is the content channel now).
+    ``slot`` names the brief-ledger slot the question fills (book-path only
+    — post-run questions never backfill a brief). The envelope seats ride
+    the same call so the turn's ledger proposal and material promotion
+    arrive with the verdict, exactly once."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return _drop_bad_brief(
+            _tolerate_null_keys(data, "options", "default_path", "slot", "material_text")
+        )
+
+    question: str = Field(
+        description="The ONE question, in the interface language — the bare question, no framing, no default-path tail (those live in your spoken message)."
+    )
+    options: list[Option] = Field(
+        default_factory=list,
+        description="3 concrete one-word values (2 only for a genuinely binary choice) sourced from the user's persona/context, translated into the interface language. Empty only when no sensible options exist (a freeform ask). Freeform input always stays available alongside.",
+    )
+    allow_freeform: bool = True
+    default_path: str = Field(
+        default="",
+        description="One short clause: what you will do if the user skips. The skip must be safe.",
+    )
+    slot: Literal["topic", "audience", "tone"] | None = Field(
+        default=None,
+        description="The brief-ledger slot this question fills (the pre-run router's seat).",
+    )
+    brief: BriefLedger | None = Field(
+        default=None,
+        description="Ledger updates this turn: only the slots you have a view on, each with its source (user-stated ONLY when the user's own words literally state the value). Slots you leave out keep their stored value.",
+    )
+    material_text: str | None = Field(
+        default=None,
+        description="Verbatim source text the user explicitly declared as their own material this turn ('this is my transcript: …'). Null otherwise — a bare request is never material.",
+    )
+
+
+class PresentPlanArgs(BaseModel):
+    """``present_plan`` params, book path — the draft verdict's payload (the
+    task book docks for confirmation; it never starts a run by itself). The
+    plan-introducing echo is your spoken message, never a param."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return _drop_bad_brief(
+            _tolerate_null_keys(
+                data, "tasks", "specific_instruction", "caption_mode", "tasks_explicit", "name", "material_text"
+            )
+        )
+
+    tasks: list[TaskItem] = Field(
+        default_factory=list,
+        description="The proposed tool chain — one task per piece of work, in execution order (an English and a German post = two write_post tasks; whole-video bilingual subtitles = one translate_clip task).",
+    )
+    specific_instruction: str | None = Field(
+        default=None,
+        description="Free-form instruction distilled from the prompt.",
+    )
+    caption_mode: Literal["bilingual", "source_only", "target_only"] | None = Field(
+        default=None,
+        description="Caption mode for captioned-video runs (write_quotes / caption-bearing recipes). None = chat should ask the user; a value = the answer already recorded.",
+    )
+    tasks_explicit: bool = Field(
+        default=False,
+        description="True when the user explicitly named the work themselves; False when the chain is the default proposal.",
+    )
+    name: str = Field(
+        default="",
+        description="A compact noun phrase (2-6 words, interface language) naming the book's deliverable — it titles the run's receipt. Name the work, never the tools.",
+    )
+    brief: BriefLedger | None = Field(
+        default=None,
+        description="Ledger updates this turn: only the slots you have a view on, each with its source (user-stated ONLY when the user's own words literally state the value).",
+    )
+    material_text: str | None = Field(
+        default=None,
+        description="Verbatim source text the user explicitly declared as their own material this turn. Null otherwise.",
+    )
+
+
+class BookAnswerArgs(BaseModel):
+    """``answer`` params, book path — a purely informational reply. The
+    answer text itself is your spoken message; only the envelope seats ride
+    here."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return _drop_bad_brief(_tolerate_null_keys(data, "material_text"))
+
+    brief: BriefLedger | None = Field(
+        default=None,
+        description="Ledger updates this turn, if any (same rules as the other tools).",
+    )
+    material_text: str | None = Field(
+        default=None,
+        description="Verbatim source text the user explicitly declared as their own material this turn. Null otherwise.",
+    )
+
+
+class ProposeTasksArgs(BaseModel):
+    """``propose_tasks`` params, chat path (TaskListProposal minus summary —
+    the proposal's summary is your spoken message). Empty tasks = the legal
+    ask-back read, but prefer ask_user when one question decides it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return _tolerate_null_keys(data, "tasks", "name")
+
+    tasks: list[TaskItem] = Field(
+        default_factory=list,
+        description="The proposed tool chain — one task per piece of work, in execution order.",
+    )
+    name: str = Field(
+        default="",
+        description="A compact noun phrase (2-6 words, interface language) naming the run's deliverable. Name the work, never the tools.",
+    )
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="When the context shows a pending question: 'answer' = this message IS the question's answer; 'skip' = an explicit decline; 'none' = an interjection (the question stays pending).",
+    )
+
+
+class ApplyEditOpsArgs(BaseModel):
+    """``apply_edit_ops`` params, chat path (EditOpsProposal minus summary):
+    clip-spec-level edit operations against one existing output."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return _tolerate_null_keys(data, "ops")
+
+    target_output_id: UUID = Field(
+        description="The id of the output being edited (from the project's output list / an @-mention).",
+    )
+    ops: list[EditOp] = Field(
+        default_factory=list,
+        description="The edit operations, in the Operation Model vocabulary.",
+    )
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="Pending-question settlement for this turn: 'answer' / 'skip' / 'none'.",
+    )
+
+
+class EditGraphArgs(BaseModel):
+    """``edit_graph`` params, chat path (WiringProposal minus summary):
+    revise the persistent graph and re-fill the affected subgraph. ``ops``
+    stays loose dicts — adjudication is ``apply_wiring_ops``'s (op shape /
+    references / ports / cycles), whose own errors feed back as the
+    rejection echo."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return _tolerate_null_keys(data, "ops", "name")
+
+    ops: list[dict] = Field(
+        default_factory=list,
+        description="Wiring ops in the registry vocabulary: add_node / connect / edit_prompt / delete_node / run.",
+    )
+    name: str = Field(
+        default="",
+        description="A compact noun phrase (2-6 words, interface language) naming the revision run's deliverable.",
+    )
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="Pending-question settlement for this turn: 'answer' / 'skip' / 'none'.",
+    )
+
+
+class ChatAskArgs(BaseModel):
+    """``ask_user`` params, chat path — the same one-question shape as the
+    book path minus the brief slot (post-run questions never backfill a
+    brief)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return _tolerate_null_keys(data, "options", "default_path")
+
+    question: str = Field(
+        description="The ONE question, in the interface language — the bare question, no framing, no default-path tail."
+    )
+    options: list[Option] = Field(
+        default_factory=list,
+        description="3 concrete one-word values (2 only for a genuinely binary choice) sourced from the user's persona/context, translated into the interface language. Empty only for a freeform ask.",
+    )
+    allow_freeform: bool = True
+    default_path: str = Field(
+        default="",
+        description="One short clause: what you will do if the user skips. The skip must be safe.",
+    )
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="Pending-question settlement for this turn: 'answer' / 'skip' / 'none'.",
+    )
+
+
+class ChatAnswerArgs(BaseModel):
+    """``answer`` params, chat path (AnswerProposal minus text — the answer
+    IS your spoken message). Only the pending-question disposition rides
+    here."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="Pending-question settlement for this turn: 'answer' / 'skip' / 'none'.",
+    )
+
+
 class AnswerResponse(BaseModel):
     """Result of ``POST /chat/messages/{id}/answer``.
 
