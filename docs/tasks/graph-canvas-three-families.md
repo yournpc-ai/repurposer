@@ -126,7 +126,7 @@ writer 链：`素材 → transcript →（research brief）→ post/article(散�
 
 ### 3.5.3 批次（顺序强依赖，每 commit 自绿）
 
-**C1 — 前端休眠兼容**（零行为变化；此时服务端还没产新词）
+**C1 — 前端休眠兼容**（零行为变化；此时服务端还没产新词）✅ 已落 `1a2547e`
 - `lib/types.ts`：`GraphNodeKind` 并集加新值（过渡）；`flow/types.ts` 同步。
 - 卡分流点全部改为「spec.type 优先、kind 推导兜底」或加并集：FlowNodeCard.tsx 分流（现 1732 `isGraphCard`）/ FlowView.tsx `productionPort`（42 行——新 type 直接按媒介出锚，天然兼容，只需确认 fallback）、ResultsCanvas.tsx draft 过滤（499）与 blast 估价过滤（602）。
 - `layout.ts`：尺寸双轨（FLOW_NODE_SIZE fallback + graphNodeSize 内容驱动）都加新 type 分支。
@@ -134,7 +134,7 @@ writer 链：`素材 → transcript →（research brief）→ post/article(散�
 - i18n 先行（休眠键）：type 五值的 fallback 标签 + prototype 相关键，en.ts → zh.ts 镜像。
 - 绿：`cd apps/web && npx tsc --noEmit` 零错。
 
-**C2a — 写门门层先行**（零 stamp 行为变化）
+**C2a — 写门门层先行**（零 stamp 行为变化）✅ 已落 `6d24a4f`
 - graph_store：`AddNodeOp.kind` 校验从五值 Literal 放开（新 type 值 + legacy 五值容忍——可改注册表驱动）；`_NODE_PORTS` 按 type(+prototype) 重写并保留 legacy 五型条目；**document/text 类型 accepts 过渡性含 ctx**（任务书→writer 的 ctx 边否则令整 stamp 批 422——本批最高危交互点，显式测）；EditPromptOp 闸门改「spec.tool 存在 或 kind∈(generator,agent) 旧行兜底」（无 tool 的文档恒拒）。
 - **graph_revise.py:46**：`task_for_graph_node` 的跳过规则从 `kind in ("asset","document")` 改为「asset 或 无 spec.tool」——writer 升 text 型后 chat 修订 run 桥不断（**评审修正 P0-B**）。
 - 门层测试三族化 + legacy 容忍用例。
