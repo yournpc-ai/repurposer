@@ -46,11 +46,16 @@ Covered:
   stack inside their shared column, settled history never moves; pinned-id
   adds wire same-batch connects (born with full edge knowledge) and id
   collisions are rejected
-- 词表 v3 门层 (ADR-076, C2a): the transition kind union (medium five +
-  legacy five), v3 port table (text accepts ctx — the task-book→writer
-  ctx edge lands), legacy rows still derive into v3 nodes, EditPromptOp's
-  transition gate (tool presence or legacy kind fallback — tool-less
-  documents rejected), task_for_graph_node's execution-truth skip (P0-B)
+- 词表 v3 门层 (ADR-076, C2a→C4): the v3 birth vocabulary (medium five +
+  server-internal asset/document; legacy generator/processor/agent dead at
+  the schema boundary since C4), v3 port table (text accepts ctx — the
+  task-book→writer ctx edge lands), legacy rows still derive into v3 nodes,
+  EditPromptOp's transition gate (tool presence or legacy kind fallback —
+  tool-less documents rejected), task_for_graph_node's execution-truth skip
+  (P0-B)
+- _read_face (C4 读面 legacy 映射): asset→媒介×manual / document→text×manual
+  / legacy generator·processor·agent 按 spec.tool 落 (writer 卡 spec.text
+  从最新 output 合成) / modifier·materialize 过渡词 / 新行直传
 """
 
 from uuid import uuid4
@@ -220,8 +225,8 @@ async def test_add_node_with_after_derives_edge_state_layout():
         db,
         _PROJECT_ID,
         # ``after`` is connect's shorthand — the edge's type derives off the
-        # two ends' ports (a video asset → a generator = the video flow).
-        [{"op": "add_node", "kind": "generator", "spec": {"prompt": "p"}, "after": [asset.id]}],
+        # two ends' ports (a video asset → a video node = the video flow).
+        [{"op": "add_node", "kind": "video", "spec": {"prompt": "p"}, "after": [asset.id]}],
     )
     assert len(delta.affected) == 1
     newborn = next(n for n in db.added if isinstance(n, GraphNode) and n.id == delta.affected[0])
@@ -442,7 +447,7 @@ async def test_disconnect_a_same_batch_newborn_edge_just_drops_it():
         db,
         _PROJECT_ID,
         [
-            {"op": "add_node", "id": newborn_id, "kind": "generator", "spec": {"prompt": "p"}, "after": [a.id]},
+            {"op": "add_node", "id": newborn_id, "kind": "video", "spec": {"prompt": "p"}, "after": [a.id]},
             {"op": "disconnect", "from_node": a.id, "to_node": newborn_id, "edge_type": "video"},
         ],
     )
@@ -1174,7 +1179,7 @@ async def test_add_node_pinned_id_wires_same_batch_born_with_edge_knowledge():
         [
             {"op": "add_node", "id": book_id, "kind": "document",
              "spec": {"role": "task_book", "text": "1 LinkedIn post · English"}},
-            {"op": "add_node", "id": writer_id, "kind": "generator",
+            {"op": "add_node", "id": writer_id, "kind": "text",
              "spec": {"fill_key": "write_post#post#0", "frame_class": "text"}},
             {"op": "connect", "from_node": book_id, "to_node": writer_id, "edge_type": "ctx"},
         ],
@@ -1195,7 +1200,7 @@ async def test_add_node_pinned_id_collision_rejected():
         await apply_wiring_ops(
             db,
             _PROJECT_ID,
-            [{"op": "add_node", "id": existing.id, "kind": "generator", "spec": {}}],
+            [{"op": "add_node", "id": existing.id, "kind": "text", "spec": {}}],
         )
 
 
@@ -1266,7 +1271,7 @@ def test_settle_frames_never_moves_settled_history():
 
 @pytest.mark.asyncio
 async def test_add_node_accepts_the_v3_medium_vocabulary():
-    """The door's transition kind union: the five medium values land as
+    """The door's v3 birth vocabulary: the five medium values land as
     first-class nodes, and a legacy video asset's birth edges derive into
     them by the same port law (concrete-first)."""
     asset = _node("asset", state="done", spec={"asset_type": "video"})
@@ -1293,11 +1298,16 @@ async def test_add_node_accepts_the_v3_medium_vocabulary():
 
 
 @pytest.mark.asyncio
-async def test_add_node_rejects_a_kind_outside_the_transition_union():
-    db = _StubDb()
-    with pytest.raises(ValidationError):
-        await apply_wiring_ops(db, _PROJECT_ID, [{"op": "add_node", "kind": "hologram"}])
-    assert db.flush_count == 0
+async def test_add_node_rejects_a_kind_outside_the_v3_vocabulary():
+    """C4 门收窄: the birth vocabulary is the five media values + the two
+    server-internal words (asset / document) — the legacy generator /
+    processor / agent trio is dead at the schema boundary (their tolerance
+    entries stay only in the port table for old-row edge derivation)."""
+    for dead in ("hologram", "generator", "processor", "agent"):
+        db = _StubDb()
+        with pytest.raises(ValidationError):
+            await apply_wiring_ops(db, _PROJECT_ID, [{"op": "add_node", "kind": dead}])
+        assert db.flush_count == 0
 
 
 @pytest.mark.asyncio
@@ -1402,3 +1412,80 @@ def test_task_for_graph_node_skips_by_the_execution_truth():
     assert task_for_graph_node(_node("document", spec={"role": "task_book"})) is None
     assert task_for_graph_node(_node("text", spec={"role": "transcript"})) is None
 
+
+
+# ---- _read_face (C4 读面 legacy 映射) -----------------------------------------
+
+
+def test_read_face_passes_v3_rows_through():
+    from app.pipeline.routes.projects import _read_face
+
+    spec = {"fill_key": "translate_clip#fr#False#False", "tool": "translate_clip",
+            "prototype": "editor", "doc_node_id": "x"}
+    assert _read_face("video", spec, []) == ("video", spec)
+    table_spec = {"fill_key": "k#doc", "role": "translation", "prototype": "manual"}
+    assert _read_face("table", table_spec, []) == ("table", table_spec)
+
+
+def test_read_face_maps_assets_by_asset_type():
+    from app.pipeline.routes.projects import _read_face
+
+    kind, spec = _read_face("asset", {"asset_id": "a", "asset_type": "video"}, [])
+    assert (kind, spec["prototype"]) == ("video", "manual")
+    assert spec["asset_id"] == "a"  # the dossier join key rides along
+    assert _read_face("asset", {"asset_type": "voice_sample"}, [])[0] == "audio"
+    assert _read_face("asset", {"asset_type": "slides"}, [])[0] == "video"
+    assert _read_face("asset", {"asset_type": "image"}, [])[0] == "image"
+    assert _read_face("asset", {"asset_type": "transcript"}, [])[0] == "text"
+    assert _read_face("asset", {}, [])[0] == "text"  # unknown → safest reading
+
+
+def test_read_face_maps_documents_to_text_manual():
+    from app.pipeline.routes.projects import _read_face
+
+    kind, spec = _read_face("document", {"role": "transcript", "text": "t"}, [])
+    assert (kind, spec["prototype"], spec["role"]) == ("text", "manual", "transcript")
+    assert _read_face("document", {"role": "task_book"}, [])[0] == "text"
+    assert _read_face("document", {}, [])[0] == "text"  # role-less → same
+
+
+def test_read_face_maps_legacy_executors_by_tool_not_kind():
+    from app.pipeline.routes.projects import _read_face
+
+    # 键用 spec.tool 而非裸 kind — a reused legacy row's kind is stale.
+    assert _read_face("generator", {"tool": "write_post"}, [])[0] == "text"
+    assert _read_face("processor", {"tool": "write_article"}, [])[1]["prototype"] == "generator"
+    assert _read_face("agent", {"tool": "research"}, [])[0] == "text"
+    assert _read_face("generator", {"tool": "write_quotes"}, [])[0] == "image"
+    assert _read_face("generator", {"tool": "write_carousel"}, [])[1]["prototype"] == "generator"
+    assert _read_face("processor", {"tool": "select_clips"}, [])[0] == "video"
+    assert _read_face("generator", {"tool": "translate_clip"}, [])[1]["prototype"] == "editor"
+    assert _read_face("processor", {"tool": "dub_clip"}, [])[0] == "video"
+    # 过渡词: modifier 随 B4 退役, materialize 随历史清理收 — spec 原样.
+    mod_spec = {"tool": "remove_filler", "output_ids": []}
+    assert _read_face("processor", mod_spec, []) == ("modifier", mod_spec)
+    mat_spec = {"tool": "materialize_source"}
+    assert _read_face("processor", mat_spec, []) == ("materialize", mat_spec)
+    # 无 tool 回退 = text×manual (the full-text card is the safest reading).
+    assert _read_face("generator", {}, []) == ("text", {"prototype": "manual"})
+
+
+def test_read_face_synthesizes_writer_text_from_the_latest_output():
+    from app.pipeline.routes.projects import _read_face
+
+    out_old = Output(id=uuid4(), project_id=_PROJECT_ID, type="post",
+                     payload={"content": "old"})
+    out_new = Output(id=uuid4(), project_id=_PROJECT_ID, type="post",
+                     payload={"content": "the latest words"})
+    kind, spec = _read_face(
+        "generator", {"tool": "write_post", "output_ids": ["x", "y"]}, [out_old, out_new]
+    )
+    assert kind == "text"
+    assert spec["text"] == "the latest words"  # the 全文卡 face
+    # An existing spec.text (a C2b+ row's sync back-write) is never clobbered.
+    kind2, spec2 = _read_face(
+        "generator", {"tool": "write_post", "text": "stamped"}, [out_new]
+    )
+    assert spec2["text"] == "stamped"
+    # 非 writer 的 text×generator (research) 不合成.
+    assert "text" not in _read_face("agent", {"tool": "research"}, [out_new])[1]

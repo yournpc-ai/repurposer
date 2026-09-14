@@ -55,11 +55,12 @@ class AddNodeOp(BaseModel):
     island guess repaired by a second pass). Chat proposals never carry one."""
 
     op: Literal["add_node"]
-    # 词表 v3 过渡并集 (ADR-076, C2a): legacy 五值 ∪ 媒介五值 — the door
-    # accepts both vocabularies while the stamp migrates (收窄到注册表驱动
-    # 归批 C4; 列改名 kind→type 归 C5b).
+    # 词表 v3 (ADR-076, C4 收窄): 出生词表 = 媒介五值 + 服务端内部两词
+    # (asset / document — 素材与文档的出生地词, 读面映射归 _read_face)。
+    # generator/processor/agent 三死词退役出出生词表 (legacy 容忍条目只留
+    # 端口表 _NODE_PORTS — 旧行连线仍要过门; 列改名 kind→type 归 C5b)。
     kind: Literal[
-        "asset", "document", "generator", "processor", "agent",
+        "asset", "document",
         "text", "table", "image", "video", "audio",
     ]
     spec: dict[str, Any] = Field(default_factory=dict)
@@ -146,14 +147,16 @@ _OPS_ADAPTER: TypeAdapter[Any] = TypeAdapter(list[WiringOp])
 def wiring_catalog_lines() -> str:
     """The registry's self-projection as prompt lines (注册表条目扰动 =
     prompt 扰动纪律: entries stay terse + the gate enumerations ride along).
-    The chat intent surfaces consume this verbatim — K4 wires it in."""
+    The chat intent surfaces consume this verbatim — K4 wires it in. 词表
+    v3 (ADR-076, C4): the addable vocabulary is the five media values
+    (assets / documents are server-born, never proposed)."""
     return "\n".join(
         [
-            "- add_node: place a node (kind: asset|document|generator|processor|agent; "
+            "- add_node: place a node (kind: text|table|image|video|audio; "
             "spec: the node's program — prompt/params; after: upstream node ids to wire from)",
             "- connect: wire a typed flow between two nodes "
             "(edge_type: video|audio|text|ctx — ctx = the reference/context flow)",
-            "- edit_prompt: rewrite a generator/agent node's prompt",
+            "- edit_prompt: rewrite a node's prompt (nodes carrying spec.tool)",
             "- delete_node: remove a node (its edges go with it)",
             "- run: fill nodes with products (nodes optional — default = the "
             "affected subgraph; always closes over downstream)",

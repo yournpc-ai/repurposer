@@ -259,6 +259,72 @@ async def get_project_results(
     }
 
 
+# ---- 读面 legacy 映射 (词表 v3, ADR-076 批 C4) -------------------------------
+
+# The canvas-facing node vocabulary is the five media values (+ the two
+# transitional words for rows whose node species retires with 批 B4 / the
+# history sweep). DB rows never migrate (grow-only — a C2b+ re-stamp reuses
+# the old row without rewriting its kind), so the mapping happens HERE, at
+# the one read frame. Key = spec.tool (the execution truth), never the bare
+# kind — it covers reused legacy rows whose kind is stale.
+_READ_FACE_MEDIA = frozenset({"text", "table", "image", "video", "audio"})
+
+# asset_type → 媒介值 (上传素材 = 媒介×manual, ADR-076 映射律): a slides
+# deck's consumption form is video (stills chain); a pasted transcript /
+# past material reads as text.
+_ASSET_MEDIUM = {
+    "video": "video",
+    "audio": "audio",
+    "voice_sample": "audio",
+    "image": "image",
+    "slides": "video",
+    "transcript": "text",
+    "past_material": "text",
+}
+
+
+def _read_face(kind: str, spec: dict, outputs: list) -> tuple[str, dict]:
+    """Map one graph row to the canvas's v3 face: (type, spec). Pure.
+
+    - 新行直传 (媒介五值 already carry their face + prototype from the stamp).
+    - asset → its asset_type's medium × manual (the asset dossier still
+      joins on the ORM kind — the response carries it under `asset`).
+    - document (transcript / task_book / research_brief / role-less) →
+      text × manual (spec.role rides along as the internal birth certificate).
+    - generator / processor / agent → by spec.tool: writers·research·revise
+      → text×generator (writer 卡缺 spec.text 时从最新 joined output 的
+      payload.content 合成 — the 全文卡 face); quotes/carousel →
+      image×generator; clips/translate/dub → video×editor; morph modifiers
+      → ``modifier`` 旧词 (批 B4 退役); materialize → ``materialize`` 过渡词
+      (历史清理收).
+    - 无 tool 回退 = text×manual (the full-text card is the safest reading).
+    """
+    if kind in _READ_FACE_MEDIA:
+        return kind, spec
+    if kind == "asset":
+        medium = _ASSET_MEDIUM.get(str(spec.get("asset_type") or ""), "text")
+        return medium, {**spec, "prototype": "manual"}
+    if kind == "document":
+        return "text", {**spec, "prototype": "manual"}
+    tool = str(spec.get("tool") or "")
+    if tool in ("write_post", "write_article", "research", "revise_script"):
+        face = {**spec, "prototype": "generator"}
+        if tool in ("write_post", "write_article") and not face.get("text") and outputs:
+            content = ((outputs[-1].payload or {}).get("content"))
+            if isinstance(content, str) and content:
+                face["text"] = content
+        return "text", face
+    if tool in ("write_quotes", "write_carousel"):
+        return "image", {**spec, "prototype": "generator"}
+    if tool in ("select_clips", "translate_clip", "dub_clip"):
+        return "video", {**spec, "prototype": "editor"}
+    if tool in ("reframe_clip", "add_music", "remove_filler"):
+        return "modifier", spec
+    if tool == "materialize_source":
+        return "materialize", spec
+    return "text", {**spec, "prototype": "manual"}
+
+
 @router.get("/{project_id}/graph", response_model=ProjectGraphResponse)
 async def get_project_graph(
     project_id: UUID,
@@ -484,12 +550,17 @@ async def get_project_graph(
             ),
             key=lambda o: o.created_at,
         )
+        # 读面 legacy 映射 (批 C4): the canvas-facing type/spec — legacy
+        # rows map to the v3 vocabulary, new rows pass through. The ORM
+        # kind stays the domain truth everywhere above (lite patches /
+        # asset dossier join).
+        face_kind, face_spec = _read_face(node.kind, spec, node_outputs)
         resp_nodes.append(
             GraphNodeResponse(
                 id=node.id,
-                kind=node.kind,
+                kind=face_kind,
                 state=node.state,
-                spec=spec,
+                spec=face_spec,
                 layout=node.layout or {},
                 estimate_credits=estimate_credits,
                 asset=asset_resp,
