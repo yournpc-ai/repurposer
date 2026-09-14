@@ -18,7 +18,11 @@ from tenacity import (
 )
 
 from app.config import settings
-from app.providers.llm.base import LLMError, LLMSchemaError
+from app.providers.llm.base import (
+    LLMError,
+    LLMSchemaError,
+    ProviderCapabilities,
+)
 
 logger = structlog.get_logger()
 
@@ -171,6 +175,17 @@ def _raise_for_status(
 
 class MiniMaxClient:
     """MiniMax M3 API client with structured output."""
+
+    # Capability declaration (ADR-077 判词④): M3's ONLY schema-following
+    # channel is native tool_calls (spike 2026-09-11/12 — json_schema is
+    # ignored outright); the reasoning dialect is the <think>…</think>
+    # preamble plus reasoning_content deltas, normalized inside this client
+    # (_ThinkStripper, ADR-066) — upstream layers never see it.
+    capabilities = ProviderCapabilities(
+        supports_native_tools=True,
+        supports_json_schema=False,
+        reasoning_dialect="think_block",
+    )
 
     def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
         self.api_key = api_key or settings.minimax_api_key
