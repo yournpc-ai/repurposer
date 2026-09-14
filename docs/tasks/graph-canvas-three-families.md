@@ -176,7 +176,7 @@ graph_fill.py：
 - Alembic：`graph_nodes.kind` → `type`（列改名；值已在 C2b/C4 就位，本步无值迁移）；ORM + 全栈读点 + 前端 GraphNodeType 终名 + wiring_catalog_lines 的 `kind:` 词（prompt gate 重跑，用户代跑）。
 - 绿：pytest + 迁移幂等 + gate。
 
-**C6 — 画布相机批（2026-09-14 拍板排入）**
+**C6 — 画布相机批（2026-09-14 拍板排入）** ✅ 已落 `c7031a7`（间距拍板 64/16/88；replay 迁移拍板不做；实况走查归用户）
 - **聚焦转场**：FlowView 监听节点 id delta，仅用户发起节拍触发——chat 发送后 draft 图到来 = 整链 fit（复用 ViewportController settle framing）；会话中途新节点诞生 = `setCenter(x+w/2, y+h/2, {duration:~500})` **保持当前 zoom 只平移**。护栏：手势防护（用户近期拖/缩过则不抢——2026-08-19「explore 面增长不动视口」拍板的收窄不是推翻）、docked 几何面板遮挡补偿（onPanelStateChange 先例）、prefers-reduced-motion 退化瞬移、背景 refetch 永不触发。
 - **俯视 discoverability**：比例尺 pill 加回 fit icon（2026-09-05 瘦身拍板后「点击百分比=fit」是隐形知识）。
 - **间距常数收紧**：server graph_store `_GAP_MAIN`(96)/`_GAP_CROSS`(24)/`_FRESH_COLUMN_RISE`(126) ↔ client layout.ts 一条律两镜像同批改；只影响新出生帧（append-only 保序律不动）；旧项目可选 replay 迁移（e7a9c1d35b28 先例）。不引 dagre/elk（禁第二布局律）。
