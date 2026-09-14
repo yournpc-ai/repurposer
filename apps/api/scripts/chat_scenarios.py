@@ -657,14 +657,25 @@ async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
     draft_graph = await ctx.graph(pid)
     draft_nodes = [
         n for n in draft_graph["nodes"]
-        if n.get("state") == "draft" and n.get("kind") in ("generator", "processor", "agent")
+        # 词表 v3 (ADR-076, 三族批): the graph read frame carries ``type`` +
+        # ``spec.prototype`` (never the legacy card kinds) — producer draft
+        # nodes = the two working prototypes (generator/editor).
+        if n.get("state") == "draft"
+        and (n.get("spec") or {}).get("prototype") in ("generator", "editor")
     ]
     check(len(draft_nodes) >= 1, "the dock stamps the draft graph (图先展示后运行)",
           draft_graph["nodes"])
-    check(any(
-        n.get("kind") == "document" and (n.get("spec") or {}).get("role") == "task_book"
+    check(not any(
+        # B1-lite (a82e1a9, 2026-09-13, ADR-070): the task-book node is
+        # stamped server-side but filtered out of the read frame — the
+        # canvas shows the pure material flow, the confirm beat's only seat
+        # is the dock pill. This check locks the CURRENT design (an
+        # accidental un-hiding goes red); it replaces the pre-B1-lite
+        # positive "the book rides the draft graph" assertion.
+        (n.get("spec") or {}).get("role") == "task_book"
         for n in draft_graph["nodes"]
-    ), "the task-book document node rides the draft graph", draft_graph["nodes"])
+    ), "the read frame hides the task-book node (B1-lite — confirm seat = dock pill)",
+       draft_graph["nodes"])
     check(any(n.get("estimate_credits") for n in draft_nodes),
           "draft nodes carry their own quotes (逐节点估价)", draft_nodes)
     draft_ids = sorted(n["id"] for n in draft_graph["nodes"])
