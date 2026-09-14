@@ -155,24 +155,24 @@ graph_fill.py：
 - 测试（test_graph_wiring_pure.py 同 commit 改写保持绿）：端口/门三族化 + legacy 容忍（旧五型行 ↔ 新节点连线派生仍通）；fill_key 三形态补 `#doc`；两站 stamp（asm+doc、doc_node_id、doc 无 tool/prompt/step_ids）；materialize 折叠（无节点、step id 入宿主、宿主 root 恒吃素材、素材直连边）；research 单节点（双节点锁定用例重写）；writer spec.text 回写；任务书 + _document_frame 数学不动。
 - 绿：pytest + 冷启动 assert_runners_registered（family→node_type/prototype 自检追齐）。
 
-**C3 — 批 A4 两站估价归位（评审修正 P0-D：stamp 侧拆分，step.estimate 一律不动）**
+**C3 — 批 A4 两站估价归位（评审修正 P0-D：stamp 侧拆分，step.estimate 一律不动）** ✅ 已落 `51a7f86`
 - 事实基础：translate 的 estimate 现就是纯 translator token 报价（captions/node.py:75-97，无 render 成分）；fan-out render 全 NULL（ADR-063 诚实面），render_seconds 零定价；dub = estimate_mechanical 混合体（token 段 + units 段 tts_chars/voice_clones）。
 - 切口 = `_family_estimate` 层 token/units JSON 分拆：doc 族 = token 段（translate 全量、dub 的 prompt/completion 段），asm 族 = units 段或 None（translate 的 asm 编译期 None =「估价随运行」；voice_clones 归 asm——配音产物的声纹单位）。
 - **铁律**：create_run 的 hold fold 的是 step 级 estimate（orchestrator:1059）——step.estimate 零改动，hold 不变性测试锁定；fold_estimates 计量钳制（voice_clones min-1）不动。
 - 绿：pytest（两站各归其座 + reuse 时 doc 站 capture 0 账面 + hold 不变性）。
 
-**C4 — 写门收窄 + 读面映射（prompt 面 → gate 用户代跑）**
+**C4 — 写门收窄 + 读面映射（prompt 面 → gate 用户代跑）** ✅ 已落 `34ada59`（prompt gate 归用户代跑）
 - AddNodeOp 校验收窄到 v3 词表（注册表驱动：五媒介值 + 注册表声明）；`wiring_catalog_lines` 同步改写（**prompt 面 → `scripts/prompt_gate.py` 必过，判负复跑再 bisect，永不调阈值迁就**）。
 - `get_project_graph` 加纯函数 `_read_face`（可纯测）：legacy 行映射——asset→asset_type 媒介值+manual；document+role=transcript/task_book/research_brief→text；generator/processor/agent→按 spec.tool 落（writers→text+generator 且 spec.text 从最新 joined output payload.content 合成；quotes/carousel→image+generator；clips/translate/dub→video+editor；modifier→modifier 旧词；materialize→materialize 过渡词）；新行直传。键用 spec.tool 而非裸 kind——兜 C2b 后 reused 旧行的 kind 错位（fill_key 不变 → 重盖章复用旧行，列值不迁移，读面映射兜底；草稿重 dock 的 orphan sweep 最终收敛）。
 - 三 lite 补丁保留作旧数据守卫。
 - 绿：pytest + 冷启动 + prompt gate。
 
-**C5 — 前端收窄**
+**C5 — 前端收窄** ✅ 已落 `0bc56f2`
 - `GraphNodeKind`→ 新词表联合（或改名 GraphNodeType 随 C5b）；卡分流按 type + prototype（text→DocumentCard、table→暂走 DocumentCard 全文渲染（TableCard 归 UI 批）、媒介→GraphCard 路径）；程序区按 prototype 门控——**editor 卡的 prompt 区显示提前退场**（compose 回声显示侧不等 B5）；ResultsCanvas 过滤改 prototype/card 语义；清 draftTaskCount 的 materialize 死过滤。
 - **DocumentCard 最小产物尾（2026-09-14 已拍板）**：output_ids 非空时底部一条 factsbar——版本 pager + copy/download + 打开 inspector；选区引用 pill 不做（归 UI 批）。
 - 绿：tsc 零错。
 
-**C5b — 列改名 kind→type**
+**C5b — 列改名 kind→type** ✅ 已落 `3d43815`（prompt gate 重跑归用户代跑）
 - Alembic：`graph_nodes.kind` → `type`（列改名；值已在 C2b/C4 就位，本步无值迁移）；ORM + 全栈读点 + 前端 GraphNodeType 终名 + wiring_catalog_lines 的 `kind:` 词（prompt gate 重跑，用户代跑）。
 - 绿：pytest + 迁移幂等 + gate。
 
