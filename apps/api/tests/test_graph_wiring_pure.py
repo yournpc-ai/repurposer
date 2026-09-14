@@ -38,6 +38,11 @@ Covered:
   stack inside their shared column, settled history never moves; pinned-id
   adds wire same-batch connects (born with full edge knowledge) and id
   collisions are rejected
+- 词表 v3 门层 (ADR-076, C2a): the transition kind union (medium five +
+  legacy five), v3 port table (text accepts ctx — the task-book→writer
+  ctx edge lands), legacy rows still derive into v3 nodes, EditPromptOp's
+  transition gate (tool presence or legacy kind fallback — tool-less
+  documents rejected), task_for_graph_node's execution-truth skip (P0-B)
 """
 
 from uuid import uuid4
@@ -203,10 +208,11 @@ async def test_add_node_with_after_derives_edge_state_layout():
     edge = next(e for e in db.added if isinstance(e, GraphEdge))
     assert (edge.from_node, edge.to_node, edge.edge_type) == (asset.id, newborn.id, "video")
     # 定居取景 (统一摆位律): x = depth × pitch (the parent's generation 0 →
-    # the child lands one pitch right); a fresh column's first node RISES
+    # the child lands one pitch right; pitch = the widest class 400 + 96
+    # since the 2026-09-13 分档加宽批); a fresh column's first node RISES
     # above its parent (2026-09-09); existing frames never move
     # (append-only 保序律).
-    assert newborn.layout["x"] == 436
+    assert newborn.layout["x"] == 496
     assert newborn.layout["y"] == -126
     assert asset.layout == {"x": 0, "y": 0, "w": 280, "h": 260}
     # TWO flushes (ADR-059 分裂 flush 律): nodes strictly before edges — the
@@ -707,10 +713,11 @@ async def test_draft_book_born_with_full_prose_and_confirm_sized_frame():
     book = _book_node(db)
     assert book.spec["text"] == prose  # the LLM's own plan restatement, never a condensation
     # 全文卡律 frame (server mirror of layout.ts documentTextHeight): 66
-    # Latin chars → ceil(66/50) = 2 lines → 26 + 16 + 36 + 16 + 88 (the
-    # dock-time confirm allowance) = 182.
-    assert book.layout["h"] == 182
-    assert book.layout["w"] == 260
+    # Latin chars → ceil(66/67) = 1 line → 26 + 16 + 18 + 16 + 88 (the
+    # dock-time confirm allowance) = 164 → the DOCUMENT_MIN_H floor (280,
+    # 2026-09-13 增大批) binds; the lane is the widened 340 (was 260).
+    assert book.layout["h"] == 280
+    assert book.layout["w"] == 340
 
 
 @pytest.mark.asyncio
@@ -761,14 +768,23 @@ async def test_run_born_book_fills_an_empty_face_with_composition_or_run_name():
 def test_document_frame_full_text_math_cjk_latin_empty():
     from app.pipeline.graph_store import _document_frame
 
-    # CJK 100 chars → ceil(100/32) = 4 lines → 26 + 16 + 72 + 16 = 130.
-    assert _document_frame({"text": "字" * 100}) == (260, 130)
-    # Latin 200 chars → ceil(200/50) = 4 lines — same height.
-    assert _document_frame({"text": "a" * 200}) == (260, 130)
-    # Empty text → the one-line floor; the task_book role adds the confirm
-    # allowance (+88).
-    assert _document_frame({"text": ""}) == (260, 26 + 16 + 18 + 16)
-    assert _document_frame({"text": "", "role": "task_book"}) == (260, 26 + 16 + 18 + 16 + 88)
+    # 2026-09-13 增大批: the 340-wide lane, 43 CJK / 67 Latin chars per line
+    # (the 308px column), floor 280 / cap 560 (one law with layout.ts).
+    # CJK 100 chars → ceil(100/43) = 3 lines → 26 + 16 + 54 + 16 = 112 →
+    # the floor binds.
+    assert _document_frame({"text": "字" * 100}) == (340, 280)
+    # Latin 200 chars → ceil(200/67) = 3 lines — the same floor.
+    assert _document_frame({"text": "a" * 200}) == (340, 280)
+    # Above the floor the math speaks: CJK 1000 → ceil(1000/43) = 24 lines
+    # → 26 + 16 + 432 + 16 = 490; Latin 2000 → ceil(2000/67) = 30 lines →
+    # 598 → the 560 cap binds.
+    assert _document_frame({"text": "字" * 1000}) == (340, 490)
+    assert _document_frame({"text": "a" * 2000}) == (340, 560)
+    # Empty text → the floor again; the task_book role adds the confirm
+    # allowance (+88) — visible once the text's own need clears the floor:
+    # Latin 600 → ceil(600/67) = 9 lines → 26 + 16 + 162 + 16 = 220 + 88.
+    assert _document_frame({"text": ""}) == (340, 280)
+    assert _document_frame({"text": "a" * 600, "role": "task_book"}) == (340, 308)
 
 
 # ---- settle_frames_with_edges (the door's frame settle, 2026-09-08) ---------
@@ -797,7 +813,7 @@ async def test_add_node_pinned_id_wires_same_batch_born_with_edge_knowledge():
     book = next(n for n in db.nodes if n.id == book_id)
     writer = next(n for n in db.nodes if n.id == writer_id)
     assert (book.layout["x"], book.layout["y"]) == (0, 0)
-    assert writer.layout["x"] == 436
+    assert writer.layout["x"] == 496
     # A fresh column's first node rises above its parent (2026-09-09).
     assert writer.layout["y"] == -126
 
@@ -831,12 +847,13 @@ def test_settle_frames_chain_grows_right_not_down():
     settle_frames_with_edges([book, writer, verify_free_second], [], edges)
     # The book has no parents — it stays at the origin island.
     assert (book.layout["x"], book.layout["y"]) == (0, 0)
-    # Children settle one depth-pitch right: the first RISES above the book
-    # (2026-09-09), the second stacks INSIDE the shared column (same depth)
-    # under its sibling (cross gap).
-    assert writer.layout["x"] == 436
+    # Children settle one depth-pitch right (496 since the 2026-09-13 分档
+    # 加宽批: the widest class 400 + GAP_MAIN 96): the first RISES above
+    # the book (2026-09-09), the second stacks INSIDE the shared column
+    # (same depth) under its sibling (cross gap).
+    assert writer.layout["x"] == 496
     assert writer.layout["y"] == -126
-    assert verify_free_second.layout["x"] == 436
+    assert verify_free_second.layout["x"] == 496
     # The sibling stack's gap derives from the frame-class RESERVATION
     # (text = 560 since 2026-09-10 卡高内容驱动, was 440), never from the
     # node's provisional layout h — the fixture's 440 is deliberately stale
@@ -853,8 +870,8 @@ def test_settle_frames_parent_chain_one_link_per_pass():
     c = _node("processor", spec={"frame_class": "clip"}, layout={"x": 0, "y": 688, "w": 280, "h": 660})
     edges = [_edge(a.id, b.id, "ctx"), _edge(b.id, c.id, "text")]
     settle_frames_with_edges([a, b, c], [], edges)
-    assert b.layout["x"] == 436
-    assert c.layout["x"] == 2 * 436
+    assert b.layout["x"] == 496
+    assert c.layout["x"] == 2 * 496
     # The rise compounds link by link: b above a, c above b.
     assert c.layout["y"] == -252
 
@@ -871,5 +888,148 @@ def test_settle_frames_never_moves_settled_history():
     settle_frames_with_edges([book, writer], [asset], edges)
     assert asset.layout == {"x": 0, "y": 0, "w": 280, "h": 260}
     # The book rises above its settled parent; the settled frame is untouched.
-    assert (book.layout["x"], book.layout["y"]) == (436, -126)
-    assert writer.layout["x"] == 2 * 436
+    assert (book.layout["x"], book.layout["y"]) == (496, -126)
+    assert writer.layout["x"] == 2 * 496
+
+
+# ---- 词表 v3 门层 (ADR-076, C2a): 媒介五值 + legacy 容忍 ---------------------
+
+
+@pytest.mark.asyncio
+async def test_add_node_accepts_the_v3_medium_vocabulary():
+    """The door's transition kind union: the five medium values land as
+    first-class nodes, and a legacy video asset's birth edges derive into
+    them by the same port law (concrete-first)."""
+    asset = _node("asset", state="done", spec={"asset_type": "video"})
+    db = _StubDb(nodes=[asset])
+    delta = await apply_wiring_ops(
+        db,
+        _PROJECT_ID,
+        [
+            {"op": "add_node", "kind": "video",
+             "spec": {"tool": "translate_clip"}, "after": [asset.id]},
+            {"op": "add_node", "kind": "text",
+             "spec": {"tool": "write_post"}, "after": [asset.id]},
+        ],
+    )
+    assert len(delta.affected) == 2
+    by_kind = {n.kind: n for n in db.added if isinstance(n, GraphNode)}
+    edge_types = {
+        str(e.to_node): e.edge_type for e in db.added if isinstance(e, GraphEdge)
+    }
+    # asset(video) offers {video,audio,text} — the concrete video flow wins
+    # into the video node; the text node takes the concrete text flow.
+    assert edge_types[str(by_kind["video"].id)] == "video"
+    assert edge_types[str(by_kind["text"].id)] == "text"
+
+
+@pytest.mark.asyncio
+async def test_add_node_rejects_a_kind_outside_the_transition_union():
+    db = _StubDb()
+    with pytest.raises(ValidationError):
+        await apply_wiring_ops(db, _PROJECT_ID, [{"op": "add_node", "kind": "hologram"}])
+    assert db.flush_count == 0
+
+
+@pytest.mark.asyncio
+async def test_legacy_rows_still_derive_into_v3_nodes():
+    """legacy 读容忍: a legacy generator's out-flows derive into the new
+    medium nodes by the unchanged port law (旧行连线仍要过门)."""
+    gen = _node("generator")
+    video = _node("video", spec={"tool": "translate_clip"})
+    text = _node("text", spec={"tool": "write_post"})
+    db = _StubDb(nodes=[gen, video, text])
+    await apply_wiring_ops(
+        db,
+        _PROJECT_ID,
+        [
+            {"op": "connect", "from_node": gen.id, "to_node": video.id},
+            {"op": "connect", "from_node": gen.id, "to_node": text.id},
+        ],
+    )
+    edge_types = {
+        str(e.to_node): e.edge_type for e in db.added if isinstance(e, GraphEdge)
+    }
+    assert edge_types[str(video.id)] == "video"  # concrete-first
+    assert edge_types[str(text.id)] == "text"
+
+
+@pytest.mark.asyncio
+async def test_task_book_ctx_edge_lands_on_a_v3_text_writer():
+    """本批最高危交互点: 任务书→writer 的 ctx 边打到新 text 型 writer 节点
+    —— text 的 accepts 缺 ctx 会令整 stamp 批 422. document offers
+    {text,ctx}: the explicit ctx edge lands; the unnamed derivation still
+    prefers the concrete text flow."""
+    book = _node("document", spec={"role": "task_book"})
+    writer = _node("text", spec={"tool": "write_post"})
+    db = _StubDb(nodes=[book, writer])
+    await apply_wiring_ops(
+        db,
+        _PROJECT_ID,
+        [{"op": "connect", "from_node": book.id, "to_node": writer.id, "edge_type": "ctx"}],
+    )
+    assert db.added[-1].edge_type == "ctx"
+    writer2 = _node("text", spec={"tool": "write_article"})
+    db.nodes.append(writer2)
+    await apply_wiring_ops(
+        db, _PROJECT_ID, [{"op": "connect", "from_node": book.id, "to_node": writer2.id}]
+    )
+    assert db.added[-1].edge_type == "text"
+
+
+@pytest.mark.asyncio
+async def test_edit_prompt_transition_gate_tool_presence():
+    """ADR-076 过渡闸门 (批 B4 set_param 落地前 editor 修订不断粮): the
+    executing body's presence (spec.tool) marks an editable program — the
+    legacy two-kind fallback covers pre-v3 unstamped rows."""
+    # 旧行带 tool 可编辑 (a tool-bearing processor — the widened gate).
+    proc = _node("processor", state="done", spec={"tool": "translate_clip", "prompt": "old"})
+    await apply_wiring_ops(
+        _StubDb(nodes=[proc]), _PROJECT_ID,
+        [{"op": "edit_prompt", "node": proc.id, "prompt": "new"}],
+    )
+    assert proc.spec["prompt"] == "new"
+    assert proc.state == "stale"
+    # 新 text 型 writer 可编辑.
+    writer = _node("text", state="done", spec={"tool": "write_post", "prompt": "old"})
+    await apply_wiring_ops(
+        _StubDb(nodes=[writer]), _PROJECT_ID,
+        [{"op": "edit_prompt", "node": writer.id, "prompt": "new"}],
+    )
+    assert writer.spec["prompt"] == "new"
+    assert writer.state == "stale"
+    # 无 tool 的文档恒拒 — v3 与 legacy 同律 (transcript / task book /
+    # brief 的文字层直改是另一个 op 的事, 不归 edit_prompt).
+    v3_doc = _node("text", spec={"role": "transcript"})
+    with pytest.raises(WiringRejected, match="no prompt"):
+        await apply_wiring_ops(
+            _StubDb(nodes=[v3_doc]), _PROJECT_ID,
+            [{"op": "edit_prompt", "node": v3_doc.id, "prompt": "x"}],
+        )
+    legacy_doc = _node("document", spec={"role": "task_book"})
+    with pytest.raises(WiringRejected, match="no prompt"):
+        await apply_wiring_ops(
+            _StubDb(nodes=[legacy_doc]), _PROJECT_ID,
+            [{"op": "edit_prompt", "node": legacy_doc.id, "prompt": "x"}],
+        )
+
+
+def test_task_for_graph_node_skips_by_the_execution_truth():
+    """词表 v3 评审修正 P0-B: skip = asset or no spec.tool, never the card's
+    kind — a writer upgraded to the text type keeps its run bridge (the
+    graph/revise + chat revision run aimed at it never 422s)."""
+    from app.pipeline.graph_revise import task_for_graph_node
+
+    writer = _node("text", spec={"tool": "write_post", "params": {"slot": {"type": "post"}}})
+    task = task_for_graph_node(writer)
+    assert task is not None
+    assert task.tool == "write_post"
+    # A legacy row's bridge is exactly as before.
+    legacy = _node("generator", spec={"tool": "write_post", "params": {"slot": {"type": "post"}}})
+    assert task_for_graph_node(legacy) is not None
+    # Tool-less nodes drop out whatever their kind — asset (an input),
+    # legacy documents, and the v3 manual text doc all the same.
+    assert task_for_graph_node(_node("asset", state="done")) is None
+    assert task_for_graph_node(_node("document", spec={"role": "task_book"})) is None
+    assert task_for_graph_node(_node("text", spec={"role": "transcript"})) is None
+

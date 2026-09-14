@@ -39,11 +39,15 @@ _PARAM_KEYS = (
 
 
 def task_for_graph_node(node: GraphNode) -> TaskItem | None:
-    """One graph node → its chain entry. None = not executable (asset /
-    document / internal compile-only kind / a node predating the tool
-    stamp). The node's CURRENT spec is the program — an edit_prompt that
-    landed before the run is what gets re-filled."""
-    if node.kind in ("asset", "document"):
+    """One graph node → its chain entry. None = not executable (asset — an
+    input, never a task / a tool-less node — internal compile-only kind,
+    document, or a node predating the tool stamp). The node's CURRENT spec
+    is the program — an edit_prompt that landed before the run is what gets
+    re-filled. Skip by the EXECUTION truth, never by the card's kind
+    (词表 v3 评审修正 P0-B, ADR-076: a writer upgraded to the text type
+    keeps its run bridge — a kind-based skip would 422 every graph/revise +
+    chat revision run aimed at it)."""
+    if node.kind == "asset":
         return None
     spec = node.spec or {}
     tool = spec.get("tool")

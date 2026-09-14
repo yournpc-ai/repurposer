@@ -55,7 +55,13 @@ class AddNodeOp(BaseModel):
     island guess repaired by a second pass). Chat proposals never carry one."""
 
     op: Literal["add_node"]
-    kind: Literal["asset", "document", "generator", "processor", "agent"]
+    # 词表 v3 过渡并集 (ADR-076, C2a): legacy 五值 ∪ 媒介五值 — the door
+    # accepts both vocabularies while the stamp migrates (收窄到注册表驱动
+    # 归批 C4; 列改名 kind→type 归 C5b).
+    kind: Literal[
+        "asset", "document", "generator", "processor", "agent",
+        "text", "table", "image", "video", "audio",
+    ]
     spec: dict[str, Any] = Field(default_factory=dict)
     after: list[UUID] = Field(default_factory=list)
     id: UUID | None = None
@@ -74,10 +80,12 @@ class ConnectOp(BaseModel):
 
 
 class EditPromptOp(BaseModel):
-    """Rewrite a generator/agent node's prompt — the card-face direct edit
+    """Rewrite a program-bearing node's prompt — the card-face direct edit
     AND the chat-pointed revision are this one op. A done node goes stale
     (its product predates the new program); a running node rejects (it is
-    executing the old program — the revision reruns it)."""
+    executing the old program — the revision reruns it). Gate (ADR-076
+    过渡): ``spec.tool`` 存在 or the legacy generator/agent kinds — a
+    tool-less document never has an editable program."""
 
     op: Literal["edit_prompt"]
     node: UUID
@@ -159,6 +167,7 @@ def wiring_catalog_lines() -> str:
 # accepted by its target; ctx is the universal context flow (never the only
 # choice when a concrete type is shared — the derivation prefers it last).
 _NODE_PORTS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
+    # ── legacy 五型 (读容忍 — 旧行连线仍要过门) ──────────────────────────
     "asset": (frozenset(), frozenset()),  # per asset type — see _offers/_accepts
     "document": (frozenset({"text", "ctx"}), frozenset({"text"})),
     "generator": (
@@ -170,6 +179,23 @@ _NODE_PORTS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
         frozenset({"video", "audio", "text", "ctx"}),
     ),
     "agent": (frozenset({"text"}), frozenset({"text", "ctx"})),
+    # ── 词表 v3 媒介五值 (ADR-076, C2a 门层先行) ─────────────────────────
+    # accepts 先取并集 (prototype 收紧归后续批次). ctx 过渡必须: 任务书→
+    # writer 的 ctx 边打到新 text 型 writer 节点, 缺它整 stamp 批 422 ——
+    # 本批最高危交互点.
+    "text": (frozenset({"text"}), frozenset({"text", "ctx"})),
+    "table": (frozenset({"text"}), frozenset({"text", "ctx"})),
+    # image 是渲染侧 glyph: 边类型词表无 image (ConnectOp.edge_type 四值),
+    # 它从不过线 —— offers 只有 text.
+    "image": (frozenset({"text"}), frozenset({"text", "ctx"})),
+    "video": (
+        frozenset({"video", "audio", "text"}),
+        frozenset({"video", "audio", "text", "ctx"}),
+    ),
+    "audio": (
+        frozenset({"audio", "text"}),
+        frozenset({"audio", "text", "ctx"}),
+    ),
 }
 
 # An asset's out-ports by its asset type (the three-flow source: a video
@@ -689,7 +715,13 @@ async def apply_wiring_ops(
             node = nodes.get(op.node)
             if node is None:
                 raise WiringRejected(f"edit_prompt: unknown node {op.node}")
-            if node.kind not in ("generator", "agent"):
+            # ADR-076 过渡闸门: the executing body's presence (spec.tool)
+            # marks an editable program — a tool-less document (transcript /
+            # task book / brief) never has one; the legacy two-kind fallback
+            # covers pre-v3 rows stamped without tool. 终态闸门 =
+            # prototype=="generator" (批 B4 set_param 落地前 editor 的修订
+            # 路不能断), 卡面 hover wash 与本报文同真值 (批 C1).
+            if not (node.spec or {}).get("tool") and node.kind not in ("generator", "agent"):
                 raise WiringRejected(
                     f"edit_prompt: a {node.kind} node has no prompt to edit"
                 )
