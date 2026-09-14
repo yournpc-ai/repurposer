@@ -8,11 +8,13 @@ a pointed-at product rides the message as an @-mention chip, ADR-058).
 
 Transport (chat SSE): the endpoint content-negotiates on the ``Accept``
 header. Plain callers get the one-shot JSON ``ChatResponse`` (unchanged);
-``Accept: text/event-stream`` streams the turn: ``assistant.delta`` prose
-previews while the verdict JSON generates, then one terminal ``turn.completed``
-carrying the exact ChatResponse payload (or ``turn.failed``). The verdict
-itself never changes — deltas are a preview channel, the envelope is
-authoritative.
+``Accept: text/event-stream`` streams the turn. ADR-077 判词② (2026-09-14):
+the verdict JSON retired into terminal tool calls, so the prose channel IS
+the reply — ``assistant.delta`` frames carry it verbatim (dialect-stripped at
+the client seam, typewriter law native); ``assistant.thinking`` carries
+liveness keepalives and REAL phase labels; ``question.preview`` docks the
+pill the moment an ask_user call's arguments validate. The terminal envelope
+(``turn.completed`` / ``turn.failed``) stays authoritative.
 """
 
 import asyncio
@@ -42,7 +44,6 @@ from app.chat.service import (
     list_conversation_messages,
     prepare_chat_turn,
 )
-from app.chat.stream_extract import AskObjectWatcher, ProseDeltaExtractor
 from app.providers.llm.base import LLMError
 from app.pipeline.errors import user_error_line
 from app.platform.project_context import get_project_for_user
@@ -88,11 +89,12 @@ def _sse(event: str, data: str) -> str:
 
 
 def _question_preview_frame(payload: dict) -> str:
-    """The ``question.preview`` frame for one closed ask object (2026-09-09
-    用户拍板——「选项该和这句话一起来」). Both turn pumps share the shape:
-    the pill's whole payload (question/options/allow_freeform/slot/
-    default_path) has closed the moment the echo's last character streams —
-    the verdict's brief tail is still generating, but the pill can dock."""
+    """The ``question.preview`` frame for one validated ask_user call
+    (2026-09-09 用户拍板——「选项该和这句话一起来」; 2026-09-14 the tool-loop
+    seat): the pill's whole payload (question/options/allow_freeform/slot/
+    default_path) has VALIDATED the moment the call's arguments complete —
+    the loop may still reject it, so the client rolls the preview back on a
+    flip or turn.failed; the terminal envelope stays authoritative."""
     return _sse(
         "question.preview",
         json.dumps(
@@ -111,28 +113,57 @@ def _question_preview_frame(payload: dict) -> str:
 _HEARTBEAT_SECONDS = 15
 
 
-def _make_plan_beat():
-    """相位完整律 (2026-09-10 用户拍板——「一直是 thinking」根本不是一个完整
-    功能): the verdict's PLAN ARRAY streaming ("tasks" / "ops") is a REAL
-    phase — the row's beat moves to `drafting` the moment the plan's first
-    key opens instead of waiting out the whole call. For zero-prose turns
-    (start verdicts, prose-last key orders) it is the ONLY mid-call beat.
-    Bare-quote keys can only appear as JSON syntax (string values escape
-    their quotes), so a plain substring scan over a rolling tail is
-    false-positive-free. Fires once per turn."""
-    state = {"done": False, "tail": ""}
+def _make_delta_hook(queue: asyncio.Queue):
+    """The prose channel → ``assistant.delta`` frames, verbatim (ADR-077
+    判词②: prose is the content channel now — every fragment is reply text,
+    dialect-stripped at the client seam; the extractor's JSON-sifting and
+    the non-prose keepalive both retired with the verdict payload)."""
+    async def on_delta(fragment: str) -> None:
+        await queue.put(_sse("assistant.delta", json.dumps({"text": fragment})))
 
-    def feed(fragment: str) -> bool:
-        if state["done"]:
-            return False
-        window = state["tail"] + fragment
-        hit = '"tasks"' in window or '"ops"' in window
-        state["tail"] = window[-16:]
-        if hit:
-            state["done"] = True
-        return hit
+    return on_delta
 
-    return feed
+
+def _make_tool_hooks(queue: asyncio.Queue):
+    """The structure frames (both turn pumps share the shape):
+
+    - ``on_tool_call``: a call's NAME became known — the phase beat's tool
+      seat (相位完整律 2026-09-10, re-seated 2026-09-14): a plan-shaped call
+      (present_plan / propose_tasks / apply_edit_ops / edit_graph) moves the
+      row's beat to `drafting` the moment the model commits to it, replacing
+      the retired "tasks"/"ops" substring scan over the JSON stream — the
+      name-known signal is earlier and false-positive-free by construction.
+    - ``on_tool_ready``: an ask_user call's arguments completed and validated
+      (pre-execution) — preview-dock the pill NOW instead of waiting out the
+      loop. Fires on every iteration; a rejected ask's preview rolls back
+      with the turn's other previews.
+    """
+    async def on_tool_call(name: str) -> None:
+        if name in ("present_plan", "propose_tasks", "apply_edit_ops", "edit_graph"):
+            await queue.put(
+                _sse(
+                    "assistant.thinking",
+                    json.dumps({"phase": THINKING_PHASE_DRAFTING}),
+                )
+            )
+
+    async def on_tool_ready(name: str, params) -> None:
+        if name == "ask_user" and params is not None:
+            await queue.put(
+                _question_preview_frame(
+                    {
+                        "question": params.question,
+                        "options": [
+                            o.model_dump(mode="json") for o in params.options
+                        ],
+                        "allow_freeform": params.allow_freeform,
+                        "slot": getattr(params, "slot", None),
+                        "default_path": params.default_path,
+                    }
+                )
+            )
+
+    return on_tool_call, on_tool_ready
 
 
 def _failure_detail(exc: Exception, ui_language: str) -> str | dict:
@@ -200,15 +231,13 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
     never the request-scoped one: this app's BaseHTTPMiddleware stack closes
     yield-dependency sessions when the route returns, before the generator
     body is iterated (same reason the run-events stream opens AsyncSessionLocal
-    per poll). Raw LLM fragments feed the prose extractor (book path previews
-    ``answer``, the chat loop previews ``text``/``summary``) and decoded prose
-    lands in the queue as ``assistant.delta`` frames; fragments with no prose
-    (reasoning, the <think> preamble, the verdict JSON tail) emit
-    ``assistant.thinking`` keepalive frames so the indicator stays warm. The
-    turn ends with exactly one terminal frame: ``turn.completed`` (the full
-    ChatResponse) or ``turn.failed`` (a 4xx-class failure the JSON path would
-    raise as an HTTP error — e.g. a recipe rejection — arrives here as a
-    frame instead).
+    per poll). The prose channel lands in the queue as ``assistant.delta``
+    frames verbatim; reasoning fragments emit ``assistant.thinking``
+    keepalive frames so the indicator stays warm; the tool hooks carry the
+    phase beat and the question preview. The turn ends with exactly one
+    terminal frame: ``turn.completed`` (the full ChatResponse) or
+    ``turn.failed`` (a 4xx-class failure the JSON path would raise as an
+    HTTP error — e.g. a recipe rejection — arrives here as a frame instead).
 
     A client disconnect cancels the response, which lands in the pump's
     ``finally`` (see ``_sse_pump``): the turn task is cancelled before its
@@ -225,49 +254,8 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
         try:
             async with AsyncSessionLocal() as db:
                 prepared = await prepare_chat_turn(db, user_id, data)
-                # "prose" = the ask verdict's framing speech (ask 三分解剖 ①,
-                # nested inside the ask object at extractable depth 2) — it
-                # streams exactly like the draft echo's "answer".
-                extractor = ProseDeltaExtractor(
-                    ("answer", "prose")
-                    if prepared.book_path
-                    else ("text", "summary", "prose")
-                )
-                # ask 预览帧 (2026-09-09 用户拍板——「选项该和这句话一起
-                # 来」): the ask object's internal key order puts prose first,
-                # so the pill's whole payload (question/options/default_path)
-                # has closed the moment the echo's last character streams —
-                # preview-dock it NOW instead of waiting out the verdict's
-                # brief-ledger tail. The terminal envelope stays
-                # authoritative; the client rolls the preview back on a flip
-                # or turn.failed.
-                ask_previews: list[dict] = []
-                ask_watcher = AskObjectWatcher(ask_previews.append)
-                plan_beat = _make_plan_beat()
-
-                async def on_delta(fragment: str) -> None:
-                    ask_watcher.feed(fragment)
-                    while ask_previews:
-                        await queue.put(
-                            _question_preview_frame(ask_previews.pop(0))
-                        )
-                    if plan_beat(fragment):
-                        await queue.put(
-                            _sse(
-                                "assistant.thinking",
-                                json.dumps({"phase": THINKING_PHASE_DRAFTING}),
-                            )
-                        )
-                    text = extractor.feed(fragment)
-                    if text:
-                        await queue.put(
-                            _sse("assistant.delta", json.dumps({"text": text}))
-                        )
-                    else:
-                        # A non-prose fragment (the <think> preamble, the
-                        # verdict JSON after the echo closes) still proves the
-                        # model is alive — keep the thinking indicator warm.
-                        await queue.put(_sse("assistant.thinking", "{}"))
+                on_delta = _make_delta_hook(queue)
+                on_tool_call, on_tool_ready = _make_tool_hooks(queue)
 
                 async def on_reasoning(_fragment: str) -> None:
                     # Reasoning-content frames: liveness only, never shown.
@@ -287,6 +275,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                 response = await execute_chat_turn(
                     db, prepared, data, on_delta=on_delta, on_reasoning=on_reasoning,
                     on_phase=on_phase,
+                    on_tool_call=on_tool_call, on_tool_ready=on_tool_ready,
                 )
             await queue.put(("completed", response.model_dump(mode="json")))
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash
@@ -305,19 +294,13 @@ async def _answer_stream(
     Mirrors ``_turn_stream`` for the answer endpoint: the answer's
     continuation IS an LLM turn (a slot answer resumes the BOOK path — the
     echo prose generates here), so an option click deserves the same prose
-    previews as a typed turn instead of a frozen second followed by an
-    instant blob. Wire is identical — ``assistant.delta`` prose previews,
-    ``assistant.thinking`` keepalives / phase labels, one terminal frame
+    stream as a typed turn instead of a frozen second followed by an instant
+    blob. Wire is identical — ``assistant.delta`` prose, ``assistant.thinking``
+    keepalives / phase labels, the tool hooks (the phase beat + the
+    question preview — questions 2..N of the 每轮一问 sequence arrive as
+    answer-continuation follow-ups, 2026-09-09 对称拍板), one terminal frame
     (``answer.completed`` = the full AnswerResponse, ``answer.failed`` =
-    the JSON path's error as a frame). The extractor listens on all four
-    prose keys (``answer`` / ``text`` / ``summary`` / ``prose`` — the ask
-    verdict's framing speech) — whichever field the continuation's verdict
-    carries streams; the others never appear at extractable depth.
-
-    The ask watcher rides along too (2026-09-09 对称拍板): questions 2..N
-    of the 每轮一问 sequence all arrive as answer-continuation follow-ups —
-    they get the same ``question.preview`` early dock as the chat turn's
-    first ask, never the envelope-late pill.
+    the JSON path's error as a frame).
     """
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -326,31 +309,8 @@ async def _answer_stream(
 
         try:
             async with AsyncSessionLocal() as db:
-                extractor = ProseDeltaExtractor(("answer", "text", "summary", "prose"))
-                ask_previews: list[dict] = []
-                ask_watcher = AskObjectWatcher(ask_previews.append)
-                plan_beat = _make_plan_beat()
-
-                async def on_delta(fragment: str) -> None:
-                    ask_watcher.feed(fragment)
-                    while ask_previews:
-                        await queue.put(
-                            _question_preview_frame(ask_previews.pop(0))
-                        )
-                    if plan_beat(fragment):
-                        await queue.put(
-                            _sse(
-                                "assistant.thinking",
-                                json.dumps({"phase": THINKING_PHASE_DRAFTING}),
-                            )
-                        )
-                    text = extractor.feed(fragment)
-                    if text:
-                        await queue.put(
-                            _sse("assistant.delta", json.dumps({"text": text}))
-                        )
-                    else:
-                        await queue.put(_sse("assistant.thinking", "{}"))
+                on_delta = _make_delta_hook(queue)
+                on_tool_call, on_tool_ready = _make_tool_hooks(queue)
 
                 async def on_phase(phase: str) -> None:
                     await queue.put(
@@ -364,6 +324,8 @@ async def _answer_stream(
                     data,
                     on_delta=on_delta,
                     on_phase=on_phase,
+                    on_tool_call=on_tool_call,
+                    on_tool_ready=on_tool_ready,
                 )
             await queue.put(
                 (
@@ -397,7 +359,7 @@ async def send_chat_message(
 
     The backend locates or creates the conversation, builds the context, and
     dispatches any background work. With ``Accept: text/event-stream`` the
-    reply streams (assistant.delta previews + a terminal turn.completed
+    reply streams (assistant.delta prose + a terminal turn.completed
     envelope); anything else gets the one-shot JSON ChatResponse (201)
     exactly as before.
     """
@@ -459,10 +421,10 @@ async def answer_message(
     graceful exit, never an error.
 
     With ``Accept: text/event-stream`` the continuation streams
-    (``assistant.delta`` prose previews + a terminal ``answer.completed``
-    envelope carrying this same AnswerResponse) — an option click is the
-    primary answering gesture (ADR-053) and its continuation generates the
-    echo prose, so it gets the same typing animation as a typed turn. The
+    (``assistant.delta`` prose + a terminal ``answer.completed`` envelope
+    carrying this same AnswerResponse) — an option click is the primary
+    answering gesture (ADR-053) and its continuation generates the echo
+    prose, so it gets the same typing animation as a typed turn. The
     pill-Start path keeps the one-shot JSON (no LLM continuation there).
     """
     if "text/event-stream" not in request.headers.get("accept", ""):

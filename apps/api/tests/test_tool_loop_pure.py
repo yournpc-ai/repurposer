@@ -77,7 +77,7 @@ def _make_agent(name: str, client: StubClient, tools: list[ChatTool] | None = No
     )
 
 
-async def _always_accept(name: str, params: BaseModel | None) -> str | None:
+async def _always_accept(name: str, params: BaseModel | None, prose: str) -> str | None:
     return None
 
 
@@ -90,7 +90,7 @@ async def test_terminal_call_stops_the_loop() -> None:
     client = StubClient([_call("echo", {"text": "hi", "count": 2}), _call("echo", {"text": "never"})])
     seen: list[tuple[str, Any]] = []
 
-    async def execute(name: str, params: BaseModel | None) -> str | None:
+    async def execute(name: str, params: BaseModel | None, prose: str) -> str | None:
         seen.append((name, params))
         return None
 
@@ -114,7 +114,7 @@ async def test_rejection_echoes_feedback_and_iterates() -> None:
     ])
     feedbacks = ["empty tasks — present a plan with at least one task or ask a question"]
 
-    async def execute(name: str, params: BaseModel | None) -> str | None:
+    async def execute(name: str, params: BaseModel | None, prose: str) -> str | None:
         return feedbacks.pop(0) if feedbacks else None
 
     agent = _make_agent("tl_reject", client)
@@ -143,7 +143,7 @@ async def test_bare_reply_is_the_answer_floor() -> None:
 async def test_exhaustion_is_an_honest_result_never_a_success() -> None:
     client = StubClient([_call("echo", {"text": "x"}) for _ in range(3)])
 
-    async def reject(name: str, params: BaseModel | None) -> str | None:
+    async def reject(name: str, params: BaseModel | None, prose: str) -> str | None:
         return "still wrong"
 
     agent = _make_agent("tl_exhaust", client, max_iterations=3)
@@ -175,7 +175,7 @@ async def test_only_iteration_zero_streams() -> None:
     ])
     deltas: list[str] = []
 
-    async def execute(name: str, params: BaseModel | None) -> str | None:
+    async def execute(name: str, params: BaseModel | None, prose: str) -> str | None:
         assert params is not None
         return "nope" if params.text == "bad" else None
 
@@ -229,7 +229,7 @@ async def test_extra_calls_never_execute() -> None:
     ])
     seen: list[str] = []
 
-    async def execute(name: str, params: BaseModel | None) -> str | None:
+    async def execute(name: str, params: BaseModel | None, prose: str) -> str | None:
         assert params is not None
         seen.append(params.text)
         return None

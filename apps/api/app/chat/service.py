@@ -12,19 +12,23 @@ and lets the intent agent propose (CHAT_ARCH §3). It is the ONLY intent
 surface (intent-surface-unification W1): project-scope turns before the
 first run — or while a task book is pending — go through the book path
 (``_book_turn``: build / refine / confirm the task book via the intent router);
-everything else goes to the four-state proposer:
+everything else goes to the chat-path proposer (``_propose_turn``).
 
-- task_list (non-empty) → compile_graph mode② → a new WorkflowRun
-- ask                   → a typed question docked above the input; the old
-                          "tasks=[] ask back" migrates to a freeform ask
-- edit_ops              → Operation Model (ADR-032): registry-validated ops
-                          applied to the target output, journaled with
-                          message lineage
-- answer                → a purely informational reply (capability /
-                          progress / explanation / small talk) landing as a
-                          plain assistant message — no run, no dock (G-4)
+ADR-077 判词② (2026-09-14): both turns run the bounded tool loop — the
+verdict union retired into the terminal tool set (type = tool name, fields =
+params), the guardrails live inside the executions, and the loop itself is
+side-effect-free (``app/chat/book_turn.py`` / ``app/chat/propose_turn.py``;
+the two names above are shims). The write doors never moved:
 
-One LLM call per turn; the loop lives between turns, never inside one.
+- propose_tasks / edit_graph → compile_graph via ``_create_run_from_tasks``
+  (the ONLY run birthplace; wiring resolves through ``apply_wiring_ops`` first)
+- ask_user                → a typed question docked above the input
+- apply_edit_ops          → Operation Model (ADR-032): registry-validated ops
+                            applied to the target output, journaled with
+                            message lineage
+- answer                  → a purely informational reply (capability /
+                            progress / explanation / small talk) landing as a
+                            plain assistant message — no run, no dock (G-4)
 
 提问机器 (the question machine): a message may carry a typed
 ``question`` payload; ``answer`` NULL = pending. Pending questions dock above
@@ -50,11 +54,14 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.contexts import _build_context
-from app.chat.intent import chat_intent_agent, intent_router
+# The two chat agents no longer take calls HERE (the turn runners —
+# app/chat/book_turn.py / propose_turn.py — drive them through the tool
+# loop); importing the declarations module keeps them registered in AGENTS
+# at startup (the orchestrator's roster self-check walks it).
+from app.chat.intent import chat_intent_agent as _chat_intent_agent  # noqa: F401
+from app.chat.intent import intent_router as _intent_router  # noqa: F401
 from app.models.schemas import (
     AnswerPayload,
-    AnswerProposal,
     AnswerRequest,
     BriefLedger,
     BriefSlot,
@@ -70,25 +77,21 @@ from app.models.schemas import (
     ProjectStatus,
     QuestionPayload,
     QuestionProposal,
-    StartAnswerRequest,
     TaskBookEstimate,
     TaskItem,
     TaskListProposal,
-    WiringProposal,
 )
 from app.models.tables import (
     Asset,
     Conversation,
     Message,
-    Output,
     Persona,
     Project,
     WorkflowRun,
 )
 from app.operations.registry import OP_REGISTRY, validate_op
-from app.operations.service import OpConflict, OpRejected, apply_operations
+from app.operations.service import OpRejected
 from app.pipeline.asset_processing import has_any_text_material, has_renderable_media
-from app.pipeline.assets import create_transcript_asset_from_text
 from app.pipeline.derivative_dispatch import (
     DerivativeWriterNode,
     _project_source_language,
@@ -96,9 +99,7 @@ from app.pipeline.derivative_dispatch import (
 )
 from app.pipeline.graph import MEDIA, NODE_KINDS
 from app.platform.billing import CreditsInsufficientError
-from app.platform.project_context import resolve_default_persona
-from app.providers.llm.base import LLMError
-from app.tools import ToolRejected, validate_task_list
+from app.tools import ToolRejected
 
 logger = structlog.get_logger()
 
@@ -1134,6 +1135,8 @@ async def answer_question(
     data: AnswerRequest,
     on_delta=None,
     on_phase=None,
+    on_tool_call=None,
+    on_tool_ready=None,
 ) -> tuple[Message, Message | None]:
     """Answer a pending question (``POST /chat/messages/{id}/answer``).
 
@@ -1503,11 +1506,15 @@ async def answer_question(
                 recent=history[-5:],
                 on_delta=on_delta,
                 on_phase=on_phase,
+                on_tool_call=on_tool_call,
+                on_tool_ready=on_tool_ready,
             )
         else:
             follow_up, _run_id, bailed_run_ids, _settled = await _propose_turn(
                 db, user_id, conversation, project, say, [], history[-6:],
                 on_delta=on_delta,
+                on_tool_call=on_tool_call,
+                on_tool_ready=on_tool_ready,
             )
 
     elif question.kind == "question" and data.kind == "bail" and question.slot is not None:
@@ -1534,6 +1541,8 @@ async def answer_question(
                 recent=history[-5:],
                 on_delta=on_delta,
                 on_phase=on_phase,
+                on_tool_call=on_tool_call,
+                on_tool_ready=on_tool_ready,
             )
 
     await db.commit()
@@ -1599,745 +1608,40 @@ async def _book_turn(
     on_delta=None,
     on_reasoning=None,
     on_phase=None,
+    on_tool_call=None,
+    on_tool_ready=None,
 ) -> tuple[Message, UUID | None, Message | None, list[UUID]]:
     """Book path (intent-surface-unification W1): build / refine / confirm
     the task book inside the chat loop — the ONLY intent surface.
 
     Entered for project-scope turns while a task book is pending (refine or
     prose confirmation) or before the project's first run (first turn / after
-    a bail). The intent router's four-action verdict dispatches:
-
-    - draft  → three-way merge (panel prior / fresh inference) + reasons +
-               the 出书门槛 (the book docks only on a rooted brief: topic /
-               material / explicit grounded recipe — rootless asks the topic
-               once, then docks draft-from-persona) + dock
-    - ask    → the ONE question docks through the 提问机器 (the
-               shared QuestionProposal shape; the stored book stays untouched;
-               the asked roll bounds the loop — a re-asked slot falls
-               through to the draft gate)
-    - answer → a plain assistant message; the stored book stays untouched
-    - start  → the docked task book is answered kind=start (G-1 path: the
-               run comes from the only birthplace, answer_question)
-
-    Returns the assistant message (the docked/answered question row for
-    draft/ask/start), the started run id, the answered task-book question
+    a bail). Returns the assistant message (the docked/answered question row
+    for draft/ask/start), the started run id, the answered task-book question
     (for ChatResponse.answered_question), and cascade-bailed run ids. The
     caller commits — except the start branch, where answer_question commits.
+
+    ADR-077 判词② (2026-09-14): the verdict dispatch retired into the tool
+    loop — this body is a shim; the turn lives in ``app/chat/book_turn.py``
+    (the intent router's terminal tools present_plan / ask_user / start_run /
+    answer, guardrails inside the executions). Deferred import: the runner
+    imports THIS module's machinery (the 提问机器, the docks, the gate texts).
     """
-    conversation_id = UUID(str(conversation.id))
-    text = request.message
-    if not text.strip() and request.attachments:
-        # Attachment-only turn (files staged in the overlay's input group,
-        # sent with no text): the persisted user message stays empty (the
-        # chips carry the record), but the inference needs honest words —
-        # the files themselves are listed in the Assets context block.
-        names = ", ".join(a.name for a in request.attachments)
-        text = (
-            f"(I just attached new source files: {names}. "
-            "No note — treat them as material for what I asked, or ask what "
-            "I'd like made from them.)"
-        )
+    from app.chat.book_turn import run_book_turn
 
-    stored = (
-        PendingBrief.model_validate(project.pending_brief)
-        if isinstance(project.pending_brief, dict)
-        else None
+    return await run_book_turn(
+        db,
+        user_id,
+        conversation,
+        project,
+        request,
+        recent=recent,
+        on_delta=on_delta,
+        on_reasoning=on_reasoning,
+        on_phase=on_phase,
+        on_tool_call=on_tool_call,
+        on_tool_ready=on_tool_ready,
     )
-    # ADR-052 B2 D2-C2: the accumulated prompt narrative is retired — the
-    # brief ledger is the dialog's structured state (code-merged), and this
-    # turn's message is judged on its own words. The archive already holds
-    # each turn as its own user message; stored.prompt stays the birth
-    # prompt, frozen at the first dock (never re-accumulated).
-
-    # 插话支持 (ADR-053 R2): a still-open plain question rides the router's
-    # context explicitly (the pending block) — a user-stated proposal for
-    # ITS slot is the answer (code settles the row after the merge below),
-    # anything else is an interjection (the question stays open and the
-    # answer exit's reply gets the reminder tail). A pending task_book is
-    # this path's own confirmation target (G-1), never a judgment subject.
-    pending_q = await latest_pending_question(db, conversation_id)
-    # Remember a pending task_book before the null below (ADR-071 判词⑦'s
-    # hybrid flip reads it): docking a fresh plain question would supersede
-    # the book row and orphan the confirmation (S5, 2026-09-12).
-    book_pending = (
-        pending_q is not None
-        and pending_q.workflow_run_id is None
-        and (pending_q.question or {}).get("kind") == "task_book"
-    )
-    if pending_q is not None and (
-        pending_q.workflow_run_id is not None
-        or (pending_q.question or {}).get("kind") != "question"
-    ):
-        pending_q = None
-
-    assets = list(
-        (
-            await db.execute(
-                select(Asset)
-                .where(
-                    Asset.project_id == project.id,
-                    Asset.file_url.isnot(None),
-                )
-                # Deterministic "first asset" for filename/excerpt picks —
-                # the repo convention (jobs.py / projects.py).
-                .order_by(Asset.created_at)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    first_file = next((a for a in assets if a.file_url), None)
-    filename = first_file.file_url.rsplit("/", 1)[-1] if first_file else None
-    # The plan layer reads the material's opening, not just its filename
-    # (track-model §7.4 折中版 — mechanical slice, zero extra LLM): the first
-    # asset carrying text (transcript beats extracted_text), capped.
-    material_excerpt = next(
-        (
-            excerpt
-            for a in assets
-            if (excerpt := (a.transcript or a.extracted_text or "").strip())
-        ),
-        None,
-    )
-    if material_excerpt:
-        material_excerpt = material_excerpt[:800]
-
-    # intent_router provider failures propagate as LLMError — no fabricated
-    # default book (2026-08-14 裁定: a wrong plan that looks real misleads,
-    # and Start would spend a paid run on it); the route boundary turns it
-    # into a 502 with the localized provider line. The presented book rides
-    # along so the
-    # start/revise verdict sees what is actually being confirmed; the recent
-    # rounds ride along so the material/content judgment sees what just
-    # happened (G-7 — e.g. the assistant asked for source material and the
-    # user then pastes it; same "feed the context, never make the model guess
-    # blind" precedent as presented_book). on_delta (chat SSE) streams the raw
-    # verdict fragments for the answer-prose preview; on_reasoning is a
-    # liveness signal for the thinking indicator; on_phase labels the real
-    # phase switches (the start branch's create_run = "creating_run"). None =
-    # today's one-shot call.
-    recent_lines: list[str] = []
-    for m in recent or []:
-        attached = [a.get("name") for a in (m.attachments or []) if a.get("name")]
-        if not m.content and not attached:
-            continue
-        line = f"- {m.role}: {(m.content or '')[:200]}"
-        if attached:
-            line += f" [attached: {', '.join(attached)}]"
-        recent_lines.append(line)
-    # The presented chain (ADR-043): the panel's current task list when the
-    # caller sends one (hand edits ride along), else the stored book's. The
-    # The intent router sees it as a JSON chain and re-emits the WHOLE refined chain
-    # — panel edits survive because the LLM preserves what the message does
-    # not revise (chat revisions always win; the field-level merge machinery
-    # died with the slots grammar).
-    prior = request.prior_intent or (stored.intent if stored else None)
-    # The LLM revises the exact chain, not a prose digest — ship the JSON.
-    presented_book = (
-        json.dumps([t.model_dump(mode="json") for t in prior.tasks], ensure_ascii=False)
-        if prior is not None and prior.tasks
-        else None
-    )
-    # The ledger the router reads (ADR-052 B2): the stored ledger with the
-    # material state freshly code-stamped (the router reads it for the root
-    # judgment, never proposes it). This turn's own proposal merges AFTER
-    # the call — LLM proposes, code decides.
-    has_text_material = await has_any_text_material(db, UUID(str(project.id)))
-    ledger_in = (stored.brief if stored else BriefLedger()).model_copy(deep=True)
-    ledger_in.material_state = BriefSlot(
-        value=(
-            "attached"
-            if any(a.file_url for a in assets)
-            else "pasted"
-            if has_text_material
-            else "none"
-        ),
-        source=BriefSlotSource.DEFAULT,
-    )
-    # Asking strategy ②'s pantry (C2): resolve the turn's persona so the
-    # router can source concrete one-word option values from it (explicit
-    # pick → the pending book's → the project mount → the user default —
-    # the same precedence resolve_run_persona stamps at start). Without
-    # this block the "3 concrete options" rule had no material and
-    # questions starved to bare text.
-    persona_id = (
-        request.persona_id
-        or (stored.persona_id if stored else None)
-        or project.persona_id
-    )
-    persona: Persona | None = None
-    if persona_id:
-        persona = (
-            await db.execute(select(Persona).where(Persona.id == persona_id))
-        ).scalar_one_or_none()
-    if persona is None:
-        persona = await resolve_default_persona(db, user_id)
-    infer_kwargs: dict[str, Any] = dict(
-        message=text,
-        brief=ledger_in,
-        persona=persona,
-        pending_question=pending_q,
-        filename=filename,
-        presented_book=presented_book,
-        recent=recent_lines or None,
-        # The transform-target rule's authoritative signal (同源语言护栏 —
-        # the plan surface's only other language hint is the filename).
-        file_language=(first_file.meta or {}).get("language") if first_file else None,
-        material_excerpt=material_excerpt,
-    )
-    if on_delta is not None:
-        intent = await intent_router.call_stream(
-            on_delta=on_delta,
-            on_reasoning=on_reasoning,
-            on_repair=_repair_phase_callback(on_phase),
-            **infer_kwargs,
-        )
-    else:
-        intent = await intent_router.call(**infer_kwargs)
-
-    # Declared-material promotion (2026-08-05 手测决策): the user explicitly
-    # said "this is my transcript/content" — the pasted text becomes a real
-    # TRANSCRIPT asset (visible, named; groundwork for the synthetic-talk
-    # line). Never inferred from text length — the LLM extracts it only on an
-    # explicit declaration.
-    material_asset: Asset | None = None
-    if intent.material_text and intent.material_text.strip():
-        material_asset = await create_transcript_asset_from_text(
-            db, UUID(str(project.id)), user_id, intent.material_text.strip()
-        )
-        assets.append(material_asset)
-
-    # brief 账本 (ADR-052 B2): the router's update proposal lands by source
-    # precedence, then the material state is code-stamped over it (attached =
-    # file assets; pasted = text-only material; else none). Every downstream
-    # decision — the ask-loop guard, the 出书门槛, the dock write — reads
-    # this ONE merged ledger (出书决策只看账本).
-    merged_brief = merge_brief(
-        intent.brief, stored.brief if stored else BriefLedger()
-    )
-    merged_brief.material_state = BriefSlot(
-        value=(
-            "attached"
-            if any(a.file_url for a in assets)
-            else "pasted"
-            if has_text_material or material_asset is not None
-            else "none"
-        ),
-        source=BriefSlotSource.DEFAULT,
-    )
-
-    # 插话判定结算 (ADR-053 R2): the router saw the pending question in
-    # context; a user-stated proposal for ITS OWN slot is the answer —
-    # code settles the row (freeform, the user's stated value) and the
-    # enriched ledger drives the gate below. Anything else leaves the
-    # question pending (the answer exit's reply gets the reminder tail).
-    settled_pending: Message | None = None
-    if pending_q is not None:
-        p_slot = (pending_q.question or {}).get("slot")
-        proposed_slot = (
-            getattr(intent.brief, p_slot, None)
-            if p_slot and intent.brief is not None
-            else None
-        )
-        if (
-            proposed_slot is not None
-            and proposed_slot.source == BriefSlotSource.USER_STATED
-            and isinstance(proposed_slot.value, str)
-            and proposed_slot.value.strip()
-        ):
-            pending_q.answer = AnswerPayload(
-                kind="freeform",
-                text=proposed_slot.value.strip(),
-                answered_at=datetime.now(UTC),
-            ).model_dump(mode="json")
-            await db.flush()
-            settled_pending = pending_q
-            pending_q = None
-
-    # 顺形 read-tolerance (2026-09-11, ADR-071 判词⑦): the model's natural
-    # hybrid for "I must ask first" sometimes arrives as action='draft'
-    # carrying the ask object with an EMPTY task list. The chain
-    # adjudication below has no path back to ask (the repair round only
-    # accepts a non-empty valid chain — a corrected ask verdict counts as
-    # failure), so the shape would burn the repair round and degrade to the
-    # refusal line despite an obviously-ask intent. Re-read it as the ask
-    # verdict it is; the ask branch's own guards (misfire / asked-roll)
-    # take it from there.
-    if (
-        intent.action == "draft"
-        and not intent.tasks
-        and intent.ask is not None
-        and intent.ask.question.strip()
-    ):
-        intent.action = "ask"
-    # 判词⑦ 扩座 (2026-09-12, S5): ANY ask while a question is still pending
-    # is an interjection, never a new dock — docking supersedes the pending
-    # row, and for a task_book that orphans the confirmation: the book's row
-    # dies while project.pending_brief stays alive, the dispatch then reads
-    # "no pending book" and routes turns to the chat loop, where "looks
-    # good, start" becomes a bare-run wiring no-op (the run never starts).
-    # Land the ask's framing prose as a plain answer instead (with the
-    # reminder tail when a plain question is pending, ADR-053 R2); the
-    # pending row stays open and the user's next message resumes it — a
-    # would-be brief answer simply rides the next revision turn.
-    if (
-        intent.action == "ask"
-        and intent.ask is not None
-        and intent.ask.question.strip()
-        and (book_pending or pending_q is not None)
-    ):
-        intent.action = "answer"
-        intent.answer = intent.ask.prose or intent.ask.question
-    # 判词⑦ 第二颗牙 (2026-09-12, S10): the answer-carrying twin of the
-    # hybrid — action='draft' with an EMPTY chain, no ask object, and the
-    # reply written into the echo (the model answering a capability/meta
-    # question through the wrong action field). Today it burns the repair
-    # round and degrades to the refusal line, and because the echo already
-    # STREAMED, the envelope then swaps the user's bubble mid-read
-    # (stream-swap). Re-read it as the answer verdict it is: the streamed
-    # prose IS the final content, no refusal, no swap. Strictly better than
-    # the guaranteed degrade it replaces — an empty chain can never dock.
-    if (
-        intent.action == "draft"
-        and not intent.tasks
-        and intent.ask is None
-        and (intent.answer or "").strip()
-    ):
-        intent.action = "answer"
-
-    # Chain adjudication (ADR-043): the registry validates the proposed task
-    # list — one bounded repair round on rejection (the funnel's reserved
-    # kwarg), then degrade to an answer, never a docked broken book. The
-    # same-language adjudication rides the same door (2026-09-13): a
-    # translate/dub target that IS the faced source language is doomed by
-    # construction — the repair round sees the fix named ("中英双语 on an en
-    # source → target zh") and re-emits a runnable chain before the user
-    # ever confirms, instead of the chain dying mid-run at the step.
-    if intent.action == "draft":
-        # Deferred imports (import cycle / request ctx) — hoisted ABOVE the
-        # try so the handler's repair round sees them bound: a validate_task_list
-        # rejection fires before the import line inside the try would run, and
-        # the repair round's own adjudication re-references both names
-        # (2026-09-13 实拍: UnboundLocalError → bare "Internal server error"
-        # frame, the answered question rolled back to pending).
-        from app.pipeline.morph import _check_transform_targets
-        from app.ui_locale import current_ui_language
-
-        try:
-            validate_task_list(intent.tasks)
-            if not intent.tasks:
-                raise ToolRejected("empty task list")
-            await _check_transform_targets(
-                db,
-                project,
-                intent.tasks,
-                zh=(current_ui_language() or "").startswith("zh"),
-            )
-        except (ToolRejected, ValueError) as first_error:
-            repaired_intent: InferredIntent | None = None
-            try:
-                retry = await intent_router.call(
-                    **infer_kwargs,
-                    repair_feedback=(
-                        f"{first_error} "
-                        f"(available: {getattr(first_error, 'suggestions', [])})"
-                    ),
-                )
-                validate_task_list(retry.tasks)
-                if retry.tasks:
-                    # The repaired chain faces the same adjudication — a
-                    # repair that ignores the same-language fix never docks.
-                    await _check_transform_targets(
-                        db,
-                        project,
-                        retry.tasks,
-                        zh=(current_ui_language() or "").startswith("zh"),
-                    )
-                    repaired_intent = retry
-            except (ToolRejected, LLMError, ValueError):
-                pass
-            if repaired_intent is not None:
-                intent = repaired_intent
-            else:
-                # The degrade says "can't do that" — log what was actually
-                # proposed and why it was rejected, or the refusal class is
-                # invisible (2026-08-19: recipe-template launches died here).
-                logger.info(
-                    "plan_chain_rejected",
-                    error=str(first_error),
-                    proposed=[t.tool for t in intent.tasks],
-                    repair="failed",
-                )
-                intent.action = "answer"
-                intent.answer = _cannot_do_text(text)
-
-    if intent.action == "ask":
-        if intent.ask is None or not intent.ask.question.strip():
-            # Ask-misfire: the verdict lacks its question payload — degrade
-            # to the answer machinery below (it repairs the book turn or
-            # answers with the capability line; never an empty-book dock).
-            intent.action = "answer"
-        elif intent.ask.slot is not None and intent.ask.slot in merged_brief.asked:
-            # The ask loop is bounded (一轮一问决定槽, each slot asks at most
-            # once): the router re-asked an already-asked slot — treat the
-            # turn as a draft verdict and let the 出书门槛 dock the
-            # draft-from-persona book instead of looping the question.
-            intent.action = "draft"
-        else:
-            # ask 一等动作 (ADR-052 B2, 案 A 双实例): the pre-run router's ONE
-            # question docks through the same 提问机器 the chat
-            # loop's shape C uses — with the book-path handshake on the
-            # payload (slot → the answer backfills the ledger user-stated;
-            # default_path → the dock's muted second line). The brief merge
-            # lands as a ledger-only row: the stored book's intent is
-            # preserved verbatim (an ask never clobbers the book), and a
-            # fresh project's row carries intent=None (never startable).
-            if intent.ask.slot is not None:
-                merged_brief.asked = [*merged_brief.asked, intent.ask.slot]
-            project.pending_brief = PendingBrief(
-                # The birth prompt stays frozen (stored.prompt wins) — the
-                # accumulated narrative retired with the ledger switch.
-                prompt=stored.prompt if stored and stored.prompt else text,
-                intent=stored.intent if stored else None,
-                brief=merged_brief,
-                reasons=stored.reasons if stored else [],
-                persona_id=(
-                    request.persona_id
-                    or (stored.persona_id if stored else None)
-                ),
-                derived=stored.derived if stored else [],
-            ).model_dump(mode="json")
-            # ask 三分解剖 (2026-09-08): the row's content carries the framing
-            # prose (解剖 ① — it streams as the turn's echo and replays in the
-            # flow); the bare question rides the payload (解剖 ② — dock title,
-            # QA archive, reminder tail). Prose-less asks (a model that skips
-            # the field) fall back to content = the bare question, the legacy
-            # shape every consumer still reads.
-            assistant_message, bailed_run_ids = await _dock_question(
-                db,
-                conversation_id,
-                _ask_content(intent.ask),
-                QuestionPayload(
-                    kind="question",
-                    question=intent.ask.question,
-                    options=intent.ask.options,
-                    allow_freeform=intent.ask.allow_freeform,
-                    slot=intent.ask.slot,
-                    default_path=intent.ask.default_path,
-                ),
-                intent=intent.model_dump(mode="json"),
-            )
-            return assistant_message, None, settled_pending, bailed_run_ids
-
-    reasons = await _compute_book_reasons(db, project, intent)
-
-    # An answer action without answer text is an LLM misfire — degrade to a
-    # book turn (dock the book for confirmation) when a chain exists, else
-    # answer with the capability line; never clobber the stored task book
-    # with an empty answer or dock an empty chain. The 出书门槛 below judges
-    # every draft verdict AFTER the flips settle — one gate, no re-checks.
-    if intent.action == "answer" and not intent.answer:
-        if intent.tasks:
-            intent.action = "draft"
-        else:
-            intent.answer = _cannot_do_text(text)
-
-    if intent.action == "start":
-        # G-1: a prose confirmation ("looks good, start it") is not a
-        # revision — it answers the docked task_book question with
-        # kind=start, so the run still comes from the only birthplace
-        # (answer_question → create_run, which also clears pending_brief in
-        # the same transaction). The dock's autonomy tier rides the request —
-        # a review-tier choice must survive a prose confirmation.
-        pending_question = await latest_pending_question(db, conversation_id)
-        if (
-            is_pending_task_book(pending_question)
-            and stored is not None
-            and stored.intent is not None
-        ):
-            if on_phase is not None:
-                # Real phase switch: the start verdict is about to birth
-                # the run (create_run — compile + step rows + run context).
-                await on_phase(THINKING_PHASE_CREATING_RUN)
-            answered, _follow_up = await answer_question(
-                db, user_id, UUID(str(pending_question.id)),
-                # The review panel's edited book rides along (typed Start
-                # parity): dropping prior_intent here would execute the
-                # stored chain and silently discard the user's panel edits.
-                StartAnswerRequest(
-                    kind="start",
-                    autonomy=request.autonomy,
-                    intent=request.prior_intent,
-                ),
-            )
-            # answer_question commits — the run, the answer and the cleared
-            # pending brief land in one transaction.
-            return answered, UUID(str(answered.workflow_run_id)), answered, []
-        if stored is not None and stored.intent is not None:
-            # Nothing startable right now. Never overwrite a stored task book
-            # with a start-action misfire's fields: re-dock the stored book
-            # unchanged. Unless a run started concurrently — then the plan is
-            # moot and re-docking would raise a book over an active run.
-            active_line = await _active_run_line(db, project, text)
-            if active_line is not None:
-                assistant_message = await _create_message(
-                    db, conversation_id, "assistant", active_line
-                )
-                return assistant_message, None, settled_pending, []
-            bailed_run_ids = await sync_task_book_question(
-                db, user_id, project, stored.intent, stored.prompt,
-                reasons=stored.reasons, derived=stored.derived,
-                brief=stored.brief,
-                echo=stored.intent.answer,
-                estimate=await _safe_task_estimate(db, project, stored.intent.tasks),
-            )
-            question = await latest_pending_question(db, conversation_id)
-            assert question is not None  # sync_task_book_question just docked it
-            return question, None, settled_pending, bailed_run_ids
-        # Start-misfire → treat the turn as a fresh draft verdict; the
-        # 出书门槛 below judges it (media without material / rootless), so a
-        # misfired "start" can never dock a groundless book either.
-        intent.action = "draft"
-
-    # 出书门槛 (ADR-052 B2 D2-C2 — the two retired patches folded into ONE
-    # ledger-driven strategy): a task book docks only when the brief has a
-    # root. The gate reads only the merged ledger + the adjudicated chain —
-    # the zero-material net and the no-material lift are gone as separate
-    # machinery; their outcomes survive as gate branches:
-    #  - media-needing chain with material "none" and no book on the table →
-    #    the missing root is the material itself: ask for it in prose, never
-    #    dock (S13's net, now ledger-driven);
-    #  - rootless (no topic / no material / no explicit grounded recipe) →
-    #    ask the topic once (the code backstop for an LLM that drafted a
-    #    bare wish), never docking an empty book;
-    #  - still rootless after the topic was already asked → dock the
-    #    draft-from-persona book with the default-path declaration (提问
-    #    策略③ — every question is safe to skip; skipping lands here).
-    if intent.action == "draft":
-        book_on_table = stored is not None and stored.intent is not None
-        media_blocked = (
-            not book_on_table
-            and merged_brief.material_state.value == "none"
-            and any(_needs_media(t.tool) for t in intent.tasks)
-        )
-        if media_blocked:
-            intent.action = "answer"
-            intent.answer = _material_gate_text(text)
-        else:
-            has_root = (
-                bool((merged_brief.topic.value or "").strip())
-                # S2 语义缝 (2026-09-12): a topic the model INFERRED after the
-                # user skipped the topic ask is not a root — the skip chose
-                # the default path (draft-from-persona, reason + code echo),
-                # and an inferred re-root silently bypasses both. Only the
-                # user's own words re-root a skipped slot. (With material
-                # attached the next clause roots the book anyway, so the
-                # infer-from-material path is untouched.)
-                and (
-                    merged_brief.topic.source == BriefSlotSource.USER_STATED
-                    or "topic" not in merged_brief.asked
-                )
-            ) or (
-                merged_brief.material_state.value != "none"
-                or (
-                    intent.tasks_explicit
-                    and bool((intent.specific_instruction or "").strip())
-                )
-            )
-            if not has_root and "topic" not in merged_brief.asked:
-                merged_brief.asked = [*merged_brief.asked, "topic"]
-                project.pending_brief = PendingBrief(
-                    prompt=stored.prompt if stored and stored.prompt else text,
-                    intent=stored.intent if stored else None,
-                    brief=merged_brief,
-                    reasons=stored.reasons if stored else [],
-                    persona_id=(
-                        request.persona_id
-                        or (stored.persona_id if stored else None)
-                    ),
-                    derived=stored.derived if stored else [],
-                ).model_dump(mode="json")
-                topic_ask = _topic_gate_question(text)
-                assistant_message, bailed_run_ids = await _dock_question(
-                    db,
-                    conversation_id,
-                    topic_ask["question"],
-                    QuestionPayload(
-                        kind="question",
-                        question=topic_ask["question"],
-                        options=[],
-                        allow_freeform=True,
-                        slot="topic",
-                        default_path=topic_ask["default_path"],
-                    ),
-                    intent=intent.model_dump(mode="json"),
-                )
-                return assistant_message, None, settled_pending, bailed_run_ids
-            if not has_root:
-                # Asked once, still rootless → the default path docks: the
-                # chain is the LLM's (registry-adjudicated), the declaration
-                # is code (a code-forced dock never borrows the LLM's voice).
-                reasons = [*reasons, "draft_from_persona"]
-                intent.answer = _draft_from_persona_echo(text)
-
-    if intent.action == "answer" and intent.answer:
-        # Capability question: the reply lands as a plain assistant message
-        # and the stored task book stays untouched — an answer turn never
-        # overwrites the plan the user is confirming. When a question
-        # survived the turn unsettled (an interjection, ADR-053 R2), the
-        # reply ends with the code-composed reminder tail (the question +
-        # its default path — never the LLM's voice).
-        content = intent.answer
-        if pending_q is not None:
-            content += _reminder_tail(
-                text,
-                _bare_question(pending_q),
-                (pending_q.question or {}).get("default_path"),
-            )
-        assistant_message = await _create_message(
-            db, conversation_id, "assistant", content
-        )
-        return assistant_message, None, settled_pending, []
-
-    # A turn that omits persona_id must not clobber the persona choice an
-    # earlier turn made.
-    persona_id = request.persona_id
-    if persona_id is None and isinstance(project.pending_brief, dict):
-        persona_id = project.pending_brief.get("persona_id")
-
-    # Derived preview (ADR-043): dry-run the chain through compile_graph and
-    # project what it will make — the plan card's "you'll get" section. A
-    # chain that can't compile here (e.g. transform with no media anywhere)
-    # still docks, flagged by its reason — the birthplace rejects for real.
-    from app.pipeline.orchestrator import derive_plan_preview
-
-    try:
-        derived = await derive_plan_preview(db, project, intent.tasks)
-    except (ToolRejected, ValueError):
-        derived = []
-    # Dock 载荷的估价面 (BILLING §7): the same dry-run compile's credits
-    # quotation (total + per-task marginal), degraded exactly like the
-    # preview — an unquotable/uncompilable chain docks quote-less.
-    task_estimate = await _safe_task_estimate(db, project, intent.tasks)
-
-    # Persist the unconfirmed task book on the project: leaving the chat and
-    # coming back (any device) restores this exact plan. Cleared once the run
-    # starts. The dock above the input rebuilds from the task_book question.
-    # But first the late-turn guard: a concurrent Start committed while this
-    # refine was in flight — docking now would raise a task book over an
-    # active run (the zombie dock). Degrade to the active-run line.
-    active_line = await _active_run_line(db, project, text)
-    if active_line is not None:
-        assistant_message = await _create_message(
-            db, conversation_id, "assistant", active_line
-        )
-        return assistant_message, None, settled_pending, []
-    # Caption mode for captioned-video runs (Phase 1 book-path fix,
-    # 2026-08-25, RECIPES §4.7): the book_path is the FIRST-turn entry
-    # point for fresh projects — the chat path's elif alone leaves the very
-    # first "make a quote card" prompt to dock a task_book without ever
-    # asking which caption mode the user wants. Mirror the chat path's
-    # three escape hatches (LLM-set / keyword / prior answer) and dock a
-    # caption_mode choice before the task_book; the bare InferredIntent
-    # rides the question's `intent` field, the answer path replays it
-    # verbatim back into PendingBrief (chat_path stashes a TaskListProposal,
-    # book_path stashes an InferredIntent — both shapes handled).
-    if (
-        intent.action == "draft"
-        and _needs_caption_mode_question(intent.tasks)
-        and intent.caption_mode is None
-        and _detect_caption_mode(text) is None
-        and _detect_caption_mode(intent.specific_instruction or "") is None
-        and not _has_resolved_caption_mode(project)
-    ):
-        if await _caption_choice_is_meaningful(db, project, intent.tasks):
-            caption_question = _build_caption_mode_question(text)
-            stashed_intent = intent.model_dump(mode="json")
-            assistant_message, bailed_run_ids = await _dock_question(
-                db,
-                conversation_id,
-                caption_question.question,
-                QuestionPayload(
-                    kind="question",
-                    question=caption_question.question,
-                    options=caption_question.options,
-                    allow_freeform=caption_question.allow_freeform,
-                ),
-                intent=stashed_intent,
-            )
-            return assistant_message, None, settled_pending, bailed_run_ids
-        # §2.3/D4 (2026-08-28): no distinct alt language exists (the source
-        # material's language equals every candidate) — bilingual would
-        # print one language twice. Skip the question entirely and stamp
-        # source_only; the run falls through to the task-book dock.
-        intent = intent.model_copy(update={"caption_mode": "source_only"})
-    # Caption-mode keyword auto-classification (Phase 1 book-path fix,
-    # 2026-08-25, RECIPES §4.7): when the user prompt carries an
-    # unambiguous bilingual keyword ("双语" / "bilingual" / "中英对照" /
-    # "双语字幕" / "中英双语"), stamp intent.caption_mode="bilingual" so
-    # the run lands with the right value even when the LLM didn't set it.
-    # Source / target-only keywords stay null here — they're ambiguous
-    # without knowing the source language, the chat question handles them.
-    keyword_mode = _detect_caption_mode(text)
-    if keyword_mode is not None and intent.caption_mode is None:
-        intent = intent.model_copy(update={"caption_mode": keyword_mode})
-    # Inherit the answered caption mode before the overwrite below
-    # (2026-08-29 追问丢答 root-fix): this write replaces the stored
-    # pending_brief wholesale, and the fresh verdict's caption_mode is
-    # None on any refinement turn that doesn't re-mention it — without
-    # the inherit, "answer bilingual → 改成 5 张 → Start" landed a run
-    # with no caption_mode (single-language cards) and the NEXT turn
-    # re-asked the already-answered question. Precedence: fresh LLM-set
-    # > fresh keyword > stashed answer.
-    if intent.caption_mode is None:
-        stashed_mode = _resolved_caption_mode(project)
-        if stashed_mode is not None:
-            intent = intent.model_copy(update={"caption_mode": stashed_mode})
-    # Inherit the previous dock's NAME on an identical-chain re-dock
-    # (2026-09-09 取证: a bare confirmation the router misjudged as a draft
-    # re-proposes the SAME chain with name=null — the plan card's header and
-    # the run receipt then fall back to the frozen-params label the 二源律
-    # bans. The inherited name IS the LLM's own earlier naming of the same
-    # work — preserving it invents nothing).
-    if (
-        not (intent.name or "").strip()
-        and stored is not None
-        and stored.intent is not None
-        and (stored.intent.name or "").strip()
-        and [t.model_dump(mode="json") for t in intent.tasks]
-        == [t.model_dump(mode="json") for t in stored.intent.tasks]
-    ):
-        intent = intent.model_copy(update={"name": stored.intent.name})
-    # The birth prompt freezes at the first dock (stored.prompt wins on every
-    # later write) — the ledger is the accumulated state now, the prompt is
-    # only the book's birth narrative (Start's instruction fallback).
-    birth_prompt = stored.prompt if stored and stored.prompt else text
-    if on_phase is not None:
-        # Real phase switch (相位通道用起来, 2026-09-09): the verdict is in
-        # and the dock-work starts — ledger write + sync_task_book_question +
-        # the draft-graph stamp (compile + estimate folds) are the seconds
-        # between the echo's last character and the plan card's arrival.
-        await on_phase(THINKING_PHASE_DRAFTING)
-    project.pending_brief = PendingBrief(
-        prompt=birth_prompt,
-        intent=intent,
-        # brief 账本 (ADR-052 B2): the ONE merged ledger — the router's update
-        # landed by source precedence + the material state code-stamped
-        # upstream; the gate and the ask branch read this same object.
-        brief=merged_brief,
-        reasons=reasons,
-        persona_id=persona_id,
-        derived=derived,
-    ).model_dump(mode="json")
-    bailed_run_ids = await sync_task_book_question(
-        db, user_id, project, intent, birth_prompt, reasons=reasons, derived=derived,
-        brief=merged_brief,
-        echo=intent.answer,
-        estimate=task_estimate,
-    )
-    question = await latest_pending_question(db, conversation_id)
-    assert question is not None  # sync_task_book_question just docked it
-    return question, None, settled_pending, bailed_run_ids
 
 
 async def _propose_turn(
@@ -2351,480 +1655,39 @@ async def _propose_turn(
     on_delta=None,
     on_reasoning=None,
     on_phase=None,
+    on_tool_call=None,
+    on_tool_ready=None,
 ) -> tuple[Message, UUID | None, list[UUID], Message | None]:
-    """One assistant turn after the user input is settled (CHAT_ARCH §3):
-    assemble context, single intent call, adjudicate, record the reply.
+    """One assistant turn after the user input is settled (CHAT_ARCH §3).
 
     Shared by ``chat()`` and the choice-answer continuation in
     ``answer_question`` (the answer endpoint doubles as resume). Returns the
-    assistant message, the dispatched run id if any, the run ids whose
-    parked interrupt was cascade-bailed when a new docked question
-    superseded it (finalized by the caller after its commit), and the
-    pending question this turn settled by judgment (ADR-053 R2 — the
-    caller surfaces it as ChatResponse.answered_question so the client's
-    pill clears and the AnsweredQuestion block lands). Flush-only — the caller commits.
+    assistant message, the dispatched run id if any, the run ids whose parked
+    interrupt was cascade-bailed, and the pending question this turn settled
+    by judgment (ADR-053 R2). Flush-only — the caller commits.
+
+    ADR-077 判词② (2026-09-14): the verdict dispatch retired into the tool
+    loop — this body is a shim; the turn lives in ``app/chat/propose_turn.py``
+    (the chat intent agent's terminal tools propose_tasks / apply_edit_ops /
+    edit_graph / ask_user / answer). Deferred import: the runner imports THIS
+    module's machinery.
     """
-    conversation_id = UUID(str(conversation.id))
-    pending = (
-        await latest_pending_question(db, conversation_id) if project else None
+    from app.chat.propose_turn import run_propose_turn
+
+    return await run_propose_turn(
+        db,
+        user_id,
+        conversation,
+        project,
+        text,
+        mentions,
+        recent,
+        on_delta=on_delta,
+        on_reasoning=on_reasoning,
+        on_phase=on_phase,
+        on_tool_call=on_tool_call,
+        on_tool_ready=on_tool_ready,
     )
-    # A pending task_book rides the context as before, but it is never a
-    # judgment subject on this path — its answers are the dock's Start /
-    # book-path turns (the same exclusion as prepare_chat_turn's
-    # autoResume); judged settlement and the reminder tail below apply to
-    # plain questions only.
-    pending_judgable = (
-        pending is not None
-        and (pending.question or {}).get("kind") == "question"
-        # A blank turn (attachment-only: this path receives request.message
-        # verbatim — the stand-in line is a _book_turn local) carries nothing
-        # to judge, so the question is not a judgment subject this turn,
-        # period. Without this the envelope's disposition was a coin flip on
-        # empty input: a judged "answer" settled an EMPTY freeform and woke a
-        # parked interrupt with "Direction locked: ." (2026-09-05 S6d
-        # first-run failure). Code-side guard, never a prompt plea — "a blank
-        # message never auto-answers a docked checkpoint" is a law, not a
-        # judgment.
-        and bool(text.strip())
-    )
-    context = (
-        await _build_context(
-            db,
-            project,
-            recent,
-            mentions,
-            pending,
-        )
-        if project
-        else {"text": ""}
-    )
-
-    proposal: TaskListProposal | EditOpsProposal | QuestionProposal | AnswerProposal | None = (
-        None
-    )
-    disposition = "none"
-    try:
-        if on_delta is not None:
-            # Chat SSE: stream the verdict; raw fragments feed the prose
-            # preview extractor. Repair rounds stay non-streaming (the funnel
-            # handles that — N-26).
-            result = await chat_intent_agent.call_stream(
-                message=text, context=context,
-                on_delta=on_delta, on_reasoning=on_reasoning,
-                on_repair=_repair_phase_callback(on_phase),
-            )
-        else:
-            result = await chat_intent_agent.call(message=text, context=context)
-        proposal = result.proposal
-        disposition = result.pending_disposition
-    except LLMError:
-        proposal = None
-
-    run_id: UUID | None = None
-    bailed_run_ids: list[UUID] = []
-    assistant_message: Message | None = None
-    assistant_content: str | None = None
-    settled_question: Message | None = None
-
-    # 插话判定结算 (ADR-053 R2): the pending question rode the context and
-    # the envelope's disposition is the agent's judgment — settlement is
-    # code's (the retired autoResume masking's honest successor). A judged
-    # answer settles freeform — a parked interrupt's answer wakes its run
-    # (the wake IS the continuation, so the proposal is not dispatched on
-    # top); a judged skip settles bail (the text question's only ×); an
-    # interjection leaves the question open and the reply gets the
-    # code-composed reminder tail below.
-    if pending_judgable and proposal is not None and disposition == "answer":
-        pending.answer = AnswerPayload(
-            kind="freeform",
-            text=text,
-            answered_at=datetime.now(UTC),
-        ).model_dump(mode="json")
-        await db.flush()
-        settled_question = pending
-        pending = None
-        if settled_question.workflow_run_id is not None:
-            from app.pipeline.orchestrator import resume_waiting_interrupt
-
-            run = await db.get(WorkflowRun, settled_question.workflow_run_id)
-            if run is not None:
-                await resume_waiting_interrupt(db, run, settled_question.answer)
-            decided = (settled_question.answer or {}).get("text") or ""
-            # Same deterministic acknowledgment as the option-hit wake in
-            # prepare_chat_turn — display language follows the UI locale.
-            from app.ui_locale import current_ui_language
-
-            assistant_message = await _create_message(
-                db,
-                conversation_id,
-                "assistant",
-                f"方向已锁定：{decided}。继续生成。"
-                if (current_ui_language() or "").startswith("zh")
-                else f"Direction locked: {decided}. Resuming the run.",
-            )
-            return assistant_message, None, [], settled_question
-    elif pending_judgable and proposal is not None and disposition == "skip":
-        pending.answer = AnswerPayload(
-            kind="bail",
-            answered_at=datetime.now(UTC),
-        ).model_dump(mode="json")
-        await db.flush()
-        settled_question = pending
-        if pending.workflow_run_id is not None:
-            from app.pipeline.orchestrator import bail_waiting_interrupt
-
-            run = await db.get(WorkflowRun, pending.workflow_run_id)
-            if run is not None and await bail_waiting_interrupt(db, run) is not None:
-                bailed_run_ids.append(UUID(str(run.id)))
-        pending = None
-
-    if proposal is None:
-        # LLM failure: ask back — the only failure form (prohibition #7;
-        # the asset-scope revise_script guess retired with the scope itself).
-        assistant_content = _ASK_BACK_TEXT
-    elif isinstance(proposal, QuestionProposal):
-        # Ask 落库 (N-18): the agent's question becomes the docked
-        # question (task_book questions are raised solely by the book path,
-        # never by the agent — LLM proposes, code adjudicates).
-        # ask 三分解剖: content carries the framing prose (the turn's echo),
-        # the bare question rides the payload; slot stays None — a post-run
-        # question never backfills the brief (book-path handshake only).
-        assistant_message, bailed_run_ids = await _dock_question(
-            db,
-            conversation_id,
-            _ask_content(proposal),
-            QuestionPayload(
-                kind="question",
-                question=proposal.question,
-                options=proposal.options,
-                allow_freeform=proposal.allow_freeform,
-                default_path=proposal.default_path,
-            ),
-            intent=proposal.model_dump(mode="json"),
-        )
-    elif isinstance(proposal, AnswerProposal):
-        # Direct answer (G-4, N-21): a purely informational reply lands as a
-        # plain assistant message — no task, no run, no docked question
-        # (same archival shape as a book-path answer turn, B1).
-        assistant_content = proposal.text
-    elif isinstance(proposal, EditOpsProposal):
-        # Operation Model wiring (ADR-032): validate against the registry
-        # (one repair round on rejection), then apply with message lineage.
-        ops_items = _edit_op_items(proposal)
-        try:
-            _validate_edit_ops(ops_items)
-        except OpRejected as first_error:
-            repaired = False
-            try:
-                retry = await chat_intent_agent.call(
-                    message=text, context=context,
-                    repair_feedback=str(first_error),
-                )
-                if isinstance(retry.proposal, EditOpsProposal):
-                    ops_items = _edit_op_items(retry.proposal)
-                    _validate_edit_ops(ops_items)
-                    proposal = retry.proposal
-                    repaired = True
-                elif isinstance(retry.proposal, TaskListProposal) and retry.proposal.tasks:
-                    run_id = await _create_run_from_tasks(
-                        db, project, retry.proposal.tasks, retry.proposal.summary,
-                        # A repaired task_list is the same run birth — the
-                        # caption mode rides the shared funnel (2026-08-29).
-                        caption_mode=await _derive_chat_caption_mode(
-                            db, project, retry.proposal.tasks, text
-                        ),
-                        name=retry.proposal.name or None, on_phase=on_phase,
-                    )
-                    proposal = retry.proposal
-                    assistant_content = retry.proposal.summary
-                    repaired = True
-            except (OpRejected, ToolRejected, ValueError, LLMError):
-                pass
-            if not repaired:
-                proposal = None
-                assistant_content = _cannot_do_text(text)
-        if isinstance(proposal, EditOpsProposal):
-            # Mentions forward client-pinned ids verbatim (MENTIONS §35) —
-            # authorize before any write: the target must be an output of
-            # THIS project. Every other write path (editor routes / revise /
-            # render / derivative targets) re-checks ownership at execution;
-            # the chat surface's only write had none (cross-tenant IDOR).
-            target = await db.get(Output, proposal.target_output_id)
-            if (
-                project is None
-                or target is None
-                or UUID(str(target.project_id)) != UUID(str(project.id))
-            ):
-                proposal = None
-                assistant_content = _cannot_do_text(text)
-        if isinstance(proposal, EditOpsProposal):
-            # Create the assistant message first (flush for the id), then
-            # apply with message_id lineage — one commit at the tail.
-            assistant_message = await _create_message(
-                db,
-                conversation_id,
-                "assistant",
-                proposal.summary,
-                intent=proposal.model_dump(mode="json"),
-            )
-            try:
-                await apply_operations(
-                    db,
-                    proposal.target_output_id,
-                    ops_items,
-                    source="chat",
-                    user_id=user_id,
-                    message_id=UUID(str(assistant_message.id)),
-                )
-                assistant_content = proposal.summary
-            except (OpRejected, OpConflict):
-                assistant_message.content = _cannot_do_text(text)
-                assistant_content = assistant_message.content
-                proposal = None
-            except HTTPException as e:
-                # e.g. target has no render_spec — a legitimate "can't do that".
-                assistant_message.content = str(e.detail)
-                assistant_content = assistant_message.content
-                proposal = None
-    elif isinstance(proposal, WiringProposal):
-        # 修订 = edit_prompt(node) + run({node} ∪ downstream) (ADR-057 K4):
-        # the ops land through the graph's ONLY write door (validation /
-        # repair echo below), then the resolved subgraph translates back to
-        # a chain and rides the ONLY run birthplace — zero bypass, and the
-        # revision target is the graph node id, never a run-scope guess.
-        from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
-        from app.pipeline.graph_revise import tasks_for_graph_nodes
-        from app.models.tables import GraphNode
-
-        async def _dispatch_wiring(p: WiringProposal) -> UUID | None:
-            if project is None or not p.ops:
-                raise WiringRejected("wiring: no ops to apply")
-            delta = await apply_wiring_ops(db, UUID(str(project.id)), p.ops)
-            if not delta.run_nodes:
-                # A pure graph edit with no run (e.g. a delete) lands as-is.
-                return None
-            run_nodes = list(
-                (
-                    await db.execute(
-                        select(GraphNode).where(GraphNode.id.in_(delta.run_nodes))
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            by_id = {str(n.id): n for n in run_nodes}
-            ordered = [by_id[str(nid)] for nid in delta.run_nodes if str(nid) in by_id]
-            tasks = tasks_for_graph_nodes(ordered)
-            if not tasks:
-                raise WiringRejected("run: the resolved subgraph has nothing executable")
-            # The edited programs pin the run's instruction (the writers'
-            # GenerationContext.instruction steers the rewrite); the
-            # summary-only fallback keeps the run's book honest.
-            instruction = "\n".join(
-                str(op.get("prompt")) for op in p.ops
-                if op.get("op") == "edit_prompt" and op.get("prompt")
-            )
-            return await _create_run_from_tasks(
-                db, project, tasks, p.summary, instruction=instruction or None,
-                name=p.name or None, on_phase=on_phase,
-            )
-
-        try:
-            run_id = await _dispatch_wiring(proposal)
-            assistant_content = proposal.summary
-        except (WiringRejected, ToolRejected, ValueError) as first_error:
-            # One bounded repair round — the adjudication's own error rides
-            # the funnel's reserved feedback kwarg (same posture as the
-            # edit_ops repair); a task_list repair re-dispatches through the
-            # shared funnel.
-            repaired = False
-            try:
-                retry = await chat_intent_agent.call(
-                    message=text, context=context,
-                    repair_feedback=str(first_error),
-                )
-                if isinstance(retry.proposal, WiringProposal) and retry.proposal.ops:
-                    run_id = await _dispatch_wiring(retry.proposal)
-                    proposal = retry.proposal
-                    assistant_content = retry.proposal.summary
-                    repaired = True
-                elif isinstance(retry.proposal, TaskListProposal) and retry.proposal.tasks:
-                    run_id = await _create_run_from_tasks(
-                        db, project, retry.proposal.tasks, retry.proposal.summary,
-                        caption_mode=await _derive_chat_caption_mode(
-                            db, project, retry.proposal.tasks, text
-                        ),
-                        name=retry.proposal.name or None, on_phase=on_phase,
-                    )
-                    proposal = retry.proposal
-                    assistant_content = retry.proposal.summary
-                    repaired = True
-            except (WiringRejected, ToolRejected, ValueError, LLMError):
-                pass
-            if not repaired:
-                proposal = None
-                assistant_content = _cannot_do_text(text)
-    elif not proposal.tasks:
-        # N-18 migration: the pre-ask "tasks=[] ask back" maps onto a
-        # freeform ask (no options, free-text replies resume onto it).
-        ask_back = proposal.summary or _ASK_BACK_TEXT
-        assistant_message, bailed_run_ids = await _dock_question(
-            db,
-            conversation_id,
-            ask_back,
-            QuestionPayload(
-                kind="question",
-                question=ask_back,
-                options=[],
-                allow_freeform=True,
-            ),
-            intent=proposal.model_dump(mode="json"),
-        )
-    elif (
-        # Caption mode for captioned-video runs (Phase 1, 2026-08-25, RECIPES
-        # §4.7): when the chain asks for a quote card and the user didn't name
-        # a caption mode, dock the bilingual/source/target choice BEFORE
-        # letting the run start — the answer rides run.context.caption_mode
-        # downstream (write_quotes Phase 2 reads it, Remotion Phase 3 layouts
-        # off it). Escape hatches on THIS path: the user prompt carries an
-        # unambiguous keyword, or the stored pending_brief already locked
-        # the choice from an earlier answer (so a follow-up refinement turn
-        # doesn't re-ask). The book path's third hatch (LLM-set caption_mode
-        # on InferredIntent) does not exist here — TaskListProposal carries
-        # no intent, the chat intent agent has no caption_mode field to set.
-        # (2026-08-29 root-fix: this condition previously READ
-        # ``proposal.intent.*`` — a field that has never existed on
-        # TaskListProposal — so every write_quotes chat proposal 500'd
-        # before the question could dock.)
-        isinstance(proposal, TaskListProposal)
-        and _needs_caption_mode_question(proposal.tasks)
-        and _detect_caption_mode(text) is None
-        and not _has_resolved_caption_mode(project)
-        and await _caption_choice_is_meaningful(db, project, proposal.tasks)
-    ):
-        caption_question = _build_caption_mode_question(text)
-        # The original TaskListProposal's dump is stashed on the docked
-        # question's `intent` field — the answer path replays it once the
-        # user picks a mode, rather than re-running the intent router (the plan
-        # would otherwise re-enter the question-dock loop). The intent we
-        # replay is a `TaskListProposal`-shaped dict (not an InferredIntent):
-        # the resume code path below knows to convert it into an
-        # InferredIntent + PendingBrief + task_book dock.
-        stashed_proposal = proposal.model_dump(mode="json")
-        assistant_message, bailed_run_ids = await _dock_question(
-            db,
-            conversation_id,
-            caption_question.question,
-            QuestionPayload(
-                kind="question",
-                question=caption_question.question,
-                options=caption_question.options,
-                allow_freeform=caption_question.allow_freeform,
-            ),
-            intent=stashed_proposal,
-        )
-    else:
-        # Caption-mode resolution for the immediate run (2026-08-29
-        # root-fix): the chat path's proposal carries no intent — the mode
-        # is derived here and rides TaskSpec.caption_mode → run.context
-        # end-to-end. The derivation lives in _derive_chat_caption_mode
-        # (keyword > stashed answer > source_only-if-no-distinct-alt) so
-        # the main dispatch and the repair re-dispatches share one funnel.
-        # (Replaces two blocks that READ ``proposal.intent.*`` — a field
-        # that never existed on TaskListProposal: the §2.3/D4 narrowing was
-        # unreachable dead code, and the keyword block 500'd on ANY
-        # task_list proposal carrying a bilingual keyword.)
-        caption_mode: str | None = None
-        if isinstance(proposal, TaskListProposal):
-            caption_mode = await _derive_chat_caption_mode(
-                db, project, proposal.tasks, text
-            )
-        try:
-            run_id = await _create_run_from_tasks(
-                db, project, proposal.tasks, proposal.summary,
-                caption_mode=caption_mode,
-                name=proposal.name or None, on_phase=on_phase,
-            )
-            assistant_content = proposal.summary
-        except ValueError as e:
-            from app.pipeline.orchestrator import (  # deferred: import cycle
-                RunAlreadyActiveError,
-            )
-
-            if isinstance(e, RunAlreadyActiveError):
-                # Active-run guard fired — say THAT, not the missing-material
-                # line (the guard's own 422 copy rides the typed endpoints).
-                assistant_content = _run_active_text(text)
-            else:
-                # Missing required input (media/transcript/…) — no repair round
-                # can fix that. The raw exception carries registry vocabulary;
-                # it goes to the log, the user gets a plain line in their
-                # language (same posture as _cannot_do_text, 2026-08-20).
-                logger.info("run_birth_missing_input", error=str(e))
-                assistant_content = (
-                    "还缺素材——先发我视频、音频或文字稿，我再开工。"
-                    if _prefers_zh(text)
-                    else "I'm missing the material for that — attach a video, "
-                    "audio, or transcript first, then I'll get to work."
-                )
-        except ToolRejected as first_error:
-            # One bounded repair round with the rejection as feedback (the
-            # funnel's reserved kwarg — the echo lives in Agent.call).
-            repaired = False
-            try:
-                retry = await chat_intent_agent.call(
-                    message=text, context=context,
-                    repair_feedback=(
-                        f"{first_error} "
-                        f"(available: {getattr(first_error, 'suggestions', [])})"
-                    ),
-                )
-                if (
-                    isinstance(retry.proposal, TaskListProposal)
-                    and retry.proposal.tasks
-                ):
-                    run_id = await _create_run_from_tasks(
-                        db, project, retry.proposal.tasks, retry.proposal.summary,
-                        # A repaired task_list is the same run birth — the
-                        # caption mode rides the shared funnel (2026-08-29).
-                        caption_mode=await _derive_chat_caption_mode(
-                            db, project, retry.proposal.tasks, text
-                        ),
-                        name=retry.proposal.name or None, on_phase=on_phase,
-                    )
-                    proposal = retry.proposal
-                    assistant_content = retry.proposal.summary
-                    repaired = True
-            except (ToolRejected, ValueError, LLMError):
-                pass
-            if not repaired:
-                proposal = None
-                assistant_content = _cannot_do_text(text)
-
-    if assistant_message is None:
-        assistant_message = await _create_message(
-            db,
-            conversation_id,
-            "assistant",
-            assistant_content,
-            workflow_run_id=run_id,
-            intent=proposal.model_dump(mode="json") if proposal else None,
-        )
-    # 插话提醒尾 (ADR-053 R2): the pre-turn question survived the turn
-    # unsettled and unsuperseded (an interjection) — the reply ends with
-    # the code-composed reminder: the question + its default path, in the
-    # turn's language.
-    if pending_judgable and pending is not None and assistant_message.question is None:
-        still_open = await latest_pending_question(db, conversation_id)
-        if still_open is not None and still_open.id == pending.id:
-            assistant_message.content = (
-                assistant_message.content or ""
-            ) + _reminder_tail(
-                text,
-                _bare_question(pending),
-                (pending.question or {}).get("default_path"),
-            )
-    return assistant_message, run_id, bailed_run_ids, settled_question
 
 
 @dataclass
@@ -3063,20 +1926,23 @@ async def execute_chat_turn(
     on_delta=None,
     on_reasoning=None,
     on_phase=None,
+    on_tool_call=None,
+    on_tool_ready=None,
 ) -> ChatResponse:
     """chat() phase 2: run the agent turn, commit once, assemble the response.
 
-    ``on_delta`` (chat SSE) receives raw LLM verdict fragments for the prose
-    preview channel; ``on_reasoning`` receives reasoning fragments as a
-    liveness signal; ``on_phase`` receives thinking-phase labels at REAL
-    phase-switch points — a start verdict about to birth the run =
-    "creating_run", a draft verdict's ledger/book/stamp tail = "drafting".
-    The base label is "Thinking…" (2026-09-10 用户拍板: thinking 为主 — the
-    router's own inference IS the opaque thinking window; "understanding"
-    restated it with zero information and, emitted at the call's head, it
-    froze the row for the whole call — 09-09 加、09-10 撤). None (the JSON
-    path, repair rounds, answer_question's continuation) keeps today's
-    one-shot calls.
+    ``on_delta`` (chat SSE) receives the prose channel's fragments — the
+    reply itself now (ADR-077 判词②: speech left the verdict JSON; the
+    typewriter law holds natively); ``on_reasoning`` receives reasoning
+    fragments as a liveness signal; ``on_phase`` receives thinking-phase
+    labels at REAL phase-switch points — a start verdict about to birth the
+    run = "creating_run", a plan call accepted and docking = "drafting".
+    ``on_tool_call`` / ``on_tool_ready`` carry the structure frames: a tool
+    call's name became known (the phase beat's seat — the retired "tasks"/
+    "ops" substring scan) / a call's arguments validated (the
+    question.preview seat — the retired ask-object watcher). The base label
+    is "Thinking…" (2026-09-10 用户拍板). None (the JSON path, repair
+    iterations, answer_question's continuation) keeps the one-shot calls.
     """
     if prepared.interrupt_reply is not None:
         assistant_message = prepared.interrupt_reply
@@ -3099,6 +1965,8 @@ async def execute_chat_turn(
             on_delta=on_delta,
             on_reasoning=on_reasoning,
             on_phase=on_phase,
+            on_tool_call=on_tool_call,
+            on_tool_ready=on_tool_ready,
         )
         if book_answered is not None:
             prepared.answered_question = book_answered
@@ -3114,6 +1982,8 @@ async def execute_chat_turn(
             on_delta=on_delta,
             on_reasoning=on_reasoning,
             on_phase=on_phase,
+            on_tool_call=on_tool_call,
+            on_tool_ready=on_tool_ready,
         )
         if chat_settled is not None:
             # 插话判定结算 (ADR-053 R2): the agent judged this very message

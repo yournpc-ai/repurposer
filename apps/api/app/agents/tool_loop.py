@@ -134,11 +134,14 @@ def _loop_echo(feedback: str) -> str:
     )
 
 
-# Execute signature: (tool name, validated params) → None when the call is
-# ACCEPTED (a terminal stop), or the structured feedback string when it is
-# REJECTED (the loop echoes it and iterates). All side effects belong to the
-# executor; the loop writes nothing.
-LoopExecute = Callable[[str, BaseModel | None], Awaitable[str | None]]
+# Execute signature: (tool name, validated params, this iteration's prose) →
+# None when the call is ACCEPTED (a terminal stop), or the structured feedback
+# string when it is REJECTED (the loop echoes it and iterates). The prose seat
+# exists because the executions need it — the docked question row's content,
+# the plan echo, the answer message all carry the turn's speech (ask 三分解剖
+# ① / 任务书回声). All side effects belong to the executor; the loop writes
+# nothing.
+LoopExecute = Callable[[str, BaseModel | None, str], Awaitable[str | None]]
 
 
 class ToolLoopAgent:
@@ -321,7 +324,7 @@ class ToolLoopAgent:
                     }
                     continue
             await _emit(on_tool_ready, call.name, params)
-            feedback = await execute(call.name, params)
+            feedback = await execute(call.name, params, prose)
             if feedback is None:
                 return LoopResult(
                     prose=prose,

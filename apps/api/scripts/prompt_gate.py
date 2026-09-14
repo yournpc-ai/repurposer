@@ -6,18 +6,23 @@ editing sessions) — this gate asserts ABSOLUTE minimum rates for the LIVE
 prompt, so a regression is caught before deploy, not after. Three probes,
 same contexts as the A/B instrument:
 
-- A:start-verdict — a book on the table + "looks good, start" must judge
-  'start' (never a same-chain re-draft). Measured band 9-11/12 across all
+- A:start-verdict — a book on the table + "looks good, start" must call
+  start_run (never a same-chain re-plan). Measured band 9-11/12 across all
   prompt versions; threshold 8 catches a real regression (the 2/5-era
   degradation) with flake headroom.
 - B:slot-handshake — pending topic question + free-text answer must propose
-  brief.topic user-stated (else the user's answer falls on the floor).
-  Current prompt measured 8/8 and 12/12; threshold 8/12 fails a return to
+  brief.topic user-stated on the terminal call (else the user's answer falls
+  on the floor). Measured 8/8 and 12/12; threshold 8/12 fails a return to
   the old prompt's ~2/3 band.
-- C:rootless-wish — a rootless wish must produce the topic ask. PASS counts
-  both the direct ask verdict AND the harmless hybrid (draft + empty tasks
-  + ask(topic)) that 判词⑦ re-reads as ask; only drafting groundless work
-  or answering away fails. Current prompt measured 11-12/12; threshold 10.
+- C:rootless-wish — a rootless wish must end at ask_user slot='topic'. The
+  stub execute MIRRORS the production guardrail (a rootless present_plan is
+  rejected with the gate's feedback), so both the direct ask and the
+  corrected-after-rejection path count — only docking groundless work or
+  answering away fails. Measured 11-12/12; threshold 10.
+
+Tool-loop form (ADR-077 判词②, 2026-09-14): the agent is the ToolLoopAgent,
+the verdict is the terminal tool call, and the predicates read
+``LoopResult`` — the thresholds are UNCHANGED.
 
 A gate failure means: re-run once (provider drift exists even at these
 thresholds), then bisect with the A/B instrument — never tune the
@@ -35,10 +40,13 @@ from pathlib import Path
 # Make ``app`` importable when run as a file (apps/api on sys.path).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.agents.base import StreamingAgent  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
+
+from app.agents.tool_loop import LoopResult, ToolLoopAgent  # noqa: E402
 from app.chat.intent import _assemble_book_turn  # noqa: E402
 from app.chat.prompts import intent_router_system  # noqa: E402
-from app.models.schemas import BriefLedger, InferredIntent  # noqa: E402
+from app.chat.turn_tools import BOOK_TOOLS  # noqa: E402
+from app.models.schemas import BriefLedger, BriefSlotSource  # noqa: E402
 from app.models.tables import Message  # noqa: E402
 
 # (probe, minimum passes out of N)
@@ -96,18 +104,43 @@ PROBE_B = {
 PROBE_C = {"message": "I want a social post."}
 
 
-def _passed(probe: str, r: InferredIntent) -> bool:
+async def _gate_execute(name: str, params: BaseModel | None, prose: str) -> str | None:
+    """The gate's execution stub — accepts everything EXCEPT the rootless
+    present_plan (mirrors the production 出书门槛 probe C measures: no
+    user-stated topic, no material, and the topic never asked → the gate
+    rejects toward ask_user). None = accepted (terminal)."""
+    if name == "present_plan":
+        brief = getattr(params, "brief", None)
+        topic = brief.topic if brief else None
+        rooted = (
+            topic is not None
+            and bool((topic.value or "").strip())
+            and topic.source == BriefSlotSource.USER_STATED
+        ) or bool((getattr(params, "material_text", None) or "").strip())
+        if not rooted:
+            return (
+                "the brief has no root (no topic, no material, no explicitly "
+                "named grounded recipe) and the topic was never asked — a "
+                "rootless plan never docks. Call ask_user with slot='topic' "
+                "asking the ONE topic question."
+            )
+    return None
+
+
+def _passed(probe: str, r: LoopResult) -> bool:
     if probe == "A":
-        return r.action == "start"
+        return r.tool_name == "start_run"
     if probe == "B":
-        topic = r.brief.topic if r.brief else None
-        return topic is not None and topic.source == "user-stated"
-    # C: the direct ask OR the 判词⑦-harmless hybrid (draft + empty tasks +
-    # ask(topic)) — the code re-reads the hybrid as the ask verdict.
-    slot = r.ask.slot if r.ask else None
-    if r.action == "ask":
-        return slot == "topic"
-    return r.action == "draft" and not r.tasks and slot == "topic"
+        brief = getattr(r.params, "brief", None)
+        topic = brief.topic if brief else None
+        return (
+            topic is not None
+            and bool((topic.value or "").strip())
+            and topic.source == BriefSlotSource.USER_STATED
+        )
+    # C: the direct ask OR the corrected-after-rejection ask — the terminal
+    # call must be the topic question either way.
+    return r.tool_name == "ask_user" and getattr(r.params, "slot", None) == "topic"
 
 
 async def main() -> int:
@@ -116,13 +149,14 @@ async def main() -> int:
     parser.add_argument("--probe", choices=["A", "B", "C"], default=None)
     args = parser.parse_args()
 
-    agent = StreamingAgent(
+    agent = ToolLoopAgent(
         name="prompt_gate_router",
         prompt="intent_router.j2",
-        schema=InferredIntent,
         system=intent_router_system(),
         temperature=0.2,
         assemble=_assemble_book_turn,
+        tools=BOOK_TOOLS,
+        max_iterations=4,
     )
     probes = {"A": PROBE_A, "B": PROBE_B, "C": PROBE_C}
     failed = False
@@ -132,7 +166,7 @@ async def main() -> int:
         outcomes = []
         for _ in range(args.n):
             try:
-                r = await agent.call(**ctx)
+                r = await agent.call_loop(_gate_execute, **ctx)
                 outcomes.append(_passed(name, r))
             except Exception as e:  # noqa: BLE001 — provider errors count as failures
                 outcomes.append(False)

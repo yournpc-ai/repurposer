@@ -1,34 +1,40 @@
 """Intent agents (two distinct jobs behind the SINGLE chat surface, NAMING §5).
 
-Both are declared instances of the funnel's one sanctioned subclass
-(``StreamingAgent``, N-30 — the streaming special form, N-26); the declared
-fallback / the adjudication repair echo are funnel stages, not bespoke code.
-The model-facing prose lives one file over (``chat/prompts.py``, Mastra
-instructions.md-style same-site extraction); this module is declarations +
-turn assembly only.
+Both are declared ``ToolLoopAgent`` instances (ADR-077 判词② — the bounded
+tool-loop form, 2026-09-14): the verdict union retired into the tool set
+(type field = tool name, per-state fields = params — a mechanical
+translation), prose rides the content channel (it streams; the typewriter
+law's key-order tooth retired with the JSON payload), and the adjudication
+repair round re-homed into the loop (a rejected call's reason echoes back,
+bounded by ``max_iterations``). The model-facing prose lives one file over
+(``chat/prompts.py``, Mastra instructions.md-style same-site extraction);
+the tool declarations in ``chat/turn_tools.py``; this module is declarations
++ turn assembly only.
 
 ``intent_router`` — the task-book builder (book path, CHAT_ARCH §3): free-form
-text → a structured task book (language/outputs/tone) plus the four-action
-verdict (draft / ask / answer / start). Invoked only from the chat service's
-book path — first-turn projects and pending-task-book refinement turns.
-Provider failures propagate as LLMError: the route boundary answers 502
-with the localized provider line (2026-08-14 裁定 — a fabricated default
-book looks like a real plan and Start would spend a paid run on it; an
-honest failure beats a wrong plan, and the user_key taxonomy makes the
-failure presentable).
+text → present_plan (draft/refine the task book) / ask_user (the ONE deciding
+question) / start_run (prose confirmation of the docked book) / answer.
+Invoked only from the chat service's book path — first-turn projects and
+pending-task-book refinement turns. Provider failures propagate as LLMError:
+the route boundary answers 502 with the localized provider line (2026-08-14
+裁定 — a fabricated default book looks like a real plan and Start would
+spend a paid run on it; an honest failure beats a wrong plan, and the
+user_key taxonomy makes the failure presentable).
 
 ``chat_intent_agent`` — the chat loop's intent proposer (CHAT_ARCH §3): one
-user message + assembled context → a four-state ``IntentProposal``
-(task_list / edit_ops / ask / answer — N-18 + N-21). Single
-tool-calling-style call per turn, never a ReAct loop; the LLM proposes and
-``compile_graph`` adjudicates.
+user message + assembled context → one terminal call (propose_tasks /
+apply_edit_ops / edit_graph / ask_user / answer — the five proposal states,
+mechanically). The LLM proposes; ``compile_graph`` / the operations registry
+/ ``apply_wiring_ops`` adjudicate — their rejections ARE the loop's
+feedback.
 """
 
 from typing import Any
 
-from app.agents.base import StreamingAgent
+from app.agents.tool_loop import ToolLoopAgent
 from app.chat.prompts import chat_intent_system, intent_router_system
-from app.models.schemas import BriefLedger, InferredIntent, IntentResult
+from app.chat.turn_tools import BOOK_TOOLS, CHAT_TOOLS
+from app.models.schemas import BriefLedger
 from app.models.tables import Message, Persona
 from app.ui_locale import current_ui_language
 
@@ -180,13 +186,14 @@ def _assemble_book_turn(
 
 # The registries are static once imported (the tools door opens them), so
 # the system prompts are built once at declaration time.
-intent_router: StreamingAgent[InferredIntent] = StreamingAgent(
+intent_router = ToolLoopAgent(
     name="intent_router",
     prompt="intent_router.j2",
-    schema=InferredIntent,
     system=intent_router_system(),
     temperature=0.2,
     assemble=_assemble_book_turn,
+    tools=BOOK_TOOLS,
+    max_iterations=4,
 )
 
 
@@ -208,11 +215,12 @@ def _assemble_chat_turn(message: str, context: dict[str, Any]):
     return ({"context_text": context_text, "message": message}, [])
 
 
-chat_intent_agent: StreamingAgent[IntentResult] = StreamingAgent(
+chat_intent_agent = ToolLoopAgent(
     name="chat_intent",
     prompt="chat_intent.j2",
-    schema=IntentResult,
     system=chat_intent_system(),
     temperature=0.2,
     assemble=_assemble_chat_turn,
+    tools=CHAT_TOOLS,
+    max_iterations=4,
 )

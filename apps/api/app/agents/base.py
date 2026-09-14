@@ -315,11 +315,11 @@ class Agent(Generic[OutT]):
 
 
 class StreamingAgent(Agent[OutT]):
-    """The one sanctioned Agent subclass (N-30): the chat intent agents'
-    streaming form (N-26, ``generate_stream`` + the service-side
-    ProseDeltaExtractor single funnel). Same funnel as ``call`` — the first
-    attempt simply streams its raw fragments for the prose preview channel.
-    """
+    """The one sanctioned Agent subclass (N-30): a streaming single-call form
+    (N-26, ``generate_stream`` + a caller-side prose extractor). Same funnel
+    as ``call`` — the first attempt simply streams its raw fragments. (The
+    chat intent agents LEFT this form for the tool loop, ADR-077 判词②
+    2026-09-14 — prose is the content channel there, no extractor.)"""
 
     @staticmethod
     def _user_message(user_prompt: str, media: list[MediaInput]) -> dict[str, Any]:
