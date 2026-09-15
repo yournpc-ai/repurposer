@@ -55,13 +55,13 @@ from app.chat.intent import _assemble_book_turn  # noqa: E402
 from app.chat.perception import PERCEPTION_TOOLS  # noqa: E402
 from app.chat.prompts import intent_router_system  # noqa: E402
 from app.chat.turn_tools import BOOK_READ_TOOLS, BOOK_TOOLS  # noqa: E402
-from app.models.schemas import BriefLedger, BriefSlotSource  # noqa: E402
+from app.models.schemas import Brief, BriefSlotSource  # noqa: E402
 from app.models.tables import Message  # noqa: E402
 
 # (probe, minimum passes out of N)
 THRESHOLDS = {"A": 8, "B": 8, "C": 10}
 
-LEDGER_ANSWERED = BriefLedger.model_validate(
+BRIEF_ANSWERED = Brief.model_validate(
     {
         "topic": {"value": "EU AI Act for researchers", "source": "user-stated"},
         "audience": {"value": "researchers", "source": "user-stated"},
@@ -69,7 +69,7 @@ LEDGER_ANSWERED = BriefLedger.model_validate(
         "asked": ["topic"],
     }
 )
-LEDGER_EMPTY_ASKED = BriefLedger.model_validate(
+BRIEF_EMPTY_ASKED = Brief.model_validate(
     {
         "material_state": {"value": "none", "source": "default"},
         "asked": ["topic"],
@@ -89,7 +89,7 @@ TOPIC_QUESTION = Message(
 
 PROBE_A = {
     "message": "looks good, start",
-    "brief": LEDGER_ANSWERED,
+    "brief": BRIEF_ANSWERED,
     "presented_book": "write_post (language: en) — 'EU AI Act post for researchers'",
     "recent": [
         "user: I want a social post.",
@@ -101,7 +101,7 @@ PROBE_A = {
 }
 PROBE_B = {
     "message": "Make it about the EU AI Act for researchers.",
-    "brief": LEDGER_EMPTY_ASKED,
+    "brief": BRIEF_EMPTY_ASKED,
     "pending_question": TOPIC_QUESTION,
     "recent": [
         "user: I want a social post.",

@@ -180,7 +180,7 @@ export interface DerivedRow {
 /** Per-tool card anatomy (which controls a chain row gets). The label keys
  * reuse the results-tabs vocabulary for the five output tools; transforms
  * get their own words under generationOverlay.tools.*. (ADR-052 B3: the
- * per-row focus input retired — the card renders the brief ledger instead;
+ * per-row focus input retired — the card renders the brief instead;
  * params.focus stays a legal chat-set param, just never a blank UI box.) */
 const TOOL_META: Record<
   string,
@@ -369,8 +369,8 @@ export function tasksFromRunContext(ctx: unknown): TaskItem[] {
 }
 
 // ---------------------------------------------------------------------------
-// brief 账本 (ADR-052 B2/B3): the dialog engine's structured state, mirrored
-// from the API. The plan card renders the ledger's valued slots (the agent's
+// brief (ADR-052 B2/B3): the dialog engine's structured state, mirrored
+// from the API. The plan card renders the brief's valued slots (the agent's
 // own understanding) instead of blank form fields; an inferred slot value is
 // clickable and its edit rides the normal chat send channel (chat is the one
 // and only revision channel — the click-to-edit is its shorthand).
@@ -386,7 +386,7 @@ interface BriefSlot<T> {
 /** The slots the plan card renders. `material_state` is code-stamped
  * server-side (none/pasted/attached); the card shows it only when material
  * exists. `constraints` and the code-owned `asked` roll stay off the card. */
-interface BriefLedger {
+interface Brief {
   topic: BriefSlot<string>
   audience: BriefSlot<string>
   tone: BriefSlot<string>
@@ -405,7 +405,7 @@ function normalizeBriefSlot<T>(raw: unknown): BriefSlot<T> {
 
 /** Tolerate a missing/partial brief payload (old question rows pre-B3 carry
  * no `brief` key — read tolerance only, never written back). */
-function normalizeBrief(raw: unknown): BriefLedger | null {
+function normalizeBrief(raw: unknown): Brief | null {
   if (!raw || typeof raw !== "object") return null
   const data = raw as Record<string, unknown>
   return {
@@ -544,7 +544,7 @@ interface QuestionPayload {
     total: [number, number]
     per_task: ([number, number] | null)[]
   } | null
-  /** 预填评审卡 (ADR-052 B3): task_book only — the merged brief ledger at
+  /** 预填评审卡 (ADR-052 B3): task_book only — the merged brief at
    * dock time; the plan card renders its valued slots. Absent on question
    * rows from before B3 (normalizeBrief tolerates). */
   brief?: unknown
@@ -760,7 +760,7 @@ interface ChatDockProps {
     personaId?: string
   } | null
   initialIntent?: InferredIntent | null
-  /** The parked book's merged brief ledger (pending_brief.brief) on a restored
+  /** The parked book's merged brief (pending_brief.brief) on a restored
    * session — the plan card's slot rows (预填评审卡, ADR-052 B3). Live turns
    * refresh it from the docked question's payload, not this prop. */
   initialBrief?: unknown
@@ -810,7 +810,7 @@ export interface ChatDockHandle {
   startPendingBook: () => void
 }
 
-/** 预填评审卡 slot row (ADR-052 B3): one valued brief-ledger slot. A
+/** 预填评审卡 slot row (ADR-052 B3): one valued brief slot. A
  * user-stated value is settled prose (the user's own words); an
  * inferred/default proposal carries a dashed underline and opens an inline
  * editor — Enter commits the new value as a real chat message (chat is the
@@ -1267,10 +1267,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   /** Derived preview (ADR-043): the docked chain's server-compiled "you'll
    * get" projection — rides pending_brief.derived; refetched with the book. */
   const [derived, setDerived] = useState<DerivedRow[]>(initialDerived ?? [])
-  /** The merged brief ledger (预填评审卡, ADR-052 B3): the plan card's slot
+  /** The merged brief (预填评审卡, ADR-052 B3): the plan card's slot
    * rows. Initial load reads pending_brief.brief; every live turn re-stamps
    * it from the docked question's payload (turn-fresh single channel). */
-  const [brief, setBrief] = useState<BriefLedger | null>(() =>
+  const [brief, setBrief] = useState<Brief | null>(() =>
     normalizeBrief(initialBrief)
   )
   /** The docked book's soft-signal reasons (pending_brief.reasons) — the
@@ -3512,7 +3512,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   /** 点值改 (B3): an inferred slot's inline-edit commit IS a normal chat
    * send — the composed statement (「受众：X」 / "Audience: X") rides the one
    * and only revision channel; the router merges it user-stated and the
-   * re-docked book carries the fresh ledger. No slot-update endpoint —
+   * re-docked book carries the fresh brief. No slot-update endpoint —
    * prohibited-behavior: 禁第二修订通道. */
   /** Suggestion-pill clicks (T3 触发回合): "send" fires the pill's text as
    * the user's next message — verbatim, through the same sendChat every
@@ -3678,7 +3678,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   retired into the prose — the card carries only the editable
                   chain + the incremental derived preview. */}
               {/* 预填评审卡 (ADR-052 B3): the card TOP renders the agent's
-                  OWN understanding — the merged brief ledger's valued slots
+                  OWN understanding — the merged brief's valued slots
                   (有值显示，无值不显示；零空框). The review is recognition,
                   not creation: inferred values are one click from a chat
                   revision, user-stated values are settled prose. */}

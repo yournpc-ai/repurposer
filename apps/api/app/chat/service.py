@@ -63,7 +63,7 @@ from app.chat.intent import intent_router as _intent_router  # noqa: F401
 from app.models.schemas import (
     AnswerPayload,
     AnswerRequest,
-    BriefLedger,
+    Brief,
     BriefSlot,
     BriefSlotSource,
     ChatMention,
@@ -116,7 +116,7 @@ _ASK_BACK_TEXT = (
 
 
 def _material_gate_text(text: str) -> str:
-    """出书门槛·素材根 (ADR-052 B2 D2-C2): media-needing chain + ledger
+    """出书门槛·素材根 (ADR-052 B2 D2-C2): media-needing chain + brief
     material "none" + no book on the table — the missing root is the material
     itself, so the reply asks for it and nothing docks (the retired
     zero-material net's S13 outcome, folded into the gate). Language follows
@@ -382,7 +382,7 @@ async def _safe_task_estimate(
     try:
         return await derive_task_estimates(db, project, tasks)
     except (ToolRejected, ValueError):
-        return None# ---- brief 账本 (DIALOG_WORKFLOW §2.4, ADR-052 B2) ---------------------------
+        return None# ---- brief (DIALOG_WORKFLOW §2.4, ADR-052 B2) --------------------------------
 
 _SOURCE_RANK: dict[BriefSlotSource, int] = {
     BriefSlotSource.DEFAULT: 0,
@@ -390,7 +390,7 @@ _SOURCE_RANK: dict[BriefSlotSource, int] = {
     BriefSlotSource.USER_STATED: 2,
 }
 
-_LEDGER_SCALAR_SLOTS = ("topic", "audience", "tone", "material_state")
+_BRIEF_SCALAR_SLOTS = ("topic", "audience", "tone", "material_state")
 
 
 _CONSTRAINT_DIGITS = re.compile(r"\d+")
@@ -410,7 +410,7 @@ def _merge_constraints(
     """constraints 合并（顺形律 2026-09-11, ADR-064）= keyed union：键 = 归一化
     条目文本，同文本冲突按逐项 precedence（user-stated > inferred > default，
     与标量槽同一把尺——用户亲口说的约束永不被推断顶掉）。顺序 = stored 原序
-    + 新条目追加（账本稳定可读）。"""
+    + 新条目追加（brief 稳定可读）。"""
     merged = list(stored)
     index = {
         _constraint_key(item.value): i for i, item in enumerate(merged) if item.value
@@ -428,8 +428,8 @@ def _merge_constraints(
     return merged
 
 
-def merge_brief(update: BriefLedger | None, stored: BriefLedger) -> BriefLedger:
-    """Ledger merge — pure (LLM proposes, code decides; 禁 LLM 合并槽位).
+def merge_brief(update: Brief | None, stored: Brief) -> Brief:
+    """Brief merge — pure (LLM proposes, code decides; 禁 LLM 合并槽位).
 
     The router proposes a full update every book turn; code lands it per
     slot by source precedence (user-stated > inferred > default):
@@ -445,7 +445,7 @@ def merge_brief(update: BriefLedger | None, stored: BriefLedger) -> BriefLedger:
     if update is None:
         return stored
     merged = stored.model_copy(deep=True)
-    for field_name in _LEDGER_SCALAR_SLOTS:
+    for field_name in _BRIEF_SCALAR_SLOTS:
         proposed: BriefSlot = getattr(update, field_name)
         if proposed is None or proposed.value is None:
             continue
@@ -457,17 +457,17 @@ def merge_brief(update: BriefLedger | None, stored: BriefLedger) -> BriefLedger:
 
 
 def _backfill_brief_slot(project: Project, slot: str, value: str) -> None:
-    """ask 答复回填 (ADR-052 B2 D2-C1): the docked question's ledger slot
+    """ask 答复回填 (ADR-052 B2 D2-C1): the docked question's brief slot
     takes the user's answer as a user-stated value. Routed through
     merge_brief (user-stated 恒胜 — never a 反向覆盖), never a direct write.
-    Creates the ledger-only row when none exists (defensive — the ask dock
+    Creates the brief-only row when none exists (defensive — the ask dock
     normally wrote one)."""
     stored = (
         PendingBrief.model_validate(project.pending_brief)
         if isinstance(project.pending_brief, dict)
         else PendingBrief()
     )
-    update = BriefLedger()
+    update = Brief()
     setattr(
         update,
         slot,
@@ -983,7 +983,7 @@ async def sync_task_book_question(
     prompt: str,
     reasons: list[str] | None = None,
     derived: list[dict] | None = None,
-    brief: BriefLedger | None = None,
+    brief: Brief | None = None,
     echo: str | None = None,
     estimate: TaskBookEstimate | None = None,
 ) -> list[UUID]:
@@ -995,7 +995,7 @@ async def sync_task_book_question(
     new task book becomes the pending question. The needs_clarification
     ``reasons`` ride in the question's human text (data, localized at render)
     so the archive and the LLM context record WHY confirmation was asked.
-    ``brief`` (ADR-052 B3) stamps the merged ledger into the question payload
+    ``brief`` (ADR-052 B3) stamps the merged brief into the question payload
     — the plan card renders the agent's own understanding from it, never a
     blank form. ``estimate`` (BILLING §7) stamps the chain's credits
     quotation (total + per-task marginal, the dry-run compile's fold × the
@@ -1152,7 +1152,7 @@ async def answer_question(
                            rides into the next intent turn (the answered
                            question is in context), the follow-up reply
                            comes back here.
-                           A brief-ask (payload.slot) backfills the ledger
+                           A brief-ask (payload.slot) backfills the brief
                            user-stated and resumes the BOOK path
     - question + bail    → record only (a graceful exit, never a failure) —
                            except a brief-ask bail, which TAKES the default
@@ -1280,13 +1280,13 @@ async def answer_question(
                                 "caption_mode": recovered_mode,
                             }
                         )
-                    # The ledger rides along verbatim — the caption answer
+                    # The brief rides along verbatim — the caption answer
                     # is not a book turn; no merge, just preservation.
                     preserved_brief = (
-                        BriefLedger.model_validate(project.pending_brief["brief"])
+                        Brief.model_validate(project.pending_brief["brief"])
                         if isinstance(project.pending_brief, dict)
                         and isinstance(project.pending_brief.get("brief"), dict)
-                        else BriefLedger()
+                        else Brief()
                     )
                     project.pending_brief = PendingBrief(
                         prompt=prompt_text,
@@ -1355,7 +1355,7 @@ async def answer_question(
             # verbatim — no merge machinery.
             intent = data.intent or pending.intent
             if intent is None:
-                # Ledger-only row (ask-turn write) — no book was ever drafted.
+                # Brief-only row (ask-turn write) — no book was ever drafted.
                 raise HTTPException(
                     status.HTTP_409_CONFLICT, "No pending task book to start."
                 )
@@ -1491,9 +1491,9 @@ async def answer_question(
         say = (data.text if data.kind == "freeform" else None) or option_label or ""
         history = await list_conversation_messages(db, UUID(str(conversation.id)))
         if question.slot is not None and project is not None:
-            # ask 一等动作的答复回填 (ADR-052 B2 D2-C1): the ledger slot takes
+            # ask 一等动作的答复回填 (ADR-052 B2 D2-C1): the brief slot takes
             # the answer user-stated, then the book path resumes on the
-            # enriched ledger — draft the (now-rooted) book or ask the next
+            # enriched brief — draft the (now-rooted) book or ask the next
             # deciding slot. The answer text rides as the turn's message so
             # the router sees it as the user's own words.
             _backfill_brief_slot(project, question.slot, say)
@@ -1807,7 +1807,7 @@ async def prepare_chat_turn(
             ):
                 # ask 一等动作的 autoResume 回填 (ADR-052 B2 D2-C1): same
                 # user-stated backfill as the answer endpoint — the book
-                # path dispatch below then re-judges on the enriched ledger.
+                # path dispatch below then re-judges on the enriched brief.
                 _backfill_brief_slot(
                     project,
                     pending_payload.slot,
@@ -1860,13 +1860,13 @@ async def prepare_chat_turn(
             ):
                 # ask 一等动作的答复回 book path (D2-C1): the backfill already
                 # landed above — the book path re-judges on the enriched
-                # ledger (draft the rooted book, or ask the next slot).
+                # brief (draft the rooted book, or ask the next slot).
                 book_path = True
             elif (
                 not isinstance(project.pending_brief, dict)
                 or project.pending_brief.get("intent") is None
             ):
-                # A ledger-only pending_brief row (an ask-turn write) keeps
+                # A brief-only pending_brief row (an ask-turn write) keeps
                 # the pre-run probe — the project is still in its book phase.
                 has_runs = (
                     await db.execute(
@@ -1897,7 +1897,7 @@ async def prepare_chat_turn(
 # "Thinking…" with zero information (user ruling: the label earns its place
 # only when the activity structurally differs from thinking).
 THINKING_PHASE_CREATING_RUN = "creating_run"
-# The call is a draft — ledger write + book dock + the draft-graph stamp
+# The call is a draft — brief write + book dock + the draft-graph stamp
 # (compile + estimate folds) fill the seconds between the echo's end and
 # the plan card's arrival (the window the 10s-gap forensics named).
 THINKING_PHASE_DRAFTING = "drafting"

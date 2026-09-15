@@ -572,7 +572,7 @@ async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
           options)
     book1 = await pending_book(ctx, pid)
     check(book1 is None or book1.get("intent") is None,
-          "no task book parks on an ask turn (ledger-only row or none)", book1)
+          "no task book parks on an ask turn (brief-only row or none)", book1)
 
     # 契约拍①：待决重建零内存态（旧 S26 并入）。
     res = await ctx.conversation(pid)
@@ -637,7 +637,7 @@ async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
         turn2b = await ctx.chat(pid, "go ahead")
         msg2 = turn2b["assistant_message"]
     check(is_task_book_dock(msg2),
-          "the enriched ledger docks the task book (root now exists)", msg2)
+          "the enriched brief docks the task book (root now exists)", msg2)
     ftopic = ((msg2.get("question") or {}).get("brief") or {}).get("topic") or {}
     check(ftopic.get("source") == "user-stated" and bool(ftopic.get("value")),
           "the review card stamps the merged brief into the payload", ftopic)
@@ -1635,7 +1635,7 @@ async def s8_research_grounds_writer(ctx: Ctx) -> None:
 
 
 async def s9_consult_never_books(ctx: Ctx) -> None:
-    """核⑨ 问事不出书：能力提问 / 闲聊 → 纯 answer（无 dock 无 run 无账本）；
+    """核⑨ 问事不出书：能力提问 / 闲聊 → 纯 answer（无 dock 无 run 无 brief）；
     无书 "start it" 不死路不起 run（rootless → 主题问门槛接住，永不裸跑）。"""
     pid = await ctx.new_project("S9 consult")
 
@@ -1844,24 +1844,24 @@ async def s11_whole_source_and_materialize_matrix(ctx: Ctx) -> None:
 
 
 async def s12_merge_brief_source_matrix(ctx: Ctx) -> None:
-    """S12 brief 账本来源优先级三态矩阵（ADR-052 B2 D1-C1，进程内纯函数）：
+    """S12 brief 来源优先级三态矩阵（ADR-052 B2 D1-C1，进程内纯函数）：
     user-stated 永不反向覆盖 / user 重申恒胜 / inferred 压 default /
     default 永不压 inferred / no-opinion 槽永不落账 / 整账 None 原样返回 /
     asked 簿永不吃 LLM 提议。"""
     del ctx  # in-process pure-function matrix — no API, no DB rows
     from app.chat.service import merge_brief
-    from app.models.schemas import BriefLedger, BriefSlot, BriefSlotSource as Src
+    from app.models.schemas import Brief, BriefSlot, BriefSlotSource as Src
 
-    def ledger(**slots) -> BriefLedger:
-        return BriefLedger(**slots)
+    def brief(**slots) -> Brief:
+        return Brief(**slots)
 
     def slot(value, source) -> BriefSlot:
         return BriefSlot(value=value, source=source)
 
     # 1. user-stated survives inferred AND default proposals (永不反向覆盖).
-    stored = ledger(topic=slot("grid storage", Src.USER_STATED))
+    stored = brief(topic=slot("grid storage", Src.USER_STATED))
     out = merge_brief(
-        ledger(
+        brief(
             topic=slot("renewables", Src.INFERRED),
             audience=slot("CTOs", Src.INFERRED),
         ),
@@ -1870,33 +1870,33 @@ async def s12_merge_brief_source_matrix(ctx: Ctx) -> None:
     check(out.topic.value == "grid storage"
           and out.topic.source == Src.USER_STATED,
           "user-stated topic survives an inferred proposal", out.topic)
-    out = merge_brief(ledger(topic=slot("anything", Src.DEFAULT)), stored)
+    out = merge_brief(brief(topic=slot("anything", Src.DEFAULT)), stored)
     check(out.topic.value == "grid storage",
           "user-stated topic survives a default proposal", out.topic)
 
     # 2. The user re-stating a slot always wins (user-stated ≥ user-stated —
     #    chat 修订恒胜).
-    out = merge_brief(ledger(topic=slot("renewables", Src.USER_STATED)), stored)
+    out = merge_brief(brief(topic=slot("renewables", Src.USER_STATED)), stored)
     check(out.topic.value == "renewables"
           and out.topic.source == Src.USER_STATED,
           "a re-stated slot lands (the user spoke again)", out.topic)
 
     # 3. inferred lands over an empty/default slot and over a default value;
     #    default never lands over inferred.
-    stored = ledger(audience=slot("general public", Src.DEFAULT))
-    out = merge_brief(ledger(audience=slot("first-time founders", Src.INFERRED)), stored)
+    stored = brief(audience=slot("general public", Src.DEFAULT))
+    out = merge_brief(brief(audience=slot("first-time founders", Src.INFERRED)), stored)
     check(out.audience.value == "first-time founders"
           and out.audience.source == Src.INFERRED,
           "inferred outranks default", out.audience)
-    out = merge_brief(ledger(audience=slot("everyone", Src.DEFAULT)), out)
+    out = merge_brief(brief(audience=slot("everyone", Src.DEFAULT)), out)
     check(out.audience.value == "first-time founders",
           "default never overwrites inferred", out.audience)
 
     # 4. A no-opinion slot (value=None) never lands — stored survives; and
     #    fresh inference re-lands over stale inference (same rank, latest wins).
     out = merge_brief(
-        ledger(tone=BriefSlot(source=Src.INFERRED), topic=slot("new angle", Src.INFERRED)),
-        ledger(tone=slot("sharp", Src.USER_STATED), topic=slot("old angle", Src.INFERRED)),
+        brief(tone=BriefSlot(source=Src.INFERRED), topic=slot("new angle", Src.INFERRED)),
+        brief(tone=slot("sharp", Src.USER_STATED), topic=slot("old angle", Src.INFERRED)),
     )
     check(out.tone.value == "sharp", "a None update never lands", out.tone)
     check(out.topic.value == "new angle",
@@ -1905,9 +1905,9 @@ async def s12_merge_brief_source_matrix(ctx: Ctx) -> None:
     # 5. constraints 是数组槽（ADR-064 顺形律）——按条目 keyed union：新条目
     #    追加、同文本冲突逐项 precedence（user-stated 永不反向覆盖）、归一化
     #    键大小写/空白不敏感。
-    stored = ledger(constraints=[slot("keep it under 200 words", Src.USER_STATED)])
+    stored = brief(constraints=[slot("keep it under 200 words", Src.USER_STATED)])
     out = merge_brief(
-        ledger(constraints=[
+        brief(constraints=[
             slot("add hashtags", Src.INFERRED),
             slot("Keep it under 200  words", Src.INFERRED),  # 同键不同来源
         ]),
@@ -1926,7 +1926,7 @@ async def s12_merge_brief_source_matrix(ctx: Ctx) -> None:
     )
     # 同键重申恒胜（user-stated ≥ user-stated — 与标量槽同尺）。
     out = merge_brief(
-        ledger(constraints=[slot("keep it under 100 words", Src.USER_STATED)]),
+        brief(constraints=[slot("keep it under 100 words", Src.USER_STATED)]),
         out,
     )
     check(
@@ -1936,7 +1936,7 @@ async def s12_merge_brief_source_matrix(ctx: Ctx) -> None:
         out.constraints,
     )
     # 旧槽形状（对象包数组/对象包字符串）读容忍——存量 pending_brief 行。
-    legacy = BriefLedger.model_validate(
+    legacy = Brief.model_validate(
         {"constraints": {"value": ["a", "b"], "source": "user-stated"}}
     )
     check(
@@ -1945,7 +1945,7 @@ async def s12_merge_brief_source_matrix(ctx: Ctx) -> None:
         "legacy object-wrapped constraints normalize on read",
         legacy.constraints,
     )
-    legacy_str = BriefLedger.model_validate(
+    legacy_str = Brief.model_validate(
         {"constraints": {"value": "one long sentence", "source": "inferred"}}
     )
     check(
@@ -1953,13 +1953,13 @@ async def s12_merge_brief_source_matrix(ctx: Ctx) -> None:
         "object-wrapped bare-string constraints normalize on read",
         legacy_str.constraints,
     )
-    bare = BriefLedger.model_validate({"constraints": ["keep 1:1"]})
+    bare = Brief.model_validate({"constraints": ["keep 1:1"]})
     check(
         [c.value for c in bare.constraints] == ["keep 1:1"],
         "bare-string items normalize",
         bare.constraints,
     )
-    made_up = BriefLedger.model_validate(
+    made_up = Brief.model_validate(
         {"constraints": [{"value": "x", "source": "explicit"}]}
     )
     check(
@@ -1968,17 +1968,17 @@ async def s12_merge_brief_source_matrix(ctx: Ctx) -> None:
         made_up.constraints,
     )
 
-    # 6. update=None returns the stored ledger (start/answer calls carry
+    # 6. update=None returns the stored brief (start/answer calls carry
     #    no proposal); the merge never mutates the stored input in place.
-    stored = ledger(topic=slot("grid storage", Src.USER_STATED))
+    stored = brief(topic=slot("grid storage", Src.USER_STATED))
     check(merge_brief(None, stored) is stored, "None update returns stored verbatim")
-    merge_brief(ledger(audience=slot("CTOs", Src.INFERRED)), stored)
+    merge_brief(brief(audience=slot("CTOs", Src.INFERRED)), stored)
     check(stored.audience.value is None, "the merge never mutates the stored input")
 
     # 7. The code-owned asked roll never lands from an LLM proposal (禁 LLM
     #    簿记, D2-C2) — it rides only the stored side of the merge.
     stored.asked = ["topic"]
-    upd = ledger()
+    upd = brief()
     upd.asked = ["audience"]
     out = merge_brief(upd, stored)
     check(out.asked == ["topic"],

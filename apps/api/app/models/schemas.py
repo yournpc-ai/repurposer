@@ -422,7 +422,7 @@ class QuestionProposal(BaseModel):
     options: list[Option] = Field(default_factory=list)
     allow_freeform: bool = True
     # ADR-052 B2 (ask 一等动作, the shared question shape): ``slot`` names the
-    # brief-ledger slot this question fills (the pre-run router sets it; the
+    # brief slot this question fills (the pre-run router sets it; the
     # chat loop's shape C leaves it null — post-run questions never backfill
     # a brief). ``default_path`` is 提问策略 ③'s schema tooth: the skip
     # path, consumed by the dock's × and the interjection reminder tail —
@@ -545,16 +545,16 @@ def _tolerate_null_keys(data: Any, *keys: str) -> Any:
 
 
 def _drop_bad_brief(data: Any) -> Any:
-    """校验分层律 (ADR-064) at the tool boundary: the brief ledger is
+    """校验分层律 (ADR-064) at the tool boundary: the brief is
     ADVISORY bookkeeping — if it still fails shape after its own
     normalization, drop the field and let the call live (never spend a loop
     iteration on bookkeeping). Logged, never silent."""
     if isinstance(data, dict) and data.get("brief") is not None:
         try:
-            BriefLedger.model_validate(data["brief"])
+            Brief.model_validate(data["brief"])
         except Exception:
             logger.warning(
-                "brief_ledger_dropped",
+                "brief_dropped",
                 brief=json.dumps(data["brief"], default=str)[:500],
             )
             data = dict(data)
@@ -594,11 +594,11 @@ class BookAskArgs(BaseModel):
     )
     slot: Literal["topic", "audience", "tone"] | None = Field(
         default=None,
-        description="The brief-ledger slot this question fills (the pre-run router's seat).",
+        description="The brief slot this question fills (the pre-run router's seat).",
     )
-    brief: BriefLedger | None = Field(
+    brief: Brief | None = Field(
         default=None,
-        description="Ledger updates this turn: only the slots you have a view on, each with its source (user-stated ONLY when the user's own words literally state the value). Slots you leave out keep their stored value.",
+        description="Brief updates this turn: only the slots you have a view on, each with its source (user-stated ONLY when the user's own words literally state the value). Slots you leave out keep their stored value.",
     )
     material_text: str | None = Field(
         default=None,
@@ -642,9 +642,9 @@ class PresentPlanArgs(BaseModel):
         default="",
         description="A compact noun phrase (2-6 words, interface language) naming the book's deliverable — it titles the run's receipt. Name the work, never the tools.",
     )
-    brief: BriefLedger | None = Field(
+    brief: Brief | None = Field(
         default=None,
-        description="Ledger updates this turn: only the slots you have a view on, each with its source (user-stated ONLY when the user's own words literally state the value).",
+        description="Brief updates this turn: only the slots you have a view on, each with its source (user-stated ONLY when the user's own words literally state the value).",
     )
     material_text: str | None = Field(
         default=None,
@@ -664,9 +664,9 @@ class BookAnswerArgs(BaseModel):
     def _read_tolerance(cls, data: Any) -> Any:
         return _drop_bad_brief(_tolerate_null_keys(data, "material_text"))
 
-    brief: BriefLedger | None = Field(
+    brief: Brief | None = Field(
         default=None,
-        description="Ledger updates this turn, if any (same rules as the other tools).",
+        description="Brief updates this turn, if any (same rules as the other tools).",
     )
     material_text: str | None = Field(
         default=None,
@@ -1134,7 +1134,7 @@ def _legacy_slots_to_tasks(data: dict) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# brief 账本（DIALOG_WORKFLOW §2.4, ADR-052 B2): the dialog engine's structured
+# brief（DIALOG_WORKFLOW §2.4, ADR-052 B2): the dialog engine's structured
 # state. Five slots, each with provenance; the intent router proposes a full
 # update every book turn and code merges by source precedence (merge_brief —
 # LLM proposes, code decides; user-stated is never reverse-overwritten).
@@ -1142,7 +1142,7 @@ def _legacy_slots_to_tasks(data: dict) -> list[dict]:
 
 
 class BriefSlotSource(StrEnum):
-    """Provenance of one ledger slot's value (merge precedence: stated > inferred > default)."""
+    """Provenance of one brief slot's value (merge precedence: stated > inferred > default)."""
 
     USER_STATED = "user-stated"
     INFERRED = "inferred"
@@ -1153,7 +1153,7 @@ SlotT = TypeVar("SlotT")
 
 
 class BriefSlot(BaseModel, Generic[SlotT]):
-    """One ledger slot: a value plus its provenance.
+    """One brief slot: a value plus its provenance.
 
     ``value=None`` is the empty slot (stored) and the no-opinion update
     (the router emits only slots it has a view on) — a None update never
@@ -1169,14 +1169,14 @@ class BriefSlot(BaseModel, Generic[SlotT]):
 MaterialState = Literal["none", "pasted", "attached"]
 
 
-class BriefLedger(BaseModel):
-    """The brief ledger: five slots + code-owned bookkeeping.
+class Brief(BaseModel):
+    """The brief: five slots + code-owned bookkeeping.
 
     topic / audience / tone / constraints are the askable slots — the ask
     strategy (一轮一问决定槽) targets the one whose answer most decides
     quality. ``material_state`` is code-stamped at write time (assets with
     files → attached; pasted text material → pasted; else none) — the router
-    READS it in the ledger block for the root judgment, never proposes it.
+    READS it in the brief block for the root judgment, never proposes it.
 
     顺形律 (2026-09-11，ADR-064): ``constraints`` = 来源化条目的**数组**
     (``list[BriefSlot[str]]``)，不是对象包数组——实测（M3 十七次复跑 +
@@ -1343,20 +1343,20 @@ class InferredIntent(BaseModel):
             "clip_count_explicit",
         ):
             data.pop(retired, None)
-        # 校验分层律 (2026-09-11, ADR-064): the brief ledger is ADVISORY
+        # 校验分层律 (2026-09-11, ADR-064): the brief is ADVISORY
         # bookkeeping — after its own shape normalization it still fails to
         # parse, drop the field and let the turn live (the critical payload
         # — action / tasks / answer / ask / name, the things that drive a
-        # paid run — stays strict above). Losing one ledger update is
+        # paid run — stays strict above). Losing one brief update is
         # harmless: the next turn re-proposes, and the raw messages are
         # still there. The drop is logged, never silent.
         brief = data.get("brief")
         if brief is not None:
             try:
-                BriefLedger.model_validate(brief)
+                Brief.model_validate(brief)
             except Exception:
                 logger.warning(
-                    "brief_ledger_dropped",
+                    "brief_dropped",
                     brief=json.dumps(brief, default=str)[:500],
                 )
                 data["brief"] = None
@@ -1438,12 +1438,12 @@ class InferredIntent(BaseModel):
             "target language only."
         ),
     )
-    # brief 账本 (ADR-052 B2): the router's full-update proposal for the
-    # ledger — emit only the slots you have a view on this turn, each with
+    # brief (ADR-052 B2): the router's full-update proposal — emit only the
+    # slots you have a view on this turn, each with
     # its source (user-stated ONLY when the user's own words literally state
     # the value). Code merges by source precedence; a slot you leave out
     # (or set null) keeps its stored value. Null for start/answer calls.
-    brief: BriefLedger | None = None
+    brief: Brief | None = None
     # LLM 建图时命名 (2026-09-09, ADR-058): a compact noun phrase naming the
     # book's deliverable, in the interface language ("中文 LinkedIn 帖子" /
     # "Chinese LinkedIn post") — it titles the run's receipt and completion
@@ -1478,7 +1478,7 @@ class QuestionPayload(BaseModel):
     confirmation vs a plain question), never combined with the mechanism
     (NAMING: use × mechanism combos are banned). ``content`` on the
     message row keeps the question's human text. Defined after the brief
-    family: the task_book form stamps the merged ledger (B3).
+    family: the task_book form stamps the merged brief (B3).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -1488,7 +1488,7 @@ class QuestionPayload(BaseModel):
     def _upgrade_legacy_kind(cls, data: Any) -> Any:
         """Stored rows written before the kind convergence spell ``choice``
         (and the retired ``confirm`` seat) — upgrade on read, never written
-        (读容忍, same doctrine as the ledger rows)."""
+        (读容忍, same doctrine as the brief rows)."""
         if isinstance(data, dict) and data.get("kind") in ("choice", "confirm"):
             return {**data, "kind": "question"}
         return data
@@ -1521,7 +1521,7 @@ class QuestionPayload(BaseModel):
     # task_book only: the needs_clarification reason KEYS (data, localized at
     # render — never baked into `content`, which is user-facing prose).
     reasons: list[str] = Field(default_factory=list)
-    # ask 一等动作牙齿 (ADR-052 B2): ``slot`` is the brief-ledger slot this
+    # ask 一等动作牙齿 (ADR-052 B2): ``slot`` is the brief slot this
     # question fills — the answer backfills it user-stated and the book path
     # resumes (the dock handshake, same pattern as the caption_mode_ prefix).
     # None on every question that is not a brief ask (caption mode, direction
@@ -1531,11 +1531,11 @@ class QuestionPayload(BaseModel):
     # for the dock's × and the interjection reminder tail.
     slot: Literal["topic", "audience", "tone"] | None = None
     default_path: str = ""
-    # 预填评审卡 (ADR-052 B3): task_book only — the merged brief ledger at
+    # 预填评审卡 (ADR-052 B3): task_book only — the merged brief at
     # dock time, so the plan card renders the agent's OWN understanding
     # (valued slots with provenance) instead of blank form fields. Frozen
     # with the question row; every re-dock stamps the fresh merge.
-    brief: BriefLedger | None = None
+    brief: Brief | None = None
     # 任务书行自完备 (2026-09-08, 方案 B): task_book only — the ADR-043
     # derived preview ("you'll get") stamped at dock time. With the chain on
     # the row's `intent` column and this on the payload, the docked row IS
@@ -1551,7 +1551,7 @@ class PendingBrief(BaseModel):
     Written by the chat book path on draft-action turns (an
     answer-action turn never overwrites the stored book), cleared once the
     run starts. Lets a user who left the book-confirmation chat resume it
-    exactly, from any device. Ask-action turns write a ledger-only row
+    exactly, from any device. Ask-action turns write a brief-only row
     (``intent=None``): the merged brief persists while the ONE question is
     docked, and the answer's backfill lands on it.
     """
@@ -1569,14 +1569,14 @@ class PendingBrief(BaseModel):
         return data
 
     prompt: str = ""
-    # Null on ledger-only rows (ADR-052 B2: an ask-turn write — the brief
+    # Null on brief-only rows (ADR-052 B2: an ask-turn write — the brief
     # merged, no book drafted yet). A row with intent=None is never startable
     # and never re-docked as a task book.
     intent: InferredIntent | None = None
-    # brief 账本 (ADR-052 B2): the dialog's structured state — slots with
+    # brief (ADR-052 B2): the dialog's structured state — slots with
     # provenance, merged by code every book turn (merge_brief). The task
     # chain and derived preview above stay the book's own rows (原样).
-    brief: BriefLedger = Field(default_factory=BriefLedger)
+    brief: Brief = Field(default_factory=Brief)
     reasons: list[str] = Field(default_factory=list)
     persona_id: UUID | None = None
     # Derived preview (ADR-043): the dry-run-compiled graph's user-facing
@@ -2453,7 +2453,7 @@ class MaterialUnderstanding(BaseModel):
 # artifact — web grounding gathered by the researcher agent's search/fetch
 # iterations, stamped into the research step's spec and appended to
 # consuming writers' asset texts. Machine channel only (step spec): it never
-# enters the dialog engine's brief ledger — same word, different object.
+# enters the dialog engine's brief — same word, different object.
 # ---------------------------------------------------------------------------
 
 

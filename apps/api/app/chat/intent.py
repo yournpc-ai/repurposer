@@ -39,7 +39,7 @@ from app.chat.turn_tools import (
     CHAT_READ_TOOLS,
     CHAT_TOOLS,
 )
-from app.models.schemas import BriefLedger
+from app.models.schemas import Brief
 from app.models.tables import Message, Persona
 from app.ui_locale import current_ui_language
 
@@ -66,7 +66,7 @@ def _speech_language_line(lang: str) -> str:
 
 def _assemble_book_turn(
     message: str,
-    brief: BriefLedger | None = None,
+    brief: Brief | None = None,
     persona: Persona | None = None,
     pending_question: Message | None = None,
     filename: str | None = None,
@@ -75,13 +75,13 @@ def _assemble_book_turn(
     file_language: str | None = None,
     material_excerpt: str | None = None,
 ):
-    """Book-turn inputs (ADR-052 B2 D2-C2 — the ledger is the state).
+    """Book-turn inputs (ADR-052 B2 D2-C2 — the brief is the state).
 
     ``message``: this turn's own words — never an accumulated prompt (the
-    ledger carries the accumulated state; ``MAX_ACCUM_PROMPT_CHARS``'s
+    brief carries the accumulated state; ``MAX_ACCUM_PROMPT_CHARS``'s
     head/tail bookkeeping retired with the switch).
-    ``brief``: the code-merged ledger BEFORE this turn's proposal (material
-    state freshly stamped) — rendered as the ledger block: valued slots with
+    ``brief``: the code-merged brief BEFORE this turn's proposal (material
+    state freshly stamped) — rendered as the brief block: valued slots with
     their source, the material line always, and the asked roll (the router
     reads it for the root judgment and never re-asks an asked slot).
     ``persona``: the turn's persona row (the caller resolves: explicit pick →

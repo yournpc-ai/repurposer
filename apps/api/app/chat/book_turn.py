@@ -21,18 +21,18 @@ the caller commits (except ``start_run``, where ``answer_question`` commits,
 unchanged). The envelope absorb (declared-material promotion + brief merge +
 the pending-slot handshake) is idempotent per turn: it may run on several
 iterations, it writes at most once, and every gate reads the ONE merged
-ledger (出书决策只看账本).
+brief (出书决策只看 brief).
 
 Storage shapes preserved: docked rows and ``message.intent`` still carry
 ``InferredIntent`` dumps (built here from the accepted call's params plus
 the turn's prose), the caption-mode stash stays a bare ``InferredIntent``
-dump, and an ask turn's ledger-only ``pending_brief`` row is byte-identical.
+dump, and an ask turn's brief-only ``pending_brief`` row is byte-identical.
 The 判词⑦ hybrid-flip machinery retired structurally — a tool call IS one
 action; the impossible hybrid shapes have no wire form anymore (their
 outcomes survive as rejections).
 
 T2b 感知族 (ADR-077 判词②): the read tools (``app/chat/perception/``)
-dispatch straight from ``execute`` — never a ledger write, never an
+dispatch straight from ``execute`` — never a brief write, never an
 outcome — and ride back as a ToolObservation the loop feeds back.
 """
 
@@ -80,7 +80,7 @@ from app.models.schemas import (
     AnswerPayload,
     BookAnswerArgs,
     BookAskArgs,
-    BriefLedger,
+    Brief,
     BriefSlot,
     BriefSlotSource,
     ChatRequest,
@@ -136,7 +136,7 @@ class BookTurn:
         self.infer_kwargs: dict[str, Any] = {}
         # Loop state:
         self.material_asset: Asset | None = None
-        self.merged_brief: BriefLedger | None = None
+        self.merged_brief: Brief | None = None
         self.settled_pending: Message | None = None
         self.outcome: BookTurnOutcome | None = None
         self.saw_rootless_rejection = False
@@ -167,7 +167,7 @@ class BookTurn:
             else None
         )
         # ADR-052 B2 D2-C2: the accumulated prompt narrative is retired — the
-        # brief ledger is the dialog's structured state (code-merged), and this
+        # brief is the dialog's structured state (code-merged), and this
         # turn's message is judged on its own words. The archive already holds
         # each turn as its own user message; stored.prompt stays the birth
         # prompt, frozen at the first dock (never re-accumulated).
@@ -251,13 +251,13 @@ class BookTurn:
             if prior is not None and prior.tasks
             else None
         )
-        # The ledger the router reads (ADR-052 B2): the stored ledger with the
+        # The brief the router reads (ADR-052 B2): the stored brief with the
         # material state freshly code-stamped (the router reads it for the root
         # judgment, never proposes it). This turn's own proposal merges in the
         # absorb — LLM proposes, code decides.
         self.has_text_material = await has_any_text_material(db, UUID(str(project.id)))
-        ledger_in = (stored.brief if stored else BriefLedger()).model_copy(deep=True)
-        ledger_in.material_state = BriefSlot(
+        brief_in = (stored.brief if stored else Brief()).model_copy(deep=True)
+        brief_in.material_state = BriefSlot(
             value=(
                 "attached"
                 if any(a.file_url for a in assets)
@@ -288,7 +288,7 @@ class BookTurn:
         self.persona = persona
         self.infer_kwargs = dict(
             message=text,
-            brief=ledger_in,
+            brief=brief_in,
             persona=persona,
             pending_question=pending_q,
             filename=filename,
@@ -302,11 +302,11 @@ class BookTurn:
 
     # ---- the envelope absorb (once per turn, idempotent) -------------------
 
-    async def _absorb(self, brief: BriefLedger | None, material_text: str | None) -> BriefLedger:
+    async def _absorb(self, brief: Brief | None, material_text: str | None) -> Brief:
         """The turn's envelope absorb — the retired pre-branch block, run at
         the head of every tool execution that carries the seats. Idempotent:
         the material promotion writes at most once per turn, the merge is a
-        pure function of the stored ledger + THIS call's proposal (the last
+        pure function of the stored brief + THIS call's proposal (the last
         call's merge is what a dock persists), the slot handshake settles the
         pending row once."""
         db = self.db
@@ -323,12 +323,12 @@ class BookTurn:
             )
             self.assets.append(self.material_asset)
 
-        # brief 账本 (ADR-052 B2): the call's update proposal lands by source
+        # brief (ADR-052 B2): the call's update proposal lands by source
         # precedence, then the material state is code-stamped over it. Every
         # downstream decision — the ask-loop guard, the 出书门槛, the dock
-        # write — reads this ONE merged ledger (出书决策只看账本).
+        # write — reads this ONE merged brief (出书决策只看 brief).
         merged_brief = merge_brief(
-            brief, self.stored.brief if self.stored else BriefLedger()
+            brief, self.stored.brief if self.stored else Brief()
         )
         merged_brief.material_state = BriefSlot(
             value=(
@@ -345,7 +345,7 @@ class BookTurn:
         # 插话判定结算 (ADR-053 R2): the router saw the pending question in
         # context; a user-stated proposal for ITS OWN slot is the answer —
         # code settles the row (freeform, the user's stated value) and the
-        # enriched ledger drives the gates below.
+        # enriched brief drives the gates below.
         pending_q = self.pending_q
         if pending_q is not None:
             p_slot = (pending_q.question or {}).get("slot")
@@ -429,7 +429,7 @@ class BookTurn:
         except (ToolRejected, ValueError) as e:
             return str(e)
 
-        # 出书门槛 (ADR-052 B2 D2-C2 — the gate reads only the merged ledger +
+        # 出书门槛 (ADR-052 B2 D2-C2 — the gate reads only the merged brief +
         # the adjudicated chain):
         #  - media-needing chain with material "none" and no book on the table →
         #    the missing root is the material itself: REJECT, the model answers
@@ -630,12 +630,12 @@ class BookTurn:
             name=name,
         )
         # The birth prompt freezes at the first dock (stored.prompt wins on every
-        # later write) — the ledger is the accumulated state now, the prompt is
+        # later write) — the brief is the accumulated state now, the prompt is
         # only the book's birth narrative (Start's instruction fallback).
         birth_prompt = stored.prompt if stored and stored.prompt else self.text
         if self.on_phase is not None:
             # Real phase switch (相位通道用起来, 2026-09-09): the call is
-            # accepted and the dock-work starts — ledger write +
+            # accepted and the dock-work starts — brief write +
             # sync_task_book_question + the draft-graph stamp (compile +
             # estimate folds) are the seconds between the echo's last
             # character and the plan card's arrival.
@@ -643,7 +643,7 @@ class BookTurn:
         project.pending_brief = PendingBrief(
             prompt=birth_prompt,
             intent=intent,
-            # brief 账本 (ADR-052 B2): the ONE merged ledger — the call's update
+            # brief (ADR-052 B2): the ONE merged brief — the call's update
             # landed by source precedence + the material state code-stamped in
             # the absorb; the gate and the ask execution read this same object.
             brief=merged_brief,
@@ -700,8 +700,8 @@ class BookTurn:
         # ask 一等动作 (ADR-052 B2, 案 A 双实例): the pre-run router's ONE
         # question docks through the same machinery the chat path's ask_user
         # uses — with the book-path handshake on the payload (slot → the
-        # answer backfills the ledger user-stated; default_path → the dock's
-        # muted second line). The brief merge lands as a ledger-only row: the
+        # answer backfills the brief user-stated; default_path → the dock's
+        # muted second line). The brief merge lands as a brief-only row: the
         # stored book's intent is preserved verbatim (an ask never clobbers
         # the book), and a fresh project's row carries intent=None (never
         # startable).
@@ -709,7 +709,7 @@ class BookTurn:
             merged_brief.asked = [*merged_brief.asked, params.slot]
         self.project.pending_brief = PendingBrief(
             # The birth prompt stays frozen (stored.prompt wins) — the
-            # accumulated narrative retired with the ledger switch.
+            # accumulated narrative retired with the brief switch.
             prompt=stored.prompt if stored and stored.prompt else self.text,
             intent=stored.intent if stored else None,
             brief=merged_brief,
@@ -878,7 +878,7 @@ class BookTurn:
         )
         if self.saw_rootless_rejection:
             stored = self.stored
-            merged_brief = self.merged_brief or BriefLedger()
+            merged_brief = self.merged_brief or Brief()
             merged_brief.asked = [*merged_brief.asked, "topic"]
             self.project.pending_brief = PendingBrief(
                 prompt=stored.prompt if stored and stored.prompt else self.text,
