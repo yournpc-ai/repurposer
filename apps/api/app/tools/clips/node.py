@@ -8,7 +8,7 @@ render node per produced clip (claimed via outputs.render_status, D2).
 from uuid import UUID
 
 import structlog
-from sqlalchemy import bindparam, delete, select, text as _text
+from sqlalchemy import bindparam, select, text as _text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.memory.brand import (
@@ -35,6 +35,7 @@ from app.pipeline.decompile import (
     skeleton_caption_overrides,
     skeleton_clip_count,
 )
+from app.pipeline.outputs import delete_outputs_fk_safe
 from app.pipeline.edges import _load_plan_prelude_outputs
 from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase, estimate_agent, token_bounds
 from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
@@ -316,9 +317,9 @@ class SelectClips(NodeBase):
                 ).bindparams(bindparam("oids", expanding=True)),
                 {"oids": [str(oid) for oid in prior_clip_ids]},
             )
-            await db.execute(
-                delete(Output).where(Output.id.in_(prior_clip_ids))
-            )
+            # FK-safe order lives in the helper (operations/publications die
+            # first — an edited clip carries journaled ops).
+            await delete_outputs_fk_safe(db, prior_clip_ids)
 
         brand = brand_from_block(brand_cfg)
         brand_ref = persona.id if persona is not None else None

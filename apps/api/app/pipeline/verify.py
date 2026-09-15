@@ -38,7 +38,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import bindparam, delete, text as _text
+from sqlalchemy import bindparam, text as _text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import Agent
@@ -61,6 +61,7 @@ from app.pipeline.quality import (
 )
 from app.pipeline.step_context import _list_assets
 from app.pipeline.step_display import _set_summary
+from app.pipeline.outputs import delete_outputs_fk_safe
 from app.platform.project_context import collect_asset_texts, resolve_persona
 from app.providers.storage import stream_url
 
@@ -529,7 +530,7 @@ class Verify(NodeBase):
                 ).bindparams(bindparam("oids", expanding=True)),
                 {"rid": str(run.id), "oids": [str(oid) for oid in doomed]},
             )
-            await db.execute(delete(Output).where(Output.id.in_(doomed)))
+            await delete_outputs_fk_safe(db, doomed)
         restored: list[Output] = []
         for row in snap.get("outputs") or []:
             files = dict(row.get("files") or {})

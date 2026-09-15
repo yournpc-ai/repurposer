@@ -9,7 +9,7 @@ into any listing.
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
@@ -18,7 +18,7 @@ from app.models.schemas import (
     StepResponse,
     RunResponse,
 )
-from app.models.tables import Output, WorkflowStep, WorkflowRun
+from app.models.tables import Operation, Output, Publication, WorkflowStep, WorkflowRun
 from app.pipeline.graph import fold_estimates, node_for
 from app.platform.billing import cost_usd, credits_at_ratio, estimate_usd_range
 from app.platform.configs import get_config
@@ -271,3 +271,23 @@ async def run_to_response(
         resp.steps = [workflow_step_to_response(n, ratio=ratio) for n in nodes]
         resp.cost = aggregate_step_cost(nodes)
     return resp
+
+
+async def delete_outputs_fk_safe(
+    db: AsyncSession, doomed: list[UUID] | Select[tuple[UUID]]
+) -> None:
+    """FK-safe bulk delete of outputs — operations → publications → outputs
+    (Gate #2 Commit 2, 2026-09-16; the ``projects.py`` delete flow's order,
+    previously its private discipline): ``operations.output_id`` is a NO
+    ACTION FK and ``publications.output_id`` a RESTRICT FK, so any path that
+    deletes an output row carrying either dependent dies at the FK — an
+    edited clip (journaled ops) 500s on delete, and ``select_clips``' wipe
+    fails the whole run. ``doomed`` = an id list or a SELECT of
+    ``outputs.id`` (both plug into ``in_()``); an empty list is a no-op.
+    Deletion scope is the caller's decision — this helper changes ORDER only.
+    """
+    if isinstance(doomed, list) and not doomed:
+        return
+    await db.execute(delete(Operation).where(Operation.output_id.in_(doomed)))
+    await db.execute(delete(Publication).where(Publication.output_id.in_(doomed)))
+    await db.execute(delete(Output).where(Output.id.in_(doomed)))

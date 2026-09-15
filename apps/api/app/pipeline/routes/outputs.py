@@ -27,6 +27,7 @@ from app.models.schemas import (
     validate_output_payload,
 )
 from app.models.tables import Output, Project, User
+from app.pipeline.outputs import delete_outputs_fk_safe
 from app.tools.captions.procedure import translate_caption_track
 from app.chat.service import chat
 from app.agents.contexts import _output_one_liner
@@ -147,7 +148,9 @@ async def delete_output(
     for key in (files.get("video"), files.get("srt"), files.get("image")):
         await delete_file(key)
     await delete_file((output.publishing or {}).get("cover_image_url"))
-    await db.delete(output)
+    # FK-safe order lives in the helper (operations/publications die first —
+    # an edited output carries journaled ops, a published one publications).
+    await delete_outputs_fk_safe(db, [output_id])
     # A never-started render mirror would orphan into eternal pending and hold
     # its run open forever (ADR-074② 翻案: renders hold the run now) — the row
     # it's waiting for is gone. Settle it skipped; a RUNNING mirror resolves

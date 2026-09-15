@@ -56,7 +56,7 @@
 
 ### 3.1 含义（TARGET 表述，CURRENT 已大体成立）
 
-Agent 的职责是**产出决策**（choose / request / query / propose / ask），不是操作系统。决策生产者未来可替换（GPT / Gemini / Claude / Kimi / MiniMax / 本地模型 / 规则引擎），替换不改变下游生产系统——这是 `providers/llm` 单边界（ADR-039 Model 层）存在的理由。
+Agent 的职责是**产出决策**（choose / request / query / propose / ask），不是操作系统。决策生产者可替换（GPT / Gemini / Claude / Kimi / MiniMax / 本地模型 / 规则引擎）而不改变下游生产系统——**可替换性机制已就位（`providers/llm` 单边界 + T1 三层线格式 + 能力旗标，ADR-039/077），但尚未经第二 provider 真实运行实证（实证 = TARGET，未证明）**——这是该单边界存在的理由。
 
 **CURRENT 证据**：`app/agents/` 包全文无 DB import、无 session——决策纯已经成立（T5 后体检核实）；LLM 能写入的 schema 座位被结构封死的最严先例 = decompile 三座位（`CraftJudgment extra=forbid`，`test_decompile_pure.py` 看门）。
 

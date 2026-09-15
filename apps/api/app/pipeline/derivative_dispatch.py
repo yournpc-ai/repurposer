@@ -18,7 +18,7 @@ import hashlib
 import io
 import structlog
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import MAX_CHARS_PER_TEXT, Agent
@@ -47,6 +47,7 @@ from app.pipeline.quote_card_stack import (
 from app.pipeline.edges import _load_plan_prelude_outputs
 from app.pipeline.graph import NODE_KINDS, NodeBase, estimate_mechanical, token_bounds
 from app.pipeline.morph import _render_step_label
+from app.pipeline.outputs import delete_outputs_fk_safe
 from app.pipeline.step_context import _count_words, _list_assets
 from app.pipeline.step_display import (
     _fill_summary,
@@ -801,8 +802,10 @@ async def _sweep_stale_derivative_outputs(
         .where(WorkflowStep.run_id == run.id, WorkflowStep.kind == node.kind)
         .scalar_subquery()
     )
-    await db.execute(
-        delete(Output).where(
+    # FK-safe order lives in the helper (operations/publications die first).
+    await delete_outputs_fk_safe(
+        db,
+        select(Output.id).where(
             Output.project_id == project.id,
             Output.type == derivative_type.value,
             or_(
@@ -810,7 +813,7 @@ async def _sweep_stale_derivative_outputs(
                 Output.workflow_step_id == node.id,
                 Output.workflow_step_id.notin_(sibling_step_ids),
             ),
-        )
+        ),
     )
     if derivative_type == DerivativeType.QUOTES:
         quotes_step_ids = (
@@ -818,8 +821,9 @@ async def _sweep_stale_derivative_outputs(
             .where(WorkflowStep.kind == "write_quotes")
             .scalar_subquery()
         )
-        await db.execute(
-            delete(Output).where(
+        await delete_outputs_fk_safe(
+            db,
+            select(Output.id).where(
                 Output.project_id == project.id,
                 Output.type.in_(["quote_frame", "clip"]),
                 Output.workflow_step_id.in_(quotes_step_ids),
@@ -827,7 +831,7 @@ async def _sweep_stale_derivative_outputs(
                     Output.workflow_step_id == node.id,
                     Output.workflow_step_id.notin_(sibling_step_ids),
                 ),
-            )
+            ),
         )
 
 
