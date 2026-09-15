@@ -68,6 +68,7 @@ from app.models.schemas import (
     AnswerPayload,
     AnswerProposal,
     ApplyEditOpsArgs,
+    AssetType,
     ChatAnswerArgs,
     ChatAskArgs,
     ChatMention,
@@ -79,7 +80,7 @@ from app.models.schemas import (
     TaskListProposal,
     WiringProposal,
 )
-from app.models.tables import Message, Output, Project, WorkflowRun
+from app.models.tables import Asset, Message, Output, Project, WorkflowRun
 from app.operations.service import OpConflict, OpRejected, apply_operations
 from app.providers.llm.base import LLMError
 from app.tools import ToolRejected
@@ -114,12 +115,14 @@ class ChatTurn:
         self.pending: Message | None = None
         self.pending_judgable = False
         self.context: dict = {"text": ""}
+        self.mentions: list[ChatMention] = []
         self.settled_question: Message | None = None
         self.outcome: ProposeTurnOutcome | None = None
         self._bailed_on_skip: list[UUID] = []
 
     async def assemble(self, mentions: list[ChatMention], recent: list[Message]) -> None:
         db, project = self.db, self.project
+        self.mentions = mentions
         pending = (
             await latest_pending_question(db, self.conversation_id) if project else None
         )
@@ -144,6 +147,49 @@ class ChatTurn:
             if project
             else {"text": ""}
         )
+
+    # ---- 资产角色 pins (ADR-078 判词④), the chat path's dispatch seat --------
+
+    async def _role_pins_for(self, tasks) -> tuple[str | None, str | None]:
+        """(source, exemplar) pins for a proposed chain — only when the chain
+        reaches the clips producer (derived off NODE_KINDS via
+        node_for_output, never a name list); every other chain runs pin-less.
+
+        An asset @-mention on a project video pins THIS run's source (the
+        mentioned video is the material to cut — the mention outranks the
+        inherited pin). Without a mention, the conversation's settled pins
+        inherit (the pending plan's, else the latest run's — reference 常驻).
+        角色反转: a mention colliding with the inherited exemplar flips the
+        roles — the mention wins the source seat, the exemplar seat clears
+        for this run (the case cuts itself, no self-imitation).
+        """
+        from app.chat.perception.executes import _conversation_role_pins
+        from app.pipeline.graph import node_for_output
+
+        project = self.project
+        if project is None:
+            return (None, None)
+        clips_node = node_for_output("clips")
+        if clips_node is None or not any(
+            t.tool == clips_node.kind for t in tasks
+        ):
+            return (None, None)
+        source_pin: str | None = None
+        mentioned = next((m for m in self.mentions if m.type == "asset"), None)
+        if mentioned is not None:
+            asset = await self.db.get(Asset, mentioned.id)
+            if (
+                asset is not None
+                and str(asset.project_id) == str(project.id)
+                and asset.type == AssetType.VIDEO
+                and asset.file_url
+            ):
+                source_pin = str(asset.id)
+        inh_source, exemplar_pin = await _conversation_role_pins(self.db, project)
+        source_pin = source_pin or inh_source
+        if exemplar_pin is not None and exemplar_pin == source_pin:
+            exemplar_pin = None
+        return (source_pin, exemplar_pin)
 
     # ---- the pending-disposition preamble (ADR-053 R2) ----------------------
 
@@ -279,10 +325,12 @@ class ChatTurn:
         # keyword > stashed answer > source_only-if-no-distinct-alt — one
         # shared funnel.
         caption_mode = await _derive_chat_caption_mode(db, project, params.tasks, text)
+        source_pin, exemplar_pin = await self._role_pins_for(params.tasks)
         try:
             run_id = await _create_run_from_tasks(
                 db, project, params.tasks, prose,
                 caption_mode=caption_mode,
+                source_asset_id=source_pin, exemplar_asset_id=exemplar_pin,
                 name=params.name or None, on_phase=self.on_phase,
             )
         except ToolRejected as e:
@@ -416,8 +464,12 @@ class ChatTurn:
                 str(op.get("prompt")) for op in p.ops
                 if op.get("op") == "edit_prompt" and op.get("prompt")
             )
+            # 判词④ pins inherit on a revision run too (the conversation's
+            # resident state) — a remix revision keeps honoring the roles.
+            source_pin, exemplar_pin = await self._role_pins_for(tasks)
             return await _create_run_from_tasks(
                 db, project, tasks, p.summary, instruction=instruction or None,
+                source_asset_id=source_pin, exemplar_asset_id=exemplar_pin,
                 name=p.name or None, on_phase=self.on_phase,
             )
 

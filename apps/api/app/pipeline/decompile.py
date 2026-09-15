@@ -361,6 +361,23 @@ async def warm_craft_skeleton(project_id: UUID, asset_id: UUID) -> None:
         )
 
 
+# create_task holds only a weak reference — the GC can collect a fire-and-
+# forget task mid-flight. Keep a strong reference until done (the
+# asset_processing._warm_tasks precedent, re-homed here so every fire seat
+# — the asset processor's completion, the chat layer's role-pin settle —
+# shares the one guard).
+_WARM_TASKS: set[asyncio.Task] = set()
+
+
+def fire_warm_craft_skeleton(project_id: UUID, asset_id: UUID) -> None:
+    """Fire-and-forget warm with the GC guard owned here. The warm itself
+    re-checks every precondition (VIDEO, COMPLETED, reuse hit), so callers
+    fire on the pin event without re-deriving eligibility."""
+    task = asyncio.create_task(warm_craft_skeleton(project_id, asset_id))
+    _WARM_TASKS.add(task)
+    task.add_done_callback(_WARM_TASKS.discard)
+
+
 class Decompile(NodeBase):
     """The decompiler node — compile-injected (orchestrator keys off
     ``TaskSpec.exemplar_asset_id``), never a registry tool, never in the

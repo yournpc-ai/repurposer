@@ -74,6 +74,7 @@ def _assemble_plan_turn(
     recent: list[str] | None = None,
     file_language: str | None = None,
     material_excerpt: str | None = None,
+    asset_lines: list[str] | None = None,
 ):
     """Plan-turn inputs (ADR-052 B2 D2-C2 — the brief is the state).
 
@@ -108,6 +109,10 @@ def _assemble_plan_turn(
     ``material_excerpt``: the material's opening excerpt (track-model §7.4
     折中版 — the plan layer is no longer blind to what the material SAYS;
     mechanical slice, zero extra LLM).
+    ``asset_lines``: every attached file as one roster line (≥2 files only —
+    ADR-078: the remix judgment must SEE the full roster to know a role
+    question decides the plan; the single-file surface stays filename +
+    excerpt).
     """
     brief_lines: list[str] | None = None
     if brief is not None:
@@ -178,6 +183,7 @@ def _assemble_plan_turn(
             "recent": recent,
             "file_language": file_language,
             "material_excerpt": material_excerpt,
+            "asset_lines": asset_lines,
             # None outside a request (worker / scenario script) → the
             # directive is simply omitted and the LLM falls back to the
             # message's language (pre-2026-09-04 behavior).

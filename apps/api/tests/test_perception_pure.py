@@ -41,6 +41,7 @@ def test_registry_shape_and_naming_law() -> None:
         "search_music",
         "get_run_status",
         "get_asset",
+        "get_craft_skeleton",
     }
     for name, entry in PERCEPTION_TOOLS.items():
         assert re.fullmatch(r"(get|list|search)_[a-z_]+", name), name

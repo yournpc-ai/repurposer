@@ -1215,6 +1215,7 @@ const en = {
       music: "Searching the music library…",
       runStatus: "Checking the run's progress…",
       asset: "Looking at the asset…",
+      craftSkeleton: "Reading the reference's style breakdown…",
     },
     completed: "Done",
     failed: "Sorry, I couldn't update this. Please try again.",

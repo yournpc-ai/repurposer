@@ -459,3 +459,147 @@ async def test_render_source_pin_wins_exemplar_excluded_reversible():
         None, node, [silent, other], source_asset_id="silent"
     )
     assert picked4 is other
+
+
+# ---------------------------------------------------------------------------
+# 资产角色消歧 + pin 流 (批次⑥ T5 ④ — 判词④: the question machine's options
+# are code-built; mentions pin by code; the pins ride PendingPlan/TaskSpec)
+# ---------------------------------------------------------------------------
+
+from app.models.schemas import ChatMention  # noqa: E402
+
+
+def _video(asset_id: str, name: str):
+    return SimpleNamespace(
+        id=asset_id, type=AssetType.VIDEO, file_url=f"s3://x/{name}"
+    )
+
+
+def test_role_question_options_are_code_built_asset_ids():
+    """The role question's options ARE the project's videos (option id =
+    asset id — the answer settles deterministically); <2 videos = no
+    question (nothing to disambiguate)."""
+    from app.chat.service import _build_role_question
+
+    a, b = _video("id-a", "a.mp4"), _video("id-b", "b.mp4")
+    q = _build_role_question("cut a like b", [a, b])
+    assert q is not None and q.slot == "asset_role"
+    assert [o.id for o in q.options] == ["id-a", "id-b"]  # upload order
+    assert [o.label for o in q.options] == ["a.mp4", "b.mp4"]
+    assert q.allow_freeform and q.default_path  # the bail promise is stated
+    # One video (or none) → no disambiguation to ask about.
+    assert _build_role_question("cut it", [a]) is None
+    assert _build_role_question("cut it", []) is None
+
+
+def test_role_slot_literals_carry_asset_role():
+    """The dock handshake's slot seats all accept 'asset_role' — the plan
+    ask args, the docked proposal, and the persisted payload."""
+    from app.models.schemas import PlanAskArgs, QuestionPayload, QuestionProposal
+
+    for field in (
+        PlanAskArgs.model_fields["slot"],
+        QuestionProposal.model_fields["slot"],
+        QuestionPayload.model_fields["slot"],
+    ):
+        values: set[str] = set()
+        for arg in get_args(field.annotation):
+            if get_origin(arg) is Literal:
+                values.update(get_args(arg))
+        assert "asset_role" in values, field
+
+
+def _plan_turn_for_pins(stored, mention_exemplar_id=None):
+    """A PlanTurn shell carrying only what _role_pins reads (the method is
+    pure — __init__'s db/conversation seats never load)."""
+    from app.chat.plan_turn import PlanTurn
+
+    turn = object.__new__(PlanTurn)
+    turn.stored = stored
+    turn.mention_exemplar_id = mention_exemplar_id
+    return turn
+
+
+def test_plan_path_role_pins_preserve_and_mention_overrides():
+    from app.models.schemas import PendingPlan
+
+    stored = PendingPlan(
+        prompt="p", source_asset_id="s", exemplar_asset_id="e"
+    )
+    # A turn that never touched the roles preserves the settled pins.
+    assert _plan_turn_for_pins(stored)._role_pins() == {
+        "source_asset_id": "s",
+        "exemplar_asset_id": "e",
+    }
+    # A fresh mention re-pins the exemplar; the stored source survives.
+    assert _plan_turn_for_pins(stored, "e2")._role_pins() == {
+        "source_asset_id": "s",
+        "exemplar_asset_id": "e2",
+    }
+    # Mentioning the stored SOURCE flips the roles — one asset never holds
+    # both seats (the source seat clears).
+    assert _plan_turn_for_pins(stored, "s")._role_pins() == {
+        "source_asset_id": None,
+        "exemplar_asset_id": "s",
+    }
+    # No stored plan, no mention → both None.
+    assert _plan_turn_for_pins(None)._role_pins() == {
+        "source_asset_id": None,
+        "exemplar_asset_id": None,
+    }
+
+
+class _MentionDb:
+    """The mention path's only DB touch: asset lookup by id."""
+
+    def __init__(self, asset):
+        self._asset = asset
+
+    async def get(self, _model, _key):
+        return self._asset
+
+
+@pytest.mark.asyncio
+async def test_chat_path_role_pins_inherit_mention_wins_reversal():
+    """Chat path (propose_turn._role_pins_for): pins compute ONLY for chains
+    reaching the clips producer; a video mention pins THIS run's source
+    (outranking the inherited pin); mentioning the inherited exemplar
+    reverses the roles (its seat clears)."""
+    from app.chat.propose_turn import ChatTurn
+
+    turn = object.__new__(ChatTurn)
+    turn.db = None  # the no-mention paths never touch the db
+    turn.project = SimpleNamespace(
+        id="p",
+        pending_brief={"source_asset_id": "s", "exemplar_asset_id": "e"},
+    )
+    turn.mentions = []
+    clips = [TaskItem(tool="select_clips")]
+    # Inheritance off the pending plan's pins.
+    assert await turn._role_pins_for(clips) == ("s", "e")
+    # A chain without the clips producer runs pin-less (the pins would find
+    # no consumer downstream).
+    assert await turn._role_pins_for([TaskItem(tool="write_post")]) == (
+        None,
+        None,
+    )
+
+    # A video mention pins the run's source; the exemplar still inherits.
+    turn.db = _MentionDb(_video("m", "m.mp4"))
+    turn.project.id = "p"
+    turn.mentions = [ChatMention(type="asset", id="m", label="m.mp4")]
+    assert await turn._role_pins_for(clips) == ("m", "e")
+
+    # 角色反转: mentioning the inherited exemplar makes IT the material —
+    # the exemplar seat clears for this run (no self-imitation).
+    turn.db = _MentionDb(_video("e", "e.mp4"))
+    turn.mentions = [ChatMention(type="asset", id="e", label="e.mp4")]
+    assert await turn._role_pins_for(clips) == ("e", None)
+
+    # A mention on a non-video / foreign asset pins nothing (falls back to
+    # the inherited pins).
+    turn.db = _MentionDb(
+        SimpleNamespace(id="x", project_id="other", type=AssetType.VIDEO, file_url="f")
+    )
+    turn.mentions = [ChatMention(type="asset", id="x", label="x.mp4")]
+    assert await turn._role_pins_for(clips) == ("s", "e")

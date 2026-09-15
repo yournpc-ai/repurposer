@@ -24,7 +24,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
-from app.models.schemas import ClipSpec, MaterialUnderstanding
+from app.models.schemas import (
+    AssetType,
+    ClipSpec,
+    CraftSkeleton,
+    MaterialUnderstanding,
+)
 from app.models.tables import (
     Asset,
     Output,
@@ -59,6 +64,13 @@ class SearchMusicParams(BaseModel):
     query: str | None = Field(
         default=None,
         description="A mood or keyword to match against track mood/title (e.g. 'calm', 'upbeat'); null/empty = the full catalog.",
+    )
+
+
+class GetCraftSkeletonParams(BaseModel):
+    asset_id: UUID | None = Field(
+        default=None,
+        description="The reference video's asset id (from the context's Assets list or an @-mention); null = the conversation's pinned reference (the role question's / mention's exemplar).",
     )
 
 
@@ -342,4 +354,121 @@ async def get_asset(db: AsyncSession, project: Project, params: GetAssetParams) 
         lines.append(f"- Opening text: {excerpt[:300]}")
     elif str(asset.processing_status) != "completed":
         lines.append("- Still processing — no text yet.")
+    return "\n".join(lines)
+
+
+# ---- 资产角色 pins (ADR-078 判词④) — the shared inheritance read -------------
+
+
+async def _conversation_role_pins(
+    db: AsyncSession, project: Project
+) -> tuple[str | None, str | None]:
+    """The conversation's current role pins (source_asset_id,
+    exemplar_asset_id) — reference 常驻可回读's read seat. The pending plan's
+    pins win while one is on the table (the pre-run state — a role answer
+    just settled them); else the latest run's context pins (what the last
+    run actually ran with — the post-run inheritance the chat path's
+    proposal dispatch reads). Each None when unset. Pure read — the WRITE
+    seat is service.py's _stamp_role_pins, the only one."""
+    pending = project.pending_brief if isinstance(project.pending_brief, dict) else {}
+    source = pending.get("source_asset_id")
+    exemplar = pending.get("exemplar_asset_id")
+    if source or exemplar:
+        return (str(source) if source else None, str(exemplar) if exemplar else None)
+    latest_run = (
+        await db.execute(
+            select(WorkflowRun)
+            .where(WorkflowRun.project_id == project.id)
+            .order_by(WorkflowRun.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    ctx = (latest_run.context or {}) if latest_run is not None else {}
+    source = ctx.get("source_asset_id")
+    exemplar = ctx.get("exemplar_asset_id")
+    return (str(source) if source else None, str(exemplar) if exemplar else None)
+
+
+async def get_craft_skeleton(
+    db: AsyncSession, project: Project, params: GetCraftSkeletonParams
+) -> str:
+    """The reference video's craft skeleton — what a remix BORROWS (ADR-078):
+    aspect / shot rhythm / caption best-fit / music mood = measured facts
+    (never guesses), plus the honest 做不到 list (gaps — the 带理由纠偏
+    substrate, JOURNEYS 旅程二 2b). The craft_decompiled trigger turn's first
+    read; the 「照这个案例做」family's factual substrate."""
+    from app.pipeline.decompile import (  # deferred: pipeline weight
+        _find_reusable_skeleton,
+    )
+
+    asset_id = getattr(params, "asset_id", None)
+    if asset_id is None:
+        _, pinned = await _conversation_role_pins(db, project)
+        asset_id = pinned
+        if asset_id is None:
+            return (
+                "No reference video is pinned in this conversation — the "
+                "user pins one by @-mentioning a video as the case to "
+                "imitate, or by answering the role question."
+            )
+    asset = await db.get(Asset, UUID(str(asset_id)))
+    if asset is None or str(asset.project_id) != str(project.id):
+        return (
+            f"No asset with id {asset_id} exists in this project — pick an "
+            "id from the context's Assets list or an @-mention."
+        )
+    if asset.type != AssetType.VIDEO:
+        return (
+            f"Asset {asset.id} is not a video — only a video can be a style "
+            "reference."
+        )
+    row = await _find_reusable_skeleton(db, project, asset)
+    if row is None:
+        if str(asset.processing_status) != "completed":
+            return (
+                "The reference video is still processing — its craft "
+                "skeleton lands in a moment. Say so honestly rather than "
+                "guessing at its style."
+            )
+        return (
+            "No craft skeleton exists for this video yet — it materializes "
+            "when the decompile step runs (or its warm fires on the role "
+            "pin). Never invent its style."
+        )
+    try:
+        s = CraftSkeleton.model_validate(row.payload)
+    except Exception:  # noqa: BLE001 — a stale-shaped row reads honestly
+        return "A craft skeleton exists but its stored shape is stale — it will be regenerated on the next run."
+    name = asset.title or (
+        asset.file_url.rsplit("/", 1)[-1] if asset.file_url else str(asset.id)
+    )
+    lines = [f'Craft skeleton of "{name}" (measured, zero guessing):']
+    lines.append(
+        f"- Aspect {s.aspect}, {s.duration_seconds:.0f}s, "
+        f"{s.rhythm.shot_count} shots "
+        f"({s.rhythm.cuts_per_minute:.0f} cuts/min — {s.rhythm.pace} pace)"
+    )
+    if s.captions.present:
+        cap = f'- Captions: preset "{s.captions.preset}"'
+        if s.captions.color:
+            cap += f", color {s.captions.color}"
+        if s.captions.position is not None:
+            cap += f", centered at y={s.captions.position.y:.2f}"
+        lines.append(cap)
+    else:
+        lines.append("- Captions: none detected in the case")
+    if s.music_mood:
+        lines.append(f'- Music mood: "{s.music_mood}"')
+    if s.hook_device:
+        lines.append(f"- Opening hook: {s.hook_device}")
+    if s.gaps:
+        lines.append("- What a remix CANNOT reproduce (say this honestly):")
+        for gap in s.gaps:
+            wording = (
+                "not possible with the current render contract"
+                if gap.severity == "unsupported"
+                else "not yet available"
+            )
+            detail = f" — {gap.detail}" if gap.detail else ""
+            lines.append(f"  - {gap.kind}: {wording}{detail}")
     return "\n".join(lines)

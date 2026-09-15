@@ -19,6 +19,10 @@ The user's persona (identity memory — asking strategy ②'s pantry: source con
 A question of yours is still awaiting the user's answer — judge THIS message against it first (if it supplies the pending slot's value, propose that slot with source 'user-stated' in your brief update; if it is an unrelated interjection, judge the message on its own merits and leave that slot alone — the question stays pending and the user gets a reminder):
 {{ pending_lines|join('\n') }}
 {%- endif %}
+{%- if asset_lines %}
+Uploaded files (in upload order):
+{{ asset_lines|join('\n') }}
+{%- endif %}
 {%- if filename %}
 Uploaded file: {{ filename }}{% if file_language %} (detected language: {{ file_language }}){% endif %}
 {%- if material_excerpt %}
@@ -26,7 +30,9 @@ Material excerpt (the opening of the source content — judge what the material 
 {{ material_excerpt }}
 {%- endif %}
 {%- else %}
+{%- if not asset_lines %}
 No file uploaded (text-only input).
+{%- endif %}
 {%- endif %}
 {%- if presented_plan %}
 A plan has already been presented to the user and is awaiting confirmation (a JSON task chain): {{ presented_plan }}

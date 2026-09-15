@@ -37,6 +37,7 @@ from app.agents.tool_loop import ChatTool, ToolObservation
 from app.chat.perception import executes
 from app.chat.perception.executes import (
     GetAssetParams,
+    GetCraftSkeletonParams,
     GetOutputSpecParams,
     SearchMusicParams,
 )
@@ -119,6 +120,19 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             params_model=GetAssetParams,
             execute=executes.get_asset,
             activity_key="chat.inspecting.asset",
+        ),
+        PerceptionTool(
+            name="get_craft_skeleton",
+            description=(
+                "Read the pinned reference video's craft skeleton (aspect, "
+                "shot rhythm, caption style best-fit, music mood, and the "
+                "honest list of what a remix cannot reproduce) — ALWAYS the "
+                "first read when a reference case is pinned or its decompile "
+                "just finished; never guess at the case's style."
+            ),
+            params_model=GetCraftSkeletonParams,
+            execute=executes.get_craft_skeleton,
+            activity_key="chat.inspecting.craftSkeleton",
         ),
     ]
 }

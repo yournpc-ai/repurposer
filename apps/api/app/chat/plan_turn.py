@@ -78,6 +78,7 @@ from app.chat.service import (
 )
 from app.models.schemas import (
     AnswerPayload,
+    AssetType,
     Brief,
     BriefSlot,
     BriefSlotSource,
@@ -142,6 +143,9 @@ class PlanTurn:
         self.saw_rootless_rejection = False
         self.echo_override: str | None = None
         self.reasons_extra: list[str] = []
+        # 资产角色 (ADR-078 判词④): this turn's mention-settled exemplar pin
+        # (None = no asset mention this turn — the stored plan's pins ride).
+        self.mention_exemplar_id: str | None = None
 
     # ---- assembly (the retired _plan_turn's pre-call block, verbatim) ------
 
@@ -215,6 +219,37 @@ class PlanTurn:
         self.assets = assets
         first_file = next((a for a in assets if a.file_url), None)
         filename = first_file.file_url.rsplit("/", 1)[-1] if first_file else None
+        # Multi-asset block (ADR-078): with ≥2 files the router must SEE the
+        # roster to judge the remix shape (which is the user's material, which
+        # the reference) — the single-file filename/excerpt surface stays for
+        # the common case; this lists every file in upload order.
+        asset_lines: list[str] | None = None
+        if len(assets) > 1:
+            lines = []
+            for a in assets:
+                name = a.file_url.rsplit("/", 1)[-1] if a.file_url else "(text)"
+                kind_bits = [a.type.value]
+                if a.duration_seconds:
+                    kind_bits.append(f"{int(a.duration_seconds)}s")
+                lang = (a.meta or {}).get("language")
+                if lang:
+                    kind_bits.append(str(lang))
+                lines.append(f"- {name} ({' · '.join(kind_bits)})")
+            asset_lines = lines
+        # 资产角色 mention 结算 (判词④ — code settles, the LLM never pins):
+        # an @asset mention on the PLAN path names the EXEMPLAR ("做成
+        # @这个 那样" — the mentioned video is the reference whose craft the
+        # run mirrors). The latest mention wins a re-pin; mentioning the
+        # stored SOURCE re-points the roles (the old source seat clears —
+        # one asset never holds both roles).
+        for mention in request.mentions or []:
+            if mention.type != "asset":
+                continue
+            mentioned = next(
+                (a for a in assets if str(a.id) == mention.id), None
+            )
+            if mentioned is not None and mentioned.type == AssetType.VIDEO:
+                self.mention_exemplar_id = str(mentioned.id)
         # The plan layer reads the material's opening, not just its filename
         # (track-model §7.4 折中版 — mechanical slice, zero extra LLM): the first
         # asset carrying text (transcript beats extracted_text), capped.
@@ -298,6 +333,37 @@ class PlanTurn:
             # the plan surface's only other language hint is the filename).
             file_language=(first_file.meta or {}).get("language") if first_file else None,
             material_excerpt=material_excerpt,
+            asset_lines=asset_lines,
+        )
+
+    def _role_pins(self) -> dict[str, str | None]:
+        """The role pins to persist on a PendingPlan write (判词④ — the same
+        preserve law as persona_id: a turn that never touched the roles must
+        not clobber an earlier settle). Mention this turn > stored."""
+        stored = self.stored
+        source = stored.source_asset_id if stored else None
+        exemplar = stored.exemplar_asset_id if stored else None
+        if self.mention_exemplar_id is not None:
+            exemplar = self.mention_exemplar_id
+            if source == exemplar:
+                source = None  # one asset never holds both roles
+        return {"source_asset_id": source, "exemplar_asset_id": exemplar}
+
+    def _fire_mention_warm(self) -> None:
+        """A mention-pinned exemplar warms its skeleton as the pin PERSISTS
+        (the role question's answer has _stamp_role_pins; the mention has no
+        settle branch of its own, and an already-processed asset's
+        processing-completion seat has passed). Called after each PendingPlan
+        write — the pin only earns its warm by landing. The warm re-guards
+        everything itself (VIDEO / COMPLETED / reuse hit → early return)."""
+        if self.mention_exemplar_id is None:
+            return
+        from app.pipeline.decompile import (  # deferred: pipeline edge
+            fire_warm_craft_skeleton,
+        )
+
+        fire_warm_craft_skeleton(
+            UUID(str(self.project.id)), UUID(self.mention_exemplar_id)
         )
 
     # ---- the envelope absorb (once per turn, idempotent) -------------------
@@ -650,7 +716,9 @@ class PlanTurn:
             reasons=reasons,
             persona_id=persona_id,
             derived=derived,
+            **self._role_pins(),
         ).model_dump(mode="json")
+        self._fire_mention_warm()
         bailed_run_ids = await sync_plan_question(
             db, self.user_id, project, intent, birth_prompt, reasons=reasons,
             derived=derived,
@@ -707,6 +775,29 @@ class PlanTurn:
         # startable).
         if params.slot is not None:
             merged_brief.asked = [*merged_brief.asked, params.slot]
+        if params.slot == "asset_role":
+            # 资产角色消歧 (ADR-078 判词④): the question's options are
+            # CODE-BUILT from the project's videos (option id = asset id,
+            # label = filename) — the LLM frames the speech, code guarantees
+            # the ids resolve at the answer's settle. Fewer than two videos =
+            # nothing to disambiguate: reject back into the loop.
+            from app.chat.service import _build_role_question
+
+            role_question = _build_role_question(self.text, self.assets)
+            if role_question is None:
+                return (
+                    "fewer than two video files are attached — there is no "
+                    "role ambiguity to ask about. Call present_plan with the "
+                    "chain, or answer."
+                )
+            params = params.model_copy(
+                update={
+                    "question": role_question.question,
+                    "options": role_question.options,
+                    "allow_freeform": role_question.allow_freeform,
+                    "default_path": role_question.default_path or params.default_path,
+                }
+            )
         self.project.pending_brief = PendingPlan(
             # The birth prompt stays frozen (stored.prompt wins) — the
             # accumulated narrative retired with the brief switch.
@@ -719,7 +810,9 @@ class PlanTurn:
                 or (stored.persona_id if stored else None)
             ),
             derived=stored.derived if stored else [],
+            **self._role_pins(),
         ).model_dump(mode="json")
+        self._fire_mention_warm()
         # ask 三分解剖 (2026-09-08): the row's content carries the framing
         # prose (解剖 ① — it streams as the turn's echo and replays in the
         # flow); the bare question rides the payload (解剖 ② — dock title,
@@ -890,7 +983,9 @@ class PlanTurn:
                     or (stored.persona_id if stored else None)
                 ),
                 derived=stored.derived if stored else [],
+                **self._role_pins(),
             ).model_dump(mode="json")
+            self._fire_mention_warm()
             topic_ask = _topic_gate_question(self.text)
             topic_intent = InferredIntent(
                 action="ask",

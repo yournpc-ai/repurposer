@@ -22,6 +22,7 @@ from pydantic import ValidationError
 
 from app.chat.perception import PERCEPTION_TOOLS
 from app.chat.trigger_turn import (
+    TRIGGER_CRAFT_DECOMPILED,
     TRIGGER_DUMP_TYPE,
     TRIGGER_RUN_COMPLETED,
     TRIGGER_UNDERSTANDING,
@@ -35,9 +36,15 @@ from app.models.tables import Message, WorkflowRun
 
 
 def test_whitelist_is_the_proactivity_boundary() -> None:
-    assert TRIGGER_WHITELIST == {"understanding_warmed", "run_completed"}
+    # 案例拆解完成 (ADR-078 判词③ whitelist #3, 批次⑥ T5) joined on 2026-09-15.
+    assert TRIGGER_WHITELIST == {
+        "understanding_warmed",
+        "run_completed",
+        "craft_decompiled",
+    }
     assert TRIGGER_UNDERSTANDING in TRIGGER_WHITELIST
     assert TRIGGER_RUN_COMPLETED in TRIGGER_WHITELIST
+    assert TRIGGER_CRAFT_DECOMPILED in TRIGGER_WHITELIST
 
 
 def test_tool_set_is_the_reads_plus_one_terminal() -> None:
@@ -47,8 +54,8 @@ def test_tool_set_is_the_reads_plus_one_terminal() -> None:
     assert all(
         by_name[name].terminal is False for name in PERCEPTION_TOOLS
     )
-    # 报价 = fold: the bound plus the 7-tool roster stays far under the
-    # hallucination line (简报 §4 挂账①).
+    # 报价 = fold: the bound plus the reads-plus-one roster stays far under
+    # the hallucination line (简报 §4 挂账①).
     assert trigger_agent.max_iterations == 6
     assert len(trigger_agent.tools) <= 12
 

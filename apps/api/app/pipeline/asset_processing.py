@@ -342,14 +342,10 @@ async def process_asset(asset_id: UUID) -> None:
                 )
                 if pin == str(asset_id):
                     from app.pipeline.decompile import (  # deferred: runtime-only edge
-                        warm_craft_skeleton,
+                        fire_warm_craft_skeleton,
                     )
 
-                    skeleton_task = asyncio.create_task(
-                        warm_craft_skeleton(asset.project_id, asset_id)
-                    )
-                    _warm_tasks.add(skeleton_task)
-                    skeleton_task.add_done_callback(_warm_tasks.discard)
+                    fire_warm_craft_skeleton(asset.project_id, asset_id)
         except Exception as e:  # noqa: BLE001 — record any failure on the row
             logger.error("asset_processing_failed", asset_id=str(asset_id), error=str(e))
             asset.processing_status = AssetStatus.FAILED

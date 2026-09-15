@@ -63,6 +63,8 @@ from app.chat.intent import intent_router as _intent_router  # noqa: F401
 from app.models.schemas import (
     AnswerPayload,
     AnswerRequest,
+    AssetStatus,
+    AssetType,
     Brief,
     BriefSlot,
     BriefSlotSource,
@@ -306,6 +308,8 @@ async def _create_run_from_tasks(
     caption_mode: str | None = None,
     instruction: str | None = None,
     name: str | None = None,
+    source_asset_id: str | None = None,
+    exemplar_asset_id: str | None = None,
     on_phase=None,
 ) -> UUID:
     """Dispatch a proposed task list through the ONLY run birthplace.
@@ -325,6 +329,12 @@ async def _create_run_from_tasks(
     ``name`` = the proposer's fresh naming of the run (ADR-058 — LLM 建图时
     命名), stored on run.context via TaskSpec; the receipt title and the
     completion line read it instead of any frozen-params template.
+
+    ``source_asset_id`` / ``exemplar_asset_id`` = the 资产角色 pins (ADR-078
+    判词④), computed by the caller (a mention pin or the inherited
+    conversation pins — propose_turn's seat), riding TaskSpec → run.context
+    verbatim. create_run validates them at the birthplace (422 on a
+    non-project / non-video exemplar).
 
     ``on_phase`` (SSE turns only): the run is about to be born — emit the
     ``creating_run`` phase label so the dock's status line never goes dark
@@ -350,6 +360,8 @@ async def _create_run_from_tasks(
                 instruction=instruction or summary,
                 scope="full",
                 caption_mode=caption_mode,
+                source_asset_id=source_asset_id,
+                exemplar_asset_id=exemplar_asset_id,
                 name=name or None,
             ),
         )
@@ -475,6 +487,144 @@ def _backfill_brief_slot(project: Project, slot: str, value: str) -> None:
     )
     stored.brief = merge_brief(update, stored.brief)
     project.pending_brief = stored.model_dump(mode="json")
+
+
+# ---- 资产角色 (ADR-078 判词④): the role question + the pin settles -----------
+#
+# 判词④: source = the user's own material; reference/exemplar = the case whose
+# craft the decompiler reverse-compiles. Disambiguation = the ask_user machine
+# (slot="asset_role") or an @-mention; the pins are settled by CODE ONLY — the
+# LLM frames the question but its options are built here (id = asset id), and
+# the answer decodes by id, never by a guessed filename. reference 常驻可回读:
+# the pins ride PendingPlan → TaskSpec → run.context verbatim, and the
+# skeleton row itself is content-addressed (the read tool re-reads it any
+# time). Roles are reversible between runs (a fresh mention re-pins).
+
+
+def _build_role_question(text: str, assets: list[Asset]) -> QuestionProposal | None:
+    """The role-disambiguation question — code-built (the caption-mode
+    question's precedent): the options ARE the project's videos (option id =
+    asset id, label = filename), so the answer settles deterministically.
+    None = fewer than two videos attached (nothing to disambiguate). The
+    default path keeps upload order: first video = the material."""
+    videos = [a for a in assets if a.type == AssetType.VIDEO and a.file_url]
+    if len(videos) < 2:
+        return None
+    zh = _prefers_zh(text)
+    options = [
+        Option(id=str(a.id), label=a.file_url.rsplit("/", 1)[-1]) for a in videos
+    ]
+    first_name = videos[0].file_url.rsplit("/", 1)[-1]
+    if zh:
+        return QuestionProposal(
+            question="哪个是你的原片？另一个会当参照案例，拆解它的风格。",
+            options=options,
+            allow_freeform=True,
+            slot="asset_role",
+            default_path=f"跳过按上传顺序：{first_name} 当原片，另一个当案例。",
+        )
+    return QuestionProposal(
+        question="Which one is your own video? The other becomes the style reference I decompile.",
+        options=options,
+        allow_freeform=True,
+        slot="asset_role",
+        default_path=f"Skip keeps upload order: {first_name} is the material, the other the reference.",
+    )
+
+
+async def _project_videos(db: AsyncSession, project: Project) -> list[Asset]:
+    """The project's attached videos in upload order (the honest prior the
+    role question's default path promises)."""
+    return list(
+        (
+            await db.execute(
+                select(Asset)
+                .where(
+                    Asset.project_id == project.id,
+                    Asset.type == AssetType.VIDEO,
+                    Asset.file_url.isnot(None),
+                )
+                .order_by(Asset.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def _stamp_role_pins(
+    db: AsyncSession,
+    project: Project,
+    source: Asset,
+    exemplar: Asset | None,
+) -> None:
+    """The ONE role-pin write (判词④): the PendingPlan seats + the exemplar's
+    warm fire (the skeleton materializes before any run asks; the claim gate
+    holds the run until processing drains, and the processing-completion
+    seat re-fires the warm for a still-processing exemplar). Both settle
+    paths — the answer's pick and the bail's default — write through here,
+    and nothing else does."""
+    stored = (
+        PendingPlan.model_validate(project.pending_brief)
+        if isinstance(project.pending_brief, dict)
+        else PendingPlan()
+    )
+    stored.source_asset_id = str(source.id)
+    stored.exemplar_asset_id = str(exemplar.id) if exemplar is not None else None
+    project.pending_brief = stored.model_dump(mode="json")
+    logger.info(
+        "asset_roles_settled",
+        project_id=str(project.id),
+        source=str(source.id),
+        exemplar=str(exemplar.id) if exemplar is not None else None,
+    )
+    if exemplar is not None and exemplar.processing_status == AssetStatus.COMPLETED:
+        from app.pipeline.decompile import (  # deferred: pipeline edge
+            fire_warm_craft_skeleton,
+        )
+
+        fire_warm_craft_skeleton(UUID(str(project.id)), UUID(str(exemplar.id)))
+
+
+async def _settle_role_answer(
+    db: AsyncSession, project: Project, data: AnswerRequest, say: str
+) -> None:
+    """The role question's option/freeform answer → pins by code. An option
+    hit names the user's original directly (option id = asset id, built by
+    ``_build_role_question``); a freeform answer substring-matches a video
+    filename (both directions — 'the second one, b.mp4' carries the name).
+    Unresolvable answers settle NOTHING — the plan proceeds pin-less and the
+    decompiler simply isn't injected (honest degrade, never a guess)."""
+    videos = await _project_videos(db, project)
+    source: Asset | None = None
+    if data.kind == "option" and data.option_id:
+        source = next((v for v in videos if str(v.id) == str(data.option_id)), None)
+    if source is None and say.strip():
+        needle = say.strip().lower()
+        source = next(
+            (
+                v
+                for v in videos
+                if (name := v.file_url.rsplit("/", 1)[-1].lower())
+                and (needle in name or name in needle)
+            ),
+            None,
+        )
+    if source is None:
+        logger.info("role_answer_unresolved", project_id=str(project.id))
+        return
+    exemplar = next((v for v in videos if v.id != source.id), None)
+    await _stamp_role_pins(db, project, source, exemplar)
+
+
+async def _settle_default_role_pins(db: AsyncSession, project: Project) -> None:
+    """The bail path's promised default (the question's own default_path):
+    skip = upload order — the first video is the material, the next the
+    exemplar."""
+    videos = await _project_videos(db, project)
+    if len(videos) < 2:
+        return
+    await _stamp_role_pins(db, project, videos[0], videos[1])
 
 
 # Caption mode for captioned-video runs (Phase 1, 2026-08-25, RECIPES §4.7):
@@ -1440,6 +1590,13 @@ async def answer_question(
                         # the InferredIntent — the chat path's caption-mode
                         # question stores it on the intent (RECIPES §4.7).
                         caption_mode=intent.caption_mode,
+                        # 资产角色 pins (ADR-078 判词④): settled on the
+                        # PendingPlan by the role question / the mention,
+                        # riding TaskSpec → run.context verbatim. The panel
+                        # never edits them (it edits the intent only), so
+                        # the stored pending's pins are the confirmed ones.
+                        source_asset_id=pending.source_asset_id,
+                        exemplar_asset_id=pending.exemplar_asset_id,
                         # The router's fresh naming of the plan (ADR-058) —
                         # the receipt title and completion line read it.
                         name=intent.name or None,
@@ -1490,7 +1647,26 @@ async def answer_question(
         project = await db.get(Project, conversation.project_id)
         say = (data.text if data.kind == "freeform" else None) or option_label or ""
         history = await list_conversation_messages(db, UUID(str(conversation.id)))
-        if question.slot is not None and project is not None:
+        if question.slot == "asset_role" and project is not None:
+            # 资产角色消歧的答复落 pin (ADR-078 判词④): the pins settle by
+            # CODE (the option id IS the asset id — _settle_role_answer),
+            # never a brief backfill — asset_role has no Brief seat, and the
+            # generic backfill would setattr-crash on it. The plan path then
+            # resumes on the pinned plan, same shape as the brief branch.
+            await _settle_role_answer(db, project, data, say)
+            follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
+                db,
+                user_id,
+                conversation,
+                project,
+                ChatRequest(project_id=project.id, message=say),
+                recent=history[-5:],
+                on_delta=on_delta,
+                on_phase=on_phase,
+                on_tool_call=on_tool_call,
+                on_tool_ready=on_tool_ready,
+            )
+        elif question.slot is not None and project is not None:
             # ask 一等动作的答复回填 (ADR-052 B2 D2-C1): the brief slot takes
             # the answer user-stated, then the plan path resumes on the
             # enriched brief — draft the (now-rooted) plan or ask the next
@@ -1525,6 +1701,11 @@ async def answer_question(
         # is never persisted as a user message).
         project = await db.get(Project, conversation.project_id)
         if project is not None:
+            if question.slot == "asset_role":
+                # 判词④'s promised default, kept by code: skip = upload
+                # order — first video the material, the next the exemplar
+                # (the default_path copy's exact promise).
+                await _settle_default_role_pins(db, project)
             history = await list_conversation_messages(db, UUID(str(conversation.id)))
             follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
                 db,

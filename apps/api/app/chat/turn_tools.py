@@ -133,10 +133,13 @@ CHAT_TOOLS = [
 # The perception family (ADR-077 判词②, T2b — read-only, NON-terminal): the
 # agent's eyes. Plan path: pre-first-run there are no outputs and no runs
 # yet, so only the material/catalog reads ride (registering the dead seats
-# would invite hallucinated calls). Chat path: the full family.
+# would invite hallucinated calls) — plus get_craft_skeleton: a remix's
+# FIRST turn is plan-path (two uploads, 「照这个案例做」), and a role-pinned
+# exemplar's skeleton may already be warm. Chat path: the full family.
 PLAN_READ_TOOLS = perception_chat_tools(
     "get_understanding",
     "get_asset",
+    "get_craft_skeleton",
     "search_music",
     "list_caption_styles",
 )
@@ -147,4 +150,5 @@ CHAT_READ_TOOLS = perception_chat_tools(
     "search_music",
     "get_run_status",
     "get_asset",
+    "get_craft_skeleton",
 )

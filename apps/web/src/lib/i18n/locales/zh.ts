@@ -1152,6 +1152,7 @@ const zh: Resources = {
       music: "正在查曲库…",
       runStatus: "正在查看运行进度…",
       asset: "正在查看素材…",
+      craftSkeleton: "正在读案例的风格拆解…",
     },
     completed: "完成",
     failed: "抱歉，这次没能完成修改，请再试一次。",

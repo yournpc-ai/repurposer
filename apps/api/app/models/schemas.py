@@ -424,10 +424,14 @@ class QuestionProposal(BaseModel):
     # ADR-052 B2 (ask 一等动作, the shared question shape): ``slot`` names the
     # brief slot this question fills (the pre-run router sets it; the
     # chat loop's shape C leaves it null — post-run questions never backfill
-    # a brief). ``default_path`` is 提问策略 ③'s schema tooth: the skip
+    # a brief). ADR-078 判词④ adds ``asset_role``: the 角色消歧 ask — which
+    # uploaded video is the source and which the reference case. Its options
+    # are CODE-BUILT (id = asset id, _build_role_question) so the answer
+    # settles the PendingPlan pins deterministically; the LLM only frames
+    # the speech. ``default_path`` is 提问策略 ③'s schema tooth: the skip
     # path, consumed by the dock's × and the interjection reminder tail —
     # the prose carries it visibly, the field keeps it machine-readable.
-    slot: Literal["topic", "audience", "tone"] | None = None
+    slot: Literal["topic", "audience", "tone", "asset_role"] | None = None
     default_path: str = ""
 
 
@@ -592,9 +596,9 @@ class PlanAskArgs(BaseModel):
         default="",
         description="One short clause: what you will do if the user skips. The skip must be safe.",
     )
-    slot: Literal["topic", "audience", "tone"] | None = Field(
+    slot: Literal["topic", "audience", "tone", "asset_role"] | None = Field(
         default=None,
-        description="The brief slot this question fills (the pre-run router's seat).",
+        description="The brief slot this question fills (the pre-run router's seat). 'asset_role' is NOT a brief slot: the 资产角色 disambiguation (ADR-078 判词④) — ask it when ≥2 videos are attached and which is the user's own material vs the reference exemplar is undecidable from the message. Its options are code-built from the videos at the dock seat (never write option ids yourself); the answer settles the source/exemplar pins by code.",
     )
     brief: Brief | None = Field(
         default=None,
@@ -1525,11 +1529,14 @@ class QuestionPayload(BaseModel):
     # question fills — the answer backfills it user-stated and the plan path
     # resumes (the dock handshake, same pattern as the caption_mode_ prefix).
     # None on every question that is not a brief ask (caption mode, direction
-    # interrupts, post-run shape C). ``default_path`` is the schema tooth of
+    # interrupts, post-run shape C). ADR-078 判词④ adds ``asset_role``: the
+    # 角色消歧 dock ask — its options are code-built (id = asset id) and its
+    # answer settles the PendingPlan source/exemplar pins by code, never by
+    # LLM re-interpretation. ``default_path`` is the schema tooth of
     # 提问策略 ③: what happens when the user skips — the framing prose
     # (``content``) carries it visibly; the field keeps it machine-readable
     # for the dock's × and the interjection reminder tail.
-    slot: Literal["topic", "audience", "tone"] | None = None
+    slot: Literal["topic", "audience", "tone", "asset_role"] | None = None
     default_path: str = ""
     # 预填评审卡 (ADR-052 B3): task_book only — the merged brief at
     # dock time, so the plan card renders the agent's OWN understanding
@@ -1579,6 +1586,15 @@ class PendingPlan(BaseModel):
     brief: Brief = Field(default_factory=Brief)
     reasons: list[str] = Field(default_factory=list)
     persona_id: UUID | None = None
+    # 资产角色 pins (ADR-078 判词④): which attached video is the user's OWN
+    # material (source) and which is the reference exemplar whose craft the
+    # run reverse-compiles. Settled by CODE only — the role question's answer
+    # (service._settle_role_pins) or an @-mention (plan_turn's assemble) —
+    # never by the LLM; stamped verbatim onto the TaskSpec at run start.
+    # Roles are reversible between runs (a fresh mention re-pins). None =
+    # unsettled (a multi-video remix asks the role question first).
+    source_asset_id: str | None = None
+    exemplar_asset_id: str | None = None
     # Derived preview (ADR-043): the dry-run-compiled graph's user-facing
     # projection — what this chain will produce — computed at dock time
     # (outputs are derived, never declared). Rows: {"type": "video"|"clips"|
