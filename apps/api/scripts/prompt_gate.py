@@ -33,7 +33,7 @@ thresholds), then bisect with the A/B instrument — never tune the
 thresholds to make a regression pass.
 
 Usage (from apps/api):
-    uv run python scripts/prompt_gate.py [--n 12] [--probe A|B|C]
+    uv run python scripts/prompt_gate.py [--n 12] [--probe A|B|C] [--provider minimax]
 """
 
 import argparse
@@ -57,6 +57,17 @@ from app.chat.prompts import intent_router_system  # noqa: E402
 from app.chat.turn_tools import PLAN_READ_TOOLS, PLAN_TOOLS  # noqa: E402
 from app.models.schemas import Brief, BriefSlotSource  # noqa: E402
 from app.models.tables import Message  # noqa: E402
+from app.providers.llm.minimax import minimax_client  # noqa: E402
+
+# The provider registry (T4 参数化): --provider picks the client the gate's
+# agent runs against. "minimax" is the only seat today; a new provider joins
+# here AND must declare native tools (the loud capabilities check in main —
+# the tool loop speaks Tier 1, ADR-077 判词④). Factories, not instances:
+# the client is built inside main so importing the gate never touches the
+# provider's env.
+PROVIDERS = {
+    "minimax": lambda: minimax_client,
+}
 
 # (probe, minimum passes out of N)
 THRESHOLDS = {"A": 8, "B": 8, "C": 10}
@@ -162,8 +173,21 @@ async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=12)
     parser.add_argument("--probe", choices=["A", "B", "C"], default=None)
+    parser.add_argument("--provider", choices=sorted(PROVIDERS), default="minimax")
     args = parser.parse_args()
 
+    client = PROVIDERS[args.provider]()
+    capabilities = getattr(client, "capabilities", None)
+    if capabilities is None or not capabilities.supports_native_tools:
+        # The loud capabilities check (T4): the gate probes the tool-loop
+        # line — a provider without declared native tools has nothing to
+        # gate here (the loop itself would raise LLMError on every turn and
+        # a 0/12 read would masquerade as a prompt regression).
+        raise SystemExit(
+            f"prompt gate: provider {args.provider!r} does not declare native "
+            "tool support — the gate probes the tool-loop line (ADR-077 "
+            "判词④); a Tier-2 provider has nothing to gate here."
+        )
     agent = ToolLoopAgent(
         name="prompt_gate_router",
         prompt="intent_router.j2",
@@ -172,6 +196,7 @@ async def main() -> int:
         assemble=_assemble_plan_turn,
         tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS],
         max_iterations=6,
+        client=client,
     )
     probes = {"A": PROBE_A, "B": PROBE_B, "C": PROBE_C}
     failed = False
