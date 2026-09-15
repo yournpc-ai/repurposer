@@ -1,6 +1,7 @@
 # Repurposer Dialog Workflow — 厚 Agent 蓝图
 
 > Status: 已拍板（2026-09-03，ADR-052），**B1~B4 代码全落（2026-09-03）**——B1 改名批 / B2 brief 账本+ask+出书门槛 / B3 预填评审卡 / B4 有界 loop 节点+research 试点；剧本测试（S50~S53）与产品试用验证归用户（简报 `docs/tasks/dialog-workflow-b*.md`）。
+> **（ADR-077 注，2026-09-14 拍板待实施）** §2.1「零 agent 全 workflow」判词收窄：恐惧对象精确化为**开放式自主**（执行 loop / 拓扑塑形——维持永拒），**有界只读感知 loop 收编**会话层；双引擎分离与拓扑铁律不变。会话层形态全面工具化（判决 union → 工具集，护栏搬入工具执行内），canonical 词汇随 NAMING 批 v3 直取行业词；终极旅程「案例仿制」的技术内核 = ADR-078 decompiler。施工简报 `docs/tasks/chat-tool-loop-migration.md`；旅程母文档 `docs/JOURNEYS.md`；落地后本文改写为现在时。
 > 本文是「对话→生产」全链路的**概念架构母文档**：一个产品级厚 agent，身体是一条 workflow。工程实现地图（Model / Harness / Graph / Loop 四层）归 `AGENT_ARCHITECTURE.md`；chat 机器规格归 `CHAT_ARCHITECTURE.md`；命名判例归 `NAMING.md`（N-43 起）；任务书字段契约归 ADR-043。
 
 ## 1. 蓝图一句话

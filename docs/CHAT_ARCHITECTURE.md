@@ -2,6 +2,7 @@
 
 > Status: ✅ v2 已实现（意图层单面化：`POST /chat` 是唯一意图表面，任务书构建/修订/确认并入 book path；2026-08-18 复核对齐代码）。意图覆盖现状见 `INTENT_COVERAGE.md`；实施史简报归 `docs/tasks/done/`。
 > 上游决策：ADR-028（RunPlan）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）/ ADR-032（edit ops）/ ADR-039（架构规范级大迭代：本文 = 四层工程地图的 Loop 层行为规格；技能包收编注册表、`kind`/`cost_hint` 字段退役、agent 正名，见 §4）/ **ADR-057（图即产品对象，2026-09-07 拍板，内核批落地时本文 §5/§9 改写）——chat 的全部产出统一翻案为 wiring ops（图变更 API：add_node / connect / edit_prompt / delete_node / run(_subgraph)），图持久化、画布直读零投影；五补丁（canvas_hidden / canvas_key / 过程脊 / 脊收编 / R1 游走）随批火化；task_list / edit_ops 两家族统一为 wiring op 集，chat 唯一消费面不变**
+> **（ADR-077 注，2026-09-14 拍板待实施）** 本文描述的「单调用判决 + 四态 union」会话层将迁移为**标准有界工具 loop**：判决 union 机械翻译为工具集（ask→`ask_user` / draft→`present_plan` / start→`start_run` / task_list→`propose_tasks` / edit_ops→`apply_edit_ops` / WiringProposal→`edit_graph`），护栏搬进工具执行内（出书门槛 = present_plan 执行内校验），dock 生命周期与结算代码留存；新增读工具一族（`app/chat/perception/`，世界的读法 vs `app/tools/` 世界的改法）+ 触发回合（理解完成 / run 完成主动说话 + 收官 reviewer）；线格式三层（action-JSON 地板 / 原生 tool_calls / provider 特有）。**生产层 DAG 与三扇唯一门零改动；执行 loop 永拒。** 施工简报 `docs/tasks/chat-tool-loop-migration.md`（T1~T5）；旅程 = `docs/JOURNEYS.md`；落地后本文全量改写为现在时。
 > 命名遵循：`docs/NAMING.md`；模块归属：`docs/MODULE_ARCHITECTURE.md`（Agent Interface：conversations/messages）；chat/ 包是本文的代码家。
 >
 > 关键形态事实：
