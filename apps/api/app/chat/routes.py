@@ -12,7 +12,10 @@ header. Plain callers get the one-shot JSON ``ChatResponse`` (unchanged);
 the verdict JSON retired into terminal tool calls, so the prose channel IS
 the reply — ``assistant.delta`` frames carry it verbatim (dialect-stripped at
 the client seam, typewriter law native); ``assistant.thinking`` carries
-liveness keepalives and REAL phase labels; ``question.preview`` docks the
+liveness keepalives and REAL phase labels (drafting / creating_run /
+repairing, plus the perception family's ``inspecting`` frames — T2b — which
+add the registry entry's i18n copy ``key``; the tool name never crosses to
+the user face); ``question.preview`` docks the
 pill the moment an ask_user call's arguments validate. The terminal envelope
 (``turn.completed`` / ``turn.failed``) stays authoritative.
 """
@@ -34,8 +37,10 @@ from app.models.schemas import (
     MessageListResponse,
 )
 from app.models.tables import Conversation, User
+from app.chat.perception import PERCEPTION_TOOLS
 from app.chat.service import (
     THINKING_PHASE_DRAFTING,
+    THINKING_PHASE_INSPECTING,
     answer_question,
     chat,
     execute_chat_turn,
@@ -48,6 +53,13 @@ from app.providers.llm.base import LLMError
 from app.pipeline.errors import user_error_line
 from app.platform.project_context import get_project_for_user
 from app.ui_locale import current_ui_language
+
+# The trigger-turn agent (T3, ADR-077 判词③) takes no calls HERE either —
+# the pipeline's two whitelist seats (warm understanding / run finalized)
+# fire it. Importing the module registers "trigger_turn" in AGENTS at
+# startup (the service.py precedent for the two chat agents), so a broken
+# import fails the boot, never a mid-run first fire.
+from app.chat import trigger_turn as _trigger_turn  # noqa: F401
 
 chat_router = APIRouter()
 
@@ -133,6 +145,10 @@ def _make_tool_hooks(queue: asyncio.Queue):
       row's beat to `drafting` the moment the model commits to it, replacing
       the retired "tasks"/"ops" substring scan over the JSON stream — the
       name-known signal is earlier and false-positive-free by construction.
+      A PERCEPTION call (T2b 感知族) emits the inspecting family instead:
+      phase "inspecting" + the registry entry's i18n copy key — the user
+      reads 「正在查曲库…」 while the tool NAME never crosses to the user
+      face (简报 §3 禁令).
     - ``on_tool_ready``: an ask_user call's arguments completed and validated
       (pre-execution) — preview-dock the pill NOW instead of waiting out the
       loop. Fires on every iteration; a rejected ask's preview rolls back
@@ -144,6 +160,18 @@ def _make_tool_hooks(queue: asyncio.Queue):
                 _sse(
                     "assistant.thinking",
                     json.dumps({"phase": THINKING_PHASE_DRAFTING}),
+                )
+            )
+        elif name in PERCEPTION_TOOLS:
+            await queue.put(
+                _sse(
+                    "assistant.thinking",
+                    json.dumps(
+                        {
+                            "phase": THINKING_PHASE_INSPECTING,
+                            "key": PERCEPTION_TOOLS[name].activity_key,
+                        }
+                    ),
                 )
             )
 

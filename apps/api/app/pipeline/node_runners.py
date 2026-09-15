@@ -380,6 +380,18 @@ async def warm_understanding(project_id: UUID) -> None:
                 quotes=len(understanding.quotable_lines),
                 beats=len(understanding.topic_boundaries),
             )
+            # 触发回合 (T3, ADR-077 判词③): 理解完成 is whitelist trigger #1 —
+            # the agent looks at the material and speaks (旅程一②). Only a
+            # FRESH materialization fires (a reuse hit above returns early);
+            # the turn dedups on the digest, so the warm's re-materialization
+            # race can never double-speak. Fire-and-forget — the warm's tick
+            # moves on.
+            from app.chat.trigger_turn import (  # deferred: pipeline → chat edge
+                TRIGGER_UNDERSTANDING,
+                fire_trigger,
+            )
+
+            fire_trigger(project_id, TRIGGER_UNDERSTANDING, digest)
     except Exception as e:  # noqa: BLE001 — warm is best-effort, the run path pays later
         logger.warning(
             "understanding_warm_failed", project_id=str(project_id), error=str(e)

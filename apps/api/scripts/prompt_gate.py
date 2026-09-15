@@ -22,7 +22,11 @@ same contexts as the A/B instrument:
 
 Tool-loop form (ADR-077 判词②, 2026-09-14): the agent is the ToolLoopAgent,
 the verdict is the terminal tool call, and the predicates read
-``LoopResult`` — the thresholds are UNCHANGED.
+``LoopResult`` — the thresholds are UNCHANGED. T2b (2026-09-15): the gate's
+agent carries the production tool set INCLUDING the book path's read tools
+(BOOK_READ_TOOLS — the registry perturbation is the thing being gated), and
+the stub execute answers reads with a ToolObservation so the loop iterates
+to its terminal call exactly like production.
 
 A gate failure means: re-run once (provider drift exists even at these
 thresholds), then bisect with the A/B instrument — never tune the
@@ -42,10 +46,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pydantic import BaseModel  # noqa: E402
 
-from app.agents.tool_loop import LoopResult, ToolLoopAgent  # noqa: E402
+from app.agents.tool_loop import (  # noqa: E402
+    LoopResult,
+    ToolLoopAgent,
+    ToolObservation,
+)
 from app.chat.intent import _assemble_book_turn  # noqa: E402
+from app.chat.perception import PERCEPTION_TOOLS  # noqa: E402
 from app.chat.prompts import intent_router_system  # noqa: E402
-from app.chat.turn_tools import BOOK_TOOLS  # noqa: E402
+from app.chat.turn_tools import BOOK_READ_TOOLS, BOOK_TOOLS  # noqa: E402
 from app.models.schemas import BriefLedger, BriefSlotSource  # noqa: E402
 from app.models.tables import Message  # noqa: E402
 
@@ -104,11 +113,17 @@ PROBE_B = {
 PROBE_C = {"message": "I want a social post."}
 
 
-async def _gate_execute(name: str, params: BaseModel | None, prose: str) -> str | None:
+async def _gate_execute(name: str, params: BaseModel | None, prose: str):
     """The gate's execution stub — accepts everything EXCEPT the rootless
     present_plan (mirrors the production 出书门槛 probe C measures: no
     user-stated topic, no material, and the topic never asked → the gate
-    rejects toward ask_user). None = accepted (terminal)."""
+    rejects toward ask_user). None = accepted (terminal). T2b: a read tool
+    answers with a ToolObservation (the probe contexts have nothing readable)
+    so the loop iterates on to its terminal call exactly like production."""
+    if name in PERCEPTION_TOOLS:
+        return ToolObservation(
+            "(gate stub: nothing readable in this probe context)"
+        )
     if name == "present_plan":
         brief = getattr(params, "brief", None)
         topic = brief.topic if brief else None
@@ -155,8 +170,8 @@ async def main() -> int:
         system=intent_router_system(),
         temperature=0.2,
         assemble=_assemble_book_turn,
-        tools=BOOK_TOOLS,
-        max_iterations=4,
+        tools=[*BOOK_TOOLS, *BOOK_READ_TOOLS],
+        max_iterations=6,
     )
     probes = {"A": PROBE_A, "B": PROBE_B, "C": PROBE_C}
     failed = False

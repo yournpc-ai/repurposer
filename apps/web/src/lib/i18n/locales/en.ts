@@ -1204,6 +1204,18 @@ const en = {
       creating_run: "Creating your workflow…",
       repairing: "That answer didn't come out right — reworking it…",
     },
+    /** The perception family's inspecting chatter (T2b): the thinking row's
+     * label while a read tool runs. Keys ride the server registry
+     * (app/chat/perception) — the tool NAME never surfaces; first-person
+     * whisper register, same as thinkingPhases. */
+    inspecting: {
+      outputSpec: "Reading the current settings…",
+      understanding: "Taking another look at your material…",
+      captionStyles: "Browsing the caption styles…",
+      music: "Searching the music library…",
+      runStatus: "Checking the run's progress…",
+      asset: "Looking at the asset…",
+    },
     completed: "Done",
     failed: "Sorry, I couldn't update this. Please try again.",
     runFailed: "Run failed",

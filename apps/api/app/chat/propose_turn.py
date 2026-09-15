@@ -24,6 +24,10 @@ Storage shapes preserved: message.intent still carries the proposal dumps
 (TaskListProposal / EditOpsProposal / WiringProposal / QuestionProposal /
 AnswerProposal, built here from the accepted call's params plus the turn's
 prose), and the caption-mode stash stays a TaskListProposal dump.
+
+T2b 感知族 (ADR-077 判词②): the read tools (``app/chat/perception/``)
+dispatch straight from ``execute`` — they never carry a disposition, never
+touch the outcome, and return a ToolObservation the loop feeds back.
 """
 
 from datetime import UTC, datetime
@@ -35,7 +39,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.contexts import _build_context
+from app.agents.tool_loop import ToolObservation
 from app.chat.intent import chat_intent_agent
+from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.service import (
     _ASK_BACK_TEXT,
     _ask_content,
@@ -199,10 +205,14 @@ class ChatTurn:
 
     # ---- the loop's execute dispatch ----------------------------------------
 
-    async def execute(self, name: str, params, prose: str) -> str | None:
+    async def execute(self, name: str, params, prose: str) -> str | None | ToolObservation:
         """The LoopExecute seat: the disposition preamble, then the tool's
         validate → (reject: feedback, zero writes) → accept: writes + the
-        outcome stashed → None (terminal stop)."""
+        outcome stashed → None (terminal stop). A PERCEPTION call never
+        carries a disposition and never ends the turn — it dispatches to the
+        family registry and rides back as a ToolObservation."""
+        if name in PERCEPTION_TOOLS:
+            return await run_perception_tool(self.db, self.project, name, params)
         disposition = (
             getattr(params, "pending_disposition", "none") if params is not None else "none"
         )

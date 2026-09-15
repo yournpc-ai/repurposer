@@ -1904,6 +1904,11 @@ THINKING_PHASE_DRAFTING = "drafting"
 # running (2026-09-11 服务感): that window used to read as frozen thinking —
 # the row now says the answer is being reworked, in first person.
 THINKING_PHASE_REPAIRING = "repairing"
+# The perception family's phase family (T2b, ADR-077 判词②): a read tool's
+# name-known moment emits this phase PLUS the registry entry's i18n copy key
+# (``key`` — resolved client-side; the tool name never reaches the user
+# face). 「正在查曲库…」= the process chatter's free seat (礼仪三件套 ②).
+THINKING_PHASE_INSPECTING = "inspecting"
 
 
 def _repair_phase_callback(on_phase):

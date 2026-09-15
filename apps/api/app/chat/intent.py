@@ -33,7 +33,12 @@ from typing import Any
 
 from app.agents.tool_loop import ToolLoopAgent
 from app.chat.prompts import chat_intent_system, intent_router_system
-from app.chat.turn_tools import BOOK_TOOLS, CHAT_TOOLS
+from app.chat.turn_tools import (
+    BOOK_READ_TOOLS,
+    BOOK_TOOLS,
+    CHAT_READ_TOOLS,
+    CHAT_TOOLS,
+)
 from app.models.schemas import BriefLedger
 from app.models.tables import Message, Persona
 from app.ui_locale import current_ui_language
@@ -186,14 +191,19 @@ def _assemble_book_turn(
 
 # The registries are static once imported (the tools door opens them), so
 # the system prompts are built once at declaration time.
+#
+# max_iterations=6 (报价 = fold, 简报「初值 ≤6」): the terminal call plus
+# headroom for the perception family's reads (a designed flow tops at
+# read → read → terminal) and one rejection iteration — the bound is what
+# makes an unquoted chat turn safe.
 intent_router = ToolLoopAgent(
     name="intent_router",
     prompt="intent_router.j2",
     system=intent_router_system(),
     temperature=0.2,
     assemble=_assemble_book_turn,
-    tools=BOOK_TOOLS,
-    max_iterations=4,
+    tools=[*BOOK_TOOLS, *BOOK_READ_TOOLS],
+    max_iterations=6,
 )
 
 
@@ -221,6 +231,6 @@ chat_intent_agent = ToolLoopAgent(
     system=chat_intent_system(),
     temperature=0.2,
     assemble=_assemble_chat_turn,
-    tools=CHAT_TOOLS,
-    max_iterations=4,
+    tools=[*CHAT_TOOLS, *CHAT_READ_TOOLS],
+    max_iterations=6,
 )

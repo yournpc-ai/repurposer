@@ -8,9 +8,13 @@ the chat service so the import DAG stays one-directional:
 
     schemas ← turn_tools ← intent ← service ← book_turn / propose_turn
 
+    (turn_tools ← perception: the read registry's executes import the
+    pipeline layer DEFERRED, so this module's own import stays light)
+
 Tool names are model-facing only — they never surface in user copy (简报 §3
-禁令). Every tool here is terminal (终态工具一调即停); the non-terminal read
-tools arrive with the perception family (T2b).
+禁令). The BOOK_TOOLS / CHAT_TOOLS lists are the TERMINAL set (终态工具一调
+即停); the NON-terminal read tools are the perception family's projections
+below (T2b — ``app/chat/perception/`` is their registry home).
 
 Description discipline (注册表条目扰动 = prompt 扰动): terse behavioral
 contracts — WHEN to call, what the call does, what speech must precede it.
@@ -19,6 +23,7 @@ asking strategy / naming / disclosure rules stay in the system templates.
 """
 
 from app.agents.tool_loop import ChatTool
+from app.chat.perception import perception_chat_tools
 from app.models.schemas import (
     ApplyEditOpsArgs,
     BookAnswerArgs,
@@ -117,10 +122,29 @@ CHAT_TOOLS = [
         name="answer",
         description=(
             "Reply with information only — capability questions, run-progress "
-            "readouts, explanations of existing outputs, small talk. Work "
-            "requests go to the proposal tools; an ambiguous reading goes to "
-            "ask_user — answer is never the lazy out."
+            "readouts (call get_run_status first), explanations of existing "
+            "outputs, small talk. Work requests go to the proposal tools; an "
+            "ambiguous reading goes to ask_user — answer is never the lazy out."
         ),
         params_model=ChatAnswerArgs,
     ),
 ]
+
+# The perception family (ADR-077 判词②, T2b — read-only, NON-terminal): the
+# agent's eyes. Book path: pre-first-run there are no outputs and no runs
+# yet, so only the material/catalog reads ride (registering the dead seats
+# would invite hallucinated calls). Chat path: the full family.
+BOOK_READ_TOOLS = perception_chat_tools(
+    "get_understanding",
+    "get_asset",
+    "search_music",
+    "list_caption_styles",
+)
+CHAT_READ_TOOLS = perception_chat_tools(
+    "get_output_spec",
+    "get_understanding",
+    "list_caption_styles",
+    "search_music",
+    "get_run_status",
+    "get_asset",
+)

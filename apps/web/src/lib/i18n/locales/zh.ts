@@ -1144,6 +1144,16 @@ const zh: Resources = {
       creating_run: "正在创建你的 workflow…",
       repairing: "刚才的回答没组织好，我重新整理一下…",
     },
+    /** 感知族的查询碎碎念（T2b）：读工具运行期间 thinking 行的文案。
+     * key 随服务端注册表（app/chat/perception）——工具名永不上用户面。 */
+    inspecting: {
+      outputSpec: "正在读当前设置…",
+      understanding: "正在回看素材理解…",
+      captionStyles: "正在翻字幕样式…",
+      music: "正在查曲库…",
+      runStatus: "正在查看运行进度…",
+      asset: "正在查看素材…",
+    },
     completed: "完成",
     failed: "抱歉，这次没能完成修改，请再试一次。",
     runFailed: "运行失败",

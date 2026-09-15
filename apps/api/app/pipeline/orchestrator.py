@@ -1563,6 +1563,26 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             status=run.status.value,
             nodes=total,
         )
+        # 触发回合 (T3, ADR-077 判词③): run 完成 is whitelist trigger #2 —
+        # the closing reviewer reads the products and speaks (旅程一⑦). The
+        # fire gate IS ADR-074②'s closing-line truth (前端门与判决同一真值):
+        # a succeeded run or a partial failure with landings speaks; a run
+        # where NOTHING landed stays silent (its receipt is the failure
+        # surface). This line runs once per terminal transition (an
+        # already-terminal run early-returns above), and the turn dedups on
+        # the run id regardless. Fire-and-forget — finalization never waits
+        # on the agent's speech.
+        if project is not None and (
+            run.status == WorkflowStatus.COMPLETED or any_landed
+        ):
+            from app.chat.trigger_turn import (  # deferred: pipeline → chat edge
+                TRIGGER_RUN_COMPLETED,
+                fire_trigger,
+            )
+
+            fire_trigger(
+                UUID(str(project.id)), TRIGGER_RUN_COMPLETED, str(run_id)
+            )
 
 
 async def expire_stale_interrupts(older_than: timedelta | None = None) -> int:

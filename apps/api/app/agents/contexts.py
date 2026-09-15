@@ -7,13 +7,22 @@ stands on — the services orchestrate, they never assemble:
   builds from the run's task book (moved from ``pipeline/step_context.py``,
   which keeps the mechanical media/digest helpers).
 - ``_build_context`` — the chat loop's intent context: project summary
-  (assets / visible outputs / latest run + the per-step status section),
-  the recent rounds, the pending-question line, and the mention injection
-  (moved from ``chat/service.py``).
+  (assets / visible outputs / latest run), the recent rounds, the
+  pending-question line, and the mention injection (moved from
+  ``chat/service.py``).
+
+Digest doctrine (ADR-077 判词②, T2b 感知族): the fixed digest stops at
+IDENTITY level — what exists (assets / outputs / the graph / the latest
+run's one-line marker), so the agent knows what it may point at and which
+read tool answers the detail. Anything a read tool reads is never
+pre-injected: per-step run progress lives behind ``get_run_status``, an
+output's spec behind ``get_output_spec``, an asset's detail behind
+``get_asset``, the material understanding behind ``get_understanding``
+(the understanding-summary fixed injection — the interim B1 form — retired
+before ever landing; the tool IS the read).
 """
 
 from typing import Any
-from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +40,6 @@ from app.models.tables import (
     Persona,
     Project,
     WorkflowRun,
-    WorkflowStep,
 )
 from app.pipeline.outputs import list_visible_outputs
 from app.platform.project_context import persona_context_from_row
@@ -79,29 +87,7 @@ def _output_one_liner(output: Any) -> str:
     return ""
 
 
-_RUN_STEP_PROGRESS_LIMIT = 12
 _GRAPH_CONTEXT_LIMIT = 16
-
-
-def _format_step_progress(steps: list[WorkflowStep]) -> list[str]:
-    """One quantified line per step of a run (G-2): ``kind: status —
-    summary``. A waiting interrupt's line reads as "waiting for you" on its
-    own; a slot label preset at materialization ("Post · DE") rides the
-    summary the same way. Capped — when a run outgrows the budget the tail
-    (current + upcoming work) is what a progress question is about."""
-    rows = []
-    for step in steps:
-        row = f"- {step.kind}: {step.status}"
-        summary = (step.spec or {}).get("summary")
-        if summary:
-            row += f" — {summary}"
-        rows.append(row)
-    if len(rows) > _RUN_STEP_PROGRESS_LIMIT:
-        omitted = len(rows) - _RUN_STEP_PROGRESS_LIMIT
-        rows = [f"- … ({omitted} earlier steps omitted)"] + rows[
-            -_RUN_STEP_PROGRESS_LIMIT:
-        ]
-    return rows
 
 
 async def _build_context(
@@ -208,24 +194,10 @@ async def _build_context(
         )
     ).scalar_one_or_none()
     if latest_run is not None:
+        # One-line marker only (the digest doctrine, module header): the
+        # per-step progress detail retired behind the get_run_status read
+        # tool — the agent knows a run exists and reads the detail on demand.
         lines.append(f"Latest run: status={latest_run.status} id={latest_run.id}")
-        steps = list(
-            (
-                await db.execute(
-                    select(WorkflowStep)
-                    .where(WorkflowStep.run_id == latest_run.id)
-                    .order_by(WorkflowStep.seq)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        progress = _format_step_progress(steps)
-        if progress:
-            # Node-level progress (G-2): "how far along / how much longer"
-            # gets answered from real step states, not guessed.
-            lines.append("Latest run steps:")
-            lines.extend(progress)
 
     if recent:
         lines.append("Recent rounds:")

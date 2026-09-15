@@ -54,8 +54,11 @@ export interface StreamChatOptions {
    * or with `{phase: "drafting" | "creating_run" | "repairing"}` at a REAL
    * phase switch — the client
    * labels its thinking row from the phase and leaves it untouched on bare
-   * keepalives. */
-  onThinking?: (payload: { phase?: string }) => void
+   * keepalives. The perception family's inspecting frames (T2b) add
+   * `{phase: "inspecting", key}` — the key is the read-registry entry's i18n
+   * copy key (「正在查曲库…」), resolved via t(); the tool NAME never
+   * crosses to the user face. */
+  onThinking?: (payload: { phase?: string; key?: string }) => void
   /** The ask verdict's pill payload the moment its object closes in the
    * stream (2026-09-09 用户拍板——「选项该和这句话一起来」; object-level
    * trust: the ask object's prose key streams first, so question/options/
@@ -116,7 +119,7 @@ function streamTurn<T>(
   }: {
     signal?: AbortSignal
     onDelta?: (text: string) => void
-    onThinking?: (payload: { phase?: string }) => void
+    onThinking?: (payload: { phase?: string; key?: string }) => void
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
   },
 ): Promise<T> {
@@ -166,7 +169,7 @@ function streamTurn<T>(
           const data = JSON.parse(msg.data) as { text: string }
           onDelta?.(data.text)
         } else if (msg.event === "assistant.thinking") {
-          onThinking?.(JSON.parse(msg.data) as { phase?: string })
+          onThinking?.(JSON.parse(msg.data) as { phase?: string; key?: string })
         } else if (msg.event === "question.preview") {
           onQuestionPreview?.(
             JSON.parse(msg.data) as Parameters<
@@ -206,7 +209,7 @@ export function streamAnswer<T>(
   body: AnswerTurnBody,
   handlers: {
     onDelta?: (text: string) => void
-    onThinking?: (payload: { phase?: string }) => void
+    onThinking?: (payload: { phase?: string; key?: string }) => void
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
   },
 ): Promise<T> {

@@ -59,3 +59,12 @@ def chat_intent_system() -> str:
         # the existing-project tail (ADR-071 ④ 单一化).
         chat_loop=True,
     )
+
+
+def trigger_system() -> str:
+    """The proactive speaker's system prompt (T3, ADR-077 判词③ — trigger
+    turns: understanding_warmed / run_completed). No catalog lines ride
+    here — the trigger turn's verbs are the read tools (the wire
+    declarations carry them) plus the one terminal ``wrap_up``; the
+    template teaches the judgment law and the suggestions contract."""
+    return jinja_env.get_template("chat/trigger_system.j2").render()

@@ -6,11 +6,14 @@ by calling ONE terminal tool — the verdict union's mechanical translation
 (ask → ``ask_user``, draft → ``present_plan``, start → ``start_run``,
 task_list → ``propose_tasks``, edit_ops → ``apply_edit_ops``, wiring →
 ``edit_graph``; the answer states close with the ``answer`` tool or bare
-prose). The loop exists for ONE reason: a rejected tool call — schema-class
+prose). The loop exists for TWO reasons: a rejected tool call — schema-class
 truncation (``LLMSchemaError`` at the client seam), params validation, or the
 execution's own guardrails (出书门槛搬进执行内) — feeds structured feedback
-back and the model iterates, bounded. 修复/错误反馈语义同构 across the wire
-tiers (ADR-077 判词④ 法则).
+back and the model iterates, bounded; and the NON-terminal read tools (T2b's
+perception family, ``app/chat/perception/``) let the model look at the world
+before it closes — read-before-write is the relative-revision/recommendation
+journeys' functional premise (JOURNEYS 旅程三). 修复/错误反馈语义同构 across
+the wire tiers (ADR-077 判词④ 法则).
 
 Guardrails (三条军规):
 
@@ -18,19 +21,28 @@ Guardrails (三条军规):
   The loop's worst case is a fold: cap × one call's cost, never open-ended
   (报价 = fold 的会话层形态 — chat turns aren't pre-quoted, the bound is
   what makes that safe).
-- 终态工具一调即停 — every T2a tool is terminal. Non-terminal read tools
-  arrive with the perception family (T2b).
+- 终态工具一调即停 — a terminal tool's accepted call ends the turn. The
+  perception family's tools are declared ``terminal=False``: an accepted
+  read feeds its observation back on the wire (assistant tool_call +
+  role:tool result — the standard continuation) and the loop iterates.
 - 零副作用往返 — the loop itself writes nothing and never commits; the
   executions write through the three only doors (edit ops / wiring ops /
-  ``create_run``), flush-only.
+  ``create_run``), flush-only; the read tools carry no writes at all
+  (只读纪律 — their implementations hold zero write functions).
 
-打字机律 on the tool wire (the three teeth restated): prose = the content
-channel, streamed on iteration 0; a REJECTED iteration's speech is replaced
-speech, so later iterations run quiet and the frontend paces the settled
-prose at the envelope (paceSettledProse — the zero-delta path unchanged);
-structure frames (``on_tool_call`` name-known / ``on_tool_ready``
-args-complete) fire on every iteration — they are phase information, not
-prose.
+打字机律 on the tool wire (the three teeth restated for the loop form,
+T2b): prose = the content channel, streamed on iteration 0. A REJECTED
+call's speech is replaced speech — it never enters the envelope, later
+iterations run quiet, and the frontend paces the settled prose at the
+envelope (paceSettledProse — the zero-delta path unchanged). An ACCEPTED
+read iteration's speech is KEPT speech: it composes into the envelope as
+the prefix (the executions dock/write the composed whole), and the
+unstreamed tail paces out through the same typewriter under the same key
+(never a blob, never an erase). Structure frames (``on_tool_call``
+name-known / ``on_tool_ready`` args-complete) fire on every iteration —
+they are phase information, not prose; a read call's name-known frame is
+the inspecting family's seat (「正在查曲库…」— the copy key rides the
+registry entry, the tool name never reaches the user face).
 
 Tier law (ADR-077 判词④): this driver speaks Tier 1 (native tool_calls). A
 client without ``supports_native_tools`` fails LOUD here — the Tier-0
@@ -39,6 +51,7 @@ research node's loop is the proven form); a silent downgrade nobody tests
 would be a lie.
 """
 
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -74,7 +87,8 @@ class ChatTool:
     prompt 扰动). ``params_model`` compiles to the tool's JSON schema — its
     Field descriptions ARE the parameter documentation. None = a zero-arg
     call (``start_run``). ``terminal``: a terminal tool's accepted call ends
-    the turn (终态工具一调即停).
+    the turn (终态工具一调即停); a non-terminal tool (the perception family's
+    reads) returns a ``ToolObservation`` and the loop iterates.
     """
 
     name: str
@@ -134,14 +148,36 @@ def _loop_echo(feedback: str) -> str:
     )
 
 
-# Execute signature: (tool name, validated params, this iteration's prose) →
-# None when the call is ACCEPTED (a terminal stop), or the structured feedback
-# string when it is REJECTED (the loop echoes it and iterates). The prose seat
-# exists because the executions need it — the docked question row's content,
-# the plan echo, the answer message all carry the turn's speech (ask 三分解剖
-# ① / 任务书回声). All side effects belong to the executor; the loop writes
-# nothing.
-LoopExecute = Callable[[str, BaseModel | None, str], Awaitable[str | None]]
+def _compose_speech(parts: list[str]) -> str:
+    """The turn's ONE speech from its kept parts (言语账本): an accepted read
+    iteration's prose + the terminal iteration's prose join on a blank line;
+    a rejected call's prose never reaches here (replaced speech). Single-part
+    turns (the T2a-pure form) come out as the part itself, stripped."""
+    return "\n\n".join(part.strip() for part in parts if part and part.strip())
+
+
+@dataclass(frozen=True)
+class ToolObservation:
+    """A NON-terminal tool's accepted result (T2b 感知族 — the read tools'
+    return channel). The text is model-facing (compact lines, capped by the
+    execute); the loop appends it to the wire as the role:tool message and
+    iterates. A terminal tool's execute never returns this (skew = loud)."""
+
+    text: str
+
+
+# Execute signature: (tool name, validated params, the turn's composed speech
+# so far) → None when a TERMINAL call is ACCEPTED (the stop), the structured
+# feedback string when a call is REJECTED (the loop echoes it and iterates),
+# or a ToolObservation when a NON-terminal read call is accepted (fed back,
+# loop continues). The speech seat exists because the executions need it —
+# the docked question row's content, the plan echo, the answer message all
+# carry the turn's speech (ask 三分解剖 ① / 任务书回声) — and that speech is
+# the ACCUMULATED one: words spoken before a kept read are part of the reply.
+# All side effects belong to the executor; the loop writes nothing.
+LoopExecute = Callable[
+    [str, BaseModel | None, str], Awaitable[str | None | ToolObservation]
+]
 
 
 class ToolLoopAgent:
@@ -195,18 +231,21 @@ class ToolLoopAgent:
         **ctx: Any,
     ) -> LoopResult:
         """Run the bounded loop: assemble → render → [generate_with_tools →
-        execute → feedback] × at most ``max_iterations``.
+        execute → feedback/observation] × at most ``max_iterations``.
 
-        ``execute`` returns None to accept (terminal stop) or a feedback
-        string to reject (echoed, one more iteration). The hooks:
+        ``execute`` returns None to accept a TERMINAL call (the stop), a
+        feedback string to reject (echoed, one more iteration), or a
+        ToolObservation to accept a NON-terminal read (the loop continues
+        with the observation on the wire). The hooks:
 
         - ``on_delta``: prose fragments — iteration 0 only (a rejected
           iteration's speech is replaced speech; later iterations run quiet
           and the envelope paces out — the repair-never-streams law).
         - ``on_reasoning``: reasoning fragments, a liveness signal only.
         - ``on_tool_call``: a call's name became known (the phase-frame
-          seam). Streaming path: the client fires it as the name arrives;
-          quiet iterations: fired when the response lands.
+          seam — a read tool's name-known frame IS the inspecting family's
+          「正在查曲库…」seat). Streaming path: the client fires it as the
+          name arrives; quiet iterations: fired when the response lands.
         - ``on_tool_ready``: a call's arguments completed and validated,
           pre-execution (the question.preview seam — structure, not prose;
           fires on every iteration).
@@ -236,14 +275,25 @@ class ToolLoopAgent:
             {"role": "user", "content": user_prompt},
         ]
         calls: list[str] = []
+        # 言语账本 (T2b): an ACCEPTED read iteration's speech is kept speech —
+        # it composes into the envelope's prefix (the terminal execution and
+        # the LoopResult both carry the composed whole). A rejected call's
+        # speech is replaced speech and never enters the parts.
+        speech_parts: list[str] = []
+        # The wire continuation after an accepted read: the assistant tool_call
+        # echo + the role:tool observation (the standard OpenAI form). The
+        # tail SURVIVES later rejections (they ride the user-message echo —
+        # one rejection form only) so a retry never pays a second read.
+        observation_tail: list[dict] = []
         for iteration in range(self.max_iterations):
             if iteration and on_repair is not None:
                 await _emit(on_repair)
             streaming = on_delta is not None and iteration == 0
+            messages = [*base_messages, *observation_tail]
             try:
                 if streaming:
                     result = await self.client.generate_stream_with_tools(
-                        messages=base_messages,
+                        messages=messages,
                         tools=specs,
                         temperature=self.temperature,
                         on_delta=on_delta,
@@ -252,7 +302,7 @@ class ToolLoopAgent:
                     )
                 else:
                     result = await self.client.generate_with_tools(
-                        messages=base_messages,
+                        messages=messages,
                         tools=specs,
                         temperature=self.temperature,
                     )
@@ -267,15 +317,14 @@ class ToolLoopAgent:
                     "content": user_prompt + _loop_echo(str(e)),
                 }
                 continue
-            # The terminal iteration's prose is what lands in the envelope —
-            # a rejected iteration's speech was replaced speech. Misplaced
-            # speech (an args-level "prose" habit key) reads as speech when
-            # the content channel stayed empty (读容忍, below).
+            # Misplaced speech (an args-level "prose" habit key) reads as
+            # speech when the content channel stayed empty (读容忍, below).
             prose = result.content
             if not result.tool_calls:
-                # Bare final reply — the read-tolerant answer verdict.
+                # Bare final reply — the read-tolerant answer verdict (any
+                # kept read-iteration speech composes in front of it).
                 return LoopResult(
-                    prose=prose,
+                    prose=_compose_speech([*speech_parts, prose]),
                     tool_name=None,
                     params=None,
                     iterations=iteration + 1,
@@ -324,10 +373,60 @@ class ToolLoopAgent:
                     }
                     continue
             await _emit(on_tool_ready, call.name, params)
-            feedback = await execute(call.name, params, prose)
-            if feedback is None:
+            speech = _compose_speech([*speech_parts, prose])
+            outcome = await execute(call.name, params, speech)
+            if isinstance(outcome, ToolObservation):
+                if tool.terminal:
+                    raise RuntimeError(
+                        f"terminal tool {call.name!r} returned a ToolObservation "
+                        "— the declaration and the execute table skewed "
+                        "(a terminal call ends the turn, never observes)"
+                    )
+                # A read accepted (T2b 感知族): the iteration's speech is KEPT
+                # (it may have streamed — erasing it would glitch; the
+                # envelope's prefix composes it), and the observation rides
+                # the wire's standard continuation so the next iteration
+                # reads what it asked for. Read executions never reject on
+                # content — a miss is an honest empty observation — but a
+                # feedback string stays legal and iterates like any rejection.
+                speech_parts.append(prose)
+                call_id = call.id or f"call_{iteration}"
+                observation_tail.append(
+                    {
+                        "role": "assistant",
+                        "content": prose or "",
+                        "tool_calls": [
+                            {
+                                "id": call_id,
+                                "type": "function",
+                                "function": {
+                                    "name": call.name,
+                                    "arguments": json.dumps(
+                                        call.arguments, ensure_ascii=False
+                                    ),
+                                },
+                            }
+                        ],
+                    }
+                )
+                observation_tail.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "name": call.name,
+                        "content": outcome.text,
+                    }
+                )
+                continue
+            if outcome is None:
+                if not tool.terminal:
+                    raise RuntimeError(
+                        f"read tool {call.name!r} returned a terminal accept "
+                        "— the declaration and the execute table skewed "
+                        "(a read never ends the turn)"
+                    )
                 return LoopResult(
-                    prose=prose,
+                    prose=speech,
                     tool_name=call.name,
                     params=params,
                     iterations=iteration + 1,
@@ -335,7 +434,7 @@ class ToolLoopAgent:
                 )
             base_messages[1] = {
                 "role": "user",
-                "content": user_prompt + _loop_echo(feedback),
+                "content": user_prompt + _loop_echo(outcome),
             }
         return LoopResult(
             prose="",

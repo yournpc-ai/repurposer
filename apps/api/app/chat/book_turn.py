@@ -30,6 +30,10 @@ dump, and an ask turn's ledger-only ``pending_brief`` row is byte-identical.
 The 判词⑦ hybrid-flip machinery retired structurally — a tool call IS one
 verdict; the impossible hybrid shapes have no wire form anymore (their
 outcomes survive as rejections).
+
+T2b 感知族 (ADR-077 判词②): the read tools (``app/chat/perception/``)
+dispatch straight from ``execute`` — never a ledger write, never an
+outcome — and ride back as a ToolObservation the loop feeds back.
 """
 
 import json
@@ -41,7 +45,9 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.tool_loop import ToolObservation
 from app.chat.intent import intent_router
+from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.service import (
     THINKING_PHASE_CREATING_RUN,
     THINKING_PHASE_DRAFTING,
@@ -366,9 +372,14 @@ class BookTurn:
 
     # ---- the loop's execute dispatch ----------------------------------------
 
-    async def execute(self, name: str, params, prose: str) -> str | None:
+    async def execute(self, name: str, params, prose: str) -> str | None | ToolObservation:
         """The LoopExecute seat: validate → (reject: feedback, zero writes) →
-        accept: writes + the outcome stashed → None (terminal stop)."""
+        accept: writes + the outcome stashed → None (terminal stop). A
+        PERCEPTION call short-circuits the seats above: reads are dispatched
+        to the family registry and ride back as a ToolObservation (the loop
+        iterates — 终态工具一调即停 covers the verdict tools only)."""
+        if name in PERCEPTION_TOOLS:
+            return await run_perception_tool(self.db, self.project, name, params)
         if name == "present_plan":
             assert isinstance(params, PresentPlanArgs)
             return await self._present_plan(params, prose)

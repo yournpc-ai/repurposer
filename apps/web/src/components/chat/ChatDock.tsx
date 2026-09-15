@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ChevronUp,
   Crosshair,
+  Download,
   Eraser,
   FileText,
   History,
@@ -53,6 +54,7 @@ import {
   type CreditsInsufficientDetail,
 } from "@/lib/credits"
 import { createTypewriter } from "@/lib/typewriter"
+import { downloadOutput } from "@/components/results/downloadOutput"
 import { useRunEvents } from "@/lib/use-run-events"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -485,6 +487,45 @@ interface OverlayMessage {
    * on a failed turn, so a refresh drops it (the conversation stays honest:
    * nothing was answered). */
   meta?: "error"
+  /** Trigger-turn pills (T3, ADR-077 判词③): a proactive review row's
+   * suggestion actions — undefined on every other message shape (the
+   * reviewer-landed test reads exactly that). Set only after the row's
+   * prose has drained (散文永远在先、提问随后 — the pills follow the
+   * speech). */
+  suggestions?: SuggestionPill[]
+}
+
+/** A trigger turn's suggestion pill (T3): "send" fires the text verbatim
+ * as the user's next message (the revision kind rides the chat surface —
+ * the single intent door); "download" one-taps a landed output. Label and
+ * text are LLM-authored user voice in the interface language. */
+interface SuggestionPill {
+  label: string
+  action: "send" | "download"
+  text?: string | null
+  output_id?: string | null
+}
+
+/** The trigger dump on a proactive row's intent column ({type:
+ * "trigger_review", trigger, ref, suggestions}). Read tolerance: anything
+ * off-shape parses to undefined (a plain assistant row), never a crash. */
+function triggerSuggestions(intent: unknown): SuggestionPill[] | undefined {
+  const data = (intent ?? {}) as Record<string, unknown>
+  if (data.type !== "trigger_review") return undefined
+  const raw = Array.isArray(data.suggestions) ? data.suggestions : []
+  return raw
+    .map((s) => (s ?? {}) as Record<string, unknown>)
+    .filter(
+      (s) =>
+        typeof s.label === "string" &&
+        (s.action === "send" || s.action === "download")
+    )
+    .map((s) => ({
+      label: s.label as string,
+      action: s.action as "send" | "download",
+      text: (s.text as string | null) ?? null,
+      output_id: (s.output_id as string | null) ?? null,
+    }))
 }
 
 /** The typed question payload mirrored from the API (messages.question). */
@@ -1265,6 +1306,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // never touch
   // it, and without a phase the row falls back to chat.thinking.
   const [thinkingPhase, setThinkingPhase] = useState<string | null>(null)
+  // The perception family's inspecting key (T2b): an inspecting frame carries
+  // {phase: "inspecting", key: <the read-registry entry's i18n copy key>} —
+  // the row speaks 「正在查曲库…」 while the tool name never surfaces. The
+  // key wins over the phase label while set; a phase-only frame clears it.
+  const [thinkingKey, setThinkingKey] = useState<string | null>(null)
 
   // Conversation below the pinned regions (plan card / progress).
   const [messages, setMessages] = useState<OverlayMessage[]>([])
@@ -1555,6 +1601,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               content: m.content ?? "",
               runId: m.workflow_run_id,
               at: m.created_at,
+              // 触发回合回放 (T3): a proactive review row's pills rebuild
+              // from its intent dump — undefined on every other shape.
+              suggestions: triggerSuggestions(m.intent),
             })
           }
         }
@@ -1604,6 +1653,156 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       cancelled = true
     }
   }, [steps, pendingQuestion, runId, fetchPendingQuestion])
+
+  // ── 触发回合的到达通道 (T3, ADR-077 判词③) ─────────────────────────
+  // Trigger turns land as plain assistant rows (intent.type ===
+  // "trigger_review") OUTSIDE any request the dock made: the
+  // understanding-warmed beat fires while assets process (pre-first-run,
+  // journey 一②), the closing reviewer lands seconds after the run's
+  // terminal frame (journey 一⑦). The dock polls the conversation while
+  // either window is open; each unseen trigger row types out through its
+  // own typewriter (打字机律 — server-born prose never blobs in), the pills
+  // land only after the prose drains (散文在先), and the settle rides the
+  // existing agent-speech recall funnel (a tucked-away dock resurfaces on
+  // its own — 唤回复用, zero new machinery).
+  const messagesRef = useRef<OverlayMessage[]>(messages)
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+  const triggerInFlight = useRef<Set<string>>(new Set())
+
+  const pollTriggerMessages = useCallback(async (): Promise<void> => {
+    try {
+      const convRes = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
+        toast: false,
+      })
+      if (!convRes.ok) return
+      const conv = (await convRes.json()) as { id?: string }
+      if (!conv.id) return
+      const res = await apiFetch(`/api/v1/chat/conversations/${conv.id}/messages`, {
+        toast: false,
+      })
+      if (!res.ok) return
+      const data = (await res.json()) as {
+        items?: (QuestionMessage & { role: "user" | "assistant" | "system" })[]
+      }
+      for (const row of data.items ?? []) {
+        if (row.role !== "assistant") continue
+        const suggestions = triggerSuggestions(row.intent)
+        if (suggestions === undefined) continue
+        // Dedup by the SERVER row id — the archive replay and a previous
+        // poll arrival land under the same id, so the row is known if it is
+        // in the flow already or mid-typing.
+        if (
+          triggerInFlight.current.has(row.id) ||
+          messagesRef.current.some((m) => m.id === row.id)
+        ) {
+          continue
+        }
+        triggerInFlight.current.add(row.id)
+        const text = (row.content ?? "").trim()
+        try {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: row.id,
+              role: "assistant" as const,
+              content: "",
+              streaming: true,
+              at: row.created_at,
+              runId: row.workflow_run_id,
+            },
+          ])
+          const tw = createTypewriter((fragment) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === row.id ? { ...m, content: m.content + fragment } : m
+              )
+            )
+          }, setProseActive)
+          // NO flush — server-born prose paces out under the typewriter's
+          // cadence (the zero-delta path's same law), never a blob.
+          tw.push(text)
+          await tw.drain()
+          // The pills follow the drained prose (散文在先、提问随后); the
+          // settle (streaming: false) fires the agent-speech recall.
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === row.id ? { ...m, streaming: false, suggestions } : m
+            )
+          )
+        } finally {
+          triggerInFlight.current.delete(row.id)
+        }
+      }
+    } catch {
+      /* server-born speech is best-effort — the replay rebuilds on refresh */
+    }
+  }, [projectId])
+
+  // Watch window A (理解完成): assets mid-processing — the warm fires the
+  // moment the whole set completes. The tick refreshes the assets too (the
+  // chips' processing state updates on the same cadence), which flips the
+  // window shut; the trailing grace below still catches the review landing
+  // seconds after completion.
+  const assetsProcessing = assets.some(
+    (a) => a.processing_status === "pending" || a.processing_status === "processing",
+  )
+  useEffect(() => {
+    if (!assetsProcessing) return
+    const id = setInterval(() => {
+      void fetchAssets()
+      void pollTriggerMessages()
+    }, 3000)
+    return () => clearInterval(id)
+  }, [assetsProcessing, fetchAssets, pollTriggerMessages])
+
+  // Trailing grace: the understanding beat lands a few seconds AFTER the
+  // last asset completes (the warm materializes, then the LLM turn runs) —
+  // keep polling briefly past the flip. Stamped on the falling edge only.
+  const [assetsSettledAt, setAssetsSettledAt] = useState<number | null>(null)
+  const wasProcessingRef = useRef(false)
+  useEffect(() => {
+    if (assetsProcessing) {
+      wasProcessingRef.current = true
+      return
+    }
+    if (wasProcessingRef.current) {
+      wasProcessingRef.current = false
+      setAssetsSettledAt(Date.now())
+    }
+  }, [assetsProcessing])
+  useEffect(() => {
+    if (assetsSettledAt === null) return
+    const remaining = 45_000 - (Date.now() - assetsSettledAt)
+    if (remaining <= 0) return
+    const id = setInterval(() => void pollTriggerMessages(), 3000)
+    const stop = setTimeout(() => clearInterval(id), remaining)
+    return () => {
+      clearInterval(id)
+      clearTimeout(stop)
+    }
+  }, [assetsSettledAt, pollTriggerMessages])
+
+  // Watch window B (run 完成 — the closing reviewer): the terminal frame
+  // just landed and no review row for this run is in the flow yet. The
+  // grace is bounded — if the reviewer never lands (its failure degrades to
+  // silence by design), the poll stops; the receipt stands alone.
+  const reviewerLanded = messages.some(
+    (m) => m.runId === runId && m.suggestions !== undefined,
+  )
+  useEffect(() => {
+    if (!terminal || !runId || reviewerLanded) return
+    const startedAt = Date.now()
+    const id = setInterval(() => {
+      if (Date.now() - startedAt > 60_000) {
+        clearInterval(id)
+        return
+      }
+      void pollTriggerMessages()
+    }, 3000)
+    return () => clearInterval(id)
+  }, [terminal, runId, reviewerLanded, pollTriggerMessages])
 
   // Load the project's assets for the prompt attachments — once on mount,
   // and again after a chat turn when the project started empty: the plan
@@ -2346,10 +2545,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setChatBusy(true)
     setProseActive(false)
     setThinkingPhase(null)
+    setThinkingKey(null)
     const streamId = crypto.randomUUID()
     let streamedAny = false
+    // What the preview bubble currently shows (the typewriter-released text)
+    // — the suffix-pacing gate's reference (打字机律·工具线重述, see below).
+    let previewText = ""
     const appendDelta = (delta: string) => {
       streamedAny = true
+      previewText += delta
       setMessages((prev) =>
         prev.some((m) => m.id === streamId)
           ? prev.map((m) =>
@@ -2415,6 +2619,24 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       await typewriter.drain()
       finalizePreview(content, runId, at)
     }
+    /** 打字机律·工具线重述牙③ (T2b 感知族): the loop's accumulated speech may
+     * EXTEND the streamed preview — words spoken before a kept read call are
+     * the envelope's prefix, the quiet terminal speech its tail. When the
+     * settled content continues what's on screen, only the unseen tail rides
+     * the typewriter (same key, no blob, no erase). A non-prefix settled text
+     * is replaced speech (a rejected call's flip) and settles as before. Call
+     * AFTER typewriter.flush() so previewText is the full streamed prefix. */
+    const paceUnstreamedTail = async (content: string): Promise<void> => {
+      if (
+        streamedAny &&
+        previewText &&
+        content.length > previewText.length &&
+        content.startsWith(previewText)
+      ) {
+        typewriter.push(content.slice(previewText.length))
+        await typewriter.drain()
+      }
+    }
     try {
       const data = await streamChat<{
         assistant_message: QuestionMessage
@@ -2440,8 +2662,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           onDelta: (delta) => typewriter.push(delta),
           onThinking: (payload) => {
             // Labelled phase frames only; bare keepalives leave the label
-            // as-is (the row keeps shimmering at its last real phase).
-            if (payload.phase) setThinkingPhase(payload.phase)
+            // as-is (the row keeps shimmering at its last real phase). An
+            // inspecting frame (T2b) carries the registry's copy key — it
+            // wins while set; a phase-only frame clears it back.
+            if (payload.phase) {
+              setThinkingPhase(payload.phase)
+              setThinkingKey(payload.key ?? null)
+            }
           },
           onQuestionPreview: (payload) =>
             dockQuestionPreview(`preview-${streamId}`, payload),
@@ -2468,6 +2695,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // receipt tombstones at the run's END, which postdates every
         // birthing row by construction).
         if (streamedAny) {
+          // A read-tool turn's echo may EXTEND the streamed prefix (the
+          // loop's accumulated speech): pace the unseen tail BEFORE the run
+          // lands — the same law as the zero-delta start's paceSettledProse.
+          await paceUnstreamedTail(data.assistant_message.content ?? "")
           finalizePreview(undefined, data.run_id, data.assistant_message.created_at)
         } else {
           // Zero-delta start (the funnel's repair round never streams): the
@@ -2519,6 +2750,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // produced it — the same anchor the inline card occupied while the
         // turn was in flight — and the fresh card pins bottom-most.
         if (streamedAny) {
+          // The echo may extend the streamed prefix (read-tool turn) — pace
+          // the tail, then the bubble carries the whole speech into the dock.
+          await paceUnstreamedTail(message.content ?? "")
           finalizePreview()
           if (message.question.kind === "task_book") {
             if (intentReady && liveBookMessageId) {
@@ -2565,8 +2799,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
       } else if (streamedAny) {
         // Prose reply: the preview bubble IS the settled message (same key;
-        // the envelope content + run id are authoritative).
+        // the envelope content + run id are authoritative). A read-tool
+        // turn's unstreamed tail paces out first (打字机律·工具线重述).
         discardPreviewArtifacts()
+        await paceUnstreamedTail(message.content ?? "")
         finalizePreview(
           message.content ?? "",
           message.workflow_run_id,
@@ -2808,6 +3044,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setChatBusy(true)
     setProseActive(false)
     setThinkingPhase(null)
+    setThinkingKey(null)
     setPendingQuestion(null)
     setMessages((prev) =>
       prev.some((m) => m.id === optimisticId)
@@ -2829,8 +3066,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // before the terminal frame; raw appends read as "popped in at once",
     // which is the exact symptom this stream exists to kill.
     let previewStreamed = false
+    // What the preview bubble shows (typewriter-released) — the read-tool
+    // tail-pacing gate's reference (打字机律·工具线重述, sendChat 同款).
+    let previewText = ""
     const typewriter = createTypewriter((text) => {
       previewStreamed = true
+      previewText += text
       setMessages((prev) =>
         prev.some((m) => m.id === previewId)
           ? prev.map((m) =>
@@ -2855,7 +3096,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }>(question.id, { kind: "option", option_id: optionId }, {
         onDelta: (text) => typewriter.push(text),
         onThinking: (payload) => {
-          if (payload.phase) setThinkingPhase(payload.phase)
+          if (payload.phase) {
+            setThinkingPhase(payload.phase)
+            setThinkingKey(payload.key ?? null)
+          }
         },
         // Q2..N 对称 (2026-09-09): the continuation's follow-up ask closes
         // its object mid-stream just like the chat turn's first ask — dock
@@ -2872,19 +3116,30 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // already IN the preview → handleAssistantMessage rides echoCarried.
       typewriter.flush()
       setThinkingPhase(null)
+      setThinkingKey(null)
       const answeredRow = buildAnsweredQuestionRow(data.answered_question)
       const followUp = data.follow_up
       // 打字机律最后闸门 (sendChat 同款): a zero-delta follow-up (the
       // funnel's repair round never streams) paces its prose through the
       // preview bubble BEFORE the archive splice — the echo visibly leads,
-      // the settled rows follow.
-      if (followUp && !previewStreamed) {
+      // the settled rows follow. T2b: a read-tool turn's follow-up EXTENDS
+      // the streamed prefix — the unseen tail paces through the same
+      // typewriter (never a blob, never an erase).
+      if (followUp) {
         const settled =
           followUp.question && !followUp.answer
-            ? questionEcho(followUp)
+            ? (questionEcho(followUp) ?? "")
             : (followUp.content ?? "").trim()
-        if (settled) {
+        if (settled && !previewStreamed) {
           typewriter.push(settled)
+          await typewriter.drain()
+        } else if (
+          settled &&
+          previewText &&
+          settled.length > previewText.length &&
+          settled.startsWith(previewText)
+        ) {
+          typewriter.push(settled.slice(previewText.length))
           await typewriter.drain()
         }
       }
@@ -2950,6 +3205,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // (双路同语义 with the typed Start).
       typewriter.flush()
       setThinkingPhase(null)
+      setThinkingKey(null)
       // A failed turn retires every ask-preview artifact too — a stashed
       // next-click's optimistic block and the preview pill never existed
       // server-side (the original question restores just below).
@@ -3258,6 +3514,22 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * and only revision channel; the router merges it user-stated and the
    * re-docked book carries the fresh ledger. No slot-update endpoint —
    * prohibited-behavior: 禁第二修订通道. */
+  /** Suggestion-pill clicks (T3 触发回合): "send" fires the pill's text as
+   * the user's next message — verbatim, through the same sendChat every
+   * typed turn takes (the chat surface stays the single intent door);
+   * "download" one-taps the landed output via the cards' own channel. The
+   * pills never carry a turn of their own. */
+  const handleSuggestionClick = (s: SuggestionPill) => {
+    if (s.action === "download") {
+      const output = outputs.find((o) => o.id === s.output_id)
+      if (output) downloadOutput(output)
+      return
+    }
+    const text = (s.text ?? "").trim()
+    if (!text || chatBusy || isStarting) return
+    void sendChat(text)
+  }
+
   const sendSlotEdit = (slot: "topic" | "audience" | "tone", value: string) => {
     if (chatBusy || isStarting) return
     const text = t(`generationOverlay.slotEditMessages.${slot}`, { value })
@@ -3694,6 +3966,34 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             {m.content ? (
               <AssistantText text={m.content} streaming={m.streaming} />
             ) : null}
+            {/* 建议 pills (T3 触发回合): the closing review's next steps —
+                quiet outline buttons under the review's own speech, landing
+                only after the prose drains. send = speaks the pill's text
+                as the user's next message; download = the output cards'
+                own channel. Never a second intent surface. */}
+            {m.suggestions && m.suggestions.length > 0 ? (
+              <Message align="start">
+                <MessageContent>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {m.suggestions.map((s, index) => (
+                      <Button
+                        key={`${m.id}-s${index}`}
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 rounded-md"
+                        disabled={s.action === "send" && (chatBusy || isStarting)}
+                        onClick={() => handleSuggestionClick(s)}
+                      >
+                        {s.action === "download" ? (
+                          <Download className="size-3.5" />
+                        ) : null}
+                        {s.label}
+                      </Button>
+                    ))}
+                  </div>
+                </MessageContent>
+              </Message>
+            ) : null}
             {/* 单一渲染面律 (2026-09-10 用户实拍「消息错乱」取证): the
                 ATTACHED run renders ONLY through runStreamUnits (live
                 checklist → terminal receipt at the run anchors) — never
@@ -3929,11 +4229,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   <MessageScrollerItem>
                     <ThinkingRow
                       label={
-                        thinkingPhase
-                          ? t(`chat.thinkingPhases.${thinkingPhase}`, {
+                        thinkingKey
+                          ? t(thinkingKey, {
                               defaultValue: t("chat.thinking"),
                             })
-                          : t("chat.thinking")
+                          : thinkingPhase
+                            ? t(`chat.thinkingPhases.${thinkingPhase}`, {
+                                defaultValue: t("chat.thinking"),
+                              })
+                            : t("chat.thinking")
                       }
                     />
                   </MessageScrollerItem>

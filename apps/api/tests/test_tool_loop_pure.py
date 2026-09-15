@@ -3,7 +3,9 @@
 No DB, no LLM, no HTTP — a scripted stub client + a scripted execute cover
 the loop laws: terminal stop, rejection→feedback→iteration, bare reply,
 exhaustion, truncation absorbed as an iteration, iteration-0-only streaming,
-read-tolerance at the loop boundary, and the Tier-1 loud gate.
+read-tolerance at the loop boundary, the perception family's non-terminal
+reads (T2b: observation feedback on the wire + kept speech), and the Tier-1
+loud gate.
 """
 
 from typing import Any
@@ -11,7 +13,13 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from app.agents.tool_loop import ChatTool, LoopResult, ToolLoopAgent, tool_spec
+from app.agents.tool_loop import (
+    ChatTool,
+    LoopResult,
+    ToolLoopAgent,
+    ToolObservation,
+    tool_spec,
+)
 from app.providers.llm.base import (
     LLMError,
     LLMSchemaError,
@@ -246,6 +254,149 @@ async def test_client_without_native_tools_fails_loud() -> None:
     agent = _make_agent("tl_tier", NoToolsClient([]))
     with pytest.raises(LLMError, match="Tier 1"):
         await agent.call_loop(_always_accept)
+
+
+# ---- T2b 感知族: non-terminal read tools -------------------------------------
+
+
+def _read_tool(name: str = "lookup") -> ChatTool:
+    return ChatTool(name, "Look it up.", None, terminal=False)
+
+
+@pytest.mark.asyncio
+async def test_read_observation_continues_the_loop_and_keeps_speech() -> None:
+    """An accepted read feeds its observation back on the wire (assistant
+    tool_call echo + role:tool result), KEEPS the iteration's speech, and the
+    terminal call closes with the COMPOSED speech (打字机律·工具线重述: the
+    kept read speech is the envelope's prefix)."""
+    read = _read_tool()
+    echo = ChatTool("echo", "Echo the text.", EchoArgs)
+    client = StubClient([
+        _call("lookup", {}, prose="let me check"),
+        _call("echo", {"text": "done"}, prose="the answer"),
+    ])
+    seen: list[tuple[str, str]] = []
+
+    async def execute(name: str, params: Any, prose: str):
+        seen.append((name, prose))
+        if name == "lookup":
+            return ToolObservation("the world says hi")
+        return None
+
+    agent = _make_agent("tl_read", client, tools=[read, echo])
+    result = await agent.call_loop(execute, on_delta=lambda t: None)
+    assert result.iterations == 2 and result.calls == ["lookup", "echo"]
+    assert result.tool_name == "echo"
+    assert result.prose == "let me check\n\nthe answer"
+    # The terminal execute received the composed speech — the executions
+    # dock/write the whole reply, never the last iteration's fragment.
+    assert seen == [
+        ("lookup", "let me check"),
+        ("echo", "let me check\n\nthe answer"),
+    ]
+    # The wire continuation: iteration 2's messages carry the assistant
+    # tool_call echo + the role:tool observation.
+    second = client.seen_messages[1]
+    assert second[2]["role"] == "assistant"
+    assert second[2]["tool_calls"][0]["function"]["name"] == "lookup"
+    assert second[3] == {
+        "role": "tool",
+        "tool_call_id": "c1",
+        "name": "lookup",
+        "content": "the world says hi",
+    }
+    # Iteration-0-only streaming holds across reads.
+    assert client.entries == ["stream", "plain"]
+
+
+@pytest.mark.asyncio
+async def test_rejection_after_a_read_keeps_the_observation_tail() -> None:
+    """A rejected call after an accepted read still rides the user-message
+    echo (ONE rejection form), and the observation tail SURVIVES — the retry
+    never pays a second read."""
+    read = _read_tool()
+    echo = ChatTool("echo", "Echo the text.", EchoArgs)
+    client = StubClient([
+        _call("lookup", {}, prose=""),
+        _call("echo", {"text": "bad"}, prose=""),
+        _call("echo", {"text": "good"}, prose=""),
+    ])
+    feedbacks = ["echo broke"]
+
+    async def execute(name: str, params: Any, prose: str):
+        if name == "lookup":
+            return ToolObservation("world")
+        return feedbacks.pop(0) if feedbacks else None
+
+    agent = _make_agent("tl_read_reject", client, tools=[read, echo])
+    result = await agent.call_loop(execute)
+    assert result.calls == ["lookup", "echo", "echo"] and not result.exhausted
+    assert result.params is not None and result.params.text == "good"
+    third = client.seen_messages[2]
+    assert third[1]["role"] == "user" and "echo broke" in third[1]["content"]
+    assert third[2]["role"] == "assistant" and third[3]["role"] == "tool"
+
+
+@pytest.mark.asyncio
+async def test_bare_reply_after_a_read_composes_speech() -> None:
+    """The read-tolerant answer floor composes with kept read speech too."""
+    read = _read_tool()
+    client = StubClient([
+        _call("lookup", {}, prose="checking"),
+        ToolGeneration(content="the answer", tool_calls=[]),
+    ])
+
+    async def execute(name: str, params: Any, prose: str):
+        return ToolObservation("world")
+
+    agent = _make_agent("tl_read_bare", client, tools=[read])
+    result = await agent.call_loop(execute)
+    assert result.tool_name is None
+    assert result.prose == "checking\n\nthe answer"
+
+
+@pytest.mark.asyncio
+async def test_read_only_turn_exhausts_honestly() -> None:
+    """Reads never end the turn — a read-only loop hits the cap and degrades
+    honestly (never a fabricated success)."""
+    read = _read_tool()
+    client = StubClient([_call("lookup", {}, prose="") for _ in range(3)])
+
+    async def execute(name: str, params: Any, prose: str):
+        return ToolObservation("more")
+
+    agent = _make_agent("tl_read_exhaust", client, tools=[read], max_iterations=3)
+    result = await agent.call_loop(execute)
+    assert result.exhausted and result.calls == ["lookup"] * 3
+    assert result.prose == ""
+
+
+@pytest.mark.asyncio
+async def test_terminal_tool_returning_observation_fails_loud() -> None:
+    """Declaration/execute skew: a terminal tool's execute must never
+    observe — loud, never a silent degrade."""
+    client = StubClient([_call("echo", {"text": "x"})])
+
+    async def execute(name: str, params: Any, prose: str):
+        return ToolObservation("skew")
+
+    agent = _make_agent("tl_skew_terminal", client)
+    with pytest.raises(RuntimeError, match="skewed"):
+        await agent.call_loop(execute)
+
+
+@pytest.mark.asyncio
+async def test_read_tool_terminal_accept_fails_loud() -> None:
+    """The mirror skew: a read tool's execute must never end the turn."""
+    read = _read_tool()
+    client = StubClient([_call("lookup", {})])
+
+    async def execute(name: str, params: Any, prose: str):
+        return None
+
+    agent = _make_agent("tl_skew_read", client, tools=[read])
+    with pytest.raises(RuntimeError, match="skewed"):
+        await agent.call_loop(execute)
 
 
 def test_tool_spec_shape_and_zero_arg_tools() -> None:
