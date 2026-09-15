@@ -124,7 +124,7 @@ class NodeBase:
 - **拓扑代码定，LLM 永不塑形图**（ADR-028）：LLM 提议（task list = 意图面唯一语法，ADR-043），`compile_graph` 纯函数裁决与物化。
 - `create_run` 是 WorkflowRun 唯一出生地：clips-media 门、count 边界、requires 校验全部集中于此，入口点零门禁代码。
 - 失败语义：确定性失败快速失败 + 下游级联 skipped；provider/网络/存储瞬时故障抛 `TransientNodeError`，按节点 `retries` 预算复位 pending 不级联；`checkpoint` 瘦节点 `Suspend` 挂起等答（waiting / WAITING_HUMAN），bail 优雅退出永不标 failed。
-- "全败或无事"：run 只在全部生成节点 failed/skipped 时标 FAILED；render 节点镜像渲染链，永不 hold run。
+- 失败判决（ADR-074）：任一非 fanout 节点 failed 即判 run FAILED；render 节点计入 active（hold run 到自身渲染终态落地）但不参与失败判决——单输出失败的渲染是卡面事实，不是 run 判决。
 
 ### 4.4 understand/plan 两步走（两次 LLM 调用，契约不变）
 

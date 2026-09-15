@@ -13,6 +13,7 @@
 | 竞品证据 | `research/` + `DECISION_MATRIX.md` | `COMPETITIVE_ANALYSIS.md` 只做综合，不存原始事实 |
 | 产品定位 / 需求 | `PRD.md` | 技术决策内容降级为指向 ADR 的指针 |
 | 现状架构 | `MODULE_ARCHITECTURE.md` + 子系统文档 | 描述"现在是什么"，不描述"将要做什么" |
+| 目标架构 / 可靠性主线 | `ARCHITECTURE_NORTH_STAR.md` | "将要建成什么"只住这里（五态纪律：CURRENT/TARGET/PLANNED/OPEN/REJECTED）；现状描述仍归 MODULE_ARCHITECTURE.md |
 | 模块架构 / 表归属 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 跨模块契约 |
 | 身份/运营层概念架构 | `POSITIONING.md` | 定位根 / 人设分区 / 渠道 / 选题的概念树只住这里，其他文档只引用 |
 | 对话→生产概念架构 | `DIALOG_WORKFLOW.md` | 厚 agent 判词 / 双引擎 workflow / brief / canonical 词汇（router·understand·plan）只住这里，其他文档只引用 |
@@ -28,6 +29,7 @@
 | `REPORT-2026-09.md` | 进展简报（2026-09-01 节点快照）：进度 / 已有功能 / 后续计划一页纸——PROGRESS.md 的对外摘录 | 节点快照（不复述细节、不维护周表，过期即归档） | 向技术总监 / 投资人汇报时 |
 | `STRATEGY.md` | 战略论证：三个判断 / 三资产哲学 / 五张牌 / 两个风险 / Gallery 决策 | 活跃（2026-07-21 建） | 动方向、评估新功能、仲裁排期争议时 |
 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 表归属契约（"2027 架构"）+ 现状系统架构（代码地图/队列/数据约定，自 ARCHITECTURE.md 并入） | 活跃（2026-07 建） | 动模块边界/新模块/任何子系统前 |
+| `ARCHITECTURE_NORTH_STAR.md` | **目标架构与可靠性主线**（North Star）：Agent=Decision Producer / Execution Kernel=可靠性核心 / Structured Media=领域核心 + 执行五概念词典 + 五态纪律 + 实施序列（含 POST_T5_DELTA_AUDIT 基线） | 活跃（2026-09-16 建，Architecture Gate 批） | 任何 coding agent 开工前第一读；动执行内核/agent 边界/Media IR 方向前 |
 | `POSITIONING.md` | 定位根概念架构（运营层母文档）：定位/人设/渠道/选题概念树 + 产品流程重写 + 实施切分 | 已拍板方向（2026-08-13，ADR-042），未实施——排期 PROGRESS 第八~十周运营端 | 动身份模块/渠道/选题/home 前 |
 | `AGENT_ARCHITECTURE.md` | 四层工程地图（Model / Harness / Graph / Loop，ADR-039）+ 工具包/花名册/NodeBase/估价 | 活跃（2026-08-09 重画；2026-08-18 随 ADR-043 收口请求层语法；2026-09-14 ADR-077 Loop 层形态修订落地——会话层 = 有界工具 loop，§2.5 方言侧消融） | 动 generation/agents/tools 前 |
 | `DIALOG_WORKFLOW.md` | 对话→生产概念架构母文档（厚 agent 蓝图，ADR-052）：双引擎 workflow / canonical 词汇（router·understand·plan·brief）/ brief + ask_user 一等终态工具 / 预填评审卡 / 有界 loop 节点 + 施工切分 B1~B4 | 已落地（2026-09-03 拍板即日动工，**B1~B4 全量收口 09-04**；2026-09-14 ADR-077 会话层工具 loop 化随批次⑤ T1~T4 落地，本文已改写为现在时） | 动 chat 意图层 / plan path / 多轮对话 / agent 概念前 |

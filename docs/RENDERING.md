@@ -161,7 +161,7 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——下表的 family / t
 
 ### apps/render（Node 黑盒）
 
-- `server.ts` — `POST /render`：校验 → 临时目录 → `renderClip` → 预签名 PUT 上传 → 返回对象键。`/cache` 静态服务把本地落盘的源经 loopback 喂回 Remotion（CORS `*` 因 bundle-server 跨源 fetch）。可选 `preview: {seconds}`（期 4 钩子预览闸）：只渲前 N 秒（≤15，frameRange 夹到合成末帧）+ 半分辨率 + 高 CRF，无 SRT 无响度 pass——**黑盒内部参数，clip-spec 契约不变体**（ADR-016）。
+- `server.ts` — `POST /render`：校验 → 临时目录 → `renderClip` → 预签名 PUT 上传 → 返回对象键。`/cache` 静态服务把本地落盘的源经 loopback 喂回 Remotion（CORS `*` 因 bundle-server 跨源 fetch）。
 - `render.ts`
   - `renderClip(spec, outDir, basename, preview?)` — 主流程：`stageRemoteSource`（源先落盘）→ 共享 bundle（一次构建复用）→ `selectComposition` → `renderMedia`（h264）→ SRT → `normalizeLoudness`。`preview` 在时提前返回（`srtPath: null`，两个后置 pass 全跳）。
   - `normalizeLoudness` — EBU R128 双 pass 响度归一（`-16 LUFS / TP -1.5`），ffmpeg 二进制取自 Remotion compositor 包（`resolveFfBinary`）；**增强不是正确性**——失败保留原音，永不翻车渲染；无声产物（stills 幻灯）跳过。
@@ -181,8 +181,7 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——下表的 family / t
   - `render_output(output_id)` — 驱动主流程：读 spec → 烘焙缝 → 预签名 PUT URL → POST 渲染服务 → 写 `files` + COMPLETED。**竞态守卫**：条件 UPDATE（`render_status == RENDERING`）——渲染中途 morph 重排（re-pend）时本次产物为陈品，删孤键、镜像 superseded，永不覆盖新 spec。
   - `_absolutize(spec)` — **烘焙缝 = 注册表 fold**：`resolve_spec_urls` 按各轨声明的 `url_fields` 绝对化（source.url / image_urls / image_shots[*].image_url / segments[*].url / brand 卡 / music / dub / layers[*].media.url）——新轨注册即接管，无逐字段特判。
   - `_mirror_render_node` — 渲染生命周期镜像到 run 的 render 步骤（可见性 + 成本的家；run-less 重渲染路径不受影响）。
-  - `render_hook_preview(project_id, user_id, output_id, render_spec, seconds)` — 期 4 钩子预览闸的闸内预渲染：烘焙缝 → 预签名 `{output_id}-hook-{ts}.mp4` → POST 渲染服务（`preview` 载荷）；无 DB 会话（调用方落 `files.hook_preview` + commit），失败回 None（闸诚实降级，不阻放行）。
-- `app/operations/registry.py`（与 pipeline 平级） — op 注册表（ADR-032 + ADR-044）：`OpDef.writes` 声明写入字段（启动对账分区）；`llm_visible=False` 的七 op（reorder_segments / insert_segment / set_transition / add_layer / remove_layer / move_layer = 操作集闭包登记，LLM 词汇随技能批开放；swap_hook_shot = 期 4 钩子预览闸的 dock 调整 op）——客户端可调、不进 chat 词表；载荷 = 实体引用（段 id / 锚 / 枚举 / 拍序号），寻址 =（轨, item_id, op）三元校验。ops 路由响应带 `stale_tracks`。
+- `app/operations/registry.py`（与 pipeline 平级） — op 注册表（ADR-032 + ADR-044）：`OpDef.writes` 声明写入字段（启动对账分区）；`llm_visible=False` 的六 op（reorder_segments / insert_segment / set_transition / add_layer / remove_layer / move_layer = 操作集闭包登记，LLM 词汇随技能批开放）——客户端可调、不进 chat 词表；载荷 = 实体引用（段 id / 锚 / 枚举 / 拍序号），寻址 =（轨, item_id, op）三元校验。ops 路由响应带 `stale_tracks`。
 - 认领谓词：`outputs.render_status`（NULL = 未请求 / PENDING 可认领），worker `FOR UPDATE SKIP LOCKED`（ADR-017）。
 
 ### 写纪律（Operation Model 联动）
