@@ -368,7 +368,9 @@
 
 ### 会话层工具 loop 批 + decompiler 批（09-14 拍板插入，ADR-077/078）
 
-> 需求模拟四轮讨论收敛（起点 = 乔布斯判词「完美的技术从产品需求入手」；诊断 = 代码级通读四层：chat「少了智能」的病根 = Loop 层建成纯裁决器——无感知 / 无触发 / 一次定音，**脊柱无病**）。落档包 = `docs/JOURNEYS.md`（用户旅程母文档，首发三条旅程）+ ADR-077（会话层工具 loop 化 + **常备否决收窄终裁**：生产编译期封闭 / 服务有界感知 loop 收编 / 执行 loop 永拒 + 判决 union 翻工具集 + 多 provider 线格式三层 + 触发回合 + NAMING 批 v3）+ ADR-078（**decompiler 反向编译器**：video → clip-spec 骨架，remix = 换内容留风格，契约即能力边界）+ 简报 `docs/tasks/chat-tool-loop-migration.md`（批次 T1 线格式 → T2 工具 loop 内核 → T3 触发回合 → T4 剧本/文档/NAMING v3 → T5 decompiler；B4 画布镜头跟随纯前端随时插入）。**与画布三族批（ADR-072/076）并行跑道不动；其后各周次顺延一周。** 验收口径 = 简报 §2 各批验收行 + JOURNEYS 旅程分支树逐条过。
+> 需求模拟四轮讨论收敛（起点 = 乔布斯判词「完美的技术从产品需求入手」；诊断 = 代码级通读四层：chat「少了智能」的病根 = Loop 层建成纯裁决器——无感知 / 无触发 / 一次定音，**脊柱无病**）。落档包 = `docs/JOURNEYS.md`（用户旅程母文档，首发三条旅程）+ ADR-077（会话层工具 loop 化 + **常备否决收窄终裁**：生产编译期封闭 / 服务有界感知 loop 收编 / 执行 loop 永拒 + 判决 union 翻工具集 + 多 provider 线格式三层 + 触发回合 + NAMING 批 v3）+ ADR-078（**decompiler 反向编译器**：video → clip-spec 骨架，remix = 换内容留风格，契约即能力边界）+ 简报 `docs/tasks/done/chat-tool-loop-migration.md`（批次 T1 线格式 → T2 工具 loop 内核 → T3 触发回合 → T4 剧本/文档/NAMING v3 → T5 decompiler；B4 画布镜头跟随纯前端随时插入）。**与画布三族批（ADR-072/076）并行跑道不动；其后各周次顺延一周。** 验收口径 = 简报 §2 各批验收行 + JOURNEYS 旅程分支树逐条过。
+
+> **2026-09-15 T5 decompiler 批入账（①~④ 四 commit，ADR-078 全判词落地）**：① **craft_scan 确定性扫描**——PyAV 顺序解码 + 3 通道 HSV 直方图相关切镜头（自适应下限 median−4σ，MAD=0 退化 0.55）+ 节奏分档 + 画幅最近档 + 字幕带视觉最近邻 best-fit（preset 枚举镜像 clip-spec Literal，调色板 snap）——**零 LLM 由构造保证**（纯套件双闸：源码 import 扫描 + CraftJudgment schema 只载判断座）；② **decompile 节点**（内部 crew，编译期注入 off preprocess、与 understand 平行，plan.inputs 带它）+ CraftSkeleton 内部产物（资产级 + 内容寻址 + 跨项目复用）+ warm 前移 + craft_decompiled 触发事件；③ **exemplar 参数源（判词⑤）**——plan 装配签名加骨架座；select_clips/materialize 代码映射（count 钳制 / 画幅 / 字幕覆写 / 配乐 mood），优先级全链 = 显式 > exemplar > 默认，LLM 永不写 spec；④ **资产角色双消歧门（判词④）**——提问机器门（slot=asset_role，选项代码自建 option id = asset id，答复/跳过都代码结算 pin）+ mention 门（plan 路 @video = exemplar，chat 路 @video+clips 链 = source，撞座即角色反转），pins 骑 PendingPlan → TaskSpec → run.context 常驻可回读，get_craft_skeleton 读工具入感知族双挂。**验证归用户自跑**（纯套件 / prompt gate / 全量剧本 / 案例仿制 e2e）；需求池新收「能力缺口喂给」一行（gaps 的 not_yet 族 = 需求池候选源）。
 
 ### 第十一周（09-10 ~ 09-23，自 10-02 提前）：**支付实际开发 + 分发联调**
 
@@ -509,6 +511,7 @@
 | quotes/carousel 两站拆分 | P2 | 三族批两站机制（✅ 2026-09-14，translate/dub 先例） | 三族批简报 §7.3 遗留（简报 `tasks/done/graph-canvas-three-families.md`）：quotes/carousel 现单站 image×generator——拆「文案稿 doc 站（table×manual）+ 图装配站」同款两站，改文案零重买图渲染（billing 对账可见 renderer capture 为 0） |
 | 样式覆写 UI | P2 | 三族批 editor 卡程序区（✅）；`style_overrides` JSONB 地基未落 | 三族批简报 §7.3 遗留：装配节点 `style_overrides` 数据层 + 用户面（杠杆行形态归批 B4 一并设计；皮肤六件之外的 run 级覆写） |
 | 分镜表表格档节点（rev 迭代） | P2 | 三族批表格档先例（✅ 译文/配音稿两站）；编辑映射 op 设计 | 三族批简报 §7.3 遗留：plan 的分镜产物（槽位 + 覆盖理由）持久化为表格档节点（transcript 与 clips 卡之间），删行 = 弃选 / 改时间窗 = 重切 / 改论点 = 重选——全部确定性 op；用户原话挂头 |
+| 能力缺口喂给（decompiler gaps → 需求池候选） | P2 | decompiler 骨架（✅ 09-15，ADR-078 判词②）；缺口观察积累后再按价值排期 | T5 落地登记：拆解时契约无座位的字段 = 诚实「做不到」清单（CraftGap）；`unsupported` = L3 线永不承诺，`not_yet` = 契约座在、写手未到——**not_yet 族即本池候选源**（既有对应行：text_layers → MG 动画工具行；broll_overlay → insert_broll 行）；旅程二 2b 的带理由纠偏消费它，运营侧按观测频率升格排期 |
 
 ### 可选需求
 

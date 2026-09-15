@@ -1,6 +1,6 @@
 # Repurposer Agent Architecture
 
-> Status: Active（2026-08-09 重画，ADR-039 架构规范级大迭代；2026-08-18 随 ADR-043 收口请求层语法；2026-08-20 增 §2.5 行业坐标；2026-08-21 N-42 全量对齐行业命名——skill→tool 换位，更名随命名批 v2；**2026-09-14 ADR-077/078 落地（批次⑤ T1~T4）：会话层 = 标准有界工具 loop（读工具 + 门动作工具 + 终态工具停环，ToolLoopAgent），生产层 Graph/Harness/Model 脊柱不变；§2.5 方言侧翻译表随 NAMING 批 v3 消融——方言词全退役，业务名直取行业词**；施工简报 `docs/tasks/chat-tool-loop-migration.md`）
+> Status: Active（2026-08-09 重画，ADR-039 架构规范级大迭代；2026-08-18 随 ADR-043 收口请求层语法；2026-08-20 增 §2.5 行业坐标；2026-08-21 N-42 全量对齐行业命名——skill→tool 换位，更名随命名批 v2；**2026-09-14 ADR-077/078 落地（批次⑤ T1~T4）：会话层 = 标准有界工具 loop（读工具 + 门动作工具 + 终态工具停环，ToolLoopAgent），生产层 Graph/Harness/Model 脊柱不变；§2.5 方言侧翻译表随 NAMING 批 v3 消融——方言词全退役，业务名直取行业词**；施工简报 `docs/tasks/done/chat-tool-loop-migration.md`）
 > 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 工具包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29 起）；loop 层行为规格见 CHAT_ARCHITECTURE.md；行业座位映射见 §2.5；**概念层母文档（厚 agent 判词 / 双引擎 workflow / 有界 loop 节点）见 `DIALOG_WORKFLOW.md`（ADR-052，B1~B4 已收口 2026-09-04）**。
 
 ## 1. 叙事

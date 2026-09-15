@@ -26,13 +26,13 @@
 | 拍 | 用户感知 | 系统支撑 | 状态 |
 |---|---|---|---|
 | 0. 到达 | 两视频 staging chips → 上传 → 建项目 | 现成 | ✅ |
-| 0a. 角色消歧 | 「哪个是你的原视频？」（选项 = 文件名，一词可答）；@mention 指认则免问 | **资产角色（source / reference）** + 提问机器 | 🚧 T5 |
-| 1. 看 | agent 看两个视频：素材 → understand；案例 → **decompiler**（video → clip-spec 骨架）；看完主动说话（「案例是 45 秒快节奏 5 段混剪…」） | warm + **decompiler 节点** + 触发回合 | 🚧 T5/T3 |
-| 1a. 案例无语音 | 纯画面混剪走视觉通道（帧采样 + 视觉锚点 + M3 视觉） | understand 多模态通路先例 | 🚧 T5 |
+| 0a. 角色消歧 | 「哪个是你的原视频？」（选项 = 文件名，一词可答）；@mention 指认则免问 | **资产角色（source / reference）** + 提问机器 | ✅ |
+| 1. 看 | agent 看两个视频：素材 → understand；案例 → **decompiler**（video → clip-spec 骨架）；看完主动说话（「案例是 45 秒快节奏 5 段混剪…」） | warm + **decompiler 节点** + 触发回合 | ✅ |
+| 1a. 案例无语音 | 纯画面混剪走视觉通道（帧采样 + 视觉锚点 + M3 视觉） | decompile 关键帧通路（无转写时 judgment 纯走帧） | ✅ |
 | 1b. 无录像素材 | 文字稿+照片 → stills 链 | align_stills 先例 | ✅ |
-| 2. 拟书 | 链 = understand → plan（吃骨架）→ select_clips → captions → add_music → render；参数 **exemplar-derived**（代码从骨架映射） | ADR-078 判词⑤ + draft 图 + fold 估价 | 🚧 T5 |
+| 2. 拟书 | 链 = understand → plan（吃骨架）→ select_clips → captions → add_music → render；参数 **exemplar-derived**（代码从骨架映射） | ADR-078 判词⑤ + draft 图 + fold 估价 | ✅ |
 | 2a. 素材撑不起结构 | 「案例 5 段，你的素材只找到 3 个亮点——做 3 段版？」 | ask（一词可答） | ✅ 机制 |
-| 2b. 案例有做不到的 | 「动图形我做不到——用结构+节奏+字幕逼近，行么？」 | **契约即能力边界**（分解时无座位的字段 = 做不到清单）+ 带理由纠偏 | 🚧 T5 |
+| 2b. 案例有做不到的 | 「动图形我做不到——用结构+节奏+字幕逼近，行么？」 | **契约即能力边界**（分解时无座位的字段 = 做不到清单）+ 带理由纠偏 | ✅ |
 | 2c. 画幅不匹配 | reframe 或留黑 | reframe 已注册 | ✅ |
 | 3. 施工 / 4. 收官 | 同旅程一 ⑥⑦；收官建议 pill 例：「和你的案例摆在一起对比看？」（reference 常驻可回读） | 同旅程一 | 🚧 T3/B4 |
 | 5. 后续更改 | 旅程三全集 + 案例特有：「节奏再快点」（改 exemplar 参数 → edit_prompt → run 子图）；「字幕再像案例一点」（preset op）；「案例 13 秒那个转场我也要」（能力缺口 → 诚实纠偏 + 需求池）；「用案例本身也剪一条」（角色反转） | 修订三扇门 + ADR-078 判词④ | 半 |

@@ -1631,7 +1631,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 ## ADR-077: 会话层工具 loop 化——常备否决收窄终裁：生产封闭 / 服务收编 / 执行永拒
 
-**Status**: Decided (2026-09-14，用户需求模拟四轮讨论拍板——起点 = 乔布斯判词「完美的技术从产品需求入手」；走查参照 = ChatCut 式会话编辑器三连截图 + 终极旅程「把原视频做成案例视频那样子」；施工落点 = 简报 `docs/tasks/chat-tool-loop-migration.md`；旅程母文档 = `docs/JOURNEYS.md`)
+**Status**: Decided (2026-09-14，用户需求模拟四轮讨论拍板——起点 = 乔布斯判词「完美的技术从产品需求入手」；走查参照 = ChatCut 式会话编辑器三连截图 + 终极旅程「把原视频做成案例视频那样子」；施工落点 = 简报 `docs/tasks/done/chat-tool-loop-migration.md`；旅程母文档 = `docs/JOURNEYS.md`)
 
 **Context**: chat 体验「少了智能」的病根经代码级诊断定案（`agents/base|contexts`、`chat/intent|service`、`pipeline/graph|orchestrator`、`providers/llm/minimax` 通读）：**脊柱（四层工程地图）无病，Loop 层被建成了纯裁决器**——有嘴（散文）有判断（verdict）没眼睛（感知）、没有在对的时刻说话的座位（主动发声）、一次定音（轮内单调用）。三轮需求模拟逐拍倒推（迷失用户首产 / 后续更改服务 / 终极案例仿制，全文 = JOURNEYS）：缺口集中于①感知（read-before-write 是相对量指令与推荐的**功能前提**，不是体验糖）②触发回合（理解完成 / run 完成时 agent 主动说话）③收官 reviewer（判断 + 下一步）④镜头跟随。同期 spike 实证（2026-09-11/12）：M3 唯一遵循 schema 的通道 = tool_calls（json_schema 被完全无视；截断 ~11% 走工具错误反馈吸收）——**模型为工具形态训练，JSON-in-prompt 判决逆模型纹理**（顺形律 ADR-064 的架构层兑现）。且我们已在逐个重建标准件（BoundedLoopNode = agent-in-step、ask 判决 = AskUserQuestion 工具、四态 union = 工具集）——方言翻译表（AGENT_ARCH §2.5）的存在本身就是方言的证据。修补判词：当年判「零 agent 全 workflow」时恐惧的对象 = 不可估价/不可测试/不可预测的**开放式自主**；本轮模拟证明该恐惧只命中执行 loop 与拓扑塑形，不命中有界感知。
 
@@ -1667,6 +1667,6 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 5. **exemplar 参数源**：任务书参数的第四来源（user-stated / inferred / default 之外 + **exemplar-derived**）。纪律：**参数由代码从骨架映射，LLM 永不写 spec**——拓扑铁律（ADR-028）不破，骨架是数据不是指令。
 6. **双抽取分工**：understand 答「它说了什么」（内容），decompile 答「它怎么做的」（工艺）——两种抽取皆资产级、内容寻址、跨项目可复用；plan 的装配签名加 craft 骨架输入（纯度签名化扩展先例 = §5.3 纪律内）。
 
-**Consequences**: 施工归简报 T5（`docs/tasks/chat-tool-loop-migration.md`）。decompiler 住 pipeline 内部 crew（编译期注入，永不进用户提议空间——与 materialize_source 同族）；CraftSkeleton（工作名）= 新内部产物类型（visible_outputs 过滤族同例）。能力缺口清单（案例里做不到的字段）进 PROGRESS 需求池按价值排期。验收 = 案例仿制旅程 e2e（JOURNEYS §2 的分支树逐条过）+ 骨架字段的确定性分层断言（确定性字段零 LLM 介入）。
+**Consequences**: 施工归简报 T5（`docs/tasks/done/chat-tool-loop-migration.md`）。decompiler 住 pipeline 内部 crew（编译期注入，永不进用户提议空间——与 materialize_source 同族）；CraftSkeleton（工作名）= 新内部产物类型（visible_outputs 过滤族同例）。能力缺口清单（案例里做不到的字段）进 PROGRESS 需求池按价值排期。验收 = 案例仿制旅程 e2e（JOURNEYS §2 的分支树逐条过）+ 骨架字段的确定性分层断言（确定性字段零 LLM 介入）。
 
 **Related**: ADR-077（会话层工具 loop 化——终极旅程的服务面）/ ADR-016（clip-spec 唯一契约——本条是它的反向通道）/ ADR-044（轨道模型——骨架的字段家）/ ADR-028（拓扑铁律——exemplar 参数源不破它）/ ADR-043（任务书语法——第四参数源的语法座位）
