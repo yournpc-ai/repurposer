@@ -1,7 +1,7 @@
 """Intent agents (two distinct jobs behind the SINGLE chat surface, NAMING §5).
 
 Both are declared ``ToolLoopAgent`` instances (ADR-077 判词② — the bounded
-tool-loop form, 2026-09-14): the verdict union retired into the tool set
+tool-loop form, 2026-09-14): the action union retired into the tool set
 (type field = tool name, per-state fields = params — a mechanical
 translation), prose rides the content channel (it streams; the typewriter
 law's key-order tooth retired with the JSON payload), and the adjudication
@@ -96,7 +96,7 @@ def _assemble_book_turn(
     an interjection (the question stays open, the reply gets the reminder
     tail).
     ``presented_book``: one-line digest of the docked task book, when one is
-    on the table — the start/revise verdict needs to SEE the plan being
+    on the table — the start/revise call needs to SEE the plan being
     confirmed, not imagine it (a bare "开始吧" after a vague first turn
     otherwise reads as "go draft it").
     ``recent``: the conversation's latest rounds (pre-formatted lines,

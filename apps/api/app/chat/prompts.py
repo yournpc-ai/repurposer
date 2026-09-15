@@ -55,7 +55,7 @@ def chat_intent_system() -> str:
         op_lines=op_lines,
         wiring_lines=wiring_catalog_lines(),
         # chat_loop=True: the shared no-material partial drops the router-only
-        # framing (draft-verdict header / material_text bullets) and appends
+        # framing (draft header / material_text bullets) and appends
         # the existing-project tail (ADR-071 ④ 单一化).
         chat_loop=True,
     )

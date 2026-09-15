@@ -9,7 +9,7 @@ a pointed-at product rides the message as an @-mention chip, ADR-058).
 Transport (chat SSE): the endpoint content-negotiates on the ``Accept``
 header. Plain callers get the one-shot JSON ``ChatResponse`` (unchanged);
 ``Accept: text/event-stream`` streams the turn. ADR-077 判词② (2026-09-14):
-the verdict JSON retired into terminal tool calls, so the prose channel IS
+the action JSON retired into terminal tool calls, so the prose channel IS
 the reply — ``assistant.delta`` frames carry it verbatim (dialect-stripped at
 the client seam, typewriter law native); ``assistant.thinking`` carries
 liveness keepalives and REAL phase labels (drafting / creating_run /
@@ -129,7 +129,7 @@ def _make_delta_hook(queue: asyncio.Queue):
     """The prose channel → ``assistant.delta`` frames, verbatim (ADR-077
     判词②: prose is the content channel now — every fragment is reply text,
     dialect-stripped at the client seam; the extractor's JSON-sifting and
-    the non-prose keepalive both retired with the verdict payload)."""
+    the non-prose keepalive both retired with the action payload)."""
     async def on_delta(fragment: str) -> None:
         await queue.put(_sse("assistant.delta", json.dumps({"text": fragment})))
 
@@ -440,7 +440,7 @@ async def answer_message(
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> AnswerResponse:
-    """Answer a pending question (提问机器 — the question machine).
+    """Answer a pending question (the ask_user machinery).
 
     The answer endpoint doubles as the resume mechanism — writing the answer
     is what unblocks the pending decision: a task book start begins the run,

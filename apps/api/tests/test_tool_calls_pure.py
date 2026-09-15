@@ -2,11 +2,11 @@
 the fragment accumulator and the one arguments parse law.
 
 Pure-function coverage only (suite discipline: no DB, no LLM, no HTTP). The
-contract under test (ADR-077 判词④): prose rides content, verdicts ride
+contract under test (ADR-077 判词④): prose rides content, calls ride
 accumulated tool_call arguments; the TRUNCATION SIGNATURE (finish_reason
 says tool_calls but arguments hit EOF — spike 2026-09-11/12, ~11%) is the
 schema class, raising ``LLMSchemaError`` so the harness's one feedback
-repair round answers it — never a blind re-roll, never a half-verdict.
+repair round answers it — never a blind re-roll, never a half-call.
 """
 
 import pytest
@@ -47,12 +47,12 @@ def test_arguments_parse_law() -> None:
 def test_single_call_assembles_across_fragments() -> None:
     """Name + id arrive once; JSON text shards concatenate in order."""
     acc = _ToolCallAccumulator()
-    named = acc.feed([_fragment(0, name="submit_verdict", call_id="c1")])
-    assert named == ["submit_verdict"]
+    named = acc.feed([_fragment(0, name="submit_answer", call_id="c1")])
+    assert named == ["submit_answer"]
     assert acc.feed([_fragment(0, args='{"act')]) == []  # name already known
     assert acc.feed([_fragment(0, args='ion": "ask"}')]) == []
     assert acc.finish("tool_calls") == [
-        ToolCall(id="c1", name="submit_verdict", arguments={"action": "ask"})
+        ToolCall(id="c1", name="submit_answer", arguments={"action": "ask"})
     ]
 
 
@@ -82,7 +82,7 @@ def test_truncation_signature_raises_schema_class() -> None:
     """finish_reason=tool_calls but the arguments hit EOF mid-call — the
     spike's ~11% case — raises LLMSchemaError (the repair round's class)."""
     acc = _ToolCallAccumulator()
-    acc.feed([_fragment(0, name="submit_verdict", args='{"action": "start", "tasks": [{"k')])
+    acc.feed([_fragment(0, name="submit_answer", args='{"action": "start", "tasks": [{"k')])
     with pytest.raises(LLMSchemaError) as excinfo:
         acc.finish("tool_calls")
     assert excinfo.value.user_key == "ai_unreadable"
@@ -91,7 +91,7 @@ def test_truncation_signature_raises_schema_class() -> None:
 def test_length_finish_with_a_partial_call_is_truncation_too() -> None:
     """finish_reason=length mid-call = budget truncation — same class."""
     acc = _ToolCallAccumulator()
-    acc.feed([_fragment(0, name="submit_verdict", args='{"action"')])
+    acc.feed([_fragment(0, name="submit_answer", args='{"action"')])
     with pytest.raises(LLMSchemaError):
         acc.finish("length")
 
@@ -118,13 +118,13 @@ def test_complete_object_form_shares_the_one_parse_law() -> None:
     empty-name call."""
     good = _tool_call_from_object(
         {"id": "c1", "type": "function",
-         "function": {"name": "submit_verdict", "arguments": '{"action": "ask"}'}},
+         "function": {"name": "submit_answer", "arguments": '{"action": "ask"}'}},
         "tool_calls",
     )
-    assert good == ToolCall(id="c1", name="submit_verdict", arguments={"action": "ask"})
+    assert good == ToolCall(id="c1", name="submit_answer", arguments={"action": "ask"})
     with pytest.raises(LLMSchemaError):
         _tool_call_from_object(
-            {"function": {"name": "submit_verdict", "arguments": '{"action": "st'}},
+            {"function": {"name": "submit_answer", "arguments": '{"action": "st'}},
             "tool_calls",
         )
     with pytest.raises(LLMSchemaError):

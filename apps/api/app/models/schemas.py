@@ -513,9 +513,9 @@ class IntentResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Chat tool params (ADR-077 判词② — 判决 union 的机械翻译)
+# Chat tool params (ADR-077 判词② — action union 的机械翻译)
 # ---------------------------------------------------------------------------
-# The verdict unions above (InferredIntent / IntentResult) translated into
+# The action unions above (InferredIntent / IntentResult) translated into
 # tool-call parameters: the type field = the tool's name, the per-state
 # fields = the params. The ADR-071 ⑤ signpost INVERTS on this wire: under
 # json_object the schema never reached the model (prompt literals were the
@@ -563,12 +563,13 @@ def _drop_bad_brief(data: Any) -> Any:
 
 
 class BookAskArgs(BaseModel):
-    """``ask_user`` params, book path — the 提问机器's one-question shape
-    (QuestionProposal minus the prose, which is the content channel now).
+    """``ask_user`` params, book path — the ask_user machinery's one-question
+    shape (QuestionProposal minus the prose, which is the content channel
+    now).
     ``slot`` names the brief-ledger slot the question fills (book-path only
     — post-run questions never backfill a brief). The envelope seats ride
     the same call so the turn's ledger proposal and material promotion
-    arrive with the verdict, exactly once."""
+    arrive with the call, exactly once."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -606,7 +607,7 @@ class BookAskArgs(BaseModel):
 
 
 class PresentPlanArgs(BaseModel):
-    """``present_plan`` params, book path — the draft verdict's payload (the
+    """``present_plan`` params, book path — the draft call's payload (the
     task book docks for confirmation; it never starts a run by itself). The
     plan-introducing echo is your spoken message, never a param."""
 
@@ -898,7 +899,7 @@ class ChatRequest(BaseModel):
     # omitting it never clobbers the stored choice).
     persona_id: UUID | None = None
     # The dock's autonomy tier (§2.7) — consumed only when this turn confirms
-    # the task book by prose (the intent router verdict "start"): a typed "looks
+    # the task book by prose (the intent router call "start"): a typed "looks
     # good, start it" must not silently drop a review-tier choice.
     autonomy: Literal["auto", "review"] | None = None
 
@@ -1256,14 +1257,14 @@ class BriefLedger(BaseModel):
     material_state: BriefSlot[MaterialState] = Field(default_factory=BriefSlot)
     # Code-owned roll of the slots already asked once this book phase (一轮
     # 一问决定槽， bounded: each slot asks at most once — the second rootless
-    # verdict docks the draft-from-persona book instead). merge_brief never
+    # call docks the draft-from-persona book instead). merge_brief never
     # reads it from the LLM's proposal (禁 LLM 簿记); code stamps it when the
     # question docks.
     asked: list[str] = Field(default_factory=list)
 
 
 class InferredIntent(BaseModel):
-    """The intent router's verdict: four actions + the proposed tool chain.
+    """The intent router's payload: four actions + the proposed tool chain.
 
     ADR-043 (outputs → derive): the request layer carries NO output
     declarations — ``tasks`` is the only grammar (a registry tool + its
@@ -1272,8 +1273,9 @@ class InferredIntent(BaseModel):
 
     ADR-052 B2 (action set): ``draft`` drafts/refines the task book (it never
     generates — the retired ``generate`` name lied); ``ask`` asks ONE
-    question through the dock's 提问机器 (the shared QuestionProposal
-    shape, 案 A 双实例); ``answer`` is a purely informational reply;
+    question through the dock's ask_user machinery (the shared
+    QuestionProposal shape, 案 A 双实例); ``answer`` is a purely
+    informational reply;
     ``start`` confirms the docked book.
     """
 
@@ -1290,17 +1292,17 @@ class InferredIntent(BaseModel):
             return data
         data = dict(data)
         # An explicit ``tasks: null`` (the LLM's habit on start/answer
-        # verdicts) reads as "no opinion" — dropping the key lets the field
+        # calls) reads as "no opinion" — dropping the key lets the field
         # default apply instead of failing validation.
         if data.get("tasks") is None:
             data.pop("tasks", None)
         # Same null tolerance for ``name`` (ADR-058 — the LLM writes null on
-        # start/ask/answer verdicts; 打字机律牙①: a rejection costs the
+        # start/ask/answer calls; 打字机律牙①: a rejection costs the
         # funnel's repair round, which never streams).
         if data.get("name") is None:
             data.pop("name", None)
         # Same null tolerance for ``tasks_explicit`` (2026-09-09 实测: ask
-        # verdicts habitually write null here — three repair rounds observed
+        # calls habitually write null here — three repair rounds observed
         # in one day, each costing ~15s and diverging the stream from the
         # envelope; an ask has no tasks to be explicit about, so the False
         # default is the honest read).
@@ -1402,7 +1404,7 @@ class InferredIntent(BaseModel):
             "The proposed tool chain — one task per piece of work, in "
             "execution order (e.g. an English and a German post = two "
             "write_post tasks; whole-video bilingual subtitles = one "
-            "translate_clip task). Empty for start/answer/ask verdicts."
+            "translate_clip task). Empty for start/answer/ask calls."
         ),
     )
     specific_instruction: str | None = Field(
@@ -1440,7 +1442,7 @@ class InferredIntent(BaseModel):
     # ledger — emit only the slots you have a view on this turn, each with
     # its source (user-stated ONLY when the user's own words literally state
     # the value). Code merges by source precedence; a slot you leave out
-    # (or set null) keeps its stored value. Null for start/answer verdicts.
+    # (or set null) keeps its stored value. Null for start/answer calls.
     brief: BriefLedger | None = None
     # LLM 建图时命名 (2026-09-09, ADR-058): a compact noun phrase naming the
     # book's deliverable, in the interface language ("中文 LinkedIn 帖子" /
@@ -1469,8 +1471,8 @@ class TaskBookEstimate(BaseModel):
 
 
 class QuestionPayload(BaseModel):
-    """The typed ``question`` payload on a message (提问机器 — the question
-    machine).
+    """The typed ``question`` payload on a message (the ask_user machinery —
+    the question machine).
 
     The mechanism words live here — ``kind`` carries the *use* (task book
     confirmation vs a plain question), never combined with the mechanism

@@ -1,6 +1,6 @@
 """The chat path's tool-loop runner (ADR-077 判词② — T2a 内核半边).
 
-The retired ``_propose_turn`` verdict dispatch, re-homed: the chat intent
+The retired ``_propose_turn`` dispatch, re-homed: the chat intent
 agent closes its turn with ONE terminal tool call — the five proposal
 states' mechanical translation (task_list → ``propose_tasks``, edit_ops →
 ``apply_edit_ops``, wiring → ``edit_graph``, ask → ``ask_user``, answer →
@@ -434,9 +434,10 @@ class ChatTurn:
         return None
 
     async def _ask_user(self, params: ChatAskArgs, prose: str) -> str | None:
-        """ask → the agent's question docks through the 提问机器 (task_book
-        questions are raised solely by the book path, never here). slot stays
-        None — a post-run question never backfills the brief."""
+        """ask → the agent's question docks through the ask_user machinery
+        (task_book questions are raised solely by the book path, never
+        here). slot stays None — a post-run question never backfills the
+        brief."""
         if not params.question.strip():
             return (
                 "empty question — speak the framing as your message text and "

@@ -2,7 +2,7 @@
 capability flags + ``pick_wire_tier`` (ADR-077 判词④).
 
 Pure-function coverage only (suite discipline: no DB, no LLM, no HTTP). The
-law: tiers swap ONLY the wire format, never the verdict contract — the
+law: tiers swap ONLY the wire format, never the call contract — the
 harness picks the highest tier both sides speak and degradation is
 automatic (the Tier-0 floor is always speakable).
 """
@@ -20,7 +20,7 @@ TOOLS = ProviderCapabilities(supports_native_tools=True, reasoning_dialect="thin
 
 def test_floor_is_always_speakable() -> None:
     """A capability-bare client still answers Tier 0 (action-JSON in prompt —
-    the research-node precedent carries every verdict semantic there)."""
+    the research-node precedent carries every call semantic there)."""
     assert pick_wire_tier(WireTier.ACTION_JSON, BARE) == WireTier.ACTION_JSON
     assert pick_wire_tier(WireTier.NATIVE_TOOLS, BARE) == WireTier.ACTION_JSON
 

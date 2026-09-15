@@ -2,7 +2,7 @@
 
 The chat intent surface's call shape: the model speaks prose on the content
 channel (it streams — the typewriter law holds natively) and closes the turn
-by calling ONE terminal tool — the verdict union's mechanical translation
+by calling ONE terminal tool — the action union's mechanical translation
 (ask → ``ask_user``, draft → ``present_plan``, start → ``start_run``,
 task_list → ``propose_tasks``, edit_ops → ``apply_edit_ops``, wiring →
 ``edit_graph``; the answer states close with the ``answer`` tool or bare
@@ -120,7 +120,7 @@ class LoopResult:
     """One turn's loop outcome.
 
     ``tool_name=None`` + ``exhausted=False`` = the bare final reply (the
-    model spoke without calling a tool — read as the answer verdict, the
+    model spoke without calling a tool — read as the answer call, the
     read-tolerant floor). ``exhausted=True`` = the iteration cap was hit
     with every call rejected — the caller degrades honestly (the cannot-do
     line or the code-composed topic question), never a fabricated success.
@@ -321,7 +321,7 @@ class ToolLoopAgent:
             # speech when the content channel stayed empty (读容忍, below).
             prose = result.content
             if not result.tool_calls:
-                # Bare final reply — the read-tolerant answer verdict (any
+                # Bare final reply — the read-tolerant answer call (any
                 # kept read-iteration speech composes in front of it).
                 return LoopResult(
                     prose=_compose_speech([*speech_parts, prose]),

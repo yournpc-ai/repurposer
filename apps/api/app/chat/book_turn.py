@@ -1,6 +1,6 @@
 """The book path's tool-loop runner (ADR-077 判词② — T2a 内核半边).
 
-The retired ``_book_turn`` verdict dispatch, re-homed: the intent router
+The retired ``_book_turn`` dispatch, re-homed: the intent router
 closes its turn with ONE terminal tool call — the four actions' mechanical
 translation (draft → ``present_plan``, ask → ``ask_user``, start →
 ``start_run``, answer → ``answer``) — and the guardrails live INSIDE the
@@ -28,7 +28,7 @@ Storage shapes preserved: docked rows and ``message.intent`` still carry
 the turn's prose), the caption-mode stash stays a bare ``InferredIntent``
 dump, and an ask turn's ledger-only ``pending_brief`` row is byte-identical.
 The 判词⑦ hybrid-flip machinery retired structurally — a tool call IS one
-verdict; the impossible hybrid shapes have no wire form anymore (their
+action; the impossible hybrid shapes have no wire form anymore (their
 outcomes survive as rejections).
 
 T2b 感知族 (ADR-077 判词②): the read tools (``app/chat/perception/``)
@@ -377,7 +377,7 @@ class BookTurn:
         accept: writes + the outcome stashed → None (terminal stop). A
         PERCEPTION call short-circuits the seats above: reads are dispatched
         to the family registry and ride back as a ToolObservation (the loop
-        iterates — 终态工具一调即停 covers the verdict tools only)."""
+        iterates — 终态工具一调即停 covers the terminal tools only)."""
         if name in PERCEPTION_TOOLS:
             return await run_perception_tool(self.db, self.project, name, params)
         if name == "present_plan":
@@ -493,8 +493,8 @@ class BookTurn:
             self.echo_override = _draft_from_persona_echo(self.text)
 
         # The intent object the storage shapes are built from (the accepted
-        # call's params + the turn's echo — the same fields the retired
-        # verdict carried).
+        # call's params + the turn's echo — the same fields the action
+        # union carried).
         caption_mode = params.caption_mode
         echo = self.echo_override if self.echo_override is not None else prose
         reasons = await _compute_book_reasons(db, project, InferredIntent(
@@ -664,8 +664,9 @@ class BookTurn:
         return None
 
     async def _ask_user(self, params: BookAskArgs, prose: str) -> str | None:
-        """ask → the ONE question docks through the 提问机器. Guards first:
-        the pending-question law and the asked-roll bound the loop."""
+        """ask → the ONE question docks through the ask_user machinery.
+        Guards first: the pending-question law and the asked-roll bound
+        the loop."""
         stored = self.stored
         merged_brief = await self._absorb(params.brief, params.material_text)
         if not params.question.strip():
@@ -697,7 +698,7 @@ class BookTurn:
                 "dock the book now (the gate handles rootlessness)."
             )
         # ask 一等动作 (ADR-052 B2, 案 A 双实例): the pre-run router's ONE
-        # question docks through the same 提问机器 the chat path's ask_user
+        # question docks through the same machinery the chat path's ask_user
         # uses — with the book-path handshake on the payload (slot → the
         # answer backfills the ledger user-stated; default_path → the dock's
         # muted second line). The brief merge lands as a ledger-only row: the

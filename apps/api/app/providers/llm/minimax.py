@@ -181,7 +181,7 @@ def _parse_tool_arguments(name: str, raw: str, finish_reason: str | None) -> dic
     budget — finish_reason says tool_calls but the arguments hit EOF) or
     outright malformation; both are the schema class — ``LLMSchemaError`` so
     the harness's one feedback repair round carries the reason back to the
-    model, never a blind re-roll, never a half-verdict.
+    model, never a blind re-roll, never a half-call.
     """
     if not raw:
         return {}
@@ -394,7 +394,7 @@ class MiniMaxClient:
         on_delta: Callable[[str], Awaitable[None] | None] | None = None,
         on_reasoning: Callable[[str], Awaitable[None] | None] | None = None,
     ) -> T:
-        """Streaming variant of ``generate`` — same single verdict call, but the
+        """Streaming variant of ``generate`` — same single call, but the
         raw response text is also forwarded chunk-by-chunk via ``on_delta`` as
         it arrives (chat SSE 流式: the service layer extracts prose previews
         from these fragments; the returned value is still the fully validated
@@ -549,11 +549,11 @@ class MiniMaxClient:
     ) -> ToolGeneration:
         """Tier-1 wire format (ADR-077 判词④), non-streaming: the provider
         picks from the declared ``tools`` (OpenAI-compatible function specs);
-        prose rides the content channel, verdicts ride tool_call arguments.
+        prose rides the content channel, calls ride tool_call arguments.
 
         No ``response_format``: with tools declared, content is free prose,
-        not the JSON payload — the verdict contract moves to the arguments
-        channel (层只换线格式，永不动判决契约: the caller validates the
+        not the JSON payload — the call contract moves to the arguments
+        channel (层只换线格式，永不动调用契约: the caller validates the
         returned arguments against the same contract it holds today).
         """
         if not self.api_key:
@@ -625,7 +625,7 @@ class MiniMaxClient:
         frame is a side effect too). Truncation (finish_reason=tool_calls but
         arguments hit EOF) raises ``LLMSchemaError`` after the stream drains —
         prose already delivered stays delivered, and the harness's repair
-        round answers the verdict channel, exactly like a schema rejection
+        round answers the call channel, exactly like a schema rejection
         on the Tier-0 wire.
         """
         if not self.api_key:

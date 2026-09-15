@@ -15,7 +15,7 @@ first run — or while a task book is pending — go through the book path
 everything else goes to the chat-path proposer (``_propose_turn``).
 
 ADR-077 判词② (2026-09-14): both turns run the bounded tool loop — the
-verdict union retired into the terminal tool set (type = tool name, fields =
+action union retired into the terminal tool set (type = tool name, fields =
 params), the guardrails live inside the executions, and the loop itself is
 side-effect-free (``app/chat/book_turn.py`` / ``app/chat/propose_turn.py``;
 the two names above are shims). The write doors never moved:
@@ -30,7 +30,7 @@ the two names above are shims). The write doors never moved:
                             progress / explanation / small talk) landing as a
                             plain assistant message — no run, no dock (G-4)
 
-提问机器 (the question machine): a message may carry a typed
+ask_user 机器 (the ask_user machinery): a message may carry a typed
 ``question`` payload; ``answer`` NULL = pending. Pending questions dock above
 the input (QuestionDock); answered ones collapse into the flow as answered
 questions. At
@@ -138,7 +138,7 @@ def _material_gate_text(text: str) -> str:
 
 def _topic_gate_question(text: str) -> dict[str, str]:
     """出书门槛·主题问 (D2-C2): the code-composed ONE topic ask for a rootless
-    draft verdict — the backstop for an LLM that drafted a bare wish. Freeform
+    draft call — the backstop for an LLM that drafted a bare wish. Freeform
     only (options=[] — 策略②'s one-word options are the LLM's to source from
     the persona / project context; code composes no fabricated choices)."""
     if _prefers_zh(text):
@@ -623,7 +623,7 @@ def _resolved_caption_mode(project: Project) -> str | None:
 
     The answer fast path writes it onto ``pending_brief.intent.caption_mode``
     and every consumption site (book-turn overwrite, propose-turn run) must
-    INHERIT it — a fresh verdict's ``caption_mode=None`` is "not mentioned
+    INHERIT it — a fresh call's ``caption_mode=None`` is "not mentioned
     this turn", never "the user retracted the answer".
     """
     pending = project.pending_brief if isinstance(project.pending_brief, dict) else None
@@ -694,7 +694,7 @@ def _replay_stashed_caption_intent(message: Message) -> InferredIntent | None:
             return None
         return InferredIntent(tasks=tlp.tasks)
     if "tasks" in stashed and "action" in stashed:
-        # _book_turn path: bare InferredIntent (the intent router's verdict)
+        # _book_turn path: bare InferredIntent (the intent router's payload)
         try:
             return InferredIntent.model_validate(stashed)
         except Exception:  # noqa: BLE001
@@ -796,7 +796,7 @@ def _cannot_do_text(text: str) -> str:
     )
 
 
-# ---- 提问机器 (the question machine): question / answer -------------------
+# ---- ask_user 机器 (the ask_user machinery): question / answer ------------
 #
 # One message row, two states: ``question`` payload present, ``answer`` NULL =
 # pending. Pending questions dock above the input; answered ones collapse into
@@ -1064,7 +1064,7 @@ async def sync_task_book_question(
     from app.ui_locale import current_ui_language  # deferred: request ctx
 
     try:
-        # 全文卡律 (判词④): the book doc's face = the verdict's own plan
+        # 全文卡律 (判词④): the book doc's face = the intent's own plan
         # prose (intent.answer) — never the deterministic condensed
         # composition (blind to transform chains).
         await stamp_draft_graph(
@@ -1621,11 +1621,12 @@ async def _book_turn(
     (for ChatResponse.answered_question), and cascade-bailed run ids. The
     caller commits — except the start branch, where answer_question commits.
 
-    ADR-077 判词② (2026-09-14): the verdict dispatch retired into the tool
+    ADR-077 判词② (2026-09-14): the dispatch retired into the tool
     loop — this body is a shim; the turn lives in ``app/chat/book_turn.py``
     (the intent router's terminal tools present_plan / ask_user / start_run /
     answer, guardrails inside the executions). Deferred import: the runner
-    imports THIS module's machinery (the 提问机器, the docks, the gate texts).
+    imports THIS module's machinery (the ask_user machinery, the docks, the
+    gate texts).
     """
     from app.chat.book_turn import run_book_turn
 
@@ -1666,7 +1667,7 @@ async def _propose_turn(
     interrupt was cascade-bailed, and the pending question this turn settled
     by judgment (ADR-053 R2). Flush-only — the caller commits.
 
-    ADR-077 判词② (2026-09-14): the verdict dispatch retired into the tool
+    ADR-077 判词② (2026-09-14): the dispatch retired into the tool
     loop — this body is a shim; the turn lives in ``app/chat/propose_turn.py``
     (the chat intent agent's terminal tools propose_tasks / apply_edit_ops /
     edit_graph / ask_user / answer). Deferred import: the runner imports THIS
@@ -1891,12 +1892,12 @@ async def prepare_chat_turn(
 
 # Thinking-phase label for the chat SSE ``assistant.thinking`` frames
 # (2026-09-04 chat-flow-sequencing C, 同日验收修订): emitted ONLY at a real
-# phase switch — a start verdict about to birth the run. The router's own
+# phase switch — a start_run call about to birth the run. The router's own
 # inference was briefly labelled "understanding" too, but that restated
 # "Thinking…" with zero information (user ruling: the label earns its place
 # only when the activity structurally differs from thinking).
 THINKING_PHASE_CREATING_RUN = "creating_run"
-# The verdict is a draft — ledger write + book dock + the draft-graph stamp
+# The call is a draft — ledger write + book dock + the draft-graph stamp
 # (compile + estimate folds) fill the seconds between the echo's end and
 # the plan card's arrival (the window the 10s-gap forensics named).
 THINKING_PHASE_DRAFTING = "drafting"
@@ -1937,10 +1938,10 @@ async def execute_chat_turn(
     """chat() phase 2: run the agent turn, commit once, assemble the response.
 
     ``on_delta`` (chat SSE) receives the prose channel's fragments — the
-    reply itself now (ADR-077 判词②: speech left the verdict JSON; the
+    reply itself now (ADR-077 判词②: speech left the action JSON; the
     typewriter law holds natively); ``on_reasoning`` receives reasoning
     fragments as a liveness signal; ``on_phase`` receives thinking-phase
-    labels at REAL phase-switch points — a start verdict about to birth the
+    labels at REAL phase-switch points — a start_run call about to birth the
     run = "creating_run", a plan call accepted and docking = "drafting".
     ``on_tool_call`` / ``on_tool_ready`` carry the structure frames: a tool
     call's name became known (the phase beat's seat — the retired "tasks"/

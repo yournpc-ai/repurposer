@@ -1,7 +1,7 @@
 /** QuestionDock — the pending question's home, docked above the input.
  *
  * The message list is the record of *decided* things; the dock holds the
- * one *pending* decision (提问机器 — at most one at a time). The kind
+ * one *pending* decision (the ask_user machinery — at most one at a time). The kind
  * selects the form (NAMING N-19: the use lives in `question.kind`, the
  * mechanism is the dock — no per-kind dock components):
  * - task_book: ONE row (2026-09-02 stadium 化, ADR-051 条款 8 Ⓑ) — ✓ +

@@ -6,18 +6,18 @@ catch (intent agents, chat loop, pipeline nodes, route boundaries) keeps
 working unchanged. The ``user_key`` tax is unchanged: raise sites key the
 failure mode, wrapper layers propagate the key.
 
-The wire-format law (层只换线格式，永不动判决契约): the three tiers swap ONLY
-the wire format — the validated verdict contract is identical across them, so
+The wire-format law (层只换线格式，永不动调用契约): the three tiers swap ONLY
+the wire format — the validated call contract is identical across them, so
 falling to a lower tier is always safe and repair/error-feedback semantics
 are isomorphic. Each client declares its ``ProviderCapabilities`` once; the
 harness picks the highest tier both sides speak (``pick_wire_tier``) and
 degradation is automatic.
 
 - Tier 0 ``ACTION_JSON`` (the floor): action-JSON in the prompt — the
-  research node's bounded loop already carries every verdict semantic this
+  research node's bounded loop already carries every call semantic this
   way, so every provider can always be spoken to.
 - Tier 1 ``NATIVE_TOOLS``: the provider's native tool_calls channel — prose
-  rides the content channel, verdicts ride tool_call argument accumulation
+  rides the content channel, calls ride tool_call argument accumulation
   (M3's only schema-following channel, spike 2026-09-11/12).
 - Tier 2 ``PROVIDER_NATIVE``: provider-specific extras (strict schema /
   parallel calls / reasoning control), declared per provider.
@@ -76,8 +76,8 @@ class ProviderCapabilities:
 
 class WireTier(IntEnum):
     """The three wire-format layers (ADR-077 判词④), ordered — a higher tier
-    is a richer channel for the SAME verdict contract, never a different
-    verdict."""
+    is a richer channel for the SAME call contract, never a different
+    call."""
 
     ACTION_JSON = 0  # the floor: action-JSON in the prompt
     NATIVE_TOOLS = 1  # native tool_calls channel
@@ -87,7 +87,7 @@ class WireTier(IntEnum):
 @dataclass(frozen=True)
 class ToolCall:
     """One tool invocation from the provider's tool_calls channel — the
-    Tier-1 wire's verdict unit. ``arguments`` is the PARSED JSON object: a
+    Tier-1 wire's call unit. ``arguments`` is the PARSED JSON object: a
     fragment stream that fails to parse never reaches here — it raises
     ``LLMSchemaError`` at the seam (truncation signature: finish_reason says
     tool_calls but the arguments hit EOF) so the harness answers it with the
@@ -102,7 +102,7 @@ class ToolCall:
 class ToolGeneration:
     """Provider-neutral result of a tool-formatted generation: ``content`` is
     the prose channel (dialect-clean — the client's reasoning dialect is
-    already stripped at the seam), ``tool_calls`` the accumulated verdicts.
+    already stripped at the seam), ``tool_calls`` the accumulated calls.
     Empty ``tool_calls`` with prose is a LEGAL shape (tool_choice="auto",
     the model chose to speak) — what that means is the caller's contract,
     never the wire's."""

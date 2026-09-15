@@ -325,7 +325,7 @@ class StreamingAgent(Agent[OutT]):
     def _user_message(user_prompt: str, media: list[MediaInput]) -> dict[str, Any]:
         """Plain-string user content — the chat intent agents' historical
         payload shape (they never carry media; a parts list reads differently
-        to the provider and flipped S3's start verdict, 2026-08-10)."""
+        to the provider and flipped S3's start call, 2026-08-10)."""
         return {"role": "user", "content": user_prompt}
 
     async def call_stream(
@@ -334,7 +334,7 @@ class StreamingAgent(Agent[OutT]):
         on_reasoning: DeltaCallback | None = None,
         **ctx: Any,
     ) -> OutT:
-        """The streaming twin of ``call``: identical verdict, but raw
+        """The streaming twin of ``call``: identical result, but raw
         response fragments flow through ``on_delta`` while the JSON
         generates. ``on_reasoning`` receives reasoning fragments (a liveness
         signal only — never shown to the user, never parsed)."""

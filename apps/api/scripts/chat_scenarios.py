@@ -1499,7 +1499,7 @@ async def s7_caption_mode_gate(ctx: Ctx) -> None:
 
     # C) 答 → 追问 → Start：the answered mode must survive a refinement turn
     #    between the answer and Start — the book path overwrites
-    #    pending_brief wholesale with the fresh verdict (caption_mode=None
+    #    pending_brief wholesale with the fresh call (caption_mode=None
     #    whenever the turn doesn't re-mention it), which used to drop the
     #    answer on the floor: the run started single-language and the NEXT
     #    turn re-asked the already-answered question. Now the stash is
@@ -1674,7 +1674,7 @@ async def s10_sse_turn_streaming(ctx: Ctx) -> None:
     # the envelope's persisted content (preview channel == source of truth).
     # The phrasing mirrors the system prompt's few-shot example verbatim —
     # the answer/draft judgment is LLM variance, and the strict concat
-    # assertion below needs the answer verdict to be near-deterministic.
+    # assertion below needs the answer call to be near-deterministic.
     deltas, completed, failed = await ctx.chat_stream(pid, "what can you generate?")
     check(failed is None, "answer turn has no turn.failed", failed)
     check(completed is not None, "answer turn ends with turn.completed")
@@ -1968,7 +1968,7 @@ async def s12_merge_brief_source_matrix(ctx: Ctx) -> None:
         made_up.constraints,
     )
 
-    # 6. update=None returns the stored ledger (start/answer verdicts carry
+    # 6. update=None returns the stored ledger (start/answer calls carry
     #    no proposal); the merge never mutates the stored input in place.
     stored = ledger(topic=slot("grid storage", Src.USER_STATED))
     check(merge_brief(None, stored) is stored, "None update returns stored verbatim")

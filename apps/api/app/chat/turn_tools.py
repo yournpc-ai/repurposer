@@ -1,9 +1,9 @@
-"""The chat turn's tool set (ADR-077 判词② — 判决 union 的机械翻译).
+"""The chat turn's tool set (ADR-077 判词② — action union 的机械翻译).
 
 Declarations only: name + model-facing description + params model. The
 executions live with the turn runners (``book_turn.py`` / ``propose_turn.py``)
-because they need the service layer's machinery (the 提问机器, the run
-birthplace, the wiring door) — this module deliberately imports NOTHING from
+because they need the service layer's machinery (the ask_user machinery,
+the run birthplace, the wiring door) — this module deliberately imports NOTHING from
 the chat service so the import DAG stays one-directional:
 
     schemas ← turn_tools ← intent ← service ← book_turn / propose_turn

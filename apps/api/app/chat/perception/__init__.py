@@ -126,7 +126,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
 
 def perception_chat_tools(*names: str) -> list[ChatTool]:
     """Project registry entries into the loop's tool form — non-terminal by
-    construction (终态工具一调即停 covers the verdict tools; a read never
+    construction (终态工具一调即停 covers the terminal tools; a read never
     ends a turn). Unknown names raise at declaration time (startup), never
     mid-turn."""
     tools: list[ChatTool] = []

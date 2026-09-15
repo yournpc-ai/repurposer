@@ -6,7 +6,7 @@ editing sessions) — this gate asserts ABSOLUTE minimum rates for the LIVE
 prompt, so a regression is caught before deploy, not after. Three probes,
 same contexts as the A/B instrument:
 
-- A:start-verdict — a book on the table + "looks good, start" must call
+- A:start-call — a book on the table + "looks good, start" must call
   start_run (never a same-chain re-plan). Measured band 9-11/12 across all
   prompt versions; threshold 8 catches a real regression (the 2/5-era
   degradation) with flake headroom.
@@ -21,7 +21,7 @@ same contexts as the A/B instrument:
   answering away fails. Measured 11-12/12; threshold 10.
 
 Tool-loop form (ADR-077 判词②, 2026-09-14): the agent is the ToolLoopAgent,
-the verdict is the terminal tool call, and the predicates read
+the action IS the terminal tool call, and the predicates read
 ``LoopResult`` — the thresholds are UNCHANGED. T2b (2026-09-15): the gate's
 agent carries the production tool set INCLUDING the book path's read tools
 (BOOK_READ_TOOLS — the registry perturbation is the thing being gated), and

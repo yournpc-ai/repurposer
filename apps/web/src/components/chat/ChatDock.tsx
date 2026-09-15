@@ -148,7 +148,7 @@ export interface TaskItem {
 }
 
 export interface InferredIntent {
-  /** The intent router's four-action verdict (ADR-052 B2 — `generate`
+  /** The intent router's four-action payload (ADR-052 B2 — `generate`
    * renamed to `draft`: it never generates, it drafts the task book). The
    * panel round-trips the value; only `draft` books are ever editable. */
   action: "draft" | "ask" | "answer" | "start"
@@ -473,7 +473,7 @@ interface OverlayMessage {
    * envelope replaces it (the envelope always wins). */
   streaming?: boolean
   /** Answered-question item (a settled question collapsing into the flow).
-   * `questionId` = the settled row's id — the 提问机器不变量's join key:
+   * `questionId` = the settled row's id — the ask_user 不变量's join key:
    * a question whose QA archive is in the flow is DECIDED and must never
    * also render as the pending dock. */
   qa?: { question: string; answer: string; muted: boolean; detail?: string; questionId?: string }
@@ -557,7 +557,7 @@ interface QuestionPayload {
   reasons?: string[]
 }
 
-/** A question-carrying chat message (提问机器): the dock's pending
+/** A question-carrying chat message (the ask_user machinery): the dock's pending
  * question and, once answered, its collapsed form in the flow. */
 interface QuestionMessage {
   id: string
@@ -571,7 +571,7 @@ interface QuestionMessage {
   answer: QuestionAnswer | null
   workflow_run_id: string | null
   /** ask 预览帧的乐观 dock (2026-09-09): the ask object closed stream-side
-   * but the verdict's tail — and with it the row's server-side birth — is
+   * but the turn's tail — and with it the row's server-side birth — is
    * still generating, so this id does NOT exist server-side yet. A click
    * stashes and fires at the envelope's authoritative dock; a flip or
    * turn.failed rolls the preview back. Never persisted anywhere. */
@@ -1290,7 +1290,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const [isStarting, setIsStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
 
-  // 提问机器: the pending question docks above the input (task_book in
+  // ask_user 机器: the pending question docks above the input (task_book in
   // the confirm phase; plain questions from the chat loop afterwards); the
   // answered one collapses into the flow as an answered question.
   const [pendingQuestion, setPendingQuestion] = useState<QuestionMessage | null>(null)
@@ -1976,7 +1976,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setIsStarting(true)
     try {
       if (pendingQuestion) {
-        // 提问机器: Start IS the answer to the docked task_book
+        // ask_user 机器: Start IS the answer to the docked task_book
         // question — one call answers, starts the run, and settles the row.
         // "start" is a first-class answer kind (no magic option id); the
         // panel's edited task book rides along so hand edits (slots marked
@@ -2284,7 +2284,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     void uploadStaged(item.localId, item.file)
   }
 
-  /** An answered question collapses into the flow (提问机器: the flow keeps
+  /** An answered question collapses into the flow (ask_user machinery: the flow keeps
    * settled decisions, the dock holds the open one).
    * Reason keys (payload data) render localized as the block's detail line.
    * 形态律 (ADR-053 R1): the AnsweredQuestion block exists only for
@@ -2464,7 +2464,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * keeps the "written live" feel); the terminal turn.completed envelope is
    * authoritative and FINALIZES THE PREVIEW IN PLACE — same React key, no
    * remount — so a docking task book never makes the text flicker. */
-  /** Roll the ask-preview artifacts back (a flipped verdict / turn.failed /
+  /** Roll the ask-preview artifacts back (a flipped call / turn.failed /
    * abort): the preview pill and any stashed click's optimistic block never
    * existed server-side, so they simply disappear. The envelope's happy
    * paths either REPLACE the preview pill with the persisted row (zero
@@ -2481,7 +2481,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
 
   /** Preview-dock the pill the moment the ask object closes stream-side —
    * its prose already typed above, the pill's whole payload exists, and the
-   * verdict's brief tail is still generating (2026-09-09 用户拍板「选项该
+   * rest of the turn is still generating (2026-09-09 用户拍板「选项该
    * 和这句话一起来」). The envelope re-docks the persisted row
    * authoritatively (identical payload in the happy path → zero visual
    * change); a flip / turn.failed rolls the preview back (the discard
@@ -2988,7 +2988,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     const question = questionOverride ?? pendingQuestion
     if (!question) return
     const option = question.question?.options?.find((o) => o.id === optionId)
-    // A click on the PREVIEW pill (the ask object closed but the verdict's
+    // A click on the PREVIEW pill (the ask object closed but the turn's
     // tail — and with it the row's server-side birth — is still generating,
     // so the row's id doesn't exist yet): register the choice NOW with the
     // same optimistic anatomy, and the envelope's dock fires the real
@@ -3349,7 +3349,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // The dock's live form outside the confirm phase: a pending OPTIONS
   // question from the chat loop (task_book docks only while confirming; an
   // options-empty text question never docks — 形态律 ADR-053 R1).
-  // 提问机器不变量 (2026-09-13): the flow's QA archive is the record of a
+  // ask_user 不变量 (2026-09-13): the flow's QA archive is the record of a
   // DECIDED question; the dock is the one PENDING decision — the pair never
   // coexists. Every settle path already lands the QA (option click's
   // optimistic block, typed autoResume / judged settlement's envelope,
@@ -3617,7 +3617,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * rendering — a chain earns them only with review substance (≥2 tasks).
    * A one-task book is pure prose: the echo bubble (live journey) or this
    * pinned echo line (restored) carries the whole confirm beat, and
-   * starting = the user's next chat message (the router's start verdict,
+   * starting = the user's next chat message (the router's start_run call,
    * G-1) — no card, no pill, no Start button. The book row / payload /
    * settlement are untouched; a rendering threshold only, derived from the
    * same intent the card would render. */
