@@ -2,10 +2,13 @@
 
 不是 harness（harness 单义 = 调用面 Agent 漏斗，NAMING N-48），也不是"测试
 套件"（scripts/ 下的剧本测试脚本，不配概念名——去方言批禁令）。剧本驱动
-活 API 的唯一意图表面（``POST /chat`` + answer 端点），断言形态级结果——
-提案态 / dock 态 / run 数 / 落库行 / SSE 帧序——永不锁 LLM 文案（禁令 #7）。
-例外：代码强制文本（提醒尾 / 机器标记 / 确定性回执）可以锁——那是代码，
-不是 LLM。
+活 API 的唯一意图表面（``POST /chat`` + answer 端点），断言 = **工具序列 +
+终态帧消息**（ADR-077 判词② 工具 loop 线格式）：terminal_tool_of 从终态
+信封的形状判别回合收在哪个终态工具（工具名永不过线，简报 §3——信封形状
+就是判别面），SSE 侧断言相位帧序（assistant.thinking 的 drafting /
+inspecting 座）与 question.preview 预览帧，外加既有形态级结果——dock 态 /
+run 数 / 落库行——永不锁 LLM 文案（禁令 #7）。例外：代码强制文本（提醒尾 /
+机器标记 / 确定性回执）可以锁——那是代码，不是 LLM。
 
 2026-09-04 大浓缩（C4，简报 ``docs/tasks/de-dialect-question-machine.md``）：
 52 本机制碎片（旧 S1–S53，S22 空）浓缩为 **12 条核心用户 story**，编号连续
@@ -18,18 +21,21 @@
              → 评审卡 → start → run（途中锁待决重建 / 一行一答 409 / 选项点选
              不 500 三张契约拍；K5 草稿图横切：dock 即 stamp draft 节点 +
              计划 document + 逐节点估价，start 同 id 原地填充无双生）
-    S2  核② 跳过提问 → draft-from-persona 书 + 默认路径声明
+    S2  核② 跳过提问 → draft-from-persona 计划 + 默认路径声明
     S3  核③ 插话：正常回答 + 代码拼装提醒尾 + 保持 pending → 下轮作答回填
-    S4  核④ 素材全链（run completed + 产物落库）+ 估价三断言 + repair 只一轮
-             + 修订 = wiring 横切（K4/K5 验收点：chat 修订 → edit_prompt 原地
-             改写节点程序（同 id 无双生）→ 子图重跑起 run）
+    S4  核④ 素材全链（run completed + 产物落库 + 触发回合 reviewer
+             poll）+ 估价三断言 + repair 只一轮 + 修订 = wiring 横切
+             （K4/K5 验收点：chat 修订 → edit_prompt 原地改写节点程序
+             （同 id 无双生）→ 子图重跑起 run）
     S5  核⑤ 修订链：手改存活 / chat 恒胜 / supersede 标记 / task_book 不打字母
              + 草稿图随行（新槽位长新 draft 节点 / 参数微调同 fill_key 零双生）
     S6  核⑥ interrupt 一条：三答法 + 空白不答 + bail 级联 + 插话后续跑
     S7  核⑦ caption mode：选项问 → 回执 + run.context + refine 存活
     S8  核⑧ research 全链（活 DDG，网络全灭时 caveat 降级也算过）
-    S9  核⑨ 问事不出书：能力问 / 闲聊纯 answer，无书 start 不死路不起 run
-    S10 SSE 流式：delta 拼接 == 信封散文（唯一 transport 座）
+    S9  核⑨ 问事不出书：能力问 / 闲聊纯 answer，无计划 start 不死路不起 run
+    S10 SSE 流式（工具 loop 线格式）：单轮 concat(deltas) == 信封散文 /
+             读先 startswith 前缀律 / 拒轮方差注记 + drafting 相位帧 +
+             question.preview 预览帧
     S11 整条源规则（整条视频字幕活链）+ materialize 注入矩阵（进程内）
     S12 merge_brief 来源矩阵（进程内纯函数）
     S13 积分① 余额不足出生地拦截（typed Start 与 /generate 双路 422
@@ -70,6 +76,7 @@ import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import NamedTuple
 
 # Make ``app`` importable when run as a file (apps/api on sys.path).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -79,6 +86,7 @@ from pydantic import BaseModel  # noqa: E402
 from sqlalchemy import delete, func, select  # noqa: E402
 
 from app.agents.base import Agent, StreamingAgent  # noqa: E402
+from app.chat.perception import PERCEPTION_TOOLS  # noqa: E402
 from app.providers.llm.base import LLMError, LLMSchemaError  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.schemas import MediaInput, TaskItem  # noqa: E402
@@ -132,6 +140,16 @@ def check(condition: bool, label: str, detail: object = "") -> None:
         raise ScenarioFailure(f"{label}" + (f" — {detail}" if detail else ""))
 
 
+class StreamTurn(NamedTuple):
+    """One SSE chat turn's full frame record (Ctx.chat_stream)."""
+
+    deltas: list[str]
+    thinking: list[dict]
+    previews: list[dict]
+    completed: dict | None
+    failed: dict | None
+
+
 class Ctx:
     """Per-run context: an authed HTTP client plus cleanup bookkeeping."""
 
@@ -165,12 +183,15 @@ class Ctx:
         check(res.status_code == 201, f"/chat {message[:30]!r}", res.text)
         return res.json()
 
-    async def chat_stream(
-        self, pid: str, message: str, **extra: object
-    ) -> tuple[list[str], dict | None, dict | None]:
-        """One SSE chat turn (Accept: text/event-stream). Returns the ordered
-        prose deltas, the turn.completed envelope, and turn.failed if any."""
+    async def chat_stream(self, pid: str, message: str, **extra: object) -> "StreamTurn":
+        """One SSE chat turn (Accept: text/event-stream) — the FULL frame
+        record: ordered prose deltas, the assistant.thinking phase frames
+        ({} / {phase} / {phase, key} — the inspecting family's seat), the
+        question.preview frames (pre-execution, rolled back on a flip), the
+        turn.completed envelope, and turn.failed if any."""
         deltas: list[str] = []
+        thinking: list[dict] = []
+        previews: list[dict] = []
         completed: dict | None = None
         failed: dict | None = None
         async with self.client.stream(
@@ -188,11 +209,21 @@ class Ctx:
                     payload = json.loads(line[5:].strip())
                     if event == "assistant.delta":
                         deltas.append(payload["text"])
+                    elif event == "assistant.thinking":
+                        thinking.append(payload)
+                    elif event == "question.preview":
+                        previews.append(payload)
                     elif event == "turn.completed":
                         completed = payload
                     elif event == "turn.failed":
                         failed = payload
-        return deltas, completed, failed
+        return StreamTurn(
+            deltas=deltas,
+            thinking=thinking,
+            previews=previews,
+            completed=completed,
+            failed=failed,
+        )
 
     async def answer(self, question_id: str, body: dict) -> httpx.Response:
         return await self.client.post(f"/chat/messages/{question_id}/answer", json=body)
@@ -487,6 +518,74 @@ def is_plan_dock(msg: dict) -> bool:
     return bool(msg.get("question")) and msg["question"].get("kind") == "task_book" and not msg.get("answer")
 
 
+def terminal_tool_of(turn: dict) -> str:
+    """The terminal tool the turn closed on, discriminated off the terminal
+    envelope (ADR-077 判词② — the tool NAME never crosses the wire, 简报 §3;
+    the envelope's SHAPE is the discriminator):
+
+    - the plan settles + a run is born → ``start_run``
+    - an unanswered task_book question docks → ``present_plan``
+    - an unanswered caption-mode options question → ``caption_gate``
+      (propose_tasks' execution sub-dock, not an ask_user call)
+    - any other unanswered plain question → ``ask_user``
+    - a run born with no settled question → ``run_birth`` (chat path: a
+      proposal tool — propose_tasks / apply_edit_ops / edit_graph — started
+      it; the envelope does not discriminate further, the scenarios assert
+      the wiring outcome instead)
+    - prose only → ``answer``
+    """
+    msg = turn.get("assistant_message") or {}
+    q = msg.get("question") or {}
+    if turn.get("answered_question") is not None and turn.get("run_id"):
+        return "start_run"
+    if not turn.get("answered_question") and q.get("kind") == "task_book":
+        return "present_plan"
+    if q.get("kind") == "question":
+        if any(
+            str(o.get("id", "")).startswith("caption_mode_")
+            for o in q.get("options") or []
+        ):
+            return "caption_gate"
+        return "ask_user"
+    if turn.get("run_id"):
+        return "run_birth"
+    return "answer"
+
+
+def check_stream_law(
+    stream: "StreamTurn", content: str, label: str, *, allow_reads: bool = True
+) -> None:
+    """The SSE 打字机律's tool-loop form (tool_loop.py on_delta 的 iteration-0
+    唯一座位): iteration 0's speech streams verbatim; later iterations run
+    quiet (a rejected iteration's speech is REPLACED speech, the repair-
+    never-streams law). Therefore:
+
+    - single-iteration turn (no inspecting frames): concat(deltas) == the
+      envelope content, exactly;
+    - read-first turn (accepted reads in iteration 0 — inspecting frames
+      present): the kept read-iteration speech is a PREFIX of the composed
+      content (言语账本: kept parts + the terminal part join on a blank
+      line), so content.startswith(concat(deltas));
+    - a rejected iteration breaks even the prefix relation (its streamed
+      speech was replaced) — LLM variance the scenarios cannot foresee, so
+      this helper asserts the two designed relations only.
+    """
+    concat = "".join(stream.deltas)
+    had_reads = any(t.get("phase") == "inspecting" for t in stream.thinking)
+    if had_reads and allow_reads:
+        check(
+            not concat or content.startswith(concat),
+            f"{label}: the read-first stream law (kept speech prefixes the content)",
+            f"{concat[:120]!r} vs {content[:120]!r}",
+        )
+    else:
+        check(
+            concat == content,
+            f"{label}: the single-iteration stream law (concat(deltas) == content)",
+            f"{concat[:120]!r} vs {content[:120]!r}",
+        )
+
+
 async def answer_caption_gate(ctx: Ctx, turn1: dict) -> dict:
     """The caption gate (S1 precedent): a chain carrying write_quotes docks
     the caption_mode options question BEFORE the plan. When turn1 docked
@@ -529,6 +628,24 @@ async def pending_plan(ctx: Ctx, pid: str) -> dict | None:
     return (await ctx.results(pid)).get("pending_brief")
 
 
+async def wait_trigger_review(
+    ctx: Ctx, conversation_id: str, run_id: str, timeout: float = 90.0
+) -> dict | None:
+    """Poll the conversation for the run-completed trigger turn's review row
+    (ADR-077 判词③ T3): the pipeline fires the proactive turn fire-and-forget
+    at run terminal, and the agent's wrap_up persists a PLAIN assistant row
+    whose intent dump is ``{type: "trigger_review", trigger, ref,
+    suggestions}``. Returns the message row, or None on timeout."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        for m in await ctx.messages(conversation_id):
+            intent = m.get("intent") or {}
+            if intent.get("type") == "trigger_review" and intent.get("ref") == run_id:
+                return m
+        await asyncio.sleep(2)
+    return None
+
+
 def has_reminder_tail(content: str) -> bool:
     """The code-composed interjection reminder tail (ADR-053 R2 — code-forced
     text, so locking its marker is legal: it is code, never the LLM's voice)."""
@@ -552,6 +669,8 @@ async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
     turn1 = await ctx.chat(pid, "I want a social post.")
     msg1 = turn1["assistant_message"]
     check(turn1["run_id"] is None, "a bare wish never starts a run", turn1)
+    check(terminal_tool_of(turn1) == "ask_user",
+          "the rootless wish closes on the ask_user call", turn1)
     q1 = msg1.get("question") or {}
     check(q1.get("kind") == "question" and q1.get("slot") == "topic",
           "the rootless wish docks the topic ask first (never an empty plan)", msg1)
@@ -631,11 +750,16 @@ async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
         check(True, "option-pick beat skipped (pantry empty — C2 exempt)", q1b)
 
     # 评审卡：作答轮直接出书，或（answer 裁决时）推一轮——终点断言不变：
-    # task_book dock 且 merged brief 钢印进 payload（预填评审卡 B3）。
-    msg2 = turn2["assistant_message"]
+    # present_plan 终态（task_book dock）且 merged brief 钢印进 payload
+    # （预填评审卡 B3）。
+    turn_dock = turn2
+    msg2 = turn_dock["assistant_message"]
     if not is_plan_dock(msg2):
-        turn2b = await ctx.chat(pid, "go ahead")
-        msg2 = turn2b["assistant_message"]
+        turn_dock = await ctx.chat(pid, "go ahead")
+        msg2 = turn_dock["assistant_message"]
+    check(terminal_tool_of(turn_dock) == "present_plan",
+          "the enriched brief closes on the present_plan call (root now exists)",
+          turn_dock)
     check(is_plan_dock(msg2),
           "the enriched brief docks the plan (root now exists)", msg2)
     ftopic = ((msg2.get("question") or {}).get("brief") or {}).get("topic") or {}
@@ -682,6 +806,8 @@ async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
 
     # 散文确认 start → run 起步（G-1）+ 草稿图原地填充（同 id 无双生）。
     turn3 = await ctx.chat(pid, "looks good, start")
+    check(terminal_tool_of(turn3) == "start_run",
+          "the prose confirmation closes on the start_run call", turn3)
     check(turn3["run_id"] is not None, "prose confirmation starts the run", turn3)
     check(turn3["answered_question"] is not None, "the plan settles on start", turn3)
     check((await ctx.results(pid)).get("pending_brief") is None,
@@ -698,9 +824,9 @@ async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
 
 
 async def s2_skipped_topic_ask_drafts_from_persona(ctx: Ctx) -> None:
-    """核② 问完一轮仍无根 → draft-from-persona 书（ADR-052 B2 D2-C2，验收③）：
+    """核② 问完一轮仍无根 → draft-from-persona 计划（ADR-052 B2 D2-C2，验收③）：
     裸愿望 → 主题问 → × 跳过（bail）→ 默认路径生效——出书门槛 dock
-    draft-from-persona 书（reason + 散文含默认路径声明），asked 簿记挡住
+    draft-from-persona 计划（reason + 散文含默认路径声明），asked 簿记挡住
     第二轮同槽问（问环有界）。
 
     LLM 方差说明：跳过后 router 应判 draft（stand-in 行明示默认路径）；
@@ -753,6 +879,8 @@ async def s3_interjection_keeps_pending(ctx: Ctx) -> None:
     check(bool(default_path), "the ask carries its default path", q1)
 
     turn2 = await ctx.chat(pid, "By the way, what can you generate?")
+    check(terminal_tool_of(turn2) == "answer",
+          "the interjection closes on the answer call", turn2)
     check(turn2.get("answered_question") is None,
           "an interjection never settles the pending ask", turn2)
     msg2 = turn2["assistant_message"]
@@ -788,9 +916,10 @@ async def s3_interjection_keeps_pending(ctx: Ctx) -> None:
 
 async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
     """核④ 带素材全链：transcript 素材 → dock 计划 → dock Start → run
-    completed → post 产物落库；估价三断言（fold 对账 / 报价单调性 / NULL
-    语义）与 repair 只一轮（Agent 漏斗进程内 stub 自检）随链并入（简报
-    C4「原 S41/S42 保留并入」）。"""
+    completed → post 产物落库 → 触发回合 reviewer 发言（T3：trigger_review
+    dump + 0–3 枚良构建议 pill）；估价三断言（fold 对账 / 报价单调性 /
+    NULL 语义）与 repair 只一轮（Agent 漏斗进程内 stub 自检）随链并入
+    （简报 C4「原 S41/S42 保留并入」）。"""
     # A) 活链：COMPLETED transcript 资产（声明素材升格的终态——worker 资产
     #    队列不碰假字节），writer 链走真 LLM 到 completed。
     pid = await ctx.new_project("S4 material chain")
@@ -799,7 +928,10 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
                      processed=True)
 
     turn1 = await ctx.chat(pid, "write a LinkedIn post from my talk")
+    conv_id = turn1["conversation_id"]  # the gate's re-wrap drops the key
     turn1 = await answer_caption_gate(ctx, turn1)  # write_quotes 链先答 caption
+    check(terminal_tool_of(turn1) == "present_plan",
+          "turn1 closes on the present_plan call", turn1)
     check(is_plan_dock(turn1["assistant_message"]), "turn1 docks a task_book",
           turn1["assistant_message"])
     res = await ctx.answer(turn1["assistant_message"]["id"], {"kind": "start"})
@@ -819,6 +951,31 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
         ).scalars().all()
     check(len(outs) >= 1, "the post output lands in the DB", len(outs))
 
+    # A1) 触发回合（ADR-077 判词③ T3）：run 收官触发 reviewer 主动发言——
+    #    持久化为普通 assistant 行，intent dump = {type: "trigger_review",
+    #    trigger: "run_completed", ref: run_id, suggestions}。断言 dump 形态
+    #    与 pills 良构（0–3 枚；download 指认真实落库产物——执行面已校验，
+    #    剧本锁 wire 形态）；言语内容不锁（LLM 文案，禁令 #7）。
+    review = await wait_trigger_review(ctx, conv_id, run_id)
+    check(review is not None,
+          "the run-completed trigger turn speaks its review row", run_id)
+    rintent = (review or {}).get("intent") or {}
+    check(rintent.get("trigger") == "run_completed" and rintent.get("ref") == run_id,
+          "the review dump names trigger + ref", rintent)
+    sugs = rintent.get("suggestions") or []
+    check(0 <= len(sugs) <= 3, "0–3 suggestion pills (schema-bounded)", sugs)
+    real_output_ids = {str(o.id) for o in outs}
+    for s in sugs:
+        check(s.get("action") in ("send", "download")
+              and bool((s.get("label") or "").strip()),
+              "each pill is well-formed (action + user-voice label)", s)
+        if s.get("action") == "send":
+            check(bool((s.get("text") or "").strip()),
+                  "a send pill carries the fired user-voice text", s)
+        else:
+            check(s.get("output_id") in real_output_ids,
+                  "a download pill names a REAL landed output", s)
+
     # A2) 修订 = wiring（ADR-057 K4/K5 横切——修订环根治验收点）: chat 修订
     #    → WiringProposal（edit_prompt + run 子图）→ 节点程序行原地改写
     #    （同 id 无双生）→ 子图重跑起 run。锁的是设计行为（shape E 修既有图
@@ -833,6 +990,8 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
           graph_before["nodes"])
     prompt_before = (post_node.get("spec") or {}).get("prompt")
     turn_rev = await ctx.chat(pid, "make the post shorter")
+    check(terminal_tool_of(turn_rev) == "run_birth",
+          "the revision closes on a proposal tool's run birth (chat path)", turn_rev)
     check(turn_rev["run_id"] is not None,
           "the revision rides the wiring path — the subgraph rerun is born",
           turn_rev)
@@ -1214,13 +1373,15 @@ def _user_text(messages: list[dict]) -> str:
 
 
 async def s5_revision_chat_always_wins(ctx: Ctx) -> None:
-    """核⑤ 修订链（ADR-043 + ADR-053）：re-dock 旧书 supersede（机器标记入
-    流）→ 面板手改整链存活于无关 refine → chat 修订恒胜（覆盖面板钉）→
-    task_book 待决打字母永不误答（不参与任何结算）→ 散文确认起 run。"""
+    """核⑤ 修订链（ADR-043 + ADR-053）：re-dock 旧计划 supersede（机器标记
+    入流）→ 面板手改整链存活于无关 refine → chat 修订恒胜（覆盖面板钉）
+    → task_book 待决打字母永不误答（不参与任何结算）→ 散文确认起 run。"""
     pid = await ctx.new_project("S5 revision chain")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
 
     turn1 = await ctx.chat(pid, "cut highlight clips from my talk")
+    check(terminal_tool_of(turn1) == "present_plan",
+          "turn1 closes on the present_plan call", turn1)
     check(is_plan_dock(turn1["assistant_message"]), "turn1 docks a task_book",
           turn1["assistant_message"])
     first_qid = turn1["assistant_message"]["id"]
@@ -1236,11 +1397,13 @@ async def s5_revision_chat_always_wins(ctx: Ctx) -> None:
         ]
         return edited
 
-    # 面板手改存活 + 旧书 supersede（已答问题入流的机器标记）。
+    # 面板手改存活 + 旧计划 supersede（已答问题入流的机器标记）。
     plan1 = (await ctx.results(pid)).get("pending_brief")
     turn2 = await ctx.chat(
         pid, "also add a German post", prior_intent=pin_count(plan1, 3)
     )
+    check(terminal_tool_of(turn2) == "present_plan",
+          "turn2 closes on present_plan again (the refinement re-docks)", turn2)
     check(is_plan_dock(turn2["assistant_message"]), "turn2 re-docks",
           turn2["assistant_message"])
     check(turn2["assistant_message"]["id"] != first_qid,
@@ -1251,7 +1414,7 @@ async def s5_revision_chat_always_wins(ctx: Ctx) -> None:
           "the panel hand edit survives an unrelated refine", tasks)
     check(any(t["tool"] == "write_post" and task_params(t).get("language") == "de" for t in tasks),
           "the German post arrived", tasks)
-    # 草稿图随行（K5）：新槽位长新 draft 节点，书全文进 document。
+    # 草稿图随行（K5）：新槽位长新 draft 节点，计划全文进 document。
     graph2 = await ctx.graph(pid)
     check(any(
         (n.get("spec") or {}).get("tool") == "write_post" and n.get("state") == "draft"
@@ -1263,10 +1426,12 @@ async def s5_revision_chat_always_wins(ctx: Ctx) -> None:
           "the superseded plan carries the machine marker", old.get("answer"))
 
     # chat 修订恒胜（覆盖面板钉）。
-    book2 = (await ctx.results(pid)).get("pending_brief")
+    plan2 = (await ctx.results(pid)).get("pending_brief")
     turn3 = await ctx.chat(
-        pid, "clips only needs 2", prior_intent=pin_count(book2, 3)
+        pid, "clips only needs 2", prior_intent=pin_count(plan2, 3)
     )
+    check(terminal_tool_of(turn3) == "present_plan",
+          "turn3 closes on present_plan (the chat revision re-docks)", turn3)
     check(is_plan_dock(turn3["assistant_message"]), "turn3 re-docks",
           turn3["assistant_message"])
     tasks = plan_tasks((await ctx.results(pid)).get("pending_brief"))
@@ -1290,6 +1455,8 @@ async def s5_revision_chat_always_wins(ctx: Ctx) -> None:
           q.get("answer"))
 
     turn5 = await ctx.chat(pid, "looks good, start")
+    check(terminal_tool_of(turn5) == "start_run",
+          "the prose confirmation closes on the start_run call", turn5)
     check(turn5["run_id"] is not None, "prose confirmation starts the run", turn5)
 
 
@@ -1382,14 +1549,30 @@ async def s6_interrupt_consolidated(ctx: Ctx) -> None:
           "the bailed run settles COMPLETED, never failed", run["status"])
     await ctx.cleanup()
 
-    # f) 插话后续跑（ADR-053 R2 chat path）：进度插话 → 正常回答 + 代码拼装
-    #    提醒尾 + 问题保持 pending + run 保持 parked → 再打字母唤醒。
+    # f) 插话后续跑（ADR-053 R2 chat path）：进度插话 → get_run_status 读
+    #    （inspecting 相位帧）→ 正常回答 + 代码拼装提醒尾 + 问题保持
+    #    pending + run 保持 parked → 再打字母唤醒。
+    #    LLM 方差说明：进度问先读后答是设计行为（answer 工具契约：run
+    #    readouts call get_run_status first）；不读直接答红了 = chat_intent
+    #    prompt 回归信号，不是剧本松劲。
     pid = await ctx.new_project("S6f interjection resumes later")
     ck = await seed_parked_interrupt(pid, ctx.user_id)
-    turn = await ctx.chat(pid, "how is the run doing?")
+    stream = await ctx.chat_stream(pid, "how is the run doing?")
+    check(stream.failed is None, "the interjection turn has no turn.failed",
+          stream.failed)
+    check(stream.completed is not None, "the interjection turn completes")
+    turn = stream.completed
+    status_key = PERCEPTION_TOOLS["get_run_status"].activity_key
+    check(any(t.get("phase") == "inspecting" and t.get("key") == status_key
+              for t in stream.thinking),
+          "the progress question reads first (get_run_status's inspecting frame)",
+          stream.thinking)
     check(turn.get("answered_question") is None,
           "an interjection never settles the parked interrupt", turn)
+    check(terminal_tool_of(turn) == "answer",
+          "the progress interjection closes on the answer call", turn)
     content = turn["assistant_message"].get("content") or ""
+    check_stream_law(stream, content, "the read-first interjection")
     check(has_reminder_tail(content),
           "the reply carries the code-composed reminder tail", content[-200:])
     q = await message_row(ck["question_id"])
@@ -1448,6 +1631,9 @@ async def s7_caption_mode_gate(ctx: Ctx) -> None:
             await wait_run_terminal(rid)
     check(docked is not None,
           "A: the caption question docks for a chat-path quote-cards ask")
+    check(terminal_tool_of(docked) == "caption_gate",
+          "A: the turn closes on the caption gate (propose_tasks' sub-dock)",
+          docked)
     check(docked.get("run_id") is None, "A: no run before the answer", docked)
     check(len((docked["assistant_message"].get("question") or {}).get("options") or []) > 0,
           "A: the caption ask is an OPTIONS question (形态律 pill 的 wire 面)",
@@ -1521,6 +1707,9 @@ async def s7_caption_mode_gate(ctx: Ctx) -> None:
             break
     check(docked_c is not None,
           "C: the caption question docks on the plan path")
+    check(terminal_tool_of(docked_c) == "caption_gate",
+          "C: the turn closes on the caption gate (present_plan's sub-dock)",
+          docked_c)
     ans = await ctx.answer(docked_c["assistant_message"]["id"],
                            {"kind": "option", "option_id": "caption_mode_bilingual"})
     check(ans.status_code in (200, 201), "C: caption answer accepted", ans.text)
@@ -1585,6 +1774,8 @@ async def s8_research_grounds_writer(ctx: Ctx) -> None:
         "research the latest developments first.",
     )
     turn1 = await answer_caption_gate(ctx, turn1)  # no-op unless the dock quotes first
+    check(terminal_tool_of(turn1) == "present_plan",
+          "a rooted topic closes on the present_plan call", turn1)
     check(is_plan_dock(turn1["assistant_message"]),
           "a rooted topic docks a plan", turn1["assistant_message"])
     plan = (await ctx.results(pid)).get("pending_brief")
@@ -1636,22 +1827,30 @@ async def s8_research_grounds_writer(ctx: Ctx) -> None:
 
 async def s9_consult_never_books(ctx: Ctx) -> None:
     """核⑨ 问事不出书：能力提问 / 闲聊 → 纯 answer（无 dock 无 run 无 brief）；
-    无书 "start it" 不死路不起 run（rootless → 主题问门槛接住，永不裸跑）。"""
+    无计划 "start it" 不死路不起 run（rootless → 主题问门槛接住，永不裸跑）。"""
     pid = await ctx.new_project("S9 consult")
 
     turn1 = await ctx.chat(pid, "what can you do?")
+    check(terminal_tool_of(turn1) == "answer",
+          "a capability question closes on the answer call", turn1)
     check(turn1["run_id"] is None, "capability question starts no run")
     check(not turn1["assistant_message"].get("question"), "no question docks",
           turn1["assistant_message"])
     check(has_prose(turn1["assistant_message"]), "a prose answer lands")
 
     turn2 = await ctx.chat(pid, "hello, how are you today?")
+    check(terminal_tool_of(turn2) == "answer",
+          "small talk closes on the answer call", turn2)
     check(turn2["run_id"] is None, "small talk starts no run", turn2)
     check(not turn2["assistant_message"].get("question"),
           "small talk docks nothing", turn2["assistant_message"])
     check(has_prose(turn2["assistant_message"]), "small talk gets an answer")
 
     turn3 = await ctx.chat(pid, "start it")
+    check(terminal_tool_of(turn3) in ("ask_user", "answer"),
+          "a baseless start closes on ask_user (出书门槛) or answer — never "
+          "present_plan / start_run (LLM 方差: the rootless-start phrasing "
+          "reads as either a work wish or a capability question)", turn3)
     check(turn3["run_id"] is None, "a baseless start never launches a run", turn3)
     check(not is_plan_dock(turn3["assistant_message"]),
           "a baseless start never docks a groundless plan either (出书门槛接住)",
@@ -1666,59 +1865,84 @@ async def s9_consult_never_books(ctx: Ctx) -> None:
 
 
 async def s10_sse_turn_streaming(ctx: Ctx) -> None:
-    """S10 SSE 回合：answer 流式（delta 拼接 == 信封散文）；draft 流计划复述（== intent.answer）。"""
+    """S10 SSE 回合（工具 loop 线格式，ADR-077 判词②）：answer 单轮流式
+    （concat(deltas) == 信封散文）；draft 流计划复述 + drafting 相位帧；
+    ask 流框架散文 + question.preview 预览帧先于终态信封。流式律的两款
+    关系（单轮 == / 读先 startswith / 拒轮方差注记）归 check_stream_law。"""
     pid = await ctx.new_project("S10 sse streaming")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4")
 
-    # Answer turn: prose previews stream, and concatenated deltas must equal
-    # the envelope's persisted content (preview channel == source of truth).
-    # The phrasing mirrors the system prompt's few-shot example verbatim —
-    # the answer/draft judgment is LLM variance, and the strict concat
-    # assertion below needs the answer call to be near-deterministic.
-    deltas, completed, failed = await ctx.chat_stream(pid, "what can you generate?")
-    check(failed is None, "answer turn has no turn.failed", failed)
-    check(completed is not None, "answer turn ends with turn.completed")
-    content = (completed["assistant_message"].get("content") or "")
-    check(len(deltas) > 0, "answer turn streams prose deltas")
-    check("".join(deltas) == content, "delta concat == envelope content",
-          f"{''.join(deltas)!r} vs {content!r}")
-    check(completed["run_id"] is None, "answer turn starts no run")
+    # Answer turn: prose streams on the content channel (iteration 0 only —
+    # later iterations run quiet by the repair-never-streams law). The
+    # phrasing mirrors the system prompt's few-shot example verbatim — the
+    # answer/draft judgment is LLM variance, and the single-iteration
+    # relation needs the answer call to be near-deterministic.
+    stream = await ctx.chat_stream(pid, "what can you generate?")
+    check(stream.failed is None, "answer turn has no turn.failed", stream.failed)
+    check(stream.completed is not None, "answer turn ends with turn.completed")
+    check(terminal_tool_of(stream.completed) == "answer",
+          "the capability question closes on the answer call", stream.completed)
+    content = (stream.completed["assistant_message"].get("content") or "")
+    check(len(stream.deltas) > 0, "answer turn streams prose deltas")
+    check_stream_law(stream, content, "answer turn")
+    check(stream.completed["run_id"] is None, "answer turn starts no run")
 
-    # Draft turn: the plan echo (intent.answer) streams as deltas and is
-    # persisted in the pending brief; the dock rides the envelope.
-    deltas, completed, failed = await ctx.chat_stream(
-        pid, "Cut 3 highlight clips from my talk"
-    )
-    check(failed is None, "draft turn has no turn.failed", failed)
-    check(completed is not None, "draft turn ends with turn.completed")
-    check(is_plan_dock(completed["assistant_message"]),
+    # Draft turn: the plan echo (intent.answer) streams as deltas; the
+    # present_plan name-known frame moves the phase beat to drafting BEFORE
+    # the envelope (相位完整律's tool seat); the dock rides the envelope.
+    stream = await ctx.chat_stream(pid, "Cut 3 highlight clips from my talk")
+    check(stream.failed is None, "draft turn has no turn.failed", stream.failed)
+    check(stream.completed is not None, "draft turn ends with turn.completed")
+    check(terminal_tool_of(stream.completed) == "present_plan",
+          "the draft closes on the present_plan call", stream.completed)
+    check(is_plan_dock(stream.completed["assistant_message"]),
           "draft turn docks the plan via the envelope",
-          completed["assistant_message"])
+          stream.completed["assistant_message"])
+    check(any(t.get("phase") == "drafting" for t in stream.thinking),
+          "the present_plan name-known frame moves the beat to drafting",
+          stream.thinking)
+    content = (stream.completed["assistant_message"].get("content") or "")
     plan = (await ctx.results(pid)).get("pending_brief")
     echo = (plan["intent"].get("answer") or "")
-    check(len(deltas) > 0, "draft turn streams the plan echo")
-    check("".join(deltas) == echo, "echo deltas == persisted intent.answer",
-          f"{''.join(deltas)!r} vs {echo!r}")
+    check(content == echo, "the envelope content IS the persisted plan echo",
+          f"{content[:120]!r} vs {echo[:120]!r}")
+    check_stream_law(stream, content, "draft turn")
 
-    # Ask turn (ask 三分解剖): the framing prose streams as deltas exactly
-    # like the draft echo (the extractor's "prose" key) — the envelope's
-    # content IS that prose, and the bare question rides the payload (the
-    # structured dock never streams, it lands with the envelope).
+    # Ask turn (ask 三分解剖): the framing prose streams like the draft echo;
+    # the pill's whole payload lands EARLY as question.preview (pre-execution
+    # — a rejected iteration re-previews and the client rolls back, so the
+    # LAST preview is the authoritative one) and must match the envelope's
+    # docked payload field for field.
     pid2 = await ctx.new_project("S10 sse ask streaming")
-    deltas, completed, failed = await ctx.chat_stream(pid2, "I want a social post.")
-    check(failed is None, "ask turn has no turn.failed", failed)
-    check(completed is not None, "ask turn ends with turn.completed")
-    msg = completed["assistant_message"]
+    stream = await ctx.chat_stream(pid2, "I want a social post.")
+    check(stream.failed is None, "ask turn has no turn.failed", stream.failed)
+    check(stream.completed is not None, "ask turn ends with turn.completed")
+    check(terminal_tool_of(stream.completed) == "ask_user",
+          "the bare wish closes on the ask_user call", stream.completed)
+    msg = stream.completed["assistant_message"]
     q = msg.get("question") or {}
     check(q.get("kind") == "question", "the bare wish docks the ask", msg)
     content = (msg.get("content") or "")
-    check(len(deltas) > 0, "ask turn streams the framing prose", q)
-    check("".join(deltas) == content,
-          "prose deltas == envelope content (解剖① streams like the draft echo)",
-          f"{''.join(deltas)!r} vs {content!r}")
+    check(len(stream.deltas) > 0, "ask turn streams the framing prose", q)
+    check_stream_law(stream, content, "ask turn")
     check(bool((q.get("question") or "").strip())
           and content != q["question"],
           "the bare question rides the payload, distinct from the prose", q)
+    check(len(stream.previews) >= 1,
+          "the ask's question.preview frame precedes the terminal envelope",
+          stream.thinking)
+    preview = stream.previews[-1]
+    check(preview.get("question") == q.get("question"),
+          "the preview's bare question IS the docked payload's", preview)
+    check([o.get("id") for o in preview.get("options") or []]
+          == [o.get("id") for o in q.get("options") or []],
+          "the preview's options match the docked payload's", preview)
+    check(preview.get("slot") == q.get("slot"),
+          "the preview's slot matches the docked payload's", preview)
+    check(isinstance(preview.get("allow_freeform"), bool),
+          "the preview carries allow_freeform", preview)
+    check(bool((preview.get("default_path") or "").strip()),
+          "the preview carries the default path", preview)
 
 
 # ---- S11 整条源规则 + materialize 注入矩阵 ----------------------------------------------
@@ -1740,6 +1964,8 @@ async def s11_whole_source_and_materialize_matrix(ctx: Ctx) -> None:
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4", meta={"language": "en"})
 
     turn1 = await ctx.chat(pid, "给我的视频加中英双语字幕")
+    check(terminal_tool_of(turn1) == "present_plan",
+          "turn1 closes on the present_plan call", turn1)
     check(is_plan_dock(turn1["assistant_message"]), "turn1 docks a task_book",
           turn1["assistant_message"])
     plan = (await ctx.results(pid)).get("pending_brief")
