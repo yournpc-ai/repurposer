@@ -1,6 +1,6 @@
 # 会话层工具 loop 批 + decompiler 批 —— 施工简报
 
-> Status: 已拍板待实施（2026-09-14，ADR-077/078）。需求模拟四轮讨论收敛，用户旅程母文档 = `docs/JOURNEYS.md`。
+> Status: **T1~T4 已落地（2026-09-15）**——线格式三层 / 工具 loop 内核 / 触发回合 / 验收改写+NAMING 批 v3+文档现在时；T5（decompiler，ADR-078）待实施。需求模拟四轮讨论收敛，用户旅程母文档 = `docs/JOURNEYS.md`。
 > 本文是实施的唯一工作简报；决策正文在 `docs/DECISIONS.md` ADR-077/078。完成后归 `docs/tasks/done/`。
 
 ## 0. 一句话目标

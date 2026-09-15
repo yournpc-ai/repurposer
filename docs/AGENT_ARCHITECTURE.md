@@ -1,7 +1,7 @@
 # Repurposer Agent Architecture
 
-> Status: Active（2026-08-09 重画，ADR-039 架构规范级大迭代；2026-08-18 随 ADR-043 收口请求层语法；2026-08-20 增 §2.5 行业坐标；2026-08-21 N-42 全量对齐行业命名——skill→tool 换位，更名随命名批 v2，落地前代码仍读旧名；**2026-09-14 ADR-077/078：Loop 层形态修订拍板——会话层迁移为标准有界工具 loop（读工具 + 门动作工具 + 终态工具停环），生产层 Graph/Harness/Model 脊柱不变；§2.5 方言侧翻译表随 NAMING 批 v3 消融**；施工简报 `docs/tasks/chat-tool-loop-migration.md`）
-> 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 工具包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29~N-47）；loop 层行为规格见 CHAT_ARCHITECTURE.md；行业座位映射见 §2.5；**概念层母文档（厚 agent 判词 / 双引擎 workflow / 有界 loop 节点）见 `DIALOG_WORKFLOW.md`（ADR-052，B1~B4 已收口 2026-09-04）**。
+> Status: Active（2026-08-09 重画，ADR-039 架构规范级大迭代；2026-08-18 随 ADR-043 收口请求层语法；2026-08-20 增 §2.5 行业坐标；2026-08-21 N-42 全量对齐行业命名——skill→tool 换位，更名随命名批 v2；**2026-09-14 ADR-077/078 落地（批次⑤ T1~T4）：会话层 = 标准有界工具 loop（读工具 + 门动作工具 + 终态工具停环，ToolLoopAgent），生产层 Graph/Harness/Model 脊柱不变；§2.5 方言侧翻译表随 NAMING 批 v3 消融——方言词全退役，业务名直取行业词**；施工简报 `docs/tasks/chat-tool-loop-migration.md`）
+> 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 工具包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29 起）；loop 层行为规格见 CHAT_ARCHITECTURE.md；行业座位映射见 §2.5；**概念层母文档（厚 agent 判词 / 双引擎 workflow / 有界 loop 节点）见 `DIALOG_WORKFLOW.md`（ADR-052，B1~B4 已收口 2026-09-04）**。
 
 ## 1. 叙事
 
@@ -9,13 +9,14 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 
 架构一句话：**外层 loop（chat 治理环）编译出内层 graph（DAG 执行核）；图上每个节点自描述；每个 LLM 决策单元是同一个 Agent 类的声明实例，每次调用过同一个 harness 漏斗；模型经 client 单边界。**
 
-我们是多 agent 系统——但 **agent 互不对话**：协作经落库产物沿 DAG 边流动（素材理解 → 分镜表 → clips → 配音行，每个中间产物可寻址、可复用、可单独重跑），编排者是 `compile_graph`（代码），不是任何 agent。禁 ReAct / 多步推理铁律延伸于此。
+我们是多 agent 系统——但 **agent 互不对话**：协作经落库产物沿 DAG 边流动（素材理解 → 分镜表 → clips → 配音行，每个中间产物可寻址、可复用、可单独重跑），编排者是 `compile_graph`（代码），不是任何 agent。开放式自主（执行 loop / 拓扑塑形）永拒的铁律延伸于此。
 
 ## 2. 四层工程地图
 
 ```
 ┌─ Loop（chat 治理环）──────────────────────────────────────┐
-│  提议（LLM）→ 裁决（注册表）→ 预览/确认（dock）→ 执行 → 审阅 → 修订 │
+│  有界工具 loop（终态工具停环，裁决 = 执行内护栏）              │
+│  → 预览/确认（dock）→ 执行 → 审阅 → 修订                    │
 │  chat/service.py 状态分派 · CHAT_ARCHITECTURE 行为规格        │
 └──────────────────────┬────────────────────────────────────┘
                        │ 每一圈编译出一张图（TaskSpec → compile_graph）
@@ -40,26 +41,26 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 
 | 层 | 回答的问题 | 内核形态 | 家 |
 |---|---|---|---|
-| Loop | 用户多轮怎么治理 | 状态分派 + 四态提议 + dock/checkpoint | `app/chat/` |
+| Loop | 用户多轮怎么治理 | 有界工具 loop（ToolLoopAgent）+ 终态工具集 + dock/checkpoint | `app/chat/` |
 | Graph | 多次调用怎么编排 | `NodeBase` + `compile_graph` + 图算法 | `app/pipeline/` |
 | Harness | 每一次 LLM 调用怎么调得好 | Agent 漏斗 + 花名册 + prompts | `app/agents/` |
 | Model | 用谁的模型 | client 单边界 + 计量捕获 | `app/providers/llm/` |
 
 ## 2.5 行业坐标（业务命名 → 行业座位）
 
-模块分工在行业内已收敛为常数（dsh / Mastra / Agno / LangGraph / Claude Code 五源核对 + Agent Skills 规范四厂商证据，证据 `research/deepseek-harness.md` / `research/agent-skills-spec.md`）。本节是唯一映射表：**我们的业务名 ↔ 传统 agent 架构里的座位 ↔ 差异注记**——业务名随 N-42 与行业对齐（更名随命名批 v2，落地前代码仍读旧名），差异注记说明座位；新模块准入时先在此表找座位。
+模块分工在行业内已收敛为常数（dsh / Mastra / Agno / LangGraph / Claude Code 五源核对 + Agent Skills 规范四厂商证据，证据 `research/deepseek-harness.md` / `research/agent-skills-spec.md`）。本节是唯一映射表：**我们的业务名 ↔ 传统 agent 架构里的座位 ↔ 差异注记**——业务名随 N-42（命名批 v2）与 N-52（命名批 v3：方言词全退役，ask_user / tool call / plan / brief 直取行业词，方言侧翻译消融）与行业对齐，差异注记说明座位；新模块准入时先在此表找座位。
 
 | 我们 | 行业座位（参照） | 差异注记 |
 |---|---|---|
-| Loop（chat 治理环） | agent loop（dsh agent-loop / Mastra AgentController 的 Session） | 我们的 loop 只做意图治理，执行下沉 Graph；dsh loop 内含工具循环 |
+| Loop（chat 治理环） | agent loop（dsh agent-loop / Mastra AgentController 的 Session） | 我们的 loop = 有界工具 loop（ToolLoopAgent：终态工具停环 + 迭代上界 + 只读感知），只做意图治理，执行下沉 Graph；dsh loop 的工具循环无界 |
 | Graph（DAG 执行核） | workflow / orchestration（LangGraph graph·node / Agno Workflow） | 拓扑代码定（ADR-028）；dsh 反面 = 模型写编排脚本，永拒 |
 | Harness（Agent 漏斗） | agent harness 调用面（dsh core spine：system-prompt + tools + llm） | harness 单义 = 本调用面（N-48）；我们漏斗固定，无插件拦截 |
 | Model（MiniMaxClient） | provider seam（dsh `ctx.llm` 适配器注册表） | 单边界（家 = `providers/llm/`）；政策开关座位在 PROGRESS 池 |
 | agent | agent（五源同词，N-29） | 一个类 + 声明实例（N-30） |
-| tools 工具（N-42 前 skills 技能包） | tool（schema + execute；Agno Function step = 图调用先例） | 非模型可见（禁 ReAct 不变，调用方 = 图） |
+| tools 工具（N-42 前 skills 技能包） | tool（schema + execute；Agno Function step = 图调用先例） | 非模型可见（调用方 = 图）；会话层模型可见的读工具 = `chat/perception/` 一族另册（ADR-077） |
 | providers | integrations / provider clients | 外部服务包装一统家（含 `llm/` = Model 缝）；LLM 禁 import 门禁迁址于此 |
 | skills 指令包 | skill（Agent Skills 规范，四厂商同格式） | 包格式行业同、消费异：装配期按声明注入（instructions 式消费），无 runtime discovery；首包 `linkedin-longform` 在册 |
-| TaskSpec 任务书 | plan（Claude Code plan mode）/ goal（dsh） | 确认制；goal 的自治续跑不建 |
+| TaskSpec 计划 | plan（Claude Code plan mode）——同词同义，翻译消融 / goal（dsh） | 确认制；goal 的自治续跑不建；plan 归两主（chat 计划书义 + pipeline planner 义，N-44），存储字 `task_book` 冻结 |
 | interrupt（N-40 前 checkpoint） | LangGraph `interrupt()` / Mastra `tool_suspended` / Agno approval | 提问-等待-续跑的人在环闸节点 |
 | Conversation | thread（Mastra Thread）/ session（Agno） | 撞 auth session 避让在案 |
 | `app/memory/` 记忆层 | Agno Memory（语义记忆） | 现住户 = persona；积累式写入路径（≈ Agno Learnings）= persona 校准池条目 |
@@ -76,7 +77,7 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 
 | 概念 | 一句话 |
 |---|---|
-| **任务书** `TaskSpec` | 意图归一：唯一请求语法 = 工具链 `tasks` × instruction（语言/数量是链上参数，spec 级只剩默认值）；产物 = 编译图的派生投影，请求层永不声明（ADR-043/N-37）；loop → graph 的交接物 |
+| **计划** `TaskSpec`（存储字 `task_book` 冻结） | 意图归一：唯一请求语法 = 工具链 `tasks` × instruction（语言/数量是链上参数，spec 级只剩默认值）；产物 = 编译图的派生投影，请求层永不声明（ADR-043/N-37）；loop → graph 的交接物 |
 | **预处理** `preprocess` | ASR 词级时间戳 + 文本提取（机械，无 LLM） |
 | **understand / plan** `understand` `plan` | 两步走：看懂素材（素材级，asset-hash 复用）→ 分任务（请求级，每 run 重排）；共享 crew，住 agents/ |
 | **agent** | LLM 决策单元（N-29 正名）：一个 Agent 类的声明实例（N-30） |
@@ -128,7 +129,7 @@ class NodeBase:
 ### 4.4 understand/plan 两步走（两次 LLM 调用，契约不变）
 
 - **看懂素材**（`understand`）：产出素材理解（论点带位置/金句/主题/受众），素材级，`source_ref.asset_hash` 命中即复用（节点 `reuse()` 钩子的本例）；**自足契约**——产物必须足以支撑分任务。
-- **分任务**（`plan`）：吃素材理解 + 任务书 → 分镜表（论点→分镜槽位 + 覆盖报告），请求级，每 run 必重排。
+- **分任务**（`plan`）：吃素材理解 + 计划 → 分镜表（论点→分镜槽位 + 覆盖报告），请求级，每 run 必重排。
 - **纯度纪律（签名化，见 §5.3）**：understand 不接收 persona/tone/instruction；plan 不读原稿。
 
 ### 4.5 节点分两类
@@ -146,7 +147,7 @@ class NodeBase:
 2. **报价 = fold**：内核 `estimate()` = 子类 `loop_estimate()`（单次报价）× 上限——最坏情形已计入 run 总价，未来 loop 节点想报错价都报不了；
 3. **对外 = DAG 单节点**：topology / roster / SSE 零改动；迭代只投影到自己 step 的 summary 通道，永不投到图上（无新 step / 无 canvas 节点 / 无 SSE 事件类型）。
 
-循环的工具集固定在节点代码里——agent 选动作，永不造工具；开放自治（steering / compaction / 自由 tool-loop / 运行期工具发现）维持否决。**首个实例 = `research`**（`app/tools/research/`）：researcher agent 驱动 search/fetch 迭代（零键 web 对）至上限，收尾把 ResearchBrief 钢印进 `spec.research_brief`；编译期提升（align_stills 先例）让它以 `inputs=[]` 与 prelude 并行，声明 `consumes_research` 的 writer（四写手基类）接线等它并把简报追加进 asset_texts。**诚实降级是结构的一部分**：研究侧失败（funnel / 网络 / 上限耗尽）一律以 caveated brief 完成 step，run 继续——`retries=0`，重试只买同样的空。
+循环的工具集固定在节点代码里——agent 选动作，永不造工具；开放自治（steering / compaction / 无界 tool-loop / 运行期工具发现）维持否决。（chat 侧的 ToolLoopAgent 是**另一座**有界 loop——会话层回合机器，不是 DAG 节点，不适用本节三护栏。）**首个实例 = `research`**（`app/tools/research/`）：researcher agent 驱动 search/fetch 迭代（零键 web 对）至上限，收尾把 ResearchBrief 钢印进 `spec.research_brief`；编译期提升（align_stills 先例）让它以 `inputs=[]` 与 prelude 并行，声明 `consumes_research` 的 writer（四写手基类）接线等它并把简报追加进 asset_texts。**诚实降级是结构的一部分**：研究侧失败（funnel / 网络 / 上限耗尽）一律以 caveated brief 完成 step，run 继续——`retries=0`，重试只买同样的空。
 
 ## 5. Harness 层：模型调用面
 
@@ -168,20 +169,20 @@ class Agent[OutT]:
 ### 5.2 三条纪律
 
 1. **修复带反馈**：schema/裁决失败 → 错误结构化回显 → **一轮**自修复 → 再败才算节点失败（走图的重试语义）。不带反馈的重试只是掷两次骰子。
-2. **兜底声明化**：静默降级是例外不是常态——合法先例 = intent router 永不白屏（fallback 任务书可确认可改）、多模态拒绝 → 文本降级；其余默认禁，声明处一眼可查。
+2. **兜底声明化**：静默降级是例外不是常态——合法先例 = intent router 永不白屏（fallback 计划可确认可改）、多模态拒绝 → 文本降级；其余默认禁，声明处一眼可查。
 3. **纯度签名化**：禁注规则在类型层不可表示——`understand.call(asset_texts, media)` 的签名里没有 persona 参数；比任何 prompt 警告都硬，签名即文档、评审即测试。
 
 ### 5.3 花名册与声明归属
 
 - `agents/base.py` = 唯一 Agent 类；`agents/registry.py` = 共享 crew 声明（understand / plan / persona / translator…）；**工具私有声明住工具包**（选段编剧、各 writer、reviser）。
 - `AGENTS` dict 收编全部声明，可枚举；启动自检节点→agent 引用存在。
-- 流式 = 唯一特殊形态（chat intent，generate_stream + ProseDeltaExtractor 单漏斗，N-26）。
-- context 装配：统一装配层 = `agents/contexts.py`——GenerationContext（节点侧，run 任务书 → GenerationContext）与 chat 意图上下文（项目摘要 / per-step 状态段 / mentions 注入 / recent 轮次收口）同住；各 agent 声明的 `assemble` 回调是每 agent 的输入契约（签名即纯度）。`pipeline/step_context.py` 只留机械助手（多模态收集 / 素材摘要 / 行助手）。
+- 流式 = chat 侧形态（ToolLoopAgent 的言语直推 `assistant.delta`，N-26；pipeline 侧 StreamingAgent 子类照旧服务 researcher/judge 家族）。
+- context 装配：统一装配层 = `agents/contexts.py`——GenerationContext（节点侧，run 计划 → GenerationContext）与 chat 意图上下文（项目摘要 / per-step 状态段 / mentions 注入 / recent 轮次收口）同住；各 agent 声明的 `assemble` 回调是每 agent 的输入契约（签名即纯度）。`pipeline/step_context.py` 只留机械助手（多模态收集 / 素材摘要 / 行助手）。
 
 ### 5.4 明确不建的 harness 部件
 
 - **Context compaction**：那是长程单 context agent 的解法；我们的调用是短调用 + 每节点精确装配，没有可压缩的。
-- **Tool-call loop 脚手架**（iteration caps / loop detection）：禁 ReAct，永远不需要。
+- **无界 tool-call loop 脚手架**（loop detection / steering / 运行期工具发现）：开放式自主永拒。有界形态全仓库只有两座，各守一层——会话层 = `agents/tool_loop.py` 的 **ToolLoopAgent**（终态工具一调即停 + 迭代上界 + 只读感知族，ADR-077）；生产层 = §4.6 的 **BoundedLoopNode**（三护栏：迭代上限 / 报价=fold / 对外=DAG 单节点）。
 - **Memory 写入冲突管理**：agent 无共享可变状态（中间产物落库、单写者），结构性规避。
 
 ## 6. Model 层
@@ -228,14 +229,14 @@ verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈�
 
 ## 11. Critical files
 
-- `app/agents/base.py` — Agent 类（harness 漏斗：装配→渲染→调用→修复一轮→声明兜底）+ StreamingAgent（唯一 sanctioned 子类，流式形态）；`app/agents/registry.py` — 共享 crew 花名册；`app/agents/contexts.py` — 统一装配层（GenerationContext / chat 意图上下文）
+- `app/agents/base.py` — Agent 类（harness 漏斗：装配→渲染→调用→修复一轮→声明兜底）+ StreamingAgent（唯一 sanctioned 子类，流式形态）；`app/agents/tool_loop.py` — ToolLoopAgent（会话层有界工具 loop：终态工具停环 + 迭代上界 + 言语账本）；`app/agents/registry.py` — 共享 crew 花名册；`app/agents/contexts.py` — 统一装配层（GenerationContext / chat 意图上下文）
 - `app/pipeline/step_context.py` — 节点侧机械助手（多模态收集 / 素材摘要 / 行助手）；context 装配在 `agents/contexts.py`
 - `app/tools/` — 工具包（clips / dub / captions / posts / quotes / carousel / article / music / filler / stills…）；`tools/__init__.py` — TOOL_REGISTRY 收编
 - `app/providers/` — 外部服务包装（asr / voice / storage / vision / dubbing…；N-42 前 `app/tools/`；通用件随消费方归位）
 - `app/pipeline/graph.py` — NodeBase 协议 + 图算法；`app/pipeline/orchestrator.py` — create_run / execute_step / 收尾
 - `app/pipeline/node_runners.py` — 内部节点 crew（preprocess / understand·plan 节点 / checkpoint / render）
 - `app/pipeline/recipes.py` — 配方注册表（播种唯一发生地）
-- `app/chat/service.py` — loop 状态分派（不持装配逻辑）；`app/chat/intent.py` — intent_router / chat_intent 两个声明实例（StreamingAgent 流式特殊形态）
+- `app/chat/service.py` — loop 状态分派（不持装配逻辑）；`app/chat/intent.py` — intent_router / chat_intent 两个声明实例（ToolLoopAgent 有界工具 loop）；`app/chat/turn_tools.py` — 终态工具集声明（PLAN_TOOLS / CHAT_TOOLS）；`app/chat/perception/` — 读工具一族注册表（世界的读法）；`app/chat/plan_turn.py` / `propose_turn.py` / `trigger_turn.py` — 回合 runner 三座（plan path / chat path / 触发回合）
 - `app/providers/llm/minimax.py` — Model 单边界；`app/metering.py` — 计量
 - `app/models/schemas.py` — GenerationContext / TaskSpec / IntentSlot（编译期投影 `spec.slot`，非请求层语法）/ 输出契约（OUTPUT_PAYLOAD_SCHEMAS）
 - `app/prompts/*.j2` — prompt 模板（版本随代码）

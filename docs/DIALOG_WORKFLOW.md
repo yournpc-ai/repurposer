@@ -1,12 +1,11 @@
 # Repurposer Dialog Workflow — 厚 Agent 蓝图
 
-> Status: 已拍板（2026-09-03，ADR-052），**B1~B4 代码全落（2026-09-03）**——B1 改名批 / B2 brief 账本+ask+出书门槛 / B3 预填评审卡 / B4 有界 loop 节点+research 试点；剧本测试（S50~S53）与产品试用验证归用户（简报 `docs/tasks/dialog-workflow-b*.md`）。
-> **（ADR-077 注，2026-09-14 拍板待实施）** §2.1「零 agent 全 workflow」判词收窄：恐惧对象精确化为**开放式自主**（执行 loop / 拓扑塑形——维持永拒），**有界只读感知 loop 收编**会话层；双引擎分离与拓扑铁律不变。会话层形态全面工具化（判决 union → 工具集，护栏搬入工具执行内），canonical 词汇随 NAMING 批 v3 直取行业词；终极旅程「案例仿制」的技术内核 = ADR-078 decompiler。施工简报 `docs/tasks/chat-tool-loop-migration.md`；旅程母文档 `docs/JOURNEYS.md`；落地后本文改写为现在时。
-> 本文是「对话→生产」全链路的**概念架构母文档**：一个产品级厚 agent，身体是一条 workflow。工程实现地图（Model / Harness / Graph / Loop 四层）归 `AGENT_ARCHITECTURE.md`；chat 机器规格归 `CHAT_ARCHITECTURE.md`；命名判例归 `NAMING.md`（N-43 起）；任务书字段契约归 ADR-043。
+> Status: 已拍板（2026-09-03，ADR-052），**B1~B4 代码全落（2026-09-03）**——B1 改名批 / B2 brief+ask_user+plan 门槛 / B3 预填评审卡 / B4 有界 loop 节点+research 试点；会话层 = ADR-077 有界工具 loop（2026-09-14 拍板、批次⑤ T1~T4 落地——动作 union 机械翻译为终态工具集，护栏搬入工具执行内，canonical 词汇随 NAMING 批 v3 直取行业词）；剧本测试（S50~S53）与产品试用验证归用户（简报 `docs/tasks/dialog-workflow-b*.md`）。
+> 本文是「对话→生产」全链路的**概念架构母文档**：一个产品级厚 agent，身体是一条 workflow。工程实现地图（Model / Harness / Graph / Loop 四层）归 `AGENT_ARCHITECTURE.md`；chat 机器规格归 `CHAT_ARCHITECTURE.md`；命名判例归 `NAMING.md`（N-43 起）；计划字段契约归 ADR-043；终极旅程「案例仿制」的技术内核 = ADR-078 decompiler。
 
 ## 1. 蓝图一句话
 
-**整个用户对话就是一条 workflow**：聊天 → 意图路由（router）→ 任务分配（brief 账本 → 任务书）→ 生产 DAG（understand → plan → 执行器群 → verify）→ 产出结果，workflow 结束。
+**整个用户对话就是一条 workflow**：聊天 → 意图路由（router）→ 任务分配（brief → 计划）→ 生产 DAG（understand → plan → 执行器群 → verify）→ 产出结果，workflow 结束。
 
 对用户，这是**一个「厚」agent**（assistant，单身份，NAMING N-25 双轨不变）；对实现，这全是 workflow——**agent 性在产品承诺层，实现层没有一个 autonomy 义的 agent**（判词见 §2.1）。各环节需要"角色"处理的事，由**带工具的节点**完成；角色是节点的展示属性，不是节点的名字（§2.5）。
 
@@ -14,33 +13,33 @@
 
 ### 2.1 厚 agent（thick agent）
 
-产品 = 一个厚 agent。它的"厚"不来自自主循环，来自**声明式部件的组合厚度**：Agent 调用漏斗（harness）× NodeBase 节点协议 × compile_graph 编译器 × app/tools 能力注册表 × brief 账本 × 提问机器——基类全部已在仓库里。
+产品 = 一个厚 agent。它的"厚"不来自自主循环，来自**声明式部件的组合厚度**：Agent 调用漏斗（harness）× NodeBase 节点协议 × compile_graph 编译器 × app/tools 能力注册表 × brief × ask_user 机器——基类全部已在仓库里。
 
-**判词（ADR-039 补记）**：按业界定义（Anthropic《Building effective agents》：workflow = 预定义代码路径编排 LLM；agent = LLM 在循环里自主指挥自己），本系统**零 agent、全 workflow**——chat 边缘是 routing 模式，pipeline 是 orchestrator-workers 模式。这是设计，不是缺口：开放式 autonomy 永拒（常备否决清单），"LLM proposes, code decides" 就是 workflow 哲学的别名。对外文案的 agent/assistant 指产品承诺层，不指任何内部模块。
+**判词（ADR-039 补记；ADR-077 收窄）**：按业界定义（Anthropic《Building effective agents》：workflow = 预定义代码路径编排 LLM；agent = LLM 在循环里自主指挥自己），本系统生产层**零 agent、全 workflow**——pipeline 是 orchestrator-workers 模式；会话层 = **有界工具 loop**（ToolLoopAgent：终态工具一调即停 + 迭代上界 + 只读感知——ADR-077 把恐惧对象精确化为**开放式自主**：执行 loop / 拓扑塑形维持永拒，有界形态收编）。这是设计，不是缺口："LLM proposes, code decides" 就是 workflow 哲学的别名。对外文案的 agent/assistant 指产品承诺层，不指任何内部模块。
 
 ### 2.2 双引擎 workflow（概念统一，引擎分离）
 
 | | 对话引擎 | 生产引擎 |
 |---|---|---|
-| 本质 | **事件驱动状态机**（router + brief 账本 + 提问机器） | **编译 DAG**（compile_graph → workflow_steps） |
+| 本质 | **事件驱动状态机**（router + brief + ask_user 机器） | **编译 DAG**（compile_graph → workflow_steps） |
 | 步数 | 开放（人决定何时说完） | 编译期封闭（拓扑可排） |
 | 环境 | 人（每轮等待输入） | 队列（worker 认领执行） |
 | 保证 | 单待决问题 / brief 合并优先级 | 报价=fold / 执行=topo / 草稿图（dock 即 stamp，ADR-057） |
 
-**对话永不编译进 DAG**：DAG 的三大编译期保证对开放对话不成立（轮数未知、环境是人、报价无意义）。两引擎的唯一接口 = **任务书**（对话引擎的产出 = 生产引擎的输入，出生地唯一——`answer_question` kind=start，ADR-043 不变）。接口载体 = **持久可变图**（ADR-057）：chat 建/改草稿图（wiring 层唯一消费面），确认 → run 填充节点，修订 = 原地图变更；账本机制不动——账本 = 对话引擎状态。**（ADR-072 注，待实施——批 B1）：任务书不再并入图感知层——task_book 画布节点下线，它的真身各归其位：用户的话在 chat、链 = 图结构、确认 = dock pill 唯一座位（读面隐藏已先行：B1-lite 在读帧过滤书节点）；pending_brief 项目状态不动。**
+**对话永不编译进 DAG**：DAG 的三大编译期保证对开放对话不成立（轮数未知、环境是人、报价无意义）。两引擎的唯一接口 = **计划**（对话引擎的产出 = 生产引擎的输入，出生地唯一——`answer_question` kind=start，ADR-043 不变）。接口载体 = **持久可变图**（ADR-057）：chat 建/改草稿图（wiring 层唯一消费面），确认 → run 填充节点，修订 = 原地图变更；brief 机制不动——brief = 对话引擎状态。**（ADR-072 注，待实施——批 B1）：计划不再并入图感知层——task_book 画布节点下线，它的真身各归其位：用户的话在 chat、链 = 图结构、确认 = dock pill 唯一座位（读面隐藏已先行：B1-lite 在读帧过滤 task_book 节点）；pending_brief 项目状态不动。**
 
 ### 2.3 router（意图路由）
 
-chat 边缘的两个结构化调用（原 `plan_agent` / `chat_intent_agent`）是**同一个概念**：意图路由器，两个相位 prompt（pre-run / post-run——相位是上下文参数，不是两个概念）。业界对位：Anthropic routing 模式 / OpenAI SDK triage / AI SDK `generateObject`。**ask 形状两相位共享**——「pre-run 不能提问」的不对称（东施效颦事件的结构性根因之一）在概念层根除。
+chat 边缘的两个回合（plan path / chat path——原 `plan_agent` / `chat_intent_agent`）是**同一个概念**：意图路由器，两个相位 prompt（pre-run / post-run——相位是上下文参数，不是两个概念），各跑一座有界工具 loop（ToolLoopAgent）。业界对位：Anthropic routing 模式 / OpenAI SDK triage / AI SDK `generateObject`。**ask_user 形状两相位共享**——「pre-run 不能提问」的不对称（东施效颦事件的结构性根因之一）在概念层根除。
 
-### 2.4 brief 账本（对话状态）
+### 2.4 brief（对话状态）
 
 对话引擎的结构化状态，持久化于 `projects.pending_brief`（原 `pending_intent` 更名）：
 
 - **槽位**（初版）：`topic` / `audience` / `tone` / `constraints[]` / `material_state`（none | pasted | attached）+ 任务链与 derived（原样保留）。
 - **每槽带来源**：`user-stated` / `inferred` / `default`。合并是代码的事：**user-stated > inferred > default**（LLM proposes, code decides 不变——LLM 每轮提议更新，代码按来源优先级合并，永不反向覆盖）。
-- **上下文工程的主压缩件**：账本存在后，累积 prompt 叙事退居存档位，recent 窗口保留——账本比任何 message window 便宜且抗遗忘。
-- 账本与 run 的接缝不变：账本 → 任务书 → 起 run；任务书的落地形态 = 图上的 document 节点（ADR-057——修订 = 图变更 wiring op，不再是「任务书文档层 + 投影补丁」）。
+- **上下文工程的主压缩件**：brief 存在后，累积 prompt 叙事退居存档位，recent 窗口保留——brief 比任何 message window 便宜且抗遗忘。
+- brief 与 run 的接缝不变：brief → 计划 → 起 run；计划的落地形态 = 图上的 document 节点（ADR-057——修订 = 图变更 wiring op，不再是「计划文档层 + 投影补丁」）。
 
 ### 2.5 角色 = 节点的 display 属性
 
@@ -56,7 +55,7 @@ chat 边缘的两个结构化调用（原 `plan_agent` / `chat_intent_agent`）�
 2. **报价 = fold**（上限 × 单次报价——估价体系不破）
 3. **对外 = DAG 里的一个节点**（拓扑 / 图节点（对外单 agent 节点，ADR-057）/ SSE / 诞生编排全部无感）
 
-首个试点 = **research 节点**（产出 research brief artifact 喂 writer；2026-09-03 拍板「立即」——B4 随本批，PROGRESS W7 09-09~09-10）。开放式 autonomy（无界循环 / 自主改拓扑 / 自我 steering）维持永拒——常备否决清单只收编有界形态。
+首个试点 = **research 节点**（产出 research brief artifact 喂 writer；2026-09-03 拍板「立即」——B4 随本批，PROGRESS W7 09-09~09-10）。开放式 autonomy（无界循环 / 自主改拓扑 / 自我 steering）维持永拒——常备否决清单只收编有界形态。（chat 侧的 ToolLoopAgent 是**另一座**有界 loop——会话层的回合机器，不是 DAG 节点，不适用本节三护栏；NAMING「有界 loop 节点」词条。）
 
 ## 3. 词汇表（canonical，零自造词）
 
@@ -67,60 +66,62 @@ chat 边缘的两个结构化调用（原 `plan_agent` / `chat_intent_agent`）�
 | 原 `director_understand` | **`understand`** | 结构化抽取 pass（extractor/comprehension 的动词形） |
 | 图执行单位 | **node / step** | LangGraph node / Mastra step / AI SDK workflow step |
 | `Agent` 类原语 | 声明式结构化调用 | = AI SDK `generateObject`；ADR-039 判词补记，类名不动 |
-| 对话状态 | **brief**（账本） | 对话系统 frame / slot-filling 的 frame |
+| 对话状态 | **brief** | 对话系统 frame / slot-filling 的 frame |
+| 会话层回合机器 | **ToolLoopAgent**（有界工具 loop） | Anthropic tool-use / OpenAI function-calling 正典 |
+| router 的动作 | **终态工具调用**（ask_user / present_plan / start_run / propose_tasks / apply_edit_ops / edit_graph / answer） | tool calling 正典——动作 = 工具名，字段 = 参数模型 |
 | 嵌套自主性 | **有界 loop 节点** | LangGraph subgraph / Mastra agent-in-step / Anthropic agentic component |
 
-**改名批**（判例归 NAMING.md N-43 起，commit 级自绿）：`plan_agent → intent_router`（相位参数化）/ `chat_intent_agent → intent_router`（同概念）/ `director_understand → understand` / `director_plan → plan`（**plan 一词归一主**——pipeline 唯一规划节点；chat 侧只叫 book/brief）/ `pending_intent → pending_brief` / plan path → book path / presented_plan → presented_book / plan_summary → book_summary。工具侧 `*_writer` / `translator` / `verify_judge` 不动（本来就是诚实角色名）。
+**改名批**（判例归 NAMING.md N-43 起，commit 级自绿）：`plan_agent → intent_router`（相位参数化）/ `chat_intent_agent → intent_router`（同概念）/ `director_understand → understand` / `director_plan → plan` / `pending_intent → pending_brief` / 提问机器 → `ask_user`、verdict → tool call、任务书 → **plan**（命名批 v3，N-52）。**plan 归两主**（N-44，v3 ③ 修订原「归一主」）：chat 计划书义（plan path / presented_plan——v3 ③ 复活）与 pipeline planner 义双座分工；存储字 `task_book` / `book_summary` 冻结不动（kind 枚举 / spec 键 / pending_brief 列）。工具侧 `*_writer` / `translator` / `verify_judge` 不动（本来就是诚实角色名）。
 
-## 4. 对话工作流（P0：brief 账本 + ask 一等动作）
+## 4. 对话工作流（P0：brief + ask_user 一等终态工具）
 
-### 4.1 ask 升格为一等动作
+### 4.1 ask_user 升格为一等终态工具
 
-router 动作集（pre-run 相位）：**ask / draft / answer / start**（原 generate/answer/start 修订——generate 名不副实，它从不生成，只是起草/修订任务书）。ask 复用 chat_intent agent shape C 的形状（选项 3 项——真二元抉择降 2，2026-09-04 拍板——+ freeform，走现成 dock 提问机器——caption-mode 特例泛化为正典）。
+router 终态工具集（pre-run 相位）：**ask_user / present_plan / answer / start_run**（四动作的机械翻译——「generate」名不副实早已修订：它从不生成，只是起草/修订计划）。ask_user = 选项 3 项（真二元抉择降 2，2026-09-04 拍板）+ freeform，走 dock（caption-mode 特例泛化为正典）。
 
 **提问策略三条**：
 1. **一轮最多一问，只问决定质量的那个缺失槽**（裸愿望无素材 → 第一问 = 主题/受众）
 2. **选项一词可答**（具体值，来源 = persona / 项目上下文），freeform 恒在
-3. **散文必带默认路径**（"不答我就按你的人设风格起草"）——每个问题都可安全跳过，不知所措在原理层消除。**落地形态 = ask 三分解剖（2026-09-08 拍板，§4.1 附）**：① 框架散文（`prose` 字段——认领 + 理由 + default path 织入，流式入流 = 问题行 content）② 裸问题（payload `question` 字段——dock 标题 / QA 归档 / 提醒尾引文）③ 选项；散文是本条策略的可见面，09-04「正常对话即可」的拍板由 ① 真正兑现
+3. **散文必带默认路径**（"不答我就按你的人设风格起草"）——每个问题都可安全跳过，不知所措在原理层消除。**落地形态 = ask_user 三分解剖（2026-09-08 拍板，§4.1 附）**：① 框架散文（`prose` 字段——认领 + 理由 + default path 织入，流式入流 = 问题行 content）② 裸问题（payload `question` 字段——dock 标题 / QA 归档 / 提醒尾引文）③ 选项；散文是本条策略的可见面，09-04「正常对话即可」的拍板由 ① 真正兑现
 
 「诊断一轮封顶」翻案为「**每轮一问、每问可一词答**」——顾问姿态的本义是不让用户做创作题，不是不问（证据：Opus sequential singles 走查）。
 
-### 4.2 出书门槛
+### 4.2 plan 门槛
 
-任务书只在 brief **有根**时 dock：主题 / 素材 / 明确配方，三者有其一。零根裸愿望永远先走 ask；问完一轮仍无主题 → 出 draft-from-persona 书 + 散文带默认路径声明（"直接开始我会按人设风格起草，你也可以先告诉我主题"）。原 zero-material safety net / no-material lift 两张补丁**折叠进这同一策略**——出书决策只看账本，不看临时网。
+计划只在 brief **有根**时 dock：主题 / 素材 / 明确配方，三者有其一——= `present_plan` 的执行内校验。零根裸愿望永远先走 ask_user；问完一轮仍无主题 → 出 draft-from-persona 计划 + 散文带默认路径声明（"直接开始我会按人设风格起草，你也可以先告诉我主题"）。原 zero-material safety net / no-material lift 两张补丁**折叠进这同一策略**——plan 决策只看 brief，不看临时网。
 
 ### 4.3 上下文装配
 
-router 每轮输入 = brief 账本（主状态）+ presented book（chain JSON，修订时）+ recent 消息窗口 + 素材摘要（800 字，现状不变）。累积 prompt 叙事降为存档（head/tail 截断簿记退役）。
+router 每回合输入 = brief（主状态）+ presented_plan（chain JSON，修订时）+ recent 消息窗口 + 素材摘要（800 字，现状不变）。累积 prompt 叙事降为存档（head/tail 截断簿记退役）。
 
-## 5. 任务书卡 = brief 的渲染（P1：预填评审卡）
+## 5. 计划卡 = brief 的渲染（P1：预填评审卡）
 
-**东施效颦的正解**（证据走查 2026-09-02，Opus 对照）：Opus 的卡是对话的**终点**（已填账本的渲染，用户做识别题），我们的卡曾是对话的**起点**（空账本表格，用户做创作题）。修订解剖：
+**东施效颦的正解**（证据走查 2026-09-02，Opus 对照）：Opus 的卡是对话的**终点**（已填 brief 的渲染，用户做识别题），我们的卡曾是对话的**起点**（空 brief 表格，用户做创作题）。修订解剖：
 
 - **卡顶 = brief 槽位渲染**（About / For / Tone / Material——有值显示，inferred 值可点改，无值不显示；零空框）
 - **任务行保留**（链 = 要确认的东西，现状解剖不变）
 - **两个空文本框全删**（per-row focus + run 级 instruction——修订全部走「点值改 / 聊天改」；chat 修订恒胜不变）
 - **确认 pill 按动作命名**（"Save & generate" / 「保存并开始」），散文第二句恒为默认路径声明（≤2 句拍板不变——本条给它 schema 级牙齿）
 - **默认路径必声明**（Opus "I'll use my best judgment if you step away" 同义）——「不填会怎样」永远有答案
-- **密度律（ADR-054，2026-09-04 拍板）**：卡 + 确认 pill 只在 **chain ≥2 任务**（有评审实质）时出现；**单任务书 = 纯散文确认**（无卡无 pill，确认 = 下一条 chat 的 start 裁决）——识别题为零时连卡都不展开，散文牙齿升格为全部确认 UI
+- **密度律（ADR-054，2026-09-04 拍板）**：卡 + 确认 pill 只在 **chain ≥2 任务**（有评审实质）时出现；**单任务计划 = 纯散文确认**（无卡无 pill，确认 = 下一条 chat 的 start_run）——识别题为零时连卡都不展开，散文牙齿升格为全部确认 UI
 
 ## 6. 不变量（本蓝图不动的部分）
 
-四层工程地图（AGENT_ARCHITECTURE）/ LLM proposes, code decides / 报价=fold、执行=topo、校验=∀、对账=⊆ / chat 唯一意图面（POST /chat）/ 单 LLM 边界（MiniMaxClient）/ 禁 ReAct 开放式 autonomy / ~~占位 roster 编译期投影（ADR-051）~~（ADR-057：草稿图即占位，干跑投影退役）/ clip-spec 唯一渲染契约（ADR-016）/ 提问机器与停靠法则（CHAT_ARCH §8.5）/ **形态律**（文字问 = 普通对话消息、输入恒活；选项问 = 阻塞形态——待决时输入行与免责行让位给问题卡，铅笔行 = 自由输入通道，ADR-053 R1）/ **插话支持**（判定是 LLM 的、结算是代码的——slot 握手 / pending_disposition；插话回合回复接代码拼装提醒尾，ADR-053 R2）/ **任务书密度律**（评审卡 + 确认 pill 归 ≥2 任务，单任务书 = 纯散文确认，ADR-054）/ **图即产品对象**（ADR-057：持久可变图 + wiring 层 chat 唯一消费面 + 能力完备手势缺席 + 修订 = 图变更）。
+四层工程地图（AGENT_ARCHITECTURE）/ LLM proposes, code decides / 报价=fold、执行=topo、校验=∀、对账=⊆ / chat 唯一意图面（POST /chat）/ 单 LLM 边界（MiniMaxClient）/ 禁开放式 autonomy（执行 loop / 拓扑塑形永拒；有界工具 loop 收编会话层，ADR-077）/ ~~占位 roster 编译期投影（ADR-051）~~（ADR-057：草稿图即占位，干跑投影退役）/ clip-spec 唯一渲染契约（ADR-016）/ ask_user 机器与停靠法则（CHAT_ARCH §8.5）/ **形态律**（文字问 = 普通对话消息、输入恒活；选项问 = 阻塞形态——待决时输入行与免责行让位给问题卡，铅笔行 = 自由输入通道，ADR-053 R1）/ **插话支持**（判定是 LLM 的、结算是代码的——slot 握手 / pending_disposition；插话回合回复接代码拼装提醒尾，ADR-053 R2）/ **计划密度律**（评审卡 + 确认 pill 归 ≥2 任务，单任务计划 = 纯散文确认，ADR-054）/ **图即产品对象**（ADR-057：持久可变图 + wiring 层 chat 唯一消费面 + 能力完备手势缺席 + 修订 = 图变更）。
 
 ## 7. 落地切分（批次，各自 commit 级自绿）
 
 | 批 | 内容 | 验收 |
 |---|---|---|
 | **B1 改名批** ✅（2026-09-03） | §3 全栈改名（实例/字段/路径/文档）；NAMING N-43+ 判例同批 | 每 commit 冷启动绿（tsc + import + 引导一处真实路径）；零行为变化 |
-| **B2 P0** ✅ 代码已落（2026-09-03，验证归用户产品试用） | brief 账本（schema + 迁移 + 合并规则）/ router 相位统一 + ask 动作 / 出书门槛 / 默认路径声明 | 裸愿望 "I want a social post." → 先收到一词可答的主题问（带默认路径），不再收到空心书 |
-| **B3 P1** ✅ 代码已落（2026-09-03，同上） | 任务书卡 = brief 渲染（槽位行 + 空框全删 + 确认 pill 改名 + 散文牙齿） | 卡面零空文本框；每个值有来源；不填任何东⻄直接 Start 的路径在卡上可读 |
+| **B2 P0** ✅ 代码已落（2026-09-03，验证归用户产品试用） | brief（schema + 迁移 + 合并规则）/ router 相位统一 + ask_user 动作 / plan 门槛 / 默认路径声明 | 裸愿望 "I want a social post." → 先收到一词可答的主题问（带默认路径），不再收到空心计划 |
+| **B3 P1** ✅ 代码已落（2026-09-03，同上） | 计划卡 = brief 渲染（槽位行 + 空框全删 + 确认 pill 改名 + 散文牙齿） | 卡面零空文本框；每个值有来源；不填任何东⻄直接 Start 的路径在卡上可读 |
 | **B4 research 试点** ✅ 代码已落（2026-09-03，同上） | 有界 loop 节点类型 + research 节点（工具：web search/fetch） | 三护栏成立；DAG/报价/占位无感；writer 收到 research brief |
 
 B1→B2→B3 顺序强依赖；B4 独立（2026-09-03 拍板「立即」——排期随批 09-09~09-10）。每批施工简报开做前落 `docs/tasks/`（flora-parity 先例）。B2~B4 三批代码同日落地（简报 `tasks/dialog-workflow-b*.md`），剧本测试 与产品试用验证归用户。
 
 ## 8. 悬案（待真实数据 / 后续拍板）
 
-1. **槽位优先级参数**：「问哪个槽」的顺序与「几轮问完出书」的阈值，初版按 §4.1 三条策略，真实对话数据回来再调。
+1. **槽位优先级参数**：「问哪个槽」的顺序与「几轮问完出计划」的阈值，初版按 §4.1 三条策略，真实对话数据回来再调。
 
 > 已关闭（2026-09-03 拍板）：research 试点排期（「立即」——B4 随批，PROGRESS W7）；人形叙事一判（工艺叙事发稿，人形 = 翻 N-24 维持门槛）；**router 两相位物理形态（案 A 双实例保持）**——`intent_router` + `chat_intent_agent` 各自声明，概念合一由本节与共享 `QuestionProposal` schema 承载：两声明的 schema / assemble / 动作集 / prompt 主体本就不共享，单实例相位参数化要以联合 schema（非法动作变可表示）+ assemble 纯度签名腐蚀 + `StreamingAgent` 漏斗手术为代价，且是未来唯一用户的 bespoke 机制；双实例下 prompt 迭代面物理隔离、第三件走「再声明一个实例」正典，A→B 可逆 B→A 贵。
