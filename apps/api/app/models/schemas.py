@@ -2690,6 +2690,7 @@ OUTPUT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "article": Article,
     "material_understanding": MaterialUnderstanding,
     "storyboard": Storyboard,
+    "craft_skeleton": CraftSkeleton,
 }
 
 # Internal types are node artifacts, not user-facing products. Every read path
@@ -2697,7 +2698,7 @@ OUTPUT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
 # type filter (results/library/export, and future MCP/gallery surfaces).
 # ``content_plan`` stays listed so pre-Phase-2 rows remain hidden.
 INTERNAL_OUTPUT_TYPES: frozenset[str] = frozenset(
-    {"content_plan", "material_understanding", "storyboard"}
+    {"content_plan", "material_understanding", "storyboard", "craft_skeleton"}
 )
 
 
@@ -2823,6 +2824,132 @@ class ClipSpec(BaseModel):
         if any(b <= a for a, b in zip(ts, ts[1:])):
             raise ValueError("crop_track: keyframe t must be strictly ascending")
         return self
+
+
+# ---------------------------------------------------------------------------
+# Craft skeleton (ADR-078): the decompiler's product — video → clip-spec
+# skeleton. An internal output row (INTERNAL_OUTPUT_TYPES member), asset-level
+# + content-addressed + reusable (the understand row's reuse discipline). The
+# fields layer by determinism: shots / rhythm / aspect / caption scan are
+# deterministic detections (zero LLM — craft_scan.py imports no provider); the
+# music mood / hook device / capability gaps are the LLM's judgment
+# (CraftJudgment, the decompile agent's output schema); content slots stay
+# EMPTY — the shot list is structure to fill, it carries timing never content.
+# ---------------------------------------------------------------------------
+
+
+class CraftShot(BaseModel):
+    """One detected shot of the exemplar (a scene-cut span, source clock)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start: float = Field(ge=0)
+    end: float = Field(ge=0)
+
+
+class CraftRhythm(BaseModel):
+    """Cut rhythm, measured off the shot list (deterministic)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    shot_count: int = Field(ge=0)
+    cuts_per_minute: float = Field(ge=0)
+    median_shot_seconds: float = Field(ge=0)
+    # Coarse pace class off the median shot length (<2s fast / ≤4s steady /
+    # else slow) — skeleton-internal vocabulary, never a clip-spec field.
+    pace: Literal["fast", "steady", "slow"]
+
+
+class CraftCaptionScan(BaseModel):
+    """Burned-in caption findings — visual nearest-neighbor BEST-FIT over the
+    contract enums (零 LLM): the preset id lives only inside the
+    ClipSpec.caption_style_preset catalog, the color snaps to the craft_scan
+    palette. ``present=False`` ⇒ every other field stays None (the remix
+    keeps the skin's caption defaults)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    present: bool
+    # Mirrors ClipSpec.caption_style_preset's Literal (the drift gate: the
+    # pure suite asserts the two sets stay equal).
+    preset: Literal[
+        "clean-bottom", "karaoke-highlight", "fade-in", "pop-in", "slide-up", "stacking"
+    ] | None = None
+    color: str | None = None  # hex, palette-snapped (never a raw sample)
+    position: Point | None = None  # normalized center of the detected band
+
+
+class CraftGap(BaseModel):
+    """One observed device the remix cannot reproduce — 契约即能力边界
+    (ADR-078 判词②): the honest「做不到 / 还不能」清单 entry, the 带理由纠偏
+    substrate (JOURNEYS 旅程二 2b). ``unsupported`` = no seat in the contract
+    (L3 line — never promised); ``not_yet`` = a contract seat whose writer
+    skill hasn't landed (the layers track's family — a 需求池 candidate)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal[
+        "motion_graphics",
+        "multi_track",
+        "transition_effects",
+        "speed_ramp",
+        "broll_overlay",
+        "text_layers",
+        "other",
+    ]
+    severity: Literal["unsupported", "not_yet"]
+    detail: str | None = None
+
+
+class CraftJudgment(BaseModel):
+    """The decompile agent's output — ONLY the judgment fields (mood / hook
+    device / gaps). 骨架确定性字段零 LLM 介入 is structural here: this schema
+    has no aspect/shots/rhythm/caption seat, so the LLM cannot write them
+    (the pure suite asserts the disjointness)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Judged from the keyframes (+ transcript when the case has speech) —
+    # clamped by code to the assembled catalog's moods, never a free string
+    # reaching a spec.
+    music_mood: str | None = Field(
+        default=None,
+        description="The backing music's mood — pick from the provided catalog moods; null when the case carries no music bed.",
+    )
+    hook_device: str | None = Field(
+        default=None,
+        description="The opening hook device as a short noun phrase (e.g. 'cold-open question', 'title card', 'silent montage'); null when the opening is plain.",
+    )
+    gaps: list[CraftGap] = Field(
+        default_factory=list,
+        description="Effects/devices you OBSERVE that the listed contract cannot express (motion graphics, multi-track compositing, transition effects, speed ramps, b-roll overlays, animated text layers). Only what you actually see.",
+    )
+
+
+class CraftSkeleton(BaseModel):
+    """The clip-spec-shaped craft skeleton (ADR-078 判词①) — one exemplar
+    video's craft, reverse-compiled.
+
+    内容槽位留空 by construction: ``shots`` is the structure to FILL (timing,
+    never content — no text/url/title seats exist). Remix = 内容槽替换
+    (判词③): the user's material fills the slots downstream; the style
+    fields (captions / music mood / rhythm / aspect) ride as
+    exemplar-derived params, code-mapped (LLM 永不写 spec, 判词⑤).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: int = 1
+    # Deterministic layer (craft_scan, zero LLM):
+    aspect: Literal["9:16", "1:1", "16:9"]
+    duration_seconds: float = Field(ge=0)
+    shots: list[CraftShot] = Field(default_factory=list)
+    rhythm: CraftRhythm
+    captions: CraftCaptionScan
+    # LLM layer (the decompile agent's judgment; None when the call degraded):
+    music_mood: str | None = None
+    hook_device: str | None = None
+    gaps: list[CraftGap] = Field(default_factory=list)
 
 
 class StepResponse(BaseModel):
