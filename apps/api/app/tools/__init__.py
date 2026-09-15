@@ -31,6 +31,7 @@ from pydantic import BaseModel
 # internal crew first, then tool packages in curated proposal order.
 import app.pipeline.node_runners  # noqa: F401
 import app.pipeline.verify  # noqa: F401 — the 质检环 node (期 3), internal crew
+import app.pipeline.decompile  # noqa: F401 — the decompiler node (ADR-078), internal crew
 from app.tools.clips.node import SelectClips  # noqa: F401
 from app.tools.clips.materialize import MaterializeSource  # noqa: F401 — NODE_KINDS only; an internal node (ADR-043), never a registry entry
 from app.tools.clips.params import SelectClipsParams

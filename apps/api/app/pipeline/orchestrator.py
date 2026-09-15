@@ -164,6 +164,14 @@ class TaskSpec(BaseModel):
     # None on typed/legacy paths → the display layer falls back to the
     # chain-derived label. Display copy NEVER derives from frozen params.
     name: str | None = None
+    # 资产角色 pins (ADR-078 判词④): settled by CODE from the role question's
+    # answer / an @-mention (chat layer), never by the LLM. ``source`` = the
+    # user's own material the run works on; ``exemplar`` = the reference
+    # video whose craft the run reverse-compiles — it keys the decompiler's
+    # compile-time injection. Stored verbatim on run.context; roles are
+    # reversible between runs (the next plan may swap them).
+    source_asset_id: str | None = None
+    exemplar_asset_id: str | None = None
 
 
 def first_task_language(tasks: list[TaskItem] | None) -> str | None:
@@ -336,18 +344,44 @@ def _compile_task_list(
                 _NodeSpec("understand", 3, inputs=[0]),
             ]
         )
+        next_seq = 4
+        decompile_idx: int | None = None
+        if task.exemplar_asset_id:
+            # Decompiler (ADR-078): the pinned exemplar's craft skeleton —
+            # an internal-crew node, compile-injected (never a proposal-space
+            # tool), running parallel to understand off preprocess. The plan
+            # node's inputs carry it, so planning reads the skeleton as the
+            # exemplar param source (判词⑤ — code maps it, the LLM never
+            # writes a spec). Modifier-only chains (no prelude) skip the
+            # injection in v1: their exemplar honors would find no skeleton
+            # and fall to defaults anyway.
+            decompile_idx = len(nodes)
+            nodes.append(
+                _NodeSpec(
+                    "decompile",
+                    next_seq,
+                    inputs=[0],
+                    spec={"asset_id": str(task.exemplar_asset_id)},
+                )
+            )
+            next_seq += 1
         if task.autonomy == "review":
             # Direction interrupt (期 4, review tier only — the auto tier
             # never inserts one; targeted runs don't either). It parks the
             # run for the user's direction pick between understanding and
             # planning; persona and understanding ride its inputs so the
             # plan node's ordering constraint survives transitively.
+            interrupt_idx = len(nodes)
             nodes.append(
-                _NodeSpec("interrupt", 4, inputs=[1, 2], spec={"for": "direction"})
+                _NodeSpec("interrupt", next_seq, inputs=[1, 2], spec={"for": "direction"})
             )
-            nodes.append(_NodeSpec("plan", 5, inputs=[3]))
+            next_seq += 1
+            plan_inputs = [interrupt_idx]
         else:
-            nodes.append(_NodeSpec("plan", 4, inputs=[1, 2]))
+            plan_inputs = [1, 2]
+        if decompile_idx is not None:
+            plan_inputs.append(decompile_idx)
+        nodes.append(_NodeSpec("plan", next_seq, inputs=plan_inputs))
     plan_idx = len(nodes) - 1 if nodes else None
 
     seq = 10
@@ -976,6 +1010,25 @@ async def create_run(
         if node_for_output(target.type) is None or target.type == "clips":
             raise ValueError(f"Target output type {target.type} is not regenerable")
         target_type = target.type
+
+    # 资产角色 pins (ADR-078 判词④): a pinned asset must resolve HERE, at the
+    # birthplace — exist, belong to the project, carry bytes; the exemplar
+    # must be a VIDEO (the decompiler reverse-compiles video craft). An
+    # unresolved pin rejects (ValueError → 422), never a mid-run surprise.
+    for pin, role_word, must_be_video in (
+        (task.exemplar_asset_id, "exemplar", True),
+        (task.source_asset_id, "source", False),
+    ):
+        if not pin:
+            continue
+        try:
+            pinned = await db.get(Asset, UUID(str(pin)))
+        except ValueError:
+            pinned = None
+        if pinned is None or pinned.project_id != project.id or not pinned.file_url:
+            raise ValueError(f"The pinned {role_word} asset is not available.")
+        if must_be_video and pinned.type != AssetType.VIDEO:
+            raise ValueError("The exemplar must be a video (the decompiler reads video craft).")
 
     # One ∀-check for every birth constraint (AGENT_ARCH §4.2) — the chain's
     # tools' requires, all node-declared. Unconditional: targeted re-renders

@@ -36,7 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import AssetStatus, AssetType
-from app.models.tables import Asset
+from app.models.tables import Asset, Project
 from app.pipeline.extraction import extract_text, render_pdf_pages_and_upload
 from app.pipeline.graph import media_missing
 from app.pipeline.prosody import prosody_processor
@@ -330,6 +330,26 @@ async def process_asset(asset_id: UUID) -> None:
                 task = asyncio.create_task(warm_understanding(asset.project_id))
                 _warm_tasks.add(task)
                 task.add_done_callback(_warm_tasks.discard)
+                # 案例拆解前移 (ADR-078): when the pending plan pins THIS asset
+                # as the exemplar, its craft skeleton warms alongside the
+                # understanding, so the decompile node reuses at zero cost.
+                # Tolerant dict read — the pin seats land with the chat layer.
+                project_row = await db.get(Project, asset.project_id)
+                pin = (
+                    (project_row.pending_brief or {}).get("exemplar_asset_id")
+                    if project_row is not None
+                    else None
+                )
+                if pin == str(asset_id):
+                    from app.pipeline.decompile import (  # deferred: runtime-only edge
+                        warm_craft_skeleton,
+                    )
+
+                    skeleton_task = asyncio.create_task(
+                        warm_craft_skeleton(asset.project_id, asset_id)
+                    )
+                    _warm_tasks.add(skeleton_task)
+                    skeleton_task.add_done_callback(_warm_tasks.discard)
         except Exception as e:  # noqa: BLE001 — record any failure on the row
             logger.error("asset_processing_failed", asset_id=str(asset_id), error=str(e))
             asset.processing_status = AssetStatus.FAILED

@@ -1,0 +1,40 @@
+You are studying ONE exemplar video's craft — how it is cut, captioned, and scored — never its content. A remix will reuse the craft with someone else's material; your judgment guides the style, never the substance.
+
+## Measured facts (deterministic — trust them, never re-derive or override)
+
+- Aspect: {{ facts.aspect }}
+- Duration: {{ facts.duration_seconds }}s
+- Shots: {{ facts.shot_count }} shots · {{ facts.cuts_per_minute }} cuts/min · median shot {{ facts.median_shot_seconds }}s ({{ facts.pace }} pace)
+{% if facts.captions.present %}
+- Burned captions: preset family "{{ facts.captions.preset }}", text color {{ facts.captions.color }}, band center at y={{ facts.captions.position_y }} (normalized)
+{% else %}
+- No burned captions detected
+{% endif %}
+
+{% if has_transcript %}
+## Transcript excerpt (tone reference only — never summarize it)
+
+{{ transcript_excerpt }}
+
+{% endif %}
+{% if keyframes_count %}
+## Keyframes
+
+{{ keyframes_count }} shot-midpoint frames are attached in time order. Read them for visual craft: opening device, on-screen graphics, compositing.
+
+{% endif %}
+## Your three judgment calls
+
+1. `music_mood` — the backing music's mood, chosen ONLY from this catalog: {{ mood_catalog }}. Null when the case carries no music bed.
+2. `hook_device` — the opening hook device as a short noun phrase (e.g. "cold-open question", "title card", "silent montage"); null when the opening is plain.
+3. `gaps` — devices you actually OBSERVE that the remix contract cannot express. The contract covers exactly: single-track cuts, burned captions from a fixed preset family, title cards, a music bed, dubbing. Anything beyond is a gap. Each gap: `kind` is exactly one of `motion_graphics` / `multi_track` / `transition_effects` / `speed_ramp` / `broll_overlay` / `text_layers` / `other`; `severity` is `unsupported` (outside the contract entirely) or `not_yet` (the contract has a seat for it but no writer yet — e.g. static overlay layers); `detail` is one short clause. Report only what you see — an empty list is a good answer.
+
+## Output Format
+
+Valid JSON only, no explanations or markdown code blocks.
+
+{
+  "music_mood": "one catalog mood, or null",
+  "hook_device": "short noun phrase, or null",
+  "gaps": [{"kind": "motion_graphics", "severity": "unsupported", "detail": "animated lower-third name card"}]
+}

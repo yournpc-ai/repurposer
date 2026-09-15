@@ -17,6 +17,7 @@ import structlog
 from app.providers.llm.base import LLMError
 from app.models.schemas import (
     CaptionTranslation,
+    CraftJudgment,
     ExtractedPersonaMemory,
     GenerationContext,
     MaterialUnderstanding,
@@ -88,6 +89,63 @@ understand: Agent[MaterialUnderstanding] = Agent(
     temperature=0.3,
     assemble=_assemble_understand,
     postprocess=_resolve_understanding,
+    media_text_fallback=True,
+)
+
+
+def _assemble_decompile(
+    facts: dict[str, Any],
+    mood_catalog: list[str],
+    keyframes: list[MediaInput] | None = None,
+    transcript_excerpt: str | None = None,
+):
+    """Decompile node inputs (ADR-078 双抽取分工 — understand answers 「它说了
+    什么」, this agent answers 「它怎么做的」): the deterministic scan's facts
+    (trust, never re-derive), the mood catalog it may pick from, the shot
+    keyframes as visual evidence, and the transcript excerpt for tone (a
+    no-speech case simply omits it — JOURNEYS 旅程二 1a).
+
+    Purity is signature-enforced as usual: no deterministic seat exists
+    here (aspect / shots / rhythm / captions arrive as read-only facts),
+    so the LLM can only ever fill CraftJudgment's three seats.
+    """
+    media = keyframes or []
+    excerpt = (transcript_excerpt or "").strip()
+    return {
+        "facts": facts,
+        "mood_catalog": ", ".join(mood_catalog),
+        "transcript_excerpt": excerpt,
+        "has_transcript": bool(excerpt),
+        "keyframes_count": len(media),
+    }, media
+
+
+def _clamp_judgment(result: CraftJudgment, ctx: dict[str, Any]) -> CraftJudgment:
+    """Clamp the mood pick to the assembled catalog (code half of the mood
+    channel): the LLM picks FROM A LIST — an off-catalog pick reads as None
+    (the remix then falls to the brand/plan music precedence), never a free
+    string reaching a spec downstream."""
+    catalog = set(ctx.get("mood_catalog") or [])
+    if result.music_mood is not None and result.music_mood not in catalog:
+        logger.warning("decompile_mood_off_catalog", mood=result.music_mood)
+        return result.model_copy(update={"music_mood": None})
+    return result
+
+
+decompile: Agent[CraftJudgment] = Agent(
+    name="decompile",
+    prompt="decompile.j2",
+    schema=CraftJudgment,
+    system=(
+        "You are a senior short-form video editor. You study an exemplar "
+        "video's craft — how it is cut and scored, never what it says — "
+        "and output your judgment as valid JSON, with no extra commentary."
+    ),
+    temperature=0.3,
+    assemble=_assemble_decompile,
+    postprocess=_clamp_judgment,
+    # Declared degradation: brittle keyframes retry text-only (facts +
+    # transcript) — the mood/hook judgment survives on words alone.
     media_text_fallback=True,
 )
 

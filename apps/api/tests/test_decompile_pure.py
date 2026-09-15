@@ -27,6 +27,7 @@ from app.models.schemas import (
     CraftRhythm,
     CraftShot,
     CraftSkeleton,
+    TaskItem,
 )
 
 
@@ -236,3 +237,106 @@ def test_skeleton_rejects_out_of_enum_preset():
 
 def test_selftest_runs():
     craft_scan._selftest()
+
+
+# ---------------------------------------------------------------------------
+# compile-time injection + node/agent declaration (批次⑥ T5 ②)
+# ---------------------------------------------------------------------------
+
+import app.tools  # noqa: F401,E402 — the registry door (populates NODE_KINDS)
+from app.agents.base import AGENTS  # noqa: E402
+from app.pipeline.graph import NODE_KINDS  # noqa: E402
+from app.pipeline.orchestrator import TaskSpec, compile_graph  # noqa: E402
+from app.tools import TOOL_REGISTRY  # noqa: E402
+
+
+def _compile(tasks: list[TaskItem], **kw):
+    return compile_graph(TaskSpec(tasks=tasks, **kw), materialize_profile="media")
+
+
+def test_decompile_injected_only_when_exemplar_pinned():
+    pinned = _compile(
+        [TaskItem(tool="select_clips")], exemplar_asset_id="11111111-1111-1111-1111-111111111111"
+    )
+    kinds = [n.kind for n in pinned]
+    assert "decompile" in kinds
+    decompile = next(n for n in pinned if n.kind == "decompile")
+    plan = next(n for n in pinned if n.kind == "plan")
+    assert decompile.inputs == [0]  # off preprocess, parallel to understand
+    assert pinned.index(decompile) < pinned.index(plan)
+    assert pinned.index(decompile) in plan.inputs  # planning waits for the skeleton
+    assert decompile.spec["asset_id"] == "11111111-1111-1111-1111-111111111111"
+    # The pin's compile spec carries ONLY the asset id — the skeleton itself
+    # is a run-time product, never compile-time state.
+    assert set(decompile.spec) == {"asset_id"}
+
+    unpinned = _compile([TaskItem(tool="select_clips")])
+    assert "decompile" not in [n.kind for n in unpinned]
+
+
+def test_decompile_injection_survives_review_tier():
+    nodes = _compile(
+        [TaskItem(tool="select_clips")],
+        exemplar_asset_id="11111111-1111-1111-1111-111111111111",
+        autonomy="review",
+    )
+    kinds = [n.kind for n in nodes]
+    assert kinds[:5] == ["preprocess", "persona_bootstrap", "understand", "decompile", "interrupt"]
+    plan = nodes[5]
+    assert plan.kind == "plan"
+    assert set(plan.inputs) == {3, 4}  # interrupt + decompile
+
+
+def test_decompile_skipped_on_modifier_only_chain():
+    """v1 documented seat: no plan prelude → no injection (the exemplar
+    honors would find no skeleton and fall to defaults anyway)."""
+    nodes = _compile([TaskItem(tool="add_music")], exemplar_asset_id="x")
+    kinds = [n.kind for n in nodes]
+    assert "decompile" not in kinds
+    assert "materialize_source" in kinds  # sanity: the chain still compiled
+
+
+def test_task_spec_pins_store_verbatim():
+    """The pins ride TaskSpec → run.context verbatim (the model_dump seat)."""
+    spec = TaskSpec(
+        tasks=[TaskItem(tool="select_clips")],
+        source_asset_id="s1",
+        exemplar_asset_id="e1",
+    )
+    dumped = spec.model_dump(mode="json")
+    assert dumped["source_asset_id"] == "s1"
+    assert dumped["exemplar_asset_id"] == "e1"
+
+
+def test_decompile_node_declaration():
+    """Internal crew standing: registered in NODE_KINDS, NEVER in the
+    proposal-space TOOL_REGISTRY; its agent reference resolves."""
+    node = NODE_KINDS["decompile"]
+    assert node.task_name and node.task_name_zh
+    assert "decompile" not in TOOL_REGISTRY
+    assert all(a.name in AGENTS for a in node.agents)
+
+
+def test_decompile_assemble_signature_carries_no_deterministic_seat():
+    """Purity is signature-enforced (ADR-039): the decompile agent's inputs
+    are facts/media/catalog only — no deterministic field can be passed."""
+    import inspect
+
+    from app.agents.registry import _assemble_decompile
+
+    params = set(inspect.signature(_assemble_decompile).parameters)
+    assert params == {"facts", "mood_catalog", "keyframes", "transcript_excerpt"}
+    assert params.isdisjoint({"aspect", "shots", "rhythm", "captions"})
+
+
+def test_decompile_mood_clamped_to_catalog():
+    from app.agents.registry import _clamp_judgment
+
+    off = _clamp_judgment(
+        CraftJudgment(music_mood="epic-trailer", hook_device="title card"),
+        {"mood_catalog": ["calm", "uplifting"]},
+    )
+    assert off.music_mood is None  # an off-catalog pick never reaches a spec
+    assert off.hook_device == "title card"
+    on = _clamp_judgment(CraftJudgment(music_mood="calm"), {"mood_catalog": ["calm"]})
+    assert on.music_mood == "calm"

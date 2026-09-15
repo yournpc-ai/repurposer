@@ -60,10 +60,13 @@ from app.pipeline.outputs import list_visible_outputs
 
 logger = structlog.get_logger(__name__)
 
-# The proactivity boundary (白名单): a turn fires ONLY from these two seats.
+# The proactivity boundary (白名单): a turn fires ONLY from these seats.
 TRIGGER_UNDERSTANDING = "understanding_warmed"
 TRIGGER_RUN_COMPLETED = "run_completed"
-TRIGGER_WHITELIST = frozenset({TRIGGER_UNDERSTANDING, TRIGGER_RUN_COMPLETED})
+TRIGGER_CRAFT_DECOMPILED = "craft_decompiled"  # 案例拆解完成 (ADR-078, 旅程二④)
+TRIGGER_WHITELIST = frozenset(
+    {TRIGGER_UNDERSTANDING, TRIGGER_RUN_COMPLETED, TRIGGER_CRAFT_DECOMPILED}
+)
 
 # The assistant row's intent-dump discriminator (the persistence seat — the
 # question machine's payload is untouched: a trigger turn never docks a
