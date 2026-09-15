@@ -2694,21 +2694,6 @@ class ClipPayload(BaseModel):
     aspect: str | None = None
 
 
-# ADR-030 rule 1: payload is the default home and a schema registry guards the
-# door. Write = model_dump(); read = parse back into the typed model (same
-# pattern as render_spec/ClipSpec).
-OUTPUT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
-    "clip": ClipPayload,
-    "post": Post,
-    "quotes": Quotes,
-    "quote_frame": QuoteFrame,
-    "carousel": CarouselResponse,
-    "article": Article,
-    "material_understanding": MaterialUnderstanding,
-    "storyboard": Storyboard,
-    "craft_skeleton": CraftSkeleton,
-}
-
 # Internal types are node artifacts, not user-facing products. Every read path
 # must exclude them via ``services.outputs.visible_outputs`` — never hand-roll a
 # type filter (results/library/export, and future MCP/gallery surfaces).
@@ -2966,6 +2951,24 @@ class CraftSkeleton(BaseModel):
     music_mood: str | None = None
     hook_device: str | None = None
     gaps: list[CraftGap] = Field(default_factory=list)
+
+
+# ADR-030 rule 1: payload is the default home and a schema registry guards the
+# door. Write = model_dump(); read = parse back into the typed model (same
+# pattern as render_spec/ClipSpec). The registry sits BELOW the craft classes
+# (2026-09-16 boot fix): every value must be defined by this line — T5 ①'s
+# forward reference to CraftSkeleton made the whole module unimportable.
+OUTPUT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
+    "clip": ClipPayload,
+    "post": Post,
+    "quotes": Quotes,
+    "quote_frame": QuoteFrame,
+    "carousel": CarouselResponse,
+    "article": Article,
+    "material_understanding": MaterialUnderstanding,
+    "storyboard": Storyboard,
+    "craft_skeleton": CraftSkeleton,
+}
 
 
 class StepResponse(BaseModel):
