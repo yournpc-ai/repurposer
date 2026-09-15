@@ -172,7 +172,7 @@ class ToolObservation:
 # or a ToolObservation when a NON-terminal read call is accepted (fed back,
 # loop continues). The speech seat exists because the executions need it —
 # the docked question row's content, the plan echo, the answer message all
-# carry the turn's speech (ask 三分解剖 ① / 任务书回声) — and that speech is
+# carry the turn's speech (ask 三分解剖 ① / 计划回声) — and that speech is
 # the ACCUMULATED one: words spoken before a kept read are part of the reply.
 # All side effects belong to the executor; the loop writes nothing.
 LoopExecute = Callable[

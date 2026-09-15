@@ -86,7 +86,7 @@ async def has_renderable_media(db: AsyncSession, project_id: UUID) -> bool:
 
     The predicate's single home is the MEDIA birthplace requirement
     (``graph.media_missing``); this helper keeps the project_id-shaped call
-    the chat book path uses for the clips-needs-media clarification reason.
+    the chat plan path uses for the clips-needs-media clarification reason.
     """
     return not await media_missing(db, project_id)
 
@@ -95,7 +95,7 @@ async def has_any_text_material(db: AsyncSession, project_id: UUID) -> bool:
     """Whether the project has any text-yielding source — transcript /
     past_material / media with extracted text / ASR'd word axis (2026-08-24).
 
-    Sibling of ``has_renderable_media``: the chat book path's
+    Sibling of ``has_renderable_media``: the chat plan path's
     ``text_without_material`` reason rides this predicate (the prior
     ``requires=(TRANSCRIPT,)`` gate hard-422ed legitimate "I have nothing,
     write me a post" requests). Mirrors ``_TranscriptRequirement.missing``
@@ -304,7 +304,7 @@ async def process_asset(asset_id: UUID) -> None:
             # 转写稿落图 (ADR-057 document 型第二实例): the transcript /
             # extracted text gets its document node the moment it exists —
             # pre-run projects see it on the canvas without waiting for a
-            # book/run stamp (which re-ensures it idempotently anyway).
+            # plan/run stamp (which re-ensures it idempotently anyway).
             if asset.project_id is not None and (result.transcript or result.extracted_text):
                 from app.pipeline.graph_fill import (  # deferred: runtime edge
                     stamp_transcript_node,

@@ -87,12 +87,12 @@ interface PendingBrief {
   prompt: string
   /** Task-shaped on the API (the server upgrades legacy flat/slot rows on
    * read); typed loosely here and normalized at the overlay boundary. Null
-   * on ledger-only rows (an ask-turn write — no book parked, ADR-052 B2). */
+   * on brief-only rows (an ask-turn write — no plan parked, ADR-052 B2). */
   intent: unknown | null
-  /** The merged brief ledger (预填评审卡, ADR-052 B3) — the plan card's
+  /** The merged brief (预填评审卡, ADR-052 B3) — the plan card's
    * slot rows; typed loosely here and normalized at the dock boundary. */
   brief?: unknown
-  /** Why the book needs a human check — confirmation is `reasons.length > 0`
+  /** Why the plan needs a human check — confirmation is `reasons.length > 0`
    * (the API's redundant needs_clarification bool was retired, B4). */
   reasons?: string[]
   persona_id?: string | null
@@ -228,7 +228,7 @@ function ProjectDetailPage() {
   // back pill crossfades into the full ProjectMenu, all on one beat
   // (2026-09-06 fade-simplified: the old grid-rows collapse read as the
   // chat flying up, user-retired). The graph world arrives on EITHER the
-  // first run (hasRuns) OR the docked task book's draft graph
+  // first run (hasRuns) OR the docked plan's draft graph
   // (hasDraftGraph — 图先展示后运行, ADR-057 K5: the canvas previews the
   // whole chain as draft nodes before a credit moves; bail tears it down
   // and the world morphs back). The loading/error early returns below
@@ -825,12 +825,12 @@ function ProjectDetailPage() {
 
   // ── The one chat dock (ADR-051) ──────────────────────────────────────
   // The page is ALWAYS canvas (desktop) / list world (mobile) + the chat
-  // dock — project state drives the dock's form: a parked task book docks
+  // dock — project state drives the dock's form: a parked plan docks
   // the confirm panel, a live run attaches the step flow, a completed run
   // lands on the results conversation. One mounted instance across all
   // forms — the input group is never remounted between them.
 
-  /** The dock's book-summary line, rebuilt from the completed run's context
+  /** The dock's plan-summary line, rebuilt from the completed run's context
    * (the same read-tolerance shape the attach flow uses); a run with no
    * recorded chain at all shows a bare clips row. */
   const completedRunTasks = tasksFromRunContext(completedRun?.context)
@@ -853,11 +853,11 @@ function ProjectDetailPage() {
         name: latestRun?.context?.name,
       })
     : pendingBrief?.intent
-      ? // A parked task book always wins — it IS the live confirmation
-        // surface (a refinement book parked from any device must be the
-        // book the panel edits and Start answers with, never the stale
-        // completed run's). A ledger-only row (intent null — an ask-turn
-        // write, ADR-052 B2) parks no book: fall through.
+      ? // A parked plan always wins — it IS the live confirmation
+        // surface (a refinement plan parked from any device must be the
+        // plan the panel edits and Start answers with, never the stale
+        // completed run's). A brief-only row (intent null — an ask-turn
+        // write, ADR-052 B2) parks no plan: fall through.
         normalizeIntent(pendingBrief.intent)
       : completedRun
         ? completedRunIntent
@@ -878,7 +878,7 @@ function ProjectDetailPage() {
     <div className="relative flex h-dvh flex-col overflow-hidden bg-background">
       {/* Top-left chrome — a TWO-FORM machine (2026-09-02 形态机, driven by
           worldLive): pre-generation it is a plain back pill (icon + Projects);
-          the graph world's arrival (first run OR the docked book's draft
+          the graph world's arrival (first run OR the docked plan's draft
           graph, desktop) crossfades it into the full ProjectMenu (brand
           mark + title + ops). Both are stacked in one slot — the active
           form in flow, the inactive one absolutely overlaid — so the
@@ -950,7 +950,7 @@ function ProjectDetailPage() {
            navigation. The whole canvas is gated on graphLive (2026-09-02
            形态机; K5 拓宽): pre-generation it is invisible + inert (the
            full-form chat stage owns the page); the graph world's arrival
-           (first run OR the docked book's draft graph) fades it in on the
+           (first run OR the docked plan's draft graph) fades it in on the
            same beat as the stage's fade-out — 500ms on a 150ms delay
            (2026-09-06 fade-simplified). */
         <div
@@ -1038,7 +1038,7 @@ function ProjectDetailPage() {
         // frosted overlay on the full-bleed canvas, float / docked-right
         // geometry toggled in its header) or the MOBILE bottom dock
         // ("dock", unchanged). The desktop world arrives on the first run
-        // OR the docked book's draft graph (图先展示后运行); mobile has no
+        // OR the docked plan's draft graph (图先展示后运行); mobile has no
         // canvas (prohibition #13) and waits for the first run. The stage
         // fades out in place, the canvas fades in on a slight delay on the
         // same beat. Projects WITH runs (or a pending draft) mount straight
@@ -1085,7 +1085,7 @@ function ProjectDetailPage() {
         // fresh latest_run flips runActive, the page SSE attaches, and the
         // live canvas (graph nodes filling in place, ADR-057) renders from
         // the first beat instead of arriving whole at terminal. The graph
-        // rides the same fetch — a book-turn can CREATE assets server-side
+        // rides the same fetch — a plan-turn can CREATE assets server-side
         // (declared-material promotion) whose nodes land in the same frame.
         onRunStarted={() => {
           // C6 聚焦转场: the run fill's newborns land via the refetch loop —
@@ -1095,9 +1095,9 @@ function ProjectDetailPage() {
           }
           void fetchResults()
         }}
-        // K5 图先展示后运行: a book dock / bail changes the draft graph
+        // K5 图先展示后运行: a plan dock / bail changes the draft graph
         // server-side — refetch so the `hasDraftGraph` flip gate sees it
-        // (the desktop world must morph on the book's arrival, before any
+        // (the desktop world must morph on the plan's arrival, before any
         // run; without this the flip only ever fired on the first run and
         // the chain preview never showed — 2026-09-09 取证).
         onDraftGraphChange={() => {

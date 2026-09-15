@@ -43,7 +43,7 @@ from app.models.tables import (
     WorkflowRun,
 )
 from app.chat.service import (
-    discard_unanswered_task_book,
+    discard_unanswered_plan,
     get_project_prompt,
     seed_project_prompt,
 )
@@ -357,7 +357,7 @@ async def get_project_graph(
         .scalars()
         .all()
     )
-    # B1-lite (2026-09-13 演示冻结期, ADR-072 批 B1 的读面先行): the task-book
+    # B1-lite (2026-09-13 演示冻结期, ADR-072 批 B1 的读面先行): the plan
     # document and every edge touching it are filtered at READ time only —
     # the canvas shows the pure material flow (源 → 文档 → 装配); the confirm
     # beat's seat is the dock pill (ADR-070), the card's own Start was the
@@ -760,14 +760,14 @@ async def generate_content(
         db, project_id, UUID(str(current_user.id))
     )
 
-    # Full-scope runs from the composer must provide an explicit task book
+    # Full-scope runs from the composer must provide an explicit plan
     # resolved by POST /chat (ADR-043 — the chain is the only grammar).
     # Targeted scopes (hook/clip/derivative/render) carry no chain — they
     # re-run one node family off target_id.
     if request.tasks is None and request.scope == "full":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Task book must be confirmed via the chat book path first.",
+            detail="Plan must be confirmed via the chat plan path first.",
         )
     instruction = request.instruction or "Generate content from the uploaded assets."
 
@@ -812,11 +812,11 @@ async def generate_content(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     project.status = ProjectStatus.PROCESSING
-    # The task book is confirmed now — drop the unconfirmed copy.
+    # The plan is confirmed now — drop the unconfirmed copy.
     project.pending_brief = None
     # /generate starts the run without a human answer — discard the open
     # task_book question instead of archiving a fabricated answered question.
-    await discard_unanswered_task_book(db, UUID(str(current_user.id)), project_id)
+    await discard_unanswered_plan(db, UUID(str(current_user.id)), project_id)
     await db.commit()
     await db.refresh(run)
 

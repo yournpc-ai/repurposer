@@ -181,7 +181,7 @@ class SelectClips(NodeBase):
             await _pop_spec_field(node.id, "feedback")
         slot = _node_slot(node, ctx, "clips")
         clip_count = (slot.count if slot else None) or self.count_default
-        # Language resolves per slot first, then the task-book language.
+        # Language resolves per slot first, then the plan language.
         target_language = (
             (slot.language if slot else None) or ctx.get("target_language", "en")
         )
@@ -269,7 +269,7 @@ class SelectClips(NodeBase):
         brand_ref = persona.id if persona is not None else None
         cfg = brand_cfg
         # Frame format: the chain's aspect param (spec, user-named) wins,
-        # then the run.context carry-over (legacy books), then the skin
+        # then the run.context carry-over (legacy plans), then the skin
         # default (2026-08-14 三档画幅; ADR-043 参数化).
         aspect = str(
             (node.spec or {}).get("aspect")

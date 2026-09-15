@@ -25,7 +25,7 @@ def _assemble(
     # understanding fields fall back to their empty defaults, and
     # ``slot.focus`` / ``slot.cta`` fall back to the prompt's defaults or
     # the persona's. The chat safety net guarantees the run is a copy-writer
-    # chain before this path is taken (any non-copy-writer row in the book
+    # chain before this path is taken (any non-copy-writer row in the plan
     # would have caused the chain to need real material upstream).
     trimmed = trim_texts(asset_texts)
     return (

@@ -486,7 +486,7 @@ function StepCard({ node }: { node: FlowNode }) {
   )
 }
 
-/** The document node's card (ADR-057 — the task book, the FLORA text-node
+/** The document node's card (ADR-057 — the plan, the FLORA text-node
  * form). Parked on the same dot grid as the dock, so it takes the
  * dock-surface frost (the canvas's dots read through) + the hairline,
  * never a shadow: the produced text IS the body copy. 全文卡律 (2026-09-10

@@ -11,13 +11,13 @@ bounded by ``max_iterations``). The model-facing prose lives one file over
 the tool declarations in ``chat/turn_tools.py``; this module is declarations
 + turn assembly only.
 
-``intent_router`` — the task-book builder (book path, CHAT_ARCH §3): free-form
-text → present_plan (draft/refine the task book) / ask_user (the ONE deciding
-question) / start_run (prose confirmation of the docked book) / answer.
-Invoked only from the chat service's book path — first-turn projects and
-pending-task-book refinement turns. Provider failures propagate as LLMError:
+``intent_router`` — the plan builder (plan path, CHAT_ARCH §3): free-form
+text → present_plan (draft/refine the plan) / ask_user (the ONE deciding
+question) / start_run (prose confirmation of the docked plan) / answer.
+Invoked only from the chat service's plan path — first-turn projects and
+pending-plan refinement turns. Provider failures propagate as LLMError:
 the route boundary answers 502 with the localized provider line (2026-08-14
-裁定 — a fabricated default book looks like a real plan and Start would
+裁定 — a fabricated default plan looks like a real plan and Start would
 spend a paid run on it; an honest failure beats a wrong plan, and the
 user_key taxonomy makes the failure presentable).
 
@@ -34,10 +34,10 @@ from typing import Any
 from app.agents.tool_loop import ToolLoopAgent
 from app.chat.prompts import chat_intent_system, intent_router_system
 from app.chat.turn_tools import (
-    BOOK_READ_TOOLS,
-    BOOK_TOOLS,
     CHAT_READ_TOOLS,
     CHAT_TOOLS,
+    PLAN_READ_TOOLS,
+    PLAN_TOOLS,
 )
 from app.models.schemas import Brief
 from app.models.tables import Message, Persona
@@ -64,18 +64,18 @@ def _speech_language_line(lang: str) -> str:
     )
 
 
-def _assemble_book_turn(
+def _assemble_plan_turn(
     message: str,
     brief: Brief | None = None,
     persona: Persona | None = None,
     pending_question: Message | None = None,
     filename: str | None = None,
-    presented_book: str | None = None,
+    presented_plan: str | None = None,
     recent: list[str] | None = None,
     file_language: str | None = None,
     material_excerpt: str | None = None,
 ):
-    """Book-turn inputs (ADR-052 B2 D2-C2 — the brief is the state).
+    """Plan-turn inputs (ADR-052 B2 D2-C2 — the brief is the state).
 
     ``message``: this turn's own words — never an accumulated prompt (the
     brief carries the accumulated state; ``MAX_ACCUM_PROMPT_CHARS``'s
@@ -85,7 +85,7 @@ def _assemble_book_turn(
     their source, the material line always, and the asked roll (the router
     reads it for the root judgment and never re-asks an asked slot).
     ``persona``: the turn's persona row (the caller resolves: explicit pick →
-    pending book's → project mount → user default) — rendered as a few
+    pending plan's → project mount → user default) — rendered as a few
     audience / identity / domain lines, asking strategy ②'s pantry: the
     one-word option values come from here first (the C2 fix — the rule was
     written but its pantry was never assembled, so options starved).
@@ -95,7 +95,7 @@ def _assemble_book_turn(
     the pending slot IS the answer (code settles the row), anything else is
     an interjection (the question stays open, the reply gets the reminder
     tail).
-    ``presented_book``: one-line digest of the docked task book, when one is
+    ``presented_plan``: one-line digest of the docked plan, when one is
     on the table — the start/revise call needs to SEE the plan being
     confirmed, not imagine it (a bare "开始吧" after a vague first turn
     otherwise reads as "go draft it").
@@ -174,7 +174,7 @@ def _assemble_book_turn(
             "persona_lines": persona_lines,
             "pending_lines": pending_lines,
             "filename": filename,
-            "presented_book": presented_book,
+            "presented_plan": presented_plan,
             "recent": recent,
             "file_language": file_language,
             "material_excerpt": material_excerpt,
@@ -201,8 +201,8 @@ intent_router = ToolLoopAgent(
     prompt="intent_router.j2",
     system=intent_router_system(),
     temperature=0.2,
-    assemble=_assemble_book_turn,
-    tools=[*BOOK_TOOLS, *BOOK_READ_TOOLS],
+    assemble=_assemble_plan_turn,
+    tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS],
     max_iterations=6,
 )
 
@@ -214,7 +214,7 @@ def _assemble_chat_turn(message: str, context: dict[str, Any]):
     context_text = context.get("text", "")
     lang = current_ui_language()
     if lang:
-        # Same speech-language law as the book path (2026-09-04) — the chat
+        # Same speech-language law as the plan path (2026-09-04) — the chat
         # loop's ask/answer/prose follows the UI language, never the
         # message's or the material's.
         context_text = (

@@ -199,7 +199,7 @@ function streamTurn<T>(
 
 /** One streamed answer turn (the answer endpoint's SSE mode, 2026-09-04
  * 验收批): the answer's continuation is an LLM turn (a slot answer resumes
- * the book path), so an option click gets the same wire as a typed turn —
+ * the plan path), so an option click gets the same wire as a typed turn —
  * the endpoint Accept-negotiates exactly like POST /chat, and this wrapper
  * only names its terminal events. The ask preview rides along too
  * (2026-09-09 对称拍板): a follow-up ask previews its pill mid-stream,

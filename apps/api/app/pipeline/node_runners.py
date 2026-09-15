@@ -101,7 +101,7 @@ def _chain_needs_material(run: WorkflowRun) -> bool:
     proxy (``isinstance DerivativeWriterNode``): a research+writer chain
     with no source is every bit as material-free as a pure writer chain,
     and the proxy let it die at preprocess (2026-09-05, S8). An empty or
-    unknown task book returns True (we never know — be safe)."""
+    unknown plan returns True (we never know — be safe)."""
     ctx = run.context if isinstance(run.context, dict) else {}
     chain_tasks = ctx.get("tasks") or []
     if not chain_tasks:
@@ -625,7 +625,7 @@ class Interrupt(NodeBase):
             # is the default alone, and a one-option question has no branch —
             # parking for it is pure friction (the writer-only stub
             # understanding lands here: "Full-talk highlights" is clips
-            # vocabulary on a post book). Auto-resolve as the default option —
+            # vocabulary on a post plan). Auto-resolve as the default option —
             # the same spec.answer shape a human pick writes; with no
             # suspend_payload the plan read falls through to None =
             # the default direction (edges.py `_interrupt_direction`).
@@ -699,7 +699,7 @@ class Plan(NodeBase):
 
     @staticmethod
     def book_summary(slots: list[IntentSlot], target_language: str) -> str | None:
-        """The human task-book summary line — PUBLIC: the graph fill
+        """The human plan summary line — PUBLIC: the graph fill
         (graph_fill stamp / back-write) recomposes the identical line from
         the same slot source, so the document node's text never flickers."""
         if not slots:
@@ -732,7 +732,7 @@ class Plan(NodeBase):
 
     def estimate(self, ctx: dict) -> dict | None:
         """One call: prompt = the upstream understanding (≤ 2500 completion
-        tokens) + task book + persona/tone context; completion = the
+        tokens) + plan + persona/tone context; completion = the
         storyboard (per-slot fields, bounded by the slot schema)."""
         return estimate_agent([800, 4500], [300, 2500])
 
@@ -742,8 +742,8 @@ class Plan(NodeBase):
         """Plan node: request-scoped storyboard, re-planned every run.
 
         Reads ONLY the upstream understanding (self-sufficiency contract) plus the
-        task book and persona/tone context; coverage accountability is computed by
-        code and persisted with the storyboard. The task book is passed slot by
+        plan and persona/tone context; coverage accountability is computed by
+        code and persisted with the storyboard. The plan is passed slot by
         slot (per-slot count/focus/language); explicit slot fields are enforced
         by code after the LLM returns.
 
@@ -856,7 +856,7 @@ class Plan(NodeBase):
         await db.flush()
         assets = await _list_assets(db, project.id)
         zh = _display_zh(run, project, assets)
-        # 任务书摘要落 spec — 图填充（graph_fill._task_book_text）与运行时
+        # 计划摘要落 spec — 图填充（graph_fill._task_book_text）与运行时
         # back-write 同源读它。
         book_summary = self.book_summary(intent_slots, ctx.get("target_language", "en"))
         if book_summary:

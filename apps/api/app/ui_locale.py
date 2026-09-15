@@ -8,7 +8,7 @@ The browser's locale rides the CORS-safelisted ``Accept-Language`` header
 (the frontend sends ``i18n.language`` verbatim); a middleware captures it
 into a request-scoped ContextVar, and ``create_run`` pins it into
 ``TaskSpec.ui_language`` — stored verbatim on run.context like every other
-task-book field, so the worker (a separate process, no request context)
+task field, so the worker (a separate process, no request context)
 reads the pinned value off the run.
 """
 

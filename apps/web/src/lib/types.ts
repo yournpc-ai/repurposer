@@ -213,7 +213,7 @@ export type StepStatus = "pending" | "running" | "done" | "failed" | "skipped" |
 
 export type IntentSlotType = "clips" | "post" | "quotes" | "carousel" | "article"
 
-/** 任务槽 (IntentSlot, N-20 request layer): one line of the task book — one
+/** 任务槽 (IntentSlot, N-20 request layer): one line of the plan — one
  * requested output. `null` fields mean task-book defaults (count → per-type
  * default, language → the run's target language); `explicit` marks
  * user-edited slots that pin through re-inference. */

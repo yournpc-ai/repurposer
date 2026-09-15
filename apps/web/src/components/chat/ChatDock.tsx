@@ -6,14 +6,14 @@
  * The project's single chat shell (ADR-051), a TWO-FORM machine (2026-09-02
  * 形态机): before the first run it is the centered fullscreen chat (the
  * composer draft opens the conversation — sent as the first /chat message on
- * mount — and the task book confirms here); the first run's arrival morphs
+ * mount — and the task plan confirms here); the first run's arrival morphs
  * it into the bottom dock over the canvas, whose steps light up in the flow.
  * The dock form has three visibility states: collapsed (the resident input
  * group), expanded (history grows upward in the same frosted container),
  * hidden (a user gesture folds it to a bottom-right LogoMark dot — agent
  * speech / a pending question / a canvas focus recalls it). The bottom input
  * is always live and every turn goes through the same /chat endpoint
- * (intent-surface-unification W2): the server routes book-path turns
+ * (intent-surface-unification W2): the server routes plan-path turns
  * (task-book build / refine / confirm) and chat-loop turns itself.
  */
 
@@ -149,8 +149,8 @@ export interface TaskItem {
 
 export interface InferredIntent {
   /** The intent router's four-action payload (ADR-052 B2 — `generate`
-   * renamed to `draft`: it never generates, it drafts the task book). The
-   * panel round-trips the value; only `draft` books are ever editable. */
+   * renamed to `draft`: it never generates, it drafts the task plan). The
+   * panel round-trips the value; only `draft` plans are ever editable. */
   action: "draft" | "ask" | "answer" | "start"
   answer: string | null
   tasks: TaskItem[]
@@ -160,7 +160,7 @@ export interface InferredIntent {
    * it only round-trips so Start doesn't drop the user's choice (the
    * server treats a missing mode as "not mentioned", never "retracted"). */
   caption_mode?: "bilingual" | "source_only" | "target_only" | null
-  /** The proposer's fresh naming of the run/book (ADR-058 — LLM 建图时命名):
+  /** The proposer's fresh naming of the run/plan (ADR-058 — LLM 建图时命名):
    * a compact noun phrase in the interface language; "" = unnamed (readers
    * fall back to the chain-derived label). */
   name?: string
@@ -299,7 +299,7 @@ function normalizeTasks(raw: unknown): TaskItem[] {
 
 /** outputs-grammar → task list (client-side read tolerance for legacy
  * run.context rows; the same conversion the server applies to stored
- * pending_brief books). */
+ * pending_brief plans). */
 function legacyOutputsToTasks(data: Record<string, unknown>): TaskItem[] {
   const tasks: TaskItem[] = []
   const aspect = typeof data.aspect === "string" ? data.aspect : null
@@ -336,7 +336,7 @@ function legacyOutputsToTasks(data: Record<string, unknown>): TaskItem[] {
 
 /** Normalize an intent payload into the task-chain InferredIntent the panel
  * edits. Tasks pass through verbatim; a legacy outputs-grammar payload
- * (stored run contexts, old books) upgrades on read. */
+ * (stored run contexts, old plans) upgrades on read. */
 export function normalizeIntent(raw: unknown): InferredIntent {
   const data = (raw ?? {}) as Record<string, unknown>
   const tasks = Array.isArray(data.tasks)
@@ -548,7 +548,7 @@ interface QuestionPayload {
    * dock time; the plan card renders its valued slots. Absent on question
    * rows from before B3 (normalizeBrief tolerates). */
   brief?: unknown
-  /** 任务书行自完备 (2026-09-08, 方案 B): task_book only — the derived
+  /** 计划行自完备 (2026-09-08, 方案 B): task_book only — the derived
    * preview ("you'll get") stamped at dock time. Absent on rows docked
    * before the seal — the recovery pending-brief fetch is the fallback. */
   derived?: DerivedRow[]
@@ -563,7 +563,7 @@ interface QuestionMessage {
   id: string
   content: string | null
   /** The row's intent JSONB: task_book docks stamp the presented chain
-   * here (任务书行自完备, 方案 B — the envelope's row IS the whole plan
+   * here (计划行自完备, 方案 B — the envelope's row IS the whole plan
    * card, no second fetch); ask questions stash their replay payload.
    * Null on rows docked before the seal. */
   intent?: unknown
@@ -724,7 +724,7 @@ function StagedAttachmentChip({
 
 /** 形态律 (ADR-053 R1): a TEXT question (options-empty) never docks — it
  * lives in the flow as a plain assistant message, so a refresh / revival
- * fetch keeps nothing for the pill. Task books and options questions dock
+ * fetch keeps nothing for the pill. Task plans and options questions dock
  * as before (the Start press answers the docked task_book row by id). */
 function dockWorthyQuestion(q: QuestionMessage | null): QuestionMessage | null {
   return q &&
@@ -760,14 +760,14 @@ interface ChatDockProps {
     personaId?: string
   } | null
   initialIntent?: InferredIntent | null
-  /** The parked book's merged brief (pending_brief.brief) on a restored
+  /** The parked plan's merged brief (pending_brief.brief) on a restored
    * session — the plan card's slot rows (预填评审卡, ADR-052 B3). Live turns
    * refresh it from the docked question's payload, not this prop. */
   initialBrief?: unknown
-  /** The parked book's derived preview (ADR-043 — pending_brief.derived):
+  /** The parked plan's derived preview (ADR-043 — pending_brief.derived):
    * the card's "you'll get" section on a restored session. */
   initialDerived?: DerivedRow[]
-  /** The parked book's soft-signal reasons (pending_brief.reasons) on a
+  /** The parked plan's soft-signal reasons (pending_brief.reasons) on a
    * restored session — drives the clips row's no-media inline warning. */
   initialReasons?: string[]
   /** Attach to an already-running generation (returning visitor): skips the
@@ -807,7 +807,7 @@ export interface ChatDockHandle {
    * beat — identical to the dock pill's Start (the task_book question's
    * start answer, the only start path; guards and failure surfaces ride
    * along). No-op while a turn/run is in flight or nothing is pending. */
-  startPendingBook: () => void
+  startPendingPlan: () => void
 }
 
 /** 预填评审卡 slot row (ADR-052 B3): one valued brief slot. A
@@ -1035,12 +1035,12 @@ function ThinkingRow({ label }: { label: string }) {
 }
 
 /** A superseded plan version in the flow: one slim chip row that expands
- * into a read-only snapshot with a restore action. The live book is always
+ * into a read-only snapshot with a restore action. The live plan is always
  * the bottom-most card; these chips are its history (2026-08-05 ruling —
  * chat edits the plan, nothing is locked, old versions stay visible). */
 function PlanVersionChip({
   n,
-  book,
+  plan,
   summary,
   expanded,
   onToggle,
@@ -1048,7 +1048,7 @@ function PlanVersionChip({
   taskLabel,
 }: {
   n: number
-  book: InferredIntent
+  plan: InferredIntent
   summary: string
   expanded: boolean
   onToggle: () => void
@@ -1079,7 +1079,7 @@ function PlanVersionChip({
           {expanded && (
             <div className="mt-1 flex flex-col gap-3 rounded-lg bg-muted p-4">
               <div className="flex flex-col gap-1.5">
-                {book.tasks.map((task, i) => {
+                {plan.tasks.map((task, i) => {
                   const meta = TOOL_META[task.tool]
                   return (
                     <div key={i} className="flex items-center gap-1.5 text-xs">
@@ -1090,9 +1090,9 @@ function PlanVersionChip({
                     </div>
                   )
                 })}
-                {book.specific_instruction ? (
+                {plan.specific_instruction ? (
                   <p className="line-clamp-2 text-xs text-muted-foreground">
-                    {book.specific_instruction}
+                    {plan.specific_instruction}
                   </p>
                 ) : null}
               </div>
@@ -1244,8 +1244,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // Canvas draft-confirm card (ADR-057 K5): the desktop confirm beat —
     // it IS the dock's Start (same answer channel, same guards, same
     // credits-grey-row failure surface). No-op while a turn/run is in
-    // flight or no task book is pending.
-    startPendingBook: () => void handleStartGeneration(),
+    // flight or no task plan is pending.
+    startPendingPlan: () => void handleStartGeneration(),
   }))
 
   const [phase, setPhase] = useState<Phase>(
@@ -1265,7 +1265,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
   )
   /** Derived preview (ADR-043): the docked chain's server-compiled "you'll
-   * get" projection — rides pending_brief.derived; refetched with the book. */
+   * get" projection — rides pending_brief.derived; refetched with the plan. */
   const [derived, setDerived] = useState<DerivedRow[]>(initialDerived ?? [])
   /** The merged brief (预填评审卡, ADR-052 B3): the plan card's slot
    * rows. Initial load reads pending_brief.brief; every live turn re-stamps
@@ -1273,7 +1273,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const [brief, setBrief] = useState<Brief | null>(() =>
     normalizeBrief(initialBrief)
   )
-  /** The docked book's soft-signal reasons (pending_brief.reasons) — the
+  /** The docked plan's soft-signal reasons (pending_brief.reasons) — the
    * clips row's no-media inline warning reads `clips_without_media`. */
   const [reasons, setReasons] = useState<string[]>(initialReasons ?? [])
   // The plan card renders only once a real inference has landed (a restored
@@ -1338,22 +1338,22 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     [],
   )
   // Plan versions (2026-08-05 refinement-flow rework; 2026-08-06 in-flight
-  // rework): the LIVE book renders as the bottom-most card while settled;
+  // rework): the LIVE plan renders as the bottom-most card while settled;
   // during an in-flight turn it UNPINS — anchored inline right after the
   // echo bubble that docked it (above the new user bubble + thinking row),
   // so the stale confirm dock can hide and the flow reads chronologically.
-  // When the turn lands, the superseded book collapses into a version chip
+  // When the turn lands, the superseded plan collapses into a version chip
   // at that same anchor (expandable read-only snapshot, restorable — chat
   // edits the plan, nothing is locked) and the fresh card pins bottom.
-  // liveBookMessageId = the echo bubble of the turn that docked the current
-  // book; null on restored sessions (no bubble exists → the card carries its
+  // livePlanMessageId = the echo bubble of the turn that docked the current
+  // plan; null on restored sessions (no bubble exists → the card carries its
   // own echo line and stays pinned).
-  const [liveBookMessageId, setLiveBookMessageId] = useState<string | null>(null)
+  const [livePlanMessageId, setLivePlanMessageId] = useState<string | null>(null)
   const [planVersions, setPlanVersions] = useState<
-    { messageId: string; book: InferredIntent }[]
+    { messageId: string; plan: InferredIntent }[]
   >([])
   const [expandedVersion, setExpandedVersion] = useState<number | null>(null)
-  // The demotion snapshot must capture the book as it stands AT DOCK TIME
+  // The demotion snapshot must capture the plan as it stands AT DOCK TIME
   // (the panel stays editable while a refinement turn is in flight).
   const intentRef = useRef(intent)
   useEffect(() => {
@@ -1408,8 +1408,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }
   }, [projectId])
 
-  /** The panel's task book + reasons live on the project (pending_brief) —
-   * refetched after every book-path turn (first inference, refinements).
+  /** The panel's task plan + reasons live on the project (pending_brief) —
+   * refetched after every plan-path turn (first inference, refinements).
    * `derived` is the server-compiled preview riding the same row. */
   const fetchPendingBrief = useCallback(async (): Promise<{
     intent: unknown
@@ -1919,25 +1919,25 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     [t]
   )
 
-  const summarizeBook = useCallback(
-    (book: InferredIntent) => book.tasks.map(taskLabel).join(", "),
+  const summarizePlan = useCallback(
+    (plan: InferredIntent) => plan.tasks.map(taskLabel).join(", "),
     [taskLabel]
   )
 
   /** Display-copy law (ADR-058): the proposer's fresh LLM name leads; the
    * chain-derived label is the fallback for unnamed (legacy) intents. */
   const titleOf = useCallback(
-    (book: InferredIntent) => book.name || summarizeBook(book),
-    [summarizeBook],
+    (plan: InferredIntent) => plan.name || summarizePlan(plan),
+    [summarizePlan],
   )
 
   const planSummary = useMemo(() => titleOf(intent), [intent, titleOf])
 
   /** The receipt/recap title (ADR-058): stamped from the BIRTHING proposal
    * at run birth — the run's own truth, immune to later intent drift (a
-   * chat-dispatch turn never touches the dock's book state; the next
-   * refinement book must not retitle an archived receipt). Null = fall back
-   * to the live book's title (book-confirm starts are fresh by construction). */
+   * chat-dispatch turn never touches the dock's plan state; the next
+   * refinement plan must not retitle an archived receipt). Null = fall back
+   * to the live plan's title (plan-confirm starts are fresh by construction). */
   const [runTitleOverride, setRunTitleOverride] = useState<string | null>(null)
   const runTitle = runTitleOverride ?? planSummary
 
@@ -1969,7 +1969,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // runId && !terminal: a run is LIVE — starting now would double-launch.
     // (A terminal run does NOT block: the dock's refinement Start launches
     // the next run — runId set ≠ run live.) chatBusy: a refine turn is in
-    // flight — starting now would race its response (the late task book
+    // flight — starting now would race its response (the late task plan
     // could re-dock over the running flow).
     if ((runId && !terminal) || isStarting || chatBusy) return
     setStartError(null)
@@ -1979,7 +1979,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // ask_user 机器: Start IS the answer to the docked task_book
         // question — one call answers, starts the run, and settles the row.
         // "start" is a first-class answer kind (no magic option id); the
-        // panel's edited task book rides along so hand edits (slots marked
+        // panel's edited task plan rides along so hand edits (slots marked
         // explicit) reach the run instead of the stale stored intent.
         // toast:false — the start path surfaces its own failures: the
         // structured credits 422 as the grey row, anything else inline.
@@ -2006,11 +2006,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
         const answered = ((await res.json()) as { answered_question: QuestionMessage }).answered_question
         if (!answered.workflow_run_id) throw new Error("Generation failed")
-        // Stamp the receipt title from the BIRTHING book (ADR-058): every
+        // Stamp the receipt title from the BIRTHING plan (ADR-058): every
         // run-birth path writes the override, so a later run never inherits
         // an earlier run's title (the chat-dispatch path stamps from the
         // envelope's proposal; the Start gesture's birth truth IS the
-        // docked book).
+        // docked plan).
         setRunTitleOverride(titleOf(intent))
         landOnStartedRun(answered.workflow_run_id)
         return
@@ -2164,20 +2164,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     return assets.filter((a) => !carried.has(a.id))
   }, [assets, messages])
 
-  /** True when the echo bubble of the turn that docked the current book is
+  /** True when the echo bubble of the turn that docked the current plan is
    * in the flow — the card's own echo line then stays hidden. */
   const liveBubblePresent =
-    liveBookMessageId !== null &&
-    messages.some((m) => m.id === liveBookMessageId)
+    livePlanMessageId !== null &&
+    messages.some((m) => m.id === livePlanMessageId)
 
   /** Restore a superseded version as the current plan — the chip's snapshot
-   * becomes the panel's book (it rides the next refine as prior_intent, and
+   * becomes the panel's plan (it rides the next refine as prior_intent, and
    * Start uses it directly). Nothing is locked; older versions stay in the
    * flow as chips. */
   const restoreVersion = (index: number) => {
     const version = planVersions[index]
     if (!version) return
-    setIntent(version.book)
+    setIntent(version.plan)
     setExpandedVersion(null)
     toast.success(
       t("generationOverlay.versionRestored", { n: index + 1 })
@@ -2319,9 +2319,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     message: QuestionMessage,
   ): Omit<OverlayMessage, "id"> | null => {
     if (!message.answer) return null
-    const isTaskBook = message.question?.kind === "task_book"
-    // Task-book start confirmations never archive as QA (ruling above).
-    if (isTaskBook) return null
+    const isPlan = message.question?.kind === "task_book"
+    // task-book start confirmations never archive as QA (ruling above).
+    if (isPlan) return null
     if (
       message.question?.kind === "question" &&
       (message.question?.options?.length ?? 0) === 0
@@ -2346,11 +2346,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * IS a plain conversation message (形态律 ADR-053 R1 — it stays in the
    * flow; the pending row lives server-side and later turns bring the
    * judged settlement / the reminder tail); anything else renders as prose
-   * + an optional RunCard. A docked task book also refetches the panel's
+   * + an optional RunCard. A docked task plan also refetches the panel's
    * plan. Starting is ALWAYS the user's explicit Start press — no
    * auto-start.
    *
-   * echo 实体化 (2026-09-04, chat-flow-sequencing A2): docking a task book
+   * echo 实体化 (2026-09-04, chat-flow-sequencing A2): docking a task plan
    * first pushes the row's echo prose as a real flow message (its content
    * IS the echo since A1) — unless this turn's streamed bubble already
    * carries it (`echoCarried`, the sendChat streaming path) — so the
@@ -2368,9 +2368,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         !terminalRef.current
       ) {
         // A run is already LIVE (started from another surface while this
-        // turn was in flight) — a late task book must not pull the UI back
+        // turn was in flight) — a late task plan must not pull the UI back
         // to confirm; the run flow owns the surface now. (A TERMINAL run
-        // does not trigger this guard: the dock's refinement books dock
+        // does not trigger this guard: the dock's refinement plans dock
         // normally — runId set ≠ run live.)
         return
       }
@@ -2391,7 +2391,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         return
       }
       if (!opts?.echoCarried) {
-        // The framing prose (ask 三分解剖 ① — a task book's echo, or an
+        // The framing prose (ask 三分解剖 ① — a task plan's echo, or an
         // options question's framing speech) lands ABOVE the docked pill,
         // anchored at the question row's own birth time (#5 chronology).
         // Rows whose content IS the bare question (code-composed, legacy)
@@ -2407,11 +2407,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
       setPendingQuestion(message)
       if (message.question.kind === "task_book") {
-        // A book docked — the server stamped the draft graph in the same
+        // A plan docked — the server stamped the draft graph in the same
         // transaction: tell the page so its flip gate sees it (K5 图先展示
         // 后运行 — the world morphs on the draft graph, not just on runs).
         void onDraftGraphChangeRef.current?.()
-        // 任务书行自完备 (2026-09-08, 方案 B): the docked row IS the whole
+        // 计划行自完备 (2026-09-08, 方案 B): the docked row IS the whole
         // plan card — the chain on the row's `intent` column, the derived
         // preview + brief + reasons + estimate on the payload. The live
         // path renders it straight off the envelope (one turn = one call);
@@ -2453,7 +2453,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   }
 
   /** One endpoint for every turn (intent-surface-unification W2): the server
-   * routes book-path turns (task-book build / refine / confirm) and
+   * routes plan-path turns (task-book build / refine / confirm) and
    * chat-loop turns itself. The panel's current chain rides confirm-phase
    * turns as prior_intent (the intent router re-emits the full revised chain —
    * chat revisions always win); mentions / the persona choice ride only the
@@ -2463,7 +2463,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * preview bubble (reasoning models emit a short echo in one burst — pacing
    * keeps the "written live" feel); the terminal turn.completed envelope is
    * authoritative and FINALIZES THE PREVIEW IN PLACE — same React key, no
-   * remount — so a docking task book never makes the text flicker. */
+   * remount — so a docking task plan never makes the text flicker. */
   /** Roll the ask-preview artifacts back (a flipped call / turn.failed /
    * abort): the preview pill and any stashed click's optimistic block never
    * existed server-side, so they simply disappear. The envelope's happy
@@ -2653,7 +2653,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             phase === "confirm" && intentReady
               ? intent
               : undefined,
-          // Consumed only when this turn confirms the book by prose — the
+          // Consumed only when this turn confirms the plan by prose — the
           // dock's tier must survive a typed "looks good, start it".
           autonomy: phase === "confirm" ? autonomy : undefined,
         },
@@ -2680,7 +2680,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // refresh the prompt attachments when the project started empty.
       if (assets.length === 0) void fetchAssets()
       if (data.run_id) {
-        // G-1: the prose confirmation answered the docked task book
+        // G-1: the prose confirmation answered the docked task plan
         // server-side (kind=start) and the run is live. NO QA archive on
         // ANY start path (2026-09-05 用户拍板): the AnsweredQuestion block
         // is the option-choice UI — a task_book start (chat text or pill)
@@ -2719,7 +2719,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // The receipt titles the RUN by its birthing proposal (ADR-058):
         // the echo row carries the fresh intent server-side — its LLM name
         // leads, the chain label falls back. The dock's own intent state is
-        // NOT touched (a chat-dispatch turn is not a book edit).
+        // NOT touched (a chat-dispatch turn is not a plan edit).
         if (data.assistant_message.intent) {
           const birthTitle = titleOf(normalizeIntent(data.assistant_message.intent))
           if (birthTitle) setRunTitleOverride(birthTitle)
@@ -2742,10 +2742,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         message.question.kind === "question" &&
         (message.question.options?.length ?? 0) === 0
       if (message.question && !message.answer && !isTextQuestion) {
-        // An OPTIONS question / task book docks (a TEXT question IS the
+        // An OPTIONS question / task plan docks (a TEXT question IS the
         // prose reply and lands below like one — 形态律 ADR-053 R1). The
         // streamed echo bubble
-        // STAYS in place (same key — never a remount); the superseded book
+        // STAYS in place (same key — never a remount); the superseded plan
         // collapses into a version chip anchored after the echo bubble that
         // produced it — the same anchor the inline card occupied while the
         // turn was in flight — and the fresh card pins bottom-most.
@@ -2755,13 +2755,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           await paceUnstreamedTail(message.content ?? "")
           finalizePreview()
           if (message.question.kind === "task_book") {
-            if (intentReady && liveBookMessageId) {
+            if (intentReady && livePlanMessageId) {
               setPlanVersions((prev) => [
                 ...prev,
-                { messageId: liveBookMessageId, book: intentRef.current },
+                { messageId: livePlanMessageId, plan: intentRef.current },
               ])
             }
-            setLiveBookMessageId(streamId)
+            setLivePlanMessageId(streamId)
           }
         } else {
           // Zero-delta turn (the funnel's repair round never streams): the
@@ -3236,7 +3236,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const handleBailQuestion = async () => {
     if (!pendingQuestion || answering) return
     setAnswering(true)
-    const wasTaskBook = pendingQuestion.question?.kind === "task_book"
+    const wasPlan = pendingQuestion.question?.kind === "task_book"
     try {
       const res = await apiFetch(
         `/api/v1/chat/messages/${pendingQuestion.id}/answer`,
@@ -3248,7 +3248,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       setPendingQuestion(null)
       // A task_book bail tears the draft graph down server-side — the page
       // morphs back to the chat world (K5 条款: bail 拆图).
-      if (wasTaskBook) void onDraftGraphChangeRef.current?.()
+      if (wasPlan) void onDraftGraphChangeRef.current?.()
       pushAnsweredQuestion(data.answered_question)
       if (hadRun) toast.info(t("generationOverlay.stopped"))
     } finally {
@@ -3512,7 +3512,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   /** 点值改 (B3): an inferred slot's inline-edit commit IS a normal chat
    * send — the composed statement (「受众：X」 / "Audience: X") rides the one
    * and only revision channel; the router merges it user-stated and the
-   * re-docked book carries the fresh brief. No slot-update endpoint —
+   * re-docked plan carries the fresh brief. No slot-update endpoint —
    * prohibited-behavior: 禁第二修订通道. */
   /** Suggestion-pill clicks (T3 触发回合): "send" fires the pill's text as
    * the user's next message — verbatim, through the same sendChat every
@@ -3592,15 +3592,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // → inline at its echo anchor in the message loop (above the new user
   // bubble + thinking row), so the flow reads chronologically and the stale
   // confirm dock can hide. Restored sessions have no echo bubble — the card
-  // stays pinned. K5 形态裁定 (简报「dock 任务书卡保留至图节点接管确认节拍后
+  // stays pinned. K5 形态裁定 (简报「dock 计划卡保留至图节点接管确认节拍后
   // 退役」): the DESKTOP panel form retires the card — the draft graph IS
-  // the book's face (图先展示后运行: the chain and its per-node quotes live
+  // the plan's face (图先展示后运行: the chain and its per-node quotes live
   // on the canvas), so the panel renders only the echo prose. (The confirm
   // beat went dual-seat 2026-09-11, ADR-070: the dock pill is back in the
   // panel form — this gate is about the CARD only.) The mobile dock keeps
   // the card (prohibition #13 — no canvas below iPad width — the dock is
   // its only plan surface).
-  // 2026-09-13 用户拍板 — desktop retires the card in EVERY form: the book's
+  // 2026-09-13 用户拍板 — desktop retires the card in EVERY form: the plan's
   // dock and the draft-graph stamp land in the same transaction, so the
   // world flips full → panel one graph fetch later; rendering the card in
   // the pre-flip full form made it FLASH in the message flow, then vanish
@@ -3613,15 +3613,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   /** chat 修改单价 (BILLING §7): the dock payload's per-task marginal credits,
    * index-aligned with the plan card's task rows (Σ ≡ the pill's total). */
   const taskEstimates = pendingQuestion?.question?.estimate_credits?.per_task
-  /** 任务书密度律 (ADR-054): the review card + confirm pill are the HEAVY
+  /** 计划密度律 (ADR-054): the review card + confirm pill are the HEAVY
    * rendering — a chain earns them only with review substance (≥2 tasks).
-   * A one-task book is pure prose: the echo bubble (live journey) or this
+   * A one-task plan is pure prose: the echo bubble (live journey) or this
    * pinned echo line (restored) carries the whole confirm beat, and
    * starting = the user's next chat message (the router's start_run call,
-   * G-1) — no card, no pill, no Start button. The book row / payload /
+   * G-1) — no card, no pill, no Start button. The plan row / payload /
    * settlement are untouched; a rendering threshold only, derived from the
    * same intent the card would render. */
-  const singleTaskBook = planCardVisible && intent.tasks.length === 1
+  const singlePlan = planCardVisible && intent.tasks.length === 1
   /** echo 实体化 (2026-09-04, A2): the echo also lands as a real flow
    * message (answer-POST follow_ups push it before docking) — the card's
    * own echo line then stays hidden. Content match is exact: A1 stores
@@ -3636,7 +3636,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         m.content === intent.answer
     )
   const echoCarriedInFlow = liveBubblePresent || echoInFlow
-  const planCard = singleTaskBook ? (
+  const planCard = singlePlan ? (
     echoCarriedInFlow ? null : (
       <Message align="start">
         <MessageContent>
@@ -3672,7 +3672,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               shadow). Depth comes from bg contrast alone. */}
           <Card className="ring-0 bg-muted">
             <div className="flex flex-col gap-3 p-4">
-              {/* No card header, no section labels (2026-09-02 任务书瘦身):
+              {/* No card header, no section labels (2026-09-02 计划瘦身):
                   the assistant's own message above IS the introduction, and
                   the rows explain themselves. The identity echo ("Style: …")
                   retired into the prose — the card carries only the editable
@@ -3854,7 +3854,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                         {/* No-media inline warning (2026-09-02 新增): the
                             S11 signal used to live only in the prose + the
                             Start 422 — the row itself now names the problem
-                            and the way out. Data = the book's soft-signal
+                            and the way out. Data = the plan's soft-signal
                             reasons (clips_without_media). */}
                         {task.tool === "select_clips" &&
                           reasons.includes("clips_without_media") && (
@@ -3939,7 +3939,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       The message machine itself is untouched — only the shell changes. */
   /** Step marker label — the same chain as RunCard: live summary →
    * friendly stage copy → kind fallback. */
-  /** One conversation message with its anchors: superseded book-version
+  /** One conversation message with its anchors: superseded plan-version
    * chips sit right after the echo bubble whose turn produced them; an
    * in-flight live plan card anchors after its own echo bubble. */
   const renderConversationMessage = (m: OverlayMessage) => (
@@ -3998,8 +3998,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                 ATTACHED run renders ONLY through runStreamUnits (live
                 checklist → terminal receipt at the run anchors) — never
                 inline here. The stamp on the birthing row is an ANCHOR
-                marker, not a render trigger: the book-confirm start stamps
-                the pre-run book row, whose inline card would render the same
+                marker, not a render trigger: the plan-confirm start stamps
+                the pre-run plan row, whose inline card would render the same
                 run ABOVE the user's start message while the units render it
                 again below (the #157 scramble — two surfaces, two SSE
                 subscriptions, two step snapshots). Detached runs (older
@@ -4017,11 +4017,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       </MessageScrollerItem>
       {planVersions.map((version, index) =>
         version.messageId === m.id ? (
-          <MessageScrollerItem key={`${m.id}-book-v${index + 1}`}>
+          <MessageScrollerItem key={`${m.id}-plan-v${index + 1}`}>
             <PlanVersionChip
               n={index + 1}
-              book={version.book}
-              summary={titleOf(version.book)}
+              plan={version.plan}
+              summary={titleOf(version.plan)}
               expanded={expandedVersion === index}
               onToggle={() =>
                 setExpandedVersion(
@@ -4039,7 +4039,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           above the new user bubble and the thinking row. When
           the turn lands, the version chip takes this slot and
           the fresh card pins bottom-most again. */}
-      {planCardInline && planCard && m.id === liveBookMessageId ? (
+      {planCardInline && planCard && m.id === livePlanMessageId ? (
         <MessageScrollerItem key={`${m.id}-live-plan`}>
           {planCard}
         </MessageScrollerItem>
@@ -4208,7 +4208,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     through runStreamUnits — ONE path, the legacy fixed block
                     is dead 2026-09-09). A superseded plan version's chip sits
                     right after the echo bubble whose turn produced it; the
-                    live book is the bottom-most card. */}
+                    live plan is the bottom-most card. */}
                 {messages.map(renderConversationMessage)}
                   </>
                 )}
@@ -4281,15 +4281,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // The task-book confirm dock — chromeless content for the question pill
   // (plain — the pill owns the chrome, 拆粘 2026-09-02). Single row, no
   // Cancel (non-blocking question = no negative action, stadium 化同批).
-  // 任务书密度律 (ADR-054): HEAVY rendering only — a one-task book's
+  // 计划密度律 (ADR-054): HEAVY rendering only — a one-task plan's
   // confirm is the next chat message, no pill. 2026-09-11 user ruling
   // (ADR-063 K5 partial reversal): the pill is BACK in the desktop panel
   // form too — at the confirm moment nobody notices a button on the
   // canvas; the canvas task-book card keeps its own Confirm & run as the
   // second seat of the same beat (both ride handleStartGeneration).
-  const taskBookEstimate = pendingQuestion?.question?.estimate_credits?.total
-  const taskBookDock =
-    phase === "confirm" && intentReady && !chatBusy && !singleTaskBook ? (
+  const planEstimate = pendingQuestion?.question?.estimate_credits?.total
+  const planDock =
+    phase === "confirm" && intentReady && !chatBusy && !singlePlan ? (
       <QuestionDock
         kind="task_book"
         plain
@@ -4300,10 +4300,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         starting={isStarting}
         startDisabled={!canStartGeneration || chatBusy}
         estimate={
-          taskBookEstimate
+          planEstimate
             ? t("credits.range", {
-                low: taskBookEstimate[0],
-                high: taskBookEstimate[1],
+                low: planEstimate[0],
+                high: planEstimate[1],
               })
             : null
         }
@@ -4660,9 +4660,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               input group below, not to the question pill — a tall option
               list in a capsule is broken geometry anyway). Same dock-surface
               frost + hairline recipe. */}
-          {(taskBookDock || pillDock) && (
+          {(planDock || pillDock) && (
             <div className="dock-surface mb-2.5 overflow-hidden rounded-xl ring-1 ring-foreground/10">
-              {taskBookDock}
+              {planDock}
               {pillDock}
             </div>
           )}

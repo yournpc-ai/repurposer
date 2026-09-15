@@ -20,10 +20,10 @@ from app.tools import tool_catalog_lines
 
 
 def intent_router_system() -> str:
-    """The task-book builder's system prompt (book path).
+    """The plan builder's system prompt (plan path).
 
     revise_script is excluded from the catalog — it targets an EXISTING
-    output and the book path runs before the project's first run, when none
+    output and the plan path runs before the project's first run, when none
     exist."""
     return jinja_env.get_template("chat/intent_router_system.j2").render(
         tool_lines=tool_catalog_lines(exclude={"revise_script"}),

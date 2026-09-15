@@ -61,7 +61,7 @@ export interface ResultsCanvasProps {
    * the canvas. */
   healEpoch?: number
   /** The canvas is VISIBLE (the page's graph-world gate: first run OR a
-   * docked book's draft graph, K5). The settle key (initial framing) joins
+   * docked plan's draft graph, K5). The settle key (initial framing) joins
    * this with baselineReady: frame only when the visible, settled content
    * is present, never on a partial fetch frame (2026-09-06). */
   visible?: boolean
@@ -211,7 +211,7 @@ export function ResultsCanvas({
         label:
           spec.summary ??
           (spec.role === "task_book"
-            ? t("results.canvas.taskBook")
+            ? t("results.canvas.plan")
             : spec.role === "transcript"
               ? t("results.canvas.transcript")
               : spec.role === "research_brief"
@@ -491,13 +491,13 @@ export function ResultsCanvas({
   }, [])
 
   // ── Draft-confirm card (ADR-057 K5 — 确认 = 节点锚定) ──────────────────
-  // While the docked task book's draft graph is on the canvas, the desktop
+  // While the docked plan's draft graph is on the canvas, the desktop
   // confirm beat lives HERE: anchored at the task-book document node, the
   // whole chain's price folded from the draft nodes' OWN quotes (the same
   // numbers the draft cards read — never a second estimate source), the
   // balance as the soft compare, Start riding the dock's one start path
   // (the imperative handle — same guards, same grey-row failure surface).
-  // 任务书密度律 mirror (ADR-054): a one-task chain confirms by the next
+  // 计划密度律 mirror (ADR-054): a one-task chain confirms by the next
   // chat message — no card (it never earns the heavy rendering). The card
   // self-clears when the run starts (the draft nodes re-queue) and refreshes
   // when a refine re-docks (the graph re-stamps).
@@ -513,7 +513,7 @@ export function ResultsCanvas({
       ),
     [nodes],
   )
-  const taskBookDoc = useMemo(
+  const planDoc = useMemo(
     () => nodes.find((n) => n.spec?.role === "task_book") ?? null,
     [nodes],
   )
@@ -533,14 +533,14 @@ export function ResultsCanvas({
     () => draftNodes.filter((n) => n.estimateCredits == null).length,
     [draftNodes],
   )
-  // 任务书密度律 mirror (ADR-054): the chain's TASK count gates the heavy
+  // 计划密度律 mirror (ADR-054): the chain's TASK count gates the heavy
   // confirm, not the node count. C2b folded the compile-injected
   // materialize_source into its host family (it never grows a node), so
   // the draft node count IS the task count — the dead materialize filter
   // retired with the fold. The price fold above keeps every node.
   const draftTaskCount = draftNodes.length
   const draftConfirmVisible =
-    draftTaskCount >= 2 && taskBookDoc !== null && draftEstimate !== null
+    draftTaskCount >= 2 && planDoc !== null && draftEstimate !== null
 
   // The balance soft-compare, shared by both confirm cards (K4's prompt-
   // edit card on open, K5's resident draft card while the draft graph is
@@ -649,7 +649,7 @@ export function ResultsCanvas({
 
   // 动作住节点内 (2026-09-10 判词①): the pricing confirmation and the
   // draft world's confirm beat both dock INSIDE their nodes now — the
-  // surface only computes the payloads; the program region / the book card
+  // surface only computes the payloads; the program region / the plan card
   // render them in place (both ViewportPortal floating cards retired —
   // one less anchor-math pair, and the gesture lives where the eye is).
   const promptConfirmPayload =

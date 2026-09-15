@@ -141,7 +141,7 @@ async def update_persona(
     update_data = data.model_dump(exclude_unset=True)
     brand = update_data.get("brand")
     if isinstance(brand, dict):
-        # Craft keys (aspect/fillMode/captionEnabled) are task-book / recipe
+        # Craft keys (aspect/fillMode/captionEnabled) are plan / recipe
         # defaults, never persona fields — reject by name so hand-rolled API
         # callers learn the rule instead of silently getting their way.
         leaked = sorted(k for k in brand if k in PERSONA_CRAFT_KEYS)
@@ -149,7 +149,7 @@ async def update_persona(
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"Craft keys do not belong on a persona: {', '.join(leaked)} "
-                "(they are task-book / recipe defaults)",
+                "(they are plan / recipe defaults)",
             )
     for field, value in update_data.items():
         setattr(persona, field, value)

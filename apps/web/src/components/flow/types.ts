@@ -215,7 +215,7 @@ export interface FlowViewProps {
   } | null
   /** 动作住节点内 (判词①): the draft world's confirm beat docks INSIDE the
    * task-book document card (the retired floating card) — resident while
-   * the docked book's draft graph is up. */
+   * the docked plan's draft graph is up. */
   draftConfirm?: {
     low: number
     high: number

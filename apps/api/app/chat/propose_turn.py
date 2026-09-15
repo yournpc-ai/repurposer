@@ -125,7 +125,7 @@ class ChatTurn:
         )
         # A pending task_book rides the context as before, but it is never a
         # judgment subject on this path — its answers are the dock's Start /
-        # book-path turns (the same exclusion as prepare_chat_turn's
+        # plan-path turns (the same exclusion as prepare_chat_turn's
         # autoResume); judged settlement and the reminder tail apply to plain
         # questions only.
         self.pending = pending
@@ -133,7 +133,7 @@ class ChatTurn:
             pending is not None
             and (pending.question or {}).get("kind") == "question"
             # A blank turn (attachment-only: this path receives request.message
-            # verbatim — the stand-in line is a book-path local) carries nothing
+            # verbatim — the stand-in line is a plan-path local) carries nothing
             # to judge, so the question is not a judgment subject this turn,
             # period. "A blank message never auto-answers a docked checkpoint"
             # is a law, not a judgment (2026-09-05 S6d).
@@ -411,7 +411,7 @@ class ChatTurn:
                 raise WiringRejected("run: the resolved subgraph has nothing executable")
             # The edited programs pin the run's instruction (the writers'
             # GenerationContext.instruction steers the rewrite); the
-            # summary-only fallback keeps the run's book honest.
+            # summary-only fallback keeps the run's plan honest.
             instruction = "\n".join(
                 str(op.get("prompt")) for op in p.ops
                 if op.get("op") == "edit_prompt" and op.get("prompt")
@@ -435,7 +435,7 @@ class ChatTurn:
 
     async def _ask_user(self, params: ChatAskArgs, prose: str) -> str | None:
         """ask → the agent's question docks through the ask_user machinery
-        (task_book questions are raised solely by the book path, never
+        (task_book questions are raised solely by the plan path, never
         here). slot stays None — a post-run question never backfills the
         brief."""
         if not params.question.strip():
@@ -473,7 +473,7 @@ class ChatTurn:
     async def _answer(self, prose: str) -> str | None:
         """answer → a purely informational reply lands as a plain assistant
         message — no task, no run, no docked question (G-4, N-21; the same
-        archival shape as a book-path answer turn)."""
+        archival shape as a plan-path answer turn)."""
         if not prose.strip():
             return (
                 "an empty reply says nothing — speak the answer as your "

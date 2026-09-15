@@ -201,7 +201,7 @@ def _failure_detail(exc: Exception, ui_language: str) -> str | dict:
     path would surface). A STRUCTURED detail (the credits.insufficient
     payload, API.md §4) passes through as the object — the client renders
     its typed form (the dock's grey row), never a repr'd dict. LLMError
-    = the provider failed (no fabricated default book, 2026-08-14 裁定) —
+    = the provider failed (no fabricated default plan, 2026-08-14 裁定) —
     the localized provider line (errors.USER_ERROR_LINES) rides the frame;
     the raw 402/429/5xx text stays in structlog. Anything else is an
     internal failure — the JSON path answers "Internal server error" via the
@@ -400,7 +400,7 @@ async def send_chat_message(
         except LLMError as e:
             # Provider failure on the one-shot path — same honesty rule as
             # the SSE frame: 502 with the localized line, never a fabricated
-            # default book (editor dub endpoint precedent, routes/outputs).
+            # default plan (editor dub endpoint precedent, routes/outputs).
             raise HTTPException(
                 status.HTTP_502_BAD_GATEWAY,
                 user_error_line(e, current_ui_language() or "en"),
@@ -443,7 +443,7 @@ async def answer_message(
     """Answer a pending question (the ask_user machinery).
 
     The answer endpoint doubles as the resume mechanism — writing the answer
-    is what unblocks the pending decision: a task book start begins the run,
+    is what unblocks the pending decision: a plan start begins the run,
     a choice answer continues the conversation (the follow-up reply rides
     back in the response), interrupt wake lands in phase 4. Bail is a
     graceful exit, never an error.

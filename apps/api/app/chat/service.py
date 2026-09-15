@@ -10,14 +10,14 @@ The public surface is intentionally tiny: ``chat()`` takes a user message,
 locates or creates the right conversation, assembles deterministic context,
 and lets the intent agent propose (CHAT_ARCH §3). It is the ONLY intent
 surface (intent-surface-unification W1): project-scope turns before the
-first run — or while a task book is pending — go through the book path
-(``_book_turn``: build / refine / confirm the task book via the intent router);
+first run — or while a plan is pending — go through the plan path
+(``_plan_turn``: build / refine / confirm the plan via the intent router);
 everything else goes to the chat-path proposer (``_propose_turn``).
 
 ADR-077 判词② (2026-09-14): both turns run the bounded tool loop — the
 action union retired into the terminal tool set (type = tool name, fields =
 params), the guardrails live inside the executions, and the loop itself is
-side-effect-free (``app/chat/book_turn.py`` / ``app/chat/propose_turn.py``;
+side-effect-free (``app/chat/plan_turn.py`` / ``app/chat/propose_turn.py``;
 the two names above are shims). The write doors never moved:
 
 - propose_tasks / edit_graph → compile_graph via ``_create_run_from_tasks``
@@ -55,7 +55,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # The two chat agents no longer take calls HERE (the turn runners —
-# app/chat/book_turn.py / propose_turn.py — drive them through the tool
+# app/chat/plan_turn.py / propose_turn.py — drive them through the tool
 # loop); importing the declarations module keeps them registered in AGENTS
 # at startup (the orchestrator's roster self-check walks it).
 from app.chat.intent import chat_intent_agent as _chat_intent_agent  # noqa: F401
@@ -73,11 +73,11 @@ from app.models.schemas import (
     EditOpsProposal,
     InferredIntent,
     Option,
-    PendingBrief,
+    PendingPlan,
     ProjectStatus,
     QuestionPayload,
     QuestionProposal,
-    TaskBookEstimate,
+    PlanEstimate,
     TaskItem,
     TaskListProposal,
 )
@@ -117,10 +117,10 @@ _ASK_BACK_TEXT = (
 
 def _material_gate_text(text: str) -> str:
     """出书门槛·素材根 (ADR-052 B2 D2-C2): media-needing chain + brief
-    material "none" + no book on the table — the missing root is the material
+    material "none" + no plan on the table — the missing root is the material
     itself, so the reply asks for it and nothing docks (the retired
     zero-material net's S13 outcome, folded into the gate). Language follows
-    the turn's text — the book path's prose always speaks the user's language.
+    the turn's text — the plan path's prose always speaks the user's language.
     """
     if _prefers_zh(text):
         return (
@@ -157,7 +157,7 @@ def _topic_gate_question(text: str) -> dict[str, str]:
 
 def _draft_from_persona_echo(text: str) -> str:
     """出书门槛·默认路径声明 (提问策略③ / 验收③): asked once and still
-    rootless, the docked draft-from-persona book's echo is code-composed —
+    rootless, the docked draft-from-persona plan's echo is code-composed —
     a code-forced dock never borrows the LLM's voice for the declaration."""
     if _prefers_zh(text):
         return (
@@ -318,7 +318,7 @@ async def _create_run_from_tasks(
     SSE turn pump carries it as the turn.failed frame the dock renders as
     its grey row (入流灰行, 双路同语义).
 
-    ``instruction`` overrides the run's task-book instruction (default = the
+    ``instruction`` overrides the run's plan instruction (default = the
     summary): the wiring revision path pins the edited node program here
     (the writers' GenerationContext.instruction steers the rewrite).
 
@@ -373,9 +373,9 @@ def _prefers_zh(text: str) -> bool:
 
 async def _safe_task_estimate(
     db: AsyncSession, project: Project, tasks: list[TaskItem]
-) -> TaskBookEstimate | None:
+) -> PlanEstimate | None:
     """The dock payload's credits quotation, degraded like the derived
-    preview (the book-turn's own posture): an uncompilable/unquotable chain
+    preview (the plan-turn's own posture): an uncompilable/unquotable chain
     docks quote-less, never blocked."""
     from app.pipeline.orchestrator import derive_task_estimates  # deferred
 
@@ -431,7 +431,7 @@ def _merge_constraints(
 def merge_brief(update: Brief | None, stored: Brief) -> Brief:
     """Brief merge — pure (LLM proposes, code decides; 禁 LLM 合并槽位).
 
-    The router proposes a full update every book turn; code lands it per
+    The router proposes a full update every plan turn; code lands it per
     slot by source precedence (user-stated > inferred > default):
     - a no-opinion slot (value=None) never lands — the stored value survives;
     - the update wins when its source ranks AT LEAST the stored source's —
@@ -463,9 +463,9 @@ def _backfill_brief_slot(project: Project, slot: str, value: str) -> None:
     Creates the brief-only row when none exists (defensive — the ask dock
     normally wrote one)."""
     stored = (
-        PendingBrief.model_validate(project.pending_brief)
+        PendingPlan.model_validate(project.pending_brief)
         if isinstance(project.pending_brief, dict)
-        else PendingBrief()
+        else PendingPlan()
     )
     update = Brief()
     setattr(
@@ -622,7 +622,7 @@ def _resolved_caption_mode(project: Project) -> str | None:
     """The answered caption mode stashed on the pending brief, if any.
 
     The answer fast path writes it onto ``pending_brief.intent.caption_mode``
-    and every consumption site (book-turn overwrite, propose-turn run) must
+    and every consumption site (plan-turn overwrite, propose-turn run) must
     INHERIT it — a fresh call's ``caption_mode=None`` is "not mentioned
     this turn", never "the user retracted the answer".
     """
@@ -636,9 +636,9 @@ def _resolved_caption_mode(project: Project) -> str | None:
 
 def _has_resolved_caption_mode(project: Project) -> bool:
     """A caption-mode question was already answered and the answer is
-    reflected in the stored pending_brief — the next book turn re-uses it
+    reflected in the stored pending_brief — the next plan turn re-uses it
     instead of re-docking the question (the user has spoken). Mirrors the
-    pending_brief's role for the task book (CHAT_ARCH §3)."""
+    pending_brief's role for the plan (CHAT_ARCH §3)."""
     return _resolved_caption_mode(project) is not None
 
 
@@ -676,8 +676,8 @@ def _replay_stashed_caption_intent(message: Message) -> InferredIntent | None:
     Two shapes ride the question's ``intent`` field:
       - ``TaskListProposal`` from ``_propose_turn`` (chat_intent_agent path;
         carries ``type="task_list"`` + ``tasks`` + ``summary``) — we wrap it
-        back into an InferredIntent, the same shape book-path stores
-      - bare ``InferredIntent`` from ``_book_turn`` (intent_router path; first
+        back into an InferredIntent, the same shape plan-path stores
+      - bare ``InferredIntent`` from ``_plan_turn`` (intent_router path; first
         turn goes here) — used as-is, the LLM already gave us a complete intent
 
     Returns None when the stash is missing or unrecognized — the caller
@@ -694,7 +694,7 @@ def _replay_stashed_caption_intent(message: Message) -> InferredIntent | None:
             return None
         return InferredIntent(tasks=tlp.tasks)
     if "tasks" in stashed and "action" in stashed:
-        # _book_turn path: bare InferredIntent (the intent router's payload)
+        # _plan_turn path: bare InferredIntent (the intent router's payload)
         try:
             return InferredIntent.model_validate(stashed)
         except Exception:  # noqa: BLE001
@@ -702,15 +702,15 @@ def _replay_stashed_caption_intent(message: Message) -> InferredIntent | None:
     return None
 
 
-async def _compute_book_reasons(
+async def _compute_plan_reasons(
     db: AsyncSession,
     project: Project,
     intent: InferredIntent,
 ) -> list[str]:
-    """Re-derive the soft-signal reasons for a docked task book (Phase 1
+    """Re-derive the soft-signal reasons for a docked plan (Phase 1
     answer path needs this — the caption_mode replay rebuilds the
-    PendingBrief from the stashed intent and the reasons computed in
-    _book_turn are scoped to that function's stack).
+    PendingPlan from the stashed intent and the reasons computed in
+    _plan_turn are scoped to that function's stack).
 
     Pure function over (db, project, intent) — the answer path passes the
     replay_intent (caption_mode already stamped) and the project, and gets
@@ -740,8 +740,8 @@ async def _compute_book_reasons(
 def _needs_media(tool: str) -> bool:
     """True iff a tool's node requires MEDIA or materializes source.
 
-    Hoisted out of _book_turn (2026-08-25) so the answer path's
-    ``_compute_book_reasons`` and the book path's carve-out can both
+    Hoisted out of _plan_turn (2026-08-25) so the answer path's
+    ``_compute_plan_reasons`` and the plan path's carve-out can both
     call it. Registry-native: walks ``node.requires`` + ``node.after``
     rather than maintaining a parallel tool list (RECIPES §4.6).
     """
@@ -771,7 +771,7 @@ async def _active_run_line(
     clear. Deliberately lock-free: locking the project row here would invert
     the Start path's Message→Project lock order (deadlock). The millisecond
     check-then-dock window this leaves is backstopped by create_run's own
-    serialized guard — a zombie book confirmed later gets the clean
+    serialized guard — a zombie plan confirmed later gets the clean
     RunAlreadyActiveError 422, never a second run."""
     from app.pipeline.orchestrator import has_active_run  # deferred: import cycle
 
@@ -826,7 +826,7 @@ async def latest_pending_question(
     return result.scalar_one_or_none()
 
 
-def is_pending_task_book(message: Message | None) -> bool:
+def is_pending_plan(message: Message | None) -> bool:
     """A startable confirmation target (G-1): an unanswered task_book
     question — the only question kind a prose "start it" may answer."""
     return (
@@ -953,7 +953,7 @@ async def finalize_bailed_runs(run_ids: list[UUID]) -> None:
 
 def _task_chain_digest(tasks: list) -> str:
     """The chain's compact digest — fed to the intent router as the presented
-    book (it revises the WHOLE chain, so it must see every task + param) and
+    plan (it revises the WHOLE chain, so it must see every task + param) and
     used as the summary fallback when no derived preview exists."""
     labels = []
     for task in tasks:
@@ -975,7 +975,7 @@ def _task_chain_digest(tasks: list) -> str:
     return ", ".join(labels)
 
 
-async def sync_task_book_question(
+async def sync_plan_question(
     db: AsyncSession,
     user_id: UUID,
     project: Project,
@@ -985,14 +985,14 @@ async def sync_task_book_question(
     derived: list[dict] | None = None,
     brief: Brief | None = None,
     echo: str | None = None,
-    estimate: TaskBookEstimate | None = None,
+    estimate: PlanEstimate | None = None,
 ) -> list[UUID]:
     """Keep exactly one pending task_book question per project conversation.
 
-    Called by the chat book path on every inference (first call and
+    Called by the chat plan path on every inference (first call and
     refinements alike): a fresh conversation first archives the original
     prompt, any still-open plan question is retired as superseded, and the
-    new task book becomes the pending question. The needs_clarification
+    new plan becomes the pending question. The needs_clarification
     ``reasons`` ride in the question's human text (data, localized at render)
     so the archive and the LLM context record WHY confirmation was asked.
     ``brief`` (ADR-052 B3) stamps the merged brief into the question payload
@@ -1001,7 +1001,7 @@ async def sync_task_book_question(
     quotation (total + per-task marginal, the dry-run compile's fold × the
     live ratio) — the dock pill reads the total, the plan card's task rows
     the per-task prices; None docks quote-less, never blocked. ``echo`` = the
-    turn's book-introduction prose (intent.answer,
+    turn's plan-introduction prose (intent.answer,
     or the stored draft's echo on a code-path re-dock) — since 2026-09-04 it
     IS the row's ``content`` so the echo survives as a real message entity
     (live journey pushes it into the flow before docking; the restore replay
@@ -1033,7 +1033,7 @@ async def sync_task_book_question(
     # never baked into content, which is user-facing prose (the answered
     # question renders it verbatim). The LLM context line re-appends them (keys are
     # the agent's vocabulary).
-    # 任务书行自完备 (2026-09-08, 方案 B): the chain stamps the row's `intent`
+    # 计划行自完备 (2026-09-08, 方案 B): the chain stamps the row's `intent`
     # column and the derived preview the payload — the docked row IS the
     # whole plan card (the B3 brief stamp's precedent: frozen with the row,
     # re-stamped every dock), and the SSE envelope needs no pending-brief
@@ -1055,7 +1055,7 @@ async def sync_task_book_question(
     # canvas's preview as DRAFT nodes through the birthplace's own compile
     # (same fill keys → Start fills them in place). A chain the birthplace
     # would reject degrades exactly like the quote-less dock (the derived
-    # preview's posture): the book docks, the stale preview tears down, and
+    # preview's posture): the plan docks, the stale preview tears down, and
     # Start 422s for real.
     from app.pipeline.graph_fill import (  # deferred: import cycle
         clear_draft_graph,
@@ -1064,7 +1064,7 @@ async def sync_task_book_question(
     from app.ui_locale import current_ui_language  # deferred: request ctx
 
     try:
-        # 全文卡律 (判词④): the book doc's face = the intent's own plan
+        # 全文卡律 (判词④): the plan doc's face = the intent's own plan
         # prose (intent.answer) — never the deterministic condensed
         # composition (blind to transform chains).
         await stamp_draft_graph(
@@ -1103,7 +1103,7 @@ async def dock_interrupt_question(
     return message, bailed_run_ids
 
 
-async def discard_unanswered_task_book(
+async def discard_unanswered_plan(
     db: AsyncSession,
     user_id: UUID,
     project_id: UUID,
@@ -1156,8 +1156,8 @@ async def answer_question(
                            user-stated and resumes the BOOK path
     - question + bail    → record only (a graceful exit, never a failure) —
                            except a brief-ask bail, which TAKES the default
-                           path: the book path resumes and docks the
-                           draft-from-persona book (提问策略③)
+                           path: the plan path resumes and docks the
+                           draft-from-persona plan (提问策略③)
     A question carrying ``workflow_run_id`` is a direction interrupt
     (期 4): the answer wakes the parked run (spec.answer → node back to
     pending → run back to RUNNING); bail settles the node done, cascade-
@@ -1179,7 +1179,7 @@ async def answer_question(
 
     # Row lock to the request boundary: a double-clicked Start (or retry)
     # otherwise passes the answer-is-None check concurrently and births two
-    # paid runs off one task book. The second waiter re-reads post-commit and
+    # paid runs off one plan. The second waiter re-reads post-commit and
     # hits the 409 below.
     message = await db.get(Message, message_id, with_for_update=True)
     if message is None:
@@ -1235,8 +1235,8 @@ async def answer_question(
     # Caption-mode fast path (Phase 1, 2026-08-25, RECIPES §4.7): the question
     # is one of ours when every option_id starts with ``caption_mode_``. The
     # user picked a mode, so we re-stitch the stashed intent (a TaskListProposal
-    # from _propose_turn, or a bare InferredIntent from _book_turn's first
-    # turn) into an InferredIntent + PendingBrief and dock a task_book
+    # from _propose_turn, or a bare InferredIntent from _plan_turn's first
+    # turn) into an InferredIntent + PendingPlan and dock a task_book
     # question — the user then confirms with Start like any normal generation.
     # Skipping _propose_turn here is intentional: the LLM would re-derive the
     # task list from the option label alone, which is the brittle 续聊 path.
@@ -1261,13 +1261,13 @@ async def answer_question(
                         db, UUID(str(project.id))
                     ) or ""
                     # The stashed InferredIntent already carries tasks +
-                    # specific_instruction (from the book path) — keep them
+                    # specific_instruction (from the plan path) — keep them
                     # verbatim, just stamp caption_mode. The chat path
                     # stashed a TaskListProposal (no specific_instruction) —
                     # synthesize one from the prompt so the downstream
                     # text-tribe agents see the user's intent. caption_mode
                     # itself rides the structured field end-to-end
-                    # (intent → PendingBrief → TaskSpec → run.context) —
+                    # (intent → PendingPlan → TaskSpec → run.context) —
                     # no machine marker in the prose.
                     if stashed_intent.specific_instruction:
                         replay_intent = stashed_intent.model_copy(
@@ -1281,18 +1281,18 @@ async def answer_question(
                             }
                         )
                     # The brief rides along verbatim — the caption answer
-                    # is not a book turn; no merge, just preservation.
+                    # is not a plan turn; no merge, just preservation.
                     preserved_brief = (
                         Brief.model_validate(project.pending_brief["brief"])
                         if isinstance(project.pending_brief, dict)
                         and isinstance(project.pending_brief.get("brief"), dict)
                         else Brief()
                     )
-                    project.pending_brief = PendingBrief(
+                    project.pending_brief = PendingPlan(
                         prompt=prompt_text,
                         intent=replay_intent,
                         brief=preserved_brief,
-                        reasons=await _compute_book_reasons(db, project, replay_intent),
+                        reasons=await _compute_plan_reasons(db, project, replay_intent),
                         persona_id=(
                             project.pending_brief.get("persona_id")
                             if isinstance(project.pending_brief, dict)
@@ -1300,10 +1300,10 @@ async def answer_question(
                         ),
                         derived=[],
                     ).model_dump(mode="json")
-                    # sync_task_book_question docks a task_book question; its
+                    # sync_plan_question docks a task_book question; its
                     # bailed_run_ids are the cascade-bailed run interrupts (none
                     # here, but the contract is the same).
-                    bailed_run_ids = await sync_task_book_question(
+                    bailed_run_ids = await sync_plan_question(
                         db, user_id, project, replay_intent, prompt_text,
                         reasons=project.pending_brief["reasons"],
                         brief=preserved_brief,
@@ -1313,7 +1313,7 @@ async def answer_question(
                         ),
                     )
                     follow_up = await latest_pending_question(db, UUID(str(conversation.id)))
-                    # Skip the 续聊 fallback below — the task book question is
+                    # Skip the 续聊 fallback below — the plan question is
                     # the follow_up, no need to re-propose.
                     await db.commit()
                     if bailed_run_ids:
@@ -1328,11 +1328,11 @@ async def answer_question(
         if project is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
         if data.kind == "bail":
-            # Graceful exit: the unconfirmed task book is dropped, the project
+            # Graceful exit: the unconfirmed plan is dropped, the project
             # stays a draft and the prompt stays in the conversation — the
-            # setup can be reopened any time. Never a failure. The book's
+            # setup can be reopened any time. Never a failure. The plan's
             # draft graph goes with it (K5 — asset nodes stay: they are the
-            # project's inputs, never the book's).
+            # project's inputs, never the plan's).
             project.pending_brief = None
             from app.pipeline.graph_fill import clear_draft_graph  # deferred
 
@@ -1340,30 +1340,30 @@ async def answer_question(
         else:
             # kind == "start" (the only other kind a task_book accepts).
             pending = (
-                PendingBrief.model_validate(project.pending_brief)
+                PendingPlan.model_validate(project.pending_brief)
                 if isinstance(project.pending_brief, dict)
                 else None
             )
             if pending is None:
                 raise HTTPException(
-                    status.HTTP_409_CONFLICT, "No pending task book to start."
+                    status.HTTP_409_CONFLICT, "No pending plan to start."
                 )
-            # The review panel's edited task book wins over the stored
+            # The review panel's edited plan wins over the stored
             # pending brief — panel edits must reach the run they confirm.
             # Panel edits ARE task-list mutations (ADR-043): the same data
             # structure the LLM proposes, so the confirmed chain ships
             # verbatim — no merge machinery.
             intent = data.intent or pending.intent
             if intent is None:
-                # Brief-only row (ask-turn write) — no book was ever drafted.
+                # Brief-only row (ask-turn write) — no plan was ever drafted.
                 raise HTTPException(
-                    status.HTTP_409_CONFLICT, "No pending task book to start."
+                    status.HTTP_409_CONFLICT, "No pending plan to start."
                 )
             # caption_mode is intent metadata the review panel never edits —
             # a panel-submitted intent without it (client-side normalize may
             # strip fields it doesn't know) says "not mentioned", never
             # "retracted". Inherit the answered mode from the stored pending
-            # intent (2026-08-29 — the same doctrine as the book-turn
+            # intent (2026-08-29 — the same doctrine as the plan-turn
             # overwrite fix; without it, answer→Start via the PANEL dropped
             # the mode even though answer→Start via prose kept it).
             if (
@@ -1378,7 +1378,7 @@ async def answer_question(
             if not tasks:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    "The task book is empty — nothing to start.",
+                    "The plan is empty — nothing to start.",
                 )
             # The confirmed chain's draft twin must mirror what Start
             # actually runs (K5): the review panel's hand edits (data.intent)
@@ -1407,13 +1407,13 @@ async def answer_question(
                 # param): derive it from the first task that carries one.
                 if on_phase is not None:
                     # Same labelled beat as the chat path's start branch
-                    # (_book_turn): the run is about to be born.
+                    # (_plan_turn): the run is about to be born.
                     await on_phase(THINKING_PHASE_CREATING_RUN)
                 if not (intent.name or "").strip():
                     # Same observability seat as _create_run_from_tasks
-                    # (ADR-058): the book SHOULD carry the router's name.
+                    # (ADR-058): the plan SHOULD carry the router's name.
                     logger.info(
-                        "unnamed_proposal", path="book_start",
+                        "unnamed_proposal", path="plan_start",
                         project_id=str(project.id),
                     )
                 run = await create_run(
@@ -1440,7 +1440,7 @@ async def answer_question(
                         # the InferredIntent — the chat path's caption-mode
                         # question stores it on the intent (RECIPES §4.7).
                         caption_mode=intent.caption_mode,
-                        # The router's fresh naming of the book (ADR-058) —
+                        # The router's fresh naming of the plan (ADR-058) —
                         # the receipt title and completion line read it.
                         name=intent.name or None,
                     ),
@@ -1466,7 +1466,7 @@ async def answer_question(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)
                 ) from exc
             project.status = ProjectStatus.PROCESSING
-            # The task book is confirmed now — drop the unconfirmed copy.
+            # The plan is confirmed now — drop the unconfirmed copy.
             project.pending_brief = None
             message.workflow_run_id = run.id
 
@@ -1492,12 +1492,12 @@ async def answer_question(
         history = await list_conversation_messages(db, UUID(str(conversation.id)))
         if question.slot is not None and project is not None:
             # ask 一等动作的答复回填 (ADR-052 B2 D2-C1): the brief slot takes
-            # the answer user-stated, then the book path resumes on the
-            # enriched brief — draft the (now-rooted) book or ask the next
+            # the answer user-stated, then the plan path resumes on the
+            # enriched brief — draft the (now-rooted) plan or ask the next
             # deciding slot. The answer text rides as the turn's message so
             # the router sees it as the user's own words.
             _backfill_brief_slot(project, question.slot, say)
-            follow_up, _run_id, _answered, bailed_run_ids = await _book_turn(
+            follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
                 db,
                 user_id,
                 conversation,
@@ -1519,14 +1519,14 @@ async def answer_question(
 
     elif question.kind == "question" and data.kind == "bail" and question.slot is not None:
         # 默认路径 (提问策略③ / D2-C2): skipping a brief ask TAKES the default
-        # path — the book path resumes and the 出书门槛 docks the
-        # draft-from-persona book (the asked roll already bounds the loop).
+        # path — the plan path resumes and the 出书门槛 docks the
+        # draft-from-persona plan (the asked roll already bounds the loop).
         # Nothing backfills; the stand-in line only feeds the inference (it
         # is never persisted as a user message).
         project = await db.get(Project, conversation.project_id)
         if project is not None:
             history = await list_conversation_messages(db, UUID(str(conversation.id)))
-            follow_up, _run_id, _answered, bailed_run_ids = await _book_turn(
+            follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
                 db,
                 user_id,
                 conversation,
@@ -1535,7 +1535,7 @@ async def answer_question(
                     project_id=project.id,
                     message=(
                         "(The user skipped my question — take the default "
-                        "path and draft the task book.)"
+                        "path and draft the plan.)"
                     ),
                 ),
                 recent=history[-5:],
@@ -1583,7 +1583,7 @@ async def seed_project_prompt(
     """Create the project-scoped conversation and store the original prompt.
 
     A no-op when the conversation already has messages — the first message
-    normally lands via the chat book path, so /generate callers must not
+    normally lands via the chat plan path, so /generate callers must not
     duplicate it.
     """
     conversation = await _get_or_create_project_conversation(db, user_id, project_id)
@@ -1598,7 +1598,7 @@ async def seed_project_prompt(
     return await _create_message(db, conversation_id, "user", prompt)
 
 
-async def _book_turn(
+async def _plan_turn(
     db: AsyncSession,
     user_id: UUID,
     conversation: Conversation,
@@ -1611,10 +1611,10 @@ async def _book_turn(
     on_tool_call=None,
     on_tool_ready=None,
 ) -> tuple[Message, UUID | None, Message | None, list[UUID]]:
-    """Book path (intent-surface-unification W1): build / refine / confirm
-    the task book inside the chat loop — the ONLY intent surface.
+    """Plan path (intent-surface-unification W1): build / refine / confirm
+    the plan inside the chat loop — the ONLY intent surface.
 
-    Entered for project-scope turns while a task book is pending (refine or
+    Entered for project-scope turns while a plan is pending (refine or
     prose confirmation) or before the project's first run (first turn / after
     a bail). Returns the assistant message (the docked/answered question row
     for draft/ask/start), the started run id, the answered task-book question
@@ -1622,15 +1622,15 @@ async def _book_turn(
     caller commits — except the start branch, where answer_question commits.
 
     ADR-077 判词② (2026-09-14): the dispatch retired into the tool
-    loop — this body is a shim; the turn lives in ``app/chat/book_turn.py``
+    loop — this body is a shim; the turn lives in ``app/chat/plan_turn.py``
     (the intent router's terminal tools present_plan / ask_user / start_run /
     answer, guardrails inside the executions). Deferred import: the runner
     imports THIS module's machinery (the ask_user machinery, the docks, the
     gate texts).
     """
-    from app.chat.book_turn import run_book_turn
+    from app.chat.plan_turn import run_plan_turn
 
-    return await run_book_turn(
+    return await run_plan_turn(
         db,
         user_id,
         conversation,
@@ -1698,7 +1698,7 @@ class PreparedTurn:
     Everything decided before the LLM call: conversation, the persisted user
     message, a deterministically answered question (autoResume), the canned
     interrupt-resume reply when the turn needs no LLM at all, and the
-    book-path dispatch bit. All 4xx-raising validation lives in phase 1 so a
+    plan-path dispatch bit. All 4xx-raising validation lives in phase 1 so a
     streaming route can raise plain HTTP errors before the SSE response
     starts; phase 2 (``execute_chat_turn``) only runs the agent turn, commits
     once at the end, and assembles the response.
@@ -1712,7 +1712,7 @@ class PreparedTurn:
     history: list[Message]
     answered_question: Message | None
     interrupt_reply: Message | None
-    book_path: bool
+    plan_path: bool
 
 
 async def prepare_chat_turn(
@@ -1784,7 +1784,7 @@ async def prepare_chat_turn(
     # judged answer settles the row — an interjection leaves it pending
     # and the reply gets the reminder tail). A pending task_book
     # (unconfirmed plan) never resumes here: its answers are the dock's
-    # Start and book-path refinements below.
+    # Start and plan-path refinements below.
     answered_question: Message | None = None
     pending = await latest_pending_question(db, conversation_id)
     if pending is not None:
@@ -1806,7 +1806,7 @@ async def prepare_chat_turn(
                 and answered_question.workflow_run_id is None
             ):
                 # ask 一等动作的 autoResume 回填 (ADR-052 B2 D2-C1): same
-                # user-stated backfill as the answer endpoint — the book
+                # user-stated backfill as the answer endpoint — the plan
                 # path dispatch below then re-judges on the enriched brief.
                 _backfill_brief_slot(
                     project,
@@ -1816,7 +1816,7 @@ async def prepare_chat_turn(
             await db.flush()
 
     interrupt_reply: Message | None = None
-    book_path = False
+    plan_path = False
     if answered_question is not None and answered_question.workflow_run_id is not None:
         # Interrupt autoResume (期 4): a typed answer to the docked direction
         # question takes the same dispatch as the answer endpoint — wake the
@@ -1844,30 +1844,30 @@ async def prepare_chat_turn(
             else f"Direction locked: {decided}. Resuming the run.",
         )
     else:
-        # Book path dispatch (intent-surface-unification W1): this endpoint is
-        # the ONLY intent surface. A turn goes to the book path (task-book
-        # build / refine / confirm via the intent router) while a task book is
+        # Plan path dispatch (intent-surface-unification W1): this endpoint is
+        # the ONLY intent surface. A turn goes to the plan path (plan
+        # build / refine / confirm via the intent router) while a plan is
         # pending or before the project's first run; everything else goes to
         # the four-state proposer. (Conversations are project-scope only —
         # ADR-041 D8.)
         if project is not None:
-            if is_pending_task_book(pending):
-                book_path = True
+            if is_pending_plan(pending):
+                plan_path = True
             elif (
                 answered_question is not None
                 and isinstance(answered_question.question, dict)
                 and answered_question.question.get("slot")
             ):
-                # ask 一等动作的答复回 book path (D2-C1): the backfill already
-                # landed above — the book path re-judges on the enriched
-                # brief (draft the rooted book, or ask the next slot).
-                book_path = True
+                # ask 一等动作的答复回 plan path (D2-C1): the backfill already
+                # landed above — the plan path re-judges on the enriched
+                # brief (draft the rooted plan, or ask the next slot).
+                plan_path = True
             elif (
                 not isinstance(project.pending_brief, dict)
                 or project.pending_brief.get("intent") is None
             ):
                 # A brief-only pending_brief row (an ask-turn write) keeps
-                # the pre-run probe — the project is still in its book phase.
+                # the pre-run probe — the project is still in its plan phase.
                 has_runs = (
                     await db.execute(
                         select(WorkflowRun.id)
@@ -1875,7 +1875,7 @@ async def prepare_chat_turn(
                         .limit(1)
                     )
                 ).scalar_one_or_none()
-                book_path = has_runs is None
+                plan_path = has_runs is None
 
     return PreparedTurn(
         user_id=user_id,
@@ -1886,7 +1886,7 @@ async def prepare_chat_turn(
         history=history,
         answered_question=answered_question,
         interrupt_reply=interrupt_reply,
-        book_path=book_path,
+        plan_path=plan_path,
     )
 
 
@@ -1897,7 +1897,7 @@ async def prepare_chat_turn(
 # "Thinking…" with zero information (user ruling: the label earns its place
 # only when the activity structurally differs from thinking).
 THINKING_PHASE_CREATING_RUN = "creating_run"
-# The call is a draft — brief write + book dock + the draft-graph stamp
+# The call is a draft — brief write + plan dock + the draft-graph stamp
 # (compile + estimate folds) fill the seconds between the echo's end and
 # the plan card's arrival (the window the 10s-gap forensics named).
 THINKING_PHASE_DRAFTING = "drafting"
@@ -1954,14 +1954,14 @@ async def execute_chat_turn(
         assistant_message = prepared.interrupt_reply
         run_id = None
         bailed_run_ids: list[UUID] = []
-    elif prepared.book_path:
+    elif prepared.plan_path:
         # The intent router's context excludes this turn's own message (already
         # the prompt being judged); the latest few rounds before it are the
         # disambiguating conversation (G-7).
         recent = [
             m for m in prepared.history if m.id != prepared.user_message.id
         ][-5:]
-        assistant_message, run_id, book_answered, bailed_run_ids = await _book_turn(
+        assistant_message, run_id, plan_answered, bailed_run_ids = await _plan_turn(
             db,
             prepared.user_id,
             prepared.conversation,
@@ -1974,8 +1974,8 @@ async def execute_chat_turn(
             on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready,
         )
-        if book_answered is not None:
-            prepared.answered_question = book_answered
+        if plan_answered is not None:
+            prepared.answered_question = plan_answered
     else:
         assistant_message, run_id, bailed_run_ids, chat_settled = await _propose_turn(
             db,

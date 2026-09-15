@@ -82,7 +82,7 @@ def _align_storyboard_slots(
 ) -> list[StoryboardSlot]:
     """Zip storyboard slots 1:1 onto the task slots (same type, in order).
 
-    The task book's explicit fields (count/focus/tone_override) are binding —
+    The plan's explicit fields (count/focus/tone_override) are binding —
     code enforces them here so the planner's remaining freedom is exactly
     the vacancies: argument_ids / quote_candidates / cta (and focus when the
     slot left it open). Same-type multi slots keep the canonical order both
@@ -108,7 +108,7 @@ def _align_storyboard_slots(
 async def _interrupt_direction(
     db: AsyncSession, node: WorkflowStep
 ) -> dict | None:
-    """The direction interrupt's answer as task-book input (期 4).
+    """The direction interrupt's answer as plan input (期 4).
 
     Read off the plan node's interrupt upstream (matched by kind, never by
     position): option → the chosen argument as a priority; freeform → the

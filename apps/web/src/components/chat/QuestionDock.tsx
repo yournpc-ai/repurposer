@@ -10,8 +10,8 @@
  *   negative action). No reasons line — the agent's inference bookkeeping
  *   (chain_default / clip_count_default) is not user copy; the plan card
  *   above carries the substance and the streamed echo carries the caveats.
- *   Rendered only for ≥2-task chains (任务书密度律 ADR-054 — a one-task
- *   book is pure prose; ChatDock owns the threshold).
+ *   Rendered only for ≥2-task chains (计划密度律 ADR-054 — a one-task
+ *   plan is pure prose; ChatDock owns the threshold).
  * - question (形态律 ADR-053 R1, 阻塞形态 2026-09-04 用户拍板翻回):
  *   while an OPTIONS question is pending the chat input row and the
  *   disclaimer HIDE — the dock IS the question (FLORA/Opus 双参照同款：两家
@@ -61,7 +61,7 @@ export interface DockOption {
   label: string
 }
 
-interface TaskBookDockProps {
+interface PlanDockProps {
   kind: "task_book"
   /** The confirm display line (localized). */
   question: string
@@ -104,11 +104,11 @@ interface OptionDockProps {
   plain?: boolean
 }
 
-export type QuestionDockProps = TaskBookDockProps | OptionDockProps
+export type QuestionDockProps = PlanDockProps | OptionDockProps
 
 const AUTONOMY_TIERS: Autonomy[] = ["auto", "review"]
 
-function TaskBookForm({
+function PlanForm({
   question,
   autonomy,
   onAutonomyChange,
@@ -117,7 +117,7 @@ function TaskBookForm({
   startDisabled,
   estimate,
   plain,
-}: TaskBookDockProps) {
+}: PlanDockProps) {
   const { t } = useTranslation()
   return (
     // ONE row (2026-09-02 stadium 化): ✓ + confirm line … Start — the FLORA
@@ -322,5 +322,5 @@ function OptionForm({
 
 export function QuestionDock(props: QuestionDockProps) {
   if (props.kind === "question") return <OptionForm {...props} />
-  return <TaskBookForm {...props} />
+  return <PlanForm {...props} />
 }

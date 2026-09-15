@@ -115,7 +115,7 @@ async def resolve_run_persona(
     project: Project,
 ) -> Persona | None:
     """The persona a run generates with: the run-pinned choice
-    (``run.context.persona_id``, written at task-book confirmation) → the
+    (``run.context.persona_id``, written at plan confirmation) → the
     project mount → the user's default persona. A historical run context's
     ``brand_template_id`` key is ignored on read — re-runs fall back to the
     persona skin.

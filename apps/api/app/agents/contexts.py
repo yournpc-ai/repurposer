@@ -4,7 +4,7 @@ One home for the deterministic prompt-context assembly every agent call
 stands on — the services orchestrate, they never assemble:
 
 - ``_generation_context`` — the GenerationContext every generation node
-  builds from the run's task book (moved from ``pipeline/step_context.py``,
+  builds from the run's plan (moved from ``pipeline/step_context.py``,
   which keeps the mechanical media/digest helpers).
 - ``_build_context`` — the chat loop's intent context: project summary
   (assets / visible outputs / latest run), the recent rounds, the
@@ -64,7 +64,7 @@ def _generation_context(
     *,
     brand_music_id: str | None = None,
 ) -> GenerationContext:
-    """Assemble the GenerationContext from the run's task book (context)."""
+    """Assemble the GenerationContext from the run's plan (context)."""
     ctx = run.context or {}
     tone_raw = ctx.get("tone_settings")
     return GenerationContext(
@@ -215,7 +215,7 @@ async def _build_context(
                 line += f" [attached: {', '.join(attached)}]"
             qreasons = (m.question or {}).get("reasons") or []
             if qreasons:
-                # Task-book needs-check keys are data for the agent (its
+                # Plan needs-check keys are data for the agent (its
                 # vocabulary) — they live on the payload, never in prose.
                 line += f" (needs check: {', '.join(qreasons)})"
             if m.question and m.answer:

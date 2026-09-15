@@ -45,7 +45,7 @@ def _expected_media_needing() -> set[str]:
 def _expected_writers() -> set[str]:
     """Fresh-chain copy writers: produce outputs, need nothing, no media
     file. revise_script is excluded by design — it targets an EXISTING
-    output and never rides a fresh chain (the book path's catalog excludes
+    output and never rides a fresh chain (the plan path's catalog excludes
     it, prompts.py), so the no-material block never enumerates it."""
     return {
         name

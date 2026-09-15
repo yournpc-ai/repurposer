@@ -6,7 +6,7 @@ editing sessions) — this gate asserts ABSOLUTE minimum rates for the LIVE
 prompt, so a regression is caught before deploy, not after. Three probes,
 same contexts as the A/B instrument:
 
-- A:start-call — a book on the table + "looks good, start" must call
+- A:start-call — a plan on the table + "looks good, start" must call
   start_run (never a same-chain re-plan). Measured band 9-11/12 across all
   prompt versions; threshold 8 catches a real regression (the 2/5-era
   degradation) with flake headroom.
@@ -23,8 +23,8 @@ same contexts as the A/B instrument:
 Tool-loop form (ADR-077 判词②, 2026-09-14): the agent is the ToolLoopAgent,
 the action IS the terminal tool call, and the predicates read
 ``LoopResult`` — the thresholds are UNCHANGED. T2b (2026-09-15): the gate's
-agent carries the production tool set INCLUDING the book path's read tools
-(BOOK_READ_TOOLS — the registry perturbation is the thing being gated), and
+agent carries the production tool set INCLUDING the plan path's read tools
+(PLAN_READ_TOOLS — the registry perturbation is the thing being gated), and
 the stub execute answers reads with a ToolObservation so the loop iterates
 to its terminal call exactly like production.
 
@@ -51,10 +51,10 @@ from app.agents.tool_loop import (  # noqa: E402
     ToolLoopAgent,
     ToolObservation,
 )
-from app.chat.intent import _assemble_book_turn  # noqa: E402
+from app.chat.intent import _assemble_plan_turn  # noqa: E402
 from app.chat.perception import PERCEPTION_TOOLS  # noqa: E402
 from app.chat.prompts import intent_router_system  # noqa: E402
-from app.chat.turn_tools import BOOK_READ_TOOLS, BOOK_TOOLS  # noqa: E402
+from app.chat.turn_tools import PLAN_READ_TOOLS, PLAN_TOOLS  # noqa: E402
 from app.models.schemas import Brief, BriefSlotSource  # noqa: E402
 from app.models.tables import Message  # noqa: E402
 
@@ -90,7 +90,7 @@ TOPIC_QUESTION = Message(
 PROBE_A = {
     "message": "looks good, start",
     "brief": BRIEF_ANSWERED,
-    "presented_book": "write_post (language: en) — 'EU AI Act post for researchers'",
+    "presented_plan": "write_post (language: en) — 'EU AI Act post for researchers'",
     "recent": [
         "user: I want a social post.",
         "assistant: What topic should the post cover — one phrase is enough?",
@@ -169,8 +169,8 @@ async def main() -> int:
         prompt="intent_router.j2",
         system=intent_router_system(),
         temperature=0.2,
-        assemble=_assemble_book_turn,
-        tools=[*BOOK_TOOLS, *BOOK_READ_TOOLS],
+        assemble=_assemble_plan_turn,
+        tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS],
         max_iterations=6,
     )
     probes = {"A": PROBE_A, "B": PROBE_B, "C": PROBE_C}

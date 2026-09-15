@@ -169,7 +169,7 @@ def _node_slot(node: WorkflowStep, ctx: dict, slot_type: str) -> IntentSlot | No
 
     Compiled nodes carry it in spec (``spec.slot`` — the chain's compile-time
     projection); the context fallback is read tolerance for pre-ADR-043 runs
-    (their slots lived on run.context.outputs), then None = all task-book
+    (their slots lived on run.context.outputs), then None = all plan
     defaults."""
     raw = (node.spec or {}).get("slot")
     if isinstance(raw, dict):

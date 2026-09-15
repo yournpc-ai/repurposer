@@ -67,7 +67,7 @@ class DubClip(NodeBase):
         if (
             {"select_clips", "materialize_source"} & set(ctx.get("input_kinds", ()))
             # Same recipe-sticker exemption as translate (captions/node.py):
-            # the card quotes the declared typical source, not a live book.
+            # the card quotes the declared typical source, not a live plan.
             and ctx.get("quote_scope") != "recipe"
         ):
             return None

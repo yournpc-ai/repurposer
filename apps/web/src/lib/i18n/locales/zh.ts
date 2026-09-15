@@ -424,7 +424,7 @@ const zh: Resources = {
       music: "MiniMax music-2.6",
     },
     modelsDescs: {
-      copy: "任务书、写作与改写",
+      copy: "计划、写作与改写",
       voice: "声纹克隆与多语言配音",
       captions: "自托管 · 词级时间戳",
       music: "AI 生成曲库 · 按氛围匹配",
@@ -1000,10 +1000,9 @@ const zh: Resources = {
       focusNode: "在对话中指认",
       reprocess: "重新处理",
       more: "更多操作",
-      // 图画布的文档节点（ADR-057）：任务书升为一等玻璃文本节点；转写稿 /
-      // 调研简报是该型的另外两个实例；通用文档用普通标签。zh 分工照旧：
-      // 画布节点叫「任务书」，确认面/计划界面仍叫「计划」（NAMING 登记）。
-      taskBook: "任务书",
+      // 图画布的文档节点（ADR-057）：计划升为一等玻璃文本节点；转写稿 /
+      // 调研简报是该型的另外两个实例；通用文档用普通标签。
+      plan: "计划",
       transcript: "转写稿",
       researchBrief: "调研简报",
       // 两站拆分的文档站 (ADR-072, spec.role 派生——文档站不携 builder 摘要,

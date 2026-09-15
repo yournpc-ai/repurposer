@@ -1,12 +1,12 @@
 """Prompt-surface verification (08-21 gate, recipe-gallery v2): every
-recipe-card prefilled template → book path → does the proposed task book
+recipe-card prefilled template → plan path → does the proposed plan
 reliably include the card's expected node kinds?
 
 Mirrors the gallery (recipe-gallery-v2 brief §6): a fresh project with
 the card's declared input asset, first message = the card's template
 copy. TRIALS_PER_LANG trials per language (LLM variance — one run is a
 coin flip, never a verdict). Per-card ``trials`` overrides the default.
-Plan-only: no book is ever confirmed, nothing renders.
+Plan-only: no plan is ever confirmed, nothing renders.
 
 Each card declares its ``expected_tools`` list — the validator asserts
 all of those tool kinds appear in the compiled plan, in order. The card's
@@ -38,7 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from chat_scenarios import Ctx, book_tasks, make_user, pending_book, seed_asset
+from chat_scenarios import Ctx, make_user, plan_tasks, pending_plan, seed_asset
 
 from app.models.schemas import AssetType
 
@@ -244,8 +244,8 @@ async def one_trial(
         meta={"language": "zh" if lang == "zh" else "en"},
     )
     turn = await ctx.chat(pid, message)
-    book = await pending_book(ctx, pid)
-    tasks = book_tasks(book)
+    plan = await pending_plan(ctx, pid)
+    tasks = plan_tasks(plan)
     kinds = [t.get("tool") for t in tasks]
 
     # Ordered subset check: every expected kind must appear, in declared

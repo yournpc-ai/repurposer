@@ -269,7 +269,7 @@ class WalletTransactionItem(BaseModel):
     # topup = 充值 (purchase — W11 boundary).
     family: str
     amount: int
-    # The row's display name: a spend names its run (the task book's
+    # The row's display name: a spend names its run (the plan's
     # instruction, trimmed); grant/topup name their family (+ note).
     label: str
     created_at: datetime
@@ -338,7 +338,7 @@ async def get_wallet_transactions(
         else:
             ordered.append(("", row))
 
-    # Run labels in one batch (a spend names its run's task book).
+    # Run labels in one batch (a spend names its run's plan).
     run_ids = [UUID(rid) for rid in groups]
     run_rows = (
         list(

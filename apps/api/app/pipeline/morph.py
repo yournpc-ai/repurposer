@@ -247,9 +247,9 @@ async def _guard_target_differs_from_source(
     anywhere (the intent router had defaulted target_language to the prompt's own
     language). Fail loud and name the fix — a silent same-language rewrite is
     the banned posture. This is the LAST backstop: the same adjudication runs
-    earlier at the book/birthplace seats (``_check_transform_targets``) so a
+    earlier at the plan/birthplace seats (``_check_transform_targets``) so a
     doomed chain bounces before the user confirms; this seat covers stale
-    books and wiring-born runs. Raises plain ``ValueError`` — errors.py passes
+    plans and wiring-born runs. Raises plain ``ValueError`` — errors.py passes
     an exact ValueError's authored message through to the step's user-facing
     line.
     """
@@ -274,7 +274,7 @@ async def _faced_source_languages(
     """The languages a translate/dub task would ACTUALLY face at run time
     (compile-time mirror of the runtime targeting, one truth two seats):
     the ``target_output_id``-scoped clip; a chain carrying select_clips →
-    the source recording's language (the run's clips are unborn at book
+    the source recording's language (the run's clips are unborn at plan
     time and come from the assets, never from the project's older clips);
     else the project's existing clips (the "existing" materialize profile),
     else the project's recording assets (the materialize-whole-source
@@ -337,7 +337,7 @@ async def _check_transform_targets(
 ) -> None:
     """Compile-time same-language adjudication (chat 修复环 + birthplace
     422 两座): a translate/dub whose target IS the faced source language is
-    doomed by construction — reject it where the book is judged, naming the
+    doomed by construction — reject it where the plan is judged, naming the
     fix, so the router's repair round (chat path) or the confirm card's 422
     (typed path) lands on a runnable chain instead of failing mid-run after
     money moved (2026-09-13 实拍: "中英双语" on an en source drafted

@@ -1,6 +1,6 @@
-"""The book path's tool-loop runner (ADR-077 判词② — T2a 内核半边).
+"""The plan path's tool-loop runner (ADR-077 判词② — T2a 内核半边).
 
-The retired ``_book_turn`` dispatch, re-homed: the intent router
+The retired ``_plan_turn`` dispatch, re-homed: the intent router
 closes its turn with ONE terminal tool call — the four actions' mechanical
 translation (draft → ``present_plan``, ask → ``ask_user``, start →
 ``start_run``, answer → ``answer``) — and the guardrails live INSIDE the
@@ -57,7 +57,7 @@ from app.chat.service import (
     _build_caption_mode_question,
     _cannot_do_text,
     _caption_choice_is_meaningful,
-    _compute_book_reasons,
+    _compute_plan_reasons,
     _create_message,
     _detect_caption_mode,
     _dock_question,
@@ -71,21 +71,21 @@ from app.chat.service import (
     _safe_task_estimate,
     _topic_gate_question,
     answer_question,
-    is_pending_task_book,
+    is_pending_plan,
     latest_pending_question,
     merge_brief,
-    sync_task_book_question,
+    sync_plan_question,
 )
 from app.models.schemas import (
     AnswerPayload,
-    BookAnswerArgs,
-    BookAskArgs,
     Brief,
     BriefSlot,
     BriefSlotSource,
     ChatRequest,
     InferredIntent,
-    PendingBrief,
+    PendingPlan,
+    PlanAnswerArgs,
+    PlanAskArgs,
     PresentPlanArgs,
     QuestionPayload,
     QuestionProposal,
@@ -102,12 +102,12 @@ logger = structlog.get_logger()
 # The return shape the service layer's callers hold (unchanged):
 # (assistant message, started run id, answered task-book question,
 # cascade-bailed run ids).
-BookTurnOutcome = tuple[Message, UUID | None, Message | None, list[UUID]]
+PlanTurnOutcome = tuple[Message, UUID | None, Message | None, list[UUID]]
 
 
-class BookTurn:
-    """One book-path turn: the pre-call assembly, the four tool executions,
-    and the outcome mapping. Created by ``run_book_turn``; one instance per
+class PlanTurn:
+    """One plan-path turn: the pre-call assembly, the four tool executions,
+    and the outcome mapping. Created by ``run_plan_turn``; one instance per
     turn (the idempotency guards are its fields)."""
 
     def __init__(
@@ -127,9 +127,9 @@ class BookTurn:
         self.on_phase = on_phase
         # Turn state (filled by the assembly below and the executions):
         self.text = ""
-        self.stored: PendingBrief | None = None
+        self.stored: PendingPlan | None = None
         self.pending_q: Message | None = None
-        self.book_pending = False
+        self.plan_pending = False
         self.assets: list[Asset] = []
         self.has_text_material = False
         self.persona: Persona | None = None
@@ -138,12 +138,12 @@ class BookTurn:
         self.material_asset: Asset | None = None
         self.merged_brief: Brief | None = None
         self.settled_pending: Message | None = None
-        self.outcome: BookTurnOutcome | None = None
+        self.outcome: PlanTurnOutcome | None = None
         self.saw_rootless_rejection = False
         self.echo_override: str | None = None
         self.reasons_extra: list[str] = []
 
-    # ---- assembly (the retired _book_turn's pre-call block, verbatim) ------
+    # ---- assembly (the retired _plan_turn's pre-call block, verbatim) ------
 
     async def assemble(self, recent: list[Message] | None) -> None:
         db, project, request = self.db, self.project, self.request
@@ -162,7 +162,7 @@ class BookTurn:
         self.text = text
 
         stored = (
-            PendingBrief.model_validate(project.pending_brief)
+            PendingPlan.model_validate(project.pending_brief)
             if isinstance(project.pending_brief, dict)
             else None
         )
@@ -181,10 +181,10 @@ class BookTurn:
         # this path's own confirmation target (G-1), never a judgment subject.
         pending_q = await latest_pending_question(db, self.conversation_id)
         # Remember a pending task_book before the null below: raising a fresh
-        # plain question would supersede the book row and orphan the
+        # plain question would supersede the plan row and orphan the
         # confirmation (S5, 2026-09-12) — the ask_user execution rejects
         # while either kind is pending.
-        self.book_pending = (
+        self.plan_pending = (
             pending_q is not None
             and pending_q.workflow_run_id is None
             and (pending_q.question or {}).get("kind") == "task_book"
@@ -239,14 +239,14 @@ class BookTurn:
                 line += f" [attached: {', '.join(attached)}]"
             recent_lines.append(line)
         # The presented chain (ADR-043): the panel's current task list when the
-        # caller sends one (hand edits ride along), else the stored book's. The
+        # caller sends one (hand edits ride along), else the stored plan's. The
         # intent router sees it as a JSON chain and re-emits the WHOLE refined chain
         # — panel edits survive because the LLM preserves what the message does
         # not revise (chat revisions always win; the field-level merge machinery
         # died with the slots grammar).
         prior = request.prior_intent or (stored.intent if stored else None)
         # The LLM revises the exact chain, not a prose digest — ship the JSON.
-        presented_book = (
+        presented_plan = (
             json.dumps([t.model_dump(mode="json") for t in prior.tasks], ensure_ascii=False)
             if prior is not None and prior.tasks
             else None
@@ -269,7 +269,7 @@ class BookTurn:
         )
         # Asking strategy ②'s pantry (C2): resolve the turn's persona so the
         # router can source concrete one-word option values from it (explicit
-        # pick → the pending book's → the project mount → the user default —
+        # pick → the pending plan's → the project mount → the user default —
         # the same precedence resolve_run_persona stamps at start). Without
         # this block the "3 concrete options" rule had no material and
         # questions starved to bare text.
@@ -292,7 +292,7 @@ class BookTurn:
             persona=persona,
             pending_question=pending_q,
             filename=filename,
-            presented_book=presented_book,
+            presented_plan=presented_plan,
             recent=recent_lines or None,
             # The transform-target rule's authoritative signal (同源语言护栏 —
             # the plan surface's only other language hint is the filename).
@@ -384,17 +384,17 @@ class BookTurn:
             assert isinstance(params, PresentPlanArgs)
             return await self._present_plan(params, prose)
         if name == "ask_user":
-            assert isinstance(params, BookAskArgs)
+            assert isinstance(params, PlanAskArgs)
             return await self._ask_user(params, prose)
         if name == "start_run":
             return await self._start_run()
         if name == "answer":
-            assert isinstance(params, BookAnswerArgs)
+            assert isinstance(params, PlanAnswerArgs)
             return await self._answer(params, prose)
         return f"unknown tool {name!r}"  # unreachable — the driver gates names
 
     async def _present_plan(self, params: PresentPlanArgs, prose: str) -> str | None:
-        """draft → the task book docks. Guardrails first (a rejection writes
+        """draft → the plan docks. Guardrails first (a rejection writes
         nothing): the chain adjudication, then the 出书门槛."""
         db, project, stored = self.db, self.project, self.stored
         merged_brief = await self._absorb(params.brief, params.material_text)
@@ -431,7 +431,7 @@ class BookTurn:
 
         # 出书门槛 (ADR-052 B2 D2-C2 — the gate reads only the merged brief +
         # the adjudicated chain):
-        #  - media-needing chain with material "none" and no book on the table →
+        #  - media-needing chain with material "none" and no plan on the table →
         #    the missing root is the material itself: REJECT, the model answers
         #    with the upload guidance in its own voice (the retired code line's
         #    disclosure payload survives as the feedback's instruction);
@@ -440,9 +440,9 @@ class BookTurn:
         #  - still rootless after the topic was asked → ACCEPT and dock with
         #    the code-composed draft-from-persona declaration (提问策略③ — a
         #    code-forced dock never borrows the LLM's voice).
-        book_on_table = stored is not None and stored.intent is not None
+        plan_on_table = stored is not None and stored.intent is not None
         media_blocked = (
-            not book_on_table
+            not plan_on_table
             and merged_brief.material_state.value == "none"
             and any(_needs_media(t.tool) for t in params.tasks)
         )
@@ -463,7 +463,7 @@ class BookTurn:
             # the default path (draft-from-persona, reason + code echo),
             # and an inferred re-root silently bypasses both. Only the
             # user's own words re-root a skipped slot. (With material
-            # attached the next clause roots the book anyway, so the
+            # attached the next clause roots the plan anyway, so the
             # infer-from-material path is untouched.)
             and (
                 merged_brief.topic.source == BriefSlotSource.USER_STATED
@@ -497,7 +497,7 @@ class BookTurn:
         # union carried).
         caption_mode = params.caption_mode
         echo = self.echo_override if self.echo_override is not None else prose
-        reasons = await _compute_book_reasons(db, project, InferredIntent(
+        reasons = await _compute_plan_reasons(db, project, InferredIntent(
             action="draft",
             tasks=params.tasks,
             specific_instruction=params.specific_instruction,
@@ -530,7 +530,7 @@ class BookTurn:
         task_estimate = await _safe_task_estimate(db, project, params.tasks)
 
         # The late-turn guard: a concurrent Start committed while this refine
-        # was in flight — docking now would raise a task book over an active
+        # was in flight — docking now would raise a plan over an active
         # run (the zombie dock). Degrade to the active-run line.
         active_line = await _active_run_line(db, project, self.text)
         if active_line is not None:
@@ -539,11 +539,11 @@ class BookTurn:
             )
             self.outcome = (assistant_message, None, self.settled_pending, [])
             return None
-        # Caption mode for captioned-video runs (Phase 1 book-path fix,
+        # Caption mode for captioned-video runs (Phase 1 plan-path fix,
         # 2026-08-25, RECIPES §4.7): dock the bilingual/source/target choice
         # before the task_book; the accepted call's InferredIntent dump rides
         # the question's `intent` field, the answer path replays it verbatim
-        # back into PendingBrief.
+        # back into PendingPlan.
         if (
             _needs_caption_mode_question(params.tasks)
             and caption_mode is None
@@ -582,7 +582,7 @@ class BookTurn:
             # §2.3/D4 (2026-08-28): no distinct alt language exists (the source
             # material's language equals every candidate) — bilingual would
             # print one language twice. Skip the question entirely and stamp
-            # source_only; the run falls through to the task-book dock.
+            # source_only; the run falls through to the plan dock.
             caption_mode = "source_only"
         # Caption-mode keyword auto-classification: an unambiguous bilingual
         # keyword ("双语" / "bilingual" / "中英对照" / "双语字幕" / "中英双语")
@@ -631,16 +631,16 @@ class BookTurn:
         )
         # The birth prompt freezes at the first dock (stored.prompt wins on every
         # later write) — the brief is the accumulated state now, the prompt is
-        # only the book's birth narrative (Start's instruction fallback).
+        # only the plan's birth narrative (Start's instruction fallback).
         birth_prompt = stored.prompt if stored and stored.prompt else self.text
         if self.on_phase is not None:
             # Real phase switch (相位通道用起来, 2026-09-09): the call is
             # accepted and the dock-work starts — brief write +
-            # sync_task_book_question + the draft-graph stamp (compile +
+            # sync_plan_question + the draft-graph stamp (compile +
             # estimate folds) are the seconds between the echo's last
             # character and the plan card's arrival.
             await self.on_phase(THINKING_PHASE_DRAFTING)
-        project.pending_brief = PendingBrief(
+        project.pending_brief = PendingPlan(
             prompt=birth_prompt,
             intent=intent,
             # brief (ADR-052 B2): the ONE merged brief — the call's update
@@ -651,7 +651,7 @@ class BookTurn:
             persona_id=persona_id,
             derived=derived,
         ).model_dump(mode="json")
-        bailed_run_ids = await sync_task_book_question(
+        bailed_run_ids = await sync_plan_question(
             db, self.user_id, project, intent, birth_prompt, reasons=reasons,
             derived=derived,
             brief=merged_brief,
@@ -659,11 +659,11 @@ class BookTurn:
             estimate=task_estimate,
         )
         question = await latest_pending_question(db, self.conversation_id)
-        assert question is not None  # sync_task_book_question just docked it
+        assert question is not None  # sync_plan_question just docked it
         self.outcome = (question, None, self.settled_pending, bailed_run_ids)
         return None
 
-    async def _ask_user(self, params: BookAskArgs, prose: str) -> str | None:
+    async def _ask_user(self, params: PlanAskArgs, prose: str) -> str | None:
         """ask → the ONE question docks through the ask_user machinery.
         Guards first: the pending-question law and the asked-roll bound
         the loop."""
@@ -679,7 +679,7 @@ class BookTurn:
         # ANY ask while a question is still pending is an interjection, never
         # a new dock — docking supersedes the pending row, and for a
         # task_book that orphans the confirmation.
-        if self.book_pending or self.pending_q is not None:
+        if self.plan_pending or self.pending_q is not None:
             return (
                 "a question of yours is still awaiting the user's answer — "
                 "this message is an interjection, not a new question. Call "
@@ -690,24 +690,24 @@ class BookTurn:
         if params.slot is not None and params.slot in merged_brief.asked:
             # The ask loop is bounded (一轮一问决定槽, each slot asks at most
             # once): the router re-asked an already-asked slot — the turn is
-            # a plan turn; the 出书门槛 docks the draft-from-persona book
+            # a plan turn; the 出书门槛 docks the draft-from-persona plan
             # instead of looping the question.
             return (
-                f"slot '{params.slot}' was already asked once this book "
+                f"slot '{params.slot}' was already asked once this plan "
                 "phase — each slot asks at most once. Call present_plan to "
-                "dock the book now (the gate handles rootlessness)."
+                "dock the plan now (the gate handles rootlessness)."
             )
         # ask 一等动作 (ADR-052 B2, 案 A 双实例): the pre-run router's ONE
         # question docks through the same machinery the chat path's ask_user
-        # uses — with the book-path handshake on the payload (slot → the
+        # uses — with the plan-path handshake on the payload (slot → the
         # answer backfills the brief user-stated; default_path → the dock's
         # muted second line). The brief merge lands as a brief-only row: the
-        # stored book's intent is preserved verbatim (an ask never clobbers
-        # the book), and a fresh project's row carries intent=None (never
+        # stored plan's intent is preserved verbatim (an ask never clobbers
+        # the plan), and a fresh project's row carries intent=None (never
         # startable).
         if params.slot is not None:
             merged_brief.asked = [*merged_brief.asked, params.slot]
-        self.project.pending_brief = PendingBrief(
+        self.project.pending_brief = PendingPlan(
             # The birth prompt stays frozen (stored.prompt wins) — the
             # accumulated narrative retired with the brief switch.
             prompt=stored.prompt if stored and stored.prompt else self.text,
@@ -757,13 +757,13 @@ class BookTurn:
         return None
 
     async def _start_run(self) -> str | None:
-        """start → the docked task book is answered kind=start (G-1 path: the
+        """start → the docked plan is answered kind=start (G-1 path: the
         run comes from the only birthplace, answer_question — which commits;
         zero bypass)."""
         db, stored = self.db, self.stored
         pending_question = await latest_pending_question(db, self.conversation_id)
         if (
-            is_pending_task_book(pending_question)
+            is_pending_plan(pending_question)
             and stored is not None
             and stored.intent is not None
         ):
@@ -773,7 +773,7 @@ class BookTurn:
                 await self.on_phase(THINKING_PHASE_CREATING_RUN)
             answered, _follow_up = await answer_question(
                 db, self.user_id, UUID(str(pending_question.id)),
-                # The review panel's edited book rides along (typed Start
+                # The review panel's edited plan rides along (typed Start
                 # parity): dropping prior_intent here would execute the
                 # stored chain and silently discard the user's panel edits.
                 StartAnswerRequest(
@@ -787,10 +787,10 @@ class BookTurn:
             self.outcome = (answered, UUID(str(answered.workflow_run_id)), answered, [])
             return None
         if stored is not None and stored.intent is not None:
-            # Nothing startable right now. Never overwrite a stored task book
-            # with a start-call misfire: re-dock the stored book unchanged.
+            # Nothing startable right now. Never overwrite a stored plan
+            # with a start-call misfire: re-dock the stored plan unchanged.
             # Unless a run started concurrently — then the plan is moot and
-            # re-docking would raise a book over an active run.
+            # re-docking would raise a plan over an active run.
             active_line = await _active_run_line(db, self.project, self.text)
             if active_line is not None:
                 assistant_message = await _create_message(
@@ -798,7 +798,7 @@ class BookTurn:
                 )
                 self.outcome = (assistant_message, None, self.settled_pending, [])
                 return None
-            bailed_run_ids = await sync_task_book_question(
+            bailed_run_ids = await sync_plan_question(
                 db, self.user_id, self.project, stored.intent, stored.prompt,
                 reasons=stored.reasons, derived=stored.derived,
                 brief=stored.brief,
@@ -806,18 +806,18 @@ class BookTurn:
                 estimate=await _safe_task_estimate(db, self.project, stored.intent.tasks),
             )
             question = await latest_pending_question(db, self.conversation_id)
-            assert question is not None  # sync_task_book_question just docked it
+            assert question is not None  # sync_plan_question just docked it
             self.outcome = (question, None, self.settled_pending, bailed_run_ids)
             return None
         return (
-            "no task book is on the table — nothing to start. If the user "
+            "no plan is on the table — nothing to start. If the user "
             "wants work, call present_plan with the chain; if one missing "
             "answer decides quality, call ask_user. A start call can never "
             "create a plan."
         )
 
-    async def _answer(self, params: BookAnswerArgs, prose: str) -> str | None:
-        """answer → a plain assistant message; the stored book stays
+    async def _answer(self, params: PlanAnswerArgs, prose: str) -> str | None:
+        """answer → a plain assistant message; the stored plan stays
         untouched. The envelope seats still absorb (an answer can carry the
         user's declared material)."""
         await self._absorb(params.brief, params.material_text)
@@ -827,7 +827,7 @@ class BookTurn:
                 "message text, then call answer."
             )
         # Capability question: the reply lands as a plain assistant message
-        # and the stored task book stays untouched — an answer turn never
+        # and the stored plan stays untouched — an answer turn never
         # overwrites the plan the user is confirming. When a question
         # survived the turn unsettled (an interjection, ADR-053 R2), the
         # reply ends with the code-composed reminder tail (the question +
@@ -847,7 +847,7 @@ class BookTurn:
 
     # ---- the outcome mapping -------------------------------------------------
 
-    async def finish(self, result) -> BookTurnOutcome:
+    async def finish(self, result) -> PlanTurnOutcome:
         """LoopResult → the caller's 4-tuple. An accepted execution stashed
         its outcome already; the bare reply and the exhaustion degrade land
         here (an honest degrade, never a fabricated success)."""
@@ -870,9 +870,9 @@ class BookTurn:
         # Exhaustion — every call rejected. When the rootless rejection was
         # among them, the code-composed topic question docks (the asked roll
         # stamped — the bound holds); anything else degrades to the
-        # cannot-do line. Never a docked broken book.
+        # cannot-do line. Never a docked broken plan.
         logger.info(
-            "book_turn_loop_exhausted",
+            "plan_turn_loop_exhausted",
             calls=result.calls,
             rootless=self.saw_rootless_rejection,
         )
@@ -880,7 +880,7 @@ class BookTurn:
             stored = self.stored
             merged_brief = self.merged_brief or Brief()
             merged_brief.asked = [*merged_brief.asked, "topic"]
-            self.project.pending_brief = PendingBrief(
+            self.project.pending_brief = PendingPlan(
                 prompt=stored.prompt if stored and stored.prompt else self.text,
                 intent=stored.intent if stored else None,
                 brief=merged_brief,
@@ -923,7 +923,7 @@ class BookTurn:
         return assistant_message, None, self.settled_pending, []
 
 
-async def run_book_turn(
+async def run_plan_turn(
     db: AsyncSession,
     user_id: UUID,
     conversation,
@@ -935,15 +935,15 @@ async def run_book_turn(
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
-) -> BookTurnOutcome:
-    """The book path's turn: assemble → the bounded tool loop → the outcome
+) -> PlanTurnOutcome:
+    """The plan path's turn: assemble → the bounded tool loop → the outcome
     mapping. ``intent_router`` provider failures propagate as LLMError — no
-    fabricated default book (2026-08-14 裁定); the route boundary turns it
+    fabricated default plan (2026-08-14 裁定); the route boundary turns it
     into a 502 with the localized provider line. on_delta streams the prose
     channel (it IS the reply now); on_tool_call/on_tool_ready carry the
     structure frames (the phase beat / the question preview); on_phase labels
     the real phase switches. None = the one-shot path."""
-    turn = BookTurn(db, user_id, conversation, project, request, on_phase=on_phase)
+    turn = PlanTurn(db, user_id, conversation, project, request, on_phase=on_phase)
     await turn.assemble(recent)
     result = await intent_router.call_loop(
         turn.execute,
@@ -957,4 +957,4 @@ async def run_book_turn(
     return await turn.finish(result)
 
 
-__all__ = ["run_book_turn", "BookTurn", "BookTurnOutcome"]
+__all__ = ["run_plan_turn", "PlanTurn", "PlanTurnOutcome"]

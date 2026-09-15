@@ -70,7 +70,7 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
         to="/projects/$id"
         params={{ id: project.id }}
         // The project page is always canvas + dock (ADR-051) — its own state
-        // drives the dock's form (draft ⟺ the parked task book docks the
+        // drives the dock's form (draft ⟺ the parked plan docks the
         // confirm panel; processing ⟺ the dock attaches to the live run).
         className="group flex flex-col gap-2"
       >

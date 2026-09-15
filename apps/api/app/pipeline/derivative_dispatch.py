@@ -902,7 +902,7 @@ class DerivativeWriterNode(NodeBase):
     # The gate moves to the prompt layer: the intent router recognizes the
     # no-material case and tells the user (in echo prose + soft reason)
     # that the draft comes from prompt + persona; if material shows up
-    # later, the next turn re-docks a richer book. needs_plan_prelude stays
+    # later, the next turn re-docks a richer plan. needs_plan_prelude stays
     # True so the plan prelude's persona/style hand-off survives the empty
     # material_excerpt path.
     requires = ()
@@ -984,7 +984,7 @@ class DerivativeWriterNode(NodeBase):
         slot = _node_slot(node, ctx, derivative_type.value)
         target_id = node.spec.get("target_id")
         # Language resolves per slot first, then the node's targeted language,
-        # then the task-book language.
+        # then the plan language.
         target_language = (
             (slot.language if slot else None)
             or node.spec.get("target_language")

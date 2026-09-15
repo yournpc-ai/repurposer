@@ -58,7 +58,7 @@ class _MediaRequirement(Requirement):
 
 async def media_missing(db: AsyncSession, project_id) -> bool:
     """The single renderable-media predicate (VIDEO / AUDIO / IMAGE / SLIDES
-    with bytes) — every consumer (birthplace ∀-check, chat book-path
+    with bytes) — every consumer (birthplace ∀-check, chat plan-path
     clarification reason) reads this one definition."""
     result = await db.execute(
         select(Asset.id)

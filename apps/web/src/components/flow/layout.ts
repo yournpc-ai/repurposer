@@ -277,7 +277,7 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
     // outgrows the reservation (new frames are born with exactly this via
     // the server's mirror math, so the two agree; a legacy frame may be
     // taller than the cap — extra whitespace, never overlap). The confirm
-    // anatomy is reserved only while the book is actually draft (post-Start
+    // anatomy is reserved only while the plan is actually draft (post-Start
     // the card fills less — the frame's +88 is a reservation, not a mandate).
     const text = (node.spec?.text as string | undefined) ?? ""
     const confirm = node.spec?.role === "task_book" && node.status === "draft"

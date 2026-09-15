@@ -1051,10 +1051,10 @@ const en = {
       focusNode: "Point it out in chat",
       reprocess: "Reprocess",
       more: "More actions",
-      // The graph canvas's document node (ADR-057): the task book as a
+      // The graph canvas's document node (ADR-057): the plan as a
       // first-class glass text node; the transcript / research brief are
       // the type's other two instances; generic documents get the plain label.
-      taskBook: "Task book",
+      plan: "Plan",
       transcript: "Transcript",
       researchBrief: "Research brief",
       // 两站拆分的文档站 (ADR-072, spec.role-derived — the doc station

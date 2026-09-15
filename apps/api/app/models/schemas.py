@@ -199,7 +199,7 @@ class AnswerPayload(BaseModel):
     """The typed ``answer`` payload on a message.
 
     ``bail`` is a first-class answer kind — a graceful exit, never a failure.
-    ``start`` is the task_book confirmation (the answer that starts the run)
+    ``start`` is the plan confirmation (the answer that starts the run)
     — a kind of its own, not a magic option id (C1).
     """
 
@@ -230,11 +230,11 @@ class FreeformAnswerRequest(BaseModel):
 
 
 class StartAnswerRequest(BaseModel):
-    """Confirm the docked task book and start the run (task_book questions).
+    """Confirm the docked plan and start the run (task_book questions).
 
     Replaces the phase-1 magic ``option_id="start"`` — the confirmation is a
     kind of its own, so the kind-specific fields (autonomy tier, the review
-    panel's edited task book) are only valid here, never silently ignored on
+    panel's edited plan) are only valid here, never silently ignored on
     other kinds (C2).
     """
 
@@ -243,7 +243,7 @@ class StartAnswerRequest(BaseModel):
     kind: Literal["start"]
     # Autonomy tier carried into the run (dock toggle, §2.7); None = auto.
     autonomy: Literal["auto", "review"] | None = None
-    # The review panel's edited task book (hand-edited slots marked explicit).
+    # The review panel's edited plan (hand-edited slots marked explicit).
     # Wins over the stored pending brief, so panel edits reach the run;
     # None = use the stored pending brief.
     intent: InferredIntent | None = None
@@ -370,7 +370,7 @@ class QuestionProposal(BaseModel):
     task_list / edit_ops, so the union gains a third state. The pre-N-18
     "tasks=[] ask back" migrates here as an ``options=[]`` + ``allow_freeform``
     question. The LLM only ever raises a plain question — a task_book question
-    is raised by the chat book path, never by the agent.
+    is raised by the chat plan path, never by the agent.
 
     ADR-071 ⑤ 方向裁定 (2026-09-11): the provider call sends
     ``response_format: json_object`` — this schema NEVER reaches the model;
@@ -438,7 +438,7 @@ class AnswerProposal(BaseModel):
     context carries the per-step status section, G-2), explanations of
     existing outputs, small talk. Nothing is dispatched, no run starts, no
     question docks: the text lands as a plain assistant message, the same
-    archival shape as a book-path answer turn (B1). The boundary against
+    archival shape as a plan-path answer turn (B1). The boundary against
     the other states is a prompt rule: work requests go to task_list /
     edit_ops, ambiguous readings go to ask — answer is never the lazy out.
     """
@@ -528,7 +528,7 @@ class IntentResult(BaseModel):
 # carry NO speech field. A misplaced "prose"/"type"/"kind" habit key is
 # read-tolerated at the loop boundary (agents/tool_loop.py), never here.
 # The envelope seats ride the call they belong to: brief / material_text on
-# the book-path tools, pending_disposition on the chat-path tools.
+# the plan-path tools, pending_disposition on the chat-path tools.
 
 
 def _tolerate_null_keys(data: Any, *keys: str) -> Any:
@@ -562,13 +562,13 @@ def _drop_bad_brief(data: Any) -> Any:
     return data
 
 
-class BookAskArgs(BaseModel):
-    """``ask_user`` params, book path — the ask_user machinery's one-question
+class PlanAskArgs(BaseModel):
+    """``ask_user`` params, plan path — the ask_user machinery's one-question
     shape (QuestionProposal minus the prose, which is the content channel
     now).
-    ``slot`` names the brief-ledger slot the question fills (book-path only
+    ``slot`` names the brief slot the question fills (plan-path only
     — post-run questions never backfill a brief). The envelope seats ride
-    the same call so the turn's ledger proposal and material promotion
+    the same call so the turn's brief proposal and material promotion
     arrive with the call, exactly once."""
 
     model_config = ConfigDict(extra="forbid")
@@ -607,8 +607,8 @@ class BookAskArgs(BaseModel):
 
 
 class PresentPlanArgs(BaseModel):
-    """``present_plan`` params, book path — the draft call's payload (the
-    task book docks for confirmation; it never starts a run by itself). The
+    """``present_plan`` params, plan path — the draft call's payload (the
+    plan docks for confirmation; it never starts a run by itself). The
     plan-introducing echo is your spoken message, never a param."""
 
     model_config = ConfigDict(extra="forbid")
@@ -640,7 +640,7 @@ class PresentPlanArgs(BaseModel):
     )
     name: str = Field(
         default="",
-        description="A compact noun phrase (2-6 words, interface language) naming the book's deliverable — it titles the run's receipt. Name the work, never the tools.",
+        description="A compact noun phrase (2-6 words, interface language) naming the plan's deliverable — it titles the run's receipt. Name the work, never the tools.",
     )
     brief: Brief | None = Field(
         default=None,
@@ -652,8 +652,8 @@ class PresentPlanArgs(BaseModel):
     )
 
 
-class BookAnswerArgs(BaseModel):
-    """``answer`` params, book path — a purely informational reply. The
+class PlanAnswerArgs(BaseModel):
+    """``answer`` params, plan path — a purely informational reply. The
     answer text itself is your spoken message; only the envelope seats ride
     here."""
 
@@ -754,7 +754,7 @@ class EditGraphArgs(BaseModel):
 
 class ChatAskArgs(BaseModel):
     """``ask_user`` params, chat path — the same one-question shape as the
-    book path minus the brief slot (post-run questions never backfill a
+    plan path minus the brief slot (post-run questions never backfill a
     brief)."""
 
     model_config = ConfigDict(extra="forbid")
@@ -888,18 +888,18 @@ class ChatRequest(BaseModel):
     mentions: list[ChatMention] = Field(default_factory=list)
     # Plan-path transports (intent-surface-unification W3 — carry only, never
     # persisted on the message):
-    # The review panel's current task book (the user may have hand-edited the
+    # The review panel's current plan (the user may have hand-edited the
     # chain). Panel edits ARE task-list mutations (ADR-043) — the panel's
-    # chain is shown to the intent router as the presented book and re-emitted
+    # chain is shown to the intent router as the presented plan and re-emitted
     # whole on every revision, so hand edits survive unless the message
     # revises them; None = the stored pending brief is presented, if any.
     prior_intent: "InferredIntent | None" = None
     # The composer's persona choice rides the first message; written into the
-    # pending brief only when the book path docks a task book (a later turn
+    # pending brief only when the plan path docks a plan (a later turn
     # omitting it never clobbers the stored choice).
     persona_id: UUID | None = None
     # The dock's autonomy tier (§2.7) — consumed only when this turn confirms
-    # the task book by prose (the intent router call "start"): a typed "looks
+    # the plan by prose (the intent router call "start"): a typed "looks
     # good, start it" must not silently drop a review-tier choice.
     autonomy: Literal["auto", "review"] | None = None
 
@@ -1025,13 +1025,13 @@ class ToneSettings(BaseModel):
 
 
 class IntentSlot(BaseModel):
-    """任务槽: one line of the task book — one requested output (request layer).
+    """任务槽: one line of the plan — one requested output (request layer).
 
     N-20 layering: the IntentSlot says WHAT the user wants; the planner's
     ``StoryboardSlot`` (派工层） says how the work is assigned. ``None`` fields
-    mean "task-book default": count → the per-type default (clips 3 / quotes 3
+    mean "plan default": count → the per-type default (clips 3 / quotes 3
     / carousel 6). Language is a per-slot property (2026-08-05 restructure —
-    the book-level field is retired): ``None`` is legacy/read-tolerant and
+    the plan-level field is retired): ``None`` is legacy/read-tolerant and
     inherits the run's derived fallback. Same-type multi slots are how one run
     produces e.g. an English and a German post. With ADR-043 the slot is a
     COMPILE-TIME PROJECTION of the task chain (node ``spec.slot``), never a
@@ -1055,7 +1055,7 @@ class IntentSlot(BaseModel):
     @classmethod
     def _tolerate_bare_type(cls, data: Any) -> Any:
         """A bare type string (``"post"``) reads as a bare slot — legacy flat
-        task books (pre-slot) deserialize through this; new writes never
+        plans (pre-slot) deserialize through this; new writes never
         produce it (read tolerance, not a bridge layer)."""
         if isinstance(data, str):
             return {"type": data}
@@ -1089,10 +1089,10 @@ _SLOT_TO_TOOL = {
 
 
 def _legacy_slots_to_tasks(data: dict) -> list[dict]:
-    """outputs-grammar book → task list (ADR-043): each slot becomes its
+    """outputs-grammar plan → task list (ADR-043): each slot becomes its
     producing tool's task (slot fields sink to params — params models ignore
-    stray keys at adjudication); the retired book-level modifiers fan out
-    into per-language transform tasks; a book-level aspect rides the clips
+    stray keys at adjudication); the retired plan-level modifiers fan out
+    into per-language transform tasks; a plan-level aspect rides the clips
     task. Read tolerance only — new writes are born as task lists."""
     tasks: list[dict] = []
     aspect = data.get("aspect")
@@ -1136,7 +1136,7 @@ def _legacy_slots_to_tasks(data: dict) -> list[dict]:
 # ---------------------------------------------------------------------------
 # brief（DIALOG_WORKFLOW §2.4, ADR-052 B2): the dialog engine's structured
 # state. Five slots, each with provenance; the intent router proposes a full
-# update every book turn and code merges by source precedence (merge_brief —
+# update every plan turn and code merges by source precedence (merge_brief —
 # LLM proposes, code decides; user-stated is never reverse-overwritten).
 # ---------------------------------------------------------------------------
 
@@ -1255,9 +1255,9 @@ class Brief(BaseModel):
     tone: BriefSlot[str] = Field(default_factory=BriefSlot)
     constraints: list[BriefSlot[str]] = Field(default_factory=list)
     material_state: BriefSlot[MaterialState] = Field(default_factory=BriefSlot)
-    # Code-owned roll of the slots already asked once this book phase (一轮
+    # Code-owned roll of the slots already asked once this plan phase (一轮
     # 一问决定槽， bounded: each slot asks at most once — the second rootless
-    # call docks the draft-from-persona book instead). merge_brief never
+    # call docks the draft-from-persona plan instead). merge_brief never
     # reads it from the LLM's proposal (禁 LLM 簿记); code stamps it when the
     # question docks.
     asked: list[str] = Field(default_factory=list)
@@ -1271,12 +1271,12 @@ class InferredIntent(BaseModel):
     params, the same shape the chat loop's task_list proposals use). Outputs
     are a derived projection of the compiled graph, never a request field.
 
-    ADR-052 B2 (action set): ``draft`` drafts/refines the task book (it never
+    ADR-052 B2 (action set): ``draft`` drafts/refines the plan (it never
     generates — the retired ``generate`` name lied); ``ask`` asks ONE
     question through the dock's ask_user machinery (the shared
     QuestionProposal shape, 案 A 双实例); ``answer`` is a purely
     informational reply;
-    ``start`` confirms the docked book.
+    ``start`` confirms the docked plan.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -1284,9 +1284,9 @@ class InferredIntent(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _tolerate_legacy_shape(cls, data: Any) -> Any:
-        """Upgrade stored legacy books on read (never written): the pre-slot
+        """Upgrade stored legacy plans on read (never written): the pre-slot
         flat shape → slots, the slots/modifiers grammar → a task list; the
-        retired keys (outputs / tone / the four book-level modifiers) are
+        retired keys (outputs / tone / the four plan-level modifiers) are
         stripped. Read tolerance for stored ``pending_brief`` rows only."""
         if not isinstance(data, dict):
             return data
@@ -1308,8 +1308,8 @@ class InferredIntent(BaseModel):
         # default is the honest read).
         if data.get("tasks_explicit") is None:
             data.pop("tasks_explicit", None)
-        # 2026-08-05 restructure leftover: legacy stored books carry
-        # book-level ``language`` / ``language_explicit`` — strip on read.
+        # 2026-08-05 restructure leftover: legacy stored plans carry
+        # plan-level ``language`` / ``language_explicit`` — strip on read.
         for retired in ("language", "language_explicit"):
             data.pop(retired, None)
         outputs = data.get("outputs")
@@ -1366,8 +1366,8 @@ class InferredIntent(BaseModel):
         default="draft",
         description=(
             "Whether the user wants content drafted ('draft' — build/refine "
-            "the task book), is asking a question about the tool's "
-            "capabilities ('answer'), is confirming the proposed task book "
+            "the plan), is asking a question about the tool's "
+            "capabilities ('answer'), is confirming the proposed plan "
             "('start' — a prose 'looks good, go ahead' in the confirm "
             "phase, not a revision), or one missing answer most decides "
             "quality and you must ask first ('ask')."
@@ -1445,7 +1445,7 @@ class InferredIntent(BaseModel):
     # (or set null) keeps its stored value. Null for start/answer calls.
     brief: Brief | None = None
     # LLM 建图时命名 (2026-09-09, ADR-058): a compact noun phrase naming the
-    # book's deliverable, in the interface language ("中文 LinkedIn 帖子" /
+    # plan's deliverable, in the interface language ("中文 LinkedIn 帖子" /
     # "Chinese LinkedIn post") — it titles the run's receipt and completion
     # line. Display copy comes from the proposer's FRESH reading of the
     # turn, never from a frozen-params template. "" = unnamed (readers fall
@@ -1453,12 +1453,12 @@ class InferredIntent(BaseModel):
     name: str = ""
 
 
-class TaskBookEstimate(BaseModel):
-    """Dock 载荷的估价面 (BILLING §7, ADR-055): the task book's credits
+class PlanEstimate(BaseModel):
+    """Dock 载荷的估价面 (BILLING §7, ADR-055): the plan's credits
     quotation, code-supplied (the estimate fold × PRICING × the consumption
     ratio — never the LLM, never a persisted column).
 
-    ``total`` = the whole book's [low, high] credits. ``per_task`` aligns
+    ``total`` = the whole plan's [low, high] credits. ``per_task`` aligns
     with the task list by index: each entry is the task's MARGINAL range
     (prefix-compile difference — Σ per_task ≡ total exactly, 三面同源), or
     None for a task that adds no quoted cost (an unquotable fan-out — it
@@ -1474,7 +1474,7 @@ class QuestionPayload(BaseModel):
     """The typed ``question`` payload on a message (the ask_user machinery —
     the question machine).
 
-    The mechanism words live here — ``kind`` carries the *use* (task book
+    The mechanism words live here — ``kind`` carries the *use* (plan
     confirmation vs a plain question), never combined with the mechanism
     (NAMING: use × mechanism combos are banned). ``content`` on the
     message row keeps the question's human text. Defined after the brief
@@ -1517,12 +1517,12 @@ class QuestionPayload(BaseModel):
     # dock time from the estimate fold (N-34) × the consumption ratio —
     # code-supplied, structured (data, localized at render), never a
     # pre-formatted string. None until supplied / for plain questions.
-    estimate_credits: TaskBookEstimate | None = None
+    estimate_credits: PlanEstimate | None = None
     # task_book only: the needs_clarification reason KEYS (data, localized at
     # render — never baked into `content`, which is user-facing prose).
     reasons: list[str] = Field(default_factory=list)
     # ask 一等动作牙齿 (ADR-052 B2): ``slot`` is the brief slot this
-    # question fills — the answer backfills it user-stated and the book path
+    # question fills — the answer backfills it user-stated and the plan path
     # resumes (the dock handshake, same pattern as the caption_mode_ prefix).
     # None on every question that is not a brief ask (caption mode, direction
     # interrupts, post-run shape C). ``default_path`` is the schema tooth of
@@ -1536,7 +1536,7 @@ class QuestionPayload(BaseModel):
     # (valued slots with provenance) instead of blank form fields. Frozen
     # with the question row; every re-dock stamps the fresh merge.
     brief: Brief | None = None
-    # 任务书行自完备 (2026-09-08, 方案 B): task_book only — the ADR-043
+    # 计划行自完备 (2026-09-08, 方案 B): task_book only — the ADR-043
     # derived preview ("you'll get") stamped at dock time. With the chain on
     # the row's `intent` column and this on the payload, the docked row IS
     # the whole plan card — the SSE envelope needs no pending-brief refetch
@@ -1545,12 +1545,12 @@ class QuestionPayload(BaseModel):
     derived: list[dict] = Field(default_factory=list)
 
 
-class PendingBrief(BaseModel):
-    """Unconfirmed task book persisted on ``projects.pending_brief``.
+class PendingPlan(BaseModel):
+    """Unconfirmed plan persisted on ``projects.pending_brief``.
 
-    Written by the chat book path on draft-action turns (an
-    answer-action turn never overwrites the stored book), cleared once the
-    run starts. Lets a user who left the book-confirmation chat resume it
+    Written by the chat plan path on draft-action turns (an
+    answer-action turn never overwrites the stored plan), cleared once the
+    run starts. Lets a user who left the plan-confirmation chat resume it
     exactly, from any device. Ask-action turns write a brief-only row
     (``intent=None``): the merged brief persists while the ONE question is
     docked, and the answer's backfill lands on it.
@@ -1570,12 +1570,12 @@ class PendingBrief(BaseModel):
 
     prompt: str = ""
     # Null on brief-only rows (ADR-052 B2: an ask-turn write — the brief
-    # merged, no book drafted yet). A row with intent=None is never startable
-    # and never re-docked as a task book.
+    # merged, no plan drafted yet). A row with intent=None is never startable
+    # and never re-docked as a plan.
     intent: InferredIntent | None = None
     # brief (ADR-052 B2): the dialog's structured state — slots with
-    # provenance, merged by code every book turn (merge_brief). The task
-    # chain and derived preview above stay the book's own rows (原样).
+    # provenance, merged by code every plan turn (merge_brief). The task
+    # chain and derived preview above stay the plan's own rows (原样).
     brief: Brief = Field(default_factory=Brief)
     reasons: list[str] = Field(default_factory=list)
     persona_id: UUID | None = None
@@ -2426,7 +2426,7 @@ class MaterialUnderstanding(BaseModel):
 
     Pure: built from source texts/media only — never persona, tone,
     instruction, or target language — so it stays reusable across runs,
-    languages, and task books (asset-hash invalidation). The beat-map fields
+    languages, and plans (asset-hash invalidation). The beat-map fields
     (期 1) extend it into the material-level beat map: semantic halves only.
     """
 
@@ -3080,9 +3080,9 @@ class GraphReviseResponse(BaseModel):
 class GenerateRequest(BaseModel):
     """Generate content request."""
 
-    # The confirmed task chain (ADR-043 — the book path's only grammar).
-    # Required for full-scope requests (422 otherwise — the task book is
-    # built and confirmed via the chat book path); None only on targeted
+    # The confirmed task chain (ADR-043 — the plan path's only grammar).
+    # Required for full-scope requests (422 otherwise — the plan is
+    # built and confirmed via the chat plan path); None only on targeted
     # scopes (hook/clip/derivative/render re-run one node family off
     # target_id).
     tasks: list[TaskItem] | None = None
@@ -3259,7 +3259,7 @@ class ProjectResultsResponse(BaseModel):
     outputs: list[OutputResponse] = Field(default_factory=list)
     latest_run: RunResponse | None = None
     assets: list[ProjectAssetStatus] = Field(default_factory=list)
-    pending_brief: PendingBrief | None = None
+    pending_brief: PendingPlan | None = None
 
 
 # ---------------------------------------------------------------------------

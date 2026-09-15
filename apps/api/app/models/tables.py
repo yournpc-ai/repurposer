@@ -129,8 +129,8 @@ class Project(Base):
     language = Column(String(10), default="zh")
     status = Column(Enum(ProjectStatus), default=ProjectStatus.DRAFT)
     tone_snapshot = Column(JSON, nullable=True)
-    # Unconfirmed task book + original prompt from /projects/{id}/intent
-    # (PendingBrief shape). Cleared when /generate starts the run; its
+    # Unconfirmed plan + original prompt from /projects/{id}/intent
+    # (PendingPlan shape). Cleared when /generate starts the run; its
     # presence on a draft project is what "awaiting confirmation" means.
     pending_brief = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
@@ -184,8 +184,8 @@ class Asset(Base):
 class WorkflowRun(Base):
     """Workflow run table — run-level state machine only.
 
-    Per-step state lives in workflow_steps (RunPlan); ``context`` is the task
-    book (normalized intent), ``progress`` aggregates node states. The retired
+    Per-step state lives in workflow_steps (RunPlan); ``context`` is the
+    plan (normalized intent), ``progress`` aggregates node states. The retired
     current_step string is gone (query running nodes instead).
     """
 

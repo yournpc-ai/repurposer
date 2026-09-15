@@ -32,7 +32,7 @@ from app.models.schemas import (
     AssetType,
     IntentSlot,
     ProjectStatus,
-    TaskBookEstimate,
+    PlanEstimate,
     TaskItem,
     WorkflowStatus,
 )
@@ -122,7 +122,7 @@ class QualityBounce(Exception):
 
 
 class TaskSpec(BaseModel):
-    """The task book: normalized generation intent (任务书).
+    """The confirmed plan: normalized generation intent (计划).
 
     Mirrors GenerateRequest/chat dispatch; stored verbatim on run.context.
     The only request grammar is the tool chain (``tasks``, ADR-043) —
@@ -134,7 +134,7 @@ class TaskSpec(BaseModel):
     target_language: str = "en"
     instruction: str | None = None
     tone_settings: dict | None = None
-    # The confirmed persona choice, pinned into run.context at task-book
+    # The confirmed persona choice, pinned into run.context at plan
     # confirmation (the composer persona block → chat first message → pending
     # intent chain). None = resolve per the default-persona chain.
     persona_id: str | None = None
@@ -218,7 +218,7 @@ def compile_graph(
     add_stills_align: bool = False,
     materialize_profile: str | None = None,
 ) -> list[_NodeSpec]:
-    """Lower a task book into a node topology (pure, code-determined).
+    """Lower a plan into a node topology (pure, code-determined).
 
     Full scope: ``task.tasks`` (the tool chain, ADR-043) materializes via
     ``_compile_task_list`` — generation tools share one deduped planning
@@ -563,8 +563,8 @@ def _compile_task_list(
             )
             seq += 1
 
-    # 任务书兜底 (2026-09-02 用户拍板): stamp the compile-time task book on
-    # the plan node so the task-book document node's text is born WITH the
+    # 计划兜底 (2026-09-02 用户拍板): stamp the compile-time plan on
+    # the plan node so the plan document node's text is born WITH the
     # graph — while the run parks at the direction interrupt the document
     # already reads the request's summary, never a transparent shell. The
     # runtime stamp (book_summary + refined task_book) overwrites it when
@@ -651,8 +651,8 @@ async def derive_plan_preview(
 
 async def derive_task_estimates(
     db: AsyncSession, project: Project, tasks: list[TaskItem]
-) -> TaskBookEstimate | None:
-    """The dock payload's credits quotation (BILLING §7): the book's total
+) -> PlanEstimate | None:
+    """The dock payload's credits quotation (BILLING §7): the plan's total
     [low, high] plus a per-task MARGINAL range.
 
     Per-task = the prefix-compile difference (compile the chain up to task i,
@@ -703,7 +703,7 @@ async def derive_task_estimates(
         total = current
     if total == [0, 0]:
         return None
-    return TaskBookEstimate(total=total, per_task=per_task)
+    return PlanEstimate(total=total, per_task=per_task)
 
 
 def compile_recipe_quote(entry: RecipeEntry) -> dict:
@@ -735,7 +735,7 @@ def compile_recipe_quote(entry: RecipeEntry) -> dict:
                 # (RECIPE_QUOTE_FACTS): its clips exist by declaration, so a
                 # clip-driven modifier (translate / dub / reframe) chained on
                 # this run's own clips node stays quotable here — the live
-                # book keeps its NULL (估价随运行) because there the clips
+                # plan keeps its NULL (估价随运行) because there the clips
                 # are truly unborn at compile time.
                 "quote_scope": "recipe",
             }
@@ -761,7 +761,7 @@ async def _check_birthplace_requires(
         req, owners = needs[key]
         if await req.missing(db, project):
             # The clips-media 422 keeps its own copy: it names the way out
-            # ("deselect clips") in task-book terms, not tool terms.
+            # ("deselect clips") in plan terms, not tool terms.
             if key == MEDIA.key and has_clips_slot:
                 raise ValueError(CLIPS_NEED_MEDIA)
             raise ValueError(
@@ -943,7 +943,7 @@ async def create_run(
     answer that started it, and the project state land in ONE transaction
     (the run only becomes claimable by the worker on commit).
     """
-    # Pin the requesting browser's locale into the task book (stored verbatim
+    # Pin the requesting browser's locale into the plan (stored verbatim
     # on run.context below) — the worker process has no request context, so
     # display strings read the pinned value off the run.
     if task.ui_language is None:

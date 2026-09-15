@@ -345,7 +345,7 @@ function GroupFrames({
  * page's home-inherited top-right cluster; 2026-09-05 比例尺瘦身：只读百
  * 分比——± 步进与 fit icon 全退役（用户拍板），框内就一个数字，点击
  * 仍是 fit to view。Rides the same dock-surface recipe as the dock and
- * the 任务书 node. Explore surfaces only (the parent gates it). Subscribes
+ * the 计划 node. Explore surfaces only (the parent gates it). Subscribes
  * to zoom ONLY (transform[2]) — useViewport's {x,y,zoom} shallow compare
  * would re-render the pill on every pan frame. */
 function FlowControls({ className }: { className?: string }) {

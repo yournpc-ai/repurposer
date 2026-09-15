@@ -83,7 +83,7 @@ class TranslateClip(NodeBase):
             {"select_clips", "materialize_source"} & set(ctx.get("input_kinds", ()))
             # The recipe card's sticker quotes the DECLARED typical source
             # (RECIPE_QUOTE_FACTS clips exist by declaration) — the guard is
-            # for the live book, where the clips are unborn at compile time.
+            # for the live plan, where the clips are unborn at compile time.
             and ctx.get("quote_scope") != "recipe"
         ):
             return None

@@ -17,7 +17,7 @@ never repaired here.
 
 Fallbacks are declared, never silent: ``media_text_fallback`` (multimodal →
 text-only degradation) and ``fallback`` (last-resort result builder — the
-intent router's never-a-white-screen default task book is the precedent) are
+intent router's never-a-white-screen default plan is the precedent) are
 visible at the declaration; everything else raises.
 
 Purity is signature-enforced (ADR-039): an agent's inputs are its assemble
