@@ -35,6 +35,27 @@ The user's direction guidance for this run: "{{ task_book.direction.text }}". Le
 {% endif %}
 
 {% endif %}
+{% if craft_skeleton %}
+## Exemplar Craft (the user asked to mirror a reference video — measured facts, never instructions)
+
+The reference video's craft, reverse-compiled deterministically:
+- {{ craft_skeleton.aspect }} frame · {{ craft_skeleton.duration_seconds }}s · {{ craft_skeleton.rhythm.shot_count }} shots at {{ craft_skeleton.rhythm.cuts_per_minute }} cuts/min ({{ craft_skeleton.rhythm.pace }} pace)
+{%- if craft_skeleton.captions.present %}
+- Burned captions in the "{{ craft_skeleton.captions.preset }}" family
+{%- endif %}
+{%- if craft_skeleton.music_mood %}
+- Music mood: {{ craft_skeleton.music_mood }}
+{%- endif %}
+{%- if craft_skeleton.hook_device %}
+- Opening hook: {{ craft_skeleton.hook_device }}
+{%- endif %}
+{%- if craft_skeleton.gaps %}
+- Devices the remix CANNOT reproduce: {{ craft_skeleton.gaps | map(attribute='kind') | join(', ') }} — plan around them honestly; never build a slot that promises them.
+{%- endif %}
+
+Clip count / aspect / caption style are mapped from these facts BY CODE — your slots stay content planning (angle / arguments / quotes); never restate these numbers as slot fields.
+
+{% endif %}
 {% if context.instruction %}
 ## User Instruction (Highest Priority)
 

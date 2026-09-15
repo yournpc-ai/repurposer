@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.memory.brand import (
     brand_from_block,
     music_from_block,
+    music_from_exemplar,
     resolve_brand_block,
 )
 from app.models.schemas import (
@@ -30,6 +31,7 @@ from app.models.tables import (
     WorkflowRun,
 )
 from app.pipeline.clip_spec import build_clip_spec
+from app.pipeline.decompile import load_skeleton_for_run, skeleton_caption_overrides
 from app.pipeline.graph import NodeBase, estimate_free
 from app.pipeline.graph_store import display_aspect_class
 from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
@@ -72,8 +74,19 @@ class MaterializeSource(NodeBase):
         """
         ctx = run.context or {}
         assets = await _list_assets(db, project.id)
+        # 资产角色 (ADR-078 判词④) — the shared decision's pins (select_clips
+        # resolves the same way): a pinned source wins; the pinned exemplar
+        # stays out of the material pool unless the roles reversed.
+        source_pin = ctx.get("source_asset_id")
+        exemplar_pin = ctx.get("exemplar_asset_id")
         render_source, render_kind, still_images = await resolve_render_source(
-            db, node, assets
+            db,
+            node,
+            assets,
+            source_asset_id=source_pin,
+            exclude_asset_id=(
+                exemplar_pin if exemplar_pin and exemplar_pin != source_pin else None
+            ),
         )
         if render_source is None:
             raise ValueError("materialize_source: no renderable source asset")
@@ -88,15 +101,33 @@ class MaterializeSource(NodeBase):
         # The persona skin's aspect is a SHORTS craft default and never
         # applies to a whole-video materialization (a landscape talk must
         # not come out cropped to 9:16).
+        # Whole-source aspect (2026-08-17 拍板: 链无 clip 工具 = 比例跟源):
+        # explicit intent (spec / run.context) wins; then the EXEMPLAR's
+        # measured aspect (ADR-078 判词⑤ — a remix asks for the case's frame);
+        # otherwise "original" — the renderer resolves the source's own
+        # dimensions at render time. The persona skin's aspect is a SHORTS
+        # craft default and never applies to a whole-video materialization
+        # (a landscape talk must not come out cropped to 9:16).
+        skeleton = await load_skeleton_for_run(db, run, project)
         aspect = str(
             (node.spec or {}).get("aspect")
             or ctx.get("aspect")
+            or (skeleton.aspect if skeleton is not None else None)
             or "original"
         )
         cfg = brand_cfg
-        cap_pos = cfg.get("captionPosition")
+        caption_overrides = skeleton_caption_overrides(skeleton)
+        cap_pos = caption_overrides.get("position") or cfg.get("captionPosition")
         cap_style_raw = cfg.get("captionStylePreset")
-        cap_style = cap_style_raw if isinstance(cap_style_raw, str) else "clean-bottom"
+        cap_style = caption_overrides.get("preset") or (
+            cap_style_raw if isinstance(cap_style_raw, str) else "clean-bottom"
+        )
+        if caption_overrides.get("color"):
+            # Run-scoped brand copy carries the exemplar's palette-snapped
+            # caption color; the skin row is never mutated.
+            brand = brand.model_copy(
+                update={"caption_color": caption_overrides["color"]}
+            )
         ttl_pos = cfg.get("titlePosition")
         ttl_size_raw = cfg.get("titleSize")
         ttl_size = int(ttl_size_raw) if isinstance(ttl_size_raw, (int, float)) else None
@@ -118,7 +149,11 @@ class MaterializeSource(NodeBase):
             end_seconds=float(duration),
             duration_seconds=max(5, int(duration)),
         )
-        music = await music_from_block(db, brand_cfg)
+        # Exemplar-derived mood (ADR-078 判词⑤) outranks the skin default;
+        # the skin's musicEnabled master switch holds inside both helpers.
+        music = await music_from_exemplar(
+            db, skeleton.music_mood if skeleton is not None else None, brand_cfg
+        ) or await music_from_block(db, brand_cfg)
         spec = build_clip_spec(
             render_source,
             segment,

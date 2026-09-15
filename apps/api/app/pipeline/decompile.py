@@ -243,6 +243,74 @@ def _row(
     )
 
 
+# ---- exemplar param source (ADR-078 判词⑤): code maps, the LLM never writes a spec
+#
+# The skeleton's measured craft becomes run params HERE — plain functions over
+# the validated CraftSkeleton, called by the consumers (select_clips /
+# materialize_source / plan / music precedence). Precedence everywhere:
+# explicit (user-stated slot/spec fields) > exemplar (this source) > defaults
+# (skin / catalog / count_default). A missing skeleton ⇒ every helper returns
+# None/{} and the regular chain decides (degrade visible, never silent).
+
+
+async def load_skeleton_for_run(
+    db: AsyncSession, run: WorkflowRun, project: Project
+) -> CraftSkeleton | None:
+    """The run's exemplar skeleton: ``run.context.exemplar_asset_id`` → asset
+    → content hash → the latest same-user skeleton row (the reuse query — a
+    warmed or earlier-project row serves too). None = this run carries no
+    (resolvable) exemplar."""
+    ctx = run.context if isinstance(run.context, dict) else {}
+    pin = ctx.get("exemplar_asset_id")
+    if not pin:
+        return None
+    try:
+        asset = await db.get(Asset, UUID(str(pin)))
+    except ValueError:
+        return None
+    if asset is None:
+        return None
+    row = await _find_reusable_skeleton(db, project, asset)
+    if row is None:
+        return None
+    try:
+        return CraftSkeleton.model_validate(row.payload)
+    except Exception:  # noqa: BLE001 — stale shape: treat as absent
+        logger.warning("craft_skeleton_payload_invalid", output_id=str(row.id))
+        return None
+
+
+def skeleton_clip_count(
+    skeleton: CraftSkeleton | None, count_limits: tuple[int, int] | None
+) -> int | None:
+    """Exemplar-derived clip count: the exemplar's shot count, clamped to the
+    node's declared count bounds (birthplace C3's limits bind code-mapped
+    values too). None = no skeleton / no shots → the default chain decides."""
+    if skeleton is None or skeleton.rhythm.shot_count <= 0:
+        return None
+    lo, hi = count_limits or (1, 10)
+    return max(lo, min(hi, skeleton.rhythm.shot_count))
+
+
+def skeleton_caption_overrides(skeleton: CraftSkeleton | None) -> dict[str, Any]:
+    """The exemplar's caption style as param overrides. ``present=False`` ⇒
+    {} — absence is NOT a style signal: the remix keeps the skin's caption
+    defaults, never strips them."""
+    if skeleton is None or not skeleton.captions.present:
+        return {}
+    out: dict[str, Any] = {}
+    if skeleton.captions.preset:
+        out["preset"] = skeleton.captions.preset
+    if skeleton.captions.color:
+        out["color"] = skeleton.captions.color
+    if skeleton.captions.position is not None:
+        out["position"] = {
+            "x": skeleton.captions.position.x,
+            "y": skeleton.captions.position.y,
+        }
+    return out
+
+
 async def warm_craft_skeleton(project_id: UUID, asset_id: UUID) -> None:
     """Pin/upload-time materialization (期 1 前移的 exemplar 形态): once a
     pin lands (the pending plan's exemplar_asset_id — the chat layer's

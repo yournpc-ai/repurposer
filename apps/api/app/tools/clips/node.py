@@ -30,6 +30,11 @@ from app.models.tables import (
     WorkflowRun,
 )
 from app.pipeline.clip_spec import build_clip_spec
+from app.pipeline.decompile import (
+    load_skeleton_for_run,
+    skeleton_caption_overrides,
+    skeleton_clip_count,
+)
 from app.pipeline.edges import _load_plan_prelude_outputs
 from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase, estimate_agent, token_bounds
 from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
@@ -58,12 +63,21 @@ logger = structlog.get_logger()
 
 
 async def resolve_render_source(
-    db: AsyncSession, node: WorkflowStep, assets: list[Asset]
+    db: AsyncSession,
+    node: WorkflowStep,
+    assets: list[Asset],
+    *,
+    source_asset_id: str | None = None,
+    exclude_asset_id: str | None = None,
 ) -> tuple[Asset | None, str, list[str]]:
     """The render-source decision shared by select_clips and materialize_source
     (ADR-043 — one home, never a second copy): an upstream align_stills edge
-    wins (its timeline-materialized transcript asset); else a video with
-    words; else an audio with words; else a stills set. Returns
+    wins (its timeline-materialized transcript asset); else a pinned SOURCE
+    asset with words (ADR-078 判词④ — the role-settled 原片 wins the pick);
+    else a video with words; else an audio with words; else a stills set.
+    The pinned EXEMPLAR stays out of the media pool (reference, never
+    content) — the caller passes exclude=None on a role reversal (source ==
+    exemplar, 「用案例本身也剪一条」). Returns
     ``(render_source, render_kind, still_images)``."""
     aligned_source: Asset | None = None
     for upstream_id in node.inputs or []:
@@ -80,6 +94,22 @@ async def resolve_render_source(
     def _has_words(a: Asset) -> bool:
         return bool(a.file_url and (a.meta or {}).get("words"))
 
+    pool = (
+        [a for a in assets if str(a.id) != str(exclude_asset_id)]
+        if exclude_asset_id
+        else assets
+    )
+    pinned_source = (
+        next((a for a in pool if str(a.id) == str(source_asset_id)), None)
+        if source_asset_id
+        else None
+    )
+    if pinned_source is not None and not _has_words(pinned_source):
+        # A pinned source without a word axis can't drive captions — fall to
+        # the pool rules (the pin stays honored for any asset that can).
+        logger.info("render_source_pin_without_words", asset_id=str(source_asset_id))
+        pinned_source = None
+
     slide_page_urls = [
         u
         for a in assets
@@ -94,23 +124,27 @@ async def resolve_render_source(
     ]
     still_images = slide_page_urls + image_urls
     source_video = next(
-        (a for a in assets if a.type == AssetType.VIDEO and _has_words(a)),
+        (a for a in pool if a.type == AssetType.VIDEO and _has_words(a)),
         None,
     )
     source_audio = next(
-        (a for a in assets if a.type == AssetType.AUDIO and _has_words(a)),
+        (a for a in pool if a.type == AssetType.AUDIO and _has_words(a)),
         None,
     )
     first_visual = next(
         (
             a
-            for a in assets
+            for a in pool
             if a.type in (AssetType.SLIDES, AssetType.IMAGE) and a.file_url
         ),
         None,
     )
     if aligned_source is not None:
         return aligned_source, "stills", still_images
+    if pinned_source is not None and pinned_source.type == AssetType.VIDEO:
+        return pinned_source, "video", still_images
+    if pinned_source is not None and pinned_source.type == AssetType.AUDIO:
+        return pinned_source, "stills", still_images
     if source_video is not None:
         return source_video, "video", still_images
     if source_audio is not None:
@@ -180,7 +214,17 @@ class SelectClips(NodeBase):
         if feedback is not None:
             await _pop_spec_field(node.id, "feedback")
         slot = _node_slot(node, ctx, "clips")
-        clip_count = (slot.count if slot else None) or self.count_default
+        # 案例仿制参数源 (ADR-078 判词⑤ — the fourth param source): the
+        # decompiled skeleton's measured craft maps to params BY CODE (the
+        # LLM never writes a spec). Precedence everywhere below: explicit
+        # (slot/spec/context fields) > exemplar (the skeleton) > defaults
+        # (skin / catalog / count_default).
+        skeleton = await load_skeleton_for_run(db, run, project)
+        clip_count = (
+            (slot.count if slot else None)
+            or skeleton_clip_count(skeleton, self.count_limits)
+            or self.count_default
+        )
         # Language resolves per slot first, then the plan language.
         target_language = (
             (slot.language if slot else None) or ctx.get("target_language", "en")
@@ -199,9 +243,20 @@ class SelectClips(NodeBase):
         understanding, storyboard = await _load_plan_prelude_outputs(db, node)
 
         # Render source selection (docs/VIDEO_EDITOR.md §4) — the shared
-        # decision (materialize_source resolves the same way).
+        # decision (materialize_source resolves the same way). 资产角色
+        # (ADR-078 判词④): a pinned source wins the pick; the pinned exemplar
+        # stays OUT of the material pool (reference, never content) — unless
+        # the roles reversed (source == exemplar: 「用案例本身也剪一条」).
+        source_pin = ctx.get("source_asset_id")
+        exemplar_pin = ctx.get("exemplar_asset_id")
         render_source, render_kind, still_images = await resolve_render_source(
-            db, node, assets
+            db,
+            node,
+            assets,
+            source_asset_id=source_pin,
+            exclude_asset_id=(
+                exemplar_pin if exemplar_pin and exemplar_pin != source_pin else None
+            ),
         )
 
         async def _load_music_pieces() -> list[dict[str, str]]:
@@ -267,18 +322,30 @@ class SelectClips(NodeBase):
 
         brand = brand_from_block(brand_cfg)
         brand_ref = persona.id if persona is not None else None
+        caption_overrides = skeleton_caption_overrides(skeleton)
+        if caption_overrides.get("color"):
+            # The exemplar's palette-snapped caption color outranks the
+            # skin's (remix = 换内容留风格); the skin row is never mutated —
+            # a run-scoped copy carries the override.
+            brand = brand.model_copy(
+                update={"caption_color": caption_overrides["color"]}
+            )
         cfg = brand_cfg
         # Frame format: the chain's aspect param (spec, user-named) wins,
-        # then the run.context carry-over (legacy plans), then the skin
-        # default (2026-08-14 三档画幅; ADR-043 参数化).
+        # then the run.context carry-over (legacy plans), then the EXEMPLAR's
+        # measured aspect (ADR-078 判词⑤), then the skin default
+        # (2026-08-14 三档画幅; ADR-043 参数化).
         aspect = str(
             (node.spec or {}).get("aspect")
             or ctx.get("aspect")
+            or (skeleton.aspect if skeleton is not None else None)
             or cfg.get("aspect", "9:16")
         )
-        cap_pos = cfg.get("captionPosition")
+        cap_pos = caption_overrides.get("position") or cfg.get("captionPosition")
         cap_style_raw = cfg.get("captionStylePreset")
-        cap_style = cap_style_raw if isinstance(cap_style_raw, str) else "clean-bottom"
+        cap_style = caption_overrides.get("preset") or (
+            cap_style_raw if isinstance(cap_style_raw, str) else "clean-bottom"
+        )
         ttl_pos = cfg.get("titlePosition")
         ttl_size_raw = cfg.get("titleSize")
         ttl_size = int(ttl_size_raw) if isinstance(ttl_size_raw, (int, float)) else None
@@ -294,7 +361,12 @@ class SelectClips(NodeBase):
         output_ids: list[UUID] = []
         for plan in plans.clips[:clip_count]:
             segment = plan.to_segment()
-            music = await music_from_plan(db, plan, brand_cfg)
+            music = await music_from_plan(
+                db,
+                plan,
+                brand_cfg,
+                exemplar_mood=skeleton.music_mood if skeleton is not None else None,
+            )
             # 期 2 剪辑师 (stills 首接): the beat plan subdivides the clip's
             # narration span into planned shots. Editor failure degrades to
             # the legacy even split — never fails the clip.

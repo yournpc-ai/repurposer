@@ -828,6 +828,17 @@ class Plan(NodeBase):
         if direction:
             task_book["direction"] = direction
 
+        # Exemplar skeleton (ADR-078 判词⑤): when a decompile sibling fed this
+        # plan, the exemplar's measured craft rides the assemble as read-only
+        # facts (planning honesty — the gaps list steers slots away from
+        # unshippable promises). The params themselves are code-mapped at the
+        # consumers; the LLM never writes a spec.
+        from app.pipeline.decompile import (  # deferred: decompile imports THIS module
+            load_skeleton_for_run,
+        )
+
+        skeleton = await load_skeleton_for_run(db, run, project)
+
         persona_row = await resolve_persona(db, project)
         generation_context = _generation_context(run, project, persona_row)
 
@@ -839,6 +850,9 @@ class Plan(NodeBase):
             # as data, never restated by hand in the template.
             count_defaults_text=", ".join(
                 f"{t} → {d}" for t, d in slot_default_counts().items()
+            ),
+            craft_skeleton=(
+                skeleton.model_dump(mode="json") if skeleton is not None else None
             ),
         )
         storyboard.slots = _align_storyboard_slots(storyboard.slots, intent_slots)

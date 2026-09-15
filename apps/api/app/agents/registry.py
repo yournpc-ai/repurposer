@@ -155,12 +155,16 @@ def _assemble_plan(
     context: GenerationContext,
     task_book: dict[str, Any],
     count_defaults_text: str,
+    craft_skeleton: dict[str, Any] | None = None,
 ):
     """Plan node inputs — the self-sufficiency contract: only the
     understanding, the shared context, and the task book; never the raw
     sources. ``count_defaults_text`` is the registry-derived per-type count
     defaults line (N-32), supplied by the caller — the harness never imports
-    the graph layer."""
+    the graph layer. ``craft_skeleton`` (ADR-078 判词⑤): the pinned
+    exemplar's MEASURED craft, read-only facts for planning honesty (the
+    gaps list steers slots away from unshippable promises) — the params
+    themselves are code-mapped downstream; the LLM never writes a spec."""
     dump = understanding.model_dump()
     # The Quote Pool is the derived one-write view of quotable_lines (the
     # understanding stores the checked/anchored rows; planning reads texts).
@@ -171,6 +175,7 @@ def _assemble_plan(
             "context": context.model_dump(),
             "task_book": task_book,
             "count_defaults_text": count_defaults_text,
+            "craft_skeleton": craft_skeleton,
         },
         [],
     )

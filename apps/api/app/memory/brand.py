@@ -241,10 +241,41 @@ async def music_from_mood(db: AsyncSession, mood: str | None) -> ClipMusic:
     )
 
 
+async def music_from_exemplar(
+    db: AsyncSession,
+    mood: str | None,
+    brand_block: dict[str, Any] | None,
+) -> ClipMusic | None:
+    """Exemplar-derived music (ADR-078 判词⑤ — the fourth param source): the
+    decompiled skeleton's mood, code-mapped to a library piece. The mood was
+    clamped to the assembled catalog at the decompile agent's postprocess,
+    so this resolves by the unique natural key directly (no synonym layer —
+    a clamped catalog key never needs it). The skin's ``musicEnabled``
+    toggle stays the master switch and its gain applies — the exemplar says
+    WHAT mood, the skin keeps whether/how loud. None = no mood / no piece /
+    toggle off: the caller's regular precedence continues.
+    """
+    if not mood:
+        return None
+    if brand_block is not None and not brand_block.get("musicEnabled"):
+        return None
+    piece = await get_music_by_mood(db, mood)
+    if piece is None:
+        return None
+    return ClipMusic(
+        music_id=str(piece.id),
+        url=public_url(piece.file_path),
+        enabled=True,
+        gain_db=_gain_db((brand_block or {}).get("musicGainDb")),
+    )
+
+
 async def music_from_plan(
     db: AsyncSession,
     plan: Any,
     brand_block: dict[str, Any] | None,
+    *,
+    exemplar_mood: str | None = None,
 ) -> ClipMusic:
     """Per-clip music: the Clip Agent's pick wins, else the brand default.
 
@@ -254,9 +285,12 @@ async def music_from_plan(
        per-clip agent's pick cannot override.
     1. ``plan.music_id`` (UUID or mood key) when ``plan.music_enabled`` — the
        agent's per-clip choice, with ``plan.music_gain_db`` applied.
-    2. Otherwise the brand block default (``music_from_block``), which
+    2. The exemplar-derived mood (ADR-078 判词⑤): the decompiled skeleton's
+       music mood, code-mapped — outranks the brand default, never the
+       agent's own pick.
+    3. Otherwise the brand block default (``music_from_block``), which
        honors ``musicEnabled``/``musicId``/``musicGainDb`` (and legacy musicMood).
-    3. If neither resolves, a disabled, track-less block is returned.
+    4. If neither resolves, a disabled, track-less block is returned.
     """
     if brand_block is not None and not brand_block.get("musicEnabled"):
         return ClipMusic(gain_db=_gain_db(brand_block.get("musicGainDb")))
@@ -270,4 +304,7 @@ async def music_from_plan(
                 enabled=True,
                 gain_db=float(getattr(plan, "music_gain_db", -18.0) or -18.0),
             )
+    exemplar = await music_from_exemplar(db, exemplar_mood, brand_block)
+    if exemplar is not None:
+        return exemplar
     return await music_from_block(db, brand_block)

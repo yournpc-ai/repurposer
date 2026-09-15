@@ -340,3 +340,122 @@ def test_decompile_mood_clamped_to_catalog():
     assert off.hook_device == "title card"
     on = _clamp_judgment(CraftJudgment(music_mood="calm"), {"mood_catalog": ["calm"]})
     assert on.music_mood == "calm"
+
+
+# ---------------------------------------------------------------------------
+# exemplar param mapping (批次⑥ T5 ③ — 判词⑤: code maps, the LLM never
+# writes a spec; precedence = explicit > exemplar > defaults)
+# ---------------------------------------------------------------------------
+
+from types import SimpleNamespace  # noqa: E402
+
+from app.models.schemas import AssetType, Point  # noqa: E402
+
+
+def _skeleton(**over) -> CraftSkeleton:
+    base: dict = {
+        "aspect": "9:16",
+        "duration_seconds": 30.0,
+        "shots": [CraftShot(start=0.0, end=3.0), CraftShot(start=3.0, end=6.0)],
+        "rhythm": CraftRhythm(
+            shot_count=2, cuts_per_minute=4.0, median_shot_seconds=3.0, pace="steady"
+        ),
+        "captions": CraftCaptionScan(present=False),
+    }
+    base.update(over)
+    return CraftSkeleton(**base)
+
+
+def test_skeleton_clip_count_clamps_to_declared_limits():
+    from app.pipeline.decompile import skeleton_clip_count
+
+    assert skeleton_clip_count(None, (1, 10)) is None
+    assert skeleton_clip_count(_skeleton(), (1, 10)) == 2
+    fast = _skeleton(
+        rhythm=CraftRhythm(shot_count=42, cuts_per_minute=84.0, median_shot_seconds=0.7, pace="fast")
+    )
+    # The birthplace C3 bounds bind code-mapped values too.
+    assert skeleton_clip_count(fast, (1, 10)) == 10
+    empty = _skeleton(
+        rhythm=CraftRhythm(shot_count=0, cuts_per_minute=0.0, median_shot_seconds=0.0, pace="slow")
+    )
+    assert skeleton_clip_count(empty, (1, 10)) is None
+
+
+def test_skeleton_caption_overrides_absence_is_not_a_strip_signal():
+    from app.pipeline.decompile import skeleton_caption_overrides
+
+    assert skeleton_caption_overrides(None) == {}
+    assert skeleton_caption_overrides(_skeleton()) == {}  # present=False ⇒ skin defaults keep
+    present = _skeleton(
+        captions=CraftCaptionScan(
+            present=True,
+            preset="stacking",
+            color="#FDE047",
+            position=Point(x=0.5, y=0.8),
+        )
+    )
+    assert skeleton_caption_overrides(present) == {
+        "preset": "stacking",
+        "color": "#FDE047",
+        "position": {"x": 0.5, "y": 0.8},
+    }
+
+
+def test_assemble_plan_carries_the_skeleton_seat():
+    """判词⑤'s assemble-side seat: plan receives the skeleton as read-only
+    facts; the self-sufficiency contract holds (no raw-source seats)."""
+    import inspect
+
+    from app.agents.registry import _assemble_plan
+
+    params = set(inspect.signature(_assemble_plan).parameters)
+    assert "craft_skeleton" in params
+    assert params.isdisjoint({"assets", "source_blocks", "asset_media"})
+
+
+# ---- render-source role honoring (判词④) ------------------------------------
+
+
+def _fake_asset(asset_id: str, asset_type: AssetType, words: bool = True):
+    return SimpleNamespace(
+        id=asset_id,
+        type=asset_type,
+        file_url=f"file://{asset_id}",
+        meta={"words": [{"w": "x"}]} if words else {},
+        slide_pages=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_render_source_pin_wins_exemplar_excluded_reversible():
+    from app.tools.clips.node import resolve_render_source
+
+    source = _fake_asset("s", AssetType.VIDEO)
+    exemplar = _fake_asset("e", AssetType.VIDEO)
+    node = SimpleNamespace(inputs=[])  # no align_stills upstream → db untouched
+
+    # The pinned source wins the pick; the exemplar is not material.
+    picked, kind, _ = await resolve_render_source(
+        None, node, [exemplar, source], source_asset_id="s", exclude_asset_id="e"
+    )
+    assert picked is source and kind == "video"
+
+    # Exclusion alone: the exemplar never becomes the material pool's pick.
+    picked2, _, _ = await resolve_render_source(None, node, [exemplar], exclude_asset_id="e")
+    assert picked2 is None
+
+    # Role reversal (用案例本身也剪一条): the caller passes exclude=None when
+    # source == exemplar — the case itself renders.
+    picked3, _, _ = await resolve_render_source(
+        None, node, [exemplar], source_asset_id="e", exclude_asset_id=None
+    )
+    assert picked3 is exemplar
+
+    # A pinned source without a word axis falls through to the pool rules.
+    silent = _fake_asset("silent", AssetType.VIDEO, words=False)
+    other = _fake_asset("o", AssetType.VIDEO)
+    picked4, _, _ = await resolve_render_source(
+        None, node, [silent, other], source_asset_id="silent"
+    )
+    assert picked4 is other
