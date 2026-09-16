@@ -296,6 +296,8 @@ uv run alembic downgrade -1
 
 **修订（2026-09-16，ADR-079）**：claim/reap 语义从 ownerless 升级为 **fencing-aware**——claim 原子 UPDATE 内铸 `claim_token` / `render_claim_token`（`gen_random_uuid()`），两个 reap（startup 全量 + per-tick 按龄）翻 status 时同置 NULL；被 reap 的旧执行者醒来时其终态写谓词（token）必失败，reap 从「只翻状态」升级为「失效令牌」。
 
+**修订（2026-09-16，R1 B4a）**：reap/retry 语义族补**封顶终态**——`assets.attempt` / `outputs.render_attempt` 计数 claim 次数（崩溃 reap 不清零——计数本身就是被封的环；意图 re-pend 与手动 reprocess 清零——新意图 = 新预算），`claim_pending_asset` / `claim_pending_render` / `reap_stale` 三处判定 `attempt > cap`（config `asset_max_attempts` / `render_max_attempts`，默认 3，与 NodeBase.retries 0–2 同量级）→ 终态 FAILED + 本地化人话行（`processing_gave_up` / `render_gave_up`），render 封顶连带 fanout 节点镜像 failed + 收官所属 run（否则节点永 pending 挂死 run）。手动 reprocess = 一座复位（`jobs.reset_asset_processing` / `reset_output_render`：状态+错误+计数一体），旧「只翻 status」旁路退役。tick 即退避，不发明 backoff 策略。
+
 **Related files**:
 - `apps/api/app/worker.py`, `apps/api/app/services/jobs.py`, `apps/api/app/services/asset_processing.py`
 - `apps/api/app/models/tables.py` (`Asset.processing_status`)

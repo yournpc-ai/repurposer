@@ -25,8 +25,8 @@
 |---|---|---|---|---|---|---|
 | **B1** | J2 | 旗舰旅程零自动化验收；run 路径拆解静默；画布孤儿节点 | remix e2e + run-path trigger + prelude 折叠 + 测试复位（4 漂移 + gate 0） | **DONE**（2026-09-16 验证绿：190 纯测试 / 闸门 / prompt gate / S16；commit cd90fca） | — | `tasks/r1-batch-1-remix-closure.md` |
 | B2 | J5/J3/J6 | 竞态下双扣 + 僵尸写污染产物：收费后第一个 worker 卡顿 = 账单事故 | claim fencing（范围冻结 = `ARCHITECTURE_GATE_2_REPORT.md` §7/§13） | **DONE**（2026-09-16 施工+§10.1 自动化四条绿：纯套件 9 / 全量 199 / 闸门 / migration 升降；手工竞态演练 §10.2–10.5 待跑；commit 50c4ae8） | B1 | `tasks/r1-batch-2-execution-fencing.md` |
-| B3 | J6/J4 | 旧问题后答/过期自动答 → 旧 run 无守卫复活，整族销毁新 run 产物 | run authority 仲裁座（一座四入口）+ expire 解耦 | PLANNED | B2 | `tasks/r1-batch-3-run-authority.md` |
-| B4a | J5 | 素材崩溃环无限重烧、永无终态 | attempts 封顶终态 + reprocess 完整 reset 一座 | PLANNED | B2 | `tasks/r1-batch-4a-poison-pill.md` |
+| B3 | J6/J4 | 旧问题后答/过期自动答 → 旧 run 无守卫复活，整族销毁新 run 产物 | run authority 仲裁座（一座四入口）+ expire 解耦 | **DONE**（2026-09-16 验证绿：纯套件 6 新绿（全量 209）/ S17 剧本全链绿 / S14·S4·S13·S15 回归绿；S6f read-first 流式断言 = 既有 LLM 方差（baseline 同红，非本批引入）；commit 3e1cbc8） | B2 | `tasks/r1-batch-3-run-authority.md` |
+| B4a | J5 | 素材崩溃环无限重烧、永无终态 | attempts 封顶终态 + reprocess 完整 reset 一座 | **DONE**（2026-09-16 验证绿：migration 升降 / 纯套件 4 新绿 / 崩溃环演练 14 项全绿（封顶终态+人话行+不再认领+复位真重开）/ S4 正常素材链回归绿；commit 051ad0e） | B2 | `tasks/r1-batch-4a-poison-pill.md` |
 
 ### 0.2 R1 Definition of Done
 

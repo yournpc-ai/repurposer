@@ -1,6 +1,6 @@
 # R1 Batch 4a — Poison Pill / Retry Termination（卡死有终态）
 
-> Status: PLANNED（2026-09-16 建；排期唯一事实源 = `docs/PROGRESS.md` §0.1，本文件只是施工合同）
+> Status: DONE（2026-09-16 施工+验证绿：T1 migration `a4b7c2d91e05`（`assets.attempt` + `outputs.render_attempt`——命名裁定：outputs 走 render_* 族，`quality.attempt` 异义键防撞；可升可降实测绿）+ T2 claim 计数（两座）+ T3 封顶终态（claim/reap 三处判定，config `asset_max_attempts`/`render_max_attempts` 默认 3；render 封顶连带 fanout 镜像 + 收官）+ T4 一座复位（`jobs.reset_asset_processing`/`reset_output_render`；10 座意图 re-pend 清零 = 新意图新预算，崩溃 reap 不清零）+ T5 纯测试 4 例绿 + 崩溃环演练 14 项全绿（封顶终态+人话行+不再认领+复位后真重开）+ S4 正常素材链回归绿；commit 051ad0e；行号核验于 HEAD `e8dbced`）
 > 行号核验于 HEAD `e8dbced`；开工前以 current HEAD 重新定位。
 
 ## 1. Product goal

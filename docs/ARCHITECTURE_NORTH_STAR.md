@@ -144,14 +144,16 @@ ADR-052 判词「实现层零 agent、全 workflow」维持；ADR-077 收编的�
 
 ## 8. Execution Kernel = 可靠性核心
 
-### 8.1 当前基线（CURRENT，R1 B2 落地后）
+### 8.1 当前基线（CURRENT，R1 B4a 落地后）
 
-`POST_T5_DELTA_AUDIT.md` 登记的四条 P0 **已全部修复**（原文核验于 HEAD `453b73d`）：
+`POST_T5_DELTA_AUDIT.md` 登记的四条 P0 **已全部修复**（原文核验于 HEAD `453b73d`），R1 B3/B4a 各补一条：
 
 1. ~~节点终态写无围栏——成功尾/失败尾 = ORM 按 PK 盲写~~ → **已修（ADR-079，R1 B2）**：execute_step 四尾改条件 UPDATE `WHERE id=:id AND claim_token=:mine` + rowcount；fenced → rollback + 零副作用（不 capture / 不 sync / 不 cascade / 不写 run）。
 2. ~~渲染守卫是 status 不是身份~~ → **已修（ADR-079，R1 B2）**：render 三处终态写谓词换 `render_claim_token=:mine`；全部 10 处 re-pend 置 NULL；入口 token NULL 提前 return。
 3. ~~Suspend 的 run 迁移无 expected-from-state guard~~ → **已修（ADR-079，R1 B2）**：`WHERE id=:rid AND status='RUNNING'`——COMPLETED→WAITING_HUMAN 复活链结构性死亡。
 4. ~~`operations.output_id` FK NO ACTION + 删除路径不清 operations~~ → **已修（Gate #2 Commit 2，`6ca3b70`）**：四处删除路径对齐 FK-safe 顺序（operations → publications → outputs）。
+5. ~~resume/expire 第二出生通道无守卫——挂起-新开-后答制造双 RUNNING，旧 run 复活整族销毁新 run 产物~~ → **已修（R1 B3，I-EXEC-03/04）**：`resume_waiting_interrupt` 函数体内唯一仲裁座（项目行锁 + 原子重查 `has_active_run`，四入口全继承）；authority 被占 = 再挂+明示（零状态污染）；expire = 答案结算 + 仲裁尝试两动作解耦；authority 空出触发器 = 收官交接钩（`_resume_parked_answered`）+ sweep 重试分支。
+6. ~~assets/renders 无执行计数——崩溃环无限重烧、永无终态（`reap_stale` 自认 TODO）~~ → **已修（R1 B4a，ADR-017 修订）**：`attempt` / `render_attempt` 计数列 + claim/reap 封顶终态（> cap → FAILED + 人话行）+ 手动 reprocess 一座复位；意图 re-pend 清零、崩溃 reap 计数。
 
 ### 8.2 Race proof 的架构意义
 

@@ -86,7 +86,8 @@ book path 进入条件（`prepare_chat_turn` 分派，service.py）：project sc
 | checkpoint 答题：打字母/序号/原文 | /chat autoResume（零 LLM 确定性结算——ADR-053 后唯一确定性座位）→ resume | ✅（S6b） |
 | checkpoint 答题：自由文本 | /chat → chat_intent 判 `pending_disposition=answer` → 代码结算 freeform → resume（判定是 LLM 的、结算是代码的，ADR-053 R2） | ✅（S6c） |
 | checkpoint 弃跑 | dock bail 按钮 → 级联 skipped + COMPLETED（永不 failed） | ✅（S6e） |
-| checkpoint 不答 | 过期扫描（默认 30min）→ 默认项 auto-answer + resume | ✅（机制现役，TTL 语义 ADR-053 未动；专项剧本旧 S39 随 C4 浓缩退役——人工走查） |
+| checkpoint 不答 | 过期扫描（默认 30min）→ 默认项 auto-answer + **仲裁尝试**（R1 B3：expire ≠ TTL resume——authority 被占则 answered-but-parked 再挂，sweep 每 tick 经已答分支重试，收官交接钩续跑） | ✅（机制现役，TTL 语义 ADR-053 未动；专项剧本旧 S39 随 C4 浓缩退役——人工走查；仲裁语义 S17b） |
+| **checkpoint 后答/过期时已有新 run 在跑**（J6 挂起-新开-后答） | 四入口（answer 端点 / autoResume / 工具 loop 判定 / expire sweep）→ 唯一仲裁座：authority 被占 = **再挂+明示**（答案照收、节点保持 waiting、确定性人话回执），B 收官 → 交接钩自动续跑 A；全程 {PENDING,RUNNING} 单 owner（I-EXEC-03/04） | ✅（S17，R1 B3） |
 | checkpoint 答题期间另起新题 | 新题 supersede → 级联 bail 那个 run（多 run 不搁浅） | ✅（机制现役；多 run 级联专项（旧 S38）随 C4 浓缩退役，supersede 主径由 S5 覆盖） |
 | **checkpoint 停驻中插话**（"跑得到哪了"） | /chat → chat_intent 判 `pending_disposition=none` → 正常回答 + 代码拼装提醒尾（原问题 + default_path）；问题保持待决、run 保持 parked，下轮作答再唤醒 | ✅（S6f，ADR-053 R2） |
 | **Q 进度（"到哪了/还要多久"）** | /chat → answer 形态；`_build_context` 注入 latest run 的节点级量化摘要（kind: status — summary，≤12 行），waiting checkpoint 行天然传达"在等你" | ✅（期 4 补四 G-2） |
@@ -178,6 +179,7 @@ book path 进入条件（`prepare_chat_turn` 分派，service.py）：project sc
 | 积分② 失败不扣费：缺参确定性失败探针（seeded run，活 worker）→ FAILED + 级联 skipped → 台账零 capture、hold 全额 release、余额回到赠额；capture 幂等（重复调用结构性 no-op）+ bounce 重跑差额落 attempt 键 + Σ captures ≡ credits（总成本）（进程内） | ✅ S14（需 dev worker） |
 | 积分③ 孤儿 hold 回收（BILLING §8 边界落地）：PENDING run + 真 hold → DELETE /projects/{id} → 同事务先退未结 hold 再级联删 run（RUNNING 在途归收官路径台账结算，幂等键两路相斥只退一笔）→ 台账 hold+release 闭合、余额回赠额 | ✅ S15 |
 | **remix 旗舰（旅程二）**：两视频 + @mention 指认参考片（拍 0a 免问路，pin 代码结算）→ warm 拆解主动说话（P1，零 run）/ run 路径新鲜物化同权发声（P2，FAILED 处理态参考片逼出 run 座位，恰一条不重复）→ exemplar pin 骑 run.context → decompile 新鲜物化（warmed=False 骨架行）→ clips 产物参数 = 骨架（画幅 / 字幕色严等 + 条数不超 clamp(shots) 帽，自洽读骨架行）→ draft+run 图均无 decompile 孤儿节点、步骤骑 task book 内部族 | ✅ S16（需 dev worker + demo 桶 fixture，真 ASR 真 LLM） |
+| **run 执行权仲裁（R1 B3，J6）**：a) B 活跃时答 A 的旧 checkpoint → blocked + 明示回执 + A 零状态污染保持 parked + 全程单 owner；B 收官 → 交接钩续跑 A → A 完成、B 行零损失。b) expire 在 authority 被占时结算默认答案但不再制造双 RUNNING（answered-but-parked）；sweep 重试分支不重复结算/计数；B 收官 → A 续跑完成 | ✅ S17（需 dev worker；进程内调 expire/finalize 驱动确定性时序） |
 | asset_role 角色问 dock（remix 句 → router 主动问） | ⚠️ 无确定性 scenario（ask 提案靠 LLM 触发——S16 两次实测路由在旗舰句上直接出默认 plan 不问角色，prompt 规则在册（intent_router_system §ASSET ROLES）但 miss 率未测量，归 prompt 探针；代码侧——选项构造 / 答复落 pin / bail 默认路径——由 test_decompile_pure 纯测试锁定） |
 | ask 落库（chat_intent agent ask 提案 → dock 选项问） | ⚠️ 无确定性 scenario（ask 提案靠 LLM 触发，只有人工走查） |
 | translate_clip / dub_clip chat 派发 | ❌ 待补（烧声纹/渲染管线，登记为已知空白） |

@@ -1,6 +1,6 @@
 # R1 Batch 3 — Run Execution Authority（E′ run 隔离）
 
-> Status: PLANNED（2026-09-16 建；排期唯一事实源 = `docs/PROGRESS.md` §0.1，本文件只是施工合同）
+> Status: DONE（2026-09-16 施工+验证绿：T1 仲裁座（`resume_waiting_interrupt` 函数体，四入口继承）+ T2 expire 解耦（结算/重获执行权两动作 + 已答分支重试）+ T3 三入口「再挂+明示」（共享 `_resume_ack_line`）+ T4 双触发（`maybe_finalize_run` 收官交接钩 `_resume_parked_answered` + sweep 重试——单 sweep 有 TTL 内搁浅洞，故两做）+ T5 纯测试 `test_run_authority_pure.py` 6 例绿 + S17 剧本绿（a 答题 blocked→明示→交接续跑 / b expire blocked→不造双 RUNNING→重试不重复计数→交接续跑）+ 回归 S14·S4·S13·S15 绿；S6f read-first 流式断言 = 既有 LLM 方差（baseline HEAD 同红 3/4，零假设排除本批）；commit 3e1cbc8；排期唯一事实源 = `docs/PROGRESS.md` §0.1，本文件只是施工合同）
 > 行号核验于 HEAD `e8dbced`；开工前以 current HEAD 重新定位。发现合同与代码不一致 → 标记 discrepancy 回报，不自行扩大 scope。
 
 ## 1. Product goal
