@@ -10,6 +10,8 @@
 
 **对外叙事版**：DAG + 状态机是执行层，不是产品本身——最终产品是一个 **Agentic Content OS**：Agent = 决策层（§3），Structured Media + Decompiler/Compiler = 内容语义层（§9），Execution Kernel = 可靠执行层（§8）。此句只是上一句的展开，不产生任何超出五态表的承诺（统一 Artifact 模型、Media IR 等上层抽象仍为触发制 OPEN）。
 
+**R1 收口后的对外口径（2026-09-17 评审拍板）**：已成立的是**一个 Agent 驱动的 Content Execution System**——Agent → Execution Kernel → Structured Media → Rendered Output 的真实可用闭环（证据 = R1 四条 invariant + S1–S17 剧本族）。「Agentic Content OS」仍是 North Star，但 OS 的高级抽象（统一 Artifact / Media IR / ExecutionAttempt）**不提前承诺、不成 R2/R3 排期暗示**——触发条件满足才进入决策。
+
 ### 1.1 愿景词汇 ↔ 现行词汇对照表
 
 拿着 Agentic Content OS 的图读代码时查这张表——左列是讲故事的词，右列是代码里今天的名字与真实进度：
@@ -19,12 +21,12 @@
 | Agent / Tool 层 | `app/agents/`（ToolLoopAgent 终态工具机）+ `app/tools/` + perception 只读族 | ✅ CURRENT |
 | Decision / Command | 三扇门：`create_run` / `apply_wiring_ops` / `apply_operations` | ✅ CURRENT |
 | Workflow DAG | `workflow_steps` + `jobs.py` 队列 + `compile_graph`（拓扑代码裁决） | ✅ CURRENT |
-| Execution State Machine（run/task 生命周期 + HITL） | run/step 状态 + interrupt 提问机器 + **fencing（R1 B2 本周施工）** | 🔨 强化中 |
-| Task / **Attempt** | step = ✅；**ExecutionAttempt = OPEN**（四证据点触发制，§8.5） | ⏳ OPEN |
+| Execution State Machine（run/task 生命周期 + HITL） | run/step 状态 + interrupt 提问机器 + fencing（R1 B2 ✅）+ run authority 仲裁（R1 B3 ✅）+ retry 封顶终态（R1 B4a ✅） | ✅ CURRENT |
+| Task / **Attempt** | step = ✅；attempt 计数器 = ✅（B4a）；**ExecutionAttempt = OPEN**（四证据点触发制，§8.5） | ⏳ OPEN |
 | **Artifact 层**（不可变 + parent/version/provenance） | **无统一模型**——其目标已被替代机制部分兑现：operations journal（ADR-032）/ `restore_version` 快照 / 变体并行（ADR-061）/ 内容寻址复用（understanding、skeleton）。统一模型 = 触发制 OPEN | ⏳ OPEN（部分能力 ✅） |
 | Structured Media 层（Media Program / AST） | clip-spec（ADR-016 唯一渲染契约）+ CraftSkeleton（ADR-078 首个工艺结构产物）；**Media IR = OPEN** | ✅ 雏形 / ⏳ 深化 OPEN |
 | Decompiler / Compiler | `craft_scan` + `Decompile` 节点（video→骨架，T5）/ renderer 确定性渲染（黑盒） | ✅ CURRENT |
-| Human-in-the-loop | interrupt/checkpoint 提问机器（S6 族）+ **run authority（R1 B3 本周施工）** | ✅ / 🔨 |
+| Human-in-the-loop | interrupt/checkpoint 提问机器（S6 族）+ run authority（R1 B3 ✅） | ✅ CURRENT |
 
 用法：对外讲用左列，写代码用右列，评审时倒查「这个词今天的状态配不配得上它的愿景名」——**配不上愿景名的词不许提前用愿景名命名代码**（词汇版「把 OPEN 写成 CURRENT」）。
 

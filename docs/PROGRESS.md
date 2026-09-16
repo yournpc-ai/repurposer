@@ -39,6 +39,8 @@
 
 **Invariant（第二语言，验收保障，不开新文档）**：I-EXEC-01/02（stale 执行不写终态、零副作用，B2）/ I-EXEC-03/04（project {PENDING,RUNNING} 至多一 owner、进入必原子重查，B3）/ 超限 retry 必有终态（B4a）。
 
+> **R1 状态标签（2026-09-17 评审拍板）**：**Implementation complete, acceptance nearly closed**——core execution architecture 已证明（四 invariant + S17 族），剩两块**有界**证据缺口：① B2 §10.2–10.5 手工竞态演练（真实时序下的 fencing invariant，非文档仪式，跑掉即封板）；② S1/S6f baseline LLM 方差（🟡 existing baseline variance, not a release regression；follow-up probe 保持 OPEN）。**防漂移纪律**：「不是本批引入的 regression」与「首产链验证未完全稳定」两事实并存——前者永不抵消后者；DoD-1 在这两拍下保持 🟡，不因归因判断转 ✅，也不因此重开/扩大 R1。上层抽象（统一 Artifact / ExecutionAttempt / 结构级 remix / Media IR）**明确没有承诺**，trigger-gated OPEN，不成 R2/R3 排期暗示。
+
 **R1 停止线**：B1→B2→B3→B4a 完成即停。以下事项**不得**扩张进 R1（除非证明阻塞 J2/J5/J6）：ExecutionAttempt / HITL canonical store / artifact lineage / Media IR / AgentBudget / Capability Registry / 结构级 remix / second provider / Distribution / W11 / op 覆盖度扩面 / B4 镜头跟随 / select_clips 语义重设计。
 
 ### 0.3 R1.1 — Commercial / Distribution（R1 之后；**排期挂起 2026-09-16**）
