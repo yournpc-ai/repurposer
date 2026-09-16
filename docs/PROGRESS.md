@@ -24,7 +24,7 @@
 | Batch | 服务 Journey | 用户阻塞（Why now） | 技术工作（第二层） | 状态 | 依赖 | 施工合同 |
 |---|---|---|---|---|---|---|
 | **B1** | J2 | 旗舰旅程零自动化验收；run 路径拆解静默；画布孤儿节点 | remix e2e + run-path trigger + prelude 折叠 + 测试复位（4 漂移 + gate 0） | **DONE**（2026-09-16 验证绿：190 纯测试 / 闸门 / prompt gate / S16；commit cd90fca） | — | `tasks/r1-batch-1-remix-closure.md` |
-| B2 | J5/J3/J6 | 竞态下双扣 + 僵尸写污染产物：收费后第一个 worker 卡顿 = 账单事故 | claim fencing（范围冻结 = `ARCHITECTURE_GATE_2_REPORT.md` §7/§13） | **DONE**（2026-09-16 施工+§10.1 自动化四条绿：纯套件 9 / 全量 199 / 闸门 / migration 升降；手工竞态演练 §10.2–10.5 待跑；commit 50c4ae8） | B1 | `tasks/r1-batch-2-execution-fencing.md` |
+| B2 | J5/J3/J6 | 竞态下双扣 + 僵尸写污染产物：收费后第一个 worker 卡顿 = 账单事故 | claim fencing（范围冻结 = `ARCHITECTURE_GATE_2_REPORT.md` §7/§13） | **DONE**（2026-09-16 施工+§10.1 自动化四条绿：纯套件 9 / 全量 199 / 闸门 / migration 升降；**§10.2–10.5 实弹演练 2026-09-17 全绿**——§10.2 节点 fencing（A 冻结→SQL reap→B 新 token/attempt+1 完成→A 醒后 `workflow_step_fenced` 落日志、B 值不被覆写、capture 恰一条、钱包零二扣、run 保持 COMPLETED）；§10.3 render 同型（morph-sim 后 B 完成、A 醒后 `render_superseded`、行保 B 的 files/token）；§10.4 zombie Suspend 守卫实证（COMPLETED→WAITING_HUMAN 命中 0 行）；§10.5 全量剧本回归（归因见 §0.2 状态标签）；**演练抓出真 bug 一条并同批修掉**：fenced 五尾 rollback 后读过期 ORM 属性崩 MissingGreenlet、日志永不落（commit 928d5a8）；commits 50c4ae8 / 928d5a8） | B1 | `tasks/r1-batch-2-execution-fencing.md` |
 | B3 | J6/J4 | 旧问题后答/过期自动答 → 旧 run 无守卫复活，整族销毁新 run 产物 | run authority 仲裁座（一座四入口）+ expire 解耦 | **DONE**（2026-09-16 验证绿：纯套件 6 新绿（全量 209）/ S17 剧本全链绿 / S14·S4·S13·S15 回归绿；S6f read-first 流式断言 = 既有 LLM 方差（baseline 同红，非本批引入）；commit 3e1cbc8） | B2 | `tasks/r1-batch-3-run-authority.md` |
 | B4a | J5 | 素材崩溃环无限重烧、永无终态 | attempts 封顶终态 + reprocess 完整 reset 一座 | **DONE**（2026-09-16 验证绿：migration 升降 / 纯套件 4 新绿 / 崩溃环演练 14 项全绿（封顶终态+人话行+不再认领+复位真重开）/ S4 正常素材链回归绿；commit 051ad0e） | B2 | `tasks/r1-batch-4a-poison-pill.md` |
 
@@ -39,7 +39,7 @@
 
 **Invariant（第二语言，验收保障，不开新文档）**：I-EXEC-01/02（stale 执行不写终态、零副作用，B2）/ I-EXEC-03/04（project {PENDING,RUNNING} 至多一 owner、进入必原子重查，B3）/ 超限 retry 必有终态（B4a）。
 
-> **R1 状态标签（2026-09-17 评审拍板）**：**Implementation complete, acceptance nearly closed**——core execution architecture 已证明（四 invariant + S17 族），剩两块**有界**证据缺口：① B2 §10.2–10.5 手工竞态演练（真实时序下的 fencing invariant，非文档仪式，跑掉即封板）；② S1/S6f baseline LLM 方差（🟡 existing baseline variance, not a release regression；follow-up probe 保持 OPEN）。**防漂移纪律**：「不是本批引入的 regression」与「首产链验证未完全稳定」两事实并存——前者永不抵消后者；DoD-1 在这两拍下保持 🟡，不因归因判断转 ✅，也不因此重开/扩大 R1。上层抽象（统一 Artifact / ExecutionAttempt / 结构级 remix / Media IR）**明确没有承诺**，trigger-gated OPEN，不成 R2/R3 排期暗示。
+> **R1 状态标签（2026-09-17 封板）**：**Implementation complete, acceptance closed**——core execution architecture 已证明：四 invariant + S17 族 + B2 §10.2–10.5 实弹竞态演练全绿（证据见 §0.1 B2 行；演练按 2026-09-17 评审拍板执行，非文档仪式）。**仍 OPEN 的一块（有界，不阻塞封板）**：baseline LLM 方差族 = S1 / S6f / **S10**（🟡 existing baseline variance, not a release regression；follow-up probe 保持 OPEN）。§10.5 全量回归 10/17 的归因全账：S3/S5/S11 隔离复跑即绿（flaky 判断方差）；S17 单跑即绿（45s 轮询窗在全量负载下不够，handoff 日志链完整）；S1/S6f = 既有登记方差；S10 本日新登记为稳定红，机理实证 = 模型散文前导 `\n\n` 沿 delta 原样流出、信封 `_compose_speech` 侧 strip——零代码面因果路径（`tool_loop.py` 自 baseline 未动），属 provider 输出形态漂移，登记不改闸门。**防漂移纪律照旧**：「不是本批引入的 regression」与「首产链验证未完全稳定」两事实并存——前者永不抵消后者；DoD-1 保持 🟡，不因归因判断转 ✅，也不因此重开/扩大 R1。上层抽象（统一 Artifact / ExecutionAttempt / 结构级 remix / Media IR）**明确没有承诺**，trigger-gated OPEN，不成 R2/R3 排期暗示。
 
 **R1 停止线**：B1→B2→B3→B4a 完成即停。以下事项**不得**扩张进 R1（除非证明阻塞 J2/J5/J6）：ExecutionAttempt / HITL canonical store / artifact lineage / Media IR / AgentBudget / Capability Registry / 结构级 remix / second provider / Distribution / W11 / op 覆盖度扩面 / B4 镜头跟随 / select_clips 语义重设计。
 
