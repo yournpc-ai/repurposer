@@ -242,7 +242,11 @@ async def render_output_endpoint(
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> Output:
-    """Queue this clip for video rendering (worker claims render_status=PENDING)."""
+    """Queue this clip for video rendering (worker claims render_status=PENDING).
+
+    R1 B4a: the reset is ONE seat (``reset_output_render``) — status + token +
+    error + attempt counter move together, so a capped-out FAILED render gets
+    a genuinely fresh budget instead of instantly terminally failing again."""
     output = _require_clip(
         await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
     )
@@ -251,9 +255,9 @@ async def render_output_endpoint(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Clip has no render_spec (text-only project — no source video)",
         )
-    output.render_status = RenderStatus.PENDING
-    output.render_claim_token = None
-    output.render_error = None
+    from app.pipeline.jobs import reset_output_render
+
+    reset_output_render(output)
     await db.commit()
     await db.refresh(output)
     return output

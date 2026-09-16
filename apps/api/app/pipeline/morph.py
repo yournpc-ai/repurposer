@@ -464,7 +464,12 @@ async def _pend_suppressed_base_renders(
     await db.execute(
         update(Output)
         .where(Output.id.in_(stale_ids))
-        .values(render_status=RenderStatus.PENDING, render_claim_token=None)
+        .values(
+            render_status=RenderStatus.PENDING,
+            render_claim_token=None,
+            # R1 B4a: intent re-pend = new budget (only the crash reap keeps counting)
+            render_attempt=0,
+        )
     )
     await db.flush()
     await _fan_out_renders(

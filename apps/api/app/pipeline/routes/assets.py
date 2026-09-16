@@ -233,7 +233,11 @@ async def reprocess_asset(
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> Asset:
-    """Re-queue a project asset for processing (e.g. after a failure)."""
+    """Re-queue a project asset for processing (e.g. after a failure).
+
+    R1 B4a: the reset is ONE seat (``reset_asset_processing``) — status +
+    error + attempt counter move together, so a capped-out FAILED row gets a
+    genuinely fresh budget instead of instantly terminally failing again."""
     await _get_user_project(project_id, current_user.id, db)
     result = await db.execute(
         select(Asset).where(Asset.id == asset_id, Asset.project_id == project_id)
@@ -244,8 +248,9 @@ async def reprocess_asset(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Asset not found",
         )
-    asset.processing_status = AssetStatus.PENDING
-    asset.processing_error = None
+    from app.pipeline.jobs import reset_asset_processing
+
+    reset_asset_processing(asset)
     await db.commit()
     await db.refresh(asset)
     return asset

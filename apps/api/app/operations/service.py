@@ -319,6 +319,7 @@ def _repend_after_restore(output: Output, op_name: str) -> None:
         output.render_status = RenderStatus.PENDING
         output.render_claim_token = None
         output.render_error = None
+        output.render_attempt = 0  # R1 B4a: intent re-pend = new budget (only the crash reap keeps counting)
 
 
 async def list_operations(db: AsyncSession, output_id: UUID) -> list[Operation]:

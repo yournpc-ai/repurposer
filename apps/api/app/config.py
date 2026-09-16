@@ -57,6 +57,15 @@ class Settings(BaseSettings):
     # best-judgment completion, never a bail and never a permanent park.
     interrupt_expiry_seconds: int = 1800
 
+    # Poison-pill caps (R1 B4a): claims of a queue row beyond the cap flip it
+    # to its FAILED terminal instead of re-entering the crash loop. Boundary:
+    # attempt == cap is still claimable, attempt > cap is terminal (total
+    # executions = cap + 1). Same magnitude as the node-level budgets
+    # (NodeBase.retries 0–2). The tick cadence is the backoff — no retry
+    # schedule is invented here.
+    asset_max_attempts: int = 3
+    render_max_attempts: int = 3
+
     # ASR (faster-whisper, self-hosted — EU/GDPR; CTranslate2, no torch)
     asr_model: str = "base"  # tiny/base/small/medium/large-v3
     asr_device: str = "cpu"  # cpu | cuda

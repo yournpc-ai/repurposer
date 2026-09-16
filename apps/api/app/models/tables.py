@@ -174,6 +174,11 @@ class Asset(Base):
         Enum(AssetStatus), nullable=False, default=AssetStatus.PENDING
     )
     processing_error = Column(Text, nullable=True)
+    # Poison-pill counter (R1 B4a): claims of this queue row. The crash-
+    # recovery reap keeps counting (that IS the loop being bounded); the
+    # manual reprocess seat resets to 0 (new budget). Mirrors
+    # ``workflow_steps.attempt``.
+    attempt = Column(Integer, nullable=False, default=0)
     duration_seconds = Column(Integer, nullable=True)
     # Processor extras (e.g. ASR word-level timestamps, detected language).
     meta = Column(JSON, nullable=True)
@@ -391,6 +396,12 @@ class Output(Base):
     # an identity (the morph-window race proof), so a zombie render's
     # guarded write matches 0 rows.
     render_claim_token = Column(UUID(as_uuid=True), nullable=True)
+    # Poison-pill counter (R1 B4a): claims of this render row. Intent-driven
+    # re-pends (morph / verify / undo-redo / manual render / tool re-render —
+    # every seat that NULLs the token for NEW work) reset it to 0; the crash
+    # reap never does. Named into the render_* family — a bare ``attempt``
+    # would collide with the verify verdict's ``quality.attempt`` key.
+    render_attempt = Column(Integer, nullable=False, default=0)
     score = Column(JSONB, nullable=True)
     # 质检裁决 (产物质量线期 3): the verify node's verdict —
     # {status: passed|needs_human, checks: [{id, ok, detail, cls}], attempt,

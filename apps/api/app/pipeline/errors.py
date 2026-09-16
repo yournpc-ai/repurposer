@@ -70,6 +70,17 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
         "en": "Video rendering failed — please try again",
         "zh": "视频渲染失败，请重试",
     },
+    # Poison-pill terminals (R1 B4a): the attempt cap gave up — the honest
+    # next step is the manual reset (reprocess / re-render), which restarts
+    # the budget.
+    "processing_gave_up": {
+        "en": "This file couldn't be processed after several attempts — reprocess it to start fresh.",
+        "zh": "这个文件多次处理都失败了——重新处理可以从头再来。",
+    },
+    "render_gave_up": {
+        "en": "This clip couldn't be rendered after several attempts — queue the render again to start fresh.",
+        "zh": "这条视频多次渲染都失败了——重新发起渲染可以从头再来。",
+    },
     "step_failed": {
         "en": "This step hit an unexpected error",
         "zh": "这一步出了意外错误",

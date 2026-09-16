@@ -927,5 +927,6 @@ class RenderRequest(NodeBase):
         output.render_status = RenderStatus.PENDING
         output.render_claim_token = None
         output.render_error = None
+        output.render_attempt = 0  # R1 B4a: intent re-pend = new budget (only the crash reap keeps counting)
         await db.flush()
         return []
