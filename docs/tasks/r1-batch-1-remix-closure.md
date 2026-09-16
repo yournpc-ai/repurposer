@@ -1,6 +1,6 @@
 # R1 Batch 1 — Remix 旗舰旅程收口 + 测试地基复位
 
-> Status: IMPLEMENTED（2026-09-16 施工 + 验证完毕：纯套件 190 绿 / gate 0 注入验证过 / prompt gate 3/3 / S16 剧本绿；Implemented: <commit 待补> / Verified: 2026-09-16。排期唯一事实源 = `docs/PROGRESS.md` §0.1，本文件只是施工合同）
+> Status: IMPLEMENTED（2026-09-16 施工 + 验证完毕：纯套件 190 绿 / gate 0 注入验证过 / prompt gate 3/3 / S16 剧本绿；Implemented: cd90fca / Verified: 2026-09-16。排期唯一事实源 = `docs/PROGRESS.md` §0.1，本文件只是施工合同）
 > **开工纪律**：本文件的文件/行号核验于 HEAD `e8dbced`（2026-09-16）。行号会漂移——开工前以 current HEAD 重新定位代码座位；docs 与 code 冲突时 `Current code > DB constraints/migrations > tests > ADR > 架构文档`。发现本合同与代码不一致 → 标记 discrepancy 回报，不自行扩大 scope。
 
 > **施工记录（验证驱动的范围外修复，单独说明理由）**：
