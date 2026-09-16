@@ -1,6 +1,6 @@
 # R1 Batch 2 — Execution Fencing（执行围栏）
 
-> Status: IMPLEMENTED（2026-09-16 施工完毕：migration `f3a8c1d52e97` 两列 token / claim 铸 token / 全 失 Paths 置 NULL（10 处 render re-pend grep 复核）/ 四尾 + render 三写 token-guarded / fenced 零副作用纪律 / Suspend run 写 expected-from-state / 入口防御 ×2 / 纯测试 `tests/test_execution_fencing_pure.py` 8 项 / ADR-079 + ADR-017/030/050 修订 + North Star §8.1/§8.4/§13/§2 翻转。验证（纯套件 / 手工竞态演练 / 单 worker 回归 / migration 升降）用户自跑。Implemented: <commit 待回填> / Verified: 待定。排期唯一事实源 = `docs/PROGRESS.md` §0.1，本文件只是施工合同）
+> Status: IMPLEMENTED（2026-09-16 施工完毕：migration `f3a8c1d52e97` 两列 token / claim 铸 token / 全 失 Paths 置 NULL（10 处 render re-pend grep 复核）/ 四尾 + render 三写 token-guarded / fenced 零副作用纪律 / Suspend run 写 expected-from-state / 入口防御 ×2 / 纯测试 `tests/test_execution_fencing_pure.py` 8 项 / ADR-079 + ADR-017/030/050 修订 + North Star §8.1/§8.4/§13/§2 翻转。验证（纯套件 / 手工竞态演练 / 单 worker 回归 / migration 升降）用户自跑。Implemented: 50c4ae8 / Verified: 待定。排期唯一事实源 = `docs/PROGRESS.md` §0.1，本文件只是施工合同）
 > **施工范围合同 = `ARCHITECTURE_GATE_2_REPORT.md`（仓库根）§7 IN/OUT 清单 + §13 完成定义 + §15 验收——已冻结，本文件不重述设计、不重新谈判边界。** 行号核验于 HEAD `e8dbced`；开工前以 current HEAD 重新定位。
 
 ## 1. Product goal

@@ -24,7 +24,7 @@
 | Batch | 服务 Journey | 用户阻塞（Why now） | 技术工作（第二层） | 状态 | 依赖 | 施工合同 |
 |---|---|---|---|---|---|---|
 | **B1** | J2 | 旗舰旅程零自动化验收；run 路径拆解静默；画布孤儿节点 | remix e2e + run-path trigger + prelude 折叠 + 测试复位（4 漂移 + gate 0） | **DONE**（2026-09-16 验证绿：190 纯测试 / 闸门 / prompt gate / S16；commit cd90fca） | — | `tasks/r1-batch-1-remix-closure.md` |
-| B2 | J5/J3/J6 | 竞态下双扣 + 僵尸写污染产物：收费后第一个 worker 卡顿 = 账单事故 | claim fencing（范围冻结 = `ARCHITECTURE_GATE_2_REPORT.md` §7/§13） | **DONE**（2026-09-16 施工完毕：migration `f3a8c1d52e97` + 两列 token + claim/reap/四尾/render 三写全链 fencing + 8 项纯测试；验证（纯套件 / 手工竞态演练 / 回归）用户自跑；commit 待回填） | B1 | `tasks/r1-batch-2-execution-fencing.md` |
+| B2 | J5/J3/J6 | 竞态下双扣 + 僵尸写污染产物：收费后第一个 worker 卡顿 = 账单事故 | claim fencing（范围冻结 = `ARCHITECTURE_GATE_2_REPORT.md` §7/§13） | **DONE**（2026-09-16 施工完毕：migration `f3a8c1d52e97` + 两列 token + claim/reap/四尾/render 三写全链 fencing + 8 项纯测试；验证（纯套件 / 手工竞态演练 / 回归）用户自跑；commit 50c4ae8） | B1 | `tasks/r1-batch-2-execution-fencing.md` |
 | B3 | J6/J4 | 旧问题后答/过期自动答 → 旧 run 无守卫复活，整族销毁新 run 产物 | run authority 仲裁座（一座四入口）+ expire 解耦 | PLANNED | B2 | `tasks/r1-batch-3-run-authority.md` |
 | B4a | J5 | 素材崩溃环无限重烧、永无终态 | attempts 封顶终态 + reprocess 完整 reset 一座 | PLANNED | B2 | `tasks/r1-batch-4a-poison-pill.md` |
 
