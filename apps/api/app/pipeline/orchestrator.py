@@ -18,7 +18,7 @@ Run-level semantics preserved from the retired run_generation:
 import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import structlog
 from pydantic import BaseModel
@@ -1136,6 +1136,38 @@ async def create_run(
 NODE_EXECUTION_TIMEOUT_SECONDS = 600.0
 
 
+def _foreign_execution(node_status: str | None, claim_token: UUID | None) -> bool:
+    """Entry defense (ADR-079): a ``running`` row WITHOUT a claim token is
+    foreign — an in-flight row from before the fencing migration (the deploy
+    note kills its owning asyncio task with the worker restart) or a
+    claim-less mirror flip. There is no identity to fence its terminal
+    writes with, so the only safe move is to stand down; a live claim
+    re-mints the token and re-executes legitimately."""
+    return node_status == "running" and claim_token is None
+
+
+async def _fenced_step_write(
+    db: AsyncSession, node_id: UUID, mine: UUID, **values
+) -> bool:
+    """The fencing write (ADR-079): every terminal/settle write carries the
+    execution identity — ``WHERE id=:id AND claim_token=:mine``.
+
+    rowcount=0 = authority lost (reaped, then re-claimed by a live worker,
+    whose claim re-minted the token). The caller then rolls the session back
+    — the executor's staged writes die with it — and stops: no capture, no
+    graph sync, no cascade, no mirror, no run write (I-EXEC-01/02). The row
+    lock the write takes also serializes us against the reaper: while this
+    transaction is open the row cannot be reaped out from under us.
+    """
+    result = await db.execute(
+        update(WorkflowStep)
+        .where(WorkflowStep.id == node_id, WorkflowStep.claim_token == mine)
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    return result.rowcount > 0
+
+
 async def execute_step(node_id: UUID) -> None:
     """Execute one claimed node; settle terminal state + downstream + the run.
 
@@ -1148,13 +1180,44 @@ async def execute_step(node_id: UUID) -> None:
             if node is None or node.status not in ("pending", "running"):
                 return
             run_id = node.run_id
+            if _foreign_execution(node.status, node.claim_token):
+                logger.warning(
+                    "workflow_step_foreign_row_refused",
+                    node_id=str(node_id),
+                    kind=node.kind,
+                )
+                return
+            mine: UUID
             if node.status == "pending":
-                node.status = "running"
-                node.started_at = datetime.now(UTC)
-                node.attempt = (node.attempt or 0) + 1
+                # Legacy direct-execution path (never worker-claimed): mint
+                # our own token with a guarded flip — a racing claim wins the
+                # row and we stand down instead of double-executing.
+                mine = uuid4()
+                minted = await db.execute(
+                    update(WorkflowStep)
+                    .where(
+                        WorkflowStep.id == node_id,
+                        WorkflowStep.status == "pending",
+                    )
+                    .values(
+                        status="running",
+                        started_at=datetime.now(UTC),
+                        attempt=WorkflowStep.attempt + 1,
+                        claim_token=mine,
+                        updated_at=datetime.now(UTC),
+                    )
+                    .execution_options(synchronize_session=False)
+                )
+                if minted.rowcount == 0:
+                    await db.rollback()
+                    logger.info("workflow_step_claim_race_lost", node_id=str(node_id))
+                    return
+                await db.refresh(node)
                 # Graph back-write (ADR-057 K2): the family's first running
                 # step flips the owning graph node queued → running.
                 await sync_graph_node_for_step(db, node)
+            else:
+                mine = node.claim_token
             run = await db.get(WorkflowRun, node.run_id)
             if run is not None and run.status == WorkflowStatus.PENDING:
                 run.status = WorkflowStatus.RUNNING
@@ -1186,29 +1249,59 @@ async def execute_step(node_id: UUID) -> None:
                             f"node execution timed out after "
                             f"{NODE_EXECUTION_TIMEOUT_SECONDS:.0f}s"
                         ) from exc
-                node.output_refs = [str(oid) for oid in (output_ids or [])]
                 # D9: metering no longer UPDATEs this row per LLM call from a
                 # second session (that locked the row this session holds
                 # uncommitted — an application-level self-deadlock under node
                 # concurrency). One merge write bills the whole execution.
-                node.cost = merge_accrued_cost(node.cost, accrued)
-                if NODE_KINDS[node.kind].runtime_fanout:
+                new_cost = merge_accrued_cost(node.cost, accrued)
+                fanout = NODE_KINDS[node.kind].runtime_fanout
+                values: dict = {
+                    "output_refs": [str(oid) for oid in (output_ids or [])],
+                    "cost": new_cost,
+                    "updated_at": datetime.now(UTC),
+                }
+                if fanout:
                     # The render chain owns this node's terminal state (D2):
-                    # back to pending so the render-status claim mirror moves it.
-                    node.status = "pending"
-                    node.finished_at = None
+                    # back to pending so the render-status claim mirror moves
+                    # it. An authority-losing re-pend (ADR-079) — the token
+                    # dies here; the render chain re-mints at its own claim.
+                    values.update(
+                        status="pending", finished_at=None, claim_token=None
+                    )
                 else:
-                    node.status = "done"
-                    node.finished_at = datetime.now(UTC)
-                    # Clear any transient note from earlier attempts (W3) —
-                    # a done node carries no error.
-                    node.error = None
+                    values.update(
+                        status="done",
+                        finished_at=datetime.now(UTC),
+                        # Clear any transient note from earlier attempts (W3) —
+                        # a done node carries no error.
+                        error=None,
+                    )
+                if not await _fenced_step_write(db, node_id, mine, **values):
+                    # Fenced (I-EXEC-01/02): a live worker re-claimed this node
+                    # while we executed. Roll back — the executor's staged
+                    # writes die with the session — and stop: NO capture (the
+                    # double-billing hole), no graph sync, no run write. The
+                    # finally-block's maybe_finalize_run still runs (deliberate
+                    # exception: row lock + terminal early-return make it
+                    # idempotent, and cascade-NULLed nodes rely on it to close).
+                    await db.rollback()
+                    logger.warning(
+                        "workflow_step_fenced",
+                        node_id=str(node_id),
+                        kind=node.kind,
+                        tail="success",
+                    )
+                    return
+                await db.refresh(node)
+                if not fanout:
                     # Credits (ADR-055): settle the step's actual at the
                     # metering merge write — same session, same commit
                     # (ADR-050). Only the done branch: failed/skipped nodes
                     # never write a capture (失败不扣费), and runtime_fanout
                     # (render) settles in the render chain — its terminal
                     # state is D2-owned and render is priced $0 (PRICING).
+                    # Only reachable with authority held (the fenced write
+                    # above) — a stale execution NEVER captures.
                     await capture_step(db, user_id=project.user_id, node=node)
                 # Graph back-write (ADR-057 K2): AFTER the status write above —
                 # the owning graph node's state re-aggregates off its internal
@@ -1229,12 +1322,48 @@ async def execute_step(node_id: UUID) -> None:
                     # Project deleted mid-flight (cleanup won the race) —
                     # nothing left to settle.
                     return
-                node.status = "waiting"
-                node.spec = {**(node.spec or {}), "suspend_payload": s.payload}
-                node.cost = merge_accrued_cost(node.cost, accrued)
-                run = await db.get(WorkflowRun, node.run_id)
-                if run is not None:
-                    run.status = WorkflowStatus.WAITING_HUMAN
+                parked = await _fenced_step_write(
+                    db,
+                    node_id,
+                    mine,
+                    status="waiting",
+                    spec={**(node.spec or {}), "suspend_payload": s.payload},
+                    cost=merge_accrued_cost(node.cost, accrued),
+                    # Suspend park is authority-losing (ADR-079): the resume
+                    # re-pend is re-claimed with a fresh token — this one dies.
+                    claim_token=None,
+                    updated_at=datetime.now(UTC),
+                )
+                if not parked:
+                    # Fenced zombie Suspend: no park, and above all NO run
+                    # write — the COMPLETED → WAITING_HUMAN resurrection path
+                    # (race proof §3.4) dies here. The docked question message
+                    # the runner already committed becomes an orphan (known
+                    # residue, registered for a later sweep batch).
+                    await db.rollback()
+                    logger.warning(
+                        "workflow_step_fenced",
+                        node_id=str(node_id),
+                        kind=node.kind,
+                        tail="suspend",
+                    )
+                    return
+                await db.refresh(node)
+                # Run write with expected-from-state (ADR-079): ONLY
+                # RUNNING → WAITING_HUMAN may land — a terminal run can never
+                # be resurrected, even when the node write raced a finalize.
+                await db.execute(
+                    update(WorkflowRun)
+                    .where(
+                        WorkflowRun.id == node.run_id,
+                        WorkflowRun.status == WorkflowStatus.RUNNING,
+                    )
+                    .values(
+                        status=WorkflowStatus.WAITING_HUMAN,
+                        updated_at=datetime.now(UTC),
+                    )
+                    .execution_options(synchronize_session=False)
+                )
                 await sync_graph_node_for_step(db, node)
                 await db.commit()
                 logger.info("workflow_step_waiting", node_id=str(node_id), kind=node.kind)
@@ -1253,15 +1382,37 @@ async def execute_step(node_id: UUID) -> None:
                 if node is None:
                     # Project deleted mid-flight — nothing left to reset.
                     return
-                node.status = "pending"
-                node.finished_at = None
-                # Bill the bounced verify attempt — its judge calls happened.
-                node.cost = merge_accrued_cost(node.cost, accrued)
+                requeued = await _fenced_step_write(
+                    db,
+                    node_id,
+                    mine,
+                    status="pending",
+                    finished_at=None,
+                    # Bill the bounced verify attempt — its judge calls happened.
+                    cost=merge_accrued_cost(node.cost, accrued),
+                    # The bounce re-queue is authority-losing (ADR-079) — the
+                    # next claim re-mints. Same for the executor + modifier
+                    # resets below: any stale execution still holding their
+                    # old token dies against the NULL.
+                    claim_token=None,
+                    updated_at=datetime.now(UTC),
+                )
+                if not requeued:
+                    await db.rollback()
+                    logger.warning(
+                        "workflow_step_fenced",
+                        node_id=str(node_id),
+                        kind=node.kind,
+                        tail="quality_bounce",
+                    )
+                    return
+                await db.refresh(node)
                 executor = await db.get(WorkflowStep, q.executor_id)
                 if executor is not None and executor.status == "done":
                     executor.status = "pending"
                     executor.finished_at = None
                     executor.error = None
+                    executor.claim_token = None
                     executor.spec = {**(executor.spec or {}), "feedback": q.feedback}
                     siblings = list(
                         (
@@ -1304,6 +1455,7 @@ async def execute_step(node_id: UUID) -> None:
                             s.status = "pending"
                             s.finished_at = None
                             s.error = None
+                            s.claim_token = None
                             await sync_graph_node_for_step(db, s)
                 await sync_graph_node_for_step(db, node)
                 await db.commit()
@@ -1328,10 +1480,28 @@ async def execute_step(node_id: UUID) -> None:
                 executor = node_for(node.kind)
                 budget = executor.retries if executor is not None else 0
                 if isinstance(e, TransientNodeError) and (node.attempt or 0) <= budget:
-                    node.status = "pending"
-                    node.error = f"transient attempt {node.attempt}: {str(e)[:500]}"
-                    node.finished_at = None
-                    node.cost = merge_accrued_cost(node.cost, accrued)
+                    requeued = await _fenced_step_write(
+                        db,
+                        node_id,
+                        mine,
+                        status="pending",
+                        error=f"transient attempt {node.attempt}: {str(e)[:500]}",
+                        finished_at=None,
+                        cost=merge_accrued_cost(node.cost, accrued),
+                        # The retry re-queue is authority-losing (ADR-079) —
+                        # the next claim re-mints; this token dies.
+                        claim_token=None,
+                        updated_at=datetime.now(UTC),
+                    )
+                    if not requeued:
+                        await db.rollback()
+                        logger.warning(
+                            "workflow_step_fenced",
+                            node_id=str(node_id),
+                            kind=node.kind,
+                            tail="retry",
+                        )
+                        return
                     await db.commit()
                     logger.info(
                         "workflow_step_retry",
@@ -1340,7 +1510,6 @@ async def execute_step(node_id: UUID) -> None:
                         attempt=node.attempt,
                     )
                     return
-                node.status = "failed"
                 # node.error is USER copy — the failed step row's tail. Bake the
                 # localized line (errors.USER_ERROR_LINES, the run's pinned UI
                 # locale — same bake-at-write discipline as step summaries);
@@ -1348,14 +1517,33 @@ async def execute_step(node_id: UUID) -> None:
                 # in the DB the UI reads.
                 run = await db.get(WorkflowRun, node.run_id)
                 project = await db.get(Project, run.project_id) if run else None
-                node.error = (
-                    user_error_line(e, ui_lang_of(run, project))
-                    if run is not None
-                    else user_error_line(e)
+                failed = await _fenced_step_write(
+                    db,
+                    node_id,
+                    mine,
+                    status="failed",
+                    error=(
+                        user_error_line(e, ui_lang_of(run, project))
+                        if run is not None
+                        else user_error_line(e)
+                    ),
+                    finished_at=datetime.now(UTC),
+                    # Bill the failed attempt — its LLM/media calls happened.
+                    cost=merge_accrued_cost(node.cost, accrued),
+                    updated_at=datetime.now(UTC),
                 )
-                node.finished_at = datetime.now(UTC)
-                # Bill the failed attempt — its LLM/media calls happened.
-                node.cost = merge_accrued_cost(node.cost, accrued)
+                if not failed:
+                    # Fenced (I-EXEC-01/02): no sync, no rescue, no cascade —
+                    # the live execution owns the node's world now.
+                    await db.rollback()
+                    logger.warning(
+                        "workflow_step_fenced",
+                        node_id=str(node_id),
+                        kind=node.kind,
+                        tail="failure",
+                    )
+                    return
+                await db.refresh(node)
                 await sync_graph_node_for_step(db, node)
                 await db.commit()
                 # Morph-failure rescue: a failed in-place morph leaves its
@@ -1413,6 +1601,10 @@ async def _cascade_skip(
             child.status = "skipped"
             child.error = reason or f"upstream node {current} failed"
             child.finished_at = datetime.now(UTC)
+            # ADR-079: a cascade-skipped RUNNING child may have a stale
+            # executor still in flight — NULLing the token turns its terminal
+            # write into a deterministic 0-row discard (not last-writer-wins).
+            child.claim_token = None
             # Graph back-write (ADR-057 K2): a cascade-skipped child flips its
             # owning graph node's aggregate with it (no-op outside the graph).
             await sync_graph_node_for_step(db, child)
@@ -1441,6 +1633,9 @@ async def resume_waiting_interrupt(
     node.spec = {**(node.spec or {}), "answer": answer}
     node.status = "pending"
     node.started_at = None
+    # ADR-079: the resume re-pend is authority-losing — the next claim
+    # re-mints (the park already NULLed; this is the explicit belt).
+    node.claim_token = None
     if run.status == WorkflowStatus.WAITING_HUMAN:
         run.status = WorkflowStatus.RUNNING
     await sync_graph_node_for_step(db, node)

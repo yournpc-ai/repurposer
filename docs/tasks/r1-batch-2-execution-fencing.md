@@ -1,6 +1,6 @@
 # R1 Batch 2 — Execution Fencing（执行围栏）
 
-> Status: PLANNED（2026-09-16 建；排期唯一事实源 = `docs/PROGRESS.md` §0.1，本文件只是施工合同）
+> Status: IMPLEMENTED（2026-09-16 施工完毕：migration `f3a8c1d52e97` 两列 token / claim 铸 token / 全 失 Paths 置 NULL（10 处 render re-pend grep 复核）/ 四尾 + render 三写 token-guarded / fenced 零副作用纪律 / Suspend run 写 expected-from-state / 入口防御 ×2 / 纯测试 `tests/test_execution_fencing_pure.py` 8 项 / ADR-079 + ADR-017/030/050 修订 + North Star §8.1/§8.4/§13/§2 翻转。验证（纯套件 / 手工竞态演练 / 单 worker 回归 / migration 升降）用户自跑。Implemented: <commit 待回填> / Verified: 待定。排期唯一事实源 = `docs/PROGRESS.md` §0.1，本文件只是施工合同）
 > **施工范围合同 = `ARCHITECTURE_GATE_2_REPORT.md`（仓库根）§7 IN/OUT 清单 + §13 完成定义 + §15 验收——已冻结，本文件不重述设计、不重新谈判边界。** 行号核验于 HEAD `e8dbced`；开工前以 current HEAD 重新定位。
 
 ## 1. Product goal
@@ -74,3 +74,68 @@ ExecutionAttempt 任何形态 / attempt 语义迁移 / poison-pill（Batch 4a）
 - `ARCHITECTURE_NORTH_STAR.md` §8.1 四条 P0 中的 1/2/3 翻转为已修；§8.4 claim token PLANNED→CURRENT。
 - `docs/PROGRESS.md` §0.1：B2 → DONE + commit。
 - 本文件 Status → DONE。
+
+## 10. 验证操作手册（用户自跑，2026-09-16 施工随附）
+
+### 10.1 自动化（命令逐条）
+
+```bash
+cd apps/api
+
+# ① 本批纯函数套件（token 捕获决策 + rowcount=0 零副作用 + authority-held happy path）
+uv run --extra dev python -m pytest tests/test_execution_fencing_pure.py -q
+# 期望：8 passed
+
+# ② 全量纯套件（回归基线 = B1 的 190 绿 + 本批 8 = 198）
+uv run --extra dev python -m pytest tests/ -q
+
+# ③ 架构闸门（preflight chore commit b48d589 后必须全绿——B2 回归基线）
+uv run python scripts/check_gates.py
+
+# ④ migration 可升可降
+uv run alembic upgrade head
+uv run alembic current            # 期望 f3a8c1d52e97
+# 确认两列在：psql 里 \d workflow_steps 见 claim_token、\d outputs 见 render_claim_token
+uv run alembic downgrade -1       # 两列消失
+uv run alembic upgrade head       # 恢复
+```
+
+### 10.2 手工竞态演练 ①：节点 fencing（A claim→停滞→reap→B claim→B 完成→A 醒）
+
+前置：dev DB 有积分余额充足的账号；worker 可起两个实例。
+
+1. 终端 A：`cd apps/api && uv run python -m app.worker`（worker A）。
+2. UI 或 chat 触发一个含 LLM 节点的 run（如 select_clips）。
+3. 观察 DB：`SELECT id, status, attempt, claim_token FROM workflow_steps WHERE run_id='<rid>' ORDER BY seq;`
+   —— 待目标节点 N 为 `running` 且 `claim_token` 非空（= T_A）。
+4. **冻结 A**：`kill -STOP $(pgrep -f "app.worker" | head -1)`（模拟停滞）。
+5. **模拟 reap**（等价 per-tick 900s 收割，直接 SQL）：
+   `UPDATE workflow_steps SET status='pending', claim_token=NULL WHERE id='<N>';`
+6. 终端 B：再起一个 worker（`uv run python -m app.worker`）→ B claim N（`claim_token` 变为 T_B，attempt+1）→ B 执行完成。
+7. 确认 B 判决落库：N 行 `status='done'`、`claim_token=T_B`；`SELECT kind, idem, amount FROM credit_transactions WHERE ref->>'step_id'='<N>';` 有且仅有一条 capture；run 行 `COMPLETED`。
+8. **唤醒 A**：`kill -CONT <pid>` → A 的 executor 返回（或 LLM 调用超时失败，两种结局都合法）→ A 的终态写。
+9. **验收**：A 的日志出现 `workflow_step_fenced`（tail=success 或 failure）；N 行保持 B 的值（output_refs/cost 不被覆写）；capture 仍只有一条（**无第二条 `:capture:2`**——双扣封死）；run 行保持 COMPLETED；钱包余额只减一次。
+10. 收尾：`kill <pid of A>`；B 的 worker 也停掉。
+
+### 10.3 手工竞态演练 ②：render 同型（morph 窗口内 zombie 先完成不得覆写）
+
+1. 找一个有 render_spec 的 clip 产物 O，worker A 跑起来，触发 render（画布「导出」或 `POST /outputs/{id}/render`）。
+2. 待 `outputs.render_status='RENDERING'` 且 `render_claim_token=T_A` 后，**冻结 A**（渲染服务跑一片约 10–60s，窗口足够）。
+3. **模拟 morph re-pend**：`UPDATE outputs SET render_status='PENDING', render_claim_token=NULL WHERE id='<O>';`（真实 morph 写的就是这两值）。
+4. worker B 起 → claim O（token=T_B）→ 渲染完成 → O 行 `COMPLETED` + B 的文件 key。
+5. **唤醒 A** → zombie render 完成 → 终态写 0 命中。
+6. **验收**：A 日志 `render_superseded`；O 行仍是 B 的 files + COMPLETED（不被 v1 覆写）；A 自己渲染出的孤儿 key 已被删（`render_superseded_delete_failed` 无新增则为删净）；无第二个 COMPLETED mirror 之外的 run 状态污染。
+
+### 10.4 手工竞态演练 ③：zombie Suspend 不得 COMPLETED→WAITING_HUMAN
+
+纯测试已锁 fenced 尾零副作用（`test_fenced_suspend_tail_never_writes_the_run`）。DB 层补一条守卫实证：
+
+1. 找一个已 `COMPLETED` 的 run。
+2. 执行：`UPDATE workflow_runs SET status='WAITING_HUMAN' WHERE id='<rid>' AND status='RUNNING';` → **必须 0 rows**（expected-from-state 守卫）。
+3. （可选全链）挂起一个 interrupt 节点（方向提问）→ run `WAITING_HUMAN`；回答 → resume → run `RUNNING`——正常 Suspend 链路不受 fencing 影响。
+
+### 10.5 回归
+
+1. 单 worker 正常 run：`./dev.sh` 起全栈，UI 走一条完整 run（产物落地 + 收官）——行为不变。
+2. 剧本回归：`cd apps/api && uv run python scripts/chat_scenarios.py`（全量；含 retry / QualityBounce 覆盖的既有剧本不红）。
+3. prompt gate（未动 prompt 面，可不跑；如跑：`uv run python scripts/prompt_gate.py`）。

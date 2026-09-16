@@ -242,6 +242,13 @@ class WorkflowStep(Base):
     estimate = Column(JSONB, nullable=True)
     error = Column(Text, nullable=True)
     attempt = Column(Integer, nullable=False, default=0)
+    # Fencing token (ADR-079): minted at claim (jobs.claim_ready_node),
+    # NULLed on every authority-losing path (reap / retry re-pend /
+    # QualityBounce reset / runtime-fanout re-pend / Suspend park / resume /
+    # cascade-skip). execute_step's terminal tails predicate on it
+    # (``WHERE id=:id AND claim_token=:mine`` + rowcount) — a stale
+    # executor's terminal write matches 0 rows and is discarded wholesale.
+    claim_token = Column(UUID(as_uuid=True), nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
@@ -377,6 +384,13 @@ class Output(Base):
     # render_status claim write-set companion (ADR-030 rule 2 — read together
     # with render_status everywhere; falls back into payload if review objects).
     render_error = Column(Text, nullable=True)
+    # Render fencing token (ADR-079): minted at claim
+    # (jobs.claim_pending_render), NULLed at every re-pend (morphs / verify
+    # title-card / undo-redo / manual render / startup reap). The render
+    # chain's terminal writes predicate on it — render_status is a state, not
+    # an identity (the morph-window race proof), so a zombie render's
+    # guarded write matches 0 rows.
+    render_claim_token = Column(UUID(as_uuid=True), nullable=True)
     score = Column(JSONB, nullable=True)
     # 质检裁决 (产物质量线期 3): the verify node's verdict —
     # {status: passed|needs_human, checks: [{id, ok, detail, cls}], attempt,

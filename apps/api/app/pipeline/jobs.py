@@ -20,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
-from sqlalchemy import CursorResult, select, text, update
+from sqlalchemy import CursorResult, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import AssetStatus, RenderStatus
@@ -76,6 +76,8 @@ async def claim_ready_node(db: AsyncSession) -> UUID | None:
 
     Single UPDATE...RETURNING statement, so the claim is atomic under
     concurrent workers. Also flips the owning run PENDING -> RUNNING.
+    The claim mints the row's fencing token (``claim_token``, ADR-079) —
+    ``execute_step``'s terminal writes predicate on it.
     """
     node_id = (
         await db.execute(
@@ -85,6 +87,7 @@ async def claim_ready_node(db: AsyncSession) -> UUID | None:
                 SET status = 'running',
                     started_at = now(),
                     attempt = attempt + 1,
+                    claim_token = gen_random_uuid(),
                     updated_at = now()
                 WHERE pn.id = (
                     SELECT pn2.id
@@ -143,7 +146,10 @@ async def claim_ready_node(db: AsyncSession) -> UUID | None:
 
 
 async def claim_pending_render(db: AsyncSession) -> UUID | None:
-    """Atomically claim one clip output awaiting render, flipping it to RENDERING."""
+    """Atomically claim one clip output awaiting render, flipping it to RENDERING.
+
+    The claim mints the row's fencing token (``render_claim_token``, ADR-079)
+    — the render chain's terminal writes predicate on it."""
     result = await db.execute(
         select(Output.id)
         .where(Output.type == "clip")
@@ -159,7 +165,11 @@ async def claim_pending_render(db: AsyncSession) -> UUID | None:
     output_id = await db.scalar(
         update(Output)
         .where(Output.id == output_id)
-        .values(render_status=RenderStatus.RENDERING, render_error=None)
+        .values(
+            render_status=RenderStatus.RENDERING,
+            render_error=None,
+            render_claim_token=func.gen_random_uuid(),
+        )
         .returning(Output.id)
     )
     # Mirror the fan-out node (if any) to running.
@@ -208,12 +218,12 @@ async def reap_stale(db: AsyncSession) -> None:
     nodes = await db.execute(
         update(WorkflowStep)
         .where(WorkflowStep.status == "running")
-        .values(status="pending")
+        .values(status="pending", claim_token=None)
     )
     renders = await db.execute(
         update(Output)
         .where(Output.render_status == RenderStatus.RENDERING)
-        .values(render_status=RenderStatus.PENDING)
+        .values(render_status=RenderStatus.PENDING, render_claim_token=None)
     )
     await db.commit()
     asset_count = assets.rowcount if isinstance(assets, CursorResult) else 0
@@ -244,7 +254,7 @@ async def reap_stale_nodes_older_than(db: AsyncSession, older_than_seconds: floa
         update(WorkflowStep)
         .where(WorkflowStep.status == "running")
         .where(WorkflowStep.started_at < cutoff)
-        .values(status="pending")
+        .values(status="pending", claim_token=None)
     )
     await db.commit()
     node_count = nodes.rowcount if isinstance(nodes, CursorResult) else 0

@@ -196,6 +196,7 @@ class ReframeClip(NodeBase):
                 skipped += 1
                 continue
             output.render_status = RenderStatus.PENDING
+            output.render_claim_token = None
             output.render_error = None
             await db.flush()
             touched.append(output.id)

@@ -464,7 +464,7 @@ async def _pend_suppressed_base_renders(
     await db.execute(
         update(Output)
         .where(Output.id.in_(stale_ids))
-        .values(render_status=RenderStatus.PENDING)
+        .values(render_status=RenderStatus.PENDING, render_claim_token=None)
     )
     await db.flush()
     await _fan_out_renders(

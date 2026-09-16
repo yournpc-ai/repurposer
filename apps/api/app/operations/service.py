@@ -317,6 +317,7 @@ def _repend_after_restore(output: Output, op_name: str) -> None:
         and output.render_spec is not None
     ):
         output.render_status = RenderStatus.PENDING
+        output.render_claim_token = None
         output.render_error = None
 
 

@@ -215,6 +215,14 @@ async def render_output(output_id: UUID) -> None:
             return
         output, project = row
         user_id = project.user_id
+        mine = output.render_claim_token
+        if mine is None:
+            # Entry defense (ADR-079): an unclaimed/foreign row (pre-migration
+            # in-flight, or a re-pend that already swallowed the claim) —
+            # stand down BEFORE spending a render on it. A live claim
+            # re-mints the token.
+            logger.warning("render_foreign_row_refused", output_id=str(output_id))
+            return
         # render_error is USER copy (the clip card + the mirrored render node
         # row) — localized human lines only; raw httpx/storage innards stay in
         # the structlog event. Locale = the project's display chain (no run
@@ -225,7 +233,7 @@ async def render_output(output_id: UUID) -> None:
                 update(Output)
                 .where(
                     Output.id == output_id,
-                    Output.render_status == RenderStatus.RENDERING,
+                    Output.render_claim_token == mine,
                 )
                 .values(
                     render_status=RenderStatus.FAILED,
@@ -236,6 +244,10 @@ async def render_output(output_id: UUID) -> None:
             if failed.rowcount:
                 await _mirror_render_node(
                     output_id, "failed", user_line("render_failed", lang)
+                )
+            else:
+                logger.warning(
+                    "render_fenced", output_id=str(output_id), tail="no_spec"
                 )
             return
         # Snapshot everything the render + terminal write need as plain data —
@@ -280,17 +292,20 @@ async def render_output(output_id: UUID) -> None:
             resp.raise_for_status()
             data = resp.json()
 
-        # Guarded write (2026-08-15 morph/render race): a morph landing
-        # mid-render re-pends the row (RENDERING -> PENDING) with a fresh
-        # spec. The conditional UPDATE matches 0 rows then — this render's
-        # product is STALE and must be discarded, never clobber the row
+        # Guarded write (ADR-079): the predicate is the claim TOKEN, not the
+        # render_status state — a state guard cannot tell executions apart
+        # (a re-claim re-enters RENDERING: the morph-window race proof). A
+        # morph landing mid-render re-pends the row (RENDERING -> PENDING and
+        # the token NULLed) with a fresh spec; a reap + re-claim re-mints the
+        # token. Either way this render's conditional UPDATE matches 0 rows —
+        # its product is STALE and must be discarded, never clobber the row
         # (the re-pend renders the fresh spec on a later claim).
         async with AsyncSessionLocal() as db:
             claimed = await db.execute(
                 update(Output)
                 .where(
                     Output.id == output_id,
-                    Output.render_status == RenderStatus.RENDERING,
+                    Output.render_claim_token == mine,
                 )
                 .values(
                     files={**files, "video": data["video"], "srt": data["srt"]},
@@ -336,14 +351,15 @@ async def render_output(output_id: UUID) -> None:
         )
     except Exception as e:  # noqa: BLE001 — record any failure on the row
         logger.error("render_output_failed", output_id=str(output_id), error=str(e))
-        # Same guard as the success path: a mid-render morph owns the row
-        # now — the stale failure must not clobber its re-pend.
+        # Same token guard as the success path: a mid-render morph (or a
+        # re-claim after reap) owns the row now — the stale failure must not
+        # clobber its re-pend.
         async with AsyncSessionLocal() as db:
             failed = await db.execute(
                 update(Output)
                 .where(
                     Output.id == output_id,
-                    Output.render_status == RenderStatus.RENDERING,
+                    Output.render_claim_token == mine,
                 )
                 .values(
                     render_status=RenderStatus.FAILED,

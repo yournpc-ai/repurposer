@@ -252,6 +252,7 @@ async def render_output_endpoint(
             detail="Clip has no render_spec (text-only project — no source video)",
         )
     output.render_status = RenderStatus.PENDING
+    output.render_claim_token = None
     output.render_error = None
     await db.commit()
     await db.refresh(output)

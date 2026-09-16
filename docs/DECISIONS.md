@@ -294,6 +294,8 @@ uv run alembic downgrade -1
 - Internal validation phase (ADR-012) throughput/scale does not yet need Redis; DB-as-queue adds zero new middleware.
 - Worker process isolation prevents heavy tasks from dragging down online requests; `SKIP LOCKED` supports safe concurrent multi-worker.
 
+**修订（2026-09-16，ADR-079）**：claim/reap 语义从 ownerless 升级为 **fencing-aware**——claim 原子 UPDATE 内铸 `claim_token` / `render_claim_token`（`gen_random_uuid()`），两个 reap（startup 全量 + per-tick 按龄）翻 status 时同置 NULL；被 reap 的旧执行者醒来时其终态写谓词（token）必失败，reap 从「只翻状态」升级为「失效令牌」。
+
 **Related files**:
 - `apps/api/app/worker.py`, `apps/api/app/services/jobs.py`, `apps/api/app/services/asset_processing.py`
 - `apps/api/app/models/tables.py` (`Asset.processing_status`)
@@ -546,6 +548,8 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
    - clip = 带 `source_ref`（时间轴语义）+ `render_spec`（渲染管线）的那一类；Editor 照旧只认 `type=clip`。
    - `render_status` 保持顶级列（worker 认领谓词），NULL = 未请求渲染（语义沿用）。
    - **产物类型注册表 = 节点类型注册表**（加一种节点自动有产物位）。
+
+**修订（2026-09-16，ADR-079）**：render 认领谓词补**身份维度**——`render_claim_token UUID NULL` 顶级列（规则 2「要查的字段升级为列」的认领先例扩一列）：claim 铸、一切 re-pend 置 NULL、render 三处终态写谓词从 `render_status==RENDERING`（状态，无法区分执行者）换 `render_claim_token=:mine`（身份）。
 2. **三条 payload 规则**（防 god-table，可评审可执行）：
    - 规则 1：**默认进 payload，schema 注册表守门**——`OUTPUT_PAYLOAD_SCHEMAS`（type→BaseModel），写入 `model_dump()`、读取 parse 回 typed model（沿用 render_spec/ClipSpec 的"JSON 列 + Pydantic 契约"先例）；
    - 规则 2：**要查的字段升级为列**——需要 SQL 谓词/索引/认领的字段挣顶级列（`render_status` 是先例）；
@@ -1045,6 +1049,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 1. **计量改内存累积（`app/metering.py`）**：`bind_workflow_step` 绑定 contextvar 内存台账；`record_usage` / `record_media_usage` 只改内存、**零 SQL**。`execute_step`（orchestrator.py）在执行尾段用 `merge_accrued_cost` 归并一次写入——成功 / Suspend / QualityBounce / 瞬时重试 / 失败五个终态分支全部记账（每节点 N 次写 → 1 次写）。cost 形状 `{prompt_tokens, completion_tokens, fixed_cost, units?}` 不变；跨 attempt 累加（与旧 per-call 机制语义对齐）；空台账 → cost 保持 NULL（估价对账 SQL 继续忽略未计量节点）。**不加表、不加字段**。
 2. **render_output 会话收窄（`app/pipeline/rendering.py`）**：短 session 快照行数据（spec / files / project_id / user_id / lang）→ **无 session** 横跨渲染 POST → 新短 session 做 guarded 终态写入（morph 竞态守卫条件不变）。`_mirror_superseded_node` 签名由 `Project` 改收 `lang`。
+   - **修订（2026-09-16，ADR-079）**：guarded-write 纪律从**状态守卫升级为身份守卫**——render 三处终态写谓词 = `render_claim_token=:mine`（rowcount 检查不变）；execute_step 四尾同样改条件 UPDATE + rowcount（fenced → rollback + 零副作用）。会话收窄纪律（短 session / 无 session 横跨长等待）不变。
 3. **runner 禁污 Session-2 节点（铁律）**：Session 2 内对 step 行的写只属于 execute_step 尾段结算；runner 中途要写 spec 一律走 `step_display` 的 own-session 原子写（`_pop_spec_field` jsonb `-` 减法 / `_set_*` jsonb_set）。两处 feedback-pop（`derivative_dispatch` / `clips/node`）已改 `_pop_spec_field`。
 4. **四条 runner-父行 FK 改 DEFERRABLE INITIALLY DEFERRED**（migration `c3a9e71f52d0`）：`outputs.workflow_step_id` / `outputs.project_id` / `operations.project_id` / `workflow_steps.run_id`——Session 2 中途 INSERT 子行不再对父行持 KEY SHARE 至提交，父行写者（display writers / maybe_finalize / run 状态翻转）永不被 mid-run 锁窗口卡住。完整性不变，检查挪到 COMMIT。
 5. **DB 保险丝**：`ALTER ROLE <app_role> SET idle_in_transaction_session_timeout = '600s'`——任何环境（dev 已落地；**部署新环境时必做**，本条即部署说明）。保险丝是兜底不是许可。**120s 首日即被翻案**：Session 2 横跨 runner 的 LLM await 是保留设计，director_understand 一次调用 + schema 修复重试 ≈ 2 分钟纯等待，120s 把健康事务杀成 `connection is closed`——保险丝只防永久 wedge，10 分钟足以把灾难收敛为有界失败。
@@ -1670,3 +1675,26 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Consequences**: 施工归简报 T5（`docs/tasks/done/chat-tool-loop-migration.md`）。decompiler 住 pipeline 内部 crew（编译期注入，永不进用户提议空间——与 materialize_source 同族）；CraftSkeleton（工作名）= 新内部产物类型（visible_outputs 过滤族同例）。能力缺口清单（案例里做不到的字段）进 PROGRESS 需求池按价值排期。验收 = 案例仿制旅程 e2e（JOURNEYS §2 的分支树逐条过）+ 骨架字段的确定性分层断言（确定性字段零 LLM 介入）。
 
 **Related**: ADR-077（会话层工具 loop 化——终极旅程的服务面）/ ADR-016（clip-spec 唯一契约——本条是它的反向通道）/ ADR-044（轨道模型——骨架的字段家）/ ADR-028（拓扑铁律——exemplar 参数源不破它）/ ADR-043（任务书语法——第四参数源的语法座位）
+
+## ADR-079: 执行围栏——终态写必须携带执行身份（claim token）+ fenced 零副作用纪律
+
+**Status**: Decided (2026-09-16；范围冻结 = `ARCHITECTURE_GATE_2_REPORT.md` §7/§13/§15；施工合同 = `docs/tasks/r1-batch-2-execution-fencing.md`；race proof = `POST_T5_DELTA_AUDIT.md` §3.2/§3.3/§3.4)
+
+**Context**: 写操作不携带「这次执行是谁」。`A claim → A 停滞 → reap → B claim → B 完成 → A 醒来 → A 终态写` 全链路上 A 没有任何一个 DB predicate 会失败：step 行最后写者赢（四尾 = ORM 按 PK 盲写）；钱包双扣（zombie 的 idem key `step:{id}:capture:{attempt}` 与合法 QualityBounce 重跑同族，`merge_accrued_cost` 严格加和 = 真实重复扣款，`release_run` 钳制保证多扣永不退）；渲染守卫 `render_status==RENDERING` 是状态不是身份（re-claim 重进同状态，morph 窗口内 zombie 先完成即静默持久腐蚀——产物与 spec 不一致且无后续触发器）；Suspend 的 run 写是全库唯一无 from-state 守卫的迁移（zombie 可 COMPLETED→WAITING_HUMAN 复活 run，已 release 的 hold 永不回来）。根原则（North Star §8.3）：**Execution writes must be fenced by execution identity**——每一次终态写的 WHERE 必须携带本次执行的身份；写不动 = 失去 authority = 丢弃 + 记日志 + 永不 capture。
+
+**Decision**:
+
+1. **两列 fencing token**（migration `f3a8c1d52e97`，可升可降）：`workflow_steps.claim_token UUID NULL` + `outputs.render_claim_token UUID NULL`。token 回答「**现在**谁有权写」——短暂、随 claim 生灭、失势即 NULL；它**不是**执行模型（ExecutionAttempt 回答「当时发生了什么」，形态 OPEN，禁止互冒充，North Star §8.4 分层维持）。
+2. **claim 铸 token**：`claim_ready_node` / `claim_pending_render` 的原子 UPDATE 内 `SET (render_)claim_token = gen_random_uuid()`——认领即铸，铸即唯一。
+3. **失 Paths 全置 NULL**：两个 reap（startup 全量 + per-tick 按龄）、execute_step 的 retry 重排 / QualityBounce 重排（verify 节点 + executor + done modifiers）/ runtime_fanout 重排 / Suspend park、`resume_waiting_interrupt`、`_cascade_skip`（含 running 子节点——级联语义落成确定性丢弃）、全部 **10 处既有 render re-pend**（morph / node_runners render / verify title-card / music / captions / dub / reframe / filler / operations undo-redo / 手动 render 端点）。少一处 = 竞态洞原样保留（re-pend 与新 claim 之间 zombie 的旧 token 仍能命中）。
+4. **终态写谓词换身份 + rowcount**：execute_step 四尾（成功 / Suspend / QualityBounce / 失败含 retry 分支）全部改条件 UPDATE `WHERE id=:id AND claim_token=:mine`；render 三处终态写（no-spec fail / success / exception fail）谓词从 `render_status==RENDERING` 换 `render_claim_token=:mine`。
+5. **fenced 零副作用纪律（核心）**：rowcount=0 → rollback session（executor staged writes 一并丢弃）→ 只记 fenced 日志 → **不 capture / 不 graph sync / 不 cascade / 不 mirror / 不 fire trigger / 不写 run 状态**（I-EXEC-01 stale 执行不写终态；I-EXEC-02 stale 执行零副作用）。刻意的唯二例外：① `finally` 的 `maybe_finalize_run` 照调（行锁 + 终态 early-return，幂等；被级联置 NULL 的节点靠它收官）；② Suspend 的问题消息在其独立 session 已先落库（fenced 后成孤儿问题——known residue，归后续小批清理，不进本批）。
+6. **Suspend 的 run 写加 expected-from-state**：`WHERE id=:rid AND status='RUNNING'`——仅 RUNNING→WAITING_HUMAN 可成；node 写与 run 写双保险后，COMPLETED→WAITING_HUMAN 复活链结构性死亡。
+7. **入口防御**：execute_step 入口 `running 且 token NULL` = 外来行（迁移前在途 / 无 claim 镜像翻转）→ 防御性 return（pending 直执路径改为 guarded mint——竞态 claim 赢则让步）；render_output 入口 token NULL → 提前 return（省一次渲染钱）。
+8. **部署注记**：迁移后在途行 token=NULL 由入口防御接住；部署即重启 worker（在途 asyncio 任务随进程死亡，startup reap 把行送回 pending 由新 claim 重铸）。
+
+**明确不做**（Gate #2 §7 OUT 清单，逐项维持）：ExecutionAttempt 任何形态 / attempt 语义迁移 / poison-pill 上限（R1 B4a）/ hold GC（R1.1 B4b）/ select_clips 语义收窄 / worker registry / pause-cancel / chat 墙钟 / 统一 Policy 层 / AgentBudget。fencing 不限制健康并发（双活 worker 各 claim 不同节点 = 合法；startup-reap 竞态造成的重复执行被 fencing 正确丢弃——浪费的是资源，不是正确性）。
+
+**Consequences**: 双扣路径封死（fenced 永不 capture）= 收费的诚实前提；render morph 窗口腐蚀封死（zombie 先完成 0 命中，产物永不回退旧 spec）；run 复活链封死。Known residue（登记，均不归本批）：fenced 执行途中已直传对象存储的媒体对象成孤儿（DB 世界干净、存储世界留垃圾，归后续存储 GC 小批，与 render superseded 删 key 先例对齐）；fenced zombie Suspend 的孤儿问题消息（永不过期，窗口极小，后续小批清理）。锁序影响评审过：fencing 写把 step 行锁提前到尾段写时刻（原来在 commit flush），但锁窗口内只剩 capture/sync 的短 DB 操作（无 LLM 等待），D9 族形态不复发。验收 = 纯函数套件（token 捕获决策 + rowcount=0 零副作用，`tests/test_execution_fencing_pure.py`）+ 手工竞态演练（A claim→停滞→reap→B claim→B 完成→A 醒：A 终态写 0 命中、无第二条 capture、run 行保持 B 判决；render 同型；zombie Suspend 不复活 run）+ 单 worker happy path / retry / QualityBounce 回归。
+
+**Related**: ADR-017（reap 语义从 ownerless 改 fencing-aware——本条修订）/ ADR-030（render 认领谓词加身份维度——规则 2 的认领先例扩一列）/ ADR-050（guarded-write 纪律从状态守卫升级为身份守卫——会话纪律不变）/ ADR-055（billing——`_mutate` 双层 dedupe 永不破坏，fenced 永不进 capture_step 是 execution kernel owns billing boundary 的具体含义）/ North Star §8（Execution Kernel——§8.1 P0-1/2/3 由本条修复）

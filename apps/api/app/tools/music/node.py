@@ -122,6 +122,7 @@ class AddMusic(NodeBase):
                 commit=False,
             )
             output.render_status = RenderStatus.PENDING
+            output.render_claim_token = None
             output.render_error = None
             await db.flush()
             touched.append(output.id)

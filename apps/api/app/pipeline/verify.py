@@ -766,6 +766,7 @@ class Verify(NodeBase):
                 commit=False,
             )
             output.render_status = RenderStatus.PENDING
+            output.render_claim_token = None
             output.render_error = None
             applied += 1
         await db.flush()

@@ -925,6 +925,7 @@ class RenderRequest(NodeBase):
             raise ValueError("Clip has no render_spec")
 
         output.render_status = RenderStatus.PENDING
+        output.render_claim_token = None
         output.render_error = None
         await db.flush()
         return []

@@ -70,7 +70,7 @@
 | attempt counter | 认领次数计数 | ✅ | `workflow_steps.attempt`（Integer）——只喂 retry 预算与 billing idem key；**不是执行身份** |
 | worker identity | 哪个 worker 实例 | ❌ 不存在 | 无列、无实例 id |
 | execution identity | 哪一次执行 | ❌ 不存在 | 无 execution_id / claim_id |
-| fencing token | 使旧执行写必失败的令牌 | ❌ 不存在 | reap 没有任何可失效的东西（`jobs.py:243-248` 只翻 status） |
+| fencing token | 使旧执行写必失败的令牌 | ✅（ADR-079，2026-09-16） | `workflow_steps.claim_token` / `outputs.render_claim_token`——claim 铸、失势置 NULL、终态写 `WHERE … AND claim_token=:mine` 查 rowcount |
 
 ### 2.1 概念词典：内容世界六概念（CURRENT 存在性）
 
@@ -144,14 +144,14 @@ ADR-052 判词「实现层零 agent、全 workflow」维持；ADR-077 收编的�
 
 ## 8. Execution Kernel = 可靠性核心
 
-### 8.1 当前基线（CURRENT，HEAD `453b73d`）
+### 8.1 当前基线（CURRENT，R1 B2 落地后）
 
-`POST_T5_DELTA_AUDIT.md` 结论：**Previous P0 still exists**（commits since previous audit = 0，全部为存量问题）：
+`POST_T5_DELTA_AUDIT.md` 登记的四条 P0 **已全部修复**（原文核验于 HEAD `453b73d`）：
 
-1. 节点终态写无围栏——成功尾/失败尾 = ORM 按 PK 盲写（`orchestrator.py:1189-1218` / `1343-1360`），WHERE 只有主键；
-2. 渲染守卫是 status 不是身份（`rendering.py:289-302`：`WHERE render_status==RENDERING`）——reap 后 B 重进同一状态，守卫无法区分执行者；
-3. Suspend 的 run 迁移无 expected-from-state guard（`orchestrator.py:1235-1237`）——全库 8 个 run 写点中唯一无守卫者，zombie 可 COMPLETED→WAITING_HUMAN 复活 run；
-4. `operations.output_id` FK NO ACTION（`tables.py:423`）+ 删除路径不清 operations（`clips/node.py:320`、`routes/outputs.py:147` 等）——删已编辑产物 = FK 违反。
+1. ~~节点终态写无围栏——成功尾/失败尾 = ORM 按 PK 盲写~~ → **已修（ADR-079，R1 B2）**：execute_step 四尾改条件 UPDATE `WHERE id=:id AND claim_token=:mine` + rowcount；fenced → rollback + 零副作用（不 capture / 不 sync / 不 cascade / 不写 run）。
+2. ~~渲染守卫是 status 不是身份~~ → **已修（ADR-079，R1 B2）**：render 三处终态写谓词换 `render_claim_token=:mine`；全部 10 处 re-pend 置 NULL；入口 token NULL 提前 return。
+3. ~~Suspend 的 run 迁移无 expected-from-state guard~~ → **已修（ADR-079，R1 B2）**：`WHERE id=:rid AND status='RUNNING'`——COMPLETED→WAITING_HUMAN 复活链结构性死亡。
+4. ~~`operations.output_id` FK NO ACTION + 删除路径不清 operations~~ → **已修（Gate #2 Commit 2，`6ca3b70`）**：四处删除路径对齐 FK-safe 顺序（operations → publications → outputs）。
 
 ### 8.2 Race proof 的架构意义
 
@@ -164,7 +164,7 @@ ADR-052 判词「实现层零 agent、全 workflow」维持；ADR-077 收编的�
 
 ### 8.4 Claim Token ≠ ExecutionAttempt（概念分层，永不混淆）
 
-- **Claim Token（PLANNED，短期 correctness primitive）**：`workflow_steps.claim_token` / `outputs.render_claim_token`——claim 时生成、reap/re-pend/resume 时置 NULL、终态写 `WHERE id=:id AND claim_token=:mine` 查 rowcount。解决 §8.1 的 1/2/3。**它不是执行模型，只是围栏。**
+- **Claim Token（CURRENT，2026-09-16 落地，ADR-079）**：`workflow_steps.claim_token` / `outputs.render_claim_token`——claim 时生成、reap/re-pend/resume 时置 NULL、终态写 `WHERE id=:id AND claim_token=:mine` 查 rowcount。已解决 §8.1 的 1/2/3。**它不是执行模型，只是围栏。**
 - **ExecutionAttempt（TARGET，长期 execution model）**：回答 Who / When / Which attempt / Which worker / Which claim / What input / What output / What cost / What error / Was it superseded。§8.5。
 - 两者有关但不是同一概念；**禁止**以「一次重构全部解决」扩大当前批次 scope，也禁止把 claim_token 命名成 attempt 继续混淆。
 
@@ -248,4 +248,4 @@ Architecture Gate（本文，2026-09-16）
 ## 13. 与现行 ADR 的关系
 
 - **兼容继承**：ADR-016（clip-spec 唯一契约）/ ADR-028（拓扑铁律）/ ADR-030（outputs 治理——fencing 为其认领谓词补身份维度，非翻案）/ ADR-032（operations 账）/ ADR-039（四层地图）/ ADR-052/077（厚 agent 判词与有界收编）/ ADR-055（billing）/ ADR-057（图即产品对象）/ ADR-078（decompiler）。
-- **实施时需修订**：ADR-017（reap 语义从 ownerless 改 fencing-aware）、ADR-030（render 认领谓词加身份维度）、ADR-050（会话纪律补 guarded-write 纪律）；新增 fencing ADR 随 Commit 1 落地（决策稳定才立 ADR，不在本 Gate 批预写）。
+- **实施时需修订（已落地 2026-09-16）**：ADR-017（reap 语义从 ownerless 改 fencing-aware）、ADR-030（render 认领谓词加身份维度）、ADR-050（会话纪律补 guarded-write 纪律）三条修订已随 R1 B2 落档；fencing ADR 已立 = **ADR-079**（随 Commit 1 落地）。
