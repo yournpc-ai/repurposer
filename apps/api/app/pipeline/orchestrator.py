@@ -1304,11 +1304,17 @@ async def execute_step(node_id: UUID) -> None:
                     # finally-block's maybe_finalize_run still runs (deliberate
                     # exception: row lock + terminal early-return make it
                     # idempotent, and cascade-NULLed nodes rely on it to close).
+                    # kind captured pre-rollback: rollback expires every
+                    # session object, and reading an expired attribute is
+                    # implicit IO — MissingGreenlet under asyncio
+                    # (expire_on_commit=False shields commits, never
+                    # rollbacks). Same capture in every fenced tail below.
+                    kind = node.kind
                     await db.rollback()
                     logger.warning(
                         "workflow_step_fenced",
                         node_id=str(node_id),
-                        kind=node.kind,
+                        kind=kind,
                         tail="success",
                     )
                     return
@@ -1360,11 +1366,12 @@ async def execute_step(node_id: UUID) -> None:
                     # (race proof §3.4) dies here. The docked question message
                     # the runner already committed becomes an orphan (known
                     # residue, registered for a later sweep batch).
+                    kind = node.kind  # pre-rollback (see tail="success")
                     await db.rollback()
                     logger.warning(
                         "workflow_step_fenced",
                         node_id=str(node_id),
-                        kind=node.kind,
+                        kind=kind,
                         tail="suspend",
                     )
                     return
@@ -1418,11 +1425,12 @@ async def execute_step(node_id: UUID) -> None:
                     updated_at=datetime.now(UTC),
                 )
                 if not requeued:
+                    kind = node.kind  # pre-rollback (see tail="success")
                     await db.rollback()
                     logger.warning(
                         "workflow_step_fenced",
                         node_id=str(node_id),
-                        kind=node.kind,
+                        kind=kind,
                         tail="quality_bounce",
                     )
                     return
@@ -1514,11 +1522,12 @@ async def execute_step(node_id: UUID) -> None:
                         updated_at=datetime.now(UTC),
                     )
                     if not requeued:
+                        kind = node.kind  # pre-rollback (see tail="success")
                         await db.rollback()
                         logger.warning(
                             "workflow_step_fenced",
                             node_id=str(node_id),
-                            kind=node.kind,
+                            kind=kind,
                             tail="retry",
                         )
                         return
@@ -1555,11 +1564,12 @@ async def execute_step(node_id: UUID) -> None:
                 if not failed:
                     # Fenced (I-EXEC-01/02): no sync, no rescue, no cascade —
                     # the live execution owns the node's world now.
+                    kind = node.kind  # pre-rollback (see tail="success")
                     await db.rollback()
                     logger.warning(
                         "workflow_step_fenced",
                         node_id=str(node_id),
-                        kind=node.kind,
+                        kind=kind,
                         tail="failure",
                     )
                     return
