@@ -53,7 +53,7 @@ from app.tools.music.node import AddMusic  # noqa: F401
 from app.tools.music.params import AddMusicParams
 from app.tools.reframe.node import ReframeClip  # noqa: F401
 from app.tools.reframe.params import ReframeClipParams
-from app.tools.stills.node import AlignStills  # noqa: F401
+from app.tools.align_stills.node import AlignStills  # noqa: F401
 from app.tools.research.node import ResearchNode  # noqa: F401
 from app.tools.research.params import ResearchParams
 

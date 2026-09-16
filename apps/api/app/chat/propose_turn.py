@@ -138,7 +138,7 @@ class ChatTurn:
             # A blank turn (attachment-only: this path receives request.message
             # verbatim — the stand-in line is a plan-path local) carries nothing
             # to judge, so the question is not a judgment subject this turn,
-            # period. "A blank message never auto-answers a docked checkpoint"
+            # period. "A blank message never auto-answers a docked question"
             # is a law, not a judgment (2026-09-05 S6d).
             and bool(self.text.strip())
         )
