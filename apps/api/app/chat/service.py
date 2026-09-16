@@ -266,6 +266,30 @@ async def _get_or_create_project_conversation(
     return conversation
 
 
+def _resume_ack_line(decided: str, outcome: str) -> str:
+    """The direction-interrupt wake acknowledgment (期 4 + R1 B3 再挂+明示):
+    ``resumed`` = the locked-direction line; ``blocked`` (another run holds
+    the project's execution authority) = the honest parked line — the answer
+    is saved, the run continues once the current generation finishes.
+    Display language follows the request's UI locale (the option label is
+    already localized). Shared by the answer endpoint, the chat autoResume,
+    and the tool-loop disposition wake."""
+    from app.ui_locale import current_ui_language  # deferred: request ctx
+
+    zh = (current_ui_language() or "").startswith("zh")
+    if outcome == "blocked":
+        return (
+            "你的回答已收到——等当前生成完成后，这条会继续。"
+            if zh
+            else "Got your answer — it will continue once the current generation finishes."
+        )
+    return (
+        f"方向已锁定：{decided}。继续生成。"
+        if zh
+        else f"Direction locked: {decided}. Resuming the run."
+    )
+
+
 async def _create_message(
     db: AsyncSession,
     conversation_id: UUID,
@@ -1633,13 +1657,23 @@ async def answer_question(
         # node back to pending, run back to RUNNING, the worker re-executes
         # the thin node. Bail is a graceful exit: node done (spec.bailed),
         # downstream cascade-skipped, run settles COMPLETED — never failed.
+        # R1 B3: the resume arbitrates the project's execution authority —
+        # while another run holds it the answer parks (再挂) and the user
+        # hears the honest one-liner, never silence.
         run = await db.get(WorkflowRun, message.workflow_run_id)
         if run is not None:
             if data.kind == "bail":
                 if await bail_waiting_interrupt(db, run) is not None:
                     bailed_run_ids.append(UUID(str(run.id)))
             else:
-                await resume_waiting_interrupt(db, run, message.answer)
+                outcome = await resume_waiting_interrupt(db, run, message.answer)
+                if outcome == "blocked":
+                    follow_up = await _create_message(
+                        db,
+                        UUID(str(conversation.id)),
+                        "assistant",
+                        _resume_ack_line("", "blocked"),
+                    )
 
     elif question.kind == "question" and data.kind in ("option", "freeform"):
         # 续聊: the answer unblocks the conversation — the user's pick is
@@ -2003,26 +2037,22 @@ async def prepare_chat_turn(
         # question takes the same dispatch as the answer endpoint — wake the
         # parked run. No LLM turn on top: the wake IS the continuation (the
         # step flow shows the run resuming), so the acknowledgment is a
-        # deterministic line.
+        # deterministic line. R1 B3: a blocked arbitration (another run
+        # holds the authority) speaks the parked line instead.
         from app.pipeline.orchestrator import resume_waiting_interrupt
 
+        outcome = "idle"
         run = await db.get(WorkflowRun, answered_question.workflow_run_id)
         if run is not None:
-            await resume_waiting_interrupt(db, run, answered_question.answer)
+            outcome = await resume_waiting_interrupt(db, run, answered_question.answer)
         decided = (answered_question.answer or {}).get("text") or (
             answered_question.answer or {}
         ).get("option_id") or ""
-        # Deterministic acknowledgment — display language follows the
-        # request's UI locale (the option label is already localized).
-        from app.ui_locale import current_ui_language
-
         interrupt_reply = await _create_message(
             db,
             conversation_id,
             "assistant",
-            f"方向已锁定：{decided}。继续生成。"
-            if (current_ui_language() or "").startswith("zh")
-            else f"Direction locked: {decided}. Resuming the run.",
+            _resume_ack_line(decided, outcome),
         )
     else:
         # Plan path dispatch (intent-surface-unification W1): this endpoint is

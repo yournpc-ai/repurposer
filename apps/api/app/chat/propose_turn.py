@@ -58,6 +58,7 @@ from app.chat.service import (
     _has_resolved_caption_mode,
     _needs_caption_mode_question,
     _prefers_zh,
+    _resume_ack_line,
     _reminder_tail,
     _repair_phase_callback,
     _run_active_text,
@@ -213,21 +214,19 @@ class ChatTurn:
             if pending.workflow_run_id is not None:
                 from app.pipeline.orchestrator import resume_waiting_interrupt
 
+                outcome = "idle"
                 run = await db.get(WorkflowRun, pending.workflow_run_id)
                 if run is not None:
-                    await resume_waiting_interrupt(db, run, pending.answer)
+                    outcome = await resume_waiting_interrupt(db, run, pending.answer)
                 decided = (pending.answer or {}).get("text") or ""
                 # Same deterministic acknowledgment as the option-hit wake in
-                # prepare_chat_turn — display language follows the UI locale.
-                from app.ui_locale import current_ui_language
-
+                # prepare_chat_turn — R1 B3: a blocked arbitration (another
+                # run holds the authority) speaks the parked line instead.
                 assistant_message = await _create_message(
                     db,
                     self.conversation_id,
                     "assistant",
-                    f"方向已锁定：{decided}。继续生成。"
-                    if (current_ui_language() or "").startswith("zh")
-                    else f"Direction locked: {decided}. Resuming the run.",
+                    _resume_ack_line(decided, outcome),
                 )
                 self.outcome = (assistant_message, None, [], self.settled_question)
                 return True

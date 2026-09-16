@@ -44,6 +44,8 @@ run 数 / 落库行——永不锁 LLM 文案（禁令 #7）。例外：代码�
              零 capture、hold 全额 release）+ capture 幂等/bounce 差额（进程内）
     S15 积分③ 孤儿 hold 回收（BILLING §8 边界落地：project 删除先退未结
              hold 再级联删 run——台账闭合、余额回赠额）
+    S17 run 执行权仲裁（R1 B3）：A 挂 B 跑 → 答/过期皆 blocked 再挂+明示
+             （零状态污染、全程单 owner）→ B 收官交接钩续跑 A
 
 S4/S7/S8 起的 run 是真的（worker 会执行；writer 链走真 LLM——S4 用
 ``processing_status=COMPLETED`` 的 transcript 资产走 writer 链到 completed，
@@ -74,7 +76,7 @@ import json
 import os
 import sys
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import NamedTuple
 
@@ -83,7 +85,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import httpx  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
-from sqlalchemy import delete, func, select  # noqa: E402
+from sqlalchemy import delete, func, select, update  # noqa: E402
 
 from app.agents.base import Agent, StreamingAgent  # noqa: E402
 from app.chat.perception import PERCEPTION_TOOLS  # noqa: E402
@@ -95,6 +97,8 @@ from app.pipeline.orchestrator import (  # noqa: E402
     TaskSpec,
     assert_runners_registered,
     compile_graph,
+    expire_stale_interrupts,
+    maybe_finalize_run,
 )
 from app.models.tables import (  # noqa: E402
     Asset,
@@ -457,6 +461,71 @@ async def seed_parked_interrupt(
             "child_id": child_id,
             "question_id": str(question.id),
         }
+
+
+async def seed_active_run(pid: str) -> str:
+    """An authority-holding run (I-EXEC-03 fixture, R1 B3): RUNNING + one
+    inert ``running`` node. The claim loop only takes ``pending`` rows and
+    the per-tick reap (900s) never fires inside a scenario, so the row holds
+    the project's execution authority until ``settle_seeded_run`` ends it.
+    Returns the run id."""
+    async with AsyncSessionLocal() as db:
+        run = WorkflowRun(
+            project_id=uuid.UUID(pid),
+            status=WorkflowStatus.RUNNING,
+            context={
+                "outputs": [{"type": "post"}],
+                "target_language": "en",
+                "autonomy": "review",
+            },
+        )
+        db.add(run)
+        await db.flush()
+        db.add(
+            WorkflowStep(
+                run_id=run.id,
+                kind="plan",
+                status="running",
+                seq=1,
+                started_at=datetime.now(UTC),
+            )
+        )
+        await db.commit()
+        return str(run.id)
+
+
+async def settle_seeded_run(run_id: str) -> None:
+    """Settle a seeded inert run the way its worker execution would end:
+    nodes done, then maybe_finalize_run — the finalizer is the authority-
+    handoff seat (R1 B3), so this drives the parked-run resume hook for real.
+    """
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            update(WorkflowStep)
+            .where(
+                WorkflowStep.run_id == uuid.UUID(run_id),
+                WorkflowStep.status.in_(["pending", "running"]),
+            )
+            .values(status="done", finished_at=datetime.now(UTC))
+        )
+        await db.commit()
+    await maybe_finalize_run(uuid.UUID(run_id))
+
+
+async def count_active_runs(pid: str) -> int:
+    """The I-EXEC-03 witness: a project's {PENDING, RUNNING} run count."""
+    async with AsyncSessionLocal() as db:
+        rows = (
+            await db.execute(
+                select(WorkflowRun.id).where(
+                    WorkflowRun.project_id == uuid.UUID(pid),
+                    WorkflowRun.status.in_(
+                        [WorkflowStatus.PENDING, WorkflowStatus.RUNNING]
+                    ),
+                )
+            )
+        ).all()
+        return len(rows)
 
 
 async def count_runs(pid: str) -> int:
@@ -2845,6 +2914,88 @@ async def s16_remix_flagship_journey(ctx: Ctx) -> None:
           (dec_step["id"], book_steps))
 
 
+async def s17_run_authority_park_and_handoff(ctx: Ctx) -> None:
+    """核⑰ run 执行权仲裁（R1 B3，J6 多轮一致性；I-EXEC-03/04）：
+    a) 答旧问——B 活跃时 A 被答 → 仲裁 blocked → 明示回执（再挂+明示）+
+       A 保持 parked（节点/运行零状态污染）+ 全程单 owner；B 收官 → 交接钩
+       续跑 A → A 完成、B 行零损失。
+    b) 过期路——expire 结算默认答案但 authority 被占 → answered-but-parked，
+       不再制造双 RUNNING；sweep 重试分支不重复结算/计数；B 收官 → A 续跑
+       完成。"""
+
+    # a) 回答路径：blocked → 明示 → B 收官 → 交接钩续跑。
+    pid = await ctx.new_project("S17a answer blocked then handoff")
+    ck = await seed_parked_interrupt(pid, ctx.user_id)
+    b_run = await seed_active_run(pid)
+    res = await ctx.answer(ck["question_id"], {"kind": "option", "option_id": "a"})
+    check(res.status_code == 200, "the answer lands", res.text)
+    follow = res.json().get("follow_up")
+    check(
+        follow is not None and "current generation" in (follow.get("content") or ""),
+        "the blocked arbitration speaks the honest parked line (再挂+明示)",
+        follow,
+    )
+    answered = res.json()["answered_question"]
+    check(
+        (answered.get("answer") or {}).get("text") == "Focus: Pricing",
+        "the answer is settled on the message row even while parked",
+        answered.get("answer"),
+    )
+    a_run = await run_row(ck["run_id"])
+    check(a_run["status"] == "waiting_human", "A stays WAITING_HUMAN (再挂)", a_run)
+    a_node = (await step_rows(ck["run_id"]))[0]
+    check(
+        a_node["status"] == "waiting" and "answer" not in a_node["spec"],
+        "the blocked park writes ZERO node state (no spec.answer)",
+        a_node,
+    )
+    check(
+        await count_active_runs(pid) == 1,
+        "I-EXEC-03: answering the old question never births a second owner",
+    )
+    await settle_seeded_run(b_run)
+    b_after = await run_row(b_run)
+    check(b_after["status"] == "completed", "B settles completed, rows untouched", b_after)
+    await wait_run_status(ck["run_id"], {"completed"})
+    check(
+        await count_active_runs(pid) == 0,
+        "the handoff resumed A only after B settled — authority serialized",
+    )
+    await ctx.cleanup()
+
+    # b) 过期路径：expire = 结算 + 尝试重获执行权；被占 = answered-but-parked。
+    pid = await ctx.new_project("S17b expire blocked then handoff")
+    ck = await seed_parked_interrupt(pid, ctx.user_id)
+    b_run = await seed_active_run(pid)
+    expired = await expire_stale_interrupts(timedelta(0))
+    check(expired == 1, "the sweep settles the default answer", expired)
+    msg = await message_row(ck["question_id"])
+    check(
+        (msg["answer"] or {}).get("text") == "expired",
+        "the default answer settled with the machine marker",
+        msg["answer"],
+    )
+    a_node = (await step_rows(ck["run_id"]))[0]
+    check(
+        a_node["status"] == "waiting" and "answer" not in a_node["spec"],
+        "expire under a held authority parks answered-but-blocked",
+        a_node,
+    )
+    check(
+        await count_active_runs(pid) == 1,
+        "I-EXEC-03: expire never manufactures a double RUNNING",
+    )
+    again = await expire_stale_interrupts(timedelta(0))
+    check(again == 0, "the settled park is never re-expired (retry branch)", again)
+    check(
+        await count_active_runs(pid) == 1,
+        "the sweep retry keeps the single owner",
+    )
+    await settle_seeded_run(b_run)
+    await wait_run_status(ck["run_id"], {"completed"})
+    await ctx.cleanup()
+
+
 SCENARIOS = {
     "S1": s1_bare_wish_full_journey,
     "S2": s2_skipped_topic_ask_drafts_from_persona,
@@ -2862,6 +3013,7 @@ SCENARIOS = {
     "S14": s14_failed_run_zero_capture_full_release,
     "S15": s15_orphan_hold_released_on_project_delete,
     "S16": s16_remix_flagship_journey,
+    "S17": s17_run_authority_park_and_handoff,
 }
 
 

@@ -832,24 +832,44 @@ class RunAlreadyActiveError(ValueError):
     chat surface catches it first for its own plain-language line."""
 
 
-async def has_active_run(db: AsyncSession, project_id) -> bool:
+async def has_active_run(
+    db: AsyncSession, project_id, *, exclude_run_id: UUID | None = None
+) -> bool:
     """The active-run predicate (PENDING/RUNNING — WAITING_HUMAN is parked,
     not executing). Shared by create_run's guard and the plan surface's
     late-turn zombie-dock check; callers needing serialization take the
-    project row lock first."""
+    project row lock first. ``exclude_run_id`` (the resume arbitration seat,
+    R1 B3) keeps a resuming run from counting ITSELF as the blocker — a
+    RUNNING run holding a waiting node must not dead-lock its own resume."""
+    clauses = [
+        WorkflowRun.project_id == project_id,
+        WorkflowRun.status.in_([WorkflowStatus.PENDING, WorkflowStatus.RUNNING]),
+    ]
+    if exclude_run_id is not None:
+        clauses.append(WorkflowRun.id != exclude_run_id)
     row = (
-        await db.execute(
-            select(WorkflowRun.id)
-            .where(
-                WorkflowRun.project_id == project_id,
-                WorkflowRun.status.in_(
-                    [WorkflowStatus.PENDING, WorkflowStatus.RUNNING]
-                ),
-            )
-            .limit(1)
-        )
+        await db.execute(select(WorkflowRun.id).where(*clauses).limit(1))
     ).first()
     return row is not None
+
+
+# The resume arbitration seat's verdict (I-EXEC-03/04, R1 B3): callers speak
+# plainly off it — a blocked park is NOT a resume, and "idle" (no waiting
+# node) is the idempotent no-op.
+ResumeOutcome = Literal["resumed", "blocked", "idle"]
+
+
+def _resume_authority_decision(
+    node_present: bool, authority_free: bool
+) -> ResumeOutcome:
+    """The pure decision layer of the resume arbitration seat (DB-free,
+    matrix-tested): no waiting node → idle; the project's {PENDING, RUNNING}
+    single-owner law (I-EXEC-03) decides resume vs. 再挂 (blocked — the
+    answer stays settled on the message row, the node stays parked, a later
+    authority-freeing beat retries)."""
+    if not node_present:
+        return "idle"
+    return "resumed" if authority_free else "blocked"
 
 
 async def _needs_stills_alignment(db: AsyncSession, project: Project, task: TaskSpec) -> bool:
@@ -1613,14 +1633,29 @@ async def _cascade_skip(
 
 async def resume_waiting_interrupt(
     db: AsyncSession, run: WorkflowRun, answer: dict
-) -> WorkflowStep | None:
-    """answer = resume: write the AnswerPayload dump into the waiting node's
-    spec, flip it back to pending and the run back to RUNNING — the claim
-    loop re-executes the node, whose spec.answer branch goes straight to
-    done. The seat is the ``waiting`` status, any kind (direction interrupt,
-    期 3 verify escalation): each runner's own answer branch decides what the
-    answer means. Idempotent: no waiting node → None (already resumed or
-    bailed). Flush-only; the caller commits."""
+) -> ResumeOutcome:
+    """answer = resume — under project-level execution-authority arbitration
+    (I-EXEC-03/04, R1 B3). On a free authority: write the AnswerPayload dump
+    into the waiting node's spec, flip it back to pending and the run back to
+    RUNNING — the claim loop re-executes the node, whose spec.answer branch
+    goes straight to done. The seat is the ``waiting`` status, any kind
+    (direction interrupt, 期 3 verify escalation): each runner's own answer
+    branch decides what the answer means.
+
+    THE ONE arbitration seat: every resume channel (chat answer endpoint,
+    chat autoResume, tool-loop disposition, expire sweep) funnels here, so
+    the {PENDING, RUNNING} single-owner law is enforced at this second birth
+    channel exactly like create_run's — project row lock (same pattern),
+    then an atomic re-check. Lock order (D9): callers arrive holding at most
+    a message row lock; the project lock is taken AFTER it here, and
+    create_run never locks a message after its project lock — no cycle.
+
+    Authority occupied → ``"blocked"``: zero state writes (the node stays
+    waiting, the answer lives on the settled message row), and the caller
+    speaks the parked line (再挂+明示). The next authority-freeing beat —
+    the run-finalization handoff or the expire sweep's retry branch —
+    re-attempts. Idempotent: no waiting node → ``"idle"``. Flush-only; the
+    caller commits."""
     result = await db.execute(
         select(WorkflowStep).where(
             WorkflowStep.run_id == run.id,
@@ -1629,7 +1664,21 @@ async def resume_waiting_interrupt(
     )
     node = result.scalar_one_or_none()
     if node is None:
-        return None
+        return "idle"
+    await db.execute(
+        select(Project.id).where(Project.id == run.project_id).with_for_update()
+    )
+    decision = _resume_authority_decision(
+        node_present=True,
+        authority_free=not await has_active_run(
+            db, run.project_id, exclude_run_id=run.id
+        ),
+    )
+    if decision == "blocked":
+        logger.info(
+            "interrupt_resume_blocked", run_id=str(run.id), node_id=str(node.id)
+        )
+        return "blocked"
     node.spec = {**(node.spec or {}), "answer": answer}
     node.status = "pending"
     node.started_at = None
@@ -1640,7 +1689,58 @@ async def resume_waiting_interrupt(
         run.status = WorkflowStatus.RUNNING
     await sync_graph_node_for_step(db, node)
     logger.info("interrupt_resumed", run_id=str(run.id), node_id=str(node.id))
-    return node
+    return "resumed"
+
+
+async def _resume_parked_answered(db: AsyncSession, settled_run: WorkflowRun) -> None:
+    """Authority handoff (I-EXEC-03/04, R1 B3): a terminal settle frees the
+    project's execution authority — resume any same-project interrupt parked
+    ANSWERED-but-blocked (再挂), with no user action. An unanswered park is
+    the user's own pending decision, never auto-resumed here. Each candidate
+    goes through the one arbitration seat (project row lock + atomic
+    re-check), so at most one parked run takes the freed slot; the rest stay
+    parked for the next handoff / sweep retry. Flush + one commit."""
+    parked_runs = (
+        (
+            await db.execute(
+                select(WorkflowRun).where(
+                    WorkflowRun.project_id == settled_run.project_id,
+                    WorkflowRun.status == WorkflowStatus.WAITING_HUMAN,
+                    WorkflowRun.id != settled_run.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for parked in parked_runs:
+        node = (
+            await db.execute(
+                select(WorkflowStep).where(
+                    WorkflowStep.run_id == parked.id,
+                    WorkflowStep.status == "waiting",
+                )
+            )
+        ).scalar_one_or_none()
+        if node is None:
+            continue
+        message_id = ((node.spec or {}).get("suspend_payload") or {}).get(
+            "question_message_id"
+        )
+        if not message_id:
+            continue
+        message = await db.get(Message, UUID(str(message_id)))
+        if message is None or message.answer is None:
+            continue
+        outcome = await resume_waiting_interrupt(db, parked, message.answer)
+        if outcome == "resumed":
+            logger.info(
+                "authority_handoff_resumed",
+                settled_run_id=str(settled_run.id),
+                run_id=str(parked.id),
+            )
+    if parked_runs:
+        await db.commit()
 
 
 async def bail_waiting_interrupt(
@@ -1811,6 +1911,16 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             status=run.status.value,
             nodes=total,
         )
+        # Authority handoff (R1 B3): the settle freed this project's execution
+        # authority — a same-project interrupt parked answered-but-blocked
+        # (再挂) resumes now, no user action. Best-effort: the expire sweep's
+        # retry branch is the backstop if this fires mid-crash.
+        try:
+            await _resume_parked_answered(db, run)
+        except Exception:  # noqa: BLE001 — finalization never dies on it
+            logger.warning(
+                "authority_handoff_failed", run_id=str(run_id), exc_info=True
+            )
         # 触发回合 (T3, ADR-077 判词③): run 完成 is whitelist trigger #2 —
         # the closing reviewer reads the products and speaks (旅程一⑦). The
         # fire gate IS ADR-074②'s closing-line truth (前端门与判决同一真值):
@@ -1844,9 +1954,16 @@ async def expire_stale_interrupts(older_than: timedelta | None = None) -> int:
     ``answer.text="expired"`` (same pattern as ``superseded``); the default
     option has no argument id, so plan injects no direction —
     exactly the auto-tier behavior. The message UPDATE is guarded by
-    ``answer IS NULL``: a user answer racing the sweep always wins, and
-    ``resume_waiting_interrupt`` is itself idempotent. Returns the number
-    of interrupts expired (0 is the common, silent case).
+    ``answer IS NULL``: a user answer racing the sweep always wins.
+
+    Expire ≠ TTL resume (R1 B3): settling the answer and regaining execution
+    authority are two acts. The resume attempt goes through the arbitration
+    seat (``resume_waiting_interrupt``) — while another run holds the
+    project's {PENDING, RUNNING} slot the expired node stays parked
+    (answered-but-blocked), and every later sweep tick retries through the
+    already-settled branch until the authority handoff lets it in. Returns
+    the number of interrupts NEWLY expired (0 is the common, silent case;
+    retries of already-settled parks don't count).
     """
     ttl = (
         older_than
@@ -1900,16 +2017,29 @@ async def expire_stale_interrupts(older_than: timedelta | None = None) -> int:
                 .values(answer=answer)
                 .returning(Message.id)
             )
-            if settled_id is None:
-                continue  # the user answered between the scan and this write
+            if settled_id is not None:
+                expired += 1
+                logger.info(
+                    "interrupt_expired", node_id=str(node.id), run_id=str(node.run_id)
+                )
+                settled_answer = answer
+            else:
+                # Already settled — the user beat the sweep, OR a previous
+                # tick settled the default but parked blocked (authority
+                # held, R1 B3). Expire ≠ TTL resume: expiry settles the
+                # answer, then the arbitration seat ATTEMPTS to regain
+                # execution authority. Blocked → the node stays parked and
+                # the next sweep tick retries through this same branch (the
+                # settled answer is re-read from the message row — the
+                # user's answer always wins, it is never re-settled).
+                message = await db.get(Message, UUID(str(message_id)))
+                if message is None or message.answer is None:
+                    continue
+                settled_answer = message.answer
             run = await db.get(WorkflowRun, node.run_id)
             if run is not None:
-                await resume_waiting_interrupt(db, run, answer)
+                await resume_waiting_interrupt(db, run, settled_answer)
             await db.commit()
-            expired += 1
-            logger.info(
-                "interrupt_expired", node_id=str(node.id), run_id=str(node.run_id)
-            )
     return expired
 
 
