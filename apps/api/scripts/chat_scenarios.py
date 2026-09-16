@@ -2996,6 +2996,51 @@ async def s17_run_authority_park_and_handoff(ctx: Ctx) -> None:
     await ctx.cleanup()
 
 
+async def s18_idless_asset_read_terminalizes(ctx: Ctx) -> None:
+    """交互完整性批 (2026-09-17) 事故场景回归：单视频 pre-ASR（PENDING、
+    meta 无 language）+ 原事故文案 —— 模型想「先看源语言」时 get_asset 的
+    无 id 调用必须成功（工具自证 provenance：prompt 面从不列 asset id，
+    必填 id 曾逼模型编造 → schema 拒绝 → 静默 repair 窗）。回合必须收敛
+    到计划 dock，永不落入 exhausted 的 cannot-do 降级。锁终态形态
+    （task_book / 提问），不锁 LLM 言语（禁令 #7）。"""
+    pid = await ctx.new_project("S18 idless asset read")
+    await seed_asset(
+        pid,
+        ctx.user_id,
+        AssetType.VIDEO,
+        "talk.mp4",
+        extracted_text="So a company from Oxford University introduced "
+        "some of his new initiative.",
+        # PENDING + no meta.language — the incident's pre-ASR window: the
+        # plan surface shows the filename with no detected language.
+    )
+    turn1 = await ctx.chat(
+        pid,
+        "Caption my video in Chinese and French — Chinese as bilingual "
+        "subtitles.",
+    )
+    turn1 = await answer_caption_gate(ctx, turn1)
+    terminal = terminal_tool_of(turn1)
+    check(
+        terminal in ("present_plan", "ask_user"),
+        "the pre-ASR caption turn terminalizes as a plan dock or an honest "
+        "question — never the exhaustion degrade",
+        terminal,
+    )
+    check(
+        has_prose(turn1["assistant_message"]),
+        "the terminal message carries the settled speech",
+        turn1["assistant_message"],
+    )
+    if terminal == "present_plan":
+        plan = await pending_plan(ctx, pid)
+        check(
+            len(plan_tasks(plan)) >= 1,
+            "the docked chain has at least one task",
+            plan,
+        )
+
+
 SCENARIOS = {
     "S1": s1_bare_wish_full_journey,
     "S2": s2_skipped_topic_ask_drafts_from_persona,
@@ -3014,6 +3059,7 @@ SCENARIOS = {
     "S15": s15_orphan_hold_released_on_project_delete,
     "S16": s16_remix_flagship_journey,
     "S17": s17_run_authority_park_and_handoff,
+    "S18": s18_idless_asset_read_terminalizes,
 }
 
 

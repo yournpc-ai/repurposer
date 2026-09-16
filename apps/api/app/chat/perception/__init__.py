@@ -115,7 +115,9 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             name="get_asset",
             description=(
                 "Read one asset's detail (processing status, language, "
-                "duration, opening text) by id."
+                "duration, opening text). Omit the id for the project's "
+                "only file asset — with several, the call returns the "
+                "roster with their ids."
             ),
             params_model=GetAssetParams,
             execute=executes.get_asset,

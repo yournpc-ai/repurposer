@@ -403,6 +403,79 @@ async def test_read_tool_terminal_accept_fails_loud() -> None:
         await agent.call_loop(execute)
 
 
+# ---- on_repair 语义 (2026-09-17 交互完整性批 ②) ------------------------------
+#
+# The "repairing" label marks a REJECTION's retry, never an accepted read's
+# continuation — before the fix it fired at every iteration ≥ 1, so the
+# read-before-write journey lit "reworking it…" right after a SUCCESSFUL
+# read (a lie about the world; the 2026-09-16 incident's status line).
+
+
+@pytest.mark.asyncio
+async def test_on_repair_fires_on_a_rejection_iteration() -> None:
+    client = StubClient([
+        _call("echo", {"text": "bad"}, prose="first"),
+        _call("echo", {"text": "good"}, prose="second"),
+    ])
+    repairs: list[int] = []
+
+    async def execute(name: str, params: BaseModel | None, prose: str) -> str | None:
+        assert params is not None
+        return "nope" if params.text == "bad" else None
+
+    agent = _make_agent("tl_repair_fires", client)
+    result = await agent.call_loop(execute, on_repair=lambda: repairs.append(1))
+    assert result.params is not None and result.params.text == "good"
+    assert len(repairs) == 1  # exactly the rejection's retry, no more
+
+
+@pytest.mark.asyncio
+async def test_on_repair_never_fires_for_an_accepted_read() -> None:
+    """A successful read's continuation is not a repair — the label stays
+    dark across the whole read-before-write journey."""
+    read = _read_tool()
+    echo = ChatTool("echo", "Echo the text.", EchoArgs)
+    client = StubClient([
+        _call("lookup", {}, prose="let me check"),
+        _call("echo", {"text": "done"}, prose="the answer"),
+    ])
+    repairs: list[int] = []
+
+    async def execute(name: str, params: Any, prose: str):
+        if name == "lookup":
+            return ToolObservation("world")
+        return None
+
+    agent = _make_agent("tl_repair_read", client, tools=[read, echo])
+    result = await agent.call_loop(execute, on_repair=lambda: repairs.append(1))
+    assert result.tool_name == "echo" and repairs == []
+
+
+@pytest.mark.asyncio
+async def test_on_repair_marks_only_the_rejection_after_a_read() -> None:
+    """Read accepted (dark) → terminal rejected (label) → accepted: exactly
+    one repair beat, on the rejection's retry alone."""
+    read = _read_tool()
+    echo = ChatTool("echo", "Echo the text.", EchoArgs)
+    client = StubClient([
+        _call("lookup", {}, prose=""),
+        _call("echo", {"text": "bad"}, prose=""),
+        _call("echo", {"text": "good"}, prose=""),
+    ])
+    repairs: list[int] = []
+
+    async def execute(name: str, params: Any, prose: str):
+        if name == "lookup":
+            return ToolObservation("world")
+        assert params is not None
+        return "nope" if params.text == "bad" else None
+
+    agent = _make_agent("tl_repair_read_reject", client, tools=[read, echo])
+    result = await agent.call_loop(execute, on_repair=lambda: repairs.append(1))
+    assert result.calls == ["lookup", "echo", "echo"]
+    assert len(repairs) == 1
+
+
 def test_tool_spec_shape_and_zero_arg_tools() -> None:
     spec = tool_spec(ChatTool("echo", "Echo the text.", EchoArgs))
     assert spec["type"] == "function"

@@ -251,6 +251,12 @@ class ToolLoopAgent:
           fires on every iteration).
         - ``on_repair``: a rejection iteration begins (the funnel's reserved
           kwarg's loop seat — the thinking row's "repairing" label rides it).
+          Fires ONLY when the previous iteration was a genuine rejection
+          (schema truncation / unknown tool / params validation / execute
+          guardrail) — an ACCEPTED read's continuation is not a repair and
+          never wears the label (2026-09-17 交互完整性批 ②: the read-before-
+          write journey used to light "reworking it…" right after a
+          successful read — a lie about the world).
         """
         capabilities = getattr(self.client, "capabilities", None)
         if capabilities is None or not capabilities.supports_native_tools:
@@ -285,9 +291,14 @@ class ToolLoopAgent:
         # tail SURVIVES later rejections (they ride the user-message echo —
         # one rejection form only) so a retry never pays a second read.
         observation_tail: list[dict] = []
+        # Repair-label truthfulness (交互完整性批 ②): set by the rejection
+        # paths below, cleared at each iteration's top — on_repair marks a
+        # rejection's retry, never an accepted read's continuation.
+        prev_rejected = False
         for iteration in range(self.max_iterations):
-            if iteration and on_repair is not None:
+            if iteration and prev_rejected and on_repair is not None:
                 await _emit(on_repair)
+            prev_rejected = False
             streaming = on_delta is not None and iteration == 0
             messages = [*base_messages, *observation_tail]
             try:
@@ -312,10 +323,18 @@ class ToolLoopAgent:
                 # The truncation signature (finish_reason=tool_calls but
                 # arguments hit EOF) — schema class: absorbed into the loop
                 # with the reason as feedback, never a blind re-roll.
+                logger.info(
+                    "tool_loop_rejection",
+                    agent=self.name,
+                    iteration=iteration,
+                    kind="schema_truncation",
+                    detail=str(e)[:200],
+                )
                 base_messages[1] = {
                     "role": "user",
                     "content": user_prompt + _loop_echo(str(e)),
                 }
+                prev_rejected = True
                 continue
             # Misplaced speech (an args-level "prose" habit key) reads as
             # speech when the content channel stayed empty (读容忍, below).
@@ -342,6 +361,13 @@ class ToolLoopAgent:
             calls.append(call.name)
             tool = by_name.get(call.name)
             if tool is None:
+                logger.info(
+                    "tool_loop_rejection",
+                    agent=self.name,
+                    iteration=iteration,
+                    kind="unknown_tool",
+                    tool=call.name,
+                )
                 base_messages[1] = {
                     "role": "user",
                     "content": user_prompt
@@ -350,6 +376,7 @@ class ToolLoopAgent:
                         + ", ".join(t.name for t in self.tools)
                     ),
                 }
+                prev_rejected = True
                 continue
             # 读容忍 at the loop boundary (打字机律牙①'s loop form): the
             # retired wire habits drop silently — "type"/"kind" naming keys
@@ -367,10 +394,19 @@ class ToolLoopAgent:
                 try:
                     params = tool.params_model.model_validate(raw)
                 except ValidationError as e:
+                    logger.info(
+                        "tool_loop_rejection",
+                        agent=self.name,
+                        iteration=iteration,
+                        kind="params_validation",
+                        tool=call.name,
+                        detail=str(e)[:200],
+                    )
                     base_messages[1] = {
                         "role": "user",
                         "content": user_prompt + _loop_echo(str(e)),
                     }
+                    prev_rejected = True
                     continue
             await _emit(on_tool_ready, call.name, params)
             speech = _compose_speech([*speech_parts, prose])
@@ -432,10 +468,19 @@ class ToolLoopAgent:
                     iterations=iteration + 1,
                     calls=calls,
                 )
+            logger.info(
+                "tool_loop_rejection",
+                agent=self.name,
+                iteration=iteration,
+                kind="execute_guardrail",
+                tool=call.name,
+                detail=outcome[:200],
+            )
             base_messages[1] = {
                 "role": "user",
                 "content": user_prompt + _loop_echo(outcome),
             }
+            prev_rejected = True
         return LoopResult(
             prose="",
             tool_name=None,

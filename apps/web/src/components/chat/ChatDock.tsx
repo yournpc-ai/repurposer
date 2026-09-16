@@ -2754,8 +2754,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         if (streamedAny) {
           // The echo may extend the streamed prefix (read-tool turn) — pace
           // the tail, then the bubble carries the whole speech into the dock.
+          // A non-prefix settled echo is REPLACED speech (a rejected
+          // iteration streamed first): the envelope wins here exactly like
+          // the prose path below — the rejected iteration's words never
+          // survive as the settled bubble (2026-09-17 交互完整性批 ③: the
+          // dock branch used to keep the streamed orphan AND suppress the
+          // real echo via echoCarried — the live view diverged from the DB).
           await paceUnstreamedTail(message.content ?? "")
-          finalizePreview()
+          finalizePreview(message.content || undefined)
           if (message.question.kind === "task_book") {
             if (intentReady && livePlanMessageId) {
               setPlanVersions((prev) => [

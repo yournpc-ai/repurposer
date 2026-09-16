@@ -55,8 +55,13 @@ class GetOutputSpecParams(BaseModel):
 
 
 class GetAssetParams(BaseModel):
-    asset_id: UUID = Field(
-        description="The asset's id (from the context's Assets list or an @-mention)."
+    asset_id: UUID | None = Field(
+        default=None,
+        description=(
+            "The asset's id (from an @-mention or a previous get_asset "
+            "roster reply); null = the project's only file asset — with "
+            "several, the call returns the roster with their ids."
+        ),
     )
 
 
@@ -327,15 +332,73 @@ async def get_run_status(db: AsyncSession, project: Project, params) -> str:
     return "\n".join(lines)
 
 
+def _asset_roster_line(asset: Asset) -> str:
+    """One roster row (the multi-asset observation): id + name + the same
+    type/duration/language bits the plan context's asset block uses — the id
+    is the point (the re-call's legitimate provenance)."""
+    name = asset.title or (
+        asset.file_url.rsplit("/", 1)[-1] if asset.file_url else "(text)"
+    )
+    bits = [asset.type.value if hasattr(asset.type, "value") else str(asset.type)]
+    if asset.duration_seconds:
+        bits.append(f"{int(asset.duration_seconds)}s")
+    lang = (asset.meta or {}).get("language")
+    if lang:
+        bits.append(str(lang))
+    return f"- {asset.id} — {name} ({' · '.join(bits)})"
+
+
+def _resolve_asset_target(
+    assets: list[Asset], asset_id: UUID | None
+) -> Asset | str:
+    """工具自证 provenance（2026-09-17 交互完整性批 ①）: an asset id's only
+    legitimate sources are an @-mention or THIS tool's own roster reply
+    (prior tool output) — the prompt surface never lists asset ids, so a
+    required id forced the model to invent one (the 2026-09-16 incident:
+    get_asset(schema reject) → silent repair window). The idless call
+    resolves deterministically: 0 file assets → an honest empty; exactly 1 →
+    the read proceeds (a unique reference carries no ambiguity); several →
+    the roster observation — the tool never guesses a target, an ambiguity
+    returns the CHOICE with the ids the re-call needs. An explicit id
+    resolves by membership over the project's own assets (tenant-inherent,
+    text assets included — the @-mention reach the old db.get had). Returns
+    the Asset to render, or the observation text."""
+    if asset_id is not None:
+        asset = next((a for a in assets if str(a.id) == str(asset_id)), None)
+        if asset is None:
+            return (
+                f"No asset with id {asset_id} exists in this project — call "
+                "get_asset without an id for the roster, or use an @-mention."
+            )
+        return asset
+    file_assets = [a for a in assets if a.file_url]
+    if not file_assets:
+        return "No file assets in this project — there is nothing to read."
+    if len(file_assets) > 1:
+        roster = "\n".join(_asset_roster_line(a) for a in file_assets)
+        return (
+            "Several file assets in this project — call get_asset again "
+            f"with one of these ids:\n{roster}"
+        )
+    return file_assets[0]
+
+
 async def get_asset(db: AsyncSession, project: Project, params: GetAssetParams) -> str:
     """One asset's detail — identity + processing status + language +
-    duration + an opening text excerpt (the 「看这个素材」mention's read)."""
-    asset = await db.get(Asset, params.asset_id)
-    if asset is None or str(asset.project_id) != str(project.id):
-        return (
-            f"No asset with id {params.asset_id} exists in this project — "
-            "pick an id from the context's Assets list or an @-mention."
+    duration + an opening text excerpt (the 「看这个素材」mention's read).
+    The target resolution lives in ``_resolve_asset_target`` (idless 0/1/N);
+    one project-scoped query, the membership check is the tenant law."""
+    assets = list(
+        (
+            await db.execute(select(Asset).where(Asset.project_id == project.id))
         )
+        .scalars()
+        .all()
+    )
+    resolved = _resolve_asset_target(assets, params.asset_id)
+    if isinstance(resolved, str):
+        return resolved
+    asset = resolved
     lines = [
         f"Asset {asset.id} — type={asset.type}, status={asset.processing_status}"
     ]
