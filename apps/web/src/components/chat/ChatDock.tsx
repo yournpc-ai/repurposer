@@ -1740,6 +1740,27 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }
   }, [projectId])
 
+  // Load the project's assets for the prompt attachments — once on mount,
+  // and again after a chat turn when the project started empty: the plan
+  // path promotes user-declared pasted text ("this is my transcript: …")
+  // into a real transcript asset mid-turn, and it must show up. Declared
+  // above the watch windows — their effects consume it in dependency arrays,
+  // which evaluate at render (TDZ).
+  const fetchAssets = useCallback(async () => {
+    try {
+      const res = await apiFetch(`/api/v1/projects/${projectId}/assets`, {
+        toast: false,
+      })
+      if (res.ok) setAssets((await res.json()) as ProjectAsset[])
+    } catch {
+      /* attachment refresh is best-effort */
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    void fetchAssets()
+  }, [fetchAssets])
+
   // Watch window A (理解完成): assets mid-processing — the warm fires the
   // moment the whole set completes. The tick refreshes the assets too (the
   // chips' processing state updates on the same cadence), which flips the
@@ -1803,25 +1824,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }, 3000)
     return () => clearInterval(id)
   }, [terminal, runId, reviewerLanded, pollTriggerMessages])
-
-  // Load the project's assets for the prompt attachments — once on mount,
-  // and again after a chat turn when the project started empty: the plan
-  // path promotes user-declared pasted text ("this is my transcript: …")
-  // into a real transcript asset mid-turn, and it must show up.
-  const fetchAssets = useCallback(async () => {
-    try {
-      const res = await apiFetch(`/api/v1/projects/${projectId}/assets`, {
-        toast: false,
-      })
-      if (res.ok) setAssets((await res.json()) as ProjectAsset[])
-    } catch {
-      /* attachment refresh is best-effort */
-    }
-  }, [projectId])
-
-  useEffect(() => {
-    void fetchAssets()
-  }, [fetchAssets])
 
   // The output mention's candidate feed (reference family, MENTIONS §2): a
   // pinned output id resolves the revision target deterministically
