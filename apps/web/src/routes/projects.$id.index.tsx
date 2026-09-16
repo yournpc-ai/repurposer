@@ -487,7 +487,7 @@ function ProjectDetailPage() {
   // desktop confirm beat rides the dock's ONE start path (the task_book
   // question's start answer; guards and failure surfaces live in the dock).
   const handleDraftConfirm = useCallback(() => {
-    dockRef.current?.startPendingBook()
+    dockRef.current?.startPendingPlan()
   }, [])
 
   const completedRun =
