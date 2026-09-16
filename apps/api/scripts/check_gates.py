@@ -2,6 +2,11 @@
 
     uv run python scripts/check_gates.py
 
+Gate 0 (boot smoke): ``import app.main`` must succeed in a clean subprocess.
+A boot-level break (e.g. a module-scope forward reference) otherwise kills
+the pytest suite at COLLECTION — every test red with zero signal, and the
+registry-reading gates below crash mid-check with a stack, not a verdict.
+
 Gate 1 (N-29 iron rule, naming batch v2 ④/⑥ seat): ``app/providers/``
 never imports the decision layer (``app.agents``; the retired ``app.clients``
 stays banned as a reintroduction guard), and the deterministic tool packages
@@ -31,6 +36,7 @@ banned — it is the instruction-pack home (N-42 指令包, industry meaning);
 """
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -151,7 +157,31 @@ def check_retired_identifiers() -> list[str]:
     return violations
 
 
+def check_import_smoke() -> list[str]:
+    """Gate 0: the app must import clean in a fresh interpreter. Subprocess,
+    never in-process — this script's own interpreter already carries partial
+    imports, and the failure we catch here must read as a boot verdict, not
+    a stack in the wrong frame."""
+    proc = subprocess.run(
+        [sys.executable, "-c", "import app.main"],
+        cwd=API_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    if proc.returncode == 0:
+        return []
+    tail = (proc.stderr or proc.stdout or "").strip().splitlines()
+    return ["import app.main raised (boot-level failure):", *tail[-15:]]
+
+
 def main() -> int:
+    smoke = check_import_smoke()
+    if smoke:
+        print("gate 0 FAILED (boot smoke — the app must import before any gate can read its registries):")
+        for line in smoke:
+            print(f"  {line}")
+        return 1
     failures = check_purity()
     if failures:
         print("purity gate FAILED (N-29: providers/ never imports the decision layer; deterministic packages never touch the LLM seam):")
@@ -174,7 +204,7 @@ def main() -> int:
             print(f"  {failure}")
     if failures or parallel or blind or retired:
         return 1
-    print("check_gates: OK (providers/+deterministic purity, no parallel maps, no blind retries, no retired identifiers)")
+    print("check_gates: OK (gate 0 boot smoke, providers/+deterministic purity, no parallel maps, no blind retries, no retired identifiers)")
     return 0
 
 

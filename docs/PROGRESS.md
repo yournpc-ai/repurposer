@@ -1,7 +1,101 @@
 # PROGRESS — 进展、排期与需求池
 
-> Status: 活跃快照（2026-07-31 建，每周五滚动；周期结束归档时 §1/§2 随周期滚动，§2 末"需求池"三表为常驻节，带入下一周期）
+> Status: 活跃快照（2026-07-31 建，每周五滚动；周期结束归档时 §1/§2 随周期滚动，§2 末"需求池"三表为常驻节，带入下一周期；**2026-09-16 产品-first 重排**——新增 §0 当前里程碑区，R1/R1.1 施工序列以此为唯一事实源，§1/§2 周次叙事转为历史与远期框架）
 > 本文是**排期 / 优先级 / 需求池的唯一事实源**（未排期需求见 §2 末需求池）；其他文档只引用周次或需求池条目，不复述排期。双受众：内部管理 / 投资人可摘录。
+
+## 0. 当前里程碑与施工序列（2026-09-16 产品-first 重排）
+
+> 本节是**新会话的唯一入口**：从本节 → 当前 batch 的施工合同 → 合同引用的架构文档 → current HEAD。§1 起的周次排期为周期叙事与远期框架；与本节冲突时**以本节为准**。
+
+### 0.0 R1 — Core Product Beta（当前里程碑）
+
+**一句话**：用户可以放心把工作交给 Repurposer 完成核心创作闭环。**R1 不要求商业化、不含外部依赖。**
+
+用户语言定义：首产（J1）→ Remix 仿制（J2）→ 第二句话修改（J3）→ 被问能答（J4）→ 失败能恢复（J5：不重复扣费 / 不污染已有产物 / 卡死有终态）→ 挂起后继续（J6：不毁已有工作）。旅程逐拍定义 = `docs/JOURNEYS.md`。
+
+**Must-have journey = J2 / J5 / J6**（J1/J3 是存量优势，本阶段只做 regression lock；J4 随 J6 修）。判断方法：每个 batch 必须能回答「它阻塞哪个用户行为」——答不上来的工作项不进本节。
+
+**R1 在长期蓝图中的位置**（`docs/ARCHITECTURE_NORTH_STAR.md`）：R1 = §8 Execution Kernel 可靠性闭环 + §9 Structured Media 的首个真实入口（J2，**参数级仿制**——结构级消费仍 OPEN）。OS 上层抽象（统一 Artifact 模型 / Media IR / ExecutionAttempt / AgentBudget）全部**触发制 OPEN、不排期**——触发条件在 North Star 各节在册，触发前不存在于任何里程碑。
+
+### 0.1 Active Roadmap（施工顺序 = 拍板，不再重排）
+
+> **工期拍板（2026-09-16）**：**R1 本周内收口（≤ 09-20）**——当前技术架构下产品功能闭环不可靠（J2 无验收 / 竞态可双扣 / 旧 run 可毁新产物 / 卡死无终态），先把产品功能做完成；商业化（R1.1）排期挂起，随支付或更后再议。三个施工会话：B1（四 09-17）→ B2（四~五 09-17~18，最重，可 compact 一次）→ B3+B4a（六~日 09-19~20）+ R1 验收。**回退预案**：B2 若溢出，B1+B2 = 收费关键最小集优先保住，B3/B4a 顺延数日不伤任何后续（R1.1 未排期）。
+
+| Batch | 服务 Journey | 用户阻塞（Why now） | 技术工作（第二层） | 状态 | 依赖 | 施工合同 |
+|---|---|---|---|---|---|---|
+| **B1** | J2 | 旗舰旅程零自动化验收；run 路径拆解静默；画布孤儿节点 | remix e2e + run-path trigger + prelude 折叠 + 测试复位（4 漂移 + gate 0） | **DONE**（2026-09-16 验证绿：190 纯测试 / 闸门 / prompt gate / S16；commit 待补） | — | `tasks/r1-batch-1-remix-closure.md` |
+| B2 | J5/J3/J6 | 竞态下双扣 + 僵尸写污染产物：收费后第一个 worker 卡顿 = 账单事故 | claim fencing（范围冻结 = `ARCHITECTURE_GATE_2_REPORT.md` §7/§13） | PLANNED | B1 | `tasks/r1-batch-2-execution-fencing.md` |
+| B3 | J6/J4 | 旧问题后答/过期自动答 → 旧 run 无守卫复活，整族销毁新 run 产物 | run authority 仲裁座（一座四入口）+ expire 解耦 | PLANNED | B2 | `tasks/r1-batch-3-run-authority.md` |
+| B4a | J5 | 素材崩溃环无限重烧、永无终态 | attempts 封顶终态 + reprocess 完整 reset 一座 | PLANNED | B2 | `tasks/r1-batch-4a-poison-pill.md` |
+
+### 0.2 R1 Definition of Done
+
+**产品 DoD（第一语言）**：
+1. 首产闭环：素材 + 一句话 → 被接住 → 计划+估价 → 确认 → 施工可见 → 产物+收官（剧本 S1–S12 持续全绿）；
+2. 旗舰闭环：两个视频 + 一句话 → 角色消歧 → agent 说出案例理解 → 仿制产物 → 可继续改（remix e2e 绿 + **人工验收脚本五维打勾**，见 `tasks/r1-batch-1-remix-closure.md` §8）；
+3. 更改闭环：第二句话改字幕/音乐/翻译/重剪，撤销可回退（存量，锁绿）；
+4. 恢复可信：失败 → 人话原因 → 重试 → 台账零重复扣费（竞态演练证明）→ 已有产物零污染 → 卡死素材有终态；
+5. 多轮一致：挂起 → 开新 run → 后答/过期 → 旧 run 重新排队，新产物零损失。
+
+**Invariant（第二语言，验收保障，不开新文档）**：I-EXEC-01/02（stale 执行不写终态、零副作用，B2）/ I-EXEC-03/04（project {PENDING,RUNNING} 至多一 owner、进入必原子重查，B3）/ 超限 retry 必有终态（B4a）。
+
+**R1 停止线**：B1→B2→B3→B4a 完成即停。以下事项**不得**扩张进 R1（除非证明阻塞 J2/J5/J6）：ExecutionAttempt / HITL canonical store / artifact lineage / Media IR / AgentBudget / Capability Registry / 结构级 remix / second provider / Distribution / W11 / op 覆盖度扩面 / B4 镜头跟随 / select_clips 语义重设计。
+
+### 0.3 R1.1 — Commercial / Distribution（R1 之后；**排期挂起 2026-09-16**）
+
+> 商业化整体挂起：随支付商对接节奏或更后排期，本周不做。批次合同已备（见下表），随时可启动；启动时日期周五滚动定。
+
+| Batch | 服务 | 内容 | 状态 | 依赖 | 施工合同 |
+|---|---|---|---|---|---|
+| B4b | 资金可用性 | hold GC（资格谓词 = claim 谓词语义镜像） | PLANNED | B4a | `tasks/r1-1-batch-4b-hold-gc.md` |
+| B5 | 商业化闭环 | W11 全集：支付/订阅/权益/计费中心/agent_calls 台账（批内前置）/ LinkedIn·TikTok 联调 / 已发布产物 delete 409 | PLANNED | R1（硬前置 = B2） | `tasks/r1-1-batch-5-commercial-distribution.md` |
+| C1（并行） | J2 规模化 | skeleton cache identity（唯一索引 = dedupe = lookup + 三戳谓词）；**不阻塞任何 milestone** | PLANNED | 无（顺序上排在 R1 后） | `tasks/r1-1-batch-c1-cache-identity.md` |
+
+外部凭据/平台审批归 R1.1 吸收（mock 验收 + 真联调排队清单），**永不成 R1 的结束条件**。R1.1 之后 = 运营端（W8–W10，§2 既有排期）。
+
+### 0.4 新会话执行规则与启动 Checklist
+
+**事实源优先级**：`Current code > DB constraints/migrations > tests > ADR > 架构文档 > 历史计划`。施工合同里的文件/行号核验于合同标注的 HEAD，**行号会漂移——开工前以 current HEAD 重新定位，合同是导航不是代码事实源**。
+
+**执行规则**：
+1. 开工先读 current HEAD 与 git log，不信合同里的行号永远正确；
+2. 每个 batch 开工前做 preflight（读合同 + 其引用文档 + 核验代码座位）；
+3. 不跨 batch 偷渡未来 architecture；一次只解决一个 correctness/product gap；
+4. 每完成一个 batch，从代码重新验证 DoD，不用旧 audit 证明新代码正确；
+5. migration / 状态机 / 并发改动必须有 regression scenario；
+6. 发现合同与 current code 不一致 → 标记 discrepancy 回报，不自行扩大 scope；
+7. 不把 OPEN 产品决策改成 CURRENT，除非该 batch 合同明确要求；
+8. 验证纪律：纯函数套件/gate 用户自跑（CLAUDE.md Testing）；e2e 剧本需 dev worker。
+
+**启动 Checklist**：
+```
+[ ] 读 docs/PROGRESS.md §0（当前里程碑 + Active batch）
+[ ] 读当前 batch 的施工合同（tasks/r1-*.md）
+[ ] 读合同引用的架构文档（North Star / JOURNEYS / 相关 ADR）
+[ ] git log 确认 current HEAD；核验合同中的代码座位
+[ ] 确认工作树干净、当前测试基线
+[ ] 只做这一个 batch；跑合同 §8 验收
+[ ] 完成合同 §9 文档同步（PROGRESS 状态 + commit 号）
+[ ] 报告：改动文件 / 测试 / 剩余风险
+```
+
+**Non-negotiable constraints**（详表 = `docs/ARCHITECTURE_NORTH_STAR.md`）：LLM 面永不写 DB；拓扑代码裁决；tool schema = action 边界；`apply_wiring_ops` 唯一图写口；`_mutate` 双层 dedupe 永不破坏；clip-spec 唯一渲染契约；打字机律；perception 只读；craft_scan 零 LLM；终态写必须携带执行身份（B2 落地后）；project {PENDING,RUNNING} 至多一 owner（B3 补全到全通道）。
+
+### 0.5 与既有排期的对账（2026-09-16 补登）
+
+§0 不是推翻旧计划，是把已发生的滑动正式化。逐项交接：
+
+| 旧排期项 | 状态（09-16） | 去向 |
+|---|---|---|
+| W7 积分系统批（ADR-055，09-05 完工） | ✅ 已完成 | R1 B2/B4a/R1.1 B4b = 它的加固层——拍板（四）「积分完全先行、支付只留 W11 边界」的执行 |
+| 全流程测试批（09-07~09-09） | ✅ 已完成（S13–S15 绿） | — |
+| 画布三族批（ADR-072/076） | ✅ 已完成 | — |
+| 工具 loop + decompiler 批（ADR-077/078，09-15 完工） | ✅ 已完成 | **B1 = 它的收口批**（旗舰旅程验收 + 体验残留） |
+| W11 支付批（原 09-10~09-23） | **未开工**——被画布三族/工具 loop 两插入批（拍板明文顺延一周）+ Architecture Gate 顶至 09-16 | **整体平移为 R1.1 B5**，范围不变，加硬前置 B2（双扣封死再接真钱，Architecture Gate 结论） |
+| W8–W10 运营端（选题库 / Memory / 账号体系） | 未开始 | 不变，排在 R1.1 之后 |
+| W12 法务 / W13 缓冲 / W14 go/no-go（11-17） | 框架 | 保留。**工期拍板（2026-09-16）：R1 本周收口（≤09-20）；R1.1 挂起（随支付或更后）**——R1 提前完成使运营端可提前至 ~09-21 周起谈，但「R1 后先运营端还是先看 R1.1 启动条件」**留周五（09-18）滚动定夺**；go/no-go 11-17 压力大幅缓解 |
+
+需求池条目不受 §0 影响：deferred/trigger 制条目（ExecutionAttempt、AgentBudget、结构级 remix 等）仍按各自触发条件在 §2 末需求池在册。
 
 ## 1. 产品现状（截至 2026-07-31）
 
@@ -373,6 +467,8 @@
 > **2026-09-15 T5 decompiler 批入账（①~④ 四 commit，ADR-078 全判词落地）**：① **craft_scan 确定性扫描**——PyAV 顺序解码 + 3 通道 HSV 直方图相关切镜头（自适应下限 median−4σ，MAD=0 退化 0.55）+ 节奏分档 + 画幅最近档 + 字幕带视觉最近邻 best-fit（preset 枚举镜像 clip-spec Literal，调色板 snap）——**零 LLM 由构造保证**（纯套件双闸：源码 import 扫描 + CraftJudgment schema 只载判断座）；② **decompile 节点**（内部 crew，编译期注入 off preprocess、与 understand 平行，plan.inputs 带它）+ CraftSkeleton 内部产物（资产级 + 内容寻址 + 跨项目复用）+ warm 前移 + craft_decompiled 触发事件；③ **exemplar 参数源（判词⑤）**——plan 装配签名加骨架座；select_clips/materialize 代码映射（count 钳制 / 画幅 / 字幕覆写 / 配乐 mood），优先级全链 = 显式 > exemplar > 默认，LLM 永不写 spec；④ **资产角色双消歧门（判词④）**——提问机器门（slot=asset_role，选项代码自建 option id = asset id，答复/跳过都代码结算 pin）+ mention 门（plan 路 @video = exemplar，chat 路 @video+clips 链 = source，撞座即角色反转），pins 骑 PendingPlan → TaskSpec → run.context 常驻可回读，get_craft_skeleton 读工具入感知族双挂。**验证归用户自跑**（纯套件 / prompt gate / 全量剧本 / 案例仿制 e2e）；需求池新收「能力缺口喂给」一行（gaps 的 not_yet 族 = 需求池候选源）。
 
 ### 第十一周（09-10 ~ 09-23，自 10-02 提前）：**支付实际开发 + 分发联调**
+
+> **⚠️ 2026-09-16 状态注记**：本批实际未按原日期开工（被 09-12/09-14 两插入批 + Architecture Gate 顺延），**已整体平移为 §0.3 的 R1.1 Batch 5**——范围不变，施工合同 = `tasks/r1-1-batch-5-commercial-distribution.md`，硬前置 = R1 B2（双扣封死再接真钱）。以下日期为历史记录，新日期随 §0.5 滚动。
 
 > 在 W7 落定的积分+支付联合架构上接入实际支付商 + LinkedIn / TikTok OAuth 发布链路。**⚠️ 入驻审批跑道收紧**（08-14 提交 → 09-01 前须确认沙盒到位）——未过审则第一周切 mock / 合同流对接，真联调吃批内第二周；开发者权限同理。
 

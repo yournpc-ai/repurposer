@@ -424,7 +424,21 @@ async def get_craft_skeleton(
         )
     row = await _find_reusable_skeleton(db, project, asset)
     if row is None:
-        if str(asset.processing_status) != "completed":
+        status = str(asset.processing_status)
+        if status in ("failed",):
+            # A failed processing never produces a warm skeleton — the
+            # "still processing" copy below would stall the planner FOREVER
+            # on this asset (R1 B1 S16 实测: the agent waits for a skeleton
+            # that never lands and the remix journey dead-ends pre-plan).
+            return (
+                "The reference video's own processing FAILED, so no warm "
+                "skeleton is coming — but a remix is still possible: the "
+                "run's decompile step reads the bytes directly, and if the "
+                "case proves unreadable the cut honestly proceeds as a "
+                "regular one (exemplar params fall back to defaults). "
+                "Present the plan, saying this plainly."
+            )
+        if status != "completed":
             return (
                 "The reference video is still processing — its craft "
                 "skeleton lands in a moment. Say so honestly rather than "

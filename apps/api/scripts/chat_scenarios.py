@@ -128,7 +128,7 @@ from app.platform.billing import (  # noqa: E402
 )
 
 BASE = os.getenv("SCENARIO_API_BASE", "http://127.0.0.1:8000/api/v1")
-TIMEOUT = httpx.Timeout(180.0)  # plan-path turns are real LLM calls
+TIMEOUT = httpx.Timeout(300.0)  # plan-path turns are real LLM calls (remix turns with a real transcript excerpt have crossed 180s on a slow provider)
 
 
 class ScenarioFailure(AssertionError):
@@ -297,30 +297,39 @@ async def seed_asset(
     extracted_text: str | None = None,
     meta: dict | None = None,
     processed: bool = False,
-) -> None:
+    file_url: str | None = None,
+    status: AssetStatus | None = None,
+) -> str:
     """A fake file-backed asset row — enough for the clips-media gate and the
     intent router's filename context; the bytes never exist. ``extracted_text``
     satisfies the "transcript" required-input check (registry requires).
     ``meta`` carries e.g. the ASR-detected ``language`` the plan context
     surfaces for transform-target decisions. ``processed`` stamps the row
     COMPLETED (the declared-material promotion's end state) — the worker's
-    asset queue then never touches the fake bytes (S4's writer chain)."""
+    asset queue then never touches the fake bytes (S4's writer chain).
+    ``file_url`` points at a REAL bucket object (S16's demo-bucket fixtures —
+    the worker really processes a PENDING one). ``status`` overrides the
+    derived state (S16's FAILED exemplar — the warm never fires for it).
+    Returns the row's id."""
     async with AsyncSessionLocal() as db:
-        db.add(
-            Asset(
-                user_id=user_id,
-                project_id=uuid.UUID(pid),
-                type=type_,
-                file_url=f"scenario/{filename}",
-                title=filename,
-                extracted_text=extracted_text,
-                meta=meta,
-                processing_status=(
-                    AssetStatus.COMPLETED if processed else AssetStatus.PENDING
-                ),
-            )
+        asset = Asset(
+            user_id=user_id,
+            project_id=uuid.UUID(pid),
+            type=type_,
+            file_url=file_url or f"scenario/{filename}",
+            title=filename,
+            extracted_text=extracted_text,
+            meta=meta,
+            processing_status=(
+                status
+                or (AssetStatus.COMPLETED if processed else AssetStatus.PENDING)
+            ),
         )
+        db.add(asset)
+        await db.flush()
+        asset_id = str(asset.id)
         await db.commit()
+        return asset_id
 
 
 async def seed_completed_run(pid: str) -> None:
@@ -650,6 +659,85 @@ def has_reminder_tail(content: str) -> bool:
     """The code-composed interjection reminder tail (ADR-053 R2 — code-forced
     text, so locking its marker is legal: it is code, never the LLM's voice)."""
     return "Still waiting for your answer:" in content or "还在等你的回答：" in content
+
+
+async def wait_asset_status(
+    asset_id: str, wanted: set[AssetStatus], timeout: float = 420.0
+) -> AssetStatus:
+    """Poll an asset row to a wanted processing state (S16's real-bytes seed:
+    the dev worker really ASRs the PENDING demo-bucket source)."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    while True:
+        async with AsyncSessionLocal() as db:
+            asset = await db.get(Asset, uuid.UUID(asset_id))
+            check(asset is not None, f"asset {asset_id} exists")
+            if asset.processing_status in wanted:
+                return asset.processing_status
+        if asyncio.get_event_loop().time() > deadline:
+            raise ScenarioFailure(
+                f"asset did not reach {sorted(str(s) for s in wanted)} within {timeout}s "
+                f"(worker down?) — last {asset.processing_status}"
+            )
+        await asyncio.sleep(3)
+
+
+async def wait_step_terminal(
+    run_id: str, kind: str, timeout: float = 600.0
+) -> dict:
+    """Poll a run's steps until the named kind settles (done/failed/skipped).
+    The caller asserts WHICH terminal is acceptable — a failed step surfaces
+    its error verbatim."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    while True:
+        for step in await step_rows(run_id):
+            if step["kind"] == kind and step["status"] in ("done", "failed", "skipped"):
+                return step
+        if asyncio.get_event_loop().time() > deadline:
+            raise ScenarioFailure(
+                f"step {kind} did not settle within {timeout}s — steps: "
+                f"{[(s['kind'], s['status']) for s in await step_rows(run_id)]}"
+            )
+        await asyncio.sleep(3)
+
+
+async def outputs_of(pid: str, type_: str) -> list[Output]:
+    async with AsyncSessionLocal() as db:
+        return list(
+            (
+                await db.execute(
+                    select(Output).where(
+                        Output.project_id == uuid.UUID(pid), Output.type == type_
+                    )
+                )
+            ).scalars().all()
+        )
+
+
+async def task_book_step_ids(pid: str) -> list[str]:
+    """The task-book node's internal step family (the read frame hides the
+    book — B1-lite — so the prelude-membership assertion reads the row)."""
+    from app.models.tables import GraphNode
+
+    async with AsyncSessionLocal() as db:
+        node = (
+            await db.execute(
+                select(GraphNode).where(
+                    GraphNode.project_id == uuid.UUID(pid),
+                    GraphNode.spec["role"].astext == "task_book",
+                )
+            )
+        ).scalars().one_or_none()
+        if node is None:
+            return []
+        return [str(s) for s in (node.spec or {}).get("step_ids") or []]
+
+
+def no_decompile_canvas_node(graph: dict) -> bool:
+    """T3 (R1 B1): decompile folds into the prelude — it must never read back
+    as a standalone canvas node (its pre-fold face was a text×manual orphan)."""
+    return not any(
+        (n.get("spec") or {}).get("tool") == "decompile" for n in graph.get("nodes") or []
+    )
 
 
 # ---- S1 核① 裸愿望全旅程 ------------------------------------------------------
@@ -2499,6 +2587,264 @@ async def s15_orphan_hold_released_on_project_delete(ctx: Ctx) -> None:
             await db.commit()
 
 
+# ---- S16 remix 旗舰旅程（旅程二，R1 B1 T5） --------------------------------------
+
+# 固定 fixture（demo 桶常住对象，reset_db 保护前缀）：
+# - 用户素材 = 真演讲片（worker 真 ASR → 真剪辑）；
+# - 参考片 = 特征明显的高光剪辑成品（实测 craft_scan: 9:16 / 2 shots / steady /
+#   clean-bottom 青色 #22D3EE 字幕）——断言全部自洽读骨架行，不硬编码事实。
+REMIX_SOURCE_KEY = "demo/uploads/demo_talk.mp4"
+REMIX_EXEMPLAR_KEY = "demo/outputs/highlight-clips-preview-ec8e575b.mp4"
+
+
+async def copy_fixture(key: str, dest_prefix: str) -> str:
+    """Copy a shared demo-bucket fixture to a scenario-owned key. NEVER seed
+    an asset pointing at the shared object directly: project deletion unlinks
+    every asset's ``file_url`` (``delete_project`` → ``delete_file``), so a
+    shared key referenced by a scenario project dies with its cleanup — S16's
+    first run ate a recipe card's marketing video this way. (Script seam:
+    scripts reach into app internals throughout this file.)"""
+    from app.config import settings
+    from app.providers.storage import _get_s3_client
+
+    dest = f"{dest_prefix}/{key.rsplit('/', 1)[-1]}"
+    client = _get_s3_client()
+    await asyncio.to_thread(
+        client.copy_object,
+        Bucket=settings.s3_bucket_name,
+        Key=dest,
+        CopySource={"Bucket": settings.s3_bucket_name, "Key": key},
+    )
+    return dest
+
+
+async def s16_remix_flagship_journey(ctx: Ctx) -> None:
+    """remix 旗舰（旅程二零自动化验收的收口，需 dev worker + demo 桶 fixture）：
+    P1 warm 路径——@mention 指认参考片（拍 0a 免问路，pin 由代码结算）→ pin 落
+    定即拆解，agent 主动说看懂了案例（零 run 成本）；P2 run 路径——两视频 +
+    一句「做成案例那样子」→ mention pin → plan → start → decompile 新鲜物化
+    （参考片 seeded 为 FAILED 处理态 = warm 永不点火的现实形态，如参考片自身
+    ASR 失败——run 路径不看处理态只读字节，T4 的火因此必走 run 座位）→ 触发
+    回合说话 → 产物参数 = 骨架（条数/画幅/字幕色三断）→ 画布无 decompile 孤儿
+    节点。角色提问机器一路（router 主动问 asset_role）是 LLM 裁量，不做 e2e
+    锁定（登记 INTENT_COVERAGE §6 ⚠️ 行；其代码侧——选项构造 / 答复落 pin /
+    默认路径——由纯测试锁定）。复用不重复发声由结构锁住（reuse 早退在火前
+    60 行）+ (conversation, trigger, ref) 去重（test_trigger_turn_pure），本
+    剧本末尾断言消息恰一条。"""
+    fixture_prefix = f"scenario/s16-{uuid.uuid4().hex[:8]}"
+    src_key = await copy_fixture(REMIX_SOURCE_KEY, fixture_prefix)
+    ex_key = await copy_fixture(REMIX_EXEMPLAR_KEY, fixture_prefix)
+    # ---- P1: warm 路径 —— pin 落定即拆解、主动说话（无 run） ------------------
+    # 消歧走 @mention 指认（拍 0a 第二路「免问」）：角色 pin 由代码结算（判词
+    # ④），不依赖 LLM 是否选择提问——提问机器一路的 dock 决策是 LLM 裁量
+    # （两次实测路由在旗舰句上直接出默认 plan，miss 率归 prompt 探针测量，
+    # 登记 INTENT_COVERAGE §6 ⚠️ 行），e2e 只锁确定性路径。
+    pid1 = await ctx.new_project("S16-P1 warm path")
+    src1 = await seed_asset(
+        pid1, ctx.user_id, AssetType.VIDEO, "s16-p1-source.mp4", processed=True
+    )
+    ex1 = await seed_asset(
+        pid1,
+        ctx.user_id,
+        AssetType.VIDEO,
+        "highlight-clips-preview.mp4",
+        processed=True,
+        file_url=ex_key,
+    )
+    turn1 = await ctx.chat(
+        pid1,
+        "你能帮我把我的原视频做成 @参考案例 那样子吗？",
+        mentions=[{"type": "asset", "id": ex1, "label": "highlight-clips-preview.mp4"}],
+    )
+    conv1 = turn1["conversation_id"]
+    brief1 = (await ctx.results(pid1)).get("pending_brief") or {}
+    # The pin persists on the first PendingPlan WRITE — a bare-answer turn
+    # (the router freeform-asks instead of calling a tool) writes nothing
+    # and the pin evaporates with it. Re-mention on each continuation until
+    # a write lands (bounded — three prose-only turns = stuck, fail loud).
+    for _ in range(3):
+        if brief1.get("exemplar_asset_id") == ex1:
+            break
+        turn1 = await ctx.chat(
+            pid1,
+            "参考案例就是 @这条，继续。",
+            mentions=[{"type": "asset", "id": ex1, "label": "highlight-clips-preview.mp4"}],
+        )
+        brief1 = (await ctx.results(pid1)).get("pending_brief") or {}
+    check(brief1.get("exemplar_asset_id") == ex1,
+          "the @mention pins the exemplar by code (拍 0a 免问路 — 判词④)",
+          {"brief": brief1,
+           "last_content": (turn1["assistant_message"].get("content") or "")[:200]})
+    # pin 落定（随 PendingPlan 写入）→ warm 拆解（fire-and-forget）→ 触发回合
+    # 主动说话（拍 1）。
+    review1 = await wait_trigger_review(ctx, conv1, ex1, timeout=240.0)
+    check(review1 is not None,
+          "the warm path's decompile speaks (拍 1 — 「我看了你的案例」)", ex1)
+    rintent1 = (review1 or {}).get("intent") or {}
+    check(rintent1.get("trigger") == "craft_decompiled" and rintent1.get("ref") == ex1,
+          "the warm review dump names trigger + exemplar ref", rintent1)
+    check(bool(((review1 or {}).get("content") or "").strip()),
+          "the agent's case understanding is spoken, not silent", review1)
+
+    # ---- P2: run 路径 —— 新鲜物化必发声（T4）+ exemplar 参数 + 画布孤儿修复 ----
+    pid2 = await ctx.new_project("S16-P2 run path")
+    src2 = await seed_asset(
+        pid2, ctx.user_id, AssetType.VIDEO, "demo_talk.mp4",
+        file_url=src_key,  # PENDING — the worker really ASRs it
+    )
+    ex2 = await seed_asset(
+        pid2, ctx.user_id, AssetType.VIDEO, "highlight-clips-preview.mp4",
+        file_url=ex_key,
+        status=AssetStatus.FAILED,  # warm 永不点火 → run 路径新鲜物化（T4 的火）
+    )
+    src_status = await wait_asset_status(
+        src2, {AssetStatus.COMPLETED, AssetStatus.FAILED}
+    )
+    check(src_status == AssetStatus.COMPLETED,
+          "the real source asset is ASR-processed by the dev worker", src_status)
+    # remix = 全模态真链（decompile + clips + render pending），赠额外补足避免
+    # 422 噪音（S13/S14 的余额断言都按当前值动态读，互不影响）。
+    async with AsyncSessionLocal() as db:
+        wallet = await get_or_create_wallet(db, ctx.user_id)
+        wallet.balance = int(wallet.balance) + 200000
+        await db.commit()
+
+    turn2 = await ctx.chat(
+        pid2,
+        "你能帮我把我的原视频做成 @参考案例 那样子吗？",
+        mentions=[{"type": "asset", "id": ex2, "label": "highlight-clips-preview.mp4"}],
+    )
+    conv2 = turn2["conversation_id"]
+    brief2 = (await ctx.results(pid2)).get("pending_brief") or {}
+    # Same bounded re-mention recovery as P1: the pin only lands with the
+    # first PendingPlan write.
+    for _ in range(3):
+        if brief2.get("exemplar_asset_id") == ex2:
+            break
+        turn2 = await ctx.chat(
+            pid2,
+            "参考案例就是 @这条，继续。",
+            mentions=[{"type": "asset", "id": ex2, "label": "highlight-clips-preview.mp4"}],
+        )
+        brief2 = (await ctx.results(pid2)).get("pending_brief") or {}
+    check(brief2.get("exemplar_asset_id") == ex2,
+          "P2's @mention pins the exemplar by code",
+          {"brief": brief2, "terminal": terminal_tool_of(turn2),
+           "run_id": turn2.get("run_id"),
+           "question": (turn2["assistant_message"].get("question") or {}),
+           "content_head": (turn2["assistant_message"].get("content") or "")[:200]})
+
+    # 计划 dock：mention 回合可能直接出书；若路由仍 dock 了角色问（mention 的
+    # pin 已随写入落账，问题只是再确认），按选项答掉它（答复同样代码落 pin），
+    # 再回推到出书。
+    follow = turn2["assistant_message"]
+    q2 = follow.get("question") or {}
+    if q2.get("kind") == "question" and q2.get("slot") == "asset_role":
+        ans2 = await ctx.answer(follow["id"], {"kind": "option", "option_id": src2})
+        check(ans2.status_code in (200, 201), "P2's role answer settles", ans2.text)
+        follow = ans2.json().get("follow_up") or {}
+    if not is_plan_dock(follow):
+        # 显式覆盖：骨架缺席不该阻塞出书（读工具已被告知 FAILED = 直接出方案，
+        # 此话术兜底 agent 仍犹豫的残差）。
+        turn_dock = await ctx.chat(
+            pid2, "参考片的骨架暂时拿不到也没关系——按你的判断直接出方案，不用等它。"
+        )
+        follow = turn_dock["assistant_message"]
+    check(is_plan_dock(follow), "the pinned plan docks", follow)
+    tasks = plan_tasks((await ctx.results(pid2)).get("pending_brief"))
+    if not any(t.get("tool") == "select_clips" for t in tasks):
+        # LLM 路由方差的一次纠偏——旗舰旅程的合法产物就是 clips 链。
+        await ctx.chat(pid2, "把原视频剪成案例那样的竖屏短片")
+        tasks = plan_tasks((await ctx.results(pid2)).get("pending_brief"))
+    check(any(t.get("tool") == "select_clips" for t in tasks),
+          "the remix plan carries the clips chain (旗舰旅程的合法链)", tasks)
+    draft_graph = await ctx.graph(pid2)
+    check(no_decompile_canvas_node(draft_graph),
+          "the draft graph carries NO decompile orphan node (T3)", draft_graph["nodes"])
+
+    turn3 = await ctx.chat(pid2, "looks good, start")
+    check(terminal_tool_of(turn3) == "start_run",
+          "the prose confirmation closes on start_run", turn3)
+    run_id = turn3["run_id"]
+    check(run_id is not None, "the remix run is born", turn3)
+    run_ctx = (await run_row(run_id))["context"]
+    check(run_ctx.get("exemplar_asset_id") == ex2,
+          "the exemplar pin rides run.context into the run (判词④) — source stays "
+          "None on the mention path (两视频项目素材由 exemplar 排除法确定性解析)",
+          run_ctx)
+
+    # decompile 步骤新鲜物化（参考片 FAILED → warm 从未点火 → 非复用）。
+    dec_step = await wait_step_terminal(run_id, "decompile", timeout=420.0)
+    check(dec_step["status"] == "done",
+          "the decompile step completes on the real exemplar bytes", dec_step)
+    dec_summary = str((dec_step["spec"] or {}).get("summary") or "")
+    check("复用" not in dec_summary and "Reused" not in dec_summary,
+          "the run path materializes FRESH (no warm row existed)", dec_summary)
+    # 骨架行：run 路径所物化（warmed=False, source_ref 指认参考片）。
+    skeletons = [
+        o for o in await outputs_of(pid2, "craft_skeleton")
+        if (o.source_ref or {}).get("asset_id") == ex2
+    ]
+    check(len(skeletons) == 1, "exactly one skeleton row names the exemplar",
+          [o.source_ref for o in skeletons])
+    check((skeletons[0].source_ref or {}).get("warmed") is False,
+          "the skeleton is the RUN path's materialization, not the warm's",
+          skeletons[0].source_ref)
+    skel = skeletons[0].payload
+
+    # T4: run 路径拆解 → 触发回合说话（与 warm 同权）；恰一条（复用不重复发声
+    # 的结构锁 + 去重在本项目内同 ref 恒一条）。
+    review2 = await wait_trigger_review(ctx, conv2, ex2, timeout=240.0)
+    check(review2 is not None,
+          "the RUN path's fresh decompile speaks (T4 — 与 warm 同权)", ex2)
+    rintent2 = (review2 or {}).get("intent") or {}
+    check(rintent2.get("trigger") == "craft_decompiled",
+          "the run-path review dump names the craft trigger", rintent2)
+    craft_msgs = [
+        m for m in await ctx.messages(conv2)
+        if (m.get("intent") or {}).get("type") == "trigger_review"
+        and (m.get("intent") or {}).get("ref") == ex2
+    ]
+    check(len(craft_msgs) == 1,
+          "exactly one craft speech per (conversation, exemplar) — no double-speak",
+          len(craft_msgs))
+
+    # 产物落库 + exemplar 参数断言（自洽读骨架行，ADR-078 判词⑤ code-mapped）：
+    # 画幅 / 字幕色 = 代码映射（确定性，严等）；条数 = clamp(骨架 shots) 是 CAP
+    # 不是产量——实现条数是 agent 的内容判断（119s 原片挑 1 条高光合法），断言
+    # 只锁「不超帽 + 至少一条」。
+    clips_step = await wait_step_terminal(run_id, "select_clips", timeout=600.0)
+    check(clips_step["status"] == "done",
+          "the clips step completes on the real source", clips_step)
+    clips = [
+        o for o in await outputs_of(pid2, "clip")
+        if str(o.workflow_step_id) == clips_step["id"]
+    ]
+    expected_cap = max(1, min(10, int(skel["rhythm"]["shot_count"])))
+    check(1 <= len(clips) <= expected_cap,
+          "clip count respects the skeleton-derived cap (count_default=1 without it)",
+          (len(clips), expected_cap, (clips_step["spec"] or {}).get("slot")))
+    specs = [o.render_spec or {} for o in clips]
+    check(all(s.get("aspect") == skel["aspect"] for s in specs),
+          "every clip's aspect = the skeleton's measured aspect",
+          [s.get("aspect") for s in specs])
+    if (skel.get("captions") or {}).get("present") and skel["captions"].get("color"):
+        check(all((s.get("brand") or {}).get("caption_color") == skel["captions"]["color"]
+                  for s in specs),
+              "every clip's caption color = the skeleton's palette-snapped color",
+              [(s.get("brand") or {}).get("caption_color") for s in specs])
+
+    # T3 终态：run 图无 decompile 孤儿节点；decompile 步骤骑 task book 内部族。
+    filled_graph = await ctx.graph(pid2)
+    check(no_decompile_canvas_node(filled_graph),
+          "the run-filled graph carries NO decompile orphan node (T3)",
+          filled_graph["nodes"])
+    book_steps = await task_book_step_ids(pid2)
+    check(dec_step["id"] in book_steps,
+          "the decompile step rides the task book's internal family (prelude 折叠)",
+          (dec_step["id"], book_steps))
+
+
 SCENARIOS = {
     "S1": s1_bare_wish_full_journey,
     "S2": s2_skipped_topic_ask_drafts_from_persona,
@@ -2515,6 +2861,7 @@ SCENARIOS = {
     "S13": s13_credits_insufficient_birthplace_422,
     "S14": s14_failed_run_zero_capture_full_release,
     "S15": s15_orphan_hold_released_on_project_delete,
+    "S16": s16_remix_flagship_journey,
 }
 
 

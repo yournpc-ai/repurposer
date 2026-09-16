@@ -8,6 +8,26 @@
 
 **一个以 Structured Media 为领域核心、以 Execution Kernel 为可靠性核心、以 Agent 为 Decision Producer 的可编排媒体生产系统。**
 
+**对外叙事版**：DAG + 状态机是执行层，不是产品本身——最终产品是一个 **Agentic Content OS**：Agent = 决策层（§3），Structured Media + Decompiler/Compiler = 内容语义层（§9），Execution Kernel = 可靠执行层（§8）。此句只是上一句的展开，不产生任何超出五态表的承诺（统一 Artifact 模型、Media IR 等上层抽象仍为触发制 OPEN）。
+
+### 1.1 愿景词汇 ↔ 现行词汇对照表
+
+拿着 Agentic Content OS 的图读代码时查这张表——左列是讲故事的词，右列是代码里今天的名字与真实进度：
+
+| 愿景词汇 | 现行词汇 / 位置 | 状态 |
+|---|---|---|
+| Agent / Tool 层 | `app/agents/`（ToolLoopAgent 终态工具机）+ `app/tools/` + perception 只读族 | ✅ CURRENT |
+| Decision / Command | 三扇门：`create_run` / `apply_wiring_ops` / `apply_operations` | ✅ CURRENT |
+| Workflow DAG | `workflow_steps` + `jobs.py` 队列 + `compile_graph`（拓扑代码裁决） | ✅ CURRENT |
+| Execution State Machine（run/task 生命周期 + HITL） | run/step 状态 + interrupt 提问机器 + **fencing（R1 B2 本周施工）** | 🔨 强化中 |
+| Task / **Attempt** | step = ✅；**ExecutionAttempt = OPEN**（四证据点触发制，§8.5） | ⏳ OPEN |
+| **Artifact 层**（不可变 + parent/version/provenance） | **无统一模型**——其目标已被替代机制部分兑现：operations journal（ADR-032）/ `restore_version` 快照 / 变体并行（ADR-061）/ 内容寻址复用（understanding、skeleton）。统一模型 = 触发制 OPEN | ⏳ OPEN（部分能力 ✅） |
+| Structured Media 层（Media Program / AST） | clip-spec（ADR-016 唯一渲染契约）+ CraftSkeleton（ADR-078 首个工艺结构产物）；**Media IR = OPEN** | ✅ 雏形 / ⏳ 深化 OPEN |
+| Decompiler / Compiler | `craft_scan` + `Decompile` 节点（video→骨架，T5）/ renderer 确定性渲染（黑盒） | ✅ CURRENT |
+| Human-in-the-loop | interrupt/checkpoint 提问机器（S6 族）+ **run authority（R1 B3 本周施工）** | ✅ / 🔨 |
+
+用法：对外讲用左列，写代码用右列，评审时倒查「这个词今天的状态配不配得上它的愿景名」——**配不上愿景名的词不许提前用愿景名命名代码**（词汇版「把 OPEN 写成 CURRENT」）。
+
 ```
                 User
                   │
@@ -51,6 +71,21 @@
 | worker identity | 哪个 worker 实例 | ❌ 不存在 | 无列、无实例 id |
 | execution identity | 哪一次执行 | ❌ 不存在 | 无 execution_id / claim_id |
 | fencing token | 使旧执行写必失败的令牌 | ❌ 不存在 | reap 没有任何可失效的东西（`jobs.py:243-248` 只翻 status） |
+
+### 2.1 概念词典：内容世界六概念（CURRENT 存在性）
+
+读代码先查这张表——六概念不是冗余，是四个世界各有其主：
+
+| 概念 | 含义 | 位置 | 永不是 |
+|---|---|---|---|
+| asset | 输入素材（上传 / 贴文升格 / persona 绑定） | `assets` 表 | 产物 |
+| output | **统一产物行**（clips 与 derivatives 皆是 `type`，ADR-030） | `outputs` 表 | 素材；版本节点（版本账在 operation） |
+| operation | 对已落地产物的编辑账（undo / 快照 / 重放） | `operations` 表（ADR-032） | 产物本身 |
+| publication | 产物的发布单（渠道状态机 + 快照语义） | `publications` 表 | 产物本体 |
+| graph_node | 画布上的产品对象（持久图，ADR-057） | `graph_nodes` 表 | 执行身份（step 才是） |
+| workflow_step | 执行节点（DAG 一步） | `workflow_steps` 表 | 产品对象（graph_node 才是） |
+
+四世界：输入（asset）/ 执行（step）/ 产物与编辑（output+operation）/ 画布投影与分发（graph_node+publication）。可靠性机器各不相同（fencing 管 step、FK-safe 删除管 output、claim 谓词管 asset、状态机管 publication）——这正是不能揉成一个 "Artifact" 大概念的原因。**统一 Artifact 模型 = 触发制 OPEN（§9/§10）**：触发成立时 outputs 自然成为它的第一个 type——概念由需求生出来，不由改名生出来。
 
 ## 3. Agent = Decision Producer
 
@@ -154,7 +189,7 @@ CURRENT：`_mutate` 双层 dedupe（NOT-EXISTS 门 + `on_conflict_do_nothing`）
 
 - **clip-spec = 现行 Structured Media 形态**：唯一渲染契约（ADR-016），renderer-agnostic（轨道模型 ADR-044，TRACK_REGISTRY 9 轨），渲染服务是可替换黑盒。
 - **CraftSkeleton = 首个「工艺结构」内部产物**（ADR-078）：确定性字段零 LLM 是构造性保证（craft_scan 无 provider import + 三座位 schema + 测试看门）；内容寻址复用已成立。
-- **Decompiler CURRENT 限制（T5 核验修正版）**：latest-20 Python 扫描复用 / version 不进 cache key / warm 行无 lineage / decompile 画布节点落 text×manual 缺省面 / run 路径不触发 craft 触发回合 / 无 remix e2e 剧本；**修正**：gaps 有确定性注入进 plan facts（`registry.py:166-178`），skeleton 时序结构有 prompt 侧消费者——但**确定性参数消费者仍只有 count/aspect/captions/music**，结构级 remix 未实现。
+- **Decompiler CURRENT 限制（R1 B1 收口后）**：latest-20 Python 扫描复用 / version 不进 cache key / warm 行无 lineage（三项归 R1.1 C1）；~~decompile 画布孤儿节点 / run 路径不触发 craft 触发回合 / 无 remix e2e 剧本~~（R1 B1 收口：prelude 折叠 + run 路径 fire_trigger + S16 剧本）；**修正**：gaps 有确定性注入进 plan facts（`registry.py:166-178`），skeleton 时序结构有 prompt 侧消费者——但**确定性参数消费者仍只有 count/aspect/captions/music**，结构级 remix 未实现。
 
 ### 9.2 TARGET
 
@@ -166,17 +201,26 @@ Structured Media 逐步成长为 **Media IR / AST**：timeline / clips / audio /
 
 ## 10. 实施序列（PLANNED，顺序即拍板）
 
+> **2026-09-16 产品-first 重排**：施工顺序从「技术债驱动」翻转为「产品旅程驱动」——**现行批次与顺序的唯一事实源 = `docs/PROGRESS.md` §0**（R1 = J2/J5/J6 must-have：B1 remix 收口 → B2 fencing → B3 run authority → B4a poison-pill；R1.1 = B4b hold GC + B5 W11 + C1 并行）。本节保留技术依赖注记，不再承担排期。
+
+技术依赖注记（被 PROGRESS §0 吸收后的映射）：
+
 ```
 Architecture Gate（本文，2026-09-16）
-  → Commit 2：operations FK cleanup（确定性 correctness bug，小、可先落）
-  → Commit 1：claim fencing（§8.4 短期原语；新 ADR + ADR-017/030/050 修订随实施）
-  → ExecutionAttempt 演进（§8.5；独立批次，先拍板形态）
-  → 能力契约显式化（§4 四分注册属性）
-  → AgentBudget（§6）
+  → Commit 2：operations FK cleanup ✅（6ca3b70 已落）
+  → B1：remix 旅程收口 + 测试地基（J2）
+  → B2：claim fencing（§8.4 短期原语；新 ADR + ADR-017/030/050 修订随实施）——J5 收费诚实前提
+  → B3：run execution authority（resume/expire 第二出生通道执法）——J6
+  → B4a：poison-pill 封顶——J5 卡死有终态
+  →【R1 停止线】
+  → R1.1：B4b hold GC（B4a 前置）→ B5 W11（硬前置 = B2：双扣路径封死再接真钱）∥ C1 cache identity
+  → ExecutionAttempt 演进（§8.5；独立批次，先拍板形态——四证据点门禁：fenced 频率 / 台账查询模式 / W11 对账 / postmortem 九问）
+  → 能力契约显式化（§4 四分注册属性——触发制：首例能力误挂事故或新能力族批量入场）
+  → AgentBudget（§6——触发制：跑飞事故 / 台账长尾数据 / 第二 provider）
   → Structured Media 深化（结构级 remix 是产品承诺问题，先拍板再立项）
 ```
 
-每批只解自己的题：Commit 1/2 不解 ExecutionAttempt；ExecutionAttempt 不改写围栏语义（它消费围栏）。W11 支付批排在 Commit 1 之后（双扣路径封死再接真钱）。
+每批只解自己的题：B2 不解 ExecutionAttempt；ExecutionAttempt 不改写围栏语义（它消费围栏）。
 
 ## 11. 不做清单（REJECTED / 缓做）
 

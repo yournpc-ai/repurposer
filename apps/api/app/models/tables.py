@@ -501,7 +501,7 @@ class Message(Base):
         ForeignKey("workflow_runs.id", ondelete="SET NULL"),
         nullable=True,
     )
-    intent = Column(JSON(none_as_null=True), nullable=True)  # IntentProposal dump for this turn (chat/intent.py chat_intent agent)
+    intent = Column(JSONB(none_as_null=True), nullable=True)  # IntentProposal dump for this turn (chat/intent.py chat_intent agent); JSONB — the trigger dedup reads intent["trigger"].astext (generic JSON's subscript has no .astext, R1 B1 实证)
     # One row, two states (the ask_user machinery): ``question`` is the typed payload
     # ({kind: task_book|choice|confirm, ...}); ``answer`` NULL = pending —
     # pending questions live in the dock, answered ones archive as QA pairs.

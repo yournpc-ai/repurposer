@@ -66,9 +66,12 @@ from app.tools.captions.procedure import TRANSLATION_ARTIFACT_KEY
 logger = structlog.get_logger()
 
 # Step kinds of the plan prelude — the task-book document's internal
-# workflow (the book's birth process: preprocess → persona ∥ understand →
-# (interrupt) → plan). Kind strings, same source as node_runners.
-_PRELUDE_KINDS = frozenset({"preprocess", "persona_bootstrap", "understand", "interrupt", "plan"})
+# workflow (the book's birth process: preprocess → persona ∥ understand (∥
+# decompile when an exemplar is pinned) → (interrupt) → plan). Kind strings,
+# same source as node_runners. decompile rides here (ADR-078): the compile
+# injects it parallel to understand off preprocess, so it shares the book's
+# internal workflow — never an independent canvas node.
+_PRELUDE_KINDS = frozenset({"preprocess", "persona_bootstrap", "understand", "decompile", "interrupt", "plan"})
 
 # Modifier kinds whose editor node carries NO prompt slot (deterministic
 # 工序 — the program region stays empty until 批 B4's lever row; the prompt

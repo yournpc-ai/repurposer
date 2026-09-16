@@ -509,4 +509,19 @@ class Decompile(NodeBase):
             captions=skeleton.captions.present,
             gaps=len(skeleton.gaps),
         )
+        # 触发回合 (判词③ whitelist #3): the run path's fresh materialization
+        # speaks with the same voice as the warm (:357) — the user in a remix
+        # run hears 「我看了你的案例」(旅程二④). Fire-and-forget; a reuse hit
+        # above returns early and never re-speaks, and the turn dedups on
+        # (conversation, trigger, ref) against the warm's prior speech. The
+        # step's session commits right after run() returns (execute_step's
+        # done branch) — the trigger turn's own session reads the skeleton
+        # only inside its bounded loop, seconds later, and a miss reads
+        # honestly (the turn NEVER raises).
+        from app.chat.trigger_turn import (  # deferred: pipeline → chat edge
+            TRIGGER_CRAFT_DECOMPILED,
+            fire_trigger,
+        )
+
+        fire_trigger(project.id, TRIGGER_CRAFT_DECOMPILED, str(asset.id))
         return [row.id]

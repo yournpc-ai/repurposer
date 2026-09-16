@@ -469,9 +469,14 @@ async def test_render_source_pin_wins_exemplar_excluded_reversible():
 from app.models.schemas import ChatMention  # noqa: E402
 
 
-def _video(asset_id: str, name: str):
+def _video(asset_id: str, name: str, project_id: str | None = None):
+    # project_id: the mention-pin path's read face (propose_turn pins only a
+    # video of THIS project); the role-question tests never read it.
     return SimpleNamespace(
-        id=asset_id, type=AssetType.VIDEO, file_url=f"s3://x/{name}"
+        id=asset_id,
+        project_id=project_id,
+        type=AssetType.VIDEO,
+        file_url=f"s3://x/{name}",
     )
 
 
@@ -585,14 +590,14 @@ async def test_chat_path_role_pins_inherit_mention_wins_reversal():
     )
 
     # A video mention pins the run's source; the exemplar still inherits.
-    turn.db = _MentionDb(_video("m", "m.mp4"))
+    turn.db = _MentionDb(_video("m", "m.mp4", project_id="p"))
     turn.project.id = "p"
     turn.mentions = [ChatMention(type="asset", id="m", label="m.mp4")]
     assert await turn._role_pins_for(clips) == ("m", "e")
 
     # 角色反转: mentioning the inherited exemplar makes IT the material —
     # the exemplar seat clears for this run (no self-imitation).
-    turn.db = _MentionDb(_video("e", "e.mp4"))
+    turn.db = _MentionDb(_video("e", "e.mp4", project_id="p"))
     turn.mentions = [ChatMention(type="asset", id="e", label="e.mp4")]
     assert await turn._role_pins_for(clips) == ("e", None)
 

@@ -177,6 +177,8 @@ book path 进入条件（`prepare_chat_turn` 分派，service.py）：project sc
 | 积分① 余额不足出生地拦截：钱包置零 → typed Start 与 /generate 双路结构化 422 {code, balance, required} 同形同义 → 零 run 零台账行；负余额 hold 必拒（含 0 元 hold，BILLING §5） | ✅ S13 |
 | 积分② 失败不扣费：缺参确定性失败探针（seeded run，活 worker）→ FAILED + 级联 skipped → 台账零 capture、hold 全额 release、余额回到赠额；capture 幂等（重复调用结构性 no-op）+ bounce 重跑差额落 attempt 键 + Σ captures ≡ credits（总成本）（进程内） | ✅ S14（需 dev worker） |
 | 积分③ 孤儿 hold 回收（BILLING §8 边界落地）：PENDING run + 真 hold → DELETE /projects/{id} → 同事务先退未结 hold 再级联删 run（RUNNING 在途归收官路径台账结算，幂等键两路相斥只退一笔）→ 台账 hold+release 闭合、余额回赠额 | ✅ S15 |
+| **remix 旗舰（旅程二）**：两视频 + @mention 指认参考片（拍 0a 免问路，pin 代码结算）→ warm 拆解主动说话（P1，零 run）/ run 路径新鲜物化同权发声（P2，FAILED 处理态参考片逼出 run 座位，恰一条不重复）→ exemplar pin 骑 run.context → decompile 新鲜物化（warmed=False 骨架行）→ clips 产物参数 = 骨架（画幅 / 字幕色严等 + 条数不超 clamp(shots) 帽，自洽读骨架行）→ draft+run 图均无 decompile 孤儿节点、步骤骑 task book 内部族 | ✅ S16（需 dev worker + demo 桶 fixture，真 ASR 真 LLM） |
+| asset_role 角色问 dock（remix 句 → router 主动问） | ⚠️ 无确定性 scenario（ask 提案靠 LLM 触发——S16 两次实测路由在旗舰句上直接出默认 plan 不问角色，prompt 规则在册（intent_router_system §ASSET ROLES）但 miss 率未测量，归 prompt 探针；代码侧——选项构造 / 答复落 pin / bail 默认路径——由 test_decompile_pure 纯测试锁定） |
 | ask 落库（chat_intent agent ask 提案 → dock 选项问） | ⚠️ 无确定性 scenario（ask 提案靠 LLM 触发，只有人工走查） |
 | translate_clip / dub_clip chat 派发 | ❌ 待补（烧声纹/渲染管线，登记为已知空白） |
 

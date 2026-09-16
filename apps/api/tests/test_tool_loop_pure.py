@@ -79,7 +79,9 @@ def _make_agent(name: str, client: StubClient, tools: list[ChatTool] | None = No
         prompt="intent_router.j2",
         system="test system",
         assemble=lambda **ctx: ({"recent": []}, []),
-        tools=tools or [ChatTool("echo", "Echo the text.", EchoArgs)],
+        # Explicit [] must reach the constructor (the declaration guards
+        # test exercises it) — None alone means "the default echo set".
+        tools=tools if tools is not None else [ChatTool("echo", "Echo the text.", EchoArgs)],
         max_iterations=max_iterations,
         client=client,  # type: ignore[arg-type] — a scripted stand-in, not a MiniMaxClient
     )
@@ -220,7 +222,9 @@ async def test_unknown_tool_and_bad_params_are_feedback_iterations() -> None:
     assert result.iterations == 3 and result.params is not None
     assert result.params.text == "fine"
     assert "unknown tool 'fly'" in client.seen_messages[1][1]["content"]
-    assert "echo" in client.seen_messages[2][1]["content"]  # validation echo
+    # validation echo: the params failure's detail rides the user message
+    # (missing required `text` → pydantic's "Field required").
+    assert "Field required" in client.seen_messages[2][1]["content"]
 
 
 @pytest.mark.asyncio
