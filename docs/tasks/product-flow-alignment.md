@@ -116,6 +116,8 @@
 
 ## 5. Batch A — Upload Staging Session
 
+> **状态：代码已落（2026-09-18，验证归用户自跑）**。落地座位：服务端 = `apps/api/app/pipeline/routes/staging.py`（presign + × 删）/ `assets.py` `create_asset_from_staging`（attach，两扇窄门）/ `app/pipeline/staging.py`（reaper，TTL 24h）/ `worker.py` 小时级节流；前端 = `lib/stagingUploads.ts`（会话 + XHR 真实进度）/ `useProjectLaunch.ts`（launch = 建项目 + attach + 导航；未竟上传阻塞 toast）/ `HomeComposer` / `AssetChips` / `AssetsPanel` / `RecipeInspectOverlay`。**零 migration**（预期兑现）。tsc 两处报错为 HEAD 基线既有（`ChatDock.tsx:2626` / `layout.ts:459`，ADR-082/085 批残留，本批未触）——验收时一并核。
+
 **Problem**：选文件零网络；Generate 后串行承担 建项目 + presign + 全量 PUT + 建行 + 导航（1-2 min 黑窗）；dock 与 composer 上传时序结构性不对称；孤儿对象无回收。
 
 **Current behavior**：§2.2 全表。

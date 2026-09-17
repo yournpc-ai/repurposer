@@ -436,6 +436,8 @@ const zh: Resources = {
     assetsUpload: "上传文件",
     assetsFormats: "MP4 · MOV · WEBM · MP3 · WAV · M4A · PNG · JPG · WEBP · TXT · MD · PDF · DOC · DOCX · SRT · VTT",
     uploadFailed: "上传失败，请重试",
+    uploadRetry: "重试",
+    uploadInProgress: "文件还在上传中，请稍候",
     managePersonas: "管理人设…",
   },
   // 配方卡（RECIPES §7）—— 与 lib/recipes.ts 的卡 id 一一对应；

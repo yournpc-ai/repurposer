@@ -1,6 +1,7 @@
 "use client"
 
-import { X } from "lucide-react"
+import { Loader2, X } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import {
   fileFormatLabel,
@@ -8,30 +9,50 @@ import {
   formatChipDuration,
   useStagedFileMeta,
 } from "@/lib/stagedFiles"
+import type { StagingUpload } from "@/lib/stagingUploads"
 
 /** Staged asset chips — the composer's TOP band (the "what I have" list
  * reads above the "what I want" text). Typed anatomy: video = thumbnail
  * sliver + duration, audio = waveform-family icon + duration, image =
  * thumbnail, doc/slides = icon tile + format label; × removes the file.
- * The pill below carries the summary (count); these chips carry the list. */
+ * Batch A lifecycle (2026-09-18): each chip carries its upload state —
+ * uploading = spinner + real %, error = a retry affordance, done = the
+ * typed meta label as before. */
 export function AssetChips({
-  files,
+  items,
   onRemove,
+  onRetry,
 }: {
-  files: File[]
-  onRemove: (index: number) => void
+  items: StagingUpload[]
+  onRemove: (item: StagingUpload) => void
+  onRetry: (item: StagingUpload) => void
 }) {
-  if (files.length === 0) return null
+  if (items.length === 0) return null
   return (
     <div className="mb-3 flex flex-wrap gap-2">
-      {files.map((file, index) => (
-        <AssetChip key={`${file.name}:${file.size}`} file={file} onRemove={() => onRemove(index)} />
+      {items.map((item) => (
+        <AssetChip
+          key={item.localId}
+          item={item}
+          onRemove={() => onRemove(item)}
+          onRetry={() => onRetry(item)}
+        />
       ))}
     </div>
   )
 }
 
-function AssetChip({ file, onRemove }: { file: File; onRemove: () => void }) {
+function AssetChip({
+  item,
+  onRemove,
+  onRetry,
+}: {
+  item: StagingUpload
+  onRemove: () => void
+  onRetry: () => void
+}) {
+  const { t } = useTranslation()
+  const { file } = item
   const meta = useStagedFileMeta(file)
   const Icon = fileIconFor(file)
   const isAv = file.type.startsWith("video/") || file.type.startsWith("audio/")
@@ -55,7 +76,22 @@ function AssetChip({ file, onRemove }: { file: File; onRemove: () => void }) {
         </span>
       )}
       <span className="truncate">{file.name}</span>
-      {metaLabel ? <span className="flex-none text-[10px] text-meta-foreground">{metaLabel}</span> : null}
+      {item.status === "uploading" ? (
+        <span className="flex flex-none items-center gap-1 text-[10px] text-meta-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          {Math.round(item.progress * 100)}%
+        </span>
+      ) : item.status === "error" ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="flex-none text-[10px] text-destructive hover:underline"
+        >
+          {t("composer.uploadRetry")}
+        </button>
+      ) : metaLabel ? (
+        <span className="flex-none text-[10px] text-meta-foreground">{metaLabel}</span>
+      ) : null}
       <button
         type="button"
         onClick={onRemove}

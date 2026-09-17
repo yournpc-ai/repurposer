@@ -27,6 +27,7 @@ from app.pipeline.routes import (
     projects,
     recipes,
     runs,
+    staging,
 )
 from app.platform.configs import reconcile_configs
 from app.platform.routes import auth_router, files_router, notifications_router, wallet_router
@@ -235,6 +236,7 @@ app.include_router(runs, prefix="/api/v1/runs", tags=["runs"])
 app.include_router(chat_router, prefix="/api/v1/chat", tags=["chat"])
 app.include_router(assets, prefix="/api/v1/projects", tags=["assets"])
 app.include_router(persona_assets, prefix="/api/v1/personas", tags=["persona-assets"])
+app.include_router(staging, prefix="/api/v1/uploads/staging", tags=["staging"])
 app.include_router(outputs, prefix="/api/v1/outputs", tags=["outputs"])
 app.include_router(operations_router, prefix="/api/v1/outputs", tags=["operations"])
 app.include_router(files_router, prefix="/api/v1", tags=["files"])

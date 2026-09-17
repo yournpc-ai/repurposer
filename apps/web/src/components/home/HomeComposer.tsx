@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { ArrowUp, Box, Plus, User } from "lucide-react"
 
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
+import { useStagingUploads } from "@/lib/stagingUploads"
 import { fileKindOf, type ChatMention } from "@/lib/mentions"
 import {
   MentionEditor,
@@ -145,7 +146,11 @@ export function HomeComposer({
   const { launching: isGenerating, launch } = useProjectLaunch()
 
   const [personaId, setPersonaId] = useState(AUTO_GENERATE)
-  const [files, setFiles] = useState<File[]>([])
+  // Batch A (2026-09-18): picked files upload IMMEDIATELY into a pre-project
+  // staging session (useStagingUploads) — Generate never waits on the wire;
+  // the chips carry the upload lifecycle (spinner+% / retry / ×).
+  const { staged, addFiles, removeStaged, retryStaged, clearStaged } =
+    useStagingUploads()
   const [assetsOpen, setAssetsOpen] = useState(false)
   const [personaOpen, setPersonaOpen] = useState(false)
   const [modelsOpen, setModelsOpen] = useState(false)
@@ -189,24 +194,13 @@ export function HomeComposer({
     }
   }
 
-  const addFiles = (picked: File[]) => {
-    if (picked.length === 0) return
-    setFiles((prev) => {
-      const existing = new Set(prev.map((f) => `${f.name}:${f.size}`))
-      const additions = picked.filter((f) => !existing.has(`${f.name}:${f.size}`))
-      return [...prev, ...additions]
-    })
-  }
-
-  const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index))
-  }
-
   // The asset mention's candidate feed (memoized — the picker reloads when
-  // the identity changes, so it must track `files`, not renders).
+  // the identity changes, so it must track `staged`, not renders).
   const mentionContext = useMemo(
-    () => ({ files: files.map((f) => ({ name: f.name, kind: fileKindOf(f.type) })) }),
-    [files],
+    () => ({
+      files: staged.map((s) => ({ name: s.file.name, kind: fileKindOf(s.file.type) })),
+    }),
+    [staged],
   )
 
   // Mention chip laws (MENTIONS §4): visible (inline chip in the sentence,
@@ -216,17 +210,22 @@ export function HomeComposer({
   //
   // The send mechanism is the shared `useProjectLaunch` (2026-08-08, D6 二次
   // 修订): composer and the recipe overlay's launch zone ride the identical
-  // path (create project → upload → navigate → first /chat message). A
-  // recipe launch is just its prompt template (配方 = 提示词, 2026-08-11) —
-  // the composer never builds a prior (MENTIONS §3).
+  // path — since Batch A (2026-09-18) a light one: the files are already
+  // uploaded (staging), so send = create project → attach → navigate →
+  // first /chat message. A recipe launch is just its prompt template
+  // (配方 = 提示词, 2026-08-11) — the composer never builds a prior
+  // (MENTIONS §3).
   const handleGenerate = () =>
     launch({
       prompt,
       mentions,
-      files,
+      staged,
       personaId: personaId === AUTO_GENERATE ? undefined : personaId || undefined,
       onStart: onGenerateStart,
-      onSent: () => editorRef.current?.clear(),
+      onSent: () => {
+        editorRef.current?.clear()
+        clearStaged()
+      },
     })
 
   // Rotating placeholder (Lovart-style, 2026-08-30): a fixed prefix
@@ -289,7 +288,7 @@ export function HomeComposer({
   // belief leaked pt-5/pb-3 into the docked bar, 2026-08-21 headless probe),
   // so static padding classes on a fold addon are banned; the padding must
   // ride the interpolation.
-  const chipsOpen = files.length > 0 && !assetsOpen
+  const chipsOpen = staged.length > 0 && !assetsOpen
   const chipsStyle: CSSProperties = {
     maxHeight: chipsOpen ? (1 - dockP) * CHIPS_MAX_H : 0,
     paddingTop: chipsOpen ? (1 - dockP) * CHIPS_PAD_TOP : 0,
@@ -356,7 +355,7 @@ export function HomeComposer({
           style={chipsStyle}
           onClick={focusEditor}
         >
-          <AssetChips files={files} onRemove={removeFile} />
+          <AssetChips items={staged} onRemove={removeStaged} onRetry={retryStaged} />
         </InputGroupAddon>
 
         {/* The input row: the bar's attach button (zero width when expanded)
@@ -391,7 +390,12 @@ export function HomeComposer({
                 <TooltipContent side="bottom">{t("composer.assets")}</TooltipContent>
               </Tooltip>
               <PopoverContent side="bottom" align="start" className="w-80">
-                <AssetsPanel files={files} onAdd={addFiles} onRemove={removeFile} />
+                <AssetsPanel
+                  items={staged}
+                  onAdd={addFiles}
+                  onRemove={removeStaged}
+                  onRetry={retryStaged}
+                />
               </PopoverContent>
             </Popover>
           </div>
@@ -493,7 +497,12 @@ export function HomeComposer({
                   <TooltipContent side="top">{t("composer.assets")}</TooltipContent>
                 </Tooltip>
                 <PopoverContent side="bottom" align="start" className="w-80">
-                  <AssetsPanel files={files} onAdd={addFiles} onRemove={removeFile} />
+                  <AssetsPanel
+                    items={staged}
+                    onAdd={addFiles}
+                    onRemove={removeStaged}
+                    onRetry={retryStaged}
+                  />
                 </PopoverContent>
               </Popover>
 

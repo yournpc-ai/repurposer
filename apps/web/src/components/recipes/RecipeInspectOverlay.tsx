@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { FlowView } from "@/components/flow/FlowView"
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
+import { useStagingUploads } from "@/lib/stagingUploads"
 import { slotCoversFile, type RecipePublic } from "@/lib/recipes"
 import { ASSETS_ACCEPT } from "@/lib/stagedFiles"
 import { Badge } from "@/components/ui/badge"
@@ -77,9 +78,12 @@ export function RecipeInspectOverlay({
   const { launching, launch } = useProjectLaunch()
 
   const title = t(`recipes.${card.id}.title`)
-  // State order matters: ``files`` is read by the template picker below,
-  // so its useState must come first (TS2448).
-  const [files, setFiles] = useState<File[]>([])
+  // State order matters: ``staged`` is read by the template picker below,
+  // so its hook must come first (TS2448). Batch A (2026-09-18): picked
+  // files upload immediately into a staging session (useStagingUploads) —
+  // launch only attaches.
+  const { staged, addFiles, removeStaged, retryStaged, clearStaged } =
+    useStagingUploads()
 
   // 2026-08-24 dual-template (RECIPES §7.2): the launch pre-fills the
   // beginner voice ("I want a quote card.") when no source is attached,
@@ -90,7 +94,7 @@ export function RecipeInspectOverlay({
   // it yet (their draft wins, chat always beats preset, same rule as
   // everywhere else). Cards without `promptTemplateWithMaterial` (text
   // tribe is the only current user) fall back to the no-material voice.
-  const hasFiles = files.length > 0
+  const hasFiles = staged.length > 0
   const template = hasFiles
     ? (t(`recipes.${card.id}.promptTemplateWithMaterial`, {
         defaultValue: "",
@@ -152,24 +156,14 @@ export function RecipeInspectOverlay({
   const sharedPoster =
     card.example_outputs.find((o) => o.poster_url)?.poster_url ?? null
 
-  const addFiles = (picked: File[]) => {
-    if (picked.length === 0) return
-    setFiles((prev) => {
-      const existing = new Set(prev.map((f) => `${f.name}:${f.size}`))
-      const additions = picked.filter((f) => !existing.has(`${f.name}:${f.size}`))
-      return [...prev, ...additions]
-    })
-  }
-  const removeFile = (index: number) =>
-    setFiles((prev) => prev.filter((_, i) => i !== index))
-
   const handleDrop = (e: DragEvent) => {
     e.preventDefault()
     addFiles(Array.from(e.dataTransfer.files ?? []))
   }
 
-  // Send = the composer's send, parked here. Nothing to consume onSent — the
-  // overlay's draft dies with navigation. Identity rides the default-persona
+  // Send = the composer's send, parked here — since Batch A (2026-09-18) a
+  // light one (files are already uploaded; launch only attaches). The staged
+  // list is consumed onSent (chip law ②). Identity rides the default-persona
   // chain server-side (ADR-038) — the overlay carries no persona picker; the
   // recipe's identity stays in this overlay (配方 = 提示词).
   // The recipe's required input slots are the launch gate (input_slots is
@@ -178,7 +172,7 @@ export function RecipeInspectOverlay({
   // wide slot (any_of) passes when ANY ONE accepted kind is covered.
   const handleLaunch = () => {
     const uncovered = card.input_slots.some(
-      (slot) => slot.required && !files.some((f) => slotCoversFile(slot, f))
+      (slot) => slot.required && !staged.some((s) => slotCoversFile(slot, s.file))
     )
     if (uncovered) {
       toast.error(
@@ -188,7 +182,7 @@ export function RecipeInspectOverlay({
       )
       return
     }
-    launch({ prompt, mentions: [], files })
+    launch({ prompt, mentions: [], staged, onSent: clearStaged })
   }
 
   const fileIconFor = (file: File) => {
@@ -307,23 +301,36 @@ export function RecipeInspectOverlay({
                 <span className="text-sm">{t("recipes.inspect.dropzone")}</span>
               </button>
 
-              {files.length > 0 && (
+              {staged.length > 0 && (
                 <div className="flex flex-col gap-1.5">
-                  {files.map((file, index) => {
-                    const Icon = fileIconFor(file)
+                  {staged.map((s) => {
+                    const Icon = fileIconFor(s.file)
                     return (
                       <div
-                        key={`${file.name}:${file.size}`}
+                        key={s.localId}
                         className="flex items-center gap-2 rounded-md bg-muted px-2.5 py-1.5"
                       >
                         <Icon className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
                         <span className="min-w-0 flex-1 truncate text-xs">
-                          {file.name}
+                          {s.file.name}
                         </span>
+                        {s.status === "uploading" ? (
+                          <span className="flex-shrink-0 text-[10px] text-meta-foreground">
+                            {Math.round(s.progress * 100)}%
+                          </span>
+                        ) : s.status === "error" ? (
+                          <button
+                            type="button"
+                            onClick={() => retryStaged(s)}
+                            className="flex-shrink-0 text-[10px] text-destructive hover:underline"
+                          >
+                            {t("composer.uploadRetry")}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           aria-label={t("common.remove")}
-                          onClick={() => removeFile(index)}
+                          onClick={() => removeStaged(s)}
                           className="flex-shrink-0 text-muted-foreground hover:text-foreground"
                         >
                           <X className="h-3.5 w-3.5" />

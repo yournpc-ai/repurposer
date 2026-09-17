@@ -451,6 +451,8 @@ const en = {
     assetsUpload: "Upload files",
     assetsFormats: "MP4 · MOV · WEBM · MP3 · WAV · M4A · PNG · JPG · WEBP · TXT · MD · PDF · DOC · DOCX · SRT · VTT",
     uploadFailed: "Upload failed — please try again",
+    uploadRetry: "Retry",
+    uploadInProgress: "Files are still uploading — give it a moment",
     managePersonas: "Manage personas…",
   },
   // Recipe cards (RECIPES §7) — one block per card id in lib/recipes.ts;

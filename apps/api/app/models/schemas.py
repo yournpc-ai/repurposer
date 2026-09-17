@@ -1667,6 +1667,16 @@ class AssetUploadUrlRequest(BaseModel):
     content_type: str = "application/octet-stream"
 
 
+class StagingUploadUrlRequest(AssetUploadUrlRequest):
+    """Request a presigned PUT URL for a pre-project staging session (Batch A).
+
+    ``session_id`` is client-generated (uuid); the route validates its shape
+    before it ever reaches a key builder — it becomes one path segment.
+    """
+
+    session_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+
+
 class AssetUploadUrlResponse(BaseModel):
     """Presigned PUT URL response."""
 

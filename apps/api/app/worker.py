@@ -41,10 +41,16 @@ from app.pipeline.orchestrator import (
 )
 from app.pipeline.orchestrator import assert_runners_registered
 from app.pipeline.rendering import render_output
+from app.pipeline.staging import reap_stale_staging_uploads
 
 logger = structlog.get_logger()
 
 _NODE_CONCURRENCY = 4
+
+# Staging GC (Batch A, I-PFA-08): S3 listing is not free, so the reaper runs
+# on a slow cadence inside the tick loop rather than every tick.
+_STAGING_REAP_INTERVAL_SECONDS = 3600
+_last_staging_reap = 0.0
 
 _running_node_tasks: set[asyncio.Task] = set()
 
@@ -97,6 +103,14 @@ async def _tick() -> bool:
     if render_id is not None:
         did_work = True
         await render_output(render_id)
+
+    # Staging GC (Batch A): expired, unreferenced pre-project uploads.
+    # Hourly cadence; failures stay inside the reaper (log + next pass).
+    global _last_staging_reap  # noqa: PLW0603
+    now = asyncio.get_running_loop().time()
+    if now - _last_staging_reap >= _STAGING_REAP_INTERVAL_SECONDS:
+        _last_staging_reap = now
+        await reap_stale_staging_uploads()
 
     return did_work
 

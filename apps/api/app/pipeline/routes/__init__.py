@@ -7,6 +7,7 @@ from app.pipeline.routes.outputs import router as outputs
 from app.pipeline.routes.projects import router as projects
 from app.pipeline.routes.recipes import router as recipes
 from app.pipeline.routes.runs import router as runs
+from app.pipeline.routes.staging import router as staging
 
 __all__ = [
     "assets",
@@ -16,4 +17,5 @@ __all__ = [
     "projects",
     "recipes",
     "runs",
+    "staging",
 ]

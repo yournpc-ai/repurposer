@@ -7,15 +7,21 @@ import { toast } from "sonner"
 
 import { apiFetch } from "@/lib/api"
 import { inferAssetType } from "@/lib/asset-type"
-import { probeMediaDims } from "@/lib/stagedFiles"
 import { useAuth } from "@/lib/auth-context"
 import type { ChatMention } from "@/lib/mentions"
+import type { StagingUpload } from "@/lib/stagingUploads"
 
 /**
  * useProjectLaunch — the composer's send mechanism, shared (2026-08-08, D6
  * 二次修订): **one launchpad, two parking spots**. HomeComposer and the recipe
- * inspect overlay's launch zone ride the SAME path: create an empty project →
- * upload staged files (direct-to-storage) → navigate straight to
+ * inspect overlay's launch zone ride the SAME path.
+ *
+ * Product Flow Alignment Batch A (2026-09-18, contract
+ * docs/tasks/product-flow-alignment.md §5): the upload LEFT this hook.
+ * Files upload the moment they're picked (useStagingUploads →
+ * /uploads/staging/*), so launch is now the LIGHT beat it should be:
+ * create an empty project → attach the already-uploaded staging keys
+ * (`assets/from-staging`, zero re-upload) → navigate straight to
  * `/projects/$id` (canvas + chat dock, ADR-051 — the ?overlay= route params
  * are retired) with the draft handed over via router state — the dock sends
  * it as the first `/chat` message (mentions and the persona choice ride
@@ -32,7 +38,10 @@ import type { ChatMention } from "@/lib/mentions"
 export interface LaunchInput {
   prompt: string
   mentions: ChatMention[]
-  files: File[]
+  /** Already-uploaded staging items (useStagingUploads). Launch refuses to
+   * fire while any item is mid-flight or failed — Generate never waits on
+   * the wire and never silently drops a file. */
+  staged: StagingUpload[]
   /** undefined = auto persona. */
   personaId?: string
   /** Fires when the send begins (spinner on). */
@@ -62,6 +71,13 @@ export function useProjectLaunch() {
           toast.error(t("home.noPromptError"))
           return
         }
+        // The staging gate: an unfinished upload blocks the send (same
+        // posture as the chat dock's handleSend) — Generate never carries
+        // upload time, and a failed chip is the user's call (retry or ×).
+        if (input.staged.some((s) => s.status !== "done")) {
+          toast.error(t("composer.uploadInProgress"))
+          return
+        }
         setLaunching(true)
         input.onStart?.()
         try {
@@ -83,54 +99,25 @@ export function useProjectLaunch() {
           if (!projectRes.ok) throw new Error("Failed to create project")
           const project = (await projectRes.json()) as CreatedProject
 
-          // Only real user files upload. A prompt-only send creates NO asset:
-          // pasted text is promoted server-side in the chat plan path when it
-          // IS the user's content (LLM-judged, never a length heuristic).
+          // Attach only — the bytes are already in storage (Batch A). A
+          // prompt-only send creates NO asset: pasted text is promoted
+          // server-side in the chat plan path when it IS the user's content
+          // (LLM-judged, never a length heuristic).
           await Promise.all(
-            input.files.map(async (material) => {
-              const type = inferAssetType(material)
-
-              const urlRes = await apiFetch(
-                `/api/v1/projects/${project.id}/assets/upload-url`,
+            input.staged.map(async (s) => {
+              const assetRes = await apiFetch(
+                `/api/v1/projects/${project.id}/assets/from-staging`,
                 {
                   method: "POST",
                   body: {
-                    filename: material.name,
-                    content_type: material.type || undefined,
+                    type: inferAssetType(s.file),
+                    key: s.key,
+                    title: s.file.name,
+                    ...(s.dims ?? {}),
                   },
                 },
               )
-              if (!urlRes.ok) throw new Error("Failed to get upload URL")
-              const { key, upload_url } = (await urlRes.json()) as {
-                key: string
-                upload_url: string
-              }
-
-              // The PUT and the pixel probe run in parallel — the asset row
-              // is born with its real dims (产物卡跟源比例), so the canvas
-              // frame law shapes the node correctly from birth.
-              const [putRes, dims] = await Promise.all([
-                fetch(upload_url, {
-                  method: "PUT",
-                  body: material,
-                  headers: material.type ? { "Content-Type": material.type } : {},
-                }),
-                probeMediaDims(material),
-              ])
-              // Direct-to-storage PUT bypasses apiFetch, so toast here.
-              if (!putRes.ok) {
-                toast.error(t("composer.uploadFailed"))
-                throw new Error("Failed to upload file")
-              }
-
-              const assetRes = await apiFetch(
-                `/api/v1/projects/${project.id}/assets`,
-                {
-                  method: "POST",
-                  body: { type, key, title: material.name, ...(dims ?? {}) },
-                },
-              )
-              if (!assetRes.ok) throw new Error("Failed to create asset")
+              if (!assetRes.ok) throw new Error("Failed to attach staged asset")
             }),
           )
 

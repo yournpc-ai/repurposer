@@ -24,6 +24,7 @@ from app.providers.storage import (
     get_project_upload_dir,
     get_persona_upload_dir,
     get_persona_upload_path,
+    get_staging_upload_prefix,
     get_upload_path,
     presign_upload,
     save_persona_upload,
@@ -107,6 +108,44 @@ async def create_project_asset_upload_url(
     return AssetUploadUrlResponse(key=key, upload_url=upload_url)
 
 
+async def _insert_project_asset(
+    db: DBDep,
+    project_id: UUID,
+    current_user: User,
+    request: AssetCreateRequest,
+) -> Asset:
+    """Shared asset-row birth for direct-to-storage uploads (any gated prefix).
+
+    Caller owns prefix validation (project gate vs staging gate) and the
+    object-exists check; this seat owns the row + its canvas twin.
+    """
+    asset = Asset(
+        user_id=current_user.id,
+        project_id=project_id,
+        type=request.type,
+        file_url=request.key,
+        title=request.title,
+        processing_status=AssetStatus.PENDING,
+        # The client-probed pixels (display-only aspect truth — the chain-head
+        # probe backfills when absent). Born with the row so stamp_asset_node
+        # below shapes the frame correctly from birth.
+        meta=(
+            {"width": request.width, "height": request.height}
+            if request.width and request.height
+            else {}
+        ),
+    )
+    db.add(asset)
+    # 上传即落图 (ADR-057 K2): the asset node is born with its asset row —
+    # flush-only, commits with the asset below.
+    from app.pipeline.graph_fill import stamp_asset_node  # deferred: import cycle
+
+    await stamp_asset_node(db, project_id, asset)
+    await db.commit()
+    await db.refresh(asset)
+    return asset
+
+
 @router.post(
     "/{project_id}/assets",
     response_model=AssetResponse,
@@ -134,32 +173,42 @@ async def create_asset_from_key(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Uploaded file not found in storage; upload it first",
         )
+    return await _insert_project_asset(db, project_id, current_user, request)
 
-    asset = Asset(
-        user_id=current_user.id,
-        project_id=project_id,
-        type=request.type,
-        file_url=request.key,
-        title=request.title,
-        processing_status=AssetStatus.PENDING,
-        # The client-probed pixels (display-only aspect truth — the chain-head
-        # probe backfills when absent). Born with the row so stamp_asset_node
-        # below shapes the frame correctly from birth.
-        meta=(
-            {"width": request.width, "height": request.height}
-            if request.width and request.height
-            else {}
-        ),
-    )
-    db.add(asset)
-    # 上传即落图 (ADR-057 K2): the asset node is born with its asset row —
-    # flush-only, commits with the asset below.
-    from app.pipeline.graph_fill import stamp_asset_node  # deferred: import cycle
 
-    await stamp_asset_node(db, project_id, asset)
-    await db.commit()
-    await db.refresh(asset)
-    return asset
+@router.post(
+    "/{project_id}/assets/from-staging",
+    response_model=AssetResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_asset_from_staging(
+    project_id: UUID,
+    request: AssetCreateRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> Asset:
+    """Attach a pre-uploaded staging object to a project (Batch A).
+
+    Same trust rules as the project gate, but the accepted prefix is the
+    caller's own staging namespace — the asset row points at the staging key
+    as-is (zero server-side copy; deletion semantics key off ``file_url``,
+    and the staging reaper skips referenced keys). The project-prefix gate
+    above stays closed: two gates, each narrow.
+    """
+    await _get_user_project(project_id, current_user.id, db)
+
+    staging_prefix = get_staging_upload_prefix(current_user.id)
+    if not request.key.startswith(f"{staging_prefix}/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid staging key",
+        )
+    if not await exists(request.key):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Staged file not found in storage; it may have expired — upload it again",
+        )
+    return await _insert_project_asset(db, project_id, current_user, request)
 
 
 @router.post(

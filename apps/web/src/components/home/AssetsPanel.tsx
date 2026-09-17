@@ -2,7 +2,7 @@
 
 import { useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { Plus, X } from "lucide-react"
+import { Loader2, Plus, X } from "lucide-react"
 
 import {
   ASSETS_ACCEPT,
@@ -12,21 +12,25 @@ import {
   formatFileSize,
   useStagedFileMeta,
 } from "@/lib/stagedFiles"
+import type { StagingUpload } from "@/lib/stagingUploads"
 
 /** Assets picker panel — the frosted Popover the Assets pill opens
  * (side="bottom"). Picker weight, not manager: upload row + typed file rows
  * + ×; deep asset management belongs to a future asset-center page.
  * Row anatomy (the 2026-08-21 mock, promoted): a square typed tile (file
  * column = SQUARE, identity column stays round) + name / typed-meta two
- * lines + a vertically-centered ×. */
+ * lines + a vertically-centered ×. Batch A lifecycle (2026-09-18): rows
+ * carry the same upload state as the chips band (spinner + % / retry). */
 export function AssetsPanel({
-  files,
+  items,
   onAdd,
   onRemove,
+  onRetry,
 }: {
-  files: File[]
+  items: StagingUpload[]
   onAdd: (picked: File[]) => void
-  onRemove: (index: number) => void
+  onRemove: (item: StagingUpload) => void
+  onRetry: (item: StagingUpload) => void
 }) {
   const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -55,13 +59,14 @@ export function AssetsPanel({
         <span className="text-xs">{t("composer.assetsUpload")}</span>
       </button>
 
-      {files.length > 0 && (
+      {items.length > 0 && (
         <div className="mt-1 flex max-h-56 flex-col gap-0.5 overflow-y-auto no-scrollbar">
-          {files.map((file, index) => (
+          {items.map((item) => (
             <AssetPanelRow
-              key={`${file.name}:${file.size}`}
-              file={file}
-              onRemove={() => onRemove(index)}
+              key={item.localId}
+              item={item}
+              onRemove={() => onRemove(item)}
+              onRetry={() => onRetry(item)}
             />
           ))}
         </div>
@@ -74,8 +79,17 @@ export function AssetsPanel({
   )
 }
 
-function AssetPanelRow({ file, onRemove }: { file: File; onRemove: () => void }) {
+function AssetPanelRow({
+  item,
+  onRemove,
+  onRetry,
+}: {
+  item: StagingUpload
+  onRemove: () => void
+  onRetry: () => void
+}) {
   const { t } = useTranslation()
+  const { file } = item
   const meta = useStagedFileMeta(file)
   const Icon = fileIconFor(file)
   const isVideo = file.type.startsWith("video/")
@@ -85,7 +99,7 @@ function AssetPanelRow({ file, onRemove }: { file: File; onRemove: () => void })
   // Typed meta line: AV = "Video · 12:34 · 480 MB" (duration joins when the
   // probe lands), image = "Image · 480 KB", doc = "PDF · 12 MB" (the format
   // ext is the informative bit — page counts would take pdf.js, never worth
-  // a row).
+  // a row). Upload state replaces the whole line while it matters.
   const size = formatFileSize(file.size)
   const metaLine =
     isVideo || isAudio
@@ -117,9 +131,24 @@ function AssetPanelRow({ file, onRemove }: { file: File; onRemove: () => void })
         <span className="block truncate text-xs font-medium text-foreground">
           {file.name}
         </span>
-        <span className="block truncate text-[11px] text-muted-foreground">
-          {metaLine}
-        </span>
+        {item.status === "uploading" ? (
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            {Math.round(item.progress * 100)}%
+          </span>
+        ) : item.status === "error" ? (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="block text-[11px] text-destructive hover:underline"
+          >
+            {t("composer.uploadFailed")}
+          </button>
+        ) : (
+          <span className="block truncate text-[11px] text-muted-foreground">
+            {metaLine}
+          </span>
+        )}
       </span>
       <button
         type="button"

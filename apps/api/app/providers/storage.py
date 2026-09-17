@@ -7,6 +7,8 @@ backend; neither the frontend nor the render service touches AK/SK.
 
 Key layout:
 - User upload: ``{user_id}/uploads/projects/{project_id}/{filename}``
+- Staging upload (pre-project, Product Flow Alignment Batch A):
+  ``{user_id}/uploads/staging/{session_id}/{filename}``
 - Persona asset: ``{user_id}/personas/{persona_id}/{filename}``
 - Brand media: ``{user_id}/brand-media/{filename}``
 - Output: ``{user_id}/outputs/projects/{project_id}/{filename}``
@@ -94,6 +96,23 @@ def get_project_upload_dir(project_id: UUID, user_id: UUID | str) -> str:
     return f"{user_id}/uploads/projects/{project_id}"
 
 
+def get_staging_upload_dir(user_id: UUID | str, session_id: str) -> str:
+    """Get upload prefix for a pre-project staging session (Batch A).
+
+    Staging objects are uploaded before any project exists; the attach
+    endpoint later points an asset row at the staging key as-is (zero
+    server-side copy). ``session_id`` is client-generated and must already
+    be validated by the caller (route layer) — this builder never trusts
+    raw input for path safety.
+    """
+    return f"{user_id}/uploads/staging/{session_id}"
+
+
+def get_staging_upload_prefix(user_id: UUID | str) -> str:
+    """Ownership prefix for all of a user's staging sessions."""
+    return f"{user_id}/uploads/staging"
+
+
 def get_persona_upload_dir(persona_id: UUID, user_id: UUID | str) -> str:
     """Get upload prefix for a persona."""
     return f"{user_id}/personas/{persona_id}"
@@ -112,6 +131,11 @@ def get_project_output_dir(project_id: UUID, user_id: UUID | str) -> str:
 async def get_upload_path(project_id: UUID, user_id: UUID | str, filename: str) -> str:
     """Generate a unique upload key for a project."""
     return _unique_key(get_project_upload_dir(project_id, user_id), filename)
+
+
+async def get_staging_upload_path(user_id: UUID | str, session_id: str, filename: str) -> str:
+    """Generate a unique upload key for a staging session."""
+    return _unique_key(get_staging_upload_dir(user_id, session_id), filename)
 
 
 async def get_persona_upload_path(
@@ -370,6 +394,26 @@ async def _list_keys(prefix: str) -> list[str]:
         for obj in page.get("Contents", []):
             keys.append(obj["Key"])
     return keys
+
+
+async def list_objects_with_age(prefix: str) -> list[tuple[str, float]]:
+    """List ``(key, last_modified_epoch)`` pairs under a prefix.
+
+    Reaper-only seat (staging GC): ``_list_keys`` stays age-blind for its
+    delete-prefix callers; age decisions must never be derived from key
+    timestamps embedded in filenames.
+    """
+    client = _get_s3_client()
+    paginator = client.get_paginator("list_objects_v2")
+    objects: list[tuple[str, float]] = []
+    for page in await asyncio.to_thread(
+        lambda: list(
+            paginator.paginate(Bucket=settings.s3_bucket_name, Prefix=prefix)
+        ),
+    ):
+        for obj in page.get("Contents", []):
+            objects.append((obj["Key"], obj["LastModified"].timestamp()))
+    return objects
 
 
 async def delete_prefix(prefix: str) -> None:
