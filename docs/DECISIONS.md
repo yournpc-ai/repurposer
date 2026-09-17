@@ -565,7 +565,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - MODULE_ARCH §4 登记 outputs（Owner: Pipeline）；数据架构图见 §2.2。
 - payload 的"类型安全"未丢——从 DB 层移到 schema 层（Pydantic 校验强于 SQL CHECK）。
 
-**Related**: ADR-016、ADR-026、ADR-028、ADR-029；`docs/DISTRIBUTION.md` §3；`docs/AGENT_ARCHITECTURE.md`；`docs/tasks/done/runplan-persistence.md`
+**Related**: ADR-016、ADR-026、ADR-028、ADR-029；`docs/DISTRIBUTION.md` §3；`docs/AGENT_ARCHITECTURE.md`；`docs/archive/tasks-done/runplan-persistence.md`
 
 ## ADR-031: 渠道凭证应用级加密——Fernet + env key
 
@@ -604,7 +604,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - editor 历史面板/版本时间线 UI 后置（反过度设计裁决）；undo 能力经端点 + chat 撤销按钮先行可用。
 - 校准回流的读路径（按 project/op/时间窗聚合 params）落成文档座位，消费端后建。
 
-**Related**: ADR-016（clip-spec 唯一契约）、ADR-028（RunPlan 同构对偶）、ADR-030（outputs 统一产物表）；`docs/tasks/done/operation-model.md`（D1–D7 全文）；`docs/MODULE_ARCHITECTURE.md` §2/§4
+**Related**: ADR-016（clip-spec 唯一契约）、ADR-028（RunPlan 同构对偶）、ADR-030（outputs 统一产物表）；`docs/archive/tasks-done/operation-model.md`（D1–D7 全文）；`docs/MODULE_ARCHITECTURE.md` §2/§4
 
 ## ADR-033: 编辑面分层——能力层唯一（ops+skills 双海拔），适配层多前端并存
 
@@ -624,7 +624,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - chat 适配器的语义完备性成为产品面：morph/fork 选择权暴露、recipe 参数默认值化等归 chat 能力简报（入 PROGRESS 需求池）。
 - "能力层 / 适配层"入架构词汇（NAMING §2）；新 op/skill 评审清单固定加一问："这是能力层成员，还是某适配器的呈现细节？"
 
-**Related**: ADR-016（clip-spec 唯一契约）、ADR-028（RunPlan）、ADR-032（Operation Model——本条将其"三前端共用操作日志"的愿景钉为分层纪律）；CHAT_ARCH §9；`docs/tasks/recipe-mention.md` §2.5
+**Related**: ADR-016（clip-spec 唯一契约）、ADR-028（RunPlan）、ADR-032（Operation Model——本条将其"三前端共用操作日志"的愿景钉为分层纪律）；CHAT_ARCH §9；`docs/archive/tasks-done/recipe-mention.md` §2.5
 
 ## ADR-034: chat 回合流式——单调用流式 + 增量散文提取，Accept 协商落地
 
@@ -662,7 +662,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 新产物类型 / 新配方进入时，静态流程图随注册项一并策展（注册表纪律 +1 字段）；活图若升正，同一渲染器零浪费接管。
 - 翻译失败 = ask 反问成为硬契约：意图识别覆盖率不足时永远多问一句，永不亮图兜底。
 
-**Related**: ADR-028（RunPlan——本条修订其用户侧结论）、ADR-032（Operation Model）、ADR-033（编辑面分层——翻译两层的注册表纪律来源）；简报 `docs/tasks/results-canvas.md`；DECISION_MATRIX §F（画布行与配方 overlay 行证据）
+**Related**: ADR-028（RunPlan——本条修订其用户侧结论）、ADR-032（Operation Model）、ADR-033（编辑面分层——翻译两层的注册表纪律来源）；简报 `docs/archive/tasks-done/results-canvas.md`；DECISION_MATRIX §F（画布行与配方 overlay 行证据）
 
 ## ADR-036: Flow 基座——只读图渲染扶正为共享能力（投影模型 2026-09-07 翻案入 ADR-057）
 
@@ -681,7 +681,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 后端增量两处：`StepResponse.inputs` 下发（DAG 边表，单字段读容忍）；`GET /projects/{id}/lineage` 血缘投影端点（服务端解析唯一发生地）。
 - DAG 的用户面形态 = FlowView 渲染的只读图（配方流程图 / 结果画布 / 复核中的血缘板）；可操作画布永不用户化（ADR-035 第 2 条）不变。
 
-**Related**: ADR-035（运行期活图拆分裁决的母条）、ADR-028（RunPlan）、ADR-016（clip-spec 单一画笔先例——FlowView 是其图面同构）、ADR-041（结果画布升正——本条第 3/4 条与补记 1/3 的修订来源）；简报 `docs/tasks/results-canvas.md`
+**Related**: ADR-035（运行期活图拆分裁决的母条）、ADR-028（RunPlan）、ADR-016（clip-spec 单一画笔先例——FlowView 是其图面同构）、ADR-041（结果画布升正——本条第 3/4 条与补记 1/3 的修订来源）；简报 `docs/archive/tasks-done/results-canvas.md`
 
 ### 补记（2026-08-07，同日两轮用户拍板）
 
@@ -735,7 +735,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - IP 容器终态（ADR-037 D4）更干净：IP = 人设（身份+风格+策略+声音+皮肤，一个完整对象）+ 绑定账号 + 表现数据，整体迁入无残肢。
 - 多人设共享皮肤（未来团队空间共用机构 VI）以"从另一人设复制"过渡，团队空间立项时再升级共享引用——不为它保留独立模块（§7 逆用：失去独立表归属即失去模块资格）。
 - 排期（PROGRESS）：**插入周 08-09~08-14 最高优先级连续落地**（改名迁移 08-09 ✅ → 皮肤吸收 08-10 → 声纹缓存 + STOCK_VOICES 08-11 → 人设显化页 08-12 → 触点 + 门禁 v1 08-13）；门禁 v2 随第五周一（08-31，`speaker_map` 过滤）；后续周次以 PROGRESS 为准。
-- 实施简报：`docs/tasks/persona-identity.md`——含**消费面全审计与迁移地图**（渲染链 / DAG / chat / 配方 / 前端 / 种子脚本逐点过）与数据迁移步骤（§6–§7）。
+- 实施简报：`docs/archive/tasks-done/persona-identity.md`——含**消费面全审计与迁移地图**（渲染链 / DAG / chat / 配方 / 前端 / 种子脚本逐点过）与数据迁移步骤（§6–§7）。
 
 **Related**: ADR-037（改名与人设正名）、ADR-016（clip-spec 契约不动）、RECIPES §4.4（look 层）/ §5（声音的家）、NAMING N-27/N-28
 
@@ -807,7 +807,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - results-workspace 简报退役（中央区状态机 / 六屏 / 工作面三区被本条吸收改写；chips 双级派生 / 翻译两层 / Before-After / 焦点注入沿入新简报）；其 D5「配方身份贯穿三站」条款正式退役——ADR-040 后服务端永不见配方身份：打勾流皮肤用节点友好名、chips 按焦点产物派生，均不需要配方身份（本条同时关闭 ADR-040 的未决带出）。
 - 移动端本期保留现有结果列表兜底；RunCard 增强排第三周。
 
-**Related**: ADR-035（可操作画布永久拒绝不变；第 3 条裁决口关闭）、ADR-036（本条修订其第 3 条与补记 1/3）、ADR-040（D5 条款退役的母因）、ADR-028（RunPlan）；简报 `docs/tasks/results-canvas.md`
+**Related**: ADR-035（可操作画布永久拒绝不变；第 3 条裁决口关闭）、ADR-036（本条修订其第 3 条与补记 1/3）、ADR-040（D5 条款退役的母因）、ADR-028（RunPlan）；简报 `docs/archive/tasks-done/results-canvas.md`
 
 ## ADR-042: 身份根升格——定位（Positioning）为根、人设收窄为表达分区、选题库升一等公民
 
@@ -856,7 +856,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - **计划卡瘦身（2026-09-02 用户拍板）**：卡解剖收窄为「任务行（唯一编辑面）+ 增量派生」——① 派生节只在 materialize 家族（整条源）出现：「整条视频」是任务行说不出的唯一信息（materialize_source 是编译期注入的内部节点），提取/写作链的派生行与任务行 1:1 复读、整节隐藏；② 节标/hint/「Style: …」identity 行全退役（身份由 echo 散文吸收）；③ instruction 框永远空开——`specific_instruction` 蒸馏照进 run（数据层不动），但不再倒进用户编辑区（推断簿记不是 UI 文案，needs_clarification reasons 同款判词）；可见框 = 用户自己的补充，ship 时合并（Start / prior_intent / legacy generate 三点同径）；④ echo 散文 ≤2 句：结论 + 唯一下一步，成功定义随散文（顾问姿态 law 3 落地，prompt 约束——2026-09-08 起措辞归 LLM 自由发挥，prompt 只约束话型与原则，见 ADR-054 条款 2 修订）；⑤ clips 无素材 = 行内 amber 警告（S11 形态从 prose-only 扶正，数据 = `clips_without_media` reason 现成）。
 - 第九周报价系统协同：卡 derive 与估价 fold 共享同一次干跑编译。
 
-**Related**: ADR-039（技能注册表——本条的语法家）、ADR-028/029（RunPlan / plan 级 dispatch——mode② 先例）、ADR-040（配方=提示词——载荷单一通道同款哲学）、ADR-041（结果画布——派生预览的消费面）、STRATEGY §5（反打包）；简报 `docs/tasks/done/outputs-derive.md`
+**Related**: ADR-039（技能注册表——本条的语法家）、ADR-028/029（RunPlan / plan 级 dispatch——mode② 先例）、ADR-040（配方=提示词——载荷单一通道同款哲学）、ADR-041（结果画布——派生预览的消费面）、STRATEGY §5（反打包）；简报 `docs/archive/tasks-done/outputs-derive.md`
 
 ## ADR-044: clip-spec 轨道模型——锚定存储 + 泳道编译产物 + TRACK_REGISTRY（12 操作闭包）
 
@@ -876,7 +876,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
    - **transition 枚举**：挂段的进场边（none/fade/dip，2-3 封顶——`insert_segment` 与 `set_transition` 两 op 同查），换序随段走；进场边语义与 FFmpeg xfade / Remotion 插值天然对齐。**ADR-016 L3 注记修订为"枚举可、画廊不可"**（转场挑选面板永拒不变）。
 6. **泳道投影 = 位置 fold 单函数**：sequence + layer 家族 → 扁平泳道（绝对输出时间 + z 序），TS 单家（packages/clip）+ Python 同名镜像（NAMING §1）；data 家族不投影——按 sourceTime 采样（crop_track 采样器 = keyframes 族第一个渲染件）；块轨本就输出时间轴。渲染器只吃投影/采样，永不读锚；投影函数同时是 FFmpeg 后路的 filtergraph 供料口。
 7. **ops 闭包**：`reorder_segments` / `insert_segment` / `set_transition` / `add_layer` / `remove_layer` / `move_layer` 登记入 OP_REGISTRY；**op 载荷 = 实体引用（段 id / 锚 / 枚举），LLM 永不提议绝对时间码**（坐标计算永归代码——"LLM 提议、代码裁决"的编辑侧延伸）；寻址 = （轨, item_id, op) 对注册表校验，不靠 LLM 猜字段路径；段/层 id 唯一性由 ClipSpec 契约断言（锚寻址 first-match 的前提）。**一轨一写者**：撞轨 = 编译期 422（fork 豁免——派生行各有其 spec），不做运行时合并。**派生轨失效声明**：对主时间轴派生的轨（dub）在注册表声明依赖，时间轴 op 落地时经注册表枚举失效轨并告知（重配一句话；不产生"合法的谎"）。
-8. **agent / skill / tool 配套边界**：**总 agent 不变**——chat loop / PlanAgent / ChatIntentAgent 零改动，单次调用 + 预装配上下文、禁 ReAct 辩护到底。**skill 按用户语言命名和切分，不按轨道切分**（「说到工厂时配工厂画面」是一个技能，「插入 layer」不是；轨道是内部坐标系）。tools 层零新增（投影/remap 是 pipeline 镜像函数，不进 tools/；边界精确化见 ADR-045——工序零新增，引擎缝按 asr.py 先例豁免）。技能化（insert_broll 工序、reframe_clip、checks 首批住户、LLM op 词汇开放、层的画布标记卡呈现）随功能排期——语录评审全案归简报 `tasks/done/track-model.md` §7。
+8. **agent / skill / tool 配套边界**：**总 agent 不变**——chat loop / PlanAgent / ChatIntentAgent 零改动，单次调用 + 预装配上下文、禁 ReAct 辩护到底。**skill 按用户语言命名和切分，不按轨道切分**（「说到工厂时配工厂画面」是一个技能，「插入 layer」不是；轨道是内部坐标系）。tools 层零新增（投影/remap 是 pipeline 镜像函数，不进 tools/；边界精确化见 ADR-045——工序零新增，引擎缝按 asr.py 先例豁免）。技能化（insert_broll 工序、reframe_clip、checks 首批住户、LLM op 词汇开放、层的画布标记卡呈现）随功能排期——语录评审全案归简报 `archive/tasks-done/track-model.md` §7。
 9. **tracks:{} 容器禁令保留、理由换血**：旧理由"破坏性格式迁移"随破坏性授权作废；保留理由 = 收益已证伪——快照 undo + LLM 不写 spec 的地基上全量常驻空轨无收益，扁平 spec + 注册表索引已提供全部归属能力。本禁令与兼容性无关，是纯目标判断。
 
 **Alternatives（翻案条件随附）**:
@@ -890,7 +890,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 存量 spec：段 `id` 新写必带、旧行读容忍（无 id 行在首个时间轴 op 落地时整体回填——旧行无层无锚，回填无损）；dev 数据可经 reset_db 清场，不构成约束（破坏性授权）。
 - 禁令入档：禁 NLE 自由轨语义进 spec（任意增删道 / 同道重叠 / 转场画廊 / 关键帧自由编辑）；UI 永不见轨（层条目呈现为"这段配了画面"标记卡，随技能批）；kind 全枚举注册表守门；消费方禁逐字段特判；每轨唯一写者。
 
-**Related**: ADR-016（契约锁定；L3 注记本条修订）/ ADR-020（stills Ken-Burns 拒绝与本条 transition 的边界：枚举进场边可、动效画廊不可）/ ADR-026（C2PA fold——layers provenance 必填）/ ADR-029（虚拟产物段进主时间轴）/ ADR-032（快照 undo——锚定面是其存储面）/ ADR-033（能力层双海拔）/ ADR-035（可操作画布永拒——泳道期权的前提门）/ ADR-039（注册表时刻同款迭代）/ ADR-043（派生投影同款哲学）；母文档 `docs/RENDERING.md`（§8 本条转正）；简报 `docs/tasks/done/track-model.md`（§7 配套层 / §8 附录 12 操作走查全表）
+**Related**: ADR-016（契约锁定；L3 注记本条修订）/ ADR-020（stills Ken-Burns 拒绝与本条 transition 的边界：枚举进场边可、动效画廊不可）/ ADR-026（C2PA fold——layers provenance 必填）/ ADR-029（虚拟产物段进主时间轴）/ ADR-032（快照 undo——锚定面是其存储面）/ ADR-033（能力层双海拔）/ ADR-035（可操作画布永拒——泳道期权的前提门）/ ADR-039（注册表时刻同款迭代）/ ADR-043（派生投影同款哲学）；母文档 `docs/RENDERING.md`（§8 本条转正）；简报 `docs/archive/tasks-done/track-model.md`（§7 配套层 / §8 附录 12 操作走查全表）
 
 ## ADR-045: 智能分镜能力线——YuNet 视觉引擎 + speaker_map 素材级事实 + crop_track 稀疏关键帧
 
@@ -915,7 +915,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - **M3 全程判定**（零新依赖）：静帧网格猜"谁张嘴"是其最弱形态；逐帧追踪贵且抖（60s 素材 0.5s 间隔 = 120 次调用）。只任形态归类与模糊仲裁。
 - **稠密平滑关键帧 + 线性插值**：契约肥大、防眩晕参数散落数据。**翻案条件**：sparse + smoothstep 在真实素材出现可见跳变且写侧平滑无法吸收。
 
-**Related**: ADR-044（轨道地基；crop_track 进场路径与 tools 注记本条落地）/ ADR-016（渲染器黑盒——采样器只进 packages/clip）/ ADR-020（Ken-Burns 拒绝的边界：crop_track 是 video 源取景决策轨，非 stills 动效）/ ADR-026（speaker_map 不涉 C2PA——分析事实非生成内容）；简报 `docs/tasks/done/reframe-line.md`；双验证 spike 与排期见 `docs/PROGRESS.md` 第三周
+**Related**: ADR-044（轨道地基；crop_track 进场路径与 tools 注记本条落地）/ ADR-016（渲染器黑盒——采样器只进 packages/clip）/ ADR-020（Ken-Burns 拒绝的边界：crop_track 是 video 源取景决策轨，非 stills 动效）/ ADR-026（speaker_map 不涉 C2PA——分析事实非生成内容）；简报 `docs/archive/tasks-done/reframe-line.md`；双验证 spike 与排期见 `docs/PROGRESS.md` 第三周
 
 
 ## ADR-046: Studio 视觉骨架重塑——灰底填充阶 / 影子只属浮层 / 实体丸化 / 海报优先画廊 / 去全局 header
@@ -929,7 +929,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 3. **实体丸化 + chips 顶置**：composer 骑缝 blocks 退役（自我批判四条：信息密度倒挂 / 剪影打断 / 跨双表面必坏 / 底排失衡之源）。实体 = 底排左簇 ghost pills（Assets 📎 / Persona 16px avatar），**值状态律 = meta→foreground 一步变色**（无填充无彩色）；pills 开雾面 Popover 面板（`side="top"`，浮层影首个正当场景），AssetsModal / PersonaPickerModal 退役（深度管理归未来资产中心页）。暂存文件 = **卡顶类型化 chips 带**（视频缩略图+时长 / 音频波形+时长 / 文档图标+页数 / 上传中转圈百分比，× 即删）——摘要归 pill、清单归 chips、富展示归面板行。
 4. **画廊**（卡面形态与布局 2026-08-23 起由 **ADR-048** 整体取代：工艺示意图封面 / 均匀 4 列网格 / 证据层移交 overlay / badge·chip·featured 退役）：本条残留有效部分 = **click = 检视 overlay 是唯一发射路径**（hover 填充二次否决维持：我们的卡面是多产物组合的 teaser + 配方素材依赖，检视是认知步骤不是摩擦）。
 5. **去全局 AppHeader**：工具（主题/语言）迁账户 console；**通知 = 内容区右上角唯一浮动芯片**（圆角方块 + 未读点，右上槽位全 `_app` 保留，页面级控件永不占此角——Agent Opus 证据）；移动端留浮动 trigger。账户区两层架构：rail footer popover = 高频 console（身份头 / inset 账户组 / 行内 segmented 偏好 / 帮助段），深度偏好归设置页（FLORA modal 先例）。
-6. **色役表治理**："角色 → token × 双主题"对照表为组件唯一取色来源（禁直引色值），缺位角色补 token（send-disabled、group-title、icon-chip-bg、toggle-track）；角色全住中性阶梯，多角色 ≠ 多颜色。表随简报 `tasks/home-skeleton-revamp.md` 落地并当验收清单。
+6. **色役表治理**："角色 → token × 双主题"对照表为组件唯一取色来源（禁直引色值），缺位角色补 token（send-disabled、group-title、icon-chip-bg、toggle-track）；角色全住中性阶梯，多角色 ≠ 多颜色。表随简报 `archive/tasks-done/home-skeleton-revamp.md` 落地并当验收清单。
 
 **Rationale**: 层级来自阶不来自色（Tailwind 哲学 + MiniMax 黑白多层实证）；影子物理（白底困境的止痛是灰底，不是更软的影）；形态跟信息密度走（pill 36px 说一个词的值为足）；发射深度取决于卡面代表度（卡面越完整代表产物，快捷发射越浅）；交互基准线被大厂产品持续抬高，骨架一次到位比逐面补丁省返工。
 
@@ -940,7 +940,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - **hover Use Prompt 双动作**（FLORA/MiniMax 先例）：二次否决维持 08-08 清洗判例，理由见 Decision 4。**翻案条件**：配方简化为单产物 + 零素材依赖的那类（若存在）可个案重议。
 - **bell 降 rail 导航项**：通知的时效性（"你的片子好了"）需要全页一瞥可达，埋进 rail 伤可发现性；浮芯片方案兼得"无 header"与"一瞥可达"。
 
-**Related**: ADR-035/036（只读图与配方 overlay 纪律不变）/ ADR-040（配方=提示词——hover-fill 否决的教义同源）/ ADR-041（结果画布 dock 体系不受影响）/ ADR-016（clip-spec 契约零关联）；证据 `research/minimax-design.md`（§8–§11 二轮证据 + 色役盘点）+ `research/flora.md`（EU AI Act 偏好项）；简报 `docs/tasks/home-skeleton-revamp.md`（施工与验收）；需求池登记 EU AI Act 水印偏好一条后续
+**Related**: ADR-035/036（只读图与配方 overlay 纪律不变）/ ADR-040（配方=提示词——hover-fill 否决的教义同源）/ ADR-041（结果画布 dock 体系不受影响）/ ADR-016（clip-spec 契约零关联）；证据 `research/minimax-design.md`（§8–§11 二轮证据 + 色役盘点）+ `research/flora.md`（EU AI Act 偏好项）；简报 `docs/archive/tasks-done/home-skeleton-revamp.md`（施工与验收）；需求池登记 EU AI Act 水印偏好一条后续
 
 **附（2026-08-21 拍板，点阵 2026-09-02 翻案）**：点阵采纳——**结果画布唯一签名面**（home 同日摘除：不可平移面上的固定纹理广告了不存在的 affordance；单面使用让点阵 = 「进入图」的舞台信号）；配方 = muted-foreground 32%（light）/ 30%（dark）、2px 点、32px 网格（FLORA 实测世界常量，FlowView `dots` prop 世界坐标随缩放，无重铺无缩放补偿；home 原 `dot-grid` utility 已删，无 CSS 工具类）；第二处点阵面即违规。demo 封面维持现烘焙帧（重烘取消）。同日走查修订（用户逐帧对照 MiniMax Design）：① 滚动编排采纳——home 改固定 app-shell（路由根 `h-svh` 不滚、画廊唯一滚动口 `no-scrollbar` + 顶 fade），hero 文案级 fade 折叠，composer 常驻顶 chrome 并 compact 变形（pill 隐藏 / 输入带收缩，send 常驻，迟滞阈值）；② 点阵配方细化（数值其后两轮再调，现行值见段首）；③ 滚动条治理——`:root` / `.dark` 挂 `color-scheme`（原生滚动条随主题），home 滚动口无滚动条。同日二轮走查修订（MiniMax 逐帧对照）：④ composer rest **居中停驻**（hero 时刻，`pt-[20vh]`）→ 滚动滑上钉顶成**单行 half-radius（stadium）探索条**——rounded-full 禁令**第三例外**（用户拍板）；⑤ 单行条布局对齐 MiniMax 标准件（左 attach 带计数 + 单行输入 + 右 send），chips 带/控制行折叠，send 改绝对锚点跨形态常驻；⑥ hero 改纯 fade（撤高度折叠，行程耦合）；⑦ sticky chrome 背板防宽卡露头（纯色 page fill）。同日位置对批（用户双屏对照）：⑧ rest 集群下移居中（spacer 20vh→28vh）；⑨ **核心 hero（标题）常驻**——钉顶收缩悬于单行条之上（MiniMax docked 态 parity：logo+标题永驻、subtitle 消失），subtitle 改 chrome 内部折叠（钉点零位移）。⑩ **设置 = 共享弹窗组件，不设页面**（MiniMax/FLORA 对照拍板）——SettingsDialog 左 nav + 右内容，`useSettingsDialog()` 随处召唤（memory 等未来深面同构入列）；`/settings` 路由退役为 channels OAuth 回调 shim（toast + 开 dialog + 弹回 home）。⑪ **console 分组律**（MiniMax 对照拍板）——inset 账户块只装价值面（plan/credits/订阅），系统面（设置）降级入偏好组；偏好组改 MiniMax 行解剖：行标签 + **尾置** segmented（theme 图标三态 / 语言 EN·中，inset 轨 + card 滑块），深面行带 chevron。⑫ **滚动编排的形变一律滚动链接，禁时钟过渡**（三轮走查拍板）——位置是滚动驱动的即时位移，形变若走 300ms 时钟，快滚必现半途态；`dockP` = 距钉点末 140px 的 scrollTop 插值，全部形变属性随动，阈值/迟滞废除（纯函数无振颤）。⑬ **home hero = 品牌锁up + 品类句**（MiniMax 解剖，用户拍板原话）——`LogoMark`+"Repurposer" 常驻钉顶（em 尺寸 mark 随字号缩放），品类句「你的自媒体Agent团队」折叠；welcome 接待式退役，旧 `welcomeTitle/welcomeSubtitle` 键清尸。⑭ composer pill 面板**一律向下开**（`side="bottom"`——向上开盖输入区）+ 面板滚动列表 `no-scrollbar`；docked 条下方留白加大（`pb-14` + 32px 溶解带），卡片不贴条底消失。⑮ **列表一处律**——面板是其暂存列表的展开形态：Assets 面板开则 composer chips 带收起，同一列表永不同帧双呈（计数 pill 留锚）。⑯ **面板行解剖 + 画廊带声**（同日四轮走查拍板）：面板行 = mock 转正解剖——方形类型 tile + 名称/类型化 meta 两行 + × 居中，**列律：文件列方、身份列圆**（assets 方、persona/Auto 圆）；配方卡 hover 带声裁定 2026-08-23 起随网格视频表面消失而迁移至 overlay 示例 tab（ADR-048——点击 = 手势，带声天然成立）。⑰ **半径简化 + padding 非对称**（同日五轮走查拍板，MiniMax 对照）：composer 半径撤出 dockP 插值——常量 40px（展开态大圆角），坍缩成 56px 一行条时 CSS 半径帽自动裁至 28px = stadium 从盒模型自然涌现（「只有坍缩才 full」零代码）；padding 改非对称 `px-5 pt-5 pb-3`——底 chin 收紧 12px，控制行贴底（原 p-5 底 chin 过厚）。⑱ **hover 动作**（同日六轮走查，MiniMax 逐帧对照；2026-08-23 随 ADR-048 修订）：hover 浮出 = 白色 stadium Remix 丸居中 + expand 钮右上（声音开关随网格视频表面退役）；Remix/expand 均只开检视 overlay（ADR-040 唯一发射路径不破——hover 增加发现性 affordance，不产生第二发射路径）。⑲ **composer 壳 = shadcn InputGroup 收编**（同日七轮走查拍板）：布局已收敛组件预设解剖（chips block-start / MentionEditor 挂 `data-slot=input-group-control` 当 control / 控制行 block-end），手卷 Card+CardContent 退役——白得 focus-within 环、cursor-text 点击聚焦、addon 折叠 border-box 自带 padding 裁剪；描边按卡律换皮（`border-transparent` + 发丝 + bg-card 无影）。**密度律：padding 住 addon 不住容器**——px-4 侧 / pt-4 chips / pb-3 chin，编辑带 py 16→8 随 dockP 防单行裁字；条高 44px、send 锚 16·12→4。
 
@@ -965,7 +965,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - **静态确认闸（文本分镜/首帧）**：2026-08-24 翻案——替代方案（节拍方案为 chat 评审界面）由 ADR-049 实施；本条替代路径废止。
 - **每表面独立 agent 声明**（MiniMax 剪辑 Agent/导演台 Agent 式）：维护漂移 + 跨面认知断层；我们的答案 = 同一它 + 作用域上下文（ViewScope，后续简报）。**翻案条件**：场景上下文组装的边界泄露实测不可控。
 
-**Related**: ADR-039（四层地图 + N-30 声明机制）/ ADR-016（clip-spec 契约不动）/ ADR-041（表面纪律：进度不进图、编辑走 chat）/ ADR-049（§5 翻案去向：钩子闸退役）/ N-42（指令包装配注入——剪辑工艺包的载体）/ N-25（用户面单助手不破）；简报 `docs/tasks/output-quality-line.md`（施工与验收）；旧简报 `docs/tasks/output-quality-verify.md`（期 3 被吸收升级）；需求池「质检节点」（提级 P1）/「agent 调用台账」（三信号 schema）/「执行中自适应重规划」（路由判据）/「素材理解前移」（汇合理解层 v2）/「节拍方案产品面」（接 ADR-049）
+**Related**: ADR-039（四层地图 + N-30 声明机制）/ ADR-016（clip-spec 契约不动）/ ADR-041（表面纪律：进度不进图、编辑走 chat）/ ADR-049（§5 翻案去向：钩子闸退役）/ N-42（指令包装配注入——剪辑工艺包的载体）/ N-25（用户面单助手不破）；简报 `docs/archive/tasks-done/output-quality-line.md`（施工与验收）；旧简报 `docs/tasks/output-quality-verify.md`（期 3 被吸收升级）；需求池「质检节点」（提级 P1）/「agent 调用台账」（三信号 schema）/「执行中自适应重规划」（路由判据）/「素材理解前移」（汇合理解层 v2）/「节拍方案产品面」（接 ADR-049）
 
 ## ADR-048: 配方画廊 v3——三轴模型（产物形态 × 输入路径 × 渠道适配）+ 招牌菜组织原则 + 三级准入闸门
 
@@ -1013,7 +1013,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - **字幕 + 配音合并为一卡**（"一个外语版本意图"论）：维持 08-23 拆分原判——"保留原声看字幕"与"用我的声音说外语"是两种意图，配音卡名把声纹克隆护城河写进菜名。**翻案条件**：认路证据显示用户在两张卡间犹豫选错。
 - **画廊按渠道出卡**（LinkedIn 卡 / TikTok 卡）：永久否决——渠道是适配轴不是卡轴（第 1 条）。
 
-**Related**: ADR-046（D4/附⑯⑱ 维持取代）/ ADR-040（唯一发射路径）/ ADR-042（选题库 = 覆盖的家，画廊→选题库接力点）/ ADR-043（materialize 输入画像注入 = 路径轴机制）/ ADR-035/041（画布纪律）；RECIPES §4/§7 / STRATEGY §5 / POSITIONING（平台定位 = 适配轴）；简报 `docs/tasks/recipe-gallery-v2.md`（v2 施工）/ `docs/tasks/quote-cards-redesign.md`（v3 金句卡工程）
+**Related**: ADR-046（D4/附⑯⑱ 维持取代）/ ADR-040（唯一发射路径）/ ADR-042（选题库 = 覆盖的家，画廊→选题库接力点）/ ADR-043（materialize 输入画像注入 = 路径轴机制）/ ADR-035/041（画布纪律）；RECIPES §4/§7 / STRATEGY §5 / POSITIONING（平台定位 = 适配轴）；简报 `docs/archive/tasks-done/recipe-gallery-v2.md`（v2 施工）/ `docs/tasks/quote-cards-redesign.md`（v3 金句卡工程）
 
 ## ADR-049: 钩子预览闸退役——评审回 chat，渲染无闸，节拍方案为评审界面
 
@@ -1083,7 +1083,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 2. **打勾流浓缩 + 占位物化（增量感两件）**（**占位 roster 投影 2026-09-07 经 ADR-057 翻案**：草稿图就是占位——图本体先存在、产物落地填充节点，derived preview 干跑投影退役；**打勾流形态 2026-09-08 再翻案**：「浓缩为默认折叠的一行」整体退役——打勾流 = 流内一行动态动作行 + 平铺步骤（活态 status line / 终态收据同一行原位 morph，CHAT_ARCH §8.7），输入组上方的折叠状态行删除，唯一进度面律更纯）：打勾流仍是唯一**步骤叙事**进度面（ADR-041 D2 精神不变）。同时 run 期画布活起来：**占位产物卡在 run 开始即物化**——derived preview（ADR-043 编译期干跑）已知产物花名册 + 画幅，`productNodeSize(aspect)` 让占位卡出生即占最终位置与尺寸，产物落地即原地填充（画幅未知取默认档）。**ADR-041 D2「进度不进图」范围收窄为「步骤叙事不进图」**：步骤清单永不上图不变；产物占位/填充是图的**内容**（确定性派生投影），不是进度剧场——禁令 #4「禁假进度」不破（占位 roster 必须来自编译期干跑，禁虚构产物）。
 3. **提问 dock 形态（形态律，2026-09-04 由 ADR-053 翻案本条；选项问形态同日两轮拍板定稿）**：现行 = 渲染按 `options` 是否为空分流——文字问（options 空）= 普通对话消息，永不 dock；选项问 = **阻塞形态**（本条原「阻塞 morph + 尾行铅笔手输入」即正确形态，同日先拆后由用户拍板翻回——FLORA / Opus 双参照实测两家选项问待决输入均让位）：待决时输入行与免责行让位（CSS 隐藏不卸载，编辑器草稿保住），pill = 问题行 + × + 选项行 + 尾行铅笔自由输入（与选项行同一 item 解剖——铅笔坐进字母徽章同款 tile；2026-09-02 条款 8 拆粘的浮层边界不动）；**default_path 行不渲染**（同日拍板：参照均无此行，跳过语义由 × 承担）。× = bail 出口（取 default_path，interrupt 停活 run）。回答坍缩 / 已答问题入流 / 判定结算见 ADR-053 与 CHAT_ARCH §8.5。
 4. **节点交互升级（hover prompt 框 + 变体分页 + 脊收编）**（**2026-09-07 ADR-057 翻案**：脊收编随过程脊同亡；hover prompt 框升正为卡面常驻 prompt 区——直改 + 定价确认，通道律不变）：hover 产物卡 → tooltip + 磨砂 prompt 框，展示**该产物自己的 spec**（runFlow 产物节点的全局 run `prompt` 逐卡重复退役——改 per-product spec：fork 派生行的目标语言 / hook / 参数，卡说自己的话）；prompt 框可编辑 → 发送 = 带焦点预钉的修订回合，**骑 `POST /chat` 唯一通道，永不开新执行通道**。修订/重跑后 → **变体分页（1 of N）**：数据源 = Operation Model 版本快照 + fork 家族，卡上翻页切换展示。**脊收编**：折叠步 ≤1 时过程脊不成节点（边经既有祖先投影规则解析，零新投影规则）。
-5. **模型名禁令修订（事实展示解禁）**：「禁图面模型名 / 技术黑话」（简报 `tasks/results-canvas.md` #10；代码注释里作 #12）修订为——**模型 / provider 事实可出现在详情面**（灯厢信息栏等 detail surface，陈列事实 = 诚实）；**节点面永无模型选择器、无 SKU 货架**（禁令精神不动）；节点 caption 恒友好名不变。真实第二 provider 出现时可选 picker 的用户形态仍是策略开关（需求池「LLM provider 抽象」裁定不变），本条只解禁事实陈列。
+5. **模型名禁令修订（事实展示解禁）**：「禁图面模型名 / 技术黑话」（简报 `archive/tasks-done/results-canvas.md` #10；代码注释里作 #12）修订为——**模型 / provider 事实可出现在详情面**（灯厢信息栏等 detail surface，陈列事实 = 诚实）；**节点面永无模型选择器、无 SKU 货架**（禁令精神不动）；节点 caption 恒友好名不变。真实第二 provider 出现时可选 picker 的用户形态仍是策略开关（需求池「LLM provider 抽象」裁定不变），本条只解禁事实陈列。
 6. **点阵与免责行**：点阵配方调大调显（2026-09-02 起收窄为结果画布唯一签名面、home 摘除——最终配方 32px 网格 / 2px 点 / 32%·30%，FLORA 实测世界常量，ADR-046 附同批翻案）；dock 基础形态常驻免责行，en 原文 = "Repurposer is AI and can make mistakes. Check important info."（zh 镜像「Repurposer 是 AI，可能出错。重要信息请核对。」）——位置 = 输入组**上方**耳语（**2026-09-06 用户拍板翻案——FAUNA parity 学到底**：09-02 条款 8 拆粘定的「下方页面级耳语」同批作废；「输入区上方」兜兜转转归位，但不回容器内、不夹回问句与输入之间）；文字问不隐藏任何 chrome，选项问待决时免责行随输入行一并让位（ADR-053 R1 阻塞形态，2026-09-04 翻回），其余时刻免责行与输入框同常驻。dock placeholder 同批改 @ mention 教学文案（2026-09-06 终稿——产品实测 @ 生效后按用户口径定稿：「Use '@' to mention nodes and describe changes」/「输入 @ 引用节点，描述你的修改想法」——FAUNA 句式去 '/' 版去 "your"〔单行 nowrap 省略在 14px 继承字号下 57 字符会裁，46 字符装下〕；「nodes」措辞成立：@ 候选〔素材/产物〕本就是画布节点；**只教 '@'，不写 '/'**：chat 无 slash 体系，写了即虚假承诺〔虚构 SKU 禁令同适用于 placeholder〕；FAUNA 原串的 '/' 半句待 slash 真落地才配进文案）。**placeholder 耳语注册**（同日两刀定稿）：耳语靠**对比度**不靠字号——渲染 = 继承输入字号 14px + meta-foreground（比正文 muted 暗一档），单行 nowrap 省略（第一刀误降 12px——devtools 证据显示 FLORA 的 12px 是其免责行，placeholder 本体≈输入字号；同批免责行对齐其 12px 实测）。**同批 FLORA 实测两笔学习**：①免责行颜色——meta-foreground 暗色档 0.52 → **0.42**（其 #606060 实测，整个暗色耳语层〔meta 标签 / disabled / 免责行〕随动）；②用户气泡——Bubble `muted` 变体暗色加 `dark:bg-white/10`（其 #FFFFFF1A 实测，磨砂面板上的半透明 veil 比实心 muted 阶更静；亮色无证据不动），padding 对齐其 px-4 py-2（原 py-2.5）。**大量内容适配同批对齐**：dock 输入框增高上限 max-h-32 → **max-h-56**（其输入 ~10 行可见后内滚，原 128px ≈ 6 行太局促）；dock 暂存附件 chip 升级**缩略图先行**——抽 `StagedAttachmentChip`（image = 文件本体 / video = 首帧，走共享 `useStagedFileMeta` 探针，object URL 自回收；音频/文档留图标），与 composer 的 AssetChips 同一套暂存文件语言（三处输入面同构：composer / 无画布 full 形态 / 有画布 panel·dock 形态——后两者本就是 ChatDock 三形态机的同一 inputBody，天然同步）。**同轮 FLORA 两笔**：①**滚动条统一学**——新 `@utility thin-scroll`（6px rounded thumb = foreground 12% / 透明轨 / 无 gutter），挂消息流视口 + dock 编辑器；②**输入框解剖 = 两行流式终稿**（ElevenLabs 拍板；四幕：旧 flex 侧车道钳宽 ~73% → 恒满宽+悬浮带被否「常态必须一排」→ 自适应宽度翻转当小时 revert〔逐帧振荡——宽度改变的布局翻转结构性不稳〕→ **rest 即两行**：满宽文本带（上）+ 控制条流入（下），与 ElevenLabs composer 同构〔text zone / +·权限·自治档·send〕；无覆盖层、无测量、构造上不可能振荡；dock stadium 例外随单行 rest 退役〔多行内容配 capsule = 破几何，输入组全形态恒 rounded-xl〕）。**同批细节学习**：Paperclip → **Plus**（ElevenLabs/FLORA 的 +，dock attach 与 composer Assets 实体钮同换〔2026-09-06，回形针退役〕）；暂存 chip 的 ×/重试**悬停显现**（FLORA hover 解剖；error 态常显防死端，focus-within 罩键盘）；**控制条 glyph 铁轨对齐**（同日补拍——FLORA 对齐 icon 非 container：ghost 钮休息态无底色，按 container 摆 glyph 裸奔显飘；strip 去容器 padding，`+` glyph 左缘 / `↑` glyph 右缘钉文本带 12px 铁轨〔36px 钮 − 18px glyph = 9px 内缩，ml/mr-[3px]〕，双 glyph 同 18px 光学对齐——composer glyph 左缘对齐律的 dock 孪生）。遗留滚动条样式同批清理：inline `scrollbarWidth` 全清，编辑面统一 `thin-scroll`（`overscroll-contain` 有原生 utility）。
 7. **dock 形态机（2026-09-02 用户拍板两态 + hidden 第三可见性态；2026-09-06 ADR-056 翻案扩为三形态 + fade 简化）**：现行 = **首个 run 到达前**项目页 = 居中全屏 chat（full 形态：消息舞台占满页面上部，输入组同一台消息机器原地不动）+ 左上角仅「← Projects」返回 pill；首个 run 到达同一拍：舞台原地淡出（300ms opacity——旧 grid-rows 1fr→0fr 收拢读作整个聊天框飞上去，2026-09-06 用户拍板退役）、画布延迟 150ms 淡入（500ms）、返回 pill crossfade 成完全体 ProjectMenu，chat 收拢变形为——**桌面 = 右侧面板（panel 形态，FLORA 对齐：full-bleed 画布上的雾面 overlay，float/docked-right 双几何 header 切换，解剖与保草稿结构见 ADR-056）/ 移动端 = 底部 dock（dock 形态，零改动）**。驱动 = 页面 `latestRun`（loading 闸保证主树首渲染即定态——带 run 项目直挂 panel/dock 形态，水合首帧永不重播，诞生编排铁律同义）。**hidden 态**（dock 与 panel 通用）：用户手势（dock 输入行 − 钮 / panel 头部 − 钮）把整个 chat 收成右下角 LogoMark 磨砂圆点——节点密集后要看完整画布、截图分享正在使用的产品，是正当场景（用户拍板原话：「别小看这个场景」）；唤回触发 = agent 发声 / 待决提问（choice / 任务书 dock）/ 画布焦点注入——用户只能藏起一个**静态输入组**，永远藏不住新信息（禁静默在 hidden 下存活）；活 run 状态行故意不作触发（画布擦除已传达活性，收官 recap 属 agent 发声自行唤回）。**同批评审否决的 FLORA 形态（2026-09-06 修订）**：右下浮动 panel、Queue 条（违反唯一进度面）、多 chat（项目单会话模型 ADR-041 D8）、窗口管理控件维持否决；右侧 full-height sheet 经 ADR-056 翻案收编（理由与证据见其 Context）。**改名**：组件 GenerationOverlay → ChatDock（文件/类/handle/页面引用全栈同名，`components/generation/` 目录退役入 `components/chat/`；i18n 命名空间 `generationOverlay.*` 保留——消息键名不是产品概念）。
 8. **dock 拆粘（2026-09-02 用户拍板，HTML 原型三方案对比后定 A；2026-09-06 起寄存解剖收窄为移动端 dock 法则——桌面 panel 形态的三职责天然分层：问句/任务书 pill 钉面板底寄存、输入钉面板底、历史 = 面板滚动区，见 ADR-056；stadium 同批收窄为 dock-only）**：一体容器把决策（问句）/ 行动（输入）/ 诚实（免责行）三职责零间距焊成一块，且免责行恰夹在决策节拍中间——修订为**三寄存分离**：① QuestionDock（task_book / choice）从容器拆出 = **独立浮层 pill** 悬在输入组上方，dock-surface 同款磨砂 + 发丝线；② 输入容器只装输入组（+chips 带；曾有的打勾状态行 2026-09-08 退役——消息流恒在，折叠行是纯重复，见 §2 翻案注）；历史区同批再拆（2026-09-02 续裁定，**输入框独立层律**）= 自有磨砂浮层悬于输入组上方——输入组恒为独立一层，永不与消息流融为一体（有画布 dock 曾与 full 形态分叉：full 的舞台天然分层、dock 把历史焊进输入容器——同批对齐；stadium 不再因历史打开变形，只有 chips 带第二带时才回 `rounded-xl`）；③ 免责行钉在输入组旁常驻耳语——**2026-09-06 翻案为输入组上方**（FAUNA parity 学到底，本条原「下方页面级耳语」作废；条款 6 的「输入区上方」兜兜转转归位，文案不变，不回容器内）。**§8.5 停靠法则不动**——问句 pill 恒可见，不随计划卡滚走（用户走查原话痛点是「粘」，不是停靠；choice morph 2026-09-04 经 ADR-053 R1 先拆后由用户拍板翻回——选项问 = 阻塞形态，待决时输入行与免责行让位，本条原「待决时输入行与免责行照旧隐藏」即现行）。**否决**：方案 B（只移免责行——问句+输入焊接还在，解一半）；方案 C（行动随卡进流——计划卡高时 Start 滚出视口，废停靠法则，原型面板实测可滚体验）。**同日两轮走查续裁定**：Ⓐ pill↔输入组间距 `mb-2.5`（10px——6px 太近、原型 12px 太大，两轮各否一头）；Ⓑ **task_book pill 单行化 + Cancel 退役**（非阻塞提问不配负向动作：task_book pill 不阻塞，「不开始」用沉默表达——继续聊 = 修订、走开 = 计划如实待确认、/projects 可删；FLORA / ChatGPT 的非阻塞确认 pill 均无负向动作；**选项问的 × = 阻塞 morph 的 bail 出口（ADR-053 R1 翻回后阻塞前提回归）**——取 default_path、interrupt 的 × 停活 run），Start 并入顶行成单行解剖（✓ + 问句 + Start）；Ⓒ **stadium 归坍缩态输入组，不归问句 pill**（同日第三轮纠正）：输入容器在真单行时（无历史区 / 无打勾状态行 / 无 chips 带）= **rounded-full stadium**（rounded-full 例外第 4 条，FLORA Chat-bar 解剖），出现第二带即随盒过渡回 `rounded-xl`；问句 pill 两种形态恒 `rounded-xl`。
@@ -1096,7 +1096,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 服务端增量很小：占位物化吃 derived preview（ADR-043 现成干跑）；per-product spec 从编译图 slot 参数投影（outputs.py 序列化增量）；变体分页吃 Operation Model 快照（ADR-032 现成）。无新表、无新执行通道。
 - CHAT_ARCH §8（进度面 / 前端实现 / composer 条）、CLAUDE.md（composer 契约）同步修订。
 - 排期：W7 头部插入 2 个工作日（08-31~09-01），原计划整体顺延 2 工作日，go/no-go 10-23 → **10-27**，仍早于已批回退位 10-30，不触发新拍板（PROGRESS §2/§3 同步）。
-- 简报 `docs/tasks/flora-parity.md`（验收标准 + Prohibited Behaviors + 两天切分）。
+- 简报 `docs/archive/tasks-done/flora-parity.md`（验收标准 + Prohibited Behaviors + 两天切分）。
 - **2026-09-02 续裁定（run 活性同步批，三条）**：① **interrupt 准入**——`key_arguments` 为空时选项只剩默认项，单选项提问无分支 = 纯摩擦（writer-only stub understanding 必中：「Full-talk highlights」是 clips 话语，对 post 任务书错体系），interrupt runner 自动按默认项决议（`spec.answer` 与 human pick 同形状，director_plan 经 `_interrupt_direction` 的读法不变），不再停车；review 默认档不动，顾问姿态「诊断一轮封顶」落地。② **画布活性 = runAlive，waiting ⊆ running**——画布与消息流吃同一个 `step.status` 值、各按自己粒度诚实（FLORA 对齐：message 侧 "Running node…" 与画布节点同一值）：消息流保 `waiting` 细分（CircleHelp 提问行），画布只有「活 / 不活」一档——parked interrupt 映射 running（脊脉冲 + 边包裹不断），占位卡在生产步骤未启动时也随活 run 保 FLORA 擦除（roster 服务端只对活 run 投影，`runAlive` 客户端兜 stale 帧），park 帧画布不再死寂；步骤提问 UI 永不上图（D2）不破。③ **plan 卡 compile 期任务书兜底**——director_plan 节点 `spec.task_book` 编译期钉入（与 runtime 覆写同源 = 生成节点 `spec.slot`），`canvas_text` 的 `_plan_summary` fallback 从出生即有正文，park 时不再是透明空壳；runtime 的 plan_summary 落地后同文替换（同源渲染，无闪变）。
 
 **Alternatives（翻案条件随附）**:
@@ -1105,7 +1105,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - **保留 fullscreen 壳作为 run 期可选视图**：否决——双壳 = 两套进度面悖论复发（ADR-041 D2 当初砍掉它的理由不变）；活画布 + 折叠打勾已覆盖其全部正当场景。
 - **hover prompt 框直接改图（就地重跑，不经 chat）**：否决——违反 chat 唯一意图面与「改动在 chat」（ADR-041 D5）；prompt 框发送 = 修订回合的发射快捷位，执行通道不变。
 
-**Related**: ADR-041（本条修订其 D2/D5 与外壳条款）/ ADR-035（可操作画布永拒不变）/ ADR-036（只读基座不变）/ ADR-043（derived preview = 占位物化数据源）/ ADR-032（Operation Model 快照 = 变体分页数据源）/ ADR-039（agent 层零变化）/ ADR-040（chat 唯一发射路径）/ 简报 `docs/tasks/results-canvas.md` #10（模型名禁令本条修订）；施工简报 `docs/tasks/flora-parity.md`；证据 = 用户 FLORA 工作台走查（2026-08-31）
+**Related**: ADR-041（本条修订其 D2/D5 与外壳条款）/ ADR-035（可操作画布永拒不变）/ ADR-036（只读基座不变）/ ADR-043（derived preview = 占位物化数据源）/ ADR-032（Operation Model 快照 = 变体分页数据源）/ ADR-039（agent 层零变化）/ ADR-040（chat 唯一发射路径）/ 简报 `docs/archive/tasks-done/results-canvas.md` #10（模型名禁令本条修订）；施工简报 `docs/archive/tasks-done/flora-parity.md`；证据 = 用户 FLORA 工作台走查（2026-08-31）
 
 ## ADR-052: 对话工作流母蓝图——厚 agent 判词 + 双引擎分离 + brief 账本 + ask 一等动作 + 预填评审卡 + 有界 loop 节点
 
@@ -1141,7 +1141,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 ## ADR-053: 提问机器形态律 + 插话支持——文字问对话形态 / 选项问阻塞形态 / 判定结算与提醒尾
 
-**Status**: Decided (2026-09-04，随 C3 批落地；同日 R1 选项问形态经用户拍板修订为**阻塞形态**——FLORA / Opus 双参照实测，两家选项问待决时输入均让位给问题卡；施工简报 `docs/tasks/de-dialect-question-machine.md`；规格同步 = CHAT_ARCH §8.5 + DIALOG_WORKFLOW §6)
+**Status**: Decided (2026-09-04，随 C3 批落地；同日 R1 选项问形态经用户拍板修订为**阻塞形态**——FLORA / Opus 双参照实测，两家选项问待决时输入均让位给问题卡；施工简报 `docs/archive/tasks-done/de-dialect-question-machine.md`；规格同步 = CHAT_ARCH §8.5 + DIALOG_WORKFLOW §6)
 
 **Context**: C1 改名批收敛了提问机器的词汇，两处死结留着：① **文字问（options 空）被迫套选项问的 pill 形态**，明明是普通对话却挂着 dock。② **autoResume 的「任意文本 = freeform 回答」是掩盖映射**——待决中用户说的任何话都被强记为答案，插话（"顺便问下进度"）被误记成回答、问题被吞。ADR-052 判词 5「每轮一问、每问可一词答」落地后，待决问题存在时用户照常说话是日常形态，系统必须判得清「这是回答 / 这是跳过 / 这是插话」。选项问的停靠形态同日两轮拍板定稿：初版随本条拆除阻塞 morph（非阻塞 pill + 输入恒活），用户对照 FLORA / Opus 走查后翻回——选项问不是普通对话，是**带快速回复的决断**，两家参照待决时输入都让位；文字问保持对话形态不翻。
 
@@ -1165,7 +1165,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - **插话由代码关键词表判定**（"顺便" / "另外"等）：否决——关键词表是新的启发式方言；判定本就是 LLM 的活，代码只做结算。**翻案条件**：无。
 - **`pending_disposition` 做成第五提案态**：否决——判定对象是「这条消息与待决的关系」，与「这条消息要什么动作」正交；并入提案会污染四态判别式的每个分支。**翻案条件**：出现必须与提案联合判定的真实案例。
 
-**Related**: ADR-052（判词 5 提问策略——本条为其落地形态）/ ADR-051（条款 3 被本条翻案）/ ADR-041（dock 三可见性态不受提问影响）/ CHAT_ARCH §8.5（规格落点）/ DIALOG_WORKFLOW §6（不变量登记）/ NAMING N-49（提问机器词汇批）/ 简报 `docs/tasks/de-dialect-question-machine.md`
+**Related**: ADR-052（判词 5 提问策略——本条为其落地形态）/ ADR-051（条款 3 被本条翻案）/ ADR-041（dock 三可见性态不受提问影响）/ CHAT_ARCH §8.5（规格落点）/ DIALOG_WORKFLOW §6（不变量登记）/ NAMING N-49（提问机器词汇批）/ 简报 `docs/archive/tasks-done/de-dialect-question-machine.md`
 
 ---
 
@@ -1302,7 +1302,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 - 消耗展示三面同源扩展为四面：dock 总价 / chat 单价 / 配方卡估价贴 + **节点卡空态估价**；确认卡节点锚定。
 - 施工首站 = **现有管线迁移上图**（修订环根治——「Target clip not found」类伤口死于「修订 = 图变更」），生成类配方（文生图/文生视频孤岛生长）第二站；排期 PROGRESS 拍板（六）——内核重建批插入支付批之后、W8 运营端之前。
 - **定居取景机制定稿（2026-09-08 用户拍板：布局一开始就定好）**：帧在门内一次性出生——add_node 可钉 `id`（stamper 专座），同批 connect 直接引用新生儿，门内定居 = parents-first 按最终边集一次赋值；禁「先乱长、二次重构」的两批次修复形态。既有帧永不动（append-only 保序律不变）。
-- 简报 `docs/tasks/done/graph-as-product.md`；原型 `scratch/node-ux-proposal.html` 为形态对照件（不走 React 直译，解剖以简报为准）。
+- 简报 `docs/archive/tasks-done/graph-as-product.md`；原型 `scratch/node-ux-proposal.html` 为形态对照件（不走 React 直译，解剖以简报为准）。
 
 **Related**: ADR-035（第 2 条翻案为「能力完备、手势缺席」）、ADR-036 / ADR-041 / ADR-051（投影模型条款就地翻案）、ADR-043（derived preview 投影随草稿图退役）、ADR-052（任务书并入图感知层；有界 loop 不变）、ADR-055（计费内核不动；§7 展示面改写）、ADR-039（四算子与四层地图不动）、ADR-016（clip-spec 唯一渲染契约不动）、ADR-040（配方 = 提示词不变——配方卡预填模板 = 草稿图的一种出生方式）
 
@@ -1534,7 +1534,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 ## ADR-072: 画布三族 + 两站拆分 + 任务书节点下线——画布 = 过程图与改点暴露
 
-**Status**: Decided (2026-09-12)；三族批 C1~C6 已落地（2026-09-14——词表 v3 三轴 / 两站 / materialize 折叠 / research 塌缩 / writer 升族 / 读面映射 / 相机批；task_book 节点下线 / ctx 边退役 / 分镜表表格档 / modifier 收杠杆 / compose 退役归后续批；施工简报 `docs/tasks/done/graph-canvas-three-families.md`；前端 ctx→T 入锚折叠与 @ glyph 退役已随拍板当日落地）
+**Status**: Decided (2026-09-12)；三族批 C1~C6 已落地（2026-09-14——词表 v3 三轴 / 两站 / materialize 折叠 / research 塌缩 / writer 升族 / 读面映射 / 相机批；task_book 节点下线 / ctx 边退役 / 分镜表表格档 / modifier 收杠杆 / compose 退役归后续批；施工简报 `docs/archive/tasks-done/graph-canvas-three-families.md`；前端 ctx→T 入锚折叠与 @ glyph 退役已随拍板当日落地）
 
 **Context**: 画布走查三伤连根——① 线与锚歪（出生动画 transform 污染 xyflow 挂载期 `getBoundingClientRect` 测量，事后无重测）；② 节点左舷冒出 @ 锚（task_book → 每节点的 ctx 叙事边）；③ PROMPT 区只有一行参数复读（`compose_spec_prompt` 拼装的假程序）。讨论中用户立下画布公理：**图 = 我们替用户完成任务的过程图，并暴露过程中用户可能想知道和修改的点**——筛子 = 每个元素回答「用户在这儿能知道什么、能改什么」，答不上就降级或删；prompt 测试 = 「改这段话，产出会变吗」，不会变的就是假杠杆。用户拓扑判词：transcript → 派生译文文档 → 派生成片；task_book 节点不该存在。MiniMax Design 节点划分（文本/表格/图片/视频/音频——按媒介不按生成方式，深度编辑面与驻留卡分离）互证。
 
@@ -1617,7 +1617,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 ## ADR-076: 画布词表 v3——type = 媒介五值、prototype = 能力原型三值、业务身份归 label/tool
 
-**Status**: Decided (2026-09-14，用户三参照五轮收敛拍板——ChatCut 功能菜单 / ElevenLabs「添加节点」（图像·视频·音频·文本 筛选 tab + 直白业务能力词菜单项）/ MiniMax Design「添加节点」（文本/表格/图片/视频/音频 媒介列表）)；三族批 C1~C6 同日落地（简报 `docs/tasks/done/graph-canvas-three-families.md` §3.5）
+**Status**: Decided (2026-09-14，用户三参照五轮收敛拍板——ChatCut 功能菜单 / ElevenLabs「添加节点」（图像·视频·音频·文本 筛选 tab + 直白业务能力词菜单项）/ MiniMax Design「添加节点」（文本/表格/图片/视频/音频 媒介列表）)；三族批 C1~C6 同日落地（简报 `docs/archive/tasks-done/graph-canvas-three-families.md` §3.5）
 
 **Context**: 画布三族批（ADR-072）批 A3 主体动工前的词表评审，五轮收敛：① `kind` 一词双义（`step.kind` = 工具名 N-35 vs 图节点 kind = 族）必须拆；② 节点身份词表先后两案被否——抽象案（源/文档/装配三词）「不直接」、业务案（post/captions/dubbing 业务词）「越层」——用户判词：**type 怎么可能和业务强绑定；type 是通用工作流流程节点概念，「能用于表达 xxx 业务」但本身不 named after 业务**（ElevenLabs 的媒介 tab = type 本身，菜单项 = type 上配置出的业务能力；MiniMax 的媒介列表同构互证）；③ generator/editor 之分是真实产品轴——编辑链配方卡的 PROMPT 参数回声 = editor 卡上挂了不属于它的部件——作为**能力原型**地基落成，缺省值定名 `manual`；④ `prototype` 属性名由用户亲定（不用 nature）。
 
@@ -1638,7 +1638,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 ## ADR-077: 会话层工具 loop 化——常备否决收窄终裁：生产封闭 / 服务收编 / 执行永拒
 
-**Status**: Decided (2026-09-14，用户需求模拟四轮讨论拍板——起点 = 乔布斯判词「完美的技术从产品需求入手」；走查参照 = ChatCut 式会话编辑器三连截图 + 终极旅程「把原视频做成案例视频那样子」；施工落点 = 简报 `docs/tasks/done/chat-tool-loop-migration.md`；旅程母文档 = `docs/JOURNEYS.md`)
+**Status**: Decided (2026-09-14，用户需求模拟四轮讨论拍板——起点 = 乔布斯判词「完美的技术从产品需求入手」；走查参照 = ChatCut 式会话编辑器三连截图 + 终极旅程「把原视频做成案例视频那样子」；施工落点 = 简报 `docs/archive/tasks-done/chat-tool-loop-migration.md`；旅程母文档 = `docs/JOURNEYS.md`)
 
 **Context**: chat 体验「少了智能」的病根经代码级诊断定案（`agents/base|contexts`、`chat/intent|service`、`pipeline/graph|orchestrator`、`providers/llm/minimax` 通读）：**脊柱（四层工程地图）无病，Loop 层被建成了纯裁决器**——有嘴（散文）有判断（verdict）没眼睛（感知）、没有在对的时刻说话的座位（主动发声）、一次定音（轮内单调用）。三轮需求模拟逐拍倒推（迷失用户首产 / 后续更改服务 / 终极案例仿制，全文 = JOURNEYS）：缺口集中于①感知（read-before-write 是相对量指令与推荐的**功能前提**，不是体验糖）②触发回合（理解完成 / run 完成时 agent 主动说话）③收官 reviewer（判断 + 下一步）④镜头跟随。同期 spike 实证（2026-09-11/12）：M3 唯一遵循 schema 的通道 = tool_calls（json_schema 被完全无视；截断 ~11% 走工具错误反馈吸收）——**模型为工具形态训练，JSON-in-prompt 判决逆模型纹理**（顺形律 ADR-064 的架构层兑现）。且我们已在逐个重建标准件（BoundedLoopNode = agent-in-step、ask 判决 = AskUserQuestion 工具、四态 union = 工具集）——方言翻译表（AGENT_ARCH §2.5）的存在本身就是方言的证据。修补判词：当年判「零 agent 全 workflow」时恐惧的对象 = 不可估价/不可测试/不可预测的**开放式自主**；本轮模拟证明该恐惧只命中执行 loop 与拓扑塑形，不命中有界感知。
 
@@ -1674,7 +1674,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 5. **exemplar 参数源**：任务书参数的第四来源（user-stated / inferred / default 之外 + **exemplar-derived**）。纪律：**参数由代码从骨架映射，LLM 永不写 spec**——拓扑铁律（ADR-028）不破，骨架是数据不是指令。
 6. **双抽取分工**：understand 答「它说了什么」（内容），decompile 答「它怎么做的」（工艺）——两种抽取皆资产级、内容寻址、跨项目可复用；plan 的装配签名加 craft 骨架输入（纯度签名化扩展先例 = §5.3 纪律内）。
 
-**Consequences**: 施工归简报 T5（`docs/tasks/done/chat-tool-loop-migration.md`）。decompiler 住 pipeline 内部 crew（编译期注入，永不进用户提议空间——与 materialize_source 同族）；CraftSkeleton（工作名）= 新内部产物类型（visible_outputs 过滤族同例）。能力缺口清单（案例里做不到的字段）进 PROGRESS 需求池按价值排期。验收 = 案例仿制旅程 e2e（JOURNEYS §2 的分支树逐条过）+ 骨架字段的确定性分层断言（确定性字段零 LLM 介入）。
+**Consequences**: 施工归简报 T5（`docs/archive/tasks-done/chat-tool-loop-migration.md`）。decompiler 住 pipeline 内部 crew（编译期注入，永不进用户提议空间——与 materialize_source 同族）；CraftSkeleton（工作名）= 新内部产物类型（visible_outputs 过滤族同例）。能力缺口清单（案例里做不到的字段）进 PROGRESS 需求池按价值排期。验收 = 案例仿制旅程 e2e（JOURNEYS §2 的分支树逐条过）+ 骨架字段的确定性分层断言（确定性字段零 LLM 介入）。
 
 **Related**: ADR-077（会话层工具 loop 化——终极旅程的服务面）/ ADR-016（clip-spec 唯一契约——本条是它的反向通道）/ ADR-044（轨道模型——骨架的字段家）/ ADR-028（拓扑铁律——exemplar 参数源不破它）/ ADR-043（任务书语法——第四参数源的语法座位）
 
@@ -1774,3 +1774,42 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Consequences**: 机械感的根（2 句律 + 文件名级认知）消除；判断的诚实性由证据链代码可查证（注入在 assemble，读到的才说）。prompt 面改动过 ADR-071 T2 门禁。验收（用户判词）：**点 Start 前用户能从 Chat 确认 agent 真懂了素材，且不听到重复的 DAG/计划描述**——不是「多了一句话」。
 
 **Related**: ADR-080（单一叙事者——本条是同一 writer 的「 richer turn」兑现）/ ADR-077（感知族读工具——注入复用其格式化律）/ ADR-058（展示文案二源律——判断句的素材认知源自世界自证的物化行）/ ADR-060（echo 防编造律——grounding 链是其素材侧推广）
+## ADR-084: 言语语义管线——read 静默律 + Start CTA 归 dock + grounding 两态诚实
+
+**Status**: Decided (2026-09-17；Speech Lifecycle Forensic（Kimi/Claude 代码取证）+ 用户两点纠偏后拍板，同日施工)
+
+**Context**: ADR-083 信任锚上线后实测仍机械：read-before-plan 回合的最终消息以 "I'll pull the video's language…" 开头。取证定位（`tool_loop.py` 言语账本 + `intent_router_system.j2` SPEECH 律）：SPEECH 律 "ALWAYS speak first, then call the tool" 无条件覆盖 read 调用 → 过程叙事在 iteration 0 流出 → accepted read 的散文按「已流式不可擦」约束并入信封前缀（`speech_parts.append`）→ 过程话被永久持久化。根因是 **speech 语义契约缺失**：系统只有一个 content channel、一个账本，唯一区分是 rejected vs accepted，没有 process vs settled 维度。同时 prompt 内部存在两组冲突：`_read_tools.j2` 的「do not narrate the lookup」从句对抗不了 SPEECH 段的最高位禁令；duty ③ 让 Chat 指向 Start 与 ADR-070「dock pill 是确认拍唯一座位」重复。
+
+**Decision**:
+
+1. **read 静默律（G1，最小正确修复）**：SPEECH 契约从「speak first, then call the tool」收窄为「speak first, then call the **TERMINAL** tool; before a READ tool say nothing at all」。read 迭代的 liveness 全部由 inspecting 相位帧承担（`on_tool_call` name-known 帧的既有座位）；过程叙事（'I'll pull…'/'Let me check…'/'I'll inspect…'）= banned speech。**`speech_parts` / ToolLoop 账本一行不改**——过程话不再流出，「已流式不可擦」约束不再被触发，账本自然无害化。两个 loop 面（`intent_router_system.j2` / `chat_intent_system.j2`）+ 共享 `_read_tools.j2` 同批收窄。
+2. **语义角色而非句式（维持 ADR-083 意图）**：present_plan 的 echo 定义的是 semantic duties（素材判断 → 用户意图 → 完成标准+下一步），不是机械句数；本条不新增模板。
+3. **grounding 两态诚实（用户纠偏②，不再是开放产品问题）**：「理解用户需求」和「已读用户素材」是两个不同的事实，永不混淆。素材内容本回合不可读（仍在处理——read 明说或上下文无文本）时，duty ① 不退化为沉默，而是变成**一句诚实短句**：我理解了你想要什么、内容读取在处理完成后落地、计划先按你自己的话起草。四级证据链（ADR-083 判词 2）不变。
+4. **Start CTA 归属（用户纠偏，比取证建议更坚决）**：≥2 task 的 task_book 回合，Chat 永不邀请言语确认——no 'say the word' / no 'just say start' / no 'tell me when you're ready'；duty ③ 最多一次性平指 dock 的 Start 按钮。Chat 可以解释 Start 的意义，但不拥有 Start 的交互职责（Canvas = 结构，Chat = 理解+简述，Dock = 唯一 Start 动作）。单任务无按钮分支的会话式确认（DENSITY 律）不变。
+
+**明确不做**：不给 `speech_parts` 加 process/value/settled 三角色（harness 层过度修复——prompt 一句话能解决的事不变成机制）；不动 trigger writer（ADR-080 单一叙事者维持）；不动 Canvas；不改 ToolLoop 代码；单任务会话式确认不波及。
+
+**Consequences**: 最终消息只承载三类用户价值言语——「我理解了什么 / 我准备做什么 / 你需要决定什么」；内部执行状态（调用哪个工具、拼几个 task）归 transient 相位帧，永不入持久消息。Interaction Integrity 推进一步：**不是所有真实发生的内部状态都要展示；但展示给用户的每一项状态都必须真实且有用户价值**。回归面 = chat_scenarios S20（A 部未就绪：read-silent 流式空读 + 处理中披露 + 过程话负向标记；B 部就绪：grounded 内容词代理断言 + ≥2 task 无言语确认邀请 + 流式律）。prompt 面改动过 ADR-071 T2 门禁。
+
+**Related**: ADR-083（信任锚 echo——本条修其上线后暴露的 speech 语义缝；grounding 链与注入机制不动）/ ADR-080（单一叙事者——trigger 静默维持）/ ADR-070（确认拍 = dock pill 唯一座位——本条把言语确认从 Chat 侧收干净）/ ADR-077（工具 loop——read 静默律是其言语账本语义的契约层补全）
+## ADR-085: 一回合多交付——Phase / Checkpoint / Settled 三层用户可见交付模型
+
+**Status**: **Implemented + Observable + Intentionally Opportunistic** (2026-09-17；结构审计（Kimi/Claude 代码取证）+ 用户三条约束纠偏拍板 → 同日施工 → 评审四点收口 + 观察指标补齐。验证待用户自跑：纯套件 / prompt gate / S20B+S21。**机制到此停住**——下一步是真实场景观察，不是再设计)
+
+**落地座位**（判词 5 的兑现）：路由规则在 `tool_loop.py` 的 observation 分支（quiet 迭代 + eligible 前驱 + 另一条 read → `on_checkpoint`，≤2 闸，超出丢弃记日志；iteration 0 豁免 = 违规回退账本；无通道 = 账本兜底）；资格声明在 `perception/__init__.py`（`checkpoint_eligible`：get_understanding / get_asset / get_craft_skeleton 三席）；持久化在 `service._checkpoint_callback`（`intent={"type":"checkpoint"}` 行，flush-only 随回合一次 commit）；SSE 帧 `assistant.checkpoint` 在 `routes.py`；前端分段在 `ChatDock`（`typeTargetId` + `checkpointChain` 串行化，streamId 主泡不动）；言语语义在 `_read_tools.j2`（CHECKPOINTS 段：结果陈述 = 唯一例外，终答必须独立成文不复读）。确定性回归 = `test_tool_loop_pure.py` 五条路由用例 + `chat_scenarios` S20B opportunistic 形态断言。
+
+**Context**: ADR-084 关掉过程话之后，「机械感」的结构性根因完整暴露：当前系统只有两个用户可见座位——transient 相位（「在做什么」）与 settled 终答（「最终怎么做」），中间缺了「**我刚发现了什么**」的交付座位。审计坐实 Turn ↔ Message 的 1:1 绑定是**产出契约层**的实现便利而非产品必需：first binding = `LoopResult.prose: str` + `PlanTurnOutcome(Message)`（tool_loop/plan_turn），前端对应物 = streamId 一键一泡；DB（messages 无 turn 分组，assistant 行数无约束）与 SSE（`_sse_pump` 多路复用，`question.preview` 是回合中途结构化帧的现存先例）都不是瓶颈。缺少 checkpoint 座位时，读到的有价值结果只有两个去向：并入终答（ADR-084 已禁的前形态）或退化成无内容的相位标签——「看不到它在干活」与「听到它念操作日志」是同一个缺口的两副面孔。
+
+**Decision**:
+
+1. **三层交付模型**：一个用户回合可以产生多个有意义的 user-facing deliveries——**Phase**（我现在在做什么：transient，相位帧，不落库，被下一相位替换）/ **Checkpoint**（我刚发现了什么：grounded judgment，留在消息流）/ **Settled**（基于发现我最终准备怎么做：terminal，唯一终态消息）。Checkpoint 不是 chain-of-thought：它 = 真实动作 + 真实结果 + 用户价值，永不携带内部推理。
+2. **`on_observe` 是允许边界，不是生成器**：checkpoint 的真实链路 = ToolObservation → 下一轮 LLM 迭代判断「这个结果值得告诉用户」→ 生成 checkpoint prose → `assistant.checkpoint` 帧。checkpoint 必须是 grounded judgment（同一 ADR-083 证据层级），永不是 raw tool output 的搬运。
+3. **Registry 声明资格，不声明触发**：感知族工具条目带 `checkpoint_eligible`（get_understanding 级 ✅ / get_asset 级 △ / 目录浏览族 ❌），最终是否产生由「是否产生新的用户相关信息」当场判定（同回合重复读取同内容 = 不新 = 不说）；每 turn ≤2，**earned，不是配额**——纯 answer 回合的正确 checkpoint 数是零。
+4. **Checkpoint 落库，且带显式语义类型**：checkpoint 行与普通 settled assistant message 分开（明确 kind/语义标记），四项目标——刷新可恢复 / future context 可选择性读取 / replay 不把 checkpoint 当最终回答 / trigger_review·checkpoint·settled 三语义分家。是一回合多**交付**，不是一回合多**assistant 行**。**持久化语义（2026-09-17 评审拍板③）**：checkpoint 是 **live delivery，不是 durable delivery**——落库 flush-only 随回合一次 commit，回合中途失败则已展示的 checkpoint 随事务回滚（刷新后消失）。第一版**不为此扩大事务模型**（先证明 checkpoint UX 本身成立）；若未来证明「已交付事实随失败消失」伤信任，再独立评估中途 commit，那是一条新 ADR。
+5. **Harness 路由机制（ToolLoop 内核不动）**：非终态调用前的散文 = checkpoint 候选（走新通道，**永不入 `speech_parts`**）；终态调用前的散文 = settled speech（账本现状不动）。iteration 0 的 read 前叙事仍被 ADR-084 禁（无先有 observation，无 grounded 内容可说）——**iteration 0 豁免是 streaming safety 的防御兜底，不是产品行为**：模型违规后不让 UI 坏掉，如此而已（测试面 `test_iteration_zero_prose_stays_in_the_ledger` 锁的正是这个兜底语义）。checkpoint 只可能诞生于 observation 之后的迭代。SSE 侧新增 `assistant.checkpoint` 帧（`_sse_pump` 既有队列直过）；前端 stream key 从「一发送一键」变「一键一段」——checkpoint 帧 finalize 当前泡并开新泡，帧携带完整文本走打字机节拍（安静迭代零 delta，打字机律最后闸门同形适用）。
+
+**明确不做**：不改 ToolLoop 的 terminal/max_iterations/账本语义；不展示 raw reasoning / 候选方案 / 概率；不为每个 tool 发 checkpoint；不恢复多 writer（ADR-080 维持）；不引入新 execution architecture（ExecutionAttempt / 新 Agent 状态机 / Media IR / 新里程碑）；不把 registry 变成产品规则系统（只声明资格）。
+
+**Consequences**: Chat 从「一个会生成漂亮答案的聊天框」变成「能看到它在干活的 Agent」——用户看到的是有意义的工作进展，不是内部思维日志。caption 场景理想序列：User → [Phase] 正在读取素材 → [Checkpoint] 我看到了——关于 X 的演讲，核心是 Y（grounded in understanding）→ [Phase] 正在整理计划 → [Settled] 两版字幕：中文双语 + 法语，计划在画布上 → Canvas 结构 / Dock Start。Interaction Integrity 的最终形态：**不是所有真实发生的内部状态都展示；但展示的每一项都必须真实、有结果、有用户价值**。checkpoint 的验收问句（2026-09-17 评审拍板）：**「这条消息是用户刚刚真的需要知道的信息，还是系统只是想证明自己做过某个动作？」**——前者过，后者禁。**已知风险与验证义务（评审拍板①）**：路由规则要求「结果陈述后再跟一条 read」才出 checkpoint，主路径 `get_understanding → present_plan`（单读直出）**结构性零 checkpoint**——判断句由终答的 duty ① 承载（ADR-083），这不是缺陷；但如果实测发现 earned 条件在主路径上**系统性过低**、理解锚沦为偶然体验，则重审路由（候选：显式 checkpoint 工具 / 终态前分流），那是一次新评审而不是静默扩闸。命中率数据面 = `tool_loop_checkpoint` structlog（含 predecessor）+ **`tool_loop_turn` 每回合一条汇总**（reads 序列 / eligible_reads / checkpoints / outcome——eligible 占比、eligible→checkpoint 转化、checkpoint→settled 三比例及「哪类 read 真挣到 checkpoint」全可算，评审拍板）+ `chat_scenarios` S21 探针（四场景 PRINT read 序列与 checkpoint 计数，只锁硬律不锁出现）。资格纪律（评审拍板④）：`checkpoint_eligible` 永是资格不是触发；「信息生产 vs 动作证明」的判定永远归 new + user-relevant + changes understanding。回归面 = chat_scenarios S20B/S21 + `test_tool_loop_pure.py` 五条路由用例；prompt 面改动过 ADR-071 T2 门禁。
+
+**Related**: ADR-084（read 静默律——本条是它的补全而非翻案：read 前静默不动，read 后的结果言语走新通道）/ ADR-083（信任锚——checkpoint 的 grounding 层级同源）/ ADR-077（工具 loop——checkpoint 是其呈现协议补全，内核不动）/ ADR-080（单一叙事者——checkpoint 不引入第二 writer，它仍是同一 turn 的言语）/ ADR-070（确认拍 = dock pill——Settled 层的 Start 归属不变）
