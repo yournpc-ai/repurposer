@@ -149,7 +149,7 @@ Generate → create project → attach staged（秒级）→ 导航 → 首条 /
 
 ## 6. Batch B — 统一相位 / Chat 生命周期（收窄版 + readiness gate）
 
-> **状态：代码已落（2026-09-18，commit `817a5a3`，验证归用户自跑）**。
+> **状态：代码已落（2026-09-18，commit `308c7a7`，验证归用户自跑）**。
 > **缝①+缝②（相位清除协议，I-PFA-06 定型——覆盖律 / 清除帧 / 终帧律，全文 = CHAT_ARCH §8.6 末段）**：无相位映射的调用名（ask_user / answer / start_run）一成为已知，server 发显式清除帧 `{"phase": null}`（发射座 = `apps/api/app/chat/routes.py:_make_tool_hooks.on_tool_call` else 分支）；client `"phase" in payload` 区分清除帧与裸 keepalive（`apps/web/src/lib/chat-stream.ts` 类型 + `ChatDock.tsx` 两处 onThinking）；sendChat 补上信封/失败路径的归零 parity（终帧律，与 streamAnswer 同座）。零新相位名、零新 i18n key、打字机律两牙与 `chatBusy && !proseActive` 可见性门未动；静态 `chat.thinking` 回落只剩真黑窗（首帧前）。
 > **readiness gate（I-PFA-07）**：就绪事实改为代码盖章——plan path assemble 计算 processing/failed 文件数，盖 `material_pending_line` 进上下文（`plan_turn.py` assemble → `intent.py:_assemble_plan_turn` → `intent_router.j2` 渲染块；`material_state` 三值枚举不动——它是根判断的存在性语义，就绪事实走独立 context line）；grounding 两态诚实推广到 answer 路径（`chat_intent_system.j2` Rules 新增 Material readiness 条款 + `intent_router_system.j2` 条款认知 Material status 行）；「我不能读」类路径消灭 = `executes.py:get_understanding` 的 pending/failed 拆分（failed 不再被说成 "still processing"，删掉诱导编造的 "answer from what you know"）+ `get_asset` 的 failed 分行。就绪后主动说 = 既有 `understanding_warmed` trigger（ADR-080 座位不动；pending task_book 时按单一叙事者律合法静默）。
 > **缝③**：`home.generating` 在 Batch A 后已是零消费死 key（launch 窗 = 秒级，send 钮 spinner 即全部 UI）——en/zh 两 locale 的死 key 已删，不新增状态机、不新增文案（launch 窗诚实形态 = spinner 本身）。
