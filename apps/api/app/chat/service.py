@@ -1752,6 +1752,13 @@ async def answer_question(
                 follow_up, _run_id, bailed_run_ids, _settled = await _propose_turn(
                     db, user_id, conversation, project, say, [], history[-6:],
                     on_delta=on_delta,
+                    # I-PFA-06 parity (Batch B 验收修复): the chat-path
+                    # continuation needs the phase pipe too — without it
+                    # composing/repairing/creating_run stay silent on this
+                    # branch and the inspecting label goes stale until the
+                    # envelope (the exact gap 交互完整性批 C closed on the
+                    # main paths).
+                    on_phase=on_phase,
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
                 )
