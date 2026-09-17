@@ -549,3 +549,131 @@ def test_declaration_guards() -> None:
     _make_agent("tl_roster", client)
     with pytest.raises(RuntimeError, match="Duplicate"):
         _make_agent("tl_roster", client)
+
+
+# ---- ADR-085 checkpoint channel ----------------------------------------------
+#
+# The ONE routing rule: prose before a TERMINAL call is settled speech (the
+# ledger, unchanged); prose before another READ in a quiet iteration that
+# follows an ELIGIBLE read is a checkpoint — it rides on_checkpoint with its
+# full text and never enters the ledger. Iteration 0 is exempt (its prose may
+# have streamed — the ledger is the violation fallback), and without an
+# on_checkpoint channel (the one-shot JSON path) the ledger keeps everything.
+
+
+def _eligible_read(name: str = "understanding") -> ChatTool:
+    return ChatTool(name, "Read it.", None, terminal=False, checkpoint_eligible=True)
+
+
+async def _reads_observe(name: str, params: Any, prose: str):
+    if name in ("understanding", "lookup"):
+        return ToolObservation("world")
+    return None
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_fires_for_result_speech_after_an_eligible_read() -> None:
+    """iter0 silent eligible read → iter1 result prose + another read → the
+    prose rides the checkpoint channel; the terminal call's settled speech
+    never contains it."""
+    tools = [_eligible_read(), _read_tool(), ChatTool("echo", "Echo.", EchoArgs)]
+    client = StubClient([
+        _call("understanding", {}, prose=""),
+        _call("lookup", {}, prose="I read it — a keynote on urban heat"),
+        _call("echo", {"text": "done"}, prose="the plan"),
+    ])
+    checkpoints: list[str] = []
+    seen: list[tuple[str, str]] = []
+
+    async def execute(name: str, params: Any, prose: str):
+        seen.append((name, prose))
+        return await _reads_observe(name, params, prose)
+
+    agent = _make_agent("tl_cp_fires", client, tools=tools)
+    result = await agent.call_loop(
+        execute, on_checkpoint=lambda t: checkpoints.append(t)
+    )
+    assert checkpoints == ["I read it — a keynote on urban heat"]
+    assert result.tool_name == "echo" and result.prose == "the plan"
+    # The terminal execution received ONLY the settled speech — the
+    # checkpoint never enters the composed reply.
+    assert seen[-1] == ("echo", "the plan")
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_cap_drops_without_leaking_into_the_ledger() -> None:
+    """≤2 per turn, earned never scheduled: a breaching model loses the
+    channel — the third checkpoint prose is dropped, NOT merged into the
+    settled reply."""
+    tools = [_eligible_read(), ChatTool("echo", "Echo.", EchoArgs)]
+    client = StubClient([
+        _call("understanding", {}, prose=""),
+        _call("understanding", {}, prose="finding one"),
+        _call("understanding", {}, prose="finding two"),
+        _call("understanding", {}, prose="finding three"),
+        _call("echo", {"text": "done"}, prose="the plan"),
+    ])
+    checkpoints: list[str] = []
+    agent = _make_agent("tl_cp_cap", client, tools=tools, max_iterations=6)
+    result = await agent.call_loop(
+        _reads_observe, on_checkpoint=lambda t: checkpoints.append(t)
+    )
+    assert checkpoints == ["finding one", "finding two"]
+    assert result.prose == "the plan"
+
+
+@pytest.mark.asyncio
+async def test_iteration_zero_prose_stays_in_the_ledger() -> None:
+    """The violation fallback: iteration-0 prose before a read may have
+    streamed — erasing it would glitch, so the ledger keeps it (ADR-084's
+    read-silent law keeps it empty by design; the checkpoint channel never
+    claims it)."""
+    tools = [_eligible_read(), ChatTool("echo", "Echo.", EchoArgs)]
+    client = StubClient([
+        _call("understanding", {}, prose="I'll pull…"),
+        _call("echo", {"text": "done"}, prose="the plan"),
+    ])
+    checkpoints: list[str] = []
+    agent = _make_agent("tl_cp_iter0", client, tools=tools)
+    result = await agent.call_loop(
+        _reads_observe,
+        on_delta=lambda t: None,
+        on_checkpoint=lambda t: checkpoints.append(t),
+    )
+    assert checkpoints == []
+    assert result.prose == "I'll pull…\n\nthe plan"
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_needs_an_eligible_predecessor() -> None:
+    """Eligibility is a property of the read being REPORTED ON, never of the
+    call the prose precedes: result talk after a non-eligible read stays in
+    the ledger."""
+    tools = [_read_tool(), _eligible_read(), ChatTool("echo", "Echo.", EchoArgs)]
+    client = StubClient([
+        _call("lookup", {}, prose=""),
+        _call("understanding", {}, prose="result talk after a catalog browse"),
+        _call("echo", {"text": "done"}, prose="the plan"),
+    ])
+    checkpoints: list[str] = []
+    agent = _make_agent("tl_cp_eligible", client, tools=tools)
+    result = await agent.call_loop(
+        _reads_observe, on_checkpoint=lambda t: checkpoints.append(t)
+    )
+    assert checkpoints == []
+    assert result.prose == "result talk after a catalog browse\n\nthe plan"
+
+
+@pytest.mark.asyncio
+async def test_no_checkpoint_channel_keeps_the_ledger() -> None:
+    """The one-shot JSON path (on_checkpoint=None): nothing is lost — the
+    prose composes into the envelope exactly as before ADR-085."""
+    tools = [_eligible_read(), _read_tool(), ChatTool("echo", "Echo.", EchoArgs)]
+    client = StubClient([
+        _call("understanding", {}, prose=""),
+        _call("lookup", {}, prose="result talk"),
+        _call("echo", {"text": "done"}, prose="the plan"),
+    ])
+    agent = _make_agent("tl_cp_json", client, tools=tools)
+    result = await agent.call_loop(_reads_observe)
+    assert result.prose == "result talk\n\nthe plan"

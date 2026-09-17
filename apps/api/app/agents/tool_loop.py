@@ -89,12 +89,18 @@ class ChatTool:
     call (``start_run``). ``terminal``: a terminal tool's accepted call ends
     the turn (终态工具一调即停); a non-terminal tool (the perception family's
     reads) returns a ``ToolObservation`` and the loop iterates.
+    ``checkpoint_eligible`` (ADR-085 判词 3): the read's result MAY earn a
+    user-facing checkpoint — the registry declares ELIGIBILITY, never a
+    trigger; whether the next iteration's prose actually rides the
+    checkpoint channel is the loop's routing (earned, capped, never the
+    ledger). Terminal tools never carry it.
     """
 
     name: str
     description: str
     params_model: type[BaseModel] | None
     terminal: bool = True
+    checkpoint_eligible: bool = False
 
 
 def tool_spec(tool: ChatTool) -> dict:
@@ -113,6 +119,11 @@ def tool_spec(tool: ChatTool) -> dict:
             "parameters": parameters,
         },
     }
+
+
+# 言语账本 (T2b) 见 ``call_loop``; ADR-085 的 checkpoint 通道与其分家——
+# checkpoint 散文永不入账本。
+MAX_CHECKPOINTS_PER_TURN = 2
 
 
 @dataclass
@@ -229,6 +240,7 @@ class ToolLoopAgent:
         on_tool_ready: _Hook | None = None,
         on_repair: _Hook | None = None,
         on_observe: _Hook | None = None,
+        on_checkpoint: _Hook | None = None,
         **ctx: Any,
     ) -> LoopResult:
         """Run the bounded loop: assemble → render → [generate_with_tools →
@@ -265,6 +277,19 @@ class ToolLoopAgent:
           stale inspecting label through the 15-25s quiet window). Fires
           with the read tool's name, once per accepted read; never for a
           rejection (that has ``on_repair``).
+        - ``on_checkpoint``: a CHECKPOINT was delivered (ADR-085 判词 2/5) —
+          the prose of a quiet iteration that followed an eligible read and
+          chose ANOTHER read. ``on_observe`` is only the permitting boundary
+          (the observation landed); the checkpoint itself is the NEXT
+          iteration's grounded judgment, emitted here with its full text
+          (quiet iterations never stream — the frontend paces it out under
+          the typewriter law). Checkpoint speech rides its own channel: it
+          never enters ``speech_parts``, so the settled reply must stand
+          alone. Fires at most ``MAX_CHECKPOINTS_PER_TURN`` times per turn;
+          beyond the cap the prose is dropped with a log (earned, never
+          scheduled — a breaching model loses the channel, it does not
+          overflow it). None (the one-shot JSON path) keeps the ledger
+          behavior — the prose composes into the envelope as before.
         """
         capabilities = getattr(self.client, "capabilities", None)
         if capabilities is None or not capabilities.supports_native_tools:
@@ -294,6 +319,42 @@ class ToolLoopAgent:
         # the LoopResult both carry the composed whole). A rejected call's
         # speech is replaced speech and never enters the parts.
         speech_parts: list[str] = []
+        # Checkpoint channel state (ADR-085 判词 2/5): ``last_read_eligible``
+        # remembers whether the PREVIOUS accepted read's result may earn a
+        # user-facing checkpoint (registry-declared eligibility — the prose
+        # of THIS iteration reports on THAT observation, so eligibility is a
+        # property of the predecessor read, never of the call it precedes).
+        # ``checkpoints_sent`` is the per-turn cap counter (≤2, earned).
+        # ``last_read_name`` rides for the hit-rate log (评审 2026-09-17:
+        # whether the earned condition fires on the MAIN path — e.g.
+        # get_understanding → present_plan carries no checkpoint — is an
+        # observed fact, never an assumption).
+        last_read_eligible = False
+        last_read_name: str | None = None
+        checkpoints_sent = 0
+        # Turn-summary observability (ADR-085 评审 2026-09-17 — 「不需要
+        # dashboard，日志里能查就够」): ONE line per turn answers the three
+        # hit-rate questions — eligible-read share / eligible→checkpoint
+        # conversion / checkpoint→settled — and, over real traffic, WHICH
+        # eligible reads actually earn checkpoints (the registry's future
+        # evidence base). Per-read logging stays out on purpose.
+        accepted_reads: list[tuple[str, bool]] = []
+
+        def _finish(result: LoopResult) -> LoopResult:
+            logger.info(
+                "tool_loop_turn",
+                agent=self.name,
+                outcome=(
+                    "exhausted"
+                    if result.exhausted
+                    else result.tool_name or "bare_reply"
+                ),
+                iterations=result.iterations,
+                reads=[name for name, _ in accepted_reads],
+                eligible_reads=sum(1 for _, eligible in accepted_reads if eligible),
+                checkpoints=checkpoints_sent,
+            )
+            return result
         # The wire continuation after an accepted read: the assistant tool_call
         # echo + the role:tool observation (the standard OpenAI form). The
         # tail SURVIVES later rejections (they ride the user-message echo —
@@ -350,12 +411,14 @@ class ToolLoopAgent:
             if not result.tool_calls:
                 # Bare final reply — the read-tolerant answer call (any
                 # kept read-iteration speech composes in front of it).
-                return LoopResult(
-                    prose=_compose_speech([*speech_parts, prose]),
-                    tool_name=None,
-                    params=None,
-                    iterations=iteration + 1,
-                    calls=calls,
+                return _finish(
+                    LoopResult(
+                        prose=_compose_speech([*speech_parts, prose]),
+                        tool_name=None,
+                        params=None,
+                        iterations=iteration + 1,
+                        calls=calls,
+                    )
                 )
             call = result.tool_calls[0]
             if len(result.tool_calls) > 1:
@@ -426,14 +489,42 @@ class ToolLoopAgent:
                         "— the declaration and the execute table skewed "
                         "(a terminal call ends the turn, never observes)"
                     )
-                # A read accepted (T2b 感知族): the iteration's speech is KEPT
-                # (it may have streamed — erasing it would glitch; the
-                # envelope's prefix composes it), and the observation rides
-                # the wire's standard continuation so the next iteration
-                # reads what it asked for. Read executions never reject on
-                # content — a miss is an honest empty observation — but a
-                # feedback string stays legal and iterates like any rejection.
-                speech_parts.append(prose)
+                # A read accepted (T2b 感知族): the iteration's speech is
+                # routed (ADR-085 判词 5 — the ONE routing rule): prose before
+                # a TERMINAL call is settled speech (the ledger, unchanged);
+                # prose before another READ in a quiet iteration that follows
+                # an eligible read is a CHECKPOINT — it rides on_checkpoint,
+                # never the ledger. Iteration 0 is exempt (its prose may have
+                # streamed — erasing it would glitch; ADR-084's read-silent
+                # law keeps it empty by design, the ledger is the violation
+                # fallback). Without an on_checkpoint channel (the one-shot
+                # JSON path) the ledger keeps everything.
+                if (
+                    iteration > 0
+                    and prose.strip()
+                    and last_read_eligible
+                    and on_checkpoint is not None
+                ):
+                    if checkpoints_sent < MAX_CHECKPOINTS_PER_TURN:
+                        await _emit(on_checkpoint, prose.strip())
+                        checkpoints_sent += 1
+                        logger.info(
+                            "tool_loop_checkpoint",
+                            agent=self.name,
+                            iteration=iteration,
+                            predecessor=last_read_name,
+                        )
+                    else:
+                        logger.info(
+                            "tool_loop_checkpoint_capped",
+                            agent=self.name,
+                            iteration=iteration,
+                        )
+                else:
+                    speech_parts.append(prose)
+                last_read_eligible = tool.checkpoint_eligible
+                last_read_name = call.name
+                accepted_reads.append((call.name, tool.checkpoint_eligible))
                 call_id = call.id or f"call_{iteration}"
                 observation_tail.append(
                     {
@@ -474,12 +565,14 @@ class ToolLoopAgent:
                         "— the declaration and the execute table skewed "
                         "(a read never ends the turn)"
                     )
-                return LoopResult(
-                    prose=speech,
-                    tool_name=call.name,
-                    params=params,
-                    iterations=iteration + 1,
-                    calls=calls,
+                return _finish(
+                    LoopResult(
+                        prose=speech,
+                        tool_name=call.name,
+                        params=params,
+                        iterations=iteration + 1,
+                        calls=calls,
+                    )
                 )
             logger.info(
                 "tool_loop_rejection",
@@ -494,11 +587,13 @@ class ToolLoopAgent:
                 "content": user_prompt + _loop_echo(outcome),
             }
             prev_rejected = True
-        return LoopResult(
-            prose="",
-            tool_name=None,
-            params=None,
-            iterations=self.max_iterations,
-            calls=calls,
-            exhausted=True,
+        return _finish(
+            LoopResult(
+                prose="",
+                tool_name=None,
+                params=None,
+                iterations=self.max_iterations,
+                calls=calls,
+                exhausted=True,
+            )
         )

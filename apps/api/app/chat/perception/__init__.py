@@ -22,6 +22,13 @@ with the code — never a plugin system. Each entry carries exactly:
 - ``activity_key`` — the 碎碎念 copy key for the SSE ``inspecting`` phase
   frame (i18n key, resolved client-side; the tool NAME never reaches the
   user face — 简报 §3 禁令).
+- ``checkpoint_eligible`` — ADR-085 判词 3: the read's result MAY earn a
+  user-facing checkpoint (a grounded result statement after the
+  observation). The registry declares ELIGIBILITY, never a trigger — the
+  model judges whether the result is new user-relevant information, and
+  the loop caps it (≤2/turn, earned). Eligible = information-producing
+  reads (what the material IS, what the reference's craft IS, a confirmed
+  source language); catalog browses / status reads / edit prep never are.
 
 The loop-facing projection is ``perception_chat_tools`` (each entry becomes
 a non-terminal ``ChatTool``); the turn runners dispatch reads through
@@ -53,6 +60,7 @@ class PerceptionTool:
     params_model: type[BaseModel] | None
     execute: Any  # (db, project, params) -> str — the observation text
     activity_key: str  # i18n key for the inspecting phase frame
+    checkpoint_eligible: bool = False  # ADR-085: eligibility, not a trigger
 
 
 PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
@@ -80,6 +88,9 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             params_model=None,
             execute=executes.get_understanding,
             activity_key="chat.inspecting.understanding",
+            # ADR-085: the material judgment is THE checkpoint-worthy read —
+            # 「我看了——你在讲 X」 is new user-relevant information.
+            checkpoint_eligible=True,
         ),
         PerceptionTool(
             name="list_caption_styles",
@@ -122,6 +133,10 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             params_model=GetAssetParams,
             execute=executes.get_asset,
             activity_key="chat.inspecting.asset",
+            # ADR-085: borderline-eligible — a confirmed source language or a
+            # 'still processing' fact can be worth a checkpoint; duration
+            # lookups are not (the model judges, the registry only permits).
+            checkpoint_eligible=True,
         ),
         PerceptionTool(
             name="get_craft_skeleton",
@@ -135,6 +150,9 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             params_model=GetCraftSkeletonParams,
             execute=executes.get_craft_skeleton,
             activity_key="chat.inspecting.craftSkeleton",
+            # ADR-085: the reference case's decoded craft is a material
+            # judgment of its own — same eligibility as get_understanding.
+            checkpoint_eligible=True,
         ),
     ]
 }
@@ -154,6 +172,7 @@ def perception_chat_tools(*names: str) -> list[ChatTool]:
                 description=entry.description,
                 params_model=entry.params_model,
                 terminal=False,
+                checkpoint_eligible=entry.checkpoint_eligible,
             )
         )
     return tools

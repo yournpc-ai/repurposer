@@ -1854,6 +1854,7 @@ async def _plan_turn(
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
+    on_checkpoint=None,
 ) -> tuple[Message, UUID | None, Message | None, list[UUID]]:
     """Plan path (intent-surface-unification W1): build / refine / confirm
     the plan inside the chat loop — the ONLY intent surface.
@@ -1886,6 +1887,7 @@ async def _plan_turn(
         on_phase=on_phase,
         on_tool_call=on_tool_call,
         on_tool_ready=on_tool_ready,
+        on_checkpoint=on_checkpoint,
     )
 
 
@@ -1902,6 +1904,7 @@ async def _propose_turn(
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
+    on_checkpoint=None,
 ) -> tuple[Message, UUID | None, list[UUID], Message | None]:
     """One assistant turn after the user input is settled (CHAT_ARCH §3).
 
@@ -1932,6 +1935,7 @@ async def _propose_turn(
         on_phase=on_phase,
         on_tool_call=on_tool_call,
         on_tool_ready=on_tool_ready,
+        on_checkpoint=on_checkpoint,
     )
 
 
@@ -2200,6 +2204,32 @@ def _observe_phase_callback(on_phase):
     return _emit
 
 
+def _checkpoint_callback(db, conversation_id, on_checkpoint=None):
+    """The checkpoint channel's turn-runner seat (ADR-085 判词 2/4): the loop
+    emits a checkpoint's full prose; the runner persists it as its OWN
+    message row — ``intent={"type": "checkpoint"}`` keeps the semantic type
+    explicit (never mixed with the settled assistant message: replay renders
+    it as a progress bubble, future context may filter on the marker) —
+    flush-only, the turn's one commit lands it; then the SSE hook forwards
+    the text live. The loop writes nothing (零副作用往返 holds — this hook
+    is the runner's, not the loop's). A failed turn rolls the rows back with
+    everything else, and the client's turn.failed path drops the bubbles."""
+    async def _emit(text: str) -> None:
+        await _create_message(
+            db,
+            conversation_id,
+            "assistant",
+            text,
+            intent={"type": "checkpoint"},
+        )
+        if on_checkpoint is not None:
+            result = on_checkpoint(text)
+            if result is not None:
+                await result
+
+    return _emit
+
+
 async def stamp_turn_failed(user_message_id) -> None:
     """Best-effort 'failed' stamp for a dead turn's durable user row (交互
     完整性批 A) — a FRESH session, because the turn's own is tearing down /
@@ -2246,6 +2276,7 @@ async def execute_chat_turn(
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
+    on_checkpoint=None,
 ) -> ChatResponse:
     """chat() phase 2: run the agent turn, commit once, assemble the response.
 
@@ -2285,6 +2316,7 @@ async def execute_chat_turn(
             on_phase=on_phase,
             on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready,
+            on_checkpoint=on_checkpoint,
         )
         if plan_answered is not None:
             prepared.answered_question = plan_answered
@@ -2302,6 +2334,7 @@ async def execute_chat_turn(
             on_phase=on_phase,
             on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready,
+            on_checkpoint=on_checkpoint,
         )
         if chat_settled is not None:
             # 插话判定结算 (ADR-053 R2): the agent judged this very message

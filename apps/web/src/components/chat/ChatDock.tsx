@@ -2570,18 +2570,34 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // What the preview bubble currently shows (the typewriter-released text)
     // — the suffix-pacing gate's reference (打字机律·工具线重述, see below).
     let previewText = ""
+    // Checkpoint segments (ADR-085 判词 5 — 一键一段): the settled bubble
+    // keeps the bare streamId; each checkpoint frame drains whatever is
+    // typing, settles the current segment, and paces its full text into its
+    // OWN bubble (`${streamId}#cpN`). The typewriter's output target is
+    // mutable for that window; previewText tracks ONLY the settled bubble's
+    // prefix (checkpoint text never joins the suffix-pacing reference).
+    let typeTargetId = streamId
+    let checkpointCount = 0
+    let checkpointChain: Promise<void> = Promise.resolve()
     const appendDelta = (delta: string) => {
-      streamedAny = true
-      previewText += delta
+      // streamedAny / previewText are the SETTLED bubble's facts only —
+      // checkpoint segments (typeTargetId !== streamId) never flip them, so
+      // a checkpoint-only turn still takes the zero-delta envelope branch
+      // and the echo paces into its own bubble after the checkpoints
+      // (echoCarried ≡ streamedAny stays truthful, 2026-09-09 单派生).
+      if (typeTargetId === streamId) {
+        streamedAny = true
+        previewText += delta
+      }
       setMessages((prev) =>
-        prev.some((m) => m.id === streamId)
+        prev.some((m) => m.id === typeTargetId)
           ? prev.map((m) =>
-              m.id === streamId ? { ...m, content: m.content + delta } : m
+              m.id === typeTargetId ? { ...m, content: m.content + delta } : m
             )
           : [
               ...prev,
               {
-                id: streamId,
+                id: typeTargetId,
                 role: "assistant",
                 content: delta,
                 streaming: true,
@@ -2591,6 +2607,43 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       )
     }
     const typewriter = createTypewriter(appendDelta, setProseActive)
+    /** One checkpoint's delivery (ADR-085): the frame carries the full text
+     * (quiet iterations stream nothing), so it paces out through the SAME
+     * typewriter — never a blob. Serialized on checkpointChain: SSE handlers
+     * are sync, and the per-turn cap (2) must never interleave on one
+     * typewriter. Edge note: an ADR-084-violating turn (iteration-0 prose
+     * before a read) leaves the settled bubble ABOVE the checkpoint bubbles
+     * — the tail lands there by id; the prefix relation still holds. */
+    const deliverCheckpoint = async (text: string) => {
+      if (!text.trim()) return
+      await typewriter.drain()
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === streamId && m.content ? { ...m, streaming: false } : m
+        )
+      )
+      const cpId = `${streamId}#cp${++checkpointCount}`
+      typeTargetId = cpId
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: cpId,
+          role: "assistant" as const,
+          content: "",
+          streaming: true,
+          at: new Date().toISOString(),
+        },
+      ])
+      typewriter.push(text)
+      await typewriter.drain()
+      setMessages((prev) =>
+        prev.map((m) => (m.id === cpId ? { ...m, streaming: false } : m))
+      )
+      typeTargetId = streamId
+    }
+    const onCheckpoint = (text: string) => {
+      checkpointChain = checkpointChain.then(() => deliverCheckpoint(text))
+    }
     /** In-place finalize: the preview bubble becomes the settled message
      * under the SAME key (the envelope's content wins); never a remount. */
     const finalizePreview = (content?: string, runId?: string | null, at?: string) =>
@@ -2691,9 +2744,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           },
           onQuestionPreview: (payload) =>
             dockQuestionPreview(`preview-${streamId}`, payload),
+          onCheckpoint,
         }
       )
-      // Envelope wins: release any buffered prose, then land the turn.
+      // Envelope wins: any in-flight checkpoint delivery finishes FIRST
+      // (its drain waiters ride the same typewriter), then release any
+      // buffered prose and land the turn.
+      await checkpointChain
       typewriter.flush()
       // A turn can create assets server-side (declared-material promotion) —
       // refresh the prompt attachments when the project started empty.
@@ -2854,9 +2911,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       discardPreviewArtifacts()
       if (e instanceof DOMException && e.name === "AbortError") {
         // Stopped mid-stream: the partial preview settles as static text
-        // (the server may still finish the turn server-side).
+        // (the server may still finish the turn server-side). Checkpoint
+        // segments (ADR-085) settle the same way — what was delivered stays
+        // readable.
         setMessages((prev) =>
-          prev.map((m) => (m.id === streamId ? { ...m, streaming: false } : m))
+          prev.map((m) =>
+            m.id === streamId || m.id.startsWith(`${streamId}#cp`)
+              ? { ...m, streaming: false }
+              : m
+          )
         )
         return
       }
@@ -2867,7 +2930,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // pre-stream failure rolls the optimistic bubble back out and
       // restores the draft (nothing exists server-side to diverge from).
       const persisted = e instanceof StreamTurnError && e.persisted
-      setMessages((prev) => prev.filter((m) => m.id !== streamId))
+      // Checkpoint bubbles ride the turn's rollback too (ADR-085: their rows
+      // are flush-only under the turn's one commit — a failed turn never
+      // persisted them).
+      setMessages((prev) =>
+        prev.filter(
+          (m) => m.id !== streamId && !m.id.startsWith(`${streamId}#cp`)
+        )
+      )
       if (opts?.rollbackId && !persisted) {
         const rollbackId = opts.rollbackId
         setMessages((prev) => prev.filter((m) => m.id !== rollbackId))

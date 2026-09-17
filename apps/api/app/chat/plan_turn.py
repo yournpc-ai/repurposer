@@ -58,6 +58,7 @@ from app.chat.service import (
     _build_caption_mode_question,
     _cannot_do_text,
     _caption_choice_is_meaningful,
+    _checkpoint_callback,
     _compute_plan_reasons,
     _create_message,
     _detect_caption_mode,
@@ -1061,6 +1062,7 @@ async def run_plan_turn(
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
+    on_checkpoint=None,
 ) -> PlanTurnOutcome:
     """The plan path's turn: assemble → the bounded tool loop → the outcome
     mapping. ``intent_router`` provider failures propagate as LLMError — no
@@ -1068,7 +1070,10 @@ async def run_plan_turn(
     into a 502 with the localized provider line. on_delta streams the prose
     channel (it IS the reply now); on_tool_call/on_tool_ready carry the
     structure frames (the phase beat / the question preview); on_phase labels
-    the real phase switches. None = the one-shot path."""
+    the real phase switches; on_checkpoint (ADR-085) is the checkpoint
+    channel's SSE seat — the runner wraps it with persistence (the checkpoint
+    row is this turn's own message, intent type 'checkpoint'). None = the
+    one-shot path."""
     turn = PlanTurn(db, user_id, conversation, project, request, on_phase=on_phase)
     await turn.assemble(recent)
     result = await intent_router.call_loop(
@@ -1079,6 +1084,7 @@ async def run_plan_turn(
         on_tool_ready=on_tool_ready,
         on_repair=_repair_phase_callback(on_phase),
         on_observe=_observe_phase_callback(on_phase),
+        on_checkpoint=_checkpoint_callback(db, turn.conversation_id, on_checkpoint),
         **turn.infer_kwargs,
     )
     return await turn.finish(result)

@@ -315,10 +315,24 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                         _sse("assistant.thinking", json.dumps({"phase": phase}))
                     )
 
+                async def on_checkpoint(text: str) -> None:
+                    # The checkpoint channel (ADR-085): a quiet iteration's
+                    # grounded result statement after an eligible read. The
+                    # row is persisted runner-side (flush-only, the turn's
+                    # one commit lands it); this frame carries the full text
+                    # live — the client finalizes the current bubble segment
+                    # and types the checkpoint into a new one (the typewriter
+                    # law holds: quiet iterations stream nothing, the frame
+                    # paces out client-side).
+                    await queue.put(
+                        _sse("assistant.checkpoint", json.dumps({"text": text}))
+                    )
+
                 response = await execute_chat_turn(
                     db, prepared, data, on_delta=on_delta, on_reasoning=on_reasoning,
                     on_phase=on_phase,
                     on_tool_call=on_tool_call, on_tool_ready=on_tool_ready,
+                    on_checkpoint=on_checkpoint,
                 )
             await queue.put(("completed", response.model_dump(mode="json")))
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash

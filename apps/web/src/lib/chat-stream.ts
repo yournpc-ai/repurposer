@@ -73,6 +73,15 @@ export interface StreamChatOptions {
     slot?: string | null
     default_path?: string | null
   }) => void
+  /** A user-facing checkpoint (ADR-085): a quiet iteration's grounded result
+   * statement after an eligible read — the FULL text in one frame (quiet
+   * iterations stream nothing; the client paces it out under the typewriter
+   * law). Each checkpoint is its OWN bubble segment: finalize the current
+   * segment, type this into a new one, then the settled reply lands in a
+   * fresh segment — never merged into one message. Persisted server-side as
+   * an intent.type="checkpoint" row, so a failed turn's rollback drops the
+   * bubbles and a refresh re-renders them from history. */
+  onCheckpoint?: (text: string) => void
 }
 
 /** Answer endpoint payload (the answer doubles as resume). */
@@ -123,11 +132,13 @@ function streamTurn<T>(
     onDelta,
     onThinking,
     onQuestionPreview,
+    onCheckpoint,
   }: {
     signal?: AbortSignal
     onDelta?: (text: string) => void
     onThinking?: (payload: { phase?: string; key?: string }) => void
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
+    onCheckpoint?: StreamChatOptions["onCheckpoint"]
   },
 ): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -183,6 +194,9 @@ function streamTurn<T>(
               NonNullable<StreamChatOptions["onQuestionPreview"]>
             >[0],
           )
+        } else if (msg.event === "assistant.checkpoint") {
+          const data = JSON.parse(msg.data) as { text: string }
+          onCheckpoint?.(data.text)
         } else if (msg.event === terminal.completed) {
           resolve(JSON.parse(msg.data))
         } else if (msg.event === terminal.failed) {
@@ -240,12 +254,12 @@ export function streamAnswer<T>(
  * `e.name === "AbortError"`). */
 export function streamChat<T>(
   body: ChatTurnBody,
-  { signal, onDelta, onThinking, onQuestionPreview }: StreamChatOptions,
+  { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint }: StreamChatOptions,
 ): Promise<T> {
   return streamTurn(
     `${API_URL}/api/v1/chat`,
     body,
     { completed: "turn.completed", failed: "turn.failed" },
-    { signal, onDelta, onThinking, onQuestionPreview },
+    { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint },
   )
 }

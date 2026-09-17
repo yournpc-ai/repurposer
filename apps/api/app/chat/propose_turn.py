@@ -49,6 +49,7 @@ from app.chat.service import (
     _build_caption_mode_question,
     _cannot_do_text,
     _caption_choice_is_meaningful,
+    _checkpoint_callback,
     _create_message,
     _create_run_from_tasks,
     _derive_chat_caption_mode,
@@ -599,6 +600,7 @@ async def run_propose_turn(
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
+    on_checkpoint=None,
 ) -> ProposeTurnOutcome:
     """The chat path's turn: assemble → the bounded tool loop → the outcome
     mapping. Provider failure keeps its retired posture: the ask-back line is
@@ -618,6 +620,14 @@ async def run_propose_turn(
             on_tool_ready=on_tool_ready,
             on_repair=_repair_phase_callback(on_phase),
             on_observe=_observe_phase_callback(on_phase),
+            on_checkpoint=(
+                # ADR-085: the checkpoint channel (persist + SSE forward) —
+                # a project-less defensive turn has no conversation to
+                # persist into, so the channel stays closed there.
+                _checkpoint_callback(db, turn.conversation_id, on_checkpoint)
+                if turn.project is not None
+                else None
+            ),
         )
     except LLMError:
         capabilities = getattr(chat_intent_agent.client, "capabilities", None)

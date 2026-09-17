@@ -46,6 +46,12 @@ run 数 / 落库行——永不锁 LLM 文案（禁令 #7）。例外：代码�
              hold 再级联删 run——台账闭合、余额回赠额）
     S17 run 执行权仲裁（R1 B3）：A 挂 B 跑 → 答/过期皆 blocked 再挂+明示
              （零状态污染、全程单 owner）→ B 收官交接钩续跑 A
+    S20 言语语义管线（ADR-084）：read 静默（过程话零流式零持久）/
+             Start 归 dock（≥2 task 不邀请言语确认）/ grounding 诚实
+             （未就绪披露处理中，就绪落到素材内容词）
+    S21 checkpoint 通道观察面（ADR-085 评审四场景）：A 单读直出 / B 诱导
+             多读 / C 目录读结构性静默——不锁出现与否，锁硬律 + PRINT
+             命中率（D 失败回滚归手测）
 
 S4/S7/S8 起的 run 是真的（worker 会执行；writer 链走真 LLM——S4 用
 ``processing_status=COMPLETED`` 的 transcript 资产走 writer 链到 completed，
@@ -74,6 +80,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import sys
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -116,6 +123,7 @@ from app.models.tables import (  # noqa: E402
 from app.models.schemas import (  # noqa: E402
     AssetStatus,
     AssetType,
+    MaterialUnderstanding,
     Option,
     QuestionPayload,
     WorkflowStatus,
@@ -152,6 +160,10 @@ class StreamTurn(NamedTuple):
     previews: list[dict]
     completed: dict | None
     failed: dict | None
+    # ADR-085 checkpoint frames: each entry is one checkpoint's full text.
+    # No default — a mutable default on a NamedTuple is a shared list; the
+    # single constructor (chat_stream) always passes it explicitly.
+    checkpoints: list[str]
 
 
 class Ctx:
@@ -196,6 +208,7 @@ class Ctx:
         deltas: list[str] = []
         thinking: list[dict] = []
         previews: list[dict] = []
+        checkpoints: list[str] = []
         completed: dict | None = None
         failed: dict | None = None
         async with self.client.stream(
@@ -217,6 +230,8 @@ class Ctx:
                         thinking.append(payload)
                     elif event == "question.preview":
                         previews.append(payload)
+                    elif event == "assistant.checkpoint":
+                        checkpoints.append(payload["text"])
                     elif event == "turn.completed":
                         completed = payload
                     elif event == "turn.failed":
@@ -227,6 +242,7 @@ class Ctx:
             previews=previews,
             completed=completed,
             failed=failed,
+            checkpoints=checkpoints,
         )
 
     async def answer(self, question_id: str, body: dict) -> httpx.Response:
@@ -334,6 +350,56 @@ async def seed_asset(
         asset_id = str(asset.id)
         await db.commit()
         return asset_id
+
+
+async def seed_understanding(pid: str) -> None:
+    """A content-addressed material_understanding row (ADR-083's assemble-time
+    injection data face): the digest is computed from the project's live asset
+    rows with the pipeline's own ``_asset_digest``, so the plan turn's reuse
+    lookup hits exactly as an upload-time warm row would."""
+    from app.pipeline.step_context import _asset_digest
+
+    async with AsyncSessionLocal() as db:
+        assets = list(
+            (
+                await db.execute(
+                    select(Asset)
+                    .where(Asset.project_id == uuid.UUID(pid))
+                    .order_by(Asset.created_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        check(bool(assets), "seed_understanding needs the asset seeded first")
+        understanding = MaterialUnderstanding(
+            overall_summary=(
+                "A keynote on urban heat: cities are getting hotter, and "
+                "shade trees plus reflective roofs can cool whole "
+                "neighborhoods by several degrees."
+            ),
+            core_thesis=(
+                "Neighborhood cooling through shade trees and reflective "
+                "surfaces is the cheapest climate adaptation a city can buy."
+            ),
+            themes=[
+                "urban heat",
+                "neighborhood cooling",
+                "shade trees",
+                "reflective roofs",
+            ],
+            target_audience="city planners and residents",
+        )
+        db.add(
+            Output(
+                project_id=uuid.UUID(pid),
+                type="material_understanding",
+                language="en",
+                source_ref={"asset_hash": _asset_digest(assets), "warmed": True},
+                payload=understanding.model_dump(mode="json"),
+            )
+        )
+        await db.commit()
 
 
 async def seed_completed_run(pid: str) -> None:
@@ -643,24 +709,125 @@ def check_stream_law(
     - read-first turn (accepted reads in iteration 0 — inspecting frames
       present): the kept read-iteration speech is a PREFIX of the composed
       content (言语账本: kept parts + the terminal part join on a blank
-      line), so content.startswith(concat(deltas));
+      line), so content.startswith(concat(deltas)). Post-ADR-084 the
+      read-silent law makes that concat empty BY DESIGN
+      (check_read_silent_stream asserts it); this prefix tolerance stays as
+      the variance floor;
     - a rejected iteration breaks even the prefix relation (its streamed
       speech was replaced) — LLM variance the scenarios cannot foresee, so
-      this helper asserts the two designed relations only.
+      this helper skips the turn entirely when a repairing frame appears
+      (same carve-out as check_read_silent_stream).
+
+    Both relations compare the STRIPPED concat: the envelope is edge-stripped
+    by design (``_compose_speech`` strips every part) while the wire carries
+    raw provider deltas, so leading "\n\n" tokenizer noise is variance, not
+    a violation (same granularity ruling as check_read_silent_stream,
+    2026-09-17 — assert the visible speech, not the bytes).
     """
     concat = "".join(stream.deltas)
     had_reads = any(t.get("phase") == "inspecting" for t in stream.thinking)
+    had_repair = any(t.get("phase") == "repairing" for t in stream.thinking)
+    if had_repair:
+        return  # replaced speech: even the prefix relation is void
+    streamed = concat.strip()
     if had_reads and allow_reads:
         check(
-            not concat or content.startswith(concat),
+            not streamed or content.startswith(streamed),
             f"{label}: the read-first stream law (kept speech prefixes the content)",
             f"{concat[:120]!r} vs {content[:120]!r}",
         )
     else:
         check(
-            concat == content,
+            streamed == content,
             f"{label}: the single-iteration stream law (concat(deltas) == content)",
             f"{concat[:120]!r} vs {content[:120]!r}",
+        )
+
+
+# ---- ADR-084 speech-contract markers (2026-09-17) ---------------------------
+# NEGATIVE shapes only (禁令 #7 — the LLM's own phrasing is never locked; what
+# the contract bans is a SHAPE, and a banned shape is assertable).
+
+# Process narration: read-iteration speech must never persist into the
+# settled message (the read-silent law — reads leave the message channel
+# empty, the whole speech belongs to the terminal call).
+PROCESS_NARRATION = re.compile(
+    r"(I'?ll (pull|check|inspect|look into|fetch|take a look)|"
+    r"Let me (check|pull|inspect|look|fetch)|"
+    r"I'?m going to (pull|check|inspect|look)|"
+    r"我先(查|看|拉|读)|让我(先)?(查|看|拉|读))",
+    re.IGNORECASE,
+)
+# A ≥2-task plan's echo never invites a verbal go-ahead — the dock's Start
+# button is the ONLY start action.
+VERBAL_GO_INVITATION = re.compile(
+    r"(say the word|say ['\"]?start['\"]?|tell me when you'?re ready|"
+    r"说「?开始|跟我说一?声)",
+    re.IGNORECASE,
+)
+# The not-ready state's honest disclosure (tolerant shape set — the clause is
+# duty-bound, its wording is free).
+PROCESSING_DISCLOSURE = re.compile(
+    r"(still processing|not (yet )?(ready|finished)|hasn'?t finished|"
+    r"(once|when|after) (it|the video|the material|processing) "
+    r"(is |has )?(ready|finish|done|complete)|"
+    r"还在处理|处理中|处理完成[后时]|处理好后)",
+    re.IGNORECASE,
+)
+
+
+def check_read_silent_stream(stream: "StreamTurn", label: str) -> None:
+    """ADR-084 read-silent law, wire side: a turn that ran accepted reads
+    (inspecting frames) streamed NO prose — read iterations leave the message
+    channel empty and the settled speech paces out at the envelope. Skipped
+    when a repairing frame appears (a rejected iteration's replaced speech may
+    have streamed first — the pre-existing variance carve-out, see
+    check_stream_law)."""
+    had_reads = any(t.get("phase") == "inspecting" for t in stream.thinking)
+    had_repair = any(t.get("phase") == "repairing" for t in stream.thinking)
+    if had_reads and not had_repair:
+        concat = "".join(stream.deltas)
+        # ADR-084 read-silent is a semantic UI contract: no user-visible prose
+        # may stream before a READ tool. The law lives at the prompt layer
+        # (ToolLoop unchanged by the ADR), so whitespace-only tokenizer deltas
+        # ("\n\n" before a tool call) are allowed provider variance — locking
+        # byte-empty would固化 provider noise into product contract (禁令 #7).
+        check(
+            not concat.strip(),
+            f"{label}: reads stream no visible prose (the read-silent law)",
+            repr(concat[:120]),
+        )
+
+
+def check_checkpoint_shape(stream: "StreamTurn", content: str, label: str) -> None:
+    """ADR-085 checkpoint shape laws (opportunistic — checkpoints are EARNED,
+    so absence is legal; when they fired, the shape must hold): ≤2/turn,
+    never empty, never process narration, and the settled reply never
+    repeats one verbatim. The acceptance question (2026-09-17 评审):「这条
+    消息是用户刚刚真的需要知道的信息，还是系统想证明自己做过某个动作？」
+    — the negative markers police the latter."""
+    if not stream.checkpoints:
+        return
+    check(
+        len(stream.checkpoints) <= 2,
+        f"{label}: checkpoints are capped at ≤2 per turn",
+        stream.checkpoints,
+    )
+    check(
+        all(c.strip() for c in stream.checkpoints),
+        f"{label}: checkpoints are never empty",
+        stream.checkpoints,
+    )
+    check(
+        not PROCESS_NARRATION.search(" ".join(stream.checkpoints)),
+        f"{label}: checkpoints carry results, never process narration",
+        stream.checkpoints,
+    )
+    for cp in stream.checkpoints:
+        check(
+            cp.strip() not in content,
+            f"{label}: the settled reply never repeats a checkpoint verbatim",
+            {"checkpoint": cp[:120], "settled": content[:120]},
         )
 
 
@@ -3151,6 +3318,230 @@ async def s19_turn_durability_and_trigger_admission(ctx: Ctx) -> None:
     )
 
 
+async def s20_speech_semantic_contract(ctx: Ctx) -> None:
+    """ADR-084 言语语义管线回归（2026-09-17 拍板）：Chat 不是 Agent 的操作日志。
+    A 部（素材未就绪）：PENDING 无文本视频 → read 静默（过程话零流式、零
+    持久化）+ 诚实处理中披露（理解需求 ≠ 已读素材）+ 不虚构素材判断；
+    B 部（理解就绪）：COMPLETED 视频 + 内容寻址理解行直种 → echo 落到素材
+    内容词（grounded judgment 的确定性代理断言）+ ≥2 task 计划不邀请言语
+    确认（Start 归 dock）+ 流式律 + ADR-085 checkpoint 形态断言
+    （opportunistic：earned 缺席合法，出现则锁 ≤2 / 非空 / 终答不复读 /
+    intent.type=checkpoint 落库分家）。锁禁令形状（负向标记）与行为面，
+    不锁措辞（禁令 #7）。"""
+    message = (
+        "Caption my video in Chinese and French — Chinese as bilingual "
+        "subtitles."
+    )
+
+    # ---- Part A: material not ready (PENDING, no text anywhere) ------------
+    pid = await ctx.new_project("S20A speech contract (material not ready)")
+    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
+    stream = await ctx.chat_stream(pid, message)
+    check(stream.failed is None, "S20A the turn did not fail", stream.failed)
+    completed = stream.completed or {}
+    turn1 = {
+        "assistant_message": completed.get("assistant_message") or {},
+        "run_id": completed.get("run_id"),
+        "answered_question": completed.get("answered_question"),
+    }
+    turn1 = await answer_caption_gate(ctx, turn1)
+    terminal = terminal_tool_of(turn1)
+    check(
+        terminal in ("present_plan", "ask_user"),
+        "S20A terminalizes as a plan dock or an honest question — never the "
+        "exhaustion degrade",
+        terminal,
+    )
+    content = turn1["assistant_message"].get("content") or ""
+    check(
+        has_prose(turn1["assistant_message"]),
+        "S20A the terminal message carries the settled speech",
+        turn1["assistant_message"],
+    )
+    check(
+        not PROCESS_NARRATION.search(content),
+        "S20A no process narration persists into the settled message",
+        content[:200],
+    )
+    check_read_silent_stream(stream, "S20A")
+    if terminal == "present_plan":
+        check(
+            PROCESSING_DISCLOSURE.search(content) is not None,
+            "S20A the echo discloses the material is still processing "
+            "(the request is understood ≠ the material is read)",
+            content[:200],
+        )
+
+    # ---- Part B: understanding ready (injected at assemble, ADR-083) -------
+    pid = await ctx.new_project("S20B speech contract (understanding ready)")
+    await seed_asset(
+        pid,
+        ctx.user_id,
+        AssetType.VIDEO,
+        "keynote.mp4",
+        extracted_text=(
+            "Cities are getting hotter every year. In this talk I show how "
+            "shade trees and reflective roofs can cool whole neighborhoods "
+            "by several degrees — the cheapest climate adaptation we have."
+        ),
+        processed=True,
+        meta={"language": "en"},
+    )
+    await seed_understanding(pid)
+    stream = await ctx.chat_stream(pid, message)
+    check(stream.failed is None, "S20B the turn did not fail", stream.failed)
+    completed = stream.completed or {}
+    turn1 = {
+        "assistant_message": completed.get("assistant_message") or {},
+        "run_id": completed.get("run_id"),
+        "answered_question": completed.get("answered_question"),
+    }
+    # Stream laws compare against THIS turn's own speech — capture the
+    # pre-gate content BEFORE answer_caption_gate: when the caption gate
+    # fires it re-wraps turn1 with the follow-UP turn's message (a separate
+    # /answer generation), and comparing this stream against that prose
+    # would be a cross-turn category error.
+    pre_gate_content = turn1["assistant_message"].get("content") or ""
+    check_read_silent_stream(stream, "S20B")
+    check_stream_law(stream, pre_gate_content, "S20B")
+    turn1 = await answer_caption_gate(ctx, turn1)
+    terminal = terminal_tool_of(turn1)
+    check(
+        terminal == "present_plan",
+        "S20B a ready-material caption request docks the plan",
+        terminal,
+    )
+    content = turn1["assistant_message"].get("content") or ""
+    check(
+        not PROCESS_NARRATION.search(content),
+        "S20B no process narration persists into the settled message",
+        content[:200],
+    )
+    # ADR-085 checkpoint channel: the shape laws ride the shared helper;
+    # S20B additionally reconciles persistence (one delivery = one
+    # intent.type=checkpoint row, separate from the settled message).
+    check_checkpoint_shape(stream, content, "S20B")
+    if stream.checkpoints:
+        conv_id = completed.get("conversation_id")
+        check(conv_id is not None, "S20B the envelope carries conversation_id")
+        rows = await ctx.messages(str(conv_id))
+        cp_rows = [
+            m for m in rows if (m.get("intent") or {}).get("type") == "checkpoint"
+        ]
+        check(
+            len(cp_rows) == len(stream.checkpoints),
+            "S20B checkpoints persist as intent.type=checkpoint rows "
+            "(one delivery = one row, separate from the settled message)",
+            [len(cp_rows), len(stream.checkpoints)],
+        )
+    plan = await pending_plan(ctx, pid)
+    check(
+        len(plan_tasks(plan)) >= 2,
+        "S20B the zh+fr caption chain docks ≥2 tasks",
+        plan,
+    )
+    check(
+        not VERBAL_GO_INVITATION.search(content),
+        "S20B the echo never invites a verbal go-ahead — Start owns the dock",
+        content[:200],
+    )
+    # Grounded judgment's deterministic proxy (ADR-083 duty ①): with the
+    # understanding row injected at assemble, the echo references the
+    # material's actual content — any-of a distinctive content-vocabulary
+    # set (filename words like 'keynote' are IDENTITY evidence and never
+    # count), never a fixed sentence.
+    check(
+        any(
+            word in content.lower()
+            for word in (
+                "heat", "hot", "cool", "shade", "reflective", "roof",
+                "tree", "climate", "neighborhood", "urban",
+            )
+        ),
+        "S20B the echo carries a grounded material judgment (any content word)",
+        content[:200],
+    )
+    check(
+        PROCESSING_DISCLOSURE.search(content) is None,
+        "S20B a ready material never earns a processing disclosure",
+        content[:200],
+    )
+
+
+def _stream_reads(stream: "StreamTurn") -> list[str]:
+    """The turn's read sequence by inspecting-frame copy key (observability
+    print — the tool NAME never crosses the wire, the key is the face)."""
+    return [
+        str(t.get("key"))
+        for t in stream.thinking
+        if t.get("phase") == "inspecting" and t.get("key")
+    ]
+
+
+async def s21_checkpoint_channel_observation(ctx: Ctx) -> None:
+    """ADR-085 评审四场景（2026-09-17）的可复跑探针：checkpoint 是 earned
+    不是 scheduled，所以本剧本**不锁出现与否**（禁令 #7），只锁硬律并
+    PRINT 各形态的 read 序列 + checkpoint 计数——主路径命中率是观察值，
+    不是假设（`tool_loop_checkpoint` 日志是同源数据面）。
+
+    A 单读直出（理解行 assemble 注入后 `get_understanding → present_plan`
+    完全可以零 checkpoint，判断句住终答——ADR-083 duty ①）；B 诱导多读
+    （先问语言与内容再做字幕）；C 目录读静默（catalog 前驱非 eligible，
+    harness 层结构性零 checkpoint——这条是确定性的）；D（checkpoint +
+    回合失败的 live/DB/刷新三面）归手测，不在本剧本。"""
+    caption_msg = (
+        "Caption my video in Chinese and French — Chinese as bilingual "
+        "subtitles."
+    )
+
+    async def run_shape(label: str, message: str) -> "StreamTurn":
+        pid = await ctx.new_project(f"S21{label} checkpoint observation")
+        await seed_asset(
+            pid,
+            ctx.user_id,
+            AssetType.VIDEO,
+            "keynote.mp4",
+            extracted_text=(
+                "Cities are getting hotter every year. In this talk I show "
+                "how shade trees and reflective roofs can cool whole "
+                "neighborhoods by several degrees."
+            ),
+            processed=True,
+            meta={"language": "en"},
+        )
+        await seed_understanding(pid)
+        stream = await ctx.chat_stream(pid, message)
+        check(stream.failed is None, f"S21{label} the turn did not fail", stream.failed)
+        completed = stream.completed or {}
+        content = (completed.get("assistant_message") or {}).get("content") or ""
+        check_checkpoint_shape(stream, content, f"S21{label}")
+        check_read_silent_stream(stream, f"S21{label}")
+        print(
+            f"    · S21{label} reads={_stream_reads(stream)} "
+            f"checkpoints={len(stream.checkpoints)}"
+        )
+        return stream
+
+    # A) 单读直出主路径——零 checkpoint 是合法形态（判断句住终答）。
+    await run_shape("A", caption_msg)
+    # B) 诱导多读（语言 + 内容两问在前）——命中与否都是观察值。
+    await run_shape(
+        "B",
+        "What language is my video in, and what is it about? Then caption it "
+        "in Chinese and French — Chinese as bilingual subtitles.",
+    )
+    # C) 目录读静默：catalog 前驱非 eligible 是注册表事实——若模型真的读了
+    #    目录（inspecting 帧带 captionStyles 键），checkpoint 结构性为零。
+    stream_c = await run_shape("C", "What caption styles can I choose from?")
+    if any("captionStyles" in k for k in _stream_reads(stream_c)):
+        check(
+            stream_c.checkpoints == [],
+            "S21C a catalog-browse predecessor never earns a checkpoint "
+            "(registry eligibility is structural, not advisory)",
+            stream_c.checkpoints,
+        )
+
+
 SCENARIOS = {
     "S1": s1_bare_wish_full_journey,
     "S2": s2_skipped_topic_ask_drafts_from_persona,
@@ -3171,6 +3562,8 @@ SCENARIOS = {
     "S17": s17_run_authority_park_and_handoff,
     "S18": s18_idless_asset_read_terminalizes,
     "S19": s19_turn_durability_and_trigger_admission,
+    "S20": s20_speech_semantic_contract,
+    "S21": s21_checkpoint_channel_observation,
 }
 
 
