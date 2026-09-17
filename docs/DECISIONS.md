@@ -1740,17 +1740,17 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 ## ADR-082: 画布呈现纪律——布局服务「看懂生产计划」，呈现永不反噬语义
 
-**Status**: Decided (2026-09-17；caption 配方卡走查 + GPT 评审收紧；施工待排期)
+**Status**: Decided (2026-09-17；caption 配方卡走查 + GPT 评审收紧；判词① 同日施工落地——`layout.ts` settled 分支空气压缩；判词② 的分组/长边/居中待施工)
 
 **Context**: caption 链走查暴露的画布失真全部由现行算法直接解释（非观感问题）：① **预留高度 ≠ 渲染高度**——文档站预留 340×560 / clip 预留 660，draft 态实渲 ~280/~278，兄弟节点按预留堆叠产生 300~380px 隐形空气，6 节点摊到 ~1200px 纵跨；② **跨列长边**——asset（col0）直喂装配节点（col3），贝塞尔横跨 ~1100px 与其他边穿插；③ **新列上移 88px**（`_FRESH_COLUMN_RISE`）且 settled 路径无居中，图整体向右上发散。GPT 的收紧判词：画布的目标不是「忠实显示工程 DAG」，是「用户 5 秒看懂我让它做什么、它准备怎么做」——execution topology viewer ≠ production workspace。
 
 **Decision**:
 
 1. **呈现/语义隔离铁律**：**永不为了画布排线新增语义节点、改变执行拓扑或补假边**（如为美观虚构 transcript 中继）。图 = 产品对象 + 执行拓扑（ADR-057 不变）；可读性问题的合法工具箱只有呈现层：布局常量、帧预留、分组框（`GroupFrames`，项目页画布补传 groups）、edge routing、视口。
-2. **修复次序**：先修**高度失真**（draft 态按实渲高度参与堆叠 / 预留与实渲对齐——一处改动消灭空气深渊）；再修可读性（同族链分组、长边路由、居中）。
+2. **修复次序**：先修**高度失真**（① 已落：客户端 settled 分支**空气压缩**——同列跟随者上提到前序节点的当前渲染底，`displayY = min(serverY, prevRenderBottom + gap)`。`min` 是结构保险：渲染高永不超预留（graphNodeSize 律），压缩后永不越过服务端座位、列永不重叠；产物落地只长不高回退，跟随者单调下滑归位——图只长不晃。服务端帧零改动，append-only 保序律结构性成立）；再修可读性（② 同族链分组 / 长边路由 / 居中——待施工）。
 3. **验收标准**：同 ADR-080 判词 ③ 的 5 秒三问——画布部分的及格线 = 用户一眼读出「Video → Transcript → 中文字幕 / 法语字幕」的生产计划，而不是一团穿插的贝塞尔。
 
-**明确不做**：不改 `settle_frames_with_edges` 的 append-only 保序律（既有帧永不移动不变——本批只影响新出生帧的测量与堆叠输入）；不引 dagre 等外部布局库（ADR-036 判词不变）；不借本批重开节点族 / 端口法则（词表 v3 与出入锚律不动）。
+**明确不做**：不改 `settle_frames_with_edges` 的 append-only 保序律（服务端帧永不移动不变——判词① 的压缩是客户端每帧重算的显示推导，服务端帧零触碰）；不引 dagre 等外部布局库（ADR-036 判词不变）；不借本批重开节点族 / 端口法则（词表 v3 与出入锚律不动）。
 
 **Consequences**: 布局算法的输入从「预留档」改为「当前形态实高」，同值封顶（`DOCUMENT_MAX_H`）与两镜像互引律（graph_store ↔ layout.ts）照旧——改的是测量口径不是契约。分组框上项目页 = `GroupFrames` 的第二个消费面（配方说明书先例），零新组件。
 

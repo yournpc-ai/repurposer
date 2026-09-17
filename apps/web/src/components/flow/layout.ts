@@ -390,9 +390,12 @@ export interface FlowLayout {
  * centered against the tallest column on the cross axis.
  *
  * 画布定居取景 (ADR-057): nodes carrying a server-settled `frame` keep
- * THEIR positions — the layout only computes the reveal order for them
- * (append-only is then structural: positions were assigned once at birth
- * and existing frames never move). */
+ * THEIR x (the column IS the depth) and their y as the full-grown UPPER
+ * bound — the settled branch derives display y by compacting each column
+ * to current render heights (ADR-082 空气压缩: displayY = min(serverY,
+ * predecessor's render bottom + gap) — upward compaction at draft time,
+ * downward-only drift as products land, never past the server seat, so
+ * append-only stays structural and overlap stays impossible). */
 export function layoutFlow(nodes: FlowNode[], edges: FlowEdge[]): FlowLayout {
   const parents = new Map<string, string[]>()
   for (const e of edges) {
@@ -430,10 +433,40 @@ export function layoutFlow(nodes: FlowNode[], edges: FlowEdge[]): FlowLayout {
   const revealOrder = new Map<string, number>()
 
   if (settled) {
+    // 空气压缩 (ADR-082 判词①, 2026-09-17): the server reservation is the
+    // FULL-GROWN footprint (a draft doc station reserves 560 but renders
+    // ~280 — the overlap-safety law, graphNodeSize never outgrows it), so
+    // verbatim frames read as voids between sibling cards at plan-review
+    // time. Within each settled column, pull every follower up to its
+    // predecessor's CURRENT render bottom: displayY = min(serverY,
+    // prevDisplayBottom + GAP). The min() is structural safety — current
+    // heights never exceed reservations, so compacted followers can never
+    // pass their server seats and columns never overlap; and as products
+    // land the heights only GROW, so a follower slides DOWN toward its
+    // server seat over time (图只长不晃 — growth, never a jump). Server
+    // frames stay untouched (append-only 保序律 — this is a display
+    // derivation, recomputed per render).
+    const columns = new Map<number, FlowNode[]>()
+    for (const n of nodes) {
+      const x = n.frame!.x
+      columns.set(x, [...(columns.get(x) ?? []), n])
+    }
+    for (const ns of columns.values()) {
+      ns.sort((a, b) => a.frame!.y - b.frame!.y)
+      let prevBottom: number | null = null
+      for (const n of ns) {
+        const serverY = n.frame!.y
+        const y =
+          prevBottom === null
+            ? serverY
+            : Math.min(serverY, prevBottom + GAP_CROSS)
+        positions.set(n.id, { x: n.frame!.x, y })
+        prevBottom = y + flowNodeSize(n).height
+      }
+    }
     let reveal = 0
     for (const { nodes: ns } of ordered) {
       for (const n of ns) {
-        positions.set(n.id, { x: n.frame!.x, y: n.frame!.y })
         revealOrder.set(n.id, reveal++)
       }
     }
@@ -441,8 +474,9 @@ export function layoutFlow(nodes: FlowNode[], edges: FlowEdge[]): FlowLayout {
     let height = 0
     for (const n of nodes) {
       const size = flowNodeSize(n)
-      width = Math.max(width, n.frame!.x + size.width)
-      height = Math.max(height, n.frame!.y + size.height)
+      const pos = positions.get(n.id)!
+      width = Math.max(width, pos.x + size.width)
+      height = Math.max(height, pos.y + size.height)
     }
     return { positions, revealOrder, width, height }
   }

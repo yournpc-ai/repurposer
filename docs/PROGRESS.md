@@ -614,7 +614,7 @@
 | turn 级事件可观测性落库 | P2 | agent 调用台账（上方 P1 行——同取证面，天然合批） | 2026-09-16 事故死因不可考的根：stdout 日志不持久 + 回合中途死亡零痕迹；turn_state 已有 in_flight/failed 两章，本条补的是「为什么死」（拒绝轨迹 / 异常类 / 耗时剖面落 DB，非日志文件） |
 | ~~单一叙事者收口（pending-plan 静默 + 语言唯一 owner）~~ | — | — | **✅ 09-17 当日兑现（ADR-080）**：pending task_book 静默谓词 + `conversations.ui_language` owner 列（migration h7d1e4a93b26）+ `_trigger_language` 改读 owner 链；纯函数套件锁链序——条目关闭 |
 | ~~选项语法统一（chip 退役 + OptionDock 编号 1/2/3）~~ | — | — | **✅ 09-17 当日兑现（ADR-081，阻塞形态拍板 = 阻塞式）**：`WrapUpArgs` 收窄纯 label、review 行 dock 真实编号选项问、answer generic 分支按 run 状态分派（无 run 走 plan path）、徽章 a/b/c→1/2/3、存量 pill 行读容忍——条目关闭 |
-| 画布看懂生产计划（高度失真 + 分组 + 长边路由） | P1 | 失真三源已归因（预留高≠实渲高 / asset→asm 跨两列长边 / 新列上移无居中）；`GroupFrames` 组件现成（配方说明书先例） | ADR-082（2026-09-17 拍板）：呈现/语义隔离铁律——禁为排线造语义节点；次序 = 先高度失真后可读性；只动新出生帧的测量口径，append-only 保序不动；验收同 5 秒三问 |
+| 画布看懂生产计划（②可读性：分组 + 长边路由 + 居中） | P1 | ① 高度失真 **✅ 09-17 已落**（ADR-082 判词①——`layout.ts` settled 分支空气压缩：同列按当前渲染高堆叠、`min(serverY, …)` 结构保险、服务端帧零改动）；`GroupFrames` 组件现成（配方说明书先例） | ADR-082（2026-09-17 拍板）：呈现/语义隔离铁律——禁为排线造语义节点；② 剩余 = 同族链分组（项目页补传 groups）/ asset→asm 跨列长边路由 / settled 路径居中；验收同 5 秒三问 |
 
 ### 可选需求
 
