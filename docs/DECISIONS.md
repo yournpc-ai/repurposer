@@ -1700,3 +1700,58 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Consequences**: 双扣路径封死（fenced 永不 capture）= 收费的诚实前提；render morph 窗口腐蚀封死（zombie 先完成 0 命中，产物永不回退旧 spec）；run 复活链封死。Known residue（登记，均不归本批）：fenced 执行途中已直传对象存储的媒体对象成孤儿（DB 世界干净、存储世界留垃圾，归后续存储 GC 小批，与 render superseded 删 key 先例对齐）；fenced zombie Suspend 的孤儿问题消息（永不过期，窗口极小，后续小批清理）。锁序影响评审过：fencing 写把 step 行锁提前到尾段写时刻（原来在 commit flush），但锁窗口内只剩 capture/sync 的短 DB 操作（无 LLM 等待），D9 族形态不复发。验收 = 纯函数套件（token 捕获决策 + rowcount=0 零副作用，`tests/test_execution_fencing_pure.py`）+ 手工竞态演练（A claim→停滞→reap→B claim→B 完成→A 醒：A 终态写 0 命中、无第二条 capture、run 行保持 B 判决；render 同型；zombie Suspend 不复活 run）+ 单 worker happy path / retry / QualityBounce 回归。
 
 **Related**: ADR-017（reap 语义从 ownerless 改 fencing-aware——本条修订）/ ADR-030（render 认领谓词加身份维度——规则 2 的认领先例扩一列）/ ADR-050（guarded-write 纪律从状态守卫升级为身份守卫——会话纪律不变）/ ADR-055（billing——`_mutate` 双层 dedupe 永不破坏，fenced 永不进 capture_step 是 execution kernel owns billing boundary 的具体含义）/ North Star §8（Execution Kernel——§8.1 P0-1/2/3 由本条修复）
+
+## ADR-080: 单一叙事者律——会话只有一个叙事者，界面语言有唯一 owner
+
+**Status**: Decided (2026-09-17；caption 配方卡走查 + GPT 评审收口；准入第一半 = 交互完整性批 B 已落，pending-plan 静默与语言 owner 收口待施工)
+
+**Context**: 2026-09-16 事故的产品层定性——一条用户消息引来两个 assistant 写者：plan turn（跟请求 UI locale，说英文）与 `understanding_warmed` trigger（worker 生、自行推导语言，被中文素材拖拽说中文），内容互相打脸（一个说"计划待确认"，一个说"已在跑"）。批 A+B 修了竞态的地基（用户行 prepare 即持久化 + in-flight defer 准入门），但两个残余缺口是产品规则问题不是工程 bug：① 准入门只看「回合在飞」，计划已 dock 待 Start 时 trigger 仍可发言——「这是我的计划请确认 ↓ 我建议你做三件别的事」的冲突依旧成立；② 语言决策沿三条独立代码路径分叉（plan/chat = 请求 locale，trigger = run pin/history 推导），同一会话允许两个 writer 各自决定「今天说什么语言」。
+
+**Decision**:
+
+1. **单一叙事者律**：同一 conversation 内有用户 turn 在飞（`turn_state='in_flight'`）→ trigger **defer**（批 B 已落：20s × 15 周期，超限静默）；无在飞回合但**有 pending task_book 计划**→ trigger **静默**（`understanding_warmed` 的「我看了什么」叙事已被计划 echo 散文覆盖，再说一遍只有抢麦没有增量）；两者皆无 → trigger 方可说话。准入门从「时序门」升格为「叙事所有权门」。
+2. **界面语言唯一 owner**：conversation 的界面语言只有一个事实源（请求链的 UI locale / 既有 pin），**一切 assistant 写者**（plan path / chat path / trigger / 未来的 worker 生言语）**继承它**，不做 per-writer 推导。`_trigger_language` 的 history 文字推断降级为「owner 缺席时的兜底」，素材语言永不是言语信号（现行原则不变，本条补的是 writer 间不分叉）。
+3. **验收标准**：用户看到画布 + chat 的第一眼，5 秒内能回答三问——「系统理解我要做什么吗 / 它准备怎么做 / 我下一步该点什么」。两个 writer 各说一半、语言不一 = 不过。
+
+**明确不做**：不引入 writer 仲裁器 / 优先级调度层——规则是两张静态谓词（在飞？有 pending 计划？），不是新架构（本次是 interaction 层收口，GPT 判词 ⑤）。
+
+**Consequences**: trigger 的可说话窗口收窄到「会话空闲且无待决计划」——盲区由世界事件自身的画布表达兜住（静默教义不变：盲评不如不说）。语言分裂在结构上不可能（单一 owner），prompt 级语言指令仍在但不再是唯一防线。施工 = `_project_turn_in_flight` 同族加 pending-plan 谓词 + trigger 语言解析改读 owner，均落在 `trigger_turn.py` 一处。
+
+**Related**: ADR-077（触发回合 = ToolLoopAgent 第三座，本条给它叙事所有权边界）/ ADR-052（厚 agent 产品层——一个 agent 的产品承诺在会话层的兑现）/ PROGRESS 需求池「交互完整性批」事故挂账行（本条是其产品层收口）
+
+## ADR-081: 选项语法统一律——固定选项全归 OptionDock，全局编号 1/2/3
+
+**Status**: Decided (2026-09-17；caption 配方卡走查拍板「不要 chip 型 UI，固定提问走 option dock 选 123」+ GPT 评审收口；施工待排期)
+
+**Context**: 提问/建议 UI 曾有三形态并存：阻塞式 option dock（ask_user 族，字母徽章 a/b/c）、计划确认 pill（task_book）、trigger 建议 chip（`intent.suggestions`，LLM 写的用户口吻 pill，点击原样发消息）。第三种「半结构化 pill」是交互碎片：它长得像可选项却不走问题的结算机器（无待决、无 QA 归档、无 autoResume），用户形不成稳定的交互语法。
+
+**Decision**:
+
+1. **二态法则**：凡是系统希望用户**从固定选项中选择** → 一律走 OptionDock（问句 + 全宽选项行 + 铅笔自由行，形态律 ADR-053 R1 不变）；**开放式建议** → 普通散文。**第三种「半结构化 pill」形态整体退役**——trigger 的 `wrap_up` suggestions chip 是第一个也是最后一个消费面，拆除后此形态无座位。
+2. **全局数字编号**：OptionDock 选项徽章从 a/b/c 改 **1/2/3**——用户对所有来源（plan / ask_user / trigger / clarification）的固定选项形成同一 interaction grammar（「选 1」恒 = 第一项）。autoResume 的位置命中（字母/序号/原文三态）本就确定性支持序号，改的是展示面不是结算机。
+3. **trigger 建议的去向**：固定选项类建议改写为 dock 选项（复用 OptionDock 解剖，阻塞/非阻塞形态细节随施工简报拍板）；`download` 直达动作 pill 不复活——产物下载是画布产物卡 factsbar 的既有动作座位，不属于提问语法。
+4. **读容忍**：存量 `intent.type='trigger_review'` 行的 suggestions 回放渲染保留至自然消亡（灰行旧数据不动），新行不再产出。
+
+**明确不做**：不为建议发明「非阻塞 dock 第四态」之外的任何新组件；不改 ask_user 的 schema（options 数组不动，纯展示层换徽章字符）。
+
+**Consequences**: 用户面对的选择交互收敛为唯一形态 + 唯一编号语法；「点击 pill 替我说话」的隐式代发声通道关闭，一切选择都经过 dock 的显式作答语义（QA 归档 / autoResume / bail 同源）。施工面 = `QuestionDock` 徽章字符 + `ChatDock` 的 `triggerSuggestions` 渲染分支替换 + trigger `wrap_up` schema 的 suggestions 字段退役（`Suggestion`/`WrapUpArgs` 收窄）。
+
+**Related**: ADR-053 R1（形态律——选项问阻塞形态的母体，本条不改阻塞语义只改徽章与消费面）/ ADR-070（确认拍回座 dock——dock 是一切固定选择的唯一座位原则的延续）/ ADR-077 判词③（trigger 是说话不是第二意图表面——建议入 dock 后此原则更显：dock 选项的作答仍走 `/chat` 唯一意图面）
+
+## ADR-082: 画布呈现纪律——布局服务「看懂生产计划」，呈现永不反噬语义
+
+**Status**: Decided (2026-09-17；caption 配方卡走查 + GPT 评审收紧；施工待排期)
+
+**Context**: caption 链走查暴露的画布失真全部由现行算法直接解释（非观感问题）：① **预留高度 ≠ 渲染高度**——文档站预留 340×560 / clip 预留 660，draft 态实渲 ~280/~278，兄弟节点按预留堆叠产生 300~380px 隐形空气，6 节点摊到 ~1200px 纵跨；② **跨列长边**——asset（col0）直喂装配节点（col3），贝塞尔横跨 ~1100px 与其他边穿插；③ **新列上移 88px**（`_FRESH_COLUMN_RISE`）且 settled 路径无居中，图整体向右上发散。GPT 的收紧判词：画布的目标不是「忠实显示工程 DAG」，是「用户 5 秒看懂我让它做什么、它准备怎么做」——execution topology viewer ≠ production workspace。
+
+**Decision**:
+
+1. **呈现/语义隔离铁律**：**永不为了画布排线新增语义节点、改变执行拓扑或补假边**（如为美观虚构 transcript 中继）。图 = 产品对象 + 执行拓扑（ADR-057 不变）；可读性问题的合法工具箱只有呈现层：布局常量、帧预留、分组框（`GroupFrames`，项目页画布补传 groups）、edge routing、视口。
+2. **修复次序**：先修**高度失真**（draft 态按实渲高度参与堆叠 / 预留与实渲对齐——一处改动消灭空气深渊）；再修可读性（同族链分组、长边路由、居中）。
+3. **验收标准**：同 ADR-080 判词 ③ 的 5 秒三问——画布部分的及格线 = 用户一眼读出「Video → Transcript → 中文字幕 / 法语字幕」的生产计划，而不是一团穿插的贝塞尔。
+
+**明确不做**：不改 `settle_frames_with_edges` 的 append-only 保序律（既有帧永不移动不变——本批只影响新出生帧的测量与堆叠输入）；不引 dagre 等外部布局库（ADR-036 判词不变）；不借本批重开节点族 / 端口法则（词表 v3 与出入锚律不动）。
+
+**Consequences**: 布局算法的输入从「预留档」改为「当前形态实高」，同值封顶（`DOCUMENT_MAX_H`）与两镜像互引律（graph_store ↔ layout.ts）照旧——改的是测量口径不是契约。分组框上项目页 = `GroupFrames` 的第二个消费面（配方说明书先例），零新组件。
+
+**Related**: ADR-036（布局自算 + append-only 保序——本条只动测量输入）/ ADR-057（图即产品对象——呈现/语义隔离铁律的母体）/ ADR-067（出锚语义律——同族的「呈现忠于语义」原则）/ ADR-080（共享 5 秒三问验收标准）

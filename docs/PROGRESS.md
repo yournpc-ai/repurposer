@@ -610,6 +610,11 @@
 | 样式覆写 UI | P2 | 三族批 editor 卡程序区（✅）；`style_overrides` JSONB 地基未落 | 三族批简报 §7.3 遗留：装配节点 `style_overrides` 数据层 + 用户面（杠杆行形态归批 B4 一并设计；皮肤六件之外的 run 级覆写） |
 | 分镜表表格档节点（rev 迭代） | P2 | 三族批表格档先例（✅ 译文/配音稿两站）；编辑映射 op 设计 | 三族批简报 §7.3 遗留：plan 的分镜产物（槽位 + 覆盖理由）持久化为表格档节点（transcript 与 clips 卡之间），删行 = 弃选 / 改时间窗 = 重切 / 改论点 = 重选——全部确定性 op；用户原话挂头 |
 | 能力缺口喂给（decompiler gaps → 需求池候选） | P2 | decompiler 骨架（✅ 09-15，ADR-078 判词②）；缺口观察积累后再按价值排期 | T5 落地登记：拆解时契约无座位的字段 = 诚实「做不到」清单（CraftGap）；`unsupported` = L3 线永不承诺，`not_yet` = 契约座在、写手未到——**not_yet 族即本池候选源**（既有对应行：text_layers → MG 动画工具行；broll_overlay → insert_broll 行）；旅程二 2b 的带理由纠偏消费它，运营侧按观测频率升格排期 |
+| Turn budget = iteration cap + wall-clock deadline | P1 | 交互完整性批 A+B+C（✅ 09-17）——turn_state 状态机与准入门在 | 2026-09-16 事故归因挂账（GPT 判词D）：`max_iterations=6` 只封次数不封时长——多轮 quiet read 把回合拉到 60s+，是 abort/超时暴露面与 trigger 竞速窗的放大器；到期的诚实降级形态（cannot-do 行 / "仍在处理"提问）随施工拍板，不借本条开启 AgentBudget 大架构讨论（North Star 触发制不变） |
+| turn 级事件可观测性落库 | P2 | agent 调用台账（上方 P1 行——同取证面，天然合批） | 2026-09-16 事故死因不可考的根：stdout 日志不持久 + 回合中途死亡零痕迹；turn_state 已有 in_flight/failed 两章，本条补的是「为什么死」（拒绝轨迹 / 异常类 / 耗时剖面落 DB，非日志文件） |
+| 单一叙事者收口（pending-plan 静默 + 语言唯一 owner） | P1 | 交互完整性批 A+B+C（✅ 09-17）——in-flight defer 门已落；本条补 pending task_book 静默谓词 + trigger 语言改读会话 owner | ADR-080（2026-09-17 拍板，caption 配方卡走查 + GPT 评审）：两张静态谓词，不引仲裁层；验收 = 5 秒三问（理解我吗/准备做什么/下一步点哪）；施工面 = `trigger_turn.py` 一处 |
+| 选项语法统一（chip 退役 + OptionDock 编号 1/2/3） | P1 | OptionDock/OptionForm 与 autoResume 序号命中均现成；trigger `wrap_up` suggestions 是唯一 chip 消费面 | ADR-081（2026-09-17 拍板）：二态法则（固定选项→dock / 开放建议→散文），徽章 a/b/c → 1/2/3，download pill 归产物卡 factsbar；施工面 = QuestionDock 徽章 + ChatDock `triggerSuggestions` 分支 + `Suggestion`/`WrapUpArgs` schema 收窄；阻塞/非阻塞形态细节随施工简报 |
+| 画布看懂生产计划（高度失真 + 分组 + 长边路由） | P1 | 失真三源已归因（预留高≠实渲高 / asset→asm 跨两列长边 / 新列上移无居中）；`GroupFrames` 组件现成（配方说明书先例） | ADR-082（2026-09-17 拍板）：呈现/语义隔离铁律——禁为排线造语义节点；次序 = 先高度失真后可读性；只动新出生帧的测量口径，append-only 保序不动；验收同 5 秒三问 |
 
 ### 可选需求
 
