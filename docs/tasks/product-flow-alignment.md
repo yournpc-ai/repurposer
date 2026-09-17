@@ -93,8 +93,9 @@
 
 > 用户拍板（2026-09-18）的三原则 + 本轮派生律。ADR-086 是其决策层落档。
 
-- **I-PFA-01｜Product Canvas ≠ Execution Graph**：画布节点 = 用户拥有/关心的 artifact（媒介五值 + asset/document 读面），永不是执行步骤。`task_book / preprocess / understand / plan / materialize / render / verify / checkpoint / worker / queue / retry` 类概念永不上画布。现行 read-face 过滤（B1-lite / B4-lite / `_read_face`）追认为本 invariant 的执行机制；**准入闸：新图节点类型 / 新 spec.tool 必须声明 product visibility，默认隐藏**。
+- **I-PFA-01｜Product Canvas ≠ Execution Graph**：画布节点 = **用户拥有、消费、验证或可能修改的产品对象**（user-meaningful product object——**含最终产物与可编辑中间工作产品**：transcript / 翻译文档 / 分镜表 / 字幕文档 / 渲染视频等；媒介五值 + asset/document 读面，ADR-072 词表 v3 为词汇基线），永不是纯执行步骤。`task_book / preprocess / understand / plan / materialize / render / verify / checkpoint / worker / queue / retry` 类概念永不上画布。现行 read-face 过滤（B1-lite / B4-lite / `_read_face`）追认为本 invariant 的执行机制；**准入闸：新图节点类型 / 新 spec.tool 必须声明 product visibility，默认隐藏**。「不是最终产物」永不是隐藏理由——分镜表回答「为什么是这三条」，是合法 Product Canvas node（ADR-072 先例）。
 - **I-PFA-02｜拓扑/语义 rank 是唯一空间权威，frame 是呈现 projection**：一切用户可见位置推导的上游 = Product DAG 拓扑（rank = 拓扑深度）。`graph_nodes.layout` 帧收窄为 **y 座位 / w·h 预留 / 稳定锚**三职；**x 的显示值 = rank 的投影**，服务端出生帧的 x 不再是显示依据。append-only 保序律对 y/稳定锚不变。
+- **I-PFA-02a｜rank 的输入边界**：rank **只消费当前 Product DAG 中表达生产/消费关系的语义边**（semantic production/dependency edges——含读时合成边中表达真实物料流的 A3-lite transcript→consumer 边）；**历史血缘、跨 run 关系、纯呈现关系的边（lineage / historical / presentation-only）不得参与 rank 计算**，永不改变当前图的水平排位。ADR-036 的 lineage/dependency 区分是本法的历史母体——施工时 `rank = topological_depth(all_edges)` 这类全边消费写法 = 合同级缺陷。
 - **I-PFA-03｜方向不变量**：一切用户可见 edge 满足 `rank(target) > rank(source)`；渲染满足 `x(target) > x(source) + MIN_GAP`（MIN_GAP 随施工定，初值 = `_PITCH`）。sibling 序稳定（同 rank 列内 y 序确定性）。**不依赖 node birth order。** 校验 = 纯函数 invariant 测试（layout 投影层）+ dev 显式失败 / prod graceful fallback（见 L4 处置）。
 - **I-PFA-04｜Run order = DAG topology，永不读 layout.x**：`RunOp` 排序改读图边拓扑深度；`graph_revise.py` 的「x 序 = 深度序」假设随修随删。执行顺序与视觉坐标解耦——二者可共享同一 Product DAG，**视觉坐标永不做执行依据**。
 - **I-PFA-05｜生长 = 呈现编排，节点语义一次 stamp**：ADR-057 K5 不翻案（计划确认前用户看到完整链 + 逐节点估价 = fold 报价前提）。「动态生长感」由出生编排（reveal 节拍 / loading → ready 原地状态迁移）承载；**loading → ready 是同一个 node 的更新，不是新建 node**；不把内部 execution task 逐个变成画布节点。
@@ -174,8 +175,11 @@ Generate → create project → attach staged（秒级）→ 导航 → 首条 /
    ```
    「bilingual」= 产物/节点属性，不为此造执行节点（I-PFA-01）。
 3. 定义 **layout projection**：`x = rank × PITCH + sibling 序稳定`；y = 既有服务端帧 y + ADR-082 判词① 空气压缩（不动）；w/h 预留与 `DOCUMENT_MAX_H` 两镜像律不动。**edge routing（贝塞尔 / 端口法则 / 出入锚）一行不动。**
+4. **Canonical fixture（防「几何绿、语义错」假绿，验收必带）**：北极星场景的最小产品图 fixture，同时断言五件事——① node membership（恰好这些产品节点，无执行节点）；② edge membership（Source→Transcript、Transcript→CN/FR、CN/FR→各自 Video，无多无缺）；③ rank（0/1/2/3 四层）；④ x 方向（每条 product edge `x(target) > x(source) + MIN_GAP`）；⑤ sibling 序（同 rank 列内确定性 y 序）。几何 invariant 单独绿不算绿——图本身错（如 Source 直挂 CN/FR 丢了 Transcript 层）时 fixture 必须红。
 
 ### C-1  呈现层投影改造（L1/L2/L3/L5 的视觉根修）
+
+**Preflight 纪律（2026-09-18 拍板③）——「零数据迁移」≠「legacy 图一概不碰」**：三族存量各行其道——**旧 frame** → 不迁移，rank projection 显示消化；**旧 edge** → 按 ADR-062 边对账律**正常自愈**（旧编译器产生、现行不再发射的边该 retract 就 retract——对账是既有写口行为，不是数据迁移）；**旧 node** → 按 read-face / 图语义既有规则判断。施工人员不得以「zero migration」为由冻结边对账，否则 L2/L5 永远存在。
 
 - `layout.ts` settled 分支：列分键从「精确 `frame.x`」改为「rank 投影」；`nodes.every(n => n.frame)` 的激活条件随投影改造重审（空帧行不再阻塞投影）。
 - 显示推导纯函数化，可测：输入 = Product DAG（nodes + product edges + 既有帧 y/w/h），输出 = 每节点 display frame；invariant 断言内建（I-PFA-03）。
