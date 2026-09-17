@@ -35,6 +35,7 @@ fabrication.
 """
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -55,7 +56,7 @@ from app.chat.service import (
 )
 from app.chat.turn_tools import CHAT_READ_TOOLS
 from app.models.schemas import Suggestion, WrapUpArgs
-from app.models.tables import Message, Project, WorkflowRun
+from app.models.tables import Conversation, Message, Project, WorkflowRun
 from app.pipeline.outputs import list_visible_outputs
 
 logger = structlog.get_logger(__name__)
@@ -72,6 +73,55 @@ TRIGGER_WHITELIST = frozenset(
 # question machine's payload is untouched: a trigger turn never docks a
 # question, never answers one).
 TRIGGER_DUMP_TYPE = "trigger_review"
+
+# Turn admission (交互完整性批 B, 2026-09-17 — conversation-level turn
+# ownership): a proactive turn NEVER overtakes an in-flight user turn. The
+# 2026-09-16 incident: the understanding warm fired 36s into the user's
+# first plan turn, the trigger's own session read an empty conversation
+# (the user row wasn't durable yet), and the review spoke blind — three
+# off-request suggestion pills competing with the plan the agent was still
+# building. The user row is durable from the turn's first beat now (交互
+# 完整性批 A), so the gate is a plain DB read. Defer in bounded cycles; at
+# exhaustion, yield to the silence doctrine (a blind review is worse than
+# none — the world event already landed truthfully on its own).
+_TRIGGER_DEFER_SECONDS = 20
+_TRIGGER_DEFER_MAX_ATTEMPTS = 15  # 15 × 20s = a 5-minute politeness bound
+# A stranded in_flight row (a crashed turn whose 'failed' stamp never
+# landed) ages out past this bound — the gate never deadlocks on a corpse.
+_TURN_IN_FLIGHT_STALE_SECONDS = 600
+
+
+def _trigger_admission(in_flight: bool, attempt: int, max_attempts: int) -> str:
+    """The gate's pure decision: "proceed" | "defer" | "drop" (drop = the
+    politeness bound ran out — silence, never blind speech)."""
+    if not in_flight:
+        return "proceed"
+    return "drop" if attempt >= max_attempts else "defer"
+
+
+async def _project_turn_in_flight(project_id: UUID) -> bool:
+    """The gate's read: a durable user row still owned by a live turn
+    (turn_state='in_flight', younger than the stale bound) anywhere in the
+    project's conversation. Short-lived session — this runs between defer
+    cycles, outside the turn's own session."""
+    from app.models.database import AsyncSessionLocal  # deferred: worker seat
+
+    cutoff = datetime.now(UTC) - timedelta(seconds=_TURN_IN_FLIGHT_STALE_SECONDS)
+    async with AsyncSessionLocal() as db:
+        row = (
+            await db.execute(
+                select(Message.id)
+                .join(Conversation, Message.conversation_id == Conversation.id)
+                .where(
+                    Conversation.project_id == project_id,
+                    Message.role == "user",
+                    Message.turn_state == "in_flight",
+                    Message.created_at >= cutoff,
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        return row is not None
 
 
 WRAP_UP = ChatTool(
@@ -183,6 +233,30 @@ async def run_trigger_turn(
         logger.warning("trigger_turn_rejected_off_whitelist", trigger=trigger)
         return None
     try:
+        # The admission gate (交互完整性批 B): never overtake an in-flight
+        # user turn — defer in bounded cycles, drop into silence at the
+        # bound. Inside the try: the fire-and-forget doctrine covers the
+        # gate's own reads too (a DB hiccup is silence, never a task crash).
+        for attempt in range(_TRIGGER_DEFER_MAX_ATTEMPTS + 1):
+            verdict = _trigger_admission(
+                await _project_turn_in_flight(project_id),
+                attempt,
+                _TRIGGER_DEFER_MAX_ATTEMPTS,
+            )
+            if verdict == "proceed":
+                break
+            if verdict == "drop":
+                logger.info(
+                    "trigger_turn_admission_deferred_out", trigger=trigger, ref=ref
+                )
+                return None
+            logger.info(
+                "trigger_turn_admission_defer",
+                trigger=trigger,
+                ref=ref,
+                attempt=attempt,
+            )
+            await asyncio.sleep(_TRIGGER_DEFER_SECONDS)
         async with AsyncSessionLocal() as db:
             project = await db.get(Project, project_id)
             if project is None:

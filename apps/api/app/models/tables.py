@@ -527,6 +527,16 @@ class Message(Base):
         nullable=True,
     )
     intent = Column(JSONB(none_as_null=True), nullable=True)  # IntentProposal dump for this turn (chat/intent.py chat_intent agent); JSONB — the trigger dedup reads intent["trigger"].astext (generic JSON's subscript has no .astext, R1 B1 实证)
+    # Turn identity (交互完整性批 A, 2026-09-17 — the minimal in-flight
+    # contract): set ONLY on the user row that opens a chat turn — durable
+    # from the turn's first beat (prepare's own commit), so "the message is
+    # received" never again dies with the turn's outcome. NULL everywhere
+    # else (assistant rows, legacy rows, non-turn seats). Values:
+    # in_flight (the turn owns it — the trigger admission gate's read) →
+    # settled (the turn's final commit stamps it) | failed (best-effort
+    # stamp on the failure/cancel path; a crashed turn's row AGES OUT of
+    # in_flight via the stale bound, never holds the gate forever).
+    turn_state = Column(String(20), nullable=True)
     # One row, two states (the ask_user machinery): ``question`` is the typed payload
     # ({kind: task_book|choice|confirm, ...}); ``answer`` NULL = pending —
     # pending questions live in the dock, answered ones archive as QA pairs.

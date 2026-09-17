@@ -48,6 +48,7 @@ from app.chat.service import (
     latest_pending_question,
     list_conversation_messages,
     prepare_chat_turn,
+    stamp_turn_failed,
 )
 from app.providers.llm.base import LLMError
 from app.pipeline.errors import user_error_line
@@ -245,7 +246,15 @@ async def _sse_pump(
                 yield _sse(completed_event, json.dumps(item[1]))
                 return
             else:
-                yield _sse(failed_event, json.dumps({"detail": item[1]}))
+                # A 3-tuple's third element is the turn-durability flag
+                # (交互完整性批 A): the user row survived the failure — the
+                # client keeps the bubble instead of rolling it back. The
+                # answer stream's 2-tuples simply omit it (their failure
+                # semantics are unchanged).
+                payload = {"detail": item[1]}
+                if len(item) > 2:
+                    payload["persisted"] = item[2]
+                yield _sse(failed_event, json.dumps(payload))
                 return
     finally:
         if not task.done():
@@ -279,9 +288,15 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
     async def run_turn() -> None:
         from app.models.database import AsyncSessionLocal
 
+        prepared = None
+        turn_user_message_id = None
         try:
             async with AsyncSessionLocal() as db:
                 prepared = await prepare_chat_turn(db, user_id, data)
+                # Capture pre-rollback (本地变量律 — the B2 fenced-tails
+                # MissingGreenlet lesson): the failure stamp below reads this
+                # after the turn's session has torn down.
+                turn_user_message_id = prepared.user_message.id
                 on_delta = _make_delta_hook(queue)
                 on_tool_call, on_tool_ready = _make_tool_hooks(queue)
 
@@ -292,10 +307,10 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                 async def on_phase(phase: str) -> None:
                     # A REAL phase switch (chat-flow-sequencing C): a labelled
                     # thinking frame ({"phase": "drafting" | "creating_run" |
-                    # "repairing"}) — the dock's thinking row shows the
-                    # phase copy instead of the static fallback. The bare {}
-                    # keepalive frames above never carry a phase and never
-                    # touch the client's label.
+                    # "repairing" | "composing"}) — the dock's thinking row
+                    # shows the phase copy instead of the static fallback.
+                    # The bare {} keepalive frames above never carry a phase
+                    # and never touch the client's label.
                     await queue.put(
                         _sse("assistant.thinking", json.dumps({"phase": phase}))
                     )
@@ -307,7 +322,23 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                 )
             await queue.put(("completed", response.model_dump(mode="json")))
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash
-            await queue.put(("failed", _failure_detail(exc, ui_language)))
+            # Turn durability (交互完整性批 A): the user row committed in
+            # prepare SURVIVES this failure — stamp it 'failed' (best-effort,
+            # fresh session inside) and tell the client it persisted, so the
+            # flow keeps the bubble instead of rolling the user's own words
+            # back. A prepare-stage rejection (entry caps) never persisted —
+            # persisted=False keeps the old rollback for those.
+            if turn_user_message_id is not None:
+                await stamp_turn_failed(turn_user_message_id)
+            await queue.put(
+                ("failed", _failure_detail(exc, ui_language), turn_user_message_id is not None)
+            )
+        except BaseException:
+            # Cancel (the client disconnected mid-turn): same durability
+            # stamp, then let the cancellation propagate.
+            if turn_user_message_id is not None:
+                await stamp_turn_failed(turn_user_message_id)
+            raise
 
     task = asyncio.create_task(run_turn())
     async for frame in _sse_pump(queue, task, "turn.completed", "turn.failed"):

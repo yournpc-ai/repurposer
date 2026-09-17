@@ -65,6 +65,7 @@ from app.chat.service import (
     _has_resolved_caption_mode,
     _needs_caption_mode_question,
     _needs_media,
+    _observe_phase_callback,
     _reminder_tail,
     _repair_phase_callback,
     _resolved_caption_mode,
@@ -1047,6 +1048,7 @@ async def run_plan_turn(
         on_tool_call=on_tool_call,
         on_tool_ready=on_tool_ready,
         on_repair=_repair_phase_callback(on_phase),
+        on_observe=_observe_phase_callback(on_phase),
         **turn.infer_kwargs,
     )
     return await turn.finish(result)

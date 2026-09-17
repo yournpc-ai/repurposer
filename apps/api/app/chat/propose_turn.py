@@ -57,6 +57,7 @@ from app.chat.service import (
     _edit_op_items,
     _has_resolved_caption_mode,
     _needs_caption_mode_question,
+    _observe_phase_callback,
     _prefers_zh,
     _resume_ack_line,
     _reminder_tail,
@@ -616,6 +617,7 @@ async def run_propose_turn(
             on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready,
             on_repair=_repair_phase_callback(on_phase),
+            on_observe=_observe_phase_callback(on_phase),
         )
     except LLMError:
         capabilities = getattr(chat_intent_agent.client, "capabilities", None)

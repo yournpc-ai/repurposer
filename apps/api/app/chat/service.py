@@ -1979,6 +1979,14 @@ async def prepare_chat_turn(
         # now; old rows keep their stored focus_output (读容忍 — the history
         # replay still renders their gray prefix row), new rows never write it.
     )
+    # Turn identity, first beat (交互完整性批 A): the user row owns the
+    # turn's in-flight marker from HERE, and prepare's own commit below makes
+    # it durable BEFORE the agent turn runs — input durability is never again
+    # bound to the turn's outcome (the 2026-09-16 incident: a mid-turn death
+    # rolled the user's words back with everything else, and the racing
+    # trigger read an empty conversation). The turn's final commit stamps
+    # 'settled'; failure/cancel paths stamp 'failed' best-effort.
+    user_message.turn_state = "in_flight"
 
     project = await _load_project(db, UUID(str(conversation.project_id)))
     history = list(
@@ -2088,6 +2096,15 @@ async def prepare_chat_turn(
                 ).scalar_one_or_none()
                 plan_path = has_runs is None
 
+    # Input durability commit (交互完整性批 A): everything above is
+    # deterministic and COMPLETE at this point — the conversation, the
+    # durable user row (turn_state='in_flight'), a deterministic autoResume
+    # settle, the interrupt wake. It commits NOW, before the agent turn:
+    # entry-cap 4xx above still reject pre-persistence (nothing to roll
+    # back), but from here on the request is received, provably. The agent
+    # turn's own writes land in execute_chat_turn's commit.
+    await db.commit()
+
     return PreparedTurn(
         user_id=user_id,
         conversation=conversation,
@@ -2121,6 +2138,51 @@ THINKING_PHASE_REPAIRING = "repairing"
 # (``key`` — resolved client-side; the tool name never reaches the user
 # face). 「正在查曲库…」= the process chatter's free seat (礼仪三件套 ②).
 THINKING_PHASE_INSPECTING = "inspecting"
+# The read→think takeover (交互完整性批 C, 2026-09-17): an ACCEPTED read's
+# observation is on the wire and the loop enters a QUIET decision iteration
+# (15-25s of LLM time) — without this frame the row would keep wearing the
+# stale inspecting label for work that already finished (the 「Caption
+# styles checked → putting it together」gap: tool completion had no phase
+# seat at all). Emitted at the observation's acceptance, never for a
+# rejection (that has its own label).
+THINKING_PHASE_COMPOSING = "composing"
+
+
+def _observe_phase_callback(on_phase):
+    """Map the loop's accepted-read signal (``on_observe``) onto the SSE
+    phase pipe — the read→think takeover frame (THINKING_PHASE_COMPOSING).
+    None-safe like the repair callback (the one-shot path has no pipe)."""
+    if on_phase is None:
+        return None
+
+    async def _emit(_tool_name: str) -> None:
+        await on_phase(THINKING_PHASE_COMPOSING)
+
+    return _emit
+
+
+async def stamp_turn_failed(user_message_id) -> None:
+    """Best-effort 'failed' stamp for a dead turn's durable user row (交互
+    完整性批 A) — a FRESH session, because the turn's own is tearing down /
+    already rolled back. Never raises: a missed stamp is covered by the
+    admission gate's stale bound (an ancient in_flight row stops counting as
+    alive), so this is honesty polish, not a correctness load-bearer.
+    ``user_message_id`` must be captured pre-rollback (本地变量律 — the
+    B2 fenced-tails MissingGreenlet lesson)."""
+    from app.models.database import AsyncSessionLocal  # deferred: failure path
+
+    try:
+        async with AsyncSessionLocal() as db:
+            row = await db.get(Message, user_message_id)
+            if row is not None and row.turn_state == "in_flight":
+                row.turn_state = "failed"
+                await db.commit()
+    except Exception as e:  # noqa: BLE001 — best-effort by contract
+        logger.warning(
+            "turn_state_failed_stamp_error",
+            message_id=str(user_message_id),
+            error=str(e),
+        )
 
 
 def _repair_phase_callback(on_phase):
@@ -2208,6 +2270,11 @@ async def execute_chat_turn(
             # the client's pill clears and the AnsweredQuestion block lands.
             prepared.answered_question = chat_settled
 
+    # The turn's outcome stamp rides the SAME commit as its writes (交互
+    # 完整性批 A): in_flight → settled is atomic with the assistant row /
+    # the dock / the run — "message received" and "turn converged" stay two
+    # distinct, individually truthful facts (the minimal turn contract).
+    prepared.user_message.turn_state = "settled"
     await db.commit()
     await finalize_bailed_runs(bailed_run_ids)
     return ChatResponse(

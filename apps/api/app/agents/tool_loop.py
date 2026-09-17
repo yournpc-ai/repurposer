@@ -228,6 +228,7 @@ class ToolLoopAgent:
         on_tool_call: _Hook | None = None,
         on_tool_ready: _Hook | None = None,
         on_repair: _Hook | None = None,
+        on_observe: _Hook | None = None,
         **ctx: Any,
     ) -> LoopResult:
         """Run the bounded loop: assemble → render → [generate_with_tools →
@@ -257,6 +258,13 @@ class ToolLoopAgent:
           never wears the label (2026-09-17 交互完整性批 ②: the read-before-
           write journey used to light "reworking it…" right after a
           successful read — a lie about the world).
+        - ``on_observe``: an observation was ACCEPTED (a non-terminal read's
+          result is on the wire) and the loop enters the quiet decision
+          iteration — the read→think phase-takeover seat (交互完整性批 C:
+          tool completion used to have no signal, so the UI kept wearing the
+          stale inspecting label through the 15-25s quiet window). Fires
+          with the read tool's name, once per accepted read; never for a
+          rejection (that has ``on_repair``).
         """
         capabilities = getattr(self.client, "capabilities", None)
         if capabilities is None or not capabilities.supports_native_tools:
@@ -453,6 +461,11 @@ class ToolLoopAgent:
                         "content": outcome.text,
                     }
                 )
+                # The read→think takeover (交互完整性批 C): the observation
+                # is on the wire, the quiet decision iteration begins — the
+                # UI's phase moves on from the inspecting label NOW, not at
+                # the next call's name-known moment (15-25s later).
+                await _emit(on_observe, call.name)
                 continue
             if outcome is None:
                 if not tool.terminal:

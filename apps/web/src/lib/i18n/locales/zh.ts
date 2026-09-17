@@ -1142,6 +1142,7 @@ const zh: Resources = {
       drafting: "正在起草计划…",
       creating_run: "正在创建你的 workflow…",
       repairing: "刚才的回答没组织好，我重新整理一下…",
+      composing: "正在整理…",
     },
     /** 感知族的查询碎碎念（T2b）：读工具运行期间 thinking 行的文案。
      * key 随服务端注册表（app/chat/perception）——工具名永不上用户面。 */

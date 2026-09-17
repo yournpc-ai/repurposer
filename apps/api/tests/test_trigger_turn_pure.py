@@ -27,6 +27,7 @@ from app.chat.trigger_turn import (
     TRIGGER_RUN_COMPLETED,
     TRIGGER_UNDERSTANDING,
     TRIGGER_WHITELIST,
+    _trigger_admission,
     _trigger_dump,
     _trigger_language,
     trigger_agent,
@@ -165,3 +166,26 @@ class TestTriggerLanguage:
             _trigger_language(None, [Message(role="assistant", content="你好")])
             == "en"
         )
+
+
+# ---- Turn admission (交互完整性批 B, 2026-09-17) ------------------------------
+#
+# The gate's pure decision law: a proactive turn NEVER overtakes an in-flight
+# user turn — defer while the politeness bound holds, drop into silence at
+# the bound (never blind speech). The DB read itself stays e2e-covered
+# (S19's mid-turn fire).
+
+
+def test_admission_proceeds_when_no_user_turn_is_in_flight() -> None:
+    assert _trigger_admission(False, 0, 15) == "proceed"
+    assert _trigger_admission(False, 15, 15) == "proceed"
+
+
+def test_admission_defers_while_the_bound_holds() -> None:
+    assert _trigger_admission(True, 0, 15) == "defer"
+    assert _trigger_admission(True, 14, 15) == "defer"
+
+
+def test_admission_drops_at_the_bound_never_speaks_blind() -> None:
+    assert _trigger_admission(True, 15, 15) == "drop"
+    assert _trigger_admission(True, 99, 15) == "drop"

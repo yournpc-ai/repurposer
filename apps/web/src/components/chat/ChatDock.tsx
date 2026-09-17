@@ -2532,8 +2532,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         status: "uploaded"
       }[]
       /** Failure handling for a user-typed turn: roll the optimistic bubble
-       * back out of the flow and restore the draft (the server commits
-       * nothing on a failed turn, so the flow must not keep it either). */
+       * back out of the flow and restore the draft — ONLY when the message
+       * never persisted (entry-cap rejections / pre-stream failures). A
+       * persisted turn (交互完整性批 A) keeps the bubble; the grey error
+       * row is its marker. */
       rollbackId?: string
       draft?: string
       /** The turn's mention chips return with the draft on failure. */
@@ -2843,11 +2845,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         )
         return
       }
-      // The server commits nothing on a failed turn — roll the optimistic
-      // bubble (and any streamed preview) back out, restore the draft, and
-      // re-stage the consumed attachment chips.
+      // Turn durability (交互完整性批 A): a persisted turn's user message
+      // committed server-side BEFORE the failure — the bubble STAYS (a
+      // refresh re-renders it from the DB), and the grey row below is its
+      // in-flow marker. Only a pre-persistence rejection (entry caps) or a
+      // pre-stream failure rolls the optimistic bubble back out and
+      // restores the draft (nothing exists server-side to diverge from).
+      const persisted = e instanceof StreamTurnError && e.persisted
       setMessages((prev) => prev.filter((m) => m.id !== streamId))
-      if (opts?.rollbackId) {
+      if (opts?.rollbackId && !persisted) {
         const rollbackId = opts.rollbackId
         setMessages((prev) => prev.filter((m) => m.id !== rollbackId))
         // The editor is DOM-owned: restore imperatively, and only when the
@@ -2859,7 +2865,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           for (const m of opts.rollbackMentions ?? []) editor?.insertMention(m)
         }
       }
-      if (opts?.rollbackStaged?.length) {
+      if (opts?.rollbackStaged?.length && !persisted) {
         const chips = opts.rollbackStaged
         setStaged((prev) => {
           const kept = new Set(prev.map((s) => s.localId))
@@ -2867,8 +2873,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         })
       }
       // The failure itself lands in the flow as a gray system row (never a
-      // toast — turn.failed is a fact of the conversation). The server
-      // commits nothing, so the row is local-only and a refresh drops it.
+      // toast — turn.failed is a fact of the conversation). The row is
+      // local-only; on a persisted turn the user bubble it answers IS
+      // durable, so a refresh keeps the question and drops only this row —
+      // the honest shape of "asked, not answered".
       // A structured credits shortfall (the judged-start 422 riding the
       // turn.failed frame) takes the shared grey-row seat — 双路同语义
       // with the typed Start.

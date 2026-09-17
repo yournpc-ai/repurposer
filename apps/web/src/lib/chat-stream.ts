@@ -99,11 +99,18 @@ export interface AnswerTurnBody {
  * asCreditsInsufficient & co. */
 export class StreamTurnError extends Error {
   detail: unknown
+  /** Turn durability (交互完整性批 A): the user message committed server-
+   * side before the turn died — the flow must KEEP the bubble (a refresh
+   * re-renders it from the DB), never roll the user's own words back.
+   * False for pre-persistence rejections (entry caps) and pre-stream HTTP
+   * failures, where the old rollback stays correct. */
+  persisted: boolean
 
-  constructor(detail: unknown, fallback: string) {
+  constructor(detail: unknown, fallback: string, persisted = false) {
     super(typeof detail === "string" && detail ? detail : fallback)
     this.name = "StreamTurnError"
     this.detail = detail
+    this.persisted = persisted
   }
 }
 
@@ -179,8 +186,13 @@ function streamTurn<T>(
         } else if (msg.event === terminal.completed) {
           resolve(JSON.parse(msg.data))
         } else if (msg.event === terminal.failed) {
-          const data = JSON.parse(msg.data) as { detail?: unknown }
-          reject(new StreamTurnError(data.detail, "Stream failed"))
+          const data = JSON.parse(msg.data) as {
+            detail?: unknown
+            persisted?: boolean
+          }
+          reject(
+            new StreamTurnError(data.detail, "Stream failed", !!data.persisted),
+          )
         }
         // heartbeat comment frames never reach onmessage.
       },

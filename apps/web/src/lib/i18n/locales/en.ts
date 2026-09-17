@@ -1203,6 +1203,7 @@ const en = {
       drafting: "Drafting the plan…",
       creating_run: "Creating your workflow…",
       repairing: "That answer didn't come out right — reworking it…",
+      composing: "Putting it together…",
     },
     /** The perception family's inspecting chatter (T2b): the thinking row's
      * label while a read tool runs. Keys ride the server registry

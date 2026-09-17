@@ -3041,6 +3041,113 @@ async def s18_idless_asset_read_terminalizes(ctx: Ctx) -> None:
         )
 
 
+async def s19_turn_durability_and_trigger_admission(ctx: Ctx) -> None:
+    """交互完整性批 A+B (2026-09-17) 回归：用户消息从回合第一拍即可持久
+    （turn_state: in_flight → settled 随回合提交盖章），trigger 准入门永不
+    超越在途用户回合 —— 回合进行中 in-process 直接点火 run_trigger_turn，
+    review 必须落在用户回合收敛之后。2026-09-16 事故原样：commit-once
+    回合死亡吞掉用户消息 + understanding_warmed 撞进在途回合盲说。"""
+    from app.chat.trigger_turn import TRIGGER_UNDERSTANDING, run_trigger_turn
+
+    pid = await ctx.new_project("S19 turn durability + admission")
+    await seed_asset(
+        pid,
+        ctx.user_id,
+        AssetType.VIDEO,
+        "talk.mp4",
+        extracted_text="So a company from Oxford University.",
+        processed=True,
+        meta={"language": "en"},
+    )
+    chat_task = asyncio.create_task(
+        ctx.chat(
+            pid,
+            "Caption my video in Chinese and French — Chinese as bilingual "
+            "subtitles.",
+        )
+    )
+    # A) 用户行随回合第一拍持久，且持有 in-flight 标记（轮询等它出现——
+    #    prepare 的前置提交在 LLM 调用之前，几秒内必现）。
+    user_row: dict | None = None
+    for _ in range(30):
+        async with AsyncSessionLocal() as db:
+            row = (
+                await db.execute(
+                    select(Message)
+                    .join(Conversation, Message.conversation_id == Conversation.id)
+                    .where(
+                        Conversation.project_id == uuid.UUID(pid),
+                        Message.role == "user",
+                    )
+                    .order_by(Message.created_at.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if row is not None:
+                user_row = {
+                    "id": str(row.id),
+                    "turn_state": row.turn_state,
+                    "content": row.content,
+                }
+                break
+        await asyncio.sleep(1)
+    check(user_row is not None, "the user row is durable from the first beat")
+    check(
+        user_row["turn_state"] == "in_flight",
+        "the durable row owns the in-flight marker while the turn runs",
+        user_row,
+    )
+    check(
+        "Caption my video" in (user_row["content"] or ""),
+        "the durable row carries the user's actual words",
+        user_row,
+    )
+    # B) 在途点火：准入门必须 defer（纯决策由 test_trigger_turn_pure 锁；
+    #    这里锁端到端秩序——review 落在用户回合收敛之后）。
+    trigger_task = asyncio.create_task(
+        run_trigger_turn(uuid.UUID(pid), TRIGGER_UNDERSTANDING, "s19-digest")
+    )
+    turn1 = await chat_task
+    turn1 = await answer_caption_gate(ctx, turn1)
+    check(
+        terminal_tool_of(turn1) in ("present_plan", "ask_user"),
+        "the user turn converges normally under the racing trigger",
+        terminal_tool_of(turn1),
+    )
+    async with AsyncSessionLocal() as db:
+        settled = await db.get(Message, uuid.UUID(user_row["id"]))
+        check(
+            settled is not None and settled.turn_state == "settled",
+            "the turn's commit stamps the user row settled",
+            settled.turn_state if settled is not None else None,
+        )
+    review = await trigger_task  # 5 分钟礼貌窗 >> 正常回合时长——必发言
+    check(review is not None, "the deferred review eventually speaks")
+    async with AsyncSessionLocal() as db:
+        rows = list(
+            (
+                await db.execute(
+                    select(Message)
+                    .join(Conversation, Message.conversation_id == Conversation.id)
+                    .where(Conversation.project_id == uuid.UUID(pid))
+                    .order_by(Message.created_at.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+    review_row = next(r for r in rows if str(r.id) == str(review.id))
+    assistants_before = [
+        r for r in rows if r.role == "assistant" and r.created_at < review_row.created_at
+    ]
+    check(
+        len(assistants_before) >= 1,
+        "the review lands AFTER the user turn's reply — never mid-turn "
+        "(the 2026-09-16 blind-speech race)",
+        [(r.role, r.created_at.isoformat()) for r in rows],
+    )
+
+
 SCENARIOS = {
     "S1": s1_bare_wish_full_journey,
     "S2": s2_skipped_topic_ask_drafts_from_persona,
@@ -3060,6 +3167,7 @@ SCENARIOS = {
     "S16": s16_remix_flagship_journey,
     "S17": s17_run_authority_park_and_handoff,
     "S18": s18_idless_asset_read_terminalizes,
+    "S19": s19_turn_durability_and_trigger_admission,
 }
 
 

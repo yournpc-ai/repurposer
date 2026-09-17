@@ -476,6 +476,59 @@ async def test_on_repair_marks_only_the_rejection_after_a_read() -> None:
     assert len(repairs) == 1
 
 
+# ---- on_observe 语义 (2026-09-17 交互完整性批 C) ------------------------------
+#
+# The read→think takeover: an ACCEPTED read fires on_observe exactly once
+# (with the read tool's name) as the loop enters the quiet decision
+# iteration — tool completion finally has a signal, so the UI never wears
+# the stale inspecting label through the 15-25s quiet window. Rejections
+# and terminal calls never fire it.
+
+
+@pytest.mark.asyncio
+async def test_on_observe_fires_once_per_accepted_read_with_the_name() -> None:
+    read = _read_tool()
+    echo = ChatTool("echo", "Echo the text.", EchoArgs)
+    client = StubClient([
+        _call("lookup", {}, prose="let me check"),
+        _call("lookup", {}, prose="one more look"),
+        _call("echo", {"text": "done"}, prose="the answer"),
+    ])
+    observed: list[str] = []
+
+    async def execute(name: str, params: Any, prose: str):
+        if name == "lookup":
+            return ToolObservation("world")
+        return None
+
+    agent = _make_agent("tl_observe", client, tools=[read, echo])
+    result = await agent.call_loop(
+        execute, on_observe=lambda name: observed.append(name)
+    )
+    assert result.tool_name == "echo"
+    assert observed == ["lookup", "lookup"]
+
+
+@pytest.mark.asyncio
+async def test_on_observe_never_fires_for_rejections_or_terminal_calls() -> None:
+    client = StubClient([
+        _call("echo", {"text": "bad"}, prose="first"),
+        _call("echo", {"text": "good"}, prose="second"),
+    ])
+    observed: list[str] = []
+
+    async def execute(name: str, params: BaseModel | None, prose: str) -> str | None:
+        assert params is not None
+        return "nope" if params.text == "bad" else None
+
+    agent = _make_agent("tl_observe_reject", client)
+    result = await agent.call_loop(
+        execute, on_observe=lambda name: observed.append(name)
+    )
+    assert result.params is not None and result.params.text == "good"
+    assert observed == []
+
+
 def test_tool_spec_shape_and_zero_arg_tools() -> None:
     spec = tool_spec(ChatTool("echo", "Echo the text.", EchoArgs))
     assert spec["type"] == "function"
