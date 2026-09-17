@@ -326,3 +326,42 @@
 | 三 09-16 | 第一周收口（mock 路径对账 + 审批 / 权限状态盘点，定第二周联调顺序） | 支付主链就绪，外部依赖有明确落点 |
 | 四 09-17 ~ 三 09-23 | 端到端联调（订阅 → 使用 → 查账 → 管理套餐 + 发布到渠道全链；审批未到位则 mock 验收 + 真联调排队清单）+【验收】🎯 **商业化闭环 + 分发就绪** | 从免费到付费的完整体验；产物有去处 |
 
+
+## 来源：§0.0~0.2 R1 定义 / Active Roadmap / Definition of Done（2026-09-17 封板）
+
+### 0.0 R1 — Core Product Beta（当前里程碑）
+
+**一句话**：用户可以放心把工作交给 Repurposer 完成核心创作闭环。**R1 不要求商业化、不含外部依赖。**
+
+用户语言定义：首产（J1）→ Remix 仿制（J2）→ 第二句话修改（J3）→ 被问能答（J4）→ 失败能恢复（J5：不重复扣费 / 不污染已有产物 / 卡死有终态）→ 挂起后继续（J6：不毁已有工作）。旅程逐拍定义 = `docs/JOURNEYS.md`。
+
+**Must-have journey = J2 / J5 / J6**（J1/J3 是存量优势，本阶段只做 regression lock；J4 随 J6 修）。判断方法：每个 batch 必须能回答「它阻塞哪个用户行为」——答不上来的工作项不进本节。
+
+**R1 在长期蓝图中的位置**（`docs/ARCHITECTURE_NORTH_STAR.md`）：R1 = §8 Execution Kernel 可靠性闭环 + §9 Structured Media 的首个真实入口（J2，**参数级仿制**——结构级消费仍 OPEN）。OS 上层抽象（统一 Artifact 模型 / Media IR / ExecutionAttempt / AgentBudget）全部**触发制 OPEN、不排期**——触发条件在 North Star 各节在册，触发前不存在于任何里程碑。
+
+### 0.1 Active Roadmap（施工顺序 = 拍板，不再重排）
+
+> **工期拍板（2026-09-16）**：**R1 本周内收口（≤ 09-20）**——当前技术架构下产品功能闭环不可靠（J2 无验收 / 竞态可双扣 / 旧 run 可毁新产物 / 卡死无终态），先把产品功能做完成；商业化（R1.1）排期挂起，随支付或更后再议。三个施工会话：B1（四 09-17）→ B2（四~五 09-17~18，最重，可 compact 一次）→ B3+B4a（六~日 09-19~20）+ R1 验收。**回退预案**：B2 若溢出，B1+B2 = 收费关键最小集优先保住，B3/B4a 顺延数日不伤任何后续（R1.1 未排期）。
+
+| Batch | 服务 Journey | 用户阻塞（Why now） | 技术工作（第二层） | 状态 | 依赖 | 施工合同 |
+|---|---|---|---|---|---|---|
+| **B1** | J2 | 旗舰旅程零自动化验收；run 路径拆解静默；画布孤儿节点 | remix e2e + run-path trigger + prelude 折叠 + 测试复位（4 漂移 + gate 0） | **DONE**（2026-09-16 验证绿：190 纯测试 / 闸门 / prompt gate / S16；commit cd90fca） | — | `tasks/r1-batch-1-remix-closure.md` |
+| B2 | J5/J3/J6 | 竞态下双扣 + 僵尸写污染产物：收费后第一个 worker 卡顿 = 账单事故 | claim fencing（范围冻结 = `ARCHITECTURE_GATE_2_REPORT.md` §7/§13） | **DONE**（2026-09-16 施工+§10.1 自动化四条绿：纯套件 9 / 全量 199 / 闸门 / migration 升降；**§10.2–10.5 实弹演练 2026-09-17 全绿**——§10.2 节点 fencing（A 冻结→SQL reap→B 新 token/attempt+1 完成→A 醒后 `workflow_step_fenced` 落日志、B 值不被覆写、capture 恰一条、钱包零二扣、run 保持 COMPLETED）；§10.3 render 同型（morph-sim 后 B 完成、A 醒后 `render_superseded`、行保 B 的 files/token）；§10.4 zombie Suspend 守卫实证（COMPLETED→WAITING_HUMAN 命中 0 行）；§10.5 全量剧本回归（归因见 §0.2 状态标签）；**演练抓出真 bug 一条并同批修掉**：fenced 五尾 rollback 后读过期 ORM 属性崩 MissingGreenlet、日志永不落（commit 928d5a8）；commits 50c4ae8 / 928d5a8） | B1 | `tasks/r1-batch-2-execution-fencing.md` |
+| B3 | J6/J4 | 旧问题后答/过期自动答 → 旧 run 无守卫复活，整族销毁新 run 产物 | run authority 仲裁座（一座四入口）+ expire 解耦 | **DONE**（2026-09-16 验证绿：纯套件 6 新绿（全量 209）/ S17 剧本全链绿 / S14·S4·S13·S15 回归绿；S6f read-first 流式断言 = 既有 LLM 方差（baseline 同红，非本批引入）；commit 3e1cbc8） | B2 | `tasks/r1-batch-3-run-authority.md` |
+| B4a | J5 | 素材崩溃环无限重烧、永无终态 | attempts 封顶终态 + reprocess 完整 reset 一座 | **DONE**（2026-09-16 验证绿：migration 升降 / 纯套件 4 新绿 / 崩溃环演练 14 项全绿（封顶终态+人话行+不再认领+复位真重开）/ S4 正常素材链回归绿；commit 051ad0e） | B2 | `tasks/r1-batch-4a-poison-pill.md` |
+
+### 0.2 R1 Definition of Done
+
+**产品 DoD（第一语言）**：
+1. 首产闭环：素材 + 一句话 → 被接住 → 计划+估价 → 确认 → 施工可见 → 产物+收官（剧本 S1–S12 持续全绿）；
+2. 旗舰闭环：两个视频 + 一句话 → 角色消歧 → agent 说出案例理解 → 仿制产物 → 可继续改（remix e2e 绿 + **人工验收脚本五维打勾**，见 `tasks/r1-batch-1-remix-closure.md` §8）；
+3. 更改闭环：第二句话改字幕/音乐/翻译/重剪，撤销可回退（存量，锁绿）；
+4. 恢复可信：失败 → 人话原因 → 重试 → 台账零重复扣费（竞态演练证明）→ 已有产物零污染 → 卡死素材有终态；
+5. 多轮一致：挂起 → 开新 run → 后答/过期 → 旧 run 重新排队，新产物零损失。
+
+**Invariant（第二语言，验收保障，不开新文档）**：I-EXEC-01/02（stale 执行不写终态、零副作用，B2）/ I-EXEC-03/04（project {PENDING,RUNNING} 至多一 owner、进入必原子重查，B3）/ 超限 retry 必有终态（B4a）。
+
+> **R1 状态标签（2026-09-17 封板）**：**Implementation complete, acceptance closed**——core execution architecture 已证明：四 invariant + S17 族 + B2 §10.2–10.5 实弹竞态演练全绿（证据见 §0.1 B2 行；演练按 2026-09-17 评审拍板执行，非文档仪式）。**仍 OPEN 的一块（有界，不阻塞封板）**：baseline LLM 方差族 = S1 / S6f / **S10**（🟡 existing baseline variance, not a release regression；follow-up probe 保持 OPEN）。§10.5 全量回归 10/17 的归因全账：S3/S5/S11 隔离复跑即绿（flaky 判断方差）；S17 单跑即绿（45s 轮询窗在全量负载下不够，handoff 日志链完整）；S1/S6f = 既有登记方差；S10 本日新登记为稳定红，机理实证 = 模型散文前导 `\n\n` 沿 delta 原样流出、信封 `_compose_speech` 侧 strip——零代码面因果路径（`tool_loop.py` 自 baseline 未动），属 provider 输出形态漂移，登记不改闸门。**防漂移纪律照旧**：「不是本批引入的 regression」与「首产链验证未完全稳定」两事实并存——前者永不抵消后者；DoD-1 保持 🟡，不因归因判断转 ✅，也不因此重开/扩大 R1。上层抽象（统一 Artifact / ExecutionAttempt / 结构级 remix / Media IR）**明确没有承诺**，trigger-gated OPEN，不成 R2/R3 排期暗示。
+
+**R1 停止线**：B1→B2→B3→B4a 完成即停。以下事项**不得**扩张进 R1（除非证明阻塞 J2/J5/J6）：ExecutionAttempt / HITL canonical store / artifact lineage / Media IR / AgentBudget / Capability Registry / 结构级 remix / second provider / Distribution / W11 / op 覆盖度扩面 / B4 镜头跟随 / select_clips 语义重设计。
+
