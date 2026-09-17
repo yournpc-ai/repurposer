@@ -76,6 +76,7 @@ def _assemble_plan_turn(
     material_excerpt: str | None = None,
     understanding_lines: list[str] | None = None,
     asset_lines: list[str] | None = None,
+    material_pending_line: str | None = None,
 ):
     """Plan-turn inputs (ADR-052 B2 D2-C2 — the brief is the state).
 
@@ -120,6 +121,12 @@ def _assemble_plan_turn(
     ADR-078: the remix judgment must SEE the full roster to know a role
     question decides the plan; the single-file surface stays filename +
     excerpt).
+    ``material_pending_line``: the readiness gate's code-stamped fact
+    (I-PFA-07, 2026-09-18) — "N file(s) still processing / failed
+    processing", rendered verbatim when uploads haven't drained; None when
+    every file is readable. The router never infers readiness from absent
+    evidence (the missing excerpt/understanding was the only signal, and
+    absence invited「I can't read it」improvisation).
     """
     brief_lines: list[str] | None = None
     if brief is not None:
@@ -192,6 +199,7 @@ def _assemble_plan_turn(
             "material_excerpt": material_excerpt,
             "understanding_lines": understanding_lines,
             "asset_lines": asset_lines,
+            "material_pending_line": material_pending_line,
             # None outside a request (worker / scenario script) → the
             # directive is simply omitted and the LLM falls back to the
             # message's language (pre-2026-09-04 behavior).

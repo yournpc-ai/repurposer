@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
 from app.models.schemas import (
+    AssetStatus,
     AssetType,
     ClipSpec,
     CraftSkeleton,
@@ -161,12 +162,29 @@ async def get_understanding(db: AsyncSession, project: Project, params) -> str:
     digest = _asset_digest(assets)
     row = await _find_reusable_understanding(db, project, digest)
     if row is None:
-        pending = [a for a in assets if str(a.processing_status) != "completed"]
+        # Readiness gate honesty (I-PFA-07, 2026-09-18): pending and failed
+        # are DIFFERENT facts — a failed asset told "still processing" would
+        # wait forever, and "answer from what you know" invited the model to
+        # improvise content from a filename (the「我不能读」/编造 pair).
+        pending = [
+            a
+            for a in assets
+            if a.processing_status in (AssetStatus.PENDING, AssetStatus.PROCESSING)
+        ]
+        failed = [a for a in assets if a.processing_status == AssetStatus.FAILED]
         if pending:
             return (
                 f"The material understanding is not ready yet — {len(pending)} "
-                "asset(s) are still processing. Answer from what you know and "
-                "say the material read lands in a moment."
+                "asset(s) are still processing. Do NOT guess at the content "
+                "from filenames: answer the request from what the user said, "
+                "and say the content read lands automatically when processing "
+                "finishes (you will speak again then)."
+            )
+        if failed:
+            return (
+                f"{len(failed)} asset(s) FAILED processing — their content "
+                "will not become readable. Say so plainly and offer the "
+                "re-upload path; never pretend to have read them."
             )
         return "No material understanding exists yet for the current assets."
     try:
@@ -426,7 +444,9 @@ async def get_asset(db: AsyncSession, project: Project, params: GetAssetParams) 
     excerpt = (asset.transcript or asset.extracted_text or "").strip()
     if excerpt:
         lines.append(f"- Opening text: {excerpt[:300]}")
-    elif str(asset.processing_status) != "completed":
+    elif asset.processing_status == AssetStatus.FAILED:
+        lines.append("- Processing FAILED — no text will land for this file.")
+    elif asset.processing_status != AssetStatus.COMPLETED:
         lines.append("- Still processing — no text yet.")
     return "\n".join(lines)
 

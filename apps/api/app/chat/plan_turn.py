@@ -81,6 +81,7 @@ from app.chat.service import (
 )
 from app.models.schemas import (
     AnswerPayload,
+    AssetStatus,
     AssetType,
     Brief,
     BriefSlot,
@@ -295,6 +296,38 @@ class PlanTurn:
                 except Exception:  # noqa: BLE001 — a stale-shaped row reads as absent
                     understanding_lines = None
 
+        # Readiness gate (I-PFA-07, 2026-09-18): the attached-but-unready fact
+        # is CODE-stamped into the context — the router never infers readiness
+        # from absent evidence (a missing excerpt/understanding used to be the
+        # only signal, so the model faced the unready world alone and could
+        # improvise「I can't read it」). Pasted-text material lands ready
+        # (transcript at birth), so the predicate rides file assets only.
+        processing_count = sum(
+            1
+            for a in assets
+            if a.file_url
+            and a.processing_status
+            in (AssetStatus.PENDING, AssetStatus.PROCESSING)
+        )
+        failed_count = sum(
+            1
+            for a in assets
+            if a.file_url and a.processing_status == AssetStatus.FAILED
+        )
+        material_pending_line: str | None = None
+        if processing_count:
+            material_pending_line = (
+                f"Material status: {processing_count} uploaded file(s) are "
+                "STILL PROCESSING — their content is not readable this turn "
+                "(no transcript, no understanding yet). The content read "
+                "lands automatically when processing finishes."
+            )
+        elif failed_count:
+            material_pending_line = (
+                f"Material status: {failed_count} uploaded file(s) FAILED "
+                "processing — their content will not become readable."
+            )
+
         recent_lines: list[str] = []
         for m in recent or []:
             attached = [a.get("name") for a in (m.attachments or []) if a.get("name")]
@@ -366,6 +399,7 @@ class PlanTurn:
             material_excerpt=material_excerpt,
             understanding_lines=understanding_lines,
             asset_lines=asset_lines,
+            material_pending_line=material_pending_line,
         )
 
     def _role_pins(self) -> dict[str, str | None]:

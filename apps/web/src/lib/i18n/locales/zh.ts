@@ -74,7 +74,6 @@ const zh: Resources = {
       "把我的 keynote 配音成法语和德语",
     ],
     selectPersona: "人设",
-    generating: "正在分析素材并生成内容，可能需要一会儿…",
     noPromptError: "先说说想做什么",
     personaCreateFailed: "创建人设失败",
   },

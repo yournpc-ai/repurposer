@@ -1305,6 +1305,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // "creating_run" | "repairing"}), cleared per turn — bare keepalive frames
   // never touch
   // it, and without a phase the row falls back to chat.thinking.
+  // Lifecycle (I-PFA-06 清除协议, 2026-09-18): a phase dies three ways — the
+  // next labelled frame hands over (覆盖律), the server's explicit clear
+  // frame {phase: null} ends it (an unmapped call's name-known moment), or
+  // the terminal envelope closes the turn (终帧律 — both stream paths reset
+  // at envelope AND failure, never leaving a stale label in state).
   const [thinkingPhase, setThinkingPhase] = useState<string | null>(null)
   // The perception family's inspecting key (T2b): an inspecting frame carries
   // {phase: "inspecting", key: <the read-registry entry's i18n copy key>} —
@@ -2733,12 +2738,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           signal: ctrl.signal,
           onDelta: (delta) => typewriter.push(delta),
           onThinking: (payload) => {
-            // Labelled phase frames only; bare keepalives leave the label
-            // as-is (the row keeps shimmering at its last real phase). An
-            // inspecting frame (T2b) carries the registry's copy key — it
-            // wins while set; a phase-only frame clears it back.
-            if (payload.phase) {
-              setThinkingPhase(payload.phase)
+            // Labelled phase frames and the explicit clear (I-PFA-06 清除
+            // 协议, 2026-09-18): `"phase" in payload` separates both from
+            // bare keepalives, which leave the label as-is. A string phase
+            // hands the row over; `phase: null` is the server's clear frame
+            // (an unmapped call's name-known moment ended the previous
+            // phase's activity) — reset to the base label. An inspecting
+            // frame (T2b) carries the registry's copy key — it wins while
+            // set; a phase-only frame (or the clear) drops it back.
+            if ("phase" in payload) {
+              setThinkingPhase(payload.phase ?? null)
               setThinkingKey(payload.key ?? null)
             }
           },
@@ -2752,6 +2761,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // buffered prose and land the turn.
       await checkpointChain
       typewriter.flush()
+      // 终帧律 (I-PFA-06 相位清除协议, 2026-09-18): the envelope closes every
+      // phase — the landing awaits below (prose pacing drains, then the
+      // docks/receipts land) run with chatBusy still true, so a stale label
+      // would resurface in that tail window without this reset. (The answer
+      // stream already cleared at the same seat; this is the parity gap.)
+      setThinkingPhase(null)
+      setThinkingKey(null)
       // A turn can create assets server-side (declared-material promotion) —
       // refresh the prompt attachments when the project started empty.
       if (assets.length === 0) void fetchAssets()
@@ -2909,6 +2925,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     } catch (e) {
       typewriter.flush()
       discardPreviewArtifacts()
+      // 终帧律 (同上): a failed/aborted turn closes every phase too.
+      setThinkingPhase(null)
+      setThinkingKey(null)
       if (e instanceof DOMException && e.name === "AbortError") {
         // Stopped mid-stream: the partial preview settles as static text
         // (the server may still finish the turn server-side). Checkpoint
@@ -3197,8 +3216,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }>(question.id, { kind: "option", option_id: optionId }, {
         onDelta: (text) => typewriter.push(text),
         onThinking: (payload) => {
-          if (payload.phase) {
-            setThinkingPhase(payload.phase)
+          // Same protocol as the sendChat handler above: `"phase" in
+          // payload` = a labelled hand-over or the explicit clear
+          // (phase: null); bare keepalives leave the label untouched.
+          if ("phase" in payload) {
+            setThinkingPhase(payload.phase ?? null)
             setThinkingKey(payload.key ?? null)
           }
         },

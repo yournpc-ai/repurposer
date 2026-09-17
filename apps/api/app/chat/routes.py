@@ -149,7 +149,12 @@ def _make_tool_hooks(queue: asyncio.Queue):
       A PERCEPTION call (T2b 感知族) emits the inspecting family instead:
       phase "inspecting" + the registry entry's i18n copy key — the user
       reads 「正在查曲库…」 while the tool NAME never crosses to the user
-      face (简报 §3 禁令).
+      face (简报 §3 禁令). An UNMAPPED name (ask_user / answer / start_run)
+      emits the explicit clear frame ``{"phase": null}`` — the name-known
+      moment is the phase boundary, and a phase whose activity ended never
+      persists by inheritance (I-PFA-06 相位清除协议, 2026-09-18 定型:
+      覆盖律 — a mapped frame hands over; 清除帧 — an unmapped one ends the
+      activity; 终帧律 — the terminal envelope closes whatever remains).
     - ``on_tool_ready``: an ask_user call's arguments completed and validated
       (pre-execution) — preview-dock the pill NOW instead of waiting out the
       loop. Fires on every iteration; a rejected ask's preview rolls back
@@ -174,6 +179,18 @@ def _make_tool_hooks(queue: asyncio.Queue):
                         }
                     ),
                 )
+            )
+        else:
+            # The explicit phase clear (I-PFA-06, 2026-09-18 协议定型): an
+            # UNMAPPED call's name-known moment (ask_user / answer /
+            # start_run) ends the previous phase's activity — the row falls
+            # back to the base label instead of wearing a stale phase
+            # through the terminal execution + envelope transit (缝②: no
+            # phase outlives its activity by inheritance). A no-op when no
+            # phase is set; start_run's execution segment is immediately
+            # re-taken by creating_run from inside the run birth.
+            await queue.put(
+                _sse("assistant.thinking", json.dumps({"phase": None}))
             )
 
     async def on_tool_ready(name: str, params) -> None:

@@ -57,8 +57,11 @@ export interface StreamChatOptions {
    * keepalives. The perception family's inspecting frames (T2b) add
    * `{phase: "inspecting", key}` — the key is the read-registry entry's i18n
    * copy key (「正在查曲库…」), resolved via t(); the tool NAME never
-   * crosses to the user face. */
-  onThinking?: (payload: { phase?: string; key?: string }) => void
+   * crosses to the user face. `{phase: null}` is the EXPLICIT phase clear
+   * (I-PFA-06 清除协议, 2026-09-18): an unmapped call's name-known moment
+   * ended the previous phase's activity — reset to the base label. The
+   * `"phase" in payload` check separates the clear from a bare keepalive. */
+  onThinking?: (payload: { phase?: string | null; key?: string }) => void
   /** The ask verdict's pill payload the moment its object closes in the
    * stream (2026-09-09 用户拍板——「选项该和这句话一起来」; object-level
    * trust: the ask object's prose key streams first, so question/options/
@@ -136,7 +139,7 @@ function streamTurn<T>(
   }: {
     signal?: AbortSignal
     onDelta?: (text: string) => void
-    onThinking?: (payload: { phase?: string; key?: string }) => void
+    onThinking?: (payload: { phase?: string | null; key?: string }) => void
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
     onCheckpoint?: StreamChatOptions["onCheckpoint"]
   },
@@ -187,7 +190,7 @@ function streamTurn<T>(
           const data = JSON.parse(msg.data) as { text: string }
           onDelta?.(data.text)
         } else if (msg.event === "assistant.thinking") {
-          onThinking?.(JSON.parse(msg.data) as { phase?: string; key?: string })
+          onThinking?.(JSON.parse(msg.data) as { phase?: string | null; key?: string })
         } else if (msg.event === "question.preview") {
           onQuestionPreview?.(
             JSON.parse(msg.data) as Parameters<
@@ -235,7 +238,7 @@ export function streamAnswer<T>(
   body: AnswerTurnBody,
   handlers: {
     onDelta?: (text: string) => void
-    onThinking?: (payload: { phase?: string; key?: string }) => void
+    onThinking?: (payload: { phase?: string | null; key?: string }) => void
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
   },
 ): Promise<T> {

@@ -84,7 +84,6 @@ const en = {
       "dub my keynote into French and German",
     ],
     selectPersona: "Persona",
-    generating: "Analyzing your material and generating content, this can take a moment…",
     noPromptError: "Say what you want to make first",
     personaCreateFailed: "Failed to create persona",
   },
