@@ -1967,6 +1967,16 @@ async def prepare_chat_turn(
         db, user_id, request.project_id
     )
     conversation_id = UUID(str(conversation.id))
+    # 界面语言 owner 盖章（ADR-080 单一叙事者律）: the request's locale is
+    # the conversation's ONE speech-language fact — every assistant writer
+    # (this turn's reply AND the worker-born trigger) inherits it instead of
+    # deriving its own. None-safe: outside a request there is nothing to
+    # stamp, and a worker path never erases the owner.
+    from app.ui_locale import current_ui_language  # deferred: request ctx
+
+    _ui = current_ui_language()
+    if _ui:
+        conversation.ui_language = _ui
 
     user_message = await _create_message(
         db,

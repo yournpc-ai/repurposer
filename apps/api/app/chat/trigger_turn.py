@@ -23,14 +23,15 @@ download of a landed output).
 
 Worker-side seats: both fire points are pipeline code (no request context),
 so the turn opens its OWN session (the ``dock_interrupt_question``
-precedent), resolves the speech language off the run's pinned ui_language /
-the conversation (``app.ui_locale``'s chain, never the material's), and
-persists the review as a PLAIN assistant row — ``intent`` carries the
-trigger dump ``{type: "trigger_review", trigger, ref, suggestions}`` (the
-row replays verbatim on refresh / another device; 刷新/跨设备恢复 = 消息行
-持久化). Fire-and-forget: a trigger failure logs and never raises into the
-pipeline — the world event already landed truthfully (the understanding row,
-the run verdict); the speech layer degrades to silence, never to a
+precedent), inherits the speech language from the conversation's stamped
+interface-language owner (ADR-080 单一叙事者律 — never the material's,
+never a per-writer derivation), and persists the review as a PLAIN
+assistant row — ``intent`` carries the trigger dump
+``{type: "trigger_review", trigger, ref, suggestions}`` (the row replays
+verbatim on refresh / another device; 刷新/跨设备恢复 = 消息行持久化).
+Fire-and-forget: a trigger failure logs and never raises into the pipeline
+— the world event already landed truthfully (the understanding row, the
+run verdict); the speech layer degrades to silence, never to a
 fabrication.
 """
 
@@ -52,6 +53,7 @@ from app.chat.service import (
     _create_message,
     _get_or_create_project_conversation,
     _prefers_zh,
+    is_pending_plan,
     latest_pending_question,
 )
 from app.chat.turn_tools import CHAT_READ_TOOLS
@@ -74,16 +76,19 @@ TRIGGER_WHITELIST = frozenset(
 # question, never answers one).
 TRIGGER_DUMP_TYPE = "trigger_review"
 
-# Turn admission (交互完整性批 B, 2026-09-17 — conversation-level turn
-# ownership): a proactive turn NEVER overtakes an in-flight user turn. The
-# 2026-09-16 incident: the understanding warm fired 36s into the user's
-# first plan turn, the trigger's own session read an empty conversation
-# (the user row wasn't durable yet), and the review spoke blind — three
-# off-request suggestion pills competing with the plan the agent was still
-# building. The user row is durable from the turn's first beat now (交互
-# 完整性批 A), so the gate is a plain DB read. Defer in bounded cycles; at
-# exhaustion, yield to the silence doctrine (a blind review is worse than
-# none — the world event already landed truthfully on its own).
+# Turn admission (交互完整性批 B, 2026-09-17; ADR-080 单一叙事者律升格 —
+# conversation-level turn ownership): a proactive turn NEVER overtakes an
+# in-flight user turn, and NEVER talks over a docked plan. The 2026-09-16
+# incident: the understanding warm fired 36s into the user's first plan
+# turn, the trigger's own session read an empty conversation (the user row
+# wasn't durable yet), and the review spoke blind — three off-request
+# suggestion pills competing with the plan the agent was still building.
+# Two static predicates (no arbiter layer): in-flight → defer in bounded
+# cycles (the user row is durable from the turn's first beat — 交互完整性
+# 批 A — so the gate is a plain DB read); pending task_book → silence (the
+# plan echo already narrates); exhaustion → the silence doctrine (a blind
+# review is worse than none — the world event already landed truthfully on
+# its own).
 _TRIGGER_DEFER_SECONDS = 20
 _TRIGGER_DEFER_MAX_ATTEMPTS = 15  # 15 × 20s = a 5-minute politeness bound
 # A stranded in_flight row (a crashed turn whose 'failed' stamp never
@@ -136,13 +141,20 @@ WRAP_UP = ChatTool(
 
 
 def _trigger_language(
-    run: WorkflowRun | None, history: list[Message]
+    run: WorkflowRun | None,
+    history: list[Message],
+    conversation: Conversation | None = None,
 ) -> str:
-    """The speech language for a worker-born turn (no request's
-    Accept-Language exists): the run's pinned ui_language first (the same
-    pin the run side reads), then the latest user message's script (the
-    conversation's own evidence), then English — the project's content
-    language default is NOT a speech signal, so it never votes here."""
+    """The speech language for a worker-born turn (ADR-080 界面语言唯一
+    owner): the conversation's stamped ``ui_language`` owner FIRST (the
+    request chain's locale, re-stamped every user turn — the ONE fact all
+    assistant writers inherit), then the run's pinned ui_language, then the
+    latest user message's script (owner 缺席时的兜底推导), then English —
+    the project's content language default is NOT a speech signal, so it
+    never votes here."""
+    owner = (conversation.ui_language if conversation is not None else None) or ""
+    if owner:
+        return owner.lower()
     ui = ((run.context or {}) if run is not None else {}).get("ui_language")
     if isinstance(ui, str) and ui:
         return ui.lower()
@@ -277,6 +289,23 @@ async def run_trigger_turn(
                     "trigger_turn_deduped", trigger=trigger, ref=ref
                 )
                 return None
+            # 单一叙事者律第二谓词 (ADR-080): no turn in flight, but a plan
+            # sits docked awaiting Start — the plan's own echo prose already
+            # narrates "what I saw / what I'll do", so a proactive review
+            # now is pure microphone-grabbing (the 2026-09-16 contradiction:
+            # "review the plan and hit Start" vs "already queued, how about
+            # these three other things"). Silence, not defer — a pending
+            # plan can sit for hours, and the world event already landed
+            # truthfully on the canvas.
+            if is_pending_plan(
+                await latest_pending_question(db, conversation_id)
+            ):
+                logger.info(
+                    "trigger_turn_silenced_pending_plan",
+                    trigger=trigger,
+                    ref=ref,
+                )
+                return None
             history = list(
                 (
                     await db.execute(
@@ -293,7 +322,7 @@ async def run_trigger_turn(
                 [],
                 await latest_pending_question(db, conversation_id),
             )
-            language = _trigger_language(run, history)
+            language = _trigger_language(run, history, conversation)
             event_line = (
                 f"Run {ref} just reached its terminal state. Review what it "
                 "produced (read the run status, then the landed outputs "

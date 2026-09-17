@@ -490,6 +490,11 @@ class Conversation(Base):
     asset_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     asset_type = Column(String(50), nullable=True)  # "clip" | "derivative"
     title = Column(String(255), nullable=True)
+    # The conversation's interface-language owner (ADR-080 单一叙事者律):
+    # stamped from the request's Accept-Language on every user chat turn —
+    # the ONE speech-language fact every assistant writer (plan / chat /
+    # trigger) inherits, so two writers never pick divergent languages.
+    ui_language = Column(String(10), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 

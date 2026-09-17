@@ -11,9 +11,12 @@ contract:
   at the schema so the loop iterates instead);
 - the intent dump is self-describing (replay and the dedup guard read the
   same keys);
-- the worker-side speech-language chain (no request exists — the run's
-  pinned ui_language, then the conversation's own evidence, never the
-  project's content-language default);
+- the worker-side speech-language chain (ADR-080 界面语言唯一 owner: the
+  conversation's stamped owner first; the run's pinned ui_language and the
+  history's own evidence are owner-absent fallbacks; the project's
+  content-language default never votes);
+- the admission gate's two predicates (in-flight → defer/drop; a docked
+  pending plan → silence, ADR-080 单一叙事者律);
 - the agent's tool set is the reads plus ONE terminal, bounded.
 """
 
@@ -33,7 +36,7 @@ from app.chat.trigger_turn import (
     trigger_agent,
 )
 from app.models.schemas import Suggestion, WrapUpArgs
-from app.models.tables import Message, WorkflowRun
+from app.models.tables import Conversation, Message, WorkflowRun
 
 
 def test_whitelist_is_the_proactivity_boundary() -> None:
@@ -139,16 +142,28 @@ def test_trigger_dump_is_self_describing() -> None:
 
 
 class TestTriggerLanguage:
-    """Worker-born speech language: no request's Accept-Language exists, so
-    the chain is the run's pin → the conversation's own evidence → "en".
+    """Worker-born speech language (ADR-080 界面语言唯一 owner): the
+    conversation's stamped ui_language owner wins first; the run's pin and
+    the history's own evidence are the owner-absent fallbacks; "en" last.
     The project's content-language default never votes (a defaulted "zh"
     content language must not drag an English conversation's proactive
     speech into Chinese)."""
 
-    def test_run_pin_wins(self) -> None:
+    def test_conversation_owner_wins_over_everything(self) -> None:
+        conversation = Conversation(ui_language="zh")
+        run = WorkflowRun(context={"ui_language": "en"})
+        history = [Message(role="user", content="make me a post")]
+        assert _trigger_language(run, history, conversation) == "zh"
+
+    def test_run_pin_is_the_first_fallback(self) -> None:
         run = WorkflowRun(context={"ui_language": "zh"})
         history = [Message(role="user", content="make me a post")]
         assert _trigger_language(run, history) == "zh"
+        # An ownerless conversation behaves like no conversation.
+        assert (
+            _trigger_language(run, history, Conversation(ui_language=None))
+            == "zh"
+        )
 
     def test_latest_user_message_is_the_evidence(self) -> None:
         history = [
@@ -189,3 +204,39 @@ def test_admission_defers_while_the_bound_holds() -> None:
 def test_admission_drops_at_the_bound_never_speaks_blind() -> None:
     assert _trigger_admission(True, 15, 15) == "drop"
     assert _trigger_admission(True, 99, 15) == "drop"
+
+
+# ---- Pending-plan silence (ADR-080 单一叙事者律, 2026-09-17) ------------------
+#
+# The gate's second predicate: no turn in flight, but a plan sits docked
+# awaiting Start → the trigger stays SILENT (its "what I saw" narration is
+# already covered by the plan's echo prose — speaking again is pure
+# microphone-grabbing). The predicate itself is the shared is_pending_plan;
+# what's locked HERE is that the trigger's silence consumes exactly it.
+
+
+def test_pending_plan_silence_reads_is_pending_plan() -> None:
+    from app.chat.service import is_pending_plan
+
+    # An unanswered task_book row = a docked plan = silence.
+    docked = Message(
+        role="assistant",
+        content="plan",
+        question={"kind": "task_book", "options": []},
+    )
+    assert is_pending_plan(docked) is True
+    # Answered plans and generic questions do NOT silence the trigger.
+    answered = Message(
+        role="assistant",
+        content="plan",
+        question={"kind": "task_book", "options": []},
+        answer={"kind": "start"},
+    )
+    assert is_pending_plan(answered) is False
+    generic = Message(
+        role="assistant",
+        content="q",
+        question={"kind": "question", "options": [{"id": "a", "label": "x"}]},
+    )
+    assert is_pending_plan(generic) is False
+    assert is_pending_plan(None) is False
