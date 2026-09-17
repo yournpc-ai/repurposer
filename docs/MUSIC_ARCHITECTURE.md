@@ -1,7 +1,7 @@
 # Repurposer Music Architecture
 
 > Status: Implemented（2026-07 落地：`Music` 表、MiniMax music-2.6 生成、管线集成；音乐质检归 verify 节点 Phase 3，未实现；2026-08-18 对齐现状：音乐默认住人设皮肤块、自定义生成端点 inline）
-> Related: ADR-023（AI 生成音乐库决策）、实施简报 `docs/tasks/done/music-asset-library.md`
+> Related: ADR-023（AI 生成音乐库决策）、实施简报 `docs/archive/tasks-done/music-asset-library.md`
 
 ---
 
@@ -267,7 +267,7 @@ When user-generated music becomes public:
 - `docs/DECISIONS.md` ADR-023: Music becomes an AI-generated, asset-based library.
 - `docs/VIDEO_EDITOR.md` (`render_spec.music` contract).
 - `docs/AGENT_ARCHITECTURE.md` (agent 编排集成).
-- `docs/tasks/done/music-asset-library.md`: Implementation record.
+- `docs/archive/tasks-done/music-asset-library.md`: Implementation record.
 
 ---
 

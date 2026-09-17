@@ -1,6 +1,6 @@
 # Repurposer Agent Architecture
 
-> Status: Active（2026-08-09 重画，ADR-039 架构规范级大迭代；2026-08-18 随 ADR-043 收口请求层语法；2026-08-20 增 §2.5 行业坐标；2026-08-21 N-42 全量对齐行业命名——skill→tool 换位，更名随命名批 v2；**2026-09-14 ADR-077/078 落地（批次⑤ T1~T4）：会话层 = 标准有界工具 loop（读工具 + 门动作工具 + 终态工具停环，ToolLoopAgent），生产层 Graph/Harness/Model 脊柱不变；§2.5 方言侧翻译表随 NAMING 批 v3 消融——方言词全退役，业务名直取行业词**；施工简报 `docs/tasks/done/chat-tool-loop-migration.md`）
+> Status: Active（2026-08-09 重画，ADR-039 架构规范级大迭代；2026-08-18 随 ADR-043 收口请求层语法；2026-08-20 增 §2.5 行业坐标；2026-08-21 N-42 全量对齐行业命名——skill→tool 换位，更名随命名批 v2；**2026-09-14 ADR-077/078 落地（批次⑤ T1~T4）：会话层 = 标准有界工具 loop（读工具 + 门动作工具 + 终态工具停环，ToolLoopAgent），生产层 Graph/Harness/Model 脊柱不变；§2.5 方言侧翻译表随 NAMING 批 v3 消融——方言词全退役，业务名直取行业词**；施工简报 `docs/archive/tasks-done/chat-tool-loop-migration.md`）
 > 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 工具包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29 起）；loop 层行为规格见 CHAT_ARCHITECTURE.md；行业座位映射见 §2.5；**概念层母文档（厚 agent 判词 / 双引擎 workflow / 有界 loop 节点）见 `DIALOG_WORKFLOW.md`（ADR-052，B1~B4 已收口 2026-09-04）**。
 
 ## 1. 叙事
@@ -134,7 +134,7 @@ class NodeBase:
 
 ### 4.5 节点分两类
 
-> **（ADR-072 / ADR-076，2026-09-14 三族批 C1~C6 落地）** 本节「工具节点 / 内部节点」的实现视角分类不变（注册表准入与提议空间仍由它管辖）；**画布用户面 = 词表 v3 三轴**：图节点 `type` = 媒介五值（`text`/`table`/`image`/`video`/`audio`——`graph_nodes.type` 列，kind→type 已改名，工具节点 kind = 工具名不动），`spec.prototype` = `generator`/`editor`/`manual`（程序区按它门控），业务身份 = `spec.summary` + `spec.tool`。工具节点类声明 `node_type` + `prototype`（`assert_runners_registered` 启动自检追齐）；`doc_station` 类声明驱动**两站**（captions/dub：asm = video×editor + doc 伴侣 = table×manual，估价 token/units stamp 侧拆分）；materialize_source 折叠为消费节点内部 step；research 塌缩单节点（text×generator）；write_post/write_article 升 text×generator。generator/processor/agent 卡种退役为出生史维度——旧行永不迁移，读面 `_read_face` 映射；modifier（music/filler/reframe）/ materialize 旧词随未折叠旧行存活。施工简报 `docs/tasks/done/graph-canvas-three-families.md`；modifier 收杠杆 / 分镜表表格档 / 书节点下线归后续批。
+> **（ADR-072 / ADR-076，2026-09-14 三族批 C1~C6 落地）** 本节「工具节点 / 内部节点」的实现视角分类不变（注册表准入与提议空间仍由它管辖）；**画布用户面 = 词表 v3 三轴**：图节点 `type` = 媒介五值（`text`/`table`/`image`/`video`/`audio`——`graph_nodes.type` 列，kind→type 已改名，工具节点 kind = 工具名不动），`spec.prototype` = `generator`/`editor`/`manual`（程序区按它门控），业务身份 = `spec.summary` + `spec.tool`。工具节点类声明 `node_type` + `prototype`（`assert_runners_registered` 启动自检追齐）；`doc_station` 类声明驱动**两站**（captions/dub：asm = video×editor + doc 伴侣 = table×manual，估价 token/units stamp 侧拆分）；materialize_source 折叠为消费节点内部 step；research 塌缩单节点（text×generator）；write_post/write_article 升 text×generator。generator/processor/agent 卡种退役为出生史维度——旧行永不迁移，读面 `_read_face` 映射；modifier（music/filler/reframe）/ materialize 旧词随未折叠旧行存活。施工简报 `docs/archive/tasks-done/graph-canvas-three-families.md`；modifier 收杠杆 / 分镜表表格档 / 书节点下线归后续批。
 
 - **工具节点**（N-42 前技能节点）：工具包持有，LLM 可提议（dispatchable），kind = 工具名（`select_clips`/`write_post`/`dub_clip`/`translate_clip`/`remove_filler`/`add_music`/`align_stills`/`revise_script`/`research`…）。
 - **内部节点**：内核 crew，永不进提议空间（`preprocess`/`persona_bootstrap`/`understand`/`plan`/`checkpoint`/`render`），住 `pipeline/`。

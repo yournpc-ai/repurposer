@@ -143,7 +143,7 @@ R2 兑现内容不变（无声版先行：照片轮播 + 字幕 + 音乐；`alig
 ## 5. 声音层（裁决③④落档）
 
 - **家 = 人设块扩展**：声纹 = 人设属性（已决架构不变）；人设选择器加"系统音色"区——stock voices 以**系统音色**身份出现（如 Rachel · Confident，带试听），不伪装成人设（ADR-037 修订形态），与"👤 Anna（cloned ✓）"同列表分区。composer 维持两块不加 Audio 块（避免与人设职责重叠；Opus 的 Style/Assets/Audio 三块形态已评审未采纳）。
-- **voice_gen 阻塞语义**：无声纹 → stock 默认声直接出片，**不阻塞**；QuestionDock / 审阅面板可换声（复用提问机器的选项问形态，`tasks/done/intent-ask-primitive.md` 期 3 机制零改动）；引导克隆是轻提示不是拦截（录 10s 样本路径已有 `tools/voice.py:clone_voice`）。
+- **voice_gen 阻塞语义**：无声纹 → stock 默认声直接出片，**不阻塞**；QuestionDock / 审阅面板可换声（复用提问机器的选项问形态，`archive/tasks-done/intent-ask-primitive.md` 期 3 机制零改动）；引导克隆是轻提示不是拦截（录 10s 样本路径已有 `tools/voice.py:clone_voice`）。
 - **stock 声来源**：MiniMax 系统音色（零克隆成本）。**待核实**：系统音色清单与多语言覆盖（EN/DE/FR/ES/IT/ZH 必须齐），核实结果回填本节与 R2 简报。
 - **后置**：语速调节、Pronunciation 纠正（归术语表线（PROGRESS 可选需求））。无声版（阅读节奏估算）已落地为 R2 交付本体（`align_stills`，§4.2）。
 
@@ -222,7 +222,7 @@ Recipe = {
 
 | 期 | 内容 | 上卡 | 验收（e2e 真实管线，无测试套件纪律） |
 |---|---|---|---|
-| **R1** | caption catalog 收编 + `stacking` preset + dub 配方接线（clips→dub×N 单 run）+ 卡片层（schema/布局/点击链路/i18n）（实施简报 `docs/tasks/done/recipe-cards-r1.md`；交互形态 = overlay 内发射 + 预填模板载荷，MENTIONS §3） | dub 卡 | 用户素材走 dub 卡 → 单 run 出 clips+多语言 dub 产物；stacking preset 在 editor preview 与导出 MP4 一致 |
+| **R1** | caption catalog 收编 + `stacking` preset + dub 配方接线（clips→dub×N 单 run）+ 卡片层（schema/布局/点击链路/i18n）（实施简报 `docs/archive/tasks-done/recipe-cards-r1.md`；交互形态 = overlay 内发射 + 预填模板载荷，MENTIONS §3） | dub 卡 | 用户素材走 dub 卡 → 单 run 出 clips+多语言 dub 产物；stacking preset 在 editor preview 与导出 MP4 一致 |
 | **R2** | `align_stills` 注册项（阅读节奏时间轴）+ DAG 输入画像注入 + stills 字幕轮播链（无声版先行，声音路径后置声纹线，§4.2） | 图片视频卡 | 文字稿+照片 → 照片轮播+字幕（stacking 等 catalog 成员）+音乐成片；词级时间轴与 ASR words 同构，editor/chat 换字幕样式即生效 |
 | **R3** | 简报 B：分镜 ADR + filmstrip 检测 + `crop_track` + `reframe_clip`（静态双人分镜 + 单人中景动态追踪双验证，PROGRESS 第三周 spike） | —（能力先行；分镜双子卡卡面 authoring 延至定位根落地后，PROGRESS 第八周） | 双人访谈 → 竖屏分镜 clips，说话人切换正确、无眩晕跳切 |
 | **R4** | Recipe 数据 schema 定义（§7.1）+ dub 落成第一个完整数据实例（示例 prompt / 素材账单 / 静态流程图 / 预览烘焙）+ remix→chat 链路走查补缝（08-07 启动 ~ 08-11，PROGRESS 第 2 周） | —（第四卡座位撤，§4.5） | dub 数据包五字段齐，第 2 周配方检视 overlay 装配所需内容全部就绪 |
@@ -265,7 +265,7 @@ Recipe = {
 | `STRATEGY.md` §5 | 配方库定位来源；本文档是其实施架构，论证不复述 |
 | `PROGRESS.md` | 第 1–3 周排期含配方卡（第二周字幕卡点亮 R6 + 图文视频卡 slides 槽；分镜双子卡 authoring 延至第八周批次，§4.3） |
 | `tasks/synthetic-talk-video.md` | R2 修订点：voice_gen 先行、`synth_visual` 降可选增强、stock 兜底语义、人设块扩展 |
-| `tasks/done/intent-ask-primitive.md` | 声音换声复用提问机器的选项问形态（零新机制） |
+| `archive/tasks-done/intent-ask-primitive.md` | 声音换声复用提问机器的选项问形态（零新机制） |
 | `CHAT_ARCHITECTURE.md` §4 | `reframe_clip` 准入评审；`set_caption_style` 枚举随 catalog 扩展 |
 | `VIDEO_EDITOR.md` | caption catalog 遵守 preset enum + CSS∩libass 纪律；分镜两步走契约见 `AGENT_ARCHITECTURE.md` §4（understand/plan 两步走） |
 | `AGENT_ARCHITECTURE.md` | `voice_gen`/`speaker_map` 节点的内部分析产物 + asset-hash 复用同款哲学 |

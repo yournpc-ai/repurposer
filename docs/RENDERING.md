@@ -212,7 +212,7 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——下表的 family / t
 
 ## 8. 轨道模型（现行契约，ADR-044）
 
-> 2026-08-17 过会，08-17~18 落地：注册表 + 双端自检 + segments widen + 锚/层/过渡契约 + 泳道投影 + 六 op 闭包（08-18 冷审修复批：过渡封顶补 insert_segment、段/层 id 契约级唯一、TrackDef 死字段清除、双端各守所执）。判据 = **操作集闭包**：registry 合法 op/skill 的任意序列（用户聊 N 轮）产出的 spec 仍可表示、可渲染、可继续改（12 操作走查全表 = 简报 `tasks/done/track-model.md` 附录 §8）。弹性验收机械化：spec 顶层字段 ⊆ 轨道注册表（启动自检对账，⊆ 同款代数）+ phantom track 自检（注册一条假轨，烘焙缝/寻址/合规自动接管，消费方零改动；计价不在其列——时长算术坐 `clip_spec.total_output_seconds`，时长贡献轨到来时自带扩展）。
+> 2026-08-17 过会，08-17~18 落地：注册表 + 双端自检 + segments widen + 锚/层/过渡契约 + 泳道投影 + 六 op 闭包（08-18 冷审修复批：过渡封顶补 insert_segment、段/层 id 契约级唯一、TrackDef 死字段清除、双端各守所执）。判据 = **操作集闭包**：registry 合法 op/skill 的任意序列（用户聊 N 轮）产出的 spec 仍可表示、可渲染、可继续改（12 操作走查全表 = 简报 `archive/tasks-done/track-model.md` 附录 §8）。弹性验收机械化：spec 顶层字段 ⊆ 轨道注册表（启动自检对账，⊆ 同款代数）+ phantom track 自检（注册一条假轨，烘焙缝/寻址/合规自动接管，消费方零改动；计价不在其列——时长算术坐 `clip_spec.total_output_seconds`，时长贡献轨到来时自带扩展）。
 
 ### 8.1 形态：锚定 = 存储格式，泳道 = 编译产物（存法 C）
 

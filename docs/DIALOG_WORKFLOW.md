@@ -1,6 +1,6 @@
 # Repurposer Dialog Workflow — 厚 Agent 蓝图
 
-> Status: 已拍板（2026-09-03，ADR-052），**B1~B4 代码全落（2026-09-03）**——B1 改名批 / B2 brief+ask_user+plan 门槛 / B3 预填评审卡 / B4 有界 loop 节点+research 试点；会话层 = ADR-077 有界工具 loop（2026-09-14 拍板、批次⑤ T1~T4 落地——动作 union 机械翻译为终态工具集，护栏搬入工具执行内，canonical 词汇随 NAMING 批 v3 直取行业词）；剧本测试（S50~S53）与产品试用验证归用户（简报 `docs/tasks/dialog-workflow-b*.md`）。
+> Status: 已拍板（2026-09-03，ADR-052），**B1~B4 代码全落（2026-09-03）**——B1 改名批 / B2 brief+ask_user+plan 门槛 / B3 预填评审卡 / B4 有界 loop 节点+research 试点；会话层 = ADR-077 有界工具 loop（2026-09-14 拍板、批次⑤ T1~T4 落地——动作 union 机械翻译为终态工具集，护栏搬入工具执行内，canonical 词汇随 NAMING 批 v3 直取行业词）；剧本测试（S50~S53）与产品试用验证归用户（简报 `docs/archive/tasks-done/dialog-workflow-b*.md`）。
 > 本文是「对话→生产」全链路的**概念架构母文档**：一个产品级厚 agent，身体是一条 workflow。工程实现地图（Model / Harness / Graph / Loop 四层）归 `AGENT_ARCHITECTURE.md`；chat 机器规格归 `CHAT_ARCHITECTURE.md`；命名判例归 `NAMING.md`（N-43 起）；计划字段契约归 ADR-043；终极旅程「案例仿制」的技术内核 = ADR-078 decompiler。
 
 ## 1. 蓝图一句话

@@ -1,7 +1,7 @@
 # 会话层工具 loop 批 + decompiler 批 —— 施工简报
 
 > Status: **全部落地（T1~T4 于 2026-09-15；T5 decompiler 同批 ⑥ 收口）**——线格式三层 / 工具 loop 内核 / 触发回合 / 验收改写+NAMING 批 v3+文档现在时；T5 = craft_scan 确定性扫描 + decompile 节点编译期注入 + exemplar 参数源（代码映射）+ 资产角色双消歧门 + get_craft_skeleton 读工具（ADR-078）。需求模拟四轮讨论收敛，用户旅程母文档 = `docs/JOURNEYS.md`。
-> 本文是实施的唯一工作简报；决策正文在 `docs/DECISIONS.md` ADR-077/078。完成后归 `docs/tasks/done/`。
+> 本文是实施的唯一工作简报；决策正文在 `docs/DECISIONS.md` ADR-077/078。完成后归 `docs/archive/tasks-done/`。
 
 ## 0. 一句话目标
 

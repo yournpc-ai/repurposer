@@ -54,5 +54,5 @@ mention = 用户与 AI 交流时对**实体**的点名机制。提示词的基�
 |---|---|
 | `CHAT_ARCHITECTURE.md` | mention 的运行时语义（context 注入、edit ops 指认通道）——"怎么跑"归它，"该不该是 mention"归本文 |
 | `RECIPES.md` | 配方 = 发射上下文的完整论证与卡片层架构 |
-| `tasks/recipe-launch-context.md` | recipe 脱离 mention 体系的实施简报（本文 §3 第一行的落地） |
+| `archive/tasks-done/recipe-launch-context.md` | recipe 脱离 mention 体系的实施简报（本文 §3 第一行的落地） |
 | `NAMING.md` | mention type 词汇表座位 |

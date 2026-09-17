@@ -1,7 +1,7 @@
 # intent-surface-unification 实施简报——意图层单面化：chat 唯一入口
 
 > Status: ✅ 已落地（2026-08-03 立项，2026-08-04 完成）：W1–W7 全部代码 + 文档归位；剧本测试 S1–S8 全绿（真实 LLM，形态级断言）。**施工中两处硬化**（剧本暴露，超简报原范围）：① `InferredIntent` 读容忍 `outputs: null`——LLM 在 start/answer verdict 时惯于把 slots 置 null，此前校验失败被静默降级成默认 generate 任务书；② `presented_plan` 注入——dock 中任务书的一行摘要进 PlanAgent 上下文，裸"开始吧"接模糊首轮的 start 判定从 2/3 误判 → 3/3 稳定。**留用户手测**：composer → 跳转 → overlay 首条消息自动发出 → 任务书 dock → 手编/refine/Start 全链路 + 刷新/跨设备 dock 重建。
-> 依据：`docs/INTENT_COVERAGE.md`（现状矩阵）；`docs/CHAT_ARCHITECTURE.md`（task list 契约 / 提问机器）；`tasks/done/intent-ask-primitive.md`（G-1 start 路径）；`tasks/recipe-mention.md`（mention pin）
+> 依据：`docs/INTENT_COVERAGE.md`（现状矩阵）；`docs/CHAT_ARCHITECTURE.md`（task list 契约 / 提问机器）；`tasks-done/intent-ask-primitive.md`（G-1 start 路径）；`tasks/recipe-mention.md`（mention pin）
 > 用户裁决（2026-08-03）：① **意图识别只有 chat 一个入口**——composer 点发送 = spinner 建空项目 → 跳转详情 → overlay chat 接管，composer 自身不做任何意图识别；② **任务书确认保留**——pending task_book 从"独立 confirm 相位"降级为"chat 里有一个待决任务书"的普通状态；③ 意图三层模型（L1 用户画像 / L2 补全意图 / L3 歧义澄清）中 **L1 后置**（随需求再做），本期夯实 L2+L3；④ 验收 = **后端剧本测试**（预设多轮对话、形态级断言），前端由用户手测；⑤ 风险清单全部处理（空项目垃圾 / 标题 / mention 时机 / Tour / 出生地校验 / 文档同步）
 > 迁移：**零表迁移**——`project.pending_intent`、task_book question、`messages` 全部复用；仅 `ChatRequest` 加两个可选字段
 

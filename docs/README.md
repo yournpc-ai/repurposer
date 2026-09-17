@@ -46,7 +46,7 @@
 |---|---|---|---|
 | `PRD.md` | 产品定位、ICP、FR 需求目录、输出规格与指标 | 活跃（2026-07-31 二度瘦身：§3.4/§6 删除，FR 表压缩为目录） | 动产品方向/需求前 |
 | `PROGRESS.md` | 进展快照 + 排期（至 10-29 go/no-go）+ 需求池（**排期/优先级唯一事实源**；双受众：内部管理/投资人可摘录） | 活跃快照（每周五滚动；周期结束归档） | 排期/开工前；向上汇报 / 逐日执行对齐时 |
-| `REPORT-2026-09.md` | 进展简报（2026-09-01 节点快照）：进度 / 已有功能 / 后续计划一页纸——PROGRESS.md 的对外摘录 | 节点快照（不复述细节、不维护周表，过期即归档） | 向技术总监 / 投资人汇报时 |
+| `archive/` | 历史归档区（2026-09-17 建，Docs Slimming B1）：`PROGRESS-2026-cycle1.md`（Cycle 1 周次实记/交付明细）+ 过期节点快照（`REPORT-2026-09.md`）+ `tasks-done/`（已完成施工简报）——历史记录，不再维护，不进默认 context | 归档 | 追溯历史时 |
 | `STRATEGY.md` | 战略论证：三个判断 / 三资产哲学 / 五张牌 / 两个风险 / Gallery 决策 | 活跃（2026-07-21 建） | 动方向、评估新功能、仲裁排期争议时 |
 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 表归属契约（"2027 架构"）+ 现状系统架构（代码地图/队列/数据约定，自 ARCHITECTURE.md 并入） | 活跃（2026-07 建） | 动模块边界/新模块/任何子系统前 |
 | `ARCHITECTURE_NORTH_STAR.md` | **目标架构与可靠性主线**（North Star）：Agent=Decision Producer / Execution Kernel=可靠性核心 / Structured Media=领域核心 + 执行五概念词典 + 五态纪律 + 实施序列（含 POST_T5_DELTA_AUDIT 基线） | 活跃（2026-09-16 建，Architecture Gate 批） | 任何 coding agent 开工前第一读；动执行内核/agent 边界/Media IR 方向前 |
@@ -63,7 +63,7 @@
 | `NAMING.md` | 命名宪法：八条 + 词汇表 + 判例库 | 活跃（2026-07-25 建） | 任何新名字（表/字段/包/skill/API）前；命名争议仲裁 |
 | `CHAT_ARCHITECTURE.md` | Agent Interface 层：终态工具集 / skill registry / compile_graph 动态物化 / SSE / mentions / edit ops（ADR-032） | v2 已实现；2026-09-14 ADR-077 会话层工具 loop 化落地（批次⑤ T1~T4），本文已随 T4 改写为现在时 | 动 chat / registry / 进度推送前 |
 | `JOURNEYS.md` | **用户旅程母文档**：三条旅程逐拍 × 分支树 × 系统支撑表 × 缺口登记（首产 / 案例仿制 / 后续更改服务） | 活跃（2026-09-14 建，ADR-077/078 立项依据） | 任何新功能开工前；技术评审倒查「让哪条旅程哪一拍变好」 |
-| `INTENT_COVERAGE.md` | 意图层覆盖全景：单一表面（/chat）× 七类意图的全分叉矩阵 + 状态（✅🚧❌）+ 缺口登记表 + 测试矩阵 | 活跃（2026-07-30 建；**2026-08-04 意图层单面化**——/intent 退役、计划并入 plan path，简报 `tasks/intent-surface-unification.md`） | 加 chat 能力 / 评估意图缺口 / 写 chat 相关 e2e 前 |
+| `INTENT_COVERAGE.md` | 意图层覆盖全景：单一表面（/chat）× 七类意图的全分叉矩阵 + 状态（✅🚧❌）+ 缺口登记表 + 测试矩阵 | 活跃（2026-07-30 建；**2026-08-04 意图层单面化**——/intent 退役、计划并入 plan path，简报 `archive/tasks-done/intent-surface-unification.md`） | 加 chat 能力 / 评估意图缺口 / 写 chat 相关 e2e 前 |
 | `MENTIONS.md` | @ 提及体系方针：两族分类（请求 / 指认）+ 排除清单（配方/产出/参数/人设永不是 mention）+ 判定三问 + @skill 方针 | 活跃（2026-08-11 建） | 任何新 mention 类型立案前 |
 | `RECIPES.md` | 配方架构母文档：home 能力演示卡 + 兑现管线（caption catalog / dub 接线 / voice_gen / 分镜指引）+ R1–R6 分期 | 🚧 R1/R2/R6 已落地、8 卡全 live；**画廊 v3（2026-08-27 拍板，ADR-048——三轴模型 + 招牌菜组织原则 + 三级闸门，八卡六形态，§4/§7 已同步）**；R3–R5 待施工；Remix = overlay 内发射 + 预填模板载荷（配方 = 提示词，ADR-040 / MENTIONS §3） | 动首页配方卡、字幕样式、dub/合成视频/分镜能力前；配方线 tasks 简报的母文档 |
 | `COMPETITIVE_ANALYSIS.md` | 七家竞品综合（Round 1.2） | 活跃 | 竞品概览 |
@@ -71,7 +71,7 @@
 | `API.md` | API 参考 | 活跃（2026-08-18 全面对齐路由） | 对接口前 |
 | `DATABASE_MIGRATIONS.md` | Alembic 工作流 | 活跃 | 写迁移前 |
 | `research/` | 竞品卡片（7 家）+ Opus 深拆 + ElevenCreative 调研 + FLORA 首页/工作台走查 + **Lovart 落地页走查（`lovart-landing.md`——hero 任务轮播 + 滚动驱动「输入→prompt→输出」demo 幕，着陆叙事证据）** + MiniMax Design 走查（界面工艺清单 + Skills 仓库解剖）+ Agent Skills 规范生态（Mastra/Agno 文档证据，`agent-skills-spec.md`）+ 渲染技术调研 + dsh 架构调研（agent harness 对照，采纳项已分流 PROGRESS/NAMING/AGENT_ARCH）+ **craft 解剖证据表（`craft-anatomy-2026-08-22.md`——产物质量线期 0 产出，四卡 × 真素材三源测量，期 2/3 施工顺序由它决定）** | 原始素材层 | 引用证据时 |
-| `tasks/` | 单功能实施简报（含 Prohibited Behaviors）；已完成简报归 `tasks/done/`（历史记录，不再维护）。**R1/R1.1 施工合同 = `tasks/r1-*.md` / `tasks/r1-1-*.md`（2026-09-16 产品-first 批）**——每批一份自包含合同（product goal / current state / tasks / Do NOT touch / acceptance / docs update），批次存在性与顺序归 `PROGRESS.md` §0，合同只描述怎么施工 | 活跃 | 开工对应功能前必读；**新 coding session 入口 = `PROGRESS.md` §0 → 当前 batch 合同** |
+| `tasks/` | 单功能实施简报（含 Prohibited Behaviors）；已完成简报归 `archive/tasks-done/`（历史记录，不再维护）。**R1/R1.1 施工合同 = `tasks/r1-*.md` / `tasks/r1-1-*.md`（2026-09-16 产品-first 批）**——每批一份自包含合同（product goal / current state / tasks / Do NOT touch / acceptance / docs update），批次存在性与顺序归 `PROGRESS.md` §0，合同只描述怎么施工 | 活跃 | 开工对应功能前必读；**新 coding session 入口 = `PROGRESS.md` §0 → 当前 batch 合同** |
 
 ## 已规划的文档（尚未撰写）
 

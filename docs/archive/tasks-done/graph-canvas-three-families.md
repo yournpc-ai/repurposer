@@ -1,7 +1,7 @@
 # 画布三族批（ADR-072）——施工简报
 
 > Status: 已拍板待实施（2026-09-12）。拍板过程：画布走查三伤（锚线歪 / @ 锚 / PROMPT 参数回声）→ 画布公理讨论收敛 → ADR-072。
-> 本文是实施的唯一工作简报；决策正文在 `docs/DECISIONS.md` ADR-072。完成后归 `docs/tasks/done/`。
+> 本文是实施的唯一工作简报；决策正文在 `docs/DECISIONS.md` ADR-072。完成后归 `docs/archive/tasks-done/`。
 
 ## 0. 一句话目标
 

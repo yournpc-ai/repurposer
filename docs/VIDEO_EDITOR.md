@@ -1,6 +1,6 @@
 # Portrait Video Editor — Design & Implementation Plan
 
-> Status: Implemented（L2 主流程已落地；undo 已随 Operation Model 落地——端点 + chat 撤销，editor 内按钮/历史面板后置，见 ADR-032 与 `docs/tasks/done/operation-model.md`）
+> Status: Implemented（L2 主流程已落地；undo 已随 Operation Model 落地——端点 + chat 撤销，editor 内按钮/历史面板后置，见 ADR-032 与 `docs/archive/tasks-done/operation-model.md`）
 > 编辑面分层（2026-08-02，ADR-033）：本文的"编辑形式"= **editor 适配器**的形态，不是产品编辑面的全部——能力层（OP_REGISTRY ∪ SKILL_REGISTRY）唯一，editor / chat /（预留）mcp 是并存的薄适配器；chat 已是正式编辑面，不再是"辅助入口"。
 > This document records the final plan for Repurposer's "portrait video output + editable" main pipeline.
 > It is the conclusion of multiple rounds of technical reviews (benchmarked against OpusClip / Descript / InVideo / CapCut Web).
@@ -27,7 +27,7 @@
 | **L2** (main body of this doc) | Basic portrait video output: segment trimming + burned-in subtitles + brand styling + music + intro/outro → MP4 + SRT; transcript-style editing + single-track trim | **Implemented** |
 | **L3** | Multi-track / layer compositing / transition effects / B-roll library / auto face-tracking reframe / desktop offline / client-side engine | **Never; hand off to CapCut** |
 
-**Polished means**: (1) preview = output pixel parity; (2) multilingual subtitles are accurate and one-click editable; (3) one-click yields a publishable clip (editing is optional, not required); (4) deleting a sentence = trimming the video, undoable (undo 已落地：operations 端点 + chat 撤销按钮；editor 内 undo 按钮后置——见 ADR-032 与 `docs/tasks/done/operation-model.md`); (5) restrained, unified UI + honesty (clearly say "export to CapCut for fine-tuning" where we can't deliver).
+**Polished means**: (1) preview = output pixel parity; (2) multilingual subtitles are accurate and one-click editable; (3) one-click yields a publishable clip (editing is optional, not required); (4) deleting a sentence = trimming the video, undoable (undo 已落地：operations 端点 + chat 撤销按钮；editor 内 undo 按钮后置——见 ADR-032 与 `docs/archive/tasks-done/operation-model.md`); (5) restrained, unified UI + honesty (clearly say "export to CapCut for fine-tuning" where we can't deliver).
 
 ## 3. Core Decision: Lock the Contract, Treat Renderer as a Replaceable Black Box
 
