@@ -11,14 +11,16 @@
 
 - **R1 — Core Product Beta：✅ 已封板（2026-09-17）**——implementation complete, acceptance closed：四 invariant（I-EXEC-01~04）+ S17 族 + B2 §10.2–10.5 实弹竞态演练全绿。仍 OPEN（有界，不阻塞封板）：baseline LLM 方差族 S1 / S6f / S10（登记在案，非 release regression；follow-up probe 保持 OPEN）。R1 定义 / 批次完成记录 / DoD 全账归 `archive/PROGRESS-2026-cycle1.md`。
 - **R1.1 — Commercial / Distribution：排期挂起（2026-09-16 拍板）**——随支付商对接节奏或更后再议；批次合同已备（§0.3），启动时日期周五滚动定。
+- **Product Flow Alignment：施工中（2026-09-18 拍板）**——Upload Staging / 统一相位 / Product Graph 语义与 Layout / 画布出生编排四批 + E2E；架构地基 ADR-086（拓扑空间权威三律 + Product Canvas ≠ Execution Graph）；施工合同 `tasks/product-flow-alignment.md`（§0.2）。
 
 ### 0.2 Active batch
 
 | Batch | 内容 | 状态 | 施工合同 |
 |---|---|---|---|
-| **Docs Slimming B1+B2** | 文档历史物理隔离（B1 ✅ `e7bb212`）+ 本入口恢复（B2）——依据审计 `scratch/docs-slimming-audit-2026-09-17.md`；完成即停线，B3+（ADR 瘦身 / 架构文档去重等）重新审计后再评估 | 施工中（2026-09-17） | `tasks/docs-slimming-b1-b2.md` |
+| ~~Docs Slimming B1+B2~~ | 文档历史物理隔离（B1 `e7bb212`）+ 本入口恢复（B2 `fde345e`）——依据审计 `scratch/docs-slimming-audit-2026-09-17.md`；B3+（ADR 瘦身 / 架构文档去重等）重新审计后再评估 | ✅ 完成（2026-09-17，完成即停线） | `tasks/docs-slimming-b1-b2.md` |
+| **Product Flow Alignment** | Upload Staging Session → 统一相位/readiness gate → Product Graph 语义模型 + Layout（拓扑空间权威三律）→ 画布出生编排 → E2E——三路 Recon root cause L1-L5 + 用户四决策拍板（2026-09-18）；架构地基 = ADR-086；需求池「画布可读性②」随 Batch C 吸收 | 施工中（2026-09-18 周五滚动拍板） | `tasks/product-flow-alignment.md` |
 
-**下一批：待 2026-09-18 周五滚动拍板**（候选：运营端 W8–W10 / R1.1 解冻——09-16 对账归 `archive/PROGRESS-2026-cycle1.md`；远期框架见 §2 W8 起）。
+**下一批**：本轮收口后周五滚动再定（候选不变：运营端 W8–W10 / R1.1 解冻——09-16 对账归 `archive/PROGRESS-2026-cycle1.md`；远期框架见 §2 W8 起）。
 
 ### 0.3 R1.1 — Commercial / Distribution（R1 之后；**排期挂起 2026-09-16**）
 
@@ -284,7 +286,7 @@
 | turn 级事件可观测性落库 | P2 | agent 调用台账（上方 P1 行——同取证面，天然合批） | 2026-09-16 事故死因不可考的根：stdout 日志不持久 + 回合中途死亡零痕迹；turn_state 已有 in_flight/failed 两章，本条补的是「为什么死」（拒绝轨迹 / 异常类 / 耗时剖面落 DB，非日志文件） |
 | ~~单一叙事者收口（pending-plan 静默 + 语言唯一 owner）~~ | — | — | **✅ 09-17 当日兑现（ADR-080）**：pending task_book 静默谓词 + `conversations.ui_language` owner 列（migration h7d1e4a93b26）+ `_trigger_language` 改读 owner 链；纯函数套件锁链序——条目关闭 |
 | ~~选项语法统一（chip 退役 + OptionDock 编号 1/2/3）~~ | — | — | **✅ 09-17 当日兑现（ADR-081，阻塞形态拍板 = 阻塞式）**：`WrapUpArgs` 收窄纯 label、review 行 dock 真实编号选项问、answer generic 分支按 run 状态分派（无 run 走 plan path）、徽章 a/b/c→1/2/3、存量 pill 行读容忍——条目关闭 |
-| 画布可读性②（同族链分组 + 长边路由 + 居中） | P1 | ① 高度失真 **✅ 09-17 已落**（ADR-082 判词①——`layout.ts` settled 分支空气压缩：同列按当前渲染高堆叠、`min(serverY, …)` 结构保险、服务端帧零改动）；`GroupFrames` 组件现成（配方说明书先例） | ADR-082（2026-09-17 拍板）：呈现/语义隔离铁律——禁为排线造语义节点；本行剩余 = 同族链分组（项目页补传 groups）/ asset→asm 跨列长边路由 / settled 路径居中；验收同 5 秒三问 |
+| 画布可读性②（同族链分组 + 长边路由 + 居中） | P1 | ① 高度失真 **✅ 09-17 已落**（ADR-082 判词①——`layout.ts` settled 分支空气压缩：同列按当前渲染高堆叠、`min(serverY, …)` 结构保险、服务端帧零改动）；`GroupFrames` 组件现成（配方说明书先例） | ADR-082（2026-09-17 拍板）：呈现/语义隔离铁律——禁为排线造语义节点；本行剩余 = 同族链分组（项目页补传 groups）/ asset→asm 跨列长边路由 / settled 路径居中；验收同 5 秒三问。**2026-09-18 起由 Product Flow Alignment Batch C 吸收施工**（合同 `tasks/product-flow-alignment.md` §7；layout 错位 root cause L1-L5 归该批，本行三残留随批吸收或拆分回登） |
 | ~~信任锚 echo（素材理解的发言席位）~~ | — | — | **✅ 09-17 当日兑现（ADR-083，价值链追踪 + GPT 三收紧全采纳）**：present_plan echo 2 句律修订为三语义职责（判断/转述/完成+下一步，约束语义不约束句法）+ grounding 四级证据链（metadata 仅身份证据）+ assemble 期注入 ready 理解行（零 LLM 零轮次）；single writer 不动——条目关闭 |
 
 ### 可选需求

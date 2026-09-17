@@ -1813,3 +1813,22 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Consequences**: Chat 从「一个会生成漂亮答案的聊天框」变成「能看到它在干活的 Agent」——用户看到的是有意义的工作进展，不是内部思维日志。caption 场景理想序列：User → [Phase] 正在读取素材 → [Checkpoint] 我看到了——关于 X 的演讲，核心是 Y（grounded in understanding）→ [Phase] 正在整理计划 → [Settled] 两版字幕：中文双语 + 法语，计划在画布上 → Canvas 结构 / Dock Start。Interaction Integrity 的最终形态：**不是所有真实发生的内部状态都展示；但展示的每一项都必须真实、有结果、有用户价值**。checkpoint 的验收问句（2026-09-17 评审拍板）：**「这条消息是用户刚刚真的需要知道的信息，还是系统只是想证明自己做过某个动作？」**——前者过，后者禁。**已知风险与验证义务（评审拍板①）**：路由规则要求「结果陈述后再跟一条 read」才出 checkpoint，主路径 `get_understanding → present_plan`（单读直出）**结构性零 checkpoint**——判断句由终答的 duty ① 承载（ADR-083），这不是缺陷；但如果实测发现 earned 条件在主路径上**系统性过低**、理解锚沦为偶然体验，则重审路由（候选：显式 checkpoint 工具 / 终态前分流），那是一次新评审而不是静默扩闸。命中率数据面 = `tool_loop_checkpoint` structlog（含 predecessor）+ **`tool_loop_turn` 每回合一条汇总**（reads 序列 / eligible_reads / checkpoints / outcome——eligible 占比、eligible→checkpoint 转化、checkpoint→settled 三比例及「哪类 read 真挣到 checkpoint」全可算，评审拍板）+ `chat_scenarios` S21 探针（四场景 PRINT read 序列与 checkpoint 计数，只锁硬律不锁出现）。资格纪律（评审拍板④）：`checkpoint_eligible` 永是资格不是触发；「信息生产 vs 动作证明」的判定永远归 new + user-relevant + changes understanding。回归面 = chat_scenarios S20B/S21 + `test_tool_loop_pure.py` 五条路由用例；prompt 面改动过 ADR-071 T2 门禁。
 
 **Related**: ADR-084（read 静默律——本条是它的补全而非翻案：read 前静默不动，read 后的结果言语走新通道）/ ADR-083（信任锚——checkpoint 的 grounding 层级同源）/ ADR-077（工具 loop——checkpoint 是其呈现协议补全，内核不动）/ ADR-080（单一叙事者——checkpoint 不引入第二 writer，它仍是同一 turn 的言语）/ ADR-070（确认拍 = dock pill——Settled 层的 Start 归属不变）
+
+## ADR-086: 拓扑空间权威三律 + Product Canvas ≠ Execution Graph——Product Flow Alignment 的架构地基
+
+**Status**: Decided (2026-09-18；三路代码取证（Recon，root cause L1-L5 全表）+ 用户拍板；施工合同 = `docs/tasks/product-flow-alignment.md`，批次注册 = PROGRESS §0.2「Product Flow Alignment」)
+
+**Context**: 画布「线往回走」的取证结论不是 edge routing 问题，是**拓扑与帧已不一致后的视觉症状**：深度-间距律只在节点出生执行一次、既有帧永不移动（append-only 保序律），而晚出生的中间节点（翻译/配音两站 doc 伴侣）、边对账、pitch 漂移（迁移 436 vs 现行 464）、空帧前端 `{0,0}` 静默兜底、读时合成边五个来源各自制造 `target.x < source.x`。加重发现：`RunOp` 按 `(layout.x, layout.y)` 排序 run_nodes——**视觉坐标被当作执行依据**，帧错位可让修订 run 把消费者排在生产者之前。用户判词：「Product Canvas 被执行图的历史设计污染了」；「不要把呈现层重推实现成临时视觉补丁——topology / semantic stage 必须明确定义成 layout projection 的上游依据」。
+
+**Decision**:
+
+1. **Product Canvas ≠ Execution Graph（追认 + 准入闸）**：画布节点 = 用户拥有/关心的 artifact，永不是执行步骤；`task_book / preprocess / understand / plan / materialize / render / verify / queue / retry` 类概念永不上画布。现行 read-face 机制（B1-lite 过滤 / B4-lite 收编 / `_read_face` 映射 / workflow_steps 永不成画布节点）追认为本律的执行机制，不是临时补丁；**新增图节点类型 / spec.tool 必须声明 product visibility，默认隐藏**。
+2. **拓扑/语义 rank 是唯一空间权威，frame 是呈现 projection**：一切用户可见位置的上游 = Product DAG 拓扑（rank = 拓扑深度，读时合成边是 rank 计算的合法输入）。`graph_nodes.layout` 帧收窄为 **y 座位 / w·h 预留 / 稳定锚**三职；x 的显示值 = rank 投影，服务端出生帧的 x 不再是显示依据。**方向不变量**：一切用户可见 edge 满足 `rank(target) > rank(source)` 且渲染 `x(target) > x(source) + MIN_GAP`；sibling 序稳定；不依赖 birth order。append-only 保序律对 y/稳定锚维持（ADR-036 不翻案）；**服务端帧零改动、存量零迁移**（呈现层修法，ADR-082 判词① 先例）。
+3. **Run order = DAG topology，永不读 layout.x**：`RunOp` 排序改读图边拓扑深度（与 rank 同一事实源）；`graph_revise.py`「x 序 = 深度序」假设删除。执行顺序与视觉坐标解耦——二者共享同一 Product DAG，视觉坐标永不做执行依据。本项触及执行面，施工必须带 regression scenario（R1 执行 invariants I-EXEC-01~04 不动）。
+4. **生长 = 呈现编排，节点语义一次 stamp（K5 不翻案）**：ADR-057「图先展示后运行」维持——计划确认前用户看到完整链 + 逐节点估价是 fold 报价前提。「动态生长感」由出生编排（深度序 reveal）+ 节点原地状态迁移（draft → running → done）承载；loading → ready 是同一 node 更新；不把内部 execution task 逐个变成画布节点；不为生长感让服务端 drip-feed。
+
+**明确不做**：不重写 edge routing（贝塞尔 / 端口法则 / 出入锚保留——错误的语义布局不用漂亮的线补锅，反过来也不为排线改拓扑）；不用 clamp / 翻转 edge / 固定 x-y hack 掩盖拓扑；不迁移存量帧、不引 dagre（ADR-036 判词维持）；不把 SSE 做成事件总线（节点状态 = `step.updated` → graph refetch 既有模式）；不动 ADR-084/085 / 打字机律。
+
+**Consequences**: 布局算法的输入从「出生时刻的拓扑快照」改为「当前 Product DAG 的 rank」——帧错位五源（L1-L5）的视觉症状结构性消除；执行序与呈现解耦后，「帧错 → 执行错」的污染链断掉；Product Canvas 的边界从约定升级为带准入闸的 invariant。落地座位与回归面随施工回填（合同 §13 文档同步清单）。空帧处置细则：出生地保证每行必带合法帧；前端静默原点兜底删除——dev 显式失败 / prod graceful fallback（fallback = rank 投影，不是原点）。
+
+**Related**: ADR-036（布局自算 + append-only——本条收窄帧的职责不翻其律）/ ADR-057（图即产品对象——判词① 的母体；K5 维持）/ ADR-062（边对账律——对账不再依赖帧一致性）/ ADR-067（出锚语义律——「呈现忠于语义」同族）/ ADR-082（呈现/语义隔离铁律 + 判词① 呈现层修法先例；「画布可读性②」残留随本批施工吸收）
