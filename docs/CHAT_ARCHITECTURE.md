@@ -259,11 +259,11 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 
 ### 8.8 触发回合（主动说话，ADR-077 判词③）
 
-世界事件到达 = agent 自己开口：pipeline 在两个白名单座位（理解完成 / run 终态）fire-and-forget 触发 `chat/trigger_turn.py` 的触发 agent——ToolLoopAgent 家族的第三座（与 plan path / chat path 两回合 runner 同族），读工具看世界后 `wrap_up` 终态落一条**普通 assistant 行**（`intent={type:"trigger_review", trigger, ref, suggestions}`）。`_already_spoke` 按 (trigger, ref) 去重——一个事件最多说一次。触发回合永不起 run、永不结算提问——它是说话，不是第二意图表面。
+世界事件到达 = agent 自己开口：pipeline 在两个白名单座位（理解完成 / run 终态）fire-and-forget 触发 `chat/trigger_turn.py` 的触发 agent——ToolLoopAgent 家族的第三座（与 plan path / chat path 两回合 runner 同族），读工具看世界后 `wrap_up` 终态落一条 assistant 行（`intent={type:"trigger_review", trigger, ref, suggestions}`）。`_already_spoke` 按 (trigger, ref) 去重——一个事件最多说一次。触发回合永不起 run——它是说话，不是第二意图表面（建议的作答仍走 answer 端点 / autoResume 的既有结算，trigger 自身不结算）。
 
-- **单一叙事者律（ADR-080，2026-09-17 拍板）**：准入门 = 叙事所有权门，两张静态谓词——会话内有用户 turn 在飞（`turn_state='in_flight'`）→ **defer**（20s × 15 周期，交互完整性批 B 已落）；无在飞但有 **pending task_book 计划** → **静默**（「我看了什么」的叙事已被计划 echo 覆盖，再说只有抢麦——待施工）；两者皆无才可说话。超限/失势一律落静默教义：盲评不如不说。
-- **界面语言唯一 owner（ADR-080）**：一切 assistant 写者（plan / chat / trigger / 未来 worker 生言语）继承会话的单一界面语言事实源，不做 per-writer 推导——`_trigger_language` 的 history 文字推断降级为 owner 缺席时的兜底，素材语言永不是言语信号。2026-09-16 事故的双语打脸（plan 说英文 / trigger 说中文）在结构上不再可能。
-- **建议形态（ADR-081，2026-09-17 拍板，施工待排期）**：`suggestions` chip（≤3 条 pill，`{label≤40, action:"send"|"download"}`）**整体退役**——固定选项类建议改走 OptionDock（全局编号 1/2/3，字母徽章退役），开放式建议写进散文，download 直达动作归画布产物卡 factsbar 既有座位。存量 trigger_review 行的 suggestions 回放读容忍保留，新行不再产出。
+- **单一叙事者律（ADR-080，2026-09-17 拍板，已落地）**：准入门 = 叙事所有权门，两张静态谓词——会话内有用户 turn 在飞（`turn_state='in_flight'`）→ **defer**（20s × 15 周期）；无在飞但有 **pending task_book 计划** → **静默**（「我看了什么」的叙事已被计划 echo 覆盖，再说只有抢麦）；两者皆无才可说话。超限/失势一律落静默教义：盲评不如不说。
+- **界面语言唯一 owner（ADR-080，已落地）**：`conversations.ui_language` 列 = 单一事实源（prepare 每个用户回合从请求 Accept-Language 盖章），一切 assistant 写者（plan / chat / trigger）继承它——`_trigger_language` 链 = owner → run pin → history 兜底推导 → en，per-writer 推导退役。
+- **建议形态（ADR-081，2026-09-17 拍板并落地）**：`suggestions` = ≤3 条**用户口吻选项 label**（schema 收窄：blank 丢弃、>40 字拒收、download pill 退役——产物下载归画布产物卡 factsbar），有建议时 review 行**dock 成真实编号选项问**（`kind="question"`，选项 id = 1/2/3 位置序号，阻塞形态律不变，× = 优雅不选）；无建议 = 普通散文行。作答路径零新机制：选项命中（点击 / 打序号）走 answer 端点 generic 续聊分支——**按项目 run 状态分派**（无 run 走 plan path 起草计划，有 run 走 chat path），选中 label = 用户发言。存量 pill 行前端读容忍回放，新行不再产出。
 
 ## 9. 修订边界（ADR-057：wiring 统一 + edit ops 节点内部存活）
 

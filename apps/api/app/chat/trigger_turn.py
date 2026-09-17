@@ -17,9 +17,10 @@ first):
 The loop itself: the perception family's reads are the agent's eyes (look
 BEFORE speaking — read-before-speak is the reviewer's honesty base), and
 ONE terminal tool (``wrap_up``) closes the turn with the spoken review plus
-0-3 suggestion pills (click = the text fires as the user's next message —
-the revision kind rides the chat single intent surface — or a direct
-download of a landed output).
+0-3 next-step option labels that dock as a REAL numbered options question
+on the review row (ADR-081 选项语法统一律 — the pill form is retired; the
+picked label rides the answer endpoint's generic continuation into the
+next chat turn as the user's own say).
 
 Worker-side seats: both fire points are pipeline code (no request context),
 so the turn opens its OWN session (the ``dock_interrupt_question``
@@ -51,15 +52,16 @@ from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.prompts import trigger_system
 from app.chat.service import (
     _create_message,
+    _dock_question,
     _get_or_create_project_conversation,
     _prefers_zh,
+    finalize_bailed_runs,
     is_pending_plan,
     latest_pending_question,
 )
 from app.chat.turn_tools import CHAT_READ_TOOLS
-from app.models.schemas import Suggestion, WrapUpArgs
+from app.models.schemas import Option, QuestionPayload, WrapUpArgs
 from app.models.tables import Conversation, Message, Project, WorkflowRun
-from app.pipeline.outputs import list_visible_outputs
 
 logger = structlog.get_logger(__name__)
 
@@ -71,9 +73,10 @@ TRIGGER_WHITELIST = frozenset(
     {TRIGGER_UNDERSTANDING, TRIGGER_RUN_COMPLETED, TRIGGER_CRAFT_DECOMPILED}
 )
 
-# The assistant row's intent-dump discriminator (the persistence seat — the
-# question machine's payload is untouched: a trigger turn never docks a
-# question, never answers one).
+# The assistant row's intent-dump discriminator — the dedup guard and the
+# frontend's arrival channel read it. Since ADR-081 the row MAY also dock
+# its options question (the suggestion labels' seat); the dump stays the
+# forensics/identity layer (type + trigger + ref + labels).
 TRIGGER_DUMP_TYPE = "trigger_review"
 
 # Turn admission (交互完整性批 B, 2026-09-17; ADR-080 单一叙事者律升格 —
@@ -133,11 +136,37 @@ WRAP_UP = ChatTool(
     name="wrap_up",
     description=(
         "Close the proactive turn: your spoken message is the review; carry "
-        "0-3 next-step suggestion pills grounded in what you actually read. "
-        "Speak first, then call this."
+        "0-3 next-step option labels grounded in what you actually read "
+        "(they dock as a numbered options question — ADR-081). Speak "
+        "first, then call this."
     ),
     params_model=WrapUpArgs,
 )
+
+
+def _trigger_question_line(language: str) -> str:
+    """The suggestion dock's bare question (ask 三分解剖 ② — code-assembled,
+    never the LLM's voice, same doctrine as the reminder tail): the review
+    prose already framed why; the dock title only asks which next step."""
+    return "接下来做什么？" if language.startswith("zh") else "What's next?"
+
+
+def _suggestions_payload(labels: list[str], language: str) -> QuestionPayload:
+    """The suggestion dock's question payload (ADR-081 选项语法统一律):
+    the trigger's send-labels become a REAL options question — numbered
+    options (id = 1-based position, the autoResume/digital-badge grammar),
+    freeform pencil on, blocking per the 形态律. No slot, no run marker:
+    the answer endpoint's generic continuation carries the picked label
+    into the next chat turn as the user's own say."""
+    return QuestionPayload(
+        kind="question",
+        question=_trigger_question_line(language),
+        options=[
+            Option(id=str(index + 1), label=label)
+            for index, label in enumerate(labels)
+        ],
+        allow_freeform=True,
+    )
 
 
 def _trigger_language(
@@ -198,16 +227,17 @@ trigger_agent = ToolLoopAgent(
 
 
 def _trigger_dump(
-    trigger: str, ref: str, suggestions: list[Suggestion]
+    trigger: str, ref: str, suggestions: list[str]
 ) -> dict[str, Any]:
-    """The assistant row's self-describing dump — replay (refresh / another
-    device) rebuilds the pills from here; the dedup guard reads
-    (trigger, ref) off the same keys."""
+    """The assistant row's self-describing dump — the dedup guard reads
+    (trigger, ref) off these keys; ``suggestions`` keeps the option labels
+    for forensics (the dock itself rebuilds from the row's ``question``
+    payload, never from here)."""
     return {
         "type": TRIGGER_DUMP_TYPE,
         "trigger": trigger,
         "ref": ref,
-        "suggestions": [s.model_dump(mode="json") for s in suggestions],
+        "suggestions": list(suggestions),
     }
 
 
@@ -337,10 +367,9 @@ async def run_trigger_turn(
 
             async def execute(name: str, params, prose: str):
                 """The LoopExecute seat: reads dispatch to the perception
-                family (never terminal); ``wrap_up`` validates the pills
-                against the world's truth (a download suggestion names a
-                REAL landed output of this project — never an invented id),
-                persists the review row, and stops the loop."""
+                family (never terminal); ``wrap_up``'s labels are already
+                dock-worthy by schema (blank dropped, overlong rejected into
+                the loop) — persist the review row and stop the loop."""
                 if name in PERCEPTION_TOOLS:
                     return await run_perception_tool(db, project, name, params)
                 assert isinstance(params, WrapUpArgs)
@@ -349,23 +378,6 @@ async def run_trigger_turn(
                         "an empty review says nothing — speak your judgment "
                         "as your message text, then call wrap_up."
                     )
-                downloadable = [
-                    s for s in params.suggestions if s.action == "download"
-                ]
-                if downloadable:
-                    visible = await list_visible_outputs(db, project.id)
-                    visible_ids = {str(o.id) for o in visible}
-                    bad = [
-                        s.label
-                        for s in downloadable
-                        if str(s.output_id) not in visible_ids
-                    ]
-                    if bad:
-                        return (
-                            f"download suggestions name outputs that do not "
-                            f"exist in this project: {bad} — only ids from "
-                            "the context's Current outputs list are legal."
-                        )
                 outcome["suggestions"] = params.suggestions
                 return None
 
@@ -386,18 +398,37 @@ async def run_trigger_turn(
             speech = result.prose.strip()
             if not speech:
                 return None
-            suggestions = outcome.get("suggestions", [])
-            message = await _create_message(
-                db,
-                conversation_id,
-                "assistant",
-                speech,
-                workflow_run_id=(
-                    UUID(ref) if trigger == TRIGGER_RUN_COMPLETED else None
-                ),
-                intent=_trigger_dump(trigger, ref, suggestions),
-            )
-            await db.commit()
+            suggestions: list[str] = outcome.get("suggestions", [])
+            if suggestions:
+                # 选项语法统一律 (ADR-081): the next-step labels dock as a
+                # REAL options question on the review row (blocking 形态律,
+                # × = the graceful not-now). The single-pending invariant's
+                # supersede may cascade-bail a parked interrupt run —
+                # finalize those after our commit.
+                message, bailed_run_ids = await _dock_question(
+                    db,
+                    conversation_id,
+                    speech,
+                    _suggestions_payload(suggestions, language),
+                    intent=_trigger_dump(trigger, ref, suggestions),
+                )
+                if trigger == TRIGGER_RUN_COMPLETED:
+                    message.workflow_run_id = UUID(ref)
+                await db.commit()
+                if bailed_run_ids:
+                    await finalize_bailed_runs(bailed_run_ids)
+            else:
+                message = await _create_message(
+                    db,
+                    conversation_id,
+                    "assistant",
+                    speech,
+                    workflow_run_id=(
+                        UUID(ref) if trigger == TRIGGER_RUN_COMPLETED else None
+                    ),
+                    intent=_trigger_dump(trigger, ref, suggestions),
+                )
+                await db.commit()
             logger.info(
                 "trigger_turn_spoke",
                 trigger=trigger,

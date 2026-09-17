@@ -1720,12 +1720,41 @@ async def answer_question(
                 on_tool_ready=on_tool_ready,
             )
         else:
-            follow_up, _run_id, bailed_run_ids, _settled = await _propose_turn(
-                db, user_id, conversation, project, say, [], history[-6:],
-                on_delta=on_delta,
-                on_tool_call=on_tool_call,
-                on_tool_ready=on_tool_ready,
-            )
+            # 选项语法统一律 (ADR-081): trigger suggestion questions land
+            # here — the picked label is the user's say. Dispatch by the
+            # project's run state (the same probe prepare_chat_turn runs):
+            # a PRE-FIRST-RUN pick (the understanding-warmed dock) must
+            # draft a PLAN — falling into the proposal path would answer a
+            # "make me X" pick with proposal tools instead of a plan.
+            has_runs = None
+            if project is not None:
+                has_runs = (
+                    await db.execute(
+                        select(WorkflowRun.id)
+                        .where(WorkflowRun.project_id == project.id)
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+            if project is not None and has_runs is None:
+                follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
+                    db,
+                    user_id,
+                    conversation,
+                    project,
+                    ChatRequest(project_id=project.id, message=say),
+                    recent=history[-5:],
+                    on_delta=on_delta,
+                    on_phase=on_phase,
+                    on_tool_call=on_tool_call,
+                    on_tool_ready=on_tool_ready,
+                )
+            else:
+                follow_up, _run_id, bailed_run_ids, _settled = await _propose_turn(
+                    db, user_id, conversation, project, say, [], history[-6:],
+                    on_delta=on_delta,
+                    on_tool_call=on_tool_call,
+                    on_tool_ready=on_tool_ready,
+                )
 
     elif question.kind == "question" and data.kind == "bail" and question.slot is not None:
         # 默认路径 (提问策略③ / D2-C2): skipping a brief ask TAKES the default

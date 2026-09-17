@@ -802,48 +802,15 @@ class ChatAnswerArgs(BaseModel):
 # ---- 触发回合 (T3, ADR-077 判词③) — the proactive turn's terminal --------
 
 
-class Suggestion(BaseModel):
-    """One suggestion pill riding a trigger turn's closing message. The pill
-    is EITHER a user-voice message fired on click (``send`` — the revision
-    kind rides the chat surface, the single intent door) OR a direct action
-    (``download`` — one landed output). The label and text are the USER's
-    voice (the click speaks them verbatim), in the interface language."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    label: str = Field(
-        max_length=40,
-        description="The pill's visible text — short, user-voice, interface language (e.g. '做一个法语版').",
-    )
-    action: Literal["send", "download"] = Field(
-        description="'send' = the text fires as the user's next chat message; 'download' = one-tap download of the output.",
-    )
-    text: str | None = Field(
-        default=None,
-        max_length=300,
-        description="action='send': the full instruction fired on click — a complete user-voice request ('把这条做成法语版'), never your own voice.",
-    )
-    output_id: UUID | None = Field(
-        default=None,
-        description="action='download': the landed output's id — ONLY an id from the context's Current outputs list, never invented.",
-    )
-
-    @model_validator(mode="after")
-    def _action_payload(self) -> "Suggestion":
-        """校验分层律: the action's payload field must ride along — a send
-        pill without its text (or a download pill without its output) is a
-        dead click, so the call rejects into the loop instead."""
-        if self.action == "send" and not (self.text or "").strip():
-            raise ValueError("a 'send' suggestion needs its text")
-        if self.action == "download" and self.output_id is None:
-            raise ValueError("a 'download' suggestion needs its output_id")
-        return self
-
-
 class WrapUpArgs(BaseModel):
     """``wrap_up`` params (trigger turns only) — the proactive turn's ONE
     terminal call. The review itself is your spoken message (the content
-    channel); only the suggestion pills ride here."""
+    channel); only the next-step option labels ride here.
+
+    选项语法统一律 (ADR-081, 2026-09-17): suggestions are LABELS ONLY —
+    they dock as a real options question (OptionDock, numbered 1/2/3),
+    never as pills; the pill form (send/download actions) is retired, a
+    landed output's download lives on its canvas card's factsbar."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -852,10 +819,23 @@ class WrapUpArgs(BaseModel):
     def _read_tolerance(cls, data: Any) -> Any:
         return _tolerate_null_keys(data, "suggestions")
 
-    suggestions: list[Suggestion] = Field(
+    @field_validator("suggestions")
+    @classmethod
+    def _labels_are_dock_worthy(cls, labels: list[str]) -> list[str]:
+        """校验分层律: a label is the dock row's visible text AND the user's
+        pick riding into the continuation — blank labels are dropped (the
+        model means "fewer options"), an overlong one rejects into the loop
+        (the dock row cannot carry it)."""
+        cleaned = [label.strip() for label in labels]
+        cleaned = [label for label in cleaned if label]
+        if any(len(label) > 40 for label in cleaned):
+            raise ValueError("a suggestion label is at most 40 characters")
+        return cleaned
+
+    suggestions: list[str] = Field(
         default_factory=list,
         max_length=3,
-        description="0-3 next-step pills grounded in what you actually read — never a generic checklist.",
+        description="0-3 next-step option labels grounded in what you actually read — user-voice, interface language, ≤40 chars each, never a generic checklist.",
     )
 
 

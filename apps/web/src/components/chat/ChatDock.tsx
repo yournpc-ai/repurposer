@@ -487,18 +487,18 @@ interface OverlayMessage {
    * on a failed turn, so a refresh drops it (the conversation stays honest:
    * nothing was answered). */
   meta?: "error"
-  /** Trigger-turn pills (T3, ADR-077 判词③): a proactive review row's
-   * suggestion actions — undefined on every other message shape (the
-   * reviewer-landed test reads exactly that). Set only after the row's
-   * prose has drained (散文永远在先、提问随后 — the pills follow the
-   * speech). */
+  /** Trigger-turn suggestion pills — LEGACY REPLAY ONLY (ADR-081,
+   * 2026-09-17): rows docked before the option-grammar unification carry
+   * pill-shaped suggestions in the intent dump and replay as chips; new
+   * rows dock a REAL numbered options question (messages.question payload)
+   * instead and this stays undefined/empty. Set only after the row's prose
+   * has drained (散文永远在先、提问随后). */
   suggestions?: SuggestionPill[]
 }
 
-/** A trigger turn's suggestion pill (T3): "send" fires the text verbatim
- * as the user's next message (the revision kind rides the chat surface —
- * the single intent door); "download" one-taps a landed output. Label and
- * text are LLM-authored user voice in the interface language. */
+/** A legacy trigger row's suggestion pill (pre-ADR-081 rows only): "send"
+ * fires the text verbatim as the user's next message; "download" one-taps
+ * a landed output. New trigger rows never produce this shape. */
 interface SuggestionPill {
   label: string
   action: "send" | "download"
@@ -1655,16 +1655,17 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   }, [steps, pendingQuestion, runId, fetchPendingQuestion])
 
   // ── 触发回合的到达通道 (T3, ADR-077 判词③) ─────────────────────────
-  // Trigger turns land as plain assistant rows (intent.type ===
-  // "trigger_review") OUTSIDE any request the dock made: the
-  // understanding-warmed beat fires while assets process (pre-first-run,
-  // journey 一②), the closing reviewer lands seconds after the run's
-  // terminal frame (journey 一⑦). The dock polls the conversation while
-  // either window is open; each unseen trigger row types out through its
-  // own typewriter (打字机律 — server-born prose never blobs in), the pills
-  // land only after the prose drains (散文在先), and the settle rides the
-  // existing agent-speech recall funnel (a tucked-away dock resurfaces on
-  // its own — 唤回复用, zero new machinery).
+  // Trigger turns land as assistant rows (intent.type === "trigger_review")
+  // OUTSIDE any request the dock made: the understanding-warmed beat fires
+  // while assets process (pre-first-run, journey 一②), the closing reviewer
+  // lands seconds after the run's terminal frame (journey 一⑦). The dock
+  // polls the conversation while either window is open; each unseen trigger
+  // row types out through its own typewriter (打字机律 — server-born prose
+  // never blobs in), and the question docks only after the prose drains
+  // (散文在先、提问随后): NEW rows carry a real options question (ADR-081 —
+  // the numbered OptionDock), LEGACY rows replay their intent-dump pills.
+  // The settle rides the existing agent-speech recall funnel (a tucked-away
+  // dock resurfaces on its own — 唤回复用, zero new machinery).
   const messagesRef = useRef<OverlayMessage[]>(messages)
   useEffect(() => {
     messagesRef.current = messages
@@ -1692,10 +1693,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         if (suggestions === undefined) continue
         // Dedup by the SERVER row id — the archive replay and a previous
         // poll arrival land under the same id, so the row is known if it is
-        // in the flow already or mid-typing.
+        // in the flow already or mid-typing. A PENDING options question
+        // replays as its echo row (`${id}-echo`, 形态律 replay), so that
+        // alias counts as known too — without it a refresh inside a watch
+        // window re-types the review under the bare id.
         if (
           triggerInFlight.current.has(row.id) ||
-          messagesRef.current.some((m) => m.id === row.id)
+          messagesRef.current.some(
+            (m) => m.id === row.id || m.id === `${row.id}-echo`
+          )
         ) {
           continue
         }
@@ -1731,6 +1737,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               m.id === row.id ? { ...m, streaming: false, suggestions } : m
             )
           )
+          // 选项语法统一律 (ADR-081): a NEW-shape trigger row carries its
+          // suggestions as a real options question (question payload) —
+          // dock it once the prose has drained (提问随后, same law the
+          // legacy pills follow). Legacy rows skip this (their chips are
+          // already attached above).
+          if (!row.answer && (row.question?.options?.length ?? 0) > 0) {
+            const q = await fetchPendingQuestion()
+            setPendingQuestion((prev) => prev ?? dockWorthyQuestion(q))
+          }
         } finally {
           triggerInFlight.current.delete(row.id)
         }
@@ -1738,7 +1753,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     } catch {
       /* server-born speech is best-effort — the replay rebuilds on refresh */
     }
-  }, [projectId])
+  }, [projectId, fetchPendingQuestion])
 
   // Load the project's assets for the prompt attachments — once on mount,
   // and again after a chat turn when the project started empty: the plan

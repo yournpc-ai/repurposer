@@ -263,14 +263,16 @@ function OptionForm({
                   : "bg-card"
               )}
             >
-              {/* The badge is the POSITIONAL letter (a/b/c…), never the raw
+              {/* The badge is the POSITIONAL NUMBER (1/2/3…), never the raw
                   option id — the id is a transport fact the LLM may spell as
                   a slug ("tech_innovation"), which used to overflow this 20px
-                  tile and bleed across the card (2026-09-10). The letter is
+                  tile and bleed across the card (2026-09-10). The number is
                   also the typed-answer channel: _match_option resolves it
-                  positionally server-side. */}
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[11px] font-medium uppercase text-muted-foreground">
-                {String.fromCharCode(97 + index)}
+                  positionally server-side. ADR-081 (2026-09-17): the badge
+                  went a/b/c → 1/2/3 — one option grammar for every source
+                  (plan / ask_user / trigger). */}
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[11px] font-medium text-muted-foreground">
+                {index + 1}
               </span>
               <span className="min-w-0 break-words">{option.label}</span>
               {answering && pickedId === option.id ? (
@@ -282,9 +284,9 @@ function OptionForm({
               while the input row is morphed away (freeform 恒在, 判词 5),
               rendered as ONE MORE ITEM ROW (2026-09-04 用户拍板, FLORA /
               Opus "Something else…" 同款解剖): the pencil sits in the same
-              badge tile as the option letters, the input aligns with the
+              badge tile as the option numbers, the input aligns with the
               option labels. Enter submits through the same send channel as
-              the chat input — the server's deterministic letter/number/
+              the chat input — the server's deterministic number/letter/
               label autoResume mapping resolves a hit, anything else goes
               through the judged settlement. */}
           {onFreeform ? (

@@ -711,9 +711,11 @@ async def wait_trigger_review(
 ) -> dict | None:
     """Poll the conversation for the run-completed trigger turn's review row
     (ADR-077 判词③ T3): the pipeline fires the proactive turn fire-and-forget
-    at run terminal, and the agent's wrap_up persists a PLAIN assistant row
-    whose intent dump is ``{type: "trigger_review", trigger, ref,
-    suggestions}``. Returns the message row, or None on timeout."""
+    at run terminal, and the agent's wrap_up persists an assistant row whose
+    intent dump is ``{type: "trigger_review", trigger, ref, suggestions}``
+    (ADR-081: suggestions = option labels; the row also docks the numbered
+    options question when labels exist). Returns the message row, or None on
+    timeout."""
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
         for m in await ctx.messages(conversation_id):
@@ -1108,11 +1110,11 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
         ).scalars().all()
     check(len(outs) >= 1, "the post output lands in the DB", len(outs))
 
-    # A1) 触发回合（ADR-077 判词③ T3）：run 收官触发 reviewer 主动发言——
-    #    持久化为普通 assistant 行，intent dump = {type: "trigger_review",
-    #    trigger: "run_completed", ref: run_id, suggestions}。断言 dump 形态
-    #    与 pills 良构（0–3 枚；download 指认真实落库产物——执行面已校验，
-    #    剧本锁 wire 形态）；言语内容不锁（LLM 文案，禁令 #7）。
+    # A1) 触发回合（ADR-077 判词③ T3 + ADR-081 选项语法统一律）：run 收官
+    #    触发 reviewer 主动发言——持久化为 assistant 行，intent dump =
+    #    {type: "trigger_review", trigger, ref, suggestions=labels}；有建议
+    #    时建议 dock 成真实编号选项问（messages.question payload，id = 1 起
+    #    序号）。断言 dump 形态与 dock 良构；言语内容不锁（LLM 文案，禁令 #7）。
     review = await wait_trigger_review(ctx, conv_id, run_id)
     check(review is not None,
           "the run-completed trigger turn speaks its review row", run_id)
@@ -1120,18 +1122,19 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
     check(rintent.get("trigger") == "run_completed" and rintent.get("ref") == run_id,
           "the review dump names trigger + ref", rintent)
     sugs = rintent.get("suggestions") or []
-    check(0 <= len(sugs) <= 3, "0–3 suggestion pills (schema-bounded)", sugs)
-    real_output_ids = {str(o.id) for o in outs}
-    for s in sugs:
-        check(s.get("action") in ("send", "download")
-              and bool((s.get("label") or "").strip()),
-              "each pill is well-formed (action + user-voice label)", s)
-        if s.get("action") == "send":
-            check(bool((s.get("text") or "").strip()),
-                  "a send pill carries the fired user-voice text", s)
-        else:
-            check(s.get("output_id") in real_output_ids,
-                  "a download pill names a REAL landed output", s)
+    check(0 <= len(sugs) <= 3, "0–3 suggestion labels (schema-bounded)", sugs)
+    check(all(isinstance(s, str) and s.strip() for s in sugs),
+          "each suggestion is a user-voice label (ADR-081 — pills retired)",
+          sugs)
+    if sugs:
+        question = (review or {}).get("question") or {}
+        check(question.get("kind") == "question",
+              "the suggestions dock as a real options question", question)
+        options = question.get("options") or []
+        check([o.get("id") for o in options] == [str(i + 1) for i in range(len(sugs))]
+              and [o.get("label") for o in options] == sugs,
+              "the dock options are the numbered labels (1/2/3 grammar)",
+              options)
 
     # A2) 修订 = wiring（ADR-057 K4/K5 横切——修订环根治验收点）: chat 修订
     #    → WiringProposal（edit_prompt + run 子图）→ 节点程序行原地改写

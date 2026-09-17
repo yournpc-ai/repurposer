@@ -6,11 +6,13 @@ and stays e2e-covered. What's gated HERE is the trigger turn's declared
 contract:
 
 - the whitelist IS the proactivity boundary (风险挂账③: 白名单外永不主动说话);
-- the terminal tool's params law (suggestions are user-voice pills — a send
-  without its text / a download without its output is a dead click, rejected
-  at the schema so the loop iterates instead);
-- the intent dump is self-describing (replay and the dedup guard read the
-  same keys);
+- the terminal tool's params law (ADR-081: suggestions are dock-worthy
+  option LABELS — blanks drop, overlong rejects into the loop, null reads
+  as none; the send/download pill form is retired);
+- the suggestion dock's payload law (numbered 1/2/3 option ids the
+  autoResume grammar + the dock badge share; the bare question is
+  code-assembled in the turn's speech language);
+- the intent dump is self-describing (the dedup guard reads the same keys);
 - the worker-side speech-language chain (ADR-080 界面语言唯一 owner: the
   conversation's stamped owner first; the run's pinned ui_language and the
   history's own evidence are owner-absent fallbacks; the project's
@@ -24,18 +26,20 @@ import pytest
 from pydantic import ValidationError
 
 from app.chat.perception import PERCEPTION_TOOLS
+from app.chat.service import _match_option
 from app.chat.trigger_turn import (
     TRIGGER_CRAFT_DECOMPILED,
     TRIGGER_DUMP_TYPE,
     TRIGGER_RUN_COMPLETED,
     TRIGGER_UNDERSTANDING,
     TRIGGER_WHITELIST,
+    _suggestions_payload,
     _trigger_admission,
     _trigger_dump,
     _trigger_language,
     trigger_agent,
 )
-from app.models.schemas import Suggestion, WrapUpArgs
+from app.models.schemas import WrapUpArgs
 from app.models.tables import Conversation, Message, WorkflowRun
 
 
@@ -64,81 +68,66 @@ def test_tool_set_is_the_reads_plus_one_terminal() -> None:
     assert len(trigger_agent.tools) <= 12
 
 
-class TestSuggestionParamsLaw:
-    def test_send_pill_needs_its_text(self) -> None:
-        with pytest.raises(ValidationError, match="text"):
-            Suggestion.model_validate(
-                {"label": "法语版", "action": "send"}
-            )
-
-    def test_download_pill_needs_a_real_output_seat(self) -> None:
-        with pytest.raises(ValidationError, match="output_id"):
-            Suggestion.model_validate(
-                {"label": "下载", "action": "download"}
-            )
-
-    def test_legal_pills_validate(self) -> None:
-        send = Suggestion.model_validate(
-            {"label": "做一个法语版", "action": "send", "text": "把这条做成法语版"}
-        )
-        assert send.text == "把这条做成法语版"
-        download = Suggestion.model_validate(
-            {
-                "label": "Download the video",
-                "action": "download",
-                "output_id": "3f4a5b6c-7d8e-4f0a-b1c2-d3e4f5a6b7c8",
-            }
-        )
-        assert download.output_id is not None
-
-    def test_labels_are_capped(self) -> None:
-        with pytest.raises(ValidationError):
-            Suggestion.model_validate(
-                {"label": "x" * 41, "action": "send", "text": "go"}
-            )
-
-
 class TestWrapUpArgs:
+    """ADR-081 选项语法统一律: suggestions are LABELS ONLY — they dock as
+    a real numbered options question; the send/download pill form retired."""
+
     def test_null_suggestions_is_tolerated(self) -> None:
-        # 打字机律牙①: the model writes null when it means "no pills" —
+        # 打字机律牙①: the model writes null when it means "no options" —
         # the default applies instead of a rejection burning an iteration.
         args = WrapUpArgs.model_validate({"suggestions": None})
         assert args.suggestions == []
 
-    def test_pills_cap_at_three(self) -> None:
-        pill = {"label": "go", "action": "send", "text": "go"}
+    def test_labels_cap_at_three(self) -> None:
         with pytest.raises(ValidationError):
-            WrapUpArgs.model_validate({"suggestions": [pill] * 4})
-        args = WrapUpArgs.model_validate({"suggestions": [pill] * 3})
-        assert len(args.suggestions) == 3
+            WrapUpArgs.model_validate({"suggestions": ["a", "b", "c", "d"]})
+        args = WrapUpArgs.model_validate({"suggestions": ["a", "b", "c"]})
+        assert args.suggestions == ["a", "b", "c"]
+
+    def test_blank_labels_drop_overlong_rejects(self) -> None:
+        # A blank label means "fewer options" — dropped, not an iteration
+        # burned; an overlong one cannot ride a dock row — reject.
+        args = WrapUpArgs.model_validate({"suggestions": ["做一个法语版", "  "]})
+        assert args.suggestions == ["做一个法语版"]
+        with pytest.raises(ValidationError, match="40"):
+            WrapUpArgs.model_validate({"suggestions": ["x" * 41]})
 
     def test_unknown_keys_reject(self) -> None:
         with pytest.raises(ValidationError):
             WrapUpArgs.model_validate({"suggestionz": []})
 
 
+class TestSuggestionsPayload:
+    """The docked question built from the labels (ADR-081): numbered ids
+    (the 1/2/3 grammar autoResume + the dock badge share), freeform pencil
+    on, the bare question code-assembled in the turn's speech language."""
+
+    def test_numbered_options_in_order(self) -> None:
+        payload = _suggestions_payload(["剪一个金句快剪版", "出个 30 秒精华版"], "zh")
+        assert payload.kind == "question"
+        assert payload.allow_freeform is True
+        assert [o.id for o in payload.options] == ["1", "2"]
+        assert [o.label for o in payload.options] == [
+            "剪一个金句快剪版",
+            "出个 30 秒精华版",
+        ]
+        # The positional number hit resolves each option (the dock grammar).
+        assert _match_option("1", payload.options).label == "剪一个金句快剪版"
+        assert _match_option("2", payload.options).label == "出个 30 秒精华版"
+
+    def test_bare_question_follows_the_speech_language(self) -> None:
+        assert "接下来" in _suggestions_payload(["a"], "zh").question
+        assert "Next" in _suggestions_payload(["a"], "en").question
+
+
 def test_trigger_dump_is_self_describing() -> None:
-    pill = Suggestion.model_validate(
-        {
-            "label": "Download",
-            "action": "download",
-            "output_id": "3f4a5b6c-7d8e-4f0a-b1c2-d3e4f5a6b7c8",
-        }
-    )
-    dump = _trigger_dump(TRIGGER_RUN_COMPLETED, "run-1", [pill])
+    dump = _trigger_dump(TRIGGER_RUN_COMPLETED, "run-1", ["做一个法语版"])
     assert dump["type"] == TRIGGER_DUMP_TYPE
     assert dump["trigger"] == "run_completed"
     assert dump["ref"] == "run-1"
-    # JSON-mode dump (the row's intent column is plain JSON) — the UUID
-    # serialized to its string form.
-    assert dump["suggestions"] == [
-        {
-            "label": "Download",
-            "action": "download",
-            "text": None,
-            "output_id": "3f4a5b6c-7d8e-4f0a-b1c2-d3e4f5a6b7c8",
-        }
-    ]
+    # Labels ride for forensics only — the dock rebuilds from the row's
+    # question payload, never from the dump.
+    assert dump["suggestions"] == ["做一个法语版"]
 
 
 class TestTriggerLanguage:

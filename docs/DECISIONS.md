@@ -1721,20 +1721,20 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 ## ADR-081: 选项语法统一律——固定选项全归 OptionDock，全局编号 1/2/3
 
-**Status**: Decided (2026-09-17；caption 配方卡走查拍板「不要 chip 型 UI，固定提问走 option dock 选 123」+ GPT 评审收口；施工待排期)
+**Status**: Decided (2026-09-17；caption 配方卡走查拍板「不要 chip 型 UI，固定提问走 option dock 选 123」+ GPT 评审收口；**同日施工落地**——阻塞形态拍板 = 阻塞式，与一切选项问同一形态律)
 
 **Context**: 提问/建议 UI 曾有三形态并存：阻塞式 option dock（ask_user 族，字母徽章 a/b/c）、计划确认 pill（task_book）、trigger 建议 chip（`intent.suggestions`，LLM 写的用户口吻 pill，点击原样发消息）。第三种「半结构化 pill」是交互碎片：它长得像可选项却不走问题的结算机器（无待决、无 QA 归档、无 autoResume），用户形不成稳定的交互语法。
 
 **Decision**:
 
-1. **二态法则**：凡是系统希望用户**从固定选项中选择** → 一律走 OptionDock（问句 + 全宽选项行 + 铅笔自由行，形态律 ADR-053 R1 不变）；**开放式建议** → 普通散文。**第三种「半结构化 pill」形态整体退役**——trigger 的 `wrap_up` suggestions chip 是第一个也是最后一个消费面，拆除后此形态无座位。
+1. **二态法则**：凡是系统希望用户**从固定选项中选择** → 一律走 OptionDock（问句 + 全宽选项行 + 铅笔自由行，形态律 ADR-053 R1 不变——trigger 建议 dock 同走**阻塞形态**〔2026-09-17 施工拍板：ADR-080 双谓词已把 trigger 收窄到「会话空闲且无待决计划」才说话，阻塞成本低；× = 优雅不选〕）；**开放式建议** → 普通散文。**第三种「半结构化 pill」形态整体退役**——trigger 的 `wrap_up` suggestions chip 是第一个也是最后一个消费面，拆除后此形态无座位。
 2. **全局数字编号**：OptionDock 选项徽章从 a/b/c 改 **1/2/3**——用户对所有来源（plan / ask_user / trigger / clarification）的固定选项形成同一 interaction grammar（「选 1」恒 = 第一项）。autoResume 的位置命中（字母/序号/原文三态）本就确定性支持序号，改的是展示面不是结算机。
-3. **trigger 建议的去向**：固定选项类建议改写为 dock 选项（复用 OptionDock 解剖，阻塞/非阻塞形态细节随施工简报拍板）；`download` 直达动作 pill 不复活——产物下载是画布产物卡 factsbar 的既有动作座位，不属于提问语法。
-4. **读容忍**：存量 `intent.type='trigger_review'` 行的 suggestions 回放渲染保留至自然消亡（灰行旧数据不动），新行不再产出。
+3. **trigger 建议的去向（落地形态）**：`wrap_up` 的 suggestions 收窄为**纯 label 数组**（≤3、≤40 字、blank 丢弃、download 动作退役——产物下载是画布产物卡 factsbar 的既有动作座位）；有建议时 review 行经 `_dock_question` **dock 成真实选项问**（选项 id = 1 起位置序号），作答走 answer 端点 generic 续聊分支——**按项目 run 状态分派**（无 run 走 plan path 起草计划，有 run 走 chat path——首跑前点「剪一个金句快剪版」必须产出计划而不是提案工具回答），选中 label 即用户发言。
+4. **读容忍**：存量 `intent.type='trigger_review'` 行的 pill 形 suggestions 前端回放渲染保留至自然消亡（灰行旧数据不动），新行的 dump 只带 label 数组（取证用，前端不消费——dock 从 `question` payload 重建）。
 
-**明确不做**：不为建议发明「非阻塞 dock 第四态」之外的任何新组件；不改 ask_user 的 schema（options 数组不动，纯展示层换徽章字符）。
+**明确不做**：不为建议发明任何新组件/新形态（阻塞拍板后连「非阻塞 dock 第四态」也不需要——trigger 建议复用选项问全机器）；不改 ask_user 的 schema（options 数组不动，纯展示层换徽章字符）。
 
-**Consequences**: 用户面对的选择交互收敛为唯一形态 + 唯一编号语法；「点击 pill 替我说话」的隐式代发声通道关闭，一切选择都经过 dock 的显式作答语义（QA 归档 / autoResume / bail 同源）。施工面 = `QuestionDock` 徽章字符 + `ChatDock` 的 `triggerSuggestions` 渲染分支替换 + trigger `wrap_up` schema 的 suggestions 字段退役（`Suggestion`/`WrapUpArgs` 收窄）。
+**Consequences**: 用户面对的选择交互收敛为唯一形态 + 唯一编号语法；「点击 pill 替我说话」的隐式代发声通道关闭，一切选择都经过 dock 的显式作答语义（QA 归档 / autoResume / bail 同源）。施工面（已落）= `QuestionDock` 徽章字符 + `ChatDock` 轮询通道（散文排干后 dock 选项问；`triggerSuggestions` 降级为存量行回放）+ `WrapUpArgs` 收窄为纯 label 数组（`Suggestion` 类删除）+ answer 端点 generic 分支按 run 状态分派。
 
 **Related**: ADR-053 R1（形态律——选项问阻塞形态的母体，本条不改阻塞语义只改徽章与消费面）/ ADR-070（确认拍回座 dock——dock 是一切固定选择的唯一座位原则的延续）/ ADR-077 判词③（trigger 是说话不是第二意图表面——建议入 dock 后此原则更显：dock 选项的作答仍走 `/chat` 唯一意图面）
 
