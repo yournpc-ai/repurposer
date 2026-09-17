@@ -1831,4 +1831,6 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 **Consequences**: 布局算法的输入从「出生时刻的拓扑快照」改为「当前 Product DAG 的 rank」——帧错位五源（L1-L5）的视觉症状结构性消除；执行序与呈现解耦后，「帧错 → 执行错」的污染链断掉；Product Canvas 的边界从约定升级为带准入闸的 invariant。落地座位与回归面随施工回填（合同 §13 文档同步清单）。空帧处置细则：出生地保证每行必带合法帧；前端静默原点兜底删除——dev 显式失败 / prod graceful fallback（fallback = rank 投影，不是原点）。
 
+**落地回填（C-0，2026-09-18）**：契约模块 = `app/pipeline/product_graph.py`（pure）——判词 1 的准入闸落地为 type 层 membership 谓词（媒介五值可见 / `HIDDEN_ROLES` / `LEVER_TOOLS` 两显式枚举 / 未知 type default-deny，等效机制）；判词 2 的 rank = `product_ranks`（longest-path，rank 边集 = `{video, audio, text}`，ctx 引用流排除）；判词 3 的消费点 = `topological_order`（与 rank 同一事实源，C-2 接入 RunOp）；canonical fixture = `apps/api/tests/test_product_graph_pure.py`。legacy `materialize` 行的读面可见性与谓词的暂时不一致登记为合同 §12 D-PFA-01（随历史清理收编）。
+
 **Related**: ADR-036（布局自算 + append-only——本条收窄帧的职责不翻其律）/ ADR-057（图即产品对象——判词① 的母体；K5 维持）/ ADR-062（边对账律——对账不再依赖帧一致性）/ ADR-067（出锚语义律——「呈现忠于语义」同族）/ ADR-082（呈现/语义隔离铁律 + 判词① 呈现层修法先例；「画布可读性②」残留随本批施工吸收）
