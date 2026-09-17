@@ -1755,3 +1755,22 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **Consequences**: 布局算法的输入从「预留档」改为「当前形态实高」，同值封顶（`DOCUMENT_MAX_H`）与两镜像互引律（graph_store ↔ layout.ts）照旧——改的是测量口径不是契约。分组框上项目页 = `GroupFrames` 的第二个消费面（配方说明书先例），零新组件。
 
 **Related**: ADR-036（布局自算 + append-only 保序——本条只动测量输入）/ ADR-057（图即产品对象——呈现/语义隔离铁律的母体）/ ADR-067（出锚语义律——同族的「呈现忠于语义」原则）/ ADR-080（共享 5 秒三问验收标准）
+
+## ADR-083: 信任锚 echo——present_plan 的三语义职责 + grounding 四级证据链
+
+**Status**: Decided (2026-09-17；价值链追踪分析（用户 + GPT 评审）拍板，同日施工落地)
+
+**Context**: ADR-080 静默 trigger 后暴露能力误杀——「Agent 真的看懂了素材」这个**付费前信任锚**的数据层（`MaterialUnderstanding` 物化行）与工具层（`get_understanding` 在 plan path 注册表内）完好，但它唯一的发言人（trigger turn）被静默，而存活的 plan turn 被 2026-09-02 的「2 句律」明文限制在文件名级素材认知（"judged from the user's own words or the filename"）。first loss boundary = 言语契约层，不是数据层。GPT 三条收紧全部采纳：① 不做新僵硬模板（约束语义职责，不约束句法）；② 不强制 `get_understanding` 工具轮次（会破坏 speak-first 流式拍，产生 "I'll take a look…" 过渡语）——ready 理解行在 assemble 期注入（DB 读，零 LLM 零轮次）；③ grounding 链收紧——filename/metadata 是**身份证据不是语义证据**。
+
+**Decision**:
+
+1. **echo 三语义职责（修订 2 句律，非推翻）**：present_plan 的言语承载 ① **信任锚**（我实际读到什么 + 核心判断——付费前用户必须能验证 agent 理解了内容）② 计划转述（照旧）③ 完成标准 + 下一步（照旧），自然表达为 2–3 句，职责相邻可合并成句，永不为凑数注水。瘦身意图保留：bookkeeping / 公式脚手架 / DAG 复述仍禁（结构是画布的职责——Chat 管 understanding/judgment/confirmation，Canvas 管 structure/plan，互不复述）。
+2. **grounding 四级证据链（严格）**：理解行 = 完整语义证据 → transcript/excerpt = 限于已读文字的语义证据 → 用户自己的描述 = 复述/组织用户说过的话，不 extrapolate → filename/metadata（名称/时长/尺寸）= **仅身份证据**，证明「这是哪个文件」，永不推断内容（`xy_2_15s.mp4` 不支持任何内容断言；陈述时长/格式事实合法）。本回合无语义证据 → 职责① 空缺不编造。
+3. **assemble 注入优先于工具轮次**：`plan_turn.assemble` 直接读内容寻址的 ready 理解行入 context（`understanding_lines`，复用 perception 的 `understanding_digest_lines`——一条格式化律两消费面）；未物化 / 形态过期 = 缺席，证据链降级到 excerpt / 用户原话。`get_understanding` 读工具原位保留（mid-conversation 追问的入口），但不再是判断的前置义务。
+4. **single writer 不动**：ADR-080 双谓词维持（pending task_book 时 trigger 静默）；`run_completed` 收官判断是付费后复盘，与付费前信任锚是两个节拍，不受影响。
+
+**明确不做**：不恢复双 writer / 不加仲裁层（ADR-080 明确不做维持）；不把理解摘要做成独立 deterministic UI 组件（候选 C 存档——未来可作资产详情页补充，不作替代）；不动 ToolLoop / canvas / trigger 仲裁。
+
+**Consequences**: 机械感的根（2 句律 + 文件名级认知）消除；判断的诚实性由证据链代码可查证（注入在 assemble，读到的才说）。prompt 面改动过 ADR-071 T2 门禁。验收（用户判词）：**点 Start 前用户能从 Chat 确认 agent 真懂了素材，且不听到重复的 DAG/计划描述**——不是「多了一句话」。
+
+**Related**: ADR-080（单一叙事者——本条是同一 writer 的「 richer turn」兑现）/ ADR-077（感知族读工具——注入复用其格式化律）/ ADR-058（展示文案二源律——判断句的素材认知源自世界自证的物化行）/ ADR-060（echo 防编造律——grounding 链是其素材侧推广）

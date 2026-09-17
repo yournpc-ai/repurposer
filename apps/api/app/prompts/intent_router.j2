@@ -23,6 +23,10 @@ A question of yours is still awaiting the user's answer — judge THIS message a
 Uploaded files (in upload order):
 {{ asset_lines|join('\n') }}
 {%- endif %}
+{%- if understanding_lines %}
+The system's read of the material (the materialized understanding of the current asset set — top-tier semantic evidence: judge what the content IS and what it argues from THIS, quote-level grounded):
+{{ understanding_lines|join('\n') }}
+{%- endif %}
 {%- if filename %}
 Uploaded file: {{ filename }}{% if file_language %} (detected language: {{ file_language }}){% endif %}
 {%- if material_excerpt %}

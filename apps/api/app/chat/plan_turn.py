@@ -48,6 +48,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.tool_loop import ToolObservation
 from app.chat.intent import intent_router
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
+from app.chat.perception.executes import understanding_digest_lines
 from app.chat.service import (
     THINKING_PHASE_CREATING_RUN,
     THINKING_PHASE_DRAFTING,
@@ -85,6 +86,7 @@ from app.models.schemas import (
     BriefSlotSource,
     ChatRequest,
     InferredIntent,
+    MaterialUnderstanding,
     PendingPlan,
     PlanAnswerArgs,
     PlanAskArgs,
@@ -264,6 +266,33 @@ class PlanTurn:
         )
         if material_excerpt:
             material_excerpt = material_excerpt[:800]
+        # 信任锚注入 (ADR-083, 2026-09-17): the READY material understanding
+        # rides the context at assemble time — a plain DB read off the
+        # content-addressed row (zero LLM, zero extra round), so the echo's
+        # judgment duty has top-tier semantic evidence in iteration 0
+        # instead of needing a get_understanding detour (which would break
+        # the speak-first streaming beat with a transition filler). Not
+        # ready / stale shape → absent, the grounding hierarchy falls
+        # through to the excerpt / the user's own words.
+        understanding_lines: list[str] | None = None
+        if assets:
+            from app.pipeline.node_runners import (  # deferred: pipeline weight
+                _find_reusable_understanding,
+            )
+            from app.pipeline.step_context import _asset_digest
+
+            understanding_row = await _find_reusable_understanding(
+                db, project, _asset_digest(assets)
+            )
+            if understanding_row is not None:
+                try:
+                    understanding_lines = understanding_digest_lines(
+                        MaterialUnderstanding.model_validate(
+                            understanding_row.payload
+                        )
+                    ) or None
+                except Exception:  # noqa: BLE001 — a stale-shaped row reads as absent
+                    understanding_lines = None
 
         recent_lines: list[str] = []
         for m in recent or []:
@@ -334,6 +363,7 @@ class PlanTurn:
             # the plan surface's only other language hint is the filename).
             file_language=(first_file.meta or {}).get("language") if first_file else None,
             material_excerpt=material_excerpt,
+            understanding_lines=understanding_lines,
             asset_lines=asset_lines,
         )
 

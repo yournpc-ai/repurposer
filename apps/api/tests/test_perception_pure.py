@@ -161,3 +161,52 @@ def test_explicit_unknown_id_is_an_honest_miss_naming_the_roster_door() -> None:
     resolved = _resolve_asset_target([a], uuid4())
     assert isinstance(resolved, str) and "No asset with id" in resolved
     assert "roster" in resolved
+
+
+# ---- 信任锚注入 (ADR-083, 2026-09-17): the understanding digest formatter ----
+#
+# understanding_digest_lines is the ONE formatting law with two consumers
+# (the get_understanding read + the plan turn's assemble injection). Gated
+# here: the caps keep the digest prompt-sized, and the empty-stub shape
+# reads as "nothing to say" ([]) so the caller's block simply stays absent.
+
+
+class TestUnderstandingDigestLines:
+    def test_full_row_renders_all_sections_capped(self) -> None:
+        from app.chat.perception.executes import understanding_digest_lines
+        from app.models.schemas import MaterialUnderstanding
+
+        u = MaterialUnderstanding(
+            overall_summary="x" * 400,
+            core_thesis="y" * 300,
+            themes=[f"t{i}" for i in range(12)],
+            target_audience="z" * 200,
+        )
+        lines = understanding_digest_lines(u)
+        assert lines[0] == f"- Summary: {'x' * 300}"
+        assert lines[1] == f"- Core thesis: {'y' * 200}"
+        assert lines[2] == "- Themes: " + ", ".join(f"t{i}" for i in range(8))
+        assert lines[3] == f"- Audience: {'z' * 120}"
+
+    def test_empty_stub_reads_as_nothing_to_say(self) -> None:
+        from app.chat.perception.executes import understanding_digest_lines
+        from app.models.schemas import MaterialUnderstanding
+
+        assert understanding_digest_lines(
+            MaterialUnderstanding(core_thesis="")
+        ) == []
+
+    def test_quotables_and_beats_render_counts_and_examples(self) -> None:
+        from app.chat.perception.executes import understanding_digest_lines
+        from app.models.schemas import MaterialUnderstanding, QuotableLine
+
+        u = MaterialUnderstanding(
+            core_thesis="thesis",
+            quotable_lines=[
+                QuotableLine.model_validate({"text": f"line {i}", "start": i, "end": i + 1})
+                for i in range(5)
+            ],
+        )
+        lines = understanding_digest_lines(u)
+        quoted = next(l for l in lines if l.startswith("- Quotable lines:"))
+        assert "5" in quoted and "line 0" in quoted and "line 3" not in quoted

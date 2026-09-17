@@ -114,6 +114,34 @@ def _stamp(dt) -> str:
 # ---- the six reads -----------------------------------------------------------
 
 
+def understanding_digest_lines(u: MaterialUnderstanding) -> list[str]:
+    """The understanding row's compact digest (ONE formatting law, two
+    consumers — 两镜像互引): the perception read ``get_understanding``
+    renders it under its own header, and the plan turn's assemble
+    (ADR-083 信任锚注入) renders it into the router's context block.
+    Caps keep the digest prompt-sized; an empty stub shape returns []."""
+    lines: list[str] = []
+    if u.overall_summary:
+        lines.append(f"- Summary: {u.overall_summary[:300]}")
+    if u.core_thesis:
+        lines.append(f"- Core thesis: {u.core_thesis[:200]}")
+    if u.themes:
+        lines.append(f"- Themes: {', '.join(u.themes[:8])}")
+    if u.target_audience:
+        lines.append(f"- Audience: {u.target_audience[:120]}")
+    if u.quotable_lines:
+        quotes = "; ".join(f"“{q.text[:100]}”" for q in u.quotable_lines[:3])
+        lines.append(
+            f"- Quotable lines: {len(u.quotable_lines)} — e.g. {quotes}"
+        )
+    if u.topic_boundaries or u.climax_spans:
+        lines.append(
+            f"- Beat map: {len(u.topic_boundaries)} topic boundaries, "
+            f"{len(u.climax_spans)} climax spans"
+        )
+    return lines
+
+
 async def get_understanding(db: AsyncSession, project: Project, params) -> str:
     """The project's material understanding — what the material SAYS (the
     warm/run materialized row, content-addressed by the current asset set).
@@ -147,24 +175,7 @@ async def get_understanding(db: AsyncSession, project: Project, params) -> str:
         return "A material understanding exists but its stored shape is stale — it will be regenerated on the next run."
 
     lines = ["Material understanding (the current asset set):"]
-    if u.overall_summary:
-        lines.append(f"- Summary: {u.overall_summary[:300]}")
-    if u.core_thesis:
-        lines.append(f"- Core thesis: {u.core_thesis[:200]}")
-    if u.themes:
-        lines.append(f"- Themes: {', '.join(u.themes[:8])}")
-    if u.target_audience:
-        lines.append(f"- Audience: {u.target_audience[:120]}")
-    if u.quotable_lines:
-        quotes = "; ".join(f"“{q.text[:100]}”" for q in u.quotable_lines[:3])
-        lines.append(
-            f"- Quotable lines: {len(u.quotable_lines)} — e.g. {quotes}"
-        )
-    if u.topic_boundaries or u.climax_spans:
-        lines.append(
-            f"- Beat map: {len(u.topic_boundaries)} topic boundaries, "
-            f"{len(u.climax_spans)} climax spans"
-        )
+    lines.extend(understanding_digest_lines(u))
     if len(lines) == 1:
         # The stub shape (a no-material chain's placeholder row) — say so.
         lines.append("- (empty stub — the chain ran without material)")
