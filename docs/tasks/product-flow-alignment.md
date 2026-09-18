@@ -194,6 +194,17 @@ Generate → create project → attach staged（秒级）→ 导航 → 首条 /
 
 ### C-1  呈现层投影改造（L1/L2/L3/L5 的视觉根修）
 
+> **状态：代码已落（2026-09-18，commit `5056e18`；vitest 9/9 + C-0 fixture 13/13 + tsc baseline 2 错不增，Claude 已跑；视觉 e2e 归用户）**。
+> **服务端 rank 上线**：`get_project_graph` 在 read-frame 最终形态（B1/B4 过滤后 + A3-lite 合成边后，projects.py 注入点）调 `product_ranks(nodes, edges)`——节点此时携带 storage 词（legacy materialize 行 = generator 等 → 谓词判可见 → 拿 rank，F1 由注入点结构性消解）；`GraphNodeResponse.rank: int | None`（schemas.py，注释钉约束❶ = read-time projection，非持久态非独立权威）；B4 闸存活 modifier 孤儿行得 `None`（约束❷ 唯一合法来源）。
+> **Canvas settled 投影**：`layout.ts` 新增导出纯函数 `projectSettledFrames(nodes, edges)`——列分键 = rank（不再读精确 `frame.x`，436-pitch 旧帧天然消化）；x = rank × PITCH（PITCH=464 三镜像互引）；ranked 节点永不读 `frame.x`；rank-null 节点回退 `frame.x` 兼容显示**且**其 product edge 必入 `violations`（兼容显示 ≠ 合法拓扑）；y = ADR-082 空气压缩不动；`revealOrder` = rank 升序 + 帧 y（Batch D bornRanks 自动吃真深度序）；dev 下 violations `console.error` 可观测（dev-throw/L4 处置归 C-3）。`layoutFlow` 的 frame-less 分支钉界为 **recipe surface 专用**（depthOf 只服务它；draft 节点出生即带帧走 settled/rank 路径——约束❸）。
+> **验收套件**：`apps/web/src/components/flow/layout.test.ts` 七例——含旗舰 L1 回归（帧 928/464/100 与拓扑完全脱节 → 投影严格 0/464/928）与 rank-null 违例点名负例。
+
+> **实现边界（2026-09-18 开工拍板，先于一切 C-1 代码）**：
+> **F1/F2 消解规则**——① Canvas membership = **read-frame 既有行 membership**（过 B1-lite/B4-lite 闸后发出即可见；C-0 谓词不反向过滤既有行，legacy materialize 行由注入点选在 storage 词层结构性消解）；② C-0 predicate = **新类型/新 tool 的准入闸**，不做存量过滤器；③ rank input = **read-frame 最终边集**（持久生产边 + 合法 A3-lite 合成边），永不在裸 DB 行上算。
+> **三条钉死约束**——❶ `GraphNodeResponse.rank` 是 **read-time Product Graph projection**：不持久化、不是 node 自身事实、不是独立 graph authority；❷ **rank-null = 异常兼容态**（唯一合法来源 = B4-lite 安全闸存活的 modifier 孤儿行）——兼容显示 ≠ 合法拓扑，**任何 product edge 任一端点 rank-null 必入 violations**，永不静默；❸ **draft = Product Canvas 的一种 state**（出生即带帧，走 settled/rank 路径）；layout.ts 的 frame-less 分支 = **recipe surface 专用**，不构成第二套 Canvas layout authority。
+> **不可妥协验收句**：`layout.ts` 的 settled 图画布路径不得自己推 depth——**视觉正确但 depth 自推 = C-1 未完成**；前端不得重新计算 rank/depth（任何「新 rank helper」= 第二事实源，与 depthOf 同罪）。
+> **静态验收链**：`get_project_graph` 注入点 → `GraphNodeResponse.rank` → `GraphNode.rank` → `FlowNode.rank`（ResultsCanvas 透传）→ `projectSettledFrames()` → `frame.x`——任何一段重算 topology 即判不通过。
+
 **Preflight 纪律（2026-09-18 拍板③）——「零数据迁移」≠「legacy 图一概不碰」**：三族存量各行其道——**旧 frame** → 不迁移，rank projection 显示消化；**旧 edge** → 按 ADR-062 边对账律**正常自愈**（旧编译器产生、现行不再发射的边该 retract 就 retract——对账是既有写口行为，不是数据迁移）；**旧 node** → 按 read-face / 图语义既有规则判断。施工人员不得以「zero migration」为由冻结边对账，否则 L2/L5 永远存在。
 
 - `layout.ts` settled 分支：列分键从「精确 `frame.x`」改为「rank 投影」；`nodes.every(n => n.frame)` 的激活条件随投影改造重审（空帧行不再阻塞投影）。
