@@ -128,14 +128,14 @@ def is_rank_edge(edge_type: str) -> bool:
 
 
 def _rank_inputs(
-    nodes: Iterable[Any], edges: Iterable[Any]
+    nodes: Iterable[Any], edges: Iterable[Any], gated: bool
 ) -> tuple[list[str], dict[str, list[str]]]:
     """(visible node ids, parents-by-child over rank edges) — the Product DAG
     in its rank-consumable form. Deterministic: ids sort by str."""
     visible = {
         str(_get(n, "id"))
         for n in nodes
-        if is_product_node(str(_get(n, "type") or ""), _spec_of(n))
+        if not gated or is_product_node(str(_get(n, "type") or ""), _spec_of(n))
     }
     parents: dict[str, list[str]] = {nid: [] for nid in visible}
     for e in edges:
@@ -147,12 +147,19 @@ def _rank_inputs(
     return sorted(visible), parents
 
 
-def product_ranks(nodes: Iterable[Any], edges: Iterable[Any]) -> dict[str, int]:
+def product_ranks(
+    nodes: Iterable[Any], edges: Iterable[Any], *, gated: bool = True
+) -> dict[str, int]:
     """Product DAG 的拓扑深度（longest-path over rank edges）——唯一的用户
     可见空间权威（I-PFA-02）。环防御：输入按契约是 DAG，但永不信任输入
     （layout.ts depthOf 同款 cycle guard）；成环节点回落 0 并被
-    ``validate_product_graph`` 显式报出。"""
-    visible, parents = _rank_inputs(nodes, edges)
+    ``validate_product_graph`` 显式报出。
+
+    ``gated=False`` = 执行拓扑消费（I-PFA-04，C-2 的 RunOp 座位）：visibility
+    闸是画布准入门（I-PFA-01），不是执行拓扑过滤器——morph modifier 对画布
+    隐藏但**是可执行步骤**，必须排在它的生产者与消费者之间；边输入边界
+    （物料流三值）两种模式完全一致，只有节点过滤不同。"""
+    visible, parents = _rank_inputs(nodes, edges, gated)
     memo: dict[str, int] = {}
 
     def depth(nid: str, trail: frozenset[str]) -> int:

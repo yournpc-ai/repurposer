@@ -34,6 +34,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tables import GraphEdge, GraphNode, Project
+from app.pipeline.product_graph import product_ranks
 
 
 class WiringRejected(ValueError):
@@ -764,12 +765,19 @@ async def apply_wiring_ops(
                 # Close over downstream — a node rerun refills what feeds
                 # off it (修订 = edit_prompt + run({node} ∪ downstream)).
                 resolved |= {n for n in nodes if reaches(seed, n)}
+            # I-PFA-04 (合同 §7 C-2): execution order = the DAG's topological
+            # depth — visual coordinates lost execution authority (a stale or
+            # drifted frame can never put a consumer before its producer).
+            # Ungated rank: the visibility gate hides morph modifiers from
+            # the CANVAS, but they are executable steps that must order
+            # between their producers and consumers; the edge boundary
+            # (物料流三值) is identical either way. Tiebreak = id str —
+            # deterministic, and same-rank nodes are parallel by definition
+            # so the order among them is semantically free.
+            ranks = product_ranks(nodes.values(), edges, gated=False)
             delta.run_nodes = sorted(
                 resolved,
-                key=lambda n: (
-                    int((nodes[n].layout or {}).get("x", 0)),
-                    int((nodes[n].layout or {}).get("y", 0)),
-                ),
+                key=lambda n: (ranks[str(n)], str(n)),
             )
 
     # Settle the newborns' frames with FULL edge knowledge (画布定居取景):

@@ -19,7 +19,9 @@ Covered:
   edit_prompt on wrong kind / edit_prompt while running / unknown nodes
 - edit_prompt semantics: done → stale, draft stays draft, prompt written
 - delete_node: edges die structurally with it
-- run op: explicit seeds ∪ downstream closure (layout order), default
+- run op: explicit seeds ∪ downstream closure (DAG topology order — I-PFA-04
+  / C-2, NEVER layout.x: reversed-frame regressions, canvas-hidden modifier
+  ordering, deterministic same-rank tiebreak), default
   seeds = the batch's affected set
 - batch atomicity: a failing op kills the batch BEFORE the flush — never a
   half-applied graph (the caller's transaction rolls back)
@@ -472,7 +474,7 @@ async def test_delete_node_takes_its_edges_structurally():
 
 
 @pytest.mark.asyncio
-async def test_run_op_closes_over_downstream_in_layout_order():
+async def test_run_op_closes_over_downstream_in_topology_order():
     a = _node("generator", layout={"x": 0, "y": 0, "w": 280, "h": 260})
     b = _node("processor", layout={"x": 376, "y": 0, "w": 280, "h": 260})
     c = _node("generator", layout={"x": 752, "y": 0, "w": 280, "h": 260})
@@ -481,6 +483,54 @@ async def test_run_op_closes_over_downstream_in_layout_order():
     db = _StubDb(nodes=[a, b, c, island], edges=edges)
     delta = await apply_wiring_ops(db, _PROJECT_ID, [{"op": "run", "nodes": [a.id]}])
     assert delta.run_nodes == [a.id, b.id, c.id]  # the island stays out
+
+
+@pytest.mark.asyncio
+async def test_run_op_orders_by_topology_never_layout_x():
+    """The C-2 regression (I-PFA-04, 合同 §7 C-2): frames that contradict
+    the topology (a 436-pitch legacy project / a late-born intermediate
+    node) must NOT leak into execution — producers precede consumers even
+    when layout.x says the opposite. Visual coordinates hold no execution
+    authority."""
+    producer = _node("generator", layout={"x": 928, "y": 0, "w": 280, "h": 260})
+    middle = _node("processor", layout={"x": 464, "y": 0, "w": 280, "h": 260})
+    consumer = _node("generator", layout={"x": 0, "y": 0, "w": 280, "h": 260})
+    edges = [_edge(producer.id, middle.id, "video"), _edge(middle.id, consumer.id, "video")]
+    db = _StubDb(nodes=[producer, middle, consumer], edges=edges)
+    delta = await apply_wiring_ops(db, _PROJECT_ID, [{"op": "run", "nodes": [producer.id]}])
+    # layout.x says consumer(0) < middle(464) < producer(928); the DAG says
+    # producer → middle → consumer. The DAG wins.
+    assert delta.run_nodes == [producer.id, middle.id, consumer.id]
+
+
+@pytest.mark.asyncio
+async def test_run_op_ranks_canvas_hidden_modifier_between_producer_and_consumer():
+    """The visibility gate is a CANVAS law (I-PFA-01), never an execution
+    filter: a morph modifier (reframe_clip — read-face hidden, B4-lite) is
+    an executable step and must order between its producer and consumer."""
+    producer = _node("generator", layout={"x": 0, "y": 0, "w": 280, "h": 260})
+    mod = _node(
+        "processor", spec={"tool": "reframe_clip"}, layout={"x": 464, "y": 0, "w": 280, "h": 260}
+    )
+    consumer = _node("generator", layout={"x": 928, "y": 0, "w": 280, "h": 260})
+    edges = [_edge(producer.id, mod.id, "video"), _edge(mod.id, consumer.id, "video")]
+    db = _StubDb(nodes=[producer, mod, consumer], edges=edges)
+    delta = await apply_wiring_ops(db, _PROJECT_ID, [{"op": "run", "nodes": [producer.id]}])
+    assert delta.run_nodes == [producer.id, mod.id, consumer.id]
+
+
+@pytest.mark.asyncio
+async def test_run_op_same_rank_tiebreak_is_deterministic_never_layout():
+    """Same-rank nodes are parallel by definition — their relative order is
+    semantically free but must be deterministic (id str, never layout)."""
+    x = _node("generator", layout={"x": 0, "y": 500, "w": 280, "h": 260})
+    y = _node("processor", layout={"x": 0, "y": 0, "w": 280, "h": 260})
+    src = _node("asset", state="done", spec={"asset_type": "video"})
+    edges = [_edge(src.id, x.id, "video"), _edge(src.id, y.id, "video")]
+    db = _StubDb(nodes=[src, x, y], edges=edges)
+    delta = await apply_wiring_ops(db, _PROJECT_ID, [{"op": "run", "nodes": [src.id]}])
+    same_rank = sorted([str(x.id), str(y.id)])
+    assert [str(n) for n in delta.run_nodes] == [str(src.id)] + same_rank  # rank 0 first, then id order
 
 
 @pytest.mark.asyncio

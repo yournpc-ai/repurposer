@@ -68,10 +68,11 @@ def task_for_graph_node(node: GraphNode) -> TaskItem | None:
 
 def tasks_for_graph_nodes(nodes: list[GraphNode]) -> list[TaskItem]:
     """The subgraph's chain (the caller passes the nodes in the wiring
-    delta's order — the settled layout's x order IS depth order, so
-    producers precede their consumers). Internal kinds drop out; a subgraph
-    that translates to nothing rejects at the caller (never a vacuous
-    run)."""
+    delta's order — the DAG's topological order (I-PFA-04, C-2: rank over
+    the production-edge set, NEVER layout.x — visual coordinates hold no
+    execution authority), so producers precede their consumers). Internal
+    kinds drop out; a subgraph that translates to nothing rejects at the
+    caller (never a vacuous run)."""
     return [
         task
         for node in nodes
