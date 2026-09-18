@@ -228,7 +228,9 @@ Generate → create project → attach staged（秒级）→ 导航 → 首条 /
 - 出生地保证：`apply_wiring_ops` 唯一写口内，任何落行节点必带合法帧（缺 = 出生地拒绝或补算，二选一施工定）；存量 `'{}'` 行盘点。
 - 前端 `layout.x ?? 0` / `?? {x:0,y:0}` 两处静默兜底删除——**dev 显式失败（throw/assert），prod graceful fallback**（fallback = rank 投影，不是原点）。
 
-**Acceptance**：全部用户可见 edge 严格 L→R（invariant 测试绿）；sibling 序稳定；不依赖 birth order；存量错位帧项目渲染正确且**零数据迁移**；修订 run 执行序 = 拓扑序；edge routing 视觉无损（现有柔和曲线 / S curve / 锚点保留）；需求池「画布可读性②」三残留（同族链分组 / 长边路由 / 居中）随本批吸收或明确拆分登记。
+**Acceptance**：全部用户可见 edge 严格 L→R（invariant 测试绿）；sibling 序稳定；不依赖 birth order；修订 run 执行序 = 拓扑序；edge routing 视觉无损（现有柔和曲线 / S curve / 锚点保留）；需求池「画布可读性②」三残留（同族链分组 / 长边路由 / 居中）随本批吸收或明确拆分登记。
+
+**验收口径收窄（2026-09-18 用户拍板——Greenfield Product Flow Acceptance）**：存量兼容验收整体删除（436-pitch 旧帧项目渲染 / 旧帧零迁移观察 / 跨存量错位帧修订 run 均不再作为 C-1/C-2 验收项——dev 库 9 个旧项目同日已清，产品现阶段不保旧数据兼容）。验收只认**全新项目 → 新数据 → 正常生成 → Canvas → Revision** 链路；架构约束保留「新数据永不依赖 frame.x」（rank → x 链路必须实际生效），但不验收旧数据修复能力。Preflight 纪律的「旧 edge 对账自愈 / 旧 node 读面规则」作为写口行为仍然有效，只是不再是验收预算。
 
 **Prohibited**：重写 edge routing / 改直线；用 clamp / 翻转 edge / 固定 x-y hack 掩盖拓扑；为排线新增语义节点或假边（ADR-082 呈现/语义隔离铁律）；迁移存量帧；引 dagre 等外部布局库（ADR-036 判词）；服务端重排帧写 DB。
 
