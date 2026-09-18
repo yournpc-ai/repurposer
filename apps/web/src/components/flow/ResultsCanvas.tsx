@@ -196,6 +196,7 @@ export function ResultsCanvas({
           thumbUrl: asset.type === "image" ? mediaUrl : null,
           videoUrl: asset.type === "video" ? mediaUrl : null,
           frame,
+          rank: n.rank ?? null,
           order: i,
         }
       }
@@ -228,6 +229,7 @@ export function ResultsCanvas({
         outputs,
         estimateCredits: n.estimate_credits ?? null,
         frame,
+        rank: n.rank ?? null,
         topClipScore,
         order: i,
       }

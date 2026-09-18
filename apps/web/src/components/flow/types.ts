@@ -113,8 +113,18 @@ export interface FlowNode {
   estimateCredits?: [number, number] | null
   /** 画布定居取景: the server-settled frame — position AND reserved size
    * come from the graph row (append-only; existing frames never move). The
-   * card renders content-driven height inside the reservation. */
+   * card renders content-driven height inside the reservation. Since C-1 the
+   * frame's x is NOT the display x authority (I-PFA-02) — it narrows to y
+   * seat / w·h reservation / stability anchor. */
   frame?: { x: number; y: number; w: number; h: number }
+  /** Read-time Product Graph projection (I-PFA-02, 合同 §7 C-1): the node's
+   * topological depth, stamped server-side (product_ranks over the read
+   * frame) and passed through untouched — the settled canvas's ONLY rank
+   * source; the client never recomputes depth. Null = legacy compatibility
+   * state (a B4-lite-gate survivor): compatibility display, never legal
+   * topology — its product edges are projection violations. Undefined on
+   * the recipe surface (no Product Graph there). */
+  rank?: number | null
   /** The batch's highest clip score (score triage — what to post first):
    * the card accents the winning product's badge. */
   topClipScore?: number

@@ -48,6 +48,7 @@ from app.chat.service import (
     seed_project_prompt,
 )
 from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
+from app.pipeline.product_graph import product_ranks
 from app.pipeline.outputs import (
     aggregate_step_cost,
     compose_spec_prompt,
@@ -462,6 +463,16 @@ async def get_project_graph(
     if not nodes:
         return {"nodes": [], "edges": []}
 
+    # ── Product Graph rank (I-PFA-02 / 合同 §7 C-1) ──────────────────────
+    # rank = the one spatial authority, computed HERE at the single point
+    # where both inputs are the final read frame: nodes carry STORAGE words
+    # (the predicate's design input layer — legacy materialize rows ride
+    # generator/processor/agent here, so the read-face flip of F1 never
+    # happens) and edges are persisted-minus-removed plus the A3-lite
+    # synthetic text edges (the L5 root fix: synthetic material-flow edges
+    # are legitimate rank input). The canvas never re-derives depth.
+    ranks = product_ranks(nodes, edges)
+
     # ── Joined display rows ──────────────────────────────────────────────
     asset_ids = [
         UUID(str((n.spec or {}).get("asset_id")))
@@ -563,6 +574,10 @@ async def get_project_graph(
                 spec=face_spec,
                 layout=node.layout or {},
                 estimate_credits=estimate_credits,
+                # None = the legacy compatibility state (合同 §7 C-1 约束❷):
+                # a B4-lite-gate survivor the predicate does not rank —
+                # tolerated here, named as a violation at the projection.
+                rank=ranks.get(str(node.id)),
                 asset=asset_resp,
                 outputs=[OutputResponse.model_validate(o) for o in node_outputs],
                 created_at=node.created_at,

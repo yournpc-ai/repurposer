@@ -368,6 +368,12 @@ export const ASSET_TOOLBAR_PX = 44
 const GAP_MAIN = 64
 const GAP_CROSS = 16
 
+// 投影律横向间距 (I-PFA-02/03, C-1): display x = rank × PITCH. One law with
+// TWO mirrors — product_graph.PITCH (the contract module) ↔
+// graph_store._PITCH (the birth-frame law) ↔ this seat (the projection);
+// never a third value.
+const PITCH = 464
+
 /** Birth-choreography stagger quantum (ADR-036 补记 3): the delay between
  * consecutive nodes' entrances in compile-order replay — shared by the node
  * card (FlowNodeCard), the edge draw-on (FlowView), and region frames
@@ -376,27 +382,151 @@ export const BIRTH_STAGGER_MS = 120
 
 export interface FlowLayout {
   positions: Map<string, { x: number; y: number }>
-  /** Reveal order for birth choreography: depth-major, then the stable
-   * `order` key — a slowed-down replay of the real compile order. */
+  /** Reveal order for birth choreography: rank-major (the server's Product
+   * Graph projection), then the frame's y seat — a slowed-down replay of the
+   * real compile order. */
   revealOrder: Map<string, number>
   width: number
   height: number
 }
 
-/** Deterministic layered layout: depth(v) = max(depth(parents)) + 1 over
- * edges; within a layer nodes sort by their stable `order` key (append-only:
- * a new node slots into its layer's tail, existing positions never move —
- * "chat 加节点，图只长不晃"). Layers are columns (main axis left→right),
- * centered against the tallest column on the cross axis.
+export interface SettledProjection {
+  positions: Map<string, { x: number; y: number }>
+  revealOrder: Map<string, number>
+  /** The direction invariant as named violations (I-PFA-03; 合同 §7 C-1
+   * 约束❷): empty = green. Ranked edges must satisfy rank(to) > rank(from)
+   * AND x(to) > x(from); ANY product edge touching a rank-null endpoint is
+   * named — compatibility display is never legal topology. */
+  violations: string[]
+}
+
+/** The settled canvas's display projection (I-PFA-02, 合同 §7 C-1): pure.
  *
- * 画布定居取景 (ADR-057): nodes carrying a server-settled `frame` keep
- * THEIR x (the column IS the depth) and their y as the full-grown UPPER
- * bound — the settled branch derives display y by compacting each column
- * to current render heights (ADR-082 空气压缩: displayY = min(serverY,
- * predecessor's render bottom + gap) — upward compaction at draft time,
- * downward-only drift as products land, never past the server seat, so
- * append-only stays structural and overlap stays impossible). */
+ * - **x = rank × PITCH** — rank is the server's read-time Product Graph
+ *   projection (`GraphNode.rank`, product_ranks over the read frame); this
+ *   function NEVER derives depth from edges, and a ranked node NEVER reads
+ *   its stored `frame.x` (the frame's x lost topology authority at C-1 —
+ *   projection migration, not data migration).
+ * - **Column key = rank** (not the exact `frame.x` value — L3's 436-pitch
+ *   legacy frames are digested by the projection, zero migration).
+ * - **rank-null = the legacy compatibility state** (a B4-lite-gate survivor
+ *   the predicate does not rank): it displays on its stored `frame.x` as a
+ *   COMPATIBILITY seat and every product edge touching it is a named
+ *   violation — the fallback draws the orphan, it never acquits it.
+ * - **y = the ADR-082 air-compression, unchanged**: within a column (sorted
+ *   by the frame's y seat — the sibling-order law), displayY =
+ *   min(serverY, prevDisplayBottom + GAP_CROSS); server frames untouched.
+ * - **revealOrder = rank-major, then frame y** — one semantic truth feeding
+ *   both the x projection and the birth choreography. */
+export function projectSettledFrames(
+  nodes: FlowNode[],
+  edges: FlowEdge[],
+): SettledProjection {
+  const positions = new Map<string, { x: number; y: number }>()
+  const violations: string[] = []
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+
+  // Columns keyed by rank; a rank-null node falls back to its stored frame.x
+  // bucket (the legacy orphan case — the two key namespaces can only meet
+  // there, and each node's display x still follows its own rule).
+  const columns = new Map<number, FlowNode[]>()
+  for (const n of nodes) {
+    const key = n.rank ?? n.frame!.x
+    columns.set(key, [...(columns.get(key) ?? []), n])
+  }
+  for (const ns of columns.values()) {
+    ns.sort((a, b) => a.frame!.y - b.frame!.y)
+    let prevBottom: number | null = null
+    for (const n of ns) {
+      const serverY = n.frame!.y
+      const y =
+        prevBottom === null ? serverY : Math.min(serverY, prevBottom + GAP_CROSS)
+      const x = n.rank != null ? n.rank * PITCH : n.frame!.x
+      positions.set(n.id, { x, y })
+      prevBottom = y + flowNodeSize(n).height
+    }
+  }
+
+  // The direction invariant, named per edge (ctx 引用流不算 product edge —
+  // the same boundary as the server's RANK_EDGE_TYPES).
+  for (const e of edges) {
+    if (e.edgeType === "ctx") continue
+    const from = byId.get(e.from)
+    const to = byId.get(e.to)
+    if (!from || !to) continue
+    if (from.rank == null || to.rank == null) {
+      violations.push(
+        `rank-null endpoint on product edge: ${e.from} (rank ${from.rank}) -> ${e.to} (rank ${to.rank})`,
+      )
+      continue
+    }
+    if (to.rank <= from.rank) {
+      violations.push(
+        `rank violation: ${e.from} (rank ${from.rank}) -> ${e.to} (rank ${to.rank})`,
+      )
+      continue
+    }
+    const fx = positions.get(e.from)!.x
+    const tx = positions.get(e.to)!.x
+    if (tx <= fx) {
+      violations.push(`projection violation: ${e.from} (x ${fx}) -> ${e.to} (x ${tx})`)
+    }
+  }
+
+  const ranked = [...nodes].sort(
+    (a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || a.frame!.y - b.frame!.y,
+  )
+  const revealOrder = new Map<string, number>()
+  ranked.forEach((n, i) => revealOrder.set(n.id, i))
+
+  return { positions, revealOrder, violations }
+}
+
+/** Deterministic layered layout. Two surfaces, two laws (合同 §7 C-1 约束❸):
+ *
+ * - **Graph canvas (settled — every node carries a server-settled frame,
+ *   draft nodes included)**: positions come from `projectSettledFrames` —
+ *   the Product Graph rank projection. This path NEVER derives depth from
+ *   edges; `GraphNode.rank` is its only rank source.
+ * - **Recipe surface (frame-less)**: the static 说明书 diagram has no
+ *   Product Graph and no rank source — it keeps its local layered layout
+ *   (depthOf below serves THIS branch only; it is not a second Canvas
+ *   topology authority). A graph-canvas node without a frame is C-3's
+ *   explicit-failure territory, never this branch's business.
+ *
+ * 画布定居取景 (ADR-057) + 空气压缩 (ADR-082 判词①): the server reservation
+ * is the FULL-GROWN footprint; within each rank column, followers compact up
+ * to their predecessor's CURRENT render bottom (min(serverY, …) is the
+ * structural safety — never past the server seat, append-only stays
+ * structural). */
 export function layoutFlow(nodes: FlowNode[], edges: FlowEdge[]): FlowLayout {
+  const positions = new Map<string, { x: number; y: number }>()
+  const revealOrder = new Map<string, number>()
+
+  // ── 定居取景: every node framed → the Product Graph rank projection ────
+  const settled = nodes.length > 0 && nodes.every((n) => n.frame)
+
+  if (settled) {
+    const projection = projectSettledFrames(nodes, edges)
+    if (projection.violations.length > 0 && import.meta.env.DEV) {
+      // 合同 §7 C-1: dev 可观测, prod graceful — the dev-throw / L4 disposal
+      // is C-3's seat; this batch never breaks the render path.
+      console.error("[layout] product-graph projection violations:", projection.violations)
+    }
+    for (const [id, pos] of projection.positions) positions.set(id, pos)
+    for (const [id, ord] of projection.revealOrder) revealOrder.set(id, ord)
+    let width = 0
+    let height = 0
+    for (const n of nodes) {
+      const size = flowNodeSize(n)
+      const pos = positions.get(n.id)!
+      width = Math.max(width, pos.x + size.width)
+      height = Math.max(height, pos.y + size.height)
+    }
+    return { positions, revealOrder, width, height }
+  }
+
+  // ── Recipe surface (frame-less): the local layered layout ─────────────
   const parents = new Map<string, string[]>()
   for (const e of edges) {
     parents.set(e.to, [...(parents.get(e.to) ?? []), e.from])
@@ -426,60 +556,6 @@ export function layoutFlow(nodes: FlowNode[], edges: FlowEdge[]): FlowLayout {
       depth,
       nodes: [...ns].sort((a, b) => a.order - b.order),
     }))
-
-  // ── 定居取景: every node framed → positions come from the server ──────
-  const settled = nodes.length > 0 && nodes.every((n) => n.frame)
-  const positions = new Map<string, { x: number; y: number }>()
-  const revealOrder = new Map<string, number>()
-
-  if (settled) {
-    // 空气压缩 (ADR-082 判词①, 2026-09-17): the server reservation is the
-    // FULL-GROWN footprint (a draft doc station reserves 560 but renders
-    // ~280 — the overlap-safety law, graphNodeSize never outgrows it), so
-    // verbatim frames read as voids between sibling cards at plan-review
-    // time. Within each settled column, pull every follower up to its
-    // predecessor's CURRENT render bottom: displayY = min(serverY,
-    // prevDisplayBottom + GAP). The min() is structural safety — current
-    // heights never exceed reservations, so compacted followers can never
-    // pass their server seats and columns never overlap; and as products
-    // land the heights only GROW, so a follower slides DOWN toward its
-    // server seat over time (图只长不晃 — growth, never a jump). Server
-    // frames stay untouched (append-only 保序律 — this is a display
-    // derivation, recomputed per render).
-    const columns = new Map<number, FlowNode[]>()
-    for (const n of nodes) {
-      const x = n.frame!.x
-      columns.set(x, [...(columns.get(x) ?? []), n])
-    }
-    for (const ns of columns.values()) {
-      ns.sort((a, b) => a.frame!.y - b.frame!.y)
-      let prevBottom: number | null = null
-      for (const n of ns) {
-        const serverY = n.frame!.y
-        const y =
-          prevBottom === null
-            ? serverY
-            : Math.min(serverY, prevBottom + GAP_CROSS)
-        positions.set(n.id, { x: n.frame!.x, y })
-        prevBottom = y + flowNodeSize(n).height
-      }
-    }
-    let reveal = 0
-    for (const { nodes: ns } of ordered) {
-      for (const n of ns) {
-        revealOrder.set(n.id, reveal++)
-      }
-    }
-    let width = 0
-    let height = 0
-    for (const n of nodes) {
-      const size = flowNodeSize(n)
-      const pos = positions.get(n.id)!
-      width = Math.max(width, pos.x + size.width)
-      height = Math.max(height, pos.y + size.height)
-    }
-    return { positions, revealOrder, width, height }
-  }
 
   // Column widths (main axis) and heights (cross axis).
   const colWidth = ordered.map(({ nodes: ns }) =>

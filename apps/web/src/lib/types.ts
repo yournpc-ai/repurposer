@@ -332,8 +332,16 @@ export interface GraphNode {
     [key: string]: unknown
   }
   /** 画布定居取景: the settled frame {x, y, w, h} — server-assigned once,
-   * append-only; existing frames never move. */
+   * append-only; existing frames never move. Since C-1 the frame's x is NOT
+   * the display x authority — it narrows to y seat / w·h reservation /
+   * stability anchor (I-PFA-02). */
   layout: { x?: number; y?: number; w?: number; h?: number }
+  /** Read-time Product Graph projection (I-PFA-02, 合同 §7 C-1 约束❶): the
+   * node's topological depth, computed server-side by product_ranks() over
+   * the read frame. NEVER recompute client-side — this is the settled
+   * canvas's ONLY rank source. null = legacy compatibility state (a
+   * B4-lite-gate survivor the predicate does not rank). */
+  rank?: number | null
   /** The node's quotation folded to credits at read time (BILLING §7);
    * null = unquoted. */
   estimate_credits?: [number, number] | null

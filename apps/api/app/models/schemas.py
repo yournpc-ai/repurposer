@@ -3358,6 +3358,13 @@ class GraphNodeResponse(BaseModel):
     spec: dict = Field(default_factory=dict)
     layout: dict = Field(default_factory=dict)
     estimate_credits: list[int] | None = None
+    # Read-time Product Graph projection (I-PFA-02 / 合同 §7 C-1 约束❶):
+    # the node's topological depth over the read-frame Product DAG, computed
+    # by product_graph.product_ranks at read time. NOT persisted node state,
+    # NOT an independent graph authority — never store it, never let it
+    # outrank the DAG itself. None = the legacy compatibility state (a
+    # B4-lite-gate survivor the predicate does not rank).
+    rank: int | None = None
     asset: AssetResponse | None = None
     outputs: list[OutputResponse] = Field(default_factory=list)
     created_at: datetime
