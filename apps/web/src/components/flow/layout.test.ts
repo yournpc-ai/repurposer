@@ -116,6 +116,24 @@ describe("projectSettledFrames — C-1 rank projection", () => {
     expect(seated.positions.get("floor")!.y).toBe(100)
   })
 
+  it("错帧双杀 (shared malicious fixture, 用户点名): the same corrupted frames feed BOTH consumers — Canvas projects L→R while (mirror suite API-side) execution orders A→B→C", () => {
+    // Mirror of apps/api/tests/test_graph_wiring_pure.py::
+    // test_run_op_double_kill_shared_fixture — SAME frames, SAME ranks, two
+    // runtimes. If this pair ever diverges, one of the two consumers
+    // re-derived topology on its own.
+    const nodes = [
+      node("a", 0, { x: 928, y: 0 }),
+      node("b", 1, { x: 100, y: 0 }),
+      node("c", 2, { x: 464, y: 0 }),
+    ]
+    const edges = [edge("a", "b", "video"), edge("b", "c", "video")]
+    const { positions, violations } = projectSettledFrames(nodes, edges)
+    expect(positions.get("a")!.x).toBe(0)
+    expect(positions.get("b")!.x).toBe(PITCH)
+    expect(positions.get("c")!.x).toBe(2 * PITCH)
+    expect(violations).toEqual([])
+  })
+
   it("revealOrder = rank-major then frame y; insertion order never matters", () => {
     const nodes = [
       node("c", 2, { x: 0, y: 0 }),

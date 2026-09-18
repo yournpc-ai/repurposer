@@ -25,6 +25,14 @@ I-PFA-04, ADR-086; 施工合同 ``docs/tasks/product-flow-alignment.md`` §7 C-0
 - **execution order**（I-PFA-04 的 C-2 消费点）= 同一 Product DAG 的拓扑
   序——``topological_order`` 与 rank 同一事实源，视觉坐标永不做执行依据。
 
+**同一事实源 + 消费面 gate（2026-09-18 用户钉死）**：rank 算法/拓扑事实源
+只有一个；但消费面允许有不同的 gate——Canvas 吃 gated rank（visibility
+准入门过滤后），RunOp 吃 ungated rank（modifier 是隐藏但可执行的步骤）。
+**gate 不得改变 Product DAG 的生产依赖事实**——它只决定「谁被那个消费面
+看见/排序」，永不增删边、永不改写依赖。看到 ``gated=False`` 不要问
+「为什么两个消费面不用同一个 nodes」——答案是它们用同一个 DAG，
+只是过了不同的门。
+
 **product visibility 准入闸（I-PFA-01，等效机制）**：visibility 声明在
 **type 层**（媒介五值 = 产品对象，ADR-076 的 type 轴本来就是产品对象轴；
 tool 是执行身份，永不是卡面身份），例外走 role/tool 两个显式枚举；

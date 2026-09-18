@@ -217,6 +217,8 @@ Generate → create project → attach staged（秒级）→ 导航 → 首条 /
 > **RunOp 排序键**：`(layout.x, layout.y)` → `(rank, id str)`——`product_ranks(nodes.values(), edges, gated=False)`（graph_store.py RunOp 分支；直索引不兜底，缺 key = 契约违例响亮炸）。**`gated=False` = 执行拓扑消费的合同形态**：visibility 闸是画布准入门（I-PFA-01）不是执行过滤器——morph modifier 对画布隐藏但是可执行步骤，必须排在生产者与消费者之间；边输入边界（物料流三值）两模式一致，只有节点过滤不同（`product_graph.py` docstring 钉死）。
 > **「x 序 = 深度序」假设删除**：`graph_revise.py:tasks_for_graph_nodes` docstring 改写为拓扑序事实源；执行面 grep 复核——jobs/orchestrator/propose_turn 零 layout 读取残留。
 > **Regression scenario（合同强制）**（`test_graph_wiring_pure.py`）：① 帧与拓扑完全相反（928/464/0）→ run_nodes 仍生产者先于消费者；② canvas-hidden modifier（reframe_clip）排在 producer/consumer 之间；③ 同 rank tiebreak = id str 确定性，永不读 layout；既有 `layout order` 测试改名 topology order（断言不变——帧与拓扑一致时两律同果）。
+> **错帧双杀镜像 fixture（2026-09-18 用户点名）**：同一份恶意帧（A.x=928/B.x=100/C.x=464，rank 0/1/2）喂两个消费面——web 侧 `layout.test.ts` 断言投影 0/464/928，API 侧 `test_run_op_double_kill_shared_fixture` 断言执行序 A→B→C；两例互引，发散即说明某消费面私自重推了拓扑。
+> **同一事实源 + 消费面 gate（用户钉死原话入档，`product_graph.py` 模块 docstring 同载）**：rank 算法/拓扑事实源相同，但消费面允许有不同 gate（Canvas gated / RunOp ungated）；**gate 不得改变 Product DAG 的生产依赖事实**。
 
 - `RunOp`（`graph_store.py:767-773`）排序键从 `(layout.x, layout.y)` 改为图边拓扑深度（同 rank 定义，单一事实源）；`graph_revise.py:69-73` 假设删除。
 - **这是 R1 执行面改动**：必须带 regression scenario（修订 run 拓扑序 = 生产者先于消费者；跨存量错位帧项目验证）。

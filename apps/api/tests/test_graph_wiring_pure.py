@@ -520,6 +520,22 @@ async def test_run_op_ranks_canvas_hidden_modifier_between_producer_and_consumer
 
 
 @pytest.mark.asyncio
+async def test_run_op_double_kill_shared_fixture():
+    """错帧双杀 (shared malicious fixture, 用户点名): the same corrupted
+    frames feed BOTH consumers — execution orders A→B→C here while (mirror
+    suite web-side, layout.test.ts) the Canvas projects 0/464/928. If this
+    pair ever diverges, one of the two consumers re-derived topology."""
+    a = _node("generator", layout={"x": 928, "y": 0, "w": 280, "h": 260})
+    b = _node("processor", layout={"x": 100, "y": 0, "w": 280, "h": 260})
+    c = _node("generator", layout={"x": 464, "y": 0, "w": 280, "h": 260})
+    edges = [_edge(a.id, b.id, "video"), _edge(b.id, c.id, "video")]
+    db = _StubDb(nodes=[a, b, c], edges=edges)
+    delta = await apply_wiring_ops(db, _PROJECT_ID, [{"op": "run", "nodes": [a.id]}])
+    # layout.x says b(100) < c(464) < a(928); the DAG says a → b → c.
+    assert delta.run_nodes == [a.id, b.id, c.id]
+
+
+@pytest.mark.asyncio
 async def test_run_op_same_rank_tiebreak_is_deterministic_never_layout():
     """Same-rank nodes are parallel by definition — their relative order is
     semantically free but must be deterministic (id str, never layout)."""
