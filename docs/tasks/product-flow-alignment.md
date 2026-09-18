@@ -175,12 +175,12 @@ Generate → create project → attach staged（秒级）→ 导航 → 首条 /
 
 ### C-0  Product Graph schema 定义（先于一切 layout 改动）
 
-> **状态：代码已落（2026-09-18，commit `e31503e`，纯函数 fixture 归用户自跑）**。
+> **状态：收口（2026-09-18）——代码 commit `e31503e` + `0308589`；canonical fixture 13/13 绿（同日实跑）；Post-Compact Forensic Audit = PASS WITH DEBT（只读归档，零修改）**。Debt 挂账：F1/F2（谓词对 legacy materialize 行非 read-face 不变 / modifier 无条件 hidden vs B4-lite 认领闸）→ 消解规则随 C-1 开工第一句落档（read-frame = 既有行 membership 权威，谓词 = 新类型准入闸，rank 在 read-frame 边集上算）；F3（ctx 边仍在 graph_fill.py:1072 出生 vs ADR-072「ctx 退役」字面漂移）→ 待裁决是否登 §12。
 > **契约模块 = `apps/api/app/pipeline/product_graph.py`**（pure，no DB / no ORM——duck-typed 行同吃 ORM 与 A3-lite 合成 dict）：四层分离前两层的唯一定义家——Product DAG membership（`is_product_node` / `is_rank_edge`）+ rank/拓扑序（`product_ranks` / `topological_order`，longest-path + cycle guard，二者同一事实源——C-2 的 RunOp 排序消费点）+ 投影原语（`project_x` / `sibling_order` / `validate_product_graph`，C-1 呈现层消费点）。**「layout 是 Product Graph 的投影，而不是 Product Graph 本身」已写入契约 docstring**（用户拍板原话入档）。
 > **product edge 全集（I-PFA-02a 输入边界）**：`RANK_EDGE_TYPES = {video, audio, text}`——`ctx` 引用流（task_book → 消费者）永不参与 rank；当前图不存在 lineage / presentation-only 边词（版本血缘住节点 `spec.output_ids`，从不是边），未来出生同样不入。A3-lite 合成边中表达真实物料流的 transcript→consumer 边是 rank 的合法输入（L5 根修口径）。
 > **准入闸 = 等效机制（合同本条款明允「注册属性或等效机制」）**：visibility 声明在 **type 层**（ADR-076 的 type 轴本来就是产品对象轴——媒介五值出生即可见），例外走两个显式枚举（`HIDDEN_ROLES = {task_book}` = B1-lite 的声明式形态；`LEVER_TOOLS = {reframe_clip, add_music, remove_filler}` = B4-lite 的声明式形态；读路径的产物认领安全闸留在读面不复制）；`TRANSITIONAL_TYPES = {modifier, materialize}` 过渡词隐藏；`LEGACY_VISIBLE_TYPES`（asset / document / generator / processor / agent）读容忍可见；**未知 type default-deny**——新图节点类型不登记就不上画布。NodeBase registry 未动（visibility 是 type 层谓词，不是 per-kind 注册属性，不建平行映射表）。
 > **Canonical fixture = `apps/api/tests/test_product_graph_pure.py`**：北极星六节点（Source→Transcript→CN/FR subtitles→CN/FR video，含 asset→asm 的真实 video 边——rank 由最长路径决定 asm=3 层而非 1 层）+ 三 decoy（task_book / modifier / 未知 type），五断言（membership / edge membership / rank 0·1·2·2·3·3 / x 方向 / sibling 序插入序无关）+ 三负例（丢 Transcript 层 rank 必变 / 反向边必被 `validate_product_graph` 点名 / decoy 永不可见）。
-> compileall + 冷导入已过；**pytest 未跑（归用户自跑）**。
+> compileall + 冷导入已过；fixture 13/13 绿（2026-09-18 实跑）。
 
 1. 定义 **product edge 全集**：经 read-face（B1-lite / B4-lite / `_read_face`）+ A3-lite 合成边后的用户可见图 = Product DAG；明确每类节点/边的 product visibility 声明（I-PFA-01 准入闸落地为注册属性或等效机制）。
 2. 定义 **rank**：Product DAG 上的拓扑深度（含合成边参与计算——L5 的根修：合成边不再是「读时补丁」，而是 rank 计算的合法输入）。北极星场景的目标形态（验证 rank 定义用，**不是硬编码模板**）：
