@@ -104,3 +104,14 @@ PLANNED（2026-09-19 建档，未开工；前置 = Phase 1 全闭环）。
 - **上报项（未顺手修）**：① 服务端 `graph_store._document_frame` 仍按 +88 确认解剖预留出生帧——客户端渲染不再填满，留白合法（reservation law）但镜像已漂移，Batch C 裁决；② HEAD 预存 tsc 错误 ×2（见上）；③ ChatDock 两缝同 commit（ad05a2d）——文件级回滚粒度，非逐座。
 - **Batch B/C 未动**：旧相位 token 全保留；ToolLoop / Lifecycle / Activity / Product Domain 零触碰；Activity persistence 不做。
 - **A.1 Acceptance 实测 PASS（2026-09-20，四场景种子 + CDP 无头 Chrome 真实驱动，worktree API :8011 + web :3002）**：A 空项目 = 纯聊天面（画布门 `pointer-events-none opacity-0` 在祖先链，无 Start 钮）/ B 全就绪 = 画布 1440×813 可见 + 「Start generation」**enabled**（移动视口 390px 同戳：计划卡两任务行 + pill 同在）/ C 旗舰组合（plan_ready ∧ ¬confirmation_ready，空散文种子）= 画布可见 + Start **disabled** / D 已完成 run = 工作区持续可见、无回翻纯聊天（`hasRuns = latestRun != null` 是单调存在事实非 readiness 门——概念判明成立，「完成 run 翻回聊天」语义错误不存在）。种子/用户/测试进程已清理。**Batch A CLOSED。**
+
+**BATCH B 已落地（2026-09-20，worktree `worktree-phase3-batch-b` commits `755028f` ① confirm 腿 / `840e4d4` ② running 腿 + phase 机退役 / `44b5d4d` ③ 三替身相位 / `046bd9f` ④ CDP 取证 harness / `b9dc6ee` ⑤ creating_run 删除 / `37e252c` ⑥ 剧本迁移）**：
+
+- **三裁定落地**：
+  - **裁定 1（confirm 谓词）**：`confirmActive = intentReady && isPlanReady(lifecycle) && !runAttached`（runAttached = `runId != null && !terminal`——活性非存在，终态后修订计划可再举起确认拍）；phase 永不参与 lifecycle 判定；信封→盖章窗口按裁定接受（安全收敛 + zombie-dock 守卫），永不再造 phase authority。pillDock 的 phase 合取判明语义为空（plan_turn.py:812 服务端插话规则），随批摘除。
+  - **裁定 2（creating_run 先证后删）**：B4 CDP 取证（`scratch/phase3_b4_seed.py` + `phase3_b4_deadwindow.mjs`，50ms DOM 采样，五类覆盖分类器含散文运动）双场景 PASS——typed Start 32 样本 / G-1 散文 75 样本，dead=0、creatingRunOnly=0；覆盖链 = ThinkingRow 基座 → Activity RUN 里程碑（`chat.activity.run`）+ 散文 → run 叙事面；System Status 的 creating_run label 两 run 零样本出现（发射时刻 Activity 里程碑已是可见面）。B4-d 双 PASS → B4-e 才剪线（`b9dc6ee`）。
+  - **裁定 3（无正向相位锁）**：composing 幸存为 System Status 唯一宏观叙事（read→think takeover 不动）；永不建「相位帧 → lifecycle readiness」锁。
+- **退役账**：`type Phase` 状态机整体删除（ChatDock）；drafting/inspecting/repairing 三 token 服务端发射器 + 客户端消费 + i18n 双语 key 清零（`chat.inspecting.*` 族合法保留——Activity 读帧复用同注册表）；creating_run 三发射器（plan_turn `_start_run` / service `_create_run_from_tasks` / answer start 分支）+ 常量 + i18n 双语 key 清零（`_create_run_from_tasks` 的 `on_phase` 死参同摘，propose_turn 两 caller 同步）；`THINKING_PHASE_COMPOSING` 保留。
+- **剧本迁移（⑥）**：`SCENARIO_ACTIVITY_LEGACY` 逃生舱 + 尾部汇总打印删除；`_work_evidence` 收窄为纯 Activity 通道（co-fire 律失去第二信号）；S10 drafting 相位断言随葬（迁移座位 = 同位 draft Activity 生→收断言）；`_stream_reads` 的 inspecting 相位 print fallback 删除。
+- **验收 grep 门全过**：`phase === "confirm"` / `"running"` 在 lifecycle 决策零命中（phase 机已不存在）；drafting/inspecting/repairing token 零（退役谱系注释除外）；creating_run 发射器/常量/key 零；`SCENARIO_ACTIVITY_LEGACY` 零；`_stream_reads` fallback 零；PLAN_READY / CONFIRMATION_READY / RUNNING 各自唯一事实源不变。
+- **验证（Claude 自跑）**：vitest 58 绿 / 纯 pytest 305 绿 / API boot 绿 / tsc 2 错 = main HEAD `2d415ba` 预存（layout.ts:441 自引用 + ChatDock typeTargetId 模板串，与本批无关）。check_gates 全门 + 活链剧本回归（S1/S5/S6f/S10/S20A/S20B/S21）随 B8 批——结果回填于此。

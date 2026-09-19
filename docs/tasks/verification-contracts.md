@@ -28,7 +28,7 @@
 | Upload-on-birth（text-yielding → transcript node queued 出生 + 幂等；非产出族不生） | `app/pipeline/graph_fill.py` `stamp_transcript_node` | Phase 1（8972e74 有意变更）+ ADR-087 §2 | `test_graph_wiring_pure.py` 边界型（四文本产出族阳性 + IMAGE/VOICE_SAMPLE/SLIDES 阴性 + 幂等） | — | — | 🟢 |
 | Confirmation Doctrine（四合取组合点唯一 + 手势必需 + dock pill 唯一座） | lifecycle + `chat/service.py` | ADR-063 / ADR-054 / ADR-070 | T9/T9b/T10/T10b/T15 + Charge 等价钉 | S1 戳拍②③；S13 422 出生地 | gate 5c（客户端不推导 readiness） | 🟢 ｜ Charge 等价见 §3 |
 | Charge Semantics | （合同层，无独立实现站） | ADR-063 | `test_charge_semantics_ready_is_exactly_the_docked_plan` | — | — | 🟢 ｜ **当前 ≡ has_pending_plan（故意等价，§3）** |
-| Activity 投影（白名单五键 / N→1 repair 聚合 / 1→0 过滤 / T16-A·B 终态） | `app/chat/activity.py` + routes 缝 | ADR-087 §3 | `test_activity_pure.py`（22，含路由缝 stub ×2） | `check_activity_shape` 接线 S6f / S10 / S20A / S20B / S21；strict co-fire 律（`_work_evidence`） | gate 5a（内核侧反向） | 🟢 ｜ 客户端累积/渲染零单测——ChatDock 静态证明 only（§6 DEFERRED） |
+| Activity 投影（白名单五键 / N→1 repair 聚合 / 1→0 过滤 / T16-A·B 终态） | `app/chat/activity.py` + routes 缝 | ADR-087 §3 | `test_activity_pure.py`（22，含路由缝 stub ×2） | `check_activity_shape` 接线 S6f / S10 / S20A / S20B / S21 | gate 5a（内核侧反向） | 🟢 ｜ 客户端累积/渲染零单测——ChatDock 静态证明 only（§6 DEFERRED）；strict co-fire 律随 Batch B ⑥ 退役（相位侧信号已删，协同失去对象） |
 | ToolLoop 内核边界（U1：LoopEvent 无 Activity 词汇） | `app/agents/tool_loop.py` | 用户裁定 U1 + ADR-087 §5 | tool_loop 纯套件 + 5a teeth | — | gate 5a | 🟢 |
 | Lifecycle/Presentation 依赖方向（lifecycle 禁 app.chat） | `app/pipeline/lifecycle.py` | ADR-087 §5 | 5b teeth | — | gate 5b | 🟢 |
 | 客户端 lifecycle 读取纪律（读戳合法，本地生成 truth 非法） | `apps/web` ChatDock | ADR-087 §5 | 5c teeth（正反 8 探针） | — | gate 5c | 🟢 ｜ 禁的是「生成」，读 server projection 恒合法 |
@@ -40,7 +40,7 @@
 | Execution（fenced 零副作用 / SKIP LOCKED 认领 / 毒丸护栏） | `app/pipeline/jobs.py` + worker | R1 批（I-EXEC-01~04） | — | S13 / S14 / S15 | — | 🟢 |
 | 计费账本（hold→capture→release / 负余额语义） | `app/platform/billing` | ADR-055 | — | `reconcile_credits` + S13–S15 | — | 🟢 |
 | Prompt 面（三探针绝对阈值 / 枚举漂移） | `app/prompts/chat/` | ADR-071 T2 | 枚举漂移 guard ×3 | `scripts/prompt_gate.py` | — | 🟢 ｜ `router_ab_probe` 移植挂账（§6 DEFERRED） |
-| 三通道分家（System Status / Activity / Conversation） | routes + ChatDock | ADR-087 §1 | T14 反向锁（投影器无 phase 面） | strict co-fire 律 | gate 5a / 5c | 🟡 ｜ 旧 phase 退役（步⑤）HOLD → Phase 3；残余依赖见 §6 |
+| 三通道分家（System Status / Activity / Conversation） | routes + ChatDock | ADR-087 §1 | T14 反向锁（投影器无 phase 面） | — | gate 5a / 5c | 🟢 ｜ Phase 3 Batch B 解清：旧相位 token 全退役（③ 三替身 / ⑤ creating_run，§6），composing = System Status 唯一幸存叙事（判词 3），永不建「相位帧 → lifecycle readiness」正向锁 |
 
 ## 3. Charge Semantics 等价登记（ADR-063 终读）
 
@@ -96,9 +96,10 @@ LLM 行为方差，容忍）/ **KNOWN VERIFICATION FRAGILITY**（合同已兑现
 
 ### UNPROVEN / 待定性
 
-| 项 | 说明 |
-|:---|:---|
-| 相位帧正向锁缺失 | 步⑤前无「相位帧仍在发」的正向座——删相位通道在 e2e 静默。随 Phase 3 相位退役一并裁决（届时整族删除，正向锁或不再必要） |
+（当前无。原「相位帧正向锁缺失」一项已裁决结案——Phase 3 判词 3
+（2026-09-20）：永不建「相位帧仍在发」的正向锁；相位整族随 Batch B
+退役后对象消失，composing 保留为 System Status 宏观叙事，永不作
+lifecycle readiness 之锁。）
 
 ## 5. 剧本 fixture 律（Batch B-4，强制）
 
@@ -162,10 +163,10 @@ truth 从「处理中」变成「处理失败」——前置条件被 worker 调
 
 | 项 | 位置 | 说明 |
 |:---|:---|:---|
-| S10 drafting 相位断言 | `chat_scenarios.py:2453` | 步⑤退役相位通道时随葬；ADR-087 原生继任者已同位在役（:2456 draft 活动生→收断言） |
-| `_stream_reads` legacy print fallback | `chat_scenarios.py:3738` | print-only 观察面；strict 断言层已是 Activity-first |
-| `SCENARIO_ACTIVITY_LEGACY=1` 降级通道 | `chat_scenarios.py` | 并行渲染期的逃生舱；步⑤后删 |
-| 旧 phase token（drafting/inspecting/repairing/creating_run）去留 | 服务端 + 客户端 | 步⑤ HOLD 中——收窄 / 转 Activity / 废弃是 Phase 3 的 Presentation 决策 |
+| ~~S10 drafting 相位断言~~ | `chat_scenarios.py` | **RESOLVED（Phase 3 Batch B ⑥, `37e252c`）**：相位通道退役后随葬——draft Activity 断言（present_plan name-known 生→收）是唯一座位 |
+| ~~`_stream_reads` legacy print fallback~~ | `chat_scenarios.py` | **RESOLVED（Phase 3 Batch B ⑥, `37e252c`）**：纯 Activity 键序，print fallback 删除 |
+| ~~`SCENARIO_ACTIVITY_LEGACY=1` 降级通道~~ | `chat_scenarios.py` | **RESOLVED（Phase 3 Batch B ⑥, `37e252c`）**：逃生舱 + 尾部汇总打印同删——第二信号消失后降级失去对象 |
+| ~~旧 phase token（drafting/inspecting/repairing/creating_run）去留~~ | 服务端 + 客户端 | **RESOLVED（Phase 3 Batch B）**：③ 三替身退役（`44b5d4d`——工作证据归 Activity 投影器座位，inspecting i18n 族随读帧保留）；⑤ creating_run 删除（`b9dc6ee`——B4 CDP 死窗取证双场景 PASS 后剪线，`scratch/phase3_b4_deadwindow.mjs`）；composing 幸存为 System Status 唯一宏观叙事（判词 3） |
 | ~~客户端 ActivityStream 渲染级 vitest + ChatDock reducer 纯化提取~~ | `apps/web` | **reducer 纯化提取已落地（Phase 3 Batch A，2026-09-19）**：`activityReducer.ts`（upsert/sweep/reset 纯函数 + 8 例）/ `historyReplay.ts`（mapHistoryRows + 13 例，含「恢复不推导 lifecycle」keys 白名单锁）/ `chatStreamFrames.ts`（routeStreamFrame + 12 例）/ `lifecycleStamp.ts`（戳消费三态谓词 + 10 例，missing ≠ ready）+ `vitest.config.ts`（纯 node 零 DOM，app 插件在 vitest 下挂起的 setup gap 已补）。**仍 DEFERRED**：ActivityStream 渲染级（DOM）vitest |
 
 ### DEFERRED → ops 卫生批（非本阶段）
