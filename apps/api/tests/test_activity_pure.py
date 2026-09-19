@@ -19,7 +19,11 @@ lands in exactly one bucket).
 """
 
 import ast
+import asyncio
+import json
 from pathlib import Path
+
+import pytest
 
 from app.agents.tool_loop import (
     LoopExhausted,
@@ -345,3 +349,82 @@ def test_activity_module_is_read_only_projection():
             imported.add(node.module)
     banned = [m for m in imported if m.startswith(("app.models", "app.pipeline", "sqlalchemy"))]
     assert not banned, f"Activity Projection must stay read-only, imports: {banned}"
+
+
+# ---- Phase 2.5 Batch B-3: the route seam at stub level ----------------------
+# The projector's laws are locked above; these tests pin the WIRE seam in
+# app/chat/routes.py — _make_loop_event_hook (internal LoopEvents → queued
+# user-safe frames) and _sweep_activities (T16-B's terminal cleanup) — with
+# nothing but an asyncio.Queue, so the seam's contract is covered without a
+# live turn.
+
+from app.chat.routes import (  # noqa: E402  (after the pure projector block)
+    _activity_frame,
+    _make_loop_event_hook,
+    _sweep_activities,
+)
+
+
+def _wire(queue: asyncio.Queue) -> list[tuple[str, dict]]:
+    """Drain the stub queue into (event, payload) pairs."""
+    out = []
+    while not queue.empty():
+        raw = queue.get_nowait()
+        event_line, data_line = raw.splitlines()[:2]
+        out.append((event_line.removeprefix("event: "),
+                    json.loads(data_line.removeprefix("data: "))))
+    return out
+
+
+@pytest.mark.asyncio
+async def test_route_seam_rejection_then_failed_sweep():
+    """cancelled + failed across the seam: the name-known beat queues the
+    active frame; the rejection cancels the half-started draft (active key
+    kept) and opens the ONE repair span; the failed turn's sweep settles the
+    repair FAILED. Zero active survives; every frame rides the
+    assistant.activity event with the exact whitelist payload."""
+    queue: asyncio.Queue = asyncio.Queue()
+    p = ActivityProjector()
+    hook = _make_loop_event_hook(queue, p)
+    for f in p.name_known("present_plan"):
+        await queue.put(_activity_frame(f))
+    await hook(ToolRejected(kind="params_validation", tool_name="present_plan"))
+    await _sweep_activities(queue, p, "failed")
+    wire = _wire(queue)
+    assert all(event == "assistant.activity" for event, _ in wire)
+    assert [
+        (d["activity_id"], d["kind"], d["status"], d["key"]) for _, d in wire
+    ] == [
+        ("a1", "draft", "active", DRAFT),
+        ("a1", "draft", "cancelled", DRAFT),  # rejection → cancelled, key kept
+        ("a2", "repair", "active", REPAIR),
+        ("a2", "repair", "failed", REPAIR),  # failed turn sweeps repair FAILED
+    ]
+    for _, payload in wire:
+        assert set(payload.keys()) == {"activity_id", "seq", "kind", "status", "key"}
+    assert not p.has_active()
+
+
+@pytest.mark.asyncio
+async def test_route_seam_completed_sweep_settles_every_active():
+    """The completed-turn sweep with TWO actives open (a repair span from a
+    nameless truncation + an in-flight read): both settle COMPLETED in one
+    sweep — repair first (span ordering), past-tense keys on the wire, zero
+    dangling."""
+    queue: asyncio.Queue = asyncio.Queue()
+    p = ActivityProjector()
+    hook = _make_loop_event_hook(queue, p)
+    await hook(ToolRejected(kind="schema_truncation", tool_name=None))
+    for f in p.name_known("search_music"):
+        await queue.put(_activity_frame(f))
+    await _sweep_activities(queue, p, "completed")
+    wire = _wire(queue)
+    assert [
+        (d["activity_id"], d["kind"], d["status"], d["key"]) for _, d in wire
+    ] == [
+        ("a1", "repair", "active", REPAIR),
+        ("a2", "read", "active", MUSIC),
+        ("a1", "repair", "completed", REPAIR_DONE),
+        ("a2", "read", "completed", MUSIC_DONE),
+    ]
+    assert not p.has_active()
