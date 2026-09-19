@@ -72,7 +72,7 @@
 | `API.md` | API 参考 | 活跃（2026-08-18 全面对齐路由） | 对接口前 |
 | `DATABASE_MIGRATIONS.md` | Alembic 工作流 | 活跃 | 写迁移前 |
 | `research/` | 竞品卡片（7 家）+ Opus 深拆 + ElevenCreative 调研 + FLORA 首页/工作台走查 + **Lovart 落地页走查（`lovart-landing.md`——hero 任务轮播 + 滚动驱动「输入→prompt→输出」demo 幕，着陆叙事证据）** + MiniMax Design 走查（界面工艺清单 + Skills 仓库解剖）+ Agent Skills 规范生态（Mastra/Agno 文档证据，`agent-skills-spec.md`）+ 渲染技术调研 + dsh 架构调研（agent harness 对照，采纳项已分流 PROGRESS/NAMING/AGENT_ARCH）+ **craft 解剖证据表（`craft-anatomy-2026-08-22.md`——产物质量线期 0 产出，四卡 × 真素材三源测量，期 2/3 施工顺序由它决定）** | 原始素材层 | 引用证据时 |
-| `tasks/` | 单功能实施简报（含 Prohibited Behaviors）；已完成简报归 `archive/tasks-done/`（历史记录，不再维护）。**R1/R1.1 施工合同 = `tasks/r1-*.md` / `tasks/r1-1-*.md`（2026-09-16 产品-first 批）**——每批一份自包含合同（product goal / current state / tasks / Do NOT touch / acceptance / docs update），批次存在性与顺序归 `PROGRESS.md` §0，合同只描述怎么施工 | 活跃 | 开工对应功能前必读；**新 coding session 入口 = `PROGRESS.md` §0 → 当前 batch 合同** |
+| `tasks/` | 单功能实施简报（含 Prohibited Behaviors）；已完成简报归 `archive/tasks-done/`（历史记录，不再维护）。**例外：`tasks/verification-contracts.md` 不是简报——验证侧合同登记表**（Phase 2.5 Batch C 立）：合同 ↔ Owner ↔ 纯测试/剧本/静态门座 ↔ Status + Known Variance 登记 + 剧本 fixture 律；测试/断言迁移前先查它。**R1/R1.1 施工合同 = `tasks/r1-*.md` / `tasks/r1-1-*.md`（2026-09-16 产品-first 批）**——每批一份自包含合同（product goal / current state / tasks / Do NOT touch / acceptance / docs update），批次存在性与顺序归 `PROGRESS.md` §0，合同只描述怎么施工 | 活跃 | 开工对应功能前必读；**新 coding session 入口 = `PROGRESS.md` §0 → 当前 batch 合同** |
 
 ## 已规划的文档（尚未撰写）
 

@@ -803,10 +803,15 @@ def check_stream_law(
 # Process narration: read-iteration speech must never persist into the
 # settled message (the read-silent law — reads leave the message channel
 # empty, the whole speech belongs to the terminal call).
+# 词边界 adjudication（C-6，2026-09-19）：IGNORECASE 下裸 `I'?ll` 会把
+# "will pull from" 的 "ill pull" 误判为第一人称过程叙述（S20A 两连红：
+# "the caption text will pull from …" 是诚实披露而非过程泄漏）。合同不变
+# （ADR-084 禁的是第一人称过程话入终答），断言补 \b 词界——harness 侧修正，
+# 生产码零改动。
 PROCESS_NARRATION = re.compile(
-    r"(I'?ll (pull|check|inspect|look into|fetch|take a look)|"
-    r"Let me (check|pull|inspect|look|fetch)|"
-    r"I'?m going to (pull|check|inspect|look)|"
+    r"(\bI'?ll (pull|check|inspect|look into|fetch|take a look)|"
+    r"\bLet me (check|pull|inspect|look|fetch)|"
+    r"\bI'?m going to (pull|check|inspect|look)|"
     r"我先(查|看|拉|读)|让我(先)?(查|看|拉|读))",
     re.IGNORECASE,
 )
@@ -2482,7 +2487,28 @@ async def s10_sse_turn_streaming(ctx: Ctx) -> None:
     check(q.get("kind") == "question", "the bare wish docks the ask", msg)
     content = (msg.get("content") or "")
     check(len(stream.deltas) > 0, "ask turn streams the framing prose", q)
-    check_stream_law(stream, content, "ask turn")
+    # Ask-turn stream law (ask 三分解剖, `_ask_content` service.py): an
+    # OPTIONS ask's content IS the streamed framing (the question rides the
+    # dock title); a TEXT ask keeps the bare question IN the speech —
+    # content = framing + "\n\n" + question, appended at compose, never
+    # streamed. The generic single-iteration law (concat == content) is
+    # therefore structurally false for TEXT asks; which branch the turn
+    # takes is the LLM's call, so the harness asserts the BRANCH's law.
+    # (C-6 adjudication 2026-09-19: two reds traced to this mismatch —
+    # harness contract bug, production unchanged since 2026-09-08.)
+    _had_reads_ask, had_repair_ask = _work_evidence(stream, "ask turn")
+    if not had_repair_ask:  # replaced speech voids even the prefix relation
+        streamed_ask = "".join(stream.deltas).strip()
+        expected_ask = (
+            streamed_ask
+            if q.get("options")
+            else f"{streamed_ask}\n\n{(q.get('question') or '').strip()}"
+        )
+        check(content == expected_ask,
+              "ask turn: the framing streams verbatim; a TEXT ask's bare "
+              "question appends at compose (blank-line join), an options "
+              "ask's content is the framing alone",
+              f"{''.join(stream.deltas)[:120]!r} vs {content[:120]!r}")
     check(bool((q.get("question") or "").strip())
           and content != q["question"],
           "the bare question rides the payload, distinct from the prose", q)
