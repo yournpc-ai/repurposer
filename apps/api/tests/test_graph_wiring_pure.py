@@ -670,11 +670,41 @@ async def test_transcript_node_births_queued_for_textless_text_yielding_asset():
 
 @pytest.mark.asyncio
 async def test_transcript_node_skips_non_text_yielding_assets():
-    """Asset types without a text yield never birth a transcript card."""
-    for t in (AssetType.IMAGE, AssetType.VOICE_SAMPLE):
+    """Asset types without a text yield never birth a transcript card
+    (Phase 2.5 B-2: the boundary's negative side — the question is never
+    "does text exist yet" but "does this material PRODUCE a transcript
+    product object")."""
+    for t in (AssetType.IMAGE, AssetType.VOICE_SAMPLE, AssetType.SLIDES):
         db = _StubDb()
         assert await stamp_transcript_node(db, _PROJECT_ID, _asset(type=t)) is None
         assert db.added == []
+
+
+@pytest.mark.asyncio
+async def test_transcript_node_births_queued_for_every_text_yielding_type():
+    """Phase 2.5 B-2 boundary positives: the text-yielding family is
+    {VIDEO, AUDIO, TRANSCRIPT, PAST_MATERIAL} (graph_fill's text_yielding
+    set) — each births its queued card at upload, idempotently, even before
+    any text exists. The sharpest edge is TRANSCRIPT itself: the asset IS
+    text, yet its transcript document node still births (the card is the
+    product object, the asset row is the file)."""
+    for t in (
+        AssetType.VIDEO,
+        AssetType.AUDIO,
+        AssetType.TRANSCRIPT,
+        AssetType.PAST_MATERIAL,
+    ):
+        asset = _asset(type=t)
+        db = _StubDb()
+        doc = await stamp_transcript_node(db, _PROJECT_ID, asset)
+        assert doc is not None, f"{t}: text-yielding asset births its card"
+        assert doc.state == "queued", f"{t}: born queued while text is owed"
+        assert doc.spec["role"] == "transcript"
+        # Idempotent per type: a second stamp finds the same card, no twin.
+        db2 = _StubDb(nodes=[doc], edges=list(db.edges))
+        again = await stamp_transcript_node(db2, _PROJECT_ID, asset)
+        assert str(again.id) == str(doc.id), f"{t}: idempotent birth"
+        assert db2.added == []
 
 
 @pytest.mark.asyncio
