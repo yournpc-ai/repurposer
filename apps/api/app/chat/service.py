@@ -334,7 +334,6 @@ async def _create_run_from_tasks(
     name: str | None = None,
     source_asset_id: str | None = None,
     exemplar_asset_id: str | None = None,
-    on_phase=None,
 ) -> UUID:
     """Dispatch a proposed task list through the ONLY run birthplace.
 
@@ -359,10 +358,6 @@ async def _create_run_from_tasks(
     conversation pins — propose_turn's seat), riding TaskSpec → run.context
     verbatim. create_run validates them at the birthplace (422 on a
     non-project / non-video exemplar).
-
-    ``on_phase`` (SSE turns only): the run is about to be born — emit the
-    ``creating_run`` phase label so the dock's status line never goes dark
-    between the echo and the run's arrival (回合后半段也有状态所有者).
     """
     from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 
@@ -372,8 +367,6 @@ async def _create_run_from_tasks(
         # didn't, so the unnamed rate is visible instead of the frozen-params
         # template quietly coming back.
         logger.info("unnamed_proposal", path="chat_dispatch", project_id=str(project.id))
-    if on_phase is not None:
-        await on_phase(THINKING_PHASE_CREATING_RUN)
     try:
         run = await create_run(
             db,
@@ -1580,10 +1573,6 @@ async def answer_question(
                 # birthplace — ValueError here is a client-facing 422.
                 # target_language is a pure fallback (language is a per-task
                 # param): derive it from the first task that carries one.
-                if on_phase is not None:
-                    # Same labelled beat as the chat path's start branch
-                    # (_plan_turn): the run is about to be born.
-                    await on_phase(THINKING_PHASE_CREATING_RUN)
                 if not (intent.name or "").strip():
                     # Same observability seat as _create_run_from_tasks
                     # (ADR-058): the plan SHOULD carry the router's name.
@@ -1758,10 +1747,9 @@ async def answer_question(
                     on_delta=on_delta,
                     # I-PFA-06 parity (Batch B 验收修复): the chat-path
                     # continuation needs the phase pipe too — without it
-                    # composing/repairing/creating_run stay silent on this
-                    # branch and the inspecting label goes stale until the
-                    # envelope (the exact gap 交互完整性批 C closed on the
-                    # main paths).
+                    # composing stays silent on this branch and a stale
+                    # label could linger until the envelope (the exact gap
+                    # 交互完整性批 C closed on the main paths).
                     on_phase=on_phase,
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
@@ -2183,11 +2171,12 @@ async def prepare_chat_turn(
 # evidence — the agent's work rides the Activity channel). Emitted ONLY at
 # a real macro-state switch; a label earns its place only when the state
 # structurally differs from thinking (2026-09-04 user ruling). Phase 3
-# Batch B ③ retired the drafting / inspecting(+key) / repairing stand-ins —
-# their beats are the Activity projector's name-known / rejection seats now,
-# one fact one projection. Survivors: creating_run (until Batch B ⑤ —
-# B4 dead-window forensics gate) and composing (判词 3 保留义).
-THINKING_PHASE_CREATING_RUN = "creating_run"
+# Batch B retired every stand-in: ③ took drafting / inspecting(+key) /
+# repairing (their beats are the Activity projector's name-known /
+# rejection seats now), ⑤ took creating_run after the B4 CDP dead-window
+# forensics proved it never renders as the sole cover (the Activity RUN
+# milestone + the run surface own that segment). Sole survivor: composing
+# (判词 3 保留义 — the read→think takeover below).
 # The read→think takeover (交互完整性批 C, 2026-09-17): an ACCEPTED read's
 # observation is on the wire and the loop enters a QUIET decision iteration
 # (15-25s of LLM time) — without this frame the row would keep wearing a
@@ -2278,10 +2267,10 @@ async def execute_chat_turn(
     reply itself now (ADR-077 判词②: speech left the action JSON; the
     typewriter law holds natively); ``on_reasoning`` receives reasoning
     fragments as a liveness signal; ``on_phase`` receives System Status
-    labels at REAL macro-state switches — a start_run call about to birth
-    the run = "creating_run" (until Batch B ⑤), the read→think takeover =
-    "composing"; the retired work-evidence labels (drafting/inspecting/
-    repairing) moved to the Activity channel (Phase 3 Batch B ③).
+    labels at REAL macro-state switches — the read→think takeover =
+    "composing" (the sole survivor after Phase 3 Batch B retired every
+    stand-in: ③ drafting/inspecting/repairing, ⑤ creating_run after the
+    B4 CDP dead-window forensics).
     ``on_tool_call`` / ``on_tool_ready`` carry the structure frames: a tool
     call's name became known (the Activity beat's seat + the explicit phase
     clear) / a call's arguments validated (the

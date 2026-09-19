@@ -50,7 +50,6 @@ from app.chat.intent import intent_router
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.perception.executes import understanding_digest_lines
 from app.chat.service import (
-    THINKING_PHASE_CREATING_RUN,
     _active_run_line,
     _ask_content,
     _bare_question,
@@ -921,10 +920,6 @@ class PlanTurn:
             and stored is not None
             and stored.intent is not None
         ):
-            if self.on_phase is not None:
-                # Real phase switch: the start call is about to birth the run
-                # (create_run — compile + step rows + run context).
-                await self.on_phase(THINKING_PHASE_CREATING_RUN)
             answered, _follow_up = await answer_question(
                 db, self.user_id, UUID(str(pending_question.id)),
                 # The review panel's edited plan rides along (typed Start

@@ -891,7 +891,7 @@ function ThinkingMark() {
  * label only (2026-09-06 user ruling: the live "· 3s" elapsed countdown is
  * retired, a bare phase shimmer carries it; run-level clocks live on
  * RunTaskList's row, not here). The label is the LIVE phase (Thinking… →
- * Creating your workflow…), never a frozen word. */
+ * Putting it together…), never a frozen word. */
 function ThinkingRow({ label }: { label: string }) {
   return (
     <Message align="start">
@@ -1166,12 +1166,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // picker is a one-flag flip.
   const [autonomy, setAutonomy] = useState<Autonomy>("review")
   const [answering, setAnswering] = useState(false)
-  // System Status label (三概念分家, ADR-087 §1; Phase 3 Batch B ③): set
-  // from the server's labelled assistant.thinking frames — survivors are
-  // "composing" (the read→think takeover) and "creating_run" (until Batch
-  // B ⑤); the retired work-evidence labels (drafting/inspecting/repairing)
-  // live on the Activity channel now. Bare keepalive frames never touch the
-  // label, and without one the row falls back to chat.thinking.
+  // System Status label (三概念分家, ADR-087 §1; Phase 3 Batch B): set
+  // from the server's labelled assistant.thinking frames — the sole
+  // survivor is "composing" (the read→think takeover); the retired
+  // work-evidence labels (drafting/inspecting/repairing) live on the
+  // Activity channel, and creating_run was deleted in Batch B ⑤ after the
+  // B4 CDP dead-window forensics proved it never the sole cover. Bare
+  // keepalive frames never touch the label, and without one the row falls
+  // back to chat.thinking.
   // Lifecycle (I-PFA-06 清除协议, 2026-09-18): a label dies two ways — the
   // server's explicit clear frame {phase: null} ends it (every call's
   // name-known moment), or the terminal envelope closes the turn (终帧律 —
@@ -2520,13 +2522,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           onDelta: (delta) => typewriter.push(delta),
           onThinking: (payload) => {
             // System Status labels and the explicit clear (I-PFA-06 清除
-            // 协议, 2026-09-18; Phase 3 Batch B ③): `"phase" in payload`
+            // 协议, 2026-09-18; Phase 3 Batch B): `"phase" in payload`
             // separates both from bare keepalives, which leave the label
-            // as-is. A string phase hands the row over (composing;
-            // creating_run until B ⑤); `phase: null` is the server's clear
-            // frame (every call's name-known moment) — reset to the base
-            // label. Work evidence never rides this channel (Activity owns
-            // it); a phase-only frame drops the row back.
+            // as-is. A string phase hands the row over (composing is the
+            // sole survivor — creating_run deleted in B ⑤); `phase: null`
+            // is the server's clear frame (every call's name-known
+            // moment) — reset to the base label. Work evidence never rides
+            // this channel (Activity owns it); a phase-only frame drops
+            // the row back.
             if ("phase" in payload) {
               setThinkingPhase(payload.phase ?? null)
             }
@@ -4158,8 +4161,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     status owner (the 死窗 the whole-turn gate was built to
                     kill; the typewriter's busy/idle edge drives it, idle
                     after a grace so burst gaps don't strobe). The label
-                    follows the server's System Status frames (composing;
-                    creating_run until Batch B ⑤), falling back to the
+                    follows the server's System Status frames (composing is
+                    the sole survivor after Batch B), falling back to the
                     static copy when no label arrived. Phase 2+: the row
                     ALSO yields while an activity is active — the milestone
                     stream owns the "now" line, this row is the System

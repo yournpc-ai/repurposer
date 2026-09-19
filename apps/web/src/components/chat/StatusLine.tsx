@@ -1,7 +1,7 @@
 /** StatusLine — THE one live status row of the message flow (2026-09-09
  * user ruling): every transient "what's happening NOW" line in the flow is
  * this one component — the chat turn's thinking row (phases: Thinking… →
- * Creating your workflow…) and the run task list's dynamic narrative row
+ * Putting it together…) and the run task list's dynamic narrative row
  * alike. LIVE BY DEFINITION: the label is always the CURRENT phase /
  * narrative from the world (never a frozen canned word — 二源律), and the
  * same row's terminal form (active=false) is its static receipt.

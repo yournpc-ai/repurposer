@@ -331,7 +331,7 @@ class ChatTurn:
                 db, project, params.tasks, prose,
                 caption_mode=caption_mode,
                 source_asset_id=source_pin, exemplar_asset_id=exemplar_pin,
-                name=params.name or None, on_phase=self.on_phase,
+                name=params.name or None,
             )
         except ToolRejected as e:
             # The registry's rejection IS the feedback — one bounded loop
@@ -470,7 +470,7 @@ class ChatTurn:
             return await _create_run_from_tasks(
                 db, project, tasks, p.summary, instruction=instruction or None,
                 source_asset_id=source_pin, exemplar_asset_id=exemplar_pin,
-                name=p.name or None, on_phase=self.on_phase,
+                name=p.name or None,
             )
 
         try:

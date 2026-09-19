@@ -1201,7 +1201,6 @@ const en = {
     userLabel: "You",
     thinking: "Thinking...",
     thinkingPhases: {
-      creating_run: "Creating your workflow…",
       composing: "Putting it together…",
     },
     /** The perception family's inspecting chatter (T2b): a read ACTIVITY's

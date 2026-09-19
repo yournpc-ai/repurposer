@@ -1140,7 +1140,6 @@ const zh: Resources = {
     userLabel: "你",
     thinking: "思考中...",
     thinkingPhases: {
-      creating_run: "正在创建你的 workflow…",
       composing: "正在整理…",
     },
     /** 感知族的查询碎碎念（T2b）：读工具运行期间 read 活动帧的文案

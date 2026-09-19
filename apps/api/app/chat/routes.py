@@ -12,8 +12,9 @@ header. Plain callers get the one-shot JSON ``ChatResponse`` (unchanged);
 the action JSON retired into terminal tool calls, so the prose channel IS
 the reply — ``assistant.delta`` frames carry it verbatim (dialect-stripped at
 the client seam, typewriter law native); ``assistant.thinking`` carries
-liveness keepalives, the System Status labels (``composing``; creating_run
-until Batch B ⑤), and the explicit clear frame; ``question.preview`` docks the
+liveness keepalives, the System Status label (``composing`` — the sole
+survivor after Phase 3 Batch B retired creating_run on the B4 dead-window
+forensics), and the explicit clear frame; ``question.preview`` docks the
 pill the moment an ask_user call's arguments validate. The terminal envelope
 (``turn.completed`` / ``turn.failed``) stays authoritative.
 """
@@ -317,12 +318,12 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
 
                 async def on_phase(phase: str) -> None:
                     # A REAL System Status switch: a labelled thinking frame
-                    # ({"phase": "composing"}; "creating_run" until Batch
-                    # B ⑤) — the dock's status row shows the phase copy
-                    # instead of the static fallback. The bare {} keepalive
-                    # frames above never carry a phase and never touch the
-                    # client's label. Work evidence rides the Activity
-                    # channel, never this one (三通道分家, Phase 3 Batch B).
+                    # ({"phase": "composing"}) — the dock's status row shows
+                    # the phase copy instead of the static fallback. The bare
+                    # {} keepalive frames above never carry a phase and never
+                    # touch the client's label. Work evidence rides the
+                    # Activity channel, never this one (三通道分家, Phase 3
+                    # Batch B).
                     await queue.put(
                         _sse("assistant.thinking", json.dumps({"phase": phase}))
                     )
