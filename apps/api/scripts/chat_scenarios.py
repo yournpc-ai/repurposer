@@ -1891,7 +1891,20 @@ async def s5_revision_chat_always_wins(ctx: Ctx) -> None:
     入流）→ 面板手改整链存活于无关 refine → chat 修订恒胜（覆盖面板钉）
     → task_book 待决打字母永不误答（不参与任何结算）→ 散文确认起 run。"""
     pid = await ctx.new_project("S5 revision chain")
-    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
+    # Fixture declaration (B-4): the revision mechanics under test need a
+    # READY material — declare the processing end state explicitly
+    # (COMPLETED + transcript + language), never the PENDING default whose
+    # fate the resident worker's claim loop would decide mid-scenario.
+    await seed_asset(
+        pid, ctx.user_id, AssetType.VIDEO, "talk.mp4",
+        extracted_text=(
+            "In this talk I walk through three lessons from a decade of "
+            "field research — what teams get wrong about trust, and how "
+            "the best leaders repair it."
+        ),
+        meta={"language": "en"},
+        processed=True,
+    )
 
     turn1 = await ctx.chat(pid, "cut highlight clips from my talk")
     check(terminal_tool_of(turn1) == "present_plan",
@@ -2131,8 +2144,11 @@ async def s7_caption_mode_gate(ctx: Ctx) -> None:
     # A) distinct alt language exists → dock first, answer, plan follows.
     pid = await ctx.new_project("S7-A chat caption dock")
     await set_project_language(pid, "de")
+    # Fixture declaration (B-4): the caption gate's language fact is the
+    # declared COMPLETED row's meta — worker-immune by construction.
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
-                     extracted_text=material, meta={"language": "en"})
+                     extracted_text=material, meta={"language": "en"},
+                     processed=True)
     await seed_completed_run(pid)
     docked: dict | None = None
     for prompt in ("make a quote card from the video",
@@ -2180,7 +2196,8 @@ async def s7_caption_mode_gate(ctx: Ctx) -> None:
     pid_b = await ctx.new_project("S7-B chat caption source_only")
     await set_project_language(pid_b, "en")
     await seed_asset(pid_b, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
-                     extracted_text=material, meta={"language": "en"})
+                     extracted_text=material, meta={"language": "en"},
+                     processed=True)
     await seed_completed_run(pid_b)
     mode: str | None = None
     tools_seen: list = []
@@ -2212,7 +2229,8 @@ async def s7_caption_mode_gate(ctx: Ctx) -> None:
     pid_c = await ctx.new_project("S7-C caption answer survives refinement")
     await set_project_language(pid_c, "de")
     await seed_asset(pid_c, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
-                     extracted_text=material, meta={"language": "en"})
+                     extracted_text=material, meta={"language": "en"},
+                     processed=True)
     docked_c: dict | None = None
     for prompt in ("make quote cards from the video",
                    "pull the keynote's sharpest quotes into cards",
@@ -2389,7 +2407,21 @@ async def s10_sse_turn_streaming(ctx: Ctx) -> None:
     ask 流框架散文 + question.preview 预览帧先于终态信封。流式律的两款
     关系（单轮 == / 读先 startswith / 拒轮方差注记）归 check_stream_law。"""
     pid = await ctx.new_project("S10 sse streaming")
-    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4")
+    # Fixture declaration (B-4): the draft turn's ground truth is a READY
+    # material — declared COMPLETED up front. The old bare-PENDING row let
+    # the resident worker flip it FAILED mid-turn, and whether the draft
+    # turn saw "material ready" or "processing failed" was a race — the
+    # draft race is hereby eliminated by declaration, not by timing luck.
+    await seed_asset(
+        pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
+        extracted_text=(
+            "Welcome back. Today I want to share the three decisions that "
+            "shaped our product year — what we cut, what we kept, and why "
+            "focus beat breadth every single time."
+        ),
+        meta={"language": "en"},
+        processed=True,
+    )
 
     # Answer turn: prose streams on the content channel (iteration 0 only —
     # later iterations run quiet by the repair-never-streams law). The
@@ -3520,7 +3552,7 @@ async def s19_turn_durability_and_trigger_admission(ctx: Ctx) -> None:
 
 async def s20_speech_semantic_contract(ctx: Ctx) -> None:
     """ADR-084 言语语义管线回归（2026-09-17 拍板）：Chat 不是 Agent 的操作日志。
-    A 部（素材未就绪）：PENDING 无文本视频 → read 静默（过程话零流式、零
+    A 部（素材未就绪）：PROCESSING 无文本视频 → read 静默（过程话零流式、零
     持久化）+ 诚实处理中披露（理解需求 ≠ 已读素材）+ 不虚构素材判断；
     B 部（理解就绪）：COMPLETED 视频 + 内容寻址理解行直种 → echo 落到素材
     内容词（grounded judgment 的确定性代理断言）+ ≥2 task 计划不邀请言语
@@ -3533,9 +3565,16 @@ async def s20_speech_semantic_contract(ctx: Ctx) -> None:
         "subtitles."
     )
 
-    # ---- Part A: material not ready (PENDING, no text anywhere) ------------
+    # ---- Part A: material not ready (PROCESSING, no text anywhere) -------
+    # Fixture declaration (B-4): the state under test is "not ready" — so
+    # the row is declared PROCESSING. claim_pending_asset only ever claims
+    # PENDING rows, and the Lifecycle gatherer folds PROCESSING into
+    # material_pending — the not-ready reading is now worker-immune and the
+    # blocker below is exact, never whichever of pending/failed the worker
+    # race happened to land on.
     pid = await ctx.new_project("S20A speech contract (material not ready)")
-    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4")
+    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4",
+                     status=AssetStatus.PROCESSING)
     stream = await ctx.chat_stream(pid, message)
     check(stream.failed is None, "S20A the turn did not fail", stream.failed)
     completed = stream.completed or {}
@@ -3554,15 +3593,14 @@ async def s20_speech_semantic_contract(ctx: Ctx) -> None:
     )
     # Lifecycle stamp: when the plan docks over unready material, the stamp
     # — never the dock's existence — names the lifecycle truth: material not
-    # ready, plan not ready, confirmation not ready, a material_* blocker
-    # present (Batch C pins the exact blocker; the worker race may flip
-    # pending→failed mid-turn today).
+    # ready, plan not ready, confirmation not ready, and with the fixture's
+    # PROCESSING declaration the blocker is exactly material_pending.
     if terminal == "present_plan":
         stamp = (await ctx.results(pid))["lifecycle"]
         check(stamp["material_ready"] is False
               and stamp["plan_ready"] is False
               and stamp["confirmation_ready"] is False
-              and any(b.startswith("material_") for b in stamp["blockers"]),
+              and "material_pending" in stamp["blockers"],
               "S20A the stamp names the unready material on a docked plan",
               stamp)
     content = turn1["assistant_message"].get("content") or ""
