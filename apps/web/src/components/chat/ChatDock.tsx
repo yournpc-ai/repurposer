@@ -156,7 +156,7 @@ const LANGUAGE_OPTIONS = [
   { code: "it", labelKey: "languages.it" },
 ] as const
 
-type Phase = "confirm" | "running" | "chat"
+type Phase = "running" | "chat"
 
 /** One task in the plan chain (ADR-043 — the request layer's only grammar:
  * a registry tool + its params, the same shape the intent router proposes and
@@ -639,7 +639,7 @@ interface ChatDockProps {
    * restored session — drives the clips row's no-media inline warning. */
   initialReasons?: string[]
   /** Attach to an already-running generation (returning visitor): skips the
-   * confirm phase, lands straight on the step flow. */
+   * confirm beat, lands straight on the step flow. */
   initialRunId?: string | null
   /** The run reached a terminal-success state while this dock was watching
    * — the page refetches so the landed products show. */
@@ -1114,19 +1114,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     },
   }))
 
-  // Restore mounts by the lifecycle stamp (Phase 1, acceptance #4): a
-  // parked plan enters the confirm phase only at PLAN_READY — materials
-  // still processing mounts plain chat, and the poll-driven stamp flip
-  // below raises the confirm phase when readiness lands. Phase 3 判词 2:
-  // a MISSING stamp is unknown, never ready — the mount parks in chat and
-  // waits for the stamp (the retired `?? true` fallback was a hidden
-  // Lifecycle Authority: no stamp → the plan never auto-confirms).
+  // Restore mounts by the lifecycle stamp (Phase 1, acceptance #4; Phase 3
+  // Batch B 判词 3 拆语义): the dock's view state is only "run attached" vs
+  // "chat" — the CONFIRM beat is no longer a phase at all. It is DERIVED
+  // below (confirmActive = intentReady ∧ the stamp's PLAN_READY ∧ no live
+  // run): a parked plan's confirm surface appears when readiness lands and
+  // never on a dock envelope alone (task_book exists ≠ PLAN_READY). Phase 3
+  // 判词 2: a MISSING stamp is unknown, never ready — no stamp, no confirm
+  // face (the retired `?? true` fallback was a hidden Lifecycle Authority).
   const [phase, setPhase] = useState<Phase>(
-    initialRunId
-      ? "running"
-      : initialIntent && isPlanReady(lifecycle)
-        ? "confirm"
-        : "chat"
+    initialRunId ? "running" : "chat"
   )
   const [intent, setIntent] = useState<InferredIntent>(() =>
     initialIntent
@@ -1157,18 +1154,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // session hands one over; a fresh navigation gets it from the first /chat
   // turn's refetch). Attach mode never shows the card, so it starts ready.
   const [intentReady, setIntentReady] = useState(!!initialIntent || !!initialRunId)
-  // Lifecycle stamp flip (Phase 1): a restored parked plan that mounted in
-  // the chat phase (materials still processing — or the stamp not yet
-  // arrived — at mount) rises into the confirm phase when the poll-driven
-  // stamp lands PLAN_READY. Never fires downward — bail/supersede ride
-  // their own message events.
-  const planReady = isPlanReady(lifecycle)
-  useEffect(() => {
-    if (planReady && intentReady && phase === "chat" && !initialRunId) {
-      setPhase("confirm")
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planReady])
   const [runId, setRunId] = useState<string | null>(initialRunId ?? null)
   // Mirrored in a ref: async chat continuations capture stale closures, and
   // they must be able to tell a run went live while their turn was in flight.
@@ -1180,7 +1165,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const [startError, setStartError] = useState<string | null>(null)
 
   // ask_user 机器: the pending question docks above the input (task_book in
-  // the confirm phase; plain questions from the chat loop afterwards); the
+  // the confirm beat; plain questions from the chat loop afterwards); the
   // answered one collapses into the flow as an answered question.
   const [pendingQuestion, setPendingQuestion] = useState<QuestionMessage | null>(null)
   // Autonomy tier: the picker is hidden (QuestionDock.SHOW_AUTONOMY_PICKER),
@@ -1307,6 +1292,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   useEffect(() => {
     terminalRef.current = terminal
   }, [terminal])
+
+  // Phase 3 Batch B (裁决 1, 2026-09-20): the confirm beat is a DERIVED
+  // predicate, never a phase — readiness comes from the server-named stamp
+  // alone (PLAN_READY), plus the dock's own facts: a plan actually landed
+  // (intentReady) and no run is live (runAttached = runId ∧ ¬terminal — the
+  // post-terminal refinement's new plan must be able to raise the beat
+  // again, so the conjunct is run LIVENESS, not run existence). The
+  // envelope→stamp window (a live dock's pill waits one refetch) is accepted
+  // by the ruling: the conservative direction, and the birthplace 422 guards
+  // for real. No lifecycle decision is ever re-derived locally.
+  const runAttached = runId != null && !terminal
+  const confirmActive = intentReady && isPlanReady(lifecycle) && !runAttached
 
   // The pending question is a plain DB row — fetching the project
   // conversation rebuilds the dock after refresh / on any device, whatever
@@ -2232,13 +2229,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // the pending-brief fetch is the RECOVERY seat only, kept as the
         // fallback for rows docked before the seal (intent column null).
         const questionBrief = normalizeBrief(message.question.brief)
+        // Phase 3 Batch B (裁决 1): docking NO LONGER raises a "confirm"
+        // phase — the confirm beat derives from the stamp's PLAN_READY
+        // (confirmActive), so a dock envelope alone never opens the beat
+        // (task_book exists ≠ PLAN_READY). The intent/brief/derived state
+        // still lands here; the stamp's refetch (onDraftGraphChange above)
+        // flips the surface.
         if (message.intent) {
           setIntent(normalizeIntent(message.intent))
           setBrief(questionBrief)
           setDerived(message.question.derived ?? [])
           setReasons(message.question.reasons ?? [])
           setIntentReady(true)
-          setPhase("confirm")
         } else {
           const pending = await fetchPendingBrief()
           if (pending) {
@@ -2247,7 +2249,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             setDerived(pending.derived ?? [])
             setReasons(pending.reasons ?? [])
             setIntentReady(true)
-            setPhase("confirm")
             // No "plan updated" filler line on refinements — the turn's own
             // streamed echo bubble already says what changed.
           }
@@ -2268,7 +2269,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
 
   /** One endpoint for every turn (intent-surface-unification W2): the server
    * routes plan-path turns (task-book build / refine / confirm) and
-   * chat-loop turns itself. The panel's current chain rides confirm-phase
+   * chat-loop turns itself. The panel's current chain rides confirm-beat
    * turns as prior_intent (the intent router re-emits the full revised chain —
    * chat revisions always win); mentions / the persona choice ride only the
    * composer's first message.
@@ -2520,12 +2521,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           attachments: opts?.attachments ?? [],
           persona_id: opts?.personaId,
           prior_intent:
-            phase === "confirm" && intentReady
+            // The panel's current chain rides while the confirm beat is
+            // live (裁决 1 derived predicate — never a phase read).
+            confirmActive
               ? intent
               : undefined,
           // Consumed only when this turn confirms the plan by prose — the
           // dock's tier must survive a typed "looks good, start it".
-          autonomy: phase === "confirm" ? autonomy : undefined,
+          autonomy: confirmActive ? autonomy : undefined,
         },
         {
           signal: ctrl.signal,
@@ -3279,7 +3282,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [])
 
-  // The dock's live form outside the confirm phase: a pending OPTIONS
+  // The dock's live form outside the confirm beat: a pending OPTIONS
   // question from the chat loop (task_book docks only while confirming; an
   // options-empty text question never docks — 形态律 ADR-053 R1).
   // ask_user 不变量 (2026-09-13): the flow's QA archive is the record of a
@@ -3336,8 +3339,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if (pillQuestion) setDockHidden(false)
   }, [pillQuestion])
   useEffect(() => {
-    if (phase === "confirm" && intentReady && !chatBusy) setDockHidden(false)
-  }, [phase, intentReady, chatBusy])
+    if (confirmActive && !chatBusy) setDockHidden(false)
+  }, [confirmActive, chatBusy])
 
   // Message-flow chronology (#5 — the Claude Code reference: the stream is
   // ONE timeline that never scrambles; a QA archives inline at its real
@@ -3351,7 +3354,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // dynamic row). Once terminal the start line is gone and the task list
   // settles as the run's tombstone AT THE RUN'S END (same 拍板 — mid-run
   // life sorts by real time ABOVE the receipt, never below it), the
-  // completion line right after. No run anchor (confirm phase,
+  // completion line right after. No run anchor (confirm beat,
   // pre-snapshot window) → the legacy fixed block + flat list below.
   const runStartAt = runCreatedAt ? Date.parse(runCreatedAt) : null
   type RunStreamUnit =
@@ -3541,15 +3544,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // the beat never loses its surface during the fetch window. The card is
   // now exactly the canvas-less surface = mobile (both its forms).
   const planCardVisible =
-    phase === "confirm" &&
-    intentReady &&
+    confirmActive &&
     form !== "panel" &&
-    isMobile &&
+    isMobile
     // 移动端 parity (Phase 1): the plan card IS the mobile review surface —
-    // it reads the same stamp's PLAN_READY as the desktop canvas flip.
-    // Phase 3 判词 2: stamp missing → unknown → the card waits (never the
-    // retired `: true` fallback's premature confirm face).
-    isPlanReady(lifecycle)
+    // it reads the same stamp's PLAN_READY as the desktop canvas flip
+    // (confirmActive already carries it). Phase 3 判词 2: stamp missing →
+    // unknown → the card waits (never the retired `: true` fallback's
+    // premature confirm face).
   const planCardInline = planCardVisible && chatBusy && liveBubblePresent
   /** chat 修改单价 (BILLING §7): the dock payload's per-task marginal credits,
    * index-aligned with the plan card's task rows (Σ ≡ the pill's total). */
@@ -4022,7 +4024,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   </MessageScrollerItem>
                 ) : null}
 
-                {/* Plan card (confirm phase) — pinned bottom-most
+                {/* Plan card (confirm beat) — pinned bottom-most
                     (order-10) while settled. During an in-flight turn it
                     unpins and renders inline at its echo anchor in the loop
                     below (the stale confirm dock hides with it); restored
@@ -4041,7 +4043,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     run's end once terminal, the completion line last. A
                     mid-run QA lands between the start line and the dynamic
                     row while live, and above the receipt once terminal —
-                    the Claude Code reference. Fallback (confirm phase /
+                    the Claude Code reference. Fallback (confirm beat /
                     pre-snapshot window): the legacy fixed block + flat
                     list below. */}
                 {runStreamUnits ? (
@@ -4218,8 +4220,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // the pill (its options + the pencil freeform row) owns the bottom row
   // (FLORA/Opus 同款). A text question never docks (plain flow speech,
   // input live); the task-book pill stays non-blocking.
+  // Phase 3 Batch B: the retired `phase !== "confirm"` conjunct was
+  // defensive-only — an options question never coexists with a parked
+  // task_book server-side (判词⑦ 扩座: an ask while a question is pending
+  // is an interjection, never a new dock), and pillQuestion's kind filter
+  // already excludes task_book rows. No replacement guard.
   const pillDock =
-    phase !== "confirm" && pillQuestion ? (
+    pillQuestion ? (
       <QuestionDock
         kind="question"
         plain
@@ -4251,11 +4258,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // canvas flip AND no confirm pill; the stamp's poll drives the flip).
   // Phase 3 判词 2: a missing stamp is unknown → no pill (missing ≠ ready).
   const planDock =
-    phase === "confirm" &&
-    intentReady &&
+    confirmActive &&
     !chatBusy &&
-    !singlePlan &&
-    isPlanReady(lifecycle) ? (
+    !singlePlan ? (
       <QuestionDock
         kind="task_book"
         plain
@@ -4602,7 +4607,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             dockHidden ? "pointer-events-none" : "pointer-events-auto"
           )}
         >
-          {phase === "confirm" && startError && (
+          {confirmActive && startError && (
             <p className="mb-2 text-sm text-destructive">{startError}</p>
           )}
           {/* The history region — its OWN floating layer (2026-09-02 输入框
@@ -4673,9 +4678,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                 pending (ADR-053 R1 阻塞形态) — CSS-hidden, NOT unmounted:
                 the editor keeps its DOM-owned draft across the morph. The
                 condition follows the RENDERED pill (pillDock), not the raw
-                pending state: the pill is gated off during the confirm
-                phase, so there the input must stay live (a typed answer
-                settles via the slot handshake). */}
+                pending state: while a task_book is docked the options pill
+                is absent (pillQuestion's kind filter), so there the input
+                must stay live (a typed answer settles via the slot
+                handshake). */}
             <div className={cn("p-2", pillDock && "hidden")}>{inputBody}</div>
           </div>
         </div>
