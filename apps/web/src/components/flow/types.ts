@@ -223,16 +223,6 @@ export interface FlowViewProps {
     onConfirm: () => void
     onCancel: () => void
   } | null
-  /** 动作住节点内 (判词①): the draft world's confirm beat docks INSIDE the
-   * task-book document card (the retired floating card) — resident while
-   * the docked plan's draft graph is up. */
-  draftConfirm?: {
-    low: number
-    high: number
-    unquoted: number
-    balance: number | null
-    onConfirm: () => void
-  } | null
   /** Pane-only click (node clicks never fire this) — the results canvas's
    * "back to neutral" gesture: collapse the history, clear the focus. */
   onPaneClick?: () => void

@@ -93,11 +93,6 @@ export interface ResultsCanvasProps {
    * the dock — the node's own state cycle is the feedback. Resolves true
    * when the run started. */
   onNodeRevise?: (nodeId: string, text: string) => Promise<boolean>
-  /** The draft-confirm card's Start (ADR-057 K5 — 确认 = 节点锚定): the
-   * surface rides it to the dock's one start path (the imperative
-   * handle — the task_book question's start answer; same guards, same
-   * grey-row failure surface). */
-  onDraftConfirm?: () => void
   /** An asset node's factsbar action (download / delete / reprocess) — the
    * surface owns them; absent = asset nodes render no bar. */
   onAssetAction?: (asset: FlowAssetInfo, action: FlowAssetAction) => void
@@ -135,7 +130,6 @@ export function ResultsCanvas({
   onOutputAction,
   onQuoteOutput,
   onNodeRevise,
-  onDraftConfirm,
   onAssetAction,
   selectedOutputId = null,
   onPaneClick,
@@ -492,62 +486,15 @@ export function ResultsCanvas({
     setPromptConfirmOpen(false)
   }, [])
 
-  // ── Draft-confirm card (ADR-057 K5 — 确认 = 节点锚定) ──────────────────
-  // While the docked plan's draft graph is on the canvas, the desktop
-  // confirm beat lives HERE: anchored at the task-book document node, the
-  // whole chain's price folded from the draft nodes' OWN quotes (the same
-  // numbers the draft cards read — never a second estimate source), the
-  // balance as the soft compare, Start riding the dock's one start path
-  // (the imperative handle — same guards, same grey-row failure surface).
-  // 计划密度律 mirror (ADR-054): a one-task chain confirms by the next
-  // chat message — no card (it never earns the heavy rendering). The card
-  // self-clears when the run starts (the draft nodes re-queue) and refreshes
-  // when a refine re-docks (the graph re-stamps).
-  const draftNodes = useMemo(
-    () =>
-      nodes.filter(
-        (n) =>
-          n.status === "draft" &&
-          // 词表 v3 (ADR-076, C5): capability speaks through prototype —
-          // only generator/editor consume (manual nodes are content, the
-          // read face stamps prototype onto every row).
-          (n.spec?.prototype === "generator" || n.spec?.prototype === "editor"),
-      ),
-    [nodes],
-  )
-  const planDoc = useMemo(
-    () => nodes.find((n) => n.spec?.role === "task_book") ?? null,
-    [nodes],
-  )
-  const draftEstimate = useMemo<[number, number] | null>(() => {
-    if (draftNodes.length === 0) return null
-    const low = draftNodes.reduce((sum, n) => sum + (n.estimateCredits?.[0] ?? 0), 0)
-    const high = draftNodes.reduce(
-      (sum, n) => sum + (n.estimateCredits?.[1] ?? n.estimateCredits?.[0] ?? 0),
-      0,
-    )
-    return [low, high]
-  }, [draftNodes])
-  // 估价诚实面 (2026-09-10): unquoted draft nodes (estimate NULL — transform
-  // chains price only when their clips exist mid-run). The confirm face
-  // must never promise "≈ 0" for a chain that will charge at run time.
-  const draftUnquoted = useMemo(
-    () => draftNodes.filter((n) => n.estimateCredits == null).length,
-    [draftNodes],
-  )
-  // 计划密度律 mirror (ADR-054): the chain's TASK count gates the heavy
-  // confirm, not the node count. C2b folded the compile-injected
-  // materialize_source into its host family (it never grows a node), so
-  // the draft node count IS the task count — the dead materialize filter
-  // retired with the fold. The price fold above keeps every node.
-  const draftTaskCount = draftNodes.length
-  const draftConfirmVisible =
-    draftTaskCount >= 2 && planDoc !== null && draftEstimate !== null
+  // ── Draft-confirm card — RETIRED (Phase 3 Batch A, 2026-09-19 判词 1) ──
+  // The canvas is NOT a Confirmation Seat (ADR-070 唯一座位律): Confirm /
+  // Start live on the dock pill alone; the canvas reads and reviews, and a
+  // draft task_book node is just the plan's face. No stamp-gated
+  // replacement here — a gated second seat would still be two seats.
 
-  // The balance soft-compare, shared by both confirm cards (K4's prompt-
-  // edit card on open, K5's resident draft card while the draft graph is
-  // up): lazy + silent (CreditsPill's 防双报 discipline) — a fetch failure
-  // just keeps the line blank.
+  // The balance soft-compare for the prompt-edit pricing card (K4, on
+  // open): lazy + silent (CreditsPill's 防双报 discipline) — a fetch
+  // failure just keeps the line blank.
   const [balanceNow, setBalanceNow] = useState<number | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -564,9 +511,9 @@ export function ResultsCanvas({
     return () => {
       cancelled = true
     }
-    // draftConfirmVisible's flip re-arms the fetch (a re-docked chain
-    // re-quotes; the balance may have moved with a prior run).
-  }, [promptEdit !== null, draftConfirmVisible])
+    // Re-arms per edit (a re-priced chain may have moved the balance with
+    // a prior run).
+  }, [promptEdit !== null])
 
   const editedNode = promptEdit ? (nodeById.get(promptEdit.nodeId) ?? null) : null
   // A refresh / delete vanishing the anchor node closes the card.
@@ -649,11 +596,11 @@ export function ResultsCanvas({
     else clearPromptEdit()
   }, [promptEdit, onNodeRevise, clearPromptEdit])
 
-  // 动作住节点内 (2026-09-10 判词①): the pricing confirmation and the
-  // draft world's confirm beat both dock INSIDE their nodes now — the
-  // surface only computes the payloads; the program region / the plan card
-  // render them in place (both ViewportPortal floating cards retired —
-  // one less anchor-math pair, and the gesture lives where the eye is).
+  // 动作住节点内 (2026-09-10 判词①): the prompt edit's pricing
+  // confirmation docks INSIDE the node's program region — the surface only
+  // computes the payload; the card renders it in place (the ViewportPortal
+  // floating card retired — one less anchor-math pair, and the gesture
+  // lives where the eye is).
   const promptConfirmPayload =
     promptEdit && promptConfirmOpen && editedNode && promptEditBlast
       ? {
@@ -666,17 +613,6 @@ export function ResultsCanvas({
           balance: balanceNow,
           onConfirm: handlePromptEditConfirm,
           onCancel: clearPromptEdit,
-        }
-      : null
-
-  const draftConfirmPayload =
-    draftConfirmVisible && draftEstimate
-      ? {
-          low: draftEstimate[0],
-          high: draftEstimate[1],
-          unquoted: draftUnquoted,
-          balance: balanceNow,
-          onConfirm: () => onDraftConfirm?.(),
         }
       : null
 
@@ -737,7 +673,6 @@ export function ResultsCanvas({
         onPromptEdit={handlePromptEdit}
         pendingProgram={promptEdit}
         promptConfirm={promptConfirmPayload}
-        draftConfirm={draftConfirmPayload}
         cameraBeat={cameraBeat}
         onCameraBeatConsumed={onCameraBeatConsumed}
         occludedRightPx={occludedRightPx}

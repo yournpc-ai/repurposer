@@ -486,13 +486,6 @@ function ProjectDetailPage() {
     [projectId, fetchResults, t]
   )
 
-  // Canvas draft-confirm card Start (ADR-057 K5 — 确认 = 节点锚定): the
-  // desktop confirm beat rides the dock's ONE start path (the task_book
-  // question's start answer; guards and failure surfaces live in the dock).
-  const handleDraftConfirm = useCallback(() => {
-    dockRef.current?.startPendingPlan()
-  }, [])
-
   const completedRun =
     latestRun?.status === "completed" ? latestRun : stickyCompletedRun
 
@@ -1004,7 +997,6 @@ function ProjectDetailPage() {
             onOutputAction={handleOutputAction}
             onQuoteOutput={handleQuoteOutput}
             onNodeRevise={handleGraphRevise}
-            onDraftConfirm={handleDraftConfirm}
             onAssetAction={handleAssetAction}
             selectedOutputId={selectedOutputId}
             onPaneClick={() => {

@@ -98,16 +98,6 @@ export interface FlowCardData extends Record<string, unknown> {
     onConfirm: () => void
     onCancel: () => void
   } | null
-  /** 动作住节点内 (判词①): the draft world's confirm beat docks INSIDE the
-   * task-book document card (the retired floating card's anatomy) — the
-   * chain's total estimate + the balance + the Start gesture. */
-  draftConfirm?: {
-    low: number
-    high: number
-    unquoted: number
-    balance: number | null
-    onConfirm: () => void
-  } | null
 }
 
 export type FlowCardNode = Node<FlowCardData, "flowCard">
@@ -492,23 +482,20 @@ function StepCard({ node }: { node: FlowNode }) {
  * never a shadow: the produced text IS the body copy. 全文卡律 (2026-09-10
  * 判词④) + 封顶滚动律 (2026-09-11): the body carries the FULL text — never
  * a clamp, never an ellipsis — and SCROLLS in place past the card's cap
- * (layout.ts DOCUMENT_MAX_H; the text product card's nowheel+nopan posture,
- * so the estimate math can never push prose through the card's face or its
- * confirm beat). The task_book's dock-time confirm beat lives INSIDE the
- * card (判词① — the retired floating overlay's anatomy: price + balance
- * soft-compare + Start) PINNED BELOW the scrollport — text can never flow
- * behind it. No Cancel: "don't start" is said by not starting. 最小产物尾
+ * (layout.ts DOCUMENT_MAX_H; the text product card's nowheel+nopan
+ * posture). Phase 3 Batch A (2026-09-19 判词 1, ADR-070 唯一座位律): the
+ * canvas is NOT a Confirmation Seat — the task_book card's in-card confirm
+ * (price + Start) is RETIRED; Confirm/Start lives on the dock pill alone,
+ * the canvas only reads and reviews. 最小产物尾
  * (C5 已拍板): a text node holding products (the writer card's post-upgrade
  * regression fix) gets a bottom factsbar — the version pager (版本累积现成
  * 语义, the body follows the shown version) + copy + open-inspector; the
  * quote-selection pill stays with the UI batch. */
 function DocumentCard({
   node,
-  draftConfirm,
   onOutputAction,
 }: {
   node: FlowNode
-  draftConfirm?: FlowCardData["draftConfirm"]
   onOutputAction?: FlowCardData["onOutputAction"]
 }) {
   const { t } = useTranslation()
@@ -576,30 +563,6 @@ function DocumentCard({
                 onOutputAction?.(output.id, action as FlowOutputAction)
               }}
             />
-          </div>
-        ) : null}
-        {draftConfirm ? (
-          <div className="shrink-0 px-4 pt-3 pb-4">
-            <EstimatePriceLine
-              low={draftConfirm.low}
-              high={draftConfirm.high}
-              unquoted={draftConfirm.unquoted}
-              balance={draftConfirm.balance}
-            />
-            <div className="mt-2.5 flex justify-end">
-              <Button
-                size="sm"
-                className="h-8"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  draftConfirm.onConfirm()
-                }}
-              >
-                {/* Same beat, same words as the dock pill (2026-09-11):
-                    one action = one label — the echo prose says "Start". */}
-                {t("generationOverlay.confirm")}
-              </Button>
-            </div>
           </div>
         ) : null}
       </div>
@@ -1768,7 +1731,7 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
  * Birth choreography: `flow-node-born` keyframe staggered by `bornIndex`
  * (the real compile order, replayed slowly — ADR-036 补记 3). */
 export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
-  const { node, bornIndex, selected, ports, onOutputAction, onQuoteOutput, onExpandMedia, onAssetAction, onDisplayChange, onPromptEdit, pendingProgram, promptConfirm, draftConfirm } = data
+  const { node, bornIndex, selected, ports, onOutputAction, onQuoteOutput, onExpandMedia, onAssetAction, onDisplayChange, onPromptEdit, pendingProgram, promptConfirm } = data
   // Latch the birth frame: the surface drops bornIndex on the next commit
   // (its seen-set absorbs the id), and a follow-up SSE tick can land inside
   // the 420ms keyframe — the class must outlive the animation. A class that
@@ -1826,7 +1789,6 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
         // the table card's own anatomy lands with the UI batch.
         <DocumentCard
           node={node}
-          draftConfirm={draftConfirm}
           onOutputAction={onOutputAction}
         />
       ) : isGraphCard ? (

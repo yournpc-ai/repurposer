@@ -813,11 +813,6 @@ export interface ChatDockHandle {
    * — the ONE pointing mechanism, ADR-058; also the @workflow_step 本面限定
    * 候选源, ADR-041 D8). No-op when the editor isn't mounted. */
   insertMention: (mention: ChatMention) => void
-  /** Canvas draft-confirm card's Start (ADR-057 K5): the desktop confirm
-   * beat — identical to the dock pill's Start (the task_book question's
-   * start answer, the only start path; guards and failure surfaces ride
-   * along). No-op while a turn/run is in flight or nothing is pending. */
-  startPendingPlan: () => void
 }
 
 /** 预填评审卡 slot row (ADR-052 B3): one valued brief slot. A
@@ -1252,11 +1247,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       setDockHidden(false)
       editorRef.current?.insertMention(mention)
     },
-    // Canvas draft-confirm card (ADR-057 K5): the desktop confirm beat —
-    // it IS the dock's Start (same answer channel, same guards, same
-    // credits-grey-row failure surface). No-op while a turn/run is in
-    // flight or no task plan is pending.
-    startPendingPlan: () => void handleStartGeneration(),
   }))
 
   // Restore mounts by the lifecycle stamp (Phase 1, acceptance #4): a
@@ -4523,11 +4513,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // (plain — the pill owns the chrome, 拆粘 2026-09-02). Single row, no
   // Cancel (non-blocking question = no negative action, stadium 化同批).
   // 计划密度律 (ADR-054): HEAVY rendering only — a one-task plan's
-  // confirm is the next chat message, no pill. 2026-09-11 user ruling
-  // (ADR-063 K5 partial reversal): the pill is BACK in the desktop panel
-  // form too — at the confirm moment nobody notices a button on the
-  // canvas; the canvas task-book card keeps its own Confirm & run as the
-  // second seat of the same beat (both ride handleStartGeneration).
+  // confirm is the next chat message, no pill. Phase 3 Batch A
+  // (2026-09-19 判词 1, ADR-070 唯一座位律): this pill is the ONLY confirm
+  // seat — the canvas task-book card's in-card Confirm & run is retired;
+  // the canvas reads and reviews, it never starts a run.
   const planEstimate = pendingQuestion?.question?.estimate_credits?.total
   // Pill visibility reads PLAN_READY off the same stamp (R2 翻案: the
   // review surface is born at PLAN_READY — while materials process, no

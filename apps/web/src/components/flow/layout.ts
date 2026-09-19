@@ -232,14 +232,16 @@ export const DOCUMENT_MIN_H = 280
  * frame mirror (apps/api/app/pipeline/graph_store.py _document_frame — the
  * same chars-per-line proportion off the text card's table, the same 18px
  * line, the same caption/padding anatomy; two mirrors cross-referenced,
- * never a third copy — 判词②). `confirm` reserves the task_book's dock-time
- * confirm anatomy (price + balance + Start button — the server reserves it
- * from birth; post-Start the card fills less of the frame). */
-export function documentTextHeight(text: string, confirm: boolean): number {
+ * never a third copy — 判词②). Phase 3 Batch A (2026-09-19 判词 1): the
+ * task_book confirm-anatomy reservation (+88) is RETIRED with the canvas
+ * confirm seat — the client no longer reserves it (the server's birth-frame
+ * mirror keeps its reservation; the render fills less of the frame, which
+ * the reservation law already permits — extra whitespace, never overlap). */
+export function documentTextHeight(text: string): number {
   const cjk = /[一-龥぀-ゟ゠-ヿ]/.test(text)
   const charsPerLine = cjk ? 43 : 67 // the server's 308px-column values (340 frame, 2026-09-13 增大批 — was 32/50 at 228px)
   const lines = text ? Math.max(1, Math.ceil(text.length / charsPerLine)) : 1
-  return 26 + 16 + lines * 18 + 16 + (confirm ? 88 : 0)
+  return 26 + 16 + lines * 18 + 16
 }
 
 /** The graph node's content-driven render size (ADR-057 K3): width = the
@@ -276,14 +278,11 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
     // DOCUMENT_MAX_H — the body scrolls past the cap, so the render never
     // outgrows the reservation (new frames are born with exactly this via
     // the server's mirror math, so the two agree; a legacy frame may be
-    // taller than the cap — extra whitespace, never overlap). The confirm
-    // anatomy is reserved only while the plan is actually draft (post-Start
-    // the card fills less — the frame's +88 is a reservation, not a mandate).
+    // taller than the cap — extra whitespace, never overlap).
     const text = (node.spec?.text as string | undefined) ?? ""
-    const confirm = node.spec?.role === "task_book" && node.status === "draft"
     // Floor + cap (DOCUMENT_MIN_H / MAX_H, one law with the server mirror):
     // the body scrolls past the cap; short texts fill the floor with air.
-    return { width, height: Math.min(Math.max(documentTextHeight(text, confirm), DOCUMENT_MIN_H), DOCUMENT_MAX_H) }
+    return { width, height: Math.min(Math.max(documentTextHeight(text), DOCUMENT_MIN_H), DOCUMENT_MAX_H) }
   }
   // 媒介卡 (video/image/audio + modifier/materialize 过渡词): product
   // region + program region + bar.
