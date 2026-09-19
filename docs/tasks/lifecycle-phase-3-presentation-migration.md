@@ -83,3 +83,14 @@ Goal / Current evidence / Contract changes / Files / Tests / Migration strategy 
 ## Status
 
 PLANNED（2026-09-19 建档，未开工；前置 = Phase 1 全闭环）。
+
+**PREFLIGHT PASS / READY（2026-09-19，四路并行只读取证 + 主线复核，锚点 `3ca6f76`）**：客户端 lifecycle 推导近清零（`hasDraftGraph` 全仓零命中；唯一残存推导族 = ResultsCanvas draft-confirm 卡）；ChatDock 实测 4995 行，其 `phase` 三态机 = 第二台生命周期机（六转换点：ChatDock.tsx:1266-1272/:1309/:1981/:2137/:2518/:2527，无腿离开 running）；四替身相位（drafting/inspecting/repairing/creating_run）发射与消费全枚举待步⑤；Web 测试空洞定位到纯函数缝（activity reducer 对 ChatDock.tsx:1358-1376 / 戳门谓词 / replay 行映射器 :1550-1671 / chat-stream dispatch :211-240——全部 node 环境零 DOM 可测，vitest config 缺失是唯一 setup gap）。简报两处预判被取证修正：`activity_key` 住 perception 注册表**合法**（ChatTool 投影故意丢弃该键，内核永不见——KEEP 不需迁）；`_read_face` 住 `pipeline/routes/projects.py:323`（非 graph_store）且命运是**随 legacy 行清理删除**而非搬迁（DEFER）。
+
+**用户开工裁定（2026-09-19，五条判词）**：
+1. **Canvas 不是 Confirmation Seat**——ResultsCanvas.tsx:506-545 / FlowNodeCard.tsx:581-604 的 draft-confirm 卡与 Start 路径**退役删除**（不补戳门——补了就是两个确认座，违反 ADR-070 唯一座位律）；Canvas 管结构与审阅，Confirm/Start 唯 dock pill。
+2. **No lifecycle fallback-to-true（P0）**——`lifecycle?.x ?? true` 四站点（ChatDock.tsx:1269/:2167/:3827/:4533）是藏得更深的隐形 Lifecycle Authority；终态 = stamp missing → loading/unknown → 不做 lifecycle decision；兼容期 fallback 必须标记 legacy 且最终删除。必须配纯测试：stamp present / false / missing 三态，证明 missing ≠ ready。
+3. **phase 机不整体删除，拆语义**——confirm/running 腿退位给戳；phase 只留 System Status 职责（composing 等）。
+4. **creating_run 先验证死窗再删**——极小真实剧本实证「Start → run 活动 → RUNNING」无空窗后才剪线；若死窗真实存在则它收窄为 System Status 而非 Lifecycle。
+5. **Activity refresh 蒸发不碰**——v1 turn-scoped 非持久化是合同线，登记为 future product decision。
+
+**施工分三批**（每批独立 STOP）：Batch A = Presentation Authority + Web Contract Seats（退役画布确认座 / 消灭 fallback-to-true / 三面共用戳 + 纯 contract tests）；Batch B = Phase Machine Migration（confirm/running 退位 + 三替身相位退役 + creating_run 死窗实证 + 剧本验证点迁移）；Batch C = Presentation Contract Cleanup（adapter 抽出 / prompt DENSITY 单主 / rendering.py:173 / fallback 终清理）。
