@@ -80,4 +80,178 @@ Goal / Current evidence / Contract changes / Files / Tests / Migration strategy 
 
 ## Status
 
-PLANNED（2026-09-19 建档，未开工；前置 = Phase 1 全闭环）。
+PREFLIGHT 已交付（2026-09-19；只读取证，未改代码；产物 = 本文 §Preflight 报告 P1~P7）。**待用户评审 Preflight + 裁定 U1~U10；Implementation 未开工。** 前置 = Phase 1 验收全闭环（剧本/tsc 用户自跑，结果未回）。
+
+---
+
+## §Preflight 报告（2026-09-19；只读取证，未改代码；未跑验证——本报告全部结论来自静态阅读；锚点核于 HEAD `6196b1f`，行号会漂移，以内容定位）
+
+### P1. 现有 activity-ish 信号全集
+
+**A. Loop 内部信号（`app/agents/tool_loop.py` `call_loop`——Agent Runtime / Harness 层，内部执行事实的唯一源头）：**
+
+| # | 信号 | 座位 | 现状发射 | 今天用户可见形态 |
+|---|---|---|---|---|
+| L1 | 散文 delta（仅 iteration 0） | tool_loop.py:375-382 | `on_delta` → `assistant.delta` | 散文流（打字机） |
+| L2 | reasoning 片段 | tool_loop.py:380（kwarg :238） | `on_reasoning` → `assistant.thinking {}` | 仅保温，永不展示 |
+| L3 | 工具名成为已知（name-known） | 流式 :381；静默迭代 :389-390 | `on_tool_call(name)` | 相位拍（drafting / inspecting+key / 清除帧） |
+| L4 | 参数校验通过（执行前） | tool_loop.py:482 | `on_tool_ready(name, params)` | 仅 ask_user 消费（`question.preview`） |
+| L5 | 拒绝：schema_truncation | tool_loop.py:391-407 | 仅 structlog + `prev_rejected` | **零帧（拒绝当时不可见）** |
+| L6 | 拒绝：unknown_tool | tool_loop.py:433-451 | 同上 | 零帧 |
+| L7 | 拒绝：params_validation | tool_loop.py:464-481 | 同上 | 零帧 |
+| L8 | 拒绝：execute_guardrail | tool_loop.py:577-589 | 同上（runner 经返回值可知） | 零帧 |
+| L9 | 重试迭代开始（prev_rejected） | tool_loop.py:367-370 | `on_repair` | `repairing` 相位（经 R4 适配器）——**迟一拍**，拒绝发生时不发 |
+| L10 | 读被接受（ToolObservation） | tool_loop.py:485-559 | `on_observe(name)`（:559） | `composing` 相位（经 R5 适配器） |
+| L11 | checkpoint 交付 | tool_loop.py:502-522 | `on_checkpoint(text)` | `assistant.checkpoint` 帧 + 持久化行（ADR-085，言语族，互不消费） |
+| L12 | 终态接受（execute → None） | tool_loop.py:561-576 | `LoopResult` | runner 副作用（dock / run 出生），无独立帧 |
+| L13 | bare reply（无工具调用） | tool_loop.py:410-422 | `LoopResult(tool_name=None)` | 信封散文 |
+| L14 | exhausted（上限，全拒绝） | tool_loop.py:590-598 | `LoopResult(exhausted=True)` | runner finish 的 cannot-do 行 |
+| L15 | 多余工具调用（>1） | tool_loop.py:423-431 | 仅 structlog warning | 无 |
+| L16 | 回合摘要日志 | tool_loop.py:343-357 | 仅 structlog | 无 |
+
+**B. Turn-runner / service 层信号：**
+
+| # | 信号 | 座位 | 现状形态 |
+|---|---|---|---|
+| R1 | drafting（dock 工作开始） | plan_turn.py:768-774 | `on_phase(drafting)`——brief 写 + dock + 草稿图钢印段 |
+| R2 | creating_run ×3 座位 | service.py:375-376（chat 派发）/ :1582-1585（answer plan_start）/ plan_turn.py:929-932（G-1） | `on_phase(creating_run)`——run 出生前 |
+| R3 | checkpoint 持久化 + 转发 | service.py:2214-2237（`_checkpoint_callback`） | 消息行 `intent={type:checkpoint}` + SSE 帧 |
+| R4 | repair 适配器 | service.py:2264-2274（`_repair_phase_callback`） | on_repair → phase repairing |
+| R5 | observe 适配器 | service.py:2201-2211（`_observe_phase_callback`） | on_observe → phase composing |
+| R6 | 相位清除帧（未映射 name-known：ask_user / answer / start_run） | routes.py:183-194 | `assistant.thinking {"phase": null}`（I-PFA-06 缝②） |
+| R7 | **name→相位映射硬编码** | routes.py:163-194（plan-shape 清单 :164 + perception 成员判定 :171 + 未映射→清除 :183） | 与 turn_tools.py 的工具集声明**双座**（规则 9 隐患，见 U6） |
+| R8 | 终端信封 | routes.py:354 / :364-366 + `_sse_pump` :262-275 | `turn.completed` / `turn.failed`（带 persisted 旗） |
+| R9 | 心跳 | routes.py:126 + `_sse_pump` :256-259 | `: heartbeat` 注释帧 15s |
+| R10 | question.preview | routes.py:104-123 / :196-210 | ask_user 参数一过校验即 dock pill |
+| R11 | 相位常量 | service.py:2177-2198 | creating_run / drafting / repairing / inspecting / composing 五值 |
+
+**C. 相邻流（边界登记，非本 Phase 范围）：**
+
+- **run 事件流**：`pipeline/routes/runs.py:87-144`（`run.snapshot` / `step.updated` / `run.updated`，1s DB tail + 15s 心跳）——workflow_steps 的推送管道，消费面 = RunTaskList（**已是追加式打勾流**）。这是执行运行时的可见性，不是 chat 回合的 Agent 活动；两个面不动。
+- **trigger 回合**：trigger_turn.py:384-389 `call_loop` **零 hook 接线、无 SSE**（fire-and-forget，说话 = dock 一条 review 行落库）。无直播窗口可挂活动流（见 U2）。
+
+**D. 客户端消费点（取证自 working tree）：**
+
+- thinking 状态：`thinkingPhase` / `thinkingKey`（ChatDock.tsx:1340/:1345）；渲染门 `chatBusy && !proseActive`（:4395-4411），label 优先级 `thinkingKey > chat.thinkingPhases[phase] > chat.thinking`；清空点 = 回合开场（:2609-2610 / :3204-3205）+ 终端帧（:2807-2808 / :2967-2968 / :3279-3280 / :3368-3369，I-PFA-06 终帧律）。
+- 帧分发：`lib/chat-stream.ts:188-215`（delta 189-191 / thinking 192-193 / question.preview 194-199 / checkpoint 200-202 / completed/failed 203-213）；`streamTurn` 是唯一 SSE 泵，禁自动重连。
+- 打字机耦合：`lib/typewriter.ts:13-100`（忙闲边沿 → `proseActive`；IDLE_GRACE_MS 400ms :28；`drain()` :75-80 是 paceSettledProse/checkpoint 的「散文先行」闸门）；`paceSettledProse` ChatDock.tsx:2714-2736 / `paceUnstreamedTail` :2744-2754。
+- StatusLine 一座两行（`components/chat/StatusLine.tsx:18-75`，纯展示组件）：dock thinking 座（ChatDock.tsx:1033-1041 ThinkingRow，label-only 无时钟）+ run 动态行座（RunTaskList.tsx:162-200，消费 run 事件流，不消费 chat 回合流）。
+- **`Phase` 同名两义防撞**：ChatDock.tsx:139 的本地 `Phase = "confirm"|"running"|"chat"` 是 dock 表单机（确认门/几何），与服务端 `THINKING_PHASE_*` 是两个概念；ADR-087「phase = System Status」收窄的是服务端族。本 Phase 不动本地 Phase（归位命名是 Phase 3 的事，见 U8）。
+- Home 侧零消费（`components/home/` 无任何 stream/StatusLine 引用）。
+
+**现状结论（压扁点取证）**：回合内一切过程可见性 = 单槽 `thinkingPhase` last-write-wins；无身份、无排序、无历史累积结构。`composing` 相位（2026-09-17 交互完整性批 C）已消灭「读完后戴 stale inspecting 标签」的假相，但单槽结构仍在：>0 迭代时用户看不到「已经做过什么」，只有当下一个标签；拒绝当时（L5-L8）到重试开始（L9）之间零帧。这正是十条对账规则要落成机制的三个缺口：**身份 / 排序 / 显式终态**。
+
+### P2. internal → user-safe 事件对账表（逐事件裁定 + 理由）
+
+| 内部事件 | 裁定 | 拟议 user-safe 形态 | 理由 |
+|---|---|---|---|
+| 读调用 name-known（L3，perception 名） | **暴露** | `read` 活动 active 帧（copy = registry `activity_key`） | 已是用户安全形态（inspecting 帧现役）；补身份与显式开始 |
+| 读被接受（L10） | **暴露**（与上配对） | 同一 `read` 活动 completed 帧 | on_observe 是天然的完成边界；started→completed 显式终态（规则 6） |
+| 读的 observation 文本 | **过滤**（1→0） | 永不上帧 | 原始结果载荷禁令（简报 Prohibited #2）；它喂模型不喂用户 |
+| 计划形调用 name-known（present_plan / propose_tasks / apply_edit_ops / edit_graph） | **暴露** | `draft` 活动 active 帧 | 现役 drafting 语义的活动化 |
+| 计划形调用接受（L12） | **暴露**（配对） | `draft` 活动 completed 帧（dock 落 = 副作用完成 = execute 返回 None） | dock/卡到达前用户看到「起草中→已落卡」 |
+| start_run name-known → 出生 | **暴露** | `run` 活动 active（name-known）→ completed（L12 accept = create_run 已返回）；出生地 422 → failed | 现役 creating_run 段的活动化；费用手势语义不动（Activity 永不控制 Run，规则 8） |
+| ask_user / answer 调用 | **过滤**（1→0） | 无活动帧 | 它们的用户面 = question.preview pill / 散文本体（Assistant Conversation 层）；再发活动行 = 双重叙事 |
+| 拒绝当时（L5-L8 四类） | **暴露（新增）** | `repair` 活动 active 帧——**拒绝当时即开始** | 简报预判三座 hook 之首；消灭「拒绝→重试开始」零帧段 |
+| 连续拒绝 + 重试 | **聚合**（N→1） | 同一 `repair` 活动保持 active（seq 递增的 refresh 帧可选；v1 建议不逐次刷） | 规则 3；一轮修复是一个用户语义单元 |
+| 修复后接受（L12/L10） | **暴露**（配对） | `repair` 活动 completed + 被接受调用自己的活动正常开始 | 显式终态 |
+| exhausted（L14） | **暴露**（终态） | `repair` 活动 failed；cannot-do 行照旧（信封职责不变） | 旗舰 negative：不得留 dangling active |
+| bare reply（L13） | **过滤**（1→0） | 无活动帧 | 纯散文回合没有工作可观察 |
+| reasoning（L2）/ 心跳（R9）/ 多余调用（L15）/ 摘要日志（L16） | **过滤**（1→0） | 永不上帧 | 保温/簿记信号，零信息量；CoT 禁令 |
+| checkpoint（L11/R3） | **不动**（互不消费） | 现役 `assistant.checkpoint` 帧不变 | ADR-085 言语族近亲，Assistant Conversation 层；合同明文共存不重设计 |
+| question.preview（R10） | **不动** | 现役帧不变 | 同上，pill 是它的面 |
+| 相位帧五值（R1/R2/R4/R5/R6） | **保留 = System Status** | `assistant.thinking` 相位协议不动（I-PFA-06 三形态照旧） | 三概念分家：宏观态继续由相位承担，活动流是追加在其旁的里程碑层 |
+| 迭代边界（loop 索引） | **内化**（不直接暴露） | 投影的排序/聚合骨架（deterministic ordering 的事实源） | 规则 5 的排序事实；迭代号本身不是用户语义 |
+
+### P3. 输入事实 + ownership（投影零新推理——每个输入都是已有 owner 的已发射事实 + 三座新 hook 点）
+
+| 输入事实 | Owner | 座位 / 通道 |
+|---|---|---|
+| 工具调用 name-known / 参数校验通过 | Agent Runtime（ToolLoopAgent） | 既有 `on_tool_call` / `on_tool_ready`（tool_loop.py:239-240） |
+| 读被接受 | Agent Runtime | 既有 `on_observe`（tool_loop.py:242） |
+| 重试迭代开始 | Agent Runtime | 既有 `on_repair`（tool_loop.py:241） |
+| **拒绝当时 + 拒绝类（4 类）** | Agent Runtime | **新 hook 点①**（L5-L8 既有 structlog 座位旁 additive `_emit`——runner 侧看不到 L5/L6/L7，[PROVEN] 必须在内核发射，见 U1） |
+| **终态接受** | Agent Runtime | **新 hook 点②**（L12 accept 点；runner 亦知其自己执行的结果，但 loop 级发射对所有 agent 同形） |
+| **迭代边界（index + 起因 initial/retry/continuation）** | Agent Runtime | **新 hook 点③**（loop 顶部；只有 loop 知道迭代索引，[PROVEN]） |
+| 读活动文案键（`activity_key`） | Agent Interface（perception registry） | `perception/__init__.py:62-156`——投影**引用**不复制 |
+| 计划形/终态工具集合成员 | Agent Interface（turn_tools 声明） | turn_tools.py:40-131——kind 映射的 canonical owner 归位见 U6 |
+| 回合终局（completed/failed） | Transport（routes） | `_sse_pump` 终帧 tuple（routes.py:262-275）——投影的终帧清扫触发 |
+
+**边界纪律**：Activity Projection 只消费上述事件流——零 DB、零 Domain 读、零 Lifecycle 谓词调用（grep 可证，验收标准）；首版内存态（回合级实例，随 SSE 生成器生灭），不写库不回放（合同明文）。
+
+### P4. 输出 contract（活动帧 schema + 活动本体论 v1）
+
+**新 SSE 帧类型（additive，既有帧全不动）：**
+
+```
+event: assistant.activity
+data: {
+  "activity_id": "a3",      // 回合内稳定身份（规则 5）
+  "seq": 7,                 // 回合内单调递增帧序号（deterministic ordering）
+  "kind": "read" | "draft" | "run" | "repair",
+  "status": "active" | "completed" | "failed" | "cancelled",
+  "key": "chat.inspecting.music" | null   // 文案键；kind 级静态文案时 null
+}
+```
+
+- **状态翻转 = 同 `activity_id` 的新帧追加**（append-oriented：客户端维护有序 map，历史永不改写）；一个活动恰好经历 active → 一个终态（completed / failed / cancelled）。
+- **终帧清扫律（I-PFA-06 终帧律的活动同形）**：信封（`turn.completed` / `turn.failed`）落地前，投影为一切仍 active 的活动发关闭帧（completed 路径清扫为 completed 属防御——正常时 accept 帧已先行；failed 路径清扫为 failed）；客户端信封到达同样兜底清扫。**任何活动不得比回合活得久。**
+- **零泄漏白名单**：帧字段集合 = {activity_id, seq, kind, status, key}，永无参数 / 结果 / 推理文本（测试矩阵 T11 断言）。
+- **cancelled 的 v1 可达性**：schema 保留为合同完备；v1 无发射路径（断连/abort 都取消任务，无法向已断开客户端发帧，routes.py:367-372——[PROVEN]，见 U10）。
+- **载体**：既有队列直过（`_sse_pump` 字符串透传不动）；chat 与 answer 两条流共用同一投影器形状（hooks 同构，routes.py:318/:403）。
+- **文案 canonical owner**（规则 9 落地，座位见 U6）：kind→文案键映射由 Activity Projection 模块单点拥有；read 的 key 引用 perception registry `activity_key`；前端 i18n 新家族 `chat.activity.*` 镜像（现役 `chat.thinkingPhases.repairing` 等已是活动形态文案，迁引不新造——U7）。
+
+**活动本体论 v1（四 kind）**：`read`（感知族调用）/ `draft`（计划形调用的起草+dock/落地段）/ `run`（run 出生段）/ `repair`（修复轮，聚合 N 次拒绝）。**decision/composing 窗不进 Activity**——建议归 System Status（相位族保留），见 U4。
+
+### P5. Consumer 迁移清单（additive → 并行渲染 → switch，每步独立 commit）
+
+| 步 | 座位 | 动作 |
+|---|---|---|
+| ① 服务端 additive | `app/chat/activity.py`（新，投影器纯核）+ routes.py hook 接缝（`_make_tool_hooks` 旁新增活动接线）+ tool_loop.py 三座 additive hook 点 | 活动帧上流；**相位帧、preview、checkpoint 全不动**；纯 pytest 全绿 |
+| ② 客户端解析 | `lib/chat-stream.ts:188-215` 新增 `assistant.activity` 分支 → `onActivity` 回调 | 零 UI 变化 |
+| ③ 累积结构 | ChatDock：回合级 `activities` 有序 map state（信封时刻定档为静态历史）；终端清扫客户端兜底 | 零 UI 变化（state only） |
+| ④ Chat Activity UI 并行渲染 | dock 内追加式流新组件（StatusLine 座不动） | 剧本 + 产品试用验证 |
+| ⑤ switch | 单槽 ThinkingRow 的 **Activity 职能**退役——`thinkingPhase` 收窄为纯 System Status（base Thinking…/composing 宏观态保留；drafting/inspecting/repairing/creating_run 的里程碑职能由活动流承担） | revert = 回退本 commit |
+
+**明确豁免（不动，附理由）**：
+- RunTaskList / run 事件流——执行运行时可见性，已是追加式，非 chat 回合活动。
+- question.preview / checkpoint 路径——Assistant Conversation 层（ADR-085 共存互不消费）。
+- I-PFA-06 相位清除协议——System Status 的生命周期纪律，原样保留。
+- trigger 回合（U2）/ JSON one-shot 路径（U3）——无流可挂。
+- ChatDock 本地 `Phase` 表单机（U8）——Phase 3 归位时再议。
+
+### P6. 纯函数测试矩阵（投影器纯核：输入 = 有序内部事件序列，输出 = 帧序列；零 DB 零 LLM）
+
+| # | 输入组合 | 期望 |
+|---|---|---|
+| T1 | 单次读：name-known(read) → observe | active(key=activity_key) → completed；同 activity_id；seq 单调 |
+| T2 | 两次读链 | 两个活动，身份互异，顺序 = 事件顺序 |
+| T3 | 读 name-known 后参数校验拒绝 | 该 read 活动 cancelled（显式终态，不留 dangling）+ repair 活动 active |
+| T4 | 两次拒绝后接受（聚合 N→1） | 恰好一个 repair 活动：首次拒绝 active → 接受时 completed |
+| T5 | exhausted（全拒绝到上限） | repair 活动 failed（显式终态）；无 dangling active |
+| T6 | bare reply 回合 | 零活动帧（1→0 合法） |
+| T7 | 计划形调用：name-known → accept | draft active → completed |
+| T8 | start_run：name-known → accept | run active → completed |
+| T9 | 终帧清扫：turn failed 时仍有 active | 信封前全部关闭（failed）；completed 时清扫为 completed（防御路径） |
+| T10 | 过滤：reasoning / 心跳 / observation 文本 / checkpoint / ask_user / answer | 零活动帧 |
+| T11 | 零泄漏白名单 | 任意事件序列下，帧载荷键 ⊆ {activity_id, seq, kind, status, key}；值扫描无参数/结果/推理串 |
+| T12 | 确定性 | 同事件序列 → 字节级同帧序列（纯函数） |
+| T13 | 排序稳定性 | seq 严格递增，与 delta/相位帧交错无关（活动 seq 自域） |
+| T14 | 相位共存 | 投影器不触 on_phase 通道——同输入下相位帧序列与无投影时逐字节一致 |
+| T15 | **旗舰 negative**：拒绝 → 重试 → 再拒绝 → exhausted | repair 活动恰好一次 active、恰好一次 failed 终态；全程无双 active、无 dangling |
+| T16 | **盲窗结构不变量**：多迭代回合的每个事件时刻 | 投影状态恒满足：存在 active 活动 ∨ 散文在流 ∨ 已达终态——不存在「无可展示」状态（盲窗上界的结构形态，判定读法见 U5） |
+
+**外加静态审计（验收标准落形）**：`activity.py` 无 DB import、无 lifecycle 谓词调用（grep 可证）；打字机律回归 = 剧本 SSE 通道（chat_scenarios.py:203-233 已有 S10 帧序断言）扩展断活动帧序（**用户自跑**）。
+
+### P7. 上报项（[PROVEN]/[INFERRED] 标注；本次取证无 UNPROVEN）
+
+- **U1 [PROVEN] 「ToolLoopAgent 零重写」的读法确认**：拒绝当时（L5-L8 中 schema_truncation / unknown_tool / params_validation 三类）与迭代边界（loop 索引）**只存在于 call_loop 内核**（tool_loop.py:391-451 / :367），runner 侧结构性不可见。三座新 hook 点必须是内核内的 additive `_emit` 发射（既有拒绝座位旁），terminal 语义 / max_iterations / 言语账本 / 拒绝反馈协议零改动。**建议**：三座信号走**一个** typed 通道（如 `on_loop_event` 携 `rejection(kind, name?)` / `accepted(name)` / `iteration(index, cause)` 联合类型），投影器是唯一消费者——hook 签名只增一个参数，不增三个。请确认这不违合同本意（简报「最小增量 3 座」的原文预测与此一致）。
+- **U2 [PROVEN] trigger 回合无流可挂**：trigger_turn.py:384-389 的 `call_loop` 零 hook、无 SSE（fire-and-forget；说话 = review 行落库即现）。v1 活动流不覆盖 trigger 回合——它没有直播窗口，其可见性已由落库行承担。请确认出范围。
+- **U3 [PROVEN] JSON one-shot 路径零帧**：无 `Accept: text/event-stream` 的调用拿不到任何帧（hooks 全 None）。活动流 v1 = SSE-only；剧本 harness 已有 SSE 通道可断帧序（chat_scenarios.py:203-233）。请确认。
+- **U4 [INFERRED] composing/decision 窗归类**：读被接受后的静默决策迭代（15-25s LLM 思考）——**建议归 System Status**（composing 相位保留，不进活动流）：「模型在想」不是用户有意义的工作单元，里程碑是它两侧的 read/draft/repair；活动流的追加历史让这段静态标签不再读作冻结。反方案 = 给它一个 `compose` 活动 kind。请拍板。
+- **U5 [INFERRED] 「无 15s+ 纯心跳盲窗」的判定读法**：LLM 思考窗内物理上没有新事实，「帧间隔 <15s」无法诚实满足（造帧 = 撒谎）。**建议**判读为结构性质：「任何窗口 UI 都有已完成里程碑历史 + 当前状态主」（P6 T16 的不变量形态）——盲窗的定义从「无帧」收窄为「无累积信息」。请拍板。
+- **U6 [PROVEN] name→语义映射双座**：routes.py:163-194 硬编码 plan-shape 清单 + perception 成员判定，与 turn_tools.py:40-131 的工具集声明重复（规则 9 隐患——工具集变更要两处同步）。**建议**：kind 映射的 canonical owner 归 Activity Projection 模块（引用 `PERCEPTION_TOOLS` 与工具声明，不复制清单）；routes.py 的相位拍映射在 Phase 3 归位时同源收敛（本 Phase 不动相位）。请拍板座位。
+- **U7 [INFERRED] 活动文案键家族**：新家族 `chat.activity.*`（en.ts 先行、zh.ts 镜像）；`read` 复用 `chat.inspecting.*` 现役键；`repair`/`draft`/`run` 的 active 态文案可从 `chat.thinkingPhases.*` 迁引（它们已是活动形态文案，简报 Current evidence #4）；**终态文案是新键**（completed/failed 的耳语级措辞，Implementation 期定稿）。细节无需现在拍板，登记备查。
+- **U8 [PROVEN] `Phase` 同名两义**：ChatDock.tsx:139 本地 `Phase`（confirm/running/chat 表单机）≠ 服务端 `THINKING_PHASE_*`（System Status）。本 Phase 只动后者消费面；前者命名归位是 Phase 3 的事。登记防撞，无需裁定。
+- **U9 [INFERRED] 活动流的终局形态**：信封落地后，活动流在消息流里**留静态历史**（追加式包含回看时的可溯性）还是**随 thinking 行一起消失**？**建议留**（否则「ordered history」在用户回看回合时归零，规则 5 的 history 语义落空）；静态痕迹的视觉形态（如收成一行可展开，RunTaskList 收据同族手法）Implementation 期定。请拍板方向。
+- **U10 [PROVEN] cancelled 无发射路径**：断连 / abortRef stop（ChatDock.tsx:3443-3445）都走任务取消（routes.py:367-372），无法向已断开客户端发帧；回合无「被新回合打断」路径（in_flight 准入闸）。schema 保留 cancelled 为合同完备，v1 不发射。登记，无需裁定。
