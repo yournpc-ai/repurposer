@@ -94,8 +94,12 @@ BANNED_CLIENT_LIFECYCLE_DERIVATION = re.compile(r"\bhasDraftGraph\b")
 # …and local readiness locals whose RHS never touches the stamp (a legal
 # alias like ``const planReady = lifecycle?.plan_ready ?? false`` reads the
 # stamp and passes; deriving readiness from nodes/runs/outputs does not).
+# ``confirmActive`` joined the name set with Phase 3 Batch B (裁定 1): the
+# confirm beat's derived predicate is ``intentReady && isPlanReady(lifecycle)
+# && !runAttached`` — a direct stamp read; any artifact/existence-derived
+# reimplementation of the confirm beat must bite here.
 BANNED_CLIENT_LIFECYCLE_LOCAL = re.compile(
-    r"^\s*const\s+(planReady|confirmationReady|materialReady)\s*=\s*(?!.*\blifecycle\b)"
+    r"^\s*const\s+(planReady|confirmationReady|materialReady|confirmActive)\s*=\s*(?!.*\blifecycle\b)"
 )
 
 BANNED_LLM_IMPORT = re.compile(r"^\s*(from|import)\s+app\.(agents|clients|providers\.llm)\b")

@@ -67,6 +67,11 @@ def test_5c_bites_on_local_readiness_derivation():
         "const confirmationReady = Boolean(taskBook) && assets.every(ok)"
     )
     assert gates.BANNED_CLIENT_LIFECYCLE_LOCAL.match("const materialReady = assets.length > 0")
+    # Phase 3 Batch B (裁定 1): the confirm beat's predicate joined the name
+    # set — an artifact-derived confirmActive is a lifecycle re-derivation.
+    assert gates.BANNED_CLIENT_LIFECYCLE_LOCAL.match(
+        "const confirmActive = intentReady && nodes.some((n) => n.state === 'draft')"
+    )
 
 
 def test_5c_stamp_reads_stay_legal():
@@ -83,3 +88,8 @@ def test_5c_stamp_reads_stay_legal():
     )
     # The stamp's TS type declaration is a definition, not a derivation.
     assert not gates.BANNED_CLIENT_LIFECYCLE_LOCAL.match("  plan_ready: boolean")
+    # Batch B's canonical confirm predicate — a DIRECT stamp read via
+    # isPlanReady(lifecycle) — must never trip the gate.
+    assert not gates.BANNED_CLIENT_LIFECYCLE_LOCAL.match(
+        "  const confirmActive = intentReady && isPlanReady(lifecycle) && !runAttached"
+    )
