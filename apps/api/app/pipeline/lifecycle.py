@@ -191,6 +191,7 @@ def compute_lifecycle(facts: LifecycleFacts) -> LifecycleStamp:
 
     plan_ready = (
         facts.has_pending_plan
+        and bool(facts.plan_tasks)  # 无链不成计划——空链 task_book 永不 ready
         and material_ready
         and adjudication_ok
         and not facts.prerequisite_pending

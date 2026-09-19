@@ -241,3 +241,13 @@ def test_chain_without_asset_inputs_ignores_asset_status() -> None:
     assert stamp.material_ready
     assert stamp.plan_ready
     assert stamp.blockers == ()
+
+
+# A task_book row with an EMPTY chain is never plan-ready (无链不成计划 —
+# material/adjudication conditions can't save it; ConfirmationScopeReady
+# independently false).
+def test_empty_chain_never_plan_ready() -> None:
+    stamp = compute_lifecycle(_ready_facts(plan_tasks=()))
+    assert not stamp.plan_ready
+    assert not stamp.confirmation_scope_ready
+    assert not stamp.confirmation_ready

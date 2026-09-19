@@ -91,7 +91,14 @@ Goal / Current evidence / Contract changes / Files / Tests / Migration strategy 
 
 ## Status
 
-IMPLEMENTATION 已批准（2026-09-19 用户验收 Preflight：**PASS WITH 3 CONDITIONS**——U1/U2/U4/U5 裁定落档于 §Preflight P7/P8/P9，ConfirmationScope 字段盘点与 Fact→Owner Matrix 已补齐，方准开工）。Preflight 产物 = 本文 §Preflight 报告 P1~P9。
+IMPLEMENTATION 已落地（2026-09-19，worktree 分支 `worktree-lifecycle-phase0`）：
+
+- `386c62c` 服务端：`app/pipeline/lifecycle.py`（`compute_lifecycle` 纯核 + `project_lifecycle` 装配器）+ `LifecycleStamp` schema + results/graph 双响应携戳 + `tests/test_lifecycle_pure.py` 19 例（T1~T15 + 边界 4 例，**Claude 已跑绿**；门禁三旗舰 negative T10/T10b 在列）。
+- `8972e74` 转写节点上传即出生：text-yielding 资产上传时转写卡 queued 出生，ASR 完成/失败/空词三终态翻转。
+- `167638e` 客户端切换（门禁二）：`worldLive`/`graphLive` 读戳（`hasDraftGraph` 推导删除）、`canStartGeneration = confirmation_ready`、planDock/pill/planCard 可见性读 `plan_ready`、恢复挂载相位读戳 + PLAN_READY 翻转升起 confirm、`material_pending` 轮询臂。
+- 文档：本简报 Preflight P1~P9 + `MODULE_ARCHITECTURE.md` §7.1 登记。
+
+**未跑验证（用户自跑）**：compileall 全量 / import 探针 / tsc / prompt_gate（本批未动 prompt 面）/ 剧本 S5/S7/S10/S11/S20A + 戳断言。已知留白：U4 的 derived/reasons 字段最终归类待 Phase 3 消费面落地时复核；mobile plan card 的戳消费已接但未跑真机。
 
 ## 三道硬门禁（2026-09-19 用户拍板，验收时逐条过）
 

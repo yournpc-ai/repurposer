@@ -208,6 +208,11 @@ apps/api/
 │   ├── pipeline/        # Pipeline（RunPlan 内核）
 │   │   ├── routes/      # projects（含 GET /projects/{id}/graph 画布直读帧，ADR-057）/ assets / outputs / runs / music / recipes 端点
 │   │   ├── orchestrator.py        # RunPlan 物化/走图（create_run = WorkflowRun 唯一出生地；逐节点 estimate 落库 = 报价存储侧）
+│   │   ├── lifecycle.py           # Lifecycle Projection（ADR-087 §2，Phase 1）：服务端命名只读生命周期戳——
+│   │   │                        #   compute_lifecycle 纯谓词族（零 DB，T1~T15 纯测试矩阵）+ project_lifecycle
+│   │   │                        #   装配器（读既有 Domain facts：资产四态 / 出生地 Requirement / 同款链重裁决 /
+│   │   │                        #   has_active_run；chat 事实由调用方经 public 协议传入，本模块零 chat import）；
+│   │   │                        #   读者 = Transport（results/graph 响应）→ Presentation；不加表、不写 DB
 │   │   ├── graph.py               # NodeBase 协议 + BoundedLoopNode（有界 loop，ADR-052 B4）+ 图算法（报价=fold/执行=topo/校验=∀/对账=⊆，ADR-039）
 │   │   ├── graph_store.py         # wiring 层（ADR-057）：apply_wiring_ops = 持久图唯一写口
 │   │   │                        #   （add_node / connect / edit_prompt / delete_node / run(_subgraph)，op 校验 +

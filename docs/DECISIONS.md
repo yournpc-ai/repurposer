@@ -2013,7 +2013,7 @@ Lifecycle Projection       Execution Runtime
 ### Consequences
 
 - **Phase 0（本批，docs-only）**：本 ADR + README 事实源表补行 + NAMING 注册（lifecycle / activity / confirmation 词族入册；过程脊 / 渲染单元 / 结果画布 runFlow 定义 / 焦点注入死行清理）+ INTENT_COVERAGE 标记 historical + Phase 1~6 施工简报 + PROGRESS §0 登记。
-- **Phase 1 Lifecycle Projection**：服务端命名 Lifecycle facts 单点谓词；projection additive → dual-read → switch → remove；素材处理中 Review Surface 不出现、PLAN_READY 同拍出现、CONFIRMATION_READY=false 时 Confirm disabled；转写节点 loading 出生随批。
+- **Phase 1 Lifecycle Projection**：服务端命名 Lifecycle facts 单点谓词；projection additive → dual-read → switch → remove；素材处理中 Review Surface 不出现、PLAN_READY 同拍出现、CONFIRMATION_READY=false 时 Confirm disabled；转写节点 loading 出生随批。**已落地（2026-09-19，worktree `worktree-lifecycle-phase0` commits 386c62c / 8972e74 / 167638e）**：座位 = `app/pipeline/lifecycle.py`（纯核 + 装配器，MODULE_ARCH §7.1 已登记）；CONFIRMATION_READY 四合取（U4 判词：PLAN_READY ∧ ConfirmationScopeReady ∧ ChargeSemanticsReady ∧ NoActiveConflictingRun，payload-existence 捷径永禁）；客户端旧谓词归零（`hasDraftGraph` 推导删除）。验证状态见简报 Status（未跑项在册）。
 - **Phase 2 Agent Activity Projection**：single-slot ThinkingRow → append-oriented Activity Stream；复用既有 hook 接缝最小增量 3 座；首版无持久化无回放；打字机律不破。
 - **Phase 3 Presentation Migration**：`_read_face` / `activity_key` / `THINKING_PHASE_*` 归位 protocol/presentation-contract；客户端零 lifecycle 推导（grep 可证）。
 - **Phase 4 Confirmation Doctrine Unification**：先盘点 propose path 直起 run 全部来源与测试再改代码；统一 Paid Authorization path；caption 双标 / `propose_tasks` 失信描述 / IC:50 自动 Start / `autonomy="review"` 死档同批裁决；prompt 面必过 prompt_gate。
