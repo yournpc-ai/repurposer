@@ -164,6 +164,10 @@ class StreamTurn(NamedTuple):
     # No default — a mutable default on a NamedTuple is a shared list; the
     # single constructor (chat_stream) always passes it explicitly.
     checkpoints: list[str]
+    # ADR-087 §3 activity frames (Phase 2): the append-oriented work stream —
+    # each entry is one assistant.activity payload {activity_id, seq, kind,
+    # status, key}. Same constructor discipline as checkpoints.
+    activities: list[dict]
 
 
 class Ctx:
@@ -209,6 +213,7 @@ class Ctx:
         thinking: list[dict] = []
         previews: list[dict] = []
         checkpoints: list[str] = []
+        activities: list[dict] = []
         completed: dict | None = None
         failed: dict | None = None
         async with self.client.stream(
@@ -232,6 +237,8 @@ class Ctx:
                         previews.append(payload)
                     elif event == "assistant.checkpoint":
                         checkpoints.append(payload["text"])
+                    elif event == "assistant.activity":
+                        activities.append(payload)
                     elif event == "turn.completed":
                         completed = payload
                     elif event == "turn.failed":
@@ -243,6 +250,7 @@ class Ctx:
             completed=completed,
             failed=failed,
             checkpoints=checkpoints,
+            activities=activities,
         )
 
     async def answer(self, question_id: str, body: dict) -> httpx.Response:
@@ -829,6 +837,60 @@ def check_checkpoint_shape(stream: "StreamTurn", content: str, label: str) -> No
             f"{label}: the settled reply never repeats a checkpoint verbatim",
             {"checkpoint": cp[:120], "settled": content[:120]},
         )
+
+
+_ACTIVITY_KINDS = {"read", "draft", "run", "repair"}
+_ACTIVITY_TERMINAL = {"completed", "failed", "cancelled"}
+
+
+def check_activity_shape(stream: "StreamTurn", label: str) -> None:
+    """ADR-087 §3 activity shape laws (opportunistic — a bare-reply turn
+    legally has ZERO frames; when frames flew, the shape must hold):
+    ① the wire whitelist is exactly {activity_id, seq, kind, status, key}
+    (no params / results / reasoning ever leak); ② kind is a user-semantic
+    category, never a tool name; ③ seq is strictly increasing (deterministic
+    ordering); ④ a status flip appends a NEW frame on the same activity_id
+    (never a mutation); ⑤ T16-B wire twin — when the envelope lands, every
+    activity's LAST frame is terminal (no dangling active)."""
+    acts = stream.activities
+    if not acts:
+        return
+    for a in acts:
+        check(
+            set(a.keys()) == {"activity_id", "seq", "kind", "status", "key"},
+            f"{label}: activity frame carries exactly the whitelist fields",
+            a,
+        )
+        check(
+            a["kind"] in _ACTIVITY_KINDS,
+            f"{label}: kind is a user-semantic category, never a tool name",
+            a,
+        )
+        check(
+            a["status"] in _ACTIVITY_TERMINAL | {"active"},
+            f"{label}: status is one of active/completed/failed/cancelled",
+            a,
+        )
+        check(
+            a["key"] is None or (isinstance(a["key"], str) and a["key"]),
+            f"{label}: key is null or a non-empty i18n key",
+            a,
+        )
+    seqs = [a["seq"] for a in acts]
+    check(
+        seqs == sorted(seqs) and len(set(seqs)) == len(seqs),
+        f"{label}: activity seq is strictly increasing",
+        seqs,
+    )
+    last_status: dict[str, str] = {}
+    for a in acts:  # append-oriented: the LAST frame per id is its state
+        last_status[a["activity_id"]] = a["status"]
+    dangling = {k: v for k, v in last_status.items() if v not in _ACTIVITY_TERMINAL}
+    check(
+        not dangling,
+        f"{label}: T16-B — no activity outlives the turn (envelope sweep)",
+        dangling,
+    )
 
 
 async def answer_caption_gate(ctx: Ctx, turn1: dict) -> dict:
@@ -2212,6 +2274,7 @@ async def s10_sse_turn_streaming(ctx: Ctx) -> None:
     content = (stream.completed["assistant_message"].get("content") or "")
     check(len(stream.deltas) > 0, "answer turn streams prose deltas")
     check_stream_law(stream, content, "answer turn")
+    check_activity_shape(stream, "answer turn")
     check(stream.completed["run_id"] is None, "answer turn starts no run")
 
     # Draft turn: the plan echo (intent.answer) streams as deltas; the
@@ -2228,6 +2291,12 @@ async def s10_sse_turn_streaming(ctx: Ctx) -> None:
     check(any(t.get("phase") == "drafting" for t in stream.thinking),
           "the present_plan name-known frame moves the beat to drafting",
           stream.thinking)
+    check_activity_shape(stream, "draft turn")
+    check(any(a["kind"] == "draft" and a["status"] == "completed"
+              for a in stream.activities),
+          "the present_plan call births a draft activity that completes at "
+          "the accept (name-known opens, TerminalAccepted settles)",
+          stream.activities)
     content = (stream.completed["assistant_message"].get("content") or "")
     plan = (await ctx.results(pid)).get("pending_brief")
     echo = (plan["intent"].get("answer") or "")
@@ -2270,6 +2339,7 @@ async def s10_sse_turn_streaming(ctx: Ctx) -> None:
           "the preview carries allow_freeform", preview)
     check(bool((preview.get("default_path") or "").strip()),
           "the preview carries the default path", preview)
+    check_activity_shape(stream, "ask turn")
 
 
 # ---- S11 整条源规则 + materialize 注入矩阵 ----------------------------------------------
@@ -3364,6 +3434,7 @@ async def s20_speech_semantic_contract(ctx: Ctx) -> None:
         content[:200],
     )
     check_read_silent_stream(stream, "S20A")
+    check_activity_shape(stream, "S20A")
     if terminal == "present_plan":
         check(
             PROCESSING_DISCLOSURE.search(content) is not None,
