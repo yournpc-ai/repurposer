@@ -22,6 +22,20 @@ import { fetchEventSource } from "@microsoft/fetch-event-source"
 import { API_URL, UNAUTHORIZED_EVENT } from "@/lib/api"
 import { clearAuth, getToken } from "@/lib/auth"
 import i18n from "@/lib/i18n"
+import { routeStreamFrame } from "@/lib/chatStreamFrames"
+
+// The frame vocabulary's single seat is chatStreamFrames.ts (Phase 3 Batch
+// A test seam) — re-exported here so existing import sites stay put.
+export type {
+  ActivityFramePayload,
+  QuestionPreviewPayload,
+  ThinkingPayload,
+} from "@/lib/chatStreamFrames"
+import type {
+  ActivityFramePayload,
+  QuestionPreviewPayload,
+  ThinkingPayload,
+} from "@/lib/chatStreamFrames"
 
 export interface ChatTurnBody {
   project_id: string
@@ -45,22 +59,6 @@ export interface ChatTurnBody {
   autonomy?: string
 }
 
-/** One user-safe activity frame (ADR-087 §3 Phase 2 — the append-oriented
- * Activity Stream). Status flips arrive as NEW frames carrying the same
- * `activity_id` (append-only wire; the client keeps an ordered map keyed by
- * id). `kind` is a user-semantic category — never a tool name; `key` is the
- * i18n copy identity for THAT status (active = progressive form, completed =
- * past-tense form, failed/cancelled = the active form, the ✗ says the rest).
- * The field set is the contract's whitelist — no params, results, or
- * reasoning ever ride this channel. */
-export interface ActivityFramePayload {
-  activity_id: string
-  seq: number
-  kind: "read" | "draft" | "run" | "repair"
-  status: "active" | "completed" | "failed" | "cancelled"
-  key: string | null
-}
-
 export interface StreamChatOptions {
   signal: AbortSignal
   /** Decoded prose fragment, in order — concatenate to render the preview. */
@@ -77,7 +75,7 @@ export interface StreamChatOptions {
    * (I-PFA-06 清除协议, 2026-09-18): an unmapped call's name-known moment
    * ended the previous phase's activity — reset to the base label. The
    * `"phase" in payload` check separates the clear from a bare keepalive. */
-  onThinking?: (payload: { phase?: string | null; key?: string }) => void
+  onThinking?: (payload: ThinkingPayload) => void
   /** The ask verdict's pill payload the moment its object closes in the
    * stream (2026-09-09 用户拍板——「选项该和这句话一起来」; object-level
    * trust: the ask object's prose key streams first, so question/options/
@@ -85,13 +83,7 @@ export interface StreamChatOptions {
    * is still generating). Preview-dock the pill from this frame; the
    * terminal envelope stays authoritative (envelope always wins), and a
    * flipped / failed turn rolls the preview back. */
-  onQuestionPreview?: (payload: {
-    question?: string | null
-    options?: { id: string; label: string }[]
-    allow_freeform?: boolean
-    slot?: string | null
-    default_path?: string | null
-  }) => void
+  onQuestionPreview?: (payload: QuestionPreviewPayload) => void
   /** A user-facing checkpoint (ADR-085): a quiet iteration's grounded result
    * statement after an eligible read — the FULL text in one frame (quiet
    * iterations stream nothing; the client paces it out under the typewriter
@@ -161,7 +153,7 @@ function streamTurn<T>(
   }: {
     signal?: AbortSignal
     onDelta?: (text: string) => void
-    onThinking?: (payload: { phase?: string | null; key?: string }) => void
+    onThinking?: (payload: ThinkingPayload) => void
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
     onCheckpoint?: StreamChatOptions["onCheckpoint"]
     onActivity?: StreamChatOptions["onActivity"]
@@ -209,32 +201,35 @@ function streamTurn<T>(
         }
       },
       onmessage: (msg) => {
-        if (msg.event === "assistant.delta") {
-          const data = JSON.parse(msg.data) as { text: string }
-          onDelta?.(data.text)
-        } else if (msg.event === "assistant.thinking") {
-          onThinking?.(JSON.parse(msg.data) as { phase?: string | null; key?: string })
-        } else if (msg.event === "question.preview") {
-          onQuestionPreview?.(
-            JSON.parse(msg.data) as Parameters<
-              NonNullable<StreamChatOptions["onQuestionPreview"]>
-            >[0],
-          )
-        } else if (msg.event === "assistant.checkpoint") {
-          const data = JSON.parse(msg.data) as { text: string }
-          onCheckpoint?.(data.text)
-        } else if (msg.event === "assistant.activity") {
-          onActivity?.(JSON.parse(msg.data) as ActivityFramePayload)
-        } else if (msg.event === terminal.completed) {
-          resolve(JSON.parse(msg.data))
-        } else if (msg.event === terminal.failed) {
-          const data = JSON.parse(msg.data) as {
-            detail?: unknown
-            persisted?: boolean
-          }
-          reject(
-            new StreamTurnError(data.detail, "Stream failed", !!data.persisted),
-          )
+        // The dispatch is the extracted PURE router (chatStreamFrames.ts —
+        // same event names, same JSON.parse-in-place failure semantics).
+        const frame = routeStreamFrame(msg.event, msg.data, terminal)
+        switch (frame.kind) {
+          case "delta":
+            onDelta?.(frame.text)
+            break
+          case "thinking":
+            onThinking?.(frame.payload)
+            break
+          case "question_preview":
+            onQuestionPreview?.(frame.payload)
+            break
+          case "checkpoint":
+            onCheckpoint?.(frame.text)
+            break
+          case "activity":
+            onActivity?.(frame.frame)
+            break
+          case "completed":
+            resolve(frame.envelope as T)
+            break
+          case "failed":
+            reject(
+              new StreamTurnError(frame.detail, "Stream failed", frame.persisted),
+            )
+            break
+          case "ignored":
+            break
         }
         // heartbeat comment frames never reach onmessage.
       },
@@ -263,7 +258,7 @@ export function streamAnswer<T>(
   body: AnswerTurnBody,
   handlers: {
     onDelta?: (text: string) => void
-    onThinking?: (payload: { phase?: string | null; key?: string }) => void
+    onThinking?: (payload: ThinkingPayload) => void
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
     onActivity?: StreamChatOptions["onActivity"]
   },
