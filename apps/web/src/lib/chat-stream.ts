@@ -45,6 +45,22 @@ export interface ChatTurnBody {
   autonomy?: string
 }
 
+/** One user-safe activity frame (ADR-087 §3 Phase 2 — the append-oriented
+ * Activity Stream). Status flips arrive as NEW frames carrying the same
+ * `activity_id` (append-only wire; the client keeps an ordered map keyed by
+ * id). `kind` is a user-semantic category — never a tool name; `key` is the
+ * i18n copy identity for THAT status (active = progressive form, completed =
+ * past-tense form, failed/cancelled = the active form, the ✗ says the rest).
+ * The field set is the contract's whitelist — no params, results, or
+ * reasoning ever ride this channel. */
+export interface ActivityFramePayload {
+  activity_id: string
+  seq: number
+  kind: "read" | "draft" | "run" | "repair"
+  status: "active" | "completed" | "failed" | "cancelled"
+  key: string | null
+}
+
 export interface StreamChatOptions {
   signal: AbortSignal
   /** Decoded prose fragment, in order — concatenate to render the preview. */
@@ -85,6 +101,11 @@ export interface StreamChatOptions {
    * an intent.type="checkpoint" row, so a failed turn's rollback drops the
    * bubbles and a refresh re-renders them from history. */
   onCheckpoint?: (text: string) => void
+  /** One activity frame (ADR-087 §3 Phase 2): append-oriented milestones of
+   * the agent's work — status flips arrive as new frames on the same
+   * activity_id; the server's terminal sweep guarantees zero active
+   * activities at the envelope (T16-B), the client sweeps defensively too. */
+  onActivity?: (frame: ActivityFramePayload) => void
 }
 
 /** Answer endpoint payload (the answer doubles as resume). */
@@ -136,12 +157,14 @@ function streamTurn<T>(
     onThinking,
     onQuestionPreview,
     onCheckpoint,
+    onActivity,
   }: {
     signal?: AbortSignal
     onDelta?: (text: string) => void
     onThinking?: (payload: { phase?: string | null; key?: string }) => void
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
     onCheckpoint?: StreamChatOptions["onCheckpoint"]
+    onActivity?: StreamChatOptions["onActivity"]
   },
 ): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -200,6 +223,8 @@ function streamTurn<T>(
         } else if (msg.event === "assistant.checkpoint") {
           const data = JSON.parse(msg.data) as { text: string }
           onCheckpoint?.(data.text)
+        } else if (msg.event === "assistant.activity") {
+          onActivity?.(JSON.parse(msg.data) as ActivityFramePayload)
         } else if (msg.event === terminal.completed) {
           resolve(JSON.parse(msg.data))
         } else if (msg.event === terminal.failed) {
@@ -240,6 +265,7 @@ export function streamAnswer<T>(
     onDelta?: (text: string) => void
     onThinking?: (payload: { phase?: string | null; key?: string }) => void
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
+    onActivity?: StreamChatOptions["onActivity"]
   },
 ): Promise<T> {
   return streamTurn(
@@ -257,12 +283,12 @@ export function streamAnswer<T>(
  * `e.name === "AbortError"`). */
 export function streamChat<T>(
   body: ChatTurnBody,
-  { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint }: StreamChatOptions,
+  { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity }: StreamChatOptions,
 ): Promise<T> {
   return streamTurn(
     `${API_URL}/api/v1/chat`,
     body,
     { completed: "turn.completed", failed: "turn.failed" },
-    { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint },
+    { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity },
   )
 }
