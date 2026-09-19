@@ -690,7 +690,13 @@ def terminal_tool_of(turn: dict) -> str:
     q = msg.get("question") or {}
     if turn.get("answered_question") is not None and turn.get("run_id"):
         return "start_run"
-    if not turn.get("answered_question") and q.get("kind") == "task_book":
+    # The dock's OWN answer state discriminates, not this turn's settlement
+    # of a PREVIOUS question — the enriched-brief answer turn legitimately
+    # settles the pending ask AND docks the plan in one beat (S1 作答轮直接
+    # 出书). (Batch A harness-contract fix: the old guard read
+    # answered_question as "no plan docks this turn", misclassifying the
+    # settle+dock shape as an answer turn.)
+    if q.get("kind") == "task_book" and q.get("answer") is None:
         return "present_plan"
     if q.get("kind") == "question":
         if any(
@@ -704,6 +710,44 @@ def terminal_tool_of(turn: dict) -> str:
     return "answer"
 
 
+# ---- Activity-first work evidence (ADR-087 §3, Phase 2.5 Batch A) ----------
+# The Activity channel (assistant.activity frames) is the STRICT PRIMARY
+# evidence that work happened (a read ran / a repair is in flight). The
+# System Status phase frames (inspecting / repairing) are the legacy
+# parallel-render period's secondary signal — they may CORROBORATE, never
+# REPLACE: phase evidence without activity evidence means the server claims
+# work the user-safe channel doesn't show — a contract violation, not
+# variance. SCENARIO_ACTIVITY_LEGACY=1 downgrades that violation to a
+# counted warning (step-⑤ transition aid only; strict mode is the default).
+_ACTIVITY_LEGACY = os.environ.get("SCENARIO_ACTIVITY_LEGACY") == "1"
+LEGACY_ACTIVITY_WARNINGS: list[str] = []
+
+
+def _work_evidence(stream: "StreamTurn", label: str) -> tuple[bool, bool]:
+    """(had_reads, had_repair) from the ACTIVITY channel, with the strict
+    co-fire law: a phase frame claiming work the Activity channel never
+    showed fails the turn (or warns+counts in legacy mode)."""
+    had_reads = any(a["kind"] == "read" for a in stream.activities)
+    had_repair = any(a["kind"] == "repair" for a in stream.activities)
+    phase_reads = any(t.get("phase") == "inspecting" for t in stream.thinking)
+    phase_repair = any(t.get("phase") == "repairing" for t in stream.thinking)
+    for name, act, phase in (
+        ("read", had_reads, phase_reads),
+        ("repair", had_repair, phase_repair),
+    ):
+        if phase and not act:
+            msg = (
+                f"{label}: System Status reported a {name} but the Activity "
+                f"channel is silent — the phase fallback must never mask "
+                f"missing activity frames"
+            )
+            if _ACTIVITY_LEGACY:
+                LEGACY_ACTIVITY_WARNINGS.append(msg)
+            else:
+                check(False, msg, {"thinking": stream.thinking, "activities": stream.activities})
+    return had_reads, had_repair
+
+
 def check_stream_law(
     stream: "StreamTurn", content: str, label: str, *, allow_reads: bool = True
 ) -> None:
@@ -712,10 +756,11 @@ def check_stream_law(
     quiet (a rejected iteration's speech is REPLACED speech, the repair-
     never-streams law). Therefore:
 
-    - single-iteration turn (no inspecting frames): concat(deltas) == the
+    - single-iteration turn (no read activities): concat(deltas) == the
       envelope content, exactly;
-    - read-first turn (accepted reads in iteration 0 — inspecting frames
-      present): the kept read-iteration speech is a PREFIX of the composed
+    - read-first turn (accepted reads in iteration 0 — read ACTIVITY frames
+      present; the inspecting phase frame is the legacy corroboration):
+      the kept read-iteration speech is a PREFIX of the composed
       content (言语账本: kept parts + the terminal part join on a blank
       line), so content.startswith(concat(deltas)). Post-ADR-084 the
       read-silent law makes that concat empty BY DESIGN
@@ -723,7 +768,7 @@ def check_stream_law(
       the variance floor;
     - a rejected iteration breaks even the prefix relation (its streamed
       speech was replaced) — LLM variance the scenarios cannot foresee, so
-      this helper skips the turn entirely when a repairing frame appears
+      this helper skips the turn entirely when a repair ACTIVITY appears
       (same carve-out as check_read_silent_stream).
 
     Both relations compare the STRIPPED concat: the envelope is edge-stripped
@@ -733,8 +778,7 @@ def check_stream_law(
     2026-09-17 — assert the visible speech, not the bytes).
     """
     concat = "".join(stream.deltas)
-    had_reads = any(t.get("phase") == "inspecting" for t in stream.thinking)
-    had_repair = any(t.get("phase") == "repairing" for t in stream.thinking)
+    had_reads, had_repair = _work_evidence(stream, label)
     if had_repair:
         return  # replaced speech: even the prefix relation is void
     streamed = concat.strip()
@@ -786,13 +830,13 @@ PROCESSING_DISCLOSURE = re.compile(
 
 def check_read_silent_stream(stream: "StreamTurn", label: str) -> None:
     """ADR-084 read-silent law, wire side: a turn that ran accepted reads
-    (inspecting frames) streamed NO prose — read iterations leave the message
-    channel empty and the settled speech paces out at the envelope. Skipped
-    when a repairing frame appears (a rejected iteration's replaced speech may
-    have streamed first — the pre-existing variance carve-out, see
-    check_stream_law)."""
-    had_reads = any(t.get("phase") == "inspecting" for t in stream.thinking)
-    had_repair = any(t.get("phase") == "repairing" for t in stream.thinking)
+    (read ACTIVITY frames — the strict evidence seat; the inspecting phase
+    frame is legacy corroboration) streamed NO prose — read iterations leave
+    the message channel empty and the settled speech paces out at the
+    envelope. Skipped when a repair activity appears (a rejected iteration's
+    replaced speech may have streamed first — the pre-existing variance
+    carve-out, see check_stream_law)."""
+    had_reads, had_repair = _work_evidence(stream, label)
     if had_reads and not had_repair:
         concat = "".join(stream.deltas)
         # ADR-084 read-silent is a semantic UI contract: no user-visible prose
@@ -882,6 +926,45 @@ def check_activity_shape(stream: "StreamTurn", label: str) -> None:
         f"{label}: activity seq is strictly increasing",
         seqs,
     )
+    # Stable identity law (⑤): frames sharing an activity_id are ONE work
+    # item's state flips — the first frame is the active birth, kind never
+    # mutates mid-activity, exactly one terminal frame closes the id (and
+    # nothing follows it), and the copy key follows the status-form law:
+    # failed/cancelled REUSE the active key (the ✗/strikethrough carries
+    # the outcome), completed swaps to the past-tense form.
+    by_id: dict[str, list[dict]] = {}
+    for a in acts:
+        by_id.setdefault(a["activity_id"], []).append(a)
+    for aid, frames in by_id.items():
+        check(
+            frames[0]["status"] == "active",
+            f"{label}: an activity's first frame is its active birth ({aid})",
+            frames,
+        )
+        check(
+            len({f["kind"] for f in frames}) == 1,
+            f"{label}: kind never mutates across an activity's flips ({aid})",
+            frames,
+        )
+        check(
+            all(f["status"] == "active" for f in frames[:-1]),
+            f"{label}: only the terminal frame leaves active ({aid})",
+            frames,
+        )
+        active_keys = {f["key"] for f in frames[:-1]}
+        terminal = frames[-1]
+        if terminal["status"] == "completed":
+            check(
+                terminal["key"] is not None and terminal["key"] not in active_keys,
+                f"{label}: completion swaps to the past-tense key ({aid})",
+                frames,
+            )
+        elif terminal["status"] in ("failed", "cancelled"):
+            check(
+                terminal["key"] in active_keys,
+                f"{label}: failed/cancelled reuse the active key ({aid})",
+                frames,
+            )
     last_status: dict[str, str] = {}
     for a in acts:  # append-oriented: the LAST frame per id is its state
         last_status[a["activity_id"]] = a["status"]
@@ -1054,6 +1137,14 @@ async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
     信号。options 空合法（C2：无 persona 时储藏室为空，策略②豁免）。"""
     pid = await ctx.new_project("S1 bare wish journey")
 
+    # Lifecycle stamp beat ① (ADR-087 §2 — the stamp is the ONLY lifecycle
+    # read; artifacts never speak): a fresh project is preparing — nothing
+    # ready, no blockers yet (pending → not ready).
+    stamp0 = (await ctx.results(pid))["lifecycle"]
+    check(stamp0["state"] == "preparing" and not stamp0["plan_ready"]
+          and not stamp0["confirmation_ready"] and stamp0["blockers"] == [],
+          "a fresh project reads preparing / not-ready on the stamp", stamp0)
+
     turn1 = await ctx.chat(pid, "I want a social post.")
     msg1 = turn1["assistant_message"]
     check(turn1["run_id"] is None, "a bare wish never starts a run", turn1)
@@ -1190,6 +1281,40 @@ async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
        draft_graph["nodes"])
     check(any(n.get("estimate_credits") for n in draft_nodes),
           "draft nodes carry their own quotes (逐节点估价)", draft_nodes)
+
+    # Lifecycle stamp beat ②: the docked, fully-quoted chain reads
+    # plan_ready ∧ confirmation_ready — the 四合取 all hold over a
+    # text-only chain (no material gate), zero blockers, the state rollup
+    # names the stage (ready → plan ready).
+    stamp1 = (await ctx.results(pid))["lifecycle"]
+    check(stamp1["plan_ready"] is True
+          and stamp1["confirmation_ready"] is True
+          and stamp1["blockers"] == []
+          and stamp1["state"] == "confirmation_ready",
+          "the docked plan reads plan_ready ∧ confirmation_ready on the stamp",
+          stamp1)
+
+    # Lifecycle stamp beat ③ (T10 flagship over the wire): an ACTIVE run
+    # holds confirmation back while the plan stays docked — plan_ready
+    # stays true, confirmation_ready flips false, the blocker names
+    # active_run, the rollup reads running (plan ready + confirmation
+    # incomplete → confirmation false; PLAN_READY ≠ confirm authority).
+    # The seeded authority settles immediately after, so the journey's own
+    # start beat below proceeds.
+    seeded_run = await seed_active_run(pid)
+    stamp2 = (await ctx.results(pid))["lifecycle"]
+    check(stamp2["plan_ready"] is True
+          and stamp2["confirmation_ready"] is False
+          and "active_run" in stamp2["blockers"]
+          and stamp2["state"] == "running",
+          "an active run blocks confirmation while the plan stays docked",
+          stamp2)
+    await settle_seeded_run(seeded_run)
+    stamp2b = (await ctx.results(pid))["lifecycle"]
+    check(stamp2b["confirmation_ready"] is True
+          and stamp2b["blockers"] == [],
+          "settling the run hands confirmation readiness back", stamp2b)
+
     draft_ids = sorted(n["id"] for n in draft_graph["nodes"])
 
     # 散文确认 start → run 起步（G-1）+ 草稿图原地填充（同 id 无双生）。
@@ -1952,10 +2077,15 @@ async def s6_interrupt_consolidated(ctx: Ctx) -> None:
     check(stream.completed is not None, "the interjection turn completes")
     turn = stream.completed
     status_key = PERCEPTION_TOOLS["get_run_status"].activity_key
-    check(any(t.get("phase") == "inspecting" and t.get("key") == status_key
-              for t in stream.thinking),
-          "the progress question reads first (get_run_status's inspecting frame)",
-          stream.thinking)
+    # Activity-first (ADR-087 §3): the read's user-safe evidence is the
+    # ACTIVITY channel — kind=read carrying the perception registry's
+    # activity_key. The System Status inspecting frame is legacy
+    # corroboration only (parallel-render period; retires with step ⑤).
+    check(any(a["kind"] == "read" and a["key"] == status_key
+              for a in stream.activities),
+          "the progress question reads first (get_run_status's read activity)",
+          stream.activities)
+    check_activity_shape(stream, "S6f")
     check(turn.get("answered_question") is None,
           "an interjection never settles the parked interrupt", turn)
     check(terminal_tool_of(turn) == "answer",
@@ -3422,6 +3552,19 @@ async def s20_speech_semantic_contract(ctx: Ctx) -> None:
         "exhaustion degrade",
         terminal,
     )
+    # Lifecycle stamp: when the plan docks over unready material, the stamp
+    # — never the dock's existence — names the lifecycle truth: material not
+    # ready, plan not ready, confirmation not ready, a material_* blocker
+    # present (Batch C pins the exact blocker; the worker race may flip
+    # pending→failed mid-turn today).
+    if terminal == "present_plan":
+        stamp = (await ctx.results(pid))["lifecycle"]
+        check(stamp["material_ready"] is False
+              and stamp["plan_ready"] is False
+              and stamp["confirmation_ready"] is False
+              and any(b.startswith("material_") for b in stamp["blockers"]),
+              "S20A the stamp names the unready material on a docked plan",
+              stamp)
     content = turn1["assistant_message"].get("content") or ""
     check(
         has_prose(turn1["assistant_message"]),
@@ -3474,6 +3617,7 @@ async def s20_speech_semantic_contract(ctx: Ctx) -> None:
     # would be a cross-turn category error.
     pre_gate_content = turn1["assistant_message"].get("content") or ""
     check_read_silent_stream(stream, "S20B")
+    check_activity_shape(stream, "S20B")
     check_stream_law(stream, pre_gate_content, "S20B")
     turn1 = await answer_caption_gate(ctx, turn1)
     terminal = terminal_tool_of(turn1)
@@ -3540,9 +3684,20 @@ async def s20_speech_semantic_contract(ctx: Ctx) -> None:
 
 
 def _stream_reads(stream: "StreamTurn") -> list[str]:
-    """The turn's read sequence by inspecting-frame copy key (observability
-    print — the tool NAME never crosses the wire, the key is the face)."""
-    return [
+    """The turn's read sequence, ACTIVITY-FIRST (ADR-087 §3): the read
+    activities' active-frame copy keys in birth order (the tool NAME never
+    crosses the wire, the key is the face). The inspecting phase frames
+    remain as the legacy fallback for the print only — run_shape's
+    check_read_silent_stream already enforces (strict mode) that phase
+    evidence never masks a silent Activity channel."""
+    keys = [
+        str(a["key"])
+        for a in stream.activities
+        if a["kind"] == "read" and a["status"] == "active" and a["key"]
+    ]
+    if keys:
+        return keys
+    return [  # legacy/compatibility print fallback (parallel-render period)
         str(t.get("key"))
         for t in stream.thinking
         if t.get("phase") == "inspecting" and t.get("key")
@@ -3587,6 +3742,7 @@ async def s21_checkpoint_channel_observation(ctx: Ctx) -> None:
         content = (completed.get("assistant_message") or {}).get("content") or ""
         check_checkpoint_shape(stream, content, f"S21{label}")
         check_read_silent_stream(stream, f"S21{label}")
+        check_activity_shape(stream, f"S21{label}")
         print(
             f"    · S21{label} reads={_stream_reads(stream)} "
             f"checkpoints={len(stream.checkpoints)}"
@@ -3673,6 +3829,15 @@ async def main() -> int:
         await ctx.close()
 
     print("=" * 60)
+    if LEGACY_ACTIVITY_WARNINGS:
+        # Legacy/compat report (Phase 2.5 Batch A): phase evidence without
+        # activity evidence, downgraded by SCENARIO_ACTIVITY_LEGACY=1. Strict
+        # mode (the default) fails these turns instead — this list existing
+        # at all means the Activity channel went silent where System Status
+        # claimed work.
+        print(f"legacy activity-fallback warnings ({len(LEGACY_ACTIVITY_WARNINGS)}):")
+        for warning in LEGACY_ACTIVITY_WARNINGS:
+            print(f"  ⚠ {warning}")
     if failures:
         print(f"{len(selected) - len(failures)}/{len(selected)} passed. Failures:")
         for name, why in failures.items():

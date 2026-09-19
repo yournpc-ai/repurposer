@@ -791,7 +791,8 @@ interface ChatDockProps {
   onRunStarted?: (runId: string) => void | Promise<void>
   /** The draft graph changed server-side (a task_book docked → stamped, or
    * a task_book bailed → torn down) — the page refetches the graph so the
-   * form flip's `hasDraftGraph` gate sees it (ADR-057 K5 图先展示后运行:
+   * form flip reads the fresh lifecycle stamp (ADR-057 K5 图先展示后运行 +
+   * ADR-087 §2: the stamp's plan_ready is the flip's gate:
    * the desktop world morphs on the draft graph's arrival, BEFORE any run
    * — without this channel the flip only ever fires on the first run and
    * the chain preview never shows). */

@@ -28,11 +28,29 @@ sense.
 
 Gate 4 (naming batch v2 retired identifiers): the renames of N-40/N-41/N-42
 leave no shim — the retired identifiers (``SkillEntry`` / ``SkillRejected``
-/ ``dispatchable_skills`` / ``checkpoint``; imports of ``app.clients`` or
-``app.agents.roster``) must never reappear under ``app/``, and
-``agents/roster.py`` must never come back as a file. ``app.skills`` is NOT
+/ ``dispatchable_skills``; the retired node KIND ``checkpoint`` as a
+kind-string; imports of ``app.clients`` or ``app.agents.roster``) must
+never reappear under ``app/``, and ``agents/roster.py`` must never come
+back as a file. The WORD ``checkpoint`` is no longer banned bare: ADR-085
+re-claimed it for the Assistant Conversation channel. ``app.skills`` is NOT
 banned — it is the instruction-pack home (N-42 指令包, industry meaning);
 ``roster`` as plain prose (the AGENTS roster) stays legitimate.
+
+Gate 5 (ADR-087 dependency direction, Phase 2.5 — the three-way split made
+grep-provable):
+  5a 内核边界（U1 frozen）: ``app/agents/tool_loop.py`` says WHAT HAPPENED
+      only — typed LoopEvents out, never Activity construction vocabulary
+      (projector/frame types, the SSE event name, the i18n key family),
+      never Presentation/Domain imports (``app.chat`` / ``app.pipeline`` /
+      ``app.models``). Docstring prose naming the boundary stays legal.
+  5b Lifecycle Projection → Presentation: ``app/pipeline/lifecycle.py``
+      never imports ``app.chat`` — Presentation consumes the projection,
+      never the reverse.
+  5c Client never INFERS lifecycle: in ``apps/web/src`` the server-named
+      stamp (results/graph ``lifecycle.*``) is the only lifecycle read —
+      ``hasDraftGraph``-style artifact-existence derivations (retired with
+      Phase 1) and local planReady/confirmationReady/materialReady
+      derivations that don't read the stamp must never reappear.
 """
 
 import re
@@ -45,8 +63,41 @@ sys.path.insert(0, str(API_ROOT))  # the purity gate reads the registries
 APP_DIR = API_ROOT / "app"
 PROVIDERS_DIR = APP_DIR / "providers"
 
+# ADR-087 dependency direction (gate 5).
+KERNEL_FILE = APP_DIR / "agents" / "tool_loop.py"
+LIFECYCLE_FILE = APP_DIR / "pipeline" / "lifecycle.py"
+WEB_SRC = API_ROOT.parent / "web" / "src"
+
 # Module-level or deferred — an import is an import wherever it sits.
 BANNED_DECISION_IMPORT = re.compile(r"^\s*(from|import)\s+app\.(agents|clients)\b")
+
+# 5a: the kernel never imports Presentation/Domain…
+BANNED_KERNEL_IMPORT = re.compile(r"^\s*(from|import)\s+app\.(chat|pipeline|models)\b")
+# …and never speaks the Activity channel's CONSTRUCTION vocabulary (the
+# docstring's prose naming the boundary — "the Activity Projection's job" —
+# is legal; these tokens are the projection's types / wire event / i18n
+# family / kind·status constants, none of which may appear in the kernel).
+BANNED_KERNEL_ACTIVITY_VOCAB = re.compile(
+    r"\bActivityProjector\b"
+    r"|\bActivityFrame\b"
+    r"|assistant\.activity"
+    r"|chat\.activity\."
+    r"|\bKIND_(READ|DRAFT|RUN|REPAIR)\b"
+    r"|\bSTATUS_(ACTIVE|COMPLETED|FAILED|CANCELLED)\b"
+)
+# 5b: the Lifecycle Projection never imports the Presentation layer.
+BANNED_PRESENTATION_IMPORT = re.compile(r"^\s*(from|import)\s+app\.chat\b")
+# 5c: the client never infers lifecycle — the retired derivation identifier
+# (Phase 1 removed it; a hit is always a reintroduction, prose included —
+# the same strictness gate 4 applies to retired identifiers)…
+BANNED_CLIENT_LIFECYCLE_DERIVATION = re.compile(r"\bhasDraftGraph\b")
+# …and local readiness locals whose RHS never touches the stamp (a legal
+# alias like ``const planReady = lifecycle?.plan_ready ?? false`` reads the
+# stamp and passes; deriving readiness from nodes/runs/outputs does not).
+BANNED_CLIENT_LIFECYCLE_LOCAL = re.compile(
+    r"^\s*const\s+(planReady|confirmationReady|materialReady)\s*=\s*(?!.*\blifecycle\b)"
+)
+
 BANNED_LLM_IMPORT = re.compile(r"^\s*(from|import)\s+app\.(agents|clients|providers\.llm)\b")
 
 # P2 retired identifiers: the parallel maps these named now derive from
@@ -72,14 +123,19 @@ BANNED_PARALLEL_MAPS = re.compile(
 BANNED_BLIND_RETRY = re.compile(r"auto_retry|_with_retry")
 
 # Naming batch v2 retired identifiers (N-40/N-41/N-42): the renames left no
-# shim, so a hit is always a reintroduction. ``checkpoint`` is matched
-# case-insensitively (kind string AND prose); ``app.skills`` is deliberately
-# absent — it is the live instruction-pack home.
+# shim, so a hit is always a reintroduction. The N-40 half is scoped to the
+# retired NODE KIND (``kind="checkpoint"``): ADR-085 (2026-09-17) re-claimed
+# the WORD ``checkpoint`` for the Assistant Conversation channel
+# (``on_checkpoint`` hook / ``assistant.checkpoint`` SSE event /
+# ``intent.type=checkpoint`` row) — that vocabulary is current and legal;
+# what must never come back is the flow-control node kind. Bare-word
+# matching was retired when the word gained a lawful sense (Phase 2.5
+# adjudication: the ban outlived its contract).
 BANNED_RETIRED_IDENTIFIERS = re.compile(
     r"\bSkillEntry\b"
     r"|\bSkillRejected\b"
     r"|\bdispatchable_skills\b"
-    r"|\bcheckpoint\b"
+    r"|kind\s*(?:=|==)\s*[\"']checkpoint[\"']"
     r"|^\s*(from|import)\s+app\.clients\b"
     r"|^\s*(from|import)\s+app\.agents\.roster\b",
     re.IGNORECASE,
@@ -175,6 +231,45 @@ def check_import_smoke() -> list[str]:
     return ["import app.main raised (boot-level failure):", *tail[-15:]]
 
 
+def check_kernel_boundary() -> list[str]:
+    """Gate 5a (U1 frozen boundary): the ToolLoop kernel emits typed
+    LoopEvents saying WHAT HAPPENED — it never imports Presentation/Domain
+    and never speaks the Activity channel's construction vocabulary."""
+    violations: list[str] = []
+    for lineno, line in enumerate(KERNEL_FILE.read_text().splitlines(), start=1):
+        if BANNED_KERNEL_IMPORT.match(line) or BANNED_KERNEL_ACTIVITY_VOCAB.search(line):
+            violations.append(f"{KERNEL_FILE.relative_to(API_ROOT)}:{lineno}: {line.strip()}")
+    return violations
+
+
+def check_lifecycle_no_presentation() -> list[str]:
+    """Gate 5b (ADR-087 dependency direction): the Lifecycle Projection is a
+    pure fact layer — Presentation (app.chat) consumes it, never the
+    reverse."""
+    violations: list[str] = []
+    for lineno, line in enumerate(LIFECYCLE_FILE.read_text().splitlines(), start=1):
+        if BANNED_PRESENTATION_IMPORT.match(line):
+            violations.append(f"{LIFECYCLE_FILE.relative_to(API_ROOT)}:{lineno}: {line.strip()}")
+    return violations
+
+
+def check_client_lifecycle_reads() -> list[str]:
+    """Gate 5c (固定不等式的客户端牙): the lifecycle stamp is server-named;
+    the client READS ``lifecycle.*`` and never re-derives readiness from
+    artifact/run/graph existence."""
+    violations: list[str] = []
+    if not WEB_SRC.exists():
+        return [f"{WEB_SRC}: web source tree not found (gate 5c needs the client)"]
+    for path in sorted(WEB_SRC.rglob("*.ts")) + sorted(WEB_SRC.rglob("*.tsx")):
+        for lineno, line in enumerate(path.read_text().splitlines(), start=1):
+            if BANNED_CLIENT_LIFECYCLE_DERIVATION.search(
+                line
+            ) or BANNED_CLIENT_LIFECYCLE_LOCAL.match(line):
+                rel = path.relative_to(WEB_SRC.parent.parent)
+                violations.append(f"{rel}:{lineno}: {line.strip()}")
+    return violations
+
+
 def main() -> int:
     smoke = check_import_smoke()
     if smoke:
@@ -202,9 +297,24 @@ def main() -> int:
         print("retired-identifier gate FAILED (naming batch v2: no shim, no reintroduction):")
         for failure in retired:
             print(f"  {failure}")
-    if failures or parallel or blind or retired:
+    kernel = check_kernel_boundary()
+    if kernel:
+        print("kernel-boundary gate FAILED (ADR-087 U1: the ToolLoop kernel says WHAT HAPPENED via typed LoopEvents — Activity vocabulary/projection belongs to app/chat/activity.py, Presentation/Domain imports are banned):")
+        for failure in kernel:
+            print(f"  {failure}")
+    lifecycle = check_lifecycle_no_presentation()
+    if lifecycle:
+        print("lifecycle-purity gate FAILED (ADR-087 dependency direction: the Lifecycle Projection never imports Presentation — app.chat is the consumer, not a dependency):")
+        for failure in lifecycle:
+            print(f"  {failure}")
+    client = check_client_lifecycle_reads()
+    if client:
+        print("client-lifecycle gate FAILED (固定不等式: lifecycle is server-named — read the results/graph `lifecycle.*` stamp; never infer readiness from artifact/run/graph existence):")
+        for failure in client:
+            print(f"  {failure}")
+    if failures or parallel or blind or retired or kernel or lifecycle or client:
         return 1
-    print("check_gates: OK (gate 0 boot smoke, providers/+deterministic purity, no parallel maps, no blind retries, no retired identifiers)")
+    print("check_gates: OK (gate 0 boot smoke, providers/+deterministic purity, no parallel maps, no blind retries, no retired identifiers, ADR-087 kernel/lifecycle/client boundaries)")
     return 0
 
 
