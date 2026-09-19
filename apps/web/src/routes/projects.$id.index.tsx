@@ -32,7 +32,7 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
 
-import type { IntentSlot, Output, ProjectGraph, WorkflowStep, Project } from "@/lib/types"
+import type { IntentSlot, LifecycleStamp, Output, ProjectGraph, WorkflowStep, Project } from "@/lib/types"
 
 interface AssetStatusEntry {
   id: string
@@ -107,6 +107,7 @@ interface ProjectResults {
   latest_run: WorkflowRun | null
   assets?: AssetStatusEntry[]
   pending_brief?: PendingBrief | null
+  lifecycle?: LifecycleStamp | null
 }
 
 /** Tools (== node kinds, N-35) that own a results tab (ADR-028): the whole
@@ -221,26 +222,27 @@ function ProjectDetailPage() {
   }, [projectId])
 
   const latestRun = results?.latest_run
-  // The page's two-form choreography driver (2026-09-02 形态机; 2026-09-08
-  // K5 拓宽): pre-generation it is the centered fullscreen chat + back pill
-  // (no canvas); the GRAPH WORLD's arrival flips it — the chat stage fades
-  // out in place (300ms), the canvas fades in on a slight delay, and the
-  // back pill crossfades into the full ProjectMenu, all on one beat
-  // (2026-09-06 fade-simplified: the old grid-rows collapse read as the
-  // chat flying up, user-retired). The graph world arrives on EITHER the
-  // first run (hasRuns) OR the docked plan's draft graph
-  // (hasDraftGraph — 图先展示后运行, ADR-057 K5: the canvas previews the
-  // whole chain as draft nodes before a credit moves; bail tears it down
-  // and the world morphs back). The loading/error early returns below
-  // guarantee this is settled at first render, so projects WITH runs (or a
-  // pending draft) mount straight in the dock world (the hydrated first
-  // frame never replays the morph).
+  // Lifecycle Projection (ADR-087 §2, Phase 1): the server-named stamp is
+  // the ONE readiness truth — this page never derives lifecycle from
+  // artifact existence. The stamp rides BOTH frames (results + graph);
+  // the graph frame is the fresher source during live turns.
+  const lifecycle = graph?.lifecycle ?? results?.lifecycle ?? null
+  // The page's two-form choreography driver (2026-09-02 形态机; Phase 1
+  // switch): pre-generation it is the centered fullscreen chat + back pill
+  // (no canvas); the GRAPH WORLD's arrival flips it. The arrival fact is
+  // the lifecycle stamp: a completed/active run's graph world
+  // (state=running, or runs exist → the world persists terminal-side), or
+  // PLAN_READY's draft-graph review surface (ADR-086 条款4 翻案 R2: the
+  // canvas flips at PLAN_READY, never at dock-time draft existence — while
+  // materials process, the review surface stays unborn). The loading/error
+  // early returns below guarantee this is settled at first render, so
+  // projects WITH runs (or a ready plan) mount straight in the dock world
+  // (the hydrated first frame never replays the morph).
   const hasRuns = latestRun != null
-  const hasDraftGraph = (graph?.nodes ?? []).some((n) => n.state === "draft")
-  const graphLive = hasRuns || hasDraftGraph
+  const graphLive = hasRuns || (lifecycle?.plan_ready ?? false)
   // The driver forks per surface (prohibition #13 — mobile has no canvas):
-  // the desktop world morphs on the draft graph's arrival; mobile waits
-  // for the first run (its confirm beat stays in the dock).
+  // the desktop world morphs at PLAN_READY; mobile waits for the first run
+  // (its confirm beat stays in the dock).
   const worldLive = isMobile ? hasRuns : graphLive
   // The desktop chat panel is a FROSTED OVERLAY on the full-bleed canvas
   // (2026-09-06 用户拍板, FLORA "Dock panel" parity — float / docked-right,
@@ -539,6 +541,22 @@ function ProjectDetailPage() {
     }, 2500)
     return () => clearInterval(interval)
   }, [results?.latest_run, results?.outputs, sseActive])
+
+  // Lifecycle poll (Phase 1): pre-first-run there is no SSE and the run
+  // poll above never arms — but the stamp can still be mid-flight
+  // (materials processing toward PLAN_READY). Poll while the stamp says
+  // material_pending so the review-surface flip arrives on its own beat.
+  // Background refetch never moves the camera (画布相机律 — only explicit
+  // beats do).
+  const materialPending = lifecycle?.blockers.includes("material_pending") ?? false
+  useEffect(() => {
+    if (!materialPending) return
+    if (results?.latest_run) return // the run poll / SSE owns the cadence
+    const interval = setInterval(() => {
+      fetchResults()
+    }, 2500)
+    return () => clearInterval(interval)
+  }, [materialPending, results?.latest_run, fetchResults])
 
   const nodes = sseActive ? sse.steps : (latestRun?.steps ?? [])
   // Skeleton count for the clips pane: the confirmed count when the chain
@@ -1046,6 +1064,10 @@ function ProjectDetailPage() {
         // before first render, so the hydrated first frame never replays
         // the morph.
         form={isMobile ? (hasRuns ? "dock" : "full") : graphLive ? "panel" : "full"}
+        // The server-named lifecycle stamp (ADR-087 §2, Phase 1): the
+        // dock's confirm-phase mount + Start gate read it — never a local
+        // derivation.
+        lifecycle={lifecycle}
         onPanelStateChange={setPanelState}
         prompt={
           firstMessage?.text ??
@@ -1096,10 +1118,11 @@ function ProjectDetailPage() {
           void fetchResults()
         }}
         // K5 图先展示后运行: a plan dock / bail changes the draft graph
-        // server-side — refetch so the `hasDraftGraph` flip gate sees it
-        // (the desktop world must morph on the plan's arrival, before any
-        // run; without this the flip only ever fired on the first run and
-        // the chain preview never showed — 2026-09-09 取证).
+        // server-side — refetch so the lifecycle stamp's PLAN_READY flip
+        // gate sees it (the desktop world must morph on the plan's
+        // readiness, before any run; without this the flip only ever fired
+        // on the first run and the chain preview never showed —
+        // 2026-09-09 取证).
         onDraftGraphChange={() => {
           // C6 聚焦转场: the re-stamped draft chain's arrival = 整链 fit
           // (user-initiated beat — a re-dock on a live canvas re-frames).

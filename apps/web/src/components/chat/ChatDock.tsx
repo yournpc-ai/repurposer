@@ -119,7 +119,7 @@ import {
   RunTaskList,
 } from "@/components/chat/RunTaskList"
 import { StatusLine } from "@/components/chat/StatusLine"
-import type { IntentSlot, Output } from "@/lib/types"
+import type { IntentSlot, LifecycleStamp, Output } from "@/lib/types"
 import {
   fileIconFor,
   formatChipDuration,
@@ -776,6 +776,12 @@ interface ChatDockProps {
   /** The run reached a terminal-success state while this dock was watching
    * — the page refetches so the landed products show. */
   onComplete: (runId: string | null) => void | Promise<void>
+  /** The server-named lifecycle stamp (ADR-087 §2, Phase 1): the confirm
+   * phase's mount gate and the Start button's enable read it — the dock
+   * never derives lifecycle locally. Null on the pre-first-fetch frame
+   * (the page's loading gate holds the mount, so this is always settled
+   * before the confirm beat can show). */
+  lifecycle?: LifecycleStamp | null
   /** A run STARTED while this dock was watching (Start button / prose
    * confirmation / 修订 run) — the page refetches immediately so its own
    * SSE attaches and the run 期活画布 (placeholders / wipe / fills) renders
@@ -1125,6 +1131,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   initialDerived,
   initialReasons,
   initialRunId,
+  lifecycle,
   onComplete,
   onRunStarted,
   onDraftGraphChange,
@@ -1248,8 +1255,17 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     startPendingPlan: () => void handleStartGeneration(),
   }))
 
+  // Restore mounts by the lifecycle stamp (Phase 1, acceptance #4): a
+  // parked plan enters the confirm phase only at PLAN_READY — materials
+  // still processing mounts plain chat, and the poll-driven stamp flip
+  // below raises the confirm phase when readiness lands. The stamp is
+  // settled before mount (the page's loading gate holds the tree).
   const [phase, setPhase] = useState<Phase>(
-    initialRunId ? "running" : initialIntent ? "confirm" : "chat"
+    initialRunId
+      ? "running"
+      : initialIntent && (lifecycle?.plan_ready ?? true)
+        ? "confirm"
+        : "chat"
   )
   const [intent, setIntent] = useState<InferredIntent>(() =>
     initialIntent
@@ -1280,6 +1296,17 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // session hands one over; a fresh navigation gets it from the first /chat
   // turn's refetch). Attach mode never shows the card, so it starts ready.
   const [intentReady, setIntentReady] = useState(!!initialIntent || !!initialRunId)
+  // Lifecycle stamp flip (Phase 1): a restored parked plan that mounted in
+  // the chat phase (materials still processing at mount) rises into the
+  // confirm phase when the poll-driven stamp lands PLAN_READY. Never fires
+  // downward — bail/supersede ride their own message events.
+  const planReady = lifecycle?.plan_ready ?? false
+  useEffect(() => {
+    if (planReady && intentReady && phase === "chat" && !initialRunId) {
+      setPhase("confirm")
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planReady])
   const [runId, setRunId] = useState<string | null>(initialRunId ?? null)
   // Mirrored in a ref: async chat continuations capture stale closures, and
   // they must be able to tell a run went live while their turn was in flight.
@@ -2095,7 +2122,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * question BLOCKS: the options question's × (hidden input row + bail stops
    * a live run). No handler here — nothing to cancel. */
 
-  const canStartGeneration = intent.tasks.length > 0
+  // The Start gate reads the server-named lifecycle stamp (ADR-087 §2,
+  // Phase 1 门禁二): CONFIRMATION_READY is the ONLY readiness authority —
+  // materials mid-flight / a failed asset / a hanging prerequisite all
+  // read as a disabled Start with the pill still visible (信息补全态,
+  // product goal #3). The tasks.length guard is the LOCAL edit buffer's
+  // emptiness check (the payload being shipped), never a lifecycle
+  // derivation. A hand-edited chain keeps the stamp's stored-chain
+  // verdict — the birthplace 422 guards it for real (T14/U3). Stamp null
+  // (pre-first-fetch frame) falls back to the payload guard so the
+  // confirm beat can never deadlock behind a missing frame.
+  const canStartGeneration =
+    intent.tasks.length > 0 && (lifecycle ? lifecycle.confirmation_ready : true)
 
   // Chain edits (ADR-043): panel controls mutate the task list directly —
   // the same data structure the intent router proposes, so the edited chain
@@ -3731,7 +3769,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // the beat never loses its surface during the fetch window. The card is
   // now exactly the canvas-less surface = mobile (both its forms).
   const planCardVisible =
-    phase === "confirm" && intentReady && form !== "panel" && isMobile
+    phase === "confirm" &&
+    intentReady &&
+    form !== "panel" &&
+    isMobile &&
+    // 移动端 parity (Phase 1): the plan card IS the mobile review surface —
+    // it reads the same stamp's PLAN_READY as the desktop canvas flip.
+    (lifecycle ? lifecycle.plan_ready : true)
   const planCardInline = planCardVisible && chatBusy && liveBubblePresent
   /** chat 修改单价 (BILLING §7): the dock payload's per-task marginal credits,
    * index-aligned with the plan card's task rows (Σ ≡ the pill's total). */
@@ -4411,8 +4455,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // canvas; the canvas task-book card keeps its own Confirm & run as the
   // second seat of the same beat (both ride handleStartGeneration).
   const planEstimate = pendingQuestion?.question?.estimate_credits?.total
+  // Pill visibility reads PLAN_READY off the same stamp (R2 翻案: the
+  // review surface is born at PLAN_READY — while materials process, no
+  // canvas flip AND no confirm pill; the stamp's poll drives the flip).
   const planDock =
-    phase === "confirm" && intentReady && !chatBusy && !singlePlan ? (
+    phase === "confirm" &&
+    intentReady &&
+    !chatBusy &&
+    !singlePlan &&
+    (lifecycle ? lifecycle.plan_ready : true) ? (
       <QuestionDock
         kind="task_book"
         plain

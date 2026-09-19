@@ -366,6 +366,24 @@ export interface GraphEdge {
 export interface ProjectGraph {
   nodes: GraphNode[]
   edges: GraphEdge[]
+  lifecycle?: LifecycleStamp | null
+}
+
+/** The server-named lifecycle projection (ADR-087 §2, Phase 1) — the ONE
+ * readiness truth every client surface reads (canvas / confirm / chat);
+ * clients never derive lifecycle from artifact existence. The four
+ * CONFIRMATION_READY conjuncts are independent fields; `state` is the
+ * presentation rollup, `blockers` the first-class reason channel. */
+export interface LifecycleStamp {
+  state: "preparing" | "plan_ready" | "confirmation_ready" | "running"
+  material_ready: boolean
+  plan_ready: boolean
+  confirmation_scope_ready: boolean
+  charge_semantics_ready: boolean
+  no_active_conflicting_run: boolean
+  confirmation_ready: boolean
+  blockers: string[]
+  charge: { known: [number, number] | null; deferred: boolean }
 }
 
 export interface BrandTemplate {
