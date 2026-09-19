@@ -305,7 +305,9 @@ async def process_asset(asset_id: UUID) -> None:
             # extracted text gets its document node the moment it exists —
             # pre-run projects see it on the canvas without waiting for a
             # plan/run stamp (which re-ensures it idempotently anyway).
-            if asset.project_id is not None and (result.transcript or result.extracted_text):
+            # 上传即出生 (Phase 1): the card was born queued at upload — this
+            # visit flips it done (text or settle-empty alike).
+            if asset.project_id is not None:
                 from app.pipeline.graph_fill import (  # deferred: runtime edge
                     stamp_transcript_node,
                 )
@@ -351,3 +353,12 @@ async def process_asset(asset_id: UUID) -> None:
             asset.processing_status = AssetStatus.FAILED
             asset.processing_error = str(e)
             await db.commit()
+            # 状态随 ASR (Phase 1): the upload-born transcript card flips to
+            # its failed face with the row — never a perpetual loading card.
+            if asset.project_id is not None:
+                from app.pipeline.graph_fill import (  # deferred: runtime edge
+                    stamp_transcript_node,
+                )
+
+                await stamp_transcript_node(db, asset.project_id, asset)
+                await db.commit()

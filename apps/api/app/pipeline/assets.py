@@ -61,5 +61,12 @@ async def create_transcript_asset_from_text(
     from app.pipeline.graph_fill import stamp_asset_node  # deferred: import cycle
 
     await stamp_asset_node(db, project_id, asset)
+    # 转写卡上传即出生 (Phase 1): this path carries its text from birth, so
+    # the transcript document is born done alongside the asset node.
+    from app.pipeline.graph_fill import (  # deferred: import cycle
+        stamp_transcript_node,
+    )
+
+    await stamp_transcript_node(db, project_id, asset)
     await db.flush()
     return asset

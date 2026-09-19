@@ -52,6 +52,7 @@ from sqlalchemy import cast, func, select, update
 from sqlalchemy.dialects.postgresql import JSONB, array as pg_array
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.schemas import AssetType
 from app.models.tables import Asset, GraphEdge, GraphNode, Output, Project, WorkflowRun, WorkflowStep
 from app.pipeline.graph import NODE_KINDS
 from app.pipeline.graph_store import (
@@ -326,9 +327,26 @@ async def stamp_transcript_node(
     (same ruling as the asset itself). Idempotent on role+asset_id; the text
     refreshes on reprocess. A LEAF face — consumers still wire from the asset
     (the execution truth); rewiring consumers arrives with 改稿驱动重剪.
-    Flush-only."""
+    Flush-only.
+
+    上传即出生 (Phase 1, ADR-087 §2 R2 配套缓做项): an ASR-able / text-
+    yielding asset births its transcript card AT UPLOAD in ``queued``
+    (loading) — the card holds its seat on the canvas while the worker
+    processes, and flips to ``done`` when the text lands (the completion
+    path re-enters this same function), to ``failed`` if processing fails.
+    Asset types without a text yield (image / voice_sample) never birth one.
+    """
     text = asset.transcript or asset.extracted_text
-    if not text:
+    status = str(
+        getattr(asset.processing_status, "value", asset.processing_status)
+    ).lower()
+    text_yielding = asset.type in (
+        AssetType.VIDEO,
+        AssetType.AUDIO,
+        AssetType.TRANSCRIPT,
+        AssetType.PAST_MATERIAL,
+    )
+    if not text and not text_yielding:
         return None
     existing = (
         await db.execute(
@@ -341,10 +359,21 @@ async def stamp_transcript_node(
         )
     ).scalar_one_or_none()
     if existing is not None:
-        if (existing.spec or {}).get("text") != text:
+        if text and (existing.spec or {}).get("text") != text:
             existing.spec = {**(existing.spec or {}), "text": text}
+        # State follows ASR: text landed → done; processing failed → failed
+        # (the 卡内红 face); completed without words (silence / empty
+        # extraction) → done with an empty body, never a perpetual loading
+        # card; still waiting → stays queued.
+        if text or status == "completed":
+            existing.state = "done"
+        elif status == "failed":
+            existing.state = "failed"
         return existing
     asset_node = await stamp_asset_node(db, project_id, asset)
+    spec: dict = {"role": _TRANSCRIPT_ROLE, "asset_id": str(asset.id)}
+    if text:
+        spec["text"] = text
     delta = await apply_wiring_ops(
         db,
         project_id,
@@ -352,18 +381,16 @@ async def stamp_transcript_node(
             {
                 "op": "add_node",
                 "type": "document",
-                "spec": {
-                    "role": _TRANSCRIPT_ROLE,
-                    "asset_id": str(asset.id),
-                    "text": text,
-                },
+                "spec": spec,
                 "after": [UUID(str(asset_node.id))],
             }
         ],
     )
     node = await db.get(GraphNode, delta.affected[0])
     assert node is not None
-    node.state = "done"  # an artifact, not an execution unit
+    # Born done when the text already exists (paste path bypasses the
+    # worker); queued (loading) while ASR/extraction is still owed.
+    node.state = "done" if text else "queued"
     return node
 
 
