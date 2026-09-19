@@ -32,6 +32,9 @@
 | ToolLoop 内核边界（U1：LoopEvent 无 Activity 词汇） | `app/agents/tool_loop.py` | 用户裁定 U1 + ADR-087 §5 | tool_loop 纯套件 + 5a teeth | — | gate 5a | 🟢 |
 | Lifecycle/Presentation 依赖方向（lifecycle 禁 app.chat） | `app/pipeline/lifecycle.py` | ADR-087 §5 | 5b teeth | — | gate 5b | 🟢 |
 | 客户端 lifecycle 读取纪律（读戳合法，本地生成 truth 非法） | `apps/web` ChatDock | ADR-087 §5 | 5c teeth（正反 8 探针） | — | gate 5c | 🟢 ｜ 禁的是「生成」，读 server projection 恒合法 |
+| 戳消费谓词三态（missing ≠ ready，判词 2） | `apps/web/src/lib/lifecycleStamp.ts` | ADR-087 §2 + Phase 3 判词 2 | `lifecycleStamp.test.ts`（10） | — | gate 5c | 🟢（Phase 3 Batch A） |
+| Web 纯缝（activity reducer 对 / replay 映射器 / stream dispatch） | `apps/web` activityReducer / historyReplay / chatStreamFrames | ADR-087 §1/§3 + 打字机律 | 三套件（8+13+12，vitest 纯 node） | — | — | 🟢（Phase 3 Batch A）｜ DOM 渲染级仍 DEFERRED（§6） |
+| Canvas 唯一确认座（Confirm/Start 唯 dock pill） | `apps/web` flow/ + ChatDock | ADR-070 + Phase 3 判词 1 | — | S1 戳拍②③（dock pill 路径） | draftConfirm/onDraftConfirm/startPendingPlan 标识符清零（grep 可证） | 🟢（Phase 3 Batch A）｜ 渲染级负向锁（画布无 Start 钮的 DOM 断言）仍 DEFERRED |
 | Product Graph（词表 v3 / apply_wiring_ops 唯一写口 / 读面映射） | `app/pipeline/graph_*` | ADR-057 / ADR-076 | `test_graph_wiring_pure.py` + `test_product_graph_pure.py` | S12 等 | check_gates 既有门 | 🟢 |
 | C-0/C-1/C-2 拓扑空间权威三律（membership / rank / RunOp 拓扑序） | `app/pipeline/product_graph.py` | ADR-086 | `test_product_graph_pure.py` | — | — | 🟢 ｜ legacy `materialize` 读面不一致 = 合同 §12 D-PFA-01 在册 |
 | Execution（fenced 零副作用 / SKIP LOCKED 认领 / 毒丸护栏） | `app/pipeline/jobs.py` + worker | R1 批（I-EXEC-01~04） | — | S13 / S14 / S15 | — | 🟢 |
@@ -163,7 +166,7 @@ truth 从「处理中」变成「处理失败」——前置条件被 worker 调
 | `_stream_reads` legacy print fallback | `chat_scenarios.py:3738` | print-only 观察面；strict 断言层已是 Activity-first |
 | `SCENARIO_ACTIVITY_LEGACY=1` 降级通道 | `chat_scenarios.py` | 并行渲染期的逃生舱；步⑤后删 |
 | 旧 phase token（drafting/inspecting/repairing/creating_run）去留 | 服务端 + 客户端 | 步⑤ HOLD 中——收窄 / 转 Activity / 废弃是 Phase 3 的 Presentation 决策 |
-| 客户端 ActivityStream 渲染级 vitest + ChatDock reducer 纯化提取 | `apps/web` | 审计最大空洞；用户裁定登记为 Presentation/Hygiene 候选，本阶段不动 |
+| ~~客户端 ActivityStream 渲染级 vitest + ChatDock reducer 纯化提取~~ | `apps/web` | **reducer 纯化提取已落地（Phase 3 Batch A，2026-09-19）**：`activityReducer.ts`（upsert/sweep/reset 纯函数 + 8 例）/ `historyReplay.ts`（mapHistoryRows + 13 例，含「恢复不推导 lifecycle」keys 白名单锁）/ `chatStreamFrames.ts`（routeStreamFrame + 12 例）/ `lifecycleStamp.ts`（戳消费三态谓词 + 10 例，missing ≠ ready）+ `vitest.config.ts`（纯 node 零 DOM，app 插件在 vitest 下挂起的 setup gap 已补）。**仍 DEFERRED**：ActivityStream 渲染级（DOM）vitest |
 
 ### DEFERRED → ops 卫生批（非本阶段）
 

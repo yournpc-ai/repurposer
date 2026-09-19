@@ -94,3 +94,12 @@ PLANNED（2026-09-19 建档，未开工；前置 = Phase 1 全闭环）。
 5. **Activity refresh 蒸发不碰**——v1 turn-scoped 非持久化是合同线，登记为 future product decision。
 
 **施工分三批**（每批独立 STOP）：Batch A = Presentation Authority + Web Contract Seats（退役画布确认座 / 消灭 fallback-to-true / 三面共用戳 + 纯 contract tests）；Batch B = Phase Machine Migration（confirm/running 退位 + 三替身相位退役 + creating_run 死窗实证 + 剧本验证点迁移）；Batch C = Presentation Contract Cleanup（adapter 抽出 / prompt DENSITY 单主 / rendering.py:173 / fallback 终清理）。
+
+**BATCH A 已落地（2026-09-19→20，worktree `worktree-phase3-batch-a` commits `df5de98` 戳谓词 / `e5a95a2` 画布座退役 / `75f0570` stream dispatch 缝 / `ad05a2d` ChatDock 两纯缝）**：
+
+- **判词 1 落地**：Canvas Confirmation Seat 退役——ResultsCanvas draft-confirm 卡整族 / FlowNodeCard DocumentCard 的 price+Start 块 / FlowView 与 types 的 `draftConfirm` 布线 / layout.ts `documentTextHeight` 的 confirm +88 预留 / ChatDockHandle.startPendingPlan / projects 页 handleDraftConfirm 全删（grep 零命中可证）。不补戳门。K4 卡面 prompt 直改的定价确认（promptConfirm）不动——那是另一节拍（判词① 动作住节点内）。
+- **判词 2 落地（P0）**：四处 `lifecycle ? … : true` 全灭（ChatDock 挂载相位 / canStartGeneration / planCardVisible / planDock）——统一消费 `lib/lifecycleStamp.ts` 三态谓词（ready/blocked/unknown），stamp missing → unknown → 不做 lifecycle decision（挂载停 chat 相位等戳翻、Start disabled、卡片与 pill 不出现）。projects 页 graphLive 同批切 `isPlanReady`。
+- **Web contract seats**：`vitest.config.ts`（纯 node 零 DOM；app vite.config 的 tanstackStart/devtools 插件在 vitest 下挂起——setup gap 已补）+ 三缝抽出（行为零变化）：`activityReducer.ts`（upsert 幂等 / arrival 序 / sweep 零 dangling / per-turn reset）、`historyReplay.ts`（mapHistoryRows + 行词汇单座；恢复不推导 lifecycle 由输出 keys 白名单测试钉死）、`chatStreamFrames.ts`（routeStreamFrame 三通道 dispatch；JSON.parse 留 router 内保 throw 语义）。vitest 52 例全绿（含既有 11）。
+- **验证（Claude 自跑）**：vitest 52 绿 / tsc 仅剩 2 处 HEAD 预存错误（ChatDock `typeTargetId = cpId` UUID 模板型 + layout.ts `const y` 自引用——与本批无关，按避让清单上报不修）/ apps/api 纯 pytest 305 绿 / check_gates 全绿（gate 5c 过）/ 剧本 S1+S5+S20 回归。
+- **上报项（未顺手修）**：① 服务端 `graph_store._document_frame` 仍按 +88 确认解剖预留出生帧——客户端渲染不再填满，留白合法（reservation law）但镜像已漂移，Batch C 裁决；② HEAD 预存 tsc 错误 ×2（见上）；③ ChatDock 两缝同 commit（ad05a2d）——文件级回滚粒度，非逐座。
+- **Batch B/C 未动**：旧相位 token 全保留；ToolLoop / Lifecycle / Activity / Product Domain 零触碰；Activity persistence 不做。
