@@ -251,3 +251,52 @@ def test_empty_chain_never_plan_ready() -> None:
     assert not stamp.plan_ready
     assert not stamp.confirmation_scope_ready
     assert not stamp.confirmation_ready
+
+
+# ---- Phase 2.5 Batch B-1: the remaining conjunct pins -----------------------
+
+
+# ChargeSemanticsReady IS exactly "a plan is docked" (ADR-063 final reading):
+# the disclosure surface is renderable whenever a plan exists — a NULL
+# estimate shows the honest Deferred facet, so estimate completeness NEVER
+# blocks Confirm. The conjunct's only False is the no-plan row, where
+# plan_ready is already False (T1); there is NO reachable "plan_ready ∧
+# charge-incomplete" state by design — T9 pins the NULL-estimate green case,
+# this pin locks the equivalence itself.
+def test_charge_semantics_ready_is_exactly_the_docked_plan() -> None:
+    no_plan = compute_lifecycle(LifecycleFacts())
+    assert no_plan.charge_semantics_ready is False
+    assert no_plan.confirmation_scope_ready is False
+    assert no_plan.confirmation_ready is False
+    docked = compute_lifecycle(_ready_facts(estimate_total=None))
+    assert docked.charge_semantics_ready is True
+    assert docked.confirmation_ready is True  # ADR-063: deferred ≠ blocked
+    assert docked.charge_deferred is True
+
+
+# Multi-blocker determinism: when several predicates fail at once the
+# blockers tuple is the predicate evaluation order — stable, deduped,
+# semantic (never DB row order / dict order / stream order). Pinned as an
+# EXACT tuple so reordering or duplication goes red.
+def test_multi_blocker_order_is_the_predicate_evaluation_order() -> None:
+    facts = _ready_facts(
+        assets_pending=True,
+        language_unknown=True,
+        prerequisite_pending=True,
+        active_run=True,
+    )
+    expected = (
+        BLOCKER_MATERIAL_PENDING,   # material facts first
+        BLOCKER_LANGUAGE_UNKNOWN,   # …then the content fact…
+        BLOCKER_PENDING_PREREQUISITE,  # …then the dangling prerequisite…
+        BLOCKER_ACTIVE_RUN,         # …then the authority conflict last
+    )
+    stamp = compute_lifecycle(facts)
+    assert stamp.blockers == expected
+    # Determinism: the same facts re-computed byte-identically.
+    assert compute_lifecycle(facts).blockers == expected
+    # And the failing predicates still leave plan_ready false /
+    # confirmation_ready false (the blockers are explanatory, never
+    # decorative).
+    assert not stamp.plan_ready
+    assert not stamp.confirmation_ready
