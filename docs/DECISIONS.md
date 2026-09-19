@@ -1834,3 +1834,191 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 **落地回填（C-0，2026-09-18）**：契约模块 = `app/pipeline/product_graph.py`（pure）——判词 1 的准入闸落地为 type 层 membership 谓词（媒介五值可见 / `HIDDEN_ROLES` / `LEVER_TOOLS` 两显式枚举 / 未知 type default-deny，等效机制）；判词 2 的 rank = `product_ranks`（longest-path，rank 边集 = `{video, audio, text}`，ctx 引用流排除）；判词 3 的消费点 = `topological_order`（与 rank 同一事实源，C-2 接入 RunOp）；canonical fixture = `apps/api/tests/test_product_graph_pure.py`。legacy `materialize` 行的读面可见性与谓词的暂时不一致登记为合同 §12 D-PFA-01（随历史清理收编）。
 
 **Related**: ADR-036（布局自算 + append-only——本条收窄帧的职责不翻其律）/ ADR-057（图即产品对象——判词① 的母体；K5 维持）/ ADR-062（边对账律——对账不再依赖帧一致性）/ ADR-067（出锚语义律——「呈现忠于语义」同族）/ ADR-082（呈现/语义隔离铁律 + 判词① 呈现层修法先例；「画布可读性②」残留随本批施工吸收）
+
+---
+
+## ADR-087: Agent Interaction & Product Lifecycle Architecture——三条语义层 + Lifecycle / Activity / Confirmation 三合同 + 依赖方向冻结
+
+**Status**: Decided（2026-09-19，Architecture Freeze 用户拍板；Phase 0 = 本 ADR + docs 规范化落档，无产品代码；施工切分 = Phase 1~6 六份简报 `docs/tasks/lifecycle-phase-1~6-*.md`，批次登记 = PROGRESS §0.2；阶段门禁：每 Phase 全闭环才进下一 Phase）
+
+**Context**: 九轮只读取证 + Architecture Fitness Audit 的终判（等级 **B——骨架正确、边界重划**）：Agent Runtime / ToolLoop（有界 loop / terminal 语义 / hooks）/ Write Gates（图双门 / run 单出生地 `create_run` / operations 单门）/ DB-state-driven dispatch / Application Command 层的事实存在 / Product Domain / Product Graph / C-0/C-1/C-2 / Execution Runtime / 双引擎分离 / SSE 通用 transport 全部健康，**禁止因 UX 问题重写**。真正的结构性缺口是 **Product Lifecycle Projection 唯一真缺**——生命周期事实由 dispatch 谓词、trigger 双谓词与客户端多处推导代偿（plan pending ≥4 权威、素材就绪 ≥7 站点、Plan Ready 0 权威）；Presentation 向上越位（artifact existence → lifecycle 推导、turn.completed → Canvas）；Agent 中间事件丰富却被压扁成单槽 last-write-wins 状态行（>0 迭代 15–25s 只有心跳的盲窗）；确认教义存在路径分叉（propose path 直起 run、caption 双标、G-explicit 自动 Start）；docs 层 12 对矛盾条款与 10 组命名冲突。本条把已冻结的架构合同一次落档——允许重划的只有六处：Lifecycle Projection（新建）/ Activity Projection（新建）/ Presentation Contract（归位）/ Confirmation Doctrine 统一实现 / chat↔pipeline 依赖方向 / docs canonicalization。
+
+**Decision**:
+
+### 1. 五条 Architecture Principles（冻结）
+
+1. **Agent execution、Product lifecycle、Presentation 是三个不同问题**，必须由三个不同语义层回答。
+2. **Lifecycle 是服务端命名的只读投影**；Presentation 只能响应 Lifecycle，不得从 artifact existence、Agent event 或客户端推理恢复生命周期。
+3. **Activity 是 Agent 工作的用户安全观察流**；是可见性机制，不是生命周期权威，也不是 Tool Log。
+4. **Agent proposes → Application Commands → Domain decides**；新的 Paid Work 必须经过统一 Confirmation Doctrine；已确认 Scope 内的 continuation 可以自治。
+5. **每个产品概念只有一个 canonical definition**；代码、Transport、Prompt、Frontend 和 Docs 都只能引用该定义，不得另造语义。
+
+### 2. Lifecycle Contract
+
+服务端命名事实；**plan-scoped**；只读；唯一 lifecycle authority。
+
+- **PREPARING** = 计划形成 / 材料处理阶段（默认态）。
+- **MATERIAL_READY(P)** ⇔ 计划 P 引用的资产全部 COMPLETED ∧ 无 FAILED ∧ 链所需内容事实就位（text 链需非空 transcript；transform 需已知语言）。**相对 Plan P 的谓词，不是 project-global flag**。
+- **PLAN_READY** ⇔ unanswered task_book exists ∧ MATERIAL_READY(P) ∧ chain 针对当前事实重新裁决通过（复用 `validate_task_list` + 同语裁决——纯函数已存在，缺的是调用不是能力）∧ 无挂起前置提问。
+- **CONFIRMATION_READY** ⇔ PLAN_READY ∧ 确认信息完整 ∧ 对 Paid Work 费用语义已披露（§2.1）∧ 无活动 run。
+- **RUNNING** ⇔ 活动 run 存在。
+
+**固定不等式（入册）**：
+
+```
+Material Exists ≠ Material Ready ≠ Plan Ready ≠ Confirmation Ready
+turn.completed ≠ PLAN_READY
+present_plan ≠ PLAN_READY
+task_book exists ≠ PLAN_READY
+activity.completed ≠ PLAN_READY
+```
+
+estimate completeness 不是 PLAN_READY 必要条件。允许 **PLAN_READY=true ∧ CONFIRMATION_READY=false**（如估价进行中：Canvas + pill 可见，Confirm disabled）。
+
+**Presentation 映射**：PLAN_READY → Review Surface（Canvas + Confirm Dock 出现）；CONFIRMATION_READY → Confirm action enabled。**Canvas 与 Confirm Dock 是同一 lifecycle 状态的两个 presentation effects，不是两个独立 readiness predicates。** 移动端 parity：无画布形态下 plan card 是评审面（已发货形态），同一投影戳驱动，不另造谓词。
+
+#### 2.1 费用语义就绪（Charge Semantics Ready——衔接微合同，2026-09-19 用户拍板）
+
+CONFIRMATION_READY 的「费用信息可见」≠「所有节点 estimate 非空」。ADR-063（编译期 NULL 估价合法、「估价随运行」）**保持有效**——本条只定义确认就绪的费用披露标准，不改变「估价可随运行确定」的合法性；Lifecycle 表达产品阶段事实，不强迫下游 Runtime 提前产生它还没有能力产生的事实。对 Paid Work，CONFIRMATION_READY 要求**计费语义已经完整披露**：
+
+| 面 | 含义 |
+|---|---|
+| **Known** | 当前可得的精确 / 估算费用事实已知 |
+| **Deferred** | 当前无法计算的部分：不确定性、确定时点与计费规则必须明确标注 |
+| **Conditional** | 费用取决于什么条件必须明确 |
+| **Held** | 预留 / 冻结（hold）语义必须明确 |
+| **Actualized** | 最终扣费发生在什么时点必须明确 |
+
+禁止「价格以后再说」——Confirm 之后才浮现任何未披露费用的形态永禁（`Confirm → 后台才发现还有一部分收费` 是本合同真正禁止的事）。「必须全量估价才能 Confirm」是独立的未来产品 / 商业策略决策，**不在本合同内**。
+
+### 3. Agent Activity Contract
+
+唯一产品目标：**让用户持续感知 Agent 正在为其完成什么工作**。Activity ≠ Chain-of-Thought ≠ Tool Log ≠ Product Lifecycle ≠ Presentation Lifecycle。
+
+标准链：`Internal Agent Events → Activity Projection → User-safe Activity Events → Activity Stream → Chat Activity UI`。**Tool execution event 不直接进入用户 UI。**
+
+对账规则（十条，冻结）：
+
+1. 每个用户可见 Activity 必须可追溯到一个或多个内部执行事实；
+2. 内部事件可被过滤 / 聚合 / 折叠；
+3. N internal events → 1 Activity 合法；
+4. 1 internal event → 0 Activity 合法；
+5. 稳定 identity + deterministic ordering（activity_id / sequence / status / semantic_key）；
+6. 显式生命周期 started → completed / failed / cancelled；
+7. 永不作 Lifecycle authority；
+8. 永不直接控制 Canvas / Confirm / Run；
+9. 词汇单一 canonical owner（出 Tool Registry / Prompt / Service）；
+10. 对 Domain / Lifecycle 只读。
+
+Stream 语义：回合内 **append-oriented**，非 last-write-wins；至少表达 active / completed / ordered history；首版不要求持久化与回放；长执行 / 多 iteration 不得再产生无界盲窗（>0 迭代目前 15–25s 只有心跳）；发射节奏是实现细节，不是架构合同。
+
+**三概念分家**：`phase` 保留，但定义为 **System Status**（宏观态）——System Status = 系统处于什么大状态；Agent Activity = Agent 在做什么工作；Assistant Conversation = Agent 在对用户说什么。phase 不再是 Activity container。
+
+绝对约束：**SSE 打字机律不可破**——活动帧与散文打字机节拍共存，任何改动不得让散文整段瞬移（CHAT_ARCH §8.6）。
+
+### 4. Confirmation Doctrine（用户拍板，禁止重新解释）
+
+核心：**自然语言请求 = Task Intent ≠ Paid Execution Authorization**。
+
+标准路径：`Task Intent → Preparation → PLAN_READY → CONFIRMATION_READY → Explicit Confirmation → Paid Run`。
+
+- **明确禁止 G-explicit task request = paid gesture**：即使用户明确指定输出类型 / 语言 / 数量 / 范围 /「直接帮我做」，仍只是明确 Task Intent——可减少澄清、直接成 Plan，不得绕过 PLAN_READY → CONFIRMATION_READY → Explicit Confirmation。
+- **Existing Approved Scope（可自治）**：retry / internal repair / render continuation / execution step completion / approved-scope graph revision。
+- **Scope Expansion（必须重新 Confirmation）**：新增未确认付费输出 / 新增付费分支 / 超出已确认范围。**范围包含性由 Application Command 层代码裁决，不是 LLM 自决。**
+- **Caption/Non-caption Parity**：caption 特殊性仅限参数收集 / 前置提问 / 模式与语言格式选择；不拥有独立 Paid Authorization 语义。
+- **Estimate**：不阻塞 PLAN_READY；但 Paid Work 的 CONFIRMATION_READY 要求 scope 完整 + 费用语义披露（§2.1）+ 用户拥有足够信息做决定。**Paid Run MUST NOT begin before charge semantics disclosed ∧ explicit confirmation accepted。**
+- **统一 Paid Authorization path（用户拍板原文）**：plan path 与 propose path 可以拥有不同的 Agent preparation path，但**不得拥有不同的 Paid Authorization path**。正确目标：所有新 Paid Work → 统一 Confirmation-ready Product State → 统一 Confirmation Dock。**消灭的是路径分叉，不是新增一个「propose dock」UI。**
+- `propose_tasks` 的工具描述「it never starts a run by itself」是逐字复制 `present_plan` 的失信文本（`turn_tools.py:88-89` vs 实现 `propose_turn.py:331`），必须与最终实际语义一致（Phase 4 修）。
+
+### 5. Target Architecture
+
+```
+                       USER
+                        │
+                        ▼
+                 Agent Runtime
+                 ToolLoop / hooks
+                   │        │
+                   │        └──────────────┐
+                   ▼                       ▼
+             Tool Interface        Agent Execution Events
+                   │                       │
+                   ▼                       ▼
+           Application Commands    Activity Projection
+                   │                       │
+                   ▼                       ▼
+             Product Domain       Activity Stream → Chat
+                   │
+        ┌──────────┴───────────┐
+        ▼                      ▼
+Lifecycle Projection       Execution Runtime
+        │                      │
+        └──────────┬───────────┘
+                   ▼
+                Transport
+                   ▼
+              Presentation
+           Chat / Canvas / Dock
+```
+
+两投影可消费共同底层事实；互不消费对方输出；**Presentation 只消费 projection**。
+
+### 6. Dependency Direction（冻结）
+
+**允许**：Agent→Tool→Application Command→Domain；Domain→Execution Runtime 委托；Runtime→Events/Domain facts；Events→Projection；Projection→Transport→Presentation。
+
+**禁止**：
+
+- Presentation→Domain internals；
+- Presentation→artifact existence 推导 lifecycle；
+- Activity→Lifecycle / Canvas visibility / Confirm；
+- Tool→Presentation；
+- Agent→Product Lifecycle 决定；
+- Lifecycle Projection→Domain 写；
+- Pipeline→Chat 直接 import（现状 2 顶层 + 6 deferred，改走 trigger 事件缝）；
+- Prompt→frontend 渲染阈值；
+- Chat↔Pipeline 双向依赖；
+- 跨模块私有函数 import（`_asset_digest` / `_check_transform_targets` 等现状违规）。
+
+**跨层回溯只能经过**：event seam / public application command / explicit protocol。**不得再新增 deferred import 来修架构。**
+
+### 7. C-0/C-1/C-2 保护合同
+
+不重新设计。Product Graph ≠ Execution Runtime ≠ Presentation。Rank 是 topology authority；Frame 是 presentation projection；执行序走拓扑（ADR-086 不变）。Canvas edge/anchor routing 不重写。**本阶段一切 lifecycle/activity 改造只在 read-side，不得进入 graph write gate。**
+
+### Non-goals
+
+- 不重写 ToolLoop / Agent / Product Graph / Execution Runtime / SSE 机制 / Canvas edge routing；
+- 不把 Product Canvas 变成 Execution Graph；
+- 不把 Activity 做成 workflow graph；
+- 不把内部 Tool Log 暴露给用户；
+- 不一次性拆 ChatDock / service.py；
+- 不为目录漂亮移动文件。
+
+### Reversal Ledger
+
+> 每条 = old contract → current reality → target contract → migration note。被翻案条款的现行表述以本条与相关 ADR 正文为准（ADR 只保留现行决策，就地改写，历史在 git）。
+
+| # | 条款 | old contract | current reality | target contract | migration note |
+|---|---|---|---|---|---|
+| R1 | ADR-057 §3（草稿态可见性） | 计划 dock 即 stamp 草稿图、画布经 `hasRuns`/`hasDraftGraph` 客户端推导出现 | 推导散落（`projects.$id.index.tsx:238-244` 等 ≥4 站点），无单一 readiness 权威 | Review Surface 可见性 = Lifecycle Projection 的 **PLAN_READY** 投影戳；客户端零推导；fold 报价前提（ADR-086 条款 4）保留——draft 图仍带逐节点估价 | Phase 1：projection additive → dual-read → switch consumer → 删旧推导 |
+| R2 | ADR-086 条款 4（K5 翻案注） | 「图先展示后运行」= dock 即现 | 素材处理中 draft 图也可能已现——PREPARING 阶段提前翻页 | fold 报价前提保留；**翻页时机移后**——Review Surface 自 PLAN_READY 起出现（PLAN_READY 含 MATERIAL_READY，素材处理中不出现） | Phase 1 随 R1 同一投影戳落地；K5「先展示后运行」不翻案，收窄的是出现的 lifecycle 条件 |
+| R3 | ADR-080（单一叙事者） | trigger 双谓词（in_flight → defer；pending task_book → 静默）；Status 行写「待施工」 | 已落地（2026-09-17 当日兑现，PROGRESS 需求池条目已关闭）——Status 行「待施工 vs 已落地」自相矛盾 | 双谓词原样保留（叙事所有权门不变）；`understanding_warmed` 豁免 pending-plan 静默——它只在无 pending plan 时说话，**不构成第三条 readiness 路径**；trigger 言语永不作 lifecycle authority；文档状态行修正为「已落地」 | Phase 0 落档（本表即解消）；无代码动作 |
+| R4 | ADR-084（Start CTA 归 dock） | duty ③：Chat 永不邀请言语确认，Start CTA 归 dock | 已落地；但「pill 可见」与「Confirm 可点」未分离 | duty-① 信任锚保留 + 补「**确认权等 CONFIRMATION_READY**」——pill 可见（PLAN_READY）与可点（CONFIRMATION_READY）是两个 lifecycle 条件 | Phase 1：disabled 态由投影戳驱动（估价进行中 = 信息补全态） |
+| R5 | IC:50 G-explicit 自动 Start | INTENT_COVERAGE §3.0「G 明确 → 前端自动 Start ✅」 | 与 ADR-054「付费 run 必须有手势」并存矛盾 | **翻案退役**——G-explicit = Task Intent ≠ 付费手势；一切新 Paid Work 走统一确认路径 | Phase 4：前端移除自动 Start；INTENT_COVERAGE 已标记 historical（Phase 0） |
+| R6 | ADR-054 × IC:50（§1194 和解） | ADR-054 Alternatives「薄书自动 Start 否决（翻案条件：无——付费 run 必须有手势）」 vs IC:50 自动 Start | 两条文并存 | **1194 绝对读法胜**：一切付费 run 必须有显式确认手势，G-explicit 不豁免；**密度律不动**（单任务 = 纯散文确认仍是确认手势，只是形态轻） | Phase 4 统一实现；无文档追加动作（本表即和解记录） |
+| R7 | ADR-083「Canvas 管 plan」 | 「Chat 管 understanding/judgment/confirmation，Canvas 管 structure/plan」 | 与 ADR-072⑤（task_book 节点下线）、ADR-086（Product Canvas ≠ Execution Graph）需要同一读法 | 对齐 072⑤/086：Canvas 管 structure（draft 图即计划结构的显形），确认拍座位 = dock pill（ADR-070）；「管 plan」不读作画布承载确认；ADR-083 三语义职责与 grounding 链不动 | 无代码动作；本表即对齐记录 |
+| R8 | ADR-077 判词⑥（命名方向） | 「brief 账本 → session state」列为 NAMING 批 v3 方向 | N-52 已记录该方向**评审被拒**（brief 保留——session state 撞 auth/工程语境） | 以 N-52 被拒记录为准；ADR-077 判词⑥的命名方向读作「方言词退役」（brief 保留原词） | 无代码动作；本表即对齐记录 |
+
+### Consequences
+
+- **Phase 0（本批，docs-only）**：本 ADR + README 事实源表补行 + NAMING 注册（lifecycle / activity / confirmation 词族入册；过程脊 / 渲染单元 / 结果画布 runFlow 定义 / 焦点注入死行清理）+ INTENT_COVERAGE 标记 historical + Phase 1~6 施工简报 + PROGRESS §0 登记。
+- **Phase 1 Lifecycle Projection**：服务端命名 Lifecycle facts 单点谓词；projection additive → dual-read → switch → remove；素材处理中 Review Surface 不出现、PLAN_READY 同拍出现、CONFIRMATION_READY=false 时 Confirm disabled；转写节点 loading 出生随批。
+- **Phase 2 Agent Activity Projection**：single-slot ThinkingRow → append-oriented Activity Stream；复用既有 hook 接缝最小增量 3 座；首版无持久化无回放；打字机律不破。
+- **Phase 3 Presentation Migration**：`_read_face` / `activity_key` / `THINKING_PHASE_*` 归位 protocol/presentation-contract；客户端零 lifecycle 推导（grep 可证）。
+- **Phase 4 Confirmation Doctrine Unification**：先盘点 propose path 直起 run 全部来源与测试再改代码；统一 Paid Authorization path；caption 双标 / `propose_tasks` 失信描述 / IC:50 自动 Start / `autonomy="review"` 死档同批裁决；prompt 面必过 prompt_gate。
+- **Phase 5 Dependency Cleanup**：pipeline→chat 8 处改道 trigger 事件缝；跨模块私有 import 清零；import 图单向（冷导入探针可证）。
+- **Phase 6 Hygiene**：service.py / schemas.py / graph_fill.py 拆分、Message.intent typed union、apply_edit_ops commit 律对齐——最后做，永不进关键路径。
+- **新能力机械回答表（验收基准）**：Agent action → Tool Interface；改 Domain → Application Command → Write Gate；用户要看到在做 → Activity Projection；改变产品阶段 → Lifecycle Projection；UI 响应 → Presentation consumes projection。若新增一种能力仍需「新 phase + 新 envelope + 新 ChatDock if + 新 polling + 新 prompt 条件」，说明本合同被破坏——STOP 上报。
+
+**Related**: ADR-057（图即产品对象——Lifecycle 投影的消费面）/ ADR-063（估价诚实面——§2.1 保持其有效性）/ ADR-070（确认拍 dock 唯一座位——Confirmation Dock 的形态基座）/ ADR-072（task_book 节点下线——计划真身各归其位）/ ADR-077（会话层工具 loop——Activity 的内部事件源；判词⑥ 命名方向见 R8）/ ADR-080（单一叙事者——R3）/ ADR-083/084（言语语义管线——R4/R7）/ ADR-085（三层交付模型——Checkpoint 是 Activity 的言语族近亲，Activity Projection 不重设计它）/ ADR-086（拓扑空间权威三律——C-0/C-1/C-2 保护合同）/ North Star §3（Agent = Decision Producer——原则 4 的母体）
