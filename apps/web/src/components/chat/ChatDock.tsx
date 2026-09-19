@@ -156,8 +156,6 @@ const LANGUAGE_OPTIONS = [
   { code: "it", labelKey: "languages.it" },
 ] as const
 
-type Phase = "running" | "chat"
-
 /** One task in the plan chain (ADR-043 — the request layer's only grammar:
  * a registry tool + its params, the same shape the intent router proposes and
  * the chat loop adjudicates). Outputs are a derived projection of the
@@ -645,10 +643,10 @@ interface ChatDockProps {
    * — the page refetches so the landed products show. */
   onComplete: (runId: string | null) => void | Promise<void>
   /** The server-named lifecycle stamp (ADR-087 §2, Phase 1): the confirm
-   * phase's mount gate and the Start button's enable read it — the dock
-   * never derives lifecycle locally. Null on the pre-first-fetch frame
-   * (the page's loading gate holds the mount, so this is always settled
-   * before the confirm beat can show). */
+   * beat's derived gate (confirmActive) and the Start button's enable read
+   * it — the dock never derives lifecycle locally. Null on the
+   * pre-first-fetch frame (the page's loading gate holds the mount, so this
+   * is always settled before the confirm beat can show). */
   lifecycle?: LifecycleStamp | null
   /** A run STARTED while this dock was watching (Start button / prose
    * confirmation / 修订 run) — the page refetches immediately so its own
@@ -1114,17 +1112,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     },
   }))
 
-  // Restore mounts by the lifecycle stamp (Phase 1, acceptance #4; Phase 3
-  // Batch B 判词 3 拆语义): the dock's view state is only "run attached" vs
-  // "chat" — the CONFIRM beat is no longer a phase at all. It is DERIVED
-  // below (confirmActive = intentReady ∧ the stamp's PLAN_READY ∧ no live
-  // run): a parked plan's confirm surface appears when readiness lands and
-  // never on a dock envelope alone (task_book exists ≠ PLAN_READY). Phase 3
-  // 判词 2: a MISSING stamp is unknown, never ready — no stamp, no confirm
-  // face (the retired `?? true` fallback was a hidden Lifecycle Authority).
-  const [phase, setPhase] = useState<Phase>(
-    initialRunId ? "running" : "chat"
-  )
+  // Restore mount (Phase 1, acceptance #4; Phase 3 Batch B): the dock's only
+  // view fork is "a run is attached" vs plain chat — a transport fact
+  // (initialRunId), never a lifecycle judgment. The CONFIRM beat is derived
+  // (confirmActive below); RUN lIVENESS reads the run's own SSE facts
+  // (terminal/status). No phase machine lives here anymore.
   const [intent, setIntent] = useState<InferredIntent>(() =>
     initialIntent
       ? normalizeIntent(initialIntent)
@@ -1697,7 +1689,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const landOnStartedRun = useCallback((runId: string) => {
     setPendingQuestion(null)
     setRunId(runId)
-    setPhase("running")
     void onRunStartedRef.current?.(runId)
   }, [])
 
@@ -1853,7 +1844,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // Same override stamp as the answer path above (ADR-058).
       setRunTitleOverride(titleOf(intent))
       setRunId(data.run_id)
-      setPhase("running")
       void onRunStartedRef.current?.(data.run_id)
     } catch (e) {
       setStartError(e instanceof Error ? e.message : t("generationOverlay.failed"))
@@ -3367,8 +3357,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // fixed block is dead): the pre-snapshot window (runStartAt == null —
     // the run is attached but the SSE's first frame hasn't arrived) renders
     // the SAME live pose with the chrome pinned bottom-most (+∞) and the
-    // task list's narrativeFallback standing in for the steps.
-    if (phase !== "running") return null
+    // task list's narrativeFallback standing in for the steps. Phase 3 Batch
+    // B: the gate is the run-ATTACH fact (runId), never a lifecycle phase —
+    // archive (terminal) runs render through this same path by design.
+    if (runId == null) return null
     type Timed = { t: number; order: number; unit: RunStreamUnit }
     const timed: Timed[] = []
     let order = 0
@@ -3443,7 +3435,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
     }
     return units
-  }, [phase, runStartAt, runCreatedAt, steps, messages, terminal, status])
+  }, [runId, runStartAt, runCreatedAt, steps, messages, terminal, status])
 
   /** 点值改 (B3): an inferred slot's inline-edit commit IS a normal chat
    * send — the composed statement (「受众：X」 / "Audience: X") rides the one
