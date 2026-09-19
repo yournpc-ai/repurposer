@@ -39,7 +39,7 @@ Lifecycle 成为服务端命名的只读投影，客户端零生命周期推导�
 
 ## Tests（Claude 编写，用户自跑）
 
-- 纯 pytest：谓词分支矩阵——素材 PENDING / PROCESSING / FAILED / COMPLETED；空 transcript；未知语言（transform 链）；前置提问挂起；链重裁决失败；估价 NULL；`PLAN_READY ∧ ¬CONFIRMATION_READY`；无活动 run / 有活动 run。
+- 纯 pytest：谓词分支矩阵（§Preflight P6 全表 T1~T15）——素材 PENDING / PROCESSING / FAILED / COMPLETED；空 transcript；未知语言（language_unknown = 内容事实缺席，U5）；已知语言规则不通过（chain_adjudication_failed，U5）；前置提问挂起；链重裁决失败；估价 NULL；旗舰 negative `PLAN_READY ∧ ¬CONFIRMATION_READY`（T10 active run / T10b scope 未就绪双变体）；四合取项独立性（T15）。
 - 剧本：PENDING 素材 dock 存活（S5 / S7 / S10 / S11 / S20A 全保留）+ 投影戳断言新增。
 - 预部署门禁顺序：纯 pytest → prompt_gate（本批不动 prompt 面则无新增义务，动了必过）→ chat_scenarios 全量。
 
@@ -74,6 +74,9 @@ projection additive → dual-read verification → switch consumer → remove ol
 - 禁止顺手拆 ChatDock（Phase 3 的事）/ 顺手改 Activity（Phase 2 的事）/ 顺手统一确认路径（Phase 4 的事）。
 - 禁止新增 deferred import；跨模块取数走 public application command / explicit protocol。
 - 禁止 Presentation→artifact existence 推导 lifecycle 的新写点。
+- 禁止把「dock payload 存在」当 lifecycle authority（U4 判词：payload-existence → confirmation_ready = task_book exists → confirm 的换皮错误；投影只读字段级 Domain facts）。
+- 禁止把旧 frontend predicates 原样集中搬入 projection（门禁一禁令的另一面：搬迁 ≠ 重建——每个谓词必须从 Domain facts 重新推导）。
+- 禁止修改 Architecture Contract（ADR-087 本文不动；裁定落档在本文）。
 
 ## 收尾报告格式（每 Phase 同律，§十六）
 
@@ -88,7 +91,7 @@ Goal / Current evidence / Contract changes / Files / Tests / Migration strategy 
 
 ## Status
 
-PREFLIGHT 已交付（2026-09-19 用户验收 Phase 0 通过、允许进 Phase 1；同日用户加三道硬门禁 + 裁定 **Preflight 先行、不改代码**——Preflight 产物 = 本文 §Preflight 报告 P1~P7，含门禁一对账表与 U1~U5 待裁定项）。**待用户评审 Preflight；Implementation 未开工。**
+IMPLEMENTATION 已批准（2026-09-19 用户验收 Preflight：**PASS WITH 3 CONDITIONS**——U1/U2/U4/U5 裁定落档于 §Preflight P7/P8/P9，ConfirmationScope 字段盘点与 Fact→Owner Matrix 已补齐，方准开工）。Preflight 产物 = 本文 §Preflight 报告 P1~P9。
 
 ## 三道硬门禁（2026-09-19 用户拍板，验收时逐条过）
 
@@ -148,7 +151,7 @@ PREFLIGHT 已交付（2026-09-19 用户验收 Phase 0 通过、允许进 Phase 1
 | 素材 FAILED | S4 告知 router；无代码门阻挡 Start → 可造出注定失败的 run | MATERIAL_READY(P)=false → PREPARING；FAILED 出口引导 = prepare 层职责（上报 U1） | ✅ |
 | 素材 COMPLETED | 正常 | MATERIAL_READY=true（文本事实 = transcript/extracted_text/meta.words 任一，消费规则镜像 `graph.py` transcript requirement） | ✅ |
 | 空 transcript（ASR 完成无词） | S8 节点不出生；S5 transcript requirement 缺 → 出生地 422 | MATERIAL_READY=false（chain 内容事实不在）→ PREPARING | ✅ |
-| 未知 language（transform 链） | 同语裁决在 S5（出生地）+ `plan_turn.py:550-562`（present_plan 校验）二次执行 | PLAN_READY 链重裁决直接复用同款纯函数；输入事实 = `asset.meta.language` | ✅ |
+| 未知 language（transform 链） | 同语裁决在 S5（出生地）+ `plan_turn.py:550-562`（present_plan 校验）二次执行 | **language_unknown = 必需内容事实缺席（U5 裁定）** → MATERIAL_READY=false → PREPARING；不属于裁决失败 | ✅ |
 | pending prerequisite 未答 | S1 真 → dock 重建提问；S10 trigger 静默 | PLAN_READY 条件「无挂起前置提问」读同一 unanswered 行事实 | ✅ |
 | 旧 task_book（已答/被取代） | S1 假 → 不进 plan 恢复 | 投影只认 unanswered 行 | ✅ |
 | re-dock | dock 覆写 pending_brief；C3 parked plan wins | 投影读最新 dock 行重算 | ✅ |
@@ -171,21 +174,37 @@ PREFLIGHT 已交付（2026-09-19 用户验收 Phase 0 通过、允许进 Phase 1
 
 原则落实：投影**零新推理**——每个输入都是已有 owner 的已定义事实；链裁决复用既有纯函数，不新写 heuristic（门禁一禁令遵守）。
 
-### P4. 输出 contract（投影戳形状提案；Implementation 期冻结为 schema）
+### P4. 输出 contract（投影戳形状；已按 2026-09-19 用户 U4 裁定修订——Implementation 期冻结为 schema）
+
+**CONFIRMATION_READY 的构造律（U4 裁定原文落档）**：
+
+```
+CONFIRMATION_READY = PLAN_READY
+                   ∧ ConfirmationScopeReady
+                   ∧ ChargeSemanticsReady
+                   ∧ NoActiveConflictingRun
+```
+
+四个合取项各自独立成字段出现在投影戳里——**禁止坍缩成一个 boolean**（门禁三的结构性兑现；「dock payload 存在 → confirmation_ready」被明确否决，投影读的是 payload 内的字段级事实，不是 payload 的存在性）。
 
 ```jsonc
 "lifecycle": {
   "state": "preparing" | "plan_ready" | "confirmation_ready" | "running",
-  "material_ready": false,        // MATERIAL_READY(P)，P = 当前 dock 计划
-  "plan_ready": false,            // 与 confirmation_ready 独立（门禁三）
-  "confirmation_ready": false,
+  "material_ready": false,              // MATERIAL_READY(P)，P = 当前 dock 计划（plan-scoped，U2）
+  "plan_ready": false,
+  "confirmation_scope_ready": false,    // ConfirmationScopeReady（字段盘点见 P8）
+  "charge_semantics_ready": false,      // ChargeSemanticsReady（ADR-087 §2.1 五面可呈现性）
+  "no_active_conflicting_run": false,   // NoActiveConflictingRun
+  "confirmation_ready": false,          // = 上述 plan_ready ∧ scope ∧ charge ∧ no_run（唯一合成点）
   "blockers": ["material_pending" | "material_failed" | "content_missing"
-             | "chain_adjudication_failed" | "pending_prerequisite" | "active_run"],
+             | "language_unknown"                       // U5：必需内容事实缺席，非裁决失败
+             | "chain_adjudication_failed"              // 已知语言但规则不通过（U5）
+             | "pending_prerequisite" | "active_run"],
   "charge": { "known": [low, high] | null, "deferred": true }  // 展示事实，不裁决
 }
 ```
 
-载体：results 响应 + graph 响应携带同一戳（一票源、两处运输）；移动端 plan card 读同一戳（parity）。`blockers` 存在是为了信息补全态文案（CONFIRMATION_READY=false 时 UI 知道说什么），不是第二套谓词。
+载体：results 响应 + graph 响应携带同一戳（一票源、两处运输）；移动端 plan card 读同一戳（parity）。`blockers` 存在是为了信息补全态文案（CONFIRMATION_READY=false 时 UI 知道说什么），不是第二套谓词。**blocker reason 是一等输出（U1 裁定）：FAILED ≠ generic not-ready——投影必须能表达 blocker reason，本阶段不新增 UI（Presentation 消费归 Phase 3，本批只保证戳里带 reason）。**
 
 ### P5. Consumer 迁移清单（门禁二：迁移完成后客户端旧 lifecycle predicate 归零）
 
@@ -197,29 +216,64 @@ PREFLIGHT 已交付（2026-09-19 用户验收 Phase 0 通过、允许进 Phase 1
 - S7 worker deferred claim——执行层兜底；R2 后 UI 路径不再触达，API 直调仍可能，保留为防御。
 - S5/S6 出生地写门——Domain 写路径永不依赖投影（ADR-087 §2），原位保留。
 
-### P6. 纯函数测试矩阵（门禁三旗舰 case 在列）
+### P6. 纯函数测试矩阵（门禁三旗舰 case 在列；已按 U4/U5 裁定修订）
 
 | # | 输入组合 | 期望 |
 |---|---|---|
-| T1 | 无挂起计划 | preparing；两 ready 均 false |
+| T1 | 无挂起计划 | preparing；各 ready 均 false |
 | T2 | dock 计划 + 素材 PENDING | material_pending；preparing |
 | T3 | 素材 PROCESSING | 同 T2 |
-| T4 | 素材 FAILED | material_failed；preparing |
+| T4 | 素材 FAILED | material_failed（**独立 reason，不坍缩进 generic not-ready——U1**）；preparing |
 | T5 | 素材 COMPLETED 但空 transcript（链需文本） | content_missing；preparing |
-| T6 | transform 链 + 未知 language | chain_adjudication_failed（归类裁定见 U5） |
+| T6 | transform 链 + 未知 language | **language_unknown——必需内容事实缺席（U5：不属于裁决失败）**；material_ready=false；preparing |
+| T6b | transform 链 + 已知 language 但同语规则不通过 | chain_adjudication_failed（U5：已知语言但规则不通过才是 revalidation failure）；plan_ready=false |
 | T7 | 前置提问挂起 | pending_prerequisite；plan_ready=false |
-| T8 | 同语链裁决失败 | chain_adjudication_failed |
-| T9 | 全就绪 + 估价 NULL | plan_ready=true ∧ confirmation_ready=true（Deferred 披露可呈现） |
-| T10 | **旗舰 negative：全就绪 + 活动 run** | plan_ready=true ∧ confirmation_ready=false；state=running；UI 合法（Canvas + pill 可见、Confirm disabled） |
+| T8 | 同语链裁决失败（已知语言） | chain_adjudication_failed |
+| T9 | 全就绪 + 估价 NULL | plan_ready=true；charge_semantics_ready=true（Deferred 面可呈现）；confirmation_ready=true |
+| T10 | **旗舰 negative：全就绪 + 活动 run** | plan_ready=true ∧ no_active_conflicting_run=false → confirmation_ready=false；state=running；UI 合法（Canvas + pill 可见、Confirm disabled） |
+| T10b | 旗舰变体：PLAN_READY ∧ ConfirmationScopeReady=false（scope 字段缺席，盘点见 P8） | confirmation_ready=false 且 plan_ready=true——四合取项独立性的第二证据 |
 | T11 | 活动 run + 无新计划 | running |
 | T12 | 已答/被取代 task_book | 不参与（等价 T1） |
 | T13 | re-dock | 按最新行重算 |
 | T14 | 手改面板链（panel dirty） | 投影裁决**存储的** dock 链；手改链由出生地 422 兜底（现行行为不变，见 U3） |
+| T15 | 四合取项排列：plan_ready=false 时 confirmation_ready 恒 false（无论其余三项） | 合成点唯一性 |
 
-### P7. 无法由当前 Domain facts 判定 / 需用户裁定的场景（不自行裁决）
+### P7. Preflight 上报项 → 用户裁定落档（2026-09-19，PASS WITH 3 CONDITIONS）
 
-- **U1 [INFERRED] FAILED 资产的 UX 出口**：MATERIAL_READY 要求无 FAILED——用户不移除/重传失败资产时计划永不 ready。投影只报 blocker；出口引导属 prepare 层。建议：保留 S4 material line 作为 router 信号（现状），本 Phase 不加新 UI。请确认。
-- **U2 [INFERRED] MATERIAL_READY(P) 的「P 引用资产集」**：合同定义为「计划 P 引用的资产」，但当前 Domain 无 plan→asset 一阶绑定。v1 工作读法 = 项目级资产集（chain 的 requires 消费集与出生地 profile dispatch 同款推导）。请确认 v1 采用项目级读法。
-- **U3 [PROVEN] 手改面板链**：投影只能裁决存储的 dock 链；手改链在 Start 时由出生地 ∀-check + 同语裁决兜底（现行行为，不变）。无需新事实，无需裁定。
-- **U4 [UNPROVEN]「确认信息完整」的完整枚举**：除估价戳外，pending_brief payload 的 `derived`/`reasons` 字段是否全部属于「确认信息」需 Implementation 期逐字段盘点。当前工作读法：确认信息完整 ⇔ dock payload 存在 ∧ charge 披露面可呈现。
-- **U5 [INFERRED] T6 归类**：未知 language 是内容事实缺席还是裁决失败——两种 blocker 归类都合法，Implementation 期定，不影响谓词覆盖性。
+- **U1 → 裁定：FAILED ≠ generic not-ready。** Projection 必须能表达 blocker reason（`material_failed` 独立成 blocker 枚举值，见 P4）；本阶段不新增 UI（Presentation 消费归 Phase 3）。原「FAILED 出口引导属 prepare 层」结论保留：S4 material line 继续作 router 信号，不加新 UI。
+- **U2 → 裁定：不允许把 project-level asset set 写成 MATERIAL_READY 的架构定义。** MATERIAL_READY(P) 必须保持 plan-scoped（「计划 P 引用的资产」）；可以存在 legacy project-scope resolver（v1 实现可先用项目级资产集求解 P 的引用集），但**必须在代码与本文标明兼容性座位**——它是 resolver 的 v1 近似，不是概念定义。概念定义永远是 plan-scoped。
+- **U3 [PROVEN] 手改面板链**：投影只能裁决存储的 dock 链；手改链在 Start 时由出生地 ∀-check + 同语裁决兜底（现行行为，不变）。无需新事实。
+- **U4 → 裁定：否决「dock payload 存在」作为 lifecycle authority。** CONFIRMATION_READY = PLAN_READY ∧ ConfirmationScopeReady ∧ ChargeSemanticsReady ∧ NoActiveConflictingRun（四合取项，见 P4）；ConfirmationScope 字段盘点 = P8（Implementation 前置，已补齐）。**警戒判词（用户原文落档）**：「task_book exists → confirm」是已经走过一次的错误；「dock payload exists → confirmation_ready」是架构上换皮的同一个错误。本 Phase 建立的方向是 `Domain Facts → Lifecycle Projection → Presentation`，永不是 `Presentation Artifact → Lifecycle`。
+- **U5 → 裁定：UNKNOWN_LANGUAGE = required content fact missing**（blocker = `language_unknown`，归入内容事实缺席族，material_ready=false）；**已知语言但规则不通过才是 revalidation failure**（blocker = `chain_adjudication_failed`）。两个 blocker 永不混用。
+
+### P8. ConfirmationScope 字段盘点（U4 裁定的 Implementation 前置产物；锚点核于 worktree HEAD `83c37c2`）
+
+ConfirmationScope = 确认拍呈现给用户裁决的**范围事实集**。盘点结论：每个字段都是已有 owner 的 Domain fact，投影逐字段读取——**不存在「payload 存在即 ready」的捷径**。
+
+| 字段 | 座位 | Owner | 就绪条件（Scope Ready 的组成） | 确认拍消费者 |
+|---|---|---|---|---|
+| 链（task list） | task_book 行 `intent` 列（`InferredIntent.tasks`） | Agent Interface（dock 时由代码 stamp） | 非空且每 task 结构合法（`validate_task_list` 同款纯函数裁决） | ChatDock.tsx:3837（行渲染）/ :2043 |
+| 计划散文 | `intent.answer`（= 提问行 `content`，回声实体化） | Agent Interface | 非空（全文卡律：计划文本 = 提案自身散文） | ChatDock.tsx:3753-3788 |
+| 估价戳 | `payload.estimate_credits`（`PlanEstimate{total, per_task}`） | Billing 契约（ADR-055）+ Agent Interface dock 戳 | **非 scope 条件**——归 ChargeSemanticsReady（NULL = Deferred 面，合法） | ChatDock.tsx:4413 / :3738 |
+| 派生预览 | `payload.derived` / `pending_brief.derived`（ADR-043 dry-run 投影） | Agent Interface（dock 时 dry-run compile 计算） | **非 scope 条件**——展示事实（空 = 旧行读容忍，不阻塞） | ChatDock.tsx:2446 / :2455 |
+| 澄清原因键 | `payload.reasons`（needs_clarification keys） | Agent Interface | **非 scope 条件**——非空时计划本就停在提问态（pending_prerequisite 已覆盖） | dock 渲染（本地化在 render） |
+| brief 槽位 | `payload.brief` / `pending_brief.brief`（`Brief`，provenance 槽） | Agent Interface | **非 scope 条件**——slot 未答 = 挂起提问（pending_prerequisite 已覆盖） | 计划回合合并 |
+| 角色 pins | `pending_brief.source_asset_id` / `exemplar_asset_id`（ADR-078） | Agent Interface（代码 settle，永不 LLM） | 多视频 remix 时必须已 settle——未 settle 时角色提问 dock 中 = pending_prerequisite 已覆盖 | run start 时 stamp 到 TaskSpec |
+| persona | `pending_brief.persona_id` | Agent Interface | **非 scope 条件**——null = Auto，合法 | run.context 钉入 |
+
+**ConfirmationScopeReady 判定（v1）**：链非空 ∧ 结构合法 ∧ 计划散文非空。其余字段或归入其他合取项（估价 → ChargeSemanticsReady），或已被 pending_prerequisite 覆盖（reasons / brief / 角色 pins），或为合法可空（derived / persona）——**盘点结论：ConfirmationScopeReady 不引入任何新事实源，全部读 task_book 行已有 stamp 字段**。
+
+### P9. Lifecycle Fact → Input Fact → Owner Matrix（2026-09-19 用户新增 Phase 1 前置静态产物）
+
+| Lifecycle Fact | Input Facts | Owner | 读法 |
+|---|---|---|---|
+| PREPARING（默认） | 无挂起计划 ∨ 任何下游条件不满足 | —（缺省态，无输入） | 缺省 |
+| MATERIAL_READY(P) | ① P 引用资产集（plan-scoped，U2——v1 可由 project-scope legacy resolver 求解，标明兼容性）② 每资产 `processing_status` ③ 链内容事实（transcript / extracted_text / meta.words，镜像 `graph.py` transcript requirement）④ transform 链目标语言 vs `asset.meta.language` | Pipeline（asset_processing 状态机 / 资产文本事实 / ASR 语言事实） | 纯函数，输入 = 资产行 + 链 |
+| PLAN_READY | ① unanswered task_book 行存在 ② MATERIAL_READY(P) ③ 链重裁决通过（`validate_task_list` + `_check_transform_targets` 同款纯函数）④ 无挂起前置提问 | Agent Interface（①④）+ Pipeline（②③的事实输入） | ①④ = 行存在性；②③ = 纯函数 |
+| ConfirmationScopeReady | 链 stamp 非空 ∧ 结构合法 ∧ 计划散文非空（P8） | Agent Interface | 字段级读法（否决 payload-existence 捷径，U4） |
+| ChargeSemanticsReady | `estimate_credits` 戳（Known）∨ Deferred 面可呈现（静态文案 + hold 规则，ADR-087 §2.1） | Billing 契约（ADR-055）+ Agent Interface dock 戳 | 字段读法 + 静态规则 |
+| NoActiveConflictingRun | `has_active_run` | Pipeline orchestrator（S6） | 现有谓词直读 |
+| CONFIRMATION_READY | 上述四合取（唯一合成点） | —（合成，无新输入） | 纯合取 |
+| RUNNING | 活动 run 存在 | Pipeline orchestrator | 现有谓词直读 |
+
+**矩阵纪律**：每行的 Input Facts 都必须是「已存在、有明确 owner 的 Domain fact」——任何一行若需要新推理 / 新事实源，STOP 上报（门禁一禁令的矩阵形态）。
