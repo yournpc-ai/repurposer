@@ -80,7 +80,7 @@ Goal / Current evidence / Contract changes / Files / Tests / Migration strategy 
 
 ## Status
 
-PREFLIGHT 已交付（2026-09-19；只读取证，未改代码；产物 = 本文 §Preflight 报告 P1~P7）。**待用户评审 Preflight + 裁定 U1~U10；Implementation 未开工。** 前置 = Phase 1 验收全闭环（剧本/tsc 用户自跑，结果未回）。
+PREFLIGHT **PASS WITH CONDITIONS**（2026-09-19 用户裁定：U1/U4 批准、U5 按 T16-A/T16-B 双不变量收紧后批准开工；另冻结两条门禁——kind = 用户语义类别永不退化为 tool name、连续性 ≠ 周期刷新；ToolLoop 只产 typed internal Loop Events）。裁定全文已回填 §Preflight P4/P6/P7。**Implementation 开工。** 前置 = Phase 1 验收全闭环（剧本/tsc 用户自跑，结果未回）。
 
 ---
 
@@ -197,6 +197,9 @@ data: {
 - **状态翻转 = 同 `activity_id` 的新帧追加**（append-oriented：客户端维护有序 map，历史永不改写）；一个活动恰好经历 active → 一个终态（completed / failed / cancelled）。
 - **终帧清扫律（I-PFA-06 终帧律的活动同形）**：信封（`turn.completed` / `turn.failed`）落地前，投影为一切仍 active 的活动发关闭帧（completed 路径清扫为 completed 属防御——正常时 accept 帧已先行；failed 路径清扫为 failed）；客户端信封到达同样兜底清扫。**任何活动不得比回合活得久。**
 - **零泄漏白名单**：帧字段集合 = {activity_id, seq, kind, status, key}，永无参数 / 结果 / 推理文本（测试矩阵 T11 断言）。
+- **kind = 用户语义类别，永不退化为 tool name**（2026-09-19 用户裁定）：`get_transcript` / `present_plan` 式 kind 永禁——那是 Tool Log 换皮。kind 词表（read / draft / run / repair，可扩）表达「Agent 在做什么类工作」；**key 才是 user-safe vocabulary identity**（多个 tool 可聚合进同一 kind/key 的活动实例）。语义分工：activity_id = 实例是谁；seq = 顺序；kind = 用户语义类别；status = 生命周期；key = 文案身份。
+- **连续性 ≠ 周期刷新**（2026-09-19 用户裁定）：不为「看起来活着」每几秒造帧——连续感来自 active 活动的生命周期 + 真实完成里程碑 + 散文流。`●` 可以合法地持续一段 LLM 时间，只要它最终走向显式终态。
+- **ToolLoop 只产 internal Loop Events，永不引用 Activity 词汇**（U1 裁定）：loop 内核只发「发生了什么」（tool_rejected / terminal_accepted / …）的 typed 事件；「这对用户意味着什么」完全由 Activity Projection 裁定。Agent Runtime 不知道、也不得知道 Presentation 词汇。
 - **cancelled 的 v1 可达性**：schema 保留为合同完备；v1 无发射路径（断连/abort 都取消任务，无法向已断开客户端发帧，routes.py:367-372——[PROVEN]，见 U10）。
 - **载体**：既有队列直过（`_sse_pump` 字符串透传不动）；chat 与 answer 两条流共用同一投影器形状（hooks 同构，routes.py:318/:403）。
 - **文案 canonical owner**（规则 9 落地，座位见 U6）：kind→文案键映射由 Activity Projection 模块单点拥有；read 的 key 引用 perception registry `activity_key`；前端 i18n 新家族 `chat.activity.*` 镜像（现役 `chat.thinkingPhases.repairing` 等已是活动形态文案，迁引不新造——U7）。
@@ -239,19 +242,20 @@ data: {
 | T13 | 排序稳定性 | seq 严格递增，与 delta/相位帧交错无关（活动 seq 自域） |
 | T14 | 相位共存 | 投影器不触 on_phase 通道——同输入下相位帧序列与无投影时逐字节一致 |
 | T15 | **旗舰 negative**：拒绝 → 重试 → 再拒绝 → exhausted | repair 活动恰好一次 active、恰好一次 failed 终态；全程无双 active、无 dangling |
-| T16 | **盲窗结构不变量**：多迭代回合的每个事件时刻 | 投影状态恒满足：存在 active 活动 ∨ 散文在流 ∨ 已达终态——不存在「无可展示」状态（盲窗上界的结构形态，判定读法见 U5） |
+| T16-A | **盲窗不变量（Blind-window，U5 裁定双不变量之一）**：多迭代回合未终态的每个事件时刻 | 有工作在执行 ⇒ 至少存在一个 active user-safe 活动 ∨ 散文在流——「存在 active 活动」是必要非充分条件 |
+| T16-B | **活性不变量（Activity liveness，U5 裁定双不变量之二）**：任意 active 活动 / 回合终局 | 每个 active 活动最终必达 completed / failed / cancelled（显式终态或终帧清扫）；`turn.completed` 时 active 活动数 = 0——**dangling 活动结构性不可能** |
 
 **外加静态审计（验收标准落形）**：`activity.py` 无 DB import、无 lifecycle 谓词调用（grep 可证）；打字机律回归 = 剧本 SSE 通道（chat_scenarios.py:203-233 已有 S10 帧序断言）扩展断活动帧序（**用户自跑**）。
 
-### P7. 上报项（[PROVEN]/[INFERRED] 标注；本次取证无 UNPROVEN）
+### P7. 上报项 → 用户裁定落档（2026-09-19，**PASS WITH CONDITIONS**，裁定原文要点并入各节）
 
-- **U1 [PROVEN] 「ToolLoopAgent 零重写」的读法确认**：拒绝当时（L5-L8 中 schema_truncation / unknown_tool / params_validation 三类）与迭代边界（loop 索引）**只存在于 call_loop 内核**（tool_loop.py:391-451 / :367），runner 侧结构性不可见。三座新 hook 点必须是内核内的 additive `_emit` 发射（既有拒绝座位旁），terminal 语义 / max_iterations / 言语账本 / 拒绝反馈协议零改动。**建议**：三座信号走**一个** typed 通道（如 `on_loop_event` 携 `rejection(kind, name?)` / `accepted(name)` / `iteration(index, cause)` 联合类型），投影器是唯一消费者——hook 签名只增一个参数，不增三个。请确认这不违合同本意（简报「最小增量 3 座」的原文预测与此一致）。
-- **U2 [PROVEN] trigger 回合无流可挂**：trigger_turn.py:384-389 的 `call_loop` 零 hook、无 SSE（fire-and-forget；说话 = review 行落库即现）。v1 活动流不覆盖 trigger 回合——它没有直播窗口，其可见性已由落库行承担。请确认出范围。
-- **U3 [PROVEN] JSON one-shot 路径零帧**：无 `Accept: text/event-stream` 的调用拿不到任何帧（hooks 全 None）。活动流 v1 = SSE-only；剧本 harness 已有 SSE 通道可断帧序（chat_scenarios.py:203-233）。请确认。
-- **U4 [INFERRED] composing/decision 窗归类**：读被接受后的静默决策迭代（15-25s LLM 思考）——**建议归 System Status**（composing 相位保留，不进活动流）：「模型在想」不是用户有意义的工作单元，里程碑是它两侧的 read/draft/repair；活动流的追加历史让这段静态标签不再读作冻结。反方案 = 给它一个 `compose` 活动 kind。请拍板。
-- **U5 [INFERRED] 「无 15s+ 纯心跳盲窗」的判定读法**：LLM 思考窗内物理上没有新事实，「帧间隔 <15s」无法诚实满足（造帧 = 撒谎）。**建议**判读为结构性质：「任何窗口 UI 都有已完成里程碑历史 + 当前状态主」（P6 T16 的不变量形态）——盲窗的定义从「无帧」收窄为「无累积信息」。请拍板。
-- **U6 [PROVEN] name→语义映射双座**：routes.py:163-194 硬编码 plan-shape 清单 + perception 成员判定，与 turn_tools.py:40-131 的工具集声明重复（规则 9 隐患——工具集变更要两处同步）。**建议**：kind 映射的 canonical owner 归 Activity Projection 模块（引用 `PERCEPTION_TOOLS` 与工具声明，不复制清单）；routes.py 的相位拍映射在 Phase 3 归位时同源收敛（本 Phase 不动相位）。请拍板座位。
-- **U7 [INFERRED] 活动文案键家族**：新家族 `chat.activity.*`（en.ts 先行、zh.ts 镜像）；`read` 复用 `chat.inspecting.*` 现役键；`repair`/`draft`/`run` 的 active 态文案可从 `chat.thinkingPhases.*` 迁引（它们已是活动形态文案，简报 Current evidence #4）；**终态文案是新键**（completed/failed 的耳语级措辞，Implementation 期定稿）。细节无需现在拍板，登记备查。
-- **U8 [PROVEN] `Phase` 同名两义**：ChatDock.tsx:139 本地 `Phase`（confirm/running/chat 表单机）≠ 服务端 `THINKING_PHASE_*`（System Status）。本 Phase 只动后者消费面；前者命名归位是 Phase 3 的事。登记防撞，无需裁定。
-- **U9 [INFERRED] 活动流的终局形态**：信封落地后，活动流在消息流里**留静态历史**（追加式包含回看时的可溯性）还是**随 thinking 行一起消失**？**建议留**（否则「ordered history」在用户回看回合时归零，规则 5 的 history 语义落空）；静态痕迹的视觉形态（如收成一行可展开，RunTaskList 收据同族手法）Implementation 期定。请拍板方向。
-- **U10 [PROVEN] cancelled 无发射路径**：断连 / abortRef stop（ChatDock.tsx:3443-3445）都走任务取消（routes.py:367-372），无法向已断开客户端发帧；回合无「被新回合打断」路径（in_flight 准入闸）。schema 保留 cancelled 为合同完备，v1 不发射。登记，无需裁定。
+- **U1 → 批准。** 拒绝 / repair / iteration boundary 的增量 hook **不违反「ToolLoopAgent 零重写」**——「重写内核」与「在既有生命周期节点加 instrumentation hook」是两回事。**冻结边界**：ToolLoop 只产出 typed internal Loop Events（`tool_rejected` / `terminal_accepted` / `read_accepted` / `loop_exhausted`，iteration 边界的两个起因已由既有 `on_repair` / `on_observe` 覆盖），**不得引用 Activity 词汇、不得构造 user-facing activity、不得触碰 Presentation**；「发生了什么 → 对用户意味着什么」的翻译全部归 Activity Projection。通道形态 = 明确 typed union，**禁万能 dict**（防未来 30 种事件无限塞入）。
+- **U2 → 确认出范围。** trigger 回合无流可挂（trigger_turn.py:384-389）；其可见性 = 落库 review 行。v1 不覆盖。
+- **U3 → 确认。** 活动流 v1 = SSE-only；JSON one-shot 路径零帧；剧本 SSE 通道（chat_scenarios.py:203-233）承担帧序断言。
+- **U4 → 批准。** composing / orchestration / decision-window 归 **System Status**，不进 Activity Stream。补充措辞律：它表达「系统正在组织下一步动作 / 整理当前结果」，**永不暗示暴露内部推理**（"Thinking about whether French subtitles are needed…" 式文案永禁）。
+- **U5 → 批准「结构性质而非 15s 硬时限」，T16 拆双不变量**（见 P6 T16-A / T16-B）。关键修订：「存在 active 活动」是**必要非充分**条件——一个假活着的活动（active 90s 无终态）同样让用户觉得「它死了」；因此活性不变量（一切 active 必达显式终态、turn.completed 时 active=0）与盲窗不变量同级。附加原则入 P4：**连续性 ≠ 周期刷新**；**kind 必须是用户语义类别，不得退化为 tool name；key 是 user-safe vocabulary identity**。
+- **U6 → 座位裁定：kind 映射归 Activity Projection 模块单点拥有**（引用 `PERCEPTION_TOOLS` 与 turn_tools 声明，纯 pytest 做「每个已声明工具名恰好落一个桶」的一致性闸）；routes.py 的 name→phase 双座在 switch commit 收窄（相位面只留 composing / clear / keepalive），残余归位是 Phase 3。
+- **U7 → 确认方向，实施期定稿。** `chat.activity.*` 新家族 + read 复用 `chat.inspecting.*`；帧的 `key` 随 status 取态（active 帧带进行态键、completed 帧带完成态键），schema 不变；失败态视觉 = ✗ + destructive，不另造文案族。
+- **U8 → 记录在案。** ChatDock 本地 `Phase`（confirm/running/chat 表单机）与 `THINKING_PHASE_*` 同名两义；本 Phase 不动前者，命名归位 Phase 3。
+- **U9 → 批准留痕方向。** 信封落地后活动块在回合区域**沉淀为静态历史**（ordered history 语义覆盖回看），视觉形态（收成静态行组）实施期定。
+- **U10 → 记录在案。** cancelled 保留在 schema 为合同完备，v1 无发射路径。
