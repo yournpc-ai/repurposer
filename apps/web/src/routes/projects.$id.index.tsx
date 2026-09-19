@@ -33,6 +33,7 @@ import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
 
 import type { IntentSlot, LifecycleStamp, Output, ProjectGraph, WorkflowStep, Project } from "@/lib/types"
+import { isPlanReady } from "@/lib/lifecycleStamp"
 
 interface AssetStatusEntry {
   id: string
@@ -239,7 +240,7 @@ function ProjectDetailPage() {
   // projects WITH runs (or a ready plan) mount straight in the dock world
   // (the hydrated first frame never replays the morph).
   const hasRuns = latestRun != null
-  const graphLive = hasRuns || (lifecycle?.plan_ready ?? false)
+  const graphLive = hasRuns || isPlanReady(lifecycle)
   // The driver forks per surface (prohibition #13 — mobile has no canvas):
   // the desktop world morphs at PLAN_READY; mobile waits for the first run
   // (its confirm beat stays in the dock).

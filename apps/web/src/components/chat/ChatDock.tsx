@@ -122,6 +122,7 @@ import {
 import { StatusLine } from "@/components/chat/StatusLine"
 import { ActivityStream } from "@/components/chat/ActivityStream"
 import type { IntentSlot, LifecycleStamp, Output } from "@/lib/types"
+import { isConfirmationReady, isPlanReady } from "@/lib/lifecycleStamp"
 import {
   fileIconFor,
   formatChipDuration,
@@ -1261,12 +1262,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // Restore mounts by the lifecycle stamp (Phase 1, acceptance #4): a
   // parked plan enters the confirm phase only at PLAN_READY — materials
   // still processing mounts plain chat, and the poll-driven stamp flip
-  // below raises the confirm phase when readiness lands. The stamp is
-  // settled before mount (the page's loading gate holds the tree).
+  // below raises the confirm phase when readiness lands. Phase 3 判词 2:
+  // a MISSING stamp is unknown, never ready — the mount parks in chat and
+  // waits for the stamp (the retired `?? true` fallback was a hidden
+  // Lifecycle Authority: no stamp → the plan never auto-confirms).
   const [phase, setPhase] = useState<Phase>(
     initialRunId
       ? "running"
-      : initialIntent && (lifecycle?.plan_ready ?? true)
+      : initialIntent && isPlanReady(lifecycle)
         ? "confirm"
         : "chat"
   )
@@ -1300,10 +1303,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // turn's refetch). Attach mode never shows the card, so it starts ready.
   const [intentReady, setIntentReady] = useState(!!initialIntent || !!initialRunId)
   // Lifecycle stamp flip (Phase 1): a restored parked plan that mounted in
-  // the chat phase (materials still processing at mount) rises into the
-  // confirm phase when the poll-driven stamp lands PLAN_READY. Never fires
-  // downward — bail/supersede ride their own message events.
-  const planReady = lifecycle?.plan_ready ?? false
+  // the chat phase (materials still processing — or the stamp not yet
+  // arrived — at mount) rises into the confirm phase when the poll-driven
+  // stamp lands PLAN_READY. Never fires downward — bail/supersede ride
+  // their own message events.
+  const planReady = isPlanReady(lifecycle)
   useEffect(() => {
     if (planReady && intentReady && phase === "chat" && !initialRunId) {
       setPhase("confirm")
@@ -2160,11 +2164,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // product goal #3). The tasks.length guard is the LOCAL edit buffer's
   // emptiness check (the payload being shipped), never a lifecycle
   // derivation. A hand-edited chain keeps the stamp's stored-chain
-  // verdict — the birthplace 422 guards it for real (T14/U3). Stamp null
-  // (pre-first-fetch frame) falls back to the payload guard so the
-  // confirm beat can never deadlock behind a missing frame.
+  // verdict — the birthplace 422 guards it for real (T14/U3). Phase 3
+  // 判词 2: a MISSING stamp is unknown → NOT ready — Start stays disabled
+  // until the stamp lands (the retired `: true` fallback could open the
+  // confirm beat on a frame the server never named).
   const canStartGeneration =
-    intent.tasks.length > 0 && (lifecycle ? lifecycle.confirmation_ready : true)
+    intent.tasks.length > 0 && isConfirmationReady(lifecycle)
 
   // Chain edits (ADR-043): panel controls mutate the task list directly —
   // the same data structure the intent router proposes, so the edited chain
@@ -3824,7 +3829,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     isMobile &&
     // 移动端 parity (Phase 1): the plan card IS the mobile review surface —
     // it reads the same stamp's PLAN_READY as the desktop canvas flip.
-    (lifecycle ? lifecycle.plan_ready : true)
+    // Phase 3 判词 2: stamp missing → unknown → the card waits (never the
+    // retired `: true` fallback's premature confirm face).
+    isPlanReady(lifecycle)
   const planCardInline = planCardVisible && chatBusy && liveBubblePresent
   /** chat 修改单价 (BILLING §7): the dock payload's per-task marginal credits,
    * index-aligned with the plan card's task rows (Σ ≡ the pill's total). */
@@ -4525,12 +4532,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // Pill visibility reads PLAN_READY off the same stamp (R2 翻案: the
   // review surface is born at PLAN_READY — while materials process, no
   // canvas flip AND no confirm pill; the stamp's poll drives the flip).
+  // Phase 3 判词 2: a missing stamp is unknown → no pill (missing ≠ ready).
   const planDock =
     phase === "confirm" &&
     intentReady &&
     !chatBusy &&
     !singlePlan &&
-    (lifecycle ? lifecycle.plan_ready : true) ? (
+    isPlanReady(lifecycle) ? (
       <QuestionDock
         kind="task_book"
         plain
