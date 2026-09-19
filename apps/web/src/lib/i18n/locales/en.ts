@@ -1201,15 +1201,15 @@ const en = {
     userLabel: "You",
     thinking: "Thinking...",
     thinkingPhases: {
-      drafting: "Drafting the plan…",
       creating_run: "Creating your workflow…",
-      repairing: "That answer didn't come out right — reworking it…",
       composing: "Putting it together…",
     },
-    /** The perception family's inspecting chatter (T2b): the thinking row's
-     * label while a read tool runs. Keys ride the server registry
+    /** The perception family's inspecting chatter (T2b): a read ACTIVITY's
+     * active-frame label while a read tool runs (Phase 3 Batch B ③ moved the
+     * family from the retired System Status row to the Activity Stream —
+     * same registry, same keys). Keys ride the server registry
      * (app/chat/perception) — the tool NAME never surfaces; first-person
-     * whisper register, same as thinkingPhases. */
+     * whisper register. */
     inspecting: {
       outputSpec: "Reading the current settings…",
       understanding: "Taking another look at your material…",

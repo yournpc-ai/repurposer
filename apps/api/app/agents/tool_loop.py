@@ -307,15 +307,17 @@ class ToolLoopAgent:
           iteration's speech is replaced speech; later iterations run quiet
           and the envelope paces out — the repair-never-streams law).
         - ``on_reasoning``: reasoning fragments, a liveness signal only.
-        - ``on_tool_call``: a call's name became known (the phase-frame
-          seam — a read tool's name-known frame IS the inspecting family's
-          「正在查曲库…」seat). Streaming path: the client fires it as the
-          name arrives; quiet iterations: fired when the response lands.
+        - ``on_tool_call``: a call's name became known (the Activity
+          projector's ``name_known`` seat + the explicit System Status
+          clear, Phase 3 Batch B ③). Streaming path: the client fires it as
+          the name arrives; quiet iterations: fired when the response lands.
         - ``on_tool_ready``: a call's arguments completed and validated,
           pre-execution (the question.preview seam — structure, not prose;
           fires on every iteration).
         - ``on_repair``: a rejection iteration begins (the funnel's reserved
-          kwarg's loop seat — the thinking row's "repairing" label rides it).
+          kwarg's loop seat — the repair ACTIVITY opens here via the
+          projector's ToolRejected twin; the retired "repairing" System
+          Status label rode this hook until Phase 3 Batch B ③).
           Fires ONLY when the previous iteration was a genuine rejection
           (schema truncation / unknown tool / params validation / execute
           guardrail) — an ACCEPTED read's continuation is not a repair and
@@ -324,9 +326,10 @@ class ToolLoopAgent:
           successful read — a lie about the world).
         - ``on_observe``: an observation was ACCEPTED (a non-terminal read's
           result is on the wire) and the loop enters the quiet decision
-          iteration — the read→think phase-takeover seat (交互完整性批 C:
-          tool completion used to have no signal, so the UI kept wearing the
-          stale inspecting label through the 15-25s quiet window). Fires
+          iteration — the read→think takeover seat (交互完整性批 C: tool
+          completion used to have no signal, so the UI kept wearing a stale
+          label through the 15-25s quiet window; the surviving "composing"
+          System Status label rides this hook). Fires
           with the read tool's name, once per accepted read; never for a
           rejection (that has ``on_repair``).
         - ``on_checkpoint``: a CHECKPOINT was delivered (ADR-085 判词 2/5) —

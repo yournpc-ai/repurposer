@@ -27,14 +27,14 @@ export interface ActivityFramePayload {
 }
 
 /** The thinking frame's payload: `{}` = a pure keepalive (drive the
- * indicator, never render); `{phase}` = a REAL phase switch label;
- * `{phase: "inspecting", key}` = the perception family's i18n copy key;
- * `{phase: null}` = the EXPLICIT phase clear (I-PFA-06 清除协议,
- * 2026-09-18). `"phase" in payload` separates the clear from a bare
- * keepalive. */
+ * indicator, never render); `{phase}` = a REAL System Status label
+ * (`composing`; `creating_run` until Batch B ⑤); `{phase: null}` = the
+ * EXPLICIT phase clear (I-PFA-06 清除协议, 2026-09-18). `"phase" in
+ * payload` separates the clear from a bare keepalive. Work evidence never
+ * rides this channel (Phase 3 Batch B ③ — the retired inspecting key and
+ * the drafting/repairing labels live on the Activity channel). */
 export interface ThinkingPayload {
   phase?: string | null
-  key?: string
 }
 
 /** The ask verdict's pill payload at object close (2026-09-09 用户拍板 ——

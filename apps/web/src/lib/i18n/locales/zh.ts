@@ -1140,13 +1140,13 @@ const zh: Resources = {
     userLabel: "你",
     thinking: "思考中...",
     thinkingPhases: {
-      drafting: "正在起草计划…",
       creating_run: "正在创建你的 workflow…",
-      repairing: "刚才的回答没组织好，我重新整理一下…",
       composing: "正在整理…",
     },
-    /** 感知族的查询碎碎念（T2b）：读工具运行期间 thinking 行的文案。
-     * key 随服务端注册表（app/chat/perception）——工具名永不上用户面。 */
+    /** 感知族的查询碎碎念（T2b）：读工具运行期间 read 活动帧的文案
+     * （Phase 3 Batch B ③ 自退役的 System Status 行迁入 Activity Stream，
+     * 同注册表同 key）。key 随服务端注册表（app/chat/perception）——
+     * 工具名永不上用户面。 */
     inspecting: {
       outputSpec: "正在读当前设置…",
       understanding: "正在回看素材理解…",

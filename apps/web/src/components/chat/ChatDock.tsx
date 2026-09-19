@@ -1166,22 +1166,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // picker is a one-flag flip.
   const [autonomy, setAutonomy] = useState<Autonomy>("review")
   const [answering, setAnswering] = useState(false)
-  // Thinking-phase label (chat-flow-sequencing C): set from the server's
-  // labelled assistant.thinking frames ({phase: "drafting" |
-  // "creating_run" | "repairing"}), cleared per turn — bare keepalive frames
-  // never touch
-  // it, and without a phase the row falls back to chat.thinking.
-  // Lifecycle (I-PFA-06 清除协议, 2026-09-18): a phase dies three ways — the
-  // next labelled frame hands over (覆盖律), the server's explicit clear
-  // frame {phase: null} ends it (an unmapped call's name-known moment), or
-  // the terminal envelope closes the turn (终帧律 — both stream paths reset
-  // at envelope AND failure, never leaving a stale label in state).
+  // System Status label (三概念分家, ADR-087 §1; Phase 3 Batch B ③): set
+  // from the server's labelled assistant.thinking frames — survivors are
+  // "composing" (the read→think takeover) and "creating_run" (until Batch
+  // B ⑤); the retired work-evidence labels (drafting/inspecting/repairing)
+  // live on the Activity channel now. Bare keepalive frames never touch the
+  // label, and without one the row falls back to chat.thinking.
+  // Lifecycle (I-PFA-06 清除协议, 2026-09-18): a label dies two ways — the
+  // server's explicit clear frame {phase: null} ends it (every call's
+  // name-known moment), or the terminal envelope closes the turn (终帧律 —
+  // both stream paths reset at envelope AND failure, never leaving a stale
+  // label in state).
   const [thinkingPhase, setThinkingPhase] = useState<string | null>(null)
-  // The perception family's inspecting key (T2b): an inspecting frame carries
-  // {phase: "inspecting", key: <the read-registry entry's i18n copy key>} —
-  // the row speaks 「正在查曲库…」 while the tool name never surfaces. The
-  // key wins over the phase label while set; a phase-only frame clears it.
-  const [thinkingKey, setThinkingKey] = useState<string | null>(null)
 
   // The turn's Activity Stream (ADR-087 §3 Phase 2): append-oriented
   // user-safe milestones. The wire is append-only — a status flip arrives as
@@ -2352,7 +2348,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setChatBusy(true)
     setProseActive(false)
     setThinkingPhase(null)
-    setThinkingKey(null)
     setActivities(resetActivities()) // the new turn's own stream replaces the settled one
     const streamId = crypto.randomUUID()
     let streamedAny = false
@@ -2524,17 +2519,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           signal: ctrl.signal,
           onDelta: (delta) => typewriter.push(delta),
           onThinking: (payload) => {
-            // Labelled phase frames and the explicit clear (I-PFA-06 清除
-            // 协议, 2026-09-18): `"phase" in payload` separates both from
-            // bare keepalives, which leave the label as-is. A string phase
-            // hands the row over; `phase: null` is the server's clear frame
-            // (an unmapped call's name-known moment ended the previous
-            // phase's activity) — reset to the base label. An inspecting
-            // frame (T2b) carries the registry's copy key — it wins while
-            // set; a phase-only frame (or the clear) drops it back.
+            // System Status labels and the explicit clear (I-PFA-06 清除
+            // 协议, 2026-09-18; Phase 3 Batch B ③): `"phase" in payload`
+            // separates both from bare keepalives, which leave the label
+            // as-is. A string phase hands the row over (composing;
+            // creating_run until B ⑤); `phase: null` is the server's clear
+            // frame (every call's name-known moment) — reset to the base
+            // label. Work evidence never rides this channel (Activity owns
+            // it); a phase-only frame drops the row back.
             if ("phase" in payload) {
               setThinkingPhase(payload.phase ?? null)
-              setThinkingKey(payload.key ?? null)
             }
           },
           onQuestionPreview: (payload) =>
@@ -2554,7 +2548,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // would resurface in that tail window without this reset. (The answer
       // stream already cleared at the same seat; this is the parity gap.)
       setThinkingPhase(null)
-      setThinkingKey(null)
       // Defensive sweep (T16-B): the server's terminal sweep already closed
       // every activity; this catches whatever the stream dropped — the
       // envelope leaves nothing spinning.
@@ -2718,7 +2711,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       discardPreviewArtifacts()
       // 终帧律 (同上): a failed/aborted turn closes every phase too.
       setThinkingPhase(null)
-      setThinkingKey(null)
       // The activity stream settles the same way: a user stop marks the
       // in-flight work cancelled, a failure marks it failed — nothing keeps
       // spinning (假活跃禁令, T16-B client twin).
@@ -2963,7 +2955,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setChatBusy(true)
     setProseActive(false)
     setThinkingPhase(null)
-    setThinkingKey(null)
     setActivities(resetActivities()) // the answer continuation is its own turn — new stream
     setPendingQuestion(null)
     setMessages((prev) =>
@@ -3021,7 +3012,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           // (phase: null); bare keepalives leave the label untouched.
           if ("phase" in payload) {
             setThinkingPhase(payload.phase ?? null)
-            setThinkingKey(payload.key ?? null)
           }
         },
         // Q2..N 对称 (2026-09-09): the continuation's follow-up ask closes
@@ -3040,7 +3030,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // already IN the preview → handleAssistantMessage rides echoCarried.
       typewriter.flush()
       setThinkingPhase(null)
-      setThinkingKey(null)
       settleActivities("completed") // defensive twin of the server sweep
       const answeredRow = buildAnsweredQuestionRow(data.answered_question)
       const followUp = data.follow_up
@@ -3130,7 +3119,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // (双路同语义 with the typed Start).
       typewriter.flush()
       setThinkingPhase(null)
-      setThinkingKey(null)
       settleActivities("failed") // T16-B: the failed answer leaves nothing spinning
       // A failed turn retires every ask-preview artifact too — a stashed
       // next-click's optimistic block and the preview pill never existed
@@ -4170,27 +4158,23 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     status owner (the 死窗 the whole-turn gate was built to
                     kill; the typewriter's busy/idle edge drives it, idle
                     after a grace so burst gaps don't strobe). The label
-                    follows the server's phase frames (thinking →
-                    creating_run), falling back to the static copy when no
-                    phase arrived. Phase 2: the row ALSO yields while an
-                    activity is active — the milestone stream owns the "now"
-                    line, the phase row is the System Status fallback (base
-                    thinking / composing windows). */}
+                    follows the server's System Status frames (composing;
+                    creating_run until Batch B ⑤), falling back to the
+                    static copy when no label arrived. Phase 2+: the row
+                    ALSO yields while an activity is active — the milestone
+                    stream owns the "now" line, this row is the System
+                    Status fallback (base thinking / composing windows). */}
                 {chatBusy &&
                   !proseActive &&
                   !activities.some((a) => a.status === "active") && (
                   <MessageScrollerItem>
                     <ThinkingRow
                       label={
-                        thinkingKey
-                          ? t(thinkingKey, {
+                        thinkingPhase
+                          ? t(`chat.thinkingPhases.${thinkingPhase}`, {
                               defaultValue: t("chat.thinking"),
                             })
-                          : thinkingPhase
-                            ? t(`chat.thinkingPhases.${thinkingPhase}`, {
-                                defaultValue: t("chat.thinking"),
-                              })
-                            : t("chat.thinking")
+                          : t("chat.thinking")
                       }
                     />
                   </MessageScrollerItem>

@@ -12,10 +12,8 @@ header. Plain callers get the one-shot JSON ``ChatResponse`` (unchanged);
 the action JSON retired into terminal tool calls, so the prose channel IS
 the reply — ``assistant.delta`` frames carry it verbatim (dialect-stripped at
 the client seam, typewriter law native); ``assistant.thinking`` carries
-liveness keepalives and REAL phase labels (drafting / creating_run /
-repairing, plus the perception family's ``inspecting`` frames — T2b — which
-add the registry entry's i18n copy ``key``; the tool name never crosses to
-the user face); ``question.preview`` docks the
+liveness keepalives, the System Status labels (``composing``; creating_run
+until Batch B ⑤), and the explicit clear frame; ``question.preview`` docks the
 pill the moment an ask_user call's arguments validate. The terminal envelope
 (``turn.completed`` / ``turn.failed``) stays authoritative.
 """
@@ -37,11 +35,8 @@ from app.models.schemas import (
     MessageListResponse,
 )
 from app.models.tables import Conversation, User
-from app.chat.perception import PERCEPTION_TOOLS
 from app.chat.activity import ActivityProjector
 from app.chat.service import (
-    THINKING_PHASE_DRAFTING,
-    THINKING_PHASE_INSPECTING,
     answer_question,
     chat,
     execute_chat_turn,
@@ -141,23 +136,17 @@ def _make_delta_hook(queue: asyncio.Queue):
 def _make_tool_hooks(queue: asyncio.Queue, projector: ActivityProjector | None = None):
     """The structure frames (both turn pumps share the shape):
 
-    - ``on_tool_call``: a call's NAME became known — the phase beat's tool
-      seat (相位完整律 2026-09-10, re-seated 2026-09-14): a plan-shaped call
-      (present_plan / propose_tasks / apply_edit_ops / edit_graph) moves the
-      row's beat to `drafting` the moment the model commits to it, replacing
-      the retired "tasks"/"ops" substring scan over the JSON stream — the
-      name-known signal is earlier and false-positive-free by construction.
-      A PERCEPTION call (T2b 感知族) emits the inspecting family instead:
-      phase "inspecting" + the registry entry's i18n copy key — the user
-      reads 「正在查曲库…」 while the tool NAME never crosses to the user
-      face (简报 §3 禁令). An UNMAPPED name (ask_user / answer / start_run)
-      emits the explicit clear frame ``{"phase": null}`` — the name-known
-      moment is the phase boundary, and a phase whose activity ended never
-      persists by inheritance (I-PFA-06 相位清除协议, 2026-09-18 定型:
-      覆盖律 — a mapped frame hands over; 清除帧 — an unmapped one ends the
-      activity; 终帧律 — the terminal envelope closes whatever remains).
-      When a ``projector`` rides (Activity Projection, ADR-087 §3 Phase 2),
-      the same name-known beat feeds it — one fact, two projections.
+    - ``on_tool_call``: a call's NAME became known — one fact, ONE
+      projection (Phase 3 Batch B ③): the Activity projector's
+      ``name_known`` (the user-safe work evidence, ADR-087 §3). The retired
+      parallel-render System Status labels (drafting / inspecting+key /
+      repairing) are gone — the Activity frames speak for the work now
+      (三通道分家). Every name-known moment ALSO emits the explicit phase
+      clear ``{"phase": null}`` (I-PFA-06 清除协议, 2026-09-18 定型):
+      whatever System Status label preceded it (``composing`` — the only
+      surviving label, emitted at a read's observation-acceptance) never
+      outlives its activity by inheritance; a no-op when no label is set.
+      The terminal envelope closes whatever remains (终帧律, client-side).
     - ``on_tool_ready``: an ask_user call's arguments completed and validated
       (pre-execution) — preview-dock the pill NOW instead of waiting out the
       loop. Fires on every iteration; a rejected ask's preview rolls back
@@ -167,37 +156,9 @@ def _make_tool_hooks(queue: asyncio.Queue, projector: ActivityProjector | None =
         if projector is not None:
             for frame in projector.name_known(name):
                 await queue.put(_activity_frame(frame))
-        if name in ("present_plan", "propose_tasks", "apply_edit_ops", "edit_graph"):
-            await queue.put(
-                _sse(
-                    "assistant.thinking",
-                    json.dumps({"phase": THINKING_PHASE_DRAFTING}),
-                )
-            )
-        elif name in PERCEPTION_TOOLS:
-            await queue.put(
-                _sse(
-                    "assistant.thinking",
-                    json.dumps(
-                        {
-                            "phase": THINKING_PHASE_INSPECTING,
-                            "key": PERCEPTION_TOOLS[name].activity_key,
-                        }
-                    ),
-                )
-            )
-        else:
-            # The explicit phase clear (I-PFA-06, 2026-09-18 协议定型): an
-            # UNMAPPED call's name-known moment (ask_user / answer /
-            # start_run) ends the previous phase's activity — the row falls
-            # back to the base label instead of wearing a stale phase
-            # through the terminal execution + envelope transit (缝②: no
-            # phase outlives its activity by inheritance). A no-op when no
-            # phase is set; start_run's execution segment is immediately
-            # re-taken by creating_run from inside the run birth.
-            await queue.put(
-                _sse("assistant.thinking", json.dumps({"phase": None}))
-            )
+        await queue.put(
+            _sse("assistant.thinking", json.dumps({"phase": None}))
+        )
 
     async def on_tool_ready(name: str, params) -> None:
         if name == "ask_user" and params is not None:
@@ -355,12 +316,13 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     await queue.put(_sse("assistant.thinking", "{}"))
 
                 async def on_phase(phase: str) -> None:
-                    # A REAL phase switch (chat-flow-sequencing C): a labelled
-                    # thinking frame ({"phase": "drafting" | "creating_run" |
-                    # "repairing" | "composing"}) — the dock's thinking row
-                    # shows the phase copy instead of the static fallback.
-                    # The bare {} keepalive frames above never carry a phase
-                    # and never touch the client's label.
+                    # A REAL System Status switch: a labelled thinking frame
+                    # ({"phase": "composing"}; "creating_run" until Batch
+                    # B ⑤) — the dock's status row shows the phase copy
+                    # instead of the static fallback. The bare {} keepalive
+                    # frames above never carry a phase and never touch the
+                    # client's label. Work evidence rides the Activity
+                    # channel, never this one (三通道分家, Phase 3 Batch B).
                     await queue.put(
                         _sse("assistant.thinking", json.dumps({"phase": phase}))
                     )

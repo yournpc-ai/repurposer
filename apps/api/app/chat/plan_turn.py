@@ -51,7 +51,6 @@ from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.perception.executes import understanding_digest_lines
 from app.chat.service import (
     THINKING_PHASE_CREATING_RUN,
-    THINKING_PHASE_DRAFTING,
     _active_run_line,
     _ask_content,
     _bare_question,
@@ -69,7 +68,6 @@ from app.chat.service import (
     _needs_media,
     _observe_phase_callback,
     _reminder_tail,
-    _repair_phase_callback,
     _resolved_caption_mode,
     _safe_task_estimate,
     _topic_gate_question,
@@ -765,13 +763,10 @@ class PlanTurn:
         # later write) — the brief is the accumulated state now, the prompt is
         # only the plan's birth narrative (Start's instruction fallback).
         birth_prompt = stored.prompt if stored and stored.prompt else self.text
-        if self.on_phase is not None:
-            # Real phase switch (相位通道用起来, 2026-09-09): the call is
-            # accepted and the dock-work starts — brief write +
-            # sync_plan_question + the draft-graph stamp (compile +
-            # estimate folds) are the seconds between the echo's last
-            # character and the plan card's arrival.
-            await self.on_phase(THINKING_PHASE_DRAFTING)
+        # Phase 3 Batch B ③: the retired "drafting" System Status label used
+        # to fire here — the draft ACTIVITY frame (opened at this call's
+        # name-known beat, settled at its acceptance) is the work's only
+        # user-safe face now (三通道分家).
         project.pending_brief = PendingPlan(
             prompt=birth_prompt,
             intent=intent,
@@ -1117,7 +1112,6 @@ async def run_plan_turn(
         on_reasoning=on_reasoning,
         on_tool_call=on_tool_call,
         on_tool_ready=on_tool_ready,
-        on_repair=_repair_phase_callback(on_phase),
         on_observe=_observe_phase_callback(on_phase),
         on_checkpoint=_checkpoint_callback(db, turn.conversation_id, on_checkpoint),
         on_loop_event=on_loop_event,

@@ -62,7 +62,6 @@ from app.chat.service import (
     _prefers_zh,
     _resume_ack_line,
     _reminder_tail,
-    _repair_phase_callback,
     _run_active_text,
     _validate_edit_ops,
     latest_pending_question,
@@ -619,7 +618,6 @@ async def run_propose_turn(
             on_reasoning=on_reasoning,
             on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready,
-            on_repair=_repair_phase_callback(on_phase),
             on_observe=_observe_phase_callback(on_phase),
             on_loop_event=on_loop_event,
             on_checkpoint=(

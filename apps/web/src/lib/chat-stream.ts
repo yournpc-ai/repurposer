@@ -63,17 +63,16 @@ export interface StreamChatOptions {
   signal: AbortSignal
   /** Decoded prose fragment, in order — concatenate to render the preview. */
   onDelta?: (text: string) => void
-  /** Model-activity frame: fires with `{}` as a pure keepalive (reasoning
+  /** System Status frame: fires with `{}` as a pure keepalive (reasoning
    * fragments / non-prose JSON chunks — drive the indicator, never render),
-   * or with `{phase: "drafting" | "creating_run" | "repairing"}` at a REAL
-   * phase switch — the client
-   * labels its thinking row from the phase and leaves it untouched on bare
-   * keepalives. The perception family's inspecting frames (T2b) add
-   * `{phase: "inspecting", key}` — the key is the read-registry entry's i18n
-   * copy key (「正在查曲库…」), resolved via t(); the tool NAME never
-   * crosses to the user face. `{phase: null}` is the EXPLICIT phase clear
-   * (I-PFA-06 清除协议, 2026-09-18): an unmapped call's name-known moment
-   * ended the previous phase's activity — reset to the base label. The
+   * or with `{phase: "composing"}` (`"creating_run"` until Batch B ⑤) at a
+   * REAL macro-state switch — the client labels its status row from the
+   * phase and leaves it untouched on bare keepalives. Work evidence never
+   * rides this channel (Phase 3 Batch B ③: the retired drafting/inspecting/
+   * repairing labels live on the Activity channel).
+   * `{phase: null}` is the EXPLICIT phase clear
+   * (I-PFA-06 清除协议, 2026-09-18): every call's name-known moment ends
+   * the previous label — reset to the base label. The
    * `"phase" in payload` check separates the clear from a bare keepalive. */
   onThinking?: (payload: ThinkingPayload) => void
   /** The ask verdict's pill payload the moment its object closes in the

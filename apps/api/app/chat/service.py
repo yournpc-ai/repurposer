@@ -2178,33 +2178,22 @@ async def prepare_chat_turn(
     )
 
 
-# Thinking-phase label for the chat SSE ``assistant.thinking`` frames
-# (2026-09-04 chat-flow-sequencing C, 同日验收修订): emitted ONLY at a real
-# phase switch — a start_run call about to birth the run. The router's own
-# inference was briefly labelled "understanding" too, but that restated
-# "Thinking…" with zero information (user ruling: the label earns its place
-# only when the activity structurally differs from thinking).
+# System Status labels for the chat SSE ``assistant.thinking`` frames
+# (三概念分家, ADR-087 §1/§3: phase = System Status 宏观态, never work
+# evidence — the agent's work rides the Activity channel). Emitted ONLY at
+# a real macro-state switch; a label earns its place only when the state
+# structurally differs from thinking (2026-09-04 user ruling). Phase 3
+# Batch B ③ retired the drafting / inspecting(+key) / repairing stand-ins —
+# their beats are the Activity projector's name-known / rejection seats now,
+# one fact one projection. Survivors: creating_run (until Batch B ⑤ —
+# B4 dead-window forensics gate) and composing (判词 3 保留义).
 THINKING_PHASE_CREATING_RUN = "creating_run"
-# The call is a draft — brief write + plan dock + the draft-graph stamp
-# (compile + estimate folds) fill the seconds between the echo's end and
-# the plan card's arrival (the window the 10s-gap forensics named).
-THINKING_PHASE_DRAFTING = "drafting"
-# The first proposal was schema-rejected and the funnel's repair round is
-# running (2026-09-11 服务感): that window used to read as frozen thinking —
-# the row now says the answer is being reworked, in first person.
-THINKING_PHASE_REPAIRING = "repairing"
-# The perception family's phase family (T2b, ADR-077 判词②): a read tool's
-# name-known moment emits this phase PLUS the registry entry's i18n copy key
-# (``key`` — resolved client-side; the tool name never reaches the user
-# face). 「正在查曲库…」= the process chatter's free seat (礼仪三件套 ②).
-THINKING_PHASE_INSPECTING = "inspecting"
 # The read→think takeover (交互完整性批 C, 2026-09-17): an ACCEPTED read's
 # observation is on the wire and the loop enters a QUIET decision iteration
-# (15-25s of LLM time) — without this frame the row would keep wearing the
-# stale inspecting label for work that already finished (the 「Caption
-# styles checked → putting it together」gap: tool completion had no phase
-# seat at all). Emitted at the observation's acceptance, never for a
-# rejection (that has its own label).
+# (15-25s of LLM time) — without this frame the row would keep wearing a
+# stale label for work that already finished (the 「Caption styles checked →
+# putting it together」gap). Emitted at the observation's acceptance, never
+# for a rejection (the repair ACTIVITY owns that window now).
 THINKING_PHASE_COMPOSING = "composing"
 
 
@@ -2271,19 +2260,6 @@ async def stamp_turn_failed(user_message_id) -> None:
         )
 
 
-def _repair_phase_callback(on_phase):
-    """Map the funnel's repair-round signal (``on_repair``) onto the SSE
-    phase pipe. None-safe: the one-shot JSON path has no phase pipe, so the
-    reserved kwarg stays unset and the repair round runs silent there."""
-    if on_phase is None:
-        return None
-
-    async def _emit() -> None:
-        await on_phase(THINKING_PHASE_REPAIRING)
-
-    return _emit
-
-
 async def execute_chat_turn(
     db: AsyncSession,
     prepared: PreparedTurn,
@@ -2301,12 +2277,14 @@ async def execute_chat_turn(
     ``on_delta`` (chat SSE) receives the prose channel's fragments — the
     reply itself now (ADR-077 判词②: speech left the action JSON; the
     typewriter law holds natively); ``on_reasoning`` receives reasoning
-    fragments as a liveness signal; ``on_phase`` receives thinking-phase
-    labels at REAL phase-switch points — a start_run call about to birth the
-    run = "creating_run", a plan call accepted and docking = "drafting".
+    fragments as a liveness signal; ``on_phase`` receives System Status
+    labels at REAL macro-state switches — a start_run call about to birth
+    the run = "creating_run" (until Batch B ⑤), the read→think takeover =
+    "composing"; the retired work-evidence labels (drafting/inspecting/
+    repairing) moved to the Activity channel (Phase 3 Batch B ③).
     ``on_tool_call`` / ``on_tool_ready`` carry the structure frames: a tool
-    call's name became known (the phase beat's seat — the retired "tasks"/
-    "ops" substring scan) / a call's arguments validated (the
+    call's name became known (the Activity beat's seat + the explicit phase
+    clear) / a call's arguments validated (the
     question.preview seat — the retired ask-object watcher). The base label
     is "Thinking…" (2026-09-10 用户拍板). None (the JSON path, repair
     iterations, answer_question's continuation) keeps the one-shot calls.
