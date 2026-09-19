@@ -38,6 +38,7 @@ from app.models.schemas import (
 )
 from app.models.tables import Conversation, User
 from app.chat.perception import PERCEPTION_TOOLS
+from app.chat.activity import ActivityProjector
 from app.chat.service import (
     THINKING_PHASE_DRAFTING,
     THINKING_PHASE_INSPECTING,
@@ -137,7 +138,7 @@ def _make_delta_hook(queue: asyncio.Queue):
     return on_delta
 
 
-def _make_tool_hooks(queue: asyncio.Queue):
+def _make_tool_hooks(queue: asyncio.Queue, projector: ActivityProjector | None = None):
     """The structure frames (both turn pumps share the shape):
 
     - ``on_tool_call``: a call's NAME became known — the phase beat's tool
@@ -155,12 +156,17 @@ def _make_tool_hooks(queue: asyncio.Queue):
       persists by inheritance (I-PFA-06 相位清除协议, 2026-09-18 定型:
       覆盖律 — a mapped frame hands over; 清除帧 — an unmapped one ends the
       activity; 终帧律 — the terminal envelope closes whatever remains).
+      When a ``projector`` rides (Activity Projection, ADR-087 §3 Phase 2),
+      the same name-known beat feeds it — one fact, two projections.
     - ``on_tool_ready``: an ask_user call's arguments completed and validated
       (pre-execution) — preview-dock the pill NOW instead of waiting out the
       loop. Fires on every iteration; a rejected ask's preview rolls back
       with the turn's other previews.
     """
     async def on_tool_call(name: str) -> None:
+        if projector is not None:
+            for frame in projector.name_known(name):
+                await queue.put(_activity_frame(frame))
         if name in ("present_plan", "propose_tasks", "apply_edit_ops", "edit_graph"):
             await queue.put(
                 _sse(
@@ -210,6 +216,31 @@ def _make_tool_hooks(queue: asyncio.Queue):
             )
 
     return on_tool_call, on_tool_ready
+
+
+def _activity_frame(frame) -> str:
+    """One serialized ``assistant.activity`` frame (ADR-087 §3 Phase 2):
+    additive alongside the phase frames; ``_sse_pump`` passes it through
+    untouched."""
+    return _sse("assistant.activity", json.dumps(frame.to_dict(), ensure_ascii=False))
+
+
+def _make_loop_event_hook(queue: asyncio.Queue, projector: ActivityProjector):
+    """The typed loop-event channel's SSE seat (U1): internal events in,
+    user-safe activity frames out — the translation lives entirely in the
+    projector."""
+    async def on_loop_event(event) -> None:
+        for frame in projector.feed_event(event):
+            await queue.put(_activity_frame(frame))
+
+    return on_loop_event
+
+
+async def _sweep_activities(queue: asyncio.Queue, projector: ActivityProjector, outcome: str) -> None:
+    """The terminal sweep (T16-B, 终帧律的活动同形): before the envelope,
+    every still-active activity is settled — no activity outlives its turn."""
+    for frame in projector.sweep(outcome):
+        await queue.put(_activity_frame(frame))
 
 
 def _failure_detail(exc: Exception, ui_language: str) -> str | dict:
@@ -301,6 +332,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
     bookkeeping breaks it.)
     """
     queue: asyncio.Queue = asyncio.Queue()
+    projector = ActivityProjector()
 
     async def run_turn() -> None:
         from app.models.database import AsyncSessionLocal
@@ -315,7 +347,8 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                 # after the turn's session has torn down.
                 turn_user_message_id = prepared.user_message.id
                 on_delta = _make_delta_hook(queue)
-                on_tool_call, on_tool_ready = _make_tool_hooks(queue)
+                on_tool_call, on_tool_ready = _make_tool_hooks(queue, projector)
+                on_loop_event = _make_loop_event_hook(queue, projector)
 
                 async def on_reasoning(_fragment: str) -> None:
                     # Reasoning-content frames: liveness only, never shown.
@@ -350,7 +383,9 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     on_phase=on_phase,
                     on_tool_call=on_tool_call, on_tool_ready=on_tool_ready,
                     on_checkpoint=on_checkpoint,
+                    on_loop_event=on_loop_event,
                 )
+            await _sweep_activities(queue, projector, "completed")
             await queue.put(("completed", response.model_dump(mode="json")))
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash
             # Turn durability (交互完整性批 A): the user row committed in
@@ -361,6 +396,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
             # persisted=False keeps the old rollback for those.
             if turn_user_message_id is not None:
                 await stamp_turn_failed(turn_user_message_id)
+            await _sweep_activities(queue, projector, "failed")
             await queue.put(
                 ("failed", _failure_detail(exc, ui_language), turn_user_message_id is not None)
             )
@@ -393,6 +429,7 @@ async def _answer_stream(
     the JSON path's error as a frame).
     """
     queue: asyncio.Queue = asyncio.Queue()
+    projector = ActivityProjector()
 
     async def run_answer() -> None:
         from app.models.database import AsyncSessionLocal
@@ -400,7 +437,8 @@ async def _answer_stream(
         try:
             async with AsyncSessionLocal() as db:
                 on_delta = _make_delta_hook(queue)
-                on_tool_call, on_tool_ready = _make_tool_hooks(queue)
+                on_tool_call, on_tool_ready = _make_tool_hooks(queue, projector)
+                on_loop_event = _make_loop_event_hook(queue, projector)
 
                 async def on_phase(phase: str) -> None:
                     await queue.put(
@@ -416,7 +454,9 @@ async def _answer_stream(
                     on_phase=on_phase,
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
+                    on_loop_event=on_loop_event,
                 )
+            await _sweep_activities(queue, projector, "completed")
             await queue.put(
                 (
                     "completed",
@@ -431,6 +471,7 @@ async def _answer_stream(
                 )
             )
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash
+            await _sweep_activities(queue, projector, "failed")
             await queue.put(("failed", _failure_detail(exc, ui_language)))
 
     task = asyncio.create_task(run_answer())

@@ -15,9 +15,13 @@ from pydantic import BaseModel
 
 from app.agents.tool_loop import (
     ChatTool,
+    LoopExhausted,
     LoopResult,
+    ReadAccepted,
+    TerminalAccepted,
     ToolLoopAgent,
     ToolObservation,
+    ToolRejected,
     tool_spec,
 )
 from app.providers.llm.base import (
@@ -677,3 +681,124 @@ async def test_no_checkpoint_channel_keeps_the_ledger() -> None:
     agent = _make_agent("tl_cp_json", client, tools=tools)
     result = await agent.call_loop(_reads_observe)
     assert result.prose == "result talk\n\nthe plan"
+
+
+# ---- on_loop_event 语义 (ADR-087 §3 Phase 2, U1 裁定 2026-09-19) --------------
+#
+# The typed internal-event channel: the kernel says WHAT HAPPENED (rejection
+# at the moment it happens / the two accept points / exhaustion), never what
+# the user should be told — the Activity Projection owns the translation.
+# Iteration boundaries have no event of their own: their two causes already
+# ride on_repair / on_observe.
+
+
+@pytest.mark.asyncio
+async def test_loop_event_rejection_at_the_moment_and_accept() -> None:
+    """拒绝当时: the ToolRejected event fires in the SAME iteration as the
+    guardrail rejection (before the retry's LLM call), and the terminal
+    accept fires TerminalAccepted."""
+    client = StubClient([
+        _call("echo", {"text": "bad"}, prose="first"),
+        _call("echo", {"text": "good"}, prose="second"),
+    ])
+    events: list[object] = []
+
+    async def execute(name: str, params: BaseModel | None, prose: str) -> str | None:
+        assert params is not None
+        return "nope" if params.text == "bad" else None
+
+    agent = _make_agent("tl_ev_reject", client)
+    result = await agent.call_loop(execute, on_loop_event=lambda e: events.append(e))
+    assert result.params is not None and result.params.text == "good"
+    assert events == [
+        ToolRejected(kind="execute_guardrail", tool_name="echo"),
+        TerminalAccepted(tool_name="echo"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_loop_event_truncation_carries_no_name() -> None:
+    """Schema truncation can sever the stream before the name is known —
+    the honest fact is tool_name=None."""
+    client = StubClient([
+        LLMSchemaError("truncated tool_call arguments"),
+        _call("echo", {"text": "recovered"}),
+    ])
+    events: list[object] = []
+    agent = _make_agent("tl_ev_trunc", client)
+    await agent.call_loop(_always_accept, on_loop_event=lambda e: events.append(e))
+    assert events == [
+        ToolRejected(kind="schema_truncation", tool_name=None),
+        TerminalAccepted(tool_name="echo"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_loop_event_unknown_tool_and_params_validation() -> None:
+    client = StubClient([
+        _call("nope_tool", {}),
+        _call("echo", {"wrong": "shape"}),
+        _call("echo", {"text": "ok"}),
+    ])
+    events: list[object] = []
+    agent = _make_agent("tl_ev_kinds", client)
+    result = await agent.call_loop(_always_accept, on_loop_event=lambda e: events.append(e))
+    assert result.params is not None and result.params.text == "ok"
+    assert events == [
+        ToolRejected(kind="unknown_tool", tool_name="nope_tool"),
+        ToolRejected(kind="params_validation", tool_name="echo"),
+        TerminalAccepted(tool_name="echo"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_loop_event_read_accepted_and_never_for_terminal() -> None:
+    read = _read_tool()
+    echo = ChatTool("echo", "Echo the text.", EchoArgs)
+    client = StubClient([
+        _call("lookup", {}, prose="let me check"),
+        _call("echo", {"text": "done"}, prose="the answer"),
+    ])
+    events: list[object] = []
+
+    async def execute(name: str, params: Any, prose: str):
+        if name == "lookup":
+            return ToolObservation("world")
+        return None
+
+    agent = _make_agent("tl_ev_read", client, tools=[read, echo])
+    result = await agent.call_loop(execute, on_loop_event=lambda e: events.append(e))
+    assert result.tool_name == "echo"
+    assert events == [
+        ReadAccepted(tool_name="lookup"),
+        TerminalAccepted(tool_name="echo"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_loop_event_exhausted_fires_before_the_honest_degradation() -> None:
+    client = StubClient([_call("echo", {"text": "x"})] * 3)
+    events: list[object] = []
+
+    async def reject(name: str, params: BaseModel | None, prose: str) -> str:
+        return "no"
+
+    agent = _make_agent("tl_ev_exhaust", client, max_iterations=3)
+    result = await agent.call_loop(reject, on_loop_event=lambda e: events.append(e))
+    assert result.exhausted
+    assert events == [
+        ToolRejected(kind="execute_guardrail", tool_name="echo"),
+        ToolRejected(kind="execute_guardrail", tool_name="echo"),
+        ToolRejected(kind="execute_guardrail", tool_name="echo"),
+        LoopExhausted(iterations=3),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_loop_event_bare_reply_emits_nothing() -> None:
+    """A bare reply is the answer floor — no call, no loop events."""
+    client = StubClient([ToolGeneration(content="just words", tool_calls=[])])
+    events: list[object] = []
+    agent = _make_agent("tl_ev_bare", client)
+    result = await agent.call_loop(_always_accept, on_loop_event=lambda e: events.append(e))
+    assert result.tool_name is None and events == []

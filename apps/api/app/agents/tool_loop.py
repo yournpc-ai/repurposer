@@ -177,6 +177,57 @@ class ToolObservation:
     text: str
 
 
+# --- Internal loop events (ADR-087 §3 Phase 2, U1 裁定 2026-09-19) ---
+#
+# The loop's instrumentation channel: typed facts about WHAT HAPPENED in the
+# kernel, nothing else. The frozen boundary (用户拍板): the loop never
+# references Activity vocabulary, never constructs a user-facing activity,
+# never touches Presentation — translating "what happened" into "what the
+# user is told" is entirely the Activity Projection's job
+# (``app/chat/activity.py`` is the channel's only consumer). Typed union,
+# never a grab-bag dict: a new event kind is a new dataclass here.
+
+
+@dataclass(frozen=True)
+class ToolRejected:
+    """A call was REJECTED at the moment it happened (拒绝当时) — schema
+    truncation / unknown tool / params validation / execute guardrail.
+    ``tool_name`` is None when the name never became reliably known (a
+    truncation can sever the stream before/within the arguments)."""
+
+    kind: str  # schema_truncation | unknown_tool | params_validation | execute_guardrail
+    tool_name: str | None
+
+
+@dataclass(frozen=True)
+class TerminalAccepted:
+    """A TERMINAL call's execute returned accept (the stop) — the work the
+    call commits to (dock / run birth / edit application) has completed."""
+
+    tool_name: str
+
+
+@dataclass(frozen=True)
+class ReadAccepted:
+    """A NON-terminal read's execute returned its observation — the read is
+    done; the loop now enters the quiet decision iteration. Pairs with the
+    call's name-known moment."""
+
+    tool_name: str
+
+
+@dataclass(frozen=True)
+class LoopExhausted:
+    """The iteration cap was hit with every call rejected — the caller
+    degrades honestly. The projector's explicit-failure fact (an open repair
+    span must not be swept to 'completed' by a cannot-do envelope)."""
+
+    iterations: int
+
+
+LoopEvent = ToolRejected | TerminalAccepted | ReadAccepted | LoopExhausted
+
+
 # Execute signature: (tool name, validated params, the turn's composed speech
 # so far) → None when a TERMINAL call is ACCEPTED (the stop), the structured
 # feedback string when a call is REJECTED (the loop echoes it and iterates),
@@ -241,6 +292,7 @@ class ToolLoopAgent:
         on_repair: _Hook | None = None,
         on_observe: _Hook | None = None,
         on_checkpoint: _Hook | None = None,
+        on_loop_event: _Hook | None = None,
         **ctx: Any,
     ) -> LoopResult:
         """Run the bounded loop: assemble → render → [generate_with_tools →
@@ -290,6 +342,16 @@ class ToolLoopAgent:
           scheduled — a breaching model loses the channel, it does not
           overflow it). None (the one-shot JSON path) keeps the ledger
           behavior — the prose composes into the envelope as before.
+        - ``on_loop_event``: the typed internal-event channel (ADR-087 §3
+          Phase 2, U1 裁定) — ``ToolRejected`` at the moment of every
+          rejection, ``TerminalAccepted`` / ``ReadAccepted`` at the two
+          accept points, ``LoopExhausted`` before the exhausted return.
+          The loop emits WHAT HAPPENED and nothing else; user-facing
+          meaning is the Activity Projection's job, never the kernel's.
+          The iteration boundary has no separate event: its two causes
+          (retry-after-rejection / continuation-after-read) already ride
+          ``on_repair`` / ``on_observe`` — an event without a consumer is
+          a lie waiting to drift.
         """
         capabilities = getattr(self.client, "capabilities", None)
         if capabilities is None or not capabilities.supports_native_tools:
@@ -399,6 +461,12 @@ class ToolLoopAgent:
                     kind="schema_truncation",
                     detail=str(e)[:200],
                 )
+                # The name may never have become reliably known (the stream
+                # can sever inside the arguments) — None is the honest fact.
+                await _emit(
+                    on_loop_event,
+                    ToolRejected(kind="schema_truncation", tool_name=None),
+                )
                 base_messages[1] = {
                     "role": "user",
                     "content": user_prompt + _loop_echo(str(e)),
@@ -439,6 +507,10 @@ class ToolLoopAgent:
                     kind="unknown_tool",
                     tool=call.name,
                 )
+                await _emit(
+                    on_loop_event,
+                    ToolRejected(kind="unknown_tool", tool_name=call.name),
+                )
                 base_messages[1] = {
                     "role": "user",
                     "content": user_prompt
@@ -472,6 +544,12 @@ class ToolLoopAgent:
                         kind="params_validation",
                         tool=call.name,
                         detail=str(e)[:200],
+                    )
+                    await _emit(
+                        on_loop_event,
+                        ToolRejected(
+                            kind="params_validation", tool_name=call.name
+                        ),
                     )
                     base_messages[1] = {
                         "role": "user",
@@ -556,6 +634,7 @@ class ToolLoopAgent:
                 # is on the wire, the quiet decision iteration begins — the
                 # UI's phase moves on from the inspecting label NOW, not at
                 # the next call's name-known moment (15-25s later).
+                await _emit(on_loop_event, ReadAccepted(tool_name=call.name))
                 await _emit(on_observe, call.name)
                 continue
             if outcome is None:
@@ -565,6 +644,7 @@ class ToolLoopAgent:
                         "— the declaration and the execute table skewed "
                         "(a read never ends the turn)"
                     )
+                await _emit(on_loop_event, TerminalAccepted(tool_name=call.name))
                 return _finish(
                     LoopResult(
                         prose=speech,
@@ -582,11 +662,16 @@ class ToolLoopAgent:
                 tool=call.name,
                 detail=outcome[:200],
             )
+            await _emit(
+                on_loop_event,
+                ToolRejected(kind="execute_guardrail", tool_name=call.name),
+            )
             base_messages[1] = {
                 "role": "user",
                 "content": user_prompt + _loop_echo(outcome),
             }
             prev_rejected = True
+        await _emit(on_loop_event, LoopExhausted(iterations=self.max_iterations))
         return _finish(
             LoopResult(
                 prose="",

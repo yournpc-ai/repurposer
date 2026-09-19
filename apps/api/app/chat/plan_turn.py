@@ -1097,6 +1097,7 @@ async def run_plan_turn(
     on_tool_call=None,
     on_tool_ready=None,
     on_checkpoint=None,
+    on_loop_event=None,
 ) -> PlanTurnOutcome:
     """The plan path's turn: assemble → the bounded tool loop → the outcome
     mapping. ``intent_router`` provider failures propagate as LLMError — no
@@ -1119,6 +1120,7 @@ async def run_plan_turn(
         on_repair=_repair_phase_callback(on_phase),
         on_observe=_observe_phase_callback(on_phase),
         on_checkpoint=_checkpoint_callback(db, turn.conversation_id, on_checkpoint),
+        on_loop_event=on_loop_event,
         **turn.infer_kwargs,
     )
     return await turn.finish(result)

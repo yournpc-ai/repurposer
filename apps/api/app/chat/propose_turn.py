@@ -601,6 +601,7 @@ async def run_propose_turn(
     on_tool_call=None,
     on_tool_ready=None,
     on_checkpoint=None,
+    on_loop_event=None,
 ) -> ProposeTurnOutcome:
     """The chat path's turn: assemble → the bounded tool loop → the outcome
     mapping. Provider failure keeps its retired posture: the ask-back line is
@@ -620,6 +621,7 @@ async def run_propose_turn(
             on_tool_ready=on_tool_ready,
             on_repair=_repair_phase_callback(on_phase),
             on_observe=_observe_phase_callback(on_phase),
+            on_loop_event=on_loop_event,
             on_checkpoint=(
                 # ADR-085: the checkpoint channel (persist + SSE forward) —
                 # a project-less defensive turn has no conversation to
