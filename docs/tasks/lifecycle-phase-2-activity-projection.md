@@ -82,6 +82,14 @@ Goal / Current evidence / Contract changes / Files / Tests / Migration strategy 
 
 PREFLIGHT **PASS WITH CONDITIONS**（2026-09-19 用户裁定：U1/U4 批准、U5 按 T16-A/T16-B 双不变量收紧后批准开工；另冻结两条门禁——kind = 用户语义类别永不退化为 tool name、连续性 ≠ 周期刷新；ToolLoop 只产 typed internal Loop Events）。裁定全文已回填 §Preflight P4/P6/P7。**Implementation 开工。** 前置 = Phase 1 验收全闭环（剧本/tsc 用户自跑，结果未回）。
 
+IMPLEMENTATION **步①~④ 已落地（2026-09-19，commits `662d88a` 服务端 additive / `fa0df01` 客户端解析 / `a33cae4` 并行渲染 UI；worktree `worktree-lifecycle-phase2-preflight`）**：
+- 步①：`agents/tool_loop.py` typed `LoopEvent` 四事件（ToolRejected / TerminalAccepted / ReadAccepted / LoopExhausted）+ `on_loop_event` 缝 6 个发射点（零行为变化，可选 kwarg）；`app/chat/activity.py` 纯投影器（kind 四值 / repair N→1 聚合 / conversation 工具 1→0 过滤 / 终帧清扫 T16-B / 零 DB 零 Domain）；`assistant.activity` SSE 帧上流（chat/answer 双流）；`on_loop_event` 全链穿线（execute_chat_turn → 双 shim → 双 runner + answer_question 5 内部点）。纯 pytest 26 例绿（T1-T17 + loop 发射 6 例）。
+- 步②：`chat-stream.ts` `ActivityFramePayload` 类型 + `onActivity` 回调 + `assistant.activity` 分发分支（字段白名单注释入码）。
+- 步③④：ChatDock 回合级 activities 累积（append-only 按 activity_id upsert）+ 信封/失败/abort 三处防御清扫（T16-B 客户端孪生）+ `ActivityStream` 组件（active spinner+shimmer / ✓ / ✗ destructive / 删除线 cancelled）+ 渲染座在 thinking 行上方、active 活动在位时 System Status 行让位；i18n `chat.activity.*` + `chat.inspectingDone.*` 双语镜像。
+- **步⑤（相位面收窄）HOLD**——本简报 Migration strategy 的门禁即「活动帧上线但 UI 并行渲染 → 剧本 + 产品试用验证 → Chat Activity UI 切换」；收窄面 = 服务端 drafting/inspecting/repairing/creating_run 相位发射退役（保留 composing/基座/清除帧）+ 客户端 thinkingKey 移除 + i18n 死键清理 + 剧本 S10 帧序断言更新。**待用户跑剧本 + 产品试用后裁定开工。**
+- **未跑验证（用户自跑，在册）**：compileall / import 探针 / tsc / 剧本复跑（S5/S7/S10/S11/S20A）；prompt_gate 不需要（零 prompt 面变化）。Claude 自跑：纯 pytest 全绿（两新套件 54 例 + 既有纯套件回归——`test_graph_wiring_pure.py::test_transcript_node_skips_textless_assets` 与 `test_trigger_turn_pure.py::test_bare_question_follows_the_speech_language` 2 例在 base 6196b1f 同样失败 = Phase 1 验收发现，非本批 regression，待用户裁定）。
+- **已知环境注记**：纯 pytest 需要仓库根 `.env`（Settings 从 `parents[3]` 读，worktree 内已复制一份 gitignored 副本）。
+
 ---
 
 ## §Preflight 报告（2026-09-19；只读取证，未改代码；未跑验证——本报告全部结论来自静态阅读；锚点核于 HEAD `6196b1f`，行号会漂移，以内容定位）

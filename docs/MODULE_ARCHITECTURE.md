@@ -205,6 +205,8 @@ apps/api/
 │   ├── main.py / config.py / worker.py   # FastAPI 入口 / 配置 / 独立 worker 进程
 │   ├── dependencies/    # 依赖注入（auth：JWT / 匿名回退默认用户数据）
 │   ├── chat/            # Agent Interface：routes / service / intent / stream_extract（ProseDeltaExtractor，N-26）
+│   │                    #   / activity.py（Activity Projection，ADR-087 §3 Phase 2：LoopEvent + name-known
+│   │                    #   → user-safe assistant.activity 帧的纯投影器，kind=用户语义类别，零 DB 零 Domain 读）
 │   ├── pipeline/        # Pipeline（RunPlan 内核）
 │   │   ├── routes/      # projects（含 GET /projects/{id}/graph 画布直读帧，ADR-057）/ assets / outputs / runs / music / recipes 端点
 │   │   ├── orchestrator.py        # RunPlan 物化/走图（create_run = WorkflowRun 唯一出生地；逐节点 estimate 落库 = 报价存储侧）
@@ -243,7 +245,9 @@ apps/api/
 │   │   │                        #   纯函数半边（fidelity 族 + craft 可测量项 + run_checks 按类型分派）
 │   ├── agents/          # agent 花名册 + harness 漏斗（ADR-039）：base.py（Agent 唯一类 +
 │   │                    #   StreamingAgent 流式子类）/ roster.py（共享 crew：understand·plan/persona/
-│   │                    #   translator）/ contexts.py（统一装配层：GenerationContext + chat 意图上下文）
+│   │                    #   translator）/ contexts.py（统一装配层：GenerationContext + chat 意图上下文）/
+│   │                    #   tool_loop.py（有界工具 loop harness，ADR-077；typed LoopEvent 内部事件通道——
+│   │                    #   内核只说「发生了什么」，用户语义归 chat/activity.py，ADR-087 §3 U1 冻结边界）
 │   ├── tools/           # 工具包（能力唯一家，N-42）：article / captions / carousel / clips /
 │   │                    #   dub / filler / music / posts / quotes / reframe / research / revise / stills
 │   │                    #   （节点类+params+私有工序+估价+私有 agent 声明）；
