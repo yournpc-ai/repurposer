@@ -646,10 +646,35 @@ def _asset(**kw):
 
 
 @pytest.mark.asyncio
-async def test_transcript_node_skips_textless_assets():
+async def test_transcript_node_births_queued_for_textless_text_yielding_asset():
+    """上传即出生 (Phase 1, ADR-087 §2 R2): a text-yielding asset with no
+    transcript yet still births its card AT UPLOAD in ``queued`` (loading) —
+    the card holds its canvas seat while ASR/extraction runs; the completion
+    path flips it to done. Idempotent: a second stamp finds the same card."""
+    asset = _asset()  # video, no transcript yet
     db = _StubDb()
-    assert await stamp_transcript_node(db, _PROJECT_ID, _asset()) is None
-    assert db.added == []
+    doc = await stamp_transcript_node(db, _PROJECT_ID, asset)
+    assert doc is not None
+    assert doc.state == "queued"
+    assert doc.type == "document"
+    assert doc.spec["role"] == "transcript"
+    assert "text" not in doc.spec
+    edge = next(e for e in db.edges if e.to_node == doc.id)
+    assert edge.edge_type == "text"
+    # Idempotent while still waiting: no twin, no second edge, stays queued.
+    db2 = _StubDb(nodes=[doc], edges=list(db.edges))
+    again = await stamp_transcript_node(db2, _PROJECT_ID, asset)
+    assert str(again.id) == str(doc.id)
+    assert db2.added == []
+
+
+@pytest.mark.asyncio
+async def test_transcript_node_skips_non_text_yielding_assets():
+    """Asset types without a text yield never birth a transcript card."""
+    for t in (AssetType.IMAGE, AssetType.VOICE_SAMPLE):
+        db = _StubDb()
+        assert await stamp_transcript_node(db, _PROJECT_ID, _asset(type=t)) is None
+        assert db.added == []
 
 
 @pytest.mark.asyncio

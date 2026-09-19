@@ -116,8 +116,14 @@ class TestSuggestionsPayload:
         assert _match_option("2", payload.options).label == "出个 30 秒精华版"
 
     def test_bare_question_follows_the_speech_language(self) -> None:
+        # Semantic assertion: the contract is LANGUAGE-following (zh → the
+        # Chinese line, en → the English line), not a frozen casing — the
+        # copy is deliberate sentence-case ("What's next?"), so match
+        # case-insensitively.
         assert "接下来" in _suggestions_payload(["a"], "zh").question
-        assert "Next" in _suggestions_payload(["a"], "en").question
+        en_question = _suggestions_payload(["a"], "en").question
+        assert "next" in en_question.lower()
+        assert "接下来" not in en_question
 
 
 def test_trigger_dump_is_self_describing() -> None:
