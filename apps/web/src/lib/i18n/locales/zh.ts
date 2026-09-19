@@ -1156,6 +1156,27 @@ const zh: Resources = {
       asset: "正在查看素材…",
       craftSkeleton: "正在读案例的风格拆解…",
     },
+    /** 活动流里程碑文案（ADR-087 §3 Phase 2）：active 帧带进行态、completed
+     * 帧带完成态；failed/cancelled 复用进行态（✗/删除线说剩下的）。 */
+    activity: {
+      draft: "正在起草计划…",
+      draftDone: "计划已起草",
+      run: "正在创建你的 workflow…",
+      runDone: "workflow 已创建",
+      repair: "刚才的回答没组织好，我重新整理一下…",
+      repairDone: "已重新整理好",
+    },
+    /** inspecting 族的完成态镜像——读活动 completed 帧的文案（键随服务端
+     * 注册表，本族按前缀交换镜像）。 */
+    inspectingDone: {
+      outputSpec: "已读当前设置",
+      understanding: "已回看素材理解",
+      captionStyles: "已翻完字幕样式",
+      music: "已查曲库",
+      runStatus: "已查看运行进度",
+      asset: "已查看素材",
+      craftSkeleton: "已读案例的风格拆解",
+    },
     completed: "完成",
     failed: "抱歉，这次没能完成修改，请再试一次。",
     runFailed: "运行失败",

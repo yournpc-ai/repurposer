@@ -49,6 +49,7 @@ import {
 import { apiFetch } from "@/lib/api"
 import { inferAssetType } from "@/lib/asset-type"
 import { streamAnswer, streamChat, StreamTurnError } from "@/lib/chat-stream"
+import type { ActivityFramePayload } from "@/lib/chat-stream"
 import {
   asCreditsInsufficient,
   type CreditsInsufficientDetail,
@@ -119,6 +120,7 @@ import {
   RunTaskList,
 } from "@/components/chat/RunTaskList"
 import { StatusLine } from "@/components/chat/StatusLine"
+import { ActivityStream } from "@/components/chat/ActivityStream"
 import type { IntentSlot, LifecycleStamp, Output } from "@/lib/types"
 import {
   fileIconFor,
@@ -1343,6 +1345,34 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // the row speaks 「正在查曲库…」 while the tool name never surfaces. The
   // key wins over the phase label while set; a phase-only frame clears it.
   const [thinkingKey, setThinkingKey] = useState<string | null>(null)
+
+  // The turn's Activity Stream (ADR-087 §3 Phase 2): append-oriented
+  // user-safe milestones. The wire is append-only — a status flip arrives as
+  // a NEW frame on the same activity_id — so this list keeps the latest
+  // frame per id in arrival (= seq) order. The block is cleared when the
+  // NEXT turn starts (v1: per-turn block, no cross-session replay — the
+  // contract's no-persistence line) and settles in place at the envelope
+  // (U9: the stream stays as the turn's static history below its bubble).
+  const [activities, setActivities] = useState<ActivityFramePayload[]>([])
+  const handleActivityFrame = useCallback((frame: ActivityFramePayload) => {
+    setActivities((prev) => {
+      const i = prev.findIndex((a) => a.activity_id === frame.activity_id)
+      if (i === -1) return [...prev, frame]
+      const next = [...prev]
+      next[i] = frame
+      return next
+    })
+  }, [])
+  // The defensive sweep (T16-B's client twin — the server sweeps before the
+  // envelope, this catches whatever the stream lost): a settling turn never
+  // leaves an activity spinning forever (假活跃禁令).
+  const settleActivities = useCallback(
+    (status: "completed" | "failed" | "cancelled") =>
+      setActivities((prev) =>
+        prev.map((a) => (a.status === "active" ? { ...a, status } : a))
+      ),
+    [],
+  )
 
   // Conversation below the pinned regions (plan card / progress).
   const [messages, setMessages] = useState<OverlayMessage[]>([])
@@ -2608,6 +2638,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setProseActive(false)
     setThinkingPhase(null)
     setThinkingKey(null)
+    setActivities([]) // the new turn's own stream replaces the settled one
     const streamId = crypto.randomUUID()
     let streamedAny = false
     // What the preview bubble currently shows (the typewriter-released text)
@@ -2792,6 +2823,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           onQuestionPreview: (payload) =>
             dockQuestionPreview(`preview-${streamId}`, payload),
           onCheckpoint,
+          onActivity: handleActivityFrame,
         }
       )
       // Envelope wins: any in-flight checkpoint delivery finishes FIRST
@@ -2806,6 +2838,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // stream already cleared at the same seat; this is the parity gap.)
       setThinkingPhase(null)
       setThinkingKey(null)
+      // Defensive sweep (T16-B): the server's terminal sweep already closed
+      // every activity; this catches whatever the stream dropped — the
+      // envelope leaves nothing spinning.
+      settleActivities("completed")
       // A turn can create assets server-side (declared-material promotion) —
       // refresh the prompt attachments when the project started empty.
       if (assets.length === 0) void fetchAssets()
@@ -2966,6 +3002,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // 终帧律 (同上): a failed/aborted turn closes every phase too.
       setThinkingPhase(null)
       setThinkingKey(null)
+      // The activity stream settles the same way: a user stop marks the
+      // in-flight work cancelled, a failure marks it failed — nothing keeps
+      // spinning (假活跃禁令, T16-B client twin).
+      settleActivities(
+        e instanceof DOMException && e.name === "AbortError"
+          ? "cancelled"
+          : "failed",
+      )
       if (e instanceof DOMException && e.name === "AbortError") {
         // Stopped mid-stream: the partial preview settles as static text
         // (the server may still finish the turn server-side). Checkpoint
@@ -3203,6 +3247,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setProseActive(false)
     setThinkingPhase(null)
     setThinkingKey(null)
+    setActivities([]) // the answer continuation is its own turn — new stream
     setPendingQuestion(null)
     setMessages((prev) =>
       prev.some((m) => m.id === optimisticId)
@@ -3267,6 +3312,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // its pill NOW; the envelope re-docks authoritatively below.
         onQuestionPreview: (payload) =>
           dockQuestionPreview(`preview-answer-${optimisticId}`, payload),
+        onActivity: handleActivityFrame,
       })
       // Envelope wins (2026-09-06 原地落定，与 sendChat 的 finalizePreview
       // 同一纪律): the optimistic block becomes the real answered row AT
@@ -3278,6 +3324,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       typewriter.flush()
       setThinkingPhase(null)
       setThinkingKey(null)
+      settleActivities("completed") // defensive twin of the server sweep
       const answeredRow = buildAnsweredQuestionRow(data.answered_question)
       const followUp = data.follow_up
       // 打字机律最后闸门 (sendChat 同款): a zero-delta follow-up (the
@@ -3367,6 +3414,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       typewriter.flush()
       setThinkingPhase(null)
       setThinkingKey(null)
+      settleActivities("failed") // T16-B: the failed answer leaves nothing spinning
       // A failed turn retires every ask-preview artifact too — a stashed
       // next-click's optimistic block and the preview pill never existed
       // server-side (the original question restores just below).
@@ -4380,6 +4428,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   </>
                 )}
 
+                {/* The turn's Activity Stream (ADR-087 §3 Phase 2): the
+                    append-oriented milestone surface — rows appear as the
+                    loop's work starts, settle in place as it completes, and
+                    the block stays as the turn's static history until the
+                    next turn replaces it. While an activity is ACTIVE it IS
+                    the "what's happening now" line, so the System Status row
+                    below yields (no double narration). */}
+                {activities.length > 0 && (
+                  <MessageScrollerItem>
+                    <ActivityStream activities={activities} />
+                  </MessageScrollerItem>
+                )}
+
                 {/* The turn's status line owns every window where NO prose
                     is visibly flowing (2026-09-09 用户拍板——打字机途中不需
                     要 thinking): prose in motion IS the activity evidence,
@@ -4391,8 +4452,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     after a grace so burst gaps don't strobe). The label
                     follows the server's phase frames (thinking →
                     creating_run), falling back to the static copy when no
-                    phase arrived. */}
-                {chatBusy && !proseActive && (
+                    phase arrived. Phase 2: the row ALSO yields while an
+                    activity is active — the milestone stream owns the "now"
+                    line, the phase row is the System Status fallback (base
+                    thinking / composing windows). */}
+                {chatBusy &&
+                  !proseActive &&
+                  !activities.some((a) => a.status === "active") && (
                   <MessageScrollerItem>
                     <ThinkingRow
                       label={

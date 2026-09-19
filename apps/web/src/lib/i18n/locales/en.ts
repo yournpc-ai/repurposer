@@ -1219,6 +1219,30 @@ const en = {
       asset: "Looking at the asset…",
       craftSkeleton: "Reading the reference's style breakdown…",
     },
+    /** The Activity Stream's milestone copy (ADR-087 §3 Phase 2): the active
+     * frame carries the progressive form, the completed frame the past-tense
+     * form; failed/cancelled reuse the active form (the ✗ / strikethrough
+     * says the rest). kind is a user-semantic category — never a tool name. */
+    activity: {
+      draft: "Drafting the plan…",
+      draftDone: "Drafted the plan",
+      run: "Creating your workflow…",
+      runDone: "Created your workflow",
+      repair: "That answer didn't come out right — reworking it…",
+      repairDone: "Reworked it",
+    },
+    /** Past-tense mirrors of the inspecting family — a read activity's
+     * completed frames (chat.inspecting.* stays the active form; the keys
+     * ride the server registry, this family mirrors it by prefix swap). */
+    inspectingDone: {
+      outputSpec: "Read the current settings",
+      understanding: "Reviewed your material",
+      captionStyles: "Browsed the caption styles",
+      music: "Searched the music library",
+      runStatus: "Checked the run's progress",
+      asset: "Looked at the asset",
+      craftSkeleton: "Read the reference's style breakdown",
+    },
     completed: "Done",
     failed: "Sorry, I couldn't update this. Please try again.",
     runFailed: "Run failed",
