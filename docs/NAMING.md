@@ -98,13 +98,9 @@
 | 流程视图 | `FlowView` | 只读图渲染基座（`components/flow/`，ADR-036）：节点皮（asset/output/step）× 双边语义 × 分层布局，四消费面共用；引擎 `@xyflow/react`（摆位+视口，布局自算）；编辑手势常锁，缩放按面门禁（导航 ≠ 编辑，ADR-036 补记） | 不是画布（canvas 撞可操作画布禁令）、不是图编辑器 |
 | 血缘边 | lineage edge | FlowView 边语义之一：素材→产物 / 产物→产物（`derived_from_output_id`）的派生关系 | 不是依赖边 |
 | 依赖边 | dependency edge | FlowView 边语义之二：step 间工艺顺序（step `inputs`） | 不是血缘边 |
-| 结果画布 | results canvas | 项目页收官态默认中心（ADR-041 D1，run 进度图排产随它撤销）：FlowView 渲染当前 run 拓扑 + 最新产物——产物节点即卡（缩略图/分数+top-pick/下一步建议 + hover toolbar）；适配器 `runFlowGraph`（`components/flow/runFlow.ts`） | 不是可操作画布（ADR-035 永拒）；进度不进图（打勾流唯一进度面） |
 | 底部 dock | chat dock（组件 `ChatDock`，2026-09-02 由 GenerationOverlay 改名） | 项目页的 chat 外壳（`components/chat/ChatDock.tsx`）：**两态形态机**——首个 run 前 = 居中全屏 chat（full），首个 run 到达收拢成底部 dock（dock）；dock 形态下**三可见性态**——收起 = 输入组（唯一常驻 chrome），展开 = 历史区域在同一容器内向上生长，hidden = 用户手势收成右下角 LogoMark 点（agent 发声 / 待决提问 / 焦点唤回）；agent 发声必自动展开（#6） | 不是第二意图入口（推断/合并/确认全在 plan path） |
 | meta 行 | meta row（`MetaRow`） | 系统层事实的消息流内灰色渲染（Claude Code 解剖：muted + xs + 无填充无卡片 + 流内左对齐 + 超长截断可点开）——步骤勾选项 / recap 行（`RecapRow`，run 收官摘要单行）/ 焦点行（`FocusRow`）共用一族；**信息入流，控制留底** | 不是卡片、不是气泡、不是流外 chrome（独立摘要卡 / 焦点 chip 已退役） |
-| 焦点注入 | focus injection（`focus_output`） | 画布点选产物 → 下一轮 chat 携带焦点 `{id,label}`，context 加一行"当前焦点 output"（ADR-041 D8）；一次性消费（发完即清、点画布空白即清）+ **落库为用户消息焦点前缀**（`messages.focus_output`，历史回读渲染灰行） | 不是会话 scope（asset scope 已退役，N-36）、不是 mention（确定性指认归注册表参考族） |
 | 诞生回放 | birth choreography | 收官时画布按 `seq` 编译序逐节点入场 + 边描画（真实编译顺序的缓动回放，ADR-036 补记 3）；reduced-motion / 断线重连 / 历史打开直接终态 | 禁剧场（动画 = 真实事件投影） |
-| 过程脊 | process spine | 结果画布的无键步骤折叠组节点（ADR-041 D6）：渲染单元之外的管道步骤（preprocess / persona_bootstrap / 修饰 morphs）折为一个可就地展开的组节点（步骤计数 + 聚合状态，组节点 id 恒 `spine`）；失败不再破脊，聚合状态承载 | 折叠是视图行为不是数据行为——图数据永远全量（成本 / 重跑 / 血缘靠它） |
-| 渲染单元 | canvas render unit（`canvas_key` / `canvas_hidden` / `canvas_text`） | 结果画布的节点粒度（ADR-041 D6 修订 2026-08-12；名词节点收窄 2026-08-19）：画布只渲染名词节点——素材 / 文本（计划）/ 产物，过程动词永不上图（select_clips / dub / add_music 全部折叠，translate_clip 08-15 先例推广）。节点类自描述聚合键（与 `label()` 同哲学），同键 steps 合一卡（现行唯一授予 = `plan`：understand+checkpoint+plan 的计划玻璃文本节点）；无键折"过程脊"（干预 = 点产物卡注入 dock 焦点 / 脊内步骤 pill 走 @workflow_step）；`canvas_hidden`（render；prelude——preprocess/persona_bootstrap，08-19 二轮 R1：plan 上游与下游同脊成环，hidden 后资产喂边走下游兜底）永不上图，状态原地投影到产物卡；`canvas_text` = 卡面主体文案（如 checkpoint 的方向全文） | 不是 step 一一对应；判定问句："它是名词吗？"——动词一律折脊 |
 | 配方流程画布 | recipe process flow | 配方 overlay"流程"tab 的唯一图面（D6）：素材 → 策展步骤（fanout 展开）→ 烘焙成片的一张图；适配器 `recipeProcessFlow`（`components/recipes/recipeFlow.ts`） | 图只画一次——示例 tab 是平铺输入/输出卡，不是第二张图 |
 | 家族视图 | family view | 舞台焦点产物的一跳血缘邻里（父 + 己 + 派生子） | 只画一跳，不画全史 |
 | 血缘板 | lineage board | 项目全史产物血缘的只读投影（spike 名，复述测试裁决是否升正默认中心，排期见 PROGRESS） | 图内不堆历史（禁令 #6） |
@@ -129,6 +125,20 @@
 | 台账行 | `credit_transactions`（表） | 积分余额变动唯一事实源（ADR-055）：append-only，kind ∈ grant / purchase / hold / capture / release / refund / adjust；`idempotency_key` UNIQUE 一等列；ledger 是子系统概念名不上表名 | 不叫 entry（双 entry 会计第三层用不到）；不叫裸 `transactions`（撞 DB 事务语境） |
 | 消耗比例 | `credits.per_cost_usd`（configs key） | 每 $1 provider 成本的积分价（默认 1000）：报价 fold 与实扣同源单点，调参不发版、不动历史账 | 不是购买比例（钱→积分汇率 = W11 套餐定价决策，解耦） |
 | 公共参数表 | `configs`（表）/ `get_config()` | 运营参数的统一家（ADR-055）：`CONFIG_REGISTRY`（key → default/类型/desc）是唯一事实源，表只存覆盖值，启动 reconcile 补插；读取一个漏斗，未知 key 报错 | 工程参数禁入（连接串/密钥/保险丝留 env `config.py`）；模块禁直查表 |
+| 生命周期 | lifecycle | 产品阶段的五态命名事实（PREPARING / MATERIAL_READY / PLAN_READY / CONFIRMATION_READY / RUNNING，ADR-087 §2）：plan-scoped、服务端命名、只读 | 不是 run 状态机（执行层词汇）；不是 phase（phase = System Status） |
+| 生命周期投影 | Lifecycle Projection | 生命周期事实的唯一计算层：消费 Domain 事实（资产状态 / task_book / 链裁决 / 活动 run），产出投影戳经 Transport 供 Presentation 订阅；对 Domain 只读（ADR-087 原则 2） | 不是 Domain 写口；不是客户端推导（客户端推导永禁） |
+| 素材就绪 | MATERIAL_READY(P) | 计划 P 引用的资产全部 COMPLETED ∧ 无 FAILED ∧ 链所需内容事实就位（text 链需非空 transcript；transform 需已知语言）；相对 Plan P 的谓词 | 不是 project-global flag；不是 material exists（固定不等式） |
+| 计划就绪 | PLAN_READY | unanswered task_book ∧ MATERIAL_READY(P) ∧ chain 对当前事实重裁决通过 ∧ 无挂起前置提问；驱动 Review Surface（Canvas + Confirm Dock）出现 | ≠ turn.completed / present_plan / task_book exists / activity.completed（固定不等式入册） |
+| 确认就绪 | CONFIRMATION_READY | PLAN_READY ∧ 确认信息完整 ∧ 费用语义披露 ∧ 无活动 run；驱动 Confirm action enabled | ≠ PLAN_READY（PLAN_READY ∧ ¬CONFIRMATION_READY 合法——信息补全态 Confirm disabled） |
+| 费用语义就绪 | Charge Semantics Ready | Paid Work 的确认前提（ADR-087 §2.1）：Known / Deferred / Conditional / Held / Actualized 五面披露完整——当前可得费用事实 + 未确定部分的不确定性/确定时点/计费规则 + hold 语义 + 最终扣费时点；未披露收费路径永禁 | ≠「全量估价非空」（ADR-063 估价随运行合法不变；全量估价硬门 = 独立未来决策） |
+| 活动 | Activity | Agent 工作的用户安全观察流（可见性机制）：stable activity_id + sequence + started→completed/failed/cancelled，append-oriented | 不是 CoT / Tool Log / lifecycle authority / presentation 驱动器（永不控制 Canvas/Confirm/Run） |
+| 活动投影 | Activity Projection | Internal Agent Events → User-safe Activity Events 的唯一过滤/聚合层（十条对账规则，ADR-087 §3）；首版无持久化无回放 | 不是事件总线；不是 workflow graph；不是 lifecycle |
+| 系统状态 | System Status | `phase` 的保留义：系统宏观态（三概念分家——System Status / Agent Activity / Assistant Conversation） | 不再是 Activity container |
+| 确认教义 | Confirmation Doctrine | Task Intent ≠ Paid Execution Authorization：一切新 Paid Work 经 PLAN_READY → CONFIRMATION_READY → Explicit Confirmation；Approved Scope 内 continuation 自治，Scope Expansion 重新确认（ADR-087 §4） | G-explicit 消息 ≠ 付费手势（永禁）；plan/propose 不得有不同 Paid Authorization path |
+| 任务意图 | Task Intent | 自然语言请求的唯一语义——含明确指定输出/语言/数量/范围的 G-explicit 消息；可减少澄清直接成 Plan | 不是付费执行授权（再明确也只是意图） |
+| 付费执行授权 | Paid Execution Authorization | 显式确认手势才产生的授权；plan path 与 propose path 同一路径同一 Confirmation Dock | 不是 task intent 的强形式；不是 scope continuation（那在已授权范围内自治） |
+| 已确认范围 | Approved Scope | 可自治的 continuation：retry / internal repair / render continuation / execution step completion / approved-scope graph revision | 不含新增付费输出/分支（那是 Scope Expansion） |
+| 范围扩张 | Scope Expansion | 新增未确认付费输出 / 新增付费分支 / 超出已确认范围 → 必须重新 Confirmation；包含性由 Application Command 层代码裁决 | 不是 LLM 自决（LLM 永不裁决范围包含性） |
 
 **plan 词汇现状**：plan 归两主（N-44 修订，命名批 v3 ③）——pipeline `plan` = 唯一规划节点（planner 义：素材理解 + 计划 → 分镜表）；chat 侧计划书 = plan path 义（`plan_turn.py` 的构建/修订/确认分支，类 `TaskSpec` / `PendingPlan`）。RunPlan = 执行计划（工程层）。plan 是合法词，但跨两主引用时必须带限定词——裸 plan（`lower_plan`/`compile_plan`）歧义，见 N-11。
 

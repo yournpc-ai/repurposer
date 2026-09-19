@@ -39,6 +39,7 @@
 | 对话→生产概念架构 | `DIALOG_WORKFLOW.md` | 厚 agent 判词 / 双引擎 workflow / brief / canonical 词汇（router·understand·plan）只住这里，其他文档只引用 |
 | 用户旅程 | `JOURNEYS.md` | 旅程逐拍 / 分支树 / 体验规格横切 / 缺口登记只住这里；新功能开工先答「在哪条旅程哪一拍」 |
 | 积分 / 钱包 / 计费架构 | `BILLING.md` | credit / wallet / credit_transactions / hold→capture→release / configs / 比例参数 / 负余额语义只住这里，其他文档只引用 |
+| Lifecycle / Lifecycle Projection / PLAN_READY / CONFIRMATION_READY / Activity / Activity Projection / Confirmation Doctrine | `DECISIONS.md`（ADR-087） | 五条原则 / Lifecycle 五态合同 / Activity 十条对账规则 / 确认教义 / 依赖方向 / Reversal Ledger 只住这里；NAMING.md §2 有词汇行，其他文档只引用 |
 
 ## 文档清单
 
@@ -63,7 +64,7 @@
 | `NAMING.md` | 命名宪法：八条 + 词汇表 + 判例库 | 活跃（2026-07-25 建） | 任何新名字（表/字段/包/skill/API）前；命名争议仲裁 |
 | `CHAT_ARCHITECTURE.md` | Agent Interface 层：终态工具集 / skill registry / compile_graph 动态物化 / SSE / mentions / edit ops（ADR-032） | v2 已实现；2026-09-14 ADR-077 会话层工具 loop 化落地（批次⑤ T1~T4），本文已随 T4 改写为现在时 | 动 chat / registry / 进度推送前 |
 | `JOURNEYS.md` | **用户旅程母文档**：三条旅程逐拍 × 分支树 × 系统支撑表 × 缺口登记（首产 / 案例仿制 / 后续更改服务） | 活跃（2026-09-14 建，ADR-077/078 立项依据） | 任何新功能开工前；技术评审倒查「让哪条旅程哪一拍变好」 |
-| `INTENT_COVERAGE.md` | 意图层覆盖全景：单一表面（/chat）× 七类意图的全分叉矩阵 + 状态（✅🚧❌）+ 缺口登记表 + 测试矩阵 | 活跃（2026-07-30 建；**2026-08-04 意图层单面化**——/intent 退役、计划并入 plan path，简报 `archive/tasks-done/intent-surface-unification.md`） | 加 chat 能力 / 评估意图缺口 / 写 chat 相关 e2e 前 |
+| `INTENT_COVERAGE.md` | 意图层覆盖全景（意图层单面化时代的覆盖登记表） | **历史 / retired（2026-09-19，ADR-087）**——不再作为 architecture authority；IC:50 G-explicit 自动 Start 随确认教义翻案退役；意图路由现状 = CHAT_ARCHITECTURE + DECISIONS | 追溯历史时 |
 | `MENTIONS.md` | @ 提及体系方针：两族分类（请求 / 指认）+ 排除清单（配方/产出/参数/人设永不是 mention）+ 判定三问 + @skill 方针 | 活跃（2026-08-11 建） | 任何新 mention 类型立案前 |
 | `RECIPES.md` | 配方架构母文档：home 能力演示卡 + 兑现管线（caption catalog / dub 接线 / voice_gen / 分镜指引）+ R1–R6 分期 | 🚧 R1/R2/R6 已落地、8 卡全 live；**画廊 v3（2026-08-27 拍板，ADR-048——三轴模型 + 招牌菜组织原则 + 三级闸门，八卡六形态，§4/§7 已同步）**；R3–R5 待施工；Remix = overlay 内发射 + 预填模板载荷（配方 = 提示词，ADR-040 / MENTIONS §3） | 动首页配方卡、字幕样式、dub/合成视频/分镜能力前；配方线 tasks 简报的母文档 |
 | `COMPETITIVE_ANALYSIS.md` | 七家竞品综合（Round 1.2） | 活跃 | 竞品概览 |

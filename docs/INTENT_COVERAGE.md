@@ -1,9 +1,7 @@
 # INTENT_COVERAGE — 意图层覆盖全景
 
-> Status: 活跃（**2026-08-04 意图层单面化落地**：四表面坍缩为一表面——`/intent` 与 `/infer-intent` 端点退役，任务书构建/修订/确认并入 `/chat` book path，composer 不再做意图识别；简报 `archive/tasks-done/intent-surface-unification.md`；**2026-08-05 手测修复**：prompt.txt shim 退役——素材声明由 intent router 识别并升格为 transcript 资产，零素材 generate 一律反问；**2026-08-06 剧本测试扩编 S23–S40**：dock 生命周期（bail/autonomy/409/重建/已答问题入流/附件）+ 四态实分派（task_list/edit_ops/进度/元信息/asset scope）+ checkpoint 全家（三答法/bail 级联/supersede 级联/过期/task_book 不参与 autoResume）——§6 中原"期 N e2e"行（随 API 测试套件删除的覆盖）全部改指剧本测试；**2026-08-18 复核对齐代码**：合并机械 / asset scope / 默认书兜底等漂移修正，剧本测试现到 S45；**2026-08-24 copy-writer 解除硬门禁**：派生 writer 节点 `requires=(TRANSCRIPT,)` → `()`，recipe 卡 `input_slots[0].required=False`，intent_router_system / chat_intent_system 学会"无素材 → instruction 吸收 + persona 撑骨架 + echo 散文告知"，`text_without_material` reason 软信号进 dock，剧本测试加 S48；S13 反问路径仅对 media-needing 工具生效；**2026-09-03 B2 brief 账本 + 出书门槛（ADR-052，简报 `archive/tasks-done/dialog-workflow-b2-brief-ledger.md`）**：动作集四动作正名（generate→draft；**ask 一等动作**直通 dock 提问机器，payload 带 `slot` 握手 + `default_path` 牙齿——作答经 slot 握手判定结算回填账本 user-stated（ADR-053 R2：判定是 LLM 的、结算是代码的）并回 book path 重判，跳过 = 替身行走默认路径恢复出书）；**brief 账本**（topic/audience/tone/constraints/material_state 五槽位各带来源 + asked 簿，LLM 提议代码 merge，user-stated 恒胜）取代累积 prompt 成 book path 主状态，`pending.prompt` = 出生 prompt 冻结、`MAX_ACCUM_PROMPT_CHARS` 退役；**出书门槛**（draft 判定后的代码裁决）取代零素材反问网与 copy-writer lift 两补丁——无根（topic 空 ∧ material none ∧ 非明确配方指令）→ 代码组装 topic 问一轮（asked 簿记防重问），仍无根 → draft-from-persona dock（`draft_from_persona` reason + echo 散文声明），media-needing 链 ∧ 零素材 ∧ 桌上无书 → answer 素材引导永不 dock；剧本测试加 S50（merge_brief 来源矩阵）/ S51（裸愿望 → 主题问）/ S52（跳过 → draft-from-persona），S13/S48 断言改写归门槛；**2026-09-04 C3 形态律 + 插话支持（ADR-053）+ C4 剧本浓缩（简报 `archive/tasks-done/de-dialect-question-machine.md`）**：**形态律 R1**——文字问（options 空）= 普通对话消息永不停靠、选项问 = 非阻塞 pill 浮于活输入之上、输入框永不隐藏（blocking morph 拆毁永禁回归）、× = 显式跳过（吃 default_path；interrupt × 停付费 run）、AnsweredQuestion 块只渲染选项问与 task_book 回执；**插话支持 R2**——判定是 LLM 的、结算是代码的：book path = slot 握手（router 在 pending 上下文里提案槽位值 user-stated → 代码结算 freeform 回填），chat path = `pending_disposition` 三态（answer / skip / none 骑信封，非第五提案态），autoResume 收窄为只认选项命中的确定性结算（「任意文本 = freeform 回答」掩盖退役），插话回合回复接代码拼装提醒尾（原问题 + default_path）；**C4 剧本浓缩**：52 本机制碎片（旧 S1–S53）浓缩为 12 条核心用户 story 连续重排，**旧 S 号全部作废**——本文件此前条目里的 S 编号皆为历史引用，现役映射只看 §6）
-> 单一事实源：**"用户在任意相位说任何话 → 系统走哪条路"** 的唯一登记表。
-> 新增 chat 能力（skill / op / 问题形态 / 相位）时必须在本表登记；发现新缺口按 §6 格式追加。
-> 机制细节不复述——task list 契约看 `CHAT_ARCHITECTURE.md`，命名看 `NAMING.md`，实施史看 `archive/tasks-done/intent-ask-primitive.md` 与 `archive/tasks-done/intent-surface-unification.md`。
+> Status: **历史 / retired（2026-09-19，ADR-087）——不再作为 architecture authority**。本文是意图层单面化时代（2026-08~09）的覆盖登记表，保留作历史参考；意图路由、计划构建/确认、提问机器的现状唯一事实源 = `CHAT_ARCHITECTURE.md` + `DECISIONS.md`（ADR-087 及所引 ADR）。**IC:50（§3.0「G 明确 → 前端自动 Start」）随 Confirmation Doctrine 翻案退役**——G-explicit = Task Intent ≠ 付费手势，一切新 Paid Work 走 PLAN_READY → CONFIRMATION_READY → 显式确认（ADR-087 §4 / Reversal Ledger R5）。本文内容不再登记新缺口、不再驱动施工。
+> 本文原角色（已随退役失效）："用户在任意相位说任何话 → 系统走哪条路" 的登记表。机制细节看 `CHAT_ARCHITECTURE.md`，命名看 `NAMING.md`，实施史看 `archive/tasks-done/`。
 
 ---
 
@@ -47,7 +45,7 @@ book path 进入条件（`prepare_chat_turn` 分派，service.py）：project sc
 
 | 意图 | 路由 | 现状 |
 |---|---|---|
-| G 明确（产出物+语言都说清） | /chat book path → dock，reasons 空 → 前端自动 Start | ✅（S4——dock → Start → run completed 同径覆盖） |
+| G 明确（产出物+语言都说清） | /chat book path → dock，reasons 空 → ~~前端自动 Start~~ | ❌ **已翻案（ADR-087 §4 / Reversal Ledger R5，2026-09-19）**：G-explicit = Task Intent ≠ 付费手势——自动 Start 退役，一切新 Paid Work 统一走 PLAN_READY → CONFIRMATION_READY → 显式确认（Phase 4 施工） |
 | G 模糊（"帮我处理一下"） | /chat book path → dock + reasons → 面板确认 | ✅（S1/S4） |
 | G 全迷失（"不知道做什么/从哪开始"） | /chat book path → ask 主题问（一词可答 + 默认路径）或 dock（reasons 非空）；永不裸跑、永不出无根书（出书门槛代码兜底） | ✅（S1/S2） |
 | Q 能力（"你能做什么"） | /chat book path → answer（普通 assistant 消息） | ✅（S9） |
