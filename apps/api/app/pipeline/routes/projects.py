@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import Integer, cast, delete, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
@@ -44,9 +45,13 @@ from app.models.tables import (
 )
 from app.chat.service import (
     discard_unanswered_plan,
+    find_conversation,
     get_project_prompt,
+    is_pending_plan,
+    latest_pending_question,
     seed_project_prompt,
 )
+from app.pipeline.lifecycle import project_lifecycle
 from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 from app.pipeline.product_graph import product_ranks
 from app.pipeline.outputs import (
@@ -67,6 +72,7 @@ from app.platform.billing import (
 from app.platform.configs import get_config
 from app.platform.project_context import get_project_for_user
 from app.providers.storage import delete_file, delete_project_files, resolve_stored_url
+from app.ui_locale import current_ui_language
 
 router = APIRouter()
 
@@ -257,6 +263,10 @@ async def get_project_results(
         "latest_run": latest_run_resp,
         "assets": assets,
         "pending_brief": project.pending_brief,
+        # Lifecycle Projection (ADR-087 §2, Phase 1): the server-named
+        # stamp rides the same frame — additive; clients keep their old
+        # derivations until the dual-read switch.
+        "lifecycle": await _lifecycle_stamp(db, project),
     }
 
 
@@ -282,6 +292,32 @@ _ASSET_MEDIUM = {
     "transcript": "text",
     "past_material": "text",
 }
+
+
+# ---- Lifecycle Projection stamp (ADR-087 §2, Phase 1) -----------------------
+
+async def _lifecycle_stamp(db: AsyncSession, project: Project) -> dict:
+    """Assemble the server-named lifecycle stamp for one read frame.
+
+    The Agent Interface facts (the docked plan row) are fetched through
+    chat's public read protocol and passed IN — the projection module
+    itself never imports chat (dependency direction, ADR-087 §6). The
+    chat import above rides this route's pre-existing top-level line
+    (Phase 5 retires it; this helper adds no new reverse edge)."""
+    conversation = await find_conversation(db, project.user_id, project.id)
+    pending = (
+        await latest_pending_question(db, UUID(str(conversation.id)))
+        if conversation is not None
+        else None
+    )
+    stamp = await project_lifecycle(
+        db,
+        project,
+        pending_question=pending,
+        pending_plan=is_pending_plan(pending),
+        ui_language=current_ui_language() or "en",
+    )
+    return stamp.to_payload()
 
 
 def _read_face(row_type: str, spec: dict, outputs: list) -> tuple[str, dict]:
@@ -336,7 +372,9 @@ async def get_project_graph(
     joined display rows (asset rows / visible product rows / per-node credit
     estimates). The canvas renders this directly — zero projection, the
     display model IS the domain model."""
-    await get_project_for_user(db, project_id, current_user.id if current_user else None)
+    project = await get_project_for_user(
+        db, project_id, current_user.id if current_user else None
+    )
 
     nodes = list(
         (
@@ -588,6 +626,9 @@ async def get_project_graph(
     return {
         "nodes": resp_nodes,
         "edges": [GraphEdgeResponse.model_validate(e) for e in edges],
+        # Same stamp, second transport (一票源两处运输 — mobile parity
+        # reads this frame).
+        "lifecycle": await _lifecycle_stamp(db, project),
     }
 
 

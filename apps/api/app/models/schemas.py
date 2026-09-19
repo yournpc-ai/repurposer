@@ -3384,12 +3384,33 @@ class GraphEdgeResponse(BaseModel):
     edge_type: str
 
 
+class LifecycleStamp(BaseModel):
+    """The server-named lifecycle projection (ADR-087 §2, Phase 1) — one
+    truth, many readers. The four CONFIRMATION_READY conjuncts are
+    independent fields (门禁三: never one boolean); ``state`` is the
+    presentation rollup, ``blockers`` the first-class reason channel
+    (U1: FAILED ≠ generic not-ready)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    state: Literal["preparing", "plan_ready", "confirmation_ready", "running"]
+    material_ready: bool
+    plan_ready: bool
+    confirmation_scope_ready: bool
+    charge_semantics_ready: bool
+    no_active_conflicting_run: bool
+    confirmation_ready: bool
+    blockers: list[str] = Field(default_factory=list)
+    charge: dict = Field(default_factory=dict)
+
+
 class ProjectGraphResponse(BaseModel):
     """The project graph's one read frame — nodes + edges + joined display
     rows, everything the canvas renders, in one fetch."""
 
     nodes: list[GraphNodeResponse] = Field(default_factory=list)
     edges: list[GraphEdgeResponse] = Field(default_factory=list)
+    lifecycle: LifecycleStamp | None = None
 
 
 class ProjectResultsResponse(BaseModel):
@@ -3403,6 +3424,7 @@ class ProjectResultsResponse(BaseModel):
     latest_run: RunResponse | None = None
     assets: list[ProjectAssetStatus] = Field(default_factory=list)
     pending_brief: PendingPlan | None = None
+    lifecycle: LifecycleStamp | None = None
 
 
 # ---------------------------------------------------------------------------
