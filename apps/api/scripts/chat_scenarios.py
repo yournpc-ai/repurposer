@@ -5,8 +5,9 @@
 活 API 的唯一意图表面（``POST /chat`` + answer 端点），断言 = **工具序列 +
 终态帧消息**（ADR-077 判词② 工具 loop 线格式）：terminal_tool_of 从终态
 信封的形状判别回合收在哪个终态工具（工具名永不过线，简报 §3——信封形状
-就是判别面），SSE 侧断言相位帧序（assistant.thinking 的 drafting /
-inspecting 座）与 question.preview 预览帧，外加既有形态级结果——dock 态 /
+就是判别面），SSE 侧断言 Activity 帧形态（Phase 3 Batch B 后相位帧
+只剩 composing 一座——工作证据永不过 System Status 通道）与
+question.preview 预览帧，外加既有形态级结果——dock 态 /
 run 数 / 落库行——永不锁 LLM 文案（禁令 #7）。例外：代码强制文本（提醒尾 /
 机器标记 / 确定性回执）可以锁——那是代码，不是 LLM。
 
@@ -34,7 +35,8 @@ run 数 / 落库行——永不锁 LLM 文案（禁令 #7）。例外：代码�
     S8  核⑧ research 全链（活 DDG，网络全灭时 caveat 降级也算过）
     S9  核⑨ 问事不出书：能力问 / 闲聊纯 answer，无计划 start 不死路不起 run
     S10 SSE 流式（工具 loop 线格式）：单轮 concat(deltas) == 信封散文 /
-             读先 startswith 前缀律 / 拒轮方差注记 + drafting 相位帧 +
+             读先 startswith 前缀律 / 拒轮方差注记 + draft Activity 帧
+             （Batch B ③ 后 drafting 相位帧退役,Activity 是唯一座位）+
              question.preview 预览帧
     S11 整条源规则（整条视频字幕活链）+ materialize 注入矩阵（进程内）
     S12 merge_brief 来源矩阵（进程内纯函数）
@@ -206,7 +208,9 @@ class Ctx:
     async def chat_stream(self, pid: str, message: str, **extra: object) -> "StreamTurn":
         """One SSE chat turn (Accept: text/event-stream) — the FULL frame
         record: ordered prose deltas, the assistant.thinking phase frames
-        ({} / {phase} / {phase, key} — the inspecting family's seat), the
+        ({} keepalive / {phase: "composing"} / {phase: null} clear — after
+        Phase 3 Batch B the inspecting family's {phase, key} form lives on
+        the ACTIVITY channel), the
         question.preview frames (pre-execution, rolled back on a flip), the
         turn.completed envelope, and turn.failed if any."""
         deltas: list[str] = []
@@ -710,41 +714,17 @@ def terminal_tool_of(turn: dict) -> str:
     return "answer"
 
 
-# ---- Activity-first work evidence (ADR-087 §3, Phase 2.5 Batch A) ----------
-# The Activity channel (assistant.activity frames) is the STRICT PRIMARY
-# evidence that work happened (a read ran / a repair is in flight). The
-# System Status phase frames (inspecting / repairing) are the legacy
-# parallel-render period's secondary signal — they may CORROBORATE, never
-# REPLACE: phase evidence without activity evidence means the server claims
-# work the user-safe channel doesn't show — a contract violation, not
-# variance. SCENARIO_ACTIVITY_LEGACY=1 downgrades that violation to a
-# counted warning (step-⑤ transition aid only; strict mode is the default).
-_ACTIVITY_LEGACY = os.environ.get("SCENARIO_ACTIVITY_LEGACY") == "1"
-LEGACY_ACTIVITY_WARNINGS: list[str] = []
-
-
-def _work_evidence(stream: "StreamTurn", label: str) -> tuple[bool, bool]:
-    """(had_reads, had_repair) from the ACTIVITY channel, with the strict
-    co-fire law: a phase frame claiming work the Activity channel never
-    showed fails the turn (or warns+counts in legacy mode)."""
+# ---- Activity work evidence (ADR-087 §3) ------------------------------------
+# The Activity channel (assistant.activity frames) is the ONLY work-evidence
+# channel (Phase 3 Batch B: the phase-side corroboration signal retired).
+def _work_evidence(stream: "StreamTurn") -> tuple[bool, bool]:
+    """(had_reads, had_repair) from the ACTIVITY channel — the ONLY work-
+    evidence channel after Phase 3 Batch B (③ deleted the inspecting /
+    repairing phase emitters server-side, so the old phase-side
+    corroboration and the SCENARIO_ACTIVITY_LEGACY downgrade hatch are gone
+    for good: there is no second signal left to disagree with)."""
     had_reads = any(a["kind"] == "read" for a in stream.activities)
     had_repair = any(a["kind"] == "repair" for a in stream.activities)
-    phase_reads = any(t.get("phase") == "inspecting" for t in stream.thinking)
-    phase_repair = any(t.get("phase") == "repairing" for t in stream.thinking)
-    for name, act, phase in (
-        ("read", had_reads, phase_reads),
-        ("repair", had_repair, phase_repair),
-    ):
-        if phase and not act:
-            msg = (
-                f"{label}: System Status reported a {name} but the Activity "
-                f"channel is silent — the phase fallback must never mask "
-                f"missing activity frames"
-            )
-            if _ACTIVITY_LEGACY:
-                LEGACY_ACTIVITY_WARNINGS.append(msg)
-            else:
-                check(False, msg, {"thinking": stream.thinking, "activities": stream.activities})
     return had_reads, had_repair
 
 
@@ -759,7 +739,7 @@ def check_stream_law(
     - single-iteration turn (no read activities): concat(deltas) == the
       envelope content, exactly;
     - read-first turn (accepted reads in iteration 0 — read ACTIVITY frames
-      present; the inspecting phase frame is the legacy corroboration):
+      present, the only evidence seat after Batch B):
       the kept read-iteration speech is a PREFIX of the composed
       content (言语账本: kept parts + the terminal part join on a blank
       line), so content.startswith(concat(deltas)). Post-ADR-084 the
@@ -778,7 +758,7 @@ def check_stream_law(
     2026-09-17 — assert the visible speech, not the bytes).
     """
     concat = "".join(stream.deltas)
-    had_reads, had_repair = _work_evidence(stream, label)
+    had_reads, had_repair = _work_evidence(stream)
     if had_repair:
         return  # replaced speech: even the prefix relation is void
     streamed = concat.strip()
@@ -835,13 +815,13 @@ PROCESSING_DISCLOSURE = re.compile(
 
 def check_read_silent_stream(stream: "StreamTurn", label: str) -> None:
     """ADR-084 read-silent law, wire side: a turn that ran accepted reads
-    (read ACTIVITY frames — the strict evidence seat; the inspecting phase
-    frame is legacy corroboration) streamed NO prose — read iterations leave
+    (read ACTIVITY frames — the sole evidence seat after Batch B) streamed
+    NO prose — read iterations leave
     the message channel empty and the settled speech paces out at the
     envelope. Skipped when a repair activity appears (a rejected iteration's
     replaced speech may have streamed first — the pre-existing variance
     carve-out, see check_stream_law)."""
-    had_reads, had_repair = _work_evidence(stream, label)
+    had_reads, had_repair = _work_evidence(stream)
     if had_reads and not had_repair:
         concat = "".join(stream.deltas)
         # ADR-084 read-silent is a semantic UI contract: no user-visible prose
@@ -2082,8 +2062,8 @@ async def s6_interrupt_consolidated(ctx: Ctx) -> None:
     await ctx.cleanup()
 
     # f) 插话后续跑（ADR-053 R2 chat path）：进度插话 → get_run_status 读
-    #    （inspecting 相位帧）→ 正常回答 + 代码拼装提醒尾 + 问题保持
-    #    pending + run 保持 parked → 再打字母唤醒。
+    #    （read Activity 帧——Batch B ③ 后相位帧退役）→ 正常回答 + 代码拼装
+    #    提醒尾 + 问题保持 pending + run 保持 parked → 再打字母唤醒。
     #    LLM 方差说明：进度问先读后答是设计行为（answer 工具契约：run
     #    readouts call get_run_status first）；不读直接答红了 = chat_intent
     #    prompt 回归信号，不是剧本松劲。
@@ -2095,10 +2075,10 @@ async def s6_interrupt_consolidated(ctx: Ctx) -> None:
     check(stream.completed is not None, "the interjection turn completes")
     turn = stream.completed
     status_key = PERCEPTION_TOOLS["get_run_status"].activity_key
-    # Activity-first (ADR-087 §3): the read's user-safe evidence is the
-    # ACTIVITY channel — kind=read carrying the perception registry's
-    # activity_key. The System Status inspecting frame is legacy
-    # corroboration only (parallel-render period; retires with step ⑤).
+    # Activity (ADR-087 §3): the read's user-safe evidence is the ACTIVITY
+    # channel — kind=read carrying the perception registry's activity_key
+    # (Batch B ③ deleted the System Status inspecting frame that used to
+    # corroborate it).
     check(any(a["kind"] == "read" and a["key"] == status_key
               for a in stream.activities),
           "the progress question reads first (get_run_status's read activity)",
@@ -2408,9 +2388,11 @@ async def s9_consult_never_books(ctx: Ctx) -> None:
 
 async def s10_sse_turn_streaming(ctx: Ctx) -> None:
     """S10 SSE 回合（工具 loop 线格式，ADR-077 判词②）：answer 单轮流式
-    （concat(deltas) == 信封散文）；draft 流计划复述 + drafting 相位帧；
-    ask 流框架散文 + question.preview 预览帧先于终态信封。流式律的两款
-    关系（单轮 == / 读先 startswith / 拒轮方差注记）归 check_stream_law。"""
+    （concat(deltas) == 信封散文）；draft 流计划复述 + draft Activity 帧
+    （Batch B ③ 后 drafting 相位帧退役，Activity 是计划工作证据的唯一
+    座位）；ask 流框架散文 + question.preview 预览帧先于终态信封。流式律
+    的两款关系（单轮 == / 读先 startswith / 拒轮方差注记）归
+    check_stream_law。"""
     pid = await ctx.new_project("S10 sse streaming")
     # Fixture declaration (B-4): the draft turn's ground truth is a READY
     # material — declared COMPLETED up front. The old bare-PENDING row let
@@ -2445,8 +2427,10 @@ async def s10_sse_turn_streaming(ctx: Ctx) -> None:
     check(stream.completed["run_id"] is None, "answer turn starts no run")
 
     # Draft turn: the plan echo (intent.answer) streams as deltas; the
-    # present_plan name-known frame moves the phase beat to drafting BEFORE
-    # the envelope (相位完整律's tool seat); the dock rides the envelope.
+    # present_plan name-known frame births the draft ACTIVITY before the
+    # envelope (Phase 3 Batch B ③ retired the drafting phase beat — the
+    # Activity frame below is the only seat now); the dock rides the
+    # envelope.
     stream = await ctx.chat_stream(pid, "Cut 3 highlight clips from my talk")
     check(stream.failed is None, "draft turn has no turn.failed", stream.failed)
     check(stream.completed is not None, "draft turn ends with turn.completed")
@@ -2455,9 +2439,6 @@ async def s10_sse_turn_streaming(ctx: Ctx) -> None:
     check(is_plan_dock(stream.completed["assistant_message"]),
           "draft turn docks the plan via the envelope",
           stream.completed["assistant_message"])
-    check(any(t.get("phase") == "drafting" for t in stream.thinking),
-          "the present_plan name-known frame moves the beat to drafting",
-          stream.thinking)
     check_activity_shape(stream, "draft turn")
     check(any(a["kind"] == "draft" and a["status"] == "completed"
               for a in stream.activities),
@@ -2496,7 +2477,7 @@ async def s10_sse_turn_streaming(ctx: Ctx) -> None:
     # takes is the LLM's call, so the harness asserts the BRANCH's law.
     # (C-6 adjudication 2026-09-19: two reds traced to this mismatch —
     # harness contract bug, production unchanged since 2026-09-08.)
-    _had_reads_ask, had_repair_ask = _work_evidence(stream, "ask turn")
+    _had_reads_ask, had_repair_ask = _work_evidence(stream)
     if not had_repair_ask:  # replaced speech voids even the prefix relation
         streamed_ask = "".join(stream.deltas).strip()
         expected_ask = (
@@ -3748,23 +3729,15 @@ async def s20_speech_semantic_contract(ctx: Ctx) -> None:
 
 
 def _stream_reads(stream: "StreamTurn") -> list[str]:
-    """The turn's read sequence, ACTIVITY-FIRST (ADR-087 §3): the read
-    activities' active-frame copy keys in birth order (the tool NAME never
-    crosses the wire, the key is the face). The inspecting phase frames
-    remain as the legacy fallback for the print only — run_shape's
-    check_read_silent_stream already enforces (strict mode) that phase
-    evidence never masks a silent Activity channel."""
-    keys = [
+    """The turn's read sequence from the ACTIVITY channel (ADR-087 §3): the
+    read activities' active-frame copy keys in birth order (the tool NAME
+    never crosses the wire, the key is the face). The only channel after
+    Phase 3 Batch B — the inspecting-phase print fallback retired with the
+    emitter."""
+    return [
         str(a["key"])
         for a in stream.activities
         if a["kind"] == "read" and a["status"] == "active" and a["key"]
-    ]
-    if keys:
-        return keys
-    return [  # legacy/compatibility print fallback (parallel-render period)
-        str(t.get("key"))
-        for t in stream.thinking
-        if t.get("phase") == "inspecting" and t.get("key")
     ]
 
 
@@ -3893,15 +3866,6 @@ async def main() -> int:
         await ctx.close()
 
     print("=" * 60)
-    if LEGACY_ACTIVITY_WARNINGS:
-        # Legacy/compat report (Phase 2.5 Batch A): phase evidence without
-        # activity evidence, downgraded by SCENARIO_ACTIVITY_LEGACY=1. Strict
-        # mode (the default) fails these turns instead — this list existing
-        # at all means the Activity channel went silent where System Status
-        # claimed work.
-        print(f"legacy activity-fallback warnings ({len(LEGACY_ACTIVITY_WARNINGS)}):")
-        for warning in LEGACY_ACTIVITY_WARNINGS:
-            print(f"  ⚠ {warning}")
     if failures:
         print(f"{len(selected) - len(failures)}/{len(selected)} passed. Failures:")
         for name, why in failures.items():
