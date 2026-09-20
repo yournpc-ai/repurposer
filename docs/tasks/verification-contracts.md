@@ -87,7 +87,7 @@ LLM 行为方差，容忍）/ **KNOWN VERIFICATION FRAGILITY**（合同已兑现
 | S10 | answer/draft 判定（few-shot 逐字镜像缓解，构造性方差；draft 拍单发一次散文口头确认代替 dock——当日 1/6）；ask 轮 preview `default_path` 空单发一次（prompt 合规抖动，未复现） |
 | S20B | grounded-judgment 内容词 any-of：措辞自由下存在词表外措辞的非零概率 |
 | S6f / S11 | 路由判定抖动（重试预算已在剧本内） |
-| S5 | refine 轮 slots 抖动：无关 refine 偶发改写面板钉住的参数（2026-09-20 Batch B ⑧ 首跑单发，复跑即绿；合并座 `merge_prior_slots` 本批零触碰，harness 走裸 API 与客户端改动无涉） |
+| S5 | refine 轮 slots 抖动：无关 refine 偶发改写面板钉住的参数（2026-09-20 Batch B ⑧ 首跑单发，复跑即绿；合并座 `merge_prior_slots` 本批零触碰，harness 走裸 API 与客户端改动无涉）；turn1 present_plan 未落地——工具调用参数倒进散文尾部成截断 JSON（provider 发射抖动，2026-09-20 Batch C 验收首跑单发，复跑即绿） |
 
 ### KNOWN VERIFICATION FRAGILITY（挂账，不修生产码）
 
@@ -175,7 +175,7 @@ truth 从「处理中」变成「处理失败」——前置条件被 worker 调
 - `dev.sh` 死旗 `DEMO_SEED_ASYNC` 删除（零读者，与 `SKIP_DEMO_SEED` 同族）
 - `scratch/router_ab_probe.py` 移植到 ToolLoopAgent 接口（import 已断；prompt_gate 失败协议点名它做 A/B bisect）
 - 一次性脚本归档判定（`migrate_to_tos.py` / `backfill_graph.py`）
-- S11 `bilingual is True` → truthiness 断言迁移 + 产品侧 params coercion 挂账（B/D 边界，审计 §5 已裁）
+- S11 `bilingual is True` → truthiness 断言迁移 + 产品侧 params coercion 挂账（B/D 边界，审计 §5 已裁）——2026-09-20 Batch C 验收两连同一形状（LLM 稳定发字符串 `'true'`），与本批零机制关联，确诊在册债的常驻形态
 
 ### KNOWN VARIANCE
 
