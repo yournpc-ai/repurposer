@@ -730,7 +730,9 @@ class ApplyEditOpsArgs(BaseModel):
 
 class EditGraphArgs(BaseModel):
     """``edit_graph`` params, chat path (WiringProposal minus summary):
-    revise the persistent graph and re-fill the affected subgraph. ``ops``
+    revise the persistent graph — a revision inside the already-confirmed
+    work re-fills the affected subgraph directly; one that adds new paid
+    work docks for the user's confirmation instead, it does not run. ``ops``
     stays loose dicts — adjudication is ``apply_wiring_ops``'s (op shape /
     references / ports / cycles), whose own errors feed back as the
     rejection echo."""
