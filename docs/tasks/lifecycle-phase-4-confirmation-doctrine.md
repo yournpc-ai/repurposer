@@ -1,6 +1,7 @@
 # Lifecycle Phase 4 施工合同——Confirmation Doctrine Unification（统一 Paid Authorization path）
 
-> 拍板：2026-09-19（用户，Architecture Freeze）。架构合同 = `docs/DECISIONS.md` ADR-087 §4（Confirmation Doctrine）+ Reversal Ledger R5/R6。
+> 拍板：2026-09-19（用户，Architecture Freeze）。架构合同 = `docs/DECISIONS.md` ADR-087 §4（Confirmation Doctrine）+ Reversal Ledger R5/R6/R9。
+> 终裁：2026-09-20（用户，Decision Gate 四项终裁 D1~D4 + Frozen Rule 1~10——见 §Decision Ledger，**最终施工合同以终裁为准**）。
 > 前置：Phase 1（CONFIRMATION_READY 投影戳存在——统一确认门有事实源）。
 > 范围纪律：**只做 Paid Authorization path 统一**。Agent preparation path 的分叉（plan path vs propose path 各自的准备流程）**保留不动**——消灭的是路径分叉，不是 preparation 差异，更不是新增一个「propose dock」UI。
 
@@ -12,89 +13,200 @@
 
 核心：自然语言请求 = Task Intent ≠ Paid Execution Authorization。**明确禁止 G-explicit task request = paid gesture**——即使用户明确指定输出类型/语言/数量/范围/「直接帮我做」，仍只是明确 Task Intent。
 
+## Frozen Rules（2026-09-20 终裁——最终施工合同）
+
+- **Rule 1** — Natural Language Request ≠ Paid Execution Authorization.
+- **Rule 2** — New Paid Work MUST follow: Task Intent → Preparation → PLAN_READY → CONFIRMATION_READY → Explicit Confirmation → Paid Run.
+- **Rule 3** — Explicit language never bypasses Confirmation（「直接做 / 帮我生成 / 生成中文和法语视频 / 不要问我直接开始」= G-explicit Task Intent，可减少澄清、直接成 Plan，不得跳过确认）。
+- **Rule 4** — Confirmation Dock is the canonical confirmation seat（不存在 G-explicit auto-start / 散文隐式确认 / 模型自判「用户已明确」/ propose path 特殊豁免；dock pill 与 G-1 散文确认 = 同一 task_book 座位，不是两条授权路）。
+- **Rule 5** — Approved Scope Continuation may be autonomous.
+- **Rule 6** — Scope Expansion MUST require Confirmation.
+- **Rule 7** — Continuation / Expansion classification MUST be deterministic and Application-Command / Domain driven.
+- **Rule 8** — Activity / prose / prompt / LLM output MUST NOT decide Paid Authorization.
+- **Rule 9** — Client-provided tasks MUST NOT be treated as proof of approval.
+- **Rule 10** — Unproven continuation MUST NOT default to autonomous Paid Run.
+
+## Decision Ledger（2026-09-20 用户终裁，四项）
+
+### D1 — `autonomy="review"`：RETIRE
+
+所有正常 Paid Run 不再使用 `autonomy="review"`；默认行为 = autonomous continuation。退役理由：picker 已隐藏（`QuestionDock.tsx:56`）用户无真实入口；当前值事实恒 review（`ChatDock.tsx:957` + `setAutonomy` 无活路 `:4038`）；propose path 又不可达；review 的 direction interrupt 是执行中 HITL 语义，不是 Paid Authorization；无足够产品证据证明其应作为正式用户能力存在。**边界**：不是删除 human-interrupt / WAITING_HUMAN 机制——verification escalation 等运行时升级/异常处理机制全部保留（`orchestrator.py:1652/1764/1956`），只移除「review 档导致 understand→plan direction interrupt」这一产品档位（`orchestrator.py:368-381`）。**Batch 7 施工前先列 inventory**：frontend state/picker、request schema、`TaskSpec.autonomy`、orchestrator review 分支、相关测试、文档——禁止顺手删除无关 WAITING_HUMAN 机制。
+
+### D2 — /generate Paid Boundary：SERVER-VERIFIABLE APPROVED RETRY
+
+- **A. 服务端可证 exact retry**（根据历史 run / approved scope / retry reference 确定性证明当前请求只是已有 approved scope 的精确 retry）→ continuation，不需重新 Confirmation。
+- **B. 扩张或不可证**（新增 paid output / 新增 paid branch / execution scope 与历史不一致 / 服务端无法证明其属于 approved retry）→ 不得直接 `create_run`；进入 Preparation / PendingPlan / Confirmation Dock → Explicit Confirmation → Paid Run。
+- **C. legacy typed Start / old-client fallback** = unproven legacy path；统一 Dock 路径覆盖后逐步退役，不得继续作为隐式授权通道。
+- **禁止的授权依据**：「客户端传了 tasks + scope=full」「客户端说这是 retry」「请求来自前端 retry button」——证明必须建立在**服务端已经存在的事实**之上（Rule 9）。保留当前合法的 exact retry 行为，不得为封口而破坏真正的 approved retry（Rule 5）。
+
+### D3 — Start endpoint：SERVER-SIDE confirmation enforcement（Batch 6，独立 commit）
+
+`answer_question(kind="start")` 在进入 paid `create_run` 前由服务端验证：confirmation scope valid ∧ charge semantics ready ∧ no active conflicting run ∧ plan/material prerequisites satisfied ∧ current plan / task_book 与确认范围一致。不满足 → 不得 `create_run`，返回明确 machine-readable blocker，不伪装成普通业务错误。Confirmation Dock 是产品表现层、Explicit Confirmation 是 Paid Authorization——「前端按钮 disabled」不能是唯一防线。先完成 A1/A2 收敛再施工（便于审计与回滚）。
+
+### D4 — `delete_node + run`：RESULTING-SCOPE 分类律
+
+高层 Domain Rule：**Continuation / Expansion MUST be decided from RESULTING PAID EXECUTION SCOPE, not from operation name.** 判定过程：
+
+```
+requested graph operations
+  → resulting graph / execution closure
+  → resulting paid outputs / branches
+  → compare against approved execution scope
+  → same approved scope    → autonomous continuation
+  → expanded scope         → Confirmation Dock
+  → unproven               → Confirmation Dock
+```
+
+`delete_node` 本身不是产品语义。分类器判断删除之后**最终 execution scope** 是否仍属于 approved scope；当前系统缺少证明所需的 historical facts 时不猜——**unproven → Confirmation** 为临时安全行为。「delete + run 的精确历史 scope comparison」列为后续 domain capability（挂账），不在 Phase 4 以拍脑袋规则完成。
+
 ## Product goal
 
 1. 一切新 Paid Work：无 explicit confirmation 不 `create_run`。
 2. Approved Scope 内 continuation（retry / internal repair / render continuation / execution step completion / approved-scope graph revision）不被误阻塞。
 3. 同类型工作 plan / propose 两路收敛同一 Confirmation Dock（统一 Confirmation-ready Product State 驱动）。
 
-## Step 0——先盘点，不是改代码
+## Step 0 盘点清单（Preflight 已执行 2026-09-20；全文 = `scratch/phase4_step0_inventory.md`）
 
-盘点所有「propose path 直接 create_run」的来源与测试，建立清单（source file / call path / test name / old expected / target / 产品含义），随本批第一份 commit 落 `scratch/` 并附进收尾报告。**未建清单不动代码。**
+锚点核于 current HEAD `d3616c2`（原合同锚点核于 `d0006ac`，漂移已更正）。**先盘点后施工——清单已建，允许动代码。**
 
-已知锚点（已核于 Phase 0 HEAD `d0006ac`；行号会漂移）：
+| 来源（d3616c2 锚点） | 现状 | 产品含义 | 处置批 |
+|---|---|---|---|
+| `propose_turn.py:330`（`propose_tasks` → `_create_run_from_tasks`） | chat path 提案直接起 run（caption 闸门豁免外） | 新 Paid Work 无确认节拍（Rule 1/2 打击面 A1） | B3 |
+| `propose_turn.py:470`（`edit_graph` run op → `_create_run_from_tasks`） | wiring 提案的 run op 直接起 run；`EditGraphArgs.ops` 全词汇可收（`schemas.py:745`），prompt 只引导 edit_prompt+run，代码层无拦 | approved-scope revision 与 scope expansion 无分界（A2） | B1+B2 |
+| `service.py:327-394`（`_create_run_from_tasks`） | 命令层统一起 run 座；`scope="full"` 硬编、不设 autonomy | 范围包含性裁决座（Rule 7 代码裁决，非 LLM 自决） | B1 |
+| `service.py:1403-1492`（caption fast path） | 确定性 replay → PendingPlan → dock task_book → 估价随行 → Start。**双标方向与旧表述相反：caption 路已是目标形态**，非 caption propose 工作（A1）才是缺口 | parity = 把 A1 抬到同一 dock，不拆 fast path（Rule 4 样板） | B3 随批 |
+| IC:50 前端 G-explicit 自动 Start | **已不存在**——`43dbda3`（2026-09-03，ADR-051 批删 `GenerationOverlay.tsx`）物理消失；当前唯一 Start 触发 = dock pill onClick（`ChatDock.tsx:4039→1546`） | R5 锚点更正：Phase 4 无前端移除工作，验收 grep 即可 | B0（本批落档） |
+| `autonomy="review"` 档 | **非死档**：plan path 事实唯一实发档（隐藏 picker 钉死 review）；propose path 恒 auto 不可达 | D1 终裁 RETIRE（WAITING_HUMAN/escalation 基建保留） | B7 |
+| `turn_tools.py:88-90`（`propose_tasks` 描述） | 「it never starts a run by itself」= 逐字复制 `present_plan`（`:44-47`）的失信文本；`chat_intent_system.j2:19` 又说 "run NEW work"——系统 prompt 与工具描述自相矛盾 | 必须与最终实际语义一致（B3 落地后改写） | B4 |
+| `routes/projects.py:840-856`（/generate） | **合同外新发现（Preflight F7）**：tasks≠None 即信客户端任意链——Retry 合法但服务端不可证；arbitrary/unproven 门全开；legacy Start fallback（`ChatDock.tsx:1596-1617`）确认记录仅在客户端 | D2 终裁 SERVER-VERIFIABLE APPROVED RETRY（Rule 9/10） | B5 |
 
-| 来源 | 现状 | 产品含义 |
+### create_run 全量调用点（F7 sweep，产品代码 4 处无遗漏）
+
+| 座 | 性质 | 批 |
 |---|---|---|
-| `propose_turn.py:331`（`propose_tasks` → `_create_run_from_tasks`） | chat path 提案直接起 run（caption-mode 解析后即起） | 新 Paid Work 无确认节拍 |
-| `propose_turn.py:471`（`edit_graph` 的 run op → `_create_run_from_tasks`） | wiring 提案的 run op 直接起 run | approved-scope revision 与 scope expansion 无分界 |
-| `service.py:327-401`（`_create_run_from_tasks`） | 命令层统一起 run 座（出生地 `create_run` 不变） | 范围包含性裁决应住这里（代码裁决，非 LLM 自决） |
-| `service.py:1409-1414`（caption-mode fast path） | caption 双标：选项答完直接 dock + Start，绕过 propose_turn 重判 | caption 不拥有独立 Paid Authorization 语义（parity 条款） |
-| IC:50 前端 G-explicit 自动 Start | 前端在 reasons 空时自动 Start | R5：翻案退役 |
-| `autonomy="review"` 档 | propose path 不可达的死档 | 一并裁决：接线或退役，**不允许继续悬空** |
-| `turn_tools.py:88-89`（`propose_tasks` 描述） | 「it never starts a run by itself」= 逐字复制 `present_plan` 的失信文本（实现 `propose_turn.py:331` 恰恰起 run） | 必须与最终实际语义一致 |
+| `service.py:1583`（answer_question task_book Start） | 合法确认座（B6 加服务端四合取强制） | B6 |
+| `routes/projects.py:693`（/graph/revise，`origin="node_revise"`） | 合法 approved-scope continuation | —（不动） |
+| `routes/projects.py:856`（/generate） | D2 灰区 | B5 |
+| `service.py:374`（`_create_run_from_tasks`，propose 两出口汇入） | A1/A2 打击面 | B1~B3 |
+
+脚本侧（零触碰）：`bake_image_video_demo.py:244` / `bake_quote_chain.py:213` / `bake_reframe_demos.py:323` / `bake_text_tribe_demos.py:266` / `run_anatomy_matrix.py:229`。
+
+### 锁现状的测试（改写对象登记）
+
+| 测试 | 锁的旧行为 | 处置 |
+|---|---|---|
+| S7-B（`chat_scenarios.py:2180-2205`） | chat path 无第二语言 → 当轮直起 run + `caption_mode=source_only` | B3 改写为新确认路径 expected |
+| S7-A/C（`:2129-2178` / `:2207-2277`） | caption 闸门 → 答 → dock → Start | 保绿（已是目标形态） |
+| S4-A2（`:1478-1508`） | edit_graph 修订 → run_birth 直起 | B2 保绿（edit_prompt = 自治 continuation 不受阻） |
+| `terminal_tool_of` 的 `run_birth` 类（`:687-690`） | harness 对「提案工具当轮起 run」的判别 | B2/B3 随语义改写 |
+| S13（`:2780-2867`） | plan Start 与 /generate 双路 422 形状 | 保绿 |
 
 ## Contract changes
 
-- ADR-087 §4 是唯一合同：Task Intent → Preparation → PLAN_READY → CONFIRMATION_READY → Explicit Confirmation → Paid Run。
-- Scope Expansion（新增未确认付费输出 / 新增付费分支 / 超出已确认范围）必须重新 Confirmation；**范围包含性由 Application Command 层代码裁决，不是 LLM 自决**。
+- ADR-087 §4 是唯一合同：Task Intent → Preparation → PLAN_READY → CONFIRMATION_READY → Explicit Confirmation → Paid Run；Frozen Rule 1~10 与 D1~D4 随本批落档（ADR-087 §4 修订 bullets + Reversal Ledger R9 + Consequences Phase 4 行）。
+- Scope Expansion（新增未确认付费输出 / 新增付费分支 / 超出已确认范围）必须重新 Confirmation；**范围包含性由 Application Command 层代码裁决，不是 LLM 自决**（Rule 7）；判定对象 = **结果付费执行范围**（D4 resulting-scope 律），不是操作名。
 - Caption/Non-caption Parity：caption 特殊性仅限参数收集 / 前置提问 / 模式与语言格式选择。
 - Estimate：不阻塞 PLAN_READY；Paid Run MUST NOT begin before charge semantics disclosed（ADR-087 §2.1）∧ explicit confirmation accepted。
-- Reversal Ledger R5（IC:50 自动 Start 退役）/ R6（ADR-054 §1194 绝对读法胜；密度律不动）随本批生效。
+- Reversal Ledger R5（IC:50 自动 Start 退役——代码已先于拍板消失）/ R6（ADR-054 §1194 绝对读法胜；密度律不动）/ R9（`autonomy="review"` 退役）随本批生效。
 
-## Files（预判，以 Step 0 清单为准）
+## Contract Matrix（终裁版 2026-09-20）
 
-- `apps/api/app/chat/propose_turn.py`（propose_tasks / edit_graph 的 run 出口改走确认门）。
-- `apps/api/app/chat/service.py`（`_create_run_from_tasks` 范围包含性裁决座；caption fast path 双标拆除）。
-- `apps/api/app/chat/turn_tools.py`（propose_tasks 失信描述改写与实际语义一致）。
-- 前端：G-explicit 自动 Start 移除（自动起步闸删除，统一走确认拍）。
-- prompt：`intent_router_system.j2` / `chat_intent_system.j2` / `turn_tools.py` 描述（quote-before-paid-run 语义——费用语义披露先于付费 run）。
-- 剧本：`chat_scenarios.py` 相关剧本改写（propose 直起 run 的旧 expected → 新确认路径 expected）。
+| Entry | Paid Work? | Existing Approved Scope? | Confirmation | Canonical Path |
+|---|---|---|---|---|
+| propose_tasks | FACT：付费（出生即 hold，`orchestrator.py:1132-1135`） | FACT：否（新工作） | GAP：今日零确认直起（`propose_turn.py:330`） | CONTRACT：dock → 显式确认 → Start 座（B3） |
+| edit_prompt（filled 节点）+run | FACT：付费重跑 | FACT：是（同节点身份、边不变、`node.state` 可证） | CONTRACT：自治 continuation | continuation（B2 放行） |
+| edit_prompt（draft 节点）+run | FACT：执行未确认计划 = 新付费工作 | FACT：否（`node.state=="draft"` 可证） | GAP：今日混在 A2 直起里 | CONTRACT：归计划修订/dock（B2） |
+| delete_node + run | FACT：删除本身无新付费产出；run 批重跑剩余子图 | D4：由**结果付费执行范围**判定；历史比对能力缺席 → unproven | CONTRACT：unproven → dock（临时安全行为，非归类；精确历史比对 = 后续 domain capability 挂账） | dock（B2 兜底） |
+| add_node | FACT：新付费分支（`produces_outputs` ∨ fold 非零可证） | FACT：否 | GAP：今日混在 A2 直起里 | CONTRACT：dock → 确认（B2） |
+| connect（改既有节点输入集） | FACT：下游以新输入组合执行 = 新 execution scope | FACT：否（图边可证） | GAP：同上 | CONTRACT：dock → 确认（B2） |
+| disconnect | FACT：编译器内部手势（chat 永不发射，`graph_store.py:106-113`） | —（chat 面不可达） | —（出 chat 范围） | 编译器内部（不动） |
+| /generate retry（服务端可证一致） | FACT：付费 | D2-A：须服务端确定性证明（历史 run context / retry 引用） | GAP：今日无证明座 | CONTRACT：证明后自治（B5） |
+| /generate arbitrary / unproven tasks | FACT：付费 | D2-B：不可证 | GAP：今日门全开（Rule 9 逐字违反） | CONTRACT：不直接 create_run → preparation/confirmation（B5） |
+| /generate legacy typed Start fallback | FACT：付费 | D2-C：unproven legacy | GAP：确认记录仅在客户端 | CONTRACT：统一 Dock 覆盖后退役/收敛，旧数据读容忍（B5） |
+| answer_question(start)（pill 与 G-1 同一座） | FACT：付费 | FACT：是（docked PendingPlan 即 approved scope） | FACT：显式手势——确认座本体；D3：Batch 6 加服务端四合取强制 | canonical（B6 加固） |
+| caption fast path | FACT：答后经 Start 付费 | FACT：replay stash = 提案 scope | FACT：dock + estimate + Start 全链（`service.py:1459-1483`） | canonical（收敛样板，不动） |
+
+## Files（按批次；预判以批次 preflight 为准）
+
+- **B1**：`apps/api/app/chat/service.py`（`_create_run_from_tasks` 周边——分类器座位，additive）或新模块；`apps/api/tests/` 新增分类器纯测试文件。
+- **B2**：`apps/api/app/chat/propose_turn.py`（`_edit_graph` dispatch 接分类器：自治放行 / 扩张与 unproven 转 dock）。
+- **B3**：`apps/api/app/chat/propose_turn.py`（`_propose_tasks` → PendingPlan + dock）；复用座位 `service.py`（`sync_plan_question` / `_safe_task_estimate` / `stamp_draft_graph` / PendingPlan / 角色 pins stash）；剧本 S7-B 改写。
+- **B4**（独立 commit，prompt 面）：`apps/api/app/chat/turn_tools.py`（propose_tasks / edit_graph 描述）+ `apps/api/app/prompts/chat/chat_intent_system.j2`（run 语义与确认措辞）。prompt 不得重定义 lifecycle / scope classifier。
+- **B5**（独立 commit）：`apps/api/app/pipeline/routes/projects.py`（/generate server gate + retry 证明座）；前端最小跟随（retry 携带证明 `projects.$id.index.tsx`；legacy fallback 收敛 `ChatDock.tsx`——收敛为非授权通道，不新造 UI）。
+- **B6**（独立 commit）：`apps/api/app/chat/service.py`（`answer_question` Start 分支接 lifecycle 四合取强制）+ 纯测试 + 剧本。
+- **B7**（独立 commit；**inventory 先行**）：`apps/web/src/components/chat/ChatDock.tsx`（state/prop）、`apps/web/src/components/chat/QuestionDock.tsx`（picker 块）、i18n（`en.ts` / `zh.ts` 的 `questionDock.autonomy.*`）、`apps/api/app/models/schemas.py`（`:245` / `:888` / `:3234`）、`apps/api/app/pipeline/orchestrator.py`（`TaskSpec.autonomy` `:144` + review 分支 `:368-381`）、`apps/api/tests/test_decompile_pure.py`（`:277-281`）、docs。**WAITING_HUMAN / interrupt / expiry sweep / verify escalation 一律不动**。
+- **B8**：`apps/api/scripts/chat_scenarios.py`（改写 + 新增）+ `docs/tasks/verification-contracts.md` §2 + `docs/CHAT_ARCHITECTURE.md` §3 + ADR-087 Consequences 回填 + PROGRESS §0.2。
 
 ## Tests（Claude 编写，用户自跑）
 
-- 纯 pytest：范围包含性裁决矩阵（retry / repair / render continuation / approved-scope revision = 自治；新增付费输出 / 新增付费分支 = 重新确认）。
-- 剧本：propose path 新 Paid Work 必须经确认拍；approved continuation 不阻塞；caption 与非 caption 同一授权语义；G-explicit 消息不再自动 Start（裸愿望与明确请求同走确认门）。
-- **门禁（ADR-071 T2）**：prompt 面改动必过 `scripts/prompt_gate.py` 三探针；失败先复跑一次（provider 漂移存在），再 A/B 仪器 `scratch/router_ab_probe.py` 二分——**禁止回调阈值凑绿**。
+- **B1 分类器纯测试矩阵**：edit_prompt(filled)=自治 / edit_prompt(draft)=dock / add_node=扩张 / connect 改既有节点输入=扩张 / delete_node+run=unproven→dock（D4 临时安全行为）/ 纯 delete 无 run=无付费动作。
+- **B2**：S4-A2 保绿（自治不受阻，Product goal 2）；新增 scope-expansion 转 dock 用例。
+- **B3**：S7-B 改写（propose 新工作必须经确认拍）；S7-A/C 保绿；新增「chat path 新工作 → dock → G-1 散文确认 → Start」剧本。
+- **B4**：prompt_gate 三探针（plan path 回归门）+ chat 侧剧本当探针（S4-A2/S7/S9/S20——chat_intent prompt 无探针覆盖是已知盲区）；失败先复跑一次再 `scratch/router_ab_probe.py` 二分，**禁止回调阈值凑绿**。
+- **B5 六例矩阵（D2 终裁指定）**：① exact approved retry → continuation；② same tasks but altered scope → confirmation；③ new task/output → confirmation；④ arbitrary tasks → rejection or preparation/confirmation；⑤ missing retry proof → never direct create_run；⑥ legacy fallback → never direct paid run。S13 保绿。
+- **B6 六例矩阵（D3 终裁指定）**：confirmation_ready=true → allowed；false → blocked；charge semantics unavailable → blocked；scope mismatch → blocked；active conflicting run → blocked；explicit confirmation missing → blocked。
+- **B7**：S6/S17 interrupt 机器剧本保绿（基建未伤证明）；review-tier 纯测试改写；prod 存留 WAITING_HUMAN run 数据排查（机器保留，既有 park 仍可答/过期）。
 - 预部署门禁顺序：纯 pytest → prompt_gate → chat_scenarios 全量。
 
-## Migration strategy
+## Migration strategy（批次序 B0→B8，每批独立 commit）
 
-Step 0 清单 → 命令层范围裁决落地（additive，旧直起路径并行一版）→ propose 两出口切换 → 前端自动 Start 移除 → caption 双标拆除 → 失信描述与 prompt 改写 → 剧本改写。每步独立 commit；prompt 面改动与行为改动分离 commit（prompt gate 可定位回归源）。
+| Batch | 内容 | 状态 |
+|---|---|---|
+| **B0** | Decision Ledger + Frozen Rules 落档 + 锚点更正（R5 前端已完成 / review=活档 / caption 方向）+ Contract Matrix 终裁版（**docs-only，本批**） | ✅ 2026-09-20 |
+| B1 | deterministic scope classifier（additive 先行，纯测试先行，零行为切换，无前端改动，无图路由改动） | PLANNED |
+| B2 | A2 切换：edit_graph 按分类器——approved continuation 自治 / scope expansion → PendingPlan+Dock / unproven → PendingPlan+Dock（零 LLM 决策） | PLANNED |
+| B3 | A1 切换：propose_tasks → PendingPlan → task_book/dock → estimate/charge semantics → PLAN_READY → CONFIRMATION_READY → explicit Start → Paid Run；**禁止同 turn create_run**；复用既有座位，禁止新确认 UI | PLANNED |
+| B4 | prompt 合同修正（独立 commit；只修 propose_tasks / edit_graph 描述 / run 语义 / 确认措辞） | PLANNED |
+| B5 | /generate server gate（独立 commit；approved retry=服务端可证 continuation，否则不直接 create_run；legacy fallback 退役/收敛；不破坏合法 retry） | PLANNED |
+| B6 | Start server-side confirmation enforcement（独立 commit，A1/A2 收敛后） | PLANNED |
+| B7 | `autonomy="review"` 退役（独立 commit；inventory 先行；保留 WAITING_HUMAN/escalation 基建） | PLANNED |
+| B8 | 剧本 / 验证 / docs 收口 | PLANNED |
 
 ## Rollback strategy
 
-逐出口独立 commit，回滚 = revert 对应出口 switch。命令层裁决 additive，旧路径在切换前保留。
+逐批独立 commit，回滚 = revert 对应批。B1 分类器 additive 零行为切换（revert 即无痕迹）；B2/B3 出口 switch 各自 revert；B5/B6/B7 各自独立 revert 互不粘联。
 
 ## Acceptance criteria
 
 - 一切新 Paid Work：无 explicit confirmation 不 `create_run`（grep + 剧本可证——propose 两出口无直起路径）。
-- approved scope continuation 不被误阻塞（S 族剧本回归全绿）。
+- approved scope continuation 不被误阻塞（S 族剧本回归全绿；exact retry 全绿）。
 - 同类型工作 plan / propose 两路收敛同一 Confirmation Dock。
+- continuation / expansion 分类全走确定性 domain facts（Rule 7——零 LLM 自决，代码可证）。
+- /generate 无「传 tasks 即信」（Rule 9/10——B5 六例矩阵绿）。
+- Start 服务端四合取强制（B6 六例矩阵绿；machine-readable blocker）。
 - `propose_tasks` 描述与实际语义一致（失信文本清零）。
-- `autonomy="review"` 死档有裁决（接线或退役，不留悬空）。
+- `autonomy="review"` 档退役且 WAITING_HUMAN/escalation 基建保留可证（S6/S17 保绿）。
 - prompt_gate 三探针过；chat_scenarios 全量绿。
 
 ## Prohibited Behaviors
 
 - 禁止给 propose path 发明第二个 dock UI（统一 Confirmation Dock 唯一）。
-- 禁止把范围包含性裁决交给 LLM（命令层代码裁决）。
+- 禁止把范围包含性裁决交给 LLM（Rule 7——命令层代码裁决）。
+- 禁止用 prompt / Activity / LLM 输出控制 paid authorization（Rule 8）。
+- 禁用客户端字段或客户端声明证明 approved scope（Rule 9——证明建立在服务端既有事实上）。
+- 禁止 unproven continuation 默认自治起 run（Rule 10）。
+- 禁止按操作名给 `delete_node` 拍脑袋归类（D4——结果付费执行范围判定；缺事实 = unproven → dock）。
+- 禁止顺手删除 WAITING_HUMAN / interrupt / expiry sweep / verify escalation 基建（D1 边界）。
+- 禁止把 /generate 门（B5）塞进 A2 批；禁止把 Start 服务端强制（B6）与 A1/A2 混批。
 - 禁止改动 Agent preparation path 的分叉（plan/propose 各自准备流程保留）。
 - 禁止让 estimate completeness 阻塞 PLAN_READY（ADR-087 §2）。
 - 禁止破坏密度律（ADR-054 不动——单任务 = 纯散文确认仍是确认手势）。
-- 禁止顺手拆 service.py / ChatDock（Phase 3/6 的事）。
-- 禁止回调 prompt_gate 阈值凑绿。
+- 禁止顺手拆 service.py / ChatDock（Phase 6 的事）。
+- 禁止 opportunistic refactor / 顺手重构 / 改 Canvas routing / 改 Product Graph canonical 结构 / 把 Execution Graph 暴露成 Product Graph。
+- 禁止回调 prompt_gate 阈值凑绿；禁止因为测试旧了就改 contract、为了绿测试而降低 doctrine。
+- 施工中发现冻结 doctrine 与代码事实冲突：**STOP——先报告 contradiction / affected contract / affected call sites / proposed options，不自行改变 doctrine**。
 
 ## 收尾报告格式（每 Phase 同律，§十六）
 
 Goal / Current evidence / Contract changes / Files / Tests / Migration strategy / Rollback strategy / Acceptance criteria / Status（日期 + commit 范围 + 验证状态——compileall / import 探针 / tsc / 剧本 = 用户自跑，报告标注「未跑验证」项）；另附 Step 0 盘点清单全文。
 
-## Docs update（同批）
+## Docs update（随批）
 
-- ADR-087 Consequences Phase 4 行回填 + commit 范围。
-- CHAT_ARCHITECTURE §3（终态工具集）现在时改写（propose_tasks 语义）。
-- PROGRESS §0.2 状态行更新。
+- ADR-087 §4 修订 bullets + Reversal Ledger R5 锚点更正 / R9 + Consequences Phase 4 行回填（B0 已落；commit 范围随 B8 补齐）。
+- CHAT_ARCHITECTURE §3（终态工具集）现在时改写（propose_tasks 语义，B3/B4 后）。
+- PROGRESS §0.2 状态行更新（B0 已落；随批续写）。
+- verification-contracts §2 Confirmation Doctrine 行（B1~B6 新验证座随批登记）。
 
 ## Status
 
-PLANNED（2026-09-19 建档，未开工；前置 = Phase 1 全闭环）。
+IN PROGRESS（2026-09-19 建档；2026-09-20 Preflight 盘点完成 + Decision Gate 四项终裁 + **Batch 0 落档 ✅**；下一批 = B1 deterministic scope classifier）。
