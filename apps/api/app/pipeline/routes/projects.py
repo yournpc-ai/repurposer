@@ -499,7 +499,10 @@ async def get_project_graph(
                 }
             )
     if not nodes:
-        return {"nodes": [], "edges": []}
+        # 「lifecycle 键恒在」不变量 (Phase 3 Batch C 拍板 A): the zero-node
+        # frame carries the same stamp (an empty project's blocked vs
+        # unknown reads identically in today's UI).
+        return {"nodes": [], "edges": [], "lifecycle": await _lifecycle_stamp(db, project)}
 
     # ── Product Graph rank (I-PFA-02 / 合同 §7 C-1) ──────────────────────
     # rank = the one spatial authority, computed HERE at the single point
