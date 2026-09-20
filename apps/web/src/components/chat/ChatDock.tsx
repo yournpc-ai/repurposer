@@ -3329,6 +3329,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   /** chat 修改单价 (BILLING §7): the dock payload's per-task marginal credits,
    * index-aligned with the plan card's task rows (Σ ≡ the pill's total). */
   const taskEstimates = pendingQuestion?.question?.estimate_credits?.per_task
+  /** 估价区间 (BILLING §2.1): the dock payload's [low, high] total — the
+   * pill's range AND the single-task charge line's number (hoisted above
+   * planCard, 2026-09-21 — the density-law single case has no pill, so its
+   * whisper line is that plan's only price surface). */
+  const planEstimate = pendingQuestion?.question?.estimate_credits?.total
   /** 计划密度律 (ADR-054): the review card + confirm pill are the HEAVY
    * rendering — a chain earns them only with review substance (≥2 tasks).
    * A one-task plan is pure prose: the echo bubble (live journey) or this
@@ -3352,14 +3357,32 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         m.content === intent.answer
     )
   const echoCarriedInFlow = liveBubblePresent || echoInFlow
+  /** 付费语义耳语 (BILLING §2.1 Held + Actualized, Phase 4 B3): the confirm
+   * beat's ONE disclosure of the hold/settle/refund mechanics — numberless
+   * when the estimate is deferred (估价随运行, never a fabricated number). */
+  const chargeLine = planEstimate
+    ? t("generationOverlay.chargeNoteWithEstimate", {
+        low: planEstimate[0],
+        high: planEstimate[1],
+      })
+    : t("generationOverlay.chargeNote")
   const planCard = singlePlan ? (
-    echoCarriedInFlow ? null : (
+    echoCarriedInFlow ? (
+      // 密度律单任务的唯一价格面：echo 已在流里时，耳语独立成行（披露 ≠
+      // echo——确认拍期间恒在）。
+      <Message align="start">
+        <MessageContent>
+          <p className="text-xs text-muted-foreground">{chargeLine}</p>
+        </MessageContent>
+      </Message>
+    ) : (
       <Message align="start">
         <MessageContent>
           <p className="text-sm leading-relaxed">
             {intent.answer ??
               t("generationOverlay.planProseSingle", { summary: planSummary })}
           </p>
+          <p className="mt-2 text-xs text-muted-foreground">{chargeLine}</p>
         </MessageContent>
       </Message>
     )
@@ -3418,6 +3441,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   is always here; it never depends on the LLM's memory. */}
               <p className="text-xs text-muted-foreground">
                 {t("generationOverlay.defaultPathLine")}
+              </p>
+              {/* 付费语义耳语 (BILLING §2.1, Phase 4 B3): the numberless
+                  charge-mechanics disclosure — the pill below already carries
+                  the range; same whisper register as the default-path line. */}
+              <p className="text-xs text-muted-foreground">
+                {t("generationOverlay.chargeNote")}
               </p>
               {/* The task chain (ADR-043) — one row per task, in execution
                   order. Outputs are the chain's derived projection (the
@@ -4021,7 +4050,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // (2026-09-19 判词 1, ADR-070 唯一座位律): this pill is the ONLY confirm
   // seat — the canvas task-book card's in-card Confirm & run is retired;
   // the canvas reads and reviews, it never starts a run.
-  const planEstimate = pendingQuestion?.question?.estimate_credits?.total
   // Pill visibility reads PLAN_READY off the same stamp (R2 翻案: the
   // review surface is born at PLAN_READY — while materials process, no
   // canvas flip AND no confirm pill; the stamp's poll drives the flip).

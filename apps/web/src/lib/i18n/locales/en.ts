@@ -1378,6 +1378,15 @@ const en = {
     },
     defaultPathLine:
       "Start as-is and I'll generate exactly this — to change anything, just say so in chat.",
+    // 付费语义耳语 (BILLING §2.1 Held + Actualized, Phase 4 B3): the ONE
+    // disclosure of the hold/settle/refund mechanics, whisper register —
+    // the numberless form rides the heavy plan card (the pill below already
+    // carries the range); the WithEstimate form is the single-task plan's
+    // only price surface (密度律: no card, no pill for one task).
+    chargeNote:
+      "On start, the high estimate is held; you're charged only for what actually runs — failed steps are free — and the remainder is returned.",
+    chargeNoteWithEstimate:
+      "On start, up to {{high}} credits are held; you're charged only for what actually runs — failed steps are free — and the remainder is returned.",
     clipsNeedMedia: "Needs a video, audio, or image source — upload to unlock, or remove this row.",
     countDecrease: "Decrease",
     countIncrease: "Increase",

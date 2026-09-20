@@ -684,10 +684,11 @@ def terminal_tool_of(turn: dict) -> str:
     - an unanswered caption-mode options question → ``caption_gate``
       (propose_tasks' execution sub-dock, not an ask_user call)
     - any other unanswered plain question → ``ask_user``
-    - a run born with no settled question → ``run_birth`` (chat path: a
-      proposal tool — propose_tasks / apply_edit_ops / edit_graph — started
-      it; the envelope does not discriminate further, the scenarios assert
-      the wiring outcome instead)
+    - a run born with no settled question → ``run_birth`` (chat path: after
+      Phase 4 B3 the ONLY same-turn birth left is edit_graph's approved-
+      continuation branch — propose_tasks always docks; the envelope does
+      not discriminate further, the scenarios assert the wiring outcome
+      instead)
     - prose only → ``answer``
     """
     msg = turn.get("assistant_message") or {}
@@ -1474,6 +1475,15 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
               and [o.get("label") for o in options] == sugs,
               "the dock options are the numbered labels (1/2/3 grammar)",
               options)
+        # Harness 卫生（非断言）：建议问先 × 跳过收掉——A2 的修订消息不能
+        # 被判定结算吃掉（ADR-053 R2：judged answer settle parked 问后走
+        # 唤醒路、tool dispatch 被跳过——pre-existing 方差，在册于
+        # verification-contracts Known Variance；A2 锁的是 wiring 修订
+        # 路，不是 disposition 判定稳健性）。
+        bail = await ctx.answer(review["id"], {"kind": "bail"})
+        check(bail.status_code in (200, 201),
+              "the review suggestions question is bailed (A2 determinism)",
+              bail.text)
 
     # A2) 修订 = wiring（ADR-057 K4/K5 横切——修订环根治验收点）: chat 修订
     #    → WiringProposal（edit_prompt + run 子图）→ 节点程序行原地改写
@@ -1506,6 +1516,56 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
           (post_after.get("spec") or {}).get("prompt"))
     check(post_after.get("state") != "draft",
           "the rerun re-queues its node", post_after.get("state"))
+    # A2's revision run settles before A3 — A3's Start would otherwise hit
+    # the birthplace's active-run 422 (the guard fires at Start too; waiting
+    # is harness hygiene, not an assertion).
+    await wait_run_terminal(turn_rev["run_id"])
+
+    # A3) 扩张 → Confirmation Dock（ADR-087 §4 Rule 6, Phase 4 B3 剧本座）：
+    #    已批图之外的新付费工作（基于 post 新写一篇 article——图上没有
+    #    article 节点，add_node 是唯一自然布线）——无论 LLM 走
+    #    edit_graph(add_node+run) 还是 propose_tasks，回合都必须 dock
+    #    （task_book + 零 run），Start 才放行 run。路由无关断言：信封
+    #    形状 + draft 预览 + Start 后链上生 run。
+    turn_exp: dict | None = None
+    for prompt in ("write a long-form article from the post as a new piece",
+                   "add an article version of the post alongside it",
+                   "the article, please"):
+        cand = await ctx.chat(pid, prompt)
+        check(cand.get("run_id") is None,
+              "A3: 扩张同 turn 直跑 = 教义红线（Rule 1/6——new paid work "
+              "must never run unauthorized）", cand)
+        if is_plan_dock(cand["assistant_message"]):
+            turn_exp = cand
+            break
+    check(turn_exp is not None,
+          "A3: the expansion ask docks a plan within 3 prompts", None)
+    check(terminal_tool_of(turn_exp) == "present_plan",
+          "A3: the turn closes on the plan dock", turn_exp)
+    graph_docked = await ctx.graph(pid)
+    draft_tools = [
+        (n.get("spec") or {}).get("tool")
+        for n in graph_docked["nodes"]
+        if n.get("state") == "draft"
+    ]
+    check("write_article" in draft_tools,
+          "A3: the dock's draft stamp previews the article node (the door's "
+          "mutation rolled back; canonical fill keys)", draft_tools)
+    res_exp = await ctx.answer(turn_exp["assistant_message"]["id"],
+                               {"kind": "start"})
+    check(res_exp.status_code == 200, "A3: dock Start answers the plan",
+          res_exp.text)
+    run_exp = res_exp.json()["answered_question"].get("workflow_run_id")
+    check(run_exp, "A3: a run was born on Start", res_exp.json())
+    runs_exp = await ctx.client.get(f"/projects/{pid}/runs")
+    born_exp = next((r for r in runs_exp.json() if r.get("id") == run_exp),
+                    None) or {}
+    exp_tools = [
+        t.get("tool")
+        for t in (born_exp.get("context") or {}).get("tasks") or []
+    ]
+    check("write_article" in exp_tools,
+          "A3: the born run carries the expansion chain", exp_tools)
 
     # B) 估价地基（进程内编译，零 LLM）——fold 对账 / 单调性 / NULL 语义。
     assert_runners_registered()
@@ -2116,8 +2176,10 @@ async def s7_caption_mode_gate(ctx: Ctx) -> None:
     A) 有独立第二语言（项目 de / 素材 en）→ 选择问先 dock（不起 run），
        回答后 replay 出计划：回执 kind=option + 选中的 mode 钉进
        pending_brief；
-    B) 无独立第二语言（项目 en / 素材 en）→ 不问，run 直接带
-       run.context.caption_mode == "source_only"（§2.3/D4）；
+    B) 无独立第二语言（项目 en / 素材 en）→ 不问 caption；计划照常 dock
+       （Phase 4 B3：propose 路同 turn 永不生 run），source_only 随
+       dock 的 intent，Start 后 run.context.caption_mode == "source_only"
+       （§2.3/D4）；
     C) 答 → 追问 → Start：answered mode 存活于中间修订轮（stash 继承：
        fresh LLM-set > fresh keyword > stashed answer）。
 
@@ -2177,32 +2239,53 @@ async def s7_caption_mode_gate(ctx: Ctx) -> None:
     check(((plan or {}).get("intent") or {}).get("caption_mode") == "bilingual",
           "A: the picked mode rides pending_brief end-to-end", plan)
 
-    # B) no distinct alt (en/en) → no question; source_only rides run.context.
+    # B) no distinct alt (en/en) → no caption question; the plan docks with
+    #    source_only riding the intent, and only Start births the run with
+    #    run.context.caption_mode == "source_only" (Phase 4 B3 翻转: the
+    #    propose path NEVER births same-turn — the dock is the one seat).
     pid_b = await ctx.new_project("S7-B chat caption source_only")
     await set_project_language(pid_b, "en")
     await seed_asset(pid_b, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
                      extracted_text=material, meta={"language": "en"},
                      processed=True)
     await seed_completed_run(pid_b)
-    mode: str | None = None
+    docked_b: dict | None = None
     tools_seen: list = []
     for prompt in ("make a quote card from the video",
                    "pull the sharpest quotes from my keynote into quote cards",
                    "the quote cards, please"):
         turn = await ctx.chat(pid_b, prompt)
-        rid = turn.get("run_id")
-        if rid is None:
-            continue  # ask-back — nudge again
-        runs = await ctx.client.get(f"/projects/{pid_b}/runs")
-        born = next((r for r in runs.json() if r.get("id") == rid), None) or {}
-        run_ctx = born.get("context") or {}
-        tools_seen = [t.get("tool") for t in run_ctx.get("tasks") or []]
+        if not is_plan_dock(turn["assistant_message"]):
+            continue  # ask-back / prose — nudge again
+        plan_b = await pending_plan(ctx, pid_b)
+        tools_seen = [t.get("tool") for t in plan_tasks(plan_b)]
         if "write_quotes" in tools_seen:
-            mode = run_ctx.get("caption_mode")
+            docked_b = turn
             break
-        await wait_run_terminal(rid)  # non-quotes run — settle, then retry
-    check(mode is not None, "B: no write_quotes run after 3 turns", tools_seen)
-    check(mode == "source_only", "B: run.context.caption_mode", mode)
+        # Wrong chain docked — bail the plan before nudging again (a live
+        # dock would read the next chat message as its revision/Start).
+        await ctx.answer(turn["assistant_message"]["id"], {"kind": "bail"})
+    check(docked_b is not None,
+          "B: no write_quotes plan dock after 3 turns", tools_seen)
+    check(docked_b.get("run_id") is None,
+          "B: no run before Start (B3: same-turn create_run is forbidden)",
+          docked_b)
+    check(terminal_tool_of(docked_b) == "present_plan",
+          "B: the turn closes on the plan dock (propose_tasks' B3 seat)",
+          docked_b)
+    plan_b = await pending_plan(ctx, pid_b)
+    check(((plan_b or {}).get("intent") or {}).get("caption_mode") == "source_only",
+          "B: source_only rides the docked intent (no question for en/en)",
+          plan_b)
+    res_b = await ctx.answer(docked_b["assistant_message"]["id"], {"kind": "start"})
+    check(res_b.status_code == 200, "B: dock Start answers the plan", res_b.text)
+    run_id_b = res_b.json()["answered_question"].get("workflow_run_id")
+    check(run_id_b, "B: a run was born on Start", res_b.json())
+    runs = await ctx.client.get(f"/projects/{pid_b}/runs")
+    born = next((r for r in runs.json() if r.get("id") == run_id_b), None) or {}
+    run_ctx = born.get("context") or {}
+    check(run_ctx.get("caption_mode") == "source_only",
+          "B: run.context.caption_mode", run_ctx.get("caption_mode"))
 
     # C) 答 → 追问 → Start：the answered mode must survive a refinement turn
     #    between the answer and Start — the plan path overwrites

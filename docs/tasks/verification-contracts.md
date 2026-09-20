@@ -28,7 +28,7 @@
 | Upload-on-birth（text-yielding → transcript node queued 出生 + 幂等；非产出族不生） | `app/pipeline/graph_fill.py` `stamp_transcript_node` | Phase 1（8972e74 有意变更）+ ADR-087 §2 | `test_graph_wiring_pure.py` 边界型（四文本产出族阳性 + IMAGE/VOICE_SAMPLE/SLIDES 阴性 + 幂等） | — | — | 🟢 |
 | Confirmation Doctrine（四合取组合点唯一 + 手势必需 + dock pill 唯一座） | lifecycle + `chat/service.py` | ADR-063 / ADR-054 / ADR-070 | T9/T9b/T10/T10b/T15 + Charge 等价钉 | S1 戳拍②③；S13 422 出生地 | gate 5c（客户端不推导 readiness） | 🟢 ｜ Charge 等价见 §3 |
 | Charge Semantics | （合同层，无独立实现站） | ADR-063 | `test_charge_semantics_ready_is_exactly_the_docked_plan` | — | — | 🟢 ｜ **当前 ≡ has_pending_plan（故意等价，§3）** |
-| Scope 分类（continuation/expansion/unproven 三值 + 链逐字 retry 证明 + 零 op 语义可扩展锁 + registry-known 即付费） | `app/pipeline/scope_classifier.py` + B2 接线 `chat/propose_turn._edit_graph` | ADR-087 §4 + D4/D2 + Frozen Rule 5/6/7/10 | `test_scope_classifier_pure.py`（27，含 §8 修正两锁：translate_clip/research 全付费） | S4-A2（continuation 直跑锁）；**expansion dock 剧本座随 B3**（A1 收敛后整面验收）；B2 in-process probe 实证（2026-09-21，一次性仪器） | — | 🟡 ｜ B2 已接线 edit_graph（continuation 自治 / expansion·unproven 回滚转 dock）；A1 待 B3、/generate 待 B5；gatherer 无纯测试座（lifecycle gatherer 先例） |
+| Scope 分类（continuation/expansion/unproven 三值 + 链逐字 retry 证明 + 零 op 语义可扩展锁 + registry-known 即付费） | `app/pipeline/scope_classifier.py` + B2/B3 接线 `chat/propose_turn`（`_edit_graph` + `_propose_tasks` 出口 + `_dock_plan_as_question` 唯一 dock 座） | ADR-087 §4 + D4/D2 + Frozen Rule 5/6/7/10 | `test_scope_classifier_pure.py`（27，含 §8 修正两锁：translate_clip/research 全付费） | S4-A2（continuation 直跑锁）；**S4-A3（expansion dock 整面，B3 落地）**：task_book + 零 run + draft 预览 + Start 生 run 带链，同 turn 直跑 = 硬红；S7-B（propose dock + caption_mode 随行翻转） | — | 🟡 ｜ B2/B3 已接线（continuation 自治 / expansion·unproven 回滚转 dock / propose 同 turn 永不生 run）；/generate 待 B5；gatherer 无纯测试座（lifecycle gatherer 先例） |
 | Activity 投影（白名单五键 / N→1 repair 聚合 / 1→0 过滤 / T16-A·B 终态） | `app/chat/activity.py` + routes 缝 | ADR-087 §3 | `test_activity_pure.py`（22，含路由缝 stub ×2） | `check_activity_shape` 接线 S6f / S10 / S20A / S20B / S21 | gate 5a（内核侧反向） | 🟢 ｜ 客户端累积/渲染零单测——ChatDock 静态证明 only（§6 DEFERRED）；strict co-fire 律随 Batch B ⑥ 退役（相位侧信号已删，协同失去对象） |
 | ToolLoop 内核边界（U1：LoopEvent 无 Activity 词汇） | `app/agents/tool_loop.py` | 用户裁定 U1 + ADR-087 §5 | tool_loop 纯套件 + 5a teeth | — | gate 5a | 🟢 |
 | Lifecycle/Presentation 依赖方向（lifecycle 禁 app.chat） | `app/pipeline/lifecycle.py` | ADR-087 §5 | 5b teeth | — | gate 5b | 🟢 |
@@ -88,13 +88,14 @@ LLM 行为方差，容忍）/ **KNOWN VERIFICATION FRAGILITY**（合同已兑现
 | S10 | answer/draft 判定（few-shot 逐字镜像缓解，构造性方差；draft 拍单发一次散文口头确认代替 dock——当日 1/6）；ask 轮 preview `default_path` 空单发一次（prompt 合规抖动，未复现） |
 | S20B | grounded-judgment 内容词 any-of：措辞自由下存在词表外措辞的非零概率 |
 | S6f / S11 | 路由判定抖动（重试预算已在剧本内） |
-| S5 | refine 轮 slots 抖动：无关 refine 偶发改写面板钉住的参数（2026-09-20 Batch B ⑧ 首跑单发，复跑即绿；合并座 `merge_prior_slots` 本批零触碰，harness 走裸 API 与客户端改动无涉）；turn1 present_plan 未落地——工具调用参数倒进散文尾部成截断 JSON（provider 发射抖动，2026-09-20 Batch C 验收首跑单发，复跑即绿） |
+| S5 | refine 轮 slots 抖动：无关 refine 偶发改写面板钉住的参数（2026-09-20 Batch B ⑧ 首跑单发，复跑即绿；合并座 `merge_prior_slots` 本批零触碰，harness 走裸 API 与客户端改动无涉）；turn1 present_plan 未落地——工具调用参数倒进散文尾部成截断 JSON（provider 发射抖动，2026-09-20 Batch C 验收首跑单发，复跑即绿）；**count 标量字符串化窗口**（2026-09-21 B3 验收：同窗口 4 连红——`"count":"3"/"2"` + `"null"` 字符串，语义全对仅类型抖；实证三连排批次——null 实验（B0 码 API 同窗口绿）+ round-robin（B3 码第 5 跑即绿）+ 两 checkout 全树 byte-diff（plan path 零差异、.env 一致）→ provider 发射类型抖动以分钟~十分钟尺度成簇，多连红 ≠ 批次回归） |
 
 ### KNOWN VERIFICATION FRAGILITY（挂账，不修生产码）
 
 | 项 | 说明 |
 |:---|:---|
 | S20A `PROCESSING_DISCLOSURE` 正则语序洞 | 合同 = 披露语义存在（duty-bound clause），不锁措辞（禁令 #7）；正则宽容形状集不含「Processing is still underway」类语序 → 合同兑现但断言单发红。后续若要消除，扩正则宽容集（测试侧），**不动生产码** |
+| trigger_review 建议问挂 completed run id → judged answer 走 interrupt 唤醒路 | ADR-077 T3 建议问带 `workflow_run_id`（review 的 ref）× ADR-053 R2 判定结算的交互：修订类消息被 judged answer settle 后走 `resume_waiting_interrupt`（completed run 空转 outcome=idle）+ `_resume_ack_line` 泛行 "Resuming the run"（失信 copy）+ tool dispatch 跳过 → 修订意图蒸发。pre-existing（Phase 4 之前，B3 验收 S4 首猎 2026-09-21）；harness 侧隔离 = A1 断言后 bail 建议问（A2 锁 wiring 修订路，非 disposition 判定稳健性）；产品侧修法挂账：唤醒路加 run 状态门（非 WAITING_HUMAN 不唤醒 + ack 按 outcome 分词），或建议问不挂 run id |
 
 ### UNPROVEN / 待定性
 

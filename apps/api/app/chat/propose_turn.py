@@ -6,9 +6,16 @@ states' mechanical translation (task_list → ``propose_tasks``, edit_ops →
 ``apply_edit_ops``, wiring → ``edit_graph``, ask → ``ask_user``, answer →
 ``answer``). The write doors never moved:
 
-- ``propose_tasks`` / ``edit_graph`` runs still come from
-  ``_create_run_from_tasks`` — the ONLY run birthplace (wiring resolves its
-  subgraph through ``apply_wiring_ops`` first, the graph's only write door).
+- ``propose_tasks`` NEVER births a run (Phase 4 B3, ADR-087 §4 + Frozen
+  Rule 1/3 — a natural-language request is Task Intent, never Paid
+  Execution Authorization): every new-work proposal docks as a PendingPlan
+  + task_book question through ``_dock_plan_as_question`` — the ONE shared
+  dock seat — and the run births only on the user's explicit Start (the
+  propose path and the plan path share ONE authorization seat; same-turn
+  create_run is forbidden here). ``edit_graph``'s approved continuations
+  still come from ``_create_run_from_tasks`` — the ONLY run birthplace
+  (wiring resolves its subgraph through ``apply_wiring_ops`` first, the
+  graph's only write door).
   Phase 4 B2 (ADR-087 §4 + D4): ``edit_graph``'s run births are gated by the
   Deterministic Scope Classifier — the door's RESULTING paid execution scope
   is adjudicated against the pre-op run-born graph inside a savepoint; an
@@ -66,10 +73,8 @@ from app.chat.service import (
     _edit_op_items,
     _has_resolved_caption_mode,
     _needs_caption_mode_question,
-    _prefers_zh,
     _resume_ack_line,
     _reminder_tail,
-    _run_active_text,
     _safe_task_estimate,
     _validate_edit_ops,
     latest_pending_question,
@@ -98,7 +103,7 @@ from app.models.schemas import (
 from app.models.tables import Asset, Message, Output, Project, WorkflowRun
 from app.operations.service import OpConflict, OpRejected, apply_operations
 from app.providers.llm.base import LLMError
-from app.tools import ToolRejected
+from app.tools import ToolRejected, validate_task_list
 
 logger = structlog.get_logger()
 
@@ -295,8 +300,19 @@ class ChatTurn:
         return f"unknown tool {name!r}"  # unreachable — the driver gates names
 
     async def _propose_tasks(self, params: ProposeTasksArgs, prose: str) -> str | None:
-        """task_list → the caption gate, then the ONLY run birthplace. The
-        registry's ToolRejected rides back as the loop's feedback."""
+        """task_list → the caption gate, then the Confirmation Dock (ADR-087
+        §4, Phase 4 B3): a natural-language request is Task Intent, never
+        Paid Execution Authorization (Frozen Rules 1/3) — EVERY new-work
+        proposal docks as a PendingPlan + task_book question (estimate +
+        charge semantics + canonical draft preview), and the run births
+        only on the user's explicit Start. Same-turn create_run is
+        forbidden on this path (统一 Paid Authorization path — the propose
+        path and the plan path share ONE authorization seat). The
+        registry's ToolRejected rides back as the loop's feedback —
+        adjudication stays immediate and only registry-valid chains ever
+        dock; the birthplace's remaining constraints (media gates /
+        transform targets / active-run guard) fire at Start, the plan
+        path's own posture."""
         db, project, text = self.db, self.project, self.text
         if not params.tasks:
             return (
@@ -334,55 +350,86 @@ class ChatTurn:
                 assistant_message, None, bailed_run_ids, self.settled_question
             )
             return None
-        # Caption-mode resolution for the immediate run (2026-08-29 root-fix):
-        # keyword > stashed answer > source_only-if-no-distinct-alt — one
-        # shared funnel.
-        caption_mode = await _derive_chat_caption_mode(db, project, params.tasks, text)
-        source_pin, exemplar_pin = await self._role_pins_for(params.tasks)
         try:
-            run_id = await _create_run_from_tasks(
-                db, project, params.tasks, prose,
-                caption_mode=caption_mode,
-                source_asset_id=source_pin, exemplar_asset_id=exemplar_pin,
-                name=params.name or None,
-            )
+            validate_task_list(params.tasks)
         except ToolRejected as e:
             # The registry's rejection IS the feedback — one bounded loop
-            # iteration (the retired repair round's seat).
+            # iteration (the retired repair round's seat) — the same
+            # adjudication _create_run_from_tasks ran at the birthplace,
+            # now BEFORE the dock so only registry-valid chains ever dock.
             return f"{e} (available: {getattr(e, 'suggestions', [])})"
-        except ValueError as e:
-            from app.pipeline.orchestrator import (  # deferred: import cycle
-                RunAlreadyActiveError,
-            )
-            if isinstance(e, RunAlreadyActiveError):
-                # Active-run guard fired — say THAT, not the missing-material
-                # line (the guard's own 422 copy rides the typed endpoints).
-                content = _run_active_text(text)
-            else:
-                # Missing required input (media/transcript/…) — no feedback
-                # iteration can fix that. The raw exception carries registry
-                # vocabulary; it goes to the log, the user gets a plain line
-                # in their language (same posture as _cannot_do_text).
-                logger.info("run_birth_missing_input", error=str(e))
-                content = (
-                    "还缺素材——先发我视频、音频或文字稿，我再开工。"
-                    if _prefers_zh(text)
-                    else "I'm missing the material for that — attach a video, "
-                    "audio, or transcript first, then I'll get to work."
-                )
-            assistant_message = await _create_message(
-                db, self.conversation_id, "assistant", content,
-                intent=proposal.model_dump(mode="json"),
-            )
-            self.outcome = (assistant_message, None, [], self.settled_question)
-            return None
-        assistant_message = await _create_message(
-            db, self.conversation_id, "assistant", prose,
-            workflow_run_id=run_id,
-            intent=proposal.model_dump(mode="json"),
+        # Caption-mode resolution rides the DOCKED intent now (was: the
+        # same-turn run's TaskSpec): keyword > stashed answer >
+        # source_only-if-no-distinct-alt — one shared funnel; Start reads
+        # intent.caption_mode off the stored pending.
+        caption_mode = await _derive_chat_caption_mode(db, project, params.tasks, text)
+        source_pin, exemplar_pin = await self._role_pins_for(params.tasks)
+        await self._dock_plan_as_question(
+            tasks=params.tasks,
+            answer=prose,
+            specific_instruction=text or None,
+            caption_mode=caption_mode,
+            name=params.name or None,
+            source_pin=source_pin,
+            exemplar_pin=exemplar_pin,
         )
-        self.outcome = (assistant_message, run_id, [], self.settled_question)
         return None
+
+    async def _dock_plan_as_question(
+        self,
+        *,
+        tasks: list,
+        answer: str,
+        specific_instruction: str | None,
+        caption_mode: str | None,
+        name: str | None,
+        source_pin: str | None,
+        exemplar_pin: str | None,
+    ) -> None:
+        """The chat path's ONE plan-docking seat (Phase 4 B2/B3): PendingPlan
+        + task_book question + estimate + canonical draft preview (inside
+        sync_plan_question) — the caption-replay pattern verbatim; Start
+        reads intent.tasks / specific_instruction / caption_mode / pins off
+        the stored pending. Sets the turn's outcome to the docked question
+        (never a run)."""
+        db, project = self.db, self.project
+        intent = InferredIntent(
+            action="draft",
+            tasks=tasks,
+            answer=answer or "",
+            specific_instruction=specific_instruction,
+            caption_mode=caption_mode,
+            name=name,
+        )
+        preserved_brief = (
+            Brief.model_validate(project.pending_brief["brief"])
+            if isinstance(project.pending_brief, dict)
+            and isinstance(project.pending_brief.get("brief"), dict)
+            else Brief()
+        )
+        project.pending_brief = PendingPlan(
+            prompt=self.text,
+            intent=intent,
+            brief=preserved_brief,
+            reasons=await _compute_plan_reasons(db, project, intent),
+            persona_id=(
+                project.pending_brief.get("persona_id")
+                if isinstance(project.pending_brief, dict)
+                else None
+            ),
+            source_asset_id=source_pin,
+            exemplar_asset_id=exemplar_pin,
+            derived=[],
+        ).model_dump(mode="json")
+        bailed_run_ids = await sync_plan_question(
+            db, self.user_id, project, intent, self.text,
+            reasons=project.pending_brief["reasons"],
+            brief=preserved_brief,
+            echo=intent.answer,
+            estimate=await _safe_task_estimate(db, project, intent.tasks),
+        )
+        docked = await latest_pending_question(db, self.conversation_id)
+        self.outcome = (docked, None, bailed_run_ids, self.settled_question)
 
     async def _apply_edit_ops(self, params: ApplyEditOpsArgs, prose: str) -> str | None:
         """edit_ops → the operations registry. Validation rejections ride the
@@ -534,46 +581,19 @@ class ChatTurn:
                     name=p.name or None,
                 )
             # Expansion / unproven → Confirmation Dock (Rule 6/10): the
-            # translated chain becomes a PendingPlan + task_book question —
-            # the caption-replay pattern verbatim (Start reads intent.tasks
-            # / specific_instruction / pins off the stored pending).
+            # translated chain docks through the ONE shared seat (Start
+            # reads intent.tasks / specific_instruction / pins off the
+            # stored pending).
             source_pin, exemplar_pin = await self._role_pins_for(tasks)
-            intent = InferredIntent(
-                action="draft",
+            await self._dock_plan_as_question(
                 tasks=tasks,
                 answer=p.summary or "",
                 specific_instruction=instruction or None,
+                caption_mode=None,
                 name=p.name or None,
+                source_pin=source_pin,
+                exemplar_pin=exemplar_pin,
             )
-            preserved_brief = (
-                Brief.model_validate(project.pending_brief["brief"])
-                if isinstance(project.pending_brief, dict)
-                and isinstance(project.pending_brief.get("brief"), dict)
-                else Brief()
-            )
-            project.pending_brief = PendingPlan(
-                prompt=self.text,
-                intent=intent,
-                brief=preserved_brief,
-                reasons=await _compute_plan_reasons(db, project, intent),
-                persona_id=(
-                    project.pending_brief.get("persona_id")
-                    if isinstance(project.pending_brief, dict)
-                    else None
-                ),
-                source_asset_id=source_pin,
-                exemplar_asset_id=exemplar_pin,
-                derived=[],
-            ).model_dump(mode="json")
-            bailed_run_ids = await sync_plan_question(
-                db, self.user_id, project, intent, self.text,
-                reasons=project.pending_brief["reasons"],
-                brief=preserved_brief,
-                echo=intent.answer,
-                estimate=await _safe_task_estimate(db, project, intent.tasks),
-            )
-            docked = await latest_pending_question(db, self.conversation_id)
-            self.outcome = (docked, None, bailed_run_ids, self.settled_question)
             return None
 
         try:

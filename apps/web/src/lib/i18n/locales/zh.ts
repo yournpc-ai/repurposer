@@ -1311,6 +1311,13 @@ const zh: Resources = {
     },
     defaultPathLine:
       "直接开始 = 我严格按这本书生成——想改什么，在聊天里说一句就行。",
+    // 付费语义耳语（BILLING §2.1 Held + Actualized，Phase 4 B3）：预扣/结算/
+    // 退还机制的唯一披露，耳语 register——无数字版随重型计划卡（下方 pill
+    // 已带估价区间）；带估价版是单任务计划的唯一价格面（密度律：单任务
+    // 无卡无 pill）。
+    chargeNote: "开始时按估价上限预扣；按实际用量结算，失败的步骤不收费，剩余退回。",
+    chargeNoteWithEstimate:
+      "开始时预扣至多 {{high}} 积分；按实际用量结算，失败的步骤不收费，剩余退回。",
     clipsNeedMedia: "需要视频、音频或图片素材——上传后即可解锁，或移除本行。",
     countDecrease: "减少",
     countIncrease: "增加",
