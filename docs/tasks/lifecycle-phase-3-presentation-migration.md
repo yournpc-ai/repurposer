@@ -145,3 +145,4 @@ PLANNED（2026-09-19 建档，未开工；前置 = Phase 1 全闭环）。
 - **⑦ C3 DENSITY 改写**：言语分叉改键链组成 domain fact（never on what the interface shows）；三处渲染断言全删（含失信 "the Start button always appears"）；ADR-070 语义指针保留（button→control surface-neutral）；阈值单主 ChatDock 不动；provenance 头补注。
 - **验证（Claude 自跑，逐刀自绿）**：compileall 全过 / 定向纯 pytest（graph_wiring 64、check_gates+activity 27、lifecycle 22、prompt registry consistency 3）全绿 / 生产 jinja env 渲染探针五断言全过 / tsc 回 2 预存错（避让不修）/ vitest 52/52 绿。
 - **未跑验证（用户自跑）**：纯 pytest 全量 305 基线 / check_gates 全量 / 剧本 S5·S7·S10·S11·S20A（S5 在册方差，复跑即绿不算红）/ prompt_gate 三探针 round-robin（刀⑦）。**待验收回填。**
+- **尾刀（2026-09-20，用户拍板删）**：preflight 漂移上报项闭环——`intent_router_system.j2` "Never narrate the DAG" 句的渲染断言半句（"the canvas/plan card shows the structure"）与 C3 同标准退役，言语纪律 + speech-role 分工（"your words carry understanding, judgment, and the ask"）原样保留。**新上报（零触碰，待拍板）**：Disclosure 段 "remove it in the plan panel when the card is shown" 的 "when the card is shown" 是同款渲染条件从句（同族残留，验收后不阻塞地裁决）。
