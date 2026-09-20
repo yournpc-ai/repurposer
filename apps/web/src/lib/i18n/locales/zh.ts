@@ -1349,6 +1349,8 @@ const zh: Resources = {
     },
     stopped: "已停止生成。",
     failed: "生成失败",
+    scopeUnproven:
+      "这次运行在服务端无法核证为已确认的重跑——请在下方对话里确认计划，再从那里开始。",
   },
   questionDock: {
     autonomy: {

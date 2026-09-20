@@ -1622,6 +1622,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           pushCreditsGreyRow(credits)
           return
         }
+        // D2 (Phase 4 B5): the /generate gate's machine-readable blocker —
+        // the legacy fallback is NOT an authorization channel, so an
+        // unproven chain reads as the honest confirm-in-chat line, never
+        // a generic failure.
+        if (
+          (body?.detail as { code?: string } | undefined)?.code ===
+          "scope.unproven"
+        ) {
+          throw new Error(t("generationOverlay.scopeUnproven"))
+        }
         throw new Error(
           typeof body?.detail === "string" && body.detail
             ? body.detail

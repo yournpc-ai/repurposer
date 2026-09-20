@@ -354,3 +354,111 @@ def test_match_against_any_historical_chain():
     other = _chain(tasks=({"tool": "dub", "params": {"language": "de"}},), spec={"target_language": "de"})
     verdict = classify_chain_against_history(requested=_chain(), historical=(other, _chain()))
     assert verdict.decision == CONTINUATION
+
+
+# ---- D2 six-case matrix (2026-09-20 终裁) + family-retry tier (B5) ----------------
+
+
+def test_d2_case1_exact_approved_retry_is_continuation():
+    # ① exact approved retry → continuation.
+    verdict = classify_chain_against_history(requested=_chain(), historical=(_chain(),))
+    assert verdict.decision == CONTINUATION
+    assert verdict.reasons == ("exact_retry",)
+
+
+def test_d2_case2_same_tasks_altered_scope_is_unproven():
+    # ② same tasks but altered scope → confirmation (unproven): one
+    # task's params edited means the combination was never confirmed.
+    requested = _chain(
+        tasks=(
+            _TASKS[0],
+            {"tool": "translate", "params": {"language": "de"}},
+        )
+    )
+    verdict = classify_chain_against_history(requested=requested, historical=(_chain(),))
+    assert verdict.decision == UNPROVEN
+
+
+def test_d2_case3_new_task_output_is_unproven():
+    # ③ new task/output → confirmation: the confirmed chain plus one
+    # extra task is a superset, never an approved retry.
+    requested = _chain(tasks=(*_TASKS, {"tool": "write_article", "params": {"language": "en"}}))
+    verdict = classify_chain_against_history(requested=requested, historical=(_chain(),))
+    assert verdict.decision == UNPROVEN
+
+
+def test_d2_case4_arbitrary_tasks_are_unproven():
+    # ④ arbitrary tasks → rejection or preparation/confirmation: no
+    # historical chain contains them.
+    requested = _chain(tasks=({"tool": "dub", "params": {"language": "it"}},))
+    verdict = classify_chain_against_history(requested=requested, historical=(_chain(),))
+    assert verdict.decision == UNPROVEN
+
+
+def test_d2_case5_missing_retry_proof_is_unproven():
+    # ⑤ missing retry proof → never direct create_run (empty history).
+    verdict = classify_chain_against_history(requested=_chain(), historical=())
+    assert verdict.decision == UNPROVEN
+
+
+def test_d2_case6_legacy_fallback_shape_is_unproven():
+    # ⑥ legacy typed Start fallback → never a direct paid run: the
+    # request may equal a DOCKED plan's chain, but with zero confirmed
+    # runs there is nothing to prove it against (docked ≠ approved).
+    legacy = ChainFacts(
+        tasks=({"tool": "write_post", "params": {"language": "en"}},),
+        spec={"target_language": "en", "scope": "full", "operation": "regenerate"},
+    )
+    verdict = classify_chain_against_history(requested=legacy, historical=())
+    assert verdict.decision == UNPROVEN
+
+
+def test_family_retry_subsequence_is_continuation():
+    # The 整类重做 shape: one family's verbatim tasks of a confirmed
+    # chain, spec work-fields echoed — provably inside approved scope.
+    requested = _chain(tasks=(_TASKS[1],))
+    verdict = classify_chain_against_history(requested=requested, historical=(_chain(),))
+    assert verdict.decision == CONTINUATION
+    assert verdict.reasons == ("family_retry",)
+
+
+def test_family_retry_spanning_two_chains_is_unproven():
+    # Task A from run 1 + task B from run 2: the combination was never
+    # confirmed together — a per-chain proof, never a union.
+    chain_a = _chain(tasks=({"tool": "write_post", "params": {"language": "en"}},))
+    chain_b = _chain(tasks=({"tool": "dub", "params": {"language": "de"}},))
+    requested = _chain(
+        tasks=(
+            {"tool": "write_post", "params": {"language": "en"}},
+            {"tool": "dub", "params": {"language": "de"}},
+        )
+    )
+    verdict = classify_chain_against_history(requested=requested, historical=(chain_a, chain_b))
+    assert verdict.decision == UNPROVEN
+
+
+def test_family_retry_reordered_subset_is_unproven():
+    # A reordered subset executes in an order no approval covered —
+    # task order IS the execution order.
+    requested = _chain(tasks=(_TASKS[1], _TASKS[0]))
+    verdict = classify_chain_against_history(requested=requested, historical=(_chain(),))
+    assert verdict.decision == UNPROVEN
+
+
+def test_family_retry_with_altered_params_is_unproven():
+    requested = _chain(tasks=({"tool": "translate", "params": {"language": "de"}},))
+    verdict = classify_chain_against_history(requested=requested, historical=(_chain(),))
+    assert verdict.decision == UNPROVEN
+
+
+def test_family_retry_with_spec_mismatch_is_unproven():
+    requested = _chain(tasks=(_TASKS[1],), spec={**_SPEC, "persona_id": "p2"})
+    verdict = classify_chain_against_history(requested=requested, historical=(_chain(),))
+    assert verdict.decision == UNPROVEN
+
+
+def test_empty_requested_chain_is_unproven():
+    # An empty chain through the paid entry claims nothing and proves
+    # nothing — never the vacuous-subsequence continuation.
+    verdict = classify_chain_against_history(requested=_chain(tasks=()), historical=(_chain(),))
+    assert verdict.decision == UNPROVEN

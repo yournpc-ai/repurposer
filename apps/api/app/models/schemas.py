@@ -3261,6 +3261,29 @@ class GenerateRequest(BaseModel):
         default="regenerate",
         description="Operation to apply when scope is targeted.",
     )
+    # Retry-reference echo (ADR-087 §4 D2, Phase 4 B5): the client names
+    # WHICH historical confirmed scope it means — these ride into the
+    # TaskSpec verbatim so an exact retry's run.context equals the
+    # original's. They are NEVER authorization proof (Rule 9): the
+    # server-side gate proves chain equality against persisted run.context
+    # rows; a client-invented combination simply matches nothing → 422
+    # scope.unproven.
+    persona_id: str | None = Field(
+        default=None,
+        description="The run-pinned persona of the chain being retried (echo of run.context).",
+    )
+    caption_mode: Literal["bilingual", "source_only", "target_only"] | None = Field(
+        default=None,
+        description="The caption mode of the chain being retried (echo of run.context).",
+    )
+    source_asset_id: str | None = Field(
+        default=None,
+        description="The source-role asset pin of the chain being retried (echo of run.context).",
+    )
+    exemplar_asset_id: str | None = Field(
+        default=None,
+        description="The exemplar-role asset pin of the chain being retried (echo of run.context).",
+    )
 
 
 class ExportRequest(BaseModel):

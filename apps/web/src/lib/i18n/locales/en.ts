@@ -1424,6 +1424,8 @@ const en = {
     },
     stopped: "Generation stopped.",
     failed: "Generation failed",
+    scopeUnproven:
+      "This run can't be verified as an approved retry on the server — confirm the plan in the chat below, then start it from there.",
   },
   questionDock: {
     autonomy: {

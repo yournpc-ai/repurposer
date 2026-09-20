@@ -54,6 +54,12 @@ from app.chat.service import (
 from app.pipeline.lifecycle import project_lifecycle
 from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 from app.pipeline.product_graph import product_ranks
+from app.pipeline.scope_classifier import (
+    CONTINUATION,
+    ChainFacts,
+    classify_chain_against_history,
+    load_historical_chains,
+)
 from app.pipeline.outputs import (
     aggregate_step_cost,
     compose_spec_prompt,
@@ -829,6 +835,54 @@ async def generate_content(
             detail="Plan must be confirmed via the chat plan path first.",
         )
     instruction = request.instruction or "Generate content from the uploaded assets."
+    resolved_language = (
+        request.target_language or first_task_language(request.tasks) or "en"
+    )
+
+    # Paid Authorization gate (ADR-087 §4 D2, Phase 4 B5 — SERVER-VERIFIABLE
+    # APPROVED RETRY): a tasks-bearing request is paid work, so it must be
+    # provably INSIDE the already-confirmed scope — exact retry of a
+    # historical confirmed chain, or one family's verbatim re-run of it
+    # (the 整类重做 shape). The proof is server-side chain equality against
+    # persisted run.context rows; the request's own fields are the retry
+    # REFERENCE, never the proof (Rule 9 — "client sent tasks" /
+    # "client says retry" authorize nothing). Unproven → the machine-
+    # readable blocker, never create_run (Rule 10): the chat dock is the
+    # only confirmation seat (D2-B/C).
+    if request.tasks is not None:
+        historical = await load_historical_chains(db, project_id)
+        verdict = classify_chain_against_history(
+            requested=ChainFacts(
+                tasks=tuple(t.model_dump() for t in request.tasks),
+                spec={
+                    "target_language": resolved_language,
+                    # Raw, not the materialized default — None reads as
+                    # "take the default" and strips in canonical form.
+                    "instruction": request.instruction,
+                    "tone_settings": (
+                        request.tone_settings.model_dump()
+                        if request.tone_settings
+                        else None
+                    ),
+                    "persona_id": request.persona_id,
+                    "scope": request.scope,
+                    "operation": request.operation,
+                    "target_id": request.target_id,
+                    "caption_mode": request.caption_mode,
+                    "source_asset_id": request.source_asset_id,
+                    "exemplar_asset_id": request.exemplar_asset_id,
+                },
+            ),
+            historical=historical,
+        )
+        if verdict.decision != CONTINUATION:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={
+                    "code": "scope.unproven",
+                    "reasons": list(verdict.reasons),
+                },
+            )
 
     # Persist the original prompt in the project-scoped conversation if it is
     # not already there. This is a no-op when the conversation already has messages.
@@ -839,11 +893,7 @@ async def generate_content(
         # at the birthplace — ValueError here is a client-facing 422.
         task_spec = TaskSpec(
             tasks=request.tasks,
-            target_language=(
-                request.target_language
-                or first_task_language(request.tasks)
-                or "en"
-            ),
+            target_language=resolved_language,
             instruction=instruction,
             tone_settings=(
                 request.tone_settings.model_dump() if request.tone_settings else None
@@ -852,6 +902,10 @@ async def generate_content(
             scope=request.scope,
             operation=request.operation,
             target_id=request.target_id,
+            persona_id=request.persona_id,
+            caption_mode=request.caption_mode,
+            source_asset_id=request.source_asset_id,
+            exemplar_asset_id=request.exemplar_asset_id,
         )
         run = await create_run(db, project, task_spec)
     except CreditsInsufficientError as exc:

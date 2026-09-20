@@ -47,14 +47,24 @@ unknown-tool path is locked by a contract test.
   2026-09-21). A tool the registry can no longer resolve (legacy
   ``spec.tool``) proves nothing → ``unproven``.
 - ``classify_chain_against_history`` — chain entries (typed /generate,
-  verbatim retry, D2). The requested chain + spec-level work fields must
-  EQUAL a historical confirmed chain after canonicalization (recursive
-  null-strip — the proposal convention is "null = take the default" — with
-  mapping keys canonicalized; the task ORDER is preserved — it is the
-  execution order). Client claims ("this is a retry") are never proof
-  (Rule 9); only equality against a server-persisted chain is. Strictness
-  is deliberate: a false negative docks a legitimate retry (safe), a false
-  positive would run unapproved paid work (never).
+  verbatim retry, D2). Two proof tiers, both against server-persisted
+  confirmed chains only (client claims — "this is a retry", a retry
+  button's origin — are never proof, Rule 9):
+  **exact retry** = the requested chain + spec-level work fields EQUAL a
+  historical confirmed chain after canonicalization (recursive null-strip
+  — the proposal convention is "null = take the default" — with mapping
+  keys canonicalized; the task ORDER is preserved — it is the execution
+  order). **family retry** = the requested tasks form a NON-EMPTY ordered
+  subsequence of ONE historical chain with the same spec work-fields —
+  the 整类重做 shape (re-run one family of the confirmed chain verbatim);
+  the single-chain requirement means a combination never confirmed
+  together (task A from run 1 + task B from run 2) proves nothing. Every
+  matched task is canonical-equal (tool + params), so a param edit
+  (altered scope) or an unmatched task (new output) fails the proof.
+  Strictness is deliberate: a false negative docks a legitimate retry
+  (safe), a false positive would run unapproved paid work (never). The
+  matcher owns zero tool/param semantics — no per-tool param is ever
+  special-cased here (the B1 extensibility guardrail).
 
 Gatherers (``load_graph_facts`` / ``load_historical_chains``) read
 pipeline-owned tables only, so DB access stays in this Application Command
@@ -258,24 +268,42 @@ def classify_chain_against_history(
     requested: ChainFacts,
     historical: tuple[ChainFacts, ...],
 ) -> ScopeVerdict:
-    """Prove an exact retry: the requested chain must EQUAL a server-
-    persisted confirmed chain (D2). No match → ``unproven`` → Confirmation
-    Dock — never guessed into continuation (Rule 10)."""
-    wanted = _normalize_chain(requested)
+    """Prove an approved retry (D2): exact-chain equality (``exact_retry``)
+    or a non-empty ordered subsequence of one historical chain with equal
+    spec work-fields (``family_retry`` — the 整类重做 shape). No match →
+    ``unproven`` → Confirmation Dock — never guessed into continuation
+    (Rule 10)."""
+    if not requested.tasks:
+        # An empty chain claims no paid execution yet arrives through a
+        # paid entry — provable neither way (and never the 整类重做 shape,
+        # which re-runs a non-empty family).
+        return ScopeVerdict(UNPROVEN, ("no_exact_retry",))
+    wanted_spec = _spec_projection(requested.spec)
+    wanted_tasks = tuple(_canonicalize(dict(t)) for t in requested.tasks)
     for entry in historical:
-        if _normalize_chain(entry) == wanted:
+        if _spec_projection(entry.spec) != wanted_spec:
+            continue
+        entry_tasks = tuple(_canonicalize(dict(t)) for t in entry.tasks)
+        if entry_tasks == wanted_tasks:
             return ScopeVerdict(CONTINUATION, ("exact_retry",))
+        if _is_subsequence(wanted_tasks, entry_tasks):
+            return ScopeVerdict(CONTINUATION, ("family_retry",))
     return ScopeVerdict(UNPROVEN, ("no_exact_retry",))
 
 
-def _normalize_chain(facts: ChainFacts) -> tuple:
-    """The canonical comparison form: spec work-fields projection (mapping
-    key order erased, explicit nulls stripped) + the task list in ORDER."""
-    spec_projection = {k: v for k, v in facts.spec.items() if k in SPEC_WORK_FIELDS}
-    return (
-        _canonicalize(spec_projection),
-        tuple(_canonicalize(dict(t)) for t in facts.tasks),
-    )
+def _is_subsequence(needle: tuple, haystack: tuple) -> bool:
+    """Ordered (not necessarily contiguous) containment — the 整类重做
+    family filter preserves the confirmed chain's relative order, and a
+    reordered request executes in an order no approval covered."""
+    it = iter(haystack)
+    return all(any(item == candidate for candidate in it) for item in needle)
+
+
+def _spec_projection(spec: Mapping[str, Any]) -> tuple:
+    """The work-fields projection in canonical form (display / governance
+    fields are not the work; explicit nulls strip — null = take the
+    default)."""
+    return _canonicalize({k: v for k, v in spec.items() if k in SPEC_WORK_FIELDS})
 
 
 def _canonicalize(value: Any) -> Any:

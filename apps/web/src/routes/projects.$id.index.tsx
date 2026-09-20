@@ -71,6 +71,12 @@ interface WorkflowRun {
     persona_id?: string | null
     instruction?: string | null
     tone_settings?: Record<string, unknown> | null
+    /** Caption mode of a captioned-chain run (S7); echoed verbatim by an
+     * exact retry (ADR-087 §4 D2 — the retry reference, never the proof). */
+    caption_mode?: "bilingual" | "source_only" | "target_only" | null
+    /** 资产角色 pins (ADR-078); same retry-echo rule as caption_mode. */
+    source_asset_id?: string | null
+    exemplar_asset_id?: string | null
     /** The proposer's fresh naming of the run (ADR-058 — LLM 建图时命名);
      * absent on typed/legacy paths (readers fall back to the chain label). */
     name?: string | null
@@ -616,11 +622,18 @@ function ProjectDetailPage() {
           return { tool: task.tool, params }
         },
       )
+      // Exact retry = the chain + the spec work-fields echoed verbatim
+      // (ADR-087 §4 D2): the server gate proves equality against persisted
+      // run.context — the echo is the retry REFERENCE, never the proof.
       await apiPost(`/api/v1/projects/${projectId}/generate`, {
         tasks,
         target_language: ctx?.target_language || results.project.language || "en",
         instruction: ctx?.instruction || undefined,
         tone_settings: ctx?.tone_settings || undefined,
+        persona_id: ctx?.persona_id ?? undefined,
+        caption_mode: ctx?.caption_mode ?? undefined,
+        source_asset_id: ctx?.source_asset_id ?? undefined,
+        exemplar_asset_id: ctx?.exemplar_asset_id ?? undefined,
       })
       await fetchResults()
     } catch (e) {

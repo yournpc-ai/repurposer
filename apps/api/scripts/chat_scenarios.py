@@ -2901,6 +2901,24 @@ async def s13_credits_insufficient_birthplace_422(ctx: Ctx) -> None:
               "required rides the payload", detail)
         check(await count_runs(pid) == 0, "no run was born", None)
 
+        # D2（Phase 4 B5）：/generate 的 tasks 载荷现在必须是服务端可证的
+        # approved retry——先种一条已确认历史链（本请求正是它的 exact
+        # retry），门放行后出生地的 credits 422 才是本断言的目标。
+        async with AsyncSessionLocal() as db:
+            db.add(
+                WorkflowRun(
+                    project_id=uuid.UUID(pid),
+                    status=WorkflowStatus.COMPLETED,
+                    context={
+                        "tasks": [{"tool": "write_post", "params": {"language": "en"}}],
+                        "target_language": "en",
+                        "scope": "full",
+                        "operation": "regenerate",
+                    },
+                )
+            )
+            await db.commit()
+
         # typed /generate（legacy fallback 路）——同形同义。
         res2 = await local.client.post(
             f"/projects/{pid}/generate",
@@ -2914,6 +2932,25 @@ async def s13_credits_insufficient_birthplace_422(ctx: Ctx) -> None:
         check(detail2.get("code") == "credits.insufficient"
               and detail2.get("balance") == 0 and detail2.get("required", 0) > 0,
               "the /generate payload is the same shape", detail2)
+
+        # D2-B（Phase 4 B5）：不可证载荷 → machine-readable 422
+        # scope.unproven，永不 create_run——门先于余额检查开火（不可证
+        # 即拒，与余额无关），run 计数恒等于刚种的 1。
+        res3 = await local.client.post(
+            f"/projects/{pid}/generate",
+            json={
+                "tasks": [{"tool": "write_post", "params": {"language": "fr"}}],
+                "target_language": "fr",
+            },
+        )
+        check(res3.status_code == 422,
+              "/generate unproven chain is a 422", res3.text)
+        detail3 = (res3.json() or {}).get("detail") or {}
+        check(detail3.get("code") == "scope.unproven"
+              and "no_exact_retry" in (detail3.get("reasons") or []),
+              "the unproven payload is machine-readable", detail3)
+        check(await count_runs(pid) == 1,
+              "the unproven request never reaches the birthplace", None)
 
         # 台账零行：check_hold 拒在 hold_run 之前，run 行也随事务回滚。
         async with AsyncSessionLocal() as db:
