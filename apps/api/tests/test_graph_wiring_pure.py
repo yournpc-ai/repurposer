@@ -1275,11 +1275,14 @@ def test_document_frame_full_text_math_cjk_latin_empty():
     # 598 → the 560 cap binds.
     assert _document_frame({"text": "字" * 1000}) == (340, 490)
     assert _document_frame({"text": "a" * 2000}) == (340, 560)
-    # Empty text → the floor again; the task_book role adds the confirm
-    # allowance (+88) — visible once the text's own need clears the floor:
-    # Latin 600 → ceil(600/67) = 9 lines → 26 + 16 + 162 + 16 = 220 + 88.
+    # Empty text → the floor again. The frame math is role-blind (Phase 3
+    # Batch C: the task_book +88 confirm reservation retired — B1-lite
+    # read-face filtering keeps task_book nodes off the client, and the
+    # Canvas confirm seat it reserved for was retired in Batch A):
+    # Latin 600 → ceil(600/67) = 9 lines → 26 + 16 + 162 + 16 = 220 → the
+    # 280 floor binds (was 308 with the +88 reservation).
     assert _document_frame({"text": ""}) == (340, 280)
-    assert _document_frame({"text": "a" * 600, "role": "task_book"}) == (340, 308)
+    assert _document_frame({"text": "a" * 600, "role": "task_book"}) == (340, 280)
 
 
 # ---- settle_frames_with_edges (the door's frame settle, 2026-09-08) ---------

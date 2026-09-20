@@ -336,10 +336,9 @@ _ASSET_FRAME: dict[str, tuple[int, int]] = {
 }
 _ASSET_FRAME_DEFAULT = _FRAME_CLASS["asset"]
 
-# The task-book document's role tag (graph_fill's stamps set it; the frame
-# law reads it for the dock-time confirm allowance). One home here — the
-# graph's role vocabulary is the door's business, never a magic string per
-# call site.
+# The task-book document's role tag (graph_fill's stamps set it). One home
+# here — the graph's role vocabulary is the door's business, never a magic
+# string per call site.
 _TASK_BOOK_ROLE = "task_book"
 
 # 全文卡律 (2026-09-10 判词④——进了卡面的必须原文全文，无摘要无浓缩) + 封顶
@@ -355,11 +354,6 @@ _TASK_BOOK_ROLE = "task_book"
 # mirrors cross-referenced, never a third copy (判词②).
 _DOCUMENT_LINE_PX = 18  # text-xs leading-relaxed (same as the text card)
 _DOCUMENT_CAPTION_PX = 26  # NodeCaption band (= PRODUCT_LABEL_PX)
-# The task_book's dock-time confirm anatomy (price + balance + the Start
-# button): resident while the book is unconfirmed, so the frame reserves it
-# from birth; post-Start the card simply fills less of its reservation
-# (cards fill INTO frames, never the reverse).
-_DOCUMENT_CONFIRM_PX = 88
 # The cap — one law with the client mirror (layout.ts DOCUMENT_MAX_H); the
 # value = the text frame class's 560 reservation.
 _DOCUMENT_MAX_H = 560
@@ -382,8 +376,6 @@ def _document_frame(spec: dict[str, Any]) -> tuple[int, int]:
     chars_per_line = 43 if cjk else 67
     lines = max(1, math.ceil(len(text) / chars_per_line)) if text else 1
     h = _DOCUMENT_CAPTION_PX + 16 + lines * _DOCUMENT_LINE_PX + 16
-    if spec.get("role") == _TASK_BOOK_ROLE:
-        h += _DOCUMENT_CONFIRM_PX
     return w, min(max(h, _DOCUMENT_MIN_H), _DOCUMENT_MAX_H)
 
 # 统一摆位律 (2026-09-09 拍板): ONE frame law owns every newborn's frame
