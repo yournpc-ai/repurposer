@@ -207,6 +207,8 @@ apps/api/
 │   ├── chat/            # Agent Interface：routes / service / intent / stream_extract（ProseDeltaExtractor，N-26）
 │   │                    #   / activity.py（Activity Projection，ADR-087 §3 Phase 2：LoopEvent + name-known
 │   │                    #   → user-safe assistant.activity 帧的纯投影器，kind=用户语义类别，零 DB 零 Domain 读）
+│   │                    #   / system_status.py（System Status 词汇唯一家，Phase 3 Batch C：
+│   │                    #   THINKING_PHASE_COMPOSING + observe_phase_callback 公开协议，ADR-087 §1/§6）
 │   ├── pipeline/        # Pipeline（RunPlan 内核）
 │   │   ├── routes/      # projects（含 GET /projects/{id}/graph 画布直读帧，ADR-057）/ assets / outputs / runs / music / recipes 端点
 │   │   ├── orchestrator.py        # RunPlan 物化/走图（create_run = WorkflowRun 唯一出生地；逐节点 estimate 落库 = 报价存储侧）

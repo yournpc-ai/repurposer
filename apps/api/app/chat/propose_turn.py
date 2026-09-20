@@ -58,7 +58,6 @@ from app.chat.service import (
     _edit_op_items,
     _has_resolved_caption_mode,
     _needs_caption_mode_question,
-    _observe_phase_callback,
     _prefers_zh,
     _resume_ack_line,
     _reminder_tail,
@@ -66,6 +65,7 @@ from app.chat.service import (
     _validate_edit_ops,
     latest_pending_question,
 )
+from app.chat.system_status import observe_phase_callback
 from app.models.schemas import (
     AnswerPayload,
     AnswerProposal,
@@ -618,7 +618,7 @@ async def run_propose_turn(
             on_reasoning=on_reasoning,
             on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready,
-            on_observe=_observe_phase_callback(on_phase),
+            on_observe=observe_phase_callback(on_phase),
             on_loop_event=on_loop_event,
             on_checkpoint=(
                 # ADR-085: the checkpoint channel (persist + SSE forward) —
