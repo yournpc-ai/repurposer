@@ -1357,10 +1357,20 @@ async def answer_question(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Message not found")
     if message.question is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Message is not a question")
-    if message.answer is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Question already answered")
-
     question = QuestionPayload.model_validate(message.question)
+    if message.answer is not None:
+        # D3 (Phase 4 B6): on the confirmation seat the stale-start blocks
+        # are machine-readable — a superseded task_book is no longer the
+        # current confirmation scope; a re-start is a double gesture.
+        if question.kind == "task_book":
+            if (message.answer or {}).get("text") == "superseded":
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, {"code": "start.scope_mismatch"}
+                )
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, {"code": "start.already_answered"}
+            )
+        raise HTTPException(status.HTTP_409_CONFLICT, "Question already answered")
     # Kind × question-kind contract: a task_book is only ever confirmed
     # (start) or dropped (bail); start is meaningless on any other question.
     if question.kind == "task_book" and data.kind not in ("start", "bail"):
@@ -1512,21 +1522,12 @@ async def answer_question(
                 if isinstance(project.pending_brief, dict)
                 else None
             )
-            if pending is None:
-                raise HTTPException(
-                    status.HTTP_409_CONFLICT, "No pending plan to start."
-                )
             # The review panel's edited plan wins over the stored
             # pending brief — panel edits must reach the run they confirm.
             # Panel edits ARE task-list mutations (ADR-043): the same data
             # structure the LLM proposes, so the confirmed chain ships
             # verbatim — no merge machinery.
-            intent = data.intent or pending.intent
-            if intent is None:
-                # Brief-only row (ask-turn write) — no plan was ever drafted.
-                raise HTTPException(
-                    status.HTTP_409_CONFLICT, "No pending plan to start."
-                )
+            intent = (data.intent or pending.intent) if pending is not None else None
             # caption_mode is intent metadata the review panel never edits —
             # a panel-submitted intent without it (client-side normalize may
             # strip fields it doesn't know) says "not mentioned", never
@@ -1535,19 +1536,51 @@ async def answer_question(
             # overwrite fix; without it, answer→Start via the PANEL dropped
             # the mode even though answer→Start via prose kept it).
             if (
-                intent.caption_mode is None
+                intent is not None
+                and intent.caption_mode is None
+                and pending is not None
                 and pending.intent is not None
                 and pending.intent.caption_mode is not None
             ):
                 intent = intent.model_copy(
                     update={"caption_mode": pending.intent.caption_mode}
                 )
-            tasks = list(intent.tasks)
-            if not tasks:
-                raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    "The plan is empty — nothing to start.",
-                )
+            tasks = list(intent.tasks) if intent is not None else []
+            # D3 (Phase 4 B6): the Start seat enforces the SAME four-
+            # conjunction lifecycle truth the client reads (门禁三) — "the
+            # button is disabled" is the first line, never the only one.
+            # The structural guards (no pending plan / empty chain) and the
+            # projection verdict (material / adjudication / prerequisite /
+            # active conflicting run) all surface as machine-readable codes
+            # before paid create_run, never as disguised business errors.
+            from app.pipeline.lifecycle import (  # deferred: chat → pipeline
+                evaluate_start_gate,               # only, one-directional
+                project_lifecycle,
+            )
+            from app.ui_locale import current_ui_language  # deferred
+
+            stamp = await project_lifecycle(
+                db,
+                project,
+                pending_question=message,
+                # The branch guarantees task_book — pass the plan flag
+                # directly: the answer write above precedes this dispatch,
+                # so is_pending_plan (which requires an UNANSWERED row)
+                # always reads False here and would flip the gatherer into
+                # its prerequisite branch, blocking every Start.
+                pending_plan=True,
+                ui_language=current_ui_language() or "en",
+            )
+            gate = evaluate_start_gate(
+                has_pending_plan=intent is not None,
+                effective_tasks_nonempty=bool(tasks),
+                stamp=stamp,
+            )
+            if gate is not None:
+                detail: dict[str, Any] = {"code": gate.code}
+                if gate.blockers:
+                    detail["blockers"] = list(gate.blockers)
+                raise HTTPException(gate.http_status, detail)
             # The confirmed chain's draft twin must mirror what Start
             # actually runs (K5): the review panel's hand edits (data.intent)
             # may diverge from the last docked stamp — re-sync idempotently
@@ -1557,7 +1590,6 @@ async def answer_question(
                 clear_draft_graph,
                 stamp_draft_graph,
             )
-            from app.ui_locale import current_ui_language  # deferred
 
             try:
                 # Same prose law as the dock (判词④): the confirmed intent's

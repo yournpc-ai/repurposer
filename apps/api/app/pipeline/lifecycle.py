@@ -256,6 +256,65 @@ def compute_lifecycle(facts: LifecycleFacts) -> LifecycleStamp:
     )
 
 
+# ---- The Start gate (ADR-087 §4 D3, Phase 4 B6) -----------------------------------
+
+
+@dataclass(frozen=True)
+class StartGateVerdict:
+    """One pre-birth block at the ONLY confirmation seat (``answer_question``
+    kind="start" — the dock pill and the G-1 prose confirm share it,
+    plan_turn._start_run funnels into the same function). Machine-readable
+    by construction (D3: never a disguised business error — "the frontend
+    button is disabled" is the first line, never the only one).
+    ``http_status`` separates the structural guards (409 — the request is
+    stale / there is nothing to confirm) from the readiness block (422 —
+    the four-conjunction projection says not yet)."""
+
+    http_status: int
+    code: str
+    blockers: tuple[str, ...] = ()
+
+
+def evaluate_start_gate(
+    *,
+    already_answered: bool = False,
+    superseded: bool = False,
+    has_pending_plan: bool,
+    effective_tasks_nonempty: bool,
+    stamp: LifecycleStamp,
+) -> StartGateVerdict | None:
+    """Every check that must hold before the Start seat reaches paid
+    ``create_run``, in evaluation order (the precedence the blockers
+    report). ``None`` = the start may proceed.
+
+    - ``superseded`` (the dock moved on — the answered task_book is no
+      longer the current confirmation scope) beats the generic
+      ``already_answered`` (a double start) — D3's "current plan /
+      task_book 与确认范围一致" and "explicit confirmation missing".
+    - no resolvable pending plan → 409 ``start.no_pending_plan``: charge
+      semantics are by definition unavailable there (§3's deliberate
+      equivalence: charge ≡ has_pending_plan) and there is nothing to
+      confirm — one code covers D3's charge-unavailable and
+      confirmation-missing rows.
+    - an empty effective chain is not a confirmable scope (422
+      ``start.empty_plan``).
+    - the stamp's four conjuncts → 422 ``start.blocked`` carrying the
+      projection's own blocker ids (material / adjudication / prerequisite
+      / active conflicting run).
+    """
+    if superseded:
+        return StartGateVerdict(409, "start.scope_mismatch")
+    if already_answered:
+        return StartGateVerdict(409, "start.already_answered")
+    if not has_pending_plan:
+        return StartGateVerdict(409, "start.no_pending_plan")
+    if not effective_tasks_nonempty:
+        return StartGateVerdict(422, "start.empty_plan")
+    if not stamp.confirmation_ready:
+        return StartGateVerdict(422, "start.blocked", stamp.blockers)
+    return None
+
+
 async def project_lifecycle(
     db: AsyncSession,
     project: "Project",

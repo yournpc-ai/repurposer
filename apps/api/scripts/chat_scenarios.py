@@ -2976,6 +2976,19 @@ async def s13_credits_insufficient_birthplace_422(ctx: Ctx) -> None:
                 raised = e
         check(raised is not None and raised.balance == -50,
               "a negative balance fails even a free (0) hold", raised)
+
+        # D3（Phase 4 B6）：Start 服务端四合取强制——活跃 run 冲突时服务端
+        # machine-readable 阻断（前端按钮 disabled 只是第一道防线）；被阻
+        # 的 Start 永不生 run（计数恒 = 历史 1 + 活跃 1）。
+        await seed_active_run(pid)
+        res4 = await local.answer(turn1["assistant_message"]["id"], {"kind": "start"})
+        check(res4.status_code == 422,
+              "typed Start is server-blocked on an active run", res4.text)
+        detail4 = (res4.json() or {}).get("detail") or {}
+        check(detail4.get("code") == "start.blocked"
+              and "active_run" in (detail4.get("blockers") or []),
+              "the Start blocker is machine-readable", detail4)
+        check(await count_runs(pid) == 2, "the blocked Start births no run", None)
     finally:
         await local.cleanup()
         await local.close()

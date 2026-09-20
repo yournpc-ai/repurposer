@@ -300,3 +300,106 @@ def test_multi_blocker_order_is_the_predicate_evaluation_order() -> None:
     # decorative).
     assert not stamp.plan_ready
     assert not stamp.confirmation_ready
+
+
+# ---- D3 Start gate six-case matrix (ADR-087 §4, Phase 4 B6) ----------------
+
+from app.pipeline.lifecycle import evaluate_start_gate  # noqa: E402
+
+_READY_STAMP = compute_lifecycle(_ready_facts())
+
+
+def test_d3_case1_confirmation_ready_is_allowed() -> None:
+    # ① confirmation_ready=true → allowed (None = proceed to create_run).
+    verdict = evaluate_start_gate(
+        has_pending_plan=True, effective_tasks_nonempty=True, stamp=_READY_STAMP
+    )
+    assert verdict is None
+
+
+def test_d3_case2_confirmation_not_ready_is_blocked_machine_readable() -> None:
+    # ② confirmation_ready=false → 422 start.blocked carrying the
+    # projection's own blocker ids (here: material pending).
+    stamp = compute_lifecycle(_ready_facts(assets_pending=True))
+    verdict = evaluate_start_gate(
+        has_pending_plan=True, effective_tasks_nonempty=True, stamp=stamp
+    )
+    assert verdict is not None
+    assert verdict.http_status == 422
+    assert verdict.code == "start.blocked"
+    assert "material_pending" in verdict.blockers
+
+
+def test_d3_case3_charge_semantics_unavailable_is_blocked() -> None:
+    # ③ charge semantics unavailable → blocked. §3's deliberate
+    # equivalence (charge ≡ has_pending_plan) folds this into the
+    # no-pending-plan structural guard — one code covers it.
+    verdict = evaluate_start_gate(
+        has_pending_plan=False, effective_tasks_nonempty=True, stamp=_READY_STAMP
+    )
+    assert verdict is not None
+    assert verdict.http_status == 409
+    assert verdict.code == "start.no_pending_plan"
+
+
+def test_d3_case4_scope_mismatch_is_blocked() -> None:
+    # ④ scope mismatch (the answered task_book was superseded — the dock
+    # moved on) → 409 start.scope_mismatch, and it beats the generic
+    # already-answered code.
+    verdict = evaluate_start_gate(
+        already_answered=True,
+        superseded=True,
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+    )
+    assert verdict is not None
+    assert verdict.http_status == 409
+    assert verdict.code == "start.scope_mismatch"
+
+
+def test_d3_case5_active_conflicting_run_is_blocked() -> None:
+    # ⑤ active conflicting run → 422 start.blocked with active_run.
+    stamp = compute_lifecycle(_ready_facts(active_run=True))
+    verdict = evaluate_start_gate(
+        has_pending_plan=True, effective_tasks_nonempty=True, stamp=stamp
+    )
+    assert verdict is not None
+    assert verdict.http_status == 422
+    assert verdict.code == "start.blocked"
+    assert verdict.blockers == ("active_run",)
+
+
+def test_d3_case6_explicit_confirmation_missing_is_blocked() -> None:
+    # ⑥ explicit confirmation missing (a double start) → 409
+    # start.already_answered; no pending plan reads as the same
+    # missing-confirmation guard (start.no_pending_plan, case ③'s code).
+    verdict = evaluate_start_gate(
+        already_answered=True,
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+    )
+    assert verdict is not None
+    assert verdict.http_status == 409
+    assert verdict.code == "start.already_answered"
+
+
+def test_d3_empty_chain_is_not_a_confirmable_scope() -> None:
+    verdict = evaluate_start_gate(
+        has_pending_plan=True, effective_tasks_nonempty=False, stamp=_READY_STAMP
+    )
+    assert verdict is not None
+    assert verdict.http_status == 422
+    assert verdict.code == "start.empty_plan"
+
+
+def test_d3_gate_precedence_structural_before_projection() -> None:
+    # The structural guards precede the projection verdict: a missing
+    # plan reports no_pending_plan even when the stamp would also block.
+    not_ready = compute_lifecycle(_ready_facts(assets_pending=True))
+    verdict = evaluate_start_gate(
+        has_pending_plan=False, effective_tasks_nonempty=True, stamp=not_ready
+    )
+    assert verdict is not None
+    assert verdict.code == "start.no_pending_plan"
