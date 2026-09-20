@@ -37,11 +37,15 @@ unknown-tool path is locked by a contract test.
   upstream strictly GREW → it now executes on a configuration no approval
   covered (``expansion``); upstream shrank or swapped → the D4-interim
   deletion-semantics case, provable neither way (``unproven``); upstream
-  unchanged → inside approved scope. Registry-unknown tools (a legacy
-  ``spec.tool`` NODE_KINDS no longer declares) can prove nothing →
-  ``unproven``. Registry-internal members (``produces_outputs=False``,
-  e.g. research — their cost folds into the family estimate, preflight §8)
-  ride as notes only and never flip the verdict alone (B2 复议点, in-册).
+  unchanged → inside approved scope. Paid member = every tool-carrying
+  node whose tool the registry resolves (the tools registry's billing
+  guardrail: every task is paid work — LLM / image / render);
+  ``produces_outputs`` is a settle-time bookkeeping flag, NOT a paid-ness
+  flag (translate_clip / dub_clip / render / research all carry False and
+  are all paid — the Batch-1 note-only carve-out for False members was
+  retired the moment its first counter-example fired, preflight §8 复议点,
+  2026-09-21). A tool the registry can no longer resolve (legacy
+  ``spec.tool``) proves nothing → ``unproven``.
 - ``classify_chain_against_history`` — chain entries (typed /generate,
   verbatim retry, D2). The requested chain + spec-level work fields must
   EQUAL a historical confirmed chain after canonicalization (recursive
@@ -91,8 +95,11 @@ class NodeFact:
     state: str  # draft | queued | running | done | failed | skipped | stale
     fill_key: str | None  # spec.fill_key — the persisted identity
     tool: str | None  # spec.tool — the executable identity
-    produces_outputs: bool | None  # registry declaration, gatherer-resolved
-    # (None = the tool is unknown to the current registry — proves nothing)
+    produces_outputs: bool | None  # registry RESOLUTION marker, not a paid-ness
+    # flag: every registry-known tool is paid work (the tools registry's own
+    # billing guardrail — LLM / image / render), and translate_clip / dub_clip
+    # / render / research all carry False here. None = the tool is unknown to
+    # the current registry → proves nothing → unproven.
 
 
 @dataclass(frozen=True)
@@ -158,7 +165,6 @@ def classify_graph_scope(
 
     expansion: list[str] = []
     unproven: list[str] = []
-    notes: list[str] = []
 
     for node_id in run_node_ids:
         member = post_by_id.get(node_id)
@@ -168,19 +174,20 @@ def classify_graph_scope(
         if member.tool is None:
             continue  # not executable — never part of the paid scope
         key = member.fill_key or node_id
+        # Every registry-known tool is paid work; a registry miss can prove
+        # nothing (the False case is settle bookkeeping, not free work).
+        known = member.produces_outputs is not None
         prior = pre_by_id.get(node_id)
         approved = prior is not None and prior.state != "draft"
         if not approved:
             # Born draft by the door in this batch, or still an unconfirmed
             # draft: executing it is NEW paid work (Rule 6), never an
             # approved continuation (Rule 10 — a draft edit is not a bypass).
-            if member.produces_outputs is True:
+            if known:
                 tag = "new_paid_node" if prior is None else "draft_node_executed"
                 expansion.append(f"{tag}:{key}")
-            elif member.produces_outputs is None:
-                unproven.append(f"unclassified_tool_member:{member.tool}@{node_id}")
             else:
-                notes.append(f"internal_tool_member:{member.tool}@{node_id}")
+                unproven.append(f"unclassified_tool_member:{member.tool}@{node_id}")
             continue
         # Approved member: does it now execute on an input set no approval
         # covered? (connect re-wires it; delete starves it.)
@@ -188,14 +195,8 @@ def classify_graph_scope(
         upstream_after = _reach(post_rev, node_id)
         if upstream_before == upstream_after:
             continue
-        if member.produces_outputs is None:
+        if not known:
             unproven.append(f"unclassified_tool_member:{member.tool}@{node_id}")
-            continue
-        if member.produces_outputs is False:
-            # Registry-internal members never flip the verdict alone
-            # (preflight §8, in-册 — B2 复议点), but the note keeps the
-            # altered configuration visible.
-            notes.append(f"internal_tool_inputs_changed:{key}")
             continue
         added = upstream_after - upstream_before
         removed = upstream_before - upstream_after
@@ -205,10 +206,10 @@ def classify_graph_scope(
             unproven.append(f"closure_inputs_reduced:{key}")
 
     if expansion:
-        return ScopeVerdict(EXPANSION, tuple(expansion + unproven + notes))
+        return ScopeVerdict(EXPANSION, tuple(expansion + unproven))
     if unproven:
-        return ScopeVerdict(UNPROVEN, tuple(unproven + notes))
-    return ScopeVerdict(CONTINUATION, tuple(notes))
+        return ScopeVerdict(UNPROVEN, tuple(unproven))
+    return ScopeVerdict(CONTINUATION)
 
 
 def _reverse_adjacency(edges: tuple[EdgeFact, ...]) -> dict[str, set[str]]:

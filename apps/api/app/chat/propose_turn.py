@@ -8,7 +8,14 @@ states' mechanical translation (task_list → ``propose_tasks``, edit_ops →
 
 - ``propose_tasks`` / ``edit_graph`` runs still come from
   ``_create_run_from_tasks`` — the ONLY run birthplace (wiring resolves its
-  subgraph through ``apply_wiring_ops`` first, the graph's only write door);
+  subgraph through ``apply_wiring_ops`` first, the graph's only write door).
+  Phase 4 B2 (ADR-087 §4 + D4): ``edit_graph``'s run births are gated by the
+  Deterministic Scope Classifier — the door's RESULTING paid execution scope
+  is adjudicated against the pre-op run-born graph inside a savepoint; an
+  approved continuation runs autonomously (Frozen Rule 5), an expansion /
+  unprovable scope rolls the door's mutation back and docks as a PendingPlan
+  + task_book question instead (Rule 6/10 — never a silent paid run on new
+  scope);
 - ``apply_edit_ops`` still goes through the operations registry's
   ``apply_operations`` with message lineage;
 - every adjudication rejection (registry / wiring door / transform targets)
@@ -50,6 +57,7 @@ from app.chat.service import (
     _cannot_do_text,
     _caption_choice_is_meaningful,
     _checkpoint_callback,
+    _compute_plan_reasons,
     _create_message,
     _create_run_from_tasks,
     _derive_chat_caption_mode,
@@ -62,8 +70,10 @@ from app.chat.service import (
     _resume_ack_line,
     _reminder_tail,
     _run_active_text,
+    _safe_task_estimate,
     _validate_edit_ops,
     latest_pending_question,
+    sync_plan_question,
 )
 from app.chat.system_status import observe_phase_callback
 from app.models.schemas import (
@@ -71,11 +81,14 @@ from app.models.schemas import (
     AnswerProposal,
     ApplyEditOpsArgs,
     AssetType,
+    Brief,
     ChatAnswerArgs,
     ChatAskArgs,
     ChatMention,
     EditGraphArgs,
     EditOpsProposal,
+    InferredIntent,
+    PendingPlan,
     ProposeTasksArgs,
     QuestionPayload,
     QuestionProposal,
@@ -425,13 +438,32 @@ class ChatTurn:
 
     async def _edit_graph(self, params: EditGraphArgs, prose: str) -> str | None:
         """wiring → 修订 = edit_prompt(node) + run({node} ∪ downstream)
-        (ADR-057 K4): the ops land through the graph's ONLY write door, then
-        the resolved subgraph translates back to a chain and rides the ONLY
-        run birthplace — zero bypass. The door's own rejections ARE the
-        loop's feedback."""
+        (ADR-057 K4), gated by the Deterministic Scope Classifier (ADR-087
+        §4 + D4, Phase 4 B2): the ops land through the graph's ONLY write
+        door inside a savepoint, then the door's RESULTING paid execution
+        scope is adjudicated against the pre-op run-born graph —
+
+        - ``continuation`` (provably approved scope): the run births
+          autonomously through the ONLY run birthplace (Frozen Rule 5),
+          exactly as before;
+        - ``expansion`` / ``unproven`` (new paid work, or scope provable
+          neither way): the savepoint rolls the door's mutation back and
+          the translated chain docks as a PendingPlan + task_book question
+          (Rule 6/10) through the SAME machinery the plan path / the
+          caption replay use — estimate, draft-graph preview with
+          canonical fill keys, Start filling in place. A bail restores the
+          graph exactly, and an LLM add_node spec missing fill_key can
+          never twin a node at Start.
+
+        The door's own rejections ARE the loop's feedback."""
         db, project = self.db, self.project
         from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
         from app.pipeline.graph_revise import tasks_for_graph_nodes
+        from app.pipeline.scope_classifier import (
+            CONTINUATION,
+            classify_graph_scope,
+            load_graph_facts,
+        )
         from app.models.tables import GraphNode
 
         proposal = WiringProposal(ops=params.ops, summary=prose, name=params.name)
@@ -439,24 +471,52 @@ class ChatTurn:
         async def _dispatch(p: WiringProposal) -> UUID | None:
             if project is None or not p.ops:
                 raise WiringRejected("wiring: no ops to apply")
-            delta = await apply_wiring_ops(db, UUID(str(project.id)), p.ops)
-            if not delta.run_nodes:
-                # A pure graph edit with no run (e.g. a delete) lands as-is.
-                return None
-            run_nodes = list(
-                (
-                    await db.execute(
-                        select(GraphNode).where(GraphNode.id.in_(delta.run_nodes))
+            project_id = UUID(str(project.id))
+            # The approved-scope baseline (Batch 1 preflight ①): the pre-op
+            # run-born graph. The classifier never sees ops — it compares
+            # plain facts gathered before and after the door (D4).
+            pre_nodes, pre_edges = await load_graph_facts(db, project_id)
+            nested = await db.begin_nested()
+            try:
+                delta = await apply_wiring_ops(db, project_id, p.ops)
+                if not delta.run_nodes:
+                    # A pure graph edit with no run (e.g. a delete) lands
+                    # as-is — no paid execution was requested.
+                    await nested.commit()
+                    return None
+                run_nodes = list(
+                    (
+                        await db.execute(
+                            select(GraphNode).where(GraphNode.id.in_(delta.run_nodes))
+                        )
                     )
+                    .scalars()
+                    .all()
                 )
-                .scalars()
-                .all()
-            )
-            by_id = {str(n.id): n for n in run_nodes}
-            ordered = [by_id[str(nid)] for nid in delta.run_nodes if str(nid) in by_id]
-            tasks = tasks_for_graph_nodes(ordered)
-            if not tasks:
-                raise WiringRejected("run: the resolved subgraph has nothing executable")
+                by_id = {str(n.id): n for n in run_nodes}
+                ordered = [by_id[str(nid)] for nid in delta.run_nodes if str(nid) in by_id]
+                tasks = tasks_for_graph_nodes(ordered)
+                if not tasks:
+                    raise WiringRejected("run: the resolved subgraph has nothing executable")
+                post_nodes, post_edges = await load_graph_facts(db, project_id)
+                verdict = classify_graph_scope(
+                    pre_nodes=pre_nodes,
+                    pre_edges=pre_edges,
+                    post_nodes=post_nodes,
+                    post_edges=post_edges,
+                    run_node_ids=tuple(str(nid) for nid in delta.run_nodes),
+                )
+                if verdict.decision == CONTINUATION:
+                    await nested.commit()
+                else:
+                    # Roll the door's mutation back — the dock's own draft
+                    # stamp (inside sync_plan_question) previews the plan
+                    # with canonical fill keys instead.
+                    await nested.rollback()
+            except BaseException:
+                if nested.is_active:
+                    await nested.rollback()
+                raise
             # The edited programs pin the run's instruction (the writers'
             # GenerationContext.instruction steers the rewrite); the
             # summary-only fallback keeps the run's plan honest.
@@ -464,19 +524,67 @@ class ChatTurn:
                 str(op.get("prompt")) for op in p.ops
                 if op.get("op") == "edit_prompt" and op.get("prompt")
             )
-            # 判词④ pins inherit on a revision run too (the conversation's
-            # resident state) — a remix revision keeps honoring the roles.
+            if verdict.decision == CONTINUATION:
+                # 判词④ pins inherit on a revision run too (the conversation's
+                # resident state) — a remix revision keeps honoring the roles.
+                source_pin, exemplar_pin = await self._role_pins_for(tasks)
+                return await _create_run_from_tasks(
+                    db, project, tasks, p.summary, instruction=instruction or None,
+                    source_asset_id=source_pin, exemplar_asset_id=exemplar_pin,
+                    name=p.name or None,
+                )
+            # Expansion / unproven → Confirmation Dock (Rule 6/10): the
+            # translated chain becomes a PendingPlan + task_book question —
+            # the caption-replay pattern verbatim (Start reads intent.tasks
+            # / specific_instruction / pins off the stored pending).
             source_pin, exemplar_pin = await self._role_pins_for(tasks)
-            return await _create_run_from_tasks(
-                db, project, tasks, p.summary, instruction=instruction or None,
-                source_asset_id=source_pin, exemplar_asset_id=exemplar_pin,
+            intent = InferredIntent(
+                action="draft",
+                tasks=tasks,
+                answer=p.summary or "",
+                specific_instruction=instruction or None,
                 name=p.name or None,
             )
+            preserved_brief = (
+                Brief.model_validate(project.pending_brief["brief"])
+                if isinstance(project.pending_brief, dict)
+                and isinstance(project.pending_brief.get("brief"), dict)
+                else Brief()
+            )
+            project.pending_brief = PendingPlan(
+                prompt=self.text,
+                intent=intent,
+                brief=preserved_brief,
+                reasons=await _compute_plan_reasons(db, project, intent),
+                persona_id=(
+                    project.pending_brief.get("persona_id")
+                    if isinstance(project.pending_brief, dict)
+                    else None
+                ),
+                source_asset_id=source_pin,
+                exemplar_asset_id=exemplar_pin,
+                derived=[],
+            ).model_dump(mode="json")
+            bailed_run_ids = await sync_plan_question(
+                db, self.user_id, project, intent, self.text,
+                reasons=project.pending_brief["reasons"],
+                brief=preserved_brief,
+                echo=intent.answer,
+                estimate=await _safe_task_estimate(db, project, intent.tasks),
+            )
+            docked = await latest_pending_question(db, self.conversation_id)
+            self.outcome = (docked, None, bailed_run_ids, self.settled_question)
+            return None
 
         try:
             run_id = await _dispatch(proposal)
         except (WiringRejected, ToolRejected, ValueError) as e:
             return str(e)
+        if self.outcome is not None:
+            # The dock path set the outcome inside _dispatch — the docked
+            # task_book question IS the turn's assistant message; no run,
+            # no duplicate prose line on top.
+            return None
         assistant_message = await _create_message(
             db, self.conversation_id, "assistant", prose,
             workflow_run_id=run_id,

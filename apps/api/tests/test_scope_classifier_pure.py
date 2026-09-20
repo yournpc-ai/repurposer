@@ -224,31 +224,36 @@ def test_downstream_leaf_delete_is_continuation():
     assert verdict.decision == CONTINUATION
 
 
-# ---- graph scope: registry-internal members ride as notes only ---------------------
+# ---- graph scope: every registry tool is paid (the §8-correction locks) ----------
 
 
-def test_internal_tool_member_is_note_only():
-    # produces_outputs=False (e.g. research): cost folds into the family
-    # estimate — visible as a note, never a verdict of its own (preflight
-    # §8, in-册). (Wiring it INTO a paid member's upstream would be a real
-    # input expansion for THAT member — see test_inputs_grown_is_expansion.)
+def test_transform_tool_member_is_paid_expansion():
+    # The Batch-1 §8 carve-out's killer: translate_clip carries
+    # produces_outputs=False (a settle-bookkeeping flag) yet is paid work
+    # (TTS + render) — a new transform node is an expansion like any other.
     pre = [paid("a")]
-    post = [paid("a"), node("r", state="draft", tool="research", produces=False)]
-    verdict = classify(pre, [], post, [], ("r",))
-    assert verdict.decision == CONTINUATION
-    assert verdict.reasons == ("internal_tool_member:research@r",)
+    post = [paid("a"), paid("t", state="draft", tool="translate_clip")]
+    post[1] = NodeFact(
+        id="t", type="video", state="draft",
+        fill_key="translate_clip#t", tool="translate_clip", produces_outputs=False,
+    )
+    verdict = classify(pre, [], post, [edge("a", "t", "video")], ("t",))
+    assert verdict.decision == EXPANSION
+    assert verdict.reasons == ("new_paid_node:translate_clip#t",)
 
 
-def test_internal_tool_member_note_rides_along_expansion():
+def test_registry_internal_tool_also_expands():
+    # research (produces_outputs=False, an internal LLM loop) is paid work
+    # too — no note-only free pass remains anywhere in the vocabulary.
     pre = [paid("a")]
     post = [
         paid("a"),
-        node("r", state="draft", tool="research", produces=False),
-        paid("b", state="draft", tool="translate"),
+        NodeFact(id="r", type="text", state="draft",
+                 fill_key="research#r", tool="research", produces_outputs=False),
     ]
-    verdict = classify(pre, [], post, [edge("a", "b")], ("r", "b"))
+    verdict = classify(pre, [], post, [], ("r",))
     assert verdict.decision == EXPANSION
-    assert verdict.reasons == ("new_paid_node:translate#b", "internal_tool_member:research@r")
+    assert verdict.reasons == ("new_paid_node:research#r",)
 
 
 # ---- graph scope: determinism -------------------------------------------------------
