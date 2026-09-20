@@ -23,7 +23,7 @@
 
 | Contract | Owner | Canonical source | Pure tests | Scenario / script 座 | Static guards | Status / Known limitations |
 |:---|:---|:---|:---|:---|:---|:---|
-| Lifecycle 谓词（五态 + 四合取 + blocker 谓词序） | `app/pipeline/lifecycle.py` | ADR-087 §2 + NAMING 固定不等式 | `test_lifecycle_pure.py`（22） | S1 戳三拍（preparing/dock 四合取/active_run blocker）；S20A 戳断言 | gate 5b + teeth | 🟢 ｜ gatherer（DB 事实解析）只有剧本座，无纯测试 |
+| Lifecycle 谓词（五态 + 四合取 + blocker 谓词序） | `app/pipeline/lifecycle.py` | ADR-087 §2 + NAMING 固定不等式 | `test_lifecycle_pure.py`（22） | S1 戳三拍（preparing/dock 四合取/active_run blocker）；S20A 戳断言 | gate 5b + teeth | 🟢 ｜ gatherer（DB 事实解析）只有剧本座，无纯测试 ｜ run 活性/存在 = transport 事实，非 lifecycle 推导（Phase 3 Batch C 拍板 B）——三读者合法在册：ChatDock `runAttached`（裁定 1 窗口收敛腿）/ `projects.$id.index` `hasRuns` / `runActive`；禁补戳读者（不重开信封→盖章窗口）｜「lifecycle 键恒在」不变量（拍板 A）：graph 响应零节点早退同带 lifecycle 键（空项目 blocked vs unknown 今日 UI 零差异） |
 | Material Readiness（pending/processing/failed 归并 + required-input） | lifecycle gatherer + Asset 状态机 | ADR-087 §2 | 同上 T1–T6b | S20A / S20B + fixture 律（§5） | — | 🟢 |
 | Upload-on-birth（text-yielding → transcript node queued 出生 + 幂等；非产出族不生） | `app/pipeline/graph_fill.py` `stamp_transcript_node` | Phase 1（8972e74 有意变更）+ ADR-087 §2 | `test_graph_wiring_pure.py` 边界型（四文本产出族阳性 + IMAGE/VOICE_SAMPLE/SLIDES 阴性 + 幂等） | — | — | 🟢 |
 | Confirmation Doctrine（四合取组合点唯一 + 手势必需 + dock pill 唯一座） | lifecycle + `chat/service.py` | ADR-063 / ADR-054 / ADR-070 | T9/T9b/T10/T10b/T15 + Charge 等价钉 | S1 戳拍②③；S13 422 出生地 | gate 5c（客户端不推导 readiness） | 🟢 ｜ Charge 等价见 §3 |
@@ -33,7 +33,7 @@
 | Lifecycle/Presentation 依赖方向（lifecycle 禁 app.chat） | `app/pipeline/lifecycle.py` | ADR-087 §5 | 5b teeth | — | gate 5b | 🟢 |
 | 客户端 lifecycle 读取纪律（读戳合法，本地生成 truth 非法） | `apps/web` ChatDock | ADR-087 §5 | 5c teeth（正反 8 探针） | — | gate 5c | 🟢 ｜ 禁的是「生成」，读 server projection 恒合法 |
 | 戳消费谓词三态（missing ≠ ready，判词 2） | `apps/web/src/lib/lifecycleStamp.ts` | ADR-087 §2 + Phase 3 判词 2 | `lifecycleStamp.test.ts`（10） | — | gate 5c | 🟢（Phase 3 Batch A） |
-| Web 纯缝（activity reducer 对 / replay 映射器 / stream dispatch） | `apps/web` activityReducer / historyReplay / chatStreamFrames | ADR-087 §1/§3 + 打字机律 | 三套件（8+13+12，vitest 纯 node） | — | — | 🟢（Phase 3 Batch A）｜ DOM 渲染级仍 DEFERRED（§6） |
+| Web 纯缝（activity reducer 对 / replay 映射器 / stream dispatch） | `apps/web` activityReducer / historyReplay / chatStreamFrames | ADR-087 §1/§3 + 打字机律 | 三套件（8/14/10，vitest 纯 node） | — | — | 🟢（Phase 3 Batch A）｜ DOM 渲染级仍 DEFERRED（§6） |
 | Canvas 唯一确认座（Confirm/Start 唯 dock pill） | `apps/web` flow/ + ChatDock | ADR-070 + Phase 3 判词 1 | — | S1 戳拍②③（dock pill 路径） | draftConfirm/onDraftConfirm/startPendingPlan 标识符清零（grep 可证） | 🟢（Phase 3 Batch A）｜ 渲染级负向锁（画布无 Start 钮的 DOM 断言）仍 DEFERRED |
 | Product Graph（词表 v3 / apply_wiring_ops 唯一写口 / 读面映射） | `app/pipeline/graph_*` | ADR-057 / ADR-076 | `test_graph_wiring_pure.py` + `test_product_graph_pure.py` | S12 等 | check_gates 既有门 | 🟢 |
 | C-0/C-1/C-2 拓扑空间权威三律（membership / rank / RunOp 拓扑序） | `app/pipeline/product_graph.py` | ADR-086 | `test_product_graph_pure.py` | — | — | 🟢 ｜ legacy `materialize` 读面不一致 = 合同 §12 D-PFA-01 在册 |
@@ -168,7 +168,7 @@ truth 从「处理中」变成「处理失败」——前置条件被 worker 调
 | ~~`_stream_reads` legacy print fallback~~ | `chat_scenarios.py` | **RESOLVED（Phase 3 Batch B ⑥, `37e252c`）**：纯 Activity 键序，print fallback 删除 |
 | ~~`SCENARIO_ACTIVITY_LEGACY=1` 降级通道~~ | `chat_scenarios.py` | **RESOLVED（Phase 3 Batch B ⑥, `37e252c`）**：逃生舱 + 尾部汇总打印同删——第二信号消失后降级失去对象 |
 | ~~旧 phase token（drafting/inspecting/repairing/creating_run）去留~~ | 服务端 + 客户端 | **RESOLVED（Phase 3 Batch B）**：③ 三替身退役（`44b5d4d`——工作证据归 Activity 投影器座位，inspecting i18n 族随读帧保留）；⑤ creating_run 删除（`b9dc6ee`——B4 CDP 死窗取证双场景 PASS 后剪线，`scratch/phase3_b4_deadwindow.mjs`）；composing 幸存为 System Status 唯一宏观叙事（判词 3） |
-| ~~客户端 ActivityStream 渲染级 vitest + ChatDock reducer 纯化提取~~ | `apps/web` | **reducer 纯化提取已落地（Phase 3 Batch A，2026-09-19）**：`activityReducer.ts`（upsert/sweep/reset 纯函数 + 8 例）/ `historyReplay.ts`（mapHistoryRows + 13 例，含「恢复不推导 lifecycle」keys 白名单锁）/ `chatStreamFrames.ts`（routeStreamFrame + 12 例）/ `lifecycleStamp.ts`（戳消费三态谓词 + 10 例，missing ≠ ready）+ `vitest.config.ts`（纯 node 零 DOM，app 插件在 vitest 下挂起的 setup gap 已补）。**仍 DEFERRED**：ActivityStream 渲染级（DOM）vitest |
+| ~~客户端 ActivityStream 渲染级 vitest + ChatDock reducer 纯化提取~~ | `apps/web` | **reducer 纯化提取已落地（Phase 3 Batch A，2026-09-19）**：`activityReducer.ts`（upsert/sweep/reset 纯函数 + 8 例）/ `historyReplay.ts`（mapHistoryRows + 14 例，含「恢复不推导 lifecycle」keys 白名单锁）/ `chatStreamFrames.ts`（routeStreamFrame + 10 例）/ `lifecycleStamp.ts`（戳消费三态谓词 + 10 例，missing ≠ ready）+ `vitest.config.ts`（纯 node 零 DOM，app 插件在 vitest 下挂起的 setup gap 已补）。**仍 DEFERRED**：ActivityStream 渲染级（DOM）vitest |
 
 ### DEFERRED → ops 卫生批（非本阶段）
 
