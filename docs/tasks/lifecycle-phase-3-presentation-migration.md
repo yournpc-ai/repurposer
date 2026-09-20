@@ -116,3 +116,20 @@ PLANNED（2026-09-19 建档，未开工；前置 = Phase 1 全闭环）。
 - **验收 grep 门全过**：`phase === "confirm"` / `"running"` 在 lifecycle 决策零命中（phase 机已不存在）；drafting/inspecting/repairing token 零（退役谱系注释除外）；creating_run 发射器/常量/key 零；`SCENARIO_ACTIVITY_LEGACY` 零；`_stream_reads` fallback 零；PLAN_READY / CONFIRMATION_READY / RUNNING 各自唯一事实源不变。
 - **验证（Claude 自跑）**：vitest 58 绿 / 纯 pytest 305 绿 / API boot 绿 / tsc 2 错 = main HEAD `2d415ba` 预存（layout.ts:441 自引用 + ChatDock typeTargetId 模板串，与本批无关）。
 - **B8 全量验证 PASS（2026-09-20）**：check_gates 全绿（gate 5c 随批加固——`confirmActive` 入本地 readiness 名集，裁定 1 派生谓词唯一直读戳形态，正反探针入 `test_check_gates_pure.py`，`8a57b2a`）；活链剧本回归 S1 / S5 / S6(含 f) / S10 / S20(含 A·B) / S21 全绿——S5 首跑单发红（refine 轮 slots 抖动，合并座本批零触碰，复跑即绿）已登记 verification-contracts §4 KNOWN VARIANCE；prompt 面零触碰（diff 可证），prompt_gate 免检；剧本种子自清理无残留（库内 09-16 三条旧剧本残留属历史会话，非本批）。**Batch B CLOSED。**
+
+**BATCH C PREFLIGHT CLOSED（2026-09-20，只读取证 @ `f60ff4b` + 用户两裁定）**：十项取证闭环，裁决与施工切分如下（证据行号 @ `f60ff4b`，行号会漂移，开工重新定位）——
+
+- **C1 删（本批）**：`graph_store._DOCUMENT_CONFIRM_PX`（+88）= 纯几何债——task_book 节点自 B1-lite 读面过滤（`projects.py:399-417`）永不达客户端，server 侧无 frame 读者（graph_fill 只写 text/spec）；client 镜像已随 Batch A 退役（`layout.ts:235-239` 自证 reservation law 合法）。删常量 + role 条件 + `:358-362` 注释块；`test_graph_wiring_pure.py:1278-1282` 断言迁移。**避让**同文件无关两 88（`_FRESH_COLUMN_RISE` :286 间距常数 / port 几何注释 :280）。
+- **C2 预留删（DEFER 维持）**：`_read_face`（`projects.py:323`）**不搬迁**（= 为目录漂亮移动文件，Prohibited）。dev DB 实测 `document`×10 + `asset`×5 仍在被映射（分支活）；`generator/processor/agent/modifier/materialize` 分支 dev 零行、**prod UNKNOWN**（守卫查询挂账）。删除扳机 = legacy 五型 + 旧工具集 DB 守卫查询全零。
+- **C3 改写（prompt 面，压轴）**：`intent_router_system.j2:30` DENSITY 段——言语分叉改键 agent 自知的链组成 domain fact（one task / ≥2 tasks），**删全部渲染断言**（card/button 出不出、plan 在哪展示、桌面形态）；保留 ADR-070 语义指针（start 控件 = 唯一启动动作）。该段部分断言已失信（"the Start button always appears"——Phase 1 R2 后 pill 以 PLAN_READY 为门）。阈值单主 = `ChatDock.tsx:3550`（不动）。`:26` "plan card's introduction" 保留（语义职责非阈值）。**prompt_gate 三探针必过**（ADR-071 T2，round-robin）+ 剧本 S5/S7/S10/S11/S20A。
+- **C4 改写**：`rendering.py:173` 内联双语串 → `USER_ERROR_LINES` 加 `render_superseded` key（`errors.py:91` 既有注册表，单主化），文案逐字平移，行为零变化。不开「展示词汇出 pipeline」大议题（= ADR-069 人话行全家合同翻案，超出本批）。
+- **C5 迁移**：`THINKING_PHASE_COMPOSING`（`service.py:2186`）+ `_observe_phase_callback`（`:2189`）→ **`app/chat/system_status.py`**（新文件 = chat 模块职责扩充；**不开 `app/presentation/`**——纯声明层无表无队列认领源，不过 NAMING §7 分组准入测试）。顺带消灭 `propose_turn.py:61` / `plan_turn.py:68` 两条 §6 跨模块私有 import（callback 公开化摘帽）。登记 `MODULE_ARCHITECTURE.md` §7.1 chat 行。
+- **C6 落档（docs-only）**：`verification-contracts.md:36`（§2 行）与 `:171`（§6 行）数字 8+13+12 → 实测 **8/14/10/10**（总账 52 吻合）；`DECISIONS.md:2018` Consequences Batch B commit 清单补 `803096b` / `8a57b2a` / `f60ff4b`。
+- **C7 补戳（用户拍板 A）**：`projects.py:501-502` 零节点早退补 `lifecycle` 键——「lifecycle 键恒在」不变量（2 行；空项目 blocked vs unknown 今日 UI 零差异）。
+- **C8 合同落档（用户拍板 B）**：**代码零改动**——「run 活性/存在 = transport 事实，非 lifecycle 推导」写入 verification-contracts §2 Lifecycle 行注 + ADR-087 Consequences Batch C 行。三读者合法在册：`ChatDock.tsx:1295` runAttached（裁定 1 窗口收敛腿）/ `projects.$id.index.tsx:242` hasRuns / `:271` runActive。**禁补戳读者**（重开裁定 1 信封→盖章窗口）。
+- **C9 抽出**：normalize* 族（`ChatDock.tsx:278-470` 九件 + `:163`/`:168` TaskItem/InferredIntent 接口）→ `apps/web/src/components/chat/chatProtocol.ts`（Batch A 三缝同目录同族）。外部消费仅 `projects.$id.index.tsx:14`。状态机/视图零触碰（Phase 6）。
+- **C10 sweep 干净**：fallback-to-true / phase 机残留 / 退役 token（除合法 `chat.inspecting.*` i18n 族）/ hasDraftGraph / turn.completed→Canvas / activity→lifecycle / pending_brief→readiness **全零命中**；戳读者 = 三个已登记谓词站点。原 Batch C「fallback 终清理」项已由 Batch B 事实闭环，**无需刀**。
+
+**施工切分（七刀，零代码依赖，每刀独立 commit，回滚 = 逐刀 revert）**：① docs-only（C6 + C8 + C7 文档注）→ ② C1 删 → ③ C4 注册表 → ④ C5 迁移 + §7.1 登记 → ⑤ C9 抽出 + tsc → ⑥ C7 补戳（可并②）→ ⑦ C3 prompt 改写 + prompt_gate（压轴，验证成本最高）。
+
+**验证纪律**：preflight 未跑套件（grep + dev DB SELECT 取证）；施工批验证 = 用户自跑——纯 pytest 305 基线 / vitest 52 / tsc 回 2 预存错（`ChatDock.tsx:2412` + `layout.ts:441`，避让不修）/ check_gates / 剧本 S5·S7·S10·S11·S20A / prompt_gate（刀⑦）。**Batch C READY。**
