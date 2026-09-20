@@ -153,7 +153,7 @@ requested graph operations
 | Batch | 内容 | 状态 |
 |---|---|---|
 | **B0** | Decision Ledger + Frozen Rules 落档 + 锚点更正（R5 前端已完成 / review=活档 / caption 方向）+ Contract Matrix 终裁版（**docs-only，本批**） | ✅ 2026-09-20 |
-| B1 | deterministic scope classifier（additive 先行，纯测试先行，零行为切换，无前端改动，无图路由改动） | PLANNED |
+| B1 | deterministic scope classifier（additive 先行，纯测试先行，零行为切换，无前端改动，无图路由改动）。**落地形态（2026-09-20 用户裁定——可扩展性护栏）**：分类器**零 op 词汇**——不重演 ops，消费 wiring 门前后图 facts 纯比对（D4 结果 scope 律，双写漂移从根上消失；新 op/节点族/工具对分类器不可见）；座位 = `app/pipeline/scope_classifier.py`（纯核+装配器，lifecycle.py 同款）+ `test_scope_classifier_pure.py`（27 例） | ✅ 2026-09-20 |
 | B2 | A2 切换：edit_graph 按分类器——approved continuation 自治 / scope expansion → PendingPlan+Dock / unproven → PendingPlan+Dock（零 LLM 决策） | PLANNED |
 | B3 | A1 切换：propose_tasks → PendingPlan → task_book/dock → estimate/charge semantics → PLAN_READY → CONFIRMATION_READY → explicit Start → Paid Run；**禁止同 turn create_run**；复用既有座位，禁止新确认 UI | PLANNED |
 | B4 | prompt 合同修正（独立 commit；只修 propose_tasks / edit_graph 描述 / run 语义 / 确认措辞） | PLANNED |
@@ -209,4 +209,4 @@ Goal / Current evidence / Contract changes / Files / Tests / Migration strategy 
 
 ## Status
 
-IN PROGRESS（2026-09-19 建档；2026-09-20 Preflight 盘点完成 + Decision Gate 四项终裁 + **Batch 0 落档 ✅**；下一批 = B1 deterministic scope classifier）。
+IN PROGRESS（2026-09-19 建档；2026-09-20 Preflight 盘点完成 + Decision Gate 四项终裁 + **Batch 0 落档 ✅** + **Batch 1 落地 ✅**——`pipeline/scope_classifier.py` 零-op-语义纯核+装配器 + 27 例纯测试全绿 + 全量纯套件 332 绿，additive 未接线；下一批 = B2 A2 切换——edit_graph 按分类器裁决：approved continuation 自治 / expansion·unproven → PendingPlan+Dock）。

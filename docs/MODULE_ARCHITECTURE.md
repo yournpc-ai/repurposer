@@ -217,6 +217,11 @@ apps/api/
 │   │   │                        #   装配器（读既有 Domain facts：资产四态 / 出生地 Requirement / 同款链重裁决 /
 │   │   │                        #   has_active_run；chat 事实由调用方经 public 协议传入，本模块零 chat import）；
 │   │   │                        #   读者 = Transport（results/graph 响应）→ Presentation；不加表、不写 DB
+│   │   ├── scope_classifier.py    # Deterministic Scope Classifier（ADR-087 §4 + D4/D2，Phase 4 B1）：
+│   │   │                        #   continuation/expansion/unproven 三值纯核（零 op 词汇——消费 wiring 门前后
+│   │   │                        #   图 facts 比对，D4 结果 scope 律）+ 链逐字匹配器（历史 run.context 证明
+│   │   │                        #   approved retry，D2）+ 纯核+装配器两瓣（facts gatherer 读 graph_nodes/
+│   │   │                        #   graph_edges/workflow_runs 只读）；B1 additive 未接线——B2（edit_graph）/B5（/generate）切换
 │   │   ├── graph.py               # NodeBase 协议 + BoundedLoopNode（有界 loop，ADR-052 B4）+ 图算法（报价=fold/执行=topo/校验=∀/对账=⊆，ADR-039）
 │   │   ├── graph_store.py         # wiring 层（ADR-057）：apply_wiring_ops = 持久图唯一写口
 │   │   │                        #   （add_node / connect / edit_prompt / delete_node / run(_subgraph)，op 校验 +
