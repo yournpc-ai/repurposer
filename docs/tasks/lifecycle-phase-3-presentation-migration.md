@@ -133,3 +133,15 @@ PLANNED（2026-09-19 建档，未开工；前置 = Phase 1 全闭环）。
 **施工切分（七刀，零代码依赖，每刀独立 commit，回滚 = 逐刀 revert）**：① docs-only（C6 + C8 + C7 文档注）→ ② C1 删 → ③ C4 注册表 → ④ C5 迁移 + §7.1 登记 → ⑤ C9 抽出 + tsc → ⑥ C7 补戳（可并②）→ ⑦ C3 prompt 改写 + prompt_gate（压轴，验证成本最高）。
 
 **验证纪律**：preflight 未跑套件（grep + dev DB SELECT 取证）；施工批验证 = 用户自跑——纯 pytest 305 基线 / vitest 52 / tsc 回 2 预存错（`ChatDock.tsx:2412` + `layout.ts:441`，避让不修）/ check_gates / 剧本 S5·S7·S10·S11·S20A / prompt_gate（刀⑦）。**Batch C READY。**
+
+**BATCH C 七刀已落地（2026-09-20，worktree `worktree-phase3-batch-c` commits `c143ad1` ① / `3d57098` ② / `ed0262e` ③ / `99dc8e7` ④ / `273c2b5` ⑤ / `6e5628a` ⑥ / `1ae164d` ⑦）**：
+
+- **① docs-only（C6+C8+C7 文档注）**：verification-contracts §2 Web 纯缝行 8+13+12 → 8/14/10 + §6 行 historyReplay 13→14 / chatStreamFrames 12→10（实测总账 52 吻合）；DECISIONS Consequences Batch B commit 清单补 `803096b`/`8a57b2a`/`f60ff4b`；C8 拍板 B（run 活性/存在 = transport 事实非 lifecycle 推导，三读者合法在册，禁补戳读者）+ C7 拍板 A（「lifecycle 键恒在」不变量）同批落档（§2 Lifecycle 行注 + ADR-087 Consequences Batch C 行）。
+- **② C1 删**：`_DOCUMENT_CONFIRM_PX`（+88）+ role 条件 + 注释块全删；`_TASK_BOOK_ROLE` 保留（graph_fill 5 处在用），仅摘除随删失信注释从句；断言迁移 a*600 role=task_book 308→280（220 触底，旧码 308 牙仍在）。避让两 88 零触碰。
+- **③ C4 注册表**：`render_superseded` key 入 `USER_ERROR_LINES`，文案逐字平移；lang 全域 = primary subtag，`startswith('zh')` ⟺ `user_line` 精确命中（与同函数既有 `render_failed` 同一输入同一助手）——行为零变化。
+- **④ C5 迁移**：`THINKING_PHASE_COMPOSING` + callback → `app/chat/system_status.py`（不开 `app/presentation/`）；callback 公开化摘帽，`propose_turn`/`plan_turn` 两条 §6 跨模块私有 import 同灭；MODULE_ARCH §7.1 chat 行登记。
+- **⑤ C9 抽出**：normalize 族全件 + `TaskItem`/`InferredIntent`/`BriefSlot`/`Brief` 行词汇 → `components/chat/chatProtocol.ts`；ChatDock 回导、`IntentSlot` 随族离舰；外部唯一消费 `projects.$id.index` 改直导。状态机/视图零触碰。
+- **⑥ C7 补戳**：`/graph` 零节点早退补 `lifecycle` 键——`ProjectGraphResponse` 两返回路径同形；`_lifecycle_stamp` 对 `conversation=None` 安全。
+- **⑦ C3 DENSITY 改写**：言语分叉改键链组成 domain fact（never on what the interface shows）；三处渲染断言全删（含失信 "the Start button always appears"）；ADR-070 语义指针保留（button→control surface-neutral）；阈值单主 ChatDock 不动；provenance 头补注。
+- **验证（Claude 自跑，逐刀自绿）**：compileall 全过 / 定向纯 pytest（graph_wiring 64、check_gates+activity 27、lifecycle 22、prompt registry consistency 3）全绿 / 生产 jinja env 渲染探针五断言全过 / tsc 回 2 预存错（避让不修）/ vitest 52/52 绿。
+- **未跑验证（用户自跑）**：纯 pytest 全量 305 基线 / check_gates 全量 / 剧本 S5·S7·S10·S11·S20A（S5 在册方差，复跑即绿不算红）/ prompt_gate 三探针 round-robin（刀⑦）。**待验收回填。**
