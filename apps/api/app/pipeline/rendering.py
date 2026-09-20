@@ -170,7 +170,7 @@ async def _mirror_superseded_node(output_id: UUID, lang: str) -> None:
     the row mid-render): only the RUNNING step — the morph's fresh render step
     stays pending for the next claim. Best-effort, same as _mirror_render_node."""
     try:
-        summary = "已被新的渲染取代" if lang.startswith("zh") else "Replaced by a newer render"
+        summary = user_line("render_superseded", lang)
         async with AsyncSessionLocal() as db:
             await db.execute(
                 text(

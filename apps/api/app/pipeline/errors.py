@@ -70,6 +70,13 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
         "en": "Video rendering failed — please try again",
         "zh": "视频渲染失败，请重试",
     },
+    # Not a failure: the terminal mirror line for a render DISCARDED as
+    # superseded (a morph re-pended the row mid-render) — the running step
+    # settles done with this summary (rendering._mirror_superseded_node).
+    "render_superseded": {
+        "en": "Replaced by a newer render",
+        "zh": "已被新的渲染取代",
+    },
     # Poison-pill terminals (R1 B4a): the attempt cap gave up — the honest
     # next step is the manual reset (reprocess / re-render), which restarts
     # the budget.
