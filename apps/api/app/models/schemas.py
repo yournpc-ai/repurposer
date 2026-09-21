@@ -456,11 +456,14 @@ class AnswerProposal(BaseModel):
 
 
 class WiringProposal(BaseModel):
-    """Intent agent output, state E (ADR-057 K4): edit the persistent graph
-    and re-fill a subgraph — 修订 = ``edit_prompt(node)`` + ``run({node} ∪
-    downstream)``, the revision loop's one form. ``ops`` speaks the
-    graph_store wiring registry's vocabulary (add_node / connect /
-    edit_prompt / delete_node / run); adjudication is
+    """Intent agent output, state E (ADR-057 K4): edit the persistent graph,
+    then the deterministic scope classifier adjudicates the resulting paid
+    execution scope (ADR-087 §4, D4) — an approved-scope continuation
+    (e.g. ``edit_prompt(node)`` + ``run({node} ∪ downstream)`` on filled
+    nodes) re-fills autonomously; a scope expansion / unproven op rolls the
+    door's mutation back and docks a plan for explicit confirmation instead.
+    ``ops`` speaks the graph_store wiring registry's vocabulary (add_node /
+    connect / edit_prompt / delete_node / run); adjudication is
     ``apply_wiring_ops``'s (op shape / references / ports / cycles), never
     the schema boundary's — ops stay loose dicts here so the registry's own
     errors feed the repair round verbatim."""

@@ -2610,7 +2610,15 @@ async def s11_whole_source_and_materialize_matrix(ctx: Ctx) -> None:
     # The source's language is pinned (an English keynote): the 同源语言护栏
     # prompt (2026-08-17) resolves 中英双语 → target zh deterministically —
     # without it the planner infers the source language from the zh prompt.
-    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4", meta={"language": "en"})
+    # Fixture declaration (§5 fixture 律, Phase 4 B8 硬化): the material is
+    # READY — a bare PENDING row would be claimed by the worker, 404 on the
+    # fictional bytes and flip FAILED, and the B6 Start gate then blocks on
+    # material_failed (2026-09-21 首跑取证).
+    await seed_asset(
+        pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
+        extracted_text="A keynote on the future of embodied intelligence.",
+        meta={"language": "en"}, processed=True,
+    )
 
     turn1 = await ctx.chat(pid, "给我的视频加中英双语字幕")
     check(terminal_tool_of(turn1) == "present_plan",
@@ -2624,8 +2632,9 @@ async def s11_whole_source_and_materialize_matrix(ctx: Ctx) -> None:
     subs = [t for t in tasks if t["tool"] == "translate_clip"]
     check(len(subs) == 1 and task_params(subs[0]).get("target_language") == "zh",
           "one translate task into Chinese", tasks)
-    check(task_params(subs[0]).get("bilingual") is True,
-          "双语 → bilingual: true", tasks)
+    check(task_params(subs[0]).get("bilingual") in (True, "true"),
+          "双语 → bilingual: true（§6 在册债的断言迁移：LLM 两形状都发——"
+          "bool True / 字符串 'true'；产品侧 params coercion 仍挂账）", tasks)
     derived = (plan or {}).get("derived") or []
     check(any(r.get("type") == "video" for r in derived),
           "the derived preview shows the whole video", derived)
@@ -3241,7 +3250,14 @@ async def s16_remix_flagship_journey(ctx: Ctx) -> None:
     锁定（登记 INTENT_COVERAGE §6 ⚠️ 行；其代码侧——选项构造 / 答复落 pin /
     默认路径——由纯测试锁定）。复用不重复发声由结构锁住（reuse 早退在火前
     60 行）+ (conversation, trigger, ref) 去重（test_trigger_turn_pure），本
-    剧本末尾断言消息恰一条。"""
+    剧本末尾断言消息恰一条。
+    已知红座（2026-09-21 B8 在册）：P2 的 Start 在 B6 门下 422 material_failed
+    ——material gatherer 的项目级 any() 把失败的 REFERENCE 资产计入（plan-
+    scoped 收窄挂账，verification-contracts §4）；该座即此悬案的常驻验收位，
+    裁决落地前本剧本在此红。P1 已知轮盘（同日取证）：mention 回合若路由
+    直接 dock 默认计划（裁量内形态），ADR-080 第二谓词使 warm review 准入
+    即静默、且静默不复燃——wait_trigger_review 240s 超时即「flake」；无
+    计划 dock 的回合则正常发言（复跑即绿的机理，非时序抖动）。"""
     fixture_prefix = f"scenario/s16-{uuid.uuid4().hex[:8]}"
     src_key = await copy_fixture(REMIX_SOURCE_KEY, fixture_prefix)
     ex_key = await copy_fixture(REMIX_EXEMPLAR_KEY, fixture_prefix)
@@ -3306,7 +3322,14 @@ async def s16_remix_flagship_journey(ctx: Ctx) -> None:
     ex2 = await seed_asset(
         pid2, ctx.user_id, AssetType.VIDEO, "highlight-clips-preview.mp4",
         file_url=ex_key,
-        status=AssetStatus.FAILED,  # warm 永不点火 → run 路径新鲜物化（T4 的火）
+        status=AssetStatus.FAILED,  # warm 永不点火的现实形态（如参考片自身
+        # ASR 失败）——run 路径不看处理态只读字节，T4 的火因此必走 run 座位。
+        # 已知代价（在册，勿再「修」）：B6 Start 门的 material gatherer 是
+        # 项目级 any()，失败的 REFERENCE 资产也阻塞 Start（material_failed）
+        # ——plan-scoped 收窄 = 产品侧裁决挂账，verification-contracts §4。
+        # 2026-09-21 B8 曾改 processed=True 绕门，结果 warm 在 pin 落定即点火、
+        # 触发回合在计划 dock 同秒落 dock 抢占确认座（另一在册悬案），且
+        # run 的 decompile 走 reuse 早退使 T4 永不发声——语义破坏更大，回退。
     )
     src_status = await wait_asset_status(
         src2, {AssetStatus.COMPLETED, AssetStatus.FAILED}
@@ -3586,9 +3609,14 @@ async def s18_idless_asset_read_terminalizes(ctx: Ctx) -> None:
 async def s19_turn_durability_and_trigger_admission(ctx: Ctx) -> None:
     """交互完整性批 A+B (2026-09-17) 回归：用户消息从回合第一拍即可持久
     （turn_state: in_flight → settled 随回合提交盖章），trigger 准入门永不
-    超越在途用户回合 —— 回合进行中 in-process 直接点火 run_trigger_turn，
-    review 必须落在用户回合收敛之后。2026-09-16 事故原样：commit-once
-    回合死亡吞掉用户消息 + understanding_warmed 撞进在途回合盲说。"""
+    超越在途用户回合 —— 回合进行中 in-process 直接点火 run_trigger_turn。
+    2026-09-16 事故原样：commit-once 回合死亡吞掉用户消息 +
+    understanding_warmed 撞进在途回合盲说。
+    Phase 4 B8 改写（B3 后语义）：caption 回合收敛即 dock 计划——pending
+    plan 在位时 review 按 ADR-080 第二谓词静默（在途 defer → 收敛静默 =
+    「永不中途开口」的证明形态）；bail 清 pending 后同一世界事件补发言,
+    发言落序锁不变（review 必落在用户回合答复之后）。清 pending 不用
+    Start 的原因见下方注释（空散文 dock 悬案,verification-contracts §4）。"""
     from app.chat.trigger_turn import TRIGGER_UNDERSTANDING, run_trigger_turn
 
     pid = await ctx.new_project("S19 turn durability + admission")
@@ -3663,8 +3691,32 @@ async def s19_turn_durability_and_trigger_admission(ctx: Ctx) -> None:
             "the turn's commit stamps the user row settled",
             settled.turn_state if settled is not None else None,
         )
-    review = await trigger_task  # 5 分钟礼貌窗 >> 正常回合时长——必发言
-    check(review is not None, "the deferred review eventually speaks")
+    review = await trigger_task
+    if is_plan_dock(turn1["assistant_message"]):
+        # ADR-080 单一叙事者律第二谓词的端到端座（Phase 4 B8 改写——B3 后
+        # caption 回合收敛即 dock 计划，pending plan 恒在）：计划自己的
+        # echo 散文已经叙述「我看到了什么 / 我要做什么」，主动 review 此刻
+        # 开口 = 抢麦克风——silence, not defer（pending plan 可能挂几小时,
+        # 而世界事件已诚实落在画布上）。在途 defer 链 → 收敛后静默,正是
+        # 「永不超越用户回合」的证明形态。
+        check(review is None,
+              "ADR-080 第二谓词：pending plan 在位,review 静默（计划的 echo "
+              "持有麦克风——在途 defer → 收敛静默,永不中途开口）", review)
+        # 清 pending 用 bail 不用 Start（2026-09-21 B8 取证后修正）：本剧本的
+        # 主题是 trigger 准入门,不是 Start 门;Start 当前被「空散文 dock 永不
+        # ready」悬案轮盘阻塞——present_plan 空 content 通道是 LLM 合法形态
+        # （实测本剧本的 dock 行 content/intent.answer 双空）,P8「计划散文非
+        # 空」合取静默拒绝 → start.blocked 无 blocker ids（D3 机读性同时受
+        # 损）。裁决挂账 verification-contracts §4。bail 同样清 pending,
+        # 第二谓词的证明形态不变。
+        res = await ctx.answer(turn1["assistant_message"]["id"], {"kind": "bail"})
+        check(res.status_code == 200, "dock bail drops the plan", res.text)
+        review = await run_trigger_turn(uuid.UUID(pid), TRIGGER_UNDERSTANDING,
+                                        "s19-digest-after-bail")
+        check(review is not None,
+              "pending plan 清完(bail)后,同一世界事件补发言")
+    else:
+        check(review is not None, "the deferred review eventually speaks")
     async with AsyncSessionLocal() as db:
         rows = list(
             (

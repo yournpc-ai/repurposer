@@ -268,7 +268,7 @@ ConfirmationScope = 确认拍呈现给用户裁决的**范围事实集**。盘�
 | 角色 pins | `pending_brief.source_asset_id` / `exemplar_asset_id`（ADR-078） | Agent Interface（代码 settle，永不 LLM） | 多视频 remix 时必须已 settle——未 settle 时角色提问 dock 中 = pending_prerequisite 已覆盖 | run start 时 stamp 到 TaskSpec |
 | persona | `pending_brief.persona_id` | Agent Interface | **非 scope 条件**——null = Auto，合法 | run.context 钉入 |
 
-**ConfirmationScopeReady 判定（v1）**：链非空 ∧ 结构合法 ∧ 计划散文非空。其余字段或归入其他合取项（估价 → ChargeSemanticsReady），或已被 pending_prerequisite 覆盖（reasons / brief / 角色 pins），或为合法可空（derived / persona）——**盘点结论：ConfirmationScopeReady 不引入任何新事实源，全部读 task_book 行已有 stamp 字段**。
+**ConfirmationScopeReady 判定（v1）**：链非空 ∧ 结构合法 ∧ 计划散文非空【已拍板翻案（ADR-087 Reversal Ledger R10，2026-09-21 终裁）：散文合取删除——`present_plan` 空 content 通道是 LLM 合法形态 + caption 回放确定性空散文，散文合取使合法 dock 结构性永不 ready 且 `start.blocked` 不携戳；**确认 scope = 卡载荷（tasks/brief/estimate——payload 字段级，U4 不涉），散文降为叙事装饰**，空散文 dock 可确认；生效 = Phase 4 修复批】。其余字段或归入其他合取项（估价 → ChargeSemanticsReady），或已被 pending_prerequisite 覆盖（reasons / brief / 角色 pins），或为合法可空（derived / persona）——**盘点结论：ConfirmationScopeReady 不引入任何新事实源，全部读 task_book 行已有 stamp 字段**。
 
 ### P9. Lifecycle Fact → Input Fact → Owner Matrix（2026-09-19 用户新增 Phase 1 前置静态产物）
 
@@ -277,7 +277,7 @@ ConfirmationScope = 确认拍呈现给用户裁决的**范围事实集**。盘�
 | PREPARING（默认） | 无挂起计划 ∨ 任何下游条件不满足 | —（缺省态，无输入） | 缺省 |
 | MATERIAL_READY(P) | ① P 引用资产集（plan-scoped，U2——v1 可由 project-scope legacy resolver 求解，标明兼容性）② 每资产 `processing_status` ③ 链内容事实（transcript / extracted_text / meta.words，镜像 `graph.py` transcript requirement）④ transform 链目标语言 vs `asset.meta.language` | Pipeline（asset_processing 状态机 / 资产文本事实 / ASR 语言事实） | 纯函数，输入 = 资产行 + 链 |
 | PLAN_READY | ① unanswered task_book 行存在 ② MATERIAL_READY(P) ③ 链重裁决通过（`validate_task_list` + `_check_transform_targets` 同款纯函数）④ 无挂起前置提问 | Agent Interface（①④）+ Pipeline（②③的事实输入） | ①④ = 行存在性；②③ = 纯函数 |
-| ConfirmationScopeReady | 链 stamp 非空 ∧ 结构合法 ∧ 计划散文非空（P8） | Agent Interface | 字段级读法（否决 payload-existence 捷径，U4） |
+| ConfirmationScopeReady | 链 stamp 非空 ∧ 结构合法（P8；散文合取已随 R10 翻案删除，生效 = Phase 4 修复批） | Agent Interface | 字段级读法（否决 payload-existence 捷径，U4） |
 | ChargeSemanticsReady | `estimate_credits` 戳（Known）∨ Deferred 面可呈现（静态文案 + hold 规则，ADR-087 §2.1） | Billing 契约（ADR-055）+ Agent Interface dock 戳 | 字段读法 + 静态规则 |
 | NoActiveConflictingRun | `has_active_run` | Pipeline orchestrator（S6） | 现有谓词直读 |
 | CONFIRMATION_READY | 上述四合取（唯一合成点） | —（合成，无新输入） | 纯合取 |

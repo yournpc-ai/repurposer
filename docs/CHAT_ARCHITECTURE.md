@@ -63,9 +63,9 @@ start_run       起已确认计划的 run（唯一出生地，零旁路）
 answer          纯信息直答：言语即回复，无计划无提问无 run
 
 // chat path（有 run 的项目）——CHAT_TOOLS
-propose_tasks   提议新任务链：链校验在执行内（必要时先 dock caption 选项问）→ 出生地起 run
+propose_tasks   提议新任务链：链校验在执行内（必要时先 dock caption 选项问）→ 计划 dock 待确认——同 turn 永不起 run，run 只在显式确认后出生（ADR-087 §4 B3）
 apply_edit_ops  改现有产物：clip-spec 级 op，按 output id 指认（→ Operation Model，§9）
-edit_graph      修订持久图（wiring ops）→ apply_wiring_ops 唯一写口 → 重填受影响子图
+edit_graph      修订持久图（wiring ops）→ apply_wiring_ops 唯一写口 → 已批 scope 内 continuation 自治重填 / 扩张·unproven 回滚转 dock（ADR-087 §4 D4，B2）
 ask_user        提问（同 plan path 形态）
 answer          纯信息直答（读数先调 get_run_status）
 ```
