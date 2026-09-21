@@ -46,7 +46,7 @@ from app.pipeline.quote_card_stack import (
 )
 from app.pipeline.edges import load_plan_prelude_outputs
 from app.pipeline.graph import NODE_KINDS, NodeBase, estimate_mechanical, token_bounds
-from app.pipeline.morph import _render_step_label
+from app.pipeline.morph import render_step_label
 from app.pipeline.outputs import delete_outputs_fk_safe
 from app.pipeline.step_context import _count_words, list_assets
 from app.pipeline.step_display import (
@@ -497,7 +497,7 @@ async def _materialize_quote_card_outputs(
     # paths — the label follows the run's pinned UI language). None when no
     # render_cls is registered or no project is attached (spec["summary"]
     # becomes optional in that case).
-    label = await _render_step_label(db, run)
+    label = await render_step_label(db, run)
 
     if not quotes:
         return []

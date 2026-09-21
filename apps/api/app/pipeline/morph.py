@@ -31,7 +31,7 @@ INPLACE_MORPH_KINDS = (
 _PRODUCER_KINDS = ("select_clips", "materialize_source")
 
 
-async def _render_step_label(db: AsyncSession, run: WorkflowRun) -> str | None:
+async def render_step_label(db: AsyncSession, run: WorkflowRun) -> str | None:
     """The runtime-born render step's builder-written task name (same label()
     source as compile-time nodes), localized to the run's pinned UI locale."""
     from app.pipeline.graph import NODE_KINDS  # deferred: import cycle
@@ -44,7 +44,7 @@ async def _render_step_label(db: AsyncSession, run: WorkflowRun) -> str | None:
     return render_cls.label(None, ui_lang_of(run, project))
 
 
-async def _later_inplace_morph_exists(db: AsyncSession, run: WorkflowRun, node: WorkflowStep) -> bool:
+async def later_inplace_morph_exists(db: AsyncSession, run: WorkflowRun, node: WorkflowStep) -> bool:
     """True when a NON-FORK morph sibling sits LATER in this run's graph.
 
     That morph will rewrite the same outputs' render_spec in place and own
@@ -71,7 +71,7 @@ async def _later_inplace_morph_exists(db: AsyncSession, run: WorkflowRun, node: 
     return bool(count)
 
 
-async def _has_producer_upstream(db: AsyncSession, node: WorkflowStep) -> bool:
+async def has_producer_upstream(db: AsyncSession, node: WorkflowStep) -> bool:
     """True when a clip producer feeds this modifier. The compiler wires the
     producer edge into EVERY modifier of the run, so a later morph's target
     set always unions the producer's full output_refs — this morph's skipped
@@ -91,7 +91,7 @@ async def _has_producer_upstream(db: AsyncSession, node: WorkflowStep) -> bool:
     return bool(count)
 
 
-async def _target_clips(
+async def target_clips(
     db: AsyncSession, node: WorkflowStep, project: Project
 ) -> list[Output]:
     """Clips a modifier step acts on: the upstream steps' output_refs (same
@@ -160,12 +160,12 @@ async def _target_clips(
     return [c for c in clips if c.render_spec]
 
 
-async def _modifier_target_clips(
+async def modifier_target_clips(
     db: AsyncSession, node: WorkflowStep, project: Project
 ) -> list[Output]:
     """Target resolution for modifier steps: an explicit
     ``spec.target_output_id`` (asset-scoped chat) wins; otherwise fall back to
-    the upstream/project clips (``_target_clips``)."""
+    the upstream/project clips (``target_clips``)."""
     target_id = (node.spec or {}).get("target_output_id")
     if target_id:
         clips = list(
@@ -182,10 +182,10 @@ async def _modifier_target_clips(
             .all()
         )
         return [c for c in clips if c.render_spec]
-    return await _target_clips(db, node, project)
+    return await target_clips(db, node, project)
 
 
-async def _run_origin(db: AsyncSession, run: WorkflowRun) -> str:
+async def run_origin(db: AsyncSession, run: WorkflowRun) -> str:
     """Operations-journal source for run-dispatched morphs (agent-loop-upgrade
     W4, ADR-033 shell parity): ``"chat"`` when the run was dispatched from a
     chat message (``messages.workflow_run_id`` backlink), else ``"system"``."""
@@ -234,7 +234,7 @@ async def _clip_source_language(db: AsyncSession, output: Output) -> str | None:
     return None
 
 
-async def _guard_target_differs_from_source(
+async def guard_target_differs_from_source(
     db: AsyncSession,
     clips: list[Output],
     lang: str,
@@ -368,7 +368,7 @@ async def check_transform_targets(
             raise ValueError(_same_language_message(matched, zh=zh))
 
 
-async def _fan_out_renders(
+async def fan_out_renders(
     db: AsyncSession,
     run: WorkflowRun,
     node: WorkflowStep,
@@ -398,7 +398,7 @@ async def _fan_out_renders(
             WorkflowStep.spec["output_id"].astext.in_([str(oid) for oid in output_ids]),
         )
     )
-    if defer_to_later_morph and await _later_inplace_morph_exists(db, run, node):
+    if defer_to_later_morph and await later_inplace_morph_exists(db, run, node):
         await db.execute(
             update(Output)
             .where(Output.id.in_(output_ids))
@@ -414,7 +414,7 @@ async def _fan_out_renders(
         ).scalar_one()
         or node.seq
     )
-    label = await _render_step_label(db, run)
+    label = await render_step_label(db, run)
     for idx, output_id in enumerate(output_ids, start=1):
         db.add(
             WorkflowStep(
@@ -429,7 +429,7 @@ async def _fan_out_renders(
     await db.flush()
 
 
-async def _pend_suppressed_base_renders(
+async def pend_suppressed_base_renders(
     db: AsyncSession,
     run: WorkflowRun,
     node: WorkflowStep,
@@ -441,10 +441,10 @@ async def _pend_suppressed_base_renders(
     """Morph skip-rescue: targets the morph did NOT touch keep their base
     spec, so when the producer's render fan-out was suppressed for this run
     (render_status NULL = render not requested) the morph owes them the
-    render they would otherwise never get. Goes through _fan_out_renders so
+    render they would otherwise never get. Goes through fan_out_renders so
     a later in-place morph defers the same way — but only when that morph
     can actually SEE the rescued clips. Callers pass
-    ``defer_to_later_morph = (not touched) or await _has_producer_upstream(...)``:
+    ``defer_to_later_morph = (not touched) or await has_producer_upstream(...)``:
     a producer edge means every later morph unions the producer's full
     output_refs (skips stay visible); an all-skipped morph leaves empty
     output_refs, so the later morph's project-wide fallback sees them. A
@@ -472,12 +472,12 @@ async def _pend_suppressed_base_renders(
         )
     )
     await db.flush()
-    await _fan_out_renders(
+    await fan_out_renders(
         db, run, node, stale_ids, defer_to_later_morph=defer_to_later_morph
     )
 
 
-async def _record_target_output_ids(node_id: UUID, output_ids: list[UUID]) -> None:
+async def record_target_output_ids(node_id: UUID, output_ids: list[UUID]) -> None:
     """Record the cross-run DAG edge (which outputs this step consumed) on the
     step's spec — jsonb_set in its own session, same discipline as set_stage."""
     async with AsyncSessionLocal() as s:

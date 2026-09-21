@@ -25,13 +25,13 @@ from app.operations.service import apply_precomputed
 from app.pipeline.errors import TransientNodeError
 from app.pipeline.graph import MEDIA, NodeBase, estimate_mechanical
 from app.pipeline.morph import (
-    _fan_out_renders,
-    _guard_target_differs_from_source,
-    _has_producer_upstream,
-    _modifier_target_clips,
-    _pend_suppressed_base_renders,
-    _record_target_output_ids,
-    _run_origin,
+    fan_out_renders,
+    guard_target_differs_from_source,
+    has_producer_upstream,
+    modifier_target_clips,
+    pend_suppressed_base_renders,
+    record_target_output_ids,
+    run_origin,
 )
 from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.pipeline.tracks import spec_provenance
@@ -98,7 +98,7 @@ class DubClip(NodeBase):
         lang = (node.spec or {}).get("target_language") or "en"
         fork = bool((node.spec or {}).get("fork"))
         await set_stage(node.id, "dubbing")
-        clips = await _modifier_target_clips(db, node, project)
+        clips = await modifier_target_clips(db, node, project)
         if not clips:
             await set_summary(
                 node.id,
@@ -106,11 +106,11 @@ class DubClip(NodeBase):
             )
             return []
 
-        origin = await _run_origin(db, run)
+        origin = await run_origin(db, run)
         # Same-language guard (2026-08-17, translate 同款): dubbing zh into
         # zh clones the voice over the same words — pointless spend, fail
         # loud with the fix named.
-        await _guard_target_differs_from_source(
+        await guard_target_differs_from_source(
             db, clips, lang, zh=ui_lang_of(run, project).startswith("zh")
         )
         # 译文 artifact 复用钩 (ADR-072 批 A2): the graph node id threads into
@@ -190,7 +190,7 @@ class DubClip(NodeBase):
             # would never persist. Never defer — the failure cascade-skips
             # every downstream morph; no later morph exists to own these.
             async with AsyncSessionLocal() as s:
-                await _pend_suppressed_base_renders(
+                await pend_suppressed_base_renders(
                     s, run, node, clips, defer_to_later_morph=False
                 )
                 await s.commit()
@@ -200,12 +200,12 @@ class DubClip(NodeBase):
         # Defer only when a later morph can see the skips: a producer edge
         # unions the full output_refs downstream; an all-skip leaves empty
         # refs so the later morph falls back to the project-wide set.
-        await _pend_suppressed_base_renders(
+        await pend_suppressed_base_renders(
             db, run, node, clips, exclude=set(touched),
-            defer_to_later_morph=not touched or await _has_producer_upstream(db, node),
+            defer_to_later_morph=not touched or await has_producer_upstream(db, node),
         )
-        await _fan_out_renders(db, run, node, touched, defer_to_later_morph=not fork)
-        await _record_target_output_ids(node.id, touched)
+        await fan_out_renders(db, run, node, touched, defer_to_later_morph=not fork)
+        await record_target_output_ids(node.id, touched)
         await fill_summary(
             node.id, self.kind, ui_language=ui_lang_of(run, project), n=len(touched), lang=lang.upper()
         )

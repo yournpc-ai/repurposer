@@ -16,12 +16,12 @@ from app.models.tables import Asset, Output, Project, WorkflowRun, WorkflowStep
 from app.operations.service import apply_precomputed
 from app.pipeline.graph import MEDIA, NodeBase, estimate_mechanical
 from app.pipeline.morph import (
-    _fan_out_renders,
-    _has_producer_upstream,
-    _modifier_target_clips,
-    _pend_suppressed_base_renders,
-    _record_target_output_ids,
-    _run_origin,
+    fan_out_renders,
+    has_producer_upstream,
+    modifier_target_clips,
+    pend_suppressed_base_renders,
+    record_target_output_ids,
+    run_origin,
 )
 from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.tools.reframe.procedure import compute_crop_track, resolve_mode
@@ -66,7 +66,7 @@ class ReframeClip(NodeBase):
     ) -> list[UUID]:
         """Write crop_track keyframes onto the target clips, then re-render."""
         await set_stage(node.id, "reframing_clips")
-        clips = await _modifier_target_clips(db, node, project)
+        clips = await modifier_target_clips(db, node, project)
         if not clips:
             await set_summary(
                 node.id,
@@ -75,7 +75,7 @@ class ReframeClip(NodeBase):
             return []
 
         mode_req = (node.spec or {}).get("mode") or "auto"
-        origin = await _run_origin(db, run)
+        origin = await run_origin(db, run)
 
         # Phase 1 — compute only, zero DB writes. Detection costs seconds-
         # to-minutes per clip and apply_precomputed locks the output row
@@ -215,15 +215,15 @@ class ReframeClip(NodeBase):
         # an all-skip leaves empty refs so the later morph falls back to the
         # project-wide set. A partial touch without a producer edge renders
         # the skips now — the later morph would never see them.
-        await _pend_suppressed_base_renders(
+        await pend_suppressed_base_renders(
             db, run, node, clips, exclude=set(touched),
-            defer_to_later_morph=not touched or await _has_producer_upstream(db, node),
+            defer_to_later_morph=not touched or await has_producer_upstream(db, node),
         )
         if not touched:
             return []
 
-        await _fan_out_renders(db, run, node, touched)
-        await _record_target_output_ids(node.id, touched)
+        await fan_out_renders(db, run, node, touched)
+        await record_target_output_ids(node.id, touched)
         await fill_summary(
             node.id,
             self.kind,

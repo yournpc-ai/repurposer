@@ -34,7 +34,7 @@ from app.pipeline.clip_spec import build_clip_spec
 from app.pipeline.decompile import load_skeleton_for_run, skeleton_caption_overrides
 from app.pipeline.graph import NodeBase, estimate_free
 from app.pipeline.graph_store import display_aspect_class
-from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
+from app.pipeline.morph import later_inplace_morph_exists, render_step_label
 from app.pipeline.step_context import list_assets
 from app.pipeline.step_display import set_summary, ui_lang_of
 from app.platform.project_context import resolve_run_persona
@@ -179,8 +179,8 @@ class MaterializeSource(NodeBase):
         # place and owns the render — the base render would be dead work and
         # a last-writer-wins race on the row. Leave render_status NULL
         # (render not requested); the morph pends + fans out (a morph that
-        # skips the clip rescues it via _pend_suppressed_base_renders).
-        suppressed = await _later_inplace_morph_exists(db, run, node)
+        # skips the clip rescues it via pend_suppressed_base_renders).
+        suppressed = await later_inplace_morph_exists(db, run, node)
         spec_dict = spec.model_dump(mode="json")
         # The display-class stamp for "original"-aspect chains (2026-09-13
         # 用户拍板 — 产物卡跟源比例): the source's real pixels (probed into
@@ -231,7 +231,7 @@ class MaterializeSource(NodeBase):
             # the output row (render_status=PENDING) and mirrors terminal
             # state back. The summary preset is the builder-written task name
             # (the task list's pending-row text).
-            label = await _render_step_label(db, run)
+            label = await render_step_label(db, run)
             db.add(
                 WorkflowStep(
                     run_id=run.id,

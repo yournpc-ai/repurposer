@@ -15,12 +15,12 @@ from app.operations.service import apply_precomputed
 from app.pipeline.clip_spec import remove_range
 from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_free
 from app.pipeline.morph import (
-    _fan_out_renders,
-    _has_producer_upstream,
-    _pend_suppressed_base_renders,
-    _record_target_output_ids,
-    _run_origin,
-    _target_clips,
+    fan_out_renders,
+    has_producer_upstream,
+    pend_suppressed_base_renders,
+    record_target_output_ids,
+    run_origin,
+    target_clips,
 )
 from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.tools.filler.detect import detect
@@ -50,7 +50,7 @@ class RemoveFiller(NodeBase):
         the source media — cuts land as hidden segments in the render_spec.
         """
         await set_stage(node.id, "removing_fillers")
-        clips = await _target_clips(db, node, project)
+        clips = await target_clips(db, node, project)
         if not clips:
             await set_summary(
                 node.id,
@@ -58,7 +58,7 @@ class RemoveFiller(NodeBase):
             )
             return []
 
-        origin = await _run_origin(db, run)
+        origin = await run_origin(db, run)
         total_fillers = 0
         total_repeats = 0
         touched: list[UUID] = []
@@ -121,15 +121,15 @@ class RemoveFiller(NodeBase):
         # all-skip leaves empty refs so the later morph falls back to the
         # project-wide set; a partial touch without a producer edge renders
         # the skips now — the later morph would never see them.
-        await _pend_suppressed_base_renders(
+        await pend_suppressed_base_renders(
             db, run, node, clips, exclude=set(touched),
-            defer_to_later_morph=not touched or await _has_producer_upstream(db, node),
+            defer_to_later_morph=not touched or await has_producer_upstream(db, node),
         )
         if not touched:
             return []
 
-        await _fan_out_renders(db, run, node, touched)
-        await _record_target_output_ids(node.id, touched)
+        await fan_out_renders(db, run, node, touched)
+        await record_target_output_ids(node.id, touched)
         await fill_summary(
             node.id,
             self.kind,

@@ -38,7 +38,7 @@ from app.pipeline.decompile import (
 from app.pipeline.outputs import delete_outputs_fk_safe
 from app.pipeline.edges import load_plan_prelude_outputs
 from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase, estimate_agent, token_bounds
-from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
+from app.pipeline.morph import later_inplace_morph_exists, render_step_label
 from app.agents.base import MAX_CHARS_PER_TEXT
 from app.agents.contexts import generation_context
 from app.pipeline.step_context import (
@@ -358,7 +358,7 @@ class SelectClips(NodeBase):
         # place and owns the render — the base fan-out would be dead work and
         # a last-writer-wins race on the rows. Leave render_status NULL; the
         # morph pends + fans out (skips are rescued by the morph).
-        suppressed = await _later_inplace_morph_exists(db, run, node)
+        suppressed = await later_inplace_morph_exists(db, run, node)
         output_ids: list[UUID] = []
         for plan in plans.clips[:clip_count]:
             segment = plan.to_segment()
@@ -452,7 +452,7 @@ class SelectClips(NodeBase):
         # morph; see above.)
         if not suppressed:
             max_seq = int(node.seq)
-            label = await _render_step_label(db, run)
+            label = await render_step_label(db, run)
             for idx, output_id in enumerate(output_ids, start=1):
                 db.add(
                     WorkflowStep(

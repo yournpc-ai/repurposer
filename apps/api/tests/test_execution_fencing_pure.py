@@ -178,7 +178,7 @@ class _World:
         monkeypatch.setattr(orchestrator, "capture_step", _capture)
         monkeypatch.setattr(orchestrator, "sync_graph_node_for_step", _sync)
         monkeypatch.setattr(orchestrator, "_cascade_skip", _cascade)
-        monkeypatch.setattr(orchestrator, "_modifier_target_clips", _rescue)
+        monkeypatch.setattr(orchestrator, "modifier_target_clips", _rescue)
         monkeypatch.setattr(orchestrator, "maybe_finalize_run", _finalize)
 
 

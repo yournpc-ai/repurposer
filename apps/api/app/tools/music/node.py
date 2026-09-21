@@ -16,11 +16,11 @@ from app.models.tables import WorkflowStep, Project, WorkflowRun
 from app.operations.service import apply_operations
 from app.pipeline.graph import MEDIA, NodeBase, estimate_free
 from app.pipeline.morph import (
-    _fan_out_renders,
-    _pend_suppressed_base_renders,
-    _record_target_output_ids,
-    _run_origin,
-    _target_clips,
+    fan_out_renders,
+    pend_suppressed_base_renders,
+    record_target_output_ids,
+    run_origin,
+    target_clips,
 )
 from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.platform.project_context import resolve_persona
@@ -53,7 +53,7 @@ class AddMusic(NodeBase):
         clear error (CHAT_ARCH §10: the conversation offers alternatives).
         """
         await set_stage(node.id, "adding_music")
-        clips = await _target_clips(db, node, project)
+        clips = await target_clips(db, node, project)
         if not clips:
             await set_summary(
                 node.id,
@@ -90,13 +90,13 @@ class AddMusic(NodeBase):
             # defer — the failure cascade-skips every downstream morph, so
             # no later morph exists to own these renders.
             async with AsyncSessionLocal() as s:
-                await _pend_suppressed_base_renders(
+                await pend_suppressed_base_renders(
                     s, run, node, clips, defer_to_later_morph=False
                 )
                 await s.commit()
             raise ValueError(f"No music track found for mood '{mood}'")
 
-        origin = await _run_origin(db, run)
+        origin = await run_origin(db, run)
         touched: list[UUID] = []
         for output in clips:
             # Journal through the SHARED pure-apply path (the editor's batch
@@ -128,8 +128,8 @@ class AddMusic(NodeBase):
             await db.flush()
             touched.append(output.id)
 
-        await _fan_out_renders(db, run, node, touched)
-        await _record_target_output_ids(node.id, touched)
+        await fan_out_renders(db, run, node, touched)
+        await record_target_output_ids(node.id, touched)
         await fill_summary(
             node.id, self.kind,
             ui_language=ui_lang_of(run, project), mood=track.mood or mood or "calm",

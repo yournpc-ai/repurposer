@@ -43,8 +43,8 @@ from app.pipeline.errors import TransientNodeError, user_error_line
 from app.pipeline.morph import (
     INPLACE_MORPH_KINDS,
     check_transform_targets,
-    _modifier_target_clips,
-    _pend_suppressed_base_renders,
+    modifier_target_clips,
+    pend_suppressed_base_renders,
 )
 from app.pipeline.step_display import ui_lang_of
 from app.pipeline.graph import (
@@ -1578,8 +1578,8 @@ async def execute_step(node_id: UUID) -> None:
                     and project is not None
                 ):
                     try:
-                        rescued = await _modifier_target_clips(db, node, project)
-                        await _pend_suppressed_base_renders(
+                        rescued = await modifier_target_clips(db, node, project)
+                        await pend_suppressed_base_renders(
                             db, run, node, rescued, defer_to_later_morph=False
                         )
                         await db.commit()

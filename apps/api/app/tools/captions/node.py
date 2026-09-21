@@ -35,13 +35,13 @@ from app.operations.service import apply_precomputed
 from app.pipeline.errors import TransientNodeError, propagate_key
 from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_agent, token_bounds
 from app.pipeline.morph import (
-    _fan_out_renders,
-    _guard_target_differs_from_source,
-    _has_producer_upstream,
-    _modifier_target_clips,
-    _pend_suppressed_base_renders,
-    _record_target_output_ids,
-    _run_origin,
+    fan_out_renders,
+    guard_target_differs_from_source,
+    has_producer_upstream,
+    modifier_target_clips,
+    pend_suppressed_base_renders,
+    record_target_output_ids,
+    run_origin,
 )
 from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.tools.captions.procedure import (
@@ -109,7 +109,7 @@ class TranslateClip(NodeBase):
         fork = bool((node.spec or {}).get("fork"))
         bilingual = bool((node.spec or {}).get("bilingual"))
         await set_stage(node.id, "translating_captions")
-        clips = await _modifier_target_clips(db, node, project)
+        clips = await modifier_target_clips(db, node, project)
         if not clips:
             await set_summary(
                 node.id,
@@ -117,11 +117,11 @@ class TranslateClip(NodeBase):
             )
             return []
 
-        origin = await _run_origin(db, run)
+        origin = await run_origin(db, run)
         # Same-language guard (2026-08-17 走查实修) — translating zh into zh
         # renders a 繁体+简体 "bilingual" pair with no English; fail loud with
         # the fix named, never a silent same-language rewrite.
-        await _guard_target_differs_from_source(
+        await guard_target_differs_from_source(
             db, clips, lang, zh=ui_lang_of(run, project).startswith("zh")
         )
         # 译文 artifact 复用钩 (ADR-072 批 A2): the cue rows live on the
@@ -287,14 +287,14 @@ class TranslateClip(NodeBase):
         # all-skip leaves empty refs so the later morph falls back to the
         # project-wide set; a partial touch without a producer edge renders
         # the skips now — the later morph would never see them.
-        await _pend_suppressed_base_renders(
+        await pend_suppressed_base_renders(
             db, run, node, clips, exclude=set(touched),
-            defer_to_later_morph=not touched or await _has_producer_upstream(db, node),
+            defer_to_later_morph=not touched or await has_producer_upstream(db, node),
         )
         if not touched:
             return []
-        await _fan_out_renders(db, run, node, touched, defer_to_later_morph=not fork)
-        await _record_target_output_ids(node.id, touched)
+        await fan_out_renders(db, run, node, touched, defer_to_later_morph=not fork)
+        await record_target_output_ids(node.id, touched)
         await fill_summary(
             node.id, self.kind, ui_language=ui_lang_of(run, project), n=len(touched), lang=lang.upper()
         )
