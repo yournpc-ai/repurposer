@@ -57,7 +57,7 @@ from app.pipeline import craft_scan
 from app.pipeline.graph import NodeBase, estimate_agent
 from app.pipeline.node_runners import _display_zh
 from app.pipeline.step_context import list_assets, _source_language
-from app.pipeline.step_display import _set_spec_field, _set_summary
+from app.pipeline.step_display import set_spec_field, set_summary
 from app.pipeline.trigger_events import TRIGGER_CRAFT_DECOMPILED, fire_trigger
 from app.providers.llm.base import LLMError
 
@@ -416,7 +416,7 @@ class Decompile(NodeBase):
             )
             return None
         zh = _display_zh(run, project, assets)
-        await _set_summary(
+        await set_summary(
             node.id,
             f"复用案例拆解 · {len(cached.shots)} 个镜头"
             if zh
@@ -452,8 +452,8 @@ class Decompile(NodeBase):
             # the asset may have vanished since — honest noop, the chain
             # proceeds as a regular cut (exemplar params find no skeleton
             # and fall to defaults).
-            await _set_spec_field(node.id, "noop", True)
-            await _set_summary(
+            await set_spec_field(node.id, "noop", True)
+            await set_summary(
                 node.id,
                 "案例不可用——按常规剪辑进行"
                 if zh
@@ -468,8 +468,8 @@ class Decompile(NodeBase):
 
         skeleton = await _materialize_skeleton(db, asset)
         if skeleton is None:
-            await _set_spec_field(node.id, "noop", True)
-            await _set_summary(
+            await set_spec_field(node.id, "noop", True)
+            await set_summary(
                 node.id,
                 "案例拆解失败——按常规剪辑进行"
                 if zh
@@ -491,7 +491,7 @@ class Decompile(NodeBase):
                 if zh
                 else f" · captions {skeleton.captions.preset}"
             )
-        await _set_summary(
+        await set_summary(
             node.id,
             f"拆解了案例 · {len(skeleton.shots)} 个镜头 · {pace_zh}节奏{caption_note}"
             if zh

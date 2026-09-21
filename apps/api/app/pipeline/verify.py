@@ -64,7 +64,7 @@ from app.pipeline.quality import (
     run_checks,
 )
 from app.pipeline.step_context import list_assets
-from app.pipeline.step_display import _set_summary
+from app.pipeline.step_display import set_summary
 from app.pipeline.outputs import delete_outputs_fk_safe
 from app.platform.project_context import collect_asset_texts, resolve_persona
 from app.providers.storage import stream_url
@@ -145,7 +145,7 @@ class Verify(NodeBase):
         outputs = await self._executor_outputs(db, executor)
         zh = await self._zh(db, run, project)
         if not outputs:
-            await _set_summary(node.id, "没有产物可检" if zh else "No outputs to check")
+            await set_summary(node.id, "没有产物可检" if zh else "No outputs to check")
             return []
 
         for_type = str(spec.get("for") or "")
@@ -166,7 +166,7 @@ class Verify(NodeBase):
             self._write_verdicts(outputs, verdicts, node, status="passed")
             await db.flush()
             n = sum(1 for v in verdicts for c in v if c.ok is True)
-            await _set_summary(
+            await set_summary(
                 node.id, f"质检通过 · {n} 项检查" if zh else f"Passed · {n} checks"
             )
             logger.info("verify_passed", node_id=str(node.id), checks=n)
@@ -639,7 +639,7 @@ class Verify(NodeBase):
             else " (restored the best round)" if restored
             else ""
         )
-        await _set_summary(
+        await set_summary(
             node.id,
             f"需人工复核 · {len(failing_ids)} 项未过{suffix}"
             if zh
@@ -737,7 +737,7 @@ class Verify(NodeBase):
         )
         zh = await self._zh(db, run, project)
         if action != "title_card":
-            await _set_summary(
+            await set_summary(
                 node.id, "质检：已降级接受" if zh else "Quality: accepted as-is"
             )
             return
@@ -771,7 +771,7 @@ class Verify(NodeBase):
             output.render_attempt = 0  # R1 B4a: intent re-pend = new budget (only the crash reap keeps counting)
             applied += 1
         await db.flush()
-        await _set_summary(
+        await set_summary(
             node.id,
             f"质检：已改标题卡开场 · {applied} 条"
             if zh

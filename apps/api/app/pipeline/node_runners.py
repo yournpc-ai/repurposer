@@ -71,7 +71,7 @@ from app.pipeline.step_context import (
     _truncate,
     collect_asset_media,
 )
-from app.pipeline.step_display import _set_spec_field, _set_summary
+from app.pipeline.step_display import set_spec_field, set_summary
 from app.pipeline.trigger_events import TRIGGER_UNDERSTANDING, fire_trigger
 from app.platform.project_context import (
     collect_asset_texts,
@@ -158,8 +158,8 @@ class Preprocess(NodeBase):
         # copy — "正在分析…" reading on a ✓ row). Quantified by file count;
         # a material-free chain with no source says so instead of "0 assets".
         if not assets and not needs_material:
-            await _set_spec_field(node.id, "noop", True)
-            await _set_summary(
+            await set_spec_field(node.id, "noop", True)
+            await set_summary(
                 node.id,
                 "无素材输入，直接生成"
                 if _display_zh(run, project, assets)
@@ -167,7 +167,7 @@ class Preprocess(NodeBase):
             )
             return []
         n = sum(1 for a in assets if a.file_url) or len(assets)
-        await _set_summary(
+        await set_summary(
             node.id,
             f"分析了 {n} 个素材" if _display_zh(run, project, assets) else f"Analyzed {n} assets",
         )
@@ -204,7 +204,7 @@ class PersonaBootstrap(NodeBase):
         if project.persona_id:
             mounted = await db.get(Persona, project.persona_id)
             name = mounted.name if mounted is not None else None
-            await _set_summary(
+            await set_summary(
                 node.id,
                 f"人设就位：{name}" if zh and name else f"Persona ready: {name}" if name else "人设就位" if zh else "Persona ready",
             )
@@ -213,8 +213,8 @@ class PersonaBootstrap(NodeBase):
         asset_texts = await collect_asset_texts(db, project.id)
         trimmed = [t[:20_000] for t in asset_texts if t and t.strip()]
         if not trimmed:
-            await _set_spec_field(node.id, "noop", True)
-            await _set_summary(
+            await set_spec_field(node.id, "noop", True)
+            await set_summary(
                 node.id,
                 "没有文字素材，未建人设" if zh else "No text material — persona skipped",
             )
@@ -233,7 +233,7 @@ class PersonaBootstrap(NodeBase):
                 project_id=str(project.id),
                 error=str(e),
             )
-            await _set_summary(
+            await set_summary(
                 node.id,
                 "人设提取失败，继续生成" if zh else "Persona extraction failed — continuing",
             )
@@ -275,7 +275,7 @@ class PersonaBootstrap(NodeBase):
             project_id=str(project.id),
             persona_id=str(persona_row.id),
         )
-        await _set_summary(
+        await set_summary(
             node.id,
             f"创建了人设「{persona_row.name}」" if zh else f"Created persona “{persona_row.name}”",
         )
@@ -444,7 +444,7 @@ class Understand(NodeBase):
                 # Step lines follow the UI locale pinned on the run, never
                 # the material's language (display_language chain).
                 zh = _display_zh(run, project, assets)
-                await _set_summary(
+                await set_summary(
                     node.id,
                     f"复用素材理解 · {len(cached.key_arguments)} 个论点"
                     if zh
@@ -472,7 +472,7 @@ class Understand(NodeBase):
         empty-shape understanding gracefully (their prompts' ``{% for %}``
         loops degrade to nothing rendered, and the slot-level fallback
         copy lights up). plan writes its own matching stub on the same
-        gate, so the executor's _load_plan_prelude_outputs always returns
+        gate, so the executor's load_plan_prelude_outputs always returns
         a paired (understanding, storyboard) tuple."""
         assets = await list_assets(db, project.id)
 
@@ -502,8 +502,8 @@ class Understand(NodeBase):
                 )
                 db.add(row)
                 await db.flush()
-                await _set_spec_field(node.id, "noop", True)
-                await _set_summary(
+                await set_spec_field(node.id, "noop", True)
+                await set_summary(
                     node.id,
                     "无素材输入，跳过素材理解" if _display_zh(run, project, assets)
                     else "No source material — understanding skipped",
@@ -532,7 +532,7 @@ class Understand(NodeBase):
         db.add(row)
         await db.flush()
         zh = _display_zh(run, project, assets)
-        await _set_summary(
+        await set_summary(
             node.id,
             f"理解了 {len(understanding.key_arguments)} 个论点 · "
             f"{len(understanding.quotable_lines)} 条金句 · "
@@ -600,7 +600,7 @@ class Interrupt(NodeBase):
                     label = label[len(prefix):]
                     break
             picked = _truncate(label, 60) or ("默认" if zh else "default")
-            await _set_summary(node.id, f"方向：{picked}" if zh else f"Direction: {picked}")
+            await set_summary(node.id, f"方向：{picked}" if zh else f"Direction: {picked}")
             return []
 
         understanding = await _load_understanding(db, node)
@@ -629,7 +629,7 @@ class Interrupt(NodeBase):
                 **(node.spec or {}),
                 "answer": {"kind": "option", "option_id": "a"},
             }
-            await _set_summary(
+            await set_summary(
                 node.id, f"方向：{default_label}" if zh else f"Direction: {default_label}"
             )
             return []
@@ -770,8 +770,8 @@ class Plan(NodeBase):
             )
             db.add(row)
             await db.flush()
-            await _set_spec_field(node.id, "noop", True)
-            await _set_summary(
+            await set_spec_field(node.id, "noop", True)
+            await set_summary(
                 node.id,
                 "无素材输入，跳过分镜规划" if _display_zh(run, project, assets)
                 else "No source material — storyboard skipped",
@@ -871,7 +871,7 @@ class Plan(NodeBase):
         book_summary = self.book_summary(intent_slots, ctx.get("target_language", "en"))
         if book_summary:
             node.spec = {**(node.spec or {}), "book_summary": book_summary, "task_book": task_book}
-        await _set_summary(
+        await set_summary(
             node.id,
             f"规划了 {len(storyboard.slots)} 个槽位 · "
             f"{len(storyboard.coverage.unused_arguments)} 个论点未使用"

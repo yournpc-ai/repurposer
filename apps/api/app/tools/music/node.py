@@ -22,7 +22,7 @@ from app.pipeline.morph import (
     _run_origin,
     _target_clips,
 )
-from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary, ui_lang_of
+from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.platform.project_context import resolve_persona
 
 
@@ -52,10 +52,10 @@ class AddMusic(NodeBase):
         default → "calm". A mood with no matching track fails the step with a
         clear error (CHAT_ARCH §10: the conversation offers alternatives).
         """
-        await _set_stage(node.id, "adding_music")
+        await set_stage(node.id, "adding_music")
         clips = await _target_clips(db, node, project)
         if not clips:
-            await _set_summary(
+            await set_summary(
                 node.id,
                 "没有可配乐的片段" if ui_lang_of(run, project).startswith("zh") else "No clips to score",
             )
@@ -130,7 +130,7 @@ class AddMusic(NodeBase):
 
         await _fan_out_renders(db, run, node, touched)
         await _record_target_output_ids(node.id, touched)
-        await _fill_summary(
+        await fill_summary(
             node.id, self.kind,
             ui_language=ui_lang_of(run, project), mood=track.mood or mood or "calm",
         )

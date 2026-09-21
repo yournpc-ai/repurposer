@@ -36,7 +36,7 @@ from app.pipeline.decompile import (
     skeleton_clip_count,
 )
 from app.pipeline.outputs import delete_outputs_fk_safe
-from app.pipeline.edges import _load_plan_prelude_outputs
+from app.pipeline.edges import load_plan_prelude_outputs
 from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase, estimate_agent, token_bounds
 from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
 from app.agents.base import MAX_CHARS_PER_TEXT
@@ -46,10 +46,10 @@ from app.pipeline.step_context import (
     collect_asset_media,
 )
 from app.pipeline.step_display import (
-    _fill_summary,
-    _node_slot,
-    _pop_spec_field,
-    _set_stage,
+    fill_summary,
+    node_slot,
+    pop_spec_field,
+    set_stage,
     slot_tag,
     ui_lang_of,
 )
@@ -206,15 +206,15 @@ class SelectClips(NodeBase):
         ctx = run.context or {}
         # 质检打回 (期 3): a bounced round's feedback rides the spec exactly
         # once — pop it so a later targeted regen never eats stale feedback.
-        # The row write goes through _pop_spec_field's own session (D9,
+        # The row write goes through pop_spec_field's own session (D9,
         # 2026-08-28): an ORM assignment here would dirty the Session-2 node,
         # and the next autoflush would lock this row for the rest of the run
         # — deadlocking this runner's own display writers.
         spec = dict(node.spec or {})
         feedback = spec.pop("feedback", None)
         if feedback is not None:
-            await _pop_spec_field(node.id, "feedback")
-        slot = _node_slot(node, ctx, "clips")
+            await pop_spec_field(node.id, "feedback")
+        slot = node_slot(node, ctx, "clips")
         # 案例仿制参数源 (ADR-078 判词⑤ — the fourth param source): the
         # decompiled skeleton's measured craft maps to params BY CODE (the
         # LLM never writes a spec). Precedence everywhere below: explicit
@@ -231,7 +231,7 @@ class SelectClips(NodeBase):
             (slot.language if slot else None) or ctx.get("target_language", "en")
         )
 
-        await _set_stage(node.id, "selecting_segments")
+        await set_stage(node.id, "selecting_segments")
 
         asset_texts = await collect_asset_texts(db, project.id)
         assets = await list_assets(db, project.id)
@@ -241,7 +241,7 @@ class SelectClips(NodeBase):
             run, project, persona, brand_music_id=brand_music_id
         )
         generation_context.target_language = target_language
-        understanding, storyboard = await _load_plan_prelude_outputs(db, node)
+        understanding, storyboard = await load_plan_prelude_outputs(db, node)
 
         # Render source selection (docs/VIDEO_EDITOR.md §4) — the shared
         # decision (materialize_source resolves the same way). 资产角色
@@ -296,7 +296,7 @@ class SelectClips(NodeBase):
             repair_feedback=feedback,
         )
 
-        await _set_stage(node.id, "building_specs")
+        await set_stage(node.id, "building_specs")
 
         # Idempotency: clear this project's prior clip outputs before writing new
         # ones (same semantics as the retired _delete_prior_outputs). Pending
@@ -469,7 +469,7 @@ class SelectClips(NodeBase):
                 )
             await db.flush()
 
-        await _fill_summary(
+        await fill_summary(
             node.id,
             self.kind,
             tag=slot_tag(slot),

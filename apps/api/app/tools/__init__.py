@@ -105,7 +105,7 @@ class ToolEntry(BaseModel):
     behavior: Literal["deterministic", "probabilistic"]
     params_model: type[BaseModel] | None = None
     # Per-locale display templates ("en" required, others fall back to it):
-    # _fill_summary picks by the run's pinned UI locale — step lines follow
+    # fill_summary picks by the run's pinned UI locale — step lines follow
     # the UI language, never the material's.
     summary_templates: dict[str, str] = {}
     seat: bool = False  # registered-but-not-implemented (no node yet)

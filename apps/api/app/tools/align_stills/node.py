@@ -15,7 +15,7 @@ from app.models.schemas import AssetType
 from app.models.tables import WorkflowStep, Project, WorkflowRun
 from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_free
 from app.pipeline.step_context import list_assets
-from app.pipeline.step_display import _fill_summary, _set_spec_field, ui_lang_of
+from app.pipeline.step_display import fill_summary, set_spec_field, ui_lang_of
 from app.tools.align_stills.procedure import cjk_ratio, estimate_words_timeline
 
 logger = structlog.get_logger()
@@ -77,8 +77,8 @@ class AlignStills(NodeBase):
                 words=len(words),
             )
 
-        await _set_spec_field(node.id, "aligned_asset_id", str(asset.id))
-        await _fill_summary(
+        await set_spec_field(node.id, "aligned_asset_id", str(asset.id))
+        await fill_summary(
             node.id,
             self.kind,
             ui_language=ui_lang_of(run, project),

@@ -62,7 +62,7 @@ async def _load_understanding(
     return MaterialUnderstanding.model_validate(row.payload)
 
 
-async def _load_plan_prelude_outputs(
+async def load_plan_prelude_outputs(
     db: AsyncSession, node: WorkflowStep
 ) -> tuple[MaterialUnderstanding, Storyboard]:
     """Load both plan-prelude artifacts for an executor node (two upstream hops):

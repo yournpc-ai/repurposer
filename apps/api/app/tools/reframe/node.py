@@ -23,7 +23,7 @@ from app.pipeline.morph import (
     _record_target_output_ids,
     _run_origin,
 )
-from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary, ui_lang_of
+from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.tools.reframe.procedure import compute_crop_track, resolve_mode
 from app.providers.storage import download_to_temp
 
@@ -65,10 +65,10 @@ class ReframeClip(NodeBase):
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
     ) -> list[UUID]:
         """Write crop_track keyframes onto the target clips, then re-render."""
-        await _set_stage(node.id, "reframing_clips")
+        await set_stage(node.id, "reframing_clips")
         clips = await _modifier_target_clips(db, node, project)
         if not clips:
-            await _set_summary(
+            await set_summary(
                 node.id,
                 "没有可分镜的片段" if ui_lang_of(run, project).startswith("zh") else "No clips to reframe",
             )
@@ -204,7 +204,7 @@ class ReframeClip(NodeBase):
 
         logger.info("reframe_clip_done", touched=len(touched), skipped=skipped)
         if not touched:
-            await _set_summary(
+            await set_summary(
                 node.id,
                 "没有可分镜的片段" if ui_lang_of(run, project).startswith("zh") else "Nothing to reframe",
             )
@@ -224,7 +224,7 @@ class ReframeClip(NodeBase):
 
         await _fan_out_renders(db, run, node, touched)
         await _record_target_output_ids(node.id, touched)
-        await _fill_summary(
+        await fill_summary(
             node.id,
             self.kind,
             ui_language=ui_lang_of(run, project),

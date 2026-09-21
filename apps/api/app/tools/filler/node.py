@@ -22,7 +22,7 @@ from app.pipeline.morph import (
     _run_origin,
     _target_clips,
 )
-from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary, ui_lang_of
+from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.tools.filler.detect import detect
 
 
@@ -49,10 +49,10 @@ class RemoveFiller(NodeBase):
         Deterministic (tools/filler.detect + clip_spec.remove_range); never touches
         the source media — cuts land as hidden segments in the render_spec.
         """
-        await _set_stage(node.id, "removing_fillers")
+        await set_stage(node.id, "removing_fillers")
         clips = await _target_clips(db, node, project)
         if not clips:
-            await _set_summary(
+            await set_summary(
                 node.id,
                 "没有可清理的片段" if ui_lang_of(run, project).startswith("zh") else "No clips to clean",
             )
@@ -110,7 +110,7 @@ class RemoveFiller(NodeBase):
             total_repeats += applied_repeats
 
         if not touched:
-            await _set_summary(
+            await set_summary(
                 node.id,
                 "没有发现口水词" if ui_lang_of(run, project).startswith("zh") else "No fillers found",
             )
@@ -130,7 +130,7 @@ class RemoveFiller(NodeBase):
 
         await _fan_out_renders(db, run, node, touched)
         await _record_target_output_ids(node.id, touched)
-        await _fill_summary(
+        await fill_summary(
             node.id,
             self.kind,
             ui_language=ui_lang_of(run, project),

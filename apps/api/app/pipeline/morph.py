@@ -479,7 +479,7 @@ async def _pend_suppressed_base_renders(
 
 async def _record_target_output_ids(node_id: UUID, output_ids: list[UUID]) -> None:
     """Record the cross-run DAG edge (which outputs this step consumed) on the
-    step's spec — jsonb_set in its own session, same discipline as _set_stage."""
+    step's spec — jsonb_set in its own session, same discipline as set_stage."""
     async with AsyncSessionLocal() as s:
         await s.execute(
             update(WorkflowStep)

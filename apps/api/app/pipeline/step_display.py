@@ -12,7 +12,7 @@ The mirror discipline (D9, 2026-08-28): a runner must NEVER dirty the
 Session-2-loaded node (ORM attribute assignment) — the next autoflush locks
 the row for the rest of the run and the runner's own display writers below
 deadlock against their own session (the verify-bounce feedback-pop did
-exactly this until it moved to ``_pop_spec_field``). Session-2 writes to the
+exactly this until it moved to ``pop_spec_field``). Session-2 writes to the
 step row belong to execute_step's final settle only.
 """
 
@@ -30,7 +30,7 @@ from app.models.tables import WorkflowStep
 logger = structlog.get_logger()
 
 
-async def _set_stage(node_id: UUID, stage: str) -> None:
+async def set_stage(node_id: UUID, stage: str) -> None:
     """Write the stepper's display-stage hint in its own session."""
     async with AsyncSessionLocal() as s:
         await s.execute(
@@ -45,13 +45,13 @@ async def _set_stage(node_id: UUID, stage: str) -> None:
         await s.commit()
 
 
-async def _set_spec_field(node_id: UUID, key: str, value: Any) -> None:
+async def set_spec_field(node_id: UUID, key: str, value: Any) -> None:
     """Write one spec field in its own session — same jsonb_set discipline as
-    ``_set_stage``. The value binds as a typed JSONB cast: a bare
+    ``set_stage``. The value binds as a typed JSONB cast: a bare
     ``to_jsonb(:param)`` leaves asyncpg unable to resolve the polymorphic
     type for dict/list payloads ("input has type unknown" — the research
     node's brief stamp failed exactly this way on Postgres from its B4
-    birth until 2026-09-05; str values like ``_set_stage``'s resolve to
+    birth until 2026-09-05; str values like ``set_stage``'s resolve to
     text and never tripped it)."""
     async with AsyncSessionLocal() as s:
         await s.execute(
@@ -69,7 +69,7 @@ async def _set_spec_field(node_id: UUID, key: str, value: Any) -> None:
         await s.commit()
 
 
-async def _pop_spec_field(node_id: UUID, key: str) -> None:
+async def pop_spec_field(node_id: UUID, key: str) -> None:
     """Remove one spec key in its own session (atomic jsonb ``-`` subtraction).
 
     Built for the verify-bounce feedback-pop at runner start (D9, 2026-08-28):
@@ -85,9 +85,9 @@ async def _pop_spec_field(node_id: UUID, key: str) -> None:
         await s.commit()
 
 
-async def _set_summary(node_id: UUID, summary: str) -> None:
+async def set_summary(node_id: UUID, summary: str) -> None:
     """Write the quantified one-liner (spec.summary) — same independent-session
-    jsonb_set discipline as ``_set_stage`` (never Python read-modify-write)."""
+    jsonb_set discipline as ``set_stage`` (never Python read-modify-write)."""
     async with AsyncSessionLocal() as s:
         await s.execute(
             update(WorkflowStep)
@@ -101,7 +101,7 @@ async def _set_summary(node_id: UUID, summary: str) -> None:
         await s.commit()
 
 
-async def _fill_summary(
+async def fill_summary(
     node_id: UUID, kind: str, *, tag: str | None = None, ui_language: str = "en", **params: object
 ) -> None:
     """Fill spec.summary from the registry's summary_templates for ``kind``.
@@ -133,7 +133,7 @@ async def _fill_summary(
         return
     if tag:
         line = f"{line} · {tag}"
-    await _set_summary(node_id, line)
+    await set_summary(node_id, line)
 
 
 def ui_lang_of(run: Any, project: Any) -> str:
@@ -164,7 +164,7 @@ def slot_tag(slot: IntentSlot | None) -> str | None:
     return " · ".join(parts) if parts else None
 
 
-def _node_slot(node: WorkflowStep, ctx: dict, slot_type: str) -> IntentSlot | None:
+def node_slot(node: WorkflowStep, ctx: dict, slot_type: str) -> IntentSlot | None:
     """The executor node's own task slot.
 
     Compiled nodes carry it in spec (``spec.slot`` — the chain's compile-time

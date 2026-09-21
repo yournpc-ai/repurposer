@@ -33,7 +33,7 @@ from app.pipeline.morph import (
     _record_target_output_ids,
     _run_origin,
 )
-from app.pipeline.step_display import _fill_summary, _set_stage, _set_summary, ui_lang_of
+from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.pipeline.tracks import spec_provenance
 from app.tools.dub.procedure import synthesize_dub
 
@@ -97,10 +97,10 @@ class DubClip(NodeBase):
         (modifier step — morph in place, or fork into derived rows)."""
         lang = (node.spec or {}).get("target_language") or "en"
         fork = bool((node.spec or {}).get("fork"))
-        await _set_stage(node.id, "dubbing")
+        await set_stage(node.id, "dubbing")
         clips = await _modifier_target_clips(db, node, project)
         if not clips:
-            await _set_summary(
+            await set_summary(
                 node.id,
                 "没有可配音的片段" if ui_lang_of(run, project).startswith("zh") else "No clips to dub",
             )
@@ -206,7 +206,7 @@ class DubClip(NodeBase):
         )
         await _fan_out_renders(db, run, node, touched, defer_to_later_morph=not fork)
         await _record_target_output_ids(node.id, touched)
-        await _fill_summary(
+        await fill_summary(
             node.id, self.kind, ui_language=ui_lang_of(run, project), n=len(touched), lang=lang.upper()
         )
         return touched

@@ -36,7 +36,7 @@ from app.pipeline.graph import NodeBase, estimate_free
 from app.pipeline.graph_store import display_aspect_class
 from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
 from app.pipeline.step_context import list_assets
-from app.pipeline.step_display import _set_summary, ui_lang_of
+from app.pipeline.step_display import set_summary, ui_lang_of
 from app.platform.project_context import resolve_run_persona
 from app.tools.clips.node import resolve_render_source
 
@@ -248,7 +248,7 @@ class MaterializeSource(NodeBase):
             await db.flush()
 
         zh = ui_lang_of(run, project).startswith("zh")
-        await _set_summary(
+        await set_summary(
             node.id,
             f"整条视频就位 · {int(duration)} 秒" if zh else f"Full video ready · {int(duration)}s",
         )

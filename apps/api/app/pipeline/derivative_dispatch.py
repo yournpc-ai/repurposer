@@ -44,16 +44,16 @@ from app.pipeline.quote_card_stack import (
     extract_video_frames,
     pick_curated_frame,
 )
-from app.pipeline.edges import _load_plan_prelude_outputs
+from app.pipeline.edges import load_plan_prelude_outputs
 from app.pipeline.graph import NODE_KINDS, NodeBase, estimate_mechanical, token_bounds
 from app.pipeline.morph import _render_step_label
 from app.pipeline.outputs import delete_outputs_fk_safe
 from app.pipeline.step_context import _count_words, list_assets
 from app.pipeline.step_display import (
-    _fill_summary,
-    _node_slot,
-    _pop_spec_field,
-    _set_stage,
+    fill_summary,
+    node_slot,
+    pop_spec_field,
+    set_stage,
     slot_tag,
     ui_lang_of,
 )
@@ -977,15 +977,15 @@ class DerivativeWriterNode(NodeBase):
         ctx = run.context or {}
         # 质检打回 (期 3): a bounced round's feedback rides the spec exactly
         # once — pop it so a later targeted regen never eats stale feedback.
-        # The row write goes through _pop_spec_field's own session (D9,
+        # The row write goes through pop_spec_field's own session (D9,
         # 2026-08-28): an ORM assignment here would dirty the Session-2 node,
         # and the next autoflush would lock this row for the rest of the run
         # — deadlocking this runner's own display writers.
         spec = dict(node.spec or {})
         feedback = spec.pop("feedback", None)
         if feedback is not None:
-            await _pop_spec_field(node.id, "feedback")
-        slot = _node_slot(node, ctx, derivative_type.value)
+            await pop_spec_field(node.id, "feedback")
+        slot = node_slot(node, ctx, derivative_type.value)
         target_id = node.spec.get("target_id")
         # Language resolves per slot first, then the node's targeted language,
         # then the plan language.
@@ -995,7 +995,7 @@ class DerivativeWriterNode(NodeBase):
             or ctx.get("target_language", "en")
         )
 
-        await _set_stage(node.id, "writing_copy")
+        await set_stage(node.id, "writing_copy")
 
         asset_texts = await collect_asset_texts(db, project.id)
         # 研究简报注入 (ADR-052 B4): same-run research steps' stamped briefs
@@ -1031,7 +1031,7 @@ class DerivativeWriterNode(NodeBase):
             generation_context.quote_alt_language = alt_language
             if generation_context.caption_mode == "bilingual" and alt_language is None:
                 generation_context.caption_mode = "source_only"
-        understanding, storyboard = await _load_plan_prelude_outputs(db, node)
+        understanding, storyboard = await load_plan_prelude_outputs(db, node)
 
         # Narrow the storyboard to THIS slot: same-type sibling slots (e.g. an
         # English and a German post) are addressed by the slot's ordinal, which
@@ -1060,7 +1060,7 @@ class DerivativeWriterNode(NodeBase):
             output.updated_at = datetime.now(UTC)
             output.workflow_step_id = node.id
             await db.flush()
-            await _fill_summary(
+            await fill_summary(
                 node.id, self.kind, tag=slot_tag(slot),
                 ui_language=ui_lang_of(run, project), word_count=_count_words(content),
             )
@@ -1093,7 +1093,7 @@ class DerivativeWriterNode(NodeBase):
         if derivative_type == DerivativeType.QUOTES:
             quotes = content.get("quotes", []) if isinstance(content, dict) else []
             if quotes:
-                await _set_stage(node.id, "building_specs")
+                await set_stage(node.id, "building_specs")
                 # The writer's verdict on whether the cascade needs a speaker
                 # frame on top, plus the core-idea thesis sentence that drove
                 # the chain selection. Both ride on the writer content —
@@ -1118,7 +1118,7 @@ class DerivativeWriterNode(NodeBase):
                     ),
                 )
 
-        await _fill_summary(
+        await fill_summary(
             node.id, self.kind, tag=slot_tag(slot),
             ui_language=ui_lang_of(run, project), word_count=_count_words(content),
         )

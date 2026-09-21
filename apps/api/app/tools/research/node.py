@@ -22,9 +22,9 @@ from app.models.schemas import ResearchBrief, ResearchSource
 from app.models.tables import Project, WorkflowRun, WorkflowStep
 from app.pipeline.graph import BoundedLoopNode, estimate_agent
 from app.pipeline.step_display import (
-    _fill_summary,
-    _set_spec_field,
-    _set_stage,
+    fill_summary,
+    set_spec_field,
+    set_stage,
     ui_lang_of,
 )
 from app.providers.llm.base import LLMError
@@ -69,7 +69,7 @@ class ResearchNode(BoundedLoopNode):
             query = ((run.context or {}).get("prompt") or "").strip() or "the run's topic"
         angle = (spec.get("angle") or "").strip() or None
 
-        await _set_stage(node.id, "researching")
+        await set_stage(node.id, "researching")
 
         evidence: list[dict[str, str]] = []
         brief: ResearchBrief | None = None
@@ -116,10 +116,10 @@ class ResearchNode(BoundedLoopNode):
         elif caveat:
             brief.caveat = brief.caveat or caveat
 
-        await _set_spec_field(
+        await set_spec_field(
             node.id, "research_brief", brief.model_dump(mode="json")
         )
-        await _fill_summary(
+        await fill_summary(
             node.id,
             self.kind,
             ui_language=ui_lang_of(run, project),
