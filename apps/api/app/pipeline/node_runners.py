@@ -43,6 +43,10 @@ from app.pipeline.beat_map import (
     image_refs_from_assets,
     word_axis_from_assets,
 )
+from app.pipeline.conversation_bridge import (
+    dock_interrupt_question,
+    finalize_bailed_runs,
+)
 from app.pipeline.derivative_dispatch import derivative_output_types
 from app.pipeline.edges import (
     _align_storyboard_slots,
@@ -569,10 +573,6 @@ class Interrupt(NodeBase):
         the chosen direction). plan reads the answer off this node's
         spec — see ``_interrupt_direction``.
         """
-        from app.chat.service import (  # deferred: import cycle
-            dock_interrupt_question,
-            finalize_bailed_runs,
-        )
         from app.pipeline.orchestrator import Suspend  # deferred: import cycle
 
         spec = node.spec or {}

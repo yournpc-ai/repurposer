@@ -50,6 +50,10 @@ from app.models.schemas import (
     RenderStatus,
 )
 from app.models.tables import Output, WorkflowStep, Project, WorkflowRun
+from app.pipeline.conversation_bridge import (
+    dock_interrupt_question,
+    finalize_bailed_runs,
+)
 from app.pipeline.edges import _load_understanding, _upstream_by_kind
 from app.pipeline.graph import NodeBase, estimate_agent, estimate_free
 from app.pipeline.quality import (
@@ -664,10 +668,6 @@ class Verify(NodeBase):
         """Craft double-fail → the docked escalation question (interrupt 机制
         复用): 降级接受 (default — the TTL sweep auto-picks it) / 标题卡开场.
         Never a fabricated hook (顾问姿态: 带理由纠偏)."""
-        from app.chat.service import (  # deferred: import cycle
-            dock_interrupt_question,
-            finalize_bailed_runs,
-        )
         from app.models.database import AsyncSessionLocal
         from app.pipeline.orchestrator import Suspend  # deferred: import cycle
 
