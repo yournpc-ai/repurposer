@@ -3,7 +3,7 @@
 One home for the deterministic prompt-context assembly every agent call
 stands on — the services orchestrate, they never assemble:
 
-- ``_generation_context`` — the GenerationContext every generation node
+- ``generation_context`` — the GenerationContext every generation node
   builds from the run's plan (moved from ``pipeline/step_context.py``,
   which keeps the mechanical media/digest helpers).
 - ``_build_context`` — the chat loop's intent context: project summary
@@ -57,7 +57,7 @@ def pack_instructions(packs: list[str]) -> str:
     return "\n".join(SKILL_REGISTRY[name].body for name in packs)
 
 
-def _generation_context(
+def generation_context(
     run: WorkflowRun,
     project: Project,
     persona: Persona | None,
@@ -77,7 +77,7 @@ def _generation_context(
     )
 
 
-def _output_one_liner(output: Any) -> str:
+def output_one_liner(output: Any) -> str:
     """A one-line label for a visible output (type + first creative line)."""
     payload = output.payload or {}
     for key in ("hook", "title", "body"):
@@ -135,7 +135,7 @@ async def _build_context(
     if outputs:
         lines.append("Current outputs:")
         for o in outputs:
-            one_liner = _output_one_liner(o)
+            one_liner = output_one_liner(o)
             lines.append(f"- {o.type} id={o.id}" + (f": {one_liner}" if one_liner else ""))
 
     # The persistent graph (ADR-057 — the wiring revision's target table):

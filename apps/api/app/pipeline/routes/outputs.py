@@ -30,7 +30,7 @@ from app.models.tables import Output, Project, User
 from app.pipeline.outputs import delete_outputs_fk_safe
 from app.tools.captions.procedure import translate_caption_track
 from app.chat.service import chat
-from app.agents.contexts import _output_one_liner
+from app.agents.contexts import output_one_liner
 from app.operations.service import apply_precomputed
 from app.pipeline.images import generate_clip_cover_image
 from app.platform.project_context import (
@@ -469,7 +469,7 @@ async def regenerate_output(
                 ChatMention(
                     type="output",
                     id=str(output_id),
-                    label=_output_one_liner(output) or output.type,
+                    label=output_one_liner(output) or output.type,
                 )
             ],
         ),

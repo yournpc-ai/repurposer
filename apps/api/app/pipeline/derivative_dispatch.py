@@ -22,7 +22,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import MAX_CHARS_PER_TEXT, Agent
-from app.agents.contexts import _generation_context
+from app.agents.contexts import generation_context
 from app.memory.brand import brand_from_block, resolve_brand_block
 from app.models.schemas import (
     ClipPayload,
@@ -1005,7 +1005,7 @@ class DerivativeWriterNode(NodeBase):
         # byte unchanged; a degraded brief says so in its own caveat line.
         asset_texts.extend(await _collect_research_brief_texts(db, run.id))
         persona = await resolve_persona(db, project)
-        generation_context = _generation_context(run, project, persona)
+        generation_context = generation_context(run, project, persona)
         generation_context.target_language = target_language
         # 2026-08-25 Phase 2: caption_mode rides run.context verbatim —
         # write_quotes (Phase 2 / RECIPES §4.6.2) reads it to know whether

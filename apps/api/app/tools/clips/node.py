@@ -40,7 +40,7 @@ from app.pipeline.edges import _load_plan_prelude_outputs
 from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase, estimate_agent, token_bounds
 from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
 from app.agents.base import MAX_CHARS_PER_TEXT
-from app.agents.contexts import _generation_context
+from app.agents.contexts import generation_context
 from app.pipeline.step_context import (
     _list_assets,
     collect_asset_media,
@@ -237,7 +237,7 @@ class SelectClips(NodeBase):
         assets = await _list_assets(db, project.id)
         persona = await resolve_run_persona(db, run, project)
         brand_cfg, brand_music_id = await resolve_brand_block(db, persona)
-        generation_context = _generation_context(
+        generation_context = generation_context(
             run, project, persona, brand_music_id=brand_music_id
         )
         generation_context.target_language = target_language

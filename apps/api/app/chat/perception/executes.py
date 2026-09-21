@@ -204,7 +204,7 @@ async def get_output_spec(db: AsyncSession, project: Project, params: GetOutputS
     """One output's current state — the read-before-write seat for relative
     revisions (「字幕调小一点」「声音小一点不」: compose the op from the CURRENT
     settings, never invent them)."""
-    from app.agents.contexts import _output_one_liner  # deferred: assembly layer
+    from app.agents.contexts import output_one_liner  # deferred: assembly layer
 
     output = await db.get(Output, params.output_id)
     if output is None or str(output.project_id) != str(project.id):
@@ -217,7 +217,7 @@ async def get_output_spec(db: AsyncSession, project: Project, params: GetOutputS
         f"Output {output.id} — type={output.type}, language={output.language}, "
         f"status={output.status}"
     ]
-    one_liner = _output_one_liner(output)
+    one_liner = output_one_liner(output)
     if one_liner:
         lines.append(f"- First line: {one_liner}")
     spec = output.render_spec or {}

@@ -2,7 +2,7 @@
 
 Multimodal input collection, asset listing/digest, misc row helpers. Context
 ASSEMBLY lives in the harness layer (``agents/contexts.py``:
-``_generation_context`` there, the chat intent context there too); this
+``generation_context`` there, the chat intent context there too); this
 module keeps the media/digest mechanics. The output-type vocabulary lives on
 the node classes (``pipeline/graph.py``, N-32).
 """

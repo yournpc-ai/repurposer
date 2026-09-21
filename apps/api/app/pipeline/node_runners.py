@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import MAX_CHARS_PER_TEXT
-from app.agents.contexts import _generation_context
+from app.agents.contexts import generation_context
 from app.agents.registry import plan, understand, persona
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
@@ -836,7 +836,7 @@ class Plan(NodeBase):
         skeleton = await load_skeleton_for_run(db, run, project)
 
         persona_row = await resolve_persona(db, project)
-        generation_context = _generation_context(run, project, persona_row)
+        generation_context = generation_context(run, project, persona_row)
 
         storyboard = await plan.call(
             understanding=understanding,
