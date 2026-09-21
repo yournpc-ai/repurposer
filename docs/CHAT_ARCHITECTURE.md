@@ -261,7 +261,7 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 
 ### 8.8 触发回合（主动说话，ADR-077 判词③）
 
-世界事件到达 = agent 自己开口：pipeline 在两个白名单座位（理解完成 / run 终态）fire-and-forget 触发 `chat/trigger_turn.py` 的触发 agent——ToolLoopAgent 家族的第三座（与 plan path / chat path 两回合 runner 同族），读工具看世界后 `wrap_up` 终态落一条 assistant 行（`intent={type:"trigger_review", trigger, ref, suggestions}`）。`_already_spoke` 按 (trigger, ref) 去重——一个事件最多说一次。触发回合永不起 run——它是说话，不是第二意图表面（建议的作答仍走 answer 端点 / autoResume 的既有结算，trigger 自身不结算）。
+世界事件到达 = agent 自己开口：pipeline 在白名单座位 fire-and-forget 触发 `chat/trigger_turn.py` 的触发 agent——ToolLoopAgent 家族的第三座（与 plan path / chat path 两回合 runner 同族），读工具看世界后 `wrap_up` 终态落一条 assistant 行（`intent={type:"trigger_review", trigger, ref, suggestions}`）。`_already_spoke` 按 (trigger, ref) 去重——一个事件最多说一次。触发回合永不起 run——它是说话，不是第二意图表面（建议的作答仍走 answer 端点 / autoResume 的既有结算，trigger 自身不结算）。**缝注（Phase 5，ADR-087 §6）**：pipeline 侧一切 fire 走 `pipeline/trigger_events.py` 白名单事件缝——kind ∈ {`understanding_warmed`, `run_completed`, `craft_decompiled`} 冻结白名单（扩名单 = ADR 评审），handler 由组合根（app.main / app.worker）经 `chat/seams.py` 注册，未注册 = 静默降级永不 pipeline 失败；pipeline 零 `app.chat` import（冷导入探针可证）。
 
 - **单一叙事者律（ADR-080，2026-09-17 拍板，已落地）**：准入门 = 叙事所有权门，两张静态谓词——会话内有用户 turn 在飞（`turn_state='in_flight'`）→ **defer**（20s × 15 周期）；无在飞但有 **pending task_book 计划** → **静默**（「我看了什么」的叙事已被计划 echo 覆盖，再说只有抢麦）；两者皆无才可说话。超限/失势一律落静默教义：盲评不如不说。
 - **界面语言唯一 owner（ADR-080，已落地）**：`conversations.ui_language` 列 = 单一事实源（prepare 每个用户回合从请求 Accept-Language 盖章），一切 assistant 写者（plan / chat / trigger）继承它——`_trigger_language` 链 = owner → run pin → history 兜底推导 → en，per-writer 推导退役。

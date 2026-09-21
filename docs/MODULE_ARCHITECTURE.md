@@ -204,13 +204,20 @@ apps/api/
 ├── app/
 │   ├── main.py / config.py / worker.py   # FastAPI 入口 / 配置 / 独立 worker 进程
 │   ├── dependencies/    # 依赖注入（auth：JWT / 匿名回退默认用户数据）
-│   ├── chat/            # Agent Interface：routes / service / intent / stream_extract（ProseDeltaExtractor，N-26）
+│   ├── chat/            # Agent Interface：routes（含 POST /outputs/{id}/regenerate——Phase 5 自
+│   │                    #   pipeline/routes/outputs.py 迁入，依赖方向唯一理由，URL/语义不变）/ service /
+│   │                    #   intent / stream_extract（ProseDeltaExtractor，N-26）
 │   │                    #   / activity.py（Activity Projection，ADR-087 §3 Phase 2：LoopEvent + name-known
 │   │                    #   → user-safe assistant.activity 帧的纯投影器，kind=用户语义类别，零 DB 零 Domain 读）
 │   │                    #   / system_status.py（System Status 词汇唯一家，Phase 3 Batch C：
 │   │                    #   THINKING_PHASE_COMPOSING + observe_phase_callback 公开协议，ADR-087 §1/§6）
+│   │                    #   / context.py（chat 意图上下文装配 build_context，Phase 5 自 agents/contexts.py
+│   │                    #   迁入——各层自装上下文，harness 不再代读 Message/outputs，ADR-087 §6）
+│   │                    #   / seams.py（wire_pipeline_seams：trigger handler + conversation bridge 注册，
+│   │                    #   组合根 app.main / app.worker 各调一次，Phase 5）
 │   ├── pipeline/        # Pipeline（RunPlan 内核）
-│   │   ├── routes/      # projects（含 GET /projects/{id}/graph 画布直读帧，ADR-057）/ assets / outputs / runs / music / recipes 端点
+│   │   ├── routes/      # projects（含 GET /projects/{id}/graph 画布直读帧，ADR-057）/ assets / outputs
+│   │   │                #   （regenerate 端点已迁 chat/routes.py——Phase 5 依赖方向）/ runs / music / recipes 端点
 │   │   ├── orchestrator.py        # RunPlan 物化/走图（create_run = WorkflowRun 唯一出生地；逐节点 estimate 落库 = 报价存储侧）
 │   │   ├── lifecycle.py           # Lifecycle Projection（ADR-087 §2，Phase 1）：服务端命名只读生命周期戳——
 │   │   │                        #   compute_lifecycle 纯谓词族（零 DB，T1~T15 纯测试矩阵）+ project_lifecycle
@@ -222,6 +229,14 @@ apps/api/
 │   │   │                        #   图 facts 比对，D4 结果 scope 律）+ 链逐字匹配器（历史 run.context 证明
 │   │   │                        #   approved retry，D2）+ 纯核+装配器两瓣（facts gatherer 读 graph_nodes/
 │   │   │                        #   graph_edges/workflow_runs 只读）；B1 additive 未接线——B2（edit_graph）/B5（/generate）切换
+│   │   ├── trigger_events.py      # trigger 白名单事件缝（ADR-087 §6，Phase 5）：kind ∈
+│   │   │                        #   {understanding_warmed, run_completed, craft_decompiled} 冻结白名单
+│   │   │                        #   （扩名单 = ADR 评审）；fire-and-forget，未注册 = 静默降级永不
+│   │   │                        #   pipeline 失败；handler 由组合根注册——pipeline 零 app.chat import
+│   │   ├── conversation_bridge.py # 会话写命令显式 protocol（ADR-087 §6，Phase 5）：
+│   │   │                        #   dock_interrupt_question / finalize_bailed_runs / seed_project_prompt /
+│   │   │                        #   discard_unanswered_plan 四命令 bridge delegate（同签名 + db 透传 +
+│   │   │                        #   flush-only 事务语义原样；未注册 fail-loudly）；实现住 chat/service.py
 │   │   ├── graph.py               # NodeBase 协议 + BoundedLoopNode（有界 loop，ADR-052 B4）+ 图算法（报价=fold/执行=topo/校验=∀/对账=⊆，ADR-039）
 │   │   ├── graph_store.py         # wiring 层（ADR-057）：apply_wiring_ops = 持久图唯一写口
 │   │   │                        #   （add_node / connect / edit_prompt / delete_node / run(_subgraph)，op 校验 +
@@ -252,7 +267,8 @@ apps/api/
 │   │   │                        #   纯函数半边（fidelity 族 + craft 可测量项 + run_checks 按类型分派）
 │   ├── agents/          # agent 花名册 + harness 漏斗（ADR-039）：base.py（Agent 唯一类 +
 │   │                    #   StreamingAgent 流式子类）/ roster.py（共享 crew：understand·plan/persona/
-│   │                    #   translator）/ contexts.py（统一装配层：GenerationContext + chat 意图上下文）/
+│   │                    #   translator）/ contexts.py（GenerationContext + output_one_liner 装配层；
+│   │                    #   chat 意图上下文已迁 chat/context.py——Phase 5，ADR-087 §6）/
 │   │                    #   tool_loop.py（有界工具 loop harness，ADR-077；typed LoopEvent 内部事件通道——
 │   │                    #   内核只说「发生了什么」，用户语义归 chat/activity.py，ADR-087 §3 U1 冻结边界）
 │   ├── tools/           # 工具包（能力唯一家，N-42）：article / captions / carousel / clips /
@@ -271,8 +287,10 @@ apps/api/
 │   ├── memory/          # Memory：personas 端点、人设皮肤块 → clip-spec 烘焙
 │   ├── distribution/    # Distribution：core / channels / publishing / adapters / routes
 │   ├── operations/      # Operation Model：registry / service / routes（ADR-032）
-│   ├── platform/        # 平台层：auth / email / notifications / project_context / configs（公共参数表漏斗）
-│   │                    #   / billing（积分钱包：hold→capture→release，ADR-055）/ routes
+│   ├── platform/        # 平台层：auth / email / notifications / project_context / conversation_context
+│   │                    #   （会话只读协议座——§4「Pipeline 只读」批准座，Phase 5：find_conversation /
+│   │                    #   latest_pending_question / is_pending_plan / get_project_prompt，零写）/
+│   │                    #   configs（公共参数表漏斗）/ billing（积分钱包：hold→capture→release，ADR-055）/ routes
 │   ├── models/          # tables.py + schemas.py + database.py
 │   ├── clients/         # minimax.py（M3 wrapper + usage 捕获点）
 │   ├── prompts/         # Jinja2 模板

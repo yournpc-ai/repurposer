@@ -74,4 +74,14 @@ Goal / Current evidence / Contract changes / Files / Tests / Migration strategy 
 
 ## Status
 
-PLANNED（2026-09-19 建档，未开工；前置 = Phase 1~4 全闭环）。
+**CLOSED（2026-09-21，branch `worktree-worktree-phase5-deps`，commits `ca98d86`→`d51c9a7` + 本批 docs commit）**
+
+- **Goal 兑现**：pipeline→chat 8 处清零（2 顶层 + 6 deferred）✅；跨模块私有 import 87→0 ✅；import 图单向（冷导入探针实证）✅；零新增 deferred import workaround（标记 71→65）✅。
+- **Current evidence → 终态**：`routes/projects.py` 顶层 import 拆除（读走 `platform/conversation_context.py`、写走 `pipeline/conversation_bridge.py`）；`routes/outputs.py` 顶层 import 拆除（regenerate 端点迁 `chat/routes.py`，URL/method/OpenAPI 不变）；deferred 6 处（node_runners×2 / orchestrator / decompile×2 / verify）全改 `trigger_events` / `conversation_bridge` 顶层 import；`_check_transform_targets` 等 32 名扶正公共（sed 全 callsite）；`agents/contexts.py` 裁定落地（`build_context` → `chat/context.py`，`generation_context`/`output_one_liner` 留 agents 扶正）。
+- **Contract changes**：ADR-087 §6 无翻案——四族机制皆合同内既有合法缝（event seam / public application command / explicit protocol）；Consequences Phase 5 行已回填。
+- **Files**：新增 `pipeline/trigger_events.py` / `pipeline/conversation_bridge.py` / `chat/seams.py` / `chat/context.py` / `platform/conversation_context.py`；改动见 commit 列（`ca98d86` 事件缝 → `624d664` 会话桥 → `a4adee2` 只读座 → `e5d5368` agents 扶正 → `d5f9ec4` regenerate 迁座 → `9b0568a` build_context 迁座 → `8a10069`/`e312add`/`79796db`/`717ca2a` 四批扶正 → `e43bc57` 探针入库 → `d51c9a7` 修复批）。
+- **Tests**：`tests/test_import_direction_pure.py` 五牙 6 例 green from birth（AST 双门 + 冷导入双子进程探针 + 组合根接线保险 + 牙⑤改名碰撞扫描）；`test_trigger_turn_pure` / `test_execution_fencing_pure` 跟随改引用；纯 pytest 358 绿。
+- **Migration strategy 执行**：每处独立 commit（先立缝/座，再删 import），冷导入探针每 commit 自绿——探针最后入库但四牙对全历史成立（终态全绿）。
+- **Rollback strategy**：逐 commit revert 即可；缝与 import 并存期无行为变化（fire-and-forget 未注册 = 静默降级，bridge 未注册 fail-loudly——组合根接线由探针牙④锁死）。
+- **Acceptance criteria**：import 图单向 ✅（探针牙③双向实证）；8 处清零 ✅；跨模块私有 import 清零 ✅（模块内豁免）；零新增 deferred workaround ✅。
+- **验证状态**：compileall OK ✅ / 纯 pytest 358 绿 ✅ / check_gates OK ✅ / 零 prompt 改动声明（`app/prompts/` 与 `chat/prompts.py` 零 diff，prompt_gate 豁免）✅ / 剧本座全绿 ✅（S1/S5/S6/S7/S10/S11/S17 首跑即绿；S16/S20 复跑取证猎得两真 bug——`_generation_context` 扶正撞同名局部变量三处 `x = x(...)` 自引用（S16 P2 plan 节点实红）+ scripts/ 旧名残留两处（S20 种子 ImportError）——修复批 `d51c9a7` + 探针牙⑤常驻后全绿；S20A 首跑红 = 披露措辞未匹配，verification-contracts §4 KNOWN VERIFICATION FRAGILITY 正则语序洞在册座，复跑即绿）/ tsc = 零前端改动不涉及。
