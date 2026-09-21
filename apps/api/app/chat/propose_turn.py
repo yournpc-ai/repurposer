@@ -52,7 +52,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.contexts import _build_context
+from app.chat.context import build_context
 from app.agents.tool_loop import ToolObservation
 from app.chat.intent import chat_intent_agent
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
@@ -163,7 +163,7 @@ class ChatTurn:
             and bool(self.text.strip())
         )
         self.context = (
-            await _build_context(db, project, recent, mentions, pending)
+            await build_context(db, project, recent, mentions, pending)
             if project
             else {"text": ""}
         )

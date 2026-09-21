@@ -45,7 +45,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.contexts import _build_context
+from app.chat.context import build_context
 from app.agents.tool_loop import ChatTool, ToolLoopAgent
 from app.chat.intent import _speech_language_line
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
@@ -203,7 +203,7 @@ def _assemble_trigger_turn(
 ) -> tuple[dict[str, Any], list]:
     """Trigger-turn inputs: the system event as the 'user message' (the
     turn's only new information) + the identity-level digest (the same
-    ``_build_context`` the chat turns read) + the resolved speech-language
+    ``build_context`` the chat turns read) + the resolved speech-language
     directive (worker-born — no middleware pin exists here)."""
     return (
         {
@@ -348,7 +348,7 @@ async def run_trigger_turn(
                     )
                 ).scalars()
             )
-            context = await _build_context(
+            context = await build_context(
                 db,
                 project,
                 history[-6:],
