@@ -1005,13 +1005,13 @@ class DerivativeWriterNode(NodeBase):
         # byte unchanged; a degraded brief says so in its own caveat line.
         asset_texts.extend(await _collect_research_brief_texts(db, run.id))
         persona = await resolve_persona(db, project)
-        generation_context = generation_context(run, project, persona)
-        generation_context.target_language = target_language
+        gen_ctx = generation_context(run, project, persona)
+        gen_ctx.target_language = target_language
         # 2026-08-25 Phase 2: caption_mode rides run.context verbatim —
         # write_quotes (Phase 2 / RECIPES §4.6.2) reads it to know whether
         # to call the translator for quote_alt. None for chains that don't
         # produce captions (write_post / write_carousel / write_article).
-        generation_context.caption_mode = ctx.get("caption_mode")
+        gen_ctx.caption_mode = ctx.get("caption_mode")
         # quote-cards §2.3/D4 (2026-08-28): resolve the run's language pair
         # once — the translator (quotes enrich) reads quote_alt_language,
         # the materializer reads source_language, and the bilingual →
@@ -1027,10 +1027,10 @@ class DerivativeWriterNode(NodeBase):
                 project.language,
                 ctx.get("target_language"),
             )
-            generation_context.source_language = resolved_source
-            generation_context.quote_alt_language = alt_language
-            if generation_context.caption_mode == "bilingual" and alt_language is None:
-                generation_context.caption_mode = "source_only"
+            gen_ctx.source_language = resolved_source
+            gen_ctx.quote_alt_language = alt_language
+            if gen_ctx.caption_mode == "bilingual" and alt_language is None:
+                gen_ctx.caption_mode = "source_only"
         understanding, storyboard = await load_plan_prelude_outputs(db, node)
 
         # Narrow the storyboard to THIS slot: same-type sibling slots (e.g. an
@@ -1044,7 +1044,7 @@ class DerivativeWriterNode(NodeBase):
 
         content = await self._generate(
             asset_texts=asset_texts,
-            context=generation_context,
+            context=gen_ctx,
             understanding=understanding,
             storyboard=storyboard,
             feedback=feedback,
@@ -1109,9 +1109,9 @@ class DerivativeWriterNode(NodeBase):
                     persona=persona,
                     quotes=quotes,
                     target_language=target_language,
-                    source_language=generation_context.source_language,
-                    caption_mode=generation_context.caption_mode,
-                    quote_alt_language=generation_context.quote_alt_language,
+                    source_language=gen_ctx.source_language,
+                    caption_mode=gen_ctx.caption_mode,
+                    quote_alt_language=gen_ctx.quote_alt_language,
                     needs_speaker_frame=needs_speaker_frame,
                     core_idea=(
                         content.get("core_idea") if isinstance(content, dict) else None

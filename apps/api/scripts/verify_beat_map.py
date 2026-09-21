@@ -34,7 +34,7 @@ from app.models.schemas import AssetStatus, AssetType  # noqa: E402
 from app.models.tables import Asset, Output, Project, User  # noqa: E402
 from app.pipeline.asset_processing import _warm_tasks, process_asset  # noqa: E402
 from app.pipeline.node_runners import (  # noqa: E402
-    _find_reusable_understanding,
+    find_reusable_understanding,
     warm_understanding,
 )
 from app.providers.storage import delete, download_to_temp, get_upload_path, save  # noqa: E402
@@ -212,7 +212,7 @@ async def main() -> None:
         # The run-path reuse sees the warm row from the same project.
         async with AsyncSessionLocal() as db:
             project_a = await db.get(Project, project_a_id)
-            hit = await _find_reusable_understanding(db, project_a, digest)
+            hit = await find_reusable_understanding(db, project_a, digest)
             assert hit is not None and hit.id == row.id
         print("[leg 1] run-path reuse resolves the warm row OK", flush=True)
 
@@ -265,7 +265,7 @@ async def main() -> None:
         # And the run path in project B2 resolves the FIRST upload's row.
         async with AsyncSessionLocal() as db:
             project_b2 = await db.get(Project, project_b2_id)
-            hit = await _find_reusable_understanding(db, project_b2, digest_b)
+            hit = await find_reusable_understanding(db, project_b2, digest_b)
             assert hit is not None and hit.id == row_b1.id
         print("[leg 2] same-bytes second upload → reuse hit, zero LLM OK", flush=True)
 

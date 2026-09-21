@@ -237,10 +237,10 @@ class SelectClips(NodeBase):
         assets = await list_assets(db, project.id)
         persona = await resolve_run_persona(db, run, project)
         brand_cfg, brand_music_id = await resolve_brand_block(db, persona)
-        generation_context = generation_context(
+        gen_ctx = generation_context(
             run, project, persona, brand_music_id=brand_music_id
         )
-        generation_context.target_language = target_language
+        gen_ctx.target_language = target_language
         understanding, storyboard = await load_plan_prelude_outputs(db, node)
 
         # Render source selection (docs/VIDEO_EDITOR.md §4) — the shared
@@ -286,7 +286,7 @@ class SelectClips(NodeBase):
         # second rejection is the node's failure (the graph's retry semantics).
         plans = await clip_writer.call(
             asset_texts=asset_texts,
-            context=generation_context,
+            context=gen_ctx,
             understanding=understanding,
             storyboard=storyboard,
             asset_media=await collect_asset_media(assets),
@@ -390,7 +390,7 @@ class SelectClips(NodeBase):
                 build_clip_spec(
                     render_source,
                     segment,
-                    generation_context.target_language,
+                    gen_ctx.target_language,
                     kind=render_kind,
                     aspect=aspect,
                     caption_position=cap_pos,

@@ -515,7 +515,7 @@ async def main() -> None:
                     extracted_text=article,
                     # The bake KNOWS the article is English and stamps it —
                     # production transcript language stamping is a follow-up
-                    # (PROGRESS 需求池); _project_source_language reads it.
+                    # (PROGRESS 需求池); project_source_language reads it.
                     meta={"language": "en"},
                     processing_status=AssetStatus.COMPLETED,
                 )

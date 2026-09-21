@@ -14,6 +14,10 @@ Zero DB, zero LLM. Four teeth:
 4. **Wiring belt**: both composition roots (``app.main`` / ``app.worker``)
    call ``app.chat.seams.wire_pipeline_seams`` — the only legal pipeline →
    chat edges (trigger events / conversation bridge) live nowhere else.
+5. **Rename-collision sweep**: no function scope assigns a local variable
+   under the same name as an imported symbol it also calls
+   (``x = x(...)`` — the sed-rename bug class: renaming the import turns the
+   call into an UnboundLocalError that compileall cannot see).
 """
 
 import ast
@@ -142,3 +146,35 @@ def test_composition_roots_wire_the_seams() -> None:
         assert "wire_pipeline_seams()" in src, (
             f"app.{root_name.removesuffix('.py')} never wires the seams"
         )
+
+
+def test_no_self_referential_local_assignment() -> None:
+    """Gate 5 (the rename-collision sweep): within any function, a name that
+    is module-imported may not be BOTH called and assigned as a local —
+    ``x = x(...)`` reads the not-yet-bound local (UnboundLocalError at
+    runtime; invisible to compileall). Born 2026-09-21: the Phase 5 sed
+    rename of ``_generation_context`` collided with locals of the same name
+    in three node runners (S16 run-path failure)."""
+    offenders: list[str] = []
+    for path in _iter_app_files():
+        rel = path.relative_to(APP_ROOT)
+        tree = ast.parse(path.read_text())
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                imported.update(a.asname or a.name for a in node.names)
+            elif isinstance(node, ast.Import):
+                imported.update((a.asname or a.name).split(".")[0] for a in node.names)
+        for func in ast.walk(tree):
+            if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            stores: set[str] = set()
+            calls: set[str] = set()
+            for node in ast.walk(func):
+                if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                    stores.add(node.id)
+                elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                    calls.add(node.func.id)
+            for name in sorted(stores & calls & imported):
+                offenders.append(f"{rel}:{func.lineno} {func.name}: {name}")
+    assert not offenders, "self-referential local assignments: " + ", ".join(offenders)

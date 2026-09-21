@@ -367,9 +367,9 @@ async def seed_asset(
 async def seed_understanding(pid: str) -> None:
     """A content-addressed material_understanding row (ADR-083's assemble-time
     injection data face): the digest is computed from the project's live asset
-    rows with the pipeline's own ``_asset_digest``, so the plan turn's reuse
+    rows with the pipeline's own ``asset_digest``, so the plan turn's reuse
     lookup hits exactly as an upload-time warm row would."""
-    from app.pipeline.step_context import _asset_digest
+    from app.pipeline.step_context import asset_digest
 
     async with AsyncSessionLocal() as db:
         assets = list(
@@ -407,7 +407,7 @@ async def seed_understanding(pid: str) -> None:
                 project_id=uuid.UUID(pid),
                 type="material_understanding",
                 language="en",
-                source_ref={"asset_hash": _asset_digest(assets), "warmed": True},
+                source_ref={"asset_hash": asset_digest(assets), "warmed": True},
                 payload=understanding.model_dump(mode="json"),
             )
         )

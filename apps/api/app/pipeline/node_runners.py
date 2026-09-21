@@ -836,11 +836,11 @@ class Plan(NodeBase):
         skeleton = await load_skeleton_for_run(db, run, project)
 
         persona_row = await resolve_persona(db, project)
-        generation_context = generation_context(run, project, persona_row)
+        gen_ctx = generation_context(run, project, persona_row)
 
         storyboard = await plan.call(
             understanding=understanding,
-            context=generation_context,
+            context=gen_ctx,
             task_book=task_book,
             # Registry-derived (N-32): per-type count defaults ride the prompt
             # as data, never restated by hand in the template.
