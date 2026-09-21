@@ -76,7 +76,7 @@ def self_contained(text: str) -> bool:
     return True
 
 
-class _Axis:
+class Axis:
     """One asset's word axis preprocessed for anchor search."""
 
     def __init__(self, asset_id: str, words: list[dict[str, Any]]):
@@ -125,7 +125,7 @@ class _Axis:
 
 
 def _locate_char_span(
-    axis: _Axis, quote: str, approx: float | None
+    axis: Axis, quote: str, approx: float | None
 ) -> tuple[int, int] | None:
     """Find the quote's char span in the axis stream (exact, then fuzzy)."""
     q = _norm(quote)
@@ -155,9 +155,9 @@ def _locate_char_span(
     return search(0, len(axis.stream))
 
 
-def _locate(
-    axes: list[_Axis], quote: str, approx: float | None
-) -> tuple[_Axis, int, int] | None:
+def locate(
+    axes: list[Axis], quote: str, approx: float | None
+) -> tuple[Axis, int, int] | None:
     """Locate a verbatim quote across axes → (axis, first_word, last_word)."""
     for axis in axes:
         span = _locate_char_span(axis, quote, approx)
@@ -171,12 +171,12 @@ def _locate(
     return None
 
 
-def _chain_ends(resolved: list[tuple[Any, "_Axis", int]]) -> None:
+def _chain_ends(resolved: list[tuple[Any, "Axis", int]]) -> None:
     """Chain segment ends within each asset: a segment's end = the word-END
     of the last word before the next segment's first word (spans cover whole
     words; the cut lands in the pause). The last segment ends at the axis's
     final word end. ``resolved`` = (item, axis, first_word_index) triples."""
-    by_asset: dict[str, list[tuple[Any, _Axis, int]]] = {}
+    by_asset: dict[str, list[tuple[Any, Axis, int]]] = {}
     for item, axis, w0 in resolved:
         by_asset.setdefault(axis.asset_id, []).append((item, axis, w0))
     for group in by_asset.values():
@@ -205,14 +205,14 @@ def resolve_beat_map(
     is data, never a fabricated time).
     """
     axes = [
-        _Axis(str(a["asset_id"]), [w for w in a["words"] if str(w.get("word") or "").strip()])
+        Axis(str(a["asset_id"]), [w for w in a["words"] if str(w.get("word") or "").strip()])
         for a in word_axis
         if a.get("words")
     ]
 
-    resolved_boundaries: list[tuple[Any, _Axis, int]] = []
+    resolved_boundaries: list[tuple[Any, Axis, int]] = []
     for b in understanding.topic_boundaries:
-        hit = _locate(axes, b.marker, b.approx_start)
+        hit = locate(axes, b.marker, b.approx_start)
         if hit:
             axis, w0, _ = hit
             b.asset_id, b.start = axis.asset_id, axis.word_start_s(w0)
@@ -220,7 +220,7 @@ def resolve_beat_map(
     _chain_ends(resolved_boundaries)
 
     for c in understanding.climax_spans:
-        hit = _locate(axes, c.text, c.approx_start)
+        hit = locate(axes, c.text, c.approx_start)
         if hit:
             axis, w0, w1 = hit
             c.asset_id = axis.asset_id
@@ -228,23 +228,23 @@ def resolve_beat_map(
             c.end = float(axis.words[w1].get("end") or 0)
 
     for e in understanding.emphasis_words:
-        hit = _locate(axes, e.word, e.approx_start)
+        hit = locate(axes, e.word, e.approx_start)
         if hit:
             axis, w0, _ = hit
             e.asset_id, e.start = axis.asset_id, axis.word_start_s(w0)
 
     for q in understanding.quotable_lines:
         q.self_contained = self_contained(q.text)
-        hit = _locate(axes, q.text, q.approx_start)
+        hit = locate(axes, q.text, q.approx_start)
         if hit:
             axis, w0, w1 = hit
             q.asset_id = axis.asset_id
             q.start = axis.word_start_s(w0)
             q.end = float(axis.words[w1].get("end") or 0)
 
-    resolved_hints: list[tuple[Any, _Axis, int]] = []
+    resolved_hints: list[tuple[Any, Axis, int]] = []
     for h in understanding.narrative_role_hints:
-        hit = _locate(axes, h.marker, h.approx_start)
+        hit = locate(axes, h.marker, h.approx_start)
         if hit:
             axis, w0, _ = hit
             h.asset_id, h.start = axis.asset_id, axis.word_start_s(w0)

@@ -25,11 +25,11 @@ import structlog
 
 from app.pipeline.clip_spec import CROP_EASE_SECONDS
 from app.pipeline.speaker_map import (
-    _bootstrap_slots,
-    _detect_tiled,
-    _frames_every,
-    _probe,
-    _Slot,
+    bootstrap_slots,
+    detect_tiled,
+    frames_every,
+    probe,
+    Slot,
 )
 from app.providers.vision import FaceDetection, detect_faces
 
@@ -142,7 +142,7 @@ def _kept_windows(spec: dict) -> list[_Window]:
 def _interview_keyframes(
     turns: list[dict[str, Any]],
     windows: list[_Window],
-    anchors: dict[str, _Slot],
+    anchors: dict[str, Slot],
     src_w: int,
     src_h: int,
     ar: float,
@@ -201,7 +201,7 @@ def _follow_keyframes(
 ) -> list[dict[str, float]]:
     """Dense track → deadzone/slew-capped keyframes. Detection at the native
     tier (spike: 640 misses far faces, native hits 99.9%), tiles on a miss."""
-    tiled = _detect_tiled()
+    tiled = detect_tiled()
 
     def candidates(frame: np.ndarray) -> list[FaceDetection]:
         det = detect_faces(frame, (src_w, src_h), score_threshold=0.6)
@@ -215,7 +215,7 @@ def _follow_keyframes(
         f0, f1 = int(w.start * fps), int(w.end * fps)
         points: list[tuple[float, FaceDetection]] = []
         last_c: tuple[float, float] | None = None
-        for f_idx, frame in _frames_every(video_path, step=FOLLOW_EVERY_FRAMES, start_f=f0, end_f=f1):
+        for f_idx, frame in frames_every(video_path, step=FOLLOW_EVERY_FRAMES, start_f=f0, end_f=f1):
             cands = candidates(frame)
             if not cands:
                 continue
@@ -284,7 +284,7 @@ def compute_crop_track(
     undecodable source) — the caller leaves the spec untouched."""
     if mode == "static_center":
         return None, mode
-    fps, _n, src_w, src_h = _probe(video_path)
+    fps, _n, src_w, src_h = probe(video_path)
     if fps <= 0 or src_w <= 0 or src_h <= 0:
         # An undecodable source has no frames to frame on — skip honestly
         # (also keeps a zero fps out of the frame-index math below).
@@ -300,7 +300,7 @@ def compute_crop_track(
         turns = (speaker_map or {}).get("turns") or []
         if (speaker_map or {}).get("form") != "interview" or not turns:
             return [], mode  # caller degrades: nothing honest to switch on
-        slots, _detect, _rate = _bootstrap_slots(video_path)
+        slots, _detect, _rate = bootstrap_slots(video_path)
         anchors = {"left": slots[0], "right": slots[1]}
         kfs = _interview_keyframes(turns, windows, anchors, src_w, src_h, ar)
     elif mode == "speaker_follow":

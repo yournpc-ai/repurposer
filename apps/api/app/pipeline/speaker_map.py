@@ -75,7 +75,7 @@ Detect = Callable[[np.ndarray], list[FaceDetection]]
 # engine seam only).
 
 
-def _probe(path: Path) -> tuple[float, int, int, int]:
+def probe(path: Path) -> tuple[float, int, int, int]:
     import cv2
 
     cap = cv2.VideoCapture(str(path))
@@ -92,7 +92,7 @@ def _det_size(width: int, height: int, det_w: int) -> tuple[int, int]:
     return (det_w, max(16, round(det_w * height / width / 16) * 16))
 
 
-def _frames_every(path: Path, step: int, start_f: int = 0, end_f: int | None = None):
+def frames_every(path: Path, step: int, start_f: int = 0, end_f: int | None = None):
     """Yield (frame_index, bgr) scanning sequentially every ``step`` frames."""
     import cv2
 
@@ -128,7 +128,7 @@ def _frame_at(path: Path, idx: int) -> np.ndarray:
     return frame
 
 
-def _detect_tiled(tile_det_w: int = 640) -> Detect:
+def detect_tiled(tile_det_w: int = 640) -> Detect:
     """远景小脸兜底: 2x2 tiles, each detected at a >=2x zoom, coords mapped
     back to full-frame space. Escalation stage only — 4 detect calls a frame."""
 
@@ -251,7 +251,7 @@ async def _form_gate(path: Path, turns: list[dict[str, Any]]) -> str:
     """Decide the asset's speaker form. Turn density picks the M3 budget:
     monologic material (<=2 turns or median turn >= 20s) gets one grid call;
     dialogic material gets one confirmation grid when the first is unsure."""
-    _fps, n_frames, _w, _h = _probe(path)
+    _fps, n_frames, _w, _h = probe(path)
 
     durations = [t["end"] - t["start"] for t in turns]
     median_turn = float(np.median(durations)) if durations else 0.0
@@ -286,7 +286,7 @@ async def _form_gate(path: Path, turns: list[dict[str, Any]]) -> str:
 
 
 @dataclass
-class _Slot:
+class Slot:
     """One static-camera person's running position anchor."""
 
     cx: float
@@ -303,7 +303,7 @@ class _Slot:
         self.n += 1
 
 
-def _assign(det: list[FaceDetection], slots: list[_Slot]) -> list[FaceDetection | None]:
+def _assign(det: list[FaceDetection], slots: list[Slot]) -> list[FaceDetection | None]:
     """Assign a frame's detections to slots by center distance (<= 1.5x width)."""
     out: list[FaceDetection | None] = [None] * len(slots)
     for d in det:
@@ -315,24 +315,24 @@ def _assign(det: list[FaceDetection], slots: list[_Slot]) -> list[FaceDetection 
     return out
 
 
-def _bootstrap_slots(path: Path) -> tuple[list[_Slot], Detect, float]:
+def bootstrap_slots(path: Path) -> tuple[list[Slot], Detect, float]:
     """Sparse 2s scan anchoring the left/right persons, escalating detection
     tiers (640 → native → 2x2 tiles) until the two-face rate reaches 95%.
     Returns the slots, the winning tier's detector, and its two-face rate."""
-    fps, _n, w, h = _probe(path)
+    fps, _n, w, h = probe(path)
     candidates: list[tuple[str, Detect]] = [("640", _plain_detect(_det_size(w, h, 640)))]
     if w > 640:
         candidates.append(("native", _plain_detect((w, h))))
-    candidates.append(("tiles", _detect_tiled()))
+    candidates.append(("tiles", detect_tiled()))
 
-    best: tuple[list[_Slot], Detect, float] | None = None
+    best: tuple[list[Slot], Detect, float] | None = None
     for name, detect in candidates:
         slots = [
-            _Slot(cx=w * 0.25, cy=h * 0.4, w=w * 0.05),
-            _Slot(cx=w * 0.75, cy=h * 0.4, w=w * 0.05),
+            Slot(cx=w * 0.25, cy=h * 0.4, w=w * 0.05),
+            Slot(cx=w * 0.75, cy=h * 0.4, w=w * 0.05),
         ]
         scanned = two_face = 0
-        for _, frame in _frames_every(path, step=max(1, int(2 * fps))):
+        for _, frame in frames_every(path, step=max(1, int(2 * fps))):
             det = detect(frame)
             scanned += 1
             if len(det) >= 2:
@@ -374,18 +374,18 @@ def _mouth_energy(frames: list[np.ndarray], det: list[FaceDetection | None]) -> 
 def _turn_energies(
     path: Path,
     turns: list[dict[str, Any]],
-    slots: list[_Slot],
+    slots: list[Slot],
     detect: Detect,
 ) -> list[dict[str, Any]]:
     """Per-turn mouth energy per slot + argmax attribution + confidence."""
-    fps, _n, _w, _h = _probe(path)
+    fps, _n, _w, _h = probe(path)
     out: list[dict[str, Any]] = []
     for ti, turn in enumerate(turns):
         f0, f1 = int(turn["start"] * fps), int(turn["end"] * fps)
         step = max(1, round(fps / TURN_FPS))
         frames: list[np.ndarray] = []
         per_slot: list[list[FaceDetection | None]] = [[], []]
-        for _, frame in _frames_every(path, step=step, start_f=f0, end_f=f1 + 1):
+        for _, frame in frames_every(path, step=step, start_f=f0, end_f=f1 + 1):
             frames.append(frame)
             a = _assign(detect(frame), slots)
             per_slot[0].append(a[0])
@@ -424,7 +424,7 @@ def _cut_turn_clip(
     """
     import av
 
-    fps, _n, src_w, src_h = _probe(path)
+    fps, _n, src_w, src_h = probe(path)
     width = min(width, src_w)
     dur = min(max_seconds, end - start)
     mid = (start + end) / 2
@@ -532,7 +532,7 @@ async def build_speaker_map(
             "turns": [],
         }
 
-    slots, detect, _rate = await asyncio.to_thread(_bootstrap_slots, asset_file)
+    slots, detect, _rate = await asyncio.to_thread(bootstrap_slots, asset_file)
     rows = await asyncio.to_thread(_turn_energies, asset_file, real_turns, slots, detect)
     ambiguous = [r for r in rows if not r["confident"]]
     verdicts = await _arbitrate(asset_file, ambiguous) if ambiguous else {}

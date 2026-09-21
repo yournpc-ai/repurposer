@@ -38,7 +38,7 @@ from app.models.schemas import (
     Segment,
     StillBeat,
 )
-from app.pipeline.beat_map import _Axis, _locate
+from app.pipeline.beat_map import Axis, locate
 from app.pipeline.clip_spec import locate_span
 from app.providers.storage import stream_url
 from app.tools.clips.transcript import build_anchored_transcript
@@ -114,7 +114,7 @@ def build_backing_list(
     return backing
 
 
-def _word_index_at_time(axis: _Axis, t: float) -> int:
+def _word_index_at_time(axis: Axis, t: float) -> int:
     """The first word whose start is at/after ``t`` (last word when beyond)."""
     for i, w in enumerate(axis.words):
         if float(w.get("start") or 0) >= t:
@@ -122,7 +122,7 @@ def _word_index_at_time(axis: _Axis, t: float) -> int:
     return len(axis.words) - 1
 
 
-def _word_end_before(axis: _Axis, t: float) -> float:
+def _word_end_before(axis: Axis, t: float) -> float:
     """The end of the last word starting before ``t`` (the cut lands in the
     pause); ``t`` itself when there is no earlier word."""
     idx = _word_index_at_time(axis, t)
@@ -133,7 +133,7 @@ def _word_end_before(axis: _Axis, t: float) -> float:
 
 def _resolve_beats(
     beats: list[StillBeat],
-    axis: _Axis,
+    axis: Axis,
     backing: list[dict[str, Any]],
     span_start: float,
     span_end: float,
@@ -164,7 +164,7 @@ def _resolve_beats(
     n = len(beats)
     bounds: list[float | None] = [span_start]
     for b in beats[1:]:
-        hit = _locate([axis], b.marker, b.approx_start)
+        hit = locate([axis], b.marker, b.approx_start)
         bounds.append(axis.word_start_s(hit[1]) if hit else None)
     bounds.append(span_end)
 
@@ -324,7 +324,7 @@ async def plan_still_beats(
         return None
     duration = span_end - span_start
     target_beats = min(len(backing), max(2, round(duration / _BEAT_TARGET_S)))
-    axis = _Axis("render", [w for w in span_words if str(w.get("word") or "").strip()])
+    axis = Axis("render", [w for w in span_words if str(w.get("word") or "").strip()])
     if not axis.words:
         return None
 
@@ -405,7 +405,7 @@ async def plan_still_beats(
     return plan
 
 
-def _resolve_sections(outline: BeatOutline, axis: _Axis, span_start: float, span_end: float) -> None:
+def _resolve_sections(outline: BeatOutline, axis: Axis, span_start: float, span_end: float) -> None:
     """Snap section markers onto the axis; chain ends across sections. A
     section whose marker won't resolve keeps start=None (the caller skips
     it — its assigned visuals simply go unused, never fabricated spans)."""
@@ -414,7 +414,7 @@ def _resolve_sections(outline: BeatOutline, axis: _Axis, span_start: float, span
         return
     sections[0].start = span_start
     for s in sections[1:]:
-        hit = _locate([axis], s.marker, s.approx_start)
+        hit = locate([axis], s.marker, s.approx_start)
         if hit is not None:
             _, w0, _ = hit
             s.start = axis.word_start_s(w0)
@@ -433,7 +433,7 @@ def _resolve_sections(outline: BeatOutline, axis: _Axis, span_start: float, span
 
 def resolve_beat_plan(
     plan: BeatPlan,
-    axis: _Axis,
+    axis: Axis,
     backing: list[dict[str, Any]],
     span_start: float,
     span_end: float,
