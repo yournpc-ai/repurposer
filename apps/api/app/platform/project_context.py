@@ -53,6 +53,32 @@ async def get_project_for_user(
     )
 
 
+async def get_output_for_user(
+    db: AsyncSession,
+    output_id: UUID,
+    user_id: UUID | None,
+) -> Output:
+    """Fetch an output and ensure it belongs to the given user."""
+    output = await db.get(Output, output_id)
+    if output is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Output not found",
+        )
+    project = await db.get(Project, output.project_id)
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+    if user_id is not None and project.user_id == user_id:
+        return output
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Access denied",
+    )
+
+
 async def collect_asset_texts(
     db: AsyncSession,
     project_id: UUID,

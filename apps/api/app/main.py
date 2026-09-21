@@ -14,7 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
 from app.models.database import AsyncSessionLocal, init_db
-from app.chat.routes import chat_router
+from app.chat.routes import chat_router, outputs_regenerate_router
 from app.distribution.routes import router as distribution_router
 from app.memory.routes import personas_router
 from app.pipeline.music import seed_default_music
@@ -245,6 +245,10 @@ app.include_router(assets, prefix="/api/v1/projects", tags=["assets"])
 app.include_router(persona_assets, prefix="/api/v1/personas", tags=["persona-assets"])
 app.include_router(staging, prefix="/api/v1/uploads/staging", tags=["staging"])
 app.include_router(outputs, prefix="/api/v1/outputs", tags=["outputs"])
+# The regenerate endpoint is an Agent Interface operation (it synthesizes a
+# chat turn) wearing an /outputs URL — the chat layer owns its transport
+# (Phase 5 dependency direction); the URL is unchanged.
+app.include_router(outputs_regenerate_router, prefix="/api/v1/outputs", tags=["outputs"])
 app.include_router(operations_router, prefix="/api/v1/outputs", tags=["operations"])
 app.include_router(files_router, prefix="/api/v1", tags=["files"])
 app.include_router(music, prefix="/api/v1/music", tags=["music"])

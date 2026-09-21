@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,8 +17,6 @@ from app.tools.revise.agents import reviser
 from app.providers.llm.base import LLMError
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
-    ChatMention,
-    ChatRequest,
     DubRequest,
     FeedbackRequest,
     OutputResponse,
@@ -29,11 +27,10 @@ from app.models.schemas import (
 from app.models.tables import Output, Project, User
 from app.pipeline.outputs import delete_outputs_fk_safe
 from app.tools.captions.procedure import translate_caption_track
-from app.chat.service import chat
-from app.agents.contexts import output_one_liner
 from app.operations.service import apply_precomputed
 from app.pipeline.images import generate_clip_cover_image
 from app.platform.project_context import (
+    get_output_for_user,
     resolve_clip_for_revision,
     persona_context_from_row,
     resolve_persona,
@@ -44,35 +41,6 @@ from app.providers.storage import delete_file
 from app.ui_locale import current_ui_language
 
 router = APIRouter()
-
-CLIP_TYPES = {"clip"}
-DERIVATIVE_TYPES = {"post", "quotes", "carousel", "article"}
-
-
-async def _get_output_for_user(
-    db: AsyncSession,
-    output_id: UUID,
-    user_id: UUID | None,
-) -> Output:
-    """Fetch an output and ensure it belongs to the given user."""
-    output = await db.get(Output, output_id)
-    if output is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Output not found",
-        )
-    project = await db.get(Project, output.project_id)
-    if project is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
-    if user_id is not None and project.user_id == user_id:
-        return output
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Access denied",
-    )
 
 
 def _require_clip(output: Output) -> Output:
@@ -105,7 +73,7 @@ async def get_output(
     current_user: User | None = Depends(get_current_user),
 ) -> Output:
     """Get a single output (editor load + render-status polling)."""
-    return await _get_output_for_user(
+    return await get_output_for_user(
         db, output_id, UUID(str(current_user.id)) if current_user else None
     )
 
@@ -118,7 +86,7 @@ async def update_output(
     current_user: User = Depends(get_current_user_required),
 ) -> Output:
     """Update an output's editable fields (payload / status / publishing)."""
-    output = await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    output = await get_output_for_user(db, output_id, UUID(str(current_user.id)))
 
     if data.payload is not None:
         output.payload = validate_output_payload(output.type, data.payload)
@@ -143,7 +111,7 @@ async def delete_output(
     (video/srt/image keys + the cover). Deleting is idempotent at the storage
     layer (S3 delete never 404s); derived fork rows are independent renders
     and survive their source's deletion."""
-    output = await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    output = await get_output_for_user(db, output_id, UUID(str(current_user.id)))
     files = output.files or {}
     for key in (files.get("video"), files.get("srt"), files.get("image")):
         await delete_file(key)
@@ -176,7 +144,7 @@ async def revise_output(
 ) -> Output:
     """Revise a clip output based on feedback and return the updated output."""
     output = _require_clip(
-        await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+        await get_output_for_user(db, output_id, UUID(str(current_user.id)))
     )
 
     project = await db.get(Project, output.project_id)
@@ -248,7 +216,7 @@ async def render_output_endpoint(
     error + attempt counter move together, so a capped-out FAILED render gets
     a genuinely fresh budget instead of instantly terminally failing again."""
     output = _require_clip(
-        await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+        await get_output_for_user(db, output_id, UUID(str(current_user.id)))
     )
     if not output.render_spec:
         raise HTTPException(
@@ -275,7 +243,7 @@ async def generate_output_cover(
     image-generation costs for every clip.
     """
     output = _require_clip(
-        await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+        await get_output_for_user(db, output_id, UUID(str(current_user.id)))
     )
 
     project = await db.get(Project, output.project_id)
@@ -319,7 +287,7 @@ async def translate_captions(
     updates the spec's ``target_language`` in place.
     """
     output = _require_clip(
-        await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+        await get_output_for_user(db, output_id, UUID(str(current_user.id)))
     )
 
     spec = output.render_spec
@@ -377,7 +345,7 @@ async def dub_output(
     run runner); the endpoint additionally journals the operation (ADR-032).
     """
     output = _require_clip(
-        await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+        await get_output_for_user(db, output_id, UUID(str(current_user.id)))
     )
     project = await db.get(Project, output.project_id)
     if project is None or project.user_id != UUID(str(current_user.id)):
@@ -407,76 +375,3 @@ async def dub_output(
     await db.commit()
     await db.refresh(output)
     return output
-
-
-class OutputRegenerateRequest(BaseModel):
-    """Request to regenerate an output with an optional instruction."""
-
-    instruction: str | None = Field(
-        default=None,
-        description="Steering prompt for the regeneration.",
-    )
-    target_language: str = Field(
-        default="en",
-        description="Target language code, e.g. en/zh/fr/de/es/it",
-    )
-
-
-@router.post("/{output_id}/regenerate", response_model=dict)
-async def regenerate_output(
-    output_id: UUID,
-    data: OutputRegenerateRequest,
-    db: DBDep,
-    current_user: User = Depends(get_current_user_required),
-) -> dict:
-    """Queue regeneration of a single output through the generic chat layer."""
-    output = await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
-    if output.type not in CLIP_TYPES | DERIVATIVE_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Output type {output.type} is not regenerable",
-        )
-
-    project = await db.get(Project, output.project_id)
-    if project is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
-
-    # The fallback message lands in the MAIN project conversation's history
-    # as the user's own turn (asset-scoped chats are retired, ADR-041 D8) —
-    # localize it like every other server-composed user-facing line.
-    zh = (current_ui_language() or "en").startswith("zh")
-    type_label = (
-        {"clip": "视频", "quotes": "金句卡", "post": "帖子",
-         "carousel": "轮播", "article": "文章"}.get(output.type, output.type)
-        if zh else output.type
-    )
-    result = await chat(
-        db,
-        UUID(str(current_user.id)),
-        ChatRequest(
-            project_id=UUID(str(project.id)),
-            message=data.instruction or (
-                f"重做这个{type_label}" if zh else f"Regenerate this {output.type}"
-            ),
-            # Asset-scoped conversations are retired (ADR-041 D8): the card's
-            # Regenerate click IS the pointing gesture, so the output rides as
-            # an @-mention chip (ADR-058 — the definite-reference channel; the
-            # pinned id resolves the revision target deterministically).
-            mentions=[
-                ChatMention(
-                    type="output",
-                    id=str(output_id),
-                    label=output_one_liner(output) or output.type,
-                )
-            ],
-        ),
-    )
-
-    return {
-        "run_id": str(result.run_id) if result.run_id else None,
-        "message_id": str(result.assistant_message.id),
-        "conversation_id": str(result.conversation_id),
-    }

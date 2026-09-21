@@ -25,17 +25,20 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
+from app.agents.contexts import output_one_liner
 from app.dependencies import DBDep, get_current_user_required
 from app.models.schemas import (
     AnswerRequest,
     AnswerResponse,
+    ChatMention,
     ChatMessageResponse,
     ChatRequest,
     ConversationResponse,
     MessageListResponse,
 )
-from app.models.tables import Conversation, User
+from app.models.tables import Conversation, Project, User
 from app.chat.activity import ActivityProjector
 from app.chat.service import (
     answer_question,
@@ -51,7 +54,7 @@ from app.platform.conversation_context import (
     find_conversation,
     latest_pending_question,
 )
-from app.platform.project_context import get_project_for_user
+from app.platform.project_context import get_output_for_user, get_project_for_user
 from app.ui_locale import current_ui_language
 
 # The trigger-turn agent (T3, ADR-077 判词③) takes no calls HERE either —
@@ -543,3 +546,90 @@ async def answer_message(
         status_code=status.HTTP_200_OK,
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ---- Output regeneration (ADR-058) ------------------------------------------
+# The card's Regenerate click IS the pointing gesture: this endpoint is an
+# Agent Interface operation wearing an /outputs URL — it synthesizes the
+# user's chat turn with the output riding as an @-mention chip. It lives in
+# the chat layer (its transport), mounted at /api/v1/outputs by the
+# composition root (Phase 5 dependency direction — pipeline never imports
+# chat; moved verbatim from pipeline/routes/outputs.py).
+
+outputs_regenerate_router = APIRouter()
+
+CLIP_TYPES = {"clip"}
+DERIVATIVE_TYPES = {"post", "quotes", "carousel", "article"}
+
+
+class OutputRegenerateRequest(BaseModel):
+    """Request to regenerate an output with an optional instruction."""
+
+    instruction: str | None = Field(
+        default=None,
+        description="Steering prompt for the regeneration.",
+    )
+    target_language: str = Field(
+        default="en",
+        description="Target language code, e.g. en/zh/fr/de/es/it",
+    )
+
+
+@outputs_regenerate_router.post("/{output_id}/regenerate", response_model=dict)
+async def regenerate_output(
+    output_id: UUID,
+    data: OutputRegenerateRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> dict:
+    """Queue regeneration of a single output through the generic chat layer."""
+    output = await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    if output.type not in CLIP_TYPES | DERIVATIVE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Output type {output.type} is not regenerable",
+        )
+
+    project = await db.get(Project, output.project_id)
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+
+    # The fallback message lands in the MAIN project conversation's history
+    # as the user's own turn (asset-scoped chats are retired, ADR-041 D8) —
+    # localize it like every other server-composed user-facing line.
+    zh = (current_ui_language() or "en").startswith("zh")
+    type_label = (
+        {"clip": "视频", "quotes": "金句卡", "post": "帖子",
+         "carousel": "轮播", "article": "文章"}.get(output.type, output.type)
+        if zh else output.type
+    )
+    result = await chat(
+        db,
+        UUID(str(current_user.id)),
+        ChatRequest(
+            project_id=UUID(str(project.id)),
+            message=data.instruction or (
+                f"重做这个{type_label}" if zh else f"Regenerate this {output.type}"
+            ),
+            # Asset-scoped conversations are retired (ADR-041 D8): the card's
+            # Regenerate click IS the pointing gesture, so the output rides as
+            # an @-mention chip (ADR-058 — the definite-reference channel; the
+            # pinned id resolves the revision target deterministically).
+            mentions=[
+                ChatMention(
+                    type="output",
+                    id=str(output_id),
+                    label=output_one_liner(output) or output.type,
+                )
+            ],
+        ),
+    )
+
+    return {
+        "run_id": str(result.run_id) if result.run_id else None,
+        "message_id": str(result.assistant_message.id),
+        "conversation_id": str(result.conversation_id),
+    }
