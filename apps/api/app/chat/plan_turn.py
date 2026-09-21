@@ -927,7 +927,6 @@ class PlanTurn:
                 # stored chain and silently discard the user's panel edits.
                 StartAnswerRequest(
                     kind="start",
-                    autonomy=self.request.autonomy,
                     intent=self.request.prior_intent,
                 ),
             )

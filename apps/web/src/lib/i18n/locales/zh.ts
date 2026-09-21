@@ -1353,11 +1353,6 @@ const zh: Resources = {
       "这次运行在服务端无法核证为已确认的重跑——请在下方对话里确认计划，再从那里开始。",
   },
   questionDock: {
-    autonomy: {
-      label: "自治档",
-      auto: "自动",
-      review: "审阅",
-    },
     bail: "停止生成",
     skip: "跳过问题",
   },

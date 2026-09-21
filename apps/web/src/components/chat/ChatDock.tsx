@@ -139,7 +139,6 @@ import {
 } from "./chatProtocol"
 import {
   QuestionDock,
-  type Autonomy,
 } from "@/components/chat/QuestionDock"
 import {
   RunTaskList,
@@ -950,11 +949,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // the confirm beat; plain questions from the chat loop afterwards); the
   // answered one collapses into the flow as an answered question.
   const [pendingQuestion, setPendingQuestion] = useState<QuestionMessage | null>(null)
-  // Autonomy tier: the picker is hidden (QuestionDock.SHOW_AUTONOMY_PICKER),
-  // so every run goes out at the review tier — the direction interrupt
-  // parks mid-run for the user's pick. The state stays so re-exposing the
-  // picker is a one-flag flip.
-  const [autonomy, setAutonomy] = useState<Autonomy>("review")
   const [answering, setAnswering] = useState(false)
   // System Status label (三概念分家, ADR-087 §1; Phase 3 Batch B): set
   // from the server's labelled assistant.thinking frames — the sole
@@ -1565,7 +1559,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           `/api/v1/chat/messages/${pendingQuestion.id}/answer`,
           {
             method: "POST",
-            body: { kind: "start", autonomy, intent },
+            body: { kind: "start", intent },
             toast: false,
           },
         )
@@ -1611,7 +1605,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           tasks: intent.tasks,
           target_language: firstLang ?? "en",
           instruction: intent.specific_instruction || prompt,
-          autonomy,
         },
         toast: false,
       })
@@ -1651,7 +1644,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // is exactly how "typed an answer, send does nothing" happens.
       setIsStarting(false)
     }
-  }, [runId, terminal, isStarting, chatBusy, pendingQuestion, autonomy, intent, projectId, prompt, t, titleOf, landOnStartedRun, pushCreditsGreyRow])
+  }, [runId, terminal, isStarting, chatBusy, pendingQuestion, intent, projectId, prompt, t, titleOf, landOnStartedRun, pushCreditsGreyRow])
 
   /** Cancel retired (2026-09-02, stadium 化): the task-book pill is
    * NON-blocking — the input group stays live below it, so "don't start" is
@@ -2313,9 +2306,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             confirmActive
               ? intent
               : undefined,
-          // Consumed only when this turn confirms the plan by prose — the
-          // dock's tier must survive a typed "looks good, start it".
-          autonomy: confirmActive ? autonomy : undefined,
         },
         {
           signal: ctrl.signal,
@@ -4072,8 +4062,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         kind="task_book"
         plain
         question={t("generationOverlay.confirmQuestion")}
-        autonomy={autonomy}
-        onAutonomyChange={setAutonomy}
         onStart={handleStartGeneration}
         starting={isStarting}
         startDisabled={!canStartGeneration || chatBusy}

@@ -63,7 +63,6 @@
 | 插话 | —（行为词） | 待决中与问题无关的用户消息（ADR-053 R2）：判定是 LLM 的（slot 握手 / `pending_disposition`），结算是代码的；插话回合回复接代码拼装**提醒尾**（双语固定句：原问题 + default_path） | 不是新意图态（信封字段，非第五提案态） |
 | 回答 | `answer` | 一词两态同域：① 落库态 messages.answer JSONB（kind: option/freeform/bail/start + answered_at）——**用户**答复待决问题，NULL = 待决，answer 端点即恢复；② 提议态 `AnswerProposal`（IntentProposal 第四态，N-21）——**系统**对信息类提问的直答，落库为普通 assistant 消息 content（B1 同款），**不进 messages.answer** | — |
 | 弃做 | `bail` | 优雅退出一等公民：入口回 draft / checkpoint 下游级联 skipped；永不标 failed | 不是 cancel（cancel 是 UI 按钮词） |
-| 自治档 | `autonomy` | `TaskSpec.autonomy: auto\|review`，随 run.context 落库；review 档 full run 插方向 checkpoint（期 4 已落代码） | 不是 mode（撞太多） |
 | 任务槽 | `IntentSlot` | 任务链的**编译期投影**一行 = 一个产物的规格（type/count/focus/language/tone_override/explicit）：住生成节点 `spec.slot`（同类型兄弟区分 + 步骤标签 + 派工对账），请求层永不声明（N-37，ADR-043）；存量 run.context 行读容忍 | **不是分镜槽位** `StoryboardSlot`（派工层，N-20）；不是请求语法 |
 | 挂起 | `Suspend` | 挂起异常：checkpoint 瘦节点转 `waiting` 的机制（期 4 已落代码）；状态词从机制动词派生 | 不是 paused——启用已有 waiting 座位 |
 | 中断 | `interrupt` | 节点 kind：提问-等待-续跑的瘦节点（`spec.for` 住用途） | 不进 TOOL_REGISTRY；不是 LangGraph checkpoint（状态快照供恢复）——语义近 LangGraph `interrupt()` / Mastra `tool_suspended` |

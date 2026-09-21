@@ -138,10 +138,6 @@ class TaskSpec(BaseModel):
     # confirmation (the composer persona block → chat first message → pending
     # intent chain). None = resolve per the default-persona chain.
     persona_id: str | None = None
-    # Autonomy tier (intent-ask-primitive §2.7): stored verbatim on
-    # run.context; the review tier inserts a direction interrupt between
-    # understand and plan on full runs (期 4).
-    autonomy: str = "auto"
     scope: str = "full"
     operation: str = "regenerate"
     target_id: UUID | None = None
@@ -365,20 +361,11 @@ def _compile_task_list(
                 )
             )
             next_seq += 1
-        if task.autonomy == "review":
-            # Direction interrupt (期 4, review tier only — the auto tier
-            # never inserts one; targeted runs don't either). It parks the
-            # run for the user's direction pick between understanding and
-            # planning; persona and understanding ride its inputs so the
-            # plan node's ordering constraint survives transitively.
-            interrupt_idx = len(nodes)
-            nodes.append(
-                _NodeSpec("interrupt", next_seq, inputs=[1, 2], spec={"for": "direction"})
-            )
-            next_seq += 1
-            plan_inputs = [interrupt_idx]
-        else:
-            plan_inputs = [1, 2]
+        # understand → plan is always direct (ADR-087 R9, 2026-09-20 D1):
+        # the review tier's direction interrupt is retired — every run is an
+        # autonomous continuation. The interrupt MACHINE itself (SuspendRun /
+        # resume / bail / expiry sweep / verify escalation) stays untouched.
+        plan_inputs = [1, 2]
         if decompile_idx is not None:
             plan_inputs.append(decompile_idx)
         nodes.append(_NodeSpec("plan", next_seq, inputs=plan_inputs))

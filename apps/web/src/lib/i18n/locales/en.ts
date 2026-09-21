@@ -1428,11 +1428,6 @@ const en = {
       "This run can't be verified as an approved retry on the server — confirm the plan in the chat below, then start it from there.",
   },
   questionDock: {
-    autonomy: {
-      label: "Autonomy",
-      auto: "Auto",
-      review: "Review",
-    },
     bail: "Stop generation",
     skip: "Skip question",
   },

@@ -233,15 +233,17 @@ class StartAnswerRequest(BaseModel):
     """Confirm the docked plan and start the run (task_book questions).
 
     Replaces the phase-1 magic ``option_id="start"`` — the confirmation is a
-    kind of its own, so the kind-specific fields (autonomy tier, the review
-    panel's edited plan) are only valid here, never silently ignored on
-    other kinds (C2).
+    kind of its own, so the kind-specific field (the review panel's edited
+    plan) is only valid here, never silently ignored on other kinds (C2).
     """
 
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["start"]
-    # Autonomy tier carried into the run (dock toggle, §2.7); None = auto.
+    # RETIRED (Phase 4 B7 / ADR-087 R9, D1): the autonomy tier is gone —
+    # every run is an autonomous continuation. The field stays so old
+    # clients keep passing it without a 422 (extra="forbid"); the value is
+    # accepted and IGNORED, never carried into the run.
     autonomy: Literal["auto", "review"] | None = None
     # The review panel's edited plan (hand-edited slots marked explicit).
     # Wins over the stored pending brief, so panel edits reach the run;
@@ -884,9 +886,10 @@ class ChatRequest(BaseModel):
     # pending brief only when the plan path docks a plan (a later turn
     # omitting it never clobbers the stored choice).
     persona_id: UUID | None = None
-    # The dock's autonomy tier (§2.7) — consumed only when this turn confirms
-    # the plan by prose (the intent router call "start"): a typed "looks
-    # good, start it" must not silently drop a review-tier choice.
+    # RETIRED (Phase 4 B7 / ADR-087 R9, D1): the autonomy tier is gone —
+    # every run is an autonomous continuation. The field stays so old
+    # clients keep passing it without a 422 (extra="forbid"); the value is
+    # accepted and IGNORED, never carried into the run.
     autonomy: Literal["auto", "review"] | None = None
 
 
@@ -3231,14 +3234,6 @@ class GenerateRequest(BaseModel):
             "Spec-level language fallback, e.g. en/zh/fr/de/es/it. Language "
             "is a per-task param now — None derives from the first task that "
             "carries one (fallback en)."
-        ),
-    )
-    autonomy: Literal["auto", "review"] | None = Field(
-        default=None,
-        description=(
-            "Autonomy tier for this run (intent-ask-primitive §2.7): auto = "
-            "no optional interruptions (default); review = full runs pause at "
-            "the direction interrupt (phase 4). Stored verbatim on run.context."
         ),
     )
     instruction: str | None = Field(

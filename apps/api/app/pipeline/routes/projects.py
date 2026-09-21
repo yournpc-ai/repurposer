@@ -898,7 +898,6 @@ async def generate_content(
             tone_settings=(
                 request.tone_settings.model_dump() if request.tone_settings else None
             ),
-            autonomy=request.autonomy or "auto",
             scope=request.scope,
             operation=request.operation,
             target_id=request.target_id,

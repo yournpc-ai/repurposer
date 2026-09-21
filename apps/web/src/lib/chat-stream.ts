@@ -56,7 +56,6 @@ export interface ChatTurnBody {
    * persona). */
   persona_id?: string
   prior_intent?: unknown
-  autonomy?: string
 }
 
 export interface StreamChatOptions {
@@ -106,7 +105,6 @@ export interface AnswerTurnBody {
   kind: "option" | "freeform" | "bail" | "start"
   option_id?: string
   text?: string
-  autonomy?: string
   intent?: unknown
 }
 

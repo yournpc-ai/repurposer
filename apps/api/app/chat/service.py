@@ -1315,7 +1315,7 @@ async def answer_question(
                            the plan can be re-inferred from the prompt)
     - task_book + start  → start the run from the persisted pending brief
                            (kind "start" is the confirmation — no magic
-                           option id; autonomy/intent only exist on it)
+                           option id; the edited plan rides only on it)
     - question + answer  → record, then continue the conversation: the pick
                            rides into the next intent turn (the answered
                            question is in context), the follow-up reply
@@ -1630,7 +1630,6 @@ async def answer_question(
                             if pending.persona_id
                             else None
                         ),
-                        autonomy=data.autonomy or "auto",
                         scope="full",
                         # Caption mode rides the run context verbatim from
                         # the InferredIntent — the chat path's caption-mode

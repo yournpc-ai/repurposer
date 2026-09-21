@@ -274,17 +274,21 @@ def test_decompile_injected_only_when_exemplar_pinned():
     assert "decompile" not in [n.kind for n in unpinned]
 
 
-def test_decompile_injection_survives_review_tier():
+def test_decompile_injection_no_direction_interrupt():
+    # ADR-087 R9 (2026-09-20 D1): the review tier is retired — understand →
+    # plan is ALWAYS direct, so no direction interrupt node is ever compiled
+    # in; with an exemplar pinned, planning waits on persona + understanding
+    # + the skeleton.
     nodes = _compile(
         [TaskItem(tool="select_clips")],
         exemplar_asset_id="11111111-1111-1111-1111-111111111111",
-        autonomy="review",
     )
     kinds = [n.kind for n in nodes]
-    assert kinds[:5] == ["preprocess", "persona_bootstrap", "understand", "decompile", "interrupt"]
-    plan = nodes[5]
+    assert kinds[:4] == ["preprocess", "persona_bootstrap", "understand", "decompile"]
+    assert "interrupt" not in kinds
+    plan = nodes[4]
     assert plan.kind == "plan"
-    assert set(plan.inputs) == {3, 4}  # interrupt + decompile
+    assert set(plan.inputs) == {1, 2, 3}  # persona + understand + decompile
 
 
 def test_decompile_skipped_on_modifier_only_chain():

@@ -34,26 +34,12 @@
  */
 
 import { useState } from "react"
-import { Check, ChevronDown, Loader2, Pencil, X } from "lucide-react"
+import { Check, Loader2, Pencil, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-
-export type Autonomy = "auto" | "review"
-
-/** The autonomy tier picker is hidden, not retired (2026-07-31): the concept
- * read as noise at confirm time ("switching it changes nothing"). The
- * plumbing stays — the tier still rides the start answer; flip this flag to
- * re-expose the picker. */
-const SHOW_AUTONOMY_PICKER = false
 
 /** One option on a structured question (mirrors the API's Option). */
 export interface DockOption {
@@ -65,8 +51,6 @@ interface PlanDockProps {
   kind: "task_book"
   /** The confirm display line (localized). */
   question: string
-  autonomy: Autonomy
-  onAutonomyChange: (next: Autonomy) => void
   onStart: () => void
   starting: boolean
   startDisabled?: boolean
@@ -106,12 +90,8 @@ interface OptionDockProps {
 
 export type QuestionDockProps = PlanDockProps | OptionDockProps
 
-const AUTONOMY_TIERS: Autonomy[] = ["auto", "review"]
-
 function PlanForm({
   question,
-  autonomy,
-  onAutonomyChange,
   onStart,
   starting,
   startDisabled,
@@ -143,34 +123,6 @@ function PlanForm({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {SHOW_AUTONOMY_PICKER ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9 gap-1.5"
-                    aria-label={t("questionDock.autonomy.label")}
-                  />
-                }
-              >
-                <span>{t(`questionDock.autonomy.${autonomy}`)}</span>
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" align="end">
-                {AUTONOMY_TIERS.map((tier) => (
-                  <DropdownMenuItem
-                    key={tier}
-                    onClick={() => onAutonomyChange(tier)}
-                  >
-                    <span className="flex-1">{t(`questionDock.autonomy.${tier}`)}</span>
-                    {tier === autonomy ? <Check className="h-4 w-4" /> : null}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
           {/* Start = the pill's single decision CTA (composer-bottom-row
               discipline: one solid anchor, h-9, px-5 presence). */}
           <Button

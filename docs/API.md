@@ -361,7 +361,6 @@ Request:
     "concise_vs_detailed": 0.5,
     "audience": "industry"
   },
-  "autonomy": "auto",
   "scope": "full",
   "target_id": null,
   "operation": "regenerate"
@@ -370,7 +369,6 @@ Request:
 
 - `tasks`: the confirmed task book (ADR-043 — the book path's only grammar): one `TaskItem` per requested task, `{ "skill", "params" }` where `skill` names a registry skill (`select_clips | write_post | write_quotes | write_carousel | write_article | …`) and `params` carries its parameters (`count` / `language` / `focus` / …; same-skill multi tasks express multi-language versions). **Required for `full`-scope requests** — the task book is built and confirmed in the chat book path (§10); a full-scope call without explicit `tasks` is rejected with `422`. Non-full scopes (retries, targeted runs) may omit them and re-run one node family off `target_id`.
 - `target_language`: optional spec-level fallback — `null` derives from the first task that carries a language (fallback `en`).
-- `autonomy`: `auto | review` (default `auto`) — `review` pauses full runs at the direction checkpoint; stored verbatim on `run.context`.
 - `scope`: `"full"` for a full project generation, or `"hook" | "clip" | "post" | "quotes" | "derivative" | "translation" | "render"` for targeted revisions.
 - `target_id`: clip or derivative UUID when `scope` is not `"full"`.
 - `operation`: operation for targeted revisions (`regenerate | shorten | lengthen | translate | render`).
@@ -413,7 +411,6 @@ Server-Sent Events stream of a run's state (CHAT_ARCHITECTURE §8 — a pushed r
     "target_language": "en",
     "instruction": "...",
     "tone_settings": null,
-    "autonomy": "auto",
     "scope": "full",
     "operation": "regenerate",
     "target_id": null
@@ -617,8 +614,7 @@ Request:
   "attachments": [],
   "mentions": [],
   "prior_intent": null,
-  "persona_id": "uuid | null",
-  "autonomy": "auto | review | null"
+  "persona_id": "uuid | null"
 }
 ```
 
@@ -626,7 +622,7 @@ Request:
 
 **Streaming (2026-08-04)**: the endpoint content-negotiates on `Accept`. Plain callers get the one-shot JSON `ChatResponse` (201) as before; `Accept: text/event-stream` streams the turn — `assistant.delta` `{"text"}` prose previews (0..N, concatenate in order) while the verdict JSON generates, then exactly one terminal frame: `turn.completed` carrying the full `ChatResponse` (the envelope is authoritative; deltas are a preview channel only) or `turn.failed` `{"detail"}` (mid-stream failure — nothing is committed). Non-prose fragments (think prefixes, verdict-JSON tails, reasoning) stream as `assistant.thinking` keepalive frames. 15s heartbeat comment frames. A `start` turn (`answer=null`) emits zero deltas; plan-card (`generate`) turns stream the plan echo (`intent.answer` prose) as deltas while the structured book arrives whole in the terminal frame. Clients must not auto-reconnect — a retried POST persists the user message again.
 
-`prior_intent` and `persona_id` are book-path transports (never persisted on the message): `prior_intent` is the review panel's current task chain — panel edits are direct structural edits to the task list (ADR-043), the edited chain rides `prior_intent` into the next inference, and the intent router re-proposes the full chain with chat revisions always winning; `persona_id` is the composer's persona choice riding the first message — it is written into the pending brief only when a task book docks (a later turn omitting it never clobbers the stored choice), and pinned into `run.context.persona_id` at `create_run`. `autonomy` is consumed only when this turn confirms the task book by prose — the dock's tier survives a typed "start it".
+`prior_intent` and `persona_id` are book-path transports (never persisted on the message): `prior_intent` is the review panel's current task chain — panel edits are direct structural edits to the task list (ADR-043), the edited chain rides `prior_intent` into the next inference, and the intent router re-proposes the full chain with chat revisions always winning; `persona_id` is the composer's persona choice riding the first message — it is written into the pending brief only when a task book docks (a later turn omitting it never clobbers the stored choice), and pinned into `run.context.persona_id` at `create_run`.
 
 **Book path** (project scope, before the first run or while a task book is pending): the intent router builds / refines the task book. Response shapes by verdict — `generate`: `assistant_message` is the docked `task_book` question (the book itself is on `GET /projects/{id}/results` → `pending_brief`); `answer`: a plain informational reply; `start` (prose confirmation): the run starts — `run_id` is set and `answered_question` carries the settled task book.
 
@@ -644,7 +640,7 @@ GET /api/v1/chat/conversations/{id}/messages
 POST /api/v1/chat/messages/{id}/answer
 ```
 
-Answers a docked question (the question machine) — writing the answer is what unblocks the pending decision: a task-book start begins the run, an options answer continues the conversation (the follow-up reply rides back in the response). The body is discriminated on `kind`: `start` (confirm the docked task book; carries the autonomy tier and the review panel's edited book), `option` / `freeform` (answers to options questions), `bail` (graceful exit, never an error). Response: `{ "answered_question", "follow_up" }`.
+Answers a docked question (the question machine) — writing the answer is what unblocks the pending decision: a task-book start begins the run, an options answer continues the conversation (the follow-up reply rides back in the response). The body is discriminated on `kind`: `start` (confirm the docked task book; carries the review panel's edited book), `option` / `freeform` (answers to options questions), `bail` (graceful exit, never an error). Response: `{ "answered_question", "follow_up" }`.
 
 ## 11. Notifications
 
