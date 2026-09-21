@@ -64,6 +64,7 @@ from app.pipeline.graph_fill import stamp_run_graph, sync_graph_node_for_step
 from app.pipeline.recipes import RECIPE_QUOTE_FACTS, RECIPE_REGISTRY, RecipeEntry
 from app.pipeline.step_context import _estimate_facts
 from app.pipeline.tracks import assert_single_writer_per_track, autofork_parallel_variants
+from app.pipeline.trigger_events import TRIGGER_RUN_COMPLETED, fire_trigger
 from app.platform.billing import (
     capture_step,
     check_hold,
@@ -1926,15 +1927,10 @@ async def maybe_finalize_run(run_id: UUID) -> None:
         # surface). This line runs once per terminal transition (an
         # already-terminal run early-returns above), and the turn dedups on
         # the run id regardless. Fire-and-forget — finalization never waits
-        # on the agent's speech.
+        # on the agent's speech. (Seam: app.pipeline.trigger_events, ADR-087 §6.)
         if project is not None and (
             run.status == WorkflowStatus.COMPLETED or any_landed
         ):
-            from app.chat.trigger_turn import (  # deferred: pipeline → chat edge
-                TRIGGER_RUN_COMPLETED,
-                fire_trigger,
-            )
-
             fire_trigger(
                 UUID(str(project.id)), TRIGGER_RUN_COMPLETED, str(run_id)
             )

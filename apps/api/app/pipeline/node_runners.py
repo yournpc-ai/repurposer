@@ -68,6 +68,7 @@ from app.pipeline.step_context import (
     collect_asset_media,
 )
 from app.pipeline.step_display import _set_spec_field, _set_summary
+from app.pipeline.trigger_events import TRIGGER_UNDERSTANDING, fire_trigger
 from app.platform.project_context import (
     collect_asset_texts,
     resolve_persona,
@@ -385,12 +386,7 @@ async def warm_understanding(project_id: UUID) -> None:
             # FRESH materialization fires (a reuse hit above returns early);
             # the turn dedups on the digest, so the warm's re-materialization
             # race can never double-speak. Fire-and-forget — the warm's tick
-            # moves on.
-            from app.chat.trigger_turn import (  # deferred: pipeline → chat edge
-                TRIGGER_UNDERSTANDING,
-                fire_trigger,
-            )
-
+            # moves on. (Seam: app.pipeline.trigger_events, ADR-087 §6.)
             fire_trigger(project_id, TRIGGER_UNDERSTANDING, digest)
     except Exception as e:  # noqa: BLE001 — warm is best-effort, the run path pays later
         logger.warning(

@@ -58,6 +58,7 @@ from app.pipeline.graph import NodeBase, estimate_agent
 from app.pipeline.node_runners import _display_zh
 from app.pipeline.step_context import _list_assets, _source_language
 from app.pipeline.step_display import _set_spec_field, _set_summary
+from app.pipeline.trigger_events import TRIGGER_CRAFT_DECOMPILED, fire_trigger
 from app.providers.llm.base import LLMError
 
 logger = structlog.get_logger(__name__)
@@ -349,11 +350,7 @@ async def warm_craft_skeleton(project_id: UUID, asset_id: UUID) -> None:
             )
             # 触发回合 (判词③ whitelist #3): 案例拆解完成 — the agent reads the
             # skeleton and speaks (旅程二 ④). Fire-and-forget.
-            from app.chat.trigger_turn import (  # deferred: pipeline → chat edge
-                TRIGGER_CRAFT_DECOMPILED,
-                fire_trigger,
-            )
-
+            # (Seam: app.pipeline.trigger_events, ADR-087 §6.)
             fire_trigger(project_id, TRIGGER_CRAFT_DECOMPILED, str(asset_id))
     except Exception as e:  # noqa: BLE001 — warm is best-effort, the run path pays later
         logger.warning(
@@ -518,10 +515,6 @@ class Decompile(NodeBase):
         # done branch) — the trigger turn's own session reads the skeleton
         # only inside its bounded loop, seconds later, and a miss reads
         # honestly (the turn NEVER raises).
-        from app.chat.trigger_turn import (  # deferred: pipeline → chat edge
-            TRIGGER_CRAFT_DECOMPILED,
-            fire_trigger,
-        )
-
+        # (Seam: app.pipeline.trigger_events, ADR-087 §6.)
         fire_trigger(project.id, TRIGGER_CRAFT_DECOMPILED, str(asset.id))
         return [row.id]

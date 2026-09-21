@@ -34,6 +34,14 @@ from app.platform.routes import auth_router, files_router, notifications_router,
 from app.operations.routes import router as operations_router
 from app.ui_locale import capture_ui_language
 
+# Composition-root seam wiring (ADR-087 §6): the Agent Interface subscribes
+# its trigger turn to the pipeline's whitelist event seam — the only legal
+# pipeline → chat edge. Never inside app.pipeline itself.
+from app.chat.trigger_turn import fire_trigger as _trigger_turn_fire
+from app.pipeline.trigger_events import register_trigger_handler
+
+register_trigger_handler(_trigger_turn_fire)
+
 logger = logging.getLogger(__name__)
 request_logger = structlog.get_logger("http")
 

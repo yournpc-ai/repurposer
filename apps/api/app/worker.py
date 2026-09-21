@@ -43,6 +43,14 @@ from app.pipeline.orchestrator import assert_runners_registered
 from app.pipeline.rendering import render_output
 from app.pipeline.staging import reap_stale_staging_uploads
 
+# Composition-root seam wiring (ADR-087 §6): the trigger fires happen in this
+# process (node runners / finalization), so the Agent Interface's trigger
+# turn subscribes here at boot — the only legal pipeline → chat edge.
+from app.chat.trigger_turn import fire_trigger as _trigger_turn_fire
+from app.pipeline.trigger_events import register_trigger_handler
+
+register_trigger_handler(_trigger_turn_fire)
+
 logger = structlog.get_logger()
 
 _NODE_CONCURRENCY = 4

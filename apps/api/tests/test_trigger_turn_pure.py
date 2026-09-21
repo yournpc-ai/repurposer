@@ -28,11 +28,7 @@ from pydantic import ValidationError
 from app.chat.perception import PERCEPTION_TOOLS
 from app.chat.service import _match_option
 from app.chat.trigger_turn import (
-    TRIGGER_CRAFT_DECOMPILED,
     TRIGGER_DUMP_TYPE,
-    TRIGGER_RUN_COMPLETED,
-    TRIGGER_UNDERSTANDING,
-    TRIGGER_WHITELIST,
     _suggestions_payload,
     _trigger_admission,
     _trigger_dump,
@@ -41,6 +37,12 @@ from app.chat.trigger_turn import (
 )
 from app.models.schemas import WrapUpArgs
 from app.models.tables import Conversation, Message, WorkflowRun
+from app.pipeline.trigger_events import (
+    TRIGGER_CRAFT_DECOMPILED,
+    TRIGGER_RUN_COMPLETED,
+    TRIGGER_UNDERSTANDING,
+    TRIGGER_WHITELIST,
+)
 
 
 def test_whitelist_is_the_proactivity_boundary() -> None:
