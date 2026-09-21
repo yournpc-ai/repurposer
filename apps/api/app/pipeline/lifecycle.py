@@ -197,16 +197,18 @@ def compute_lifecycle(facts: LifecycleFacts) -> LifecycleStamp:
         and not facts.prerequisite_pending
     )
 
-    # --- ConfirmationScopeReady (P8 field inventory) --------------------
+    # --- ConfirmationScopeReady (P8 field inventory; R10 翻案 2026-09-21) ---
     # The confirmation card's scope facts: a non-empty, structurally legal
-    # chain + the plan prose. Everything else on the dock payload is
-    # either another conjunct (estimate → charge) or already covered
-    # (reasons/brief/role pins → pending_prerequisite).
+    # chain. The plan PROSE is narrative decoration, never a scope fact
+    # (R10: an empty-echo dock — the LLM's legal silent present_plan, or the
+    # caption replay's TaskListProposal stash — is confirmable like any
+    # other; the card payload carries tasks/brief/estimate). Everything else
+    # on the dock payload is either another conjunct (estimate → charge) or
+    # already covered (reasons/brief/role pins → pending_prerequisite).
     confirmation_scope_ready = (
         facts.has_pending_plan
         and bool(facts.plan_tasks)
         and adjudication_ok
-        and bool(facts.plan_prose.strip())
     )
 
     # --- ChargeSemanticsReady (ADR-087 §2.1) ----------------------------
@@ -376,8 +378,15 @@ async def project_lifecycle(
         except (ToolRejected, ValueError) as e:
             adjudication_error = str(e)
 
-    # --- Asset status facts (legacy project-scope resolver — U2 compat;
-    # the worker claim gate shares this scope, jobs.py:176).
+    # --- Asset status facts (plan-scoped, 2026-09-21 拍板 — U2 intent:
+    # "status facts only gate when the chain actually consumes assets").
+    # The pinned exemplar is consumed BYTE-wise by the decompile (the run
+    # path reads bytes, never processing status) — its FAILED/PENDING state
+    # must not block Start (S16-P2's registered red seat; a failed reference
+    # ASR says nothing about the plan's required inputs). Excluded only
+    # when it is not also the pinned source. The legacy project-scope
+    # resolver covers the remaining (consumed) asset set — same scope the
+    # worker claim gate shares (jobs.py:176).
     assets = list(
         (
             await db.execute(
@@ -390,10 +399,17 @@ async def project_lifecycle(
         .scalars()
         .all()
     )
+    excluded_ids: set[str] = set()
+    if isinstance(project.pending_brief, dict):
+        exemplar = project.pending_brief.get("exemplar_asset_id")
+        source = project.pending_brief.get("source_asset_id")
+        if exemplar and str(exemplar) != str(source):
+            excluded_ids.add(str(exemplar))
+    gated_assets = [a for a in assets if str(a.id) not in excluded_ids]
     assets_pending = any(
-        _asset_status(a) in ("pending", "processing") for a in assets
+        _asset_status(a) in ("pending", "processing") for a in gated_assets
     )
-    assets_failed = any(_asset_status(a) == "failed" for a in assets)
+    assets_failed = any(_asset_status(a) == "failed" for a in gated_assets)
 
     # --- Required-input existence (the birthplace Requirement predicates
     # themselves — the node's own knowledge, not a parallel table).

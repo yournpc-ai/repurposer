@@ -3251,13 +3251,13 @@ async def s16_remix_flagship_journey(ctx: Ctx) -> None:
     默认路径——由纯测试锁定）。复用不重复发声由结构锁住（reuse 早退在火前
     60 行）+ (conversation, trigger, ref) 去重（test_trigger_turn_pure），本
     剧本末尾断言消息恰一条。
-    已知红座（2026-09-21 B8 在册）：P2 的 Start 在 B6 门下 422 material_failed
-    ——material gatherer 的项目级 any() 把失败的 REFERENCE 资产计入（plan-
-    scoped 收窄挂账，verification-contracts §4）；该座即此悬案的常驻验收位，
-    裁决落地前本剧本在此红。P1 已知轮盘（同日取证）：mention 回合若路由
-    直接 dock 默认计划（裁量内形态），ADR-080 第二谓词使 warm review 准入
-    即静默、且静默不复燃——wait_trigger_review 240s 超时即「flake」；无
-    计划 dock 的回合则正常发言（复跑即绿的机理，非时序抖动）。"""
+    gatherer 已收窄（2026-09-21 修复批，拍板 = plan-scoped）：pinned exemplar
+    非源时排除出 Start 门控资产集（decompile 读字节不读处理态）——P2 的
+    Start 在 B6 门下绿即此收窄的常驻验收位（原红座：失败的 REFERENCE 资产
+    被项目级 any() 计入 material_failed）。P1 已知轮盘（2026-09-21 B8 取证）：
+    mention 回合若路由直接 dock 默认计划（裁量内形态），ADR-080 第二谓词使
+    warm review 准入即静默、且静默不复燃——wait_trigger_review 240s 超时
+    即「flake」；无计划 dock 的回合则正常发言（复跑即绿的机理，非时序抖动）。"""
     fixture_prefix = f"scenario/s16-{uuid.uuid4().hex[:8]}"
     src_key = await copy_fixture(REMIX_SOURCE_KEY, fixture_prefix)
     ex_key = await copy_fixture(REMIX_EXEMPLAR_KEY, fixture_prefix)
@@ -3614,9 +3614,9 @@ async def s19_turn_durability_and_trigger_admission(ctx: Ctx) -> None:
     understanding_warmed 撞进在途回合盲说。
     Phase 4 B8 改写（B3 后语义）：caption 回合收敛即 dock 计划——pending
     plan 在位时 review 按 ADR-080 第二谓词静默（在途 defer → 收敛静默 =
-    「永不中途开口」的证明形态）；bail 清 pending 后同一世界事件补发言,
-    发言落序锁不变（review 必落在用户回合答复之后）。清 pending 不用
-    Start 的原因见下方注释（空散文 dock 悬案,verification-contracts §4）。"""
+    「永不中途开口」的证明形态）；Start 清 pending 后同一世界事件补发言,
+    发言落序锁不变（review 必落在用户回合答复之后）。Start 形随 R10
+    生效归位（2026-09-21 修复批——散文降装饰,空 echo dock 可确认）。"""
     from app.chat.trigger_turn import TRIGGER_UNDERSTANDING, run_trigger_turn
 
     pid = await ctx.new_project("S19 turn durability + admission")
@@ -3702,19 +3702,16 @@ async def s19_turn_durability_and_trigger_admission(ctx: Ctx) -> None:
         check(review is None,
               "ADR-080 第二谓词：pending plan 在位,review 静默（计划的 echo "
               "持有麦克风——在途 defer → 收敛静默,永不中途开口）", review)
-        # 清 pending 用 bail 不用 Start（2026-09-21 B8 取证后修正）：本剧本的
-        # 主题是 trigger 准入门,不是 Start 门;Start 当前被「空散文 dock 永不
-        # ready」悬案轮盘阻塞——present_plan 空 content 通道是 LLM 合法形态
-        # （实测本剧本的 dock 行 content/intent.answer 双空）,P8「计划散文非
-        # 空」合取静默拒绝 → start.blocked 无 blocker ids（D3 机读性同时受
-        # 损）。裁决挂账 verification-contracts §4。bail 同样清 pending,
-        # 第二谓词的证明形态不变。
-        res = await ctx.answer(turn1["assistant_message"]["id"], {"kind": "bail"})
-        check(res.status_code == 200, "dock bail drops the plan", res.text)
+        # Start 清掉 pending plan 后重新点火——世界事件此时才允许说话。
+        # （2026-09-21 R10 生效后 Start 形归位：散文降叙事装饰，空 echo
+        # dock 同样可确认——本拍同时是 R10 的端到端验收座：若本回合的
+        # present_plan 走了空 content 通道,旧 P8 合取会静默 422,现在必过。）
+        res = await ctx.answer(turn1["assistant_message"]["id"], {"kind": "start"})
+        check(res.status_code == 200, "dock Start answers the plan", res.text)
         review = await run_trigger_turn(uuid.UUID(pid), TRIGGER_UNDERSTANDING,
-                                        "s19-digest-after-bail")
+                                        "s19-digest-after-start")
         check(review is not None,
-              "pending plan 清完(bail)后,同一世界事件补发言")
+              "pending plan 清完(Start)后,同一世界事件补发言")
     else:
         check(review is not None, "the deferred review eventually speaks")
     async with AsyncSessionLocal() as db:
@@ -3991,6 +3988,53 @@ async def s21_checkpoint_channel_observation(ctx: Ctx) -> None:
         )
 
 
+async def s22_trigger_landing_silence(ctx: Ctx) -> None:
+    """触发回合落点拍回归座（ADR-080 第二谓词补齐，2026-09-21 拍板修复批）：
+    准入通过（无在途回合、无 pending plan——caption 选项问在场但非计划）
+    → 触发的 LLM loop 在途 → caption 答复回放 dock 计划 → 落点复评命中
+    → 整体静默（永不落建议问 dock 抢确认座——S16-P2 2026-09-21 实证竞态
+    「计划 dock 与 trigger_turn_spoke 同秒」的常驻回归座）。确定性说明：
+    计划 dock 由 caption 答复驱动（回放是代码路径，秒级），触发的 loop
+    恒为 10s+ 量级——计划必在 loop 在途期间落定；罕见的反方向（loop 快
+    于答复）只会误红不会误绿。"""
+    from app.chat.trigger_turn import TRIGGER_UNDERSTANDING, run_trigger_turn
+
+    pid = await ctx.new_project("S22 trigger landing silence")
+    await seed_asset(
+        pid, ctx.user_id, AssetType.VIDEO, "talk.mp4",
+        extracted_text="On embodied intelligence and why robots need a body.",
+        processed=True,
+        meta={"language": "en"},
+    )
+    turn1 = await ctx.chat(pid, "把我的视频做成 3 张金句卡")
+    q1 = turn1["assistant_message"].get("question") or {}
+    check(
+        q1.get("kind") == "question"
+        and any(
+            str(o.get("id", "")).startswith("caption_mode_")
+            for o in q1.get("options") or []
+        ),
+        "the quote-card chain docks the caption gate first (S1 precedent)",
+        turn1["assistant_message"],
+    )
+    # 准入拍此刻通过：无在途用户回合、无 pending plan（caption 问不是计划）。
+    trigger_task = asyncio.create_task(
+        run_trigger_turn(uuid.UUID(pid), TRIGGER_UNDERSTANDING, "s22-landing")
+    )
+    await asyncio.sleep(2)  # 让触发回合过准入、进入 LLM loop 窗口
+    turn1 = await answer_caption_gate(ctx, turn1)  # 回放 dock 计划（在 loop 在途期间）
+    check(is_plan_dock(turn1["assistant_message"]),
+          "the caption answer docks the plan while the trigger loop runs",
+          turn1["assistant_message"])
+    review = await trigger_task
+    check(
+        review is None,
+        "落点拍：计划 dock 在触发 loop 在途期间落定 → 落点复评命中即静默"
+        "（永不抢确认座）",
+        review,
+    )
+
+
 SCENARIOS = {
     "S1": s1_bare_wish_full_journey,
     "S2": s2_skipped_topic_ask_drafts_from_persona,
@@ -4013,6 +4057,7 @@ SCENARIOS = {
     "S19": s19_turn_durability_and_trigger_admission,
     "S20": s20_speech_semantic_contract,
     "S21": s21_checkpoint_channel_observation,
+    "S22": s22_trigger_landing_silence,
 }
 
 

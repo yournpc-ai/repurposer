@@ -91,7 +91,7 @@ LLM 行为方差，容忍）/ **KNOWN VERIFICATION FRAGILITY**（合同已兑现
 | S10 | answer/draft 判定（few-shot 逐字镜像缓解，构造性方差；draft 拍单发一次散文口头确认代替 dock——当日 1/6）；ask 轮 preview `default_path` 空单发一次（prompt 合规抖动，未复现） |
 | S20B | grounded-judgment 内容词 any-of：措辞自由下存在词表外措辞的非零概率 |
 | S6f / S11 | 路由判定抖动（重试预算已在剧本内） |
-| S5 | refine 轮 slots 抖动：无关 refine 偶发改写面板钉住的参数（2026-09-20 Batch B ⑧ 首跑单发，复跑即绿；合并座 `merge_prior_slots` 本批零触碰，harness 走裸 API 与客户端改动无涉）；turn1 present_plan 未落地——工具调用参数倒进散文尾部成截断 JSON（provider 发射抖动，2026-09-20 Batch C 验收首跑单发，复跑即绿）；**count 标量字符串化窗口**（2026-09-21 B3 验收：同窗口 4 连红——`"count":"3"/"2"` + `"null"` 字符串，语义全对仅类型抖；实证三连排批次——null 实验（B0 码 API 同窗口绿）+ round-robin（B3 码第 5 跑即绿）+ 两 checkout 全树 byte-diff（plan path 零差异、.env 一致）→ provider 发射类型抖动以分钟~十分钟尺度成簇，多连红 ≠ 批次回归） |
+| S5 | refine 轮 slots 抖动：无关 refine 偶发改写面板钉住的参数（2026-09-20 Batch B ⑧ 首跑单发，复跑即绿；合并座 `merge_prior_slots` 本批零触碰，harness 走裸 API 与客户端改动无涉）；turn1 present_plan 未落地——工具调用参数倒进散文尾部成截断 JSON（provider 发射抖动，2026-09-20 Batch C 验收首跑单发，复跑即绿）；**count 标量字符串化窗口**（2026-09-21 B3 验收：同窗口 4 连红——`"count":"3"/"2"` + `"null"` 字符串，语义全对仅类型抖；实证三连排批次——null 实验（B0 码 API 同窗口绿）+ round-robin（B3 码第 5 跑即绿）+ 两 checkout 全树 byte-diff（plan path 零差异、.env 一致）→ provider 发射类型抖动以分钟~十分钟尺度成簇，多连红 ≠ 批次回归）；**2026-09-21 Phase 4 修复批验收窗三连红三形态**（同族不同形，均非批次机制——修复批零触碰 router/loop/schema/merge 座）：① present_plan 参数倒进散文尾部成 JSON（在册形）② `params=""` 空串 ×5 + `audience` 越界字段 ×1 → 校验层 6 连拒 exhausted（API 日志取证，校验分层律正确履职）③ refine 轮 `count:'3'` 字符串化（B3 窗在册形复现）——provider 类型抖动窗当日活跃 |
 
 ### KNOWN VERIFICATION FRAGILITY（挂账，不修生产码）
 
@@ -99,9 +99,6 @@ LLM 行为方差，容忍）/ **KNOWN VERIFICATION FRAGILITY**（合同已兑现
 |:---|:---|
 | S20A `PROCESSING_DISCLOSURE` 正则语序洞 | 合同 = 披露语义存在（duty-bound clause），不锁措辞（禁令 #7）；正则宽容形状集不含「Processing is still underway」类语序 → 合同兑现但断言单发红。后续若要消除，扩正则宽容集（测试侧），**不动生产码** |
 | trigger_review 建议问挂 completed run id → judged answer 走 interrupt 唤醒路 | ADR-077 T3 建议问带 `workflow_run_id`（review 的 ref）× ADR-053 R2 判定结算的交互：修订类消息被 judged answer settle 后走 `resume_waiting_interrupt`（completed run 空转 outcome=idle）+ `_resume_ack_line` 泛行 "Resuming the run"（失信 copy）+ tool dispatch 跳过 → 修订意图蒸发。pre-existing（Phase 4 之前，B3 验收 S4 首猎 2026-09-21）；harness 侧隔离 = A1 断言后 bail 建议问（A2 锁 wiring 修订路，非 disposition 判定稳健性）；产品侧修法挂账：唤醒路加 run 状态门（非 WAITING_HUMAN 不唤醒 + ack 按 outcome 分词），或建议问不挂 run id |
-| material gatherer 的 `assets_failed`/`assets_pending` = 项目级 any() vs U2 plan-scoped required-input 意图 | 失败的 **REFERENCE 资产**（exemplar——计划从不消费它的处理态）也触发 `material_failed` 阻塞 Start，即使计划的 required inputs 全部就绪；B6 Start 门使其服务端可见（Phase 4 B8 全量剧本 S16-P2 首猎 2026-09-21——此前任何失败资产都阻 Start 只在 UI 禁钮层，无剧本座）。harness 侧隔离曾试 exemplar 改 COMPLETED 无理解行，**实证非等价已回退**（2026-09-21 B8 二轮取证：pin 落定即触发 warm 拆解火——COMPLETED 参考片的「无可复用」不阻止新鲜拆解，触发回合与计划 dock 同秒落 dock 抢确认座，且 run 的 decompile 走 reuse 早退使 T4 永不发声）；现状 = 恢复 FAILED 原设计，**S16-P2 的 Start 红座 = 本 corner 的常驻验收位**。**产品侧裁决（已拍板 2026-09-21）：plan-scoped 收窄**——status facts 只在链实际消费该类资产时门控（对齐 U2 注释意图「Status facts only gate when the chain actually consumes assets」；decompile 读字节不读处理态）；修复另起后续批（gatherer 按 plan-required 资产集评估；S16 全绿即证明），落地前行为维持现状 |
-| 空散文 dock 永不 ready vs P8「计划散文非空」冻结合取（Start 死端 + D3 机读性受损） | `present_plan` 空 content 通道是 LLM 合法形态（tool_loop `speech=""` 直通；实测 2026-09-21 最近 3 次 S16/S19 dock 中 2 次 `answer=""`——轮盘非边角），caption 回放自 TaskListProposal stash 则**确定性** `answer=None`（`_replay_stashed_caption_intent` 只搬 tasks）。dock 行 `content=""` + `intent.answer=""` 是 `sync_plan_question` docstring 明示祝福的合法形态（「空 echo 存空 content——卡面即门面，永不机器摘要行」），但 P8（Phase 1 简报冻结，用户拍板）ConfirmationScopeReady = 链非空 ∧ 结构合法 ∧ **计划散文非空** → `confirmation_ready` 结构性 false：Start 422 `start.blocked` 且**不携任何 blocker id**（该合取不追加戳——`start.blocked` 裸码，D3「机可读阻断携戳」合同受损），前端读同一投影 = Confirm 永禁无解释。实证行：S19 dock `content:""`, `intent.answer:""`, tasks 双 translate_clip 在场（2026-09-21 13:36 run）。**产品侧裁决（已拍板 2026-09-21）：选项 B——P8 翻案（ADR-087 Reversal Ledger R10）**，确认 scope = 卡载荷（tasks/brief/estimate——payload 字段级，U4「payload-existence 永禁」不涉），散文降叙事装饰，空散文 dock 可确认；修复另起后续批（lifecycle 删 `plan_prose` 合取 + Phase 1 简报 P8 翻案注已同批落 + `test_lifecycle_pure` 矩阵更新 + S19 恢复 Start 形），落地前行为维持现状（S19 harness 暂用 bail 清 pending，主题归位 trigger 准入门） |
-| 触发回合落点竞态：准入门第二谓词只在**准入时**评估，落 dock 时不复评（ADR-080「永不压过 docked plan」被竞态击穿） | 触发回合（warm decompile / run_completed）通过准入时无 pending plan → LLM loop 跑 15-90s → 期间用户回合 dock 计划 → 触发回合落 ADR-081 建议问 dock（`_dock_question` 单 pending 不变式 supersede 任何未答问）→ **计划被抢座**：计划行被 supersede（Start 之 → 409 `start.scope_mismatch`），`is_pending_plan` 翻 false → 「looks good, start」路由去 chat 路（bare_reply 弹跳），pending_brief 里的计划失去确认座。实证：S16-P2 2026-09-21 13:35:35 计划 dock（present_plan）与 `trigger_turn_spoke`（craft_decompiled, suggestions=2）同秒，随后 /results 生命周期 = `pending_prerequisite`（非计划 pending 在场）。ADR-080 注释自述「in-flight user turn, and NEVER talks over a docked plan」——现状只守住了准入一拍，落点一拍无人守。生产可达：真实用户的参考片恒为 COMPLETED，warm 拆解随 pin 落定即点火，与用户 dock 计划并发是常态。**产品侧裁决（已拍板 2026-09-21）：(a) 落 dock 前复评 `is_pending_plan`，命中即整体静默**（与准入静默同教义——世界事件已诚实落画布，计划持有麦克风）；修复另起后续批（trigger_turn 落点复评 + 验收座；doctrine-aligned 补齐非翻案），落地前竞态存在 |
 
 ### UNPROVEN / 待定性
 
@@ -155,6 +152,9 @@ truth 从「处理中」变成「处理失败」——前置条件被 worker 调
 | S1 | 增 lifecycle stamp 三拍（preparing → dock 四合取 → active_run blocker + settle 归还） | A |
 | gate 4 checkpoint 条款 | 裸词禁 → `kind="checkpoint"` 上下文禁（ adjudication 样例） | A |
 | `test_decompile_injection_survives_review_tier` | review 档退役（Phase 4 B7，D1/R9）→ 改写为 `test_decompile_injection_no_direction_interrupt`：合同从「exemplar 注入在 review 档下存活」迁移为「understand→plan 恒直通、无 direction interrupt 编译入图」（interrupt 机器保留，档位消失） | Phase 4 B7 |
+| T10b（`test_lifecycle_pure`） | P8「计划散文非空」合取随 R10 翻案退役（确认 scope = 卡载荷，散文降叙事装饰）→ 从 flagship PLAN_READY ∧ ¬ScopeReady 独立见证改写为 R10 锁：空散文 dock（LLM 合法静默 present_plan / caption 回放 stash）可确认 | Phase 4 修复批 |
+| S19 | 空散文 dock 死端消除（R10）→ 清 pending 从 bail 绕门归位 Start 形：Start 清 pending 即 R10 端到端验收座 | Phase 4 修复批 |
+| S16 | gatherer plan-scoped 收窄（pinned exemplar 非源时排除出 Start 门控资产集——decompile 读字节不读处理态）→ P2 Start 原红座转绿即收窄的常驻验收位 | Phase 4 修复批 |
 
 ### ADDED（新架构合同的新验证座）
 
@@ -168,6 +168,7 @@ truth 从「处理中」变成「处理失败」——前置条件被 worker 调
 | B-3：`_sweep_activities` 路由缝 stub ×2（T16-B 服务端缝脱离剧本可证） | B-3 |
 | B-5：gate 5a/5b/5c 牙口正反探针（`test_check_gates_pure.py`，5 例） | B-5 |
 | 本文档（Registry + 哲学 + fixture 律 + 方差登记 + 本 diff） | C |
+| S22 触发回合落点拍回归座（ADR-080 第二谓词补齐：触发 loop 在途期间计划 dock → 落点复评 `is_pending_plan` 命中即整体静默，永不抢确认座） | Phase 4 修复批 |
 
 ### DEFERRED → Phase 3（Presentation Migration / 相位退役联动）
 

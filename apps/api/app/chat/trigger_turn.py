@@ -398,6 +398,24 @@ async def run_trigger_turn(
             speech = result.prose.strip()
             if not speech:
                 return None
+            # 落点拍 (ADR-080 第二谓词补齐, 2026-09-21 拍板): the admission
+            # check ran before our LLM loop — a user turn may have docked a
+            # plan since (S16-P2 实证: the review's suggestion dock landed
+            # the same second as present_plan and superseded it, stealing
+            # the confirmation seat). Re-check at the landing beat: a plan
+            # now pending holds the microphone — the world event already
+            # landed truthfully on the canvas, so silence overall (never a
+            # dock, never a bare message). Not deduped: once the plan
+            # clears, a later fire of the same world event may speak.
+            if is_pending_plan(
+                await latest_pending_question(db, conversation_id)
+            ):
+                logger.info(
+                    "trigger_turn_silenced_pending_plan_at_landing",
+                    trigger=trigger,
+                    ref=ref,
+                )
+                return None
             suggestions: list[str] = outcome.get("suggestions", [])
             if suggestions:
                 # 选项语法统一律 (ADR-081): the next-step labels dock as a

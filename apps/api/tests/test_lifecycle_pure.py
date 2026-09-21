@@ -30,7 +30,6 @@ from app.pipeline.lifecycle import (
     BLOCKER_MATERIAL_PENDING,
     BLOCKER_PENDING_PREREQUISITE,
     STATE_CONFIRMATION_READY,
-    STATE_PLAN_READY,
     STATE_PREPARING,
     STATE_RUNNING,
     LifecycleFacts,
@@ -173,16 +172,20 @@ def test_t10_flagship_negative_active_run() -> None:
     assert BLOCKER_ACTIVE_RUN in stamp.blockers
 
 
-# T10b — flagship variant: PLAN_READY ∧ ¬ConfirmationScopeReady (e.g. the
-# docked row lost its plan prose) → confirmation_ready=False while
-# plan_ready=True. The four conjuncts are independent fields, not one
-# boolean (U4).
-def test_t10b_flagship_variant_scope_not_ready() -> None:
+# T10b — R10 (2026-09-21 翻案 P8): the plan prose is narrative decoration,
+# never a scope fact — an empty-echo dock (the LLM's legal silent
+# present_plan / the caption replay's TaskListProposal stash) is
+# confirmation-ready like any other. (Pre-R10 this seat was the flagship
+# PLAN_READY ∧ ¬ScopeReady conjunct-independence witness; with the prose
+# conjunct retired, scope_ready = has_pending_plan ∧ chain ∧ adjudication
+# is implied by plan_ready's own conjuncts — the independence witness is
+# gone BY DESIGN, this pin locks the R10 truth.)
+def test_t10b_empty_prose_dock_is_confirmation_ready() -> None:
     stamp = compute_lifecycle(_ready_facts(plan_prose=""))
     assert stamp.plan_ready
-    assert not stamp.confirmation_scope_ready
-    assert not stamp.confirmation_ready
-    assert stamp.state == STATE_PLAN_READY
+    assert stamp.confirmation_scope_ready
+    assert stamp.confirmation_ready
+    assert stamp.state == STATE_CONFIRMATION_READY
 
 
 # T11 — active run + no new plan: RUNNING, plan facts all false.
