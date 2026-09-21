@@ -53,7 +53,7 @@ def _count_words(value: object) -> int:
     return 0
 
 
-async def _list_assets(db: AsyncSession, project_id: UUID) -> list[Asset]:
+async def list_assets(db: AsyncSession, project_id: UUID) -> list[Asset]:
     result = await db.execute(select(Asset).where(Asset.project_id == project_id))
     return list(result.scalars().all())
 
@@ -67,7 +67,7 @@ def _source_language(project: Project, assets: list[Asset]) -> str:
     return project.language or "en"
 
 
-def _asset_digest(assets: list[Asset]) -> str:
+def asset_digest(assets: list[Asset]) -> str:
     """Content-addressed digest of the understanding's material set (v3).
 
     Each asset contributes ``type|content_sha256`` (stamped by the first
@@ -198,7 +198,7 @@ async def _estimate_facts(db: AsyncSession, project: Project) -> dict:
     clip rows' duration/caption text. Each node's ``estimate(ctx)`` picks what
     it needs; ``spec`` and ``input_kinds`` ride per node at the call site.
     """
-    assets = await _list_assets(db, project.id)
+    assets = await list_assets(db, project.id)
     texts = [t for a in assets if (t := (a.extracted_text or a.transcript))]
     # Mirrors collect_asset_media's feed surface (no downloads): images with a
     # file, one item per slide page, videos within the direct-feed duration.

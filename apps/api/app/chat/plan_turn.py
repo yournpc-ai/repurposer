@@ -12,7 +12,7 @@ tool executions:
   the code-composed draft-from-persona declaration);
 - ``start_run`` still runs through ``answer_question`` → ``create_run`` —
   the only run birthplace, zero bypass, its transaction untouched;
-- chain adjudication (``validate_task_list`` / ``_check_transform_targets``)
+- chain adjudication (``validate_task_list`` / ``check_transform_targets``)
   rejections ARE the loop's feedback — the retired funnel repair round's
   seat, now one bounded iteration each.
 
@@ -276,12 +276,12 @@ class PlanTurn:
         understanding_lines: list[str] | None = None
         if assets:
             from app.pipeline.node_runners import (  # deferred: pipeline weight
-                _find_reusable_understanding,
+                find_reusable_understanding,
             )
-            from app.pipeline.step_context import _asset_digest
+            from app.pipeline.step_context import asset_digest
 
-            understanding_row = await _find_reusable_understanding(
-                db, project, _asset_digest(assets)
+            understanding_row = await find_reusable_understanding(
+                db, project, asset_digest(assets)
             )
             if understanding_row is not None:
                 try:
@@ -541,7 +541,7 @@ class PlanTurn:
         # translate/dub target that IS the faced source language is doomed by
         # construction — the feedback names the fix ("中英双语 on an en source
         # → target zh") before the user ever confirms.
-        from app.pipeline.morph import _check_transform_targets
+        from app.pipeline.morph import check_transform_targets
         from app.ui_locale import current_ui_language
 
         try:
@@ -549,7 +549,7 @@ class PlanTurn:
         except (ToolRejected, ValueError) as e:
             return f"{e} (available: {getattr(e, 'suggestions', [])})"
         try:
-            await _check_transform_targets(
+            await check_transform_targets(
                 db,
                 project,
                 params.tasks,

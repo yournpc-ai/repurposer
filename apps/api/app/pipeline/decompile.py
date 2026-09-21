@@ -56,7 +56,7 @@ from app.models.tables import Asset, Music, Output, Project, WorkflowRun, Workfl
 from app.pipeline import craft_scan
 from app.pipeline.graph import NodeBase, estimate_agent
 from app.pipeline.node_runners import _display_zh
-from app.pipeline.step_context import _list_assets, _source_language
+from app.pipeline.step_context import list_assets, _source_language
 from app.pipeline.step_display import _set_spec_field, _set_summary
 from app.pipeline.trigger_events import TRIGGER_CRAFT_DECOMPILED, fire_trigger
 from app.providers.llm.base import LLMError
@@ -72,11 +72,11 @@ def _skeleton_digest(asset: Asset) -> str | None:
     return str(digest) if digest else None
 
 
-async def _find_reusable_skeleton(
+async def find_reusable_skeleton(
     db: AsyncSession, project: Project, asset: Asset
 ) -> Output | None:
     """The latest same-user skeleton row matching the exemplar's content hash
-    (cross-project by design — the _find_reusable_understanding precedent:
+    (cross-project by design — the find_reusable_understanding precedent:
     content addressing makes any earlier materialization satisfy the reuse;
     the row is referenced, never copied). Without a hash, the per-upload
     asset id is the fallback identity (same-project only)."""
@@ -271,7 +271,7 @@ async def load_skeleton_for_run(
         return None
     if asset is None:
         return None
-    row = await _find_reusable_skeleton(db, project, asset)
+    row = await find_reusable_skeleton(db, project, asset)
     if row is None:
         return None
     try:
@@ -334,7 +334,7 @@ async def warm_craft_skeleton(project_id: UUID, asset_id: UUID) -> None:
                 return
             if asset.processing_status != AssetStatus.COMPLETED:
                 return  # the processor's completion seat re-fires the warm
-            if await _find_reusable_skeleton(db, project, asset) is not None:
+            if await find_reusable_skeleton(db, project, asset) is not None:
                 logger.info("craft_skeleton_warm_reuse_hit", asset_id=str(asset_id))
                 return
             skeleton = await _materialize_skeleton(db, asset)
@@ -405,7 +405,7 @@ class Decompile(NodeBase):
         """Idempotent reuse (asset-hash class — the understand protocol's
         second case): a hit returns the earlier row's id and the node costs
         nothing, whether the row came from a prior run or the warm."""
-        latest = await _find_reusable_skeleton(db, project, asset)
+        latest = await find_reusable_skeleton(db, project, asset)
         if latest is None:
             return None
         try:
@@ -432,7 +432,7 @@ class Decompile(NodeBase):
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
     ) -> list[UUID]:
-        assets = await _list_assets(db, project.id)
+        assets = await list_assets(db, project.id)
         zh = _display_zh(run, project, assets)
         spec = node.spec or {}
         asset: Asset | None = None

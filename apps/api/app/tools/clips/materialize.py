@@ -35,7 +35,7 @@ from app.pipeline.decompile import load_skeleton_for_run, skeleton_caption_overr
 from app.pipeline.graph import NodeBase, estimate_free
 from app.pipeline.graph_store import display_aspect_class
 from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
-from app.pipeline.step_context import _list_assets
+from app.pipeline.step_context import list_assets
 from app.pipeline.step_display import _set_summary, ui_lang_of
 from app.platform.project_context import resolve_run_persona
 from app.tools.clips.node import resolve_render_source
@@ -73,7 +73,7 @@ class MaterializeSource(NodeBase):
         treat the row like any clip.
         """
         ctx = run.context or {}
-        assets = await _list_assets(db, project.id)
+        assets = await list_assets(db, project.id)
         # 资产角色 (ADR-078 判词④) — the shared decision's pins (select_clips
         # resolves the same way): a pinned source wins; the pinned exemplar
         # stays out of the material pool unless the roles reversed.

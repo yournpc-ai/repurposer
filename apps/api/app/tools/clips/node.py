@@ -42,7 +42,7 @@ from app.pipeline.morph import _later_inplace_morph_exists, _render_step_label
 from app.agents.base import MAX_CHARS_PER_TEXT
 from app.agents.contexts import generation_context
 from app.pipeline.step_context import (
-    _list_assets,
+    list_assets,
     collect_asset_media,
 )
 from app.pipeline.step_display import (
@@ -234,7 +234,7 @@ class SelectClips(NodeBase):
         await _set_stage(node.id, "selecting_segments")
 
         asset_texts = await collect_asset_texts(db, project.id)
-        assets = await _list_assets(db, project.id)
+        assets = await list_assets(db, project.id)
         persona = await resolve_run_persona(db, run, project)
         brand_cfg, brand_music_id = await resolve_brand_block(db, persona)
         generation_context = generation_context(

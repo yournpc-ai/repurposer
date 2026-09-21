@@ -63,7 +63,7 @@ from app.pipeline.quality import (
     failed_checks,
     run_checks,
 )
-from app.pipeline.step_context import _list_assets
+from app.pipeline.step_context import list_assets
 from app.pipeline.step_display import _set_summary
 from app.pipeline.outputs import delete_outputs_fk_safe
 from app.platform.project_context import collect_asset_texts, resolve_persona
@@ -241,7 +241,7 @@ class Verify(NodeBase):
     async def _zh(db: AsyncSession, run: WorkflowRun, project: Project) -> bool:
         from app.pipeline.node_runners import _display_zh  # deferred: crew local
 
-        return _display_zh(run, project, await _list_assets(db, project.id))
+        return _display_zh(run, project, await list_assets(db, project.id))
 
     async def _check(
         self,
@@ -305,7 +305,7 @@ class Verify(NodeBase):
         except ValueError:
             logger.warning("verify_understanding_missing", executor_id=str(executor.id))
 
-        assets = await _list_assets(db, project.id)
+        assets = await list_assets(db, project.id)
         by_id = {str(a.id): a for a in assets}
         anchors_by_url: dict[str, dict] = {}
         for a in assets:

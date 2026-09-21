@@ -42,7 +42,7 @@ from app.pipeline.derivative_dispatch import derivative_output_types
 from app.pipeline.errors import TransientNodeError, user_error_line
 from app.pipeline.morph import (
     INPLACE_MORPH_KINDS,
-    _check_transform_targets,
+    check_transform_targets,
     _modifier_target_clips,
     _pend_suppressed_base_renders,
 )
@@ -794,7 +794,7 @@ async def _check_birthplace_requires(
     # birthplace with the fix named (the confirm card's 422), never mid-run
     # after money moved. The chat path's draft adjudication runs the same
     # check with the router's repair round.
-    await _check_transform_targets(
+    await check_transform_targets(
         db, project, task.tasks or [], zh=(task.ui_language or "").startswith("zh")
     )
 

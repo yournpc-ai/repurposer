@@ -247,7 +247,7 @@ async def _guard_target_differs_from_source(
     anywhere (the intent router had defaulted target_language to the prompt's own
     language). Fail loud and name the fix — a silent same-language rewrite is
     the banned posture. This is the LAST backstop: the same adjudication runs
-    earlier at the plan/birthplace seats (``_check_transform_targets``) so a
+    earlier at the plan/birthplace seats (``check_transform_targets``) so a
     doomed chain bounces before the user confirms; this seat covers stale
     plans and wiring-born runs. Raises plain ``ValueError`` — errors.py passes
     an exact ValueError's authored message through to the step's user-facing
@@ -332,7 +332,7 @@ async def _faced_source_languages(
     return await _asset_languages()
 
 
-async def _check_transform_targets(
+async def check_transform_targets(
     db: AsyncSession, project: Project, tasks: list, *, zh: bool
 ) -> None:
     """Compile-time same-language adjudication (chat 修复环 + birthplace

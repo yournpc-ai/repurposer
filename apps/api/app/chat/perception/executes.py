@@ -148,19 +148,19 @@ async def get_understanding(db: AsyncSession, project: Project, params) -> str:
     warm/run materialized row, content-addressed by the current asset set).
     Journeys: 「我看了——你在讲 X」的读法 + 推荐配乐/样式前的氛围匹配."""
     from app.pipeline.node_runners import (  # deferred: pipeline weight
-        _find_reusable_understanding,
+        find_reusable_understanding,
     )
-    from app.pipeline.step_context import _asset_digest, _list_assets
+    from app.pipeline.step_context import asset_digest, list_assets
 
-    assets = await _list_assets(db, project.id)
+    assets = await list_assets(db, project.id)
     if not assets:
         return (
             "No assets in this project yet — there is no material to read. "
             "If the user means to work from material, they need to upload or "
             "paste it first."
         )
-    digest = _asset_digest(assets)
-    row = await _find_reusable_understanding(db, project, digest)
+    digest = asset_digest(assets)
+    row = await find_reusable_understanding(db, project, digest)
     if row is None:
         # Readiness gate honesty (I-PFA-07, 2026-09-18): pending and failed
         # are DIFFERENT facts — a failed asset told "still processing" would
@@ -492,7 +492,7 @@ async def get_craft_skeleton(
     substrate, JOURNEYS 旅程二 2b). The craft_decompiled trigger turn's first
     read; the 「照这个案例做」family's factual substrate."""
     from app.pipeline.decompile import (  # deferred: pipeline weight
-        _find_reusable_skeleton,
+        find_reusable_skeleton,
     )
 
     asset_id = getattr(params, "asset_id", None)
@@ -516,7 +516,7 @@ async def get_craft_skeleton(
             f"Asset {asset.id} is not a video — only a video can be a style "
             "reference."
         )
-    row = await _find_reusable_skeleton(db, project, asset)
+    row = await find_reusable_skeleton(db, project, asset)
     if row is None:
         status = str(asset.processing_status)
         if status in ("failed",):

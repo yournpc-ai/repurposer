@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.schemas import AssetType
 from app.models.tables import WorkflowStep, Project, WorkflowRun
 from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_free
-from app.pipeline.step_context import _list_assets
+from app.pipeline.step_context import list_assets
 from app.pipeline.step_display import _fill_summary, _set_spec_field, ui_lang_of
 from app.tools.align_stills.procedure import cjk_ratio, estimate_words_timeline
 
@@ -43,7 +43,7 @@ class AlignStills(NodeBase):
         The aligned asset id rides ``spec.aligned_asset_id`` so the downstream
         clips node reads its render source off the DAG edge, not an asset scan.
         """
-        assets = await _list_assets(db, project.id)
+        assets = await list_assets(db, project.id)
         candidates = [
             a for a in assets if a.type == AssetType.TRANSCRIPT and (a.extracted_text or "").strip()
         ]

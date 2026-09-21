@@ -96,7 +96,7 @@ from app.operations.service import OpRejected
 from app.pipeline.asset_processing import has_any_text_material, has_renderable_media
 from app.pipeline.derivative_dispatch import (
     DerivativeWriterNode,
-    _project_source_language,
+    project_source_language,
     derive_quote_alt_language,
 )
 from app.pipeline.graph import MEDIA, NODE_KINDS
@@ -726,7 +726,7 @@ async def _caption_choice_is_meaningful(
     question would be theatre — skip it and let the caller stamp
     ``source_only``.
     """
-    source = await _project_source_language(db, project)
+    source = await project_source_language(db, project)
     task_language = next(
         (
             (t.params or {}).get("language")

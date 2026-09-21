@@ -65,8 +65,8 @@ from app.pipeline.graph import (
     token_bounds,
 )
 from app.pipeline.step_context import (
-    _asset_digest,
-    _list_assets,
+    asset_digest,
+    list_assets,
     _source_language,
     _truncate,
     collect_asset_media,
@@ -143,7 +143,7 @@ class Preprocess(NodeBase):
         needs_material = _chain_needs_material(run)
 
         asset_texts = await collect_asset_texts(db, project.id)
-        assets = await _list_assets(db, project.id)
+        assets = await list_assets(db, project.id)
         has_media = any(a.file_url for a in assets)
         if not asset_texts and not has_media and needs_material:
             raise ValueError("No source material to analyze")
@@ -200,7 +200,7 @@ class PersonaBootstrap(NodeBase):
         Every exit bakes a done summary — a finished step must never keep the
         progressive stage copy (the ✓ "正在准备你的人设…" bug class).
         """
-        zh = _display_zh(run, project, await _list_assets(db, project.id))
+        zh = _display_zh(run, project, await list_assets(db, project.id))
         if project.persona_id:
             mounted = await db.get(Persona, project.persona_id)
             name = mounted.name if mounted is not None else None
@@ -282,7 +282,7 @@ class PersonaBootstrap(NodeBase):
         return []
 
 
-async def _find_reusable_understanding(
+async def find_reusable_understanding(
     db: AsyncSession, project: Project, digest: str
 ) -> Output | None:
     """The latest same-user understanding row matching the asset hash.
@@ -346,7 +346,7 @@ async def warm_understanding(project_id: UUID) -> None:
             project = await db.get(Project, project_id)
             if project is None:
                 return
-            assets = await _list_assets(db, project_id)
+            assets = await list_assets(db, project_id)
             if not assets or any(
                 a.processing_status != AssetStatus.COMPLETED for a in assets
             ):
@@ -362,8 +362,8 @@ async def warm_understanding(project_id: UUID) -> None:
             )
             if not asset_texts and not has_media:
                 return
-            digest = _asset_digest(assets)
-            if await _find_reusable_understanding(db, project, digest) is not None:
+            digest = asset_digest(assets)
+            if await find_reusable_understanding(db, project, digest) is not None:
                 logger.info("understanding_warm_reuse_hit", project_id=str(project_id))
                 return
             understanding = await _materialize_understanding(project, assets)
@@ -431,8 +431,8 @@ class Understand(NodeBase):
         A reuse returns the earlier row's id, so no duplicate understanding
         rows accumulate and the node costs nothing.
         """
-        digest = _asset_digest(assets)
-        latest = await _find_reusable_understanding(db, project, digest)
+        digest = asset_digest(assets)
+        latest = await find_reusable_understanding(db, project, digest)
         if latest is not None:
             try:
                 cached = MaterialUnderstanding.model_validate(latest.payload)
@@ -474,7 +474,7 @@ class Understand(NodeBase):
         copy lights up). plan writes its own matching stub on the same
         gate, so the executor's _load_plan_prelude_outputs always returns
         a paired (understanding, storyboard) tuple."""
-        assets = await _list_assets(db, project.id)
+        assets = await list_assets(db, project.id)
 
         if not _chain_needs_material(run):
             asset_texts = await collect_asset_texts(db, project.id)
@@ -527,7 +527,7 @@ class Understand(NodeBase):
             language=_source_language(project, assets),
             provenance="generated",
             payload=understanding.model_dump(mode="json"),
-            source_ref={"asset_hash": _asset_digest(assets)},
+            source_ref={"asset_hash": asset_digest(assets)},
         )
         db.add(row)
         await db.flush()
@@ -591,7 +591,7 @@ class Interrupt(NodeBase):
                 chosen = by_id.get(answer.get("option_id")) or {}
                 label = chosen.get("label")
             label = label or answer.get("text")
-            assets = await _list_assets(db, project.id)
+            assets = await list_assets(db, project.id)
             zh = _display_zh(run, project, assets)
             # The option label already carries the "Focus: "/"聚焦：" prefix —
             # strip it before wrapping with the direction word (no "方向：聚焦：").
@@ -604,7 +604,7 @@ class Interrupt(NodeBase):
             return []
 
         understanding = await _load_understanding(db, node)
-        assets = await _list_assets(db, project.id)
+        assets = await list_assets(db, project.id)
         zh = _display_zh(run, project, assets)
 
         # Options (code-derived, zero LLM): up to 3 "Focus: {argument}" + the
@@ -759,7 +759,7 @@ class Plan(NodeBase):
             and not understanding.key_arguments
             and not understanding.quotable_lines
         ):
-            assets = await _list_assets(db, project.id)
+            assets = await list_assets(db, project.id)
             row = Output(
                 project_id=project.id,
                 workflow_step_id=node.id,
@@ -864,7 +864,7 @@ class Plan(NodeBase):
         )
         db.add(row)
         await db.flush()
-        assets = await _list_assets(db, project.id)
+        assets = await list_assets(db, project.id)
         zh = _display_zh(run, project, assets)
         # 计划摘要落 spec — 图填充（graph_fill._task_book_text）与运行时
         # back-write 同源读它。

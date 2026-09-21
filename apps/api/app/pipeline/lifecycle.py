@@ -14,7 +14,7 @@ reasoning of its own and is never a second heuristic center:
   not ours).
 - Pipeline facts (asset states / active run / chain re-adjudication) are
   gathered here through the same functions the write gates already use
-  (``validate_task_list`` / ``_check_transform_targets`` / the birthplace
+  (``validate_task_list`` / ``check_transform_targets`` / the birthplace
   ``Requirement`` predicates / ``has_active_run``).
 
 Two halves:
@@ -58,7 +58,7 @@ from app.pipeline.graph import (
     TRANSCRIPT,
     VOICEPRINT,
 )
-from app.pipeline.morph import _check_transform_targets, _faced_source_languages
+from app.pipeline.morph import check_transform_targets, _faced_source_languages
 from app.pipeline.orchestrator import has_active_run
 from app.tools import ToolRejected, validate_task_list
 
@@ -449,7 +449,7 @@ async def project_lifecycle(
                 language_unknown = True
             else:
                 try:
-                    await _check_transform_targets(
+                    await check_transform_targets(
                         db,
                         project,
                         [_TaskShim(t) for t in plan_tasks],
@@ -479,7 +479,7 @@ async def project_lifecycle(
 
 
 class _TaskShim:
-    """validate_task_list/_check_transform_targets read ``.tool`` /
+    """validate_task_list/check_transform_targets read ``.tool`` /
     ``.params`` attributes; the docked intent stamp stores plain dicts.
     Attribute view only — no validation logic here."""
 

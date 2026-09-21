@@ -48,7 +48,7 @@ from app.pipeline.edges import _load_plan_prelude_outputs
 from app.pipeline.graph import NODE_KINDS, NodeBase, estimate_mechanical, token_bounds
 from app.pipeline.morph import _render_step_label
 from app.pipeline.outputs import delete_outputs_fk_safe
-from app.pipeline.step_context import _count_words, _list_assets
+from app.pipeline.step_context import _count_words, list_assets
 from app.pipeline.step_display import (
     _fill_summary,
     _node_slot,
@@ -126,7 +126,7 @@ def derive_quote_alt_language(
     return None
 
 
-async def _project_source_language(
+async def project_source_language(
     db: AsyncSession, project: Project
 ) -> str | None:
     """The run's source language: the first AV asset's ASR-detected
@@ -134,7 +134,7 @@ async def _project_source_language(
     asset's stamped ``meta.language`` (text processors don't stamp it yet —
     only assets created with an explicit language carry one), else the
     project's own language. None only when all are unset."""
-    assets = await _list_assets(db, project.id)
+    assets = await list_assets(db, project.id)
     for a in assets:
         if a.type in (AssetType.VIDEO, AssetType.AUDIO, AssetType.TRANSCRIPT):
             lang = (a.meta or {}).get("language")
@@ -447,7 +447,7 @@ async def _materialize_quote_card_outputs(
     empty list) — frame cards without their stack are orphan strips and
     are never served standalone, so no partial family is materialized.
     """
-    assets = await _list_assets(db, project.id)
+    assets = await list_assets(db, project.id)
     source_video: Asset | None = next(
         (
             a for a in assets
@@ -1018,7 +1018,7 @@ class DerivativeWriterNode(NodeBase):
         # source_only narrowing (no distinct alt language exists) is
         # stamped HERE so every downstream consumer agrees.
         if derivative_type == DerivativeType.QUOTES:
-            resolved_source = ctx.get("source_language") or await _project_source_language(
+            resolved_source = ctx.get("source_language") or await project_source_language(
                 db, project
             )
             alt_language = derive_quote_alt_language(
