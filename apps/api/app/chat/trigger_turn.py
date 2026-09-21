@@ -56,8 +56,6 @@ from app.chat.service import (
     _get_or_create_project_conversation,
     _prefers_zh,
     finalize_bailed_runs,
-    is_pending_plan,
-    latest_pending_question,
 )
 from app.chat.turn_tools import CHAT_READ_TOOLS
 from app.models.schemas import Option, QuestionPayload, WrapUpArgs
@@ -67,6 +65,10 @@ from app.pipeline.trigger_events import (
     TRIGGER_RUN_COMPLETED,
     TRIGGER_UNDERSTANDING,
     TRIGGER_WHITELIST,
+)
+from app.platform.conversation_context import (
+    is_pending_plan,
+    latest_pending_question,
 )
 
 logger = structlog.get_logger(__name__)

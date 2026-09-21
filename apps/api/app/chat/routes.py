@@ -41,14 +41,16 @@ from app.chat.service import (
     answer_question,
     chat,
     execute_chat_turn,
-    find_conversation,
-    latest_pending_question,
     list_conversation_messages,
     prepare_chat_turn,
     stamp_turn_failed,
 )
 from app.providers.llm.base import LLMError
 from app.pipeline.errors import user_error_line
+from app.platform.conversation_context import (
+    find_conversation,
+    latest_pending_question,
+)
 from app.platform.project_context import get_project_for_user
 from app.ui_locale import current_ui_language
 

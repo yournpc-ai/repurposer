@@ -43,12 +43,8 @@ from app.models.tables import (
     User,
     WorkflowRun,
 )
-from app.chat.service import (
+from app.pipeline.conversation_bridge import (
     discard_unanswered_plan,
-    find_conversation,
-    get_project_prompt,
-    is_pending_plan,
-    latest_pending_question,
     seed_project_prompt,
 )
 from app.pipeline.lifecycle import project_lifecycle
@@ -76,6 +72,12 @@ from app.platform.billing import (
     release_run,
 )
 from app.platform.configs import get_config
+from app.platform.conversation_context import (
+    find_conversation,
+    get_project_prompt,
+    is_pending_plan,
+    latest_pending_question,
+)
 from app.platform.project_context import get_project_for_user
 from app.providers.storage import delete_file, delete_project_files, resolve_stored_url
 from app.ui_locale import current_ui_language
@@ -305,11 +307,10 @@ _ASSET_MEDIUM = {
 async def _lifecycle_stamp(db: AsyncSession, project: Project) -> dict:
     """Assemble the server-named lifecycle stamp for one read frame.
 
-    The Agent Interface facts (the docked plan row) are fetched through
-    chat's public read protocol and passed IN — the projection module
-    itself never imports chat (dependency direction, ADR-087 §6). The
-    chat import above rides this route's pre-existing top-level line
-    (Phase 5 retires it; this helper adds no new reverse edge)."""
+    The Agent Interface facts (the docked plan row) are fetched through the
+    conversation store's shared read protocol (``app.platform.conversation_context``)
+    and passed IN — the projection module itself never imports chat
+    (dependency direction, ADR-087 §6)."""
     conversation = await find_conversation(db, project.user_id, project.id)
     pending = (
         await latest_pending_question(db, UUID(str(conversation.id)))

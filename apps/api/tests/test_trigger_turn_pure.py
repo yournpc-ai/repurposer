@@ -213,7 +213,7 @@ def test_admission_drops_at_the_bound_never_speaks_blind() -> None:
 
 
 def test_pending_plan_silence_reads_is_pending_plan() -> None:
-    from app.chat.service import is_pending_plan
+    from app.platform.conversation_context import is_pending_plan
 
     # An unanswered task_book row = a docked plan = silence.
     docked = Message(
