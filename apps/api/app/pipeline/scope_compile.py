@@ -243,4 +243,31 @@ def compile_plans(
     return tasks
 
 
-__all__ = ["ScopeCompileRejected", "compile_plans"]
+__all__ = ["ScopeCompileRejected", "compile_plans", "decision_package_plans"]
+
+
+def decision_package_plans(plans: list[Any]) -> list[dict[str, Any]]:
+    """The decision package's READING layer (ADR-089 §4 R16, iter-2 ③):
+    Content Plan rows → the dock payload's user-safe plan summaries
+    (``plans`` key, N-57) — plan_id / title / outputs / state, the LLM-named
+    product semantics (展示文案二源律). The compiled TaskItem[] (the EVIDENCE
+    layer) and the quote (费用语义) ride their own seats on the same dock.
+    The door's additive ``issues`` stamp is popped before strict validation
+    (the compile seat's same read tolerance)."""
+    package: list[dict[str, Any]] = []
+    for row in plans:
+        raw = dict(row.spec or {})
+        open_issues = raw.pop("issues", None)
+        spec = ContentPlanSpec.model_validate(raw)
+        entry: dict[str, Any] = {
+            "plan_id": str(row.id),
+            "title": spec.title,
+            "state": getattr(row, "state", STATE_READY),
+            "outputs": [
+                o.model_dump(mode="json", exclude_none=True) for o in spec.outputs
+            ],
+        }
+        if open_issues:
+            entry["issues"] = open_issues
+        package.append(entry)
+    return package

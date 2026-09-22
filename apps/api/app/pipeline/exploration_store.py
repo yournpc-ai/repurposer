@@ -372,6 +372,36 @@ async def _exploration_nodes(db: AsyncSession, project_id: UUID) -> list[GraphNo
     )
 
 
+async def read_journey_evidence(
+    db: AsyncSession, project_id: UUID, journey_id: UUID
+) -> tuple[list[GraphNode], list[GraphNode]]:
+    """The compiler's read seat (iter-2 ③, R14 编译器半边——门外侧只读):
+    the journey's Select and Candidate Set rows, so ``compile_plans`` can
+    dereference the R7 evidence pointers. Returns (selects, candidate_sets)
+    in birth order. Pure read — the exploration door's invariants never
+    relax for the compiler (the door writes, the compiler translates)."""
+    rows = list(
+        (
+            await db.execute(
+                select(GraphNode).where(
+                    GraphNode.project_id == project_id,
+                    GraphNode.type == EXPLORATION_NODE_TYPE,
+                    GraphNode.journey_id == journey_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    selects = [
+        n for n in rows if (n.spec or {}).get("exploration_kind") == KIND_SELECT
+    ]
+    candidate_sets = [
+        n for n in rows if (n.spec or {}).get("exploration_kind") == KIND_CANDIDATE_SET
+    ]
+    return selects, candidate_sets
+
+
 def _get_exploration_node(
     nodes: list[GraphNode], node_id: UUID, kind: str
 ) -> GraphNode:

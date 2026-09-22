@@ -1573,6 +1573,13 @@ class QuestionPayload(BaseModel):
     # (that GET stays the recovery seat). Read tolerance: absent on rows
     # docked before the seal.
     derived: list[dict] = Field(default_factory=list)
+    # 决策包阅读层 (ADR-089 §4 R16, iter-2 ③, N-57): task_book only — the
+    # Content Plans the docked chain was compiled from (plan_id / title /
+    # outputs / state — LLM-named product semantics, user-safe, never task
+    # params). 确认消费三层: this reading layer + the intent column's
+    # compiled tasks (evidence layer) + estimate_credits (费用语义五面).
+    # Empty on every non-exploration dock (读容忍: 旧行无此键).
+    plans: list[dict] = Field(default_factory=list)
 
 
 class PendingPlan(BaseModel):
@@ -1624,6 +1631,12 @@ class PendingPlan(BaseModel):
     # "post"|"quotes"|"carousel"|"article", "variant": "subs"|"dub"|None,
     # "language"?, "count"?, "bilingual"?}. Empty on legacy rows.
     derived: list[dict] = Field(default_factory=list)
+    # 决策包阅读层 (iter-2 ③, ADR-089 §4 R16): the Content Plans behind the
+    # compiled chain (plan_id / title / state / outputs — the LLM-named
+    # product semantics), stamped at dock time so the reading layer survives
+    # a refresh (the restore path reads pending_brief, never the question
+    # row). Empty on the router-drafted rows (读容忍).
+    plans: list[dict] = Field(default_factory=list)
 
 
 class ProjectBase(BaseModel):

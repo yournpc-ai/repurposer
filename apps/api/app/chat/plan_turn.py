@@ -37,6 +37,7 @@ outcome — and ride back as a ToolObservation the loop feeds back.
 """
 
 import json
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -46,6 +47,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.tool_loop import ToolObservation
+from app.chat.exploration_tools import (
+    EXPLORATION_TOOLS,
+    ProposeCandidatesArgs,
+    ProposePlansArgs,
+    ProposeSelectsArgs,
+    candidates_observation,
+    selects_observation,
+)
 from app.chat.intent import intent_router
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.perception.executes import understanding_digest_lines
@@ -94,9 +103,27 @@ from app.models.schemas import (
     QuestionProposal,
     StartAnswerRequest,
 )
-from app.models.tables import Asset, Message, Persona, Project
+from app.models.tables import Asset, GraphNode, Message, Persona, Project
 from app.pipeline.asset_processing import has_any_text_material
 from app.pipeline.assets import create_transcript_asset_from_text
+from app.pipeline.exploration_store import (
+    KIND_SELECT,
+    STATE_DRAFT,
+    STATE_READY,
+    ContentPlanSpec,
+    ExplorationRejected,
+    plan_completeness_issues,
+    propose_candidates,
+    propose_plans,
+    propose_selects,
+    read_journey_evidence,
+)
+from app.pipeline.product_graph import EXPLORATION_NODE_TYPE
+from app.pipeline.scope_compile import (
+    ScopeCompileRejected,
+    compile_plans,
+    decision_package_plans,
+)
 from app.platform.project_context import resolve_default_persona
 from app.tools import ToolRejected, validate_task_list
 
@@ -106,6 +133,18 @@ logger = structlog.get_logger()
 # (assistant message, started run id, answered task-book question,
 # cascade-bailed run ids).
 PlanTurnOutcome = tuple[Message, UUID | None, Message | None, list[UUID]]
+
+
+@dataclass
+class _PlanPreview:
+    """The pre-flight compile's in-memory stand-in for a Content Plan row
+    (R14 双门, iter-2 ③): the compile passes BEFORE the door births anything,
+    so the duck-typed fields (id / state / spec) mirror what
+    ``compile_plans`` reads off a real row."""
+
+    id: str
+    state: str
+    spec: dict
 
 
 class PlanTurn:
@@ -509,6 +548,8 @@ class PlanTurn:
         iterates — 终态工具一调即停 covers the terminal tools only)."""
         if name in PERCEPTION_TOOLS:
             return await run_perception_tool(self.db, self.project, name, params)
+        if name in EXPLORATION_TOOLS:
+            return await self._explore(name, params, prose)
         if name == "present_plan":
             assert isinstance(params, PresentPlanArgs)
             return await self._present_plan(params, prose)
@@ -785,6 +826,240 @@ class PlanTurn:
             brief=merged_brief,
             echo=echo,
             estimate=task_estimate,
+        )
+        question = await latest_pending_question(db, self.conversation_id)
+        assert question is not None  # sync_plan_question just docked it
+        self.outcome = (question, None, self.settled_pending, bailed_run_ids)
+        return None
+
+    # ---- the exploration seats (iter-2 ③/⑤ — ADR-088 旅程四 chain) -----------
+
+    async def _explore(
+        self, name: str, params, prose: str
+    ) -> str | None | ToolObservation:
+        """The discovery chain's dispatch (R2 免费探索区连续工作 — one turn
+        carries search → candidates → selects → plans): candidates/selects
+        ride back as observations (NON-terminal, the loop iterates; the
+        observation builders are the harness seat's ONE wording);
+        propose_plans is TERMINAL — landing the plans compiles and docks
+        the decision package, which IS the paid-boundary stop (R15)."""
+        if name == "propose_candidates":
+            assert isinstance(params, ProposeCandidatesArgs)
+            try:
+                node = await propose_candidates(
+                    self.db,
+                    self.project,
+                    asset_id=params.asset_id,
+                    topic=params.topic,
+                    members=params.members,
+                    goal_text=params.goal or None,
+                    journey_id=params.journey_id,
+                )
+            except ExplorationRejected as e:
+                return f"The door rejected the proposal: {e}"
+            return ToolObservation(
+                text=candidates_observation(
+                    node, topic=params.topic, member_count=len(params.members)
+                )
+            )
+        if name == "propose_selects":
+            assert isinstance(params, ProposeSelectsArgs)
+            try:
+                born = await propose_selects(
+                    self.db,
+                    self.project,
+                    candidate_set_id=params.candidate_set_id,
+                    selects=[s.model_dump() for s in params.selects],
+                )
+            except ExplorationRejected as e:
+                return f"The door rejected the proposal: {e}"
+            return ToolObservation(text=selects_observation(born))
+        if name == "propose_plans":
+            assert isinstance(params, ProposePlansArgs)
+            return await self._propose_plans(params, prose)
+        return f"unknown exploration tool {name!r}"  # unreachable — gated above
+
+    async def _propose_plans(self, params: ProposePlansArgs, prose: str) -> str | None:
+        """plans → the decision package docks (ADR-089 §4 R16, iter-2 ③).
+
+        双门 (R14): the PRE-FLIGHT compile runs BEFORE the door birth — an
+        uncompilable package rejects back into the loop with zero writes
+        (an uncompilable plan never reaches the canvas or the dock). Only
+        then does the exploration door birth the rows, and the dock carries
+        the three faces: the plans reading layer + the compiled task
+        evidence + the credits quote (费用语义五面)."""
+        db, project = self.db, self.project
+        merged_brief = await self._absorb(None, None)
+
+        # Journey resolution: the params carry select ids and the journey
+        # rides structurally from them (one call plans one journey — the
+        # door's own law, mirrored here so the pre-flight has its evidence).
+        select_ids = [UUID(str(p.select_id)) for p in params.plans]
+        rows = list(
+            (
+                await db.execute(
+                    select(GraphNode).where(
+                        GraphNode.project_id == project.id,
+                        GraphNode.type == EXPLORATION_NODE_TYPE,
+                        GraphNode.id.in_(select_ids),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        by_id = {str(n.id): n for n in rows}
+        journey_ids: set[str] = set()
+        for sid in select_ids:
+            row = by_id.get(str(sid))
+            if row is None or (row.spec or {}).get("exploration_kind") != KIND_SELECT:
+                return (
+                    f"select: node {sid} is not one of this project's "
+                    "selects — re-read the propose_selects observation."
+                )
+            journey_ids.add(str(row.journey_id))
+        if len(journey_ids) > 1:
+            return (
+                "propose_plans: one call plans one journey — the selects "
+                "span two. Split the call."
+            )
+        journey_id = UUID(journey_ids.pop())
+        selects, candidate_sets = await read_journey_evidence(
+            db, UUID(str(project.id)), journey_id
+        )
+
+        persona_id = UUID(str(self.persona.id)) if self.persona is not None else None
+        # The pre-flight compile (R12 编译移出 LLM): in-memory previews of
+        # the rows the door WOULD birth (same completeness self-check, same
+        # states) — a rejection here writes nothing.
+        previews: list[_PlanPreview] = []
+        for p in params.plans:
+            issues = plan_completeness_issues(p.outputs)
+            payload = ContentPlanSpec(
+                select_id=str(p.select_id),
+                title=p.title.strip(),
+                outputs=p.outputs,
+                persona_id=str(persona_id) if persona_id else None,
+            ).model_dump()
+            if issues:
+                payload["issues"] = issues
+            previews.append(
+                _PlanPreview(
+                    id=f"preview:{p.select_id}",
+                    state=STATE_DRAFT if issues else STATE_READY,
+                    spec=payload,
+                )
+            )
+        from app.pipeline.derivative_dispatch import (  # deferred: pipeline weight
+            project_source_language,
+        )
+        from app.pipeline.morph import check_transform_targets
+        from app.ui_locale import current_ui_language
+
+        try:
+            compiled = compile_plans(
+                previews,
+                selects,
+                candidate_sets,
+                source_language=await project_source_language(db, project),
+                default_language=project.language or current_ui_language() or "en",
+            )
+        except ScopeCompileRejected as e:
+            return str(e)
+        # The router-drafted dock's own backstop rides too (同源语言护栏 etc.).
+        try:
+            await check_transform_targets(
+                db,
+                project,
+                compiled,
+                zh=(current_ui_language() or "").startswith("zh"),
+            )
+        except (ToolRejected, ValueError) as e:
+            return str(e)
+
+        # Pre-flight passed — the door births the rows (its validation
+        # re-runs as the authority; a door rejection rides back as the echo).
+        try:
+            born = await propose_plans(
+                db,
+                project,
+                plans=[p.model_dump() for p in params.plans],
+                persona_id=persona_id,
+            )
+        except ExplorationRejected as e:
+            return f"The door rejected the proposal: {e}"
+
+        # Caption form for quote cards: named on a quotes output → stamped
+        # onto the intent (the same field the caption question's answer
+        # stamps); unnamed = the runtime default, never invented.
+        caption_mode = next(
+            (
+                o.caption_mode
+                for p in params.plans
+                for o in p.outputs
+                if o.kind == "quotes" and o.caption_mode
+            ),
+            None,
+        )
+        intent = InferredIntent(
+            action="draft",
+            tasks=compiled,
+            answer=prose,
+            caption_mode=caption_mode,
+            name=params.name or None,
+        )
+        reasons = await _compute_plan_reasons(db, project, intent)
+        from app.pipeline.orchestrator import derive_plan_preview
+
+        try:
+            derived = await derive_plan_preview(db, project, compiled)
+        except (ToolRejected, ValueError):
+            derived = []
+        task_estimate = await _safe_task_estimate(db, project, compiled)
+
+        # The late-turn guard (same zombie-dock law as present_plan): a
+        # concurrent Start committed while this turn was in flight — docking
+        # now would raise a plan over an active run.
+        active_line = await _active_run_line(db, project, self.text)
+        if active_line is not None:
+            assistant_message = await _create_message(
+                db, self.conversation_id, "assistant", active_line
+            )
+            self.outcome = (assistant_message, None, self.settled_pending, [])
+            return None
+
+        # The birth prompt freezes at the first dock (stored.prompt wins on
+        # every later write) — the same preserve law as present_plan.
+        birth_prompt = (
+            self.stored.prompt if self.stored and self.stored.prompt else self.text
+        )
+        # 决策包阅读层 (R16): the Content Plans ride BOTH the pending-brief
+        # row (the restore path reads it) and the dock payload (the live
+        # envelope) — one stamp, two seats.
+        package_plans = decision_package_plans(born)
+        project.pending_brief = PendingPlan(
+            prompt=birth_prompt,
+            intent=intent,
+            brief=merged_brief,
+            reasons=reasons,
+            persona_id=persona_id,
+            derived=derived,
+            plans=package_plans,
+            **self._role_pins(),
+        ).model_dump(mode="json")
+        self._fire_mention_warm()
+        bailed_run_ids = await sync_plan_question(
+            db,
+            self.user_id,
+            project,
+            intent,
+            birth_prompt,
+            reasons=reasons,
+            derived=derived,
+            brief=merged_brief,
+            echo=prose,
+            estimate=task_estimate,
+            plans=package_plans,
         )
         question = await latest_pending_question(db, self.conversation_id)
         assert question is not None  # sync_plan_question just docked it

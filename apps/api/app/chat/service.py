@@ -1128,6 +1128,7 @@ async def sync_plan_question(
     brief: Brief | None = None,
     echo: str | None = None,
     estimate: PlanEstimate | None = None,
+    plans: list[dict] | None = None,
 ) -> list[UUID]:
     """Keep exactly one pending task_book question per project conversation.
 
@@ -1190,6 +1191,9 @@ async def sync_plan_question(
             brief=brief,
             estimate_credits=estimate,
             derived=derived or [],
+            # 决策包阅读层 (iter-2 ③): the Content Plans behind the compiled
+            # chain; empty on the router-drafted docks (读容忍).
+            plans=plans or [],
         ),
         intent=intent.model_dump(mode="json"),
     )

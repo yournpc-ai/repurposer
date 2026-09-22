@@ -1400,6 +1400,24 @@ const en = {
       dub: "voice-over",
       bilingual: "bilingual",
     },
+    // 决策包阅读层 (iter-2 ③, ADR-089 §4 R16): the plan card's reading layer
+    // — one Content Plan's output line = kind + language + caption form /
+    // dub / aspect, composed in code from these small keys (never raw task
+    // params — the reading layer speaks product semantics, R8).
+    planOutputs: {
+      clip: "Clip",
+      post: "Post",
+      article: "Article",
+      quotes: "Quote cards",
+      carousel: "Carousel",
+      captionBilingual: "bilingual captions",
+      captionTarget: "translated captions",
+      captionSource: "source captions",
+      dub: "voice-over",
+    },
+    // The evidence layer's expander (tasks 证据可展开): the compiled chain
+    // collapses behind this row when the reading layer is present.
+    chainEvidence: "How it gets made · {{count}} steps",
     bilingualToggle: "Bilingual",
     planVersion: "Plan v{{n}}",
     versionRestore: "Restore this version",

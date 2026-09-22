@@ -1331,6 +1331,22 @@ const zh: Resources = {
       dub: "配音版",
       bilingual: "双语",
     },
+    // 决策包阅读层 (iter-2 ③, ADR-089 §4 R16): 计划卡的阅读层——一条方案
+    // 输出行 = 品类 + 语言 + 字幕形态/配音/画幅，代码用小键拼装（阅读层
+    // 永不说原始任务参数，R8 产品语义）。
+    planOutputs: {
+      clip: "短片",
+      post: "帖子",
+      article: "文章",
+      quotes: "金句卡",
+      carousel: "轮播图",
+      captionBilingual: "双语字幕",
+      captionTarget: "翻译字幕",
+      captionSource: "源语言字幕",
+      dub: "配音",
+    },
+    // 证据层展开器（tasks 证据可展开）：阅读层在场时编译链收进这一行。
+    chainEvidence: "它是怎么做的 · {{count}} 步",
     bilingualToggle: "双语对照",
     planVersion: "计划 v{{n}}",
     versionRestore: "恢复此版本",

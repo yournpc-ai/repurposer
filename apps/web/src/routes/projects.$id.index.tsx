@@ -11,7 +11,7 @@ import { ClipCardSkeleton } from "@/components/results/ClipCardSkeleton"
 import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
 import { downloadOutput } from "@/components/results/downloadOutput"
 import { outputFullText } from "@/components/results/outputText"
-import { ChatDock, type DerivedRow, type ChatDockHandle } from "@/components/chat/ChatDock"
+import { ChatDock, type DerivedRow, type DecisionPlanRow, type ChatDockHandle } from "@/components/chat/ChatDock"
 import { normalizeIntent, tasksFromRunContext } from "@/components/chat/chatProtocol"
 import { CreditsPill } from "@/components/credits/CreditsPill"
 import { ResultsCanvas } from "@/components/flow/ResultsCanvas"
@@ -106,6 +106,10 @@ interface PendingBrief {
   persona_id?: string | null
   /** The server-compiled "what you'll get" preview rows (ADR-043). */
   derived?: DerivedRow[]
+  /** 决策包阅读层 (iter-2 ③): the Content Plans behind the compiled chain —
+   * stamped at dock time so the plan card's reading layer survives refresh.
+   * Empty on router-drafted rows (读容忍). */
+  plans?: DecisionPlanRow[]
 }
 
 interface ProjectResults {
@@ -1096,6 +1100,7 @@ function ProjectDetailPage() {
         initialBrief={pendingBrief?.brief}
         initialDerived={pendingBrief?.derived}
         initialReasons={pendingBrief?.reasons}
+        initialPlans={pendingBrief?.plans}
         initialRunId={
           // A node-originated run (ADR-058 — the card-face edit's
           // deterministic revision) never attaches to the dock: zero

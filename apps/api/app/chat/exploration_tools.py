@@ -137,6 +137,23 @@ class PlanItem(BaseModel):
 
 class ProposePlansArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "name")
+
+    # 展示文案二源律 (ADR-058): the decision package's name — the LLM names
+    # the work it structured (the run's receipt title rides it). "" = the
+    # display layer's honest fallback.
+    name: str = Field(
+        default="",
+        max_length=200,
+        description=(
+            "A compact noun phrase naming the whole package (2-6 words, "
+            "interface language — name the work, not the tools)."
+        ),
+    )
     plans: list[PlanItem] = Field(
         description="The Content Plans — one per Select the user should see. One call plans one journey."
     )
@@ -184,6 +201,61 @@ EXPLORATION_TOOLS: dict[str, ChatTool] = {
 EXPLORATION_READ_NAMES = ("search_transcript", "get_segment", "get_asset", "get_understanding")
 
 
+# ---- observation text builders (ONE wording, two seats) -------------------------
+# The harness seat (execute_exploration_tool below) and the production plan-turn
+# seat (iter-2 ③/⑤) both render the agent-facing observation from these — the
+# wording never drifts between the two loops.
+
+
+def candidates_observation(node, *, topic: str, member_count: int) -> str:
+    return (
+        f"Candidate set landed on the canvas — {member_count} "
+        f"member(s) under the topic \"{topic}\".\n"
+        f"- candidate_set_id: {node.id}\n- journey_id: {node.journey_id}\n"
+        "Next: evaluate the members and call propose_selects with your picks."
+    )
+
+
+def selects_observation(born: list) -> str:
+    lines = [f"{len(born)} select(s) landed on the canvas:"]
+    for n in born:
+        spec = n.spec
+        lines.append(f"- select_id: {n.id} — member {spec['member_index']}: {spec['verdict']}")
+    lines.append("Next: call propose_plans to structure what the user gets from each Select.")
+    return "\n".join(lines)
+
+
+def plans_observation(born: list) -> str:
+    lines = [f"{len(born)} content plan(s) landed on the canvas:"]
+    for n in born:
+        spec = n.spec
+        outputs = ", ".join(
+            o["kind"] + (f" ({o['language']})" if o.get("language") else "")
+            for o in spec["outputs"]
+        )
+        state_note = "ready" if n.state == "ready" else f"draft — issues: {'; '.join(spec.get('issues') or [])}"
+        lines.append(f"- plan_id: {n.id} — {spec['title'] or '(unnamed)'}: {outputs} [{state_note}]")
+    return "\n".join(lines)
+
+
+def exploration_chat_tools() -> list[ChatTool]:
+    """The production projection (iter-2 ⑤, R6 — N-57): the SAME registry
+    entries re-formed for the plan path's loop. R2 免费探索区连续工作:
+    candidates/selects ride back as observations (NON-terminal — one turn
+    carries the whole discovery chain: search → candidates → selects →
+    plans); propose_plans stays TERMINAL — landing the plans compiles and
+    docks the decision package, which IS the paid-boundary stop (R15)."""
+    return [
+        ChatTool(
+            name=t.name,
+            description=t.description,
+            params_model=t.params_model,
+            terminal=t.name == "propose_plans",
+        )
+        for t in EXPLORATION_TOOLS.values()
+    ]
+
+
 async def execute_exploration_tool(
     db: AsyncSession,
     project: Project,
@@ -208,11 +280,8 @@ async def execute_exploration_tool(
                 goal_text=params.goal or None,
                 journey_id=params.journey_id,
             )
-            return (
-                f"Candidate set landed on the canvas — {len(params.members)} "
-                f"member(s) under the topic \"{params.topic}\".\n"
-                f"- candidate_set_id: {node.id}\n- journey_id: {node.journey_id}\n"
-                "Next: evaluate the members and call propose_selects with your picks."
+            return candidates_observation(
+                node, topic=params.topic, member_count=len(params.members)
             )
         if name == "propose_selects":
             born = await propose_selects(
@@ -221,12 +290,7 @@ async def execute_exploration_tool(
                 candidate_set_id=params.candidate_set_id,
                 selects=[s.model_dump() for s in params.selects],
             )
-            lines = [f"{len(born)} select(s) landed on the canvas:"]
-            for n in born:
-                spec = n.spec
-                lines.append(f"- select_id: {n.id} — member {spec['member_index']}: {spec['verdict']}")
-            lines.append("Next: call propose_plans to structure what the user gets from each Select.")
-            return "\n".join(lines)
+            return selects_observation(born)
         if name == "propose_plans":
             born = await propose_plans(
                 db,
@@ -234,16 +298,7 @@ async def execute_exploration_tool(
                 plans=[p.model_dump() for p in params.plans],
                 persona_id=persona_id,
             )
-            lines = [f"{len(born)} content plan(s) landed on the canvas:"]
-            for n in born:
-                spec = n.spec
-                outputs = ", ".join(
-                    o["kind"] + (f" ({o['language']})" if o.get("language") else "")
-                    for o in spec["outputs"]
-                )
-                state_note = "ready" if n.state == "ready" else f"draft — issues: {'; '.join(spec.get('issues') or [])}"
-                lines.append(f"- plan_id: {n.id} — {spec['title'] or '(unnamed)'}: {outputs} [{state_note}]")
-            return "\n".join(lines)
+            return plans_observation(born)
         raise KeyError(name)
     except ExplorationRejected as e:
         return f"The door rejected the proposal: {e}"

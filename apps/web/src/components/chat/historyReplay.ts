@@ -100,6 +100,25 @@ export interface DerivedRow {
   bilingual?: boolean
 }
 
+/** 决策包阅读层 (iter-2 ③, ADR-089 §4 R16): one Content Plan's user-safe
+ * summary — the product semantics the agent named (title + outputs),
+ * mirrored from the exploration rows. The compiled task chain stays the
+ * EVIDENCE layer (expandable under the plans). */
+export interface DecisionPlanRow {
+  plan_id: string
+  title: string
+  state: string
+  outputs: {
+    kind: string
+    language?: string | null
+    caption_mode?: string | null
+    dub?: boolean | null
+    aspect?: string | null
+    brief?: string | null
+  }[]
+  issues?: string[]
+}
+
 /** The typed question payload mirrored from the API (messages.question). */
 export interface QuestionPayload {
   kind: "task_book" | "question"
@@ -127,6 +146,9 @@ export interface QuestionPayload {
   /** task_book only: the needs-clarification reason KEYS (data, localized
    * at render — never baked into the row's content). */
   reasons?: string[]
+  /** 决策包阅读层 (iter-2 ③): task_book only — the Content Plans behind
+   * the compiled chain; empty on the router-drafted docks (读容忍). */
+  plans?: DecisionPlanRow[]
 }
 
 /** A question-carrying chat message (the ask_user machinery): the dock's pending
