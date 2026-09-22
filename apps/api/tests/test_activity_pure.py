@@ -40,6 +40,7 @@ from app.chat.activity import (
     all_known_tool_names,
     kind_for_tool,
 )
+from app.chat.exploration_tools import EXPLORATION_TOOLS
 from app.chat.perception import PERCEPTION_TOOLS
 from app.chat.turn_tools import CHAT_READ_TOOLS, CHAT_TOOLS, PLAN_READ_TOOLS, PLAN_TOOLS
 
@@ -390,7 +391,7 @@ def test_exploration_verbs_open_no_per_call_activity():
 def test_t17_every_declared_tool_classified():
     declared = {
         t.name for t in (*PLAN_TOOLS, *CHAT_TOOLS, *PLAN_READ_TOOLS, *CHAT_READ_TOOLS)
-    } | set(PERCEPTION_TOOLS)
+    } | set(PERCEPTION_TOOLS) | set(EXPLORATION_TOOLS)  # iter-2 ⑤: the verbs ride the router
     known = all_known_tool_names()
     assert declared <= known, f"undeclared-to-projector tools: {declared - known}"
     # The kind mapping covers exactly the work kinds; conversation tools

@@ -32,6 +32,7 @@ feedback.
 from typing import Any
 
 from app.agents.tool_loop import ToolLoopAgent
+from app.chat.exploration_tools import exploration_chat_tools
 from app.chat.prompts import chat_intent_system, intent_router_system
 from app.chat.turn_tools import (
     CHAT_READ_TOOLS,
@@ -214,18 +215,22 @@ def _assemble_plan_turn(
 # The registries are static once imported (the tools door opens them), so
 # the system prompts are built once at declaration time.
 #
-# max_iterations=6 (报价 = fold, 简报「初值 ≤6」): the terminal call plus
-# headroom for the perception family's reads (a designed flow tops at
-# read → read → terminal) and one rejection iteration — the bound is what
-# makes an unquoted chat turn safe.
+# max_iterations=8 (报价 = fold): the discovery chain (iter-2 ⑤, R2 免费
+# 探索区连续工作) rides ONE turn — search_transcript → (get_segment reads)
+# → propose_candidates → propose_selects → propose_plans = up to 6 calls on
+# the designed flow, plus one rejection iteration of headroom. The bound is
+# what makes an unquoted chat turn safe.
 intent_router = ToolLoopAgent(
     name="intent_router",
     prompt="intent_router.j2",
     system=intent_router_system(),
     temperature=0.2,
     assemble=_assemble_plan_turn,
-    tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS],
-    max_iterations=6,
+    # iter-2 ⑤ (R6): the exploration verbs ride the production projection —
+    # candidates/selects NON-terminal (the turn chains the discovery), only
+    # propose_plans is terminal (the dock = the paid-boundary stop, R15).
+    tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS, *exploration_chat_tools()],
+    max_iterations=8,
 )
 
 
