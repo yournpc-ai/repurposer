@@ -83,10 +83,16 @@ class SelectItem(BaseModel):
     member_index: int = Field(
         description="The candidate member's index in its set (0-based, in the order you proposed it)."
     )
+    # max_length mirrors the door's SelectSpec (校验分层律 ADR-064): the
+    # constraint bites at the tool boundary — the loop's native params
+    # repair feeds it back — never as a raw door-side ValidationError,
+    # which would escape the echo path and crash the iteration.
     verdict: str = Field(
+        max_length=300,
         description="One user-safe verdict line for this pick (e.g. 'Most complete answer on pricing')."
     )
     reason: str = Field(
+        max_length=300,
         description="One user-safe reason line — the conclusion, never your reasoning process."
     )
 
@@ -111,7 +117,9 @@ class PlanItem(BaseModel):
     select_id: UUID = Field(
         description="The Select this plan content-izes (from the propose_selects observation)."
     )
+    # max_length mirrors the door's ContentPlanSpec (same 校验分层律 seat).
     title: str = Field(
+        max_length=200,
         default="",
         description="A compact noun phrase naming the plan (2-6 words, interface language — name the work).",
     )

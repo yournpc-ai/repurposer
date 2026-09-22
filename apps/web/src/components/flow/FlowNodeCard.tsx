@@ -39,7 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { apiPut, toAbsoluteUrl } from "@/lib/api"
-import { cn, formatDuration } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import type { ExplorationMember, ExplorationPlanOutput, GraphEdgeType, Output } from "@/lib/types"
 
 import { BIRTH_STAGGER_MS, EXPLORATION_MEMBER_LIST_PX, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX } from "./layout"
@@ -509,6 +509,15 @@ function ExplorationCard({ node }: { node: FlowNode }) {
   return <ContentPlanCard node={node} />
 }
 
+/** The evidence range's MM:SS — a TIMESTAMP, not a duration: formatDuration
+ * treats 0 as "unknown" (`--:--`), but a member at the talk's cold open
+ * starts at exactly 0.0s (2026-09-23 review catch). */
+function formatTimestamp(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, "0")}`
+}
+
 /** 候选集合集卡 (R1 合集律): 默认折叠 = 一行摘要（topic + 「N 个候选」）;
  * 展开 = 成员列表（区间 + 一句话摘录 + speaker）— 封顶滚动 (the frame
  * never grows: the expansion overlays the lane below transiently, a user
@@ -555,7 +564,7 @@ function CandidateSetCard({ node }: { node: FlowNode }) {
             {members.map((m, i) => (
               <div key={i} className="flex items-baseline gap-2 py-1">
                 <span className="shrink-0 text-[11px] whitespace-nowrap text-muted-foreground">
-                  {formatDuration(m.start)}–{formatDuration(m.end)}
+                  {formatTimestamp(m.start)}–{formatTimestamp(m.end)}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-xs">{m.excerpt}</span>
                 {m.speaker ? (
@@ -586,7 +595,7 @@ function SelectCard({ node }: { node: FlowNode }) {
       <div className="dock-surface flex min-h-0 flex-1 flex-col justify-center gap-1.5 rounded-xl p-3 ring-1 ring-foreground/10">
         {range ? (
           <span className="text-[11px] text-muted-foreground">
-            {formatDuration(range.start)}–{formatDuration(range.end)}
+            {formatTimestamp(range.start)}–{formatTimestamp(range.end)}
           </span>
         ) : null}
         <p className="line-clamp-2 text-xs leading-snug">{verdict}</p>

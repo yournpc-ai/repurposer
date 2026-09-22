@@ -28,6 +28,7 @@ from app.chat.exploration_tools import (
     ProposeCandidatesArgs,
     ProposePlansArgs,
     ProposeSelectsArgs,
+    SelectItem,
 )
 
 _MEMBER = {"start": 12.0, "end": 18.5, "excerpt": "pricing is hard"}
@@ -85,6 +86,46 @@ class TestReadTolerance:
             {"select_id": str(uuid4()), "title": None, "outputs": [{"kind": "clip"}]}
         )
         assert item.title == ""
+
+
+class TestWireDoorCapParity:
+    """校验分层律 (ADR-064): the wire's max_length mirrors the door spec's —
+    an overlong verdict / reason / title rejects at the TOOL boundary (the
+    loop's native params repair feeds it back), never as a raw door-side
+    ValidationError escaping the echo path (2026-09-23 review catch)."""
+
+    def test_wire_caps_match_the_door_caps(self) -> None:
+        from app.pipeline.exploration_store import ContentPlanSpec, SelectSpec
+
+        for wire_field, door_field in (
+            (SelectItem.model_fields["verdict"], SelectSpec.model_fields["verdict"]),
+            (SelectItem.model_fields["reason"], SelectSpec.model_fields["reason"]),
+            (PlanItem.model_fields["title"], ContentPlanSpec.model_fields["title"]),
+        ):
+            wire_cap = next(
+                (m.max_length for m in wire_field.metadata if hasattr(m, "max_length")),
+                None,
+            )
+            door_cap = next(
+                (m.max_length for m in door_field.metadata if hasattr(m, "max_length")),
+                None,
+            )
+            assert wire_cap is not None and wire_cap == door_cap, (
+                wire_field,
+                door_field,
+            )
+
+    def test_overlong_verdict_rejects_at_the_wire(self) -> None:
+        with pytest.raises(ValidationError):
+            SelectItem.model_validate(
+                {"member_index": 0, "verdict": "v" * 301, "reason": "r"}
+            )
+
+    def test_overlong_title_rejects_at_the_wire(self) -> None:
+        with pytest.raises(ValidationError):
+            PlanItem.model_validate(
+                {"select_id": str(uuid4()), "title": "t" * 201, "outputs": [{"kind": "clip"}]}
+            )
 
 
 class TestDriftAlarm:
