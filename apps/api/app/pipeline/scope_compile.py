@@ -243,7 +243,12 @@ def compile_plans(
     return tasks
 
 
-__all__ = ["ScopeCompileRejected", "compile_plans", "decision_package_plans"]
+__all__ = [
+    "ScopeCompileRejected",
+    "compile_plans",
+    "decision_package_plans",
+    "build_confirmed_scope",
+]
 
 
 def decision_package_plans(plans: list[Any]) -> list[dict[str, Any]]:
@@ -271,3 +276,31 @@ def decision_package_plans(plans: list[Any]) -> list[dict[str, Any]]:
             entry["issues"] = open_issues
         package.append(entry)
     return package
+
+
+def build_confirmed_scope(
+    *,
+    confirmation_id: str,
+    confirmed_at: str,
+    confirmed_via: str,
+    plans: list[dict[str, Any]],
+    tasks: list[TaskItem],
+    quote: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """The Confirmed Scope Snapshot (ADR-089 §4 R20, iter-2 ④ — 销 P0-①):
+    the immutable record of WHAT the user confirmed at the paid boundary,
+    stamped onto ``run.context.confirmed_scope`` after the birthplace
+    succeeds — the reading layer as docked (``plans``, empty on
+    router-drafted docks — 读容忍), the compiled scope (the exact TaskItem
+    chain the run was born with — hand edits included, since Start ships
+    the confirmed intent verbatim), the quote shown at confirm time, and
+    the confirmation channel (``confirmed_via``: "dock_pill" | "chat_reply",
+    N-57). Pure: the caller owns the clock and the row write."""
+    return {
+        "confirmation_id": confirmation_id,
+        "confirmed_at": confirmed_at,
+        "confirmed_via": confirmed_via,
+        "plans": plans,
+        "compiled_scope": [t.model_dump(mode="json") for t in tasks],
+        "quote": quote,
+    }

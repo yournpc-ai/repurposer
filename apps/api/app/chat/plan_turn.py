@@ -1204,6 +1204,9 @@ class PlanTurn:
                     kind="start",
                     intent=self.request.prior_intent,
                 ),
+                # ④ snapshot channel (N-57): the confirmation arrived as a
+                # chat reply (the start_run tool), not the dock pill.
+                confirmed_via="chat_reply",
             )
             # answer_question commits — the run, the answer and the cleared
             # pending brief land in one transaction.

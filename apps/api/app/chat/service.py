@@ -1284,6 +1284,7 @@ async def answer_question(
     on_tool_call=None,
     on_tool_ready=None,
     on_loop_event=None,
+    confirmed_via: str = "dock_pill",
 ) -> tuple[Message, Message | None]:
     """Answer a pending question (``POST /chat/messages/{id}/answer``).
 
@@ -1315,6 +1316,11 @@ async def answer_question(
     echo prose generates here), so the endpoint streams like POST /chat;
     these callbacks carry the prose previews / phase labels. None keeps the
     one-shot JSON behavior the pill-Start path uses (no LLM there).
+
+    ``confirmed_via`` (iter-2 ④, ADR-089 §4 R20): the confirmation channel
+    stamped into the Confirmed Scope Snapshot — "dock_pill" (the typed
+    answer endpoint, the default) or "chat_reply" (the plan path's
+    start_run tool answered in prose, N-57).
     """
     from app.pipeline.orchestrator import (
         TaskSpec,
@@ -1650,6 +1656,26 @@ async def answer_question(
             # The plan is confirmed now — drop the unconfirmed copy.
             project.pending_brief = None
             message.workflow_run_id = run.id
+            # Confirmed Scope Snapshot (iter-2 ④, ADR-089 §4 R20 — 销
+            # P0-①): the immutable record of WHAT was confirmed at the paid
+            # boundary — the reading layer as docked, the exact chain the
+            # run was born with, the quote shown at confirm time. Stamped
+            # post-birthplace so a rejected Start never leaves a snapshot.
+            from app.pipeline.scope_compile import (  # deferred: pipeline edge
+                build_confirmed_scope,
+            )
+
+            run.context = {
+                **(run.context or {}),
+                "confirmed_scope": build_confirmed_scope(
+                    confirmation_id=str(message.id),
+                    confirmed_at=datetime.now(UTC).isoformat(),
+                    confirmed_via=confirmed_via,
+                    plans=list(pending.plans) if pending is not None else [],
+                    tasks=tasks,
+                    quote=(message.question or {}).get("estimate_credits"),
+                ),
+            }
 
     elif question.kind == "question" and message.workflow_run_id is not None:
         # Direction interrupt (期 4): workflow_run_id is the dispatch

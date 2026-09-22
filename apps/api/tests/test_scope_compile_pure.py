@@ -249,3 +249,85 @@ class TestChainShape:
             "write_carousel",
             "write_article",
         ]
+
+
+# ---- ④ Confirmed Scope Snapshot (ADR-089 §4 R20 — 销 P0-①) -------------------
+
+
+class TestConfirmedScopeSnapshot:
+    def test_shape(self):
+        from app.models.schemas import TaskItem
+        from app.pipeline.scope_compile import build_confirmed_scope
+
+        snap = build_confirmed_scope(
+            confirmation_id="msg-1",
+            confirmed_at="2026-09-23T00:00:00+00:00",
+            confirmed_via="dock_pill",
+            plans=[
+                {
+                    "plan_id": "p1",
+                    "title": "Pricing clip",
+                    "state": "ready",
+                    "outputs": [],
+                }
+            ],
+            tasks=[TaskItem(tool="write_post", params={"language": "en"})],
+            quote={"total": [10, 20], "per_task": [[10, 20]]},
+        )
+        assert snap == {
+            "confirmation_id": "msg-1",
+            "confirmed_at": "2026-09-23T00:00:00+00:00",
+            "confirmed_via": "dock_pill",
+            "plans": [
+                {
+                    "plan_id": "p1",
+                    "title": "Pricing clip",
+                    "state": "ready",
+                    "outputs": [],
+                }
+            ],
+            "compiled_scope": [{"tool": "write_post", "params": {"language": "en"}}],
+            "quote": {"total": [10, 20], "per_task": [[10, 20]]},
+        }
+
+    def test_router_drafted_dock_carries_empty_plans(self):
+        """读容忍: a router-drafted dock has no Content Plans — the chain IS
+        the whole package, and the snapshot records plans=[] (never a
+        fabricated reading layer)."""
+        from app.models.schemas import TaskItem
+        from app.pipeline.scope_compile import build_confirmed_scope
+
+        snap = build_confirmed_scope(
+            confirmation_id="msg-2",
+            confirmed_at="2026-09-23T00:00:00+00:00",
+            confirmed_via="chat_reply",
+            plans=[],
+            tasks=[
+                TaskItem(
+                    tool="cut_segments",
+                    params={"segments": [{"start": 1.0, "end": 2.0}]},
+                )
+            ],
+            quote=None,
+        )
+        assert snap["plans"] == []
+        assert snap["quote"] is None
+        assert snap["confirmed_via"] == "chat_reply"
+        assert snap["compiled_scope"][0]["tool"] == "cut_segments"
+
+    def test_snapshot_is_json_round_trippable(self):
+        """The stamp rides run.context (JSONB) — the shape must serialize."""
+        import json
+
+        from app.models.schemas import TaskItem
+        from app.pipeline.scope_compile import build_confirmed_scope
+
+        snap = build_confirmed_scope(
+            confirmation_id="msg-3",
+            confirmed_at="2026-09-23T00:00:00+00:00",
+            confirmed_via="dock_pill",
+            plans=[],
+            tasks=[TaskItem(tool="write_article", params={"language": "de"})],
+            quote=None,
+        )
+        assert json.loads(json.dumps(snap)) == snap
