@@ -366,7 +366,9 @@ class TestProposePlans:
                 "select_id": str(sel.id),
                 "title": "定价三条",
                 "outputs": [
-                    {"kind": "clip", "language": None, "caption_mode": "bilingual"},
+                    # iter-2 ① (N-56): bilingual captions need their target
+                    # language — a complete promise names both.
+                    {"kind": "clip", "language": "fr", "caption_mode": "bilingual"},
                     {"kind": "post", "language": "fr"},
                 ],
             }],

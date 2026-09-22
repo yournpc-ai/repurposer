@@ -1094,6 +1094,14 @@ const en = {
           quotes: "Quote card",
           carousel: "Carousel",
         },
+        // Plan-card output-row form facts (iter-2 ①, N-56): the controlled
+        // caption vocabulary + the dub marker.
+        captionMode: {
+          bilingual: "Bilingual",
+          source_only: "Source captions",
+          target_only: "Translated captions",
+        },
+        dubbed: "Dubbed",
       },
       // 状态原地表达 (ADR-057 §5 — state speaks in place, the caption's
       // right slot stays empty): the un-run node's dashed region reads its

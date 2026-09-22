@@ -138,13 +138,50 @@ class SelectSpec(BaseModel):
 class PlanOutput(BaseModel):
     """One named deliverable of a Content Plan (product semantics: what the
     user gets — language / captions / a per-output brief; never task
-    params, R8)."""
+    params, R8).
+
+    Iter-2 ① field completion (N-56, product-first ruling 2026-09-23): the
+    clip promise's six product facts are now all expressible — the range and
+    the source asset arrive STRUCTURALLY (the Select pointer), and the user-
+    named variables ride here: language version / caption form / dubbing /
+    frame format. ``dub`` splits the "French captions vs French speech"
+    ambiguity; ``caption_mode`` is the controlled vocabulary (the TaskSpec
+    word family); ``aspect`` is a birth-time property (the clip-spec bakes
+    the frame at birth — no downstream capability can re-frame it, so the
+    plan must carry it). Narrowing ``caption_mode`` from free str is safe in
+    exactly this window: the exploration tools are still harness-level (R6
+    production wiring lands later this iteration), so no production plan row
+    carries a free-form value."""
 
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["clip", "post", "article", "quotes", "carousel"]
-    language: str | None = None
-    caption_mode: str | None = None
+    language: str | None = Field(
+        default=None,
+        description="ISO code of the deliverable's language version. For "
+        "clips: the captions' language (speech stays the source's unless "
+        "dub is set); for writers: the content's language. null = the "
+        "source/default.",
+    )
+    caption_mode: Literal["bilingual", "source_only", "target_only"] | None = Field(
+        default=None,
+        description="Caption form of a language version (clips / quotes): "
+        "bilingual = source + target side by side; target_only = the "
+        "translation replaces the source captions; source_only = "
+        "source-language captions (the default anyway). Meaningless without "
+        "language. null = default.",
+    )
+    dub: bool | None = Field(
+        default=None,
+        description="Clips only: true = re-voice the speech into `language` "
+        "(cloned-voice dub — the heavier promise). null/false = the speech "
+        "stays the source's.",
+    )
+    aspect: Literal["9:16", "1:1", "16:9"] | None = Field(
+        default=None,
+        description="Clips only: frame format — set when the user names one "
+        "(竖版/9:16, 方形/1:1, 横版/16:9). null = the persona skin default.",
+    )
     brief: str | None = None
 
 
@@ -216,7 +253,11 @@ def plan_completeness_issues(outputs: list[PlanOutput]) -> list[str]:
     draft → ready): outputs non-empty and no duplicate (kind, language)
     pair. Ranges resolve structurally (the door validated the select's
     evidence at ITS birth); defaults absorb unnamed languages/captions
-    (config 三分流 — an unnamed field is complete, not missing)."""
+    (config 三分流 — an unnamed field is complete, not missing). Iter-2 ①
+    additions: a language-dependent form (bilingual / target_only captions,
+    dub) without a language is a gap, and clip-only properties (aspect /
+    dub) on a non-clip output are a semantic confusion the agent should
+    fix — both surface as honest issues, never silent drops."""
     issues: list[str] = []
     if not outputs:
         return ["content plan names no outputs"]
@@ -226,6 +267,17 @@ def plan_completeness_issues(outputs: list[PlanOutput]) -> list[str]:
         if key in seen:
             issues.append(f"output {i}: duplicate {o.kind}/{o.language or 'default'}")
         seen.add(key)
+        if o.caption_mode in ("bilingual", "target_only") and not o.language:
+            issues.append(
+                f"output {i}: {o.caption_mode} captions need a target language"
+            )
+        if o.dub and not o.language:
+            issues.append(f"output {i}: dub needs a target language")
+        if o.kind != "clip":
+            if o.aspect is not None:
+                issues.append(f"output {i}: aspect applies to clips only")
+            if o.dub:
+                issues.append(f"output {i}: dub applies to clips only")
     return issues
 
 

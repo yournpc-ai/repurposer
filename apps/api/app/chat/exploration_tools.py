@@ -127,8 +127,10 @@ class PlanItem(BaseModel):
         description=(
             "What the user gets from this plan: each output = its family "
             "(clip / post / article / quotes / carousel) + optional "
-            "language / caption_mode / a per-output brief. Name only what "
-            "the user named — defaults absorb the rest."
+            "language / caption_mode / a per-output brief; clips may also "
+            "carry aspect (frame format) and dub (re-voiced speech) when "
+            "the user names them. Name only what the user named — defaults "
+            "absorb the rest."
         )
     )
 

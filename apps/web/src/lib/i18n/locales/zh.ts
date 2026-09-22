@@ -1041,6 +1041,13 @@ const zh: Resources = {
           quotes: "金句卡",
           carousel: "轮播图",
         },
+        // 方案卡产出行的形态事实（iter-2 ①，N-56）：字幕形态词表化 + 配音徽。
+        captionMode: {
+          bilingual: "双语字幕",
+          source_only: "源语字幕",
+          target_only: "译文字幕",
+        },
+        dubbed: "配音版",
       },
       // 状态原地表达（ADR-057 §5——状态在卡内说话，caption 右槽恒空）：未运行
       // 节点虚线空区读自己的估价；排队 / 跳过 / 失败 / 可重跑是安静标签。

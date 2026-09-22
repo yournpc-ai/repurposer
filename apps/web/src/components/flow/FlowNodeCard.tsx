@@ -645,6 +645,21 @@ function ContentPlanCard({ node }: { node: FlowNode }) {
               {o.language ? (
                 <span className="shrink-0 text-[11px] text-muted-foreground">{o.language}</span>
               ) : null}
+              {o.caption_mode ? (
+                <span className="shrink-0 text-[11px] text-muted-foreground">
+                  {t(`results.canvas.exploration.captionMode.${o.caption_mode}`, {
+                    defaultValue: o.caption_mode,
+                  })}
+                </span>
+              ) : null}
+              {o.aspect ? (
+                <span className="shrink-0 text-[11px] text-muted-foreground">{o.aspect}</span>
+              ) : null}
+              {o.dub ? (
+                <span className="shrink-0 text-[11px] text-muted-foreground">
+                  {t("results.canvas.exploration.dubbed")}
+                </span>
+              ) : null}
               {o.brief ? (
                 <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
                   {o.brief}
