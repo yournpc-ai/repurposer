@@ -78,6 +78,7 @@ def _assemble_plan_turn(
     understanding_lines: list[str] | None = None,
     asset_lines: list[str] | None = None,
     material_pending_line: str | None = None,
+    plans_lines: list[str] | None = None,
 ):
     """Plan-turn inputs (ADR-052 B2 D2-C2 — the brief is the state).
 
@@ -128,6 +129,10 @@ def _assemble_plan_turn(
     every file is readable. The router never infers readiness from absent
     evidence (the missing excerpt/understanding was the only signal, and
     absence invited「I can't read it」improvisation).
+    ``plans_lines``: the docked decision package's plan roster (iter-2 ⑦)
+    — plan_id + title + outputs digest per plan, rendered as the package
+    block so a change ask can name its revise_plan target; None when the
+    dock on the table is router-drafted (no Content Plans behind it).
     """
     brief_lines: list[str] | None = None
     if brief is not None:
@@ -195,6 +200,7 @@ def _assemble_plan_turn(
             "pending_lines": pending_lines,
             "filename": filename,
             "presented_plan": presented_plan,
+            "plans_lines": plans_lines,
             "recent": recent,
             "file_language": file_language,
             "material_excerpt": material_excerpt,

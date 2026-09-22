@@ -379,8 +379,14 @@ def test_exploration_verbs_open_no_per_call_activity():
     # A rejected exploration call opens the aggregated repair span.
     frames = _feed(p, "propose_plans", ToolRejected("params_validation", "propose_plans"))
     assert _summary(frames) == [("a1", 1, "repair", STATUS_ACTIVE, REPAIR)]
-    # Every exploration verb classifies (T17's bucket law).
-    for name in ("propose_candidates", "propose_selects", "propose_plans"):
+    # Every exploration verb classifies (T17's bucket law) — the revision
+    # verb (iter-2 ⑦) rides the same 1→0 posture.
+    for name in (
+        "propose_candidates",
+        "propose_selects",
+        "propose_plans",
+        "revise_plan",
+    ):
         assert name in all_known_tool_names()
         assert kind_for_tool(name) is None
 

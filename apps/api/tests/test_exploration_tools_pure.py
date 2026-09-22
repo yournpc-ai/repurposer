@@ -6,8 +6,10 @@ No DB, no LLM, no HTTP (suite discipline): the execute half needs a session
 and stays covered by the door's own suite (test_exploration_store_pure.py)
 plus the iter-1 scenario. What's gated HERE:
 
-- the registry's shape (three verbs, ALL terminal — 终态工具一调即停; the
-  reads stay the perception family's seat);
+- the registry's shape (four verbs, ALL terminal in the harness form —
+  终态工具一调即停; the production projection's terminal law is pinned in
+  TestRegistryShape too: candidates/selects ride back, propose_plans /
+  revise_plan stop the turn, iter-2 ⑤/⑦ N-57);
 - 迁移弧纪律 (ADR-089 §8): harness-level in iter-1 — the family is NOT
   registered into the production turn tools (production wiring = iter-2 R6);
 - 打字机律牙① (read tolerance): explicit null on the optional fields reads
@@ -28,6 +30,7 @@ from app.chat.exploration_tools import (
     ProposeCandidatesArgs,
     ProposePlansArgs,
     ProposeSelectsArgs,
+    RevisePlanArgs,
     SelectItem,
 )
 
@@ -41,17 +44,40 @@ _CANDIDATES = {
 
 
 class TestRegistryShape:
-    def test_three_terminal_verbs(self) -> None:
+    def test_four_terminal_verbs(self) -> None:
+        """The harness form: ALL four verbs terminal (终态工具一调即停);
+        revise_plan joined as the family's fourth word (iter-2 ⑦, N-57)."""
         assert set(EXPLORATION_TOOLS) == {
             "propose_candidates",
             "propose_selects",
             "propose_plans",
+            "revise_plan",
         }
         for name, tool in EXPLORATION_TOOLS.items():
             assert tool.name == name
             assert tool.terminal, name  # 终态工具一调即停
             assert tool.params_model is not None, name
             assert tool.description.strip(), name
+
+    def test_production_projection_terminal_law(self) -> None:
+        """iter-2 ⑤ (R6, N-57): the production projection re-forms the SAME
+        entries — candidates/selects NON-terminal (R2 一回合连续工作: the
+        observations ride back and the loop iterates), propose_plans /
+        revise_plan TERMINAL (the dock = the paid-boundary stop, R15)."""
+        from app.chat.exploration_tools import exploration_chat_tools
+
+        projection = {t.name: t.terminal for t in exploration_chat_tools()}
+        assert projection == {
+            "propose_candidates": False,
+            "propose_selects": False,
+            "propose_plans": True,
+            "revise_plan": True,
+        }
+        # Same params models — zero wording/schema drift between the seats.
+        by_name = {t.name: t for t in exploration_chat_tools()}
+        for name, tool in EXPLORATION_TOOLS.items():
+            assert by_name[name].params_model is tool.params_model
+            assert by_name[name].description == tool.description
 
     def test_read_names_are_registered_perception_reads(self) -> None:
         """The harness's loop composes the verbs with EXISTING perception
@@ -87,6 +113,21 @@ class TestReadTolerance:
         )
         assert item.title == ""
 
+    def test_revise_plan_nulls_read_as_keep_and_empty(self) -> None:
+        """iter-2 ⑦: a null title reads as 'keep the current one' (the door's
+        None semantics), a null instruction as the empty restatement."""
+        args = RevisePlanArgs.model_validate(
+            {
+                "plan_id": str(uuid4()),
+                "title": None,
+                "instruction": None,
+                "outputs": [{"kind": "post", "language": "en"}],
+            }
+        )
+        assert args.title == ""
+        assert args.instruction == ""
+        assert args.outputs[0].kind == "post"
+
 
 class TestWireDoorCapParity:
     """校验分层律 (ADR-064): the wire's max_length mirrors the door spec's —
@@ -101,6 +142,8 @@ class TestWireDoorCapParity:
             (SelectItem.model_fields["verdict"], SelectSpec.model_fields["verdict"]),
             (SelectItem.model_fields["reason"], SelectSpec.model_fields["reason"]),
             (PlanItem.model_fields["title"], ContentPlanSpec.model_fields["title"]),
+            # iter-2 ⑦: the revision verb's title wire obeys the same cap.
+            (RevisePlanArgs.model_fields["title"], ContentPlanSpec.model_fields["title"]),
         ):
             wire_cap = next(
                 (m.max_length for m in wire_field.metadata if hasattr(m, "max_length")),

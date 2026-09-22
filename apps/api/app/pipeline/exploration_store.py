@@ -638,3 +638,73 @@ async def propose_plans(
         born.append(node)
     await db.flush()
     return born
+
+
+async def read_journey_plans(
+    db: AsyncSession, project_id: UUID, journey_id: UUID
+) -> list[GraphNode]:
+    """The revise/recompile seat's read (iter-2 ⑦): ALL of the journey's
+    Content Plan rows (the decision package re-docks as a whole — a revise
+    targets one plan, the package re-presents every plan). Pure read, same
+    door-outside posture as ``read_journey_evidence``."""
+    rows = list(
+        (
+            await db.execute(
+                select(GraphNode).where(
+                    GraphNode.project_id == project_id,
+                    GraphNode.type == EXPLORATION_NODE_TYPE,
+                    GraphNode.journey_id == journey_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        n for n in rows if (n.spec or {}).get("exploration_kind") == KIND_CONTENT_PLAN
+    ]
+
+
+async def revise_plan(
+    db: AsyncSession,
+    project: Project,
+    *,
+    plan_id: UUID,
+    title: str | None = None,
+    outputs: list[dict[str, Any]] | None = None,
+) -> GraphNode:
+    """Revise one Content Plan IN PLACE (iter-2 ⑦, ADR-089 §6 修订分类,
+    contract §4.8): the SAME row takes the restated spec — clean → state
+    ``revised``, gaps → ``draft`` with the issues re-stamped (the birth
+    self-check's 同一律). ``revision_of`` is never built (同一行修订, 无
+    版本树 — N-57); the spec's birth ``idem`` survives (a revision never
+    re-mints identity). compiled / superseded rows are closed — the
+    decision package they rode is settled history. Replay = an identical
+    restatement returns the row untouched. Flush-only."""
+    lane = await _exploration_nodes(db, project.id)
+    node = _get_exploration_node(lane, plan_id, KIND_CONTENT_PLAN)
+    if node.state in ("compiled", "superseded"):
+        raise ExplorationRejected(
+            f"plan {plan_id} is {node.state} — a settled plan is never revised"
+        )
+    raw = dict(node.spec or {})
+    raw.pop("issues", None)
+    spec = ContentPlanSpec.model_validate(raw)
+    new_title = spec.title if title is None else title.strip()
+    new_outputs = (
+        spec.outputs
+        if outputs is None
+        else [PlanOutput.model_validate(o) for o in outputs]
+    )
+    payload = spec.model_copy(
+        update={"title": new_title, "outputs": new_outputs}
+    ).model_dump()
+    issues = plan_completeness_issues(new_outputs)
+    if issues:
+        payload["issues"] = issues
+    if dict(node.spec or {}) == payload:
+        return node  # replay: identical restatement is a no-op
+    node.spec = payload
+    node.state = STATE_DRAFT if issues else "revised"
+    await db.flush()
+    return node

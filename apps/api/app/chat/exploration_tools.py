@@ -38,6 +38,7 @@ from app.pipeline.exploration_store import (
     propose_candidates,
     propose_plans,
     propose_selects,
+    revise_plan,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -159,6 +160,39 @@ class ProposePlansArgs(BaseModel):
     )
 
 
+class RevisePlanArgs(BaseModel):
+    """iter-2 ⑦ (ADR-089 §6 修订分类, contract §4.8): the plan-level revision
+    verb — the ONLY way an already-landed plan changes. Full restatement,
+    never a patch (读容忍: title/instruction null-tolerant)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "title", "instruction")
+
+    plan_id: UUID = Field(
+        description="The plan to revise — from the decision package on the table (the pending-package block's plan_id), never invented."
+    )
+    instruction: str = Field(
+        default="",
+        description="The user's change ask, restated in one compact line (what changes) — the revision's own record of the ask.",
+    )
+    title: str = Field(
+        default="",
+        max_length=200,
+        description="The plan's title after the revision — omit to keep the current one.",
+    )
+    outputs: list[PlanOutput] = Field(
+        description=(
+            "The plan's FULL restated outputs after the revision — no patch "
+            "semantics: restate everything that stays, add what changes, "
+            "drop what goes."
+        )
+    )
+
+
 EXPLORATION_TOOLS: dict[str, ChatTool] = {
     t.name: t
     for t in (
@@ -191,6 +225,18 @@ EXPLORATION_TOOLS: dict[str, ChatTool] = {
                 "plan card shows draft until its self-check passes."
             ),
             params_model=ProposePlansArgs,
+            terminal=True,
+        ),
+        ChatTool(
+            name="revise_plan",
+            description=(
+                "Revise one already-landed Content Plan in place (the user's "
+                "change ask — 'make the second plan French too', 'the clip "
+                "square instead') restated as the plan's FULL new outputs. "
+                "The package re-compiles and re-docks for confirmation — "
+                "every plan-level revision re-confirms."
+            ),
+            params_model=RevisePlanArgs,
             terminal=True,
         ),
     )
@@ -238,19 +284,38 @@ def plans_observation(born: list) -> str:
     return "\n".join(lines)
 
 
+def revise_observation(node) -> str:
+    spec = node.spec
+    state_note = (
+        "ready"
+        if node.state in ("ready", "revised")
+        else f"draft — issues: {'; '.join(spec.get('issues') or [])}"
+    )
+    outputs = ", ".join(
+        o["kind"] + (f" ({o['language']})" if o.get("language") else "")
+        for o in spec["outputs"]
+    )
+    return (
+        f"Plan revised in place — plan_id: {node.id} — "
+        f"{spec['title'] or '(unnamed)'}: {outputs} [{state_note}]. The "
+        "decision package re-compiles and re-docks for confirmation."
+    )
+
+
 def exploration_chat_tools() -> list[ChatTool]:
     """The production projection (iter-2 ⑤, R6 — N-57): the SAME registry
     entries re-formed for the plan path's loop. R2 免费探索区连续工作:
     candidates/selects ride back as observations (NON-terminal — one turn
     carries the whole discovery chain: search → candidates → selects →
-    plans); propose_plans stays TERMINAL — landing the plans compiles and
-    docks the decision package, which IS the paid-boundary stop (R15)."""
+    plans); propose_plans / revise_plan stay TERMINAL — landing (or
+    re-landing) the plans docks the decision package, which IS the
+    paid-boundary stop (R15)."""
     return [
         ChatTool(
             name=t.name,
             description=t.description,
             params_model=t.params_model,
-            terminal=t.name == "propose_plans",
+            terminal=t.name in ("propose_plans", "revise_plan"),
         )
         for t in EXPLORATION_TOOLS.values()
     ]
@@ -299,6 +364,15 @@ async def execute_exploration_tool(
                 persona_id=persona_id,
             )
             return plans_observation(born)
+        if name == "revise_plan":
+            node = await revise_plan(
+                db,
+                project,
+                plan_id=params.plan_id,
+                title=params.title or None,
+                outputs=[o.model_dump() for o in params.outputs],
+            )
+            return revise_observation(node)
         raise KeyError(name)
     except ExplorationRejected as e:
         return f"The door rejected the proposal: {e}"
