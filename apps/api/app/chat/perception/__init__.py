@@ -47,7 +47,9 @@ from app.chat.perception.executes import (
     GetCraftSkeletonParams,
     GetNodeParams,
     GetOutputSpecParams,
+    GetSegmentParams,
     SearchMusicParams,
+    SearchTranscriptParams,
 )
 
 
@@ -159,6 +161,29 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             params_model=None,
             execute=executes.get_pending_plan,
             activity_key="chat.inspecting.pendingPlan",
+        ),
+        PerceptionTool(
+            name="search_transcript",
+            description=(
+                "Search the project's transcripts for a topic (deterministic "
+                "keyword retrieval) — the discovery read: hits come back as "
+                "[start–end] sections with their verbatim cue text, ready "
+                "to evaluate as candidate members."
+            ),
+            params_model=SearchTranscriptParams,
+            execute=executes.search_transcript,
+            activity_key="chat.inspecting.transcriptSearch",
+        ),
+        PerceptionTool(
+            name="get_segment",
+            description=(
+                "Read one timeline range's verbatim speech ([start–end] in "
+                "seconds) — read THIS before proposing a range as evidence: "
+                "the excerpt must be what is actually said here."
+            ),
+            params_model=GetSegmentParams,
+            execute=executes.get_segment,
+            activity_key="chat.inspecting.segment",
         ),
         PerceptionTool(
             name="get_asset",

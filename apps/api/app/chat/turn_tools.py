@@ -146,6 +146,11 @@ PLAN_READ_TOOLS = perception_chat_tools(
     "get_craft_skeleton",
     "search_music",
     "list_caption_styles",
+    # 证据 reads (迭代一): material reads by family — a discovery goal's
+    # first turn is plan-path (fresh project), so the transcript evidence
+    # substrate rides here too (2026-09-22).
+    "search_transcript",
+    "get_segment",
 )
 CHAT_READ_TOOLS = perception_chat_tools(
     "get_output_spec",
@@ -158,4 +163,6 @@ CHAT_READ_TOOLS = perception_chat_tools(
     "get_pending_plan",
     "get_asset",
     "get_craft_skeleton",
+    "search_transcript",
+    "get_segment",
 )

@@ -48,6 +48,8 @@ def test_registry_shape_and_naming_law() -> None:
         "get_pending_plan",
         "get_asset",
         "get_craft_skeleton",
+        "search_transcript",
+        "get_segment",
     }
     for name, entry in PERCEPTION_TOOLS.items():
         assert re.fullmatch(r"(get|list|search)_[a-z_]+", name), name
@@ -363,3 +365,37 @@ class TestUnderstandingDigestLines:
         lines = understanding_digest_lines(u)
         quoted = next(l for l in lines if l.startswith("- Quotable lines:"))
         assert "5" in quoted and "line 0" in quoted and "line 3" not in quoted
+
+
+# ---- 证据 reads (ADR-088 §2 拍 2, 2026-09-22 迭代一): search + segment -------
+
+
+class TestCueMatchLines:
+    def test_anchor_and_speaker_render(self) -> None:
+        from app.chat.perception.executes import _cue_match_lines
+
+        matches = [
+            {"start": 12.3, "end": 18.7, "text": "pricing is hard", "hits": ["pricing"]},
+            {"start": 40.0, "end": 46.0, "text": "pricing tiers", "hits": ["pricing"]},
+        ]
+        lines = _cue_match_lines(matches, {"turns": [{"start": 10.0, "end": 30.0, "speaker": "left"}]})
+        assert lines[0] == "- [12.3–18.7] pricing is hard (left)"
+        assert lines[1] == "- [40.0–46.0] pricing tiers"  # no turn → no speaker tail
+
+
+class TestSegmentBody:
+    def test_under_cap_verbatim(self) -> None:
+        from app.chat.perception.executes import _segment_body
+
+        words = [{"word": "hello", "start": 0.0, "end": 0.5}, {"word": "world", "start": 0.6, "end": 1.0}]
+        text, truncated = _segment_body(words, 0.0, 1.0)
+        assert text == "hello world"
+        assert truncated is False
+
+    def test_over_cap_says_so_honestly(self) -> None:
+        from app.chat.perception.executes import _SEGMENT_TEXT_LIMIT, _segment_body
+
+        words = [{"word": "p" * _SEGMENT_TEXT_LIMIT, "start": 0.0, "end": 1.0}, {"word": "tail", "start": 1.1, "end": 2.0}]
+        text, truncated = _segment_body(words, 0.0, 2.0)
+        assert truncated is True
+        assert f"truncated at {_SEGMENT_TEXT_LIMIT}" in text

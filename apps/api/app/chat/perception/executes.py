@@ -42,6 +42,12 @@ from app.models.tables import (
     WorkflowRun,
     WorkflowStep,
 )
+from app.tools.clips.transcript import (
+    group_cues,
+    search_cues,
+    speaker_at,
+    words_in_range,
+)
 
 
 # ---- params models (package-local, like tools/<pkg>/params.py) --------------
@@ -545,6 +551,165 @@ async def get_pending_plan(db: AsyncSession, project: Project, params) -> str:
     lines = ["Docked plan (waiting for the user's confirmation):"]
     lines.extend(_pending_plan_lines(plan))
     return "\n".join(lines)
+
+
+# ---- 证据 reads (ADR-088 §2 拍 2, 2026-09-22 迭代一): transcript search + segment
+#
+# The discovery chain's evidence substrate: search_transcript is the
+# DETERMINISTIC retrieval read (keyword retrieval over cue lines — the cue
+# law lives in app/tools/clips/transcript), get_segment reads one range's
+# verbatim speech (the evidence check's twin — the agent quotes from THIS
+# text, and the exploration door rejects anything else). Both degrade
+# honestly on assets without word-level timestamps (the understanding
+# chain hasn't finished — never a fabricated range).
+
+_SEGMENT_TEXT_LIMIT = 4000
+_SEARCH_PER_ASSET_LIMIT = 10
+
+
+class SearchTranscriptParams(BaseModel):
+    query: str = Field(
+        description="What to find in the talk — a topic word or phrase (e.g. 'pricing', '定价')."
+    )
+    asset_id: UUID | None = Field(
+        default=None,
+        description="The asset to search (from the roster or an @-mention). Omit to search every timeline-ready asset in the project.",
+    )
+
+
+class GetSegmentParams(BaseModel):
+    asset_id: UUID = Field(description="The asset whose timeline to read.")
+    start: float = Field(description="Range start, in seconds.")
+    end: float = Field(description="Range end, in seconds.")
+
+
+def _cue_match_lines(matches: list[dict], speaker_map: dict | None) -> list[str]:
+    """One search-hit line: [start–end] cue text (+ speaker when the
+    speaker_map attributes one). The range anchor is the point — the
+    agent's propose_candidates members copy these anchors."""
+    lines = []
+    for m in matches:
+        line = f"- [{m['start']:.1f}–{m['end']:.1f}] {m['text']}"
+        speaker = speaker_at(speaker_map, m["start"], m["end"])
+        if speaker:
+            line += f" ({speaker})"
+        lines.append(line)
+    return lines
+
+
+def _asset_label(asset: Asset) -> str:
+    return asset.title or (
+        asset.file_url.rsplit("/", 1)[-1] if asset.file_url else "(text)"
+    )
+
+
+async def search_transcript(
+    db: AsyncSession, project: Project, params: SearchTranscriptParams
+) -> str:
+    """Deterministic keyword retrieval over the project's transcripts
+    （拍 2「Searching… / Found 14 relevant sections」）. Hits ride cue-line
+    anchors [start–end]; per-asset hits are capped with an honest omission
+    note (observations never flood)."""
+    assets = list(
+        (
+            await db.execute(select(Asset).where(Asset.project_id == project.id))
+        )
+        .scalars()
+        .all()
+    )
+    if params.asset_id is not None:
+        target = _resolve_asset_target(assets, params.asset_id)
+        if isinstance(target, str):
+            return target
+        pool = [target]
+    else:
+        pool = [a for a in assets if a.file_url]
+    timed = [a for a in pool if (a.meta or {}).get("words")]
+    if not timed:
+        return (
+            "No timeline-ready asset in this project yet — the understanding "
+            "chain (ASR word timestamps) has not finished, so there is "
+            "nothing to search."
+        )
+
+    sections: list[str] = []
+    grand_total = 0
+    for asset in timed:
+        words = (asset.meta or {}).get("words") or []
+        cues, _ = group_cues(words)
+        matches, total = search_cues(
+            cues, params.query, limit=_SEARCH_PER_ASSET_LIMIT
+        )
+        grand_total += total
+        if not matches:
+            continue
+        header = f"Asset {_asset_label(asset)} — {total} hit(s)"
+        if total > len(matches):
+            header += f" (showing {len(matches)})"
+        header += ":"
+        sections.append(
+            "\n".join(
+                [header, *_cue_match_lines(matches, (asset.meta or {}).get("speaker_map"))]
+            )
+        )
+    if not sections:
+        return f'No section mentions "{params.query}" — try a different word, or read the understanding summary with get_understanding.'
+    head = f'Search "{params.query}" — {grand_total} hit(s) across {len(sections)} asset(s):'
+    return "\n".join([head, *sections])
+
+
+def _segment_body(
+    words: list[dict], start: float, end: float
+) -> tuple[str, bool]:
+    """The range's verbatim speech, capped at the observation budget —
+    the truncation flag rides so the caller says so (a silent cut here
+    would re-open the blind-evidence hole)."""
+    text = words_in_range(words, start, end)
+    if len(text) <= _SEGMENT_TEXT_LIMIT:
+        return text, False
+    return text[:_SEGMENT_TEXT_LIMIT] + f"… (truncated at {_SEGMENT_TEXT_LIMIT} of {len(text)} chars)", True
+
+
+async def get_segment(
+    db: AsyncSession, project: Project, params: GetSegmentParams
+) -> str:
+    """One timeline range's verbatim speech — the evidence read: the
+    agent reads THIS before proposing the range as a candidate member
+    (compose the excerpt from what is actually said here)."""
+    if not params.start < params.end:
+        return f"start ({params.start}) must be < end ({params.end})."
+    asset = await db.get(Asset, params.asset_id)
+    if asset is None or str(asset.project_id) != str(project.id):
+        return (
+            f"No asset with id {params.asset_id} exists in this project — "
+            "pick an id from the roster (get_asset)."
+        )
+    words = (asset.meta or {}).get("words") or []
+    if not words:
+        return (
+            f"Asset {_asset_label(asset)} has no timeline yet — the "
+            "understanding chain has not finished."
+        )
+    timeline_end = float(words[-1].get("end") or 0.0)
+    note = ""
+    end = params.end
+    if end > timeline_end:
+        end = timeline_end
+        note = f" (end clamped to the timeline's {timeline_end:.1f}s)"
+    text, truncated = _segment_body(words, params.start, end)
+    if not text:
+        return (
+            f"No speech inside [{params.start:.1f}–{end:.1f}] — the range "
+            "lands in a pause or outside the talk."
+        )
+    header = (
+        f"Segment of {_asset_label(asset)} [{params.start:.1f}–{end:.1f}]"
+        f" ({end - params.start:.1f}s){note}:"
+    )
+    speaker = speaker_at((asset.meta or {}).get("speaker_map"), params.start, end)
+    if speaker:
+        header += f"\nSpeaker: {speaker}"
+    return "\n".join([header, text])
 
 
 def _asset_roster_line(asset: Asset) -> str:
