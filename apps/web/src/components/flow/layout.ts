@@ -30,7 +30,28 @@ export const FLOW_NODE_SIZE: Record<FlowNodeKind, { width: number; height: numbe
   audio: { width: 280, height: 268 },
   modifier: { width: 280, height: 268 },
   materialize: { width: 280, height: 268 },
+  /** 探索产物族 (ADR-088 §2, 词表 v3 第八值): the family's ONE fallback —
+   * the server-settled frame (per-kind, _EXPLORATION_FRAME ↔
+   * EXPLORATION_NODE_SIZE below) always supersedes it. */
+  exploration: { width: 340, height: 96 },
 }
+
+/** 探索族卡面尺寸 (ADR-088 §2; 一条测量律两镜像互引 — server mirror
+ * exploration_store._EXPLORATION_FRAME): the per-kind FIXED anatomies the
+ * birth frames reserve. Candidate set = the COLLAPSED summary row; its
+ * expansion is the card's own max-height scroll (封顶滚动律 precedent —
+ * the frame never grows; the expanded card overlays the lane below it
+ * transiently, a user gesture, z-raised and solid). */
+export const EXPLORATION_NODE_SIZE: Record<string, { width: number; height: number }> = {
+  candidate_set: { width: 340, height: 96 },
+  select: { width: 320, height: 140 },
+  content_plan: { width: 360, height: 220 },
+}
+
+/** The candidate-set card's expanded member-list cap (px) — the list
+ * scrolls in place past it (nowheel+nopan), so the transient expansion
+ * stays bounded inside the lane. */
+export const EXPLORATION_MEMBER_LIST_PX = 264
 
 /** The results canvas's product card (ADR-041 D5 大卡, 2026-08-17 二轮走查
  * 放大; 2026-09-13 用户拍板 分档加宽): a corner-info band above the card (type
@@ -253,6 +274,14 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
   const frame = node.frame
   const fallback = FLOW_NODE_SIZE[node.kind]
   const width = frame?.w ?? fallback.width
+  // 探索产物族 (ADR-088 §2): the fixed per-kind anatomy — the frame IS the
+  // reservation (EXPLORATION_NODE_SIZE, the server mirror's one law). The
+  // candidate set's expansion is the card's transient overlay, never a
+  // layout event (the frame never grows).
+  if (node.kind === "exploration") {
+    const kind = EXPLORATION_NODE_SIZE[String(node.spec?.exploration_kind ?? "")] ?? fallback
+    return { width, height: kind.height }
+  }
   // 素材节点 (C4 读面后 kind 已是媒介值 — the joined asset dossier is the
   // birth certificate). 素材节点同律 (2026-09-13 用户拍板): the source's
   // real pixels shape the node — snapped to its display class's anatomy
@@ -438,7 +467,7 @@ export function projectSettledFrames(
     let prevBottom: number | null = null
     for (const n of ns) {
       const serverY = n.frame!.y
-      const y =
+      const y: number =
         prevBottom === null ? serverY : Math.min(serverY, prevBottom + GAP_CROSS)
       const x = n.rank != null ? n.rank * PITCH : n.frame!.x
       positions.set(n.id, { x, y })

@@ -272,6 +272,10 @@ export interface WorkflowStep {
 // ``modifier`` (morph modifiers — 批 B4 退役) and ``materialize``
 // (pre-fold whole-source nodes — 历史清理收). (C5b: the field itself
 // renamed kind → type — the graph node's family word, 词表 v3.)
+// ``exploration`` (词表 v3 第八值, ADR-088 §2, 2026-09-22): the exploration
+// family's ONE family word — candidate set / select / content plan rows
+// pass the read face straight through (spec.exploration_kind distinguishes
+// them); I-EXPLORE-01 keeps them rank-blind, edge-less and execution-blind.
 export type GraphNodeType =
   | "text"
   | "table"
@@ -280,6 +284,7 @@ export type GraphNodeType =
   | "audio"
   | "modifier"
   | "materialize"
+  | "exploration"
 
 export type GraphNodeState =
   | "draft"
@@ -289,6 +294,17 @@ export type GraphNodeState =
   | "failed"
   | "skipped"
   | "stale"
+
+/** The exploration family's own state machine (ADR-088 §5 双状态机):
+ * draft → ready → revised → compiled → superseded. R18 同框纪律: the two
+ * machines' words NEVER share chrome — an exploration node never mirrors
+ * the product machine's running wipe / skipped dim / stale badge. */
+export type ExplorationNodeState =
+  | "draft"
+  | "ready"
+  | "revised"
+  | "compiled"
+  | "superseded"
 
 export type GraphEdgeType = "video" | "audio" | "text" | "ctx"
 
@@ -310,7 +326,9 @@ export interface GraphNodeAsset {
 export interface GraphNode {
   id: string
   type: GraphNodeType
-  state: GraphNodeState
+  /** The row's own machine's word: product nodes carry GraphNodeState,
+   * exploration rows carry ExplorationNodeState (R18 — never mixed). */
+  state: GraphNodeState | ExplorationNodeState
   /** The node's program: prompt / params / role / fill_key / frame_class /
    * summary — the node type's own shape, rendered as-is. */
   spec: {
@@ -350,8 +368,38 @@ export interface GraphNode {
   /** Producer nodes: the joined visible product rows (created_at asc — the
    * card's pager order). */
   outputs?: Output[]
+  /** R24 (ADR-088): the journey this row belongs to — an OWNERSHIP
+   * attribute, never a graph edge (the lane's grouping truth). Null on
+   * product nodes. */
+  journey_id?: string | null
   created_at: string
   updated_at?: string | null
+}
+
+// ── 探索产物族 (ADR-088 §2) — the exploration family's spec shapes ────────
+// The three kinds share the family word type="exploration" and read their
+// own spec.exploration_kind. R7 证据引用: a Select POINTS at its evidence
+// (candidate set + member index) — the client resolves the range at read
+// time for display; the artifact never copies the source.
+
+export type ExplorationKind = "candidate_set" | "select" | "content_plan"
+
+/** One evidence member of a Candidate Set — every field traceable back to
+ * the transcript (start/end in seconds, excerpt verbatim). */
+export interface ExplorationMember {
+  start: number
+  end: number
+  excerpt: string
+  speaker?: string | null
+}
+
+/** One named deliverable of a Content Plan (product semantics: what the
+ * user gets — never task params, R8). */
+export interface ExplorationPlanOutput {
+  kind: "clip" | "post" | "article" | "quotes" | "carousel"
+  language?: string | null
+  caption_mode?: string | null
+  brief?: string | null
 }
 
 export interface GraphEdge {

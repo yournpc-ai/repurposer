@@ -1020,6 +1020,27 @@ const zh: Resources = {
         image: "图片",
         video: "视频",
         audio: "音频",
+        // 词表 v3 第八值（ADR-088 §2）：探索族单一族词——卡面自带分 kind
+        // caption，这里只是通用回退。
+        exploration: "探索",
+      },
+      // 探索产物族卡面（ADR-088 §2，迭代一）：三种卡面的结构文案。verdict /
+      // 理由 / topic / 标题是 agent 用界面语言写的数据（世界自证）——这里只
+      // 放结构标签。
+      exploration: {
+        kindCandidateSet: "候选",
+        kindSelect: "精选",
+        kindContentPlan: "内容方案",
+        candidateCount: "{{count}} 个候选",
+        stateReady: "就绪",
+        stateDraft: "草稿",
+        outputKind: {
+          clip: "视频片段",
+          post: "社交长文",
+          article: "长文章",
+          quotes: "金句卡",
+          carousel: "轮播图",
+        },
       },
       // 状态原地表达（ADR-057 §5——状态在卡内说话，caption 右槽恒空）：未运行
       // 节点虚线空区读自己的估价；排队 / 跳过 / 失败 / 可重跑是安静标签。

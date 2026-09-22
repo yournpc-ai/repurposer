@@ -229,6 +229,14 @@
   transition: transform 300ms ease;
 }
 
+/* 探索族候选集合集卡 (ADR-088 §2): the expanded member list outgrows the
+   card's birth frame (the frame never grows — expansion is a transient
+   user gesture overlaying the lane below); raise the WHOLE node while
+   open, or later-born siblings paint over the list. */
+.react-flow__node:has(.exploration-card-open) {
+  z-index: 10;
+}
+
 /* ── xyflow chrome taming (tokens, not its defaults) ─────────────────── */
 
 .react-flow__attribution {

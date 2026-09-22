@@ -2155,7 +2155,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // OWN bubble (`${streamId}#cpN`). The typewriter's output target is
     // mutable for that window; previewText tracks ONLY the settled bubble's
     // prefix (checkpoint text never joins the suffix-pacing reference).
-    let typeTargetId = streamId
+    // 显式 string 标注: crypto.randomUUID() 的新 lib.dom 模板字面量类型
+    // (`${string}-${string}-...`) 会传染推断,让 `#cpN` 检查点 id 赋不上。
+    let typeTargetId: string = streamId
     let checkpointCount = 0
     let checkpointChain: Promise<void> = Promise.resolve()
     const appendDelta = (delta: string) => {

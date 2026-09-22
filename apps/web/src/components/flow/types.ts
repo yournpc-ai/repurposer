@@ -6,7 +6,12 @@
  * renderer knows nothing about topology semantics; every edge carries its
  * meaning, every node is real. */
 
-import type { GraphEdgeType, GraphNodeState, GraphNodeType } from "@/lib/types"
+import type {
+  ExplorationNodeState,
+  GraphEdgeType,
+  GraphNodeState,
+  GraphNodeType,
+} from "@/lib/types"
 
 export type { GraphEdgeType, GraphNodeState, GraphNodeType }
 
@@ -28,9 +33,14 @@ export type OutPortType = GraphEdgeType | "image"
  * words — "asset" (a recipe's manual asset node) | "step" | "output". */
 export type FlowNodeKind = GraphNodeType | "asset" | "output" | "step"
 
-/** Graph canvas node state (the graph row's own state vocabulary). The
- * recipe surface leaves status unset — its cards have no liveness. */
-export type FlowNodeStatus = GraphNodeState
+/** Graph canvas node state (the graph row's state vocabulary — the product
+ * machine's words, or the exploration family's own for type="exploration"
+ * rows). R18 同框纪律: the exploration machine never mirrors the product
+ * chrome (no running wipe / skipped dim) — the words pass through so the
+ * card face can read its own machine (a content plan's draft badge), and
+ * the root chrome only ever matches the PRODUCT words. The recipe surface
+ * leaves status unset — its cards have no liveness. */
+export type FlowNodeStatus = GraphNodeState | ExplorationNodeState
 
 /** lineage 血缘边 = derivation (asset→output, output→output);
  * dependency 依赖边 = process order (step→step). Visually distinct.
@@ -108,6 +118,15 @@ export interface FlowNode {
    * siblings). Empty/undefined = the region shows the state-appropriate
    * body (draft estimate / running wipe / quiet done). */
   outputs?: import("@/lib/types").Output[]
+  /** R24 (ADR-088): the journey this exploration row belongs to — ownership
+   * attribute passthrough, never an edge. Null on product nodes. */
+  journeyId?: string | null
+  /** Select 卡的证据区间 (ADR-088 R7 证据引用): the artifact is a POINTER
+   * (candidate set + member index); the adapter resolves the pointed-at
+   * member's [start, end] at read time for the card face — display
+   * projection, never a copy into the artifact. Null when the parent set
+   * or member is absent (the card reads its range line honestly empty). */
+  evidenceRange?: { start: number; end: number } | null
   /** The node's quotation in credits (server-folded at read time) — the
    * draft card's 「运行后生成 · 约 N 积分」. Null = unquoted. */
   estimateCredits?: [number, number] | null

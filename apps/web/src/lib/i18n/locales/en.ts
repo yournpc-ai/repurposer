@@ -1072,6 +1072,28 @@ const en = {
         image: "Image",
         video: "Video",
         audio: "Audio",
+        // 词表 v3 第八值 (ADR-088 §2): the exploration family's ONE family
+        // word — the card faces render their own per-kind captions; this
+        // is the generic fallback only.
+        exploration: "Exploration",
+      },
+      // 探索产物族卡面 (ADR-088 §2, iter-1): the three card faces' chrome.
+      // Verdicts / reasons / topics / titles are agent-written DATA in the
+      // interface language (世界自证) — only the structural labels live here.
+      exploration: {
+        kindCandidateSet: "Candidates",
+        kindSelect: "Select",
+        kindContentPlan: "Content plan",
+        candidateCount: "{{count}} candidates",
+        stateReady: "Ready",
+        stateDraft: "Draft",
+        outputKind: {
+          clip: "Clip",
+          post: "Post",
+          article: "Article",
+          quotes: "Quote card",
+          carousel: "Carousel",
+        },
       },
       // 状态原地表达 (ADR-057 §5 — state speaks in place, the caption's
       // right slot stays empty): the un-run node's dashed region reads its

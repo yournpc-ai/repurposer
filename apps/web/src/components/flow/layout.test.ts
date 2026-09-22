@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from "vitest"
 
-import { projectSettledFrames } from "./layout"
+import { flowNodeSize, projectSettledFrames } from "./layout"
 import type { FlowEdge, FlowNode } from "./types"
 
 // The three-mirror pitch value (product_graph.PITCH ↔ graph_store._PITCH ↔
@@ -148,5 +148,79 @@ describe("projectSettledFrames — C-1 rank projection", () => {
       const order = [...revealOrder.entries()].sort(([, i], [, j]) => i - j).map(([id]) => id)
       expect(order).toEqual(expected)
     }
+  })
+})
+
+/** 探索产物族 (ADR-088 §2, iter-1 — I-EXPLORE-01 前端投影): the family's
+ * lane lives ONE pitch left of the island column (x = −464, rank-null by
+ * the server's default-deny); edgeless by construction, the projection
+ * names no violations, and the render sizes mirror the server's per-kind
+ * frame reservations (exploration_store._EXPLORATION_FRAME ↔
+ * EXPLORATION_NODE_SIZE — 一条测量律两镜像互引). */
+describe("exploration family — lane projection + per-kind sizes", () => {
+  function explorationNode(
+    id: string,
+    explorationKind: "candidate_set" | "select" | "content_plan",
+    frame: { x: number; y: number; w: number; h: number },
+  ): FlowNode {
+    return {
+      id,
+      kind: "exploration",
+      label: id,
+      rank: null, // I-EXPLORE-01: the server's product_ranks is blind to it
+      spec: { exploration_kind: explorationKind },
+      frame,
+      order: 0,
+    }
+  }
+
+  it("the lane renders at its stored x left of the island column, violations stay empty", () => {
+    const nodes = [
+      node("island", 0, { x: 0, y: 0 }),
+      explorationNode("cs", "candidate_set", { x: -464, y: 0, w: 340, h: 96 }),
+      explorationNode("sel", "select", { x: -464, y: 112, w: 320, h: 140 }),
+      explorationNode("plan", "content_plan", { x: -464, y: 268, w: 360, h: 220 }),
+    ]
+    const { positions, violations } = projectSettledFrames(nodes, [])
+    expect(violations).toEqual([])
+    expect(positions.get("cs")!.x).toBe(-464)
+    expect(positions.get("sel")!.x).toBe(-464)
+    expect(positions.get("island")!.x).toBe(0)
+    // The lane's y seats pass through (its own stacking law — compression
+    // only ever pulls UP within the column, the seats here are exact).
+    expect(positions.get("sel")!.y).toBe(112)
+    expect(positions.get("plan")!.y).toBe(268)
+  })
+
+  it("a product edge never names an exploration endpoint — the family is edgeless by the door", () => {
+    // 防假绿负例: IF an edge ever touched an exploration node the
+    // projection MUST name it (rank-null endpoint) — the fallback draws
+    // the orphan, it never acquits it.
+    const nodes = [
+      node("island", 0, { x: 0, y: 0 }),
+      explorationNode("cs", "candidate_set", { x: -464, y: 0, w: 340, h: 96 }),
+    ]
+    const { violations } = projectSettledFrames(nodes, [edge("island", "cs", "video")])
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toContain("rank-null endpoint")
+  })
+
+  it("render sizes mirror the server's per-kind reservations", () => {
+    // exploration_store._EXPLORATION_FRAME = candidate_set (340,96) /
+    // select (320,140) / content_plan (360,220) — the frame's w is the
+    // width authority, the kind's anatomy the height.
+    for (const [kind, h] of [
+      ["candidate_set", 96],
+      ["select", 140],
+      ["content_plan", 220],
+    ] as const) {
+      const n = explorationNode("x", kind, { x: -464, y: 0, w: 340, h })
+      expect(flowNodeSize(n)).toEqual({ width: 340, height: h })
+    }
+    // An unknown kind reads the family fallback (the collapsed row),
+    // never a crash.
+    const orphan = explorationNode("x", "candidate_set", { x: -464, y: 0, w: 340, h: 96 })
+    orphan.spec = { exploration_kind: "future_kind" }
+    expect(flowNodeSize(orphan).height).toBe(96)
   })
 })

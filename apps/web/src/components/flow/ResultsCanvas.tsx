@@ -200,6 +200,23 @@ export function ResultsCanvas({
       // stations never carry spec.summary — ADR-072) to the medium's own
       // word (业务身份 = spec.summary 的座位, ADR-058 二源律).
       const outputs = n.outputs ?? []
+      // 探索族 (ADR-088 §2, R7 证据引用): the Select artifact is a POINTER
+      // (candidate_set_id + member_index) — the card's range line is a
+      // READ-TIME projection of the pointed-at member, resolved here; the
+      // artifact never copies the source. An unresolvable pointer passes
+      // null and the card reads its range line as an honest absence.
+      let evidenceRange: { start: number; end: number } | null = null
+      if (n.type === "exploration" && spec.exploration_kind === "select") {
+        const parent = graphNodes.find((g) => g.id === spec.candidate_set_id)
+        const members = Array.isArray(parent?.spec?.members)
+          ? (parent!.spec!.members as { start?: unknown; end?: unknown }[])
+          : []
+        const idx = typeof spec.member_index === "number" ? spec.member_index : -1
+        const member = members[idx]
+        if (member && typeof member.start === "number" && typeof member.end === "number") {
+          evidenceRange = { start: member.start, end: member.end }
+        }
+      }
       return {
         id: n.id,
         kind: n.type,
@@ -224,6 +241,8 @@ export function ResultsCanvas({
         estimateCredits: n.estimate_credits ?? null,
         frame,
         rank: n.rank ?? null,
+        journeyId: n.journey_id ?? null,
+        evidenceRange,
         topClipScore,
         order: i,
       }

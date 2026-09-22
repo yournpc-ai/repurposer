@@ -3,14 +3,18 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ArrowUp,
   AudioLines,
+  BadgeCheck,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clapperboard,
+  ClipboardList,
   Copy,
   Download,
   FileText,
   Image as ImageIcon,
   Images,
+  ListChecks,
   Maximize2,
   MoreHorizontal,
   Newspaper,
@@ -26,6 +30,7 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { BrandLoader } from "@/components/BrandLoader"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -34,10 +39,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { apiPut, toAbsoluteUrl } from "@/lib/api"
-import { cn } from "@/lib/utils"
-import type { GraphEdgeType, Output } from "@/lib/types"
+import { cn, formatDuration } from "@/lib/utils"
+import type { ExplorationMember, ExplorationPlanOutput, GraphEdgeType, Output } from "@/lib/types"
 
-import { BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX } from "./layout"
+import { BIRTH_STAGGER_MS, EXPLORATION_MEMBER_LIST_PX, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX } from "./layout"
 import { useSoundMutex } from "./sound-mutex"
 import type {
   FlowAssetAction,
@@ -491,6 +496,164 @@ function StepCard({ node }: { node: FlowNode }) {
  * regression fix) gets a bottom factsbar — the version pager (版本累积现成
  * 语义, the body follows the shown version) + copy + open-inspector; the
  * quote-selection pill stays with the UI batch. */
+/** 探索产物族卡面 (ADR-088 §2, iter-1 — docs/tasks/agent-working-loop-iter-1.md §7):
+ * spec.exploration_kind 分发三卡面。R18 同框纪律: the family's own state
+ * machine never mirrors the product chrome (no running wipe / skipped dim
+ * — the words can't collide by construction); I-EXPLORE-01 前端投影: no
+ * ports (zero edges → FlowView derives none), no toolbar, click is a
+ * structural no-op (zero outputs → the surface's length guard). */
+function ExplorationCard({ node }: { node: FlowNode }) {
+  const kind = typeof node.spec?.exploration_kind === "string" ? node.spec.exploration_kind : null
+  if (kind === "candidate_set") return <CandidateSetCard node={node} />
+  if (kind === "select") return <SelectCard node={node} />
+  return <ContentPlanCard node={node} />
+}
+
+/** 候选集合集卡 (R1 合集律): 默认折叠 = 一行摘要（topic + 「N 个候选」）;
+ * 展开 = 成员列表（区间 + 一句话摘录 + speaker）— 封顶滚动 (the frame
+ * never grows: the expansion overlays the lane below transiently, a user
+ * gesture; flow.css raises the whole node while open). */
+function CandidateSetCard({ node }: { node: FlowNode }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const spec = node.spec ?? {}
+  const topic = typeof spec.topic === "string" ? spec.topic : ""
+  const members = (Array.isArray(spec.members) ? spec.members : []) as ExplorationMember[]
+  return (
+    <div className="flex h-full w-full flex-col">
+      <NodeCaption label={t("results.canvas.exploration.kindCandidateSet")} Icon={ListChecks} />
+      <div
+        className={cn(
+          "dock-surface flex min-h-0 flex-1 flex-col rounded-xl ring-1 ring-foreground/10",
+          open && "exploration-card-open",
+        )}
+      >
+        <button
+          type="button"
+          className="flex min-h-0 flex-1 cursor-pointer items-center gap-2 px-3 text-left"
+          onClick={(e) => {
+            e.stopPropagation()
+            setOpen((v) => !v)
+          }}
+        >
+          <span className="min-w-0 flex-1 truncate text-xs">{topic}</span>
+          <span className="shrink-0 text-[11px] text-muted-foreground">
+            {t("results.canvas.exploration.candidateCount", { count: members.length })}
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+              open && "rotate-180",
+            )}
+          />
+        </button>
+        {open ? (
+          <div
+            className="nowheel nopan thin-scroll shrink-0 overflow-y-auto overscroll-contain px-3 pb-2"
+            style={{ maxHeight: EXPLORATION_MEMBER_LIST_PX }}
+          >
+            {members.map((m, i) => (
+              <div key={i} className="flex items-baseline gap-2 py-1">
+                <span className="shrink-0 text-[11px] whitespace-nowrap text-muted-foreground">
+                  {formatDuration(m.start)}–{formatDuration(m.end)}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-xs">{m.excerpt}</span>
+                {m.speaker ? (
+                  <span className="shrink-0 text-[11px] text-muted-foreground">{m.speaker}</span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+/** 精选卡: 区间 + verdict + 一行理由 (R3 理由是属性 — reasoning never
+ * persists, the card shows exactly the two attribute lines). 区间 = R7
+ * 证据引用的读时投影 (the adapter's evidenceRange — the artifact itself
+ * stays a pointer); an unresolvable pointer reads as an honest absence. */
+function SelectCard({ node }: { node: FlowNode }) {
+  const { t } = useTranslation()
+  const spec = node.spec ?? {}
+  const verdict = typeof spec.verdict === "string" ? spec.verdict : ""
+  const reason = typeof spec.reason === "string" ? spec.reason : ""
+  const range = node.evidenceRange ?? null
+  return (
+    <div className="flex h-full w-full flex-col">
+      <NodeCaption label={t("results.canvas.exploration.kindSelect")} Icon={BadgeCheck} />
+      <div className="dock-surface flex min-h-0 flex-1 flex-col justify-center gap-1.5 rounded-xl p-3 ring-1 ring-foreground/10">
+        {range ? (
+          <span className="text-[11px] text-muted-foreground">
+            {formatDuration(range.start)}–{formatDuration(range.end)}
+          </span>
+        ) : null}
+        <p className="line-clamp-2 text-xs leading-snug">{verdict}</p>
+        {reason ? (
+          <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">{reason}</p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+/** 方案卡 (R8 产品语义): 产出要求清单 + state 徽（ready/draft）；draft =
+ * ADR-057 K5 既有草稿形态 (the dashed ghost — the plan's self-check hasn't
+ * passed, its issues ride as world-facts). */
+function ContentPlanCard({ node }: { node: FlowNode }) {
+  const { t } = useTranslation()
+  const spec = node.spec ?? {}
+  const title = typeof spec.title === "string" ? spec.title : ""
+  const outputs = (Array.isArray(spec.outputs) ? spec.outputs : []) as ExplorationPlanOutput[]
+  const issues = (Array.isArray(spec.issues) ? spec.issues : []) as string[]
+  const draft = node.status === "draft"
+  return (
+    <div className="flex h-full w-full flex-col">
+      <NodeCaption label={t("results.canvas.exploration.kindContentPlan")} Icon={ClipboardList} />
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col gap-2 rounded-xl p-3",
+          draft
+            ? "border border-dashed border-foreground/15 bg-card"
+            : "dock-surface ring-1 ring-foreground/10",
+        )}
+      >
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-xs">{title}</span>
+          <Badge variant={draft ? "outline" : "secondary"} className="rounded-md">
+            {draft
+              ? t("results.canvas.exploration.stateDraft")
+              : t("results.canvas.exploration.stateReady")}
+          </Badge>
+        </div>
+        <div className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          {outputs.map((o, i) => (
+            <div key={i} className="flex items-baseline gap-2 py-0.5">
+              <span className="shrink-0 text-xs">
+                {t(`results.canvas.exploration.outputKind.${o.kind}`, { defaultValue: o.kind })}
+              </span>
+              {o.language ? (
+                <span className="shrink-0 text-[11px] text-muted-foreground">{o.language}</span>
+              ) : null}
+              {o.brief ? (
+                <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+                  {o.brief}
+                </span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        {draft && issues.length > 0 ? (
+          <p className="line-clamp-3 shrink-0 text-[11px] leading-relaxed text-muted-foreground">
+            {issues.join("; ")}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 function DocumentCard({
   node,
   onOutputAction,
@@ -1784,6 +1947,10 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
           onExpandMedia={onExpandMedia}
           onAssetAction={onAssetAction}
         />
+      ) : node.kind === "exploration" ? (
+        // 探索产物族 (ADR-088 §2, 词表 v3 第八值): spec.exploration_kind
+        // 分发三卡面 — R18 状态语义不共享, I-EXPLORE-01 无端口无边.
+        <ExplorationCard node={node} />
       ) : node.kind === "text" || node.kind === "table" ? (
         // 词表 v3 (ADR-076, C5): text/table derive the 全文卡 anatomy —
         // the table card's own anatomy lands with the UI batch.
