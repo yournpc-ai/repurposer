@@ -149,10 +149,13 @@ PLAN_READ_TOOLS = perception_chat_tools(
 )
 CHAT_READ_TOOLS = perception_chat_tools(
     "get_output_spec",
+    "get_node",
     "get_understanding",
     "list_caption_styles",
     "search_music",
     "get_run_status",
+    "list_runs",
+    "get_pending_plan",
     "get_asset",
     "get_craft_skeleton",
 )

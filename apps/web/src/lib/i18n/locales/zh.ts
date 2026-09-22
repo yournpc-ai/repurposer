@@ -1148,10 +1148,13 @@ const zh: Resources = {
      * 工具名永不上用户面。 */
     inspecting: {
       outputSpec: "正在读当前设置…",
+      node: "正在读卡片的完整程序…",
       understanding: "正在回看素材理解…",
       captionStyles: "正在翻字幕样式…",
       music: "正在查曲库…",
       runStatus: "正在查看运行进度…",
+      runHistory: "正在读运行历史…",
+      pendingPlan: "正在读待确认的计划…",
       asset: "正在查看素材…",
       craftSkeleton: "正在读案例的风格拆解…",
     },
@@ -1169,10 +1172,13 @@ const zh: Resources = {
      * 注册表，本族按前缀交换镜像）。 */
     inspectingDone: {
       outputSpec: "已读当前设置",
+      node: "已读卡片的完整程序",
       understanding: "已回看素材理解",
       captionStyles: "已翻完字幕样式",
       music: "已查曲库",
       runStatus: "已查看运行进度",
+      runHistory: "已读运行历史",
+      pendingPlan: "已读待确认的计划",
       asset: "已查看素材",
       craftSkeleton: "已读案例的风格拆解",
     },
