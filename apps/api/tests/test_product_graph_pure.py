@@ -210,3 +210,26 @@ def test_negative_decoy_in_product_set_fails_membership():
         str(n["id"]) for n in NODES if is_product_node(n["type"], n["spec"])
     }
     assert "book" not in visible and "mod" not in visible and "mystery" not in visible
+
+
+# ---- I-EXPLORE-01 rank/visibility blindness (ADR-088 §4; 2026-09-22 迭代一) ----
+
+
+def test_exploration_family_fails_product_membership_default_deny():
+    """探索族对 Product DAG 结构性盲: type="exploration" 不在媒介五值也
+    不在 legacy 容忍表 — the predicate's default-deny IS the rank half of
+    I-EXPLORE-01, and this lock keeps a future vocabulary addition from
+    silently admitting the family into rank math."""
+    spec = {"prototype": "exploration", "exploration_kind": "candidate_set"}
+    assert is_product_node("exploration", spec) is False
+    assert is_product_node("exploration", {}) is False
+
+
+def test_product_ranks_never_return_an_exploration_rank():
+    nodes = NODES + [
+        {"id": "xcand", "type": "exploration",
+         "spec": {"prototype": "exploration", "exploration_kind": "candidate_set"},
+         "layout": {"x": -464, "y": 0, "w": 340, "h": 96}},
+    ]
+    ranks = product_ranks(nodes, EDGES)
+    assert "xcand" not in ranks

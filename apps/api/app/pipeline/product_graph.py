@@ -77,6 +77,15 @@ LEVER_TOOLS = frozenset({"reframe_clip", "add_music", "remove_filler"})
 #: （task_book → 消费者），不是生产/消费关系，永不参与 rank。
 RANK_EDGE_TYPES = frozenset({"video", "audio", "text"})
 
+#: 探索族（ADR-088 §4，NAMING N-55）——Candidate Set / Select / Content Plan
+#: 的家族词。``type = "exploration"``（词表 v3 的第八值，家族词）+
+#: ``spec.prototype = "exploration"``（prototype 第四值）。I-EXPLORE-01：
+#: 探索产物永不进执行拓扑 / 闭包 / 报价 rank / 媒体流边语义——执行写门
+#: （graph_store）与探索写门（exploration_store）都从本声明取词（叶子
+#: 座位：两门的共享词汇不落任一门内，防环）。
+EXPLORATION_PROTOTYPE = "exploration"
+EXPLORATION_NODE_TYPE = "exploration"
+
 #: 投影律的横向间距（合同 §3 I-PFA-03：MIN_GAP 初值 = _PITCH）。镜像
 #: graph_store._PITCH（464 = 最宽帧类 400 + _GAP_MAIN 64）——两镜像互引，
 #: 禁第三份拷贝；取值以参数传入，本常量仅供契约文档与 fixture 引用。

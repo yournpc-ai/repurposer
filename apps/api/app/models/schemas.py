@@ -3397,6 +3397,10 @@ class GraphNodeResponse(BaseModel):
     # outrank the DAG itself. None = the legacy compatibility state (a
     # B4-lite-gate survivor the predicate does not rank).
     rank: int | None = None
+    # R24 journey attribution (ADR-088 §10): the owning journey's id on
+    # exploration artifacts; NULL on execution-family nodes. An attribution
+    # property, never a graph edge — the canvas's journey grouping reads it.
+    journey_id: UUID | None = None
     asset: AssetResponse | None = None
     outputs: list[OutputResponse] = Field(default_factory=list)
     created_at: datetime

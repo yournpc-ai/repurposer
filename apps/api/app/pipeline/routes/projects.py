@@ -331,6 +331,8 @@ def _read_face(row_type: str, spec: dict, outputs: list) -> tuple[str, dict]:
     """Map one graph row to the canvas's v3 face: (type, spec). Pure.
 
     - 新行直传 (媒介五值 already carry their face + prototype from the stamp).
+    - exploration → 直传 (ADR-088 §4: the family is born with its own face —
+      prototype/exploration_kind ride in spec; never remapped).
     - asset → its asset_type's medium × manual (the asset dossier still
       joins on the ORM type — the response carries it under `asset`).
     - document (transcript / task_book / research_brief / role-less) →
@@ -344,6 +346,11 @@ def _read_face(row_type: str, spec: dict, outputs: list) -> tuple[str, dict]:
     - 无 tool 回退 = text×manual (the full-text card is the safest reading).
     """
     if row_type in _READ_FACE_MEDIA:
+        return row_type, spec
+    # 探索族直传 (ADR-088 §4): exploration artifacts are BORN with their own
+    # face (type = exploration, prototype/kind ride in spec) — never remap
+    # them into a media word or the manual fallback.
+    if row_type == "exploration":
         return row_type, spec
     if row_type == "asset":
         medium = _ASSET_MEDIUM.get(str(spec.get("asset_type") or ""), "text")
@@ -626,6 +633,7 @@ async def get_project_graph(
                 # a B4-lite-gate survivor the predicate does not rank —
                 # tolerated here, named as a violation at the projection.
                 rank=ranks.get(str(node.id)),
+                journey_id=node.journey_id,
                 asset=asset_resp,
                 outputs=[OutputResponse.model_validate(o) for o in node_outputs],
                 created_at=node.created_at,

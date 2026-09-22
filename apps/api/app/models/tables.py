@@ -265,6 +265,33 @@ class WorkflowStep(Base):
     )
 
 
+class Journey(Base):
+    """One User Goal's working loop (ADR-088 §10, R24).
+
+    The attribution anchor every exploration artifact points back to via
+    ``graph_nodes.journey_id`` — an attribution property, NEVER a graph
+    edge (the edge vocabulary stays media-flow pure). One goal = one
+    journey: the discovery chain (candidates → selects → plans) of one
+    user ask shares the row. No status column: the journey is not a state
+    machine — artifact states live on the artifacts themselves
+    (draft → ready → …, ADR-088 §3). Owner = Pipeline (same as the graph
+    kernel).
+    """
+
+    __tablename__ = "journeys"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    goal_text = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+
 class GraphNode(Base):
     """One node of the project's persistent canvas graph (ADR-057).
 
@@ -300,6 +327,15 @@ class GraphNode(Base):
     spec = Column(JSONB, nullable=False, default=dict)
     # {x, y, w, h} — the settled canvas frame, assigned once at birth.
     layout = Column(JSONB, nullable=False, default=dict)
+    # R24 journey attribution (ADR-088 §10): exploration artifacts carry the
+    # owning journey's id; execution-family nodes stay NULL. An attribution
+    # property, never a graph edge.
+    journey_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("journeys.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 

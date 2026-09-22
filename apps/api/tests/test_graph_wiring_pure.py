@@ -1613,3 +1613,83 @@ def test_read_face_synthesizes_writer_text_from_the_latest_output():
     assert spec2["text"] == "stamped"
     # 非 writer 的 text×generator (research) 不合成.
     assert "text" not in _read_face("agent", {"tool": "research"}, [out_new])[1]
+
+
+# ---- I-EXPLORE-01 反向守卫 (ADR-088 §4, R14 双门; 2026-09-22 迭代一) ----------
+#
+# The execution door writes the EXECUTION family only: no wiring op may
+# birth, wire, edit, delete, run, or parent off an exploration artifact —
+# they are born edgeless by exploration_store's own door. Gated here: the
+# one seat inside apply_wiring_ops rejects every op shape that could touch
+# the family (and the batch dies BEFORE any flush — the atomicity witness).
+
+
+def _exploration_node(kind="candidate_set"):
+    return _node(
+        "exploration",
+        state="ready",
+        spec={"prototype": "exploration", "exploration_kind": kind},
+    )
+
+
+@pytest.mark.asyncio
+async def test_add_node_with_exploration_prototype_rejected():
+    db = _StubDb()
+    with pytest.raises(WiringRejected, match="exploration"):
+        await apply_wiring_ops(
+            db,
+            _PROJECT_ID,
+            [{"op": "add_node", "type": "text", "spec": {"prototype": "exploration", "exploration_kind": "select"}}],
+        )
+    assert db.flush_count == 0
+
+
+@pytest.mark.asyncio
+async def test_add_node_after_an_exploration_parent_rejected():
+    explore = _exploration_node()
+    db = _StubDb(nodes=[explore])
+    with pytest.raises(WiringRejected, match="cannot parent"):
+        await apply_wiring_ops(
+            db,
+            _PROJECT_ID,
+            [{"op": "add_node", "type": "video", "spec": {"tool": "select_clips"}, "after": [str(explore.id)]}],
+        )
+    assert db.flush_count == 0
+
+
+@pytest.mark.asyncio
+async def test_connect_touching_exploration_rejected():
+    explore = _exploration_node()
+    doc = _node("document", state="done", spec={})
+    db = _StubDb(nodes=[explore, doc])
+    with pytest.raises(WiringRejected, match="I-EXPLORE-01"):
+        await apply_wiring_ops(
+            db,
+            _PROJECT_ID,
+            [{"op": "connect", "from_node": str(doc.id), "to_node": str(explore.id)}],
+        )
+    assert db.flush_count == 0
+
+
+@pytest.mark.asyncio
+async def test_edit_delete_run_touching_exploration_rejected():
+    explore = _exploration_node()
+    db = _StubDb(nodes=[explore])
+    with pytest.raises(WiringRejected, match="I-EXPLORE-01"):
+        await apply_wiring_ops(
+            db, _PROJECT_ID, [{"op": "edit_prompt", "node": str(explore.id), "prompt": "x"}]
+        )
+    with pytest.raises(WiringRejected, match="I-EXPLORE-01"):
+        await apply_wiring_ops(db, _PROJECT_ID, [{"op": "delete_node", "node": str(explore.id)}])
+    with pytest.raises(WiringRejected, match="I-EXPLORE-01"):
+        await apply_wiring_ops(db, _PROJECT_ID, [{"op": "run", "nodes": [str(explore.id)]}])
+    assert db.flush_count == 0
+
+
+def test_read_face_passes_exploration_rows_through():
+    """The read face's exploration branch (ADR-088 §4): a family row carries
+    its own face — never remapped into a media word or the manual fallback."""
+    from app.pipeline.routes.projects import _read_face
+
+    spec = {"prototype": "exploration", "exploration_kind": "candidate_set", "topic": "pricing"}
+    assert _read_face("exploration", spec, []) == ("exploration", spec)

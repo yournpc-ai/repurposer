@@ -34,7 +34,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tables import GraphEdge, GraphNode, Project
-from app.pipeline.product_graph import product_ranks
+from app.pipeline.product_graph import EXPLORATION_PROTOTYPE, product_ranks
 
 
 class WiringRejected(ValueError):
@@ -572,6 +572,46 @@ async def apply_wiring_ops(
     # existing row takes a real DELETE, a same-batch newborn just drops out
     # of the working list before it ever lands).
     persisted_edge_ids = {id(e) for e in edges}
+
+    # I-EXPLORE-01 反向守卫 (ADR-088 §4, R14 双门): the execution door writes
+    # the EXECUTION family only — exploration artifacts are born edgeless by
+    # exploration_store's own door, and no wiring op may birth, wire, edit,
+    # delete, or run them. One seat covers the batch: the op vocabulary
+    # (R14's 零 op 词汇 spirit) never grows exploration branches here.
+    _exploration_ids = {
+        UUID(str(n.id))
+        for n in nodes.values()
+        if (n.spec or {}).get("prototype") == EXPLORATION_PROTOTYPE
+    }
+    for op in parsed:
+        if isinstance(op, AddNodeOp):
+            if (op.spec or {}).get("prototype") == EXPLORATION_PROTOTYPE:
+                raise WiringRejected(
+                    "add_node: exploration artifacts land via the exploration "
+                    "door (exploration_store), never the execution door"
+                )
+            unknown_exploration = op.after and any(
+                parent_id in _exploration_ids for parent_id in op.after
+            )
+            if unknown_exploration:
+                raise WiringRejected(
+                    "add_node: an exploration artifact cannot parent an "
+                    "execution node (I-EXPLORE-01)"
+                )
+            continue
+        refs: list[UUID] = []
+        if isinstance(op, (ConnectOp, DisconnectOp)):
+            refs = [op.from_node, op.to_node]
+        elif isinstance(op, (EditPromptOp, DeleteNodeOp)):
+            refs = [op.node]
+        elif isinstance(op, RunOp) and op.nodes is not None:
+            refs = list(op.nodes)
+        if any(r in _exploration_ids for r in refs):
+            raise WiringRejected(
+                f"{op.op}: exploration artifacts never participate in "
+                "execution topology (I-EXPLORE-01) — the exploration door "
+                "owns them"
+            )
 
     def children_of(node_id: UUID) -> list[UUID]:
         return [UUID(str(e.to_node)) for e in edges if UUID(str(e.from_node)) == node_id]
