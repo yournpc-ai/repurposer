@@ -138,8 +138,18 @@
 | 付费执行授权 | Paid Execution Authorization | 显式确认手势才产生的授权；plan path 与 propose path 同一路径同一 Confirmation Dock | 不是 task intent 的强形式；不是 scope continuation（那在已授权范围内自治） |
 | 已确认范围 | Approved Scope | 可自治的 continuation：retry / internal repair / render continuation / execution step completion / approved-scope graph revision | 不含新增付费输出/分支（那是 Scope Expansion） |
 | 范围扩张 | Scope Expansion | 新增未确认付费输出 / 新增付费分支 / 超出已确认范围 → 必须重新 Confirmation；包含性由 Application Command 层代码裁决 | 不是 LLM 自决（LLM 永不裁决范围包含性） |
+| 探索产物 | exploration artifact | Agent 在 Project World 中生产的用户可理解工作产物族（ADR-088）：候选集 / 精选 / 内容方案；住 Project Artifact Graph 惰性族（prototype 第四值 `exploration`；I-EXPLORE-01：永不进执行拓扑 / 闭包 / 报价 rank / 媒体流边语义） | 不是执行节点；不是 task；不是 CoT |
+| 候选集 | Candidate Set | 主题检索的证据集合 artifact（成员 = 时间区间 / 摘录 / 说话人 / 时长，每字段可回溯 transcript）；默认折叠、可展开（R1 粒度律：可见粒度服务「用户纠正 Agent」） | 不是 N 个独立画布节点；不是筛选结果（精选才是） |
+| 精选 | Select | 候选的定版 artifact：证据引用（不复制源，R7）+ verdict + 一行用户安全理由 + 证据指针（R3——判断的输出是属性，推理过程永不持久化） | 理由不是推理过程（CoT 永禁）；不是 transcript 副本 |
+| 内容方案 | Content Plan | Agent 的产品语义方案（ADR-088/089）：一个 Select 的内容化描述（source range / 产出要求 / 语言 / 字幕 / 文案 / persona 引用）——**编译器的输入** | 不是 Task / TaskSpec（那是执行表示）；不是 dock 计划书（task_book——并行弧期共存，ADR-089 §8 吸收） |
+| 执行范围 | Execution Scope | Content Plan 经确定性编译的产物（task DAG + 报价 fold 的对象）；确认与范围裁决的事实基 | 不是裸 plan（N-11 不变）；不是 agent 提议文本 |
+| 旅程 | journey（`journey_id`） | 一个 User Goal 的完整工作循环身份（R24）：探索产物的归属属性——画布组织 / 历史摘要 / 读取律的前提 | 不是图边（归属 ≠ 媒体流）；不是 session（撞 auth） |
+| 决策包 | Decision Package | 确认面消费的完整决策单位（R16）：方案语义 + 编译范围 + 费用语义五面；确认戳（confirmed_at / confirmed_via）盖于其上 | 不是 task list 复述；不是报价单行 |
+| 已确认范围快照 | Confirmed Scope Snapshot | 决策包确认时的持久化事实（confirmed plans + compiled scope + 戳，ADR-089 §4）：Approved Scope 的证明基材 + 修订路由器（R20，「plan 2」→ 节点集解析索引） | 不是「run 存在 + context 有 tasks」（P0-① 前形态）；不是审计专用件（修订基础设施） |
 
 **plan 词汇现状**：plan 归两主（N-44 修订，命名批 v3 ③）——pipeline `plan` = 唯一规划节点（planner 义：素材理解 + 计划 → 分镜表）；chat 侧计划书 = plan path 义（`plan_turn.py` 的构建/修订/确认分支，类 `TaskSpec` / `PendingPlan`）。RunPlan = 执行计划（工程层）。plan 是合法词，但跨两主引用时必须带限定词——裸 plan（`lower_plan`/`compile_plan`）歧义，见 N-11。
+
+**内容方案词汇现状（2026-09-22，ADR-088/089）**：Content Plan（探索族产品语义方案）与 dock 计划书（task_book，plan path 义）在迁移弧期并行共存；ADR-089 §8 退役弧收口后 Content Plan 为唯一「方案」座位，dock 内容 = 编译的 Execution Scope。裸 plan 违规（N-11）不变；跨层引用带限定词（pipeline plan / dock plan / Content Plan 三主并立期尤其）。
 
 ## 3. 判例库（只保留现行裁决）
 
@@ -190,6 +200,7 @@
 | N-50 | 形态律两词 = 文字问 / 选项问；插话 / 提醒尾；「形态切换」「morph」永禁指提问形态 | 提问机器形态律（ADR-053 R1）：问题按 `options` 是否为空分两形——**文字问**（options 空 = 普通对话消息）/ **选项问**（options 非空 = 非阻塞 pill），渲染分流与 kind 无关；**插话**（interjection）= 待决中与问题无关的用户消息（判定是 LLM 的——slot 握手 / `pending_disposition` 三态；结算是代码的）；**提醒尾** = 插话回合回复末尾代码拼装的双语固定句（原问题 + default_path，永不借 LLM 之声）。「形态切换」「morph」只许指 dock 两态形态机与 stadium 半径过渡——指提问形态 = 方言（阻塞形态已拆除，ADR-053） | §1、§6 |
 | N-51 | 积分词汇批：credit / wallet / credit_transactions / hold→capture→release / grant / purchase / payment；settle / claim / pay / ledger 表名 / entry 永禁 | 积分系统命名（ADR-055，行业坐标 = Stripe authorize→capture→release / Modern Treasury ledger transactions）：**credit**（积分 = 用户面唯一计价单位）；**wallet**（余额 + 判定）；**credit_transactions**（台账行——ledger 保留为子系统概念名不上表名，行 = transaction，entry 是双 entry 会计第三层用不到）；扣费时序 **hold → capture → release**（预扣 → 实扣 → 释放剩余——settle 是银行间清算语境、claim 是用户发起的收款动作方向相反，均禁）；**grant**（授予：开户 / 订阅周期 / 补偿）/ **purchase**（购买，W11）/ **payment**（名词位；pay 是动词只留函数名）；比例参数 `credits.per_cost_usd`（消耗比例 ≠ 购买比例） | §1、§6 |
 | N-52 | 方言词退役全表（命名批 v3，ADR-077 判词⑥ T4）：verdict → tool call/action；提问机器 → ask_user；`BriefLedger` → `Brief`（账本修辞退役）；任务书 → plan/计划（book path → plan path） | 工具 loop 落地后方言词成批退役（每 commit 冷启动自绿、零行为变化）：① chat 意图域 verdict 全扫为 tool call / action，「提问机器」散文退役为 ask_user 机器/the ask_user machinery——**保留**：pipeline 质检/run 真值域的 verdict（run verdict / 质检裁决 / researcher·judge 义，与 chat 方言无关）；② `BriefLedger` → `Brief`，账本修辞全退——**保留**：言语账本（tool_loop 言语隐喻）/ 计费台账（BILLING 义）/ judge 台账；③ 任务书 → plan/计划，深度 = 用户拍板「标识符+prompt+文档，存储冻结」——**冻结存储字**：`question.kind="task_book"` 及其比较/枚举、`spec.role="task_book"`、`projects.pending_brief` 列与 results 响应字段（N-45 存储出身）、`spec["task_book"]`/`"book_summary"` 键、`plan.j2` 的 `task_book.slots`；存储镜像家族文件（graph_fill / graph_store / registry / test_graph_wiring_pure）整文件不动。**「brief 账本 → session state」评审被拒**（2026-09-15 用户拍板：brief 保留——session state 撞 auth/工程语境，brief 已是行业词）；「任务书→plan」plan 归两主（N-44 修订）；i18n `results.canvas.taskBook` → `plan`（zh「计划」/ en "Plan"，画布名词节点与确认面同词，2026-08-19 两词分工裁决翻案） | §1、§6 |
+| N-55 | 探索产物词族注册（ADR-088/089）：Candidate Set / Select / Content Plan / Execution Scope / Decision Package / Confirmed Scope Snapshot / journey / exploration artifact；prototype 第四值 = `exploration` | 旅程四拍板（2026-09-22）：**Content Plan ≠ Task ≠ dock 计划书**——三主并立期各带限定词（Content Plan = 产品语义方案 / task_book = dock 计划书 / Execution Scope = 编译产物），ADR-089 §8 退役弧收口后 Content Plan 唯一「方案」座位；**`journey_id` 是归属属性永不成图边**（R24）；**`exploration` 一词专指探索产物族**（prototype 第四值），不挪作「agent 在探索」的行为描述（那是 work session / discovery goal）；brief 不被新词族触碰（N-52 不变）；canonical vocabulary 冻结：Candidate Set / Select / Content Plan / Execution Scope——Task / Plan（裸）/ Brief / Workflow 互相越界 = 违规 | §1、§6 |
 
 ## 4. API 命名
 

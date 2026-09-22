@@ -40,6 +40,7 @@
 | 用户旅程 | `JOURNEYS.md` | 旅程逐拍 / 分支树 / 体验规格横切 / 缺口登记只住这里；新功能开工先答「在哪条旅程哪一拍」 |
 | 积分 / 钱包 / 计费架构 | `BILLING.md` | credit / wallet / credit_transactions / hold→capture→release / configs / 比例参数 / 负余额语义只住这里，其他文档只引用 |
 | Lifecycle / Lifecycle Projection / PLAN_READY / CONFIRMATION_READY / Activity / Activity Projection / Confirmation Doctrine | `DECISIONS.md`（ADR-087） | 五条原则 / Lifecycle 五态合同 / Activity 十条对账规则 / 确认教义 / 依赖方向 / Reversal Ledger 只住这里；NAMING.md §2 有词汇行，其他文档只引用 |
+| 探索产物 / Candidate Set / Select / Content Plan / Execution Scope / Decision Package / Confirmed Scope Snapshot / Work Session / 停顿定律 / 项目记忆分层 | `DECISIONS.md`（ADR-088/089）+ `JOURNEYS.md` 旅程四 | 探索产物族 / 双写门 / I-EXPLORE-01 / 双状态机 / 记忆四层合同只住 ADR-088；能力编译 / 决策包 / 快照 / 停顿定律 / 迁移弧只住 ADR-089；「为什么这样裁」只住旅程四；NAMING.md §2 + N-55 有词汇行，其他文档只引用 |
 
 ## 文档清单
 
@@ -63,7 +64,7 @@
 | `DISTRIBUTION.md` | 分发模块设计：数据模型 / 状态机 / OAuth / 审核队列 / 回流 | 活跃（2026-07-21 建；直发链路代码完成 07-24，待平台凭据联调） | 动 Distribution 前 |
 | `NAMING.md` | 命名宪法：八条 + 词汇表 + 判例库 | 活跃（2026-07-25 建） | 任何新名字（表/字段/包/skill/API）前；命名争议仲裁 |
 | `CHAT_ARCHITECTURE.md` | Agent Interface 层：终态工具集 / skill registry / compile_graph 动态物化 / SSE / mentions / edit ops（ADR-032） | v2 已实现；2026-09-14 ADR-077 会话层工具 loop 化落地（批次⑤ T1~T4），本文已随 T4 改写为现在时 | 动 chat / registry / 进度推送前 |
-| `JOURNEYS.md` | **用户旅程母文档**：三条旅程逐拍 × 分支树 × 系统支撑表 × 缺口登记（首产 / 案例仿制 / 后续更改服务） | 活跃（2026-09-14 建，ADR-077/078 立项依据） | 任何新功能开工前；技术评审倒查「让哪条旅程哪一拍变好」 |
+| `JOURNEYS.md` | **用户旅程母文档**：四条旅程逐拍 × 分支树 × 系统支撑表 × 缺口登记（首产 / 案例仿制 / 后续更改服务 / 从素材到精选——ADR-077/078 与 ADR-088/089 的立项依据） | 活跃（2026-09-14 建；2026-09-22 旅程四收敛） | 任何新功能开工前；技术评审倒查「让哪条旅程哪一拍变好」 |
 | `INTENT_COVERAGE.md` | 意图层覆盖全景（意图层单面化时代的覆盖登记表） | **历史 / retired（2026-09-19，ADR-087）**——不再作为 architecture authority；IC:50 G-explicit 自动 Start 随确认教义翻案退役；意图路由现状 = CHAT_ARCHITECTURE + DECISIONS | 追溯历史时 |
 | `MENTIONS.md` | @ 提及体系方针：两族分类（请求 / 指认）+ 排除清单（配方/产出/参数/人设永不是 mention）+ 判定三问 + @skill 方针 | 活跃（2026-08-11 建） | 任何新 mention 类型立案前 |
 | `RECIPES.md` | 配方架构母文档：home 能力演示卡 + 兑现管线（caption catalog / dub 接线 / voice_gen / 分镜指引）+ R1–R6 分期 | 🚧 R1/R2/R6 已落地、8 卡全 live；**画廊 v3（2026-08-27 拍板，ADR-048——三轴模型 + 招牌菜组织原则 + 三级闸门，八卡六形态，§4/§7 已同步）**；R3–R5 待施工；Remix = overlay 内发射 + 预填模板载荷（配方 = 提示词，ADR-040 / MENTIONS §3） | 动首页配方卡、字幕样式、dub/合成视频/分镜能力前；配方线 tasks 简报的母文档 |

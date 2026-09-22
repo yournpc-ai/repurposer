@@ -13,6 +13,7 @@
 - **R1.1 — Commercial / Distribution：排期挂起（2026-09-16 拍板）**——随支付商对接节奏或更后再议；批次合同已备（§0.3），启动时日期周五滚动定。
 - **Product Flow Alignment：施工中（2026-09-18 拍板）**——Upload Staging / 统一相位 / Product Graph 语义与 Layout / 画布出生编排四批 + E2E；架构地基 ADR-086（拓扑空间权威三律 + Product Canvas ≠ Execution Graph）；施工合同 `tasks/product-flow-alignment.md`（§0.2）。
 - **Agent Interaction & Product Lifecycle Architecture：Phase 0 文档冻结完成（2026-09-19 拍板）**——九轮只读取证 + Architecture Fitness Audit（等级 B——骨架正确、边界重划）的允许重划面落档为 **ADR-087**（五条原则 + Lifecycle / Activity / Confirmation 三合同 + 依赖方向 + Reversal Ledger）；施工 = Phase 1~6 六份简报（§0.2），阶段门禁：每 Phase 全闭环才进下一 Phase。与 Product Flow Alignment（验收中）并行，**C-0/C-1/C-2 保护合同不动**（一切 lifecycle/activity 改造只在 read-side，不进 graph write gate）。
+- **Agent Working Loop & Exploration Artifacts：旅程四收敛（2026-09-22 拍板，docs-only）**——Agent Tools 审计（`scratch/agent-tools-audit-2026-09-22.md`：A-1 程序盲改 / P0-① 批准出处缺席 / P0-② instruction 双哲学 / P0-③ 工具词表内部化实锤）→ 旅程四 11 拍模拟（JOURNEYS.md，发现型目标的 Agent 工作循环）收敛：北极星（Agent 主循环 = 生产/修订用户可理解的项目产物，Run = 受授权执行阶段）+ R1~R26 裁决台账落档为 **ADR-088（Exploration Artifacts & Project Working Loop）/ ADR-089（Capability Compilation & Execution Boundary）** + NAMING 探索产物词族（N-55）。施工 = **修复批先行**（A-1 `get_node` + specific_instruction 对账 + read 洞 + SSE 实流 CoT 审计，2026-09-22 已交接新会话）→ **ADR 实施批**（探索族 schema → 探索写门 + 终态工具族 → 编译器 + 决策包/快照 → 修订动词 → propose_tasks/edit_graph 并行→退役弧），排期周五滚动定；**既有合同零推翻**（确认教义 / scope classifier D4 / draft 图 / dock 唯一座 / trigger turn / 打字机律 / 拓扑铁律全部原样承重——拍 6/9 压力测试在 JOURNEYS 旅程四）。
 
 ### 0.2 Active batch
 
@@ -50,6 +51,7 @@
 6. 发现合同与 current code 不一致 → 标记 discrepancy 回报，不自行扩大 scope；
 7. 不把 OPEN 产品决策改成 CURRENT，除非该 batch 合同明确要求；
 8. 验证纪律：纯函数套件/gate 用户自跑（CLAUDE.md Testing）；e2e 剧本需 dev worker。
+9. **认知验收**（2026-09-22 拍板，ADR-088 Consequences）：触及 agent loop / 意图面 / prompt 面的批，DoD 必答三问——**Agent 看见了什么**（观察合同 ≥ 行动合同，A-1 教训）/ **Agent 对「用户要什么」的内部表示是否一致**（P0-② 教训）/ **Agent 怎么知道自己做对了**；控制流全绿不再视为认知正确的证据（30/30 全绿与 A-1 并存的教训）。
 
 **启动 Checklist**：
 ```
@@ -291,6 +293,10 @@
 | ~~选项语法统一（chip 退役 + OptionDock 编号 1/2/3）~~ | — | — | **✅ 09-17 当日兑现（ADR-081，阻塞形态拍板 = 阻塞式）**：`WrapUpArgs` 收窄纯 label、review 行 dock 真实编号选项问、answer generic 分支按 run 状态分派（无 run 走 plan path）、徽章 a/b/c→1/2/3、存量 pill 行读容忍——条目关闭 |
 | 画布可读性②（同族链分组 + 长边路由 + 居中） | P1 | ① 高度失真 **✅ 09-17 已落**（ADR-082 判词①——`layout.ts` settled 分支空气压缩：同列按当前渲染高堆叠、`min(serverY, …)` 结构保险、服务端帧零改动）；`GroupFrames` 组件现成（配方说明书先例） | ADR-082（2026-09-17 拍板）：呈现/语义隔离铁律——禁为排线造语义节点；本行剩余 = 同族链分组（项目页补传 groups）/ asset→asm 跨列长边路由 / settled 路径居中；验收同 5 秒三问。**2026-09-18 起由 Product Flow Alignment Batch C 吸收施工**（合同 `tasks/product-flow-alignment.md` §7；layout 错位 root cause L1-L5 归该批，本行三残留随批吸收或拆分回登） |
 | ~~信任锚 echo（素材理解的发言席位）~~ | — | — | **✅ 09-17 当日兑现（ADR-083，价值链追踪 + GPT 三收紧全采纳）**：present_plan echo 2 句律修订为三语义职责（判断/转述/完成+下一步，约束语义不约束句法）+ grounding 四级证据链（metadata 仅身份证据）+ assemble 期注入 ready 理解行（零 LLM 零轮次）；single writer 不动——条目关闭 |
+| `select_clips` 存留范围裁决（ADR-PENDING） | P1 | ADR-089 实施批开工 | 旅程四拍 6 挂账（ADR-089 §8 登记）：plan 来源的工作里 pipeline LLM `select_clips` 萎缩为确定性裁剪——发现工作移至 chat 边缘 agent，pipeline 更确定、报价更准；候选存留面 = 长素材二次裁切 / 语义连续处理 / execution-time transformation；实施批开工第一件事裁决，不提前封口 |
+| 深度 reviewer / 看片复核 | P2 | 视频理解 provider 能力与成本评估 | 旅程四 B7 挂账（ADR-088 §8）：reviewer 现界 = 确定性 verify + plan 意图比对；「看片复核」（渲染产物内容级自检）缺稳定 ground truth 与成本模型，需求观察后再评 |
+| 常驻自主拨盘（standing autonomy dial） | P2 | R1.1 商业形态（订阅 / 额度信封） | 旅程四挂账 B6：Claude Code auto-mode 参照——常驻授权信封（如「N 积分内自动确认」），费用语义在设定信封时一次性披露；ADR-087 D1 刚退役 review 档不重开，商业形态明朗后随 R1.1 评 |
+| Canvas 密度组织学（journey 分组 / 折叠 / 归档） | P2 | 旅程四实施批（R24 `journey_id` 身份落地 = 前提契约，ADR-088 §10） | 旅程四拍 10 挂账：活跃项目多旅程后画布节点密度（候选合集 / 精选 / 方案 / 产物累积）——分组 / 折叠 / 归档的呈现层方案；禁为组织造语义节点（ADR-082 呈现/语义隔离铁律同律） |
 
 ### 可选需求
 

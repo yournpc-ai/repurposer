@@ -1,6 +1,6 @@
 # Journeys — 用户旅程母文档
 
-> Status: 活跃（2026-09-14 建，需求模拟四轮讨论的沉淀；拍板 = ADR-077/078；**2026-09-16 状态翻新**：T2 读工具族 / T3 触发回合+收官 reviewer / T5 decompiler 均已落地，原 🚧 标记按代码现状翻 ✅；残留 🚧 = op 覆盖度与 B4 镜头跟随）
+> Status: 活跃（2026-09-14 建，需求模拟四轮讨论的沉淀；拍板 = ADR-077/078；**2026-09-16 状态翻新**：T2 读工具族 / T3 触发回合+收官 reviewer / T5 decompiler 均已落地，原 🚧 标记按代码现状翻 ✅；残留 🚧 = op 覆盖度与 B4 镜头跟随；**2026-09-22 旅程四收敛**：发现型目标的 Agent 工作循环 11 拍全绿（R1~R26 台账），拍板落档 = ADR-088/089）
 > 本文是**用户旅程的唯一事实源**：以「用户此刻感知到什么」为骨架的需求模拟。架构文档描述「系统是什么」，本文描述「用户经历什么」——技术评审时倒查：这个改动让哪条旅程的哪一拍变好？
 > 治理规则：① 新功能开工先答「你在哪条旅程的哪一拍」；② 缺口从旅程登记进 `PROGRESS.md` 需求池（本文不记排期）；③ 旅程只描述感知与分支，实现细节指针到架构文档；④ 旅程的新增/修订 = 需求模拟讨论的产品产出，修订时全量改写为现在时。
 
@@ -53,6 +53,61 @@
 | 「算了，还是之前的好」 | 撤销 | operations undo（ADR-032） | ✅ |
 | 「以后都用这个样式」 | 偏好沉淀 persona | **挂定位大迭代**（ADR-042，运营端批次） | 📋 |
 
+## 旅程四：从素材到精选（发现型目标的 Agent 工作循环）
+
+**定性**：发现型目标（「把这场里关于定价最好的回答做成 3 条短视频」）的完整工作循环——本旅程是 ADR-088/089 的立项依据。与旅程一~三的关系：一~三描述「首产与后续更改的接待形态」，本条描述 **Agent 在 Project World 中连续工作的主循环**——Agent 的主循环不是 Run，而是围绕 User Goal 持续生产、验证、修订用户可理解的项目产物；Run 是其中一个受授权的执行阶段。**北极星**：Agent continuously produces and refines user-meaningful project artifacts; it does not compile or directly execute workflow internals. Paid execution begins only at the confirmed scope boundary.
+
+**入口一句话**：「把这场 60 分钟 webinar 里关于定价最好的回答做成 3 条短视频，配 LinkedIn 文案，法语版。」
+**参照系**：OriginCut（项目状态连续 + 证据/精选中间层）与 Claude Code（一句绿灯 → 连续可见工作 → 只在需要用户时停）——「正在自主工作」本身是产品体验；确认拍的位置两者与我们一致（付费边界），差异从来只在过程可见性。
+
+| 拍 | 用户感知 | 系统支撑 | 状态 |
+|---|---|---|---|
+| 0. 目标抵达 | agent 复述目标后**直接开始干活**（「我先看看素材和内容」）——无 dock、无任务清单复述 | 意图路由识别**发现型目标**（R6：实现空间未定 → 探索链；范围清晰的干脆请求走既有短路径） | 📋 ADR-088 §9 |
+| 1. 理解/索引 | 转写节点出生即 loading → done | understand 链，内容寻址复用 | ✅ 既有 |
+| 2. 搜索候选 | Activity「Searching… / Found 14 relevant sections」→ 画布长**候选合集节点**（默认折叠，展开 = 14 段时间区间 + 一句话摘录） | `search_transcript`（确定性检索 read）+ `get_segment` 精读 → 终态 `propose_candidates`（探索写门）；**R1 合集律**：可见粒度服务「用户纠正 Agent」，不铺 14 张独立卡 | 📋 ADR-088 §2 |
+| 3. 评估 | Activity「Comparing 14 candidates…」 | LLM 逐段判完整性（时长/边界 = 代码算）；**R3：理由 = artifact 属性**（结论 + 证据指针），reasoning 永不持久化 | 📋 ADR-088 §2 |
+| 4. 精选 | 画布长 3 个精选节点（各带一句理由）；**用户可随时插话换选**（「第 2 个换第 5 个」——免费、秒级、零仪式） | 终态 `propose_selects`（探索写门）；**R7：Select = 证据引用**，不复制源 | 📋 ADR-088 §2 |
+| 5. 结构化方案 | 3 个方案节点（draft 虚线）：区间 + 字幕样式 + 语言版本 + 文案草稿 | 终态 `propose_plans`；**R9：persona/默认在 Structure 注入**，不参与选段；**R8：Content Plan ≠ Task** | 📋 ADR-088 §2 |
+| 5a. 方案自检 | Activity「Verifying the 3 plans… ✓」 | 确定性完整性检查（区间/语言/产出类型/字幕/文案/必填输入）；artifact state `draft → ready` | 📋 ADR-088 §2/§3 |
+| 6. 编译·报价·确认 | 散文收官（3 方案的产品语言 + 总价 + 费用语义）→ **停**——dock pill 或回「开工」，同一座 | **R12 编译移出 LLM**：Content Plan → 确定性编译器 → draft 执行链（ADR-057 K5 形态零改）→ quote=fold → **决策包**（R16）；**R15 停顿定律首次触发** | 📋 ADR-089 §1~5 |
+| 7. 付费执行 | 节点状态周期 + 打勾流动态行（既有零改）；**R18 同框纪律**：探索族退背景（合集自动折叠可审计）、执行族独占运动，plan 节点永不镜像 running | create_run 唯一出生地 + Start 四合取 + hold→capture（全部既有） | ✅ 既有 |
+| 8. 收官验证 | reviewer 散文 verdict + 建议 pills；scope 内问题自治修，scope 外只提建议 | trigger turn（run 完成白名单，ADR-077 §3 既有）；**B7 结案（R21）**：自检 = 确定性 verify + plan 意图比对，「够不够精彩」归用户纠正；**R22：pill = expansion 提案唯一出口** | 📋 ADR-088 §8 |
+| 9. 修订 | 「plan 2 的字幕太长了」→ agent 说产品语义（不见 UUID/wiring），自治重渲染零仪式；「plan 2 改德语」→ 新决策包（只含变化 + 价差）→ 重确认 | **R19 修订两分律**：唯一判据 = 结果执行范围 ⊆ 已批准范围（scope classifier 裁决，agent 永不自封 continuation）；**R20：Confirmed Scope Snapshot = 修订路由器** | 📋 ADR-089 §4/§6 |
+| 10. 新主题 | 「再挑两条关于募资的，照上次的样子」→ 主链原样重跑；上次的候选/精选/方案/产物可回查 | **R23 记忆分层**（事实可复用 / 判断不迁移）；**R26 前作 exemplar**（ADR-078 第四参数源座位）；**R25 反专断**：纠正 = 事实非偏好，升格需显式授权 | 📋 ADR-088 §10 |
+
+**决策台账（R1~R26）**——合同全文 = ADR-088/089，本表只记「从哪拍打出什么」：
+
+| 裁决 | 一句话 | 出处拍 | 合同 |
+|---|---|---|---|
+| R1 | 候选 = 合集 artifact（折叠可展开），不铺独立节点 | 拍 2 | ADR-088 §2 |
+| R2 | 免费探索区默认连续工作——纠正成本对称性决定停顿位置 | 拍 2~5 | ADR-088 §5 |
+| R3 | 理由 = artifact 属性（结论 + 证据指针）；reasoning 永不持久化 | 拍 3 | ADR-088 §2 |
+| R5 | Activity = work session 连续视图，UX 永不暴露 runtime 回合边界 | 拍 2~8 | ADR-088 §6 |
+| R6 | 发现型目标才进探索链；「更智能 = 事事探索」永禁 | 拍 0 | ADR-088 §9 |
+| R7 | Select = 证据引用（evidence-backed），不复制源 | 拍 4 | ADR-088 §2 |
+| R8 | Content Plan ≠ Task（产品语义 vs 执行表示） | 拍 5 | ADR-088 §2 / ADR-089 §2 |
+| R9 | persona / presentation 默认在 Structure 阶段注入 | 拍 5 | ADR-088 §2 |
+| R10/R17 | Artifact 与 Execution 双状态机；修订发生在哪层决定哪台变化 | 拍 5/9 | ADR-088 §3 |
+| R11 | Observation = 阶段相关的 Project View，非一次性 context dump | 拍 3~5 | ADR-088 §7 |
+| R12 | 编译移出 LLM；agent 词表纯产品语义 | 拍 6/9 | ADR-089 §1 |
+| R13 | 探索族住 Project Artifact Graph；I-EXPLORE-01 永不进执行拓扑/闭包/报价/边语义 | 拍 6 | ADR-088 §4 |
+| R14 | 探索写门 / 执行写门双门两套不变量；编译器 = 确定性翻译器非第三门 | 拍 6 | ADR-088 §4 / ADR-089 §3 |
+| R15 | **停顿定律（总纲）**：只在移动金钱 ∨ 需要用户独有信息时停；停必带完整决策包 | 拍 6 | ADR-089 §5 |
+| R16 | 确认消费 = 方案语义 + 编译范围 + 费用语义；确认戳盖在决策包上 | 拍 6 | ADR-089 §4 |
+| R18 | 两族同框不同状态语义（plan 节点永不镜像 running） | 拍 7 | ADR-088 §3 |
+| R19 | 修订两分：唯一判据 = 结果执行范围 ⊆ 已批准范围（classifier 唯一裁判） | 拍 9 | ADR-089 §6 |
+| R20 | Confirmed Scope Snapshot = 修订路由器（「plan 2」→ 节点集解析索引） | 拍 9 | ADR-089 §4 |
+| R21 | Reviewer 自检 = 确定性 verify + plan 意图兑现比对；主观质量归用户 | 拍 8 | ADR-088 §8 |
+| R22 | Reviewer scope 内自治修；scope 外 = 建议 pill 唯一出口 | 拍 8 | ADR-088 §8 |
+| R23 | 项目记忆四层 + 永不升格清单 + 读取律（当前旅程全量 / 历史旅程摘要+按需） | 拍 10 | ADR-088 §10 |
+| R24 | `journey_id` = 产物归属属性，永不成图边 | 拍 10 | ADR-088 §10 |
+| R25 | 偏好升格需显式用户授权；重复 N 次不充分（agent 有提议权无升格权） | 拍 10 | ADR-088 §10 |
+| R26 | 前作 exemplar = 参数源（ADR-078 第四源座位），不是新业务对象 | 拍 10 | ADR-088 §10 |
+
+**压力测试摘要**：拍 6 接缝——draft 图 K5 / dock pill 唯一座 / G-1 散文同座 / Start 四合取 / D4 结果范围律 / 打字机律 /「只有合法链才进 dock」（B3）/ merge_prior_slots 修订恒胜，全过零改；拍 9 修订回路验收——R12（agent 全程不见 wiring 词汇）/ R16（快照从审计装饰升格为修订基础设施）/ R17（craft 修订 plan 状态不动）/ R15（预授权内不停、新钱必停）。
+
+**挂账**（全部有座）：`select_clips` 存留范围（ADR-PENDING，ADR-089 §8）/ 深度看片复核（PROGRESS 池）/ 常驻自主拨盘（PROGRESS 池）/ Canvas 密度组织学（R24 前提契约已立，PROGRESS 池）。
+
 ## 体验规格横切（全旅程通用）
 
 1. **打字机律**（绝对规范）：agent 一切言语打字机节奏，整段瞬移永禁；工具线格式下重述 = 散文走 content 通道、工具调用走相位帧、零 delta 路径 paceSettledProse（CLAUDE.md / CHAT_ARCH §8.6）。
@@ -60,6 +115,7 @@
 3. **礼仪三件套**：礼貌 echo（认领 + 稍等）+ 过程碎碎念（工具调用叙事）+ 有判断的收官（汇报 + 下一步）。
 4. **诚实降级**：做不到 = 带理由 + 替代方案，永不静默排除、永不编造（错误的计划看着像真的，Start 会为它烧一次付费 run——ADR-071 门前判词同义）。
 5. **画布 = 展示面**：拖线/连线编辑器永禁（ADR-035）；卡面 prompt 直改与发布/下载是仅有的手势（ADR-058/063）；镜头跟随当前节点（B4）。
+6. **活动行 = 回合内穿插的证据行**（2026-09-22 旅程四呈现规格）：散文段与活动/证据行按发生时刻穿插渲染（run 期 `runStreamUnits` 单路径同法的非 run 期套用）；证据行可展开（用户安全摘要 + 耗时），wire 白名单扩字段走 ADR-088 注记（user-safe 纪律不变：永不带 params / raw results / reasoning）；活动流首版不持久化，穿插 = in-session。
 
 ## 缺口登记（旅程 → 工程批的映射）
 
@@ -71,3 +127,9 @@
 | ~~decompiler + 资产角色 + exemplar 参数源~~ | 二全旅程 | ✅ T5（ADR-078，2026-09-15 落地；残留收口 = R1 B1：remix e2e S16 + run 路径触发回合 + prelude 折叠 + 测试地基复位） |
 | op/契约覆盖度（字幕 size·color 等） | 三首行 | PROGRESS 覆盖度池（语料驱动排期） |
 | ~~多 provider 线格式三层~~ | 横切 | ✅ T1（ADR-077 判词④） |
+| Agent Tools 修复（A-1 程序盲改 + specific_instruction 双哲学对账 + read 洞 d/e） | 四②③横切 | 修复批（审计 `scratch/agent-tools-audit-2026-09-22.md`，2026-09-22 交接） |
+| SSE 实流 CoT 审计 | 横切 | 独立取证动作（零代码改动，抓真流验证 reasoning 永不入用户通道） |
+| 探索产物族 + 探索写门（候选集 / 精选 / 内容方案） | 四②③④⑤ | 📋 ADR-088 实施批 |
+| 能力编译层（Content Plan → Execution Scope + 决策包 + Confirmed Scope Snapshot） | 四⑥⑨ | 📋 ADR-089 实施批 |
+| propose_tasks / edit_graph 退役弧（并行 → 证明 → 退役） | 四⑥ | 📋 ADR-089 §8 |
+| 活动行呈现升级（散文段穿插 + 可展开证据 + 耗时） | 四全旅程 | Activity 呈现批（横切规格 6；Phase 2 步⑤ 联动） |

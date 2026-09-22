@@ -2027,3 +2027,124 @@ Lifecycle Projection       Execution Runtime
 - **新能力机械回答表（验收基准）**：Agent action → Tool Interface；改 Domain → Application Command → Write Gate；用户要看到在做 → Activity Projection；改变产品阶段 → Lifecycle Projection；UI 响应 → Presentation consumes projection。若新增一种能力仍需「新 phase + 新 envelope + 新 ChatDock if + 新 polling + 新 prompt 条件」，说明本合同被破坏——STOP 上报。
 
 **Related**: ADR-057（图即产品对象——Lifecycle 投影的消费面）/ ADR-063（估价诚实面——§2.1 保持其有效性）/ ADR-070（确认拍 dock 唯一座位——Confirmation Dock 的形态基座）/ ADR-072（task_book 节点下线——计划真身各归其位）/ ADR-077（会话层工具 loop——Activity 的内部事件源；判词⑥ 命名方向见 R8）/ ADR-080（单一叙事者——R3）/ ADR-083/084（言语语义管线——R4/R7）/ ADR-085（三层交付模型——Checkpoint 是 Activity 的言语族近亲，Activity Projection 不重设计它）/ ADR-086（拓扑空间权威三律——C-0/C-1/C-2 保护合同）/ North Star §3（Agent = Decision Producer——原则 4 的母体）
+
+## ADR-088: Exploration Artifacts & Project Working Loop——探索产物族与 Agent 工作循环
+
+**Status**: Decided（2026-09-22，旅程四 11 拍模拟收敛后拍板；母文档 = `docs/JOURNEYS.md` 旅程四；取证底座 = `scratch/agent-tools-audit-2026-09-22.md`；与 ADR-089 双生——本条答「Agent 在 Project World 里生产什么、这些东西如何持续工作」，ADR-089 答「这些产物如何确定性进入执行世界」）
+
+**Context**: Phase 0–5（ADR-087）把 Agent Safety Architecture 收口（Lifecycle / Activity / Confirmation / Scope / 依赖方向），验收网全绿——但 Agent Tools 审计证实**能力层缺席**：agent 的工具词表只有执行世界的内部语言（add_node / connect / edit_prompt / task.tool），LLM 沦为 workflow compiler（审计 P0-③）；观察合同 < 行动合同（A-1 程序盲改：prompt 要求基于当前程序合成新程序，context 只给 140 字）；意图表示双哲学（P0-②）。参照系重校准：OriginCut（项目状态连续性 + 证据/精选中间层）与 Claude Code（一句绿灯 → 连续可见工作 → 只在需要用户时停）证明「正在自主工作」本身是产品体验——当前的僵硬感不来自确认教义（付费边界两家一致），而来自 agent 没有可见的工作对象与连续的工作循环。旅程四逐拍模拟（11 拍，JOURNEYS）从真实任务倒推出本组裁决；拍 6/9 压力测试证明既有合同（确认教义 §4 / scope classifier D4 / draft 图 K5 / dock 唯一座 / trigger turn / 打字机律）全部原样承重，零推翻。
+
+**Decision**:
+
+### 1. 北极星与主循环重定义
+
+**Agent 的主循环不是 Run，而是围绕 User Goal 在 Project World 中连续产生、检查、演化用户可理解的工作产物；Paid Run 是这条连续工作流里的一个授权边界，不是产品主循环。**
+
+> Agent continuously produces and refines user-meaningful project artifacts; it does not compile or directly execute workflow internals. Paid execution begins only at the confirmed scope boundary.
+
+「Agent 开始工作」≠「Paid Run 开始」——与确认教义 §4 的准备阶段同义，本条从用户体验侧立。
+
+### 2. 探索产物族（Exploration Artifacts）
+
+三个 canonical 对象，均为**证据容器**：
+
+- **候选集 Candidate Set**：主题检索的证据集合；成员 = `{asset_id, start, end, excerpt, speaker, duration}`，每字段可回溯 transcript。**R1 粒度律**：合集 = 一个 artifact（默认折叠、可展开）——画布可见粒度服务于「用户纠正 Agent」，而非复刻 agent 内部操作数量；独立铺卡永禁（画布密度律）。
+- **精选 Select**：候选的定版；**R7 = 证据引用**（指向源片段，不复制源）；**R3 理由 = artifact 属性**（verdict + 一行用户安全结论 + 证据指针）——**判断的输出是属性，产生判断的私有推理过程永不成为产品状态**（reasoning 永不持久化，CoT 闸不变）。
+- **内容方案 Content Plan**：一个 Select 的内容化方案（source range / 产出要求 / 语言 / 字幕 / 文案 / persona 引用）。**R8：Content Plan ≠ Task**——它描述「我们准备怎么把这个内容做出来」，Task DAG 描述「Execution Runtime 执行什么」（编译关系 = ADR-089 §2）。**R9：persona / presentation 默认在 Structure 阶段注入**，不参与候选评估（除非用户目标点名）。
+- **完整性自检**：plan 就绪前经确定性完整性检查（区间 / 语言 / 产出类型 / 必填输入）；artifact state `draft → ready`。
+
+### 3. 双状态机（R10 / R17 / R18）
+
+Artifact 状态机 = `draft → ready → revised → compiled → superseded`；Execution 状态机 = 既有（draft → running → done / failed）。**修订发生在哪个语义层，决定哪台状态机变化**——craft 修订（购买信封内的 how）plan 状态不动；plan 级修订（what 变）才走 `compiled → revised`。**R18 同框纪律**：两族可同框展示，**永不共享状态语义**——plan 节点永不镜像 running（`ContentPlan.status = running` 永禁）。
+
+### 4. Project Artifact Graph 居住律（R13 / R14 探索门半边）
+
+探索产物住持久图（`graph_nodes` 新族，prototype 第四值 `exploration`，NAMING 注册）——零投影律（ADR-057）与项目删除级联统一。**I-EXPLORE-01（不变量，纯测试锁）**：
+
+> **Exploration artifacts MUST NOT participate in execution topology, execution closure, quote/rank calculation, or media-flow edge semantics.**
+
+plan → compiled chain 的链接 = **spec 引用，永不是 Graph Edge**（边词表保持媒体流纯洁：video / audio / text / ctx）。**探索写门**：免费但仍是真写门——事务（savepoint）+ 证据校验（start < end、不超素材时长、与 transcript 有交集）+ 回合幂等；agent 永不直接写图（终态工具 `propose_candidates` / `propose_selects` / `propose_plans` / `revise_plan` 经 Application 层落门）。
+
+### 5. 免费探索区连续性（R2）
+
+探索区（检索 / 评估 / 精选 / 结构化 / 自检 / 编译 / 报价）**默认连续工作，不在拍间停**——**纠正成本对称性决定停顿位置**：免费区纠错便宜（chat 一句插话），故免费区不停；「先给我看看候选」= 作用域暂停指令，逐消息生效。停顿的唯一合法位置 = ADR-089 §5 停顿定律。
+
+### 6. Work Session（R5）
+
+Runtime 可以是多回合的（链式回合 + trigger turn，机制 = ADR-077 §3 既有），**用户体验永不暴露 runtime 回合边界**——一个 goal 的工作 = 一个连续 work session 的 Activity 视图（阶段标签随拍迁移，不按回合替换块）。呈现规格见 JOURNEYS 横切 §6（活动行 = 散文段间穿插的证据行）。
+
+### 7. 阶段化 Observation（R11）
+
+agent 的上下文 = **当前 action 所需的 Project View**，不是一次性 context dump——每拍只取相关切片（Goal / 相关 artifacts / 证据 / 能力目录）；历史旅程 = 摘要行 + 按需 read（§10 读取律）。read 族覆盖缺口（`get_node` / `get_pending_plan` / `list_runs` / `get_artifact`）随实施批补齐（修复批先行，A-1 = 观察合同 ≥ 行动合同的第一刀）。
+
+### 8. Reviewer 合同（R21 / R22，B7 结案）
+
+run 完成触发回合的 reviewer = **确定性执行验证 + 已批准 plan 的意图兑现检查**（时长 / 字幕存在 / 溢出 / 配音 / 区间 / 产出类型——spec 与证据比对，**不是看片**）；**主观内容质量（「够不够精彩」）永不伪装为系统可验证事实**，归用户纠正。修复半径 = Approved Scope 内 retry / internal repair（教义预授权）；**scope 外 = 建议 pill 唯一出口**（R22）。深度看片复核挂 PROGRESS 需求池。
+
+### 9. 发现型路由（R6）
+
+探索链只服务**实现空间未定的发现型目标**（「找最好 / 挑 / 哪些」类语义）；范围清晰的干脆请求（「加中文字幕」）走既有短路径——**「更智能 = 所有事情都探索」永禁**。判定归 intent router（prompt 面改动走 prompt_gate）；干脆请求在新世界 = Content Plan 的零探索退化形态（ADR-089 §8 统一词表）。
+
+### 10. 项目记忆（R23~R26）
+
+不是「Memory Feature」，是 **Project World 的事实分层与 Agent 的学习边界**：
+
+- **Tier 0 资产事实**：transcript / understanding / craft skeleton（内容寻址，既有法律）。
+- **Tier 1 旅程产物**：候选集 / 精选 / 方案 / 确认快照 / 产物——**事实可复用，判断不迁移**（判断是主题与目标的作用域：「pricing 的完整回答」推不出「募资的好片段」）。
+- **Tier 2 显式偏好**：persona brand·voice / 项目默认（既有家）。
+- **Tier 3 会话历史**：messages（既有持久化）。
+- **永不升格清单**：判断 / 一次性纠正 / transient 工作集 / Activity / reasoning。
+- **读取律**：当前旅程按 §7 阶段视图全量；历史旅程 = 摘要行 + 按需 read（context 有界摘要纪律不破）。
+- **R24 旅程归属**：每个探索产物携带 `journey_id`（归属属性，**永不成图边**）——画布组织学 / 历史摘要 / 读取律的前提契约。
+- **R25 偏好升格律（反专断）**：**Preference promotion requires explicit user authorization; recurrence alone is insufficient.** 纠正确切记为 artifact 事实；升格 Tier 2 只经显式声明或 persona 编辑流；agent 有提议权（「要不要以后都这样？」），**无升格权**。
+- **R26 前作 exemplar**：「照上次的样子」= exemplar-derived 参数（ADR-078 第四参数源座位），项目内部前作与外部 reference 同法——**exemplar 是参数来源，不是新业务对象**。
+
+**Consequences**: 施工 = ADR 实施批（排期周五滚动定）：探索族图 schema（prototype 第四值 + spec 形状 + `journey_id`）→ 探索写门 + 终态工具族 → 编译器（ADR-089）→ work session 活动视图 → 记忆读取律；**修复批先行**（A-1 `get_node` + specific_instruction 对账 + read 洞 + SSE 实流 CoT 审计，2026-09-22 已交接）。迁移弧（ADR-089 §8）：`propose_tasks` / `edit_graph` 与探索流并行 → 证明 → 退役，一刀切永禁。**既有合同承重零改动清单**：确认教义 §4 / §2.1 / scope classifier D4 / Start 四合取 / draft 图 K5 / dock pill 唯一座 / G-1 同座 / trigger turn 白名单 / ADR-058 通道分家 / ADR-069 / ADR-078 exemplar / Activity 十规则 / 打字机律 / persona brand·voice / config 三分流 / C-0/C-1/C-2 / 拓扑铁律（ADR-028）。**认知验收入执行规则**（PROGRESS §0.4 规则 9）：触及 agent loop 的批，DoD 必答「agent 看见了什么 / 内部表示是否一致 / 怎么知道自己对了」——A-1 类盲区不再依赖运气。
+
+**Related**: ADR-089（双生——执行边界）/ ADR-087（三合同——本条的准备阶段 / 活动 / 确认从其条款生长）/ ADR-077（有界 loop + trigger turn——链式回合机制基座）/ ADR-057（图即产品对象——探索族的家）/ ADR-086（Product Canvas ≠ Execution Graph——同框纪律的母体）/ ADR-028（拓扑铁律——I-EXPLORE-01 保护它而非削弱）/ ADR-058 / ADR-063 / ADR-069 / ADR-070 / ADR-078（通道分家 / 估价诚实 / quote 指认 / dock 唯一座 / exemplar 参数源）/ ADR-052（厚 agent 判词——本条是其产品层的兑现形态）
+
+## ADR-089: Capability Compilation & Execution Boundary——能力编译层与执行边界
+
+**Status**: Decided（2026-09-22，与 ADR-088 双生同批拍板；母文档 = `docs/JOURNEYS.md` 旅程四拍 6/9；取证底座 = `scratch/agent-tools-audit-2026-09-22.md` P0-①/②/③）
+
+**Context**: Agent Tools 审计 P0-③ 实锤：`propose_tasks` / `edit_graph` 把执行世界内部语言（task.tool / add_node / connect / edit_prompt / 媒介五值 / offer·accept / 闭包）直接暴露给 LLM——「LLM = workflow compiler」是能力层缺席的**代偿**，不是 prompt 问题；edit_graph 要求 LLM 具备的知识逐项实证（裸 UUID / spec.tool 注册表名 / typed edge / 环拒收 / run 闭包）全属系统内部。P0-① 实锤：Approved Scope 无出处字段（信任根 = 「曾出生且 context 带 tasks」），哪个 run 是用户确认的不可审计。旅程四拍 6 逼出接缝四问：Content Plan 如何变成 Execution Scope、确认消费什么、quote 凭什么可信、agent 凭什么在这里停。
+
+**Decision**:
+
+### 1. 编译移出 LLM（R12）
+
+agent 的终态词表 = **纯产品语义**（`propose_candidates` / `propose_selects` / `propose_plans` / `revise_plan` / `revise_output` / read 族 / `ask_user` / `answer`）——**workflow compilation 从 LLM 的职责里删除**；`propose_tasks` / `edit_graph` 退居编译器内部（迁移弧 = §8），不再作为 agent 的产品语义语言。验收标准（旅程四拍 9）：agent 全程不见 UUID / wiring op / 媒介五值 / 闭包词汇。
+
+### 2. Content Plan → Execution Scope 编译合同
+
+编译器 = Content Plan × Goal × 注册表 → task DAG 的**确定性纯函数**（`validate_task_list` / 同语裁决复用——「只有注册表合法的链才进 dock」的 B3 先例上移为**只有可编译的方案才呈现确认**）；编译失败 = 域拒绝回环修复（`_loop_echo` 同族座位），确认面永不呈现不可编译的方案。
+
+### 3. 编译器座位（R14 编译器半边）
+
+Application Command 层（审计认出的 de facto 层：dock / Start / `create_run` / scope classifier 一家）。**编译器 = 从一种已合法的世界状态确定性产生另一种世界状态的翻译器，不是第三个写门**——它经既有执行写门发写（`apply_wiring_ops` 唯一图写口 / `create_run` 唯一出生地），自身不新增写特权。
+
+### 4. 决策包与确认出处（R16 / R20，P0-① 销账）
+
+确认面消费 = **方案语义（用户阅读层）+ 编译范围（证据层）+ 费用语义五面（ADR-087 §2.1）**——**用户确认的是 plan，task DAG 是证据层不是阅读层**。确认手势落戳 = **Confirmed Scope Snapshot** 持久化：`{confirmed plans, compiled scope, confirmed_at, confirmed_via, confirmation_id}`——Approved Scope 的证明基材从「run 存在 + context 有 tasks」升级为**决策包的生命周期**（P0-① 事实模型缺口销账；legacy run = 不可证，与 D2 读法一致）。**R20：快照 = 修订路由器**——「plan 2 的字幕」解析为节点集的确定性索引（plan → compiled nodes 映射）；provenance 从审计装饰升格为产品语义修订的基础设施。
+
+### 5. 停顿定律（R15，总纲）
+
+> **Agent stops iff the next act moves money or requires information only the user has; every stop must present a complete, user-judgeable decision package.**（Agent 只在下一步移动金钱或需要用户独有信息时停下；任何停顿必须形成用户可理解、可判断、可执行的完整决策包。）
+
+推论：免费探索区不停（ADR-088 §5）；`ask_user` = 信息类停（同律 b 支）；执行中 direction interrupt = 同律在执行侧的投影；确认拍 = 付费边界停——**Confirmation = Agent 已经把需要用户决策的付费边界准备好了**，不是「Agent 做完了所以要确认」。
+
+### 6. 修订分类与范围裁决（R19 执行半边）
+
+修订分两语义层——**plan 级**（what 变：`revise_plan` → 重编译 → 重报价 → 重确认）与 **craft 级**（购买信封内的 how：`revise_output` → 编译为 wiring op → 锚定受影响子图，ADR-058 先例）。**唯一判据 = 结果执行范围是否包含于已批准范围**（`new_scope ⊆ approved_scope` → continuation 自治；否则 expansion → R15 停顿）——agent 可提议语义理解（「我理解你想把字幕调短」），**永不自封 continuation**；scope classifier（D4 结果范围律）是唯一裁判，一个字不改。
+
+### 7. 报价站在 artifact 事实上
+
+quote 输入 = Content Plan 具体字段（精确区间 → 时长 → 渲染单位；语言数 → dub 单位；字幕模式；文案条数）——报价从 LLM 提议参数升级为 domain source of truth；**Known / Deferred / Conditional / Held / Actualized 五面披露保留**（ADR-087 §2.1 不动；「plan ready ≠ 一切成本精确已知」边界明文化）。
+
+### 8. 迁移弧与 select_clips PENDING
+
+新探索流与既有 chat 路（`propose_tasks` / `edit_graph`）**并行 → 证明 → 退役**——一刀切永禁；退役扳机 = 旅程四主链 e2e 全绿 + 迁移期无 regression 在册。干脆请求（ADR-088 §9）在新世界 = Content Plan 的零探索退化形态，词表统一。**ADR-PENDING：`select_clips` 存留范围**——plan 来源工作里它萎缩为确定性裁剪（发现工作移至 chat 边缘 agent）；候选存留面 = 长素材二次裁切 / 语义连续处理 / execution-time transformation；实施批开工第一件事裁决，不在本条封口。
+
+**Consequences**: 审计四归宿——P0-① = §4 销账；P0-③ = §1/§8；P0-② 与 A-1 = 修复批（先行）；SSE CoT 实流审计 = 独立取证动作。施工依赖序：探索族（ADR-088）→ 编译器 + 决策包/快照（本条）→ 修订动词 → 退役弧；每批过既有门禁（纯 pytest / prompt_gate / 剧本 + PROGRESS §0.4 规则 9 认知验收）。**零改动重申**：执行写门（`apply_wiring_ops` / `create_run`）/ scope classifier / Start 四合取 / 计费三词两层与 hold→capture→release / fencing（ADR-079）——本条不改任何执行世界机制，只改「谁有资格向执行世界递东西」。
+
+**Related**: ADR-088（双生——探索产物与工作循环）/ ADR-087 §4（确认教义——停顿定律是其付费边的泛化；Consequences Phase 4 = scope classifier D4）/ ADR-028（拓扑铁律——编译器是其新兑现形态）/ ADR-055（计费——决策包的费用语义面）/ ADR-058（通道分家——craft 修订的卡面直改先例）/ ADR-079（fencing——执行写不变）/ ADR-057（draft 图 K5——编译产物的画布形态）
