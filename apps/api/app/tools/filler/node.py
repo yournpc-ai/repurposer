@@ -32,7 +32,10 @@ class RemoveFiller(NodeBase):
     prototype = "editor"  # 参数程序 (去口头禅开关)
     task_name = "Remove filler words"
     task_name_zh = "去除口头禅"
-    after = ("select_clips", "materialize_source")
+    # Acts on clips: this run's clips producer (select_clips / cut_segments /
+    # materialize_source — ADR-043, N-56) when one exists, else the project's
+    # existing clips (empty inputs).
+    after = ("select_clips", "materialize_source", "cut_segments")
     requires = (TRANSCRIPT,)
 
     def estimate(self, ctx: dict) -> dict | None:

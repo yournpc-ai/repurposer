@@ -33,8 +33,9 @@ import app.pipeline.node_runners  # noqa: F401
 import app.pipeline.verify  # noqa: F401 — the 质检环 node (期 3), internal crew
 import app.pipeline.decompile  # noqa: F401 — the decompiler node (ADR-078), internal crew
 from app.tools.clips.node import SelectClips  # noqa: F401
+from app.tools.clips.cut import CutSegments  # noqa: F401
 from app.tools.clips.materialize import MaterializeSource  # noqa: F401 — NODE_KINDS only; an internal node (ADR-043), never a registry entry
-from app.tools.clips.params import SelectClipsParams
+from app.tools.clips.params import CutSegmentsParams, SelectClipsParams
 from app.pipeline.derivative_dispatch import CopyWriterParams
 from app.tools.posts.node import WritePost  # noqa: F401
 from app.tools.quotes.node import WriteQuotes  # noqa: F401
@@ -117,6 +118,14 @@ class ToolEntry(BaseModel):
     # designed counter-example — requires=(TRANSCRIPT,) yet serves the
     # NO-recording case, so TRANSCRIPT membership is NOT this axis.
     needs_media_file: bool = False
+    # Compiler-only citizenship (N-56, iter-2 ①): False = the tool is
+    # registry-legal (adjudication / dispatch / display all work) but NEVER
+    # appears in the LLM-facing catalog — the agent cannot propose what it
+    # cannot see; only the deterministic compiler emits it. Same word as
+    # OpDef.llm_visible (operations/registry.py), same law one layer down.
+    # First seat: cut_segments. dispatchable_tools() is NOT filtered —
+    # compiled chains must adjudicate normally.
+    llm_visible: bool = True
 
 
 TOOL_REGISTRY: dict[str, ToolEntry] = {
@@ -131,6 +140,19 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
             summary_templates={
                 "en": "Selected {n} clip{n_s} · {total_seconds}s total",
                 "zh": "选出了 {n} 个片段 · 共 {total_seconds} 秒",
+            },
+        ),
+        ToolEntry(
+            name="cut_segments",
+            description="Materialize the named source spans into clips "
+            "(compiler-emitted, deterministic — no selection, no LLM)",
+            needs_media_file=True,
+            behavior="deterministic",
+            params_model=CutSegmentsParams,
+            llm_visible=False,
+            summary_templates={
+                "en": "Cut {n} segment{n_s} · {total_seconds}s total",
+                "zh": "裁出 {n} 段 · 共 {total_seconds} 秒",
             },
         ),
         ToolEntry(
@@ -311,7 +333,9 @@ def tool_catalog_lines(*, exclude: frozenset[str] = frozenset()) -> str:
     """The registry's self-projection as prompt lines (N-42 裂脑修复): one
     ``- name: description (params: …)`` line per dispatchable tool. The chat
     intent agents consume this verbatim — the catalog is projected here, at
-    the registry's home, never re-assembled per consumer."""
+    the registry's home, never re-assembled per consumer. Compiler-only
+    citizens (``llm_visible=False``, N-56) never project — the agent cannot
+    propose what it cannot see."""
     return "\n".join(
         f"- {entry.name}: {entry.description}"
         + (
@@ -320,7 +344,7 @@ def tool_catalog_lines(*, exclude: frozenset[str] = frozenset()) -> str:
             else ""
         )
         for entry in dispatchable_tools()
-        if entry.name not in exclude
+        if entry.llm_visible and entry.name not in exclude
     )
 
 

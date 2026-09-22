@@ -432,8 +432,13 @@ async def project_lifecycle(
             and (t.get("params") or {}).get("target_language")
         ]
         if transform_tasks:
-            chain_has_select_clips = any(
-                t.get("tool") == "select_clips" for t in plan_tasks
+            # "The chain births clips" reads the output_type declaration
+            # (N-56: select_clips and the compiler-only cut_segments both
+            # claim "clips") — never a tool name.
+            chain_births_clips = any(
+                t.get("tool") in NODE_KINDS
+                and NODE_KINDS[t.get("tool")].output_type == "clips"
+                for t in plan_tasks
             )
             scopes = {
                 str((t.get("params") or {}).get("target_output_id") or "") or None
@@ -441,7 +446,7 @@ async def project_lifecycle(
             }
             faced_sets = {
                 scope: await _faced_source_languages(
-                    db, project, scope, chain_has_select_clips=chain_has_select_clips
+                    db, project, scope, chain_births_clips=chain_births_clips
                 )
                 for scope in scopes
             }

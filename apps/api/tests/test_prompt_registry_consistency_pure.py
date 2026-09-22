@@ -34,11 +34,13 @@ def _expected_media_needing() -> set[str]:
     """Tools that need an uploaded media FILE — the registry's own flag
     (``ToolEntry.needs_media_file``), never derived from node ``requires``:
     align_stills requires a TRANSCRIPT yet serves the NO-recording case, so
-    requirement membership is not this axis."""
+    requirement membership is not this axis. Compiler-only citizens
+    (``llm_visible=False``, N-56) never project into prompt prose — the
+    agent cannot name what it cannot see."""
     return {
         name
         for name, entry in TOOL_REGISTRY.items()
-        if not entry.seat and entry.needs_media_file
+        if not entry.seat and entry.needs_media_file and entry.llm_visible
     }
 
 
@@ -46,11 +48,14 @@ def _expected_writers() -> set[str]:
     """Fresh-chain copy writers: produce outputs, need nothing, no media
     file. revise_script is excluded by design — it targets an EXISTING
     output and never rides a fresh chain (the plan path's catalog excludes
-    it, prompts.py), so the no-material block never enumerates it."""
+    it, prompts.py), so the no-material block never enumerates it.
+    Compiler-only citizens (``llm_visible=False``, N-56) never project into
+    prompt prose either."""
     return {
         name
         for name, entry in TOOL_REGISTRY.items()
         if not entry.seat
+        and entry.llm_visible
         and not entry.needs_media_file
         and name != "revise_script"
         and (node := NODE_KINDS.get(name)) is not None
