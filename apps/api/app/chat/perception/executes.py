@@ -20,6 +20,7 @@ capped (see the per-tool caps) so a read never floods the loop.
 from typing import get_args
 from uuid import UUID
 
+import json
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
@@ -30,9 +31,12 @@ from app.models.schemas import (
     ClipSpec,
     CraftSkeleton,
     MaterialUnderstanding,
+    PendingPlan,
 )
 from app.models.tables import (
     Asset,
+    GraphEdge,
+    GraphNode,
     Output,
     Project,
     WorkflowRun,
@@ -52,6 +56,12 @@ from app.models.tables import (
 class GetOutputSpecParams(BaseModel):
     output_id: UUID = Field(
         description="The output's id (from the context's Current outputs list or an @-mention)."
+    )
+
+
+class GetNodeParams(BaseModel):
+    node_id: UUID = Field(
+        description="The graph node's id (from the context's Graph section)."
     )
 
 
@@ -112,7 +122,7 @@ def _stamp(dt) -> str:
     return dt.strftime("%Y-%m-%d %H:%M UTC") if dt is not None else "?"
 
 
-# ---- the six reads -----------------------------------------------------------
+# ---- the reads -----------------------------------------------------------------
 
 
 def understanding_digest_lines(u: MaterialUnderstanding) -> list[str]:
@@ -254,6 +264,79 @@ async def get_output_spec(db: AsyncSession, project: Project, params: GetOutputS
     return "\n".join(lines)
 
 
+# A node's program is LLM-written and short in practice — the cap is the
+# module's output-budget law (observations never flood the loop), NOT the
+# context's 140-char truncation: anything under the cap rides VERBATIM, an
+# over-cap program says so honestly (a silent truncation here would
+# re-introduce the blind-revision hole this read exists to close).
+_NODE_PROGRAM_LIMIT = 4000
+
+
+def _node_detail_lines(node, downstream: list[str]) -> list[str]:
+    """One node's full detail (the pure renderer — the DB seat below only
+    resolves and gathers). The program rides FULL, never truncated at the
+    context's 140 chars: this read is the edit_graph revision's factual
+    substrate (compose the NEW program from THIS one)."""
+    spec = node.spec or {}
+    lines = [f"Node {node.id} — type={node.type}, state={node.state}"]
+    label = spec.get("summary")
+    if label:
+        lines.append(f"- Label: {label}")
+    prompt = spec.get("prompt")
+    if prompt:
+        prompt = str(prompt)
+        if len(prompt) > _NODE_PROGRAM_LIMIT:
+            prompt = (
+                prompt[:_NODE_PROGRAM_LIMIT]
+                + f"… (truncated at {_NODE_PROGRAM_LIMIT} of {len(prompt)} chars)"
+            )
+        lines.append(f"- Program (full): {prompt}")
+    else:
+        lines.append("- Program: (none — this node's spec has no prompt)")
+    output_ids = spec.get("output_ids") or []
+    if output_ids:
+        lines.append(
+            f"- Products: {len(output_ids)} (ids: "
+            + ", ".join(str(oid) for oid in output_ids)
+            + ")"
+        )
+    else:
+        lines.append("- Products: none")
+    if downstream:
+        lines.append("- Downstream: " + ", ".join(downstream))
+    else:
+        lines.append("- Downstream: none")
+    return lines
+
+
+async def get_node(db: AsyncSession, project: Project, params: GetNodeParams) -> str:
+    """One graph node's FULL current program + state + products + downstream —
+    the edit_graph read-before-write seat (A-1, 2026-09-22): the context's
+    Graph section truncates long programs, and the revision rule ("compose
+    the NEW program from the CURRENT one, never invent") is unsatisfiable
+    from a truncation. Read the node here first; then compose."""
+    node = await db.get(GraphNode, params.node_id)
+    if node is None or str(node.project_id) != str(project.id):
+        return (
+            f"No node with id {params.node_id} exists in this project — "
+            "pick an id from the context's Graph section."
+        )
+    downstream = [
+        str(e.to_node)
+        for e in (
+            await db.execute(
+                select(GraphEdge).where(
+                    GraphEdge.project_id == project.id,
+                    GraphEdge.from_node == node.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    ]
+    return "\n".join(_node_detail_lines(node, downstream))
+
+
 # The caption-style catalog's model-facing behavior notes. The ids MIRROR the
 # clip-spec Literal (which mirrors packages/clip/src/captions.ts — the behavior
 # source of truth); adding a style = catalog line + Literal + this dict (the
@@ -358,6 +441,109 @@ async def get_run_status(db: AsyncSession, project: Project, params) -> str:
     if progress:
         lines.append("Steps:")
         lines.extend(progress)
+    return "\n".join(lines)
+
+
+_RUN_HISTORY_LIMIT = 5
+
+
+def _run_history_lines(runs: list[WorkflowRun]) -> list[str]:
+    """The run-history roster (pure renderer): newest first, one line per
+    run — id + status + start stamp + the run's receipt name (ADR-058, the
+    proposal's name rides run.context). Capped at the family's history
+    budget; the header owns the honest omission note."""
+    lines = []
+    for run in runs:
+        ctx = run.context if isinstance(run.context, dict) else {}
+        name = (ctx.get("name") or "").strip()
+        line = (
+            f"- {run.id} — {run.status} (started {_stamp(run.created_at)})"
+        )
+        if name:
+            line += f" — {name}"
+        lines.append(line)
+    return lines
+
+
+async def list_runs(db: AsyncSession, project: Project, params) -> str:
+    """The project's recent run history (newest first, capped) — the
+    「之前跑过什么 / what did we already make」 read. The LIVE detail of the
+    latest run stays get_run_status's seat; this read is the roster."""
+    runs = list(
+        (
+            await db.execute(
+                select(WorkflowRun)
+                .where(WorkflowRun.project_id == project.id)
+                .order_by(WorkflowRun.created_at.desc())
+                .limit(_RUN_HISTORY_LIMIT + 1)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not runs:
+        return "No runs yet in this project."
+    shown = runs[:_RUN_HISTORY_LIMIT]
+    omitted = len(runs) - len(shown)
+    header = f"Run history (newest first, {len(shown)} run(s)"
+    header += ", %d older omitted" % omitted if omitted else ""
+    header += "):"
+    return "\n".join([header, *_run_history_lines(shown)])
+
+
+def _pending_plan_lines(plan) -> list[str]:
+    """The docked plan's detail (pure renderer): the original request, the
+    receipt name, the task chain (registry tool + compact params), the
+    distilled extra instruction, the caption-mode answer. Params ride as
+    compact JSON, capped — the chain's SHAPE is the read's point."""
+    lines = []
+    intent = plan.intent
+    if plan.prompt:
+        lines.append(f"- Original request: {plan.prompt[:200]}")
+    if intent is not None and (intent.name or "").strip():
+        lines.append(f"- Name: {intent.name.strip()}")
+    if intent is not None and intent.tasks:
+        lines.append("- Tasks:")
+        for task in intent.tasks:
+            params_json = (
+                json.dumps(task.params, ensure_ascii=False) if task.params else ""
+            )
+            if len(params_json) > 160:
+                params_json = params_json[:160] + "…"
+            lines.append(
+                f"  - {task.tool}" + (f" {params_json}" if params_json else "")
+            )
+    if intent is not None and intent.specific_instruction:
+        lines.append(f"- Extra instruction: {intent.specific_instruction[:300]}")
+    if intent is not None and intent.caption_mode:
+        lines.append(f"- Caption mode: {intent.caption_mode}")
+    return lines
+
+
+async def get_pending_plan(db: AsyncSession, project: Project, params) -> str:
+    """The conversation's currently DOCKED plan (the PendingPlan awaiting the
+    user's Start) — the chat path's draft-plan read (audit §7(d), 2026-09-22):
+    the plan path sees this chain in its context; the chat path read it
+    here or not at all. 「我刚才让你做的那个计划是什么」从这读."""
+    raw = project.pending_brief if isinstance(project.pending_brief, dict) else None
+    if not raw:
+        return (
+            "No plan is docked for confirmation right now — nothing is "
+            "waiting for the user's Start."
+        )
+    try:
+        plan = PendingPlan.model_validate(raw)
+    except Exception:  # noqa: BLE001 — a stale-shaped row reads honestly
+        return "A docked plan exists but its stored shape is stale — it will be rebuilt on the next proposal."
+    if plan.intent is None or not plan.intent.tasks:
+        # Brief-only rows (an ask turn's write) carry no chain — the honest
+        # read is the same as no docked plan.
+        return (
+            "No plan is docked for confirmation right now — nothing is "
+            "waiting for the user's Start."
+        )
+    lines = ["Docked plan (waiting for the user's confirmation):"]
+    lines.extend(_pending_plan_lines(plan))
     return "\n".join(lines)
 
 

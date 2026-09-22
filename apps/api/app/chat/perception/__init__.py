@@ -45,6 +45,7 @@ from app.chat.perception import executes
 from app.chat.perception.executes import (
     GetAssetParams,
     GetCraftSkeletonParams,
+    GetNodeParams,
     GetOutputSpecParams,
     SearchMusicParams,
 )
@@ -77,6 +78,21 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             params_model=GetOutputSpecParams,
             execute=executes.get_output_spec,
             activity_key="chat.inspecting.outputSpec",
+        ),
+        PerceptionTool(
+            name="get_node",
+            description=(
+                "Read one graph node's FULL current program, state, "
+                "products and downstream (the context's Graph section "
+                "truncates long programs) — ALWAYS before an edit_graph "
+                "revision of that node: compose the new program from the "
+                "full current one, never from the truncated line."
+            ),
+            params_model=GetNodeParams,
+            execute=executes.get_node,
+            activity_key="chat.inspecting.node",
+            # Edit prep — never checkpoint-eligible (the registry header's
+            # eligibility law).
         ),
         PerceptionTool(
             name="get_understanding",
@@ -121,6 +137,28 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             params_model=None,
             execute=executes.get_run_status,
             activity_key="chat.inspecting.runStatus",
+        ),
+        PerceptionTool(
+            name="list_runs",
+            description=(
+                "List the project's recent run history (newest first) — "
+                "for 'what did we already run / 之前跑过什么' questions; the "
+                "latest run's live detail stays get_run_status's seat."
+            ),
+            params_model=None,
+            execute=executes.list_runs,
+            activity_key="chat.inspecting.runHistory",
+        ),
+        PerceptionTool(
+            name="get_pending_plan",
+            description=(
+                "Read the plan currently docked for the user's confirmation "
+                "(its task chain, name, extra instruction) — for 'what was "
+                "the plan again / 计划是什么' questions on the chat path."
+            ),
+            params_model=None,
+            execute=executes.get_pending_plan,
+            activity_key="chat.inspecting.pendingPlan",
         ),
         PerceptionTool(
             name="get_asset",

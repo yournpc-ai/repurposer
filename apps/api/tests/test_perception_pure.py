@@ -16,6 +16,7 @@ is the registry's shape and its contracts with the loop and the prompts:
 """
 
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import get_args
@@ -38,10 +39,13 @@ _PROMPTS = Path(__file__).resolve().parents[1] / "app" / "prompts" / "chat"
 def test_registry_shape_and_naming_law() -> None:
     assert set(PERCEPTION_TOOLS) == {
         "get_output_spec",
+        "get_node",
         "get_understanding",
         "list_caption_styles",
         "search_music",
         "get_run_status",
+        "list_runs",
+        "get_pending_plan",
         "get_asset",
         "get_craft_skeleton",
     }
@@ -161,6 +165,155 @@ def test_explicit_unknown_id_is_an_honest_miss_naming_the_roster_door() -> None:
     resolved = _resolve_asset_target([a], uuid4())
     assert isinstance(resolved, str) and "No asset with id" in resolved
     assert "roster" in resolved
+
+
+# ---- A-1 程序盲改修复 (2026-09-22): get_node's full-program renderer -----------
+#
+# The context's Graph section truncates programs at 140 chars, but the
+# edit_graph rule requires composing the NEW program from the CURRENT one —
+# get_node is the read-before-write seat. Gated here: the program rides
+# VERBATIM under the budget cap (never silently truncated — a silent cut
+# would re-open the blind-revision hole), and the detail lines carry
+# state / products / downstream honestly.
+
+
+def _node(**over) -> SimpleNamespace:
+    base = dict(
+        id=uuid4(),
+        project_id=uuid4(),
+        type="text",
+        state="done",
+        spec={
+            "summary": "English post",
+            "prompt": "Write a LinkedIn post about the talk.",
+            "output_ids": [str(uuid4()), str(uuid4())],
+        },
+    )
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+class TestNodeDetailLines:
+    def test_full_program_rides_verbatim_under_the_cap(self) -> None:
+        from app.chat.perception.executes import (
+            _NODE_PROGRAM_LIMIT,
+            _node_detail_lines,
+        )
+
+        program = "p" * 500  # past the context's 140, far under the cap
+        lines = _node_detail_lines(_node(spec={"prompt": program}), [])
+        program_line = next(l for l in lines if l.startswith("- Program"))
+        assert program_line == f"- Program (full): {program}"
+        assert len(program) < _NODE_PROGRAM_LIMIT
+
+    def test_over_cap_program_says_so_honestly(self) -> None:
+        from app.chat.perception.executes import (
+            _NODE_PROGRAM_LIMIT,
+            _node_detail_lines,
+        )
+
+        program = "p" * (_NODE_PROGRAM_LIMIT + 100)
+        lines = _node_detail_lines(_node(spec={"prompt": program}), [])
+        program_line = next(l for l in lines if l.startswith("- Program"))
+        assert f"truncated at {_NODE_PROGRAM_LIMIT}" in program_line
+        assert program_line.startswith(f"- Program (full): {'p' * 100}")
+
+    def test_state_products_and_downstream_render(self) -> None:
+        from app.chat.perception.executes import _node_detail_lines
+
+        node = _node()
+        child_a, child_b = str(uuid4()), str(uuid4())
+        lines = _node_detail_lines(node, [child_a, child_b])
+        assert lines[0] == f"Node {node.id} — type=text, state=done"
+        assert next(l for l in lines if l.startswith("- Label")) == (
+            "- Label: English post"
+        )
+        products = next(l for l in lines if l.startswith("- Products"))
+        assert products.startswith("- Products: 2 (ids: ")
+        downstream = next(l for l in lines if l.startswith("- Downstream"))
+        assert child_a in downstream and child_b in downstream
+
+    def test_empty_spec_reads_honestly(self) -> None:
+        from app.chat.perception.executes import _node_detail_lines
+
+        lines = _node_detail_lines(_node(spec={}), [])
+        assert "- Program: (none — this node's spec has no prompt)" in lines
+        assert "- Products: none" in lines
+        assert "- Downstream: none" in lines
+
+
+# ---- 同族 read 洞 (审计 §7 d/e, 2026-09-22): run history + docked plan ------
+
+
+class TestRunHistoryLines:
+    def test_roster_newest_first_with_receipt_name(self) -> None:
+        from app.chat.perception.executes import _run_history_lines
+
+        run = SimpleNamespace(
+            id=uuid4(),
+            status="COMPLETED",
+            created_at=datetime(2026, 9, 22, 12, 0, tzinfo=UTC),
+            context={"name": "German post"},
+        )
+        lines = _run_history_lines([run])
+        assert len(lines) == 1
+        assert str(run.id) in lines[0]
+        assert "COMPLETED" in lines[0] and "German post" in lines[0]
+        assert "2026-09-22" in lines[0]
+
+    def test_missing_context_and_name_read_cleanly(self) -> None:
+        from app.chat.perception.executes import _run_history_lines
+
+        run = SimpleNamespace(
+            id=uuid4(), status="RUNNING", created_at=None, context=None
+        )
+        (line,) = _run_history_lines([run])
+        assert "RUNNING" in line
+        assert "started ?" in line  # the stamp helper's honest unknown
+        assert line.count(" — ") == 1  # no empty name tail
+
+
+class TestPendingPlanLines:
+    def _plan(self, **intent_over):
+        from app.models.schemas import InferredIntent, PendingPlan
+
+        intent = InferredIntent(
+            action="draft",
+            tasks=[
+                {"tool": "select_clips", "params": {"count": 3}},
+                {"tool": "write_post", "params": {"language": "de"}},
+            ],
+            specific_instruction="focus on the Q&A section",
+            caption_mode="bilingual",
+            name=intent_over.pop("name", "German clips + post"),
+            **intent_over,
+        )
+        return PendingPlan(prompt="剪三条德语短片加一篇帖子", intent=intent)
+
+    def test_chain_instruction_and_mode_render(self) -> None:
+        from app.chat.perception.executes import _pending_plan_lines
+
+        lines = _pending_plan_lines(self._plan())
+        joined = "\n".join(lines)
+        assert "- Original request: 剪三条德语短片加一篇帖子" in joined
+        assert "- Name: German clips + post" in joined
+        assert "  - select_clips" in joined and '"count": 3' in joined
+        assert "  - write_post" in joined and '"language": "de"' in joined
+        assert "- Extra instruction: focus on the Q&A section" in joined
+        assert "- Caption mode: bilingual" in joined
+
+    def test_sparse_plan_renders_chain_only(self) -> None:
+        from app.chat.perception.executes import _pending_plan_lines
+        from app.models.schemas import InferredIntent, PendingPlan
+
+        plan = PendingPlan(
+            prompt="",
+            intent=InferredIntent(
+                action="draft", tasks=[{"tool": "write_post", "params": {}}]
+            ),
+        )
+        lines = _pending_plan_lines(plan)
+        assert lines == ["- Tasks:", "  - write_post"]
 
 
 # ---- 信任锚注入 (ADR-083, 2026-09-17): the understanding digest formatter ----

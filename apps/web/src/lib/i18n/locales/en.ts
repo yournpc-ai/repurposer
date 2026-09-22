@@ -1211,10 +1211,13 @@ const en = {
      * whisper register. */
     inspecting: {
       outputSpec: "Reading the current settings…",
+      node: "Reading the card's full program…",
       understanding: "Taking another look at your material…",
       captionStyles: "Browsing the caption styles…",
       music: "Searching the music library…",
       runStatus: "Checking the run's progress…",
+      runHistory: "Reading the run history…",
+      pendingPlan: "Reading the plan waiting for confirmation…",
       asset: "Looking at the asset…",
       craftSkeleton: "Reading the reference's style breakdown…",
     },
@@ -1235,10 +1238,13 @@ const en = {
      * ride the server registry, this family mirrors it by prefix swap). */
     inspectingDone: {
       outputSpec: "Read the current settings",
+      node: "Read the card's full program",
       understanding: "Reviewed your material",
       captionStyles: "Browsed the caption styles",
       music: "Searched the music library",
       runStatus: "Checked the run's progress",
+      runHistory: "Read the run history",
+      pendingPlan: "Read the waiting plan",
       asset: "Looked at the asset",
       craftSkeleton: "Read the reference's style breakdown",
     },

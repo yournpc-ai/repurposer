@@ -693,11 +693,20 @@ class ProposeTasksArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return _tolerate_null_keys(data, "tasks", "name")
+        return _tolerate_null_keys(data, "tasks", "name", "specific_instruction")
 
     tasks: list[TaskItem] = Field(
         default_factory=list,
         description="The proposed tool chain — one task per piece of work, in execution order.",
+    )
+    specific_instruction: str | None = Field(
+        default=None,
+        description=(
+            "A short distilled EXTRA instruction for the generator — only "
+            "constraints or focus NOT already expressed by the task params; "
+            "never restate the requested work itself. Omit when nothing "
+            "extra remains."
+        ),
     )
     name: str = Field(
         default="",

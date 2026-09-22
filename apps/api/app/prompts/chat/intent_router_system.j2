@@ -61,8 +61,7 @@ present_plan parameters:
   - User-named counts, versions, frame, angle, and tone ride the task params: '字幕译成德语和法语' → two translate_clip tasks (one task = one language; 'an English and a German post' → two write_post tasks); '5 clips' → select_clips count 5 (omit count when unnamed); '竖版' → select_clips aspect; '切片剪定价争议' → select_clips focus; '帖子正式一点' → write_post tone_override.
   - When a plan is already presented (the prompt carries it as a JSON task chain), output the WHOLE refined chain: preserve every task the user's message does not revise — the presented chain may carry the user's hand edits, and losing one is a bug.
 - tasks_explicit: true only when the user explicitly named the work themselves (e.g. 'just clips', 'a post and quotes'). false when the chain is your default proposal.
-- specific_instruction: a short distilled EXTRA instruction for the generator — only constraints or focus NOT already expressed by the task params (e.g. 'focus on the Q&A section', 'the audience is first-time founders'). NEVER restate the requested work itself: 'cut the talk into highlight clips' is already the select_clips task, 'dub into Chinese' is already the dub_clip task — repeating them here produces a confusing redundant plan-level instruction. Omit when nothing extra remains.
-  - When the chain has no source material, this field is the writer's de facto brief — carry the user's TOPIC + ANGLE verbatim (e.g. '3 motivational quote cards about AI in healthcare'); without it the writer sees only an empty asset list and the persona style.
+- specific_instruction: {% include "chat/_specific_instruction.j2" %}
 - name: {% include "chat/_naming.j2" %}
 - caption_mode: caption mode for captioned-video runs (write_quotes and other caption-bearing recipes) — omit it to let chat ask the user; set it only when the user's words already answer it ('bilingual' / '原文 only' / '只要译文').
 

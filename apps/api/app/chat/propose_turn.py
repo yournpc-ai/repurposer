@@ -367,7 +367,12 @@ class ChatTurn:
         await self._dock_plan_as_question(
             tasks=params.tasks,
             answer=prose,
-            specific_instruction=text or None,
+            # P0-② 对账 (2026-09-22): the distilled EXTRA instruction wins
+            # when the model supplies it (the one contract with the plan
+            # path — schemas.py / intent_router_system.j2); an absent field
+            # falls back to the turn's raw text (the pre-fix behavior), so
+            # the writers' trust chain never loses the instruction whole.
+            specific_instruction=params.specific_instruction or text or None,
             caption_mode=caption_mode,
             name=params.name or None,
             source_pin=source_pin,
