@@ -160,6 +160,7 @@ class PlanTurn:
         project: Project,
         request: ChatRequest,
         on_phase=None,
+        on_activity=None,
     ) -> None:
         self.db = db
         self.user_id = user_id
@@ -167,6 +168,10 @@ class PlanTurn:
         self.project = project
         self.request = request
         self.on_phase = on_phase
+        # 工作会话里程碑通道 (iter-2 ⑥): the SSE pump's projector feed —
+        # called at the exploration door's successes; None = the one-shot
+        # path (no stream, no frames).
+        self.on_activity = on_activity
         # Turn state (filled by the assembly below and the executions):
         self.text = ""
         self.stored: PendingPlan | None = None
@@ -834,6 +839,13 @@ class PlanTurn:
 
     # ---- the exploration seats (iter-2 ③/⑤ — ADR-088 旅程四 chain) -----------
 
+    async def _emit_milestone(self, key: str, count: int) -> None:
+        """Fire one work-session milestone frame (iter-2 ⑥, N-57) at a door
+        success — in-session interleave only, never persisted. No-op on the
+        one-shot path."""
+        if self.on_activity is not None:
+            await self.on_activity(key, count)
+
     async def _explore(
         self, name: str, params, prose: str
     ) -> str | None | ToolObservation:
@@ -857,6 +869,9 @@ class PlanTurn:
                 )
             except ExplorationRejected as e:
                 return f"The door rejected the proposal: {e}"
+            await self._emit_milestone(
+                "chat.explore.candidatesReady", len(params.members)
+            )
             return ToolObservation(
                 text=candidates_observation(
                     node, topic=params.topic, member_count=len(params.members)
@@ -873,6 +888,7 @@ class PlanTurn:
                 )
             except ExplorationRejected as e:
                 return f"The door rejected the proposal: {e}"
+            await self._emit_milestone("chat.explore.selectsReady", len(born))
             return ToolObservation(text=selects_observation(born))
         if name == "propose_plans":
             assert isinstance(params, ProposePlansArgs)
@@ -988,6 +1004,7 @@ class PlanTurn:
             )
         except ExplorationRejected as e:
             return f"The door rejected the proposal: {e}"
+        await self._emit_milestone("chat.explore.plansReady", len(born))
 
         # Caption form for quote cards: named on a quotes output → stamped
         # onto the intent (the same field the caption question's answer
@@ -1365,6 +1382,7 @@ async def run_plan_turn(
     on_tool_ready=None,
     on_checkpoint=None,
     on_loop_event=None,
+    on_activity=None,
 ) -> PlanTurnOutcome:
     """The plan path's turn: assemble → the bounded tool loop → the outcome
     mapping. ``intent_router`` provider failures propagate as LLMError — no
@@ -1376,7 +1394,7 @@ async def run_plan_turn(
     channel's SSE seat — the runner wraps it with persistence (the checkpoint
     row is this turn's own message, intent type 'checkpoint'). None = the
     one-shot path."""
-    turn = PlanTurn(db, user_id, conversation, project, request, on_phase=on_phase)
+    turn = PlanTurn(db, user_id, conversation, project, request, on_phase=on_phase, on_activity=on_activity)
     await turn.assemble(recent)
     result = await intent_router.call_loop(
         turn.execute,

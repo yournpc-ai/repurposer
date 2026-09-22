@@ -58,7 +58,12 @@ def test_registry_shape_and_naming_law() -> None:
         assert callable(entry.execute)
         # The 碎碎念 copy key — the tool NAME never reaches the user face
         # (简报 §3 禁令); the key is what the SSE inspecting frame carries.
-        assert entry.activity_key.startswith("chat.inspecting.")
+        # Two legal families (iter-2 ⑥, N-57): the generic inspecting
+        # vocabulary, and the work-session family (search_transcript's
+        # 改籍 seat — the discovery read rides chat.explore.searching).
+        assert entry.activity_key.startswith(("chat.inspecting.", "chat.explore."))
+        if entry.name == "search_transcript":
+            assert entry.activity_key == "chat.explore.searching"
 
 
 def test_projection_is_non_terminal_and_wire_shaped() -> None:

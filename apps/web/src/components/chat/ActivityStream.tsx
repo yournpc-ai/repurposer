@@ -47,8 +47,14 @@ function ActivityRow({ activity }: { activity: ActivityFramePayload }) {
           status === "cancelled" && "line-through",
         )}
       >
+        {/* 工作会话里程碑 (iter-2 ⑥): count rides as the ONLY interpolation
+            (the wire whitelist's one extension, N-57) — frames without it
+            pass undefined and resolve exactly as before. */}
         {activity.key
-          ? t(activity.key, { defaultValue: t("chat.thinking") })
+          ? t(activity.key, {
+              count: activity.count,
+              defaultValue: t("chat.thinking"),
+            })
           : t("chat.thinking")}
       </span>
     </div>

@@ -48,6 +48,7 @@ from app.agents.tool_loop import (
     TerminalAccepted,
     ToolRejected,
 )
+from app.chat.exploration_tools import EXPLORATION_TOOLS
 from app.chat.perception import PERCEPTION_TOOLS
 
 # The user-semantic kind vocabulary (冻结: user-semantic, never tool names).
@@ -70,6 +71,12 @@ STATUS_CANCELLED = "cancelled"  # schema-complete; see the module docstring
 _DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "apply_edit_ops", "edit_graph"})
 _RUN_TOOLS = frozenset({"start_run"})
 _CONVERSATION_TOOLS = frozenset({"ask_user", "answer"})
+# The exploration proposal verbs (iter-2 ⑤/⑥, ADR-088 旅程四): their user
+# face is the milestone frame (``explore_milestone`` below) + the canvas
+# card + the decision package dock — never a per-call activity (the
+# conversation tools' 1→0 同律). Referenced from the registry (U6 — never
+# re-typed), and their rejections still count as repair work.
+_EXPLORATION_VERBS: frozenset[str] = frozenset(EXPLORATION_TOOLS)
 
 # Copy keys for the terminal kinds (U7: active/completed status-forms; a
 # FAILED frame reuses the ACTIVE key — the ✗ says the work did not land,
@@ -86,10 +93,26 @@ _ACTIVITY_KEYS = {
 _INSPECTING_PREFIX = "chat.inspecting."
 _INSPECTING_DONE_PREFIX = "chat.inspectingDone."
 
+# The work-session family (iter-2 ⑥, N-57): ``chat.explore.searching`` is
+# search_transcript's re-homed activity_key (done mirror = key + "Done",
+# same inspecting→inspectingDone 同律 at this family's shape); the three
+# milestone keys fire ONE born-completed frame at each door success, with
+# the artifact count as the only payload (Activity 十规则 — user-safe pure
+# count, never params / excerpts / reasoning).
+_EXPLORE_PREFIX = "chat.explore."
+_EXPLORE_MILESTONE_KEYS: frozenset[str] = frozenset(
+    {
+        "chat.explore.candidatesReady",
+        "chat.explore.selectsReady",
+        "chat.explore.plansReady",
+    }
+)
+
 
 def kind_for_tool(tool_name: str) -> str | None:
     """The name→kind mapping's ONE seat. None = the call opens no activity
-    (conversation-layer terminal tools / unknown names)."""
+    (conversation-layer terminal tools / the exploration verbs / unknown
+    names)."""
     if tool_name in PERCEPTION_TOOLS:
         return KIND_READ
     if tool_name in _DRAFT_TOOLS:
@@ -104,7 +127,11 @@ def all_known_tool_names() -> frozenset[str]:
     gate compares this against the declared tool sets (U6: reference the
     registries, never duplicate them silently)."""
     return frozenset(
-        PERCEPTION_TOOLS.keys() | _DRAFT_TOOLS | _RUN_TOOLS | _CONVERSATION_TOOLS
+        PERCEPTION_TOOLS.keys()
+        | _DRAFT_TOOLS
+        | _RUN_TOOLS
+        | _CONVERSATION_TOOLS
+        | _EXPLORATION_VERBS
     )
 
 
@@ -112,22 +139,28 @@ def all_known_tool_names() -> frozenset[str]:
 class ActivityFrame:
     """One user-safe activity frame (the SSE ``assistant.activity`` payload).
     Field whitelist is the contract: id / seq / kind / status / key — never
-    params, results, or reasoning text (简报 Prohibited #2, T11)."""
+    params, results, or reasoning text (简报 Prohibited #2, T11). Iter-2 ⑥
+    (N-57) extends the whitelist by ONE key: ``count`` — the work-session
+    milestone's pure artifact count, present only on milestone frames."""
 
     activity_id: str
     seq: int
     kind: str
     status: str
     key: str | None
+    count: int | None = None
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "activity_id": self.activity_id,
             "seq": self.seq,
             "kind": self.kind,
             "status": self.status,
             "key": self.key,
         }
+        if self.count is not None:
+            d["count"] = self.count
+        return d
 
 
 class ActivityProjector:
@@ -154,10 +187,19 @@ class ActivityProjector:
 
     # -- frame factory -------------------------------------------------
 
-    def _frame(self, activity_id: str, kind: str, status: str, key: str | None) -> ActivityFrame:
+    def _frame(
+        self,
+        activity_id: str,
+        kind: str,
+        status: str,
+        key: str | None,
+        *,
+        count: int | None = None,
+    ) -> ActivityFrame:
         self._seq += 1
         return ActivityFrame(
-            activity_id=activity_id, seq=self._seq, kind=kind, status=status, key=key
+            activity_id=activity_id, seq=self._seq, kind=kind, status=status, key=key,
+            count=count,
         )
 
     def _start(self, kind: str, key: str | None) -> tuple[str, ActivityFrame]:
@@ -173,10 +215,26 @@ class ActivityProjector:
     @staticmethod
     def _done_key(kind: str, active_key: str | None) -> str | None:
         if kind == KIND_READ and active_key is not None:
-            assert active_key.startswith(_INSPECTING_PREFIX)
-            return _INSPECTING_DONE_PREFIX + active_key[len(_INSPECTING_PREFIX):]
+            if active_key.startswith(_INSPECTING_PREFIX):
+                return _INSPECTING_DONE_PREFIX + active_key[len(_INSPECTING_PREFIX):]
+            # chat.explore.* (iter-2 ⑥): the done mirror is the same key +
+            # "Done" (searching → searchingDone) — the family's own law.
+            assert active_key.startswith(_EXPLORE_PREFIX)
+            return active_key + "Done"
         pair = _ACTIVITY_KEYS.get(kind)
         return pair[1] if pair else None
+
+    def explore_milestone(self, key: str, *, count: int) -> ActivityFrame:
+        """One work-session milestone frame (iter-2 ⑥, N-57): fired at the
+        exploration door's successes — BORN-COMPLETED (a milestone is a
+        fact, never an in-progress span, so it never joins ``_active`` and
+        the terminal sweep has nothing to settle). ``count`` is the only
+        payload (Activity 十规则 — the whitelist's one extension)."""
+        assert key in _EXPLORE_MILESTONE_KEYS, f"unknown explore milestone {key!r}"
+        self._count += 1
+        return self._frame(
+            f"a{self._count}", KIND_DRAFT, STATUS_COMPLETED, key, count=count
+        )
 
     # -- event feeds ----------------------------------------------------
 

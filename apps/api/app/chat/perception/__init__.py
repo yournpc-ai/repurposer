@@ -172,7 +172,10 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             ),
             params_model=SearchTranscriptParams,
             execute=executes.search_transcript,
-            activity_key="chat.inspecting.transcriptSearch",
+            # 改籍 (iter-2 ⑥, N-57): the discovery read rides the work-session
+            # family — the same read, the work-session vocabulary replaces
+            # the generic inspecting word (done mirror = key + "Done").
+            activity_key="chat.explore.searching",
         ),
         PerceptionTool(
             name="get_segment",

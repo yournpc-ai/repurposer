@@ -203,6 +203,17 @@ def _make_loop_event_hook(queue: asyncio.Queue, projector: ActivityProjector):
     return on_loop_event
 
 
+def _make_activity_hook(queue: asyncio.Queue, projector: ActivityProjector):
+    """The work-session milestone channel's SSE seat (iter-2 ⑥, N-57): the
+    plan turn fires ``explore_milestone`` at the exploration door's
+    successes; the frame is born-completed and rides the same
+    ``assistant.activity`` channel as the loop-event frames."""
+    async def on_activity(key: str, count: int) -> None:
+        await queue.put(_activity_frame(projector.explore_milestone(key, count=count)))
+
+    return on_activity
+
+
 async def _sweep_activities(queue: asyncio.Queue, projector: ActivityProjector, outcome: str) -> None:
     """The terminal sweep (T16-B, 终帧律的活动同形): before the envelope,
     every still-active activity is settled — no activity outlives its turn."""
@@ -316,6 +327,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                 on_delta = _make_delta_hook(queue)
                 on_tool_call, on_tool_ready = _make_tool_hooks(queue, projector)
                 on_loop_event = _make_loop_event_hook(queue, projector)
+                on_activity = _make_activity_hook(queue, projector)
 
                 async def on_reasoning(_fragment: str) -> None:
                     # Reasoning-content frames: liveness only, never shown.
@@ -352,6 +364,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     on_tool_call=on_tool_call, on_tool_ready=on_tool_ready,
                     on_checkpoint=on_checkpoint,
                     on_loop_event=on_loop_event,
+                    on_activity=on_activity,
                 )
             await _sweep_activities(queue, projector, "completed")
             await queue.put(("completed", response.model_dump(mode="json")))
@@ -407,6 +420,7 @@ async def _answer_stream(
                 on_delta = _make_delta_hook(queue)
                 on_tool_call, on_tool_ready = _make_tool_hooks(queue, projector)
                 on_loop_event = _make_loop_event_hook(queue, projector)
+                on_activity = _make_activity_hook(queue, projector)
 
                 async def on_phase(phase: str) -> None:
                     await queue.put(
@@ -423,6 +437,7 @@ async def _answer_stream(
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
                     on_loop_event=on_loop_event,
+                    on_activity=on_activity,
                 )
             await _sweep_activities(queue, projector, "completed")
             await queue.put(

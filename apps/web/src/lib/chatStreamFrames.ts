@@ -24,6 +24,9 @@ export interface ActivityFramePayload {
   kind: "read" | "draft" | "run" | "repair"
   status: "active" | "completed" | "failed" | "cancelled"
   key: string | null
+  /** 工作会话里程碑 (iter-2 ⑥, N-57): the whitelist's one extension — the
+   * artifact count on `chat.explore.*Ready` frames, absent elsewhere. */
+  count?: number
 }
 
 /** The thinking frame's payload: `{}` = a pure keepalive (drive the

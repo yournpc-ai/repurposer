@@ -1248,10 +1248,22 @@ const en = {
       runStatus: "Checking the run's progress…",
       runHistory: "Reading the run history…",
       pendingPlan: "Reading the plan waiting for confirmation…",
-      transcriptSearch: "Searching the transcript…",
       segment: "Reading the segment…",
       asset: "Looking at the asset…",
       craftSkeleton: "Reading the reference's style breakdown…",
+    },
+    /** The work-session family (iter-2 ⑥, N-57): the discovery chain's
+     * user-safe beats — `searching` rides the read frame (active + done
+     * mirror, the inspecting→inspectingDone 同律 at this family's shape);
+     * the three milestones fire once at each door success, born-completed,
+     * with the artifact count as the only interpolation (user-safe pure
+     * count — never params / excerpts / reasoning). */
+    explore: {
+      searching: "Searching the transcript…",
+      searchingDone: "Searched the transcript",
+      candidatesReady: "Found {{count}} candidate sections",
+      selectsReady: "Picked {{count}} sections",
+      plansReady: "Structured {{count}} plans",
     },
     /** The Activity Stream's milestone copy (ADR-087 §3 Phase 2): the active
      * frame carries the progressive form, the completed frame the past-tense
@@ -1277,7 +1289,6 @@ const en = {
       runStatus: "Checked the run's progress",
       runHistory: "Read the run history",
       pendingPlan: "Read the waiting plan",
-      transcriptSearch: "Searched the transcript",
       segment: "Read the segment",
       asset: "Looked at the asset",
       craftSkeleton: "Read the reference's style breakdown",

@@ -1284,6 +1284,7 @@ async def answer_question(
     on_tool_call=None,
     on_tool_ready=None,
     on_loop_event=None,
+    on_activity=None,
     confirmed_via: str = "dock_pill",
 ) -> tuple[Message, Message | None]:
     """Answer a pending question (``POST /chat/messages/{id}/answer``).
@@ -1726,6 +1727,7 @@ async def answer_question(
                 on_tool_call=on_tool_call,
                 on_tool_ready=on_tool_ready,
                 on_loop_event=on_loop_event,
+                on_activity=on_activity,
             )
         elif question.slot is not None and project is not None:
             # ask 一等动作的答复回填 (ADR-052 B2 D2-C1): the brief slot takes
@@ -1746,6 +1748,7 @@ async def answer_question(
                 on_tool_call=on_tool_call,
                 on_tool_ready=on_tool_ready,
                 on_loop_event=on_loop_event,
+                on_activity=on_activity,
             )
         else:
             # 选项语法统一律 (ADR-081): trigger suggestion questions land
@@ -1776,6 +1779,7 @@ async def answer_question(
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
                     on_loop_event=on_loop_event,
+                    on_activity=on_activity,
                 )
             else:
                 follow_up, _run_id, bailed_run_ids, _settled = await _propose_turn(
@@ -1824,6 +1828,7 @@ async def answer_question(
                 on_tool_call=on_tool_call,
                 on_tool_ready=on_tool_ready,
                 on_loop_event=on_loop_event,
+                on_activity=on_activity,
             )
 
     await db.commit()
@@ -1876,6 +1881,7 @@ async def _plan_turn(
     on_tool_ready=None,
     on_checkpoint=None,
     on_loop_event=None,
+    on_activity=None,
 ) -> tuple[Message, UUID | None, Message | None, list[UUID]]:
     """Plan path (intent-surface-unification W1): build / refine / confirm
     the plan inside the chat loop — the ONLY intent surface.
@@ -1910,6 +1916,7 @@ async def _plan_turn(
         on_tool_ready=on_tool_ready,
         on_checkpoint=on_checkpoint,
         on_loop_event=on_loop_event,
+        on_activity=on_activity,
     )
 
 
@@ -2246,6 +2253,7 @@ async def execute_chat_turn(
     on_tool_ready=None,
     on_checkpoint=None,
     on_loop_event=None,
+    on_activity=None,
 ) -> ChatResponse:
     """chat() phase 2: run the agent turn, commit once, assemble the response.
 
@@ -2289,6 +2297,7 @@ async def execute_chat_turn(
             on_tool_ready=on_tool_ready,
             on_checkpoint=on_checkpoint,
             on_loop_event=on_loop_event,
+            on_activity=on_activity,
         )
         if plan_answered is not None:
             prepared.answered_question = plan_answered
