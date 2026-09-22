@@ -416,7 +416,9 @@ def _compile_task_list(
                 **{
                     k: v
                     for k, v in params_dict.items()
-                    if k in ("count", "focus", "language", "tone_override")
+                    # iter-2 ②: source_span rides the slot like count/focus —
+                    # compiler-emitted, the writer narrows its material to it.
+                    if k in ("count", "focus", "language", "tone_override", "source_span")
                 },
             }
             spec = {

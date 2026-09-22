@@ -1025,6 +1025,29 @@ class ToneSettings(BaseModel):
     audience: Literal["academic", "industry", "general", "investor"] = "industry"
 
 
+class SourceSpan(BaseModel):
+    """A timeline span of one source asset (iter-2 ②, N-57): the writer's
+    material narrows to this range instead of the whole talk.
+
+    Compiler-set on plan-sourced chains (the exploration world resolved the
+    Select's evidence range at the door); ``asset_id`` pins the asset
+    deterministically (the compile knows the candidate set's asset), None
+    = resolve to the project's timeline-carrying asset.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    start: float
+    end: float
+    asset_id: str | None = None
+
+    @model_validator(mode="after")
+    def _ordered(self) -> "SourceSpan":
+        if not self.start < self.end:
+            raise ValueError(f"source_span start ({self.start}) must be < end ({self.end})")
+        return self
+
+
 class IntentSlot(BaseModel):
     """任务槽: one line of the plan — one requested output (request layer).
 
@@ -1050,6 +1073,9 @@ class IntentSlot(BaseModel):
     focus: str | None = None
     language: str | None = None
     tone_override: str | None = None
+    # iter-2 ② (N-57): the writer's source narrowing — compiler-emitted on
+    # plan-sourced chains, None on every existing path (the whole material).
+    source_span: SourceSpan | None = None
     explicit: bool = False
 
     @model_validator(mode="before")
