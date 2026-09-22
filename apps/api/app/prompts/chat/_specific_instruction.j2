@@ -1,0 +1,8 @@
+{# The specific_instruction contract — ONE definition, two consumers
+   (intent_router_system's draft call / chat_intent_system's propose_tasks).
+   P0-② 对账 (2026-09-22): the chat path's propose_tasks finally carries the
+   same distilled field as the plan path — distilled EXTRAS only, never the
+   requested work itself (the router already absorbed that into the
+   structured task params). Mid-line include discipline: this partial ends
+   WITHOUT a trailing newline so the including line stays byte-stable. #}a short distilled EXTRA instruction for the generator — only constraints or focus NOT already expressed by the task params (e.g. 'focus on the Q&A section', 'the audience is first-time founders'). NEVER restate the requested work itself: 'cut the talk into highlight clips' is already the select_clips task, 'dub into Chinese' is already the dub_clip task — repeating them here produces a confusing redundant plan-level instruction. Omit when nothing extra remains.
+  - When the chain has no source material, this field is the writer's de facto brief — carry the user's TOPIC + ANGLE verbatim (e.g. '3 motivational quote cards about AI in healthcare'); without it the writer sees only an empty asset list and the persona style.
