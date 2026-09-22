@@ -54,6 +54,13 @@ run 数 / 落库行——永不锁 LLM 文案（禁令 #7）。例外：代码�
     S21 checkpoint 通道观察面（ADR-085 评审四场景）：A 单读直出 / B 诱导
              多读 / C 目录读结构性静默——不锁出现与否，锁硬律 + PRINT
              命中率（D 失败回滚归手测）
+    S23 探索族全链 harness 拍（ADR-088 §2, 迭代一）：search → candidates →
+             selects → plans 三族出生 / journey 归属 / rank 盲 / 零边 + 执行门
+             拒收 / 幂等重放 / 无时间轴降级诚实
+    S-explore-2 发现型主链生产 e2e（ADR-088/089, 迭代二 §4.9）：SSE 发现型
+             目标 → chat.explore.* 活动流 → 决策包 dock（plans+编译链+quote）
+             → dock Start → confirmed_scope 快照 → 产物真落地（fixture
+             纪律同 S23/S16；MiniMax 配额是硬前提）
 
 S4/S7/S8 起的 run 是真的（worker 会执行；writer 链走真 LLM——S4 用
 ``processing_status=COMPLETED`` 的 transcript 资产走 writer 链到 completed，
@@ -113,6 +120,8 @@ from app.models.tables import (  # noqa: E402
     Asset,
     Conversation,
     CreditTransaction,
+    GraphNode,
+    Journey,
     Message,
     Operation,
     Output,
@@ -4365,6 +4374,228 @@ async def s23_exploration_chain_lands_on_canvas(ctx: Ctx) -> None:
     check(not touching, "I-EXPLORE-01: zero edges touch exploration nodes", touching)
 
 
+# ── S-explore-2 发现型主链生产 e2e（ADR-088/089, Agent Working Loop 迭代二 §4.9）
+#
+# S23 的 harness 拍在这里收进生产形态：一条 SSE chat 回合跑完整发现链
+# （search_transcript → candidates → selects → plans 终态 dock）——工作会话
+# 活动键族（chat.explore.*，迭代二⑥）、决策包 dock 三面（plans 阅读层 +
+# 编译链证据 + quote，迭代二③）、探索三族出生且一条 journey（迭代一⑤）、
+# 确认 → run 出生带 Confirmed Scope Snapshot（迭代二④）→ 产物真落地
+# （cut_segments 真渲染 + writer 真 LLM）。fixture 纪律同 S23/S16：
+# scenario/ 前缀的真实桶拷贝（共享 demo 键会被项目删除 unlink——S16 的课）、
+# 时间轴落在 demo_talk 真实时长内（~119s）、words 逐词真值（门在出生时刻
+# 逐字校验 excerpt）。MiniMax 配额是硬前提——跑不了标「未跑验证」。
+
+_SE2_SENTENCES = [
+    (0.0, "Welcome back to the founder notes."),
+    (6.0, "Today I want to walk through how we think about pricing."),
+    (14.0, "Our pricing is simple."),
+    (18.0, "The starter tier is free forever."),
+    (24.0, "The pro tier costs ten dollars a month."),
+    (30.0, "You only pay when your team actually grows."),
+    (38.0, "Let me switch gears and talk about the roadmap for a moment."),
+    (52.0, "We are shipping the new dashboard next quarter."),
+    (64.0, "Back to pricing for a second."),
+    (68.0, "Every paid tier includes the analytics dashboard."),
+    (76.0, "Annual billing saves you two months."),
+    (84.0, "That is the whole announcement for this week."),
+]
+
+
+def _se2_words() -> list[dict]:
+    words: list[dict] = []
+    for line_start, sentence in _SE2_SENTENCES:
+        t = line_start
+        for w in sentence.split():
+            words.append({"word": w, "start": round(t, 2), "end": round(t + 0.4, 2)})
+            t += 0.5
+    return words
+
+
+async def s_explore_2_decision_package_to_confirmed_scope(ctx: Ctx) -> None:
+    """发现型主链生产 e2e（迭代二 §4.9）：发现型目标（SSE）→ 探索三族出生
+    （一条 journey）→ chat.explore.* 活动流 → 决策包 dock（plans+tasks+quote）
+    → dock Start → run.context.confirmed_scope 五字段 → run 收官产物落地。"""
+    fixture_prefix = f"scenario/s-explore-2-{uuid.uuid4().hex[:8]}"
+    src_key = await copy_fixture(REMIX_SOURCE_KEY, fixture_prefix)
+
+    pid = await ctx.new_project("S-explore-2 discovery chain")
+    project_uuid = uuid.UUID(pid)
+    await seed_asset(
+        pid, ctx.user_id, AssetType.VIDEO, "se2-talk.mp4",
+        file_url=src_key,  # 真字节——cut_segments 真的剪
+        extracted_text=" ".join(s for _, s in _SE2_SENTENCES),
+        meta={
+            "words": _se2_words(),
+            "speaker_map": {"turns": [{"start": 0.0, "end": 95.0, "speaker": "host"}]},
+            "language": "en",
+        },
+        processed=True,  # worker 的资产队列不碰（时间轴/文本即种子）
+    )
+    # cut_segments 真渲染 + writer 真 LLM 都花积分——赠额外补足避免 422 噪音。
+    async with AsyncSessionLocal() as db:
+        wallet = await get_or_create_wallet(db, ctx.user_id)
+        wallet.balance = int(wallet.balance) + 200000
+        await db.commit()
+
+    # ── 发现型目标（SSE 全链）─────────────────────────────────────────────
+    stream = await ctx.chat_stream(
+        pid,
+        "Find the parts where I talk about pricing — cut those into a clip, "
+        "and write an English post from them.",
+    )
+    check(stream.failed is None, "the discovery turn never fails", stream.failed)
+    check(stream.completed is not None, "the discovery turn completes", stream.activities)
+
+    # 工作会话活动键族（迭代二⑥, N-57）：读的开/收 + 三个里程碑帧（出生即
+    # 完成，count 是唯一载荷）。
+    acts = stream.activities
+    searching = [a for a in acts if a.get("key") == "chat.explore.searching"]
+    searching_done = [a for a in acts if a.get("key") == "chat.explore.searchingDone"]
+    check(
+        searching and all(a["status"] == "active" for a in searching),
+        "search_transcript opens chat.explore.searching (active)",
+        acts,
+    )
+    check(
+        searching_done and all(a["status"] == "completed" for a in searching_done),
+        "the read settles as chat.explore.searchingDone (completed)",
+        acts,
+    )
+    for key in ("candidatesReady", "selectsReady", "plansReady"):
+        frames = [a for a in acts if a.get("key") == f"chat.explore.{key}"]
+        check(
+            len(frames) == 1
+            and frames[0]["kind"] == "draft"
+            and frames[0]["status"] == "completed"
+            and isinstance(frames[0].get("count"), int)
+            and frames[0]["count"] >= 1,
+            f"the {key} milestone lands born-completed with its count",
+            acts,
+        )
+
+    # ── 决策包 dock（迭代二③, ADR-089 §4 R16）─────────────────────────────
+    dock_msg = stream.completed["assistant_message"]
+    check(is_plan_dock(dock_msg), "the discovery chain docks the decision package", dock_msg)
+    question = dock_msg["question"]
+    plans_payload = question.get("plans") or []
+    check(plans_payload, "the dock carries the plans reading layer", question)
+    check(
+        all(p.get("plan_id") and "title" in p and p.get("outputs") for p in plans_payload),
+        "every plan row carries plan_id / title / outputs",
+        plans_payload,
+    )
+    intent_dump = dock_msg.get("intent") or {}
+    dock_tools = [t.get("tool") for t in intent_dump.get("tasks") or []]
+    check(
+        "cut_segments" in dock_tools and "write_post" in dock_tools,
+        "the compiled chain = cut_segments + write_post (R12 编译移出 LLM)",
+        dock_tools,
+    )
+    check(
+        "select_clips" not in dock_tools,
+        "the compiler never emits select_clips (the execution world has no "
+        "second discoverer)",
+        dock_tools,
+    )
+    check("estimate_credits" in question, "the quote rides the dock (费用语义)", question)
+    check("derived" in question, "the derived preview rides the dock", question)
+
+    # ── 探索三族出生，一条 journey（迭代一⑤ 的生产侧复证）─────────────────
+    async with AsyncSessionLocal() as db:
+        explore_rows = list(
+            (
+                await db.execute(
+                    select(GraphNode).where(
+                        GraphNode.project_id == project_uuid,
+                        GraphNode.type == "exploration",
+                    )
+                )
+            ).scalars().all()
+        )
+        kinds = {r.spec.get("exploration_kind") for r in explore_rows}
+        check(
+            {"candidate_set", "select", "content_plan"} <= kinds,
+            "the exploration three families are born",
+            kinds,
+        )
+        journey_ids = {str(r.journey_id) for r in explore_rows}
+        check(len(journey_ids) == 1, "the whole chain rides ONE journey", journey_ids)
+        journeys = int(
+            (
+                await db.execute(
+                    select(func.count())
+                    .select_from(Journey)
+                    .where(Journey.project_id == project_uuid)
+                )
+            ).scalar_one()
+        )
+        check(journeys == 1, "exactly one Journey row", journeys)
+    db_plan_ids = {
+        str(r.id) for r in explore_rows if r.spec.get("exploration_kind") == "content_plan"
+    }
+    check(
+        {p["plan_id"] for p in plans_payload} == db_plan_ids,
+        "the dock's plan ids == the canvas's content_plan rows",
+        (plans_payload, [str(r.id) for r in explore_rows]),
+    )
+
+    # 恢复路复证（plans 双座的第二座）：pending_question 直读 plans。
+    conv = await ctx.conversation(pid)
+    check(conv.status_code == 200, "the conversation reads back", conv.text)
+    pending = conv.json().get("pending_question") or {}
+    check(
+        (pending.get("question") or {}).get("plans"),
+        "the restore path's pending_question carries plans (pending_brief 座)",
+        pending,
+    )
+
+    # ── 确认 → run 出生 → Confirmed Scope Snapshot（迭代二④, R20）──────────
+    res = await ctx.answer(dock_msg["id"], {"kind": "start"})
+    check(res.status_code == 200, "dock Start answers the decision package", res.text)
+    run_id = res.json()["answered_question"].get("workflow_run_id")
+    check(run_id, "a run was born on Start", res.json())
+
+    run_ctx = (await run_row(run_id))["context"]
+    scope = run_ctx.get("confirmed_scope") or {}
+    check(bool(scope), "the run carries the Confirmed Scope Snapshot", run_ctx)
+    check(
+        scope.get("confirmation_id") == dock_msg["id"],
+        "confirmation_id = the docked message (确认点可追)",
+        scope,
+    )
+    check(bool(scope.get("confirmed_at")), "confirmed_at stamped", scope)
+    check(
+        scope.get("confirmed_via") == "dock_pill",
+        "confirmed_via = dock_pill (typed Start 座位)",
+        scope,
+    )
+    check(
+        {p.get("plan_id") for p in scope.get("plans") or []}
+        == {p["plan_id"] for p in plans_payload},
+        "the snapshot's plans = the docked reading layer",
+        scope,
+    )
+    check(
+        [t.get("tool") for t in scope.get("compiled_scope") or []] == dock_tools,
+        "the snapshot's compiled_scope = the chain the run was born with",
+        (scope.get("compiled_scope"), dock_tools),
+    )
+    check(
+        scope.get("quote") == question.get("estimate_credits"),
+        "the snapshot's quote = the quote shown at confirm time",
+        (scope.get("quote"), question.get("estimate_credits")),
+    )
+
+    # ── 产物落地（真渲染 + 真 writer）──────────────────────────────────────
+    final = await wait_run_terminal(run_id, timeout=600.0)
+    check(final == "completed", "the discovery run completes", final)
+    clips = await outputs_of(pid, "clip")
+    check(len(clips) >= 1, "cut_segments' clip output lands", len(clips))
+    posts = await outputs_of(pid, "post")
+    check(len(posts) >= 1, "the post output lands", len(posts))
+
+
 SCENARIOS = {
     "S1": s1_bare_wish_full_journey,
     "S2": s2_skipped_topic_ask_drafts_from_persona,
@@ -4389,6 +4620,7 @@ SCENARIOS = {
     "S21": s21_checkpoint_channel_observation,
     "S22": s22_trigger_landing_silence,
     "S23": s23_exploration_chain_lands_on_canvas,
+    "S-explore-2": s_explore_2_decision_package_to_confirmed_scope,
 }
 
 
