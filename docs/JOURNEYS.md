@@ -1,6 +1,6 @@
 # Journeys — 用户旅程母文档
 
-> Status: 活跃（2026-09-14 建，需求模拟四轮讨论的沉淀；拍板 = ADR-077/078；**2026-09-16 状态翻新**：T2 读工具族 / T3 触发回合+收官 reviewer / T5 decompiler 均已落地，原 🚧 标记按代码现状翻 ✅；残留 🚧 = op 覆盖度与 B4 镜头跟随；**2026-09-22 旅程四收敛**：发现型目标的 Agent 工作循环 11 拍全绿（R1~R26 台账），拍板落档 = ADR-088/089；**同日迭代一落地**：旅程四拍 2~5a 对象层 ✅（探索三族 + 探索写门 + 证据 reads + 画布三卡面 + S23 剧本），Activity 穿插 / R6 路由 / 编译器 / 修订回路 📋 迭代二三）
+> Status: 活跃（2026-09-14 建，需求模拟四轮讨论的沉淀；拍板 = ADR-077/078；**2026-09-16 状态翻新**：T2 读工具族 / T3 触发回合+收官 reviewer / T5 decompiler 均已落地，原 🚧 标记按代码现状翻 ✅；残留 🚧 = op 覆盖度与 B4 镜头跟随；**2026-09-22 旅程四收敛**：发现型目标的 Agent 工作循环 11 拍全绿（R1~R26 台账），拍板落档 = ADR-088/089；**同日迭代一落地**：旅程四拍 2~5a 对象层 ✅（探索三族 + 探索写门 + 证据 reads + 画布三卡面 + S23 剧本）；**2026-09-23 迭代二落地**：拍 0 R6 路由 / 拍 2~3 Activity 穿插 / 拍 5 生产座位 / 拍 6 编译器+决策包+快照+R15 停顿全 ✅（合同 `tasks/agent-working-loop-iter-2.md`；唯一挂账 = LLM 驱动面 live 验证待 MiniMax 配额）；残留 📋 迭代三 = 拍 4 插话换选 / 拍 8 收官 reviewer / 拍 9 修订回路收口 / 拍 10 记忆）
 > 本文是**用户旅程的唯一事实源**：以「用户此刻感知到什么」为骨架的需求模拟。架构文档描述「系统是什么」，本文描述「用户经历什么」——技术评审时倒查：这个改动让哪条旅程的哪一拍变好？
 > 治理规则：① 新功能开工先答「你在哪条旅程的哪一拍」；② 缺口从旅程登记进 `PROGRESS.md` 需求池（本文不记排期）；③ 旅程只描述感知与分支，实现细节指针到架构文档；④ 旅程的新增/修订 = 需求模拟讨论的产品产出，修订时全量改写为现在时。
 
@@ -62,15 +62,15 @@
 
 | 拍 | 用户感知 | 系统支撑 | 状态 |
 |---|---|---|---|
-| 0. 目标抵达 | agent 复述目标后**直接开始干活**（「我先看看素材和内容」）——无 dock、无任务清单复述 | 意图路由识别**发现型目标**（R6：实现空间未定 → 探索链；范围清晰的干脆请求走既有短路径） | 📋 ADR-088 §9 |
+| 0. 目标抵达 | agent 复述目标后**直接开始干活**（「我先看看素材和内容」）——无 dock、无任务清单复述 | 意图路由识别**发现型目标**（R6：实现空间未定 → 探索链；范围清晰的干脆请求走既有短路径） | ✅ 迭代二（R6 生产接线：EXPLORATION_TOOLS 入 intent_router 工具集 + 判定段 prompt + prompt_gate 探针 D，2026-09-23；live 复跑待配额） |
 | 1. 理解/索引 | 转写节点出生即 loading → done | understand 链，内容寻址复用 | ✅ 既有 |
-| 2. 搜索候选 | Activity「Searching… / Found 14 relevant sections」→ 画布长**候选合集节点**（默认折叠，展开 = 14 段时间区间 + 一句话摘录） | `search_transcript`（确定性检索 read）+ `get_segment` 精读 → 终态 `propose_candidates`（探索写门）；**R1 合集律**：可见粒度服务「用户纠正 Agent」，不铺 14 张独立卡 | 🚧 迭代一 ✅（reads + 写门 + 合集卡，2026-09-22）；Activity / R6 路由 📋 迭代二三 |
-| 3. 评估 | Activity「Comparing 14 candidates…」 | LLM 逐段判完整性（时长/边界 = 代码算）；**R3：理由 = artifact 属性**（结论 + 证据指针），reasoning 永不持久化 | 🚧 迭代一 ✅（写门证据校验三牙）；Activity 📋 迭代二三 |
+| 2. 搜索候选 | Activity「Searching… / Found 14 relevant sections」→ 画布长**候选合集节点**（默认折叠，展开 = 14 段时间区间 + 一句话摘录） | `search_transcript`（确定性检索 read）+ `get_segment` 精读 → 终态 `propose_candidates`（探索写门）；**R1 合集律**：可见粒度服务「用户纠正 Agent」，不铺 14 张独立卡 | ✅ 迭代一（reads + 写门 + 合集卡，2026-09-22）+ 迭代二（Activity = `chat.explore.searching`/`searchingDone` + `candidatesReady` 里程碑带 count，R6 路由，2026-09-23） |
+| 3. 评估 | Activity「Comparing 14 candidates…」 | LLM 逐段判完整性（时长/边界 = 代码算）；**R3：理由 = artifact 属性**（结论 + 证据指针），reasoning 永不持久化 | ✅ 迭代一（写门证据校验三牙）+ 迭代二（`selectsReady` 里程碑，2026-09-23） |
 | 4. 精选 | 画布长 3 个精选节点（各带一句理由）；**用户可随时插话换选**（「第 2 个换第 5 个」——免费、秒级、零仪式） | 终态 `propose_selects`（探索写门）；**R7：Select = 证据引用**，不复制源 | 🚧 迭代一 ✅（写门 + 精选卡）；插话换选 📋 迭代三 |
-| 5. 结构化方案 | 3 个方案节点（draft 虚线）：区间 + 字幕样式 + 语言版本 + 文案草稿 | 终态 `propose_plans`；**R9：persona/默认在 Structure 注入**，不参与选段；**R8：Content Plan ≠ Task** | 🚧 迭代一 ✅（写门 + 方案卡 draft 虚线） |
+| 5. 结构化方案 | 3 个方案节点（draft 虚线）：区间 + 字幕样式 + 语言版本 + 文案草稿 | 终态 `propose_plans`；**R9：persona/默认在 Structure 注入**，不参与选段；**R8：Content Plan ≠ Task** | ✅ 迭代一（写门 + 方案卡 draft 虚线）+ 迭代二（生产座位 = `_propose_plans`：预检编译 → 写门 → 决策包 dock，`plansReady` 里程碑，2026-09-23） |
 | 5a. 方案自检 | Activity「Verifying the 3 plans… ✓」 | 确定性完整性检查（区间/语言/产出类型/字幕/文案/必填输入）；artifact state `draft → ready` | ✅ 迭代一（写门内完整性自检，2026-09-22） |
-| 6. 编译·报价·确认 | 散文收官（3 方案的产品语言 + 总价 + 费用语义）→ **停**——dock pill 或回「开工」，同一座 | **R12 编译移出 LLM**：Content Plan → 确定性编译器 → draft 执行链（ADR-057 K5 形态零改）→ quote=fold → **决策包**（R16）；**R15 停顿定律首次触发** | 📋 ADR-089 §1~5 |
-| 7. 付费执行 | 节点状态周期 + 打勾流动态行（既有零改）；**R18 同框纪律**：探索族退背景（合集自动折叠可审计）、执行族独占运动，plan 节点永不镜像 running | create_run 唯一出生地 + Start 四合取 + hold→capture（全部既有） | ✅ 既有 |
+| 6. 编译·报价·确认 | 散文收官（3 方案的产品语言 + 总价 + 费用语义）→ **停**——dock pill 或回「开工」，同一座 | **R12 编译移出 LLM**：Content Plan → 确定性编译器 → draft 执行链（ADR-057 K5 形态零改）→ quote=fold → **决策包**（R16）；**R15 停顿定律首次触发** | ✅ 迭代二（2026-09-23）：编译器 `scope_compile` 纯函数 + R14 双门预检（不可编译包零写入）+ 决策包 dock（plans 阅读层 + 编译链证据 + quote）+ R20 Confirmed Scope Snapshot（`run.context.confirmed_scope` 五字段，销 P0-①）+ R15 停顿（propose_plans/revise_plan 终态） |
+| 7. 付费执行 | 节点状态周期 + 打勾流动态行（既有零改）；**R18 同框纪律**：探索族退背景（合集自动折叠可审计）、执行族独占运动，plan 节点永不镜像 running | create_run 唯一出生地 + Start 四合取 + hold→capture（全部既有） | ✅ 既有；迭代二加固 = 确认即快照（confirmed_scope 盖戳在出生地成功之后，拒收的 Start 永不留快照） |
 | 8. 收官验证 | reviewer 散文 verdict + 建议 pills；scope 内问题自治修，scope 外只提建议 | trigger turn（run 完成白名单，ADR-077 §3 既有）；**B7 结案（R21）**：自检 = 确定性 verify + plan 意图比对，「够不够精彩」归用户纠正；**R22：pill = expansion 提案唯一出口** | 📋 ADR-088 §8 |
 | 9. 修订 | 「plan 2 的字幕太长了」→ agent 说产品语义（不见 UUID/wiring），自治重渲染零仪式；「plan 2 改德语」→ 新决策包（只含变化 + 价差）→ 重确认 | **R19 修订两分律**：唯一判据 = 结果执行范围 ⊆ 已批准范围（scope classifier 裁决，agent 永不自封 continuation）；**R20：Confirmed Scope Snapshot = 修订路由器** | 📋 ADR-089 §4/§6 |
 | 10. 新主题 | 「再挑两条关于募资的，照上次的样子」→ 主链原样重跑；上次的候选/精选/方案/产物可回查 | **R23 记忆分层**（事实可复用 / 判断不迁移）；**R26 前作 exemplar**（ADR-078 第四参数源座位）；**R25 反专断**：纠正 = 事实非偏好，升格需显式授权 | 📋 ADR-088 §10 |

@@ -1,6 +1,6 @@
 # Agent Working Loop 迭代二：能力编译层 + 决策包/快照 + R6 路由——主链 e2e 首通
 
-> Status: **逐项拍板施工中（2026-09-23）**——① 已拍板并落地（cut_segments + llm_visible 公民轴 + PlanOutput 三缺口，branch `feat/cut-segments`）；②~⑦ 待拍板。拍板项见 §3。
+> Status: **已落地（2026-09-23）**——①~⑦ + §4.1 编译器 + §4.9 S-explore-2 全部落地（branch `feat/cut-segments`）。唯一挂账 = LLM 驱动面（prompt_gate 探针 D live 跑 + S-explore-2 live e2e）未跑验证：MiniMax 配额 429 硬前提未满足，配额恢复后复跑。拍板项见 §3。
 > 母合同 = ADR-089（§1 编译移出 LLM / §2 编译合同 / §3 编译器座位 / §4 决策包与快照 / §5 停顿定律 / §6 修订分类 / §7 报价站 artifact 事实 / §8 迁移弧）+ ADR-088 §9（R6 发现型路由）+ JOURNEYS 旅程四拍 0、6、7。迭代一（`tasks/agent-working-loop-iter-1.md`）已落地承重：探索三族 + 写门 + 证据 reads + EXPLORATION_TOOLS（harness 级）+ 画布三卡面 + S23。
 
 ## 1. 三次迭代切分（承接，用户拍板 2026-09-22）
@@ -8,7 +8,7 @@
 | 迭代 | 内容 | 状态 |
 |---|---|---|
 | 一 | 探索产物族数据面 + 画布呈现 + S23 剧本 | ✅ 已落地（唯一挂账 = S23 LLM 三拍未跑，MiniMax 配额） |
-| **二（本批）** | 编译器（Content Plan → Execution Scope）+ 决策包 + Confirmed Scope Snapshot（销 P0-①）+ R6 发现型路由（EXPLORATION_TOOLS 生产接线）+ work session 活动视图 + R15 停顿 + revise_plan（重编译→重报价→重确认）→ **主链 e2e 首次全通** | 逐项拍板施工中（① ✅ 2026-09-23） |
+| **二（本批）** | 编译器（Content Plan → Execution Scope）+ 决策包 + Confirmed Scope Snapshot（销 P0-①）+ R6 发现型路由（EXPLORATION_TOOLS 生产接线）+ work session 活动视图 + R15 停顿 + revise_plan（重编译→重报价→重确认）→ **主链 e2e 首次全通** | ✅ 已落地（2026-09-23；唯一挂账 = LLM 驱动面未跑验证，MiniMax 配额） |
 | 三 | revise_output + R19 两分律接线 + R20 快照修订路由器 + reviewer 合同 + 记忆读取律 + 迁移弧收口 + 活动行呈现升级 + 终态对标验收 | 后续 |
 
 ## 2. 开工裁决承接（迭代一复述，本批承重）
