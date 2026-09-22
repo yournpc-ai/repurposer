@@ -4035,6 +4035,336 @@ async def s22_trigger_landing_silence(ctx: Ctx) -> None:
     )
 
 
+# ── S23 探索族全链（ADR-088 §2, Agent Working Loop 迭代一）────────────────────
+#
+# The harness composes its own loop (the prompt_gate precedent): the
+# exploration terminal verbs + the evidence reads, turn-faithful — one
+# terminal call per loop (拍 2/3: candidates → 拍 4: selects → 拍 5: plans),
+# the harness carrying the previous beat's ids from the DB (in production
+# they ride the observations + the graph context). The deterministic tail
+# locks the graph face (lane / rank-blind / zero edges / journey ownership),
+# the execution door's I-EXPLORE-01 rejection, idempotent replay, and the
+# no-timeline asset's honest degradation.
+
+_S23_SENTENCES = [
+    (0.0, "Welcome back to the founder notes."),
+    (6.0, "Today I answer the question everyone asks."),
+    (12.0, "Our pricing is simple."),
+    (15.0, "The pro tier costs ten dollars a month."),
+    (21.0, "You can start free and upgrade when the team grows."),
+    (28.0, "Let me switch gears to the roadmap."),
+    (34.0, "Every pricing tier includes the analytics dashboard."),
+    (41.0, "That is the whole announcement for this week."),
+]
+
+
+def _s23_words() -> list[dict]:
+    words: list[dict] = []
+    for line_start, sentence in _S23_SENTENCES:
+        t = line_start
+        for w in sentence.split():
+            words.append({"word": w, "start": round(t, 2), "end": round(t + 0.4, 2)})
+            t += 0.5
+    return words
+
+
+_S23_SYSTEM = (
+    "You are the Repurposer discovery agent. You work in beats, one "
+    "proposal per reply:\n"
+    "1. Search the transcript for the user's topic (search_transcript), "
+    "then read the exact ranges with get_segment.\n"
+    "2. Land ONE candidate collection with propose_candidates — every "
+    "excerpt must be the VERBATIM words inside its own range (you read "
+    "them with get_segment; the door rejects anything not actually said "
+    "there).\n"
+    "3. When asked, land your picks with propose_selects (a verdict and a "
+    "one-line reason each).\n"
+    "4. When asked, land the content plan with propose_plans.\n"
+    "Speak one short sentence before each proposal call."
+)
+
+
+async def s23_exploration_chain_lands_on_canvas(ctx: Ctx) -> None:
+    """探索族全链（ADR-088 §2, 迭代一 §8）：harness 组 EXPLORATION_TOOLS +
+    证据 reads 三拍驱动 → 三族出生 / journey 归属 / rank 盲 / 零边 / 车道帧；
+    确定性尾 = I-EXPLORE-01 执行门拒收 + 幂等重放 + 无时间轴降级诚实。"""
+    from app.agents.tool_loop import ToolLoopAgent
+    from app.chat.exploration_tools import (
+        EXPLORATION_TOOLS,
+        execute_exploration_tool,
+    )
+    from app.chat.perception import (
+        SearchTranscriptParams,
+        perception_chat_tools,
+        run_perception_tool,
+    )
+    from app.pipeline.exploration_store import KIND_CANDIDATE_SET
+    from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
+    from app.models.tables import GraphNode, Journey
+
+    pid = await ctx.new_project("S23 exploration chain")
+    project_uuid = uuid.UUID(pid)
+    asset_id = await seed_asset(
+        pid, ctx.user_id, AssetType.VIDEO, "explore-talk.mp4",
+        extracted_text=" ".join(s for _, s in _S23_SENTENCES),
+        meta={
+            "words": _s23_words(),
+            "speaker_map": {"turns": [{"start": 0.0, "end": 48.0, "speaker": "host"}]},
+            "language": "en",
+        },
+        processed=True,
+    )
+
+    async with AsyncSessionLocal() as db:
+        project = (
+            await db.execute(select(Project).where(Project.id == project_uuid))
+        ).scalar_one()
+
+        async def execute(name: str, params, prose: str):
+            """The harness's execute seat: reads answer with observations;
+            a door rejection feeds back as the loop echo (the agent reads
+            and retries); a landed proposal accepts the terminal (the
+            turn-faithful beat boundary)."""
+            if name in PERCEPTION_TOOLS:
+                return await run_perception_tool(db, project, name, params)
+            text = await execute_exploration_tool(
+                db, project, name, params.model_dump() if params else {}
+            )
+            if text.startswith("The door rejected"):
+                return text
+            await db.commit()  # the door is flush-only — the caller commits
+            return None
+
+        agent = ToolLoopAgent(
+            name="scenario_s23_explore",
+            # The harness's prompt carrier (the _probe_agent precedent):
+            # chat_intent.j2 renders context_text + message verbatim — the
+            # harness's system text carries the beats instead.
+            prompt="chat_intent.j2",
+            system=_S23_SYSTEM,
+            assemble=lambda message: (
+                {"context_text": "", "message": message},
+                [],
+            ),
+            tools=[
+                *EXPLORATION_TOOLS.values(),
+                *perception_chat_tools(
+                    "search_transcript", "get_segment", "get_asset", "get_understanding"
+                ),
+            ],
+            temperature=0.2,
+            max_iterations=10,
+        )
+
+        # 拍 2/3 — search → read → ONE candidate collection on the canvas.
+        r1 = await agent.call_loop(
+            execute,
+            message=(
+                "Search my talk for the pricing sections, read them, and put "
+                "ONE candidate collection on the canvas. My goal: pricing "
+                "clips for my launch post."
+            ),
+        )
+        check(
+            r1.tool_name == "propose_candidates",
+            "拍 2/3 terminal = propose_candidates",
+            r1.tool_name,
+        )
+        candidate_set = (
+            await db.execute(
+                select(GraphNode).where(
+                    GraphNode.project_id == project_uuid,
+                    GraphNode.type == "exploration",
+                    GraphNode.spec["exploration_kind"].as_string() == KIND_CANDIDATE_SET,
+                )
+            )
+        ).scalar_one()
+        check(
+            candidate_set.journey_id is not None,
+            "the chain's journey minted",
+            candidate_set.id,
+        )
+        journey_id = str(candidate_set.journey_id)
+
+        # 拍 4 — evaluate → selects with verdicts (journey rides from the set).
+        r2 = await agent.call_loop(
+            execute,
+            message=(
+                f"The candidate set {candidate_set.id} is on the canvas. "
+                "Evaluate its members and land your selects — each with a "
+                "verdict and a one-line reason."
+            ),
+        )
+        check(r2.tool_name == "propose_selects", "拍 4 terminal = propose_selects", r2.tool_name)
+        selects = (
+            (
+                await db.execute(
+                    select(GraphNode).where(
+                        GraphNode.project_id == project_uuid,
+                        GraphNode.type == "exploration",
+                        GraphNode.spec["exploration_kind"].as_string() == "select",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        check(len(selects) >= 1, "selects landed", len(selects))
+
+        # 拍 5 — structure → a ready content plan.
+        r3 = await agent.call_loop(
+            execute,
+            message=(
+                f"Structure what I get from select {selects[0].id} as a "
+                "content plan — I want a short clip and a post in English."
+            ),
+        )
+        check(r3.tool_name == "propose_plans", "拍 5 terminal = propose_plans", r3.tool_name)
+        plans = (
+            (
+                await db.execute(
+                    select(GraphNode).where(
+                        GraphNode.project_id == project_uuid,
+                        GraphNode.type == "exploration",
+                        GraphNode.spec["exploration_kind"].as_string() == "content_plan",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        check(len(plans) >= 1, "content plans landed", len(plans))
+        check(
+            all(p.state == "ready" for p in plans),
+            "plans self-check to ready (complete outputs, no issues)",
+            [(str(p.id), p.state, p.spec.get("issues")) for p in plans],
+        )
+        chain_nodes = [candidate_set, *selects, *plans]
+        check(
+            all(str(n.journey_id) == journey_id for n in chain_nodes),
+            "the whole chain rides ONE journey (R24 ownership, never an edge)",
+            [(str(n.id), str(n.journey_id)) for n in chain_nodes],
+        )
+
+        # ── Deterministic tail ───────────────────────────────────────────
+        # I-EXPLORE-01: the execution door rejects exploration nodes.
+        for ops in (
+            [{"op": "run", "nodes": [str(candidate_set.id)]}],
+            [{"op": "delete_node", "node": str(selects[0].id)}],
+            [{"op": "connect", "from_node": str(candidate_set.id), "to_node": str(selects[0].id)}],
+        ):
+            try:
+                await apply_wiring_ops(db, project_uuid, ops)
+            except WiringRejected:
+                pass
+            else:
+                raise ScenarioFailure(f"I-EXPLORE-01: the wiring door accepted {ops}")
+
+        # Idempotent replay: identical call → the SAME artifact, no twin.
+        idem_args = {
+            "asset_id": asset_id,
+            "topic": "pricing",
+            "goal": "s23 idempotency probe",
+            "members": [
+                {
+                    "start": 12.0,
+                    "end": 18.9,
+                    "excerpt": "Our pricing is simple. The pro tier costs ten dollars a month.",
+                    "speaker": "host",
+                }
+            ],
+        }
+        first = await execute_exploration_tool(db, project, "propose_candidates", dict(idem_args))
+        await db.commit()
+        second = await execute_exploration_tool(db, project, "propose_candidates", dict(idem_args))
+        await db.commit()
+        id_of = lambda text: re.search(r"candidate_set_id: ([0-9a-f-]{36})", text).group(1)  # noqa: E731
+        check(
+            id_of(first) == id_of(second),
+            "idempotent replay returns the existing artifact",
+            (first, second),
+        )
+
+        # 无时间轴降级: an asset without words is an honest door rejection
+        # and the reads say so — never a fabricated range.
+        bare_asset_id = await seed_asset(
+            pid, ctx.user_id, AssetType.VIDEO, "explore-bare.mp4",
+            extracted_text="A talk without word-level timestamps.",
+            meta={"language": "en"},
+            processed=True,
+        )
+        obs = await run_perception_tool(
+            db, project, "search_transcript",
+            SearchTranscriptParams(query="pricing", asset_id=uuid.UUID(bare_asset_id)),
+        )
+        check(
+            "timeline-ready" in obs.text or "word-level" in obs.text,
+            "the no-timeline read is an honest empty, never a fabricated hit",
+            obs.text,
+        )
+        rejected = await execute_exploration_tool(
+            db, project, "propose_candidates",
+            {**idem_args, "asset_id": bare_asset_id, "goal": "s23 degradation probe"},
+        )
+        check(
+            rejected.startswith("The door rejected"),
+            "exploration on a wordless asset is a door rejection",
+            rejected,
+        )
+        await db.commit()
+
+        journeys = int(
+            (
+                await db.execute(
+                    select(func.count())
+                    .select_from(Journey)
+                    .where(Journey.project_id == project_uuid)
+                )
+            ).scalar_one()
+        )
+        check(
+            journeys == 2,
+            "chain journey + idem-probe journey — adopt never mints twins "
+            "(rejected calls never mint)",
+            journeys,
+        )
+
+    # ── The graph face (画布响应形状 — ADR-057 直读零投影) ─────────────────
+    graph = await ctx.graph(pid)
+    explore_nodes = [n for n in graph["nodes"] if n["type"] == "exploration"]
+    check(
+        len(explore_nodes) >= 4,
+        "the chain's three nodes + the idem-probe set ride the graph",
+        len(explore_nodes),
+    )
+    kinds = {n["spec"].get("exploration_kind") for n in explore_nodes}
+    check(
+        kinds == {"candidate_set", "select", "content_plan"},
+        "all three exploration kinds born",
+        kinds,
+    )
+    check(
+        all(n.get("rank") is None for n in explore_nodes),
+        "I-EXPLORE-01: product_ranks is blind to exploration nodes",
+        [(n["id"], n.get("rank")) for n in explore_nodes],
+    )
+    check(
+        all(n.get("journey_id") for n in explore_nodes),
+        "R24: every exploration node carries its journey ownership",
+        [n["id"] for n in explore_nodes],
+    )
+    check(
+        all(int(n["layout"]["x"]) == -464 for n in explore_nodes),
+        "the family's lane sits one pitch left of the island column",
+        [n["layout"] for n in explore_nodes],
+    )
+    touching = [
+        e for e in graph["edges"]
+        if {e["from_node"], e["to_node"]} & {n["id"] for n in explore_nodes}
+    ]
+    check(not touching, "I-EXPLORE-01: zero edges touch exploration nodes", touching)
+
+
 SCENARIOS = {
     "S1": s1_bare_wish_full_journey,
     "S2": s2_skipped_topic_ask_drafts_from_persona,
@@ -4058,6 +4388,7 @@ SCENARIOS = {
     "S20": s20_speech_semantic_contract,
     "S21": s21_checkpoint_channel_observation,
     "S22": s22_trigger_landing_silence,
+    "S23": s23_exploration_chain_lands_on_canvas,
 }
 
 
