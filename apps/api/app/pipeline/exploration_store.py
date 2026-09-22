@@ -45,7 +45,7 @@ import re
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -97,6 +97,8 @@ class CandidateMember(BaseModel):
     to the transcript (ADR-088 §2). ``speaker`` is best-effort (audio
     assets carry no speaker_map — ADR-045 D4)."""
 
+    model_config = ConfigDict(extra="forbid")
+
     start: float
     end: float
     excerpt: str
@@ -106,6 +108,8 @@ class CandidateMember(BaseModel):
 class CandidateSetSpec(BaseModel):
     """R1 合集律: the set is ONE artifact (collapsed by default, expandable)
     — never N independent cards (the canvas density law)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     prototype: Literal["exploration"] = EXPLORATION_PROTOTYPE
     exploration_kind: Literal["candidate_set"] = KIND_CANDIDATE_SET
@@ -119,6 +123,8 @@ class SelectSpec(BaseModel):
     """R7 证据引用: the Select points at its evidence (candidate set +
     member index) and never copies the source; R3: the reason is an
     ATTRIBUTE (verdict + one user-safe line) — reasoning never persists."""
+
+    model_config = ConfigDict(extra="forbid")
 
     prototype: Literal["exploration"] = EXPLORATION_PROTOTYPE
     exploration_kind: Literal["select"] = KIND_SELECT
@@ -134,6 +140,8 @@ class PlanOutput(BaseModel):
     user gets — language / captions / a per-output brief; never task
     params, R8)."""
 
+    model_config = ConfigDict(extra="forbid")
+
     kind: Literal["clip", "post", "article", "quotes", "carousel"]
     language: str | None = None
     caption_mode: str | None = None
@@ -145,6 +153,8 @@ class ContentPlanSpec(BaseModel):
     we will make this Select into content" (source range via the Select
     reference / outputs / persona ref — R9: persona is injected at
     Structure time, never during candidate evaluation)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     prototype: Literal["exploration"] = EXPLORATION_PROTOTYPE
     exploration_kind: Literal["content_plan"] = KIND_CONTENT_PLAN

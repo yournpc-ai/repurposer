@@ -540,7 +540,7 @@ class IntentResult(BaseModel):
 # the plan-path tools, pending_disposition on the chat-path tools.
 
 
-def _tolerate_null_keys(data: Any, *keys: str) -> Any:
+def tolerate_null_keys(data: Any, *keys: str) -> Any:
     """Null-means-skip tolerance (打字机律牙①'s tool form): the model writes
     null when it means to skip a field — dropping the key lets the default
     apply instead of rejecting the call (a rejection burns a loop
@@ -586,7 +586,7 @@ class PlanAskArgs(BaseModel):
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
         return _drop_bad_brief(
-            _tolerate_null_keys(data, "options", "default_path", "slot", "material_text")
+            tolerate_null_keys(data, "options", "default_path", "slot", "material_text")
         )
 
     question: str = Field(
@@ -626,7 +626,7 @@ class PresentPlanArgs(BaseModel):
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
         return _drop_bad_brief(
-            _tolerate_null_keys(
+            tolerate_null_keys(
                 data, "tasks", "specific_instruction", "caption_mode", "tasks_explicit", "name", "material_text"
             )
         )
@@ -671,7 +671,7 @@ class PlanAnswerArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return _drop_bad_brief(_tolerate_null_keys(data, "material_text"))
+        return _drop_bad_brief(tolerate_null_keys(data, "material_text"))
 
     brief: Brief | None = Field(
         default=None,
@@ -693,7 +693,7 @@ class ProposeTasksArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return _tolerate_null_keys(data, "tasks", "name", "specific_instruction")
+        return tolerate_null_keys(data, "tasks", "name", "specific_instruction")
 
     tasks: list[TaskItem] = Field(
         default_factory=list,
@@ -727,7 +727,7 @@ class ApplyEditOpsArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return _tolerate_null_keys(data, "ops")
+        return tolerate_null_keys(data, "ops")
 
     target_output_id: UUID = Field(
         description="The id of the output being edited (from the project's output list / an @-mention).",
@@ -756,7 +756,7 @@ class EditGraphArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return _tolerate_null_keys(data, "ops", "name")
+        return tolerate_null_keys(data, "ops", "name")
 
     ops: list[dict] = Field(
         default_factory=list,
@@ -782,7 +782,7 @@ class ChatAskArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return _tolerate_null_keys(data, "options", "default_path")
+        return tolerate_null_keys(data, "options", "default_path")
 
     question: str = Field(
         description="The ONE question, in the interface language — the bare question, no framing, no default-path tail."
@@ -833,7 +833,7 @@ class WrapUpArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return _tolerate_null_keys(data, "suggestions")
+        return tolerate_null_keys(data, "suggestions")
 
     @field_validator("suggestions")
     @classmethod
