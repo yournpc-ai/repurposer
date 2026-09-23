@@ -1,6 +1,6 @@
 # Agent Working Loop 迭代三：持续工作闭环收口——修订回路 / 收官审计 / 过程可见 / 记忆窄切 + 迁移弧裁决
 
-> Status: **合同简报，待逐项拍板（2026-09-23）**——Product Gate 已拍板（同日）：产品母线 = Discover → Select → Plan → Confirm → Execute → Review → Revise → Discover again 持续工作闭环；四点收口（停顿合同语言 / 决策包可编辑律 / 自治修 P2 / Memory 三分拆）已并入 §1~§2 冻结条。拍板项见 §3（全带推荐答案）；**拍板前不写代码**。
+> Status: **施工中（2026-09-23）**——Product Gate 已拍板（同日）：产品母线 = Discover → Select → Plan → Confirm → Execute → Review → Revise → Discover again 持续工作闭环；四点收口（停顿合同语言 / 决策包可编辑律 / 自治修 P2 / Memory 三分拆）已并入 §1~§2 冻结条。工程拍板 E1~E10 已生效（同日，全部按 §3 推荐答案：E1 CompiledScope 返回对象 / E2 快照 plan_task_map / E3 mark_compiled+supersede-继任双态写者 / E4 revise_output chat 专用终态 / E5 exemplar 事实行注入 / E6 R25 窄门砍出本批 / E7 活动帧只扩 at+duration_ms / E8 chat loop 预算 12 / E9 剧本座 S-explore-3/4/5 / E10 N-58 词族先行）。施工进度：S0 ✅（N-58 登记 + ADR-089 §8 select_clips 裁决销记 + PROGRESS 池挂账）；S1~S9 进行中。
 > 母合同 = 本文 §2 Product Contract v1（P0 Product Gate 产出）+ ADR-088（§3 双状态机 / §8 Reviewer 合同 / §10 项目记忆）+ ADR-089（§4 快照 / §5 停顿定律 / §6 修订分类 / §8 迁移弧）+ JOURNEYS 旅程四拍 3/4/5/6/8/9/10 + PROGRESS §0.1 验收口径。承重既有批：迭代一（`archive/tasks-done/agent-working-loop-iter-1.md`：探索三族 + 写门 + 证据 reads + 画布卡面）+ 迭代二（`tasks/agent-working-loop-iter-2.md`：编译器 + 决策包 + Confirmed Scope Snapshot + R6 路由 + 活动键 + revise_plan，实测全绿）。
 
 ## 1. 主线与冻结条（Product Gate 拍板原文，施工硬约束）

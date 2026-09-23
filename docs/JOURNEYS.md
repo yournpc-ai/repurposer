@@ -106,7 +106,7 @@
 
 **压力测试摘要**：拍 6 接缝——draft 图 K5 / dock pill 唯一座 / G-1 散文同座 / Start 四合取 / D4 结果范围律 / 打字机律 /「只有合法链才进 dock」（B3）/ merge_prior_slots 修订恒胜，全过零改；拍 9 修订回路验收——R12（agent 全程不见 wiring 词汇）/ R16（快照从审计装饰升格为修订基础设施）/ R17（craft 修订 plan 状态不动）/ R15（预授权内不停、新钱必停）。
 
-**挂账**（全部有座）：`select_clips` 存留范围（ADR-PENDING，ADR-089 §8）/ 深度看片复核（PROGRESS 池）/ 常驻自主拨盘（PROGRESS 池）/ Canvas 密度组织学（R24 前提契约已立，PROGRESS 池）。
+**挂账**（全部有座）：零探索退化形态（propose_tasks / select_clips 退役弧，PROGRESS 池——select_clips 存留裁决已落 2026-09-23，ADR-089 §8）/ 深度看片复核（PROGRESS 池）/ 常驻自主拨盘（PROGRESS 池）/ Canvas 密度组织学（R24 前提契约已立，PROGRESS 池）。
 
 ## 体验规格横切（全旅程通用）
 
