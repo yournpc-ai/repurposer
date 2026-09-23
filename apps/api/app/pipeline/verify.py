@@ -420,6 +420,7 @@ class Verify(NodeBase):
                 {
                     "type": o.type,
                     "language": o.language,
+                    "work_id": str(o.work_id),
                     "provenance": o.provenance,
                     "payload": o.payload,
                     "files": o.files or {},
@@ -555,6 +556,10 @@ class Verify(NodeBase):
                 workflow_step_id=executor.id,
                 type=row.get("type") or "clip",
                 language=row.get("language") or "en",
+                # 工作锚随快照轮回 (ADR-091 §2): a restored version continues
+                # its round's work; pre-S1 snapshots lack the key (read
+                # tolerance — the column default mints a fresh work).
+                **({"work_id": UUID(row["work_id"])} if row.get("work_id") else {}),
                 provenance=row.get("provenance") or "generated",
                 payload=row.get("payload") or {},
                 files=files,

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.schemas import RenderStatus, canonical_json_hash
 from app.models.tables import Operation, Output
 from app.operations.registry import OP_REGISTRY, SOURCE_REGISTRY, validate_op
+from app.pipeline.outputs import VersionSwitchRejected, plan_version_switch
 
 logger = logging.getLogger(__name__)
 
@@ -320,6 +321,40 @@ def _repend_after_restore(output: Output, op_name: str) -> None:
         output.render_claim_token = None
         output.render_error = None
         output.render_attempt = 0  # R1 B4a: intent re-pend = new budget (only the crash reap keeps counting)
+
+
+async def restore_archived_version(db: AsyncSession, output_id: UUID) -> Output:
+    """换态 (ADR-091 §2, restore_version 的版本语义): the named ARCHIVED
+    version becomes its work's active row; the work's currently-active
+    sibling archives in the same transaction — 同 work 内至多一 active.
+    Nothing is rebuilt: the row, its files and its operations journal all
+    survived the archive, and a pending-render row re-enters the claim pool
+    simply by becoming visible (the claim gate filters archived rows). The
+    journal-level restore_version (spec undo inside one row) is untouched —
+    this door addresses version ROWS, never specs."""
+    target = await _lock_output(db, output_id)
+    siblings = list(
+        (
+            await db.execute(
+                select(Output)
+                .where(Output.work_id == target.work_id)
+                .where(Output.id != target.id)
+                .with_for_update()
+            )
+        ).scalars().all()
+    )
+    try:
+        demoted = plan_version_switch(target, siblings)
+    except VersionSwitchRejected as e:
+        raise OpRejected(str(e)) from e
+    now = datetime.now(UTC)
+    for row in demoted:
+        row.archived_at = now
+    target.archived_at = None
+    target.updated_at = now
+    await db.commit()
+    await db.refresh(target)
+    return target
 
 
 async def list_operations(db: AsyncSession, output_id: UUID) -> list[Operation]:

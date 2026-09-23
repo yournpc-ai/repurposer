@@ -48,7 +48,13 @@ from app.pipeline.quote_card_stack import (
 from app.pipeline.edges import load_plan_prelude_outputs
 from app.pipeline.graph import NODE_KINDS, NodeBase, estimate_mechanical, token_bounds
 from app.pipeline.morph import render_step_label
-from app.pipeline.outputs import delete_outputs_fk_safe
+from app.pipeline.outputs import (
+    WorkChain,
+    archive_outputs,
+    delete_outputs_fk_safe,
+    next_work_id,
+    partition_by_run,
+)
 from app.pipeline.step_context import _count_words, list_assets
 from app.pipeline.step_display import (
     fill_summary,
@@ -461,6 +467,7 @@ async def _materialize_quote_card_outputs(
     quote_alt_language: str | None = None,
     needs_speaker_frame: bool = False,
     core_idea: str | None = None,
+    work_chain: WorkChain | None = None,
 ) -> list[UUID]:
     """Quote-cards → quote_frame image Outputs + optional motion clip (§2.2).
 
@@ -485,6 +492,7 @@ async def _materialize_quote_card_outputs(
     empty list) — frame cards without their stack are orphan strips and
     are never served standalone, so no partial family is materialized.
     """
+    chain = work_chain or {}
     assets = await list_assets(db, project.id)
     source_video: Asset | None = next(
         (
@@ -574,6 +582,7 @@ async def _materialize_quote_card_outputs(
                 project_id=project.id,
                 workflow_step_id=node.id,
                 type="quote_frame",
+                **next_work_id(chain, "quote_frame"),
                 language=target_language,
                 provenance="real",
                 payload=QuoteFrame(
@@ -603,6 +612,7 @@ async def _materialize_quote_card_outputs(
             project_id=project.id,
             workflow_step_id=node.id,
             type="quote_frame",
+            **next_work_id(chain, "quote_frame"),
             language=target_language,
             provenance="real",
             payload=QuoteFrame(
@@ -639,9 +649,9 @@ async def _materialize_quote_card_outputs(
                 workflow_step_id=node.id,
                 type="clip",
                 language=target_language,
+                **next_work_id(chain, "clip"),
                 provenance="real",
-                payload=ClipPayload(
-                    hook=str(anchor.get("quote", "")),
+                payload=ClipPayload(                    hook=str(anchor.get("quote", "")),
                     title_options=(
                         [str(anchor.get("attribution", ""))]
                         if anchor.get("attribution")
@@ -699,6 +709,7 @@ async def _materialize_quote_card_outputs(
                 workflow_step_id=node.id,
                 type="clip",
                 language=target_language,
+                **next_work_id(chain, "clip"),
                 # Real — the kept video span IS the user's real footage. The
                 # caption text overlay is text, not synthesized visual; matches
                 # select_clips's provenance="real" semantics (slice-of-real).
@@ -788,6 +799,7 @@ async def _materialize_quote_card_outputs(
         workflow_step_id=node.id,
         type="quote_frame",
         language=target_language,
+        **next_work_id(chain, "quote_frame"),
         provenance="real",
         payload=QuoteFrame(
             quote=captions[0].primary,
@@ -817,8 +829,9 @@ async def _sweep_stale_derivative_outputs(
     node: WorkflowStep,
     project: Project,
     derivative_type: DerivativeType,
-) -> None:
-    """Idempotency sweep, sibling-safe (per-slot fan-out).
+) -> WorkChain:
+    """Idempotency sweep, sibling-safe (per-slot fan-out) + 归档不变量
+    (ADR-091 S1).
 
     Same-type outputs produced by THIS run's same-kind nodes are their own
     slots' products — only prior products (other runs' steps, step-less
@@ -826,6 +839,12 @@ async def _sweep_stale_derivative_outputs(
     same WorkflowStep row, and its products are stale by definition) are
     cleared. Two sibling write_post nodes can therefore never delete each
     other's output.
+
+    The clear splits by delivery (ADR-091 §2/§3): THIS run's own attempts
+    are mid-production and stay PHYSICAL deletes; earlier runs' delivered
+    rows are ARCHIVED (their journal / publications / files survive) and
+    their work_ids return as the positional inheritance chain for the
+    newborn outputs (oldest first, per type).
 
     quote-cards §2.2 byproducts (frame cards + the motion clip) die with
     their producer: a quotes re-run replaces the whole family. Scope =
@@ -840,18 +859,27 @@ async def _sweep_stale_derivative_outputs(
         .where(WorkflowStep.run_id == run.id, WorkflowStep.kind == node.kind)
         .scalar_subquery()
     )
-    # FK-safe order lives in the helper (operations/publications die first).
-    await delete_outputs_fk_safe(
-        db,
-        select(Output.id).where(
-            Output.project_id == project.id,
-            Output.type == derivative_type.value,
-            or_(
-                Output.workflow_step_id.is_(None),
-                Output.workflow_step_id == node.id,
-                Output.workflow_step_id.notin_(sibling_step_ids),
-            ),
-        ),
+    doomed = (
+        (
+            await db.execute(
+                select(
+                    Output.id, Output.work_id, Output.workflow_step_id,
+                    Output.type, Output.created_at,
+                )
+                .where(
+                    Output.project_id == project.id,
+                    Output.type == derivative_type.value,
+                    Output.archived_at.is_(None),
+                    or_(
+                        Output.workflow_step_id.is_(None),
+                        Output.workflow_step_id == node.id,
+                        Output.workflow_step_id.notin_(sibling_step_ids),
+                    ),
+                )
+                .order_by(Output.created_at)
+            )
+        )
+        .all()
     )
     if derivative_type == DerivativeType.QUOTES:
         quotes_step_ids = (
@@ -859,18 +887,52 @@ async def _sweep_stale_derivative_outputs(
             .where(WorkflowStep.kind == "write_quotes")
             .scalar_subquery()
         )
-        await delete_outputs_fk_safe(
-            db,
-            select(Output.id).where(
-                Output.project_id == project.id,
-                Output.type.in_(["quote_frame", "clip"]),
-                Output.workflow_step_id.in_(quotes_step_ids),
-                or_(
-                    Output.workflow_step_id == node.id,
-                    Output.workflow_step_id.notin_(sibling_step_ids),
-                ),
-            ),
+        doomed += (
+            (
+                await db.execute(
+                    select(
+                        Output.id, Output.work_id, Output.workflow_step_id,
+                        Output.type, Output.created_at,
+                    )
+                    .where(
+                        Output.project_id == project.id,
+                        Output.type.in_(["quote_frame", "clip"]),
+                        Output.archived_at.is_(None),
+                        Output.workflow_step_id.in_(quotes_step_ids),
+                        or_(
+                            Output.workflow_step_id == node.id,
+                            Output.workflow_step_id.notin_(sibling_step_ids),
+                        ),
+                    )
+                    .order_by(Output.created_at)
+                )
+            )
+            .all()
         )
+    if not doomed:
+        return {}
+    run_step_ids = set(
+        (
+            await db.execute(
+                select(WorkflowStep.id).where(WorkflowStep.run_id == run.id)
+            )
+        ).scalars().all()
+    )
+    physical_ids, archive_ids = partition_by_run(
+        [(r.id, r.work_id, r.workflow_step_id) for r in doomed],
+        run_step_ids,
+    )
+    if archive_ids:
+        await archive_outputs(db, archive_ids)
+    if physical_ids:
+        # FK-safe order lives in the helper (operations/publications die first).
+        await delete_outputs_fk_safe(db, physical_ids)
+    archived_set = set(archive_ids)
+    chain: WorkChain = {}
+    for r in doomed:
+        if r.id in archived_set:
+            chain.setdefault(r.type, []).append(r.work_id)
+    return chain
 
 
 async def _collect_research_brief_texts(db: AsyncSession, run_id: UUID) -> list[str]:
@@ -1125,7 +1187,9 @@ class DerivativeWriterNode(NodeBase):
         # (other runs' steps, step-less rows, or THIS step's own prior
         # attempt — a verify bounce re-runs the same WorkflowStep row) are
         # cleared; sibling same-kind nodes never delete each other's output.
-        await _sweep_stale_derivative_outputs(
+        # 归档不变量 (ADR-091): delivered rows archive, their work_ids ride
+        # back as the newborns' positional inheritance chain.
+        work_chain = await _sweep_stale_derivative_outputs(
             db, run=run, node=node, project=project, derivative_type=derivative_type
         )
 
@@ -1136,6 +1200,7 @@ class DerivativeWriterNode(NodeBase):
             language=target_language,
             provenance="generated",
             payload=validate_output_payload(derivative_type.value, content),
+            **next_work_id(work_chain, derivative_type.value),
         )
         db.add(output)
         await db.flush()
@@ -1171,6 +1236,7 @@ class DerivativeWriterNode(NodeBase):
                     core_idea=(
                         content.get("core_idea") if isinstance(content, dict) else None
                     ),
+                    work_chain=work_chain,
                 )
 
         await fill_summary(

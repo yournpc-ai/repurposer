@@ -35,7 +35,12 @@ from app.pipeline.decompile import (
     skeleton_caption_overrides,
     skeleton_clip_count,
 )
-from app.pipeline.outputs import delete_outputs_fk_safe
+from app.pipeline.outputs import (
+    archive_outputs,
+    delete_outputs_fk_safe,
+    pair_work_inheritance,
+    partition_by_run,
+)
 from app.pipeline.edges import load_plan_prelude_outputs
 from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase, estimate_agent, token_bounds
 from app.pipeline.morph import later_inplace_morph_exists, render_step_label
@@ -298,28 +303,57 @@ class SelectClips(NodeBase):
 
         await set_stage(node.id, "building_specs")
 
-        # Idempotency: clear this project's prior clip outputs before writing new
-        # ones (same semantics as the retired _delete_prior_outputs). Pending
-        # render nodes pointing at the deleted rows are cancelled (skipped).
-        prior_clip_ids = (
+        # Idempotency + 归档不变量 (ADR-091 S1): the wipe splits by delivery
+        # — THIS run's own bounce rounds stay physical (mid-production, no
+        # history rights); earlier runs' DELIVERED clips are archived, never
+        # deleted (their journal / publications / files survive). Pending
+        # render nodes pointing at either set are cancelled (skipped).
+        prior_clips = (
             await db.execute(
-                select(Output.id).where(
-                    Output.project_id == project.id, Output.type == "clip"
-                )
+                select(
+                    Output.id, Output.work_id, Output.workflow_step_id,
+                ).where(
+                    Output.project_id == project.id,
+                    Output.type == "clip",
+                    Output.archived_at.is_(None),
+                ).order_by(Output.created_at)
             )
-        ).scalars().all()
-        if prior_clip_ids:
+        ).all()
+        inheritance: list[UUID | None] = []
+        if prior_clips:
+            run_step_ids = set(
+                (
+                    await db.execute(
+                        select(WorkflowStep.id).where(WorkflowStep.run_id == run.id)
+                    )
+                ).scalars().all()
+            )
+            physical_ids, archive_ids = partition_by_run(prior_clips, run_step_ids)
+            doomed_ids = physical_ids + archive_ids
             await db.execute(
                 _text(
                     "UPDATE workflow_steps SET status = 'skipped', updated_at = now() "
                     "WHERE kind = 'render' AND status = 'pending' "
                     "AND spec->>'output_id' IN :oids"
                 ).bindparams(bindparam("oids", expanding=True)),
-                {"oids": [str(oid) for oid in prior_clip_ids]},
+                {"oids": [str(oid) for oid in doomed_ids]},
             )
-            # FK-safe order lives in the helper (operations/publications die
-            # first — an edited clip carries journaled ops).
-            await delete_outputs_fk_safe(db, prior_clip_ids)
+            if archive_ids:
+                # Positional work chain: the i-th newborn clip continues the
+                # i-th archived clip's work (oldest first).
+                archived_chain = [
+                    (row.id, row.work_id)
+                    for row in prior_clips
+                    if row.id in set(archive_ids)
+                ]
+                inheritance = pair_work_inheritance(
+                    archived_chain, len(plans.clips[:clip_count])
+                )
+                await archive_outputs(db, archive_ids)
+            if physical_ids:
+                # FK-safe order lives in the helper (operations/publications
+                # die first — an edited clip carries journaled ops).
+                await delete_outputs_fk_safe(db, physical_ids)
 
         brand = brand_from_block(brand_cfg)
         brand_ref = persona.id if persona is not None else None
@@ -360,7 +394,7 @@ class SelectClips(NodeBase):
         # morph pends + fans out (skips are rescued by the morph).
         suppressed = await later_inplace_morph_exists(db, run, node)
         output_ids: list[UUID] = []
-        for plan in plans.clips[:clip_count]:
+        for clip_idx, plan in enumerate(plans.clips[:clip_count]):
             segment = plan.to_segment()
             music = await music_from_plan(
                 db,
@@ -414,6 +448,14 @@ class SelectClips(NodeBase):
                 workflow_step_id=node.id,
                 type="clip",
                 language=target_language,
+                # 归档链继承 (ADR-091 §2): a wipe successor continues the
+                # archived clip's work; a fresh slot lets the column default
+                # mint a new work (never pass None explicitly).
+                **(
+                    {"work_id": inheritance[clip_idx]}
+                    if clip_idx < len(inheritance) and inheritance[clip_idx]
+                    else {}
+                ),
                 # birth: no generated track rides yet (ADR-026)
                 provenance="real",
                 payload=ClipPayload(

@@ -3152,6 +3152,11 @@ class OutputResponse(BaseModel):
     type: str
     language: str
     status: str
+    # work/version 两身份 (ADR-091, N-59): work_id = the user-semantic anchor
+    # shared by every version of one work; archived_at NULL = the work's
+    # active version (可空时间戳律 — the read face filters on it).
+    work_id: UUID | None = None
+    archived_at: datetime | None = None
     provenance: str
     payload: dict
     files: dict = Field(default_factory=dict)

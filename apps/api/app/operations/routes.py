@@ -123,6 +123,23 @@ async def apply_output_operations(
     }
 
 
+@router.post("/{output_id}/restore")
+async def restore_output_version(
+    output_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+):
+    """换态 (ADR-091 §2): make this archived version the active row of its
+    work (the work's currently-active version archives). The version-chain
+    door — distinct from the journal's spec-level restore_version."""
+    output = await _get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    try:
+        output = await service.restore_archived_version(db, output.id)
+    except OpRejected as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+    return {"output": _output_json(output)}
+
+
 @router.post("/{output_id}/operations/undo")
 async def undo_output_operation(
     output_id: UUID,

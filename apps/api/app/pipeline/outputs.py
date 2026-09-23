@@ -7,9 +7,10 @@ artifacts (``INTERNAL_OUTPUT_TYPES``, e.g. the plan prelude's material_understan
 into any listing.
 """
 
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
@@ -25,8 +26,98 @@ from app.platform.configs import get_config
 
 
 def visible_outputs_stmt() -> Select:
-    """Base SELECT over user-facing outputs only (internal types excluded)."""
-    return select(Output).where(Output.type.notin_(INTERNAL_OUTPUT_TYPES))
+    """Base SELECT over user-facing outputs only (internal types excluded,
+    archived versions excluded — ADR-091: archived rows stay queryable
+    through the version chain, never in the default user face)."""
+    return select(Output).where(
+        Output.type.notin_(INTERNAL_OUTPUT_TYPES),
+        Output.archived_at.is_(None),
+    )
+
+
+# ---- 归档不变量 (ADR-091, N-59) -----------------------------------------------
+#
+# Wipe points never DELETE delivered products — they archive. The two pure
+# helpers below carry the partition/pairing law so the DB-side callers stay
+# mechanical and the law stays pure-testable.
+
+
+def partition_by_run(
+    rows: list[tuple[UUID, UUID, UUID | None]],
+    run_step_ids: set[UUID],
+) -> tuple[list[UUID], list[UUID]]:
+    """Split doomed rows into (physical, archive) by delivery status.
+
+    ``rows`` = (id, work_id, workflow_step_id) triples. A row produced by a
+    step of the CURRENT run is mid-production (a verify-bounce round — never
+    delivered, ADR-091 §3: no history rights, physical delete). Anything
+    else (an earlier run's delivered row, or a legacy NULL-step row) earns
+    the archive. Returns (physical_ids, archive_ids)."""
+    physical: list[UUID] = []
+    archive: list[UUID] = []
+    for row_id, _work_id, step_id in rows:
+        (physical if step_id in run_step_ids else archive).append(row_id)
+    return physical, archive
+
+
+def pair_work_inheritance(
+    archived: list[tuple[UUID, UUID]],
+    new_count: int,
+) -> list[UUID | None]:
+    """Positional work_id inheritance for a wipe's successors (ADR-091 §2):
+    the i-th newborn continues the i-th archived row's work (oldest first);
+    extra newborns start fresh works (None = the column default fires).
+    ``archived`` = (id, work_id) triples already ordered by created_at."""
+    chain = [work_id for _id, work_id in archived]
+    return [
+        chain[i] if i < len(chain) else None
+        for i in range(new_count)
+    ]
+
+
+async def archive_outputs(db: AsyncSession, ids: list[UUID]) -> None:
+    """The wipe door's archive half: stamp archived_at (the row, its files,
+    its operations journal and its publications all survive — ADR-091 §2).
+    Pending render mirrors of the doomed rows are skipped by the caller's
+    own cancel dance (unchanged); the claim query excludes archived rows."""
+    if not ids:
+        return
+    await db.execute(
+        update(Output)
+        .where(Output.id.in_(ids))
+        .values(archived_at=datetime.now(UTC))
+    )
+
+
+# output type → archived work_ids, oldest first (a sweep's inheritance chain)
+WorkChain = dict[str, list[UUID]]
+
+
+def next_work_id(chain: WorkChain, type_: str) -> dict[str, UUID]:
+    """Pop the positional work anchor for a newborn (ADR-091 §2 positional
+    inheritance); an empty chain = fresh work (the column default mints).
+    Returns a kwargs dict so a birth can ``**next_work_id(...)`` — never
+    pass ``work_id=None`` explicitly (NULL violates NOT NULL)."""
+    ids = chain.get(type_)
+    return {"work_id": ids.pop(0)} if ids else {}
+
+
+class VersionSwitchRejected(Exception):
+    """The 换态 door's domain refusal (target already active / cross-work)."""
+
+
+def plan_version_switch(target, siblings: list) -> list:
+    """Pure law of restore_version 换态 (ADR-091 §2): ``target`` must be an
+    ARCHIVED row of its work; returns the same-work sibling rows to demote
+    (active, not the target — at most one active per work after the swap).
+    Rows are duck-typed (id / work_id / archived_at) so the law stays pure-
+    testable; the DB door stamps the timestamps."""
+    if target.archived_at is None:
+        raise VersionSwitchRejected("output is already its work's active version")
+    return [
+        s for s in siblings
+        if s.work_id == target.work_id and s.archived_at is None and s.id != target.id
+    ]
 
 
 async def list_visible_outputs(

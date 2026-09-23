@@ -231,6 +231,11 @@ async def claim_pending_render(db: AsyncSession) -> UUID | None:
                 select(Output)
                 .where(Output.type == "clip")
                 .where(Output.render_status == RenderStatus.PENDING)
+                # Archived rows never render (ADR-091 §4 认领面): a wipe
+                # archives delivered versions; their pending mirrors were
+                # cancelled by the wipe's own cancel dance, but the claim
+                # gate is the load-bearing fence, not the dance.
+                .where(Output.archived_at.is_(None))
                 .order_by(Output.created_at)
                 .with_for_update(skip_locked=True)
                 .limit(1)

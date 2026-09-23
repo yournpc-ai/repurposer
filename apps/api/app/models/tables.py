@@ -444,6 +444,19 @@ class Output(Base):
     # checked_at}. NULL = never verified (legacy rows / verify-less graphs).
     quality = Column(JSONB, nullable=True)
     publishing = Column(JSONB, nullable=False, default=dict)
+    # work/version 两身份 (ADR-091, N-59): work_id = the work's physical
+    # anchor — born fresh at first birth (the column default), INHERITED by
+    # every recreation of the same logical product (wipe successors /
+    # verify snapshot restores); publication + operations queries anchor
+    # here, so a rerun never orphans them. Legacy rows backfilled work_id=id
+    # (singleton works — their pre-ADR history already evaporated, honest).
+    work_id = Column(UUID(as_uuid=True), nullable=False, default=uuid4, index=True)
+    # 归档不变量 (ADR-091 §2, 可空时间戳律): NULL = active; stamped = archived
+    # (read faces default-filter it; the row + its files + its journal chain
+    # survive — 交付后的产物历史不可销毁，只可归档). Physical delete survives
+    # ONLY for mid-production self-correction (verify bounce rounds — never
+    # delivered, no history rights) and project deletion.
+    archived_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
