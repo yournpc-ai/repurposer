@@ -1,0 +1,7 @@
+{# Markdown speech contract (2026-09-24): assistant prose renders through a
+   markdown renderer (Streamdown) on every chat surface — the model must KNOW
+   its message is markdown, or it improvises literal '•' bullets and glued
+   lines (the capability-answer formatting collapse that birthed this law:
+   enumeration items fused into one paragraph because they were not markdown
+   list lines). One definition, three consumers (intent_router_system /
+   chat_intent_system / trigger_system SPEECH blocks). #}MARKDOWN: your message renders as markdown — write it as markdown. '- ' bullet lines for enumerations: ONE item per line, a blank line before the list. **bold** for a group label or a key term. Never literal '•' / '–' bullets, never two items crammed onto one line. Plain sentences stay plain — markdown carries structure, never decoration: no headings (#), no horizontal rules, no code blocks unless the user asked for code.
