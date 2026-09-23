@@ -42,7 +42,7 @@ Frames are append-only reservations, assigned once at birth.
 import hashlib
 import json
 import re
-from typing import Any, Literal
+from typing import Any, Iterable, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -679,6 +679,61 @@ async def read_journey_plans(
     ]
 
 
+async def read_journey_plan_rows(
+    db: AsyncSession, project_id: UUID, journey_id: UUID
+) -> list[GraphNode]:
+    """The revision money-state discriminator's read (iter-3 S4): EVERY
+    Content Plan row of the journey regardless of state — the settled rows
+    (``compiled``/``superseded``) ARE the post-run signal, so the state
+    filter of ``read_journey_plans`` (the recompile seat's CURRENT-package
+    read) cannot serve here. Pure read, same door-outside posture."""
+    rows = list(
+        (
+            await db.execute(
+                select(GraphNode).where(
+                    GraphNode.project_id == project_id,
+                    GraphNode.type == EXPLORATION_NODE_TYPE,
+                    GraphNode.journey_id == journey_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        n
+        for n in rows
+        if (n.spec or {}).get("exploration_kind") == KIND_CONTENT_PLAN
+    ]
+
+
+# The three money states of a select revision (iter-3 S4, contract §4 S4 /
+# N-58) — judged over the states of the plans RIDING the revised selects:
+PHASE_PRE_DOCK = "pre_dock"  # no riding plan row — pure door revision, zero ceremony
+PHASE_DOCKED = "docked"  # riding LIVE plans — whole-journey recompile + in-place re-dock
+PHASE_POST_RUN = "post_run"  # riding SETTLED plans — supersede-继任 + mini package re-confirm
+SELECT_REVISION_PHASES: frozenset[str] = frozenset(
+    {PHASE_PRE_DOCK, PHASE_DOCKED, PHASE_POST_RUN}
+)
+
+
+def select_revision_phase(riding_states: Iterable[str]) -> str:
+    """The money-state discriminator (pure — the turn paths adjudicate on
+    it, never re-derive it): a SETTLED riding row (compiled/superseded)
+    means the package already ran → post_run; live riding rows mean a
+    package is on the table (or heading to it) → docked; nothing riding →
+    pre_dock. A superseded row's successor rides the SAME select (the
+    carry-over keeps select_id), so a re-revision before the mini package
+    confirms still finds the live successor here → docked/post_run as the
+    rows say."""
+    states = list(riding_states)
+    if any(s in ("compiled", "superseded") for s in states):
+        return PHASE_POST_RUN
+    if states:
+        return PHASE_DOCKED
+    return PHASE_PRE_DOCK
+
+
 async def revise_plan(
     db: AsyncSession,
     project: Project,
@@ -722,6 +777,80 @@ async def revise_plan(
     node.state = STATE_DRAFT if issues else "revised"
     await db.flush()
     return node
+
+
+async def revise_selects(
+    db: AsyncSession,
+    project: Project,
+    *,
+    selects: list[dict[str, Any]],
+) -> list[GraphNode]:
+    """Revise Selects IN PLACE (iter-3 S4, ADR-089 §6 修订分类 / N-58): the
+    pick swaps — ``member_index`` re-points into the SAME candidate set
+    (bounds re-validated against the set's members, the birth law's 同一律),
+    and the verdict + reason RESTATE for the new pick (R3: the judgment is
+    an attribute of the pick — the old lines vouched for the old member,
+    they never transfer). The SAME row takes the restatement → state
+    ``revised`` (the Select family's first revised writer; the artifact
+    state machine's ready → revised path). The birth ``idem`` survives —
+    a revision never re-mints identity (revise_plan 同律). One call revises
+    ONE journey (propose_plans' one-journey law mirrored — the turn layer's
+    follow-up docks one package per journey). compiled/superseded rows are
+    closed (settled history — a post-run swap supersedes the riding PLANS,
+    the select row itself revises in place all the same). Replay = an
+    identical restatement returns the row untouched. Flush-only."""
+    lane = await _exploration_nodes(db, project.id)
+    if not selects:
+        raise ExplorationRejected("revise_selects carries no selects")
+
+    revised: list[GraphNode] = []
+    journey_id: UUID | None = None
+    for s in selects:
+        node = _get_exploration_node(
+            lane, UUID(str(s.get("select_id"))), KIND_SELECT
+        )
+        sel_journey = UUID(str(node.journey_id))
+        if journey_id is None:
+            journey_id = sel_journey
+        elif journey_id != sel_journey:
+            raise ExplorationRejected(
+                "revise_selects: one call revises one journey — the selects "
+                "span two. Split the call."
+            )
+        if node.state in ("compiled", "superseded"):
+            raise ExplorationRejected(
+                f"select {node.id} is {node.state} — a settled select is "
+                "never revised"
+            )
+        spec = SelectSpec.model_validate(node.spec)
+        cset = _get_exploration_node(
+            lane, UUID(spec.candidate_set_id), KIND_CANDIDATE_SET
+        )
+        cspec = CandidateSetSpec.model_validate(cset.spec)
+        new_index = int(s.get("member_index", -1))
+        if not (0 <= new_index < len(cspec.members)):
+            raise ExplorationRejected(
+                f"select: member_index {new_index} outside the candidate "
+                f"set's {len(cspec.members)} members"
+            )
+        verdict = str(s.get("verdict") or "").strip()
+        reason = str(s.get("reason") or "").strip()
+        if not verdict or not reason:
+            raise ExplorationRejected(
+                "select: verdict and reason restate for the NEW pick (R3 — "
+                "the judgment attribute moves with the pick)"
+            )
+        payload = spec.model_copy(
+            update={"member_index": new_index, "verdict": verdict, "reason": reason}
+        ).model_dump()
+        if dict(node.spec or {}) == payload:
+            revised.append(node)  # replay: identical restatement is a no-op
+            continue
+        node.spec = payload
+        node.state = "revised"
+        revised.append(node)
+    await db.flush()
+    return revised
 
 
 async def mark_compiled(

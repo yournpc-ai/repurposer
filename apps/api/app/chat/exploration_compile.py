@@ -216,6 +216,32 @@ async def recompile_journey_package(
     )
 
 
+async def compile_plan_rows_package(
+    db: AsyncSession,
+    project: Project,
+    journey_id: UUID,
+    plan_rows: list[Any],
+) -> CompiledPackage | str:
+    """The mini-package compile seat (iter-3 S4, post-run select revision):
+    a SUBSET of the journey's real plan rows (the supersede successors —
+    迷你包只含变化) compiles on the journey's evidence with the SAME
+    compiler + backstop; the map keys ARE the real row ids."""
+    selects, candidate_sets = await read_journey_evidence(
+        db, UUID(str(project.id)), journey_id
+    )
+    compiled = await _compile_and_check(db, project, plan_rows, selects, candidate_sets)
+    if isinstance(compiled, str):
+        return compiled
+    return CompiledPackage(
+        journey_id=journey_id,
+        selects=selects,
+        candidate_sets=candidate_sets,
+        plans=list(plan_rows),
+        tasks=compiled.tasks,
+        plan_task_map=dict(compiled.plan_task_map),
+    )
+
+
 async def _compile_and_check(
     db: AsyncSession,
     project: Project,
@@ -258,6 +284,7 @@ async def _compile_and_check(
 __all__ = [
     "CompiledPackage",
     "PlanPreview",
+    "compile_plan_rows_package",
     "compile_plans_package",
     "recompile_journey_package",
 ]

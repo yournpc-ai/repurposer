@@ -291,7 +291,8 @@ class TestCompilePlansPackage:
         assert len(db.nodes) == nodes_before  # the door never ran
 
     async def test_preview_ids_are_preview_namespaced(self) -> None:
-        """The pre-flight stand-ins are named preview:{select_id} — a leak of
+        """The pre-flight stand-ins are named preview:{i}:{select_id} (per-
+        item uniqueness — the S2 same-select collision fix) — a leak of
         the preview id into the package would break the R20 map, so the
         package's keys must be the born rows' real ids (never 'preview:…')."""
         db = _StubDb(assets=[_asset()])

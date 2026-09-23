@@ -47,6 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.tool_loop import ToolObservation
 from app.chat.exploration_compile import (
+    compile_plan_rows_package,
     compile_plans_package,
     recompile_journey_package,
 )
@@ -56,6 +57,7 @@ from app.chat.exploration_tools import (
     ProposePlansArgs,
     ProposeSelectsArgs,
     RevisePlanArgs,
+    ReviseSelectsArgs,
     candidates_observation,
     selects_observation,
 )
@@ -78,6 +80,7 @@ from app.chat.service import (
     _has_resolved_caption_mode,
     _needs_caption_mode_question,
     _needs_media,
+    _prefers_zh,
     _reminder_tail,
     _resolved_caption_mode,
     _safe_task_estimate,
@@ -111,10 +114,17 @@ from app.models.tables import Asset, Message, Persona, Project
 from app.pipeline.asset_processing import has_any_text_material
 from app.pipeline.assets import create_transcript_asset_from_text
 from app.pipeline.exploration_store import (
+    PHASE_DOCKED,
+    PHASE_PRE_DOCK,
     ExplorationRejected,
     propose_candidates,
     propose_selects,
+    read_journey_plan_rows,
+    read_journey_plans,
     revise_plan,
+    revise_selects,
+    select_revision_phase,
+    supersede_plan,
 )
 from app.pipeline.scope_compile import decision_package_plans
 from app.platform.project_context import resolve_default_persona
@@ -893,6 +903,9 @@ class PlanTurn:
         if name == "propose_plans":
             assert isinstance(params, ProposePlansArgs)
             return await self._propose_plans(params, prose)
+        if name == "revise_selects":
+            assert isinstance(params, ReviseSelectsArgs)
+            return await self._revise_selects(params, prose)
         if name == "revise_plan":
             assert isinstance(params, RevisePlanArgs)
             return await self._revise_plan(params, prose)
@@ -1008,9 +1021,10 @@ class PlanTurn:
         re-docks for confirmation — zero autonomy. The revised row lands
         even when the recompile then rejects (draft with issues re-stamped
         = the canvas's honest surface); the rejection rides back as the
-        loop echo and the LLM repairs the PLAN, never the chain."""
+        loop echo and the LLM repairs the PLAN, never the chain. The dock
+        tail lives in ``_redock_journey_package`` (iter-3 S4 — ONE seat,
+        shared with revise_selects)."""
         db, project = self.db, self.project
-        merged_brief = await self._absorb(None, None)
         try:
             revised = await revise_plan(
                 db,
@@ -1030,19 +1044,31 @@ class PlanTurn:
         )
         if isinstance(package, str):
             return package
+        await self._redock_journey_package(package, prose)
+        return None
+
+    async def _redock_journey_package(self, package, prose: str) -> None:
+        """The decision package's re-dock tail (决策包可编辑律 — the SAME
+        confirmation seat, never a new confirmation ritual: sync_plan_question
+        supersedes the still-open task_book row in place). ONE seat for every
+        package-level revision (iter-3 S4): revise_plan's whole-journey
+        recompile and revise_selects' docked re-quote / post-run mini package
+        all land here. The package's name survives from the stored intent
+        (the LLM named the work; code never renames the package — a plan's
+        own title is the revision's renaming seat); caption_mode re-derives
+        from the current rows, inheriting the stored answer when unnamed
+        (同一律 — read as a DICT off the spec JSONB: the iter-2 attribute
+        access on it was a latent crash for quotes+caption_mode rows)."""
+        db, project = self.db, self.project
+        merged_brief = await self._absorb(None, None)
         plans = package.plans
         compiled = package.tasks
         await self._emit_milestone("chat.explore.plansReady", len(plans))
 
-        # The package's name survives the revision (the LLM chose to revise
-        # THIS package — the name still vouches for it; a plan's own title
-        # is the revision's renaming seat). caption_mode re-derives from the
-        # restated outputs, inheriting the stored answer when unnamed (the
-        # plan-turn overwrite fix's 同一律).
         stored_intent = self.stored.intent if self.stored else None
         caption_mode = next(
             (
-                o.caption_mode
+                o.get("caption_mode")
                 for row in plans
                 for o in (row.spec or {}).get("outputs") or []
                 if o.get("kind") == "quotes" and o.get("caption_mode")
@@ -1114,6 +1140,87 @@ class PlanTurn:
         assert question is not None  # sync_plan_question just docked it
         self.outcome = (question, None, self.settled_pending, bailed_run_ids)
         return None
+
+    async def _revise_selects(self, params: ReviseSelectsArgs, prose: str) -> str | None:
+        """revise_selects → the door re-points the pick → the three money
+        states (iter-3 S4, N-58 / 决策包可编辑律):
+
+        - PRE-DOCK (no plan rides the pick yet): the door revision alone,
+          zero ceremony — the prose IS the one-line acknowledgment, nothing
+          docks (the plans follow at THEIR birth: the compile dereferences
+          the live select).
+        - DOCKED (live riding plans): the whole-journey recompile re-docks
+          through the SAME confirmation seat (``_redock_journey_package``).
+        - POST-RUN (settled riding plans): the riding compiled plans
+          supersede (E3 继任 — the spec carries over verbatim: the swap
+          changes the SOURCE, never the deliverables), the live riding rows
+          compile as the MINI package (只含变化) and re-dock for
+          re-confirmation.
+        """
+        db, project = self.db, self.project
+        try:
+            revised = await revise_selects(
+                db, project, selects=[s.model_dump() for s in params.selects]
+            )
+        except ExplorationRejected as e:
+            return f"The door rejected the revision: {e}"
+        journey_id = UUID(str(revised[0].journey_id))
+        revised_ids = {str(n.id) for n in revised}
+        riding = [
+            p
+            for p in await read_journey_plan_rows(db, project.id, journey_id)
+            if (p.spec or {}).get("select_id") in revised_ids
+        ]
+        phase = select_revision_phase([p.state for p in riding])
+        if phase == PHASE_PRE_DOCK:
+            # 零仪式 + 一句确认叙事: the prose IS the acknowledgment; empty
+            # prose falls to the code-composed fact line (打字机律牙② — the
+            # beat never lands empty).
+            content = prose.strip() or self._select_swap_note(revised)
+            assistant_message = await _create_message(
+                db, self.conversation_id, "assistant", content
+            )
+            self.outcome = (assistant_message, None, self.settled_pending, [])
+            return None
+        if phase == PHASE_DOCKED:
+            package = await recompile_journey_package(db, project, journey_id)
+        else:
+            try:
+                for p in riding:
+                    if p.state == "compiled":
+                        await supersede_plan(db, project, plan_id=p.id)
+            except ExplorationRejected as e:
+                return f"The door rejected the revision: {e}"
+            live_riding = [
+                p
+                for p in await read_journey_plans(db, project.id, journey_id)
+                if (p.spec or {}).get("select_id") in revised_ids
+            ]
+            if not live_riding:
+                return (
+                    "the pick swapped, but no live plan rides it — nothing "
+                    "to re-confirm. Tell the user the swap is on the canvas."
+                )
+            package = await compile_plan_rows_package(
+                db, project, journey_id, live_riding
+            )
+        if isinstance(package, str):
+            return package
+        await self._redock_journey_package(package, prose)
+        return None
+
+    def _select_swap_note(self, revised) -> str:
+        """The pre-dock swap's empty-prose floor (code-composed fact line,
+        the reminder-tail precedent — 世界自证, never the LLM's voice): the
+        new picks' own verdicts, bounded."""
+        labels = [
+            str((n.spec or {}).get("verdict") or "").strip() for n in revised
+        ]
+        labels = [label for label in labels if label]
+        shown = ", ".join(labels[:3]) + (" …" if len(labels) > 3 else "")
+        if _prefers_zh(self.text):
+            return f"已换成新选段：{shown}。"
+        return f"Swapped the pick: {shown}."
 
     async def _ask_user(self, params: PlanAskArgs, prose: str) -> str | None:
         """ask → the ONE question docks through the ask_user machinery.

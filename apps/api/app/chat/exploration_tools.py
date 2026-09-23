@@ -8,15 +8,22 @@ agent's product-semantic proposal verbs for the discovery chain —
 - ``propose_selects`` — the定版 picks with verdict + one user-safe reason
   (拍 4; R3 理由是属性, R7 证据引用);
 - ``propose_plans`` — the Content Plans, one per Select (拍 5; R8 产品
-  语义, 完整性自检 draft → ready).
+  语义, 完整性自检 draft → ready);
+- ``revise_plan`` — the plan-level revision verb (iter-2 ⑦: in-place
+  restatement → whole-journey recompile → re-dock on the same seat);
+- ``revise_selects`` — the pick-swap verb (iter-3 S4, N-58: member_index
+  edit + bounds re-validation + idem preserved + state → revised; the three
+  money states adjudicate in the turn layer).
 
-**迁移弧纪律 (ADR-089 §8)**: this registry is HARNESS-LEVEL in iter-1 —
-it is NOT registered into the production chat agent's tool set
-(``turn_tools.py`` untouched; production wiring lands with R6 routing in
-iter-2). The scenario harness composes its own loop with these tools +
-the evidence reads (the prompt_gate PLAN_TOOLS precedent). Descriptions
-stay product-semantic (R12: no workflow internals — no UUID lore beyond
-the ids the observations themselves hand back, no graph vocabulary).
+**Production wiring (iter-2 ⑤ plan path + iter-3 S2 chat path, R6)**: the
+registry projects into BOTH loops' tool sets via ``exploration_chat_tools()``
+(candidates/selects non-terminal — the discovery chain rides one turn;
+propose_plans / revise_plan / revise_selects terminal — the dock is the
+paid-boundary stop, R15). The harness seat (``execute_exploration_tool``)
+drives the same door directly for the deterministic scenario tails.
+Descriptions stay product-semantic (R12: no workflow internals — no UUID
+lore beyond the ids the observations themselves hand back, no graph
+vocabulary).
 
 The execute half (``execute_exploration_tool``) adapts the door's
 rejections into observation text (the loop-echo precedent — a rejection
@@ -39,6 +46,7 @@ from app.pipeline.exploration_store import (
     propose_plans,
     propose_selects,
     revise_plan,
+    revise_selects,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -106,6 +114,44 @@ class ProposeSelectsArgs(BaseModel):
     selects: list[SelectItem] = Field(
         description="The定版 picks — evidence pointers with verdicts, never copies."
     )
+
+
+class ReviseSelectItem(BaseModel):
+    """One pick swap (iter-3 S4, N-58): the Select re-points at a DIFFERENT
+    member of the SAME candidate set, and the judgment restates for it."""
+
+    model_config = ConfigDict(extra="forbid")
+    select_id: UUID = Field(
+        description="The pick to swap — from the propose_selects observation or the canvas's pick row, never invented."
+    )
+    member_index: int = Field(
+        description="The NEW member's index in the same candidate set (0-based, in the set's own order)."
+    )
+    # max_length mirrors the door's SelectSpec (校验分层律 ADR-064 — the
+    # constraint bites at the tool boundary, same seat as SelectItem).
+    verdict: str = Field(
+        max_length=300,
+        description="The restated verdict line for the NEW pick — it vouches for the new member, never carries over.",
+    )
+    reason: str = Field(
+        max_length=300,
+        description="The restated one-line reason for the NEW pick — the conclusion, never your reasoning process.",
+    )
+
+
+class ReviseSelectsArgs(BaseModel):
+    """iter-3 S4 (ADR-089 §6 修订分类, N-58): the select-level revision verb
+    — the ONLY way a landed pick swaps. Full restatement of the pick, never
+    a patch (the verdict/reason move with the member)."""
+
+    model_config = ConfigDict(extra="forbid")
+    selects: list[ReviseSelectItem] = Field(
+        description="The pick swaps — one per Select the user wants changed. One call revises one journey."
+    )
+    # 插话判定座 (ADR-053 R2, iter-3 S2) — same dual-path envelope seat as
+    # ProposePlansArgs / RevisePlanArgs: the chat path settles by it; the
+    # plan path never reads it.
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
 
 
 class PlanItem(BaseModel):
@@ -237,6 +283,20 @@ EXPLORATION_TOOLS: dict[str, ChatTool] = {
             terminal=True,
         ),
         ChatTool(
+            name="revise_selects",
+            description=(
+                "Swap a landed pick for a different member of the SAME "
+                "candidate collection (the user's '第二条换成讲 roadmap 的那段', "
+                "'use the pricing answer instead'). Restate the verdict and "
+                "reason for the NEW pick — they vouch for the new member, "
+                "never carry over. Free before anything runs; when the "
+                "affected plans were already confirmed and produced, they "
+                "re-confirm as a small package."
+            ),
+            params_model=ReviseSelectsArgs,
+            terminal=True,
+        ),
+        ChatTool(
             name="revise_plan",
             description=(
                 "Revise one already-landed Content Plan in place (the user's "
@@ -293,6 +353,21 @@ def plans_observation(born: list) -> str:
     return "\n".join(lines)
 
 
+def revise_selects_observation(revised: list) -> str:
+    lines = [f"{len(revised)} select(s) revised in place:"]
+    for n in revised:
+        spec = n.spec
+        lines.append(
+            f"- select_id: {n.id} — now member {spec['member_index']}: "
+            f"{spec['verdict']} [{n.state}]"
+        )
+    lines.append(
+        "The plans riding these picks follow the new sections — the system "
+        "re-quotes and re-confirms what needs it; you never re-author them."
+    )
+    return "\n".join(lines)
+
+
 def revise_observation(node) -> str:
     spec = node.spec
     state_note = (
@@ -316,15 +391,16 @@ def exploration_chat_tools() -> list[ChatTool]:
     R6 — N-57): the SAME registry entries re-formed for BOTH loops' tool
     sets. R2 免费探索区连续工作: candidates/selects ride back as observations
     (NON-terminal — one turn carries the whole discovery chain: search →
-    candidates → selects → plans); propose_plans / revise_plan stay
-    TERMINAL — landing (or re-landing) the plans docks the decision package,
-    which IS the paid-boundary stop (R15)."""
+    candidates → selects → plans); propose_plans / revise_plan /
+    revise_selects stay TERMINAL — landing (or re-landing) the plans docks
+    the decision package, which IS the paid-boundary stop (R15), and a pick
+    swap can dock too (the three money states, iter-3 S4)."""
     return [
         ChatTool(
             name=t.name,
             description=t.description,
             params_model=t.params_model,
-            terminal=t.name in ("propose_plans", "revise_plan"),
+            terminal=t.name in ("propose_plans", "revise_plan", "revise_selects"),
         )
         for t in EXPLORATION_TOOLS.values()
     ]
@@ -373,6 +449,13 @@ async def execute_exploration_tool(
                 persona_id=persona_id,
             )
             return plans_observation(born)
+        if name == "revise_selects":
+            revised = await revise_selects(
+                db,
+                project,
+                selects=[s.model_dump() for s in params.selects],
+            )
+            return revise_selects_observation(revised)
         if name == "revise_plan":
             node = await revise_plan(
                 db,
