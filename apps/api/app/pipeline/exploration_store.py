@@ -42,6 +42,7 @@ Frames are append-only reservations, assigned once at birth.
 import hashlib
 import json
 import re
+from dataclasses import dataclass
 from typing import Any, Iterable, Literal
 from uuid import UUID, uuid4
 
@@ -851,6 +852,115 @@ async def revise_selects(
         revised.append(node)
     await db.flush()
     return revised
+
+
+# ---- journey summaries (iter-3 S6, Memory 窄切 / E5 样例参数继承) -------------------
+
+
+@dataclass(frozen=True)
+class JourneySummary:
+    """One historical journey's deterministic digest (the exemplar carrier):
+    goal + plan/output counts + the NEWEST plan's output spec facts. Pure
+    data — the line rendering (``journey_summary_line``) is the ONE wording
+    shared by the context block and the chain's exemplar injection."""
+
+    journey_id: UUID
+    goal: str
+    plan_count: int
+    output_count: int
+    spec_facts: tuple[str, ...] = ()
+
+
+def output_fact(output: dict[str, Any]) -> str:
+    """One plan output's compact spec fact ('clip:fr(dub,9:16)' / 'post:en')
+    — the user-named variables only (language version / caption form / dub /
+    frame), never defaults the plan left unnamed. Shared by the journey
+    digest and the get_artifact read (one wording, two seats)."""
+    kind = str(output.get("kind") or "?")
+    language = output.get("language")
+    extras = [
+        str(output[key])
+        for key in ("caption_mode", "aspect")
+        if output.get(key)
+    ]
+    if output.get("dub"):
+        extras.append("dub")
+    fact = f"{kind}:{language}" if language else kind
+    if extras:
+        fact += "(" + ",".join(extras) + ")"
+    return fact
+
+
+def journey_summary_line(summary: JourneySummary) -> str:
+    """The ONE wording of a journey digest line (the context block and the
+    propose_selects exemplar injection share it — one wording, two seats)."""
+    line = (
+        f'goal "{summary.goal[:80]}": {summary.plan_count} plan(s), '
+        f"{summary.output_count} output(s)"
+    )
+    if summary.spec_facts:
+        line += "; last plan: " + ", ".join(summary.spec_facts)
+    return line
+
+
+def _sort_key_created(row: Any) -> str:
+    """None-safe created_at ordering (stubbed sessions never fire column
+    defaults — the pure suite's rows sort stable by insertion)."""
+    created = getattr(row, "created_at", None)
+    return str(created) if created is not None else ""
+
+
+async def read_journey_summaries(
+    db: AsyncSession,
+    project_id: UUID,
+    *,
+    cap: int = 3,
+    exclude_journey_id: UUID | None = None,
+) -> list[JourneySummary]:
+    """The historical-journey read (iter-3 S6, 有界块 — cap 3 newest): each
+    journey digested deterministically (goal + plan/output counts + the
+    newest plan's spec facts). ``exclude_journey_id`` drops the journey
+    currently being built (the exemplar names the LAST one, never the work
+    in flight). Pure read, door-outside posture."""
+    journeys = list(
+        (
+            await db.execute(
+                select(Journey).where(Journey.project_id == project_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    journeys.sort(key=_sort_key_created, reverse=True)
+    plans_by_journey: dict[str, list[GraphNode]] = {}
+    for n in await _exploration_nodes(db, project_id):
+        if (n.spec or {}).get("exploration_kind") == KIND_CONTENT_PLAN:
+            plans_by_journey.setdefault(str(n.journey_id), []).append(n)
+    summaries: list[JourneySummary] = []
+    for j in journeys:
+        if exclude_journey_id is not None and str(j.id) == str(exclude_journey_id):
+            continue
+        plans = sorted(
+            plans_by_journey.get(str(j.id), []), key=_sort_key_created
+        )
+        outputs = [o for p in plans for o in (p.spec or {}).get("outputs") or []]
+        newest_facts = (
+            tuple(output_fact(o) for o in (plans[-1].spec or {}).get("outputs") or [])
+            if plans
+            else ()
+        )
+        summaries.append(
+            JourneySummary(
+                journey_id=j.id,
+                goal=str(j.goal_text or ""),
+                plan_count=len(plans),
+                output_count=len(outputs),
+                spec_facts=newest_facts,
+            )
+        )
+        if len(summaries) >= cap:
+            break
+    return summaries
 
 
 async def mark_compiled(

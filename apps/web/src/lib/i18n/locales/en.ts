@@ -1251,6 +1251,7 @@ const en = {
       segment: "Reading the segment…",
       asset: "Looking at the asset…",
       craftSkeleton: "Reading the reference's style breakdown…",
+      artifact: "Reading the card's details…",
     },
     /** The work-session family (iter-2 ⑥, N-57): the discovery chain's
      * user-safe beats — `searching` rides the read frame (active + done
@@ -1292,6 +1293,7 @@ const en = {
       segment: "Read the segment",
       asset: "Looked at the asset",
       craftSkeleton: "Read the reference's style breakdown",
+      artifact: "Read the card's details",
     },
     completed: "Done",
     failed: "Sorry, I couldn't update this. Please try again.",

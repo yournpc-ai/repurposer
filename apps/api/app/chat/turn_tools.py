@@ -157,6 +157,9 @@ CHAT_TOOLS = [
 # would invite hallucinated calls) — plus get_craft_skeleton: a remix's
 # FIRST turn is plan-path (two uploads, 「照这个案例做」), and a role-pinned
 # exemplar's skeleton may already be warm. Chat path: the full family.
+# get_artifact rides BOTH paths (iter-3 S6): the exploration artifacts the
+# discovery chain births are plan-path rows too, and revise_selects (its
+# edit-prep reader) lives on both paths.
 PLAN_READ_TOOLS = perception_chat_tools(
     "get_understanding",
     "get_asset",
@@ -168,6 +171,7 @@ PLAN_READ_TOOLS = perception_chat_tools(
     # substrate rides here too (2026-09-22).
     "search_transcript",
     "get_segment",
+    "get_artifact",
 )
 CHAT_READ_TOOLS = perception_chat_tools(
     "get_output_spec",
@@ -182,4 +186,5 @@ CHAT_READ_TOOLS = perception_chat_tools(
     "get_craft_skeleton",
     "search_transcript",
     "get_segment",
+    "get_artifact",
 )

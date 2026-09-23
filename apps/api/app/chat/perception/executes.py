@@ -48,6 +48,13 @@ from app.tools.clips.transcript import (
     speaker_at,
     words_in_range,
 )
+from app.pipeline.exploration_store import (
+    KIND_CANDIDATE_SET,
+    KIND_CONTENT_PLAN,
+    KIND_SELECT,
+    output_fact,
+)
+from app.pipeline.product_graph import EXPLORATION_NODE_TYPE
 
 
 # ---- params models (package-local, like tools/<pkg>/params.py) --------------
@@ -93,6 +100,12 @@ class GetCraftSkeletonParams(BaseModel):
     asset_id: UUID | None = Field(
         default=None,
         description="The reference video's asset id (from the context's Assets list or an @-mention); null = the conversation's pinned reference (the role question's / mention's exemplar).",
+    )
+
+
+class GetArtifactParams(BaseModel):
+    artifact_id: UUID = Field(
+        description="The exploration artifact's id (a candidate collection / a pick / a plan card — from the Graph section's exploration rows or a discovery-chain observation)."
     )
 
 
@@ -951,3 +964,84 @@ async def get_craft_skeleton(
             detail = f" — {gap.detail}" if gap.detail else ""
             lines.append(f"  - {gap.kind}: {wording}{detail}")
     return "\n".join(lines)
+
+
+# ---- get_artifact (iter-3 S6, ADR-088 §7 read 洞销账 / N-58) ----------------------
+
+_ARTIFACT_MEMBERS_CAP = 12
+
+
+async def get_artifact(
+    db: AsyncSession, project: Project, params: GetArtifactParams
+) -> str:
+    """One exploration artifact's user-safe full fields: the candidate
+    collection's sections (verbatim), a pick's verdict/reason + the section
+    it POINTS at (R7 dereferenced at read time — the pointer never makes
+    the model chase a second read), a plan card's deliverables. Tenant-scoped
+    like every read; a miss answers honestly."""
+    node = await db.get(GraphNode, params.artifact_id)
+    if (
+        node is None
+        or str(node.project_id) != str(project.id)
+        or node.type != EXPLORATION_NODE_TYPE
+    ):
+        return (
+            f"No exploration artifact with id {params.artifact_id} exists in "
+            "this project — pick an id from the Graph section's exploration "
+            "rows or a discovery-chain observation."
+        )
+    spec = node.spec or {}
+    kind = spec.get("exploration_kind")
+    if kind == KIND_CANDIDATE_SET:
+        members = spec.get("members") or []
+        lines = [
+            f"Candidate collection (id={node.id}, state={node.state}) — "
+            f"topic \"{spec.get('topic')}\", {len(members)} section(s):"
+        ]
+        for i, m in enumerate(members[: _ARTIFACT_MEMBERS_CAP]):
+            speaker = m.get("speaker") or "—"
+            lines.append(
+                f"  {i}) [{m.get('start')}–{m.get('end')}s] {speaker}: "
+                f"{m.get('excerpt') or ''}"
+            )
+        if len(members) > _ARTIFACT_MEMBERS_CAP:
+            lines.append(f"  … ({len(members) - _ARTIFACT_MEMBERS_CAP} more sections)")
+        return "\n".join(lines)
+    if kind == KIND_SELECT:
+        idx = spec.get("member_index")
+        lines = [
+            f"Pick (id={node.id}, state={node.state}): member {idx} of "
+            f"collection {spec.get('candidate_set_id')}",
+            f"- verdict: {spec.get('verdict')}",
+            f"- reason: {spec.get('reason')}",
+        ]
+        # R7 dereference: the pointed member's range + excerpt ride the read.
+        cset = await db.get(GraphNode, UUID(str(spec.get("candidate_set_id"))))
+        members = ((cset.spec or {}).get("members") or []) if cset is not None else []
+        if isinstance(idx, int) and 0 <= idx < len(members):
+            m = members[idx]
+            lines.append(
+                f"- the section: [{m.get('start')}–{m.get('end')}s] "
+                f"{m.get('excerpt') or ''}"
+            )
+        return "\n".join(lines)
+    if kind == KIND_CONTENT_PLAN:
+        outputs = spec.get("outputs") or []
+        lines = [
+            f"Plan (id={node.id}, state={node.state}): "
+            f"{spec.get('title') or '(unnamed)'} — from pick "
+            f"{spec.get('select_id')}, {len(outputs)} output(s):"
+        ]
+        for o in outputs:
+            line = f"  - {output_fact(o)}"
+            if o.get("brief"):
+                line += f" — {o['brief']}"
+            lines.append(line)
+        issues = spec.get("issues") or []
+        if issues:
+            lines.append("- open gaps: " + "; ".join(str(i) for i in issues))
+        return "\n".join(lines)
+    return (
+        f"Exploration artifact {node.id} (state={node.state}) — unrecognized "
+        f"kind {kind!r}."
+    )

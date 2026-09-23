@@ -1186,6 +1186,7 @@ const zh: Resources = {
       segment: "正在读片段…",
       asset: "正在查看素材…",
       craftSkeleton: "正在读案例的风格拆解…",
+      artifact: "正在读卡片的详情…",
     },
     /** 工作会话族（迭代二⑥，N-57）：发现链的用户安全节拍——searching 骑
      * 读帧（进行态 + 完成态镜像，与 inspecting→inspectingDone 同律的
@@ -1222,6 +1223,7 @@ const zh: Resources = {
       segment: "已读片段",
       asset: "已查看素材",
       craftSkeleton: "已读案例的风格拆解",
+      artifact: "已读卡片的详情",
     },
     completed: "完成",
     failed: "抱歉，这次没能完成修改，请再试一次。",

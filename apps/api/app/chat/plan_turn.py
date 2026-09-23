@@ -119,8 +119,10 @@ from app.pipeline.exploration_store import (
     ExplorationRejected,
     propose_candidates,
     propose_selects,
+    journey_summary_line,
     read_journey_plan_rows,
     read_journey_plans,
+    read_journey_summaries,
     revise_plan,
     revise_selects,
     select_revision_phase,
@@ -899,7 +901,7 @@ class PlanTurn:
             except ExplorationRejected as e:
                 return f"The door rejected the proposal: {e}"
             await self._emit_milestone("chat.explore.selectsReady", len(born))
-            return ToolObservation(text=selects_observation(born))
+            return ToolObservation(text=await self._selects_text(born))
         if name == "propose_plans":
             assert isinstance(params, ProposePlansArgs)
             return await self._propose_plans(params, prose)
@@ -1221,6 +1223,25 @@ class PlanTurn:
         if _prefers_zh(self.text):
             return f"已换成新选段：{shown}。"
         return f"Swapped the pick: {shown}."
+
+    async def _selects_text(self, born) -> str:
+        """The selects observation + the exemplar tail (iter-3 S6, E5 —
+        Memory 窄切 ③): the project's LAST other journey rides as one fact
+        line so 「照上次的样子」 grounds on a real reference. Reference only
+        — exemplar facts are NEVER silently applied as defaults."""
+        text = selects_observation(born)
+        exemplars = await read_journey_summaries(
+            self.db,
+            self.project.id,
+            cap=1,
+            exclude_journey_id=UUID(str(born[0].journey_id)),
+        )
+        if exemplars:
+            text += (
+                "\nLast time (reference only — reuse only if the user asks): "
+                + journey_summary_line(exemplars[0])
+            )
+        return text
 
     async def _ask_user(self, params: PlanAskArgs, prose: str) -> str | None:
         """ask → the ONE question docks through the ask_user machinery.
