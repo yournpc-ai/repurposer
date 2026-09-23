@@ -3453,9 +3453,11 @@ async def s16_remix_flagship_journey(ctx: Ctx) -> None:
           len(craft_msgs))
 
     # 产物落库 + exemplar 参数断言（自洽读骨架行，ADR-078 判词⑤ code-mapped）：
-    # 画幅 / 字幕色 = 代码映射（确定性，严等）；条数 = clamp(骨架 shots) 是 CAP
-    # 不是产量——实现条数是 agent 的内容判断（119s 原片挑 1 条高光合法），断言
-    # 只锁「不超帽 + 至少一条」。
+    # 画幅 / 字幕色 = 代码映射（确定性，严等）；条数帽 = 优先级律 explicit >
+    # exemplar > default（clips/node.py: slot.count 合法胜过骨架 shot_count——
+    # 2026-09-24 live 验收 S16 红：骨架 2 shots 但计划点名 3 条，3 条在显式帽
+    # 内合法，旧断言把骨架帽当成了无条件硬帽）。实现条数是 agent 的内容判断
+    # （119s 原片挑 1 条高光合法），断言只锁「不超具约束力的帽 + 至少一条」。
     clips_step = await wait_step_terminal(run_id, "select_clips", timeout=600.0)
     check(clips_step["status"] == "done",
           "the clips step completes on the real source", clips_step)
@@ -3463,10 +3465,17 @@ async def s16_remix_flagship_journey(ctx: Ctx) -> None:
         o for o in await outputs_of(pid2, "clip")
         if str(o.workflow_step_id) == clips_step["id"]
     ]
-    expected_cap = max(1, min(10, int(skel["rhythm"]["shot_count"])))
+    slot = (clips_step["spec"] or {}).get("slot") or {}
+    explicit_count = slot.get("count") if isinstance(slot, dict) else None
+    expected_cap = (
+        max(1, min(10, int(explicit_count)))
+        if explicit_count
+        else max(1, min(10, int(skel["rhythm"]["shot_count"])))
+    )
     check(1 <= len(clips) <= expected_cap,
-          "clip count respects the skeleton-derived cap (count_default=1 without it)",
-          (len(clips), expected_cap, (clips_step["spec"] or {}).get("slot")))
+          "clip count respects the BINDING cap (explicit slot count > skeleton cap; "
+          "count_default=1 without either)",
+          (len(clips), expected_cap, explicit_count, skel["rhythm"]["shot_count"]))
     specs = [o.render_spec or {} for o in clips]
     check(all(s.get("aspect") == skel["aspect"] for s in specs),
           "every clip's aspect = the skeleton's measured aspect",

@@ -66,6 +66,7 @@ from app.pipeline.quality import (
 from app.pipeline.step_context import list_assets
 from app.pipeline.step_display import set_summary
 from app.pipeline.outputs import delete_outputs_fk_safe
+from app.pipeline.morph import render_step_label
 from app.platform.project_context import collect_asset_texts, resolve_persona
 from app.providers.storage import stream_url
 
@@ -503,7 +504,11 @@ class Verify(NodeBase):
         """best-not-last restore: replace the regressed round's outputs with
         the best earlier round's snapshot (fresh ids; the snapshot's rendered
         files ride along; pending render nodes of the doomed round are
-        skipped — select_clips' own cancel dance).
+        skipped — select_clips' own cancel dance). Restored outputs re-pended
+        for render get their render mirror steps reborn too (ADR-074②):
+        renders hold the run open and the render chain finds the owning run
+        via ``spec->>'output_id'`` — without the mirror row the re-render
+        lands but no run ever finalizes (live-acceptance wedge 2026-09-24).
 
         Targeted regens (executor ``spec.target_id``) restore IN PLACE: the
         user addressed that row — its identity and operations chain survive,
@@ -563,6 +568,30 @@ class Verify(NodeBase):
             restored.append(output)
         await db.flush()
         executor.output_refs = [str(o.id) for o in restored]
+        # Reborn render mirrors (ADR-074② 台账补登): every birth path that
+        # pends an output for render also writes a mirror step — the bounce
+        # restore is a birth path too. Shape law copied verbatim from
+        # materialize.py / derivative_dispatch._add_render_step (parent = the
+        # verify executor that owns the restored rows).
+        pending_restored = [
+            o for o in restored if o.render_status == RenderStatus.PENDING
+        ]
+        if pending_restored:
+            label = await render_step_label(db, run)
+            for output in pending_restored:
+                db.add(
+                    WorkflowStep(
+                        run_id=run.id,
+                        kind="render",
+                        status="pending",
+                        seq=int(executor.seq) + 1,
+                        inputs=[str(executor.id)],
+                        spec={
+                            "output_id": str(output.id),
+                            **({"summary": label} if label else {}),
+                        },
+                    )
+                )
         await db.flush()
         return restored
 

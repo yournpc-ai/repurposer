@@ -90,6 +90,7 @@ from app.models.tables import (
     Persona,
     Project,
     WorkflowRun,
+    WorkflowStep,
 )
 from app.operations.registry import OP_REGISTRY, validate_op
 from app.operations.service import OpRejected
@@ -1274,6 +1275,125 @@ async def discard_unanswered_plan(
     await db.delete(pending)
 
 
+async def _continue_chat_answer(
+    db: AsyncSession,
+    user_id: UUID,
+    conversation: Conversation,
+    question: QuestionPayload,
+    data: AnswerRequest,
+    option_label: str | None,
+    *,
+    on_delta=None,
+    on_phase=None,
+    on_tool_call=None,
+    on_tool_ready=None,
+    on_loop_event=None,
+    on_activity=None,
+) -> tuple[Message | None, UUID | None, list[UUID], Any]:
+    """The generic question-answer 续聊 continuation: the user's pick is
+    their say for the next turn, with the answered question in context.
+    Dispatch: asset_role answers pin by code, brief-slot answers backfill
+    user-stated, everything else (ADR-081 trigger suggestions, plain asks)
+    rides plan-or-propose by the project's run state. Two seats call this:
+    the no-run-id branch and the interrupt branch's not-parked fall-through
+    (a trigger suggestion's run id is a display anchor, not a park marker).
+    Returns (follow_up, run_id, bailed_run_ids, extra) — extra is the plan
+    path's answered dump or the proposal path's settled question, both
+    advisory to the caller."""
+    project = await db.get(Project, conversation.project_id)
+    say = (data.text if data.kind == "freeform" else None) or option_label or ""
+    history = await list_conversation_messages(db, UUID(str(conversation.id)))
+    if question.slot == "asset_role" and project is not None:
+        # 资产角色消歧的答复落 pin (ADR-078 判词④): the pins settle by
+        # CODE (the option id IS the asset id — _settle_role_answer),
+        # never a brief backfill — asset_role has no Brief seat, and the
+        # generic backfill would setattr-crash on it. The plan path then
+        # resumes on the pinned plan, same shape as the brief branch.
+        await _settle_role_answer(db, project, data, say)
+        follow_up, run_id, answered, bailed = await _plan_turn(
+            db,
+            user_id,
+            conversation,
+            project,
+            ChatRequest(project_id=project.id, message=say),
+            recent=history[-5:],
+            on_delta=on_delta,
+            on_phase=on_phase,
+            on_tool_call=on_tool_call,
+            on_tool_ready=on_tool_ready,
+            on_loop_event=on_loop_event,
+            on_activity=on_activity,
+        )
+        return follow_up, run_id, bailed, answered
+    if question.slot is not None and project is not None:
+        # ask 一等动作的答复回填 (ADR-052 B2 D2-C1): the brief slot takes
+        # the answer user-stated, then the plan path resumes on the
+        # enriched brief — draft the (now-rooted) plan or ask the next
+        # deciding slot. The answer text rides as the turn's message so
+        # the router sees it as the user's own words.
+        _backfill_brief_slot(project, question.slot, say)
+        follow_up, run_id, answered, bailed = await _plan_turn(
+            db,
+            user_id,
+            conversation,
+            project,
+            ChatRequest(project_id=project.id, message=say),
+            recent=history[-5:],
+            on_delta=on_delta,
+            on_phase=on_phase,
+            on_tool_call=on_tool_call,
+            on_tool_ready=on_tool_ready,
+            on_loop_event=on_loop_event,
+            on_activity=on_activity,
+        )
+        return follow_up, run_id, bailed, answered
+    # 选项语法统一律 (ADR-081): trigger suggestion questions land here —
+    # the picked label is the user's say. Dispatch by the project's run
+    # state (the same probe prepare_chat_turn runs): a PRE-FIRST-RUN pick
+    # (the understanding-warmed dock) must draft a PLAN — falling into the
+    # proposal path would answer a "make me X" pick with proposal tools
+    # instead of a plan.
+    has_runs = None
+    if project is not None:
+        has_runs = (
+            await db.execute(
+                select(WorkflowRun.id)
+                .where(WorkflowRun.project_id == project.id)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+    if project is not None and has_runs is None:
+        follow_up, run_id, answered, bailed = await _plan_turn(
+            db,
+            user_id,
+            conversation,
+            project,
+            ChatRequest(project_id=project.id, message=say),
+            recent=history[-5:],
+            on_delta=on_delta,
+            on_phase=on_phase,
+            on_tool_call=on_tool_call,
+            on_tool_ready=on_tool_ready,
+            on_loop_event=on_loop_event,
+            on_activity=on_activity,
+        )
+        return follow_up, run_id, bailed, answered
+    follow_up, run_id, bailed, settled = await _propose_turn(
+        db, user_id, conversation, project, say, [], history[-6:],
+        on_delta=on_delta,
+        # I-PFA-06 parity (Batch B 验收修复): the chat-path continuation
+        # needs the phase pipe too — without it composing stays silent on
+        # this branch and a stale label could linger until the envelope
+        # (the exact gap 交互完整性批 C closed on the main paths).
+        on_phase=on_phase,
+        on_tool_call=on_tool_call,
+        on_tool_ready=on_tool_ready,
+        on_loop_event=on_loop_event,
+        on_activity=on_activity,
+    )
+    return follow_up, run_id, bailed, settled
+
+
 async def answer_question(
     db: AsyncSession,
     user_id: UUID,
@@ -1700,16 +1820,25 @@ async def answer_question(
             )
 
     elif question.kind == "question" and message.workflow_run_id is not None:
-        # Direction interrupt (期 4): workflow_run_id is the dispatch
-        # marker. The answer resumes the parked run — spec.answer written,
-        # node back to pending, run back to RUNNING, the worker re-executes
-        # the thin node. Bail is a graceful exit: node done (spec.bailed),
-        # downstream cascade-skipped, run settles COMPLETED — never failed.
-        # R1 B3: the resume arbitrates the project's execution authority —
-        # while another run holds it the answer parks (再挂) and the user
-        # hears the honest one-liner, never silence.
+        # Direction interrupt (期 4) — but the run-id column alone does NOT
+        # prove one: a run_completed trigger's suggestion question also
+        # carries it as the display anchor (trigger_turn stamps it for the
+        # canvas/rerun references), and _suggestions_payload's contract is
+        # "no run marker — the generic continuation carries the pick". The
+        # real marker is a node PARKED in waiting. Answering a trigger pill
+        # through the interrupt seat used to no-op (resume → "idle" → zero
+        # continuation — the live-acceptance dead-exit red 2026-09-24); the
+        # pick now falls through to the generic 续聊 branch below.
         run = await db.get(WorkflowRun, message.workflow_run_id)
-        if run is not None:
+        parked = run is not None and (
+            await db.execute(
+                select(WorkflowStep.id).where(
+                    WorkflowStep.run_id == run.id,
+                    WorkflowStep.status == "waiting",
+                )
+            )
+        ).scalar_one_or_none() is not None
+        if parked:
             if data.kind == "bail":
                 if await bail_waiting_interrupt(db, run) is not None:
                     bailed_run_ids.append(UUID(str(run.id)))
@@ -1722,101 +1851,38 @@ async def answer_question(
                         "assistant",
                         _resume_ack_line("", "blocked"),
                     )
+        elif data.kind in ("option", "freeform"):
+            # No parked node → this run id was the display anchor (trigger
+            # suggestion) or the interrupt already expired — the pick is the
+            # user's say, carried by the generic continuation (same seat as
+            # the no-run-id branch below).
+            follow_up, _run_id, bailed_run_ids, _settled = await _continue_chat_answer(
+                db, user_id, conversation, question, data, option_label,
+                on_delta=on_delta,
+                on_phase=on_phase,
+                on_tool_call=on_tool_call,
+                on_tool_ready=on_tool_ready,
+                on_loop_event=on_loop_event,
+                on_activity=on_activity,
+            )
 
     elif question.kind == "question" and data.kind in ("option", "freeform"):
         # 续聊: the answer unblocks the conversation — the user's pick is
         # their say for the next turn, with the answered question in context.
-        project = await db.get(Project, conversation.project_id)
-        say = (data.text if data.kind == "freeform" else None) or option_label or ""
-        history = await list_conversation_messages(db, UUID(str(conversation.id)))
-        if question.slot == "asset_role" and project is not None:
-            # 资产角色消歧的答复落 pin (ADR-078 判词④): the pins settle by
-            # CODE (the option id IS the asset id — _settle_role_answer),
-            # never a brief backfill — asset_role has no Brief seat, and the
-            # generic backfill would setattr-crash on it. The plan path then
-            # resumes on the pinned plan, same shape as the brief branch.
-            await _settle_role_answer(db, project, data, say)
-            follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
-                db,
-                user_id,
-                conversation,
-                project,
-                ChatRequest(project_id=project.id, message=say),
-                recent=history[-5:],
-                on_delta=on_delta,
-                on_phase=on_phase,
-                on_tool_call=on_tool_call,
-                on_tool_ready=on_tool_ready,
-                on_loop_event=on_loop_event,
-                on_activity=on_activity,
-            )
-        elif question.slot is not None and project is not None:
-            # ask 一等动作的答复回填 (ADR-052 B2 D2-C1): the brief slot takes
-            # the answer user-stated, then the plan path resumes on the
-            # enriched brief — draft the (now-rooted) plan or ask the next
-            # deciding slot. The answer text rides as the turn's message so
-            # the router sees it as the user's own words.
-            _backfill_brief_slot(project, question.slot, say)
-            follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
-                db,
-                user_id,
-                conversation,
-                project,
-                ChatRequest(project_id=project.id, message=say),
-                recent=history[-5:],
-                on_delta=on_delta,
-                on_phase=on_phase,
-                on_tool_call=on_tool_call,
-                on_tool_ready=on_tool_ready,
-                on_loop_event=on_loop_event,
-                on_activity=on_activity,
-            )
-        else:
-            # 选项语法统一律 (ADR-081): trigger suggestion questions land
-            # here — the picked label is the user's say. Dispatch by the
-            # project's run state (the same probe prepare_chat_turn runs):
-            # a PRE-FIRST-RUN pick (the understanding-warmed dock) must
-            # draft a PLAN — falling into the proposal path would answer a
-            # "make me X" pick with proposal tools instead of a plan.
-            has_runs = None
-            if project is not None:
-                has_runs = (
-                    await db.execute(
-                        select(WorkflowRun.id)
-                        .where(WorkflowRun.project_id == project.id)
-                        .limit(1)
-                    )
-                ).scalar_one_or_none()
-            if project is not None and has_runs is None:
-                follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
-                    db,
-                    user_id,
-                    conversation,
-                    project,
-                    ChatRequest(project_id=project.id, message=say),
-                    recent=history[-5:],
-                    on_delta=on_delta,
-                    on_phase=on_phase,
-                    on_tool_call=on_tool_call,
-                    on_tool_ready=on_tool_ready,
-                    on_loop_event=on_loop_event,
-                    on_activity=on_activity,
-                )
-            else:
-                follow_up, _run_id, bailed_run_ids, _settled = await _propose_turn(
-                    db, user_id, conversation, project, say, [], history[-6:],
-                    on_delta=on_delta,
-                    # I-PFA-06 parity (Batch B 验收修复): the chat-path
-                    # continuation needs the phase pipe too — without it
-                    # composing stays silent on this branch and a stale
-                    # label could linger until the envelope (the exact gap
-                    # 交互完整性批 C closed on the main paths).
-                    on_phase=on_phase,
-                    on_tool_call=on_tool_call,
-                    on_tool_ready=on_tool_ready,
-                    on_loop_event=on_loop_event,
-                    on_activity=on_activity,
-                )
+        follow_up, _run_id, bailed_run_ids, _extra = await _continue_chat_answer(
+            db,
+            user_id,
+            conversation,
+            question,
+            data,
+            option_label,
+            on_delta=on_delta,
+            on_phase=on_phase,
+            on_tool_call=on_tool_call,
+            on_tool_ready=on_tool_ready,
+            on_loop_event=on_loop_event,
+            on_activity=on_activity,
+        )
 
     elif question.kind == "question" and data.kind == "bail" and question.slot is not None:
         # 默认路径 (提问策略③ / D2-C2): skipping a brief ask TAKES the default

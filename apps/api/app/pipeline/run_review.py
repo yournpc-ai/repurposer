@@ -11,7 +11,9 @@ captured credits), and gets back the 兑现事实清单 (delivery-fact list):
 - promised vs landed output families (type / language presence, clip counts);
 - per-landed-clip facts: duration vs the cut range, caption-track existence,
   dub existence, the verify flag (``outputs.quality`` — passed /
-  needs_human / never-verified);
+  needs_human / never-verified), the render outcome (``outputs.render_status``
+  — a render-FAILED row never counts toward the delivery tallies and fires
+  the ``render_failed:<type>`` gap);
 - the charge fact: captured credits vs the confirm-time quote range.
 
 The review's prose law (facts first, ZERO subjective quality words, gaps
@@ -48,6 +50,7 @@ class LandedFact:
     has_translation: bool | None = None  # clips only: the translated caption half
     dubbed: bool | None = None  # clips only: the cloned-voice dub track
     quality: str | None = None  # passed | needs_human | None (never verified)
+    render: str | None = None  # pending | rendering | completed | failed | None (no render contract)
 
 
 @dataclass(frozen=True)
@@ -87,6 +90,7 @@ def landed_fact(output: Any) -> LandedFact:
     payload = getattr(output, "payload", None) or {}
     source_ref = getattr(output, "source_ref", None) or {}
     quality = getattr(output, "quality", None) or {}
+    render_status = getattr(output, "render_status", None)
     is_clip = getattr(output, "type", None) == "clip"
     cut_range = None
     if is_clip:
@@ -111,6 +115,8 @@ def landed_fact(output: Any) -> LandedFact:
         has_translation=bool(spec.get("translation_track")) if is_clip else None,
         dubbed=bool(spec.get("dub")) if is_clip else None,
         quality=(quality.get("status") if isinstance(quality, dict) else None),
+        # Enum → its value, without importing the models layer (pure seat).
+        render=getattr(render_status, "value", render_status),
     )
 
 
@@ -172,10 +178,19 @@ def compute_run_review(
         else {"types": [], "clip_count": 0, "caption_languages": [], "dub": False}
     )
 
-    landed_clips = [f for f in landed if f.output_type == "clip"]
-    landed_writers = [f for f in landed if f.output_type != "clip"]
+    # A render-FAILED row is not delivered — it carries no playable file. It
+    # stays visible in the landed tuple (its line carries render=FAILED) but
+    # never counts toward the delivery tallies (live-acceptance red 2026-09-24:
+    # "3 clips landed" narrated over a fan-out whose third render had failed).
+    delivered = [f for f in landed if f.render != "failed"]
+    landed_clips = [f for f in delivered if f.output_type == "clip"]
+    landed_writers = [f for f in delivered if f.output_type != "clip"]
 
     gaps: list[str] = []
+    # The render failure itself is a proven fact independent of any promise —
+    # it fires even for legacy no-snapshot runs.
+    for failed_type in sorted({f.output_type for f in landed if f.render == "failed"}):
+        gaps.append(f"render_failed:{failed_type}")
     if snapshot is not None and compiled:
         # Family presence: a promised writer family with zero landed rows.
         for entry in promised["types"]:
@@ -269,14 +284,23 @@ def review_fact_lines(review: RunReview) -> list[str]:
         if f.dubbed:
             parts.append("dubbed=yes")
         if f.quality:
-            parts.append(f"verify={f.quality}")
+            # The token is echoed by the narrator — keep it human words even
+            # in the machine block (a raw `needs_human` leaked into the closing
+            # prose as inline code in the 2026-09-24 live acceptance).
+            parts.append(
+                "verify=flagged-for-human-review"
+                if f.quality == "needs_human"
+                else f"verify={f.quality}"
+            )
+        if f.render == "failed":
+            parts.append("render=FAILED")
         lines.append("- " + " ".join(parts))
     if len(review.landed) > _MAX_LANDED_LINES:
         lines.append(f"- … ({len(review.landed) - _MAX_LANDED_LINES} more landed outputs)")
     for gap in review.gaps[: _MAX_GAP_LINES]:
         lines.append(f"GAP {gap}")
     if review.needs_human:
-        lines.append("verify needs_human: " + ", ".join(review.needs_human))
+        lines.append("verify flagged for human review: " + ", ".join(review.needs_human))
     charge = review.charge
     if charge.captured is not None:
         if charge.quoted_low is not None and charge.quoted_high is not None:
