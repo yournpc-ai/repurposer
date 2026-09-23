@@ -139,6 +139,7 @@ async def main() -> None:
             rej = await execute_exploration_tool(db, project, "revise_selects", {"selects": [bad]})
             ok(f"door rejection: {why}", rej.startswith("The door rejected"), rej)
         await db.rollback()  # rejections are flush-only, but stay clean
+        await db.refresh(project)  # rollback expires ORM attrs — re-load before reuse
 
         # ── PRE-DOCK: swap before any plan — 零仪式 ────────────────────────
         nodes_before = len((await db.execute(select(GraphNode).where(GraphNode.project_id == pu))).scalars().all())

@@ -65,7 +65,7 @@ async def main() -> None:
         run = WorkflowRun(
             id=run_id,
             project_id=pu,
-            status="succeeded",
+            status="completed",
             context={
                 "confirmed_scope": {
                     "confirmation_id": "c1",
@@ -128,7 +128,7 @@ async def main() -> None:
            any("captured 150 credits (quoted 100–200)" in l for l in lines), lines)
 
         # The no-snapshot legacy posture: nothing about the promise, no gaps.
-        legacy = WorkflowRun(id=uuid.uuid4(), project_id=pu, status="succeeded", context={})
+        legacy = WorkflowRun(id=uuid.uuid4(), project_id=pu, status="completed", context={})
         db.add(legacy)
         await db.commit()
         legacy_lines = await _run_review_lines(db, legacy)

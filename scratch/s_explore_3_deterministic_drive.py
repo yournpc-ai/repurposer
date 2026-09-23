@@ -81,7 +81,7 @@ async def main() -> None:
         )
         cut = GraphNode(
             id=uuid.uuid4(), project_id=pu, type="video", state="done",
-            spec={"tool": "cut_segments", "fill_key": "cut_segments", "summary": "Cut segments"},
+            spec={"tool": "cut_segments", "fill_key": "cut_segments#clips#0", "summary": "Cut segments"},
         )
         writer = GraphNode(
             id=uuid.uuid4(), project_id=pu, type="text", state="done",
@@ -105,7 +105,7 @@ async def main() -> None:
             "plan_task_map": {str(plan_id): [0, 2]},
         }
         run = WorkflowRun(
-            id=uuid.uuid4(), project_id=pu, status="succeeded",
+            id=uuid.uuid4(), project_id=pu, status="completed",
             context={"confirmed_scope": snapshot},
         )
         db.add_all([output, cut, writer, run])
