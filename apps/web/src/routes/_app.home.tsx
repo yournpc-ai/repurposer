@@ -30,6 +30,11 @@ export const Route = createFileRoute("/_app/home")({
 const HERO_SCROLL_PX = 160
 const DOCK_WINDOW_PX = 140
 
+/** Gallery filter keys (2026-09-24, user ruling — material-based, MiniMax
+ * parity). "all" needs no slot match; the rest match input-slot types
+ * ("video" / "transcript" / "images"). i18n: `recipes.filters.<key>`. */
+const GALLERY_FILTERS = ["all", "video", "transcript", "images"] as const
+
 function Home() {
   const { t } = useTranslation()
   const [personas, setPersonas] = useState<Persona[]>([])
@@ -53,14 +58,11 @@ function Home() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const chromeRef = useRef<HTMLDivElement>(null)
   const subtitleRef = useRef<HTMLDivElement>(null)
-  const titleRef = useRef<HTMLHeadingElement>(null)
   // The chrome's flow top = the docking scrollTop (offsetTop is unaffected by
-  // scroll); the subtitle's rest height feeds its fold; the section title's
-  // height feeds ITS identical fold (mirror copy — same morph family,
-  // same RAF driver). All three measured on mount, re-measured on resize.
+  // scroll); the subtitle's rest height feeds its fold. Both measured on
+  // mount, re-measured on resize.
   const pinPointRef = useRef<number | null>(null)
   const [subtitleH, setSubtitleH] = useState<number | null>(null)
-  const [titleH, setTitleH] = useState<number | null>(null)
   const [heroP, setHeroP] = useState(0)
   const [dockP, setDockP] = useState(0)
 
@@ -70,8 +72,6 @@ function Home() {
       if (chrome) pinPointRef.current = chrome.offsetTop
       const sub = subtitleRef.current
       if (sub) setSubtitleH(sub.offsetHeight)
-      const title = titleRef.current
-      if (title) setTitleH(title.offsetHeight)
     }
     measure()
     window.addEventListener("resize", measure)
@@ -130,27 +130,26 @@ function Home() {
     container.scrollTo({ top: 0, behavior: "smooth" })
   }, [])
 
+  // Gallery filter (2026-09-24, user ruling — MiniMax parity): material-
+  // based categories replace the old section title; "all" shows every card,
+  // a material filter keeps cards whose ANY input slot accepts it (wide
+  // slots like quote-cards' video/images/transcript appear under each).
+  const [filter, setFilter] = useState<string>("all")
+  const filteredCards =
+    filter === "all"
+      ? cards
+      : cards.filter((card) =>
+          card.input_slots.some((slot) =>
+            (slot.type ? [slot.type] : (slot.any_of ?? [])).includes(filter),
+          ),
+        )
+
   // Subtitle fold: copy-level fade + measured-height collapse (the gap below
   // it is padding, so the fold swallows it too). The TITLE never folds — it
   // is the core hero and docks smaller above the bar. The fold lives INSIDE
   // the chrome (below its top edge), so the docking point never moves.
   const subtitleStyle: CSSProperties = {
     maxHeight: subtitleH == null ? undefined : (1 - heroP) * subtitleH,
-    opacity: 1 - heroP,
-    transform: `translateY(${-12 * heroP}px)`,
-    filter: heroP === 0 ? undefined : `blur(${heroP * 3}px)`,
-    visibility: heroP >= 1 ? "hidden" : undefined,
-  }
-
-  // Section title — LITERAL MIRROR of subtitleStyle (every field, same
-  // heroP driver, same 0–160px window). Subtitle FOLDS upward into the
-  // chrome; h2 FOLDS upward into the chrome on the SAME scroll trigger
-  // — two identical morphs on opposite sides of the chrome's top edge.
-  // At rest (heroP=0): opacity 1, full height, no transform, no blur
-  // (the earlier `opacity: titleP` mistake hid it at rest; using
-  // heroP=0 at rest gives opacity 1 = visible).
-  const titleStyle: CSSProperties = {
-    maxHeight: titleH == null ? undefined : (1 - heroP) * titleH,
     opacity: 1 - heroP,
     transform: `translateY(${-12 * heroP}px)`,
     filter: heroP === 0 ? undefined : `blur(${heroP * 3}px)`,
@@ -166,12 +165,15 @@ function Home() {
         {/* Hero + composer chrome — sticky: at rest the whole cluster sits
             center-stage in flow; scrolling docks it at the top (title
             persists smaller, composer morphs into the one-line explore bar).
-            The backdrop (page fill, scroll-linked opacity) keeps wider
-            gallery cards from peeking beside the narrower bar; the clear
-            space below the bar interpolates 48→56px with dockP (rest-state
-            gallery rhythm ↔ docked-bar protection, same pure-function
-            interpolation as every other morph — no clocks), then the 32px
-            bottom mask dissolves whatever passes. */}
+            The filter pill row is the chrome's THIRD register (2026-09-24,
+            MiniMax parity): it rides the sticky chrome, so it pins under the
+            docked bar with zero choreography of its own. The backdrop (page
+            fill, scroll-linked opacity) keeps wider gallery cards from
+            peeking beside the narrower bar; the clear space below the bar
+            interpolates 48→56px with dockP (rest-state gallery rhythm ↔
+            docked-bar protection, same pure-function interpolation as every
+            other morph — no clocks), then the 32px bottom mask dissolves
+            whatever passes. */}
         <div
           ref={chromeRef}
           className="sticky top-0 z-20 px-4 pt-3 [mask-image:linear-gradient(to_bottom,black_calc(100%-32px),transparent)]"
@@ -217,6 +219,28 @@ function Home() {
               onFocus={handleComposerFocus}
             />
           </div>
+          {/* Filter pill row — the chrome's third register, grid-width
+              (max-w-6xl + sm:px-2 matches the section's px-4 sm:px-6).
+              Stadium pills are MiniMax parity (2026-09-24 user ruling —
+              the rounded-full law's fifth exception); active = the dark
+              solid pill, inactive = white chip floating on the gray page
+              via the fill step (no border, fill-first law). */}
+          <div className="mx-auto mt-6 flex w-full max-w-6xl flex-wrap items-center gap-2 sm:px-2">
+            {GALLERY_FILTERS.map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilter(key)}
+                className={`h-8 rounded-full px-4 text-sm transition-colors ${
+                  filter === key
+                    ? "bg-foreground text-background"
+                    : "bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
+                }`}
+              >
+                {t(`recipes.filters.${key}`)}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Recipe gallery (recipe-gallery v2, ADR-048): uniform 4-column grid
@@ -227,20 +251,13 @@ function Home() {
             (ADR-040). */}
         <section className="flex flex-col items-center px-4 pb-[max(64px,40vh)] sm:px-6">
           <div className="w-full max-w-6xl">
-            <h2
-              ref={titleRef}
-              style={titleStyle}
-              className="mb-6 overflow-hidden text-center text-base text-balance text-muted-foreground sm:text-lg"
-            >
-              {t("recipes.sectionTitle")}
-            </h2>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
               {/* Tour step 4 anchors the FIFTH card (row-2 lead on lg): the
                   tour's scrollIntoView block:"center" then centers it, so the
                   grid fills the viewport under the docked composer bar at ANY
                   screen height — anchoring card 0 over-scrolled (2026-08-31
                   user ruling). Fewer than 5 cards → the step auto-skips. */}
-              {cards.map((card, index) => (
+              {filteredCards.map((card, index) => (
                 <div
                   key={card.id}
                   data-tour={index === 4 ? "home-recipes" : undefined}

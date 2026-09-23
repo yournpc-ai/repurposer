@@ -26,11 +26,33 @@
 
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, ChevronDown, Loader2, X } from "lucide-react"
+import {
+  ChevronDown,
+  Eye,
+  Loader2,
+  PenLine,
+  Play,
+  RotateCcw,
+  X,
+  type LucideIcon,
+} from "lucide-react"
 
 import type { ActivityFramePayload } from "@/lib/chat-stream"
 import { formatElapsed } from "@/components/chat/RunTaskList"
 import { cn } from "@/lib/utils"
+
+/** Per-kind glyphs (2026-09-24 user ruling, OriginCut parity — 查看项目资源
+ * → folder, 查看时间线 → eye): the kind is user-semantic (never a tool
+ * name), so its icon reads as WHAT the agent did, not as machinery. The
+ * completed row's leading mark IS the kind glyph (the generic ✓ said
+ * "success", which the settled register already says); live rows keep the
+ * spinner, failed/cancelled keep the ✗ seat. */
+const KIND_ICONS: Record<ActivityFramePayload["kind"], LucideIcon> = {
+  read: Eye,
+  draft: PenLine,
+  run: Play,
+  repair: RotateCcw,
+}
 
 export function ActivityRow({ activity }: { activity: ActivityFramePayload }) {
   const { t } = useTranslation()
@@ -52,6 +74,7 @@ export function ActivityRow({ activity }: { activity: ActivityFramePayload }) {
     status !== "active" && activity.duration_ms != null
       ? formatElapsed(activity.duration_ms)
       : null
+  const KindIcon = KIND_ICONS[activity.kind]
   return (
     <div className="flex w-full flex-col gap-1">
       <div
@@ -67,7 +90,7 @@ export function ActivityRow({ activity }: { activity: ActivityFramePayload }) {
         {status === "active" ? (
           <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
         ) : status === "completed" ? (
-          <Check className="h-3.5 w-3.5 shrink-0" />
+          <KindIcon className="h-3.5 w-3.5 shrink-0" />
         ) : (
           // failed / cancelled share the ✗ seat — destructive says failure,
           // the strike-through says the attempt was discarded.
@@ -82,16 +105,18 @@ export function ActivityRow({ activity }: { activity: ActivityFramePayload }) {
         >
           {label}
         </span>
+        {/* Left-cluster duration (2026-09-24 user ruling, OriginCut parity —
+            "查看时间线 · 893ms"): the elapsed rides the label with a ·
+            separator in the same quiet register, nothing floats right. */}
         {duration && (
-          <span className="ml-auto shrink-0 text-xs tabular-nums text-meta-foreground">
-            {duration}
+          <span className="shrink-0 text-xs tabular-nums text-meta-foreground">
+            · {duration}
           </span>
         )}
         {expandable && (
           <ChevronDown
             className={cn(
-              "h-3.5 w-3.5 shrink-0 transition-transform",
-              !duration && "ml-auto",
+              "ml-auto h-3.5 w-3.5 shrink-0 transition-transform",
               open && "rotate-180",
             )}
           />

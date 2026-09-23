@@ -14,6 +14,16 @@ import {
 export const ASSETS_ACCEPT =
   ".mp4,.mov,.webm,.mp3,.wav,.m4a,.png,.jpg,.jpeg,.webp,.txt,.md,.pdf,.doc,.docx,.srt,.vtt"
 
+const ASSETS_ACCEPT_SET = new Set(ASSETS_ACCEPT.split(","))
+
+/** Drop-gate counterpart of ASSETS_ACCEPT (the file picker enforces the
+ * accept list itself; a drag-drop must check the extension on its own —
+ * a dragged File's MIME is not trustworthy across platforms). */
+export function acceptsStagedFile(file: File): boolean {
+  const dot = file.name.lastIndexOf(".")
+  return dot >= 0 && ASSETS_ACCEPT_SET.has(file.name.slice(dot).toLowerCase())
+}
+
 /** Type glyph for a staged file (chips / panel rows). */
 export function fileIconFor(file: File): LucideIcon {
   if (file.type.startsWith("video/")) return Video

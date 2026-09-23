@@ -682,14 +682,17 @@ body {
    devtools correction): the 12px figure in the reference is their
    DISCLAIMER line — the placeholder itself renders at INPUT size (~15px)
    in a quiet gray. Ours = inherited 14px + meta-foreground (one step
-   dimmer than the input's muted body), one line, ellipsis when the copy
-   outgrows the box (the two-line wrap was the real 别扭). */
+   dimmer than the input's muted body). Wrapping ALLOWED (2026-09-24 user
+   ruling, OriginCut parity — the teaching placeholder is a composed
+   two-line read: the ask, then the mechanics; natural wrap beats the
+   ellipsis clip, superseding the earlier "two-line wrap 别扭" call —
+   that 别扭 was an un-composed sentence breaking mid-clause, not two
+   deliberate lines). */
 [contenteditable][data-placeholder]:empty::before {
   content: attr(data-placeholder);
   color: var(--meta-foreground);
-  white-space: nowrap;
+  white-space: pre-wrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   pointer-events: none;
 }
 

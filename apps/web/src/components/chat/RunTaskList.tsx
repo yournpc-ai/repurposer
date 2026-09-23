@@ -154,19 +154,17 @@ export function RunTaskList({
           一座两行; 2026-09-10 层级重铸 — the receipt is the OWNER row): live
           = shimmer narrative + its stage clock; terminal = the receipt pose
           — the stamp STAMPS ONCE (the 16px circle chip — ✓ "the run
-          succeeded" / red ✗ "the run failed", 2026-09-13 失败态拍板), the
-          title reads one notch brighter (the steps' parent, not their
-          sibling — red in the failed pose), total elapsed + chevron right.
-          It is itself the expand/collapse toggle for the railed checklist
-          below. */}
+          succeeded" / red ✗ "the run failed", 2026-09-13 失败态拍板). The
+          settled title reads MUTED like the rest of the chrome (2026-09-24
+          user ruling — the foreground + font-medium pose read as content
+          prose, not chrome; red stays for the failed pose), total elapsed
+          + chevron right. It is itself the expand/collapse toggle for the
+          railed checklist below. */}
       <StatusLine
         label={
           terminal ? (
             <span
-              className={cn(
-                "font-medium",
-                failed ? "text-destructive" : "text-foreground",
-              )}
+              className={cn(failed ? "text-destructive" : "text-muted-foreground")}
             >
               {title}
             </span>

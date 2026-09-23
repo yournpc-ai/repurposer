@@ -512,8 +512,23 @@ function ExplorationCard({ node }: { node: FlowNode }) {
 /** The evidence range's MM:SS — a TIMESTAMP, not a duration: formatDuration
  * treats 0 as "unknown" (`--:--`), but a member at the talk's cold open
  * starts at exactly 0.0s (2026-09-23 review catch). */
-function formatTimestamp(seconds: number): string {
-  const m = Math.floor(seconds / 60)
+/** Render-in-flight = the node's OWN busy beat (2026-09-24 user ruling —
+ * unify the loading chrome): a clip output whose render job is still on
+ * the wire (pending/rendering, no video yet) drives the SAME node wipe and
+ * edge packet as status="running". The producing step lands the output row
+ * and the node's status flips done while the render runs async — keying
+ * the chrome off node.status alone (the 转写-era wiring) read the render
+ * beat as a dead black node with silent edges. */
+export function nodeRenderActive(node: FlowNode): boolean {
+  return (node.outputs ?? []).some(
+    (o) =>
+      o.type === "clip" &&
+      !o.files?.video &&
+      (o.render_status === "pending" || o.render_status === "rendering"),
+  )
+}
+
+function formatTimestamp(seconds: number): string {  const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)
   return `${m}:${s.toString().padStart(2, "0")}`
 }
@@ -709,9 +724,11 @@ function DocumentCard({
             container padding only shows at scroll-end (mid-scroll content
             slides into it), while the wrapper's bottom padding holds the
             scrollport's box itself off the card edge in EVERY scroll state.
-            scroll-fade-y stays: the clip at the inset edge reads soft. */}
+            NO scroll-fade (2026-09-24 user ruling): the top/bottom mask read
+            as a haze over the document's own text — a hard clip at the inset
+            edge is the honest boundary for a reading surface. */}
         <div className="flex min-h-0 flex-1 flex-col p-4">
-          <div className="nowheel nopan thin-scroll scroll-fade-y min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {bodyText ? (
               <p className="text-xs leading-relaxed whitespace-pre-wrap">{bodyText}</p>
             ) : (
@@ -1669,7 +1686,7 @@ function GraphCard({
     onOutputAction?.(output.id, action as FlowOutputAction)
   }
 
-  const running = node.status === "running"
+  const running = node.status === "running" || nodeRenderActive(node)
   const failed = node.status === "failed"
   const renderFailed =
     !!output && output.type === "clip" && output.render_status === "failed"
@@ -1944,7 +1961,8 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
         // filling node keeps its quiet pulse; draft/queued/failed/stale all
         // speak inside the card, never on it.
         node.status === "skipped" && "opacity-40",
-        node.status === "running" && "flow-node-running",
+        (node.status === "running" || nodeRenderActive(node)) &&
+          "flow-node-running",
         selected && !isGraphCard && "rounded-md ring-2 ring-foreground/40",
       )}
     >

@@ -2,10 +2,13 @@
 
 import { useEffect, useMemo, useState, type CSSProperties, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
-import { Box, Plus, User } from "lucide-react"
+import { toast } from "sonner"
+import { Box, Plus, Upload, User } from "lucide-react"
 
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
 import { useStagingUploads } from "@/lib/stagingUploads"
+import { acceptsStagedFile } from "@/lib/stagedFiles"
+import { useFileDrop } from "@/lib/useFileDrop"
 import { fileKindOf, type ChatMention } from "@/lib/mentions"
 import {
   MentionEditor,
@@ -151,6 +154,21 @@ export function HomeComposer({
   const [personaOpen, setPersonaOpen] = useState(false)
   const [modelsOpen, setModelsOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
+
+  // Drag-drop upload (2026-09-24, user ruling — MiniMax/Lovart parity): the
+  // shell IS the drop target in BOTH forms (expanded card / docked bar);
+  // dropping is just a second entry into addFiles — the chips lifecycle
+  // (spinner+% → done/error) rides unchanged. The gesture machinery
+  // (depth-counted enter/leave, files-only arming, the browser-default
+  // guard) is the shared useFileDrop — the dock rides the same hook.
+  const { dragging, dropProps } = useFileDrop((files) => {
+    const accepted = files.filter(acceptsStagedFile)
+    if (accepted.length === 0) {
+      if (files.length > 0) toast.error(t("composer.dropInvalid"))
+      return
+    }
+    addFiles(accepted)
+  }, isGenerating)
 
   // First-visit teaching: open the composer tour once per tour version. Read
   // in an effect only — localStorage is never touched during SSR.
@@ -338,9 +356,26 @@ export function HomeComposer({
         transition. NO backdrop-filter (it would make the card the containing
         block for the portaled MentionPicker). */}
     <InputGroup
-      className="border-0 bg-card shadow-none ring-1 ring-foreground/10 dark:bg-card"
+      className={`border-0 bg-card shadow-none dark:bg-card ${
+        dragging
+          ? "border-2 border-dashed border-foreground/30 ring-0"
+          : "ring-1 ring-foreground/10"
+      }`}
       style={shellStyle}
+      {...dropProps}
     >
+        {/* Drop affordance — the floating pill (screenshot parity): centered
+            over the card, pointer-events-none so the drop always lands on
+            the shell. Frosted floating layer (overlay-surface family) with
+            the /10 hairline; icon + plain-weight label per the pill law. */}
+        {dragging && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+            <div className="overlay-surface flex items-center gap-2.5 rounded-2xl px-5 py-3 ring-1 ring-foreground/10">
+              <Upload className="size-4.5" />
+              <span className="text-base">{t("composer.dropHint")}</span>
+            </div>
+          </div>
+        )}
         {/* Block-start — staged asset chips. Always rendered (keeps the
             container h-auto), folds to zero when empty / docked / the Assets
             panel is open (the icon buttons are stateless — in the docked bar

@@ -19,7 +19,7 @@ import "@xyflow/react/dist/style.css"
 import "./flow.css"
 
 import { FlowEdge, type FlowEdgeType } from "./FlowEdge"
-import { FlowNodeCard, type FlowCardNode } from "./FlowNodeCard"
+import { FlowNodeCard, nodeRenderActive, type FlowCardNode } from "./FlowNodeCard"
 import { BIRTH_STAGGER_MS, declaredHandles, flowNodeSize, layoutFlow } from "./layout"
 import type { FlowGroup, FlowNode, FlowViewProps, GraphEdgeType, OutPortType } from "./types"
 
@@ -180,6 +180,11 @@ function ViewportController({
 const GESTURE_SHIELD_MS = 3000
 const CAMERA_BEAT_TIMEOUT_MS = 5000
 
+/** An edge endpoint's busy beat: running status OR render-in-flight. */
+function nodeBusy(n: FlowNode | undefined): boolean {
+  return !!n && (n.status === "running" || nodeRenderActive(n))
+}
+
 function CameraBeats({
   nodes,
   beat,
@@ -197,6 +202,7 @@ function CameraBeats({
 }) {
   const rf = useReactFlow()
   const prevIdsRef = useRef<ReadonlySet<string> | null>(null)
+  const prevOutsRef = useRef<ReadonlyMap<string, number> | null>(null)
   const armedTokenRef = useRef<number | null>(null)
 
   // Track the current arm by token (declared BEFORE the delta effect so a
@@ -216,12 +222,24 @@ function CameraBeats({
     const ids = new Set(nodes.map((n) => n.id))
     const prev = prevIdsRef.current
     prevIdsRef.current = ids
+    const outCounts = new Map(nodes.map((n) => [n.id, n.outputs?.length ?? 0]))
+    const prevOuts = prevOutsRef.current
+    prevOutsRef.current = outCounts
     // The baseline frame is never a beat (refresh / reconnect / the heal
     // remount render instantly — 铁律).
     if (prev === null) return
     if (!beat || armedTokenRef.current !== beat.token) return
     const newborns = nodes.filter((n) => !prev.has(n.id))
-    if (newborns.length === 0) return // a racing no-delta fetch — arm survives
+    // 产出落地跟随 (2026-09-24 user ruling): a node whose product count
+    // GREW is a landing the camera follows too — outputs fill EXISTING
+    // nodes, so the id-diff alone never saw the run's harvest arrive
+    // (pan beats only; a fit beat reframes on the chain's birth, never
+    // on fills).
+    const filled = nodes.filter(
+      (n) => (n.outputs?.length ?? 0) > (prevOuts?.get(n.id) ?? 0),
+    )
+    const targets = beat.mode === "pan" ? [...newborns, ...filled] : newborns
+    if (targets.length === 0) return // a racing no-delta fetch — arm survives
     const el = wrapperRef.current
     if (!el || !el.clientWidth || !el.clientHeight) return onConsumed?.()
     if (Date.now() - lastGestureRef.current < GESTURE_SHIELD_MS) {
@@ -240,13 +258,13 @@ function CameraBeats({
         duration: reduce ? 0 : 300,
       })
     } else {
-      // setCenter on the newborn cluster's bbox — zoom LOCKED (pan only).
+      // setCenter on the target cluster's bbox — zoom LOCKED (pan only).
       let minX = Infinity
       let minY = Infinity
       let maxX = -Infinity
       let maxY = -Infinity
       let framed = 0
-      for (const n of newborns) {
+      for (const n of targets) {
         const f = n.frame
         if (!f) continue
         framed += 1
@@ -540,9 +558,13 @@ export function FlowView({
           semantic: e.semantic,
           edgeType: e.edgeType,
           drawDelay: bornAt >= 0 ? bornAt * BIRTH_STAGGER_MS + 240 : null,
+          // Live work = a running node OR a render-in-flight clip output
+          // (2026-09-24 统一: the render beat rides the same packet — the
+          // producing step flips the node done while the render runs
+          // async, and the 转写-era status-only wiring went silent there).
           active:
-            nodes.find((n) => n.id === e.to)?.status === "running" ||
-            nodes.find((n) => n.id === e.from)?.status === "running",
+            nodeBusy(nodes.find((n) => n.id === e.to)) ||
+            nodeBusy(nodes.find((n) => n.id === e.from)),
         },
         selectable: false,
         focusable: false,

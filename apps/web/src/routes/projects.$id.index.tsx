@@ -333,6 +333,13 @@ function ProjectDetailPage() {
     lastRunStatusRef.current = status
     if (prev == null || prev === status) return
     if (status !== "completed" && status !== "failed") return
+    // 产出落地跟随 (2026-09-24 user ruling): the run's harvest arrives via
+    // the terminal refetch — arm a pan-keep-zoom beat; CameraBeats fires it
+    // at the cluster whose product counts grew (outputs fill EXISTING
+    // nodes, so the newborn id-diff alone never saw landings).
+    if (graphLive && !isMobile) {
+      setCameraBeat({ token: Date.now(), mode: "pan" })
+    }
     const timer = setTimeout(() => setCanvasEpoch((e) => e + 1), 600)
     return () => clearTimeout(timer)
   }, [latestRun?.status])

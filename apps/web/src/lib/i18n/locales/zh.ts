@@ -63,15 +63,15 @@ const zh: Resources = {
   },
   home: {
     newChat: "新对话",
-    brandTagline: "懂你的自媒体Agent，帮你搞定一切",
+    brandTagline: "懂你的内容Agent，帮你搞定一切",
     // Composer placeholder：固定前缀 + 三条最常见 prompt 在前缀后轮换
     // （Lovart 式轮换 placeholder，2026-08-30）。后缀保持简短，钉顶条里
     // 不超一行。
     placeholderPrefix: "让 Repurposer ",
     placeholderPrompts: [
-      "把我的演讲变成一周的 LinkedIn 帖子",
-      "把这期播客做成一套金句卡",
-      "把我的 keynote 配音成法语和德语",
+      "看看这些素材，你有什么想法建议？",
+      "说说你能做些什么？",
+      "照着我上传的视频做一个一样的",
     ],
     selectPersona: "人设",
     noPromptError: "先说说想做什么",
@@ -408,6 +408,10 @@ const zh: Resources = {
     autoGenerate: "自动",
     assets: "素材",
     models: "模型",
+    // 拖拽上传浮层（2026-09-24）：文件拖入 composer 时的居中 pill，以及
+    // 拖入文件全部不符合 ASSETS_ACCEPT 类型时的 toast。
+    dropHint: "松开以上传文件",
+    dropInvalid: "暂不支持该文件类型",
     // 诚实 Auto 面板（2026-08-30）：每行都是 pipeline 真实的分模态分配，
     // 只读——每个模态只有一个 provider 时没有可选行。
     modelsRows: {
@@ -468,7 +472,14 @@ const zh: Resources = {
   // 配方卡（RECIPES §7）—— 与 lib/recipes.ts 的卡 id 一一对应；
   // reserved 卡在此留座但不渲染发射区。
   recipes: {
-    sectionTitle: "汲取灵感，化为己作",
+    // 画廊筛选 pill（2026-09-24 用户拍板，按素材维度，MiniMax 式）——键与
+    // _app.home.tsx 的 GALLERY_FILTERS 一一对应，取代退役的 sectionTitle。
+    filters: {
+      all: "全部",
+      video: "视频",
+      transcript: "文稿",
+      images: "图片",
+    },
     soon: "即将推出",
     expand: "放大预览",
     mute: "关闭预览声音",
@@ -1269,10 +1280,8 @@ const zh: Resources = {
     completed: "完成",
     failed: "抱歉，这次没能完成修改，请再试一次。",
     runFailed: "运行失败",
-    /** 收官内容回复——FLORA 标准答案：说清什么做好了、在哪儿。无 recap、无下一步。 */
-    runReady: "{{summary}} 做好了，结果在画布上。",
-    runPartial: "{{summary}} 部分完成——{{step}}没做成：{{error}}。已完成的在画布上。",
-    runPartialMore: "{{summary}} 部分完成——{{step}}等 {{count}} 步没做成：{{error}}。已完成的在画布上。",
+    /** 收官句已于 2026-09-24 退役（用户拍板——与 trigger 回合的
+     * run_completed 散文重复；现在只有 trigger 一个叙事者）。 */
     send: "发送",
     stop: "停止",
     undoLastEdit: "撤销上一步修改",
@@ -1432,16 +1441,16 @@ const zh: Resources = {
     starting: "启动中…",
     startingLine: "我开始生成了——你可以继续和我聊，也可以离开页面，它会在后台完成。",
     planUpdated: "好，我记下了——上面的计划已更新。",
-    // FAUNA 同位 mechanics placeholder（2026-09-06 用户拍板终稿——产品
-    // 实测 @ 生效）：FAUNA 句式去 '/' 版。「节点」措辞成立：@ 选择器候选
-    // （素材 / 产物）本就是画布节点。不写 '/'：chat 无 slash 体系，写了
-    // 即虚假承诺（虚构 SKU 禁令同样适用于 placeholder 文案）；FAUNA 原串
-    // 的 '/' 半句只有在 slash 真落地那天才配进文案。
-    chatPlaceholder: "输入 @ 引用节点，描述你的修改想法",
+    // OriginCut 同位 mechanics placeholder（2026-09-24 用户拍板，照搬其两
+    // 行组成式：先问需求，再讲机制——拖拽/粘贴 + @ 引用 + 确认后开工，
+    // 确认拍正好教付费边界）。「节点」措辞成立：@ 选择器候选（素材 /
+    // 产物）本就是画布节点。对外词 = 助手（N-25），不用 Agent。
+    chatPlaceholder: "描述你的修改想法。可拖拽或粘贴文件，输入 @ 引用节点；助手会与你确认后再开工。",
     // full 形态（首次 run 前、画布未生）专用（2026-09-13 用户拍板）：画布
     // 还不存在时没有「节点」可指——@ 候选只有素材；措辞走世界真相不走
     // 一句通用。画布落地后（panel / dock 形态）回到上面的 nodes 版。
-    chatPlaceholderAssets: "输入 @ 引用素材，说说你想做什么",
+    // 2026-09-24：同随 OriginCut 两行组成式（nodes 版同款，@ 对象换素材）。
+    chatPlaceholderAssets: "描述你想做什么。可拖拽或粘贴文件，输入 @ 引用素材；助手会与你确认后再开工。",
     attachFiles: "上传文件",
     retryUpload: "重试上传",
     removeAttachment: "移除附件",

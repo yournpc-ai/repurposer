@@ -73,15 +73,15 @@ const en = {
   },
   home: {
     newChat: "New chat",
-    brandTagline: "The social media agent that gets you and gets the job done",
+    brandTagline: "The content agent that gets you and gets the job done",
     // Composer placeholder: fixed prefix + three most-common prompts cycling
     // behind it (Lovart-style rotating placeholder, 2026-08-30). Keep the
     // suffixes short enough to stay one line in the docked bar.
     placeholderPrefix: "Ask Repurposer to ",
     placeholderPrompts: [
-      "turn my talk into a week of LinkedIn posts",
-      "make quote cards from this podcast episode",
-      "dub my keynote into French and German",
+      "look at this material and tell me your ideas",
+      "tell me what you can do",
+      "make one just like the video I uploaded",
     ],
     selectPersona: "Persona",
     noPromptError: "Say what you want to make first",
@@ -422,6 +422,11 @@ const en = {
     autoGenerate: "Auto",
     assets: "Assets",
     models: "Models",
+    // Drag-drop affordance (2026-09-24): the floating pill over the composer
+    // while a file drag hovers, and the toast when nothing dropped is a
+    // supported type (the ASSETS_ACCEPT list).
+    dropHint: "Drop files to upload",
+    dropInvalid: "That file type isn't supported yet",
     // Honest Auto panel (2026-08-30): every row is the pipeline's REAL
     // per-modality assignment, read-only — no selectable rows while each
     // modality has exactly one provider.
@@ -484,7 +489,15 @@ const en = {
   // Recipe cards (RECIPES §7) — one block per card id in lib/recipes.ts;
   // reserved cards render disabled with the Soon pill, never launchable.
   recipes: {
-    sectionTitle: "Get inspired. Then make it yours",
+    // Gallery filter pills (2026-09-24 user ruling — material-based, MiniMax
+    // parity). Keys mirror GALLERY_FILTERS in _app.home.tsx; replaces the
+    // retired sectionTitle.
+    filters: {
+      all: "All",
+      video: "Video",
+      transcript: "Transcripts",
+      images: "Images",
+    },
     soon: "Soon",
     expand: "Expand preview",
     mute: "Mute preview sound",
@@ -1341,11 +1354,8 @@ const en = {
     completed: "Done",
     failed: "Sorry, I couldn't update this. Please try again.",
     runFailed: "Run failed",
-    /** Terminal completion reply — the FLORA standard answer: name what
-     * became ready and where it lives. No recap, no next-step. */
-    runReady: "Your {{summary}} is ready — the results are on the canvas.",
-    runPartial: "{{summary}} is partly done — {{step}} didn't make it: {{error}}. What's finished is on the canvas.",
-    runPartialMore: "{{summary}} is partly done — {{step}} + {{extra}} more steps didn't make it: {{error}}. What's finished is on the canvas.",
+    /** Terminal completion lines retired 2026-09-24 (user ruling — they
+     * duplicated the trigger turn's run_completed prose; ONE narrator now). */
     send: "Send",
     stop: "Stop",
     undoLastEdit: "Undo last edit",
@@ -1518,13 +1528,13 @@ const en = {
     // no slash-command system; advertising it would be a false promise
     // (the 虚构 SKU 货架 ban applies to placeholder copy too). The '/'
     // half earns its seat only if slash commands ever ship.
-    chatPlaceholder: "Use '@' to mention nodes and describe changes",
+    chatPlaceholder: "Describe your changes. Drag or paste files, or type @ to mention nodes — the assistant confirms with you before starting.",
     // The full form's sibling (2026-09-13 user ruling): pre-first-run the
     // canvas doesn't exist yet, so there are no "nodes" to point at — the
     // @ picker's candidates are assets only. Copy follows the world's
     // truth per form; the nodes version returns once the canvas lands
     // (panel / dock forms).
-    chatPlaceholderAssets: "Use '@' to mention assets and say what you want to make",
+    chatPlaceholderAssets: "Describe what you want to make. Drag or paste files, or type @ to mention assets — the assistant confirms with you before starting.",
     attachFiles: "Attach files",
     retryUpload: "Retry upload",
     removeAttachment: "Remove attachment",

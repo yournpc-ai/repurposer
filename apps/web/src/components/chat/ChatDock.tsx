@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment, forwardRef, useImperativeHandle } from "react"
 import { useTranslation } from "react-i18next"
 import {
+  Box,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -42,6 +43,7 @@ import {
   Square,
   TriangleAlert,
   Undo2,
+  Upload,
   Video,
   X,
 } from "lucide-react"
@@ -103,6 +105,7 @@ import {
   MessageScrollerItem,
   MessageScrollerProvider,
   MessageScrollerViewport,
+  useMessageScroller,
 } from "@/components/ui/message-scroller"
 import {
   Select,
@@ -114,8 +117,10 @@ import {
 import { RunCard } from "@/components/chat/RunCard"
 import { AnsweredQuestion, answeredQuestionText } from "@/components/chat/AnsweredQuestion"
 import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
+import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
 import { ComposerSendButton } from "@/components/composer/ComposerSendButton"
 import { CostConfirmControl } from "@/components/composer/CostConfirmControl"
+import { ModelsPanel } from "@/components/composer/ModelsPanel"
 import {
   mapHistoryRows,
   triggerSuggestions,
@@ -153,11 +158,13 @@ import { ActivityRow } from "@/components/chat/ActivityStream"
 import type { LifecycleStamp, Output } from "@/lib/types"
 import { isConfirmationReady, isPlanReady } from "@/lib/lifecycleStamp"
 import {
+  acceptsStagedFile,
   fileIconFor,
   formatChipDuration,
   probeMediaDims,
   useStagedFileMeta,
 } from "@/lib/stagedFiles"
+import { useFileDrop } from "@/lib/useFileDrop"
 
 const LANGUAGE_OPTIONS = [
   { code: "en", labelKey: "languages.en" },
@@ -299,6 +306,28 @@ function assetTypeIcon(type: string) {
 function assetFilename(fileUrl: string | null): string {
   if (!fileUrl) return ""
   return fileUrl.split("/").pop() || fileUrl
+}
+
+/** Send-time follow re-arm (2026-09-24, user-reported auto-scroll failures).
+ * The scroller library only auto-follows while its mode is "following-
+ * bottom", which disengages the moment the viewport sits >8px off the
+ * bottom — and items' content-visibility intrinsic-size estimates can hold
+ * the geometry there (the stray ↓ button reads the same drift). SENDING is
+ * the user's explicit "take me to the live edge" intent, so every send
+ * calls scrollToEnd: the library's own entry both jumps AND re-engages
+ * following-bottom (the just-appended bubble is then caught by the
+ * content-change handler under the same follow mode). This bridge lives
+ * inside the Provider — the hook can't be called from the dock's body. */
+function ScrollerSendBridge({
+  apiRef,
+}: {
+  apiRef: React.RefObject<(() => void) | null>
+}) {
+  const { scrollToEnd } = useMessageScroller()
+  useEffect(() => {
+    apiRef.current = () => scrollToEnd({ behavior: "auto" })
+  }, [apiRef, scrollToEnd])
+  return null
 }
 
 /** One staged attachment in the dock's input band — THUMBNAIL FIRST (2026-
@@ -823,6 +852,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * flag stays inert in both, and it resets on the morph so the dock lands
    * collapsed. */
   const [historyOpen, setHistoryOpen] = useState(false)
+  // The Models button rides the dock's control strip too (2026-09-24 user
+  // ruling — OriginCut parity: the model pill isn't composer-only). Same
+  // read-only honest-Auto panel as the composer's, same shared leaves.
+  const [modelsOpen, setModelsOpen] = useState(false)
   /** The tucked-away state (2026-09-02 形态机; 2026-09-06 extended to the
    * panel form): the user tucks the whole dock/panel away to a LogoMark chip
    * at the bottom-right — node-dense canvas reading and screenshot sharing
@@ -1904,7 +1937,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }
   }
 
-  const handleFilesPicked = (picked: FileList | null) => {
+  const handleFilesPicked = (picked: FileList | File[] | null) => {
     const files = Array.from(picked ?? [])
     if (fileInputRef.current) fileInputRef.current.value = ""
     if (files.length === 0) return
@@ -1916,6 +1949,25 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setStaged((prev) => [...prev, ...additions])
     for (const s of additions) void uploadStaged(s.localId, s.file)
   }
+
+  // Drag-drop upload (2026-09-24, user ruling — composer parity): the input
+  // container is the drop target in every form (full / panel / dock);
+  // dropping is a second entry into handleFilesPicked — the staged-chips
+  // lifecycle rides unchanged. The gesture machinery (depth counting,
+  // files-only arming, the browser-default guard) is the shared
+  // useFileDrop. Types are gated by ASSETS_ACCEPT (a dragged File's MIME
+  // is not trustworthy); the drop stays live while a turn runs — chips
+  // stage for the NEXT message.
+  const { dragging: fileDragging, dropProps: fileDropProps } = useFileDrop(
+    (files) => {
+      const accepted = files.filter(acceptsStagedFile)
+      if (accepted.length === 0) {
+        if (files.length > 0) toast.error(t("composer.dropInvalid"))
+        return
+      }
+      handleFilesPicked(accepted)
+    },
+  )
 
   /** A staged chip's × : drop it from the input group; an already-created
    * asset is deleted server-side too (staged ≠ sent — it must not linger as
@@ -2791,6 +2843,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         },
       ])
       raiseHistory()
+      scrollerSendRef.current?.() // an option click is the same live-edge intent
       return
     }
     if (!questionOverride && answering) return
@@ -2834,6 +2887,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           ],
     )
     raiseHistory()
+    scrollerSendRef.current?.() // an option click is the same live-edge intent
     // Typewriter pacing (same reason as sendChat — 2026-08-05 fix): the
     // reasoning model tends to deliver the echo in one coarse chunk right
     // before the terminal frame; raw appends read as "popped in at once",
@@ -3050,6 +3104,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       },
     ])
     raiseHistory()
+    scrollerSendRef.current?.() // same live-edge intent as handleSend
     void sendChat(text, { rollbackId, draft: text })
   }
 
@@ -3060,6 +3115,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     abortRef.current = null
     setChatBusy(false)
   }
+
+  // Send-time follow re-arm (see ScrollerSendBridge): filled by the bridge
+  // inside the scroller Provider.
+  const scrollerSendRef = useRef<(() => void) | null>(null)
 
   const handleSend = () => {
     const text = input.trim()
@@ -3093,6 +3152,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setStaged((prev) => prev.filter((s) => s.status !== "done"))
     // Your own send opens the flow — the reply lands there.
     raiseHistory()
+    // Sending = explicit "take me to the live edge" intent (2026-09-24):
+    // re-arm the scroller's following-bottom mode AND jump — the library's
+    // 8px stickiness (plus content-visibility's height estimates) otherwise
+    // leaves the viewport stranded mid-flow with the ↓ pill showing.
+    scrollerSendRef.current?.()
     void sendChat(text, {
       rollbackId,
       draft: text,
@@ -3204,7 +3268,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     | { kind: "taskList" }
     | { kind: "message"; message: OverlayMessage }
     | { kind: "activity"; activity: ActivityFramePayload }
-    | { kind: "terminal" }
   const runStreamUnits = useMemo<RunStreamUnit[] | null>(() => {
     // ONE render path for every window (2026-09-09 双渲染路收一——the legacy
     // fixed block is dead): the pre-snapshot window (runStartAt == null —
@@ -3262,23 +3325,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       order: order++,
       unit: { kind: "taskList" },
     })
-    // The completion line follows a succeeded run OR a partial failure
-    // (2026-09-13 用户拍板 — 收紧判定, ADR-074②: the verdict now FAILS on
-    // any dead non-render step, and a partially-landed run still gets its
-    // honest closing line — the receipt's red ✗ stamps the run, the line
-    // names what didn't make it). A run where NOTHING landed pushes no
-    // terminal unit — its receipt header already carries the failure (red ✗
-    // stamp + red title, the reason on the failed step row inside the tree),
-    // and a separate "生成失败" item under it was a second surface saying
-    // less. "Landed" mirrors the verdict's own truth: a done step WITH
-    // output_refs — prep steps (preprocess / understand / plan) done don't
-    // count, a run whose work all died has nothing on the canvas.
-    const anyLanded = steps.some(
-      (s) => s.status === "done" && (s.output_refs?.length ?? 0) > 0,
-    )
-    if (terminal && lastStepT != null && (status !== "failed" || anyLanded)) {
-      timed.push({ t: lastStepT + 2, order: order++, unit: { kind: "terminal" } })
-    }
+    // The deterministic terminal line ("…做好了，结果在画布上") is RETIRED
+    // (2026-09-24 user ruling — 重复): it narrated the same landing the
+    // trigger turn's run_completed prose narrates seconds later, richer
+    // (quantified facts / gaps / credits). ONE narrator now: the receipt
+    // row is the instant deterministic surface, the trigger prose is the
+    // closing speech. The 2026-09-13 styling law (收官句 = 普通回复消息)
+    // survives — the trigger prose IS that ordinary AssistantText message.
     timed.sort((a, b) => a.t - b.t || a.order - b.order)
     const units: RunStreamUnit[] = timed.map((entry) => entry.unit)
     for (const m of undated) {
@@ -3342,6 +3395,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       },
     ])
     raiseHistory()
+    scrollerSendRef.current?.() // same live-edge intent as handleSend
     void sendChat(text, { rollbackId, draft: text })
   }
 
@@ -3944,6 +3998,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           // not MessageScroller.Root (which is a plain div).
           autoScroll
         >
+          <ScrollerSendBridge apiRef={scrollerSendRef} />
           <MessageScroller className="h-full">
             <MessageScrollerViewport className="scroll-fade-y thin-scroll">
               {/* Full form: the stage sits under the floating top chrome
@@ -4011,55 +4066,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                                 </p>
                               </MessageContent>
                             </Message>
-                          </MessageScrollerItem>
-                        )
-                      }
-                      if (unit.kind === "terminal") {
-                        // The completion prose speaks the PARTIAL truth when
-                        // the run has casualties (2026-09-13 用户拍板 — 收紧
-                        // 判定): a dead non-render step now FAILS the run (the
-                        // receipt's red ✗ stamps it), and the closing line
-                        // names the failed step + its baked human error —
-                        // never a blanket "做好了" over a dead branch. Copy
-                        // sources stay lawful (二源律): the run title is the
-                        // LLM's name, the step label is the builder-written
-                        // preset, the error is the world's baked fact.
-                        const casualties = steps.filter((s) => s.status === "failed")
-                        const first = casualties[0]
-                        const firstError = (first?.error ?? "").replace(/[。．.!?！？\s]+$/, "")
-                        const completionText =
-                          casualties.length === 0
-                            ? t("chat.runReady", { summary: runTitle })
-                            : casualties.length === 1
-                              ? t("chat.runPartial", {
-                                  summary: runTitle,
-                                  step: first?.summary ?? first?.kind,
-                                  error: firstError,
-                                })
-                              : t("chat.runPartialMore", {
-                                  summary: runTitle,
-                                  step: first?.summary ?? first?.kind,
-                                  count: casualties.length,
-                                  extra: casualties.length - 1,
-                                  error: firstError,
-                                })
-                        return (
-                          <MessageScrollerItem
-                            key="run-terminal"
-                            // The completion line clusters with the receipt
-                            // above it — eat one gap step (gap-6 → ~8px
-                            // visual) so the pair reads as one footer, not
-                            // two messages (2026-09-05).
-                            className="-mt-4"
-                          >
-                            {/* Success + partial failure only (a fully-failed
-                                run — nothing landed — pushes no terminal
-                                unit; its receipt IS the failure surface).
-                                The SAME AssistantText pipeline as every other
-                                assistant message (用户拍板： 收官句是普通回复
-                                消息——a hand-rolled <p> was a separate style
-                                in disguise). */}
-                            <AssistantText text={completionText} />
                           </MessageScrollerItem>
                         )
                       }
@@ -4357,6 +4363,21 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               2026-09-23 — behavior wiring is a later batch). side="top":
               the dock lives at the viewport's bottom edge. */}
           <CostConfirmControl popoverSide="top" align="end" className="mr-1" />
+          {/* Models — the honest Auto panel, dock seat (2026-09-24 user
+              ruling, OriginCut parity): the same read-only per-modality
+              assignments as the composer's panel, side="top" off the
+              bottom edge. */}
+          <ComposerPanelButton
+            icon={Box}
+            label={t("composer.models")}
+            open={modelsOpen}
+            onOpenChange={setModelsOpen}
+            popoverSide="top"
+            align="end"
+            unpadded
+          >
+            <ModelsPanel />
+          </ComposerPanelButton>
           {/* The stop button only exists while a stream is actually
               abortable (the answer path sets chatBusy without one —
               nothing to stop there). */}
@@ -4610,11 +4631,26 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               editor stays mounted inside, DOM-owned draft intact). */}
           <div
             className={cn(
-              "dock-surface overflow-hidden ring-1 ring-foreground/10 transition-[border-radius] duration-300 ease-out motion-reduce:transition-none",
+              "dock-surface relative overflow-hidden ring-1 ring-foreground/10 transition-[border-radius] duration-300 ease-out motion-reduce:transition-none",
+              fileDragging &&
+                "border-2 border-dashed border-foreground/30 ring-0",
               inputRadius,
               pillDock && "hidden"
             )}
+            {...fileDropProps}
           >
+            {/* Drop affordance — composer parity (2026-09-24): the floating
+                pill centered over the input container, pointer-events-none
+                so the drop always lands on the container. Frosted floating
+                layer + /10 hairline; icon + plain-weight label. */}
+            {fileDragging && (
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                <div className="overlay-surface flex items-center gap-2.5 rounded-2xl px-5 py-3 ring-1 ring-foreground/10">
+                  <Upload className="size-4.5" />
+                  <span className="text-base">{t("composer.dropHint")}</span>
+                </div>
+              </div>
+            )}
             {/* The input row morphs away while an options question is
                 pending (ADR-053 R1 阻塞形态) — CSS-hidden, NOT unmounted:
                 the editor keeps its DOM-owned draft across the morph. The
