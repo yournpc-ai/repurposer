@@ -815,6 +815,68 @@ class ChatAnswerArgs(BaseModel):
     )
 
 
+class ReviseOutputTarget(BaseModel):
+    """``revise_output``'s pointing (iter-3 S3, E4): the user's OWN pointing
+    words ride verbatim — ``plan_ref`` relays the ordinal / plan_id
+    ("2", "plan 2", the id from get_pending_plan); ``output_id`` is the
+    @output pin's definite id. One or the other; both empty = the target is
+    unclear (ask, never guess)."""
+
+    model_config = ConfigDict(extra="forbid", coerce_numbers_to_str=True)
+    # coerce_numbers_to_str (2026-09-23, prompt_gate probe G 实测): the
+    # provider emits the ordinal as a bare NUMBER ('plan 2' → plan_ref: 2)
+    # and never recovers from the strict-string rejection — the pointing
+    # words are the user's, so the schema absorbs the dialect (顺形律).
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "plan_ref", "output_id")
+
+    plan_ref: str | None = Field(
+        default=None,
+        description=(
+            "The user's pointing words for the plan, verbatim — an ordinal "
+            "('2', 'plan 2') or a plan_id. Relay, never resolve it yourself."
+        ),
+    )
+    output_id: UUID | None = Field(
+        default=None,
+        description="The pinned output's id (an @output mention) — the definite reference.",
+    )
+
+
+class ReviseOutputArgs(BaseModel):
+    """``revise_output`` params, chat path (iter-3 S3, ADR-089 §6 修订二分律):
+    the CRAFT-level revision verb — the how inside the paid envelope
+    ('plan 2 的字幕太长了', 'make the hook sharper'), never the what
+    (a plan's deliverables change = revise_plan). The system routes the
+    pointing to the confirmed scope's node set (R20), rewrites the affected
+    programs with the instruction, and the scope classifier decides: inside
+    the confirmed scope it reruns directly; new paid work re-docks as a
+    mini decision package."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "target", "instruction")
+
+    target: ReviseOutputTarget = Field(
+        default_factory=ReviseOutputTarget,
+        description="What the revision points at — plan_ref XOR output_id.",
+    )
+    instruction: str = Field(
+        default="",
+        description="The user's change ask, restated in one compact line (what changes about the work).",
+    )
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="Pending-question settlement for this turn: 'answer' / 'skip' / 'none'.",
+    )
+
+
 # ---- 触发回合 (T3, ADR-077 判词③) — the proactive turn's terminal --------
 
 

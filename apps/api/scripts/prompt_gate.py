@@ -33,6 +33,14 @@ same contexts as the A/B instrument:
   SAME discovery chain — propose_plans terminal, propose_candidates in the
   trace, propose_tasks / edit_graph NEVER called (the discovery ask never
   falls back to the router-drafted verbs).
+- F:package-revision (iter-3 S3, review 注记②) — a docked decision package
+  + '把第二个方案改成法语' must end at revise_plan carrying the SECOND
+  plan's plan_id (序位→id 精确命中, 验收 #3), read off the get_pending_plan
+  stub — propose_tasks / edit_graph never called (a package revision never
+  re-derives the chain).
+- G:craft-revision (iter-3 S3, N-58) — post-run 'plan 2 的帖子语气再尖锐
+  一点' must end at revise_output with plan_ref relayed verbatim
+  (containing '2'), never edit_graph / apply_edit_ops / propose_tasks.
 
 Tool-loop form (ADR-077 判词②, 2026-09-14): the agent is the ToolLoopAgent,
 the action IS the terminal tool call, and the predicates read
@@ -50,7 +58,7 @@ thresholds), then bisect with the A/B instrument — never tune the
 thresholds to make a regression pass.
 
 Usage (from apps/api):
-    uv run python scripts/prompt_gate.py [--n 12] [--probe A|B|C|D|E] [--provider minimax]
+    uv run python scripts/prompt_gate.py [--n 12] [--probe A|B|C|D|E|F|G] [--provider minimax]
 """
 
 import argparse
@@ -100,8 +108,12 @@ PROVIDERS = {
 # (probe, minimum passes out of N). D's band is measured; E measured at
 # introduction (2026-09-23, iter-3 S2): 11/12 band-reading + 9/12 on the
 # full-gate rerun — threshold 8 holds with real-regression headroom.
-# Recalibrate from readings, never to excuse a regression.
-THRESHOLDS = {"A": 8, "B": 8, "C": 10, "D": 8, "E": 8}
+# F/G measured at introduction (2026-09-23, iter-3 S3): F 10/12; G 9/12 on
+# the first reading — the failures were a params dialect (plan_ref as a
+# bare int), fixed in the SCHEMA (coerce_numbers_to_str, 顺形律), then
+# 12/12. Thresholds hold at 8 with headroom — recalibrate from readings,
+# never to excuse a regression.
+THRESHOLDS = {"A": 8, "B": 8, "C": 10, "D": 8, "E": 8, "F": 8, "G": 8}
 
 BRIEF_ANSWERED = Brief.model_validate(
     {
@@ -190,6 +202,57 @@ PROBE_E = {
     },
 }
 
+# F's docked package (iter-3 S3, review 注记②): a decision package awaiting
+# confirmation, readable through the get_pending_plan stub — the reading
+# layer's plan_ids are revise_plan's ONLY source on the chat path (A-1).
+_PROBE_F_PLAN_A = "aaaaaaaa-1111-1111-1111-111111111111"
+_PROBE_F_PLAN_B = "bbbbbbbb-2222-2222-2222-222222222222"
+_PROBE_F_PENDING_PLAN = (
+    "Docked plan (waiting for the user's confirmation):\n"
+    "- Original request: 再挑两段我讲到 onboarding 的地方，一条短片一条帖子\n"
+    "- Name: Onboarding picks\n"
+    "- Tasks:\n"
+    '  - cut_segments {"segments":[{"start":5.0,"end":11.2}],"asset_id":"66666666-6666-6666-6666-666666666666"}\n'
+    '  - write_post {"language":"en","source_span":{"start":22.4,"end":27.8}}\n'
+    "- Content plans (name them by plan_id when revising):\n"
+    f"  1) plan_id={_PROBE_F_PLAN_A} — Onboarding clip: clip [ready]\n"
+    f"  2) plan_id={_PROBE_F_PLAN_B} — Onboarding post: post (en) [ready]"
+)
+PROBE_F = {
+    "message": "把第二个方案改成法语",
+    "context": {
+        "text": (
+            "Project: Founder Talks "
+            "(id=77777777-7777-7777-7777-777777777777, language=en)\n"
+            "Assets:\n"
+            f"- video id={_PROBE_E_ASSET_ID} status=ready language=en\n"
+            "Current outputs:\n"
+            "- clip id=88888888-8888-8888-8888-888888888888: onboarding highlights\n"
+            "Latest run: status=done id=99999999-9999-9999-9999-999999999998\n"
+            "Pending question awaiting the user's answer: Start this plan?"
+        )
+    },
+}
+
+# G's post-run craft ask (iter-3 S3): confirmed work exists; the message
+# points by ordinal ('plan 2') — the model relays it verbatim, the router
+# resolves.
+PROBE_G = {
+    "message": "plan 2 的帖子语气再尖锐一点",
+    "context": {
+        "text": (
+            "Project: Founder Talks "
+            "(id=77777777-7777-7777-7777-777777777777, language=en)\n"
+            "Assets:\n"
+            f"- video id={_PROBE_E_ASSET_ID} status=ready language=en\n"
+            "Current outputs:\n"
+            "- clip id=88888888-8888-8888-8888-888888888888: onboarding highlights\n"
+            "- post id=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee: onboarding post\n"
+            "Latest run: status=done id=99999999-9999-9999-9999-999999999998"
+        )
+    },
+}
+
 # D's discovery substrate: material attached and readable (the excerpt is
 # the search read's honest footing — the stub's search observation below
 # quotes from it verbatim so the chain has real evidence to propose).
@@ -244,6 +307,7 @@ async def _gate_execute(
     *,
     search_hits: str = _PROBE_D_SEARCH_HITS,
     segment_text: str = _PROBE_D_SEGMENT,
+    pending_plan_text: str | None = None,
 ):
     """The gate's execution stub — accepts everything EXCEPT the rootless
     present_plan (mirrors the production 出书门槛 probe C measures: no
@@ -266,6 +330,10 @@ async def _gate_execute(
             return ToolObservation(search_hits.format(query=query))
         if name == "get_segment":
             return ToolObservation(segment_text)
+        if name == "get_pending_plan" and pending_plan_text is not None:
+            # F's docked package (iter-3 S3): the reading layer the chat
+            # path's revise_plan reads its plan_id from.
+            return ToolObservation(pending_plan_text)
         return ToolObservation(
             "(gate stub: nothing readable in this probe context)"
         )
@@ -342,18 +410,40 @@ def _passed(probe: str, r: LoopResult) -> bool:
     # E (iter-3 S2): same chain law on the CHAT path — propose_plans
     # terminal, propose_candidates in the trace, and the router-drafted
     # verbs (propose_tasks / edit_graph) never touched.
+    if probe == "E":
+        return (
+            r.tool_name == "propose_plans"
+            and "propose_candidates" in r.calls
+            and "propose_tasks" not in r.calls
+            and "edit_graph" not in r.calls
+        )
+    # F (iter-3 S3, review 注记②): the docked package's revision ends at
+    # revise_plan carrying the SECOND plan's id (序位→id 精确命中) — the
+    # router-drafted verbs never touched.
+    if probe == "F":
+        return (
+            r.tool_name == "revise_plan"
+            and str(getattr(r.params, "plan_id", "")) == _PROBE_F_PLAN_B
+            and "propose_tasks" not in r.calls
+            and "edit_graph" not in r.calls
+            and "revise_output" not in r.calls
+        )
+    # G (iter-3 S3): the craft revision ends at revise_output with the
+    # user's pointing relayed verbatim (plan_ref carries the '2') — never
+    # edit_graph / apply_edit_ops / propose_tasks.
     return (
-        r.tool_name == "propose_plans"
-        and "propose_candidates" in r.calls
-        and "propose_tasks" not in r.calls
+        r.tool_name == "revise_output"
+        and "2" in str(getattr(getattr(r.params, "target", None), "plan_ref", "") or "")
         and "edit_graph" not in r.calls
+        and "apply_edit_ops" not in r.calls
+        and "propose_tasks" not in r.calls
     )
 
 
 async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=12)
-    parser.add_argument("--probe", choices=["A", "B", "C", "D", "E"], default=None)
+    parser.add_argument("--probe", choices=["A", "B", "C", "D", "E", "F", "G"], default=None)
     parser.add_argument("--provider", choices=sorted(PROVIDERS), default="minimax")
     args = parser.parse_args()
 
@@ -400,23 +490,34 @@ async def main() -> int:
         max_iterations=12,
         client=client,
     )
-    probes = {"A": PROBE_A, "B": PROBE_B, "C": PROBE_C, "D": PROBE_D, "E": PROBE_E}
+    probes = {
+        "A": PROBE_A,
+        "B": PROBE_B,
+        "C": PROBE_C,
+        "D": PROBE_D,
+        "E": PROBE_E,
+        "F": PROBE_F,
+        "G": PROBE_G,
+    }
     failed = False
     for name, ctx in probes.items():
         if args.probe and name != args.probe:
             continue
-        agent = chat_agent if name == "E" else plan_agent
+        agent = chat_agent if name in ("E", "F", "G") else plan_agent
         # E's evidence reads quote onboarding, not pricing (the themed
-        # canned observations keep the chain honest to the ask).
-        execute = (
-            functools.partial(
+        # canned observations keep the chain honest to the ask); F's
+        # get_pending_plan stub carries the docked package's plan_ids.
+        execute = _gate_execute
+        if name == "E":
+            execute = functools.partial(
                 _gate_execute,
                 search_hits=_PROBE_E_SEARCH_HITS,
                 segment_text=_PROBE_E_SEGMENT,
             )
-            if name == "E"
-            else _gate_execute
-        )
+        elif name == "F":
+            execute = functools.partial(
+                _gate_execute, pending_plan_text=_PROBE_F_PENDING_PLAN
+            )
         outcomes = []
         for _ in range(args.n):
             try:

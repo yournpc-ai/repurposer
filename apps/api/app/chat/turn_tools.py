@@ -33,6 +33,7 @@ from app.models.schemas import (
     PlanAskArgs,
     PresentPlanArgs,
     ProposeTasksArgs,
+    ReviseOutputArgs,
 )
 
 # The plan path (pre-first-run intent router) — InferredIntent's four actions:
@@ -112,6 +113,22 @@ CHAT_TOOLS = [
             "BEFORE calling this."
         ),
         params_model=EditGraphArgs,
+    ),
+    # iter-3 S3 (N-58, ADR-089 §6): the craft-level revision verb — product
+    # semantics (a plan / an output + the user's words), NEVER wiring ops.
+    ChatTool(
+        name="revise_output",
+        description=(
+            "Revise an already-produced work's CRAFT (the how: 'plan 2 的字幕"
+            "太长了', 'make the hook sharper') — targeted by the user's "
+            "pointing (plan_ref relayed verbatim, or the @output pin). The "
+            "system routes the target, rewrites the affected programs, and "
+            "reruns inside the confirmed scope; new paid work re-docks as a "
+            "mini decision package. A plan's DELIVERABLES change (what it "
+            "makes) is revise_plan, never this. Speak what you'll change "
+            "BEFORE calling this."
+        ),
+        params_model=ReviseOutputArgs,
     ),
     ChatTool(
         name="ask_user",

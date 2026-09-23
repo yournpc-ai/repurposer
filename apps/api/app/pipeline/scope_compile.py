@@ -296,10 +296,13 @@ def compile_plans(
 
 __all__ = [
     "CompiledScope",
+    "CraftRevisionOps",
     "RevisionRoute",
     "ScopeCompileRejected",
+    "assemble_craft_revision",
     "compile_plans",
     "compile_scope",
+    "compose_revised_program",
     "decision_package_plans",
     "build_confirmed_scope",
     "route_revision",
@@ -577,3 +580,81 @@ def _plan_owning_node(
         ):
             return str(plan_id)
     return None
+
+
+# ---- R19 消费侧 (iter-3 S3): craft revision ops assembly ----------------------
+
+# prompt 消费族 (N-58 revise_output 的门控词表): nodes whose spec.prompt is
+# a real PROGRAM the runtime's instruction channel steers (the four writers
+# + the legacy LLM selector). Deterministic stations (cut_segments /
+# translate_clip / dub_clip / materialize …) carry params, not programs —
+# editing their display line would change nothing at runtime, so they are
+# the honest-degrade family, never silently "revised".
+_PROMPT_CONSUMING_TOOLS = frozenset(
+    {
+        "write_post",
+        "write_article",
+        "write_quotes",
+        "write_carousel",
+        "select_clips",
+    }
+)
+
+
+@dataclass(frozen=True)
+class CraftRevisionOps:
+    """The assembled craft-revision ops (R19 continuation candidate):
+    ``ops`` = one edit_prompt per prompt-consuming node + the closing bare
+    run (the run op targets the edited nodes ∪ downstream — the wiring
+    door's own closure); ``uncovered`` = the deterministic nodes' display
+    labels the revision could NOT touch (the caller's disclosure line names
+    them — a partial cover executes and SAYS what it skipped)."""
+
+    ops: tuple[dict[str, Any], ...]
+    uncovered: tuple[str, ...] = ()
+
+
+def compose_revised_program(current: str, instruction: str) -> str:
+    """The ONE prompt-composition seat for revise_output (R12: no LLM
+    composition of wiring internals — the program is user-language and the
+    revision clause is the user's own ask, restated): the current program
+    absorbs the instruction verbatim as a trailing clause, so the node's
+    program surface honestly shows what changed."""
+    current = (current or "").strip()
+    instruction = instruction.strip()
+    if not current:
+        return instruction
+    if not instruction:
+        return current
+    return f"{current}\n\n{instruction}"
+
+
+def assemble_craft_revision(
+    nodes: list[Any], instruction: str
+) -> CraftRevisionOps | None:
+    """prompt 消费族门控 + ops 组装 (E4, pure): the routed node set →
+    edit_prompt + run ops. None = NOTHING here consumes a program (the
+    all-deterministic honest degrade — the caller's echo says what CAN
+    change); a partial cover returns the editable ops plus the uncovered
+    labels for the disclosure line."""
+    editable: list[dict[str, Any]] = []
+    uncovered: list[str] = []
+    for n in nodes:
+        spec = getattr(n, "spec", None) or {}
+        if spec.get("tool") in _PROMPT_CONSUMING_TOOLS:
+            editable.append(
+                {
+                    "op": "edit_prompt",
+                    "node": str(n.id),
+                    "prompt": compose_revised_program(
+                        str(spec.get("prompt") or ""), instruction
+                    ),
+                }
+            )
+        else:
+            uncovered.append(str(spec.get("summary") or getattr(n, "type", "?")))
+    if not editable:
+        return None
+    return CraftRevisionOps(
+        ops=(*editable, {"op": "run"}), uncovered=tuple(uncovered)
+    )

@@ -523,6 +523,22 @@ def _pending_plan_lines(plan) -> list[str]:
         lines.append(f"- Extra instruction: {intent.specific_instruction[:300]}")
     if intent is not None and intent.caption_mode:
         lines.append(f"- Caption mode: {intent.caption_mode}")
+    # iter-3 S3 (A-1 观察合同 ≥ 行动合同): the decision package's READING
+    # layer — revise_plan's plan_id is reachable ONLY here on the chat
+    # path (the plan path sees the package block in its own context).
+    plans = getattr(plan, "plans", None) or []
+    if plans:
+        lines.append("- Content plans (name them by plan_id when revising):")
+        for i, p in enumerate(plans, start=1):
+            outputs = ", ".join(
+                str(o.get("kind", "?"))
+                + (f" ({o['language']})" if o.get("language") else "")
+                for o in (p.get("outputs") or [])
+            )
+            lines.append(
+                f"  {i}) plan_id={p.get('plan_id')} — "
+                f"{p.get('title') or '(unnamed)'}: {outputs} [{p.get('state')}]"
+            )
     return lines
 
 

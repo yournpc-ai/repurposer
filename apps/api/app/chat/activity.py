@@ -68,7 +68,9 @@ STATUS_CANCELLED = "cancelled"  # schema-complete; see the module docstring
 # itself) — they never open an activity (1→0, 对账规则 4), but their
 # rejections still count as repair work. Unknown (hallucinated) names open
 # nothing either — the loop already rejects them.
-_DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "apply_edit_ops", "edit_graph"})
+# revise_output (iter-3 S3, N-58): its user face is the SAME revision-work
+# row as edit_graph's (the wiring dispatch seat is shared) — draft bucket.
+_DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "apply_edit_ops", "edit_graph", "revise_output"})
 _RUN_TOOLS = frozenset({"start_run"})
 _CONVERSATION_TOOLS = frozenset({"ask_user", "answer"})
 # The exploration proposal verbs (iter-2 ⑤/⑥, ADR-088 旅程四): their user
