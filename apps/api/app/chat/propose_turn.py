@@ -42,6 +42,13 @@ prose), and the caption-mode stash stays a TaskListProposal dump.
 T2b 感知族 (ADR-077 判词②): the read tools (``app/chat/perception/``)
 dispatch straight from ``execute`` — they never carry a disposition, never
 touch the outcome, and return a ToolObservation the loop feeds back.
+
+iter-3 S2 (R6 parity): the exploration chain rides this path too — a
+post-run discovery goal ('再挑两条关于定价的') opens a NEW journey and lands
+its decision package through the SAME dock seat (``_dock_plan_as_question``
+gained the package faces as additive kwargs); the compile law itself lives
+in ``app/chat/exploration_compile.py`` (ONE seat shared with the plan path
+— the two loops can never drift on it).
 """
 
 from datetime import UTC, datetime
@@ -54,6 +61,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.context import build_context
 from app.agents.tool_loop import ToolObservation
+from app.chat.exploration_compile import (
+    compile_plans_package,
+    recompile_journey_package,
+)
+from app.chat.exploration_tools import (
+    EXPLORATION_TOOLS,
+    ProposeCandidatesArgs,
+    ProposePlansArgs,
+    ProposeSelectsArgs,
+    RevisePlanArgs,
+    candidates_observation,
+    selects_observation,
+)
 from app.chat.intent import chat_intent_agent
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.service import (
@@ -100,8 +120,16 @@ from app.models.schemas import (
     TaskListProposal,
     WiringProposal,
 )
-from app.models.tables import Asset, Message, Output, Project, WorkflowRun
+from app.models.tables import Asset, Message, Output, Persona, Project, WorkflowRun
 from app.operations.service import OpConflict, OpRejected, apply_operations
+from app.pipeline.exploration_store import (
+    ExplorationRejected,
+    propose_candidates,
+    propose_selects,
+    revise_plan,
+)
+from app.pipeline.scope_compile import decision_package_plans
+from app.platform.project_context import resolve_default_persona
 from app.providers.llm.base import LLMError
 from app.tools import ToolRejected, validate_task_list
 
@@ -125,6 +153,7 @@ class ChatTurn:
         project: Project | None,
         text: str,
         on_phase=None,
+        on_activity=None,
     ) -> None:
         self.db = db
         self.user_id = user_id
@@ -132,6 +161,10 @@ class ChatTurn:
         self.project = project
         self.text = text
         self.on_phase = on_phase
+        # 工作会话里程碑通道 (iter-3 S2 — the plan path's iter-2 ⑥ channel,
+        # threaded here for the post-run discovery chain's door successes;
+        # None = the one-shot path, no stream, no frames).
+        self.on_activity = on_activity
         self.pending: Message | None = None
         self.pending_judgable = False
         self.context: dict = {"text": ""}
@@ -282,6 +315,8 @@ class ChatTurn:
         )
         if await self._settle_by_disposition(disposition):
             return None  # the parked interrupt's wake IS the continuation
+        if name in EXPLORATION_TOOLS:
+            return await self._explore(name, params, prose)
         if name == "propose_tasks":
             assert isinstance(params, ProposeTasksArgs)
             return await self._propose_tasks(params, prose)
@@ -390,13 +425,26 @@ class ChatTurn:
         name: str | None,
         source_pin: str | None,
         exemplar_pin: str | None,
+        plans: list[dict] | None = None,
+        plan_task_map: dict[str, list[int]] | None = None,
+        derived: list[dict] | None = None,
+        persona_id=None,
     ) -> None:
         """The chat path's ONE plan-docking seat (Phase 4 B2/B3): PendingPlan
         + task_book question + estimate + canonical draft preview (inside
         sync_plan_question) — the caption-replay pattern verbatim; Start
         reads intent.tasks / specific_instruction / caption_mode / pins off
         the stored pending. Sets the turn's outcome to the docked question
-        (never a run)."""
+        (never a run).
+
+        iter-3 S2 (R6 parity): the exploration dock rides the SAME seat —
+        ``plans`` (the decision package's reading layer) + ``plan_task_map``
+        (the R20 router substrate) + ``derived`` (the "you'll get" preview)
+        + an explicitly resolved ``persona_id`` (the exploration door's
+        provenance) are additive kwargs; the router-drafted callers
+        (propose_tasks / edit_graph's expansion dock) pass none and keep
+        their exact pre-S2 shape (derived=[], no plans, persona preserved
+        from the stored pending)."""
         db, project = self.db, self.project
         intent = InferredIntent(
             action="draft",
@@ -418,13 +466,18 @@ class ChatTurn:
             brief=preserved_brief,
             reasons=await _compute_plan_reasons(db, project, intent),
             persona_id=(
-                project.pending_brief.get("persona_id")
-                if isinstance(project.pending_brief, dict)
-                else None
+                persona_id
+                or (
+                    project.pending_brief.get("persona_id")
+                    if isinstance(project.pending_brief, dict)
+                    else None
+                )
             ),
             source_asset_id=source_pin,
             exemplar_asset_id=exemplar_pin,
-            derived=[],
+            derived=derived or [],
+            plans=plans or [],
+            plan_task_map=plan_task_map,
         ).model_dump(mode="json")
         bailed_run_ids = await sync_plan_question(
             db, self.user_id, project, intent, self.text,
@@ -432,9 +485,221 @@ class ChatTurn:
             brief=preserved_brief,
             echo=intent.answer,
             estimate=await _safe_task_estimate(db, project, intent.tasks),
+            derived=derived,
+            plans=plans,
         )
         docked = await latest_pending_question(db, self.conversation_id)
         self.outcome = (docked, None, bailed_run_ids, self.settled_question)
+
+    # ---- the exploration seats (iter-3 S2 — R6 parity with the plan path) ----
+
+    async def _emit_milestone(self, key: str, count: int) -> None:
+        """Fire one work-session milestone frame (iter-2 ⑥, N-57) at a door
+        success — in-session interleave only, never persisted. No-op on the
+        one-shot path."""
+        if self.on_activity is not None:
+            await self.on_activity(key, count)
+
+    async def _resolve_persona(self) -> Persona | None:
+        """The chat path's persona resolution for exploration births (the
+        plan path's chain minus request/stored — a post-run turn has
+        neither): the project's mounted persona, else the user's default."""
+        project = self.project
+        persona: Persona | None = None
+        if project is not None and project.persona_id:
+            persona = (
+                await self.db.execute(
+                    select(Persona).where(Persona.id == project.persona_id)
+                )
+            ).scalar_one_or_none()
+        if persona is None:
+            persona = await resolve_default_persona(self.db, self.user_id)
+        return persona
+
+    async def _explore(
+        self, name: str, params, prose: str
+    ) -> str | None | ToolObservation:
+        """The discovery chain's chat-path dispatch (iter-3 S2, R6 parity —
+        a post-run '再挑两条' opens a NEW journey on the SAME chain law):
+        candidates/selects ride back as observations (NON-terminal, the
+        loop iterates; the observation builders are the plan path's ONE
+        wording); propose_plans / revise_plan are TERMINAL — landing (or
+        re-landing) the plans docks the decision package through THIS
+        path's dock seat, which IS the paid-boundary stop (R15)."""
+        if self.project is None:
+            # A project-less defensive turn has no canvas to land on — an
+            # honest boundary, never a crash.
+            return f"{name}: this conversation has no project to explore."
+        if name == "propose_candidates":
+            assert isinstance(params, ProposeCandidatesArgs)
+            try:
+                node = await propose_candidates(
+                    self.db,
+                    self.project,
+                    asset_id=params.asset_id,
+                    topic=params.topic,
+                    members=params.members,
+                    goal_text=params.goal or None,
+                    journey_id=params.journey_id,
+                )
+            except ExplorationRejected as e:
+                return f"The door rejected the proposal: {e}"
+            await self._emit_milestone(
+                "chat.explore.candidatesReady", len(params.members)
+            )
+            return ToolObservation(
+                text=candidates_observation(
+                    node, topic=params.topic, member_count=len(params.members)
+                )
+            )
+        if name == "propose_selects":
+            assert isinstance(params, ProposeSelectsArgs)
+            try:
+                born = await propose_selects(
+                    self.db,
+                    self.project,
+                    candidate_set_id=params.candidate_set_id,
+                    selects=[s.model_dump() for s in params.selects],
+                )
+            except ExplorationRejected as e:
+                return f"The door rejected the proposal: {e}"
+            await self._emit_milestone("chat.explore.selectsReady", len(born))
+            return ToolObservation(text=selects_observation(born))
+        if name == "propose_plans":
+            assert isinstance(params, ProposePlansArgs)
+            return await self._propose_plans(params, prose)
+        if name == "revise_plan":
+            assert isinstance(params, RevisePlanArgs)
+            return await self._revise_plan(params, prose)
+        return f"unknown exploration tool {name!r}"  # unreachable — gated above
+
+    async def _propose_plans(self, params: ProposePlansArgs, prose: str) -> str | None:
+        """plans → the decision package docks (iter-3 S2, R6 parity). The
+        compile law lives in ``exploration_compile`` (ONE seat, shared with
+        the plan path — the double door: pre-flight compile rejects with
+        zero writes, then the door births); the dock rides this path's ONE
+        plan-docking seat with the package's three faces (plans reading
+        layer + compiled task evidence + the quote), so Start reads
+        intent.tasks / plans / plan_task_map off the stored pending exactly
+        like a plan-path dock (ONE authorization seat)."""
+        db, project = self.db, self.project
+        assert project is not None  # _explore gates project-less turns
+        persona = await self._resolve_persona()
+        package = await compile_plans_package(
+            db,
+            project,
+            params.plans,
+            persona_id=UUID(str(persona.id)) if persona is not None else None,
+        )
+        if isinstance(package, str):
+            return package
+        compiled = package.tasks
+        await self._emit_milestone("chat.explore.plansReady", len(package.plans))
+
+        # Caption form for quote cards (same derive law as the plan path):
+        # named on a quotes output → stamped onto the intent; unnamed = the
+        # runtime default, never invented.
+        caption_mode = next(
+            (
+                o.caption_mode
+                for p in params.plans
+                for o in p.outputs
+                if o.kind == "quotes" and o.caption_mode
+            ),
+            None,
+        )
+        source_pin, exemplar_pin = await self._role_pins_for(compiled)
+        from app.pipeline.orchestrator import derive_plan_preview  # deferred
+
+        try:
+            derived = await derive_plan_preview(db, project, compiled)
+        except (ToolRejected, ValueError):
+            derived = []
+        await self._dock_plan_as_question(
+            tasks=compiled,
+            answer=prose,
+            specific_instruction=None,
+            caption_mode=caption_mode,
+            name=params.name or None,
+            source_pin=source_pin,
+            exemplar_pin=exemplar_pin,
+            plans=decision_package_plans(package.plans),
+            plan_task_map=package.plan_task_map,
+            derived=derived,
+            persona_id=UUID(str(persona.id)) if persona is not None else None,
+        )
+        return None
+
+    async def _revise_plan(self, params: RevisePlanArgs, prose: str) -> str | None:
+        """revise_plan → the door revises the row in place → the WHOLE
+        journey re-compiles → the decision package re-docks through the
+        SAME seat (iter-3 S2; 恒重确认 R15: every plan-level revision
+        re-confirms — zero autonomy; 决策包可编辑律: the re-dock lands on
+        the SAME confirmation seat, never a new ritual — sync_plan_question
+        supersedes the still-open task_book row). The revised row lands
+        even when the recompile then rejects (draft with issues re-stamped
+        = the canvas's honest surface); the rejection rides back as the
+        loop echo and the LLM repairs the PLAN, never the chain."""
+        db, project = self.db, self.project
+        assert project is not None  # _explore gates project-less turns
+        try:
+            revised = await revise_plan(
+                db,
+                project,
+                plan_id=params.plan_id,
+                title=params.title or None,
+                outputs=[o.model_dump() for o in params.outputs],
+            )
+        except ExplorationRejected as e:
+            return f"The door rejected the revision: {e}"
+        package = await recompile_journey_package(
+            db, project, UUID(str(revised.journey_id))
+        )
+        if isinstance(package, str):
+            return package
+        await self._emit_milestone("chat.explore.plansReady", len(package.plans))
+
+        # The package's name survives the revision (same law as the plan
+        # path) — the pending row's intent carries it when one survives;
+        # caption_mode re-derives from the restated outputs, inheriting the
+        # stored answer when unnamed (同一律).
+        stored_intent = (
+            project.pending_brief.get("intent")
+            if isinstance(project.pending_brief, dict)
+            and isinstance(project.pending_brief.get("intent"), dict)
+            else {}
+        )
+        caption_mode = next(
+            (
+                o.get("caption_mode")
+                for row in package.plans
+                for o in (row.spec or {}).get("outputs") or []
+                if o.get("kind") == "quotes" and o.get("caption_mode")
+            ),
+            None,
+        ) or stored_intent.get("caption_mode")
+        source_pin, exemplar_pin = await self._role_pins_for(package.tasks)
+        from app.pipeline.orchestrator import derive_plan_preview  # deferred
+
+        try:
+            derived = await derive_plan_preview(db, project, package.tasks)
+        except (ToolRejected, ValueError):
+            derived = []
+        persona = await self._resolve_persona()
+        await self._dock_plan_as_question(
+            tasks=package.tasks,
+            answer=prose,
+            specific_instruction=None,
+            caption_mode=caption_mode,
+            name=stored_intent.get("name") or None,
+            source_pin=source_pin,
+            exemplar_pin=exemplar_pin,
+            plans=decision_package_plans(package.plans),
+            plan_task_map=package.plan_task_map,
+            derived=derived,
+            persona_id=UUID(str(persona.id)) if persona is not None else None,
+        )
+        return None
 
     async def _apply_edit_ops(self, params: ApplyEditOpsArgs, prose: str) -> str | None:
         """edit_ops → the operations registry. Validation rejections ride the
@@ -734,13 +999,15 @@ async def run_propose_turn(
     on_tool_ready=None,
     on_checkpoint=None,
     on_loop_event=None,
+    on_activity=None,
 ) -> ProposeTurnOutcome:
     """The chat path's turn: assemble → the bounded tool loop → the outcome
     mapping. Provider failure keeps its retired posture: the ask-back line is
     the only failure form (prohibition #7) — EXCEPT the tier gate (ADR-077
     判词④), which fails LOUD: a tools-blind client is a deployment error,
     never the ask-back line."""
-    turn = ChatTurn(db, user_id, conversation, project, text, on_phase=on_phase)
+    turn = ChatTurn(db, user_id, conversation, project, text, on_phase=on_phase,
+                    on_activity=on_activity)
     await turn.assemble(mentions, recent)
     try:
         result = await chat_intent_agent.call_loop(

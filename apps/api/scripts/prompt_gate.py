@@ -27,6 +27,12 @@ same contexts as the A/B instrument:
   ruling — production continuity carries candidates → selects → plans in
   the SAME turn, so the chain's terminal IS propose_plans.) The stub hands
   the verbs their observation ids exactly like production.
+- E:post-run-discovery (iter-3 S2, R6 chat-path parity) — the CHAT path's
+  shape (chat_intent_system + _assemble_chat_turn + the chat tool set with
+  the exploration projection): post-run '再找两段…剪成短片' must run the
+  SAME discovery chain — propose_plans terminal, propose_candidates in the
+  trace, propose_tasks / edit_graph NEVER called (the discovery ask never
+  falls back to the router-drafted verbs).
 
 Tool-loop form (ADR-077 判词②, 2026-09-14): the agent is the ToolLoopAgent,
 the action IS the terminal tool call, and the predicates read
@@ -44,11 +50,12 @@ thresholds), then bisect with the A/B instrument — never tune the
 thresholds to make a regression pass.
 
 Usage (from apps/api):
-    uv run python scripts/prompt_gate.py [--n 12] [--probe A|B|C|D] [--provider minimax]
+    uv run python scripts/prompt_gate.py [--n 12] [--probe A|B|C|D|E] [--provider minimax]
 """
 
 import argparse
 import asyncio
+import functools
 import sys
 from pathlib import Path
 
@@ -67,10 +74,15 @@ from app.chat.exploration_tools import (  # noqa: E402
     exploration_chat_tools,
     selects_observation,
 )
-from app.chat.intent import _assemble_plan_turn  # noqa: E402
+from app.chat.intent import _assemble_chat_turn, _assemble_plan_turn  # noqa: E402
 from app.chat.perception import PERCEPTION_TOOLS  # noqa: E402
-from app.chat.prompts import intent_router_system  # noqa: E402
-from app.chat.turn_tools import PLAN_READ_TOOLS, PLAN_TOOLS  # noqa: E402
+from app.chat.prompts import chat_intent_system, intent_router_system  # noqa: E402
+from app.chat.turn_tools import (  # noqa: E402
+    CHAT_READ_TOOLS,
+    CHAT_TOOLS,
+    PLAN_READ_TOOLS,
+    PLAN_TOOLS,
+)
 from app.models.schemas import Brief, BriefSlotSource  # noqa: E402
 from app.models.tables import Message  # noqa: E402
 from app.providers.llm.minimax import minimax_client  # noqa: E402
@@ -85,9 +97,11 @@ PROVIDERS = {
     "minimax": lambda: minimax_client,
 }
 
-# (probe, minimum passes out of N). D starts conservative (no measured band
-# yet — recalibrate from the first readings, never to excuse a regression).
-THRESHOLDS = {"A": 8, "B": 8, "C": 10, "D": 8}
+# (probe, minimum passes out of N). D's band is measured; E measured at
+# introduction (2026-09-23, iter-3 S2): 11/12 band-reading + 9/12 on the
+# full-gate rerun — threshold 8 holds with real-regression headroom.
+# Recalibrate from readings, never to excuse a regression.
+THRESHOLDS = {"A": 8, "B": 8, "C": 10, "D": 8, "E": 8}
 
 BRIEF_ANSWERED = Brief.model_validate(
     {
@@ -138,7 +152,43 @@ PROBE_B = {
 }
 # Scenario users have NO persona (scripts/chat_scenarios.py persona_exists:
 # False) — the gate matches or the pantry changes the judgment surface.
+# Scenario users have NO persona (scripts/chat_scenarios.py persona_exists:
+# False) — the gate matches or the pantry changes the judgment surface.
 PROBE_C = {"message": "I want a social post."}
+
+# E's post-run substrate (iter-3 S2): a project that already produced —
+# readable AV material, one landed clip, the latest run completed. The
+# context text is hand-assembled in build_context's exact shape (digest
+# doctrine — identity lines only, the reads answer the rest).
+_PROBE_E_ASSET_ID = "66666666-6666-6666-6666-666666666666"
+_PROBE_E_SEARCH_HITS = (
+    'Search "{query}" — 3 hit(s) across 1 asset(s):\n'
+    f"Asset founder-talk.mp4 (asset_id: {_PROBE_E_ASSET_ID}) — 3 hit(s):\n"
+    '- [05.0–11.2] "Onboarding is where users decide to stay." (host)\n'
+    '- [22.4–27.8] "The first week sets the habit."\n'
+    '- [41.0–46.5] "We redesigned onboarding around one aha moment."'
+)
+_PROBE_E_SEGMENT = (
+    '[05.0–11.2] "Onboarding is where users decide to stay. The first '
+    'minute matters most." (host)'
+)
+PROBE_E = {
+    "message": "再找两段我讲到 onboarding 的地方，剪成短片",
+    "context": {
+        "text": (
+            "Project: Founder Talks "
+            "(id=77777777-7777-7777-7777-777777777777, language=en)\n"
+            "Assets:\n"
+            f"- video id={_PROBE_E_ASSET_ID} status=ready language=en\n"
+            "Current outputs:\n"
+            "- clip id=88888888-8888-8888-8888-888888888888: onboarding highlights\n"
+            "Latest run: status=done id=99999999-9999-9999-9999-999999999998\n"
+            "Recent rounds:\n"
+            "- user: Cut the best onboarding moments into a clip.\n"
+            "- assistant: Landed one clip from the onboarding section."
+        )
+    },
+}
 
 # D's discovery substrate: material attached and readable (the excerpt is
 # the search read's honest footing — the stub's search observation below
@@ -149,6 +199,17 @@ _PROBE_D_JOURNEY_ID = "99999999-9999-9999-9999-999999999999"
 # header (the production observation's same handoff: get_segment /
 # propose_candidates read their asset_id from the search hits).
 _PROBE_D_ASSET_ID = "33333333-3333-3333-3333-333333333333"
+_PROBE_D_SEARCH_HITS = (
+    'Search "{query}" — 3 hit(s) across 1 asset(s):\n'
+    f"Asset keynote-2026.mp4 (asset_id: {_PROBE_D_ASSET_ID}) — 3 hit(s):\n"
+    '- [12.0–18.9] "Our pricing is simple." (host)\n'
+    '- [34.0–39.4] "Every tier includes the dashboard."\n'
+    '- [58.2–63.0] "You only pay when you grow."'
+)
+_PROBE_D_SEGMENT = (
+    '[12.0–18.9] "Now let me talk about pricing. Our pricing is '
+    'simple." (host)'
+)
 PROBE_D = {
     "message": (
         "Find the parts where I talk about pricing — cut those into a clip, "
@@ -176,31 +237,35 @@ class _StubNode:
         self.spec = spec or {}
 
 
-async def _gate_execute(name: str, params: BaseModel | None, prose: str):
+async def _gate_execute(
+    name: str,
+    params: BaseModel | None,
+    prose: str,
+    *,
+    search_hits: str = _PROBE_D_SEARCH_HITS,
+    segment_text: str = _PROBE_D_SEGMENT,
+):
     """The gate's execution stub — accepts everything EXCEPT the rootless
     present_plan (mirrors the production 出书门槛 probe C measures: no
     user-stated topic, no material, and the topic never asked → the gate
     rejects toward ask_user). None = accepted (terminal). T2b: a read tool
     answers with a ToolObservation (the probe contexts have nothing readable)
-    so the loop iterates on to its terminal call exactly like production."""
+    so the loop iterates on to its terminal call exactly like production.
+
+    ``search_hits`` / ``segment_text`` theme the canned evidence reads per
+    probe (D = pricing, E = onboarding) — the header echoes the call's own
+    query exactly like production (``Search "<query>" — …``)."""
     if name in PERCEPTION_TOOLS:
         if name == "search_transcript":
-            # D's evidence substrate: plausible hits quoting the excerpt
-            # verbatim, so the chain has real ranges to propose from. The
-            # header mirrors the production observation's shape — asset
-            # label + the asset_id handoff (the get_segment seat's input).
-            return ToolObservation(
-                f'Search "pricing" — 3 hit(s) across 1 asset(s):\n'
-                f"Asset keynote-2026.mp4 (asset_id: {_PROBE_D_ASSET_ID}) — 3 hit(s):\n"
-                '- [12.0–18.9] "Our pricing is simple." (host)\n'
-                '- [34.0–39.4] "Every tier includes the dashboard."\n'
-                '- [58.2–63.0] "You only pay when you grow."'
-            )
+            # The discovery probes' evidence substrate: plausible hits
+            # quoting the excerpt verbatim, so the chain has real ranges to
+            # propose from. The header mirrors the production observation's
+            # shape — asset label + the asset_id handoff (the get_segment
+            # seat's input).
+            query = getattr(params, "query", None) or ""
+            return ToolObservation(search_hits.format(query=query))
         if name == "get_segment":
-            return ToolObservation(
-                '[12.0–18.9] "Now let me talk about pricing. Our pricing is '
-                'simple." (host)'
-            )
+            return ToolObservation(segment_text)
         return ToolObservation(
             "(gate stub: nothing readable in this probe context)"
         )
@@ -268,17 +333,27 @@ def _passed(probe: str, r: LoopResult) -> bool:
         return r.tool_name == "ask_user" and getattr(r.params, "slot", None) == "topic"
     # D (iter-2 ⑤): the discovery chain closed — propose_plans terminal,
     # propose_candidates earlier in the trace, present_plan never touched.
+    if probe == "D":
+        return (
+            r.tool_name == "propose_plans"
+            and "propose_candidates" in r.calls
+            and "present_plan" not in r.calls
+        )
+    # E (iter-3 S2): same chain law on the CHAT path — propose_plans
+    # terminal, propose_candidates in the trace, and the router-drafted
+    # verbs (propose_tasks / edit_graph) never touched.
     return (
         r.tool_name == "propose_plans"
         and "propose_candidates" in r.calls
-        and "present_plan" not in r.calls
+        and "propose_tasks" not in r.calls
+        and "edit_graph" not in r.calls
     )
 
 
 async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=12)
-    parser.add_argument("--probe", choices=["A", "B", "C", "D"], default=None)
+    parser.add_argument("--probe", choices=["A", "B", "C", "D", "E"], default=None)
     parser.add_argument("--provider", choices=sorted(PROVIDERS), default="minimax")
     args = parser.parse_args()
 
@@ -294,7 +369,11 @@ async def main() -> int:
             "tool support — the gate probes the tool-loop line (ADR-077 "
             "判词④); a Tier-2 provider has nothing to gate here."
         )
-    agent = ToolLoopAgent(
+    # max_iterations mirrors the production declarations (intent.py) — live
+    # evidence 2026-09-23: the realistic discovery chain is 8-10 (6 evidence
+    # reads observed), a plans params rejection at iteration 9 starved
+    # recovery at 10 (S-explore-2 runs 1-2); 12 = realistic 9-10 + 2.
+    plan_agent = ToolLoopAgent(
         name="prompt_gate_router",
         prompt="intent_router.j2",
         system=intent_router_system(),
@@ -304,22 +383,44 @@ async def main() -> int:
         # verbs' production projection rides — the registry perturbation is
         # the thing being gated.
         tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS, *exploration_chat_tools()],
-        # Mirrors the production declaration (intent.py) — live evidence
-        # 2026-09-23: the realistic discovery chain is 8-10 (6 evidence
-        # reads observed), a plans params rejection at iteration 9 starved
-        # recovery at 10 (S-explore-2 runs 1-2).
         max_iterations=12,
         client=client,
     )
-    probes = {"A": PROBE_A, "B": PROBE_B, "C": PROBE_C, "D": PROBE_D}
+    # Probe E runs the CHAT path's shape (iter-3 S2, R6 parity): chat_intent
+    # system + the chat-turn assembler + the chat tool set with the same
+    # exploration projection — the registry perturbation is again the thing
+    # being gated.
+    chat_agent = ToolLoopAgent(
+        name="prompt_gate_chat",
+        prompt="chat_intent.j2",
+        system=chat_intent_system(),
+        temperature=0.2,
+        assemble=_assemble_chat_turn,
+        tools=[*CHAT_TOOLS, *CHAT_READ_TOOLS, *exploration_chat_tools()],
+        max_iterations=12,
+        client=client,
+    )
+    probes = {"A": PROBE_A, "B": PROBE_B, "C": PROBE_C, "D": PROBE_D, "E": PROBE_E}
     failed = False
     for name, ctx in probes.items():
         if args.probe and name != args.probe:
             continue
+        agent = chat_agent if name == "E" else plan_agent
+        # E's evidence reads quote onboarding, not pricing (the themed
+        # canned observations keep the chain honest to the ask).
+        execute = (
+            functools.partial(
+                _gate_execute,
+                search_hits=_PROBE_E_SEARCH_HITS,
+                segment_text=_PROBE_E_SEGMENT,
+            )
+            if name == "E"
+            else _gate_execute
+        )
         outcomes = []
         for _ in range(args.n):
             try:
-                r = await agent.call_loop(_gate_execute, **ctx)
+                r = await agent.call_loop(execute, **ctx)
                 outcomes.append(_passed(name, r))
             except Exception as e:  # noqa: BLE001 — provider errors count as failures
                 outcomes.append(False)

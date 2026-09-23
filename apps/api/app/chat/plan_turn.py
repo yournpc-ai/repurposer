@@ -37,7 +37,6 @@ outcome — and ride back as a ToolObservation the loop feeds back.
 """
 
 import json
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -47,6 +46,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.tool_loop import ToolObservation
+from app.chat.exploration_compile import (
+    compile_plans_package,
+    recompile_journey_package,
+)
 from app.chat.exploration_tools import (
     EXPLORATION_TOOLS,
     ProposeCandidatesArgs,
@@ -104,29 +107,16 @@ from app.models.schemas import (
     QuestionProposal,
     StartAnswerRequest,
 )
-from app.models.tables import Asset, GraphNode, Message, Persona, Project
+from app.models.tables import Asset, Message, Persona, Project
 from app.pipeline.asset_processing import has_any_text_material
 from app.pipeline.assets import create_transcript_asset_from_text
 from app.pipeline.exploration_store import (
-    KIND_SELECT,
-    STATE_DRAFT,
-    STATE_READY,
-    ContentPlanSpec,
     ExplorationRejected,
-    plan_completeness_issues,
     propose_candidates,
-    propose_plans,
     propose_selects,
-    read_journey_evidence,
-    read_journey_plans,
     revise_plan,
 )
-from app.pipeline.product_graph import EXPLORATION_NODE_TYPE
-from app.pipeline.scope_compile import (
-    ScopeCompileRejected,
-    compile_scope,
-    decision_package_plans,
-)
+from app.pipeline.scope_compile import decision_package_plans
 from app.platform.project_context import resolve_default_persona
 from app.tools import ToolRejected, validate_task_list
 
@@ -136,18 +126,6 @@ logger = structlog.get_logger()
 # (assistant message, started run id, answered task-book question,
 # cascade-bailed run ids).
 PlanTurnOutcome = tuple[Message, UUID | None, Message | None, list[UUID]]
-
-
-@dataclass
-class _PlanPreview:
-    """The pre-flight compile's in-memory stand-in for a Content Plan row
-    (R14 双门, iter-2 ③): the compile passes BEFORE the door births anything,
-    so the duck-typed fields (id / state / spec) mirror what
-    ``compile_plans`` reads off a real row."""
-
-    id: str
-    state: str
-    spec: dict
 
 
 class PlanTurn:
@@ -923,113 +901,25 @@ class PlanTurn:
     async def _propose_plans(self, params: ProposePlansArgs, prose: str) -> str | None:
         """plans → the decision package docks (ADR-089 §4 R16, iter-2 ③).
 
-        双门 (R14): the PRE-FLIGHT compile runs BEFORE the door birth — an
-        uncompilable package rejects back into the loop with zero writes
-        (an uncompilable plan never reaches the canvas or the dock). Only
-        then does the exploration door birth the rows, and the dock carries
-        the three faces: the plans reading layer + the compiled task
-        evidence + the credits quote (费用语义五面)."""
+        双门 (R14): the pre-flight compile + the door birth live in
+        ``exploration_compile.compile_plans_package`` (iter-3 S2 — ONE
+        compile law shared with the chat path): an uncompilable package
+        rejects back into the loop with zero writes (an uncompilable plan
+        never reaches the canvas or the dock), then the door births the
+        rows (its validation re-runs as the authority). The dock below
+        carries the three faces: the plans reading layer + the compiled
+        task evidence + the credits quote (费用语义五面)."""
         db, project = self.db, self.project
         merged_brief = await self._absorb(None, None)
 
-        # Journey resolution: the params carry select ids and the journey
-        # rides structurally from them (one call plans one journey — the
-        # door's own law, mirrored here so the pre-flight has its evidence).
-        select_ids = [UUID(str(p.select_id)) for p in params.plans]
-        rows = list(
-            (
-                await db.execute(
-                    select(GraphNode).where(
-                        GraphNode.project_id == project.id,
-                        GraphNode.type == EXPLORATION_NODE_TYPE,
-                        GraphNode.id.in_(select_ids),
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-        by_id = {str(n.id): n for n in rows}
-        journey_ids: set[str] = set()
-        for sid in select_ids:
-            row = by_id.get(str(sid))
-            if row is None or (row.spec or {}).get("exploration_kind") != KIND_SELECT:
-                return (
-                    f"select: node {sid} is not one of this project's "
-                    "selects — re-read the propose_selects observation."
-                )
-            journey_ids.add(str(row.journey_id))
-        if len(journey_ids) > 1:
-            return (
-                "propose_plans: one call plans one journey — the selects "
-                "span two. Split the call."
-            )
-        journey_id = UUID(journey_ids.pop())
-        selects, candidate_sets = await read_journey_evidence(
-            db, UUID(str(project.id)), journey_id
-        )
-
         persona_id = UUID(str(self.persona.id)) if self.persona is not None else None
-        # The pre-flight compile (R12 编译移出 LLM): in-memory previews of
-        # the rows the door WOULD birth (same completeness self-check, same
-        # states) — a rejection here writes nothing.
-        previews: list[_PlanPreview] = []
-        for p in params.plans:
-            issues = plan_completeness_issues(p.outputs)
-            payload = ContentPlanSpec(
-                select_id=str(p.select_id),
-                title=p.title.strip(),
-                outputs=p.outputs,
-                persona_id=str(persona_id) if persona_id else None,
-            ).model_dump()
-            if issues:
-                payload["issues"] = issues
-            previews.append(
-                _PlanPreview(
-                    id=f"preview:{p.select_id}",
-                    state=STATE_DRAFT if issues else STATE_READY,
-                    spec=payload,
-                )
-            )
-        from app.pipeline.derivative_dispatch import (  # deferred: pipeline weight
-            project_source_language,
+        package = await compile_plans_package(
+            db, project, params.plans, persona_id=persona_id
         )
-        from app.pipeline.morph import check_transform_targets
-        from app.ui_locale import current_ui_language
-
-        try:
-            scope = compile_scope(
-                previews,
-                selects,
-                candidate_sets,
-                source_language=await project_source_language(db, project),
-                default_language=project.language or current_ui_language() or "en",
-            )
-        except ScopeCompileRejected as e:
-            return str(e)
-        compiled = scope.tasks
-        # The router-drafted dock's own backstop rides too (同源语言护栏 etc.).
-        try:
-            await check_transform_targets(
-                db,
-                project,
-                compiled,
-                zh=(current_ui_language() or "").startswith("zh"),
-            )
-        except (ToolRejected, ValueError) as e:
-            return str(e)
-
-        # Pre-flight passed — the door births the rows (its validation
-        # re-runs as the authority; a door rejection rides back as the echo).
-        try:
-            born = await propose_plans(
-                db,
-                project,
-                plans=[p.model_dump() for p in params.plans],
-                persona_id=persona_id,
-            )
-        except ExplorationRejected as e:
-            return f"The door rejected the proposal: {e}"
+        if isinstance(package, str):
+            return package
+        born = package.plans
+        compiled = package.tasks
         await self._emit_milestone("chat.explore.plansReady", len(born))
 
         # Caption form for quote cards: named on a quotes output → stamped
@@ -1078,17 +968,9 @@ class PlanTurn:
         )
         # 决策包阅读层 (R16): the Content Plans ride BOTH the pending-brief
         # row (the restore path reads it) and the dock payload (the live
-        # envelope) — one stamp, two seats.
+        # envelope) — one stamp, two seats. The R20 router substrate
+        # (plan_task_map, re-keyed onto the born rows) rides with them.
         package_plans = decision_package_plans(born)
-        # R20 修订路由器基材 (iter-3 E1/E2): re-key the pre-flight map
-        # (preview ids) onto the born rows — the door births in the same
-        # order the previews compiled (the compile is deterministic), so
-        # the ranges transfer verbatim.
-        plan_task_map = {
-            str(born_row.id): scope.plan_task_map[preview.id]
-            for preview, born_row in zip(previews, born, strict=True)
-            if preview.id in scope.plan_task_map
-        }
         project.pending_brief = PendingPlan(
             prompt=birth_prompt,
             intent=intent,
@@ -1097,7 +979,7 @@ class PlanTurn:
             persona_id=persona_id,
             derived=derived,
             plans=package_plans,
-            plan_task_map=plan_task_map,
+            plan_task_map=package.plan_task_map,
             **self._role_pins(),
         ).model_dump(mode="json")
         self._fire_mention_warm()
@@ -1141,38 +1023,15 @@ class PlanTurn:
             return f"The door rejected the revision: {e}"
 
         # Recompile the journey's WHOLE package (a revise targets one plan;
-        # the decision package re-docks with every plan of the journey).
-        journey_id = UUID(str(revised.journey_id))
-        selects, candidate_sets = await read_journey_evidence(
-            db, UUID(str(project.id)), journey_id
+        # the decision package re-docks with every plan of the journey) —
+        # the shared recompile seat (iter-3 S2).
+        package = await recompile_journey_package(
+            db, project, UUID(str(revised.journey_id))
         )
-        plans = await read_journey_plans(db, UUID(str(project.id)), journey_id)
-        from app.pipeline.derivative_dispatch import (  # deferred: pipeline weight
-            project_source_language,
-        )
-        from app.pipeline.morph import check_transform_targets
-        from app.ui_locale import current_ui_language
-
-        try:
-            scope = compile_scope(
-                plans,
-                selects,
-                candidate_sets,
-                source_language=await project_source_language(db, project),
-                default_language=project.language or current_ui_language() or "en",
-            )
-        except ScopeCompileRejected as e:
-            return str(e)
-        compiled = scope.tasks
-        try:
-            await check_transform_targets(
-                db,
-                project,
-                compiled,
-                zh=(current_ui_language() or "").startswith("zh"),
-            )
-        except (ToolRejected, ValueError) as e:
-            return str(e)
+        if isinstance(package, str):
+            return package
+        plans = package.plans
+        compiled = package.tasks
         await self._emit_milestone("chat.explore.plansReady", len(plans))
 
         # The package's name survives the revision (the LLM chose to revise
@@ -1232,7 +1091,7 @@ class PlanTurn:
             persona_id=persona_id,
             derived=derived,
             plans=package_plans,
-            plan_task_map=scope.plan_task_map,
+            plan_task_map=package.plan_task_map,
             **self._role_pins(),
         ).model_dump(mode="json")
         self._fire_mention_warm()

@@ -1815,6 +1815,7 @@ async def answer_question(
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
                     on_loop_event=on_loop_event,
+                    on_activity=on_activity,
                 )
 
     elif question.kind == "question" and data.kind == "bail" and question.slot is not None:
@@ -1956,6 +1957,7 @@ async def _propose_turn(
     on_tool_ready=None,
     on_checkpoint=None,
     on_loop_event=None,
+    on_activity=None,
 ) -> tuple[Message, UUID | None, list[UUID], Message | None]:
     """One assistant turn after the user input is settled (CHAT_ARCH §3).
 
@@ -1968,8 +1970,8 @@ async def _propose_turn(
     ADR-077 判词② (2026-09-14): the dispatch retired into the tool
     loop — this body is a shim; the turn lives in ``app/chat/propose_turn.py``
     (the chat intent agent's terminal tools propose_tasks / apply_edit_ops /
-    edit_graph / ask_user / answer). Deferred import: the runner imports THIS
-    module's machinery.
+    edit_graph / ask_user / answer + the iter-3 S2 exploration verbs).
+    Deferred import: the runner imports THIS module's machinery.
     """
     from app.chat.propose_turn import run_propose_turn
 
@@ -1988,6 +1990,7 @@ async def _propose_turn(
         on_tool_ready=on_tool_ready,
         on_checkpoint=on_checkpoint,
         on_loop_event=on_loop_event,
+        on_activity=on_activity,
     )
 
 
@@ -2338,6 +2341,7 @@ async def execute_chat_turn(
             on_tool_ready=on_tool_ready,
             on_checkpoint=on_checkpoint,
             on_loop_event=on_loop_event,
+            on_activity=on_activity,
         )
         if chat_settled is not None:
             # 插话判定结算 (ADR-053 R2): the agent judged this very message

@@ -110,7 +110,19 @@ async def build_context(
         lines.append("Graph (the persistent canvas — wiring ops edit THIS):")
         for n in graph_nodes[:_GRAPH_CONTEXT_LIMIT]:
             spec = n.spec or {}
-            label = spec.get("summary") or n.type
+            # iter-3 S2: exploration rows carry no `summary` — their
+            # identity lives in title (content_plan) / topic (candidate_set)
+            # / exploration_kind; execution rows keep the summary law
+            # untouched.
+            if n.type == "exploration":
+                label = (
+                    spec.get("title")
+                    or spec.get("topic")
+                    or spec.get("exploration_kind")
+                    or n.type
+                )
+            else:
+                label = spec.get("summary") or n.type
             row = f"- {n.type} id={n.id} state={n.state} — {label}"
             prompt = spec.get("prompt")
             if prompt:

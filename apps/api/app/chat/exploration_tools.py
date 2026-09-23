@@ -23,7 +23,7 @@ rejections into observation text (the loop-echo precedent — a rejection
 is information for the next iteration, never a crash).
 """
 
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -158,6 +158,11 @@ class ProposePlansArgs(BaseModel):
     plans: list[PlanItem] = Field(
         description="The Content Plans — one per Select the user should see. One call plans one journey."
     )
+    # 插话判定座 (ADR-053 R2, iter-3 S2 双路扩座): the chat path's envelope
+    # seat — the turn's pending-question judgment rides the TERMINAL call.
+    # The plan path never reads it (its pending settlement is the brief
+    # machinery's); there it stays "none".
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
 
 
 class RevisePlanArgs(BaseModel):
@@ -191,6 +196,10 @@ class RevisePlanArgs(BaseModel):
             "drop what goes."
         )
     )
+    # 插话判定座 (ADR-053 R2, iter-3 S2) — same dual-path envelope seat as
+    # ProposePlansArgs: the chat path settles by it; the plan path never
+    # reads it.
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
 
 
 EXPLORATION_TOOLS: dict[str, ChatTool] = {
@@ -303,13 +312,13 @@ def revise_observation(node) -> str:
 
 
 def exploration_chat_tools() -> list[ChatTool]:
-    """The production projection (iter-2 ⑤, R6 — N-57): the SAME registry
-    entries re-formed for the plan path's loop. R2 免费探索区连续工作:
-    candidates/selects ride back as observations (NON-terminal — one turn
-    carries the whole discovery chain: search → candidates → selects →
-    plans); propose_plans / revise_plan stay TERMINAL — landing (or
-    re-landing) the plans docks the decision package, which IS the
-    paid-boundary stop (R15)."""
+    """The production projection (iter-2 ⑤ plan path + iter-3 S2 chat path,
+    R6 — N-57): the SAME registry entries re-formed for BOTH loops' tool
+    sets. R2 免费探索区连续工作: candidates/selects ride back as observations
+    (NON-terminal — one turn carries the whole discovery chain: search →
+    candidates → selects → plans); propose_plans / revise_plan stay
+    TERMINAL — landing (or re-landing) the plans docks the decision package,
+    which IS the paid-boundary stop (R15)."""
     return [
         ChatTool(
             name=t.name,
