@@ -2156,7 +2156,7 @@ quote 输入 = Content Plan 具体字段（精确区间 → 时长 → 渲染单
 
 ## ADR-090: 精确编辑——`edit_output` 受控终态工具 + quote→range 解算器
 
-**Status**: Decided（2026-09-24；取证底座 = 年底审计（最大公约数量尺）+ live 验收六拍与修红批（`6b93b24`）+ 多轮外部评审收敛；母法 = ADR-088/089 工作循环与执行边界）
+**Status**: Decided（2026-09-24；取证底座 = 年底审计（最大公约数量尺）+ live 验收六拍与修红批（`6b93b24`）+ 多轮外部评审收敛；母法 = ADR-088/089 工作循环与执行边界）——**已实施（同日）**：S2 解算器 `a8efdf8` + S3 edit_output `47175f7`（顺形律 kind 推断 = probe H 实测落 schema）+ S5 剧本座 `6171085`；prompt_gate 探针 H 首测 11/12；live 走查 = `scratch/precise-edit-walkthrough.md` 用户自跑
 
 **Context**: 年底审计量尺（自然语言 → agent 理解 → agent 真做视频活 → **可编辑、可检视、可重跑**的视频状态）结论：Agent 架构冻结，**精确编辑是距最大公约数的唯一缺口**。机制实证齐全却不可达：OP_REGISTRY 21 个 edit ops（`remove_range` / `set_trim` / `set_caption_style` / `set_title` 在册）+ undo/redo/`restore_version` + base_hash/409 乐观锁后端完备，但 **llm_visible=False 全族**——LLM 不可见、前端零调用、editor 路由孤儿。精确编辑请求在野外已到（live 验收：「你能把字幕改成白色吗」——agent 只能绕行「改 persona 皮肤 + 整条 clip 重新生成」，改一个颜色重买一遍生产链）。评审收敛：不是把 21 个原始 ops 暴露给 LLM（ADR-089 P0-③ 同款代偿），是**受控终态工具 + enum kinds**。
 
@@ -2188,7 +2188,7 @@ MVP 四件零 LLM 成本——edit 动作不收钱；重渲染 = render $0（自
 
 ## ADR-091: 产物身份与重跑生命周期——work/version 语义 + 归档不变量
 
-**Status**: Decided（2026-09-24；取证底座 = Restore×Rerun 全链取证（live 验收 Gate 1，2026-09-23）；用户损失实证 = live 验收现场「历史版本随修订重跑蒸发」）
+**Status**: Decided（2026-09-24；取证底座 = Restore×Rerun 全链取证（live 验收 Gate 1，2026-09-23）；用户损失实证 = live 验收现场「历史版本随修订重跑蒸发」）——**已实施（同日）**：S1 归档不变量 `0f2b9fc`（work_id + archived_at 两列 + 两 wipe 点改写 + 读面过滤 + 换态写门；实现形态 = 施工修正 `outputs.status` → `archived_at` 可空时间戳律，既有 status 列为 generated 遗迹不复用；§3 verify 回退物理删除不动）
 
 **Context**: rerun 的现行语义 = **物理 DELETE + 新 id**（select_clips wipe / derivative sweep / verify 回退三处），取证四个未登记事实：① 产物身份不存活——用户指认的「第二条短片」每次重跑都是新 id，指认/发布/修订的对象随 rerun 蒸发；② **operations journal 连坐蒸发**（`delete_outputs_fk_safe` 级联删 operations）——undo/redo/`restore_version` 机制在而历史不在；③ output_refs 累积死 id（live 证据：18 个引用 15 死）；④ **publication 连坐删除**（已发布产物重跑即丢发布记录）+ 旧 MP4 孤儿无 GC。「修订」在数据层实际是「销毁重建」——与 ADR-088「持续修订用户可理解的产物」的承诺直接冲突。
 
@@ -2220,7 +2220,7 @@ verify 回退的 best-not-last restore 与 run 内重试 = **产物从未交付*
 
 ## ADR-092: 计费偏好集成——三档策略持久化 + 确认闸座位
 
-**Status**: Decided（2026-09-24；取证底座 = 计费链六环取证（live 验收 Gate 1，2026-09-23）；前提 = 用户裁定「偏好 UI 已有，集成真 API 即可」——集成不重设计）
+**Status**: Decided（2026-09-24；取证底座 = 计费链六环取证（live 验收 Gate 1，2026-09-23）；前提 = 用户裁定「偏好 UI 已有，集成真 API 即可」——集成不重设计）——**已实施（同日）**：S4 `b7ef524`（users.settings JSONB + GET/PUT /auth/settings + configs `billing.confirm_large_threshold` 默认 20 + composer 换源服务端为准 + dock 披露强度分级 + CTA 显价，手势仍是同一个 Start）
 
 **Context**: 六环取证：① 偏好 UI ✅（composer CostConfirmControl 三档 always/large/never）但 localStorage-only（自标 UI ONLY）；② 服务端持久化 ❌；③ 策略读取点 ❌；④ 确认闸 ❌；⑤ ChargeFact 已读真台账 ✅；⑥ hold→capture→release 机器真但在 run 出生地单点。结论：不是计费重设计，是**把已存在的偏好接到已存在的机制上**。
 

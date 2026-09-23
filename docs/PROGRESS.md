@@ -303,7 +303,7 @@
 | 深度 reviewer / 看片复核 | P2 | 视频理解 provider 能力与成本评估 | 旅程四 B7 挂账（ADR-088 §8）：reviewer 现界 = 确定性 verify + plan 意图比对；「看片复核」（渲染产物内容级自检）缺稳定 ground truth 与成本模型，需求观察后再评 |
 | 常驻自主拨盘（standing autonomy dial） | P2 | R1.1 商业形态（订阅 / 额度信封） | 旅程四挂账 B6：Claude Code auto-mode 参照——常驻授权信封（如「N 积分内自动确认」），费用语义在设定信封时一次性披露；ADR-087 D1 刚退役 review 档不重开，商业形态明朗后随 R1.1 评 |
 | Canvas 密度组织学（journey 分组 / 折叠 / 归档） | P2 | 旅程四实施批（R24 `journey_id` 身份落地 = 前提契约，ADR-088 §10） | 旅程四拍 10 挂账：活跃项目多旅程后画布节点密度（候选合集 / 精选 / 方案 / 产物累积）——分组 / 折叠 / 归档的呈现层方案；禁为组织造语义节点（ADR-082 呈现/语义隔离铁律同律） |
-| ~~精确编辑迭代（edit_output + quote→range + work/version 归档 + 计费偏好集成）~~ | — | 修红批（✅ 2026-09-24 `6b93b24`） | **已开工（2026-09-24，ADR-090/091/092 + 简报 `tasks/precise-editing-iter.md`）——条目转入施工**：S0 词表 N-59 已登记；进度追踪归简报 Status 行 |
+| ~~精确编辑迭代（edit_output + quote→range + work/version 归档 + 计费偏好集成）~~ | — | 修红批（✅ 2026-09-24 `6b93b24`） | **✅ 代码层全绿（2026-09-24 当日收口）**：S1 归档 `0f2b9fc` / S2 解算器 `a8efdf8` / S3 edit_output `47175f7` / S4 计费偏好 `b7ef524` / S5 剧本座 `6171085` / S6 docs 收口——纯 pytest 693 + web tsc/vitest + S-edit 剧本 PASS + 迁移回滚实证×2 + 探针 H 11/12；**欠账**：prompt_gate 全量复跑（MiniMax 402 余额尽）+ live 走查（`scratch/precise-edit-walkthrough.md`）归用户；P1 遗留 = operations 前端 UI + set_caption_visibility |
 | 归档 version 存储成本观察 | P2 | 精确编辑迭代（上行——归档写门落地后开始累积） | ADR-091 §4 挂账：归档 version 文件全保留（回滚的物理基础），GC 只随项目删除；观察存储增量曲线后再评压缩/清理机制，不预设 |
 
 ### 可选需求
