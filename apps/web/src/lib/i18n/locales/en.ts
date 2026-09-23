@@ -464,26 +464,26 @@ const en = {
     confirmStrategy: {
       label: "Cost confirmation",
       trigger: {
-        always: "Always ask",
-        large: "Ask on large",
-        never: "Never ask",
+        always: "Full note",
+        large: "Large only",
+        never: "Estimate",
       },
       options: {
         always: {
-          title: "Ask every time",
-          desc: "Confirm every generation deduction",
+          title: "Full disclosure",
+          desc: "Every plan shows the charge note and a priced confirm button",
         },
         large: {
-          title: "Ask for large costs",
-          desc: "Confirm deductions above 300 credits",
+          title: "Large plans only",
+          desc: "The full charge note appears above the credits threshold",
         },
         never: {
-          title: "Never ask",
-          desc: "Deduct without confirming",
+          title: "Estimate only",
+          desc: "Just the estimate range — nothing extra",
         },
       },
       footnote:
-        "Confirmation prompts aren't live yet — this saves your preference for when they launch.",
+        "Applies to the plan confirmation before a paid run starts.",
     },
   },
   // Recipe cards (RECIPES §7) — one block per card id in lib/recipes.ts;
@@ -1516,6 +1516,9 @@ const en = {
     countIncrease: "Increase",
     confirmQuestion: "Save & generate?",
     confirm: "Start generation",
+    // E6 披露强度分级 (ADR-092): the escalated tier's priced CTA — the
+    // gesture is the SAME single Start; only the label carries the price.
+    confirmPriced: "Start · ~{{low}}–{{high}} credits",
     starting: "Starting…",
     startingLine: "I'm starting your generation — stay to refine it together, or leave and I'll finish in the background.",
     planUpdated: "Got it — I've updated the plan above.",

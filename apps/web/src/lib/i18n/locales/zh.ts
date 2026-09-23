@@ -448,25 +448,26 @@ const zh: Resources = {
     confirmStrategy: {
       label: "扣费确认",
       trigger: {
-        always: "每次确认",
-        large: "大额确认",
-        never: "从不确认",
+        always: "完整披露",
+        large: "大额披露",
+        never: "仅估价",
       },
       options: {
         always: {
-          title: "每次都问",
-          desc: "每次生成扣费都需要确认",
+          title: "完整披露",
+          desc: "每个方案都显示扣费说明与显价确认钮",
         },
         large: {
-          title: "大额才问",
-          desc: "扣费超过 300 点数时需要确认",
+          title: "仅大额方案",
+          desc: "超过积分阈值的方案显示完整扣费说明",
         },
         never: {
-          title: "从不询问",
-          desc: "直接扣费，不再确认",
+          title: "仅估价",
+          desc: "只显示估价区间，没有额外披露",
         },
       },
-      footnote: "扣费确认尚未上线——此处先保存你的偏好，上线后自动生效。",
+      footnote: "生效于付费运行启动前的方案确认。",
+
     },
   },
   // 配方卡（RECIPES §7）—— 与 lib/recipes.ts 的卡 id 一一对应；
@@ -1438,6 +1439,9 @@ const zh: Resources = {
     countIncrease: "增加",
     confirmQuestion: "保存并开始？",
     confirm: "开始生成",
+    // E6 披露强度分级 (ADR-092)：强制档 CTA 显价——手势仍是同一个 Start，
+    // 只是标签带价。
+    confirmPriced: "开始 · ~{{low}}–{{high}} 积分",
     starting: "启动中…",
     startingLine: "我开始生成了——你可以继续和我聊，也可以离开页面，它会在后台完成。",
     planUpdated: "好，我记下了——上面的计划已更新。",

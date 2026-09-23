@@ -57,6 +57,14 @@ interface PlanDockProps {
   /** Reserved anatomy (cost quote, week-8 计费线) — muted at the top-right
    * when present; the slot is the layout reservation. */
   estimate?: string | null
+  /** 披露强度分级 (ADR-092 §2, E6): when the confirm strategy escalates
+   * (always, or large over the threshold) the CTA carries the price AND a
+   * charge-semantics disclosure row renders under the main row — the SAME
+   * dock, the SAME single Start gesture; only the disclosure strength
+   * differs (never = the estimate slot as-is). `pricedCta` = the priced
+   * label ("Confirm · 3–13 credits"), `chargeNote` = the disclosure line. */
+  pricedCta?: string | null
+  chargeNote?: string | null
   /** Chromeless content for the floating question pill (2026-09-02 拆粘):
    * no fill / rounding / margin of its own — the pill owns the chrome. */
   plain?: boolean
@@ -96,6 +104,8 @@ function PlanForm({
   starting,
   startDisabled,
   estimate,
+  pricedCta,
+  chargeNote,
   plain,
 }: PlanDockProps) {
   const { t } = useTranslation()
@@ -124,7 +134,9 @@ function PlanForm({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {/* Start = the pill's single decision CTA (composer-bottom-row
-              discipline: one solid anchor, h-9, px-5 presence). */}
+              discipline: one solid anchor, h-9, px-5 presence). The priced
+              label rides the escalation tier (E6) — the gesture is the
+              SAME single Start either way (停顿定律零破). */}
           <Button
             disabled={startDisabled || starting}
             onClick={onStart}
@@ -136,11 +148,19 @@ function PlanForm({
                 {t("generationOverlay.starting")}
               </>
             ) : (
-              t("generationOverlay.confirm")
+              (pricedCta ?? t("generationOverlay.confirm"))
             )}
           </Button>
         </div>
       </div>
+      {/* 披露行 (E6 强制档): charge semantics in one whisper line — the
+          same dock, disclosure strength only; the escalated tier renders
+          it, the estimate-only tier never does. */}
+      {chargeNote ? (
+        <p className="mt-1.5 pl-7 text-[11px] leading-snug text-meta-foreground">
+          {chargeNote}
+        </p>
+      ) : null}
     </div>
   )
 }

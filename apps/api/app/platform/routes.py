@@ -16,11 +16,12 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, RedirectResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import NotificationListResponse
@@ -34,7 +35,9 @@ from app.platform.auth import (
     verify_code,
 )
 from app.platform.billing import get_or_create_wallet, held, list_transactions
+from app.platform.configs import get_config
 from app.platform.email import InvalidRecipientError, send_verification_email
+from app.platform.user_settings import merge_confirm_strategy, read_confirm_strategy
 from app.providers.storage import (
     download_to_temp,
     owner_from_path,
@@ -160,6 +163,54 @@ class UserResponse(BaseModel):
 class VerifyCodeResponse(BaseModel):
     token: str
     user: UserResponse
+
+
+# ---- User settings (ADR-092, E5 — confirm_strategy 的用户级座位) -----------
+
+
+class UserSettingsResponse(BaseModel):
+    """The settings read shape: the strategy plus the 'large' threshold (the
+    public operating parameter rides along so the dock's disclosure tier
+    needs ONE read — ADR-055 参数座位, never a secret)."""
+
+    confirm_strategy: str
+    confirm_large_threshold: int
+
+
+class UserSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirm_strategy: Literal["always", "large", "never"]
+
+
+@auth_router.get("/settings", response_model=UserSettingsResponse)
+async def get_settings(
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> UserSettingsResponse:
+    """Read the user's settings (读容忍 — absent/unknown values read as the
+    defaults)."""
+    return UserSettingsResponse(
+        confirm_strategy=read_confirm_strategy(current_user.settings),
+        confirm_large_threshold=await get_config(db, "billing.confirm_large_threshold"),
+    )
+
+
+@auth_router.put("/settings", response_model=UserSettingsResponse)
+async def put_settings(
+    data: UserSettingsUpdate,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> UserSettingsResponse:
+    """One-key merge write — the rest of the settings block survives."""
+    current_user.settings = merge_confirm_strategy(
+        current_user.settings, data.confirm_strategy
+    )
+    await db.commit()
+    return UserSettingsResponse(
+        confirm_strategy=data.confirm_strategy,
+        confirm_large_threshold=await get_config(db, "billing.confirm_large_threshold"),
+    )
 
 
 @auth_router.post("/send-code", response_model=SendCodeResponse)

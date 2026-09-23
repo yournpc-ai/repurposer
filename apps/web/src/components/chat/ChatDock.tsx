@@ -120,6 +120,7 @@ import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
 import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
 import { ComposerSendButton } from "@/components/composer/ComposerSendButton"
 import { CostConfirmControl } from "@/components/composer/CostConfirmControl"
+import { useConfirmStrategy } from "@/components/composer/CostConfirmControl"
 import { ModelsPanel } from "@/components/composer/ModelsPanel"
 import {
   mapHistoryRows,
@@ -3509,6 +3510,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         high: planEstimate[1],
       })
     : t("generationOverlay.chargeNote")
+  /** 披露强度分级 (ADR-092 §2, E6 — S4 集成批): the confirm strategy read
+   * at the confirm beat (the停顿's only seat). `never` = the estimate slot
+   * as-is; `always` = the disclosure row + the priced CTA; `large` = the
+   * same when the quote's HIGH end crosses the configs threshold (the
+   * conservative edge — a range that MIGHT be large escalates). The Start
+   * gesture is the same single click either way (停顿定律零破). */
+  const { strategy: confirmStrategy, threshold: confirmThreshold } =
+    useConfirmStrategy()
+  const pricedConfirm =
+    confirmActive &&
+    (confirmStrategy === "always" ||
+      (confirmStrategy === "large" &&
+        planEstimate != null &&
+        planEstimate[1] > confirmThreshold))
   const planCard = singlePlan ? (
     echoCarriedInFlow ? (
       // 密度律单任务的唯一价格面：echo 已在流里时，耳语独立成行（披露 ≠
@@ -4223,6 +4238,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               })
             : null
         }
+        pricedCta={
+          pricedConfirm && planEstimate
+            ? t("generationOverlay.confirmPriced", {
+                low: planEstimate[0],
+                high: planEstimate[1],
+              })
+            : null
+        }
+        chargeNote={pricedConfirm ? chargeLine : null}
       />
     ) : null
   // (RunStatusRow retired 2026-09-08, user ruling: the message flow's

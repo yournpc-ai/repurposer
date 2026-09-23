@@ -53,6 +53,9 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     email = Column(String(255), nullable=False, unique=True)
     name = Column(String(255), nullable=True)
+    # 用户级设置 (ADR-092, E5 — persona brand/voice JSONB 的 user 级先例):
+    # confirm_strategy ∈ {always, large, never}; NULL = 全默认（读容忍）.
+    settings = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
