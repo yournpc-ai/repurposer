@@ -51,20 +51,33 @@ export interface StagedFileMeta {
   thumbUrl?: string
 }
 
+/** Probe budget (2026-09-18): dims are enrichment, never a blocker — beyond
+ * this the probe degrades to undefined and the upload lifecycle completes. */
+const PROBE_TIMEOUT_MS = 5000
+
 /** One-shot media-pixel probe for the upload payload (2026-09-13 用户拍板 —
  * 产物卡跟源比例): the asset row is born with meta.width/height so the
  * canvas's frame law shapes its node from birth (the server chain-head probe
  * backfills API-path uploads). Video/image only; metadata-load cheap, every
- * failure degrades to undefined (the default strip), never an upload block. */
+ * failure degrades to undefined (the default strip), never an upload block.
+ *
+ * 2026-09-18 (Batch A 验收): a detached media element is NOT guaranteed to
+ * fire loadedmetadata/error (undecodable container, …) — without the timeout
+ * below this promise can stay pending forever, and since runUpload gates the
+ * `done` transition on it (Promise.all), that would pin an upload at
+ * "100% / uploading" and block Generate. The timeout is what makes "never an
+ * upload block" true. */
 export function probeMediaDims(
   file: File,
 ): Promise<{ width: number; height: number } | undefined> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file)
     const done = (dims: { width: number; height: number } | undefined) => {
+      clearTimeout(timer)
       URL.revokeObjectURL(url)
       resolve(dims && dims.width > 0 && dims.height > 0 ? dims : undefined)
     }
+    const timer = setTimeout(() => done(undefined), PROBE_TIMEOUT_MS)
     if (file.type.startsWith("image/")) {
       const el = new Image()
       el.onload = () =>

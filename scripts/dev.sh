@@ -142,18 +142,16 @@ wait_for_url "http://localhost:8000/health" "API" 60
 # Remotion render service (clip-spec -> MP4+SRT). Node/pnpm, headless Chrome +
 # bundled FFmpeg. Black box the api worker calls; not needed for text-only flows.
 #
-# Proxy: the direct link from a dev machine to TOS is throttled, and the
-# service's source staging + result upload are proxy-aware via HTTPS_PROXY
-# (loopback exempt). When the local proxy is listening, carry the env into
-# the render service so large-media transfers don't die on undici timeouts
-# (2026-08-19: a hand restart without the env reproduced exactly that — the
-# render SUCCEEDS and only the PUT upload times out).
+# Proxy: NONE by default (2026-09-18 拍板) — the network is the operator's own
+# setting, code must not sniff it. The old nc-probe of 6152 auto-injected
+# HTTPS_PROXY when a local proxy was up (built for the throttled-direct era);
+# when the proxy later started stalling upload bodies, that injection silently
+# turned every render's result PUT into a HeadersTimeoutError 500. Need a proxy
+# for a throttled TOS link? Say so explicitly:
+#   HTTPS_PROXY=http://127.0.0.1:6152 ./scripts/dev.sh
+# (the render service's staging/upload fetchers honor the env; loopback exempt).
 echo "Starting render service on http://localhost:3001 ..."
-if nc -z 127.0.0.1 6152 2>/dev/null; then
-  ( cd "$ROOT/apps/render" && HTTPS_PROXY="http://127.0.0.1:6152" HTTP_PROXY="http://127.0.0.1:6152" pnpm dev ) &
-else
-  ( cd "$ROOT/apps/render" && pnpm dev ) &
-fi
+( cd "$ROOT/apps/render" && pnpm dev ) &
 RENDER_PID=$!
 
 # --- frontend --------------------------------------------------------------

@@ -31,6 +31,13 @@ export interface StagingUpload {
   dims?: { width: number; height: number }
 }
 
+/** Silence budget (2026-09-18, Batch A 验收发现): a PUT whose bytes all left
+ * (progress=100%) but whose RESPONSE never arrives — e.g. a proxy that stalls
+ * upload bodies — fired neither onload nor onerror and pinned the lifecycle
+ * at `uploading`/100% forever, blocking Generate with no escape. Any progress
+ * event re-arms the watchdog; 30s of total silence means the wire is dead. */
+const PUT_STALL_TIMEOUT_MS = 30_000
+
 /** Direct-to-storage PUT with real upload progress (fetch streams lack it). */
 function putWithProgress(
   url: string,
@@ -39,16 +46,36 @@ function putWithProgress(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
+    let settled = false
+    const stall = () => {
+      if (settled) return
+      settled = true
+      xhr.abort()
+      reject(new Error("Upload stalled (no response)"))
+    }
+    let watchdog = setTimeout(stall, PUT_STALL_TIMEOUT_MS)
+    const rearm = () => {
+      clearTimeout(watchdog)
+      watchdog = setTimeout(stall, PUT_STALL_TIMEOUT_MS)
+    }
+    const finish = (fn: () => void) => () => {
+      if (settled) return
+      settled = true
+      clearTimeout(watchdog)
+      fn()
+    }
     xhr.open("PUT", url)
     if (file.type) xhr.setRequestHeader("Content-Type", file.type)
     xhr.upload.onprogress = (e) => {
+      rearm()
       if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total)
     }
-    xhr.onload = () =>
+    xhr.onload = finish(() =>
       xhr.status >= 200 && xhr.status < 300
         ? resolve()
-        : reject(new Error(`Upload failed (HTTP ${xhr.status})`))
-    xhr.onerror = () => reject(new Error("Upload failed"))
+        : reject(new Error(`Upload failed (HTTP ${xhr.status})`)),
+    )
+    xhr.onerror = finish(() => reject(new Error("Upload failed")))
     xhr.send(file)
   })
 }
