@@ -4087,9 +4087,12 @@ _S23_SYSTEM = (
     "them with get_segment; the door rejects anything not actually said "
     "there).\n"
     "3. When asked, land your picks with propose_selects (a verdict and a "
-    "one-line reason each).\n"
+    "one-line reason each). Member indexes are 0-based over the candidate "
+    "set's members — a set of 2 members takes indexes 0 and 1.\n"
     "4. When asked, land the content plan with propose_plans.\n"
-    "Speak one short sentence before each proposal call."
+    "Every reply closes with exactly one tool call — speak one short "
+    "sentence, then make the call. A reply with no tool call is never "
+    "complete; when you are unsure, call anyway with your best arguments."
 )
 
 
@@ -4594,6 +4597,17 @@ async def s_explore_2_decision_package_to_confirmed_scope(ctx: Ctx) -> None:
     check(len(clips) >= 1, "cut_segments' clip output lands", len(clips))
     posts = await outputs_of(pid, "post")
     check(len(posts) >= 1, "the post output lands", len(posts))
+
+    # Harness 卫生（非断言——拍 8 收官 reviewer 的硬验收归迭代三）：run 收官
+    # 的 trigger 回合是 fire-and-forget；不消费它就 cleanup 会让在飞的 LLM
+    # 调用撞上项目删除（messages conversation FK 竞态——首跑实测在 worker
+    # 日志留下一条 IntegrityError 噪音）。等到落地就 bail 掉建议问；超时
+    # 静默通过（它本来就不是本剧本的断言对象）。
+    conv_id = (stream.completed or {}).get("conversation_id")
+    if conv_id:
+        review = await wait_trigger_review(ctx, conv_id, run_id, timeout=90.0)
+        if review is not None and (review.get("question") or {}).get("kind") == "question":
+            await ctx.answer(review["id"], {"kind": "bail"})
 
 
 SCENARIOS = {
