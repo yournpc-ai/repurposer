@@ -453,6 +453,33 @@ const en = {
     uploadRetry: "Retry",
     uploadInProgress: "Files are still uploading — give it a moment",
     managePersonas: "Manage personas…",
+    // Cost-confirmation strategy (2026-09-23, UI-only preference — behavior
+    // wiring is a later batch; the footnote says so honestly). Trigger copy
+    // discipline: ≤12 characters so the pill fits the dock's control strip.
+    confirmStrategy: {
+      label: "Cost confirmation",
+      trigger: {
+        always: "Always ask",
+        large: "Ask on large",
+        never: "Never ask",
+      },
+      options: {
+        always: {
+          title: "Ask every time",
+          desc: "Confirm every generation deduction",
+        },
+        large: {
+          title: "Ask for large costs",
+          desc: "Confirm deductions above 300 credits",
+        },
+        never: {
+          title: "Never ask",
+          desc: "Deduct without confirming",
+        },
+      },
+      footnote:
+        "Confirmation prompts aren't live yet — this saves your preference for when they launch.",
+    },
   },
   // Recipe cards (RECIPES §7) — one block per card id in lib/recipes.ts;
   // reserved cards render disabled with the Soon pill, never launchable.
@@ -698,7 +725,17 @@ const en = {
   },
   projects: {
     title: "Projects",
+    search: "Search",
     searchPlaceholder: "Search projects...",
+    sort: {
+      label: "Sort",
+      byField: "Sort by",
+      byUpdated: "Last modified",
+      byCreated: "Creation date",
+      order: "Order",
+      desc: "Newest first",
+      asc: "Oldest first",
+    },
     new: "New Project",
     dialogTitle: "New Project",
     dialogDesc: "Pick a persona and enter project info to start turning what you already have into reusable content.",

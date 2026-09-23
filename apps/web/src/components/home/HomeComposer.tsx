@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowUp, Box, Plus, User } from "lucide-react"
+import { Box, Plus, User } from "lucide-react"
 
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
 import { useStagingUploads } from "@/lib/stagingUploads"
@@ -12,23 +12,19 @@ import {
   type MentionEditorHandle,
 } from "@/components/mentions/MentionEditor"
 
-import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon } from "@/components/ui/input-group"
 import { AssetChips } from "@/components/home/AssetChips"
-import { AssetsPanel } from "@/components/home/AssetsPanel"
-import { ModelsPanel } from "@/components/home/ModelsPanel"
+import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
+import { ComposerSendButton } from "@/components/composer/ComposerSendButton"
+import { CostConfirmControl } from "@/components/composer/CostConfirmControl"
+import { AssetsPanel } from "@/components/composer/AssetsPanel"
+import { ModelsPanel } from "@/components/composer/ModelsPanel"
 import {
   PersonaPanel,
   type PersonaPickerEntry,
-} from "@/components/home/PersonaPanel"
+} from "@/components/composer/PersonaPanel"
 import { Tour, type TourStep } from "@/components/ui/tour"
 import { tourCopy, tourVersionOf, type TourStepDef } from "@/lib/tour"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 type Persona = PersonaPickerEntry
 
@@ -63,20 +59,20 @@ const AUTO_GENERATE = "__auto_generate__"
  * Read/write inside effects only — localStorage is never touched during SSR. */
 const TOUR_SEEN_KEY = "repurposer-tour-seen"
 
-/** Composer teaching (4 steps): assets → persona → prompt (send folded in)
- * → the recipe gallery as the alternative entry (lands last; Tour skips the
- * step if the cards haven't loaded yet). */
+/** Persona entry hidden 2026-09-23 (user ruling): returns with the
+ * positioning / memory ops-layer iteration (docs/POSITIONING.md). The
+ * state machinery (personaId / launch payload) stays — only the button
+ * and its tour step go away; the sidebar nav entry is hidden too. */
+const SHOW_PERSONA = false
+
+/** Composer teaching tour (3 steps while the persona entry is hidden):
+ * assets → prompt (send folded in) → the recipe gallery as the alternative
+ * entry (lands last; Tour skips the step if the cards haven't loaded yet). */
 const COMPOSER_TOUR_STEPS: TourStepDef[] = [
   {
     target: "[data-tour='composer-assets']",
     titleKey: "tour.composer.assetsTitle",
     descKey: "tour.composer.assetsDesc",
-    side: "bottom",
-  },
-  {
-    target: "[data-tour='composer-persona']",
-    titleKey: "tour.composer.personaTitle",
-    descKey: "tour.composer.personaDesc",
     side: "bottom",
   },
   {
@@ -125,7 +121,7 @@ const SEND_ANCHOR_X = 12 // right-3
 const SEND_ANCHOR_Y = 12 // bottom-3 (on the control row's line)
 const SEND_BAR_ANCHOR = 10 // (56 − 36) / 2 — centered in the bar
 const BAR_SEND_RESERVE = 54 // 10 anchor + 36 send + 8 gap — bar input's right reserve
-const ATTACH_PAD_X = 12 // bar: the attach glyph's center mirrors the send's
+const ATTACH_PAD_X = 10 // bar: the attach glyph's center mirrors the send's (28px)
 const ATTACH_MAX_W = 96
 /** Rotating placeholder cadence (Lovart-style): the fixed prefix stays, the
  * example prompt behind it cycles every this-many ms. */
@@ -368,36 +364,21 @@ export function HomeComposer({
                 a side="top" panel would leave the screen. Pure circle icon +
                 function tooltip, stateless (2026-08-30 icon-button ruling):
                 the staged files themselves live in the panel. */}
-            <Popover>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <PopoverTrigger
-                      render={
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={t("composer.assets")}
-                          className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
-                          tabIndex={dockP > 0.5 ? 0 : -1}
-                        >
-                          <Plus className="size-4.5" />
-                        </Button>
-                      }
-                    />
-                  }
-                />
-                <TooltipContent side="bottom">{t("composer.assets")}</TooltipContent>
-              </Tooltip>
-              <PopoverContent side="bottom" align="start" className="w-80">
-                <AssetsPanel
-                  items={staged}
-                  onAdd={addFiles}
-                  onRemove={removeStaged}
-                  onRetry={retryStaged}
-                />
-              </PopoverContent>
-            </Popover>
+            <ComposerPanelButton
+              icon={Plus}
+              label={t("composer.assets")}
+              tooltipSide="bottom"
+              popoverSide="bottom"
+              align="start"
+              tabIndex={dockP > 0.5 ? 0 : -1}
+            >
+              <AssetsPanel
+                items={staged}
+                onAdd={addFiles}
+                onRemove={removeStaged}
+                onRetry={retryStaged}
+              />
+            </ComposerPanelButton>
           </div>
           <div
             className="relative flex min-w-0 flex-1 cursor-text flex-col"
@@ -413,11 +394,14 @@ export function HomeComposer({
                 one-line docked bar can't show. The suffix is a rolling
                 window: per cycle the outgoing line (absolute, so layout
                 follows the incoming) rolls up-out while the incoming rolls
-                in from below — styles.css `.placeholder-roll-*`. */}
+                in from below — styles.css `.placeholder-roll-*`. Color =
+                the whisper tier (2026-09-23 user ruling, chat-dock parity:
+                the MentionEditor's CSS placeholder reads --meta-foreground,
+                this overlay was one tier brighter). */}
             {promptEmpty && (
               <div
                 aria-hidden
-                className="pointer-events-none absolute inset-0 overflow-hidden text-base break-words whitespace-pre-wrap text-muted-foreground"
+                className="pointer-events-none absolute inset-0 overflow-hidden text-base break-words whitespace-pre-wrap text-meta-foreground"
                 style={{ padding: editorBandStyle.padding }}
               >
                 <span>{t("home.placeholderPrefix")}</span>
@@ -459,13 +443,15 @@ export function HomeComposer({
             function tooltip, completely STATELESS — no count, no Auto/name
             value text; the selection is read inside each frosted panel (the
             staged files themselves also ride the chips band, unchanged).
-            The pr-12 reserves the send anchor's space. The ghost circle
-            buttons mirror Lovart's measured anatomy: 32px button (h-8 w-8)
-            + 18px glyph (size-4.5) — one register below the 36px send
-            anchor. The left group's -ml-[7px] pulls the first one 7px left
-            so its GLYPH's left edge lands on the editor text's left edge
-            (the 18px glyph centers inside the 32px button with a 7px
-            offset — without the bleed the icons read indented under the
+            The pr-12 reserves the send anchor's space. ONE HEIGHT for the
+            whole row (2026-09-23 ruling, retiring the 2026-08-31 "32px
+            buttons one register below the 36px send" size gap): circle
+            buttons, the cost-confirm pill and the send all share h-9, so
+            hover backgrounds align on the row's top/bottom edges by
+            construction. The left group's -ml-[9px] pulls the first button
+            9px left so its GLYPH's left edge lands on the editor text's
+            left edge (the 18px glyph centers inside the 36px button with a
+            9px offset — without the bleed the icons read indented under the
             text). */}
         <InputGroupAddon
           align="block-end"
@@ -474,60 +460,34 @@ export function HomeComposer({
           onClick={focusEditor}
         >
           <div className="flex w-full items-center justify-between">
-            <div className="-ml-[7px] flex items-center gap-1">
-              <Popover open={assetsOpen} onOpenChange={setAssetsOpen}>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <PopoverTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t("composer.assets")}
-                            className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
-                            data-tour="composer-assets"
-                          >
-                            <Plus className="size-4.5" />
-                          </Button>
-                        }
-                      />
-                    }
-                  />
-                  <TooltipContent side="top">{t("composer.assets")}</TooltipContent>
-                </Tooltip>
-                <PopoverContent side="bottom" align="start" className="w-80">
-                  <AssetsPanel
-                    items={staged}
-                    onAdd={addFiles}
-                    onRemove={removeStaged}
-                    onRetry={retryStaged}
-                  />
-                </PopoverContent>
-              </Popover>
+            <div className="-ml-[9px] flex items-center gap-1">
+              <ComposerPanelButton
+                icon={Plus}
+                label={t("composer.assets")}
+                open={assetsOpen}
+                onOpenChange={setAssetsOpen}
+                popoverSide="bottom"
+                align="start"
+                data-tour="composer-assets"
+              >
+                <AssetsPanel
+                  items={staged}
+                  onAdd={addFiles}
+                  onRemove={removeStaged}
+                  onRetry={retryStaged}
+                />
+              </ComposerPanelButton>
 
-              <Popover open={personaOpen} onOpenChange={setPersonaOpen}>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <PopoverTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t("composer.persona")}
-                            className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
-                            data-tour="composer-persona"
-                          >
-                            <User className="size-4.5" />
-                          </Button>
-                        }
-                      />
-                    }
-                  />
-                  <TooltipContent side="top">{t("composer.persona")}</TooltipContent>
-                </Tooltip>
-                <PopoverContent side="bottom" align="start" className="w-88">
+              {SHOW_PERSONA && (
+                <ComposerPanelButton
+                  icon={User}
+                  label={t("composer.persona")}
+                  open={personaOpen}
+                  onOpenChange={setPersonaOpen}
+                  popoverSide="bottom"
+                  align="start"
+                  data-tour="composer-persona"
+                >
                   <PersonaPanel
                     personas={personas}
                     value={personaId}
@@ -537,41 +497,31 @@ export function HomeComposer({
                       setPersonaOpen(false)
                     }}
                   />
-                </PopoverContent>
-              </Popover>
+                </ComposerPanelButton>
+              )}
             </div>
 
-            {/* Models — the honest Auto panel (user-ruled 2026-08-30): the
-                pipeline assigns models per modality and there is exactly one
-                provider per modality, so this is a READ-ONLY display of the
-                real assignments — no selectable rows, no fake SKU shelf.
-                `mr-3` holds it off the absolutely-anchored send button
-                (measured gap was 0px — the circles touched, 2026-08-31). */}
-            <div className="mr-3">
-            <Popover open={modelsOpen} onOpenChange={setModelsOpen}>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <PopoverTrigger
-                      render={
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={t("composer.models")}
-                          className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
-                        >
-                          <Box className="size-4.5" />
-                        </Button>
-                      }
-                    />
-                  }
-                />
-                <TooltipContent side="top">{t("composer.models")}</TooltipContent>
-              </Tooltip>
-              <PopoverContent side="bottom" align="end" className="w-88">
+            {/* Right group — the cost-confirmation pill (UI-only preference
+                this batch, 2026-09-23) + Models, the honest Auto panel
+                (user-ruled 2026-08-30): the pipeline assigns models per
+                modality and there is exactly one provider per modality, so
+                this is a READ-ONLY display of the real assignments — no
+                selectable rows, no fake SKU shelf. `mr-3` holds the group
+                off the absolutely-anchored send button (measured gap was
+                0px — the circles touched, 2026-08-31). */}
+            <div className="mr-3 flex items-center gap-2">
+              <CostConfirmControl popoverSide="bottom" align="end" />
+              <ComposerPanelButton
+                icon={Box}
+                label={t("composer.models")}
+                open={modelsOpen}
+                onOpenChange={setModelsOpen}
+                popoverSide="bottom"
+                align="end"
+                unpadded
+              >
                 <ModelsPanel />
-              </PopoverContent>
-            </Popover>
+              </ComposerPanelButton>
             </div>
           </div>
 
@@ -580,20 +530,15 @@ export function HomeComposer({
         {/* Send — the absolute bottom-right anchor in BOTH forms (expanded:
             on the control row's line, its historical seat; docked: centered
             in the bar). Absolute so the control row's fold never takes it. */}
-        <Button
-          className="absolute h-9 w-9 rounded-full transition-colors"
+        <ComposerSendButton
+          className="absolute"
           style={sendStyle}
-          size="icon"
           data-tour="composer-send"
           disabled={isGenerating}
+          generating={isGenerating}
           onClick={handleGenerate}
-        >
-          {isGenerating ? (
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          ) : (
-            <ArrowUp className="size-5" />
-          )}
-        </Button>
+          label={t("chat.send")}
+        />
     </InputGroup>
 
     <Tour

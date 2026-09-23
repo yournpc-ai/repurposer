@@ -20,7 +20,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment, forwardRef, useImperativeHandle } from "react"
 import { useTranslation } from "react-i18next"
 import {
-  ArrowUp,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -113,6 +112,9 @@ import {
 } from "@/components/ui/select"
 import { RunCard } from "@/components/chat/RunCard"
 import { AnsweredQuestion, answeredQuestionText } from "@/components/chat/AnsweredQuestion"
+import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
+import { ComposerSendButton } from "@/components/composer/ComposerSendButton"
+import { CostConfirmControl } from "@/components/composer/CostConfirmControl"
 import {
   mapHistoryRows,
   triggerSuggestions,
@@ -4264,15 +4266,31 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           onSubmit={handleSend}
           // Long-content headroom (2026-09-06, FLORA-measured): ~10 lines
           // visible before scrolling (was max-h-32 ≈ 6). Full-width px-3
-          // text band; the bottom air is small because the control strip
-          // owns the space below.
-          className="block max-h-56 w-full px-3 pt-2.5 pb-1 text-sm thin-scroll"
+          // text band; the vertical padding is SYMMETRIC (2026-09-23 user
+          // ruling — py-2.5 both sides; the old pb-1 read lopsided against
+          // the pt-2.5 head). Rest height (2026-09-23 user ruling, MiniMax
+          // chat parity): a taller text band at rest — min-h-20 (≈3 lines
+          // + padding) in the full / panel forms, so the box reads as a
+          // composer, not a one-line search bar; the mobile dock stays
+          // auto-height (screen estate) and still grows with content.
+          className={cn(
+            "block max-h-56 w-full px-3 py-2.5 text-sm thin-scroll",
+            (full || panel) && "min-h-20",
+          )}
         />
         {/* The control strip — in-flow under the text band (ElevenLabs'
             bottom row): + opens the file picker (their + opens an upload
             menu; ours has one destination — the picker — so no menu),
             history/hide ride along in the dock form, send/stop anchor the
-            right end (the flex-1 spacer). GLYPH-RAIL alignment (2026-09-06
+            right end (the flex-1 spacer). Gaps: mt-1 + the text band's
+            pb-2.5 = 14px between the input text and the strip (2026-09-23
+            user ruling — 10px read cramped), and pb-1.5 → card bottom
+            reads 14px (6+8), MiniMax-measured parity (same day, second
+            pass: on a THIN one-line card the 18px symmetric bottom read
+            too heavy — the same-day py-2.5/pb-2.5 symmetry ruling was
+            superseded; the text band keeps py-2.5, the bottom zone
+            tightens). Interior rhythm: 18 top / 14 middle / 14 bottom.
+            GLYPH-RAIL alignment (2026-09-06
             user ruling, FLORA-measured — the dock twin of the composer's
             glyph-left-edge law): the strip carries NO container padding;
             the + glyph's LEFT edge and the ↑ glyph's RIGHT edge sit on the
@@ -4281,51 +4299,40 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             buttons show no chrome at rest, so only the glyphs read —
             aligning containers leaves the glyphs visibly adrift when not
             hovering. Both glyphs are 18px for optical parity. */}
-        <div className="flex items-center gap-0.5 pb-1.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="ml-[3px] h-9 w-9 shrink-0"
-            aria-label={t("generationOverlay.attachFiles")}
+        <div className="mt-1 flex items-center gap-0.5 pb-1.5">
+          <ComposerIconButton
+            icon={Plus}
+            label={t("generationOverlay.attachFiles")}
+            className="ml-[3px]"
             onClick={() => fileInputRef.current?.click()}
-          >
-            <Plus className="h-4.5 w-4.5" />
-          </Button>
+          />
           {/* History toggle — dock form only: in the full form the stage IS
               the history (always on), and in the panel form the panel body
               IS the flow — the toggle has no meaning in either. */}
           {dock && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 shrink-0"
-              aria-label={t("results.dock.history")}
+            <ComposerIconButton
+              icon={historyOpen ? ChevronDown : History}
+              label={t("results.dock.history")}
               aria-pressed={historyOpen}
               onClick={() => setHistoryOpen((v) => !v)}
-            >
-              {historyOpen ? (
-                <ChevronDown className="h-4.5 w-4.5" />
-              ) : (
-                <History className="h-4.5 w-4.5" />
-              )}
-            </Button>
+            />
           )}
           {/* Hide — dock form only (the panel's minimize lives in its
               header): folds the whole dock to the bottom-right LogoMark
               dot. In the full form the chat IS the page — nothing to hide
               to. */}
           {dock && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 shrink-0"
-              aria-label={t("results.dock.hide")}
+            <ComposerIconButton
+              icon={Minus}
+              label={t("results.dock.hide")}
               onClick={() => setDockHidden(true)}
-            >
-              <Minus className="h-4.5 w-4.5" />
-            </Button>
+            />
           )}
           <span className="min-w-0 flex-1" />
+          {/* Cost-confirmation strategy (UI-only preference this batch,
+              2026-09-23 — behavior wiring is a later batch). side="top":
+              the dock lives at the viewport's bottom edge. */}
+          <CostConfirmControl popoverSide="top" align="end" className="mr-1" />
           {/* The stop button only exists while a stream is actually
               abortable (the answer path sets chatBusy without one —
               nothing to stop there). */}
@@ -4340,19 +4347,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               <Square className="h-3.5 w-3.5 fill-current" />
             </Button>
           ) : (
-            <Button
-              size="icon"
-              className="mr-[3px] h-9 w-9 shrink-0 rounded-full"
+            <ComposerSendButton
+              className="mr-[3px]"
               disabled={
                 (!input.trim() &&
                   !staged.some((s) => s.status === "done")) ||
                 staged.some((s) => s.status === "uploading")
               }
               onClick={handleSend}
-              aria-label={t("chat.send")}
-            >
-              <ArrowUp className="h-4.5 w-4.5" />
-            </Button>
+              label={t("chat.send")}
+            />
           )}
         </div>
       </div>

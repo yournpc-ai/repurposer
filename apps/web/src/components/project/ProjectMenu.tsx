@@ -31,7 +31,11 @@ interface ProjectMenuProps {
 
 /** The fullscreen project page's top-left chrome (ADR-041 canvas world): a
  * frosted pill — brand-mark trigger opens the project menu (navigation +
- * project-level ops), the truncated title rides beside it. */
+ * project-level ops), the truncated title rides beside it. The title is a
+ * BUTTON (2026-09-23 user ruling, MiniMax click-to-edit parity without
+ * their centered title bar — our canvas world keeps the two-corner chrome
+ * law, ADR-046): one click opens the rename dialog directly, skipping the
+ * dropdown hop (the menu item stays as the second path). */
 export function ProjectMenu({
   projectId,
   title,
@@ -87,7 +91,15 @@ export function ProjectMenu({
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-        <span className="max-w-40 truncate pl-1.5 pr-3 text-sm">{title}</span>
+        <button
+          type="button"
+          onClick={() => setRenameOpen(true)}
+          aria-label={t("projects.rename")}
+          title={t("projects.rename")}
+          className="h-9 max-w-40 truncate rounded-r-md pl-1.5 pr-3 text-sm transition-colors hover:bg-accent"
+        >
+          {title}
+        </button>
       </div>
 
       <RenameProjectDialog

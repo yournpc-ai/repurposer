@@ -1,6 +1,5 @@
 import {
   Home,
-  Mic2,
   FolderKanban,
   ArrowLeftToLine,
   ArrowRightToLine,
@@ -40,7 +39,11 @@ import { LogoMark } from "@/components/LogoMark"
 const navItems = [
   { key: "home", url: "/home", icon: Home },
   { key: "myProjects", url: "/projects", icon: FolderKanban },
-  { key: "personas", url: "/personas", icon: Mic2 },
+  // Personas nav hidden 2026-09-23 (user ruling): returns with the
+  // positioning / memory ops-layer iteration (docs/POSITIONING.md) — the
+  // /personas route itself stays alive, only the entries go away. Restore
+  // together with the composer's Persona button (HomeComposer).
+  // { key: "personas", url: "/personas", icon: Mic2 },
 ]
 
 function isActive(path: string, itemUrl: string) {

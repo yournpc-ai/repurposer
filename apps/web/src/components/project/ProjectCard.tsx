@@ -26,6 +26,7 @@ interface Project {
   id: string
   title: string
   status: string
+  created_at?: string | null
   updated_at?: string | null
   thumbnail_url?: string | null
   thumbnail_duration?: number | null
@@ -55,14 +56,24 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
     : null
   const showVideo = thumbnailSrc && !videoFailed
 
-  // Bottom line: live statuses show the current stage as plain text (the
-  // animated tile carries the motion); settled projects show the relative
-  // update time (the raw enum never leaks into the UI).
+  // Bottom line: one slot, two facts — the stage label (while unsettled) and
+  // the relative time. The list is sorted by time, so the time must always be
+  // readable; a bare status without its timestamp hides the sort's readout.
   const active = project.status === "processing" || project.status === "uploading"
   // Unsettled projects (draft included) never show a bare static tile: the
   // card stays alive — drifting glow + brand fill. A draft is "waiting on
   // you", a live run is "working"; the label below disambiguates.
   const live = active || project.status === "draft"
+  const stageLabel = active
+    ? t(`projects.status.${project.status}`)
+    : project.status === "draft"
+      ? // Same muted gray as every other status in this slot — no amber dot,
+        // no color coding.
+        t("projects.status.draft")
+      : null
+  const when = project.updated_at ?? project.created_at
+  const timeLabel = when ? formatRelativeTime(when, i18n.language) : null
+  const bottomLine = [stageLabel, timeLabel].filter(Boolean).join(" · ")
 
   return (
     <>
@@ -72,69 +83,61 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
         // The project page is always canvas + dock (ADR-051) — its own state
         // drives the dock's form (draft ⟺ the parked plan docks the
         // confirm panel; processing ⟺ the dock attaches to the live run).
-        className="group flex flex-col gap-2"
+        className="group block"
       >
-        {/* Full-bleed thumbnail — no card container, no inset padding: the
-            image carries its own radius and the text lives below it
-            (LTX/ElevenLabs projects-grid pattern, 2026-08-04). */}
-        <div
-          className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-xl ${
-            // Neutral base for the live mist — bg-primary/10 would leak hue
-            // through it; the tinted base is only for the settled thumbnail.
-            live ? "bg-muted" : "bg-primary/10"
-          }`}
-        >
-          {live ? (
-            // Unsettled project — the layered processing tile is the life
-            // signal (matte base, light shaft, mist, grain, halo), so the
-            // stage label below stays plain text.
-            <ProcessingTile>
-              <BrandLoader className="relative h-8 w-8" />
-            </ProcessingTile>
-          ) : (
-            <>
-              {showVideo ? (
-                <video
-                  src={thumbnailSrc}
-                  muted
-                  playsInline
-                  preload="metadata"
-                  onLoadedData={() => setVideoReady(true)}
-                  onError={() => setVideoFailed(true)}
-                  className={`h-full w-full object-cover transition-transform duration-300 group-hover:scale-105 ${
-                    videoReady ? "opacity-100" : "opacity-0"
-                  }`}
-                />
-              ) : null}
-              {!showVideo || !videoReady ? (
-                <FolderKanban className="absolute h-7 w-7 text-primary" />
-              ) : null}
-              {showVideo && videoReady && project.thumbnail_duration != null && (
-                <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1">
-                  <Badge variant="secondary" className="rounded-md tabular-nums">
-                    {formatDuration(project.thumbnail_duration)}
-                  </Badge>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{project.title}</p>
-          <div className="mt-0.5 flex items-center justify-between gap-1">
-            <p className="truncate text-xs text-muted-foreground">
-              {active ? (
-                // Plain text — the animated tile above already carries the
-                // "working" signal, so the stage label doesn't shimmer.
-                t(`projects.status.${project.status}`)
-              ) : project.status === "draft" ? (
-                // Same muted gray as every other status in this slot — no
-                // amber dot, no color coding.
-                t("projects.status.draft")
-              ) : project.updated_at ? (
-                formatRelativeTime(project.updated_at, i18n.language)
-              ) : null}
-            </p>
+        {/* Container card — the raised fill step (bg-card on the 0.96 page,
+            ADR-046 elevation law) is the whole separation: no shadow, no
+            ring (the fills already distinguish). The thumbnail insets inside
+            with a concentric radius, the text row lives on the card. */}
+        <div className="rounded-xl bg-card p-1.5">
+          <div
+            className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-lg ${
+              // Neutral base for the live mist — bg-primary/10 would leak hue
+              // through it; the tinted base is only for the settled thumbnail.
+              live ? "bg-muted" : "bg-primary/10"
+            }`}
+          >
+            {live ? (
+              // Unsettled project — the layered processing tile is the life
+              // signal (matte base, light shaft, mist, grain, halo), so the
+              // stage label below stays plain text.
+              <ProcessingTile>
+                <BrandLoader className="relative h-8 w-8" />
+              </ProcessingTile>
+            ) : (
+              <>
+                {showVideo ? (
+                  <video
+                    src={thumbnailSrc}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    onLoadedData={() => setVideoReady(true)}
+                    onError={() => setVideoFailed(true)}
+                    className={`h-full w-full object-cover transition-transform duration-300 group-hover:scale-105 ${
+                      videoReady ? "opacity-100" : "opacity-0"
+                    }`}
+                  />
+                ) : null}
+                {!showVideo || !videoReady ? (
+                  <FolderKanban className="absolute h-7 w-7 text-primary" />
+                ) : null}
+                {showVideo && videoReady && project.thumbnail_duration != null && (
+                  <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1">
+                    <Badge variant="secondary" className="rounded-md tabular-nums">
+                      {formatDuration(project.thumbnail_duration)}
+                    </Badge>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <div className="min-w-0 px-1.5 pb-1 pt-2">
+            <p className="truncate text-sm font-medium">{project.title}</p>
+            <div className="mt-0.5 flex items-center justify-between gap-1">
+              <p className="truncate text-xs text-muted-foreground">
+                {bottomLine}
+              </p>
             {/* "···" menu — the wrapper preventDefault+stopPropagation keeps
                 the wrapping <a> from navigating (stopPropagation alone leaves
                 the browser's default anchor behavior intact). */}
@@ -181,6 +184,7 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
+            </div>
             </div>
           </div>
         </div>

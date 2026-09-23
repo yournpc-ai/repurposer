@@ -438,6 +438,32 @@ const zh: Resources = {
     uploadRetry: "重试",
     uploadInProgress: "文件还在上传中，请稍候",
     managePersonas: "管理人设…",
+    // 扣费确认策略（2026-09-23，本次仅 UI 偏好——行为接线上后续批次，
+    // 注脚对用户诚实声明）。trigger 文案纪律：≤12 字符，保证 pill 在
+    // dock 控制条上不溢出。
+    confirmStrategy: {
+      label: "扣费确认",
+      trigger: {
+        always: "每次确认",
+        large: "大额确认",
+        never: "从不确认",
+      },
+      options: {
+        always: {
+          title: "每次都问",
+          desc: "每次生成扣费都需要确认",
+        },
+        large: {
+          title: "大额才问",
+          desc: "扣费超过 300 点数时需要确认",
+        },
+        never: {
+          title: "从不询问",
+          desc: "直接扣费，不再确认",
+        },
+      },
+      footnote: "扣费确认尚未上线——此处先保存你的偏好，上线后自动生效。",
+    },
   },
   // 配方卡（RECIPES §7）—— 与 lib/recipes.ts 的卡 id 一一对应；
   // reserved 卡在此留座但不渲染发射区。
@@ -654,7 +680,17 @@ const zh: Resources = {
   },
   projects: {
     title: "项目",
+    search: "搜索",
     searchPlaceholder: "搜索项目…",
+    sort: {
+      label: "排序",
+      byField: "排序方式",
+      byUpdated: "最近修改",
+      byCreated: "创建时间",
+      order: "顺序",
+      desc: "最新在前",
+      asc: "最早在前",
+    },
     new: "新建项目",
     dialogTitle: "新建项目",
     dialogDesc: "选择人设并输入项目信息，开始把你现有的素材变成可复用的内容。",

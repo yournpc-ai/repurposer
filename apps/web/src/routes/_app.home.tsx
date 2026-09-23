@@ -10,7 +10,7 @@ import { HomeComposer } from "@/components/home/HomeComposer"
 import { LogoMark } from "@/components/LogoMark"
 import { RecipeCard as RecipeCardView } from "@/components/home/RecipeCard"
 import { RecipeInspectOverlay } from "@/components/recipes/RecipeInspectOverlay"
-import type { PersonaPickerEntry } from "@/components/home/PersonaPanel"
+import type { PersonaPickerEntry } from "@/components/composer/PersonaPanel"
 import type { MentionEditorHandle } from "@/components/mentions/MentionEditor"
 
 type Persona = PersonaPickerEntry
