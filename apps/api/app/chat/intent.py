@@ -24,8 +24,11 @@ user_key taxonomy makes the failure presentable).
 ``chat_intent_agent`` — the chat loop's intent proposer (CHAT_ARCH §3): one
 user message + assembled context → one terminal call (propose_tasks /
 apply_edit_ops / edit_graph / ask_user / answer — the five proposal states,
-mechanically). The LLM proposes; ``compile_graph`` / the operations registry
-/ ``apply_wiring_ops`` adjudicate — their rejections ARE the loop's
+mechanically — plus the iter-3 S2 exploration verbs: a post-run discovery
+goal runs the SAME candidates → selects → plans chain as the plan path and
+docks its decision package through this path's own seat, R6 parity). The
+LLM proposes; ``compile_graph`` / the operations registry /
+``apply_wiring_ops`` adjudicate — their rejections ARE the loop's
 feedback.
 """
 
@@ -272,6 +275,16 @@ chat_intent_agent = ToolLoopAgent(
     system=chat_intent_system(),
     temperature=0.2,
     assemble=_assemble_chat_turn,
-    tools=[*CHAT_TOOLS, *CHAT_READ_TOOLS],
-    max_iterations=6,
+    # iter-3 S2 (R6 parity): the exploration verbs ride the chat path too —
+    # candidates/selects NON-terminal (one turn carries the post-run
+    # discovery chain), propose_plans / revise_plan terminal (the dock = the
+    # paid-boundary stop, R15).
+    tools=[*CHAT_TOOLS, *CHAT_READ_TOOLS, *exploration_chat_tools()],
+    # max_iterations 6→12 (iter-3 E8): the discovery chain rides ONE turn —
+    # search → reads → candidates → selects → plans is 8-10 realistic calls
+    # on the plan path's live evidence (2026-09-23, S-explore-2), and the
+    # ProposePlansArgs params shape needs real rejection-recovery headroom;
+    # 12 = realistic 9-10 + 2 recovery. The bound stays what makes an
+    # unquoted chat turn safe (bounded, never open-ended).
+    max_iterations=12,
 )

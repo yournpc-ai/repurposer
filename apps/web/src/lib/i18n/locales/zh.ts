@@ -1222,6 +1222,7 @@ const zh: Resources = {
       segment: "正在读片段…",
       asset: "正在查看素材…",
       craftSkeleton: "正在读案例的风格拆解…",
+      artifact: "正在读卡片的详情…",
     },
     /** 工作会话族（迭代二⑥，N-57）：发现链的用户安全节拍——searching 骑
      * 读帧（进行态 + 完成态镜像，与 inspecting→inspectingDone 同律的
@@ -1244,6 +1245,11 @@ const zh: Resources = {
       repair: "刚才的回答没组织好，我重新整理一下…",
       repairDone: "已重新整理好",
     },
+    /** 活动行的有界展开明细（迭代三 S7，E7 诚实边界）：只有 wire 白名单
+     * 字段——原始计数带标签成行（耗时内联同行，formatElapsed 是唯一措辞）。 */
+    activityMeta: {
+      count: "数量：{{count}}",
+    },
     /** inspecting 族的完成态镜像——读活动 completed 帧的文案（键随服务端
      * 注册表，本族按前缀交换镜像）。 */
     inspectingDone: {
@@ -1258,6 +1264,7 @@ const zh: Resources = {
       segment: "已读片段",
       asset: "已查看素材",
       craftSkeleton: "已读案例的风格拆解",
+      artifact: "已读卡片的详情",
     },
     completed: "完成",
     failed: "抱歉，这次没能完成修改，请再试一次。",

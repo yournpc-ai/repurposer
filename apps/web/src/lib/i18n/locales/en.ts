@@ -1288,6 +1288,7 @@ const en = {
       segment: "Reading the segment…",
       asset: "Looking at the asset…",
       craftSkeleton: "Reading the reference's style breakdown…",
+      artifact: "Reading the card's details…",
     },
     /** The work-session family (iter-2 ⑥, N-57): the discovery chain's
      * user-safe beats — `searching` rides the read frame (active + done
@@ -1314,6 +1315,12 @@ const en = {
       repair: "That answer didn't come out right — reworking it…",
       repairDone: "Reworked it",
     },
+    /** The activity row's bounded expand detail (iter-3 S7, E7 诚实边界):
+     * only the wire whitelist's fields — the raw count rides as a labeled
+     * meta line (the duration joins inline, formatElapsed is the ONE copy). */
+    activityMeta: {
+      count: "Count: {{count}}",
+    },
     /** Past-tense mirrors of the inspecting family — a read activity's
      * completed frames (chat.inspecting.* stays the active form; the keys
      * ride the server registry, this family mirrors it by prefix swap). */
@@ -1329,6 +1336,7 @@ const en = {
       segment: "Read the segment",
       asset: "Looked at the asset",
       craftSkeleton: "Read the reference's style breakdown",
+      artifact: "Read the card's details",
     },
     completed: "Done",
     failed: "Sorry, I couldn't update this. Please try again.",

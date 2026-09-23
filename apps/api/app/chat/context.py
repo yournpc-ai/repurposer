@@ -25,9 +25,14 @@ from app.models.tables import (
     Project,
     WorkflowRun,
 )
+from app.pipeline.exploration_store import (
+    journey_summary_line,
+    read_journey_summaries,
+)
 from app.pipeline.outputs import list_visible_outputs
 
 _GRAPH_CONTEXT_LIMIT = 16
+_PAST_JOURNEYS_CAP = 3
 
 
 async def build_context(
@@ -110,7 +115,19 @@ async def build_context(
         lines.append("Graph (the persistent canvas — wiring ops edit THIS):")
         for n in graph_nodes[:_GRAPH_CONTEXT_LIMIT]:
             spec = n.spec or {}
-            label = spec.get("summary") or n.type
+            # iter-3 S2: exploration rows carry no `summary` — their
+            # identity lives in title (content_plan) / topic (candidate_set)
+            # / exploration_kind; execution rows keep the summary law
+            # untouched.
+            if n.type == "exploration":
+                label = (
+                    spec.get("title")
+                    or spec.get("topic")
+                    or spec.get("exploration_kind")
+                    or n.type
+                )
+            else:
+                label = spec.get("summary") or n.type
             row = f"- {n.type} id={n.id} state={n.state} — {label}"
             prompt = spec.get("prompt")
             if prompt:
@@ -138,6 +155,18 @@ async def build_context(
         # per-step progress detail retired behind the get_run_status read
         # tool — the agent knows a run exists and reads the detail on demand.
         lines.append(f"Latest run: status={latest_run.status} id={latest_run.id}")
+
+    # iter-3 S6 (E5, Memory 窄切 ②): the project's recent journeys ride as
+    # ONE bounded identity-level block (goal + counts + the newest plan's
+    # output facts) — the agent can answer "what have we done before" and
+    # ground a "same as last time" reference WITHOUT a read tool; the full
+    # artifact fields stay behind get_artifact (digest doctrine — anything
+    # a read tool reads is never pre-injected in full).
+    past_journeys = await read_journey_summaries(db, project.id, cap=_PAST_JOURNEYS_CAP)
+    if past_journeys:
+        lines.append("Past journeys (newest first):")
+        for summary in past_journeys:
+            lines.append(f"- {journey_summary_line(summary)}")
 
     if recent:
         lines.append("Recent rounds:")

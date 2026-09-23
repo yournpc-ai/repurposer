@@ -43,6 +43,7 @@ from pydantic import BaseModel
 from app.agents.tool_loop import ChatTool, ToolObservation
 from app.chat.perception import executes
 from app.chat.perception.executes import (
+    GetArtifactParams,
     GetAssetParams,
     GetCraftSkeletonParams,
     GetNodeParams,
@@ -219,6 +220,20 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             # ADR-085: the reference case's decoded craft is a material
             # judgment of its own — same eligibility as get_understanding.
             checkpoint_eligible=True,
+        ),
+        PerceptionTool(
+            name="get_artifact",
+            description=(
+                "Read one exploration artifact's full fields (a candidate "
+                "collection's sections, a pick's verdict + the section it "
+                "points at, a plan card's deliverables) — before revising a "
+                "pick (revise_selects) or answering what a landed pick/plan "
+                "carries."
+            ),
+            params_model=GetArtifactParams,
+            execute=executes.get_artifact,
+            activity_key="chat.inspecting.artifact",
+            # Edit prep — never checkpoint-eligible (same law as get_node).
         ),
     ]
 }

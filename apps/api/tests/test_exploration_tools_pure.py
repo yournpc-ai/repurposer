@@ -6,10 +6,11 @@ No DB, no LLM, no HTTP (suite discipline): the execute half needs a session
 and stays covered by the door's own suite (test_exploration_store_pure.py)
 plus the iter-1 scenario. What's gated HERE:
 
-- the registry's shape (four verbs, ALL terminal in the harness form —
+- the registry's shape (five verbs, ALL terminal in the harness form —
   终态工具一调即停; the production projection's terminal law is pinned in
   TestRegistryShape too: candidates/selects ride back, propose_plans /
-  revise_plan stop the turn, iter-2 ⑤/⑦ N-57);
+  revise_plan / revise_selects stop the turn, iter-2 ⑤/⑦ N-57, iter-3 S4
+  N-58);
 - 迁移弧纪律 (ADR-089 §8): harness-level in iter-1 — the family is NOT
   registered into the production turn tools (production wiring = iter-2 R6);
 - 打字机律牙① (read tolerance): explicit null on the optional fields reads
@@ -44,14 +45,16 @@ _CANDIDATES = {
 
 
 class TestRegistryShape:
-    def test_four_terminal_verbs(self) -> None:
-        """The harness form: ALL four verbs terminal (终态工具一调即停);
-        revise_plan joined as the family's fourth word (iter-2 ⑦, N-57)."""
+    def test_five_terminal_verbs(self) -> None:
+        """The harness form: ALL five verbs terminal (终态工具一调即停);
+        revise_plan joined as the family's fourth word (iter-2 ⑦, N-57),
+        revise_selects as the fifth (iter-3 S4, N-58 — the pick swap)."""
         assert set(EXPLORATION_TOOLS) == {
             "propose_candidates",
             "propose_selects",
             "propose_plans",
             "revise_plan",
+            "revise_selects",
         }
         for name, tool in EXPLORATION_TOOLS.items():
             assert tool.name == name
@@ -63,7 +66,9 @@ class TestRegistryShape:
         """iter-2 ⑤ (R6, N-57): the production projection re-forms the SAME
         entries — candidates/selects NON-terminal (R2 一回合连续工作: the
         observations ride back and the loop iterates), propose_plans /
-        revise_plan TERMINAL (the dock = the paid-boundary stop, R15)."""
+        revise_plan / revise_selects TERMINAL (the dock = the paid-boundary
+        stop, R15; a pick swap can dock too — the three money states,
+        iter-3 S4)."""
         from app.chat.exploration_tools import exploration_chat_tools
 
         projection = {t.name: t.terminal for t in exploration_chat_tools()}
@@ -72,6 +77,7 @@ class TestRegistryShape:
             "propose_selects": False,
             "propose_plans": True,
             "revise_plan": True,
+            "revise_selects": True,
         }
         # Same params models — zero wording/schema drift between the seats.
         by_name = {t.name: t for t in exploration_chat_tools()}

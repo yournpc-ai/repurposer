@@ -13,6 +13,11 @@ first):
   The fire gate mirrors ADR-074②'s closing-line truth: a successful run OR
   a partial failure with landed products (done + output_refs); a run where
   nothing landed fires nothing — the receipt IS its failure surface.
+  Iter-3 S5 (ADR-088 §8 R21): the turn's event line carries the
+  deterministic DELIVERY FACTS block (``run_review``'s pure core — promised
+  vs landed, track/verify facts, captured vs quoted); the prose law (facts
+  first, zero subjective quality words, gaps → suggestions) lives in
+  ``trigger_system.j2``.
 
 The loop itself: the perception family's reads are the agent's eyes (look
 BEFORE speaking — read-before-speak is the reviewer's honesty base), and
@@ -42,7 +47,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.context import build_context
@@ -59,7 +64,15 @@ from app.chat.service import (
 )
 from app.chat.turn_tools import CHAT_READ_TOOLS
 from app.models.schemas import Option, QuestionPayload, WrapUpArgs
-from app.models.tables import Conversation, Message, Project, WorkflowRun
+from app.models.tables import (
+    Conversation,
+    CreditTransaction,
+    Message,
+    Output,
+    Project,
+    WorkflowRun,
+    WorkflowStep,
+)
 from app.pipeline.trigger_events import (
     TRIGGER_CRAFT_DECOMPILED,
     TRIGGER_RUN_COMPLETED,
@@ -265,6 +278,62 @@ async def _already_spoke(
     return existing is not None
 
 
+async def _run_review_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
+    """The closing audit's fact block (iter-3 S5, ADR-088 §8 R21 / N-58):
+    the deterministic 兑现事实清单 for the run_completed turn — the world's
+    self-evidence (the run's Confirmed Scope Snapshot, the landed outputs'
+    baked specs, the ledger's captures), adjudicated by ``run_review``'s
+    PURE core and bounded by its rendering caps. Zero LLM here; the prose
+    law (facts first, zero subjective quality words, gaps → suggestions)
+    lives in the prompt. Any read failure degrades to the empty block (the
+    fire-and-forget doctrine — the review then speaks from its own reads,
+    exactly the pre-S5 posture)."""
+    from app.pipeline.run_review import (  # deferred: pipeline weight
+        compute_run_review,
+        landed_fact,
+        review_fact_lines,
+    )
+
+    steps = list(
+        (
+            await db.execute(
+                select(WorkflowStep).where(WorkflowStep.run_id == run.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    output_ids = [oid for step in steps for oid in (step.output_refs or [])]
+    outputs = []
+    if output_ids:
+        outputs = list(
+            (
+                await db.execute(select(Output).where(Output.id.in_(output_ids)))
+            )
+            .scalars()
+            .all()
+        )
+    capture_count, captured_raw = (
+        await db.execute(
+            select(
+                func.count(CreditTransaction.id),
+                func.coalesce(func.sum(CreditTransaction.amount), 0),
+            ).where(
+                CreditTransaction.kind == "capture",
+                CreditTransaction.ref["run_id"].astext == str(run.id),
+            )
+        )
+    ).one()
+    # Captures are signed negative; zero rows = nothing truthful to say.
+    captured = -int(captured_raw) if capture_count else None
+    review = compute_run_review(
+        confirmed_scope=(run.context or {}).get("confirmed_scope"),
+        landed=[landed_fact(o) for o in outputs],
+        captured_credits=captured,
+    )
+    return review_fact_lines(review)
+
+
 async def run_trigger_turn(
     project_id: UUID, trigger: str, ref: str
 ) -> Message | None:
@@ -356,15 +425,29 @@ async def run_trigger_turn(
                 await latest_pending_question(db, conversation_id),
             )
             language = _trigger_language(run, history, conversation)
-            event_line = (
-                f"Run {ref} just reached its terminal state. Review what it "
-                "produced (read the run status, then the landed outputs "
-                "themselves), then close with your judgment and next steps."
-                if trigger == TRIGGER_RUN_COMPLETED
-                else "The material understanding for this project's current "
-                "assets just completed. Read it, then tell the user what "
-                "their material says and what it could become."
-            )
+            if trigger == TRIGGER_RUN_COMPLETED:
+                event_line = (
+                    f"Run {ref} just reached its terminal state. Review what "
+                    "it produced, then close with the delivery review and "
+                    "next steps."
+                )
+                # 兑现审计注入 (iter-3 S5): the deterministic fact block rides
+                # the event line — the world's self-evidence, bounded by
+                # review_fact_lines' own caps.
+                review_lines = await _run_review_lines(db, run)
+                if review_lines:
+                    event_line += (
+                        "\n\nDELIVERY FACTS (deterministic, from the run's own "
+                        "records — narrate them, never contradict them; a GAP "
+                        "line names something promised that didn't land):\n"
+                        + "\n".join(review_lines)
+                    )
+            else:
+                event_line = (
+                    "The material understanding for this project's current "
+                    "assets just completed. Read it, then tell the user what "
+                    "their material says and what it could become."
+                )
 
             outcome: dict[str, Any] = {}
 

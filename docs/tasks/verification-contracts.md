@@ -47,6 +47,8 @@
 | Prompt 面（三探针绝对阈值 / 枚举漂移） | `app/prompts/chat/` | ADR-071 T2 | 枚举漂移 guard ×3 | `scripts/prompt_gate.py` | — | 🟢 ｜ `router_ab_probe` 移植挂账（§6 DEFERRED） |
 | 三通道分家（System Status / Activity / Conversation） | routes + ChatDock | ADR-087 §1 | T14 反向锁（投影器无 phase 面） | — | gate 5a / 5c | 🟢 ｜ Phase 3 Batch B 解清：旧相位 token 全退役（③ 三替身 / ⑤ creating_run，§6），composing = System Status 唯一幸存叙事（判词 3），永不建「相位帧 → lifecycle readiness」正向锁 |
 
+| Agent Working Loop 修订回路 + 收官审计 + 记忆窄切（revise_plan / revise_selects 三金钱态 / revise_output craft 续跑·迷你包 / run_review 兑现清单 / R20 快照路由 / get_artifact + Past journeys + exemplar） | `app/pipeline/exploration_store.py` + `app/pipeline/run_review.py` + `app/pipeline/scope_compile.py`（route_revision / assemble_craft_revision）+ `app/chat/perception` | ADR-088 §6~§8·§10 / ADR-089 §4·§6·§8 + iter-3 简报 §3 E1~E10 | `test_revise_selects_pure.py`（14）/ `test_run_review_pure.py`（18）/ `test_memory_narrow_pure.py`（22）+ scope_compile / exploration_tools / perception 既有面漂 gate | S-explore-3/4/5 确定性尾（`scratch/s_explore_3|4|5_deterministic_drive.py`）+ S-explore-2 回归 + 六拍走查 `scratch/iter3-six-beat-walkthrough.md` | — | 🟡 代码层绿（2026-09-23：纯 pytest 625 + check_gates + web tsc/vitest 70）；prompt_gate 全量 + LLM 拍位 + 旧座回归 = 用户走查待跑（当日拍板代码层优先） |
+
 ## 3. Charge Semantics 等价登记（ADR-063 终读）
 
 **当前实现下 `charge_semantics_ready ≡ has_pending_plan`——这是当前合同

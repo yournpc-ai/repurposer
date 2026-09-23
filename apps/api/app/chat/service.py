@@ -1675,8 +1675,29 @@ async def answer_question(
                     plans=list(pending.plans) if pending is not None else [],
                     tasks=tasks,
                     quote=(message.question or {}).get("estimate_credits"),
+                    plan_task_map=(
+                        pending.plan_task_map if pending is not None else None
+                    ),
                 ),
             }
+            # E3 双态写者 (first half, iter-3 S1): the confirmed package's
+            # plan rows settle ready/revised → compiled IN THE SAME
+            # TRANSACTION as the snapshot stamp — the artifact state machine
+            # and the paid execution never diverge. Router-drafted docks
+            # carry no plans → the call is a no-op.
+            from app.pipeline.exploration_store import (  # deferred: pipeline edge
+                mark_compiled,
+            )
+
+            await mark_compiled(
+                db,
+                project,
+                plan_ids=[
+                    UUID(str(p["plan_id"]))
+                    for p in (pending.plans if pending is not None else [])
+                    if p.get("plan_id")
+                ],
+            )
 
     elif question.kind == "question" and message.workflow_run_id is not None:
         # Direction interrupt (期 4): workflow_run_id is the dispatch
@@ -1794,6 +1815,7 @@ async def answer_question(
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
                     on_loop_event=on_loop_event,
+                    on_activity=on_activity,
                 )
 
     elif question.kind == "question" and data.kind == "bail" and question.slot is not None:
@@ -1935,6 +1957,7 @@ async def _propose_turn(
     on_tool_ready=None,
     on_checkpoint=None,
     on_loop_event=None,
+    on_activity=None,
 ) -> tuple[Message, UUID | None, list[UUID], Message | None]:
     """One assistant turn after the user input is settled (CHAT_ARCH §3).
 
@@ -1947,8 +1970,8 @@ async def _propose_turn(
     ADR-077 判词② (2026-09-14): the dispatch retired into the tool
     loop — this body is a shim; the turn lives in ``app/chat/propose_turn.py``
     (the chat intent agent's terminal tools propose_tasks / apply_edit_ops /
-    edit_graph / ask_user / answer). Deferred import: the runner imports THIS
-    module's machinery.
+    edit_graph / ask_user / answer + the iter-3 S2 exploration verbs).
+    Deferred import: the runner imports THIS module's machinery.
     """
     from app.chat.propose_turn import run_propose_turn
 
@@ -1967,6 +1990,7 @@ async def _propose_turn(
         on_tool_ready=on_tool_ready,
         on_checkpoint=on_checkpoint,
         on_loop_event=on_loop_event,
+        on_activity=on_activity,
     )
 
 
@@ -2317,6 +2341,7 @@ async def execute_chat_turn(
             on_tool_ready=on_tool_ready,
             on_checkpoint=on_checkpoint,
             on_loop_event=on_loop_event,
+            on_activity=on_activity,
         )
         if chat_settled is not None:
             # 插话判定结算 (ADR-053 R2): the agent judged this very message
