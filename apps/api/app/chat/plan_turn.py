@@ -124,7 +124,7 @@ from app.pipeline.exploration_store import (
 from app.pipeline.product_graph import EXPLORATION_NODE_TYPE
 from app.pipeline.scope_compile import (
     ScopeCompileRejected,
-    compile_plans,
+    compile_scope,
     decision_package_plans,
 )
 from app.platform.project_context import resolve_default_persona
@@ -998,7 +998,7 @@ class PlanTurn:
         from app.ui_locale import current_ui_language
 
         try:
-            compiled = compile_plans(
+            scope = compile_scope(
                 previews,
                 selects,
                 candidate_sets,
@@ -1007,6 +1007,7 @@ class PlanTurn:
             )
         except ScopeCompileRejected as e:
             return str(e)
+        compiled = scope.tasks
         # The router-drafted dock's own backstop rides too (同源语言护栏 etc.).
         try:
             await check_transform_targets(
@@ -1079,6 +1080,15 @@ class PlanTurn:
         # row (the restore path reads it) and the dock payload (the live
         # envelope) — one stamp, two seats.
         package_plans = decision_package_plans(born)
+        # R20 修订路由器基材 (iter-3 E1/E2): re-key the pre-flight map
+        # (preview ids) onto the born rows — the door births in the same
+        # order the previews compiled (the compile is deterministic), so
+        # the ranges transfer verbatim.
+        plan_task_map = {
+            str(born_row.id): scope.plan_task_map[preview.id]
+            for preview, born_row in zip(previews, born, strict=True)
+            if preview.id in scope.plan_task_map
+        }
         project.pending_brief = PendingPlan(
             prompt=birth_prompt,
             intent=intent,
@@ -1087,6 +1097,7 @@ class PlanTurn:
             persona_id=persona_id,
             derived=derived,
             plans=package_plans,
+            plan_task_map=plan_task_map,
             **self._role_pins(),
         ).model_dump(mode="json")
         self._fire_mention_warm()
@@ -1143,7 +1154,7 @@ class PlanTurn:
         from app.ui_locale import current_ui_language
 
         try:
-            compiled = compile_plans(
+            scope = compile_scope(
                 plans,
                 selects,
                 candidate_sets,
@@ -1152,6 +1163,7 @@ class PlanTurn:
             )
         except ScopeCompileRejected as e:
             return str(e)
+        compiled = scope.tasks
         try:
             await check_transform_targets(
                 db,
@@ -1220,6 +1232,7 @@ class PlanTurn:
             persona_id=persona_id,
             derived=derived,
             plans=package_plans,
+            plan_task_map=scope.plan_task_map,
             **self._role_pins(),
         ).model_dump(mode="json")
         self._fire_mention_warm()

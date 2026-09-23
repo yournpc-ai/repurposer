@@ -67,9 +67,12 @@ EXPLORATION_KINDS: frozenset[str] = frozenset(
 )
 
 # The artifact state machine (ADR-088 §3): draft → ready → revised → compiled
-# → superseded. Iter-1 writes only draft/ready (candidates and selects are
-# evidence-complete at birth — born ready); revised/compiled land with the
-# compiler (iter-2) and the revision verbs (iter-3), superseded with them.
+# → superseded. Candidates and selects are born ready (evidence-complete at
+# birth); plans take draft/ready at birth, ``revised`` via the in-place
+# revise verb, ``compiled`` via ``mark_compiled`` when the Start birthplace
+# stamps the confirmed snapshot, and ``superseded`` via ``supersede_plan``
+# (the post-run revision — a successor row carries the restated spec;
+# ``revision_of`` is never built, N-57).
 STATE_DRAFT = "draft"
 STATE_READY = "ready"
 EXPLORATION_STATES: frozenset[str] = frozenset(
@@ -643,10 +646,18 @@ async def propose_plans(
 async def read_journey_plans(
     db: AsyncSession, project_id: UUID, journey_id: UUID
 ) -> list[GraphNode]:
-    """The revise/recompile seat's read (iter-2 ⑦): ALL of the journey's
+    """The revise/recompile seat's read (iter-2 ⑦): the journey's CURRENT
     Content Plan rows (the decision package re-docks as a whole — a revise
     targets one plan, the package re-presents every plan). Pure read, same
-    door-outside posture as ``read_journey_evidence``."""
+    door-outside posture as ``read_journey_evidence``.
+
+    Iter-3 E3 (review 注记①): the read is state-filtered to the CURRENT
+    package — ``ready``/``revised`` only. ``compiled``/``superseded`` rows
+    are settled history (the confirmed snapshot's anchors): without this
+    filter the whole-package recompile would hard-reject on them the day
+    ``mark_compiled`` lands (缺一天 = 整包重编译炸). ``draft`` rows carry
+    open gaps — they re-enter the package only through the repair verb
+    (``revise_plan`` targeting them directly)."""
     rows = list(
         (
             await db.execute(
@@ -661,7 +672,10 @@ async def read_journey_plans(
         .all()
     )
     return [
-        n for n in rows if (n.spec or {}).get("exploration_kind") == KIND_CONTENT_PLAN
+        n
+        for n in rows
+        if (n.spec or {}).get("exploration_kind") == KIND_CONTENT_PLAN
+        and n.state in (STATE_READY, "revised")
     ]
 
 
@@ -708,3 +722,122 @@ async def revise_plan(
     node.state = STATE_DRAFT if issues else "revised"
     await db.flush()
     return node
+
+
+async def mark_compiled(
+    db: AsyncSession, project: Project, *, plan_ids: list[UUID]
+) -> list[GraphNode]:
+    """E3 双态写者 (first half, iter-3 S1): after the Start birthplace
+    stamps the Confirmed Scope Snapshot, the confirmed package's plan rows
+    flip ``ready``/``revised`` → ``compiled`` — IN THE SAME TRANSACTION
+    (flush-only; the caller commits), so the artifact state machine and the
+    paid execution never diverge.
+
+    Idempotent: an already-compiled row is a no-op (Start replays). A
+    ``draft`` row is unreachable (an uncompilable package never births a
+    run) and a ``superseded`` row is settled history — both reject. An id
+    the project doesn't carry rejects too: the snapshot must never name a
+    plan the project doesn't have."""
+    if not plan_ids:
+        return []
+    lane = await _exploration_nodes(db, project.id)
+    plans = [
+        n
+        for n in lane
+        if (n.spec or {}).get("exploration_kind") == KIND_CONTENT_PLAN
+    ]
+    by_id = {str(n.id): n for n in plans}
+    marked: list[GraphNode] = []
+    for plan_id in plan_ids:
+        node = by_id.get(str(plan_id))
+        if node is None:
+            raise ExplorationRejected(
+                f"mark_compiled: plan {plan_id} is not an exploration plan "
+                "of this project"
+            )
+        if node.state == "compiled":
+            marked.append(node)  # replay: already settled into compiled
+            continue
+        if node.state not in (STATE_READY, "revised"):
+            raise ExplorationRejected(
+                f"mark_compiled: plan {plan_id} is {node.state} — only "
+                "ready/revised plans can settle into compiled"
+            )
+        node.state = "compiled"
+        marked.append(node)
+    await db.flush()
+    return marked
+
+
+async def supersede_plan(
+    db: AsyncSession,
+    project: Project,
+    *,
+    plan_id: UUID,
+    title: str | None = None,
+    outputs: list[dict[str, Any]] | None = None,
+) -> GraphNode:
+    """E3 双态写者 (second half, iter-3 S1): the POST-RUN plan-level
+    revision — the compiled row settles (``compiled → superseded``, an
+    in-vocabulary state-machine path) and a SUCCESSOR row is born: new id,
+    same journey, the restated spec (unnamed fields carry over verbatim),
+    the birth self-check's same law (clean → ``revised``, gaps → ``draft``
+    with the issues stamped).
+
+    ``revision_of`` is never built (N-57 无版本树律): the successor holds
+    NO pointer back — the replay idem is salted with the superseded row's
+    id (a hash input, not a navigable edge), so an identical retry returns
+    the existing successor instead of double-superseding. Non-compiled
+    rows reject with guidance (pre-run revisions belong to the in-place
+    ``revise_plan`` seat). Flush-only."""
+    lane = await _exploration_nodes(db, project.id)
+    node = _get_exploration_node(lane, plan_id, KIND_CONTENT_PLAN)
+    raw = dict(node.spec or {})
+    raw.pop("issues", None)
+    spec = ContentPlanSpec.model_validate(raw)
+    new_title = spec.title if title is None else title.strip()
+    new_outputs = (
+        spec.outputs
+        if outputs is None
+        else [PlanOutput.model_validate(o) for o in outputs]
+    )
+    restated = spec.model_copy(update={"title": new_title, "outputs": new_outputs})
+    # Replay first: the successor's idem salts the payload with the
+    # superseded row's id — a retry finds the successor even though the old
+    # row is already superseded.
+    idem = _idem_key(
+        KIND_CONTENT_PLAN,
+        UUID(str(node.journey_id)),
+        {**restated.model_dump(exclude={"idem"}), "supersede_of": str(plan_id)},
+    )
+    replay = _find_replay(lane, UUID(str(node.journey_id)), KIND_CONTENT_PLAN, idem)
+    if replay is not None:
+        return replay
+    if node.state == "superseded":
+        raise ExplorationRejected(
+            f"plan {plan_id} is already superseded — address its current "
+            "successor instead"
+        )
+    if node.state != "compiled":
+        raise ExplorationRejected(
+            f"plan {plan_id} is {node.state} — only a compiled plan "
+            "supersedes; pre-run revisions use revise_plan (in place)"
+        )
+    issues = plan_completeness_issues(new_outputs)
+    payload = restated.model_dump()
+    payload["idem"] = idem
+    if issues:
+        payload["issues"] = issues
+    successor = GraphNode(
+        id=uuid4(),
+        project_id=project.id,
+        type=EXPLORATION_NODE_TYPE,
+        state=STATE_DRAFT if issues else "revised",
+        spec=payload,
+        layout=exploration_lane_frame(KIND_CONTENT_PLAN, lane),
+        journey_id=node.journey_id,
+    )
+    node.state = "superseded"
+    db.add(successor)
+    await db.flush()
+    return successor

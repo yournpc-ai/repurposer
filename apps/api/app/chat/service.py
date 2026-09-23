@@ -1675,8 +1675,29 @@ async def answer_question(
                     plans=list(pending.plans) if pending is not None else [],
                     tasks=tasks,
                     quote=(message.question or {}).get("estimate_credits"),
+                    plan_task_map=(
+                        pending.plan_task_map if pending is not None else None
+                    ),
                 ),
             }
+            # E3 双态写者 (first half, iter-3 S1): the confirmed package's
+            # plan rows settle ready/revised → compiled IN THE SAME
+            # TRANSACTION as the snapshot stamp — the artifact state machine
+            # and the paid execution never diverge. Router-drafted docks
+            # carry no plans → the call is a no-op.
+            from app.pipeline.exploration_store import (  # deferred: pipeline edge
+                mark_compiled,
+            )
+
+            await mark_compiled(
+                db,
+                project,
+                plan_ids=[
+                    UUID(str(p["plan_id"]))
+                    for p in (pending.plans if pending is not None else [])
+                    if p.get("plan_id")
+                ],
+            )
 
     elif question.kind == "question" and message.workflow_run_id is not None:
         # Direction interrupt (期 4): workflow_run_id is the dispatch

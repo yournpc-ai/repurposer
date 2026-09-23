@@ -1637,6 +1637,12 @@ class PendingPlan(BaseModel):
     # a refresh (the restore path reads pending_brief, never the question
     # row). Empty on the router-drafted rows (读容忍).
     plans: list[dict] = Field(default_factory=list)
+    # R20 修订路由器基材 (iter-3 E1/E2, N-58): plan_id → the plan's
+    # half-open task range in the docked chain — born with the dock-time
+    # compile, carried verbatim into the Confirmed Scope Snapshot at Start.
+    # None on router-drafted / legacy rows — the revision router degrades
+    # honestly to the @output channel (读容忍).
+    plan_task_map: dict[str, list[int]] | None = None
 
 
 class ProjectBase(BaseModel):

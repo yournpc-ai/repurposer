@@ -28,6 +28,7 @@ from app.pipeline.exploration_store import (
     ExplorationRejected,
     SelectSpec,
     exploration_lane_frame,
+    mark_compiled,
     member_issues,
     normalize_evidence,
     plan_completeness_issues,
@@ -37,6 +38,7 @@ from app.pipeline.exploration_store import (
     propose_selects,
     read_journey_plans,
     revise_plan,
+    supersede_plan,
 )
 
 _PROJECT_ID = uuid4()
@@ -594,3 +596,223 @@ class TestRevisePlan:
         plan = await self._seed_plan(db)
         plans = await read_journey_plans(db, _PROJECT_ID, plan.journey_id)
         assert [p.id for p in plans] == [plan.id]
+
+
+# ---- iter-3 S1: E3 双态写者 + 读面过滤 ------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestMarkCompiled:
+    """E3 (iter-3 S1): Start 落戳后的同事务写门分支——ready/revised →
+    compiled；幂等重放；draft/superseded/未知 id 全拒。"""
+
+    async def _seed_plan(self, db: _StubDb) -> GraphNode:
+        cset = await propose_candidates(
+            db, db.project,
+            asset_id=_ASSET_ID, topic="pricing",
+            members=_members(), goal_text="goal",
+        )
+        sel = (
+            await propose_selects(
+                db, db.project,
+                candidate_set_id=cset.id,
+                selects=[{"member_index": 0, "verdict": "v", "reason": "r"}],
+            )
+        )[0]
+        return (
+            await propose_plans(
+                db, db.project,
+                plans=[{
+                    "select_id": str(sel.id),
+                    "title": "定价短片",
+                    "outputs": [{"kind": "clip"}],
+                }],
+            )
+        )[0]
+
+    async def test_ready_settles_into_compiled(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_plan(db)
+        assert plan.state == "ready"
+        marked = await mark_compiled(db, db.project, plan_ids=[plan.id])
+        assert [n.id for n in marked] == [plan.id]
+        assert plan.state == "compiled"
+
+    async def test_revised_settles_too(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_plan(db)
+        await revise_plan(db, db.project, plan_id=plan.id, title="改题")
+        assert plan.state == "revised"
+        await mark_compiled(db, db.project, plan_ids=[plan.id])
+        assert plan.state == "compiled"
+
+    async def test_replay_is_a_noop(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_plan(db)
+        await mark_compiled(db, db.project, plan_ids=[plan.id])
+        again = await mark_compiled(db, db.project, plan_ids=[plan.id])
+        assert [n.id for n in again] == [plan.id]
+        assert plan.state == "compiled"
+
+    async def test_draft_rejects(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_plan(db)
+        await revise_plan(
+            db, db.project, plan_id=plan.id,
+            outputs=[{"kind": "clip", "caption_mode": "bilingual"}],
+        )
+        assert plan.state == "draft"
+        with pytest.raises(ExplorationRejected, match="draft"):
+            await mark_compiled(db, db.project, plan_ids=[plan.id])
+
+    async def test_superseded_rejects(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_plan(db)
+        plan.state = "superseded"
+        with pytest.raises(ExplorationRejected, match="superseded"):
+            await mark_compiled(db, db.project, plan_ids=[plan.id])
+
+    async def test_unknown_id_rejects(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        await self._seed_plan(db)
+        with pytest.raises(ExplorationRejected, match="not an exploration plan"):
+            await mark_compiled(db, db.project, plan_ids=[uuid4()])
+
+    async def test_wrong_kind_rejects(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        cset = await propose_candidates(
+            db, db.project,
+            asset_id=_ASSET_ID, topic="pricing",
+            members=_members(), goal_text="goal",
+        )
+        with pytest.raises(ExplorationRejected, match="not an exploration plan"):
+            await mark_compiled(db, db.project, plan_ids=[cset.id])
+
+    async def test_empty_is_a_noop(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        assert await mark_compiled(db, db.project, plan_ids=[]) == []
+
+
+@pytest.mark.asyncio
+class TestSupersedePlan:
+    """E3 (iter-3 S1): post-run 修订 = 旧行 → superseded + 继任行（新 id、
+    同 journey、revised spec）——revision_of 永不建；重放幂等；非 compiled
+    行带指引拒收。"""
+
+    async def _seed_compiled_plan(self, db: _StubDb) -> GraphNode:
+        plan = await TestMarkCompiled()._seed_plan(db)
+        await mark_compiled(db, db.project, plan_ids=[plan.id])
+        return plan
+
+    async def test_compiled_plan_supersedes_with_a_successor(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_compiled_plan(db)
+        successor = await supersede_plan(
+            db, db.project, plan_id=plan.id,
+            outputs=[{"kind": "clip", "language": "fr"}],
+        )
+        assert plan.state == "superseded"
+        assert successor.id != plan.id
+        assert successor.journey_id == plan.journey_id
+        assert successor.state == "revised"
+        spec = ContentPlanSpec.model_validate(successor.spec)
+        assert spec.outputs[0].language == "fr"
+        assert spec.title == "定价短片"  # 未点名 = 原样继承
+        assert spec.select_id == plan.spec["select_id"]
+        # N-57 无版本树律: the successor carries NO back-pointer.
+        assert "revision_of" not in successor.spec
+        assert "supersede_of" not in successor.spec
+
+    async def test_replay_returns_the_successor(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_compiled_plan(db)
+        once = await supersede_plan(
+            db, db.project, plan_id=plan.id,
+            outputs=[{"kind": "post", "language": "en"}],
+        )
+        twice = await supersede_plan(
+            db, db.project, plan_id=plan.id,
+            outputs=[{"kind": "post", "language": "en"}],
+        )
+        assert twice.id == once.id
+        assert plan.state == "superseded"
+        # Exactly one successor — never a twin.
+        plans = [
+            n for n in db.nodes
+            if (n.spec or {}).get("exploration_kind") == "content_plan"
+        ]
+        assert len(plans) == 2
+
+    async def test_open_gaps_land_draft_with_issues(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_compiled_plan(db)
+        successor = await supersede_plan(
+            db, db.project, plan_id=plan.id,
+            outputs=[{"kind": "clip", "caption_mode": "bilingual"}],
+        )
+        assert successor.state == "draft"
+        assert successor.spec["issues"]
+        assert plan.state == "superseded"
+
+    async def test_pre_run_plan_rejects_with_guidance(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await TestMarkCompiled()._seed_plan(db)
+        assert plan.state == "ready"
+        with pytest.raises(ExplorationRejected, match="revise_plan"):
+            await supersede_plan(db, db.project, plan_id=plan.id)
+
+    async def test_already_superseded_rejects(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_compiled_plan(db)
+        await supersede_plan(
+            db, db.project, plan_id=plan.id, title="v2",
+        )
+        with pytest.raises(ExplorationRejected, match="already superseded"):
+            await supersede_plan(db, db.project, plan_id=plan.id, title="v3")
+
+
+@pytest.mark.asyncio
+class TestReadJourneyPlansStateFilter:
+    """E3 (review 注记①): the recompile seat reads ONLY the current package
+    (ready/revised) — compiled/superseded are settled history, draft
+    re-enters via the repair verb."""
+
+    async def test_filter_keeps_only_the_current_package(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        cset = await propose_candidates(
+            db, db.project,
+            asset_id=_ASSET_ID, topic="pricing",
+            members=_members(), goal_text="goal",
+        )
+        sels = await propose_selects(
+            db, db.project,
+            candidate_set_id=cset.id,
+            selects=[{"member_index": 0, "verdict": "v", "reason": "r"}],
+        )
+        plans = await propose_plans(
+            db, db.project,
+            plans=[
+                {"select_id": str(sels[0].id), "title": "A", "outputs": [{"kind": "clip"}]},
+                {"select_id": str(sels[0].id), "title": "B", "outputs": [{"kind": "post"}]},
+                {"select_id": str(sels[0].id), "title": "C", "outputs": [{"kind": "quotes"}]},
+                {"select_id": str(sels[0].id), "title": "D", "outputs": [{"kind": "article"}]},
+            ],
+        )
+        ready, revised, compiled, superseded = plans
+        await revise_plan(db, db.project, plan_id=revised.id, title="B2")
+        compiled.state = "compiled"
+        superseded.state = "superseded"
+        # A draft sibling (issues re-stamped by a bad revise).
+        draft = (
+            await propose_plans(
+                db, db.project,
+                plans=[{
+                    "select_id": str(sels[0].id), "title": "E",
+                    "outputs": [{"kind": "clip", "caption_mode": "bilingual"}],
+                }],
+            )
+        )[0]
+        assert draft.state == "draft"
+
+        visible = await read_journey_plans(db, _PROJECT_ID, ready.journey_id)
+        assert {p.id for p in visible} == {ready.id, revised.id}
