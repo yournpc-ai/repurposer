@@ -2153,3 +2153,91 @@ quote 输入 = Content Plan 具体字段（精确区间 → 时长 → 渲染单
 **Consequences**: 审计四归宿——P0-① = §4 销账；P0-③ = §1/§8；P0-② 与 A-1 = 修复批（先行）；SSE CoT 实流审计 = 独立取证动作。施工依赖序：探索族（ADR-088）→ 编译器 + 决策包/快照（本条）→ 修订动词 → 退役弧；每批过既有门禁（纯 pytest / prompt_gate / 剧本 + PROGRESS §0.4 规则 9 认知验收）。**零改动重申**：执行写门（`apply_wiring_ops` / `create_run`）/ scope classifier / Start 四合取 / 计费三词两层与 hold→capture→release / fencing（ADR-079）——本条不改任何执行世界机制，只改「谁有资格向执行世界递东西」。
 
 **Related**: ADR-088（双生——探索产物与工作循环）/ ADR-087 §4（确认教义——停顿定律是其付费边的泛化；Consequences Phase 4 = scope classifier D4）/ ADR-028（拓扑铁律——编译器是其新兑现形态）/ ADR-055（计费——决策包的费用语义面）/ ADR-058（通道分家——craft 修订的卡面直改先例）/ ADR-079（fencing——执行写不变）/ ADR-057（draft 图 K5——编译产物的画布形态）
+
+## ADR-090: 精确编辑——`edit_output` 受控终态工具 + quote→range 解算器
+
+**Status**: Decided（2026-09-24；取证底座 = 年底审计（最大公约数量尺）+ live 验收六拍与修红批（`6b93b24`）+ 多轮外部评审收敛；母法 = ADR-088/089 工作循环与执行边界）
+
+**Context**: 年底审计量尺（自然语言 → agent 理解 → agent 真做视频活 → **可编辑、可检视、可重跑**的视频状态）结论：Agent 架构冻结，**精确编辑是距最大公约数的唯一缺口**。机制实证齐全却不可达：OP_REGISTRY 21 个 edit ops（`remove_range` / `set_trim` / `set_caption_style` / `set_title` 在册）+ undo/redo/`restore_version` + base_hash/409 乐观锁后端完备，但 **llm_visible=False 全族**——LLM 不可见、前端零调用、editor 路由孤儿。精确编辑请求在野外已到（live 验收：「你能把字幕改成白色吗」——agent 只能绕行「改 persona 皮肤 + 整条 clip 重新生成」，改一个颜色重买一遍生产链）。评审收敛：不是把 21 个原始 ops 暴露给 LLM（ADR-089 P0-③ 同款代偿），是**受控终态工具 + enum kinds**。
+
+**Decision**:
+
+### 1. `edit_output` = chat path 受控终态工具
+
+终态词表扩员（propose_* / revise_* 同族，ADR-089 §1 纯产品语义律的延伸）：`edit_output(target, kind, params)`——target 指认骑 @output pin 与 ADR-069 quote 引用（既有指认族零新增）；`kind` = enum，**MVP 四件**：`remove_range` / `set_trim` / `set_caption_style` / `set_title`；`set_caption_visibility` 延后 P1（与 caption_enabled 计划默认纠缠，先观察前四件的野外形态）。参数 = 产品语义（样式枚举名 / 标题文本 / quote 引文）——**LLM 永不写时间戳、UUID、op 参数内部形状**。
+
+### 2. quote→range 解算器（确定性代码）
+
+「把开头那句删掉」的 range 由代码解算：LLM 只给 quote 文本（用户原话引用或产物原文摘抄），解算器 = `locate_span` 既有地基（ASR 词级时间戳 + marker/文本匹配 + 词边界 snap + silence-only pad，`clip_spec.py`）升格为 edit 面服务。解算置信不足 = **域拒绝回环**（never guess——回环话术指认歧义并给出可答形态，R12 编译失败回环同族座位）。
+
+### 3. 写门与台账律不变
+
+edit ops 经既有 operations 机制落账（base_hash/409、snapshot undo/redo 一字不改）；触发的重渲染走既有 render 链——重 PENDING + **镜像步骤同步补登**（ADR-074② 台账律：2026-09-24 修红批为 verify 回退出生地补的就是这条法律，edit 出生地同律适用；新增渲染认领源必须登记 MODULE_ARCH §7.2）。
+
+### 4. 范围纪律与路由判据
+
+`edit_output` 只动**产物级参数**（clip-spec 契约内字段族）；结构性 graph surgery 维持「能力完备手势缺席」的既有拍板；L3 铁律不动（字幕样式仅枚举，不开放自由版式）；plan 级变更仍归 `revise_plan`。与 `revise_output` 的分工——**精确请求路由 edit_output**（请求给定了可机械执行的具体变更：删这段 / 短 3 秒 / 换这个枚举 / 改这个标题）；**开放意图路由 revise_output**（「再紧凑点」类需要重买内容判断的请求）；router 判据 = 变更是否可机械执行，判不准走域拒绝回环，永不猜。
+
+### 5. 计费语义
+
+MVP 四件零 LLM 成本——edit 动作不收钱；重渲染 = render $0（自有基建定价的既有裁决不变）；确认闸复用计费偏好（ADR-092），edit 不新增停顿形态。未来涉 LLM 的 op 族（`set_caption_text` 改写类）按 capture_step 既有座位扣，落地时回本条补记。
+
+**Consequences**: 施工 = 注册表 edit_output 终态工具（loop 终态族）+ 解算器服务化 + operations 前端首调用面（形态归简报）+ 剧本 S 席（精确修订旅程）。**认知验收**（PROGRESS §0.4 规则 9）必答：agent 看见了什么（产物卡 + 词级 transcript reads）/ 怎么知道自己对了（解算回声 = 「我把 0.0–4.2s 这段去掉了」的事实句）。验收标准：「把开头那句删掉」「第二条再短 3 秒」「字幕换 karaoke」「标题改成 X」四请求族 e2e 全通且 undo 可回滚。
+
+**Related**: ADR-089（终态词表 / 编译移出 LLM——本条是其词表扩员）/ ADR-088（工作循环——edit 是产物打磨拍的主座）/ ADR-069（quote 指认）/ ADR-058（通道分家——chat 修订唯一意图面）/ ADR-016（clip-spec 唯一契约——edit 的参数域）/ ADR-074②（渲染台账律）/ ADR-091（编辑历史 = work 的 operations 链）/ ADR-092（确认闸复用）
+
+## ADR-091: 产物身份与重跑生命周期——work/version 语义 + 归档不变量
+
+**Status**: Decided（2026-09-24；取证底座 = Restore×Rerun 全链取证（live 验收 Gate 1，2026-09-23）；用户损失实证 = live 验收现场「历史版本随修订重跑蒸发」）
+
+**Context**: rerun 的现行语义 = **物理 DELETE + 新 id**（select_clips wipe / derivative sweep / verify 回退三处），取证四个未登记事实：① 产物身份不存活——用户指认的「第二条短片」每次重跑都是新 id，指认/发布/修订的对象随 rerun 蒸发；② **operations journal 连坐蒸发**（`delete_outputs_fk_safe` 级联删 operations）——undo/redo/`restore_version` 机制在而历史不在；③ output_refs 累积死 id（live 证据：18 个引用 15 死）；④ **publication 连坐删除**（已发布产物重跑即丢发布记录）+ 旧 MP4 孤儿无 GC。「修订」在数据层实际是「销毁重建」——与 ADR-088「持续修订用户可理解的产物」的承诺直接冲突。
+
+**Decision**:
+
+### 1. 两身份分离：work ≠ version
+
+**work** = 用户语义对象（指认 / 发布 / 修订 / 历史回滚的锚）；**version** = 一次生产或重跑的物理产物行（文件 / render_spec / quality 的载体）。用户可见语义全部锚 work；version 是 work 的生产历史。
+
+### 2. 重跑 = 归档，不删除
+
+对已交付（用户可见）的产物：rerun 不再物理 DELETE——旧 version 行转 `archived`（读面默认排除、可查询），新 version 接替。**operations journal 随 work 存活**（undo/redo/`restore_version` 可溯）；死 id 不再产生；publication 挂 work 不挂 version（重跑不连坐发布记录）。
+
+### 3. 例外：生产中途的自我修正不归档
+
+verify 回退的 best-not-last restore 与 run 内重试 = **产物从未交付**的生产内部修正——保持物理删除（未交付无历史权，归档是纯成本）。归档义务从产物第一次对用户可见开始；分界判据 = 产物是否已随 settled run 出现在用户画布。
+
+### 4. 文件与存储
+
+归档 version 的文件保留（回滚能力的物理基础）；GC = 随项目删除级联；存储增量的成本观察挂账（PROGRESS 需求池行），不预设压缩/清理机制。
+
+### 5. 迁移弧与不变量
+
+新写门先行（三处 wipe 点改归档写），读面读容忍（既有死 id 旧数据永不迁移、永不修复）；物理删除保留给项目删除与 §3 例外。实现形态（outputs 加 status 列 vs work 表分离）归施工简报；本条只锁语义不变量——**交付后的产物历史不可销毁，只可归档**。
+
+**Consequences**: 取证四问题全部入档（①③ 由身份分离结构性消除；②④ 由 §2 直接裁决）。**既有机制受益**：operations undo/redo 从「机制在而历史常亡」变为真正可溯；`restore_version` 获得完整版本链。**零改动重申**：run 内生产链（verify 回退 / 重试）的物理删除不动；render 链与台账律不动。
+
+**Related**: ADR-088（工作循环——「持续修订的产物」承诺的身份地基）/ ADR-090（edit_output——编辑历史 = work 的 operations 链）/ ADR-057（图即产品对象）/ ADR-074②（渲染台账——version 的生产事实）
+
+## ADR-092: 计费偏好集成——三档策略持久化 + 确认闸座位
+
+**Status**: Decided（2026-09-24；取证底座 = 计费链六环取证（live 验收 Gate 1，2026-09-23）；前提 = 用户裁定「偏好 UI 已有，集成真 API 即可」——集成不重设计）
+
+**Context**: 六环取证：① 偏好 UI ✅（composer CostConfirmControl 三档 always/large/never）但 localStorage-only（自标 UI ONLY）；② 服务端持久化 ❌；③ 策略读取点 ❌；④ 确认闸 ❌；⑤ ChargeFact 已读真台账 ✅；⑥ hold→capture→release 机器真但在 run 出生地单点。结论：不是计费重设计，是**把已存在的偏好接到已存在的机制上**。
+
+**Decision**:
+
+### 1. 偏好升格为服务端设置
+
+`confirm_strategy ∈ {always, large, never}` 落用户级设置（API GET/PUT），`large` 的费用阈值走 configs 公共参数表（ADR-055 参数座位）；前端 localStorage 降级为读容忍回退（未登录 / 接口失败），服务端值为准。
+
+### 2. 读取点 = 计划确认拍唯一座位
+
+策略在 **plan dock 呈现前**读取一次（确认拍 = 既有付费边界停，ADR-089 §5 停顿定律的唯一停顿形态）：`always` → 任何费用强制显式费用确认；`large` → quote total 超阈值才强制；`never` → 不强制（estimate 面照常显示——**显示义务与确认义务分离**）。闸的形态 = 既有 task_book dock estimate 面的强制档升格（强制档要求一次显式确认手势，非新 dock 类型），具体交互归施工简报。
+
+### 3. 机制零新增
+
+hold→capture→release 不动；edit→render 维持 $0 定价（自有基建既有裁决）；`edit_output` MVP 零 LLM 成本不收钱（ADR-090 §5）；订阅 / 支付维持 W11 边界不重开。
+
+**Consequences**: 四环补齐（持久化 / 读取点 / 闸 / 偏好真生效），UI 环与台账环不变。施工 = settings API + composer 读源切换 + dock estimate 面强制档形态 + 剧本 S 席（三档 × 费用大小矩阵）。认知验收必答：用户怎么知道自己设了什么（设置面回显当前档）；agent 怎么知道（确认拍呈现受策略驱动的事实句）。
+
+**Related**: ADR-055（计费母法——三词两层与参数表座位）/ ADR-089 §5（停顿定律——确认拍唯一停顿）/ ADR-087 §2.1（费用语义五面——estimate 面披露纪律）/ ADR-090（edit 计费语义复用）

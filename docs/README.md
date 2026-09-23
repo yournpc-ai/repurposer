@@ -41,6 +41,7 @@
 | 积分 / 钱包 / 计费架构 | `BILLING.md` | credit / wallet / credit_transactions / hold→capture→release / configs / 比例参数 / 负余额语义只住这里，其他文档只引用 |
 | Lifecycle / Lifecycle Projection / PLAN_READY / CONFIRMATION_READY / Activity / Activity Projection / Confirmation Doctrine | `DECISIONS.md`（ADR-087） | 五条原则 / Lifecycle 五态合同 / Activity 十条对账规则 / 确认教义 / 依赖方向 / Reversal Ledger 只住这里；NAMING.md §2 有词汇行，其他文档只引用 |
 | 探索产物 / Candidate Set / Select / Content Plan / Execution Scope / Decision Package / Confirmed Scope Snapshot / Work Session / 停顿定律 / 项目记忆分层 | `DECISIONS.md`（ADR-088/089）+ `JOURNEYS.md` 旅程四 | 探索产物族 / 双写门 / I-EXPLORE-01 / 双状态机 / 记忆四层合同只住 ADR-088；能力编译 / 决策包 / 快照 / 停顿定律 / 迁移弧只住 ADR-089；「为什么这样裁」只住旅程四；NAMING.md §2 + N-55 有词汇行，其他文档只引用 |
+| edit_output / quote→range / work / version / archived / confirm_strategy | `DECISIONS.md`（ADR-090/091/092） | 精确编辑词表与解算语义只住 ADR-090；产物两身份与归档不变量只住 ADR-091；计费偏好三档与确认闸座位只住 ADR-092；其他文档只引用 |
 
 ## 文档清单
 
