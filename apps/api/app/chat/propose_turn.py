@@ -56,7 +56,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.context import build_context
@@ -115,11 +115,13 @@ from app.models.schemas import (
     ChatMention,
     EditGraphArgs,
     EditOpsProposal,
+    EditOutputArgs,
     InferredIntent,
     PendingPlan,
     ProposeTasksArgs,
     QuestionPayload,
     QuestionProposal,
+    RenderStatus,
     ReviseOutputArgs,
     TaskListProposal,
     WiringProposal,
@@ -132,8 +134,11 @@ from app.models.tables import (
     Persona,
     Project,
     WorkflowRun,
+    WorkflowStep,
 )
 from app.operations.service import OpConflict, OpRejected, apply_operations
+from app.pipeline.edit_ops import EditRefusal, assemble_edit_op
+from app.pipeline.edit_span import resolve_quote_span
 from app.pipeline.exploration_store import (
     PHASE_DOCKED,
     PHASE_PRE_DOCK,
@@ -164,6 +169,36 @@ logger = structlog.get_logger()
 # (assistant message, dispatched run id, cascade-bailed run ids, the pending
 # question this turn settled by judgment).
 ProposeTurnOutcome = tuple[Message, UUID | None, list[UUID], Message | None]
+
+
+def _edit_fact_echo(kind: str, op: dict, *, zh: bool) -> str:
+    """The precise edit's world-witnessed fact sentence (展示文案二源律 —
+    the applied op's REAL numbers/state, code-composed, never the LLM's
+    claim and never a frozen template). Appended under the agent's prose."""
+    p = op["params"]
+    if kind == "remove_range":
+        return (
+            f"我把 {p['start']:.1f}–{p['end']:.1f}s 这段去掉了，正在重新渲染。"
+            if zh
+            else f"I cut the {p['start']:.1f}–{p['end']:.1f}s span — re-rendering now."
+        )
+    if kind == "set_trim":
+        return (
+            f"结尾已收紧到 {p['end']:.1f}s，正在重新渲染。"
+            if zh
+            else f"The end is tightened to {p['end']:.1f}s — re-rendering now."
+        )
+    if kind == "set_caption_style":
+        return (
+            f"字幕样式已换成 {p['preset']}，正在重新渲染。"
+            if zh
+            else f"Captions are now {p['preset']} — re-rendering now."
+        )
+    return (
+        f"标题已改成「{p['text']}」，正在重新渲染。"
+        if zh
+        else f"The title is now “{p['text']}” — re-rendering now."
+    )
 
 
 class ChatTurn:
@@ -354,6 +389,9 @@ class ChatTurn:
         if name == "revise_output":
             assert isinstance(params, ReviseOutputArgs)
             return await self._revise_output(params, prose)
+        if name == "edit_output":
+            assert isinstance(params, EditOutputArgs)
+            return await self._edit_output(params, prose)
         if name == "ask_user":
             assert isinstance(params, ChatAskArgs)
             return await self._ask_user(params, prose)
@@ -1152,6 +1190,205 @@ class ChatTurn:
         note = self._uncovered_note(list(craft.uncovered)) if craft.uncovered else None
         proposal = WiringProposal(ops=list(craft.ops), summary=prose, name="")
         return await self._run_wiring_proposal(proposal, prose, content_note=note)
+
+    # ---- edit_output (精确编辑迭代 S3, N-59, ADR-090 — 受控终态工具) --------
+
+    async def _edit_output(self, params: EditOutputArgs, prose: str) -> str | None:
+        """edit_output → the precise edit (ADR-090): R20 dual-channel target
+        resolution → quote→range adjudication (S2 置信谱) → ONE registry op
+        journaled through the existing operations door → re-pend + the
+        mirror step rebirth (ADR-074② 台账律 — op 写 + re-pend + 镜像 one
+        transaction, E4). Every refusal rides the loop as feedback with its
+        answerable form; success is terminal with the world-witnessed fact
+        echo (展示文案二源律 — the applied op's real numbers, never a
+        frozen template)."""
+        db, project, text = self.db, self.project, self.text
+        if project is None:
+            return "nothing to edit yet — this conversation has no project."
+        kind = params.kind
+        if not kind:
+            return (
+                "edit_output needs its kind — remove_range / set_trim / "
+                "set_caption_style / set_title; an open-ended change goes to "
+                "revise_output, a deliverables change to revise_plan."
+            )
+        target = params.target
+        plan_ref = (target.plan_ref or "").strip()
+        output_id = str(target.output_id) if target.output_id else None
+        if not plan_ref and not output_id:
+            return (
+                "edit_output needs its target — relay the user's pointing "
+                "(plan_ref) or the @output pin (output_id); if the message "
+                "points at nothing definite, call ask_user to clarify which "
+                "clip they mean."
+            )
+
+        # Target resolution: the @output pin lands directly; plan_ref rides
+        # the R20 snapshot → the plan's nodes → their ACTIVE clip outputs
+        # (multiple clips = ambiguity, never a guess — the @ pin is the
+        # named way out).
+        output: Output | None = None
+        if output_id:
+            row = await db.get(Output, UUID(output_id))
+            if (
+                row is None
+                or UUID(str(row.project_id)) != UUID(str(project.id))
+                or row.type != "clip"
+                or row.archived_at is not None
+            ):
+                return (
+                    f"output {output_id} is not an active clip of this "
+                    "project — never guess the target; ask the user to pin "
+                    "the clip with @."
+                )
+            output = row
+        else:
+            snapshot = await self._latest_confirmed_scope(project)
+            nodes = list(
+                (
+                    await db.execute(
+                        select(GraphNode).where(GraphNode.project_id == project.id)
+                    )
+                ).scalars().all()
+            )
+            route = route_revision(snapshot, nodes, plan_ref=plan_ref)
+            if route.status == "degrade":
+                return (
+                    f"{route.reason} — never guess the target; if the user "
+                    "can point at the clip, ask (ask_user) with the @output "
+                    "pin as the way out."
+                )
+            by_id = {str(n.id): n for n in nodes}
+            clip_ids = [
+                UUID(str(oid))
+                for nid in route.node_ids
+                if nid in by_id
+                for oid in ((by_id[nid].spec or {}).get("output_ids") or [])
+            ]
+            clips = (
+                list(
+                    (
+                        await db.execute(
+                            select(Output).where(
+                                Output.id.in_(clip_ids),
+                                Output.type == "clip",
+                                Output.archived_at.is_(None),
+                            )
+                        )
+                    ).scalars().all()
+                )
+                if clip_ids
+                else []
+            )
+            if not clips:
+                return (
+                    "that plan resolves to no active clip — pin the clip "
+                    "with @ instead."
+                )
+            if len(clips) > 1:
+                return (
+                    f"that plan has {len(clips)} active clips — which one? "
+                    "The user can say 'the second' or pin it with @; never "
+                    "guess."
+                )
+            output = clips[0]
+
+        spec = output.render_spec or {}
+        if not spec:
+            return (
+                "that clip has no editable spec — a precise edit needs the "
+                "clip's spec; an open-ended change goes to revise_output."
+            )
+
+        raw = params.params.model_dump(mode="python")
+        span = None
+        if kind == "remove_range":
+            span = resolve_quote_span(spec.get("caption_track") or [], raw.get("quote"))
+        assembled = assemble_edit_op(kind, raw, spec=spec, span=span)
+        if isinstance(assembled, EditRefusal):
+            return assembled.feedback
+
+        assistant_message = await _create_message(
+            db,
+            self.conversation_id,
+            "assistant",
+            prose,
+            intent={
+                "type": "edit_output",
+                "kind": kind,
+                "target_output_id": str(output.id),
+            },
+        )
+        try:
+            await apply_operations(
+                db,
+                output.id,
+                [assembled],
+                source="chat",
+                user_id=self.user_id,
+                message_id=UUID(str(assistant_message.id)),
+                commit=False,  # E4: op 写 + re-pend + 镜像 = one transaction
+            )
+        except (OpRejected, OpConflict) as e:
+            return str(e)  # zero writes — the door's feedback rides the loop
+        except HTTPException as e:
+            return str(e.detail)
+
+        # Re-pend + mirror rebirth (ADR-074② 台账律, fan_out_renders 同形状
+        # 律): supersede still-pending mirrors for this output, then rebirth
+        # one in the output's OWNING run with the producing step as parent
+        # (a legacy row without its step re-pends output-driven only — the
+        # undo/redo precedent; terminal runs early-return at finalize).
+        await db.refresh(output)
+        output.render_status = RenderStatus.PENDING
+        output.render_claim_token = None
+        output.render_error = None
+        output.render_attempt = 0  # intent re-pend = new budget
+        await db.execute(
+            delete(WorkflowStep).where(
+                WorkflowStep.kind == "render",
+                WorkflowStep.status == "pending",
+                WorkflowStep.spec["output_id"].astext == str(output.id),
+            )
+        )
+        step = (
+            await db.get(WorkflowStep, output.workflow_step_id)
+            if output.workflow_step_id
+            else None
+        )
+        run = await db.get(WorkflowRun, step.run_id) if step is not None else None
+        if run is not None and step is not None:
+            from app.pipeline.morph import render_step_label  # deferred: heavy
+
+            max_seq = (
+                await db.execute(
+                    select(func.max(WorkflowStep.seq)).where(
+                        WorkflowStep.run_id == run.id
+                    )
+                )
+            ).scalar_one() or step.seq
+            label = await render_step_label(db, run)
+            db.add(
+                WorkflowStep(
+                    run_id=run.id,
+                    kind="render",
+                    status="pending",
+                    seq=int(max_seq) + 1,
+                    inputs=[str(step.id)],
+                    spec={
+                        "output_id": str(output.id),
+                        **({"summary": label} if label else {}),
+                    },
+                )
+            )
+
+        fact = _edit_fact_echo(kind, assembled, zh=_prefers_zh(text))
+        assistant_message.content = (
+            f"{prose.rstrip()}\n\n{fact}" if prose.strip() else fact
+        )
+        await db.commit()
+        self.outcome = (assistant_message, None, [], self.settled_question)
+        return None
 
     async def _ask_user(self, params: ChatAskArgs, prose: str) -> str | None:
         """ask → the agent's question docks through the ask_user machinery

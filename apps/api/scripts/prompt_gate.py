@@ -113,7 +113,7 @@ PROVIDERS = {
 # bare int), fixed in the SCHEMA (coerce_numbers_to_str, 顺形律), then
 # 12/12. Thresholds hold at 8 with headroom — recalibrate from readings,
 # never to excuse a regression.
-THRESHOLDS = {"A": 8, "B": 8, "C": 10, "D": 8, "E": 8, "F": 8, "G": 8}
+THRESHOLDS = {"A": 8, "B": 8, "C": 10, "D": 8, "E": 8, "F": 8, "G": 8, "H": 8}
 
 BRIEF_ANSWERED = Brief.model_validate(
     {
@@ -253,6 +253,29 @@ PROBE_G = {
     },
 }
 
+# H's precise edit (精确编辑迭代 S3, ADR-090): a landed clip with visible
+# captions; the message names a mechanically executable change. The model
+# must route edit_output with kind=remove_range and relay the quoted words
+# verbatim — apply_edit_ops (raw ops) / revise_output (open craft) / ask are
+# all misroutes for a change this definite.
+PROBE_H = {
+    "message": '把开头那句 "Onboarding is where users decide to stay" 删掉',
+    "context": {
+        "text": (
+            "Project: Founder Talks "
+            "(id=77777777-7777-7777-7777-777777777777, language=zh)\n"
+            "Assets:\n"
+            f"- video id={_PROBE_E_ASSET_ID} status=ready language=en\n"
+            "Current outputs:\n"
+            "- clip id=88888888-8888-8888-8888-888888888888: onboarding highlights\n"
+            "Latest run: status=done id=99999999-9999-9999-9999-999999999998\n"
+            "Recent rounds:\n"
+            "- user: Cut the best onboarding moments into a clip.\n"
+            "- assistant: Landed one clip from the onboarding section."
+        )
+    },
+}
+
 # D's discovery substrate: material attached and readable (the excerpt is
 # the search read's honest footing — the stub's search observation below
 # quotes from it verbatim so the chain has real evidence to propose).
@@ -366,6 +389,18 @@ async def _gate_execute(
         )
     if name == "propose_plans":
         return None
+    if name == "edit_output":
+        # Mirror the production pairing law's feedback (propose_turn
+        # _edit_output): a kind-less call is rejected, the loop repairs —
+        # the stub must not ACCEPT what production refuses, or the probe
+        # measures the malformed call as terminal.
+        if not getattr(params, "kind", None):
+            return (
+                "edit_output needs its kind — remove_range / set_trim / "
+                "set_caption_style / set_title; an open-ended change goes to "
+                "revise_output, a deliverables change to revise_plan."
+            )
+        return None
     if name == "present_plan":
         brief = getattr(params, "brief", None)
         topic = brief.topic if brief else None
@@ -431,19 +466,34 @@ def _passed(probe: str, r: LoopResult) -> bool:
     # G (iter-3 S3): the craft revision ends at revise_output with the
     # user's pointing relayed verbatim (plan_ref carries the '2') — never
     # edit_graph / apply_edit_ops / propose_tasks.
+    if probe == "G":
+        return (
+            r.tool_name == "revise_output"
+            and "2" in str(getattr(getattr(r.params, "target", None), "plan_ref", "") or "")
+            and "edit_graph" not in r.calls
+            and "apply_edit_ops" not in r.calls
+            and "propose_tasks" not in r.calls
+        )
+    # H (精确编辑迭代 S3, ADR-090): the precise edit routes edit_output with
+    # kind=remove_range, the quote relayed verbatim (the words survive),
+    # target pointed at the clip — the raw-ops / open-craft / proposal verbs
+    # are all misroutes for a change this definite.
     return (
-        r.tool_name == "revise_output"
-        and "2" in str(getattr(getattr(r.params, "target", None), "plan_ref", "") or "")
-        and "edit_graph" not in r.calls
+        r.tool_name == "edit_output"
+        and getattr(r.params, "kind", None) == "remove_range"
+        and "onboarding is where users decide to stay"
+        in str(getattr(getattr(r.params, "params", None), "quote", "") or "").lower()
         and "apply_edit_ops" not in r.calls
+        and "revise_output" not in r.calls
         and "propose_tasks" not in r.calls
+        and "edit_graph" not in r.calls
     )
 
 
 async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=12)
-    parser.add_argument("--probe", choices=["A", "B", "C", "D", "E", "F", "G"], default=None)
+    parser.add_argument("--probe", choices=["A", "B", "C", "D", "E", "F", "G", "H"], default=None)
     parser.add_argument("--provider", choices=sorted(PROVIDERS), default="minimax")
     args = parser.parse_args()
 
@@ -498,12 +548,13 @@ async def main() -> int:
         "E": PROBE_E,
         "F": PROBE_F,
         "G": PROBE_G,
+        "H": PROBE_H,
     }
     failed = False
     for name, ctx in probes.items():
         if args.probe and name != args.probe:
             continue
-        agent = chat_agent if name in ("E", "F", "G") else plan_agent
+        agent = chat_agent if name in ("E", "F", "G", "H") else plan_agent
         # E's evidence reads quote onboarding, not pricing (the themed
         # canned observations keep the chain honest to the ask); F's
         # get_pending_plan stub carries the docked package's plan_ids.

@@ -29,6 +29,7 @@ from app.models.schemas import (
     ChatAnswerArgs,
     ChatAskArgs,
     EditGraphArgs,
+    EditOutputArgs,
     PlanAnswerArgs,
     PlanAskArgs,
     PresentPlanArgs,
@@ -129,6 +130,25 @@ CHAT_TOOLS = [
             "BEFORE calling this."
         ),
         params_model=ReviseOutputArgs,
+    ),
+    # 精确编辑迭代 S3 (N-59, ADR-090): the PRECISE edit verb — mechanically
+    # executable changes only, the controlled enum; raw ops never surface.
+    ChatTool(
+        name="edit_output",
+        description=(
+            "Edit an already-produced clip PRECISELY — a mechanically "
+            "executable change: 'delete this line' (remove_range, params.quote "
+            "= the words verbatim) / 'N seconds shorter' (set_trim, "
+            "params.seconds) / 'captions to karaoke' (set_caption_style, "
+            "params.style = a preset from list_caption_styles) / 'retitle to X' "
+            "(set_title, params.title). Target by the @output pin (output_id) "
+            "or the plan ordinal (plan_ref verbatim). The system resolves the "
+            "quote to seconds, applies, and re-renders. An open-ended craft "
+            "ask ('make it tighter') goes to revise_output; a change you "
+            "cannot name mechanically goes to ask_user — never guess. Speak "
+            "what you'll change BEFORE calling this."
+        ),
+        params_model=EditOutputArgs,
     ),
     ChatTool(
         name="ask_user",

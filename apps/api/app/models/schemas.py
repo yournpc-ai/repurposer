@@ -877,6 +877,91 @@ class ReviseOutputArgs(BaseModel):
     )
 
 
+class EditOutputParams(BaseModel):
+    """``edit_output``'s product-semantics params (ADR-090, E2): one kind
+    consumes exactly one key — the code pairs them (多给/缺给 = 域拒绝).
+    NO timestamps, no ids, no op internals: the quote is the user's words,
+    the seconds a plain count, the style a preset enum name."""
+
+    model_config = ConfigDict(extra="forbid", coerce_numbers_to_str=True)
+
+    quote: str | None = Field(
+        default=None,
+        description="remove_range: the words to cut, quoted verbatim from the user or the captions.",
+    )
+    seconds: float | None = Field(
+        default=None,
+        description="set_trim: how many seconds to take OFF the clip's end (a positive count).",
+    )
+    style: str | None = Field(
+        default=None,
+        description="set_caption_style: a preset name from list_caption_styles (enum only, never free-form).",
+    )
+    title: str | None = Field(
+        default=None,
+        description="set_title: the new title text, verbatim.",
+    )
+
+
+# The precise edit's param→verb decode table (ADR-090 E2; edit_ops.KIND_PARAMS
+# is the same law's forward direction — a pure test pins the bijection).
+_EDIT_KIND_BY_PARAM = {
+    "quote": "remove_range",
+    "seconds": "set_trim",
+    "style": "set_caption_style",
+    "title": "set_title",
+}
+
+
+class EditOutputArgs(BaseModel):
+    """``edit_output`` params, chat path (ADR-090 §1/§4): the PRECISE edit
+    verb — a mechanically executable change to an already-produced clip
+    ('delete this line' / '3 seconds shorter' / 'captions to karaoke' /
+    'retitle to X'). kind is the controlled enum (MVP 四件); the system
+    resolves the quote to seconds, journals the op, and re-renders. An
+    open-ended craft ask goes to revise_output; when the change is not
+    mechanically specifiable, ask — never guess."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "target", "kind", "params")
+
+    @model_validator(mode="after")
+    def _infer_kind(self) -> "EditOutputArgs":
+        """顺形律 (probe H 实测 2026-09-24): the provider omits the kind
+        discriminator and expresses the verb purely through WHICH param it
+        fills — one filled param determines the kind exactly, so the schema
+        decodes it (the bare-int plan_ref precedent, probe F). Zero or 2+
+        params filled carries no verb → kind stays None and the pairing
+        law's domain refusal rides the loop (never a guess)."""
+        if self.kind is None:
+            filled = [
+                k
+                for k, v in self.params.model_dump(mode="python").items()
+                if v is not None and str(v).strip() != ""
+            ]
+            if len(filled) == 1:
+                self.kind = _EDIT_KIND_BY_PARAM.get(filled[0])
+        return self
+
+    target: ReviseOutputTarget = Field(
+        default_factory=ReviseOutputTarget,
+        description="What the edit points at — the @output pin (output_id) XOR the plan ordinal (plan_ref relayed verbatim).",
+    )
+    kind: Literal["remove_range", "set_trim", "set_caption_style", "set_title"] | None = Field(
+        default=None,
+        description="The precise-edit verb: remove_range (cut the quoted words) / set_trim (shorten the end) / set_caption_style (swap the preset) / set_title (retitle).",
+    )
+    params: EditOutputParams = Field(default_factory=EditOutputParams)
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="Pending-question settlement for this turn: 'answer' / 'skip' / 'none'.",
+    )
+
+
 # ---- 触发回合 (T3, ADR-077 判词③) — the proactive turn's terminal --------
 
 
