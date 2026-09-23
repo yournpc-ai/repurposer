@@ -240,11 +240,23 @@ apps/api/
 │   │   │                        #   validate_task_list 裁决 B3 上移）+ decision_package_plans（决策包阅读层
 │   │   │                        #   R16）+ build_confirmed_scope（R20 快照构造器）；域拒绝 =
 │   │   │                        #   ScopeCompileRejected（WiringRejected/ExplorationRejected 同族）；纯函数零写
+│   │   │                        #   【iter-3 扩（2026-09-23）：R20 修订路由器 route_revision（快照
+│   │   │                        #   plan_task_map → 任务切片 → fill_key → 活图节点集；plan_ref 序位词/plan_id
+│   │   │                        #   双通道 + @output 单通道 + 诚实降级）+ R19 消费侧 assemble_craft_revision /
+│   │   │                        #   compose_revised_program（prompt 消费族门控，确定族 uncovered 披露）】
+│   │   ├── run_review.py          # 收官兑现审计纯核（ADR-088 §8 R21，iter-3 S5，2026-09-23）：
+│   │   │                        #   confirmed_scope 快照 × landed outputs × 实扣 ledger → 兑现事实清单
+│   │   │                        #   + 缺口裁决（保守——只点名数据证明缺失的）+ review_fact_lines 有界渲染；
+│   │   │                        #   零 LLM 零 DB；与图内质检 verify 分词（verify 住执行图、review 住 chat
+│   │   │                        #   边缘触发回合——消费座 = chat/trigger_turn._run_review_lines）
 │   │   ├── exploration_store.py   # 探索写门（ADR-088 §2，iter-1 落地 / iter-2 扩 revise）：
 │   │   │                        #   propose_candidates / propose_selects / propose_plans / revise_plan 四动词
 │   │   │                        #   （savepoint + 证据逐字校验 + 幂等 + 完整性自检；免费但真写门）+
 │   │   │                        #   journey 读座位 read_journey_evidence / read_journey_plans（编译器的
-│   │   │                        #   只读证据来源——读面不是写门）
+│   │   │                        #   只读证据来源——读面不是写门）【iter-3 扩（2026-09-23）：revise_selects
+│   │   │                        #   门分支（member_index 编辑 + verdict/reason 强制重述 + idem 保留）+
+│   │   │                        #   mark_compiled / supersede_plan 双态写者（E3）+ select_revision_phase
+│   │   │                        #   三金钱态纯判别 + read_journey_summaries / output_fact 记忆读座（S6）】
 │   │   ├── trigger_events.py      # trigger 白名单事件缝（ADR-087 §6，Phase 5）：kind ∈
 │   │   │                        #   {understanding_warmed, run_completed, craft_decompiled} 冻结白名单
 │   │   │                        #   （扩名单 = ADR 评审）；fire-and-forget，未注册 = 静默降级永不
