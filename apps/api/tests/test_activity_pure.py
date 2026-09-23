@@ -205,8 +205,9 @@ def test_t10_conversation_calls_filtered():
     ]
 
 
-# T11 — the no-leak whitelist: every frame's dict touches exactly the five
-# contracted fields, whatever the event sequence.
+# T11 — the no-leak whitelist: every frame's dict touches exactly the
+# contracted fields (S7/E7: + ``at`` on every frame, + ``duration_ms`` only
+# on a frame settling a genuinely-active span), whatever the event sequence.
 def test_t11_frame_field_whitelist():
     p = ActivityProjector()
     frames = _feed(
@@ -216,10 +217,19 @@ def test_t11_frame_field_whitelist():
         "propose_tasks", TerminalAccepted("propose_tasks"),
     ) + p.sweep("completed")
     for f in frames:
-        assert set(f.to_dict()) == {"activity_id", "seq", "kind", "status", "key"}
+        assert set(f.to_dict()) <= {
+            "activity_id", "seq", "kind", "status", "key", "at", "duration_ms",
+        }
+        assert f.to_dict()["at"]  # every frame carries its birth stamp
         assert f.kind in ("read", "draft", "run", "repair")
         assert f.status in (STATUS_ACTIVE, STATUS_COMPLETED, STATUS_FAILED, STATUS_CANCELLED)
         assert f.key is None or f.key.startswith(("chat.inspecting", "chat.activity."))
+        # duration_ms only on a settle frame of a real span, never on the
+        # active frame itself.
+        if f.status == STATUS_ACTIVE:
+            assert "duration_ms" not in f.to_dict()
+        else:
+            assert isinstance(f.to_dict()["duration_ms"], int)
 
 
 # T12 — determinism: the same event sequence yields the byte-same frames.
@@ -337,7 +347,9 @@ def test_explore_read_done_key_is_same_family():
 def test_explore_milestone_is_born_completed_with_count():
     """A milestone is a fact: one completed frame straight from the door
     success — never an active span, so the sweep has nothing to settle and
-    the whitelist's one extension (count) rides the wire."""
+    the whitelist's one extension (count) rides the wire. S7/E7: the birth
+    stamp rides (every frame), but an instant fact carries NO duration_ms —
+    a fake zero would be a lie."""
     p = ActivityProjector()
     frame = p.explore_milestone("chat.explore.candidatesReady", count=5)
     assert frame.kind == "draft"
@@ -345,6 +357,8 @@ def test_explore_milestone_is_born_completed_with_count():
     assert frame.key == "chat.explore.candidatesReady"
     assert frame.count == 5
     assert frame.to_dict()["count"] == 5
+    assert frame.to_dict()["at"]
+    assert "duration_ms" not in frame.to_dict()
     assert not p.has_active()
     # The sweep settles nothing (the milestone never opened a span).
     assert p.sweep("completed") == []
@@ -477,7 +491,10 @@ async def test_route_seam_rejection_then_failed_sweep():
         ("a2", "repair", "failed", REPAIR),  # failed turn sweeps repair FAILED
     ]
     for _, payload in wire:
-        assert set(payload.keys()) == {"activity_id", "seq", "kind", "status", "key"}
+        assert set(payload.keys()) <= {
+            "activity_id", "seq", "kind", "status", "key", "at", "duration_ms",
+        }
+        assert payload["at"]  # S7/E7: the birth stamp rides every frame
     assert not p.has_active()
 
 

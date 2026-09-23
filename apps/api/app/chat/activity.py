@@ -39,7 +39,9 @@ reply — is swept to completed by the envelope.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from app.agents.tool_loop import (
     LoopEvent,
@@ -143,7 +145,12 @@ class ActivityFrame:
     Field whitelist is the contract: id / seq / kind / status / key — never
     params, results, or reasoning text (简报 Prohibited #2, T11). Iter-2 ⑥
     (N-57) extends the whitelist by ONE key: ``count`` — the work-session
-    milestone's pure artifact count, present only on milestone frames."""
+    milestone's pure artifact count, present only on milestone frames.
+    Iter-3 S7 (E7) extends it by TWO more: ``at`` — the frame's birth stamp
+    (ISO UTC, EVERY frame — the web timeline interleaves activity rows with
+    messages by real moments) and ``duration_ms`` — the real elapsed of a
+    span that was genuinely ACTIVE, present only on its settling frame (a
+    born-completed milestone is an instant fact — it carries no fake zero)."""
 
     activity_id: str
     seq: int
@@ -151,6 +158,8 @@ class ActivityFrame:
     status: str
     key: str | None
     count: int | None = None
+    at: str = ""
+    duration_ms: int | None = None
 
     def to_dict(self) -> dict:
         d = {
@@ -159,9 +168,12 @@ class ActivityFrame:
             "kind": self.kind,
             "status": self.status,
             "key": self.key,
+            "at": self.at,
         }
         if self.count is not None:
             d["count"] = self.count
+        if self.duration_ms is not None:
+            d["duration_ms"] = self.duration_ms
         return d
 
 
@@ -184,8 +196,10 @@ class ActivityProjector:
         self._open_call: tuple[str, str | None] | None = None
         # the aggregated repair span's activity id (None = no repair open)
         self._repair_id: str | None = None
-        # still-active activities in birth order: id -> (kind, active key)
-        self._active: dict[str, tuple[str, str | None]] = {}
+        # still-active activities in birth order: id -> (kind, active key,
+        # monotonic start — the S7 duration_ms source; monotonic, never the
+        # wall clock, so a clock adjustment never fabricates a negative span)
+        self._active: dict[str, tuple[str, str | None, float]] = {}
 
     # -- frame factory -------------------------------------------------
 
@@ -197,22 +211,24 @@ class ActivityProjector:
         key: str | None,
         *,
         count: int | None = None,
+        duration_ms: int | None = None,
     ) -> ActivityFrame:
         self._seq += 1
         return ActivityFrame(
             activity_id=activity_id, seq=self._seq, kind=kind, status=status, key=key,
-            count=count,
+            count=count, at=datetime.now(UTC).isoformat(), duration_ms=duration_ms,
         )
 
     def _start(self, kind: str, key: str | None) -> tuple[str, ActivityFrame]:
         self._count += 1
         activity_id = f"a{self._count}"
-        self._active[activity_id] = (kind, key)
+        self._active[activity_id] = (kind, key, time.monotonic())
         return activity_id, self._frame(activity_id, kind, STATUS_ACTIVE, key)
 
     def _settle(self, activity_id: str, status: str, key: str | None) -> ActivityFrame:
-        kind, _ = self._active.pop(activity_id)
-        return self._frame(activity_id, kind, status, key)
+        kind, _, started = self._active.pop(activity_id)
+        duration_ms = max(0, int((time.monotonic() - started) * 1000))
+        return self._frame(activity_id, kind, status, key, duration_ms=duration_ms)
 
     @staticmethod
     def _done_key(kind: str, active_key: str | None) -> str | None:
@@ -277,7 +293,7 @@ class ActivityProjector:
         if self._open_call is not None:
             _name, activity_id = self._open_call
             if activity_id is not None:
-                kind, key = self._active[activity_id]
+                kind, key, _started = self._active[activity_id]
                 frames.append(self._settle(activity_id, STATUS_CANCELLED, key))
             self._open_call = None
         if self._repair_id is None:
@@ -299,7 +315,7 @@ class ActivityProjector:
         if self._open_call is not None:
             _name, activity_id = self._open_call
             if activity_id is not None:
-                kind, key = self._active[activity_id]
+                kind, key, _started = self._active[activity_id]
                 frames.append(
                     self._settle(activity_id, STATUS_COMPLETED, self._done_key(kind, key))
                 )
@@ -313,7 +329,7 @@ class ActivityProjector:
         if self._open_call is not None:
             _name, activity_id = self._open_call
             if activity_id is not None:
-                kind, key = self._active[activity_id]
+                kind, key, _started = self._active[activity_id]
                 frames.append(self._settle(activity_id, STATUS_CANCELLED, key))
             self._open_call = None
         if self._repair_id is not None:
@@ -342,7 +358,7 @@ class ActivityProjector:
         if self._open_call is not None:
             _name, activity_id = self._open_call
             if activity_id is not None and activity_id in self._active:
-                kind, key = self._active[activity_id]
+                kind, key, _started = self._active[activity_id]
                 frames.append(
                     self._settle(
                         activity_id,

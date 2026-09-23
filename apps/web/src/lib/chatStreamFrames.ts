@@ -27,6 +27,15 @@ export interface ActivityFramePayload {
   /** 工作会话里程碑 (iter-2 ⑥, N-57): the whitelist's one extension — the
    * artifact count on `chat.explore.*Ready` frames, absent elsewhere. */
   count?: number
+  /** iter-3 S7 (E7, N-58 ⑥): the frame's birth stamp (ISO, every frame) —
+   * the timeline layer interleaves activity rows with messages by real
+   * moments. The reducer preserves the FIRST-seen `at` as the activity's
+   * birth (a settle frame's own `at` is its close time, never a move). */
+  at?: string
+  /** iter-3 S7 (E7): the real elapsed of a genuinely-active span, present
+   * only on its settling frame — a born-completed milestone is an instant
+   * fact and carries none. */
+  duration_ms?: number
 }
 
 /** The thinking frame's payload: `{}` = a pure keepalive (drive the

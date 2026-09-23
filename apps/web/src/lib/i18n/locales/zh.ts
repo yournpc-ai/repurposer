@@ -1209,6 +1209,11 @@ const zh: Resources = {
       repair: "刚才的回答没组织好，我重新整理一下…",
       repairDone: "已重新整理好",
     },
+    /** 活动行的有界展开明细（迭代三 S7，E7 诚实边界）：只有 wire 白名单
+     * 字段——原始计数带标签成行（耗时内联同行，formatElapsed 是唯一措辞）。 */
+    activityMeta: {
+      count: "数量：{{count}}",
+    },
     /** inspecting 族的完成态镜像——读活动 completed 帧的文案（键随服务端
      * 注册表，本族按前缀交换镜像）。 */
     inspectingDone: {

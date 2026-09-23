@@ -18,7 +18,10 @@ export function resetActivities(): ActivityFramePayload[] {
 }
 
 /** Upsert one frame: idempotent by activity_id (a re-delivered frame
- * replaces, never duplicates); first sighting appends in arrival order. */
+ * replaces, never duplicates); first sighting appends in arrival order.
+ * S7/E7: the merged row keeps the FIRST-seen `at` as the activity's birth
+ * moment (a settle frame's own `at` is its close time — the row never moves
+ * in the timeline), while status / key / duration_ms take the latest. */
 export function upsertActivityFrame(
   prev: ActivityFramePayload[],
   frame: ActivityFramePayload,
@@ -26,7 +29,7 @@ export function upsertActivityFrame(
   const i = prev.findIndex((a) => a.activity_id === frame.activity_id)
   if (i === -1) return [...prev, frame]
   const next = [...prev]
-  next[i] = frame
+  next[i] = { ...frame, at: prev[i].at ?? frame.at }
   return next
 }
 

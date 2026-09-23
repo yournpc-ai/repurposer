@@ -51,6 +51,7 @@ import { apiFetch } from "@/lib/api"
 import { inferAssetType } from "@/lib/asset-type"
 import { streamAnswer, streamChat, StreamTurnError } from "@/lib/chat-stream"
 import type { ActivityFramePayload } from "@/lib/chat-stream"
+import { buildConversationUnits, momentOf } from "@/lib/chatTimeline"
 import {
   asCreditsInsufficient,
   type CreditsInsufficientDetail,
@@ -146,7 +147,7 @@ import {
   RunTaskList,
 } from "@/components/chat/RunTaskList"
 import { StatusLine } from "@/components/chat/StatusLine"
-import { ActivityStream } from "@/components/chat/ActivityStream"
+import { ActivityRow } from "@/components/chat/ActivityStream"
 import type { LifecycleStamp, Output } from "@/lib/types"
 import { isConfirmationReady, isPlanReady } from "@/lib/lifecycleStamp"
 import {
@@ -3191,13 +3192,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // dynamic row). Once terminal the start line is gone and the task list
   // settles as the run's tombstone AT THE RUN'S END (same 拍板 — mid-run
   // life sorts by real time ABOVE the receipt, never below it), the
-  // completion line right after. No run anchor (confirm beat,
-  // pre-snapshot window) → the legacy fixed block + flat list below.
+  // completion line right after. iter-3 S7: the turn's activity rows join
+  // this same walk at their birth moments (the shared timeline layer —
+  // lib/chatTimeline); off a run, messages × activities interleave by the
+  // same law and the fixed bottom block is retired.
   const runStartAt = runCreatedAt ? Date.parse(runCreatedAt) : null
   type RunStreamUnit =
     | { kind: "startLine" }
     | { kind: "taskList" }
     | { kind: "message"; message: OverlayMessage }
+    | { kind: "activity"; activity: ActivityFramePayload }
     | { kind: "terminal" }
   const runStreamUnits = useMemo<RunStreamUnit[] | null>(() => {
     // ONE render path for every window (2026-09-09 双渲染路收一——the legacy
@@ -3225,6 +3229,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       const t = m.at ? Date.parse(m.at) : NaN
       if (Number.isNaN(t)) undated.push(m)
       else timed.push({ t, order: order++, unit: { kind: "message", message: m } })
+    }
+    // iter-3 S7 (E7 — the fixed bottom block retired into the flow): the
+    // turn's activity rows sort at their real BIRTH moments like any other
+    // unit (the reducer preserved the first-seen `at`); undated rows
+    // (defensive — a pre-S7 wire) land at +∞, and since they push BEFORE
+    // the pinned live chrome below, the tiebreak keeps them above it (the
+    // undated-message law's twin).
+    for (const a of activities) {
+      timed.push({ t: momentOf(a.at), order: order++, unit: { kind: "activity", activity: a } })
     }
     // The run's end: the receipt (and the completion line after it) anchors
     // here so everything that happened DURING the run — the direction QA,
@@ -3282,7 +3295,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
     }
     return units
-  }, [runId, runStartAt, runCreatedAt, steps, messages, terminal, status])
+  }, [runId, runStartAt, runCreatedAt, steps, messages, activities, terminal, status])
+
+  // The NON-run timeline (iter-3 S7): the same moment-ordering law off a
+  // run — messages × the turn's activity rows in one real-time walk (the
+  // retired fixed bottom block's rows now flow at their birth moments).
+  const conversationUnits = useMemo(
+    () => buildConversationUnits(messages, activities),
+    [messages, activities],
+  )
 
   /** 点值改 (B3): an inferred slot's inline-edit commit IS a normal chat
    * send — the composed statement (「受众：X」 / "Audience: X") rides the one
@@ -3963,14 +3984,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     run's end once terminal, the completion line last. A
                     mid-run QA lands between the start line and the dynamic
                     row while live, and above the receipt once terminal —
-                    the Claude Code reference. Fallback (confirm beat /
-                    pre-snapshot window): the legacy fixed block + flat
-                    list below. */}
+                    the Claude Code reference. Activity rows (S7) sort into
+                    the same walk at their birth moments. */}
                 {runStreamUnits ? (
                   <>
                     {runStreamUnits.map((unit) => {
                       if (unit.kind === "message") {
                         return renderConversationMessage(unit.message)
+                      }
+                      if (unit.kind === "activity") {
+                        return (
+                          <MessageScrollerItem key={unit.activity.activity_id}>
+                            <ActivityRow activity={unit.activity} />
+                          </MessageScrollerItem>
+                        )
                       }
                       if (unit.kind === "startLine") {
                         return (
@@ -4071,22 +4098,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     through runStreamUnits — ONE path, the legacy fixed block
                     is dead 2026-09-09). A superseded plan version's chip sits
                     right after the echo bubble whose turn produced it; the
-                    live plan is the bottom-most card. */}
-                {messages.map(renderConversationMessage)}
-                  </>
+                    live plan is the bottom-most card. iter-3 S7: messages ×
+                    the turn's activity rows interleave by real moment (the
+                    shared timeline layer — lib/chatTimeline). */}
+                {conversationUnits.map((unit) =>
+                  unit.kind === "message" ? (
+                    renderConversationMessage(unit.message)
+                  ) : (
+                    <MessageScrollerItem key={unit.activity.activity_id}>
+                      <ActivityRow activity={unit.activity} />
+                    </MessageScrollerItem>
+                  ),
                 )}
-
-                {/* The turn's Activity Stream (ADR-087 §3 Phase 2): the
-                    append-oriented milestone surface — rows appear as the
-                    loop's work starts, settle in place as it completes, and
-                    the block stays as the turn's static history until the
-                    next turn replaces it. While an activity is ACTIVE it IS
-                    the "what's happening now" line, so the System Status row
-                    below yields (no double narration). */}
-                {activities.length > 0 && (
-                  <MessageScrollerItem>
-                    <ActivityStream activities={activities} />
-                  </MessageScrollerItem>
+                  </>
                 )}
 
                 {/* The turn's status line owns every window where NO prose

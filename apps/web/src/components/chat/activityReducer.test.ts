@@ -51,6 +51,32 @@ describe("upsertActivityFrame", () => {
     expect(prev[0].status).toBe("active")
     expect(next[0].status).toBe("completed")
   })
+
+  it("keeps the FIRST-seen `at` as the birth moment; the settle frame's own at never moves the row (S7/E7)", () => {
+    let list: ActivityFramePayload[] = []
+    list = upsertActivityFrame(list, {
+      ...frame("a", "active", 1),
+      at: "2026-09-23T08:00:00.000Z",
+    })
+    list = upsertActivityFrame(list, {
+      ...frame("a", "completed", 2),
+      at: "2026-09-23T08:00:01.200Z",
+      duration_ms: 1200,
+    })
+    expect(list[0].at).toBe("2026-09-23T08:00:00.000Z")
+    expect(list[0].status).toBe("completed")
+    expect(list[0].duration_ms).toBe(1200)
+  })
+
+  it("a first frame without `at` yields to the settle frame's stamp (defensive, pre-S7 wire)", () => {
+    let list: ActivityFramePayload[] = []
+    list = upsertActivityFrame(list, frame("a", "active", 1))
+    list = upsertActivityFrame(list, {
+      ...frame("a", "completed", 2),
+      at: "2026-09-23T08:00:01.200Z",
+    })
+    expect(list[0].at).toBe("2026-09-23T08:00:01.200Z")
+  })
 })
 
 describe("sweepActivities — zero dangling (假活跃禁令)", () => {

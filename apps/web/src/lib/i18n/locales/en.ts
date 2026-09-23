@@ -1278,6 +1278,12 @@ const en = {
       repair: "That answer didn't come out right — reworking it…",
       repairDone: "Reworked it",
     },
+    /** The activity row's bounded expand detail (iter-3 S7, E7 诚实边界):
+     * only the wire whitelist's fields — the raw count rides as a labeled
+     * meta line (the duration joins inline, formatElapsed is the ONE copy). */
+    activityMeta: {
+      count: "Count: {{count}}",
+    },
     /** Past-tense mirrors of the inspecting family — a read activity's
      * completed frames (chat.inspecting.* stays the active form; the keys
      * ride the server registry, this family mirrors it by prefix swap). */
