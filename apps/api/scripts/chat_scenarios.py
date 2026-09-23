@@ -4619,6 +4619,195 @@ async def s_explore_2_decision_package_to_confirmed_scope(ctx: Ctx) -> None:
             await ctx.answer(review["id"], {"kind": "bail"})
 
 
+# ---- S-edit 精确编辑归档生命周期（确定性尾剧本，精确编辑迭代 S5）-------------
+
+
+async def s_edit_precise_edit_archive_lifecycle(ctx: Ctx) -> None:
+    """S-edit (ADR-090/091, 验收口径 #5/#6): the precise edit's deterministic
+    tail — edit door → journal → undo → wipe 归档（不删除、publication /
+    journal 不连坐）→ 换态 restore → 读面过滤。NO LLM: the four request
+    families' routing is probe H's seat and the live walkthrough's; this
+    seat locks the archive lifecycle against the real DB + the real API
+    doors (the same doors edit_output rides)."""
+    from app.pipeline.edit_span import ResolvedSpan, resolve_quote_span
+    from app.pipeline.outputs import archive_outputs
+    from app.models.tables import Publication
+    from app.models.schemas import PublicationState
+
+    pid = await ctx.new_project("S-edit archive lifecycle")
+    asset_id = await seed_asset(
+        pid, ctx.user_id, AssetType.VIDEO, "s-edit.mp4", processed=True
+    )
+
+    cues = [
+        {"start": 10.0, "end": 10.8, "text": "Welcome back", "lang": "en"},
+        {"start": 10.8, "end": 11.5, "text": "to the show", "lang": "en"},
+        {"start": 12.0, "end": 13.2, "text": "today we talk pricing", "lang": "en"},
+    ]
+    spec = {
+        "segments": [
+            {
+                "id": "s1",
+                "start": 10.0,
+                "end": 40.0,
+                "hidden": False,
+                "asset_id": asset_id,
+                "url": "scenario/s-edit.mp4",
+            }
+        ],
+        "caption_track": cues,
+        "source": {
+            "kind": "video",
+            "url": "scenario/s-edit.mp4",
+            "asset_id": asset_id,
+            "duration": 120.0,
+        },
+        "aspect": "9:16",
+    }
+    async with AsyncSessionLocal() as db:
+        run = WorkflowRun(
+            project_id=uuid.UUID(pid),
+            status=WorkflowStatus.COMPLETED,
+            context={"target_language": "en", "ui_language": "en"},
+        )
+        db.add(run)
+        await db.flush()
+        step = WorkflowStep(
+            run_id=run.id, kind="select_clips", status="done", seq=1,
+        )
+        db.add(step)
+        await db.flush()
+        output = Output(
+            project_id=uuid.UUID(pid),
+            workflow_step_id=step.id,
+            type="clip",
+            language="en",
+            provenance="real",
+            payload={"duration": 30},
+            render_spec=spec,
+        )
+        db.add(output)
+        await db.flush()
+        oid = output.id
+        db.add(
+            WorkflowStep(
+                run_id=run.id, kind="render", status="done", seq=2,
+                inputs=[str(step.id)], spec={"output_id": str(oid)},
+            )
+        )
+        db.add(
+            Publication(
+                user_id=ctx.user_id,
+                project_id=uuid.UUID(pid),
+                output_id=oid,
+                payload={"title": "s-edit"},
+                state=PublicationState.PUBLISHED,
+                idempotency_key=f"s-edit-{oid}",
+            )
+        )
+        await db.commit()
+        work_id = output.work_id
+
+    # ① edit door: quote → span (the resolver's exact tier) → remove_range
+    # op through the real operations API — the door edit_output rides.
+    span = resolve_quote_span(cues, "welcome back")
+    check(isinstance(span, ResolvedSpan) and span.tier == "exact",
+          "the quote resolves at the exact tier", span)
+    res = await ctx.client.post(
+        f"/outputs/{oid}/operations",
+        json={"ops": [{"op": "remove_range", "params": {"start": span.start, "end": span.end}}]},
+    )
+    check(res.status_code == 201, "remove_range op applies", res.text)
+    body = res.json()
+    new_track = body["output"]["render_spec"]["caption_track"]
+    check(
+        all("Welcome" not in c["text"] for c in new_track),
+        "the cut cue leaves the caption track", new_track,
+    )
+    check(len(body["operations"]) == 1, "the op journals", body["operations"])
+
+    # ② undo (API 面) restores the pre-edit spec.
+    res = await ctx.client.post(f"/outputs/{oid}/operations/undo")
+    check(res.status_code == 200, "undo applies", res.text)
+    restored_track = res.json()["output"]["render_spec"]["caption_track"]
+    check(
+        any("Welcome" in c["text"] for c in restored_track),
+        "undo restores the cut cue", restored_track,
+    )
+
+    # ③ wipe 归档（不重删）: the wipe's DB door — archive the delivered row,
+    # birth the successor with the inherited work_id (the positional law's
+    # birth-loop shape), and the world must hold: publication survives,
+    # the journal stays readable, the visible read face swaps versions.
+    async with AsyncSessionLocal() as db:
+        await archive_outputs(db, [oid])
+        newborn = Output(
+            project_id=uuid.UUID(pid),
+            workflow_step_id=None,
+            type="clip",
+            language="en",
+            provenance="real",
+            payload={"duration": 28},
+            render_spec=spec,
+            work_id=work_id,  # 按位继承 — the wipe's birth-loop shape
+        )
+        db.add(newborn)
+        await db.flush()
+        newborn_id = newborn.id
+        await db.commit()
+    async with AsyncSessionLocal() as db:
+        pub = (
+            await db.execute(
+                select(func.count()).select_from(Publication).where(
+                    Publication.output_id == oid
+                )
+            )
+        ).scalar_one()
+        check(pub == 1, "publication survives the archive (不连坐)", pub)
+        ops_count = (
+            await db.execute(
+                select(func.count()).select_from(Operation).where(
+                    Operation.output_id == oid
+                )
+            )
+        ).scalar_one()
+        check(ops_count >= 2, "the operations journal survives", ops_count)
+    res = await ctx.client.get(f"/outputs/{oid}/operations")
+    check(res.status_code == 200, "the archived row's journal stays readable",
+          res.status_code)
+    res = await ctx.client.get(f"/projects/{pid}/results")
+    check(res.status_code == 200, "results reads", res.text)
+    visible_ids = [o["id"] for o in res.json().get("outputs", [])]
+    check(str(oid) not in visible_ids, "the archived version leaves the read face",
+          visible_ids)
+    check(str(newborn_id) in visible_ids, "the successor is the visible version",
+          visible_ids)
+
+    # ④ 换态: restore the archived version — it becomes the work's ONE active
+    # row; the successor archives. A second restore on the now-active row
+    # refuses (400).
+    res = await ctx.client.post(f"/outputs/{oid}/restore")
+    check(res.status_code == 200, "restore 换态 applies", res.text)
+    async with AsyncSessionLocal() as db:
+        rows = list(
+            (
+                await db.execute(
+                    select(Output).where(Output.work_id == work_id)
+                )
+            ).scalars().all()
+        )
+        actives = [r for r in rows if r.archived_at is None]
+        check(len(actives) == 1 and actives[0].id == oid,
+              "同 work 内至多一 active — the restored row", rows)
+    res = await ctx.client.post(f"/outputs/{oid}/restore")
+    check(res.status_code == 400, "restoring the active row refuses",
+          res.status_code)
+    res = await ctx.client.get(f"/projects/{pid}/results")
+    visible_ids = [o["id"] for o in res.json().get("outputs", [])]
+    check(str(oid) in visible_ids and str(newborn_id) not in visible_ids,
+          "the read face follows the 换态", visible_ids)
+
+
 SCENARIOS = {
     "S1": s1_bare_wish_full_journey,
     "S2": s2_skipped_topic_ask_drafts_from_persona,
@@ -4644,6 +4833,7 @@ SCENARIOS = {
     "S22": s22_trigger_landing_silence,
     "S23": s23_exploration_chain_lands_on_canvas,
     "S-explore-2": s_explore_2_decision_package_to_confirmed_scope,
+    "S-edit": s_edit_precise_edit_archive_lifecycle,
 }
 
 
