@@ -1,14 +1,14 @@
 # Agent Working Loop 迭代二：能力编译层 + 决策包/快照 + R6 路由——主链 e2e 首通
 
-> Status: **已落地（2026-09-23）**——①~⑦ + §4.1 编译器 + §4.9 S-explore-2 全部落地（branch `feat/cut-segments`）。唯一挂账 = LLM 驱动面（prompt_gate 探针 D live 跑 + S-explore-2 live e2e）未跑验证：MiniMax 配额 429 硬前提未满足，配额恢复后复跑。拍板项见 §3。
-> 母合同 = ADR-089（§1 编译移出 LLM / §2 编译合同 / §3 编译器座位 / §4 决策包与快照 / §5 停顿定律 / §6 修订分类 / §7 报价站 artifact 事实 / §8 迁移弧）+ ADR-088 §9（R6 发现型路由）+ JOURNEYS 旅程四拍 0、6、7。迭代一（`tasks/agent-working-loop-iter-1.md`）已落地承重：探索三族 + 写门 + 证据 reads + EXPLORATION_TOOLS（harness 级）+ 画布三卡面 + S23。
+> Status: **已落地并实测全绿（2026-09-23）**——①~⑦ + §4.1 编译器 + §4.9 S-explore-2 全部落地（branch `feat/cut-segments`）；LLM 驱动面同日实测销账：prompt_gate 全量四探针 48/48 PASS（A/B/C/D 各 12/12）+ S-explore-2 live e2e 全链绿（7 迭代净发现环 → 决策包 dock → confirmed_scope 五字段 → run completed，clip+post 落地）。实测猎得三修真修同批落地（`5c9ac44`：asset_id 观察头接力 + 供方 `{"item":...}` 数组方言线级拆包 + loop 预算 8→12）。拍板项见 §3。
+> 母合同 = ADR-089（§1 编译移出 LLM / §2 编译合同 / §3 编译器座位 / §4 决策包与快照 / §5 停顿定律 / §6 修订分类 / §7 报价站 artifact 事实 / §8 迁移弧）+ ADR-088 §9（R6 发现型路由）+ JOURNEYS 旅程四拍 0、6、7。迭代一（`archive/tasks-done/agent-working-loop-iter-1.md`）已落地承重：探索三族 + 写门 + 证据 reads + EXPLORATION_TOOLS（harness 级）+ 画布三卡面 + S23。
 
 ## 1. 三次迭代切分（承接，用户拍板 2026-09-22）
 
 | 迭代 | 内容 | 状态 |
 |---|---|---|
-| 一 | 探索产物族数据面 + 画布呈现 + S23 剧本 | ✅ 已落地（唯一挂账 = S23 LLM 三拍未跑，MiniMax 配额） |
-| **二（本批）** | 编译器（Content Plan → Execution Scope）+ 决策包 + Confirmed Scope Snapshot（销 P0-①）+ R6 发现型路由（EXPLORATION_TOOLS 生产接线）+ work session 活动视图 + R15 停顿 + revise_plan（重编译→重报价→重确认）→ **主链 e2e 首次全通** | ✅ 已落地（2026-09-23；唯一挂账 = LLM 驱动面未跑验证，MiniMax 配额） |
+| 一 | 探索产物族数据面 + 画布呈现 + S23 剧本 | ✅ 已落地并实测全绿（S23 LLM 三拍 2026-09-23 复跑 PASS，挂账销） |
+| **二（本批）** | 编译器（Content Plan → Execution Scope）+ 决策包 + Confirmed Scope Snapshot（销 P0-①）+ R6 发现型路由（EXPLORATION_TOOLS 生产接线）+ work session 活动视图 + R15 停顿 + revise_plan（重编译→重报价→重确认）→ **主链 e2e 首次全通** | ✅ 已落地并实测全绿（2026-09-23；prompt_gate 48/48 + S-explore-2 live e2e） |
 | 三 | revise_output + R19 两分律接线 + R20 快照修订路由器 + reviewer 合同 + 记忆读取律 + 迁移弧收口 + 活动行呈现升级 + 终态对标验收 | 后续 |
 
 ## 2. 开工裁决承接（迭代一复述，本批承重）
@@ -85,7 +85,7 @@ Start 手势落戳（销 P0-①）：`{confirmation_id（= 确认消息 id）, c
 
 ### 4.9 S-explore-2 剧本（主链 e2e 首通）
 - 生产 chat 全链：发现型目标（SSE）→ 探索三族出生 → 决策包 dock（plans+tasks+quote 断言）→ 确认 → run 启动（confirmed_scope 断言）→ 产物落地；
-- fixture 纪律同 S23（scenario/ 前缀、真实 words）；**MiniMax 配额是硬前提**——跑不了标「未跑验证」。
+- fixture 纪律同 S23（scenario/ 前缀、真实 words）；MiniMax 配额是硬前提——**已实测（2026-09-23）：live e2e 全链绿**。
 
 ## 5. 避让清单（撞一条 = 停手问）
 
@@ -102,7 +102,7 @@ Start 手势落戳（销 P0-①）：`{confirmation_id（= 确认消息 id）, c
 
 - 会话内自跑：compileall、纯 pytest 全量（编译器纯函数全谱 / snapshot 形状 / 决策包装配 / revise 写门路径）、check_gates、prompt_gate（A/B/C 旧三针 + 新 D 针）、web tsc + vitest。
 - 零假设测试：writer 无 span 装配逐字节不变；旧 task_book dock 行回放读容忍。
-- S-explore-2 需 dev API + worker + **MiniMax 配额**；跑不了标「未跑验证」（S23 同款挂账位）。
+- S-explore-2 需 dev API + worker + MiniMax 配额——**已实测（2026-09-23）**：全链 PASS（7 迭代净发现环；实测修复三件套随批，见 Status 行）。
 - 认知验收（PROGRESS §0.4 规则 9）DoD 三答：agent 看见什么（决策包三层 + reads）/ 表示一致吗（plan ↔ tasks ↔ quote 同源编译）/ 怎么知道对了（编译拒绝回环 + 快照可证 + 剧本断言）。
 
 ## 7. 验收标准
@@ -113,7 +113,7 @@ Start 手势落戳（销 P0-①）：`{confirmation_id（= 确认消息 id）, c
 4. R6 路由：prompt_gate 四针全过（D = 发现型 → propose_candidates 终态；A/B/C 无回归）；干脆请求照旧短路径。
 5. work session 四活动键在 SSE 活动流可见（user-safe，只带计数）。
 6. revise_plan：修订 → 重编译 → 重报价 → 重 dock 全通；原 plan 行 state=revised。
-7. S-explore-2 主链 e2e 绿（或标未跑验证 + 确定性替身 22 项式全绿）。
+7. S-explore-2 主链 e2e 绿（**已兑现 2026-09-23 live**）。
 8. 零改动清单实证：执行世界七件 + propose_tasks/edit_graph 行为面 diff 为零。
 
 ## 8. 收口
