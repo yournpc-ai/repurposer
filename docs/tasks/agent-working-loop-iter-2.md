@@ -1,14 +1,14 @@
 # Agent Working Loop 迭代二：能力编译层 + 决策包/快照 + R6 路由——主链 e2e 首通
 
-> Status: **待拍板（2026-09-23 起草）**——拍板项见 §3，全部有推荐答案；确认后开工。
-> 母合同 = ADR-089（§1 编译移出 LLM / §2 编译合同 / §3 编译器座位 / §4 决策包与快照 / §5 停顿定律 / §6 修订分类 / §7 报价站 artifact 事实 / §8 迁移弧）+ ADR-088 §9（R6 发现型路由）+ JOURNEYS 旅程四拍 0、6、7。迭代一（`tasks/agent-working-loop-iter-1.md`）已落地承重：探索三族 + 写门 + 证据 reads + EXPLORATION_TOOLS（harness 级）+ 画布三卡面 + S23。
+> Status: **已落地并实测全绿（2026-09-23）**——①~⑦ + §4.1 编译器 + §4.9 S-explore-2 全部落地（branch `feat/cut-segments`）；LLM 驱动面同日实测销账：prompt_gate 全量四探针 48/48 PASS（A/B/C/D 各 12/12）+ S-explore-2 live e2e 全链绿（7 迭代净发现环 → 决策包 dock → confirmed_scope 五字段 → run completed，clip+post 落地）。实测猎得三修真修同批落地（`5c9ac44`：asset_id 观察头接力 + 供方 `{"item":...}` 数组方言线级拆包 + loop 预算 8→12）。拍板项见 §3。
+> 母合同 = ADR-089（§1 编译移出 LLM / §2 编译合同 / §3 编译器座位 / §4 决策包与快照 / §5 停顿定律 / §6 修订分类 / §7 报价站 artifact 事实 / §8 迁移弧）+ ADR-088 §9（R6 发现型路由）+ JOURNEYS 旅程四拍 0、6、7。迭代一（`archive/tasks-done/agent-working-loop-iter-1.md`）已落地承重：探索三族 + 写门 + 证据 reads + EXPLORATION_TOOLS（harness 级）+ 画布三卡面 + S23。
 
 ## 1. 三次迭代切分（承接，用户拍板 2026-09-22）
 
 | 迭代 | 内容 | 状态 |
 |---|---|---|
-| 一 | 探索产物族数据面 + 画布呈现 + S23 剧本 | ✅ 已落地（唯一挂账 = S23 LLM 三拍未跑，MiniMax 配额） |
-| **二（本批）** | 编译器（Content Plan → Execution Scope）+ 决策包 + Confirmed Scope Snapshot（销 P0-①）+ R6 发现型路由（EXPLORATION_TOOLS 生产接线）+ work session 活动视图 + R15 停顿 + revise_plan（重编译→重报价→重确认）→ **主链 e2e 首次全通** | 本批 |
+| 一 | 探索产物族数据面 + 画布呈现 + S23 剧本 | ✅ 已落地并实测全绿（S23 LLM 三拍 2026-09-23 复跑 PASS，挂账销） |
+| **二（本批）** | 编译器（Content Plan → Execution Scope）+ 决策包 + Confirmed Scope Snapshot（销 P0-①）+ R6 发现型路由（EXPLORATION_TOOLS 生产接线）+ work session 活动视图 + R15 停顿 + revise_plan（重编译→重报价→重确认）→ **主链 e2e 首次全通** | ✅ 已落地并实测全绿（2026-09-23；prompt_gate 48/48 + S-explore-2 live e2e） |
 | 三 | revise_output + R19 两分律接线 + R20 快照修订路由器 + reviewer 合同 + 记忆读取律 + 迁移弧收口 + 活动行呈现升级 + 终态对标验收 | 后续 |
 
 ## 2. 开工裁决承接（迭代一复述，本批承重）
@@ -19,8 +19,8 @@
 
 ## 3. 拍板项（全部带推荐答案；无新议题 = 直接开工）
 
-**① clip 编译目标 = 新确定性工具 `cut_segments`**（推荐）。
-证据：iter-1 裁决禁编译 select_clips；registry 现存确定性工具（reframe/dub/translate/music/filler）全部以既有 clip 为输入，无「从区间产出首个 clip」的座位。`cut_segments` = 确定性裁剪（params: `segments: [{start, end}]` + `aspect?` + `caption_mode?` + `language?`），runner 复用 select_clips 渲染链的裁剪/字幕段（发现段之外的既有机械），发现语义零残留。新注册表条目 = prompt 面扰动（枚举一致性测试 + prompt_gate 必过）+ NAMING 登记。
+**① clip 编译目标 = 新确定性工具 `cut_segments`**（已拍板施工，2026-09-23 落地）。
+证据：iter-1 裁决禁编译 select_clips；registry 现存确定性工具（reframe/dub/translate/music/filler）全部以既有 clip 为输入，无「从区间产出首个 clip」的座位。**产品先行的最终形态**（施工前再裁决，推翻首版参数面）：params = `segments: [{start, end}]`（1..5）+ `asset_id?`（Select 唯一源编译期显化）+ `aspect?`（出生属性，用户可点名）——**caption_mode / language 不进出生参数**（语言版本/字幕形态/配音全是 transform 语义，各有能力续链：translate_clip / dub_clip；源语言字幕是出生的唯一诚实形态）。runner = `materialize_source` 零 LLM 配置一般化到 N 区间（共享 resolve_render_source / build_clip_spec / 渲染扇出机械）。同批并入：**PlanOutput 产品语义三缺口补齐**（+aspect 词表、+dub 布尔、caption_mode 收窄三值词表——安全窗口 = R6 生产接线前无生产 plan 行）+ 卡面展示。结构性要求落地为**注册表新轴 `llm_visible`**（N-56）：注册表合法但永不出现在 Agent 工具目录（compiler-only 公民）；N-32 一类型一生产者法相应收窄到提案空间。NAMING N-56 已登记。
 
 **② writer 源域收窄 = 四 writer 共享 `CopyWriterParams` 增可选 `source_span`**（推荐）。
 plan-sourced 写作的对象 = Select 的证据段不是全篇。`source_span: {start, end} | null`（null = 现状全篇——零探索退化形态与既有 chat 路不变）；step_context 注入点一处：有 span 时 writer 的素材上下文 = 该段 transcript（`words_in_range` 同函数，与门/读面同一法律）+ 理解摘要照旧。plan 的 per-output `brief` → `focus` 映射（既有字段，语义全等）。
@@ -49,12 +49,13 @@ Start 手势落戳（销 P0-①）：`{confirmation_id（= 确认消息 id）, c
   - `post` / `article` / `quotes` / `carousel` → 对应 writer（`language` + `focus=brief` + `source_span`）；
   - 编译失败（区间缺失 / kind 不可映射 / 注册表不收）= `ScopeCompileRejected`（域拒绝，回环修复座位）。
 - 编译器座位（R14 编译器半边）：自身零写特权——产物经既有路径落（dock 载荷 / create_run 消费同一 TaskItem[]）。
-- 估价（§7）：quote = 既有 fold 机制作用于编译产物（区间时长 → 渲染单位；语言数 → dub 单位——输入站 plan 事实，不站 LLM 提议）。
+- 估价（§7）：quote = 既有 fold 机制作用于编译产物（区间时长 → 渲染单位——输入站 plan 事实，不站 LLM 提议）。**现状诚实注记（① 落地后）**：`cut_segments.estimate` = 全零（机械装配无计价单位，materialize 先例）；渲染扇出 = 运行中出生（P4 NULL）；「语言数 → dub 单位」超出现行估价机械（dub/translate 对未出生 clip 的报价恒 NULL）——编译期总价面 = 决策包（拍板项③）的待解话题，不在 ①。
 
-### 4.2 `cut_segments` 工具包（`app/tools/clips/` 同包，注册表新条目）
-- params: `segments: [{start, end}]`（1..5）+ `aspect?` + `caption_mode?` + `language?`；
-- runner = select_clips 渲染链的确定性裁剪段复用（无 LLM 决策）；`needs_media_file=True`、`behavior="deterministic"`；
-- 摘要模板双语（「裁出 N 段 · 共 S 秒」）；NAMING 登记 + 注册表枚举一致性测试 + prompt_gate。
+### 4.2 `cut_segments` 工具包（`app/tools/clips/` 同包，注册表新条目）—— ✅ 已落地（2026-09-23）
+- params: `segments: [{start, end}]`（1..5，`extra=forbid` 严格编译器契约）+ `asset_id?` + `aspect?`——**无 caption_mode / language**（transform 语义各有能力，出生只产源语言字幕形态）；
+- runner = `materialize_source` 零 LLM 模板一般化（**不是**「复用 select_clips」——select_clips 的发现/清项目/评分三段一概不继承）；`needs_media_file=True`、`behavior="deterministic"`、`llm_visible=False`（N-56 公民轴首座）；
+- 摘要模板双语（「裁出 N 段 · 共 S 秒」）；NAMING N-56 已登记；**prompt 面零扰动**（llm_visible=False 使目录投影与 no-material 枚举字节不变——一致性测试投影收窄护航，prompt_gate 无新针）；
+- 编译路径四处窄集成（output_type 声明化 producer 判定 ×2 / label 座位 node_cls 直读 / spec 原样携带 + prelude-free 出生）+ N-32 收窄 + node_for_output 硬化 + morph/lifecycle 谓词声明化 + 5 个 after 元组——全部恒等守护既有链（纯测试 17 例 + 全量 452 绿 + 启动自检过）。
 
 ### 4.3 writer `source_span`（`derivative_dispatch.CopyWriterParams` + step_context 注入点）
 - 字段增列（null = 现状）；step_context 有 span 时素材上下文 = 段内 transcript + 理解摘要；
@@ -84,11 +85,11 @@ Start 手势落戳（销 P0-①）：`{confirmation_id（= 确认消息 id）, c
 
 ### 4.9 S-explore-2 剧本（主链 e2e 首通）
 - 生产 chat 全链：发现型目标（SSE）→ 探索三族出生 → 决策包 dock（plans+tasks+quote 断言）→ 确认 → run 启动（confirmed_scope 断言）→ 产物落地；
-- fixture 纪律同 S23（scenario/ 前缀、真实 words）；**MiniMax 配额是硬前提**——跑不了标「未跑验证」。
+- fixture 纪律同 S23（scenario/ 前缀、真实 words）；MiniMax 配额是硬前提——**已实测（2026-09-23）：live e2e 全链绿**。
 
 ## 5. 避让清单（撞一条 = 停手问）
 
-- 执行世界零改动：`apply_wiring_ops` / `create_run` / `compile_graph` / scope classifier / Start 四合取 / hold→capture→release / fencing / orchestrator / workflow_steps。
+- 执行世界零改动：`apply_wiring_ops` / `create_run` / scope classifier / Start 四合取 / hold→capture→release / fencing / workflow_steps。**偏差记录（①，2026-09-23）**：`compile_graph` / orchestrator 与 morph/lifecycle 谓词发生了**窄集成**——「链上有 clips 生产者」判定从 `select_clips` 名检改为 `output_type=="clips"` 声明读法（不改则 cut 链会误注 materialize_source / 同语言裁决漏判）、label 座位改 node_cls 直读（不改则 cut 步骤被 select_clips 冒名）、spec 携带与 prelude-free inputs、N-32 自检收窄 + node_for_output 硬化、5 个 morph `after` 元组补位。全部经恒等性纯测试守护（既有链拓扑/标签逐字节不变），属「谁有资格向执行世界递东西」的最小扩面，不触执行语义。
 - `propose_tasks` / `edit_graph` / chat 路既有行为零改动（迁移弧并行期——两条路并行证明，谁也不动谁）。
 - 确认教义 / dock pill 唯一座 / G-1 / trigger turn 白名单 / 打字机律（新增散文字段带读容忍）/ Activity 十规则 / R18 同框纪律。
 - 探索写门内部件零改动（迭代一已绿）；本批只在门**外侧**消费（编译期读探索行 = 只读）。
@@ -101,7 +102,7 @@ Start 手势落戳（销 P0-①）：`{confirmation_id（= 确认消息 id）, c
 
 - 会话内自跑：compileall、纯 pytest 全量（编译器纯函数全谱 / snapshot 形状 / 决策包装配 / revise 写门路径）、check_gates、prompt_gate（A/B/C 旧三针 + 新 D 针）、web tsc + vitest。
 - 零假设测试：writer 无 span 装配逐字节不变；旧 task_book dock 行回放读容忍。
-- S-explore-2 需 dev API + worker + **MiniMax 配额**；跑不了标「未跑验证」（S23 同款挂账位）。
+- S-explore-2 需 dev API + worker + MiniMax 配额——**已实测（2026-09-23）**：全链 PASS（7 迭代净发现环；实测修复三件套随批，见 Status 行）。
 - 认知验收（PROGRESS §0.4 规则 9）DoD 三答：agent 看见什么（决策包三层 + reads）/ 表示一致吗（plan ↔ tasks ↔ quote 同源编译）/ 怎么知道对了（编译拒绝回环 + 快照可证 + 剧本断言）。
 
 ## 7. 验收标准
@@ -112,7 +113,7 @@ Start 手势落戳（销 P0-①）：`{confirmation_id（= 确认消息 id）, c
 4. R6 路由：prompt_gate 四针全过（D = 发现型 → propose_candidates 终态；A/B/C 无回归）；干脆请求照旧短路径。
 5. work session 四活动键在 SSE 活动流可见（user-safe，只带计数）。
 6. revise_plan：修订 → 重编译 → 重报价 → 重 dock 全通；原 plan 行 state=revised。
-7. S-explore-2 主链 e2e 绿（或标未跑验证 + 确定性替身 22 项式全绿）。
+7. S-explore-2 主链 e2e 绿（**已兑现 2026-09-23 live**）。
 8. 零改动清单实证：执行世界七件 + propose_tasks/edit_graph 行为面 diff 为零。
 
 ## 8. 收口

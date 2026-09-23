@@ -197,25 +197,6 @@ class _NodeSpec:
         self.spec = spec or {}
 
 
-def slot_step_label(slot: IntentSlot, ui_language: str = "en") -> str | None:
-    """Display label distinguishing same-kind sibling steps (per-slot fan-out).
-
-    The label derives from the slot type's node (``NodeBase.label`` — the
-    retired slot-type→label map's home): preset as the step's
-    spec.summary at materialization so two ``write_post`` nodes (e.g.
-    English/German) read differently in the stepper before they run; the
-    runner rewrites it with the quantified line + the same tag when done.
-    Without a distinguishing tag the label is the node's static task name
-    (``NodeBase.label`` never returns None for a registered kind).
-    ``ui_language`` is the run's pinned UI locale — the label word follows
-    it.
-    """
-    owner = node_for_output(slot.type)
-    if owner is None:
-        return None
-    return owner.label(slot, ui_language)
-
-
 def compile_graph(
     task: TaskSpec,
     target_type: str | None = None,
@@ -435,7 +416,9 @@ def _compile_task_list(
                 **{
                     k: v
                     for k, v in params_dict.items()
-                    if k in ("count", "focus", "language", "tone_override")
+                    # iter-2 ②: source_span rides the slot like count/focus —
+                    # compiler-emitted, the writer narrows its material to it.
+                    if k in ("count", "focus", "language", "tone_override", "source_span")
                 },
             }
             spec = {
@@ -448,15 +431,34 @@ def _compile_task_list(
             # Preset the sibling-distinguishing label (two write_post nodes,
             # e.g. English/German, must read differently in the stepper
             # before they run) — the runner rewrites it with the quantified
-            # line when done.
-            label = slot_step_label(
+            # line when done. The seat is the compiled node class itself
+            # (N-56: with compiler-only citizens co-claiming an output_type,
+            # node_for_output routing would name the wrong owner; identity
+            # for every existing tool — while the one-producer law held,
+            # the owner IS the compiled class).
+            label = node_cls.label(
                 IntentSlot.model_validate(slot), task.ui_language or "en"
             )
             if label:
                 spec["summary"] = label
             if entry.name == "select_clips" and params_dict.get("aspect"):
                 spec["aspect"] = params_dict["aspect"]
+            if entry.name == "cut_segments":
+                # The span list IS the payload (N-56): the slot projection
+                # above takes none of these params by construction (its
+                # filter reads count/focus/language/tone_override), so the
+                # adjudicated params carry verbatim — segments / asset_id /
+                # aspect.
+                spec.update(params_dict)
         inputs = [plan_idx] if plan_idx is not None else []
+        if entry.name == "cut_segments":
+            # Prelude-free birth (N-56): the exploration chat already did
+            # the understanding/planning — cut waits on nothing the plan
+            # node produces; empty inputs claim as soon as asset processing
+            # drains (jobs.py readiness, research-hoisting precedent). NOT
+            # declaration-generalized in this batch: revise_script's legacy
+            # [plan_idx] wiring stays untouched.
+            inputs = []
         if entry.name == "select_clips" and add_stills_align:
             align_inputs = [plan_idx] if plan_idx is not None else []
             skill_node_idx["align_stills"] = len(nodes)
@@ -472,14 +474,20 @@ def _compile_task_list(
         seq += 1
 
     # Whole-source materialization (ADR-043): clip-spec consumers without a
-    # select_clips to hang off need an object to act on. The birthplace
+    # clips producer to hang off need an object to act on. "Producer present"
+    # reads the output_type DECLARATION, never a tool name (N-56:
+    # cut_segments births clips too — a modifier chain off it must NOT
+    # trigger a materialize_source injection). The birthplace
     # profile decides: "media" / "stills" inject materialize_source (the
     # stills profile first injects align_stills to estimate the caption
     # timeline; both wire into the modifiers through their `after`
     # declarations below); "existing" leaves the modifiers with empty inputs
     # (= act on the project's clips); no profile = nothing to act on
     # anywhere — reject at compile, not mid-run.
-    if modifiers and "select_clips" not in skill_node_idx:
+    has_clips_producer = any(
+        NODE_KINDS[k].output_type == "clips" for k in skill_node_idx
+    )
+    if modifiers and not has_clips_producer:
         if materialize_profile in ("media", "stills"):
             # Reuse the plan prelude's preprocess when one exists.
             pre_idx = 0 if nodes and nodes[0].kind == "preprocess" else None
@@ -925,7 +933,13 @@ async def _materialize_profile(db: AsyncSession, project: Project, task: TaskSpe
         and "materialize_source" in (NODE_KINDS[t.tool].after or ())
         for t in tasks
     )
-    if not consumes_clips or any(t.tool == "select_clips" for t in tasks):
+    # "Births its own clips" reads the output_type declaration, never a tool
+    # name (N-56: cut_segments claims "clips" alongside select_clips).
+    births_clips = any(
+        t.tool in NODE_KINDS and NODE_KINDS[t.tool].output_type == "clips"
+        for t in tasks
+    )
+    if not consumes_clips or births_clips:
         return None
     clips = await db.execute(
         select(Output.id)
@@ -2091,8 +2105,10 @@ def assert_runners_registered() -> None:
     1. registry ↔ node consistency: every non-seat tool entry has a node in
        ``NODE_KINDS`` under the same name (N-35), and every tool-package
        node has an entry (internal crew — ``app.pipeline.*`` — never enters
-       the proposal space by design). Output types are unique across nodes —
-       ``node_for_output`` routing depends on it (N-32: one producer per type).
+       the proposal space by design). Output types are unique across the
+       LLM-visible proposal space (N-32, narrowed by N-56: compiler-only
+       citizens — ``ToolEntry.llm_visible=False`` — may co-claim a type;
+       ``node_for_output`` routes proposal paths to the visible owner).
     2. node → agent references exist: every agent a node declares (its
        ``agents`` tuple, plus Agent-typed class attributes like the writers'
        ``writer``) is collected in the ``AGENTS`` roster.
@@ -2119,17 +2135,29 @@ def assert_runners_registered() -> None:
             raise RuntimeError(
                 f"Node '{node.kind}' ({type(node).__module__}): no TOOL_REGISTRY entry"
             )
+    # N-32 narrowed (N-56): the one-producer-per-type law governs the
+    # LLM-facing proposal space (node_for_output's consumers are all
+    # proposal paths). Compiler-only citizens (ToolEntry.llm_visible=False)
+    # may co-claim a type with the visible owner — but two COMPILER-ONLY
+    # producers on one type still collide (nothing would route between them).
     output_owners: dict[str, str] = {}
+    compiler_only_owners: dict[str, str] = {}
     for node in NODE_KINDS.values():
         if node.output_type is None:
             continue
-        owner = output_owners.get(node.output_type)
+        entry = TOOL_REGISTRY.get(node.kind)
+        space = (
+            output_owners
+            if entry is None or entry.llm_visible
+            else compiler_only_owners
+        )
+        owner = space.get(node.output_type)
         if owner is not None:
             raise RuntimeError(
                 f"Output type '{node.output_type}' claimed by both "
                 f"'{owner}' and '{node.kind}'"
             )
-        output_owners[node.output_type] = node.kind
+        space[node.output_type] = node.kind
 
     # 词表 v3 (ADR-076): every non-internal tool-package node declares its
     # stamp identity — node_type (媒介五值: 卡面解剖) + prototype (能力原型

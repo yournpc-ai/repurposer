@@ -32,7 +32,10 @@ class AddMusic(NodeBase):
     prototype = "editor"  # 参数程序 (配乐 mood 杠杆)
     task_name = "Score clips"
     task_name_zh = "片段配乐"
-    after = ("select_clips", "materialize_source")
+    # Acts on clips: this run's clips producer (select_clips / cut_segments /
+    # materialize_source — ADR-043, N-56) when one exists, else the project's
+    # existing clips (empty inputs).
+    after = ("select_clips", "materialize_source", "cut_segments")
     requires = (MEDIA,)
 
     # 图节点 (ADR-057): add_music is a PROCESSOR node on the persistent

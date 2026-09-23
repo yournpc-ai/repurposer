@@ -19,6 +19,14 @@ same contexts as the A/B instrument:
   rejected with the gate's feedback), so both the direct ask and the
   corrected-after-rejection path count — only docking groundless work or
   answering away fails. Measured 11-12/12; threshold 10.
+- D:discovery-goal (iter-2 ⑤ R6) — with material attached, a
+  where-in-the-material ask must run the discovery chain: the terminal call
+  is propose_plans with propose_candidates earlier in ``r.calls`` and
+  present_plan NEVER called. (Contract deviation, documented: the brief's
+  literal「终态必须是 propose_candidates」predates the R2 one-turn-chain
+  ruling — production continuity carries candidates → selects → plans in
+  the SAME turn, so the chain's terminal IS propose_plans.) The stub hands
+  the verbs their observation ids exactly like production.
 
 Tool-loop form (ADR-077 判词②, 2026-09-14): the agent is the ToolLoopAgent,
 the action IS the terminal tool call, and the predicates read
@@ -26,14 +34,17 @@ the action IS the terminal tool call, and the predicates read
 agent carries the production tool set INCLUDING the plan path's read tools
 (PLAN_READ_TOOLS — the registry perturbation is the thing being gated), and
 the stub execute answers reads with a ToolObservation so the loop iterates
-to its terminal call exactly like production.
+to its terminal call exactly like production. Iter-2 ⑤: the exploration
+verbs ride too (``exploration_chat_tools()`` — the production projection,
+candidates/selects non-terminal), and the stub answers them from the SAME
+observation builders the production seat uses (zero wording drift).
 
 A gate failure means: re-run once (provider drift exists even at these
 thresholds), then bisect with the A/B instrument — never tune the
 thresholds to make a regression pass.
 
 Usage (from apps/api):
-    uv run python scripts/prompt_gate.py [--n 12] [--probe A|B|C] [--provider minimax]
+    uv run python scripts/prompt_gate.py [--n 12] [--probe A|B|C|D] [--provider minimax]
 """
 
 import argparse
@@ -50,6 +61,11 @@ from app.agents.tool_loop import (  # noqa: E402
     LoopResult,
     ToolLoopAgent,
     ToolObservation,
+)
+from app.chat.exploration_tools import (  # noqa: E402
+    candidates_observation,
+    exploration_chat_tools,
+    selects_observation,
 )
 from app.chat.intent import _assemble_plan_turn  # noqa: E402
 from app.chat.perception import PERCEPTION_TOOLS  # noqa: E402
@@ -69,8 +85,9 @@ PROVIDERS = {
     "minimax": lambda: minimax_client,
 }
 
-# (probe, minimum passes out of N)
-THRESHOLDS = {"A": 8, "B": 8, "C": 10}
+# (probe, minimum passes out of N). D starts conservative (no measured band
+# yet — recalibrate from the first readings, never to excuse a regression).
+THRESHOLDS = {"A": 8, "B": 8, "C": 10, "D": 8}
 
 BRIEF_ANSWERED = Brief.model_validate(
     {
@@ -123,6 +140,41 @@ PROBE_B = {
 # False) — the gate matches or the pantry changes the judgment surface.
 PROBE_C = {"message": "I want a social post."}
 
+# D's discovery substrate: material attached and readable (the excerpt is
+# the search read's honest footing — the stub's search observation below
+# quotes from it verbatim so the chain has real evidence to propose).
+_PROBE_D_CSET_ID = "11111111-1111-1111-1111-111111111111"
+_PROBE_D_JOURNEY_ID = "99999999-9999-9999-9999-999999999999"
+# The stub asset's id — the canned search observation names it in the
+# header (the production observation's same handoff: get_segment /
+# propose_candidates read their asset_id from the search hits).
+_PROBE_D_ASSET_ID = "33333333-3333-3333-3333-333333333333"
+PROBE_D = {
+    "message": (
+        "Find the parts where I talk about pricing — cut those into a clip, "
+        "and write an English post from them."
+    ),
+    "brief": Brief.model_validate(
+        {"material_state": {"value": "attached", "source": "default"}}
+    ),
+    "filename": "keynote-2026.mp4",
+    "material_excerpt": (
+        "…Now let me talk about pricing. Our pricing is simple. Every tier "
+        "includes the dashboard. You only pay when you grow…"
+    ),
+}
+
+
+class _StubNode:
+    """The gate stub's stand-in for a door-born row (the observation
+    builders read id / journey_id / spec off it — same duck-typing as the
+    compiler's preview rows)."""
+
+    def __init__(self, id: str, journey_id: str | None = None, spec: dict | None = None):
+        self.id = id
+        self.journey_id = journey_id
+        self.spec = spec or {}
+
 
 async def _gate_execute(name: str, params: BaseModel | None, prose: str):
     """The gate's execution stub — accepts everything EXCEPT the rootless
@@ -132,9 +184,55 @@ async def _gate_execute(name: str, params: BaseModel | None, prose: str):
     answers with a ToolObservation (the probe contexts have nothing readable)
     so the loop iterates on to its terminal call exactly like production."""
     if name in PERCEPTION_TOOLS:
+        if name == "search_transcript":
+            # D's evidence substrate: plausible hits quoting the excerpt
+            # verbatim, so the chain has real ranges to propose from. The
+            # header mirrors the production observation's shape — asset
+            # label + the asset_id handoff (the get_segment seat's input).
+            return ToolObservation(
+                f'Search "pricing" — 3 hit(s) across 1 asset(s):\n'
+                f"Asset keynote-2026.mp4 (asset_id: {_PROBE_D_ASSET_ID}) — 3 hit(s):\n"
+                '- [12.0–18.9] "Our pricing is simple." (host)\n'
+                '- [34.0–39.4] "Every tier includes the dashboard."\n'
+                '- [58.2–63.0] "You only pay when you grow."'
+            )
+        if name == "get_segment":
+            return ToolObservation(
+                '[12.0–18.9] "Now let me talk about pricing. Our pricing is '
+                'simple." (host)'
+            )
         return ToolObservation(
             "(gate stub: nothing readable in this probe context)"
         )
+    # The exploration verbs (iter-2 ⑤): the stub stands in for the door —
+    # candidates/selects ride back as observations built from the SAME
+    # builders production uses (the ids the next call needs ride along);
+    # propose_plans is terminal here (accepted → None).
+    if name == "propose_candidates":
+        return ToolObservation(
+            candidates_observation(
+                _StubNode(id=_PROBE_D_CSET_ID, journey_id=_PROBE_D_JOURNEY_ID),
+                topic=params.topic,
+                member_count=len(params.members),
+            )
+        )
+    if name == "propose_selects":
+        return ToolObservation(
+            selects_observation(
+                [
+                    _StubNode(
+                        id=f"22222222-2222-2222-2222-22222222222{i}",
+                        spec={
+                            "member_index": s.member_index,
+                            "verdict": s.verdict,
+                        },
+                    )
+                    for i, s in enumerate(params.selects)
+                ]
+            )
+        )
+    if name == "propose_plans":
+        return None
     if name == "present_plan":
         brief = getattr(params, "brief", None)
         topic = brief.topic if brief else None
@@ -166,13 +264,21 @@ def _passed(probe: str, r: LoopResult) -> bool:
         )
     # C: the direct ask OR the corrected-after-rejection ask — the terminal
     # call must be the topic question either way.
-    return r.tool_name == "ask_user" and getattr(r.params, "slot", None) == "topic"
+    if probe == "C":
+        return r.tool_name == "ask_user" and getattr(r.params, "slot", None) == "topic"
+    # D (iter-2 ⑤): the discovery chain closed — propose_plans terminal,
+    # propose_candidates earlier in the trace, present_plan never touched.
+    return (
+        r.tool_name == "propose_plans"
+        and "propose_candidates" in r.calls
+        and "present_plan" not in r.calls
+    )
 
 
 async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=12)
-    parser.add_argument("--probe", choices=["A", "B", "C"], default=None)
+    parser.add_argument("--probe", choices=["A", "B", "C", "D"], default=None)
     parser.add_argument("--provider", choices=sorted(PROVIDERS), default="minimax")
     args = parser.parse_args()
 
@@ -194,11 +300,18 @@ async def main() -> int:
         system=intent_router_system(),
         temperature=0.2,
         assemble=_assemble_plan_turn,
-        tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS],
-        max_iterations=6,
+        # The production tool set verbatim (iter-2 ⑤): the exploration
+        # verbs' production projection rides — the registry perturbation is
+        # the thing being gated.
+        tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS, *exploration_chat_tools()],
+        # Mirrors the production declaration (intent.py) — live evidence
+        # 2026-09-23: the realistic discovery chain is 8-10 (6 evidence
+        # reads observed), a plans params rejection at iteration 9 starved
+        # recovery at 10 (S-explore-2 runs 1-2).
+        max_iterations=12,
         client=client,
     )
-    probes = {"A": PROBE_A, "B": PROBE_B, "C": PROBE_C}
+    probes = {"A": PROBE_A, "B": PROBE_B, "C": PROBE_C, "D": PROBE_D}
     failed = False
     for name, ctx in probes.items():
         if args.probe and name != args.probe:

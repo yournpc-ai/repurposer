@@ -28,7 +28,10 @@ INPLACE_MORPH_KINDS = (
 )
 
 # Clip producers (their fan-out a later in-place morph suppresses).
-_PRODUCER_KINDS = ("select_clips", "materialize_source")
+# cut_segments (N-56): the compiler-emitted birth seat — a morph wired
+# downstream of it must union the producer's output_refs like any other
+# (has_producer_upstream).
+_PRODUCER_KINDS = ("select_clips", "materialize_source", "cut_segments")
 
 
 async def render_step_label(db: AsyncSession, run: WorkflowRun) -> str | None:
@@ -269,16 +272,17 @@ async def _faced_source_languages(
     project: Project,
     target_output_id: str | None,
     *,
-    chain_has_select_clips: bool,
+    chain_births_clips: bool,
 ) -> set[str]:
     """The languages a translate/dub task would ACTUALLY face at run time
     (compile-time mirror of the runtime targeting, one truth two seats):
-    the ``target_output_id``-scoped clip; a chain carrying select_clips →
-    the source recording's language (the run's clips are unborn at plan
-    time and come from the assets, never from the project's older clips);
-    else the project's existing clips (the "existing" materialize profile),
-    else the project's recording assets (the materialize-whole-source
-    profile)."""
+    the ``target_output_id``-scoped clip; a chain birthing clips
+    (select_clips / cut_segments — the output_type="clips" declaration,
+    N-56) → the source recording's language (the run's clips are unborn at
+    plan time and come from the assets, never from the project's older
+    clips); else the project's existing clips (the "existing" materialize
+    profile), else the project's recording assets (the
+    materialize-whole-source profile)."""
     if target_output_id:
         output = await db.get(Output, UUID(str(target_output_id)))
         lang = (
@@ -307,7 +311,7 @@ async def _faced_source_languages(
             if (lang := (asset.meta or {}).get("language"))
         }
 
-    if chain_has_select_clips:
+    if chain_births_clips:
         return await _asset_languages()
     clips = list(
         (
@@ -345,8 +349,15 @@ async def check_transform_targets(
     silent (no false positives) — the runtime guard remains the backstop.
     Raises plain ``ValueError`` (the caller wraps it for its own door)."""
     faced: dict[str | None, set[str]] = {}
-    chain_has_select_clips = any(
-        getattr(t, "tool", None) == "select_clips" for t in tasks
+    # "The chain births clips" reads the output_type DECLARATION (N-56:
+    # select_clips and the compiler-only cut_segments both claim "clips") —
+    # never a tool name.
+    from app.pipeline.graph import NODE_KINDS  # deferred: import cycle
+
+    chain_births_clips = any(
+        getattr(t, "tool", None) in NODE_KINDS
+        and NODE_KINDS[getattr(t, "tool")].output_type == "clips"
+        for t in tasks
     )
     for t in tasks:
         if getattr(t, "tool", None) not in _TRANSFORM_TARGET_KINDS:
@@ -358,7 +369,7 @@ async def check_transform_targets(
         scope = str(params["target_output_id"]) if params.get("target_output_id") else None
         if scope not in faced:
             faced[scope] = await _faced_source_languages(
-                db, project, scope, chain_has_select_clips=chain_has_select_clips
+                db, project, scope, chain_births_clips=chain_births_clips
             )
         matched = next(
             (src for src in faced[scope] if src.lower() == str(lang).lower()),

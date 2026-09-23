@@ -394,11 +394,14 @@ export interface ExplorationMember {
 }
 
 /** One named deliverable of a Content Plan (product semantics: what the
- * user gets — never task params, R8). */
+ * user gets — never task params, R8). Mirrors the API's PlanOutput
+ * (iter-2 ①, N-56: aspect / dub / the controlled caption_mode vocabulary). */
 export interface ExplorationPlanOutput {
   kind: "clip" | "post" | "article" | "quotes" | "carousel"
   language?: string | null
-  caption_mode?: string | null
+  caption_mode?: "bilingual" | "source_only" | "target_only" | null
+  dub?: boolean | null
+  aspect?: "9:16" | "1:1" | "16:9" | null
   brief?: string | null
 }
 

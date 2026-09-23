@@ -36,9 +36,10 @@ class ReframeClip(NodeBase):
     prototype = "editor"  # 参数程序 (画幅杠杆)
     task_name = "Reframe clips"
     task_name_zh = "智能分镜"
-    # Acts on clips: this run's select_clips / materialize_source when one
-    # exists (ADR-043), else the project's existing clips (empty inputs).
-    after = ("select_clips", "materialize_source")
+    # Acts on clips: this run's clips producer (select_clips / cut_segments /
+    # materialize_source — ADR-043, N-56) when one exists, else the project's
+    # existing clips (empty inputs).
+    after = ("select_clips", "materialize_source", "cut_segments")
     requires = (MEDIA,)
 
     def estimate(self, ctx: dict) -> dict | None:

@@ -22,6 +22,7 @@ import { useTranslation } from "react-i18next"
 import {
   ArrowUp,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Crosshair,
   Download,
@@ -118,6 +119,7 @@ import {
   questionEcho,
   bareQuestion,
   type DerivedRow,
+  type DecisionPlanRow,
   type HistoryRow,
   type OverlayMessage,
   type ProjectAsset,
@@ -166,7 +168,7 @@ const LANGUAGE_OPTIONS = [
 /** Derived preview row (ADR-043): the server dry-run-compiles the chain at
  * dock time and projects what it will MAKE — the card's "you'll get"
  * section. `video` = the whole-source materialization (整条视频). */
-export type { DerivedRow } from "./historyReplay"
+export type { DerivedRow, DecisionPlanRow } from "./historyReplay"
 
 /** Per-tool card anatomy (which controls a chain row gets). The label keys
  * reuse the results-tabs vocabulary for the five output tools; transforms
@@ -425,6 +427,10 @@ interface ChatDockProps {
   /** The parked plan's soft-signal reasons (pending_brief.reasons) on a
    * restored session — drives the clips row's no-media inline warning. */
   initialReasons?: string[]
+  /** 决策包阅读层 (iter-2 ③ — pending_brief.plans): the Content Plans behind
+   * the compiled chain on a restored session; the live envelope re-stamps
+   * from the docked question's payload. Empty on router-drafted docks. */
+  initialPlans?: DecisionPlanRow[]
   /** Attach to an already-running generation (returning visitor): skips the
    * confirm beat, lands straight on the step flow. */
   initialRunId?: string | null
@@ -781,6 +787,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   initialBrief,
   initialDerived,
   initialReasons,
+  initialPlans,
   initialRunId,
   lifecycle,
   onComplete,
@@ -931,6 +938,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   /** The docked plan's soft-signal reasons (pending_brief.reasons) — the
    * clips row's no-media inline warning reads `clips_without_media`. */
   const [reasons, setReasons] = useState<string[]>(initialReasons ?? [])
+  /** 决策包阅读层 (iter-2 ③, R16): the Content Plans behind the compiled
+   * chain — the plan card's READING layer (the chain stays the evidence
+   * layer). Stamped at dock time; a hand edit clears it together with the
+   * LLM-minted name (the same 让座 law — the plans no longer vouch for the
+   * edited chain). */
+  const [plans, setPlans] = useState<DecisionPlanRow[]>(initialPlans ?? [])
+  /** The evidence layer's expander (tasks 证据可展开, iter-2 ③): collapsed
+   * by default when the reading layer is present. */
+  const [chainOpen, setChainOpen] = useState(false)
   // The plan card renders only once a real inference has landed (a restored
   // session hands one over; a fresh navigation gets it from the first /chat
   // turn's refetch). Attach mode never shows the card, so it starts ready.
@@ -1104,6 +1120,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     reasons?: string[]
     persona_id?: string | null
     derived?: DerivedRow[]
+    plans?: DecisionPlanRow[]
   } | null> => {
     try {
       const res = await apiFetch(`/api/v1/projects/${projectId}/results`, {
@@ -1116,6 +1133,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         reasons?: string[]
         persona_id?: string | null
         derived?: DerivedRow[]
+        plans?: DecisionPlanRow[]
       } | null }
       return data.pending_brief ?? null
     } catch {
@@ -1677,7 +1695,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // CURRENT params, therefore honest) takes over until the next LLM turn
   // re-names. No reconciliation — the name simply steps aside.
   const clearName = (prev: InferredIntent) => (prev.name ? { name: "" } : {})
-  const updateTaskParams = (index: number, patch: Record<string, unknown>) =>
+  // 手改撤名 (ADR-058) 的同一让座律: any hand edit also clears the decision
+  // package's plans reading layer — the LLM-named plans vouched for the
+  // chain THEY compiled; once the user's hand touches it, the card falls
+  // back to the honest chain view until the next chat turn re-lands one.
+  const clearPlans = () => setPlans((prev) => (prev.length ? [] : prev))
+  const updateTaskParams = (index: number, patch: Record<string, unknown>) => {
+    clearPlans()
     setIntent((prev) => ({
       ...prev,
       ...clearName(prev),
@@ -1685,8 +1709,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         i === index ? { ...task, params: { ...task.params, ...patch } } : task
       ),
     }))
+  }
 
-  const addTask = (tool: string) =>
+  const addTask = (tool: string) => {
+    clearPlans()
     setIntent((prev) => {
       const meta = TOOL_META[tool]
       const params: Record<string, unknown> = {}
@@ -1704,13 +1730,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         tasks: [...prev.tasks, { tool, params }],
       }
     })
+  }
 
-  const removeTask = (index: number) =>
+  const removeTask = (index: number) => {
+    clearPlans()
     setIntent((prev) => ({
       ...prev,
       ...clearName(prev),
       tasks: prev.tasks.filter((_, i) => i !== index),
     }))
+  }
 
   /** Honest preprocess copy (chat-flow-sequencing 验收 5): with zero file
    * uploads the preprocess node validates material / admits the writer
@@ -1733,6 +1762,37 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       if (row.count) label += ` ×${row.count}`
       if (row.bilingual) label += ` · ${t("generationOverlay.derive.bilingual")}`
       return label
+    },
+    [t]
+  )
+
+  /** 决策包阅读层 (iter-2 ③, R16): one plan output's user-safe line — kind
+   * + language + caption form / dub / aspect + the per-output brief,
+   * composed from the small i18n keys (product semantics, R8 — never raw
+   * task params). The brief is user-named data and rides verbatim. */
+  const planOutputLabel = useCallback(
+    (o: DecisionPlanRow["outputs"][number]) => {
+      const parts = [
+        t(`generationOverlay.planOutputs.${o.kind}`, { defaultValue: o.kind }),
+      ]
+      if (o.language) {
+        parts.push(t(`languages.${o.language}`, { defaultValue: o.language }))
+      }
+      if (o.dub) {
+        parts.push(t("generationOverlay.planOutputs.dub"))
+      } else if (o.caption_mode) {
+        const captionKey = {
+          bilingual: "captionBilingual",
+          target_only: "captionTarget",
+          source_only: "captionSource",
+        }[o.caption_mode]
+        if (captionKey) {
+          parts.push(t(`generationOverlay.planOutputs.${captionKey}`))
+        }
+      }
+      if (o.aspect) parts.push(o.aspect)
+      if (o.brief) parts.push(o.brief)
+      return parts.join(" · ")
     },
     [t]
   )
@@ -2021,6 +2081,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           setBrief(questionBrief)
           setDerived(message.question.derived ?? [])
           setReasons(message.question.reasons ?? [])
+          setPlans(message.question.plans ?? [])
           setIntentReady(true)
         } else {
           const pending = await fetchPendingBrief()
@@ -2029,6 +2090,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             setBrief(questionBrief ?? normalizeBrief(pending.brief))
             setDerived(pending.derived ?? [])
             setReasons(pending.reasons ?? [])
+            // 决策包阅读层: the recovery seat restores the stamp from
+            // pending_brief (empty on router-drafted rows).
+            setPlans(pending.plans ?? [])
             setIntentReady(true)
             // No "plan updated" filler line on refinements — the turn's own
             // streamed echo bubble already says what changed.
@@ -3450,12 +3514,63 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               <p className="text-xs text-muted-foreground">
                 {t("generationOverlay.chargeNote")}
               </p>
+              {/* 决策包阅读层 (iter-2 ③, ADR-089 §4 R16): the Content Plans
+                  — what the user gets, in the agent's own named product
+                  semantics — sit ON TOP of the card; the compiled chain
+                  below becomes the expandable evidence layer. Title renders
+                  only when the LLM named the plan (展示文案二源律: an
+                  unnamed plan never invents a label). */}
+              {plans.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  {plans.map((plan) => (
+                    <div
+                      key={plan.plan_id}
+                      className="flex flex-col gap-1 rounded-md bg-card p-3"
+                    >
+                      {plan.title ? (
+                        <span className="text-sm">{plan.title}</span>
+                      ) : null}
+                      {plan.outputs.map((o, i) => (
+                        <span
+                          key={i}
+                          className="text-xs text-muted-foreground"
+                        >
+                          {planOutputLabel(o)}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
               {/* The task chain (ADR-043) — one row per task, in execution
                   order. Outputs are the chain's derived projection (the
                   preview below), never a panel declaration: edits mutate
                   the task list directly and ride the next refine turn as
                   prior_intent. Same-tool siblings (e.g. an English and a
-                  German post) are separate rows. */}
+                  German post) are separate rows.
+                  证据层 (R16): with the reading layer present the chain
+                  collapses behind an expander; without it (router-drafted
+                  docks) the chain renders directly as before. */}
+              {plans.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 self-start text-xs text-muted-foreground"
+                  aria-expanded={chainOpen}
+                  onClick={() => setChainOpen((v) => !v)}
+                >
+                  <ChevronRight
+                    className={cn(
+                      "size-3.5 transition-transform",
+                      chainOpen && "rotate-90"
+                    )}
+                  />
+                  {t("generationOverlay.chainEvidence", {
+                    count: intent.tasks.length,
+                  })}
+                </Button>
+              )}
+              {(plans.length === 0 || chainOpen) && (
               <div className="flex flex-col gap-2">
                 <div className="flex flex-col gap-2">
                   {intent.tasks.map((task, index) => {
@@ -3651,6 +3766,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+              )}
 
               {/* Derived preview (ADR-043, 2026-09-02 收窄) — only the
                   materialize family earns rows: "Full video …" is the one

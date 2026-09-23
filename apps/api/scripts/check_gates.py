@@ -12,7 +12,9 @@ never imports the decision layer (``app.agents``; the retired ``app.clients``
 stays banned as a reintroduction guard), and the deterministic tool packages
 additionally never touch the LLM seam (``app.providers.llm``) — deterministic
 means no LLM at all. The deterministic package set is registry-derived
-(TOOL_REGISTRY behavior), never a hand-maintained list.
+(TOOL_REGISTRY behavior), never a hand-maintained list; a MIXED-behavior
+package narrows the scan to the deterministic tool's own module (N-56 —
+the law binds the tool, not its neighbor).
 
 Gate 2 (P2 no-parallel-maps rule): every "type → X" fact derives from the
 node classes / the tool registry. The retired parallel-map identifiers
@@ -146,25 +148,43 @@ BANNED_RETIRED_IDENTIFIERS = re.compile(
 )
 
 
-def _deterministic_package_dirs() -> list[Path]:
-    """The deterministic tool packages' directories, registry-derived (N-29 ④):
-    TOOL_REGISTRY entries whose behavior is deterministic → their node class's
-    package. Importing the door is safe here (this script runs interpreter-side,
-    never inside the app import graph)."""
+def _deterministic_scan_targets() -> list[Path]:
+    """The deterministic tools' scan set, registry-derived (N-29 ④):
+    TOOL_REGISTRY entries whose behavior is deterministic → their node
+    class's package. Whole-package scan when the package houses ONLY
+    deterministic citizens; narrows to the tool's own module file in a
+    MIXED-behavior package (N-56: cut_segments shares ``tools/clips`` with
+    the probabilistic select_clips — the law binds the deterministic tool's
+    code, not its neighbor's LLM seam). Importing the door is safe here
+    (this script runs interpreter-side, never inside the app import
+    graph)."""
     from app.pipeline.graph import NODE_KINDS
     from app.tools import TOOL_REGISTRY
 
-    dirs = set()
+    det_files: list[Path] = []
+    dir_behaviors: dict[Path, set[str]] = {}
     for entry in TOOL_REGISTRY.values():
-        if entry.behavior != "deterministic":
-            continue
         node = NODE_KINDS.get(entry.name)
         if node is None:
             continue
         mod = sys.modules.get(node.__module__)
-        if mod is not None and mod.__file__:
-            dirs.add(Path(mod.__file__).parent)
-    return sorted(dirs)
+        if mod is None or not mod.__file__:
+            continue
+        file = Path(mod.__file__)
+        dir_behaviors.setdefault(file.parent, set()).add(entry.behavior)
+        if entry.behavior == "deterministic":
+            det_files.append(file)
+    targets: list[Path] = []
+    whole_dirs: set[Path] = set()
+    for file in det_files:
+        pkg = file.parent
+        if dir_behaviors.get(pkg) == {"deterministic"}:
+            if pkg not in whole_dirs:
+                whole_dirs.add(pkg)
+                targets.extend(sorted(pkg.rglob("*.py")))
+        else:
+            targets.append(file)
+    return targets
 
 
 def check_purity() -> list[str]:
@@ -173,8 +193,8 @@ def check_purity() -> list[str]:
     targets: list[tuple[Path, re.Pattern]] = [
         (path, BANNED_DECISION_IMPORT) for path in sorted(PROVIDERS_DIR.rglob("*.py"))
     ]
-    for pkg in _deterministic_package_dirs():
-        targets.extend((path, BANNED_LLM_IMPORT) for path in sorted(pkg.rglob("*.py")))
+    for path in _deterministic_scan_targets():
+        targets.append((path, BANNED_LLM_IMPORT))
     violations: list[str] = []
     for path, pattern in targets:
         for lineno, line in enumerate(path.read_text().splitlines(), start=1):

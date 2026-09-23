@@ -214,6 +214,10 @@ apps/api/
 │   │                    #   THINKING_PHASE_COMPOSING + observe_phase_callback 公开协议，ADR-087 §1/§6）
 │   │                    #   / context.py（chat 意图上下文装配 build_context，Phase 5 自 agents/contexts.py
 │   │                    #   迁入——各层自装上下文，harness 不再代读 Message/outputs，ADR-087 §6）
+│   │                    #   / exploration_tools.py（探索终态工具族，ADR-088 §2 / iter-2 ⑤ R6：
+│   │                    #   EXPLORATION_TOOLS harness 四动词全终态 + exploration_chat_tools() 生产投影——
+│   │                    #   candidates/selects 非终态一回合连续工作、propose_plans/revise_plan 终态
+│   │                    #   R15 停顿；execute 走 plan_turn 的探索座位，写一律经 exploration_store 门）
 │   │                    #   / seams.py（wire_pipeline_seams：trigger handler + conversation bridge 注册，
 │   │                    #   组合根 app.main / app.worker 各调一次，Phase 5）
 │   ├── pipeline/        # Pipeline（RunPlan 内核）
@@ -230,6 +234,17 @@ apps/api/
 │   │   │                        #   图 facts 比对，D4 结果 scope 律）+ 链逐字匹配器（历史 run.context 证明
 │   │   │                        #   approved retry，D2）+ 纯核+装配器两瓣（facts gatherer 读 graph_nodes/
 │   │   │                        #   graph_edges/workflow_runs 只读）；B1 additive 未接线——B2（edit_graph）/B5（/generate）切换
+│   │   ├── scope_compile.py       # 能力编译器（ADR-089 §1~§3，iter-2，2026-09-23）：Content Plan →
+│   │   │                        #   Execution Scope 的确定性纯函数（R12 编译移出 LLM——clip → cut_segments，
+│   │   │                        #   四 writer 带 source_span；证据指针编译期解引用 R7；编译产物重入
+│   │   │                        #   validate_task_list 裁决 B3 上移）+ decision_package_plans（决策包阅读层
+│   │   │                        #   R16）+ build_confirmed_scope（R20 快照构造器）；域拒绝 =
+│   │   │                        #   ScopeCompileRejected（WiringRejected/ExplorationRejected 同族）；纯函数零写
+│   │   ├── exploration_store.py   # 探索写门（ADR-088 §2，iter-1 落地 / iter-2 扩 revise）：
+│   │   │                        #   propose_candidates / propose_selects / propose_plans / revise_plan 四动词
+│   │   │                        #   （savepoint + 证据逐字校验 + 幂等 + 完整性自检；免费但真写门）+
+│   │   │                        #   journey 读座位 read_journey_evidence / read_journey_plans（编译器的
+│   │   │                        #   只读证据来源——读面不是写门）
 │   │   ├── trigger_events.py      # trigger 白名单事件缝（ADR-087 §6，Phase 5）：kind ∈
 │   │   │                        #   {understanding_warmed, run_completed, craft_decompiled} 冻结白名单
 │   │   │                        #   （扩名单 = ADR 评审）；fire-and-forget，未注册 = 静默降级永不

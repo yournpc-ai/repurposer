@@ -40,6 +40,7 @@ from app.chat.activity import (
     all_known_tool_names,
     kind_for_tool,
 )
+from app.chat.exploration_tools import EXPLORATION_TOOLS
 from app.chat.perception import PERCEPTION_TOOLS
 from app.chat.turn_tools import CHAT_READ_TOOLS, CHAT_TOOLS, PLAN_READ_TOOLS, PLAN_TOOLS
 
@@ -315,13 +316,88 @@ def test_extra_name_known_while_open_ignored():
     ]
 
 
+# ---- iter-2 ⑥: the work-session family (chat.explore.*, N-57) ------------------
+
+SEARCHING = "chat.explore.searching"
+SEARCHING_DONE = "chat.explore.searchingDone"
+
+
+def test_explore_read_done_key_is_same_family():
+    """search_transcript re-homed (改籍): the read frame rides the
+    work-session vocabulary and its done mirror is key + "Done" (the
+    family's own law — never the inspectingDone prefix swap)."""
+    p = ActivityProjector()
+    frames = _feed(p, "search_transcript", ReadAccepted("search_transcript"))
+    assert _summary(frames) == [
+        ("a1", 1, "read", STATUS_ACTIVE, SEARCHING),
+        ("a1", 2, "read", STATUS_COMPLETED, SEARCHING_DONE),
+    ]
+
+
+def test_explore_milestone_is_born_completed_with_count():
+    """A milestone is a fact: one completed frame straight from the door
+    success — never an active span, so the sweep has nothing to settle and
+    the whitelist's one extension (count) rides the wire."""
+    p = ActivityProjector()
+    frame = p.explore_milestone("chat.explore.candidatesReady", count=5)
+    assert frame.kind == "draft"
+    assert frame.status == STATUS_COMPLETED
+    assert frame.key == "chat.explore.candidatesReady"
+    assert frame.count == 5
+    assert frame.to_dict()["count"] == 5
+    assert not p.has_active()
+    # The sweep settles nothing (the milestone never opened a span).
+    assert p.sweep("completed") == []
+
+
+def test_explore_milestone_key_whitelist():
+    """Only the three registered milestone keys fire (N-57 词表)."""
+    p = ActivityProjector()
+    for key in (
+        "chat.explore.candidatesReady",
+        "chat.explore.selectsReady",
+        "chat.explore.plansReady",
+    ):
+        assert p.explore_milestone(key, count=1).key == key
+    with pytest.raises(AssertionError):
+        p.explore_milestone("chat.explore.madeUp", count=1)
+
+
+def test_frame_count_absent_off_the_wire_otherwise():
+    """读容忍/白名单纪律: non-milestone frames never carry the count key."""
+    p = ActivityProjector()
+    frames = _feed(p, "search_music", ReadAccepted("search_music"))
+    assert all("count" not in f.to_dict() for f in frames)
+
+
+def test_exploration_verbs_open_no_per_call_activity():
+    """The exploration verbs' user face is the milestone frame + the canvas
+    card + the dock (1→0 同律) — name-known opens nothing, and their
+    rejections still count as repair work."""
+    p = ActivityProjector()
+    assert _feed(p, "propose_candidates") == []
+    # A rejected exploration call opens the aggregated repair span.
+    frames = _feed(p, "propose_plans", ToolRejected("params_validation", "propose_plans"))
+    assert _summary(frames) == [("a1", 1, "repair", STATUS_ACTIVE, REPAIR)]
+    # Every exploration verb classifies (T17's bucket law) — the revision
+    # verb (iter-2 ⑦) rides the same 1→0 posture.
+    for name in (
+        "propose_candidates",
+        "propose_selects",
+        "propose_plans",
+        "revise_plan",
+    ):
+        assert name in all_known_tool_names()
+        assert kind_for_tool(name) is None
+
+
 # T17 — U6 single-owner gate: every declared tool name (terminal sets +
 # perception reads) classifies into exactly one bucket, and the projector
 # knows every declared name.
 def test_t17_every_declared_tool_classified():
     declared = {
         t.name for t in (*PLAN_TOOLS, *CHAT_TOOLS, *PLAN_READ_TOOLS, *CHAT_READ_TOOLS)
-    } | set(PERCEPTION_TOOLS)
+    } | set(PERCEPTION_TOOLS) | set(EXPLORATION_TOOLS)  # iter-2 ⑤: the verbs ride the router
     known = all_known_tool_names()
     assert declared <= known, f"undeclared-to-projector tools: {declared - known}"
     # The kind mapping covers exactly the work kinds; conversation tools

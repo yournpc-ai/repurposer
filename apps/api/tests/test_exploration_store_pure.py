@@ -35,6 +35,8 @@ from app.pipeline.exploration_store import (
     propose_candidates,
     propose_plans,
     propose_selects,
+    read_journey_plans,
+    revise_plan,
 )
 
 _PROJECT_ID = uuid4()
@@ -366,7 +368,9 @@ class TestProposePlans:
                 "select_id": str(sel.id),
                 "title": "定价三条",
                 "outputs": [
-                    {"kind": "clip", "language": None, "caption_mode": "bilingual"},
+                    # iter-2 ① (N-56): bilingual captions need their target
+                    # language — a complete promise names both.
+                    {"kind": "clip", "language": "fr", "caption_mode": "bilingual"},
                     {"kind": "post", "language": "fr"},
                 ],
             }],
@@ -471,3 +475,122 @@ def test_born_spec_keys_are_exactly_the_declared_shape():
         "prototype", "exploration_kind", "select_id", "title",
         "outputs", "persona_id", "idem",
     }
+
+
+@pytest.mark.asyncio
+class TestRevisePlan:
+    """iter-2 ⑦ (contract §4.8): the door's revision path — same-row revise,
+    no version tree, issues re-checked, replay a no-op, settled rows closed."""
+
+    async def _seed_plan(self, db: _StubDb) -> GraphNode:
+        cset = await propose_candidates(
+            db, db.project,
+            asset_id=_ASSET_ID, topic="pricing",
+            members=_members(), goal_text="goal",
+        )
+        sel = (
+            await propose_selects(
+                db, db.project,
+                candidate_set_id=cset.id,
+                selects=[{"member_index": 0, "verdict": "v", "reason": "r"}],
+            )
+        )[0]
+        return (
+            await propose_plans(
+                db, db.project,
+                plans=[{
+                    "select_id": str(sel.id),
+                    "title": "定价短片",
+                    "outputs": [{"kind": "clip"}],
+                }],
+            )
+        )[0]
+
+    async def test_clean_revision_marks_revised_same_row(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_plan(db)
+        revised = await revise_plan(
+            db, db.project,
+            plan_id=plan.id,
+            title="定价短片（法语版）",
+            outputs=[{"kind": "clip", "language": "fr", "caption_mode": "bilingual"}],
+        )
+        assert revised.id == plan.id  # 同一行修订 — no version tree
+        assert revised.state == "revised"
+        spec = ContentPlanSpec.model_validate(revised.spec)
+        assert spec.title == "定价短片（法语版）"
+        assert spec.outputs[0].language == "fr"
+        # The birth idem survives — a revision never re-mints identity.
+        assert spec.idem == plan.spec["idem"]
+        assert "issues" not in revised.spec
+
+    async def test_issues_recheck_lands_draft(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_plan(db)
+        revised = await revise_plan(
+            db, db.project,
+            plan_id=plan.id,
+            # bilingual captions without the target language — the birth
+            # self-check's 同一律 stamps the gap honestly.
+            outputs=[{"kind": "clip", "caption_mode": "bilingual"}],
+        )
+        assert revised.state == "draft"
+        assert revised.spec["issues"]
+
+    async def test_title_omitted_keeps_the_current_one(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_plan(db)
+        revised = await revise_plan(
+            db, db.project,
+            plan_id=plan.id,
+            outputs=[{"kind": "post", "language": "en"}],
+        )
+        assert ContentPlanSpec.model_validate(revised.spec).title == "定价短片"
+
+    async def test_identical_restatement_is_a_noop_replay(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_plan(db)
+        once = await revise_plan(
+            db, db.project,
+            plan_id=plan.id, outputs=[{"kind": "post", "language": "en"}],
+        )
+        assert once.state == "revised"
+        twice = await revise_plan(
+            db, db.project,
+            plan_id=plan.id, outputs=[{"kind": "post", "language": "en"}],
+        )
+        assert twice.id == once.id
+        assert twice.state == "revised"
+        assert twice.spec == once.spec
+        # Only ONE plan row exists — revision never spawns a twin.
+        plans = await read_journey_plans(db, _PROJECT_ID, plan.journey_id)
+        assert len(plans) == 1
+
+    async def test_settled_states_are_closed(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_plan(db)
+        plan.state = "compiled"
+        with pytest.raises(ExplorationRejected, match="never revised"):
+            await revise_plan(
+                db, db.project, plan_id=plan.id,
+                outputs=[{"kind": "post"}],
+            )
+
+    async def test_wrong_kind_rejected(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        cset = await propose_candidates(
+            db, db.project,
+            asset_id=_ASSET_ID, topic="pricing",
+            members=_members(), goal_text="goal",
+        )
+        with pytest.raises(ExplorationRejected, match="content_plan"):
+            await revise_plan(
+                db, db.project, plan_id=cset.id,
+                outputs=[{"kind": "post"}],
+            )
+
+    async def test_read_journey_plans_returns_only_plans(self) -> None:
+        db = _StubDb(assets=[_asset()])
+        plan = await self._seed_plan(db)
+        plans = await read_journey_plans(db, _PROJECT_ID, plan.journey_id)
+        assert [p.id for p in plans] == [plan.id]

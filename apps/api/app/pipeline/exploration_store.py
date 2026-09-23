@@ -138,13 +138,50 @@ class SelectSpec(BaseModel):
 class PlanOutput(BaseModel):
     """One named deliverable of a Content Plan (product semantics: what the
     user gets — language / captions / a per-output brief; never task
-    params, R8)."""
+    params, R8).
+
+    Iter-2 ① field completion (N-56, product-first ruling 2026-09-23): the
+    clip promise's six product facts are now all expressible — the range and
+    the source asset arrive STRUCTURALLY (the Select pointer), and the user-
+    named variables ride here: language version / caption form / dubbing /
+    frame format. ``dub`` splits the "French captions vs French speech"
+    ambiguity; ``caption_mode`` is the controlled vocabulary (the TaskSpec
+    word family); ``aspect`` is a birth-time property (the clip-spec bakes
+    the frame at birth — no downstream capability can re-frame it, so the
+    plan must carry it). Narrowing ``caption_mode`` from free str is safe in
+    exactly this window: the exploration tools are still harness-level (R6
+    production wiring lands later this iteration), so no production plan row
+    carries a free-form value."""
 
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["clip", "post", "article", "quotes", "carousel"]
-    language: str | None = None
-    caption_mode: str | None = None
+    language: str | None = Field(
+        default=None,
+        description="ISO code of the deliverable's language version. For "
+        "clips: the captions' language (speech stays the source's unless "
+        "dub is set); for writers: the content's language. null = the "
+        "source/default.",
+    )
+    caption_mode: Literal["bilingual", "source_only", "target_only"] | None = Field(
+        default=None,
+        description="Caption form of a language version (clips / quotes): "
+        "bilingual = source + target side by side; target_only = the "
+        "translation replaces the source captions; source_only = "
+        "source-language captions (the default anyway). Meaningless without "
+        "language. null = default.",
+    )
+    dub: bool | None = Field(
+        default=None,
+        description="Clips only: true = re-voice the speech into `language` "
+        "(cloned-voice dub — the heavier promise). null/false = the speech "
+        "stays the source's.",
+    )
+    aspect: Literal["9:16", "1:1", "16:9"] | None = Field(
+        default=None,
+        description="Clips only: frame format — set when the user names one "
+        "(竖版/9:16, 方形/1:1, 横版/16:9). null = the persona skin default.",
+    )
     brief: str | None = None
 
 
@@ -216,7 +253,11 @@ def plan_completeness_issues(outputs: list[PlanOutput]) -> list[str]:
     draft → ready): outputs non-empty and no duplicate (kind, language)
     pair. Ranges resolve structurally (the door validated the select's
     evidence at ITS birth); defaults absorb unnamed languages/captions
-    (config 三分流 — an unnamed field is complete, not missing)."""
+    (config 三分流 — an unnamed field is complete, not missing). Iter-2 ①
+    additions: a language-dependent form (bilingual / target_only captions,
+    dub) without a language is a gap, and clip-only properties (aspect /
+    dub) on a non-clip output are a semantic confusion the agent should
+    fix — both surface as honest issues, never silent drops."""
     issues: list[str] = []
     if not outputs:
         return ["content plan names no outputs"]
@@ -226,6 +267,17 @@ def plan_completeness_issues(outputs: list[PlanOutput]) -> list[str]:
         if key in seen:
             issues.append(f"output {i}: duplicate {o.kind}/{o.language or 'default'}")
         seen.add(key)
+        if o.caption_mode in ("bilingual", "target_only") and not o.language:
+            issues.append(
+                f"output {i}: {o.caption_mode} captions need a target language"
+            )
+        if o.dub and not o.language:
+            issues.append(f"output {i}: dub needs a target language")
+        if o.kind != "clip":
+            if o.aspect is not None:
+                issues.append(f"output {i}: aspect applies to clips only")
+            if o.dub:
+                issues.append(f"output {i}: dub applies to clips only")
     return issues
 
 
@@ -318,6 +370,36 @@ async def _exploration_nodes(db: AsyncSession, project_id: UUID) -> list[GraphNo
         .scalars()
         .all()
     )
+
+
+async def read_journey_evidence(
+    db: AsyncSession, project_id: UUID, journey_id: UUID
+) -> tuple[list[GraphNode], list[GraphNode]]:
+    """The compiler's read seat (iter-2 ③, R14 编译器半边——门外侧只读):
+    the journey's Select and Candidate Set rows, so ``compile_plans`` can
+    dereference the R7 evidence pointers. Returns (selects, candidate_sets)
+    in birth order. Pure read — the exploration door's invariants never
+    relax for the compiler (the door writes, the compiler translates)."""
+    rows = list(
+        (
+            await db.execute(
+                select(GraphNode).where(
+                    GraphNode.project_id == project_id,
+                    GraphNode.type == EXPLORATION_NODE_TYPE,
+                    GraphNode.journey_id == journey_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    selects = [
+        n for n in rows if (n.spec or {}).get("exploration_kind") == KIND_SELECT
+    ]
+    candidate_sets = [
+        n for n in rows if (n.spec or {}).get("exploration_kind") == KIND_CANDIDATE_SET
+    ]
+    return selects, candidate_sets
 
 
 def _get_exploration_node(
@@ -556,3 +638,73 @@ async def propose_plans(
         born.append(node)
     await db.flush()
     return born
+
+
+async def read_journey_plans(
+    db: AsyncSession, project_id: UUID, journey_id: UUID
+) -> list[GraphNode]:
+    """The revise/recompile seat's read (iter-2 ⑦): ALL of the journey's
+    Content Plan rows (the decision package re-docks as a whole — a revise
+    targets one plan, the package re-presents every plan). Pure read, same
+    door-outside posture as ``read_journey_evidence``."""
+    rows = list(
+        (
+            await db.execute(
+                select(GraphNode).where(
+                    GraphNode.project_id == project_id,
+                    GraphNode.type == EXPLORATION_NODE_TYPE,
+                    GraphNode.journey_id == journey_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        n for n in rows if (n.spec or {}).get("exploration_kind") == KIND_CONTENT_PLAN
+    ]
+
+
+async def revise_plan(
+    db: AsyncSession,
+    project: Project,
+    *,
+    plan_id: UUID,
+    title: str | None = None,
+    outputs: list[dict[str, Any]] | None = None,
+) -> GraphNode:
+    """Revise one Content Plan IN PLACE (iter-2 ⑦, ADR-089 §6 修订分类,
+    contract §4.8): the SAME row takes the restated spec — clean → state
+    ``revised``, gaps → ``draft`` with the issues re-stamped (the birth
+    self-check's 同一律). ``revision_of`` is never built (同一行修订, 无
+    版本树 — N-57); the spec's birth ``idem`` survives (a revision never
+    re-mints identity). compiled / superseded rows are closed — the
+    decision package they rode is settled history. Replay = an identical
+    restatement returns the row untouched. Flush-only."""
+    lane = await _exploration_nodes(db, project.id)
+    node = _get_exploration_node(lane, plan_id, KIND_CONTENT_PLAN)
+    if node.state in ("compiled", "superseded"):
+        raise ExplorationRejected(
+            f"plan {plan_id} is {node.state} — a settled plan is never revised"
+        )
+    raw = dict(node.spec or {})
+    raw.pop("issues", None)
+    spec = ContentPlanSpec.model_validate(raw)
+    new_title = spec.title if title is None else title.strip()
+    new_outputs = (
+        spec.outputs
+        if outputs is None
+        else [PlanOutput.model_validate(o) for o in outputs]
+    )
+    payload = spec.model_copy(
+        update={"title": new_title, "outputs": new_outputs}
+    ).model_dump()
+    issues = plan_completeness_issues(new_outputs)
+    if issues:
+        payload["issues"] = issues
+    if dict(node.spec or {}) == payload:
+        return node  # replay: identical restatement is a no-op
+    node.spec = payload
+    node.state = STATE_DRAFT if issues else "revised"
+    await db.flush()
+    return node

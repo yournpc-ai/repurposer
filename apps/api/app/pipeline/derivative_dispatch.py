@@ -31,6 +31,7 @@ from app.models.schemas import (
     MaterialUnderstanding,
     QuoteFrame,
     RenderStatus,
+    SourceSpan,
     Storyboard,
     validate_derivative_content,
     validate_output_payload,
@@ -105,6 +106,43 @@ class CopyWriterParams(BaseModel):
         description="A short tone note when the user asks for a per-output "
         "tone (e.g. '帖子正式一点' → 'formal'). null = the persona's tone.",
     )
+    # iter-2 ② (N-57): plan-sourced runs write from the SELECTED section,
+    # not the whole talk. Compiler-emitted (the exploration chain resolved
+    # the evidence range at its door) — the LLM-facing catalog description
+    # tells the agent to leave it alone.
+    source_span: SourceSpan | None = Field(
+        default=None,
+        description="Compiler-set on plan-sourced runs: the material narrows "
+        "to this timeline span. Never set it yourself — null = the whole "
+        "material (the default).",
+    )
+
+
+def resolve_source_span_texts(
+    span: SourceSpan | None, assets: list[Asset]
+) -> list[str] | None:
+    """The writer's span narrowing (iter-2 ②, pure): the span resolves to the
+    in-range verbatim transcript of its asset (``words_in_range`` — the same
+    law the exploration door / the evidence reads share). ``None`` = no span
+    or the span cannot resolve (asset gone / no timeline) — the caller falls
+    back to the whole-material texts, byte-identical to the pre-span path."""
+    if span is None:
+        return None
+    # Deferred (import cycle): app.tools' package init imports the internal
+    # crew (node_runners → this module), so the transcript helper can only
+    # be reached after both sides are up.
+    from app.tools.clips.transcript import words_in_range
+
+    pool = [a for a in assets if (a.meta or {}).get("words")]
+    if span.asset_id:
+        pool = [a for a in pool if str(a.id) == str(span.asset_id)]
+    asset = pool[0] if pool else None
+    if asset is None:
+        return None
+    text = words_in_range(
+        (asset.meta or {}).get("words") or [], span.start, span.end
+    ).strip()
+    return [text] if text else None
 
 
 def derive_quote_alt_language(
@@ -998,6 +1036,23 @@ class DerivativeWriterNode(NodeBase):
         await set_stage(node.id, "writing_copy")
 
         asset_texts = await collect_asset_texts(db, project.id)
+        # iter-2 ② 源域收窄 (N-57): a plan-sourced writer writes from the
+        # SELECTED span's verbatim transcript, not the whole talk. None (no
+        # span / span unresolvable — the asset left between dock and run)
+        # falls back to the whole-material texts above, byte-identical to
+        # the pre-span path (the zero-hypothesis guard).
+        if slot is not None and slot.source_span is not None:
+            span_texts = resolve_source_span_texts(
+                slot.source_span, await list_assets(db, project.id)
+            )
+            if span_texts is not None:
+                asset_texts = span_texts
+            else:
+                logger.warning(
+                    "source_span_unresolved",
+                    node_id=str(node.id),
+                    span=slot.source_span.model_dump(mode="json"),
+                )
         # 研究简报注入 (ADR-052 B4): same-run research steps' stamped briefs
         # append as grounding material — one formatted block per brief, the
         # provenance header first so the model knows what it is reading.

@@ -47,9 +47,10 @@ class DubClip(NodeBase):
     doc_station = "dub_script"  # 两站拆分: 文档站 = 译文稿 (ADR-072)
     task_name = "Dub voice"
     task_name_zh = "声音配音"
-    # Acts on clips: this run's select_clips / materialize_source when one
-    # exists (ADR-043), else the project's existing clips (empty inputs).
-    after = ("select_clips", "materialize_source")
+    # Acts on clips: this run's clips producer (select_clips / cut_segments /
+    # materialize_source — ADR-043, N-56) when one exists, else the project's
+    # existing clips (empty inputs).
+    after = ("select_clips", "materialize_source", "cut_segments")
     requires = (MEDIA,)
     retries = 2
     agents = (translator,)

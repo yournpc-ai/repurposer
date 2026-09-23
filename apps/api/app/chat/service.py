@@ -1128,6 +1128,7 @@ async def sync_plan_question(
     brief: Brief | None = None,
     echo: str | None = None,
     estimate: PlanEstimate | None = None,
+    plans: list[dict] | None = None,
 ) -> list[UUID]:
     """Keep exactly one pending task_book question per project conversation.
 
@@ -1190,6 +1191,9 @@ async def sync_plan_question(
             brief=brief,
             estimate_credits=estimate,
             derived=derived or [],
+            # 决策包阅读层 (iter-2 ③): the Content Plans behind the compiled
+            # chain; empty on the router-drafted docks (读容忍).
+            plans=plans or [],
         ),
         intent=intent.model_dump(mode="json"),
     )
@@ -1280,6 +1284,8 @@ async def answer_question(
     on_tool_call=None,
     on_tool_ready=None,
     on_loop_event=None,
+    on_activity=None,
+    confirmed_via: str = "dock_pill",
 ) -> tuple[Message, Message | None]:
     """Answer a pending question (``POST /chat/messages/{id}/answer``).
 
@@ -1311,6 +1317,11 @@ async def answer_question(
     echo prose generates here), so the endpoint streams like POST /chat;
     these callbacks carry the prose previews / phase labels. None keeps the
     one-shot JSON behavior the pill-Start path uses (no LLM there).
+
+    ``confirmed_via`` (iter-2 ④, ADR-089 §4 R20): the confirmation channel
+    stamped into the Confirmed Scope Snapshot — "dock_pill" (the typed
+    answer endpoint, the default) or "chat_reply" (the plan path's
+    start_run tool answered in prose, N-57).
     """
     from app.pipeline.orchestrator import (
         TaskSpec,
@@ -1646,6 +1657,26 @@ async def answer_question(
             # The plan is confirmed now — drop the unconfirmed copy.
             project.pending_brief = None
             message.workflow_run_id = run.id
+            # Confirmed Scope Snapshot (iter-2 ④, ADR-089 §4 R20 — 销
+            # P0-①): the immutable record of WHAT was confirmed at the paid
+            # boundary — the reading layer as docked, the exact chain the
+            # run was born with, the quote shown at confirm time. Stamped
+            # post-birthplace so a rejected Start never leaves a snapshot.
+            from app.pipeline.scope_compile import (  # deferred: pipeline edge
+                build_confirmed_scope,
+            )
+
+            run.context = {
+                **(run.context or {}),
+                "confirmed_scope": build_confirmed_scope(
+                    confirmation_id=str(message.id),
+                    confirmed_at=datetime.now(UTC).isoformat(),
+                    confirmed_via=confirmed_via,
+                    plans=list(pending.plans) if pending is not None else [],
+                    tasks=tasks,
+                    quote=(message.question or {}).get("estimate_credits"),
+                ),
+            }
 
     elif question.kind == "question" and message.workflow_run_id is not None:
         # Direction interrupt (期 4): workflow_run_id is the dispatch
@@ -1696,6 +1727,7 @@ async def answer_question(
                 on_tool_call=on_tool_call,
                 on_tool_ready=on_tool_ready,
                 on_loop_event=on_loop_event,
+                on_activity=on_activity,
             )
         elif question.slot is not None and project is not None:
             # ask 一等动作的答复回填 (ADR-052 B2 D2-C1): the brief slot takes
@@ -1716,6 +1748,7 @@ async def answer_question(
                 on_tool_call=on_tool_call,
                 on_tool_ready=on_tool_ready,
                 on_loop_event=on_loop_event,
+                on_activity=on_activity,
             )
         else:
             # 选项语法统一律 (ADR-081): trigger suggestion questions land
@@ -1746,6 +1779,7 @@ async def answer_question(
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
                     on_loop_event=on_loop_event,
+                    on_activity=on_activity,
                 )
             else:
                 follow_up, _run_id, bailed_run_ids, _settled = await _propose_turn(
@@ -1794,6 +1828,7 @@ async def answer_question(
                 on_tool_call=on_tool_call,
                 on_tool_ready=on_tool_ready,
                 on_loop_event=on_loop_event,
+                on_activity=on_activity,
             )
 
     await db.commit()
@@ -1846,6 +1881,7 @@ async def _plan_turn(
     on_tool_ready=None,
     on_checkpoint=None,
     on_loop_event=None,
+    on_activity=None,
 ) -> tuple[Message, UUID | None, Message | None, list[UUID]]:
     """Plan path (intent-surface-unification W1): build / refine / confirm
     the plan inside the chat loop — the ONLY intent surface.
@@ -1880,6 +1916,7 @@ async def _plan_turn(
         on_tool_ready=on_tool_ready,
         on_checkpoint=on_checkpoint,
         on_loop_event=on_loop_event,
+        on_activity=on_activity,
     )
 
 
@@ -2216,6 +2253,7 @@ async def execute_chat_turn(
     on_tool_ready=None,
     on_checkpoint=None,
     on_loop_event=None,
+    on_activity=None,
 ) -> ChatResponse:
     """chat() phase 2: run the agent turn, commit once, assemble the response.
 
@@ -2259,6 +2297,7 @@ async def execute_chat_turn(
             on_tool_ready=on_tool_ready,
             on_checkpoint=on_checkpoint,
             on_loop_event=on_loop_event,
+            on_activity=on_activity,
         )
         if plan_answered is not None:
             prepared.answered_question = plan_answered

@@ -338,9 +338,23 @@ def known_output_types() -> frozenset[str]:
 
 
 def node_for_output(output_type: str) -> NodeBase | None:
-    """The producer node owning an output type (outputs = tool attribute, N-32)."""
+    """The producer node owning an output type (outputs = tool attribute, N-32).
+
+    N-56: a type may also carry a COMPILER-ONLY claimant (``ToolEntry.
+    llm_visible=False`` — e.g. cut_segments on "clips"). Every consumer here
+    is a proposal path (role-pin dispatch, targeted dispatch, existence
+    checks), so routing always resolves the proposal-space owner regardless
+    of registration order; compiler-only claimants are skipped. The registry
+    import is lazy — ``app.tools`` is the NODE_KINDS door (it imports this
+    module), so a top-level import would cycle.
+    """
+    from app.tools import TOOL_REGISTRY
+
     for n in NODE_KINDS.values():
-        if n.output_type == output_type:
+        if n.output_type != output_type:
+            continue
+        entry = TOOL_REGISTRY.get(n.kind)
+        if entry is None or entry.llm_visible:
             return n
     return None
 

@@ -38,6 +38,7 @@ from app.pipeline.exploration_store import (
     propose_candidates,
     propose_plans,
     propose_selects,
+    revise_plan,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -127,16 +128,68 @@ class PlanItem(BaseModel):
         description=(
             "What the user gets from this plan: each output = its family "
             "(clip / post / article / quotes / carousel) + optional "
-            "language / caption_mode / a per-output brief. Name only what "
-            "the user named — defaults absorb the rest."
+            "language / caption_mode / a per-output brief; clips may also "
+            "carry aspect (frame format) and dub (re-voiced speech) when "
+            "the user names them. Name only what the user named — defaults "
+            "absorb the rest."
         )
     )
 
 
 class ProposePlansArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "name")
+
+    # 展示文案二源律 (ADR-058): the decision package's name — the LLM names
+    # the work it structured (the run's receipt title rides it). "" = the
+    # display layer's honest fallback.
+    name: str = Field(
+        default="",
+        max_length=200,
+        description=(
+            "A compact noun phrase naming the whole package (2-6 words, "
+            "interface language — name the work, not the tools)."
+        ),
+    )
     plans: list[PlanItem] = Field(
         description="The Content Plans — one per Select the user should see. One call plans one journey."
+    )
+
+
+class RevisePlanArgs(BaseModel):
+    """iter-2 ⑦ (ADR-089 §6 修订分类, contract §4.8): the plan-level revision
+    verb — the ONLY way an already-landed plan changes. Full restatement,
+    never a patch (读容忍: title/instruction null-tolerant)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "title", "instruction")
+
+    plan_id: UUID = Field(
+        description="The plan to revise — from the decision package on the table (the pending-package block's plan_id), never invented."
+    )
+    instruction: str = Field(
+        default="",
+        description="The user's change ask, restated in one compact line (what changes) — the revision's own record of the ask.",
+    )
+    title: str = Field(
+        default="",
+        max_length=200,
+        description="The plan's title after the revision — omit to keep the current one.",
+    )
+    outputs: list[PlanOutput] = Field(
+        description=(
+            "The plan's FULL restated outputs after the revision — no patch "
+            "semantics: restate everything that stays, add what changes, "
+            "drop what goes."
+        )
     )
 
 
@@ -174,12 +227,98 @@ EXPLORATION_TOOLS: dict[str, ChatTool] = {
             params_model=ProposePlansArgs,
             terminal=True,
         ),
+        ChatTool(
+            name="revise_plan",
+            description=(
+                "Revise one already-landed Content Plan in place (the user's "
+                "change ask — 'make the second plan French too', 'the clip "
+                "square instead') restated as the plan's FULL new outputs. "
+                "The package re-compiles and re-docks for confirmation — "
+                "every plan-level revision re-confirms."
+            ),
+            params_model=RevisePlanArgs,
+            terminal=True,
+        ),
     )
 }
 
 # The harness's loop composition (iter-1): the exploration verbs + the
 # evidence reads. Production wiring = iter-2 (R6).
 EXPLORATION_READ_NAMES = ("search_transcript", "get_segment", "get_asset", "get_understanding")
+
+
+# ---- observation text builders (ONE wording, two seats) -------------------------
+# The harness seat (execute_exploration_tool below) and the production plan-turn
+# seat (iter-2 ③/⑤) both render the agent-facing observation from these — the
+# wording never drifts between the two loops.
+
+
+def candidates_observation(node, *, topic: str, member_count: int) -> str:
+    return (
+        f"Candidate set landed on the canvas — {member_count} "
+        f"member(s) under the topic \"{topic}\".\n"
+        f"- candidate_set_id: {node.id}\n- journey_id: {node.journey_id}\n"
+        "Next: evaluate the members and call propose_selects with your picks."
+    )
+
+
+def selects_observation(born: list) -> str:
+    lines = [f"{len(born)} select(s) landed on the canvas:"]
+    for n in born:
+        spec = n.spec
+        lines.append(f"- select_id: {n.id} — member {spec['member_index']}: {spec['verdict']}")
+    lines.append("Next: call propose_plans to structure what the user gets from each Select.")
+    return "\n".join(lines)
+
+
+def plans_observation(born: list) -> str:
+    lines = [f"{len(born)} content plan(s) landed on the canvas:"]
+    for n in born:
+        spec = n.spec
+        outputs = ", ".join(
+            o["kind"] + (f" ({o['language']})" if o.get("language") else "")
+            for o in spec["outputs"]
+        )
+        state_note = "ready" if n.state == "ready" else f"draft — issues: {'; '.join(spec.get('issues') or [])}"
+        lines.append(f"- plan_id: {n.id} — {spec['title'] or '(unnamed)'}: {outputs} [{state_note}]")
+    return "\n".join(lines)
+
+
+def revise_observation(node) -> str:
+    spec = node.spec
+    state_note = (
+        "ready"
+        if node.state in ("ready", "revised")
+        else f"draft — issues: {'; '.join(spec.get('issues') or [])}"
+    )
+    outputs = ", ".join(
+        o["kind"] + (f" ({o['language']})" if o.get("language") else "")
+        for o in spec["outputs"]
+    )
+    return (
+        f"Plan revised in place — plan_id: {node.id} — "
+        f"{spec['title'] or '(unnamed)'}: {outputs} [{state_note}]. The "
+        "decision package re-compiles and re-docks for confirmation."
+    )
+
+
+def exploration_chat_tools() -> list[ChatTool]:
+    """The production projection (iter-2 ⑤, R6 — N-57): the SAME registry
+    entries re-formed for the plan path's loop. R2 免费探索区连续工作:
+    candidates/selects ride back as observations (NON-terminal — one turn
+    carries the whole discovery chain: search → candidates → selects →
+    plans); propose_plans / revise_plan stay TERMINAL — landing (or
+    re-landing) the plans docks the decision package, which IS the
+    paid-boundary stop (R15)."""
+    return [
+        ChatTool(
+            name=t.name,
+            description=t.description,
+            params_model=t.params_model,
+            terminal=t.name in ("propose_plans", "revise_plan"),
+        )
+        for t in EXPLORATION_TOOLS.values()
+    ]
 
 
 async def execute_exploration_tool(
@@ -206,11 +345,8 @@ async def execute_exploration_tool(
                 goal_text=params.goal or None,
                 journey_id=params.journey_id,
             )
-            return (
-                f"Candidate set landed on the canvas — {len(params.members)} "
-                f"member(s) under the topic \"{params.topic}\".\n"
-                f"- candidate_set_id: {node.id}\n- journey_id: {node.journey_id}\n"
-                "Next: evaluate the members and call propose_selects with your picks."
+            return candidates_observation(
+                node, topic=params.topic, member_count=len(params.members)
             )
         if name == "propose_selects":
             born = await propose_selects(
@@ -219,12 +355,7 @@ async def execute_exploration_tool(
                 candidate_set_id=params.candidate_set_id,
                 selects=[s.model_dump() for s in params.selects],
             )
-            lines = [f"{len(born)} select(s) landed on the canvas:"]
-            for n in born:
-                spec = n.spec
-                lines.append(f"- select_id: {n.id} — member {spec['member_index']}: {spec['verdict']}")
-            lines.append("Next: call propose_plans to structure what the user gets from each Select.")
-            return "\n".join(lines)
+            return selects_observation(born)
         if name == "propose_plans":
             born = await propose_plans(
                 db,
@@ -232,16 +363,16 @@ async def execute_exploration_tool(
                 plans=[p.model_dump() for p in params.plans],
                 persona_id=persona_id,
             )
-            lines = [f"{len(born)} content plan(s) landed on the canvas:"]
-            for n in born:
-                spec = n.spec
-                outputs = ", ".join(
-                    o["kind"] + (f" ({o['language']})" if o.get("language") else "")
-                    for o in spec["outputs"]
-                )
-                state_note = "ready" if n.state == "ready" else f"draft — issues: {'; '.join(spec.get('issues') or [])}"
-                lines.append(f"- plan_id: {n.id} — {spec['title'] or '(unnamed)'}: {outputs} [{state_note}]")
-            return "\n".join(lines)
+            return plans_observation(born)
+        if name == "revise_plan":
+            node = await revise_plan(
+                db,
+                project,
+                plan_id=params.plan_id,
+                title=params.title or None,
+                outputs=[o.model_dump() for o in params.outputs],
+            )
+            return revise_observation(node)
         raise KeyError(name)
     except ExplorationRejected as e:
         return f"The door rejected the proposal: {e}"

@@ -1041,6 +1041,13 @@ const zh: Resources = {
           quotes: "金句卡",
           carousel: "轮播图",
         },
+        // 方案卡产出行的形态事实（iter-2 ①，N-56）：字幕形态词表化 + 配音徽。
+        captionMode: {
+          bilingual: "双语字幕",
+          source_only: "源语字幕",
+          target_only: "译文字幕",
+        },
+        dubbed: "配音版",
       },
       // 状态原地表达（ADR-057 §5——状态在卡内说话，caption 右槽恒空）：未运行
       // 节点虚线空区读自己的估价；排队 / 跳过 / 失败 / 可重跑是安静标签。
@@ -1176,10 +1183,20 @@ const zh: Resources = {
       runStatus: "正在查看运行进度…",
       runHistory: "正在读运行历史…",
       pendingPlan: "正在读待确认的计划…",
-      transcriptSearch: "正在检索转写内容…",
       segment: "正在读片段…",
       asset: "正在查看素材…",
       craftSkeleton: "正在读案例的风格拆解…",
+    },
+    /** 工作会话族（迭代二⑥，N-57）：发现链的用户安全节拍——searching 骑
+     * 读帧（进行态 + 完成态镜像，与 inspecting→inspectingDone 同律的
+     * 本族形态）；三个里程碑在写门成功处一发 completed 帧，唯一插值 =
+     * 产物计数（user-safe 纯计数——永不带参数/摘录/推理）。 */
+    explore: {
+      searching: "正在检索转写内容…",
+      searchingDone: "已检索转写内容",
+      candidatesReady: "找到 {{count}} 段候选",
+      selectsReady: "选定 {{count}} 段",
+      plansReady: "整理好 {{count}} 个方案",
     },
     /** 活动流里程碑文案（ADR-087 §3 Phase 2）：active 帧带进行态、completed
      * 帧带完成态；failed/cancelled 复用进行态（✗/删除线说剩下的）。 */
@@ -1202,7 +1219,6 @@ const zh: Resources = {
       runStatus: "已查看运行进度",
       runHistory: "已读运行历史",
       pendingPlan: "已读待确认的计划",
-      transcriptSearch: "已检索转写内容",
       segment: "已读片段",
       asset: "已查看素材",
       craftSkeleton: "已读案例的风格拆解",
@@ -1324,6 +1340,22 @@ const zh: Resources = {
       dub: "配音版",
       bilingual: "双语",
     },
+    // 决策包阅读层 (iter-2 ③, ADR-089 §4 R16): 计划卡的阅读层——一条方案
+    // 输出行 = 品类 + 语言 + 字幕形态/配音/画幅，代码用小键拼装（阅读层
+    // 永不说原始任务参数，R8 产品语义）。
+    planOutputs: {
+      clip: "短片",
+      post: "帖子",
+      article: "文章",
+      quotes: "金句卡",
+      carousel: "轮播图",
+      captionBilingual: "双语字幕",
+      captionTarget: "翻译字幕",
+      captionSource: "源语言字幕",
+      dub: "配音",
+    },
+    // 证据层展开器（tasks 证据可展开）：阅读层在场时编译链收进这一行。
+    chainEvidence: "它是怎么做的 · {{count}} 步",
     bilingualToggle: "双语对照",
     planVersion: "计划 v{{n}}",
     versionRestore: "恢复此版本",
