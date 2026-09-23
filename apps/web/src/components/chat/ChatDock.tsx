@@ -3561,7 +3561,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                 >
                   <ChevronRight
                     className={cn(
-                      "h-3.5 w-3.5 transition-transform",
+                      "size-3.5 transition-transform",
                       chainOpen && "rotate-90"
                     )}
                   />
