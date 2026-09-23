@@ -222,7 +222,7 @@ def _assemble_trigger_turn(
         {
             "context_text": context_text,
             "event_line": event_line,
-            "speech_language": _speech_language_line(language),
+            "speech_language": _speech_language_line(language, mirror=False),
         },
         [],
     )

@@ -48,23 +48,46 @@ from app.models.tables import Message, Persona
 from app.ui_locale import current_ui_language
 
 
-def _speech_language_line(lang: str) -> str:
-    """The speech-language directive riding every LLM turn (2026-09-04 用户
-    拍板: 言语语言一律 = 用户设置的系统语言). The value is the request's
-    Accept-Language captured by the middleware (app.ui_locale — the same
-    plumbing the run side already pins into run.context): this is the
-    language of OUR messages to the user (questions, option labels, prose,
-    summaries), never the CONTENT's language — task language params follow
-    their own rules. Without this line "the user's language" was left for
-    the LLM to infer, and a Chinese persona pantry dragged an English
-    conversation's question AND option labels into Chinese."""
+_LANG_NATIVE = {"zh": "中文", "en": "English"}
+
+
+def _speech_language_line(lang: str, mirror: bool = True) -> str:
+    """The speech-language directive riding every LLM turn (2026-09-24 用户
+    拍板，修订 2026-09-04 的「一律 = 系统语言」): speech MIRRORS the
+    language of the user's own message — the LLM judges that itself
+    (中文提问中文答 / English question English answer); the request's
+    Accept-Language (app.ui_locale) named here is only the FLOOR for
+    messages with no clear language signal. This governs OUR messages to
+    the user (questions, option labels, prose, summaries), never the
+    CONTENT's language — task language params follow their own rules, and
+    the 2026-09-04 pantry-drag guard still holds: the persona's and the
+    material's languages never steer speech. The floor language is named
+    in its own tongue (中文 / English) — a bare subtag was empirically too
+    weak against an all-English system prompt.
+
+    mirror=False is the worker-born trigger turn's form: the turn's 'user
+    message' there is a system EVENT line (English), not the user's voice,
+    so mirroring is meaningless and the pinned language is absolute."""
+    native = _LANG_NATIVE.get(lang, lang)
+    if not mirror:
+        return (
+            f"Speech language: {native} ({lang}) — the interface language, "
+            f"absolute for this turn (the event line above is a system "
+            f"signal, not the user's voice). ALL user-facing text you "
+            f"write (prose, every suggestion label) is in {native} "
+            f"({lang}). (Content-language task params follow their own "
+            f"rules.)"
+        )
     return (
-        f"Interface language: {lang} — ALL user-facing text you write (the "
-        "question, every option label, prose, the summary, default_path) is "
-        "in this language. Never infer your speech language from the user's "
-        "message, the persona, or the material: translate pantry-sourced "
-        "option values into the interface language. (Content-language task "
-        "params follow their own rules.)"
+        f"Speech language: reply in the language of the user's CURRENT "
+        f"message — judge it yourself (a pasted text or quoted fragment "
+        f"inside the message is content, not the user's voice). If the "
+        f"message gives no clear signal, use the interface language: "
+        f"{native} ({lang}). ALL user-facing text you write (the question, "
+        f"every option label, prose, the summary, default_path) follows "
+        f"this choice. Never infer your speech language from the persona "
+        f"or the material. (Content-language task params follow their own "
+        f"rules.)"
     )
 
 
@@ -211,8 +234,8 @@ def _assemble_plan_turn(
             "asset_lines": asset_lines,
             "material_pending_line": material_pending_line,
             # None outside a request (worker / scenario script) → the
-            # directive is simply omitted and the LLM falls back to the
-            # message's language (pre-2026-09-04 behavior).
+            # directive is omitted and the LLM simply mirrors the
+            # message's language.
             "speech_language": (
                 _speech_language_line(speech_language) if speech_language else None
             ),
@@ -258,14 +281,11 @@ def _assemble_chat_turn(message: str, context: dict[str, Any]):
     context_text = context.get("text", "")
     lang = current_ui_language()
     if lang:
-        # Same speech-language law as the plan path (2026-09-04) — the chat
-        # loop's ask/answer/prose follows the UI language, never the
-        # message's or the material's.
-        context_text = (
-            f"{context_text}\n\n{_speech_language_line(lang)}"
-            if context_text
-            else _speech_language_line(lang)
-        )
+        # Same speech-language law as the plan path (2026-09-24, mirror the
+        # message / UI floor) — the chat loop's ask/answer/prose follows it,
+        # never the persona's or the material's language.
+        line = _speech_language_line(lang)
+        context_text = f"{context_text}\n\n{line}" if context_text else line
     return ({"context_text": context_text, "message": message}, [])
 
 

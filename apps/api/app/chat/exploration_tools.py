@@ -168,7 +168,7 @@ class PlanItem(BaseModel):
     title: str = Field(
         max_length=200,
         default="",
-        description="A compact noun phrase naming the plan (2-6 words, interface language — name the work).",
+        description="A compact noun phrase naming the plan (2-6 words, the turn's speech language — name the work).",
     )
     outputs: list[PlanOutput] = Field(
         description=(
@@ -198,7 +198,7 @@ class ProposePlansArgs(BaseModel):
         max_length=200,
         description=(
             "A compact noun phrase naming the whole package (2-6 words, "
-            "interface language — name the work, not the tools)."
+            "the turn's speech language — name the work, not the tools)."
         ),
     )
     plans: list[PlanItem] = Field(
