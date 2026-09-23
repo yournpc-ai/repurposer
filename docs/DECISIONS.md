@@ -2145,6 +2145,8 @@ quote 输入 = Content Plan 具体字段（精确区间 → 时长 → 渲染单
 
 新探索流与既有 chat 路（`propose_tasks` / `edit_graph`）**并行 → 证明 → 退役**——一刀切永禁；退役扳机 = 旅程四主链 e2e 全绿 + 迁移期无 regression 在册。干脆请求（ADR-088 §9）在新世界 = Content Plan 的零探索退化形态，词表统一。
 
+**迁移弧进度（2026-09-23，迭代三 S8——现在时）**：修订动词族全落地——`revise_plan`（plan/chat 双路，S2 `fa336d1`）/ `revise_output`（chat 专用终态，骑 `_run_wiring_proposal` 同座，S3 `1566882`）/ `revise_selects`（三金钱态，S4 `4dab35c`）。旅程三承接面对账表 = 简报 `docs/tasks/agent-working-loop-iter-3.md` §4 S8 施工记录——残座话术族（「修订动词族表达不了的节点级重写」）逐族复核为**空集**（prompt 消费族节点重写 = revise_output 覆盖；结构性 graph surgery = 能力完备手势缺席的既有拍板）。`edit_graph` 退役 = **证明待剧本腿**：全量剧本绿未在本批跑（用户指示代码层检查为主，剧本由用户自跑）——并行期继续，零删；退役执行 = 剧本绿后按施工记录的机械削除清单一个小提交。
+
 **`select_clips` 存留裁决（2026-09-23，迭代三 S0——原 ADR-PENDING 销记）**：
 ① **执行世界永不做发现**——发现工作的唯一座位 = chat 边缘 agent 探索链（R6 路由 + 证据 reads + 探索写门）；plan 来源的工作经编译器走 `cut_segments`（Select 证据指针编译期解引用 → 数值区间确定性裁剪），编译器永不编译 `select_clips`（iter-2 已锁，N-56）。② select_clips **保留为旧路（`propose_tasks` 任务链）的执行工具**——它是零探索退化形态在旧路的唯一机制；其退役**随旧路**（propose_tasks 退役弧 = PROGRESS 需求池挂账「零探索退化形态」），本批零代码改动。③ 候选存留面复核：长素材二次裁切 = chat 侧 reads + `revise_selects`（N-58）覆盖；语义连续处理 / execution-time transformation 无在册需求——均不构成保留 LLM 可见性的理由。④ 调用面清单（仅作退役时的机械削除证据入档）：注册表 `app/tools/__init__.py` / 节点 `app/tools/clips/node.py` / prompt 面三处（`intent_router_system.j2` / `_specific_instruction.j2` / `_writers_no_material.j2`）/ recipes 预设链与执行侧声明（tracks / morph / orchestrator / lifecycle / derivative_dispatch / decompile / outputs / verify / graph_fill / schemas）/ web 展示键（ChatDock / chatProtocol / i18n / 项目页）。
 
