@@ -643,7 +643,11 @@ async def search_transcript(
         grand_total += total
         if not matches:
             continue
-        header = f"Asset {_asset_label(asset)} — {total} hit(s)"
+        # The asset_id rides the header (iter-2 ⑤ live-gate fix): get_segment
+        # and propose_candidates REQUIRE the id downstream, and the single-
+        # file plan context never names one — without it here the agent
+        # invents an id and burns loop iterations on params rejections.
+        header = f"Asset {_asset_label(asset)} (asset_id: {asset.id}) — {total} hit(s)"
         if total > len(matches):
             header += f" (showing {len(matches)})"
         header += ":"

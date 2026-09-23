@@ -221,11 +221,19 @@ def _assemble_plan_turn(
 # The registries are static once imported (the tools door opens them), so
 # the system prompts are built once at declaration time.
 #
-# max_iterations=8 (报价 = fold): the discovery chain (iter-2 ⑤, R2 免费
+# max_iterations=12 (报价 = fold): the discovery chain (iter-2 ⑤, R2 免费
 # 探索区连续工作) rides ONE turn — search_transcript → (get_segment reads)
 # → propose_candidates → propose_selects → propose_plans = up to 6 calls on
-# the designed flow, plus one rejection iteration of headroom. The bound is
-# what makes an unquoted chat turn safe.
+# the designed flow. Live evidence (2026-09-23 S-explore-2 runs): the
+# realistic chain is 8-10 — the model reads every range it means to judge
+# as evidence before proposing (the door's verbatim law makes that
+# thoroughness legitimate; 6 reads observed on a two-island transcript),
+# and ProposePlansArgs is the router's most complex params shape (plans ×
+# outputs nested lists), so its malformed-call recovery needs real budget:
+# at 8 one rejection starved the plans call; at 10 a plans params
+# rejection at iteration 9 left no recovery room. 12 = realistic 9-10 + 2
+# recovery headroom; the bound stays what makes an unquoted chat turn
+# safe (bounded, never open-ended).
 intent_router = ToolLoopAgent(
     name="intent_router",
     prompt="intent_router.j2",
@@ -236,7 +244,7 @@ intent_router = ToolLoopAgent(
     # candidates/selects NON-terminal (the turn chains the discovery), only
     # propose_plans is terminal (the dock = the paid-boundary stop, R15).
     tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS, *exploration_chat_tools()],
-    max_iterations=8,
+    max_iterations=12,
 )
 
 

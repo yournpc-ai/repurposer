@@ -145,6 +145,10 @@ PROBE_C = {"message": "I want a social post."}
 # quotes from it verbatim so the chain has real evidence to propose).
 _PROBE_D_CSET_ID = "11111111-1111-1111-1111-111111111111"
 _PROBE_D_JOURNEY_ID = "99999999-9999-9999-9999-999999999999"
+# The stub asset's id — the canned search observation names it in the
+# header (the production observation's same handoff: get_segment /
+# propose_candidates read their asset_id from the search hits).
+_PROBE_D_ASSET_ID = "33333333-3333-3333-3333-333333333333"
 PROBE_D = {
     "message": (
         "Find the parts where I talk about pricing — cut those into a clip, "
@@ -182,9 +186,12 @@ async def _gate_execute(name: str, params: BaseModel | None, prose: str):
     if name in PERCEPTION_TOOLS:
         if name == "search_transcript":
             # D's evidence substrate: plausible hits quoting the excerpt
-            # verbatim, so the chain has real ranges to propose from.
+            # verbatim, so the chain has real ranges to propose from. The
+            # header mirrors the production observation's shape — asset
+            # label + the asset_id handoff (the get_segment seat's input).
             return ToolObservation(
-                'Hits for "pricing" in keynote-2026.mp4:\n'
+                f'Search "pricing" — 3 hit(s) across 1 asset(s):\n'
+                f"Asset keynote-2026.mp4 (asset_id: {_PROBE_D_ASSET_ID}) — 3 hit(s):\n"
                 '- [12.0–18.9] "Our pricing is simple." (host)\n'
                 '- [34.0–39.4] "Every tier includes the dashboard."\n'
                 '- [58.2–63.0] "You only pay when you grow."'
@@ -297,7 +304,11 @@ async def main() -> int:
         # verbs' production projection rides — the registry perturbation is
         # the thing being gated.
         tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS, *exploration_chat_tools()],
-        max_iterations=8,
+        # Mirrors the production declaration (intent.py) — live evidence
+        # 2026-09-23: the realistic discovery chain is 8-10 (6 evidence
+        # reads observed), a plans params rejection at iteration 9 starved
+        # recovery at 10 (S-explore-2 runs 1-2).
+        max_iterations=12,
         client=client,
     )
     probes = {"A": PROBE_A, "B": PROBE_B, "C": PROBE_C, "D": PROBE_D}

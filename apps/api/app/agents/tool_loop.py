@@ -167,6 +167,28 @@ def _compose_speech(parts: list[str]) -> str:
     return "\n\n".join(part.strip() for part in parts if part and part.strip())
 
 
+def _unwrap_item_dialect(value: Any) -> Any:
+    """The provider's array-wrap dialect (iter-2 live-gate evidence,
+    2026-09-23 — probe D 5/12 runs): MiniMax's tool-args serialization
+    intermittently wraps a LIST argument in a single-key object
+    (``{"item": [...]}``), and occasionally wraps a single nested object the
+    same way — at any depth (``plans.0.outputs``, a plans list element).
+    The model cannot see or avoid the dialect, and every params rejection
+    costs a loop iteration (probe D burned 8-iteration budgets on it).
+    Unwrap recursively at the wire so validation judges the CONTENT. Safe
+    because every tool params model is ``extra="forbid"`` and no field is
+    legitimately named ``item`` (grepped) — a sole-"item"-key dict here is
+    always the dialect, never payload. Same repair-economy law as the
+    null/habit tolerances below."""
+    if isinstance(value, dict):
+        if set(value) == {"item"}:
+            return _unwrap_item_dialect(value["item"])
+        return {k: _unwrap_item_dialect(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_unwrap_item_dialect(v) for v in value]
+    return value
+
+
 @dataclass(frozen=True)
 class ToolObservation:
     """A NON-terminal tool's accepted result (T2b 感知族 — the read tools'
@@ -535,6 +557,7 @@ class ToolLoopAgent:
             habit_prose = raw.pop("prose", None) or ""
             if not prose.strip() and isinstance(habit_prose, str):
                 prose = habit_prose
+            raw = _unwrap_item_dialect(raw)
             params: BaseModel | None = None
             if tool.params_model is not None:
                 try:

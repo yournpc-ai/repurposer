@@ -11,7 +11,7 @@ loud gate.
 from typing import Any
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.agents.tool_loop import (
     ChatTool,
@@ -802,3 +802,62 @@ async def test_loop_event_bare_reply_emits_nothing() -> None:
     agent = _make_agent("tl_ev_bare", client)
     result = await agent.call_loop(_always_accept, on_loop_event=lambda e: events.append(e))
     assert result.tool_name is None and events == []
+
+
+# ---- 供方数组方言 (iter-2 live-gate, 2026-09-23 — probe D 实证) ------------
+
+
+class BatchArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    members: list[str]
+    note: str = ""
+
+
+class NestedArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plans: list[BatchArgs]
+
+
+def test_unwrap_item_dialect_pure() -> None:
+    """The recursive unwrapper's shape law: a sole-"item"-key dict at ANY
+    depth is the provider's wrap and yields its content; the plural "items"
+    is not the dialect; ordinary payloads pass through byte-identical."""
+    from app.agents.tool_loop import _unwrap_item_dialect
+
+    assert _unwrap_item_dialect({"members": {"item": ["a", "b"]}}) == {"members": ["a", "b"]}
+    assert _unwrap_item_dialect({"plans": [{"item": {"members": ["x"]}}]}) == {
+        "plans": [{"members": ["x"]}]
+    }
+    assert _unwrap_item_dialect({"item": [{"item": [True]}]}) == [[True]]
+    # Not the dialect: the plural key, multi-key dicts, scalars, empties.
+    assert _unwrap_item_dialect({"items": [1]}) == {"items": [1]}
+    assert _unwrap_item_dialect({"item": [1], "other": 2}) == {"item": [1], "other": 2}
+    assert _unwrap_item_dialect({"note": "item"}) == {"note": "item"}
+    assert _unwrap_item_dialect({}) == {}
+
+
+@pytest.mark.asyncio
+async def test_item_wrapped_list_validates_at_the_wire() -> None:
+    """Loop-level: a wrapped list param validates WITHOUT burning an
+    iteration (the rejection would have echoed and retried)."""
+    tool = ChatTool("batch", "Batch the members.", BatchArgs)
+    client = StubClient([_call("batch", {"members": {"item": ["a", "b"]}, "note": "n"})])
+    agent = _make_agent("tl_item_wrap", client, tools=[tool])
+    result = await agent.call_loop(_always_accept)
+    assert result.params is not None
+    assert result.params.members == ["a", "b"] and result.params.note == "n"
+    assert result.iterations == 1  # zero repair — the dialect never surfaces
+
+
+@pytest.mark.asyncio
+async def test_item_wrapped_nested_object_validates() -> None:
+    """plans.0 wrapped as {"item": {...}} — the nested-object variant."""
+    tool = ChatTool("nested", "Nested plans.", NestedArgs)
+    client = StubClient([_call("nested", {"plans": [{"item": {"members": ["x"]}}]})])
+    agent = _make_agent("tl_item_wrap_nested", client, tools=[tool])
+    result = await agent.call_loop(_always_accept)
+    assert result.params is not None
+    assert result.params.plans[0].members == ["x"]
+    assert result.iterations == 1
