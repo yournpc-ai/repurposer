@@ -16,6 +16,7 @@ import {
   answeredQuestionText,
   type QuestionAnswer,
 } from "./AnsweredQuestion"
+import type { ActivityFramePayload } from "@/lib/chat-stream"
 
 /** One message row in the dock's flow (live-pushed or replayed). */
 export interface OverlayMessage {
@@ -55,6 +56,16 @@ export interface OverlayMessage {
    * instead and this stays undefined/empty. Set only after the row's prose
    * has drained (散文永远在先、提问随后). */
   suggestions?: SuggestionPill[]
+  /** 素材节拍回放 (2026-09-24 素材节拍入库): a persisted material-beat row
+   * (intent.type === "material_beat") replays as a SETTLED activity row,
+   * never a bubble — the dock splits it out of the message stream into the
+   * activity stream (the settled gray "已读完 X" survives a refresh). */
+  beat?: MaterialBeatRow
+  /** activity 持久化回放 (2026-09-25): a persisted turn's settled milestone
+   * frames (intent.type === "activity_log"). The dock merges ONLY the
+   * LATEST turn's frames into the activity stream — parity with the live
+   * law (U9: a new turn's stream replaces the previous turn's rows). */
+  milestones?: ActivityFramePayload[]
 }
 
 /** A legacy trigger row's suggestion pill (pre-ADR-081 rows only): "send"
@@ -87,6 +98,110 @@ export function triggerSuggestions(intent: unknown): SuggestionPill[] | undefine
       text: (s.text as string | null) ?? null,
       output_id: (s.output_id as string | null) ?? null,
     }))
+}
+
+/** The trigger's own name off a trigger_review dump ("understanding_warmed"
+ * / "run_completed" / "craft_decompiled") — the poll windows key their
+ * closure on it (the understanding window stays open until ITS row lands).
+ * Same read tolerance as triggerSuggestions. */
+export function triggerName(intent: unknown): string | undefined {
+  const data = (intent ?? {}) as Record<string, unknown>
+  if (data.type !== "trigger_review") return undefined
+  return typeof data.trigger === "string" ? data.trigger : undefined
+}
+
+/** A persisted turn's settled activity frames (2026-09-25 activity 持久化):
+ * the SSE turn route stores the projector's settled_frames() as ONE message
+ * row per turn ({type:"activity_log", ref, frames:[…]}). The replay
+ * restores ONLY the LATEST turn's log — parity with the live law (U9: the
+ * next turn's stream replaces the previous turn's rows), never rows the
+ * live flow didn't show. Read tolerance: any off-shape frame drops the
+ * whole dump to undefined (a plain assistant row), never a crash. */
+export function activityLog(intent: unknown): ActivityFramePayload[] | undefined {
+  const data = (intent ?? {}) as Record<string, unknown>
+  if (data.type !== "activity_log") return undefined
+  const raw = Array.isArray(data.frames) ? data.frames : null
+  if (raw === null) return undefined
+  const KINDS = new Set(["read", "draft", "run", "repair"])
+  const STATUSES = new Set(["completed", "failed", "cancelled"])
+  const frames: ActivityFramePayload[] = []
+  for (const f of raw) {
+    const d = (f ?? {}) as Record<string, unknown>
+    if (
+      typeof d.activity_id !== "string" ||
+      typeof d.seq !== "number" ||
+      typeof d.kind !== "string" ||
+      !KINDS.has(d.kind) ||
+      typeof d.status !== "string" ||
+      !STATUSES.has(d.status) // settled only — an active frame never persists
+    ) {
+      return undefined
+    }
+    frames.push({
+      activity_id: d.activity_id,
+      seq: d.seq,
+      kind: d.kind as ActivityFramePayload["kind"],
+      status: d.status as ActivityFramePayload["status"],
+      key: typeof d.key === "string" ? d.key : null,
+      at: typeof d.at === "string" ? d.at : undefined,
+      count: typeof d.count === "number" ? d.count : undefined,
+      duration_ms: typeof d.duration_ms === "number" ? d.duration_ms : undefined,
+    } as ActivityFramePayload)
+  }
+  return frames
+}
+
+/** A persisted material beat replayed as an activity row (2026-09-24
+ * 素材节拍入库): wire-frame shape plus the beat's own interpolation fields
+ * (the file's `name`, the batch progress `total` for the "N/M" label). */
+export type MaterialBeatRow = ActivityFramePayload & {
+  name?: string
+  total?: number
+}
+
+/** The material-beat dump on a message row's intent column ({type:
+ * "material_beat", beat, status, name?, count?, total?, ref?}) — the
+ * pipeline's settled reading/understanding rows (app/chat/service's
+ * record_material_beat). Beats are BORN SETTLED (the live active row stays
+ * the dock's synthesized now-line); the replay renders the past-tense key.
+ * Same read tolerance as triggerSuggestions — anything off-shape parses to
+ * undefined (a plain assistant row), never a crash. */
+export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
+  const data = (intent ?? {}) as Record<string, unknown>
+  if (data.type !== "material_beat") return undefined
+  const status = data.status === "failed" ? ("failed" as const) : ("completed" as const)
+  const count = typeof data.count === "number" ? data.count : undefined
+  const total = typeof data.total === "number" ? data.total : undefined
+  const name = typeof data.name === "string" ? data.name : undefined
+  const ref = typeof data.ref === "string" ? data.ref : "beat"
+  if (data.beat === "reading") {
+    return {
+      activity_id: `beat-reading-${ref}`,
+      seq: 0,
+      kind: "read",
+      status,
+      key:
+        status === "failed"
+          ? "chat.material.readingFailed"
+          : total != null && total > 1
+            ? "chat.material.readingDoneProgress"
+            : "chat.material.readingDone",
+      count,
+      total,
+      name,
+    }
+  }
+  if (data.beat === "understanding") {
+    return {
+      activity_id: `beat-understanding-${ref}`,
+      seq: 0,
+      kind: "read",
+      status,
+      key: "chat.material.understandingDone",
+      count,
+    }
+  }
+  return undefined
 }
 
 /** Derived preview row (ADR-043): the server dry-run-compiles the chain at
@@ -195,6 +310,11 @@ export interface ProjectAsset {
   id: string
   type: string
   file_url: string | null
+  /** Browser-playable URL resolved server-side (AssetResponse's computed
+   * field) — the message chip's media sliver reads it (2026-09-24: the sent
+   * attachment degraded to a bare icon because only the storage KEY was
+   * persisted; the send payload now rides stream_url). */
+  stream_url?: string | null
   title: string | null
   processing_status: "pending" | "processing" | "completed" | "failed"
 }
@@ -340,6 +460,34 @@ export function mapHistoryRows(
         }
       }
     } else {
+      // 素材节拍回放 (2026-09-24): a persisted beat row replays as a
+      // settled activity unit, never a bubble — the dock splits it out of
+      // the message stream (flowMessages / replayedBeats).
+      const beat = materialBeat(m.intent)
+      if (beat !== undefined) {
+        history.push({
+          id: m.id,
+          role: "assistant",
+          content: "",
+          at: m.created_at,
+          beat: { ...beat, at: m.created_at },
+        })
+        continue
+      }
+      // activity 持久化回放 (2026-09-25): a turn's settled milestone log
+      // rides as one row's payload — the dock merges the LATEST turn's
+      // frames into the activity stream (U9 parity), never a bubble.
+      const log = activityLog(m.intent)
+      if (log !== undefined) {
+        history.push({
+          id: m.id,
+          role: "assistant",
+          content: "",
+          at: m.created_at,
+          milestones: log,
+        })
+        continue
+      }
       history.push({
         id: m.id,
         role: "assistant",

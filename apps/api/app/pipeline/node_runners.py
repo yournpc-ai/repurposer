@@ -378,6 +378,28 @@ async def warm_understanding(project_id: UUID) -> None:
             )
             db.add(row)
             await db.commit()
+            # 素材节拍入库 (2026-09-24 用户拍板): the settled understanding
+            # row persists BEFORE the trigger fires, so the rebuilt timeline
+            # always reads beat-then-prose ("已理解素材内容" → "我看了——…").
+            # Best-effort like the warm itself; dedup rides the digest.
+            try:
+                from app.pipeline import conversation_bridge  # deferred: ADR-087 seam
+
+                await conversation_bridge.record_material_beat(
+                    db,
+                    project.user_id,
+                    project_id,
+                    "understanding",
+                    count=len(assets),
+                    ref=digest,
+                )
+                await db.commit()
+            except Exception as e:  # noqa: BLE001 — the beat is best-effort
+                logger.warning(
+                    "material_beat_understanding_failed",
+                    project_id=str(project_id),
+                    error=str(e),
+                )
             logger.info(
                 "understanding_warmed",
                 project_id=str(project_id),

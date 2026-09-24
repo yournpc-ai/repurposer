@@ -171,10 +171,13 @@ class VerifyCodeResponse(BaseModel):
 class UserSettingsResponse(BaseModel):
     """The settings read shape: the strategy plus the 'large' threshold (the
     public operating parameter rides along so the dock's disclosure tier
-    needs ONE read — ADR-055 参数座位, never a secret)."""
+    needs ONE read — ADR-055 参数座位, never a secret). The understanding
+    window rides the same seat (2026-09-24: the chat surface's warm-wait
+    cap moved from a frontend constant to the configs table)."""
 
     confirm_strategy: str
     confirm_large_threshold: int
+    trigger_window_secs: int
 
 
 class UserSettingsUpdate(BaseModel):
@@ -193,6 +196,7 @@ async def get_settings(
     return UserSettingsResponse(
         confirm_strategy=read_confirm_strategy(current_user.settings),
         confirm_large_threshold=await get_config(db, "billing.confirm_large_threshold"),
+        trigger_window_secs=await get_config(db, "trigger.understanding_window_secs"),
     )
 
 
@@ -217,6 +221,7 @@ async def put_settings(
     return UserSettingsResponse(
         confirm_strategy=data.confirm_strategy,
         confirm_large_threshold=await get_config(db, "billing.confirm_large_threshold"),
+        trigger_window_secs=await get_config(db, "trigger.understanding_window_secs"),
     )
 
 

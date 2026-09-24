@@ -224,12 +224,17 @@ def test_t11_frame_field_whitelist():
         assert f.kind in ("read", "draft", "run", "repair")
         assert f.status in (STATUS_ACTIVE, STATUS_COMPLETED, STATUS_FAILED, STATUS_CANCELLED)
         assert f.key is None or f.key.startswith(("chat.inspecting", "chat.activity."))
-        # duration_ms only on a settle frame of a real span, never on the
-        # active frame itself.
+        # duration_ms only on a settle frame of a GENUINE span (read /
+        # repair — real server work), never on the active frame itself, and
+        # never on a terminal-kind settle (draft / run open at name_known,
+        # AFTER the LLM's drafting — the measured ~1s is validation noise
+        # that reads as a lie, 2026-09-25 诚实耗时).
         if f.status == STATUS_ACTIVE:
             assert "duration_ms" not in f.to_dict()
-        else:
+        elif f.kind in ("read", "repair"):
             assert isinstance(f.to_dict()["duration_ms"], int)
+        else:
+            assert "duration_ms" not in f.to_dict()
 
 
 # T12 — determinism: the same event sequence yields the byte-same frames.
@@ -364,6 +369,26 @@ def test_explore_milestone_is_born_completed_with_count():
     assert p.sweep("completed") == []
 
 
+def test_draft_kind_speaks_two_faces_by_tool():
+    """2026-09-25 文案批: the draft bucket's plan verbs read as 整理方案
+    (chat.activity.draft), its revision verbs (edit_graph / revise_output /
+    edit_output) read as 修改 (chat.activity.edit) — one kind, the key pair
+    picked at open time, the done mirror resolved per pair."""
+    for tool, active, done in [
+        ("propose_tasks", "chat.activity.draft", "chat.activity.draftDone"),
+        ("present_plan", "chat.activity.draft", "chat.activity.draftDone"),
+        ("edit_graph", "chat.activity.edit", "chat.activity.editDone"),
+        ("revise_output", "chat.activity.edit", "chat.activity.editDone"),
+        ("edit_output", "chat.activity.edit", "chat.activity.editDone"),
+    ]:
+        p = ActivityProjector()
+        frames = _feed(p, tool, TerminalAccepted(tool))
+        assert [(f.status, f.key) for f in frames] == [
+            (STATUS_ACTIVE, active),
+            (STATUS_COMPLETED, done),
+        ], tool
+
+
 def test_explore_milestone_key_whitelist():
     """Only the three registered milestone keys fire (N-57 词表)."""
     p = ActivityProjector()
@@ -375,6 +400,51 @@ def test_explore_milestone_key_whitelist():
         assert p.explore_milestone(key, count=1).key == key
     with pytest.raises(AssertionError):
         p.explore_milestone("chat.explore.madeUp", count=1)
+
+
+def test_settled_frames_collects_the_turns_durable_history():
+    """activity 持久化 (2026-09-25): settled_frames() is the persist seam —
+    every terminal frame in emission (seq) order, ACTIVE frames never join
+    (the live wire owns the in-flight face; only the settled form is
+    durable). A whole turn story — rejection, repair, acceptance, plus a
+    span only the sweep settles — reads back complete and ordered."""
+    p = ActivityProjector()
+    # A read call: active → rejected (cancelled + repair opens) → accepted
+    # (repair completes, the retried read completes).
+    p.name_known("search_transcript")
+    p.feed_event(ToolRejected("search_transcript", "bad params"))
+    p.name_known("search_transcript")
+    p.feed_event(ReadAccepted("search_transcript"))
+    # A draft span still open at the envelope — the sweep settles it.
+    p.name_known("propose_tasks")
+    sweep = p.sweep("completed")
+    assert len(sweep) == 1
+    # A born-completed milestone joins too.
+    p.explore_milestone("chat.explore.plansReady", count=2)
+
+    settled = p.settled_frames()
+    assert [f.seq for f in settled] == sorted(f.seq for f in settled)
+    assert [(f.kind, f.status) for f in settled] == [
+        ("read", STATUS_CANCELLED),      # the rejected first call
+        ("repair", STATUS_COMPLETED),    # the rework succeeded
+        ("read", STATUS_COMPLETED),      # the retried read landed
+        ("draft", STATUS_COMPLETED),     # swept at the envelope
+        ("draft", STATUS_COMPLETED),     # the born-completed milestone
+    ]
+    # Every settled frame is wire-shaped (the persist row stores to_dict()).
+    for f in settled:
+        d = f.to_dict()
+        assert d["activity_id"] and d["seq"] and d["at"]
+        assert d["status"] != STATUS_ACTIVE
+
+
+def test_settled_frames_empty_before_any_terminal():
+    """A turn with no terminal frames persists nothing (the route skips the
+    row on an empty list)."""
+    p = ActivityProjector()
+    assert p.settled_frames() == []
+    p.name_known("search_transcript")  # active only — never durable
+    assert p.settled_frames() == []
 
 
 def test_frame_count_absent_off_the_wire_otherwise():

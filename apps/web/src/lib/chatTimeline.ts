@@ -38,10 +38,16 @@ export type ConversationUnit =
   | { kind: "activity"; activity: ActivityFramePayload }
 
 /** The non-run timeline (S7: messages.at × activity.at 单流穿插): messages
- * and the turn's activity rows interleave by real moment. Messages claim
- * the lower order numbers (they predate the turn's work); a same-moment tie
- * lands the message first. The activity row's `at` is its BIRTH (the
- * reducer preserves the first-seen stamp) — a settled row never moves. */
+ * and the turn's SETTLED activity rows interleave by real moment. Messages
+ * claim the lower order numbers (they predate the turn's work); a
+ * same-moment tie lands the message first. The activity row's `at` is its
+ * BIRTH (the reducer preserves the first-seen stamp) — a settled row never
+ * moves.
+ *
+ * 2026-09-24 合一律: an ACTIVE activity never interleaves — while a
+ * milestone is live it is the now-line's content (one mounted row morphing
+ * think → milestone → think at the bottom of the flow), and it enters this
+ * walk only when it settles into history. */
 export function buildConversationUnits(
   messages: OverlayMessage[],
   activities: ActivityFramePayload[],
@@ -52,6 +58,7 @@ export function buildConversationUnits(
     entries.push({ t: momentOf(m.at), order: order++, unit: { kind: "message", message: m } })
   }
   for (const a of activities) {
+    if (a.status === "active") continue // the now-line owns the live row
     entries.push({ t: momentOf(a.at), order: order++, unit: { kind: "activity", activity: a } })
   }
   return orderMoments(entries)

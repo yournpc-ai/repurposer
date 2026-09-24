@@ -87,12 +87,27 @@ _EXPLORATION_VERBS: frozenset[str] = frozenset(EXPLORATION_TOOLS)
 
 # Copy keys for the terminal kinds (U7: active/completed status-forms; a
 # FAILED frame reuses the ACTIVE key — the ✗ says the work did not land,
-# the label keeps saying what the work WAS).
+# the label keeps saying what the work WAS). The draft kind speaks TWO key
+# pairs (2026-09-25 文案批): proposing a plan reads as 整理方案, revising
+# existing work reads as 修改 — one kind, picked by tool at open time.
 _ACTIVITY_KEYS = {
     KIND_DRAFT: ("chat.activity.draft", "chat.activity.draftDone"),
     KIND_RUN: ("chat.activity.run", "chat.activity.runDone"),
     KIND_REPAIR: ("chat.activity.repair", "chat.activity.repairDone"),
 }
+
+# The draft bucket's revision verbs → the edit key pair (the plan verbs
+# propose_tasks / present_plan keep the kind default above).
+_EDIT_TOOLS = frozenset({"edit_graph", "revise_output", "edit_output"})
+_EDIT_KEYS = ("chat.activity.edit", "chat.activity.editDone")
+
+
+def _active_key_for(kind: str, tool_name: str) -> str | None:
+    """The open-time key: the draft kind's two user faces split by tool."""
+    if kind == KIND_DRAFT and tool_name in _EDIT_TOOLS:
+        return _EDIT_KEYS[0]
+    pair = _ACTIVITY_KEYS.get(kind)
+    return pair[0] if pair else None
 
 # A read's done-form key derives from its registry activity_key by family
 # swap (chat.inspecting.* → chat.inspectingDone.*) — the registry stays the
@@ -203,6 +218,13 @@ class ActivityProjector:
         # monotonic start — the S7 duration_ms source; monotonic, never the
         # wall clock, so a clock adjustment never fabricates a negative span)
         self._active: dict[str, tuple[str, str | None, float]] = {}
+        # The turn's durable history (activity 持久化, 2026-09-25): every
+        # frame that reached a TERMINAL state, in emission order. The
+        # envelope sweep's 终帧律 guarantees zero active at turn end, so
+        # this list IS the whole story — the SSE route persists it as one
+        # activity_log message row so a refresh replays the settled rows
+        # (they were memory-only before, and the flow changed on F5).
+        self._settled: list[ActivityFrame] = []
 
     # -- frame factory -------------------------------------------------
 
@@ -230,8 +252,20 @@ class ActivityProjector:
 
     def _settle(self, activity_id: str, status: str, key: str | None) -> ActivityFrame:
         kind, _, started = self._active.pop(activity_id)
-        duration_ms = max(0, int((time.monotonic() - started) * 1000))
-        return self._frame(activity_id, kind, status, key, duration_ms=duration_ms)
+        # 诚实耗时 (2026-09-25): the whisper shows only a GENUINE span.
+        # Read / repair spans cover real server work (the query, the rework
+        # loop) — honest. Terminal-kind spans (draft / run) open at
+        # name_known, AFTER the LLM already did the drafting — the measured
+        # ~1s is validation noise that reads as a lie ("计划已起草 ·1s"
+        # after a 30s draft), so those settles carry none.
+        duration_ms = (
+            max(0, int((time.monotonic() - started) * 1000))
+            if kind in (KIND_READ, KIND_REPAIR)
+            else None
+        )
+        frame = self._frame(activity_id, kind, status, key, duration_ms=duration_ms)
+        self._settled.append(frame)
+        return frame
 
     @staticmethod
     def _done_key(kind: str, active_key: str | None) -> str | None:
@@ -242,6 +276,8 @@ class ActivityProjector:
             # "Done" (searching → searchingDone) — the family's own law.
             assert active_key.startswith(_EXPLORE_PREFIX)
             return active_key + "Done"
+        if active_key == _EDIT_KEYS[0]:
+            return _EDIT_KEYS[1]
         pair = _ACTIVITY_KEYS.get(kind)
         return pair[1] if pair else None
 
@@ -253,9 +289,11 @@ class ActivityProjector:
         payload (Activity 十规则 — the whitelist's one extension)."""
         assert key in _EXPLORE_MILESTONE_KEYS, f"unknown explore milestone {key!r}"
         self._count += 1
-        return self._frame(
+        frame = self._frame(
             f"a{self._count}", KIND_DRAFT, STATUS_COMPLETED, key, count=count
         )
+        self._settled.append(frame)
+        return frame
 
     # -- event feeds ----------------------------------------------------
 
@@ -273,7 +311,7 @@ class ActivityProjector:
         key = (
             PERCEPTION_TOOLS[tool_name].activity_key
             if kind == KIND_READ
-            else _ACTIVITY_KEYS[kind][0]
+            else _active_key_for(kind, tool_name)
         )
         activity_id, frame = self._start(kind, key)
         self._open_call = (tool_name, activity_id)
@@ -374,6 +412,15 @@ class ActivityProjector:
 
     def has_active(self) -> bool:
         return bool(self._active)
+
+    def settled_frames(self) -> list[ActivityFrame]:
+        """The turn's durable activity history (2026-09-25 activity 持久化):
+        every frame that reached a terminal state, in emission (seq) order.
+        Read it AFTER the envelope sweep — the 终帧律 guarantees zero active
+        at that point, so the list is the complete settled story. Active
+        frames never join (the live wire owns the in-flight face; only the
+        settled form is durable)."""
+        return list(self._settled)
 
 
 __all__ = [

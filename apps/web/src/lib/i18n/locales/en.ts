@@ -1283,6 +1283,22 @@ const en = {
     thinkingPhases: {
       composing: "Putting it together…",
     },
+    /** The now-line's material beats (2026-09-24 user ruling — thinking IS
+     * the activity row's empty state): assets mid-processing → reading (the
+     * filename interpolates); the warm gap (assets settled, the
+     * understanding review not yet landed) → understanding. The *Done /
+     * *Failed forms are the PERSISTED settled rows (素材节拍入库 — the
+     * pipeline records one message row per beat, the replay renders the
+     * past tense); Progress carries the batch count "N/M" (带计数 ruling). */
+    material: {
+      reading: "Reading {{name}}…",
+      readingMany: "Reading {{count}} files…",
+      understanding: "Understanding your material…",
+      readingDone: "Read {{name}}",
+      readingDoneProgress: "Read {{name}} ({{count}}/{{total}})",
+      readingFailed: "Couldn't read {{name}}",
+      understandingDone: "Understood your material",
+    },
     /** The perception family's inspecting chatter (T2b): a read ACTIVITY's
      * active-frame label while a read tool runs (Phase 3 Batch B ③ moved the
      * family from the retired System Status row to the Activity Stream —
@@ -1320,11 +1336,17 @@ const en = {
      * frame carries the progressive form, the completed frame the past-tense
      * form; failed/cancelled reuse the active form (the ✗ / strikethrough
      * says the rest). kind is a user-semantic category — never a tool name. */
+    /** 2026-09-25 copy batch (user ruling — the machine-status register
+     * retired): plain words for the work in flight. The draft kind speaks
+     * two faces by tool — proposing a plan / editing existing work (the
+     * projector's _EDIT_TOOLS picks the key). */
     activity: {
-      draft: "Drafting the plan…",
-      draftDone: "Drafted the plan",
-      run: "Creating your workflow…",
-      runDone: "Created your workflow",
+      draft: "Putting the plan together…",
+      draftDone: "Plan ready for review",
+      edit: "Making the change…",
+      editDone: "Change made",
+      run: "Getting started…",
+      runDone: "Started",
       repair: "That answer didn't come out right — reworking it…",
       repairDone: "Reworked it",
     },
@@ -1514,7 +1536,7 @@ const en = {
     clipsNeedMedia: "Needs a video, audio, or image source — upload to unlock, or remove this row.",
     countDecrease: "Decrease",
     countIncrease: "Increase",
-    confirmQuestion: "Save & generate?",
+    confirmQuestion: "Start with this version?",
     confirm: "Start generation",
     // E6 披露强度分级 (ADR-092): the escalated tier's priced CTA — the
     // gesture is the SAME single Start; only the label carries the price.

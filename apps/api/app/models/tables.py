@@ -188,6 +188,18 @@ class Asset(Base):
     processed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
 
+    @property
+    def display_name(self) -> str | None:
+        """The user- and LLM-facing name — the original upload title, NEVER
+        the storage key's generated basename (2026-09-24: the plan context
+        derived its filename from ``file_url``, so the router echoed
+        "xy_1-1790259951-fIsRRA.mp4" back to the user; 世界自证律 — the
+        model can only quote the names the context actually carries). The
+        key basename survives only as the no-title fallback (legacy rows)."""
+        if self.title:
+            return str(self.title)
+        return self.file_url.rsplit("/", 1)[-1] if self.file_url else None
+
 
 class WorkflowRun(Base):
     """Workflow run table — run-level state machine only.

@@ -21,6 +21,8 @@ pill the moment an ask_user call's arguments validate. The terminal envelope
 
 import asyncio
 import json
+
+import structlog
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -46,6 +48,7 @@ from app.chat.service import (
     execute_chat_turn,
     list_conversation_messages,
     prepare_chat_turn,
+    record_activity_log,
     stamp_turn_failed,
 )
 from app.providers.llm.base import LLMError
@@ -56,6 +59,8 @@ from app.platform.conversation_context import (
 )
 from app.platform.project_context import get_output_for_user, get_project_for_user
 from app.ui_locale import current_ui_language
+
+logger = structlog.get_logger()
 
 # The trigger-turn agent (T3, ADR-077 判词③) takes no calls HERE either —
 # the pipeline's two whitelist seats (warm understanding / run finalized)
@@ -221,6 +226,34 @@ async def _sweep_activities(queue: asyncio.Queue, projector: ActivityProjector, 
         await queue.put(_activity_frame(frame))
 
 
+async def _persist_activity_log(
+    conversation_id: UUID, ref: str, projector: ActivityProjector
+) -> None:
+    """activity 持久化 (2026-09-25): the turn's settled frames land as ONE
+    activity_log message row, so a refresh replays the settled activity
+    rows instead of silently dropping them (they were memory-only — the
+    flow changed on F5). Called on the COMPLETED path only, after the
+    sweep, on its own session (the turn's session already closed — its
+    commit is the turn's; this row is additive history). Best-effort: a
+    log failure degrades to a warning (the pre-persistence behavior),
+    never a failed turn."""
+    frames = [f.to_dict() for f in projector.settled_frames()]
+    if not frames:
+        return
+    try:
+        from app.models.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as db:
+            await record_activity_log(db, conversation_id, frames, ref=ref)
+            await db.commit()
+    except Exception as e:  # noqa: BLE001 — additive history is best-effort
+        logger.warning(
+            "activity_log_persist_failed",
+            conversation_id=str(conversation_id),
+            error=str(e),
+        )
+
+
 def _failure_detail(exc: Exception, ui_language: str) -> str | dict:
     """The ONE error→frame mapping both turn pumps share (2026-09-05 减法批).
 
@@ -317,6 +350,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
 
         prepared = None
         turn_user_message_id = None
+        turn_conversation_id = None
         try:
             async with AsyncSessionLocal() as db:
                 prepared = await prepare_chat_turn(db, user_id, data)
@@ -324,6 +358,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                 # MissingGreenlet lesson): the failure stamp below reads this
                 # after the turn's session has torn down.
                 turn_user_message_id = prepared.user_message.id
+                turn_conversation_id = prepared.conversation_id
                 on_delta = _make_delta_hook(queue)
                 on_tool_call, on_tool_ready = _make_tool_hooks(queue, projector)
                 on_loop_event = _make_loop_event_hook(queue, projector)
@@ -367,6 +402,10 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     on_activity=on_activity,
                 )
             await _sweep_activities(queue, projector, "completed")
+            if turn_conversation_id is not None and turn_user_message_id is not None:
+                await _persist_activity_log(
+                    turn_conversation_id, str(turn_user_message_id), projector
+                )
             await queue.put(("completed", response.model_dump(mode="json")))
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash
             # Turn durability (交互完整性批 A): the user row committed in
@@ -440,6 +479,7 @@ async def _answer_stream(
                     on_activity=on_activity,
                 )
             await _sweep_activities(queue, projector, "completed")
+            await _persist_activity_log(message.conversation_id, str(message.id), projector)
             await queue.put(
                 (
                     "completed",

@@ -507,9 +507,9 @@ def _build_role_question(text: str, assets: list[Asset]) -> QuestionProposal | N
         return None
     zh = _prefers_zh(text)
     options = [
-        Option(id=str(a.id), label=a.file_url.rsplit("/", 1)[-1]) for a in videos
+        Option(id=str(a.id), label=a.display_name or a.type.value) for a in videos
     ]
-    first_name = videos[0].file_url.rsplit("/", 1)[-1]
+    first_name = videos[0].display_name or videos[0].type.value
     if zh:
         return QuestionProposal(
             question="哪个是你的原片？另一个会当参照案例，拆解它的风格。",
@@ -600,7 +600,7 @@ async def _settle_role_answer(
             (
                 v
                 for v in videos
-                if (name := v.file_url.rsplit("/", 1)[-1].lower())
+                if (name := (v.display_name or "").lower())
                 and (needle in name or name in needle)
             ),
             None,
@@ -2435,3 +2435,122 @@ async def list_conversation_messages(
         .order_by(Message.created_at.asc())
     )
     return list(result.scalars().all())
+
+
+# ---- Material beats (2026-09-24 用户拍板) ---------------------------------
+#
+# The dock's material rows ("正在阅读 X…" / "正在理解素材内容…") were
+# frontend-synthesized and DIED on refresh — the settled gray row the live
+# surface showed simply vanished from the rebuilt history. The fix is a
+# plain message row: the pipeline records one settled row per beat through
+# the ConversationBridge (ADR-087 — pipeline never writes messages directly),
+# and the history replay maps it back onto the same ActivityRow component.
+# Beats are BORN SETTLED (completed/failed) — the live active row stays the
+# dock's synthesized now-line; only the durable settled form rides the wire.
+
+MATERIAL_BEAT_TYPE = "material_beat"
+
+
+async def record_material_beat(
+    db: AsyncSession,
+    user_id: UUID,
+    project_id: UUID,
+    beat: str,
+    *,
+    status: str = "completed",
+    name: str | None = None,
+    count: int | None = None,
+    total: int | None = None,
+    ref: str | None = None,
+) -> Message | None:
+    """Persist one settled material beat as a message row (once-only per
+    (beat, ref) — the warm's re-materialization race and the worker's
+    retries collapse onto the first landed row, same doctrine as the
+    trigger dump's ``_already_spoke``).
+
+    ``beat``: "reading" (an asset's processing drained — ref = asset id,
+    ``name`` = the asset's display name, ``count``/``total`` = the project
+    set's drain progress) | "understanding" (the warm materialized — ref =
+    the asset digest, ``count`` = the asset count). Returns None when the
+    beat already landed (dedup) so callers stay fire-and-forget.
+    """
+    conversation = await _get_or_create_project_conversation(db, user_id, project_id)
+    dedup = select(Message.id).where(
+        Message.conversation_id == conversation.id,
+        Message.intent["type"].astext == MATERIAL_BEAT_TYPE,
+        Message.intent["beat"].astext == beat,
+    )
+    if ref is not None:
+        dedup = dedup.where(Message.intent["ref"].astext == ref)
+    if (await db.execute(dedup.limit(1))).scalar_one_or_none() is not None:
+        return None
+    intent: dict[str, Any] = {"type": MATERIAL_BEAT_TYPE, "beat": beat, "status": status}
+    if name is not None:
+        intent["name"] = name
+    if count is not None:
+        intent["count"] = count
+    if total is not None:
+        intent["total"] = total
+    if ref is not None:
+        intent["ref"] = ref
+    message = Message(
+        conversation_id=conversation.id,
+        role="assistant",
+        content="",
+        attachments=[],
+        mentions=[],
+        intent=intent,
+    )
+    db.add(message)
+    await db.flush()
+    await db.refresh(message)
+    return message
+
+
+# ---- Activity log persistence (2026-09-25 activity 持久化) -----------------
+#
+# The turn's milestone stream was MEMORY-ONLY (the dock's activities state,
+# reset per turn) — a refresh silently dropped every settled activity row
+# and the flow changed on F5. The SSE turn route now persists the
+# projector's settled frames as ONE message row per turn (same "activity
+# row = a message intent dump" shape as the material beats above). The
+# replay restores ONLY the LATEST turn's log — parity with the live law
+# (U9: the next turn's stream replaces the previous turn's rows), never
+# inventing rows the live flow didn't show.
+
+ACTIVITY_LOG_TYPE = "activity_log"
+
+
+async def record_activity_log(
+    db: AsyncSession,
+    conversation_id: UUID,
+    frames: list[dict[str, Any]],
+    *,
+    ref: str,
+) -> Message | None:
+    """Persist one turn's settled activity frames as a single message row
+    (once-only per ``ref`` — the opening user row's id — so a retried
+    persist collapses onto the first landed row). Called by the SSE turn
+    routes AFTER the envelope sweep, on the completed path only — a failed
+    turn persists nothing (the stamp_turn_failed doctrine's twin)."""
+    if not frames:
+        return None
+    dedup = select(Message.id).where(
+        Message.conversation_id == conversation_id,
+        Message.intent["type"].astext == ACTIVITY_LOG_TYPE,
+        Message.intent["ref"].astext == ref,
+    )
+    if (await db.execute(dedup.limit(1))).scalar_one_or_none() is not None:
+        return None
+    message = Message(
+        conversation_id=conversation_id,
+        role="assistant",
+        content="",
+        attachments=[],
+        mentions=[],
+        intent={"type": ACTIVITY_LOG_TYPE, "ref": ref, "frames": frames},
+    )
+    db.add(message)
+    await db.flush()
+    await db.refresh(message)
+    return message

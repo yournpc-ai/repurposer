@@ -32,6 +32,7 @@ import {
   Image as ImageIcon,
   Images,
   Languages,
+  Loader2,
   Mic2,
   Minus,
   Music,
@@ -124,6 +125,8 @@ import { useConfirmStrategy } from "@/components/composer/CostConfirmControl"
 import { ModelsPanel } from "@/components/composer/ModelsPanel"
 import {
   mapHistoryRows,
+  materialBeat,
+  triggerName,
   triggerSuggestions,
   questionEcho,
   bareQuestion,
@@ -154,8 +157,7 @@ import {
 import {
   RunTaskList,
 } from "@/components/chat/RunTaskList"
-import { StatusLine } from "@/components/chat/StatusLine"
-import { ActivityRow } from "@/components/chat/ActivityStream"
+import { ActivityRow, type NowRowPayload } from "@/components/chat/ActivityStream"
 import type { LifecycleStamp, Output } from "@/lib/types"
 import { isConfirmationReady, isPlanReady } from "@/lib/lifecycleStamp"
 import {
@@ -165,6 +167,7 @@ import {
   probeMediaDims,
   useStagedFileMeta,
 } from "@/lib/stagedFiles"
+import { putWithProgress } from "@/lib/stagingUploads"
 import { useFileDrop } from "@/lib/useFileDrop"
 
 const LANGUAGE_OPTIONS = [
@@ -271,14 +274,43 @@ const ADDABLE_TOOLS = [
 /** The panel geometry's persistence key (float | docked) — 2026-09-06. */
 const PANEL_MODE_KEY = "repurposer-panel-mode"
 
+/** The understanding-window hard cap (2026-09-24 用户拍板): the value lives
+ * in the configs table (``trigger.understanding_window_secs``, default 1h —
+ * the 5-minute frontend constant retired; the warm's LLM latency runs
+ * MINUTES past asset settlement) and rides the /auth/settings read — the
+ * trailing poll closes on the understanding_warmed row LANDING, or on this
+ * cap (a failed warm degrades to silence by design), never on a latency
+ * guess. The fallback mirrors the registry default for a failed fetch. */
+const TRIGGER_WINDOW_FALLBACK_MS = 3_600_000
+let _triggerWindowMs: number | null = null
+
+async function fetchTriggerWindowMs(): Promise<number> {
+  if (_triggerWindowMs !== null) return _triggerWindowMs
+  try {
+    const res = await apiFetch("/auth/settings", { toast: false })
+    if (res.ok) {
+      const data = (await res.json()) as { trigger_window_secs?: number }
+      if (typeof data.trigger_window_secs === "number") {
+        _triggerWindowMs = data.trigger_window_secs * 1000
+      }
+    }
+  } catch {
+    // network failure — the registry default rides (读容忍)
+  }
+  return _triggerWindowMs ?? TRIGGER_WINDOW_FALLBACK_MS
+}
+
 /** A file staged in the input group, mid-lifecycle: picked → uploading
- * (direct-to-storage, same 3-step flow as the composer) → done (a real
+ * (direct-to-storage, same 3-step flow as the composer — XHR-backed so the
+ * chip shows the REAL %, 2026-09-24 composer/recipe parity) → done (a real
  * project asset) / error (retry or remove). Nothing enters the flow until
  * the user presses send — the chips ride the next user bubble. */
 interface StagedUpload {
   localId: string
   file: File
   status: "uploading" | "done" | "error"
+  /** 0..1 while uploading (XHR progress events; fetch has none). */
+  progress: number
   asset?: ProjectAsset
 }
 
@@ -335,8 +367,10 @@ function ScrollerSendBridge({
  * 09-06: dock chips learned the composer chip anatomy, one staged-file
  * language across every input surface): image = the file itself, video =
  * first frame, both via the shared useStagedFileMeta probe (object URLs
- * self-revoke); audio/docs keep the type icon. Upload lifecycle states
- * (shimmer / retry / ×) unchanged — only the media sliver is new. */
+ * self-revoke); audio/docs keep the type icon. Upload lifecycle: uploading
+ * = spinner + REAL % in the description slot (2026-09-24 composer/recipe
+ * parity — the XHR-backed PUT feeds the ratio), error = retry, × removes
+ * (and deletes the already-created asset). */
 function StagedAttachmentChip({
   item,
   onRetry,
@@ -380,7 +414,19 @@ function StagedAttachmentChip({
       </AttachmentMedia>
       <AttachmentContent>
         <AttachmentTitle>{item.file.name}</AttachmentTitle>
-        <AttachmentDescription>{metaLine}</AttachmentDescription>
+        {item.status === "uploading" ? (
+          /* Composer/recipe parity (2026-09-24 用户拍板): the uploading
+             chip speaks its REAL percent (XHR progress), spinner + numeral
+             in the description slot — the bare shimmer was illegible. */
+          <AttachmentDescription className="flex items-center gap-1">
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+            <span className="tabular-nums">
+              {Math.round(item.progress * 100)}%
+            </span>
+          </AttachmentDescription>
+        ) : (
+          <AttachmentDescription>{metaLine}</AttachmentDescription>
+        )}
       </AttachmentContent>
       <AttachmentActions
         // FLORA hover anatomy (2026-09-06): the chip chrome (× / retry)
@@ -652,8 +698,47 @@ function UserBubble({ text, assets }: { text: string; assets?: ProjectAsset[] })
           </BubbleGroup>
         ) : null}
         {assets && assets.length > 0 ? (
-          <AttachmentGroup className="justify-end">
+          <>
+            {/* Media assets ride as MEDIA messages (2026-09-25 用户拍板,
+                the shadcn message-attachment composition): Attachment
+                vertical + AttachmentMedia "media" — a video plays inline
+                (native controls, natural aspect), an image shows at
+                viewing size. Non-visual assets (audio / files) stay chips
+                below. */}
             {assets.map((asset) => {
+              const mediaUrl =
+                asset.stream_url ??
+                (asset.file_url?.startsWith("http") ? asset.file_url : null)
+              if (!mediaUrl) return null
+              if (asset.type === "video") {
+                return (
+                  <div key={asset.id} className="flex justify-end">
+                    <Attachment orientation="vertical" className="w-72 max-w-full">
+                      <AttachmentMedia variant="media">
+                        <video src={mediaUrl} controls playsInline preload="metadata" />
+                      </AttachmentMedia>
+                    </Attachment>
+                  </div>
+                )
+              }
+              if (asset.type === "image") {
+                return (
+                  <div key={asset.id} className="flex justify-end">
+                    <Attachment orientation="vertical" className="w-72 max-w-full">
+                      <AttachmentMedia variant="media">
+                        <img src={mediaUrl} alt={asset.title ?? ""} />
+                      </AttachmentMedia>
+                    </Attachment>
+                  </div>
+                )
+              }
+              return null
+            })}
+            {assets.some((a) => a.type !== "video" && a.type !== "image") && (
+            <AttachmentGroup className="justify-end">
+            {assets
+              .filter((a) => a.type !== "video" && a.type !== "image")
+              .map((asset) => {
               const Icon = assetTypeIcon(asset.type)
               const typeLabel = t(`generationOverlay.assetTypes.${asset.type}`, {
                 defaultValue: asset.type,
@@ -668,7 +753,10 @@ function UserBubble({ text, assets }: { text: string; assets?: ProjectAsset[] })
                   // flow; only a genuine failure stays visible, statically.
                   state={asset.processing_status === "failed" ? "error" : "done"}
                 >
-                  <AttachmentMedia>
+                  {/* Video/image ride as media messages above (2026-09-25
+                      用户拍板) — the chip family is audio / files only, so
+                      the sliver slot is always the type icon. */}
+                  <AttachmentMedia variant="icon">
                     <Icon />
                   </AttachmentMedia>
                   <AttachmentContent>
@@ -681,6 +769,8 @@ function UserBubble({ text, assets }: { text: string; assets?: ProjectAsset[] })
               )
             })}
           </AttachmentGroup>
+            )}
+          </>
         ) : null}
       </MessageContent>
     </Message>
@@ -701,30 +791,6 @@ function AssistantText({ text, streaming }: { text: string; streaming?: boolean 
         >
           {text}
         </Streamdown>
-      </MessageContent>
-    </Message>
-  )
-}
-
-/** The thinking row's animation slot (2026-09-09 user ruling): the brand
- * mark was retired as visual noise, and the slot reserves a CODE SEAM only
- * — renders nothing (zero width, zero gap; a sized placeholder box showed
- * up as dead space in front of the label). The future animation drops in
- * here. */
-function ThinkingMark() {
-  return null
-}
-
-/** The dock's thinking seat of the shared StatusLine (2026-09-09 一座两行):
- * label only (2026-09-06 user ruling: the live "· 3s" elapsed countdown is
- * retired, a bare phase shimmer carries it; run-level clocks live on
- * RunTaskList's row, not here). The label is the LIVE phase (Thinking… →
- * Putting it together…), never a frozen word. */
-function ThinkingRow({ label }: { label: string }) {
-  return (
-    <Message align="start">
-      <MessageContent>
-        <StatusLine label={label} leading={<ThinkingMark />} />
       </MessageContent>
     </Message>
   )
@@ -1026,6 +1092,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // contract's no-persistence line) and settles in place at the envelope
   // (U9: the stream stays as the turn's static history below its bubble).
   const [activities, setActivities] = useState<ActivityFramePayload[]>([])
+  // activity 持久化 (2026-09-25): the replayed latest-turn milestone log
+  // rides until a NEW turn starts — the live U9 law ("a new turn's stream
+  // replaces the previous turn's rows") applied to the replayed rows, so a
+  // bare-answer turn (zero frames, nothing persisted) still clears them.
+  const [logDismissed, setLogDismissed] = useState(false)
   // The reducer pair is the extracted PURE seam (activityReducer.ts, Phase
   // 3 Batch A) — same upsert/sweep semantics, contract-tested.
   const handleActivityFrame = useCallback((frame: ActivityFramePayload) => {
@@ -1218,6 +1289,23 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // Phase 3 Batch A) — same branches, zero lifecycle derivation: a
         // refresh reads the archive, readiness comes from the stamp alone.
         const history = mapHistoryRows(data.items ?? [], { prompt, t })
+        // Understanding-window closure facts (2026-09-24): whether the
+        // understanding_warmed review already landed (the trailing poll
+        // needn't open) and the last upload's moment (bounds the mount
+        // re-arm below — the warm's latency runs minutes past settlement,
+        // so a refresh inside that gap must keep polling).
+        const items = data.items ?? []
+        if (
+          items.some((r) => triggerName(r.intent) === "understanding_warmed")
+        ) {
+          setUnderstandingLanded(true)
+        }
+        const lastAttach = [...items]
+          .reverse()
+          .find((r) => (r.attachments?.length ?? 0) > 0)
+        if (lastAttach?.created_at) {
+          setLastUploadAt(Date.parse(lastAttach.created_at))
+        }
         // Prepend — anything pushed locally since mount is newer.
         if (!cancelled && history.length > 0) {
           setMessages((prev) => [...history, ...prev])
@@ -1300,8 +1388,38 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
       for (const row of data.items ?? []) {
         if (row.role !== "assistant") continue
+        // 素材节拍 (2026-09-24 素材节拍入库): a persisted beat row lands in
+        // the flow as a SETTLED activity unit — the now-line's live think
+        // row morphs away on its own facts, this is the durable gray row
+        // behind it. Dedup by the server row id (the poll repeats).
+        const beat = materialBeat(row.intent)
+        if (beat !== undefined) {
+          if (messagesRef.current.some((m) => m.id === row.id)) continue
+          setMessages((prev) =>
+            prev.some((m) => m.id === row.id)
+              ? prev
+              : [
+                  ...prev,
+                  {
+                    id: row.id,
+                    role: "assistant" as const,
+                    content: "",
+                    at: row.created_at,
+                    beat: { ...beat, at: row.created_at },
+                  },
+                ],
+          )
+          continue
+        }
         const suggestions = triggerSuggestions(row.intent)
         if (suggestions === undefined) continue
+        // Window closure fact: the understanding_warmed review has LANDED —
+        // the trailing poll window shuts on this fact, never on a timer
+        // guess (2026-09-24: the 45s grace closed minutes before the warm's
+        // LLM latency delivered the row — measured 3min on a real project).
+        if (triggerName(row.intent) === "understanding_warmed") {
+          setUnderstandingLanded(true)
+        }
         // Dedup by the SERVER row id — the archive replay and a previous
         // poll arrival land under the same id, so the row is known if it is
         // in the flow already or mid-typing. A PENDING options question
@@ -1390,8 +1508,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // Watch window A (理解完成): assets mid-processing — the warm fires the
   // moment the whole set completes. The tick refreshes the assets too (the
   // chips' processing state updates on the same cadence), which flips the
-  // window shut; the trailing grace below still catches the review landing
-  // seconds after completion.
+  // window shut; the trailing window below stays open past the flip until
+  // the review row lands (the warm's LLM latency runs minutes, not seconds).
   const assetsProcessing = assets.some(
     (a) => a.processing_status === "pending" || a.processing_status === "processing",
   )
@@ -1404,13 +1522,34 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     return () => clearInterval(id)
   }, [assetsProcessing, fetchAssets, pollTriggerMessages])
 
-  // Trailing grace: the understanding beat lands a few seconds AFTER the
-  // last asset completes (the warm materializes, then the LLM turn runs) —
-  // keep polling briefly past the flip. Stamped on the falling edge only.
+  // Trailing window (理解完成 review 的收口, 2026-09-24 重修): the warm's
+  // understanding beat lands MINUTES after the last asset completes (the
+  // warm is a full LLM call — measured ~3min against the old 45s grace,
+  // which closed long before the row landed and the review never showed).
+  // The window now closes on the FACT (the understanding_warmed row
+  // landing — set by the poll or the archive scan) or the configs-table cap
+  // (trigger.understanding_window_secs, default 1h — a failed warm degrades
+  // to silence by design), never on a latency guess. Stamped on the assets'
+  // falling edge only.
   const [assetsSettledAt, setAssetsSettledAt] = useState<number | null>(null)
+  const [triggerWindowMs, setTriggerWindowMs] = useState(TRIGGER_WINDOW_FALLBACK_MS)
+  useEffect(() => {
+    let cancelled = false
+    void fetchTriggerWindowMs().then((ms) => {
+      if (!cancelled) setTriggerWindowMs(ms)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  const [understandingLanded, setUnderstandingLanded] = useState(false)
+  const [lastUploadAt, setLastUploadAt] = useState<number | null>(null)
   const wasProcessingRef = useRef(false)
   useEffect(() => {
     if (assetsProcessing) {
+      // A NEW batch resets the closure fact — a fresh materialization fires
+      // its own understanding_warmed (digest-deduped server-side).
+      if (!wasProcessingRef.current) setUnderstandingLanded(false)
       wasProcessingRef.current = true
       return
     }
@@ -1420,16 +1559,35 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }
   }, [assetsProcessing])
   useEffect(() => {
-    if (assetsSettledAt === null) return
-    const remaining = 45_000 - (Date.now() - assetsSettledAt)
+    if (assetsSettledAt === null || understandingLanded) return
+    const remaining = triggerWindowMs - (Date.now() - assetsSettledAt)
     if (remaining <= 0) return
     const id = setInterval(() => void pollTriggerMessages(), 3000)
-    const stop = setTimeout(() => clearInterval(id), remaining)
+    // The cap closes the window as a FACT too — the now-line's
+    // understanding beat dies with it, never outspins the welcome.
+    const stop = setTimeout(() => {
+      clearInterval(id)
+      setAssetsSettledAt(null)
+    }, remaining)
     return () => {
       clearInterval(id)
       clearTimeout(stop)
     }
-  }, [assetsSettledAt, pollTriggerMessages])
+  }, [assetsSettledAt, understandingLanded, triggerWindowMs, pollTriggerMessages])
+
+  // Mount re-arm: a REFRESH inside the warm gap (assets already settled
+  // while the page was away, the review not yet in the archive) never
+  // passes through the falling edge above — without this the window simply
+  // never opens. Bounded by the last upload's age (older than the cap ⇒ the
+  // trigger has either landed — the archive scan saw it — or never will:
+  // a reuse-hit / failed warm stays silent by design).
+  useEffect(() => {
+    if (understandingLanded) return
+    if (assets.length === 0 || assetsProcessing) return
+    if (lastUploadAt === null) return
+    if (Date.now() - lastUploadAt > triggerWindowMs) return
+    setAssetsSettledAt((prev) => prev ?? Date.now())
+  }, [assets, assetsProcessing, understandingLanded, lastUploadAt, triggerWindowMs])
 
   // Watch window B (run 完成 — the closing reviewer): the terminal frame
   // just landed and no review row for this run is in the flow yet. The
@@ -1904,16 +2062,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         key: string
         upload_url: string
       }
-      const putRes = await fetch(upload_url, {
-        method: "PUT",
-        body: material,
-        headers: material.type ? { "Content-Type": material.type } : {},
-      })
-      if (!putRes.ok) throw new Error("Failed to upload file")
-      // The pixel probe rides the same beat — the asset row is born with its
-      // real dims so the canvas frame law shapes its node from birth
-      // (产物卡跟源比例, 2026-09-13).
-      const dims = await probeMediaDims(material)
+      // The progress-reporting PUT (the shared XHR seat — composer/recipe
+      // parity, the chip reads the ratio) and the pixel probe ride the same
+      // beat — the asset row is born with its real dims so the canvas frame
+      // law shapes its node from birth (产物卡跟源比例, 2026-09-13).
+      const [, dims] = await Promise.all([
+        putWithProgress(upload_url, material, (ratio) =>
+          setStaged((prev) =>
+            prev.map((s) => (s.localId === localId ? { ...s, progress: ratio } : s)),
+          ),
+        ),
+        probeMediaDims(material),
+      ])
       const assetRes = await apiFetch(`/api/v1/projects/${projectId}/assets`, {
         method: "POST",
         body: {
@@ -1928,7 +2088,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       const asset = (await assetRes.json()) as ProjectAsset
       setStaged((prev) =>
         prev.map((s) =>
-          s.localId === localId ? { ...s, status: "done", asset } : s
+          s.localId === localId ? { ...s, status: "done", progress: 1, asset } : s
         )
       )
     } catch {
@@ -1946,6 +2106,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       localId: crypto.randomUUID(),
       file,
       status: "uploading",
+      progress: 0,
     }))
     setStaged((prev) => [...prev, ...additions])
     for (const s of additions) void uploadStaged(s.localId, s.file)
@@ -1986,7 +2147,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const retryStaged = (item: StagedUpload) => {
     setStaged((prev) =>
       prev.map((s) =>
-        s.localId === item.localId ? { ...s, status: "uploading" } : s
+        s.localId === item.localId
+          ? { ...s, status: "uploading", progress: 0 }
+          : s
       )
     )
     void uploadStaged(item.localId, item.file)
@@ -2264,6 +2427,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setProseActive(false)
     setThinkingPhase(null)
     setActivities(resetActivities()) // the new turn's own stream replaces the settled one
+    setLogDismissed(true) // U9 parity — the replayed log retires with the live rows
     const streamId = crypto.randomUUID()
     let streamedAny = false
     // What the preview bubble currently shows (the typewriter-released text)
@@ -2872,6 +3036,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setProseActive(false)
     setThinkingPhase(null)
     setActivities(resetActivities()) // the answer continuation is its own turn — new stream
+    setLogDismissed(true)
     setPendingQuestion(null)
     setMessages((prev) =>
       prev.some((m) => m.id === optimisticId)
@@ -3167,7 +3332,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         id: s.asset.id,
         name: s.asset.title || s.file.name,
         type: chatAttachmentType(s.asset.type),
-        url: s.asset.file_url ?? undefined,
+        // The PLAYABLE url (never the raw storage key) — the flow's chip
+        // renders its media sliver from this, live and on replay.
+        url: s.asset.stream_url ?? s.asset.file_url ?? undefined,
         size: s.file.size,
         status: "uploaded" as const,
       })),
@@ -3264,6 +3431,31 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // lib/chatTimeline); off a run, messages × activities interleave by the
   // same law and the fixed bottom block is retired.
   const runStartAt = runCreatedAt ? Date.parse(runCreatedAt) : null
+  // 素材节拍入库 (2026-09-24) + activity 持久化 (2026-09-25): a persisted
+  // beat row / a turn's milestone log replays carrying its activity payload
+  // — the message stream drops both (they render NO bubble), the activity
+  // stream gains them (settled by construction, so the 合一律 active-skip
+  // never touches them). The milestone log restores ONLY the LATEST turn's
+  // frames — parity with the live law (U9: a new turn's stream replaces
+  // the previous turn's rows), never rows the live flow didn't show.
+  const { flowMessages, allActivityRows } = useMemo(() => {
+    const flow: OverlayMessage[] = []
+    const beats: ActivityFramePayload[] = []
+    let latestLog: ActivityFramePayload[] | null = null
+    for (const m of messages) {
+      if (m.beat) beats.push(m.beat)
+      else if (m.milestones) latestLog = m.milestones // rows walk oldest→newest — the last wins
+      else flow.push(m)
+    }
+    return {
+      flowMessages: flow,
+      allActivityRows: [
+        ...beats,
+        ...(logDismissed ? [] : (latestLog ?? [])),
+        ...activities,
+      ],
+    }
+  }, [messages, activities, logDismissed])
   type RunStreamUnit =
     | { kind: "startLine" }
     | { kind: "taskList" }
@@ -3291,7 +3483,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       })
     }
     const undated: OverlayMessage[] = []
-    for (const m of messages) {
+    for (const m of flowMessages) {
       const t = m.at ? Date.parse(m.at) : NaN
       if (Number.isNaN(t)) undated.push(m)
       else timed.push({ t, order: order++, unit: { kind: "message", message: m } })
@@ -3301,8 +3493,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // unit (the reducer preserved the first-seen `at`); undated rows
     // (defensive — a pre-S7 wire) land at +∞, and since they push BEFORE
     // the pinned live chrome below, the tiebreak keeps them above it (the
-    // undated-message law's twin).
-    for (const a of activities) {
+    // undated-message law's twin). 2026-09-24 合一律: SETTLED rows only —
+    // an active milestone is the now-line's content, never a flow unit
+    // (lib/chatTimeline's buildConversationUnits holds the same law).
+    for (const a of allActivityRows) {
+      if (a.status === "active") continue
       timed.push({ t: momentOf(a.at), order: order++, unit: { kind: "activity", activity: a } })
     }
     // The run's end: the receipt (and the completion line after it) anchors
@@ -3351,15 +3546,68 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
     }
     return units
-  }, [runId, runStartAt, runCreatedAt, steps, messages, activities, terminal, status])
+  }, [runId, runStartAt, runCreatedAt, steps, flowMessages, allActivityRows, terminal, status])
 
   // The NON-run timeline (iter-3 S7): the same moment-ordering law off a
   // run — messages × the turn's activity rows in one real-time walk (the
   // retired fixed bottom block's rows now flow at their birth moments).
   const conversationUnits = useMemo(
-    () => buildConversationUnits(messages, activities),
-    [messages, activities],
+    () => buildConversationUnits(flowMessages, allActivityRows),
+    [flowMessages, allActivityRows],
   )
+
+  // The now-line (2026-09-24 用户拍板 — thinking 和 activity 是同一个组件):
+  // ONE mounted row owns the chat world's "现在", morphing in place — an
+  // active milestone's content while one runs, else the think empty state
+  // (spinner + shimmer label, zero glyph, never settles, never history).
+  // Label priority: the live milestone > mid-turn phase > the material
+  // beats (between turns: reading the asset still processing, then the
+  // understanding gap before the warm's review lands). Prose in motion IS
+  // the activity evidence (2026-09-09 用户拍板) — the row hides while the
+  // typewriter speaks.
+  const activeActivity = activities.find((a) => a.status === "active")
+  const processingAssets = assets.filter(
+    (a) => a.processing_status === "pending" || a.processing_status === "processing",
+  )
+  // The understanding GAP row dies on the beat's OWN fact (2026-09-24
+  // 素材节拍入库): the persisted "已理解素材内容" row closes it even while
+  // the review prose is still landing — never re-show a beat the world
+  // already settled.
+  const understandingBeatLanded = allActivityRows.some(
+    (a) => a.key === "chat.material.understandingDone",
+  )
+  const understandingGap =
+    assetsSettledAt !== null && !understandingLanded && !understandingBeatLanded
+  const nowRow: NowRowPayload | null = (() => {
+    if (proseActive) return null
+    if (activeActivity) return activeActivity
+    const think = (
+      key: string | null,
+      name?: string,
+      count?: number,
+    ): NowRowPayload => ({
+      activity_id: "__now__",
+      seq: 0,
+      kind: "think",
+      status: "active",
+      key,
+      name,
+      count,
+    })
+    if (chatBusy) {
+      return think(thinkingPhase ? `chat.thinkingPhases.${thinkingPhase}` : null)
+    }
+    // 带计数 (2026-09-24 用户拍板): several files draining together read as
+    // "reading N files", a lone one names itself.
+    if (processingAssets.length > 1) {
+      return think("chat.material.readingMany", undefined, processingAssets.length)
+    }
+    if (processingAssets.length === 1) {
+      return think("chat.material.reading", processingAssets[0].title ?? undefined)
+    }
+    if (understandingGap) return think("chat.material.understanding")
+    return null
+  })()
 
   /** 点值改 (B3): an inferred slot's inline-edit commit IS a normal chat
    * send — the composed statement (「受众：X」 / "Audience: X") rides the one
@@ -4136,34 +4384,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   </>
                 )}
 
-                {/* The turn's status line owns every window where NO prose
-                    is visibly flowing (2026-09-09 用户拍板——打字机途中不需
-                    要 thinking): prose in motion IS the activity evidence,
-                    so the row hides while the typewriter speaks and returns
-                    the moment the echo drains and the structured tail
-                    (ops/tasks JSON → dispatch → run birth) still needs a
-                    status owner (the 死窗 the whole-turn gate was built to
-                    kill; the typewriter's busy/idle edge drives it, idle
-                    after a grace so burst gaps don't strobe). The label
-                    follows the server's System Status frames (composing is
-                    the sole survivor after Batch B), falling back to the
-                    static copy when no label arrived. Phase 2+: the row
-                    ALSO yields while an activity is active — the milestone
-                    stream owns the "now" line, this row is the System
-                    Status fallback (base thinking / composing windows). */}
-                {chatBusy &&
-                  !proseActive &&
-                  !activities.some((a) => a.status === "active") && (
+                {/* The now-line (2026-09-24 用户拍板 — thinking IS the
+                    activity row's empty state): ONE mounted ActivityRow owns
+                    the chat world's "现在" for both the run and non-run
+                    walks above — an active milestone morphs it in place, a
+                    settled milestone leaves it for the flow's history and
+                    the row falls back to think (or the material beats).
+                    Zero history for think: it unmounts, never settles. */}
+                {nowRow && (
                   <MessageScrollerItem>
-                    <ThinkingRow
-                      label={
-                        thinkingPhase
-                          ? t(`chat.thinkingPhases.${thinkingPhase}`, {
-                              defaultValue: t("chat.thinking"),
-                            })
-                          : t("chat.thinking")
-                      }
-                    />
+                    <ActivityRow activity={nowRow} />
                   </MessageScrollerItem>
                 )}
               </MessageScrollerContent>

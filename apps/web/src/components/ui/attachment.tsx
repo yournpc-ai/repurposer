@@ -53,7 +53,18 @@ const attachmentMediaVariants = cva(
       variant: {
         icon: "",
         image:
-          "opacity-60 group-data-[state=done]/attachment:opacity-100 group-data-[state=idle]/attachment:opacity-100 *:[img]:aspect-square *:[img]:w-full *:[img]:object-cover",
+          // img AND video (2026-09-25: the sent attachment's video sliver
+          // rendered at intrinsic size inside the square — overflow-hidden
+          // sliced its top-left corner, a broken crop next to the staged
+          // chip's proper cover. Same cover treatment, both elements).
+          "opacity-60 group-data-[state=done]/attachment:opacity-100 group-data-[state=idle]/attachment:opacity-100 *:[img]:aspect-square *:[img]:w-full *:[img]:object-cover *:[video]:aspect-square *:[video]:w-full *:[video]:object-cover",
+        // The MEDIA-message face (2026-09-25, shadcn message-attachment
+        // composition): a video/image attachment the user actually watches
+        // — natural aspect (never the square crop), height-capped so a
+        // 9:16 source never floods the flow, object-contain so a clamped
+        // box letterboxes instead of distorting.
+        media:
+          "aspect-auto *:[img]:h-auto *:[img]:max-h-80 *:[img]:w-full *:[img]:object-contain *:[video]:h-auto *:[video]:max-h-80 *:[video]:w-full *:[video]:object-contain",
       },
     },
     defaultVariants: {

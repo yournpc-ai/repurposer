@@ -1218,6 +1218,20 @@ const zh: Resources = {
     thinkingPhases: {
       composing: "正在整理…",
     },
+    /** now-line 的素材节拍（2026-09-24 用户拍板——thinking 就是 activity
+     * 行的空态）：素材处理中 → reading（文件名插值）；warm 空窗（素材已
+     * 落定、理解评述未落地）→ understanding。*Done / *Failed 是持久化的
+     * 完成态行（素材节拍入库——pipeline 每节拍落一条消息行，回放映过去
+     * 时）；Progress 带批次计数「N/M」（带计数拍板）。 */
+    material: {
+      reading: "正在阅读 {{name}}…",
+      readingMany: "正在阅读 {{count}} 个文件…",
+      understanding: "正在理解素材内容…",
+      readingDone: "已读完 {{name}}",
+      readingDoneProgress: "已读完 {{name}}（{{count}}/{{total}}）",
+      readingFailed: "没能读完 {{name}}",
+      understandingDone: "已理解素材内容",
+    },
     /** 感知族的查询碎碎念（T2b）：读工具运行期间 read 活动帧的文案
      * （Phase 3 Batch B ③ 自退役的 System Status 行迁入 Activity Stream，
      * 同注册表同 key）。key 随服务端注册表（app/chat/perception）——
@@ -1249,11 +1263,16 @@ const zh: Resources = {
     },
     /** 活动流里程碑文案（ADR-087 §3 Phase 2）：active 帧带进行态、completed
      * 帧带完成态；failed/cancelled 复用进行态（✗/删除线说剩下的）。 */
+    /** 2026-09-25 文案批 (用户拍板——「计划已起草 / 创建 workflow」那套
+     * 机器状态腔退役): 说人话，说当下在干的事。draft 按工具分两副面孔
+     * ——出方案 / 改已有产物（projector 的 _EDIT_TOOLS 选 key）。 */
     activity: {
-      draft: "正在起草计划…",
-      draftDone: "计划已起草",
-      run: "正在创建你的 workflow…",
-      runDone: "workflow 已创建",
+      draft: "正在整理方案…",
+      draftDone: "方案整理好了",
+      edit: "正在修改…",
+      editDone: "改好了",
+      run: "正在开工…",
+      runDone: "已开工",
       repair: "刚才的回答没组织好，我重新整理一下…",
       repairDone: "已重新整理好",
     },
@@ -1437,7 +1456,7 @@ const zh: Resources = {
     clipsNeedMedia: "需要视频、音频或图片素材——上传后即可解锁，或移除本行。",
     countDecrease: "减少",
     countIncrease: "增加",
-    confirmQuestion: "保存并开始？",
+    confirmQuestion: "按这版开始？",
     confirm: "开始生成",
     // E6 披露强度分级 (ADR-092)：强制档 CTA 显价——手势仍是同一个 Start，
     // 只是标签带价。

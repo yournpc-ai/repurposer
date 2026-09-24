@@ -274,11 +274,183 @@ describe("no lifecycle derivation (恢复不推导 lifecycle)", () => {
       "focus",
       "meta",
       "suggestions",
+      "beat",
+      "milestones",
     ])
     for (const m of out) {
       for (const key of Object.keys(m)) {
         expect(ALLOWED.has(key)).toBe(true)
       }
     }
+  })
+})
+
+describe("material beats (2026-09-24 素材节拍入库)", () => {
+  it("a persisted beat row replays as a settled activity payload, never a bubble", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "beat-1",
+          created_at: "2026-09-24T10:00:00Z",
+          intent: {
+            type: "material_beat",
+            beat: "reading",
+            status: "completed",
+            name: "keynote.mp4",
+            count: 1,
+            total: 2,
+            ref: "asset-1",
+          },
+        }),
+        row({
+          id: "beat-2",
+          created_at: "2026-09-24T10:03:00Z",
+          intent: {
+            type: "material_beat",
+            beat: "understanding",
+            status: "completed",
+            count: 2,
+            ref: "digest-9",
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toHaveLength(2)
+    expect(out[0].content).toBe("")
+    expect(out[0].beat).toMatchObject({
+      kind: "read",
+      status: "completed",
+      key: "chat.material.readingDoneProgress",
+      count: 1,
+      total: 2,
+      name: "keynote.mp4",
+      at: "2026-09-24T10:00:00Z",
+    })
+    expect(out[1].beat).toMatchObject({
+      kind: "read",
+      status: "completed",
+      key: "chat.material.understandingDone",
+      count: 2,
+    })
+  })
+
+  it("a lone file drops the progress form; a failed read takes the failed key", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          intent: {
+            type: "material_beat",
+            beat: "reading",
+            status: "completed",
+            name: "a.pdf",
+            count: 1,
+            total: 1,
+            ref: "asset-1",
+          },
+        }),
+        row({
+          id: "beat-f",
+          intent: {
+            type: "material_beat",
+            beat: "reading",
+            status: "failed",
+            name: "b.mov",
+            ref: "asset-2",
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out[0].beat?.key).toBe("chat.material.readingDone")
+    expect(out[1].beat).toMatchObject({
+      status: "failed",
+      key: "chat.material.readingFailed",
+      name: "b.mov",
+    })
+  })
+
+  it("an off-shape beat dump degrades to a plain assistant row (read tolerance)", () => {
+    const out = mapHistoryRows(
+      [row({ content: "", intent: { type: "material_beat", beat: "mystery" } })],
+      ctx,
+    )
+    expect(out[0].beat).toBeUndefined()
+  })
+})
+
+describe("activity logs (2026-09-25 activity 持久化)", () => {
+  const frame = (over: Record<string, unknown>) => ({
+    activity_id: "a1",
+    seq: 1,
+    kind: "read",
+    status: "completed",
+    key: "chat.inspectingDone.searchTranscript",
+    at: "2026-09-25T10:00:01Z",
+    duration_ms: 820,
+    ...over,
+  })
+
+  it("a persisted turn log replays as settled milestone frames, never a bubble", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "log-1",
+          created_at: "2026-09-25T10:00:05Z",
+          intent: {
+            type: "activity_log",
+            ref: "user-msg-1",
+            frames: [
+              frame({}),
+              frame({
+                activity_id: "a2",
+                seq: 2,
+                kind: "draft",
+                key: "chat.activity.draftDone",
+                count: 3,
+              }),
+            ],
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toHaveLength(1)
+    expect(out[0].content).toBe("")
+    expect(out[0].milestones).toHaveLength(2)
+    expect(out[0].milestones?.[0]).toMatchObject({
+      activity_id: "a1",
+      kind: "read",
+      status: "completed",
+      key: "chat.inspectingDone.searchTranscript",
+      at: "2026-09-25T10:00:01Z",
+      duration_ms: 820,
+    })
+    expect(out[0].milestones?.[1]).toMatchObject({ kind: "draft", count: 3 })
+  })
+
+  it("an active frame inside the dump drops the whole row (settled-only law, read tolerance)", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "",
+          intent: {
+            type: "activity_log",
+            ref: "x",
+            frames: [frame({ status: "active" })],
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out[0].milestones).toBeUndefined()
+  })
+
+  it("a non-array frames payload degrades to a plain assistant row", () => {
+    const out = mapHistoryRows(
+      [row({ content: "", intent: { type: "activity_log", ref: "x", frames: "no" } })],
+      ctx,
+    )
+    expect(out[0].milestones).toBeUndefined()
   })
 })

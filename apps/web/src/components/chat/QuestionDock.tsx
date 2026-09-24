@@ -4,7 +4,8 @@
  * one *pending* decision (the ask_user machinery — at most one at a time). The kind
  * selects the form (NAMING N-19: the use lives in `question.kind`, the
  * mechanism is the dock — no per-kind dock components):
- * - task_book: ONE row (2026-09-02 stadium 化, ADR-051 条款 8 Ⓑ) — ✓ +
+ * - task_book: ONE row (2026-09-02 stadium 化, ADR-051 条款 8 Ⓑ; 2026-09-25
+ *   用户拍板: the leading ✓ retired) —
  *   the confirm line + the reserved credit slot (the week-6 cost quote
  *   rides `estimate`) + Start; Cancel retired (non-blocking pill = no
  *   negative action). No reasons line — the agent's inference bookkeeping
@@ -34,7 +35,7 @@
  */
 
 import { useState } from "react"
-import { Check, Loader2, Pencil, X } from "lucide-react"
+import { Loader2, Pencil, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
@@ -110,7 +111,7 @@ function PlanForm({
 }: PlanDockProps) {
   const { t } = useTranslation()
   return (
-    // ONE row (2026-09-02 stadium 化): ✓ + confirm line … Start — the FLORA
+    // ONE row (2026-09-02 stadium 化): confirm line … Start — the FLORA
     // "Save & continue" pill anatomy. Cancel retired the same day: the pill
     // is NON-blocking (the input group stays live below), so "don't start"
     // is said by simply not starting — keep chatting (chat revision always
@@ -123,9 +124,10 @@ function PlanForm({
     // stadium correct geometry.
     <div className={plain ? "py-2 pl-4 pr-2" : "mb-2 rounded-lg bg-muted px-5 py-4"}>
       <div className="flex items-center justify-between gap-3">
+        {/* 2026-09-25 用户拍板: no leading ✓ (the pill is a question, not a
+            done mark), and pill text stays regular weight (the pill律). */}
         <div className="flex min-w-0 items-center gap-2.5">
-          <Check className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="truncate text-sm font-medium">{question}</span>
+          <span className="truncate text-sm">{question}</span>
           {estimate ? (
             <span className="shrink-0 text-xs text-muted-foreground">
               {estimate}

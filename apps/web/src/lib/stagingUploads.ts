@@ -38,8 +38,11 @@ export interface StagingUpload {
  * event re-arms the watchdog; 30s of total silence means the wire is dead. */
 const PUT_STALL_TIMEOUT_MS = 30_000
 
-/** Direct-to-storage PUT with real upload progress (fetch streams lack it). */
-function putWithProgress(
+/** Direct-to-storage PUT with real upload progress (fetch streams lack it).
+ * THE shared progress-capable PUT — the staging hook and the chat dock's
+ * staged chips both ride it (2026-09-24: the dock's bare fetch PUT showed no
+ * %, composer/recipe parity ruling). */
+export function putWithProgress(
   url: string,
   file: File,
   onProgress: (ratio: number) => void,

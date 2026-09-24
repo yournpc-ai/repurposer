@@ -627,9 +627,7 @@ def _cue_match_lines(matches: list[dict], speaker_map: dict | None) -> list[str]
 
 
 def _asset_label(asset: Asset) -> str:
-    return asset.title or (
-        asset.file_url.rsplit("/", 1)[-1] if asset.file_url else "(text)"
-    )
+    return asset.display_name or "(text)"
 
 
 async def search_transcript(
@@ -749,9 +747,7 @@ def _asset_roster_line(asset: Asset) -> str:
     """One roster row (the multi-asset observation): id + name + the same
     type/duration/language bits the plan context's asset block uses — the id
     is the point (the re-call's legitimate provenance)."""
-    name = asset.title or (
-        asset.file_url.rsplit("/", 1)[-1] if asset.file_url else "(text)"
-    )
+    name = asset.display_name or "(text)"
     bits = [asset.type.value if hasattr(asset.type, "value") else str(asset.type)]
     if asset.duration_seconds:
         bits.append(f"{int(asset.duration_seconds)}s")
@@ -818,9 +814,7 @@ async def get_asset(db: AsyncSession, project: Project, params: GetAssetParams) 
     lang = (asset.meta or {}).get("language")
     if lang:
         lines[0] += f", language={lang}"
-    name = asset.title or (
-        asset.file_url.rsplit("/", 1)[-1] if asset.file_url else None
-    )
+    name = asset.display_name
     if name:
         lines.append(f"- Name: {name}")
     if asset.duration_seconds:
@@ -931,9 +925,7 @@ async def get_craft_skeleton(
         s = CraftSkeleton.model_validate(row.payload)
     except Exception:  # noqa: BLE001 — a stale-shaped row reads honestly
         return "A craft skeleton exists but its stored shape is stale — it will be regenerated on the next run."
-    name = asset.title or (
-        asset.file_url.rsplit("/", 1)[-1] if asset.file_url else str(asset.id)
-    )
+    name = asset.display_name or str(asset.id)
     lines = [f'Craft skeleton of "{name}" (measured, zero guessing):']
     lines.append(
         f"- Aspect {s.aspect}, {s.duration_seconds:.0f}s, "

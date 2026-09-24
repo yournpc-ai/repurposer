@@ -257,7 +257,7 @@ class PlanTurn:
         )
         self.assets = assets
         first_file = next((a for a in assets if a.file_url), None)
-        filename = first_file.file_url.rsplit("/", 1)[-1] if first_file else None
+        filename = first_file.display_name if first_file else None
         # Multi-asset block (ADR-078): with ≥2 files the router must SEE the
         # roster to judge the remix shape (which is the user's material, which
         # the reference) — the single-file filename/excerpt surface stays for
@@ -266,7 +266,7 @@ class PlanTurn:
         if len(assets) > 1:
             lines = []
             for a in assets:
-                name = a.file_url.rsplit("/", 1)[-1] if a.file_url else "(text)"
+                name = a.display_name or "(text)"
                 kind_bits = [a.type.value]
                 if a.duration_seconds:
                     kind_bits.append(f"{int(a.duration_seconds)}s")

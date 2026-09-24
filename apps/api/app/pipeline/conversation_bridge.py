@@ -39,6 +39,9 @@ class ConversationBridge:
         [AsyncSession, UUID, UUID, str], Awaitable[Message | None]
     ]
     discard_unanswered_plan: Callable[[AsyncSession, UUID, UUID], Awaitable[None]]
+    record_material_beat: Callable[..., Awaitable[Message | None]]
+    """``(db, user_id, project_id, beat, *, status, name, count, total, ref)``
+    — ``...`` because ``Callable`` cannot spell keyword-only extras."""
 
 
 _bridge: ConversationBridge | None = None
@@ -93,3 +96,24 @@ async def discard_unanswered_plan(
 ) -> None:
     """Bridge delegate — the implementation lives in ``app.chat.service``."""
     await _require().discard_unanswered_plan(db, user_id, project_id)
+
+
+async def record_material_beat(
+    db: AsyncSession,
+    user_id: UUID,
+    project_id: UUID,
+    beat: str,
+    *,
+    status: str = "completed",
+    name: str | None = None,
+    count: int | None = None,
+    total: int | None = None,
+    ref: str | None = None,
+) -> Message | None:
+    """Bridge delegate — the implementation lives in ``app.chat.service``
+    (2026-09-24: material beats persist as message rows so the settled gray
+    row survives a refresh)."""
+    return await _require().record_material_beat(
+        db, user_id, project_id, beat,
+        status=status, name=name, count=count, total=total, ref=ref,
+    )

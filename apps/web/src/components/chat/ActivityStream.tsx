@@ -1,13 +1,17 @@
-/** ActivityRow — one row of the agent turn's milestone stream (ADR-087 §3,
- * Lifecycle Phase 2; iter-3 S7: the fixed bottom block RETIRED into the
- * message flow — rows render at their real moments via lib/chatTimeline's
- * single-stream interleave, this module owns the ROW only).
+/** ActivityRow — THE one row of the chat world's "现在" (2026-09-24 合一律,
+ * user ruling): the agent turn's milestone stream AND the thinking empty
+ * state are the same component with the same anatomy — spinner + shimmer
+ * label while live, kind glyph + duration whisper when settled. Thinking is
+ * the row's empty state (kind "think", frontend-synthesized, never on the
+ * wire): it never settles and leaves zero history — the next milestone's
+ * content simply replaces it in the same mounted row.
  *
- * Rows are the user-safe projection of the loop's internal events: the
- * active row shimmers with a spinner; terminal rows settle static (✓
- * completed / ✗ failed / cancelled struck through — 「被划掉的一步」, the
- * RunTaskList no-op register's cousin). A settled turn's rows stay in the
- * flow as its static history (U9) and are replaced by the next turn's own.
+ * Rows are the user-safe projection of the loop's internal events: terminal
+ * rows settle static (✗ failed / cancelled struck through — 「被划掉的一
+ * 步」, the RunTaskList no-op register's cousin) and stay in the flow as
+ * the turn's static history (U9), replaced by the next turn's own. An
+ * ACTIVE row never interleaves into the timeline — it is the now-line's
+ * content (lib/chatTimeline holds the same law for the units walk).
  *
  * This is a visibility surface ONLY — it never gates Canvas / Confirm /
  * Run (对账规则 8), never carries params / results / reasoning (the wire
@@ -17,7 +21,8 @@
  * frames, the past-tense key on completed ones).
  *
  * S7/E7 row additions: a genuinely-active span's settle carries its real
- * duration (whisper, right side — `formatElapsed` is the ONE copy); a row
+ * duration (whisper at the label's left cluster — `formatElapsed` is the
+ * ONE copy); a row
  * expands ONLY when it carries payload (the milestone's `count` — E7 诚实
  * 边界: a payload-less row never pretends to be expandable), and the
  * expanded detail stays inside the wire whitelist (the full untruncated
@@ -54,27 +59,52 @@ const KIND_ICONS: Record<ActivityFramePayload["kind"], LucideIcon> = {
   repair: RotateCcw,
 }
 
-export function ActivityRow({ activity }: { activity: ActivityFramePayload }) {
+/** The now-line's payload (2026-09-24 user ruling — thinking and the
+ * activity row are ONE component): a wire milestone, or the think empty
+ * state. "think" is frontend-synthesized, NEVER on the wire (the wire
+ * whitelist is unchanged); a think row is always active and never settles —
+ * it leaves zero history, the next milestone simply replaces its content in
+ * the same mounted row (a morph, never a new row). */
+export type NowRowPayload = Omit<ActivityFramePayload, "kind"> & {
+  kind: ActivityFramePayload["kind"] | "think"
+  /** Think-state interpolation (the material beats name the file being
+   * read); wire milestones never carry it. */
+  name?: string
+  /** Batch-progress interpolation (the persisted reading beat's "N/M" —
+   * 2026-09-24 素材节拍入库): replay-synthesized beat rows carry it, wire
+   * frames never do. */
+  total?: number
+}
+
+export function ActivityRow({ activity }: { activity: NowRowPayload }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const { status } = activity
   const label = activity.key
     ? // 工作会话里程碑 (iter-2 ⑥): count rides as the ONLY interpolation
       // (the wire whitelist's one extension, N-57) — frames without it
-      // pass undefined and resolve exactly as before.
+      // pass undefined and resolve exactly as before. `name` joins for the
+      // frontend-synthesized think beats (the material's filename), never
+      // for wire frames.
       t(activity.key, {
         count: activity.count,
+        total: activity.total,
+        name: activity.name,
         defaultValue: t("chat.thinking"),
       })
     : t("chat.thinking")
   // E7 诚实边界: expandability IS the payload fact (a count-carrying
-  // milestone) — never a chrome affordance on an empty row.
-  const expandable = activity.count != null
+  // milestone) — never a chrome affordance on an empty row. Live rows never
+  // expand (2026-09-24: the now-line's transient count — "reading N files" —
+  // is the label itself, not a payload to unfold).
+  const expandable = activity.count != null && status !== "active"
   const duration =
     status !== "active" && activity.duration_ms != null
       ? formatElapsed(activity.duration_ms)
       : null
-  const KindIcon = KIND_ICONS[activity.kind]
+  // think rows are always active → the spinner seat — so the glyph lookup
+  // never sees "think"; the guard is for the type, not the moment.
+  const KindIcon = activity.kind === "think" ? null : KIND_ICONS[activity.kind]
   return (
     <div className="flex w-full flex-col gap-1">
       <div
@@ -89,7 +119,7 @@ export function ActivityRow({ activity }: { activity: ActivityFramePayload }) {
       >
         {status === "active" ? (
           <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
-        ) : status === "completed" ? (
+        ) : status === "completed" && KindIcon ? (
           <KindIcon className="h-3.5 w-3.5 shrink-0" />
         ) : (
           // failed / cancelled share the ✗ seat — destructive says failure,

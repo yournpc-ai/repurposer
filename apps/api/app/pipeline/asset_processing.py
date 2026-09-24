@@ -31,7 +31,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import AsyncSessionLocal
@@ -269,6 +269,51 @@ PROCESSORS: dict[AssetType, list[Processor]] = {
 }
 
 
+async def _record_reading_beat(db: AsyncSession, asset: Asset, status: str) -> None:
+    """素材节拍入库 (2026-09-24 用户拍板): the dock's settled reading row
+    ("已读完 X") is a plain message row so it survives a refresh — written
+    through the ConversationBridge (ADR-087: pipeline never touches messages
+    directly). ``count``/``total`` carry the project set's drain progress so
+    the label can say "N/M" when several files ride together. Best-effort:
+    the asset's terminal state is already committed, a beat failure degrades
+    to a warning, never a processing failure."""
+    if asset.project_id is None:
+        return
+    try:
+        from app.pipeline import conversation_bridge  # deferred: ADR-087 seam
+
+        project = await db.get(Project, asset.project_id)
+        if project is None:
+            return
+        base = select(func.count(Asset.id)).where(Asset.project_id == asset.project_id)
+        total = (await db.execute(base)).scalar_one()
+        settled = (
+            await db.execute(
+                base.where(
+                    Asset.processing_status.in_(
+                        [AssetStatus.COMPLETED, AssetStatus.FAILED]
+                    )
+                )
+            )
+        ).scalar_one()
+        await conversation_bridge.record_material_beat(
+            db,
+            project.user_id,
+            asset.project_id,
+            "reading",
+            status=status,
+            name=asset.display_name,
+            count=settled,
+            total=total,
+            ref=str(asset.id),
+        )
+        await db.commit()
+    except Exception as e:  # noqa: BLE001 — the beat is best-effort
+        logger.warning(
+            "material_beat_reading_failed", asset_id=str(asset.id), error=str(e)
+        )
+
+
 async def process_asset(asset_id: UUID) -> None:
     """Run the registered processor for an asset and persist its terminal state.
 
@@ -314,6 +359,7 @@ async def process_asset(asset_id: UUID) -> None:
 
                 await stamp_transcript_node(db, asset.project_id, asset)
                 await db.commit()
+            await _record_reading_beat(db, asset, "completed")
             logger.info(
                 "asset_processed",
                 asset_id=str(asset_id),
@@ -362,3 +408,4 @@ async def process_asset(asset_id: UUID) -> None:
 
                 await stamp_transcript_node(db, asset.project_id, asset)
                 await db.commit()
+            await _record_reading_beat(db, asset, "failed")

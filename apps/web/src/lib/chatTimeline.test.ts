@@ -93,4 +93,16 @@ describe("buildConversationUnits — the non-run single stream", () => {
     const units = buildConversationUnits([msg("a"), msg("b")], [])
     expect(units.map((u) => u.kind)).toEqual(["message", "message"])
   })
+
+  it("an ACTIVE activity never interleaves — the now-line owns it until it settles (2026-09-24 合一律)", () => {
+    const live = { ...activity("live", "2026-09-23T08:00:02Z"), status: "active" as const }
+    const units = buildConversationUnits(
+      [msg("user", "2026-09-23T08:00:00Z")],
+      [activity("done", "2026-09-23T08:00:01Z"), live],
+    )
+    expect(units.map((u) => (u.kind === "message" ? u.message.id : u.activity.activity_id))).toEqual([
+      "user",
+      "done",
+    ])
+  })
 })
