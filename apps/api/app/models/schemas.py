@@ -553,6 +553,17 @@ def tolerate_null_keys(data: Any, *keys: str) -> Any:
     return data
 
 
+def wrap_single_object_list(data: Any, key: str) -> Any:
+    """顺形律 dialect absorption (probe E 实测 2026-09-24): the provider
+    emits a one-item list as the BARE OBJECT and never recovers across
+    repair rounds — the schema wraps it (the bare-int plan_ref / kind-less
+    edit_output precedents). One law one home: every list-of-models tool
+    field absorbs here."""
+    if isinstance(data, dict) and isinstance(data.get(key), dict):
+        return {**data, key: [data[key]]}
+    return data
+
+
 def _drop_bad_brief(data: Any) -> Any:
     """校验分层律 (ADR-064) at the tool boundary: the brief is
     ADVISORY bookkeeping — if it still fails shape after its own

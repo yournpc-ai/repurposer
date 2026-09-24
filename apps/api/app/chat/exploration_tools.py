@@ -36,7 +36,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.agents.tool_loop import ChatTool
-from app.models.schemas import tolerate_null_keys
+from app.models.schemas import tolerate_null_keys, wrap_single_object_list
 from app.models.tables import Project
 from app.pipeline.exploration_store import (
     CandidateMember,
@@ -159,7 +159,9 @@ class PlanItem(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "title")
+        # outputs 裸对象方言吸收（顺形律，probe E 实测——一个法一个家，
+        # wrap_single_object_list）。
+        return wrap_single_object_list(tolerate_null_keys(data, "title"), "outputs")
 
     select_id: UUID = Field(
         description="The Select this plan content-izes (from the propose_selects observation)."
@@ -221,7 +223,10 @@ class RevisePlanArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "title", "instruction")
+        # 同 PlanItem 的 outputs 裸对象方言吸收（顺形律一家座）。
+        return wrap_single_object_list(
+            tolerate_null_keys(data, "title", "instruction"), "outputs"
+        )
 
     plan_id: UUID = Field(
         description="The plan to revise — from the decision package on the table (the pending-package block's plan_id), never invented."

@@ -135,6 +135,44 @@ class TestReadTolerance:
         assert args.outputs[0].kind == "post"
 
 
+class TestOutputsDialectAbsorb:
+    """顺形律 (probe E 实测 2026-09-24): the provider emits `outputs` as a
+    bare object instead of a one-item list — the dialect is absorbed at the
+    schema layer (wrap_single_object_list, 一个法一个家), never left to burn
+    all 12 repair rounds on a params rejection."""
+
+    def test_plan_item_bare_object_outputs_wraps(self) -> None:
+        item = PlanItem.model_validate(
+            {"select_id": str(uuid4()), "outputs": {"kind": "clip"}}
+        )
+        assert len(item.outputs) == 1
+        assert item.outputs[0].kind == "clip"
+
+    def test_plan_item_list_form_untouched(self) -> None:
+        item = PlanItem.model_validate(
+            {"select_id": str(uuid4()), "outputs": [{"kind": "clip"}, {"kind": "post"}]}
+        )
+        assert [o.kind for o in item.outputs] == ["clip", "post"]
+
+    def test_revise_plan_bare_object_outputs_wraps(self) -> None:
+        args = RevisePlanArgs.model_validate(
+            {
+                "plan_id": str(uuid4()),
+                "instruction": "make it french",
+                "outputs": {"kind": "post", "language": "fr"},
+            }
+        )
+        assert len(args.outputs) == 1
+        assert args.outputs[0].kind == "post"
+        assert args.outputs[0].language == "fr"
+
+    def test_revise_plan_list_form_untouched(self) -> None:
+        args = RevisePlanArgs.model_validate(
+            {"plan_id": str(uuid4()), "outputs": [{"kind": "post"}, {"kind": "article"}]}
+        )
+        assert [o.kind for o in args.outputs] == ["post", "article"]
+
+
 class TestWireDoorCapParity:
     """校验分层律 (ADR-064): the wire's max_length mirrors the door spec's —
     an overlong verdict / reason / title rejects at the TOOL boundary (the
