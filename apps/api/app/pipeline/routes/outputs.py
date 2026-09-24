@@ -52,6 +52,21 @@ def _require_clip(output: Output) -> Output:
     return output
 
 
+def _require_active(output: Output) -> Output:
+    """归档不可变 (Final Hardening B2, 2026-09-24, ADR-091 §5): an archived
+    version is read-only history — read ✅ / restore ✅ / mutate ❌. Every
+    public door that would rewrite the row (payload / publishing /
+    render_spec / render state) rejects here; the way back is the version
+    switch (POST /outputs/{id}/restore)."""
+    if output.archived_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Archived version is read-only — restore it first "
+            "(POST /outputs/{id}/restore)",
+        )
+    return output
+
+
 class OutputUpdate(BaseModel):
     """Partial update for an output (content edit).
 
@@ -86,7 +101,9 @@ async def update_output(
     current_user: User = Depends(get_current_user_required),
 ) -> Output:
     """Update an output's editable fields (payload / status / publishing)."""
-    output = await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    output = _require_active(
+        await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    )
 
     if data.payload is not None:
         output.payload = validate_output_payload(output.type, data.payload)
@@ -143,8 +160,10 @@ async def revise_output(
     current_user: User = Depends(get_current_user_required),
 ) -> Output:
     """Revise a clip output based on feedback and return the updated output."""
-    output = _require_clip(
-        await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    output = _require_active(
+        _require_clip(
+            await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+        )
     )
 
     project = await db.get(Project, output.project_id)
@@ -215,8 +234,10 @@ async def render_output_endpoint(
     R1 B4a: the reset is ONE seat (``reset_output_render``) — status + token +
     error + attempt counter move together, so a capped-out FAILED render gets
     a genuinely fresh budget instead of instantly terminally failing again."""
-    output = _require_clip(
-        await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    output = _require_active(
+        _require_clip(
+            await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+        )
     )
     if not output.render_spec:
         raise HTTPException(
@@ -242,8 +263,10 @@ async def generate_output_cover(
     The image is created only when requested by the UI to avoid paying
     image-generation costs for every clip.
     """
-    output = _require_clip(
-        await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    output = _require_active(
+        _require_clip(
+            await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+        )
     )
 
     project = await db.get(Project, output.project_id)
@@ -286,8 +309,10 @@ async def translate_captions(
     first. Stays word-level (the captions tool's translation procedure) and
     updates the spec's ``target_language`` in place.
     """
-    output = _require_clip(
-        await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    output = _require_active(
+        _require_clip(
+            await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+        )
     )
 
     spec = output.render_spec
@@ -344,8 +369,10 @@ async def dub_output(
     Pipeline lives in ``tools/dub/procedure.py`` (shared with the dub_clip
     run runner); the endpoint additionally journals the operation (ADR-032).
     """
-    output = _require_clip(
-        await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    output = _require_active(
+        _require_clip(
+            await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+        )
     )
     project = await db.get(Project, output.project_id)
     if project is None or project.user_id != UUID(str(current_user.id)):

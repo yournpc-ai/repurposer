@@ -52,6 +52,21 @@ async def _lock_output(db: AsyncSession, output_id: UUID) -> Output:
     return row
 
 
+def _require_mutable(output: Output) -> None:
+    """归档不可变 (Final Hardening B2, 2026-09-24, ADR-091 §5): an archived
+    version is read-only history — read ✅ / restore ✅ / mutate ❌. The
+    only way back to mutable is the version switch
+    (``restore_archived_version``); every spec/payload/journal write door
+    rejects here. (The §3 mid-production exception never sees an archived
+    row — archive duty starts at delivery.)"""
+    if output.archived_at is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Archived version is read-only — restore it first "
+            "(POST /outputs/{id}/restore)",
+        )
+
+
 async def _ops_for_output(db: AsyncSession, output_id: UUID) -> list[Operation]:
     return list(
         (
@@ -168,6 +183,7 @@ async def apply_operations(
         raise OpRejected("empty op batch")
 
     output = await _lock_output(db, output_id)
+    _require_mutable(output)
     if output.type != "clip":
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "Operations target clip outputs only (v1)"
@@ -186,6 +202,14 @@ async def apply_operations(
         # (editor endpoints / run runners), never the generic batch path.
         if OP_REGISTRY[op_name].precomputed:
             raise OpRejected(f"op '{op_name}' is precomputed — use its dedicated endpoint")
+        # Final Hardening B1 (2026-09-24, ADR-090): a CHAT-sourced batch may
+        # only carry the LLM-visible vocabulary — llm_visible stops being a
+        # prompt-time filter and becomes a write door here, so a hallucinated
+        # or injected op name dies at the boundary even if a future chat tool
+        # regresses. (The editor door keeps the full client-allowed set —
+        # the ADR-044 track ops ride source="editor".)
+        if source == "chat" and not OP_REGISTRY[op_name].llm_visible:
+            raise OpRejected(f"op '{op_name}' is not in the chat edit vocabulary")
         normalized.append((op_name, params))
 
     existing = await _ops_for_output(db, output_id)
@@ -268,6 +292,7 @@ async def undo(db: AsyncSession, output_id: UUID) -> Output:
     """Undo the newest active op (baseline excluded); restore the previous
     active snapshot. Append-only: marks ``undone_at``, never deletes."""
     output = await _lock_output(db, output_id)
+    _require_mutable(output)
     ops = await _ops_for_output(db, output_id)
     active = [o for o in ops if o.undone_at is None and o.seq > 0]
     if not active:
@@ -288,6 +313,7 @@ async def undo(db: AsyncSession, output_id: UUID) -> Output:
 async def redo(db: AsyncSession, output_id: UUID) -> Output:
     """Redo the undone op directly above the active head, if any."""
     output = await _lock_output(db, output_id)
+    _require_mutable(output)
     ops = await _ops_for_output(db, output_id)
     head = _active_head(ops)
     head_seq = head.seq if head is not None else -1

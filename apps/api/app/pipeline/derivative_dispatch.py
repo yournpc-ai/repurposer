@@ -1171,6 +1171,11 @@ class DerivativeWriterNode(NodeBase):
             output = await db.get(Output, UUID(str(target_id)))
             if output is None or output.project_id != project.id:
                 raise ValueError("Target output not found")
+            # 归档不可变 (Final Hardening B2, ADR-091 §5): a targeted regen
+            # rewrites the row IN PLACE — an archived row is read-only
+            # history; restore it first, never mutate it.
+            if output.archived_at is not None:
+                raise ValueError("Target output is archived (read-only)")
             output.payload = validate_output_payload(output.type, content)
             output.language = target_language
             output.status = "generated"

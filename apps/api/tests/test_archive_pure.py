@@ -151,3 +151,26 @@ class TestPlanVersionSwitch:
         w = uuid4()
         target = _row(w, archived=True)
         assert plan_version_switch(target, [target]) == []
+
+
+class TestArchivedImmutable:
+    """Final Hardening B2 (2026-09-24, ADR-091 §5): an archived version is
+    read-only history — read ✅ / restore ✅ / mutate ❌. One shared guard
+    seat (``_require_mutable``) fronts every spec/journal write door."""
+
+    def test_archived_row_rejects_mutation(self):
+        from datetime import UTC, datetime
+
+        from fastapi import HTTPException
+
+        from app.operations.service import _require_mutable
+
+        row = SimpleNamespace(archived_at=datetime.now(UTC))
+        with pytest.raises(HTTPException) as exc_info:
+            _require_mutable(row)
+        assert exc_info.value.status_code == 409
+
+    def test_active_row_passes(self):
+        from app.operations.service import _require_mutable
+
+        _require_mutable(SimpleNamespace(archived_at=None))  # no raise

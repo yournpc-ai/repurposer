@@ -4783,6 +4783,22 @@ async def s_edit_precise_edit_archive_lifecycle(ctx: Ctx) -> None:
     check(str(newborn_id) in visible_ids, "the successor is the visible version",
           visible_ids)
 
+    # ③b 归档不可变 (Final Hardening B2, ADR-091 §5): the archived row is
+    # read-only history — every public mutate door refuses with 409 while
+    # the journal stays readable (beat above). The ONLY way back to mutable
+    # is the 换态 in ④.
+    res = await ctx.client.post(
+        f"/outputs/{oid}/operations",
+        json={"ops": [{"op": "set_title", "params": {"text": "tamper", "enabled": True}}]},
+    )
+    check(res.status_code == 409, "archived row rejects op writes", res.text)
+    res = await ctx.client.post(f"/outputs/{oid}/operations/undo")
+    check(res.status_code == 409, "archived row rejects undo", res.text)
+    res = await ctx.client.put(f"/outputs/{oid}", json={"payload": {"title": "tamper"}})
+    check(res.status_code == 409, "archived row rejects PUT", res.text)
+    res = await ctx.client.post(f"/outputs/{oid}/regenerate", json={})
+    check(res.status_code == 409, "archived row rejects regenerate", res.text)
+
     # ④ 换态: restore the archived version — it becomes the work's ONE active
     # row; the successor archives. A second restore on the now-active row
     # refuses (400).

@@ -604,6 +604,14 @@ async def regenerate_output(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Output type {output.type} is not regenerable",
         )
+    # 归档不可变 (Final Hardening B2, ADR-091 §5): regenerating an archived
+    # version would rewrite history in place — restore it first.
+    if output.archived_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Archived version is read-only — restore it first "
+            "(POST /outputs/{id}/restore)",
+        )
 
     project = await db.get(Project, output.project_id)
     if project is None:
