@@ -124,7 +124,7 @@ ADR-052 判词「实现层零 agent、全 workflow」维持；ADR-077 收编的�
 | 类 | 特征 | CURRENT 映射 |
 |---|---|---|
 | **Query** | read-only / 幂等 / 不改世界 | ✅ `chat/perception/*` 读工具族（实现里无写函数，逐文件核实） |
-| **Command** | 改意图/状态；需校验；可审计 | ✅ 终态工具中的 `start_run` / `apply_edit_ops` / `edit_graph` / `propose_tasks`——各落一扇唯一门 |
+| **Command** | 改意图/状态；需校验；可审计 | ✅ 终态工具中的 `start_run` / `edit_output` / `edit_graph` / `propose_tasks`——各落一扇唯一门 |
 | **Interaction** | Agent↔Human 协议 | ✅ 终态工具中的 `ask_user` / `present_plan` / `answer`（dock 机器，ADR-053） |
 | **Runtime** | 回合/相位/检查点原语 | ✅ **永不作为 LLM 能力暴露**——现行座位 = SSE 相位帧、触发回合白名单、checkpoint/Suspend（代码侧原语） |
 

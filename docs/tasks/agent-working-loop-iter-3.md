@@ -128,7 +128,7 @@
 | 改 docked 决策包某计划做什么（what） | `revise_plan`（plan/chat 双路） | ✅ S2/S4 |
 | 换选段（pick 换同集合另一段） | `revise_selects`（三金钱态） | ✅ S4 |
 | 已产出/已确认作品的 craft（wording/tone/sharpness） | `revise_output`（chat 专用终态，骑 `_run_wiring_proposal` 同座） | ✅ S3 |
-| 单产物精确 clip-spec 操作（trim/caption tweak） | `apply_edit_ops` | ✅ 既有 |
+| 单产物精确 clip-spec 操作（trim/caption tweak） | `edit_output`（受控四件，ADR-090；原 apply_edit_ops B1 已退役） | ✅ 既有 |
 | pre-run craft 诉求 | `revise_plan` outputs 重述（E4 判词） | ✅ S2 |
 | 新增不存在的产出（新语言版/新类型/加量） | `propose_tasks`（旧路保留；退役弧 = PROGRESS 池「零探索退化形态」挂账） | 保留 |
 | 结构性 graph surgery（add/delete/connect/disconnect 手动布线） | **无座位 = 设计**（能力完备手势缺席——既有拍板；产物删除在画布亦无家） | 设计缺席 |

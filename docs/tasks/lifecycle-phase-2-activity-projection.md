@@ -158,7 +158,7 @@ IMPLEMENTATION **步①~④ 已落地（2026-09-19，commits `662d88a` 服务端
 | 读调用 name-known（L3，perception 名） | **暴露** | `read` 活动 active 帧（copy = registry `activity_key`） | 已是用户安全形态（inspecting 帧现役）；补身份与显式开始 |
 | 读被接受（L10） | **暴露**（与上配对） | 同一 `read` 活动 completed 帧 | on_observe 是天然的完成边界；started→completed 显式终态（规则 6） |
 | 读的 observation 文本 | **过滤**（1→0） | 永不上帧 | 原始结果载荷禁令（简报 Prohibited #2）；它喂模型不喂用户 |
-| 计划形调用 name-known（present_plan / propose_tasks / apply_edit_ops / edit_graph） | **暴露** | `draft` 活动 active 帧 | 现役 drafting 语义的活动化 |
+| 计划形调用 name-known（present_plan / propose_tasks / edit_output / edit_graph） | **暴露** | `draft` 活动 active 帧 | 现役 drafting 语义的活动化 |
 | 计划形调用接受（L12） | **暴露**（配对） | `draft` 活动 completed 帧（dock 落 = 副作用完成 = execute 返回 None） | dock/卡到达前用户看到「起草中→已落卡」 |
 | start_run name-known → 出生 | **暴露** | `run` 活动 active（name-known）→ completed（L12 accept = create_run 已返回）；出生地 422 → failed | 现役 creating_run 段的活动化；费用手势语义不动（Activity 永不控制 Run，规则 8） |
 | ask_user / answer 调用 | **过滤**（1→0） | 无活动帧 | 它们的用户面 = question.preview pill / 散文本体（Assistant Conversation 层）；再发活动行 = 双重叙事 |

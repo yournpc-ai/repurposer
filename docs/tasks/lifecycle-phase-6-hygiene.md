@@ -8,14 +8,14 @@
 
 1. `service.py`（2416L）/ `schemas.py`（3547L）/ `graph_fill.py`（1534L）拆分——按既有职责缝拆，行为零变化。
 2. `Message.intent` typed union（JSONB astext 教训在册——新列/新读面一律强类型）。
-3. `apply_edit_ops` commit 律对齐（`operations/service.py:225` flush-only 例外的回滚不对称——审计登记：跳层且回合中 commit，回滚不对称）。
+3. ~~`apply_edit_ops` commit 律对齐~~（该工具已随 Final Hardening B1 全退役 `9ddf3ec`；同一 flush-only 例外现在由 `edit_output` 的 operations 路径承载——回滚不对称问题本身留本项，对象改名）。
 4. 其余 threshold / 词汇单主残留清零（Phase 3 之后仍存的散点）。
 
 ## Current evidence
 
 - 巨文件三座（审计实测行数）：`apps/api/app/chat/service.py` 2416L / `apps/api/app/models/schemas.py` 3547L / `apps/api/app/pipeline/graph_fill.py` 1534L。
 - `Message.intent` 是 generic JSON 列（无 `.astext`——`messages.intent` 曾致触发回合全静默，坑记录在册）。
-- `apply_edit_ops`：跳层且回合中 commit（`operations/service.py:225`，flush-only 律唯一例外，回滚不对称）。
+- `edit_output` 的 operations 路径（原 apply_edit_ops 座，B1 退役后由受控终态工具承载）：跳层且回合中 commit（`operations/service.py` flush-only 律唯一例外，回滚不对称）。
 - ChatDock.tsx 4877L：Phase 3 已抽 adapter；状态机/视图同居的拆留本批**评估**（非必做——拆与否以依赖方向理由为准，不为漂亮）。
 
 ## Contract changes
@@ -49,7 +49,7 @@
 - 行为零变化（纯 pytest 全量 + 剧本 S5 / S7 / S10 / S11 / S20A 保留）。
 - 三座巨文件按缝拆分，无第二事实源产生。
 - Message.intent typed union 落地，旧行读容忍。
-- apply_edit_ops commit 律与其他写口对称（或登记为显式例外并附理由）。
+- edit_output operations 路径的 commit 律与其他写口对称（或登记为显式例外并附理由）。
 
 ## Prohibited Behaviors
 

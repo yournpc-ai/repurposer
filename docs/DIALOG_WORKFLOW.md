@@ -68,7 +68,7 @@ chat 边缘的两个回合（plan path / chat path——原 `plan_agent` / `chat
 | `Agent` 类原语 | 声明式结构化调用 | = AI SDK `generateObject`；ADR-039 判词补记，类名不动 |
 | 对话状态 | **brief** | 对话系统 frame / slot-filling 的 frame |
 | 会话层回合机器 | **ToolLoopAgent**（有界工具 loop） | Anthropic tool-use / OpenAI function-calling 正典 |
-| router 的动作 | **终态工具调用**（ask_user / present_plan / start_run / propose_tasks / apply_edit_ops / edit_graph / answer） | tool calling 正典——动作 = 工具名，字段 = 参数模型 |
+| router 的动作 | **终态工具调用**（ask_user / present_plan / start_run / propose_tasks / edit_output / edit_graph / answer） | tool calling 正典——动作 = 工具名，字段 = 参数模型 |
 | 嵌套自主性 | **有界 loop 节点** | LangGraph subgraph / Mastra agent-in-step / Anthropic agentic component |
 
 **改名批**（判例归 NAMING.md N-43 起，commit 级自绿）：`plan_agent → intent_router`（相位参数化）/ `chat_intent_agent → intent_router`（同概念）/ `director_understand → understand` / `director_plan → plan` / `pending_intent → pending_brief` / 提问机器 → `ask_user`、verdict → tool call、任务书 → **plan**（命名批 v3，N-52）。**plan 归两主**（N-44，v3 ③ 修订原「归一主」）：chat 计划书义（plan path / presented_plan——v3 ③ 复活）与 pipeline planner 义双座分工；存储字 `task_book` / `book_summary` 冻结不动（kind 枚举 / spec 键 / pending_brief 列）。工具侧 `*_writer` / `translator` / `verify_judge` 不动（本来就是诚实角色名）。

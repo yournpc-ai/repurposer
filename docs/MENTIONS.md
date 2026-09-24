@@ -12,7 +12,7 @@ mention = 用户与 AI 交流时对**实体**的点名机制。提示词的基�
 | 族 | 回答的问题 | 成员 | 效果族 | 消费面 |
 |---|---|---|---|---|
 | **请求** request | "用什么做"——计划时的材料与能力 | `asset`（素材）、`skill`（技能，立案未实施，方针见 §5） | 上下文富化为底（点名素材进 LLM 上下文，推断归 intent_router） | composer / 配方 overlay 首发 |
-| **指认** reference | "改哪个"——已有之物的引用 | `output`（可携带 `quote` 段落级指认，见 §4 末条）、`workflow_step`、`transcript_segment`（未实施，仅类型残留，未注册不可创建） | 确定性指认注入（LLM 永不猜"第二条"是哪条） | chat 修订 |
+| **指认** reference | "改哪个"——已有之物的引用 | `output`（可携带 `quote` 段落级指认，见 §4 末条）、`workflow_step`、`transcript_segment`（未实施，仅类型残留，未注册不可创建） | 确定性指认注入（LLM 永不猜"第二条"是哪条；**Final Hardening B4 钉恒胜写门**：回合恰一个 output pin 时服务端强制修订 target = 钉 id，LLM 的 target 转述仅建议——live 验收曾实证转述覆盖钉） | chat 修订 |
 
 两族不混：请求族进计划路径，指认族进修订路径。一个新 mention 类型必须唯一落族；两族都落不了的实体（如配方）说明它根本不是 mention。
 
