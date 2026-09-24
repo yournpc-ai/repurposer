@@ -1,6 +1,6 @@
 # 精确编辑迭代：edit_output 受控刀 / quote→range 解算 / 产物归档不变量 / 计费偏好集成
 
-> Status: **已施工（代码层全绿，2026-09-24 当日收口）**——ADR-090/091/092 同批拍板落档（`4052db4`）；Gate 0/1 证据链 = live 验收六拍 + 修红批 `6b93b24` + Restore×Rerun/计费链取证。施工进度：S0 `1610bac` / S1 `0f2b9fc`（归档两列 + 两 wipe 点 + 读面 + 换态，迁移回滚实证）/ S2 `a8efdf8`（解算器置信谱 19 纯件）/ S3 `47175f7`（edit_output + 顺形律 kind 推断，探针 H 11/12）/ S4 `b7ef524`（settings API + dock 披露分级，web tsc/vitest 绿）/ S5 `6171085`（S-edit 剧本首跑 PASS + 走查脚本）/ S6 docs 收口（本批）。**欠账**：prompt_gate 全量复跑（MiniMax 402）+ live 走查（`scratch/precise-edit-walkthrough.md`）归用户；P1 出批 = operations 前端 UI + set_caption_visibility。
+> Status: **已施工（代码层全绿，2026-09-24 当日收口）**——ADR-090/091/092 同批拍板落档（`4052db4`）；Gate 0/1 证据链 = live 验收六拍 + 修红批 `6b93b24` + Restore×Rerun/计费链取证。施工进度：S0 `1610bac` / S1 `0f2b9fc`（归档两列 + 两 wipe 点 + 读面 + 换态，迁移回滚实证）/ S2 `a8efdf8`（解算器置信谱 19 纯件）/ S3 `47175f7`（edit_output + 顺形律 kind 推断，探针 H 11/12）/ S4 `b7ef524`（settings API + dock 披露分级，web tsc/vitest 绿）/ S5 `6171085`（S-edit 剧本首跑 PASS + 走查脚本）/ S6 docs 收口（本批）。**欠账**：~~prompt_gate 全量干净读数~~ **已销（2026-09-24：八探针全 PASS**——A 12 / B 12 / C 12 / D 11 / E 11 / F 9 / G 12 / H 11；期间 F/H 红为 402 污染，gate INVALID 化加固 `37c1536`）；live 走查（`scratch/precise-edit-walkthrough.md`）归用户；P1 出批 = operations 前端 UI + set_caption_visibility。
 > 母合同 = ADR-090（edit_output + 解算器）+ ADR-091（work/version + 归档不变量）+ ADR-092（计费偏好集成）+ ADR-089 §1/§5（终态词表 / 停顿定律）+ ADR-074②（渲染台账律）+ PROGRESS §0.4 规则 9（认知验收）。取证底座 = 年底审计（最大公约数量尺：架构冻结，精确编辑 = 唯一缺口）。
 
 ## 1. 主线与冻结条（施工硬约束）
