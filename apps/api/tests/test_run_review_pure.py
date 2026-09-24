@@ -4,12 +4,15 @@
 No DB / no LLM / no HTTP: the module is a pure function seat, so the whole
 spectrum gates here — extraction (``landed_fact``), the promise derivation
 (``_promised_from_scope`` via ``compute_run_review``), the gap adjudication
-(family presence / clip shortfall / track promises / over-quote charge),
-and the bounded prompt-feed rendering (caps are structural).
+(family presence / clip shortfall / track promises), and the bounded
+prompt-feed rendering (caps are structural).
+
+Spend is never a closing-beat fact (2026-09-24 用户拍板 — Claude/Codex
+parity): the review carries no charge fact and no over-quote gap, so nothing
+downstream can narrate cost.
 """
 
 from app.pipeline.run_review import (
-    ChargeFact,
     LandedFact,
     RunReview,
     compute_run_review,
@@ -113,19 +116,16 @@ class TestComputeRunReview:
                 _clip(language=None, payload={"duration": 30}),
                 landed_fact(_OutputStub("post", language="fr")),
             ],
-            captured_credits=150,
         )
         assert review.has_snapshot
         assert review.promised_clip_count == 1
         assert set(review.promised_types) == {"clip", "post:fr"}
         assert review.gaps == ()
-        assert review.charge == ChargeFact(quoted_low=100, quoted_high=200, captured=150)
 
     def test_missing_writer_family_is_a_gap(self) -> None:
         review = compute_run_review(
             confirmed_scope=_scope({"tool": "write_article", "params": {"language": "de"}}),
             landed=[],
-            captured_credits=None,
         )
         assert "missing_output:article:de" in review.gaps
 
@@ -133,7 +133,6 @@ class TestComputeRunReview:
         review = compute_run_review(
             confirmed_scope=_scope({"tool": "write_post", "params": {}}),
             landed=[landed_fact(_OutputStub("post", language="zh"))],
-            captured_credits=None,
         )
         assert review.gaps == ()
 
@@ -143,7 +142,6 @@ class TestComputeRunReview:
                 {"tool": "cut_segments", "params": {"segments": [{"start": 0, "end": 1}, {"start": 2, "end": 3}, {"start": 4, "end": 5}]}},
             ),
             landed=[_clip(payload={"duration": 1})],
-            captured_credits=None,
         )
         assert "clip_shortfall:1/3" in review.gaps
 
@@ -151,7 +149,6 @@ class TestComputeRunReview:
         review = compute_run_review(
             confirmed_scope=_scope({"tool": "select_clips", "params": {"count": 2}}),
             landed=[_clip(), _clip()],
-            captured_credits=None,
         )
         assert review.promised_clip_count == 2
         assert not any(g.startswith("clip_shortfall") for g in review.gaps)
@@ -164,7 +161,6 @@ class TestComputeRunReview:
                 {"tool": "dub_clip", "params": {"target_language": "fr"}},
             ),
             landed=[_clip(render_spec={"caption_track": [{"text": "x"}]})],
-            captured_credits=None,
         )
         assert "missing_caption_version:fr" in review.gaps
         assert "missing_dub" in review.gaps
@@ -184,7 +180,6 @@ class TestComputeRunReview:
                     }
                 )
             ],
-            captured_credits=None,
         )
         assert review2.gaps == ()
 
@@ -196,17 +191,8 @@ class TestComputeRunReview:
                 landed_fact(_OutputStub("post", quality={"status": "needs_human"})),
                 landed_fact(_OutputStub("article", quality={"status": "passed"})),
             ],
-            captured_credits=None,
         )
         assert review.needs_human == ("clip", "post")
-
-    def test_over_quote_capture_is_a_gap(self) -> None:
-        review = compute_run_review(
-            confirmed_scope=_scope({"tool": "write_post", "params": {}}),
-            landed=[landed_fact(_OutputStub("post"))],
-            captured_credits=250,
-        )
-        assert "charge_over_quote:250>200" in review.gaps
 
     def test_no_snapshot_is_read_tolerated(self) -> None:
         """Legacy run (no confirmed scope): the promise side stays EMPTY by
@@ -214,24 +200,10 @@ class TestComputeRunReview:
         review = compute_run_review(
             confirmed_scope=None,
             landed=[_clip()],
-            captured_credits=42,
         )
         assert not review.has_snapshot
         assert review.promised_types == ()
         assert review.gaps == ()
-        assert review.charge.captured == 42
-        assert review.charge.quoted_low is None
-
-    def test_quote_absent_is_read_tolerated(self) -> None:
-        scope = _scope({"tool": "write_post", "params": {}})
-        scope["quote"] = None
-        review = compute_run_review(
-            confirmed_scope=scope,
-            landed=[landed_fact(_OutputStub("post"))],
-            captured_credits=10,
-        )
-        assert review.charge.quoted_low is None
-        assert not any(g.startswith("charge_over_quote") for g in review.gaps)
 
 
 # ---- the bounded prompt-feed rendering ----------------------------------------------
@@ -253,7 +225,6 @@ class TestReviewFactLines:
                 ),
                 landed_fact(_OutputStub("post", language="fr")),
             ],
-            captured_credits=150,
         )
         lines = review_fact_lines(review)
         assert any(line.startswith("promised: clip, post:fr") for line in lines)
@@ -263,14 +234,12 @@ class TestReviewFactLines:
             for line in lines
         )
         assert any("landed post" in line and "lang=fr" in line for line in lines)
-        assert any("captured 150 credits (quoted 100–200)" in line for line in lines)
         assert not any(line.startswith("GAP") for line in lines)
 
     def test_gaps_render_as_stable_keys(self) -> None:
         review = compute_run_review(
             confirmed_scope=_scope({"tool": "write_quotes", "params": {}}),
             landed=[],
-            captured_credits=None,
         )
         lines = review_fact_lines(review)
         assert "GAP missing_output:quotes" in lines
@@ -283,6 +252,13 @@ class TestReviewFactLines:
         assert len(landed_lines) == 12
         assert any("(8 more landed outputs)" in line for line in lines)
 
-    def test_no_capture_says_nothing_about_the_charge(self) -> None:
-        review = compute_run_review(confirmed_scope=None, landed=[], captured_credits=None)
-        assert not any("charge:" in line for line in review_fact_lines(review))
+    def test_lines_never_speak_spend(self) -> None:
+        """The 2026-09-24 ruling's structural pin: no matter what the scope's
+        quote says, the prompt-feed block carries no charge line — the closing
+        speech cannot narrate what it never sees."""
+        review = compute_run_review(
+            confirmed_scope=_scope({"tool": "write_post", "params": {}}),
+            landed=[landed_fact(_OutputStub("post"))],
+        )
+        lines = review_fact_lines(review)
+        assert not any("charge" in line or "credit" in line for line in lines)

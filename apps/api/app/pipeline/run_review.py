@@ -5,16 +5,19 @@
 quality gate); ``run_review`` lives at the chat edge's trigger turn (the
 closing review's fact substrate). This module is a PURE function seat — zero
 LLM, zero DB: the caller (``app/chat/trigger_turn.py``) owns the IO and hands
-in plain data (the run's Confirmed Scope Snapshot, the landed outputs, the
-captured credits), and gets back the 兑现事实清单 (delivery-fact list):
+in plain data (the run's Confirmed Scope Snapshot, the landed outputs), and
+gets back the 兑现事实清单 (delivery-fact list):
 
 - promised vs landed output families (type / language presence, clip counts);
 - per-landed-clip facts: duration vs the cut range, caption-track existence,
   dub existence, the verify flag (``outputs.quality`` — passed /
   needs_human / never-verified), the render outcome (``outputs.render_status``
   — a render-FAILED row never counts toward the delivery tallies and fires
-  the ``render_failed:<type>`` gap);
-- the charge fact: captured credits vs the confirm-time quote range.
+  the ``render_failed:<type>`` gap).
+
+Spend is NEVER a closing-beat fact (2026-09-24 用户拍板 — Claude/Codex
+parity: a finished task does not report what it cost; the wallet owns the
+ledger, the speech owns the work). No charge lines, no over-quote gaps.
 
 The review's prose law (facts first, ZERO subjective quality words, gaps
 become suggestions) lives in the prompt (``trigger_system.j2``); this module
@@ -24,7 +27,7 @@ repair anywhere (P2 挂账 — the audit advises, never acts).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 # The compiled tool → product-family mapping (the promise side). Transform
@@ -54,22 +57,11 @@ class LandedFact:
 
 
 @dataclass(frozen=True)
-class ChargeFact:
-    """实扣 vs 报价 (BILLING §7's closing mirror): the confirm-time quote
-    range and the credits actually captured. ``captured=None`` = no capture
-    rows found (legacy run) — the review says nothing about the charge."""
-
-    quoted_low: int | None = None
-    quoted_high: int | None = None
-    captured: int | None = None
-
-
-@dataclass(frozen=True)
 class RunReview:
     """The delivery-fact list (结构化事实, zero prose): the promise derived
-    from the confirmed scope, the landed facts, the deterministic gaps, and
-    the charge. ``has_snapshot=False`` marks the legacy/no-scope run — the
-    promise side then stays empty by DESIGN (never reconstructed)."""
+    from the confirmed scope, the landed facts, and the deterministic gaps.
+    ``has_snapshot=False`` marks the legacy/no-scope run — the promise side
+    then stays empty by DESIGN (never reconstructed)."""
 
     has_snapshot: bool
     promised_types: tuple[str, ...] = ()  # e.g. ("clip", "clip", "post:fr")
@@ -79,7 +71,6 @@ class RunReview:
     landed: tuple[LandedFact, ...] = ()
     gaps: tuple[str, ...] = ()
     needs_human: tuple[str, ...] = ()  # landed output types flagged by verify
-    charge: ChargeFact = field(default_factory=ChargeFact)
 
 
 def landed_fact(output: Any) -> LandedFact:
@@ -164,7 +155,6 @@ def compute_run_review(
     *,
     confirmed_scope: dict[str, Any] | None,
     landed: list[LandedFact],
-    captured_credits: int | None,
 ) -> RunReview:
     """The audit's pure adjudication: promise vs landed, gaps named as
     stable snake_case keys (the prompt layer narrates them; the suggestion
@@ -217,23 +207,6 @@ def compute_run_review(
         {f.output_type for f in landed if f.quality == "needs_human"}
     )
 
-    quote = (snapshot or {}).get("quote") or {}
-    total = quote.get("total") if isinstance(quote, dict) else None
-    quoted_low = quoted_high = None
-    if isinstance(total, list) and len(total) == 2:
-        quoted_low, quoted_high = int(total[0]), int(total[1])
-    charge = ChargeFact(
-        quoted_low=quoted_low, quoted_high=quoted_high, captured=captured_credits
-    )
-    # An over-quote capture is a fact the review must surface (BILLING §5's
-    # honesty extends to the closing beat).
-    if (
-        captured_credits is not None
-        and quoted_high is not None
-        and captured_credits > quoted_high
-    ):
-        gaps.append(f"charge_over_quote:{captured_credits}>{quoted_high}")
-
     return RunReview(
         has_snapshot=snapshot is not None,
         promised_types=tuple(promised["types"]),
@@ -243,7 +216,6 @@ def compute_run_review(
         landed=tuple(landed),
         gaps=tuple(gaps),
         needs_human=tuple(needs_human),
-        charge=charge,
     )
 
 
@@ -301,20 +273,10 @@ def review_fact_lines(review: RunReview) -> list[str]:
         lines.append(f"GAP {gap}")
     if review.needs_human:
         lines.append("verify flagged for human review: " + ", ".join(review.needs_human))
-    charge = review.charge
-    if charge.captured is not None:
-        if charge.quoted_low is not None and charge.quoted_high is not None:
-            lines.append(
-                f"charge: captured {charge.captured} credits "
-                f"(quoted {charge.quoted_low}–{charge.quoted_high})"
-            )
-        else:
-            lines.append(f"charge: captured {charge.captured} credits (no quote on record)")
     return lines
 
 
 __all__ = [
-    "ChargeFact",
     "LandedFact",
     "RunReview",
     "compute_run_review",

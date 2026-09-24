@@ -47,7 +47,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.context import build_context
@@ -66,7 +66,6 @@ from app.chat.turn_tools import CHAT_READ_TOOLS
 from app.models.schemas import Option, QuestionPayload, WrapUpArgs
 from app.models.tables import (
     Conversation,
-    CreditTransaction,
     Message,
     Output,
     Project,
@@ -282,12 +281,13 @@ async def _run_review_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
     """The closing audit's fact block (iter-3 S5, ADR-088 §8 R21 / N-58):
     the deterministic 兑现事实清单 for the run_completed turn — the world's
     self-evidence (the run's Confirmed Scope Snapshot, the landed outputs'
-    baked specs, the ledger's captures), adjudicated by ``run_review``'s
-    PURE core and bounded by its rendering caps. Zero LLM here; the prose
-    law (facts first, zero subjective quality words, gaps → suggestions)
-    lives in the prompt. Any read failure degrades to the empty block (the
-    fire-and-forget doctrine — the review then speaks from its own reads,
-    exactly the pre-S5 posture)."""
+    baked specs), adjudicated by ``run_review``'s PURE core and bounded by
+    its rendering caps. Zero LLM here; the prose law (facts first, zero
+    subjective quality words, gaps → suggestions) lives in the prompt.
+    Spend is never a closing-beat fact (2026-09-24 用户拍板 — Claude/Codex
+    parity), so no capture query rides here. Any read failure degrades to
+    the empty block (the fire-and-forget doctrine — the review then speaks
+    from its own reads, exactly the pre-S5 posture)."""
     from app.pipeline.run_review import (  # deferred: pipeline weight
         compute_run_review,
         landed_fact,
@@ -313,23 +313,9 @@ async def _run_review_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
             .scalars()
             .all()
         )
-    capture_count, captured_raw = (
-        await db.execute(
-            select(
-                func.count(CreditTransaction.id),
-                func.coalesce(func.sum(CreditTransaction.amount), 0),
-            ).where(
-                CreditTransaction.kind == "capture",
-                CreditTransaction.ref["run_id"].astext == str(run.id),
-            )
-        )
-    ).one()
-    # Captures are signed negative; zero rows = nothing truthful to say.
-    captured = -int(captured_raw) if capture_count else None
     review = compute_run_review(
         confirmed_scope=(run.context or {}).get("confirmed_scope"),
         landed=[landed_fact(o) for o in outputs],
-        captured_credits=captured,
     )
     return review_fact_lines(review)
 
