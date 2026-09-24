@@ -338,33 +338,6 @@ class TaskListProposal(BaseModel):
     name: str = ""
 
 
-class EditOp(BaseModel):
-    """One clip-spec-level edit operation (Operation Model vocabulary, §9).
-
-    v1 only pins the boundary (edit ops → no run); the op set is finalized
-    with the Operation Model, so the op key tolerates ``type`` and extra keys
-    are stored verbatim.
-    """
-
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
-
-    op: str = Field(default="", validation_alias=AliasChoices("op", "type"))
-    target: str | None = None
-    params: dict = Field(default_factory=dict)
-
-
-class EditOpsProposal(BaseModel):
-    """Intent agent output, state B: edit an existing output (→ Operation
-    Model, v2 — v1 answers with the boundary text and creates no run)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["edit_ops"] = "edit_ops"
-    target_output_id: UUID
-    ops: list[EditOp] = Field(default_factory=list)
-    summary: str
-
-
 class QuestionProposal(BaseModel):
     """Intent agent output, state C: a structured question (→ QuestionDock).
 
@@ -488,7 +461,7 @@ class WiringProposal(BaseModel):
 
 
 IntentProposal = Annotated[
-    TaskListProposal | EditOpsProposal | QuestionProposal | AnswerProposal | WiringProposal,
+    TaskListProposal | QuestionProposal | AnswerProposal | WiringProposal,
     Field(discriminator="type"),
 ]
 """The five-state discriminated union the chat intent agent returns (§3, N-18 + N-21; state E = ADR-057 wiring ops)."""
@@ -729,30 +702,6 @@ class ProposeTasksArgs(BaseModel):
     )
 
 
-class ApplyEditOpsArgs(BaseModel):
-    """``apply_edit_ops`` params, chat path (EditOpsProposal minus summary):
-    clip-spec-level edit operations against one existing output."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "ops")
-
-    target_output_id: UUID = Field(
-        description="The id of the output being edited (from the project's output list / an @-mention).",
-    )
-    ops: list[EditOp] = Field(
-        default_factory=list,
-        description="The edit operations, in the Operation Model vocabulary.",
-    )
-    pending_disposition: Literal["answer", "skip", "none"] = Field(
-        default="none",
-        description="Pending-question settlement for this turn: 'answer' / 'skip' / 'none'.",
-    )
-
-
 class EditGraphArgs(BaseModel):
     """``edit_graph`` params, chat path (WiringProposal minus summary):
     revise the persistent graph — a revision inside the already-confirmed
@@ -924,47 +873,44 @@ _EDIT_KIND_BY_PARAM = {
 }
 
 
+def edit_kind_for_params(params: "EditOutputParams") -> str | None:
+    """The verb decode (ADR-090 E2, 顺形律 — probe H 实测 2026-09-24; Final
+    Hardening B1: the ONLY kind source). Exactly one filled param determines
+    the kind; zero or 2+ filled carries no verb → None → the pairing law's
+    domain refusal rides the loop (never a guess). There is no ``kind``
+    field: the verb is expressed purely through WHICH param is filled, so
+    schema and production dispatch can never disagree."""
+    filled = [
+        k
+        for k, v in params.model_dump(mode="python").items()
+        if v is not None and str(v).strip() != ""
+    ]
+    if len(filled) == 1:
+        return _EDIT_KIND_BY_PARAM.get(filled[0])
+    return None
+
+
 class EditOutputArgs(BaseModel):
     """``edit_output`` params, chat path (ADR-090 §1/§4): the PRECISE edit
     verb — a mechanically executable change to an already-produced clip
     ('delete this line' / '3 seconds shorter' / 'captions to karaoke' /
-    'retitle to X'). kind is the controlled enum (MVP 四件); the system
-    resolves the quote to seconds, journals the op, and re-renders. An
-    open-ended craft ask goes to revise_output; when the change is not
-    mechanically specifiable, ask — never guess."""
+    'retitle to X'). The verb is carried by WHICH one param is filled
+    (``edit_kind_for_params`` — the schema deliberately has no ``kind``
+    field; the loop strips stray naming keys anyway); the system resolves
+    the quote to seconds, journals the op, and re-renders. An open-ended
+    craft ask goes to revise_output; when the change is not mechanically
+    specifiable, ask — never guess."""
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "target", "kind", "params")
-
-    @model_validator(mode="after")
-    def _infer_kind(self) -> "EditOutputArgs":
-        """顺形律 (probe H 实测 2026-09-24): the provider omits the kind
-        discriminator and expresses the verb purely through WHICH param it
-        fills — one filled param determines the kind exactly, so the schema
-        decodes it (the bare-int plan_ref precedent, probe F). Zero or 2+
-        params filled carries no verb → kind stays None and the pairing
-        law's domain refusal rides the loop (never a guess)."""
-        if self.kind is None:
-            filled = [
-                k
-                for k, v in self.params.model_dump(mode="python").items()
-                if v is not None and str(v).strip() != ""
-            ]
-            if len(filled) == 1:
-                self.kind = _EDIT_KIND_BY_PARAM.get(filled[0])
-        return self
+        return tolerate_null_keys(data, "target", "params")
 
     target: ReviseOutputTarget = Field(
         default_factory=ReviseOutputTarget,
         description="What the edit points at — the @output pin (output_id) XOR the plan ordinal (plan_ref relayed verbatim).",
-    )
-    kind: Literal["remove_range", "set_trim", "set_caption_style", "set_title"] | None = Field(
-        default=None,
-        description="The precise-edit verb: remove_range (cut the quoted words) / set_trim (shorten the end) / set_caption_style (swap the preset) / set_title (retitle).",
     )
     params: EditOutputParams = Field(default_factory=EditOutputParams)
     pending_disposition: Literal["answer", "skip", "none"] = Field(

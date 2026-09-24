@@ -1,10 +1,10 @@
 """The chat path's tool-loop runner (ADR-077 判词② — T2a 内核半边).
 
 The retired ``_propose_turn`` dispatch, re-homed: the chat intent
-agent closes its turn with ONE terminal tool call — the five proposal
-states' mechanical translation (task_list → ``propose_tasks``, edit_ops →
-``apply_edit_ops``, wiring → ``edit_graph``, ask → ``ask_user``, answer →
-``answer``). The write doors never moved:
+agent closes its turn with ONE terminal tool call — the proposal states'
+mechanical translation (task_list → ``propose_tasks``, wiring →
+``edit_graph``, craft → ``revise_output``, precise edit → ``edit_output``,
+ask → ``ask_user``, answer → ``answer``). The write doors never moved:
 
 - ``propose_tasks`` NEVER births a run (Phase 4 B3, ADR-087 §4 + Frozen
   Rule 1/3 — a natural-language request is Task Intent, never Paid
@@ -23,7 +23,9 @@ states' mechanical translation (task_list → ``propose_tasks``, edit_ops →
   unprovable scope rolls the door's mutation back and docks as a PendingPlan
   + task_book question instead (Rule 6/10 — never a silent paid run on new
   scope);
-- ``apply_edit_ops`` still goes through the operations registry's
+- ``edit_output`` (Final Hardening B1 — the chat path's ONLY edit verb;
+  the raw-ops ``apply_edit_ops`` retired 2026-09-24) compiles one
+  controlled registry op and journals it through the operations registry's
   ``apply_operations`` with message lineage;
 - every adjudication rejection (registry / wiring door / transform targets)
   IS the loop's feedback — the retired funnel repair round's seat, one
@@ -35,7 +37,7 @@ answer on a parked interrupt wakes its run and the tool's own dispatch is
 skipped (the wake IS the continuation, unchanged).
 
 Storage shapes preserved: message.intent still carries the proposal dumps
-(TaskListProposal / EditOpsProposal / WiringProposal / QuestionProposal /
+(TaskListProposal / WiringProposal / QuestionProposal /
 AnswerProposal, built here from the accepted call's params plus the turn's
 prose), and the caption-mode stash stays a TaskListProposal dump.
 
@@ -92,14 +94,12 @@ from app.chat.service import (
     _derive_chat_caption_mode,
     _detect_caption_mode,
     _dock_question,
-    _edit_op_items,
     _has_resolved_caption_mode,
     _needs_caption_mode_question,
     _prefers_zh,
     _resume_ack_line,
     _reminder_tail,
     _safe_task_estimate,
-    _validate_edit_ops,
     latest_pending_question,
     sync_plan_question,
 )
@@ -107,14 +107,12 @@ from app.chat.system_status import observe_phase_callback
 from app.models.schemas import (
     AnswerPayload,
     AnswerProposal,
-    ApplyEditOpsArgs,
     AssetType,
     Brief,
     ChatAnswerArgs,
     ChatAskArgs,
     ChatMention,
     EditGraphArgs,
-    EditOpsProposal,
     EditOutputArgs,
     InferredIntent,
     PendingPlan,
@@ -125,6 +123,7 @@ from app.models.schemas import (
     ReviseOutputArgs,
     TaskListProposal,
     WiringProposal,
+    edit_kind_for_params,
 )
 from app.models.tables import (
     Asset,
@@ -380,9 +379,6 @@ class ChatTurn:
         if name == "propose_tasks":
             assert isinstance(params, ProposeTasksArgs)
             return await self._propose_tasks(params, prose)
-        if name == "apply_edit_ops":
-            assert isinstance(params, ApplyEditOpsArgs)
-            return await self._apply_edit_ops(params, prose)
         if name == "edit_graph":
             assert isinstance(params, EditGraphArgs)
             return await self._edit_graph(params, prose)
@@ -881,58 +877,6 @@ class ChatTurn:
             )
         return text
 
-    async def _apply_edit_ops(self, params: ApplyEditOpsArgs, prose: str) -> str | None:
-        """edit_ops → the operations registry. Validation rejections ride the
-        loop; the ownership check is an honest boundary (never a retry)."""
-        db, text = self.db, self.text
-        proposal = EditOpsProposal(
-            target_output_id=params.target_output_id, ops=params.ops, summary=prose
-        )
-        ops_items = _edit_op_items(proposal)
-        try:
-            _validate_edit_ops(ops_items)
-        except OpRejected as e:
-            return str(e)
-        # Mentions forward client-pinned ids verbatim (MENTIONS §35) —
-        # authorize before any write: the target must be an output of THIS
-        # project (the chat surface's cross-tenant IDOR fix).
-        target = await db.get(Output, params.target_output_id)
-        if (
-            self.project is None
-            or target is None
-            or UUID(str(target.project_id)) != UUID(str(self.project.id))
-        ):
-            assistant_message = await _create_message(
-                db, self.conversation_id, "assistant", _cannot_do_text(text)
-            )
-            self.outcome = (assistant_message, None, [], self.settled_question)
-            return None
-        # Create the assistant message first (flush for the id), then apply
-        # with message_id lineage — one commit at the tail.
-        assistant_message = await _create_message(
-            db,
-            self.conversation_id,
-            "assistant",
-            prose,
-            intent=proposal.model_dump(mode="json"),
-        )
-        try:
-            await apply_operations(
-                db,
-                params.target_output_id,
-                ops_items,
-                source="chat",
-                user_id=self.user_id,
-                message_id=UUID(str(assistant_message.id)),
-            )
-        except (OpRejected, OpConflict):
-            assistant_message.content = _cannot_do_text(text)
-        except HTTPException as e:
-            # e.g. target has no render_spec — a legitimate "can't do that".
-            assistant_message.content = str(e.detail)
-        self.outcome = (assistant_message, None, [], self.settled_question)
-        return None
-
     async def _edit_graph(self, params: EditGraphArgs, prose: str) -> str | None:
         """wiring → 修订 = edit_prompt(node) + run({node} ∪ downstream)
         (ADR-057 K4). The dispatch law lives in ``_run_wiring_proposal``
@@ -1205,12 +1149,17 @@ class ChatTurn:
         db, project, text = self.db, self.project, self.text
         if project is None:
             return "nothing to edit yet — this conversation has no project."
-        kind = params.kind
+        # Final Hardening B1: the verb decodes from WHICH param is filled
+        # (schemas.edit_kind_for_params) — the schema has no ``kind`` field,
+        # so the LLM can never contradict the pairing law.
+        kind = edit_kind_for_params(params.params)
         if not kind:
             return (
-                "edit_output needs its kind — remove_range / set_trim / "
-                "set_caption_style / set_title; an open-ended change goes to "
-                "revise_output, a deliverables change to revise_plan."
+                "edit_output takes exactly ONE filled param — quote "
+                "(remove_range) / seconds (set_trim) / style "
+                "(set_caption_style) / title (set_title); an open-ended "
+                "change goes to revise_output, a deliverables change to "
+                "revise_plan."
             )
         target = params.target
         plan_ref = (target.plan_ref or "").strip()

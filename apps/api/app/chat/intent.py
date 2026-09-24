@@ -23,8 +23,8 @@ user_key taxonomy makes the failure presentable).
 
 ``chat_intent_agent`` — the chat loop's intent proposer (CHAT_ARCH §3): one
 user message + assembled context → one terminal call (propose_tasks /
-apply_edit_ops / edit_graph / ask_user / answer — the five proposal states,
-mechanically — plus the iter-3 S2 exploration verbs: a post-run discovery
+edit_output / revise_output / edit_graph / ask_user / answer — the terminal
+proposal states, mechanically — plus the iter-3 S2 exploration verbs: a post-run discovery
 goal runs the SAME candidates → selects → plans chain as the plan path and
 docks its decision package through this path's own seat, R6 parity). The
 LLM proposes; ``compile_graph`` / the operations registry /

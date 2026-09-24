@@ -7,7 +7,7 @@ READINGS live here; the world's WRITINGS stay behind the three doors
 for a write (简报 §3).
 
 Every execute is tenant-scoped to the turn's project (the same ownership
-check as ``apply_edit_ops`` — a client-pinned id resolves only inside its
+check as the edit verbs' doors — a client-pinned id resolves only inside its
 own project) and answers a MISS honestly (an empty observation the model
 adapts to), never raises on content. Infrastructure failures (the DB
 itself) propagate — the turn's honest terminal failure, never a fabricated

@@ -40,7 +40,16 @@ same contexts as the A/B instrument:
   re-derives the chain).
 - G:craft-revision (iter-3 S3, N-58) — post-run 'plan 2 的帖子语气再尖锐
   一点' must end at revise_output with plan_ref relayed verbatim
-  (containing '2'), never edit_graph / apply_edit_ops / propose_tasks.
+  (containing '2'), never edit_graph / propose_tasks.
+- H:precise-edit routing (精确编辑迭代 S3, ADR-090; Final Hardening B1
+  扩为四族 2026-09-24) — a landed clip + a mechanically executable change
+  must end at edit_output with the verb decoded from WHICH param is
+  filled (schemas.edit_kind_for_params — there is no kind field): H =
+  remove_range (quote verbatim), H2 = set_trim (seconds=3), H3 =
+  set_title (title verbatim), H4 = set_caption_style (preset enum via the
+  list_caption_styles stub). revise_output / propose_tasks / edit_graph
+  are misroutes for changes this definite. B1's structural invariant is
+  asserted at startup: the chat tool set carries NO raw-ops verb.
 
 Tool-loop form (ADR-077 判词②, 2026-09-14): the agent is the ToolLoopAgent,
 the action IS the terminal tool call, and the predicates read
@@ -58,7 +67,7 @@ thresholds), then bisect with the A/B instrument — never tune the
 thresholds to make a regression pass.
 
 Usage (from apps/api):
-    uv run python scripts/prompt_gate.py [--n 12] [--probe A|B|C|D|E|F|G] [--provider minimax]
+    uv run python scripts/prompt_gate.py [--n 12] [--probe A|B|C|D|E|F|G|H|H2|H3|H4] [--provider minimax]
 """
 
 import argparse
@@ -91,8 +100,13 @@ from app.chat.turn_tools import (  # noqa: E402
     PLAN_READ_TOOLS,
     PLAN_TOOLS,
 )
-from app.models.schemas import Brief, BriefSlotSource  # noqa: E402
+from app.models.schemas import (  # noqa: E402
+    Brief,
+    BriefSlotSource,
+    edit_kind_for_params,
+)
 from app.models.tables import Message  # noqa: E402
+from app.pipeline.clip_spec import _CAPTION_STYLE_PRESETS  # noqa: E402
 from app.providers.llm.minimax import minimax_client  # noqa: E402
 
 # The provider registry (T4 参数化): --provider picks the client the gate's
@@ -113,7 +127,8 @@ PROVIDERS = {
 # bare int), fixed in the SCHEMA (coerce_numbers_to_str, 顺形律), then
 # 12/12. Thresholds hold at 8 with headroom — recalibrate from readings,
 # never to excuse a regression.
-THRESHOLDS = {"A": 8, "B": 8, "C": 10, "D": 8, "E": 8, "F": 8, "G": 8, "H": 8}
+THRESHOLDS = {"A": 8, "B": 8, "C": 10, "D": 8, "E": 8, "F": 8, "G": 8, "H": 8,
+              "H2": 8, "H3": 8, "H4": 8}
 
 BRIEF_ANSWERED = Brief.model_validate(
     {
@@ -256,7 +271,7 @@ PROBE_G = {
 # H's precise edit (精确编辑迭代 S3, ADR-090): a landed clip with visible
 # captions; the message names a mechanically executable change. The model
 # must route edit_output with kind=remove_range and relay the quoted words
-# verbatim — apply_edit_ops (raw ops) / revise_output (open craft) / ask are
+# verbatim — revise_output (open craft) / propose_tasks / edit_graph are
 # all misroutes for a change this definite.
 PROBE_H = {
     "message": '把开头那句 "Onboarding is where users decide to stay" 删掉',
@@ -274,6 +289,23 @@ PROBE_H = {
             "- assistant: Landed one clip from the onboarding section."
         )
     },
+}
+
+# Final Hardening B1 (2026-09-24): the four request families each get a
+# probe — same landed-clip context, one mechanically executable change per
+# family. The verb must decode from WHICH param is filled
+# (schemas.edit_kind_for_params — there is no kind field to assert on).
+PROBE_H2 = {
+    "message": "把这条视频结尾剪掉 3 秒",
+    "context": PROBE_H["context"],
+}
+PROBE_H3 = {
+    "message": "把这条视频的标题改成「AI 时代的内容创作」",
+    "context": PROBE_H["context"],
+}
+PROBE_H4 = {
+    "message": "把这条视频的字幕换成卡拉 OK 高亮那种样式",
+    "context": PROBE_H["context"],
 }
 
 # D's discovery substrate: material attached and readable (the excerpt is
@@ -357,6 +389,15 @@ async def _gate_execute(
             # F's docked package (iter-3 S3): the reading layer the chat
             # path's revise_plan reads its plan_id from.
             return ToolObservation(pending_plan_text)
+        if name == "list_caption_styles":
+            # H4's enum substrate (Final Hardening B1): the preset catalog
+            # read, mirroring production's list_caption_styles seat — the
+            # model must map the user's words to one of THESE ids, never a
+            # free-form style.
+            return ToolObservation(
+                "Caption style presets (the full catalog):\n"
+                + "\n".join(f"- {p}" for p in sorted(_CAPTION_STYLE_PRESETS))
+            )
         return ToolObservation(
             "(gate stub: nothing readable in this probe context)"
         )
@@ -390,15 +431,19 @@ async def _gate_execute(
     if name == "propose_plans":
         return None
     if name == "edit_output":
-        # Mirror the production pairing law's feedback (propose_turn
-        # _edit_output): a kind-less call is rejected, the loop repairs —
-        # the stub must not ACCEPT what production refuses, or the probe
-        # measures the malformed call as terminal.
-        if not getattr(params, "kind", None):
+        # Mirror the production verb-decode law (Final Hardening B1 —
+        # schemas.edit_kind_for_params, propose_turn._edit_output): the verb
+        # comes from WHICH single param is filled (there is no kind field);
+        # zero/2+ filled is refused and the loop repairs — the stub must not
+        # ACCEPT what production refuses, or the probe measures the
+        # malformed call as terminal.
+        if not edit_kind_for_params(params.params):
             return (
-                "edit_output needs its kind — remove_range / set_trim / "
-                "set_caption_style / set_title; an open-ended change goes to "
-                "revise_output, a deliverables change to revise_plan."
+                "edit_output takes exactly ONE filled param — quote "
+                "(remove_range) / seconds (set_trim) / style "
+                "(set_caption_style) / title (set_title); an open-ended "
+                "change goes to revise_output, a deliverables change to "
+                "revise_plan."
             )
         return None
     if name == "present_plan":
@@ -465,35 +510,46 @@ def _passed(probe: str, r: LoopResult) -> bool:
         )
     # G (iter-3 S3): the craft revision ends at revise_output with the
     # user's pointing relayed verbatim (plan_ref carries the '2') — never
-    # edit_graph / apply_edit_ops / propose_tasks.
+    # edit_graph / propose_tasks.
     if probe == "G":
         return (
             r.tool_name == "revise_output"
             and "2" in str(getattr(getattr(r.params, "target", None), "plan_ref", "") or "")
             and "edit_graph" not in r.calls
-            and "apply_edit_ops" not in r.calls
             and "propose_tasks" not in r.calls
         )
-    # H (精确编辑迭代 S3, ADR-090): the precise edit routes edit_output with
-    # kind=remove_range, the quote relayed verbatim (the words survive),
-    # target pointed at the clip — the raw-ops / open-craft / proposal verbs
-    # are all misroutes for a change this definite.
-    return (
-        r.tool_name == "edit_output"
-        and getattr(r.params, "kind", None) == "remove_range"
-        and "onboarding is where users decide to stay"
-        in str(getattr(getattr(r.params, "params", None), "quote", "") or "").lower()
-        and "apply_edit_ops" not in r.calls
-        and "revise_output" not in r.calls
-        and "propose_tasks" not in r.calls
-        and "edit_graph" not in r.calls
-    )
+    # H/H2/H3/H4 (精确编辑迭代 S3, ADR-090; Final Hardening B1 四族): the
+    # precise edit routes edit_output with the verb decoded from WHICH
+    # param is filled (schemas.edit_kind_for_params — there is no kind
+    # field), the user's words relayed verbatim — the open-craft /
+    # proposal / wiring verbs are all misroutes for a change this
+    # definite.
+    if probe.startswith("H"):
+        ep = getattr(r.params, "params", None)
+        if r.tool_name != "edit_output" or ep is None:
+            return False
+        if "revise_output" in r.calls or "propose_tasks" in r.calls or "edit_graph" in r.calls:
+            return False
+        kind = edit_kind_for_params(ep)
+        if probe == "H":
+            return kind == "remove_range" and (
+                "onboarding is where users decide to stay"
+                in str(ep.quote or "").lower()
+            )
+        if probe == "H2":
+            return kind == "set_trim" and ep.seconds is not None and abs(ep.seconds - 3) < 0.01
+        if probe == "H3":
+            return kind == "set_title" and (ep.title or "").strip() == "AI 时代的内容创作"
+        # H4: the style must be the enum id mapped off the catalog read,
+        # never a free-form phrase.
+        return kind == "set_caption_style" and (ep.style or "") == "karaoke-highlight"
+    raise AssertionError(f"no predicate registered for probe {probe!r}")
 
 
 async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=12)
-    parser.add_argument("--probe", choices=["A", "B", "C", "D", "E", "F", "G", "H"], default=None)
+    parser.add_argument("--probe", choices=["A", "B", "C", "D", "E", "F", "G", "H", "H2", "H3", "H4"], default=None)
     parser.add_argument("--provider", choices=sorted(PROVIDERS), default="minimax")
     args = parser.parse_args()
 
@@ -549,12 +605,23 @@ async def main() -> int:
         "F": PROBE_F,
         "G": PROBE_G,
         "H": PROBE_H,
+        "H2": PROBE_H2,
+        "H3": PROBE_H3,
+        "H4": PROBE_H4,
     }
+    # Final Hardening B1 (2026-09-24): the chat tool set must NOT carry the
+    # retired raw-ops verb — its presence would make every routing
+    # predicate's "never the raw path" clause vacuous. Asserted once here so
+    # the four H-family probes measure a real boundary.
+    assert "apply_edit_ops" not in {t.name for t in CHAT_TOOLS}, (
+        "apply_edit_ops is back in CHAT_TOOLS — the Agent's raw-ops edit "
+        "path must stay closed (Final Hardening B1)"
+    )
     failed = False
     for name, ctx in probes.items():
         if args.probe and name != args.probe:
             continue
-        agent = chat_agent if name in ("E", "F", "G", "H") else plan_agent
+        agent = chat_agent if name in ("E", "F", "G", "H", "H2", "H3", "H4") else plan_agent
         # E's evidence reads quote onboarding, not pricing (the themed
         # canned observations keep the chain honest to the ask); F's
         # get_pending_plan stub carries the docked package's plan_ids.

@@ -4,7 +4,7 @@ The chat intent surface's call shape: the model speaks prose on the content
 channel (it streams — the typewriter law holds natively) and closes the turn
 by calling ONE terminal tool — the action union's mechanical translation
 (ask → ``ask_user``, draft → ``present_plan``, start → ``start_run``,
-task_list → ``propose_tasks``, edit_ops → ``apply_edit_ops``, wiring →
+task_list → ``propose_tasks``, precise edit → ``edit_output``, wiring →
 ``edit_graph``; the answer states close with the ``answer`` tool or bare
 prose). The loop exists for TWO reasons: a rejected tool call — schema-class
 truncation (``LLMSchemaError`` at the client seam), params validation, or the

@@ -11,11 +11,10 @@ assembly wrapper: same function signatures, same call sites
 lines are the registry's self-projection (``app/tools/__init__.py`` —
 ``tool_catalog_lines``): chat consumes, never re-projects (裂脑修复);
 they ride into the templates as render variables (``tool_lines`` /
-``op_lines`` / ``wiring_lines``).
+``wiring_lines``).
 """
 
 from app.agents.base import jinja_env
-from app.operations.registry import OP_REGISTRY
 from app.tools import tool_catalog_lines
 
 
@@ -36,23 +35,18 @@ def chat_intent_system() -> str:
     Params are injected as "name: description" (agent-loop-upgrade W2) —
     the Field descriptions in the registry's params models ARE the LLM's
     parameter documentation."""
-    # The edit-ops vocabulary comes from the operations registry (ADR-032)
-    # — same pattern as the tool list; precomputed ops (translate/dub)
-    # are deliberately proposed as task_list tools instead.
-    op_lines = "\n".join(
-        f"- {name}: {opdef.description} (params: {list(opdef.params_model.model_fields)})"
-        for name, opdef in OP_REGISTRY.items()
-        if opdef.client_allowed and not opdef.precomputed and opdef.llm_visible
-    )
+    # Final Hardening B1 (2026-09-24): the raw edit-ops vocabulary
+    # (``op_lines`` from OP_REGISTRY) is NO LONGER injected — the Agent's
+    # only edit entry is edit_output's controlled enum (ADR-090); raw op
+    # names and their param shapes never enter the LLM vocabulary.
     # The wiring vocabulary (ADR-057 K4) comes from the graph registry —
-    # same injection discipline as the tool/op catalogs (注册表条目扰动 =
+    # same injection discipline as the tool catalog (注册表条目扰动 =
     # prompt 扰动: entries stay terse, the gate enumerations ride along).
     # Kept as a function-level import (cycle insurance, pre-split form).
     from app.pipeline.graph_store import wiring_catalog_lines
 
     return jinja_env.get_template("chat/chat_intent_system.j2").render(
         tool_lines=tool_catalog_lines(),
-        op_lines=op_lines,
         wiring_lines=wiring_catalog_lines(),
         # chat_loop=True: the shared no-material partial drops the router-only
         # framing (draft header / material_text bullets) and appends

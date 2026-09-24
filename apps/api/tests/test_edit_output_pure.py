@@ -8,7 +8,13 @@ world-witnessed fact echo's bilingual shape.
 """
 
 from app.chat.propose_turn import _edit_fact_echo
-from app.models.schemas import _EDIT_KIND_BY_PARAM, EditOutputArgs
+import pytest
+import pydantic
+from app.models.schemas import (
+    _EDIT_KIND_BY_PARAM,
+    EditOutputArgs,
+    edit_kind_for_params,
+)
 from app.pipeline.edit_ops import (
     KIND_PARAMS,
     EditRefusal,
@@ -133,7 +139,10 @@ class TestFactEcho:
 
 
 class TestKindInference:
-    """顺形律 decode (probe H): one filled param determines the verb."""
+    """顺形律 decode (probe H; Final Hardening B1 — the ONLY kind source):
+    one filled param determines the verb; the schema has NO kind field, so
+    an explicit kind key is rejected as an extra (schema == production
+    dispatch, never a paper control)."""
 
     def test_param_verb_bijection_pinned(self):
         assert KIND_PARAMS == {v: k for k, v in _EDIT_KIND_BY_PARAM.items()}
@@ -143,26 +152,62 @@ class TestKindInference:
             {"target": {"output_id": "11111111-1111-1111-1111-111111111111"},
              "params": {"quote": "welcome back"}}
         )
-        assert args.kind == "remove_range"
+        assert edit_kind_for_params(args.params) == "remove_range"
 
     def test_each_param_infers_its_kind(self):
         cases = {"seconds": 3, "style": "karaoke-highlight", "title": "X"}
         for key, value in cases.items():
             args = EditOutputArgs.model_validate({"params": {key: value}})
-            assert args.kind == _EDIT_KIND_BY_PARAM[key]
+            assert edit_kind_for_params(args.params) == _EDIT_KIND_BY_PARAM[key]
 
-    def test_explicit_kind_wins(self):
-        args = EditOutputArgs.model_validate(
-            {"kind": "remove_range", "params": {"quote": "x"}}
-        )
-        assert args.kind == "remove_range"
+    def test_no_kind_field_exists(self):
+        # B1: a stray ``kind`` key is forbidden input (extra="forbid"), never
+        # a silent override — the loop also strips it, so it can never reach
+        # production dispatch.
+        with pytest.raises(pydantic.ValidationError):
+            EditOutputArgs.model_validate(
+                {"kind": "remove_range", "params": {"quote": "x"}}
+            )
 
     def test_no_params_stays_none(self):
         args = EditOutputArgs.model_validate({})
-        assert args.kind is None
+        assert edit_kind_for_params(args.params) is None
 
     def test_two_params_stays_none(self):
         args = EditOutputArgs.model_validate(
             {"params": {"quote": "x", "seconds": 3}}
         )
-        assert args.kind is None
+        assert edit_kind_for_params(args.params) is None
+
+
+class TestSingleControlledEntry:
+    """Final Hardening B1 (2026-09-24, ADR-090): the Agent's ONLY edit entry
+    is edit_output's controlled enum — the raw-ops verb is gone from the
+    chat tool set, and the chat write door's vocabulary invariant holds in
+    the registry itself."""
+
+    def test_chat_tools_have_no_raw_ops_verb(self):
+        from app.chat.turn_tools import CHAT_TOOLS
+
+        names = {t.name for t in CHAT_TOOLS}
+        assert "apply_edit_ops" not in names
+        assert "edit_output" in names
+
+    def test_mvp_four_are_llm_visible(self):
+        from app.operations.registry import OP_REGISTRY
+
+        for name in ("remove_range", "set_trim", "set_caption_style", "set_title"):
+            assert OP_REGISTRY[name].llm_visible is True
+
+    def test_track_ops_stay_out_of_chat_vocabulary(self):
+        from app.operations.registry import OP_REGISTRY
+
+        hidden = {n for n, d in OP_REGISTRY.items() if not d.llm_visible}
+        assert hidden == {
+            "reorder_segments",
+            "insert_segment",
+            "set_transition",
+            "add_layer",
+            "remove_layer",
+            "move_layer",
+        }

@@ -25,7 +25,6 @@ asking strategy / naming / disclosure rules stay in the system templates.
 from app.agents.tool_loop import ChatTool
 from app.chat.perception import perception_chat_tools
 from app.models.schemas import (
-    ApplyEditOpsArgs,
     ChatAnswerArgs,
     ChatAskArgs,
     EditGraphArgs,
@@ -80,9 +79,13 @@ PLAN_TOOLS = [
     ),
 ]
 
-# The chat path (post-run projects) — IntentResult's five proposal states:
-# task_list → propose_tasks, edit_ops → apply_edit_ops, wiring → edit_graph,
-# ask → ask_user, answer → answer.
+# The chat path (post-run projects) — the terminal proposal states:
+# task_list → propose_tasks, wiring → edit_graph, craft → revise_output,
+# precise edit → edit_output, ask → ask_user, answer → answer.
+# (Final Hardening B1, 2026-09-24: the raw-ops verb ``apply_edit_ops`` is
+# RETIRED — the Agent's only edit entry is edit_output's controlled enum;
+# raw clip-spec ops never enter the LLM vocabulary. The REST operations
+# door stays for the editor surface.)
 CHAT_TOOLS = [
     ChatTool(
         name="propose_tasks",
@@ -93,15 +96,6 @@ CHAT_TOOLS = [
             "your message text BEFORE calling this."
         ),
         params_model=ProposeTasksArgs,
-    ),
-    ChatTool(
-        name="apply_edit_ops",
-        description=(
-            "Edit one existing output with clip-spec-level operations, "
-            "targeted by its output id. Speak the summary of what you'll "
-            "change BEFORE calling this."
-        ),
-        params_model=ApplyEditOpsArgs,
     ),
     ChatTool(
         name="edit_graph",

@@ -23,9 +23,9 @@ the two names above are shims). The write doors never moved:
 - propose_tasks / edit_graph → compile_graph via ``_create_run_from_tasks``
   (the ONLY run birthplace; wiring resolves through ``apply_wiring_ops`` first)
 - ask_user                → a typed question docked above the input
-- apply_edit_ops          → Operation Model (ADR-032): registry-validated ops
-                            applied to the target output, journaled with
-                            message lineage
+- edit_output             → the precise edit (ADR-090; Final Hardening B1 —
+                            the ONLY edit verb): one controlled registry op
+                            journaled with message lineage, then re-render
 - answer                  → a purely informational reply (capability /
                             progress / explanation / small talk) landing as a
                             plain assistant message — no run, no dock (G-4)
@@ -72,7 +72,6 @@ from app.models.schemas import (
     ChatMessageResponse,
     ChatRequest,
     ChatResponse,
-    EditOpsProposal,
     InferredIntent,
     Option,
     PendingPlan,
@@ -92,8 +91,6 @@ from app.models.tables import (
     WorkflowRun,
     WorkflowStep,
 )
-from app.operations.registry import OP_REGISTRY, validate_op
-from app.operations.service import OpRejected
 from app.pipeline.asset_processing import has_any_text_material, has_renderable_media
 from app.pipeline.derivative_dispatch import (
     DerivativeWriterNode,
@@ -216,36 +213,10 @@ def _reminder_tail(text: str, question: str, default_path: str | None) -> str:
 
 
 
-def _edit_op_items(proposal: EditOpsProposal) -> list[dict]:
-    """Normalize the LLM's tolerant EditOp shape into registry items.
-
-    v1 stored extras verbatim; the registry is the adjudicator (ADR-032).
-    Params may arrive nested or as top-level extras — merge, params win.
-    """
-    items = []
-    for op in proposal.ops:
-        params = {**(op.model_extra or {}), **(op.params or {})}
-        for key in ("op", "type", "target"):
-            params.pop(key, None)
-        items.append({"op": op.op, "params": params})
-    return items
-
-
-def _validate_edit_ops(items: list[dict]) -> None:
-    """Registry gate for edit ops (rejects unknown/system/precomputed ops
-    before any state is touched — the repair loop gets the reason)."""
-    if not items:
-        raise OpRejected("empty edit ops")
-    for item in items:
-        try:
-            validate_op(item["op"], item["params"], client=True)
-        except (KeyError, ValueError) as e:
-            raise OpRejected(str(e)) from e
-        if OP_REGISTRY[item["op"]].precomputed:
-            raise OpRejected(
-                f"op '{item['op']}' needs a run — propose a task_list with "
-                "translate_clip / dub_clip instead of edit_ops"
-            )
+# Final Hardening B1 (2026-09-24): ``_edit_op_items`` / ``_validate_edit_ops``
+# retired with the raw-ops chat verb ``apply_edit_ops`` — the Agent's only
+# edit entry is ``edit_output`` (ADR-090); the REST operations door keeps
+# its own validation in ``app.operations.service``.
 
 
 async def _get_or_create_project_conversation(
@@ -2035,8 +2006,9 @@ async def _propose_turn(
 
     ADR-077 判词② (2026-09-14): the dispatch retired into the tool
     loop — this body is a shim; the turn lives in ``app/chat/propose_turn.py``
-    (the chat intent agent's terminal tools propose_tasks / apply_edit_ops /
-    edit_graph / ask_user / answer + the iter-3 S2 exploration verbs).
+    (the chat intent agent's terminal tools propose_tasks / edit_output /
+    revise_output / edit_graph / ask_user / answer + the iter-3 S2
+    exploration verbs).
     Deferred import: the runner imports THIS module's machinery.
     """
     from app.chat.propose_turn import run_propose_turn

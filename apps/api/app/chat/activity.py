@@ -73,8 +73,9 @@ STATUS_CANCELLED = "cancelled"  # schema-complete; see the module docstring
 # revise_output (iter-3 S3, N-58): its user face is the SAME revision-work
 # row as edit_graph's (the wiring dispatch seat is shared) — draft bucket.
 # edit_output (S3, N-59): the precise edit's user face is the draft-work row
-# too (op write + re-pend + re-render — same family as apply_edit_ops).
-_DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "apply_edit_ops", "edit_graph", "revise_output", "edit_output"})
+# too (op write + re-pend + re-render).
+# (Final Hardening B1, 2026-09-24: apply_edit_ops retired — removed here.)
+_DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "edit_graph", "revise_output", "edit_output"})
 _RUN_TOOLS = frozenset({"start_run"})
 _CONVERSATION_TOOLS = frozenset({"ask_user", "answer"})
 # The exploration proposal verbs (iter-2 ⑤/⑥, ADR-088 旅程四): their user
