@@ -354,8 +354,20 @@ def strip_null_params(params: dict | None) -> dict:
     optional-in-spirit field never dies on a strict-typed schema (2026-08-19:
     a bare `count: null` sank ~half of recipe-template plan turns after the
     repair round repeated it; the STORED plan then 500'd the same way at
-    compile time — every params-validation site goes through here)."""
-    return {k: v for k, v in (params or {}).items() if v is not None}
+    compile time — every params-validation site goes through here).
+
+    2026-09-24 (probe scratch/probe_plan_reject_processing.py, production
+    incident 641cb9fc): M3 also serializes absent params as the STRING
+    "null" — the same intent in the provider's dialect, invisible to the
+    ``is not None`` guard, and it sank present_plan at the birthplace
+    (7-minute repair loop after the speech had already promised the plan).
+    顺形律: provider dialects are absorbed HERE, at the one deterministic
+    funnel, never prompt-side."""
+    return {
+        k: v
+        for k, v in (params or {}).items()
+        if v is not None and not (isinstance(v, str) and v.strip().lower() == "null")
+    }
 
 
 def validate_task_list(tasks: list[Any]) -> list[ToolEntry]:
