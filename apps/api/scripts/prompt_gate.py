@@ -570,13 +570,28 @@ async def main() -> int:
                 _gate_execute, pending_plan_text=_PROBE_F_PENDING_PLAN
             )
         outcomes = []
+        provider_errors = 0
         for _ in range(args.n):
             try:
                 r = await agent.call_loop(execute, **ctx)
                 outcomes.append(_passed(name, r))
-            except Exception as e:  # noqa: BLE001 — provider errors count as failures
-                outcomes.append(False)
-                print(f"  probe {name} call error: {type(e).__name__}", file=sys.stderr)
+            except Exception as e:  # noqa: BLE001 — provider errors are NOT behavior
+                # 2026-09-24 实测坑: a mid-gate 402 drained the balance and
+                # the tail probes read 7/3/0/12 — a financial event
+                # masquerading as a prompt regression (same masquerade class
+                # as the capabilities check above). Provider errors are
+                # tallied separately and INVALIDATE the probe's reading —
+                # they never count as behavioral failures.
+                provider_errors += 1
+                print(f"  probe {name} call error: {type(e).__name__}: {e}", file=sys.stderr)
+        if provider_errors:
+            print(
+                f"probe {name}: INVALID — {provider_errors}/{args.n} round(s) "
+                "lost to provider errors (balance/rate/upstream); rerun after "
+                "the provider recovers — this is not a behavioral reading."
+            )
+            failed = True
+            continue
         hits = sum(outcomes)
         need = THRESHOLDS[name]
         ok = hits >= need
