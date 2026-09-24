@@ -202,10 +202,17 @@ async def put_settings(
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> UserSettingsResponse:
-    """One-key merge write — the rest of the settings block survives."""
-    current_user.settings = merge_confirm_strategy(
-        current_user.settings, data.confirm_strategy
-    )
+    """One-key merge write — the rest of the settings block survives.
+
+    收口修红 (2026-09-24, B3 live 验收实测): the auth dependency loads the
+    User in its OWN short-lived session — assigning ``current_user.settings``
+    mutated a detached instance and committing the route's session wrote
+    NOTHING (PUT echoed the new value with 200 while ``users.settings``
+    stayed NULL). The write goes through the route's session."""
+    user = await db.get(User, current_user.id)
+    if user is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Account no longer exists")
+    user.settings = merge_confirm_strategy(user.settings, data.confirm_strategy)
     await db.commit()
     return UserSettingsResponse(
         confirm_strategy=data.confirm_strategy,
