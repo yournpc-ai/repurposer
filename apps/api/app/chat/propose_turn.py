@@ -170,6 +170,21 @@ logger = structlog.get_logger()
 ProposeTurnOutcome = tuple[Message, UUID | None, list[UUID], Message | None]
 
 
+def pinned_output_id(mentions: list, llm_output_id: str | None) -> str | None:
+    """B4 (Final Hardening, 2026-09-24 — MENTIONS 指认族契约的写门化): exactly
+    one @output pin in the turn IS the definite edit/revision target; the
+    LLM's relay of it through tool params is advisory only. Live evidence
+    (drive 1/2 拍2): the model twice edited its conversational-focus clip
+    while the user had pinned the OTHER one, honestly reporting the wrong
+    clip's real numbers. The pin is user truth — the server resolves it
+    deterministically. Zero or 2+ output pins: the LLM's relay stands
+    (ambiguity rides the existing refusals)."""
+    pins = [m for m in mentions if getattr(m, "type", None) == "output"]
+    if len(pins) == 1:
+        return str(pins[0].id)
+    return llm_output_id
+
+
 def _edit_fact_echo(kind: str, op: dict, *, zh: bool) -> str:
     """The precise edit's world-witnessed fact sentence (展示文案二源律 —
     the applied op's REAL numbers/state, code-composed, never the LLM's
@@ -1084,6 +1099,7 @@ class ChatTurn:
         target = params.target
         plan_ref = (target.plan_ref or "").strip()
         output_id = str(target.output_id) if target.output_id else None
+        output_id = pinned_output_id(self.mentions, output_id)  # B4: 钉恒胜
         instruction = params.instruction.strip()
         if not plan_ref and not output_id:
             return (
@@ -1164,6 +1180,7 @@ class ChatTurn:
         target = params.target
         plan_ref = (target.plan_ref or "").strip()
         output_id = str(target.output_id) if target.output_id else None
+        output_id = pinned_output_id(self.mentions, output_id)  # B4: 钉恒胜
         if not plan_ref and not output_id:
             return (
                 "edit_output needs its target — relay the user's pointing "

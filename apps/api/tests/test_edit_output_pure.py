@@ -211,3 +211,53 @@ class TestSingleControlledEntry:
             "remove_layer",
             "move_layer",
         }
+
+
+class TestPinnedOutputId:
+    """Final Hardening B4 (2026-09-24, MENTIONS 指认族契约的写门化): exactly
+    one @output pin in the turn IS the definite target — the LLM's relay
+    through tool params is advisory. Live evidence: drives 1/2 拍2 — the
+    model edited its conversational-focus clip while the user had pinned
+    the other."""
+
+    def test_single_pin_overrides_llm_relay(self):
+        from types import SimpleNamespace
+
+        from app.chat.propose_turn import pinned_output_id
+
+        pin = SimpleNamespace(type="output", id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        out = pinned_output_id([pin], "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+        assert out == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+
+    def test_single_pin_fills_empty_relay(self):
+        from types import SimpleNamespace
+
+        from app.chat.propose_turn import pinned_output_id
+
+        pin = SimpleNamespace(type="output", id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        assert pinned_output_id([pin], None) == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+
+    def test_no_pin_keeps_llm_relay(self):
+        from app.chat.propose_turn import pinned_output_id
+
+        assert pinned_output_id([], "bbbb") == "bbbb"
+        assert pinned_output_id([], None) is None
+
+    def test_multiple_pins_leave_relay_alone(self):
+        from types import SimpleNamespace
+
+        from app.chat.propose_turn import pinned_output_id
+
+        pins = [
+            SimpleNamespace(type="output", id="aaaa"),
+            SimpleNamespace(type="output", id="bbbb"),
+        ]
+        assert pinned_output_id(pins, "cccc") == "cccc"
+
+    def test_asset_mentions_do_not_count(self):
+        from types import SimpleNamespace
+
+        from app.chat.propose_turn import pinned_output_id
+
+        pins = [SimpleNamespace(type="asset", id="aaaa")]
+        assert pinned_output_id(pins, "cccc") == "cccc"
