@@ -143,6 +143,11 @@ import {
   type SuggestionPill,
 } from "./historyReplay"
 import {
+  answerEnvelopeProse,
+  planEnvelopePacing,
+  spliceAnswerEnvelope,
+} from "./answerSettlement"
+import {
   resetActivities,
   sweepActivities,
   upsertActivityFrame,
@@ -3268,43 +3273,23 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // preview bubble BEFORE the archive splice — the echo visibly leads,
       // the settled rows follow. T2b: a read-tool turn's follow-up EXTENDS
       // the streamed prefix — the unseen tail paces through the same
-      // typewriter (never a blob, never an erase).
+      // typewriter (never a blob, never an erase). The pacing decision and
+      // the splice are the extracted pure seam (answerSettlement.ts,
+      // ADR-093 §1 信封对账补全): the paced prose IS the stamped prose —
+      // the preview never settles on a text the archive would not replay.
       if (followUp) {
-        const settled =
-          followUp.question && !followUp.answer
-            ? (questionEcho(followUp) ?? "")
-            : (followUp.content ?? "").trim()
-        if (settled && !previewStreamed) {
-          typewriter.push(settled)
-          await typewriter.drain()
-        } else if (
-          settled &&
-          previewText &&
-          settled.length > previewText.length &&
-          settled.startsWith(previewText)
-        ) {
-          typewriter.push(settled.slice(previewText.length))
+        const pacing = planEnvelopePacing({
+          envelopeProse: answerEnvelopeProse(followUp),
+          previewStreamed,
+          previewText,
+        })
+        if (pacing) {
+          typewriter.push(pacing.paceText)
           await typewriter.drain()
         }
       }
       setMessages((prev) =>
-        prev.flatMap((m) => {
-          if (m.id === optimisticId)
-            // Keep the optimistic block's KEY — a fresh id unmounts the DOM
-            // node and replays the entrance animation (the 2026-09-08
-            // post-typewriter QA flicker: same content, new node, one blink).
-            // "At its own index" means same index AND same key.
-            return answeredRow ? [{ ...answeredRow, id: m.id }] : []
-          if (m.id === previewId)
-            return [
-              {
-                ...m,
-                runId: followUp?.workflow_run_id ?? m.runId,
-                streaming: false,
-              },
-            ]
-          return [m]
-        }),
+        spliceAnswerEnvelope(prev, { optimisticId, previewId, answeredRow, followUp }),
       )
       if (followUp) {
         // The envelope retires the preview pill: the real row REPLACES it
