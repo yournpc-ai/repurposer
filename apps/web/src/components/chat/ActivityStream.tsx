@@ -1,10 +1,14 @@
 /** ActivityRow — THE one row of the chat world's "现在" (2026-09-24 合一律,
  * user ruling): the agent turn's milestone stream AND the thinking empty
- * state are the same component with the same anatomy — spinner + shimmer
- * label while live, kind glyph + duration whisper when settled. Thinking is
- * the row's empty state (kind "think", frontend-synthesized, never on the
- * wire): it never settles and leaves zero history — the next milestone's
- * content simply replaces it in the same mounted row.
+ * state are the same component with the same anatomy — the live dot +
+ * shimmer label while live, kind glyph + duration whisper when settled.
+ * Register (2026-09-25 user ruling): the row FULLY shares the RunTaskList
+ * narrative row's quiet register (StatusLine quiet — "正在准备你的人设…
+ * 7s" seat): text-xs, the same 6px live dot, 12px glyphs / chevron — one
+ * glance reads one family. Thinking is the row's empty state (kind "think",
+ * frontend-synthesized, never on the wire): it never settles and leaves
+ * zero history — the next milestone's content simply replaces it in the
+ * same mounted row.
  *
  * Rows are the user-safe projection of the loop's internal events: terminal
  * rows settle static (✗ failed / cancelled struck through — 「被划掉的一
@@ -34,7 +38,6 @@ import { useTranslation } from "react-i18next"
 import {
   ChevronDown,
   Eye,
-  Loader2,
   PenLine,
   Play,
   RotateCcw,
@@ -51,7 +54,10 @@ import { cn } from "@/lib/utils"
  * name), so its icon reads as WHAT the agent did, not as machinery. The
  * completed row's leading mark IS the kind glyph (the generic ✓ said
  * "success", which the settled register already says); live rows keep the
- * spinner, failed/cancelled keep the ✗ seat. */
+ * 6px dot (the RunTaskList narrative row's own live mark, 2026-09-25 对齐批),
+ * failed/cancelled keep the ✗ seat. The `draft` glyph seat is unreachable
+ * since 落定即退役 (2026-09-28 — draft spans never render settled; the
+ * timeline filters them) — it stays for the Record's exhaustiveness. */
 const KIND_ICONS: Record<ActivityFramePayload["kind"], LucideIcon> = {
   read: Eye,
   draft: PenLine,
@@ -109,7 +115,7 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
     <div className="flex w-full flex-col gap-1">
       <div
         className={cn(
-          "flex w-full items-center gap-2 text-sm",
+          "flex w-full items-center gap-2 text-xs",
           status === "failed" ? "text-destructive" : "text-muted-foreground",
           expandable && "cursor-pointer select-none",
         )}
@@ -118,13 +124,21 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
         onClick={expandable ? () => setOpen((v) => !v) : undefined}
       >
         {status === "active" ? (
-          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+          // The live mark = the RunTaskList narrative row's own dot
+          // (2026-09-25 对齐批 — one live register across the flow). The dot
+          // RIDES the settled glyphs' 12px seat, centered (2026-09-27: the
+          // bare 6px span left-shifted live labels 6px against settled
+          // rows), and takes the label's own ink — bg-primary's solid black
+          // read as a second register next to the muted text (user ruling).
+          <span className="flex h-3 w-3 shrink-0 items-center justify-center">
+            <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+          </span>
         ) : status === "completed" && KindIcon ? (
-          <KindIcon className="h-3.5 w-3.5 shrink-0" />
+          <KindIcon className="h-3 w-3 shrink-0" />
         ) : (
           // failed / cancelled share the ✗ seat — destructive says failure,
           // the strike-through says the attempt was discarded.
-          <X className="h-3.5 w-3.5 shrink-0" />
+          <X className="h-3 w-3 shrink-0" />
         )}
         <span
           className={cn(
@@ -146,7 +160,7 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
         {expandable && (
           <ChevronDown
             className={cn(
-              "ml-auto h-3.5 w-3.5 shrink-0 transition-transform",
+              "ml-auto h-3 w-3 shrink-0 transition-transform",
               open && "rotate-180",
             )}
           />

@@ -105,4 +105,33 @@ describe("buildConversationUnits — the non-run single stream", () => {
       "done",
     ])
   })
+
+  it("draft spans never interleave — 落定即退役 (2026-09-28 user ruling); explore milestones still do", () => {
+    const draftDone = {
+      ...activity("draft-done", "2026-09-23T08:00:02Z"),
+      kind: "draft" as const,
+      key: "chat.activity.draftDone",
+    }
+    const editFailed = {
+      ...activity("edit-failed", "2026-09-23T08:00:03Z"),
+      kind: "draft" as const,
+      status: "failed" as const,
+      key: "chat.activity.edit",
+    }
+    const milestone = {
+      ...activity("milestone", "2026-09-23T08:00:04Z"),
+      kind: "draft" as const,
+      key: "chat.explore.plansReady",
+      count: 2,
+    }
+    const units = buildConversationUnits(
+      [msg("user", "2026-09-23T08:00:00Z"), msg("reply", "2026-09-23T08:00:06Z")],
+      [draftDone, editFailed, milestone],
+    )
+    expect(units.map((u) => (u.kind === "message" ? u.message.id : u.activity.activity_id))).toEqual([
+      "user",
+      "milestone",
+      "reply",
+    ])
+  })
 })

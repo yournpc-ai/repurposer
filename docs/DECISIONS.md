@@ -928,7 +928,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 2. **影子只属浮层**：文档流表面（卡 / composer / 媒体 tile）双主题一律无影——"产品卡 hairline+shadow-lg"条款与 hero-flat 特例一并退役；浮层（overlay-surface 雾面家族）浅色标配耳语级 `shadow-xl`（把玻璃从内容上揭起），暗色保持无影传统（雾面透光自分离）。
 3. **实体丸化 + chips 顶置**：composer 骑缝 blocks 退役（自我批判四条：信息密度倒挂 / 剪影打断 / 跨双表面必坏 / 底排失衡之源）。实体 = 底排左簇 ghost pills（Assets 📎 / Persona 16px avatar），**值状态律 = meta→foreground 一步变色**（无填充无彩色）；pills 开雾面 Popover 面板（`side="top"`，浮层影首个正当场景），AssetsModal / PersonaPickerModal 退役（深度管理归未来资产中心页）。暂存文件 = **卡顶类型化 chips 带**（视频缩略图+时长 / 音频波形+时长 / 文档图标+页数 / 上传中转圈百分比，× 即删）——摘要归 pill、清单归 chips、富展示归面板行。
 4. **画廊**（卡面形态与布局 2026-08-23 起由 **ADR-048** 整体取代：工艺示意图封面 / 均匀 4 列网格 / 证据层移交 overlay / badge·chip·featured 退役）：本条残留有效部分 = **click = 检视 overlay 是唯一发射路径**（hover 填充二次否决维持：我们的卡面是多产物组合的 teaser + 配方素材依赖，检视是认知步骤不是摩擦）。
-5. **去全局 AppHeader**：工具（主题/语言）迁账户 console；**通知 = 内容区右上角唯一浮动芯片**（圆角方块 + 未读点，右上槽位全 `_app` 保留，页面级控件永不占此角——Agent Opus 证据）；移动端留浮动 trigger。账户区两层架构：rail footer popover = 高频 console（身份头 / inset 账户组 / 行内 segmented 偏好 / 帮助段），深度偏好归设置页（FLORA modal 先例）。
+5. **去全局 AppHeader**：工具（主题/语言）迁账户 console；**通知 = 内容区右上角唯一浮动芯片**（圆角方块 + 未读点，右上槽位全 `_app` 保留，页面级控件永不占此角——Agent Opus 证据）；移动端留浮动 trigger，PC 展开入口 = rail hover-logo 钮 + `Cmd/Ctrl+B`（**翻案注 2026-09-27**：本条原隐含「PC 固定 rail 无展开入口」（2026-08-02 配套裁定），随 ChatGPT 解剖对照拍板翻案——rail 可展开、状态 cookie 持久化、sidebar 右侧 `border-sidebar-border` 发丝线回归，「no right border」同步废止；`--sidebar == --background` 填充融合维持）。账户区两层架构：rail footer popover = 高频 console（身份头 / inset 账户组 / 行内 segmented 偏好 / 帮助段），深度偏好归设置页（FLORA modal 先例）。
 6. **色役表治理**："角色 → token × 双主题"对照表为组件唯一取色来源（禁直引色值），缺位角色补 token（send-disabled、group-title、icon-chip-bg、toggle-track）；角色全住中性阶梯，多角色 ≠ 多颜色。表随简报 `archive/tasks-done/home-skeleton-revamp.md` 落地并当验收清单。
 
 **Rationale**: 层级来自阶不来自色（Tailwind 哲学 + MiniMax 黑白多层实证）；影子物理（白底困境的止痛是灰底，不是更软的影）；形态跟信息密度走（pill 36px 说一个词的值为足）；发射深度取决于卡面代表度（卡面越完整代表产物，快捷发射越浅）；交互基准线被大厂产品持续抬高，骨架一次到位比逐面补丁省返工。
@@ -1839,7 +1839,7 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 
 ## ADR-087: Agent Interaction & Product Lifecycle Architecture——三条语义层 + Lifecycle / Activity / Confirmation 三合同 + 依赖方向冻结
 
-**Status**: Decided（2026-09-19，Architecture Freeze 用户拍板；Phase 0 = 本 ADR + docs 规范化落档，无产品代码；施工切分 = Phase 1~6 六份简报 `docs/tasks/lifecycle-phase-1~6-*.md`，批次登记 = PROGRESS §0.2；阶段门禁：每 Phase 全闭环才进下一 Phase）
+**Status**: Decided（2026-09-19，Architecture Freeze 用户拍板；Phase 0 = 本 ADR + docs 规范化落档，无产品代码；施工切分 = Phase 1~6 六份简报 `docs/tasks/lifecycle-phase-1~6-*.md`，批次登记 = PROGRESS §0.2；阶段门禁：每 Phase 全闭环才进下一 Phase）——**补裁（2026-09-28 用户拍板）：draft 类活动落定即退役**——draft 跨度（present_plan / propose_tasks / edit_graph / revise_output / edit_output）只在 active 态存在（now-line 的活进度），落定帧骑 live wire 但**永不持久化、永不入流**——方案卡 / run 收据即落定证据，空心收据行（「方案整理好了」「改好了」）全端退役；回放旧日志由时间线读面过滤（`isDraftSpanRow`），i18n 的 draftDone/editDone 键同批删除。
 
 **Context**: 九轮只读取证 + Architecture Fitness Audit 的终判（等级 **B——骨架正确、边界重划**）：Agent Runtime / ToolLoop（有界 loop / terminal 语义 / hooks）/ Write Gates（图双门 / run 单出生地 `create_run` / operations 单门）/ DB-state-driven dispatch / Application Command 层的事实存在 / Product Domain / Product Graph / C-0/C-1/C-2 / Execution Runtime / 双引擎分离 / SSE 通用 transport 全部健康，**禁止因 UX 问题重写**。真正的结构性缺口是 **Product Lifecycle Projection 唯一真缺**——生命周期事实由 dispatch 谓词、trigger 双谓词与客户端多处推导代偿（plan pending ≥4 权威、素材就绪 ≥7 站点、Plan Ready 0 权威）；Presentation 向上越位（artifact existence → lifecycle 推导、turn.completed → Canvas）；Agent 中间事件丰富却被压扁成单槽 last-write-wins 状态行（>0 迭代 15–25s 只有心跳的盲窗）；确认教义存在路径分叉（propose path 直起 run、caption 双标、G-explicit 自动 Start）；docs 层 12 对矛盾条款与 10 组命名冲突。本条把已冻结的架构合同一次落档——允许重划的只有六处：Lifecycle Projection（新建）/ Activity Projection（新建）/ Presentation Contract（归位）/ Confirmation Doctrine 统一实现 / chat↔pipeline 依赖方向 / docs canonicalization。
 
@@ -2220,7 +2220,7 @@ verify 回退的 best-not-last restore 与 run 内重试 = **产物从未交付*
 
 ## ADR-092: 计费偏好集成——三档策略持久化 + 确认闸座位
 
-**Status**: Decided（2026-09-24；取证底座 = 计费链六环取证（live 验收 Gate 1，2026-09-23）；前提 = 用户裁定「偏好 UI 已有，集成真 API 即可」——集成不重设计）——**已实施并收口（2026-09-24 Final Hardening）**：S4 `b7ef524`（users.settings JSONB + GET/PUT /auth/settings + configs `billing.confirm_large_threshold` 默认 20 + composer 换源服务端为准 + dock 披露强度分级 + CTA 显价，手势仍是同一个 Start）+ **持久化写门修红 `4a3059d`**（auth 依赖短会话加载 User 致路由写游离实例零落库——PUT 回显 200 而 DB 恒 NULL，B3 live 验收实测猎得；修后两回 live round-trip 实证）
+**Status**: Decided（2026-09-24；取证底座 = 计费链六环取证（live 验收 Gate 1，2026-09-23）；前提 = 用户裁定「偏好 UI 已有，集成真 API 即可」——集成不重设计）——**已实施并收口（2026-09-24 Final Hardening）**：S4 `b7ef524`（users.settings JSONB + GET/PUT /auth/settings + configs `billing.confirm_large_threshold` 默认 20 + composer 换源服务端为准 + dock 披露强度分级 + CTA 显价，手势仍是同一个 Start）+ **持久化写门修红 `4a3059d`**（auth 依赖短会话加载 User 致路由写游离实例零落库——PUT 回显 200 而 DB 恒 NULL，B3 live 验收实测猎得；修后两回 live round-trip 实证）——**翻案（2026-09-28 用户拍板）：策略直执（policy_direct 静默开工，2026-09-27 随 v4.2 C8 落地）退役——「自动确认」的正解 = 口头确认**：一切方案 dock 后恒等用户确认拍（口头 yes 走普通 chat 道到 start_run，或 Start 钮——同一 Start 机器），无任何「存好的策略替你开工」路径；策略收窄为纯披露偏好（强制档 / 显价 chrome 待接），estimate 面显示义务不变；方案 echo 的收尾恒为一句朴素的方案判断问句（一词可答），永不以「成片出来后再调」式交付后修订预告收尾。
 
 **Context**: 六环取证：① 偏好 UI ✅（composer CostConfirmControl 三档 always/large/never）但 localStorage-only（自标 UI ONLY）；② 服务端持久化 ❌；③ 策略读取点 ❌；④ 确认闸 ❌；⑤ ChargeFact 已读真台账 ✅；⑥ hold→capture→release 机器真但在 run 出生地单点。结论：不是计费重设计，是**把已存在的偏好接到已存在的机制上**。
 
@@ -2241,3 +2241,124 @@ hold→capture→release 不动；edit→render 维持 $0 定价（自有基建�
 **Consequences**: 四环补齐（持久化 / 读取点 / 闸 / 偏好真生效），UI 环与台账环不变。施工 = settings API + composer 读源切换 + dock estimate 面强制档形态 + 剧本 S 席（三档 × 费用大小矩阵）。认知验收必答：用户怎么知道自己设了什么（设置面回显当前档）；agent 怎么知道（确认拍呈现受策略驱动的事实句）。
 
 **Related**: ADR-055（计费母法——三词两层与参数表座位）/ ADR-089 §5（停顿定律——确认拍唯一停顿）/ ADR-087 §2.1（费用语义五面——estimate 面披露纪律）/ ADR-090（edit 计费语义复用）
+
+## ADR-093: chat 言语真值律——信封对账补全 + 起始句言语权恢复
+
+**Status**: Decided（2026-09-28 用户拍板——「真bug就修，结合最新需求修」；取证底座 = 项目 `4dabbd98-e609-4b12-b61c-8713634302b4` 计划确认拍重复段落事件 + 起始句刷新消失事件：DB 取证（同一散文 messages 表仅一行）+ 刷新判别测试（重复 live-only，刷新后消失））
+
+**Context**: 两起同族事故暴露同一结构洞——chat 的 live 渲染与 restore 渲染不同构：
+
+① **计划确认拍重复段落**：计划散文（`intent.answer`）在 live 消息流内同文出现两次，DB 只存一行。桌面形态计划卡已全退役（planCardVisible 律），排除卡片回声。定位 = answer-SSE 续聊路径的结算缝（`ChatDock.tsx` 选项作答续聊的信封拼接处）：该缝用信封盖 runId/streaming 章，但**从不以信封内容替换预览内容**——sendChat 的 `finalizePreview` 有 `content: content ?? m.content`，此缝缺这半边 parity；叠加 echoCarried/previewStreamed 派生链（它决定 `questionEcho` 是否再推一条流内行），同一段散文可以一路活在预览气泡、一路再进消息流。
+
+② **起始句刷新消失**：「我开始生成了——你可以继续和我聊，也可以离开页面，它会在后台完成」是客户端 i18n chrome（`generationOverlay.startingLine`），由合成单元在 run 出生刻渲染、terminal 即退役，**永不落库**——run 完成后刷新，行消失。用户的记录语义期待：agent 说过的话就在聊天记录里。
+
+**根律**：agent 的一切言语只有两个合法存在形态——**入库的 message 行**（restore 唯一真值源）与 **live 途中的预览**（信封到达即被信封真值对账）；且**言语的作者恒为 LLM**——模板文案（客户端 chrome / 服务端模板）替 agent 说话全形态永禁。凡出现在消息流里的话，刷新前后必须逐字节一致；不一致即结构 bug，不是产品形态差异。
+
+**Decision**:
+
+### 1. 信封对账补全——「信封永远赢」是完整对账，不是半个盖章
+
+一切 SSE 结算路径（sendChat / streamAnswer / 未来任何新路径）在信封到达时执行同一完整对账：身份盖章（runId / streaming 归零）**+ 内容真值替换（信封 content 取代预览 typed text）**。缺任一半 = parity 洞。对账在 `paceSettledProse` 排干之后发生——打字机律两牙零触碰（排干释放的就是信封散文，同值替换零视觉变化；异值时信封赢，这正是对账的意义）。echo 实体化的精确内容匹配 dedup 不动——它防的是卡片回声行重复，与本缝互补；施工时先复现（选项作答触发续聊计划回合，live 观察双段落，刷新归一）再动缝，修复后同一剧本回归。
+
+### 2. 起始句 = start_run 回合的 LLM 言语——言语权恢复，模板言语全形态永禁
+
+**翻案（2026-09-28 用户拍板，本条为定型形态）**：首版「服务端按 ui_language 写模板文案入 run-start 节拍行」方案同日被否——起始句压根不该由我们（代码 / i18n / 模板）来说，它是 agent 的话，作者只能是 LLM。定型形态：
+
+- **start_run 回合恢复言语权**：「start_run 回合 = 纯确认、零散文」契约废止——speech BEFORE calling 适用于 start_run：模型在调用前以一句自己的话说开工语义（开工 / 可以继续聊或离开 / 后台完成的语义三要素，FREE PHRASING，零引号例句），散文走正常 delta → 打字机 → 信封结算 → **落库为普通 assistant message 行**。live/restore 同构由普通消息机制天然兑现，零持久化新机。
+- **模板言语全形态永禁**：客户端 i18n chrome（`generationOverlay.startingLine` + 合成 startLine 单元）整删；服务端模板写起始文案同样禁止——言语要么由 LLM 说出并落库，要么不存在。
+- **Start pill 零 LLM 路径诚实缺席**：pill Start 无 LLM 回合 → 消息流无起始句（无人说话即无记录）；进度由 RunTaskList 动态行与画布状态承载，收官言语归 run_completed 触发回合。pill 路径若未来要求言语，唯一合法形态 = 走 LLM 回合——永不以模板补位。
+- **翻案登记**：CHAT_ARCH §8.7 run 段时序律的「终态起始行消失」条款（ADR-073 批）与 §8.6「start_run 回合零 delta」注同批翻案。历史 run 无此言语行——不补、不迁移，旧项目 restore 与记录一致。
+
+### 3. 派生律：状态派生永不持久化，言语永不只活在客户端
+
+`qa`/`streaming` 等客户端派生态不落库（既有律重申）；反向同律——**言语永不只活在客户端**：想被记住的 agent 言语必须在出生刻落库。新增消息流文案的准入门：它是不是 agent 说过的话？是 → 入库；不是 → 不得出现在消息流（去 status 行 / 卡片 / 原生控件）。（**寄存器细化（ADR-095）**：消息流允许「日志格」的世界事件行——动宾短语 + 事实后缀、无人称无语气、视觉分行，Claude Code tool 行同款；本准入门禁令只针对「言语格写法 + 非 LLM 作者」的组合。）
+
+**Consequences**: live-only 重复类 bug 结构性不可能（对账一处不缺）；起始句成为普通言语行——刷新一致由消息机制天然兑现，零持久化新机；pill 零 LLM 路径的沉默是诚实形态而非缺失。零 schema 变更；W2~W5 均触 prompt 面，同批过 prompt_gate。验收 = 复现剧本 live 无重复 + 口头确认路径开工句流式出现且刷新后仍在 + pill 路径无句无模板残影 + echo dedup 回归（计划回声不双显）+ 打字机律回归（开工句不瞬移）。
+
+**Related**: ADR-058（展示文案二源律——言语来源纪律的母法）/ ADR-073（收据层级与时序律——§2 翻案其「终态起始行消失」条款）/ ADR-080（界面语言唯一 owner）/ ADR-095（三寄存器律——§3 准入门的寄存器细化）/ CHAT_ARCH §8.6（信封权威与打字机律）/ §8.7（run 段时序律）
+
+## ADR-094: 方向否决资格护栏——能力范围内的性状永不作否决依据 + 分镜呈现律
+
+**Status**: Decided（2026-09-28 用户拍板——「没跑过就代表没能力吗」「我希望得到类似的产出，而不是一个对准画面中央没有任何人入镜的情况」；取证底座 = 项目 `4dabbd98-e609` 成片 `render_spec.crop={x:0.5,y:0.5,scale:1.0}` 中央裁剪 + `asset.meta.speaker_map`（form=interview，20 话轮，左右双 speaker）+ trigger verdict 与 `trigger_system.j2` 引号例句近乎逐字一致的比对 + 分镜能力存在性核验（配方卡「访谈分镜」同素材演示产出 `demo/outputs/reframe-preview-7bcbb54e.mp4`——能力为既有事实，生产链零 `reframe_clip` 步是选择律问题不是能力问题））
+
+**Context**: 同一访谈素材，配方卡演示产出了镜头跟人的竖屏分镜，生产链路却产出中央裁剪 9:16——两位主持人之间无人入镜。机制取证三链全断：
+
+① **trigger verdict 照抄引号例句**：`trigger_system.j2` beat ① 的引号示例判词被模型近乎逐字复制为生产 verdict——同时违反 FREE PHRASING 律（模型面永不给引号例句，给了就会被抄），且例句的否决理由（素材性状：固定全景 / 发言密度）正是 `reframe_clip` 直接处理的性状——**能力范围内的性状成了方向否决的依据**，产品在劝用户远离自己的能力。
+
+② **router plan 面无分镜组合律**：访谈形态 + 竖屏诉求时，plan path 没有任何条款驱动 `select_clips + reframe_clip` 组合或向用户提出 framing choice（全幅 vs 分镜），静默落到中央裁剪默认。
+
+③ **能力菜单措辞欠卖**：`_MENU_PHRASES` 的 reframe_clip 行说 "reframing (vertical / square / horizontal)"——画幅机械语言，从不说镜头跟人的智能分镜语义，能力问答面自然说不出来。
+
+④ **能力问答误读实证（同日第二起，单人定机位素材）**：用户问「切片镜头会对准主人公吗」，agent 断言「镜头跟着人走需要原生镜头运动或多机位，单一全景做不到」——与 `resolve_mode`（`procedure.py:40-50`）真实行为相悖：**form=="single" → speaker_follow**（YuNet 逐帧人脸锚定 crop_track——定机位素材上的虚拟运镜正是它的主场），form=="interview" → interview_switch，仅无 speaker_map 时才落 static_center。且答复的竖版/方形/横版三 bullet 逐条复刻菜单措辞——`_MENU_PHRASES` 写什么，agent 就以为能力是什么，欠卖措辞直接塑形能力认知。
+
+**Decision**:
+
+### 1. 否决资格护栏（trigger 与 router 同律）
+
+一个方向（配方 / 切法 / 产物形态）的否决理由，**永不建立在已交付能力直接处理的素材性状之上**。适用面 = 一切 agent 言语中的方向评判：trigger verdict、plan 提案散文、能力问答、ask_user 的 framing。护栏语义（prompt 面表述走 FREE PHRASING，措辞不抄本句）：不能说「固定全景所以不适合重剪」——分镜工具就是干这个的；可以说「单人固定机位，分镜跟人收益不大，全幅更稳」——否决依据必须是能力**边界外**的真约束。
+
+### 2. 访谈形态的分镜呈现律——说得出来、选了能成
+
+**方向说出律**：素材判型为访谈/对话形态（`speaker_map.form == "interview"` 或 understand 产物同等识别）时，分镜（镜头跟人）是该素材的**活方向**——trigger 首读 / 想法问答 / plan 提案都应能把分镜方向说出口（可作 suggestion dock 的选项），永不以素材性状否决（§1）。
+
+**选择执行律（必含）**：用户选定分镜方向后（点选 suggestion 或口头指明），plan path 组链**必含 `select_clips + reframe_clip`**——选了就要像配方卡那样成片，执行不打折。用户未指明方向且诉求为竖屏短片时，plan path 二选一：组合进链，或 ask_user 提出明确 framing choice（全幅切片 vs 分镜跟人，一词可答，散文恒带默认路径）。静默中央裁剪永禁。判型证据缺席（无 speaker_map）时不阻塞——按现有默认走，护栏只在证据在场时生效。
+
+**确定性静默补链否决（2026-09-28 讨论拍板）**：「访谈 + 竖屏即自动插入 reframe、不问不说」的确定性补链方案被否——方向必须经 agent 说出、用户选择，选择面不收缩。确定性兜底（只认用户已选的结构化证据）挂账：实测若 LLM 组链仍有漏选，另批评估（届时需 suggestion 选项的结构化指令载荷，属新机制）。
+
+**验证座**：chat_scenarios 新增常驻回归——访谈素材 → 用户选分镜方向 → 断言链含 reframe_clip 且成片带 crop_track（确定性尾）。
+
+### 3. prompt 面修正（prompt authoring law：现在时法律，零引号例句）
+
+trigger beat ① 的引号示例判句整删，替换为 §1 护栏的抽象表述；router plan 面补 §2 的分镜组合律。模型面文本永不含日期 / ADR 编号 / 事故叙事。两处改动同属 prompt 面，同批过 prompt_gate。
+
+### 4. 能力菜单措辞升格
+
+`_MENU_PHRASES` 的 reframe_clip 行从画幅机械语言升格为语义语言（智能分镜 / 镜头跟人），注册表文案 en/zh 同改；能力问答面由此能说出分镜能力。
+
+**Consequences**: 访谈素材静默中央裁剪的结构通路关闭；agent 方向评判获得诚实性约束；想法回合说得出分镜、用户选定后链必含分镜；能力问答能说出分镜。零 schema / 零工具改动——reframe_clip 工具不动，动的全是选择律与措辞面。验证 = prompt_gate 三探针 + chat_scenarios 新增分镜必含座与相关座回归 + 访谈素材 live e2e（用户自跑——验收 = 想法回合说得出分镜方向、选定后同素材产出分镜成片）。
+
+**Related**: ADR-058（展示文案二源律）/ ADR-089（能力编译与执行边界——能力清单是编译事实，选择律本批补齐）/ prompt authoring law（CLAUDE.md Testing 节）/ RECIPES §4.8（配方准入——分镜能力的用户面承诺）
+
+## ADR-095: 消息流三寄存器律——言语 / 活动日志 / 瞬态状态 + 素材节拍归位
+
+**Status**: Decided（2026-09-28 用户拍板——节拍日志化 + live 工序化双方案；讨论底座 = Claude Code / Codex 顶级 agent 三寄存器解剖对照 + 「节拍为什么没有正在转写」机制取证）
+
+**Context**: 两问同族——
+
+① **节拍身份错位**：「正在看 xy_1.mp4…」= 言语格写法（进行态 + 省略号 + 会话语气）+ 模板作者 + 入库消息行——读起来像 agent 说过的话，实际 LLM 从未说过。与 startLine 案（ADR-093）同族不同病：startLine 死于三规则全违反（言语格 + chrome 作者 + 不入库），节拍是写法与身份错位。
+
+② **「为什么没有正在转写」**（机制取证）：素材处理链 = `_content_hash → _asr → speaker_map → prosody` 四工序（VIDEO，`asset_processing.py:263`）共用一个资产级 `PROCESSING` 状态——**工序信号从未暴露到资产面**；live now-line 由客户端按 `processing_status == PROCESSING` 派生，只能说资产级的「正在看」；入库节拍 `_record_reading_beat` 只在终态写一行（「已读完 X · 41s · N/M」）。另存在两面词汇不一致：run stepper 说「正在转写你的媒体…」（`results.stepper.transcribing`），上传节拍说「看」——同一动作两个名。
+
+**顶级 agent 对照取证（三寄存器解剖）**：
+
+| 寄存器 | Claude Code | Codex / Deep Research | 作者 | 入库 |
+|---|---|---|---|---|
+| 言语面 | assistant 散文（含工具前言） | final answer / thinking 摘要 | 只有模型 | ✅ 原文 |
+| 活动日志面 | `⏺ Read(path)` / `⎿ Read N lines` | `$ npm test` 执行块 / "Searched for X" 列表 | harness 模板 | ✅ 事件记录 |
+| 瞬态面 | spinner 俏皮词 / "Thinking…" | "Working (12s)" | harness | ❌ 绝不入库 |
+
+共同不变量：记录可逐字节重放（一切持久化元素派生自事件/会话日志）；瞬态 chrome 永不入记录；散文作者 = 模型独占。**合法性的边界不在「模板 vs LLM」，在寄存器**——日志面模板渲染合法且可持久化，前提是语法为日志格；言语面模板永禁；瞬态面模板合法但绝不入库。
+
+**Decision**:
+
+### 1. 三寄存器律（ADR-093 根律的展开，§3 准入门的细化）
+
+- **言语面**：会话散文（第一人称完整句）。作者恒为 LLM，落库为 message 行，信封对账同 ADR-093 §1。
+- **活动日志面**：世界/循环事件的结构化事实行（素材节拍、活动帧、步骤行）。确定性模板渲染**合法且可持久化**，但语法必须是**日志格**：动宾/名词短语 + 事实后缀，无人称、无进行态、无省略号、无会话语气；视觉与言语分行（灰阶 / meta 座）。**ADR-093 §3 准入门据此细化**：消息流允许日志面行存在（Claude Code tool 行同款），禁令只针对「言语格写法 + 非 LLM 作者」的组合。
+- **瞬态面**：spinner / thinking / now-line 等活态 chrome。模板合法，**绝不入库**，refresh 后不存在；可随工序/相位细化——瞬态面比入库面细的合法性来源即此。
+
+### 2. 素材节拍归位（拍板方案：日志化 + live 工序化）
+
+- **入库节拍（终态行，`_record_reading_beat` 既有座不变）**：措辞日志格化——动词分叉（看/听/读，2026-09-27 拍板）保留、去言语语气；事实后缀保留（时长 / N·M drain 进度）。最终双语文案入施工报告。
+- **live now-line（瞬态面）工序化**：素材处理链在每个 processor 入口把当前工序写入资产面（`asset.meta` 携带，零 schema 变更；终态清除，读容忍），客户端 now-line 随工序推进说真话（转写 / 理解等用户语言标签）；入库节拍仍一行资产级，不随工序膨胀。
+- **渲染座位、动词分叉、N/M 进度、入库时机（终态）全部不动**。
+
+### 3. 边界与禁令
+
+- 工序标签 = 用户语言的工序真相（「转写」经用户点名成为合法词汇），内部 processor 名（`speaker_map` / `prosody`）永不上屏。
+- 节拍永不进言语格；LLM 言语永不模仿节拍格式。
+- run stepper 工序文案（「正在转写你的媒体…」）是 run 面工序座，与节拍面并存合法——两面词汇对齐同一工序词表（转写 / 理解），消「同一动作两个名」。
+
+**Consequences**: 记录面干净——入库行无一「像言语的非言语」；处理中的几分钟行文本说真话（工序级）；两面词汇一致。零 schema 变更（stage 走 `asset.meta`）。验证 = live 走查（上传素材观察工序推进文案）+ 刷新一致性 + 纯测试（stage 写入/清除/读容忍）。
+
+**Related**: ADR-093（根律——本 ADR 是其 §3 准入门的寄存器细化）/ ADR-058（展示文案二源律）/ ADR-087 §3（活动投影——日志面的另一族）/ CHAT_ARCH §8.6（前端渲染律）§8.7（StatusLine 一座两行）

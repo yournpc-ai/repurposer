@@ -17,7 +17,7 @@ Gated here:
   illegal values on ProposePlansArgs / RevisePlanArgs.
 
 The DB half rides the _StubDb pattern (test_exploration_store_pure
-sibling): GraphNode / Journey / Asset list-served, JSON-path criteria stay
+sibling): ExplorationRow / Journey / Asset list-served, JSON-path criteria stay
 unevaluated — seeds are precise. The compile surface uses simple chains
 (writer-only / clip-without-language): check_transform_targets passes
 trivially with no transform tasks, and project_source_language reads the
@@ -28,7 +28,7 @@ context here → None → default_language falls back to "en" (expected).
 import pytest
 from uuid import uuid4
 
-from app.models.tables import Asset, GraphNode, Journey, Project
+from app.models.tables import Asset, ExplorationRow, Journey, Project
 from app.chat.exploration_compile import (
     CompiledPackage,
     compile_plans_package,
@@ -88,7 +88,7 @@ class _StubResult:
 
 
 class _StubDb:
-    """Serves GraphNode / Journey / Asset off lists; JSON-path criteria stay
+    """Serves ExplorationRow / Journey / Asset off lists; JSON-path criteria stay
     unevaluated (the pattern's documented limitation — seeds are precise).
     Adds ``journey_id`` to the eq-filterable plain columns (the journey
     reads filter on it) and Asset to the execute-served entities
@@ -111,7 +111,7 @@ class _StubDb:
     async def execute(self, stmt):
         entity = stmt.column_descriptions[0]["entity"]
         rows = {
-            GraphNode: self.nodes,
+            ExplorationRow: self.nodes,
             Journey: self.journeys,
             Asset: self.assets,
         }.get(entity, [])
@@ -132,7 +132,7 @@ class _StubDb:
 
     def add(self, obj):
         self.added.append(obj)
-        if isinstance(obj, GraphNode):
+        if isinstance(obj, ExplorationRow):
             self.nodes.append(obj)
         elif isinstance(obj, Journey):
             self.journeys.append(obj)
@@ -144,7 +144,7 @@ class _StubDb:
 # ---- seeds (the door births the rows — spec shapes stay exact) -------------------
 
 
-async def _seed_select(db: _StubDb, *, topic="pricing", goal="goal") -> GraphNode:
+async def _seed_select(db: _StubDb, *, topic="pricing", goal="goal") -> ExplorationRow:
     cset = await propose_candidates(
         db,
         db.project,

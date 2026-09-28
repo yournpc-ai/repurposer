@@ -353,8 +353,8 @@ def build_confirmed_scope(
     router-drafted docks — 读容忍), the compiled scope (the exact TaskItem
     chain the run was born with — hand edits included, since Start ships
     the confirmed intent verbatim), the quote shown at confirm time, and
-    the confirmation channel (``confirmed_via``: "dock_pill" | "chat_reply",
-    N-57). Pure: the caller owns the clock and the row write.
+    the confirmation channel (``confirmed_via``: "dock_pill" | "chat_reply").
+    Pure: the caller owns the clock and the row write.
 
     Iter-3 E2: ``plan_task_map`` (plan_id → half-open task range, N-58)
     rides as an ADDITIVE key when the dock carried one — it is the revision

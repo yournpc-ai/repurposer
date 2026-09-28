@@ -15,7 +15,7 @@ import {
   Languages,
   ChevronRight,
 } from "lucide-react"
-import { useNavigate, useRouterState } from "@tanstack/react-router"
+import { useNavigate, useRouterState, Link } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
@@ -140,6 +140,17 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
           <span className="ml-auto rounded-md bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
             {t("common.freePlan")}
           </span>
+          {/* Upgrade entry (2026-09-27): rides to the landing pricing anchor,
+              same destination as the rail footer's upgrade pill — the
+              in-app purchase entry is W11. */}
+          <Link
+            to="/"
+            hash="pricing"
+            onClick={onClose}
+            className="text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {t("common.upgrade")}
+          </Link>
         </div>
         <div className="flex h-8 items-center gap-2 px-2">
           <Coins className="h-3.5 w-3.5 text-muted-foreground" />
@@ -150,7 +161,8 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
         </div>
         {/* Negative balance (BILLING §5): a NULL-estimate run may settle the
             balance past zero — the number shows honestly and this note
-            explains it. No top-up CTA: the purchase entry is W11. */}
+            explains it. Plan upgrade lives on the row above (landing
+            pricing); credits top-up is W11. */}
         {balance !== null && balance < 0 && (
           <p className="px-2 pb-1.5 text-[11px] leading-snug text-muted-foreground">
             {t("credits.negativeNote")}

@@ -7,11 +7,14 @@ contract:
 
 - the whitelist IS the proactivity boundary (风险挂账③: 白名单外永不主动说话);
 - the terminal tool's params law (ADR-081: suggestions are dock-worthy
-  option LABELS — blanks drop, overlong rejects into the loop, null reads
-  as none; the send/download pill form is retired);
+  option labels — blanks drop, overlong rejects into the loop, null reads
+  as none; the send/download pill form is retired; 一问拍一体化 2026-09-27:
+  each carries a one-line reason + at most one recommended mark, bare
+  strings read in as labels 读容忍);
 - the suggestion dock's payload law (numbered 1/2/3 option ids the
   autoResume grammar + the dock badge share; the bare question is
-  code-assembled in the turn's speech language);
+  code-assembled in the turn's speech language; the recommended mark lands
+  as the positional recommended_id);
 - the intent dump is self-describing (the dedup guard reads the same keys);
 - the worker-side speech-language chain (ADR-080 界面语言唯一 owner: the
   conversation's stamped owner first; the run's pinned ui_language and the
@@ -35,7 +38,7 @@ from app.chat.trigger_turn import (
     _trigger_language,
     trigger_agent,
 )
-from app.models.schemas import WrapUpArgs
+from app.models.schemas import SuggestionItem, WrapUpArgs
 from app.models.tables import Conversation, Message, WorkflowRun
 from app.pipeline.trigger_events import (
     TRIGGER_CRAFT_DECOMPILED,
@@ -74,8 +77,9 @@ def test_tool_set_is_the_reads_plus_one_terminal() -> None:
 
 
 class TestWrapUpArgs:
-    """ADR-081 选项语法统一律: suggestions are LABELS ONLY — they dock as
-    a real numbered options question; the send/download pill form retired."""
+    """ADR-081 选项语法统一律 + 一问拍一体化 (2026-09-27): suggestions dock as
+    a real numbered options question; each carries a one-line reason and at
+    most one recommended mark; the send/download pill form retired."""
 
     def test_null_suggestions_is_tolerated(self) -> None:
         # 打字机律牙①: the model writes null when it means "no options" —
@@ -83,19 +87,41 @@ class TestWrapUpArgs:
         args = WrapUpArgs.model_validate({"suggestions": None})
         assert args.suggestions == []
 
+    def test_bare_strings_upgrade_to_labels(self) -> None:
+        # 读容忍: the pre-integration wire shape was a bare string per
+        # option — the model's old habit reads in as the label, never a
+        # repair round for a cosmetic upgrade.
+        args = WrapUpArgs.model_validate({"suggestions": ["做一个法语版"]})
+        assert [s.label for s in args.suggestions] == ["做一个法语版"]
+        assert args.suggestions[0].description == ""
+        assert args.suggestions[0].recommended is False
+
     def test_labels_cap_at_three(self) -> None:
         with pytest.raises(ValidationError):
             WrapUpArgs.model_validate({"suggestions": ["a", "b", "c", "d"]})
         args = WrapUpArgs.model_validate({"suggestions": ["a", "b", "c"]})
-        assert args.suggestions == ["a", "b", "c"]
+        assert [s.label for s in args.suggestions] == ["a", "b", "c"]
 
     def test_blank_labels_drop_overlong_rejects(self) -> None:
         # A blank label means "fewer options" — dropped, not an iteration
         # burned; an overlong one cannot ride a dock row — reject.
         args = WrapUpArgs.model_validate({"suggestions": ["做一个法语版", "  "]})
-        assert args.suggestions == ["做一个法语版"]
+        assert [s.label for s in args.suggestions] == ["做一个法语版"]
         with pytest.raises(ValidationError, match="40"):
             WrapUpArgs.model_validate({"suggestions": ["x" * 41]})
+
+    def test_extra_recommended_marks_drop_first_wins(self) -> None:
+        # 一问拍一体化: at most ONE recommendation survives — extras drop
+        # silently (cosmetic, never worth a repair round).
+        args = WrapUpArgs.model_validate(
+            {
+                "suggestions": [
+                    {"label": "a", "recommended": True},
+                    {"label": "b", "recommended": True},
+                ]
+            }
+        )
+        assert [s.recommended for s in args.suggestions] == [True, False]
 
     def test_unknown_keys_reject(self) -> None:
         with pytest.raises(ValidationError):
@@ -105,10 +131,15 @@ class TestWrapUpArgs:
 class TestSuggestionsPayload:
     """The docked question built from the labels (ADR-081): numbered ids
     (the 1/2/3 grammar autoResume + the dock badge share), freeform pencil
-    on, the bare question code-assembled in the turn's speech language."""
+    on, the bare question code-assembled in the turn's speech language.
+    一问拍一体化 (2026-09-27): the reason line rides each option and the
+    recommended mark lands as the positional recommended_id."""
 
     def test_numbered_options_in_order(self) -> None:
-        payload = _suggestions_payload(["剪一个金句快剪版", "出个 30 秒精华版"], "zh")
+        payload = _suggestions_payload(
+            [SuggestionItem(label="剪一个金句快剪版"), SuggestionItem(label="出个 30 秒精华版")],
+            "zh",
+        )
         assert payload.kind == "question"
         assert payload.allow_freeform is True
         assert [o.id for o in payload.options] == ["1", "2"]
@@ -116,23 +147,36 @@ class TestSuggestionsPayload:
             "剪一个金句快剪版",
             "出个 30 秒精华版",
         ]
+        assert payload.recommended_id is None
         # The positional number hit resolves each option (the dock grammar).
         assert _match_option("1", payload.options).label == "剪一个金句快剪版"
         assert _match_option("2", payload.options).label == "出个 30 秒精华版"
+
+    def test_reason_and_recommendation_ride_the_payload(self) -> None:
+        payload = _suggestions_payload(
+            [
+                SuggestionItem(label="a", description="理由甲"),
+                SuggestionItem(label="b", description="理由乙", recommended=True),
+            ],
+            "zh",
+        )
+        assert [o.description for o in payload.options] == ["理由甲", "理由乙"]
+        # The mark lands as the option's POSITIONAL id (the dock grammar).
+        assert payload.recommended_id == "2"
 
     def test_bare_question_follows_the_speech_language(self) -> None:
         # Semantic assertion: the contract is LANGUAGE-following (zh → the
         # Chinese line, en → the English line), not a frozen casing — the
         # copy is deliberate sentence-case ("What's next?"), so match
         # case-insensitively.
-        assert "接下来" in _suggestions_payload(["a"], "zh").question
-        en_question = _suggestions_payload(["a"], "en").question
+        assert "接下来" in _suggestions_payload([SuggestionItem(label="a")], "zh").question
+        en_question = _suggestions_payload([SuggestionItem(label="a")], "en").question
         assert "next" in en_question.lower()
         assert "接下来" not in en_question
 
 
 def test_trigger_dump_is_self_describing() -> None:
-    dump = _trigger_dump(TRIGGER_RUN_COMPLETED, "run-1", ["做一个法语版"])
+    dump = _trigger_dump(TRIGGER_RUN_COMPLETED, "run-1", [SuggestionItem(label="做一个法语版")])
     assert dump["type"] == TRIGGER_DUMP_TYPE
     assert dump["trigger"] == "run_completed"
     assert dump["ref"] == "run-1"

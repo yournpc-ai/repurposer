@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<!--
+  确认拍 × 积分披露 — 设计对比演示（2026-09-28）
+  背景：ADR-092 翻案后 confirm_strategy 收窄为纯披露偏好，但控件外形仍是
+  MiniMax 式权限开关。四个视图：现状 / 方案A（拆控件）/ 方案B（诚实化）/ EC 对照。
+  演示数据为虚构；解剖复刻 ChatDock / QuestionDock / CostConfirmControl。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>确认拍 × 积分披露 — 方案对比</title>
+<style>
+  :root {
+    --bg: #f2f2f3;            /* 0.96 neutral gray page */
+    --card: #ffffff;
+    --fg: #1f2023;
+    --muted-fg: #6e6e73;
+    --meta-fg: #a8a8ad;
+    --accent: #e9e9ec;
+    --muted: #ededf0;
+    --hairline: rgba(31,32,35,.10);
+    --frost: rgba(255,255,255,.92);
+    --whisper-shadow: 0 20px 45px -12px rgba(20,20,25,.18), 0 4px 12px -4px rgba(20,20,25,.08);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+    background: #e8e8eb; color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1280px; margin: 0 auto; padding: 36px 28px 64px; }
+  .page-head h1 { font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+  .page-head p { margin-top: 6px; font-size: 13px; color: var(--muted-fg); }
+
+  /* ---------- tabs ---------- */
+  .tabs { display:inline-flex; gap:2px; margin-top:20px; background:var(--muted); border-radius:10px; padding:3px; }
+  .tabs button {
+    border:0; background:transparent; padding:7px 14px; border-radius:8px;
+    font-size:13px; color:var(--muted-fg); cursor:pointer; font-family:inherit;
+  }
+  .tabs button.active { background:var(--card); color:var(--fg); box-shadow:0 1px 3px rgba(0,0,0,.08); }
+
+  .view { display:none; margin-top:20px; }
+  .view.active { display:flex; gap:20px; align-items:flex-start; }
+
+  /* ---------- app frame ---------- */
+  .app-frame {
+    flex:1; min-width:0; height:660px; border-radius:16px; overflow:hidden;
+    background:var(--bg); border:1px solid var(--hairline);
+    display:flex; position:relative;
+  }
+  .rail {
+    width:52px; flex:none; border-right:1px solid var(--hairline);
+    display:flex; flex-direction:column; align-items:center; padding:14px 0; gap:4px;
+  }
+  .rail .logo { width:24px; height:24px; color:var(--fg); margin-bottom:16px; }
+  .rail .nav-ic { width:36px; height:36px; border-radius:8px; display:grid; place-items:center; color:var(--muted-fg); }
+  .rail .nav-ic.on { background:var(--accent); color:var(--fg); }
+  .rail .avatar { margin-top:auto; width:28px; height:28px; border-radius:50%; background:linear-gradient(135deg,#c9c9cf,#9a9aa2); }
+  .canvas {
+    flex:1; position:relative;
+    background-image: radial-gradient(rgba(110,110,115,.30) 1px, transparent 1.3px);
+    background-size: 32px 32px;
+  }
+
+  /* demo-only controls */
+  .demo-ctl {
+    position:absolute; top:14px; left:14px; z-index:5;
+    border:1.5px dashed rgba(31,32,35,.25); border-radius:10px; padding:8px 10px;
+    background:rgba(255,255,255,.75); backdrop-filter:blur(8px);
+    font-size:11px; color:var(--meta-fg);
+  }
+  .demo-ctl .seg { display:inline-flex; gap:2px; margin-top:6px; background:var(--muted); border-radius:7px; padding:2px; }
+  .demo-ctl .seg button { border:0; background:transparent; padding:4px 10px; border-radius:5px; font-size:11px; cursor:pointer; color:var(--muted-fg); font-family:inherit; }
+  .demo-ctl .seg button.active { background:var(--card); color:var(--fg); }
+
+  /* ---------- dock panel (float geometry) ---------- */
+  .dock {
+    position:absolute; right:14px; top:14%; bottom:7%; width:400px;
+    background:var(--frost); backdrop-filter:blur(24px) saturate(1.4);
+    border:1px solid var(--hairline); border-radius:20px; box-shadow:var(--whisper-shadow);
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .dock-head { display:flex; align-items:center; gap:6px; padding:11px 12px 9px 16px; }
+  .dock-head .title { font-size:13px; font-weight:500; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dock-head .ic { width:28px; height:28px; border-radius:7px; display:grid; place-items:center; color:var(--muted-fg); }
+  .dock-body { flex:1; overflow-y:auto; padding:2px 14px 12px; display:flex; flex-direction:column; gap:12px; }
+  .dock-body::-webkit-scrollbar { display:none; }
+
+  .msg-user { align-self:flex-end; background:var(--muted); border-radius:12px; padding:8px 12px; font-size:13px; line-height:1.55; max-width:88%; }
+  .msg-ai { font-size:13.5px; line-height:1.65; }
+
+  .plan-card { background:var(--muted); border-radius:12px; padding:13px 14px; display:flex; flex-direction:column; gap:9px; }
+  .plan-card .whisper { font-size:12px; color:var(--muted-fg); line-height:1.5; }
+  .content-plans { background:var(--card); border-radius:8px; padding:9px 12px; display:flex; flex-direction:column; gap:3px; }
+  .content-plans .t { font-size:13px; }
+  .content-plans .o { font-size:12px; color:var(--muted-fg); }
+  .chain-row { display:flex; align-items:baseline; justify-content:space-between; gap:10px; font-size:12.5px; }
+  .chain-row .est { font-size:11.5px; color:var(--meta-fg); flex:none; }
+  .chain-total { border-top:1px solid var(--hairline); padding-top:8px; display:flex; justify-content:space-between; font-size:12.5px; }
+  .chain-total .est { color:var(--muted-fg); }
+
+  /* question pill (stadium → two-row when note present) */
+  .dock-bottom { padding:0 12px 12px; }
+  .qpill {
+    background:var(--frost); backdrop-filter:blur(24px) saturate(1.4);
+    border:1px solid var(--hairline); box-shadow:var(--whisper-shadow);
+    border-radius:22px; margin-bottom:8px;
+  }
+  .qpill-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:7px 8px 7px 16px; }
+  .qpill-row .q { font-size:13.5px; white-space:nowrap; }
+  .qpill-row .est { font-size:12px; color:var(--muted-fg); white-space:nowrap; }
+  .btn-start {
+    flex:none; height:36px; padding:0 18px; border:0; border-radius:8px;
+    background:var(--fg); color:#fff; font-size:13px; cursor:pointer; font-family:inherit; white-space:nowrap;
+  }
+  .qpill-note { padding:0 16px 9px 28px; font-size:11px; line-height:1.45; color:var(--meta-fg); }
+
+  .disclaimer { text-align:center; font-size:11px; color:var(--meta-fg); margin-bottom:8px; }
+
+  /* input group */
+  .input-group { background:var(--card); border:1px solid var(--hairline); border-radius:12px; padding:12px 12px 8px; }
+  .input-group .ph { font-size:13.5px; color:var(--meta-fg); padding:2px 4px 12px; }
+  .ctl-row { display:flex; align-items:center; gap:2px; }
+  .ic-btn { width:36px; height:36px; border-radius:50%; border:0; background:transparent; display:grid; place-items:center; color:var(--muted-fg); cursor:pointer; }
+  .ic-btn:hover { background:var(--accent); }
+  .pill-btn {
+    height:36px; border:0; background:transparent; border-radius:8px; padding:0 10px;
+    display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted-fg); cursor:pointer; font-family:inherit; white-space:nowrap;
+  }
+  .pill-btn:hover { background:var(--accent); color:var(--fg); }
+  .send-btn { width:36px; height:36px; border-radius:50%; border:0; background:var(--fg); color:#fff; display:grid; place-items:center; cursor:pointer; }
+  .ghost-slot {
+    height:36px; border:1.5px dashed rgba(31,32,35,.22); border-radius:8px; padding:0 10px;
+    display:flex; align-items:center; font-size:11px; color:var(--meta-fg); white-space:nowrap;
+  }
+
+  /* strategy dropdown */
+  .drop-wrap { position:relative; }
+  .drop {
+    position:absolute; bottom:44px; right:0; width:330px; z-index:20;
+    background:var(--frost); backdrop-filter:blur(24px) saturate(1.4);
+    border:1px solid var(--hairline); border-radius:14px; box-shadow:var(--whisper-shadow);
+    padding:6px;
+  }
+  .drop .opt {
+    display:flex; gap:12px; align-items:flex-start; width:100%; text-align:left;
+    border:0; background:transparent; border-radius:8px; padding:9px 8px; cursor:pointer; font-family:inherit;
+  }
+  .drop .opt:hover { background:rgba(233,233,236,.5); }
+  .drop .opt.on { background:var(--accent); }
+  .drop .opt svg { flex:none; margin-top:2px; color:var(--muted-fg); }
+  .drop .opt .tt { font-size:12px; font-weight:500; display:block; }
+  .drop .opt .dd { font-size:11px; color:var(--muted-fg); line-height:1.45; display:block; margin-top:2px; }
+  .drop .opt .ck { margin-left:auto; flex:none; margin-top:2px; }
+  .drop .foot { border-top:1px solid var(--hairline); margin-top:4px; padding:8px 8px 4px; font-size:11px; color:var(--meta-fg); line-height:1.45; }
+
+  /* ---------- annotation panel ---------- */
+  .notes { width:380px; flex:none; background:var(--card); border-radius:14px; border:1px solid var(--hairline); padding:18px 18px 14px; }
+  .notes h2 { font-size:15px; font-weight:600; }
+  .notes h2 .tag { font-size:11px; font-weight:500; color:var(--meta-fg); margin-left:6px; }
+  .notes ul { margin-top:10px; list-style:none; display:flex; flex-direction:column; gap:9px; }
+  .notes li { font-size:12.5px; line-height:1.6; color:#3a3b40; padding-left:14px; position:relative; }
+  .notes li::before { content:"–"; position:absolute; left:0; color:var(--meta-fg); }
+  .notes li b { font-weight:600; }
+  .notes .callout {
+    margin-top:12px; background:var(--muted); border-radius:10px; padding:10px 12px;
+    font-size:12px; line-height:1.55; color:#3a3b40;
+  }
+  .notes .callout .t { font-weight:600; display:block; margin-bottom:2px; }
+  .notes .dyn { margin-top:12px; font-size:11.5px; color:var(--muted-fg); border-top:1px solid var(--hairline); padding-top:10px; line-height:1.6; }
+  .notes .dyn code { background:var(--muted); border-radius:4px; padding:1px 5px; font-size:11px; }
+
+  /* ---------- EC mock ---------- */
+  .ec-wrap { flex:1; display:flex; justify-content:center; }
+  .ec-panel { width:430px; background:var(--card); border:1px solid var(--hairline); border-radius:16px; padding:22px; box-shadow:var(--whisper-shadow); }
+  .ec-panel h3 { font-size:16px; font-weight:600; }
+  .ec-panel .sub { font-size:12.5px; color:var(--muted-fg); margin-top:4px; }
+  .ec-opt { display:flex; gap:10px; margin-top:16px; }
+  .ec-opt .radio { width:18px; height:18px; border-radius:50%; border:1.5px solid #c6c6cc; flex:none; margin-top:2px; display:grid; place-items:center; }
+  .ec-opt.on .radio { border-color:var(--fg); }
+  .ec-opt.on .radio::after { content:""; width:10px; height:10px; border-radius:50%; background:var(--fg); }
+  .ec-opt .t { font-size:14px; font-weight:500; }
+  .ec-opt .d { font-size:12px; color:var(--muted-fg); line-height:1.55; margin-top:3px; }
+  .ec-threshold { margin:10px 0 0 28px; display:flex; gap:8px; }
+  .ec-threshold .sel, .ec-threshold .num { border:1px solid var(--hairline); border-radius:8px; padding:7px 12px; font-size:13px; background:var(--card); display:flex; align-items:center; gap:8px; }
+  .ec-threshold .num { width:130px; justify-content:space-between; color:var(--fg); }
+  .ec-threshold .num span:last-child { color:var(--muted-fg); font-size:12px; }
+  .ec-save { margin-top:20px; width:100%; height:40px; border:0; border-radius:9px; background:#d7d7db; color:#8a8a90; font-size:13.5px; font-family:inherit; }
+  .ec-strip { margin-top:18px; display:flex; justify-content:center; }
+  .ec-strip .pill { background:var(--muted); border-radius:999px; padding:8px 16px; font-size:13px; display:flex; align-items:center; gap:6px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-head">
+    <h1>确认拍 × 积分披露 — 设计对比演示</h1>
+    <p>ADR-092 翻案（2026-09-28）后，confirm_strategy 只剩「披露强度」一个功能，但控件外形仍是 MiniMax 式权限开关。四个视图：现状 / 方案 A / 方案 B / ElevenCreative 对照。</p>
+    <nav class="tabs">
+      <button data-tab="v1" class="active">现状 · 三档策略</button>
+      <button data-tab="va">方案 A · 拆控件（推荐）</button>
+      <button data-tab="vb">方案 B · 诚实化披露</button>
+      <button data-tab="ec">对照 · EC 权限面板</button>
+    </nav>
+  </div>
+
+  <!-- ================= 视图 1：现状 ================= -->
+  <section class="view active" id="v1">
+    <div class="app-frame">
+      <div class="rail">
+        <svg class="logo" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 22 21H2Z"/></svg>
+        <div class="nav-ic on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></div>
+        <div class="nav-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+        <div class="avatar"></div>
+      </div>
+      <div class="canvas">
+        <div class="demo-ctl">
+          演示控制 · 方案估价（非产品 UI）
+          <div class="seg" id="v1-tier">
+            <button data-tier="low" class="active">约 130–260</button>
+            <button data-tier="high">约 420–780</button>
+          </div>
+        </div>
+        <div class="dock">
+          <div class="dock-head">
+            <span class="title">讲座素材再造</span>
+            <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="12" y="12" width="8" height="6" rx="1"/></svg></span>
+            <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14"/></svg></span>
+          </div>
+          <div class="dock-body">
+            <div class="msg-user">把这个讲座剪成 3 条竖屏短片，配字幕，再写一条长文。</div>
+            <div class="msg-ai">好——我会把这段 38 分钟的讲座转写成文字稿，挑出 3 段最有张力的片段剪成竖屏短片、配上字幕，最后再写一条长文。</div>
+            <div class="plan-card">
+              <p class="whisper">直接开始 = 我严格按这版生成——想改什么，在聊天里说一句就行。</p>
+              <p class="whisper">开始时按估价上限预扣；按实际用量结算，失败的步骤不收费，剩余退回。</p>
+              <div class="content-plans">
+                <span class="t">竖屏短片 ×3</span>
+                <span class="o">每条约 60 秒 · 字幕 · 9:16</span>
+                <span class="o">LinkedIn 长文 ×1</span>
+              </div>
+              <div class="chain-row"><span>转写讲座音频</span><span class="est">约 30–50</span></div>
+              <div class="chain-row"><span>选出 3 个片段</span><span class="est">约 10–20</span></div>
+              <div class="chain-row"><span>竖屏剪辑 + 字幕 ×3</span><span class="est">约 60–120</span></div>
+              <div class="chain-row"><span>长文撰写</span><span class="est">约 30–70</span></div>
+              <div class="chain-total"><span>合计</span><span class="est" id="v1-total">约 130–260 积分</span></div>
+            </div>
+          </div>
+          <div class="dock-bottom">
+            <div class="qpill">
+              <div class="qpill-row">
+                <span class="q">按这版开始？</span>
+                <span class="est" id="v1-est">约 130–260 积分</span>
+                <button class="btn-start" id="v1-start">开始 · ~130–260 积分</button>
+              </div>
+              <p class="qpill-note" id="v1-note">开始时预扣至多 260 积分；按实际用量结算，失败的步骤不收费，剩余退回。</p>
+            </div>
+            <p class="disclaimer">Repurposer 是 AI，可能出错。重要信息请核对。</p>
+            <div class="input-group">
+              <div class="ph">描述你的修改想法。可拖拽或粘贴文件，输入 @ 引用节点…</div>
+              <div class="ctl-row">
+                <button class="ic-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+                <span style="flex:1"></span>
+                <div class="drop-wrap">
+                  <button class="pill-btn" id="v1-trigger"></button>
+                  <div class="drop" id="v1-drop" style="display:none"></div>
+                </div>
+                <button class="ic-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></button>
+                <button class="send-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h2>现状诊断<span class="tag">控件是披露强度，外形是权限开关</span></h2>
+      <ul>
+        <li>三档的<b>全部</b>实际差异 = Start 钮是否带价 + 一行耳语（且只管 ≥2 任务方案；单任务方案走密度律纯散文，恒显数字，策略零作用）。</li>
+        <li>铃铛/手图标 +「扣费确认」命名 = 「问不问」的权限语义；但 ADR-092 翻案后<b>任何档都不能跳过确认</b>——方案永远 dock 等你的口头 yes 或 Start。</li>
+        <li>「仅估价」是<b>期望落差陷阱</b>：学自 MiniMax 的用户以为这档 = Never ask（静默开工），实际只是少看一行字。</li>
+        <li>阈值 = 平台 configs 的 <code>billing.confirm_large_threshold = 20</code>，界面上用户永远看不到这个数字。</li>
+      </ul>
+      <div class="callout" id="v1-callout" style="display:none">
+        <span class="t">⚠ 当前选中「仅估价」</span>
+        注意 dock 里的方案——它<b>仍然在等你确认</b>。这个档位不改变「要不要问」，只减少确认时展示的费用信息。
+      </div>
+      <div class="dyn" id="v1-dyn"></div>
+    </aside>
+  </section>
+
+  <!-- ================= 视图 A：拆控件 ================= -->
+  <section class="view" id="va">
+    <div class="app-frame">
+      <div class="rail">
+        <svg class="logo" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 22 21H2Z"/></svg>
+        <div class="nav-ic on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></div>
+        <div class="nav-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+        <div class="avatar"></div>
+      </div>
+      <div class="canvas">
+        <div class="dock">
+          <div class="dock-head">
+            <span class="title">讲座素材再造</span>
+            <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="12" y="12" width="8" height="6" rx="1"/></svg></span>
+            <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14"/></svg></span>
+          </div>
+          <div class="dock-body">
+            <div class="msg-user">把这个讲座剪成 3 条竖屏短片，配字幕，再写一条长文。</div>
+            <div class="msg-ai">好——我会把这段 38 分钟的讲座转写成文字稿，挑出 3 段最有张力的片段剪成竖屏短片、配上字幕，最后再写一条长文。</div>
+            <div class="plan-card">
+              <p class="whisper">直接开始 = 我严格按这版生成——想改什么，在聊天里说一句就行。</p>
+              <p class="whisper">开始时按估价上限预扣；按实际用量结算，失败的步骤不收费，剩余退回。</p>
+              <div class="content-plans">
+                <span class="t">竖屏短片 ×3</span>
+                <span class="o">每条约 60 秒 · 字幕 · 9:16</span>
+                <span class="o">LinkedIn 长文 ×1</span>
+              </div>
+              <div class="chain-row"><span>转写讲座音频</span><span class="est">约 30–50</span></div>
+              <div class="chain-row"><span>选出 3 个片段</span><span class="est">约 10–20</span></div>
+              <div class="chain-row"><span>竖屏剪辑 + 字幕 ×3</span><span class="est">约 60–120</span></div>
+              <div class="chain-row"><span>长文撰写</span><span class="est">约 30–70</span></div>
+              <div class="chain-total"><span>合计</span><span class="est">约 130–260 积分</span></div>
+            </div>
+          </div>
+          <div class="dock-bottom">
+            <div class="qpill">
+              <div class="qpill-row">
+                <span class="q">按这版开始？</span>
+                <span class="est">约 130–260 积分</span>
+                <button class="btn-start">开始 · ~130–260 积分</button>
+              </div>
+              <p class="qpill-note">开始时预扣至多 260 积分；按实际用量结算，失败的步骤不收费，剩余退回。</p>
+            </div>
+            <p class="disclaimer">Repurposer 是 AI，可能出错。重要信息请核对。</p>
+            <div class="input-group">
+              <div class="ph">描述你的修改想法。可拖拽或粘贴文件，输入 @ 引用节点…</div>
+              <div class="ctl-row">
+                <button class="ic-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+                <span style="flex:1"></span>
+                <span class="ghost-slot">披露控件已移除</span>
+                <button class="ic-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></button>
+                <button class="send-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h2>方案 A<span class="tag">确认拍恒全披露，零控件</span></h2>
+      <ul>
+        <li><b>Start 钮恒带价 + 机制耳语恒在</b>：确认拍一次说全；其余时刻零费用话语（与花费沉默律同向——费用话语唯一座位就是这个停顿）。</li>
+        <li>确认拍是<b>方案闸</b>不是费用闸——「方案对不对」永远值得停一次，费用只是乘客。既然恒停，披露就没有分档的必要。</li>
+        <li><b>删除清单</b>：CostConfirmControl / useConfirmStrategy / i18n <code>confirmStrategy</code> 块 / ChatDock <code>pricedConfirm</code> 分支（恒 true）。</li>
+        <li><b>保留</b>：<code>users.settings.confirm_strategy</code> 键留表读容忍（旧行不炸）；configs 阈值参数随之失效可删；ADR-092 加一条翻案注。</li>
+        <li>对冲「嫌吵」：耳语行是 meta 级 11px 灰字，视觉噪音极低；带价 Start 钮反而让「点下去花多少」零悬念。</li>
+      </ul>
+      <div class="callout">
+        <span class="t">为什么这是首选</span>
+        三档偏好为用户买到的全部东西是一行文字；成本是一个永久 chrome 座位 + 一套 settings API + 一份「选错档」的认知负担 + 权限/披露的概念混淆。减法优先。
+      </div>
+    </aside>
+  </section>
+
+  <!-- ================= 视图 B：诚实化披露 ================= -->
+  <section class="view" id="vb">
+    <div class="app-frame">
+      <div class="rail">
+        <svg class="logo" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 22 21H2Z"/></svg>
+        <div class="nav-ic on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></div>
+        <div class="nav-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+        <div class="avatar"></div>
+      </div>
+      <div class="canvas">
+        <div class="demo-ctl">
+          演示控制 · 方案估价（非产品 UI）
+          <div class="seg" id="vb-tier">
+            <button data-tier="low" class="active">约 130–260</button>
+            <button data-tier="high">约 420–780</button>
+          </div>
+        </div>
+        <div class="dock">
+          <div class="dock-head">
+            <span class="title">讲座素材再造</span>
+            <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="12" y="12" width="8" height="6" rx="1"/></svg></span>
+            <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14"/></svg></span>
+          </div>
+          <div class="dock-body">
+            <div class="msg-user">把这个讲座剪成 3 条竖屏短片，配字幕，再写一条长文。</div>
+            <div class="msg-ai">好——我会把这段 38 分钟的讲座转写成文字稿，挑出 3 段最有张力的片段剪成竖屏短片、配上字幕，最后再写一条长文。</div>
+            <div class="plan-card">
+              <p class="whisper">直接开始 = 我严格按这版生成——想改什么，在聊天里说一句就行。</p>
+              <p class="whisper">开始时按估价上限预扣；按实际用量结算，失败的步骤不收费，剩余退回。</p>
+              <div class="content-plans">
+                <span class="t">竖屏短片 ×3</span>
+                <span class="o">每条约 60 秒 · 字幕 · 9:16</span>
+                <span class="o">LinkedIn 长文 ×1</span>
+              </div>
+              <div class="chain-row"><span>转写讲座音频</span><span class="est">约 30–50</span></div>
+              <div class="chain-row"><span>选出 3 个片段</span><span class="est">约 10–20</span></div>
+              <div class="chain-row"><span>竖屏剪辑 + 字幕 ×3</span><span class="est">约 60–120</span></div>
+              <div class="chain-row"><span>长文撰写</span><span class="est">约 30–70</span></div>
+              <div class="chain-total"><span>合计</span><span class="est" id="vb-total">约 130–260 积分</span></div>
+            </div>
+          </div>
+          <div class="dock-bottom">
+            <div class="qpill">
+              <div class="qpill-row">
+                <span class="q">按这版开始？</span>
+                <span class="est" id="vb-est">约 130–260 积分</span>
+                <button class="btn-start" id="vb-start">开始生成</button>
+              </div>
+              <p class="qpill-note" id="vb-note" style="display:none">开始时预扣至多 260 积分；按实际用量结算，失败的步骤不收费，剩余退回。</p>
+            </div>
+            <p class="disclaimer">Repurposer 是 AI，可能出错。重要信息请核对。</p>
+            <div class="input-group">
+              <div class="ph">描述你的修改想法。可拖拽或粘贴文件，输入 @ 引用节点…</div>
+              <div class="ctl-row">
+                <button class="ic-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+                <span style="flex:1"></span>
+                <div class="drop-wrap">
+                  <button class="pill-btn" id="vb-trigger"></button>
+                  <div class="drop" id="vb-drop" style="display:none"></div>
+                </div>
+                <button class="ic-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></button>
+                <button class="send-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h2>方案 B<span class="tag">保留偏好，但诚实化</span></h2>
+      <ul>
+        <li><b>改名 + 换图标</b>：「费用披露」+ Receipt——bell/hand 是「问不问」的语义，全部换掉。</li>
+        <li><b>footnote 说实话</b>：「方案总会等你确认才开始——此项只控制确认时展示多少费用信息。」一句话消解期望落差。</li>
+        <li><b>阈值入文案</b>并提到真实量级（演示用 500）：切上方演示估价，「仅大额方案」档真实分流——低估价不升级、高估价升级。</li>
+        <li>仍需补的缺口：单任务方案（密度律路径）目前不受策略影响，要么遵守策略、要么文档写明只管多任务 pill。</li>
+      </ul>
+      <div class="dyn" id="vb-dyn"></div>
+    </aside>
+  </section>
+
+  <!-- ================= 视图 EC：对照 ================= -->
+  <section class="view" id="ec">
+    <div class="app-frame" style="align-items:center; justify-content:center; background:var(--bg);">
+      <div class="ec-wrap">
+        <div class="ec-panel">
+          <h3>智能体权限</h3>
+          <p class="sub">选择智能体需要你批准的时机</p>
+          <div class="ec-opt on">
+            <span class="radio"></span>
+            <div>
+              <div class="t">低于阈值时自动</div>
+              <div class="d">自动运行低成本工具；当某个节点运行超出你的积分上限时，需要你确认。</div>
+            </div>
+          </div>
+          <div class="ec-threshold">
+            <span class="sel">自定义 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+            <span class="num"><span>300</span><span>积分</span></span>
+          </div>
+          <div class="ec-opt">
+            <span class="radio"></span>
+            <div>
+              <div class="t">确认编辑</div>
+              <div class="d">批准对现有节点和会消耗积分的运行所做的更改。新节点和连线仍会立即运行。</div>
+            </div>
+          </div>
+          <div class="ec-opt">
+            <span class="radio"></span>
+            <div>
+              <div class="t">自动运行</div>
+              <div class="d">所有工具都会立即执行，无需确认。</div>
+            </div>
+          </div>
+          <button class="ec-save">保存更改</button>
+          <div class="ec-strip">
+            <span class="pill">低于 300 积分时自动 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h2>EC 对照<span class="tag">它治理的是另一根轴</span></h2>
+      <ul>
+        <li>这个面板回答的是<b>「什么时候需要你批准」</b>——三档都真实改变「问不问」。这是权限控件，我们的控件是披露控件，外形撞车而已。</li>
+        <li><b>可学</b>：① 命名直接说出治理的轴（「智能体权限」）② 阈值可见且用户可设（自定义 300 积分）③ 粒度匹配计费粒度——它是节点级扣费，所以确认也是节点级。</li>
+        <li><b>不必抄</b>：我们是 run 级出生地 hold（确认一次锁全图高端），比「节点超限中途暂停」更简单、保护更强；且口头确认律（2026-09-28 拍板）刚关掉静默开工——开这个口子 = 新 ADR 翻案。</li>
+        <li>若未来真要「小额自动开工」，最小形态 = 「低于 N 积分自动开工」（N 用户可设），可复用 checkpoint（WAITING_HUMAN）基建；建议 W11 支付上线后再评估。</li>
+      </ul>
+      <div class="callout">
+        <span class="t">一句话</span>
+        EC 的启发是「如果做权限轴，应该长这样」——而不是「我们的披露控件应该变成权限控件」。
+      </div>
+    </aside>
+  </section>
+</div>
+
+<script>
+/* ---------- tabs ---------- */
+document.querySelectorAll('.tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === btn.dataset.tab));
+  });
+});
+
+/* ---------- shared icons ---------- */
+const IC = {
+  hand: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>',
+  bell: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
+  bellOff: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="m2 2 20 20"/></svg>',
+  receipt: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>',
+  check: '<svg class="ck" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>',
+  chevron: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>',
+};
+
+const TIERS = {
+  low:  { low: 130, high: 260, label: '约 130–260 积分', priced: '开始 · ~130–260 积分', noteHigh: 260 },
+  high: { low: 420, high: 780, label: '约 420–780 积分', priced: '开始 · ~420–780 积分', noteHigh: 780 },
+};
+
+/* ---------- generic strategy-view controller ---------- */
+function makeView(prefix, opts) {
+  const state = { strategy: 'large', tier: 'low', open: false };
+  const el = id => document.getElementById(prefix + '-' + id);
+
+  function escalated() {
+    const t = TIERS[state.tier];
+    return state.strategy === 'always' ||
+           (state.strategy === 'large' && t.high > opts.threshold);
+  }
+
+  function render() {
+    const t = TIERS[state.tier];
+    const esc = escalated();
+    const cur = opts.strategies.find(s => s.id === state.strategy);
+
+    // trigger pill
+    el('trigger').innerHTML = cur.icon + '<span>' + cur.trigger + '</span>' + IC.chevron;
+
+    // confirm beat
+    el('start').textContent = esc ? t.priced : '开始生成';
+    el('est').textContent = t.label;
+    el('total').textContent = t.label;
+    const note = el('note');
+    note.style.display = esc ? '' : 'none';
+    note.textContent = '开始时预扣至多 ' + t.noteHigh + ' 积分；按实际用量结算，失败的步骤不收费，剩余退回。';
+
+    // dropdown
+    const drop = el('drop');
+    drop.style.display = state.open ? '' : 'none';
+    drop.innerHTML = opts.strategies.map(s =>
+      '<button class="opt' + (s.id === state.strategy ? ' on' : '') + '" data-s="' + s.id + '">' +
+        s.icon +
+        '<span><span class="tt">' + s.title + '</span><span class="dd">' + s.desc + '</span></span>' +
+        (s.id === state.strategy ? IC.check : '') +
+      '</button>'
+    ).join('') + '<div class="foot">' + opts.footnote + '</div>';
+    drop.querySelectorAll('.opt').forEach(b => b.addEventListener('click', ev => {
+      ev.stopPropagation();
+      state.strategy = b.dataset.s; state.open = false; render();
+    }));
+
+    // annotation dynamics
+    if (opts.dyn) el('dyn').innerHTML = opts.dyn(state, t, esc);
+    if (opts.callout) el('callout').style.display = opts.callout(state) ? '' : 'none';
+  }
+
+  el('trigger').addEventListener('click', ev => { ev.stopPropagation(); state.open = !state.open; render(); });
+  document.addEventListener('click', () => { if (state.open) { state.open = false; render(); } });
+  el('tier').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    state.tier = b.dataset.tier;
+    el('tier').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+    render();
+  }));
+
+  render();
+}
+
+/* ---------- 视图 1：现状（阈值 20，不可见） ---------- */
+makeView('v1', {
+  threshold: 20,
+  strategies: [
+    { id: 'always', icon: IC.hand,    trigger: '完整披露', title: '完整披露',   desc: '每个方案都显示扣费说明与显价确认钮' },
+    { id: 'large',  icon: IC.bell,    trigger: '大额披露', title: '仅大额方案', desc: '超过积分阈值的方案显示完整扣费说明' },
+    { id: 'never',  icon: IC.bellOff, trigger: '仅估价',   title: '仅估价',     desc: '只显示估价区间，没有额外披露' },
+  ],
+  footnote: '生效于付费运行启动前的方案确认。',
+  callout: s => s.strategy === 'never',
+  dyn: (s, t, esc) =>
+    '当前判定：<code>strategy=' + s.strategy + '</code>，估价 high=<code>' + t.high + '</code>，阈值=<code>20</code>（界面不可见）→ ' +
+    (esc ? '<b>升级为完整披露</b>（Start 带价 + 耳语行）' : '<b>仅估价</b>（Start 不带价，无耳语行）') +
+    (s.strategy === 'large' ? '<br>注意：切到高估价再切回来——两档都 > 20，「仅大额方案」在当前默认值下≈「完整披露」，名存实亡。' : '')
+});
+
+/* ---------- 视图 B：诚实化（阈值 500，入文案） ---------- */
+makeView('vb', {
+  threshold: 500,
+  strategies: [
+    { id: 'always', icon: IC.receipt, trigger: '完整说明', title: '完整说明',   desc: '每个方案的开始钮都带价，并显示计费机制说明' },
+    { id: 'large',  icon: IC.receipt, trigger: '大额说明', title: '仅大额方案', desc: '估价超过 500 积分的方案显示完整说明与显价开始钮' },
+    { id: 'never',  icon: IC.receipt, trigger: '仅估价',   title: '仅估价',     desc: '只显示估价区间' },
+  ],
+  footnote: '方案总会等你确认后才开始——此项只控制确认时展示多少费用信息。',
+  dyn: (s, t, esc) =>
+    '当前判定：<code>strategy=' + s.strategy + '</code>，估价 high=<code>' + t.high + '</code>，阈值=<code>500</code>（写在选项文案里）→ ' +
+    (esc ? '<b>升级为完整说明</b>' : '<b>仅估价</b>') +
+    (s.strategy === 'large' ? '<br>阈值 500 有真实区分度：低估价方案不升级，高估价方案升级。' : '')
+});
+</script>
+</body>
+</html>

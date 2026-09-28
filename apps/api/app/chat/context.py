@@ -30,6 +30,7 @@ from app.pipeline.exploration_store import (
     read_journey_summaries,
 )
 from app.pipeline.outputs import list_visible_outputs
+from app.pipeline.product_graph import EXPLORATION_NODE_TYPE
 
 _GRAPH_CONTEXT_LIMIT = 16
 _PAST_JOURNEYS_CAP = 3
@@ -87,12 +88,18 @@ async def build_context(
     # the agent points at a node by its row id; the node's own program line
     # (prompt / params) and state ride so the agent can compose the NEW
     # program from the CURRENT one (never invent it). Capped — a grown
-    # graph's older islands stop mattering to a revision ask.
+    # graph's older islands stop mattering to a revision ask. Workspace 合同
+    # v4.2 C1: legacy type="exploration" graph rows are read-filtered here
+    # too (the family's home is exploration_rows now — the journey digest
+    # block below is its context seat).
     graph_nodes = list(
         (
             await db.execute(
                 select(GraphNode)
-                .where(GraphNode.project_id == project.id)
+                .where(
+                    GraphNode.project_id == project.id,
+                    GraphNode.type != EXPLORATION_NODE_TYPE,
+                )
                 .order_by(GraphNode.created_at)
             )
         )
@@ -115,19 +122,7 @@ async def build_context(
         lines.append("Graph (the persistent canvas — wiring ops edit THIS):")
         for n in graph_nodes[:_GRAPH_CONTEXT_LIMIT]:
             spec = n.spec or {}
-            # iter-3 S2: exploration rows carry no `summary` — their
-            # identity lives in title (content_plan) / topic (candidate_set)
-            # / exploration_kind; execution rows keep the summary law
-            # untouched.
-            if n.type == "exploration":
-                label = (
-                    spec.get("title")
-                    or spec.get("topic")
-                    or spec.get("exploration_kind")
-                    or n.type
-                )
-            else:
-                label = spec.get("summary") or n.type
+            label = spec.get("summary") or n.type
             row = f"- {n.type} id={n.id} state={n.state} — {label}"
             prompt = spec.get("prompt")
             if prompt:

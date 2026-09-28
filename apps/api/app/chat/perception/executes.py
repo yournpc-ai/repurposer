@@ -35,6 +35,7 @@ from app.models.schemas import (
 )
 from app.models.tables import (
     Asset,
+    ExplorationRow,
     GraphEdge,
     GraphNode,
     Output,
@@ -54,7 +55,6 @@ from app.pipeline.exploration_store import (
     KIND_SELECT,
     output_fact,
 )
-from app.pipeline.product_graph import EXPLORATION_NODE_TYPE
 
 
 # ---- params models (package-local, like tools/<pkg>/params.py) --------------
@@ -144,12 +144,24 @@ def _stamp(dt) -> str:
 # ---- the reads -----------------------------------------------------------------
 
 
+def _fmt_ts(seconds: float) -> str:
+    """M:SS digest anchor (hours flatten into minutes — digest lines stay
+    short)."""
+    total = int(seconds)
+    return f"{total // 60}:{total % 60:02d}"
+
+
 def understanding_digest_lines(u: MaterialUnderstanding) -> list[str]:
     """The understanding row's compact digest (ONE formatting law, two
     consumers — 两镜像互引): the perception read ``get_understanding``
     renders it under its own header, and the plan turn's assemble
     (ADR-083 信任锚注入) renders it into the router's context block.
-    Caps keep the digest prompt-sized; an empty stub shape returns []."""
+    Caps keep the digest prompt-sized; an empty stub shape returns [].
+    节拍锚 (2026-09-27 批「信号源」): the counts-only beat line is retired —
+    a review can only ground "which span" when it can SEE where segments
+    live (reply-quality baseline D1: zero time anchors without this).
+    Resolved spans render M:SS-M:SS + label; unresolved keep the bare label
+    (never invent a time); label-less beats drop."""
     lines: list[str] = []
     if u.overall_summary:
         lines.append(f"- Summary: {u.overall_summary[:300]}")
@@ -164,11 +176,38 @@ def understanding_digest_lines(u: MaterialUnderstanding) -> list[str]:
         lines.append(
             f"- Quotable lines: {len(u.quotable_lines)} — e.g. {quotes}"
         )
-    if u.topic_boundaries or u.climax_spans:
-        lines.append(
-            f"- Beat map: {len(u.topic_boundaries)} topic boundaries, "
-            f"{len(u.climax_spans)} climax spans"
-        )
+    if u.topic_boundaries:
+        # Label-less beats drop BEFORE the cap, so "(+N more)" counts only
+        # what the reader could have seen (test-locked semantics).
+        labeled = [b for b in u.topic_boundaries if (b.label or "").strip()]
+        beats: list[str] = []
+        for b in labeled[:8]:
+            label = (b.label or "").strip()[:40]
+            if b.start is not None and b.end is not None:
+                beats.append(f"{_fmt_ts(b.start)}-{_fmt_ts(b.end)} {label}")
+            else:
+                beats.append(label)
+        if beats:
+            more = len(labeled) - 8
+            lines.append(
+                "- Beats: "
+                + "; ".join(beats)
+                + (f" (+{more} more)" if more > 0 else "")
+            )
+    if u.climax_spans:
+        climaxes: list[str] = []
+        for c in u.climax_spans[:3]:
+            text = (c.text or "").strip()[:60]
+            if not text:
+                continue
+            anchor = (
+                f"{_fmt_ts(c.start)}-{_fmt_ts(c.end)} "
+                if c.start is not None and c.end is not None
+                else ""
+            )
+            climaxes.append(f"{anchor}“{text}”")
+        if climaxes:
+            lines.append("- Climaxes: " + "; ".join(climaxes))
     return lines
 
 
@@ -971,16 +1010,11 @@ async def get_artifact(
     it POINTS at (R7 dereferenced at read time — the pointer never makes
     the model chase a second read), a plan card's deliverables. Tenant-scoped
     like every read; a miss answers honestly."""
-    node = await db.get(GraphNode, params.artifact_id)
-    if (
-        node is None
-        or str(node.project_id) != str(project.id)
-        or node.type != EXPLORATION_NODE_TYPE
-    ):
+    node = await db.get(ExplorationRow, params.artifact_id)
+    if node is None or str(node.project_id) != str(project.id):
         return (
             f"No exploration artifact with id {params.artifact_id} exists in "
-            "this project — pick an id from the Graph section's exploration "
-            "rows or a discovery-chain observation."
+            "this project — pick an id from a discovery-chain observation."
         )
     spec = node.spec or {}
     kind = spec.get("exploration_kind")
@@ -1008,7 +1042,7 @@ async def get_artifact(
             f"- reason: {spec.get('reason')}",
         ]
         # R7 dereference: the pointed member's range + excerpt ride the read.
-        cset = await db.get(GraphNode, UUID(str(spec.get("candidate_set_id"))))
+        cset = await db.get(ExplorationRow, UUID(str(spec.get("candidate_set_id"))))
         members = ((cset.spec or {}).get("members") or []) if cset is not None else []
         if isinstance(idx, int) and 0 <= idx < len(members):
             m = members[idx]

@@ -6,13 +6,13 @@ ADR-088 §2/§4 + I-EXPLORE-01, gated here:
   timeline, excerpt verbatim inside its OWN range (normalized containment —
   punctuation retypes pass, paraphrases fail); no timeline → honest reject.
 - **Spec shapes**: CandidateSet / Select / ContentPlan serialize into
-  graph_nodes.spec with prototype/kind/journey attribution; R7 pointer (no
+  exploration_rows.spec (Workspace 合同 v4.2 C1 — the family's own table)
+  with prototype/kind/journey attribution; R7 pointer (no
   source copy); R3 verdict+reason required.
 - **Completeness self-check** (拍 5a): clean → ready; issues → draft with
   the issues stamped (never silent).
 - **Idempotency**: identical call returns the existing artifact — no twin
   node, no twin journey (the goal IS the journey's identity).
-- **The lane**: deterministic frames (x = −464, tail + gap stacking).
 - **The door's DB half** rides the _StubDb pattern (test_graph_wiring_pure
   sibling): JSON-path filters stay unevaluated — replay tests seed
   precisely.
@@ -21,13 +21,12 @@ ADR-088 §2/§4 + I-EXPLORE-01, gated here:
 import pytest
 from uuid import uuid4
 
-from app.models.tables import Asset, GraphNode, Journey, Project
+from app.models.tables import Asset, ExplorationRow, Journey, Project
 from app.pipeline.exploration_store import (
     CandidateMember,
     ContentPlanSpec,
     ExplorationRejected,
     SelectSpec,
-    exploration_lane_frame,
     mark_compiled,
     member_issues,
     normalize_evidence,
@@ -89,7 +88,7 @@ class _StubResult:
 
 
 class _StubDb:
-    """Serves GraphNode / Asset / Journey off lists; JSON-path criteria stay
+    """Serves ExplorationRow / Asset / Journey off lists; JSON-path criteria stay
     unevaluated (the pattern's documented limitation — replay tests seed
     precisely)."""
 
@@ -110,7 +109,7 @@ class _StubDb:
     async def execute(self, stmt):
         entity = stmt.column_descriptions[0]["entity"]
         rows = {
-            GraphNode: self.nodes,
+            ExplorationRow: self.nodes,
             Journey: self.journeys,
         }.get(entity, [])
         # plain-column eq only (project_id / type / goal_text) — JSON-path
@@ -126,7 +125,7 @@ class _StubDb:
 
     def add(self, obj):
         self.added.append(obj)
-        if isinstance(obj, GraphNode):
+        if isinstance(obj, ExplorationRow):
             self.nodes.append(obj)
         elif isinstance(obj, Journey):
             self.journeys.append(obj)
@@ -192,22 +191,6 @@ class TestPlanCompleteness:
         assert plan_completeness_issues(outputs) == []
 
 
-class TestLaneFrames:
-    def test_first_node_at_lane_top(self) -> None:
-        frame = exploration_lane_frame("candidate_set", [])
-        assert frame == {"x": -464, "y": 0, "w": 340, "h": 96}
-
-    def test_stacking_below_tail(self) -> None:
-        first = GraphNode(
-            id=uuid4(), project_id=_PROJECT_ID, type="exploration",
-            state="ready", spec={}, layout={"x": -464, "y": 0, "w": 340, "h": 96},
-        )
-        frame = exploration_lane_frame("select", [first])
-        assert frame["x"] == -464
-        assert frame["y"] == 96 + 16
-        assert (frame["w"], frame["h"]) == (320, 140)
-
-
 # ---- the door ---------------------------------------------------------------------
 
 
@@ -221,14 +204,12 @@ class TestProposeCandidates:
             members=_members(), goal_text="把定价最好的回答做成 3 条短视频",
         )
         assert node.state == "ready"
-        assert node.type == "exploration"
         assert node.journey_id is not None
         spec = node.spec
         assert spec["prototype"] == "exploration"
         assert spec["exploration_kind"] == "candidate_set"
         assert spec["topic"] == "pricing"
         assert len(spec["members"]) == 1
-        assert node.layout["x"] == -464
         assert len(db.journeys) == 1
         assert db.journeys[0].goal_text.startswith("把定价")
 
@@ -280,7 +261,7 @@ class TestProposeCandidates:
 
 @pytest.mark.asyncio
 class TestProposeSelects:
-    async def _seed_set(self, db: _StubDb) -> GraphNode:
+    async def _seed_set(self, db: _StubDb) -> ExplorationRow:
         return await propose_candidates(
             db, db.project,
             asset_id=_ASSET_ID, topic="pricing",
@@ -347,7 +328,7 @@ class TestProposeSelects:
 
 @pytest.mark.asyncio
 class TestProposePlans:
-    async def _seed_select(self, db: _StubDb) -> GraphNode:
+    async def _seed_select(self, db: _StubDb) -> ExplorationRow:
         cset = await propose_candidates(
             db, db.project,
             asset_id=_ASSET_ID, topic="pricing",
@@ -433,7 +414,7 @@ class TestProposePlans:
 @pytest.mark.asyncio
 async def test_door_births_zero_edges_and_no_estimate_or_prompt():
     """探索写门的 I-EXPLORE-01 半边: a full chain (candidates → selects →
-    plans) writes ONLY graph_nodes (+ the journey) — never a GraphEdge,
+    plans) writes ONLY exploration_rows (+ the journey) — never a GraphEdge,
     and the born specs carry no execution fields (estimate / prompt / tool
     / output_ids) — quote-fold and program-gate inputs never exist on the
     family, by construction."""
@@ -459,7 +440,7 @@ async def test_door_births_zero_edges_and_no_estimate_or_prompt():
     assert not any(isinstance(o, GraphEdge) for o in db.added)
     exploration_nodes = [
         o for o in db.added
-        if isinstance(o, GraphNode) and o.type == "exploration"
+        if isinstance(o, ExplorationRow)
     ]
     assert len(exploration_nodes) == 3
     for n in exploration_nodes:
@@ -484,7 +465,7 @@ class TestRevisePlan:
     """iter-2 ⑦ (contract §4.8): the door's revision path — same-row revise,
     no version tree, issues re-checked, replay a no-op, settled rows closed."""
 
-    async def _seed_plan(self, db: _StubDb) -> GraphNode:
+    async def _seed_plan(self, db: _StubDb) -> ExplorationRow:
         cset = await propose_candidates(
             db, db.project,
             asset_id=_ASSET_ID, topic="pricing",
@@ -606,7 +587,7 @@ class TestMarkCompiled:
     """E3 (iter-3 S1): Start 落戳后的同事务写门分支——ready/revised →
     compiled；幂等重放；draft/superseded/未知 id 全拒。"""
 
-    async def _seed_plan(self, db: _StubDb) -> GraphNode:
+    async def _seed_plan(self, db: _StubDb) -> ExplorationRow:
         cset = await propose_candidates(
             db, db.project,
             asset_id=_ASSET_ID, topic="pricing",
@@ -699,7 +680,7 @@ class TestSupersedePlan:
     同 journey、revised spec）——revision_of 永不建；重放幂等；非 compiled
     行带指引拒收。"""
 
-    async def _seed_compiled_plan(self, db: _StubDb) -> GraphNode:
+    async def _seed_compiled_plan(self, db: _StubDb) -> ExplorationRow:
         plan = await TestMarkCompiled()._seed_plan(db)
         await mark_compiled(db, db.project, plan_ids=[plan.id])
         return plan

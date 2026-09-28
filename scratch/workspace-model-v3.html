@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workspace 空间模型合同 v4.2 — 最终封板版</title>
+<style>
+  :root {
+    --page: oklch(0.96 0 0);
+    --card: oklch(1 0 0);
+    --fg: oklch(0.145 0 0);
+    --muted-fg: oklch(0.556 0 0);
+    --meta: oklch(0.68 0 0);
+    --hairline: oklch(0.145 0 0 / 0.10);
+    --bg-muted: oklch(0.95 0 0);
+    --inset: oklch(0.92 0 0);
+    --destructive: oklch(0.55 0.18 25);
+    --blue: oklch(0.42 0.1 250);
+    --amber: oklch(0.45 0.12 85);
+    --green: oklch(0.45 0.12 155);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+    background: var(--page); color: var(--fg); font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1100px; margin: 0 auto; padding: 48px 40px 96px; }
+
+  header.doc { margin-bottom: 36px; max-width: 880px; }
+  header.doc h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  header.doc .lede { margin-top: 10px; color: var(--muted-fg); font-size: 13px; line-height: 1.85; }
+  header.doc .lede b { color: var(--fg); font-weight: 500; }
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px; background: var(--inset); padding: 1px 5px; border-radius: 4px;
+  }
+
+  section.step { margin-top: 52px; }
+  .step-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .step-head .num {
+    font-size: 11px; color: var(--blue); font-weight: 600;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .step-head h2 { font-size: 15px; font-weight: 600; }
+  .step-head .beat { font-size: 12px; color: var(--muted-fg); }
+
+  .clause { margin-top: 16px; background: var(--card); border-radius: 12px; box-shadow: 0 0 0 1px var(--hairline); padding: 16px 20px; max-width: 940px; }
+  .clause h3 { font-size: 12.5px; font-weight: 600; }
+  .clause p { margin-top: 7px; font-size: 12px; color: var(--muted-fg); line-height: 1.75; }
+  .clause p b { color: var(--fg); font-weight: 500; }
+  .clause ul { margin-top: 7px; }
+  .clause li { font-size: 12px; color: var(--muted-fg); line-height: 1.8; margin-left: 18px; }
+  .clause li b { color: var(--fg); font-weight: 500; }
+
+  table.spec { width: 100%; max-width: 940px; border-collapse: collapse; margin-top: 14px; font-size: 12px; }
+  table.spec th { text-align: left; color: var(--meta); font-weight: 400; font-size: 11px; padding: 6px 12px 6px 0; }
+  table.spec td { padding: 8px 12px 8px 0; border-top: 1px solid var(--hairline); color: var(--muted-fg); line-height: 1.55; vertical-align: top; }
+  table.spec td:first-child { color: var(--fg); font-weight: 500; }
+  td .yes { color: var(--green); font-weight: 600; }
+  td .no { color: var(--meta); }
+
+  /* ---------- 连续 Session ---------- */
+  .session { max-width: 760px; margin: 24px auto 0; display: flex; flex-direction: column; gap: 18px; }
+
+  /* 节拍分隔线：工作空间 增量 / 无增量 的宣告 */
+  .beatline { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--meta); }
+  .beatline::before, .beatline::after { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+  .beatline b { color: var(--muted-fg); font-weight: 500; }
+
+  /* Chat 连续线程：复刻真实产品样式（158dd56e 取证） */
+  .thread {
+    background: var(--card); border-radius: 16px; box-shadow: 0 0 0 1px var(--hairline);
+    padding: 18px 16px; display: flex; flex-direction: column; gap: 14px;
+    font-size: 13px; line-height: 1.65;
+  }
+  /* 用户气泡：Bubble variant=muted align=end —— rounded-2xl px-4 py-2 text-sm */
+  .usr {
+    align-self: flex-end; background: var(--bg-muted); border-radius: 16px;
+    padding: 8px 16px; font-size: 13px; max-width: 85%; line-height: 1.6;
+  }
+  .atchip {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: oklch(0.145 0 0 / 0.08); border-radius: 5px; padding: 1px 6px;
+    font-size: 11px; color: var(--fg);
+  }
+  /* 助手散文：Streamdown markdown，无气泡，text-sm leading-relaxed */
+  .prose { color: var(--fg); font-size: 13px; line-height: 1.7; }
+  .prose p + p, .prose ul + p, .prose p + ul { margin-top: 8px; }
+  .prose ul { margin-top: 4px; padding-left: 18px; }
+  .prose li { margin-top: 2px; }
+  .prose b { font-weight: 600; }
+  .prose.dim { color: var(--muted-fg); }
+
+  /* 活动行：quiet register —— text-xs + 5px 活点 / 11px 工种 glyph + 时长耳语 */
+  .act { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--muted-fg); }
+  .act .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--fg); flex-shrink: 0; }
+  .act .glyph { width: 11px; height: 11px; flex-shrink: 0; }
+  .act .dur { color: var(--meta); font-size: 10px; }
+
+  /* Candidate Surface — 样式取自真实 options 卡（bg-muted 卡 + 编号行），语义是 chat 内决策面，永不进 graph */
+  .cand { background: var(--bg-muted); border-radius: 8px; padding: 6px; }
+  .cand .crow {
+    display: flex; gap: 8px; padding: 8px 10px; align-items: flex-start;
+    background: var(--card); border-radius: 6px; position: relative;
+  }
+  .cand .crow + .crow { margin-top: 6px; }
+  .cand .crow .ord {
+    width: 18px; height: 18px; border-radius: 4px; flex-shrink: 0; margin-top: 1px;
+    background: var(--bg-muted); color: var(--muted-fg);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10.5px; font-weight: 500;
+  }
+  .cand .crow .q { color: var(--fg); line-height: 1.45; flex: 1; font-size: 12.5px; }
+  .cand .crow .why { display: block; color: var(--meta); font-size: 10.5px; margin-top: 2px; }
+  .cand .more { padding: 8px 10px 6px; font-size: 11px; color: var(--muted-fg); }
+
+  /* task_book dock 待确认行（plain 形态）：深色 Start pill h-9 rounded-full；钉在输入区上方 */
+  .confirm-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--card); border-radius: 12px; box-shadow: 0 0 0 1px var(--hairline);
+    padding: 6px 8px 6px 16px;
+  }
+  .confirm-row .ct { font-size: 13px; }
+  .confirm-row .est { font-size: 11px; color: var(--muted-fg); margin-left: 6px; }
+  .confirm-row .start {
+    flex-shrink: 0; background: var(--fg); color: var(--page);
+    border-radius: 999px; height: 36px; padding: 0 20px;
+    display: inline-flex; align-items: center; font-size: 12.5px;
+  }
+  .docknote { text-align: center; font-size: 10px; color: var(--meta); }
+
+  /* run 动态行（RunTaskList quiet 座） */
+  .run { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--muted-fg); }
+  .run .chev { margin-left: auto; width: 10px; height: 10px; color: var(--meta); }
+
+  /* 工作空间 增量帧 */
+  .delta {
+    background: var(--card); border-radius: 16px; overflow: hidden;
+    box-shadow: 0 0 0 1px var(--hairline);
+  }
+  .delta .bar {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    padding: 9px 14px; font-size: 11px; color: var(--muted-fg);
+    border-bottom: 1px solid oklch(0 0 0 / 0.06);
+  }
+  .delta .bar b { color: var(--fg); font-weight: 500; }
+  .delta .bar .cam { color: var(--meta); font-size: 10px; flex-shrink: 0; }
+  .mc {
+    position: relative;
+    background: radial-gradient(circle, oklch(0.556 0 0 / 0.30) 1px, transparent 1px) 0 0 / 32px 32px, var(--page);
+    height: 280px;
+  }
+  .nd { position: absolute; display: flex; flex-direction: column; }
+  .nd .cap { display: flex; align-items: center; gap: 5px; height: 20px; padding-bottom: 4px; color: var(--muted-fg); font-size: 10.5px; }
+  .nd .bd { background: var(--card); border-radius: 10px; box-shadow: 0 0 0 1px var(--hairline); position: relative; }
+  .nd .bd.dashed { background: transparent; box-shadow: none; border: 1.5px dashed oklch(0.145 0 0 / 0.18); }
+  .nd .bd.queued { background: var(--inset); }
+  .nd .bd.born { box-shadow: 0 0 0 1.5px var(--blue); }
+  .born-tag {
+    position: absolute; top: -9px; right: 8px; z-index: 2;
+    font-size: 8.5px; color: #fff; background: var(--blue);
+    padding: 1.5px 7px; border-radius: 5px;
+  }
+  .mface { position: relative; display: block; width: 100%; border-radius: 9px; overflow: hidden; }
+  .txt { padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+  .txt .ln { height: 5px; border-radius: 3px; background: oklch(0.145 0 0 / 0.14); }
+  .txt .ln.short { width: 62%; }
+  .txt .ln.en { height: 4px; background: oklch(0.145 0 0 / 0.08); }
+  .facts { display: flex; align-items: center; gap: 6px; padding: 6px 8px; font-size: 9.5px; color: var(--muted-fg); }
+  .wipe { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 30%, oklch(1 0 0 / 0.45) 50%, transparent 70%); }
+  .queue-tag { display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--meta); height: 100%; }
+  .verpager {
+    position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+    font-size: 8.5px; color: #fff; background: oklch(0.145 0 0 / 0.6);
+    padding: 1px 7px; border-radius: 5px; z-index: 2;
+  }
+  .mc svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .mc svg.edges path { fill: none; stroke: oklch(0.556 0 0 / 0.4); stroke-width: 1.2; }
+  .mc svg.edges path.arrive { stroke: var(--blue); stroke-width: 1.4; }
+
+  .notes { margin-top: 0; display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 10.5px; padding: 4px 9px; border-radius: 6px; line-height: 1.4; }
+  .chip.have { background: oklch(0.5 0.1 250 / 0.10); color: var(--blue); }
+  .chip.new { background: oklch(0.55 0.14 85 / 0.12); color: var(--amber); }
+  .chip.flip { background: oklch(0.55 0.18 25 / 0.10); color: var(--destructive); }
+  .chip.grow { background: oklch(0.45 0.12 155 / 0.12); color: var(--green); }
+  .chip.stay { background: oklch(0.145 0 0 / 0.07); color: var(--muted-fg); }
+  .step-comment { font-size: 12px; color: var(--muted-fg); line-height: 1.7; max-width: 760px; margin: 0 auto; }
+  .step-comment b { color: var(--fg); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="doc">
+    <h1>Workspace 空间模型合同 v4.2 — 最终封板版</h1>
+    <p class="lede">
+      核心原则：<b>Graph ≠ 所有产品语义的空间化</b>。Graph 只装<b>值得在空间里长期存在、可以被再次指认、可以被独立操作</b>的持久 Product Entity；Chat 承担瞬时决策、候选、预览、解释与自然语言。判定 = <b>Eligibility（资格五问）+ Promotion（晋升）</b>。
+    </p>
+    <p class="lede" style="margin-top: 8px;">
+      <b>v4.2 收口（2026-09-26 最终封板）</b>：① T2 事实校正——删「点开试听」（当前代码无此能力；封板文档禁止出现代码没有的交互），候选 = 时间段 + 内容摘要 + ordinal 指认；② <b>语言分层立法</b>——合同/注释可用技术语言，模拟 chat prose 必须是自然人话，永不向用户解释 Graph / Canvas / Promotion /「不占画布」等内部概念；③ <b>命名三层</b>——内部实现 Canvas / 产品概念 Workspace / 用户话术「工作空间」，用户侧永不听到「画布」；④ T6 空间模型修正——旧 Work 保留 + 伴侣文档向右长 + 新独立作品生成新 Work node（不是全压进 pager）；⑤ <b>Revision ≠ New Work</b> 立法——改同一作品的内容/参数 → 同 identity 新 version；「再做一个不同的」→ Promotion 新 Work entity；⑥ T6 更名「持续创作」（既修已有作品，也可产生新作品）；⑦ 指认措辞放宽——「具备再次指认和独立操作的价值与可能」，不承诺每个实体必然被再指认；⑧ 终态示意图改为分支增长模型；⑨ 工作空间/Graph 关系自然化——工作空间 = Agent 与用户共同工作的持续空间，Graph = 它背后的持久结构；⑩ 字幕拍按代码实况修正——修订也有「理解正文 + dock 确认行」（scope classifier 判 expansion → 回滚落 dock），字幕 = 两站三节点链（高光 → 字幕文档 → 字幕版装配节点），原高光一帧不动；⑪ 确认行按 ADR-092 三档偏好门控（always / large 过阈值 / never——不落拍时直接执行 + 正文诚实报开工估价，门控在 server 侧）；所有收尾句与普通正文同一组件，无独立消息类型；⑫ 冻结前文字级修正——C2 删净「不占空间/不需要清理」旧话术、授权门重新定义（server-side policy gate，策略直执 ≠ 无授权）、Provisional→Settled 边界钉死（付费授权边界 = settle 时刻，失败/重试不删 Work）、Revision vs New Work 反例入图。不再新增任何交互原语。<b>v4.2 = 冻结基线，此后按差距实现，不再重开产品概念讨论。</b></p>
+  </header>
+
+  <!-- ================= C1 Eligibility ================= -->
+  <section class="step" style="margin-top: 40px;">
+    <div class="step-head">
+      <span class="num">C1</span>
+      <h2>Graph Node Eligibility — 资格，不是分类</h2>
+    </div>
+    <div class="clause">
+      <p>一个对象进入 Graph，当且仅当<b>同时</b>满足五条：</p>
+      <ul>
+        <li>① <b>稳定存在</b>——不是一次性消息材料，而是被赋予稳定 Product Identity、具有明确生命周期、可跨消息持续存在的实体（Draft Work 因此合法：它有身份和生命周期，即使最终未被确认）</li>
+        <li>② <b>独立身份</b>——它是「一个东西」，不是别的东西的属性</li>
+        <li>③ <b>可再次指认</b>——用户以后会说「那个」「@它」</li>
+        <li>④ <b>可独立操作 / 查看</b>——点开、播放、下载、修订</li>
+        <li>⑤ <b>值得占据空间</b>——它在场让工作世界更清楚，而不是更吵</li>
+      </ul>
+    </div>
+    <table class="spec">
+      <tr><th style="width: 150px;">对象</th><th style="width: 110px;">Graph Node?</th><th>理由</th></tr>
+      <tr><td>Source 素材</td><td><span class="yes">✅</span></td><td>五条全满足</td></tr>
+      <tr><td>Transcript / Evidence</td><td><span class="yes">✅</span></td><td>持久、可指认（「转写稿那句」）、可编辑查看</td></tr>
+      <tr><td>Draft Work / Work</td><td><span class="yes">✅</span></td><td>作品的全部意义就是被反复指认和操作；<b>一节点多 outputs 走 pager</b>（158dd56e 实证：5 条切片 = 1 个 select_clips 节点）</td></tr>
+      <tr><td>伴侣文档（字幕文档等）</td><td><span class="yes">✅ 有上限</span></td><td>翻译/配音 = 两站架构（装配站 video×editor + 文档站伴侣 table×manual，<code>doc_node_id</code> 链）。<b>实体资格上限</b>：只有当伴侣文档对用户具有独立身份、可独立查看/编辑/引用时才进 Graph；若它仅是 Work 的内部编辑结构或装配中间产物，<b>不得因实现需要入图</b>——Graph 装「真正的东西」，不装「数据库里恰好有个 object」</td></tr>
+      <tr><td>Version 版本</td><td><span class="yes">✅ 住在 Work 内</span></td><td>有持久身份但无独立空间资格——pager 承载</td></tr>
+      <tr><td>Candidate 候选</td><td><span class="no">❌ 永不</span></td><td>瞬时决策材料，住 Chat Candidate Surface。<b>旧模型代码级删除</b>：Judgment node / Candidate Set node / 已选 node 三种形态彻底移除（不是读面隐藏，是探索泳道节点不再产生）</td></tr>
+      <tr><td>Selection 选择</td><td><span class="no">❌</span></td><td>decision state，不是对象；选择态只在 chat 候选列表上表达（如高亮），Graph 从 Transcript 直接长到 Draft Work</td></tr>
+      <tr><td>分镜 / 效果预览</td><td><span class="no">❌ 默认</span></td><td>chat 内 structured preview / temporary presentation；只有用户明确采用（「就按这个做」）才 Promotion 为持久 Work</td></tr>
+      <tr><td>Plan 计划</td><td><span class="no">❌</span></td><td>Plan = 一组 draft works 的结构化状态 + Chat 决策语义；计划的可视化由 draft works 承担</td></tr>
+      <tr><td>Question / Answer</td><td><span class="no">❌</span></td><td>对话语义，住消息流。<b>确认拍不是 QA</b>——归档为普通用户气泡（等同帮用户输入「确认生成」），QA 块只服务真正的问答</td></tr>
+      <tr><td>Activity / Thought</td><td><span class="no">❌</span></td><td>过程，不是产物——否则 Graph 退化为操作日志</td></tr>
+      <tr><td>Reference</td><td><span class="no">❌</span></td><td>指认关系，不是实体</td></tr>
+      <tr><td>世界模型事实（「右边坐的是我」）</td><td><span class="no">❌</span></td><td>Agent memory / context 更新——Graph ≠ Agent Memory ≠ Conversation</td></tr>
+    </table>
+  </section>
+
+  <!-- ================= C2 Promotion ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">C2</span>
+      <h2>两种 Graph Birth — Entity Birth ≠ Promotion</h2>
+      <span class="beat">createGraphNode() 和 promoteToGraph() 永远不是同一个概念</span>
+    </div>
+    <div class="clause">
+      <ul>
+        <li><b>Entity Birth（系统生命周期）</b>：Source 上传即产生、Transcript 上传即落 queued 卡——由系统生命周期直接创建的持久实体，<b>不属于 Promotion</b></li>
+        <li><b>Promotion（晋升）</b>：<b>「临时对象 → 持久 Product Entity」的唯一晋升入口</b>——Candidate / 预览 / chat 建议要获得 Graph 身份，只有这一条路</li>
+        <li><b>Chat decision ≠ Promotion</b>：「第二个不错」「第一个和第三个」「都做」「把第二个换掉」都是 chat 内决策——改变的是候选面上的选择态与接下来计划的内容，<b>不产生任何 Graph 节点</b></li>
+        <li><b>Candidate → Draft Work</b>：用户决定真正制作（「切个高光看看」并收敛为计划）→ draft work 节点出生。Draft 是<b>计划的可视化</b>，出生不等授权；授权拍（确认生成）只翻转状态（draft → running → ready），零生长。未被选中的候选仅作为本轮对话中的临时呈现，不转化为持久 Product Entity</li>
+        <li><b>预览 → Work</b>：chat 里展示的分镜/效果预览，只有用户明确采用（「就按这个分镜做」）才晋升；「看看」「不错」只是讨论。未采用的预览仅作为本轮对话中的临时呈现，不转化为持久 Product Entity</li>
+        <li>Promotion 永远附带一次用户或 Agent 的明确承诺，Graph 从不因「Agent 想了想」而生长</li>
+        <li><b>Revision ≠ New Work ≠ New Product</b>：三种结局分治——① 改同一产物的参数/内容 → <b>同一 identity，新 version</b>（「中文在上英文在下」→ v1→v2；「开头加 2 秒标题」→ v2→v3）；② 产出<b>新的持久产物</b>（「字幕也加上吧」→ 字幕版装配节点 + 字幕文档伴侣，两站 <code>doc_node_id</code> 链）→ <b>新节点出生</b>，原 Work 原样保留；③ 用户表达「再做一个不同的作品 / 另一个独立版本」（「再做一个更快节奏的版本」）→ <b>Promotion 产生新 Work entity</b>（Work B v1）。Workspace 是 append-only 的持续空间——旧节点保留、新产物/新作品向右生长，<b>不是把所有未来作品都压进一个 pager</b></li>
+      </ul>
+      <p style="margin-top: 10px;"><b>Settled ≠ Provisional（消失纪律的分层 + 边界钉死）</b>：</p>
+      <ul>
+        <li><b>Settled Entity append-only</b>：已 settle 的实体只长不消，不因后续对话自动消失——它是 Graph history</li>
+        <li><b>Provisional → Settled 的边界 = 付费执行授权边界</b>：Draft 在跨过授权门（确认拍或策略直执）进入 running 的那一刻结束 provisional 状态；Work identity 自此成为 settled history——<b>后续失败、重试或版本演进均不删除该 Work</b>。「渲染失败了能不能把这个节点删掉？」——不能：节点在、状态失败/可重试，历史不擦除</li>
+        <li><b>Provisional Draft 可被重规划、替换或丢弃</b>：未跨授权门的 draft（re-dock 让位、用户说「不要了」）不是 settled history 的撤回——它从来就没有 settle 过。「用户说不要这个 draft 了，能不能删节点？」——<b>能，因为它还不是 Graph 的持久成员</b></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= C3 Workspace Birth ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">C3</span>
+      <h2>Workspace Birth — 三个事实，三条独立时间线</h2>
+      <span class="beat">graph entity 存在 ≠ canvas 出生 ≠ PLAN_READY</span>
+    </div>
+    <table class="spec">
+      <tr><th style="width: 180px;">事实</th><th style="width: 200px;">今天何时发生</th><th>性质</th></tr>
+      <tr><td><b>Graph entity 存在</b></td><td>上传即始（<code>stamp_asset_node</code> / <code>stamp_transcript_node</code> 上传即落 queued 卡）</td><td>数据事实。<b>本合同不改它</b>——entity 早存在没有任何害处</td></tr>
+      <tr><td><b>Workspace / Canvas 出生</b></td><td>T1：Agent 开始建立工作世界（今天 = transcript processing 实体出生）</td><td><b>presentation 谓词 <code>workspaceBorn</code></b>——独立计算，不是「graph 里存在非 source 节点」的同义改写；明天可以换别的事实源而不动数据层</td></tr>
+      <tr><td><b>Lifecycle / PLAN_READY</b></td><td>计划dock 时</td><td>lifecycle 投影，不动；它与 canvas 出生相距整场 plan 讨论</td></tr>
+    </table>
+    <div class="clause" style="margin-top: 12px;">
+      <p>用户节拍：</p>
+      <ul>
+        <li><b>T0 上传 Source → 仍是 Chat world</b>，Canvas 不出生——一上传就甩给用户一个巨大空白白板是错误的第一印象；此刻用户感受到的应是「AI 还在理解我的材料」</li>
+        <li><b>T1 Agent 开始建立工作世界 → Canvas 第一次出现</b>（今天恰好与 transcript processing 卡同帧——因为那条卡就是「Agent 开始工作」的第一个可见证据；合同绑的是「开始建立工作世界」，不是 ASR）</li>
+        <li>内部矛盾解：<code>stamp_transcript_node</code> 上传即产生 queued entity（数据层不动），<code>workspaceBorn</code> 作为另一个 presentation 谓词决定画布何时示人——<b>两事实不再互相冒充</b></li>
+        <li>移动端无画布，维持 run-driven，本条款只管桌面三形态机的 full→panel 翻转条件</li>
+      </ul>
+      <p style="margin-top: 10px;"><b>命名三层与用户感知五角色</b>：</p>
+      <ul>
+        <li><b>内部实现叫 Canvas / <code>workspaceBorn</code>；产品概念叫 Workspace；用户话术叫「工作空间」</b>——用户永不听到「画布」（它让人联想到 Figma/白板，而这是一个随 Agent 工作逐渐形成的空间）</li>
+        <li>用户感知 = <b>工作空间</b>；Agent = 在工作空间里工作；Chat = 人与 Agent 对话；<b>Graph = 工作空间背后的持久世界结构</b>；Pipeline = 背后的执行系统。工作空间是 Agent 与用户共同工作的持续空间，不是「Graph 的 projection」这种技术表述</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= C4 Evidence & Transcript ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">C4</span>
+      <h2>Evidence 锚链 + Transcript 双层 — 不变量</h2>
+    </div>
+    <div class="clause">
+      <p><b>Candidate 的证据定义（住 Candidate Surface，不进 Graph）</b>：</p>
+      <ul>
+        <li>Candidate = <b>source asset + source range + source-faithful excerpt</b></li>
+        <li><b>source range = 时间根</b>（单一连续闭区间）；<b>words / ASR = evidence truth</b>（唯一时间权威）；<b>excerpt = 展示事实</b>（逐字核验，不渲染）；<b>clip 消费 source range</b>（秒数），永不消费 excerpt</li>
+      </ul>
+      <p><b>Transcript 双层</b>：Source Transcript（immutable：原始 ASR + <code>meta["words"]</code> + speaker 证据，永不改）/ Editable Transcript（presentation：用户可改的文字层，卡面直改 / 叫 Agent 改同一个写口，按位置覆盖显示，不反算、不移动任何 range）。</p>
+      <p><b>不变量</b>：</p>
+      <ul>
+        <li>用户改 Transcript 文字：<b>text changed / evidence unchanged / range unchanged</b>——任何代码路径都不从文字反算时间码</li>
+        <li><b>Candidate discovery 默认基于 source evidence</b>；用户改写的 transcript 不被当成新的语音事实。若用户明确要求基于 Editable Transcript 进行语义检索，允许把它作为<b>检索输入</b>——但任何候选的时间与媒体事实仍必须回锚 source evidence（excerpt 逐字核验、range 定位只认 words）</li>
+        <li>可编辑性不是「编辑模式」：对象本身可编辑。Chat 可以自然说「你也可以直接在工作空间里改文字，或者告诉我怎么改」——一句提示，不是一个模式</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= C5 Camera ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">C5</span>
+      <h2>Camera = ensure-in-view，全部合同就这一条</h2>
+    </div>
+    <div class="clause">
+      <ul>
+        <li>规则全文：<b>当前操作对象是否处于扣除 Chat Dock 后的 safe viewport？已在：不动。不在：最小 pan 带进可读区。zoom：永不自动改变。其他对象：不因此次操作而 dim。</b></li>
+        <li>删除整组 focus 族：主作品聚焦 / 邻近退后 / focus 三态 / focus ring 作为产品状态——<b>全部不存在</b></li>
+        <li><b>唯一自动节拍 = Workspace Birth 的 initial fit</b>。此后一律 ensure-in-view——包括 draft / 新节点诞生：出生点已在安全区则不动，不在则最小 pan。Canvas 是持续存在的空间，Agent 放好东西不该重排用户的空间记忆</li>
+        <li>「draft 到达 → 整链 fitNow」<b>不入合同</b>：它曾是候选特例，未经实测证明 UX 价值前不得复活；背景 refetch 永不动相机</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= C6 Layout Island ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">C6</span>
+      <h2>Group Layout Island — 组内自治，零 UI</h2>
+    </div>
+    <div class="clause">
+      <ul>
+        <li>每个 sibling group 出生时获得自己的 <b>layout island</b>：一块独占布局区域，宽度按该组的<b>设计容量</b>预留，不是按当前成员数</li>
+        <li><b>岛零 UI</b>：岛是<b>数据结构与布局律</b>——节点上的 group 归属 + 容量参数 + 一条摆位规则。画布上永远没有「岛」的框、标签或任何 chrome；用户只看见节点之间<b>排得整齐</b></li>
+        <li>组内成员从上往下排，到容量 C 换组内第二列——<b>岛内的事</b>；岛外永远不知道、永不让位</li>
+        <li><b>Bounding contract（「永不让位」的数学保证）</b>：<code>graph depth = 逻辑关系</code>；<code>island = 局部打包域</code>。<b>岛的 origin 与 size 在 group 出生即定格</b>——宽度含全部预留列（增长廊道），成员扩列只在预留廊道内发生；深度带距 = 各带岛定格宽 + gap。任何岛的右缘永不越过出生定格的右缘 → 后续 depth 带 / 兄弟 group 的区域在数学上不可能被侵占，overlap 结构性不可能</li>
+        <li>真超容量（成员数 &gt; 预留列 × C）走集合态（contact sheet），<b>不破廊道</b>——扩容廊道本身若要改，是新 group 的事，不是既有岛的事</li>
+        <li><b>一节点多 outputs（pager）是零扇出基线</b>；sibling 同列叠放只在第二次 promotion 时才出现</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= C7 Motion ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">C7</span>
+      <h2>Motion 三语义 — 固定，不再叠加第四种</h2>
+    </div>
+    <table class="spec">
+      <tr><th style="width: 150px;">语义</th><th>说的话</th><th>形态</th></tr>
+      <tr><td><b>edge arrival</b></td><td>「关系刚建立」</td><td>incoming edge draw-on，一次性</td></tr>
+      <tr><td><b>node birth</b></td><td>「对象刚出生」</td><td>scale/fade-in，一次性，出生即结束</td></tr>
+      <tr><td><b>node working</b></td><td>「对象还在工作」</td><td>卡内 loading / wipe，持续到完工</td></tr>
+    </table>
+    <p style="margin-top: 10px; font-size: 12px; color: var(--muted-fg); max-width: 940px; line-height: 1.7;">禁止再叠加任何 aura / attention / focus 状态——用户不读文字也该分得清：线在长 = 关系来了；卡在长 = 对象来了；卡里在动 = 还在做。</p>
+  </section>
+
+  <!-- ================= C8 语气 ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">C8</span>
+      <h2>语气 — ordinal 是地址；确认拍 = 用户气泡；chat 决策永不成节点</h2>
+    </div>
+    <div class="clause">
+      <ul>
+        <li>编号是<b>视觉地址</b>：「第二个」「第一个和第三个」「都做」「把第二个换掉」都是合法 chat 决策，系统解出目标；Agent 回复「可以，我换」——永不「好的，我现在正在处理第 2 个候选」</li>
+        <li>Candidate Surface 默认只露 <b>3 个推荐 + 全量可展开</b>——推荐样本，不是只能选 3 个</li>
+        <li><b>确认拍归档 = 普通用户气泡</b>：dock 的「开始生成」pill 点击等同帮用户输入「确认生成」四个字——消息流里就是一条用户气泡 + agent 开工散文，永不归档为 QA 问/答块（QA 块只服务真正的问答）</li>
+        <li><b>授权门（Confirmation policy gate）</b>：付费执行必须经过 <b>server-side scope / confirmation policy gate</b>。在需要确认的策略下（<code>always</code>，或 <code>large</code> 且估价高端过 <code>billing.confirm_large_threshold</code>），用户确认是授权拍（dock 确认行 → 用户气泡「确认生成」）；在 <code>never</code> 或未过阈值时，可直接执行，<b>但仍必须向用户披露执行范围与估价</b>（不询问 ≠ 不披露，世界自证律）。门控决策在 <b>server 侧</b>（scope classifier / plan dock 落点读 users.settings.confirm_strategy），付费边界永不交给客户端状态。<i>代码现状：该偏好今天只调披露强度（dock 恒弹），行为接线是后续批——本合同把它立为目标语义</i></li>
+        <li><b>Chat 是自然语言编排 / 意图入口，不是唯一修改入口</b>：Work 可由 Chat 修订；Transcript / 字幕文档等具有直接编辑语义的实体也可在 Canvas 直改。两个入口改的是<b>同一个实体身份</b>，产生的都是版本演进，永不创建新 Work</li>
+        <li><b>语言分层（模拟 chat prose 的硬律）</b>：合同 / 注释 / notes 可以用技术语言（Graph、Promotion、Product Entity、append-only）；<b>模拟真实 Chat 的 prose 必须是自然、人性化的 Agent 话术</b>——永不向用户解释 Graph / Canvas / Promotion 等内部概念，永不说「不占画布 / 不需要清理 / 不占空间」。说「先看看不同方向，喜欢哪种告诉我，我再按那个继续做」，不说「未采用的预览不会成为持久实体」</li>
+        <li><b>封板文档事实律</b>：模拟 chat 里出现的任何交互，必须是当前代码真实支持的能力；没有的能力（如候选试听）不得出现——未来能力落地后再补进文档</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= 连续 Session 验证 ================= -->
+  <section class="step" style="margin-top: 64px;">
+    <div class="step-head">
+      <span class="num">验证</span>
+      <h2>同一场连续 Session — Chat 每轮继续，Canvas 只在真实增量处出现</h2>
+      <span class="beat">12 个用户 turn + 4 次确认点击（每次付费执行一拍），工作空间 8 次画面：3 次出生帧（5 个实体）/ 3 次状态翻转 / 2 次版本演进；6 个 turn 零增量</span>
+    </div>
+
+    <div class="session">
+
+      <!-- ── Seg A：能力问答 ── -->
+      <div class="thread">
+        <div class="usr">你好</div>
+        <div class="prose"><p>你好，我在。</p></div>
+        <div class="usr">你会做什么？</div>
+        <div class="prose">
+          <p>我能帮你把一段演讲、采访或录音拆成不同形态的内容，省去自己再加工的功夫。</p>
+          <p><b>文字类</b>：一篇长帖 / 几张金句卡片 / 一份多页轮播文案 / 一篇深度长文。</p>
+          <p><b>视频类</b>：把长视频剪成几条精华切片 / 加另一种语言的字幕或中英双语字幕 / 用另一种语言重新配音 / 改成竖版、方形或横版。</p>
+          <p>手头有演讲稿、会议录音或视频的话，发上来我就知道从哪儿下手了。</p>
+        </div>
+      </div>
+      <div class="notes" style="justify-content: center;">
+        <span class="chip stay">Graph ∅，工作空间未出生——能力问答 = Thought/Answer（C1 ❌）</span>
+      </div>
+
+      <!-- ── Seg B：上传 → T0 ── -->
+      <div class="beatline"><b>T0</b>&nbsp;上传 Source — 仍是 Chat world</div>
+      <div class="thread">
+        <div class="usr">看看我这个视频 <span class="atchip">▤ interview.mp4</span></div>
+        <div class="prose"><p>收到。视频还在处理中，处理完我才能读到里面的内容——读完告诉你我看到什么。</p></div>
+        <div class="act"><span class="dot"></span>正在阅读 interview.mp4…</div>
+      </div>
+      <div class="notes" style="justify-content: center;">
+        <span class="chip stay">此帧工作空间不出生（C3）：Source entity 已存在于 graph data（上传即落，数据事实不动），但用户面前还是纯对话</span>
+      </div>
+
+      <!-- ── Δ1：Workspace Birth ── -->
+      <div class="beatline"><b>T1</b>&nbsp;Agent 开始建立工作世界 — 工作空间第一次出现</div>
+      <div class="delta">
+        <div class="bar"><span><b>工作空间 增量 ①</b> · workspaceBorn 谓词首次为真：Source + Transcript processing 卡可见</span><span class="cam">camera：birth fit（唯一自动节拍）</span></div>
+        <div class="mc">
+          <svg class="edges" viewBox="0 0 720 280" preserveAspectRatio="none">
+            <path class="arrive" d="M 152 120 C 180 120, 182 120, 208 120" />
+          </svg>
+          <div class="nd" style="left: 40px; top: 88px; width: 110px;">
+            <div class="cap">▤ 视频</div>
+            <div class="bd born">
+              <span class="born-tag">node birth</span>
+              <div class="mface" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #2a3a5a, #4a6a9a);"></div>
+              <div class="facts">interview.mp4 · 6 分 12 秒</div>
+            </div>
+          </div>
+          <div class="nd" style="left: 210px; top: 84px; width: 110px;">
+            <div class="cap">≣ 转写稿</div>
+            <div class="bd born queued" style="height: 108px;">
+              <span class="born-tag">node birth · 处理中</span>
+              <div class="queue-tag">正在转写…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="notes" style="justify-content: center;">
+        <span class="chip grow">Graph：2 nodes。Motion 三语义同帧：edge arrival（连线 draw-on）+ node birth（scale-in）+ node working（「正在转写」）</span>
+      </div>
+
+      <!-- ── Seg B2：读完 ── -->
+      <div class="thread">
+        <div class="act">
+          <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          已读完 interview.mp4 <span class="dur">· 41s</span>
+        </div>
+        <div class="prose"><p>读完了——双人对话，信息密度最高的是中段。转写稿已经放进工作空间了，<b>你可以直接改上面的文字，也可以告诉我怎么改</b>。</p></div>
+      </div>
+
+      <!-- ── Δ2：Transcript ready ── -->
+      <div class="delta">
+        <div class="bar"><span><b>工作空间 增量 ②</b> · Transcript 状态翻转 queued → ready（零生长）</span><span class="cam">camera：不动</span></div>
+        <div class="mc">
+          <svg class="edges" viewBox="0 0 720 280" preserveAspectRatio="none">
+            <path d="M 152 120 C 180 120, 182 120, 208 120" />
+          </svg>
+          <div class="nd" style="left: 40px; top: 88px; width: 110px;">
+            <div class="cap">▤ 视频</div>
+            <div class="bd">
+              <div class="mface" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #2a3a5a, #4a6a9a);"></div>
+              <div class="facts">interview.mp4 · 6 分 12 秒</div>
+            </div>
+          </div>
+          <div class="nd" style="left: 210px; top: 84px; width: 110px;">
+            <div class="cap">≣ 转写稿 <span style="color: var(--meta); font-size: 9px;">· 可编辑</span></div>
+            <div class="bd">
+              <div class="txt">
+                <div class="ln"></div><div class="ln short"></div>
+                <div class="ln"></div><div class="ln"></div><div class="ln short"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="notes" style="justify-content: center;">
+        <span class="chip have">「可编辑」不是编辑模式——对象本身可编辑（C4）；chat 一句自然提示，零新 chrome</span>
+      </div>
+
+      <!-- ── Seg C：候选 ── -->
+      <div class="beatline"><b>T2</b>&nbsp;候选出现 — 工作空间没有新增对象</div>
+      <div class="thread">
+        <div class="usr">你有什么想法？</div>
+        <div class="prose">
+          <p>你讲的「组织比技术更难」那条线最站得住。能单独成片的段落我找出 12 段，先给你 3 个最有代表性的：</p>
+        </div>
+        <div class="cand">
+          <div class="crow">
+            <span class="ord">1</span>
+            <div class="q">01 · 00:18–00:42 · AI 不只是工具，而是新的生产方式<span class="why">观点完整，起承转合都在</span></div>
+          </div>
+          <div class="crow">
+            <span class="ord">2</span>
+            <div class="q">02 · 01:03–01:26 · 真正的问题不是技术，而是组织<span class="why">有冲突感，最适合做高光</span></div>
+          </div>
+          <div class="crow">
+            <span class="ord">3</span>
+            <div class="q">03 · 02:11–02:38 · 企业接下来最大的变化<span class="why">可独立成片，收尾干净</span></div>
+          </div>
+          <div class="more">另外还有 9 个</div>
+        </div>
+        <div class="prose dim" style="font-size: 12px;"><p>每条候选都带来源时间段和内容摘要。你可以直接说「第二个」「第一个和第三个」「都做」，也可以让我换个方向继续找。</p></div>
+      </div>
+      <div class="notes" style="justify-content: center;">
+        <span class="chip stay">工作空间仍只有 Source → Transcript——Candidate 永不进 Graph（C1）：Judgment / Candidate Set / 已选 节点形态代码级删除</span>
+        <span class="chip new">Candidate = source asset + source range + source-faithful excerpt（C4 锚链）；选择态只住在候选列表上</span>
+      </div>
+
+      <!-- ── Seg D：决定制作 → promotion ── -->
+      <div class="beatline"><b>T3</b>&nbsp;用户决定真正制作 — Promotion 拍</div>
+      <div class="thread">
+        <div class="usr">切个高光看看？</div>
+        <div class="prose"><p>好——就用 01:03 那段「真正的问题不是技术，而是组织」，做一条竖版高光。我先把这个制作方案放进工作空间，确认前你随时可以调整。</p></div>
+        <div class="confirm-row">
+          <span class="ct">高光短片 · 1 条<span class="est">1–3 credits</span></span>
+          <span class="start">开始生成</span>
+        </div>
+        <div class="docknote">确认行钉在输入区上方（dock pill，真实 task_book 样式）——挂着 ≠ 已确认，讨论继续。本场按 <b>always</b>（每拍必问）演示；never / large 未过阈值时各拍不落确认行，正文直接报开工</div>
+      </div>
+
+      <!-- ── Δ3：draft 出生 ── -->
+      <div class="delta">
+        <div class="bar"><span><b>工作空间 增量 ③</b> · promotion：draft Work 出生（Graph 第二次变化）</span><span class="cam">camera：ensure-in-view——出生点在安全区，不动</span></div>
+        <div class="mc">
+          <svg class="edges" viewBox="0 0 720 280" preserveAspectRatio="none">
+            <path d="M 152 120 C 180 120, 182 120, 208 120" />
+            <path class="arrive" d="M 322 120 C 355 120, 365 132, 398 140" />
+          </svg>
+          <div class="nd" style="left: 40px; top: 88px; width: 110px;">
+            <div class="cap">▤ 视频</div>
+            <div class="bd">
+              <div class="mface" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #2a3a5a, #4a6a9a);"></div>
+              <div class="facts">interview.mp4 · 6 分 12 秒</div>
+            </div>
+          </div>
+          <div class="nd" style="left: 210px; top: 84px; width: 110px;">
+            <div class="cap">≣ 转写稿</div>
+            <div class="bd">
+              <div class="txt"><div class="ln"></div><div class="ln short"></div><div class="ln"></div><div class="ln short"></div></div>
+            </div>
+          </div>
+          <div class="nd" style="left: 400px; top: 52px; width: 90px;">
+            <div class="cap">高光</div>
+            <div class="bd dashed born" style="height: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-radius: 10px;">
+              <span class="born-tag">promotion · draft</span>
+              <span style="font-size: 9px; color: var(--meta);">01:03–01:26</span>
+              <span style="font-size: 9px; color: var(--meta);">确认后生成</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="notes" style="justify-content: center;">
+        <span class="chip grow">Graph：3 nodes。Graph 从 Transcript 直接长到 Draft Work——中间没有「已选」节点（C1）</span>
+      </div>
+
+      <!-- ── Seg E：Plan 讨论期 — 分镜问答 / 事实 / 预览 ── -->
+      <div class="beatline"><b>T4</b>&nbsp;Plan 讨论期 — 三轮 chat，工作空间全程零增量</div>
+      <div class="thread">
+        <div class="usr">分镜你会吗</div>
+        <div class="prose"><p>会——把一段内容按镜头语义拆开重排：特写、双人、反应镜头换着来，节奏也能调。这条高光就可以按几种节奏剪。对了——画面里哪位是你？裁切和分镜会以你为主体。</p></div>
+        <div class="usr">是的，右边坐的是我</div>
+        <div class="prose"><p>记下了——裁切时把你放在画面主体位，反应镜头优先留你。</p></div>
+        <div class="usr">你给我展示几个分镜效果？</div>
+        <div class="prose"><p>按刚才说的做了三种拆法的预览，都以右边的你为主体：</p></div>
+        <div class="cand">
+          <div class="crow">
+            <span class="ord">1</span>
+            <div class="q">稳健双人版<span class="why">对话感最强，你的特写占六成</span></div>
+          </div>
+          <div class="crow">
+            <span class="ord">2</span>
+            <div class="q">节奏特写版<span class="why">论点处切你的近景，张力最强</span></div>
+          </div>
+          <div class="crow">
+            <span class="ord">3</span>
+            <div class="q">反应穿插版<span class="why">对方提问 + 你的回应交替</span></div>
+          </div>
+        </div>
+        <div class="prose dim" style="font-size: 12px;"><p>这几个只是给你看看不同方向的感觉——喜欢哪种告诉我，我再按那种继续做；现在这条高光的方案不受影响，确认了我就开工。</p></div>
+        <div class="docknote">确认行仍钉在输入区上方：高光短片 · 1 条 · 1–3 credits</div>
+      </div>
+      <div class="notes" style="justify-content: center;">
+        <span class="chip stay">工作空间零增量 × 3：能力问答 ❌ / 世界模型事实 ❌（进 Agent memory，驱动了三种拆法）/ 分镜预览 ❌（chat 临时呈现）</span>
+        <span class="chip flip"><b>封板试金石</b>：用户始终没有说「就按这个分镜做」——分镜预览永不晋升，Graph 里永不存在分镜节点（C2）</span>
+      </div>
+
+      <!-- ── Seg F：授权拍 → run ── -->
+      <div class="beatline"><b>T5</b>&nbsp;授权拍 — 确认行点击 = 代用户输入「确认生成」</div>
+      <div class="thread">
+        <div class="usr">确认生成</div>
+        <div class="prose"><p>好，开工——竖版高光一条，剪好了叫你。</p></div>
+        <div class="run">
+          <span class="dot" style="width:5px;height:5px;border-radius:50%;background:var(--fg);"></span>
+          正在渲染高光…
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
+        </div>
+      </div>
+      <div class="notes" style="justify-content: center;">
+        <span class="chip flip">确认拍归档 = 这条普通用户气泡（C8 根治）；QA 问/答块对 start 类退役</span>
+      </div>
+
+      <!-- ── Δ4：running ── -->
+      <div class="delta">
+        <div class="bar"><span><b>工作空间 增量 ④</b> · draft → running：状态翻转，零生长</span><span class="cam">camera：不动</span></div>
+        <div class="mc">
+          <svg class="edges" viewBox="0 0 720 280" preserveAspectRatio="none">
+            <path d="M 152 120 C 180 120, 182 120, 208 120" />
+            <path d="M 322 120 C 355 120, 365 132, 398 140" />
+          </svg>
+          <div class="nd" style="left: 40px; top: 88px; width: 110px;">
+            <div class="cap">▤ 视频</div>
+            <div class="bd">
+              <div class="mface" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #2a3a5a, #4a6a9a);"></div>
+              <div class="facts">interview.mp4 · 6 分 12 秒</div>
+            </div>
+          </div>
+          <div class="nd" style="left: 210px; top: 84px; width: 110px;">
+            <div class="cap">≣ 转写稿</div>
+            <div class="bd">
+              <div class="txt"><div class="ln"></div><div class="ln short"></div><div class="ln"></div><div class="ln short"></div></div>
+            </div>
+          </div>
+          <div class="nd" style="left: 400px; top: 36px; width: 90px;">
+            <div class="cap">高光</div>
+            <div class="bd" style="border-radius: 10px; overflow: hidden;">
+              <div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #2a1b4a, #5a3a8a);"><div class="wipe"></div></div>
+              <div class="facts">node working · 渲染中</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Seg F2：做好 ── -->
+      <div class="thread">
+        <div class="prose"><p>高光做好了，工作空间里那条就是。</p></div>
+      </div>
+
+      <!-- ── Δ5：ready ── -->
+      <div class="delta">
+        <div class="bar"><span><b>工作空间 增量 ⑤</b> · running → ready：状态翻转，零生长</span><span class="cam">camera：不动</span></div>
+        <div class="mc">
+          <svg class="edges" viewBox="0 0 720 280" preserveAspectRatio="none">
+            <path d="M 152 120 C 180 120, 182 120, 208 120" />
+            <path d="M 322 120 C 355 120, 365 132, 398 140" />
+          </svg>
+          <div class="nd" style="left: 40px; top: 88px; width: 110px;">
+            <div class="cap">▤ 视频</div>
+            <div class="bd">
+              <div class="mface" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #2a3a5a, #4a6a9a);"></div>
+              <div class="facts">interview.mp4 · 6 分 12 秒</div>
+            </div>
+          </div>
+          <div class="nd" style="left: 210px; top: 84px; width: 110px;">
+            <div class="cap">≣ 转写稿</div>
+            <div class="bd">
+              <div class="txt"><div class="ln"></div><div class="ln short"></div><div class="ln"></div><div class="ln short"></div></div>
+            </div>
+          </div>
+          <div class="nd" style="left: 400px; top: 36px; width: 90px;">
+            <div class="cap">高光</div>
+            <div class="bd">
+              <div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #2a1b4a, #5a3a8a);"></div>
+              <div class="verpager">v1</div>
+              <div class="facts">23s · 9:16</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Seg G：字幕 — 理解正文 + 确认拍（scope classifier expansion dock 实证） ── -->
+      <div class="beatline"><b>T6</b>&nbsp;持续创作 — 修改已有作品，也可以继续生成新的作品</div>
+      <div class="thread">
+        <div class="usr">字幕也加上吧，要中英双语字幕</div>
+        <div class="prose"><p>好——给这条高光配中英双语字幕：先生成一份中英对照的字幕文档（你可以直接改文字），再按它装配出一条新的字幕版视频；原高光保留，不受影响。</p></div>
+        <div class="confirm-row">
+          <span class="ct">中英字幕版 + 字幕文档<span class="est">2–4 credits</span></span>
+          <span class="start">开始生成</span>
+        </div>
+        <div class="docknote">修订也是付费执行——同一套确认纪律：理解正文 + dock 确认行（scope classifier 判 expansion → 回滚落 dock，代码实证）</div>
+        <div class="usr">确认生成</div>
+        <div class="prose"><p>好，开工——字幕文档先出，字幕版随后。</p></div>
+        <div class="act">
+          <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+          改好了 <span class="dur">· 52s</span>
+        </div>
+      </div>
+
+      <!-- ── Δ6：字幕文档 + 字幕版出生（两站三节点链） ── -->
+      <div class="delta">
+        <div class="bar"><span><b>工作空间 增量 ⑥</b> · 生长：字幕文档 + 字幕版出生（高光 → 字幕文档 → 字幕版）；高光原样保留</span><span class="cam">camera：ensure-in-view——最小 pan 把新列带进安全区</span></div>
+        <div class="mc">
+          <svg class="edges" viewBox="0 0 720 280" preserveAspectRatio="none">
+            <path d="M 152 120 C 180 120, 182 120, 208 120" />
+            <path d="M 322 120 C 355 120, 365 132, 398 140" />
+            <path class="arrive" d="M 492 130 C 504 130, 506 130, 518 130" />
+            <path class="arrive" d="M 606 130 C 616 130, 618 130, 628 130" />
+          </svg>
+          <div class="nd" style="left: 40px; top: 88px; width: 110px;">
+            <div class="cap">▤ 视频</div>
+            <div class="bd">
+              <div class="mface" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #2a3a5a, #4a6a9a);"></div>
+              <div class="facts">interview.mp4 · 6 分 12 秒</div>
+            </div>
+          </div>
+          <div class="nd" style="left: 210px; top: 84px; width: 110px;">
+            <div class="cap">≣ 转写稿</div>
+            <div class="bd">
+              <div class="txt"><div class="ln"></div><div class="ln short"></div><div class="ln"></div><div class="ln short"></div></div>
+            </div>
+          </div>
+          <div class="nd" style="left: 400px; top: 36px; width: 90px;">
+            <div class="cap">高光</div>
+            <div class="bd">
+              <div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #2a1b4a, #5a3a8a);"></div>
+              <div class="facts">23s · 9:16</div>
+            </div>
+          </div>
+          <div class="nd" style="left: 520px; top: 60px; width: 84px;">
+            <div class="cap">▦ 字幕文档</div>
+            <div class="bd born">
+              <span class="born-tag">node birth · 文档站</span>
+              <div class="txt">
+                <div class="ln"></div><div class="ln en"></div>
+                <div class="ln"></div><div class="ln en"></div>
+                <div class="ln short"></div><div class="ln en" style="width: 48%;"></div>
+              </div>
+              <div class="facts">112 行 · 中英对照</div>
+            </div>
+          </div>
+          <div class="nd" style="left: 630px; top: 36px; width: 84px;">
+            <div class="cap">高光 · 中英字幕</div>
+            <div class="bd born">
+              <span class="born-tag">node birth · 装配站</span>
+              <div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #1b4a2e, #2e7a52);">
+                <div style="position: absolute; bottom: 8px; left: 6px; right: 6px; display: flex; flex-direction: column; gap: 2px; align-items: center;">
+                  <div style="height: 4px; width: 70%; background: oklch(1 0 0 / 0.85); border-radius: 2px;"></div>
+                  <div style="height: 3px; width: 55%; background: oklch(1 0 0 / 0.55); border-radius: 2px;"></div>
+                </div>
+              </div>
+              <div class="facts">23s · 中英字幕</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="notes" style="justify-content: center;">
+        <span class="chip grow">Graph：5 nodes。字幕 = 新产物不是 version（C2 三分②）：文档站 table×manual + 装配站 video×editor，<code>asm.spec.doc_node_id</code> 链（ADR-072/076 代码实证）</span>
+        <span class="chip have">字幕文档过 C1 五条：稳定身份、可指认（「那句英文改一下」）、可独立编辑——原高光一帧未动</span>
+      </div>
+
+      <!-- ── Seg H：字幕顺序（同纪律：理解正文 + 确认拍） ── -->
+      <div class="thread">
+        <div class="usr">中文在上面英文在下面</div>
+        <div class="prose"><p>好——字幕版重新排：中文在上英文在下，中文字号放大、英文随行小一号。字幕文档的行序同步更新。</p></div>
+        <div class="confirm-row">
+          <span class="ct">字幕版 · 调整字幕布局<span class="est">1–2 credits</span></span>
+          <span class="start">开始生成</span>
+        </div>
+        <div class="usr">确认生成</div>
+        <div class="prose"><p>调好了，中文在上英文在下，字号差拉开了。</p></div>
+        <div class="act">
+          <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+          改好了 <span class="dur">· 18s</span>
+        </div>
+      </div>
+
+      <!-- ── Δ7：字幕版 v2 ── -->
+      <div class="delta">
+        <div class="bar"><span><b>工作空间 增量 ⑦</b> · 纯版本演进：字幕版 v1 → v2（零生长）；字幕文档原地更新</span><span class="cam">camera：不动（目标已在安全区）</span></div>
+        <div class="mc">
+          <svg class="edges" viewBox="0 0 720 280" preserveAspectRatio="none">
+            <path d="M 152 120 C 180 120, 182 120, 208 120" />
+            <path d="M 322 120 C 355 120, 365 132, 398 140" />
+            <path d="M 492 130 C 504 130, 506 130, 518 130" />
+            <path d="M 606 130 C 616 130, 618 130, 628 130" />
+          </svg>
+          <div class="nd" style="left: 40px; top: 88px; width: 110px;">
+            <div class="cap">▤ 视频</div>
+            <div class="bd">
+              <div class="mface" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #2a3a5a, #4a6a9a);"></div>
+              <div class="facts">interview.mp4 · 6 分 12 秒</div>
+            </div>
+          </div>
+          <div class="nd" style="left: 210px; top: 84px; width: 110px;">
+            <div class="cap">≣ 转写稿</div>
+            <div class="bd">
+              <div class="txt"><div class="ln"></div><div class="ln short"></div><div class="ln"></div><div class="ln short"></div></div>
+            </div>
+          </div>
+          <div class="nd" style="left: 400px; top: 36px; width: 90px;">
+            <div class="cap">高光</div>
+            <div class="bd">
+              <div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #2a1b4a, #5a3a8a);"></div>
+              <div class="facts">23s · 9:16</div>
+            </div>
+          </div>
+          <div class="nd" style="left: 520px; top: 60px; width: 84px;">
+            <div class="cap">▦ 字幕文档</div>
+            <div class="bd">
+              <div class="txt">
+                <div class="ln"></div><div class="ln en"></div>
+                <div class="ln"></div><div class="ln en"></div>
+                <div class="ln short"></div><div class="ln en" style="width: 48%;"></div>
+              </div>
+              <div class="facts">112 行 · 中英对照</div>
+            </div>
+          </div>
+          <div class="nd" style="left: 630px; top: 36px; width: 84px;">
+            <div class="cap">高光 · 中英字幕</div>
+            <div class="bd born">
+              <span class="born-tag">刚更新 · 中上英下</span>
+              <div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #1b4a2e, #2e7a52);">
+                <div style="position: absolute; bottom: 8px; left: 6px; right: 6px; display: flex; flex-direction: column; gap: 2px; align-items: center;">
+                  <div style="height: 5px; width: 70%; background: oklch(1 0 0 / 0.9); border-radius: 2px;"></div>
+                  <div style="height: 3px; width: 55%; background: oklch(1 0 0 / 0.5); border-radius: 2px;"></div>
+                </div>
+              </div>
+              <div class="verpager">v2 · 中上英下</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Seg I：标题（同纪律：理解正文 + 确认拍） ── -->
+      <div class="thread">
+        <div class="usr">开头再加个 2 秒随着时间淡入淡出的视频预览标题</div>
+        <div class="prose"><p>好——片头加 2 秒标题卡，随时间淡入淡出进正片；正片内容不动。</p></div>
+        <div class="confirm-row">
+          <span class="ct">字幕版 · 加片头标题<span class="est">1–2 credits</span></span>
+          <span class="start">开始生成</span>
+        </div>
+        <div class="usr">确认生成</div>
+        <div class="prose"><p>加好了——片头 2 秒标题卡，随时间淡入淡出进正片。这条现在完整了。</p><p>作品已经在工作空间里了——可以直接发，随时继续改。</p></div>
+        <div class="act">
+          <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+          改好了 <span class="dur">· 47s</span>
+        </div>
+      </div>
+
+      <!-- ── Δ8：字幕版 v3 终态 ── -->
+      <div class="delta">
+        <div class="bar"><span><b>工作空间 增量 ⑧ · 终态</b> — 字幕版 v2 → v3（零生长）</span><span class="cam">camera：不动</span></div>
+        <div class="mc">
+          <svg class="edges" viewBox="0 0 720 280" preserveAspectRatio="none">
+            <path d="M 152 120 C 180 120, 182 120, 208 120" />
+            <path d="M 322 120 C 355 120, 365 132, 398 140" />
+            <path d="M 492 130 C 504 130, 506 130, 518 130" />
+            <path d="M 606 130 C 616 130, 618 130, 628 130" />
+          </svg>
+          <div class="nd" style="left: 40px; top: 88px; width: 110px;">
+            <div class="cap">▤ 视频</div>
+            <div class="bd">
+              <div class="mface" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #2a3a5a, #4a6a9a);"></div>
+              <div class="facts">interview.mp4 · 6 分 12 秒</div>
+            </div>
+          </div>
+          <div class="nd" style="left: 210px; top: 84px; width: 110px;">
+            <div class="cap">≣ 转写稿</div>
+            <div class="bd">
+              <div class="txt"><div class="ln"></div><div class="ln short"></div><div class="ln"></div><div class="ln short"></div></div>
+            </div>
+          </div>
+          <div class="nd" style="left: 400px; top: 36px; width: 90px;">
+            <div class="cap">高光</div>
+            <div class="bd">
+              <div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #2a1b4a, #5a3a8a);"></div>
+              <div class="facts">23s · 9:16</div>
+            </div>
+          </div>
+          <div class="nd" style="left: 520px; top: 60px; width: 84px;">
+            <div class="cap">▦ 字幕文档</div>
+            <div class="bd">
+              <div class="txt">
+                <div class="ln"></div><div class="ln en"></div>
+                <div class="ln"></div><div class="ln en"></div>
+                <div class="ln short"></div><div class="ln en" style="width: 48%;"></div>
+              </div>
+              <div class="facts">112 行 · 中英对照</div>
+            </div>
+          </div>
+          <div class="nd" style="left: 630px; top: 36px; width: 84px;">
+            <div class="cap">高光 · 中英字幕</div>
+            <div class="bd born">
+              <span class="born-tag">刚更新 · 标题淡出</span>
+              <div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #1b4a2e, #2e7a52);">
+                <div style="position: absolute; top: 8px; left: 6px; right: 6px; height: 5px; background: oklch(1 0 0 / 0.8); border-radius: 2px;"></div>
+                <div style="position: absolute; bottom: 8px; left: 6px; right: 6px; display: flex; flex-direction: column; gap: 2px; align-items: center;">
+                  <div style="height: 5px; width: 70%; background: oklch(1 0 0 / 0.9); border-radius: 2px;"></div>
+                  <div style="height: 3px; width: 55%; background: oklch(1 0 0 / 0.5); border-radius: 2px;"></div>
+                </div>
+              </div>
+              <div class="verpager">v3 · 标题淡出</div>
+              <div class="facts">25s · 中英字幕</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes" style="justify-content: center;">
+        <span class="chip grow">终态 Graph：Source → Transcript → 高光 → 字幕文档 → 高光·中英字幕（v1–v3 住 pager）= 5 nodes</span>
+        <span class="chip stay">相机动过 2 次：birth fit（Δ1）/ ensure-in-view 平移（Δ6）；其余全程静默（Δ3 出生点在安全区）</span>
+        <span class="chip stay">实体出生只在 Δ1（Source+Transcript）/ Δ3（draft Work）/ Δ6（字幕文档+字幕版）——每次出生都具有明确身份，并具备后续再次指认和独立操作的价值与可能</span>
+      </div>
+
+      <p class="step-comment">
+        <b>这场会话发生过、但从未进 Graph 的：</b>能力问答、12 段高光候选（+「另外还有 9 个」）、选择讨论、3 种分镜预览（用户从未明确采用——preview remains temporary and does not become a persistent Product Entity）、「右边坐的是我」这个世界模型事实、四次确认拍（四条普通用户消息——初始计划一拍 + 三次修订各一拍）、每一次「改好了」的活动记录。<b>进 Graph 的：</b>1 个素材、1 份转写、2 件视频作品（原高光保持 v1 一帧未动；字幕版的 3 个版本住 pager）、1 份字幕文档。Chat 装下了这场会话的几乎全部信息量；Graph 只留下 5 件真正值得长期存在的东西。若用户接着说「再做一个更快节奏的版本」，那不是 v4——是一件新 Work，向右继续长（Revision ≠ New Work ≠ New Product，C2）。
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= 封板 ================= -->
+  <section class="step" style="margin-top: 64px;">
+    <div class="step-head">
+      <span class="num">封板</span>
+      <h2>五个问题，五个答案 — 不再新增交互原语</h2>
+    </div>
+    <div class="clause">
+      <p><b>① 工作空间什么时候第一次出现？</b><br>
+      T1——Agent 开始建立工作世界的时刻（今天是 transcript processing 实体出生的那一帧）。T0 上传 Source 时仍是纯 Chat world。Birth 是独立 presentation 谓词 <code>workspaceBorn</code>，与「graph entity 已存在」（数据事实，上传即始，不改）和「PLAN_READY」（lifecycle 投影，不动）三事实分离。</p>
+      <p><b>② 什么东西有资格成为 Graph node？</b><br>
+      过 Eligibility 五问（<b>稳定存在</b> / 独立身份 / 可再指认 / 可独立操作 / 值得占空间）的持久 Product Entity：Source、Transcript、Draft Work / Work、伴侣文档（字幕文档，<b>上限：对用户有独立身份与独立查看/编辑/引用能力</b>，纯装配中间产物永不入图）；Version 住 Work pager。入图两途互不冒充：系统生命周期 Entity Birth（Source / Transcript）与 Promotion（临时对象 → 持久实体的唯一晋升口）。Candidate 旧模型（Judgment / Candidate Set / 已选节点）代码级删除。</p>
+      <p><b>③ 什么东西只存在于 Chat / temporary surface？</b><br>
+      候选与选择态（Candidate Surface）、分镜/效果预览、能力问答、世界模型事实、确认拍（用户气泡）、活动行、计划散文——一切瞬时决策与过程。分镜预览未经明确采用永不晋升。</p>
+      <p><b>④ 同一对象如何随 Chat 持续被修改，而不是被重新创建？</b><br>
+      <b>Revision ≠ New Work</b>：修改已有 Work 的定义/内容/参数 → 同一 identity 新 version（pager v1→v4 原地演进，伴侣文档原地更新）；「再做一个不同的作品」→ Promotion 产生新 Work entity，向右/下一逻辑 depth 生长——Workspace 是 append-only 持续空间，不是把所有未来作品压进一个 pager。<b>Chat 是自然语言编排入口，不是唯一修改入口</b>：具有直接编辑语义的实体（Transcript / 字幕文档）可在 Canvas 直改；两个入口改的是同一实体身份，产生的都是版本演进。Transcript 编辑不变量：text changed / evidence unchanged / range unchanged；candidate discovery 默认基于 source evidence，用户点名时可借 Editable Transcript 检索，但时间与媒体事实永远回锚 source evidence。</p>
+      <p><b>⑤ 一个完整真实 Session 结束后，Graph 像不像一个越来越完整的工作空间？</b><br>
+      像。终态 = Source → Transcript → 高光（v1 原样保留）→ 字幕文档 → 高光·中英字幕（v1–v3 住 pager）：5 nodes，主干细短、每件可再指认、有版本记忆；12 轮会话里发生过的候选、预览、事实、问答全部留在 Chat。Settled 实体只长不消，provisional draft 可弃——图长得极少、极准，是 workspace，不是 workflow diagram。</p>
+    </div>
+    <div class="clause" style="margin-top: 12px;">
+      <p><b>封板一句话</b>：工作空间是 Agent 与用户共同工作的持续空间，Graph 是这个空间背后的持久结构。Graph 只记录用户未来仍值得再次指认和独立操作的 Product Entity；Chat 可以承载大量不会进入 Graph 的临时候选、决策、预览与上下文；只有真正需要持久身份的对象才进入 Graph。工作空间在 Agent 开始建立工作世界时出现，随 Product Entity 的实际产生而增长；后续对话优先修改既有实体，而不是制造新实体。</p>
+      <p style="margin-top: 10px;"><code style="display: block; padding: 10px 14px; line-height: 1.9; white-space: pre;">Source
+   │
+Transcript
+   │
+   ├──────→ High-light A（v1，原样保留）
+   │            │
+   │            └→ Subtitle Document（文档站，可独立编辑）
+   │                     │
+   │                     └→ High-light A·中英字幕版（装配站）── v1 → v2 → v3
+   │
+   └──────→ High-light B ── v1
+        （「再做一个更快节奏的版本」→ New Work，不是版本）</code></p>
+      <p style="margin-top: 8px;">两个钉死的判例：<b>「中文在上、英文在下」→ 字幕版 v1 → v2</b>（同 identity 内容演进）；<b>「再做一个更快节奏的版本」→ High-light B v1</b>（新 Work entity）——看到「再做一个…」不得条件反射塞 pager。旧 Work 保留、伴侣向右长、新作品继续长——示意图只表达增长形态，具体 edge 永远遵循真实 Graph relation，不为视觉强行造边。而不是「Agent 做过什么 → 全部画出来」。<b>这就是我们一直在找的 workspace，而不是 workflow diagram。</b></p>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

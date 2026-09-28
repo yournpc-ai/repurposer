@@ -93,6 +93,12 @@ export interface ResultsCanvasProps {
    * the dock — the node's own state cycle is the feedback. Resolves true
    * when the run started. */
   onNodeRevise?: (nodeId: string, text: string) => Promise<boolean>
+  /** The transcript card's in-place direct edit (Workspace 合同 v4.2 C4):
+   * the card reports the user's verbatim text (null = reset to the source
+   * layer); the surface posts ONE code-built edit_text op to the graph's
+   * write door — zero run, zero credits, zero chat echo. Resolves true
+   * when the write landed. */
+  onTextEdit?: (nodeId: string, text: string | null) => Promise<boolean>
   /** An asset node's factsbar action (download / delete / reprocess) — the
    * surface owns them; absent = asset nodes render no bar. */
   onAssetAction?: (asset: FlowAssetInfo, action: FlowAssetAction) => void
@@ -107,14 +113,17 @@ export interface ResultsCanvasProps {
    * docked-panel avoidance — the page offsets both clear of the open chat
    * panel so nothing sits under the frost. */
   controlsClassName?: string
-  /** 聚焦转场 (C6 画布相机批): the page-armed user beat (chat-send draft
-   * arrival = 整链 fit / run-start newborns = setCenter 平移锁 zoom) and
-   * its consumed callback; occludedRightPx = the docked panel's right-edge
-   * footprint (0 in float geometry / hidden / mobile). Pass-through to
-   * FlowView — background refetches never arm, so they never move the
-   * camera. */
-  cameraBeat?: { token: number; mode: "fit" | "pan" } | null
+  /** 相机节拍 (Workspace 合同 v4.2 C5): the page-armed user beat — ONE
+   * ensure-in-view semantics (已在安全区不动 / 不在则最小 pan / zoom 永不
+   * 自动), consumed callback, and the one-shot centering request (v4.2
+   * 未覆盖 #3「把当前操作元素移到画布中心」). occludedRightPx = the docked
+   * panel's right-edge footprint (0 in float geometry / hidden / mobile).
+   * Pass-through to FlowView — background refetches never arm, so they
+   * never move the camera. */
+  cameraBeat?: { token: number } | null
   onCameraBeatConsumed?: () => void
+  centerRequest?: { token: number; nodeId: string } | null
+  onCenterRequestConsumed?: () => void
   occludedRightPx?: number
   className?: string
 }
@@ -130,12 +139,15 @@ export function ResultsCanvas({
   onOutputAction,
   onQuoteOutput,
   onNodeRevise,
+  onTextEdit,
   onAssetAction,
   selectedOutputId = null,
   onPaneClick,
   controlsClassName,
   cameraBeat = null,
   onCameraBeatConsumed,
+  centerRequest = null,
+  onCenterRequestConsumed,
   occludedRightPx = 0,
   className,
 }: ResultsCanvasProps) {
@@ -173,6 +185,10 @@ export function ResultsCanvas({
         return {
           id: n.id,
           kind: n.type,
+          // C6 岛内格镜像: the spec rides along — an asset node can be an
+          // island member (the multi-upload source shelf), and the
+          // projection reads spec.island's frozen-cell floor off it.
+          spec,
           label: t(`generationOverlay.assetTypes.${asset.type ?? spec.asset_type ?? ""}`, {
             defaultValue: String(asset.type ?? spec.asset_type ?? "asset"),
           }),
@@ -200,32 +216,13 @@ export function ResultsCanvas({
       // stations never carry spec.summary — ADR-072) to the medium's own
       // word (业务身份 = spec.summary 的座位, ADR-058 二源律).
       const outputs = n.outputs ?? []
-      // 探索族 (ADR-088 §2, R7 证据引用): the Select artifact is a POINTER
-      // (candidate_set_id + member_index) — the card's range line is a
-      // READ-TIME projection of the pointed-at member, resolved here; the
-      // artifact never copies the source. An unresolvable pointer passes
-      // null and the card reads its range line as an honest absence.
-      let evidenceRange: { start: number; end: number } | null = null
-      if (n.type === "exploration" && spec.exploration_kind === "select") {
-        const parent = graphNodes.find((g) => g.id === spec.candidate_set_id)
-        const members = Array.isArray(parent?.spec?.members)
-          ? (parent!.spec!.members as { start?: unknown; end?: unknown }[])
-          : []
-        const idx = typeof spec.member_index === "number" ? spec.member_index : -1
-        const member = members[idx]
-        if (member && typeof member.start === "number" && typeof member.end === "number") {
-          evidenceRange = { start: member.start, end: member.end }
-        }
-      }
       return {
         id: n.id,
         kind: n.type,
         label:
           spec.summary ??
-          (spec.role === "task_book"
-            ? t("results.canvas.plan")
-            : spec.role === "transcript"
-              ? t("results.canvas.transcript")
+          (spec.role === "transcript"
+            ? t("results.canvas.transcript")
               : spec.role === "research_brief"
                 ? t("results.canvas.researchBrief")
                 : spec.role === "translation"
@@ -241,8 +238,6 @@ export function ResultsCanvas({
         estimateCredits: n.estimate_credits ?? null,
         frame,
         rank: n.rank ?? null,
-        journeyId: n.journey_id ?? null,
-        evidenceRange,
         topClipScore,
         order: i,
       }
@@ -690,10 +685,13 @@ export function ResultsCanvas({
         onAssetAction={onAssetAction}
         onDisplayChange={handleDisplayChange}
         onPromptEdit={handlePromptEdit}
+        onTextEdit={onTextEdit}
         pendingProgram={promptEdit}
         promptConfirm={promptConfirmPayload}
         cameraBeat={cameraBeat}
         onCameraBeatConsumed={onCameraBeatConsumed}
+        centerRequest={centerRequest}
+        onCenterRequestConsumed={onCenterRequestConsumed}
         occludedRightPx={occludedRightPx}
       />
       {/* The dossier rides the zoom pill's corner: right-aligned with it,

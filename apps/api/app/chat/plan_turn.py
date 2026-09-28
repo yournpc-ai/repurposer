@@ -109,8 +109,9 @@ from app.models.schemas import (
     QuestionPayload,
     QuestionProposal,
     StartAnswerRequest,
+    resolve_recommended_id,
 )
-from app.models.tables import Asset, Message, Persona, Project
+from app.models.tables import Asset, ExplorationRow, Message, Persona, Project
 from app.pipeline.asset_processing import has_any_text_material
 from app.pipeline.assets import create_transcript_asset_from_text
 from app.pipeline.exploration_store import (
@@ -120,6 +121,7 @@ from app.pipeline.exploration_store import (
     propose_candidates,
     propose_selects,
     journey_summary_line,
+    read_journey_evidence,
     read_journey_plan_rows,
     read_journey_plans,
     read_journey_summaries,
@@ -154,6 +156,7 @@ class PlanTurn:
         request: ChatRequest,
         on_phase=None,
         on_activity=None,
+        on_candidates=None,
     ) -> None:
         self.db = db
         self.user_id = user_id
@@ -165,6 +168,7 @@ class PlanTurn:
         # called at the exploration door's successes; None = the one-shot
         # path (no stream, no frames).
         self.on_activity = on_activity
+        self.on_candidates = on_candidates
         # Turn state (filled by the assembly below and the executions):
         self.text = ""
         self.stored: PendingPlan | None = None
@@ -453,6 +457,11 @@ class PlanTurn:
             understanding_lines=understanding_lines,
             asset_lines=asset_lines,
             material_pending_line=material_pending_line,
+            # The sender's surface (2026-09-25 canvas↔chat 联动): "canvas" =
+            # the plan's draft graph lives beside the conversation — the
+            # review invitation may name that home; None/"chat" = the
+            # surface-neutral law stands.
+            surface=request.surface,
         )
 
     def _role_pins(self) -> dict[str, str | None]:
@@ -565,6 +574,21 @@ class PlanTurn:
         iterates — 终态工具一调即停 covers the terminal tools only)."""
         if name in PERCEPTION_TOOLS:
             return await run_perception_tool(self.db, self.project, name, params)
+        # 插话判定结算 (ADR-053 R2 — the plan-path seat, 2026-09-27 一问拍
+        # 一体化): the disposition rides every terminal call's envelope, the
+        # chat path's `_settle_by_disposition` mirror — judgment is the LLM's,
+        # settlement is code's. "answer" settles the pending plain question
+        # as freeform with the user's OWN WORDS (原话一视同仁: an answer, a
+        # deferral like "你更推荐什么？", an option discussion all engage the
+        # question); "skip" bails it; "none" leaves it (the reply gets the
+        # reminder tail below). The slot absorb (_absorb) is the narrower
+        # code fast path and composes — it sees pending_q=None after this.
+        # Plan-path plain questions are never parked interrupts (prepare
+        # filters workflow_run_id), so there is no wake branch here.
+        disposition = (
+            getattr(params, "pending_disposition", "none") if params is not None else "none"
+        )
+        await self._settle_pending_by_disposition(disposition)
         if name in EXPLORATION_TOOLS:
             return await self._explore(name, params, prose)
         if name == "present_plan":
@@ -579,6 +603,25 @@ class PlanTurn:
             assert isinstance(params, PlanAnswerArgs)
             return await self._answer(params, prose)
         return f"unknown tool {name!r}"  # unreachable — the driver gates names
+
+    async def _settle_pending_by_disposition(self, disposition: str) -> None:
+        """Settle the pending plain question by the accepted call's judgment
+        (2026-09-27, the plan path's seat — the chat path's
+        ``_settle_by_disposition`` mirror). A blank turn never settles (the
+        judgable law — the chat path's ``pending_judgable`` guard's plan
+        twin); the reminder tail keys off ``self.pending_q``, so a settled
+        row also silences the tail."""
+        pending = self.pending_q
+        if pending is None or disposition == "none" or not self.text.strip():
+            return
+        pending.answer = AnswerPayload(
+            kind="freeform" if disposition == "answer" else "bail",
+            text=self.text if disposition == "answer" else None,
+            answered_at=datetime.now(UTC),
+        ).model_dump(mode="json")
+        await self.db.flush()
+        self.settled_pending = pending
+        self.pending_q = None
 
     async def _present_plan(self, params: PresentPlanArgs, prose: str) -> str | None:
         """draft → the plan docks. Guardrails first (a rejection writes
@@ -858,6 +901,80 @@ class PlanTurn:
         if self.on_activity is not None:
             await self.on_activity(key, count)
 
+    async def _emit_candidates(self, payload: dict) -> None:
+        """Candidate Surface 信道 (Workspace 合同 v4.2 C8-c, 2026-09-26):
+        the candidate card's payload rides its OWN SSE frame
+        (``assistant.candidates``) at the door's success — the milestone's
+        count-only whitelist never carries members. The SSE route ALSO
+        collects every emitted payload and persists them as ONE
+        ``candidates_log`` message row at turn settle (the activity_log
+        precedent), so a refresh rebuilds the surface from the archive —
+        数据链全程消息载, no endpoint. No-op on the one-shot path."""
+        if self.on_candidates is not None:
+            await self.on_candidates(payload)
+
+    @staticmethod
+    def _candidate_set_payload(node: ExplorationRow) -> dict:
+        """The ``set`` event: the persisted spec IS the authority (an
+        idempotent replay re-emits the stored members, never the request's)."""
+        spec = node.spec or {}
+        members = []
+        for m in spec.get("members") or []:
+            if not isinstance(m, dict):
+                continue
+            members.append(
+                {
+                    "start": m.get("start"),
+                    "end": m.get("end"),
+                    "excerpt": str(m.get("excerpt") or ""),
+                    "speaker": m.get("speaker") or None,
+                }
+            )
+        return {
+            "kind": "set",
+            "candidate_set_id": str(node.id),
+            "topic": str(spec.get("topic") or ""),
+            "asset_id": str(spec.get("asset_id") or ""),
+            "members": members,
+        }
+
+    async def _selection_payloads(self, rows: list[ExplorationRow]) -> list[dict]:
+        """The ``selection`` event(s) after a selects door success: per
+        touched candidate set, the set's FULL current selection (sorted
+        ordinals-as-addresses, 0-based member indexes) — the client REPLACES,
+        never unions, so a revise re-point drops the old pick by
+        construction."""
+        by_journey: dict[UUID, set[str]] = {}
+        for n in rows:
+            spec = n.spec or {}
+            set_id = spec.get("candidate_set_id")
+            if set_id:
+                by_journey.setdefault(UUID(str(n.journey_id)), set()).add(
+                    str(set_id)
+                )
+        events = []
+        for journey_id, set_ids in by_journey.items():
+            selects, _candidate_sets = await read_journey_evidence(
+                self.db, UUID(str(self.project.id)), journey_id
+            )
+            for set_id in sorted(set_ids):
+                picked: set[int] = set()
+                for s in selects:
+                    sspec = s.spec or {}
+                    if str(sspec.get("candidate_set_id")) != set_id:
+                        continue
+                    idx = sspec.get("member_index")
+                    if isinstance(idx, int):
+                        picked.add(idx)
+                events.append(
+                    {
+                        "kind": "selection",
+                        "candidate_set_id": set_id,
+                        "selected": sorted(picked),
+                    }
+                )
+        return events
+
     async def _explore(
         self, name: str, params, prose: str
     ) -> str | None | ToolObservation:
@@ -884,6 +1001,7 @@ class PlanTurn:
             await self._emit_milestone(
                 "chat.explore.candidatesReady", len(params.members)
             )
+            await self._emit_candidates(self._candidate_set_payload(node))
             return ToolObservation(
                 text=candidates_observation(
                     node, topic=params.topic, member_count=len(params.members)
@@ -901,6 +1019,8 @@ class PlanTurn:
             except ExplorationRejected as e:
                 return f"The door rejected the proposal: {e}"
             await self._emit_milestone("chat.explore.selectsReady", len(born))
+            for event in await self._selection_payloads(born):
+                await self._emit_candidates(event)
             return ToolObservation(text=await self._selects_text(born))
         if name == "propose_plans":
             assert isinstance(params, ProposePlansArgs)
@@ -949,6 +1069,7 @@ class PlanTurn:
             ),
             None,
         )
+        task_estimate = await _safe_task_estimate(db, project, compiled)
         intent = InferredIntent(
             action="draft",
             tasks=compiled,
@@ -963,7 +1084,6 @@ class PlanTurn:
             derived = await derive_plan_preview(db, project, compiled)
         except (ToolRejected, ValueError):
             derived = []
-        task_estimate = await _safe_task_estimate(db, project, compiled)
 
         # The late-turn guard (same zombie-dock law as present_plan): a
         # concurrent Start committed while this turn was in flight — docking
@@ -1077,6 +1197,7 @@ class PlanTurn:
             ),
             None,
         ) or (stored_intent.caption_mode if stored_intent else None)
+        task_estimate = await _safe_task_estimate(db, project, compiled)
         intent = InferredIntent(
             action="draft",
             tasks=compiled,
@@ -1091,7 +1212,6 @@ class PlanTurn:
             derived = await derive_plan_preview(db, project, compiled)
         except (ToolRejected, ValueError):
             derived = []
-        task_estimate = await _safe_task_estimate(db, project, compiled)
 
         # The late-turn guard (same zombie-dock law as present_plan).
         active_line = await _active_run_line(db, project, self.text)
@@ -1166,6 +1286,11 @@ class PlanTurn:
             )
         except ExplorationRejected as e:
             return f"The door rejected the revision: {e}"
+        # C8-c: the re-pointed pick repaints the candidate surface's
+        # selection highlight in EVERY phase (pre-dock included — the card
+        # is the selection state's one seat).
+        for event in await self._selection_payloads(revised):
+            await self._emit_candidates(event)
         journey_id = UUID(str(revised[0].journey_id))
         revised_ids = {str(n.id) for n in revised}
         riding = [
@@ -1330,11 +1455,16 @@ class PlanTurn:
         # flow); the bare question rides the payload (解剖 ② — dock title,
         # QA archive, reminder tail). Prose-less asks fall back to content =
         # the bare question, the legacy shape every consumer still reads.
+        # 推荐标记 (2026-09-27 一问拍一体化): the shared validation lives in
+        # resolve_recommended_id — the asset_role code-built options
+        # invalidate any LLM-written id the same way.
+        recommended_id = resolve_recommended_id(params.recommended_id, params.options)
         ask = QuestionProposal(
             prose=prose or "",
             question=params.question,
             options=params.options,
             allow_freeform=params.allow_freeform,
+            recommended_id=recommended_id,
             slot=params.slot,
             default_path=params.default_path,
         )
@@ -1353,6 +1483,7 @@ class PlanTurn:
                 question=params.question,
                 options=params.options,
                 allow_freeform=params.allow_freeform,
+                recommended_id=recommended_id,
                 slot=params.slot,
                 default_path=params.default_path,
             ),
@@ -1543,6 +1674,7 @@ async def run_plan_turn(
     on_checkpoint=None,
     on_loop_event=None,
     on_activity=None,
+    on_candidates=None,
 ) -> PlanTurnOutcome:
     """The plan path's turn: assemble → the bounded tool loop → the outcome
     mapping. ``intent_router`` provider failures propagate as LLMError — no
@@ -1554,7 +1686,7 @@ async def run_plan_turn(
     channel's SSE seat — the runner wraps it with persistence (the checkpoint
     row is this turn's own message, intent type 'checkpoint'). None = the
     one-shot path."""
-    turn = PlanTurn(db, user_id, conversation, project, request, on_phase=on_phase, on_activity=on_activity)
+    turn = PlanTurn(db, user_id, conversation, project, request, on_phase=on_phase, on_activity=on_activity, on_candidates=on_candidates)
     await turn.assemble(recent)
     result = await intent_router.call_loop(
         turn.execute,

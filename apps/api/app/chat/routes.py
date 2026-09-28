@@ -49,10 +49,15 @@ from app.chat.service import (
     list_conversation_messages,
     prepare_chat_turn,
     record_activity_log,
+    record_candidates_log,
     stamp_turn_failed,
 )
 from app.providers.llm.base import LLMError
 from app.pipeline.errors import user_error_line
+from app.pipeline.node_runners import (
+    fire_understanding_warm,
+    understanding_opening_missing,
+)
 from app.platform.conversation_context import (
     find_conversation,
     latest_pending_question,
@@ -96,6 +101,17 @@ async def get_conversation(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Conversation not found",
         )
+    # 素材理解自愈座位 (2026-09-27 用户拍板——方案 a): the upload-time warm
+    # fires in the worker on the last asset's completion; a process death in
+    # between strands the dock's "understanding" gap row forever. Opening the
+    # conversation re-fires when the guard finds a complete digestible set
+    # whose understanding beat never landed (digest-precise — a later upload
+    # re-arms it). Fire-and-forget: the response below never waits on the
+    # warm, and the warm's own dedups make a redundant fire a few reads.
+    if await understanding_opening_missing(
+        db, project_id, UUID(str(conversation.id))
+    ):
+        fire_understanding_warm(project_id)
     response = ConversationResponse.model_validate(conversation)
     pending = await latest_pending_question(db, UUID(str(conversation.id)))
     if pending is not None:
@@ -183,6 +199,10 @@ def _make_tool_hooks(queue: asyncio.Queue, projector: ActivityProjector | None =
                         "allow_freeform": params.allow_freeform,
                         "slot": getattr(params, "slot", None),
                         "default_path": params.default_path,
+                        # 推荐标记 (一问拍一体化 2026-09-27): rides the preview
+                        # too — the optimistic dock marks the lean from the
+                        # first frame, the envelope re-docks authoritatively.
+                        "recommended_id": getattr(params, "recommended_id", None),
                     }
                 )
             )
@@ -219,6 +239,24 @@ def _make_activity_hook(queue: asyncio.Queue, projector: ActivityProjector):
     return on_activity
 
 
+def _make_candidates_hook(queue: asyncio.Queue, sink: list[dict]):
+    """The Candidate Surface channel's SSE seat (Workspace 合同 v4.2 C8-c,
+    2026-09-26): the exploration doors' payloads (a candidate set's members,
+    a selection's repaint) stream as ``assistant.candidates`` frames the
+    moment the door succeeds — the milestone channel's count-only whitelist
+    never carries them. Every emitted payload ALSO lands in ``sink``; the
+    completed path persists the sink as ONE candidates_log message row (the
+    activity_log precedent), so the surface survives a refresh — 消息载数据链,
+    no endpoint."""
+    async def on_candidates(payload: dict) -> None:
+        sink.append(payload)
+        await queue.put(
+            _sse("assistant.candidates", json.dumps(payload, ensure_ascii=False))
+        )
+
+    return on_candidates
+
+
 async def _sweep_activities(queue: asyncio.Queue, projector: ActivityProjector, outcome: str) -> None:
     """The terminal sweep (T16-B, 终帧律的活动同形): before the envelope,
     every still-active activity is settled — no activity outlives its turn."""
@@ -249,6 +287,30 @@ async def _persist_activity_log(
     except Exception as e:  # noqa: BLE001 — additive history is best-effort
         logger.warning(
             "activity_log_persist_failed",
+            conversation_id=str(conversation_id),
+            error=str(e),
+        )
+
+
+async def _persist_candidates_log(
+    conversation_id: UUID, ref: str, events: list[dict]
+) -> None:
+    """Candidate surface 持久化 (v4.2 C8-c): the turn's emitted
+    ``assistant.candidates`` payloads land as ONE candidates_log message row
+    — same doctrine as ``_persist_activity_log`` (completed path only, own
+    session, best-effort), so a refresh replays the candidate card and its
+    selection highlight instead of silently dropping them."""
+    if not events:
+        return
+    try:
+        from app.models.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as db:
+            await record_candidates_log(db, conversation_id, events, ref=ref)
+            await db.commit()
+    except Exception as e:  # noqa: BLE001 — additive history is best-effort
+        logger.warning(
+            "candidates_log_persist_failed",
             conversation_id=str(conversation_id),
             error=str(e),
         )
@@ -344,6 +406,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
     """
     queue: asyncio.Queue = asyncio.Queue()
     projector = ActivityProjector()
+    candidate_events: list[dict] = []
 
     async def run_turn() -> None:
         from app.models.database import AsyncSessionLocal
@@ -363,6 +426,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                 on_tool_call, on_tool_ready = _make_tool_hooks(queue, projector)
                 on_loop_event = _make_loop_event_hook(queue, projector)
                 on_activity = _make_activity_hook(queue, projector)
+                on_candidates = _make_candidates_hook(queue, candidate_events)
 
                 async def on_reasoning(_fragment: str) -> None:
                     # Reasoning-content frames: liveness only, never shown.
@@ -400,11 +464,15 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     on_checkpoint=on_checkpoint,
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
+                    on_candidates=on_candidates,
                 )
             await _sweep_activities(queue, projector, "completed")
             if turn_conversation_id is not None and turn_user_message_id is not None:
                 await _persist_activity_log(
                     turn_conversation_id, str(turn_user_message_id), projector
+                )
+                await _persist_candidates_log(
+                    turn_conversation_id, str(turn_user_message_id), candidate_events
                 )
             await queue.put(("completed", response.model_dump(mode="json")))
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash
@@ -450,6 +518,7 @@ async def _answer_stream(
     """
     queue: asyncio.Queue = asyncio.Queue()
     projector = ActivityProjector()
+    candidate_events: list[dict] = []
 
     async def run_answer() -> None:
         from app.models.database import AsyncSessionLocal
@@ -460,6 +529,7 @@ async def _answer_stream(
                 on_tool_call, on_tool_ready = _make_tool_hooks(queue, projector)
                 on_loop_event = _make_loop_event_hook(queue, projector)
                 on_activity = _make_activity_hook(queue, projector)
+                on_candidates = _make_candidates_hook(queue, candidate_events)
 
                 async def on_phase(phase: str) -> None:
                     await queue.put(
@@ -477,9 +547,13 @@ async def _answer_stream(
                     on_tool_ready=on_tool_ready,
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
+                    on_candidates=on_candidates,
                 )
             await _sweep_activities(queue, projector, "completed")
             await _persist_activity_log(message.conversation_id, str(message.id), projector)
+            await _persist_candidates_log(
+                message.conversation_id, str(message.id), candidate_events
+            )
             await queue.put(
                 (
                     "completed",

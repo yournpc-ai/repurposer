@@ -40,14 +40,11 @@ export function answeredQuestionText(
   if (answer.kind === "option" && answer.text === "expired") {
     return { text: t("chat.qa.expired"), muted: true }
   }
-  // Task-book confirmation: "start" is a first-class answer kind (C1); the
-  // option_id form is the phase-1 spelling, kept for pre-migration rows.
-  if (
-    answer.kind === "start" ||
-    (answer.kind === "option" && answer.option_id === "start")
-  ) {
-    return { text: t("chat.qa.started"), muted: false }
-  }
+  // start 类 QA 退役 (Workspace 合同 v4.2 C8, 2026-09-26 封板): the
+  // confirmation beat archives as a plain user bubble (「确认生成」via the
+  // sendChat channel), never as a Q&A block — task_book answers bypass
+  // this resolver entirely (historyReplay replays the echo only), so no
+  // "start" branch lives here anymore. QA blocks serve genuine Q&A only.
   return { text: answer.text || answer.option_id || "", muted: false }
 }
 

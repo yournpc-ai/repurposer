@@ -462,7 +462,12 @@ async def test_delete_node_takes_its_edges_structurally():
     a = _node("asset", state="done", spec={"asset_type": "video"})
     b = _node("generator")
     db = _StubDb(nodes=[a, b], edges=[_edge(a.id, b.id, "video")])
-    delta = await apply_wiring_ops(db, _PROJECT_ID, [{"op": "delete_node", "node": a.id}])
+    # The asset module's own lifecycle delete is the ONE settled-delete
+    # caller the guard bypasses (remove_asset_node precedent, v4.2 封板⑤).
+    delta = await apply_wiring_ops(
+        db, _PROJECT_ID, [{"op": "delete_node", "node": a.id}],
+        allow_settled_delete=True,
+    )
     assert delta.affected == [a.id]
     assert [type(d) for d in db.deleted] == [GraphNode]
     # the edge died with it in the working set — a follow-up batch wiring
@@ -470,6 +475,43 @@ async def test_delete_node_takes_its_edges_structurally():
     with pytest.raises(WiringRejected, match="dangling"):
         await apply_wiring_ops(
             _StubDb(nodes=[b]), _PROJECT_ID, [{"op": "connect", "from_node": a.id, "to_node": b.id}]
+        )
+
+
+@pytest.mark.asyncio
+async def test_delete_node_settled_guard_rejects_non_draft():
+    # v4.2 封板⑤ (Settled 只长不消): a settled entity is append-only —
+    # the chat/LLM path never carries the bypass, so its delete dies at
+    # the door.
+    settled = _node("video", state="done", spec={"summary": "clip"})
+    running = _node("video", state="running")
+    db = _StubDb(nodes=[settled, running])
+    with pytest.raises(WiringRejected, match="append-only"):
+        await apply_wiring_ops(db, _PROJECT_ID, [{"op": "delete_node", "node": settled.id}])
+    with pytest.raises(WiringRejected, match="append-only"):
+        await apply_wiring_ops(db, _PROJECT_ID, [{"op": "delete_node", "node": running.id}])
+    assert db.deleted == []
+
+
+@pytest.mark.asyncio
+async def test_delete_node_draft_and_legacy_task_book_stay_deletable():
+    # The provisional cleanups keep their legal paths (clear_draft_graph's
+    # victim shapes): a draft-state node, and the legacy draft-born
+    # task-book document (pre-de-stamp rows — none post-migration, the
+    # path stays honest).
+    draft = _node("video")
+    book = _node(
+        "document", state="done", spec={"role": "task_book"}
+    )
+    db = _StubDb(nodes=[draft, book])
+    await apply_wiring_ops(db, _PROJECT_ID, [{"op": "delete_node", "node": draft.id}])
+    await apply_wiring_ops(db, _PROJECT_ID, [{"op": "delete_node", "node": book.id}])
+    assert [type(d) for d in db.deleted] == [GraphNode, GraphNode]
+    # …but a RUN-born book (history) is settled: rejected without the bypass.
+    run_book = _node("document", state="done", spec={"role": "task_book", "run_id": str(uuid4())})
+    with pytest.raises(WiringRejected, match="append-only"):
+        await apply_wiring_ops(
+            _StubDb(nodes=[run_book]), _PROJECT_ID, [{"op": "delete_node", "node": run_book.id}]
         )
 
 
@@ -766,7 +808,7 @@ async def test_research_collapses_to_one_text_node_and_sweeps_without_it():
     project = Project(id=_PROJECT_ID)
     db = _StubDb()
     await _stamp_graph_core(
-        db, project, _research_chain(), run=None, ui_language="en", draft=True, book_text="b"
+        db, project, _research_chain(), run=None, ui_language="en", draft=True
     )
     research_node = next(n for n in db.nodes if (n.spec or {}).get("tool") == "research")
     assert research_node.type == "text"
@@ -790,7 +832,7 @@ async def test_research_collapses_to_one_text_node_and_sweeps_without_it():
     db2 = _StubDb(nodes=list(db.nodes), edges=list(db.edges))
     post_only = [_research_chain()[1]]
     await _stamp_graph_core(
-        db2, project, post_only, run=None, ui_language="en", draft=True, book_text="b"
+        db2, project, post_only, run=None, ui_language="en", draft=True
     )
     assert not [n for n in db2.nodes if (n.spec or {}).get("tool") == "research"]
 
@@ -805,7 +847,7 @@ async def test_research_node_run_fill_and_sync_renders_the_brief():
     steps = _research_chain()
     db = _StubDb(steps=steps)
     await _stamp_graph_core(
-        db, project, steps, run=run, ui_language="en", draft=False, book_text=None
+        db, project, steps, run=run, ui_language="en", draft=False
     )
     research_node = next(n for n in db.nodes if (n.spec or {}).get("tool") == "research")
     assert research_node.state == "draft"  # the newborn law — sync queues it
@@ -866,7 +908,7 @@ async def test_two_station_stamp_asm_and_doc_companion():
     asset = _asset(transcript="hello world")
     db = _StubDb(steps=steps, assets=[asset])
     await _stamp_graph_core(
-        db, project, steps, run=run, ui_language="en", draft=False, book_text=None
+        db, project, steps, run=run, ui_language="en", draft=False
     )
     asm = next(n for n in db.nodes if n.type == "video")
     doc = next(n for n in db.nodes if n.type == "table")
@@ -925,7 +967,7 @@ async def test_materialize_folds_into_the_translate_family(monkeypatch):
     materialize, translate = _translate_chain(with_materialize=True)
     db = _StubDb(steps=[materialize, translate], assets=[_asset()])
     await _stamp_graph_core(
-        db, project, [materialize, translate], run=run, ui_language="en", draft=False, book_text=None
+        db, project, [materialize, translate], run=run, ui_language="en", draft=False
     )
     video_nodes = [n for n in db.nodes if n.type == "video"]
     assert len(video_nodes) == 1  # the folded materialize grows no twin
@@ -1011,7 +1053,7 @@ async def test_two_station_estimate_seats_and_requote_on_reuse():
     translate.inputs = []
     db = _StubDb(steps=[translate], assets=[_asset()])
     await _stamp_graph_core(
-        db, project, [translate], run=run, ui_language="en", draft=False, book_text=None
+        db, project, [translate], run=run, ui_language="en", draft=False
     )
     asm = next(n for n in db.nodes if n.type == "video")
     doc = next(n for n in db.nodes if n.type == "table")
@@ -1033,7 +1075,7 @@ async def test_two_station_estimate_seats_and_requote_on_reuse():
     dub.inputs = [str(translate.id)]
     db2 = _StubDb(nodes=list(db.nodes), edges=list(db.edges), steps=[dub], assets=[])
     await _stamp_graph_core(
-        db2, project, [dub], run=run, ui_language="en", draft=False, book_text=None
+        db2, project, [dub], run=run, ui_language="en", draft=False
     )
     dub_asm = next(
         n for n in db2.nodes
@@ -1068,7 +1110,7 @@ async def test_two_station_estimate_seats_and_requote_on_reuse():
         nodes=list(db2.nodes), edges=list(db2.edges), steps=[dub_v2], assets=[]
     )
     await _stamp_graph_core(
-        db3, project, [dub_v2], run=run, ui_language="en", draft=False, book_text=None
+        db3, project, [dub_v2], run=run, ui_language="en", draft=False
     )
     assert dub_doc.spec["estimate"] == {
         "prompt_tokens": [12, 22], "completion_tokens": [32, 42], "units": {}
@@ -1168,98 +1210,6 @@ async def test_sync_mirrors_the_doc_station_and_renders_the_cue_text():
     assert doc2.spec["text"] == "0:00–0:02 Bonjour\n1:05–1:07 le monde"
 
 
-# ---- task book face (全文卡律 判词④: prose birth + 双面 back-write 律) ------
-
-
-def _post_chain():
-    plan = WorkflowStep(
-        id=uuid4(),
-        kind="plan",
-        seq=1,
-        spec={"task_book": {"slots": [{"type": "post"}], "target_language": "en"}},
-        estimate=None,
-    )
-    post = WorkflowStep(
-        id=uuid4(),
-        kind="write_post",
-        seq=2,
-        spec={"slot": {"type": "post"}, "slot_index": 0},
-        estimate=None,
-    )
-    post.inputs = [str(plan.id)]
-    plan.inputs = []
-    return [plan, post]
-
-
-def _book_node(db):
-    return next(
-        n for n in db.nodes if n.type == "document" and (n.spec or {}).get("role") == "task_book"
-    )
-
-
-@pytest.mark.asyncio
-async def test_draft_book_born_with_full_prose_and_confirm_sized_frame():
-    project = Project(id=_PROJECT_ID)
-    db = _StubDb()
-    prose = "Four caption versions off your full demo video — EN, ZH, FR, ES."
-    await _stamp_graph_core(
-        db, project, _post_chain(), run=None, ui_language="en", draft=True, book_text=prose
-    )
-    book = _book_node(db)
-    assert book.spec["text"] == prose  # the LLM's own plan restatement, never a condensation
-    # 全文卡律 frame (server mirror of layout.ts documentTextHeight): 66
-    # Latin chars → ceil(66/67) = 1 line → 26 + 16 + 18 + 16 + 88 (the
-    # dock-time confirm allowance) = 164 → the DOCUMENT_MIN_H floor (280,
-    # 2026-09-13 增大批) binds; the lane is the widened 340 (was 260).
-    assert book.layout["h"] == 280
-    assert book.layout["w"] == 340
-
-
-@pytest.mark.asyncio
-async def test_draft_restamp_refreshes_the_prose_but_run_fill_never_rewrites_it():
-    project = Project(id=_PROJECT_ID)
-    run = WorkflowRun(id=uuid4(), project_id=_PROJECT_ID, context={})
-    steps = _post_chain()
-    db = _StubDb(steps=steps)
-    await _stamp_graph_core(
-        db, project, steps, run=None, ui_language="en", draft=True, book_text="old prose"
-    )
-    # A revised chain re-docks: the dock owns the DRAFT face — refresh.
-    await _stamp_graph_core(
-        db, project, steps, run=None, ui_language="en", draft=True, book_text="new prose"
-    )
-    assert _book_node(db).spec["text"] == "new prose"
-    # Start's run fill (the deterministic composition is available here —
-    # "1 post · English") must NOT overwrite the docked promise.
-    await _stamp_graph_core(
-        db, project, steps, run=run, ui_language="en", draft=False, book_text=None
-    )
-    assert _book_node(db).spec["text"] == "new prose"
-
-
-@pytest.mark.asyncio
-async def test_run_born_book_fills_an_empty_face_with_composition_or_run_name():
-    project = Project(id=_PROJECT_ID)
-    run = WorkflowRun(id=uuid4(), project_id=_PROJECT_ID, context={})
-    db = _StubDb(steps=_post_chain())
-    await _stamp_graph_core(
-        db, project, _post_chain(), run=run, ui_language="en", draft=False, book_text=None
-    )
-    assert _book_node(db).spec["text"] == "1 post · English"
-    # A transform chain carries no output slots — the deterministic
-    # composition is blind (None); the run's LLM-given name is the face.
-    plan, post = _post_chain()
-    plan.spec = {"task_book": {"slots": [], "target_language": "en"}}
-    named_run = WorkflowRun(
-        id=uuid4(), project_id=_PROJECT_ID, context={"name": "Multilingual caption versions"}
-    )
-    db2 = _StubDb(steps=[plan, post])
-    await _stamp_graph_core(
-        db2, project, [plan, post], run=named_run, ui_language="en", draft=False, book_text=None
-    )
-    assert _book_node(db2).spec["text"] == "Multilingual caption versions"
-
-
 def test_document_frame_full_text_math_cjk_latin_empty():
     from app.pipeline.graph_store import _document_frame
 
@@ -1328,7 +1278,8 @@ async def test_add_node_pinned_id_collision_rejected():
         )
 
 
-def test_settle_frames_chain_grows_right_not_down():
+@pytest.mark.asyncio
+async def test_settle_frames_chain_grows_right_not_down():
     """The fill's two-batch case: nodes born as x=0 islands (stacked), edges
     landed after — the re-settle walks parents-first and the chain reads
     left → right, one column per depth."""
@@ -1342,7 +1293,7 @@ def test_settle_frames_chain_grows_right_not_down():
         _edge(book.id, writer.id, "ctx"),
         _edge(book.id, verify_free_second.id, "ctx"),
     ]
-    settle_frames_with_edges([book, writer, verify_free_second], [], edges)
+    await settle_frames_with_edges([book, writer, verify_free_second], [], edges)
     # The book has no parents — it stays at the origin island.
     assert (book.layout["x"], book.layout["y"]) == (0, 0)
     # Children settle one depth-pitch right (464 since the 2026-09-13 分档
@@ -1359,7 +1310,8 @@ def test_settle_frames_chain_grows_right_not_down():
     assert verify_free_second.layout["y"] == -88 + 560 + 16
 
 
-def test_settle_frames_parent_chain_one_link_per_pass():
+@pytest.mark.asyncio
+async def test_settle_frames_parent_chain_one_link_per_pass():
     """A → B → C: C must wait for B's settled frame (parents-first passes),
     landing one column further right — never computed off B's provisional
     island frame."""
@@ -1367,14 +1319,15 @@ def test_settle_frames_parent_chain_one_link_per_pass():
     b = _node("generator", spec={"frame_class": "text"}, layout={"x": 0, "y": 224, "w": 340, "h": 440})
     c = _node("processor", spec={"frame_class": "clip"}, layout={"x": 0, "y": 688, "w": 280, "h": 660})
     edges = [_edge(a.id, b.id, "ctx"), _edge(b.id, c.id, "text")]
-    settle_frames_with_edges([a, b, c], [], edges)
+    await settle_frames_with_edges([a, b, c], [], edges)
     assert b.layout["x"] == 464
     assert c.layout["x"] == 2 * 464
     # The rise compounds link by link: b above a, c above b.
     assert c.layout["y"] == -176
 
 
-def test_settle_frames_never_moves_settled_history():
+@pytest.mark.asyncio
+async def test_settle_frames_never_moves_settled_history():
     """Settled nodes are the re-settle's ground truth: a newborn parented by
     one settles right of ITS frame; the settled frame itself is untouched."""
     asset = _node("asset", state="done", spec={"asset_type": "video"},
@@ -1383,7 +1336,7 @@ def test_settle_frames_never_moves_settled_history():
     writer = _node("generator", spec={"frame_class": "text"},
                    layout={"x": 0, "y": 508, "w": 340, "h": 440})
     edges = [_edge(asset.id, book.id, "text"), _edge(book.id, writer.id, "ctx")]
-    settle_frames_with_edges([book, writer], [asset], edges)
+    await settle_frames_with_edges([book, writer], [asset], edges)
     assert asset.layout == {"x": 0, "y": 0, "w": 280, "h": 260}
     # The book rises above its settled parent; the settled frame is untouched.
     assert (book.layout["x"], book.layout["y"]) == (464, -88)

@@ -30,28 +30,7 @@ export const FLOW_NODE_SIZE: Record<FlowNodeKind, { width: number; height: numbe
   audio: { width: 280, height: 268 },
   modifier: { width: 280, height: 268 },
   materialize: { width: 280, height: 268 },
-  /** 探索产物族 (ADR-088 §2, 词表 v3 第八值): the family's ONE fallback —
-   * the server-settled frame (per-kind, _EXPLORATION_FRAME ↔
-   * EXPLORATION_NODE_SIZE below) always supersedes it. */
-  exploration: { width: 340, height: 96 },
 }
-
-/** 探索族卡面尺寸 (ADR-088 §2; 一条测量律两镜像互引 — server mirror
- * exploration_store._EXPLORATION_FRAME): the per-kind FIXED anatomies the
- * birth frames reserve. Candidate set = the COLLAPSED summary row; its
- * expansion is the card's own max-height scroll (封顶滚动律 precedent —
- * the frame never grows; the expanded card overlays the lane below it
- * transiently, a user gesture, z-raised and solid). */
-export const EXPLORATION_NODE_SIZE: Record<string, { width: number; height: number }> = {
-  candidate_set: { width: 340, height: 96 },
-  select: { width: 320, height: 140 },
-  content_plan: { width: 360, height: 220 },
-}
-
-/** The candidate-set card's expanded member-list cap (px) — the list
- * scrolls in place past it (nowheel+nopan), so the transient expansion
- * stays bounded inside the lane. */
-export const EXPLORATION_MEMBER_LIST_PX = 264
 
 /** The results canvas's product card (ADR-041 D5 大卡, 2026-08-17 二轮走查
  * 放大; 2026-09-13 用户拍板 分档加宽): a corner-info band above the card (type
@@ -274,14 +253,6 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
   const frame = node.frame
   const fallback = FLOW_NODE_SIZE[node.kind]
   const width = frame?.w ?? fallback.width
-  // 探索产物族 (ADR-088 §2): the fixed per-kind anatomy — the frame IS the
-  // reservation (EXPLORATION_NODE_SIZE, the server mirror's one law). The
-  // candidate set's expansion is the card's transient overlay, never a
-  // layout event (the frame never grows).
-  if (node.kind === "exploration") {
-    const kind = EXPLORATION_NODE_SIZE[String(node.spec?.exploration_kind ?? "")] ?? fallback
-    return { width, height: kind.height }
-  }
   // 素材节点 (C4 读面后 kind 已是媒介值 — the joined asset dossier is the
   // birth certificate). 素材节点同律 (2026-09-13 用户拍板): the source's
   // real pixels shape the node — snapped to its display class's anatomy
@@ -307,8 +278,13 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
     // DOCUMENT_MAX_H — the body scrolls past the cap, so the render never
     // outgrows the reservation (new frames are born with exactly this via
     // the server's mirror math, so the two agree; a legacy frame may be
-    // taller than the cap — extra whitespace, never overlap).
-    const text = (node.spec?.text as string | undefined) ?? ""
+    // taller than the cap — extra whitespace, never overlap). The text is
+    // the DISPLAY layer (v4.2 C4: the transcript's edited overlay when
+    // present, the source mirror otherwise).
+    const text =
+      (node.spec?.edited_text as string | undefined) ??
+      (node.spec?.text as string | undefined) ??
+      ""
     // Floor + cap (DOCUMENT_MIN_H / MAX_H, one law with the server mirror):
     // the body scrolls past the cap; short texts fill the floor with air.
     return { width, height: Math.min(Math.max(documentTextHeight(text), DOCUMENT_MIN_H), DOCUMENT_MAX_H) }
@@ -391,16 +367,19 @@ export const VIDEO_ASSET_NODE_SIZE = { width: 280, height: 228 }
  * 2026-08-17; 做薄 2026-08-19): 8px gap + the 36px frosted bar. */
 export const ASSET_TOOLBAR_PX = 44
 
-// 间距常数收紧 (C6, 2026-09-14 拍板 64/16/88): one law with the server
-// mirror graph_store._GAP_MAIN/_GAP_CROSS (the rise is server-stamped).
-const GAP_MAIN = 64
+// 间距常数 (C6, 2026-09-14 拍板 64/16/88; 2026-09-28 用户走查放宽主距
+// 64→124): one law with the server mirror graph_store._GAP_MAIN/_GAP_CROSS
+// (the rise is server-stamped). 放宽动因: 09-13 分档加宽后最宽泳道 400,
+// 64 净距被左右各凸出 34 的端口圆 (PORT_SIDE_PX) 吃成相碰——124 恢复
+// 加宽前的通道宽度.
+const GAP_MAIN = 124
 const GAP_CROSS = 16
 
 // 投影律横向间距 (I-PFA-02/03, C-1): display x = rank × PITCH. One law with
 // TWO mirrors — product_graph.PITCH (the contract module) ↔
 // graph_store._PITCH (the birth-frame law) ↔ this seat (the projection);
-// never a third value.
-const PITCH = 464
+// never a third value. 524 = 最宽帧类 400 + GAP_MAIN 124 (2026-09-28).
+const PITCH = 524
 
 /** Birth-choreography stagger quantum (ADR-036 补记 3): the delay between
  * consecutive nodes' entrances in compile-order replay — shared by the node
@@ -466,12 +445,26 @@ export function projectSettledFrames(
     ns.sort((a, b) => a.frame!.y - b.frame!.y)
     let prevBottom: number | null = null
     for (const n of ns) {
+      // 岛内格 (Workspace 合同 v4.2 C6 — mirror of graph_store's birth-frozen
+      // cell law): an island member renders at its FROZEN cell y verbatim
+      // (容量预留的空白即廊道 — in-island cells never air-compress), and the
+      // column's compression floor rises to the island's RESERVED bottom so
+      // a later band-mate never invades empty corridor cells. One law, two
+      // mirrors: spec.island.reserved_bottom rides the read face's stamp.
+      const island = n.spec?.island as { reserved_bottom?: number } | undefined
       const serverY = n.frame!.y
-      const y: number =
-        prevBottom === null ? serverY : Math.min(serverY, prevBottom + GAP_CROSS)
+      const y: number = island
+        ? serverY
+        : prevBottom === null
+          ? serverY
+          : Math.min(serverY, prevBottom + GAP_CROSS)
       const x = n.rank != null ? n.rank * PITCH : n.frame!.x
       positions.set(n.id, { x, y })
-      prevBottom = y + flowNodeSize(n).height
+      prevBottom = Math.max(
+        y + flowNodeSize(n).height,
+        island?.reserved_bottom ?? 0,
+        prevBottom ?? 0,
+      )
     }
   }
 

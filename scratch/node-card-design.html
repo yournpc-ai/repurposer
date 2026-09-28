@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>产物节点卡设计稿 — 生成短片</title>
+<style>
+  :root {
+    --page: oklch(0.96 0 0);
+    --card: oklch(1 0 0);
+    --fg: oklch(0.145 0 0);
+    --muted: oklch(0.556 0 0);
+    --meta: oklch(0.68 0 0);
+    --hairline: oklch(0.145 0 0 / 0.10);
+    --accent: oklch(0.92 0 0);
+    --inset: oklch(0.92 0 0);
+    --primary: oklch(0.35 0 0);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+    background: var(--page);
+    color: var(--fg);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1440px; margin: 0 auto; padding: 48px 40px 96px; }
+
+  header.doc { margin-bottom: 40px; max-width: 720px; }
+  header.doc h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  header.doc p { margin-top: 10px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+  header.doc code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11.5px; background: var(--inset); padding: 1px 5px; border-radius: 4px;
+  }
+  .laws { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .laws span { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+  .laws b { color: var(--fg); font-weight: 500; }
+
+  section { margin-top: 56px; }
+  section > h2 { font-size: 13px; font-weight: 600; }
+  section > .sub { margin-top: 4px; font-size: 12px; color: var(--muted); }
+
+  /* ---- the canvas stage ---- */
+  .stage {
+    margin-top: 20px;
+    border-radius: 16px;
+    background:
+      radial-gradient(circle, oklch(0.556 0 0 / 0.32) 1px, transparent 1px) 0 0 / 32px 32px,
+      var(--page);
+    box-shadow: inset 0 0 0 1px var(--hairline);
+    padding: 56px;
+    display: flex;
+    gap: 72px;
+    align-items: flex-start;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .case { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .case > .tag {
+    font-size: 11px; color: var(--meta);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .case > .note { font-size: 12px; color: var(--muted); max-width: 260px; text-align: center; line-height: 1.6; }
+  .case > .note.bad { color: oklch(0.55 0.15 25); }
+
+  /* ---- the node (shared anatomy) ---- */
+  .node { display: flex; flex-direction: column; width: var(--nw, 280px); }
+  .caption {
+    display: flex; align-items: center; gap: 6px;
+    height: 26px; padding: 0 4px 8px;
+    color: var(--muted); font-size: 12px;
+  }
+  .caption svg { width: 14px; height: 14px; }
+  .card {
+    position: relative;
+    background: var(--card);
+    border-radius: 12px;
+    box-shadow: 0 0 0 1px var(--hairline);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .media {
+    position: relative;
+    width: 100%;
+    background: #000;
+  }
+  .media .face { display: block; width: 100%; height: auto; }
+  .media .badge-score {
+    position: absolute; left: 10px; bottom: 10px;
+    color: #fff; font-size: 12px; font-weight: 500;
+    text-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  }
+  .void {
+    background: var(--card);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--meta); font-size: 11px;
+  }
+  .pill {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--card);
+    border-radius: 10px;
+    box-shadow: 0 0 0 1px var(--hairline);
+    color: var(--muted);
+  }
+  .pill.pager { padding: 8px 14px; font-size: 12px; }
+  .pill.facts { padding: 9px 12px; font-size: 12px; gap: 8px; }
+  .pill.facts .acts { display: flex; gap: 6px; margin-left: auto; color: var(--fg); }
+  .pill svg { width: 14px; height: 14px; }
+  .below { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 8px; width: 100%; }
+
+  /* frosted overlay chip (on-media chrome) */
+  .frost {
+    background: oklch(1 0 0 / 0.72);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    box-shadow: 0 0 0 1px oklch(1 0 0 / 0.35), 0 8px 24px rgb(0 0 0 / 0.18);
+    border-radius: 10px;
+    color: oklch(0.25 0 0);
+  }
+  .onmedia-pager {
+    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 12px; font-size: 12px;
+  }
+  .onmedia-pager svg { width: 13px; height: 13px; }
+  .onmedia-facts {
+    position: absolute; left: 8px; right: 8px; bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; font-size: 11.5px;
+  }
+  .onmedia-facts .acts { display: flex; gap: 6px; margin-left: auto; }
+  .onmedia-facts svg { width: 13px; height: 13px; }
+  .hover-only { opacity: 0; transition: opacity 0.15s; }
+  .card:hover .hover-only { opacity: 1; }
+  @media (hover: none) { .hover-only { opacity: 1; } }
+  .filmstrip {
+    position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+    display: flex; gap: 5px; padding: 5px;
+  }
+  .filmstrip .tile {
+    width: 30px; height: 53px; border-radius: 6px; overflow: hidden;
+    opacity: 0.6; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.25);
+  }
+  .filmstrip .tile.on { opacity: 1; box-shadow: 0 0 0 2px #fff; }
+  .caption .right { margin-left: auto; display: flex; align-items: center; gap: 10px; color: var(--meta); font-size: 11px; }
+  .caption .right svg { width: 13px; height: 13px; color: var(--muted); }
+  .corner-btn {
+    position: absolute; top: 8px;
+    width: 28px; height: 28px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .corner-btn svg { width: 14px; height: 14px; }
+  .corner-btn.left { left: 8px; }
+  .corner-btn.right { right: 8px; }
+
+  .divider-note {
+    margin-top: 14px; font-size: 11.5px; color: var(--meta); line-height: 1.7;
+    max-width: 300px; text-align: center;
+  }
+
+  footer.pick {
+    margin-top: 64px; padding: 20px 24px;
+    background: var(--card); border-radius: 12px;
+    box-shadow: 0 0 0 1px var(--hairline);
+    max-width: 720px;
+  }
+  footer.pick h3 { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+  footer.pick li { font-size: 12.5px; color: var(--muted); line-height: 1.9; margin-left: 18px; }
+  footer.pick b { color: var(--fg); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="doc">
+    <h1>产物节点卡设计稿 — 生成短片（9:16）</h1>
+    <p>针对截图里「生成短片」节点的三个观感病灶出稿。取证结论：<code>frame_aspect: 16:9</code>（帧律只读 step spec，无 aspect → 跟源横屏）撞上渲染律的 skin 默认 <code>9:16</code> → 竖片 contain 进横槽 = 两侧黑柱；程序区为非 generator 卡预留 88px 却永不渲染 = 卡内白洞；pager 与 factsbar 两条分离 pill 叠在卡下。</p>
+    <div class="laws">
+      <span><b>律① 卡框跟产物比例</b>——竖片 = 竖塔，媒体撑满卡面，永无黑边（横片同理，见末节 16:9 变体）。</span>
+      <span><b>律② 无空洞</b>——卡内只为真实存在的内容留高；非 generator 卡不再背负空程序区。</span>
+      <span><b>律③ chrome 一个家</b>——pager / factsbar 不叠两条分离 pill；下给 A / B / C 三个 chrome 落位方案对拍。</span>
+    </div>
+  </header>
+
+  <!-- ================= 现状 ================= -->
+  <section>
+    <h2>现状（截图复刻）</h2>
+    <div class="sub">横屏保守帧 + 竖片 contain + 空程序区 + 双 pill</div>
+    <div class="stage">
+      <div class="case">
+        <div class="node" style="--nw: 400px;">
+          <div class="caption">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+            生成短片
+          </div>
+          <div class="card">
+            <div class="media" style="aspect-ratio: 16/9;">
+              <!-- 9:16 竖片 contain 进 16:9 横槽：两侧黑柱 -->
+              <div style="position:absolute; inset:0; display:flex; justify-content:center;">
+                <div style="width: 31.5%; height:100%; background: linear-gradient(180deg, #1b2a4a 0%, #28457a 55%, #16233f 100%); position:relative;">
+                  <div style="position:absolute; top:18%; left:0; right:0; text-align:center; color:#fff; font-size:10px; opacity:.85;">中英科技合作的全新起点</div>
+                  <div style="position:absolute; bottom:14%; left:0; right:0; text-align:center; color:#ffd23e; font-size:9px;">体 会 好 的，</div>
+                </div>
+              </div>
+              <span class="badge-score">80</span>
+            </div>
+            <div class="void" style="height: 132px;">空程序区（prototype=editor，永不渲染 · 88px 预留 + 工具带 44px）</div>
+          </div>
+          <div class="below" style="align-items: center;">
+            <div class="pill pager">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              1 / 5
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
+            <div class="pill facts" style="width:100%;">
+              中文 · 9:16 · 71s · Whisper · MiniMax music-2.6 · MiniMax M3
+              <span class="acts">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 21.7a.5.5 0 0 0 .94-.02l6.5-19a.5.5 0 0 0-.63-.63l-19 6.5a.5.5 0 0 0-.02.94l7.93 3.18a1 1 0 0 1 .62.62z"/><path d="m21.85 2.15-10.94 10.94"/></svg>
+              </span>
+            </div>
+          </div>
+        </div>
+        <span class="tag">现状</span>
+        <span class="note bad">黑柱 × 白洞 × 双 pill —— 三个病灶同框</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 设计稿：三个 chrome 落位 ================= -->
+  <section>
+    <h2>设计稿 — 竖塔卡 × 五个 chrome 方案</h2>
+    <div class="sub">卡框跟产物比例（9:16 → 宽 240 竖塔），媒体撑满；两个正交维度：pager 形态（数字 vs 缩略图）× chrome 落位（卡下 / 骑媒体 / 上移 caption）</div>
+    <div class="stage">
+
+      <!-- 方案 A：卡下一条 facts 带（pager 并入 facts 左端） -->
+      <div class="case">
+        <div class="node" style="--nw: 240px;">
+          <div class="caption">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+            生成短片
+          </div>
+          <div class="card">
+            <div class="media" style="aspect-ratio: 9/16;">
+              <div class="face" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #1b2a4a 0%, #28457a 55%, #16233f 100%); position:relative;">
+                <div style="position:absolute; top:18%; left:0; right:0; text-align:center; color:#fff; font-size:11px; opacity:.85;">中英科技合作的全新起点</div>
+                <div style="position:absolute; bottom:14%; left:0; right:0; text-align:center; color:#ffd23e; font-size:10px;">体 会 好 的，</div>
+              </div>
+              <span class="badge-score">80</span>
+            </div>
+          </div>
+          <div class="below">
+            <div class="pill facts" style="width:100%;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="m15 18-6-6 6-6"/></svg>
+              <span style="color:var(--fg);">1/5</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="m9 18 6-6-6-6"/></svg>
+              <span style="color:var(--meta);">·</span> 9:16 · 71s
+              <span class="acts">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 21.7a.5.5 0 0 0 .94-.02l6.5-19a.5.5 0 0 0-.63-.63l-19 6.5a.5.5 0 0 0-.02.94l7.93 3.18a1 1 0 0 1 .62.62z"/><path d="m21.85 2.15-10.94 10.94"/></svg>
+              </span>
+            </div>
+          </div>
+        </div>
+        <span class="tag">方案 A · 卡下一条带</span>
+        <span class="note">pager 并入 facts 左端，卡下只有一条带；最保守，几何变动最小</span>
+      </div>
+
+      <!-- 方案 B：pager 骑媒体，factsbar 卡下 -->
+      <div class="case">
+        <div class="node" style="--nw: 240px;">
+          <div class="caption">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+            生成短片
+          </div>
+          <div class="card">
+            <div class="media" style="aspect-ratio: 9/16;">
+              <div class="face" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #1b2a4a 0%, #28457a 55%, #16233f 100%); position:relative;">
+                <div style="position:absolute; top:18%; left:0; right:0; text-align:center; color:#fff; font-size:11px; opacity:.85;">中英科技合作的全新起点</div>
+                <div style="position:absolute; bottom:20%; left:0; right:0; text-align:center; color:#ffd23e; font-size:10px;">体 会 好 的，</div>
+              </div>
+              <span class="badge-score" style="bottom: 52px;">80</span>
+              <div class="frost onmedia-pager">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                1 / 5
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              </div>
+            </div>
+          </div>
+          <div class="below">
+            <div class="pill facts" style="width:100%;">
+              中文 · 9:16 · 71s · M3
+              <span class="acts">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 21.7a.5.5 0 0 0 .94-.02l6.5-19a.5.5 0 0 0-.63-.63l-19 6.5a.5.5 0 0 0-.02.94l7.93 3.18a1 1 0 0 1 .62.62z"/><path d="m21.85 2.15-10.94 10.94"/></svg>
+              </span>
+            </div>
+          </div>
+        </div>
+        <span class="tag">方案 B · pager 骑媒体</span>
+        <span class="note">换版是媒体的手势所以骑在媒体上（frost 浮层）；facts 带瘦身留卡下</span>
+      </div>
+
+      <!-- 方案 C：全骑媒体（Flows 式），hover 才出 -->
+      <div class="case">
+        <div class="node" style="--nw: 240px;">
+          <div class="caption">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+            生成短片
+          </div>
+          <div class="card">
+            <div class="media" style="aspect-ratio: 9/16;">
+              <div class="face" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #1b2a4a 0%, #28457a 55%, #16233f 100%); position:relative;">
+                <div style="position:absolute; top:18%; left:0; right:0; text-align:center; color:#fff; font-size:11px; opacity:.85;">中英科技合作的全新起点</div>
+                <div style="position:absolute; bottom:24%; left:0; right:0; text-align:center; color:#ffd23e; font-size:10px;">体 会 好 的，</div>
+              </div>
+              <div class="frost corner-btn left hover-only">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="M9 21H3v-6"/><path d="m3 21 7-7"/></svg>
+              </div>
+              <div class="frost corner-btn right hover-only">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>
+              </div>
+              <span class="badge-score" style="bottom: 56px;">80</span>
+              <div class="frost onmedia-facts">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="m15 18-6-6 6-6"/></svg>
+                <b style="font-weight:500;">1/5</b>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="m9 18 6-6-6-6"/></svg>
+                <span style="opacity:.55;">·</span> 9:16 · 71s
+                <span class="acts">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 21.7a.5.5 0 0 0 .94-.02l6.5-19a.5.5 0 0 0-.63-.63l-19 6.5a.5.5 0 0 0-.02.94l7.93 3.18a1 1 0 0 1 .62.62z"/><path d="m21.85 2.15-10.94 10.94"/></svg>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <span class="tag">方案 C · 全骑媒体</span>
+        <span class="note">卡面 = 纯媒体（Flows 式）；pager+facts 合成一条 frost 带常驻底部，expand/声音 hover 才出</span>
+      </div>
+
+      <!-- 方案 D：缩略图换版带骑媒体，facts 卡下 -->
+      <div class="case">
+        <div class="node" style="--nw: 240px;">
+          <div class="caption">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+            生成短片
+          </div>
+          <div class="card">
+            <div class="media" style="aspect-ratio: 9/16;">
+              <div class="face" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #1b2a4a 0%, #28457a 55%, #16233f 100%); position:relative;">
+                <div style="position:absolute; top:18%; left:0; right:0; text-align:center; color:#fff; font-size:11px; opacity:.85;">中英科技合作的全新起点</div>
+                <div style="position:absolute; bottom:22%; left:0; right:0; text-align:center; color:#ffd23e; font-size:10px;">体 会 好 的，</div>
+              </div>
+              <span class="badge-score" style="bottom: 74px;">80</span>
+              <div class="frost filmstrip">
+                <div class="tile on" style="background: linear-gradient(180deg, #1b2a4a, #28457a);"></div>
+                <div class="tile" style="background: linear-gradient(180deg, #2a1b4a, #5a3a8a);"></div>
+                <div class="tile" style="background: linear-gradient(180deg, #1b4a2e, #2e7a52);"></div>
+                <div class="tile" style="background: linear-gradient(180deg, #4a2e1b, #8a5a2e);"></div>
+                <div class="tile" style="background: linear-gradient(180deg, #3a3a3a, #666);"></div>
+              </div>
+            </div>
+          </div>
+          <div class="below">
+            <div class="pill facts" style="width:100%;">
+              中文 · 9:16 · 71s · M3
+              <span class="acts">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 21.7a.5.5 0 0 0 .94-.02l6.5-19a.5.5 0 0 0-.63-.63l-19 6.5a.5.5 0 0 0-.02.94l7.93 3.18a1 1 0 0 1 .62.62z"/><path d="m21.85 2.15-10.94 10.94"/></svg>
+              </span>
+            </div>
+          </div>
+        </div>
+        <span class="tag">方案 D · 缩略图换版</span>
+        <span class="note">pager 的另一个形态：5 条变体直接露面（thumbUrl 手里有），点哪条看哪条；facts 带卡下</span>
+      </div>
+
+      <!-- 方案 E：meta 上移 caption，卡下零 chrome -->
+      <div class="case">
+        <div class="node" style="--nw: 240px;">
+          <div class="caption">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+            生成短片
+            <span class="right">
+              9:16 · 71s
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 21.7a.5.5 0 0 0 .94-.02l6.5-19a.5.5 0 0 0-.63-.63l-19 6.5a.5.5 0 0 0-.02.94l7.93 3.18a1 1 0 0 1 .62.62z"/><path d="m21.85 2.15-10.94 10.94"/></svg>
+            </span>
+          </div>
+          <div class="card">
+            <div class="media" style="aspect-ratio: 9/16;">
+              <div class="face" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #1b2a4a 0%, #28457a 55%, #16233f 100%); position:relative;">
+                <div style="position:absolute; top:18%; left:0; right:0; text-align:center; color:#fff; font-size:11px; opacity:.85;">中英科技合作的全新起点</div>
+                <div style="position:absolute; bottom:20%; left:0; right:0; text-align:center; color:#ffd23e; font-size:10px;">体 会 好 的，</div>
+              </div>
+              <span class="badge-score" style="bottom: 52px;">80</span>
+              <div class="frost onmedia-pager">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                1 / 5
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+        <span class="tag">方案 E · meta 上移 caption</span>
+        <span class="note">facts 缩进 caption 行右端（9:16 · 71s + 下载/发布），卡下零 chrome；pager 骑媒体——离地最近的纯媒体</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= 16:9 变体 ================= -->
+  <section>
+    <h2>律① 的另一面 — 16:9 横片卡</h2>
+    <div class="sub">同一套解剖，卡框跟横片比例（宽 400）；chrome 落位方案与上面同选</div>
+    <div class="stage">
+      <div class="case">
+        <div class="node" style="--nw: 400px;">
+          <div class="caption">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+            生成短片
+          </div>
+          <div class="card">
+            <div class="media" style="aspect-ratio: 16/9;">
+              <div class="face" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #233a2e 0%, #3f6b52 55%, #1c2f26 100%); position:relative;">
+                <div style="position:absolute; bottom:12%; left:6%; color:#fff; font-size:11px; opacity:.85;">整片 · 比例跟源</div>
+              </div>
+              <div class="frost onmedia-facts">
+                <b style="font-weight:500;">1/2</b>
+                <span style="opacity:.55;">·</span> 16:9 · 340s
+                <span class="acts">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 21.7a.5.5 0 0 0 .94-.02l6.5-19a.5.5 0 0 0-.63-.63l-19 6.5a.5.5 0 0 0-.02.94l7.93 3.18a1 1 0 0 1 .62.62z"/><path d="m21.85 2.15-10.94 10.94"/></svg>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <span class="tag">16:9 · 方案 C 落位</span>
+        <span class="note">横片 = 宽卡，媒体照样撑满；同一律两种 silhouette</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 节点名录 ================= -->
+  <section>
+    <h2>节点名录 — 卡面名的名词化迭代</h2>
+    <div class="sub">命名律提案：<b>卡面名 = 产物名词</b>（读作「这是什么」）；<b>工序动词归 RunTaskList 树行 / activity 行</b>（读作「在干什么」）。现状一半卡名是工序动词（撰写/制作/生成），落成卡后读起来像流水线铭牌。LLM 起名（spec.summary）恒盖过类型名——类型名是兜底，兜底本身也该是名词。</div>
+    <div class="stage" style="justify-content: flex-start; gap: 48px;">
+      <div style="display: flex; flex-direction: column; gap: 28px; width: 100%; max-width: 860px;">
+
+        <div>
+          <div style="font-size: 11px; color: var(--meta); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">素材卡 · assetTypes（已是名词，不动）</div>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            <span class="pill" style="padding: 5px 10px; font-size: 12px;">视频</span>
+            <span class="pill" style="padding: 5px 10px; font-size: 12px;">音频</span>
+            <span class="pill" style="padding: 5px 10px; font-size: 12px;">图片</span>
+            <span class="pill" style="padding: 5px 10px; font-size: 12px;">幻灯片</span>
+            <span class="pill" style="padding: 5px 10px; font-size: 12px;">文字稿</span>
+            <span class="pill" style="padding: 5px 10px; font-size: 12px;">文件</span>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 11px; color: var(--meta); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">文档卡 · roles（已是名词，不动）</div>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            <span class="pill" style="padding: 5px 10px; font-size: 12px;">转写稿</span>
+            <span class="pill" style="padding: 5px 10px; font-size: 12px;">调研简报</span>
+            <span class="pill" style="padding: 5px 10px; font-size: 12px;">译文稿</span>
+            <span class="pill" style="padding: 5px 10px; font-size: 12px;">配音稿</span>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 11px; color: var(--meta); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">产物卡 · 工序动词 → 产物名词（本批迭代对象）</div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+            <thead>
+              <tr style="text-align: left; color: var(--meta); font-size: 11px;">
+                <th style="padding: 6px 10px 6px 0; font-weight: 400;">kind</th>
+                <th style="padding: 6px 10px 6px 0; font-weight: 400;">现状（工序动词）</th>
+                <th style="padding: 6px 0; font-weight: 400;">提案（产物名词）</th>
+              </tr>
+            </thead>
+            <tbody style="color: var(--muted);">
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">select_clips</td><td style="padding: 7px 10px 7px 0;">生成短片</td><td style="color: var(--fg);">短片</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">cut_segments</td><td style="padding: 7px 10px 7px 0;">裁出片段</td><td style="color: var(--fg);">片段</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">translate_clip</td><td style="padding: 7px 10px 7px 0;">翻译字幕 · DE（兄弟标签随 summary）</td><td style="color: var(--fg);">字幕 · DE</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">dub_clip</td><td style="padding: 7px 10px 7px 0;">声音配音</td><td style="color: var(--fg);">配音</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">add_music</td><td style="padding: 7px 10px 7px 0;">片段配乐</td><td style="color: var(--fg);">配乐</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">remove_filler</td><td style="padding: 7px 10px 7px 0;">去除口头禅</td><td style="color: var(--fg);">净音</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">reframe_clip</td><td style="padding: 7px 10px 7px 0;">智能分镜</td><td style="color: var(--fg);">分镜</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">align_stills</td><td style="padding: 7px 10px 7px 0;">对齐文字稿节奏</td><td style="color: var(--fg);">节奏对齐</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">materialize_source</td><td style="padding: 7px 10px 7px 0;">准备整条视频</td><td style="color: var(--fg);">整片</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">decompile</td><td style="padding: 7px 10px 7px 0;">拆解案例</td><td style="color: var(--fg);">风格拆解</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">write_post</td><td style="padding: 7px 10px 7px 0;">撰写社交帖子</td><td style="color: var(--fg);">帖子</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">write_article</td><td style="padding: 7px 10px 7px 0;">撰写文章</td><td style="color: var(--fg);">文章</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">write_carousel</td><td style="padding: 7px 10px 7px 0;">制作轮播图</td><td style="color: var(--fg);">轮播图</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">write_quotes</td><td style="padding: 7px 10px 7px 0;">制作金句卡</td><td style="color: var(--fg);">金句卡</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">revise_script</td><td style="padding: 7px 10px 7px 0;">撰写脚本</td><td style="color: var(--fg);">脚本</td></tr>
+              <tr style="border-top: 1px solid var(--hairline);"><td style="padding: 7px 10px 7px 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px;">research</td><td style="padding: 7px 10px 7px 0;">调研（已是名词）</td><td style="color: var(--fg);">调研</td></tr>
+            </tbody>
+          </table>
+          <div style="margin-top: 10px; font-size: 11.5px; color: var(--meta); line-height: 1.7;">
+            en 同步名词化：Generate clips → Clips / Write social post → Post / Build carousel → Carousel / Create quote cards → Quote cards / Prepare full video → Full video 等。<br>
+            不上卡面的内部 kind（plan / preprocess / understand / render / verify / persona_bootstrap / interrupt）是 RunTaskList 树行，动词本来就是它们的正确语态，不动。
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <footer class="pick">
+    <h3>待拍板</h3>
+    <ul>
+      <li><b>chrome 方案</b>：A（卡下一条带）/ B（pager 骑媒体）/ C（全骑媒体）/ D（缩略图换版带）/ E（meta 上移 caption，卡下零 chrome）。D 的缩略图形态可与 B/C/E 的 facts 落位自由组合。</li>
+      <li><b>帧律修正</b>：帧律补读渲染律的 9:16 默认（未来出生即竖塔）——这条无方案分歧，随施工落地。</li>
+      <li><b>存量节点</b>：已出生的错帧卡（你现在屏幕上这张）要不要在产物落定拍做一次「仅尺寸、不动位置」的校正重帧；不做则只有新链享受新帧。</li>
+      <li><b>白洞</b>：非 generator 卡的程序区预留（88px）随本批退役——批 B4 的 lever row 落地时按真实内容重新留高（几何那时再动，比现在背空洞诚实）。</li>
+      <li><b>卡面名词化</b>：产物卡 16 个 kind 的 caption 从工序动词改产物名词（见名录表），en 同步；树行动词不动。</li>
+    </ul>
+  </footer>
+
+</div>
+</body>
+</html>

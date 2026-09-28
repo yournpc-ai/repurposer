@@ -48,10 +48,15 @@ logger = structlog.get_logger()
 OutT = TypeVar("OutT", bound=BaseModel)
 
 # The one jinja environment (previously rebuilt in five agent modules).
+# auto_reload=True: prompt iteration is this project's core activity, and
+# uvicorn --reload watches only *.py — without this, a .j2 edit silently
+# keeps serving the compiled template until the process restarts. Cost is
+# one stat() per render, nothing next to an LLM call.
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 jinja_env = Environment(
     loader=FileSystemLoader(str(_PROMPTS_DIR)),
     autoescape=select_autoescape(),
+    auto_reload=True,
 )
 
 # Maximum characters to send per text to stay well within the model window.

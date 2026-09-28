@@ -1,17 +1,20 @@
 """exploration_store — the exploration artifacts' write door (ADR-088 §4, R14).
 
 探索产物族（Candidate Set / Select / Content Plan，NAMING N-55）的唯一写座。
-The family lives in the persistent graph (``graph_nodes`` rows with
-``type = "exploration"`` + ``spec.prototype = "exploration"`` +
-``spec.exploration_kind``) — the zero-projection law (ADR-057) and the
-project-delete cascade come for free.
+Workspace 合同 v4.2 C1 (2026-09-26 封板 — 图节点资格): the family NEVER
+enters the Graph — it lives in the dedicated ``exploration_rows`` table
+(re-homed out of ``graph_nodes``; legacy ``type="exploration"`` graph rows
+stay read-filtered, never migrated). The chat-surface data chain is
+message-borne (tool observations / dock payloads), so the table has no
+``type`` (the family IS the table) and no ``layout`` (no canvas seat);
+the project-delete cascade comes from the project FK.
 
 **I-EXPLORE-01 (invariant)**: exploration artifacts MUST NOT participate in
 execution topology, execution closure, quote/rank calculation, or
-media-flow edge semantics. The door enforces its half: exploration nodes
-are born EDGELESS and stay edgeless (no edge writer exists in this
-module); the execution door enforces the reverse half
-(``graph_store.apply_wiring_ops`` rejects exploration nodes).
+media-flow edge semantics. Re-homed, this holds by construction — an
+exploration artifact is not a graph row at all, so no edge writer can
+target it; the execution door keeps its reverse guard
+(``graph_store.apply_wiring_ops`` rejects the legacy exploration rows).
 
 **R14 双门**: this door is NOT the execution write door. Two doors, two
 invariant sets — the exploration door is FREE but still a real door:
@@ -30,13 +33,6 @@ journey id is an attribution property, never a graph edge.
 evidence POINTER (candidate set + member index) — never the source
 copied, never a reasoning trace (reasoning never persists, CoT gate
 unchanged).
-
-**Layout**: exploration nodes are edgeless islands; the depth law would
-stack them into the material column. Iter-1 lane rule (canvas organization
-is the P2 ledger entry): ONE dedicated lane one pitch LEFT of the island
-column (x = −464), family stacking by birth order — deterministic and
-non-overlapping by construction, zero entanglement with the depth law.
-Frames are append-only reservations, assigned once at birth.
 """
 
 import hashlib
@@ -50,15 +46,17 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.tables import Asset, GraphNode, Journey, Project
-from app.pipeline.product_graph import EXPLORATION_NODE_TYPE, EXPLORATION_PROTOTYPE
+from app.models.tables import Asset, ExplorationRow, Journey, Project
+from app.pipeline.product_graph import EXPLORATION_PROTOTYPE
 from app.tools.clips.transcript import words_in_range
 
 # ---- family vocabulary ---------------------------------------------------------
 
-# EXPLORATION_PROTOTYPE / EXPLORATION_NODE_TYPE live in product_graph (the
-# leaf vocabulary seat — both doors import from there, never from each
-# other, so no graph_store ↔ exploration_store cycle can exist).
+# EXPLORATION_PROTOTYPE lives in product_graph (the leaf vocabulary seat —
+# both doors import from there, never from each other, so no graph_store ↔
+# exploration_store cycle can exist). The legacy graph-row type word
+# (EXPLORATION_NODE_TYPE) stays in product_graph for the /graph read-face
+# filter and the wiring door's reverse guard — this table never carries it.
 
 KIND_CANDIDATE_SET = "candidate_set"
 KIND_SELECT = "select"
@@ -301,8 +299,8 @@ def _idem_key(kind: str, journey_id: UUID, payload: dict[str, Any]) -> str:
 
 
 def _find_replay(
-    lane: list[GraphNode], journey_id: UUID, kind: str, idem: str
-) -> GraphNode | None:
+    lane: list[ExplorationRow], journey_id: UUID, kind: str, idem: str
+) -> ExplorationRow | None:
     """The replay lookup — a PURE filter over the lane the door already
     loaded (journey × kind × idem). Deliberately NOT a JSON-path SQL
     filter: the journey_id index already bounds the row set, and a Python
@@ -319,55 +317,18 @@ def _find_replay(
     )
 
 
-# ---- the exploration lane (pure) -------------------------------------------------
-
-# Birth frame reservations per kind — ONE law with the client mirror
-# (apps/web/src/components/flow/layout.ts exploration frames, landing with
-# the cards in this batch): the frame is the reservation the card is built
-# to fit (candidate set = the COLLAPSED summary row; expansion is the
-# card's in-place max-height scroll, the 封顶滚动律 precedent — the frame
-# never grows).
-_EXPLORATION_FRAME: dict[str, tuple[int, int]] = {
-    KIND_CANDIDATE_SET: (340, 96),
-    KIND_SELECT: (320, 140),
-    KIND_CONTENT_PLAN: (360, 220),
-}
-# The lane: one pitch LEFT of the island column (the depth law's x = depth
-# × 464; exploration is edgeless so its "depth" would be 0 — the family
-# gets its own column at −464 instead, never mixing into the material
-# lane). _GAP_MAIN/_PITCH mirror, cross-referenced — canvas organization
-# is the P2 ledger entry, this is the iter-1 deterministic rule.
-_EXPLORATION_LANE_X = -464
-_LANE_GAP_Y = 16  # _GAP_CROSS mirror (graph_store) — sibling stacking
-
-
-def exploration_lane_frame(kind: str, lane_nodes: list[GraphNode]) -> dict[str, int]:
-    """The family's birth frame: the lane's tail + gap, or the lane top.
-    Append-only — existing frames never move (保序律)."""
-    w, h = _EXPLORATION_FRAME[kind]
-    if lane_nodes:
-        y = (
-            max(
-                int((n.layout or {}).get("y", 0)) + int((n.layout or {}).get("h", h))
-                for n in lane_nodes
-            )
-            + _LANE_GAP_Y
-        )
-    else:
-        y = 0
-    return {"x": _EXPLORATION_LANE_X, "y": y, "w": w, "h": h}
-
-
 # ---- door helpers -----------------------------------------------------------------
 
 
-async def _exploration_nodes(db: AsyncSession, project_id: UUID) -> list[GraphNode]:
+async def _exploration_nodes(db: AsyncSession, project_id: UUID) -> list[ExplorationRow]:
+    """The project's exploration lane — every row of the family's own
+    table (Workspace 合同 v4.2 C1: re-homed out of the graph; the table IS
+    the family, so no kind/type filter belongs here)."""
     return list(
         (
             await db.execute(
-                select(GraphNode).where(
-                    GraphNode.project_id == project_id,
-                    GraphNode.type == EXPLORATION_NODE_TYPE,
+                select(ExplorationRow).where(
+                    ExplorationRow.project_id == project_id,
                 )
             )
         )
@@ -378,7 +339,7 @@ async def _exploration_nodes(db: AsyncSession, project_id: UUID) -> list[GraphNo
 
 async def read_journey_evidence(
     db: AsyncSession, project_id: UUID, journey_id: UUID
-) -> tuple[list[GraphNode], list[GraphNode]]:
+) -> tuple[list[ExplorationRow], list[ExplorationRow]]:
     """The compiler's read seat (iter-2 ③, R14 编译器半边——门外侧只读):
     the journey's Select and Candidate Set rows, so ``compile_plans`` can
     dereference the R7 evidence pointers. Returns (selects, candidate_sets)
@@ -387,10 +348,9 @@ async def read_journey_evidence(
     rows = list(
         (
             await db.execute(
-                select(GraphNode).where(
-                    GraphNode.project_id == project_id,
-                    GraphNode.type == EXPLORATION_NODE_TYPE,
-                    GraphNode.journey_id == journey_id,
+                select(ExplorationRow).where(
+                    ExplorationRow.project_id == project_id,
+                    ExplorationRow.journey_id == journey_id,
                 )
             )
         )
@@ -407,8 +367,8 @@ async def read_journey_evidence(
 
 
 def _get_exploration_node(
-    nodes: list[GraphNode], node_id: UUID, kind: str
-) -> GraphNode:
+    nodes: list[ExplorationRow], node_id: UUID, kind: str
+) -> ExplorationRow:
     node = next((n for n in nodes if UUID(str(n.id)) == node_id), None)
     if node is None:
         raise ExplorationRejected(f"{kind}: node {node_id} not found in this project")
@@ -452,7 +412,7 @@ async def propose_candidates(
     members: list[CandidateMember],
     goal_text: str | None = None,
     journey_id: UUID | None = None,
-) -> GraphNode:
+) -> ExplorationRow:
     """Birth the journey's Candidate Set (R1: ONE collection artifact).
 
     Mints the journey when the call opens the chain (``goal_text``
@@ -511,13 +471,11 @@ async def propose_candidates(
         members=members,
         idem=idem,
     )
-    node = GraphNode(
+    node = ExplorationRow(
         id=uuid4(),
         project_id=project.id,
-        type=EXPLORATION_NODE_TYPE,
         state=STATE_READY,
         spec=spec.model_dump(),
-        layout=exploration_lane_frame(KIND_CANDIDATE_SET, lane),
         journey_id=journey.id,
     )
     db.add(node)
@@ -531,7 +489,7 @@ async def propose_selects(
     *,
     candidate_set_id: UUID,
     selects: list[dict[str, Any]],
-) -> list[GraphNode]:
+) -> list[ExplorationRow]:
     """Birth the Selects of one Candidate Set (R7 pointer + R3 attribute
     reason). The journey rides structurally from the set."""
     lane = await _exploration_nodes(db, project.id)
@@ -541,7 +499,7 @@ async def propose_selects(
     cspec = CandidateSetSpec.model_validate(cset.spec)
     journey_id = UUID(str(cset.journey_id))
 
-    born: list[GraphNode] = []
+    born: list[ExplorationRow] = []
     for s in selects:
         spec = SelectSpec(
             candidate_set_id=str(candidate_set_id),
@@ -566,13 +524,11 @@ async def propose_selects(
         if replay is not None:
             born.append(replay)
             continue
-        node = GraphNode(
+        node = ExplorationRow(
             id=uuid4(),
             project_id=project.id,
-            type=EXPLORATION_NODE_TYPE,
             state=STATE_READY,
             spec=spec.model_dump(),
-            layout=exploration_lane_frame(KIND_SELECT, lane),
             journey_id=journey_id,
         )
         db.add(node)
@@ -588,7 +544,7 @@ async def propose_plans(
     *,
     plans: list[dict[str, Any]],
     persona_id: UUID | None = None,
-) -> list[GraphNode]:
+) -> list[ExplorationRow]:
     """Birth the Content Plans (one per Select, R8 product semantics) with
     the deterministic completeness self-check (拍 5a): clean → ready, else
     draft with the issues stamped into the spec (honest surface, never a
@@ -597,7 +553,7 @@ async def propose_plans(
     if not plans:
         raise ExplorationRejected("propose_plans carries no plans")
 
-    born: list[GraphNode] = []
+    born: list[ExplorationRow] = []
     journey_id: UUID | None = None
     for p in plans:
         select_id = UUID(str(p.get("select_id")))
@@ -628,13 +584,11 @@ async def propose_plans(
         payload = spec.model_dump()
         if issues:
             payload["issues"] = issues
-        node = GraphNode(
+        node = ExplorationRow(
             id=uuid4(),
             project_id=project.id,
-            type=EXPLORATION_NODE_TYPE,
             state=STATE_DRAFT if issues else STATE_READY,
             spec=payload,
-            layout=exploration_lane_frame(KIND_CONTENT_PLAN, lane),
             journey_id=sel_journey,
         )
         db.add(node)
@@ -646,7 +600,7 @@ async def propose_plans(
 
 async def read_journey_plans(
     db: AsyncSession, project_id: UUID, journey_id: UUID
-) -> list[GraphNode]:
+) -> list[ExplorationRow]:
     """The revise/recompile seat's read (iter-2 ⑦): the journey's CURRENT
     Content Plan rows (the decision package re-docks as a whole — a revise
     targets one plan, the package re-presents every plan). Pure read, same
@@ -662,10 +616,9 @@ async def read_journey_plans(
     rows = list(
         (
             await db.execute(
-                select(GraphNode).where(
-                    GraphNode.project_id == project_id,
-                    GraphNode.type == EXPLORATION_NODE_TYPE,
-                    GraphNode.journey_id == journey_id,
+                select(ExplorationRow).where(
+                    ExplorationRow.project_id == project_id,
+                    ExplorationRow.journey_id == journey_id,
                 )
             )
         )
@@ -682,7 +635,7 @@ async def read_journey_plans(
 
 async def read_journey_plan_rows(
     db: AsyncSession, project_id: UUID, journey_id: UUID
-) -> list[GraphNode]:
+) -> list[ExplorationRow]:
     """The revision money-state discriminator's read (iter-3 S4): EVERY
     Content Plan row of the journey regardless of state — the settled rows
     (``compiled``/``superseded``) ARE the post-run signal, so the state
@@ -691,10 +644,9 @@ async def read_journey_plan_rows(
     rows = list(
         (
             await db.execute(
-                select(GraphNode).where(
-                    GraphNode.project_id == project_id,
-                    GraphNode.type == EXPLORATION_NODE_TYPE,
-                    GraphNode.journey_id == journey_id,
+                select(ExplorationRow).where(
+                    ExplorationRow.project_id == project_id,
+                    ExplorationRow.journey_id == journey_id,
                 )
             )
         )
@@ -742,7 +694,7 @@ async def revise_plan(
     plan_id: UUID,
     title: str | None = None,
     outputs: list[dict[str, Any]] | None = None,
-) -> GraphNode:
+) -> ExplorationRow:
     """Revise one Content Plan IN PLACE (iter-2 ⑦, ADR-089 §6 修订分类,
     contract §4.8): the SAME row takes the restated spec — clean → state
     ``revised``, gaps → ``draft`` with the issues re-stamped (the birth
@@ -785,7 +737,7 @@ async def revise_selects(
     project: Project,
     *,
     selects: list[dict[str, Any]],
-) -> list[GraphNode]:
+) -> list[ExplorationRow]:
     """Revise Selects IN PLACE (iter-3 S4, ADR-089 §6 修订分类 / N-58): the
     pick swaps — ``member_index`` re-points into the SAME candidate set
     (bounds re-validated against the set's members, the birth law's 同一律),
@@ -804,7 +756,7 @@ async def revise_selects(
     if not selects:
         raise ExplorationRejected("revise_selects carries no selects")
 
-    revised: list[GraphNode] = []
+    revised: list[ExplorationRow] = []
     journey_id: UUID | None = None
     for s in selects:
         node = _get_exploration_node(
@@ -932,7 +884,7 @@ async def read_journey_summaries(
         .all()
     )
     journeys.sort(key=_sort_key_created, reverse=True)
-    plans_by_journey: dict[str, list[GraphNode]] = {}
+    plans_by_journey: dict[str, list[ExplorationRow]] = {}
     for n in await _exploration_nodes(db, project_id):
         if (n.spec or {}).get("exploration_kind") == KIND_CONTENT_PLAN:
             plans_by_journey.setdefault(str(n.journey_id), []).append(n)
@@ -965,7 +917,7 @@ async def read_journey_summaries(
 
 async def mark_compiled(
     db: AsyncSession, project: Project, *, plan_ids: list[UUID]
-) -> list[GraphNode]:
+) -> list[ExplorationRow]:
     """E3 双态写者 (first half, iter-3 S1): after the Start birthplace
     stamps the Confirmed Scope Snapshot, the confirmed package's plan rows
     flip ``ready``/``revised`` → ``compiled`` — IN THE SAME TRANSACTION
@@ -986,7 +938,7 @@ async def mark_compiled(
         if (n.spec or {}).get("exploration_kind") == KIND_CONTENT_PLAN
     ]
     by_id = {str(n.id): n for n in plans}
-    marked: list[GraphNode] = []
+    marked: list[ExplorationRow] = []
     for plan_id in plan_ids:
         node = by_id.get(str(plan_id))
         if node is None:
@@ -1015,7 +967,7 @@ async def supersede_plan(
     plan_id: UUID,
     title: str | None = None,
     outputs: list[dict[str, Any]] | None = None,
-) -> GraphNode:
+) -> ExplorationRow:
     """E3 双态写者 (second half, iter-3 S1): the POST-RUN plan-level
     revision — the compiled row settles (``compiled → superseded``, an
     in-vocabulary state-machine path) and a SUCCESSOR row is born: new id,
@@ -1067,13 +1019,11 @@ async def supersede_plan(
     payload["idem"] = idem
     if issues:
         payload["issues"] = issues
-    successor = GraphNode(
+    successor = ExplorationRow(
         id=uuid4(),
         project_id=project.id,
-        type=EXPLORATION_NODE_TYPE,
         state=STATE_DRAFT if issues else "revised",
         spec=payload,
-        layout=exploration_lane_frame(KIND_CONTENT_PLAN, lane),
         journey_id=node.journey_id,
     )
     node.state = "superseded"

@@ -5,6 +5,10 @@ brand/voice 的 user 级先例). This module is the key set's sole vocabulary:
 read tolerance (a missing/unknown value reads as the default — legacy rows
 and hand-edited JSON never 500) and the merge write (other keys survive a
 one-key PUT). Pure — the routes stay mechanical.
+
+口头确认律 (ADR-092 翻案, 2026-09-28): the strategy is a DISCLOSURE
+preference only — every plan docks and waits for the user's confirm beat
+(verbal or pill); nothing ever starts silently on a stored policy.
 """
 
 from typing import Any

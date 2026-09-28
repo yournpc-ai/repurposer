@@ -389,7 +389,10 @@ async def _safe_task_estimate(
     try:
         return await derive_task_estimates(db, project, tasks)
     except (ToolRejected, ValueError):
-        return None# ---- brief (DIALOG_WORKFLOW §2.4, ADR-052 B2) --------------------------------
+        return None
+
+
+# ---- brief (DIALOG_WORKFLOW §2.4, ADR-052 B2) --------------------------------
 
 _SOURCE_RANK: dict[BriefSlotSource, int] = {
     BriefSlotSource.DEFAULT: 0,
@@ -1182,11 +1185,8 @@ async def sync_plan_question(
     from app.ui_locale import current_ui_language  # deferred: request ctx
 
     try:
-        # 全文卡律 (判词④): the plan doc's face = the intent's own plan
-        # prose (intent.answer) — never the deterministic condensed
-        # composition (blind to transform chains).
         await stamp_draft_graph(
-            db, project, intent.tasks, current_ui_language(), intent.answer
+            db, project, intent.tasks, current_ui_language()
         )
     except (ToolRejected, ValueError):
         logger.warning(
@@ -1260,6 +1260,7 @@ async def _continue_chat_answer(
     on_tool_ready=None,
     on_loop_event=None,
     on_activity=None,
+    on_candidates=None,
 ) -> tuple[Message | None, UUID | None, list[UUID], Any]:
     """The generic question-answer 续聊 continuation: the user's pick is
     their say for the next turn, with the answered question in context.
@@ -1294,6 +1295,7 @@ async def _continue_chat_answer(
             on_tool_ready=on_tool_ready,
             on_loop_event=on_loop_event,
             on_activity=on_activity,
+            on_candidates=on_candidates,
         )
         return follow_up, run_id, bailed, answered
     if question.slot is not None and project is not None:
@@ -1316,6 +1318,7 @@ async def _continue_chat_answer(
             on_tool_ready=on_tool_ready,
             on_loop_event=on_loop_event,
             on_activity=on_activity,
+            on_candidates=on_candidates,
         )
         return follow_up, run_id, bailed, answered
     # 选项语法统一律 (ADR-081): trigger suggestion questions land here —
@@ -1347,6 +1350,7 @@ async def _continue_chat_answer(
             on_tool_ready=on_tool_ready,
             on_loop_event=on_loop_event,
             on_activity=on_activity,
+            on_candidates=on_candidates,
         )
         return follow_up, run_id, bailed, answered
     follow_up, run_id, bailed, settled = await _propose_turn(
@@ -1361,6 +1365,7 @@ async def _continue_chat_answer(
         on_tool_ready=on_tool_ready,
         on_loop_event=on_loop_event,
         on_activity=on_activity,
+        on_candidates=on_candidates,
     )
     return follow_up, run_id, bailed, settled
 
@@ -1376,6 +1381,7 @@ async def answer_question(
     on_tool_ready=None,
     on_loop_event=None,
     on_activity=None,
+    on_candidates=None,
     confirmed_via: str = "dock_pill",
 ) -> tuple[Message, Message | None]:
     """Answer a pending question (``POST /chat/messages/{id}/answer``).
@@ -1447,7 +1453,17 @@ async def answer_question(
             raise HTTPException(
                 status.HTTP_409_CONFLICT, {"code": "start.already_answered"}
             )
-        raise HTTPException(status.HTTP_409_CONFLICT, "Question already answered")
+        # 普通问题同律 (2026-09-28): a plain question's double-answer is
+        # machine-readable too — the raw English string used to leak into
+        # the global toast. Superseded = a newer question took the floor
+        # (the click raced the re-dock); anything else = a double gesture.
+        if (message.answer or {}).get("text") == "superseded":
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, {"code": "question.superseded"}
+            )
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, {"code": "question.already_answered"}
+        )
     # Kind × question-kind contract: a task_book is only ever confirmed
     # (start) or dropped (bail); start is meaningless on any other question.
     if question.kind == "task_book" and data.kind not in ("start", "bail"):
@@ -1669,11 +1685,8 @@ async def answer_question(
             )
 
             try:
-                # Same prose law as the dock (判词④): the confirmed intent's
-                # own answer is the face (a panel-edited chain keeps the
-                # docked prose — the edits ride the tasks, not the summary).
                 await stamp_draft_graph(
-                    db, project, tasks, current_ui_language(), intent.answer
+                    db, project, tasks, current_ui_language()
                 )
             except (ToolRejected, ValueError):
                 await clear_draft_graph(db, UUID(str(project.id)))
@@ -1835,6 +1848,7 @@ async def answer_question(
                 on_tool_ready=on_tool_ready,
                 on_loop_event=on_loop_event,
                 on_activity=on_activity,
+                on_candidates=on_candidates,
             )
 
     elif question.kind == "question" and data.kind in ("option", "freeform"):
@@ -1853,6 +1867,7 @@ async def answer_question(
             on_tool_ready=on_tool_ready,
             on_loop_event=on_loop_event,
             on_activity=on_activity,
+            on_candidates=on_candidates,
         )
 
     elif question.kind == "question" and data.kind == "bail" and question.slot is not None:
@@ -1888,6 +1903,7 @@ async def answer_question(
                 on_tool_ready=on_tool_ready,
                 on_loop_event=on_loop_event,
                 on_activity=on_activity,
+                on_candidates=on_candidates,
             )
 
     await db.commit()
@@ -1941,6 +1957,7 @@ async def _plan_turn(
     on_checkpoint=None,
     on_loop_event=None,
     on_activity=None,
+    on_candidates=None,
 ) -> tuple[Message, UUID | None, Message | None, list[UUID]]:
     """Plan path (intent-surface-unification W1): build / refine / confirm
     the plan inside the chat loop — the ONLY intent surface.
@@ -1976,6 +1993,7 @@ async def _plan_turn(
         on_checkpoint=on_checkpoint,
         on_loop_event=on_loop_event,
         on_activity=on_activity,
+        on_candidates=on_candidates,
     )
 
 
@@ -1995,6 +2013,7 @@ async def _propose_turn(
     on_checkpoint=None,
     on_loop_event=None,
     on_activity=None,
+    on_candidates=None,
 ) -> tuple[Message, UUID | None, list[UUID], Message | None]:
     """One assistant turn after the user input is settled (CHAT_ARCH §3).
 
@@ -2029,6 +2048,7 @@ async def _propose_turn(
         on_checkpoint=on_checkpoint,
         on_loop_event=on_loop_event,
         on_activity=on_activity,
+        on_candidates=on_candidates,
     )
 
 
@@ -2316,6 +2336,7 @@ async def execute_chat_turn(
     on_checkpoint=None,
     on_loop_event=None,
     on_activity=None,
+    on_candidates=None,
 ) -> ChatResponse:
     """chat() phase 2: run the agent turn, commit once, assemble the response.
 
@@ -2360,6 +2381,7 @@ async def execute_chat_turn(
             on_checkpoint=on_checkpoint,
             on_loop_event=on_loop_event,
             on_activity=on_activity,
+            on_candidates=on_candidates,
         )
         if plan_answered is not None:
             prepared.answered_question = plan_answered
@@ -2380,6 +2402,7 @@ async def execute_chat_turn(
             on_checkpoint=on_checkpoint,
             on_loop_event=on_loop_event,
             on_activity=on_activity,
+            on_candidates=on_candidates,
         )
         if chat_settled is not None:
             # 插话判定结算 (ADR-053 R2): the agent judged this very message
@@ -2462,6 +2485,8 @@ async def record_material_beat(
     count: int | None = None,
     total: int | None = None,
     ref: str | None = None,
+    duration_ms: int | None = None,
+    asset_type: str | None = None,
 ) -> Message | None:
     """Persist one settled material beat as a message row (once-only per
     (beat, ref) — the warm's re-materialization race and the worker's
@@ -2470,10 +2495,16 @@ async def record_material_beat(
 
     ``beat``: "reading" (an asset's processing drained — ref = asset id,
     ``name`` = the asset's display name, ``count``/``total`` = the project
-    set's drain progress) | "understanding" (the warm materialized — ref =
-    the asset digest, ``count`` = the asset count). Returns None when the
+    set's drain progress, ``duration_ms`` = the user-perceived reading span
+    upload→processed, so the settled row can whisper "· 41s" like every
+    other settled activity row) | "understanding" (the warm materialized —
+    ref = the asset digest, ``count`` = the asset count). Returns None when the
     beat already landed (dedup) so callers stay fire-and-forget.
-    """
+
+    ``asset_type`` (批「动词」2026-09-27): the reading beat carries the
+    asset's type so the replay forks the verb (watch/listen/read) — absent
+    on rows predating the fork, the replay's read tolerance falls to the
+    base key."""
     conversation = await _get_or_create_project_conversation(db, user_id, project_id)
     dedup = select(Message.id).where(
         Message.conversation_id == conversation.id,
@@ -2493,6 +2524,10 @@ async def record_material_beat(
         intent["total"] = total
     if ref is not None:
         intent["ref"] = ref
+    if duration_ms is not None:
+        intent["duration_ms"] = duration_ms
+    if asset_type is not None:
+        intent["asset_type"] = asset_type
     message = Message(
         conversation_id=conversation.id,
         role="assistant",
@@ -2549,6 +2584,50 @@ async def record_activity_log(
         attachments=[],
         mentions=[],
         intent={"type": ACTIVITY_LOG_TYPE, "ref": ref, "frames": frames},
+    )
+    db.add(message)
+    await db.flush()
+    await db.refresh(message)
+    return message
+
+
+# ---- Candidate surface persistence (Workspace 合同 v4.2 C8-c, 2026-09-26) ---
+# The candidate surface's data chain is message-borne end to end: live it
+# rides the ``assistant.candidates`` SSE frames; at turn settle the route
+# persists the turn's emitted events as ONE row here, so a refresh / another
+# device rebuilds the card (and its selection highlight) from the archive.
+# No endpoint — the audit's 未覆盖 #1 stays closed.
+
+CANDIDATES_LOG_TYPE = "candidates_log"
+
+
+async def record_candidates_log(
+    db: AsyncSession,
+    conversation_id: UUID,
+    events: list[dict[str, Any]],
+    *,
+    ref: str,
+) -> Message | None:
+    """Persist one turn's candidate-surface events (set births + selection
+    updates, in emission order) as a single message row — the same doctrine
+    as ``record_activity_log``: once-only per ``ref``, completed path only,
+    a failed turn persists nothing (the client rolls its live cards back)."""
+    if not events:
+        return None
+    dedup = select(Message.id).where(
+        Message.conversation_id == conversation_id,
+        Message.intent["type"].astext == CANDIDATES_LOG_TYPE,
+        Message.intent["ref"].astext == ref,
+    )
+    if (await db.execute(dedup.limit(1))).scalar_one_or_none() is not None:
+        return None
+    message = Message(
+        conversation_id=conversation_id,
+        role="assistant",
+        content="",
+        attachments=[],
+        mentions=[],
+        intent={"type": CANDIDATES_LOG_TYPE, "ref": ref, "events": events},
     )
     db.add(message)
     await db.flush()

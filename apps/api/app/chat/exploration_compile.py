@@ -26,7 +26,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.tables import GraphNode, Project
+from app.models.tables import ExplorationRow, Project
 from app.pipeline.exploration_store import (
     KIND_SELECT,
     STATE_DRAFT,
@@ -38,7 +38,6 @@ from app.pipeline.exploration_store import (
     read_journey_evidence,
     read_journey_plans,
 )
-from app.pipeline.product_graph import EXPLORATION_NODE_TYPE
 from app.pipeline.scope_compile import (
     ScopeCompileRejected,
     compile_scope,
@@ -99,10 +98,9 @@ async def compile_plans_package(
     rows = list(
         (
             await db.execute(
-                select(GraphNode).where(
-                    GraphNode.project_id == project.id,
-                    GraphNode.type == EXPLORATION_NODE_TYPE,
-                    GraphNode.id.in_(select_ids),
+                select(ExplorationRow).where(
+                    ExplorationRow.project_id == project.id,
+                    ExplorationRow.id.in_(select_ids),
                 )
             )
         )

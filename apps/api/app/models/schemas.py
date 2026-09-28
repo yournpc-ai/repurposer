@@ -191,8 +191,40 @@ class Option(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_null_description(cls, data: Any) -> Any:
+        # 打字机律牙①: the model writes null when an option carries no reason
+        # line — pop the key so the "" default applies instead of rejecting
+        # the call (a rejection burns a loop iteration that never streams).
+        if isinstance(data, dict) and data.get("description") is None:
+            data = dict(data)
+            data.pop("description", None)
+        return data
+
     id: str
     label: str
+    # 一问拍一体化 (2026-09-27, Claude-Card parity): the option's one-line
+    # reason rides the card under the label — bare labels forced the
+    # "which do you recommend?" follow-up tax. "" on legacy rows and
+    # code-built options (asset_role) — 读容忍.
+    description: str = Field(
+        default="",
+        description="One short line: why this option — the conclusion the user can judge, never your reasoning process.",
+    )
+
+
+def resolve_recommended_id(
+    recommended_id: str | None, options: list[Option]
+) -> str | None:
+    """The 推荐标记's ONE validation (一问拍一体化 2026-09-27), shared by the
+    ask executions on both paths: at most one, and it must name an option
+    that actually shipped — a stale or imagined id drops silently (cosmetic,
+    never worth a rejection round; the asset_role code-built options
+    invalidate any LLM-written id the same way)."""
+    if recommended_id in {o.id for o in options}:
+        return recommended_id
+    return None
 
 
 class AnswerPayload(BaseModel):
@@ -396,6 +428,10 @@ class QuestionProposal(BaseModel):
     # available alongside.
     options: list[Option] = Field(default_factory=list)
     allow_freeform: bool = True
+    # 推荐标记 (2026-09-27 一问拍一体化): at most ONE option id the agent
+    # recommends — the card marks it, and the prose's lean names the same
+    # pick (one judgment, one voice). None = no recommendation.
+    recommended_id: str | None = None
     # ADR-052 B2 (ask 一等动作, the shared question shape): ``slot`` names the
     # brief slot this question fills (the pre-run router sets it; the
     # chat loop's shape C leaves it null — post-run questions never backfill
@@ -485,12 +521,14 @@ class IntentResult(BaseModel):
     # 插话支持 (ADR-053 R2): when the context shows a pending question, the
     # agent's judgment on whether THIS message settles it — judgment is the
     # LLM's, settlement is code's (the retired autoResume freeform
-    # masking's honest successor). "answer" = the message IS the question's
-    # answer (code settles the row freeform; a parked interrupt's answer
-    # wakes its run); "skip" = an explicit decline (code settles it as a
-    # bail — the text question's only ×, since it docks no pill);
-    # "none" = an interjection (the question stays pending and the reply
-    # gets the code-composed reminder tail).
+    # masking's honest successor). "answer" = the message ENGAGES the
+    # question (2026-09-27 一问拍一体化 — 原话一视同仁: answers it, hands
+    # the choice back to the agent, or discusses its options — the code
+    # settles the row freeform with the user's own words verbatim; a parked
+    # interrupt's answer wakes its run); "skip" = an explicit decline (code
+    # settles it as a bail — the text question's only ×, since it docks no
+    # pill); "none" = a clearly unrelated interjection (the question stays
+    # pending and the reply gets the code-composed reminder tail).
     pending_disposition: Literal["answer", "skip", "none"] = "none"
 
 
@@ -510,7 +548,8 @@ class IntentResult(BaseModel):
 # carry NO speech field. A misplaced "prose"/"type"/"kind" habit key is
 # read-tolerated at the loop boundary (agents/tool_loop.py), never here.
 # The envelope seats ride the call they belong to: brief / material_text on
-# the plan-path tools, pending_disposition on the chat-path tools.
+# the plan-path tools, pending_disposition on both paths' tools (2026-09-27
+# 一问拍一体化 — the plan path gained its seats in the zombie-card fix).
 
 
 def tolerate_null_keys(data: Any, *keys: str) -> Any:
@@ -570,7 +609,7 @@ class PlanAskArgs(BaseModel):
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
         return _drop_bad_brief(
-            tolerate_null_keys(data, "options", "default_path", "slot", "material_text")
+            tolerate_null_keys(data, "options", "default_path", "slot", "material_text", "recommended_id", "pending_disposition")
         )
 
     question: str = Field(
@@ -578,9 +617,13 @@ class PlanAskArgs(BaseModel):
     )
     options: list[Option] = Field(
         default_factory=list,
-        description="3 concrete one-word values (2 only for a genuinely binary choice) sourced from the user's persona/context, translated into the interface language. Empty only when no sensible options exist (a freeform ask). Freeform input always stays available alongside.",
+        description="3 concrete one-word values (2 only for a genuinely binary choice) sourced from the user's persona/context, translated into the interface language. Each carries its one-line reason (description). Empty only when no sensible options exist (a freeform ask). Freeform input always stays available alongside.",
     )
     allow_freeform: bool = True
+    recommended_id: str | None = Field(
+        default=None,
+        description="The ONE option id you recommend (at most one) — your judgment rides the card, and your spoken message leans toward the same pick (one judgment, one voice). Null = no recommendation.",
+    )
     default_path: str = Field(
         default="",
         description="One short clause: what you will do if the user skips. The skip must be safe.",
@@ -597,6 +640,10 @@ class PlanAskArgs(BaseModel):
         default=None,
         description="Verbatim source text the user explicitly declared as their own material this turn ('this is my transcript: …'). Null otherwise — a bare request is never material.",
     )
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — the question settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
+    )
 
 
 class PresentPlanArgs(BaseModel):
@@ -611,7 +658,7 @@ class PresentPlanArgs(BaseModel):
     def _read_tolerance(cls, data: Any) -> Any:
         return _drop_bad_brief(
             tolerate_null_keys(
-                data, "tasks", "specific_instruction", "caption_mode", "tasks_explicit", "name", "material_text"
+                data, "tasks", "specific_instruction", "caption_mode", "tasks_explicit", "name", "material_text", "pending_disposition"
             )
         )
 
@@ -643,6 +690,10 @@ class PresentPlanArgs(BaseModel):
         default=None,
         description="Verbatim source text the user explicitly declared as their own material this turn. Null otherwise.",
     )
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — the question settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
+    )
 
 
 class PlanAnswerArgs(BaseModel):
@@ -655,7 +706,7 @@ class PlanAnswerArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return _drop_bad_brief(tolerate_null_keys(data, "material_text"))
+        return _drop_bad_brief(tolerate_null_keys(data, "material_text", "pending_disposition"))
 
     brief: Brief | None = Field(
         default=None,
@@ -664,6 +715,10 @@ class PlanAnswerArgs(BaseModel):
     material_text: str | None = Field(
         default=None,
         description="Verbatim source text the user explicitly declared as their own material this turn. Null otherwise.",
+    )
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — the question settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
     )
 
 
@@ -677,7 +732,7 @@ class ProposeTasksArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "tasks", "name", "specific_instruction")
+        return tolerate_null_keys(data, "tasks", "name", "specific_instruction", "pending_disposition")
 
     tasks: list[TaskItem] = Field(
         default_factory=list,
@@ -698,7 +753,7 @@ class ProposeTasksArgs(BaseModel):
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="When the context shows a pending question: 'answer' = this message IS the question's answer; 'skip' = an explicit decline; 'none' = an interjection (the question stays pending).",
+        description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
     )
 
 
@@ -716,11 +771,11 @@ class EditGraphArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "ops", "name")
+        return tolerate_null_keys(data, "ops", "name", "pending_disposition")
 
     ops: list[dict] = Field(
         default_factory=list,
-        description="Wiring ops in the registry vocabulary: add_node / connect / edit_prompt / delete_node / run.",
+        description="Wiring ops in the registry vocabulary: add_node / connect / edit_prompt / edit_text / delete_node / run.",
     )
     name: str = Field(
         default="",
@@ -728,7 +783,7 @@ class EditGraphArgs(BaseModel):
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="Pending-question settlement for this turn: 'answer' / 'skip' / 'none'.",
+        description="Pending-question settlement for this turn: 'answer' = the message ENGAGES the question (answers it, hands the choice back to you, or discusses its options) and it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
     )
 
 
@@ -742,23 +797,27 @@ class ChatAskArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "options", "default_path")
+        return tolerate_null_keys(data, "options", "default_path", "recommended_id", "pending_disposition")
 
     question: str = Field(
         description="The ONE question, in the interface language — the bare question, no framing, no default-path tail."
     )
     options: list[Option] = Field(
         default_factory=list,
-        description="3 concrete one-word values (2 only for a genuinely binary choice) sourced from the user's persona/context, translated into the interface language. Empty only for a freeform ask.",
+        description="3 concrete one-word values (2 only for a genuinely binary choice) sourced from the user's persona/context, translated into the interface language. Each carries its one-line reason (description). Empty only for a freeform ask.",
     )
     allow_freeform: bool = True
+    recommended_id: str | None = Field(
+        default=None,
+        description="The ONE option id you recommend (at most one) — your judgment rides the card, and your spoken message leans toward the same pick (one judgment, one voice). Null = no recommendation.",
+    )
     default_path: str = Field(
         default="",
         description="One short clause: what you will do if the user skips. The skip must be safe.",
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="Pending-question settlement for this turn: 'answer' / 'skip' / 'none'.",
+        description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
     )
 
 
@@ -769,9 +828,14 @@ class ChatAnswerArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "pending_disposition")
+
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="Pending-question settlement for this turn: 'answer' / 'skip' / 'none'.",
+        description="Pending-question settlement for this turn: 'answer' = the message ENGAGES the question (answers it, hands the choice back to you, or discusses its options) and it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
     )
 
 
@@ -821,7 +885,7 @@ class ReviseOutputArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "target", "instruction")
+        return tolerate_null_keys(data, "target", "instruction", "pending_disposition")
 
     target: ReviseOutputTarget = Field(
         default_factory=ReviseOutputTarget,
@@ -833,7 +897,7 @@ class ReviseOutputArgs(BaseModel):
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="Pending-question settlement for this turn: 'answer' / 'skip' / 'none'.",
+        description="Pending-question settlement for this turn: 'answer' = the message ENGAGES the question (answers it, hands the choice back to you, or discusses its options) and it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
     )
 
 
@@ -906,7 +970,7 @@ class EditOutputArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "target", "params")
+        return tolerate_null_keys(data, "target", "params", "pending_disposition")
 
     target: ReviseOutputTarget = Field(
         default_factory=ReviseOutputTarget,
@@ -915,11 +979,47 @@ class EditOutputArgs(BaseModel):
     params: EditOutputParams = Field(default_factory=EditOutputParams)
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="Pending-question settlement for this turn: 'answer' / 'skip' / 'none'.",
+        description="Pending-question settlement for this turn: 'answer' = the message ENGAGES the question (answers it, hands the choice back to you, or discusses its options) and it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
     )
 
 
 # ---- 触发回合 (T3, ADR-077 判词③) — the proactive turn's terminal --------
+
+
+class SuggestionItem(BaseModel):
+    """One next-step option on the trigger dock (一问拍一体化 2026-09-27 —
+    the pre-integration wire shape was a bare label string, read in as
+    ``label``): the label is the dock row AND the words that ride into the
+    conversation on a pick; ``description`` is the one-line reason under it;
+    ``recommended`` marks the agent's ONE lean (at most one survives)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _upgrade_bare_label(cls, data: Any) -> Any:
+        # 读容忍: the model's old habit emits a bare string per option — it
+        # reads in as the label, never a repair round for a cosmetic upgrade.
+        # A null description means "no reason line" (打字机律牙①) — pop the
+        # key so the "" default applies instead of rejecting the call.
+        if isinstance(data, str):
+            return {"label": data}
+        if isinstance(data, dict) and data.get("description") is None:
+            data = dict(data)
+            data.pop("description", None)
+        return data
+
+    label: str = Field(
+        description="The option row's text — user-voice, a complete short instruction they would plausibly type, interface language, ≤40 chars.",
+    )
+    description: str = Field(
+        default="",
+        description="One short line: why this option — the conclusion the user can judge, never your reasoning process.",
+    )
+    recommended: bool = Field(
+        default=False,
+        description="True on the ONE option you recommend (at most one across the list) — the same lean your speech's verdict named (one judgment, one voice).",
+    )
 
 
 class WrapUpArgs(BaseModel):
@@ -927,10 +1027,12 @@ class WrapUpArgs(BaseModel):
     terminal call. The review itself is your spoken message (the content
     channel); only the next-step option labels ride here.
 
-    选项语法统一律 (ADR-081, 2026-09-17): suggestions are LABELS ONLY —
-    they dock as a real options question (OptionDock, numbered 1/2/3),
-    never as pills; the pill form (send/download actions) is retired, a
-    landed output's download lives on its canvas card's factsbar."""
+    选项语法统一律 (ADR-081, 2026-09-17): suggestions dock as a real options
+    question (OptionDock, numbered 1/2/3), never as pills; the pill form
+    (send/download actions) is retired, a landed output's download lives on
+    its canvas card's factsbar. 一问拍一体化 (2026-09-27): each suggestion
+    carries its one-line reason and at most one is marked recommended — the
+    dock carries the judgment, the speech's verdict names the same lean."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -941,21 +1043,30 @@ class WrapUpArgs(BaseModel):
 
     @field_validator("suggestions")
     @classmethod
-    def _labels_are_dock_worthy(cls, labels: list[str]) -> list[str]:
+    def _labels_are_dock_worthy(cls, items: list[SuggestionItem]) -> list[SuggestionItem]:
         """校验分层律: a label is the dock row's visible text AND the user's
         pick riding into the continuation — blank labels are dropped (the
         model means "fewer options"), an overlong one rejects into the loop
-        (the dock row cannot carry it)."""
-        cleaned = [label.strip() for label in labels]
-        cleaned = [label for label in cleaned if label]
-        if any(len(label) > 40 for label in cleaned):
+        (the dock row cannot carry it). Extra recommendation marks drop
+        silently (cosmetic — never worth a repair round)."""
+        cleaned = []
+        for item in items:
+            item.label = item.label.strip()
+            if item.label:
+                cleaned.append(item)
+        if any(len(item.label) > 40 for item in cleaned):
             raise ValueError("a suggestion label is at most 40 characters")
+        recommended_seen = False
+        for item in cleaned:
+            if item.recommended and recommended_seen:
+                item.recommended = False
+            recommended_seen = recommended_seen or item.recommended
         return cleaned
 
-    suggestions: list[str] = Field(
+    suggestions: list[SuggestionItem] = Field(
         default_factory=list,
         max_length=3,
-        description="0-3 next-step option labels grounded in what you actually read — user-voice, interface language, ≤40 chars each, never a generic checklist.",
+        description="0-3 next-step options grounded in what you actually read — each a user-voice label (≤40 chars) with its one-line reason, the ONE you recommend marked. Never a generic checklist.",
     )
 
 
@@ -1002,6 +1113,12 @@ class ChatRequest(BaseModel):
     # pending brief only when the plan path docks a plan (a later turn
     # omitting it never clobbers the stored choice).
     persona_id: UUID | None = None
+    # The sender's surface (2026-09-25 canvas↔chat 联动, user ruling): the
+    # client judges it from the page width (panel form = the plan's canvas
+    # lives beside the conversation). "canvas" lets the turn's review
+    # invitation name that home; "chat"/None stays surface-neutral. A
+    # transport fact — never persisted on the message.
+    surface: Literal["canvas", "chat"] | None = None
     # RETIRED (Phase 4 B7 / ADR-087 R9, D1): the autonomy tier is gone —
     # every run is an autonomous continuation. The field stays so old
     # clients keep passing it without a 422 (extra="forbid"); the value is
@@ -1644,6 +1761,10 @@ class QuestionPayload(BaseModel):
     question: str = ""
     options: list[Option] = Field(default_factory=list)
     allow_freeform: bool = True
+    # 推荐标记 (2026-09-27 一问拍一体化): at most one option id marked as
+    # the agent's recommendation — the dock renders its suffix. None on
+    # legacy rows / unrecommended asks (读容忍).
+    recommended_id: str | None = None
     # The dock's credits quotation (BILLING §7): task_book only, stamped at
     # dock time from the estimate fold (N-34) × the consumption ratio —
     # code-supplied, structured (data, localized at render), never a
@@ -3384,6 +3505,32 @@ class GraphReviseResponse(BaseModel):
     status: WorkflowStatus
 
 
+class GraphEditTextRequest(BaseModel):
+    """The transcript card's in-place direct edit (Workspace 合同 v4.2 C4 —
+    卡内就地编辑, 用户拍板 2026-09-26): rewrite ONE document node's editable
+    text layer with the user's verbatim words. Same posture as the prompt
+    direct edit (ADR-058): a deterministic graph action, not a chat turn —
+    zero intent recognition, zero chat messages, the node's card face is
+    the whole feedback. ``text`` null = clear the overlay (the source layer
+    shows again). No run, no credits — a manual node's text is not
+    executable work."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    node_id: UUID
+    text: str | None = None
+
+
+class GraphEditTextResponse(BaseModel):
+    """Result of ``POST /projects/{id}/graph/edit-text`` — the node's
+    display layer after the edit (the card reconciles its optimistic echo)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    node_id: UUID
+    text: str | None
+
+
 class GenerateRequest(BaseModel):
     """Generate content request."""
 
@@ -3551,10 +3698,6 @@ class GraphNodeResponse(BaseModel):
     # outrank the DAG itself. None = the legacy compatibility state (a
     # B4-lite-gate survivor the predicate does not rank).
     rank: int | None = None
-    # R24 journey attribution (ADR-088 §10): the owning journey's id on
-    # exploration artifacts; NULL on execution-family nodes. An attribution
-    # property, never a graph edge — the canvas's journey grouping reads it.
-    journey_id: UUID | None = None
     asset: AssetResponse | None = None
     outputs: list[OutputResponse] = Field(default_factory=list)
     created_at: datetime

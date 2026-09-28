@@ -32,6 +32,7 @@ const en = {
     guest: "Guest",
     new: "New",
     freePlan: "Free plan",
+    upgrade: "Upgrade",
     requestFailed: "Request failed",
     networkError: "Network error — check your connection",
     skipToContent: "Skip to content",
@@ -458,28 +459,29 @@ const en = {
     uploadRetry: "Retry",
     uploadInProgress: "Files are still uploading — give it a moment",
     managePersonas: "Manage personas…",
-    // Cost-confirmation strategy (2026-09-23, UI-only preference — behavior
-    // wiring is a later batch; the footnote says so honestly). Trigger copy
-    // discipline: ≤12 characters so the pill fits the dock's control strip.
+    // Cost-confirmation strategy (ADR-092 tiers: always / large / never —
+    // server settings win, localStorage is the read-tolerant fallback).
+    // Trigger copy discipline: ≤12 characters so the pill fits the dock's
+    // control strip.
     confirmStrategy: {
       label: "Cost confirmation",
       trigger: {
-        always: "Full note",
+        always: "Always",
         large: "Large only",
         never: "Estimate",
       },
       options: {
         always: {
-          title: "Full disclosure",
+          title: "Always confirm",
           desc: "Every plan shows the charge note and a priced confirm button",
         },
         large: {
           title: "Large plans only",
-          desc: "The full charge note appears above the credits threshold",
+          desc: "Confirmation required above the credits threshold",
         },
         never: {
           title: "Estimate only",
-          desc: "Just the estimate range — nothing extra",
+          desc: "Just the estimate range — no forced confirmation",
         },
       },
       footnote:
@@ -1102,10 +1104,9 @@ const en = {
       focusNode: "Point it out in chat",
       reprocess: "Reprocess",
       more: "More actions",
-      // The graph canvas's document node (ADR-057): the plan as a
-      // first-class glass text node; the transcript / research brief are
-      // the type's other two instances; generic documents get the plain label.
-      plan: "Plan",
+      // The graph canvas's document node (ADR-057): the transcript /
+      // research brief are the type's named instances; generic documents
+      // get the plain label. (The plan document de-stamped — v4.2 C1-b.)
       transcript: "Transcript",
       researchBrief: "Research brief",
       // 两站拆分的文档站 (ADR-072, spec.role-derived — the doc station
@@ -1122,36 +1123,6 @@ const en = {
         image: "Image",
         video: "Video",
         audio: "Audio",
-        // 词表 v3 第八值 (ADR-088 §2): the exploration family's ONE family
-        // word — the card faces render their own per-kind captions; this
-        // is the generic fallback only.
-        exploration: "Exploration",
-      },
-      // 探索产物族卡面 (ADR-088 §2, iter-1): the three card faces' chrome.
-      // Verdicts / reasons / topics / titles are agent-written DATA in the
-      // interface language (世界自证) — only the structural labels live here.
-      exploration: {
-        kindCandidateSet: "Candidates",
-        kindSelect: "Select",
-        kindContentPlan: "Content plan",
-        candidateCount: "{{count}} candidates",
-        stateReady: "Ready",
-        stateDraft: "Draft",
-        outputKind: {
-          clip: "Clip",
-          post: "Post",
-          article: "Article",
-          quotes: "Quote card",
-          carousel: "Carousel",
-        },
-        // Plan-card output-row form facts (iter-2 ①, N-56): the controlled
-        // caption vocabulary + the dub marker.
-        captionMode: {
-          bilingual: "Bilingual",
-          source_only: "Source captions",
-          target_only: "Translated captions",
-        },
-        dubbed: "Dubbed",
       },
       // 状态原地表达 (ADR-057 §5 — state speaks in place, the caption's
       // right slot stays empty): the un-run node's dashed region reads its
@@ -1181,9 +1152,17 @@ const en = {
       confirmStart: "Confirm & run",
       // Canvas navigation controls (explore surfaces, 2026-08-19 — the
       // project page's top-right swap: app chrome out, canvas controls in;
-      // 2026-09-05 the ± steppers retired — the pill is a read-only
-      // percentage, click = fit).
-      zoomFit: "Fit to view",
+      // 2026-09-28 the pill opens a zoom menu: steps / fit / fixed levels,
+      // ⌘+/⌘-/⌘0 live while the pointer is over the canvas).
+      zoomMenu: "Zoom",
+      zoomIn: "Zoom in",
+      zoomOut: "Zoom out",
+      zoomFit: "Fit to window",
+      zoomToPct: "Zoom to {{pct}}%",
+      // The transcript card's empty-truth face (2026-09-28 — born at upload;
+      // in-flight loading rides the shared wipe + edge packet, never a
+      // bespoke placeholder line).
+      transcriptEmpty: "Nothing transcribable was found in this material",
       // The product dossier (2026-09-06, FLORA node-detail parity): a product
       // click summons it under the zoom pill — 出生证明 rows only, read-only
       // facts (修订只经 chat; FLORA's inline parameter editing stays unported).
@@ -1209,6 +1188,9 @@ const en = {
       // product card offers — the pin rides into the dock as an @output chip
       // carrying the quoted passage; the agent revises THAT passage.
       quotePassage: "Quote this",
+      // Transcript 卡内就地编辑 (Workspace 合同 v4.2 C4): the edit-mode-only
+      // reset — clears the user's edited overlay, showing the source layer.
+      resetToSource: "Reset to source",
       // Hover media affordances: expand (top-left) opens the lightbox;
       // sound (top-right) flips the inline video's ambient mute.
       expand: "Expand",
@@ -1289,14 +1271,32 @@ const en = {
      * understanding review not yet landed) → understanding. The *Done /
      * *Failed forms are the PERSISTED settled rows (素材节拍入库 — the
      * pipeline records one message row per beat, the replay renders the
-     * past tense); Progress carries the batch count "N/M" (带计数 ruling). */
+     * past tense); Progress carries the batch count "N/M" (带计数 ruling).
+     * Verb fork (2026-09-27 批「动词」): the verb follows the asset type —
+     * video → watch / audio → listen / text & others → read; multi-file
+     * batches fall back to the neutral "processing". Both synthesis points
+     * fork alike (the ChatDock now-line reads asset.type, the replay reads
+     * the persisted beat's intent.asset_type). */
     material: {
       reading: "Reading {{name}}…",
-      readingMany: "Reading {{count}} files…",
+      reading_video: "Watching {{name}}…",
+      reading_audio: "Listening to {{name}}…",
+      readingMany: "Processing {{count}} files…",
       understanding: "Understanding your material…",
+      /** The beat → review window's phase row (2026-09-28 user ruling): the
+       * trigger turn composes the review after the understanding beat
+       * lands — this fills what used to be dead air; it dies on the
+       * review's own landing or the trailing window's cap. */
+      reviewing: "Putting together suggestions…",
       readingDone: "Read {{name}}",
+      readingDone_video: "Watched {{name}}",
+      readingDone_audio: "Listened to {{name}}",
       readingDoneProgress: "Read {{name}} ({{count}}/{{total}})",
+      readingDoneProgress_video: "Watched {{name}} ({{count}}/{{total}})",
+      readingDoneProgress_audio: "Listened to {{name}} ({{count}}/{{total}})",
       readingFailed: "Couldn't read {{name}}",
+      readingFailed_video: "Couldn't watch {{name}}",
+      readingFailed_audio: "Couldn't listen to {{name}}",
       understandingDone: "Understood your material",
     },
     /** The perception family's inspecting chatter (T2b): a read ACTIVITY's
@@ -1332,6 +1332,13 @@ const en = {
       selectsReady: "Picked {{count}} sections",
       plansReady: "Structured {{count}} plans",
     },
+    /** Candidate Surface (Workspace 合同 v4.2 C8-c, 2026-09-26): the chat
+     * candidate card's expand toggle — default three recommendations, the
+     * whole set unfolds on demand (推荐样本，不是只能选 3 个). */
+    candidates: {
+      more: "{{count}} more",
+      less: "Show less",
+    },
     /** The Activity Stream's milestone copy (ADR-087 §3 Phase 2): the active
      * frame carries the progressive form, the completed frame the past-tense
      * form; failed/cancelled reuse the active form (the ✗ / strikethrough
@@ -1339,12 +1346,13 @@ const en = {
     /** 2026-09-25 copy batch (user ruling — the machine-status register
      * retired): plain words for the work in flight. The draft kind speaks
      * two faces by tool — proposing a plan / editing existing work (the
-     * projector's _EDIT_TOOLS picks the key). */
+     * projector's _EDIT_TOOLS picks the key). Draft spans are ACTIVE-only
+     * (2026-09-28 user ruling — 落定即退役): the settled receipt retired,
+     * the docked plan card is the evidence, so no draftDone/editDone keys
+     * exist. */
     activity: {
       draft: "Putting the plan together…",
-      draftDone: "Plan ready for review",
       edit: "Making the change…",
-      editDone: "Change made",
       run: "Getting started…",
       runDone: "Started",
       repair: "That answer didn't come out right — reworking it…",
@@ -1375,6 +1383,11 @@ const en = {
     },
     completed: "Done",
     failed: "Sorry, I couldn't update this. Please try again.",
+    /** Quiet settles for a dead question's click (2026-09-28 — the answer
+     * endpoint's structured 409 codes; the click raced the question's own
+     * settlement, so no error toast). */
+    questionOutdated: "That question was replaced by a newer one — no answer needed.",
+    questionAnswered: "That question was already answered.",
     runFailed: "Run failed",
     /** Terminal completion lines retired 2026-09-24 (user ruling — they
      * duplicated the trigger turn's run_completed prose; ONE narrator now). */
@@ -1426,7 +1439,6 @@ const en = {
     qa: {
       q: "Q",
       a: "A",
-      started: "Start generation",
       cancelled: "Cancelled — back to draft",
       superseded: "Superseded by a newer plan",
       expired: "Timed out — continued with the default",
@@ -1538,6 +1550,10 @@ const en = {
     countIncrease: "Increase",
     confirmQuestion: "Start with this version?",
     confirm: "Start generation",
+    // 确认拍归档 = 普通用户气泡 (Workspace 合同 v4.2 C8, 2026-09-26 封板):
+    // the Start pill's click lands in the flow AS this user message (the
+    // pill is the user saying it), then rides the one sendChat channel.
+    confirmUserMessage: "Confirm and generate",
     // E6 披露强度分级 (ADR-092): the escalated tier's priced CTA — the
     // gesture is the SAME single Start; only the label carries the price.
     confirmPriced: "Start · ~{{low}}–{{high}} credits",
@@ -1579,6 +1595,7 @@ const en = {
   questionDock: {
     bail: "Stop generation",
     skip: "Skip question",
+    recommended: "Recommended",
   },
   clipMenu: {
     more: "More actions",
@@ -1681,6 +1698,7 @@ const en = {
   },
   a11y: {
     toggleSidebar: "Toggle Sidebar",
+    openSidebar: "Open sidebar",
   },
   // 质检环 (产物质量线期 3): human labels for the verify node's check ids —
   // the badge tooltip renders "<label>: <detail>".

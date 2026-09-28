@@ -109,11 +109,15 @@ async def record_material_beat(
     count: int | None = None,
     total: int | None = None,
     ref: str | None = None,
+    duration_ms: int | None = None,
+    asset_type: str | None = None,
 ) -> Message | None:
     """Bridge delegate — the implementation lives in ``app.chat.service``
     (2026-09-24: material beats persist as message rows so the settled gray
-    row survives a refresh)."""
+    row survives a refresh; ``asset_type`` = 批「动词」2026-09-27 的回放
+    分叉载荷)."""
     return await _require().record_material_beat(
         db, user_id, project_id, beat,
         status=status, name=name, count=count, total=total, ref=ref,
+        duration_ms=duration_ms, asset_type=asset_type,
     )

@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import asyncio
 import json
 import logging
 import time
@@ -44,6 +45,10 @@ wire_pipeline_seams()
 logger = logging.getLogger(__name__)
 request_logger = structlog.get_logger("http")
 
+# Module-level reference so the fire-and-forget warmup task is never
+# garbage-collected mid-flight (批3).
+_warmup_task: asyncio.Task | None = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -54,6 +59,13 @@ async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as db:
         await seed_default_music(db)
         await reconcile_configs(db)
+    # Prefix-cache warmup (批3): fire-and-forget — seeds one backend pod per
+    # chat agent, never blocks or fails startup (failures logged inside).
+    if settings.minimax_warmup_enabled:
+        from app.chat.warmup import warm_chat_prefixes
+
+        global _warmup_task
+        _warmup_task = asyncio.create_task(warm_chat_prefixes())
     yield
 
 

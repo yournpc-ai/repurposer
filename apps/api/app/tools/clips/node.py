@@ -43,6 +43,7 @@ from app.pipeline.outputs import (
 )
 from app.pipeline.edges import load_plan_prelude_outputs
 from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase, estimate_agent, token_bounds
+from app.pipeline.graph_store import SHORTS_DEFAULT_ASPECT
 from app.pipeline.morph import later_inplace_morph_exists, render_step_label
 from app.agents.base import MAX_CHARS_PER_TEXT
 from app.agents.contexts import generation_context
@@ -369,12 +370,15 @@ class SelectClips(NodeBase):
         # Frame format: the chain's aspect param (spec, user-named) wins,
         # then the run.context carry-over (legacy plans), then the EXEMPLAR's
         # measured aspect (ADR-078 判词⑤), then the skin default
-        # (2026-08-14 三档画幅; ADR-043 参数化).
+        # (2026-08-14 三档画幅; ADR-043 参数化). The default's one seat is
+        # graph_store.SHORTS_DEFAULT_ASPECT — the graph frame's predictive
+        # mirror (graph_fill) resolves the SAME chain (spec → ctx → exemplar
+        # class → this default) at stamp time, so frame and render agree.
         aspect = str(
             (node.spec or {}).get("aspect")
             or ctx.get("aspect")
             or (skeleton.aspect if skeleton is not None else None)
-            or cfg.get("aspect", "9:16")
+            or cfg.get("aspect", SHORTS_DEFAULT_ASPECT)
         )
         cap_pos = caption_overrides.get("position") or cfg.get("captionPosition")
         cap_style_raw = cfg.get("captionStylePreset")

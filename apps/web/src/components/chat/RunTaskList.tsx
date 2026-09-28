@@ -152,14 +152,17 @@ export function RunTaskList({
     <div className="w-full">
       {/* THE ONE ROW — the run's seat of the shared StatusLine (2026-09-09
           一座两行; 2026-09-10 层级重铸 — the receipt is the OWNER row): live
-          = shimmer narrative + its stage clock; terminal = the receipt pose
-          — the stamp STAMPS ONCE (the 16px circle chip — ✓ "the run
-          succeeded" / red ✗ "the run failed", 2026-09-13 失败态拍板). The
-          settled title reads MUTED like the rest of the chrome (2026-09-24
-          user ruling — the foreground + font-medium pose read as content
-          prose, not chrome; red stays for the failed pose), total elapsed
-          + chevron right. It is itself the expand/collapse toggle for the
-          railed checklist below. */}
+          = shimmer narrative + its stage clock; terminal = the receipt pose.
+          ONE anatomy across the settle (2026-09-25 user ruling — 完成和 ing
+          同一个样式，以 ing 为准): the terminal leading mark is the SAME
+          12px seat the live dot occupies (✓ success / red ✗ failure — the
+          ActivityRow settled glyph's own size), the 16px circle stamp
+          retired (it restyled the whole row at the settle moment — the
+          style flip the user caught). The settled title reads MUTED like
+          the rest of the chrome (2026-09-24 user ruling — the foreground +
+          font-medium pose read as content prose, not chrome; red stays for
+          the failed pose), total elapsed + chevron right. It is itself the
+          expand/collapse toggle for the railed checklist below. */}
       <StatusLine
         label={
           terminal ? (
@@ -176,19 +179,22 @@ export function RunTaskList({
         leading={
           terminal ? (
             failed ? (
-              // The failed stamp — same 16px circle seat as the ✓, red-tinted
-              // (提案 A failed 变体): one mark says "the run failed", the
-              // failed step row inside the tree says why.
-              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-destructive/15">
-                <X className="h-2.5 w-2.5 text-destructive" />
-              </span>
+              // The failed mark — the same 12px seat as the ✓, red says
+              // failure; the failed step row inside the tree says why.
+              <X className="h-3 w-3 shrink-0 text-destructive" />
             ) : (
-              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-foreground/12">
-                <Check className="h-2.5 w-2.5" />
-              </span>
+              <Check className="h-3 w-3 shrink-0" />
             )
           ) : (
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+            // The live dot RIDES the same 12px seat the terminal marks
+            // occupy, centered (2026-09-27 user ruling: the bare 6px span
+            // left-shifted live labels 6px against the settled rows and
+            // missed the checklist guide's 5.5px center), and takes the
+            // label's own ink — bg-primary's solid black read as a second
+            // register next to the muted text.
+            <span className="flex h-3 w-3 shrink-0 items-center justify-center">
+              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+            </span>
           )
         }
         trailing={(terminal ? elapsed : stageElapsed) || null}
@@ -198,7 +204,8 @@ export function RunTaskList({
       />
 
       {/* The checklist — the rail tree (2026-09-10 提案 A 拍板): a 1px guide
-          drops from the chip's center, the steps indent under it — parentage
+          drops from the leading mark's center (12px glyph → 5.5px, same law
+          the 16px chip's 7px followed), the steps indent under it — parentage
           is GEOMETRY, not repetition. Steps carry NO per-row ✓ (success is
           the default and says nothing per row; the chip above already said
           it once): live rows keep their spinner, failed rows open red,
@@ -208,7 +215,7 @@ export function RunTaskList({
           ("this step was crossed off the plan"); work rows keep the normal
           muted register, their quantified values doing the talking. */}
       {open ? (
-        <div className="mt-2 ml-[7px] flex flex-col gap-1.5 border-l border-foreground/15 pl-3.5">
+        <div className="mt-2 ml-[5.5px] flex flex-col gap-1.5 border-l border-foreground/15 pl-3.5">
           {steps.map((step) => (
             <TaskRow key={step.id} step={step} />
           ))}

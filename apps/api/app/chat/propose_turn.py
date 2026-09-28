@@ -54,6 +54,7 @@ in ``app/chat/exploration_compile.py`` (ONE seat shared with the plan path
 """
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -116,6 +117,7 @@ from app.models.schemas import (
     EditOutputArgs,
     InferredIntent,
     PendingPlan,
+    PlanEstimate,
     ProposeTasksArgs,
     QuestionPayload,
     QuestionProposal,
@@ -124,9 +126,11 @@ from app.models.schemas import (
     TaskListProposal,
     WiringProposal,
     edit_kind_for_params,
+    resolve_recommended_id,
 )
 from app.models.tables import (
     Asset,
+    ExplorationRow,
     GraphNode,
     Message,
     Output,
@@ -145,6 +149,7 @@ from app.pipeline.exploration_store import (
     propose_candidates,
     propose_selects,
     journey_summary_line,
+    read_journey_evidence,
     read_journey_plan_rows,
     read_journey_plans,
     read_journey_summaries,
@@ -168,6 +173,11 @@ logger = structlog.get_logger()
 # (assistant message, dispatched run id, cascade-bailed run ids, the pending
 # question this turn settled by judgment).
 ProposeTurnOutcome = tuple[Message, UUID | None, list[UUID], Message | None]
+
+# _dock_plan_as_question's estimate kwarg sentinel: None is a REAL value
+# (an unquotable plan — the gate compared it and chose direct), distinct
+# from "not computed yet" (compile here, the pre-gate behavior).
+_ESTIMATE_UNSET: Any = object()
 
 
 def pinned_output_id(mentions: list, llm_output_id: str | None) -> str | None:
@@ -228,6 +238,7 @@ class ChatTurn:
         text: str,
         on_phase=None,
         on_activity=None,
+        on_candidates=None,
     ) -> None:
         self.db = db
         self.user_id = user_id
@@ -239,6 +250,7 @@ class ChatTurn:
         # threaded here for the post-run discovery chain's door successes;
         # None = the one-shot path, no stream, no frames).
         self.on_activity = on_activity
+        self.on_candidates = on_candidates
         self.pending: Message | None = None
         self.pending_judgable = False
         self.context: dict = {"text": ""}
@@ -506,6 +518,7 @@ class ChatTurn:
         plan_task_map: dict[str, list[int]] | None = None,
         derived: list[dict] | None = None,
         persona_id=None,
+        estimate: PlanEstimate | None | object = _ESTIMATE_UNSET,
     ) -> None:
         """The chat path's ONE plan-docking seat (Phase 4 B2/B3): PendingPlan
         + task_book question + estimate + canonical draft preview (inside
@@ -561,7 +574,11 @@ class ChatTurn:
             reasons=project.pending_brief["reasons"],
             brief=preserved_brief,
             echo=intent.answer,
-            estimate=await _safe_task_estimate(db, project, intent.tasks),
+            estimate=(
+                await _safe_task_estimate(db, project, intent.tasks)
+                if estimate is _ESTIMATE_UNSET
+                else estimate
+            ),
             derived=derived,
             plans=plans,
         )
@@ -576,6 +593,80 @@ class ChatTurn:
         one-shot path."""
         if self.on_activity is not None:
             await self.on_activity(key, count)
+
+    async def _emit_candidates(self, payload: dict) -> None:
+        """Candidate Surface 信道 (Workspace 合同 v4.2 C8-c, 2026-09-26):
+        the candidate card's payload rides its OWN SSE frame
+        (``assistant.candidates``) at the door's success — the milestone's
+        count-only whitelist never carries members. The SSE route ALSO
+        collects every emitted payload and persists them as ONE
+        ``candidates_log`` message row at turn settle (the activity_log
+        precedent), so a refresh rebuilds the surface from the archive —
+        数据链全程消息载, no endpoint. No-op on the one-shot path."""
+        if self.on_candidates is not None:
+            await self.on_candidates(payload)
+
+    @staticmethod
+    def _candidate_set_payload(node: ExplorationRow) -> dict:
+        """The ``set`` event: the persisted spec IS the authority (an
+        idempotent replay re-emits the stored members, never the request's)."""
+        spec = node.spec or {}
+        members = []
+        for m in spec.get("members") or []:
+            if not isinstance(m, dict):
+                continue
+            members.append(
+                {
+                    "start": m.get("start"),
+                    "end": m.get("end"),
+                    "excerpt": str(m.get("excerpt") or ""),
+                    "speaker": m.get("speaker") or None,
+                }
+            )
+        return {
+            "kind": "set",
+            "candidate_set_id": str(node.id),
+            "topic": str(spec.get("topic") or ""),
+            "asset_id": str(spec.get("asset_id") or ""),
+            "members": members,
+        }
+
+    async def _selection_payloads(self, rows: list[ExplorationRow]) -> list[dict]:
+        """The ``selection`` event(s) after a selects door success: per
+        touched candidate set, the set's FULL current selection (sorted
+        ordinals-as-addresses, 0-based member indexes) — the client REPLACES,
+        never unions, so a revise re-point drops the old pick by
+        construction."""
+        by_journey: dict[UUID, set[str]] = {}
+        for n in rows:
+            spec = n.spec or {}
+            set_id = spec.get("candidate_set_id")
+            if set_id:
+                by_journey.setdefault(UUID(str(n.journey_id)), set()).add(
+                    str(set_id)
+                )
+        events = []
+        for journey_id, set_ids in by_journey.items():
+            selects, _candidate_sets = await read_journey_evidence(
+                self.db, UUID(str(self.project.id)), journey_id
+            )
+            for set_id in sorted(set_ids):
+                picked: set[int] = set()
+                for s in selects:
+                    sspec = s.spec or {}
+                    if str(sspec.get("candidate_set_id")) != set_id:
+                        continue
+                    idx = sspec.get("member_index")
+                    if isinstance(idx, int):
+                        picked.add(idx)
+                events.append(
+                    {
+                        "kind": "selection",
+                        "candidate_set_id": set_id,
+                        "selected": sorted(picked),
+                    }
+                )
+        return events
 
     async def _resolve_persona(self) -> Persona | None:
         """The chat path's persona resolution for exploration births (the
@@ -624,6 +715,7 @@ class ChatTurn:
             await self._emit_milestone(
                 "chat.explore.candidatesReady", len(params.members)
             )
+            await self._emit_candidates(self._candidate_set_payload(node))
             return ToolObservation(
                 text=candidates_observation(
                     node, topic=params.topic, member_count=len(params.members)
@@ -641,6 +733,8 @@ class ChatTurn:
             except ExplorationRejected as e:
                 return f"The door rejected the proposal: {e}"
             await self._emit_milestone("chat.explore.selectsReady", len(born))
+            for event in await self._selection_payloads(born):
+                await self._emit_candidates(event)
             return ToolObservation(text=await self._selects_text(born))
         if name == "propose_plans":
             assert isinstance(params, ProposePlansArgs)
@@ -695,6 +789,9 @@ class ChatTurn:
             derived = await derive_plan_preview(db, project, compiled)
         except (ToolRejected, ValueError):
             derived = []
+        # The dock's quote, computed once here so sync_plan_question never
+        # recomputes it.
+        task_estimate = await _safe_task_estimate(db, project, compiled)
         await self._dock_plan_as_question(
             tasks=compiled,
             answer=prose,
@@ -707,6 +804,7 @@ class ChatTurn:
             plan_task_map=package.plan_task_map,
             derived=derived,
             persona_id=UUID(str(persona.id)) if persona is not None else None,
+            estimate=task_estimate,
         )
         return None
 
@@ -777,6 +875,7 @@ class ChatTurn:
         except (ToolRejected, ValueError):
             derived = []
         persona = await self._resolve_persona()
+        task_estimate = await _safe_task_estimate(db, project, package.tasks)
         await self._dock_plan_as_question(
             tasks=package.tasks,
             answer=prose,
@@ -789,6 +888,7 @@ class ChatTurn:
             plan_task_map=package.plan_task_map,
             derived=derived,
             persona_id=UUID(str(persona.id)) if persona is not None else None,
+            estimate=task_estimate,
         )
 
     async def _revise_selects(self, params: ReviseSelectsArgs, prose: str) -> str | None:
@@ -815,6 +915,11 @@ class ChatTurn:
             )
         except ExplorationRejected as e:
             return f"The door rejected the revision: {e}"
+        # C8-c: the re-pointed pick repaints the candidate surface's
+        # selection highlight in EVERY phase (pre-dock included — the card
+        # is the selection state's one seat).
+        for event in await self._selection_payloads(revised):
+            await self._emit_candidates(event)
         journey_id = UUID(str(revised[0].journey_id))
         revised_ids = {str(n.id) for n in revised}
         riding = [
@@ -942,6 +1047,10 @@ class ChatTurn:
         from app.models.tables import GraphNode
 
         async def _dispatch(p: WiringProposal) -> UUID | None:
+            """Returns the born run's id, or None when the turn lands as a
+            dock (an expansion / unproven scope ALWAYS waits for the user's
+            confirmation — 口头确认律, never a silent direct start) or as a
+            pure graph edit with nothing to execute."""
             if project is None or not p.ops:
                 raise WiringRejected("wiring: no ops to apply")
             project_id = UUID(str(project.id))
@@ -949,6 +1058,9 @@ class ChatTurn:
             # run-born graph. The classifier never sees ops — it compares
             # plain facts gathered before and after the door (D4).
             pre_nodes, pre_edges = await load_graph_facts(db, project_id)
+            # The dock's quote — computed on the dock branch so
+            # sync_plan_question never recomputes it.
+            estimate: PlanEstimate | None = None
             nested = await db.begin_nested()
             try:
                 delta = await apply_wiring_ops(db, project_id, p.ops)
@@ -982,9 +1094,13 @@ class ChatTurn:
                 if verdict.decision == CONTINUATION:
                     await nested.commit()
                 else:
-                    # Roll the door's mutation back — the dock's own draft
-                    # stamp (inside sync_plan_question) previews the plan
-                    # with canonical fill keys instead.
+                    # 口头确认律 (ADR-092 翻案, 2026-09-28): an expansion /
+                    # unproven scope ALWAYS docks for the user's
+                    # confirmation — never a silent direct start. Roll the
+                    # door's mutation back — the dock's own draft stamp
+                    # (inside sync_plan_question) previews the plan with
+                    # canonical fill keys instead.
+                    estimate = await _safe_task_estimate(db, project, tasks)
                     await nested.rollback()
             except BaseException:
                 if nested.is_active:
@@ -1021,6 +1137,7 @@ class ChatTurn:
                 name=p.name or None,
                 source_pin=source_pin,
                 exemplar_pin=exemplar_pin,
+                estimate=estimate,
             )
             return None
 
@@ -1034,7 +1151,8 @@ class ChatTurn:
             # no duplicate prose line on top.
             return None
         assistant_message = await _create_message(
-            db, self.conversation_id, "assistant", (prose or "") + (content_note or ""),
+            db, self.conversation_id, "assistant",
+            (prose or "") + (content_note or ""),
             workflow_run_id=run_id,
             intent=proposal.model_dump(mode="json"),
         )
@@ -1367,12 +1485,15 @@ class ChatTurn:
                 "pass the ONE bare question, or call another tool."
             )
         # ask 三分解剖: content carries the framing prose (the turn's echo),
-        # the bare question rides the payload.
+        # the bare question rides the payload. 推荐标记 (2026-09-27 一问拍
+        # 一体化): the shared validation lives in resolve_recommended_id.
+        recommended_id = resolve_recommended_id(params.recommended_id, params.options)
         ask = QuestionProposal(
             prose=prose or "",
             question=params.question,
             options=params.options,
             allow_freeform=params.allow_freeform,
+            recommended_id=recommended_id,
             default_path=params.default_path,
         )
         assistant_message, bailed_run_ids = await _dock_question(
@@ -1384,6 +1505,7 @@ class ChatTurn:
                 question=params.question,
                 options=params.options,
                 allow_freeform=params.allow_freeform,
+                recommended_id=recommended_id,
                 default_path=params.default_path,
             ),
             intent=ask.model_dump(mode="json"),
@@ -1473,6 +1595,7 @@ async def run_propose_turn(
     on_checkpoint=None,
     on_loop_event=None,
     on_activity=None,
+    on_candidates=None,
 ) -> ProposeTurnOutcome:
     """The chat path's turn: assemble → the bounded tool loop → the outcome
     mapping. Provider failure keeps its retired posture: the ask-back line is
@@ -1480,7 +1603,7 @@ async def run_propose_turn(
     判词④), which fails LOUD: a tools-blind client is a deployment error,
     never the ask-back line."""
     turn = ChatTurn(db, user_id, conversation, project, text, on_phase=on_phase,
-                    on_activity=on_activity)
+                    on_activity=on_activity, on_candidates=on_candidates)
     await turn.assemble(mentions, recent)
     try:
         result = await chat_intent_agent.call_loop(

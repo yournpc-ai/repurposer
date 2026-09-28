@@ -125,7 +125,11 @@ export function useStagingUploads() {
             s.localId === localId ? { ...s, status: "done", progress: 1, key, dims } : s,
           ),
         )
-      } catch {
+      } catch (err) {
+        // Diagnosability (2026-09-27 代理吞响应取证): the chip shows a bare
+        // error state; the REASON (stall watchdog vs HTTP status vs network)
+        // must survive in the console — a swallowed catch is undebuggable.
+        console.error("[staging-upload] failed:", err)
         setStaged((prev) =>
           prev.map((s) =>
             // A removal mid-flight must not resurrect the chip.

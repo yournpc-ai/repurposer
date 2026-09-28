@@ -3,18 +3,15 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ArrowUp,
   AudioLines,
-  BadgeCheck,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clapperboard,
-  ClipboardList,
   Copy,
   Download,
   FileText,
   Image as ImageIcon,
   Images,
-  ListChecks,
   Maximize2,
   MoreHorizontal,
   Newspaper,
@@ -30,7 +27,6 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { BrandLoader } from "@/components/BrandLoader"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -40,9 +36,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { apiPut, toAbsoluteUrl } from "@/lib/api"
 import { cn } from "@/lib/utils"
-import type { ExplorationMember, ExplorationPlanOutput, GraphEdgeType, Output } from "@/lib/types"
+import type { GraphEdgeType, Output } from "@/lib/types"
 
-import { BIRTH_STAGGER_MS, EXPLORATION_MEMBER_LIST_PX, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX } from "./layout"
+import { BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX } from "./layout"
 import { useSoundMutex } from "./sound-mutex"
 import type {
   FlowAssetAction,
@@ -83,6 +79,10 @@ export interface FlowCardData extends Record<string, unknown> {
    * program; the surface opens the pricing confirmation (锚定子图 + 估价)
    * — nothing touches the graph until the confirm's CODE-built ops land. */
   onPromptEdit?: (nodeId: string, text: string) => void
+  /** Transcript in-place direct edit (v4.2 C4): the card reports the
+   * verbatim text (null = reset to source); the surface lands the
+   * code-built edit_text op. Resolves true when the write landed. */
+  onTextEdit?: (nodeId: string, text: string | null) => Promise<boolean>
   /** The edit's optimistic echo (ADR-058): while the confirm is open or
    * the stamp is in flight, the program region shows the user's verbatim
    * text instead of the domain's last stamp — never a revert flash. */
@@ -383,11 +383,15 @@ function ThumbCard({
         {node.videoUrl ? (
           /* The source video node plays inline — muted ambient loop, first
              frame instantly (preload=metadata), non-interactive: clicks and
-             drags belong to the canvas. */
+             drags belong to the canvas. object-COVER (2026-09-28 黑底走查):
+             the frame's aspect bucket never matches the source's real ratio
+             to the pixel (960×544 in a 16:9 bucket = pillarbox strips) —
+             cover fills the box and crops the sub-percent sliver instead of
+             showing the bg-black letterbox. */
           <video
             src={node.videoUrl}
             aria-label={node.label}
-            className="pointer-events-none h-full w-full object-contain"
+            className="pointer-events-none h-full w-full object-cover"
             muted={muted}
             loop
             playsInline
@@ -496,22 +500,6 @@ function StepCard({ node }: { node: FlowNode }) {
  * regression fix) gets a bottom factsbar — the version pager (版本累积现成
  * 语义, the body follows the shown version) + copy + open-inspector; the
  * quote-selection pill stays with the UI batch. */
-/** 探索产物族卡面 (ADR-088 §2, iter-1 — docs/tasks/agent-working-loop-iter-1.md §7):
- * spec.exploration_kind 分发三卡面。R18 同框纪律: the family's own state
- * machine never mirrors the product chrome (no running wipe / skipped dim
- * — the words can't collide by construction); I-EXPLORE-01 前端投影: no
- * ports (zero edges → FlowView derives none), no toolbar, click is a
- * structural no-op (zero outputs → the surface's length guard). */
-function ExplorationCard({ node }: { node: FlowNode }) {
-  const kind = typeof node.spec?.exploration_kind === "string" ? node.spec.exploration_kind : null
-  if (kind === "candidate_set") return <CandidateSetCard node={node} />
-  if (kind === "select") return <SelectCard node={node} />
-  return <ContentPlanCard node={node} />
-}
-
-/** The evidence range's MM:SS — a TIMESTAMP, not a duration: formatDuration
- * treats 0 as "unknown" (`--:--`), but a member at the talk's cold open
- * starts at exactly 0.0s (2026-09-23 review catch). */
 /** Render-in-flight = the node's OWN busy beat (2026-09-24 user ruling —
  * unify the loading chrome): a clip output whose render job is still on
  * the wire (pending/rendering, no video yet) drives the SAME node wipe and
@@ -528,177 +516,14 @@ export function nodeRenderActive(node: FlowNode): boolean {
   )
 }
 
-function formatTimestamp(seconds: number): string {  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${m}:${s.toString().padStart(2, "0")}`
-}
-
-/** 候选集合集卡 (R1 合集律): 默认折叠 = 一行摘要（topic + 「N 个候选」）;
- * 展开 = 成员列表（区间 + 一句话摘录 + speaker）— 封顶滚动 (the frame
- * never grows: the expansion overlays the lane below transiently, a user
- * gesture; flow.css raises the whole node while open). */
-function CandidateSetCard({ node }: { node: FlowNode }) {
-  const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const spec = node.spec ?? {}
-  const topic = typeof spec.topic === "string" ? spec.topic : ""
-  const members = (Array.isArray(spec.members) ? spec.members : []) as ExplorationMember[]
-  return (
-    <div className="flex h-full w-full flex-col">
-      <NodeCaption label={t("results.canvas.exploration.kindCandidateSet")} Icon={ListChecks} />
-      <div
-        className={cn(
-          "dock-surface flex min-h-0 flex-1 flex-col rounded-xl ring-1 ring-foreground/10",
-          open && "exploration-card-open",
-        )}
-      >
-        <button
-          type="button"
-          className="flex min-h-0 flex-1 cursor-pointer items-center gap-2 px-3 text-left"
-          onClick={(e) => {
-            e.stopPropagation()
-            setOpen((v) => !v)
-          }}
-        >
-          <span className="min-w-0 flex-1 truncate text-xs">{topic}</span>
-          <span className="shrink-0 text-[11px] text-muted-foreground">
-            {t("results.canvas.exploration.candidateCount", { count: members.length })}
-          </span>
-          <ChevronDown
-            className={cn(
-              "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
-              open && "rotate-180",
-            )}
-          />
-        </button>
-        {open ? (
-          <div
-            className="nowheel nopan thin-scroll shrink-0 overflow-y-auto overscroll-contain px-3 pb-2"
-            style={{ maxHeight: EXPLORATION_MEMBER_LIST_PX }}
-          >
-            {members.map((m, i) => (
-              <div key={i} className="flex items-baseline gap-2 py-1">
-                <span className="shrink-0 text-[11px] whitespace-nowrap text-muted-foreground">
-                  {formatTimestamp(m.start)}–{formatTimestamp(m.end)}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-xs">{m.excerpt}</span>
-                {m.speaker ? (
-                  <span className="shrink-0 text-[11px] text-muted-foreground">{m.speaker}</span>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
-/** 精选卡: 区间 + verdict + 一行理由 (R3 理由是属性 — reasoning never
- * persists, the card shows exactly the two attribute lines). 区间 = R7
- * 证据引用的读时投影 (the adapter's evidenceRange — the artifact itself
- * stays a pointer); an unresolvable pointer reads as an honest absence. */
-function SelectCard({ node }: { node: FlowNode }) {
-  const { t } = useTranslation()
-  const spec = node.spec ?? {}
-  const verdict = typeof spec.verdict === "string" ? spec.verdict : ""
-  const reason = typeof spec.reason === "string" ? spec.reason : ""
-  const range = node.evidenceRange ?? null
-  return (
-    <div className="flex h-full w-full flex-col">
-      <NodeCaption label={t("results.canvas.exploration.kindSelect")} Icon={BadgeCheck} />
-      <div className="dock-surface flex min-h-0 flex-1 flex-col justify-center gap-1.5 rounded-xl p-3 ring-1 ring-foreground/10">
-        {range ? (
-          <span className="text-[11px] text-muted-foreground">
-            {formatTimestamp(range.start)}–{formatTimestamp(range.end)}
-          </span>
-        ) : null}
-        <p className="line-clamp-2 text-xs leading-snug">{verdict}</p>
-        {reason ? (
-          <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">{reason}</p>
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
-/** 方案卡 (R8 产品语义): 产出要求清单 + state 徽（ready/draft）；draft =
- * ADR-057 K5 既有草稿形态 (the dashed ghost — the plan's self-check hasn't
- * passed, its issues ride as world-facts). */
-function ContentPlanCard({ node }: { node: FlowNode }) {
-  const { t } = useTranslation()
-  const spec = node.spec ?? {}
-  const title = typeof spec.title === "string" ? spec.title : ""
-  const outputs = (Array.isArray(spec.outputs) ? spec.outputs : []) as ExplorationPlanOutput[]
-  const issues = (Array.isArray(spec.issues) ? spec.issues : []) as string[]
-  const draft = node.status === "draft"
-  return (
-    <div className="flex h-full w-full flex-col">
-      <NodeCaption label={t("results.canvas.exploration.kindContentPlan")} Icon={ClipboardList} />
-      <div
-        className={cn(
-          "flex min-h-0 flex-1 flex-col gap-2 rounded-xl p-3",
-          draft
-            ? "border border-dashed border-foreground/15 bg-card"
-            : "dock-surface ring-1 ring-foreground/10",
-        )}
-      >
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-xs">{title}</span>
-          <Badge variant={draft ? "outline" : "secondary"} className="rounded-md">
-            {draft
-              ? t("results.canvas.exploration.stateDraft")
-              : t("results.canvas.exploration.stateReady")}
-          </Badge>
-        </div>
-        <div className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          {outputs.map((o, i) => (
-            <div key={i} className="flex items-baseline gap-2 py-0.5">
-              <span className="shrink-0 text-xs">
-                {t(`results.canvas.exploration.outputKind.${o.kind}`, { defaultValue: o.kind })}
-              </span>
-              {o.language ? (
-                <span className="shrink-0 text-[11px] text-muted-foreground">{o.language}</span>
-              ) : null}
-              {o.caption_mode ? (
-                <span className="shrink-0 text-[11px] text-muted-foreground">
-                  {t(`results.canvas.exploration.captionMode.${o.caption_mode}`, {
-                    defaultValue: o.caption_mode,
-                  })}
-                </span>
-              ) : null}
-              {o.aspect ? (
-                <span className="shrink-0 text-[11px] text-muted-foreground">{o.aspect}</span>
-              ) : null}
-              {o.dub ? (
-                <span className="shrink-0 text-[11px] text-muted-foreground">
-                  {t("results.canvas.exploration.dubbed")}
-                </span>
-              ) : null}
-              {o.brief ? (
-                <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-                  {o.brief}
-                </span>
-              ) : null}
-            </div>
-          ))}
-        </div>
-        {draft && issues.length > 0 ? (
-          <p className="line-clamp-3 shrink-0 text-[11px] leading-relaxed text-muted-foreground">
-            {issues.join("; ")}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
 function DocumentCard({
   node,
   onOutputAction,
+  onTextEdit,
 }: {
   node: FlowNode
   onOutputAction?: FlowCardData["onOutputAction"]
+  onTextEdit?: FlowCardData["onTextEdit"]
 }) {
   const { t } = useTranslation()
   const outputs = node.outputs ?? []
@@ -714,11 +539,84 @@ function DocumentCard({
     output && typeof (output.payload as { content?: unknown } | undefined)?.content === "string"
       ? ((output.payload as { content: string }).content || null)
       : null
-  const bodyText = shownContent ?? node.spec?.text
+  // Transcript 双层 (Workspace 合同 v4.2 C4): the display text = the user's
+  // edited overlay when present, the source mirror otherwise. The overlay
+  // is presentation only — the source transcript / word evidence / ranges
+  // never move (no code path reverse-computes a timecode from this text).
+  const editedText =
+    typeof node.spec?.edited_text === "string" ? node.spec.edited_text : null
+  const bodyText = shownContent ?? editedText ?? node.spec?.text
+  // 卡内就地编辑 (C4, 用户拍板 2026-09-26): the transcript document's body
+  // IS the edit surface —「可编辑」不是编辑模式，零新 chrome (合同 Δ2).
+  // The write rides the surface's deterministic channel (one code-built
+  // edit_text op through the graph's one write door) — same entity, version
+  // evolution (the displaced layer appends to the node's text_edits memory
+  // server-side), never a new work.
+  const editable =
+    node.spec?.role === "transcript" && !!onTextEdit && outputs.length === 0
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState("")
+  const [saving, setSaving] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus()
+      const len = textareaRef.current.value.length
+      textareaRef.current.setSelectionRange(len, len)
+    }
+  }, [editing])
+
+  // Same native-wheel stop as the text product's edit region — React Flow's
+  // pane listens natively, so a synthetic stopPropagation is not enough.
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el || !editing) return
+    const stopWheel = (e: WheelEvent) => {
+      e.stopPropagation()
+    }
+    el.addEventListener("wheel", stopWheel, { passive: true })
+    return () => el.removeEventListener("wheel", stopWheel)
+  }, [editing])
+
+  const save = async (next: string | null) => {
+    if (saving) return
+    const current = editedText ?? node.spec?.text ?? ""
+    if (next !== null && next === current) {
+      setEditing(false)
+      return
+    }
+    setSaving(true)
+    try {
+      const ok = (await onTextEdit?.(node.id, next)) ?? false
+      if (ok) {
+        // Optimistic echo (the TextProductRegion precedent): the card face
+        // shows the user's words NOW; the next refetch converges.
+        const spec = (node.spec ??= {})
+        if (next === null) delete spec.edited_text
+        else spec.edited_text = next
+        setEditing(false)
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // One running expression with GraphCard: the shared wipe + the incoming
+  // edge's packet read this state raw (nodeRenderActive is clip-only —
+  // inert here, kept so both cards speak one gate).
+  const running = node.status === "running" || nodeRenderActive(node)
+
+  const editAreaClass =
+    "nowheel nopan thin-scroll h-full w-full resize-none overflow-y-auto overscroll-contain bg-transparent text-xs leading-relaxed outline-none"
+
   return (
     <div className="flex h-full w-full flex-col">
       <NodeCaption label={node.label} Icon={FileText} />
-      <div className="dock-surface flex min-h-0 flex-1 flex-col rounded-xl ring-foreground/10 ring-1">
+      <div className="dock-surface relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl ring-foreground/10 ring-1">
+        {/* 公用 loading (2026-09-28 用户拍板): running = 左到右擦除 (封顶
+            96%) + 入边 packet——卡面零自养 loading 表达 (转写占位面同日退役). */}
+        {running && <span aria-hidden className="node-fill-wipe" />}
         {/* 收边结构律 (2026-09-13 走查拍板): the padding lives on a WRAPPER
             around the scrollport, never on the scrollport itself — scroll-
             container padding only shows at scroll-end (mid-scroll content
@@ -727,14 +625,102 @@ function DocumentCard({
             NO scroll-fade (2026-09-24 user ruling): the top/bottom mask read
             as a haze over the document's own text — a hard clip at the inset
             edge is the honest boundary for a reading surface. */}
-        <div className="flex min-h-0 flex-1 flex-col p-4">
-          <div className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            {bodyText ? (
-              <p className="text-xs leading-relaxed whitespace-pre-wrap">{bodyText}</p>
-            ) : (
-              <p className="text-xs leading-relaxed text-muted-foreground">{node.detail}</p>
-            )}
-          </div>
+        <div
+          className={cn("flex min-h-0 flex-1 flex-col p-4", editing && "relative")}
+          onClick={(e) => {
+            // Editing must not select the node (the TextProductRegion
+            // contract — the canvas's onNodeClick would steal the focus).
+            if (editing) e.stopPropagation()
+          }}
+        >
+          {editing ? (
+            <>
+              <textarea
+                ref={textareaRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={() => void save(draft)}
+                onWheel={(e) => {
+                  e.stopPropagation()
+                  e.preventDefault()
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault()
+                    setEditing(false)
+                  } else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                    e.preventDefault()
+                    void save(draft)
+                  }
+                }}
+                disabled={saving}
+                className={editAreaClass}
+              />
+              {editedText !== null ? (
+                // 恢复原文 (overlay reset — mode-local chrome, visible only
+                // while editing an overlaid transcript): mousedown keeps the
+                // textarea's focus so the blur-save never fires ahead of the
+                // reset (the quote pill's gesture contract).
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void save(null)
+                  }}
+                  className="nodrag absolute right-2 bottom-2 rounded-md bg-accent px-2 py-1 text-[11px] text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent/70"
+                >
+                  {t("results.canvas.resetToSource")}
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <div className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {bodyText ? (
+                <p
+                  role={editable ? "button" : undefined}
+                  tabIndex={editable ? 0 : undefined}
+                  onClick={
+                    editable
+                      ? (e) => {
+                          // 就地编辑入口: a click into the text enters edit
+                          // (not the node-select gesture); 零新 chrome — the
+                          // body itself is the affordance.
+                          e.stopPropagation()
+                          setDraft(editedText ?? node.spec?.text ?? "")
+                          setEditing(true)
+                        }
+                      : undefined
+                  }
+                  onKeyDown={
+                    editable
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            setDraft(editedText ?? node.spec?.text ?? "")
+                            setEditing(true)
+                          }
+                        }
+                      : undefined
+                  }
+                  className={cn(
+                    "text-xs leading-relaxed whitespace-pre-wrap",
+                    editable && "cursor-text",
+                  )}
+                >
+                  {bodyText}
+                </p>
+              ) : node.spec?.role === "transcript" && node.status === "done" ? (
+                // 空稿诚实面 (2026-09-28): ASR completed with zero words
+                // (silence / music-only) — say so, never a blank card.
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("results.canvas.transcriptEmpty")}
+                </p>
+              ) : (
+                <p className="text-xs leading-relaxed text-muted-foreground">{node.detail}</p>
+              )}
+            </div>
+          )}
         </div>
         {output ? (
           // 最小产物尾 (C5): version pager + copy + open-inspector — the
@@ -1935,7 +1921,7 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
  * Birth choreography: `flow-node-born` keyframe staggered by `bornIndex`
  * (the real compile order, replayed slowly — ADR-036 补记 3). */
 export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
-  const { node, bornIndex, selected, ports, onOutputAction, onQuoteOutput, onExpandMedia, onAssetAction, onDisplayChange, onPromptEdit, pendingProgram, promptConfirm } = data
+  const { node, bornIndex, selected, ports, onOutputAction, onQuoteOutput, onExpandMedia, onAssetAction, onDisplayChange, onPromptEdit, onTextEdit, pendingProgram, promptConfirm } = data
   // Latch the birth frame: the surface drops bornIndex on the next commit
   // (its seen-set absorbs the id), and a follow-up SSE tick can land inside
   // the 420ms keyframe — the class must outlive the animation. A class that
@@ -1989,16 +1975,13 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
           onExpandMedia={onExpandMedia}
           onAssetAction={onAssetAction}
         />
-      ) : node.kind === "exploration" ? (
-        // 探索产物族 (ADR-088 §2, 词表 v3 第八值): spec.exploration_kind
-        // 分发三卡面 — R18 状态语义不共享, I-EXPLORE-01 无端口无边.
-        <ExplorationCard node={node} />
       ) : node.kind === "text" || node.kind === "table" ? (
         // 词表 v3 (ADR-076, C5): text/table derive the 全文卡 anatomy —
         // the table card's own anatomy lands with the UI batch.
         <DocumentCard
           node={node}
           onOutputAction={onOutputAction}
+          onTextEdit={onTextEdit}
         />
       ) : isGraphCard ? (
         <GraphCard

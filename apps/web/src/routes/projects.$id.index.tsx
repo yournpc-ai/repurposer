@@ -34,7 +34,6 @@ import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
 
 import type { IntentSlot, LifecycleStamp, Output, ProjectGraph, WorkflowStep, Project } from "@/lib/types"
-import { isPlanReady } from "@/lib/lifecycleStamp"
 
 interface AssetStatusEntry {
   id: string
@@ -239,23 +238,36 @@ function ProjectDetailPage() {
   // artifact existence. The stamp rides BOTH frames (results + graph);
   // the graph frame is the fresher source during live turns.
   const lifecycle = graph?.lifecycle ?? results?.lifecycle ?? null
-  // The page's two-form choreography driver (2026-09-02 形态机; Phase 1
-  // switch): pre-generation it is the centered fullscreen chat + back pill
-  // (no canvas); the GRAPH WORLD's arrival flips it. The arrival fact is
-  // the lifecycle stamp: a completed/active run's graph world
-  // (state=running, or runs exist → the world persists terminal-side), or
-  // PLAN_READY's draft-graph review surface (ADR-086 条款4 翻案 R2: the
-  // canvas flips at PLAN_READY, never at dock-time draft existence — while
-  // materials process, the review surface stays unborn). The loading/error
-  // early returns below guarantee this is settled at first render, so
-  // projects WITH runs (or a ready plan) mount straight in the dock world
-  // (the hydrated first frame never replays the morph).
+  // workspaceBorn (Workspace 合同 v4.2 C3, 2026-09-26 封板): the desktop
+  // world's flip condition is an INDEPENDENT presentation predicate — the
+  // first non-Source workspace entity exists in the graph PAST its queued
+  // placeholder (2026-09-28 user ruling: the upload-born transcript
+  // processing card sits `queued` with no content yet — it must NOT birth
+  // the canvas at the send beat; the birth lands when the transcript's
+  // text does (state flips done / failed — a terminal face with the truth
+  // in hand), so the canvas arrives WITH the content at the
+  // 已看完/正在理解 beat. Draft plan chains (K5) are unaffected — "draft"
+  // passes; run-time nodes only exist once the world is alive). Three
+  // facts stay separated: graph entity existence (data truth since
+  // upload, unchanged), this predicate (presentation — it can read
+  // another fact source without touching the data layer), and PLAN_READY
+  // (lifecycle projection, unchanged). Source nodes are read off the
+  // joined asset dossier (server: the dossier joins only on ORM
+  // type="asset"); legacy exploration rows (retired swim lane, v4.2 C1)
+  // never count — a candidate is not a workspace entity (and since C1
+  // they no longer arrive at all: production stopped, legacy rows are
+  // read-filtered server-side).
+  // 翻案注: this supersedes the 2026-09-02 形态机 / ADR-057 K5 flip
+  // condition (`hasRuns || isPlanReady`) — the canvas is born when the
+  // agent STARTS BUILDING the work world (T1), no longer waiting for the
+  // first run or the plan's readiness.
   const hasRuns = latestRun != null
-  const graphLive = hasRuns || isPlanReady(lifecycle)
+  const workspaceBorn =
+    graph?.nodes.some((n) => n.asset == null && n.state !== "queued") ?? false
   // The driver forks per surface (prohibition #13 — mobile has no canvas):
-  // the desktop world morphs at PLAN_READY; mobile waits for the first run
+  // the desktop world morphs at workspaceBorn; mobile stays run-driven
   // (its confirm beat stays in the dock).
-  const worldLive = isMobile ? hasRuns : graphLive
+  const worldLive = isMobile ? hasRuns : workspaceBorn
   // The desktop chat panel is a FROSTED OVERLAY on the full-bleed canvas
   // (2026-09-06 用户拍板, FLORA "Dock panel" parity — float / docked-right,
   // never an in-flow column): the canvas's top-right zoom pill steps clear
@@ -268,7 +280,7 @@ function ProjectDetailPage() {
     docked: false,
   })
   const panelCoversCorner =
-    graphLive && !isMobile && !panelState.hidden && panelState.docked
+    workspaceBorn && !isMobile && !panelState.hidden && panelState.docked
 
   useEffect(() => {
     setLoading(true)
@@ -314,18 +326,31 @@ function ProjectDetailPage() {
   // user is reading the receipt. Rising edge only — the mount observation
   // (a refreshed already-terminal project) never fires.
   const [canvasEpoch, setCanvasEpoch] = useState(0)
-  // 聚焦转场 (C6 画布相机批, 2026-09-14 拍板): the armed user-initiated
-  // camera beat — armed ONLY inside the dock's own send/Start handlers
-  // (background polling / SSE refetches never arm, so they never move the
-  // camera), consumed by FlowView on the first arrival carrying a node-id
-  // delta (or retired by its timeout). Arming is gated on the LIVE canvas:
-  // the pre-world morph's settle framing owns the first show, and the
+  // 相机节拍 (Workspace 合同 v4.2 C5, 2026-09-26 封板): the armed
+  // user-initiated camera beat — ONE ensure-in-view semantics (已在安全区
+  // 不动 / 不在则最小 pan / zoom 永不自动 fit; the 2026-09-25 fitNow beat
+  // reversed 2026-09-26 —「draft 到达 → 整链 fitNow」不入合同). Armed ONLY
+  // inside the dock's own send/Start handlers (background polling / SSE
+  // refetches never arm, so they never move the camera), consumed by
+  // FlowView on the first arrival carrying a node-id delta (or retired by
+  // its timeout). Arming is gated on the LIVE canvas: the pre-world morph's
+  // settle framing owns the first show (the sole automatic fit), and the
   // mobile dock has no focus business (mobile stays run-driven).
-  const [cameraBeat, setCameraBeat] = useState<{
-    token: number
-    mode: "fit" | "pan"
-  } | null>(null)
+  const [cameraBeat, setCameraBeat] = useState<{ token: number } | null>(null)
   const clearCameraBeat = useCallback(() => setCameraBeat(null), [])
+  // 「把当前操作元素移到画布中心」 (v4.2 未覆盖 #3, 2026-09-26 拍板): the
+  // explicit one-shot centering capability — pan-locked-zoom, camera-law
+  // shields apply. A plain page-level method any surface (or a future
+  // agent-driven caller) summons; zero chrome of its own in this batch.
+  const [centerRequest, setCenterRequest] = useState<{
+    token: number
+    nodeId: string
+  } | null>(null)
+  const requestCenterNode = useCallback(
+    (nodeId: string) => setCenterRequest({ token: Date.now(), nodeId }),
+    [],
+  )
+  const clearCenterRequest = useCallback(() => setCenterRequest(null), [])
   const lastRunStatusRef = useRef<string | null>(null)
   useEffect(() => {
     const status = latestRun?.status ?? null
@@ -334,11 +359,12 @@ function ProjectDetailPage() {
     if (prev == null || prev === status) return
     if (status !== "completed" && status !== "failed") return
     // 产出落地跟随 (2026-09-24 user ruling): the run's harvest arrives via
-    // the terminal refetch — arm a pan-keep-zoom beat; CameraBeats fires it
-    // at the cluster whose product counts grew (outputs fill EXISTING
-    // nodes, so the newborn id-diff alone never saw landings).
-    if (graphLive && !isMobile) {
-      setCameraBeat({ token: Date.now(), mode: "pan" })
+    // the terminal refetch — arm an ensure-in-view beat; CameraBeats pans
+    // (minimally, zoom locked) only if the cluster whose product counts
+    // grew sits outside the safe viewport (outputs fill EXISTING nodes, so
+    // the newborn id-diff alone never saw landings).
+    if (workspaceBorn && !isMobile) {
+      setCameraBeat({ token: Date.now() })
     }
     const timer = setTimeout(() => setCanvasEpoch((e) => e + 1), 600)
     return () => clearTimeout(timer)
@@ -383,7 +409,11 @@ function ProjectDetailPage() {
     if (action === "focus") {
       // 在对话中指认 = an @output chip in the dock's editor (ADR-058: the
       // one pointing mechanism — visible in the user's own sentence, the
-      // chip's three laws hold). No hidden focus state.
+      // chip's three laws hold). No hidden focus state. v4.2 未覆盖 #3:
+      // the named element IS the current operation element — center its
+      // node on the canvas (pan-locked-zoom; shields inside FlowView).
+      const node = graph?.nodes.find((n) => n.spec.output_ids?.includes(output.id))
+      if (node && workspaceBorn && !isMobile) requestCenterNode(node.id)
       dockRef.current?.insertMention({
         type: "output",
         id: output.id,
@@ -413,14 +443,18 @@ function ProjectDetailPage() {
       setSelectedOutputId((prev) => (prev === output.id ? null : prev))
       await fetchResults()
     }
-  }, [handleOutputClick, fetchResults, t])
+  }, [handleOutputClick, fetchResults, graph, workspaceBorn, isMobile, requestCenterNode, t])
 
   // 选区引用 (2026-09-11 — 段落级指认): the user selected a passage on a
   // text product's card face and pinned 「引用这段」 — the dock gets an
   // @output chip carrying the quote, and the AGENT revises that passage (the
   // pinned passage is the revision's scope; manual editing stays the escape
-  // hatch, never the story).
+  // hatch, never the story). v4.2 未覆盖 #3: the quoted element is the
+  // current operation element — its node centers on the canvas (the same
+  // pan-locked-zoom capability the 指认 gesture rides).
   const handleQuoteOutput = useCallback((output: Output, quote: string) => {
+    const node = graph?.nodes.find((n) => n.spec.output_ids?.includes(output.id))
+    if (node && workspaceBorn && !isMobile) requestCenterNode(node.id)
     dockRef.current?.insertMention({
       type: "output",
       id: output.id,
@@ -432,7 +466,7 @@ function ProjectDetailPage() {
       ),
       quote,
     })
-  }, [t])
+  }, [graph, workspaceBorn, isMobile, requestCenterNode, t])
 
   // Asset-node factsbar (2026-08-17 走查拍板): the surface owns the source
   // file's actions — download / delete / reprocess ("open" never arrives
@@ -502,6 +536,43 @@ function ProjectDetailPage() {
       return true
     },
     [projectId, fetchResults, t]
+  )
+
+  // Transcript 卡内就地编辑 (Workspace 合同 v4.2 C4, 用户拍板 2026-09-26):
+  // the deterministic gesture channel — ONE code-built edit_text op through
+  // the graph's only write door; zero run, zero credits, zero chat echo
+  // (ADR-058 通道分家: the card face itself is the whole feedback). The
+  // overlay never touches the source evidence / ranges (server-side
+  // invariant). Resolves true when the write landed — the card echoes
+  // optimistically; the refetch converges the frame.
+  const handleTextEdit = useCallback(
+    async (nodeId: string, text: string | null): Promise<boolean> => {
+      let res: Response
+      try {
+        res = await apiPost(
+          `/api/v1/projects/${projectId}/graph/edit-text`,
+          { node_id: nodeId, text },
+          { toast: false }
+        )
+      } catch {
+        toast.error(t("common.networkError"))
+        return false
+      }
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          detail?: unknown
+        }
+        toast.error(
+          typeof body?.detail === "string" && body.detail
+            ? body.detail
+            : t("common.requestFailed")
+        )
+        return false
+      }
+      await fetchGraph()
+      return true
+    },
+    [projectId, fetchGraph, t]
   )
 
   const completedRun =
@@ -984,16 +1055,17 @@ function ProjectDetailPage() {
            the panel's in-flow flex-row cut was user-retired same-day — the
            frost must have the canvas living beneath it). A node passing
            under the dock is panned back into view — the canvas is explore
-           navigation. The whole canvas is gated on graphLive (2026-09-02
-           形态机; K5 拓宽): pre-generation it is invisible + inert (the
-           full-form chat stage owns the page); the graph world's arrival
-           (first run OR the docked plan's draft graph) fades it in on the
-           same beat as the stage's fade-out — 500ms on a 150ms delay
-           (2026-09-06 fade-simplified). */
+           navigation. The whole canvas is gated on workspaceBorn (v4.2 C3
+           — 翻案注: was `hasRuns || isPlanReady`, the 2026-09-02 形态机 /
+           ADR-057 K5 condition): pre-birth it is invisible + inert (the
+           full-form chat stage owns the page); the first non-Source
+           entity's arrival (today: the transcript processing card) fades
+           it in on the same beat as the stage's fade-out — 500ms on a
+           150ms delay (2026-09-06 fade-simplified). */
         <div
           className={cn(
             "min-h-0 flex-1 transition-opacity duration-500 delay-150 ease-out motion-reduce:transition-none",
-            !graphLive && "pointer-events-none opacity-0"
+            !workspaceBorn && "pointer-events-none opacity-0"
           )}
         >
           <ResultsCanvas
@@ -1005,9 +1077,9 @@ function ProjectDetailPage() {
             // store (the frozen empty canvas) never survives the run.
             healEpoch={canvasEpoch}
             // The settle key's visibility half (2026-09-06): the canvas is
-            // gated on graphLive, so initial framing joins it with the
+            // gated on workspaceBorn, so initial framing joins it with the
             // baseline — partial fetch frames never frame.
-            visible={graphLive}
+            visible={workspaceBorn}
             // Birth baseline (ADR-036 补记 3): ready only when the initial
             // /results AND /graph have both settled for THIS project —
             // an early partial frame must not become the baseline (the
@@ -1022,6 +1094,7 @@ function ProjectDetailPage() {
             onOutputAction={handleOutputAction}
             onQuoteOutput={handleQuoteOutput}
             onNodeRevise={handleGraphRevise}
+            onTextEdit={handleTextEdit}
             onAssetAction={handleAssetAction}
             selectedOutputId={selectedOutputId}
             onPaneClick={() => {
@@ -1031,6 +1104,8 @@ function ProjectDetailPage() {
             }}
             cameraBeat={cameraBeat}
             onCameraBeatConsumed={clearCameraBeat}
+            centerRequest={centerRequest}
+            onCenterRequestConsumed={clearCenterRequest}
             occludedRightPx={panelCoversCorner ? 504 : 0}
           />
         </div>
@@ -1068,20 +1143,21 @@ function ProjectDetailPage() {
         key={projectId}
         ref={dockRef}
         projectId={projectId}
-        // The three-form machine (2026-09-06, FLORA-aligned; K5 拓宽): pre-
-        // generation the dock is the centered fullscreen chat; the GRAPH
-        // WORLD's arrival morphs it into the DESKTOP panel ("panel" — a
-        // frosted overlay on the full-bleed canvas, float / docked-right
-        // geometry toggled in its header) or the MOBILE bottom dock
-        // ("dock", unchanged). The desktop world arrives on the first run
-        // OR the docked plan's draft graph (图先展示后运行); mobile has no
-        // canvas (prohibition #13) and waits for the first run. The stage
+        // The three-form machine (2026-09-06, FLORA-aligned; v4.2 C3 翻案注:
+        // the desktop flip condition is now workspaceBorn — the first
+        // non-Source workspace entity, today the transcript processing card
+        // — superseding K5's first-run / draft-graph arrival): pre-birth
+        // the dock is the centered fullscreen chat; the WORKSPACE's birth
+        // morphs it into the DESKTOP panel ("panel" — a frosted overlay on
+        // the full-bleed canvas, float / docked-right geometry toggled in
+        // its header) or the MOBILE bottom dock ("dock", unchanged — mobile
+        // has no canvas (prohibition #13) and stays run-driven). The stage
         // fades out in place, the canvas fades in on a slight delay on the
-        // same beat. Projects WITH runs (or a pending draft) mount straight
-        // in "panel"/"dock" — the loading gate above settles the driver
-        // before first render, so the hydrated first frame never replays
-        // the morph.
-        form={isMobile ? (hasRuns ? "dock" : "full") : graphLive ? "panel" : "full"}
+        // same beat. Projects already born (a transcript card, runs, or a
+        // pending draft) mount straight in "panel"/"dock" — the loading
+        // gate above settles the driver before first render, so the
+        // hydrated first frame never replays the morph.
+        form={isMobile ? (hasRuns ? "dock" : "full") : workspaceBorn ? "panel" : "full"}
         // The server-named lifecycle stamp (ADR-087 §2, Phase 1): the
         // dock's confirm-phase mount + Start gate read it — never a local
         // derivation.
@@ -1129,10 +1205,10 @@ function ProjectDetailPage() {
         // rides the same fetch — a plan-turn can CREATE assets server-side
         // (declared-material promotion) whose nodes land in the same frame.
         onRunStarted={() => {
-          // C6 聚焦转场: the run fill's newborns land via the refetch loop —
-          // arm a pan-keep-zoom beat to where they settled.
-          if (graphLive && !isMobile) {
-            setCameraBeat({ token: Date.now(), mode: "pan" })
+          // C5 相机律: the run fill's newborns land via the refetch loop —
+          // arm an ensure-in-view beat toward where they settled.
+          if (workspaceBorn && !isMobile) {
+            setCameraBeat({ token: Date.now() })
           }
           void fetchResults()
         }}
@@ -1142,11 +1218,17 @@ function ProjectDetailPage() {
         // readiness, before any run; without this the flip only ever fired
         // on the first run and the chain preview never showed —
         // 2026-09-09 取证).
+        // (2026-09-26 翻案注 — Workspace 合同 v4.2 C5: the 2026-09-25
+        // 确认拍聚焦 beat「confirm pill 首现 = 整链 fitNow」 is REVERSED —
+        // 封板合同为准: the camera never auto-fits; the sole automatic fit
+        // stays the Workspace Birth's initial settle framing. The pill's
+        // appearance arms NOTHING.)
         onDraftGraphChange={() => {
-          // C6 聚焦转场: the re-stamped draft chain's arrival = 整链 fit
-          // (user-initiated beat — a re-dock on a live canvas re-frames).
-          if (graphLive && !isMobile) {
-            setCameraBeat({ token: Date.now(), mode: "fit" })
+          // C5 相机律: the re-stamped draft chain's arrival arms an
+          // ensure-in-view beat (user-initiated; already in the safe
+          // viewport → no move; out → minimal pan; zoom never auto-fits).
+          if (workspaceBorn && !isMobile) {
+            setCameraBeat({ token: Date.now() })
           }
           void fetchGraph()
         }}

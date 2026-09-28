@@ -7,7 +7,8 @@
  * The frame vocabulary is the three-channel separation (ADR-087 §1):
  * System Status (`assistant.thinking`) / Activity (`assistant.activity`) /
  * Conversation (`assistant.delta` / `assistant.checkpoint` /
- * `question.preview`) + the terminal pair. Unknown events route to
+ * `question.preview` / `assistant.candidates` — the v4.2 C8-c Candidate
+ * Surface channel) + the terminal pair. Unknown events route to
  * "ignored" (heartbeat comment frames never reach onmessage at all). */
 
 /** One user-safe activity frame (ADR-087 §3 Phase 2 — the append-oriented
@@ -61,6 +62,33 @@ export interface QuestionPreviewPayload {
   default_path?: string | null
 }
 
+/** Candidate Surface (Workspace 合同 v4.2 C8-c, 2026-09-26) — one candidate
+ * member: the source range + the source-faithful excerpt (C4 锚链) + the
+ * speaker when the ASR named one. The ordinal IS the member's array index
+ * (0-based on the wire; the card renders the two-digit visual address). */
+export interface CandidateMemberPayload {
+  start: number
+  end: number
+  excerpt: string
+  speaker?: string | null
+}
+
+/** One ``assistant.candidates`` event. ``set`` = a candidate set's birth
+ * (or idempotent re-emit — the client replaces by candidate_set_id);
+ * ``selection`` = the set's FULL current selection (the client replaces,
+ * never unions — a revise re-point drops the old pick by construction).
+ * Chat decisions never become graph nodes; this channel is their only
+ * surface. */
+export type CandidateEventPayload =
+  | {
+      kind: "set"
+      candidate_set_id: string
+      topic: string
+      asset_id?: string | null
+      members: CandidateMemberPayload[]
+    }
+  | { kind: "selection"; candidate_set_id: string; selected: number[] }
+
 /** One routed stream frame — the onmessage dispatch's discriminated
  * output. `envelope`/`detail` stay `unknown`: the caller owns the envelope
  * type (the two surfaces type it differently). */
@@ -68,6 +96,7 @@ export type RoutedStreamFrame =
   | { kind: "delta"; text: string }
   | { kind: "thinking"; payload: ThinkingPayload }
   | { kind: "question_preview"; payload: QuestionPreviewPayload }
+  | { kind: "candidates"; event: CandidateEventPayload }
   | { kind: "checkpoint"; text: string }
   | { kind: "activity"; frame: ActivityFramePayload }
   | { kind: "completed"; envelope: unknown }
@@ -93,6 +122,12 @@ export function routeStreamFrame(
     return {
       kind: "question_preview",
       payload: JSON.parse(data) as QuestionPreviewPayload,
+    }
+  }
+  if (event === "assistant.candidates") {
+    return {
+      kind: "candidates",
+      event: JSON.parse(data) as CandidateEventPayload,
     }
   }
   if (event === "assistant.checkpoint") {

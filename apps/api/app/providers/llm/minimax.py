@@ -3,7 +3,8 @@
 import asyncio
 import json
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import TypeVar
 
@@ -27,6 +28,55 @@ from app.providers.llm.base import (
 )
 
 logger = structlog.get_logger()
+
+
+# Process-wide connection pool (provider 硬化批 1, 2026-09-27): every call
+# site below used to build a fresh ``httpx.AsyncClient`` per attempt, paying
+# DNS+TCP+TLS on EVERY LLM round-trip. One shared pool per event loop
+# (uvicorn / worker / ``asyncio.run`` scripts each own theirs — the pool
+# rebinds when the running loop changes); ``_pooled_client`` keeps the call
+# sites' ``async with`` shape while never closing the shared client.
+# Per-request timeouts ride the request call, not the client.
+_client_pool: tuple[asyncio.AbstractEventLoop, httpx.AsyncClient] | None = None
+
+
+def _shared_client() -> httpx.AsyncClient:
+    loop = asyncio.get_running_loop()
+    global _client_pool
+    if (
+        _client_pool is None
+        or _client_pool[0] is not loop
+        or _client_pool[1].is_closed
+    ):
+        _client_pool = (
+            loop,
+            httpx.AsyncClient(
+                timeout=120,
+                limits=httpx.Limits(
+                    max_connections=20, max_keepalive_connections=10
+                ),
+            ),
+        )
+    return _client_pool[1]
+
+
+@asynccontextmanager
+async def _pooled_client() -> AsyncIterator[httpx.AsyncClient]:
+    """Yield the shared pool WITHOUT closing it — a drop-in for the retired
+    per-call ``async with httpx.AsyncClient(...)`` blocks."""
+    yield _shared_client()
+
+
+def _log_usage(usage: dict | None) -> None:
+    """Prefix-cache observability (MiniMax prompt-caching doc: verify hits in
+    ``usage``) — one line per call, ledger-independent (``metering`` no-ops
+    on request-path calls, exactly the chat-path majority)."""
+    if not usage:
+        return
+    logger.info(
+        "minimax_usage",
+        **{k: v for k, v in usage.items() if "token" in k or "cache" in k},
+    )
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -313,13 +363,23 @@ class MiniMaxClient:
 
     # Capability declaration (ADR-077 判词④): M3's ONLY schema-following
     # channel is native tool_calls (spike 2026-09-11/12 — json_schema is
-    # ignored outright); the reasoning dialect is the <think>…</think>
-    # preamble plus reasoning_content deltas, normalized inside this client
-    # (_ThinkStripper, ADR-066) — upstream layers never see it.
+    # ignored outright). Every chat call sends reasoning_split=True (官方强烈
+    # 建议): thinking arrives as separate reasoning_content deltas /
+    # reasoning_details blocks instead of a <think>…</think> preamble inside
+    # content (wire-verified 2026-09-27: with the flag on, content arrives
+    # clean and BOTH reasoning fields ride along — reasoning_content stays a
+    # plain string fragment, so the liveness extraction is unchanged).
+    # _ThinkStripper (ADR-066) stays as the fallback for any path where the
+    # flag is not honored — upstream layers never see either dialect.
     capabilities = ProviderCapabilities(
         supports_native_tools=True,
         supports_json_schema=False,
-        reasoning_dialect="think_block",
+        reasoning_dialect="reasoning_split",
+        supports_constrained_decoding=False,
+        # 被动前缀缓存（tools→system→history 顺序，≥512 token 起效，缓存价
+        # ~2 折）——逐字节重放实测 17221/17222 命中（2026-09-27 取证）；
+        # 逐 pod 独立 + 负载自适应 TTL，冷 pod 首调必 miss，故配启动预热。
+        prompt_cache="passive_prefix",
     )
 
     def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
@@ -350,11 +410,13 @@ class MiniMaxClient:
             "messages": messages,
             "response_format": {"type": "json_object"},
             "temperature": temperature,
+            # Thinking out of the content channel (see capabilities note).
+            "reasoning_split": True,
         }
         if thinking:
             payload["thinking"] = True
 
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with _pooled_client() as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers={
@@ -370,6 +432,7 @@ class MiniMaxClient:
         # unbound). Done before validation — tokens were consumed either way.
         from app.metering import record_usage
 
+        _log_usage(data.get("usage"))
         await record_usage(data.get("usage"))
 
         raw_content = data["choices"][0]["message"]["content"]
@@ -430,6 +493,7 @@ class MiniMaxClient:
             "temperature": temperature,
             "stream": True,
             "stream_options": {"include_usage": True},
+            "reasoning_split": True,
         }
         if thinking:
             payload["thinking"] = True
@@ -443,7 +507,7 @@ class MiniMaxClient:
             stripper = _ThinkStripper()
             usage: dict | None = None
             try:
-                async with httpx.AsyncClient(timeout=120) as client:
+                async with _pooled_client() as client:
                     async with client.stream(
                         "POST",
                         f"{self.base_url}/chat/completions",
@@ -516,6 +580,7 @@ class MiniMaxClient:
         # validation — tokens were consumed either way).
         from app.metering import record_usage
 
+        _log_usage(usage)
         await record_usage(usage)
 
         content = self._clean_json(accumulated)
@@ -565,11 +630,12 @@ class MiniMaxClient:
             "tools": tools,
             "tool_choice": tool_choice,
             "temperature": temperature,
+            "reasoning_split": True,
         }
         if thinking:
             payload["thinking"] = True
 
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with _pooled_client() as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers={
@@ -585,6 +651,7 @@ class MiniMaxClient:
         # unbound). Done before validation — tokens were consumed either way.
         from app.metering import record_usage
 
+        _log_usage(data.get("usage"))
         await record_usage(data.get("usage"))
 
         choice = (data.get("choices") or [{}])[0]
@@ -639,6 +706,7 @@ class MiniMaxClient:
             "temperature": temperature,
             "stream": True,
             "stream_options": {"include_usage": True},
+            "reasoning_split": True,
         }
         if thinking:
             payload["thinking"] = True
@@ -654,7 +722,7 @@ class MiniMaxClient:
             usage: dict | None = None
             finish_reason: str | None = None
             try:
-                async with httpx.AsyncClient(timeout=120) as client:
+                async with _pooled_client() as client:
                     async with client.stream(
                         "POST",
                         f"{self.base_url}/chat/completions",
@@ -736,6 +804,7 @@ class MiniMaxClient:
         # validation — tokens were consumed either way).
         from app.metering import record_usage
 
+        _log_usage(usage)
         await record_usage(usage)
 
         content = _THINK_BLOCK.sub("", accumulated).strip()
@@ -782,7 +851,7 @@ class MiniMaxClient:
             "response_format": response_format,
         }
 
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with _pooled_client() as client:
             response = await client.post(
                 f"{self.base_url}/image_generation",
                 headers={
@@ -839,7 +908,7 @@ class MiniMaxClient:
             "audio_setting": {"format": audio_format},
         }
 
-        async with httpx.AsyncClient(timeout=180) as client:
+        async with _pooled_client() as client:
             response = await client.post(
                 f"{self.base_url}/music_generation",
                 headers={
@@ -847,6 +916,7 @@ class MiniMaxClient:
                     "Content-Type": "application/json",
                 },
                 json=payload,
+                timeout=180,
             )
             _raise_for_status(response)
             data = response.json()

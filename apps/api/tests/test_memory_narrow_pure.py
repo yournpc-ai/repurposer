@@ -25,19 +25,18 @@ from uuid import uuid4
 import pytest
 
 from app.chat.perception.executes import GetArtifactParams, get_artifact
-from app.models.tables import GraphNode, Journey, Project
+from app.models.tables import ExplorationRow, GraphNode, Journey, Project
 from app.pipeline.exploration_store import (
     JourneySummary,
     journey_summary_line,
     output_fact,
     read_journey_summaries,
 )
-from app.pipeline.product_graph import EXPLORATION_NODE_TYPE
 
 _PROJECT_ID = uuid4()
 
 
-# ---- the stub db (test_revise_selects_pure pattern + GraphNode.get) --------
+# ---- the stub db (test_revise_selects_pure pattern + ExplorationRow.get) --------
 
 
 class _StubResult:
@@ -52,7 +51,7 @@ class _StubResult:
 
 
 class _StubDb:
-    """Serves GraphNode / Journey off lists; JSON-path criteria stay
+    """Serves ExplorationRow / Journey off lists; JSON-path criteria stay
     unevaluated. Plain-column eq filters: project_id / type / journey_id."""
 
     def __init__(self, nodes=(), journeys=()):
@@ -61,8 +60,18 @@ class _StubDb:
         self.journeys = list(journeys)
 
     async def get(self, model, row_id):
-        if model is GraphNode:
-            return next((n for n in self.nodes if str(n.id) == str(row_id)), None)
+        if model is ExplorationRow:
+            # isinstance guard: the bucket may hold a deliberately WRONG
+            # species (the non-exploration-miss test's GraphNode) — a real
+            # session's get(Model, id) never returns another table's row.
+            return next(
+                (
+                    n
+                    for n in self.nodes
+                    if isinstance(n, ExplorationRow) and str(n.id) == str(row_id)
+                ),
+                None,
+            )
         if model is Journey:
             return next((j for j in self.journeys if str(j.id) == str(row_id)), None)
         return None
@@ -70,7 +79,7 @@ class _StubDb:
     async def execute(self, stmt):
         entity = stmt.column_descriptions[0]["entity"]
         rows = {
-            GraphNode: self.nodes,
+            ExplorationRow: self.nodes,
             Journey: self.journeys,
         }.get(entity, [])
         for crit in getattr(stmt, "_where_criteria", []):
@@ -101,11 +110,10 @@ def _node(
     state="ready",
     created=None,
     project_id=None,
-) -> GraphNode:
-    n = GraphNode(
+) -> ExplorationRow:
+    n = ExplorationRow(
         id=uuid4(),
         project_id=project_id or _PROJECT_ID,
-        type=EXPLORATION_NODE_TYPE,
         state=state,
         journey_id=journey_id,
         spec={"exploration_kind": kind, **spec},

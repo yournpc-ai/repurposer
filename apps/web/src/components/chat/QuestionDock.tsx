@@ -46,6 +46,9 @@ import { cn } from "@/lib/utils"
 export interface DockOption {
   id: string
   label: string
+  /** 一问拍一体化 (2026-09-27): the option's one-line reason, rendered
+   * muted under the label. Absent on legacy rows / code-built options. */
+  description?: string
 }
 
 interface PlanDockProps {
@@ -76,6 +79,9 @@ interface OptionDockProps {
   /** The question's human text (LLM-written user data, shown as-is). */
   question: string
   options: DockOption[]
+  /** 推荐标记 (2026-09-27 一问拍一体化): at most one option id the agent
+   * recommends — its row carries the muted 推荐 suffix. */
+  recommendedId?: string | null
   /** Reserved anatomy (cost quote, v3) — shown muted when present. */
   estimate?: string | null
   onAnswer: (optionId: string) => void
@@ -170,6 +176,7 @@ function PlanForm({
 function OptionForm({
   question,
   options,
+  recommendedId,
   estimate,
   onAnswer,
   answering,
@@ -194,7 +201,7 @@ function OptionForm({
     setFreeform("")
   }
   return (
-    <div className={plain ? "px-4 py-3" : "mb-2 rounded-lg bg-muted px-4 py-3"}>
+    <div className={plain ? "px-4 py-2.5" : "mb-2 rounded-lg bg-muted px-4 py-2.5"}>
       {/* Question line — no ✓ (ADR-051); the × on the right IS the bail
           channel. */}
       <div className="flex items-start gap-2 text-sm">
@@ -220,7 +227,9 @@ function OptionForm({
       {options.length > 0 ? (
         // Full-width rows, not pills: long option labels must wrap inside
         // the card (the old button row let them bleed past the right edge).
-        <div className="mt-3 flex flex-col gap-2">
+        // 行距 (2026-09-28 用户走查): gap 收紧到 4px——行自养 py-2 已给足
+        // 触控面与 hover 底, 行间只留一道视觉分组缝.
+        <div className="mt-2 flex flex-col gap-1">
           {options.map((option, index) => (
             <Button
               key={option.id}
@@ -231,7 +240,7 @@ function OptionForm({
                 onAnswer(option.id)
               }}
               className={cn(
-                "h-auto w-full items-start justify-start gap-2.5 whitespace-normal rounded-md px-3 py-2.5 text-left hover:bg-accent",
+                "h-auto w-full items-start justify-start gap-2.5 whitespace-normal rounded-md px-3 py-2 text-left hover:bg-accent",
                 answering && pickedId === option.id
                   ? "bg-accent disabled:opacity-100"
                   : "bg-card"
@@ -244,11 +253,29 @@ function OptionForm({
                   also the typed-answer channel: _match_option resolves it
                   positionally server-side. ADR-081 (2026-09-17): the badge
                   went a/b/c → 1/2/3 — one option grammar for every source
-                  (plan / ask_user / trigger). */}
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[11px] font-medium text-muted-foreground">
+                  (plan / ask_user / trigger). self-start (2026-09-28 对齐走
+                  查): the badge pins itself to the title's 20px line box —
+                  per-item alignment that holds regardless of which align
+                  class the row container carries. */}
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center self-start rounded bg-muted text-[11px] font-medium text-muted-foreground">
                 {index + 1}
               </span>
-              <span className="min-w-0 break-words">{option.label}</span>
+              <span className="min-w-0 break-words leading-5">
+                {option.label}
+                {recommendedId === option.id ? (
+                  <span className="ml-1.5 text-xs text-muted-foreground">
+                    · {t("questionDock.recommended")}
+                  </span>
+                ) : null}
+                {/* 一问拍一体化 (2026-09-27): the reason line rides UNDER the
+                    label (Claude-Card parity) — muted, wrapping with the
+                    row, never a second color of text. */}
+                {option.description ? (
+                  <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                    {option.description}
+                  </span>
+                ) : null}
+              </span>
               {answering && pickedId === option.id ? (
                 <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
               ) : null}
@@ -264,7 +291,7 @@ function OptionForm({
               label autoResume mapping resolves a hit, anything else goes
               through the judged settlement. */}
           {onFreeform ? (
-            <div className="flex w-full items-center gap-2.5 rounded-md bg-card px-3 py-2.5">
+            <div className="flex w-full items-center gap-2.5 rounded-md bg-card px-3 py-2">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
                 <Pencil className="h-3 w-3" />
               </span>

@@ -370,6 +370,37 @@ describe("material beats (2026-09-24 素材节拍入库)", () => {
     })
   })
 
+  it("动词分叉 (批「动词」 2026-09-27): the persisted asset_type forks the verb key", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          intent: {
+            type: "material_beat",
+            beat: "reading",
+            status: "completed",
+            name: "talk.mp4",
+            ref: "asset-v",
+            asset_type: "video",
+          },
+        }),
+        row({
+          id: "beat-a",
+          intent: {
+            type: "material_beat",
+            beat: "reading",
+            status: "completed",
+            name: "podcast.mp3",
+            ref: "asset-a",
+            asset_type: "audio",
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out[0].beat?.key).toBe("chat.material.readingDone_video")
+    expect(out[1].beat?.key).toBe("chat.material.readingDone_audio")
+  })
+
   it("an off-shape beat dump degrades to a plain assistant row (read tolerance)", () => {
     const out = mapHistoryRows(
       [row({ content: "", intent: { type: "material_beat", beat: "mystery" } })],

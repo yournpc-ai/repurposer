@@ -7,7 +7,6 @@
  * meaning, every node is real. */
 
 import type {
-  ExplorationNodeState,
   GraphEdgeType,
   GraphNodeState,
   GraphNodeType,
@@ -34,13 +33,10 @@ export type OutPortType = GraphEdgeType | "image"
 export type FlowNodeKind = GraphNodeType | "asset" | "output" | "step"
 
 /** Graph canvas node state (the graph row's state vocabulary — the product
- * machine's words, or the exploration family's own for type="exploration"
- * rows). R18 同框纪律: the exploration machine never mirrors the product
- * chrome (no running wipe / skipped dim) — the words pass through so the
- * card face can read its own machine (a content plan's draft badge), and
- * the root chrome only ever matches the PRODUCT words. The recipe surface
- * leaves status unset — its cards have no liveness. */
-export type FlowNodeStatus = GraphNodeState | ExplorationNodeState
+ * machine's words). The recipe surface leaves status unset — its cards have
+ * no liveness. (Workspace 合同 v4.2 C1: the exploration family never enters
+ * the graph, so no second state vocabulary rides this union anymore.) */
+export type FlowNodeStatus = GraphNodeState
 
 /** lineage 血缘边 = derivation (asset→output, output→output);
  * dependency 依赖边 = process order (step→step). Visually distinct.
@@ -107,6 +103,13 @@ export interface FlowNode {
     params?: Record<string, unknown> | null
     role?: string | null
     text?: string | null
+    /** The transcript's user-edited presentation layer (v4.2 C4 — the card
+     * displays this over the source mirror when present). */
+    edited_text?: string | null
+    /** 岛内格镜像 (v4.2 C6): island members carry the island's frozen
+     * reserved bottom — the projection renders the frozen cell verbatim and
+     * floors the column's air-compression there (layout.ts ↔ graph_store). */
+    island?: { reserved_bottom?: number }
     /** 能力原型 (ADR-076 词表 v3): generator / editor / manual — the
      * program region's form; absent on pre-v3 rows. */
     prototype?: "generator" | "editor" | "manual"
@@ -118,15 +121,6 @@ export interface FlowNode {
    * siblings). Empty/undefined = the region shows the state-appropriate
    * body (draft estimate / running wipe / quiet done). */
   outputs?: import("@/lib/types").Output[]
-  /** R24 (ADR-088): the journey this exploration row belongs to — ownership
-   * attribute passthrough, never an edge. Null on product nodes. */
-  journeyId?: string | null
-  /** Select 卡的证据区间 (ADR-088 R7 证据引用): the artifact is a POINTER
-   * (candidate set + member index); the adapter resolves the pointed-at
-   * member's [start, end] at read time for the card face — display
-   * projection, never a copy into the artifact. Null when the parent set
-   * or member is absent (the card reads its range line honestly empty). */
-  evidenceRange?: { start: number; end: number } | null
   /** The node's quotation in credits (server-folded at read time) — the
    * draft card's 「运行后生成 · 约 N 积分」. Null = unquoted. */
   estimateCredits?: [number, number] | null
@@ -222,6 +216,13 @@ export interface FlowViewProps {
    * confirmation (锚定受影响子图 + 估价随行) — nothing touches the graph
    * until the confirm's CODE-built edit_prompt + run lands. */
   onPromptEdit?: (nodeId: string, text: string) => void
+  /** Transcript in-place direct edit (Workspace 合同 v4.2 C4 — 卡内就地
+   * 编辑, 用户拍板 2026-09-26): the card reports the user's verbatim text
+   * (null = reset to the source layer); the surface lands ONE code-built
+   * edit_text op through the graph's write door — zero run, zero credits,
+   * zero chat echo. Resolves true when the write landed (the card then
+   * echoes optimistically). Absent = the document body is read-only. */
+  onTextEdit?: (nodeId: string, text: string | null) => Promise<boolean>
   /** The edit's optimistic echo (ADR-058 乐观回显): while the confirm is
    * open or the stamp is in flight, the edited node's card face shows the
    * user's verbatim program instead of the domain's last-stamped one —
@@ -273,20 +274,33 @@ export interface FlowViewProps {
    * surface owns the witnessing (its first hydrated frame passes NOTHING —
    * refresh / reconnect / history render instantly, 铁律). */
   bornIds?: ReadonlySet<string>
-  /** 聚焦转场 (C6 画布相机批, 2026-09-14 拍板): a USER-initiated camera beat
-   * armed by the surface — "fit" (chat-send draft arrival = 整链 fit,
-   * reusing the settle framing's recipe) or "pan" (mid-session newborns =
-   * setCenter 平移锁 zoom). Consumes on the first arrival carrying a
-   * node-id delta; a racing no-delta fetch never eats it, a ~5s timeout
-   * retires it. Background refetches never ARM, so they never move the
-   * camera (the 2026-08-19 growth law's narrowing, not its repeal). */
-  cameraBeat?: { token: number; mode: "fit" | "pan" } | null
+  /** 相机节拍 (Workspace 合同 v4.2 C5, 2026-09-26 封板 —— ensure-in-view
+   * 单语义): a USER-initiated camera beat armed by the surface. On the first
+   * arrival carrying a node-id delta the camera applies the contract: is
+   * the target cluster inside the safe viewport (visible region minus the
+   * docked panel's occlusion)? Already in → NO move; out → the MINIMAL pan
+   * closing the shortfall; zoom NEVER auto-changes (the fit/fitNow beats
+   * are deleted — the 2026-09-25 confirm-pill whole-chain fitNow reversed
+   * 2026-09-26; the sole automatic fit stays the settle/mount framing).
+   * Consumes on the first delta arrival; a racing no-delta fetch never eats
+   * it, a ~5s timeout retires it. Background refetches never ARM, so they
+   * never move the camera (the 2026-08-19 growth law's narrowing, not its
+   * repeal). */
+  cameraBeat?: { token: number } | null
   /** The armed beat was spent (fired / gesture-shielded / hidden-surface /
    * timed-out) — the surface clears its state. */
   onCameraBeatConsumed?: () => void
+  /** 「把当前操作元素移到画布中心」 (v4.2 未覆盖 #3, 2026-09-26 拍板): a
+   * ONE-SHOT explicit centering request naming the node — pan-locked-zoom,
+   * same shields as the beats. The camera capability any surface (or a
+   * future agent-driven caller) summons; zero chrome of its own. */
+  centerRequest?: { token: number; nodeId: string } | null
+  /** The centering request was spent (centered / node gone / shielded) —
+   * the surface clears its state. */
+  onCenterRequestConsumed?: () => void
   /** docked 几何面板遮挡补偿 (C6): the right-edge occlusion in screen px
-   * (the docked chat panel's footprint; 0 otherwise) — "fit" pads right,
-   * "pan" centers the newborn cluster in the VISIBLE region. */
+   * (the docked chat panel's footprint; 0 otherwise) — the safe viewport
+   * and the centering target both compensate it. */
   occludedRightPx?: number
   /** Region frames (2026-08-19 预留 — recipe surface first): large rounded
    * frames behind member node clusters, naming the region. */

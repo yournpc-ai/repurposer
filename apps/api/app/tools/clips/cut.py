@@ -51,6 +51,7 @@ from app.models.tables import (
 )
 from app.pipeline.clip_spec import build_clip_spec
 from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase, estimate_free
+from app.pipeline.graph_store import SHORTS_DEFAULT_ASPECT
 from app.pipeline.morph import fan_out_renders
 from app.pipeline.step_context import list_assets
 from app.pipeline.step_display import fill_summary, ui_lang_of
@@ -130,10 +131,15 @@ class CutSegments(NodeBase):
         )
         # Aspect: the compiled spec wins, then the run context carry-over,
         # then the skin default (select_clips' order minus the exemplar
-        # skeleton — exploration chains pin no exemplar).
+        # skeleton — exploration chains pin no exemplar). The default's one
+        # seat is graph_store.SHORTS_DEFAULT_ASPECT — the graph frame's
+        # predictive mirror reads the same constant, so the born frame
+        # always matches what this resolves to.
         cfg = brand_cfg
         aspect = str(
-            spec_in.get("aspect") or ctx.get("aspect") or cfg.get("aspect", "9:16")
+            spec_in.get("aspect")
+            or ctx.get("aspect")
+            or cfg.get("aspect", SHORTS_DEFAULT_ASPECT)
         )
         cap_pos = cfg.get("captionPosition")
         cap_style_raw = cfg.get("captionStylePreset")

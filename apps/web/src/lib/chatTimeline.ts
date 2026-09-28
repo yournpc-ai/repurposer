@@ -37,6 +37,19 @@ export type ConversationUnit =
   | { kind: "message"; message: OverlayMessage }
   | { kind: "activity"; activity: ActivityFramePayload }
 
+/** The draft span never enters the flow (2026-09-28 user ruling —
+ * 落定即退役): its settled receipt (方案整理好了 / 改好了) was hollow — the
+ * docked plan card / the run receipt IS the settled evidence — and its
+ * persisted row sorted after the run's archive, reading as if the plan was
+ * assembled after the render. The span exists only while ACTIVE (the
+ * now-line owns it). Explore milestones (chat.explore.* keys, count-carrying
+ * born-completed facts) are not spans and keep interleaving. The server
+ * twin: draft settles ride the live wire but never persist (activity.py's
+ * `_settle`), so replayed logs from before the law are filtered HERE. */
+export function isDraftSpanRow(a: ActivityFramePayload): boolean {
+  return a.kind === "draft" && (a.key ?? "").startsWith("chat.activity.")
+}
+
 /** The non-run timeline (S7: messages.at × activity.at 单流穿插): messages
  * and the turn's SETTLED activity rows interleave by real moment. Messages
  * claim the lower order numbers (they predate the turn's work); a
@@ -59,6 +72,7 @@ export function buildConversationUnits(
   }
   for (const a of activities) {
     if (a.status === "active") continue // the now-line owns the live row
+    if (isDraftSpanRow(a)) continue // 落定即退役 — the card is the evidence
     entries.push({ t: momentOf(a.at), order: order++, unit: { kind: "activity", activity: a } })
   }
   return orderMoments(entries)

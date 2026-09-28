@@ -34,6 +34,7 @@ const zh: Resources = {
     guest: "访客",
     new: "新建",
     freePlan: "免费版",
+    upgrade: "升级",
     requestFailed: "请求失败",
     networkError: "网络错误，请检查连接",
     skipToContent: "跳到主要内容",
@@ -442,32 +443,31 @@ const zh: Resources = {
     uploadRetry: "重试",
     uploadInProgress: "文件还在上传中，请稍候",
     managePersonas: "管理人设…",
-    // 扣费确认策略（2026-09-23，本次仅 UI 偏好——行为接线上后续批次，
-    // 注脚对用户诚实声明）。trigger 文案纪律：≤12 字符，保证 pill 在
-    // dock 控制条上不溢出。
+    // 扣费确认策略（ADR-092 三档 always / large / never，服务端设置为准，
+    // localStorage 降级为读容忍回退）。trigger 文案纪律：≤12 字符，保证
+    // pill 在 dock 控制条上不溢出。
     confirmStrategy: {
       label: "扣费确认",
       trigger: {
-        always: "完整披露",
-        large: "大额披露",
+        always: "每次确认",
+        large: "大额确认",
         never: "仅估价",
       },
       options: {
         always: {
-          title: "完整披露",
-          desc: "每个方案都显示扣费说明与显价确认钮",
+          title: "每次确认",
+          desc: "每个方案都列出扣费明细，确认钮上标价格",
         },
         large: {
-          title: "仅大额方案",
-          desc: "超过积分阈值的方案显示完整扣费说明",
+          title: "大额才确认",
+          desc: "超过积分阈值的方案才要求显式确认",
         },
         never: {
           title: "仅估价",
-          desc: "只显示估价区间，没有额外披露",
+          desc: "只显示估价区间，不额外强制确认",
         },
       },
-      footnote: "生效于付费运行启动前的方案确认。",
-
+      footnote: "付费运行启动前、确认方案时生效。",
     },
   },
   // 配方卡（RECIPES §7）—— 与 lib/recipes.ts 的卡 id 一一对应；
@@ -1049,9 +1049,8 @@ const zh: Resources = {
       focusNode: "在对话中指认",
       reprocess: "重新处理",
       more: "更多操作",
-      // 图画布的文档节点（ADR-057）：计划升为一等玻璃文本节点；转写稿 /
-      // 调研简报是该型的另外两个实例；通用文档用普通标签。
-      plan: "计划",
+      // 图画布的文档节点（ADR-057）：转写稿 / 调研简报是该型的命名实例；
+      // 通用文档用普通标签。（计划文档已 de-stamp —— v4.2 C1-b。）
       transcript: "转写稿",
       researchBrief: "调研简报",
       // 两站拆分的文档站 (ADR-072, spec.role 派生——文档站不携 builder 摘要,
@@ -1068,34 +1067,6 @@ const zh: Resources = {
         image: "图片",
         video: "视频",
         audio: "音频",
-        // 词表 v3 第八值（ADR-088 §2）：探索族单一族词——卡面自带分 kind
-        // caption，这里只是通用回退。
-        exploration: "探索",
-      },
-      // 探索产物族卡面（ADR-088 §2，迭代一）：三种卡面的结构文案。verdict /
-      // 理由 / topic / 标题是 agent 用界面语言写的数据（世界自证）——这里只
-      // 放结构标签。
-      exploration: {
-        kindCandidateSet: "候选",
-        kindSelect: "精选",
-        kindContentPlan: "内容方案",
-        candidateCount: "{{count}} 个候选",
-        stateReady: "就绪",
-        stateDraft: "草稿",
-        outputKind: {
-          clip: "视频片段",
-          post: "社交长文",
-          article: "长文章",
-          quotes: "金句卡",
-          carousel: "轮播图",
-        },
-        // 方案卡产出行的形态事实（iter-2 ①，N-56）：字幕形态词表化 + 配音徽。
-        captionMode: {
-          bilingual: "双语字幕",
-          source_only: "源语字幕",
-          target_only: "译文字幕",
-        },
-        dubbed: "配音版",
       },
       // 状态原地表达（ADR-057 §5——状态在卡内说话，caption 右槽恒空）：未运行
       // 节点虚线空区读自己的估价；排队 / 跳过 / 失败 / 可重跑是安静标签。
@@ -1122,8 +1093,15 @@ const zh: Resources = {
       confirmBlast: "重跑 {{count}} 个节点",
       confirmStart: "确认开始",
       // 画布导航控件（explore 面，2026-08-19——项目页右上换血：app chrome 出，画布控件进；
-      // 2026-09-05 ± 步进退役——pill 只读百分比，点击 = fit）。
-      zoomFit: "适应画布",
+      // 2026-09-28 缩放菜单形态——pill 开菜单：步进/fit/定档，⌘+/⌘-/⌘0 悬停画布时生效）。
+      zoomMenu: "缩放",
+      zoomIn: "放大",
+      zoomOut: "缩小",
+      zoomFit: "适应窗口",
+      zoomToPct: "缩放至 {{pct}}%",
+      // 转写卡空稿诚实面 (2026-09-28——上传即出生卡座，ASR 零词时说实话；
+      // 处理中的 loading 走公用擦除+边 packet，不自养占位文案)。
+      transcriptEmpty: "这段素材没有读到可转写的内容",
       // 产物档案面板（2026-09-06，FLORA 节点详情对齐）：点产物节点召唤，
       // 挂在缩放钮下方——只摆出生证明，纯只读事实（修订只经 chat；
       // FLORA 的内联参数编辑有意不搬）。
@@ -1147,6 +1125,9 @@ const zh: Resources = {
       // 选区引用（2026-09-11——段落级指认）：产物卡上划选文本浮出的钉选钮——
       // 钉选进入 dock 成为带引文的 @output chip，agent 修订的正是这一段。
       quotePassage: "引用这段",
+      // Transcript 卡内就地编辑（Workspace 合同 v4.2 C4）：仅编辑态可见的
+      // 复位钮——清除用户的改写覆盖层，回到源文字层。
+      resetToSource: "恢复原文",
       // 悬停媒体控件：展开（左上）打开 lightbox；声音（右上）切换内联视频的静音。
       expand: "展开",
       mute: "静音",
@@ -1222,14 +1203,27 @@ const zh: Resources = {
      * 行的空态）：素材处理中 → reading（文件名插值）；warm 空窗（素材已
      * 落定、理解评述未落地）→ understanding。*Done / *Failed 是持久化的
      * 完成态行（素材节拍入库——pipeline 每节拍落一条消息行，回放映过去
-     * 时）；Progress 带批次计数「N/M」（带计数拍板）。 */
+     * 时）；Progress 带批次计数「N/M」（带计数拍板）。
+     * 动词分叉（2026-09-27 批「动词」）：动词随资产类型——video=看 /
+     * audio=听 / 文本及其他=读；多文件批次落中性词「处理」。typed key
+     * 缺席时回落基 key（前后端两个合成点同一分叉律：ChatDock now-line
+     * 读 asset.type，回放读节拍入库的 intent.asset_type）。 */
     material: {
       reading: "正在阅读 {{name}}…",
-      readingMany: "正在阅读 {{count}} 个文件…",
+      reading_video: "正在看 {{name}}…",
+      reading_audio: "正在听 {{name}}…",
+      readingMany: "正在处理 {{count}} 个文件…",
       understanding: "正在理解素材内容…",
+      reviewing: "正在整理建议…",
       readingDone: "已读完 {{name}}",
+      readingDone_video: "已看完 {{name}}",
+      readingDone_audio: "已听完 {{name}}",
       readingDoneProgress: "已读完 {{name}}（{{count}}/{{total}}）",
+      readingDoneProgress_video: "已看完 {{name}}（{{count}}/{{total}}）",
+      readingDoneProgress_audio: "已听完 {{name}}（{{count}}/{{total}}）",
       readingFailed: "没能读完 {{name}}",
+      readingFailed_video: "没能看完 {{name}}",
+      readingFailed_audio: "没能听完 {{name}}",
       understandingDone: "已理解素材内容",
     },
     /** 感知族的查询碎碎念（T2b）：读工具运行期间 read 活动帧的文案
@@ -1261,16 +1255,23 @@ const zh: Resources = {
       selectsReady: "选定 {{count}} 段",
       plansReady: "整理好 {{count}} 个方案",
     },
+    /** Candidate Surface（Workspace 合同 v4.2 C8-c，2026-09-26 封板）：chat
+     * 候选卡的展开开关——默认 3 个推荐，全量按需展开（推荐样本，不是只能
+     * 选 3 个）。 */
+    candidates: {
+      more: "另外还有 {{count}} 个",
+      less: "收起",
+    },
     /** 活动流里程碑文案（ADR-087 §3 Phase 2）：active 帧带进行态、completed
      * 帧带完成态；failed/cancelled 复用进行态（✗/删除线说剩下的）。 */
     /** 2026-09-25 文案批 (用户拍板——「计划已起草 / 创建 workflow」那套
      * 机器状态腔退役): 说人话，说当下在干的事。draft 按工具分两副面孔
-     * ——出方案 / 改已有产物（projector 的 _EDIT_TOOLS 选 key）。 */
+     * ——出方案 / 改已有产物（projector 的 _EDIT_TOOLS 选 key）。draft 跨度
+     * 只有 active 态（2026-09-28 用户拍板——落定即退役）：落定收据行退役，
+     * 方案卡就是证据，故无 draftDone/editDone 键。 */
     activity: {
       draft: "正在整理方案…",
-      draftDone: "方案整理好了",
       edit: "正在修改…",
-      editDone: "改好了",
       run: "正在开工…",
       runDone: "已开工",
       repair: "刚才的回答没组织好，我重新整理一下…",
@@ -1299,6 +1300,10 @@ const zh: Resources = {
     },
     completed: "完成",
     failed: "抱歉，这次没能完成修改，请再试一次。",
+    /** 已落定问题的静默收口（2026-09-28——回答端点的结构化 409 码；
+     * 点击与问题自身的落定竞态，不报错误 toast）。 */
+    questionOutdated: "这个问题已被更新的提问取代，不用再回答了。",
+    questionAnswered: "这个问题已经回答过了。",
     runFailed: "运行失败",
     /** 收官句已于 2026-09-24 退役（用户拍板——与 trigger 回合的
      * run_completed 散文重复；现在只有 trigger 一个叙事者）。 */
@@ -1350,7 +1355,6 @@ const zh: Resources = {
     qa: {
       q: "问",
       a: "答",
-      started: "开始生成",
       cancelled: "已取消——回到草稿",
       superseded: "已被更新的计划取代",
       expired: "超时未选——已按默认方向继续",
@@ -1458,6 +1462,10 @@ const zh: Resources = {
     countIncrease: "增加",
     confirmQuestion: "按这版开始？",
     confirm: "开始生成",
+    // 确认拍归档 = 普通用户气泡（Workspace 合同 v4.2 C8，2026-09-26 封板）：
+    // Start pill 的点击以这条用户消息落进消息流（pill 等同代用户说出它），
+    // 然后走唯一 sendChat 通道。
+    confirmUserMessage: "确认生成",
     // E6 披露强度分级 (ADR-092)：强制档 CTA 显价——手势仍是同一个 Start，
     // 只是标签带价。
     confirmPriced: "开始 · ~{{low}}–{{high}} 积分",
@@ -1493,6 +1501,7 @@ const zh: Resources = {
   questionDock: {
     bail: "停止生成",
     skip: "跳过问题",
+    recommended: "推荐",
   },
   clipMenu: {
     more: "更多操作",
@@ -1592,6 +1601,7 @@ const zh: Resources = {
   },
   a11y: {
     toggleSidebar: "切换侧边栏",
+    openSidebar: "打开侧边栏",
   },
   // 质检环（产物质量线期 3）：verify 节点检查项的人话标签——
   // 徽标悬浮层渲染「<标签>: <明细>」。

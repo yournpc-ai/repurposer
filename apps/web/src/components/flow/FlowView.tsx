@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next"
 import {
   Background,
   BackgroundVariant,
+  getNodesBounds,
+  getViewportForBounds,
   Panel,
   ReactFlow,
   useReactFlow,
@@ -13,7 +15,16 @@ import {
 } from "@xyflow/react"
 
 import { cn } from "@/lib/utils"
-import { Maximize } from "lucide-react"
+import { ChevronDown } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 import "@xyflow/react/dist/style.css"
 import "./flow.css"
@@ -61,6 +72,38 @@ function productionPort(n: FlowNode): OutPortType {
  * clears the overlay's floating tab bar (top-5 + h-9 ≈ 56px). */
 const FIT_VIEW_OPTIONS = { minZoom: 0.15, maxZoom: 1, padding: 0.2 } as const
 
+/** Occlusion-aware fit (2026-09-28 — the transcript card birthed UNDER the
+ * docked chat panel): frame the graph within the SAFE region — the
+ * container minus the docked panel's width. getViewportForBounds centers
+ * the bounds in the GIVEN width, so passing the safe width centers the
+ * graph clear of the frost; a plain fitView centers in the full container
+ * and the right column slides under the panel. Falls back to the plain
+ * fitView when nothing occludes. One recipe, three seats: the
+ * ViewportController's auto fits, the zoom menu's 适应窗口, and ⌘0. */
+function fitInSafeRegion(
+  rf: ReturnType<typeof useReactFlow>,
+  el: HTMLDivElement,
+  occludedRightPx: number,
+  duration: number,
+): void {
+  const graphNodes = rf.getNodes()
+  if (graphNodes.length === 0) return
+  const safeW = el.clientWidth - occludedRightPx
+  if (occludedRightPx > 0 && safeW > 0) {
+    const vp = getViewportForBounds(
+      getNodesBounds(graphNodes),
+      safeW,
+      el.clientHeight,
+      FIT_VIEW_OPTIONS.minZoom,
+      FIT_VIEW_OPTIONS.maxZoom,
+      FIT_VIEW_OPTIONS.padding,
+    )
+    void rf.setViewport(vp, { duration })
+    return
+  }
+  void rf.fitView({ ...FIT_VIEW_OPTIONS, duration })
+}
+
 /** Fit + center via the framework's own `fitView` (xyflow's recommended
  * centered-with-padding viewport, FIT_VIEW_OPTIONS above).
  * Runs: on mount (double rAF, after paint + measurement), on growth
@@ -71,11 +114,13 @@ function ViewportController({
   wrapperRef,
   navigation,
   settleKey,
+  occludedRightPx = 0,
 }: {
   count: number
   wrapperRef: React.RefObject<HTMLDivElement | null>
   navigation: "fit" | "explore"
   settleKey?: string | null
+  occludedRightPx?: number
 }) {
   const rf = useReactFlow()
   const prevCountRef = useRef<number | null>(null)
@@ -85,9 +130,9 @@ function ViewportController({
       const el = wrapperRef.current
       if (!el || !el.clientWidth || !el.clientHeight) return
       if (rf.getNodes().length === 0) return
-      void rf.fitView({ ...FIT_VIEW_OPTIONS, duration })
+      fitInSafeRegion(rf, el, occludedRightPx, duration)
     },
-    [rf, wrapperRef],
+    [rf, wrapperRef, occludedRightPx],
   )
 
   useEffect(() => {
@@ -162,23 +207,49 @@ function ViewportController({
   return null
 }
 
-/** 聚焦转场 (C6 画布相机批, 2026-09-14 拍板): user-initiated beats move the
- * camera — NEVER background refetches (the surface arms a beat only inside
- * its own send / Start handlers, so a polling / SSE arrival carrying new
- * ids can't yank the view; the 2026-08-19「增长不动视口」law's narrowing,
- * not its repeal). Guards:
+/** 相机律 (Workspace 合同 v4.2 C5, 2026-09-26 封板 —— ensure-in-view 一条):
+ * user-initiated beats move the camera — NEVER background refetches (the
+ * surface arms a beat only inside its own send / Start handlers, so a
+ * polling / SSE arrival carrying new ids can't yank the view; the
+ * 2026-08-19「增长不动视口」law's narrowing, not its repeal). The rule in
+ * full: is the current operation's target inside the safe viewport (the
+ * visible region minus the docked panel's occlusion)? Already in: NO move.
+ * Not in: the MINIMAL pan that brings it into the readable region. Zoom:
+ * NEVER auto-changes — the fit/fitNow beats are deleted (the 2026-09-25
+ * confirm-pill whole-chain fitNow was reversed 2026-09-26 in favor of the
+ * sealed contract; the sole automatic fit remains the Workspace Birth's
+ * initial settle framing, owned by the mount, not by this machine).
+ * Guards:
  * - 手势防护: a user drag/zoom within the last 3s shields the beat (they
  *   grabbed the canvas mid-flight — don't fight the hand);
  * - prefers-reduced-motion: the transition degrades to an instant jump;
  * - a hidden surface (no box) spends the beat WITHOUT moving — the
  *   settle/morph framing owns the first show;
- * - docked 面板遮挡补偿: "fit" pads the occluded right edge, "pan" centers
- *   the newborn cluster in the VISIBLE region.
+ * - docked 面板遮挡补偿: the safe region excludes the occluded right edge.
  * One-shot: consumes on the FIRST arrival carrying a node-id delta — a
  * racing no-delta fetch (SSE tick) never eats the beat early; a ~5s
  * timeout retires an arm whose stamp never lands. */
 const GESTURE_SHIELD_MS = 3000
 const CAMERA_BEAT_TIMEOUT_MS = 5000
+/** The safe viewport's inset (screen px) — a node brushing the chrome edge
+ * reads as out of view. */
+const SAFE_MARGIN_PX = 24
+
+/** The ONE camera movement primitive (v4.2 C5 + 未覆盖 #3, 2026-09-26
+ * 拍板): setCenter with the zoom EXPLICITLY locked to the current
+ * viewport's — zoom never auto-changes. Both camera gestures converge on
+ * it: ensure-in-view's minimal pan (the target point = the current center
+ * + the shortfall delta) and "center the current operation element" (the
+ * target point = the element's frame center, occlusion-compensated). */
+function panLockedCenter(
+  rf: ReturnType<typeof useReactFlow>,
+  cx: number,
+  cy: number,
+  duration: number,
+) {
+  const zoom = rf.getViewport().zoom
+  void rf.setCenter(cx, cy, { zoom, duration })
+}
 
 /** An edge endpoint's busy beat: running status OR render-in-flight. */
 function nodeBusy(n: FlowNode | undefined): boolean {
@@ -188,17 +259,26 @@ function nodeBusy(n: FlowNode | undefined): boolean {
 function CameraBeats({
   nodes,
   beat,
+  centerRequest,
   wrapperRef,
   occludedRightPx = 0,
   lastGestureRef,
   onConsumed,
+  onCenterConsumed,
 }: {
   nodes: FlowNode[]
-  beat: { token: number; mode: "fit" | "pan" } | null | undefined
+  beat: { token: number } | null | undefined
+  /** 「把当前操作元素移到画布中心」 (v4.2 未覆盖 #3 — the camera capability
+   * the contract upgrades to): a ONE-SHOT explicit request naming the node
+   * to center (zoom locked). Available to any surface/agent-driven caller;
+   * it is a deliberate gesture, not an ambient beat, so it needs no
+   * node-delta — the element is already on the canvas. */
+  centerRequest?: { token: number; nodeId: string } | null
   wrapperRef: React.RefObject<HTMLDivElement | null>
   occludedRightPx?: number
   lastGestureRef: React.RefObject<number>
   onConsumed?: () => void
+  onCenterConsumed?: () => void
 }) {
   const rf = useReactFlow()
   const prevIdsRef = useRef<ReadonlySet<string> | null>(null)
@@ -218,6 +298,36 @@ function CameraBeats({
     return () => clearTimeout(timer)
   }, [beat, onConsumed])
 
+  // 「移到画布中心」— the explicit centering gesture: one shot on arrival,
+  // zoom locked, the same shields as the ambient beats. An unknown nodeId
+  // (the element left the canvas) spends the request silently.
+  useEffect(() => {
+    if (!centerRequest) return
+    const el = wrapperRef.current
+    if (!el || !el.clientWidth || !el.clientHeight) return onCenterConsumed?.()
+    if (Date.now() - lastGestureRef.current < GESTURE_SHIELD_MS) {
+      return onCenterConsumed?.()
+    }
+    const node = nodes.find((n) => n.id === centerRequest.nodeId)
+    const f = node?.frame
+    if (!f) return onCenterConsumed?.()
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    const zoom = rf.getViewport().zoom
+    // 遮挡补偿: center the element in the VISIBLE region — anchoring the
+    // world point half an occlusion RIGHT of the element's center puts it
+    // half an occlusion LEFT of the viewport center (world px = screen px /
+    // zoom).
+    panLockedCenter(
+      rf,
+      f.x + f.w / 2 + occludedRightPx / 2 / zoom,
+      f.y + f.h / 2,
+      reduce ? 0 : 400,
+    )
+    onCenterConsumed?.()
+  }, [centerRequest, nodes, rf, wrapperRef, occludedRightPx, lastGestureRef, onCenterConsumed])
+
   useEffect(() => {
     const ids = new Set(nodes.map((n) => n.id))
     const prev = prevIdsRef.current
@@ -232,58 +342,61 @@ function CameraBeats({
     const newborns = nodes.filter((n) => !prev.has(n.id))
     // 产出落地跟随 (2026-09-24 user ruling): a node whose product count
     // GREW is a landing the camera follows too — outputs fill EXISTING
-    // nodes, so the id-diff alone never saw the run's harvest arrive
-    // (pan beats only; a fit beat reframes on the chain's birth, never
-    // on fills).
+    // nodes, so the id-diff alone never saw the run's harvest arrive.
     const filled = nodes.filter(
       (n) => (n.outputs?.length ?? 0) > (prevOuts?.get(n.id) ?? 0),
     )
-    const targets = beat.mode === "pan" ? [...newborns, ...filled] : newborns
+    const targets = [...newborns, ...filled]
     if (targets.length === 0) return // a racing no-delta fetch — arm survives
     const el = wrapperRef.current
     if (!el || !el.clientWidth || !el.clientHeight) return onConsumed?.()
     if (Date.now() - lastGestureRef.current < GESTURE_SHIELD_MS) {
       return onConsumed?.()
     }
+    // ensure-in-view (v4.2 C5): the target cluster's world bbox against the
+    // SAFE viewport (the visible region minus the margin and the docked
+    // panel's occlusion). Already inside → the beat spends with ZERO
+    // movement; outside → the minimal pan that closes the shortfall, zoom
+    // locked.
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    let framed = 0
+    for (const n of targets) {
+      const f = n.frame
+      if (!f) continue
+      framed += 1
+      minX = Math.min(minX, f.x)
+      minY = Math.min(minY, f.y)
+      maxX = Math.max(maxX, f.x + f.w)
+      maxY = Math.max(maxY, f.y + f.h)
+    }
+    if (framed === 0) return onConsumed?.()
+    const vp = rf.getViewport()
+    const w = el.clientWidth / vp.zoom
+    const h = el.clientHeight / vp.zoom
+    const left = -vp.x / vp.zoom
+    const top = -vp.y / vp.zoom
+    const m = SAFE_MARGIN_PX / vp.zoom
+    const safeLeft = left + m
+    const safeTop = top + m
+    const safeRight = left + w - m - occludedRightPx / vp.zoom
+    const safeBottom = top + h - m
+    // The per-axis shortfall (world units); a cluster wider/taller than the
+    // safe region can never fully fit at a locked zoom — align its near
+    // edge (the honest best at this zoom).
+    let dx = 0
+    if (minX < safeLeft) dx = safeLeft - minX
+    else if (maxX > safeRight) dx = Math.max(safeRight - maxX, safeLeft - minX)
+    let dy = 0
+    if (minY < safeTop) dy = safeTop - minY
+    else if (maxY > safeBottom) dy = Math.max(safeBottom - maxY, safeTop - minY)
+    if (dx === 0 && dy === 0) return onConsumed?.() // 已在安全区：不动
     const reduce =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-    if (beat.mode === "fit") {
-      void rf.fitView({
-        ...FIT_VIEW_OPTIONS,
-        padding:
-          occludedRightPx > 0
-            ? { top: 0.2, bottom: 0.2, left: 0.2, right: `${occludedRightPx + 48}px` }
-            : FIT_VIEW_OPTIONS.padding,
-        duration: reduce ? 0 : 300,
-      })
-    } else {
-      // setCenter on the target cluster's bbox — zoom LOCKED (pan only).
-      let minX = Infinity
-      let minY = Infinity
-      let maxX = -Infinity
-      let maxY = -Infinity
-      let framed = 0
-      for (const n of targets) {
-        const f = n.frame
-        if (!f) continue
-        framed += 1
-        minX = Math.min(minX, f.x)
-        minY = Math.min(minY, f.y)
-        maxX = Math.max(maxX, f.x + f.w)
-        maxY = Math.max(maxY, f.y + f.h)
-      }
-      if (framed > 0) {
-        const zoom = rf.getViewport().zoom
-        // 遮挡补偿: center the cluster in the VISIBLE region — anchoring the
-        // world point half an occlusion RIGHT of the cluster's center puts
-        // the cluster half an occlusion LEFT of the viewport center (world
-        // px = screen px / zoom).
-        const cx = (minX + maxX) / 2 + occludedRightPx / 2 / zoom
-        const cy = (minY + maxY) / 2
-        void rf.setCenter(cx, cy, { zoom, duration: reduce ? 0 : 500 })
-      }
-    }
+    panLockedCenter(rf, left + w / 2 + dx, top + h / 2 + dy, reduce ? 0 : 400)
     onConsumed?.()
   }, [nodes, beat, rf, wrapperRef, occludedRightPx, lastGestureRef, onConsumed])
 
@@ -360,32 +473,118 @@ function GroupFrames({
 }
 
 /** The canvas's own navigation chrome (2026-08-19 — replaces the project
- * page's home-inherited top-right cluster; 2026-09-05 比例尺瘦身：只读百
- * 分比——± 步进与 fit icon 全退役（用户拍板），框内就一个数字，点击
- * 仍是 fit to view。Rides the same dock-surface recipe as the dock and
- * the 计划 node. Explore surfaces only (the parent gates it). Subscribes
- * to zoom ONLY (transform[2]) — useViewport's {x,y,zoom} shallow compare
- * would re-render the pill on every pan frame. */
-function FlowControls({ className }: { className?: string }) {
+ * page's home-inherited top-right cluster). 缩放菜单形态 (2026-09-28 用户拍
+ * 板, Figma parity — 照抄): the pill (live percentage + chevron) opens a
+ * menu — 放大 / 缩小 (center-anchored steps), 适应窗口 (fitView with the
+ * shared padding), 缩放至 50/100/150% (zoomTo is center-anchored in xyflow)
+ * — with ⌘+/⌘-/⌘0 hints; the shortcuts bind ONLY while the pointer is over
+ * the canvas (the browser's own zoom stays untouched outside it). Rides
+ * the same dock-surface recipe as the dock and the 计划 node. Explore
+ * surfaces only (the parent gates it). Subscribes to zoom ONLY
+ * (transform[2]) — useViewport's {x,y,zoom} shallow compare would re-render
+ * the pill on every pan frame. */
+function FlowControls({
+  className,
+  wrapperRef,
+  occludedRightPx = 0,
+}: {
+  className?: string
+  wrapperRef: React.RefObject<HTMLDivElement | null>
+  occludedRightPx?: number
+}) {
   const { t } = useTranslation()
   const rf = useReactFlow()
   const zoom = useStore((s) => s.transform[2])
-  const fit = () => void rf.fitView({ ...FIT_VIEW_OPTIONS, duration: 300 })
+
+  // The shortcuts' hover gate lives inside the effect: rf and wrapperRef
+  // are both stable, so the listeners re-attach only when the docked
+  // panel's occlusion changes geometry.
+  useEffect(() => {
+    const el = wrapperRef.current
+    if (!el) return
+    let hovering = false
+    const enter = () => {
+      hovering = true
+    }
+    const leave = () => {
+      hovering = false
+    }
+    el.addEventListener("pointerenter", enter)
+    el.addEventListener("pointerleave", leave)
+    const onKey = (e: KeyboardEvent) => {
+      if (!hovering || !(e.metaKey || e.ctrlKey)) return
+      if (e.key === "=" || e.key === "+") {
+        e.preventDefault()
+        void rf.zoomIn({ duration: 200 })
+      } else if (e.key === "-") {
+        e.preventDefault()
+        void rf.zoomOut({ duration: 200 })
+      } else if (e.key === "0") {
+        e.preventDefault()
+        fitInSafeRegion(rf, el, occludedRightPx, 300)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => {
+      el.removeEventListener("pointerenter", enter)
+      el.removeEventListener("pointerleave", leave)
+      window.removeEventListener("keydown", onKey)
+    }
+  }, [rf, wrapperRef, occludedRightPx])
+
   return (
     <Panel position="top-right" className={cn("!m-3 md:!m-4", className)}>
-      <button
-        type="button"
-        aria-label={t("results.canvas.zoomFit")}
-        title={t("results.canvas.zoomFit")}
-        onClick={fit}
-        className="dock-surface flex h-9 items-center gap-1.5 rounded-md px-3 text-muted-foreground text-xs tabular-nums ring-foreground/10 ring-1 transition-colors hover:bg-accent hover:text-foreground"
-      >
-        {/* 俯视 discoverability (C6): the fit icon makes「点击 = fit」
-            visible — the bare percentage was invisible knowledge since the
-            2026-09-05 瘦身拍板. */}
-        <Maximize className="size-4" aria-hidden />
-        {Math.round(zoom * 100)}%
-      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              type="button"
+              aria-label={t("results.canvas.zoomMenu")}
+              title={t("results.canvas.zoomMenu")}
+              className="dock-surface flex h-9 items-center gap-1 rounded-md px-3 text-muted-foreground text-xs tabular-nums ring-foreground/10 ring-1 transition-colors hover:bg-accent hover:text-foreground"
+            />
+          }
+        >
+          {Math.round(zoom * 100)}%
+          <ChevronDown className="size-3.5" aria-hidden />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              onClick={() => void rf.zoomIn({ duration: 200 })}
+            >
+              {t("results.canvas.zoomIn")}
+              <DropdownMenuShortcut>⌘ +</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => void rf.zoomOut({ duration: 200 })}
+            >
+              {t("results.canvas.zoomOut")}
+              <DropdownMenuShortcut>⌘ -</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                const el = wrapperRef.current
+                if (el) fitInSafeRegion(rf, el, occludedRightPx, 300)
+              }}
+            >
+              {t("results.canvas.zoomFit")}
+              <DropdownMenuShortcut>⌘ 0</DropdownMenuShortcut>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            {[50, 100, 150].map((pct) => (
+              <DropdownMenuItem
+                key={pct}
+                onClick={() => void rf.zoomTo(pct / 100, { duration: 200 })}
+              >
+                {t("results.canvas.zoomToPct", { pct })}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </Panel>
   )
 }
@@ -404,6 +603,7 @@ export function FlowView({
   onExpandMedia,
   onDisplayChange,
   onPromptEdit,
+  onTextEdit,
   pendingProgram = null,
   promptConfirm = null,
   onPaneClick,
@@ -414,6 +614,8 @@ export function FlowView({
   bornIds,
   cameraBeat = null,
   onCameraBeatConsumed,
+  centerRequest = null,
+  onCenterRequestConsumed,
   occludedRightPx = 0,
   groups = [],
   overlay,
@@ -511,6 +713,7 @@ export function FlowView({
         onExpandMedia,
         onDisplayChange,
         onPromptEdit,
+        onTextEdit,
         pendingProgram:
           pendingProgram && pendingProgram.nodeId === n.id
             ? pendingProgram.text
@@ -641,18 +844,27 @@ export function FlowView({
           wrapperRef={wrapperRef}
           navigation={navigation}
           settleKey={settleKey}
+          occludedRightPx={occludedRightPx}
         />
         <CameraBeats
           nodes={nodes}
           beat={cameraBeat}
+          centerRequest={centerRequest}
           wrapperRef={wrapperRef}
           occludedRightPx={occludedRightPx}
           lastGestureRef={lastGestureRef}
           onConsumed={onCameraBeatConsumed}
+          onCenterConsumed={onCenterRequestConsumed}
         />
         {/* The zoom pill is canvas chrome for explore surfaces only — a
             fit-locked surface has no zoom business (the prop is ignored). */}
-        {explore && controls && <FlowControls className={controlsClassName} />}
+        {explore && controls && (
+          <FlowControls
+            className={controlsClassName}
+            wrapperRef={wrapperRef}
+            occludedRightPx={occludedRightPx}
+          />
+        )}
       </ReactFlow>
     </div>
   )

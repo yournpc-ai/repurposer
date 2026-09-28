@@ -51,9 +51,10 @@ import {
 
 import { apiFetch } from "@/lib/api"
 import { inferAssetType } from "@/lib/asset-type"
-import { streamAnswer, streamChat, StreamTurnError } from "@/lib/chat-stream"
+import { streamAnswer, streamChat, StreamTurnError, questionSettledCode } from "@/lib/chat-stream"
 import type { ActivityFramePayload } from "@/lib/chat-stream"
-import { buildConversationUnits, momentOf } from "@/lib/chatTimeline"
+import type { CandidateEventPayload } from "@/lib/chatStreamFrames"
+import { buildConversationUnits, isDraftSpanRow, momentOf } from "@/lib/chatTimeline"
 import {
   asCreditsInsufficient,
   type CreditsInsufficientDetail,
@@ -116,6 +117,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { RunCard } from "@/components/chat/RunCard"
+import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
 import { AnsweredQuestion, answeredQuestionText } from "@/components/chat/AnsweredQuestion"
 import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
 import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
@@ -126,6 +128,7 @@ import { ModelsPanel } from "@/components/composer/ModelsPanel"
 import {
   mapHistoryRows,
   materialBeat,
+  materialBeatKey,
   triggerName,
   triggerSuggestions,
   questionEcho,
@@ -133,6 +136,7 @@ import {
   type DerivedRow,
   type DecisionPlanRow,
   type HistoryRow,
+  type CandidateSurface,
   type OverlayMessage,
   type ProjectAsset,
   type QuestionMessage,
@@ -713,7 +717,12 @@ function UserBubble({ text, assets }: { text: string; assets?: ProjectAsset[] })
               if (asset.type === "video") {
                 return (
                   <div key={asset.id} className="flex justify-end">
-                    <Attachment orientation="vertical" className="w-72 max-w-full">
+                    {/* Compact in the flow (2026-09-28 user ruling): once
+                        the canvas is live the SAME video sits there at full
+                        card size — the message copy is a reference, not the
+                        viewing seat, so it steps down (was w-72 like the
+                        image). */}
+                    <Attachment orientation="vertical" className="w-56 max-w-full">
                       <AttachmentMedia variant="media">
                         <video src={mediaUrl} controls playsInline preload="metadata" />
                       </AttachmentMedia>
@@ -1113,6 +1122,74 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
 
   // Conversation below the pinned regions (plan card / progress).
   const [messages, setMessages] = useState<OverlayMessage[]>([])
+  // Candidate Surface (Workspace 合同 v4.2 C8-c, 2026-09-26 封板): the live
+  // `assistant.candidates` frames — a set event births its card row at the
+  // flow's live edge (an idempotent re-emit replaces in place, keeping the
+  // selection), a selection event repaints the anchoring card's highlight
+  // (REPLACE, never union — a revise re-point drops the old pick). The
+  // rows are display-only: selection rides chat language, the surface just
+  // reflects it (chat 决策永不成节点). Live-born rows roll back if their
+  // turn fails — the server persists the turn's events (candidates_log) on
+  // the completed path only, so a failed turn's cards never existed.
+  const liveCandidateRowsRef = useRef<Set<string>>(new Set())
+  const handleCandidatesFrame = useCallback((event: CandidateEventPayload) => {
+    if (event.kind === "selection") {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.candidates?.candidateSetId === event.candidate_set_id
+            ? { ...m, candidates: { ...m.candidates, selected: event.selected } }
+            : m,
+        ),
+      )
+      return
+    }
+    const surface: CandidateSurface = {
+      candidateSetId: event.candidate_set_id,
+      topic: event.topic,
+      assetId: event.asset_id ?? null,
+      members: event.members,
+      selected: [],
+    }
+    const liveId = `live-cand-${event.candidate_set_id}`
+    liveCandidateRowsRef.current.add(liveId)
+    setMessages((prev) => {
+      const exists = prev.some(
+        (m) => m.candidates?.candidateSetId === event.candidate_set_id,
+      )
+      if (exists) {
+        return prev.map((m) =>
+          m.candidates?.candidateSetId === event.candidate_set_id
+            ? {
+                ...m,
+                candidates: {
+                  ...surface,
+                  selected: m.candidates?.selected ?? [],
+                },
+              }
+            : m,
+        )
+      }
+      return [
+        ...prev,
+        {
+          id: liveId,
+          role: "assistant" as const,
+          content: "",
+          at: new Date().toISOString(),
+          candidates: surface,
+        },
+      ]
+    })
+  }, [])
+  // C8-c 失败回滚: drop the live candidate rows born by THIS turn (the
+  // server rolled their door writes back with it; the committed earlier
+  // turns' rows are immune — the ref clears at every turn's start).
+  const rollbackCandidateRows = useCallback(() => {
+    const doomed = liveCandidateRowsRef.current
+    if (doomed.size === 0) return
+    setMessages((prev) => prev.filter((m) => !doomed.has(m.id)))
+    doomed.clear()
+  }, [])
   const [input, setInput] = useState("")
   const [mentions, setMentions] = useState<ChatMention[]>([])
   const [chatBusy, setChatBusy] = useState(false)
@@ -1289,22 +1366,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // Phase 3 Batch A) — same branches, zero lifecycle derivation: a
         // refresh reads the archive, readiness comes from the stamp alone.
         const history = mapHistoryRows(data.items ?? [], { prompt, t })
-        // Understanding-window closure facts (2026-09-24): whether the
+        // Understanding-window closure fact (2026-09-24): whether the
         // understanding_warmed review already landed (the trailing poll
-        // needn't open) and the last upload's moment (bounds the mount
-        // re-arm below — the warm's latency runs minutes past settlement,
-        // so a refresh inside that gap must keep polling).
+        // needn't open). The window's recency bound reads the asset rows'
+        // own settlement stamps (lastSettledAt below), not the archive.
         const items = data.items ?? []
         if (
           items.some((r) => triggerName(r.intent) === "understanding_warmed")
         ) {
           setUnderstandingLanded(true)
-        }
-        const lastAttach = [...items]
-          .reverse()
-          .find((r) => (r.attachments?.length ?? 0) > 0)
-        if (lastAttach?.created_at) {
-          setLastUploadAt(Date.parse(lastAttach.created_at))
         }
         // Prepend — anything pushed locally since mount is newer.
         if (!cancelled && history.length > 0) {
@@ -1505,14 +1575,75 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     void fetchAssets()
   }, [fetchAssets])
 
-  // Watch window A (理解完成): assets mid-processing — the warm fires the
-  // moment the whole set completes. The tick refreshes the assets too (the
-  // chips' processing state updates on the same cadence), which flips the
-  // window shut; the trailing window below stays open past the flip until
-  // the review row lands (the warm's LLM latency runs minutes, not seconds).
-  const assetsProcessing = assets.some(
-    (a) => a.processing_status === "pending" || a.processing_status === "processing",
+  // Workspace Birth relay (Workspace 合同 v4.2 C3): the transcript card is
+  // stamped server-side the moment an asset attaches (queued at upload) and
+  // flips done + text-filled when processing lands — but an attach-in-dock
+  // flow's page graph state predates the stamp, and nothing else refetches
+  // it pre-run (this watch window polls asset ROWS + trigger messages,
+  // never the graph; the page's lifecycle poll arms only off a stamp its
+  // stale fetch never saw). Relay every assets-signature edge (a new asset
+  // arrives, or one leaves processing — completed OR failed) to the page's
+  // graph refetch: the birth flips workspaceBorn at T1 as the contract
+  // names it, and the card's content flip (queued → full text) arrives on
+  // the same live page instead of waiting for a manual refresh. The mount
+  // frame never fires (prev === null — the page's own mount fetch holds
+  // that truth). The camera beats nothing here: the page's
+  // onDraftGraphChange pan is gated on workspaceBorn (pre-birth = no move)
+  // and the birth's initial fit is the canvas mount's own (C5).
+  const assetsSigRef = useRef<string | null>(null)
+  useEffect(() => {
+    const sig = assets
+      .map((a) => `${a.id}:${a.processing_status ?? ""}`)
+      .join("|")
+    const prev = assetsSigRef.current
+    assetsSigRef.current = sig
+    if (prev !== null && prev !== sig) void onDraftGraphChangeRef.current?.()
+  }, [assets])
+
+  // Send gate (2026-09-28 user ruling — 暂存 ≠ 交付): the conversation's
+  // material activity reads ONLY assets a message has carried. `assets`
+  // itself is the project's full list — a staged-but-unsent upload is real
+  // project material (processing starts at upload; the canvas may show its
+  // card) but it is not the agent's to narrate until the user sends it.
+  const sentAssetIds = useMemo(
+    () => new Set(messages.flatMap((m) => (m.assets ?? []).map((a) => a.id))),
+    [messages],
   )
+  // Watch window A (理解完成): sent assets mid-processing — the warm fires
+  // the moment the whole set completes. The tick refreshes the assets too
+  // (the chips' processing state updates on the same cadence), which flips
+  // the window shut; the trailing window below stays open past the flip
+  // until the review row lands (the warm's LLM latency runs minutes, not
+  // seconds).
+  const assetsProcessing = assets.some(
+    (a) =>
+      sentAssetIds.has(a.id) &&
+      (a.processing_status === "pending" ||
+        a.processing_status === "processing"),
+  )
+  // Settlement recency = a FACT read off the asset rows themselves
+  // (processed_at, else created_at) — the trailing window's bound, behind
+  // the same send gate. The mount-only archive derivation it replaces (the
+  // last attachment message's moment) was never stamped by a mid-session
+  // upload, so a fast asset settling inside the chat turn left every
+  // re-arm path shut (2026-09-28 walkthrough).
+  const lastSettledAt = useMemo(() => {
+    let latest: number | null = null
+    for (const a of assets) {
+      if (!sentAssetIds.has(a.id)) continue
+      if (
+        a.processing_status === "pending" ||
+        a.processing_status === "processing"
+      ) {
+        continue
+      }
+      const stamp = Date.parse(a.processed_at ?? a.created_at ?? "")
+      if (!Number.isNaN(stamp) && (latest === null || stamp > latest)) {
+        latest = stamp
+      }
+    }
+    return latest
+  }, [assets, sentAssetIds])
   useEffect(() => {
     if (!assetsProcessing) return
     const id = setInterval(() => {
@@ -1543,7 +1674,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }
   }, [])
   const [understandingLanded, setUnderstandingLanded] = useState(false)
-  const [lastUploadAt, setLastUploadAt] = useState<number | null>(null)
   const wasProcessingRef = useRef(false)
   useEffect(() => {
     if (assetsProcessing) {
@@ -1575,19 +1705,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }
   }, [assetsSettledAt, understandingLanded, triggerWindowMs, pollTriggerMessages])
 
-  // Mount re-arm: a REFRESH inside the warm gap (assets already settled
-  // while the page was away, the review not yet in the archive) never
-  // passes through the falling edge above — without this the window simply
-  // never opens. Bounded by the last upload's age (older than the cap ⇒ the
-  // trigger has either landed — the archive scan saw it — or never will:
-  // a reuse-hit / failed warm stays silent by design).
+  // Re-arm on ANY assets update (was: mount-only): a REFRESH inside the
+  // warm gap — or a fast asset whose settle happened entirely server-side
+  // mid-turn — never passes through the falling edge above; without this
+  // the window simply never opens and the review sits unseen until the
+  // next refresh. Bounded by the settlement's age (older than the cap ⇒
+  // the trigger has either landed — the archive scan saw it — or never
+  // will: a reuse-hit / failed warm stays silent by design).
   useEffect(() => {
     if (understandingLanded) return
-    if (assets.length === 0 || assetsProcessing) return
-    if (lastUploadAt === null) return
-    if (Date.now() - lastUploadAt > triggerWindowMs) return
+    if (assetsProcessing) return
+    if (lastSettledAt === null) return
+    if (Date.now() - lastSettledAt > triggerWindowMs) return
     setAssetsSettledAt((prev) => prev ?? Date.now())
-  }, [assets, assetsProcessing, understandingLanded, lastUploadAt, triggerWindowMs])
+  }, [assetsProcessing, understandingLanded, lastSettledAt, triggerWindowMs])
 
   // Watch window B (run 完成 — the closing reviewer): the terminal frame
   // just landed and no review row for this run is in the flow yet. The
@@ -1750,7 +1881,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     [t, raiseHistory],
   )
 
-  const handleStartGeneration = useCallback(async () => {
+  // Plain function, not useCallback: it invokes sendChat (a per-render
+  // const declared below) — a deps array would evaluate that binding during
+  // render, before its initialization (TDZ crash). QuestionDock is not
+  // memoized, so the stable-reference memoization bought nothing anyway.
+  const handleStartGeneration = async () => {
     // runId && !terminal: a run is LIVE — starting now would double-launch.
     // (A terminal run does NOT block: the dock's refinement Start launches
     // the next run — runId set ≠ run live.) chatBusy: a refine turn is in
@@ -1761,43 +1896,32 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setIsStarting(true)
     try {
       if (pendingQuestion) {
-        // ask_user 机器: Start IS the answer to the docked task_book
-        // question — one call answers, starts the run, and settles the row.
-        // "start" is a first-class answer kind (no magic option id); the
-        // panel's edited task plan rides along so hand edits (slots marked
-        // explicit) reach the run instead of the stale stored intent.
-        // toast:false — the start path surfaces its own failures: the
-        // structured credits 422 as the grey row, anything else inline.
-        const res = await apiFetch(
-          `/api/v1/chat/messages/${pendingQuestion.id}/answer`,
+        // 确认拍归档 = 普通用户气泡 (Workspace 合同 v4.2 C8, 2026-09-26
+        // 封板): the Start pill IS the user saying「确认生成」— it rides
+        // the ONE sendChat channel (the typed /answer kind=start seat is
+        // retired for this gesture). The plan path's start_run tool
+        // answers the docked task_book server-side — the G-1 machinery a
+        // typed prose confirmation already uses — so the flow shows a
+        // user bubble + the agent's 开工散文, and no QA archive ever lands
+        // (2026-09-05 拍板不变). The panel's edited plan rides
+        // prior_intent (confirmActive is true whenever the pill renders),
+        // exactly like the retired typed Start's `intent` field; the
+        // credits-422 grey row survives via the stream's turn.failed
+        // frame (双路同语义, see sendChat's catch).
+        const text = t("generationOverlay.confirmUserMessage")
+        const rollbackId = crypto.randomUUID()
+        setMessages((prev) => [
+          ...prev,
           {
-            method: "POST",
-            body: { kind: "start", intent },
-            toast: false,
+            id: rollbackId,
+            role: "user",
+            content: text,
+            at: new Date().toISOString(),
           },
-        )
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}))
-          const credits = asCreditsInsufficient(body?.detail)
-          if (credits) {
-            pushCreditsGreyRow(credits)
-            return
-          }
-          throw new Error(
-            typeof body?.detail === "string" && body.detail
-              ? body.detail
-              : t("generationOverlay.failed"),
-          )
-        }
-        const answered = ((await res.json()) as { answered_question: QuestionMessage }).answered_question
-        if (!answered.workflow_run_id) throw new Error("Generation failed")
-        // Stamp the receipt title from the BIRTHING plan (ADR-058): every
-        // run-birth path writes the override, so a later run never inherits
-        // an earlier run's title (the chat-dispatch path stamps from the
-        // envelope's proposal; the Start gesture's birth truth IS the
-        // docked plan).
-        setRunTitleOverride(titleOf(intent))
-        landOnStartedRun(answered.workflow_run_id)
+        ])
+        raiseHistory()
+        scrollerSendRef.current?.() // same live-edge intent as handleSend
+        await sendChat(text, { rollbackId })
         return
       }
       // Legacy fallback: no question row (pre-dock projects) — /generate
@@ -1857,7 +1981,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // is exactly how "typed an answer, send does nothing" happens.
       setIsStarting(false)
     }
-  }, [runId, terminal, isStarting, chatBusy, pendingQuestion, intent, projectId, prompt, t, titleOf, landOnStartedRun, pushCreditsGreyRow])
+  }
 
   /** Cancel retired (2026-09-02, stadium 化): the task-book pill is
    * NON-blocking — the input group stays live below it, so "don't start" is
@@ -2003,13 +2127,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   /** Assets carried by a message bubble must not also hang under the opening
    * prompt (a mid-conversation upload refreshed into `assets` would render
    * twice — the 2026-08-05 duplication bug). Server-promoted assets (the
-   * declared-material transcript) have no bubble, so they still surface. */
+   * declared-material transcript) have no bubble, so they still surface.
+   * A staged-but-unsent upload can sit in `assets` (a fetch saw the row) —
+   * it stays an input-group chip until a message carries it. */
   const openingAssets = useMemo(() => {
-    const carried = new Set(
-      messages.flatMap((m) => (m.assets ?? []).map((a) => a.id))
+    const staging = new Set(
+      staged.flatMap((s) => (s.asset ? [s.asset.id] : []))
     )
-    return assets.filter((a) => !carried.has(a.id))
-  }, [assets, messages])
+    return assets.filter((a) => !sentAssetIds.has(a.id) && !staging.has(a.id))
+  }, [assets, sentAssetIds, staged])
 
   /** True when the echo bubble of the turn that docked the current plan is
    * in the flow — the card's own echo line then stays hidden. */
@@ -2091,7 +2217,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           s.localId === localId ? { ...s, status: "done", progress: 1, asset } : s
         )
       )
-    } catch {
+    } catch (err) {
+      // Diagnosability (2026-09-27 代理吞响应取证): same law as the
+      // composer's staging hook — the failure reason survives in the console.
+      console.error("[staged-upload] failed:", err)
       setStaged((prev) =>
         prev.map((s) => (s.localId === localId ? { ...s, status: "error" } : s))
       )
@@ -2137,7 +2266,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const removeStaged = (item: StagedUpload) => {
     setStaged((prev) => prev.filter((s) => s.localId !== item.localId))
     if (item.asset) {
-      void apiFetch(`/api/v1/projects/${projectId}/assets/${item.asset.id}`, {
+      const assetId = item.asset.id
+      // A fetch can already know the row (mount / post-turn / tick) — drop
+      // it from `assets` too, or it lingers there until the next refetch.
+      setAssets((prev) => prev.filter((a) => a.id !== assetId))
+      void apiFetch(`/api/v1/projects/${projectId}/assets/${assetId}`, {
         method: "DELETE",
         toast: false,
       }).catch(() => {})
@@ -2373,7 +2506,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     id: string,
     payload: {
       question?: string | null
-      options?: { id: string; label: string }[]
+      options?: { id: string; label: string; description?: string }[]
+      recommended_id?: string | null
     },
   ) => {
     if (!payload.question) return
@@ -2385,6 +2519,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         kind: "question",
         question: payload.question,
         options: payload.options ?? [],
+        recommended_id: payload.recommended_id ?? null,
       },
       answer: null,
       workflow_run_id: null,
@@ -2428,6 +2563,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setThinkingPhase(null)
     setActivities(resetActivities()) // the new turn's own stream replaces the settled one
     setLogDismissed(true) // U9 parity — the replayed log retires with the live rows
+    // C8-c: a new turn owns the candidate-rollback scope — rows committed
+    // by earlier turns are no longer this turn's to roll back.
+    liveCandidateRowsRef.current.clear()
     const streamId = crypto.randomUUID()
     let streamedAny = false
     // What the preview bubble currently shows (the typewriter-released text)
@@ -2586,6 +2724,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           mentions: opts?.mentions ?? [],
           attachments: opts?.attachments ?? [],
           persona_id: opts?.personaId,
+          // The sender's surface (2026-09-25 canvas↔chat 联动): panel form
+          // = the plan's canvas lives beside this conversation — the reply
+          // may name it; every other form stays surface-neutral.
+          surface: panel ? "canvas" : "chat",
           prior_intent:
             // The panel's current chain rides while the confirm beat is
             // live (裁决 1 derived predicate — never a phase read).
@@ -2614,6 +2756,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             dockQuestionPreview(`preview-${streamId}`, payload),
           onCheckpoint,
           onActivity: handleActivityFrame,
+          onCandidates: handleCandidatesFrame,
         }
       )
       // Envelope wins: any in-flight checkpoint delivery finishes FIRST
@@ -2631,9 +2774,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // every activity; this catches whatever the stream dropped — the
       // envelope leaves nothing spinning.
       settleActivities("completed")
-      // A turn can create assets server-side (declared-material promotion) —
-      // refresh the prompt attachments when the project started empty.
-      if (assets.length === 0) void fetchAssets()
+      // A turn can create assets server-side (declared-material promotion —
+      // reachable in ANY project, not just an empty one) — always refresh
+      // the prompt attachments after a turn.
+      void fetchAssets()
       if (data.run_id) {
         // G-1: the prose confirmation answered the docked task plan
         // server-side (kind=start) and the run is live. NO QA archive on
@@ -2788,6 +2932,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     } catch (e) {
       typewriter.flush()
       discardPreviewArtifacts()
+      rollbackCandidateRows()
       // 终帧律 (同上): a failed/aborted turn closes every phase too.
       setThinkingPhase(null)
       // The activity stream settles the same way: a user stop marks the
@@ -3028,6 +3173,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
       return
     }
+    // C8-c: same rollback-scope handover as sendChat's turn start.
+    liveCandidateRowsRef.current.clear()
     const optimisticId = stashedAnswerRef.current?.optimisticId ?? crypto.randomUUID()
     stashedAnswerRef.current = null
     const previewId = `answer-preview-${optimisticId}`
@@ -3102,6 +3249,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         onQuestionPreview: (payload) =>
           dockQuestionPreview(`preview-answer-${optimisticId}`, payload),
         onActivity: handleActivityFrame,
+        onCandidates: handleCandidatesFrame,
       })
       // Envelope wins (2026-09-06 原地落定，与 sendChat 的 finalizePreview
       // 同一纪律): the optimistic block becomes the real answered row AT
@@ -3172,6 +3320,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         await handleAssistantMessage(followUp, {
           echoCarried: previewStreamed,
         })
+        // Run-landing parity with sendChat's `data.run_id` seat: a
+        // run-bearing follow-up (the answered question's continuation
+        // started a run server-side) must land the dock on the run surface
+        // too — setRunId attaches the live run channel (RunTaskList's
+        // dynamic row), onRunStarted makes the page refetch the graph so
+        // workspaceBorn recomputes and the canvas actually grows. Without
+        // this the run only appears after a manual refresh and the page
+        // stays stuck in the full (centered-chat) form.
+        if (followUp.workflow_run_id) landOnStartedRun(followUp.workflow_run_id)
         // A click stashed on the follow-up's PREVIEW pill fires NOW on the
         // persisted row (sendChat's dock branch 同款): the optimistic
         // block's id is reused inside; a flipped option set / a non-question
@@ -3206,16 +3363,35 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // next-click's optimistic block and the preview pill never existed
       // server-side (the original question restores just below).
       discardPreviewArtifacts()
+      rollbackCandidateRows()
       setMessages((prev) =>
         prev.filter((m) => m.id !== optimisticId && m.id !== previewId),
       )
-      setPendingQuestion(question)
-      const credits =
-        e instanceof StreamTurnError ? asCreditsInsufficient(e.detail) : null
-      if (credits) {
-        pushCreditsGreyRow(credits)
+      const settledCode =
+        e instanceof StreamTurnError ? questionSettledCode(e.detail) : null
+      if (settledCode) {
+        // A settled question never re-docks (2026-09-28 — the「点击回答
+        // 仍然报错」loop): the click raced the question's own settlement
+        // (a newer question superseded it / it was answered already), so
+        // the server recorded nothing — the pill stays GONE and a quiet
+        // localized line replaces the raw English error toast.
+        setPendingQuestion(null)
+        toast.info(
+          t(
+            settledCode === "question.superseded"
+              ? "chat.questionOutdated"
+              : "chat.questionAnswered",
+          ),
+        )
       } else {
-        toast.error(e instanceof Error ? e.message : t("chat.failed"))
+        setPendingQuestion(question)
+        const credits =
+          e instanceof StreamTurnError ? asCreditsInsufficient(e.detail) : null
+        if (credits) {
+          pushCreditsGreyRow(credits)
+        } else {
+          toast.error(e instanceof Error ? e.message : t("chat.failed"))
+        }
       }
     } finally {
       setAnswering(false)
@@ -3236,9 +3412,29 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     try {
       const res = await apiFetch(
         `/api/v1/chat/messages/${pendingQuestion.id}/answer`,
-        { method: "POST", body: { kind: "bail" } },
+        // toast:false — a settled-question 409 is a quiet local settle
+        // (the option path's same grace), not the global error toast.
+        { method: "POST", body: { kind: "bail" }, toast: false },
       )
-      if (!res.ok) return
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          detail?: unknown
+        }
+        const settledCode = questionSettledCode(data.detail)
+        if (settledCode) {
+          setPendingQuestion(null)
+          toast.info(
+            t(
+              settledCode === "question.superseded"
+                ? "chat.questionOutdated"
+                : "chat.questionAnswered",
+            ),
+          )
+        } else {
+          toast.error(t("chat.failed"))
+        }
+        return
+      }
       const data = (await res.json()) as { answered_question: QuestionMessage }
       const hadRun = !!pendingQuestion.workflow_run_id
       setPendingQuestion(null)
@@ -3300,6 +3496,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if ((!text && ready.length === 0) || chatBusy || isStarting || answering) return
     if (staged.some((s) => s.status === "uploading")) return
     const sentAssets = ready.map((s) => s.asset)
+    // The assets state learns the upload at SEND, never at stage (the send
+    // gate — 暂存 ≠ 交付, 2026-09-28). The merge arms the watch windows
+    // from this beat instead of waiting for the post-turn refetch: a long
+    // read shows its "Watching…" line right after the turn's prose, and a
+    // fast one (settled mid-turn) still walks the falling edge into the
+    // trailing window. The message below carries the ids, so the gate's
+    // sentAssetIds covers them in the same batch.
+    setAssets((prev) => {
+      const known = new Set(prev.map((a) => a.id))
+      const additions = sentAssets.filter((a) => !known.has(a.id))
+      return additions.length > 0 ? [...prev, ...additions] : prev
+    })
     const rollbackId = crypto.randomUUID()
     setMessages((prev) => [
       ...prev,
@@ -3498,6 +3706,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // (lib/chatTimeline's buildConversationUnits holds the same law).
     for (const a of allActivityRows) {
       if (a.status === "active") continue
+      if (isDraftSpanRow(a)) continue // 落定即退役 — the card is the evidence
       timed.push({ t: momentOf(a.at), order: order++, unit: { kind: "activity", activity: a } })
     }
     // The run's end: the receipt (and the completion line after it) anchors
@@ -3567,7 +3776,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // typewriter speaks.
   const activeActivity = activities.find((a) => a.status === "active")
   const processingAssets = assets.filter(
-    (a) => a.processing_status === "pending" || a.processing_status === "processing",
+    (a) =>
+      sentAssetIds.has(a.id) &&
+      (a.processing_status === "pending" ||
+        a.processing_status === "processing"),
   )
   // The understanding GAP row dies on the beat's OWN fact (2026-09-24
   // 素材节拍入库): the persisted "已理解素材内容" row closes it even while
@@ -3578,6 +3790,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   )
   const understandingGap =
     assetsSettledAt !== null && !understandingLanded && !understandingBeatLanded
+  // The review-composing phase (2026-09-28 user ruling — 死空气禁令): the
+  // beat → review window used to be dead air — the gap row died at the
+  // understanding beat while the trigger turn's review was still a full
+  // LLM latency away, and nothing spoke in between (the user read it as
+  // frozen). This third phase narrates the review's composition — it dies
+  // on the review's own landing (understandingLanded) or the trailing
+  // window's cap (assetsSettledAt clears), same bounded-silence doctrine
+  // as the gap row.
+  const reviewPending =
+    assetsSettledAt !== null && understandingBeatLanded && !understandingLanded
   const nowRow: NowRowPayload | null = (() => {
     if (proseActive) return null
     if (activeActivity) return activeActivity
@@ -3598,14 +3820,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       return think(thinkingPhase ? `chat.thinkingPhases.${thinkingPhase}` : null)
     }
     // 带计数 (2026-09-24 用户拍板): several files draining together read as
-    // "reading N files", a lone one names itself.
+    // "processing N files" (中性词 — 混合批次不知动谁), a lone one names
+    // itself with the verb fork (批「动词」2026-09-27: video=看 / audio=听).
     if (processingAssets.length > 1) {
       return think("chat.material.readingMany", undefined, processingAssets.length)
     }
     if (processingAssets.length === 1) {
-      return think("chat.material.reading", processingAssets[0].title ?? undefined)
+      const lone = processingAssets[0]
+      return think(
+        materialBeatKey("chat.material.reading", lone.type),
+        lone.title ?? undefined,
+      )
     }
     if (understandingGap) return think("chat.material.understanding")
+    if (reviewPending) return think("chat.material.reviewing")
     return null
   })()
 
@@ -4215,6 +4443,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                 </MessageContent>
               </Message>
             ) : null}
+            {/* Candidate Surface (v4.2 C8-c): the candidate card anchors
+                under its turn's reply — replayed from the candidates_log
+                dump or live-born from the SSE frame, same seat. */}
+            {m.candidates ? (
+              <CandidateSurfaceCard surface={m.candidates} />
+            ) : null}
           </>
         )}
       </MessageScrollerItem>
@@ -4271,7 +4505,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               <MessageScrollerContent
                 className={
                   panel
-                    ? "w-full gap-6 px-3 pb-6 pt-3"
+                    ? // Panel rails (2026-09-28 user ruling, two-step):
+                      // the message column holds FLORA's px-6; the bottom
+                      // register below runs one step tighter (px-4).
+                      "w-full gap-6 px-6 pb-6 pt-3"
                     : cn(
                         "mx-auto w-full max-w-3xl gap-8 px-4 pb-8",
                         full ? "pt-16" : "pt-4",
@@ -4425,6 +4662,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         plain
         question={bareQuestion(pillQuestion)}
         options={pillQuestion.question?.options ?? []}
+        recommendedId={pillQuestion.question?.recommended_id ?? null}
         onAnswer={handleOptionAnswer}
         answering={answering}
         onBail={pillQuestion.preview ? undefined : handleBailQuestion}
@@ -4479,6 +4717,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         chargeNote={pricedConfirm ? chargeLine : null}
       />
     ) : null
+
+  // (canvas↔chat 联动 onPlanConfirmVisible retired 2026-09-26 — Workspace
+  // 合同 v4.2 C5 封板翻案: the 2026-09-25「确认 pill 首现 = 整链 fitNow」
+  // beat was reversed in favor of the sealed camera law — the camera never
+  // auto-fits; the dock fires no camera beat at the confirm moment. The
+  // confirm pill stays the confirm beat's ONLY seat, ADR-070 unchanged.)
   // (RunStatusRow retired 2026-09-08, user ruling: the message flow's
   // RunTaskList is always on screen in the new three-form machine — the
   // panel's scroller is resident, the dock's history floats one tap away —
@@ -4813,7 +5057,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       <div
         className={cn(
           "pointer-events-none relative shrink-0 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none",
-          panel ? "px-3 pb-3 pt-2" : "px-4 pb-5 pt-2",
+          // Panel rails (2026-09-28 user ruling, two-step): the message
+          // column above holds FLORA's px-6; the bottom register (question
+          // pill + input) runs one step tighter at px-4.
+          panel ? "px-4 pb-3 pt-2" : "px-4 pb-5 pt-2",
           dock && dockHidden && "translate-y-3 opacity-0"
         )}
       >

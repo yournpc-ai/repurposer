@@ -9,9 +9,10 @@ I-PFA-04, ADR-086; 施工合同 ``docs/tasks/product-flow-alignment.md`` §7 C-0
   消费、验证或可能修改的产品对象）+ product edges（表达当前生产/消费关系
   的物料流边）。``task_book / preprocess / understand / plan / materialize /
   render / verify / checkpoint / worker / queue / retry`` 类概念永不是
-  product node（I-PFA-01）——执行组（app.pipeline.*）本就不 stamp 节点，
-  渗漏面 = task_book 文档与 morph modifier 两个既有 read-face 过滤，本模块
-  把它们追认为**声明式 membership 谓词**。
+  product node（I-PFA-01）——执行组（app.pipeline.*）本就不 stamp 节点；
+  task_book 的生产已止（v4.2 C1-b de-stamp，2026-09-26 封板），渗漏面 =
+  它的 legacy 存量行与 morph modifier 两个 read-face 过滤，本模块把它们
+  追认为**声明式 membership 谓词**。
 - **rank** = Product DAG 上的拓扑深度（longest-path），是唯一的用户可见
   空间权威（I-PFA-02）。**输入边界（I-PFA-02a）**：只消费 ``video`` /
   ``audio`` / ``text`` 物料流边（含读时合成边中表达真实物料流的 A3-lite
@@ -63,8 +64,9 @@ TRANSITIONAL_TYPES = frozenset({"modifier", "materialize"})
 #: 可见；它们永不再出生（AddNodeOp 词表已拒）。
 LEGACY_VISIBLE_TYPES = frozenset({"asset", "document", "generator", "processor", "agent"})
 
-#: role 层的隐藏枚举（B1-lite 的声明式形态）——task_book = 执行簿记，确认
-#: 拍的座位是 dock pill（ADR-070），永不上画布。
+#: role 层的隐藏枚举——task_book = 执行簿记，确认拍的座位是 dock pill
+#: （ADR-070），永不上画布。生产已止（v4.2 C1-b de-stamp，2026-09-26 封板）——
+#: 本词只服务 legacy 行的读面/迁移期闸门。
 HIDDEN_ROLES = frozenset({"task_book"})
 
 #: tool 层的杠杆枚举（B4-lite 的声明式形态）——morph modifier 改写其生产者
@@ -78,18 +80,20 @@ LEVER_TOOLS = frozenset({"reframe_clip", "add_music", "remove_filler"})
 RANK_EDGE_TYPES = frozenset({"video", "audio", "text"})
 
 #: 探索族（ADR-088 §4，NAMING N-55）——Candidate Set / Select / Content Plan
-#: 的家族词。``type = "exploration"``（词表 v3 的第八值，家族词）+
-#: ``spec.prototype = "exploration"``（prototype 第四值）。I-EXPLORE-01：
-#: 探索产物永不进执行拓扑 / 闭包 / 报价 rank / 媒体流边语义——执行写门
-#: （graph_store）与探索写门（exploration_store）都从本声明取词（叶子
-#: 座位：两门的共享词汇不落任一门内，防环）。
+#: 的家族词。Workspace 合同 v4.2 C1 (2026-09-26 封板): 探索族永不进图——
+#: 家族的新家 = exploration_rows 表（spec.prototype 仍带本词），
+#: EXPLORATION_NODE_TYPE 只剩两个读面座位：/graph 与 chat context 对
+#: legacy ``type="exploration"`` 图行的读过滤，以及执行写门
+#: （graph_store）对 legacy 行的反门卫兵。I-EXPLORE-01 现在结构性成立
+#: （探索产物根本不是图行）。叶子座位不变：两门的共享词汇不落任一门内，
+#: 防环。
 EXPLORATION_PROTOTYPE = "exploration"
 EXPLORATION_NODE_TYPE = "exploration"
 
 #: 投影律的横向间距（合同 §3 I-PFA-03：MIN_GAP 初值 = _PITCH）。镜像
-#: graph_store._PITCH（464 = 最宽帧类 400 + _GAP_MAIN 64）——两镜像互引，
+#: graph_store._PITCH（524 = 最宽帧类 400 + _GAP_MAIN 124）——两镜像互引，
 #: 禁第三份拷贝；取值以参数传入，本常量仅供契约文档与 fixture 引用。
-PITCH = 464
+PITCH = 524
 
 
 # ---- duck-typed accessors（ORM 行与合成 dict 同吃） ----------------------------
@@ -192,6 +196,69 @@ def product_ranks(
     return {nid: depth(nid, frozenset()) for nid in visible}
 
 
+def display_ranks(
+    nodes: Iterable[Any],
+    edges: Iterable[Any],
+    islands: Iterable[Any],
+    *,
+    gated: bool = True,
+) -> dict[str, int]:
+    """画布显示 rank（I-PFA-02 的岛化扩展, Workspace 合同 v4.2 C6）——
+    /graph 读面的唯一 rank 来源.
+
+    岛 = 局部打包域: a sibling group's island reserves ``cols`` consecutive
+    rank SLOTS at its band, frozen at birth (the growth corridor). Members
+    take ``band_origin + (seq // cap)``; a band's slot width = its widest
+    island's reserved cols (default 1 — the legacy 1:1 depth↔rank mapping
+    is the island-free special case). The corridor inflates LATER bands'
+    origins read-time — a retroactive island born with deeper bands already
+    settled freezes at cols=1 (graph_store._assign_islands' birth clamp),
+    so existing nodes' display x NEVER moves (append-only 保序律 in rank
+    space, not just frame space).
+
+    Direction invariant holds by construction: slots ≥ 1 per band, so
+    rank(to) > rank(from) for every product edge. ``gated`` mirrors
+    product_ranks; the RunOp execution topology (gated=False) stays on raw
+    product_ranks — islands are a DISPLAY concern, never execution."""
+    raw = product_ranks(nodes, edges, gated=gated)
+    node_list = list(nodes)
+    islands_by_id = {str(_get(i, "id")): i for i in islands}
+    island_of: dict[str, Any] = {}
+    for n in node_list:
+        iid = _get(n, "island_id")
+        if iid is not None and str(iid) in islands_by_id:
+            island_of[str(_get(n, "id"))] = islands_by_id[str(iid)]
+    if not island_of:
+        return raw
+    # The island's band = its members' shared raw rank (siblings share a
+    # topological generation by construction); members absent from the
+    # gated read frame contribute nothing.
+    slots: dict[int, int] = {}
+    for nid, isl in island_of.items():
+        d = raw.get(nid)
+        if d is None:
+            continue
+        slots[d] = max(slots.get(d, 1), int(_get(isl, "cols") or 1))
+    if not slots:
+        return raw
+
+    def band_origin(d: int) -> int:
+        return d + sum(s - 1 for b, s in slots.items() if b < d)
+
+    nodes_by_id = {str(_get(n, "id")): n for n in node_list}
+    out: dict[str, int] = {}
+    for nid, d in raw.items():
+        isl = island_of.get(nid)
+        col = 0
+        if isl is not None:
+            cap = max(1, int(_get(isl, "cap") or 1))
+            cols = max(1, int(_get(isl, "cols") or 1))
+            seq = int(_get(nodes_by_id[nid], "island_seq") or 0)
+            col = min(seq // cap, cols - 1)
+        out[nid] = band_origin(d) + col
+    return out
+
+
 def topological_order(nodes: Iterable[Any], edges: Iterable[Any]) -> list[str]:
     """执行序 = Product DAG 拓扑序（I-PFA-04 的 C-2 消费点）：rank 升序、
     同 rank 内按 id 字典序（确定性，不依赖 birth order / 插入序 / layout.x）。
@@ -266,6 +333,7 @@ __all__ = [
     "PITCH",
     "RANK_EDGE_TYPES",
     "TRANSITIONAL_TYPES",
+    "display_ranks",
     "is_product_node",
     "is_rank_edge",
     "product_ranks",

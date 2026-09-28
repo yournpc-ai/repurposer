@@ -9,10 +9,10 @@ anything chat wiring needs (manual wiring capability MUST exist for chat
 wiring to rest on), but no UI ever exposes manual gestures.
 
 Ops (the registry below): ``add_node`` / ``connect`` / ``edit_prompt`` /
-``delete_node`` / ``run``. Initial generation, revision and new builds are
-the SAME op set — the "revision loop" as a separate concept is retired;
-there is one graph being edited continuously. Islands are legal (the graph
-is a forest, not a single connected DAG).
+``edit_text`` / ``delete_node`` / ``run``. Initial generation, revision and
+new builds are the SAME op set — the "revision loop" as a separate concept
+is retired; there is one graph being edited continuously. Islands are
+legal (the graph is a forest, not a single connected DAG).
 
 Adjudication mirrors compile_graph's posture: validate EVERY op first (op
 type / reference existence / port-type compatibility / no cycle), land the
@@ -33,8 +33,12 @@ from pydantic import BaseModel, Field, TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.tables import GraphEdge, GraphNode, Project
-from app.pipeline.product_graph import EXPLORATION_PROTOTYPE, product_ranks
+from app.models.tables import GraphEdge, GraphIsland, GraphNode, Project, now_utc
+from app.pipeline.product_graph import (
+    EXPLORATION_PROTOTYPE,
+    RANK_EDGE_TYPES,
+    product_ranks,
+)
 
 
 class WiringRejected(ValueError):
@@ -94,6 +98,31 @@ class EditPromptOp(BaseModel):
     prompt: str
 
 
+class EditTextOp(BaseModel):
+    """Rewrite a document node's EDITABLE text layer (Workspace 合同 v4.2
+    C4 — Transcript 双层, 2026-09-26 封板): the card-face in-place edit and
+    the chat-pointed transcript revision are this one op, through the graph's
+    ONE write door — same entity identity, version evolution (the displaced
+    display text appends to ``spec.text_edits``), never a new work.
+
+    C4 invariants, structural by construction: the write touches ONLY the
+    presentation overlay (``spec.edited_text``) — the source mirror
+    (``spec.text``), the asset's source transcript (``assets.transcript``),
+    the word-level evidence (``assets.meta["words"]``), and every range stay
+    untouched: text changed / evidence unchanged / range unchanged. No code
+    path reverse-computes a timecode from the edited text.
+
+    ``text`` None = clear the overlay (the card reads the source layer
+    again). Gate: a transcript document (``type=="document"`` +
+    ``spec.role=="transcript"`` — the companion caption document's direct
+    edit rides the same op when its surface lands; program-bearing nodes
+    edit via ``edit_prompt``, never this)."""
+
+    op: Literal["edit_text"]
+    node: UUID
+    text: str | None = None
+
+
 class DeleteNodeOp(BaseModel):
     """Remove a node; its edges die with it structurally. Products
     (outputs rows) are NOT touched — they have their own lifecycle
@@ -129,7 +158,7 @@ class RunOp(BaseModel):
 
 
 WiringOp = Annotated[
-    AddNodeOp | ConnectOp | DisconnectOp | EditPromptOp | DeleteNodeOp | RunOp,
+    AddNodeOp | ConnectOp | DisconnectOp | EditPromptOp | EditTextOp | DeleteNodeOp | RunOp,
     Field(discriminator="op"),
 ]
 
@@ -138,6 +167,7 @@ WIRING_OPS: dict[str, type[BaseModel]] = {
     "connect": ConnectOp,
     "disconnect": DisconnectOp,
     "edit_prompt": EditPromptOp,
+    "edit_text": EditTextOp,
     "delete_node": DeleteNodeOp,
     "run": RunOp,
 }
@@ -158,7 +188,12 @@ def wiring_catalog_lines() -> str:
             "- connect: wire a typed flow between two nodes "
             "(edge_type: video|audio|text|ctx — ctx = the reference/context flow)",
             "- edit_prompt: rewrite a node's prompt (nodes carrying spec.tool)",
-            "- delete_node: remove a node (its edges go with it)",
+            "- edit_text: rewrite a transcript document's editable text layer "
+            "(presentation overlay — the source evidence never changes; "
+            "text: the new text, or null to clear the overlay)",
+            "- delete_node: remove a PROVISIONAL draft node (its edges go "
+            "with it) — a settled entity is append-only and the door "
+            "rejects its deletion",
             "- run: fill nodes with products (nodes optional — default = the "
             "affected subgraph; always closes over downstream)",
         ]
@@ -248,7 +283,7 @@ def _derive_edge_type(from_node: GraphNode, to_node: GraphNode) -> str:
 # bar 44). A node's class comes from spec.frame_class (the fill stamps it
 # from the family's product vocabulary); an unstamped generator/processor/
 # agent reserves the clip maximum — safe by construction.
-_GAP_MAIN = 64
+_GAP_MAIN = 124
 _GAP_CROSS = 16
 
 # ---- display aspect classes (2026-09-13 用户拍板 — 产物卡跟源比例 + 分档加宽)
@@ -305,17 +340,31 @@ _FRAME_CLASS: dict[str, tuple[int, int]] = {
 }
 _KIND_FRAME_CLASS = {"asset": "asset", "document": "document"}
 
+# The shorts craft default (ONE seat, 2026-09-28): the aspect a CUT chain
+# (select_clips / cut_segments) resolves to when nothing names one — the
+# runtime's own fallback chain (node.spec → run ctx → exemplar skeleton →
+# skin block, which never carries aspect) bottoms out here (tools/clips/
+# cut.py + node.py), and the graph frame's predictive mirror
+# (graph_fill._predict_family_frame_aspect) reads the same seat so the born
+# frame can never disagree with the render (the 16:9-frame / 9:16-clip
+# walkthrough). Whole-source chains never see it (比例跟源 — "original"
+# stays theirs, materialize.py 2026-08-17 拍板).
+SHORTS_DEFAULT_ASPECT = "9:16"
+
 # The clip-class frame's per-aspect reservations (2026-09-11 aspect-exact
 # heights; 2026-09-13 用户拍板 分档加宽 — the lane WIDTH now follows the
 # aspect too: 横屏真正能看, the portrait tower stays put): the fill stamps
 # spec.frame_aspect (graph_fill._frame_class_of — the chain's explicit aspect
-# wins; whole-source / transform chains resolve "original" to the source's
-# display class when the source's real dims are known — meta.width/height,
-# unknown dims keep the "original" default strip). The math is ONE law with
-# the client (layout.ts clipNodeHeight = caption 26 + PRODUCT_THUMB_PX[aspect]
-# + program 88 + bar 44, media at the lane width) — two mirrors
-# cross-referenced, never a third copy (判词②). 9:16 keeps its 660 (the 4px
-# breath included); an unstamped clip node keeps the class max.
+# wins; an UNSTAMPED clip family predicts the runtime's own resolution —
+# graph_fill._predict_family_frame_aspect: cut chains → SHORTS_DEFAULT_ASPECT
+# (or the exemplar's measured class), transform chains inherit their upstream
+# producer's aspect; only whole-source chains resolve "original" to the
+# source's display class — meta.width/height, unknown dims keep the
+# "original" default strip). The math is ONE law with the client (layout.ts
+# clipNodeHeight = caption 26 + PRODUCT_THUMB_PX[aspect] + program 88 + bar
+# 44, media at the lane width) — two mirrors cross-referenced, never a third
+# copy (判词②). 9:16 keeps its 660 (the 4px breath included); an unstamped
+# clip node keeps the class max.
 _CLIP_FRAME: dict[str, tuple[int, int]] = {
     "9:16": (280, 660),
     "1:1": (340, 498),
@@ -336,9 +385,11 @@ _ASSET_FRAME: dict[str, tuple[int, int]] = {
 }
 _ASSET_FRAME_DEFAULT = _FRAME_CLASS["asset"]
 
-# The task-book document's role tag (graph_fill's stamps set it). One home
-# here — the graph's role vocabulary is the door's business, never a magic
-# string per call site.
+# The task-book document's role tag. Production stopped (Workspace 合同
+# v4.2 C1-b de-stamp, 2026-09-26 封板 — the word survives for legacy-row
+# reads: clear_draft_graph's draft sweep and product_graph's HIDDEN_ROLES
+# gate). One home here — the graph's role vocabulary is the door's
+# business, never a magic string per call site.
 _TASK_BOOK_ROLE = "task_book"
 
 # 全文卡律 (2026-09-10 判词④——进了卡面的必须原文全文，无摘要无浓缩) + 封顶
@@ -389,7 +440,7 @@ def _document_frame(spec: dict[str, Any]) -> tuple[int, int]:
 # rendering of it, never the source of truth. Frames of projects born
 # before this law are replayed once by migration (see
 # migrations/versions/e7a9c1d35b28_depth_pitch_frames.py).
-_PITCH = max(w for w, _ in _FRAME_CLASS.values()) + _GAP_MAIN  # 400 + 64
+_PITCH = max(w for w, _ in _FRAME_CLASS.values()) + _GAP_MAIN  # 400 + 124
 
 
 def _frame_of(kind: str, spec: dict[str, Any]) -> tuple[int, int]:
@@ -418,36 +469,273 @@ def _assign_layout(
     depth: int,
     parents: list[GraphNode],
     column: list[GraphNode],
+    *,
+    x_slot: int | None = None,
+    extra_tails: tuple[int, ...] = (),
+    island_seat: tuple[GraphIsland, int] | None = None,
 ) -> dict[str, int]:
     """THE one frame law (统一摆位律) — every newborn's settled frame comes
     from this function and nowhere else:
-      x = depth × _PITCH                  (depth-pitched columns, never ragged)
-      y = ① the column's tail + _GAP_CROSS  (siblings stack in place)
+      x = the band's slot origin × _PITCH   (depth-pitched columns, never
+                                             ragged; island slots widen a
+                                             band's origin math, C6 below)
+      y = ① the column's tail + _GAP_CROSS  (siblings stack in place; the
+              tail counts the islands' RESERVED bottoms — an island's empty
+              corridor rows are never invaded)
           ② a fresh column → the topmost parent's y − _FRESH_COLUMN_RISE
              (the port-geometry delta — the out→in arc stays gentle)
           ③ an island → 0
+    C6 岛内格 (Layout Island, v4.2): an islanded member skips the column
+    law entirely — its frame is its FROZEN CELL: x = island.origin_x +
+    (seq // cap) × _PITCH, y = island.origin_y + (seq % cap) × row_h.
+    True over-capacity (seq ≥ cols × cap) extends the LAST reserved column
+    downward (the contact-sheet seat — 留座不实现, 2026-09-26 用户拍板):
+    vertical growth, never a right-edge breach.
     Existing frames NEVER move — the graph only grows, it never jolts
     (append-only 保序律)."""
     w, h = _frame_of(kind, spec)
-    if column:
-        y = (
-            max(
-                int((n.layout or {}).get("y", 0)) + int((n.layout or {}).get("h", h))
-                for n in column
-            )
-            + _GAP_CROSS
-        )
+    if island_seat is not None:
+        island, seq = island_seat
+        col = seq // island.cap
+        row = seq % island.cap
+        if col >= island.cols:
+            col = island.cols - 1
+            row = seq - col * island.cap
+        return {
+            "x": island.origin_x + col * _PITCH,
+            "y": island.origin_y + row * island.row_h,
+            "w": w,
+            "h": h,
+        }
+    tails = [
+        int((n.layout or {}).get("y", 0)) + int((n.layout or {}).get("h", h))
+        for n in column
+    ]
+    tails.extend(extra_tails)
+    if tails:
+        y = max(tails) + _GAP_CROSS
     elif parents:
         y = min(int((p.layout or {}).get("y", 0)) for p in parents) - _FRESH_COLUMN_RISE
     else:
         y = 0
-    return {"x": depth * _PITCH, "y": y, "w": w, "h": h}
+    return {"x": (x_slot if x_slot is not None else depth) * _PITCH, "y": y, "w": w, "h": h}
 
 
-def settle_frames_with_edges(
+# ---- Layout Island (Workspace 合同 v4.2 C6, 2026-09-26 封板) -----------------
+#
+# 每个 sibling group 出生即定格一块独占布局区域: origin/size 冻结, 宽度按
+# 设计容量预留 (含增长廊道), 成员岛内从上往下、到 C 换预留列; 岛的右缘永不
+# 越过出生定格 → 后续 depth 带 / 兄弟 group 数学上不可能被侵占. 岛零 UI —
+# 数据结构与摆位律, 画布永远没有「岛」的 chrome.
+
+#: 组内容量参数 (C6「设计容量」的注册默认 — MODULE_ARCH §7 登记): 每列 C=4
+#: 行; 出生列数 = ⌈成员数/C⌉ + 1 条增长廊道, 封顶 3 列. 廊道只在出生时刻
+#: 更深的带还没有定居成员时才保留 (retroactive birth 永不侵占既有领土 —
+#: cols 回落 1, 超容量走垂直延伸的 contact-sheet 留座).
+_ISLAND_COL_CAPACITY = 4
+_ISLAND_CORRIDOR_COLS = 1
+_ISLAND_MAX_COLS = 3
+
+
+def island_reserved_bottom(island: GraphIsland) -> int:
+    """The island's frozen vertical reservation (cap rows of row_h) — the
+    band tail's floor, so a later band-mate never invades empty corridor
+    cells (岛内的事, 岛外永不让位)."""
+    return island.origin_y + island.cap * island.row_h - _GAP_CROSS
+
+
+async def _assign_islands(
+    db: AsyncSession,
+    project_id: UUID,
+    islands: list[GraphIsland],
+    newborns: list[GraphNode],
+    placed: list[GraphNode],
+    depth_of: Any,
+    parents_of: Any,
+    rank_parents_of: Any,
+) -> tuple[dict[UUID, tuple[GraphIsland, int]], dict[int, int]]:
+    """C6 出生定格分配: sibling family = same topological depth + same
+    media-flow parent set (ctx 引用边永不定义同胞关系 — the Product Graph's
+    edge boundary). Mutates ``islands`` in place (births append) so the
+    settle pass's band-tail math sees them. Returns (node_id → (island,
+    seq), band → reserved slot width).
+
+    - Family ≥ 2 at a fresh seat → the island is BORN (origin = the band's
+      slot origin × _PITCH / the band tail or the fresh-column rise; row_h
+      = the family's max frame height + cross gap — sibling families share
+      one frame class by construction).
+    - An existing island at the seat → JOIN: the next cells. seq derives
+      from LIVE members, so an orphaned island (members deleted — the draft
+      re-stamp's delete+re-add) re-seats from 0 and re-lands on the same
+      cells.
+    - A lone newborn whose seat already holds a non-islanded sibling → the
+      second promotion births the island ANCHORED at that sibling's frame
+      (it joins as seq 0 WITHOUT moving — frames never move).
+    - A lone newborn at an empty seat stays on the plain column law.
+
+    TWO-PHASE (裸 FK flush 轮盘赌律): every birth's row is collected first
+    and flushed BEFORE any membership stamp — without a relationship() the
+    UOW's inter-table ordering is undriven, so the island INSERTs must
+    provably precede the node writes that reference them."""
+    seat_of: dict[UUID, tuple[GraphIsland, int]] = {}
+    if not newborns:
+        return seat_of, {}
+
+    def parent_key(node_id: UUID) -> tuple[str, ...]:
+        return tuple(sorted(str(p.id) for p in rank_parents_of(node_id)))
+
+    def live_member_seqs(island: GraphIsland) -> list[int]:
+        return [
+            int(n.island_seq or 0)
+            for n in [*placed, *newborns]
+            if getattr(n, "island_id", None) is not None
+            and UUID(str(n.island_id)) == UUID(str(island.id))
+            and n.island_seq is not None
+        ]
+
+    slots: dict[int, int] = {}
+    for isl in islands:
+        slots[isl.depth] = max(slots.get(isl.depth, 1), isl.cols)
+
+    def band_origin_slot(d: int) -> int:
+        return d + sum(s - 1 for b, s in slots.items() if b < d)
+
+    def band_tail(d: int) -> int | None:
+        bottoms = [
+            int((n.layout or {}).get("y", 0)) + int((n.layout or {}).get("h", 0))
+            for n in placed
+            if depth_of(UUID(str(n.id)), set()) == d
+        ]
+        bottoms.extend(
+            island_reserved_bottom(i) for i in islands if i.depth == d
+        )
+        return max(bottoms) if bottoms else None
+
+    deeper_placed: dict[int, bool] = {}
+
+    def deeper_band_settled(d: int) -> bool:
+        if d not in deeper_placed:
+            deeper_placed[d] = any(
+                depth_of(UUID(str(n.id)), set()) > d for n in placed
+            )
+        return deeper_placed[d]
+
+    # Group the newborns into sibling families (depth-first determinism).
+    families: dict[tuple[int, tuple[str, ...]], list[GraphNode]] = {}
+    for n in newborns:
+        nid = UUID(str(n.id))
+        key = (depth_of(nid, set()), parent_key(nid))
+        families.setdefault(key, []).append(n)
+
+    # Phase 1: decide every family's seat; birth the new island rows.
+    birthed: list[tuple[GraphIsland, list[GraphNode], list[GraphNode]]] = []
+    for (d, key), family in sorted(families.items()):
+        match = next(
+            (
+                i
+                for i in islands
+                if i.depth == d and tuple(str(p) for p in (i.parent_ids or [])) == key
+            ),
+            None,
+        )
+        if match is not None:
+            seqs = live_member_seqs(match)
+            nxt = max(seqs) + 1 if seqs else 0
+            for n in family:
+                seat_of[UUID(str(n.id))] = (match, nxt)
+                nxt += 1
+            continue
+        siblings = [
+            n
+            for n in placed
+            if depth_of(UUID(str(n.id)), set()) == d
+            and parent_key(UUID(str(n.id))) == key
+            and getattr(n, "island_id", None) is None
+        ]
+        if len(family) < 2 and not siblings:
+            continue  # a lone newborn at an empty seat — the plain column law
+        count = len(family) + len(siblings)
+        if deeper_band_settled(d):
+            # The corridor is a BIRTH reservation: deeper bands already
+            # settled → no horizontal claim is legal; growth extends the
+            # single column downward (the contact-sheet stopgap seat).
+            cols = 1
+        else:
+            cols = min(
+                max(1, -(-count // _ISLAND_COL_CAPACITY)) + _ISLAND_CORRIDOR_COLS,
+                _ISLAND_MAX_COLS,
+            )
+        if siblings:
+            # 第二次 promotion 定格 (C6: sibling 同列叠放只在第二次 promotion
+            # 时才出现): anchor at the FIRST sibling's frame — it joins as
+            # seq 0 without moving.
+            anchor = siblings[0]
+            origin_x = int((anchor.layout or {}).get("x", 0))
+            origin_y = int((anchor.layout or {}).get("y", 0))
+            heights = [int((s.layout or {}).get("h", 0)) for s in siblings]
+        else:
+            tail = band_tail(d)
+            origin_x = band_origin_slot(d) * _PITCH
+            if tail is not None:
+                origin_y = tail + _GAP_CROSS
+            else:
+                # Fresh band: rise above the topmost parent — the frame
+                # law's fresh-column rule, ALL parents (ctx included — the
+                # rise is visual placement; only the sibling KEY is the
+                # media-flow relation).
+                ups = parents_of(UUID(str(family[0].id)))
+                origin_y = (
+                    min(int((p.layout or {}).get("y", 0)) for p in ups)
+                    - _FRESH_COLUMN_RISE
+                    if ups
+                    else 0
+                )
+            heights = []
+        row_h = (
+            max(heights + [_frame_of(n.type, dict(n.spec or {}))[1] for n in family])
+            + _GAP_CROSS
+        )
+        island = GraphIsland(
+            id=uuid4(),
+            project_id=project_id,
+            depth=d,
+            parent_ids=list(key),
+            origin_x=origin_x,
+            origin_y=origin_y,
+            row_h=row_h,
+            cols=cols,
+            cap=_ISLAND_COL_CAPACITY,
+        )
+        db.add(island)
+        islands.append(island)
+        slots[d] = max(slots.get(d, 1), cols)
+        birthed.append((island, siblings, family))
+
+    if birthed:
+        # Phase boundary (轮盘赌律): the island INSERTs land before ANY
+        # membership stamp — the flush below carries no graph_nodes writes
+        # yet (the batch's node rows are still transient at this point).
+        await db.flush()
+
+    # Phase 2: stamp memberships (retroactive siblings keep their frames —
+    # the anchor's frame IS cell (0, 0), zero movement).
+    for island, siblings, family in birthed:
+        nxt = 0
+        for s in siblings:
+            s.island_id = island.id
+            s.island_seq = nxt
+            nxt += 1
+        for n in family:
+            seat_of[UUID(str(n.id))] = (island, nxt)
+            nxt += 1
+    return seat_of, slots
+
+
+async def settle_frames_with_edges(
     newborns: list[GraphNode],
     placed: list[GraphNode],
     edges: list[GraphEdge],
+    island_ctx: tuple[AsyncSession, UUID, list[GraphIsland]] | None = None,
 ) -> None:
     """The door's frame settle (画布定居取景): every newborn's frame is
     assigned ONCE — by _assign_layout, the one frame law — parents-first
@@ -464,6 +752,18 @@ def settle_frames_with_edges(
             by_id[UUID(str(e.from_node))]
             for e in edges
             if UUID(str(e.to_node)) == node_id and UUID(str(e.from_node)) in by_id
+        ]
+
+    # Media-flow parents only (物料流三值 — the Product Graph's edge
+    # boundary): siblinghood is a product relation; ctx 引用边 never joins
+    # the parent key.
+    def rank_parents_of(node_id: UUID) -> list[GraphNode]:
+        return [
+            by_id[UUID(str(e.from_node))]
+            for e in edges
+            if UUID(str(e.to_node)) == node_id
+            and e.edge_type in RANK_EDGE_TYPES
+            and UUID(str(e.from_node)) in by_id
         ]
 
     # Depth = the topological generation (max parent depth + 1, islands 0),
@@ -485,12 +785,55 @@ def settle_frames_with_edges(
         depth_memo[node_id] = d
         return d
 
+    # C6 出生定格: seat the sibling families into layout islands BEFORE any
+    # frame — the corridor's slot math then applies to every frame in the
+    # batch (island cells and the plain column law alike).
+    seat_of: dict[UUID, tuple[GraphIsland, int]] = {}
+    island_slots: dict[int, int] = {}
+    island_rows: list[GraphIsland] = []
+    if island_ctx is not None:
+        island_db, island_project_id, island_rows = island_ctx
+        seat_of, island_slots = await _assign_islands(
+            island_db,
+            island_project_id,
+            island_rows,
+            newborns,
+            placed,
+            depth_of,
+            parents_of,
+            rank_parents_of,
+        )
+
+    def band_origin_slot(d: int) -> int:
+        """The band's x slot: depth + the corridor slots the earlier bands'
+        islands reserved (a band with no islands keeps the legacy 1:1
+        depth↔slot mapping)."""
+        return d + sum(s - 1 for b, s in island_slots.items() if b < d)
+
     def frame_of(node: GraphNode) -> None:
         nid = UUID(str(node.id))
         depth = depth_of(nid, set())
         parents = parents_of(nid)
+        seat = seat_of.get(nid)
+        if seat is not None:
+            island, seq = seat
+            node.island_id = island.id
+            node.island_seq = seq
         column = [n for n in working if depth_of(UUID(str(n.id)), set()) == depth]
-        node.layout = _assign_layout(node.type, node.spec or {}, depth, parents, column)
+        node.layout = _assign_layout(
+            node.type,
+            node.spec or {},
+            depth,
+            parents,
+            column,
+            x_slot=band_origin_slot(depth),
+            # The islands' reserved bottoms floor the band's tail — empty
+            # corridor cells are never invaded by a later band-mate.
+            extra_tails=tuple(
+                island_reserved_bottom(i) for i in island_rows if i.depth == depth
+            ),
+            island_seat=seat,
+        )
 
     settled = {UUID(str(n.id)) for n in placed}
     working = list(placed)
@@ -537,12 +880,23 @@ async def apply_wiring_ops(
     db: AsyncSession,
     project_id: UUID,
     ops: list[dict[str, Any] | BaseModel],
+    *,
+    allow_settled_delete: bool = False,
 ) -> GraphDelta:
     """Validate and land one batch of wiring ops. THE graph's only write.
 
     Flush-only — the caller commits (the batch commits atomically with the
     turn that caused it, create_run precedent). Raises WiringRejected; the
     whole batch dies together, never a half-applied graph.
+
+    ``allow_settled_delete`` is the settled guard's bypass (Workspace 合同
+    v4.2 封板⑤, 2026-09-27): delete_node rejects a non-draft node by
+    default — a settled entity is append-only, and the chat/LLM path never
+    gets the bypass. The ONE legal settled-delete caller is the asset
+    module's own lifecycle (``remove_asset_node`` — an asset's deletion
+    takes its graph twin and transcript document with it); every
+    provisional cleanup (draft teardown / orphan sweep) deletes draft-state
+    nodes and needs no bypass.
     """
     parsed: list[BaseModel] = _OPS_ADAPTER.validate_python(ops)
     project = await db.get(Project, project_id)
@@ -774,10 +1128,61 @@ async def apply_wiring_ops(
                 # revision reruns it (原型 C: stale = factsbar 可重跑徽章).
                 node.state = "stale"
             delta.affected.append(op.node)
+        elif isinstance(op, EditTextOp):
+            node = nodes.get(op.node)
+            if node is None:
+                raise WiringRejected(f"edit_text: unknown node {op.node}")
+            # C4 gate: the transcript document's presentation overlay is the
+            # ONLY editable text layer (the source mirror / word evidence /
+            # ranges are never this op's business — structural invariant).
+            if node.type != "document" or (node.spec or {}).get("role") != "transcript":
+                raise WiringRejected(
+                    f"edit_text: a {node.type} node (role "
+                    f"{(node.spec or {}).get('role')!r}) has no editable text layer"
+                )
+            spec = dict(node.spec or {})
+            # Version evolution (C2 — Revision ≠ New Work): the displaced
+            # display layer appends to the edit history (append-only memory,
+            # capped — version memory, not infinite undo); the overlay
+            # replaces it. text=None clears the overlay back to the source
+            # layer (still a version step — the displaced overlay is kept).
+            previous = spec.get("edited_text")
+            if previous is None:
+                previous = spec.get("text")
+            history = list(spec.get("text_edits") or [])
+            history.append(
+                {"text": previous or "", "at": now_utc().isoformat()}
+            )
+            del history[:-50]
+            spec["text_edits"] = history
+            if op.text is None:
+                spec.pop("edited_text", None)
+            else:
+                spec["edited_text"] = op.text
+            node.spec = spec
+            delta.affected.append(op.node)
         elif isinstance(op, DeleteNodeOp):
             node = nodes.get(op.node)
             if node is None:
                 raise WiringRejected(f"delete_node: unknown node {op.node}")
+            # Settled guard (Workspace 合同 v4.2 封板⑤ — Settled 只长不消,
+            # provisional draft 可弃): a settled entity is append-only —
+            # chat/LLM-issued deletes of settled work are rejected at the
+            # door. Deletable: draft-state nodes (the provisional teardown
+            # paths) and the legacy draft-born task-book document (the
+            # pre-de-stamp cleanup's victim shape; none exist post-
+            # migration l2b5c8e1f4a7, the path stays honest). The asset
+            # module's own lifecycle deletes ride allow_settled_delete.
+            if not allow_settled_delete and str(node.state) != "draft" and not (
+                node.type == "document"
+                and (node.spec or {}).get("role") == _TASK_BOOK_ROLE
+                and not (node.spec or {}).get("run_id")
+            ):
+                raise WiringRejected(
+                    f"delete_node: node {op.node} is settled (state "
+                    f"{node.state!r}) — a settled entity is append-only; "
+                    "only provisional drafts are deletable"
+                )
             pending_delete.append(op.node)
             delta.affected.append(op.node)
             nodes.pop(op.node)
@@ -817,8 +1222,24 @@ async def apply_wiring_ops(
     # guess was a placeholder — the real parents are the batch's edges).
     # Each frame is assigned ONCE here, before the flush — born right, never
     # repaired later; existing frames NEVER move (append-only 保序律).
+    # C6: the project's island rows ride in — the settle births / joins the
+    # sibling groups' layout islands before the passes.
+    island_rows = list(
+        (
+            await db.execute(
+                select(GraphIsland).where(GraphIsland.project_id == project_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     placed = [n for n in nodes.values() if UUID(str(n.id)) not in set(newborn_ids)]
-    settle_frames_with_edges([nodes[nid] for nid in newborn_ids], placed, edges)
+    await settle_frames_with_edges(
+        [nodes[nid] for nid in newborn_ids],
+        placed,
+        edges,
+        island_ctx=(db, project_id, island_rows),
+    )
 
     # Land the batch: deletions (edges cascade structurally), then the new
     # rows, then the edited rows (ORM-tracked already). TWO flushes, nodes
@@ -853,6 +1274,7 @@ __all__ = [
     "WiringOp",
     "WiringRejected",
     "apply_wiring_ops",
+    "island_reserved_bottom",
     "settle_frames_with_edges",
     "wiring_catalog_lines",
 ]

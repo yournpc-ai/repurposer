@@ -15,6 +15,8 @@ from app.models.schemas import (
     GenerateRequest,
     GenerateResponse,
     GraphEdgeResponse,
+    GraphEditTextRequest,
+    GraphEditTextResponse,
     GraphNodeResponse,
     GraphReviseRequest,
     GraphReviseResponse,
@@ -32,6 +34,7 @@ from app.models.tables import (
     Asset,
     Conversation,
     GraphEdge,
+    GraphIsland,
     GraphNode,
     Message,
     Operation,
@@ -49,7 +52,7 @@ from app.pipeline.conversation_bridge import (
 )
 from app.pipeline.lifecycle import project_lifecycle
 from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
-from app.pipeline.product_graph import product_ranks
+from app.pipeline.product_graph import EXPLORATION_NODE_TYPE, display_ranks
 from app.pipeline.scope_classifier import (
     CONTINUATION,
     ChainFacts,
@@ -331,8 +334,6 @@ def _read_face(row_type: str, spec: dict, outputs: list) -> tuple[str, dict]:
     """Map one graph row to the canvas's v3 face: (type, spec). Pure.
 
     - 新行直传 (媒介五值 already carry their face + prototype from the stamp).
-    - exploration → 直传 (ADR-088 §4: the family is born with its own face —
-      prototype/exploration_kind ride in spec; never remapped).
     - asset → its asset_type's medium × manual (the asset dossier still
       joins on the ORM type — the response carries it under `asset`).
     - document (transcript / task_book / research_brief / role-less) →
@@ -346,11 +347,6 @@ def _read_face(row_type: str, spec: dict, outputs: list) -> tuple[str, dict]:
     - 无 tool 回退 = text×manual (the full-text card is the safest reading).
     """
     if row_type in _READ_FACE_MEDIA:
-        return row_type, spec
-    # 探索族直传 (ADR-088 §4): exploration artifacts are BORN with their own
-    # face (type = exploration, prototype/kind ride in spec) — never remap
-    # them into a media word or the manual fallback.
-    if row_type == "exploration":
         return row_type, spec
     if row_type == "asset":
         medium = _ASSET_MEDIUM.get(str(spec.get("asset_type") or ""), "text")
@@ -401,6 +397,13 @@ async def get_project_graph(
         .scalars()
         .all()
     )
+    # Workspace 合同 v4.2 C1 (2026-09-26 封板 — 图节点资格): exploration
+    # artifacts NEVER enter the Graph. Production stopped at the door (the
+    # family's home is exploration_rows now); legacy type="exploration"
+    # graph rows are read-filtered here — never migrated, never remapped
+    # (their canvas cards are deleted by the same contract; the B1-lite
+    # task_book read-filter below is the precedent).
+    nodes = [n for n in nodes if n.type != EXPLORATION_NODE_TYPE]
     edges = list(
         (
             await db.execute(
@@ -410,12 +413,13 @@ async def get_project_graph(
         .scalars()
         .all()
     )
-    # B1-lite (2026-09-13 演示冻结期, ADR-072 批 B1 的读面先行): the plan
-    # document and every edge touching it are filtered at READ time only —
-    # the canvas shows the pure material flow (源 → 文档 → 装配); the confirm
-    # beat's seat is the dock pill (ADR-070), the card's own Start was the
-    # redundant second seat. The stamp/runner/data are untouched — formal
-    # retirement (de-stamp + history cleanup) is 批 B1 after the freeze lifts.
+    # task_book 读面过滤（Workspace 合同 v4.2 C1-b，2026-09-26 封板收口）:
+    # the plan document and every edge touching it are filtered at READ
+    # time — the canvas shows the pure material flow (源 → 文档 → 装配); the
+    # confirm beat's ONLY seat is the dock pill (ADR-070). Production
+    # stopped at the stamp (graph_fill de-stamp) and legacy rows are
+    # hard-deleted by migration; this filter is the read-tolerance for any
+    # pre-migration / replica-lag straggler.
     hidden_book_ids = {
         str(n.id)
         for n in nodes
@@ -526,7 +530,25 @@ async def get_project_graph(
     # happens) and edges are persisted-minus-removed plus the A3-lite
     # synthetic text edges (the L5 root fix: synthetic material-flow edges
     # are legitimate rank input). The canvas never re-derives depth.
-    ranks = product_ranks(nodes, edges)
+    # C6 岛化 (v4.2): the island registry widens a band's rank slots by its
+    # frozen corridor — the read-time transform keeps every born frame's
+    # display x stable (append-only 保序律 in rank space).
+    island_rows = list(
+        (
+            await db.execute(
+                select(GraphIsland).where(GraphIsland.project_id == project_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    ranks = display_ranks(nodes, edges, island_rows)
+    # 岛内格镜像: islanded members carry their island's frozen reserved
+    # bottom so the client's air-compression never pulls a later band-mate
+    # into empty corridor cells (岛内的事; layout.ts projectSettledFrames
+    # 镜像同律).
+    island_by_id = {str(i.id): i for i in island_rows}
+    from app.pipeline.graph_store import island_reserved_bottom
 
     # ── Joined display rows ──────────────────────────────────────────────
     asset_ids = [
@@ -588,6 +610,16 @@ async def get_project_graph(
     resp_nodes: list[GraphNodeResponse] = []
     for node in nodes:
         spec = dict(node.spec or {})
+        if node.island_id is not None:
+            island = island_by_id.get(str(node.island_id))
+            if island is not None:
+                # C6 岛内格镜像: the client renders the member at its frozen
+                # cell and floors the column's air-compression at the
+                # island's reserved bottom (layout.ts projectSettledFrames —
+                # 一条律两镜像).
+                spec["island"] = {
+                    "reserved_bottom": island_reserved_bottom(island),
+                }
         estimate_credits: list[int] | None = None
         if spec.get("estimate"):
             usd_low, usd_high = estimate_usd_range(spec["estimate"])
@@ -633,7 +665,6 @@ async def get_project_graph(
                 # a B4-lite-gate survivor the predicate does not rank —
                 # tolerated here, named as a violation at the projection.
                 rank=ranks.get(str(node.id)),
-                journey_id=node.journey_id,
                 asset=asset_resp,
                 outputs=[OutputResponse.model_validate(o) for o in node_outputs],
                 created_at=node.created_at,
@@ -743,6 +774,50 @@ async def revise_graph_node(
     await db.commit()
     await db.refresh(run)
     return GraphReviseResponse(run_id=run.id, status=run.status)
+
+
+@router.post(
+    "/{project_id}/graph/edit-text",
+    response_model=GraphEditTextResponse,
+)
+async def edit_graph_node_text(
+    project_id: UUID,
+    request: GraphEditTextRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> GraphEditTextResponse:
+    """The transcript card's in-place direct edit (Workspace 合同 v4.2 C4,
+    卡内就地编辑): the deterministic gesture channel — ops are constructed
+    by CODE (one ``edit_text`` op carrying the user's verbatim text), land
+    through the graph's ONLY write door, and nothing runs (a manual
+    document's text is not executable work — zero credits, zero run, the
+    card face is the whole feedback). C4 invariants live in the op: the
+    source layer / word evidence / ranges are structurally untouched; the
+    displaced display layer appends to the node's version memory."""
+    await get_project_for_user(db, project_id, UUID(str(current_user.id)))
+    node = await db.get(GraphNode, request.node_id)
+    if node is None or UUID(str(node.project_id)) != project_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Node not found")
+
+    from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
+
+    try:
+        await apply_wiring_ops(
+            db,
+            project_id,
+            [{"op": "edit_text", "node": str(request.node_id), "text": request.text}],
+        )
+    except WiringRejected as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    await db.commit()
+    await db.refresh(node)
+    spec = node.spec or {}
+    return GraphEditTextResponse(
+        node_id=node.id,
+        text=spec.get("edited_text") if spec.get("edited_text") is not None else None,
+    )
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)

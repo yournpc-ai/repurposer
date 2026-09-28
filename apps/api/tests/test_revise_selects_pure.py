@@ -31,7 +31,7 @@ from pydantic import ValidationError
 
 from app.chat.exploration_compile import CompiledPackage, compile_plan_rows_package
 from app.chat.exploration_tools import ReviseSelectItem, ReviseSelectsArgs
-from app.models.tables import Asset, GraphNode, Journey, Project
+from app.models.tables import Asset, ExplorationRow, Journey, Project
 from app.pipeline.exploration_store import (
     CandidateMember,
     ExplorationRejected,
@@ -90,7 +90,7 @@ class _StubResult:
 
 
 class _StubDb:
-    """Serves GraphNode / Journey / Asset off lists; JSON-path criteria stay
+    """Serves ExplorationRow / Journey / Asset off lists; JSON-path criteria stay
     unevaluated (the pattern's documented limitation — seeds are precise).
     Plain-column eq filters: project_id / type / goal_text / journey_id."""
 
@@ -111,7 +111,7 @@ class _StubDb:
     async def execute(self, stmt):
         entity = stmt.column_descriptions[0]["entity"]
         rows = {
-            GraphNode: self.nodes,
+            ExplorationRow: self.nodes,
             Journey: self.journeys,
             Asset: self.assets,
         }.get(entity, [])
@@ -130,7 +130,7 @@ class _StubDb:
 
     def add(self, obj):
         self.added.append(obj)
-        if isinstance(obj, GraphNode):
+        if isinstance(obj, ExplorationRow):
             self.nodes.append(obj)
         elif isinstance(obj, Journey):
             self.journeys.append(obj)
@@ -142,7 +142,7 @@ class _StubDb:
 # ---- seeds (the door births the rows — spec shapes stay exact) -------------------
 
 
-async def _seed_chain(db: _StubDb, *, goal="goal") -> tuple[GraphNode, GraphNode]:
+async def _seed_chain(db: _StubDb, *, goal="goal") -> tuple[ExplorationRow, ExplorationRow]:
     """A candidate set with TWO members + one select on member 0."""
     cset = await propose_candidates(
         db,

@@ -50,6 +50,8 @@ ASSET = "chat.inspecting.asset"
 ASSET_DONE = "chat.inspectingDone.asset"
 DRAFT = "chat.activity.draft"
 DRAFT_DONE = "chat.activity.draftDone"
+EDIT = "chat.activity.edit"
+EDIT_DONE = "chat.activity.editDone"
 RUN = "chat.activity.run"
 RUN_DONE = "chat.activity.runDone"
 REPAIR = "chat.activity.repair"
@@ -406,8 +408,10 @@ def test_settled_frames_collects_the_turns_durable_history():
     """activity 持久化 (2026-09-25): settled_frames() is the persist seam —
     every terminal frame in emission (seq) order, ACTIVE frames never join
     (the live wire owns the in-flight face; only the settled form is
-    durable). A whole turn story — rejection, repair, acceptance, plus a
-    span only the sweep settles — reads back complete and ordered."""
+    durable). A whole turn story — rejection, repair, acceptance — reads
+    back complete and ordered. Draft spans are the ONE exclusion (落定即退役
+    2026-09-28): their settles ride the wire but never persist — the docked
+    plan card is the settled evidence."""
     p = ActivityProjector()
     # A read call: active → rejected (cancelled + repair opens) → accepted
     # (repair completes, the retried read completes).
@@ -415,11 +419,12 @@ def test_settled_frames_collects_the_turns_durable_history():
     p.feed_event(ToolRejected("search_transcript", "bad params"))
     p.name_known("search_transcript")
     p.feed_event(ReadAccepted("search_transcript"))
-    # A draft span still open at the envelope — the sweep settles it.
+    # A draft span still open at the envelope — the sweep settles it on the
+    # wire, but the draft kind never joins the durable history.
     p.name_known("propose_tasks")
     sweep = p.sweep("completed")
     assert len(sweep) == 1
-    # A born-completed milestone joins too.
+    # A born-completed milestone joins too (a count fact, not a span).
     p.explore_milestone("chat.explore.plansReady", count=2)
 
     settled = p.settled_frames()
@@ -428,7 +433,6 @@ def test_settled_frames_collects_the_turns_durable_history():
         ("read", STATUS_CANCELLED),      # the rejected first call
         ("repair", STATUS_COMPLETED),    # the rework succeeded
         ("read", STATUS_COMPLETED),      # the retried read landed
-        ("draft", STATUS_COMPLETED),     # swept at the envelope
         ("draft", STATUS_COMPLETED),     # the born-completed milestone
     ]
     # Every settled frame is wire-shaped (the persist row stores to_dict()).
@@ -436,6 +440,40 @@ def test_settled_frames_collects_the_turns_durable_history():
         d = f.to_dict()
         assert d["activity_id"] and d["seq"] and d["at"]
         assert d["status"] != STATUS_ACTIVE
+
+
+def test_draft_span_settles_never_persist():
+    """落定即退役 (2026-09-28 用户拍板): the draft span's settle frames ride
+    the live wire unchanged (the row leaves the now-line at the right beat)
+    but NEVER join the durable history — the plan-verbs' acceptance, the
+    edit-verbs' rejection-cancel + retry, and the envelope sweep alike."""
+    p = ActivityProjector()
+    frames = _feed(p, "propose_tasks", TerminalAccepted("propose_tasks"))
+    assert _summary(frames) == [
+        ("a1", 1, "draft", STATUS_ACTIVE, DRAFT),
+        ("a1", 2, "draft", STATUS_COMPLETED, DRAFT_DONE),
+    ]
+    assert p.settled_frames() == []
+
+    p2 = ActivityProjector()
+    _feed(p2, "edit_graph", ToolRejected("params_validation", "edit_graph"))
+    frames2 = _feed(p2, "edit_graph", TerminalAccepted("edit_graph"))
+    # The wire still says: the retried edit opens, the repair span
+    # completes, the edit completes — only the repair persists.
+    assert _summary(frames2) == [
+        ("a3", 4, "draft", STATUS_ACTIVE, EDIT),
+        ("a2", 5, "repair", STATUS_COMPLETED, REPAIR_DONE),
+        ("a3", 6, "draft", STATUS_COMPLETED, EDIT_DONE),
+    ]
+    assert [(f.kind, f.status, f.key) for f in p2.settled_frames()] == [
+        ("repair", STATUS_COMPLETED, REPAIR_DONE),
+    ]
+
+    p3 = ActivityProjector()
+    p3.name_known("present_plan")
+    sweep = p3.sweep("completed")
+    assert _summary(sweep) == [("a1", 2, "draft", STATUS_COMPLETED, DRAFT_DONE)]
+    assert p3.settled_frames() == []
 
 
 def test_settled_frames_empty_before_any_terminal():

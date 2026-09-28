@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     minimax_api_key: str = ""
     minimax_model: str = "minimax-m3"
     minimax_base_url: str = "https://api.minimax.io/v1"
+    # Startup prefix-cache warmup (批3): one throwaway call per chat agent at
+    # API boot seeds the passive prefix cache on one backend pod (forensics
+    # 2026-09-27). Fire-and-forget, never blocks startup.
+    minimax_warmup_enabled: bool = True
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/repurposer"

@@ -17,6 +17,7 @@ import {
   type QuestionAnswer,
 } from "./AnsweredQuestion"
 import type { ActivityFramePayload } from "@/lib/chat-stream"
+import type { CandidateMemberPayload } from "@/lib/chatStreamFrames"
 
 /** One message row in the dock's flow (live-pushed or replayed). */
 export interface OverlayMessage {
@@ -66,6 +67,26 @@ export interface OverlayMessage {
    * LATEST turn's frames into the activity stream — parity with the live
    * law (U9: a new turn's stream replaces the previous turn's rows). */
   milestones?: ActivityFramePayload[]
+  /** Candidate Surface (Workspace 合同 v4.2 C8-c): the replayed (or live)
+   * candidate card — the set's members + the CURRENT selection highlight
+   * (folded from every selection event up to this point). The card renders
+   * under its anchoring message; selection events from LATER turns repaint
+   * it in place (chat 决策永不成节点 — the card is the selection state's
+   * one seat). */
+  candidates?: CandidateSurface
+}
+
+/** The candidate card's data (C8-c): ordinal = the member's array index
+ * (the visual address the user's 「第二个」 speaks to); `selected` = the
+ * set's current selection (0-based member indexes). Self-contained — the
+ * payload carries every rendered fact, so a deleted source asset leaves
+ * nothing dangling (读面容忍: an off-shape dump simply renders no card). */
+export interface CandidateSurface {
+  candidateSetId: string
+  topic: string
+  assetId: string | null
+  members: CandidateMemberPayload[]
+  selected: number[]
 }
 
 /** A legacy trigger row's suggestion pill (pre-ADR-081 rows only): "send"
@@ -160,10 +181,12 @@ export type MaterialBeatRow = ActivityFramePayload & {
 }
 
 /** The material-beat dump on a message row's intent column ({type:
- * "material_beat", beat, status, name?, count?, total?, ref?}) — the
- * pipeline's settled reading/understanding rows (app/chat/service's
+ * "material_beat", beat, status, name?, count?, total?, ref?, duration_ms?})
+ * — the pipeline's settled reading/understanding rows (app/chat/service's
  * record_material_beat). Beats are BORN SETTLED (the live active row stays
  * the dock's synthesized now-line); the replay renders the past-tense key.
+ * `duration_ms` carries the user-perceived reading span (upload→processed)
+ * so the settled row whispers "· 41s" like every other settled row.
  * Same read tolerance as triggerSuggestions — anything off-shape parses to
  * undefined (a plain assistant row), never a crash. */
 export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
@@ -173,8 +196,14 @@ export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
   const count = typeof data.count === "number" ? data.count : undefined
   const total = typeof data.total === "number" ? data.total : undefined
   const name = typeof data.name === "string" ? data.name : undefined
+  const duration_ms =
+    typeof data.duration_ms === "number" ? data.duration_ms : undefined
   const ref = typeof data.ref === "string" ? data.ref : "beat"
   if (data.beat === "reading") {
+    // 动词分叉 (批「动词」): the persisted intent carries asset_type (absent
+    // on rows predating the fork — read tolerance: they fall to the base key).
+    const assetType =
+      typeof data.asset_type === "string" ? data.asset_type : undefined
     return {
       activity_id: `beat-reading-${ref}`,
       seq: 0,
@@ -182,13 +211,14 @@ export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
       status,
       key:
         status === "failed"
-          ? "chat.material.readingFailed"
+          ? materialBeatKey("chat.material.readingFailed", assetType)
           : total != null && total > 1
-            ? "chat.material.readingDoneProgress"
-            : "chat.material.readingDone",
+            ? materialBeatKey("chat.material.readingDoneProgress", assetType)
+            : materialBeatKey("chat.material.readingDone", assetType),
       count,
       total,
       name,
+      duration_ms,
     }
   }
   if (data.beat === "understanding") {
@@ -202,6 +232,72 @@ export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
     }
   }
   return undefined
+}
+
+/** 动词分叉 (2026-09-27 批「动词」): the material beat's verb follows the
+ * asset type — video/audio get the typed key suffix, everything else the
+ * base key. Both synthesis points fork alike (the live now-line reads the
+ * asset's type; this replay reads the persisted beat's intent.asset_type);
+ * the typed keys exist in every locale (zh.ts/en.ts are type-checked pairs),
+ * so no missing-key fallback is needed. */
+export function materialBeatKey(base: string, assetType?: string | null): string {
+  return assetType === "video" || assetType === "audio"
+    ? `${base}_${assetType}`
+    : base
+}
+
+/** One parsed candidates_log event (the replay-fold input). */
+export type CandidatesLogEvent =
+  | { kind: "set"; surface: CandidateSurface }
+  | { kind: "selection"; candidateSetId: string; selected: number[] }
+
+/** A persisted turn's candidate-surface events (intent.type ===
+ * "candidates_log" — the activity_log precedent's twin, v4.2 C8-c): the
+ * SSE ``assistant.candidates`` payloads the turn emitted, in order. The
+ * replay folds them: a ``set`` event births the card row, a ``selection``
+ * event repaints the anchoring card's highlight. Read tolerance: the shell
+ * or a malformed event drops to undefined / skips (a plain assistant row,
+ * never a crash); unknown member fields read as empty. */
+export function candidatesLog(intent: unknown): CandidatesLogEvent[] | undefined {
+  const data = (intent ?? {}) as Record<string, unknown>
+  if (data.type !== "candidates_log") return undefined
+  const raw = Array.isArray(data.events) ? data.events : null
+  if (raw === null) return undefined
+  const events: CandidatesLogEvent[] = []
+  for (const e of raw) {
+    const d = (e ?? {}) as Record<string, unknown>
+    const setId = typeof d.candidate_set_id === "string" ? d.candidate_set_id : null
+    if (setId === null) continue
+    if (d.kind === "set") {
+      const members: CandidateMemberPayload[] = []
+      for (const m of Array.isArray(d.members) ? d.members : []) {
+        const md = (m ?? {}) as Record<string, unknown>
+        if (typeof md.start !== "number" || typeof md.end !== "number") continue
+        members.push({
+          start: md.start,
+          end: md.end,
+          excerpt: typeof md.excerpt === "string" ? md.excerpt : "",
+          speaker: typeof md.speaker === "string" ? md.speaker : null,
+        })
+      }
+      events.push({
+        kind: "set",
+        surface: {
+          candidateSetId: setId,
+          topic: typeof d.topic === "string" ? d.topic : "",
+          assetId: typeof d.asset_id === "string" ? d.asset_id : null,
+          members,
+          selected: [],
+        },
+      })
+    } else if (d.kind === "selection") {
+      const selected = (Array.isArray(d.selected) ? d.selected : []).filter(
+        (i): i is number => typeof i === "number" && Number.isInteger(i) && i >= 0,
+      )
+      events.push({ kind: "selection", candidateSetId: setId, selected })
+    }
+  }
+  return events
 }
 
 /** Derived preview row (ADR-043): the server dry-run-compiles the chain at
@@ -242,7 +338,11 @@ export interface QuestionPayload {
    * store the question (or the echo prose) AS the content; every reader
    * falls back to `content`. */
   question?: string
-  options?: { id: string; label: string }[]
+  options?: { id: string; label: string; description?: string }[]
+  /** 推荐标记 (2026-09-27 一问拍一体化): at most one option id the agent
+   * recommends — the dock renders its muted suffix. Absent on legacy rows
+   * and unrecommended asks. */
+  recommended_id?: string | null
   /** The dock's credits quotation (BILLING §7): task_book only — total
    * [low, high] + the per-task marginal range aligned by task index (Σ
    * per_task ≡ total exactly; null = the task adds no quoted cost). */
@@ -317,6 +417,11 @@ export interface ProjectAsset {
   stream_url?: string | null
   title: string | null
   processing_status: "pending" | "processing" | "completed" | "failed"
+  /** Settlement / upload stamps (AssetResponse carries both; optional —
+   * message-persisted attachment shapes are thinner). The watch windows'
+   * recency gate reads processed_at, falling back to created_at. */
+  processed_at?: string | null
+  created_at?: string | null
 }
 
 /** One archive row as the messages endpoint returns it (the mapper's input
@@ -349,6 +454,10 @@ export function mapHistoryRows(
   ctx: { prompt: string; t: (key: string) => string },
 ): OverlayMessage[] {
   const history: OverlayMessage[] = []
+  // C8-c fold: candidate set id → the OverlayMessage anchoring its card, so
+  // a LATER turn's selection event repaints the earlier card's highlight
+  // (the surface is one seat; rows never move).
+  const cardBySetId = new Map<string, OverlayMessage>()
   for (const m of rows) {
     if (m.role === "user") {
       if ((m.content ?? "") === ctx.prompt) continue
@@ -486,6 +595,41 @@ export function mapHistoryRows(
           at: m.created_at,
           milestones: log,
         })
+        continue
+      }
+      // Candidate Surface 回放 (v4.2 C8-c): the turn's candidates_log events
+      // fold — a set event births its card row (idempotent re-emits REPLACE
+      // in place), a selection event repaints the anchoring card. A log
+      // carrying only selection events pushes NO row (the repaint lands on
+      // the earlier card; an unknown set id skips quietly).
+      const candEvents = candidatesLog(m.intent)
+      if (candEvents !== undefined) {
+        for (const ev of candEvents) {
+          if (ev.kind === "set") {
+            const existing = cardBySetId.get(ev.surface.candidateSetId)
+            if (existing !== undefined) {
+              existing.candidates = {
+                ...ev.surface,
+                selected: existing.candidates?.selected ?? [],
+              }
+              continue
+            }
+            const row: OverlayMessage = {
+              id: `${m.id}-cand-${ev.surface.candidateSetId}`,
+              role: "assistant",
+              content: "",
+              at: m.created_at,
+              candidates: ev.surface,
+            }
+            history.push(row)
+            cardBySetId.set(ev.surface.candidateSetId, row)
+          } else {
+            const card = cardBySetId.get(ev.candidateSetId)
+            if (card?.candidates !== undefined) {
+              card.candidates = { ...card.candidates, selected: ev.selected }
+            }
+          }
+        }
         continue
       }
       history.push({

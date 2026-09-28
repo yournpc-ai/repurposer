@@ -536,17 +536,20 @@ body {
   /* Native chrome (scrollbars, form controls) follows the theme — without
    * this the dark studio keeps light-theme scrollbars. */
   color-scheme: light;
-  /* Gray ladder (ADR-046, 2026-08-21): the studio canvas is 0.96 NEUTRAL GRAY
-   * — white cards are the raised layer and float via the fill step alone
-   * (elevation law, both themes: the raised surface is the lighter fill on
-   * the darker ground — light 0.96→1.0, dark 0.12→0.21). In-flow surfaces
-   * cast NO shadow; shadows belong to floating layers (see overlay-surface).
-   * The landing page opts out at its route root (marketing register stays
-   * pure white). Surface hierarchy comes from these steps, never from
-   * one-off alpha fills (bg-muted/50 & co. are retired). Three text tiers:
+  /* Gray ladder (ADR-046, 2026-08-21; base retuned 2026-09-25): the studio
+   * canvas is 0.985 NEUTRAL GRAY (#fafafa — Lovart/MiniMax measured parity;
+   * the 0.96 base sat a full register below both references, making the page
+   * read dingy and white cards pop too hard). White cards are the raised
+   * layer and float via the fill step alone (elevation law, both themes: the
+   * raised surface is the lighter fill on the darker ground — light
+   * 0.985→1.0, dark 0.12→0.21). In-flow surfaces cast NO shadow; shadows
+   * belong to floating layers (see overlay-surface). The landing page opts
+   * out at its route root (marketing register stays pure white). Surface
+   * hierarchy comes from these steps, never from one-off alpha fills
+   * (bg-muted/50 & co. are retired). Three text tiers:
    * foreground → muted-foreground (subtitles) → meta-foreground (caps meta).
    * --subtle (0.975) is the faintest step on white cards. */
-  --background: oklch(0.96 0 0);
+  --background: oklch(0.985 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -579,7 +582,7 @@ body {
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.96 0 0);
+  --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.24 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);

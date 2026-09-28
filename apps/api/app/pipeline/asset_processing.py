@@ -296,6 +296,15 @@ async def _record_reading_beat(db: AsyncSession, asset: Asset, status: str) -> N
                 )
             )
         ).scalar_one()
+        # The user-perceived reading span (upload → processed) — the settled
+        # row's "· 41s" whisper. Both stamps are tz-aware; a missing/negative
+        # span simply omits the whisper (read tolerance's server mirror).
+        duration_ms: int | None = None
+        if asset.processed_at is not None and asset.created_at is not None:
+            span_ms = int(
+                (asset.processed_at - asset.created_at).total_seconds() * 1000
+            )
+            duration_ms = span_ms if span_ms >= 0 else None
         await conversation_bridge.record_material_beat(
             db,
             project.user_id,
@@ -306,6 +315,9 @@ async def _record_reading_beat(db: AsyncSession, asset: Asset, status: str) -> N
             count=settled,
             total=total,
             ref=str(asset.id),
+            duration_ms=duration_ms,
+            # 批「动词」: the type rides so the replay forks watch/listen/read.
+            asset_type=str(getattr(asset.type, "value", asset.type)),
         )
         await db.commit()
     except Exception as e:  # noqa: BLE001 — the beat is best-effort

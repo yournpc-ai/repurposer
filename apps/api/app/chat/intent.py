@@ -105,6 +105,7 @@ def _assemble_plan_turn(
     asset_lines: list[str] | None = None,
     material_pending_line: str | None = None,
     plans_lines: list[str] | None = None,
+    surface: str | None = None,
 ):
     """Plan-turn inputs (ADR-052 B2 D2-C2 — the brief is the state).
 
@@ -159,6 +160,12 @@ def _assemble_plan_turn(
     — plan_id + title + outputs digest per plan, rendered as the package
     block so a change ask can name its revise_plan target; None when the
     dock on the table is router-drafted (no Content Plans behind it).
+    ``surface``: the sender's surface (2026-09-25 canvas↔chat 联动, user
+    ruling — the client judges it from the page width). "canvas" renders
+    the surface line: the plan is laid out as an inspectable graph beside
+    the conversation, so the review invitation may name that home (the
+    system template's law governs the usage); anything else renders
+    nothing and the surface-neutral default stands.
     """
     brief_lines: list[str] | None = None
     if brief is not None:
@@ -238,6 +245,18 @@ def _assemble_plan_turn(
             # message's language.
             "speech_language": (
                 _speech_language_line(speech_language) if speech_language else None
+            ),
+            # The surface FACT (2026-09-25; 用户话术改口 2026-09-27 — v4.2
+            # 封板⑪: the user's word is workspace/工作空间, the internal
+            # enum stays "canvas"): a plain statement of where the plan
+            # sits when the client reports the workspace — the system
+            # template's law decides how the review invitation uses it.
+            "surface_line": (
+                "The user's surface: this conversation sits beside the "
+                "plan's workspace — the presented plan is laid out there "
+                "as cards the user can open and inspect."
+                if surface == "canvas"
+                else None
             ),
         },
         [],

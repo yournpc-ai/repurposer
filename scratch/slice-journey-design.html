@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Graph 空间模型合同 v2 — Entity / Birth / Hierarchy / Identity / Layout</title>
+<style>
+  :root {
+    --page: oklch(0.96 0 0);
+    --card: oklch(1 0 0);
+    --fg: oklch(0.145 0 0);
+    --muted: oklch(0.556 0 0);
+    --meta: oklch(0.68 0 0);
+    --hairline: oklch(0.145 0 0 / 0.10);
+    --accent: oklch(0.92 0 0);
+    --inset: oklch(0.92 0 0);
+    --destructive: oklch(0.55 0.18 25);
+    --blue: oklch(0.42 0.1 250);
+    --amber: oklch(0.45 0.12 85);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+    background: var(--page); color: var(--fg); font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1280px; margin: 0 auto; padding: 48px 40px 96px; }
+
+  header.doc { margin-bottom: 36px; max-width: 860px; }
+  header.doc h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  header.doc .lede { margin-top: 10px; color: var(--muted); font-size: 13px; line-height: 1.8; }
+  header.doc .lede b { color: var(--fg); font-weight: 500; }
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px; background: var(--inset); padding: 1px 5px; border-radius: 4px;
+  }
+
+  section.step { margin-top: 56px; }
+  .step-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .step-head .num {
+    font-size: 11px; color: var(--blue); font-weight: 600;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .step-head h2 { font-size: 15px; font-weight: 600; }
+  .step-head .beat { font-size: 12px; color: var(--muted); }
+
+  /* 合同条款卡 */
+  .clause { margin-top: 16px; background: var(--card); border-radius: 12px; box-shadow: 0 0 0 1px var(--hairline); padding: 16px 20px; max-width: 920px; }
+  .clause h3 { font-size: 12.5px; font-weight: 600; }
+  .clause h3 .tag { font-size: 10px; color: var(--blue); font-weight: 500; margin-left: 8px; font-family: ui-monospace, Menlo, monospace; }
+  .clause p { margin-top: 7px; font-size: 12px; color: var(--muted); line-height: 1.75; }
+  .clause p b { color: var(--fg); font-weight: 500; }
+  .clause ul { margin-top: 7px; }
+  .clause li { font-size: 12px; color: var(--muted); line-height: 1.75; margin-left: 18px; }
+  .clause li b { color: var(--fg); font-weight: 500; }
+
+  table.spec { width: 100%; max-width: 920px; border-collapse: collapse; margin-top: 14px; font-size: 12px; }
+  table.spec th { text-align: left; color: var(--meta); font-weight: 400; font-size: 11px; padding: 6px 12px 6px 0; }
+  table.spec td { padding: 8px 12px 8px 0; border-top: 1px solid var(--hairline); color: var(--muted); line-height: 1.55; vertical-align: top; }
+  table.spec td:first-child { color: var(--fg); font-weight: 500; white-space: nowrap; }
+
+  /* 时间轴帧 */
+  .frame {
+    margin-top: 16px; display: flex;
+    border-radius: 16px; overflow: hidden;
+    box-shadow: 0 0 0 1px var(--hairline);
+    background: var(--card);
+    min-height: 380px;
+  }
+  .mc {
+    position: relative; flex: 1;
+    background: radial-gradient(circle, oklch(0.556 0 0 / 0.30) 1px, transparent 1px) 0 0 / 32px 32px, var(--page);
+    min-height: 380px;
+  }
+  .mc .zoompill {
+    position: absolute; top: 12px; right: 12px;
+    font-size: 10px; color: var(--meta); background: var(--card);
+    padding: 3px 8px; border-radius: 6px; box-shadow: 0 0 0 1px var(--hairline);
+  }
+  .mc.sleep { display: flex; align-items: center; justify-content: center; }
+  .mc.sleep .sleepnote { font-size: 11px; color: var(--meta); }
+  .nd { position: absolute; display: flex; flex-direction: column; }
+  .nd .cap { display: flex; align-items: center; gap: 5px; height: 20px; padding-bottom: 4px; color: var(--muted); font-size: 10.5px; }
+  .nd .bd { background: var(--card); border-radius: 10px; box-shadow: 0 0 0 1px var(--hairline); overflow: visible; position: relative; }
+  .nd .bd.dashed { background: transparent; box-shadow: none; border: 1.5px dashed oklch(0.145 0 0 / 0.18); }
+  .nd .bd.queued { background: oklch(0.92 0 0); }
+  .nd.dim { opacity: 0.62; filter: saturate(0.75); }
+  .nd .bd.born { box-shadow: 0 0 0 1.5px var(--blue); }
+  .born-tag {
+    position: absolute; top: -9px; right: 8px; z-index: 2;
+    font-size: 8.5px; color: #fff; background: var(--blue);
+    padding: 1.5px 7px; border-radius: 5px;
+  }
+  .mface { position: relative; display: block; width: 100%; border-radius: 9px; overflow: hidden; }
+  .txt { padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+  .txt .ln { height: 5px; border-radius: 3px; background: oklch(0.145 0 0 / 0.14); }
+  .txt .ln.short { width: 62%; }
+  .txt .ln.edited { background: oklch(0.45 0.12 85 / 0.35); }
+  .facts { display: flex; align-items: center; gap: 6px; padding: 6px 8px; font-size: 9.5px; color: var(--muted); }
+  .candrow { display: flex; gap: 6px; padding: 5px 9px; align-items: baseline; position: relative; }
+  .candrow .tc { font-size: 9px; color: var(--meta); font-family: ui-monospace, Menlo, monospace; white-space: nowrap; }
+  .candrow .q { font-size: 10px; color: var(--fg); line-height: 1.35; }
+  .candrow + .candrow { border-top: 1px solid oklch(0 0 0 / 0.05); }
+  .candrow.picked { background: oklch(0.42 0.1 250 / 0.07); }
+  .candrow.picked::before {
+    content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px;
+    background: var(--blue); border-radius: 1px;
+  }
+  .candrow .pick-mark { font-size: 8.5px; color: var(--blue); margin-left: auto; white-space: nowrap; }
+  .wipe { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 30%, oklch(1 0 0 / 0.45) 50%, transparent 70%); }
+  .queue-tag { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--meta); }
+  .numbadge {
+    position: absolute; top: 6px; left: 6px; z-index: 2;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: oklch(0.145 0 0 / 0.75); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px;
+  }
+  .mc svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .mc svg.edges path { fill: none; stroke: oklch(0.556 0 0 / 0.4); stroke-width: 1.2; }
+  .mc svg.edges path.born-edge { stroke: oklch(0.42 0.1 250 / 0.6); stroke-dasharray: 4 3; }
+
+  .ck {
+    width: 340px; flex-shrink: 0; display: flex; flex-direction: column;
+    background: var(--card); border-left: 1px solid var(--hairline);
+  }
+  .ck .hd { display: flex; align-items: center; gap: 6px; padding: 10px 14px; font-size: 11.5px; color: var(--muted); border-bottom: 1px solid oklch(0 0 0 / 0.06); }
+  .ck .bd { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 12px; line-height: 1.65; }
+  .ck .usr { align-self: flex-end; background: var(--inset); border-radius: 10px; padding: 7px 11px; font-size: 12px; max-width: 88%; }
+  .ck .prose { color: var(--fg); }
+  .ck .prose.dim { color: var(--muted); }
+  .ck .act { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); }
+  .ck .act .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--fg); flex-shrink: 0; }
+  .ck .act .glyph { width: 11px; height: 11px; flex-shrink: 0; }
+  .ck .act .dur { color: var(--meta); font-size: 10px; }
+  .ck .act .fly { width: 10px; height: 10px; color: var(--meta); margin-left: auto; flex-shrink: 0; }
+  .ck .qa { background: var(--inset); border-radius: 10px; padding: 9px 11px; display: flex; flex-direction: column; gap: 6px; }
+  .ck .qa .r { display: flex; gap: 8px; font-size: 11.5px; }
+  .ck .qa .r .k { color: var(--meta); font-size: 10px; padding-top: 1px; }
+  .ck .run { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); }
+  .ck .run .chev { margin-left: auto; width: 10px; height: 10px; color: var(--meta); }
+  .ck .pillrow { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ck .qpill { font-size: 11px; color: var(--fg); background: var(--card); box-shadow: 0 0 0 1px var(--hairline); border-radius: 8px; padding: 6px 10px; }
+  .ck .qpill.start { background: var(--fg); color: var(--page); box-shadow: none; }
+  .ck .ft { padding: 10px 14px; border-top: 1px solid oklch(0 0 0 / 0.06); }
+  .ck .disclaimer { text-align: center; font-size: 9.5px; color: var(--meta); margin-bottom: 8px; }
+  .ck .input { background: var(--card); box-shadow: 0 0 0 1px var(--hairline); border-radius: 12px; padding: 10px 12px; font-size: 11px; color: var(--meta); }
+
+  .atchip {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--inset); border-radius: 5px; padding: 1px 6px;
+    font-size: 10px; color: var(--fg);
+  }
+  .ref {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 15px; padding: 0 5px; border-radius: 5px;
+    background: var(--inset); color: var(--fg);
+    font-size: 9.5px; font-style: normal; line-height: 1;
+    vertical-align: -2px; cursor: pointer;
+  }
+
+  .notes { margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 10.5px; padding: 4px 9px; border-radius: 6px; line-height: 1.4; }
+  .chip.have { background: oklch(0.5 0.1 250 / 0.10); color: var(--blue); }
+  .chip.new { background: oklch(0.55 0.14 85 / 0.12); color: var(--amber); }
+  .chip.flip { background: oklch(0.55 0.18 25 / 0.10); color: var(--destructive); }
+  .chip.pick { background: oklch(0.145 0 0 / 0.07); color: var(--muted); }
+  .step-comment { margin-top: 10px; font-size: 12px; color: var(--muted); line-height: 1.7; max-width: 920px; }
+  .step-comment b { color: var(--fg); font-weight: 500; }
+
+  footer.pick {
+    margin-top: 64px; padding: 20px 24px;
+    background: var(--card); border-radius: 12px;
+    box-shadow: 0 0 0 1px var(--hairline); max-width: 920px;
+  }
+  footer.pick h3 { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+  footer.pick li { font-size: 12.5px; color: var(--muted); line-height: 1.9; margin-left: 18px; }
+  footer.pick b { color: var(--fg); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="doc">
+    <h1>Graph 空间模型合同 v2</h1>
+    <p class="lede">
+      Entity / Birth / Hierarchy / Identity / Layout 五条合同，每条带代码取证（2026-09-25）。核心翻案：<b>Graph ≠ Plan 的可视化结果；Graph = Agent 与用户共同工作的、持续存在的内容世界</b>——图<b>只在新的持久 Product Entity 出现时生长</b>（Agent 的思考、读取、改写永不产节点），节点只长不消。四个事实从此分离：<b>graph entity exists</b>（上传即始）、<b>canvas visible</b>（首个非 source 节点出生 = Agent 开始建立工作世界）、<b>plan ready</b>（canonical lifecycle projection，不动）、<b>confirmation</b>（授权拍，不是 draft 出生拍——代码早已如此）。下半 = T0–T6 连续生长时间轴，每帧画全量。
+    </p>
+  </header>
+
+  <!-- ================= C1 Birth ================= -->
+  <section class="step" style="margin-top: 40px;">
+    <div class="step-head">
+      <span class="num">C1</span>
+      <h2>Entity 与 Birth — 什么配成为节点，画布何时出生</h2>
+    </div>
+
+    <div class="clause">
+      <h3>Product Entity 准入律<span class="tag">生长原则</span></h3>
+      <p>Graph 新增节点 ⟺ 产品世界里出现了一个<b>新的持久 Product Entity</b>。合法出生只有五类：</p>
+      <ul>
+        <li><b>Source</b>：用户素材落库（<code>stamp_asset_node</code> graph_fill.py:235，上传即落图，born done）</li>
+        <li><b>Evidence</b>：素材的持久理解产物（转写稿 <code>stamp_transcript_node</code> graph_fill.py:320——<b>上传即出生 queued</b>，ASR 落地翻 done；调研简报同族）</li>
+        <li><b>Judgment</b>：探索产物（候选集——一组证据的合集对象，R1 合集律）</li>
+        <li><b>Plan</b>：计划结构与 draft 作品（<code>stamp_draft_graph</code>，PLAN_READY 时刻出生，service.py:1188/1675）</li>
+        <li><b>Work</b>：run 填充的作品实体（draft 原地转 running → ready，不新增节点）</li>
+      </ul>
+      <p><b>永不产节点</b>：Agent 的思考、搜索、读取、改写措辞、相机移动、引用指认。否则 Graph 退化为操作日志。</p>
+    </div>
+
+    <div class="clause">
+      <h3>四事实分离表<span class="tag">翻案核心</span></h3>
+      <table class="spec" style="margin-top: 4px;">
+        <tr><th style="width: 170px;">事实</th><th>绑定什么</th><th>现状代码</th></tr>
+        <tr><td>graph entity exists</td><td>上传事务：素材节点 + text-yielding 素材的转写卡（queued）同事务出生</td><td>已在：<code>stamp_asset_node</code> / <code>stamp_transcript_node</code></td></tr>
+        <tr><td><b>canvas visible</b></td><td><b>新谓词：graph 中存在非 source 节点</b>（第一张转写 processing 卡 = Agent 开始建立工作世界的那一刻；探索/计划/作品节点同律）。纯图片素材永不出生转写卡 → 画布沉睡到有工作世界为止，语义诚实</td><td>翻案点：替换 <code>graphLive = hasRuns || isPlanReady(lifecycle)</code>（projects.$id.index.tsx:254）——一个谓词今天同时门控画布可见性 + 三形态机翻转</td></tr>
+        <tr><td>plan ready</td><td>canonical lifecycle projection（PLAN_READY 判定）</td><td>不动：<code>planReadyVerdict(stamp)</code></td></tr>
+        <tr><td>confirmation</td><td>dock 确认 pill → 授权 → paid run</td><td>不动：ADR-070 pill 唯一座位</td></tr>
+      </table>
+      <p style="margin-top: 10px;">对照旧绑定：<b>canvas visible 曾经 = plan ready || hasRuns</b>——一个 presentation 决策被误冻结成了图的生命周期规则。翻案只动这一个谓词与三形态机的翻转条件（ADR-056/057 K5 翻案注落档），图、lifecycle、确认教义都不动。</p>
+    </div>
+  </section>
+
+  <!-- ================= C2 Evidence 锚链 ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">C2</span>
+      <h2>Evidence 锚链 — 金句候选的语义定义</h2>
+      <span class="beat">先定义语义，再谈 UI</span>
+    </div>
+
+    <div class="clause">
+      <h3>Candidate = 与原始媒体时间范围绑定的证据对象<span class="tag">语义定义</span></h3>
+      <p>现行代码已满足（exploration_store.py:99 <code>CandidateMember</code>）：</p>
+      <ul>
+        <li><b>source asset</b> — 候选集合挂在 <code>asset_id</code> 上</li>
+        <li><b>source range</b> — <code>{start, end}</code> 秒数区间，<b>这是候选真正的根</b></li>
+        <li><b>excerpt</b> — 区间内<b>逐字验证过</b>的原话（门拒绝"那里没说过的话"：<code>words_in_range</code> / get_segment 对 words 核验）；excerpt 是展示文字，从不进渲染</li>
+        <li><b>speaker</b> — best-effort（audio 素材无 speaker_map）</li>
+      </ul>
+      <p>锚链全图：<code>Asset.meta["words"]</code>（词级 {word, start, end}，<b>时间唯一权威</b>，ASR 出生即定格）→ cue 行分组（<code>[start-end]</code> 锚）→ candidate {start, end, excerpt} → select 指针 → run span → clip-spec <code>start_seconds/end_seconds</code>（<code>locate_span</code> 把粗时间戳吸附到词边界）。</p>
+    </div>
+
+    <div class="clause">
+      <h3>五问五答<span class="tag">代码取证</span></h3>
+      <table class="spec" style="margin-top: 4px;">
+        <tr><th style="width: 220px;">问</th><th>答（代码事实）</th></tr>
+        <tr><td>candidate 必须是连续时间范围吗？</td><td>是。<code>{start, end}</code> 单一闭区间，无多段并集。跨段拼接若未来需要，是新实体类型（复合候选），不是放宽现有字段</td></tr>
+        <tr><td>能跨 transcript segments 吗？</td><td>cue 行只是展示分组（标点/停顿/词数触发断行），candidate 区间自由跨越 cue 边界——范围对 words 核验，不对 cue 核验</td></tr>
+        <tr><td>时间码唯一权威是谁？</td><td><code>Asset.meta["words"]</code>（ASR 词级时间戳）。excerpt、cue 锚、clip-spec 秒数全部由它派生或向它吸附（<code>locate_span</code>）</td></tr>
+        <tr><td>用户改 quote/transcript 文字后，range 保持吗？</td><td><b>保持，零漂移</b>——没有任何代码从文字反算 range；range 是秒数，活在 words 轴上。⚠️ 唯一隐患：excerpt 逐字核验读的是<b>原始 words</b>，用户改过文字后，未来新候选的 excerpt 以 ASR 原话为准，可能与用户编辑版不一致（合同条款：编辑 = 表达层，核验层 = 原始语音事实）</td></tr>
+        <tr><td>生成 clip 消费 excerpt 还是 source range？</td><td><b>range</b>。cut.py 消费 span 秒数 → clip-spec <code>start_seconds/end_seconds</code>；excerpt 只是候选的展示面与核验副产品</td></tr>
+      </table>
+    </div>
+
+    <div class="clause">
+      <h3>Transcript 编辑 = 表达层编辑<span class="tag">新条款</span></h3>
+      <ul>
+        <li>用户可直接改画布上的转写/金句文字，也可叫 Agent 改——<b>改的是表达层</b>（<code>Asset.transcript</code> + 节点 <code>spec["text"]</code> 镜像），<b>永不触碰 <code>meta["words"]</code> 与任何 range</b></li>
+        <li>时间码、候选区间、切片入出点<b>不因文字编辑移动一秒</b></li>
+        <li>编辑痕迹可视化（edited 标记），核验层始终读原始语音事实——「你改的是说法，不是证据」</li>
+        <li>现状缺口：transcript 文字<b>今天没有编辑写口</b>（无 API 无 UI）——这是新能力，不是已有行为的澄清</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= C3 Identity ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">C3</span>
+      <h2>Identity — 选择是决策状态，不是节点</h2>
+    </div>
+    <div class="clause">
+      <h3>Selection 降级为状态<span class="tag">删除「已选」卡</span></h3>
+      <p>代码事实：<code>SelectSpec</code>（exploration_store.py）<b>已经是纯指针</b>——<code>{candidate_set_id, member_index, verdict, reason}</code>，从不拷贝源。「用户做了选择」的产品语义 = 候选集内的成员状态翻转，<b>不配拥有独立节点</b>：</p>
+      <ul>
+        <li>读面：pick 态收进候选集卡行内（左缘蓝条 + ✓ 标记），「已选 · 5」卡删除</li>
+        <li>数据面：<b>零迁移</b>——SelectSpec 指针继续作为 Plan 的结构载体（plan 的 range/source 由它送达），只是不再渲染成卡</li>
+        <li>「第二段换成讲 roadmap 的那段」= <code>revise_selects</code> 重指同一集合的另一成员（已有工具），画布上的表现 = 行内 pick 态搬家</li>
+      </ul>
+      <p>sibling ≠ version 旧律保留：版本住作品卡内（pager），sibling 扇出归组。扇出规模移交 C4 的容量律统一表达。</p>
+    </div>
+  </section>
+
+  <!-- ================= C4 Layout ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">C4</span>
+      <h2>Hierarchy 与 Layout — 秩呈现 + 组内局部布局</h2>
+    </div>
+    <div class="clause">
+      <h3>病根诊断<span class="tag">取证</span></h3>
+      <p><code>x = depth × _PITCH</code>（graph_store.py:382）<b>不是病根</b>——它是拓扑生成代的忠实渲染（子节点恒在全部父节点右侧 ≥64px，列缘永不参差）。同 depth sibling <b>今天已经垂直堆叠</b>（<code>y = column tail + _GAP_CROSS</code>，统一摆位律注释原文 "siblings stack in place"）。「数据库感」的两个真实来源：① <b>秩盲</b>——六类语义身份同一视觉寄存器；② <b>无界列</b>——列高只长不收，6 条 9:16 竖片 ≈ 4200px 一柱擎天，相机 fit 时全缩成邮票。</p>
+    </div>
+    <div class="clause">
+      <h3>组内局部布局律<span class="tag">新条款</span></h3>
+      <ul>
+        <li>同一 <b>sibling group</b>（同 depth + 同语义父）默认<b>从上往下</b>排——现行法律，不动</li>
+        <li>达到<b>局部容量 C</b>（视觉参数，非产品规则；初值按帧高估算，竖片列 C≈4）后，溢出成员向<b>组内第二列</b>扩：x 在本 depth 带内右移一档（<code>+ frame_w + gap</code>），<b>depth 不变、拓扑不变、不升成全局新列</b></li>
+        <li>后续 depth 带的列 x 按前面带的实际占用右缘让位（depth-pitch 从「固定 464」改为「前带最大右缘 + gap」——带内宽度可变，带间纪律不变）</li>
+        <li>保序律不变：已落帧永不移动；容量溢出只影响出生时刻的摆位</li>
+      </ul>
+    </div>
+    <table class="spec">
+      <tr><th style="width: 130px;">秩</th><th>节点</th><th>视觉寄存器</th></tr>
+      <tr><td>Source 源</td><td>素材卡</td><td>最实：媒体撑满；秩标 = 无</td></tr>
+      <tr><td>Evidence 证据</td><td>转写稿 / 调研简报</td><td>文本卡窄一档；可直接编辑（C2 表达层条款）</td></tr>
+      <tr><td>Judgment 判断</td><td>候选集</td><td>集合形态一卡（R1 合集律）；行 = timecode + excerpt + pick 态</td></tr>
+      <tr><td>Plan 计划</td><td>draft 作品（虚线 + 估价）</td><td>PLAN_READY 出生；确认拍在 dock pill，不占卡</td></tr>
+      <tr><td>Work 作品</td><td>短片 / 帖子 / 文章 / 轮播图 / 金句卡</td><td>最高：媒体撑满 + 序数角标 + 组内扇出</td></tr>
+      <tr><td>Revision 版本</td><td>作品修订版</td><td>不占列——住作品卡内 pager；「刚更新」徽衰减</td></tr>
+    </table>
+  </section>
+
+  <!-- ================= C5 语气 ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">C5</span>
+      <h2>交互语气 — Reference 是系统语义，不是台词</h2>
+    </div>
+    <div class="clause">
+      <ul>
+        <li>用户指认对象的手段 = <b>@mention chip / 画布直点 / 自然语言</b>（"第二段开头短一点"——系统内部解出目标即可）</li>
+        <li><b>Agent 回复永不机械报号</b>：「好，把开头那句铺垫去掉了」✓；「好的，我将修改第 2 条」✗。序号为系统语义存在（锚定/聚焦/hover 高亮），不为台词存在</li>
+        <li>Agent 的 canvas 引导句只在需要指路时自然点名（「排在画布上了」），不逐条播报</li>
+        <li>Confirmation = <b>授权拍</b>：图在 PLAN_READY 已长满 draft，确认只翻转授权状态，不出生任何节点</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= T0 ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">T0</span>
+      <h2>只有 Source — 画布沉睡</h2>
+      <span class="beat">上传瞬间；graph entity 已存在，canvas 尚未出生</span>
+    </div>
+    <div class="frame">
+      <div class="mc sleep">
+        <span class="sleepnote">画布沉睡——只有 source，还没有工作世界（桌面保持全屏 chat 形态）</span>
+      </div>
+      <div class="ck">
+        <div class="hd">对话</div>
+        <div class="bd">
+          <div class="usr">帮我从这段访谈里剪 5 条 15-30 秒的金句切片 <span class="atchip">▤ xy_1.mp4</span></div>
+          <div class="prose">好，我先通读一遍访谈，看看哪些论点站得住、能单独成片。</div>
+        </div>
+        <div class="ft">
+          <div class="disclaimer">Repurposer 是 AI，可能出错。重要信息请核对。</div>
+          <div class="input">描述你的修改想法…</div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <span class="chip have">素材节点上传即落图（graph_fill.py:235）——graph entity 已存在</span>
+      <span class="chip new">canvas visible 谓词在此刻 = false（尚无非 source 节点）</span>
+    </div>
+  </section>
+
+  <!-- ================= T1 ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">T1</span>
+      <h2>Canvas 出生 = Source + Transcript（processing）</h2>
+      <span class="beat">转写 processing 卡出生 = Agent 开始建立工作世界——canvas 睁开</span>
+    </div>
+    <div class="frame">
+      <div class="mc">
+        <span class="zoompill">fit · 2 nodes</span>
+        <svg class="edges" viewBox="0 0 600 380" preserveAspectRatio="none">
+          <path class="born-edge" d="M 210 150 C 250 150, 250 160, 288 160" />
+        </svg>
+        <div class="nd" style="left: 48px; top: 90px; width: 160px;">
+          <div class="cap">▤ 视频</div>
+          <div class="bd">
+            <div class="mface" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #2a3a5a, #4a6a9a);"></div>
+            <div class="facts">xy_1.mp4 · 340s · 960×544</div>
+          </div>
+        </div>
+        <div class="nd" style="left: 290px; top: 80px; width: 150px;">
+          <div class="cap">≣ 转写稿</div>
+          <div class="bd born queued" style="height: 120px;">
+            <span class="born-tag">born · 处理中</span>
+            <div class="queue-tag" style="position: static; display: flex; height: 100%; align-items: center;">正在转写…</div>
+          </div>
+        </div>
+      </div>
+      <div class="ck">
+        <div class="hd">对话</div>
+        <div class="bd">
+          <div class="act"><span class="dot"></span>正在阅读 xy_1.mp4…</div>
+          <div class="prose dim" style="font-size: 11px;">读完我会把能单独成片的段落找出来，排在画布上。</div>
+        </div>
+        <div class="ft">
+          <div class="disclaimer">Repurposer 是 AI，可能出错。重要信息请核对。</div>
+          <div class="input">描述你的修改想法…</div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <span class="chip have">转写卡上传即出生 queued → done（stamp_transcript_node，ADR-087 §2 R2）——数据层已是这样</span>
+      <span class="chip flip">翻案点：这张 queued 卡出生的那一刻 canvas 就该睁开（今天被 graphLive 藏到计划就绪）</span>
+      <span class="chip pick">birth 绑的是「非 source 节点存在」这个事实，不是「ASR 完成」这个时刻——Source → Transcript processing → Transcript ready 全链 canvas 都在</span>
+    </div>
+    <div class="step-comment">
+      桌面三形态机的 full→panel 翻转同拍发生（翻转条件随谓词一起改）。移动端无画布，维持 run-driven——本合同只改桌面。
+    </div>
+  </section>
+
+  <!-- ================= T2 ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">T2</span>
+      <h2>转写就绪 → Candidate Set 出生</h2>
+      <span class="beat">证据层读完，判断层落地：一卡合集，行 = timecode + excerpt</span>
+    </div>
+    <div class="frame">
+      <div class="mc">
+        <span class="zoompill">fit · 3 nodes</span>
+        <svg class="edges" viewBox="0 0 600 380" preserveAspectRatio="none">
+          <path d="M 150 190 C 190 190, 190 190, 226 190" />
+          <path class="born-edge" d="M 360 190 C 400 190, 400 190, 436 190" />
+        </svg>
+        <div class="nd" style="left: 30px; top: 150px; width: 118px;">
+          <div class="cap">▤ 视频</div>
+          <div class="bd">
+            <div class="mface" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #2a3a5a, #4a6a9a);"></div>
+          </div>
+        </div>
+        <div class="nd" style="left: 230px; top: 140px; width: 126px;">
+          <div class="cap">≣ 转写稿 <span style="color: var(--meta); font-size: 9px;">· 可编辑</span></div>
+          <div class="bd">
+            <div class="txt">
+              <div class="ln"></div><div class="ln short"></div>
+              <div class="ln"></div><div class="ln short"></div>
+            </div>
+          </div>
+        </div>
+        <div class="nd" style="left: 440px; top: 70px; width: 150px;">
+          <div class="cap">金句候选 · 12</div>
+          <div class="bd born">
+            <span class="born-tag">born · 探索落地</span>
+            <div class="candrow"><span class="tc">00:18</span><span class="q">AI 不只是工具，而是新的生产方式…</span></div>
+            <div class="candrow"><span class="tc">01:03</span><span class="q">真正的问题不是技术，而是组织…</span></div>
+            <div class="candrow"><span class="tc">02:11</span><span class="q">企业接下来最大的变化…</span></div>
+            <div class="candrow" style="color: var(--meta);"><span class="tc">…</span><span class="q">展开全部 12 条</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ck">
+        <div class="hd">对话</div>
+        <div class="bd">
+          <div class="act">
+            <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            已读完 xy_1.mp4 <span class="dur">· 38s</span>
+          </div>
+          <div class="prose">读完了。能单独成片的段落都找出来了，排在画布上——每条带时间码，点开能核对原话。</div>
+          <div class="prose dim" style="font-size: 11px;">画布上的转写稿可以直接改文字，也可以告诉我怎么改——改的只是说法，时间码不会动。</div>
+          <div class="qa">
+            <div class="r"><span class="k">问</span>这些段里挑哪几条做成片？</div>
+          </div>
+        </div>
+        <div class="ft">
+          <div class="disclaimer">Repurposer 是 AI，可能出错。重要信息请核对。</div>
+          <div class="input">描述你的修改想法…</div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <span class="chip have">候选集合卡已在（R1 合集律；CandidateMember = {start, end, excerpt, speaker}，excerpt 逐字核验）</span>
+      <span class="chip flip">翻案配套：候选集入主链视野（今天它在 x=-464 左泳道，主链 fit 时常常出画）</span>
+      <span class="chip new">「可编辑」= C2 表达层条款的读面（新写口，今天不存在）</span>
+    </div>
+  </section>
+
+  <!-- ================= T3 ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">T3</span>
+      <h2>会话决策 → PLAN_READY → Plan / draft works 出生</h2>
+      <span class="beat">选择 = 候选集行内状态翻转（无「已选」卡）；确认 pill 随 draft 图同拍出现</span>
+    </div>
+    <div class="frame">
+      <div class="mc">
+        <span class="zoompill">fitNow · 整链重帧</span>
+        <svg class="edges" viewBox="0 0 600 380" preserveAspectRatio="none">
+          <path d="M 106 190 C 134 190, 134 190, 162 190" />
+          <path d="M 262 190 C 290 190, 290 190, 318 190" />
+          <path class="born-edge" d="M 420 190 C 448 190, 448 190, 476 190" />
+        </svg>
+        <div class="nd" style="left: 14px; top: 155px; width: 90px;">
+          <div class="cap">▤ 视频</div>
+          <div class="bd"><div class="mface" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #2a3a5a, #4a6a9a);"></div></div>
+        </div>
+        <div class="nd" style="left: 166px; top: 150px; width: 92px;">
+          <div class="cap">≣ 转写稿</div>
+          <div class="bd"><div class="txt"><div class="ln"></div><div class="ln short"></div><div class="ln"></div><div class="ln short"></div></div></div>
+        </div>
+        <div class="nd" style="left: 322px; top: 80px; width: 96px;">
+          <div class="cap">金句候选 · 12</div>
+          <div class="bd">
+            <div class="candrow picked"><span class="tc">00:18</span><span class="q">AI 不只是工具…</span><span class="pick-mark">✓</span></div>
+            <div class="candrow picked"><span class="tc">02:44</span><span class="q">技术与价值同步推进…</span><span class="pick-mark">✓</span></div>
+            <div class="candrow picked"><span class="tc">02:11</span><span class="q">企业最大变化…</span><span class="pick-mark">✓</span></div>
+            <div class="candrow" style="color: var(--meta);"><span class="tc">…</span><span class="q">5 条已选</span></div>
+          </div>
+        </div>
+        <div class="nd" style="left: 480px; top: 30px; width: 76px;">
+          <div class="cap">短片 · 1</div>
+          <div class="bd dashed born" style="height: 128px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px;">
+            <span class="born-tag">born · draft</span>
+            <span style="font-size: 9px; color: var(--meta);">确认后生成</span>
+          </div>
+        </div>
+        <div class="nd" style="left: 480px; top: 190px; width: 76px;">
+          <div class="cap">短片 · 2</div>
+          <div class="bd dashed" style="height: 128px; border-radius: 10px;"></div>
+        </div>
+        <div class="nd" style="left: 564px; top: 110px; width: 30px; opacity: 0.5;">
+          <div class="bd dashed" style="height: 60px; border-radius: 10px; display:flex; align-items:center; justify-content:center; font-size: 9px; color: var(--meta);">×5</div>
+        </div>
+      </div>
+      <div class="ck">
+        <div class="hd">对话</div>
+        <div class="bd">
+          <div class="usr">第二段换成讲 roadmap 的那段，剩下按你的判断挑</div>
+          <div class="prose">换好了。方案排在画布上了——5 条短片，每条点开能看时间码、字幕和画幅，改哪条一句话的事。</div>
+          <div class="pillrow">
+            <span class="qpill start">按这版开始</span>
+            <span class="qpill">改一改</span>
+          </div>
+        </div>
+        <div class="ft">
+          <div class="disclaimer">Repurposer 是 AI，可能出错。重要信息请核对。</div>
+          <div class="input">描述你的修改想法…</div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <span class="chip flip">「已选 · 5」卡删除——pick 态收进候选集行内（C3）；SelectSpec 指针保留为数据载体，零迁移</span>
+      <span class="chip have">draft 图 PLAN_READY 出生（stamp_draft_graph @ plan dock，service.py:1188）——代码早已如此</span>
+      <span class="chip have">确认 pill 唯一座位 = dock（ADR-070）；fitNow 整链重帧已落</span>
+    </div>
+    <div class="step-comment">
+      本帧两处合同落地：① 用户说「第二段换成…」，Agent 答「换好了」——<b>不报号</b>（C5）；② 没有「已选」卡——pick 态活在候选集行内（02:44 那条是新换入的），draft 作品直接从候选集右侧出生。
+    </div>
+  </section>
+
+  <!-- ================= T4 ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">T4</span>
+      <h2>Confirmation — 授权拍，图不生长</h2>
+      <span class="beat">唯一变化：draft 原地翻 queued；零新节点，相机不动</span>
+    </div>
+    <div class="frame">
+      <div class="mc">
+        <span class="zoompill">相机不动</span>
+        <svg class="edges" viewBox="0 0 600 380" preserveAspectRatio="none">
+          <path d="M 106 190 C 134 190, 134 190, 162 190" />
+          <path d="M 262 190 C 290 190, 290 190, 318 190" />
+          <path d="M 420 190 C 448 190, 448 190, 476 190" />
+        </svg>
+        <div class="nd dim" style="left: 14px; top: 155px; width: 90px;">
+          <div class="cap">▤ 视频</div>
+          <div class="bd"><div class="mface" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #2a3a5a, #4a6a9a);"></div></div>
+        </div>
+        <div class="nd dim" style="left: 166px; top: 150px; width: 92px;">
+          <div class="cap">≣ 转写稿</div>
+          <div class="bd"><div class="txt"><div class="ln"></div><div class="ln short"></div><div class="ln"></div><div class="ln short"></div></div></div>
+        </div>
+        <div class="nd dim" style="left: 322px; top: 80px; width: 96px;">
+          <div class="cap">金句候选 · 12</div>
+          <div class="bd">
+            <div class="candrow picked"><span class="tc">00:18</span><span class="q">AI 不只是工具…</span><span class="pick-mark">✓</span></div>
+            <div class="candrow" style="color: var(--meta);"><span class="tc">…</span><span class="q">5 条已选</span></div>
+          </div>
+        </div>
+        <div class="nd" style="left: 480px; top: 30px; width: 76px;">
+          <div class="cap">短片 · 1</div>
+          <div class="bd queued born" style="height: 128px; border-radius: 10px;">
+            <span class="born-tag">已授权</span>
+            <div class="queue-tag" style="position: static; display: flex; height: 100%; align-items: center;">排队中</div>
+          </div>
+        </div>
+        <div class="nd" style="left: 480px; top: 190px; width: 76px;">
+          <div class="cap">短片 · 2</div>
+          <div class="bd queued" style="height: 128px; border-radius: 10px;">
+            <div class="queue-tag" style="position: static; display: flex; height: 100%; align-items: center;">排队中</div>
+          </div>
+        </div>
+        <div class="nd" style="left: 564px; top: 110px; width: 30px; opacity: 0.5;">
+          <div class="bd queued" style="height: 60px; border-radius: 10px; display:flex; align-items:center; justify-content:center; font-size: 9px; color: var(--meta);">×5</div>
+        </div>
+      </div>
+      <div class="ck">
+        <div class="hd">对话</div>
+        <div class="bd">
+          <div class="prose">好，开始了——你可以继续和我聊，也可以离开页面，它会在后台完成。</div>
+          <div class="run">
+            <span class="dot" style="width:5px;height:5px;border-radius:50%;background:var(--fg);"></span>
+            正在渲染短片…
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
+          </div>
+        </div>
+        <div class="ft">
+          <div class="disclaimer">Repurposer 是 AI，可能出错。重要信息请核对。</div>
+          <div class="input">描述你的修改想法…</div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <span class="chip have">确认 = 授权 → paid run（dock pill，ADR-070）；draft → queued 原地翻转（run fill 不新增节点）</span>
+      <span class="chip pick">上一版「确认 → draft 出生」措辞已纠正：draft 在 T3 的 PLAN_READY 就出生了；T4 图零生长</span>
+    </div>
+  </section>
+
+  <!-- ================= T5 ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">T5</span>
+      <h2>Works running → ready</h2>
+      <span class="beat">作品时刻：相机到作品列；全图都在，过去退后不消失</span>
+    </div>
+    <div class="frame">
+      <div class="mc">
+        <span class="zoompill">pan/fit · 作品列</span>
+        <svg class="edges" viewBox="0 0 600 380" preserveAspectRatio="none">
+          <path d="M 76 190 C 100 190, 100 190, 124 190" />
+          <path d="M 210 190 C 234 190, 234 190, 258 190" />
+          <path d="M 336 190 C 360 190, 360 190, 384 190" />
+        </svg>
+        <div class="nd dim" style="left: 10px; top: 160px; width: 64px;">
+          <div class="cap">▤ 视频</div>
+          <div class="bd"><div class="mface" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #2a3a5a, #4a6a9a);"></div></div>
+        </div>
+        <div class="nd dim" style="left: 128px; top: 156px; width: 78px;">
+          <div class="cap">≣ 转写稿</div>
+          <div class="bd"><div class="txt"><div class="ln"></div><div class="ln short"></div><div class="ln edited"></div><div class="ln short"></div></div></div>
+        </div>
+        <div class="nd dim" style="left: 262px; top: 130px; width: 70px;">
+          <div class="cap">候选 · 12</div>
+          <div class="bd">
+            <div class="candrow picked" style="padding: 4px 8px;"><span class="tc">…</span><span class="q">5 条已选</span></div>
+          </div>
+        </div>
+        <!-- 组内局部布局演示：容量 4 → 第 5 条进组内第二列（同 depth 带内右移，不升新列） -->
+        <div class="nd" style="left: 388px; top: 14px; width: 82px;">
+          <div class="cap">短片 · 1</div>
+          <div class="bd"><span class="numbadge">1</span><div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #1b2a4a, #28457a);"></div></div>
+        </div>
+        <div class="nd" style="left: 388px; top: 190px; width: 82px;">
+          <div class="cap">短片 · 2</div>
+          <div class="bd"><span class="numbadge">2</span><div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #2a1b4a, #5a3a8a);"><div class="wipe"></div></div></div>
+        </div>
+        <div class="nd" style="left: 486px; top: 14px; width: 82px;">
+          <div class="cap">短片 · 3</div>
+          <div class="bd"><span class="numbadge">3</span><div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #1b4a2e, #2e7a52);"><div class="wipe"></div></div></div>
+        </div>
+        <div class="nd" style="left: 486px; top: 190px; width: 82px;">
+          <div class="cap">短片 · 4</div>
+          <div class="bd"><span class="numbadge">4</span><div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #4a2e1b, #8a5a2e);"><div class="wipe"></div></div></div>
+        </div>
+        <div class="nd" style="left: 584px; top: 100px; width: 30px; opacity: 0.55;">
+          <div class="bd queued" style="height: 50px; border-radius: 10px; display:flex; align-items:center; justify-content:center; font-size: 9px; color: var(--meta);">5</div>
+        </div>
+      </div>
+      <div class="ck">
+        <div class="hd">对话</div>
+        <div class="bd">
+          <div class="run">
+            <span class="dot" style="width:5px;height:5px;border-radius:50%;background:var(--fg);"></span>
+            正在渲染短片… 2m 10s
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
+          </div>
+          <div class="prose dim" style="font-size: 11px;">第一条好了，后面的在渲染。</div>
+        </div>
+        <div class="ft">
+          <div class="disclaimer">Repurposer 是 AI，可能出错。重要信息请核对。</div>
+          <div class="input">描述你的修改想法…</div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <span class="chip new">组内局部布局（C4）：作品从上往下排，容量溢出 → 组内第二列（同 depth 带，不升新列）</span>
+      <span class="chip have">卡面状态周期（擦除/排队/自证）+ RunTaskList 一座两行——已在</span>
+      <span class="chip pick">转写稿上的 edited 行 = 等待期间用户顺手改过一句文字——range 零漂移（C2）</span>
+    </div>
+  </section>
+
+  <!-- ================= T6 ================= -->
+  <section class="step">
+    <div class="step-head">
+      <span class="num">T6</span>
+      <h2>@mention 局部修订 — 全图仍在</h2>
+      <span class="beat">主作品聚焦 + 邻近退后；世界的其余部分原地不动</span>
+    </div>
+    <div class="frame">
+      <div class="mc">
+        <span class="zoompill">pan → 短片 · 2</span>
+        <svg class="edges" viewBox="0 0 600 380" preserveAspectRatio="none">
+          <path d="M 76 190 C 100 190, 100 190, 124 190" />
+          <path d="M 210 190 C 234 190, 234 190, 258 190" />
+          <path d="M 336 190 C 360 190, 360 190, 384 190" />
+        </svg>
+        <div class="nd dim" style="left: 10px; top: 160px; width: 64px;">
+          <div class="cap">▤ 视频</div>
+          <div class="bd"><div class="mface" style="aspect-ratio: 16/9; background: linear-gradient(120deg, #2a3a5a, #4a6a9a);"></div></div>
+        </div>
+        <div class="nd dim" style="left: 128px; top: 156px; width: 78px;">
+          <div class="cap">≣ 转写稿</div>
+          <div class="bd"><div class="txt"><div class="ln"></div><div class="ln short"></div><div class="ln edited"></div><div class="ln short"></div></div></div>
+        </div>
+        <div class="nd dim" style="left: 262px; top: 130px; width: 70px;">
+          <div class="cap">候选 · 12</div>
+          <div class="bd">
+            <div class="candrow picked" style="padding: 4px 8px;"><span class="tc">…</span><span class="q">5 条已选</span></div>
+          </div>
+        </div>
+        <div class="nd dim" style="left: 388px; top: 14px; width: 64px;">
+          <div class="cap">短片 · 1</div>
+          <div class="bd"><span class="numbadge">1</span><div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #1b2a4a, #28457a);"></div></div>
+        </div>
+        <div class="nd" style="left: 464px; top: 30px; width: 118px;">
+          <div class="cap">短片 · 2</div>
+          <div class="bd" style="box-shadow: 0 0 0 1.5px var(--blue);">
+            <span class="born-tag">刚更新 · 44s</span>
+            <span class="numbadge" style="background: var(--blue);">2</span>
+            <div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #2a1b4a, #5a3a8a);"><div class="wipe"></div></div>
+          </div>
+        </div>
+        <div class="nd dim" style="left: 388px; top: 220px; width: 64px;">
+          <div class="cap">短片 · 3</div>
+          <div class="bd"><span class="numbadge">3</span><div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #1b4a2e, #2e7a52);"></div></div>
+        </div>
+        <div class="nd dim" style="left: 596px; top: 60px; width: 56px;">
+          <div class="cap">短片 · 4</div>
+          <div class="bd"><span class="numbadge">4</span><div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #4a2e1b, #5a3a8a);"></div></div>
+        </div>
+        <div class="nd dim" style="left: 596px; top: 190px; width: 56px;">
+          <div class="cap">短片 · 5</div>
+          <div class="bd"><span class="numbadge">5</span><div class="mface" style="aspect-ratio: 9/16; background: linear-gradient(180deg, #3a3a3a, #666);"></div></div>
+        </div>
+      </div>
+      <div class="ck">
+        <div class="hd">对话</div>
+        <div class="bd">
+          <div class="usr"><span class="ref">短片 · 2</span> 开头再短一点</div>
+          <div class="prose">好，把开头那句铺垫去掉了，从论点直接起——现在是 44 秒。</div>
+          <div class="act">
+            <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+            改好了 <span class="dur">· 41s</span>
+            <svg class="fly" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="M9 21H3v-6"/><path d="m3 21 7-7"/></svg>
+          </div>
+        </div>
+        <div class="ft">
+          <div class="disclaimer">Repurposer 是 AI，可能出错。重要信息请核对。</div>
+          <div class="input">描述你的修改想法…</div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <span class="chip have">精确编辑全链已在（@output 指认 → operation → 重渲染 → 卡面恢复）</span>
+      <span class="chip pick">C5 语气律：用户用 @chip 指认，Agent 答「把开头那句铺垫去掉了」——全程无报号</span>
+      <span class="chip new">changed =「刚更新」徽衰减；主+邻构图（非五卡等权围观）</span>
+    </div>
+    <div class="step-comment">
+      最终态：<b>从 T1 的两个节点到 T6 的完整作品世界，图只长不消</b>。相机移动、焦点切换、组内换列、卡面状态翻转——没有任何一帧是「换了一张图」。
+    </div>
+  </section>
+
+  <footer class="pick">
+    <h3>施工切分（合同 v2 定准后）</h3>
+    <ul>
+      <li><b>第零刀（空间模型翻案）</b>：① canvas visible 谓词 = 首个非 source 节点存在（替换 <code>graphLive</code>，三形态机翻转条件同步，ADR-056/057 K5 翻案注落档）；② 「已选」卡读面删除——pick 态收进候选集行内（SelectSpec 数据载体不动，零迁移）；③ 候选集入主链视野（左泳道去留同批拍）；④ 语义秩呈现映射。</li>
+      <li><b>第一刀（呈现修复）</b>：帧律补读 9:16 渲染默认（黑边根因）+ 白洞死 + chrome 落位 + 卡面名词化。</li>
+      <li><b>第二刀（组内局部布局）</b>：sibling group 容量 C → 组内第二列；depth-pitch 从固定 464 改为前带最大右缘 + gap。</li>
+      <li><b>第三刀（Transcript 表达层编辑）</b>：新写口（API + 卡面直改 + chat 驱动同一入口），edited 标记，range 零漂移验收。</li>
+      <li><b>第四刀（Reference/Focus/Activity 附着）</b>：引用层 + 事件行 fly-to + 相机节拍——C5 语气律先行（Agent 不报号）。</li>
+      <li><b>待拍</b>：chrome A–E；存量错帧卡修不修；候选泳道去留；容量 C 初值；「刚更新」徽衰减时长；移动端维持 run-driven 确认；名词化三个新词。</li>
+    </ul>
+  </footer>
+
+</div>
+</body>
+</html>

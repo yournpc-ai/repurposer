@@ -9,11 +9,13 @@ packages. Every class is a ``NodeBase`` declaration whose ``run`` body moved
 here verbatim from the P1 runner functions.
 """
 
+import asyncio
 from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import MAX_CHARS_PER_TEXT
@@ -32,6 +34,7 @@ from app.models.schemas import (
     Storyboard,
 )
 from app.models.tables import (
+    Message,
     Output,
     Persona,
     Project,
@@ -330,6 +333,20 @@ async def _materialize_understanding(
     )
 
 
+def _understandable(assets: list) -> bool:
+    """The warm's digestibility gate — at least one asset carries text or
+    media worth understanding. Shared with the lazy self-heal guard so it
+    never fires a warm that would no-op on the same fact."""
+    asset_texts = [t for a in assets if (t := (a.extracted_text or a.transcript))]
+    has_media = any(
+        (a.type == AssetType.IMAGE and a.file_url)
+        or (a.type == AssetType.SLIDES and a.slide_pages)
+        or (a.type == AssetType.VIDEO and a.file_url)
+        for a in assets
+    )
+    return bool(asset_texts or has_media)
+
+
 async def warm_understanding(project_id: UUID) -> None:
     """Upload-time materialization (期 1 素材理解前移): once every project
     asset has completed processing, build the understanding before any run
@@ -351,37 +368,58 @@ async def warm_understanding(project_id: UUID) -> None:
                 a.processing_status != AssetStatus.COMPLETED for a in assets
             ):
                 return  # a later asset's completion re-triggers the warm
-            asset_texts = [
-                t for a in assets if (t := (a.extracted_text or a.transcript))
-            ]
-            has_media = any(
-                (a.type == AssetType.IMAGE and a.file_url)
-                or (a.type == AssetType.SLIDES and a.slide_pages)
-                or (a.type == AssetType.VIDEO and a.file_url)
-                for a in assets
-            )
-            if not asset_texts and not has_media:
+            if not _understandable(assets):
                 return
             digest = asset_digest(assets)
             if await find_reusable_understanding(db, project, digest) is not None:
                 logger.info("understanding_warm_reuse_hit", project_id=str(project_id))
-                return
-            understanding = await _materialize_understanding(project, assets)
-            row = Output(
-                project_id=project.id,
-                workflow_step_id=None,
-                type="material_understanding",
-                language=_source_language(project, assets),
-                provenance="generated",
-                payload=understanding.model_dump(mode="json"),
-                source_ref={"asset_hash": digest, "warmed": True},
-            )
-            db.add(row)
-            await db.commit()
+            else:
+                understanding = await _materialize_understanding(project, assets)
+                row = Output(
+                    project_id=project.id,
+                    workflow_step_id=None,
+                    type="material_understanding",
+                    language=_source_language(project, assets),
+                    provenance="generated",
+                    payload=understanding.model_dump(mode="json"),
+                    source_ref={"asset_hash": digest, "warmed": True},
+                )
+                db.add(row)
+                try:
+                    await db.commit()
+                except IntegrityError:
+                    # 唯一索引收口 (migration n4d7e0a3b6c9, 2026-09-28): a
+                    # concurrent warm (the worker's completion seat vs the
+                    # API's lazy seat) landed the same digest first — the
+                    # race loser IS a reuse-hit discovered late. Roll back
+                    # and fall through to the shared beat + trigger tail
+                    # (deduped downstream), never skip it: the winner may
+                    # still die before its own fire.
+                    await db.rollback()
+                    logger.info(
+                        "understanding_warm_race_lost", project_id=str(project_id)
+                    )
+                else:
+                    logger.info(
+                        "understanding_warmed",
+                        project_id=str(project_id),
+                        arguments=len(understanding.key_arguments),
+                        quotes=len(understanding.quotable_lines),
+                        beats=len(understanding.topic_boundaries),
+                    )
+            # 开场席位两路合一 (2026-09-27 用户拍板): 复用检查在最前，但无论
+            # 新产还是复用命中，结果都是「理解已交代」——理解本身内容寻址
+            # （跨项目共享），而本项目的「已理解素材内容」节拍与「我看了——」
+            # 触发回合属于这个项目，两路走同一段后续代码（此前 reuse 提前
+            # return，本项目节拍与触发回合永不落座，dock 的 understanding
+            # 空档行不死，project cb3b735f 实证）。
             # 素材节拍入库 (2026-09-24 用户拍板): the settled understanding
-            # row persists BEFORE the trigger fires, so the rebuilt timeline
+            # persists BEFORE the trigger fires, so the rebuilt timeline
             # always reads beat-then-prose ("已理解素材内容" → "我看了——…").
-            # Best-effort like the warm itself; dedup rides the digest.
+            # Best-effort like the warm itself; both seats dedup on the
+            # digest (the beat once-only per conversation+beat+ref, the turn
+            # once per conversation+trigger+ref), so the warm's
+            # re-materialization race can never double-speak.
             try:
                 from app.pipeline import conversation_bridge  # deferred: ADR-087 seam
 
@@ -400,24 +438,87 @@ async def warm_understanding(project_id: UUID) -> None:
                     project_id=str(project_id),
                     error=str(e),
                 )
-            logger.info(
-                "understanding_warmed",
-                project_id=str(project_id),
-                arguments=len(understanding.key_arguments),
-                quotes=len(understanding.quotable_lines),
-                beats=len(understanding.topic_boundaries),
-            )
             # 触发回合 (T3, ADR-077 判词③): 理解完成 is whitelist trigger #1 —
-            # the agent looks at the material and speaks (旅程一②). Only a
-            # FRESH materialization fires (a reuse hit above returns early);
-            # the turn dedups on the digest, so the warm's re-materialization
-            # race can never double-speak. Fire-and-forget — the warm's tick
-            # moves on. (Seam: app.pipeline.trigger_events, ADR-087 §6.)
+            # the agent looks at the material and speaks (旅程一②).
+            # Fire-and-forget — the warm's tick moves on. (Seam:
+            # app.pipeline.trigger_events, ADR-087 §6.)
             fire_trigger(project_id, TRIGGER_UNDERSTANDING, digest)
     except Exception as e:  # noqa: BLE001 — warm is best-effort, the run path pays later
         logger.warning(
             "understanding_warm_failed", project_id=str(project_id), error=str(e)
         )
+
+
+async def understanding_opening_missing(
+    db: AsyncSession, project_id: UUID, conversation_id: UUID
+) -> bool:
+    """The lazy self-heal guard (2026-09-27 用户拍板——方案 a): True only
+    when the project's asset set is COMPLETE and digestible, but this
+    conversation's 「已理解素材内容」 beat never landed for the CURRENT digest
+    — the signature of the worker dying between the last asset's completion
+    and the warm's landing (the upload-time fire seat's only gap). An
+    incomplete set is the worker seat's business (the next completion
+    re-fires); a landed beat means the opening already happened; the digest
+    comparison re-arms the seat when a later upload changes the set."""
+    assets = await list_assets(db, project_id)
+    if not assets or any(
+        a.processing_status != AssetStatus.COMPLETED for a in assets
+    ):
+        return False
+    if not _understandable(assets):
+        return False
+    digest = asset_digest(assets)
+    from app.chat.service import MATERIAL_BEAT_TYPE  # deferred: ADR-087 seam
+
+    landed = (
+        await db.execute(
+            select(Message.id)
+            .where(
+                Message.conversation_id == conversation_id,
+                Message.intent["type"].astext == MATERIAL_BEAT_TYPE,
+                Message.intent["beat"].astext == "understanding",
+                Message.intent["ref"].astext == digest,
+            )
+            .limit(1)
+        )
+    ).first()
+    return landed is None
+
+
+_lazy_warm_tasks: set[asyncio.Task] = set()
+# In-flight registry (2026-09-28 — project 600d4a13's 16-warm pile-up):
+# the conversation-open guard stays TRUE for the WHOLE materialization
+# window, so every poll fired another full warm (16 concurrent LLM
+# materializations for one digest). One lazy warm per project per PROCESS
+# — the warmed-row unique index (migration n4d7e0a3b6c9) is the
+# cross-process backstop. The key releases at task completion: the guard
+# (beat landed) is FALSE by then, and a failed warm stays retryable.
+_lazy_warm_inflight: set[UUID] = set()
+
+
+def fire_understanding_warm(project_id: UUID) -> None:
+    """The API-process fire seat for the warm (lazy self-heal, 2026-09-27
+    用户拍板——方案 a): the worker's asset-completion seat is the primary
+    fire; the conversation-open path re-fires from here when the guard above
+    finds a stranded opening. Same task-set shape as the worker's own warm
+    fire set — schedule, track against GC, move on; the warm itself is
+    idempotent (incomplete-set early return, digest-deduped opening seats).
+    Concurrent calls while one warm is in flight collapse onto it
+    (``_lazy_warm_inflight``)."""
+    if project_id in _lazy_warm_inflight:
+        logger.info(
+            "understanding_warm_lazy_skip_inflight", project_id=str(project_id)
+        )
+        return
+    _lazy_warm_inflight.add(project_id)
+    task = asyncio.create_task(warm_understanding(project_id))
+    _lazy_warm_tasks.add(task)
+
+    def _release(done: asyncio.Task) -> None:
+        _lazy_warm_tasks.discard(done)
+        _lazy_warm_inflight.discard(project_id)
+
+    task.add_done_callback(_release)
 
 
 class Understand(NodeBase):
@@ -715,39 +816,6 @@ class Plan(NodeBase):
     task_name_zh = "规划内容"
     agents = (plan,)
 
-    @staticmethod
-    def book_summary(slots: list[IntentSlot], target_language: str) -> str | None:
-        """The human plan summary line — PUBLIC: the graph fill
-        (graph_fill stamp / back-write) recomposes the identical line from
-        the same slot source, so the document node's text never flickers."""
-        if not slots:
-            return None
-        from collections import Counter
-
-        counts = Counter(s.type for s in slots)
-        zh = target_language.startswith("zh")
-        type_labels = {
-            "post": "帖子" if zh else "post",
-            "quotes": "名言卡" if zh else "quotes card",
-            "carousel": "轮播图" if zh else "carousel",
-            "article": "文章" if zh else "article",
-            "clip": "片段" if zh else "clip",
-        }
-        lang_labels = {
-            "en": "English",
-            "zh": "中文",
-            "de": "Deutsch",
-            "fr": "Français",
-            "es": "Español",
-            "it": "Italiano",
-        }
-        parts = []
-        for slot_type, count in counts.items():
-            label = type_labels.get(slot_type, slot_type)
-            parts.append(f"{count} {label}" if count > 1 else f"1 {label}")
-        parts.append(lang_labels.get(target_language, target_language.upper()))
-        return " · ".join(parts)
-
     def estimate(self, ctx: dict) -> dict | None:
         """One call: prompt = the upstream understanding (≤ 2500 completion
         tokens) + plan + persona/tone context; completion = the
@@ -888,11 +956,6 @@ class Plan(NodeBase):
         await db.flush()
         assets = await list_assets(db, project.id)
         zh = _display_zh(run, project, assets)
-        # 计划摘要落 spec — 图填充（graph_fill._task_book_text）与运行时
-        # back-write 同源读它。
-        book_summary = self.book_summary(intent_slots, ctx.get("target_language", "en"))
-        if book_summary:
-            node.spec = {**(node.spec or {}), "book_summary": book_summary, "task_book": task_book}
         await set_summary(
             node.id,
             f"规划了 {len(storyboard.slots)} 个槽位 · "

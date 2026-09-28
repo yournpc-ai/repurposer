@@ -351,6 +351,57 @@ class GraphNode(Base):
         nullable=True,
         index=True,
     )
+    # Layout island membership (Workspace 合同 v4.2 C6, 2026-09-26 封板):
+    # the sibling group's island row + the member's sequence within it
+    # (column = seq // island.cols-per-column capacity, row = seq % cap).
+    # NULL = no island — singleton births and pre-C6 rows keep the depth
+    # column's plain stacking law. The island's bounding block is frozen at
+    # the group's birth; membership is stamped once, never re-seated.
+    island_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("graph_islands.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    island_seq = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+
+class ExplorationRow(Base):
+    """One exploration artifact (Candidate Set / Select / Content Plan —
+    ADR-088 §3, NAMING N-55).
+
+    Workspace 合同 v4.2 C1 (2026-09-26 封板 — 图节点资格): the exploration
+    family NEVER enters the Graph, so it lives in its own table, re-homed
+    out of ``graph_nodes`` (legacy ``type="exploration"`` graph rows stay
+    read-filtered, never migrated). Columns mirror the facts the door
+    (``pipeline/exploration_store``) and the compiler read — no ``type``
+    (the family IS the table; ``spec.exploration_kind`` distinguishes the
+    three kinds), no ``layout`` (no canvas seat). ``journey_id`` keeps the
+    R24 attribution; project cascade comes from the project FK. Owner =
+    Pipeline (same as the graph kernel).
+    """
+
+    __tablename__ = "exploration_rows"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # R24 journey attribution (ADR-088 §10): an attribution property, never
+    # a graph edge — same SET NULL posture as the legacy graph column.
+    journey_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("journeys.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    state = Column(String(20), nullable=False, default="ready")
+    spec = Column(JSONB, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
@@ -394,6 +445,60 @@ class GraphEdge(Base):
         Index("ix_graph_edges_from", "from_node"),
         Index("ix_graph_edges_to", "to_node"),
     )
+
+
+class GraphIsland(Base):
+    """One sibling group's layout island (Workspace 合同 v4.2 C6, 2026-09-26
+    封板 — Group Layout Island 组内自治、零 UI).
+
+    The island is a DATA STRUCTURE + a placement law, never UI: no frame,
+    label, or chrome ever renders for it. Each sibling group (same media-
+    flow parent set, same topological depth) gets one row at the group's
+    birth, freezing its bounding block:
+
+    - ``depth`` — the band (ungated topological generation at birth);
+    - ``parent_ids`` — the group's identity: sorted media-flow parent ids
+      (ctx reference edges never define siblinghood — the island is a
+      Product Graph concept, same boundary as RANK_EDGE_TYPES);
+    - ``origin_x`` / ``origin_y`` — the frozen origin;
+    - ``row_h`` — the row pitch (the birth family's max frame height +
+      cross gap — sibling families share one frame class by construction);
+    - ``cols`` — the RESERVED columns (the growth corridor: born count's
+      columns + one, capped; history-clamped to 1 when a deeper band was
+      already placed — the corridor never invades born territory);
+    - ``cap`` — rows per column (C); capacity = cols × cap.
+
+    Members fill top-down, wrapping to the next reserved column at C — an
+    in-island affair; the band outside never yields. The right edge
+    (origin_x + cols × PITCH) never moves after birth, so later depth
+    bands / sibling groups are structurally impossible to overlap. True
+    over-capacity (seq ≥ cols × cap) extends the LAST reserved column
+    downward (the contact-sheet seat — 留座不实现, 2026-09-26 用户拍板):
+    vertical growth never crosses the frozen right edge. The row is frozen
+    — no ``updated_at``: membership churn lives on ``graph_nodes``
+    (``island_id`` / ``island_seq``); an orphaned island (its members
+    deleted) is re-joined by a later same-identity group, its sequence
+    derived from LIVE members so a re-stamp re-lands on the same cells.
+    Owner = Pipeline (the graph kernel, same as graph_nodes/graph_edges).
+    """
+
+    __tablename__ = "graph_islands"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    depth = Column(Integer, nullable=False)
+    parent_ids = Column(JSONB, nullable=False, default=list)
+    origin_x = Column(Integer, nullable=False)
+    origin_y = Column(Integer, nullable=False)
+    row_h = Column(Integer, nullable=False)
+    cols = Column(Integer, nullable=False)
+    cap = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
 
 
 class Output(Base):

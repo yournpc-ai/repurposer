@@ -58,13 +58,11 @@ async def main() -> None:
             return
         from app.pipeline.graph_fill import stamp_draft_graph  # deferred: import cycle
 
-        # 判词④ prose law: the docked plan's own answer is the face.
         await stamp_draft_graph(
             db,
             project,
             list(pending.intent.tasks),
             args.lang,
-            pending.intent.answer,
         )
         await db.commit()
         logger.info(

@@ -15,7 +15,7 @@ they ride into the templates as render variables (``tool_lines`` /
 """
 
 from app.agents.base import jinja_env
-from app.tools import tool_catalog_lines
+from app.tools import capability_menu_lines, tool_catalog_lines
 
 
 def intent_router_system() -> str:
@@ -26,6 +26,7 @@ def intent_router_system() -> str:
     exist."""
     return jinja_env.get_template("chat/intent_router_system.j2").render(
         tool_lines=tool_catalog_lines(exclude={"revise_script"}),
+        menu_lines=capability_menu_lines(),
     )
 
 
@@ -47,6 +48,7 @@ def chat_intent_system() -> str:
 
     return jinja_env.get_template("chat/chat_intent_system.j2").render(
         tool_lines=tool_catalog_lines(),
+        menu_lines=capability_menu_lines(),
         wiring_lines=wiring_catalog_lines(),
         # chat_loop=True: the shared no-material partial drops the router-only
         # framing (draft header / material_text bullets) and appends
@@ -57,8 +59,13 @@ def chat_intent_system() -> str:
 
 def trigger_system() -> str:
     """The proactive speaker's system prompt (T3, ADR-077 判词③ — trigger
-    turns: understanding_warmed / run_completed). No catalog lines ride
-    here — the trigger turn's verbs are the read tools (the wire
-    declarations carry them) plus the one terminal ``wrap_up``; the
-    template teaches the judgment law and the suggestions contract."""
-    return jinja_env.get_template("chat/trigger_system.j2").render()
+    turns: understanding_warmed / run_completed). No BUILDER catalog rides
+    here (the trigger turn's verbs are the read tools plus the one terminal
+    ``wrap_up``) — but the SPEAKER menu does (批「身份核」2026-09-27: the
+    user-language capability menu is identity, it rides every surface;
+    without it the turn improvised deliverables and venues — reply-quality
+    baseline D2/D3). The template teaches the judgment law and the
+    suggestions contract."""
+    return jinja_env.get_template("chat/trigger_system.j2").render(
+        menu_lines=capability_menu_lines(),
+    )

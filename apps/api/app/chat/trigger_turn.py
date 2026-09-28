@@ -48,6 +48,7 @@ from uuid import UUID
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.context import build_context
@@ -63,7 +64,7 @@ from app.chat.service import (
     finalize_bailed_runs,
 )
 from app.chat.turn_tools import CHAT_READ_TOOLS
-from app.models.schemas import Option, QuestionPayload, WrapUpArgs
+from app.models.schemas import Option, QuestionPayload, SuggestionItem, WrapUpArgs
 from app.models.tables import (
     Conversation,
     Message,
@@ -166,21 +167,32 @@ def _trigger_question_line(language: str) -> str:
     return "接下来做什么？" if language.startswith("zh") else "What's next?"
 
 
-def _suggestions_payload(labels: list[str], language: str) -> QuestionPayload:
+def _suggestions_payload(suggestions: list[SuggestionItem], language: str) -> QuestionPayload:
     """The suggestion dock's question payload (ADR-081 选项语法统一律):
     the trigger's send-labels become a REAL options question — numbered
     options (id = 1-based position, the autoResume/digital-badge grammar),
-    freeform pencil on, blocking per the 形态律. No slot, no run marker:
-    the answer endpoint's generic continuation carries the picked label
-    into the next chat turn as the user's own say."""
+    freeform pencil on, blocking per the 形态律. 一问拍一体化 (2026-09-27):
+    each option carries its one-line reason (description) and at most one
+    is marked recommended (the verdict's lean, same pick the speech named).
+    No slot, no run marker: the answer endpoint's generic continuation
+    carries the picked label into the next chat turn as the user's own
+    say."""
     return QuestionPayload(
         kind="question",
         question=_trigger_question_line(language),
         options=[
-            Option(id=str(index + 1), label=label)
-            for index, label in enumerate(labels)
+            Option(id=str(index + 1), label=item.label, description=item.description)
+            for index, item in enumerate(suggestions)
         ],
         allow_freeform=True,
+        recommended_id=next(
+            (
+                str(index + 1)
+                for index, item in enumerate(suggestions)
+                if item.recommended
+            ),
+            None,
+        ),
     )
 
 
@@ -242,7 +254,7 @@ trigger_agent = ToolLoopAgent(
 
 
 def _trigger_dump(
-    trigger: str, ref: str, suggestions: list[str]
+    trigger: str, ref: str, suggestions: list[SuggestionItem]
 ) -> dict[str, Any]:
     """The assistant row's self-describing dump — the dedup guard reads
     (trigger, ref) off these keys; ``suggestions`` keeps the option labels
@@ -252,7 +264,7 @@ def _trigger_dump(
         "type": TRIGGER_DUMP_TYPE,
         "trigger": trigger,
         "ref": ref,
-        "suggestions": list(suggestions),
+        "suggestions": [item.label for item in suggestions],
     }
 
 
@@ -488,7 +500,7 @@ async def run_trigger_turn(
                     ref=ref,
                 )
                 return None
-            suggestions: list[str] = outcome.get("suggestions", [])
+            suggestions: list[SuggestionItem] = outcome.get("suggestions", [])
             if suggestions:
                 # 选项语法统一律 (ADR-081): the next-step labels dock as a
                 # REAL options question on the review row (blocking 形态律,
@@ -527,6 +539,13 @@ async def run_trigger_turn(
                 suggestions=len(suggestions),
             )
             return message
+    except IntegrityError:
+        # 唯一索引收口 (migration n4d7e0a3b6c9, 2026-09-28): a cross-process
+        # twin committed the same (conversation, trigger, ref) review first
+        # — the race loser dedups late. Silence (the fire-and-forget
+        # doctrine), but named for forensics, distinct from a real failure.
+        logger.info("trigger_turn_race_lost", trigger=trigger, ref=ref)
+        return None
     except Exception as e:  # noqa: BLE001 — fire-and-forget: silence, never a pipeline failure
         logger.warning(
             "trigger_turn_failed", trigger=trigger, ref=ref, error=str(e)
@@ -535,15 +554,35 @@ async def run_trigger_turn(
 
 
 _trigger_tasks: set[asyncio.Task] = set()
+# In-flight turn registry (2026-09-28 — project 600d4a13's double-dock
+# race): two fires of the same (project, trigger, ref) within one process
+# collapse HERE — the turn's ``_already_spoke`` SELECT only sees COMMITTED
+# reviews, so without this registry two concurrent turns both speak (the
+# second supersedes the first and the user's option click 409s). The
+# trigger_review unique index (migration n4d7e0a3b6c9) is the cross-process
+# backstop — the loser's commit fails into the turn's fire-and-forget
+# silence. The key releases at task completion: by then the review row is
+# committed and ``_already_spoke`` is authoritative again.
+_trigger_inflight: set[tuple[UUID, str, str]] = set()
 
 
 def fire_trigger(project_id: UUID, trigger: str, ref: str) -> None:
     """The pipeline's fire seat (the ``warm_understanding`` task-set
     precedent): schedule the turn, track the task against GC, move on — the
     worker's tick never waits on the agent's speech."""
+    key = (project_id, trigger, ref)
+    if key in _trigger_inflight:
+        logger.info("trigger_turn_skip_inflight", trigger=trigger, ref=ref)
+        return
+    _trigger_inflight.add(key)
     task = asyncio.create_task(run_trigger_turn(project_id, trigger, ref))
     _trigger_tasks.add(task)
-    task.add_done_callback(_trigger_tasks.discard)
+
+    def _release(done: asyncio.Task) -> None:
+        _trigger_tasks.discard(done)
+        _trigger_inflight.discard(key)
+
+    task.add_done_callback(_release)
 
 
 __all__ = [

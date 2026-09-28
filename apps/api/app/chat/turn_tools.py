@@ -73,7 +73,9 @@ PLAN_TOOLS = [
         description=(
             "Reply with information only — capability questions, explanations "
             "of the project, small talk. No plan, no question, no run: your "
-            "spoken message IS the reply."
+            "spoken message IS the reply. Always speak the reply as your "
+            "message text ALONGSIDE the call — a bare answer call that says "
+            "nothing is rejected."
         ),
         params_model=PlanAnswerArgs,
     ),
@@ -101,10 +103,12 @@ CHAT_TOOLS = [
         name="edit_graph",
         description=(
             "Revise the project's persistent graph (add_node / connect / "
-            "edit_prompt / delete_node / run). A revision inside the "
-            "already-confirmed work re-fills the affected subgraph directly; "
-            "one that adds new paid work docks for the user's confirmation "
-            "instead — it does not run. Speak the summary of the revision "
+            "edit_prompt / edit_text / delete_node / run). A revision inside "
+            "the already-confirmed work re-fills the affected subgraph "
+            "directly; one that adds new paid work docks for the user's "
+            "confirmation instead — it does not run. edit_text rewrites a "
+            "transcript document's user-visible text layer only — the source "
+            "evidence never changes. Speak the summary of the revision "
             "BEFORE calling this."
         ),
         params_model=EditGraphArgs,
@@ -159,7 +163,9 @@ CHAT_TOOLS = [
             "Reply with information only — capability questions, run-progress "
             "readouts (call get_run_status first), explanations of existing "
             "outputs, small talk. Work requests go to the proposal tools; an "
-            "ambiguous reading goes to ask_user — answer is never the lazy out."
+            "ambiguous reading goes to ask_user — answer is never the lazy out. "
+            "Always speak the reply as your message text ALONGSIDE the call — "
+            "a bare answer call that says nothing is rejected."
         ),
         params_model=ChatAnswerArgs,
     ),

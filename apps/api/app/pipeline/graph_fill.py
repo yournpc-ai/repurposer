@@ -28,8 +28,8 @@ Three directions:
   aggregateStatus logic's server-side home), and landed outputs back-write
   ``spec.output_ids``.
 
-Migration mapping (词表 v3, ADR-076): assets → asset (媒介×manual) / plan
-prelude → the task-book document / writers·research → text×generator /
+Migration mapping (词表 v3, ADR-076): assets → asset (媒介×manual) /
+writers·research → text×generator /
 quotes·carousel → image×generator / select_clips·translate·dub·modifiers →
 video×editor (translate/dub 两站拆分: the asm family plus a table×manual
 doc-station companion — key `{fill_key}#doc`, role = the doc_station
@@ -39,7 +39,10 @@ nearest downstream family (the bare fill key grows no node — their step ids
 ride the host's `step_ids`, the host root inherits eat-the-asset) / verify
 folds into its executor's node. Render steps join NO family — their state
 rides the output row's render_status (the node's product region carries it
-in place).
+in place). The plan prelude stamps NO node (Workspace 合同 v4.2 C1-b,
+2026-09-26 封板 — the task-book document was an implementation-needs seat,
+never eligible; the plan's user faces are the docked question row and the
+draft chain, the prelude steps stay internal bookkeeping).
 """
 
 from __future__ import annotations
@@ -57,6 +60,7 @@ from app.models.tables import Asset, GraphEdge, GraphNode, Output, Project, Work
 from app.pipeline.graph import NODE_KINDS
 from app.pipeline.graph_store import (
     _TASK_BOOK_ROLE,
+    SHORTS_DEFAULT_ASPECT,
     apply_wiring_ops,
     display_aspect_class,
     resolve_source_aspect,
@@ -66,12 +70,12 @@ from app.tools.captions.procedure import TRANSLATION_ARTIFACT_KEY
 
 logger = structlog.get_logger()
 
-# Step kinds of the plan prelude — the task-book document's internal
-# workflow (the book's birth process: preprocess → persona ∥ understand (∥
+# Step kinds of the plan prelude (preprocess → persona ∥ understand (∥
 # decompile when an exemplar is pinned) → (interrupt) → plan). Kind strings,
 # same source as node_runners. decompile rides here (ADR-078): the compile
-# injects it parallel to understand off preprocess, so it shares the book's
-# internal workflow — never an independent canvas node.
+# injects it parallel to understand off preprocess. The prelude stamps NO
+# graph node (v4.2 C1-b — the task-book document de-stamped; step-input
+# edges from prelude steps simply emit nothing).
 _PRELUDE_KINDS = frozenset({"preprocess", "persona_bootstrap", "understand", "decompile", "interrupt", "plan"})
 
 # Modifier kinds whose editor node carries NO prompt slot (deterministic
@@ -314,6 +318,9 @@ async def remove_asset_node(db: AsyncSession, project_id: UUID, asset_id: UUID) 
             db,
             project_id,
             [{"op": "delete_node", "node": UUID(str(n.id))} for n in victims],
+            # The asset module's own lifecycle delete — the ONE settled-
+            # delete caller the door's guard bypasses (v4.2 封板⑤).
+            allow_settled_delete=True,
         )
 
 
@@ -330,10 +337,11 @@ async def stamp_transcript_node(
     Flush-only.
 
     上传即出生 (Phase 1, ADR-087 §2 R2 配套缓做项): an ASR-able / text-
-    yielding asset births its transcript card AT UPLOAD in ``queued``
-    (loading) — the card holds its seat on the canvas while the worker
-    processes, and flips to ``done`` when the text lands (the completion
-    path re-enters this same function), to ``failed`` if processing fails.
+    yielding asset births its transcript card AT UPLOAD in ``running`` —
+    the SHARED loading speaks (node wipe + edge packet ride this state
+    directly; 2026-09-28 用户拍板: 出生即 running, 卡面零自养 loading) —
+    and flips to ``done`` when the text lands (the completion path
+    re-enters this same function), to ``failed`` if processing fails.
     Asset types without a text yield (image / voice_sample) never birth one.
     """
     text = asset.transcript or asset.extracted_text
@@ -364,11 +372,14 @@ async def stamp_transcript_node(
         # State follows ASR: text landed → done; processing failed → failed
         # (the 卡内红 face); completed without words (silence / empty
         # extraction) → done with an empty body, never a perpetual loading
-        # card; still waiting → stays queued.
+        # card; still waiting → running (queued 出生面 2026-09-28 退役,
+        # 老行在此愈合).
         if text or status == "completed":
             existing.state = "done"
         elif status == "failed":
             existing.state = "failed"
+        elif existing.state == "queued":
+            existing.state = "running"
         return existing
     asset_node = await stamp_asset_node(db, project_id, asset)
     spec: dict = {"role": _TRANSCRIPT_ROLE, "asset_id": str(asset.id)}
@@ -389,8 +400,9 @@ async def stamp_transcript_node(
     node = await db.get(GraphNode, delta.affected[0])
     assert node is not None
     # Born done when the text already exists (paste path bypasses the
-    # worker); queued (loading) while ASR/extraction is still owed.
-    node.state = "done" if text else "queued"
+    # worker); running while ASR/extraction is still owed — the shared
+    # wipe + edge packet read this state raw.
+    node.state = "done" if text else "running"
     return node
 
 
@@ -414,7 +426,9 @@ async def stamp_run_graph(
         run=run,
         ui_language=str((run.context or {}).get("ui_language") or "en"),
         draft=False,
-        book_text=None,
+        # The aspect mirror's exemplar leg (判词⑤): pinned at the birthplace,
+        # so the run fill predicts the same frame the draft did.
+        exemplar_asset_id=(run.context or {}).get("exemplar_asset_id") or None,
     )
 
 
@@ -423,11 +437,10 @@ async def stamp_draft_graph(
     project: Project,
     tasks: list,
     ui_language: str | None = None,
-    book_text: str | None = None,
 ) -> None:
-    """Draft stamp (ADR-057 K5) — the docked task book's graph twin.
+    """Draft stamp (ADR-057 K5) — the docked plan's graph twin.
 
-    图先展示后运行: the moment a book docks, the canvas sees the whole chain
+    图先展示后运行: the moment a plan docks, the canvas sees the whole chain
     as DRAFT nodes (「运行后生成 · 约 N 积分」 per node, zero consumption
     until Start) — the draft graph IS the "you'll get", the ADR-043 derived
     preview's replacement. The compile is the birthplace's own
@@ -436,23 +449,12 @@ async def stamp_draft_graph(
     place. Raises ToolRejected / ValueError on an uncompilable chain — the
     caller degrades exactly like the quote-less dock (and tears the stale
     preview down via ``clear_draft_graph``). Flush-only.
-
-    ``book_text`` (2026-09-10 全文卡律, 判词④): the book doc's face is the
-    plan's FULL summary prose — the draft verdict's own ``answer`` (the
-    LLM's plan restatement, 二源律①), passed by the dock. The deterministic
-    slot composition (Plan.book_summary) is the fallback only — it is blind
-    to transform chains (translate/dub carry no slot), and a condensed line
-    on the card face is the 画蛇添足 the ruling kills.
     """
-    from app.models.schemas import IntentSlot  # deferred: schema leaf
-    from app.pipeline.graph import known_output_types  # deferred: kernel leaf
-    from app.pipeline.node_runners import Plan  # deferred: runner crew
     from app.pipeline.orchestrator import (  # deferred: import cycle
         TaskSpec,
         _materialize_profile,
         _needs_stills_alignment,
         compile_graph,
-        first_task_language,
     )
     from app.pipeline.step_context import _estimate_facts  # deferred: facts pack
 
@@ -480,17 +482,10 @@ async def stamp_draft_graph(
     ]
     for step, ns in zip(steps, node_specs, strict=True):
         step.inputs = [str(steps[i].id) for i in ns.inputs]
-    # The draft book's text: the dock's LLM prose wins (the parameter);
-    # the deterministic composition is the fallback for a prose-less caller.
-    if book_text is None:
-        parsed = [
-            IntentSlot.model_validate(s.spec["slot"])
-            for s in steps
-            if (s.spec or {}).get("slot")
-        ]
-        intent_slots = [s for s in parsed if s.type in known_output_types()]
-        target_language = first_task_language(tasks) or project.language or "en"
-        book_text = Plan.book_summary(intent_slots, target_language)
+    # The role pin's one seat (判词④ — project.pending_brief): the draft
+    # resolves the SAME aspect default the run fill will, so the born draft
+    # frame survives Start's in-place re-fill without a mismatch.
+    pending = project.pending_brief if isinstance(project.pending_brief, dict) else {}
     await _stamp_graph_core(
         db,
         project,
@@ -499,10 +494,10 @@ async def stamp_draft_graph(
         # None-tolerant at the boundary (2026-09-09): callers pass the
         # request-context locale bare, which is None for a client without
         # Accept-Language — compose_spec_prompt's .startswith crashed the
-        # whole book turn. Same default seat as stamp_run_graph above.
+        # whole plan turn. Same default seat as stamp_run_graph above.
         ui_language=ui_language or "en",
         draft=True,
-        book_text=book_text,
+        exemplar_asset_id=pending.get("exemplar_asset_id") or None,
     )
 
 
@@ -550,25 +545,26 @@ async def _stamp_graph_core(
     run: WorkflowRun | None,
     ui_language: str,
     draft: bool,
-    book_text: str | None,
+    exemplar_asset_id: str | None = None,
 ) -> None:
     """The one topology stamper behind the run fill and the draft preview
     (K5 — ONE source, zero drift: the draft's graph and the run's graph are
     the same derivation over the same compile).
 
     ``draft=False`` (run fill): nodes leave at state=queued, steps back-point
-    to their nodes, the task book queues with its prelude. ``draft=True``
-    (book dock): nodes leave at state=draft with no run/step linkage, only
-    _DRAFT_RESTAMP_STATES nodes are re-stamped, and draft-state orphans of
-    the previous dock are torn down (the run fill never deletes)."""
+    to their nodes. ``draft=True`` (plan dock): nodes leave at state=draft
+    with no run/step linkage, only _DRAFT_RESTAMP_STATES nodes are
+    re-stamped, and draft-state orphans of the previous dock are torn down
+    (the run fill never deletes). The plan prelude stamps no node in either
+    mode (v4.2 C1-b de-stamp)."""
     project_id = UUID(str(project.id))
     run_id_str = str(run.id) if run is not None else None
 
     # The canvas's aspect truth (2026-09-13 用户拍板 — 产物卡跟源比例 +
     # 分档加宽): the project's media dims (probed at upload / processing into
-    # meta.width/height) let an "original"-aspect chain reserve the source's
-    # real display class at stamp time. Mixed / unknown shapes stay
-    # "original" (the conservative default strip), never a coin flip.
+    # meta.width/height) let an "original"-aspect WHOLE-SOURCE chain reserve
+    # the source's real display class at stamp time. Mixed / unknown shapes
+    # stay "original" (the conservative default strip), never a coin flip.
     dims_rows = (
         await db.execute(
             select(Asset.meta).where(
@@ -586,6 +582,16 @@ async def _stamp_graph_core(
             and isinstance(meta.get("height"), int)
         ]
     )
+
+    # The frame's predictive mirror of the runtime's aspect resolution
+    # (2026-09-28 root fix — a 9:16 clip born into a 16:9 frame pillarboxes
+    # on the canvas): cut chains without an explicit aspect resolve at RUN
+    # time to the exemplar's measured class, else SHORTS_DEFAULT_ASPECT — so
+    # the frame stamps THAT, and "original"→source stays the whole-source
+    # chains' law alone. Modifier families on the project's EXISTING clips
+    # (cross-run) predict from the clips' own display class.
+    cut_default_aspect = await _cut_default_aspect(db, exemplar_asset_id)
+    existing_clips_aspect = await _existing_clips_aspect(db, project_id)
 
     # ── 1. Classify the steps into node families ─────────────────────────
     # node_key → {"type": 媒介 type, "prototype": 能力原型, "steps": [step]};
@@ -736,14 +742,6 @@ async def _stamp_graph_core(
         for n in existing_nodes
         if (n.spec or {}).get("fill_key")
     }
-    task_book_node = next(
-        (
-            n
-            for n in existing_nodes
-            if n.type == "document" and (n.spec or {}).get("role") == _TASK_BOOK_ROLE
-        ),
-        None,
-    )
     existing_edges = list(
         (
             await db.execute(
@@ -759,12 +757,15 @@ async def _stamp_graph_core(
 
     # Orphan sweep (draft only): a re-docked chain replaces the last one —
     # draft-state nodes whose slot vanished from the new compile are torn
-    # down through the same wiring door. The task-book document is never an
-    # orphan (the draft always re-ensures its book below); live/finished
-    # nodes are history, never the preview's business. The run fill never
-    # deletes — its graph only grows / re-fills. (The doc-station companion
-    # sweeps with its family: its `{fill_key}#doc` key is in `families` only
-    # while its asm's chain survives — see the sweep key set below.)
+    # down through the same wiring door. A legacy draft task-book node
+    # (pre-de-stamp rows, v4.2 C1-b) carries no fill_key and is never
+    # re-ensured, so the sweep retires it here; a RUN-born book
+    # (spec.run_id, state ≠ draft) is history and stays (read-face
+    # filtered, migration-deleted). Live/finished nodes are history, never
+    # the preview's business. The run fill never deletes — its graph only
+    # grows / re-fills. (The doc-station companion sweeps with its family:
+    # its `{fill_key}#doc` key is in `families` only while its asm's chain
+    # survives — see the sweep key set below.)
     if draft:
         sweep_keys = set(families) | {f"{key}#doc" for key in families}
         orphans = [
@@ -772,9 +773,6 @@ async def _stamp_graph_core(
             for n in existing_nodes
             if n.type != "asset"
             and str(n.state) == "draft"
-            and not (
-                n.type == "document" and (n.spec or {}).get("role") == _TASK_BOOK_ROLE
-            )
             and (n.spec or {}).get("fill_key") not in sweep_keys
         ]
         if orphans:
@@ -816,64 +814,7 @@ async def _stamp_graph_core(
         if transcript_doc is not None:
             transcript_doc_by_asset[str(asset.id)] = UUID(str(transcript_doc.id))
 
-    # ── 4. The task-book document (the plan prelude's artifact — FLORA
-    # text-node form; the prelude's steps are its internal workflow). Run
-    # mode: only a run WITH a prelude births it — a targeted render/hook
-    # scope never grows an empty book card. Draft mode (K5): the book
-    # ALWAYS has its face — it is the confirm beat's canvas anchor; its
-    # text is the dock-composed summary (the runtime plan's back-write
-    # re-composes the identical line). A run-born book (spec.run_id) keeps
-    # its historical text through a draft — the bail stays honest.
-    prelude_steps = [s for s in steps if s.kind in _PRELUDE_KINDS]
-    if book_text is None and not draft:
-        book_text = _task_book_text(steps)
-        if book_text is None and run is not None:
-            # Transform chains carry no output slots — the deterministic
-            # composition is blind to them. The run's LLM-given name
-            # (ADR-058 二源律①, stamped into context at birth) is the
-            # honest fallback face, never an empty card.
-            book_text = (run.context or {}).get("name")
-    book_newborn_id: UUID | None = None
-    if task_book_node is None:
-        if prelude_steps or draft:
-            # Pinned id — the SAME batch's connect ops wire off it, so the
-            # book's frame is born with full edge knowledge (布局一开始就定
-            # 好, 2026-09-08 用户拍板 — never stacked-then-repaired).
-            book_newborn_id = uuid4()
-            ops.append(
-                {
-                    "op": "add_node",
-                    "id": book_newborn_id,
-                    "type": "document",
-                    "spec": {
-                        "role": _TASK_BOOK_ROLE,
-                        "text": book_text,
-                    },
-                }
-            )
-    elif book_text or draft:
-        # 全文卡律 (判词④) 的双面书文本律:
-        if draft:
-            # The dock owns the DRAFT book's face: a re-docked / revised
-            # chain refreshes the prose (the LLM's latest plan restatement).
-            # A run-born book (spec.run_id) is history — the bail keeps it
-            # honest, untouched (the old guard's intent).
-            if book_text and not (task_book_node.spec or {}).get("run_id"):
-                task_book_node.spec = {**(task_book_node.spec or {}), "text": book_text}
-        else:
-            # Run fill never rewrites the book's face — the draft's prose is
-            # the promise being executed. Only an EMPTY face (a run-born
-            # book) takes the compile's composition / the run's name: the old
-            # "same source, no flicker" back-write had TWO sources, and for
-            # transform chains the composition is None — it WIPED the draft's
-            # prose at Start.
-            if book_text and not (task_book_node.spec or {}).get("text"):
-                task_book_node.spec = {**(task_book_node.spec or {}), "text": book_text}
-    task_book_id = book_newborn_id or (
-        UUID(str(task_book_node.id)) if task_book_node is not None else None
-    )
-
-    # ── 5. Generation / editor / doc-station nodes (idempotent by fill_key) ──
+    # ── 4. Generation / editor / doc-station nodes (idempotent by fill_key) ──
     doc_pairs: list[tuple[UUID, UUID]] = []  # (doc station id, its asm id) — §7 wires them
     for key, fam in families.items():
         fam_steps = sorted(fam["steps"], key=lambda s: s.seq)
@@ -916,12 +857,22 @@ async def _stamp_graph_core(
         )
         reused = by_fill_key.get(key)
         frame_class, frame_aspect = _frame_class_of(fam_steps)
-        # "original" resolves to the source's real display class when the
-        # source dims are known (比例跟源 — the card shapes itself to the
-        # material, never a black-bar default strip); unknown / mixed keeps
-        # the sentinel and its conservative reservation.
-        if frame_aspect == "original" and source_aspect is not None:
-            frame_aspect = source_aspect
+        # "original" resolves through the predictive mirror
+        # (_predict_family_frame_aspect): cut chains → the runtime's own
+        # default (NEVER the source's shape — the runtime reframes to the
+        # shorts default); transforms inherit their upstream producer's
+        # aspect; whole-source chains keep the source's real display class
+        # (比例跟源 — the card shapes itself to the material, never a
+        # black-bar default strip); unknown / mixed keeps the sentinel and
+        # its conservative reservation.
+        if frame_aspect == "original":
+            frame_aspect = _predict_family_frame_aspect(
+                fam_steps,
+                by_id,
+                cut_default=cut_default_aspect,
+                source_aspect=source_aspect,
+                existing_clips_aspect=existing_clips_aspect,
+            )
         # A revise-headed family revisits an EXISTING node: the node's name,
         # its executable tool identity (spec.tool) and its structured params
         # (the slot the next revision re-runs from) stay the original
@@ -1095,8 +1046,8 @@ async def _stamp_graph_core(
             if upstream is None:
                 continue
             if upstream.kind in _PRELUDE_KINDS:
-                if task_book_id is not None:
-                    connect(task_book_id, target_node, "ctx")
+                # The prelude stamps no node (v4.2 C1-b) — a step input
+                # pointing at it emits no edge.
                 continue
             source_node = node_of(upstream)
             if source_node is None:
@@ -1111,7 +1062,7 @@ async def _stamp_graph_core(
     # own words arrive from its doc station…
     for doc_id, asm_id in doc_pairs:
         connect(doc_id, asm_id, "text")
-    # Assets feed the graph: text into the task book and the writers, the
+    # Assets feed the graph: text into the writers, the
     # media flow into the clip-family roots. A root = a clip-family node
     # with NO clip-family upstream mapped to a DIFFERENT node (folded
     # upstreams — materialize_source / align_stills — map to None and never
@@ -1119,9 +1070,6 @@ async def _stamp_graph_core(
     # project's EXISTING clips (mode② — the project already has clips from
     # an earlier run) wires from that run's producer node instead: the clips
     # it consumes are that node's products, not the raw assets.
-    if task_book_id is not None:
-        for asset_node_id in asset_node_ids:
-            connect(asset_node_id, task_book_id, "text")
     existing_producer_ids = await _existing_clip_producer_nodes(db, project_id)
     clip_roots = [
         s
@@ -1200,8 +1148,6 @@ async def _stamp_graph_core(
     # as stale and double-deleted — the door would raise on the missing row).
     claimed: set[str] = {str(nid) for nid in node_id_by_key.values()}
     claimed.update(str(nid) for nid in asset_node_ids)
-    if task_book_id is not None:
-        claimed.add(str(task_book_id))
     # Disconnects lead the batch: the door's cycle check walks the working
     # edge set, so a topology flip (old B→A stale, new A→B wanted) must see
     # the post-retraction set when its connect is checked — stale edges only
@@ -1229,12 +1175,11 @@ async def _stamp_graph_core(
     # left→right with full edge knowledge, never stacked-then-repaired.
     if disconnect_ops or ops:
         await apply_wiring_ops(db, project_id, disconnect_ops + ops)
-    if book_newborn_id is not None:
-        task_book_node = await db.get(GraphNode, book_newborn_id)
 
-    # ── 6. Back-pointer the steps to their nodes + queue the task book ────
-    # Run mode only — the draft's stand-in steps have no rows to point, and
-    # the draft book keeps its birth state (its text is already present).
+    # ── 6. Back-pointer the steps to their nodes ─────────────────────────
+    # Run mode only — the draft's stand-in steps have no rows to point. The
+    # prelude's steps get no back-pointer: they own no node (v4.2 C1-b
+    # de-stamp), so sync_graph_node_for_step no-ops on them.
     if run is not None:
         for key, fam in families.items():
             node_id = node_id_by_key.get(key)
@@ -1242,15 +1187,6 @@ async def _stamp_graph_core(
                 continue
             for step in fam["steps"]:
                 step.spec = {**(step.spec or {}), "graph_node_id": str(node_id)}
-        if task_book_node is not None and prelude_steps:
-            task_book_node.spec = {
-                **(task_book_node.spec or {}),
-                "step_ids": [str(s.id) for s in prelude_steps],
-                "run_id": run_id_str,
-            }
-            task_book_node.state = "queued"
-            for step in prelude_steps:
-                step.spec = {**(step.spec or {}), "graph_node_id": str(task_book_node.id)}
 
     # ── 6b. The doc-station companions mirror their asm's state law (两站
     # 双站 sync 之前的第一拍): run = queued with its assembly; draft = the
@@ -1271,7 +1207,7 @@ async def _stamp_graph_core(
         "graph_stamped",
         run_id=str(run.id) if run is not None else None,
         draft=draft,
-        nodes=len(node_id_by_key) + (1 if task_book_node is not None else 0),
+        nodes=len(node_id_by_key),
         edges=sum(1 for op in ops if op["op"] == "connect"),
     )
 
@@ -1287,7 +1223,12 @@ def _frame_class_of(fam_steps: list[WorkflowStep]) -> tuple[str, str | None]:
     660-reservation / 278-render dead-air walkthrough, 2026-09-11). The
     aspect rides spec.frame_aspect — a FRAME-only key: never in _params_of's
     factsbar whitelist, never read by the runtime tools (node.spec.aspect
-    stays the chain's own business). Assets / documents derive from kind."""
+    stays the chain's own business). Assets / documents derive from kind.
+
+    An UNSTAMPED clip family's "original" is further resolved by the caller
+    through ``_predict_family_frame_aspect`` (2026-09-28): the runtime's own
+    default chain never follows the source for CUT chains (cut.py/node.py
+    fall to SHORTS_DEFAULT_ASPECT), so neither may the frame."""
     if any(s.kind in _CLIP_FAMILY_KINDS for s in fam_steps):
         for s in fam_steps:
             aspect = (s.spec or {}).get("aspect")
@@ -1295,6 +1236,63 @@ def _frame_class_of(fam_steps: list[WorkflowStep]) -> tuple[str, str | None]:
                 return "clip", str(aspect)
         return "clip", "original"
     return "text", None
+
+
+# Cut tools whose RUNTIME aspect fallback bottoms out at SHORTS_DEFAULT_ASPECT
+# (cut.py / node.py) — a chain carrying one never keeps the source frame.
+_CUT_PRODUCER_KINDS = frozenset({"select_clips", "cut_segments"})
+
+
+def _predict_family_frame_aspect(
+    fam_steps: list,
+    by_id: dict[str, Any],
+    *,
+    cut_default: str,
+    source_aspect: str | None,
+    existing_clips_aspect: str | None,
+) -> str:
+    """The frame's aspect prediction for a clip family whose steps name NO
+    explicit aspect (2026-09-28 root fix — the 16:9-frame / 9:16-clip
+    walkthrough): the frame must predict what the RUN will render, mirroring
+    the runtime's own resolution (node.spec → run ctx → exemplar skeleton →
+    SHORTS_DEFAULT_ASPECT in tools/clips/node.py + cut.py).
+
+    - the family itself CUTS → ``cut_default`` (the exemplar's measured
+      class when pinned, else the shorts default) — a cut chain never keeps
+      the source's frame, so the source-class fallback was a lie here;
+    - the family CONTAINS a whole-source materialize (bare or folded into
+      the translate/dub consumer) → the source's class (比例跟源, unchanged);
+    - a transform family → its upstream clip producer's resolved aspect
+      (bounded in-run input walk: the producer's explicit aspect wins, else
+      the same cut default); hanging off the project's EXISTING clips
+      (cross-run, empty inputs) → their display class when unanimous;
+    - anything unknown → the source's class, else the "original" sentinel's
+      conservative strip (today's behavior for the genuinely unknowable).
+    """
+    if any(s.kind in _CUT_PRODUCER_KINDS for s in fam_steps):
+        return cut_default
+    if any(s.kind == "materialize_source" for s in fam_steps):
+        return source_aspect or "original"
+    seen: set[str] = set()
+    stack = [str(u) for s in fam_steps for u in (s.inputs or [])]
+    walked_producer = False
+    while stack and len(seen) < 32:
+        uid = stack.pop()
+        if uid in seen:
+            continue
+        seen.add(uid)
+        up = by_id.get(uid)
+        if up is None:
+            continue
+        if up.kind in _CUT_PRODUCER_KINDS:
+            return str((up.spec or {}).get("aspect") or "") or cut_default
+        if up.kind == "materialize_source":
+            walked_producer = True
+            break
+        stack.extend(str(u) for u in (up.inputs or []))
+    if walked_producer:
+        return source_aspect or "original"
+    return existing_clips_aspect or source_aspect or "original"
 
 
 async def _existing_clip_producer_nodes(db: AsyncSession, project_id: UUID) -> list[UUID]:
@@ -1330,6 +1328,62 @@ async def _existing_clip_producer_nodes(db: AsyncSession, project_id: UUID) -> l
         if node_id:
             seen[UUID(str(node_id))] = None
     return list(seen)
+
+
+async def _cut_default_aspect(db: AsyncSession, exemplar_asset_id: str | None) -> str:
+    """The cut chains' aspect when no step names one — the runtime's own
+    fallback chain (tools/clips/node.py: spec → run ctx → EXEMPLAR skeleton →
+    skin default) resolved at stamp time. The exemplar's probed dims snap to
+    the same three-class tier as the decompiler's measured skeleton aspect
+    (craft_scan.aspect_of and display_aspect_class are the same log-ratio
+    snap), so the frame predicts the skeleton without running the decompile.
+    """
+    if exemplar_asset_id:
+        try:
+            meta = (
+                await db.execute(
+                    select(Asset.meta).where(Asset.id == UUID(str(exemplar_asset_id)))
+                )
+            ).scalar_one_or_none()
+        except ValueError:
+            meta = None
+        if (
+            isinstance(meta, dict)
+            and isinstance(meta.get("width"), int)
+            and isinstance(meta.get("height"), int)
+            and meta["width"] > 0
+            and meta["height"] > 0
+        ):
+            return display_aspect_class(meta["width"], meta["height"])
+    return SHORTS_DEFAULT_ASPECT
+
+
+async def _existing_clips_aspect(db: AsyncSession, project_id: UUID) -> str | None:
+    """The project's CURRENT clips' display class — the frame prediction for
+    a modifier family acting on existing clips (cross-run, no in-run
+    producer). Mirrors OutputResponse._derive_aspect's precedence
+    (render_spec declares; "original" normalizes to the payload's display
+    stamp); mixed / unknown shapes stay None (the conservative fallback,
+    never a coin flip — resolve_source_aspect 同律)."""
+    rows = (
+        await db.execute(
+            select(Output.render_spec, Output.payload).where(
+                Output.project_id == project_id,
+                Output.type == "clip",
+                Output.archived_at.is_(None),
+            )
+        )
+    ).all()
+    classes: set[str] = set()
+    for rs, payload in rows:
+        declared = rs.get("aspect") if isinstance(rs, dict) else None
+        if declared == "original":
+            declared = None
+        stamped = payload.get("aspect") if isinstance(payload, dict) else None
+        aspect = declared or stamped
+        if isinstance(aspect, str) and aspect:
+            classes.add(aspect)
+    return classes.pop() if len(classes) == 1 else None
 
 
 def _params_of(step: WorkflowStep) -> dict[str, Any]:
@@ -1377,27 +1431,6 @@ def _split_station_estimate(estimate: dict | None) -> tuple[dict | None, dict | 
         else None
     )
     return doc, asm
-
-
-def _task_book_text(steps: list[WorkflowStep]) -> str | None:
-    """The task-book document's birth text — the compile-time task book the
-    plan node was stamped with (Plan.book_summary's one source). The plan
-    step's runtime book_summary overwrites it at back-write time (same
-    source, no flicker)."""
-    plan_step = next((s for s in steps if s.kind == "plan"), None)
-    if plan_step is None:
-        return None
-    task_book = (plan_step.spec or {}).get("task_book") or {}
-    slots_raw = task_book.get("slots") or []
-    if not slots_raw:
-        return None
-    from app.models.schemas import IntentSlot  # deferred: schema leaf
-    from app.pipeline.node_runners import Plan  # deferred: runner crew
-
-    return Plan.book_summary(
-        [IntentSlot.model_validate(s) for s in slots_raw],
-        task_book.get("target_language") or "en",
-    )
 
 
 def _research_brief_text(brief: dict) -> str | None:
@@ -1492,14 +1525,6 @@ async def sync_graph_node_for_step(db: AsyncSession, step: WorkflowStep) -> None
         }
         if not error_line:
             node.spec.pop("error", None)
-    # The task-book document's text rides the plan step's runtime book — the
-    # refined book_summary overwrites the compile-time fallback when planning
-    # lands (same source as the stamp, no flicker).
-    if node.type == "document" and (node.spec or {}).get("role") == _TASK_BOOK_ROLE:
-        plan_step = next((s for s in family if s.kind == "plan"), None)
-        book_summary = ((plan_step.spec or {}).get("book_summary")) if plan_step else None
-        if book_summary and book_summary != (node.spec or {}).get("text"):
-            node.spec = {**(node.spec or {}), "text": book_summary}
     # 版本累积 (ADR-057 — the pager's version lineage): the new terminal's
     # landed products JOIN the node's existing versions instead of replacing
     # them — a revision's old and new products stay flippable on the card

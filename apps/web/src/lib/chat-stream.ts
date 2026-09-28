@@ -23,6 +23,7 @@ import { API_URL, UNAUTHORIZED_EVENT } from "@/lib/api"
 import { clearAuth, getToken } from "@/lib/auth"
 import i18n from "@/lib/i18n"
 import { routeStreamFrame } from "@/lib/chatStreamFrames"
+import type { CandidateEventPayload } from "@/lib/chatStreamFrames"
 
 // The frame vocabulary's single seat is chatStreamFrames.ts (Phase 3 Batch
 // A test seam) — re-exported here so existing import sites stay put.
@@ -55,6 +56,12 @@ export interface ChatTurnBody {
    * project (ADR-038 — the single identity payload; the skin follows the
    * persona). */
   persona_id?: string
+  /** The sender's surface at send time (2026-09-25 canvas↔chat 联动, user
+   * ruling — the page width already judges it): "canvas" = the dock is in
+   * panel form, the plan's draft graph live beside the conversation — the
+   * reply's review invitation may name that home; "chat" = no canvas
+   * beneath (full / dock forms) — the reply stays surface-neutral. */
+  surface?: "canvas" | "chat"
   prior_intent?: unknown
 }
 
@@ -98,6 +105,12 @@ export interface StreamChatOptions {
    * activity_id; the server's terminal sweep guarantees zero active
    * activities at the envelope (T16-B), the client sweeps defensively too. */
   onActivity?: (frame: ActivityFramePayload) => void
+  /** Candidate Surface (Workspace 合同 v4.2 C8-c): one ``assistant.candidates``
+   * event — a candidate set's full member payload at the door's success, or
+   * a selection repaint (the set's FULL current selection — replace, never
+   * union). Live cards roll back if the turn fails (the server persists the
+   * turn's events as ONE candidates_log row on the completed path only). */
+  onCandidates?: (event: CandidateEventPayload) => void
 }
 
 /** Answer endpoint payload (the answer doubles as resume). */
@@ -138,6 +151,24 @@ export class StreamTurnError extends Error {
   }
 }
 
+/** The answer endpoint's settled-question codes (2026-09-28 — before them
+ * the raw "Question already answered" string leaked into the global toast
+ * and the dead pill re-docked for another click, the「点击回答仍然报错」
+ * loop): superseded = a newer question took the floor mid-click;
+ * already_answered = the plain double gesture. Both are quiet settles on
+ * the client, never error toasts. */
+export function questionSettledCode(
+  detail: unknown,
+): "question.superseded" | "question.already_answered" | null {
+  if (detail !== null && typeof detail === "object") {
+    const code = (detail as { code?: unknown }).code
+    if (code === "question.superseded" || code === "question.already_answered") {
+      return code
+    }
+  }
+  return null
+}
+
 function streamTurn<T>(
   url: string,
   body: unknown,
@@ -149,6 +180,7 @@ function streamTurn<T>(
     onQuestionPreview,
     onCheckpoint,
     onActivity,
+    onCandidates,
   }: {
     signal?: AbortSignal
     onDelta?: (text: string) => void
@@ -156,6 +188,7 @@ function streamTurn<T>(
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
     onCheckpoint?: StreamChatOptions["onCheckpoint"]
     onActivity?: StreamChatOptions["onActivity"]
+    onCandidates?: StreamChatOptions["onCandidates"]
   },
 ): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -219,6 +252,9 @@ function streamTurn<T>(
           case "activity":
             onActivity?.(frame.frame)
             break
+          case "candidates":
+            onCandidates?.(frame.event)
+            break
           case "completed":
             resolve(frame.envelope as T)
             break
@@ -260,6 +296,7 @@ export function streamAnswer<T>(
     onThinking?: (payload: ThinkingPayload) => void
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
     onActivity?: StreamChatOptions["onActivity"]
+    onCandidates?: StreamChatOptions["onCandidates"]
   },
 ): Promise<T> {
   return streamTurn(
@@ -277,12 +314,12 @@ export function streamAnswer<T>(
  * `e.name === "AbortError"`). */
 export function streamChat<T>(
   body: ChatTurnBody,
-  { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity }: StreamChatOptions,
+  { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity, onCandidates }: StreamChatOptions,
 ): Promise<T> {
   return streamTurn(
     `${API_URL}/api/v1/chat`,
     body,
     { completed: "turn.completed", failed: "turn.failed" },
-    { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity },
+    { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity, onCandidates },
   )
 }

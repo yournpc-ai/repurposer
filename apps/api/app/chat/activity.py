@@ -90,6 +90,9 @@ _EXPLORATION_VERBS: frozenset[str] = frozenset(EXPLORATION_TOOLS)
 # the label keeps saying what the work WAS). The draft kind speaks TWO key
 # pairs (2026-09-25 文案批): proposing a plan reads as 整理方案, revising
 # existing work reads as 修改 — one kind, picked by tool at open time.
+# The draft DONE keys ride the live wire only: draft settles never persist
+# and never render (落定即退役 2026-09-28 — the docked plan card is the
+# settled evidence).
 _ACTIVITY_KEYS = {
     KIND_DRAFT: ("chat.activity.draft", "chat.activity.draftDone"),
     KIND_RUN: ("chat.activity.run", "chat.activity.runDone"),
@@ -219,7 +222,9 @@ class ActivityProjector:
         # wall clock, so a clock adjustment never fabricates a negative span)
         self._active: dict[str, tuple[str, str | None, float]] = {}
         # The turn's durable history (activity 持久化, 2026-09-25): every
-        # frame that reached a TERMINAL state, in emission order. The
+        # frame that reached a TERMINAL state, in emission order — minus
+        # draft spans, whose settles never persist (落定即退役 2026-09-28:
+        # the docked plan card is the evidence). The
         # envelope sweep's 终帧律 guarantees zero active at turn end, so
         # this list IS the whole story — the SSE route persists it as one
         # activity_log message row so a refresh replays the settled rows
@@ -264,7 +269,15 @@ class ActivityProjector:
             else None
         )
         frame = self._frame(activity_id, kind, status, key, duration_ms=duration_ms)
-        self._settled.append(frame)
+        # 落定即退役 (2026-09-28 用户拍板): a draft span's settle rides the
+        # live wire (the row leaves the now-line at the right beat) but NEVER
+        # persists — the docked plan card / the run receipt IS the settled
+        # evidence, and the hollow receipt row (方案整理好了 / 改好了) retired
+        # from the flow (the web timeline filters it). Explore milestones
+        # append through their own seat (``explore_milestone``) — they are
+        # born-completed count facts, untouched by this law.
+        if kind != KIND_DRAFT:
+            self._settled.append(frame)
         return frame
 
     @staticmethod

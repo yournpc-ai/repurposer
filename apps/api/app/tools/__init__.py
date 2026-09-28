@@ -187,7 +187,7 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
         ),
         ToolEntry(
             name="write_article",
-            description="Write a long-form article / newsletter draft",
+            description="Write a long-form article draft",
             behavior="probabilistic",
             params_model=CopyWriterParams,
             summary_templates={
@@ -345,6 +345,45 @@ def tool_catalog_lines(*, exclude: frozenset[str] = frozenset()) -> str:
         )
         for entry in dispatchable_tools()
         if entry.llm_visible and entry.name not in exclude
+    )
+
+
+# The user-language menu projection (批「身份核」2026-09-27): (tool, spoken
+# deliverable phrase) pairs in display order. The catalog above is BUILDER
+# vocabulary (names + params); this is SPEAKER vocabulary (what the user
+# GETS) — both projected here at the registry's home, never re-assembled per
+# consumer. A tool dropped from the registry drops from the menu; seats and
+# hidden citizens never advertise. Channel-neutral phrasing by construction —
+# venue words never enter either vocabulary: the catalog description is
+# venue-free too (a venue word in it once surfaced in user speech as 通讯稿,
+# 批5 v2); venues are the user's to name.
+_MENU_PHRASES: list[tuple[str, str]] = [
+    ("select_clips", "highlight clips cut from the source media"),
+    ("write_post", "social posts"),
+    ("write_article", "long-form articles"),
+    ("write_quotes", "quote cards"),
+    ("write_carousel", "carousels (multi-page image cards)"),
+    ("translate_clip", "captions / translated subtitles"),
+    ("dub_clip", "voice dubbing into another language"),
+    ("remove_filler", "filler-word removal"),
+    ("add_music", "background music"),
+    ("reframe_clip", "reframing (vertical / square / horizontal)"),
+    ("align_stills", "photo-slideshow videos from stills + audio"),
+]
+
+
+def capability_menu_lines() -> str:
+    """The menu every chat surface speaks from (the identity partial's data
+    seat): one user-language deliverable phrase per dispatchable, visible,
+    non-seat tool, in ``_MENU_PHRASES`` order."""
+    registry = TOOL_REGISTRY
+    return "\n".join(
+        f"- {phrase}"
+        for name, phrase in _MENU_PHRASES
+        if (entry := registry.get(name)) is not None
+        and entry.llm_visible
+        and not entry.seat
+        and entry.name in NODE_KINDS
     )
 
 

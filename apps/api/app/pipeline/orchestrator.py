@@ -593,23 +593,6 @@ def _compile_task_list(
             )
             seq += 1
 
-    # 计划兜底 (2026-09-02 用户拍板): stamp the compile-time plan on
-    # the plan node so the plan document node's text is born WITH the
-    # graph — while the run parks at the direction interrupt the document
-    # already reads the request's summary, never a transparent shell. The
-    # runtime stamp (book_summary + refined task_book) overwrites it when
-    # planning lands; both read the same generation-node spec.slot source,
-    # and Plan.book_summary renders the two identically.
-    if plan_idx is not None:
-        book_slots = [
-            ns.spec["slot"] for ns in nodes if isinstance(ns.spec.get("slot"), dict)
-        ]
-        if book_slots:
-            nodes[plan_idx].spec["task_book"] = {
-                "slots": book_slots,
-                "target_language": task.target_language or "en",
-            }
-
     return nodes
 
 

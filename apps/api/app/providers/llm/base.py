@@ -64,14 +64,32 @@ class ProviderCapabilities:
     never probes or guesses capabilities itself.
 
     ``reasoning_dialect`` names the provider's reasoning-channel dialect the
-    client normalizes INTERNALLY (ADR-066 位置律 — e.g. MiniMax's
-    ``<think>…</think>`` preamble, stripped by its own client before any
-    fragment reaches an upstream consumer). ``None`` = no reasoning channel.
+    client normalizes INTERNALLY (ADR-066 位置律 — e.g. MiniMax with
+    ``reasoning_split=True``: thinking arrives as separate
+    ``reasoning_content`` / ``reasoning_details`` fields, consumed or dropped
+    by its own client before any fragment reaches an upstream consumer).
+    ``None`` = no reasoning channel.
+
+    ``supports_constrained_decoding``: the provider ENFORCES a declared
+    output schema at decode time (Tier-2 structured outputs). Merely
+    ACCEPTING a json_schema field does not count — M3 ignores it outright
+    (spike 2026-09-11/12), so M3 declares False and the harness keeps the
+    Tier-1 tool-call channel as its only schema-following line.
+
+    ``prompt_cache``: the provider-side cache dialect, e.g. MiniMax's
+    ``"passive_prefix"`` — an automatic prefix cache matched in
+    tools→system→history order (≥512 input tokens, load-dependent TTL,
+    per-backend-pod scope: a cold pod's first call always misses, forensics
+    2026-09-27). ``None`` = no known cache. Declarative only — the harness
+    never changes behavior off it; it exists so policy layers (warmup,
+    observability) can ask.
     """
 
     supports_native_tools: bool = False
     supports_json_schema: bool = False
     reasoning_dialect: str | None = None
+    supports_constrained_decoding: bool = False
+    prompt_cache: str | None = None
 
 
 class WireTier(IntEnum):

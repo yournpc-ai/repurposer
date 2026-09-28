@@ -20,6 +20,7 @@ dependencies = [
     "structlog>=24.1",
     "psycopg2-binary>=2.9.12",
     "faster-whisper>=1.2.1",
+    "opencc-python-reimplemented>=0.1.7",  # zh 转写稿字符集规范化 (asr.py) — pure-python OpenCC t2s
     "numpy>=1.26",
     "opencv-python-headless>=5.0,<6",
     "av>=13",  # PyAV: direct dep for speaker_map arbitration clip cuts

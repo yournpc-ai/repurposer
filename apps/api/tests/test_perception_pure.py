@@ -129,6 +129,9 @@ def _asset(**over) -> SimpleNamespace:
         meta={"language": "en"},
     )
     base.update(over)
+    # Mirror Asset.display_name's title-first property (stub drift repair —
+    # the production roster line reads display_name, the stub grew none).
+    base.setdefault("display_name", base["title"])
     return SimpleNamespace(**base)
 
 
@@ -371,6 +374,43 @@ class TestUnderstandingDigestLines:
         lines = understanding_digest_lines(u)
         quoted = next(l for l in lines if l.startswith("- Quotable lines:"))
         assert "5" in quoted and "line 0" in quoted and "line 3" not in quoted
+
+    def test_beats_render_labels_with_anchors_capped(self) -> None:
+        """节拍锚 (2026-09-27): resolved spans render M:SS-M:SS + label, the
+        list caps at 8 with a (+N more) tail, label-less beats drop."""
+        from app.chat.perception.executes import understanding_digest_lines
+        from app.models.schemas import MaterialUnderstanding, TopicBoundary
+
+        u = MaterialUnderstanding(
+            core_thesis="thesis",
+            topic_boundaries=[
+                TopicBoundary(
+                    id=f"t{i}", label=f"beat {i}",
+                    start=float(i * 60), end=float(i * 60 + 90),
+                )
+                for i in range(10)
+            ]
+            + [TopicBoundary(id="tx", label="", start=0.0, end=10.0)],
+        )
+        lines = understanding_digest_lines(u)
+        beats = next(l for l in lines if l.startswith("- Beats: "))
+        assert "0:00-1:30 beat 0" in beats
+        assert "7:00-8:30 beat 7" in beats
+        assert "beat 8" not in beats
+        assert beats.endswith("(+2 more)")
+
+    def test_beats_unresolved_span_keeps_label_only(self) -> None:
+        """Unresolved beats render the bare label — never an invented time."""
+        from app.chat.perception.executes import understanding_digest_lines
+        from app.models.schemas import MaterialUnderstanding, TopicBoundary
+
+        u = MaterialUnderstanding(
+            core_thesis="thesis",
+            topic_boundaries=[TopicBoundary(id="t1", label="开场白")],
+        )
+        lines = understanding_digest_lines(u)
+        beats = next(l for l in lines if l.startswith("- Beats: "))
+        assert beats == "- Beats: 开场白"
 
 
 # ---- 证据 reads (ADR-088 §2 拍 2, 2026-09-22 迭代一): search + segment -------
