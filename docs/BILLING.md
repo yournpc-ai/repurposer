@@ -1,6 +1,6 @@
 # BILLING — 积分与计费架构
 
-> Status: 活跃（2026-09-05 建，ADR-055 同批落档；积分层施工完成 = W7 积分批 09-03~09-05 三天提前完工；支付 / 套餐经济 = W11 支付批 09-07~09-18 随拍板（四）提前）
+> Status: 活跃（2026-09-05 建，ADR-055；积分层施工完成，支付 / 套餐经济随 W11 支付批）
 > 本文是积分 / 钱包 / 计费架构的**唯一事实源**：概念、表、扣费时序、比例参数、负余额语义、API、分期。排期只引用 PROGRESS；参数的当前生效值以 `app/platform/configs.py` 注册表为准（本文只写默认）。
 
 ## 1. 概念层（三个词，两层货币）
@@ -67,7 +67,7 @@ class Config(Base):                       # configs — 公共运营参数表（
                      （用户级 shortfall）            ✅ 失败不扣费（§6）
 ```
 
-1. **授予（grant）**：开户赠额（默认 `wallet.signup_grant=100000`，2026-09-13 自 10000 再上调），`kind=grant, ref={source:"signup"}`。
+1. **授予（grant）**：开户赠额（默认 `wallet.signup_grant=100000`），`kind=grant, ref={source:"signup"}`。
 2. **预扣（hold）**：`create_run` 折完全图报价后按 **high 端**写 hold（idem `run:{id}:hold`）。余额 < hold → 出生地拒绝（422 `credits.insufficient` + 入流灰行；**用户级"积分不足"与 provider 级 MiniMax 402 严格两词**）。并发 run 各自 hold，`wallets.version` 乐观锁防超扣。
 3. **实扣（capture）**：在每个 step 收尾、metering 归并 `cost` 的**同一写入点**（ADR-050 会话纪律不破）按 actual 实扣（idem `step:{id}:capture`）。成功 step 收全量（含内部重试消耗——那是真实成本）；**failed/skipped 不写 capture 行**。provider cost 照记 `workflow_steps.cost` 供对账，不上用户账单。
 4. **释放（release）**：run 终态释放剩余（idem `run:{id}:release`）。
@@ -92,8 +92,8 @@ class Config(Base):                       # configs — 公共运营参数表（
 - **消耗比例 ≠ 购买比例**（钱→积分汇率是 W11 套餐定价的另一个决策，可独立做阶梯加赠）。
 - 调参不动历史账：transaction 的积分额落库即事实，USD 成本在 `workflow_steps.cost` 原样保留，两侧各自为真；只有估价贴数字随参数实时变（期望行为）。
 - render_seconds 价目当前为 0（自家 infra）——估价贴不含渲染成本，诚实；将来定价只改 PRICING 一行。
-- **voice_clones 报价幂等（2026-09-13）**：声纹克隆按「每个新声一次」计费（provider 规则——首次 T2A 使用触发），一条链多站 dub 逐节点各自声明 would-be clone 时 fold 只收一次（钳制在 `fold_estimates` 一座，报价=fold 的唯一缝合点；与计量同律——`record_media_usage` 只在 voice_id 缺失时记账）——估价 ≡ 计量，多语言配音链不再虚高三倍克隆费。
-- **配方卡估价贴的可报价域（2026-09-13）**：translate / dub / reframe 挂在 materialize_source 上的链，live 任务书诚实 NULL（编译期片段未生——「估价随运行」），配方卡贴纸按 RECIPE_QUOTE_FACTS 声明的典型素材可报价（`quote_scope="recipe"` 单座豁免，传进 `compile_recipe_quote` 的 ctx）——此前 multilingual-subs / voice-dub 两卡因此无贴纸。
+- **voice_clones 报价幂等**：声纹克隆按「每个新声一次」计费（provider 规则——首次 T2A 使用触发），一条链多站 dub 逐节点各自声明 would-be clone 时 fold 只收一次（钳制在 `fold_estimates` 一座，报价=fold 的唯一缝合点；与计量同律——`record_media_usage` 只在 voice_id 缺失时记账）——估价 ≡ 计量，多语言配音链的克隆费如实计一次。
+- **配方卡估价贴的可报价域**：translate / dub / reframe 挂在 materialize_source 上的链，live 任务书诚实 NULL（编译期片段未生——「估价随运行」），配方卡贴纸按 RECIPE_QUOTE_FACTS 声明的典型素材可报价（`quote_scope="recipe"` 单座豁免，传进 `compile_recipe_quote` 的 ctx）。
 
 **公共 config 表（configs）**——运营参数的统一家（admin 预备），三条防腐纪律：
 
@@ -107,7 +107,7 @@ class Config(Base):                       # configs — 公共运营参数表（
 
 **规则**：允许余额为负并如实显示；负余额用户过不了下一次 hold 判定（余额 < high 端即拒）。
 
-**业界实证（2026-09-05 查证）**：OpenRouter 预付余额可为负（在途请求照扣），随后硬停一切新请求（连免费档），直到回正；Replicate / fal.ai 同款——**在途任务跑完照扣、被拦的永远是新任务**。行业共识 = gate at the start, never mid-flight。中途拦停催款是 AWS 惊喜账单象限，无人采用。
+**业界实证**：OpenRouter 预付余额可为负（在途请求照扣），随后硬停一切新请求（连免费档），直到回正；Replicate / fal.ai 同款——**在途任务跑完照扣、被拦的永远是新任务**。行业共识 = gate at the start, never mid-flight。中途拦停催款是 AWS 惊喜账单象限，无人采用。
 
 **为什么允许**：① run 不死在半程（会击穿的只有 NULL 估价步骤——我们报价能力的缺口，不该让用户用中断买单）；② 账本诚实（clamp 0 是让自己永远看不见失血点）；③ 负余额发生次数 = NULL 报价节点的消灭进度指标，喂校准闭环；④ 支付未接入期立语义零成本。
 
@@ -138,20 +138,20 @@ GET /wallet/transactions?limit&cursor      → 台账行（W11 计费中心的�
 
 **错误形态**（API.md §4）：`422 {detail: {code: "credits.insufficient", balance, required}}`。
 
-**前端四面 + 两余额读面**（四面 2026-09-07 ADR-057 扩展）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴 / **节点卡空态估价**（草稿态产物区「运行后生成 · 约 N 积分」，逐节点 fold）+ 账户控制台 credits 槽 + 项目页左下角 **CreditsPill** + 余额不足入流灰行。**确认 = 节点锚定**（ADR-057）：确认卡锚在图上受影响节点旁、估价随行，取代抽象总价行——用户确认的是「这张图的这些节点要花这些积分」，不是一句话总价。估价四面同源（同一个 fold、同一份 PRICING、同一个比例），结构性不可能不一致。
+**前端四面 + 两余额读面**（ADR-057）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴 / **节点卡空态估价**（草稿态产物区「运行后生成 · 约 N 积分」，逐节点 fold）+ 账户控制台 credits 槽 + 项目页左下角 **CreditsPill** + 余额不足入流灰行。**确认 = 节点锚定**（ADR-057）：确认卡锚在图上受影响节点旁、估价随行，取代抽象总价行——用户确认的是「这张图的这些节点要花这些积分」，不是一句话总价。估价四面同源（同一个 fold、同一份 PRICING、同一个比例），结构性不可能不一致。
 
-**语义账本塌缩**（ADR-057，内核批同批落地）：hold / release 永不上 UI——CreditsPill popover 的台账投影改写为 **per-run-event 语义行**（「Post 修订 −3」「初始生成 −42」：一次用户可感知动作 = 一行，hold/capture/release 内部时序折叠进该行净额）；用户面只显**花费 / 赠送 / 充值**三族。裸 kind 列表（`hold`/`capture`/`release` 逐行）是机器视角泄漏，随批删除。
+**语义账本塌缩**（ADR-057）：hold / release 永不上 UI——CreditsPill popover 的台账投影 = **per-run-event 语义行**（「Post 修订 −3」「初始生成 −42」：一次用户可感知动作 = 一行，hold/capture/release 内部时序折叠进该行净额）；用户面只显**花费 / 赠送 / 充值**三族。裸 kind 列表（`hold`/`capture`/`release` 逐行）是机器视角泄漏，不上 UI。
 
 ## 8. 分期与边界
 
 | 期 | 内容 |
 |---|---|
-| **W7 积分批（09-03~09-05 提前完工）** | 三表 + migration + configs 注册表/reconcile + 开户 grant + hold/capture/release 真扣费 + 出生地 shortfall 判定 + 三面展示 + 灰行 + `/wallet` 端点。**积分此时就是真的**——只是还没有花钱买的入口 |
+| **W7 积分批（09-03~09-05）** | 三表 + migration + configs 注册表/reconcile + 开户 grant + hold/capture/release 真扣费 + 出生地 shortfall 判定 + 三面展示 + 灰行 + `/wallet` 端点。**积分从这批起就是真的**——只是还没有花钱买的入口 |
 | **W11 支付批** | `platform/payments.py` 适配器（三方对接 + webhook + 订阅生命周期）→ 只写 ledger；套餐语义（周期额度 vs 充值包、购买比例、档位）那时定，`kind`/`ref` 已留座位；用户计费中心 = 台账只读投影 |
 
 **显式不做（W11 座位已留）**：`/payments/*` 端点、webhook 接收器、admin 侧 configs 读写端点、双桶余额（订阅周期额度 vs 充值包——W11 套餐语义定夺时如需分桶，ledger 加列而非改语义）。
 
-**孤儿 hold 回收（2026-09-05 验收对账暴露，当日落地）**：曾存在的边界——run 被删（project 级联，台账 append-only 按设计存活）或永停非终态（WAITING_HUMAN 被弃）时 hold 无解冻路径。现行机制 = 双路闭环：① **删除即退**——project 删除端点同事务对非 RUNNING run 调 `release_run`（RUNNING 在途 run 的捕获量仍在增长，提前退会与后落 capture 对不上账；它归 worker 收官路）；② **收官路台账自结算**——`maybe_finalize_run` 对 run 行已删 / 项目已删的残余调用走 `_release_orphaned_hold`（ledger hold 行自带 owner，remainder 从台账重算，幂等键防双退）；WAITING_HUMAN 被弃由 TTL 过期扫荡（`expire_stale_interrupts`）→ run 收官 → 正常 release 兜住。剧本 S15 锁删除路径。reconcile 尺子对「被删 run 的未结 hold」保留 ○ known-open 豁免（dev go-live 前存量 7 笔按业务决定不手工补），活 run 未结仍硬判。
+**孤儿 hold 回收**：run 被删（project 级联，台账 append-only 按设计存活）或永停非终态（WAITING_HUMAN 被弃）时，hold 的解冻走双路闭环：① **删除即退**——project 删除端点同事务对非 RUNNING run 调 `release_run`（RUNNING 在途 run 的捕获量仍在增长，提前退会与后落 capture 对不上账；它归 worker 收官路）；② **收官路台账自结算**——`maybe_finalize_run` 对 run 行已删 / 项目已删的残余调用走 `_release_orphaned_hold`（ledger hold 行自带 owner，remainder 从台账重算，幂等键防双退）；WAITING_HUMAN 被弃由 TTL 过期扫荡（`expire_stale_interrupts`）→ run 收官 → 正常 release 兜住。剧本 S15 锁删除路径。reconcile 尺子对「被删 run 的未结 hold」保留 ○ known-open 豁免，活 run 未结仍硬判。
 
 ## 9. 模块家与缝合点
 

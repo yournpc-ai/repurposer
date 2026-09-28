@@ -1,6 +1,6 @@
 # MENTIONS — @ 提及体系方针
 
-> Status: 活跃（2026-08-11 建，2026-09-11 校订——output mention 增 `quote` 字段，ADR-069）
+> Status: 活跃（output mention 带 `quote` 字段，ADR-069）
 > 本文是**一切 mention 需求的判定方针与机制纪律**——一个新"@X"想法先过 §2 族判定 + §3 排除清单，过不了就是不做。运行态实现细节归 `CHAT_ARCHITECTURE.md`，本文只立规矩。
 
 ## 1. 定位
@@ -12,7 +12,7 @@ mention = 用户与 AI 交流时对**实体**的点名机制。提示词的基�
 | 族 | 回答的问题 | 成员 | 效果族 | 消费面 |
 |---|---|---|---|---|
 | **请求** request | "用什么做"——计划时的材料与能力 | `asset`（素材）、`skill`（技能，立案未实施，方针见 §5） | 上下文富化为底（点名素材进 LLM 上下文，推断归 intent_router） | composer / 配方 overlay 首发 |
-| **指认** reference | "改哪个"——已有之物的引用 | `output`（可携带 `quote` 段落级指认，见 §4 末条）、`workflow_step`、`transcript_segment`（未实施，仅类型残留，未注册不可创建） | 确定性指认注入（LLM 永不猜"第二条"是哪条；**Final Hardening B4 钉恒胜写门**：回合恰一个 output pin 时服务端强制修订 target = 钉 id，LLM 的 target 转述仅建议——live 验收曾实证转述覆盖钉） | chat 修订 |
+| **指认** reference | "改哪个"——已有之物的引用 | `output`（可携带 `quote` 段落级指认，见 §4 末条）、`workflow_step`、`transcript_segment`（未实施，仅类型残留，未注册不可创建） | 确定性指认注入（LLM 永不猜"第二条"是哪条；**钉恒胜写门**：回合恰一个 output pin 时服务端强制修订 target = 钉 id，LLM 的 target 转述仅建议） | chat 修订 |
 
 两族不混：请求族进计划路径，指认族进修订路径。一个新 mention 类型必须唯一落族；两族都落不了的实体（如配方）说明它根本不是 mention。
 
@@ -20,7 +20,7 @@ mention = 用户与 AI 交流时对**实体**的点名机制。提示词的基�
 
 | 候选 | 为什么不是 | 正确通道 |
 |---|---|---|
-| 配方 recipe | 发射上下文——点卡这个动作已经说完了一切，句中 chip 是第三遍冗余（overlay 标题与预填文案已各说一遍） | **配方 = 提示词**（2026-08-11 裁定）：预填模板原文即全部发射载荷，模板点名产出与语言；无 `recipe_id` transport、无服务端播种，book path 与 composer 完全同径 |
+| 配方 recipe | 发射上下文——点卡这个动作已经说完了一切，句中 chip 是第三遍冗余（overlay 标题与预填文案已各说一遍） | **配方 = 提示词**：预填模板原文即全部发射载荷，模板点名产出与语言；无 `recipe_id` transport、无服务端播种，book path 与 composer 完全同径 |
 | 产出类型（clips / post / article…） | 大白话推断已够准；且 `@output` 已被指认族占用（引用已有产物），同词两义禁 | intent_router 链推断 |
 | 参数（语言 / 数量 / 画幅…） | mention 不是表单控件，预设空间无界 | 预填文案改字（发送前）/ chat 修订（发送后，恒胜） |
 | 人设 persona | 身份是挂载，不是点名 | composer Persona 块 / `persona_id` 载荷 |
@@ -33,7 +33,7 @@ mention = 用户与 AI 交流时对**实体**的点名机制。提示词的基�
 ## 4. 机制纪律
 
 - **注册面唯一在前端**：前端 `MENTION_REGISTRY`（picker 候选源 + icon + i18n）是唯一注册面——服务端**无按类型注册表**：mentions 经 `build_context`（chat/context.py）无类型通用透传注入 intent context，指认解析由 LLM 按 prompt 规则用 id 完成。新类型 = 前端一条注册项（+ 需要时一条 prompt 规则），禁一次性分支。
-- **输入组件唯一**：一切文本输入面挂同一个 `MentionEditor`（composer / chat dock——生成 overlay 底排在结果期就地转为底部 dock，ADR-041；产物微调会话并入 dock，指认 = @output mention——focus 机制已退役，ADR-058）；候选源差异走 `MentionContext`（面的数据喂注册表源），禁每面各起 textarea / 自养 picker。
+- **输入组件唯一**：一切文本输入面挂同一个 `MentionEditor`（composer / chat dock——生成 overlay 底排在结果期就地转为底部 dock，ADR-041；产物微调会话并入 dock，指认 = @output mention——无 focus 机制，ADR-058）；候选源差异走 `MentionContext`（面的数据喂注册表源），禁每面各起 textarea / 自养 picker。
 - **chip 三律**：可见（内联 chip 带 ×）/ 发送即消费 / × 即纯化（无状态跨发送残留）。
 - **服务端解析唯一发生地**：mention 的机械效果（上下文富化、指认注入）只在服务端发生；前端永不构建 prior。
 - **大白话显示名**：picker 与 chip 显示用户语言（"配音"），永不出现节点 kind / 模型名 / 技术黑话。

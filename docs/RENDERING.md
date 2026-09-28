@@ -1,6 +1,6 @@
 # Rendering — 渲染链架构（clip-spec 契约 · 烘焙缝 · 渲染服务 · 共享包）
 
-> Status: 活跃（2026-08-17 建；2026-08-18 对齐现状）。本文是 **clip-spec 字段级契约与渲染链的唯一事实源**（2026-08-17 自 VIDEO_EDITOR.md §4/§6/§9 迁入）；轨道模型（§8）= **现行契约（ADR-044，2026-08-17 过会，08-17~18 落地）**。
+> Status: 活跃（2026-08-18 更新）。本文是 **clip-spec 字段级契约与渲染链的唯一事实源**；轨道模型（§8）= **现行契约（ADR-044）**。
 > 上游决策：ADR-016（契约锁定 / 渲染器黑盒）/ ADR-018（服务拆分 + 共享包）/ ADR-020（stills 第二源）/ ADR-023（音乐入库烘焙）/ ADR-024（存储缝）/ ADR-026（C2PA 读 spec）/ ADR-032（Operation Model 快照）/ ADR-044（轨道模型 + 操作集闭包）。
 > 分工：本文 = 契约 + 渲染链架构 + 函数地图 + 概念命名。编辑器交互形态与 L2/L3 分工线归 VIDEO_EDITOR.md；竞品渲染技术调研归 `research/RENDERING_TECH.md`（原始素材层）。
 
@@ -156,7 +156,7 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——下表的 family / t
 - `tracks.ts` — **轨道分区（TS 端）**：`TRACK_FIELDS` = 9 轨 × spec 顶层字段 + `TrackId` + 类型级分区断言（ClipSpec 键必须全登记，tsc 强制）。本端只声明分区——可执行目录在 Python（运行时唯一消费端）。
 - `Clip.tsx` — 唯一渲染组件。泳道投影消费 `types.ts` 单一家；`LayerView`（层渲染件，按 `media.kind` 单分支）；`TransitionVeil`（入边过渡单侧面纱：fade 12f 黑场 / dip 8f 白闪，媒体之上、层与文字之下）；`groupLines`（7 词一行）；`lineRevealFrame`（行级入场帧 = `outputTimeAtSourceTime`）；`captionEntrance`（entrance 原语 → opacity/transform，每值过 libass 映射闸；**期 2**：行内任一 cue `emphasis` 则以 pop-in 覆盖预设 entrance，single/stack 两调用点同规则）；stack 布局（锚点上下半场决定容器生长方向，滑窗 `maxLines`）；双语对照配对（闸在主源段——异源段不匹配主源字幕）；`pointStyle`（归一化中心点 → CSS translate，= libass `\pos`）；尺寸按画面推导（`size × height/1920` 参考系）。**期 2 分镜**：`shotFrames`（dwell → 帧数，末拍吸收余数——splitFrames 同款纪律）、`StillShot`（Ken Burns 原语：zoom 1↔rate out-cubic；pan 带底缩放、行程按 `(rate−1)/rate·48%` 安全界——translate 先于 scale 生效，超界露边）；`image_shots` 非空时代替均分（空 = legacy 路径，向后兼容）。
 - `captions.ts` — `CAPTION_PRESETS` **字幕样式目录**（注册表先例）：样式 = 三原语（`layout` × `entrance` × `wordHighlight`）组合；**加样式 = 一行登记**（TS 类型由此推导，Python 只校验成员）；**加原语 = 过 libass 映射闸 + Clip.tsx 一分支**（CSS ∩ libass 子集纪律）。
-- `fonts.ts` — `fontFamilyFor`（品牌字体枚举 → 字体族栈）。品牌字体只载 latin 子集，CJK 码位逐字落栈回退（`CJK_FALLBACK_STACK`）：容器内字形 = vendored Noto Sans SC（SIL OFL，`apps/api/assets/fonts/`，render Dockerfile 注册进 fontconfig——slim 镜像无它则中文全部烘焙成豆腐块，2026-09-13 实拍）；dev 机回退 PingFang SC / 微软雅黑。标题层同款栈（sans 设计意图不变）。
+- `fonts.ts` — `fontFamilyFor`（品牌字体枚举 → 字体族栈）。品牌字体只载 latin 子集，CJK 码位逐字落栈回退（`CJK_FALLBACK_STACK`）：容器内字形 = vendored Noto Sans SC（SIL OFL，`apps/api/assets/fonts/`，render Dockerfile 注册进 fontconfig——slim 镜像无它则中文全部烘焙成豆腐块）；dev 机回退 PingFang SC / 微软雅黑。标题层同款栈（sans 设计意图不变）。
 - `Root.tsx` — `calculateMetadata`：aspect → 画幅尺寸（original 探源）、`totalDurationSeconds` → 合成时长；`DEFAULT_SPEC` 兜底。
 
 ### apps/render（Node 黑盒）
@@ -212,7 +212,7 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——下表的 family / t
 
 ## 8. 轨道模型（现行契约，ADR-044）
 
-> 2026-08-17 过会，08-17~18 落地：注册表 + 双端自检 + segments widen + 锚/层/过渡契约 + 泳道投影 + 六 op 闭包（08-18 冷审修复批：过渡封顶补 insert_segment、段/层 id 契约级唯一、TrackDef 死字段清除、双端各守所执）。判据 = **操作集闭包**：registry 合法 op/skill 的任意序列（用户聊 N 轮）产出的 spec 仍可表示、可渲染、可继续改（12 操作走查全表 = 简报 `archive/tasks-done/track-model.md` 附录 §8）。弹性验收机械化：spec 顶层字段 ⊆ 轨道注册表（启动自检对账，⊆ 同款代数）+ phantom track 自检（注册一条假轨，烘焙缝/寻址/合规自动接管，消费方零改动；计价不在其列——时长算术坐 `clip_spec.total_output_seconds`，时长贡献轨到来时自带扩展）。
+> 轨道模型的覆盖：注册表 + 双端自检 + segments widen + 锚/层/过渡契约 + 泳道投影 + 六 op 闭包（过渡封顶覆盖 insert_segment；段/层 id 契约级唯一；双端各守所执）。判据 = **操作集闭包**：registry 合法 op/skill 的任意序列（用户聊 N 轮）产出的 spec 仍可表示、可渲染、可继续改（12 操作走查全表 = 简报 `archive/tasks-done/track-model.md` 附录 §8）。弹性验收机械化：spec 顶层字段 ⊆ 轨道注册表（启动自检对账，⊆ 同款代数）+ phantom track 自检（注册一条假轨，烘焙缝/寻址/合规自动接管，消费方零改动；计价不在其列——时长算术坐 `clip_spec.total_output_seconds`，时长贡献轨到来时自带扩展）。
 
 ### 8.1 形态：锚定 = 存储格式，泳道 = 编译产物（存法 C）
 
@@ -235,14 +235,12 @@ transition（挂段进场边）
 |---|---|---|---|
 | 轨道 | `track` | spec 命名分区 = 注册表一条声明；**裸用违规，必须带家族限定**（N-38，N-11 同款判例） | 不是 NLE 自由轨；用户永不见 |
 | 主轨 | main track | `source` + `segments`，输出 = 数组序连接；唯一持剪辑语义（hidden/trim/reorder） | — |
-| 段 | `segment` | 主轨一行：`{id, asset_id?, url?, start, end, hidden, provenance?, transition}`；异源插入 = 带 asset_id 的段 | 不是 block（讨论期占位词，退役） |
+| 段 | `segment` | 主轨一行：`{id, asset_id?, url?, start, end, hidden, provenance?, transition}`；异源插入 = 带 asset_id 的段 | — |
 | 数据轨 | data track（`*_track`） | 源时间轴时序数据：caption / translation / crop（关键帧采样器 = `sampleCrop` 双端逐值 parity） | 不参与叠放 |
-| 层 | `layer`（字段 `layers`） | 锚定放置物列表：kind 枚举（`broll` / `text_callout` / `pip` / `motion_graphic`），z 序渲染，条目可带 `source_ref` 回放（PiP）与 `provenance`（ADR-026 必填） | 不是自由轨；不撞 UI 浮层（overlay 一词归 overlay-surface 浮层族〔组件 ChatDock 2026-09-02 改名后 "overlay" 只剩样式义〕，避让 N-27 同型撞车） |
+| 层 | `layer`（字段 `layers`） | 锚定放置物列表：kind 枚举（`broll` / `text_callout` / `pip` / `motion_graphic`），z 序渲染，条目可带 `source_ref` 回放（PiP）与 `provenance`（ADR-026 必填） | 不是自由轨；不撞 UI 浮层（overlay 一词归 overlay-surface 浮层族——"overlay" 只剩样式义，避让 N-27 同型撞车） |
 | 锚 | `anchor` | 层条目的语义挂接；输出时间派生不落库 | 不是时间码 |
 | 过渡 | `transition` | 段的进场边效果枚举（none/fade/dip），挂在段上随换序走 | 不是转场画廊（≤3 枚举封顶） |
 | 块轨 | block track | 单值轨，输出时间轴：music / dub / title / 头尾卡 | dub⇄原声互斥在注册表声明 |
-
-讨论期占位词 lane / blocks / junctions / placements 一律不采用（草稿阶段死亡，不留痕）。
 
 ### 8.3 轨道注册表（TRACK_REGISTRY）
 

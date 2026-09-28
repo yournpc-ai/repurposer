@@ -1,13 +1,13 @@
 # Repurposer Music Architecture
 
-> Status: Implemented（2026-07 落地：`Music` 表、MiniMax music-2.6 生成、管线集成；音乐质检归 verify 节点 Phase 3，未实现；2026-08-18 对齐现状：音乐默认住人设皮肤块、自定义生成端点 inline）
+> Status: Implemented（`Music` 表、MiniMax music-2.6 生成、管线集成；音乐质检归 verify 节点 Phase 3，未实现；音乐默认住人设皮肤块、自定义生成端点 inline）
 > Related: ADR-023（AI 生成音乐库决策）、实施简报 `docs/archive/tasks-done/music-asset-library.md`
 
 ---
 
 ## 1. Background
 
-早期音乐是 Brand 模板里的静态 mood 枚举（`musicMood: "calm"` → 磁盘文件），问题：版权采集脆弱、选择静态、生成/精修两侧都无智能。本架构将其替换为 **AI 生成音乐库 + 专用 `Music` 表**。
+静态 mood 枚举配乐（mood → 磁盘文件）的病灶：版权采集脆弱、选择静态、生成/精修两侧都无智能。本架构 = **AI 生成音乐库 + 专用 `Music` 表**。
 
 > **命名**：`Music` 是音乐库条目的内部表/实体名；用户侧文案与 API 路径用 "music"（`/api/v1/music`）。一条 Music 是库里的**一首背景乐**，不是视频时间线意义上的音轨。
 
@@ -247,7 +247,7 @@ When user-generated music becomes public:
 
 | 期 | 内容 | 状态 |
 |---|---|---|
-| Phase 1 | Music 表 + 迁移 + MiniMax 生成 + 3 首默认曲 seed + `/api/v1/music` 端点 + Brand `musicId` + clip agent 选曲 + UI | ✅（2026-07） |
+| Phase 1 | Music 表 + 迁移 + MiniMax 生成 + 3 首默认曲 seed + `/api/v1/music` 端点 + Brand `musicId` + clip agent 选曲 + UI | ✅ |
 | Phase 2 | chat/editor 换曲与生成（`set_music` edit op + `add_music` skill + 重渲染） | ✅ |
 | Phase 3 | 用户上传（权利声明 + 默认私有 + 审核 + ToS/DMCA） | 📋（§11） |
 | Phase 4 | 高级音频编辑（增益自动化 / 起止裁剪 / 淡入淡出；多曲明确 L3 外） | 📋 |
@@ -273,7 +273,7 @@ When user-generated music becomes public:
 
 ## 17. Summary
 
-Repurposer’s music architecture moves from a **static, file-based mood library** to an **AI-generated music library backed by a dedicated `music` table**:
+Repurposer’s music architecture is an **AI-generated music library backed by a dedicated `music` table**:
 
 - **Default**: 3 pre-generated AI music pieces (`calm`, `uplifting`, `corporate`) cover most speech/conference clips.
 - **Selection**: Clip Agent picks the best existing music piece per clip, influenced by brand defaults and content mood.

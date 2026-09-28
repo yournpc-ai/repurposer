@@ -45,7 +45,7 @@ book path 进入条件（`prepare_chat_turn` 分派，service.py）：project sc
 
 | 意图 | 路由 | 现状 |
 |---|---|---|
-| G 明确（产出物+语言都说清） | /chat book path → dock，reasons 空 → ~~前端自动 Start~~ | ❌ **已翻案（ADR-087 §4 / Reversal Ledger R5，2026-09-19）**：G-explicit = Task Intent ≠ 付费手势——自动 Start 退役，一切新 Paid Work 统一走 PLAN_READY → CONFIRMATION_READY → 显式确认（Phase 4 施工） |
+| G 明确（产出物+语言都说清） | /chat book path → dock，reasons 空 → ~~前端自动 Start~~ | ❌ **已翻案（ADR-087 §4）**：G-explicit = Task Intent ≠ 付费手势——自动 Start 退役，一切新 Paid Work 统一走 PLAN_READY → CONFIRMATION_READY → 显式确认（Phase 4 施工） |
 | G 模糊（"帮我处理一下"） | /chat book path → dock + reasons → 面板确认 | ✅（S1/S4） |
 | G 全迷失（"不知道做什么/从哪开始"） | /chat book path → ask 主题问（一词可答 + 默认路径）或 dock（reasons 非空）；永不裸跑、永不出无根书（出书门槛代码兜底） | ✅（S1/S2） |
 | Q 能力（"你能做什么"） | /chat book path → answer（普通 assistant 消息） | ✅（S9） |

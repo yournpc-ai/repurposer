@@ -29,7 +29,7 @@ POST /api/v1/auth/verify-code  { "email": "you@example.com", "code": "123456" }
 
 ## 2. Main Flow Call Sequence
 
-The homepage input box is the main entry point. After the user clicks send, the frontend creates the project, uploads the material, then navigates to the project page where the overlay chat sends the draft as the first chat message — **intent recognition lives entirely in the chat loop** (intent-surface-unification, 2026-08-04; there is no separate intent endpoint):
+The homepage input box is the main entry point. After the user clicks send, the frontend creates the project, uploads the material, then navigates to the project page where the chat dock sends the draft as the first chat message — **intent recognition lives entirely in the chat loop** (there is no separate intent endpoint):
 
 ```
 POST /api/v1/projects
@@ -54,7 +54,7 @@ GET /api/v1/projects/{project_id}/results   → Aggregate view: project + prompt
 GET /api/v1/projects/{project_id}/runs/{run_id}
 ```
 
-The `/results` endpoint is the preferred way to load a project detail page; it returns everything needed for the review UI in one call. The `assets` field carries each asset's `processing_status` / `processing_error` so the results page can render the transcribing/parsing phase while the generation run waits for assets to settle. (The computed `ui_step` field was retired on 2026-07-28 together with the results-page loading dialog — live progress is the chat overlay's step stream, driven by `GET /runs/{id}/events`.) The legacy single-resource endpoints are still available:
+The `/results` endpoint is the preferred way to load a project detail page; it returns everything needed for the review UI in one call. The `assets` field carries each asset's `processing_status` / `processing_error` so the results page can render the transcribing/parsing phase while the generation run waits for assets to settle. Live progress is the chat dock's step stream, driven by `GET /runs/{id}/events`. The legacy single-resource endpoints are still available:
 
 ```
 GET /api/v1/projects                  → the caller's own projects (anonymous: empty list)
@@ -229,7 +229,7 @@ Response:
 
 ## 4. Project Management
 
-> **Current state**: `persona_id` is optional at project creation. When omitted, the first run auto-creates a persona from the project's source texts; a dedicated `Persona` row can still be created and selected manually.
+> `persona_id` is optional at project creation. When omitted, the first run auto-creates a persona from the project's source texts; a dedicated `Persona` row can still be created and selected manually.
 
 ### Create Project
 
@@ -254,7 +254,7 @@ Request:
 GET /api/v1/projects?persona_id=uuid
 ```
 
-Response now includes a representative clip thumbnail for each project:
+The response includes a representative clip thumbnail for each project:
 
 ```json
 [
@@ -587,7 +587,7 @@ Response: a `application/zip` file download with `Content-Disposition: attachmen
 
 ## 10. Chat
 
-Project-scoped and asset-scoped conversations persist the original prompt and all follow-up instructions. **`POST /chat` is the only intent surface** (intent-surface-unification, 2026-08-04): the task book is built, refined and confirmed here — the retired `/projects/{id}/intent` and `/infer-intent` endpoints no longer exist.
+Project-scoped and asset-scoped conversations persist the original prompt and all follow-up instructions. **`POST /chat` is the only intent surface**: the task book is built, refined and confirmed here — there are no separate intent endpoints.
 
 ### Get or Create Conversation
 
@@ -618,9 +618,9 @@ Request:
 }
 ```
 
-`mentions` pins @ entity references to definite ids (`[{type, id, label}]`); the live registry types are `asset | output | workflow_step` (MENTIONS §4). `recipe` is retired — a recipe is just a prompt (ADR-040: the card's prefilled template is the entire launch payload), the type member stays only so historical messages still render their chips; `transcript_segment` is filed but unimplemented. Messages echo `mentions` back.
+`mentions` pins @ entity references to definite ids (`[{type, id, label}]`); the live registry types are `asset | output | workflow_step` (MENTIONS §4). `recipe` is not a live type — a recipe is just a prompt (ADR-040: the card's prefilled template is the entire launch payload); the enum member stays only so historical messages still render their chips. `transcript_segment` is filed but unimplemented. Messages echo `mentions` back.
 
-**Streaming (2026-08-04)**: the endpoint content-negotiates on `Accept`. Plain callers get the one-shot JSON `ChatResponse` (201) as before; `Accept: text/event-stream` streams the turn — `assistant.delta` `{"text"}` prose previews (0..N, concatenate in order) while the verdict JSON generates, then exactly one terminal frame: `turn.completed` carrying the full `ChatResponse` (the envelope is authoritative; deltas are a preview channel only) or `turn.failed` `{"detail"}` (mid-stream failure — nothing is committed). Non-prose fragments (think prefixes, verdict-JSON tails, reasoning) stream as `assistant.thinking` keepalive frames. 15s heartbeat comment frames. A `start` turn (`answer=null`) emits zero deltas; plan-card (`generate`) turns stream the plan echo (`intent.answer` prose) as deltas while the structured book arrives whole in the terminal frame. Clients must not auto-reconnect — a retried POST persists the user message again.
+**Streaming**: the endpoint content-negotiates on `Accept`. Plain callers get the one-shot JSON `ChatResponse` (201); `Accept: text/event-stream` streams the turn — `assistant.delta` `{"text"}` prose previews (0..N, concatenate in order) while the verdict JSON generates, then exactly one terminal frame: `turn.completed` carrying the full `ChatResponse` (the envelope is authoritative; deltas are a preview channel only) or `turn.failed` `{"detail"}` (mid-stream failure — nothing is committed). Non-prose fragments (think prefixes, verdict-JSON tails, reasoning) stream as `assistant.thinking` keepalive frames. 15s heartbeat comment frames. A `start` turn (`answer=null`) emits zero deltas; plan-card (`generate`) turns stream the plan echo (`intent.answer` prose) as deltas while the structured book arrives whole in the terminal frame. Clients must not auto-reconnect — a retried POST persists the user message again.
 
 `prior_intent` and `persona_id` are book-path transports (never persisted on the message): `prior_intent` is the review panel's current task chain — panel edits are direct structural edits to the task list (ADR-043), the edited chain rides `prior_intent` into the next inference, and the intent router re-proposes the full chain with chat revisions always winning; `persona_id` is the composer's persona choice riding the first message — it is written into the pending brief only when a task book docks (a later turn omitting it never clobbers the stored choice), and pinned into `run.context.persona_id` at `create_run`.
 
@@ -696,7 +696,7 @@ Returns the caller's ledger rows newest-first — one run is `1 hold + N capture
 }
 ```
 
-The frontend projection (billing center) is W11; the endpoint is the ledger's read-only truth from Day 4.
+The frontend projection (billing center) is W11; this endpoint is already the ledger's read-only truth.
 
 Insufficient credits at run birth is a structured 422 (user-level vocabulary, never conflated with a provider 402):
 
@@ -708,9 +708,9 @@ Credits elsewhere are serialization-derived (USD stays internal): `GET /runs/{id
 
 ## 12. Persona Skin Block (brand)
 
-The standalone Brand Template module is retired (ADR-038): the visual skin lives on the persona as the `brand` JSONB block, read and written through the Persona endpoints (§5 — `PUT /api/v1/personas/{persona_id}` with `{"brand": {...}}`). There are no `/brand-templates` endpoints.
+The visual skin lives on the persona as the `brand` JSONB block (ADR-038), read and written through the Persona endpoints (§5 — `PUT /api/v1/personas/{persona_id}` with `{"brand": {...}}`). There are no `/brand-templates` endpoints.
 
-At clip-generation time the Pipeline merges the resolved persona's `brand` block over the system default skin and bakes caption color/size/font + position points + intro/outro + music selection into `render_spec.brand`; `render_spec.brand_ref` records the persona id. A persona with `brand: null` renders with the system default skin. Craft/format keys that used to ride the old template config (`aspect`, `fillMode`, `captionEnabled`, filler removal) are **not** persona fields — they come from the recipe registry / task-book defaults.
+At clip-generation time the Pipeline merges the resolved persona's `brand` block over the system default skin and bakes caption color/size/font + position points + intro/outro + music selection into `render_spec.brand`; `render_spec.brand_ref` records the persona id. A persona with `brand: null` renders with the system default skin. Craft/format keys (`aspect`, `fillMode`, `captionEnabled`, filler removal) are **not** persona fields — they come from the recipe registry / task-book defaults.
 
 Skin keys (`null` on the persona = fall through to the default):
 
@@ -751,12 +751,6 @@ Core models:
 - `WorkflowStep` (RunPlan node: one step of a run's execution plan, materialized at run creation — `inputs` edge list, `spec` params, `output_refs`, per-node `cost` metering ledger)
 - `Conversation` (project-scoped or asset-scoped chat container)
 - `Message` (chat messages, referenced by `conversation_id`)
-
-Removed / not yet implemented:
-
-- `BrandTemplate` (table dropped, ADR-038 — skin absorbed into `personas.brand`)
-- `HumanFeedback` (feedback is now handled by the `/outputs/{id}/revise` endpoint and stored on the revised `Output`)
-- `WorkflowRun.current_step` (retired — per-step state lives in `workflow_steps`; query running nodes instead)
 
 Clip-spec related: `ClipSpec` / `ClipSource`(kind/image_urls) / `CaptionCue` / `ClipTitle`(size/position) / `ClipMusic` / `ClipDub` / `ClipBrand`(intro/outro) / `IntroOutroCard`(kind/text/media_url) / `Point`.
 Requests/derivatives: `GenerateRequest`(carousel/instruction) / `DubRequest` / `TranslateCaptionsRequest` / `CarouselResponse` / `CarouselSlide`.

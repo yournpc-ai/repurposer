@@ -1,18 +1,18 @@
 # Distribution — 分发模块设计
 
-> Status: Active（2026-07-21 建立；2026-07-23 定界：核心 = 直发，审核/调度/回流为边缘功能 P2；2026-07-24：**后端直发链路已落地**——OAuth（state nonce + Fernet token 加密）/ 双平台 adapter / REST 路由 / worker 第四认领源；**前端已落地**——发布对话框（卡片 Send 图标入口）+ 通知中心（全局顶栏铃铛，发布结果/渠道过期事件）+ Settings Channels；§11 原案的"sidebar 入口 + 发布记录页"经讨论**取消**，事件流由通知中心承载，见 §11 修订注记与 `archive/tasks-done/publish-dialog-notifications.md`；待办 = 平台应用凭据联调；2026-08-18 对齐代码现状：§3.2 索引谓词/删除语义、§4.1 token 加密定案（ADR-031）、§10.2 路由表补全、§14 开放问题收尾）
+> Status: Active（2026-08-18）——核心 = 直发（P1）：后端直发链路（OAuth：state nonce + Fernet token 加密 / 双平台 adapter / REST 路由 / worker 第四认领源）与前端（发布对话框 + 通知中心 + Settings Channels）已落地，待办 = 平台应用凭据联调；审核 / 调度 / 数据回流为边缘功能（P2）。事件流由通知中心承载，见 §11。
 >
 > 模块定位与边界见 `MODULE_ARCHITECTURE.md`（六层图 §2、闭环流转图 §2.1、表归属 §4）；排期见 `PROGRESS.md`（第十一周联调）；AI 标识分级见 ADR-026；战略理由（工作流闭环 / LinkedIn 单押风险）见 `STRATEGY.md` §3 牌 1、§4 风险 2。本文是 Distribution 模块设计与实现细节的**唯一事实源**——各文档只引用，不复述。
 
 ## 1. 模块职责与定位
 
-内容离开产品的最后一公里：**发布动作**（核心，P1）——审核 / 调度 / 数据回流为边缘功能（P2，2026-07-23 定界）。
+内容离开产品的最后一公里：**发布动作**（核心，P1）——审核 / 调度 / 数据回流为边缘功能（P2）。
 
 - 与 Pipeline 平级（2027 透镜）：Pipeline 管"生成什么"，Distribution 管"去了哪里、效果如何"。
-- 审核是**分级**的（ADR-027，2026-07-22）：个人免审秒发（发布对话框即确认点）；机构模式（P2）强制人工确认、审核人≠作者——审核队列是机构合规刚需，不是个人的第二页面。
+- 审核是**分级**的（ADR-027）：个人免审秒发（发布对话框即确认点）；机构模式（P2）强制人工确认、审核人≠作者——审核队列是机构合规刚需，不是个人的第二页面。
 - 发布数据回流是首发推荐分的**外部校准源**（内部校准源 = 用户选用行为；闭环流转图的回流②）——边缘功能（P2）。表结构随直发先行，理由是发布单/渠道账号是直发的载体，回流字段只做预留。
 
-### 1.1 命名约定（2026-07-21 定）
+### 1.1 命名约定
 
 - **模块 / 服务 / adapter / 文档 = `distribution`**（业务域）：`services/distribution.py`（长大可拆 `services/distribution/` 包，adapter 入包）、`routers/distribution.py`。
 - **表 = 资源名**：`publications` / `channel_accounts` / `publication_events`——表名 ≠ 模块名（先例：Pipeline 模块的表叫 `assets` / `workflow_runs`，不叫 pipeline）。
@@ -20,7 +20,7 @@
 - **不叫 `posts`**（与 derivative 类型 `post` 撞名）；**不叫 `social_accounts`**（P2 的 ESP 渠道不是 social）。
 - **`channel_accounts` 独立成表，不进 users**：一对多基数、唯一约束与 FK 需要表载体；credentials 是密钥，独立表 = 只有 Distribution 服务碰它；per-user 实体独立成表是仓库惯例。
 
-## 2. 平台范围与准入决策（2026-07-21）
+## 2. 平台范围与准入决策
 
 | 平台 | 决策 | 准入动作（墙钟，立即排队） |
 |---|---|---|
@@ -61,11 +61,9 @@ UniqueConstraint(user_id, platform, platform_user_id)
 id: UUID PK
 user_id: UUID FK                 # 去规范化（同 Asset 约定）：免 join 做归属校验
 project_id: UUID FK
-output_id: UUID FK outputs | NOT NULL    # 单 FK（ADR-030，2026-07-22 修订）：
-                                     # 产物统一为 outputs 后，原双 FK（clip_id/
-                                     # derivative_id）+ CHECK（ck_pub_target_*）退役。
-                                     # DAG 化对本模块零变化——缝=产物表，Pipeline
-                                     # 内核重建不影响 publications 设计。
+output_id: UUID FK outputs | NOT NULL    # 单 FK（ADR-030）——发布目标一律是 outputs 行。
+                                     # 与 Pipeline 的缝 = 产物表，Pipeline 内核
+                                     # 变化不影响 publications 设计。
                                      # 不用 target_type/target_id 多态引用——DB 无法
                                      # 强制外键完整性，clip 删除会产生孤儿行
 channel_account_id: UUID FK channel_accounts ON DELETE SET NULL
@@ -121,7 +119,7 @@ draft ──提交审核──► pending_review ──通过──► approved 
 - 状态迁移只允许经 Distribution 服务函数；路由/其他模块不得直写 `state`。
 - `publishing` 是**时间驱动状态**：TikTok 视频处理是异步的（返回 publish_id 后需轮询状态），进入 publishing 时 `due_at` = 下次轮询时间，worker 到期再认领续查，不阻塞认领线程。
 
-### 3.4 `publication_events`（状态迁移日志 = 审核留痕）**（P2，2026-07-23 精简）**
+### 3.4 `publication_events`（状态迁移日志 = 审核留痕）**（P2）**
 
 > P1 个人流**不建此表**：其卖点是机构审核留痕（随机构模式回补）；P1 排障靠 `publications.last_error` + `attempt_count` + worker 日志。以下 schema 为回补时的定稿。
 
@@ -276,17 +274,17 @@ _build_payload(target, channel) -> dict      # 预填快照（含 channel 快照
 
 ## 11. UI 面
 
-> **2026-07-24 修订（已实现）**：本节原案的"发布记录页 + sidebar `nav.publishing` 入口"**取消**——事件流（发布成功/失败/渠道过期）由**通知中心**承载（全局顶栏铃铛下拉，非页面），持续管理（渠道连接）收进 **Settings**；原则 = 通知是事件流的呈现层，只有需要持续操作的东西才配拥有页面。实现以 `archive/tasks-done/publish-dialog-notifications.md` 为准；下文保留为设计演化的记录，其中发布对话框（§11.2）、三态渠道卡（§11.5）仍然有效。
+> 事件流（发布成功/失败/渠道过期）由**通知中心**承载（全局顶栏铃铛下拉，非页面），渠道连接的持续管理收进 **Settings**；原则 = 通知是事件流的呈现层，只有需要持续操作的东西才配拥有页面。
 >
-> 方向（2026-07-22 定）：**主路径 = 立即发布、个人免审**（ADR-027）。calendar 视图后置（P2+ 按使用数据验证）；竞品实证：Agent Opus 的 calendar 只是 projects 页视图 toggle、排期器在其 Pro 付费墙后（`research/agent-opus.md`）——创作工具品类的主流是"创作完立刻发"。
+> 方向：**主路径 = 立即发布、个人免审**（ADR-027）。calendar 视图不做（P2+ 按使用数据验证再评估；模型已支持 `scheduled_at`/`due_at`，加上即零迁移）；竞品实证：Agent Opus 的 calendar 只是 projects 页视图 toggle、排期器在其 Pro 付费墙后（`research/agent-opus.md`）——创作工具品类的主流是"创作完立刻发"。
 
 ### 11.1 信息架构（三个入口 = 三种心智）
 
 | 入口 | 位置 | 心智 |
 |---|---|---|
 | "发布"按钮 | clip / derivative 卡片 | "把这条发出去"（动作起点） |
-| 发布记录页 | Sidebar **Post 组**（`nav.publishing`） | "我发了什么 / 排期中什么"（只读为主） |
-| 渠道连接 | 发布记录页第二 tab（P1 单页） | "连接账号" |
+| 发布结果/渠道事件 | 通知中心（全局顶栏铃铛） | "发出去之后发生了什么"（只读事件流） |
+| 渠道连接 | Settings Channels | "连接账号" |
 
 ### 11.2 发布对话框（主创建路径 = 唯一确认点）
 
@@ -296,27 +294,20 @@ _build_payload(target, channel) -> dict      # 预填快照（含 channel 快照
 4. **定时（P2）**：P1 只有"立即发布"（= `scheduled_at` now，与定时同一代码路径，UI 不出 datetime picker）。
 5. 点"发布" → toast"正在发布"，**不离开当前页**；事件序列：created → scheduled。
 
-### 11.3 发布记录页（轻量列表，不是日历）
-
-- Tabs：**全部 / 排期中 / 已发布 / 失败**（个人模式无"待审核"）。
-- 行 = 封面缩略图 + 平台图标 + 目标标题 + 时间 + 状态 Badge + 操作（取消 / 改时间 / 重试 / 外链 `platform_post_url`）。
-- token 过期与发布失败分开展示（"重新连接"而非"失败"）。
-- **日历视图后置**：P2+ 待排期行为被数据验证再加；模型已支持（`scheduled_at`/`due_at`），零迁移。
-
 ### 11.4 机构模式（P2 预览，ADR-027）
 
-团队工作区上线后：列表新增"待审核"首 tab（审核人 ≠ 作者的工作地点）；无审核权成员的对话框按钮从"发布"变"提交审核"；其余组件复用，零改版。
+团队工作区上线后：审核队列页（`GET /publications?state=pending_review`，§10.2）成为审核人（≠ 作者）的工作地点；无审核权成员的对话框按钮从"发布"变"提交审核"；其余组件复用，零改版。
 
 ### 11.5 渠道 tab / 状态回显 / 设计纪律
 
 - 渠道卡三态：**已连接**（头像 + 名字 + token 健康度）/ **未连接**（Connect 按钮）/ **未配置**（presence-gating "即将上线"，§4.1）。
 - 项目页：clip/derivative 卡片上 scheduled / published Badge（平台图标 + 时间）；发布成功/失败 → 全局 sonner toast；列表轮询刷新（与 Clip.render_status 同款模式）。
 - `rounded-md` / `ring-1 ring-border` + `shadow-*`；Badge 一律 `className="rounded-md"`；平台图标：lucide 有 `Linkedin`，TikTok 走"第三方 logo 无替代"例外（手写 SVG）。
-- 新增 i18n keys：`nav.publishing`、`publishing.*`、`channels.*`（en 先行，zh 镜像）。
+- 新增 i18n keys：`publishing.*`、`channels.*`（en 先行，zh 镜像）。
 
 ## 12. 分期路线（排期以 `PROGRESS.md` 为准）
 
-- **P1**（2026-07-23 定界后）：两张表（`publication_events` 降 P2，P1 排障靠 `last_error` + worker 日志）+ 状态机（个人流，ADR-027；建单即排期，产物出生 = `scheduled`）+ **LinkedIn 个人号 + TikTok 双平台直发**（TikTok 应用审核期间测试账号联调）+ **立即发布**（定时字段 schema 就位，datetime picker UI 入 P2）+ 幂等/重试。
+- **P1**：两张表（`publication_events` 属 P2，P1 排障靠 `last_error` + worker 日志）+ 状态机（个人流，ADR-027；建单即排期，产物出生 = `scheduled`）+ **LinkedIn 个人号 + TikTok 双平台直发**（TikTok 应用审核期间测试账号联调）+ **立即发布**（定时字段 schema 就位，datetime picker UI 入 P2）+ 幂等/重试。
 - **P2**：机构审核队列（`pending_review`/`approved`）+ metrics 回流校准、newsletter ESP（自有渠道，对冲 LinkedIn 单押）、源→目的地自动规则、多号、公司页、团队审核角色。
 
 ## 13. 范围纪律（不做什么）

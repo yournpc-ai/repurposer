@@ -1,17 +1,15 @@
-"""Model-facing prose for the two chat intent agents (N-42 批③).
+"""Model-facing prose for the two chat intent agents.
 
-2026-09-11 ADR-071 结构拆分 + 规则减负: the prose itself lives in
-``app/prompts/chat/*.j2`` — one template per agent, shared blocks as
-``_*.j2`` partials (``{% include %}``, one definition two consumers) —
-rendered through the shared ``agents/base.py`` jinja env. 考古不出 token
-律: dates / ADR numbers / reversal history live in the templates' ``{# #}``
-head comments, never in model-facing text. This module is the thin
-assembly wrapper: same function signatures, same call sites
-(``chat/intent.py`` keeps the declarations data-only). The tool catalog
-lines are the registry's self-projection (``app/tools/__init__.py`` —
-``tool_catalog_lines``): chat consumes, never re-projects (裂脑修复);
-they ride into the templates as render variables (``tool_lines`` /
-``wiring_lines``).
+The prose itself lives in ``app/prompts/chat/*.j2`` — one template per
+agent, shared blocks as ``_*.j2`` partials (``{% include %}``, one
+definition two consumers) — rendered through the shared
+``agents/base.py`` jinja env. Model-facing text carries current-state law
+only: dates / ADR numbers / incident narratives never enter it. This
+module is the thin assembly wrapper: same function signatures, same call
+sites (``chat/intent.py`` keeps the declarations data-only). The tool
+catalog lines are the registry's self-projection (``app/tools/__init__.py`` —
+``tool_catalog_lines``): chat consumes, never re-projects; they ride into
+the templates as render variables (``tool_lines`` / ``wiring_lines``).
 """
 
 from app.agents.base import jinja_env
@@ -33,16 +31,15 @@ def intent_router_system() -> str:
 def chat_intent_system() -> str:
     """The chat loop intent proposer's system prompt (four-state proposal).
 
-    Params are injected as "name: description" (agent-loop-upgrade W2) —
-    the Field descriptions in the registry's params models ARE the LLM's
-    parameter documentation."""
-    # Final Hardening B1 (2026-09-24): the raw edit-ops vocabulary
-    # (``op_lines`` from OP_REGISTRY) is NO LONGER injected — the Agent's
-    # only edit entry is edit_output's controlled enum (ADR-090); raw op
-    # names and their param shapes never enter the LLM vocabulary.
+    Params are injected as "name: description" — the Field descriptions in
+    the registry's params models ARE the LLM's parameter documentation."""
+    # The raw edit-ops vocabulary (``op_lines`` from OP_REGISTRY) is NOT
+    # injected — the Agent's only edit entry is edit_output's controlled
+    # enum (ADR-090); raw op names and their param shapes never enter the
+    # LLM vocabulary.
     # The wiring vocabulary (ADR-057 K4) comes from the graph registry —
-    # same injection discipline as the tool catalog (注册表条目扰动 =
-    # prompt 扰动: entries stay terse, the gate enumerations ride along).
+    # same injection discipline as the tool catalog (registry entries stay
+    # terse; the gate enumerations ride along).
     # Kept as a function-level import (cycle insurance, pre-split form).
     from app.pipeline.graph_store import wiring_catalog_lines
 
@@ -58,13 +55,12 @@ def chat_intent_system() -> str:
 
 
 def trigger_system() -> str:
-    """The proactive speaker's system prompt (T3, ADR-077 判词③ — trigger
+    """The proactive speaker's system prompt (ADR-077 判词③ — trigger
     turns: understanding_warmed / run_completed). No BUILDER catalog rides
     here (the trigger turn's verbs are the read tools plus the one terminal
-    ``wrap_up``) — but the SPEAKER menu does (批「身份核」2026-09-27: the
-    user-language capability menu is identity, it rides every surface;
-    without it the turn improvised deliverables and venues — reply-quality
-    baseline D2/D3). The template teaches the judgment law and the
+    ``wrap_up``) — but the SPEAKER menu does: the user-language capability
+    menu is identity, it rides every surface (without it the turn improvises
+    deliverables and venues). The template teaches the judgment law and the
     suggestions contract."""
     return jinja_env.get_template("chat/trigger_system.j2").render(
         menu_lines=capability_menu_lines(),

@@ -1,6 +1,6 @@
 # ARCHITECTURE NORTH STAR — 目标架构与可靠性主线
 
-> Status: 活跃（2026-09-16 建，Architecture Gate 批——T5 后架构体检（`POST_T5_ARCHITECTURE_AUDIT.md`）与 delta 对抗核验（`POST_T5_DELTA_AUDIT.md`，HEAD `453b73d`）的固化产出；实施边界 2026-09-16 用户拍板：先固化方向盘，再踩油门）。
+> Status: 活跃（最后更新 2026-09-16）。
 > 本文回答「我们正在把这个系统建设成什么」——**目标架构（North Star）与可靠性主线的唯一事实源**。现状架构归 `MODULE_ARCHITECTURE.md`；工程地图归 `AGENT_ARCHITECTURE.md`；概念架构归 `DIALOG_WORKFLOW.md`；决策归 `DECISIONS.md`。本文不替代它们，只给方向、边界与实施顺序。
 > **五态纪律（全文强制）**：`CURRENT` = 当前代码已存在并经代码验证；`TARGET` = 已明确决定要演进到；`PLANNED` = 已决定、未实施；`OPEN` = 未决定 / 待验证；`REJECTED` = 讨论过、明确不采用。判断优先级：**Current HEAD code > DB constraints / migrations > tests > ADR > 架构图 > 历史计划**。任何一行不得把 TARGET/PLANNED 写成 CURRENT。
 
@@ -10,7 +10,7 @@
 
 **对外叙事版**：DAG + 状态机是执行层，不是产品本身——最终产品是一个 **Agentic Content OS**：Agent = 决策层（§3），Structured Media + Decompiler/Compiler = 内容语义层（§9），Execution Kernel = 可靠执行层（§8）。此句只是上一句的展开，不产生任何超出五态表的承诺（统一 Artifact 模型、Media IR 等上层抽象仍为触发制 OPEN）。
 
-**R1 收口后的对外口径（2026-09-17 评审拍板）**：已成立的是**一个 Agent 驱动的 Content Execution System**——Agent → Execution Kernel → Structured Media → Rendered Output 的真实可用闭环（证据 = R1 四条 invariant + S1–S17 剧本族）。「Agentic Content OS」仍是 North Star，但 OS 的高级抽象（统一 Artifact / Media IR / ExecutionAttempt）**不提前承诺、不成 R2/R3 排期暗示**——触发条件满足才进入决策。
+**对外口径**：已成立的是**一个 Agent 驱动的 Content Execution System**——Agent → Execution Kernel → Structured Media → Rendered Output 的真实可用闭环（证据 = R1 四条 invariant + S1–S17 剧本族）。「Agentic Content OS」仍是 North Star，但 OS 的高级抽象（统一 Artifact / Media IR / ExecutionAttempt）**不提前承诺、不成 R2/R3 排期暗示**——触发条件满足才进入决策。
 
 ### 1.1 愿景词汇 ↔ 现行词汇对照表
 
@@ -62,7 +62,7 @@
 
 核心闭环（TARGET，未闭合）：`Video → Decompiler → Structured Media → Agent/Planner → Decision → Validated Mutation → Structured Media → Deterministic Compiler → Video`，即 **Decompile → Modify → Compile**。
 
-## 2. 概念词典：执行五概念（CURRENT 存在性，源自 delta 核验 §3.1）
+## 2. 概念词典：执行五概念（CURRENT 存在性）
 
 这五个概念**永不混用**；后续一切执行层讨论以本表为词汇基线：
 
@@ -72,7 +72,7 @@
 | attempt counter | 认领次数计数 | ✅ | `workflow_steps.attempt`（Integer）——只喂 retry 预算与 billing idem key；**不是执行身份** |
 | worker identity | 哪个 worker 实例 | ❌ 不存在 | 无列、无实例 id |
 | execution identity | 哪一次执行 | ❌ 不存在 | 无 execution_id / claim_id |
-| fencing token | 使旧执行写必失败的令牌 | ✅（ADR-079，2026-09-16） | `workflow_steps.claim_token` / `outputs.render_claim_token`——claim 铸、失势置 NULL、终态写 `WHERE … AND claim_token=:mine` 查 rowcount |
+| fencing token | 使旧执行写必失败的令牌 | ✅（ADR-079） | `workflow_steps.claim_token` / `outputs.render_claim_token`——claim 铸、失势置 NULL、终态写 `WHERE … AND claim_token=:mine` 查 rowcount |
 
 ### 2.1 概念词典：内容世界六概念（CURRENT 存在性）
 
@@ -95,7 +95,7 @@
 
 Agent 的职责是**产出决策**（choose / request / query / propose / ask），不是操作系统。决策生产者可替换（GPT / Gemini / Claude / Kimi / MiniMax / 本地模型 / 规则引擎）而不改变下游生产系统——**可替换性机制已就位（`providers/llm` 单边界 + T1 三层线格式 + 能力旗标，ADR-039/077），但尚未经第二 provider 真实运行实证（实证 = TARGET，未证明）**——这是该单边界存在的理由。
 
-**CURRENT 证据**：`app/agents/` 包全文无 DB import、无 session——决策纯已经成立（T5 后体检核实）；LLM 能写入的 schema 座位被结构封死的最严先例 = decompile 三座位（`CraftJudgment extra=forbid`，`test_decompile_pure.py` 看门）。
+**CURRENT 证据**：`app/agents/` 包全文无 DB import、无 session——决策纯已经成立；LLM 能写入的 schema 座位被结构封死的最严先例 = decompile 三座位（`CraftJudgment extra=forbid`，`test_decompile_pure.py` 看门）。
 
 ### 3.2 允许 / 永不允许
 
@@ -115,7 +115,7 @@ Agent 的职责是**产出决策**（choose / request / query / propose / ask）
 
 ### 3.4 与 ADR-052 / ADR-077 的关系
 
-ADR-052 判词「实现层零 agent、全 workflow」维持；ADR-077 收编的两个**有界**座位 = 会话层 ToolLoopAgent + DAG 内有界 loop 节点（三护栏先例：迭代上限 / 报价=fold / 对外=普通节点）。「Decision Producer」是同一判词的更锋利表述，不是翻案。
+ADR-052 判词「实现层零 agent、全 workflow」维持；ADR-077 收编的两个**有界**座位 = 会话层 ToolLoopAgent + DAG 内有界 loop 节点（三护栏先例：迭代上限 / 报价=fold / 对外=普通节点）。「Decision Producer」是同一判词的更锋利表述，判词不变。
 
 ## 4. 能力四分（Query / Command / Interaction / Runtime）
 
@@ -123,7 +123,7 @@ ADR-052 判词「实现层零 agent、全 workflow」维持；ADR-077 收编的�
 
 | 类 | 特征 | CURRENT 映射 |
 |---|---|---|
-| **Query** | read-only / 幂等 / 不改世界 | ✅ `chat/perception/*` 读工具族（实现里无写函数，逐文件核实） |
+| **Query** | read-only / 幂等 / 不改世界 | ✅ `chat/perception/*` 读工具族（实现里无写函数） |
 | **Command** | 改意图/状态；需校验；可审计 | ✅ 终态工具中的 `start_run` / `edit_output` / `edit_graph` / `propose_tasks`——各落一扇唯一门 |
 | **Interaction** | Agent↔Human 协议 | ✅ 终态工具中的 `ask_user` / `present_plan` / `answer`（dock 机器，ADR-053） |
 | **Runtime** | 回合/相位/检查点原语 | ✅ **永不作为 LLM 能力暴露**——现行座位 = SSE 相位帧、触发回合白名单、checkpoint/Suspend（代码侧原语） |
@@ -136,8 +136,8 @@ ADR-052 判词「实现层零 agent、全 workflow」维持；ADR-077 收编的�
 
 ## 6. Agent Runtime = bounded agent
 
-- **CURRENT**：会话层 loop 迭代有界（`max_iterations=6`）+ 终态工具停环 + loop 内零副作用（T5 后体检核实）；DAG 内有界 loop 节点三护栏（§3.4）。**已知缺口：`CURRENT` 无墙钟**——6 迭代 × (工具+LLM+repair) 最坏 ~36min/回合（delta 审计登记）。
-- **TARGET**：`AgentBudget`（max_iterations / max_tool_calls / max_wall_time / max_token_budget / max_side_effects），数值后定；先把五维预算作为**架构契约**记录，不在本批重写 Runtime。
+- **CURRENT**：会话层 loop 迭代有界（`max_iterations=6`）+ 终态工具停环 + loop 内零副作用；DAG 内有界 loop 节点三护栏（§3.4）。**已知缺口：`CURRENT` 无墙钟**——6 迭代 × (工具+LLM+repair) 最坏 ~36min/回合。
+- **TARGET**：`AgentBudget`（max_iterations / max_tool_calls / max_wall_time / max_token_budget / max_side_effects），数值后定；先把五维预算作为**架构契约**记录，实施触发制（§10）。
 - **REJECTED**：`while True: call_llm()` 开放式自主（ADR-052 永拒维持：执行 loop / 拓扑塑形 / 自我 steering）。
 
 ## 7. SSE / Streaming 原则
@@ -146,20 +146,20 @@ ADR-052 判词「实现层零 agent、全 workflow」维持；ADR-077 收编的�
 
 ## 8. Execution Kernel = 可靠性核心
 
-### 8.1 当前基线（CURRENT，R1 B4a 落地后）
+### 8.1 当前基线（CURRENT）
 
-`POST_T5_DELTA_AUDIT.md` 登记的四条 P0 **已全部修复**（原文核验于 HEAD `453b73d`），R1 B3/B4a 各补一条：
+执行层六条现行不变量（证据归 `POST_T5_DELTA_AUDIT.md`，§12）：
 
-1. ~~节点终态写无围栏——成功尾/失败尾 = ORM 按 PK 盲写~~ → **已修（ADR-079，R1 B2）**：execute_step 四尾改条件 UPDATE `WHERE id=:id AND claim_token=:mine` + rowcount；fenced → rollback + 零副作用（不 capture / 不 sync / 不 cascade / 不写 run）。
-2. ~~渲染守卫是 status 不是身份~~ → **已修（ADR-079，R1 B2）**：render 三处终态写谓词换 `render_claim_token=:mine`；全部 10 处 re-pend 置 NULL；入口 token NULL 提前 return。
-3. ~~Suspend 的 run 迁移无 expected-from-state guard~~ → **已修（ADR-079，R1 B2）**：`WHERE id=:rid AND status='RUNNING'`——COMPLETED→WAITING_HUMAN 复活链结构性死亡。
-4. ~~`operations.output_id` FK NO ACTION + 删除路径不清 operations~~ → **已修（Gate #2 Commit 2，`6ca3b70`）**：四处删除路径对齐 FK-safe 顺序（operations → publications → outputs）。
-5. ~~resume/expire 第二出生通道无守卫——挂起-新开-后答制造双 RUNNING，旧 run 复活整族销毁新 run 产物~~ → **已修（R1 B3，I-EXEC-03/04）**：`resume_waiting_interrupt` 函数体内唯一仲裁座（项目行锁 + 原子重查 `has_active_run`，四入口全继承）；authority 被占 = 再挂+明示（零状态污染）；expire = 答案结算 + 仲裁尝试两动作解耦；authority 空出触发器 = 收官交接钩（`_resume_parked_answered`）+ sweep 重试分支。
-6. ~~assets/renders 无执行计数——崩溃环无限重烧、永无终态（`reap_stale` 自认 TODO）~~ → **已修（R1 B4a，ADR-017 修订）**：`attempt` / `render_attempt` 计数列 + claim/reap 封顶终态（> cap → FAILED + 人话行）+ 手动 reprocess 一座复位；意图 re-pend 清零、崩溃 reap 计数。
+1. **节点终态写带围栏（ADR-079）**：execute_step 四尾 = 条件 UPDATE `WHERE id=:id AND claim_token=:mine` + rowcount；fenced → rollback + 零副作用（不 capture / 不 sync / 不 cascade / 不写 run）。
+2. **渲染终态写带围栏（ADR-079）**：render 三处终态写谓词 = `render_claim_token=:mine`；全部 10 处 re-pend 置 NULL；入口 token NULL 提前 return。
+3. **Suspend 的 run 迁移带 expected-from-state 守卫（ADR-079）**：`WHERE id=:rid AND status='RUNNING'`——COMPLETED→WAITING_HUMAN 复活链结构性不可能。
+4. **删除路径 FK-safe**：四处删除路径对齐顺序（operations → publications → outputs）。
+5. **resume/expire 第二出生通道带守卫（I-EXEC-03/04）**：`resume_waiting_interrupt` 函数体内唯一仲裁座（项目行锁 + 原子重查 `has_active_run`，四入口全继承）；authority 被占 = 再挂+明示（零状态污染）；expire = 答案结算 + 仲裁尝试两动作解耦；authority 空出触发器 = 收官交接钩（`_resume_parked_answered`）+ sweep 重试分支。
+6. **assets/renders 执行计数 + 封顶终态（ADR-017）**：`attempt` / `render_attempt` 计数列 + claim/reap 封顶（> cap → FAILED + 人话行）+ 手动 reprocess 一座复位；意图 re-pend 清零、崩溃 reap 计数。
 
 ### 8.2 Race proof 的架构意义
 
-根问题不是四个 bug，是一句话：**写操作没有携带「这次执行是谁」**。`A claim → A 停滞 → reap → B claim → B 完成 → A 醒来 → A 终态写` 全链路上，A 没有任何一个 DB predicate 会失败——结果是 run 行第一写者赢（finalize 行锁是全库唯一真围栏）、step 行最后写者赢、钱包扣两次（ledger 设计上无法区分 zombie 与合法 QualityBounce 重跑）。
+竞态根因：**写操作不携带「这次执行是谁」**。`A claim → A 停滞 → reap → B claim → B 完成 → A 醒来 → A 终态写` 全链路上，A 没有任何一个 DB predicate 会失败——不设围栏时 run 行第一写者赢（finalize 行锁是全库唯一真围栏）、step 行最后写者赢、钱包扣两次（ledger 设计上无法区分 zombie 与合法 QualityBounce 重跑）。
 
 ### 8.3 根原则（TARGET，一切执行层工作的判据）
 
@@ -168,11 +168,11 @@ ADR-052 判词「实现层零 agent、全 workflow」维持；ADR-077 收编的�
 
 ### 8.4 Claim Token ≠ ExecutionAttempt（概念分层，永不混淆）
 
-- **Claim Token（CURRENT，2026-09-16 落地，ADR-079）**：`workflow_steps.claim_token` / `outputs.render_claim_token`——claim 时生成、reap/re-pend/resume 时置 NULL、终态写 `WHERE id=:id AND claim_token=:mine` 查 rowcount。已解决 §8.1 的 1/2/3。**它不是执行模型，只是围栏。**
+- **Claim Token（CURRENT，ADR-079）**：`workflow_steps.claim_token` / `outputs.render_claim_token`——claim 时生成、reap/re-pend/resume 时置 NULL、终态写 `WHERE id=:id AND claim_token=:mine` 查 rowcount。**它不是执行模型，只是围栏。**
 - **ExecutionAttempt（TARGET，长期 execution model）**：回答 Who / When / Which attempt / Which worker / Which claim / What input / What output / What cost / What error / Was it superseded。§8.5。
 - 两者有关但不是同一概念；**禁止**以「一次重构全部解决」扩大当前批次 scope，也禁止把 claim_token 命名成 attempt 继续混淆。
 
-### 8.5 ExecutionAttempt（TARGET 模型，未拍板实施期）
+### 8.5 ExecutionAttempt（TARGET 模型，实施形态未定）
 
 ```
 Task（逻辑节点）
@@ -181,11 +181,11 @@ Task（逻辑节点）
  └── current_state（派生）
 ```
 
-目的不是加表而加表：系统必须能区分「任务是什么」与「某一次执行是谁完成的」。实施后 `attempt` 计数器退役为派生值。**OPEN**：独立表 vs step 上 attempts JSONB 日志（最小形态）——实施前拍板。
+目的不是加表而加表：系统必须能区分「任务是什么」与「某一次执行是谁完成的」。实施后 `attempt` 计数器变为派生值。**OPEN**：独立表 vs step 上 attempts JSONB 日志（最小形态）——形态待裁定。
 
 ### 8.6 Billing boundary（CURRENT 事实 + TARGET 纪律）
 
-CURRENT：`_mutate` 双层 dedupe（NOT-EXISTS 门 + `on_conflict_do_nothing`）是全库唯一真幂等层，**本批及以后永不破坏**；hold→capture→release 语义归 `BILLING.md`。TARGET 纪律：fenced execution（rowcount=0）**永不进入 capture_step**——这是「execution kernel owns billing boundary」的具体含义；禁止用扩大幂等 key 掩盖 race，禁止把 `attempt` 当 execution identity。
+CURRENT：`_mutate` 双层 dedupe（NOT-EXISTS 门 + `on_conflict_do_nothing`）是全库唯一真幂等层，**永不破坏**；hold→capture→release 语义归 `BILLING.md`。TARGET 纪律：fenced execution（rowcount=0）**永不进入 capture_step**——这是「execution kernel owns billing boundary」的具体含义；禁止用扩大幂等 key 掩盖 race，禁止把 `attempt` 当 execution identity。
 
 ## 9. Structured Media 与 Decompiler
 
@@ -193,7 +193,7 @@ CURRENT：`_mutate` 双层 dedupe（NOT-EXISTS 门 + `on_conflict_do_nothing`）
 
 - **clip-spec = 现行 Structured Media 形态**：唯一渲染契约（ADR-016），renderer-agnostic（轨道模型 ADR-044，TRACK_REGISTRY 9 轨），渲染服务是可替换黑盒。
 - **CraftSkeleton = 首个「工艺结构」内部产物**（ADR-078）：确定性字段零 LLM 是构造性保证（craft_scan 无 provider import + 三座位 schema + 测试看门）；内容寻址复用已成立。
-- **Decompiler CURRENT 限制（R1 B1 收口后）**：latest-20 Python 扫描复用 / version 不进 cache key / warm 行无 lineage（三项归 R1.1 C1）；~~decompile 画布孤儿节点 / run 路径不触发 craft 触发回合 / 无 remix e2e 剧本~~（R1 B1 收口：prelude 折叠 + run 路径 fire_trigger + S16 剧本）；**修正**：gaps 有确定性注入进 plan facts（`registry.py:166-178`），skeleton 时序结构有 prompt 侧消费者——但**确定性参数消费者仍只有 count/aspect/captions/music**，结构级 remix 未实现。
+- **Decompiler CURRENT 限制**：latest-20 Python 扫描复用 / version 不进 cache key / warm 行无 lineage（三项归 R1.1 C1）；gaps 有确定性注入进 plan facts（`registry.py:166-178`），skeleton 时序结构有 prompt 侧消费者——但**确定性参数消费者仍只有 count/aspect/captions/music**，结构级 remix 未实现。
 
 ### 9.2 TARGET
 
@@ -203,25 +203,21 @@ Structured Media 逐步成长为 **Media IR / AST**：timeline / clips / audio /
 
 「Structured Media 是领域核心」当前只覆盖**媒体族**（video/audio/image 轨）；**文本族**（post/article/table）是 schema'd payload，没有也没有必要立刻有 media IR。Media IR 主线 = 媒体族方向，不得反写成全产物统一 IR 的既有事实。
 
-## 10. 实施序列（PLANNED，顺序即拍板）
+## 10. 实施序列（PLANNED，顺序即裁定）
 
-> **2026-09-16 产品-first 重排**：施工顺序从「技术债驱动」翻转为「产品旅程驱动」——**现行批次与顺序的唯一事实源 = `docs/PROGRESS.md` §0**（R1 = J2/J5/J6 must-have：B1 remix 收口 → B2 fencing → B3 run authority → B4a poison-pill；R1.1 = B4b hold GC + B5 W11 + C1 并行）。本节保留技术依赖注记，不再承担排期。
+> **现行批次与顺序的唯一事实源 = `docs/PROGRESS.md` §0**（产品旅程驱动：R1 = J2/J5/J6 must-have，R1.1 = B4b hold GC + B5 W11 + C1 并行）。本节只留技术依赖注记，不承担排期。
 
-技术依赖注记（被 PROGRESS §0 吸收后的映射）：
+技术依赖注记：
 
 ```
-Architecture Gate（本文，2026-09-16）
-  → Commit 2：operations FK cleanup ✅（6ca3b70 已落）
-  → B1：remix 旅程收口 + 测试地基（J2）
-  → B2：claim fencing（§8.4 短期原语；新 ADR + ADR-017/030/050 修订随实施）——J5 收费诚实前提
-  → B3：run execution authority（resume/expire 第二出生通道执法）——J6
-  → B4a：poison-pill 封顶——J5 卡死有终态
-  →【R1 停止线】
+R1 ✅ 已落地：B1 remix 旅程收口（J2）→ B2 claim fencing（§8.4 短期原语；ADR-079 + ADR-017/030/050 修订）——J5 收费诚实前提
+  → B3 run execution authority（resume/expire 第二出生通道执法）——J6
+  → B4a poison-pill 封顶——J5 卡死有终态
   → R1.1：B4b hold GC（B4a 前置）→ B5 W11（硬前置 = B2：双扣路径封死再接真钱）∥ C1 cache identity
-  → ExecutionAttempt 演进（§8.5；独立批次，先拍板形态——四证据点门禁：fenced 频率 / 台账查询模式 / W11 对账 / postmortem 九问）
+  → ExecutionAttempt 演进（§8.5；独立批次，先裁定形态——四证据点门禁：fenced 频率 / 台账查询模式 / W11 对账 / postmortem 九问）
   → 能力契约显式化（§4 四分注册属性——触发制：首例能力误挂事故或新能力族批量入场）
   → AgentBudget（§6——触发制：跑飞事故 / 台账长尾数据 / 第二 provider）
-  → Structured Media 深化（结构级 remix 是产品承诺问题，先拍板再立项）
+  → Structured Media 深化（结构级 remix 是产品承诺问题，先裁定再立项）
 ```
 
 每批只解自己的题：B2 不解 ExecutionAttempt；ExecutionAttempt 不改写围栏语义（它消费围栏）。
@@ -229,8 +225,7 @@ Architecture Gate（本文，2026-09-16）
 ## 11. 不做清单（REJECTED / 缓做）
 
 - **REJECTED**（常备否决，维持）：agent 框架（Agno/LangGraph/Mastra 依赖）、开放式自主 loop、LLM 塑形拓扑、静默降级、冻参模板当文案、自由 field ops、arbitrary 代码执行、chain-of-thought 上产品面。
-- **缓做（本批及下一批不做）**：重写 Agent Runtime、新建 Tool Framework、完整 Media IR、Billing 重构、旧工具改名运动、为「架构漂亮」加抽象层、personas 拆桌（挂 ADR-042 运营端批次）、用户 pause/cancel（产品拍板先行）。
-- **本 Gate 批不做**：任何业务代码 / schema / runtime behavior 修改。
+- **缓做（近期不做）**：重写 Agent Runtime、新建 Tool Framework、完整 Media IR、Billing 重构、旧工具改名运动、为「架构漂亮」加抽象层、personas 拆桌（挂 ADR-042 运营端批次）、用户 pause/cancel（产品裁定先行）。
 
 ## 12. 文档地图（每类真相只有一个家）
 
@@ -251,5 +246,5 @@ Architecture Gate（本文，2026-09-16）
 
 ## 13. 与现行 ADR 的关系
 
-- **兼容继承**：ADR-016（clip-spec 唯一契约）/ ADR-028（拓扑铁律）/ ADR-030（outputs 治理——fencing 为其认领谓词补身份维度，非翻案）/ ADR-032（operations 账）/ ADR-039（四层地图）/ ADR-052/077（厚 agent 判词与有界收编）/ ADR-055（billing）/ ADR-057（图即产品对象）/ ADR-078（decompiler）。
-- **实施时需修订（已落地 2026-09-16）**：ADR-017（reap 语义从 ownerless 改 fencing-aware）、ADR-030（render 认领谓词加身份维度）、ADR-050（会话纪律补 guarded-write 纪律）三条修订已随 R1 B2 落档；fencing ADR 已立 = **ADR-079**（随 Commit 1 落地）。
+- **兼容继承**：ADR-016（clip-spec 唯一契约）/ ADR-028（拓扑铁律）/ ADR-030（outputs 治理——fencing 为其认领谓词补身份维度，与判词兼容）/ ADR-032（operations 账）/ ADR-039（四层地图）/ ADR-052/077（厚 agent 判词与有界收编）/ ADR-055（billing）/ ADR-057（图即产品对象）/ ADR-078（decompiler）。
+- **已随 R1 B2 修订**：ADR-017（reap 语义 fencing-aware）、ADR-030（render 认领谓词带身份维度）、ADR-050（会话纪律补 guarded-write 纪律）；fencing ADR = **ADR-079**。

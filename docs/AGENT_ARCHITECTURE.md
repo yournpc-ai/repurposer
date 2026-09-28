@@ -1,7 +1,7 @@
 # Repurposer Agent Architecture
 
-> Status: Active（2026-08-09 重画，ADR-039 架构规范级大迭代；2026-08-18 随 ADR-043 收口请求层语法；2026-08-20 增 §2.5 行业坐标；2026-08-21 N-42 全量对齐行业命名——skill→tool 换位，更名随命名批 v2；**2026-09-14 ADR-077/078 落地（批次⑤ T1~T4）：会话层 = 标准有界工具 loop（读工具 + 门动作工具 + 终态工具停环，ToolLoopAgent），生产层 Graph/Harness/Model 脊柱不变；§2.5 方言侧翻译表随 NAMING 批 v3 消融——方言词全退役，业务名直取行业词**；施工简报 `docs/archive/tasks-done/chat-tool-loop-migration.md`）
-> 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 工具包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29 起）；loop 层行为规格见 CHAT_ARCHITECTURE.md；行业座位映射见 §2.5；**概念层母文档（厚 agent 判词 / 双引擎 workflow / 有界 loop 节点）见 `DIALOG_WORKFLOW.md`（ADR-052，B1~B4 已收口 2026-09-04）**。
+> Status: Active（最后更新 2026-09-14）。会话层 = ADR-077 有界工具 loop（读工具 + 门动作工具 + 终态工具停环，ToolLoopAgent），生产层 Graph/Harness/Model 脊柱；施工简报 `docs/archive/tasks-done/chat-tool-loop-migration.md`。
+> 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 工具包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29 起）；loop 层行为规格见 CHAT_ARCHITECTURE.md；行业座位映射见 §2.5；**概念层母文档（厚 agent 判词 / 双引擎 workflow / 有界 loop 节点）见 `DIALOG_WORKFLOW.md`（ADR-052）**。
 
 ## 1. 叙事
 
@@ -48,7 +48,7 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 
 ## 2.5 行业坐标（业务命名 → 行业座位）
 
-模块分工在行业内已收敛为常数（dsh / Mastra / Agno / LangGraph / Claude Code 五源核对 + Agent Skills 规范四厂商证据，证据 `research/deepseek-harness.md` / `research/agent-skills-spec.md`）。本节是唯一映射表：**我们的业务名 ↔ 传统 agent 架构里的座位 ↔ 差异注记**——业务名随 N-42（命名批 v2）与 N-52（命名批 v3：方言词全退役，ask_user / tool call / plan / brief 直取行业词，方言侧翻译消融）与行业对齐，差异注记说明座位；新模块准入时先在此表找座位。
+模块分工在行业内已收敛为常数（dsh / Mastra / Agno / LangGraph / Claude Code 五源核对 + Agent Skills 规范四厂商证据，证据 `research/deepseek-harness.md` / `research/agent-skills-spec.md`）。本节是唯一映射表：**我们的业务名 ↔ 传统 agent 架构里的座位 ↔ 差异注记**——业务名与行业词对齐（N-42 / N-52），差异注记说明座位；新模块准入时先在此表找座位。
 
 | 我们 | 行业座位（参照） | 差异注记 |
 |---|---|---|
@@ -57,11 +57,11 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 | Harness（Agent 漏斗） | agent harness 调用面（dsh core spine：system-prompt + tools + llm） | harness 单义 = 本调用面（N-48）；我们漏斗固定，无插件拦截 |
 | Model（MiniMaxClient） | provider seam（dsh `ctx.llm` 适配器注册表） | 单边界（家 = `providers/llm/`）；政策开关座位在 PROGRESS 池 |
 | agent | agent（五源同词，N-29） | 一个类 + 声明实例（N-30） |
-| tools 工具（N-42 前 skills 技能包） | tool（schema + execute；Agno Function step = 图调用先例） | 非模型可见（调用方 = 图）；会话层模型可见的读工具 = `chat/perception/` 一族另册（ADR-077） |
-| providers | integrations / provider clients | 外部服务包装一统家（含 `llm/` = Model 缝）；LLM 禁 import 门禁迁址于此 |
+| tools 工具 | tool（schema + execute；Agno Function step = 图调用先例） | 非模型可见（调用方 = 图）；会话层模型可见的读工具 = `chat/perception/` 一族另册（ADR-077） |
+| providers | integrations / provider clients | 外部服务包装一统家（含 `llm/` = Model 缝）；LLM 禁 import 门禁住此 |
 | skills 指令包 | skill（Agent Skills 规范，四厂商同格式） | 包格式行业同、消费异：装配期按声明注入（instructions 式消费），无 runtime discovery；首包 `linkedin-longform` 在册 |
-| TaskSpec 计划 | plan（Claude Code plan mode）——同词同义，翻译消融 / goal（dsh） | 确认制；goal 的自治续跑不建；plan 归两主（chat 计划书义 + pipeline planner 义，N-44），存储字 `task_book` 冻结 |
-| interrupt（N-40 前 checkpoint） | LangGraph `interrupt()` / Mastra `tool_suspended` / Agno approval | 提问-等待-续跑的人在环闸节点 |
+| TaskSpec 计划 | plan（Claude Code plan mode）/ goal（dsh） | 确认制；goal 的自治续跑不建；plan 归两主（chat 计划书义 + pipeline planner 义，N-44），存储字 `task_book` 冻结 |
+| interrupt | LangGraph `interrupt()` / Mastra `tool_suspended` / Agno approval | 提问-等待-续跑的人在环闸节点 |
 | Conversation | thread（Mastra Thread）/ session（Agno） | 撞 auth session 避让在案 |
 | `app/memory/` 记忆层 | Agno Memory（语义记忆） | 现住户 = persona；积累式写入路径（≈ Agno Learnings）= persona 校准池条目 |
 | persona 人设 | 无行业标准词（≈ 语义记忆的身份区） | 我们的产品层概念，行业无对应 |
@@ -81,8 +81,8 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 | **预处理** `preprocess` | ASR 词级时间戳 + 文本提取（机械，无 LLM） |
 | **understand / plan** `understand` `plan` | 两步走：看懂素材（素材级，asset-hash 复用）→ 分任务（请求级，每 run 重排）；共享 crew，住 agents/ |
 | **agent** | LLM 决策单元（N-29 正名）：一个 Agent 类的声明实例（N-30） |
-| **机械** | "确定性工具"描述语（N-42 退役为子集属性）：无 LLM 决策的工具；providers/ 与确定性工具禁 import agents/LLM client（铁律迁址） |
-| **工具包** `tools/`（N-42 前 `skills/`） | 能力的唯一家：节点类 + params + 私有工序 + 估价 + 展示键（+私有 agent 声明） |
+| **机械** | 无 LLM 决策的工具（"确定性工具"描述语）；providers/ 与确定性工具禁 import agents/LLM client |
+| **工具包** `tools/` | 能力的唯一家：节点类 + params + 私有工序 + 估价 + 展示键（+私有 agent 声明） |
 | **质检** `verify`（节点 kind） | 单产物/全片质量校验（Phase 3，未实现）；可寻址、可计价、可单独重跑 |
 | **施工图** `workflow_steps` | 计划+账簿一体的 DAG 内核：`inputs` 边表 / `spec` 参数 / `output_refs` 产物 / `estimate` 计划侧成本 / `cost` 账簿侧成本 |
 | **产物** `outputs` | 统一产物表；产物类型 = 工具的属性（N-32），注册表派生可扩展；用户可见的产物预告 = 干跑编译的派生预览 `derived`（ADR-043） |
@@ -116,7 +116,7 @@ class NodeBase:
 | **报价** | fold：编译图逐节点 `estimate()` 求和——全图 = 生成前总价（dock 展示），子图 = 修改单价，配方预设图 = 配方卡估价贴 |
 | **执行** | topo 走图：worker `FOR UPDATE SKIP LOCKED` 认领 ready 节点 → `NODE_KINDS[kind].run()` → 收尾 `maybe_finalize_run` |
 | **校验** | ∀：出生地（`create_run`）对每个节点 `requires` 一次跑完，缺输入 422——链上技能直接携带其节点的 `requires` 声明，驱动器唯一（clips 需媒体 = SelectClips 自己的声明） |
-| **对账** | ⊆：配方 flow keys ⊆ 编译图 kind 集，启动自检（`compile_graph` 是纯函数，直接编译配方比对），人肉评审退役 |
+| **对账** | ⊆：配方 flow keys ⊆ 编译图 kind 集，启动自检（`compile_graph` 是纯函数，直接编译配方比对），无需人肉评审 |
 | **重跑** | 子图词汇：只跑此节点 / 从这里跑 / 跑到这里（节点可寻址的免费获得） |
 
 ### 4.3 拓扑铁律（不变）
@@ -134,9 +134,9 @@ class NodeBase:
 
 ### 4.5 节点分两类
 
-> **（ADR-072 / ADR-076，2026-09-14 三族批 C1~C6 落地）** 本节「工具节点 / 内部节点」的实现视角分类不变（注册表准入与提议空间仍由它管辖）；**画布用户面 = 词表 v3 三轴**：图节点 `type` = 媒介五值（`text`/`table`/`image`/`video`/`audio`——`graph_nodes.type` 列，kind→type 已改名，工具节点 kind = 工具名不动），`spec.prototype` = `generator`/`editor`/`manual`（程序区按它门控），业务身份 = `spec.summary` + `spec.tool`。工具节点类声明 `node_type` + `prototype`（`assert_runners_registered` 启动自检追齐）；`doc_station` 类声明驱动**两站**（captions/dub：asm = video×editor + doc 伴侣 = table×manual，估价 token/units stamp 侧拆分）；materialize_source 折叠为消费节点内部 step；research 塌缩单节点（text×generator）；write_post/write_article 升 text×generator。generator/processor/agent 卡种退役为出生史维度——旧行永不迁移，读面 `_read_face` 映射；modifier（music/filler/reframe）/ materialize 旧词随未折叠旧行存活。施工简报 `docs/archive/tasks-done/graph-canvas-three-families.md`；modifier 收杠杆 / 分镜表表格档 / 书节点下线归后续批。
+> **（ADR-072 / ADR-076）** 本节「工具节点 / 内部节点」的实现视角分类不变（注册表准入与提议空间仍由它管辖）；**画布用户面 = 词表 v3 三轴**：图节点 `type` = 媒介五值（`text`/`table`/`image`/`video`/`audio`——`graph_nodes.type` 列，工具节点 kind = 工具名不动），`spec.prototype` = `generator`/`editor`/`manual`（程序区按它门控），业务身份 = `spec.summary` + `spec.tool`。工具节点类声明 `node_type` + `prototype`（`assert_runners_registered` 启动自检追齐）；`doc_station` 类声明驱动**两站**（captions/dub：asm = video×editor + doc 伴侣 = table×manual，估价 token/units stamp 侧拆分）；materialize_source 折叠为消费节点内部 step；research = 单节点（text×generator）；write_post/write_article = text×generator。旧行（generator/processor/agent 卡种、modifier（music/filler/reframe）/ materialize 旧词）永不迁移，读面 `_read_face` 一帧映射。modifier 收杠杆 / 分镜表表格档 / 书节点下线归后续批。
 
-- **工具节点**（N-42 前技能节点）：工具包持有，LLM 可提议（dispatchable），kind = 工具名（`select_clips`/`write_post`/`dub_clip`/`translate_clip`/`remove_filler`/`add_music`/`align_stills`/`revise_script`/`research`…）。
+- **工具节点**：工具包持有，LLM 可提议（dispatchable），kind = 工具名（`select_clips`/`write_post`/`dub_clip`/`translate_clip`/`remove_filler`/`add_music`/`align_stills`/`revise_script`/`research`…）。
 - **内部节点**：内核 crew，永不进提议空间（`preprocess`/`persona_bootstrap`/`understand`/`plan`/`checkpoint`/`render`），住 `pipeline/`。
 
 ### 4.6 BoundedLoopNode——agent 性的合法座位（ADR-052 B4，DIALOG_WORKFLOW §2.6）
@@ -161,7 +161,7 @@ class Agent[OutT]:
 
     async def call(**ctx) -> OutT:
         # 装配（纯度由签名保证）→ 渲染 prompt → client.generate(schema)
-        # → 校验失败：错误结构化回显，一轮自修复（盲重试退役）
+        # → 校验失败：错误结构化回显，一轮自修复（盲重试永禁）
         # → 计量（Model 边界捕获 → workflow_steps.cost，ADR-025）
         # → 兜底：默认禁，显式声明才允许
 ```
@@ -177,7 +177,7 @@ class Agent[OutT]:
 - `agents/base.py` = 唯一 Agent 类；`agents/registry.py` = 共享 crew 声明（understand / plan / persona / translator…）；**工具私有声明住工具包**（选段编剧、各 writer、reviser）。
 - `AGENTS` dict 收编全部声明，可枚举；启动自检节点→agent 引用存在。
 - 流式 = chat 侧形态（ToolLoopAgent 的言语直推 `assistant.delta`，N-26；pipeline 侧 StreamingAgent 子类照旧服务 researcher/judge 家族）。
-- context 装配：统一装配层 = `agents/contexts.py`——GenerationContext（节点侧，run 计划 → GenerationContext）与 chat 意图上下文（项目摘要 / per-step 状态段 / mentions 注入 / recent 轮次收口）同住；各 agent 声明的 `assemble` 回调是每 agent 的输入契约（签名即纯度）。`pipeline/step_context.py` 只留机械助手（多模态收集 / 素材摘要 / 行助手）。
+- context 装配：`agents/contexts.py` = 节点侧装配层（GenerationContext，run 计划 → GenerationContext）；chat 意图上下文（项目摘要 / per-step 状态段 / mentions 注入 / recent 轮次收口）住 `chat/context.py`（ADR-087 §6，各层自装上下文）。各 agent 声明的 `assemble` 回调是每 agent 的输入契约（签名即纯度）。`pipeline/step_context.py` 只留机械助手（多模态收集 / 素材摘要 / 行助手）。
 
 ### 5.4 明确不建的 harness 部件
 
@@ -223,16 +223,16 @@ verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈�
 
 ## 10. 验收器
 
-- **剧本测试**：`chat_scenarios.py` S1–S12（2026-09-04 浓缩重排，旧 S 号作废），真实 LLM 跑形态级断言；本架构的回归网。估价三断言在册（S4）：flow 对账自检过 / 报价单调性（子图 ≤ 全图，非负）/ repair 只一轮。
+- **剧本测试**：`chat_scenarios.py` S1–S12，真实 LLM 跑形态级断言；本架构的回归网。估价三断言在册（S4）：flow 对账自检过 / 报价单调性（子图 ≤ 全图，非负）/ repair 只一轮。
 - **启动自检**：runner 注册一致性（`assert_runners_registered` 同款）+ 节点→agent 引用存在 + 配方 flow 对账（§4.2）。
 - e2e 真实管线纪律不变（无测试套件）；改 pipeline 代码必重启常驻 worker。
 
 ## 11. Critical files
 
-- `app/agents/base.py` — Agent 类（harness 漏斗：装配→渲染→调用→修复一轮→声明兜底）+ StreamingAgent（唯一 sanctioned 子类，流式形态）；`app/agents/tool_loop.py` — ToolLoopAgent（会话层有界工具 loop：终态工具停环 + 迭代上界 + 言语账本）；`app/agents/registry.py` — 共享 crew 花名册；`app/agents/contexts.py` — 统一装配层（GenerationContext / chat 意图上下文）
-- `app/pipeline/step_context.py` — 节点侧机械助手（多模态收集 / 素材摘要 / 行助手）；context 装配在 `agents/contexts.py`
+- `app/agents/base.py` — Agent 类（harness 漏斗：装配→渲染→调用→修复一轮→声明兜底）+ StreamingAgent（唯一 sanctioned 子类，流式形态）；`app/agents/tool_loop.py` — ToolLoopAgent（会话层有界工具 loop：终态工具停环 + 迭代上界 + 言语账本）；`app/agents/registry.py` — 共享 crew 花名册；`app/agents/contexts.py` — 节点侧装配层（GenerationContext）；chat 意图上下文住 `app/chat/context.py`
+- `app/pipeline/step_context.py` — 节点侧机械助手（多模态收集 / 素材摘要 / 行助手）
 - `app/tools/` — 工具包（clips / dub / captions / posts / quotes / carousel / article / music / filler / stills…）；`tools/__init__.py` — TOOL_REGISTRY 收编
-- `app/providers/` — 外部服务包装（asr / voice / storage / vision / dubbing…；N-42 前 `app/tools/`；通用件随消费方归位）
+- `app/providers/` — 外部服务包装（asr / voice / storage / vision / dubbing…；通用件随消费方归位）
 - `app/pipeline/graph.py` — NodeBase 协议 + 图算法；`app/pipeline/orchestrator.py` — create_run / execute_step / 收尾
 - `app/pipeline/node_runners.py` — 内部节点 crew（preprocess / understand·plan 节点 / checkpoint / render）
 - `app/pipeline/recipes.py` — 配方注册表（播种唯一发生地）

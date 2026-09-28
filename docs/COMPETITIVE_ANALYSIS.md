@@ -150,7 +150,7 @@
 - **范式**: 链接/上传 → AI 选段打分 → reframe + 字幕 → 审核 → 一键发全平台
 - **壁垒**: ClipAnything 全体裁理解、**Virality Score（七家独有）**、最宽的输入源
 - **2025–2026 扩张清单（向 B 端基础设施与全链路走的信号）**: Agent Opus（文本/链接 → 成片）、**OpusSearch**（企业级视频语义搜索，2025-03 随软银投资发布；企业 API 存在但产品本体为 waitlist 制）、MCP + 6 SDK、**25 语声音克隆配音**（2026-07）、AI 音效一键自动铺点（2026-07）、**Android app**（2026-07）、生成式 B-roll 规模化（Pro 50 条/天）——品类边界在快速模糊化
-- **对我们的意义**: 品类正面对标（sidebar 与交互参照 OpusClip，见 CLAUDE.md 布局节）；其弱点=学术内容理解浅、20-40% 废片、美国数据处理 — 全部已被 PRD 定位章锁定
+- **对我们的意义**: 品类正面对标（sidebar 与交互参照 OpusClip，见 UI_GUIDELINES.md）；其弱点=学术内容理解浅、20-40% 废片、美国数据处理 — 全部已被 PRD 定位章锁定
 
 ### 类型 2：Editor（文档式编辑器）— Descript
 - **范式**: 转写即编辑界面；AI（Underlord）是副驾而非流水线
@@ -207,7 +207,7 @@
 5. **LinkedIn 优先的渠道策略**：发布功能里 LinkedIn 长期是二等公民（Opus 仅企业号、Descript 没有、Submagic 没有）
 
 ### 4.4 需要注意的反直觉发现
-- **Virality Score 七家只有 Opus 一家做** — 不是"人人有之的标配"。我们改造为"首发推荐分"（2026-07-23 定，矩阵 §C）时，竞争对手事实上只有一家
+- **Virality Score 七家只有 Opus 一家做** — 不是"人人有之的标配"。我们改造为"首发推荐分"（矩阵 §C）时，竞争对手事实上只有一家
 - **Submagic 的 Magic Clips 是 +$19/月/人的加购** — 说明"长视频切条"在字幕品类里是增值项而非基础项，侧面印证切条 pipeline 与增强器是两种生意
 - **Repurpose.io 完全没有 AI 切条** — 它证明了"分发自动化"可以脱离内容智能独立成立；我们未来做 LinkedIn 直发时，它才是对标，而不是 Opus
 - **计费模式是全行业共同的信任伤口，透明定价本身就是差异化机会** — OpusClip 处理卡死投诉集中、取消订阅后项目不可访问（即使付费积分仍有效）、取消流程被批故意多步；Descript 2025-09 双表改制引发老用户反弹（有用户账单从 $30 跳到 $195/月；不滚存是官方政策）；Revid 失败生成照扣 credit（退款只能靠客服裁量）；Crayo 官方白纸黑字 ALL SALES FINAL。可借鉴的缓冲设计：Revid 的**渲染前免费成本估算**（公开 calculate-credits API/CLI/MCP，官方文档确认）——用户先看到价再点生成。我们的定价设计原则应是：可预期 > 便宜，失败不扣费、成本先告知
@@ -223,7 +223,7 @@
    - 简版：[repurpose.md](research/repurpose.md)、[crayo.md](research/crayo.md)、[revid.md](research/revid.md)
 2. **横向决策矩阵**（核心交付物）：[DECISION_MATRIX.md](DECISION_MATRIX.md) — 40 个功能点 × 七家有无 × 对我们的价值 × 决策（采纳 22 / 改造 9 / 放弃 9）× 优先级 × 现状（对齐 ADR）× 依据
 3. **渲染技术栈专项**：[research/RENDERING_TECH.md](research/RENDERING_TECH.md) — 七家渲染/预览/字幕实现取证（Submagic 与 ChatCut 确认全栈 Remotion；OpusClip 自研 GPU + EditingScript 与 clip-spec 同构；Descript 客户端 WebCodecs 派）
-3. **文档治理**：本文件为竞品事实唯一入口；PRD §3.4 已标注 superseded（2026-07-19）并链接至此；`research/opusclip-deep-dive.md` 保留为 Opus 单家流程深拆的引用源。竞品能力变化时先改本文件事实层，再同步决策矩阵
+3. **文档治理**：本文件为竞品事实唯一入口；PRD §3.4 链接至此；`research/opusclip-deep-dive.md` 保留为 Opus 单家流程深拆的引用源。竞品能力变化时先改本文件事实层，再同步决策矩阵
 
 ---
 

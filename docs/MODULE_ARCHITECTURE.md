@@ -19,8 +19,7 @@
 ┌────────────────────────── 前端面 ──────────────────────────┐
 │ composer ✅ │ Editor GUI ✅ │ chat ✅ │ 步骤清单 ✅          │
 │ FlowView 图面（配方流程图 ✅ / 结果画布 ✅ ADR-041 / 血缘板 📋spike，ADR-036）│ MCP 📋P2 │
-│ 【已拍板重构（ADR-057，内核批 PROGRESS 09-24 起）：图升正为持久可变产品对象——画布直读   │
-│  graph_nodes/graph_edges，runFlow 五补丁投影（canvas_hidden/canvas_key/过程脊/脊收编/R1）火化】│
+│ 【图 = 持久可变产品对象（ADR-057）：画布直读 graph_nodes/graph_edges，零投影】          │
 └──────────────────────────────┬─────────────────────────────┘
                                ▼ 意图
 ┌──────────────── Agent Interface（chat 升级版 + MCP）────────┐
@@ -122,14 +121,14 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | 模块 | 职责 | 现状代码 | 状态 |
 |---|---|---|---|
 | **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、生成编排（understand/plan 两步 + 技能节点）、RunPlan 计划图（ADR-028 ✅）、渲染触发 | `pipeline/asset_processing.py`、`pipeline/orchestrator.py`、`pipeline/node_runners.py`（内部节点）、`app/skills/`（技能包）、`app/agents/`（花名册+harness 漏斗）、`pipeline/rendering.py`；agent 架构事实源 = AGENT_ARCHITECTURE（ADR-039 四层工程地图） | ✅ 已落地 |
-| **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | `operations/`（registry/service/routes；ADR-032 快照式 undo） | ✅ 地基落地（2026-07-26：editor/chat 两前端已写入；校准消费端仍 📋） |
+| **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | `operations/`（registry/service/routes；ADR-032 快照式 undo） | ✅ 地基落地（editor/chat 两前端已写入；校准消费端仍 📋） |
 | **Agent Interface** | chat 主交互、意图→操作/run dispatch、tool calling、MCP server | `chat/service.py`（book path + 四态 dispatch：任务书构建/修订/确认、task_list→create_run / edit_ops→operations）、`chat/intent.py`（intent_router + chat_intent_agent，op 词汇注入）、`components/chat/`（RunCard/QuestionDock/AnsweredQuestion/OutputChatCard）、`components/mentions/`（MentionEditor/MentionPicker/MentionChip）、`skills/__init__.py`（SKILL_REGISTRY 裁决） | 🚧 v2 落地（chat UI + edit ops + translate/dub skills；plan 级节点重跑仍 ❌，MCP 📋） |
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/_app.projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
 | **Distribution** | ChannelAccount（OAuth token 生命周期）、Publication（状态机/幂等/限流重试）、审核队列、定时发布、数据回流 | `distribution/`（core/channels/publishing/adapters + routes） | 🚧 OAuth/直发骨架已落地（PROGRESS 第十一周联调） |
-| **Memory / Context** | Persona（人设：风格 / 策略 / 皮肤块 `brand` / 声纹块 `voice`）、术语表（📋）；向 understand/plan prompt / chat 上下文 / 分发调性注入 | `agents/roster.py`（persona 声明）、`memory/brand.py`（人设皮肤 → clip-spec 烘焙，模块名不动）、`memory/routes.py` | ✅ 主体落地（根升格为「定位」已拍板未实施——方向见 `POSITIONING.md` / ADR-042，落地时本行改写） |
+| **Memory / Context** | Persona（人设：风格 / 策略 / 皮肤块 `brand` / 声纹块 `voice`）、术语表（📋）；向 understand/plan prompt / chat 上下文 / 分发调性注入 | `agents/roster.py`（persona 声明）、`memory/brand.py`（人设皮肤 → clip-spec 烘焙，模块名不动）、`memory/routes.py` | ✅ 主体落地（根升格为「定位」为已定方向、未实施——方向见 `POSITIONING.md` / ADR-042，落地时本行改写） |
 | **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、逐节点成本计量、积分钱包（credit / wallet / 台账）、EU 数据驻留（P2） | `metering.py`（usage → `workflow_steps.cost`，ADR-025）、`providers/llm/minimax.py`（usage 捕获点 + PRICING）、`platform/billing.py` + `platform/configs.py`（积分层，ADR-055 / `docs/BILLING.md`） | 🚧 计量 ✅（Phase 1）；积分层 🚧 PROGRESS W7 积分批；C2PA/披露 📋 PROGRESS 第十二周；EU 驻留 📋 需求池 |
 
-**精修三角（Editor / Chat / Regenerate 的分工，自 MVP_SPEC §5.7 迁入）**：每个产物卡片提供三种精修路径——**Edit**（精确控制：剪到具体时间点、调字幕样式，仅 Clip，进 editor 页）、**Chat**（模糊指令："再短一点"、"换成德语"、"更正式一点"，asset-scoped Modal）、**Regenerate**（同参数生成新变体）。分工判据：指令能用参数精确表达 → Edit；只能用语言描述 → Chat；想要"再来一版" → Regenerate。这条分工是 Agent Interface 意图 dispatch 的设计基线（CHAT_ARCHITECTURE 待写）。
+**精修三角（Editor / Chat / Regenerate 的分工）**：每个产物卡片提供三种精修路径——**Edit**（精确控制：剪到具体时间点、调字幕样式，仅 Clip，进 editor 页）、**Chat**（模糊指令："再短一点"、"换成德语"、"更正式一点"，asset-scoped Modal）、**Regenerate**（同参数生成新变体）。分工判据：指令能用参数精确表达 → Edit；只能用语言描述 → Chat；想要"再来一版" → Regenerate。这条分工是 Agent Interface 意图 dispatch 的设计基线（行为规格见 CHAT_ARCHITECTURE）。
 
 ## 4. 表归属契约
 
@@ -144,14 +143,14 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `workflow_runs` | Pipeline | **创建收口于 `orchestrator.create_run`**（/generate、chat dispatch 全部经它，全库无旁路）；状态只由 orchestrator/worker 写。run 级成本 = `workflow_steps.cost` 聚合（API 序列化时计算，不落列） |
 | `outputs` | Pipeline | 创建 + `render_status`/`files` 归 Pipeline；内容字段（`payload`/`render_spec`/`publishing`）经 `/outputs` API 编辑，Operation Model 落地后归入其写集；payload 三规则（ADR-030）；`workflow_step_id` 为只读血统；`quality` = 质检裁决（期 3 verify 节点写，NULL = 未质检）；内部类型（`material_understanding`/`storyboard`/`craft_skeleton`；`content_plan` 仅为隐藏 Phase-2 前遗留行保留在过滤集）经 `visible_outputs_stmt()` 统一过滤 |
 | `conversations` / `messages` | Agent Interface | Pipeline 只读（run 关联展示） |
-| `personas` | Memory | 各模块注入用只读；内容只由 persona agent 写。终态 schema（ADR-038 第二刀）：身份卡 + 风格六件 flat + 策略三件（audience/guidelines/cta）+ `voice` JSONB（声纹块，NULL=Auto）+ `brand` JSONB（皮肤块，NULL=系统默认皮肤）+ `learned_from` JSONB + `calibrated_at` + `auto_created_at`（可空时间戳替代 is_default；默认解析链 = run.context pin > 项目挂载 > auto_created_at 非空 > 最早创建）。【已拍板重构：根改名 `positionings`、人设收窄为表达分区、`topics` 新表与 `channel_accounts` 挂根——ADR-042 / `POSITIONING.md`，PROGRESS 第八~十周落地时本行改写】 |
+| `personas` | Memory | 各模块注入用只读；内容只由 persona agent 写。终态 schema（ADR-038）：身份卡 + 风格六件 flat + 策略三件（audience/guidelines/cta）+ `voice` JSONB（声纹块，NULL=Auto）+ `brand` JSONB（皮肤块，NULL=系统默认皮肤）+ `learned_from` JSONB + `calibrated_at` + `auto_created_at`（可空时间戳替代 is_default；默认解析链 = run.context pin > 项目挂载 > auto_created_at 非空 > 最早创建）。【已定方向：根改名 `positionings`、人设归位为定位的表达分区、`topics` 新表与 `channel_accounts` 挂根——ADR-042 / `POSITIONING.md`，PROGRESS 第八~十周落地时本行改写】 |
 | `music` | Pipeline（渲染资产库） | 生成/挑选经 music 服务；editor 只读选择 |
 | `workflow_steps` | Pipeline | 节点状态只由 orchestrator/worker 写；outputs 的 `workflow_step_id` 为只读血统引用；`spec` 载荷 JSONB（ADR-028）；`cost` 只由 metering（ADR-025）原子累加 |
-| `graph_nodes` / `graph_edges` | Pipeline（✅ ADR-057 已落地） | **图即产品对象**：项目持久图（节点五型 asset/document/generator/processor/agent + 状态维度 + prompt/params spec + 产物引用；边 = 类型化上下文流）。结构变更只由 wiring 层（`pipeline/graph_store.apply_wiring_ops`）写——chat 是唯一消费面，前端画布直读零投影；草稿图 dock 即 stamp（`graph_fill.stamp_draft_graph`），run 填充与 step 终态反写只经 `graph_fill`（stamp_run_graph / sync_graph_node_for_step）；workflow_steps 保持 step 粒度住节点内部（billing capture / 计量 / 重试不变）；`island_id`/`island_seq` = C6 Layout Island 成员归属列（写只经 settle 的 `_assign_islands`；岛注册表见 `graph_islands` 行）。【探索产物族同住本表（ADR-088 §2，2026-09-22 迭代一 ✅）：`type="exploration"` + `spec.exploration_kind` ∈ `candidate_set`/`select`/`content_plan` + `journey_id` 归属列（R24——属性永不成边）；出生只经**探索写门** `pipeline/exploration_store.py`（savepoint + 证据校验 + 幂等；免费但真写门），执行门 `apply_wiring_ops` 反向拒收（R14 双门）；I-EXPLORE-01 = 执行闭包 / 报价 rank / 媒体流边对其结构性盲】 |
-| `journeys` | Pipeline（ADR-088，2026-09-22 迭代一 ✅） | 探索旅程的归属锚（`goal_text` + 项目级联删除）；**不是状态机**——状态住探索产物行自身。写只经探索写门（goal_text 即身份：同 goal 重放先 adopt 再判幂等，无双生）；各模块只读 |
-| `graph_islands` | Pipeline（Workspace 合同 v4.2 C6，2026-09-26 封板落地） | **Layout Island 注册表**（组内自治、零 UI）：sibling group 出生定格的独占布局区域——`depth` + `parent_ids`（媒体流父集 = 组身份，ctx 边不入）+ `origin_x/origin_y/row_h` + `cols`（预留列 = 增长廊道；更深带已有定居成员时 Clamp 回 1）+ `cap`（每列行数 C=4；容量参数注册默认 `_ISLAND_COL_CAPACITY=4 / _ISLAND_CORRIDOR_COLS=1 / _ISLAND_MAX_COLS=3`，住 `pipeline/graph_store.py`）。行冻结（无 updated_at）；**出生/认领只经唯一写门** `apply_wiring_ops` 内的 settle（`_assign_islands`，两阶段 flush——岛行 INSERT 先于任何成员写入，裸 FK 轮盘赌律）；真超容量走集合态留座（contact sheet，留座未实现）。`graph_nodes.island_id/island_seq` 为成员归属列；读面 rank 岛化 = `product_graph.display_ranks`（岛占 cols 个连续 rank 槽），客户端镜像 = `layout.ts` projectSettledFrames（冻结格 y 直读 + 压缩地板 = `spec.island.reserved_bottom`） |
-| operations | Operation Model（✅ 2026-07-26） | editor GUI / chat 两前端写入（MCP 座位）；append-only，`undone_at` 唯一可写字段 |
-| publications / channel_accounts | Distribution | 状态机只由 Distribution 服务迁移；回流字段预留给分析（2026-07-24 落地，📋 移除；publication_events 仍 P2） |
+| `graph_nodes` / `graph_edges` | Pipeline（✅ ADR-057 已落地） | **图即产品对象**：项目持久图（节点五型 asset/document/generator/processor/agent + 状态维度 + prompt/params spec + 产物引用；边 = 类型化上下文流）。结构变更只由 wiring 层（`pipeline/graph_store.apply_wiring_ops`）写——chat 是唯一消费面，前端画布直读零投影；草稿图 dock 即 stamp（`graph_fill.stamp_draft_graph`），run 填充与 step 终态反写只经 `graph_fill`（stamp_run_graph / sync_graph_node_for_step）；workflow_steps 保持 step 粒度住节点内部（billing capture / 计量 / 重试不变）；`island_id`/`island_seq` = C6 Layout Island 成员归属列（写只经 settle 的 `_assign_islands`；岛注册表见 `graph_islands` 行）。【探索产物族同住本表（ADR-088 §2）：`type="exploration"` + `spec.exploration_kind` ∈ `candidate_set`/`select`/`content_plan` + `journey_id` 归属列（R24——属性永不成边）；出生只经**探索写门** `pipeline/exploration_store.py`（savepoint + 证据校验 + 幂等；免费但真写门），执行门 `apply_wiring_ops` 反向拒收（R14 双门）；I-EXPLORE-01 = 执行闭包 / 报价 rank / 媒体流边对其结构性盲】 |
+| `journeys` | Pipeline（ADR-088） | 探索旅程的归属锚（`goal_text` + 项目级联删除）；**不是状态机**——状态住探索产物行自身。写只经探索写门（goal_text 即身份：同 goal 重放先 adopt 再判幂等，无双生）；各模块只读 |
+| `graph_islands` | Pipeline（Workspace 合同 v4.2 C6） | **Layout Island 注册表**（组内自治、零 UI）：sibling group 出生定格的独占布局区域——`depth` + `parent_ids`（媒体流父集 = 组身份，ctx 边不入）+ `origin_x/origin_y/row_h` + `cols`（预留列 = 增长廊道；更深带已有定居成员时 Clamp 回 1）+ `cap`（每列行数 C=4；容量参数注册默认 `_ISLAND_COL_CAPACITY=4 / _ISLAND_CORRIDOR_COLS=1 / _ISLAND_MAX_COLS=3`，住 `pipeline/graph_store.py`）。行冻结（无 updated_at）；**出生/认领只经唯一写门** `apply_wiring_ops` 内的 settle（`_assign_islands`，两阶段 flush——岛行 INSERT 先于任何成员写入，裸 FK 轮盘赌律）；真超容量走集合态留座（contact sheet，留座未实现）。`graph_nodes.island_id/island_seq` 为成员归属列；读面 rank 岛化 = `product_graph.display_ranks`（岛占 cols 个连续 rank 槽），客户端镜像 = `layout.ts` projectSettledFrames（冻结格 y 直读 + 压缩地板 = `spec.island.reserved_bottom`） |
+| operations | Operation Model ✅ | editor GUI / chat 两前端写入（MCP 座位）；append-only，`undone_at` 唯一可写字段 |
+| publications / channel_accounts | Distribution | 状态机只由 Distribution 服务迁移；回流字段预留给分析（📋；publication_events 仍 P2） |
 | `notifications` | （平台层，暂不属于任何模块） | 事件源模块经 `platform/notifications.create_notification` 写（当前唯一写者 = Distribution `_transition` 终态钩子）；读/已读收口于 `/notifications` 路由 |
 | `wallets` | （平台层，暂不属于任何模块） | 积分余额（ADR-055，`docs/BILLING.md`）；只由 `platform/billing.py` 写（乐观锁 `version`）；读收口于 `/wallet` 路由 |
 | `credit_transactions` | （平台层，暂不属于任何模块） | 积分台账（append-only）；只由 `platform/billing.py` 写（`idempotency_key` UNIQUE 去重）；读收口于 `/wallet/transactions` |
@@ -188,7 +187,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 3. **clip-spec 是 Pipeline ↔ 渲染的唯一契约**（ADR-016）：渲染服务不读 DB；Operation Model 的编辑也表达为 clip-spec diff，不引入第二个契约。
 4. **Memory 注入是单向的**：Memory 模块只暴露"注入载荷"（persona block / brand block / glossary），不知道谁在消费；消费者（understand/plan / chat / distribution）各自拉取。
 5. **合规与计费是横切切面**：LLM 调用统一经 ADR-025 接口层（计量落 `workflow_steps.cost`）；内容标识在 clip-spec 扩展字段与 Distribution 披露元数据两处落地，不分散到各模块自行实现。
-6. **内核重建接缝稳定**：模块内核可重建，只要表归属与通信规则不变，其他模块零感知——2026-07-22 实证：Pipeline 的 RunPlan（DAG）化后，Distribution / Memory / Editor GUI / Operation Model 全部零改动（缝 = 产物表与 clip-spec）。新内核设计必须守住既有接缝，不得以内核升级为借口移动缝。
+6. **内核重建接缝稳定**：模块内核可重建，只要表归属与通信规则不变，其他模块零感知——已有先例：Pipeline 的 RunPlan（DAG）化时，Distribution / Memory / Editor GUI / Operation Model 全部零改动（缝 = 产物表与 clip-spec）。新内核设计必须守住既有接缝，不得以内核升级为借口移动缝。
 
 ## 6. 演进规则
 
@@ -197,7 +196,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 - **命名注意**：竞品文档中 "pipeline" 也指 Opus 范式（见 DECISION_MATRIX 范式短名）；内部模块语境下 Pipeline = 我们的生成管线，引用竞品时写 `Pipeline 范式`。
 - **本契约的变更 = ADR**：表归属调整、新横切切面、认领源增减都要写 ADR 并更新本文。
 
-## 7. 代码地图与运行约定（自 ARCHITECTURE.md 并入，2026-07-31）
+## 7. 代码地图与运行约定
 
 ### 7.1 代码地图
 
@@ -206,63 +205,63 @@ apps/api/
 ├── app/
 │   ├── main.py / config.py / worker.py   # FastAPI 入口 / 配置 / 独立 worker 进程
 │   ├── dependencies/    # 依赖注入（auth：JWT / 匿名回退默认用户数据）
-│   ├── chat/            # Agent Interface：routes（含 POST /outputs/{id}/regenerate——Phase 5 自
-│   │                    #   pipeline/routes/outputs.py 迁入，依赖方向唯一理由，URL/语义不变）/ service /
+│   ├── chat/            # Agent Interface：routes（含 POST /outputs/{id}/regenerate——依赖方向
+│   │                    #   住此，URL/语义不变）/ service /
 │   │                    #   intent / stream_extract（ProseDeltaExtractor，N-26）
-│   │                    #   / activity.py（Activity Projection，ADR-087 §3 Phase 2：LoopEvent + name-known
+│   │                    #   / activity.py（Activity Projection，ADR-087 §3：LoopEvent + name-known
 │   │                    #   → user-safe assistant.activity 帧的纯投影器，kind=用户语义类别，零 DB 零 Domain 读）
-│   │                    #   / system_status.py（System Status 词汇唯一家，Phase 3 Batch C：
+│   │                    #   / system_status.py（System Status 词汇唯一家：
 │   │                    #   THINKING_PHASE_COMPOSING + observe_phase_callback 公开协议，ADR-087 §1/§6）
-│   │                    #   / context.py（chat 意图上下文装配 build_context，Phase 5 自 agents/contexts.py
-│   │                    #   迁入——各层自装上下文，harness 不再代读 Message/outputs，ADR-087 §6）
-│   │                    #   / exploration_tools.py（探索终态工具族，ADR-088 §2 / iter-2 ⑤ R6：
+│   │                    #   / context.py（chat 意图上下文装配 build_context——各层自装上下文，
+│   │                    #   harness 不代读 Message/outputs，ADR-087 §6）
+│   │                    #   / exploration_tools.py（探索终态工具族，ADR-088 §2：
 │   │                    #   EXPLORATION_TOOLS harness 四动词全终态 + exploration_chat_tools() 生产投影——
 │   │                    #   candidates/selects 非终态一回合连续工作、propose_plans/revise_plan 终态
 │   │                    #   R15 停顿；execute 走 plan_turn 的探索座位，写一律经 exploration_store 门）
 │   │                    #   / seams.py（wire_pipeline_seams：trigger handler + conversation bridge 注册，
-│   │                    #   组合根 app.main / app.worker 各调一次，Phase 5）
+│   │                    #   组合根 app.main / app.worker 各调一次）
 │   ├── pipeline/        # Pipeline（RunPlan 内核）
 │   │   ├── routes/      # projects（含 GET /projects/{id}/graph 画布直读帧，ADR-057）/ assets / outputs
-│   │   │                #   （regenerate 端点已迁 chat/routes.py——Phase 5 依赖方向）/ runs / music / recipes 端点
+│   │   │                #   （regenerate 端点住 chat/routes.py——依赖方向）/ runs / music / recipes 端点
 │   │   ├── orchestrator.py        # RunPlan 物化/走图（create_run = WorkflowRun 唯一出生地；逐节点 estimate 落库 = 报价存储侧）
-│   │   ├── lifecycle.py           # Lifecycle Projection（ADR-087 §2，Phase 1）：服务端命名只读生命周期戳——
+│   │   ├── lifecycle.py           # Lifecycle Projection（ADR-087 §2）：服务端命名只读生命周期戳——
 │   │   │                        #   compute_lifecycle 纯谓词族（零 DB，T1~T15 纯测试矩阵）+ project_lifecycle
 │   │   │                        #   装配器（读既有 Domain facts：资产四态 / 出生地 Requirement / 同款链重裁决 /
 │   │   │                        #   has_active_run；chat 事实由调用方经 public 协议传入，本模块零 chat import）；
 │   │   │                        #   读者 = Transport（results/graph 响应）→ Presentation；不加表、不写 DB
-│   │   ├── scope_classifier.py    # Deterministic Scope Classifier（ADR-087 §4 + D4/D2，Phase 4 B1）：
+│   │   ├── scope_classifier.py    # Deterministic Scope Classifier（ADR-087 §4 + D4/D2）：
 │   │   │                        #   continuation/expansion/unproven 三值纯核（零 op 词汇——消费 wiring 门前后
 │   │   │                        #   图 facts 比对，D4 结果 scope 律）+ 链逐字匹配器（历史 run.context 证明
 │   │   │                        #   approved retry，D2）+ 纯核+装配器两瓣（facts gatherer 读 graph_nodes/
 │   │   │                        #   graph_edges/workflow_runs 只读）；B1 additive 未接线——B2（edit_graph）/B5（/generate）切换
-│   │   ├── scope_compile.py       # 能力编译器（ADR-089 §1~§3，iter-2，2026-09-23）：Content Plan →
+│   │   ├── scope_compile.py       # 能力编译器（ADR-089 §1~§3）：Content Plan →
 │   │   │                        #   Execution Scope 的确定性纯函数（R12 编译移出 LLM——clip → cut_segments，
 │   │   │                        #   四 writer 带 source_span；证据指针编译期解引用 R7；编译产物重入
 │   │   │                        #   validate_task_list 裁决 B3 上移）+ decision_package_plans（决策包阅读层
 │   │   │                        #   R16）+ build_confirmed_scope（R20 快照构造器）；域拒绝 =
 │   │   │                        #   ScopeCompileRejected（WiringRejected/ExplorationRejected 同族）；纯函数零写
-│   │   │                        #   【iter-3 扩（2026-09-23）：R20 修订路由器 route_revision（快照
+│   │   │                        #   【R20 修订路由器 route_revision（快照
 │   │   │                        #   plan_task_map → 任务切片 → fill_key → 活图节点集；plan_ref 序位词/plan_id
 │   │   │                        #   双通道 + @output 单通道 + 诚实降级）+ R19 消费侧 assemble_craft_revision /
 │   │   │                        #   compose_revised_program（prompt 消费族门控，确定族 uncovered 披露）】
-│   │   ├── run_review.py          # 收官兑现审计纯核（ADR-088 §8 R21，iter-3 S5，2026-09-23）：
+│   │   ├── run_review.py          # 收官兑现审计纯核（ADR-088 §8 R21）：
 │   │   │                        #   confirmed_scope 快照 × landed outputs × 实扣 ledger → 兑现事实清单
 │   │   │                        #   + 缺口裁决（保守——只点名数据证明缺失的）+ review_fact_lines 有界渲染；
 │   │   │                        #   零 LLM 零 DB；与图内质检 verify 分词（verify 住执行图、review 住 chat
 │   │   │                        #   边缘触发回合——消费座 = chat/trigger_turn._run_review_lines）
-│   │   ├── exploration_store.py   # 探索写门（ADR-088 §2，iter-1 落地 / iter-2 扩 revise）：
+│   │   ├── exploration_store.py   # 探索写门（ADR-088 §2）：
 │   │   │                        #   propose_candidates / propose_selects / propose_plans / revise_plan 四动词
 │   │   │                        #   （savepoint + 证据逐字校验 + 幂等 + 完整性自检；免费但真写门）+
 │   │   │                        #   journey 读座位 read_journey_evidence / read_journey_plans（编译器的
-│   │   │                        #   只读证据来源——读面不是写门）【iter-3 扩（2026-09-23）：revise_selects
+│   │   │                        #   只读证据来源——读面不是写门）【revise_selects
 │   │   │                        #   门分支（member_index 编辑 + verdict/reason 强制重述 + idem 保留）+
 │   │   │                        #   mark_compiled / supersede_plan 双态写者（E3）+ select_revision_phase
 │   │   │                        #   三金钱态纯判别 + read_journey_summaries / output_fact 记忆读座（S6）】
-│   │   ├── trigger_events.py      # trigger 白名单事件缝（ADR-087 §6，Phase 5）：kind ∈
+│   │   ├── trigger_events.py      # trigger 白名单事件缝（ADR-087 §6）：kind ∈
 │   │   │                        #   {understanding_warmed, run_completed, craft_decompiled} 冻结白名单
 │   │   │                        #   （扩名单 = ADR 评审）；fire-and-forget，未注册 = 静默降级永不
 │   │   │                        #   pipeline 失败；handler 由组合根注册——pipeline 零 app.chat import
-│   │   ├── conversation_bridge.py # 会话写命令显式 protocol（ADR-087 §6，Phase 5）：
+│   │   ├── conversation_bridge.py # 会话写命令显式 protocol（ADR-087 §6）：
 │   │   │                        #   dock_interrupt_question / finalize_bailed_runs / seed_project_prompt /
 │   │   │                        #   discard_unanswered_plan 四命令 bridge delegate（同签名 + db 透传 +
 │   │   │                        #   flush-only 事务语义原样；未注册 fail-loudly）；实现住 chat/service.py
@@ -297,7 +296,7 @@ apps/api/
 │   ├── agents/          # agent 花名册 + harness 漏斗（ADR-039）：base.py（Agent 唯一类 +
 │   │                    #   StreamingAgent 流式子类）/ roster.py（共享 crew：understand·plan/persona/
 │   │                    #   translator）/ contexts.py（GenerationContext + output_one_liner 装配层；
-│   │                    #   chat 意图上下文已迁 chat/context.py——Phase 5，ADR-087 §6）/
+│   │                    #   chat 意图上下文住 chat/context.py——ADR-087 §6）/
 │   │                    #   tool_loop.py（有界工具 loop harness，ADR-077；typed LoopEvent 内部事件通道——
 │   │                    #   内核只说「发生了什么」，用户语义归 chat/activity.py，ADR-087 §3 U1 冻结边界）
 │   ├── tools/           # 工具包（能力唯一家，N-42）：article / captions / carousel / clips /
@@ -317,7 +316,7 @@ apps/api/
 │   ├── distribution/    # Distribution：core / channels / publishing / adapters / routes
 │   ├── operations/      # Operation Model：registry / service / routes（ADR-032）
 │   ├── platform/        # 平台层：auth / email / notifications / project_context / conversation_context
-│   │                    #   （会话只读协议座——§4「Pipeline 只读」批准座，Phase 5：find_conversation /
+│   │                    #   （会话只读协议座——§4「Pipeline 只读」批准座：find_conversation /
 │   │                    #   latest_pending_question / is_pending_plan / get_project_prompt，零写）/
 │   │                    #   configs（公共参数表漏斗）/ billing（积分钱包：hold→capture→release，ADR-055）/ routes
 │   ├── models/          # tables.py + schemas.py + database.py
@@ -336,14 +335,14 @@ packages/clip/           # 共享 <Clip> 组件 + clip-spec TS 类型（镜像 P
 - **Postgres 即队列**：`FOR UPDATE SKIP LOCKED` 认领；独立 worker 进程（`python -m app.worker`），与 API 进程物理隔离；不引入 Redis/Celery，横向扩容时再换 arq/Celery，调用方不变。
 - **四个认领源**：`assets.processing_status`（预处理）/ `workflow_runs.status`（生成；deferred claim——项目还有 pending/processing 素材时不认领）/ `outputs.render_status`（渲染）/ `publications`（`state='scheduled'` + `due_at` 部分索引，分发）。
 - **孤儿回收**：worker 启动时 `reap_stale` 重置中断任务；失败写 `*_error` 列，认领循环不崩。
-- **step 级瞬时重试**（2026-08-02，agent-loop-upgrade W3）：runner 把 provider/网络/存储瞬时故障抛为 `TransientNodeError`（`pipeline/errors.py`）；`execute_step` 按节点类 `retries` 预算（NodeBase 声明，dub/translate = 2）把节点复位 pending（worker 下一 tick 即退避），**不级联跳过下游**；确定性失败（缺输入/空批次）普通异常快速失败。LLM HTTP 层另有 client 内 tenacity，两层不叠加。
-- **morph 记账**（同日 W4）：modifier runner（dub/translate/add_music/remove_filler）的 render_spec 改写一律经 `apply_precomputed` 入 operations 账（source 由 `messages.workflow_run_id` 反链派生 chat/system）——chat  morph 可撤销、hash 链不断、ADR-032 写纪律补齐。
-- **会话纪律（ADR-050，2026-08-27/28）**：session 不跨长等待，且 **Session 2 永不脏 step 行**——计量 = contextvar 内存台账，`execute_step` 尾段一次归并写 `workflow_steps.cost`（五终态分支同记）；`render_output` 短 session 快照 → 无 session 横跨渲染 POST → 新短 session guarded 写入；runner 中途写 spec 只走 `step_display` own-session 原子写（`_pop_spec_field` / `_set_*`），ORM 赋值 = 自死锁（feedback-pop 实锤）；`outputs.workflow_step_id` / `outputs.project_id` / `operations.project_id` / `workflow_steps.run_id` 四条 FK = DEFERRABLE INITIALLY DEFERRED（父行锁窗口挪到 COMMIT）。DB 保险丝 `idle_in_transaction_session_timeout=600s`（部署必配；120s 首日被翻案——Session 2 横跨 LLM await 是保留设计，保险丝只防永久 wedge）。
+- **step 级瞬时重试**：runner 把 provider/网络/存储瞬时故障抛为 `TransientNodeError`（`pipeline/errors.py`）；`execute_step` 按节点类 `retries` 预算（NodeBase 声明，dub/translate = 2）把节点复位 pending（worker 下一 tick 即退避），**不级联跳过下游**；确定性失败（缺输入/空批次）普通异常快速失败。LLM HTTP 层另有 client 内 tenacity，两层不叠加。
+- **morph 记账**：modifier runner（dub/translate/add_music/remove_filler）的 render_spec 改写一律经 `apply_precomputed` 入 operations 账（source 由 `messages.workflow_run_id` 反链派生 chat/system）——chat  morph 可撤销、hash 链不断、ADR-032 写纪律补齐。
+- **会话纪律（ADR-050）**：session 不跨长等待，且 **Session 2 永不脏 step 行**——计量 = contextvar 内存台账，`execute_step` 尾段一次归并写 `workflow_steps.cost`（五终态分支同记）；`render_output` 短 session 快照 → 无 session 横跨渲染 POST → 新短 session guarded 写入；runner 中途写 spec 只走 `step_display` own-session 原子写（`_pop_spec_field` / `_set_*`），ORM 赋值 = 自死锁；`outputs.workflow_step_id` / `outputs.project_id` / `operations.project_id` / `workflow_steps.run_id` 四条 FK = DEFERRABLE INITIALLY DEFERRED（父行锁窗口挪到 COMMIT）。DB 保险丝 `idle_in_transaction_session_timeout=600s`（部署必配——Session 2 横跨 LLM await 是保留设计，保险丝只防永久 wedge）。
 - 纪律见 §5 规则 1（耗时任务一律写 pending 行入队，禁跨模块直调 service 执行重活，禁 FastAPI BackgroundTasks）。
 
 ### 7.3 横切数据约定
 
-- **字段级事实源 = 代码**：`app/models/tables.py`（表结构）+ `migrations/`（演进史）；文档不复述字段表（旧 PRD 副本已 drift 删除）。
+- **字段级事实源 = 代码**：`app/models/tables.py`（表结构）+ `migrations/`（演进史）；文档不复述字段表。
 - **asset.meta 键词汇**（处理链产物一律进 meta JSONB，不加表列）：`words`（ASR 词级时间戳——确定性地基，LLM 永不覆写）/ `language` / `speaker_map`（话轮归属）/ `prosody`（韵律：逐词 F0/能量 z、强调峰、filler 区）/ `visual_anchors`（确定性视觉半：人脸/主体框/安全区，归一化坐标；语义半在理解载荷，按 asset_id 汇合）/ `content_sha256`（内容寻址键，见下条）。
 - **素材理解前移（产物质量线期 1）**：项目素材集齐（全部 COMPLETED）即由 `process_asset` 完成钩子 fire-and-forget warm 出 `material_understanding` 行（`workflow_step_id=NULL`、`source_ref.warmed=true`）；digest 内容寻址（`understanding_v3` salt + 逐素材 `type|content_sha256` 描述符自排序；无哈希行回退上传身份，仅同项目复用）；复用查询 = **同用户跨项目**最近 20 行内哈希命中，命中行**引用不复制**（删除源项目会使他项目 run 的 output_refs 悬空——重跑即再生，期 1 接受）；warm 无 workflow step 绑定，计量按 request-path 先例静默 no-op（per-call 台账 = 需求池 agent_calls P1）。
 - **认证与隔离**：邮箱验证码无密码登录（Resend）；personas / projects / assets / conversations 全部按 user 隔离；seed 默认用户仅作共享默认 personas 的属主；启动仅播种默认音乐。

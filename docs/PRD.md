@@ -1,6 +1,6 @@
 # PRD: Intelligent Talk Repurposing Platform
 
-> Status: Active（2026-08-18 对齐现状）
+> Status: Active（2026-08-18）
 
 ## 1. Document Information
 
@@ -312,7 +312,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 > **Conclusion: Iteration main force = direct editing + local regeneration + quick actions (covers ~80% of edits); free dialogue only as fallback for "vague broad direction adjustments", non-core, can be deferred (MVP can skip dialogue first).**
 > When dialogue fallback is used, agent context = talk materials + Persona memory + current output + necessary history.
 >
-> **现状（2026-07-31）**：直改（edit ops）+ 局部重生成 + chat 三通道已落地（机制见 [CHAT_ARCHITECTURE.md](./CHAT_ARCHITECTURE.md)，现状见 PROGRESS §1）；内部 agent 架构 = 四层工程地图（Model / Harness / Graph / Loop，ADR-039），见 [AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md)，与这里的用户侧迭代交互是两回事。
+> **现状**：直改（edit ops）+ 局部重生成 + chat 三通道已落地（机制见 [CHAT_ARCHITECTURE.md](./CHAT_ARCHITECTURE.md)，现状见 PROGRESS §1）；内部 agent 架构 = 四层工程地图（Model / Harness / Graph / Loop，ADR-039），见 [AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md)，与这里的用户侧迭代交互是两回事。
 
 | ID | Requirement |
 |:---|:---|
@@ -390,13 +390,13 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 
 ## 8. Technical Architecture
 
-> **已迁移**：技术架构的唯一事实源是 [MODULE_ARCHITECTURE.md](./MODULE_ARCHITECTURE.md)（六层模块图 / 表归属 / 代码地图 / 队列机制）；生成编排细节见 [AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md)；clip-spec 与编辑器见 [VIDEO_EDITOR.md](./VIDEO_EDITOR.md)。（2026-07-20 自本文移除；2026-07-31 ARCHITECTURE.md 退役，指针改 MODULE_ARCHITECTURE.md）
+> **已迁移**：技术架构的唯一事实源是 [MODULE_ARCHITECTURE.md](./MODULE_ARCHITECTURE.md)（六层模块图 / 表归属 / 代码地图 / 队列机制）；生成编排细节见 [AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md)；clip-spec 与编辑器见 [VIDEO_EDITOR.md](./VIDEO_EDITOR.md)。
 
 ---
 
 ## 9. Data Models
 
-> **已迁移**：表结构的唯一事实源是代码——`apps/api/app/models/tables.py` + `apps/api/migrations/`（旧版文档字段表已 drift，不再维护）。架构层面的数据约定（登录方式、租户隔离、存储 key、EU 驻留预留）见 [MODULE_ARCHITECTURE.md](./MODULE_ARCHITECTURE.md) §7.3。（2026-07-20 自本文移除；2026-07-31 指针更新）
+> **已迁移**：表结构的唯一事实源是代码——`apps/api/app/models/tables.py` + `apps/api/migrations/`（文档不另维护字段表，以代码为准）。架构层面的数据约定（登录方式、租户隔离、存储 key、EU 驻留预留）见 [MODULE_ARCHITECTURE.md](./MODULE_ARCHITECTURE.md) §7.3。
 
 ---
 
@@ -435,7 +435,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 4. Click send
    ├── Frontend calls POST /projects to create the Project (persona_id 随建项目)
    ├── Frontend uploads materials（upload-url → 直传对象存储 → POST /projects/{id}/assets 登记）
-   └── Frontend navigates to /projects/{id}（画布 + chat dock；`?overlay=` 路由参数 2026-08-31 ADR-051 退役），草稿经 router state 交接
+   └── Frontend navigates to /projects/{id}（画布 + chat dock），草稿经 router state 交接
 5. 项目 dock 把草稿作为首条 POST /chat 消息发出（mentions + persona_id 随行）
    ├── Book path 从消息推断任务书（技能链），计划确认 dock 呈现
    └── 用户确认任务书后才创建 run（/generate 对无确认任务书的 full-scope 请求直接 422）
@@ -539,7 +539,7 @@ After technical review, **"vertical clip output" has been elevated from "P1 opti
 
 ## 12. API Overview
 
-> API 规格的唯一事实源：[API.md](./API.md)。（2026-07-20 移除重复的高层列表）
+> API 规格的唯一事实源：[API.md](./API.md)。
 
 ---
 
@@ -581,7 +581,7 @@ Reference Descript's text-editing experience:
 
 ### 13.5 UX Borrowed from Competitors
 
-> **已迁移**：竞品 UX 借鉴与采纳/不做决策的唯一事实源是 [DECISION_MATRIX.md](./DECISION_MATRIX.md)。（原表已过时——例如"文稿编辑视频 ❌ P1"实际已在 MVP 落地；2026-07-20 移除）
+> **已迁移**：竞品 UX 借鉴与采纳/不做决策的唯一事实源是 [DECISION_MATRIX.md](./DECISION_MATRIX.md)。
 
 ---
 
@@ -646,7 +646,7 @@ Reference Descript's text-editing experience:
 
 产品阶段方向（非排期）：
 
-- **P0 MVP（已完成，2026-07 收官）**：跑通"上传 → AI 生成 → 人工审核 → 导出"核心闭环。
+- **P0 MVP（已完成）**：跑通"上传 → AI 生成 → 人工审核 → 导出"核心闭环。
 - **P1 产品化**：链接摄入（Zoom/Drive/RSS）、术语表、分发（LinkedIn 直发 / 审核队列 / 定时发布）、合规标识（EU AI Act Art.50，2026-08 生效）。
 - **P2 SaaS 化**：多租户与计费、EU 数据驻留、MCP 接入。GTM：欧洲本地销售（London/Berlin）、学术会议组织方合作批量获客。
 
