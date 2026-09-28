@@ -3114,6 +3114,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /** A preview-stashed answer's clean retirement (the envelope's re-dock
+   * flipped away from what the user answered — a rewritten option set, or
+   * a follow-up that is no longer a question): drop the optimistic block,
+   * release the answering gate, nothing fires. Shared by the option path's
+   * not-found seat and the freeform path's kind guard. */
+  const retireStashedAnswer = () => {
+    const stashed = stashedAnswerRef.current
+    if (stashed) {
+      stashedAnswerRef.current = null
+      setAnswering(false)
+      setMessages((prev) => prev.filter((m) => m.id !== stashed.optimisticId))
+    }
+  }
+
   /** Docked question answered by an option click — the answer endpoint
    * records it and continues the conversation (answer = resume).
    * Optimistic posture (chat-flow-sequencing B): the clicked option
@@ -3171,16 +3185,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // The envelope's re-docked row may carry a DIFFERENT option set than
       // the preview the user clicked (a repair flip rewrote the question) —
       // retire the stashed optimistic block, nothing fires.
-      if (questionOverride) {
-        const stashed = stashedAnswerRef.current
-        if (stashed) {
-          stashedAnswerRef.current = null
-          setAnswering(false)
-          setMessages((prev) =>
-            prev.filter((m) => m.id !== stashed.optimisticId),
-          )
-        }
-      }
+      if (questionOverride) retireStashedAnswer()
       return
     }
     await settleAnswerTurn(question, { kind: "option", option_id: optionId }, option.label)
@@ -3473,7 +3478,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     questionOverride?: QuestionMessage,
   ) => {
     const question = questionOverride ?? pendingQuestion
-    if (!question || question.question?.kind !== "question") return
+    if (!question) return
+    if (question.question?.kind !== "question") {
+      // A stashed freeform text firing on a FLIPPED follow-up (the envelope
+      // docked a task_book / plain prose where the preview promised a
+      // question) retires exactly like the option path's not-found seat —
+      // without this the optimistic block and the answering gate leak.
+      if (questionOverride) retireStashedAnswer()
+      return
+    }
     // A letter/number/label hit IS the option pick (保回归: typing "2"
     // settles exactly like clicking row 2). Skipped on the fire path — a
     // stashed freeform text already missed this mapping at stash time, and

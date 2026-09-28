@@ -34,7 +34,7 @@ describe("matchOptionByText", () => {
 
   it("trailing punctuation never defeats a hit (the server's rstrip set)", () => {
     expect(matchOptionByText("2.", options)).toBe(options[1])
-    expect(matchOptionByText("English！",options)).toBe(options[0])
+    expect(matchOptionByText("English！", options)).toBe(options[0])
     expect(matchOptionByText(" 3）", options)).toBe(options[2])
   })
 
