@@ -2807,14 +2807,27 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           // loop's accumulated speech): pace the unseen tail BEFORE the run
           // lands — the same law as the zero-delta start's paceSettledProse.
           await paceUnstreamedTail(data.assistant_message.content ?? "")
-          finalizePreview(undefined, data.run_id, data.assistant_message.created_at)
+          // 信封永远赢 (ADR-093 §1): the content truth replaces the preview
+          // too — the start path is no exception (same-value on the happy
+          // path, the envelope's prose wins after a rejected iteration).
+          finalizePreview(
+            data.assistant_message.content ?? undefined,
+            data.run_id,
+            data.assistant_message.created_at,
+          )
         } else {
           // Zero-delta start (the funnel's repair round never streams): the
-          // echo paces through the typewriter BEFORE the run lands — the
-          // 打字机律's last gate holds on the start path too, otherwise a
-          // repaired turn pops its echo as one blob (or drops it entirely).
+          // start speech paces through the typewriter BEFORE the run lands —
+          // the 打字机律's last gate holds on the start path too. The
+          // empty-prose degrade (the envelope's assistant_message IS the
+          // answered plan row) paces NOTHING: the plan's echo already lives
+          // in the flow — re-typing it would fake a second utterance no row
+          // persists (a start path with no speech stays honestly silent).
           const settled = (data.assistant_message.content ?? "").trim()
-          if (settled) {
+          const isAnsweredPlanRow =
+            data.answered_question != null &&
+            data.assistant_message.id === data.answered_question.id
+          if (settled && !isAnsweredPlanRow) {
             await paceSettledProse(
               data.assistant_message.content ?? "",
               data.run_id,
@@ -2825,11 +2838,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           }
         }
         // The receipt titles the RUN by its birthing proposal (ADR-058):
-        // the echo row carries the fresh intent server-side — its LLM name
-        // leads, the chain label falls back. The dock's own intent state is
-        // NOT touched (a chat-dispatch turn is not a plan edit).
-        if (data.assistant_message.intent) {
-          const birthTitle = titleOf(normalizeIntent(data.assistant_message.intent))
+        // the answered plan row carries the fresh intent server-side — its
+        // LLM name leads, the chain label falls back. The dock's own intent
+        // state is NOT touched (a chat-dispatch turn is not a plan edit).
+        const birthIntent =
+          data.answered_question?.intent ?? data.assistant_message.intent
+        if (birthIntent) {
+          const birthTitle = titleOf(normalizeIntent(birthIntent))
           if (birthTitle) setRunTitleOverride(birthTitle)
         }
         landOnStartedRun(data.run_id)
@@ -3697,18 +3712,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // ONE timeline that never scrambles; a QA archives inline at its real
   // time, and NEWER replies keep flowing BELOW it). Once the run's birth
   // time is known everything sorts by real time into a single walk: the
-  // START LINE ("我开始生成了——") anchors at the run's birth, messages
-  // (the mid-run direction QA included) at their real time below it, and
-  // the task list's dynamic row pins bottom-most while the run is live
-  // (2026-09-13 时序拍板 — the start line is the run section's opener, not
-  // part of the pinned chrome, so a mid-run QA lands BETWEEN it and the
-  // dynamic row). Once terminal the start line is gone and the task list
-  // settles as the run's tombstone AT THE RUN'S END (same 拍板 — mid-run
-  // life sorts by real time ABOVE the receipt, never below it), the
-  // completion line right after. iter-3 S7: the turn's activity rows join
-  // this same walk at their birth moments (the shared timeline layer —
-  // lib/chatTimeline); off a run, messages × activities interleave by the
-  // same law and the fixed bottom block is retired.
+  // THE RUN SECTION (时序律, ADR-073 / ADR-093 §2): the start turn's speech
+  // (the work-start line — the start_run turn's own LLM prose, persisted as
+  // a plain assistant row) opens the section as a normal message unit at its
+  // real time, just before the run's birth; mid-run life (the direction QA
+  // included) sorts at its real time below it, and the task list's dynamic
+  // row pins bottom-most while the run is live (2026-09-13 时序拍板). Once
+  // terminal the task list settles as the run's tombstone AT THE RUN'S END
+  // (same 拍板 — mid-run life sorts by real time ABOVE the receipt, never
+  // below it). A start path with NO LLM turn speaks nothing — the dynamic
+  // row carries the progress alone (honest absence, never a template
+  // stand-in). iter-3 S7: the turn's activity rows join this same walk at
+  // their birth moments (the shared timeline layer — lib/chatTimeline); off
+  // a run, messages × activities interleave by the same law and the fixed
+  // bottom block is retired.
   const runStartAt = runCreatedAt ? Date.parse(runCreatedAt) : null
   // 素材节拍入库 (2026-09-24) + activity 持久化 (2026-09-25): a persisted
   // beat row / a turn's milestone log replays carrying its activity payload
@@ -3736,7 +3753,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }
   }, [messages, activities, logDismissed])
   type RunStreamUnit =
-    | { kind: "startLine" }
     | { kind: "taskList" }
     | { kind: "message"; message: OverlayMessage }
     | { kind: "activity"; activity: ActivityFramePayload }
@@ -3752,15 +3768,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     type Timed = { t: number; order: number; unit: RunStreamUnit }
     const timed: Timed[] = []
     let order = 0
-    // The start line is live-phase chrome: once terminal the receipt is the
-    // run's archive and the line would be a dead slot above it.
-    if (!terminal) {
-      timed.push({
-        t: runStartAt ?? Number.POSITIVE_INFINITY,
-        order: order++,
-        unit: { kind: "startLine" },
-      })
-    }
     const undated: OverlayMessage[] = []
     for (const m of flowMessages) {
       const t = m.at ? Date.parse(m.at) : NaN
@@ -3814,13 +3821,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // Undated messages (fresh optimistic sends) are chronologically NOW —
       // they land above the pinned task list while the run is live.
       if (!terminal && units[units.length - 1]?.kind === "taskList") {
-        let insertAt = units.length - 1
-        // Pre-snapshot the start line pins at +∞ too — undated messages land
-        // above BOTH chrome rows, never wedged between them.
-        if (runStartAt == null && units[insertAt - 1]?.kind === "startLine") {
-          insertAt--
-        }
-        units.splice(insertAt, 0, { kind: "message", message: m })
+        units.splice(units.length - 1, 0, { kind: "message", message: m })
       } else {
         units.push({ kind: "message", message: m })
       }
@@ -4605,15 +4606,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   </MessageScrollerItem>
                 )}
 
-                {/* The flow (#5 chronology): once the run's birth time is
-                    known everything sorts into ONE timeline — the start line
-                    at the run's birth, messages at their real time, the task
-                    list pinned bottom-most while live / tombstoned at the
-                    run's end once terminal, the completion line last. A
-                    mid-run QA lands between the start line and the dynamic
-                    row while live, and above the receipt once terminal —
-                    the Claude Code reference. Activity rows (S7) sort into
-                    the same walk at their birth moments. */}
+                {/* The flow (#5 chronology): everything sorts into ONE
+                    timeline — the start turn's speech row (a plain assistant
+                    message, ADR-093 §2) at its real time ahead of the run's
+                    birth, mid-run life at its real time, the task list
+                    pinned bottom-most while live / tombstoned at the run's
+                    end once terminal. A mid-run QA lands between the start
+                    speech and the dynamic row while live, and above the
+                    receipt once terminal — the Claude Code reference.
+                    Activity rows (S7) sort into the same walk at their
+                    birth moments. */}
                 {runStreamUnits ? (
                   <>
                     {runStreamUnits.map((unit) => {
@@ -4624,19 +4626,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                         return (
                           <MessageScrollerItem key={unit.activity.activity_id}>
                             <ActivityRow activity={unit.activity} />
-                          </MessageScrollerItem>
-                        )
-                      }
-                      if (unit.kind === "startLine") {
-                        return (
-                          <MessageScrollerItem key="run-start-line">
-                            <Message align="start">
-                              <MessageContent>
-                                <p className="text-sm leading-relaxed">
-                                  {t("generationOverlay.startingLine")}
-                                </p>
-                              </MessageContent>
-                            </Message>
                           </MessageScrollerItem>
                         )
                       }

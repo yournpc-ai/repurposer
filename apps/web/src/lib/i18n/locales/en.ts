@@ -1558,7 +1558,6 @@ const en = {
     // gesture is the SAME single Start; only the label carries the price.
     confirmPriced: "Start · ~{{low}}–{{high}} credits",
     starting: "Starting…",
-    startingLine: "I'm starting your generation — stay to refine it together, or leave and I'll finish in the background.",
     planUpdated: "Got it — I've updated the plan above.",
     // FAUNA-parity mechanics placeholder (2026-09-06 user ruling, final
     // cut — @ verified working in product): FAUNA's form verbatim minus

@@ -1470,7 +1470,6 @@ const zh: Resources = {
     // 只是标签带价。
     confirmPriced: "开始 · ~{{low}}–{{high}} 积分",
     starting: "启动中…",
-    startingLine: "我开始生成了——你可以继续和我聊，也可以离开页面，它会在后台完成。",
     planUpdated: "好，我记下了——上面的计划已更新。",
     // OriginCut 同位 mechanics placeholder（2026-09-24 用户拍板，照搬其两
     // 行组成式：先问需求，再讲机制——拖拽/粘贴 + @ 引用 + 确认后开工，

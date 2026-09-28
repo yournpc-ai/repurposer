@@ -64,7 +64,10 @@ PLAN_TOOLS = [
         description=(
             "Start the confirmed plan's run. Only when the user confirms "
             "a docked plan (a 'looks good, go ahead' in the confirm phase — "
-            "a revision is present_plan, not this)."
+            "a revision is present_plan, not this). Speak the work-start "
+            "line BEFORE calling this — one short sentence: the work is "
+            "starting, they can keep chatting or leave, it finishes in "
+            "the background."
         ),
         params_model=None,
     ),

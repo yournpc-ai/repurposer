@@ -598,7 +598,7 @@ class PlanTurn:
             assert isinstance(params, PlanAskArgs)
             return await self._ask_user(params, prose)
         if name == "start_run":
-            return await self._start_run()
+            return await self._start_run(prose)
         if name == "answer":
             assert isinstance(params, PlanAnswerArgs)
             return await self._answer(params, prose)
@@ -1492,10 +1492,13 @@ class PlanTurn:
         self.outcome = (assistant_message, None, self.settled_pending, bailed_run_ids)
         return None
 
-    async def _start_run(self) -> str | None:
+    async def _start_run(self, prose: str) -> str | None:
         """start → the docked plan is answered kind=start (G-1 path: the
         run comes from the only birthplace, answer_question — which commits;
-        zero bypass)."""
+        zero bypass). The turn's speech (the work-start line, ADR-093 §2)
+        lands as a plain assistant row first — created before the run
+        births, so its stamp orders before the task list by construction,
+        and answer_question's commit lands it atomically with the run."""
         db, stored = self.db, self.stored
         pending_question = await latest_pending_question(db, self.conversation_id)
         if (
@@ -1503,6 +1506,15 @@ class PlanTurn:
             and stored is not None
             and stored.intent is not None
         ):
+            # 起始句 = 普通 assistant 行 (ADR-093 §2): the model's own words
+            # persist or nothing does — an empty prose stays an honest
+            # absence (a template fill-in is prohibited speech), keeping
+            # the envelope's assistant_message on the answered plan row.
+            start_message = None
+            if prose.strip():
+                start_message = await _create_message(
+                    db, self.conversation_id, "assistant", prose.strip()
+                )
             answered, _follow_up = await answer_question(
                 db, self.user_id, UUID(str(pending_question.id)),
                 # The review panel's edited plan rides along (typed Start
@@ -1518,7 +1530,12 @@ class PlanTurn:
             )
             # answer_question commits — the run, the answer and the cleared
             # pending brief land in one transaction.
-            self.outcome = (answered, UUID(str(answered.workflow_run_id)), answered, [])
+            self.outcome = (
+                start_message or answered,
+                UUID(str(answered.workflow_run_id)),
+                answered,
+                [],
+            )
             return None
         if stored is not None and stored.intent is not None:
             # Nothing startable right now. Never overwrite a stored plan
