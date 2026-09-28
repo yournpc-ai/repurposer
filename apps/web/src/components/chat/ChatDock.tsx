@@ -147,6 +147,7 @@ import {
   planEnvelopePacing,
   spliceAnswerEnvelope,
 } from "./answerSettlement"
+import { matchOptionByText } from "./optionMatch"
 import {
   resetActivities,
   sweepActivities,
@@ -1253,9 +1254,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   /** A click on the ask PREVIEW pill, stashed until the envelope docks the
    * persisted row (2026-09-09 用户拍板「选项该和这句话一起来」): the
    * preview's id doesn't exist server-side yet, so the choice registers
-   * optimistically here and fires for real at the envelope's dock. */
+   * optimistically here and fires for real at the envelope's dock. A
+   * pencil-row freeform text stashes the same way (one register, two
+   * payloads — exactly one of optionId / freeformText is set). */
   const stashedAnswerRef = useRef<{
-    optionId: string
+    optionId?: string
+    freeformText?: string
     optimisticId: string
   } | null>(null)
   const onCompleteRef = useRef(onComplete)
@@ -2905,7 +2909,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // matching option — the override path retires it the same way.
         const stashed = stashedAnswerRef.current
         if (stashed) {
-          await handleOptionAnswer(stashed.optionId, message)
+          await fireStashedAnswer(stashed, message)
         }
       } else if (streamedAny) {
         // Prose reply: the preview bubble IS the settled message (same key;
@@ -3112,15 +3116,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
 
   /** Docked question answered by an option click — the answer endpoint
    * records it and continues the conversation (answer = resume).
-   * Optimistic posture (chat-flow-sequencing B, mirroring the freeform
-   * path): the clicked option collapses into the flow INSTANTLY (question +
-   * label) — the card never sits waiting on a full answer round-trip — and
-   * the continuation STREAMS below it (answer SSE, 2026-09-04 验收批: the
-   * slot-answer continuation is an LLM turn, so an option click gets the
-   * same typing animation as a typed turn — deltas render into a streaming
-   * preview message, the terminal frame's envelope replaces it 真值裁决).
-   * Failure rolls the optimistic block back and re-docks the question (the
-   * server settled nothing). */
+   * Optimistic posture (chat-flow-sequencing B): the clicked option
+   * collapses into the flow INSTANTLY (question + label) — the card never
+   * sits waiting on a full answer round-trip — and the continuation STREAMS
+   * below it (answer SSE, 2026-09-04 验收批: the slot-answer continuation
+   * is an LLM turn, so an option click gets the same typing animation as a
+   * typed turn — deltas render into a streaming preview message, the
+   * terminal frame's envelope replaces it 真值裁决). The pencil row's
+   * freeform text lands on the SAME machine via handleFreeformAnswer /
+   * settleAnswerTurn. Failure rolls the optimistic block back and re-docks
+   * the question (the server settled nothing). */
   const handleOptionAnswer = async (
     optionId: string,
     questionOverride?: QuestionMessage,
@@ -3178,6 +3183,23 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
       return
     }
+    await settleAnswerTurn(question, { kind: "option", option_id: optionId }, option.label)
+  }
+
+  /** The shared answer settlement machine: an option click and a pencil-row
+   * freeform text ride the SAME stream (W7 — the freeform pencil used to
+   * ride sendChat, where an options question's non-hit text settled as
+   * NOTHING: no answered_at, a stuck dock, and the next turn's agent
+   * re-asking). Optimistic archive → answer SSE → envelope splice →
+   * follow-up dock, one anatomy for both payloads. `displayText` is the QA
+   * block's answer line (the option's label / the freeform text verbatim —
+   * the envelope's archived row resolves to the same wording, so the
+   * optimistic block and the archive never flip). */
+  const settleAnswerTurn = async (
+    question: QuestionMessage,
+    body: { kind: "option"; option_id: string } | { kind: "freeform"; text: string },
+    displayText: string,
+  ) => {
     // C8-c: same rollback-scope handover as sendChat's turn start.
     liveCandidateRowsRef.current.clear()
     const optimisticId = stashedAnswerRef.current?.optimisticId ?? crypto.randomUUID()
@@ -3199,7 +3221,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               id: optimisticId,
               role: "assistant",
               content: "",
-              qa: buildQaBlock(question, option.label, false),
+              qa: buildQaBlock(question, displayText, false),
               at: new Date().toISOString(),
             },
           ],
@@ -3238,7 +3260,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       const data = await streamAnswer<{
         answered_question: QuestionMessage
         follow_up: QuestionMessage | null
-      }>(question.id, { kind: "option", option_id: optionId }, {
+      }>(question.id, body, {
         onDelta: (text) => typewriter.push(text),
         onThinking: (payload) => {
           // Same protocol as the sendChat handler above: `"phase" in
@@ -3323,11 +3345,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // while this frame awaits the stream — the shared ref is live
         // across the await even when TS's control flow can't see it.)
         const stashed = stashedAnswerRef.current as {
-          optionId: string
+          optionId?: string
+          freeformText?: string
           optimisticId: string
         } | null
         if (stashed) {
-          await handleOptionAnswer(stashed.optionId, followUp)
+          await fireStashedAnswer(stashed, followUp)
         }
       } else {
         // No follow-up at all — a pre-clicked preview never got its row:
@@ -3434,25 +3457,75 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   }
 
   /** The options dock's pencil row (ADR-053 R1 阻塞形态): with the input
-   * row morphed away, a freeform answer rides the SAME send channel as the
-   * chat input — the server's deterministic autoResume mapping resolves a
-   * letter/number/label hit (zero LLM), anything else goes through the
-   * judged settlement (slot handshake / pending_disposition). */
-  const handleFreeformAnswer = (text: string) => {
-    if (chatBusy || isStarting || answering) return
-    const rollbackId = crypto.randomUUID()
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: rollbackId,
-        role: "user",
-        content: text,
-        at: new Date().toISOString(),
-      },
-    ])
-    raiseHistory()
-    scrollerSendRef.current?.() // same live-edge intent as handleSend
-    void sendChat(text, { rollbackId, draft: text })
+   * row morphed away, a freeform answer rides the ANSWER ENDPOINT — the
+   * same settlement machine as an option click (W7: it used to ride
+   * sendChat, where an options question's non-hit text settled as NOTHING —
+   * no answered_at, a stuck dock, and the next turn's agent re-asking).
+   * A typed letter/number/label hit converts PRE-POST to the option pick
+   * (matchOptionByText, the client mirror of the server's autoResume
+   * `_match_option` — a hit settles kind="option" exactly like the chat
+   * input's typed hit); anything else settles kind="freeform" with the
+   * text verbatim. The flow record is the optimistic QA block (the point's
+   * same anatomy), never a user bubble — the archive's answered row
+   * replays byte-identical. */
+  const handleFreeformAnswer = async (
+    text: string,
+    questionOverride?: QuestionMessage,
+  ) => {
+    const question = questionOverride ?? pendingQuestion
+    if (!question || question.question?.kind !== "question") return
+    // A letter/number/label hit IS the option pick (保回归: typing "2"
+    // settles exactly like clicking row 2). Skipped on the fire path — a
+    // stashed freeform text already missed this mapping at stash time, and
+    // it stays the user's verbatim words.
+    if (!questionOverride) {
+      const matched = matchOptionByText(text, question.question.options ?? [])
+      if (matched) {
+        await handleOptionAnswer(matched.id)
+        return
+      }
+    }
+    // Preview-pill 寄存 (点选同款对称): the preview row has no server id yet
+    // — register the text with the same optimistic anatomy; the envelope's
+    // dock fires it for real (fireStashedAnswer). This branch sits ABOVE
+    // the answering guard — on the answer wire the next preview arrives
+    // while the CURRENT answer is still streaming.
+    if (question.preview && !questionOverride) {
+      const optimisticId = crypto.randomUUID()
+      stashedAnswerRef.current = { freeformText: text, optimisticId }
+      setAnswering(true)
+      setPendingQuestion(null)
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: optimisticId,
+          role: "assistant",
+          content: "",
+          qa: buildQaBlock(question, text, false),
+          at: new Date().toISOString(),
+        },
+      ])
+      raiseHistory()
+      scrollerSendRef.current?.() // a freeform answer is the same live-edge intent
+      return
+    }
+    if (!questionOverride && answering) return
+    await settleAnswerTurn(question, { kind: "freeform", text }, text)
+  }
+
+  /** The envelope's dock fires a preview-stashed answer on the persisted
+   * row (the fire sites: sendChat's dock branch for Q1, settleAnswerTurn's
+   * follow_up branch for Q2..N) — option click or freeform text, one
+   * register. */
+  const fireStashedAnswer = async (
+    stashed: { optionId?: string; freeformText?: string; optimisticId: string },
+    row: QuestionMessage,
+  ) => {
+    if (stashed.optionId !== undefined) {
+      await handleOptionAnswer(stashed.optionId, row)
+    } else if (stashed.freeformText !== undefined) {
+      await handleFreeformAnswer(stashed.freeformText, row)
+    }
   }
 
   /** Stop the in-flight assistant reply (aborts the fetch; the user's own

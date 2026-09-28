@@ -22,8 +22,9 @@
  *   picks option a; long labels wrap, never overflow), and the tail pencil
  *   row for a freeform answer rendered as ONE MORE ITEM ROW (the pencil in
  *   the same badge tile — FLORA / Opus "Something else…" 同款解剖; Enter
- *   submits through the same send channel as the chat input — autoResume /
- *   judged settlement unchanged). No default-path subtitle line (同日拍板：
+ *   settles through the answer endpoint — a number/letter/label hit
+ *   converts pre-post to the option pick, anything else records
+ *   kind="freeform"). No default-path subtitle line (同日拍板：
  *   两家参照均无此行——跳过语义由 × 承担，正常对话即可). 作答反馈座 = 点中
  *   的行本身（accent 填充 + 行尾 inline spinner，Opus 选中行解剖；作答失败
  *   自动复位），卡底不再另置孤 spinner（同日拍板）. The morph governs
@@ -92,10 +93,11 @@ interface OptionDockProps {
   onBail?: () => void
   /** The ×'s aria-label — the caller knows the context (stop vs skip). */
   bailLabel?: string
-  /** 尾行铅笔手输入 (ADR-053 R1 阻塞形态): Enter submits a freeform answer
-   * through the same send channel as the chat input (the deterministic
-   * letter/number/label autoResume mapping resolves a hit server-side,
-   * zero LLM; anything else goes through the judged settlement). */
+  /** 尾行铅笔手输入 (ADR-053 R1 阻塞形态): Enter settles a freeform answer
+   * through the ANSWER endpoint (kind="freeform") — the same settlement
+   * machine as an option click; a typed letter/number/label hit converts
+   * pre-post to the option pick (client mirror of the server's autoResume
+   * mapping), zero LLM. */
   onFreeform?: (text: string) => void
   freeformDisabled?: boolean
   /** Bare child of the floating question pill (2026-09-02 拆粘): no fill /
@@ -286,10 +288,10 @@ function OptionForm({
               rendered as ONE MORE ITEM ROW (2026-09-04 用户拍板, FLORA /
               Opus "Something else…" 同款解剖): the pencil sits in the same
               badge tile as the option numbers, the input aligns with the
-              option labels. Enter submits through the same send channel as
-              the chat input — the server's deterministic number/letter/
-              label autoResume mapping resolves a hit, anything else goes
-              through the judged settlement. */}
+              option labels. Enter settles through the answer endpoint —
+              the client-side number/letter/label mapping (the server's
+              autoResume mirror) converts a hit to the option pick,
+              anything else records kind="freeform". */}
           {onFreeform ? (
             <div className="flex w-full items-center gap-2.5 rounded-md bg-card px-3 py-2">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
