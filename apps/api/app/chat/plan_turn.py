@@ -63,7 +63,7 @@ from app.chat.exploration_tools import (
 )
 from app.chat.intent import intent_router
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
-from app.chat.perception.executes import understanding_digest_lines
+from app.chat.perception.executes import speaker_form_lines, understanding_digest_lines
 from app.chat.service import (
     _active_run_line,
     _ask_content,
@@ -455,6 +455,11 @@ class PlanTurn:
             file_language=(first_file.meta or {}).get("language") if first_file else None,
             material_excerpt=material_excerpt,
             understanding_lines=understanding_lines,
+            # The footage's speaker form (deterministic, off asset.meta —
+            # independent of the understanding row's readiness): the framing
+            # direction's evidence seat, so a vertical ask on interview /
+            # single-speaker footage never silently defaults to center crop.
+            speaker_form_lines=speaker_form_lines(assets) or None,
             asset_lines=asset_lines,
             material_pending_line=material_pending_line,
             # The sender's surface (2026-09-25 canvas↔chat 联动): "canvas" =

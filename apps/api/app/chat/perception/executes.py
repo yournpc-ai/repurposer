@@ -211,6 +211,35 @@ def understanding_digest_lines(u: MaterialUnderstanding) -> list[str]:
     return lines
 
 
+def speaker_form_lines(assets: list[Asset]) -> list[str]:
+    """The footage's speaker form as deterministic fact lines (one per
+    form-bearing VIDEO asset): the speaker_map's form + turn count, read
+    straight off ``asset.meta`` (zero LLM). Two consumers, one formatting
+    law — the ``get_understanding`` read and the plan turn's assemble — so
+    the speaker-framing direction (the camera on whoever talks) is SAYABLE
+    on every surface that reads the material. Only the attributed forms
+    render (interview / single — the forms the reframe capability keys its
+    modes on); an absent map or an unattributed form (multi / unknown) is
+    NO line, never a guess."""
+    out: list[str] = []
+    for a in assets:
+        speaker_map = (a.meta or {}).get("speaker_map") or {}
+        form = speaker_map.get("form")
+        turns = len(speaker_map.get("turns") or [])
+        name = a.display_name or a.title or "(video)"
+        if form == "interview":
+            out.append(
+                f"- Speaker form: {name} is a two-speaker interview — "
+                f"{turns} attributed turns (who speaks when is known)"
+            )
+        elif form == "single":
+            out.append(
+                f"- Speaker form: {name} is a single-speaker recording — "
+                f"{turns} turns, all attributed to the one speaker"
+            )
+    return out
+
+
 async def get_understanding(db: AsyncSession, project: Project, params) -> str:
     """The project's material understanding — what the material SAYS (the
     warm/run materialized row, content-addressed by the current asset set).
@@ -262,6 +291,7 @@ async def get_understanding(db: AsyncSession, project: Project, params) -> str:
 
     lines = ["Material understanding (the current asset set):"]
     lines.extend(understanding_digest_lines(u))
+    lines.extend(speaker_form_lines(assets))
     if len(lines) == 1:
         # The stub shape (a no-material chain's placeholder row) — say so.
         lines.append("- (empty stub — the chain ran without material)")

@@ -33,6 +33,10 @@ Uploaded files (in upload order):
 The system's read of the material (the materialized understanding of the current asset set — top-tier semantic evidence: judge what the content IS and what it argues from THIS, quote-level grounded):
 {{ understanding_lines|join('\n') }}
 {%- endif %}
+{%- if speaker_form_lines %}
+The footage's speaker form (deterministic, off each video's speaker analysis — the framing direction's evidence: an interview's turn-taking or a single speaker means the camera CAN sit on whoever talks):
+{{ speaker_form_lines|join('\n') }}
+{%- endif %}
 {%- if filename %}
 Uploaded file: {{ filename }}{% if file_language %} (detected language: {{ file_language }}){% endif %}
 {%- if material_excerpt %}

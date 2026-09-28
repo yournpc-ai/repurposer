@@ -102,6 +102,7 @@ def _assemble_plan_turn(
     file_language: str | None = None,
     material_excerpt: str | None = None,
     understanding_lines: list[str] | None = None,
+    speaker_form_lines: list[str] | None = None,
     asset_lines: list[str] | None = None,
     material_pending_line: str | None = None,
     plans_lines: list[str] | None = None,
@@ -146,6 +147,11 @@ def _assemble_plan_turn(
     row: zero LLM, zero extra loop round; None when not yet materialized —
     the grounding hierarchy then falls through to the excerpt / the user's
     own words).
+    ``speaker_form_lines``: each form-bearing video's deterministic
+    speaker-form fact (interview / single-speaker + turn count, off
+    ``asset.meta`` — independent of the understanding row's readiness) —
+    the framing direction's evidence seat: with it in context a vertical
+    ask never silently defaults to a center crop; None when no map exists.
     ``asset_lines``: every attached file as one roster line (≥2 files only —
     ADR-078: the remix judgment must SEE the full roster to know a role
     question decides the plan; the single-file surface stays filename +
@@ -238,6 +244,7 @@ def _assemble_plan_turn(
             "file_language": file_language,
             "material_excerpt": material_excerpt,
             "understanding_lines": understanding_lines,
+            "speaker_form_lines": speaker_form_lines,
             "asset_lines": asset_lines,
             "material_pending_line": material_pending_line,
             # None outside a request (worker / scenario script) → the

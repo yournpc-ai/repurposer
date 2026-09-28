@@ -413,6 +413,63 @@ class TestUnderstandingDigestLines:
         assert beats == "- Beats: 开场白"
 
 
+# ---- 分镜证据座 (ADR-094 §2): the deterministic speaker-form fact lines ----
+#
+# speaker_form_lines is the framing direction's evidence seat (two consumers:
+# the get_understanding read + the plan turn's assemble block). Gated here:
+# only the attributed forms render (interview / single — the forms the
+# reframe capability keys its modes on), the turn count rides, and an absent
+# map / unattributed form is NO line, never a guess.
+
+
+class TestSpeakerFormLines:
+    @staticmethod
+    def _asset(form=None, turns=0, name="xy_1.mp4"):
+        from types import SimpleNamespace
+
+        meta = (
+            {"speaker_map": {"form": form, "turns": [{}] * turns}}
+            if form is not None
+            else {}
+        )
+        return SimpleNamespace(meta=meta, display_name=name, title=name)
+
+    def test_interview_and_single_render_with_turn_counts(self) -> None:
+        from app.chat.perception.executes import speaker_form_lines
+
+        lines = speaker_form_lines(
+            [
+                self._asset("interview", 20, "a.mp4"),
+                self._asset("single", 34, "b.mp4"),
+            ]
+        )
+        assert lines == [
+            "- Speaker form: a.mp4 is a two-speaker interview — "
+            "20 attributed turns (who speaks when is known)",
+            "- Speaker form: b.mp4 is a single-speaker recording — "
+            "34 turns, all attributed to the one speaker",
+        ]
+
+    def test_unattributed_forms_and_absent_maps_render_nothing(self) -> None:
+        from app.chat.perception.executes import speaker_form_lines
+
+        assert speaker_form_lines(
+            [
+                self._asset("multi", 0, "panel.mp4"),
+                self._asset("unknown", 0, "u.mp4"),
+                self._asset(None, 0, "nomap.mp4"),
+            ]
+        ) == []
+
+    def test_tolerant_of_missing_meta(self) -> None:
+        from types import SimpleNamespace
+
+        from app.chat.perception.executes import speaker_form_lines
+
+        bare = SimpleNamespace(meta=None, display_name=None, title=None)
+        assert speaker_form_lines([bare]) == []
+
+
 # ---- 证据 reads (ADR-088 §2 拍 2, 2026-09-22 迭代一): search + segment -------
 
 
