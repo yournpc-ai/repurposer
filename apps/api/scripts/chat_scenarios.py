@@ -61,6 +61,10 @@ run 数 / 落库行——永不锁 LLM 文案（禁令 #7）。例外：代码�
              目标 → chat.explore.* 活动流 → 决策包 dock（plans+编译链+quote）
              → dock Start → confirmed_scope 快照 → 产物真落地（fixture
              纪律同 S23/S16；MiniMax 配额是硬前提）
+    S24 分镜呈现律验证座（ADR-094 §2）：访谈 fixture 真处理 → 口头选定
+             分镜方向 → plan 链必含 select_clips + reframe_clip → run
+             completed → 成片 render_spec 带 crop_track（确定性尾；fixture
+             纪律同 S16，需 dev worker + MiniMax 配额）
 
 S4/S7/S8 起的 run 是真的（worker 会执行；writer 链走真 LLM——S4 用
 ``processing_status=COMPLETED`` 的 transcript 资产走 writer 链到 completed，
@@ -4619,6 +4623,138 @@ async def s_explore_2_decision_package_to_confirmed_scope(ctx: Ctx) -> None:
             await ctx.answer(review["id"], {"kind": "bail"})
 
 
+# ---- S24 分镜呈现律：选定分镜方向 → 链必含 reframe（ADR-094 §2 验证座）-----------
+
+# 固定 fixture（demo 桶常住对象，reset_db 保护前缀）：14.5s 双人访谈段（xy_1
+# [172.5,187.0]，约 6.6s 处一次干净的问→答切换——烘焙配方卡「访谈分镜」
+# demo 的同一源，bake_reframe_demos.py 实证 form=interview + 真 crop_track）。
+INTERVIEW_SOURCE_KEY = "demo/uploads/xy_1_interview_15s.mp4"
+
+
+async def s24_interview_framing_choice_lands_reframe(ctx: Ctx) -> None:
+    """分镜呈现律常驻回归（ADR-094 §2 验证座，需 dev worker + demo 桶 fixture
+    + MiniMax 配额）：访谈素材真处理（worker 真 ASR + speaker_map →
+    form=interview 前提断言）→ 用户口头选定分镜方向（「镜头跟着说话人切换」）
+    → plan 链必含 select_clips + reframe_clip（选择执行律）→ start → run
+    completed → 成片 render_spec 带非空 crop_track（确定性尾——选了就要像
+    配方卡那样成片，静默中央裁剪的结构通路在此锁死）。中间（router 直接出书
+    还是先问）是 LLM 裁量，nudge 有界兜底，红了 = prompt 回归信号（S1 同口
+    径）。warm 首读先等到再 bail 掉建议问：触发回合准入口是两静态谓词，首个
+    计划回合前等到它 = 确定性排序，消掉建议问挂 pending 对计划回合的干扰
+    （它不是本剧本的断言对象——首读说得出分镜是 live 验收项，LLM 方差不
+    进确定性尾）。fixture 律：素材先拷 scenario/ 前缀隔离（delete_project
+    会 unlink 资产 file_url——共享 demo key 直接引用随清理被删，S16 首跑
+    吃过配方卡营销片）。"""
+    fixture_prefix = f"scenario/s24-{uuid.uuid4().hex[:8]}"
+    src_key = await copy_fixture(INTERVIEW_SOURCE_KEY, fixture_prefix)
+    pid = await ctx.new_project("S24 interview framing")
+    src = await seed_asset(
+        pid, ctx.user_id, AssetType.VIDEO, "xy_1_interview_15s.mp4",
+        file_url=src_key,  # PENDING — the worker really ASRs + speaker-maps it
+    )
+    status = await wait_asset_status(
+        src, {AssetStatus.COMPLETED, AssetStatus.FAILED}
+    )
+    check(status == AssetStatus.COMPLETED,
+          "the interview fixture is really processed (ASR + speaker_map)", status)
+    async with AsyncSessionLocal() as db:
+        asset = await db.get(Asset, uuid.UUID(src))
+        speaker_map = (asset.meta or {}).get("speaker_map") or {}
+    check(speaker_map.get("form") == "interview"
+          and bool(speaker_map.get("turns")),
+          "the seat's premise: the fixture judges interview-form with "
+          "attributed turns (the bake's proven source)",
+          speaker_map.get("form"))
+
+    # 积分补足（S16 同款）——clips + reframe + render 真链，避免 422 噪音。
+    async with AsyncSessionLocal() as db:
+        wallet = await get_or_create_wallet(db, ctx.user_id)
+        wallet.balance = int(wallet.balance) + 200000
+        await db.commit()
+
+    # warm 首读排序：理解落库 → 触发回合必说话（无在飞 turn、无 pending plan，
+    # 两谓词皆空）——等它落地、有建议问就 bail 掉（优雅不选），再进计划回合。
+    # conversation GET 的自愈座位保证 warm 必被点燃（worker 完成钩已点过一次，
+    # dedup 收口）。
+    conv_id = None
+    deadline = asyncio.get_event_loop().time() + 60.0
+    while conv_id is None and asyncio.get_event_loop().time() < deadline:
+        res = await ctx.conversation(pid)
+        if res.status_code == 200:
+            conv_id = res.json().get("id")
+            break
+        await asyncio.sleep(2)
+    check(conv_id is not None, "the warm first-read conversation lands (排序前提)")
+    from app.pipeline.step_context import asset_digest
+
+    async with AsyncSessionLocal() as db:
+        assets = list(
+            (
+                await db.execute(
+                    select(Asset)
+                    .where(Asset.project_id == uuid.UUID(pid))
+                    .order_by(Asset.created_at)
+                )
+            ).scalars().all()
+        )
+    review0 = await wait_trigger_review(ctx, conv_id, asset_digest(assets), timeout=300.0)
+    check(review0 is not None,
+          "the understanding_warmed first read speaks before the plan turns "
+          "(排序前提——它的建议问随后 bail 掉，不干扰计划回合)")
+    if (review0.get("question") or {}).get("kind") == "question":
+        bail0 = await ctx.answer(review0["id"], {"kind": "bail"})
+        check(bail0.status_code in (200, 201),
+              "the first read's suggestion dock settles (graceful not-now)",
+              bail0.text)
+
+    # 用户口头选定分镜方向——选择执行律：链必含 select_clips + reframe_clip。
+    turn = await ctx.chat(pid, "把我的双人访谈剪成竖屏短片，镜头跟着说话人切换。")
+    plan = await pending_plan(ctx, pid)
+    for _ in range(2):
+        if plan is not None and plan_tasks(plan):
+            break
+        # LLM 裁量兜底（先问了 caption/数量等）——一句推进，路由恒在 plan path。
+        turn = await ctx.chat(pid, "就按这个方向出计划吧——竖屏切片，镜头跟人。")
+        plan = await pending_plan(ctx, pid)
+    check(plan is not None and plan_tasks(plan),
+          "the framing-chosen turns dock the plan", plan)
+    tools = [t.get("tool") for t in plan_tasks(plan)]
+    check("select_clips" in tools and "reframe_clip" in tools,
+          "选择执行律：the chosen framing direction lands select_clips + "
+          "reframe_clip (never a silent center-crop chain)", tools)
+    check(tools.index("reframe_clip") > tools.index("select_clips"),
+          "the reframe rides after the clips producer (topology order)", tools)
+
+    turn_s = await ctx.chat(pid, "开始吧")
+    check(terminal_tool_of(turn_s) == "start_run",
+          "the prose confirmation closes on start_run", turn_s)
+    run_id = turn_s["run_id"]
+    check(run_id is not None, "the framing run is born", turn_s)
+
+    final = await wait_run_terminal(run_id, timeout=600.0)
+    check(final == "completed",
+          "the framing run completes on the real interview bytes", final)
+    reframe_step = next(
+        (s for s in await step_rows(run_id) if s["kind"] == "reframe_clip"), None
+    )
+    check(reframe_step is not None and reframe_step["status"] == "done",
+          "the reframe step ran and completed", reframe_step)
+    clips = await outputs_of(pid, "clip")
+    check(len(clips) >= 1, "the clips land", len(clips))
+    check(
+        any((o.render_spec or {}).get("crop_track") for o in clips),
+        "确定性尾：at least one clip's render_spec carries a real crop_track "
+        "(选了就要像配方卡那样成片——静默中央裁剪永禁)",
+        [(str(o.id), len((o.render_spec or {}).get("crop_track") or [])) for o in clips],
+    )
+
+    # Harness 卫生（非断言——S-explore-2 同款）：run 收官的触发回合是
+    # fire-and-forget；不消费它就 cleanup 会让在飞 LLM 调用撞上项目删除。
+    review = await wait_trigger_review(ctx, conv_id, run_id, timeout=90.0)
+    if review is not None and (review.get("question") or {}).get("kind") == "question":
+        await ctx.answer(review["id"], {"kind": "bail"})
+
+
 # ---- S-edit 精确编辑归档生命周期（确定性尾剧本，精确编辑迭代 S5）-------------
 
 
@@ -4849,6 +4985,7 @@ SCENARIOS = {
     "S22": s22_trigger_landing_silence,
     "S23": s23_exploration_chain_lands_on_canvas,
     "S-explore-2": s_explore_2_decision_package_to_confirmed_scope,
+    "S24": s24_interview_framing_choice_lands_reframe,
     "S-edit": s_edit_precise_edit_archive_lifecycle,
 }
 
