@@ -3899,6 +3899,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }
     if (processingAssets.length === 1) {
       const lone = processingAssets[0]
+      // 工序化 (ADR-095 §2): the chain's live stage speaks the user-language
+      // process truth — asr → transcribing, speaker_map/prosody →
+      // understanding (the same 转写/理解 vocabulary the run stepper
+      // shares). Unknown/absent stages (hash, extract, legacy rows without
+      // the key) fall back to the type-verb line below.
+      if (lone.processing_stage === "asr") {
+        return think("chat.material.transcribing", lone.title ?? undefined)
+      }
+      if (
+        lone.processing_stage === "speaker_map" ||
+        lone.processing_stage === "prosody"
+      ) {
+        return think("chat.material.understandingAsset", lone.title ?? undefined)
+      }
       return think(
         materialBeatKey("chat.material.reading", lone.type),
         lone.title ?? undefined,

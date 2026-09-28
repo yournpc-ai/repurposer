@@ -417,6 +417,13 @@ export interface ProjectAsset {
   stream_url?: string | null
   title: string | null
   processing_status: "pending" | "processing" | "completed" | "failed"
+  /** The chain's live stage token (ADR-095 §2 — asr / speaker_map /
+   * prosody / …): server-stamped from meta only mid-processing, cleared at
+   * the terminal state. Absent on older rows and on message-persisted
+   * attachment shapes — the now-line falls back to the type-verb line
+   * (read tolerance). The token never renders; the client maps it to the
+   * user-language label (内部工序名永不上屏). */
+  processing_stage?: string | null
   /** Settlement / upload stamps (AssetResponse carries both; optional —
    * message-persisted attachment shapes are thinner). The watch windows'
    * recency gate reads processed_at, falling back to created_at. */

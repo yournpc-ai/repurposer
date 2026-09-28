@@ -340,6 +340,15 @@ async def reap_stale(db: AsyncSession) -> None:
         lang = display_language(None, project.language if project else None)
         asset.processing_status = AssetStatus.FAILED
         asset.processing_error = user_line("processing_gave_up", lang)
+        # 终态清除 (ADR-095 §2): a crash-leftover row can carry the live stage
+        # token — process_asset's own terminal branches never ran for it. The
+        # stage never outlives processing on ANY terminal seat. (The re-pend
+        # sweep below keeps it deliberately: the same chain re-stamps on
+        # re-claim — the token stays honest.)
+        if isinstance(asset.meta, dict) and "processing_stage" in asset.meta:
+            cleaned = dict(asset.meta)
+            cleaned.pop("processing_stage", None)
+            asset.meta = cleaned
         logger.warning(
             "asset_attempt_cap_terminal",
             seat="reap",

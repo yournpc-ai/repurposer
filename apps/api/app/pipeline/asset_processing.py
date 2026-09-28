@@ -269,9 +269,48 @@ PROCESSORS: dict[AssetType, list[Processor]] = {
 }
 
 
+def _processing_stage_token(processor: Processor) -> str:
+    """The processor's stage token for ``meta.processing_stage`` — derived
+    from the function's own name (``_asr_processor`` → ``asr``), so the
+    registry needs no parallel side table (禁侧门). The token is a machine
+    fact; the user-language label maps client-side (内部工序名永不上屏)."""
+    name = getattr(processor, "__name__", "") or "unknown"
+    return name.removesuffix("_processor").lstrip("_")
+
+
+async def _stamp_processing_stage(
+    db: AsyncSession, asset: Asset, processor: Processor
+) -> None:
+    """Stamp the current stage into ``asset.meta.processing_stage`` and commit
+    so the client's asset poll watches the chain advance (the live now-line's
+    stage fork, ADR-095 §2 — the transient surface may be finer than the
+    persisted one). Best-effort: a stamp failure degrades to a warning — the
+    beat surface never takes the processing body down."""
+    try:
+        asset.meta = {
+            **(asset.meta if isinstance(asset.meta, dict) else {}),
+            "processing_stage": _processing_stage_token(processor),
+        }
+        await db.commit()
+    except Exception as e:  # noqa: BLE001 — best-effort beat surface
+        logger.warning(
+            "processing_stage_stamp_failed", asset_id=str(asset.id), error=str(e)
+        )
+
+
+def _clear_processing_stage(asset: Asset) -> None:
+    """Terminal-state hygiene: the stage never outlives processing (终态清除
+    — a settled row carries no stage; the live now-line reads live rows only,
+    and rows predating the stage simply lack the key — read tolerance)."""
+    if isinstance(asset.meta, dict) and "processing_stage" in asset.meta:
+        cleaned = dict(asset.meta)
+        cleaned.pop("processing_stage", None)
+        asset.meta = cleaned
+
+
 async def _record_reading_beat(db: AsyncSession, asset: Asset, status: str) -> None:
     """素材节拍入库 (2026-09-24 用户拍板): the dock's settled reading row
-    ("已读完 X") is a plain message row so it survives a refresh — written
+    ("读完 X") is a plain message row so it survives a refresh — written
     through the ConversationBridge (ADR-087: pipeline never touches messages
     directly). ``count``/``total`` carry the project set's drain progress so
     the label can say "N/M" when several files ride together. Best-effort:
@@ -343,6 +382,9 @@ async def process_asset(asset_id: UUID) -> None:
             chain = PROCESSORS.get(asset.type, [_noop_processor])
             result = ProcessResult()
             for processor in chain:
+                # 工序信号上资产面 (ADR-095 §2): the poll-visible stage rides
+                # meta (zero schema); the terminal branches below clear it.
+                await _stamp_processing_stage(db, asset, processor)
                 result.merge(await processor(asset, result))
             if result.extracted_text is not None:
                 asset.extracted_text = result.extracted_text
@@ -354,6 +396,7 @@ async def process_asset(asset_id: UUID) -> None:
                 asset.slide_pages = result.slide_pages
             if result.meta:
                 asset.meta = result.meta
+            _clear_processing_stage(asset)
             asset.processed_at = datetime.now(UTC)
             asset.processing_status = AssetStatus.COMPLETED
             asset.processing_error = None
@@ -410,6 +453,7 @@ async def process_asset(asset_id: UUID) -> None:
             logger.error("asset_processing_failed", asset_id=str(asset_id), error=str(e))
             asset.processing_status = AssetStatus.FAILED
             asset.processing_error = str(e)
+            _clear_processing_stage(asset)
             await db.commit()
             # 状态随 ASR (Phase 1): the upload-born transcript card flips to
             # its failed face with the row — never a perpetual loading card.

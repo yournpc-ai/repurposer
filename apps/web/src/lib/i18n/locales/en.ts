@@ -1276,12 +1276,22 @@ const en = {
      * video → watch / audio → listen / text & others → read; multi-file
      * batches fall back to the neutral "processing". Both synthesis points
      * fork alike (the ChatDock now-line reads asset.type, the replay reads
-     * the persisted beat's intent.asset_type). */
+     * the persisted beat's intent.asset_type).
+     * Stage fork (ADR-095 §2): a lone in-flight asset with a known
+     * processing_stage speaks the process truth instead — asr →
+     * transcribing, speaker_map/prosody → understandingAsset (the
+     * transcribe/understand vocabulary the run stepper shares); unknown or
+     * absent stages keep the verb line. Register law (三寄存器): the live
+     * rows are the transient surface (the progressive form is legal there);
+     * the persisted rows are the activity LOG — verb-object + fact suffix,
+     * no person, no progressive, no conversational tone. */
     material: {
       reading: "Reading {{name}}…",
       reading_video: "Watching {{name}}…",
       reading_audio: "Listening to {{name}}…",
       readingMany: "Processing {{count}} files…",
+      transcribing: "Transcribing {{name}}…",
+      understandingAsset: "Understanding {{name}}…",
       understanding: "Understanding your material…",
       /** The beat → review window's phase row (2026-09-28 user ruling): the
        * trigger turn composes the review after the understanding beat
@@ -1294,9 +1304,9 @@ const en = {
       readingDoneProgress: "Read {{name}} ({{count}}/{{total}})",
       readingDoneProgress_video: "Watched {{name}} ({{count}}/{{total}})",
       readingDoneProgress_audio: "Listened to {{name}} ({{count}}/{{total}})",
-      readingFailed: "Couldn't read {{name}}",
-      readingFailed_video: "Couldn't watch {{name}}",
-      readingFailed_audio: "Couldn't listen to {{name}}",
+      readingFailed: "Failed to read {{name}}",
+      readingFailed_video: "Failed to watch {{name}}",
+      readingFailed_audio: "Failed to listen to {{name}}",
       understandingDone: "Understood your material",
     },
     /** The perception family's inspecting chatter (T2b): a read ACTIVITY's

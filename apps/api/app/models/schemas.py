@@ -1935,6 +1935,11 @@ class AssetResponse(BaseModel):
     # column name-by-name, so the seats stamp it).
     width: int | None = None
     height: int | None = None
+    # The chain's live stage (meta.processing_stage, ADR-095 §2 — asr /
+    # speaker_map / prosody / …): present only while processing, cleared at
+    # the terminal state. Same seat-stamped pattern as width/height; the
+    # client maps the token to the user-language label (内部工序名永不上屏).
+    processing_stage: str | None = None
     processed_at: datetime | None = None
     created_at: datetime
 

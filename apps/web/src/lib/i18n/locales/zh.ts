@@ -1207,24 +1207,32 @@ const zh: Resources = {
      * 动词分叉（2026-09-27 批「动词」）：动词随资产类型——video=看 /
      * audio=听 / 文本及其他=读；多文件批次落中性词「处理」。typed key
      * 缺席时回落基 key（前后端两个合成点同一分叉律：ChatDock now-line
-     * 读 asset.type，回放读节拍入库的 intent.asset_type）。 */
+     * 读 asset.type，回放读节拍入库的 intent.asset_type）。
+     * 工序分叉（ADR-095 §2）：单个在处理资产带已知 processing_stage 时
+     * 说工序真相——asr → transcribing（转写）、speaker_map/prosody →
+     * understandingAsset（理解，与 run stepper 共用同一工序词表）；
+     * 未知/缺席 stage 回落动词行。寄存器律（三寄存器）：live 行是瞬态面
+     * （进行态合法）；入库行是活动日志——动宾 + 事实后缀，无人称、无
+     * 进行态、无省略号、无会话语气。 */
     material: {
       reading: "正在阅读 {{name}}…",
       reading_video: "正在看 {{name}}…",
       reading_audio: "正在听 {{name}}…",
       readingMany: "正在处理 {{count}} 个文件…",
+      transcribing: "正在转写 {{name}}…",
+      understandingAsset: "正在理解 {{name}}…",
       understanding: "正在理解素材内容…",
       reviewing: "正在整理建议…",
-      readingDone: "已读完 {{name}}",
-      readingDone_video: "已看完 {{name}}",
-      readingDone_audio: "已听完 {{name}}",
-      readingDoneProgress: "已读完 {{name}}（{{count}}/{{total}}）",
-      readingDoneProgress_video: "已看完 {{name}}（{{count}}/{{total}}）",
-      readingDoneProgress_audio: "已听完 {{name}}（{{count}}/{{total}}）",
-      readingFailed: "没能读完 {{name}}",
-      readingFailed_video: "没能看完 {{name}}",
-      readingFailed_audio: "没能听完 {{name}}",
-      understandingDone: "已理解素材内容",
+      readingDone: "读完 {{name}}",
+      readingDone_video: "看完 {{name}}",
+      readingDone_audio: "听完 {{name}}",
+      readingDoneProgress: "读完 {{name}}（{{count}}/{{total}}）",
+      readingDoneProgress_video: "看完 {{name}}（{{count}}/{{total}}）",
+      readingDoneProgress_audio: "听完 {{name}}（{{count}}/{{total}}）",
+      readingFailed: "读 {{name}} 失败",
+      readingFailed_video: "看 {{name}} 失败",
+      readingFailed_audio: "听 {{name}} 失败",
+      understandingDone: "素材理解完成",
     },
     /** 感知族的查询碎碎念（T2b）：读工具运行期间 read 活动帧的文案
      * （Phase 3 Batch B ③ 自退役的 System Status 行迁入 Activity Stream，

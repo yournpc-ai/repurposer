@@ -36,6 +36,19 @@ router = APIRouter()
 persona_assets_router = APIRouter()
 
 
+def _asset_response(asset: Asset) -> AssetResponse:
+    """The read seats' serializer: validate, then stamp the meta-derived
+    fields the declared schema can't read name-by-name (the width/height
+    precedent) — ``processing_stage`` = the chain's live stage token
+    (ADR-095 §2), present only mid-processing (终态清除 server-side)."""
+    resp = AssetResponse.model_validate(asset)
+    meta = asset.meta if isinstance(asset.meta, dict) else {}
+    stage = meta.get("processing_stage")
+    if isinstance(stage, str):
+        resp.processing_stage = stage
+    return resp
+
+
 async def _get_user_project(project_id: UUID, user_id: UUID | None, db: DBDep) -> Project:
     """Fetch a project and ensure it belongs to the given user."""
     result = await db.execute(select(Project).where(Project.id == project_id))
@@ -269,7 +282,7 @@ async def get_asset(
     asset_id: UUID,
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
-) -> Asset:
+) -> AssetResponse:
     """Get a single project asset (used to poll processing status)."""
     await _get_user_project(project_id, current_user.id if current_user else None, db)
     result = await db.execute(
@@ -281,7 +294,7 @@ async def get_asset(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Asset not found",
         )
-    return asset
+    return _asset_response(asset)
 
 
 @router.post(
@@ -322,13 +335,13 @@ async def list_assets(
     project_id: UUID,
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
-) -> list[Asset]:
+) -> list[AssetResponse]:
     """List assets for a project."""
     await _get_user_project(project_id, current_user.id if current_user else None, db)
     result = await db.execute(
         select(Asset).where(Asset.project_id == project_id).order_by(Asset.created_at.desc())
     )
-    return list(result.scalars().all())
+    return [_asset_response(a) for a in result.scalars().all()]
 
 
 @router.delete("/{project_id}/assets/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
