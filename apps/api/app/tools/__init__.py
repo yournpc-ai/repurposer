@@ -367,7 +367,9 @@ _MENU_PHRASES: list[tuple[str, str]] = [
     ("dub_clip", "voice dubbing into another language"),
     ("remove_filler", "filler-word removal"),
     ("add_music", "background music"),
-    ("reframe_clip", "reframing (vertical / square / horizontal)"),
+    ("reframe_clip", "speaker-aware reframing (vertical / square / horizontal) — "
+    "the camera sits on whoever is talking or follows a moving speaker, "
+    "matched automatically to the footage"),
     ("align_stills", "photo-slideshow videos from stills + audio"),
 ]
 
