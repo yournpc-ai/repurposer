@@ -116,12 +116,18 @@ function ViewportController({
   navigation,
   settleKey,
   occludedRightPx = 0,
+  preservedAtMount = false,
 }: {
   count: number
   wrapperRef: React.RefObject<HTMLDivElement | null>
   navigation: "fit" | "explore"
   settleKey?: string | null
   occludedRightPx?: number
+  /** 愈合重挂载视口保全 (2026-09-29): a remounted world born AT the
+   * preserved viewport must NOT re-animate the settle fit — the camera
+   * stays exactly where the user left it (完工零跳动). The key still marks
+   * fired so a later settleKey transition frames normally. */
+  preservedAtMount?: boolean
 }) {
   const rf = useReactFlow()
   const prevCountRef = useRef<number | null>(null)
@@ -183,6 +189,13 @@ function ViewportController({
       return
     }
     if (firedSettleRef.current === key) return
+    if (preservedAtMount) {
+      // The world was born at the preserved viewport — framing it again
+      // would read as the canvas jumping under the user. Mark the key
+      // fired so only a genuine NEW settle re-frames.
+      firedSettleRef.current = key
+      return
+    }
     let inner = 0
     const outer = requestAnimationFrame(() => {
       inner = requestAnimationFrame(() => {
@@ -194,7 +207,7 @@ function ViewportController({
       cancelAnimationFrame(outer)
       cancelAnimationFrame(inner)
     }
-  }, [settleKey, fit])
+  }, [settleKey, fit, preservedAtMount])
 
   useEffect(() => {
     if (navigation !== "fit") return
@@ -225,7 +238,9 @@ function ViewportController({
  * 2026-09-25 confirm-pill whole-chain fitNow was reversed 2026-09-26 in
  * favor of the sealed contract; the sole automatic fit remains the
  * Workspace Birth's initial settle framing, owned by the mount, not by
- * this machine).
+ * this machine — and even THAT is skipped when the world was born at a
+ * preserved viewport: the heal remount keeps the camera perfectly still,
+ * 2026-09-29 完工零跳动).
  * Guards:
  * - 手势防护: a user drag/zoom within the last 3s shields the beat (they
  *   grabbed the canvas mid-flight — don't fight the hand);
@@ -267,6 +282,8 @@ function CameraBeats({
   nodes,
   beat,
   centerRequest,
+  positions,
+  sizes,
   wrapperRef,
   occludedRightPx = 0,
   lastGestureRef,
@@ -284,6 +301,12 @@ function CameraBeats({
    * fetchGraph response and centers the cluster — zero token window, zero
    * race). */
   centerRequest?: { token: number; nodeIds: string[] } | null
+  /** 渲染席位 (2026-09-29 投影座拍板): the camera reads where the cards
+   * ACTUALLY render — layoutFlow's projected positions + sizes — never the
+   * raw settled frame (an island member renders at rank × PITCH, its
+   * frame.x is only the y-seat / stability anchor, I-PFA-02). */
+  positions: ReadonlyMap<string, { x: number; y: number }>
+  sizes: ReadonlyMap<string, { width: number; height: number }>
   wrapperRef: React.RefObject<HTMLDivElement | null>
   occludedRightPx?: number
   lastGestureRef: React.RefObject<number>
@@ -294,6 +317,21 @@ function CameraBeats({
   const prevIdsRef = useRef<ReadonlySet<string> | null>(null)
   const prevOutsRef = useRef<ReadonlyMap<string, number> | null>(null)
   const armedTokenRef = useRef<number | null>(null)
+
+  /** The cluster's RENDERED frames (projection seat above) — ids with no
+   * projected seat drop out; an empty result spends the gesture silently. */
+  const renderedFrames = useCallback(
+    (ids: Iterable<string>) => {
+      const frames: { x: number; y: number; w: number; h: number }[] = []
+      for (const id of ids) {
+        const pos = positions.get(id)
+        const size = sizes.get(id)
+        if (pos && size) frames.push({ x: pos.x, y: pos.y, w: size.width, h: size.height })
+      }
+      return frames
+    },
+    [positions, sizes],
+  )
 
   // Track the current arm by token (declared BEFORE the delta effect so a
   // same-render arm+arrival still reads the fresh token).
@@ -320,10 +358,7 @@ function CameraBeats({
     if (Date.now() - lastGestureRef.current < GESTURE_SHIELD_MS) {
       return onCenterConsumed?.()
     }
-    const wanted = new Set(centerRequest.nodeIds)
-    const center = framesBBoxCenter(
-      nodes.filter((n) => wanted.has(n.id) && n.frame).map((n) => n.frame!),
-    )
+    const center = framesBBoxCenter(renderedFrames(centerRequest.nodeIds))
     if (!center) return onCenterConsumed?.()
     const reduce =
       typeof window !== "undefined" &&
@@ -340,7 +375,7 @@ function CameraBeats({
       reduce ? 0 : 400,
     )
     onCenterConsumed?.()
-  }, [centerRequest, nodes, rf, wrapperRef, occludedRightPx, lastGestureRef, onCenterConsumed])
+  }, [centerRequest, renderedFrames, rf, wrapperRef, occludedRightPx, lastGestureRef, onCenterConsumed])
 
   useEffect(() => {
     const ids = new Set(nodes.map((n) => n.id))
@@ -379,9 +414,7 @@ function CameraBeats({
     let maxX = -Infinity
     let maxY = -Infinity
     let framed = 0
-    for (const n of targets) {
-      const f = n.frame
-      if (!f) continue
+    for (const f of renderedFrames(targets.map((n) => n.id))) {
       framed += 1
       minX = Math.min(minX, f.x)
       minY = Math.min(minY, f.y)
@@ -410,7 +443,7 @@ function CameraBeats({
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
     panLockedCenter(rf, left + w / 2 + dx, top + h / 2 + dy, reduce ? 0 : 400)
     onConsumed?.()
-  }, [nodes, beat, rf, wrapperRef, occludedRightPx, lastGestureRef, onConsumed])
+  }, [nodes, beat, rf, renderedFrames, wrapperRef, occludedRightPx, lastGestureRef, onConsumed])
 
   return null
 }
@@ -629,6 +662,7 @@ export function FlowView({
   centerRequest = null,
   onCenterRequestConsumed,
   occludedRightPx = 0,
+  viewportPreserveRef,
   groups = [],
   overlay,
   dots = false,
@@ -644,6 +678,12 @@ export function FlowView({
   // null for PROGRAMMATIC moves (fit/setCenter), non-null only for real
   // gestures, so the camera's own beats never self-shield.
   const lastGestureRef = useRef(0)
+  // 愈合重挂载视口保全 (2026-09-29): the mount reads the surface-owned
+  // preserve ref ONCE (useState initializer) — a heal-remounted world is
+  // born at the exact viewport the user was looking at, and the settle
+  // controller skips its re-fit, so the remount is invisible. First mounts
+  // (ref null) behave exactly as before.
+  const [mountViewport] = useState(() => viewportPreserveRef?.current ?? undefined)
 
   const { rfNodes, rfEdges, layout, sizes, bornRanks } = useMemo(() => {
     const layout = layoutFlow(nodes, edges)
@@ -818,6 +858,14 @@ export function FlowView({
         panOnScroll={false}
         elementsSelectable
         edgesFocusable={false}
+        // 视口保全 (2026-09-29): birth the world at the preserved viewport
+        // (heal remount) and mirror every move — programmatic or gesture —
+        // back into the surface-owned ref, so the NEXT remount inherits
+        // exactly what the user is looking at.
+        defaultViewport={mountViewport}
+        onMove={(_, viewport) => {
+          if (viewportPreserveRef) viewportPreserveRef.current = viewport
+        }}
         onMoveStart={(event) => {
           if (event) lastGestureRef.current = Date.now()
         }}
@@ -857,11 +905,14 @@ export function FlowView({
           navigation={navigation}
           settleKey={settleKey}
           occludedRightPx={occludedRightPx}
+          preservedAtMount={mountViewport != null}
         />
         <CameraBeats
           nodes={nodes}
           beat={cameraBeat}
           centerRequest={centerRequest}
+          positions={layout.positions}
+          sizes={sizes}
           wrapperRef={wrapperRef}
           occludedRightPx={occludedRightPx}
           lastGestureRef={lastGestureRef}

@@ -304,6 +304,12 @@ export interface FlowViewProps {
    * (the docked chat panel's footprint; 0 otherwise) — the safe viewport
    * and the centering target both compensate it. */
   occludedRightPx?: number
+  /** 愈合重挂载视口保全 (2026-09-29 — 完工画面零跳动): the surface owns
+   * this ref across its `key`-bump remounts; FlowView mirrors every
+   * viewport change into it and births a remounted world AT the preserved
+   * viewport (defaultViewport), with the settle re-fit skipped — the heal
+   * remount becomes invisible. The surface resets it on project switch. */
+  viewportPreserveRef?: React.RefObject<{ x: number; y: number; zoom: number } | null>
   /** Region frames (2026-08-19 预留 — recipe surface first): large rounded
    * frames behind member node clusters, naming the region. */
   groups?: FlowGroup[]

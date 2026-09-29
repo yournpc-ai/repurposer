@@ -261,6 +261,17 @@ export function ResultsCanvas({
   // frame dropping these ids never cuts a keyframe mid-flight.
   const seenIdsRef = useRef<Set<string> | null>(null)
   const baselinedKeyRef = useRef<string | null>(null)
+  // 愈合重挂载视口保全 (2026-09-29 — 完工画面零跳动): FlowView mirrors the
+  // live viewport here and a heal-remounted (`key={healEpoch}`) world is
+  // born AT it — the terminal self-heal no longer reads as the canvas
+  // jumping through a default zoom. A project switch (new baselineKey)
+  // resets it: the next project's canvas frames fresh.
+  const viewportPreserveRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
+  const prevViewportKeyRef = useRef(baselineKey)
+  if (prevViewportKeyRef.current !== baselineKey) {
+    prevViewportKeyRef.current = baselineKey
+    viewportPreserveRef.current = null
+  }
   const bornIds = useMemo(() => {
     if (!baselineReady) return undefined
     if (baselinedKeyRef.current !== baselineKey) return undefined
@@ -664,7 +675,9 @@ export function ResultsCanvas({
       {/* key = the terminal self-heal epoch: a bump remounts the xyflow
           world (fresh store, re-synced from settled props) — the frozen
           empty layer the run-tail refetch race can leave never survives
-          the run (2026-09-13 用户拍板). */}
+          the run (2026-09-13 用户拍板). viewportPreserveRef carries the
+          live viewport across the remount, so the heal is INVISIBLE —
+          完工后画面纹丝不动 (2026-09-29 用户拍板). */}
       <FlowView
         key={healEpoch}
         nodes={nodes}
@@ -693,6 +706,7 @@ export function ResultsCanvas({
         centerRequest={centerRequest}
         onCenterRequestConsumed={onCenterRequestConsumed}
         occludedRightPx={occludedRightPx}
+        viewportPreserveRef={viewportPreserveRef}
       />
       {/* The dossier rides the zoom pill's corner: right-aligned with it,
           stacked below (pill = m-3/m-4 + h-9 → 52/60px), and sharing its
