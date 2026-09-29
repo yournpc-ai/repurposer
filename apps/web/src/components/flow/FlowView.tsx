@@ -31,7 +31,7 @@ import "./flow.css"
 
 import { FlowEdge, type FlowEdgeType } from "./FlowEdge"
 import { FlowNodeCard, nodeRenderActive, type FlowCardNode } from "./FlowNodeCard"
-import { cameraPanDelta } from "./camera"
+import { cameraPanDelta, framesBBoxCenter } from "./camera"
 import { BIRTH_STAGGER_MS, declaredHandles, flowNodeSize, layoutFlow } from "./layout"
 import type { FlowGroup, FlowNode, FlowViewProps, GraphEdgeType, OutPortType } from "./types"
 
@@ -208,18 +208,24 @@ function ViewportController({
   return null
 }
 
-/** 相机律 (Workspace 合同 v4.2 C5, 2026-09-26 封板 —— ensure-in-view 一条):
- * user-initiated beats move the camera — NEVER background refetches (the
- * surface arms a beat only inside its own send / Start handlers, so a
- * polling / SSE arrival carrying new ids can't yank the view; the
- * 2026-08-19「增长不动视口」law's narrowing, not its repeal). The rule in
- * full: is the current operation's target inside the safe viewport (the
- * visible region minus the docked panel's occlusion)? Already in: NO move.
- * Not in: the MINIMAL pan that brings it into the readable region. Zoom:
- * NEVER auto-changes — the fit/fitNow beats are deleted (the 2026-09-25
- * confirm-pill whole-chain fitNow was reversed 2026-09-26 in favor of the
- * sealed contract; the sole automatic fit remains the Workspace Birth's
- * initial settle framing, owned by the mount, not by this machine).
+/** 相机律 (Workspace 合同 v4.2 C5, 2026-09-26 封板 —— ensure-in-view 一条;
+ * 2026-09-29 修订 —— dock 路径改确定性聚焦): user-initiated beats move the
+ * camera — NEVER background refetches. Two delivery shapes by arrival kind:
+ * - 同步到达 (plan dock / bail / upload-born cards): the caller's own
+ *   fetchGraph response IS the arrival — the route diffs the newborn ids
+ *   off it and fires a centerRequest naming the cluster (「聚焦新生簇」:
+ *   bbox center, zoom locked). Zero token window, zero delta race.
+ * - 异步到达 (run fills / harvest landings over SSE): this token machine
+ *   arms a beat and ensure-in-view pans (minimally, zoom locked) when the
+ *   id/output delta lands — is the current operation's target inside the
+ *   safe viewport (the visible region minus the docked panel's occlusion)?
+ *   Already in: NO move. Not in: the MINIMAL pan that brings it into the
+ *   readable region.
+ * Zoom: NEVER auto-changes — the fit/fitNow beats are deleted (the
+ * 2026-09-25 confirm-pill whole-chain fitNow was reversed 2026-09-26 in
+ * favor of the sealed contract; the sole automatic fit remains the
+ * Workspace Birth's initial settle framing, owned by the mount, not by
+ * this machine).
  * Guards:
  * - 手势防护: a user drag/zoom within the last 3s shields the beat (they
  *   grabbed the canvas mid-flight — don't fight the hand);
@@ -271,10 +277,13 @@ function CameraBeats({
   beat: { token: number } | null | undefined
   /** 「把当前操作元素移到画布中心」 (v4.2 未覆盖 #3 — the camera capability
    * the contract upgrades to): a ONE-SHOT explicit request naming the node
-   * to center (zoom locked). Available to any surface/agent-driven caller;
-   * it is a deliberate gesture, not an ambient beat, so it needs no
-   * node-delta — the element is already on the canvas. */
-  centerRequest?: { token: number; nodeId: string } | null
+   * cluster to center (zoom locked). Available to any surface/agent-driven
+   * caller; it is a deliberate gesture, not an ambient beat, so it needs no
+   * node-delta — the elements are already on the canvas. 2026-09-29 起同时
+   * 承接 dock 路径的确定性聚焦 (the route diffs the newborn ids off its own
+   * fetchGraph response and centers the cluster — zero token window, zero
+   * race). */
+  centerRequest?: { token: number; nodeIds: string[] } | null
   wrapperRef: React.RefObject<HTMLDivElement | null>
   occludedRightPx?: number
   lastGestureRef: React.RefObject<number>
@@ -300,8 +309,10 @@ function CameraBeats({
   }, [beat, onConsumed])
 
   // 「移到画布中心」— the explicit centering gesture: one shot on arrival,
-  // zoom locked, the same shields as the ambient beats. An unknown nodeId
-  // (the element left the canvas) spends the request silently.
+  // zoom locked, the same shields as the ambient beats. The target is a
+  // CLUSTER (one id = the single-element case): the bbox center is the
+  // fitView centering math minus the zoom change (2026-09-29 聚焦新生簇拍板).
+  // Every id having left the canvas spends the request silently.
   useEffect(() => {
     if (!centerRequest) return
     const el = wrapperRef.current
@@ -309,21 +320,23 @@ function CameraBeats({
     if (Date.now() - lastGestureRef.current < GESTURE_SHIELD_MS) {
       return onCenterConsumed?.()
     }
-    const node = nodes.find((n) => n.id === centerRequest.nodeId)
-    const f = node?.frame
-    if (!f) return onCenterConsumed?.()
+    const wanted = new Set(centerRequest.nodeIds)
+    const center = framesBBoxCenter(
+      nodes.filter((n) => wanted.has(n.id) && n.frame).map((n) => n.frame!),
+    )
+    if (!center) return onCenterConsumed?.()
     const reduce =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
     const zoom = rf.getViewport().zoom
-    // 遮挡补偿: center the element in the VISIBLE region — anchoring the
-    // world point half an occlusion RIGHT of the element's center puts it
+    // 遮挡补偿: center the cluster in the VISIBLE region — anchoring the
+    // world point half an occlusion RIGHT of the cluster's center puts it
     // half an occlusion LEFT of the viewport center (world px = screen px /
     // zoom).
     panLockedCenter(
       rf,
-      f.x + f.w / 2 + occludedRightPx / 2 / zoom,
-      f.y + f.h / 2,
+      center.cx + occludedRightPx / 2 / zoom,
+      center.cy,
       reduce ? 0 : 400,
     )
     onCenterConsumed?.()

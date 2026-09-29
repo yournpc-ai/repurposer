@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest"
 
-import { cameraPanDelta } from "./camera"
+import { cameraPanDelta, framesBBoxCenter } from "./camera"
 
 const SAFE = { left: 100, top: 100, right: 900, bottom: 700 }
 
@@ -69,5 +69,26 @@ describe("cameraPanDelta", () => {
       SAFE,
     )
     expect(dx).toBe(-600) // minX - left (first branch wins)
+  })
+})
+
+describe("framesBBoxCenter", () => {
+  it("empty cluster → null (the caller spends the request silently)", () => {
+    expect(framesBBoxCenter([])).toBeNull()
+  })
+
+  it("a single frame centers on itself", () => {
+    expect(framesBBoxCenter([{ x: 100, y: 50, w: 280, h: 660 }])).toEqual({
+      cx: 240,
+      cy: 380,
+    })
+  })
+
+  it("a cluster centers on its union bbox (the fitView centering math, zoom untouched)", () => {
+    const center = framesBBoxCenter([
+      { x: 524, y: 588, w: 280, h: 660 },
+      { x: 1572, y: 500, w: 280, h: 660 },
+    ])
+    expect(center).toEqual({ cx: (524 + 1852) / 2, cy: (500 + 1248) / 2 })
   })
 })

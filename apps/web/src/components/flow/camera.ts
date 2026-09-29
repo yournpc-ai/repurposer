@@ -46,3 +46,24 @@ export function cameraPanDelta(bbox: Bbox, safe: SafeRect): { dx: number; dy: nu
   }
   return { dx, dy }
 }
+
+/** The bbox center of a frame cluster in world coords — the 「聚焦新生簇」
+ * target point (2026-09-29 用户拍板): the same centering math fitView uses
+ * for 适应窗口, minus the zoom change (zoom never auto-changes — C5). Null
+ * on an empty cluster (the caller spends the request silently). */
+export function framesBBoxCenter(
+  frames: { x: number; y: number; w: number; h: number }[],
+): { cx: number; cy: number } | null {
+  if (frames.length === 0) return null
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const f of frames) {
+    minX = Math.min(minX, f.x)
+    minY = Math.min(minY, f.y)
+    maxX = Math.max(maxX, f.x + f.w)
+    maxY = Math.max(maxY, f.y + f.h)
+  }
+  return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 }
+}

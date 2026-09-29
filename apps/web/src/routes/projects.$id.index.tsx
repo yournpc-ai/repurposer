@@ -207,7 +207,10 @@ function ProjectDetailPage() {
 
   const fetchGraph = useCallback(async () => {
     const graphRes = await apiFetch(`/api/v1/projects/${projectId}/graph`, { toast: false })
-    if (graphRes.ok) setGraph((await graphRes.json()) as ProjectGraph)
+    if (!graphRes.ok) return null
+    const fresh = (await graphRes.json()) as ProjectGraph
+    setGraph(fresh)
+    return fresh
   }, [projectId])
 
   const fetchResults = useCallback(async () => {
@@ -339,12 +342,18 @@ function ProjectDetailPage() {
   // explicit one-shot centering capability — pan-locked-zoom, camera-law
   // shields apply. A plain page-level method any surface (or a future
   // agent-driven caller) summons; zero chrome of its own in this batch.
+  // 「把当前操作元素移到画布中心」 (v4.2 未覆盖 #3, 2026-09-26 拍板): the
+  // explicit one-shot centering capability — pan-locked-zoom, camera-law
+  // shields apply. A plain page-level method any surface (or a future
+  // agent-driven caller) summons; zero chrome of its own in this batch.
+  // The target is a cluster of node ids (a singleton for the single-node
+  // gesture; the dock path's newborn cluster rides the same seat).
   const [centerRequest, setCenterRequest] = useState<{
     token: number
-    nodeId: string
+    nodeIds: string[]
   } | null>(null)
   const requestCenterNode = useCallback(
-    (nodeId: string) => setCenterRequest({ token: Date.now(), nodeId }),
+    (nodeId: string) => setCenterRequest({ token: Date.now(), nodeIds: [nodeId] }),
     [],
   )
   const clearCenterRequest = useCallback(() => setCenterRequest(null), [])
@@ -1215,19 +1224,26 @@ function ProjectDetailPage() {
         // readiness, before any run; without this the flip only ever fired
         // on the first run and the chain preview never showed —
         // 2026-09-09 取证).
-        // (2026-09-26 翻案注 — Workspace 合同 v4.2 C5: the 2026-09-25
-        // 确认拍聚焦 beat「confirm pill 首现 = 整链 fitNow」 is REVERSED —
-        // 封板合同为准: the camera never auto-fits; the sole automatic fit
-        // stays the Workspace Birth's initial settle framing. The pill's
-        // appearance arms NOTHING.)
+        // C5 相机律·dock 路径 (2026-09-29 用户拍板 — 确定性聚焦): this
+        // callback's OWN fetchGraph response IS the arrival — diff the
+        // newborn ids off it and center the cluster directly (zoom locked,
+        // the centerRequest seat). Never the token machine's blind id-diff
+        // window here: a racing unarmed fetch could absorb the delta and
+        // the beat starved silently (the 2026-09-29「相机没跟新节点」走查).
+        // Bail / restamp (zero newborn ids) never moves the camera; the
+        // pre-birth world lets the mount's settle framing own the show.
         onDraftGraphChange={() => {
-          // C5 相机律: the re-stamped draft chain's arrival arms an
-          // ensure-in-view beat (user-initiated; already in the safe
-          // viewport → no move; out → minimal pan; zoom never auto-fits).
-          if (workspaceBorn && !isMobile) {
-            setCameraBeat({ token: Date.now() })
-          }
-          void fetchGraph()
+          const before = new Set((graph?.nodes ?? []).map((n) => n.id))
+          void (async () => {
+            const fresh = await fetchGraph()
+            if (!fresh || !workspaceBorn || isMobile) return
+            const newbornIds = fresh.nodes
+              .filter((n) => !before.has(n.id))
+              .map((n) => n.id)
+            if (newbornIds.length > 0) {
+              setCenterRequest({ token: Date.now(), nodeIds: newbornIds })
+            }
+          })()
         }}
       />
 

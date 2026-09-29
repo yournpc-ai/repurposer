@@ -122,7 +122,7 @@ export interface ResultsCanvasProps {
    * never move the camera. */
   cameraBeat?: { token: number } | null
   onCameraBeatConsumed?: () => void
-  centerRequest?: { token: number; nodeId: string } | null
+  centerRequest?: { token: number; nodeIds: string[] } | null
   onCenterRequestConsumed?: () => void
   occludedRightPx?: number
   className?: string
