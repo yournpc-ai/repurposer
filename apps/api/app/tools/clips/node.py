@@ -8,7 +8,7 @@ render node per produced clip (claimed via outputs.render_status, D2).
 from uuid import UUID
 
 import structlog
-from sqlalchemy import bindparam, select, text as _text
+from sqlalchemy import bindparam, or_, select, text as _text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.memory.brand import (
@@ -309,6 +309,21 @@ class SelectClips(NodeBase):
         # history rights); earlier runs' DELIVERED clips are archived, never
         # deleted (their journal / publications / files survive). Pending
         # render nodes pointing at either set are cancelled (skipped).
+        # 家族边界 (2026-09-29 走查实修): the victims are the SELECTION
+        # family's rows only — clips born of a select_clips step (plus
+        # legacy step-less rows, which earn the archive as before). A
+        # transform chain's product (materialize_source → translate/dub —
+        # the whole-source film) is a DIFFERENT product, never a stale
+        # selection: re-selecting highlights must not archive it off its own
+        # node's card (the two chains are independent works). workflow_step_id
+        # is the birth step (morphs never reassign it), so the step kind is
+        # the lineage truth — the quotes sweep's kind-scoping precedent
+        # (derivative_dispatch.py) applied to the clips wipe.
+        select_clips_steps = (
+            select(WorkflowStep.id)
+            .where(WorkflowStep.kind == "select_clips")
+            .scalar_subquery()
+        )
         prior_clips = (
             await db.execute(
                 select(
@@ -317,6 +332,10 @@ class SelectClips(NodeBase):
                     Output.project_id == project.id,
                     Output.type == "clip",
                     Output.archived_at.is_(None),
+                    or_(
+                        Output.workflow_step_id.is_(None),
+                        Output.workflow_step_id.in_(select_clips_steps),
+                    ),
                 ).order_by(Output.created_at)
             )
         ).all()
