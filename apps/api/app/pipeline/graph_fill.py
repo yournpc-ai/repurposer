@@ -183,21 +183,47 @@ def _node_label(step: WorkflowStep, ui_language: str) -> str | None:
     ) or step.kind
 
 
-def _aggregate_family(states: list[str]) -> str:
+def _family_head(fam_steps: list[WorkflowStep]) -> WorkflowStep:
+    """The family head pick's ONE seat (stamp + sync share it): the first
+    non-folded, non-verify step by seq — folded steps (align_stills /
+    materialize_source) never head (their host inherits the eat-the-asset
+    root semantics, 评审修正 P0-C; the family's tool identity stays the
+    consumer's), and verify is the tail, never the identity."""
+    return next(
+        (
+            s
+            for s in fam_steps
+            if s.kind not in _FOLDED_KINDS and s.kind != "verify"
+        ),
+        fam_steps[0],
+    )
+
+
+def _aggregate_family(states: list[str], head: str | None) -> str:
     """Node state = its internal step family's aggregate (the retired
     canvas projection's aggregateStatus, server-side form): failure always
-    visible, then liveness, then terminal honesty (all skipped = skipped)."""
+    visible, then liveness, then terminal honesty (all skipped = skipped).
+
+    族头门控 (2026-09-29 用户拍板 — 逐步 loading): the node lights running
+    only once the family's HEAD step is past pending — a folded prelude
+    (materialize_source / align_stills) borrows the host's family but never
+    its loading face (「步骤还没到这不亮」). Once the head has started, the
+    node stays lit until the WHOLE family settles: the verify tail can
+    bounce the executor back (QualityBounce), so a head-done/verify-open
+    window still reads running — never a premature done-then-redo flicker.
+    """
     if not states:
         return "queued"
     if any(s == "failed" for s in states):
         return "failed"
-    if any(s in ("running", "waiting") for s in states):
+    head_started = head is not None and head != "pending"
+    if head_started and any(s in ("running", "waiting") for s in states):
         return "running"
     if all(s == "skipped" for s in states):
         return "skipped"
     if all(s in ("done", "skipped") for s in states):
         return "done"
-    if any(s == "done" for s in states):
+    if head_started and any(s == "done" for s in states):
         return "running"
     return "queued"
 
@@ -840,14 +866,10 @@ async def _stamp_graph_core(
     doc_pairs: list[tuple[UUID, UUID]] = []  # (doc station id, its asm id) — §7 wires them
     for key, fam in families.items():
         fam_steps = sorted(fam["steps"], key=lambda s: s.seq)
-        # The family's head drives label / params / tool / prompt — folded
-        # steps (align_stills / materialize_source) never head (their host
-        # inherits the eat-the-asset root semantics, 评审修正 P0-C; the
-        # family's tool identity stays the consumer's).
-        head = next(
-            (s for s in fam_steps if s.kind not in _FOLDED_KINDS and s.kind != "verify"),
-            fam_steps[0],
-        )
+        # The family's head drives label / params / tool / prompt — the pick
+        # lives in _family_head (the ONE seat; sync_graph_node_for_step's
+        # head-gated aggregation reads the same law).
+        head = _family_head(fam_steps)
         # The doc-station declaration drives two per-family branches below
         # (the companion block + the estimate split) — resolve it once.
         head_cls = NODE_KINDS.get(head.kind)
@@ -1540,14 +1562,18 @@ async def sync_graph_node_for_step(db: AsyncSession, step: WorkflowStep) -> None
     family_ids = [UUID(str(s)) for s in (node.spec or {}).get("step_ids") or []]
     if not family_ids:
         return
-    family = list(
+    family = sorted(
         (
             await db.execute(select(WorkflowStep).where(WorkflowStep.id.in_(family_ids)))
         )
         .scalars()
-        .all()
+        .all(),
+        key=lambda s: s.seq,
     )
-    node.state = _aggregate_family([str(s.status) for s in family])
+    node.state = _aggregate_family(
+        [str(s.status) for s in family],
+        str(_family_head(family).status) if family else None,
+    )
     # 失败人话行原地表达 (2026-09-11): the failed card reads the family's
     # baked human line (the orchestrator's user_error_line on the failed
     # step), never the generic 「运行失败」 — spec.error is bake-at-write

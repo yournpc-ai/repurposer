@@ -272,7 +272,9 @@ apps/api/
 │   │   ├── graph_fill.py          # run/draft → 图 stamping 内核（同一推导源零漂移）：stamp_run_graph（create_run
 │   │   │                        #   图填充，fill_key 幂等复用无双生）/ stamp_draft_graph（dock 即 stamp 草稿图，
 │   │   │                        #   图先展示后运行）/ clear_draft_graph（bail 拆除）/ sync_graph_node_for_step
-│   │   │                        #   （step 终态 → 节点聚合态 + 产物反写 spec.output_ids 版本累积）/
+│   │   │                        #   （step 终态 → 节点聚合态【族头门控：running 只在族头越过 pending 后点亮，
+│   │   │                        #   折叠前奏不借宿主 loading 面；族尾 verify 窗保持亮】+ 产物反写
+│   │   │                        #   spec.output_ids 版本累积）/
 │   │   │                        #   stamp_asset_node / stamp_transcript_node（上传即落图 + 转写稿 document）/
 │   │   │                        #   research brief document（agent 节点的产物面，sync 镜像终态与正文）
 │   │   ├── graph_revise.py        # 修订桥（K4）：图节点 → task list（spec.tool/spec.params 展开），

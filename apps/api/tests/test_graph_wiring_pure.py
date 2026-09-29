@@ -649,6 +649,85 @@ async def test_sync_back_write_accumulates_versions():
     assert node.spec["output_ids"] == [str(old_id), str(new_id)]
 
 
+# ---- 族头门控 (2026-09-29 用户拍板 — 逐步 loading) ---------------------------
+
+
+def test_aggregate_family_head_gate_truth_table():
+    """The pure truth table (the sync tests below pin the wiring; this pins
+    the law): the head-gate narrows only WHEN running lights — failure and
+    terminal honesty keep the whole-family scan."""
+    from app.pipeline.graph_fill import _aggregate_family
+
+    # The folded-prelude windows — the fix (「步骤还没到这不亮」).
+    assert _aggregate_family(["running", "pending"], "pending") == "queued"
+    assert _aggregate_family(["done", "pending"], "pending") == "queued"
+    # The head's own windows — unchanged.
+    assert _aggregate_family(["done", "running"], "running") == "running"
+    assert _aggregate_family(["done", "waiting"], "waiting") == "running"
+    # The verify tail (head done, verify open) stays lit — QualityBounce can
+    # re-open the executor, so a premature done-then-redo flicker is worse.
+    assert _aggregate_family(["done", "pending"], "done") == "running"
+    assert _aggregate_family(["done", "running"], "done") == "running"
+    # Terminal + failure honesty — the whole-family scan survives.
+    assert _aggregate_family(["done", "done"], "done") == "done"
+    assert _aggregate_family(["done", "skipped"], "skipped") == "done"
+    assert _aggregate_family(["pending", "failed"], "pending") == "failed"
+    assert _aggregate_family(["skipped", "skipped"], "skipped") == "skipped"
+    assert _aggregate_family(["pending", "pending"], "pending") == "queued"
+    assert _aggregate_family([], None) == "queued"
+
+
+@pytest.mark.asyncio
+async def test_sync_head_gate_folded_prelude_never_lights_the_node():
+    """逐步 loading: the folded prelude (materialize_source) borrows the
+    host's family but never its loading face — the node stays queued until
+    the HEAD (translate_clip) is past pending, then tracks the family."""
+    mat = WorkflowStep(id=uuid4(), kind="materialize_source", status="pending", seq=1, spec={})
+    tr = WorkflowStep(id=uuid4(), kind="translate_clip", status="pending", seq=2, spec={})
+    node = _node(
+        "video",
+        state="queued",
+        spec={"tool": "translate_clip", "step_ids": [str(mat.id), str(tr.id)]},
+    )
+    tr.spec["graph_node_id"] = str(node.id)
+    db = _StubDb(nodes=[node], steps=[mat, tr])
+
+    # The prelude window: the node stays queued (its step hasn't come).
+    mat.status = "running"
+    await sync_graph_node_for_step(db, tr)
+    assert node.state == "queued"
+    mat.status = "done"
+    await sync_graph_node_for_step(db, tr)
+    assert node.state == "queued"
+    # The head starts → running; the whole family settles → done.
+    tr.status = "running"
+    await sync_graph_node_for_step(db, tr)
+    assert node.state == "running"
+    tr.status = "done"
+    await sync_graph_node_for_step(db, tr)
+    assert node.state == "done"
+
+
+@pytest.mark.asyncio
+async def test_sync_head_gate_verify_tail_stays_lit():
+    """族尾律 (same ruling): the head done + verify still open → the node
+    keeps reading running until the whole family settles."""
+    sel = WorkflowStep(id=uuid4(), kind="select_clips", status="done", seq=1, spec={})
+    ver = WorkflowStep(id=uuid4(), kind="verify", status="running", seq=2, spec={})
+    node = _node(
+        "video",
+        state="running",
+        spec={"tool": "select_clips", "step_ids": [str(sel.id), str(ver.id)]},
+    )
+    sel.spec["graph_node_id"] = str(node.id)
+    db = _StubDb(nodes=[node], steps=[sel, ver])
+    await sync_graph_node_for_step(db, sel)
+    assert node.state == "running"
+    ver.status = "done"
+    await sync_graph_node_for_step(db, sel)
+    assert node.state == "done"
+
+
 # ---- fill-key idempotency fingerprints (graph_fill) --------------------------
 
 
