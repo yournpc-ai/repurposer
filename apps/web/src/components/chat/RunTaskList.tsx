@@ -137,16 +137,16 @@ export function RunTaskList({
     now != null && runningMs != null ? formatElapsed(now - runningMs) : null
 
   // THE dynamic row IS the anchor (2026-09-08 层级翻案): userOpen null =
-  // follow the pose — FOLDED in both poses (2026-09-13 user ruling: the
-  // one narrative row is the whole at-a-glance surface, live included; the
-  // rail tree is on-demand). The settle still resets an untouched toggle so
-  // the archive always lands on the one-line receipt; an explicit
-  // post-settle click re-opens it.
+  // follow the pose — EXPANDED while live (2026-09-29 user ruling: the rail
+  // tree IS the run's live reading — the single narrative row alone buried
+  // the step-by-step advance), folded at the settle (落档即收: the terminal
+  // flip resets an untouched toggle so the archive always lands on the
+  // one-line receipt; an explicit post-settle click re-opens it).
   const [userOpen, setUserOpen] = useState<boolean | null>(null)
   useEffect(() => {
     if (terminal) setUserOpen(null)
   }, [terminal])
-  const open = userOpen ?? false
+  const open = userOpen ?? !terminal
 
   return (
     <div className="w-full">

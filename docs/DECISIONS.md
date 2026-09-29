@@ -1538,18 +1538,18 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ------
 
-## ADR-073: run 期消息流时序律 + 清单两态默认折叠 + 起始 banner 退役
+## ADR-073: run 期消息流时序律 + 清单活态默认展开 + 起始 banner 退役
 
 **Status**: Decided (2026-09-13)
 
-**Context**: 产品试用截图取证三伤——① 方向选择题（期 4 interrupt）回答后，活态流里 QA 块排在「我开始生成了——」**上面**：起始行住在 taskList 单元内随它 +∞ 钉底，QA 按真实时间排序反而压过 run 的开场白（用户判词：QA 应该在起始行和「正在规划内容结构…」**之间**）；② 终态后 QA 块排在收据（✓ 题名 · 总耗时）**下面**：收据锚在 run 出生刻（ADR-058 排序锚），mid-run 生活全部掉到收据之下；③ 点击 Start 后消息流多一条「✓ 生成计划 · 题名」机器块（活态 header unit / pre-run QA stand-in）——用户判词「这个不应该在这种时候出现」。另有判词④：打勾流活态默认展开会把「正在做什么」埋进步骤树——单行动态行才是全部 at-a-glance。
+**Context**: 产品试用截图取证三伤——① 方向选择题（期 4 interrupt）回答后，活态流里 QA 块排在「我开始生成了——」**上面**：起始行住在 taskList 单元内随它 +∞ 钉底，QA 按真实时间排序反而压过 run 的开场白（用户判词：QA 应该在起始行和「正在规划内容结构…」**之间**）；② 终态后 QA 块排在收据（✓ 题名 · 总耗时）**下面**：收据锚在 run 出生刻（ADR-058 排序锚），mid-run 生活全部掉到收据之下；③ 点击 Start 后消息流多一条「✓ 生成计划 · 题名」机器块（活态 header unit / pre-run QA stand-in）——用户判词「这个不应该在这种时候出现」。
 
 **Decision**:
 
 1. **起始句独立锚**：run 的起始言语（ADR-093：start_run 回合的 LLM 言语，落库普通 message 行）序在 taskList 前；活态 mid-run QA / 插话按真实时间落在起始句与钉底动态行之间。
 2. **收据锚在 run 结束刻**：终态 taskList（收据）锚 = lastStepT+1，terminal 单元（收官句）随其后——mid-run 生活（QA / 对话）恒在收据之上，ADR-058「收据永不高于生产回声」由构造成立（回声必 mid-run）。`workflow_run_id` 章不再是排序锚，只剩 detached run 内联归档（RunCard）的归属关联。
 3. **无起始 banner**：确认拍的记录 = echo 散文 + 用户原话 + 开工句（ADR-093 §2，start_run 回合的 LLM 言语）+ run 收据行，机器块零增量——无「✓ 生成计划 · 题名」块、无 pre-run QA stand-in 抑制逻辑（`hasPreRunQaArchive`）、无 `generationOverlay.title` i18n 键。
-4. **清单两态默认折叠**：RunTaskList `open = userOpen ?? false`——live 也不默认展开，单行动态行（● shimmer 叙事 + 阶段读秒）就是全部 at-a-glance，导轨树点击展开；terminal flip 仍重置未手切的 toggle，落档恒收一行收据。
+4. **清单活态默认展开、落档即收**：RunTaskList `open = userOpen ?? !terminal`——live 默认展开导轨树（步骤平铺 = run 的活读面，步骤推进逐行可见）；terminal flip 仍重置未手切的 toggle，落档恒收一行收据（✓ 题名 · 总耗时），归档态点击可再展开。
 
 **Consequences**: QA 归档律不变（选项问回答坍缩成已答问题双层消息入流、task_book start 永不入 QA 块）——变的只是排序锚；方向问答的记录双座照旧（流内 QA 块 + interrupt 步骤行「方向：…」量化重写）。
 
