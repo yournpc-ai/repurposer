@@ -227,6 +227,11 @@ _TOOL_ECHO_NAMES = frozenset(
     tool.name for tool in [*PLAN_TOOLS, *CHAT_TOOLS, *CHAT_READ_TOOLS]
 ) | {"wrap_up"}  # the trigger turn's terminal (its module imports ours)
 _TOOL_ECHO_LINE = re.compile(r"^\[[a-z_]+\]\s*$")
+# A tail fragment that could still complete INTO a bare echo line — the
+# stream filter holds exactly these undecided (fails fast on any non
+# [a-z_] character, so legit prose like a markdown link releases after
+# a character or two).
+_TOOL_ECHO_PREFIX = re.compile(r"^\[[a-z_]*(\]\s*)?$")
 
 
 def strip_tool_echoes(content: str) -> str:
@@ -242,3 +247,49 @@ def strip_tool_echoes(content: str) -> str:
     # The echo rides as its own paragraph — collapse the blank run its
     # removal leaves so the seam never shows.
     return re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip("\n")
+
+
+def _is_tool_echo_line(line: str) -> bool:
+    stripped = line.strip()
+    return bool(_TOOL_ECHO_LINE.match(stripped)) and stripped.strip("[]").strip() in _TOOL_ECHO_NAMES
+
+
+def make_tool_echo_delta_filter(emit):
+    """Stream-side gate of the same law (2026-09-30 同批拍板): iteration-0
+    deltas are RAW model fragments, so a bare '[tool]' echo line would flash
+    live long before the persistence-layer strip runs. Wrap the on_delta
+    hook: hold any '['-initial tail line undecided until its newline proves
+    it (bare registered echo → dropped with its newline; anything else →
+    released byte-exact). A registered echo held at stream end is never
+    flushed — the settled (sanitized) envelope replaces the bubble, so the
+    echo simply never exists for the user.
+    """
+    held = ""
+
+    async def on_delta(fragment: str) -> None:
+        nonlocal held
+        text = held + fragment
+        held = ""
+        if not text:
+            return
+        *body, tail = text.split("\n")
+        # The decided (newline-terminated) segment gets the same transform
+        # as the persistence strip: echo text out, 3+ newline runs collapse
+        # to the paragraph seam — so the live bubble and the settled row
+        # read identically.
+        out = ""
+        if body:
+            kept = [line for line in body if not _is_tool_echo_line(line)]
+            segment = "".join(line + "\n" for line in kept)
+            out = re.sub(r"\n{3,}", "\n\n", segment)
+        if tail:
+            if not _TOOL_ECHO_PREFIX.match(tail):
+                out += tail  # can never complete into an echo — prose
+            elif _TOOL_ECHO_LINE.match(tail.strip()) and not _is_tool_echo_line(tail):
+                out += tail  # a complete bracket line, but unregistered — prose
+            else:
+                held = tail  # undecided: still forming toward a registered echo
+        if out:
+            await emit(out)
+
+    return on_delta

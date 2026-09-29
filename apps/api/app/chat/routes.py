@@ -42,6 +42,7 @@ from app.models.schemas import (
 )
 from app.models.tables import Conversation, Project, User
 from app.chat.activity import ActivityProjector
+from app.chat.turn_tools import make_tool_echo_delta_filter
 from app.chat.service import (
     answer_question,
     chat,
@@ -153,11 +154,14 @@ def _make_delta_hook(queue: asyncio.Queue):
     """The prose channel → ``assistant.delta`` frames, verbatim (ADR-077
     判词②: prose is the content channel now — every fragment is reply text,
     dialect-stripped at the client seam; the extractor's JSON-sifting and
-    the non-prose keepalive both retired with the action payload)."""
+    the non-prose keepalive both retired with the action payload). The
+    tool-echo filter gates the raw stream first (2026-09-30 拍板 — bare
+    '[tool]' echo lines never flash live; the persistence strip is the
+    same law's other seat)."""
     async def on_delta(fragment: str) -> None:
         await queue.put(_sse("assistant.delta", json.dumps({"text": fragment})))
 
-    return on_delta
+    return make_tool_echo_delta_filter(on_delta)
 
 
 def _make_tool_hooks(queue: asyncio.Queue, projector: ActivityProjector | None = None):

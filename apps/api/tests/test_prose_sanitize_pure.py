@@ -8,7 +8,13 @@ is pure machine vocabulary the user must never see; ``strip_tool_echoes``
 removes exactly those lines at the message-persistence chokepoint.
 """
 
-from app.chat.turn_tools import _TOOL_ECHO_NAMES, strip_tool_echoes
+import pytest
+
+from app.chat.turn_tools import (
+    _TOOL_ECHO_NAMES,
+    make_tool_echo_delta_filter,
+    strip_tool_echoes,
+)
 
 
 class TestStripToolEchoes:
@@ -49,3 +55,76 @@ class TestStripToolEchoes:
         # wrap_up (the trigger turn's terminal) must both be in the set.
         assert "start_run" in _TOOL_ECHO_NAMES
         assert "wrap_up" in _TOOL_ECHO_NAMES
+
+
+class _DeltaSink:
+    """Collects emitted fragments; join() is the client's live bubble."""
+
+    def __init__(self) -> None:
+        self.fragments: list[str] = []
+
+    async def emit(self, text: str) -> None:
+        self.fragments.append(text)
+
+    def join(self) -> str:
+        return "".join(self.fragments)
+
+
+async def _drive(fragments: list[str]) -> str:
+    sink = _DeltaSink()
+    on_delta = make_tool_echo_delta_filter(sink.emit)
+    for fragment in fragments:
+        await on_delta(fragment)
+    return sink.join()
+
+
+class TestToolEchoDeltaFilter:
+    @pytest.mark.asyncio
+    async def test_echo_split_across_fragments_never_flashes(self) -> None:
+        # The image-#68 stream shape: ack sentence, then the echo arrives
+        # in pieces and the stream ends — the echo is held undecided at
+        # stream end and simply never exists on the wire.
+        out = await _drive(
+            ["好的，开始跑——后台做完会推过来。\n\n[sta", "rt_ru", "n]"]
+        )
+        assert out == "好的，开始跑——后台做完会推过来。\n\n"
+
+    @pytest.mark.asyncio
+    async def test_echo_decided_by_newline_is_dropped_with_its_newline(self) -> None:
+        out = await _drive(["先说。\n\n[start_run]", "\n后说。"])
+        assert out == "先说。\n\n后说。"
+
+    @pytest.mark.asyncio
+    async def test_echo_mid_stream_seam_matches_persistence_strip(self) -> None:
+        out = await _drive(["先说。\n\n[wrap_up]\n\n后说。"])
+        assert out == "先说。\n\n后说。"
+
+    @pytest.mark.asyncio
+    async def test_markdown_link_prose_flows_byte_exact(self) -> None:
+        # '['-initial but the second character already breaks the echo
+        # shape — held for a fragment, then released verbatim.
+        text = "看这里 [链接文字](https://example.com) 结尾。"
+        out = await _drive(["看这里 [", "链接文字](https://exa", "mple.com) 结尾。"])
+        assert out == text
+
+    @pytest.mark.asyncio
+    async def test_unregistered_bracket_line_is_released(self) -> None:
+        out = await _drive(["说明。\n\n[note]", "\n下一句。"])
+        assert out == "说明。\n\n[note]\n下一句。"
+
+    @pytest.mark.asyncio
+    async def test_unregistered_bracket_tail_at_stream_end_is_released(self) -> None:
+        out = await _drive(["说明。\n\n[note]"])
+        assert out == "说明。\n\n[note]"
+
+    @pytest.mark.asyncio
+    async def test_registered_echo_extended_into_prose_is_released(self) -> None:
+        # '[start_run]' then more text on the same line — not a bare echo.
+        out = await _drive(["[start_run]", " 额外说明。"])
+        assert out == "[start_run] 额外说明。"
+
+    @pytest.mark.asyncio
+    async def test_plain_prose_is_untouched(self) -> None:
+        text = "完全没有括号的回复。\n两行。"
+        out = await _drive([text[:5], text[5:]])
+        assert out == text
