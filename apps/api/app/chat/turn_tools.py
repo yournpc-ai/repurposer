@@ -22,6 +22,8 @@ The parameter semantics live in the params models' Field descriptions; the
 asking strategy / naming / disclosure rules stay in the system templates.
 """
 
+import re
+
 from app.agents.tool_loop import ChatTool
 from app.chat.perception import perception_chat_tools
 from app.models.schemas import (
@@ -211,3 +213,32 @@ CHAT_READ_TOOLS = perception_chat_tools(
     "get_segment",
     "get_artifact",
 )
+
+
+# ── 工具名回响 sanitizer (2026-09-30 用户拍板 — 彻底删掉) ──────────────────
+# The model sometimes echoes the tool it is calling as a BARE bracketed line
+# of prose ('[start_run]'): the name saturates its prompt (it must — it is
+# the tool's name), and the bracket shape is the function-call markup of its
+# pretraining. The real call rides the native tool channel; the echo is pure
+# noise the spoken sentence already covers — and the user should never see
+# machine vocabulary. Strip lines that are EXACTLY one registered tool's
+# name in brackets; a name mentioned mid-sentence is prose and stays.
+_TOOL_ECHO_NAMES = frozenset(
+    tool.name for tool in [*PLAN_TOOLS, *CHAT_TOOLS, *CHAT_READ_TOOLS]
+) | {"wrap_up"}  # the trigger turn's terminal (its module imports ours)
+_TOOL_ECHO_LINE = re.compile(r"^\[[a-z_]+\]\s*$")
+
+
+def strip_tool_echoes(content: str) -> str:
+    """Remove bare [tool_name] echo lines from assistant prose (pure)."""
+    if "[" not in content:
+        return content
+    kept = []
+    for line in content.split("\n"):
+        stripped = line.strip()
+        if _TOOL_ECHO_LINE.match(stripped) and stripped.strip("[]").strip() in _TOOL_ECHO_NAMES:
+            continue
+        kept.append(line)
+    # The echo rides as its own paragraph — collapse the blank run its
+    # removal leaves so the seam never shows.
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip("\n")

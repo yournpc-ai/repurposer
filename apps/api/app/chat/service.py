@@ -60,6 +60,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # at startup (the orchestrator's roster self-check walks it).
 from app.chat.intent import chat_intent_agent as _chat_intent_agent  # noqa: F401
 from app.chat.intent import intent_router as _intent_router  # noqa: F401
+from app.chat.turn_tools import strip_tool_echoes
 from app.models.schemas import (
     AnswerPayload,
     AnswerRequest,
@@ -281,6 +282,12 @@ async def _create_message(
     intent: dict[str, Any] | None = None,
     question: dict[str, Any] | None = None,
 ) -> Message:
+    if role == "assistant":
+        # 工具名回响 sanitizer (2026-09-30 用户拍板 — 彻底删掉): the model
+        # occasionally echoes its own call as a bare '[tool_name]' prose
+        # line; the ack sentence already covers it and machine vocabulary
+        # never reaches the user.
+        content = strip_tool_echoes(content)
     message = Message(
         conversation_id=conversation_id,
         role=role,
