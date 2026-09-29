@@ -2326,3 +2326,118 @@ trigger beat ① 的引号示例判句整删，替换为 §1 护栏的抽象表�
 **Consequences**: 记录面干净——入库行无一「像言语的非言语」；处理中的几分钟行文本说真话（工序级）；两面词汇一致。零 schema 变更（stage 走 `asset.meta`）。验证 = live 走查（上传素材观察工序推进文案）+ 刷新一致性 + 纯测试（stage 写入/清除/读容忍）。
 
 **Related**: ADR-093（根律——本 ADR 是其 §3 准入门的寄存器细化）/ ADR-058（展示文案二源律）/ ADR-087 §3（活动投影——日志面的另一族）/ CHAT_ARCH §8.6（前端渲染律）§8.7（StatusLine 一座两行）
+
+## ADR-096: 渲染所有权与就绪语义——运行期仲裁废止，编译静态所有权 + 就绪对账
+
+**Status**: Decided (2026-09-30)；过渡立即律（§2）先行，终态律（§1 全量）随简报施工
+
+**Context**: 一次交付的实现链（select_clips → translate ∥ reframe，同层并发、非 fork、不同 track——变体并行律内合法）暴露渲染所有权机的结构性猜测：defer 律以 seq 序回答「更晚的 morph 将拥有渲染」，但同层并行使更晚 seq 的 morph 在墙钟上先完工——reframe（seq 12）先完工、按「无更晚 morph」认领渲染（payload = 尚缺翻译轨的旧 spec）；translate（seq 11）后完工、按「更晚 morph 存在」defer（render_status=NULL、不建 step），其 re-pend 的 token 置 NULL 正确杀死在飞渲染（token CAS 按设计工作），但**所有权落空**——reframe 的认领已是过去式，translate 放弃了认领，无任何座位 re-pend：产物永久黑卡。verify 不查文件照常通过；run_completed 按 payload 播报「短片出来了」而产物文件为空（完工语义撒谎）。根因：渲染所有权在运行期用 seq/状态/墙钟猜测编译期已经确定的事实。
+
+**Decision**:
+
+### 1. 所有权 = 编译期声明（终态律）
+
+编译器静态指定每份 output 的唯一 render owner（通常 = 装配站）；其余 morph 不 re-pend、不建 render step；owner 的 render step 以 inputs 屏障等待同产物全部并行写入者完工后出生——owner 渲染恒读全量新 spec，死渲染在并行链上结构性消灭。「最后写入者拥有」由编译序静态兑现；运行期只剩执行与验证，不再仲裁。defer 律随本条落地**整条删除**（不是改判定）。
+
+### 2. 过渡立即律（D2-status）
+
+架构批落地前，defer 判定从「更晚 morph 存在（seq 序）」改为「更晚 morph 的 step 状态 ∈ pending/running」，且判定必须在持有 output 行锁之后执行（re-pend 与 fan_out 同一事务；行锁序保证竞争的 PENDING 恒晚于 defer-NULL 落地，clobber 窗口不存在）。**立即批与终态批不得同时对同一产物生效**——两套所有权机制并存即新竞态源。
+
+### 3. token 守卫不动
+
+claim token CAS（跨 run / 崩溃恢复 / 在飞渲染隔离）原样承重；worker 认领机制零改动。token 管 worker 认领隔离，所有权管内容版本归属——两概念不合并。
+
+### 4. 就绪语义（双职责）
+
+- **verify 拒错误完工**：产物文件非空 + render_status 终态 + 文件对应当前 spec 版本，三合取缺一不过。
+- **finalize reconcile 修遗漏**：run 收尾幂等扫描「有 render_spec 但 render_status=NULL 且无 pending render step」的产物并 re-pend（幂等键防重复创建）。reconcile 是修复机制，永不成正常路径依赖。
+- **run 完工 ≠ 产物就绪**：就绪 = 执行终态 + 文件有效 + 版本对账三合取。用户面完工语义随 ADR-097 §5 唯一化为 artifact readiness；「payload 完工即播报成功」永禁。
+
+### 5. 并发 spec 写入同族纪律（track 原子写）
+
+in-place morph 的 spec 写 = output 行锁内 **track 级局部更新**（track 注册表为写入权限依据）+ 合并后 ClipSpec 全量重校验；禁「应用层读快照 → 整体写回」（并发兄弟 track 丢失更新与本事故同根）。同 track 并发写显式拒绝或串行化。
+
+### 6. 生产数据恢复纪律（判例）
+
+恢复走可审计/可验证/可回滚路径：前置条件核实（目标行归属与归档态 / spec 全量性 / 无有效 pending·running step / 文件无效且无有效在飞 token / 不触发重复扣费或重复建任务）→ 事务内带状态条件的更新 + 影响行数断言 → 经既有 fan_out/enqueue 建任务 → 认领/完工/文件/状态一致性确认。禁裸 SQL 状态改写。
+
+**Consequences**: 黑卡死终态绝源（所有权不再有落空路径；reconcile 兜残余）；「已被新的渲染取代」退为瞬态行（后必有新渲染）；完工消息撒谎类事故绝源；变体并行律不动（并行合法照旧，所有权不再靠它猜）。立即批 = 最小爆炸半径（改判定 + verify/finalize 两座）；终态批 = 删逻辑而非加分支。
+
+**Related**: ADR-079（token 认领守卫——跨 run 隔离原样承重）/ ADR-086（Product Graph——编译期事实源同族纪律）/ ADR-097（artifact 本体——就绪语义的用户面唯一化 + artifact owner 与 render owner 对齐）/ ADR-091（work/version——版本对账的身份地基）/ ADR-074②（渲染台账）
+
+## ADR-097: Product Artifact Ontology——Artifact-first 持久产品图（编译期身份分组，零第二套 DAG）
+
+**Status**: Decided (2026-09-30)；目标架构——Phase 1（canonical JSONB stamp + 读面投影）已拍板，Phase 2（schema 身份表）随 Phase 1 验证后启动
+
+**Context**: 两起取证把「产物显示在哪张卡」升维到本体层：① 一次交付（agent 提案、用户确认的一份「竖屏金句短片」）的实现链降生 3 个可见节点 + 隐藏站——「就要了一个东西，怎么出来 3 个 node」；② 同一份产物显示在 2 张卡上（每站把 output 并入自己的 output_ids——「参与过」被读成「拥有」）。根：**交付物 / 中间工件 / 执行工序压进同一 Node 语义**；Product Graph 合同（ADR-086）的可见性谓词作用于 type 层（video×editor 恒可见），结构性无法表达「这三个 product node 是同一份交付物的不同 facet」。本 ADR 不另起图——Artifact 是对既有 Product Nodes 的**编译期声明身份分组 + 读面投影**；Product DAG / rank / 边边界继续是空间与关系唯一事实源。
+
+**Decision**:
+
+### 1. 分层与唯一事实源
+
+```text
+Work（一次确认的交付意图）
+  └── Artifact（用户交付物身份）
+        ├── facet（实现面：选段/装配等工序站降格）
+        ├── companion（用户可编辑工件：翻译表等）
+        └── Version（生产历史，ADR-091 语义）
+              └── Output（物化结果）
+                    └── Execution Steps（执行真相，永不上画布）
+```
+
+Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；它只是 Product Graph 之上的身份层与投影层。
+
+### 2. 第一承重条款——归属只认编译 stamp
+
+- **三身份分离**：`work_key` = 一次确认交付意图的身份；`artifact_key` = 交付物身份（编译器分配，同一交付物的全部相关节点显式携带）；`fill_key` = 节点自身的幂等复用指纹，**永不作交付物身份**。
+- **读层永禁推断** artifact 成员——禁从 rank / 邻接 / step 序 / 深度 / created_at / output 归属 / 尾位 / 相同 output_ids / fill_key 相似性推断。
+- **legacy 行无 key = legacy/unknown**，走既有兼容读面；**宁可显示 legacy，永不猜一个 artifact**。
+- **名与身份分离**：`work_name` / `artifact_name` = 展示事实（ADR-058 二源律，LLM 建图命名）；key = 身份事实。两者永不混用。
+
+### 3. 两层门——产品资格 × 表面角色
+
+- 第一层（不动）：`is_product_node`（ADR-086）——LEVER_TOOLS 保持 modifier 专用，**不吞 facet**。
+- 第二层（新增）：`artifact_role ∈ {deliverable, facet, companion, reference}`——「是不是产品对象」与「以哪种用户表面出现」是两个问题。
+- 中间工序站（select_clips 等）降 **facet**：不是隐藏（产品资格保留，状态/程序可查），是不再冒充独立交付物。翻译文档等用户可编辑内容 = **companion** 一等对象。
+
+### 4. 投影三律（M2 / M3 / tail-wins 收编）
+
+- **M2 默认投影**：交付物卡 = artifact 的用户表面（当前 version + facet 摘要 + companion 链接）。
+- **M3 Activity Overlay**：每 artifact 单一 activity owner；运行时卡携活动态（工序进展聚合），失败才展开工序级定位；运行态与完工态是同一图的两个投影，**禁两套拓扑**。
+- **tail-wins 终态律废止**：「一 output 一展示归属」规则作为 Phase-1 投影机制存活，但归属由 artifact 身份直接回答，不再由 rank/尾位推断。
+
+### 5. 就绪语义
+
+artifact readiness = 唯一用户完工语义（planned / making / ready / failed / needs_attention——词表随施工简报定）；`run completed ≠ artifact ready`（三合取见 ADR-096 §4）。完工播报只从 readiness 出发。
+
+### 6. 迟晋升（late promotion）
+
+中间对象默认 facet/reference；获得独立用户语义（被点名复用，如「就用刚才那段再出法语版」）才晋升 artifact。同一 source selection 的多交付物**共享引用、各自独立编辑**（same source ≠ same editable product）。
+
+### 7. 修订不变量
+
+- 同意图修改（「字幕换法语」）→ 同 artifact 新 version；
+- 交付变体（「再来一条德语版」）→ 同 work 兄弟 artifact；
+- 新目标（「再做张海报」）→ 新 work。
+- version 语义沿用 ADR-091（归档不删除）；**logical version ≠ output 行**——output = 物化载体（preview / attempt / final 可多个），version 是用户语义层。
+
+### 8. Phase 1 / Phase 2 边界
+
+- **Phase 1（零 schema）**：canonical JSONB 字段 `spec.work_key` / `spec.artifact_key` / `spec.artifact_name` / `spec.artifact_role` + 读面投影。字段按未来列设计——**单一 canonical 命名，禁别名垃圾场**。
+- **Phase 2（schema）**：`product_artifact(id, work_id, name, current_version_id)` + `artifact_version(id, artifact_id, output_id, version_number, status)`；output 退位为纯物化结果。Phase 2 只搬 canonical 字段语义，不重定义。
+
+### 9. 岛 / 相机 / lineage
+
+- 岛单位 = **artifact sibling set**（一问 N 交付物仍生 N 兄弟卡；廊道/簇适应保留）；append-only 帧律不动。
+- **折叠 ≠ 血缘删除**：transcript→artifact 的 lineage 边出生即真实写入（读时合成退役；legacy 走单一 canonical projection 去重兼容）；**lineage/display-only 边永不参与 stale/invalidation 闭包**（改 transcript 的 edited_text 不使下游字幕失效）；调度事实源恒为 run 内编译的 step inputs，图边增删永不改编排。站间实现边退出默认拓扑。
+
+### 10. 负向测试（强制）
+
+- 改 rank / 边序 / created_at / 共享 output / fill_key 相似 → artifact 成员不变；
+- 无 key 节点 → 不被猜进任何 artifact；
+- 改 transcript `edited_text` → 下游字幕产物不失效；
+- 一 live output 在项目视图内至多一张交付物卡（fork 兄弟不互相吞并）。
+
+**Consequences**: 「一次请求一个东西」的用户心智与「全程可检查/可编辑/可计费/可恢复」的工程面同时成立。批次映射 = A/B 照旧（ADR-096 立即批 + 恢复流程）、C 重定义为本 ADR Phase-1 投影（原 tail-wins 读面折叠案废止并入）、D/E 照旧（执行层）、F 收窄为 artifact 级 lineage（§9）。
+
+**Related**: ADR-086（Product Graph 地基——本 ADR 只补身份层）/ ADR-091（work/version——artifact = work 的图层正式身份分组，version 语义沿用）/ ADR-096（渲染所有权与就绪）/ ADR-088（北极星——用户可理解产物）/ ADR-058（命名二源律）/ ADR-087（Lifecycle 合同——readiness 戳座位）
