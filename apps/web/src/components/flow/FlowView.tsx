@@ -31,6 +31,7 @@ import "./flow.css"
 
 import { FlowEdge, type FlowEdgeType } from "./FlowEdge"
 import { FlowNodeCard, nodeRenderActive, type FlowCardNode } from "./FlowNodeCard"
+import { cameraPanDelta } from "./camera"
 import { BIRTH_STAGGER_MS, declaredHandles, flowNodeSize, layoutFlow } from "./layout"
 import type { FlowGroup, FlowNode, FlowViewProps, GraphEdgeType, OutPortType } from "./types"
 
@@ -357,7 +358,9 @@ function CameraBeats({
     // SAFE viewport (the visible region minus the margin and the docked
     // panel's occlusion). Already inside → the beat spends with ZERO
     // movement; outside → the minimal pan that closes the shortfall, zoom
-    // locked.
+    // locked. The delta math lives in camera.ts (pure + contract-tested —
+    // the sign law: the delta is a WINDOW shift TOWARD the target; the
+    // inverted sign panned the camera into empty space away from newborns).
     let minX = Infinity
     let minY = Infinity
     let maxX = -Infinity
@@ -379,19 +382,15 @@ function CameraBeats({
     const left = -vp.x / vp.zoom
     const top = -vp.y / vp.zoom
     const m = SAFE_MARGIN_PX / vp.zoom
-    const safeLeft = left + m
-    const safeTop = top + m
-    const safeRight = left + w - m - occludedRightPx / vp.zoom
-    const safeBottom = top + h - m
-    // The per-axis shortfall (world units); a cluster wider/taller than the
-    // safe region can never fully fit at a locked zoom — align its near
-    // edge (the honest best at this zoom).
-    let dx = 0
-    if (minX < safeLeft) dx = safeLeft - minX
-    else if (maxX > safeRight) dx = Math.max(safeRight - maxX, safeLeft - minX)
-    let dy = 0
-    if (minY < safeTop) dy = safeTop - minY
-    else if (maxY > safeBottom) dy = Math.max(safeBottom - maxY, safeTop - minY)
+    const { dx, dy } = cameraPanDelta(
+      { minX, minY, maxX, maxY },
+      {
+        left: left + m,
+        top: top + m,
+        right: left + w - m - occludedRightPx / vp.zoom,
+        bottom: top + h - m,
+      },
+    )
     if (dx === 0 && dy === 0) return onConsumed?.() // 已在安全区：不动
     const reduce =
       typeof window !== "undefined" &&
