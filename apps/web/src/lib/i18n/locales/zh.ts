@@ -1274,14 +1274,14 @@ const zh: Resources = {
      * 帧带完成态；failed/cancelled 复用进行态（✗/删除线说剩下的）。 */
     /** 2026-09-25 文案批 (用户拍板——「计划已起草 / 创建 workflow」那套
      * 机器状态腔退役): 说人话，说当下在干的事。draft 按工具分两副面孔
-     * ——出方案 / 改已有产物（projector 的 _EDIT_TOOLS 选 key）。draft 跨度
-     * 只有 active 态（2026-09-28 用户拍板——落定即退役）：落定收据行退役，
-     * 方案卡就是证据，故无 draftDone/editDone 键。 */
+     * ——出方案 / 改已有产物（projector 的 _EDIT_TOOLS 选 key）。draft / run
+     * 跨度只有 active 态（落定即退役——2026-09-28 draft、2026-09-29 扩到
+     * run）：落定收据行退役，方案卡 / 开工言语 + RunTaskList 收据就是证据，
+     * 故无 draftDone/editDone/runDone 键。 */
     activity: {
       draft: "正在整理方案…",
       edit: "正在修改…",
       run: "正在开工…",
-      runDone: "已开工",
       repair: "刚才的回答没组织好，我重新整理一下…",
       repairDone: "已重新整理好",
     },

@@ -1356,15 +1356,15 @@ const en = {
     /** 2026-09-25 copy batch (user ruling — the machine-status register
      * retired): plain words for the work in flight. The draft kind speaks
      * two faces by tool — proposing a plan / editing existing work (the
-     * projector's _EDIT_TOOLS picks the key). Draft spans are ACTIVE-only
-     * (2026-09-28 user ruling — 落定即退役): the settled receipt retired,
-     * the docked plan card is the evidence, so no draftDone/editDone keys
-     * exist. */
+     * projector's _EDIT_TOOLS picks the key). Draft / run spans are
+     * ACTIVE-only (落定即退役 — draft 2026-09-28, extended to run
+     * 2026-09-29): the settled receipt retired, the docked plan card / the
+     * start speech + RunTaskList receipt is the evidence, so no
+     * draftDone/editDone/runDone keys exist. */
     activity: {
       draft: "Putting the plan together…",
       edit: "Making the change…",
       run: "Getting started…",
-      runDone: "Started",
       repair: "That answer didn't come out right — reworking it…",
       repairDone: "Reworked it",
     },

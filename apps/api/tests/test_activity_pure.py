@@ -409,9 +409,10 @@ def test_settled_frames_collects_the_turns_durable_history():
     every terminal frame in emission (seq) order, ACTIVE frames never join
     (the live wire owns the in-flight face; only the settled form is
     durable). A whole turn story — rejection, repair, acceptance — reads
-    back complete and ordered. Draft spans are the ONE exclusion (落定即退役
-    2026-09-28): their settles ride the wire but never persist — the docked
-    plan card is the settled evidence."""
+    back complete and ordered. Draft/run spans are the exclusions (落定即退役
+    2026-09-28 draft, 2026-09-29 extended to run): their settles ride the
+    wire but never persist — the docked plan card / the start speech +
+    RunTaskList receipt is the settled evidence."""
     p = ActivityProjector()
     # A read call: active → rejected (cancelled + repair opens) → accepted
     # (repair completes, the retried read completes).
@@ -474,6 +475,27 @@ def test_draft_span_settles_never_persist():
     sweep = p3.sweep("completed")
     assert _summary(sweep) == [("a1", 2, "draft", STATUS_COMPLETED, DRAFT_DONE)]
     assert p3.settled_frames() == []
+
+
+def test_run_span_settles_never_persist():
+    """落定即退役同律 (2026-09-29 用户拍板 — the run span joins the draft
+    law): start_run's settle (「已开工」) rides the live wire unchanged but
+    NEVER joins the durable history — the start speech (a persisted LLM
+    line) + the RunTaskList receipt are the settled evidence; the hollow
+    receipt row added nothing and read as noise on replay."""
+    p = ActivityProjector()
+    frames = _feed(p, "start_run", TerminalAccepted("start_run"))
+    assert _summary(frames) == [
+        ("a1", 1, "run", STATUS_ACTIVE, RUN),
+        ("a1", 2, "run", STATUS_COMPLETED, RUN_DONE),
+    ]
+    assert p.settled_frames() == []
+
+    p2 = ActivityProjector()
+    p2.name_known("start_run")
+    sweep = p2.sweep("completed")
+    assert _summary(sweep) == [("a1", 2, "run", STATUS_COMPLETED, RUN_DONE)]
+    assert p2.settled_frames() == []
 
 
 def test_settled_frames_empty_before_any_terminal():

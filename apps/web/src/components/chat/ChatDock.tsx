@@ -54,7 +54,7 @@ import { inferAssetType } from "@/lib/asset-type"
 import { streamAnswer, streamChat, StreamTurnError, questionSettledCode } from "@/lib/chat-stream"
 import type { ActivityFramePayload } from "@/lib/chat-stream"
 import type { CandidateEventPayload } from "@/lib/chatStreamFrames"
-import { buildConversationUnits, isDraftSpanRow, momentOf } from "@/lib/chatTimeline"
+import { buildConversationUnits, isDraftSpanRow, isRunSpanRow, momentOf } from "@/lib/chatTimeline"
 import {
   asCreditsInsufficient,
   type CreditsInsufficientDetail,
@@ -3784,7 +3784,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // (lib/chatTimeline's buildConversationUnits holds the same law).
     for (const a of allActivityRows) {
       if (a.status === "active") continue
-      if (isDraftSpanRow(a)) continue // 落定即退役 — the card is the evidence
+      // 落定即退役 — the card / start speech + receipt is the evidence
+      if (isDraftSpanRow(a) || isRunSpanRow(a)) continue
       timed.push({ t: momentOf(a.at), order: order++, unit: { kind: "activity", activity: a } })
     }
     // The run's end: the receipt (and the completion line after it) anchors

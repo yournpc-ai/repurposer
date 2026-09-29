@@ -50,6 +50,16 @@ export function isDraftSpanRow(a: ActivityFramePayload): boolean {
   return a.kind === "draft" && (a.key ?? "").startsWith("chat.activity.")
 }
 
+/** The run span's settle (「已开工」) is the same hollow shape (2026-09-29
+ * user ruling — 落定即退役同律): the start speech (ADR-093 §2, a persisted
+ * LLM line) and the RunTaskList receipt are the evidence; the settle row
+ * adds nothing and never carries a duration. The ACTIVE span (正在开工…)
+ * stays — it is the now-line's content during the start_run window. Same
+ * server twin: run settles ride the live wire but never persist. */
+export function isRunSpanRow(a: ActivityFramePayload): boolean {
+  return a.kind === "run" && (a.key ?? "").startsWith("chat.activity.")
+}
+
 /** The non-run timeline (S7: messages.at × activity.at 单流穿插): messages
  * and the turn's SETTLED activity rows interleave by real moment. Messages
  * claim the lower order numbers (they predate the turn's work); a
@@ -72,7 +82,7 @@ export function buildConversationUnits(
   }
   for (const a of activities) {
     if (a.status === "active") continue // the now-line owns the live row
-    if (isDraftSpanRow(a)) continue // 落定即退役 — the card is the evidence
+    if (isDraftSpanRow(a) || isRunSpanRow(a)) continue // 落定即退役 — the card / start speech + receipt is the evidence
     entries.push({ t: momentOf(a.at), order: order++, unit: { kind: "activity", activity: a } })
   }
   return orderMoments(entries)

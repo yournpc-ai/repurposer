@@ -134,4 +134,28 @@ describe("buildConversationUnits — the non-run single stream", () => {
       "reply",
     ])
   })
+
+  it("the run span's settle (「已开工」) never interleaves — 落定即退役同律 (2026-09-29); its ACTIVE span stays out of the walk too (the now-line owns it)", () => {
+    const runDone = {
+      ...activity("run-done", "2026-09-23T08:00:02Z"),
+      kind: "run" as const,
+      key: "chat.activity.runDone",
+    }
+    const runActive = {
+      ...activity("run-live", "2026-09-23T08:00:03Z"),
+      kind: "run" as const,
+      status: "active" as const,
+      key: "chat.activity.run",
+    }
+    const readDone = activity("read-done", "2026-09-23T08:00:04Z")
+    const units = buildConversationUnits(
+      [msg("user", "2026-09-23T08:00:00Z"), msg("reply", "2026-09-23T08:00:06Z")],
+      [runDone, runActive, readDone],
+    )
+    expect(units.map((u) => (u.kind === "message" ? u.message.id : u.activity.activity_id))).toEqual([
+      "user",
+      "read-done",
+      "reply",
+    ])
+  })
 })
