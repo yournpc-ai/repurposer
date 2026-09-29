@@ -32,6 +32,7 @@ import { outputMentionLabel } from "@/lib/mentions"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
+import { workspaceBornOf } from "@/lib/workspaceBorn"
 
 import type { IntentSlot, LifecycleStamp, Output, ProjectGraph, WorkflowStep, Project } from "@/lib/types"
 
@@ -240,30 +241,26 @@ function ProjectDetailPage() {
   const lifecycle = graph?.lifecycle ?? results?.lifecycle ?? null
   // workspaceBorn (Workspace 合同 v4.2 C3, 2026-09-26 封板): the desktop
   // world's flip condition is an INDEPENDENT presentation predicate — the
-  // first non-Source workspace entity exists in the graph PAST its queued
-  // placeholder (2026-09-28 user ruling: the upload-born transcript
-  // processing card sits `queued` with no content yet — it must NOT birth
-  // the canvas at the send beat; the birth lands when the transcript's
-  // text does (state flips done / failed — a terminal face with the truth
-  // in hand), so the canvas arrives WITH the content at the
-  // 已看完/正在理解 beat. Draft plan chains (K5) are unaffected — "draft"
-  // passes; run-time nodes only exist once the world is alive). Three
-  // facts stay separated: graph entity existence (data truth since
-  // upload, unchanged), this predicate (presentation — it can read
-  // another fact source without touching the data layer), and PLAN_READY
-  // (lifecycle projection, unchanged). Source nodes are read off the
-  // joined asset dossier (server: the dossier joins only on ORM
-  // type="asset"); legacy exploration rows (retired swim lane, v4.2 C1)
-  // never count — a candidate is not a workspace entity (and since C1
-  // they no longer arrive at all: production stopped, legacy rows are
+  // first non-Source workspace entity exists in the graph PAST its
+  // placeholder face, so the canvas arrives WITH the content. The per-face
+  // law lives in lib/workspaceBorn.ts (the upload-born transcript card is
+  // born `running` — its queued birth face retired 2026-09-28 — so the
+  // coarse state read fired at the send beat; the predicate reads its
+  // TERMINAL face instead). Three facts stay separated: graph entity
+  // existence (data truth since upload, unchanged), this predicate
+  // (presentation — it can read another fact source without touching the
+  // data layer), and PLAN_READY (lifecycle projection, unchanged). Source
+  // nodes are read off the joined asset dossier (server: the dossier joins
+  // only on ORM type="asset"); legacy exploration rows (retired swim lane,
+  // v4.2 C1) never count — a candidate is not a workspace entity (and since
+  // C1 they no longer arrive at all: production stopped, legacy rows are
   // read-filtered server-side).
   // 翻案注: this supersedes the 2026-09-02 形态机 / ADR-057 K5 flip
   // condition (`hasRuns || isPlanReady`) — the canvas is born when the
   // agent STARTS BUILDING the work world (T1), no longer waiting for the
   // first run or the plan's readiness.
   const hasRuns = latestRun != null
-  const workspaceBorn =
-    graph?.nodes.some((n) => n.asset == null && n.state !== "queued") ?? false
+  const workspaceBorn = workspaceBornOf(graph?.nodes)
   // The driver forks per surface (prohibition #13 — mobile has no canvas):
   // the desktop world morphs at workspaceBorn; mobile stays run-driven
   // (its confirm beat stays in the dock).
