@@ -1422,6 +1422,53 @@ async def test_settle_frames_never_moves_settled_history():
     assert writer.layout["x"] == 2 * 464
 
 
+@pytest.mark.asyncio
+async def test_island_corridor_clamps_when_same_batch_deeper_newborn():
+    """C6 廊道同批封死 (2026-09-29): the corridor clamp's scan must see the
+    batch's OWN newborns, not just settled history — a corridor reserved
+    while the same batch's chain continuation (the reframe below the
+    clips) is still invisible punches a permanently empty column into the
+    canvas on day one, inflating the deeper band's display rank and
+    leaving the column gaps uneven."""
+    asset = _node("asset", state="done", spec={"asset_type": "video"},
+                  layout={"x": 0, "y": 0, "w": 280, "h": 260})
+    t1 = _node("document", spec={"role": "transcript"})
+    t2 = _node("document", spec={"role": "transcript"})
+    clips = _node("generator", spec={"frame_class": "clip"})
+    edges = [
+        _edge(asset.id, t1.id, "audio"),
+        _edge(asset.id, t2.id, "audio"),
+        _edge(t1.id, clips.id, "text"),
+    ]
+    db = _StubDb(nodes=[asset], edges=edges)
+    islands: list = []
+    await settle_frames_with_edges(
+        [t1, t2, clips], [asset], edges, island_ctx=(db, _PROJECT_ID, islands),
+    )
+    assert len(islands) == 1
+    # The same-batch clips band is occupied → no horizontal claim is legal.
+    assert islands[0].cols == 1
+
+
+@pytest.mark.asyncio
+async def test_island_corridor_survives_when_no_deeper_band_occupied():
+    """The corridor's legal case: a sibling family with NOTHING deeper —
+    settled or same-batch — keeps its birth reservation for rightward
+    growth (⌈2/4⌉ + 1 廊道)."""
+    asset = _node("asset", state="done", spec={"asset_type": "video"},
+                  layout={"x": 0, "y": 0, "w": 280, "h": 260})
+    t1 = _node("document", spec={"role": "transcript"})
+    t2 = _node("document", spec={"role": "transcript"})
+    edges = [_edge(asset.id, t1.id, "audio"), _edge(asset.id, t2.id, "audio")]
+    db = _StubDb(nodes=[asset], edges=edges)
+    islands: list = []
+    await settle_frames_with_edges(
+        [t1, t2], [asset], edges, island_ctx=(db, _PROJECT_ID, islands),
+    )
+    assert len(islands) == 1
+    assert islands[0].cols == 2
+
+
 # ---- 词表 v3 门层 (ADR-076, C2a): 媒介五值 + legacy 容忍 ---------------------
 
 

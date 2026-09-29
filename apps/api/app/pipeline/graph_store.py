@@ -611,14 +611,20 @@ async def _assign_islands(
         )
         return max(bottoms) if bottoms else None
 
-    deeper_placed: dict[int, bool] = {}
+    deeper_occupied: dict[int, bool] = {}
 
-    def deeper_band_settled(d: int) -> bool:
-        if d not in deeper_placed:
-            deeper_placed[d] = any(
-                depth_of(UUID(str(n.id)), set()) > d for n in placed
+    def deeper_band_occupied(d: int) -> bool:
+        # The scan covers the batch's own newborns, not just settled
+        # history: a corridor reserved while the same batch's chain
+        # continuation (e.g. the reframe below the clips) is still
+        # invisible would punch a permanently empty column into the
+        # canvas on day one (2026-09-29 — 同批更深节点同样封死廊道).
+        if d not in deeper_occupied:
+            deeper_occupied[d] = any(
+                depth_of(UUID(str(n.id)), set()) > d
+                for n in [*placed, *newborns]
             )
-        return deeper_placed[d]
+        return deeper_occupied[d]
 
     # Group the newborns into sibling families (depth-first determinism).
     families: dict[tuple[int, tuple[str, ...]], list[GraphNode]] = {}
@@ -655,7 +661,7 @@ async def _assign_islands(
         if len(family) < 2 and not siblings:
             continue  # a lone newborn at an empty seat — the plain column law
         count = len(family) + len(siblings)
-        if deeper_band_settled(d):
+        if deeper_band_occupied(d):
             # The corridor is a BIRTH reservation: deeper bands already
             # settled → no horizontal claim is legal; growth extends the
             # single column downward (the contact-sheet stopgap seat).
