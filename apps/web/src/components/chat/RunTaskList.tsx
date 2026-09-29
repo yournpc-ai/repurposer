@@ -20,7 +20,7 @@
  * kind→copy dictionaries. The only frontend copy left is the PROGRESSIVE
  * fallback (stage hints / kind progressive) for the live narrative. */
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import type { TFunction } from "i18next"
 import { Check, CircleHelp, Loader2, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -116,17 +116,16 @@ export function RunTaskList({
   const { t } = useTranslation()
   const now = useNow(!terminal)
   const { running, label: narrativeLabel } = runNarrative(steps, t, hasUploads)
-  // 排队词的诚实窗 (2026-09-29 走查实修): the queued/transcribing fallback
-  // speaks only while the run genuinely hasn't started (every step still
-  // pending). A between-steps handoff gap (previous committed, next not yet
-  // claimed — worker tick + SSE tail) holds the LAST narrative instead of
-  // flashing 「正在排队」 mid-run — the run is not queued, it is advancing.
-  const lastNarrativeRef = useRef<string | null>(null)
-  if (narrativeLabel) lastNarrativeRef.current = narrativeLabel
+  // 交接缝的措辞 (2026-09-29 走查拍板): a between-steps gap (previous
+  // committed, next not yet claimed — worker tick + SSE tail) reads the
+  // plain thinking word — not the queued fallback (the run IS advancing,
+  // 「正在排队」 is a lie mid-run). The genuinely-unstarted run (every step
+  // still pending) keeps the caller's fallback (assets processing / truly
+  // queued — truthful there).
   const runStarted = steps.some((s) => s.status !== "pending")
   const liveLabel =
     narrativeLabel ??
-    (runStarted ? lastNarrativeRef.current : null) ??
+    (runStarted ? t("chat.thinking") : null) ??
     narrativeFallback
   const startedMs = runStartedAt ? Date.parse(runStartedAt) : null
   // The archive frame (mounting an already-terminal run) has no ticking
