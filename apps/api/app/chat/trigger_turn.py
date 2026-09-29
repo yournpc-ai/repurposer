@@ -253,6 +253,35 @@ trigger_agent = ToolLoopAgent(
 )
 
 
+def _wrap_up_rejection(trigger: str, suggestions: list[SuggestionItem]) -> str | None:
+    """wrap_up 边界护栏 (2026-09-30 用户拍板 — execute_guardrail 同族):
+    the suggestions count is checked against the trigger's journey law
+    BEFORE the turn may close — a violation rejects back into the loop
+    (the model self-repairs; the user only ever sees the repaired turn).
+
+    - ``understanding_warmed``: hard floor of 1 — the turn fires exactly
+      because the understanding LANDED, so there is always a next step to
+      offer (the prompt's own law: gaps → suggestions; the material's
+      gaps are themselves groundable options). Zero options strands the
+      user at a promised-but-missing dock (the 「下一张卡片里挑一个」
+      broken promise, live-observed 2026-09-29).
+    - ``run_completed``: hard ceiling of 0 — the completed work's next
+      move rides the closing sentence, never a dock (prompt law)."""
+    if trigger == TRIGGER_UNDERSTANDING and not suggestions:
+        return (
+            "zero options strands the user — your verdict named a direction, "
+            "so make it pickable: pass 1-3 options grounded in what you read "
+            "(a gap in the material is itself an option — name the fix). "
+            "Call wrap_up again with suggestions."
+        )
+    if trigger == TRIGGER_RUN_COMPLETED and suggestions:
+        return (
+            "on run_completed the next move rides your closing sentence, "
+            "never a dock — call wrap_up again with suggestions=[]."
+        )
+    return None
+
+
 def _trigger_dump(
     trigger: str, ref: str, suggestions: list[SuggestionItem]
 ) -> dict[str, Any]:
@@ -462,6 +491,9 @@ async def run_trigger_turn(
                         "an empty review says nothing — speak your judgment "
                         "as your message text, then call wrap_up."
                     )
+                rejection = _wrap_up_rejection(trigger, params.suggestions)
+                if rejection is not None:
+                    return rejection
                 outcome["suggestions"] = params.suggestions
                 return None
 

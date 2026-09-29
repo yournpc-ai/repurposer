@@ -36,8 +36,10 @@ from app.chat.trigger_turn import (
     _trigger_admission,
     _trigger_dump,
     _trigger_language,
+    _wrap_up_rejection,
     trigger_agent,
 )
+from app.pipeline.trigger_events import TRIGGER_RUN_COMPLETED, TRIGGER_UNDERSTANDING
 from app.models.schemas import SuggestionItem, WrapUpArgs
 from app.models.tables import Conversation, Message, WorkflowRun
 from app.pipeline.trigger_events import (
@@ -126,6 +128,34 @@ class TestWrapUpArgs:
     def test_unknown_keys_reject(self) -> None:
         with pytest.raises(ValidationError):
             WrapUpArgs.model_validate({"suggestionz": []})
+
+
+class TestWrapUpGuardrail:
+    """wrap_up 边界护栏 (2026-09-30 用户拍板 — execute_guardrail 同族):
+    suggestions 数对 trigger 旅程法的真值表 — understanding_warmed 硬地板
+    ≥1(零选项 = 「下一张卡片里挑一个」断约,live 实证 2026-09-29),
+    run_completed 硬顶 =0(下一步在收尾句,永不在 dock)。"""
+
+    def test_understanding_warmed_rejects_zero_options(self) -> None:
+        rejection = _wrap_up_rejection(TRIGGER_UNDERSTANDING, [])
+        assert rejection is not None and "wrap_up" in rejection
+
+    def test_understanding_warmed_passes_one_to_three(self) -> None:
+        items = WrapUpArgs.model_validate({"suggestions": ["做一条金句短片"]}).suggestions
+        assert _wrap_up_rejection(TRIGGER_UNDERSTANDING, items) is None
+
+    def test_run_completed_rejects_any_option(self) -> None:
+        items = WrapUpArgs.model_validate({"suggestions": ["再做一条"]}).suggestions
+        rejection = _wrap_up_rejection(TRIGGER_RUN_COMPLETED, items)
+        assert rejection is not None and "suggestions=[]" in rejection
+
+    def test_run_completed_passes_empty(self) -> None:
+        assert _wrap_up_rejection(TRIGGER_RUN_COMPLETED, []) is None
+
+    def test_other_triggers_unpoliced(self) -> None:
+        # 护栏只管有法在身的两个 trigger — 未来新 trigger 默认自由,
+        # 立法时才进表(不过度设计律)。
+        assert _wrap_up_rejection("some_future_trigger", []) is None
 
 
 class TestSuggestionsPayload:
