@@ -291,11 +291,14 @@ export interface FlowViewProps {
    * timed-out) — the surface clears its state. */
   onCameraBeatConsumed?: () => void
   /** 「把当前操作元素移到画布中心」 (v4.2 未覆盖 #3, 2026-09-26 拍板): a
-   * ONE-SHOT explicit centering request naming the node cluster —
-   * pan-locked-zoom, same shields as the beats. The camera capability any
-   * surface (or a future agent-driven caller) summons; zero chrome of its
-   * own. 2026-09-29 起同时承接 dock 路径的确定性新生簇聚焦 (nodeIds = the
-   * diffed newborn ids; a singleton for the single-node gesture). */
+   * ONE-SHOT explicit centering request naming the node cluster. ONE id =
+   * pan-locked-zoom centering; MULTIPLE ids = ONE safe-region fit
+   * (2026-09-30 簇适应窗口拍板 — the sole auto zoom change besides the
+   * settle/mount framing, dock-path only). Same shields as the beats. The
+   * camera capability any surface (or a future agent-driven caller)
+   * summons; zero chrome of its own. 2026-09-29 起同时承接 dock 路径的
+   * 确定性新生簇聚焦 (nodeIds = the diffed newborn ids; a singleton for
+   * the single-node gesture). */
   centerRequest?: { token: number; nodeIds: string[] } | null
   /** The centering request was spent (centered / node gone / shielded) —
    * the surface clears its state. */

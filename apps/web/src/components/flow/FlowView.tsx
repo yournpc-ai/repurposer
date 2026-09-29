@@ -31,7 +31,7 @@ import "./flow.css"
 
 import { FlowEdge, type FlowEdgeType } from "./FlowEdge"
 import { FlowNodeCard, nodeRenderActive, type FlowCardNode } from "./FlowNodeCard"
-import { cameraPanDelta, framesBBoxCenter } from "./camera"
+import { cameraPanDelta, clusterGesture } from "./camera"
 import { BIRTH_STAGGER_MS, declaredHandles, flowNodeSize, layoutFlow } from "./layout"
 import type { FlowGroup, FlowNode, FlowViewProps, GraphEdgeType, OutPortType } from "./types"
 
@@ -227,7 +227,9 @@ function ViewportController({
  * - 同步到达 (plan dock / bail / upload-born cards): the caller's own
  *   fetchGraph response IS the arrival — the route diffs the newborn ids
  *   off it and fires a centerRequest naming the cluster (「聚焦新生簇」:
- *   bbox center, zoom locked). Zero token window, zero delta race.
+ *   ONE card centers zoom-locked; a MULTI-card cluster takes ONE
+ *   safe-region fit — 2026-09-30 拍板, a station chain's bbox center at a
+ *   locked zoom is empty canvas). Zero token window, zero delta race.
  * - 异步到达 (run fills / harvest landings over SSE): this token machine
  *   arms a beat and ensure-in-view pans (minimally, zoom locked) when the
  *   id/output delta lands — is the current operation's target inside the
@@ -236,11 +238,13 @@ function ViewportController({
  *   readable region.
  * Zoom: NEVER auto-changes — the fit/fitNow beats are deleted (the
  * 2026-09-25 confirm-pill whole-chain fitNow was reversed 2026-09-26 in
- * favor of the sealed contract; the sole automatic fit remains the
- * Workspace Birth's initial settle framing, owned by the mount, not by
- * this machine — and even THAT is skipped when the world was born at a
- * preserved viewport: the heal remount keeps the camera perfectly still,
- * 2026-09-29 完工零跳动).
+ * favor of the sealed contract). TWO bounded exceptions, both user-initiated
+ * beats: ① the Workspace Birth's initial settle framing (owned by the mount,
+ * not by this machine — and even THAT is skipped when the world was born at
+ * a preserved viewport: the heal remount keeps the camera perfectly still,
+ * 2026-09-29 完工零跳动); ② the dock path's MULTI-card cluster fit
+ * (2026-09-30 簇适应窗口 — cluster-bounded, one shot per request; background
+ * arrivals never fit).
  * Guards:
  * - 手势防护: a user drag/zoom within the last 3s shields the beat (they
  *   grabbed the canvas mid-flight — don't fight the hand);
@@ -347,10 +351,13 @@ function CameraBeats({
   }, [beat, onConsumed])
 
   // 「移到画布中心」— the explicit centering gesture: one shot on arrival,
-  // zoom locked, the same shields as the ambient beats. The target is a
-  // CLUSTER (one id = the single-element case): the bbox center is the
-  // fitView centering math minus the zoom change (2026-09-29 聚焦新生簇拍板).
-  // Every id having left the canvas spends the request silently.
+  // the same shields as the ambient beats. The target is a CLUSTER: ONE id
+  // centers zoom-locked (the 2026-09-29 聚焦新生簇 shape); MULTIPLE ids get
+  // ONE safe-region fit (2026-09-30 用户拍板 — a dispersed station chain's
+  // bbox center at a locked zoom is empty canvas, and the dock moment's job
+  // is seeing the whole newborn plan; the ONLY auto zoom change outside the
+  // settle/mount framing, dock-path only). Every id having left the canvas
+  // spends the request silently.
   useEffect(() => {
     if (!centerRequest) return
     const el = wrapperRef.current
@@ -358,22 +365,40 @@ function CameraBeats({
     if (Date.now() - lastGestureRef.current < GESTURE_SHIELD_MS) {
       return onCenterConsumed?.()
     }
-    const center = framesBBoxCenter(renderedFrames(centerRequest.nodeIds))
-    if (!center) return onCenterConsumed?.()
+    const gesture = clusterGesture(renderedFrames(centerRequest.nodeIds))
+    if (!gesture) return onCenterConsumed?.()
     const reduce =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-    const zoom = rf.getViewport().zoom
-    // 遮挡补偿: center the cluster in the VISIBLE region — anchoring the
-    // world point half an occlusion RIGHT of the cluster's center puts it
-    // half an occlusion LEFT of the viewport center (world px = screen px /
-    // zoom).
-    panLockedCenter(
-      rf,
-      center.cx + occludedRightPx / 2 / zoom,
-      center.cy,
-      reduce ? 0 : 400,
-    )
+    const duration = reduce ? 0 : 400
+    if (gesture.kind === "center") {
+      const zoom = rf.getViewport().zoom
+      // 遮挡补偿: center the card in the VISIBLE region — anchoring the
+      // world point half an occlusion RIGHT of the card's center puts it
+      // half an occlusion LEFT of the viewport center (world px = screen px
+      // / zoom).
+      panLockedCenter(rf, gesture.cx + occludedRightPx / 2 / zoom, gesture.cy, duration)
+    } else {
+      // 簇适应窗口: the fitInSafeRegion math with the cluster's own bounds —
+      // getViewportForBounds centers in the GIVEN width, so the safe width
+      // frames the cluster clear of the docked panel's frost.
+      const b = gesture.bounds
+      const rect = { x: b.minX, y: b.minY, width: b.maxX - b.minX, height: b.maxY - b.minY }
+      const safeW = el.clientWidth - occludedRightPx
+      if (occludedRightPx > 0 && safeW > 0) {
+        const vp = getViewportForBounds(
+          rect,
+          safeW,
+          el.clientHeight,
+          FIT_VIEW_OPTIONS.minZoom,
+          FIT_VIEW_OPTIONS.maxZoom,
+          FIT_VIEW_OPTIONS.padding,
+        )
+        void rf.setViewport(vp, { duration })
+      } else {
+        void rf.fitBounds(rect, { ...FIT_VIEW_OPTIONS, duration })
+      }
+    }
     onCenterConsumed?.()
   }, [centerRequest, renderedFrames, rf, wrapperRef, occludedRightPx, lastGestureRef, onCenterConsumed])
 

@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest"
 
-import { cameraPanDelta, framesBBoxCenter } from "./camera"
+import { cameraPanDelta, clusterGesture } from "./camera"
 
 const SAFE = { left: 100, top: 100, right: 900, bottom: 700 }
 
@@ -72,23 +72,30 @@ describe("cameraPanDelta", () => {
   })
 })
 
-describe("framesBBoxCenter", () => {
+describe("clusterGesture", () => {
   it("empty cluster → null (the caller spends the request silently)", () => {
-    expect(framesBBoxCenter([])).toBeNull()
+    expect(clusterGesture([])).toBeNull()
   })
 
-  it("a single frame centers on itself", () => {
-    expect(framesBBoxCenter([{ x: 100, y: 50, w: 280, h: 660 }])).toEqual({
+  it("a single card → zoom-locked CENTER on itself", () => {
+    expect(clusterGesture([{ x: 100, y: 50, w: 280, h: 660 }])).toEqual({
+      kind: "center",
       cx: 240,
       cy: 380,
     })
   })
 
-  it("a cluster centers on its union bbox (the fitView centering math, zoom untouched)", () => {
-    const center = framesBBoxCenter([
-      { x: 524, y: 588, w: 280, h: 660 },
-      { x: 1572, y: 500, w: 280, h: 660 },
+  it("multiple cards → FIT over the union bounds (2026-09-30 簇适应窗口拍板)", () => {
+    // The image-#66 cluster: a station chain spread by the island cell +
+    // fresh-column rise — bbox-center at a locked zoom was empty canvas.
+    const gesture = clusterGesture([
+      { x: 524, y: 588, w: 280, h: 660 }, // Clips (island cell, seq 1)
+      { x: 1048, y: -176, w: 340, h: 560 }, // the doc companion station
+      { x: 1572, y: -264, w: 280, h: 660 }, // the translate station
     ])
-    expect(center).toEqual({ cx: (524 + 1852) / 2, cy: (500 + 1248) / 2 })
+    expect(gesture).toEqual({
+      kind: "fit",
+      bounds: { minX: 524, minY: -264, maxX: 1852, maxY: 1248 },
+    })
   })
 })

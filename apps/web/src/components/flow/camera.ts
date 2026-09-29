@@ -47,14 +47,28 @@ export function cameraPanDelta(bbox: Bbox, safe: SafeRect): { dx: number; dy: nu
   return { dx, dy }
 }
 
-/** The bbox center of a frame cluster in world coords — the 「聚焦新生簇」
- * target point (2026-09-29 用户拍板): the same centering math fitView uses
- * for 适应窗口, minus the zoom change (zoom never auto-changes — C5). Null
+/** The dock-path cluster gesture (2026-09-30 用户拍板 — 簇可见性 > zoom
+ * 守恒, 仅此一扇门): a SINGLE newborn card centers zoom-locked (the 聚焦
+ * 新生簇 shape); a MULTI-card cluster gets ONE fit — a dispersed station
+ * chain's bbox center at a locked zoom is empty canvas (the island cell +
+ * fresh-column rise spread a chain beyond the viewport — 2–4 nodes per
+ * plan is the NORM, so the bbox convergence was reliably wrong), and the
+ * dock moment's job is reviewing the whole newborn plan. This fit is the
+ * ONLY automatic zoom change besides the settle/mount framing — scoped to
+ * user-initiated dock arrivals; background beats stay ensure-in-view. Null
  * on an empty cluster (the caller spends the request silently). */
-export function framesBBoxCenter(
+export type ClusterGesture =
+  | { kind: "center"; cx: number; cy: number }
+  | { kind: "fit"; bounds: Bbox }
+
+export function clusterGesture(
   frames: { x: number; y: number; w: number; h: number }[],
-): { cx: number; cy: number } | null {
+): ClusterGesture | null {
   if (frames.length === 0) return null
+  if (frames.length === 1) {
+    const f = frames[0]
+    return { kind: "center", cx: f.x + f.w / 2, cy: f.y + f.h / 2 }
+  }
   let minX = Infinity
   let minY = Infinity
   let maxX = -Infinity
@@ -65,5 +79,5 @@ export function framesBBoxCenter(
     maxX = Math.max(maxX, f.x + f.w)
     maxY = Math.max(maxY, f.y + f.h)
   }
-  return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 }
+  return { kind: "fit", bounds: { minX, minY, maxX, maxY } }
 }
