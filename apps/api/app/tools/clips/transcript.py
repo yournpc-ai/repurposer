@@ -35,12 +35,19 @@ def _timed_words(words: list[dict[str, Any]], max_words: int) -> list[dict[str, 
     return [w for w in words[:max_words] if str(w.get("word") or "").strip()]
 
 
-def group_cues(words: list[dict[str, Any]], max_words: int = 12000) -> tuple[list[Cue], bool]:
+def group_cues(
+    words: list[dict[str, Any]], max_words: int = 12000, *, raw_words: bool = False
+) -> tuple[list[Cue], bool]:
     """Group word-level timestamps into cues (the ONE grouping law).
 
     Args:
         words: ASR output as ``{"word", "start", "end"}`` dicts (seconds).
         max_words: Hard cap on covered words (~90 min of speech).
+        raw_words: Cue text joins the RAW word tokens (ASR tokens carry
+            their script's own spacing — Latin tokens lead with a space,
+            CJK concatenate bare) instead of the stripped, space-joined
+            prompt form. The transcript card's display face reads this way;
+            the prompt surface keeps the default (byte-stable).
 
     Returns:
         ``(cues, truncated)`` — cues in timeline order; ``truncated`` says
@@ -55,15 +62,18 @@ def group_cues(words: list[dict[str, Any]], max_words: int = 12000) -> tuple[lis
 
     def _flush() -> None:
         if line_words:
-            cues.append(
-                Cue(start=line_start, end=line_end, text=" ".join(line_words))
+            joined = (
+                "".join(line_words).strip()
+                if raw_words
+                else " ".join(line_words)
             )
+            cues.append(Cue(start=line_start, end=line_end, text=joined))
 
     for i, w in enumerate(timed):
         text = str(w.get("word") or "").strip()
         if not line_words:
             line_start = float(w.get("start") or 0.0)
-        line_words.append(text)
+        line_words.append(str(w.get("word") or "") if raw_words else text)
         line_end = float(w.get("end") or line_start)
         nxt = timed[i + 1] if i + 1 < len(timed) else None
         if (

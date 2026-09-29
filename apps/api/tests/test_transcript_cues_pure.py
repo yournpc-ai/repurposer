@@ -7,6 +7,9 @@ Gated here:
   grouping law) — the prompt surface must not have moved a byte. The
   pre-extraction implementation is inlined below as the reference oracle
   (zero-hypothesis discipline: re-prove, never trust the refactor).
+- **raw_words**: the transcript card's ticked display face reads cue text
+  joined from RAW tokens (script-own spacing); boundaries stay the shared
+  law's, the default prompt form stays byte-stable.
 - **search_cues**: deterministic keyword retrieval — case-folded,
   CJK-safe, distinct-term scoring, timeline tie-break, honest total.
 - **words_in_range / speaker_at**: the evidence-validation and segment-read
@@ -130,6 +133,50 @@ class TestAnchoredByteStability:
             {"start": 0.0, "end": 0.9, "text": "Hello there."},
             {"start": 1.0, "end": 1.5, "text": "Pricing"},
         ]
+
+
+class TestGroupCuesRawWords:
+    """raw_words=True (the transcript card's ticked display face, 2026-09-29):
+    cue text joins the RAW ASR tokens — they carry their script's own
+    spacing — while the boundaries stay the ONE grouping law's."""
+
+    def test_latin_tokens_carry_their_own_spacing(self) -> None:
+        words = _words(
+            (" Hello", 0.0, 0.4),
+            (" there.", 0.5, 0.9),
+            (" Pricing", 1.0, 1.5),
+        )
+        cues, _ = group_cues(words, raw_words=True)
+        assert [c["text"] for c in cues] == ["Hello there.", "Pricing"]
+
+    def test_cjk_tokens_concatenate_bare(self) -> None:
+        words = _words(
+            ("我们", 0.0, 0.4),
+            ("今天", 0.4, 0.7),
+            ("聊定价。", 0.7, 1.2),
+            ("然后", 1.3, 1.6),
+        )
+        cues, _ = group_cues(words, raw_words=True)
+        assert [c["text"] for c in cues] == ["我们今天聊定价。", "然后"]
+
+    def test_boundaries_match_the_default_grouping(self) -> None:
+        words = _words(
+            (" Hello", 0.0, 0.4),
+            (" there.", 0.5, 0.9),
+            ("我们", 1.0, 1.4),
+            ("今天", 3.0, 3.4),  # pause > 0.8s breaks the line
+        )
+        default_cues, _ = group_cues(words)
+        raw_cues, _ = group_cues(words, raw_words=True)
+        assert [(c["start"], c["end"]) for c in raw_cues] == [
+            (c["start"], c["end"]) for c in default_cues
+        ]
+
+    def test_whitespace_words_still_filtered(self) -> None:
+        cues, _ = group_cues(
+            _words(("  ", 0.0, 0.3), (" 词", 0.3, 0.6)), raw_words=True
+        )
+        assert [c["text"] for c in cues] == ["词"]
 
 
 class TestSearchCues:

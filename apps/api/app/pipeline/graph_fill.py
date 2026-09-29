@@ -67,6 +67,7 @@ from app.pipeline.graph_store import (
 )
 from app.pipeline.outputs import compose_spec_prompt
 from app.tools.captions.procedure import TRANSLATION_ARTIFACT_KEY
+from app.tools.clips.transcript import group_cues
 
 logger = structlog.get_logger()
 
@@ -343,6 +344,12 @@ async def stamp_transcript_node(
     and flips to ``done`` when the text lands (the completion path
     re-enters this same function), to ``failed`` if processing fails.
     Asset types without a text yield (image / voice_sample) never birth one.
+
+    时间刻度 (2026-09-29 用户拍板 — 译文稿同形): word-timestamped assets
+    (video / audio) also carry ``spec.cued_text`` — the same text baked as
+    `start–end text` cue lines. A DISPLAY layer only: the card prefers it
+    under the edit overlay, the in-place edit surface (C4) keeps editing
+    the plain ``spec.text`` — ticks never enter the textarea.
     """
     text = asset.transcript or asset.extracted_text
     status = str(
@@ -367,8 +374,20 @@ async def stamp_transcript_node(
         )
     ).scalar_one_or_none()
     if existing is not None:
-        if text and (existing.spec or {}).get("text") != text:
-            existing.spec = {**(existing.spec or {}), "text": text}
+        spec_now = existing.spec or {}
+        cued = _transcript_cued_text((asset.meta or {}).get("words"))
+        spec_next = dict(spec_now)
+        if text and spec_now.get("text") != text:
+            spec_next["text"] = text
+        # The ticked display layer refreshes with the words (reprocess
+        # replaces meta wholesale); text-yielding assets without word
+        # timestamps (paste / extraction) carry no cued_text at all.
+        if cued is None:
+            spec_next.pop("cued_text", None)
+        else:
+            spec_next["cued_text"] = cued
+        if spec_next != spec_now:
+            existing.spec = spec_next
         # State follows ASR: text landed → done; processing failed → failed
         # (the 卡内红 face); completed without words (silence / empty
         # extraction) → done with an empty body, never a perpetual loading
@@ -385,6 +404,9 @@ async def stamp_transcript_node(
     spec: dict = {"role": _TRANSCRIPT_ROLE, "asset_id": str(asset.id)}
     if text:
         spec["text"] = text
+        cued = _transcript_cued_text((asset.meta or {}).get("words"))
+        if cued:
+            spec["cued_text"] = cued
     delta = await apply_wiring_ops(
         db,
         project_id,
@@ -1457,6 +1479,24 @@ def _fmt_cue_time(seconds: Any) -> str:
     except (TypeError, ValueError):
         total = 0
     return f"{total // 60}:{total % 60:02d}"
+
+
+def _transcript_cued_text(words: Any) -> str | None:
+    """The transcript doc's ticked display face (译文稿同形, 2026-09-29 用户
+    拍板): ASR words baked as `start–end text` cue lines — boundaries from
+    ``group_cues`` (the ONE grouping law), text raw-joined (a space-join
+    would shred Chinese). Rides ``spec.cued_text`` — a DISPLAY layer next
+    to the source mirror: the in-place edit surface (C4) keeps editing the
+    plain ``spec.text``/overlay, ticks never enter the textarea."""
+    if not isinstance(words, list) or not words:
+        return None
+    cues, _truncated = group_cues(words, raw_words=True)
+    lines = [
+        f"{_fmt_cue_time(c['start'])}–{_fmt_cue_time(c['end'])} {c['text']}"
+        for c in cues
+        if c["text"]
+    ]
+    return "\n".join(lines) or None
 
 
 def _translation_artifact_text(artifact: Any) -> str | None:

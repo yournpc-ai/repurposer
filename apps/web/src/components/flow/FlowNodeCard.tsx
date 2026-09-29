@@ -539,13 +539,20 @@ function DocumentCard({
     output && typeof (output.payload as { content?: unknown } | undefined)?.content === "string"
       ? ((output.payload as { content: string }).content || null)
       : null
-  // Transcript 双层 (Workspace 合同 v4.2 C4): the display text = the user's
-  // edited overlay when present, the source mirror otherwise. The overlay
-  // is presentation only — the source transcript / word evidence / ranges
-  // never move (no code path reverse-computes a timecode from this text).
+  // Transcript 三层 (Workspace 合同 v4.2 C4 + 2026-09-29 刻度层): the
+  // display text = the user's edited overlay when present, else the ticked
+  // cue-line bake (cued_text — 译文稿同形, the ASR words' display face),
+  // else the plain source mirror. The overlay is presentation only — the
+  // source transcript / word evidence / ranges never move (no code path
+  // reverse-computes a timecode from this text). The edit surface keeps
+  // editing the PLAIN layer (editedText ?? spec.text) — the tick chrome
+  // never enters the textarea; a saved overlay (the user's own words, no
+  // honest tick alignment) reads unticked.
   const editedText =
     typeof node.spec?.edited_text === "string" ? node.spec.edited_text : null
-  const bodyText = shownContent ?? editedText ?? node.spec?.text
+  const cuedText =
+    typeof node.spec?.cued_text === "string" ? node.spec.cued_text : null
+  const bodyText = shownContent ?? editedText ?? cuedText ?? node.spec?.text
   // 卡内就地编辑 (C4, 用户拍板 2026-09-26): the transcript document's body
   // IS the edit surface —「可编辑」不是编辑模式，零新 chrome (合同 Δ2).
   // The write rides the surface's deterministic channel (one code-built
