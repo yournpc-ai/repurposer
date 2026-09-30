@@ -5,15 +5,19 @@ op application + baseline lazy-creation + drift self-healing + hash chain, in
 one transaction per batch. undo/redo never delete rows — ``undone_at`` only.
 """
 
+import json
 import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from pydantic import ValidationError
+from sqlalchemy import cast, func, select, update
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import array as pg_array
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.schemas import RenderStatus, canonical_json_hash
+from app.models.schemas import ClipSpec, RenderStatus, canonical_json_hash
 from app.models.tables import Operation, Output
 from app.operations.registry import OP_REGISTRY, SOURCE_REGISTRY, validate_op
 from app.pipeline.outputs import VersionSwitchRejected, plan_version_switch
@@ -267,25 +271,75 @@ async def apply_precomputed(
     user_id: UUID | None = None,
 ) -> Operation:
     """Journal an LLM-backed op whose endpoint already computed the new spec
-    (translate_captions / set_dub). The endpoint commits; this flushes."""
+    (translate_captions / set_dub / remove_filler / reframe_clip).
+
+    Track-atomic write (ADR-096 §5): only the op's declared ``writes`` fields
+    land, one jsonb_set per field on the LOCKED row — a morph whose new_spec
+    base went stale during its compute pass (a parallel morph committed
+    another track meanwhile) never clobbers that track; same-track writers
+    serialize on the row lock. The merged whole is revalidated
+    (``ClipSpec.model_validate``) so cross-track joint invariants hold
+    before anything lands. The endpoint commits; this flushes."""
     try:
         normalized = validate_op(op, params, client=True)
     except (KeyError, ValueError) as e:
         raise OpRejected(str(e)) from e
-    if not OP_REGISTRY[op].precomputed:
+    opdef = OP_REGISTRY[op]
+    if not opdef.precomputed:
         raise OpRejected(f"op '{op}' is not precomputed")
+    fields = opdef.writes
+    if not fields or "*" in fields:
+        raise OpRejected(f"op '{op}' has no track-scoped write declaration")
 
     locked = await _lock_output(db, output.id)
     existing = await _ops_for_output(db, output.id)
     next_seq = await _ensure_chain(db, locked, existing, source, user_id)
 
-    row = _insert_row(
-        db, locked, next_seq, op, normalized, new_spec, source, user_id, None
+    landed = merge_declared_fields(locked.render_spec or {}, new_spec, fields, op=op)
+    # One UPDATE, one jsonb_set per declared field — never a Python
+    # read-modify-write of the whole blob (the step_display discipline).
+    expr = Output.render_spec
+    for f in fields:
+        expr = func.jsonb_set(
+            expr, pg_array([f]), cast(json.dumps(landed[f]), JSONB), True
+        )
+    await db.execute(
+        update(Output).where(Output.id == locked.id).values(render_spec=expr)
     )
-    locked.render_spec = new_spec
+    row = _insert_row(
+        db, locked, next_seq, op, normalized, landed, source, user_id, None
+    )
+    # The jsonb_set chain owns the column write; expire so any later in-tx
+    # read reloads the landed value instead of the pre-write snapshot.
+    db.expire(locked, ["render_spec"])
     locked.updated_at = datetime.now(UTC)
     await db.flush()
     return row
+
+
+def merge_declared_fields(
+    base: dict, new_spec: dict, fields: tuple[str, ...], *, op: str
+) -> dict:
+    """The track-atomic merge kernel (ADR-096 §5), pure for the test suite.
+
+    Overlay only the op's declared write fields onto the locked row's live
+    spec, then revalidate the merged whole — the returned dict is exactly
+    what the DB write lands and the journal records (validated per-field
+    values over the untouched live base). A declared field missing from
+    new_spec is a caller bug (explicit None is a write — nulling a track);
+    a merged spec violating cross-track invariants refuses outright."""
+    missing = [f for f in fields if f not in new_spec]
+    if missing:
+        raise OpRejected(
+            f"op '{op}' new_spec is missing its declared write field(s): "
+            + ", ".join(missing)
+        )
+    merged = {**base, **{f: new_spec[f] for f in fields}}
+    try:
+        landed = ClipSpec.model_validate(merged).model_dump(mode="json")
+    except ValidationError as e:
+        raise OpRejected(f"op '{op}' merged spec failed validation: {e}") from e
+    return {**base, **{f: landed[f] for f in fields}}
 
 
 async def undo(db: AsyncSession, output_id: UUID) -> Output:

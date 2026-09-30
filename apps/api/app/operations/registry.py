@@ -501,7 +501,14 @@ OP_REGISTRY: dict[str, OpDef] = {
         TranslateCaptionsParams, None, precomputed=True,
         writes=("caption_track", "translation_track", "title", "target_language"),
     ),
-    "set_dub": OpDef(SetDubParams, None, precomputed=True, writes=("dub",)),
+    "set_dub": OpDef(
+        SetDubParams, None, precomputed=True,
+        # synthesize_dub re-times the caption track onto the dub and
+        # translates the title along — the declaration names every field
+        # the procedure lands, or the track-atomic merge (ADR-096 §5)
+        # would silently drop them.
+        writes=("dub", "caption_track", "title", "target_language"),
+    ),
     "remove_filler": OpDef(
         RemoveFillerOpParams, None, precomputed=True,
         writes=("segments", "caption_track"),
