@@ -4,6 +4,7 @@ clips a modifier acts on, journal the spec write, fan out one render step per
 touched output.
 """
 
+from collections.abc import Iterable
 from uuid import UUID
 
 from sqlalchemy import cast, delete, func, or_, select, update
@@ -47,8 +48,26 @@ async def render_step_label(db: AsyncSession, run: WorkflowRun) -> str | None:
     return render_cls.label(None, ui_lang_of(run, project))
 
 
+# Step statuses in which a later morph can still WRITE (re-pend + fan out a
+# render): pending/running are in flight; waiting (direction interrupt /
+# verify escalation park) revives via resume_waiting_interrupt. Terminal
+# states (done/failed/skipped) never write again — deferring a render to a
+# terminal morph strands it with no owner (the black-card incident, ADR-096
+# §2 D2-status).
+_ACTIVE_MORPH_STATUSES = ("pending", "running", "waiting")
+
+
+def later_active_morph_exists(statuses: Iterable[str]) -> bool:
+    """Pure fold of the defer law (ADR-096 §2): a later morph owns the render
+    only while its step can still write — any status in
+    ``_ACTIVE_MORPH_STATUSES``. The SQL seat filters the structural
+    eligibility (run / kind / seq / fork / scope); this is the status half."""
+    return any(s in _ACTIVE_MORPH_STATUSES for s in statuses)
+
+
 async def later_inplace_morph_exists(db: AsyncSession, run: WorkflowRun, node: WorkflowStep) -> bool:
-    """True when a NON-FORK morph sibling sits LATER in this run's graph.
+    """True when a NON-FORK morph sibling sits LATER in this run's graph AND
+    can still write (its step status ∈ pending/running/waiting).
 
     That morph will rewrite the same outputs' render_spec in place and own
     their render — rendering now is dead work (a full render thrown away when
@@ -59,19 +78,31 @@ async def later_inplace_morph_exists(db: AsyncSession, run: WorkflowRun, node: W
     touch the base clip). A ``target_output_id``-scoped morph doesn't count
     either: it rewrites one PRE-EXISTING output — its scope never covers
     this run's newborn clips, so it must not suppress their base renders.
+
+    The status half (ADR-096 §2) is read AFTER the caller's re-pend of the
+    output rows, inside the same transaction: every morph re-pends (UPDATE →
+    row lock held to commit, the step's terminal write riding the same
+    commit), so competing morphs serialize on the row lock and the later
+    committer always reads the earlier one's terminal status — a terminal
+    morph never suppresses a render it will never own. Seq order is NOT an
+    ownership signal: same-layer parallel morphs finish in wall-clock order.
     """
-    count = await db.scalar(
-        select(func.count())
-        .select_from(WorkflowStep)
-        .where(
-            WorkflowStep.run_id == run.id,
-            WorkflowStep.kind.in_(INPLACE_MORPH_KINDS),
-            WorkflowStep.seq > node.seq,
-            func.coalesce(WorkflowStep.spec["fork"].astext, "false") != "true",
-            func.coalesce(WorkflowStep.spec["target_output_id"].astext, "") == "",
+    statuses = (
+        (
+            await db.execute(
+                select(WorkflowStep.status).where(
+                    WorkflowStep.run_id == run.id,
+                    WorkflowStep.kind.in_(INPLACE_MORPH_KINDS),
+                    WorkflowStep.seq > node.seq,
+                    func.coalesce(WorkflowStep.spec["fork"].astext, "false") != "true",
+                    func.coalesce(WorkflowStep.spec["target_output_id"].astext, "") == "",
+                )
+            )
         )
+        .scalars()
+        .all()
     )
-    return bool(count)
+    return later_active_morph_exists(statuses)
 
 
 async def has_producer_upstream(db: AsyncSession, node: WorkflowStep) -> bool:
@@ -395,12 +426,14 @@ async def fan_out_renders(
       deleted — this morph's spec rewrite obsoletes them. (A step already
       running can't be unclaimed; the render completion guard discards its
       stale product instead — see rendering.render_output.)
-    - Defer (``defer_to_later_morph``): when a LATER non-fork morph exists in
-      this run, it will rewrite the spec again and owns the render — the
-      touched outputs go back to render_status NULL (render not requested)
-      and no steps are added. Fork fan-outs pass False: a fork's derived
-      rows are exclusively its own (later morphs act on the base clips,
-      never on them)."""
+    - Defer (``defer_to_later_morph``): when a LATER non-fork morph is still
+      active in this run (pending/running/waiting — ADR-096 §2), it will
+      rewrite the spec again and owns the render — the touched outputs go
+      back to render_status NULL (render not requested) and no steps are
+      added. A later morph already terminal never suppresses: it will never
+      write again, so this fan-out owns the render instead. Fork fan-outs
+      pass False: a fork's derived rows are exclusively its own (later morphs
+      act on the base clips, never on them)."""
     await db.execute(
         delete(WorkflowStep).where(
             WorkflowStep.run_id == run.id,
