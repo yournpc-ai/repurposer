@@ -2329,7 +2329,7 @@ trigger beat ① 的引号示例判句整删，替换为 §1 护栏的抽象表�
 
 ## ADR-096: 渲染所有权与就绪语义——运行期仲裁废止，编译静态所有权 + 就绪对账
 
-**Status**: Decided (2026-09-30)；过渡立即律（§2）先行，终态律（§1 全量）随简报施工
+**Status**: Decided (2026-09-30)；§1 终态律（编译静态所有权 + 屏障 + defer 律整条删除）、§4 就绪双职责、§5 track 原子写已落地；§6 恢复流程（批次 B）挂账
 
 **Context**: 一次交付的实现链（select_clips → translate ∥ reframe，同层并发、非 fork、不同 track——变体并行律内合法）暴露渲染所有权机的结构性猜测：defer 律以 seq 序回答「更晚的 morph 将拥有渲染」，但同层并行使更晚 seq 的 morph 在墙钟上先完工——reframe（seq 12）先完工、按「无更晚 morph」认领渲染（payload = 尚缺翻译轨的旧 spec）；translate（seq 11）后完工、按「更晚 morph 存在」defer（render_status=NULL、不建 step），其 re-pend 的 token 置 NULL 正确杀死在飞渲染（token CAS 按设计工作），但**所有权落空**——reframe 的认领已是过去式，translate 放弃了认领，无任何座位 re-pend：产物永久黑卡。verify 不查文件照常通过；run_completed 按 payload 播报「短片出来了」而产物文件为空（完工语义撒谎）。根因：渲染所有权在运行期用 seq/状态/墙钟猜测编译期已经确定的事实。
 
@@ -2339,9 +2339,9 @@ trigger beat ① 的引号示例判句整删，替换为 §1 护栏的抽象表�
 
 编译器静态指定每份 output 的唯一 render owner（通常 = 装配站）；其余 morph 不 re-pend、不建 render step；owner 的 render step 以 inputs 屏障等待同产物全部并行写入者完工后出生——owner 渲染恒读全量新 spec，死渲染在并行链上结构性消灭。「最后写入者拥有」由编译序静态兑现；运行期只剩执行与验证，不再仲裁。defer 律随本条落地**整条删除**（不是改判定）。
 
-### 2. 过渡立即律（D2-status）
+### 2. 过渡律退役
 
-架构批落地前，defer 判定从「更晚 morph 存在（seq 序）」改为「更晚 morph 的 step 状态 ∈ pending/running」，且判定必须在持有 output 行锁之后执行（re-pend 与 fan_out 同一事务；行锁序保证竞争的 PENDING 恒晚于 defer-NULL 落地，clobber 窗口不存在）。**立即批与终态批不得同时对同一产物生效**——两套所有权机制并存即新竞态源。
+§1 落地后运行期不存在任何所有权推断机制——defer 律整条删除，无过渡分支残留。**立即批与终态批不得同时对同一产物生效**——两套所有权机制并存即新竞态源（本条禁律恒有效）。
 
 ### 3. token 守卫不动
 
