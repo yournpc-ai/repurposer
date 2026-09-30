@@ -213,6 +213,59 @@ def count_match(actual: int, expected: int | None) -> CheckResult:
     )
 
 
+def render_delivery(
+    render_status: str | None, has_video_file: bool, *, has_render_spec: bool
+) -> CheckResult:
+    """交付状态 (fidelity, ADR-096 §4 三合取的本批形态): the verify node's
+    refusal of FALSE completion — a clip whose delivery state is provably
+    broken at check time never rides a green verdict.
+
+    The trio collapses to ``files.video present AND render_status COMPLETED``
+    (a COMPLETED terminal write carries the files atomically and any later
+    spec write re-pends the row, so COMPLETED already implies the file came
+    from the last claimed spec — the explicit version reconciliation is the
+    final-form batch's, never this one's). Two states gate:
+
+    - render_status NULL — the ownership hole: every writer in the run has
+      settled (verify's inputs) and nobody pended the render. The output
+      will never materialize on its own.
+    - COMPLETED without a video file — a terminal contradiction.
+
+    Everything else SKIPS (无确定性依据不判决): pending/rendering are in
+    flight under the render chain's ownership (renders hold the run open;
+    the closing review adjudicates at completion), and FAILED is an honest
+    failure the render mirror + the closing review's render_failed gap
+    already surface — double-gating it would bounce the generation executor
+    for a render-service fault.
+    """
+    if not has_render_spec:
+        return CheckResult("render_delivery", None, "no render contract")
+    if render_status is None:
+        return CheckResult(
+            "render_delivery",
+            False,
+            "render never requested though every writer settled — no owner "
+            "pended it (the output can never materialize)",
+        )
+    if render_status in ("pending", "rendering"):
+        return CheckResult(
+            "render_delivery", None, "render in flight — the render chain owns it"
+        )
+    if render_status == "failed":
+        return CheckResult(
+            "render_delivery",
+            None,
+            "render failed — surfaced by the render chain and the closing review",
+        )
+    if has_video_file:
+        return CheckResult("render_delivery", True, "rendered file present")
+    return CheckResult(
+        "render_delivery",
+        False,
+        "render completed but the video file is missing",
+    )
+
+
 def slide_count(actual: int, expected: int | None) -> CheckResult:
     """Carousel slide count equals the storyboard slot count."""
     if expected is None:
@@ -440,8 +493,9 @@ def run_checks(
     ``ctx``: ``source_texts`` (asset texts), ``target_language``, ``avoid``
     (persona avoid words), ``expected_count`` (storyboard slot count).
     Item shapes per type — clips: ``spec`` / ``source_text`` / ``span_words``
-    / ``hint_times`` / ``anchors_by_url``; quotes: ``quotes``; post/article:
-    ``text``; carousel: ``slides``.
+    / ``hint_times`` / ``anchors_by_url`` / ``render_status`` /
+    ``has_video_file`` / ``has_render_spec``; quotes: ``quotes``;
+    post/article: ``text``; carousel: ``slides``.
     """
     results: list[list[CheckResult]] = []
     for item in items:
@@ -455,6 +509,13 @@ def run_checks(
             checks.append(caption_sync(spec))
             checks.append(face_safe_area(spec, item.get("anchors_by_url") or {}))
             checks.append(emphasis_alignment(spec, item.get("hint_times") or []))
+            checks.append(
+                render_delivery(
+                    item.get("render_status"),
+                    bool(item.get("has_video_file")),
+                    has_render_spec=bool(item.get("has_render_spec")),
+                )
+            )
         elif for_type == "quotes":
             for q in item.get("quotes") or []:
                 checks.append(quote_verbatim(q.get("quote") or "", ctx["source_texts"]))

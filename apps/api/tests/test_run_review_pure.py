@@ -32,6 +32,8 @@ class _OutputStub:
         payload: dict | None = None,
         source_ref: dict | None = None,
         render_spec: dict | None = None,
+        files: dict | None = None,
+        render_status: str | None = None,
         quality: dict | None = None,
     ) -> None:
         self.type = type_
@@ -39,10 +41,19 @@ class _OutputStub:
         self.payload = payload or {}
         self.source_ref = source_ref or {}
         self.render_spec = render_spec or {}
+        self.files = files or {}
+        self.render_status = render_status
         self.quality = quality
 
 
-def _clip(**kw) -> LandedFact:
+def _clip(delivered: bool = True, **kw) -> LandedFact:
+    """A clip fact; by default in the DELIVERED shape (ADR-096 §4 — render
+    COMPLETED + the video file present), since the delivery tallies only
+    count that shape. Pass ``delivered=False`` for the raw row (no render
+    requested, no file)."""
+    if delivered:
+        kw.setdefault("render_status", "completed")
+        kw.setdefault("files", {"video": "k.mp4"})
     return landed_fact(_OutputStub("clip", **kw))
 
 
@@ -204,6 +215,58 @@ class TestComputeRunReview:
         assert not review.has_snapshot
         assert review.promised_types == ()
         assert review.gaps == ()
+
+    def test_payload_complete_but_file_missing_never_counts(self) -> None:
+        """ADR-096 §4 (run completed ≠ artifact ready): a clip whose payload
+        is complete but whose render never landed — NULL (no owner pended it),
+        in flight, or a COMPLETED row with no video key — is excluded from
+        the delivery tallies exactly like a render-FAILED row."""
+        scope = _scope(
+            {"tool": "cut_segments", "params": {"segments": [{"start": 0, "end": 1}]}},
+        )
+        for shape in (
+            {"delivered": False},  # render_status NULL, no file
+            {"render_status": "pending"},
+            {"render_status": "rendering"},
+            {"render_status": "completed", "files": {}},  # terminal contradiction
+        ):
+            review = compute_run_review(
+                confirmed_scope=scope,
+                landed=[_clip(**shape)],
+            )
+            assert "clip_shortfall:0/1" in review.gaps, shape
+        # The delivered pair (COMPLETED + file) closes the same promise.
+        review = compute_run_review(
+            confirmed_scope=scope,
+            landed=[_clip()],
+        )
+        assert review.gaps == ()
+
+    def test_file_missing_clip_line_carries_not_ready(self) -> None:
+        """The quiet lie's marker: a file-missing clip's line tells the
+        narrator NOT-READY, so the closing prose can't call it delivered."""
+        review = compute_run_review(
+            confirmed_scope=None,
+            landed=[_clip(delivered=False, payload={"duration": 30})],
+        )
+        lines = review_fact_lines(review)
+        assert any("render=NOT-READY" in line for line in lines)
+        assert not any("render=FAILED" in line for line in lines)
+
+    def test_render_failed_still_wins_over_not_ready(self) -> None:
+        review = compute_run_review(
+            confirmed_scope=None,
+            landed=[
+                landed_fact(
+                    _OutputStub(
+                        "clip", render_status="failed", files={}
+                    )
+                )
+            ],
+        )
+        lines = review_fact_lines(review)
+        assert any("render=FAILED" in line for line in lines)
+        assert not any("render=NOT-READY" in line for line in lines)
 
 
 # ---- the bounded prompt-feed rendering ----------------------------------------------

@@ -13,7 +13,9 @@ gets back the 兑现事实清单 (delivery-fact list):
   dub existence, the verify flag (``outputs.quality`` — passed /
   needs_human / never-verified), the render outcome (``outputs.render_status``
   — a render-FAILED row never counts toward the delivery tallies and fires
-  the ``render_failed:<type>`` gap).
+  the ``render_failed:<type>`` gap), and the delivery pair (COMPLETED +
+  ``files.video`` present — a payload-complete but file-missing clip never
+  counts toward the tallies either, ADR-096 §4).
 
 Spend is NEVER a closing-beat fact (2026-09-24 用户拍板 — Claude/Codex
 parity: a finished task does not report what it cost; the wallet owns the
@@ -54,6 +56,7 @@ class LandedFact:
     dubbed: bool | None = None  # clips only: the cloned-voice dub track
     quality: str | None = None  # passed | needs_human | None (never verified)
     render: str | None = None  # pending | rendering | completed | failed | None (no render contract)
+    has_file: bool | None = None  # clips only: files.video present (None = not a clip)
 
 
 @dataclass(frozen=True)
@@ -80,6 +83,7 @@ def landed_fact(output: Any) -> LandedFact:
     spec = getattr(output, "render_spec", None) or {}
     payload = getattr(output, "payload", None) or {}
     source_ref = getattr(output, "source_ref", None) or {}
+    files = getattr(output, "files", None) or {}
     quality = getattr(output, "quality", None) or {}
     render_status = getattr(output, "render_status", None)
     is_clip = getattr(output, "type", None) == "clip"
@@ -108,6 +112,7 @@ def landed_fact(output: Any) -> LandedFact:
         quality=(quality.get("status") if isinstance(quality, dict) else None),
         # Enum → its value, without importing the models layer (pure seat).
         render=getattr(render_status, "value", render_status),
+        has_file=bool(files.get("video")) if is_clip else None,
     )
 
 
@@ -172,7 +177,22 @@ def compute_run_review(
     # stays visible in the landed tuple (its line carries render=FAILED) but
     # never counts toward the delivery tallies (live-acceptance red 2026-09-24:
     # "3 clips landed" narrated over a fan-out whose third render had failed).
-    delivered = [f for f in landed if f.render != "failed"]
+    # Same law for the quieter lie (ADR-096 §4, run completed ≠ artifact
+    # ready): a clip whose payload is complete but whose FILE is missing —
+    # render never requested, still in flight, or a COMPLETED row with no
+    # video key — never counts either. Only render_status COMPLETED + the
+    # video file present proves delivery (a COMPLETED write carries the files
+    # atomically and any later spec write re-pends the row, so the pair already
+    # implies the file came from the last claimed spec). Non-clip outputs have
+    # no render contract — their rule is unchanged.
+    delivered = [
+        f
+        for f in landed
+        if f.render != "failed"
+        and (
+            f.output_type != "clip" or (f.render == "completed" and f.has_file)
+        )
+    ]
     landed_clips = [f for f in delivered if f.output_type == "clip"]
     landed_writers = [f for f in delivered if f.output_type != "clip"]
 
@@ -266,6 +286,11 @@ def review_fact_lines(review: RunReview) -> list[str]:
             )
         if f.render == "failed":
             parts.append("render=FAILED")
+        elif f.output_type == "clip" and not (f.render == "completed" and f.has_file):
+            # The quiet lie's marker (ADR-096 §4): payload-complete but no
+            # playable file — excluded from the tallies, and the narrator
+            # must never read its line as a delivery.
+            parts.append("render=NOT-READY")
         lines.append("- " + " ".join(parts))
     if len(review.landed) > _MAX_LANDED_LINES:
         lines.append(f"- … ({len(review.landed) - _MAX_LANDED_LINES} more landed outputs)")

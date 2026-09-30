@@ -346,6 +346,13 @@ class Verify(NodeBase):
                     "span_words": span_words,
                     "hint_times": hint_times,
                     "anchors_by_url": anchors_by_url,
+                    # Delivery state (ADR-096 §4): the render_delivery check's
+                    # raw facts — the trio collapses to file + COMPLETED.
+                    "render_status": (
+                        output.render_status.value if output.render_status else None
+                    ),
+                    "has_video_file": bool((output.files or {}).get("video")),
+                    "has_render_spec": bool(output.render_spec),
                 }
             )
         return items
