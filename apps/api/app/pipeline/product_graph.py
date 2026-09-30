@@ -18,7 +18,7 @@ I-PFA-04, ADR-086; 施工合同 ``docs/tasks/product-flow-alignment.md`` §7 C-0
   ``audio`` / ``text`` 物料流边（含读时合成边中表达真实物料流的 A3-lite
   transcript→consumer 边——合成边是 rank 的合法输入，不是「读时补丁」）；
   ``ctx`` 引用流（task_book → 消费者的上下文边）**不参与** rank。lineage /
-  presentation-only 边词同样**永不入 rank**（ADR-097 §5 的 transcript→
+  presentation-only 边词同样**永不入 rank**（ADR-097 §9 的 transcript→
   deliverable 真边已出生——端口标记 ``out:lineage``，``_rank_inputs`` 显式
   排除；版本血缘的另一半住节点 ``spec.output_ids``，从不是边）。
 - **layout projection** = rank × PITCH 给出 x；y 座位 / w·h 预留 / 稳定锚

@@ -480,15 +480,16 @@ async def get_project_graph(
             if str(e.from_node) not in hidden_modifier_ids
             and str(e.to_node) not in hidden_modifier_ids
         ]
-    # A3-lite (2026-09-13 演示冻结期, ADR-072 批 A3 边改造的读面先行): the
-    # material-flow reading 源 → 文档 → 装配 — the transcript document fed the
-    # consumers' text (ASR words drive selection + captions + the writers'
-    # source text), but the legacy stamp left it a LEAF (consumers wired from
-    # the asset = "the execution truth"). Synthesize the transcript → consumer
-    # text edge at READ time (display only, zero graph writes): for every
-    # video/text flow out of the transcript's asset, the document carries the
-    # same flow's text leg. Formal rewiring lands with 批 A3 (the two-station
-    # edge design).
+    # A3-lite legacy 兼容投影（ADR-097 §9——canonical 真边出生后，本合成只
+    # 服务无 lineage 真边的存量行）: the material-flow reading 源 → 文档 → 装配
+    # — the transcript document fed the consumers' text (ASR words drive
+    # selection + captions + the writers' source text), but the legacy stamp
+    # left it a LEAF (consumers wired from the asset = "the execution truth").
+    # Synthesize the transcript → consumer text edge at READ time for legacy
+    # rows only (display only, zero graph writes): for every video/text flow
+    # out of the transcript's asset, the document carries the same flow's text
+    # leg. New chains carry the canonical birth edge (graph_fill stamp); the
+    # triple dedup below makes the two sources never double-render one leg.
     asset_node_by_asset = {
         str((n.spec or {}).get("asset_id")): str(n.id)
         for n in nodes
