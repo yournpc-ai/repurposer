@@ -30,7 +30,7 @@ import {
 
 import { apiFetch, toAbsoluteUrl } from "@/lib/api"
 import { cn, formatDuration } from "@/lib/utils"
-import type { GraphNode, Output, ProjectGraph, WorkflowStep } from "@/lib/types"
+import type { GraphNode, Output, ProjectArtifact, ProjectGraph, WorkflowStep } from "@/lib/types"
 import {
   MediaLightbox,
   type MediaChip,
@@ -157,6 +157,16 @@ export function ResultsCanvas({
   // pass-through + i18n labels, zero topology derivation) ────────────────
   const { nodes, edges } = useMemo<{ nodes: FlowNode[]; edges: FlowEdge[] }>(() => {
     const graphNodes = graph?.nodes ?? []
+    // ADR-097 Phase 1: the artifact projection's deliverable index — one
+    // deliverable one card. The deliverable card takes the artifact's face
+    // (work name when the LLM named it — ADR-058 二源律 ①; the aggregate
+    // activity — 单一 activity owner); facets live on it as a read-only
+    // summary, companions stay first-class cards, unknown/legacy rows pass
+    // through untouched.
+    const artifactByDeliverable = new Map<string, ProjectArtifact>()
+    for (const a of graph?.artifacts ?? []) {
+      if (a.deliverable_node_id) artifactByDeliverable.set(a.deliverable_node_id, a)
+    }
     // The batch's highest clip score (score triage — what to post first):
     // the winning product's badge accents, wherever the pager shows it.
     const topClipScore = Math.max(
@@ -216,10 +226,15 @@ export function ResultsCanvas({
       // stations never carry spec.summary — ADR-072) to the medium's own
       // word (业务身份 = spec.summary 的座位, ADR-058 二源律).
       const outputs = n.outputs ?? []
+      const artifact = artifactByDeliverable.get(n.id)
       return {
         id: n.id,
         kind: n.type,
         label:
+          // ADR-097: the deliverable card speaks the WORK's name (the
+          // confirmed plan's LLM naming — 二源律 ①); everything else keeps
+          // the station label law.
+          artifact?.name ??
           spec.summary ??
           (spec.role === "transcript"
             ? t("results.canvas.transcript")
@@ -232,7 +247,10 @@ export function ResultsCanvas({
                     : spec.role
                       ? t("results.canvas.document")
                       : t(`results.canvas.nodeType.${n.type}`, { defaultValue: n.type })),
-        status: n.state,
+        // ADR-097 §4 单一 activity owner: the deliverable card carries the
+        // artifact's aggregate activity (failed > running > stale > queued
+        // > done) — the hidden stations never show a competing liveness.
+        status: artifact?.activity.state ?? n.state,
         spec,
         outputs,
         estimateCredits: n.estimate_credits ?? null,
@@ -240,12 +258,17 @@ export function ResultsCanvas({
         rank: n.rank ?? null,
         topClipScore,
         order: i,
+        artifact,
       }
     })
     const edges: FlowEdge[] = (graph?.edges ?? []).map((e) => ({
       from: e.from_node,
       to: e.to_node,
       edgeType: e.edge_type,
+      // ADR-097 §5: the bloodline edge's only machine mark rides the port —
+      // the direction invariant exempts it (display-only, zero rank
+      // authority).
+      lineage: e.from_port === "out:lineage" || undefined,
     }))
     return { nodes, edges }
   }, [graph, t])

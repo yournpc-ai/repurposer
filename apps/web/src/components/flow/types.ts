@@ -121,6 +121,13 @@ export interface FlowNode {
    * siblings). Empty/undefined = the region shows the state-appropriate
    * body (draft estimate / running wipe / quiet done). */
   outputs?: import("@/lib/types").Output[]
+  /** ADR-097 Phase 1 (deliverable cards only): the artifact block this node
+   * fronts — one deliverable one card. The card reads the facet summary
+   * (hidden stations, read-only) and the single activity owner off it; the
+   * caption's label and the card's status derive from it at the surface's
+   * mapping layer. Absent on facets / companions / unknown-legacy rows
+   * (default projection passthrough). */
+  artifact?: import("@/lib/types").ProjectArtifact
   /** The node's quotation in credits (server-folded at read time) — the
    * draft card's 「运行后生成 · 约 N 积分」. Null = unquoted. */
   estimateCredits?: [number, number] | null
@@ -161,6 +168,12 @@ export interface FlowEdge {
    * (video / audio), text/ctx neutral (every edge solid — the ctx reference
    * flow folds into the shared T in-anchor; no @ glyph on canvas). */
   edgeType?: GraphEdgeType
+  /** ADR-097 §5: the transcript→deliverable bloodline edge — display-only,
+   * edgeType stays "text" and the port marker (out:lineage) is the only
+   * machine discriminator. It is NOT a product edge: zero rank authority,
+   * exempt from the direction invariant (one law, two mirrors —
+   * product_graph._rank_inputs / validate_product_graph server-side). */
+  lineage?: boolean
   /** Recipe surface: derivation vs process order. */
   semantic?: FlowEdgeSemantic
 }

@@ -2,6 +2,7 @@
 
 import io
 import zipfile
+from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -55,7 +56,6 @@ from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 from app.pipeline.product_graph import (
     EXPLORATION_NODE_TYPE,
     display_ranks,
-    is_lineage_edge,
     project_artifacts,
 )
 from app.pipeline.scope_classifier import (
@@ -418,11 +418,11 @@ async def get_project_graph(
         .scalars()
         .all()
     )
-    # ADR-097 §5 (批 C-1): lineage/display-only 真边退出默认边载荷——它
-    # 是 artifact 投影的血缘事实, 不是画布的物料流 (批 C-2 才转为投影驱
-    # 动; 批 C-1 画布零变化)。排除在一切下游消费之前: rank 输入 / A3-lite
-    # 去重 triple / 边载荷, 三处与既有行为逐字节一致。
-    edges = [e for e in edges if not is_lineage_edge(e)]
+    # ADR-097 §5 (批 C-2): lineage 真边进入读帧——它是 artifact 血缘的
+    # canonical 边 (出生即真实写入), A3-lite 读时合成退为 legacy 兼容投影
+    # (同一 triple 去重: 新图的血缘由真边说话, 旧图继续合成)。它仍永不入
+    # rank (product_graph._rank_inputs 的端口标记排除) 、永不进 RunOp 闭
+    # 包 (graph_store) — 零编排语义不变。
     # task_book 读面过滤（Workspace 合同 v4.2 C1-b，2026-09-26 封板收口）:
     # the plan document and every edge touching it are filtered at READ
     # time — the canvas shows the pure material flow (源 → 文档 → 装配); the
@@ -541,6 +541,116 @@ async def get_project_graph(
             "artifacts": [],
         }
 
+    # ── ADR-097 §3 artifact 投影 + 第二层门 (批 C-2 消费开关) ─────────────
+    # 先于 rank: facet 退出后 Product DAG 收缩, rank 在收缩后的帧上计算
+    # (display x = rank × PITCH 是客户端的显示权威, 空列永不留洞)。
+    visible = await list_visible_outputs(db, project_id)
+    outputs_by_id = {str(o.id): o for o in visible}
+
+    # The artifact projection's output facts — live rows are `visible`
+    # above; archived/historical rows referenced by artifact members join
+    # here (one IN query, archived versions keep their historical
+    # ownership — ADR-091 语义不动)。
+    member_output_ids = {
+        str(oid)
+        for n in artifact_source_nodes
+        for oid in ((n.spec or {}).get("output_ids") or [])
+    }
+    artifact_outputs_by_id: dict[str, Output] = dict(outputs_by_id)
+    missing_output_ids = [
+        UUID(str(oid)) for oid in member_output_ids if oid not in outputs_by_id
+    ]
+    if missing_output_ids:
+        artifact_outputs_by_id.update(
+            {
+                str(o.id): o
+                for o in (
+                    await db.execute(
+                        select(Output).where(Output.id.in_(missing_output_ids))
+                    )
+                )
+                .scalars()
+                .all()
+            }
+        )
+    artifact_blocks = project_artifacts(
+        artifact_source_nodes,
+        artifact_outputs_by_id,
+        visible_ids=outputs_by_id.keys(),
+    )
+
+    # 第二层门: keyed facet 退出默认投影。驱动源 = stamped artifact_role
+    # 字段 (两层门不合并——第一层 is_product_node / B4-lite 零改动)。安全
+    # 闸同 B4-lite 律: facet 的全部 live 产物已被其组的 deliverable 认领
+    # (或无产物) 才退出——产物永不从画布消失, 安全闸不过的 facet 照常
+    # 渲染为自己的卡。退出的外部边改锚到组的 deliverable (组收缩的读面
+    # 投影——零新边事实, 不改依赖), 组内边消失; ORM 行永不变异 (重锚
+    # 边以 dict 出生, A3-lite 合成行的先例)。
+    deliverable_of: dict[str, str] = {}  # facet node id → deliverable node id
+    for block in artifact_blocks:
+        d_id = block.get("deliverable_node_id")
+        if not d_id:
+            continue
+        for fid in block.get("facet_node_ids") or []:
+            deliverable_of[str(fid)] = str(d_id)
+    if deliverable_of:
+        source_by_id = {str(n.id): n for n in artifact_source_nodes}
+        deliverable_claims: dict[str, set[str]] = {}
+        for d_id in set(deliverable_of.values()):
+            d_node = source_by_id.get(d_id)
+            claims = (
+                {str(o) for o in ((d_node.spec or {}).get("output_ids") or [])}
+                if d_node is not None
+                else set()
+            )
+            deliverable_claims[d_id] = claims & set(outputs_by_id)
+        exiting = {
+            fid
+            for fid, d_id in deliverable_of.items()
+            if (
+                lambda f_node: f_node is None
+                or (
+                    {str(o) for o in ((f_node.spec or {}).get("output_ids") or [])}
+                    & set(outputs_by_id)
+                )
+                <= deliverable_claims.get(d_id, set())
+            )(source_by_id.get(fid))
+        }
+        if exiting:
+            nodes = [n for n in nodes if str(n.id) not in exiting]
+
+            def _eget(e: Any, k: str) -> Any:
+                # A3-lite 合成行是 dict, ORM 行是属性对象 — 一读两用。
+                return e.get(k) if isinstance(e, dict) else getattr(e, k)
+
+            reanchored: list[Any] = []
+            seen_triples: set[tuple[str, str, str]] = set()
+            for e in edges:
+                src, dst = str(_eget(e, "from_node")), str(_eget(e, "to_node"))
+                etype = str(_eget(e, "edge_type"))
+                new_src = deliverable_of.get(src, src) if src in exiting else src
+                new_dst = deliverable_of.get(dst, dst) if dst in exiting else dst
+                if new_src == new_dst:
+                    continue  # 组内边消失进卡
+                triple = (new_src, new_dst, etype)
+                if triple in seen_triples:
+                    continue
+                seen_triples.add(triple)
+                if new_src == src and new_dst == dst:
+                    reanchored.append(e)  # untouched — the original row rides
+                else:
+                    reanchored.append(
+                        {
+                            "id": uuid4(),
+                            "from_node": new_src,
+                            "from_port": str(_eget(e, "from_port") or f"out:{etype}"),
+                            "to_node": new_dst,
+                            "to_port": str(_eget(e, "to_port") or f"in:{etype}"),
+                            "edge_type": etype,
+                        }
+                    )
+            edges = reanchored
+
     # ── Product Graph rank (I-PFA-02 / 合同 §7 C-1) ──────────────────────
     # rank = the one spatial authority, computed HERE at the single point
     # where both inputs are the final read frame: nodes carry STORAGE words
@@ -585,36 +695,6 @@ async def get_project_graph(
             .scalars()
             .all()
         }
-
-    visible = await list_visible_outputs(db, project_id)
-    outputs_by_id = {str(o.id): o for o in visible}
-
-    # ADR-097 §3: the artifact projection's output facts — live rows are
-    # `visible` above; archived/historical rows referenced by artifact
-    # members join here (one IN query, archived versions keep their
-    # historical ownership — ADR-091 语义不动)。
-    member_output_ids = {
-        str(oid)
-        for n in artifact_source_nodes
-        for oid in ((n.spec or {}).get("output_ids") or [])
-    }
-    artifact_outputs_by_id: dict[str, Output] = dict(outputs_by_id)
-    missing_output_ids = [
-        UUID(str(oid)) for oid in member_output_ids if oid not in outputs_by_id
-    ]
-    if missing_output_ids:
-        artifact_outputs_by_id.update(
-            {
-                str(o.id): o
-                for o in (
-                    await db.execute(
-                        select(Output).where(Output.id.in_(missing_output_ids))
-                    )
-                )
-                .scalars()
-                .all()
-            }
-        )
 
     # The outputs' dossier facts (spec_prompt / model_facts — OutputInspector
     # and the lightbox read them, same stamp as /results): the producing
@@ -724,14 +804,11 @@ async def get_project_graph(
         # Same stamp, second transport (一票源两处运输 — mobile parity
         # reads this frame).
         "lifecycle": await _lifecycle_stamp(db, project),
-        # ADR-097 Phase 1 (additive): the artifact projection — membership
-        # reads only the stamped canonical keys (zero read-time inference);
-        # 批 C-1 画布忽略本块 (默认投影零变化), 批 C-2 切换消费。
-        "artifacts": project_artifacts(
-            artifact_source_nodes,
-            artifact_outputs_by_id,
-            visible_ids=outputs_by_id.keys(),
-        ),
+        # ADR-097 Phase 1: the artifact projection — membership reads only
+        # the stamped canonical keys (zero read-time inference); 批 C-2 起
+        # 画布消费本块 (facet 退出默认投影 + 单一 activity owner), unknown/
+        # legacy 节点永不在此 (默认投影直通)。
+        "artifacts": artifact_blocks,
     }
 
 

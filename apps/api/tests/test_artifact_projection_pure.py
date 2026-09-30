@@ -32,6 +32,7 @@ from app.pipeline.product_graph import (
     is_lineage_edge,
     product_ranks,
     project_artifacts,
+    validate_product_graph,
 )
 
 
@@ -310,6 +311,29 @@ class TestLineageEdgeExclusion:
             _edge(transcript, deliverable, "text"),
         ]
         assert executable_children_of(flow_edges, transcript) == [deliverable]
+
+    def test_direction_invariant_exempts_lineage(self) -> None:
+        """producer-deliverable 链 (无 translate): 对照——物料流直边喂 rank
+        (deliverable 被推到 T 之后一列); 血缘边永不喂 rank (两者并列 asset
+        下游), 横跨同列也不是 violation (display-only, 永不是 product
+        edge——方向不变量豁免, layout.ts 同律两镜像)."""
+        asset, transcript, cut = uuid4(), uuid4(), uuid4()
+        nodes = [
+            _node(asset, type_="asset"),
+            _node(transcript, type_="document"),
+            _node(cut, type_="video"),
+        ]
+        flow = [_edge(asset, transcript, "text"), _edge(asset, cut, "video")]
+        with_flow = product_ranks(nodes, [*flow, _edge(transcript, cut, "text")])
+        assert with_flow[str(cut)] == with_flow[str(transcript)] + 1
+        lineage_edges = [
+            *flow,
+            _edge(transcript, cut, "text", from_port="out:lineage"),
+        ]
+        with_lineage = product_ranks(nodes, lineage_edges)
+        assert with_lineage == product_ranks(nodes, flow)
+        assert with_lineage[str(cut)] == with_lineage[str(transcript)]
+        assert validate_product_graph(nodes, lineage_edges) == []
 
 
 # ---- the activity rollup ----------------------------------------------------

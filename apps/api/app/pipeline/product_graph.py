@@ -311,6 +311,11 @@ def validate_product_graph(
     for e in edges:
         if not is_rank_edge(str(_get(e, "edge_type") or "")):
             continue
+        # ADR-097 §5: lineage 血缘边永不是 product edge——方向不变量不适
+        # 用 (display-only, 零 rank 权威; 一条律两镜像 = layout.ts
+        # projectSettledFrames 的豁免)。
+        if is_lineage_edge(e):
+            continue
         src, dst = str(_get(e, "from_node")), str(_get(e, "to_node"))
         if src not in visible or dst not in visible or src == dst:
             continue

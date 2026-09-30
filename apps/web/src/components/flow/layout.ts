@@ -469,9 +469,11 @@ export function projectSettledFrames(
   }
 
   // The direction invariant, named per edge (ctx 引用流不算 product edge —
-  // the same boundary as the server's RANK_EDGE_TYPES).
+  // the same boundary as the server's RANK_EDGE_TYPES; ADR-097 §5 lineage
+  // 血缘边同律豁免 — display-only, 永不是 product edge, 一条律两镜像 =
+  // product_graph.validate_product_graph)。
   for (const e of edges) {
-    if (e.edgeType === "ctx") continue
+    if (e.edgeType === "ctx" || e.lineage) continue
     const from = byId.get(e.from)
     const to = byId.get(e.to)
     if (!from || !to) continue

@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { apiPut, toAbsoluteUrl } from "@/lib/api"
 import { cn } from "@/lib/utils"
-import type { GraphEdgeType, Output } from "@/lib/types"
+import type { GraphEdgeType, Output, ProjectArtifact } from "@/lib/types"
 
 import { BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX } from "./layout"
 import { useSoundMutex } from "./sound-mutex"
@@ -1547,6 +1547,34 @@ function ProgramRegion({
   )
 }
 
+/** The deliverable card's facet strip (ADR-097 §3/§4 — the artifact's
+ * hidden stations summarized read-only, first version no levers). 失败才展
+ * 开工序级定位: healthy facets collapse to one muted names line (the
+ * stations' own baked labels, never invented words); each failed station
+ * gets its own destructive row. */
+function ArtifactFacetStrip({ artifact }: { artifact: ProjectArtifact }) {
+  const { t } = useTranslation()
+  const failedIds = new Set(artifact.activity.failed_node_ids)
+  const failed = artifact.facets.filter((f) => failedIds.has(f.node_id))
+  const healthyNames = artifact.facets
+    .filter((f) => !failedIds.has(f.node_id))
+    .map((f) => f.label)
+    .filter((label): label is string => !!label)
+  return (
+    <div className="shrink-0 border-t border-foreground/8 px-3 py-1.5 text-[11px] leading-snug">
+      {healthyNames.length > 0 && (
+        <p className="truncate text-muted-foreground">{healthyNames.join(" · ")}</p>
+      )}
+      {failed.map((f) => (
+        <p key={f.node_id} className="truncate text-destructive">
+          {f.label ? `${f.label} · ` : ""}
+          {t("results.canvas.runFailed")}
+        </p>
+      ))}
+    </div>
+  )
+}
+
 /** The generator / processor / agent card (ADR-057 §4/§5/§6 — one anatomy,
  * state expressed in place): caption (right slot ALWAYS empty) / product
  * region (draft dashed estimate · running wipe · done self-evident ·
@@ -1754,6 +1782,12 @@ function GraphCard({
           pendingProgram={pendingProgram}
           promptConfirm={promptConfirm}
         />
+        {/* ADR-097 §3/§4: the artifact's facet strip (deliverable cards
+            only) — the hidden stations' read-only summary; 失败才展开工序
+            级定位. */}
+        {node.artifact && node.artifact.facets.length > 0 && (
+          <ArtifactFacetStrip artifact={node.artifact} />
+        )}
       </div>
 
       {/* The factsbar band under the card (外置律): runtime facts + actions,

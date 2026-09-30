@@ -376,10 +376,42 @@ export interface GraphEdge {
   edge_type: GraphEdgeType
 }
 
+export interface ProjectArtifactFacet {
+  /** One hidden station's summary on the deliverable card (ADR-097 §3 —
+   * the facet exits the default projection; its program/state stay
+   * inspectable here). `surface="hidden_modifier"` marks the lever
+   * surfaces. */
+  node_id: string
+  tool?: string | null
+  label?: string | null
+  state: string
+  surface?: string | null
+}
+
+export interface ProjectArtifact {
+  /** One product artifact's read-face block (ADR-097 Phase 1): membership
+   * is a compile-time stamp fact, never read-time inference. The canvas
+   * contracts each block to ONE deliverable card — facets summarized
+   * read-only, companions first-class, one activity owner. */
+  artifact_key: string
+  work_key: string
+  name?: string | null
+  deliverable_node_id?: string | null
+  facet_node_ids: string[]
+  facets: ProjectArtifactFacet[]
+  companion_node_ids: string[]
+  current_output_id?: string | null
+  archived_output_ids: string[]
+  activity: { state: GraphNodeState; failed_node_ids: string[] }
+}
+
 export interface ProjectGraph {
   nodes: GraphNode[]
   edges: GraphEdge[]
   lifecycle?: LifecycleStamp | null
+  /** ADR-097 Phase 1: the artifact projection — unknown/legacy nodes never
+   * appear here (they pass through on the default projection). */
+  artifacts?: ProjectArtifact[]
 }
 
 /** The server-named lifecycle projection (ADR-087 §2, Phase 1) — the ONE
