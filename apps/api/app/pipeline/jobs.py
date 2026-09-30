@@ -224,6 +224,13 @@ async def claim_pending_render(db: AsyncSession) -> UUID | None:
     line — AND mirrors its fan-out node failed + finalizes the owning run, or
     the node would sit pending forever and the run would never settle — then
     the loop moves to the next row.
+
+    Writer barrier (ADR-096 §1): a run-scoped pend stamps
+    ``outputs.render_barrier`` with the output's compile-static writer steps.
+    The claim holds until every barrier step is done — the render always
+    reads the full final spec (a parallel morph chain can no longer render
+    early on a partial spec). A NULL barrier (run-less re-pends: undo/redo,
+    manual render, legacy rows) claims immediately, as before.
     """
     while True:
         row = (
@@ -236,6 +243,14 @@ async def claim_pending_render(db: AsyncSession) -> UUID | None:
                 # cancelled by the wipe's own cancel dance, but the claim
                 # gate is the load-bearing fence, not the dance.
                 .where(Output.archived_at.is_(None))
+                .where(
+                    text(
+                        "(render_barrier IS NULL OR NOT EXISTS ("
+                        "SELECT 1 FROM jsonb_array_elements_text(render_barrier) AS b(id) "
+                        "JOIN workflow_steps bs ON bs.id = b.id::uuid "
+                        "WHERE bs.status <> 'done'))"
+                    )
+                )
                 .order_by(Output.created_at)
                 .with_for_update(skip_locked=True)
                 .limit(1)

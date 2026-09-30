@@ -18,21 +18,18 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.registry import translator
-from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
 from app.models.tables import Output, WorkflowStep, Project, WorkflowRun
 from app.operations.service import apply_precomputed
 from app.pipeline.errors import TransientNodeError
 from app.pipeline.graph import MEDIA, NodeBase, estimate_mechanical
 from app.pipeline.morph import (
-    fan_out_renders,
     guard_target_differs_from_source,
-    has_producer_upstream,
     modifier_target_clips,
-    pend_suppressed_base_renders,
     record_target_output_ids,
     run_origin,
 )
+from app.pipeline.render_ownership import pend_outputs_for_render
 from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.pipeline.tracks import spec_provenance
 from app.tools.dub.procedure import synthesize_dub
@@ -120,6 +117,7 @@ class DubClip(NodeBase):
         gnode_id = (node.spec or {}).get("graph_node_id")
         graph_node_id = UUID(str(gnode_id)) if gnode_id else None
         touched: list[UUID] = []
+        touched_outputs: list[Output] = []
         for output in clips:
             try:
                 new_spec = await synthesize_dub(
@@ -163,10 +161,12 @@ class DubClip(NodeBase):
                 db.add(derived)
                 await db.flush()
                 touched.append(derived.id)
+                touched_outputs.append(derived)
             else:
                 # Morph: rewrite in place — journaled so the overwrite is undoable
                 # (agent-loop-upgrade W4; the fork branch's new rows start their
-                # own baseline instead).
+                # own baseline instead). The render request lands through the
+                # one seat below.
                 await apply_precomputed(
                     db,
                     output,
@@ -176,36 +176,20 @@ class DubClip(NodeBase):
                     source=origin,
                     user_id=project.user_id,
                 )
-                output.render_status = RenderStatus.PENDING
-                output.render_claim_token = None
-                output.render_error = None
-                output.render_attempt = 0  # R1 B4a: intent re-pend = new budget (only the crash reap keeps counting)
                 await db.flush()
                 touched.append(output.id)
+                touched_outputs.append(output)
 
         if not touched:
-            # Whole batch unresolvable — rescue the suppressed base renders
-            # first so the clips still come out (pre-suppression behavior),
-            # then fail the step. Own session + commit: the executor session
-            # rolls back when the raise propagates, so a plain call here
-            # would never persist. Never defer — the failure cascade-skips
-            # every downstream morph; no later morph exists to own these.
-            async with AsyncSessionLocal() as s:
-                await pend_suppressed_base_renders(
-                    s, run, node, clips, defer_to_later_morph=False
-                )
-                await s.commit()
+            # Whole batch unresolvable — fail the step. The failure tail's
+            # repair seat prunes this step out of the touched clips' render
+            # barriers, so they still render their surviving-writer spec.
             raise ValueError("No clips could be dubbed (missing captions or voice sample)")
-        # Skip-rescue: per-clip skips keep their base spec — they still owe
-        # a render when the producer's fan-out was suppressed for this chain.
-        # Defer only when a later morph can see the skips: a producer edge
-        # unions the full output_refs downstream; an all-skip leaves empty
-        # refs so the later morph falls back to the project-wide set.
-        await pend_suppressed_base_renders(
-            db, run, node, clips, exclude=set(touched),
-            defer_to_later_morph=not touched or await has_producer_upstream(db, node),
-        )
-        await fan_out_renders(db, run, node, touched, defer_to_later_morph=not fork)
+        # Render ownership (ADR-096 §1): the compile-static writer barrier
+        # makes the render wait for every writer of each touched output
+        # (this morph included — a parallel sibling morph's tracks land in
+        # the same render).
+        await pend_outputs_for_render(db, run, touched_outputs)
         await record_target_output_ids(node.id, touched)
         await fill_summary(
             node.id, self.kind, ui_language=ui_lang_of(run, project), n=len(touched), lang=lang.upper()

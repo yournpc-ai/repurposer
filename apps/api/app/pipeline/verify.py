@@ -66,7 +66,7 @@ from app.pipeline.quality import (
 from app.pipeline.step_context import list_assets
 from app.pipeline.step_display import set_summary
 from app.pipeline.outputs import delete_outputs_fk_safe
-from app.pipeline.morph import render_step_label
+from app.pipeline.render_ownership import pend_outputs_for_render
 from app.platform.project_context import collect_asset_texts, resolve_persona
 from app.providers.storage import stream_url
 
@@ -580,30 +580,17 @@ class Verify(NodeBase):
             restored.append(output)
         await db.flush()
         executor.output_refs = [str(o.id) for o in restored]
-        # Reborn render mirrors (ADR-074② 台账补登): every birth path that
-        # pends an output for render also writes a mirror step — the bounce
-        # restore is a birth path too. Shape law copied verbatim from
-        # materialize.py / derivative_dispatch._add_render_step (parent = the
-        # verify executor that owns the restored rows).
+        # Render ownership (ADR-096 §1): the bounce restore is a birth path
+        # too — it pends through the one seat like every other. The restored
+        # rows carry workflow_step_id = the executor, so the fold names the
+        # full writer set (the executor + every downstream morph the bounce
+        # reset to re-apply) as the barrier: the re-render fires only when
+        # the repaired chain settles, never on the half-written spec.
         pending_restored = [
             o for o in restored if o.render_status == RenderStatus.PENDING
         ]
         if pending_restored:
-            label = await render_step_label(db, run)
-            for output in pending_restored:
-                db.add(
-                    WorkflowStep(
-                        run_id=run.id,
-                        kind="render",
-                        status="pending",
-                        seq=int(executor.seq) + 1,
-                        inputs=[str(executor.id)],
-                        spec={
-                            "output_id": str(output.id),
-                            **({"summary": label} if label else {}),
-                        },
-                    )
-                )
+            await pend_outputs_for_render(db, run, pending_restored)
         await db.flush()
         return restored
 
@@ -787,7 +774,7 @@ class Verify(NodeBase):
 
         executor = await self._executor(db, node)
         outputs = await self._executor_outputs(db, executor)
-        applied = 0
+        touched: list[Output] = []
         for output in outputs:
             if not output.render_spec:
                 continue
@@ -806,11 +793,14 @@ class Verify(NodeBase):
                 source="system",
                 commit=False,
             )
-            output.render_status = RenderStatus.PENDING
-            output.render_claim_token = None
-            output.render_error = None
-            output.render_attempt = 0  # R1 B4a: intent re-pend = new budget (only the crash reap keeps counting)
-            applied += 1
+            touched.append(output)
+        applied = len(touched)
+        # Render ownership (ADR-096 §1): the re-pend rides the one seat — the
+        # barrier fold lifts immediately once the chain has settled (the
+        # usual case at escalation-answer time), and the mirror keeps the run
+        # open until the fresh render lands (ADR-074②).
+        if touched:
+            await pend_outputs_for_render(db, run, touched)
         await db.flush()
         await set_summary(
             node.id,

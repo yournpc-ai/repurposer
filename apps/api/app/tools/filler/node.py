@@ -9,19 +9,17 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.schemas import ClipSpec, RenderStatus
-from app.models.tables import Asset, WorkflowStep, Project, WorkflowRun
+from app.models.schemas import ClipSpec
+from app.models.tables import Asset, Output, WorkflowStep, Project, WorkflowRun
 from app.operations.service import apply_precomputed
 from app.pipeline.clip_spec import remove_range
 from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_free
 from app.pipeline.morph import (
-    fan_out_renders,
-    has_producer_upstream,
-    pend_suppressed_base_renders,
     record_target_output_ids,
     run_origin,
     target_clips,
 )
+from app.pipeline.render_ownership import pend_outputs_for_render
 from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.tools.filler.detect import detect
 
@@ -65,6 +63,7 @@ class RemoveFiller(NodeBase):
         total_fillers = 0
         total_repeats = 0
         touched: list[UUID] = []
+        touched_outputs: list[Output] = []
         for output in clips:
             spec = ClipSpec.model_validate(output.render_spec)
             asset_id = spec.source.asset_id or (output.source_ref or {}).get("asset_id")
@@ -94,6 +93,7 @@ class RemoveFiller(NodeBase):
 
             # Journal the morph (agent-loop-upgrade W4): every render_spec write
             # goes through the operations service — undoable, hash chain intact.
+            # The render request lands through the one seat below.
             await apply_precomputed(
                 db,
                 output,
@@ -103,12 +103,9 @@ class RemoveFiller(NodeBase):
                 source=origin,
                 user_id=project.user_id,
             )
-            output.render_status = RenderStatus.PENDING
-            output.render_claim_token = None
-            output.render_error = None
-            output.render_attempt = 0  # R1 B4a: intent re-pend = new budget (only the crash reap keeps counting)
             await db.flush()
             touched.append(output.id)
+            touched_outputs.append(output)
             total_fillers += applied_fillers
             total_repeats += applied_repeats
 
@@ -117,21 +114,13 @@ class RemoveFiller(NodeBase):
                 node.id,
                 "没有发现口水词" if ui_lang_of(run, project).startswith("zh") else "No fillers found",
             )
-        # Skip-rescue: clips left on their base spec (no fillers found in
-        # them) still owe a render when the producer's fan-out was suppressed
-        # for this chain. Defer to a later morph only when it can see the
-        # skips: a producer edge unions the full output_refs downstream; an
-        # all-skip leaves empty refs so the later morph falls back to the
-        # project-wide set; a partial touch without a producer edge renders
-        # the skips now — the later morph would never see them.
-        await pend_suppressed_base_renders(
-            db, run, node, clips, exclude=set(touched),
-            defer_to_later_morph=not touched or await has_producer_upstream(db, node),
-        )
-        if not touched:
             return []
 
-        await fan_out_renders(db, run, node, touched)
+        # Render ownership (ADR-096 §1): the compile-static writer barrier
+        # makes the render wait for every writer of each touched output
+        # (this morph included — a parallel sibling morph's tracks land in
+        # the same render).
+        await pend_outputs_for_render(db, run, touched_outputs)
         await record_target_output_ids(node.id, touched)
         await fill_summary(
             node.id,

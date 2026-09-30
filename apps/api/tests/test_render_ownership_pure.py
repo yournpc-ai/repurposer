@@ -1,73 +1,232 @@
-"""Pure tests for the render-ownership transition laws (ADR-096 batch A).
+"""Pure tests for the render-ownership laws (ADR-096 batches A + D).
 
 No DB / no LLM / no HTTP: the decision kernels are pure folds — the SQL
 seats filter structural eligibility (run / kind / seq / fork / scope) and
 hand plain data to these:
 
-- ``later_active_morph_exists`` — the D2-status defer law: a later morph
-  owns the render only while its step can still write
-  (pending/running/waiting). A terminal morph (done/failed/skipped) never
-  suppresses a render it will never own (the black-card incident's root:
-  the seq-ordered defer looked at a "future" that had already happened).
+- ``writer_steps_for_output`` — the batch-D compile-static writer fold: one
+  output's writer steps (birth step + every non-fork in-place morph whose
+  scope covers the row), seq-ordered, the last entry the render owner. The
+  fold errs WIDE: over-inclusion (a morph that skips the row) lifts its
+  barrier slot on completion anyway; under-inclusion is the only real error
+  (an early render reading a partial spec — the black-card incident).
+- ``prune_writer_barrier`` — the failure-repair fold: closed (failed /
+  cascade-skipped) writers drop out of a barrier so the survivors' spec
+  honestly renders.
 - ``render_delivery`` — the verify node's refusal of false completion:
   file present + render COMPLETED, with in-flight and honestly-failed
   states abstaining (无确定性依据不判决).
 - ``needs_render_reconcile`` — the finalize reconcile's orphan predicate:
   repair mechanism only, idempotent by construction.
 
-SQL-layer behavior (row-lock ordering, the actual claim/claim CAS) belongs
-to the e2e reruns, never to this suite (repo convention).
+SQL-layer behavior (row-lock ordering, the actual claim/claim CAS, the
+barrier predicate inside ``claim_pending_render``) belongs to the e2e
+reruns, never to this suite (repo convention).
 """
 
-from app.pipeline.morph import (
-    _ACTIVE_MORPH_STATUSES,
-    later_active_morph_exists,
-    needs_render_reconcile,
-)
 from app.pipeline.quality import failed_checks, render_delivery
+from app.pipeline.render_ownership import (
+    CLIPS_PRODUCER_KINDS,
+    CLOSED_STEP_STATUSES,
+    INPLACE_MORPH_KINDS,
+    StepView,
+    needs_render_reconcile,
+    prune_writer_barrier,
+    writer_steps_for_output,
+)
 
 
-# ---- the defer law's truth table (D2-status) ---------------------------------
+def _sv(
+    id: str,
+    kind: str,
+    seq: int,
+    inputs: tuple[str, ...] = (),
+    *,
+    fork: bool = False,
+    target: str | None = None,
+) -> StepView:
+    return StepView(
+        id=id, kind=kind, seq=seq, inputs=inputs, fork=fork, target_output_id=target
+    )
 
 
-class TestLaterActiveMorphExists:
-    def test_pending_counts(self) -> None:
-        assert later_active_morph_exists(["pending"]) is True
+# ---- the compile-static writer fold (batch D) ---------------------------------
 
-    def test_running_counts(self) -> None:
-        assert later_active_morph_exists(["running"]) is True
 
-    def test_waiting_counts(self) -> None:
-        """A parked interrupt (direction / verify escalation) revives via
-        resume_waiting_interrupt — it is a future writer, not a corpse."""
-        assert later_active_morph_exists(["waiting"]) is True
+class TestWriterStepsForOutput:
+    def test_run_born_base_chain(self) -> None:
+        """producer + two parallel non-fork morphs wired off it: all three
+        are writers, seq-ordered, the last morph the owner."""
+        steps = [
+            _sv("p", "select_clips", 1),
+            _sv("t", "translate_clip", 2, ("p",)),
+            _sv("r", "reframe_clip", 3, ("p",)),
+        ]
+        assert writer_steps_for_output(steps, birth_step_id="p", output_id="o1") == [
+            "p",
+            "t",
+            "r",
+        ]
 
-    def test_done_never_suppresses(self) -> None:
-        """The incident's exact shape: the later-seq morph finished FIRST —
-        deferring to it strands the render with no owner."""
-        assert later_active_morph_exists(["done"]) is False
+    def test_owner_is_last_by_seq_not_listing_order(self) -> None:
+        """The fold reads seq, never the iteration order of the step list."""
+        steps = [
+            _sv("r", "reframe_clip", 3, ("p",)),
+            _sv("t", "translate_clip", 2, ("p",)),
+            _sv("p", "select_clips", 1),
+        ]
+        assert writer_steps_for_output(steps, birth_step_id="p", output_id="o1") == [
+            "p",
+            "t",
+            "r",
+        ]
 
-    def test_failed_never_suppresses(self) -> None:
-        assert later_active_morph_exists(["failed"]) is False
+    def test_fork_morph_never_writes_the_base_row(self) -> None:
+        """A fork derives its OWN rows — the base row's barrier is the
+        producer alone; the derived row's barrier is the fork step alone."""
+        steps = [
+            _sv("p", "select_clips", 1),
+            _sv("t", "translate_clip", 2, ("p",), fork=True),
+        ]
+        assert writer_steps_for_output(steps, birth_step_id="p", output_id="o1") == ["p"]
+        assert writer_steps_for_output(steps, birth_step_id="t", output_id="o2") == ["t"]
 
-    def test_skipped_never_suppresses(self) -> None:
-        assert later_active_morph_exists(["skipped"]) is False
+    def test_mutator_chain_all_writers(self) -> None:
+        """remove_filler mutates the shared spec — a variant chained behind
+        it holds BOTH the producer and the mutator in inputs; all three
+        write the row."""
+        steps = [
+            _sv("p", "select_clips", 1),
+            _sv("f", "remove_filler", 2, ("p",)),
+            _sv("t", "translate_clip", 3, ("p", "f")),
+        ]
+        assert writer_steps_for_output(steps, birth_step_id="p", output_id="o1") == [
+            "p",
+            "f",
+            "t",
+        ]
 
-    def test_empty_is_false(self) -> None:
-        assert later_active_morph_exists([]) is False
+    def test_target_scoped_morph_excluded_from_run_born_rows(self) -> None:
+        """The scope was pinned at compile time — a run-born row was unborn
+        then, so a target-scoped morph can never name it."""
+        steps = [
+            _sv("p", "select_clips", 1),
+            _sv("t", "translate_clip", 2, ("p",), target="o-other"),
+        ]
+        assert writer_steps_for_output(steps, birth_step_id="p", output_id="o1") == ["p"]
 
-    def test_any_active_among_terminal_wins(self) -> None:
-        assert later_active_morph_exists(["done", "failed", "running"]) is True
-        assert later_active_morph_exists(["done", "waiting"]) is True
+    def test_two_producers_each_row_owns_its_chain(self) -> None:
+        """A morph wired off producer p2 never writes p1's rows — the
+        multi-output fork law: each owner waits only for its own writers."""
+        steps = [
+            _sv("p1", "select_clips", 1),
+            _sv("p2", "materialize_source", 2),
+            _sv("t", "translate_clip", 3, ("p2",)),
+        ]
+        assert writer_steps_for_output(steps, birth_step_id="p1", output_id="o1") == ["p1"]
+        assert writer_steps_for_output(steps, birth_step_id="p2", output_id="o2") == [
+            "p2",
+            "t",
+        ]
 
-    def test_status_vocabulary_pinned(self) -> None:
-        """The workflow_steps status vocabulary is pending / running /
-        waiting / done / failed / skipped — the active set is exactly the
-        non-terminal half."""
-        assert set(_ACTIVE_MORPH_STATUSES) == {"pending", "running", "waiting"}
-        assert not (
-            set(_ACTIVE_MORPH_STATUSES) & {"done", "failed", "skipped"}
-        )
+    def test_existing_profile_morphs_cover_preexisting_rows(self) -> None:
+        """No clips producer in the run's morph inputs → the morph targets
+        the project's pre-existing clips, so it covers every such row
+        (birth step absent from this run)."""
+        steps = [
+            _sv("pp", "preprocess", 1),
+            _sv("t", "translate_clip", 2, ("pp",)),
+            _sv("d", "dub_clip", 3, ("pp",)),
+        ]
+        assert writer_steps_for_output(steps, birth_step_id=None, output_id="o-old") == [
+            "t",
+            "d",
+        ]
+        # A birth step id pointing outside this run (earlier run's row) is
+        # the same case.
+        assert writer_steps_for_output(steps, birth_step_id="ghost", output_id="o-old") == [
+            "t",
+            "d",
+        ]
+
+    def test_producer_wired_morph_never_covers_preexisting_rows(self) -> None:
+        """The run births its own clips and morphs them; a pre-existing row
+        of the project is NOT in scope — empty barrier (the row is not this
+        run's to render)."""
+        steps = [
+            _sv("p", "select_clips", 1),
+            _sv("t", "translate_clip", 2, ("p",)),
+        ]
+        assert writer_steps_for_output(steps, birth_step_id=None, output_id="o-old") == []
+
+    def test_target_scoped_morph_covers_exactly_its_named_row(self) -> None:
+        steps = [
+            _sv("p", "select_clips", 1),
+            _sv("t", "translate_clip", 2, ("p",), target="o-old"),
+        ]
+        assert writer_steps_for_output(steps, birth_step_id=None, output_id="o-old") == ["t"]
+        assert writer_steps_for_output(steps, birth_step_id=None, output_id="o-other") == []
+
+    def test_fork_scoped_out_of_preexisting_coverage(self) -> None:
+        """Fork morphs derive new rows even on the existing profile — the
+        pre-existing base row keeps no writer but its own (empty) set."""
+        steps = [
+            _sv("t", "translate_clip", 1, (), fork=True),
+            _sv("r", "reframe_clip", 2, ()),
+        ]
+        assert writer_steps_for_output(steps, birth_step_id=None, output_id="o-old") == ["r"]
+
+    def test_non_morph_steps_never_writers(self) -> None:
+        """verify / render / preprocess rows sit in a run's step list too —
+        the fold only ever names the birth step + in-place morphs."""
+        steps = [
+            _sv("p", "select_clips", 1),
+            _sv("t", "translate_clip", 2, ("p",)),
+            _sv("v", "verify", 3, ("p", "t")),
+            _sv("m", "render", 4, ("p", "t")),
+        ]
+        assert writer_steps_for_output(steps, birth_step_id="p", output_id="o1") == [
+            "p",
+            "t",
+        ]
+
+    def test_kind_vocabularies_pinned(self) -> None:
+        """The fold's three vocabularies are load-bearing — a new in-place
+        morph kind must register here AND in the fold (this test is the
+        drift alarm)."""
+        assert set(INPLACE_MORPH_KINDS) == {
+            "translate_clip",
+            "dub_clip",
+            "remove_filler",
+            "add_music",
+            "reframe_clip",
+        }
+        assert set(CLIPS_PRODUCER_KINDS) == {
+            "select_clips",
+            "materialize_source",
+            "cut_segments",
+        }
+        assert set(CLOSED_STEP_STATUSES) == {"failed", "skipped"}
+
+
+# ---- the failure-repair fold ---------------------------------------------------
+
+
+class TestPruneWriterBarrier:
+    def test_closed_writers_drop_order_preserved(self) -> None:
+        assert prune_writer_barrier(["p", "t", "r"], {"t"}) == ["p", "r"]
+
+    def test_all_closed_empties(self) -> None:
+        """An emptied barrier lifts immediately — every writer the chain
+        could still hear from is settled."""
+        assert prune_writer_barrier(["p", "t"], {"p", "t"}) == []
+
+    def test_nothing_closed_is_identity(self) -> None:
+        assert prune_writer_barrier(["p", "t"], {"x"}) == ["p", "t"]
+        assert prune_writer_barrier(["p", "t"], set()) == ["p", "t"]
+
+    def test_empty_barrier_stays_empty(self) -> None:
+        assert prune_writer_barrier([], {"p"}) == []
 
 
 # ---- verify's false-completion refusal (render_delivery) ----------------------

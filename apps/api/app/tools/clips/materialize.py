@@ -34,7 +34,7 @@ from app.pipeline.clip_spec import build_clip_spec
 from app.pipeline.decompile import load_skeleton_for_run, skeleton_caption_overrides
 from app.pipeline.graph import NodeBase, estimate_free
 from app.pipeline.graph_store import display_aspect_class
-from app.pipeline.morph import later_inplace_morph_exists, render_step_label
+from app.pipeline.render_ownership import pend_outputs_for_render
 from app.pipeline.step_context import list_assets
 from app.pipeline.step_display import set_summary, ui_lang_of
 from app.platform.project_context import resolve_run_persona
@@ -174,13 +174,10 @@ class MaterializeSource(NodeBase):
         if spec is None:
             raise ValueError("materialize_source: source is not renderable")
 
-        # Render ownership (2026-08-15 morph/render race): when a NON-FORK
-        # morph sits later in this run, it rewrites this output's spec in
-        # place and owns the render — the base render would be dead work and
-        # a last-writer-wins race on the row. Leave render_status NULL
-        # (render not requested); the morph pends + fans out (a morph that
-        # skips the clip rescues it via pend_suppressed_base_renders).
-        suppressed = await later_inplace_morph_exists(db, run, node)
+        # Render ownership (ADR-096 §1): the birth step pends its outputs
+        # through the one seat — the render waits on this output's
+        # compile-static writer barrier (any later non-fork morph of this
+        # run), so it always reads the full final spec.
         spec_dict = spec.model_dump(mode="json")
         # The display-class stamp for "original"-aspect chains (2026-09-13
         # 用户拍板 — 产物卡跟源比例): the source's real pixels (probed into
@@ -221,31 +218,15 @@ class MaterializeSource(NodeBase):
                 "asset_id": str(render_source.id),
             },
             render_spec=spec_dict,
-            render_status=None if suppressed else RenderStatus.PENDING,
+            render_status=RenderStatus.PENDING,
         )
         db.add(output)
         await db.flush()
 
-        if not suppressed:
-            # Render fan-out (D2, select_clips 同款): the render worker claims
-            # the output row (render_status=PENDING) and mirrors terminal
-            # state back. The summary preset is the builder-written task name
-            # (the task list's pending-row text).
-            label = await render_step_label(db, run)
-            db.add(
-                WorkflowStep(
-                    run_id=run.id,
-                    kind="render",
-                    status="pending",
-                    seq=int(node.seq) + 1,
-                    inputs=[str(node.id)],
-                    spec={
-                        "output_id": str(output.id),
-                        **({"summary": label} if label else {}),
-                    },
-                )
-            )
-            await db.flush()
+        # Render fan-out (ADR-096 §1): pend + writer-barrier stamp + one
+        # mirror step — the claim gate holds the render until every writer
+        # of this output is done.
+        await pend_outputs_for_render(db, run, [output])
 
         zh = ui_lang_of(run, project).startswith("zh")
         await set_summary(

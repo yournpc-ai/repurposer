@@ -47,7 +47,7 @@ from app.pipeline.quote_card_stack import (
 )
 from app.pipeline.edges import load_plan_prelude_outputs
 from app.pipeline.graph import NODE_KINDS, NodeBase, estimate_mechanical, token_bounds
-from app.pipeline.morph import render_step_label
+from app.pipeline.render_ownership import pend_outputs_for_render
 from app.pipeline.outputs import (
     WorkChain,
     archive_outputs,
@@ -427,32 +427,6 @@ async def _build_quote_chain_artifacts(
     return frame_urls, composite_url, spec, None
 
 
-def _add_render_step(
-    db: AsyncSession,
-    *,
-    run: WorkflowRun,
-    node: WorkflowStep,
-    output_id: UUID,
-    label: str | None,
-) -> None:
-    """Render fan-out: the render worker picks the output row by
-    ``render_status=PENDING``; the WorkflowStep is the UI progress mirror
-    (mirrors select_clips's contract verbatim)."""
-    db.add(
-        WorkflowStep(
-            run_id=run.id,
-            kind="render",
-            status="pending",
-            seq=int(node.seq) + 1,
-            inputs=[str(node.id)],
-            spec={
-                "output_id": str(output_id),
-                **({"summary": label} if label else {}),
-            },
-        )
-    )
-
-
 async def _materialize_quote_card_outputs(
     *,
     db: AsyncSession,
@@ -539,11 +513,6 @@ async def _materialize_quote_card_outputs(
     music_mood = str(brand_cfg.get("musicMood") or "calm")
 
     created_ids: list[UUID] = []
-    # Localized label via the runtime registry (matches select_clips / morph
-    # paths — the label follows the run's pinned UI language). None when no
-    # render_cls is registered or no project is attached (spec["summary"]
-    # becomes optional in that case).
-    label = await render_step_label(db, run)
 
     if not quotes:
         return []
@@ -678,10 +647,9 @@ async def _materialize_quote_card_outputs(
             await db.flush()
             created_ids.append(clip_output.id)
 
-            _add_render_step(
-                db, run=run, node=node, output_id=clip_output.id, label=label
-            )
-            await db.flush()
+            # Render fan-out (ADR-096 §1): pend + writer-barrier stamp +
+            # one mirror step through the shared seat.
+            await pend_outputs_for_render(db, run, [clip_output])
         return created_ids
 
     # ----- N=1: the same dish as a single card -------------------------
@@ -739,10 +707,9 @@ async def _materialize_quote_card_outputs(
             await db.flush()
             created_ids.append(clip_output.id)
 
-            _add_render_step(
-                db, run=run, node=node, output_id=clip_output.id, label=label
-            )
-            await db.flush()
+            # Render fan-out (ADR-096 §1): pend + writer-barrier stamp +
+            # one mirror step through the shared seat.
+            await pend_outputs_for_render(db, run, [clip_output])
             return created_ids
 
     # N=1 without a usable spec — one frame card. Frame priority mirrors

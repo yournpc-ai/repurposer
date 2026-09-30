@@ -41,11 +41,11 @@ from app.metering import bind_workflow_step, merge_accrued_cost
 from app.pipeline.derivative_dispatch import derivative_output_types
 from app.pipeline.errors import TransientNodeError, user_error_line
 from app.pipeline.morph import (
-    INPLACE_MORPH_KINDS,
     check_transform_targets,
-    modifier_target_clips,
-    pend_suppressed_base_renders,
+)
+from app.pipeline.render_ownership import (
     reconcile_orphaned_renders,
+    repair_render_barriers,
 )
 from app.pipeline.step_display import ui_lang_of
 from app.pipeline.graph import (
@@ -1562,33 +1562,28 @@ async def execute_step(node_id: UUID) -> None:
                 await db.refresh(node)
                 await sync_graph_node_for_step(db, node)
                 await db.commit()
-                # Morph-failure rescue: a failed in-place morph leaves its
-                # producer-suppressed targets at render_status NULL — the
-                # executor session's rollback also undid any per-clip
-                # re-pends the morph managed before raising. The cascade
-                # below skips every downstream morph, so nothing later owns
-                # their render; re-pend them here (base specs intact — the
-                # morph's writes rolled back too). Rides this fresh session
-                # and is best-effort: the rescue must never mask the failure.
-                if (
-                    node.kind in INPLACE_MORPH_KINDS
-                    and run is not None
-                    and project is not None
-                ):
+                await _cascade_skip(db, node)
+                await db.commit()
+                # Render-barrier repair (ADR-096 §1): the failed step — and
+                # every downstream morph the cascade just skipped — may sit in
+                # the writer barrier of outputs this run already pended, and
+                # a barrier naming a closed step blocks the render forever.
+                # Prune the closed steps out of every PENDING output's
+                # barrier and rebirth the mirrors, so each clip honestly
+                # renders its surviving writers' spec with the failed node
+                # red on the canvas. Best-effort: the repair must never mask
+                # the failure.
+                if run is not None:
                     try:
-                        rescued = await modifier_target_clips(db, node, project)
-                        await pend_suppressed_base_renders(
-                            db, run, node, rescued, defer_to_later_morph=False
-                        )
+                        await repair_render_barriers(db, run)
                         await db.commit()
                     except Exception:
+                        await db.rollback()
                         logger.warning(
-                            "morph_failure_rescue_failed",
+                            "render_barrier_repair_failed",
                             node_id=str(node_id),
                             exc_info=True,
                         )
-                await _cascade_skip(db, node)
-                await db.commit()
     finally:
         if run_id is not None:
             await maybe_finalize_run(run_id)
@@ -1846,12 +1841,13 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             return
 
         # Render-ownership reconcile (ADR-096 §4, 双职责之二): outputs this
-        # run birthed whose render fell through every ownership seat (a defer
-        # hole, a crash window) are re-pended HERE, before the verdict — the
-        # run stays open on the fresh render steps and settles when they land
-        # (the render chain's _finalize_owning_run re-invokes this finalizer).
-        # Idempotent by predicate; a repair mechanism only — the normal paths
-        # (morph runners, morph-failure rescue) self-serve their re-pends.
+        # run birthed whose render fell through every request seat (a crash
+        # window, a pre-terminal-law legacy hole) are re-pended HERE, before
+        # the verdict — the run stays open on the fresh render steps and
+        # settles when they land (the render chain's _finalize_owning_run
+        # re-invokes this finalizer). Idempotent by predicate; a repair
+        # mechanism only — the normal paths (birth fan-out, morph touch,
+        # failure repair) self-serve their pends.
         reconciled = await reconcile_orphaned_renders(db, run)
         if reconciled:
             await db.commit()

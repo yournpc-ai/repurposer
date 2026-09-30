@@ -59,7 +59,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import HTTPException
-from sqlalchemy import delete, func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.context import build_context
@@ -1418,53 +1418,30 @@ class ChatTurn:
         except HTTPException as e:
             return str(e.detail)
 
-        # Re-pend + mirror rebirth (ADR-074② 台账律, fan_out_renders 同形状
-        # 律): supersede still-pending mirrors for this output, then rebirth
-        # one in the output's OWNING run with the producing step as parent
-        # (a legacy row without its step re-pends output-driven only — the
-        # undo/redo precedent; terminal runs early-return at finalize).
+        # Re-pend + mirror rebirth through the ONE seat (ADR-096 §1): the
+        # barrier folds over the output's BIRTH run — a terminal run's steps
+        # are all done, so the render fires immediately; a live run's barrier
+        # waits out any still-pending writers of the row. A legacy row
+        # without its birth step re-pends output-driven only (the undo/redo
+        # precedent — NULL barrier lifts at once).
         await db.refresh(output)
-        output.render_status = RenderStatus.PENDING
-        output.render_claim_token = None
-        output.render_error = None
-        output.render_attempt = 0  # intent re-pend = new budget
-        await db.execute(
-            delete(WorkflowStep).where(
-                WorkflowStep.kind == "render",
-                WorkflowStep.status == "pending",
-                WorkflowStep.spec["output_id"].astext == str(output.id),
-            )
-        )
         step = (
             await db.get(WorkflowStep, output.workflow_step_id)
             if output.workflow_step_id
             else None
         )
         run = await db.get(WorkflowRun, step.run_id) if step is not None else None
-        if run is not None and step is not None:
-            from app.pipeline.morph import render_step_label  # deferred: heavy
-
-            max_seq = (
-                await db.execute(
-                    select(func.max(WorkflowStep.seq)).where(
-                        WorkflowStep.run_id == run.id
-                    )
-                )
-            ).scalar_one() or step.seq
-            label = await render_step_label(db, run)
-            db.add(
-                WorkflowStep(
-                    run_id=run.id,
-                    kind="render",
-                    status="pending",
-                    seq=int(max_seq) + 1,
-                    inputs=[str(step.id)],
-                    spec={
-                        "output_id": str(output.id),
-                        **({"summary": label} if label else {}),
-                    },
-                )
+        if run is not None:
+            from app.pipeline.render_ownership import (  # deferred: heavy
+                pend_outputs_for_render,
             )
+
+            await pend_outputs_for_render(db, run, [output])
+        else:
+            output.render_status = RenderStatus.PENDING
+            output.render_claim_token = None
+            output.render_error = None
+            output.render_attempt = 0  # intent re-pend = new budget
 
         fact = _edit_fact_echo(kind, assembled, zh=_prefers_zh(text))
         assistant_message.content = (

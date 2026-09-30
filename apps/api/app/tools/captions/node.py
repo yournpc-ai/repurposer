@@ -35,14 +35,12 @@ from app.operations.service import apply_precomputed
 from app.pipeline.errors import TransientNodeError, propagate_key
 from app.pipeline.graph import TRANSCRIPT, NodeBase, estimate_agent, token_bounds
 from app.pipeline.morph import (
-    fan_out_renders,
     guard_target_differs_from_source,
-    has_producer_upstream,
     modifier_target_clips,
-    pend_suppressed_base_renders,
     record_target_output_ids,
     run_origin,
 )
+from app.pipeline.render_ownership import pend_outputs_for_render
 from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.tools.captions.procedure import (
     TRANSLATION_ARTIFACT_KEY,
@@ -155,6 +153,7 @@ class TranslateClip(NodeBase):
             else None
         )
         touched: list[UUID] = []
+        touched_outputs: list[Output] = []
         for output in clips:
             spec = output.render_spec
             track = (spec or {}).get("caption_track") or []
@@ -256,10 +255,12 @@ class TranslateClip(NodeBase):
                 db.add(derived)
                 await db.flush()
                 touched.append(derived.id)
+                touched_outputs.append(derived)
             else:
                 # Morph: rewrite in place — journaled so the overwrite is
                 # undoable (the fork branch's new rows start their own
-                # baseline instead).
+                # baseline instead). The render request (pend + writer
+                # barrier + mirror) lands through the one seat below.
                 await apply_precomputed(
                     db,
                     output,
@@ -269,32 +270,21 @@ class TranslateClip(NodeBase):
                     source=origin,
                     user_id=project.user_id,
                 )
-                output.render_status = RenderStatus.PENDING
-                output.render_claim_token = None
-                output.render_error = None
-                output.render_attempt = 0  # R1 B4a: intent re-pend = new budget (only the crash reap keeps counting)
                 await db.flush()
                 touched.append(output.id)
+                touched_outputs.append(output)
 
         if not touched:
             await set_summary(
                 node.id,
                 "没有可翻译的字幕" if ui_lang_of(run, project).startswith("zh") else "No captions to translate",
             )
-        # Skip-rescue: targets left on their base spec (no caption track)
-        # still owe a render when the producer's fan-out was suppressed for
-        # this chain. Defer to a later morph only when it can see the skips:
-        # a producer edge unions the full output_refs downstream; an
-        # all-skip leaves empty refs so the later morph falls back to the
-        # project-wide set; a partial touch without a producer edge renders
-        # the skips now — the later morph would never see them.
-        await pend_suppressed_base_renders(
-            db, run, node, clips, exclude=set(touched),
-            defer_to_later_morph=not touched or await has_producer_upstream(db, node),
-        )
-        if not touched:
             return []
-        await fan_out_renders(db, run, node, touched, defer_to_later_morph=not fork)
+        # Render ownership (ADR-096 §1): the compile-static writer barrier
+        # makes the render wait for every writer of each touched output
+        # (this morph included — a parallel sibling morph's tracks land in
+        # the same render).
+        await pend_outputs_for_render(db, run, touched_outputs)
         await record_target_output_ids(node.id, touched)
         await fill_summary(
             node.id, self.kind, ui_language=ui_lang_of(run, project), n=len(touched), lang=lang.upper()

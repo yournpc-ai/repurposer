@@ -1,131 +1,25 @@
 """Modifier-step machinery (ADR-039 P1 split): the shared body of the morph
 tools (remove_filler / add_music / translate_clip / dub_clip) — resolve the
-clips a modifier acts on, journal the spec write, fan out one render step per
-touched output.
+clips a modifier acts on and journal the spec write. Render requests (pend +
+writer barrier + mirror) live in ``app.pipeline.render_ownership`` (ADR-096
+§1): every render request — birth fan-out, morph touch, failure repair —
+goes through the one seat there.
 """
 
-from collections.abc import Iterable
 from uuid import UUID
 
-import structlog
-from sqlalchemy import cast, delete, func, or_, select, update
+from sqlalchemy import cast, func, or_, select, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import array as pg_array
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import AsyncSessionLocal
-from app.models.schemas import RenderStatus
 from app.models.tables import Asset, Message, Output, WorkflowStep
 from app.models.tables import Project, WorkflowRun
 
-logger = structlog.get_logger()
-
-# Morph kinds that rewrite a clip's render_spec IN PLACE and re-render (the
-# fork variants derive new rows and leave the base clip alone — they never
-# suppress anything).
-INPLACE_MORPH_KINDS = (
-    "translate_clip",
-    "dub_clip",
-    "remove_filler",
-    "add_music",
-    "reframe_clip",
-)
-
-# Clip producers (their fan-out a later in-place morph suppresses).
-# cut_segments (N-56): the compiler-emitted birth seat — a morph wired
-# downstream of it must union the producer's output_refs like any other
-# (has_producer_upstream).
-_PRODUCER_KINDS = ("select_clips", "materialize_source", "cut_segments")
-
-
-async def render_step_label(db: AsyncSession, run: WorkflowRun) -> str | None:
-    """The runtime-born render step's builder-written task name (same label()
-    source as compile-time nodes), localized to the run's pinned UI locale."""
-    from app.pipeline.graph import NODE_KINDS  # deferred: import cycle
-    from app.pipeline.step_display import ui_lang_of
-
-    project = await db.get(Project, run.project_id)
-    render_cls = NODE_KINDS.get("render")
-    if project is None or render_cls is None:
-        return None
-    return render_cls.label(None, ui_lang_of(run, project))
-
-
-# Step statuses in which a later morph can still WRITE (re-pend + fan out a
-# render): pending/running are in flight; waiting (direction interrupt /
-# verify escalation park) revives via resume_waiting_interrupt. Terminal
-# states (done/failed/skipped) never write again — deferring a render to a
-# terminal morph strands it with no owner (the black-card incident, ADR-096
-# §2 D2-status).
-_ACTIVE_MORPH_STATUSES = ("pending", "running", "waiting")
-
-
-def later_active_morph_exists(statuses: Iterable[str]) -> bool:
-    """Pure fold of the defer law (ADR-096 §2): a later morph owns the render
-    only while its step can still write — any status in
-    ``_ACTIVE_MORPH_STATUSES``. The SQL seat filters the structural
-    eligibility (run / kind / seq / fork / scope); this is the status half."""
-    return any(s in _ACTIVE_MORPH_STATUSES for s in statuses)
-
-
-async def later_inplace_morph_exists(db: AsyncSession, run: WorkflowRun, node: WorkflowStep) -> bool:
-    """True when a NON-FORK morph sibling sits LATER in this run's graph AND
-    can still write (its step status ∈ pending/running/waiting).
-
-    That morph will rewrite the same outputs' render_spec in place and own
-    their render — rendering now is dead work (a full render thrown away when
-    the morph lands) AND a last-writer-wins race on the output row (the stale
-    render's completion can clobber the morph's re-pend). Producers and
-    earlier morphs use this to leave the render to the last morph in the
-    chain; ``fork`` siblings don't count (they derive new rows and never
-    touch the base clip). A ``target_output_id``-scoped morph doesn't count
-    either: it rewrites one PRE-EXISTING output — its scope never covers
-    this run's newborn clips, so it must not suppress their base renders.
-
-    The status half (ADR-096 §2) is read AFTER the caller's re-pend of the
-    output rows, inside the same transaction: every morph re-pends (UPDATE →
-    row lock held to commit, the step's terminal write riding the same
-    commit), so competing morphs serialize on the row lock and the later
-    committer always reads the earlier one's terminal status — a terminal
-    morph never suppresses a render it will never own. Seq order is NOT an
-    ownership signal: same-layer parallel morphs finish in wall-clock order.
-    """
-    statuses = (
-        (
-            await db.execute(
-                select(WorkflowStep.status).where(
-                    WorkflowStep.run_id == run.id,
-                    WorkflowStep.kind.in_(INPLACE_MORPH_KINDS),
-                    WorkflowStep.seq > node.seq,
-                    func.coalesce(WorkflowStep.spec["fork"].astext, "false") != "true",
-                    func.coalesce(WorkflowStep.spec["target_output_id"].astext, "") == "",
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    return later_active_morph_exists(statuses)
-
-
-async def has_producer_upstream(db: AsyncSession, node: WorkflowStep) -> bool:
-    """True when a clip producer feeds this modifier. The compiler wires the
-    producer edge into EVERY modifier of the run, so a later morph's target
-    set always unions the producer's full output_refs — this morph's skipped
-    clips stay visible downstream (a rescue may safely defer to the later
-    morph). Without a producer edge the later morph sees only this step's
-    own output_refs (the touched set)."""
-    if not node.inputs:
-        return False
-    count = await db.scalar(
-        select(func.count())
-        .select_from(WorkflowStep)
-        .where(
-            WorkflowStep.id.in_([UUID(str(i)) for i in node.inputs]),
-            WorkflowStep.kind.in_(_PRODUCER_KINDS),
-        )
-    )
-    return bool(count)
+# Transform kinds whose target_language faces a source language (the
+# compile-time adjudication's scope — same two the runtime guard covers).
+_TRANSFORM_TARGET_KINDS = ("translate_clip", "dub_clip")
 
 
 async def target_clips(
@@ -296,11 +190,6 @@ async def guard_target_differs_from_source(
             raise ValueError(_same_language_message(src_lang, zh=zh))
 
 
-# Transform kinds whose target_language faces a source language (the
-# compile-time adjudication's scope — same two the runtime guard covers).
-_TRANSFORM_TARGET_KINDS = ("translate_clip", "dub_clip")
-
-
 async def _faced_source_languages(
     db: AsyncSession,
     project: Project,
@@ -411,215 +300,6 @@ async def check_transform_targets(
         )
         if matched is not None:
             raise ValueError(_same_language_message(matched, zh=zh))
-
-
-async def fan_out_renders(
-    db: AsyncSession,
-    run: WorkflowRun,
-    node: WorkflowStep,
-    output_ids: list[UUID],
-    *,
-    defer_to_later_morph: bool = True,
-) -> None:
-    """One render step per touched output (same shape as the clips fan-out):
-    claimed via outputs.render_status, terminal state mirrored back.
-
-    Two orderings are enforced here (2026-08-15 morph/render race):
-    - Supersede: still-pending sibling render steps for these outputs are
-      deleted — this morph's spec rewrite obsoletes them. (A step already
-      running can't be unclaimed; the render completion guard discards its
-      stale product instead — see rendering.render_output.)
-    - Defer (``defer_to_later_morph``): when a LATER non-fork morph is still
-      active in this run (pending/running/waiting — ADR-096 §2), it will
-      rewrite the spec again and owns the render — the touched outputs go
-      back to render_status NULL (render not requested) and no steps are
-      added. A later morph already terminal never suppresses: it will never
-      write again, so this fan-out owns the render instead. Fork fan-outs
-      pass False: a fork's derived rows are exclusively its own (later morphs
-      act on the base clips, never on them)."""
-    await db.execute(
-        delete(WorkflowStep).where(
-            WorkflowStep.run_id == run.id,
-            WorkflowStep.kind == "render",
-            WorkflowStep.status == "pending",
-            WorkflowStep.spec["output_id"].astext.in_([str(oid) for oid in output_ids]),
-        )
-    )
-    if defer_to_later_morph and await later_inplace_morph_exists(db, run, node):
-        await db.execute(
-            update(Output)
-            .where(Output.id.in_(output_ids))
-            .values(render_status=None)
-        )
-        await db.flush()
-        return
-    max_seq = int(
-        (
-            await db.execute(
-                select(func.max(WorkflowStep.seq)).where(WorkflowStep.run_id == run.id)
-            )
-        ).scalar_one()
-        or node.seq
-    )
-    label = await render_step_label(db, run)
-    for idx, output_id in enumerate(output_ids, start=1):
-        db.add(
-            WorkflowStep(
-                run_id=run.id,
-                kind="render",
-                status="pending",
-                seq=max_seq + idx,
-                inputs=[str(node.id)],
-                spec={"output_id": str(output_id), **({"summary": label} if label else {})},
-            )
-        )
-    await db.flush()
-
-
-async def pend_suppressed_base_renders(
-    db: AsyncSession,
-    run: WorkflowRun,
-    node: WorkflowStep,
-    outputs: list[Output],
-    *,
-    exclude: set[UUID] | None = None,
-    defer_to_later_morph: bool = True,
-) -> None:
-    """Morph skip-rescue: targets the morph did NOT touch keep their base
-    spec, so when the producer's render fan-out was suppressed for this run
-    (render_status NULL = render not requested) the morph owes them the
-    render they would otherwise never get. Goes through fan_out_renders so
-    a later in-place morph defers the same way — but only when that morph
-    can actually SEE the rescued clips. Callers pass
-    ``defer_to_later_morph = (not touched) or await has_producer_upstream(...)``:
-    a producer edge means every later morph unions the producer's full
-    output_refs (skips stay visible); an all-skipped morph leaves empty
-    output_refs, so the later morph's project-wide fallback sees them. A
-    partial touch with no producer edge must NOT defer — the later morph's
-    targets come from this step's output_refs (the touched set), so the
-    skipped clips are invisible to it and would never render.
-    """
-    stale_ids = [
-        o.id
-        for o in outputs
-        if o.render_spec
-        and o.render_status is None
-        and (exclude is None or o.id not in exclude)
-    ]
-    if not stale_ids:
-        return
-    await db.execute(
-        update(Output)
-        .where(Output.id.in_(stale_ids))
-        .values(
-            render_status=RenderStatus.PENDING,
-            render_claim_token=None,
-            # R1 B4a: intent re-pend = new budget (only the crash reap keeps counting)
-            render_attempt=0,
-        )
-    )
-    await db.flush()
-    await fan_out_renders(
-        db, run, node, stale_ids, defer_to_later_morph=defer_to_later_morph
-    )
-
-
-def needs_render_reconcile(
-    *,
-    has_render_spec: bool,
-    render_status: str | None,
-    archived: bool,
-    has_pending_render_step: bool,
-) -> bool:
-    """The finalize-reconcile predicate (ADR-096 §4): an output born in the
-    run is render-orphaned when it carries a render contract, the render was
-    never requested (render_status NULL), it is not archived (the claim gate
-    never picks archived rows — re-pending one would pend a render no worker
-    ever claims, holding the run open forever), and no pending render step
-    (any run) still owns its render."""
-    return (
-        has_render_spec
-        and render_status is None
-        and not archived
-        and not has_pending_render_step
-    )
-
-
-async def reconcile_orphaned_renders(db: AsyncSession, run: WorkflowRun) -> list[UUID]:
-    """Run-finalize reconcile (ADR-096 §4, the readiness law's second seat):
-    re-pend THIS run's render-orphaned outputs through the existing
-    re-pend + fan-out path (``pend_suppressed_base_renders``'s exact shape:
-    token NULL, attempt budget reset).
-
-    A repair mechanism, never a normal-path dependency: morph runners and
-    the morph-failure rescue own their re-pends; this scans only what fell
-    through (a defer hole, a crash window). Idempotent by predicate — the
-    first pass flips rows to PENDING, so a repeat finalize matches nothing.
-    Never defers: at finalize every step is settled, no later morph can own
-    the render. Scope is this run's born outputs only — a blanket sweep of
-    historical projects would mass-resurrect old renders (billing blast).
-
-    The render step's parent is the output's own birth step
-    (``workflow_step_id``), one fan-out per birth step.
-    """
-    birth_steps = select(WorkflowStep.id).where(WorkflowStep.run_id == run.id)
-    rows = list(
-        (
-            await db.execute(
-                select(Output).where(
-                    Output.workflow_step_id.in_(birth_steps),
-                    Output.render_spec.isnot(None),
-                    Output.render_status.is_(None),
-                    Output.archived_at.is_(None),
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    if not rows:
-        return []
-    pending_rendered = set(
-        (
-            await db.execute(
-                select(WorkflowStep.spec["output_id"].astext).where(
-                    WorkflowStep.kind == "render",
-                    WorkflowStep.status == "pending",
-                    WorkflowStep.spec["output_id"].astext.in_(
-                        [str(o.id) for o in rows]
-                    ),
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    by_step: dict[UUID, list[Output]] = {}
-    for o in rows:
-        if needs_render_reconcile(
-            has_render_spec=True,
-            render_status=None,
-            archived=False,
-            has_pending_render_step=str(o.id) in pending_rendered,
-        ):
-            by_step.setdefault(o.workflow_step_id, []).append(o)
-    healed: list[UUID] = []
-    for step_id, group in by_step.items():
-        step = await db.get(WorkflowStep, step_id)
-        if step is None:
-            # Lineage row gone (ondelete=SET NULL): no step to parent the
-            # render step on — leave the row for the next pass rather than
-            # inventing a parent.
-            continue
-        await pend_suppressed_base_renders(
-            db, run, step, group, defer_to_later_morph=False
-        )
-        healed.extend(o.id for o in group)
-    if healed:
-        logger.info(
-            "render_orphans_reconciled", run_id=str(run.id), count=len(healed)
-        )
-    return healed
 
 
 async def record_target_output_ids(node_id: UUID, output_ids: list[UUID]) -> None:

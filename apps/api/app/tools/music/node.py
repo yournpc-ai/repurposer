@@ -10,18 +10,15 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.memory.brand import resolve_music_ref
-from app.models.database import AsyncSessionLocal
-from app.models.schemas import RenderStatus
-from app.models.tables import WorkflowStep, Project, WorkflowRun
+from app.models.tables import Output, WorkflowStep, Project, WorkflowRun
 from app.operations.service import apply_operations
 from app.pipeline.graph import MEDIA, NodeBase, estimate_free
 from app.pipeline.morph import (
-    fan_out_renders,
-    pend_suppressed_base_renders,
     record_target_output_ids,
     run_origin,
     target_clips,
 )
+from app.pipeline.render_ownership import pend_outputs_for_render
 from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.platform.project_context import resolve_persona
 
@@ -86,27 +83,21 @@ class AddMusic(NodeBase):
             if track is not None:
                 break
         if track is None:
-            # Unresolvable chain — rescue the suppressed base renders first
-            # so the clips still come out, then fail the step. Own session +
-            # commit: the executor session rolls back when the raise below
-            # propagates, and a plain call here would never persist. Never
-            # defer — the failure cascade-skips every downstream morph, so
-            # no later morph exists to own these renders.
-            async with AsyncSessionLocal() as s:
-                await pend_suppressed_base_renders(
-                    s, run, node, clips, defer_to_later_morph=False
-                )
-                await s.commit()
+            # Unresolvable chain — fail the step. The failure tail's repair
+            # seat prunes this step out of the touched clips' render
+            # barriers, so they still render their surviving-writer spec.
             raise ValueError(f"No music track found for mood '{mood}'")
 
         origin = await run_origin(db, run)
         touched: list[UUID] = []
+        touched_outputs: list[Output] = []
         for output in clips:
             # Journal through the SHARED pure-apply path (the editor's batch
             # route): set_music carries a pure apply, so apply_precomputed
             # rejects it — the 2026-08-17 add_music breakage. commit=False
             # keeps the runner's flush discipline (the executor commits at
-            # the step boundary).
+            # the step boundary). The render request lands through the one
+            # seat below.
             await apply_operations(
                 db,
                 output.id,
@@ -124,14 +115,15 @@ class AddMusic(NodeBase):
                 user_id=project.user_id,
                 commit=False,
             )
-            output.render_status = RenderStatus.PENDING
-            output.render_claim_token = None
-            output.render_error = None
-            output.render_attempt = 0  # R1 B4a: intent re-pend = new budget (only the crash reap keeps counting)
             await db.flush()
             touched.append(output.id)
+            touched_outputs.append(output)
 
-        await fan_out_renders(db, run, node, touched)
+        # Render ownership (ADR-096 §1): the compile-static writer barrier
+        # makes the render wait for every writer of each touched output
+        # (this morph included — a parallel sibling morph's tracks land in
+        # the same render).
+        await pend_outputs_for_render(db, run, touched_outputs)
         await record_target_output_ids(node.id, touched)
         await fill_summary(
             node.id, self.kind,

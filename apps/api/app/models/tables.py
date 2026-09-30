@@ -558,6 +558,13 @@ class Output(Base):
     # reap never does. Named into the render_* family — a bare ``attempt``
     # would collide with the verify verdict's ``quality.attempt`` key.
     render_attempt = Column(Integer, nullable=False, default=0)
+    # Render writer barrier (ADR-096 §1): the compile-static writer-step ids
+    # (seq-ordered, last = the render owner) the current render request waits
+    # on — the claim gate (jobs.claim_pending_render) fires only when every
+    # listed step is done. Stamped at every run-scoped pend (birth fan-out /
+    # morph touch / failure-rescue restamp); NULL = unbarriered (run-less
+    # re-pends: undo/redo, manual render, legacy rows).
+    render_barrier = Column(JSONB, nullable=True)
     score = Column(JSONB, nullable=True)
     # 质检裁决 (产物质量线期 3): the verify node's verdict —
     # {status: passed|needs_human, checks: [{id, ok, detail, cls}], attempt,

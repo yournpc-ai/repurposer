@@ -52,7 +52,7 @@ from app.models.tables import (
 from app.pipeline.clip_spec import build_clip_spec
 from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase, estimate_free
 from app.pipeline.graph_store import SHORTS_DEFAULT_ASPECT
-from app.pipeline.morph import fan_out_renders
+from app.pipeline.render_ownership import pend_outputs_for_render
 from app.pipeline.step_context import list_assets
 from app.pipeline.step_display import fill_summary, ui_lang_of
 from app.platform.project_context import resolve_run_persona
@@ -153,11 +153,12 @@ class CutSegments(NodeBase):
         # None here by construction).
         music = await music_from_block(db, brand_cfg)
 
-        # Render ownership (2026-08-15 morph/render race) is the helper's
-        # law, one seat: birth PENDING, fan out, and a later NON-FORK morph
-        # in this run flips the rows back to NULL and owns their render
-        # (select_clips / materialize_source spell the same dance inline).
+        # Render ownership (ADR-096 §1): birth pends every clip and the one
+        # seat stamps the compile-static writer barrier — a later non-fork
+        # morph of this run sits in the barrier, so the render always reads
+        # the full final spec.
         output_ids: list[UUID] = []
+        born: list[Output] = []
         for i, span in enumerate(spans, start=1):
             segment = Segment(
                 id=f"seg-{i}",
@@ -211,8 +212,9 @@ class CutSegments(NodeBase):
             db.add(output)
             await db.flush()
             output_ids.append(output.id)
+            born.append(output)
 
-        await fan_out_renders(db, run, node, output_ids)
+        await pend_outputs_for_render(db, run, born)
 
         await fill_summary(
             node.id,

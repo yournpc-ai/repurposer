@@ -169,8 +169,9 @@ class _World:
         async def _cascade(db, failed_node, *, reason=None):
             self.cascaded.append(failed_node)
 
-        async def _rescue(db, node, project):
-            self.rescued.append(node)
+        async def _repair(db, run):
+            self.rescued.append(run)
+            return 0
 
         async def _finalize(run_id):
             self.finalized.append(run_id)
@@ -178,7 +179,7 @@ class _World:
         monkeypatch.setattr(orchestrator, "capture_step", _capture)
         monkeypatch.setattr(orchestrator, "sync_graph_node_for_step", _sync)
         monkeypatch.setattr(orchestrator, "_cascade_skip", _cascade)
-        monkeypatch.setattr(orchestrator, "modifier_target_clips", _rescue)
+        monkeypatch.setattr(orchestrator, "repair_render_barriers", _repair)
         monkeypatch.setattr(orchestrator, "maybe_finalize_run", _finalize)
 
 

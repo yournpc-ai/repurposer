@@ -11,18 +11,16 @@ import asyncio
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.schemas import ClipSpec, CropKeyframe, RenderStatus
+from app.models.schemas import ClipSpec, CropKeyframe
 from app.models.tables import Asset, Output, Project, WorkflowRun, WorkflowStep
 from app.operations.service import apply_precomputed
 from app.pipeline.graph import MEDIA, NodeBase, estimate_mechanical
 from app.pipeline.morph import (
-    fan_out_renders,
-    has_producer_upstream,
     modifier_target_clips,
-    pend_suppressed_base_renders,
     record_target_output_ids,
     run_origin,
 )
+from app.pipeline.render_ownership import pend_outputs_for_render
 from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.tools.reframe.procedure import compute_crop_track, resolve_mode
 from app.providers.storage import download_to_temp
@@ -168,6 +166,7 @@ class ReframeClip(NodeBase):
         # a concurrent select_clips re-run) skips — it must not abort the
         # tail and roll back the clips already journaled.
         touched: list[UUID] = []
+        touched_outputs: list[Output] = []
         for output, mode, keyframes in prepared:
             try:
                 # Re-read fresh and re-apply the delta onto it: the detection
@@ -180,7 +179,8 @@ class ReframeClip(NodeBase):
                 )
                 # Journal the morph (agent-loop-upgrade W4): every render_spec
                 # write goes through the operations service — undoable, hash
-                # chain intact.
+                # chain intact. The render request lands through the one seat
+                # below.
                 await apply_precomputed(
                     db,
                     output,
@@ -196,12 +196,9 @@ class ReframeClip(NodeBase):
                 )
                 skipped += 1
                 continue
-            output.render_status = RenderStatus.PENDING
-            output.render_claim_token = None
-            output.render_error = None
-            output.render_attempt = 0  # R1 B4a: intent re-pend = new budget (only the crash reap keeps counting)
             await db.flush()
             touched.append(output.id)
+            touched_outputs.append(output)
 
         logger.info("reframe_clip_done", touched=len(touched), skipped=skipped)
         if not touched:
@@ -209,21 +206,13 @@ class ReframeClip(NodeBase):
                 node.id,
                 "没有可分镜的片段" if ui_lang_of(run, project).startswith("zh") else "Nothing to reframe",
             )
-        # Skip-rescue: clips left on their base spec (no faces / not an
-        # interview) still owe a render when the producer's fan-out was
-        # suppressed for this chain. Defer to a later morph only when it can
-        # see them: a producer edge unions the full output_refs downstream;
-        # an all-skip leaves empty refs so the later morph falls back to the
-        # project-wide set. A partial touch without a producer edge renders
-        # the skips now — the later morph would never see them.
-        await pend_suppressed_base_renders(
-            db, run, node, clips, exclude=set(touched),
-            defer_to_later_morph=not touched or await has_producer_upstream(db, node),
-        )
-        if not touched:
             return []
 
-        await fan_out_renders(db, run, node, touched)
+        # Render ownership (ADR-096 §1): the compile-static writer barrier
+        # makes the render wait for every writer of each touched output
+        # (this morph included — a parallel sibling morph's tracks land in
+        # the same render).
+        await pend_outputs_for_render(db, run, touched_outputs)
         await record_target_output_ids(node.id, touched)
         await fill_summary(
             node.id,

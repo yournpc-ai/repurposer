@@ -44,7 +44,7 @@ from app.pipeline.outputs import (
 from app.pipeline.edges import load_plan_prelude_outputs
 from app.pipeline.graph import MEDIA, TRANSCRIPT, NodeBase, estimate_agent, token_bounds
 from app.pipeline.graph_store import SHORTS_DEFAULT_ASPECT
-from app.pipeline.morph import later_inplace_morph_exists, render_step_label
+from app.pipeline.render_ownership import pend_outputs_for_render
 from app.agents.base import MAX_CHARS_PER_TEXT
 from app.agents.contexts import generation_context
 from app.pipeline.step_context import (
@@ -410,13 +410,12 @@ class SelectClips(NodeBase):
         ttl_enabled_raw = cfg.get("titleEnabled")
         ttl_enabled = True if ttl_enabled_raw is None else bool(ttl_enabled_raw)
 
-        # Render ownership (2026-08-15 morph/render race): when a NON-FORK
-        # morph sits later in this run, it rewrites these outputs' specs in
-        # place and owns the render — the base fan-out would be dead work and
-        # a last-writer-wins race on the rows. Leave render_status NULL; the
-        # morph pends + fans out (skips are rescued by the morph).
-        suppressed = await later_inplace_morph_exists(db, run, node)
+        # Render ownership (ADR-096 §1): the birth step pends its outputs
+        # through the one seat — the render waits on the compile-static
+        # writer barrier (any later non-fork morph of this run) and always
+        # reads the full final spec.
         output_ids: list[UUID] = []
+        born: list[Output] = []
         for clip_idx, plan in enumerate(plans.clips[:clip_count]):
             segment = plan.to_segment()
             music = await music_from_plan(
@@ -494,7 +493,7 @@ class SelectClips(NodeBase):
                     "asset_id": str(render_source.id) if render_source is not None else None,
                 },
                 render_spec=spec_dict,
-                render_status=(RenderStatus.PENDING if not suppressed else None) if spec_dict else None,
+                render_status=RenderStatus.PENDING if spec_dict else None,
                 score={
                     "value": plan.recommendation_score,
                     "reason": plan.score_reason or None,
@@ -509,30 +508,15 @@ class SelectClips(NodeBase):
             db.add(output)
             await db.flush()
             output_ids.append(output.id)
+            if spec_dict:
+                born.append(output)
 
-        # Render fan-out (D2): one render node per clip with a render spec. These
-        # nodes are NOT claimed via the node claim — the render worker claims the
-        # output row (render_status=PENDING) and mirrors terminal state back here.
-        # (Skipped when the render's owner sits downstream — a later non-fork
-        # morph; see above.)
-        if not suppressed:
-            max_seq = int(node.seq)
-            label = await render_step_label(db, run)
-            for idx, output_id in enumerate(output_ids, start=1):
-                db.add(
-                    WorkflowStep(
-                        run_id=run.id,
-                        kind="render",
-                        status="pending",
-                        seq=max_seq + idx,
-                        inputs=[str(node.id)],
-                        spec={
-                            "output_id": str(output_id),
-                            **({"summary": label} if label else {}),
-                        },
-                    )
-                )
-            await db.flush()
+        # Render fan-out (ADR-096 §1): one mirror per clip with the compile-
+        # static writer barrier. These nodes are NOT claimed via the node
+        # claim — the render worker claims the output row
+        # (render_status=PENDING) once every barrier step is done, and
+        # mirrors terminal state back here.
+        await pend_outputs_for_render(db, run, born)
 
         await fill_summary(
             node.id,
