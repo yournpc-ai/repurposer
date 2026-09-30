@@ -52,7 +52,12 @@ from app.pipeline.conversation_bridge import (
 )
 from app.pipeline.lifecycle import project_lifecycle
 from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
-from app.pipeline.product_graph import EXPLORATION_NODE_TYPE, display_ranks
+from app.pipeline.product_graph import (
+    EXPLORATION_NODE_TYPE,
+    display_ranks,
+    is_lineage_edge,
+    project_artifacts,
+)
 from app.pipeline.scope_classifier import (
     CONTINUATION,
     ChainFacts,
@@ -413,6 +418,11 @@ async def get_project_graph(
         .scalars()
         .all()
     )
+    # ADR-097 §5 (批 C-1): lineage/display-only 真边退出默认边载荷——它
+    # 是 artifact 投影的血缘事实, 不是画布的物料流 (批 C-2 才转为投影驱
+    # 动; 批 C-1 画布零变化)。排除在一切下游消费之前: rank 输入 / A3-lite
+    # 去重 triple / 边载荷, 三处与既有行为逐字节一致。
+    edges = [e for e in edges if not is_lineage_edge(e)]
     # task_book 读面过滤（Workspace 合同 v4.2 C1-b，2026-09-26 封板收口）:
     # the plan document and every edge touching it are filtered at READ
     # time — the canvas shows the pure material flow (源 → 文档 → 装配); the
@@ -433,6 +443,10 @@ async def get_project_graph(
             if str(e.from_node) not in hidden_book_ids
             and str(e.to_node) not in hidden_book_ids
         ]
+    # ADR-097 §3: artifact 投影的源快照——B4-lite 之前 (隐藏 modifier 退出
+    # 默认投影后仍以 facet 摘要出现在交付物卡上; task_book / exploration
+    # 永不是 artifact 成员, 上面的过滤安全)。
+    artifact_source_nodes = list(nodes)
     # B4-lite (2026-09-13 演示冻结期, ADR-072 批 B4 的读面先行): morph
     # modifiers (reframe / add_music / remove_filler) rewrite their producer's
     # SAME output rows in place — the old five-type stamp gave them their own
@@ -520,7 +534,12 @@ async def get_project_graph(
         # 「lifecycle 键恒在」不变量 (Phase 3 Batch C 拍板 A): the zero-node
         # frame carries the same stamp (an empty project's blocked vs
         # unknown reads identically in today's UI).
-        return {"nodes": [], "edges": [], "lifecycle": await _lifecycle_stamp(db, project)}
+        return {
+            "nodes": [],
+            "edges": [],
+            "lifecycle": await _lifecycle_stamp(db, project),
+            "artifacts": [],
+        }
 
     # ── Product Graph rank (I-PFA-02 / 合同 §7 C-1) ──────────────────────
     # rank = the one spatial authority, computed HERE at the single point
@@ -569,6 +588,33 @@ async def get_project_graph(
 
     visible = await list_visible_outputs(db, project_id)
     outputs_by_id = {str(o.id): o for o in visible}
+
+    # ADR-097 §3: the artifact projection's output facts — live rows are
+    # `visible` above; archived/historical rows referenced by artifact
+    # members join here (one IN query, archived versions keep their
+    # historical ownership — ADR-091 语义不动)。
+    member_output_ids = {
+        str(oid)
+        for n in artifact_source_nodes
+        for oid in ((n.spec or {}).get("output_ids") or [])
+    }
+    artifact_outputs_by_id: dict[str, Output] = dict(outputs_by_id)
+    missing_output_ids = [
+        UUID(str(oid)) for oid in member_output_ids if oid not in outputs_by_id
+    ]
+    if missing_output_ids:
+        artifact_outputs_by_id.update(
+            {
+                str(o.id): o
+                for o in (
+                    await db.execute(
+                        select(Output).where(Output.id.in_(missing_output_ids))
+                    )
+                )
+                .scalars()
+                .all()
+            }
+        )
 
     # The outputs' dossier facts (spec_prompt / model_facts — OutputInspector
     # and the lightbox read them, same stamp as /results): the producing
@@ -678,6 +724,14 @@ async def get_project_graph(
         # Same stamp, second transport (一票源两处运输 — mobile parity
         # reads this frame).
         "lifecycle": await _lifecycle_stamp(db, project),
+        # ADR-097 Phase 1 (additive): the artifact projection — membership
+        # reads only the stamped canonical keys (zero read-time inference);
+        # 批 C-1 画布忽略本块 (默认投影零变化), 批 C-2 切换消费。
+        "artifacts": project_artifacts(
+            artifact_source_nodes,
+            artifact_outputs_by_id,
+            visible_ids=outputs_by_id.keys(),
+        ),
     }
 
 

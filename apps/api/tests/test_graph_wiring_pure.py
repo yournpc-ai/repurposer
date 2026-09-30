@@ -978,9 +978,12 @@ async def test_two_station_stamp_asm_and_doc_companion():
     the executor) plus its `{fill_key}#doc` companion (table×manual — the
     persistent editable cue artifact's home), linked by spec.doc_node_id.
     The companion carries NO tool / prompt / step_ids / output_ids — it is
-    not an execution unit. The new edge law: 文流经 doc 站中转 (transcript→
-    doc→asm), the media flow feeds the asm direct (asset→asm), and the old
-    transcript→asm direct edge is never stamped."""
+    not an execution unit. The edge law: 文流经 doc 站中转 (transcript→
+    doc→asm), the media flow feeds the asm direct (asset→asm). ADR-097 §5
+    adds the transcript→asm LINEAGE 真边 (出生即真实写入, 端口标记
+    out:lineage — display-only, 零编排语义); a PLAIN transcript→asm flow
+    edge is still never stamped. The stamp also writes the canonical four
+    artifact fields (ADR-097 §1): asm = deliverable, doc = companion."""
     project = Project(id=_PROJECT_ID)
     run = WorkflowRun(id=uuid4(), project_id=_PROJECT_ID, context={})
     steps = _translate_chain()
@@ -1006,6 +1009,12 @@ async def test_two_station_stamp_asm_and_doc_companion():
     # even in run mode — sync re-aggregates it to queued/running/done as
     # the steps execute (only REUSED nodes re-queue at stamp time).
     assert asm.state == "draft"
+    # canonical 四字段 (ADR-097 §1): 单组链 → 唯一 deliverable; run.context
+    # 无 name → artifact_name 省略 (诚实标签回退, ADR-058)。
+    assert asm.spec["work_key"] == f"work:{run.id}"
+    assert asm.spec["artifact_key"] == f"artifact:{run.id}:1"
+    assert asm.spec["artifact_role"] == "deliverable"
+    assert "artifact_name" not in asm.spec
     # doc 站: table×manual, role = the doc_station declaration — no tool /
     # prompt / step_ids / output_ids (the cue artifact is its whole content)
     assert doc.spec["fill_key"] == f"{key}#doc"
@@ -1017,13 +1026,22 @@ async def test_two_station_stamp_asm_and_doc_companion():
     assert "step_ids" not in doc.spec
     assert "output_ids" not in doc.spec
     assert doc.state == "queued"  # §6b — run 模式与 asm 同排
-    # 边派生新规: exactly the four edges, transcript→asm 永不存在
-    triples = {(str(e.from_node), str(e.to_node), e.edge_type) for e in db.edges}
-    assert triples == {
-        (str(asset_node.id), str(transcript_doc.id), "text"),
-        (str(transcript_doc.id), str(doc.id), "text"),
-        (str(doc.id), str(asm.id), "text"),
-        (str(asset_node.id), str(asm.id), "video"),
+    # companion 四字段随 asm 的组降生 (同一 artifact_key)
+    assert doc.spec["artifact_key"] == f"artifact:{run.id}:1"
+    assert doc.spec["artifact_role"] == "companion"
+    # 边派生: the four flow edges (transcript→asm 的**物料流**直边仍永不
+    # 存在) + the ADR-097 §5 lineage 真边 (out:lineage 端口标记是唯一机器
+    # 判别 — rank / RunOp 闭包 / 读面默认载荷三处显式排除它)。
+    edge_facts = {
+        (str(e.from_node), str(e.to_node), e.edge_type, str(e.from_port))
+        for e in db.edges
+    }
+    assert edge_facts == {
+        (str(asset_node.id), str(transcript_doc.id), "text", "out:text"),
+        (str(transcript_doc.id), str(doc.id), "text", "out:text"),
+        (str(doc.id), str(asm.id), "text", "out:text"),
+        (str(asset_node.id), str(asm.id), "video", "out:video"),
+        (str(transcript_doc.id), str(asm.id), "text", "out:lineage"),
     }
 
 

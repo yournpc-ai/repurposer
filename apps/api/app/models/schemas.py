@@ -3742,6 +3742,46 @@ class LifecycleStamp(BaseModel):
     charge: dict = Field(default_factory=dict)
 
 
+class ProjectArtifactFacet(BaseModel):
+    """One facet's summary on the deliverable card (ADR-097 §3 — the facet
+    exits the default projection; its program/state stay inspectable here).
+    ``surface="hidden_modifier"`` marks the lever surfaces (LEVER_TOOLS 兼容
+    共存, 两层门不合并)."""
+
+    node_id: UUID
+    tool: str | None = None
+    label: str | None = None
+    state: str
+    surface: str | None = None
+
+
+class ProjectArtifactActivity(BaseModel):
+    """The artifact's single activity owner (ADR-097 §4 — one aggregated
+    activity state per artifact; member-level location only on failure)."""
+
+    state: str
+    failed_node_ids: list[UUID] = Field(default_factory=list)
+
+
+class ProjectArtifact(BaseModel):
+    """One product artifact's read-face block (ADR-097 Phase 1 — additive
+    projection off the stamped canonical four fields; membership is a
+    compile-time fact, never read-time inference). ``current_output_id`` =
+    the live version's唯一归属 (one live output lands on at most one card);
+    archived versions keep their historical ownership (ADR-091)."""
+
+    artifact_key: str
+    work_key: str
+    name: str | None = None
+    deliverable_node_id: UUID | None = None
+    facet_node_ids: list[UUID] = Field(default_factory=list)
+    facets: list[ProjectArtifactFacet] = Field(default_factory=list)
+    companion_node_ids: list[UUID] = Field(default_factory=list)
+    current_output_id: UUID | None = None
+    archived_output_ids: list[UUID] = Field(default_factory=list)
+    activity: ProjectArtifactActivity
+
+
 class ProjectGraphResponse(BaseModel):
     """The project graph's one read frame — nodes + edges + joined display
     rows, everything the canvas renders, in one fetch."""
@@ -3749,6 +3789,10 @@ class ProjectGraphResponse(BaseModel):
     nodes: list[GraphNodeResponse] = Field(default_factory=list)
     edges: list[GraphEdgeResponse] = Field(default_factory=list)
     lifecycle: LifecycleStamp | None = None
+    # ADR-097 Phase 1 (additive): the artifact projection — one deliverable
+    # one card, facets summarized, companions first-class. Unknown/legacy
+    # nodes never appear here (passthrough on the default projection).
+    artifacts: list[ProjectArtifact] = Field(default_factory=list)
 
 
 class ProjectResultsResponse(BaseModel):

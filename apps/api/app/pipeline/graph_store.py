@@ -37,6 +37,7 @@ from app.models.tables import GraphEdge, GraphIsland, GraphNode, Project, now_ut
 from app.pipeline.product_graph import (
     EXPLORATION_PROTOTYPE,
     RANK_EDGE_TYPES,
+    is_lineage_edge,
     product_ranks,
 )
 
@@ -45,6 +46,20 @@ class WiringRejected(ValueError):
     """A wiring op failed adjudication (unknown op / dangling reference /
     incompatible ports / a cycle). Same family as ToolRejected — request
     handlers translate to 422, chat degrades to a plain-language reply."""
+
+
+def executable_children_of(edges: Any, node_id: UUID) -> list[UUID]:
+    """The run-closure walk's edge set (ADR-097 §5): lineage/display-only
+    真边（端口标记 out:lineage）**永不参与** stale/invalidation 闭包——调
+    度事实源恒为 run 内编译的 step inputs，新真边零编排语义。没有这道排
+    除, 对转写稿节点的 run 闭包会顺着血缘边把下游字幕产物卷进重跑
+    （改 transcript edited_text 误伤下游字幕的那一格）。Module-level and
+    pure so the walk law stays unit-testable off the DB."""
+    return [
+        UUID(str(e.to_node))
+        for e in edges
+        if UUID(str(e.from_node)) == node_id and not is_lineage_edge(e)
+    ]
 
 
 # ---- op schemas (the wiring registry) --------------------------------------
@@ -976,9 +991,12 @@ async def apply_wiring_ops(
     def children_of(node_id: UUID) -> list[UUID]:
         return [UUID(str(e.to_node)) for e in edges if UUID(str(e.from_node)) == node_id]
 
-    def reaches(start: UUID, target: UUID) -> bool:
+    def reaches(
+        start: UUID, target: UUID, *, children=children_of
+    ) -> bool:
         """Downstream reachability over the working edge set (cycle checks
-        and run-subgraph closure share this one walk)."""
+        and run-subgraph closure share this one walk; the run closure passes
+        the lineage-excluding child set — cycle checks keep the full one)."""
         seen: set[UUID] = set()
         frontier = [start]
         while frontier:
@@ -988,7 +1006,7 @@ async def apply_wiring_ops(
             if cur in seen:
                 continue
             seen.add(cur)
-            frontier.extend(children_of(cur))
+            frontier.extend(children(cur))
         return False
 
     def add_edge(
@@ -1207,7 +1225,18 @@ async def apply_wiring_ops(
                 resolved.add(seed)
                 # Close over downstream — a node rerun refills what feeds
                 # off it (修订 = edit_prompt + run({node} ∪ downstream)).
-                resolved |= {n for n in nodes if reaches(seed, n)}
+                # ADR-097 §5: the walk EXCLUDES lineage/display-only edges —
+                # a transcript node's rerun closure never swallows the
+                # downstream caption artifact through its bloodline edge.
+                resolved |= {
+                    n
+                    for n in nodes
+                    if reaches(
+                        seed,
+                        n,
+                        children=lambda nid: executable_children_of(edges, nid),
+                    )
+                }
             # I-PFA-04 (合同 §7 C-2): execution order = the DAG's topological
             # depth — visual coordinates lost execution authority (a stale or
             # drifted frame can never put a consumer before its producer).
@@ -1280,6 +1309,7 @@ __all__ = [
     "WiringOp",
     "WiringRejected",
     "apply_wiring_ops",
+    "executable_children_of",
     "island_reserved_bottom",
     "settle_frames_with_edges",
     "wiring_catalog_lines",

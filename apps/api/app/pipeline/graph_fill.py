@@ -66,6 +66,13 @@ from app.pipeline.graph_store import (
     resolve_source_aspect,
 )
 from app.pipeline.outputs import compose_spec_prompt
+from app.pipeline.product_graph import (
+    ARTIFACT_KEY_PREFIX,
+    LINEAGE_EDGE_PORT,
+    WORK_KEY_PREFIX,
+    artifact_fields_for_birth,
+    assign_artifact_groups,
+)
 from app.tools.captions.procedure import TRANSLATION_ARTIFACT_KEY
 from app.tools.clips.transcript import group_cues
 
@@ -775,6 +782,57 @@ async def _stamp_graph_core(
             continue
         family_for(_fill_key_for_step(step), _decl_of(step.kind))["steps"].append(step)
 
+    # ── 1b. Artifact 分组 (ADR-097 §1 — 编译期分配, canonical 四字段的唯一
+    # 计算座位) ─────────────────────────────────────────────────────────
+    # 家族 DAG 从持久化的 step inputs 推导 (与 §7 边推导同一事实源;
+    # verify 的 inputs 排除——它是质量门接线, 不是物料流)。分配结果随降生
+    # 凝固进 spec (artifact_fields_for_birth 的甄别: key 冻结 / legacy 永不
+    # 补写 / draft 永不盖章), 此后一切读取只认 key (读时推断永禁, ADR-097
+    # §2)。work = 一次 run (work:<run.id>); artifact_name 守 ADR-058 二源律:
+    # 恰好一个 artifact 组时 run 的 LLM 命名落上, 多组留空 (诚实标签回退)。
+    artifact_assignments: dict[str, tuple[int, str]] = {}
+    artifact_name: str | None = None
+    work_key: str | None = None
+    if not draft and run is not None:
+        step_family: dict[str, str] = {
+            str(s.id): key for key, fam in families.items() for s in fam["steps"]
+        }
+        family_parents: dict[str, list[str]] = {key: [] for key in families}
+        for step in steps:
+            child_key = step_family.get(str(step.id))
+            if (
+                child_key is None
+                or step.kind in _PRELUDE_KINDS
+                or step.kind in ("verify", "render")
+            ):
+                continue
+            for upstream_id in step.inputs or []:
+                up_key = step_family.get(str(upstream_id))
+                if (
+                    up_key is not None
+                    and up_key != child_key
+                    and up_key not in family_parents[child_key]
+                ):
+                    family_parents[child_key].append(up_key)
+        order_keys = {
+            key: (min((s.seq for s in fam["steps"]), default=0), key)
+            for key, fam in families.items()
+        }
+        artifact_assignments = assign_artifact_groups(
+            {
+                key: str(
+                    _family_head(sorted(fam["steps"], key=lambda s: s.seq)).kind
+                )
+                for key, fam in families.items()
+            },
+            family_parents,
+            order_keys,
+        )
+        work_key = f"{WORK_KEY_PREFIX}{run.id}"
+        if len({slot for slot, _ in artifact_assignments.values()}) == 1:
+            candidate = (run.context or {}).get("name")
+            artifact_name = str(candidate) if candidate else None
+
     # ── 2. Read the current graph (idempotent reuse) ─────────────────────
     existing_nodes = list(
         (
@@ -864,6 +922,7 @@ async def _stamp_graph_core(
 
     # ── 4. Generation / editor / doc-station nodes (idempotent by fill_key) ──
     doc_pairs: list[tuple[UUID, UUID]] = []  # (doc station id, its asm id) — §7 wires them
+    deliverable_node_ids: list[UUID] = []  # 本 stamp 的 deliverable 站 — §7 lineage 真边的落点
     for key, fam in families.items():
         fam_steps = sorted(fam["steps"], key=lambda s: s.seq)
         # The family's head drives label / params / tool / prompt — the pick
@@ -932,6 +991,32 @@ async def _stamp_graph_core(
             and bool((reused.spec or {}).get("prompt"))
         )
 
+        # ── Artifact 四字段 (ADR-097 §1): 冻结优先——reused 已携 key 沿用它
+        # (re-fill 永不改派); 否则按本 stamp 的编译期分配降生, 甄别真值表
+        # (draft / legacy run-born 自排除) 在 artifact_fields_for_birth。
+        # pre-fill spec 是甄别输入 (re-fill 自己也会写 run_id, 必须读旧值)。
+        pre_spec = dict(reused.spec or {}) if reused is not None else {}
+        slot_role = artifact_assignments.get(key)
+        frozen_key = str(pre_spec.get("artifact_key") or "") or None
+        birth_fields = artifact_fields_for_birth(
+            pre_spec,
+            draft=draft,
+            artifact_key=(
+                f"{ARTIFACT_KEY_PREFIX}{run.id}:{slot_role[0]}"
+                if slot_role is not None and run is not None
+                else None
+            ),
+            work_key=work_key,
+            role=slot_role[1] if slot_role is not None else None,
+            name=artifact_name,
+        )
+        effective_key = frozen_key or birth_fields.get("artifact_key")
+        effective_role = (
+            str(pre_spec.get("artifact_role") or "")
+            if frozen_key
+            else birth_fields.get("artifact_role")
+        )
+
         # ── 两站拆分 (ADR-072): the doc-station companion — ensured BEFORE
         # the reused branch so the draft-restamp guard's `continue` still
         # births and registers it (the migration path for pre-v3 rows: a
@@ -957,6 +1042,21 @@ async def _stamp_graph_core(
                     existing_doc.spec = {
                         **(existing_doc.spec or {}), "estimate": doc_estimate
                     }
+                # companion 四字段随 asm 的组降生 (甄别随 asm: asm legacy/草图
+                # → doc 同样留白; doc 已携 key 则冻结)。key 随出生凝固后,
+                # 换组永不可能 (asm 的 key 也冻着)。
+                if (
+                    not draft
+                    and effective_key
+                    and not (existing_doc.spec or {}).get("artifact_key")
+                ):
+                    existing_doc.spec = {
+                        **(existing_doc.spec or {}),
+                        "work_key": work_key,
+                        "artifact_key": effective_key,
+                        "artifact_role": "companion",
+                        **({"artifact_name": artifact_name} if artifact_name else {}),
+                    }
             else:
                 doc_node_id = uuid4()
                 ops.append(
@@ -975,6 +1075,21 @@ async def _stamp_graph_core(
                             # C3 两站估价: the translator's token section
                             # lives on the doc station (capture-0 units).
                             "estimate": doc_estimate,
+                            # companion 四字段随 asm 的组降生 (同上甄别)。
+                            **(
+                                {
+                                    "work_key": work_key,
+                                    "artifact_key": effective_key,
+                                    "artifact_role": "companion",
+                                    **(
+                                        {"artifact_name": artifact_name}
+                                        if artifact_name
+                                        else {}
+                                    ),
+                                }
+                                if not draft and effective_key
+                                else {}
+                            ),
                         },
                     }
                 )
@@ -1024,8 +1139,13 @@ async def _stamp_graph_core(
                         "run_id": run_id_str,
                     }
                 ),
+                # ADR-097 §1: {} unless draft-born 首次活填 (key 冻结 /
+                # legacy 永不补写 — 甄别见 artifact_fields_for_birth)。
+                **birth_fields,
             }
             reused.state = "draft" if draft else "queued"
+            if not draft and effective_key and effective_role == "deliverable":
+                deliverable_node_ids.append(UUID(str(reused.id)))
             continue
         # Pinned newborn id — known BEFORE the batch, so §7's connect ops
         # reference it directly and the door's frame settle sees the final
@@ -1059,22 +1179,44 @@ async def _stamp_graph_core(
                             "run_id": run_id_str,
                         }
                     ),
+                    # ADR-097 §1: 降生即写 canonical 四字段 (草图留白,
+                    # Start 活填补写)。
+                    **birth_fields,
                     "output_ids": [],
                 },
             }
         )
+        if not draft and effective_key and effective_role == "deliverable":
+            deliverable_node_ids.append(newborn_id)
 
     # ── 7. Edges (dedupe against the existing set) ────────────────────────
     want_edge: set[tuple[str, str, str]] = set()
 
-    def connect(from_id: UUID, to_id: UUID, edge_type: str) -> None:
+    def connect(
+        from_id: UUID,
+        to_id: UUID,
+        edge_type: str,
+        *,
+        from_port: str | None = None,
+        to_port: str | None = None,
+    ) -> None:
         want_edge.add((str(from_id), str(to_id), edge_type))
         if (str(from_id), str(to_id), edge_type) in have_edge or from_id == to_id:
             return
         have_edge.add((str(from_id), str(to_id), edge_type))
-        ops.append(
-            {"op": "connect", "from_node": from_id, "to_node": to_id, "edge_type": edge_type}
-        )
+        op: dict[str, Any] = {
+            "op": "connect",
+            "from_node": from_id,
+            "to_node": to_id,
+            "edge_type": edge_type,
+        }
+        # 端口词只在显式给出时携带 (lineage 真边的机器标记)——既有 op 的
+        # 形状逐字节不变。
+        if from_port:
+            op["from_port"] = from_port
+        if to_port:
+            op["to_port"] = to_port
+        ops.append(op)
 
     def node_of(step: WorkflowStep) -> UUID | None:
         return node_id_by_key.get(_fill_key_for_step(step))
@@ -1175,6 +1317,23 @@ async def _stamp_graph_core(
         for transcript_doc_id in transcript_doc_by_asset.values():
             for doc_id, _asm_id in doc_pairs:
                 connect(transcript_doc_id, doc_id, "text")
+    # lineage 真边 (ADR-097 §5): transcript → 本 stamp 每个 deliverable 站的
+    # 血缘边, 出生即真实写入 (A3-lite 读时合成的正式化; 同一 triple 去重,
+    # /graph 读面在批 C-1 仍过滤它出默认边载荷——画布零变化, 批 C-2 才转
+    # 为投影驱动)。端口标记 out:lineage 是唯一的机器判别——rank 输入
+    # (product_graph._rank_inputs) / RunOp 下游闭包 (graph_store) / 读面
+    # 边载荷三处显式排除, 新真边零编排语义。mode② (asset_fed=False) 与
+    # doc 站腿同律不盖章; draft 预览不盖 (Start 活填时补)。
+    if asset_fed and not draft:
+        for transcript_doc_id in transcript_doc_by_asset.values():
+            for deliverable_id in deliverable_node_ids:
+                connect(
+                    transcript_doc_id,
+                    deliverable_id,
+                    "text",
+                    from_port=f"out:{LINEAGE_EDGE_PORT}",
+                    to_port=f"in:{LINEAGE_EDGE_PORT}",
+                )
     for asset_node_id, asset in zip(asset_node_ids, assets):
         for step in writer_heads:
             connect(asset_node_id, node_id_by_key[_fill_key_for_step(step)], "text")
