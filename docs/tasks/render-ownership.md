@@ -12,8 +12,8 @@
 ### 施工点
 
 1. **defer 状态感知**（`app/pipeline/morph.py`）：`later_inplace_morph_exists` 的判定从「更晚 seq 非 fork morph 存在」改为「更晚 seq 非 fork morph 的 step 状态 ∈ {pending, running}」。调用序核查：判定必须在该 morph 对 output 行的 re-pend（行锁）之后、同一事务内执行——现行 morph runner（reframe/captions/dub/filler/music 五座）均为此序，施工时逐座复核不假设。
-2. **verify 拒错误完工**：verify 节点对产物加三合取——文件非空 + `render_status` 终态 + 文件对应当前 spec 版本。涉及 `run_review` 的 landed facts 同律（payload-complete/files-empty 不得计 landed）。
-3. **finalize reconcile**：run 收尾（`maybe_finalize_run` 链）幂等扫描本 run 产物中「有 render_spec 但 render_status=NULL 且无 pending render step」者，经既有 fan_out/enqueue 路径 re-pend（幂等键 = output id + 当前 spec 写入戳；crash 重入不重复建任务）。
+2. **verify 拒错误完工（两态判负 + 三态弃权）**：判负只取两态矛盾——render_status NULL 且无文件（所有权洞）、COMPLETED 且无文件（终态矛盾），走既有 fidelity bounce / needs_human；pending / rendering / failed 弃权（verify 与渲染赛跑是设计形态，FAILED 由渲染镜像与 render_failed gap 呈现，双门只会误弹生成器）。`run_review` landed facts 同律（payload-complete/files-empty 不得计 landed，事实行标 render=NOT-READY）。
+3. **finalize reconcile**：run 收尾（`maybe_finalize_run` verdict 之前）幂等扫描本 run 产物中「有 render_spec 但 render_status=NULL 且**未归档**且无 pending render step（跨 run 防御——他者已认领的渲染永不双重拥有）」者，经既有 `pend_suppressed_base_renders` 路径 re-pend（谓词抽纯 `needs_render_reconcile`；归档排除承重——claim 门永不拾 archived 行，re-pend 归档产物 = pend 一个无 worker 认领的渲染，run 永远开着）。
 
 ### 验收
 

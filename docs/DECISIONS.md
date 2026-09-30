@@ -2349,8 +2349,8 @@ claim token CAS（跨 run / 崩溃恢复 / 在飞渲染隔离）原样承重；w
 
 ### 4. 就绪语义（双职责）
 
-- **verify 拒错误完工**：产物文件非空 + render_status 终态 + 文件对应当前 spec 版本，三合取缺一不过。
-- **finalize reconcile 修遗漏**：run 收尾幂等扫描「有 render_spec 但 render_status=NULL 且无 pending render step」的产物并 re-pend（幂等键防重复创建）。reconcile 是修复机制，永不成正常路径依赖。
+- **verify 拒错误完工（两态判负 + 三态弃权）**：verify 与渲染赛跑是设计形态（verify inputs = 执行器+morph 链，render step 走渲染链认领——verify 恒在渲染在飞时执行），字面「非 COMPLETED 即负」会把每个健康 run 弹回生成器。故判负只取两态矛盾：**render_status NULL 且无文件**（所有权洞）与 **COMPLETED 且无文件**（终态矛盾）——走既有 fidelity bounce / needs_human 出路；pending / rendering / failed **弃权**（在飞无确定性依据不判决；FAILED 由渲染镜像与 render_failed gap 诚实呈现，双门只会为渲染故障误弹生成器）。`run_review` landed facts 同律收紧（payload-complete/files-empty 不得计 landed，事实行标 render=NOT-READY）。
+- **finalize reconcile 修遗漏**：run 收尾（verdict 之前）幂等扫描**本 run** 产物中「有 render_spec 但 render_status=NULL 且**未归档**且无 pending render step（跨 run 防御——他者已认领的渲染永不双重拥有）」者并 re-pend。归档排除是承重谓词：claim 门永不拾 archived 行，re-pend 归档产物 = pend 一个无 worker 认领的渲染，run 永远开着。reconcile 是修复机制，永不成正常路径依赖。
 - **run 完工 ≠ 产物就绪**：就绪 = 执行终态 + 文件有效 + 版本对账三合取。用户面完工语义随 ADR-097 §5 唯一化为 artifact readiness；「payload 完工即播报成功」永禁。
 
 ### 5. 并发 spec 写入同族纪律（track 原子写）
