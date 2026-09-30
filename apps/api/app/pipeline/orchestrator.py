@@ -45,6 +45,7 @@ from app.pipeline.morph import (
     check_transform_targets,
     modifier_target_clips,
     pend_suppressed_base_renders,
+    reconcile_orphaned_renders,
 )
 from app.pipeline.step_display import ui_lang_of
 from app.pipeline.graph import (
@@ -1841,6 +1842,18 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             if n.status in ("pending", "running", "waiting")
         ]
         if active:
+            await db.commit()
+            return
+
+        # Render-ownership reconcile (ADR-096 §4, 双职责之二): outputs this
+        # run birthed whose render fell through every ownership seat (a defer
+        # hole, a crash window) are re-pended HERE, before the verdict — the
+        # run stays open on the fresh render steps and settles when they land
+        # (the render chain's _finalize_owning_run re-invokes this finalizer).
+        # Idempotent by predicate; a repair mechanism only — the normal paths
+        # (morph runners, morph-failure rescue) self-serve their re-pends.
+        reconciled = await reconcile_orphaned_renders(db, run)
+        if reconciled:
             await db.commit()
             return
 

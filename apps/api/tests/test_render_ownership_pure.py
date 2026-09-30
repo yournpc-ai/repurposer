@@ -12,6 +12,8 @@ hand plain data to these:
 - ``render_delivery`` — the verify node's refusal of false completion:
   file present + render COMPLETED, with in-flight and honestly-failed
   states abstaining (无确定性依据不判决).
+- ``needs_render_reconcile`` — the finalize reconcile's orphan predicate:
+  repair mechanism only, idempotent by construction.
 
 SQL-layer behavior (row-lock ordering, the actual claim/claim CAS) belongs
 to the e2e reruns, never to this suite (repo convention).
@@ -20,6 +22,7 @@ to the e2e reruns, never to this suite (repo convention).
 from app.pipeline.morph import (
     _ACTIVE_MORPH_STATUSES,
     later_active_morph_exists,
+    needs_render_reconcile,
 )
 from app.pipeline.quality import failed_checks, render_delivery
 
@@ -110,3 +113,61 @@ class TestRenderDelivery:
         c = render_delivery("failed", False, has_render_spec=True)
         assert c.ok is None
         assert failed_checks([c]) == []
+
+
+# ---- the finalize reconcile's orphan predicate --------------------------------
+
+
+class TestNeedsRenderReconcile:
+    def test_orphan_shape_matches(self) -> None:
+        """spec present + never requested + live + no pending render step."""
+        assert (
+            needs_render_reconcile(
+                has_render_spec=True,
+                render_status=None,
+                archived=False,
+                has_pending_render_step=False,
+            )
+            is True
+        )
+
+    def test_each_flag_individually_excludes(self) -> None:
+        base = {
+            "has_render_spec": True,
+            "render_status": None,
+            "archived": False,
+            "has_pending_render_step": False,
+        }
+        assert needs_render_reconcile(**{**base, "has_render_spec": False}) is False
+        assert needs_render_reconcile(**{**base, "archived": True}) is False
+        assert (
+            needs_render_reconcile(**{**base, "has_pending_render_step": True})
+            is False
+        )
+
+    def test_any_requested_status_excludes(self) -> None:
+        """Idempotency: once reconciled the row is PENDING and the predicate
+        never matches again — repeat finalizes are no-ops by construction."""
+        for status in ("pending", "rendering", "completed", "failed"):
+            assert (
+                needs_render_reconcile(
+                    has_render_spec=True,
+                    render_status=status,
+                    archived=False,
+                    has_pending_render_step=False,
+                )
+                is False
+            ), status
+
+    def test_archived_never_repended(self) -> None:
+        """The claim gate never picks archived rows — re-pending one would
+        pend a render no worker ever claims (run held open forever)."""
+        assert (
+            needs_render_reconcile(
+                has_render_spec=True,
+                render_status=None,
+                archived=True,
+                has_pending_render_step=False,
+            )
+            is False
+        )

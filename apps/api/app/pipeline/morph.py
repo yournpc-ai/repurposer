@@ -7,6 +7,7 @@ touched output.
 from collections.abc import Iterable
 from uuid import UUID
 
+import structlog
 from sqlalchemy import cast, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import array as pg_array
@@ -16,6 +17,8 @@ from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
 from app.models.tables import Asset, Message, Output, WorkflowStep
 from app.models.tables import Project, WorkflowRun
+
+logger = structlog.get_logger()
 
 # Morph kinds that rewrite a clip's render_spec IN PLACE and re-render (the
 # fork variants derive new rows and leave the base clip alone — they never
@@ -519,6 +522,104 @@ async def pend_suppressed_base_renders(
     await fan_out_renders(
         db, run, node, stale_ids, defer_to_later_morph=defer_to_later_morph
     )
+
+
+def needs_render_reconcile(
+    *,
+    has_render_spec: bool,
+    render_status: str | None,
+    archived: bool,
+    has_pending_render_step: bool,
+) -> bool:
+    """The finalize-reconcile predicate (ADR-096 §4): an output born in the
+    run is render-orphaned when it carries a render contract, the render was
+    never requested (render_status NULL), it is not archived (the claim gate
+    never picks archived rows — re-pending one would pend a render no worker
+    ever claims, holding the run open forever), and no pending render step
+    (any run) still owns its render."""
+    return (
+        has_render_spec
+        and render_status is None
+        and not archived
+        and not has_pending_render_step
+    )
+
+
+async def reconcile_orphaned_renders(db: AsyncSession, run: WorkflowRun) -> list[UUID]:
+    """Run-finalize reconcile (ADR-096 §4, the readiness law's second seat):
+    re-pend THIS run's render-orphaned outputs through the existing
+    re-pend + fan-out path (``pend_suppressed_base_renders``'s exact shape:
+    token NULL, attempt budget reset).
+
+    A repair mechanism, never a normal-path dependency: morph runners and
+    the morph-failure rescue own their re-pends; this scans only what fell
+    through (a defer hole, a crash window). Idempotent by predicate — the
+    first pass flips rows to PENDING, so a repeat finalize matches nothing.
+    Never defers: at finalize every step is settled, no later morph can own
+    the render. Scope is this run's born outputs only — a blanket sweep of
+    historical projects would mass-resurrect old renders (billing blast).
+
+    The render step's parent is the output's own birth step
+    (``workflow_step_id``), one fan-out per birth step.
+    """
+    birth_steps = select(WorkflowStep.id).where(WorkflowStep.run_id == run.id)
+    rows = list(
+        (
+            await db.execute(
+                select(Output).where(
+                    Output.workflow_step_id.in_(birth_steps),
+                    Output.render_spec.isnot(None),
+                    Output.render_status.is_(None),
+                    Output.archived_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return []
+    pending_rendered = set(
+        (
+            await db.execute(
+                select(WorkflowStep.spec["output_id"].astext).where(
+                    WorkflowStep.kind == "render",
+                    WorkflowStep.status == "pending",
+                    WorkflowStep.spec["output_id"].astext.in_(
+                        [str(o.id) for o in rows]
+                    ),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_step: dict[UUID, list[Output]] = {}
+    for o in rows:
+        if needs_render_reconcile(
+            has_render_spec=True,
+            render_status=None,
+            archived=False,
+            has_pending_render_step=str(o.id) in pending_rendered,
+        ):
+            by_step.setdefault(o.workflow_step_id, []).append(o)
+    healed: list[UUID] = []
+    for step_id, group in by_step.items():
+        step = await db.get(WorkflowStep, step_id)
+        if step is None:
+            # Lineage row gone (ondelete=SET NULL): no step to parent the
+            # render step on — leave the row for the next pass rather than
+            # inventing a parent.
+            continue
+        await pend_suppressed_base_renders(
+            db, run, step, group, defer_to_later_morph=False
+        )
+        healed.extend(o.id for o in group)
+    if healed:
+        logger.info(
+            "render_orphans_reconciled", run_id=str(run.id), count=len(healed)
+        )
+    return healed
 
 
 async def record_target_output_ids(node_id: UUID, output_ids: list[UUID]) -> None:
