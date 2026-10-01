@@ -26,6 +26,7 @@ import itertools
 
 from app.pipeline.product_graph import (
     PITCH,
+    display_rank_projection,
     display_ranks,
     effective_rank_edges,
     is_product_node,
@@ -382,3 +383,165 @@ def test_display_ranks_writers_share_one_island_band():
     ranks = display_ranks(seated, eff, [island])
     assert ranks[T1] == 1
     assert [ranks[w] for w in ws] == [2, 2, 2]
+
+
+# ---- ADR-098 B3: legacy mixed island 读时归一（cohort 拆分 + seq 重定基） ------
+#
+# B1 前出生的岛按写时拓扑归组（transcript 与 consumer 同代）; 读时 effective
+# rank 把成员裂到不同带 —— 混合岛逐 cohort 判定: ≥2 享 corridor（重定基
+# seq）, 单成员 corridor 全死（slots 不记 / 无 col 加成 / spec.island 不戳）。
+# 零迁移: 存储帧不动, 读时归一即修复。
+
+
+def _island(iid, depth, cols=2, cap=4):
+    return {
+        "id": iid,
+        "depth": depth,
+        "cols": cols,
+        "cap": cap,
+        "origin_x": depth * PITCH,
+        "origin_y": -88,
+        "row_h": 576,
+    }
+
+
+def _seat(node, iid, seq):
+    n = dict(node)
+    n["island_id"] = iid
+    n["island_seq"] = seq
+    return n
+
+
+def test_accident_isomorph_mixed_island_both_cohorts_dead():
+    """总验收 A（事故同构, 项目 62594b0b 实录形状）: 岛 {transcript seq0,
+    quotes seq1} cols=2 depth=1（写时同代出生）。读时 effective rank 裂开
+    （1 vs 2）→ 两个单成员 cohort 全死 → 无 slots 预留、无 col 加成、
+    无 spec.island 戳（dead 集）; rank 0/1/2 → x 0/524/1048, 合成边
+    B→C 方向不变量成立。"""
+    island = _island("isl-accident", depth=1, cols=2)
+    seated = [
+        EFF_NODES[0],
+        _seat(EFF_NODES[1], "isl-accident", 0),
+        _seat(EFF_NODES[2], "isl-accident", 1),
+    ]
+    eff = effective_rank_edges(seated, EFF_EDGES)
+    ranks, dead = display_rank_projection(seated, eff, [island])
+    assert ranks == {A1: 0, T1: 1, Q1: 2}
+    assert [project_x(ranks[n], PITCH) for n in (A1, T1, Q1)] == [0, PITCH, 2 * PITCH]
+    assert dead == frozenset({T1, Q1})  # 两者的 corridor 全死 → 读面不戳岛
+    assert validate_product_graph(seated, eff) == []  # E: 方向不变量零违规
+    # display_ranks 包装器与同 fixture 同数。
+    assert display_ranks(seated, eff, [island]) == ranks
+
+
+def test_legacy_mixed_island_writers_cohort_keeps_corridor():
+    """B3 验收②: legacy 混合岛 {transcript + 3 writers} —— transcript cohort
+    死（单成员）, writers cohort 保 corridor（同 rank 2 同 col 0）; 带 1 的
+    死廊道不再推高后续带（writers band_origin(2)=2 而非 3）; 更深带只被
+    writers 岛的活廊道抬高（+1）。"""
+    ws = ["w1", "w2", "w3"]
+    d3 = "downstream-1"
+    nodes = (
+        EFF_NODES[:2]
+        + [_node(w, "text", spec={"tool": "write_post"}, y=0) for w in ws]
+        + [_node(d3, "video", spec={"tool": "select_clips"}, y=0)]
+    )
+    edges = (
+        [_pedge(A1, T1, "text")]
+        + [_pedge(A1, w, "text") for w in ws]
+        + [_pedge("w1", d3, "video")]
+    )
+    island = _island("isl-legacy", depth=1, cols=2)
+    seated = [nodes[0], _seat(nodes[1], "isl-legacy", 0)] + [
+        _seat(n, "isl-legacy", i + 1) for i, n in enumerate(nodes[2:5])
+    ] + [nodes[5]]
+    eff = effective_rank_edges(seated, edges)
+    ranks, dead = display_rank_projection(seated, eff, [island])
+    assert dead == frozenset({T1})
+    assert ranks[T1] == 1
+    assert [ranks[w] for w in ws] == [2, 2, 2]
+    # writers 岛在带 2 的活廊道（cols=2）抬高更深带: raw 3 → 显示 4。
+    assert ranks[d3] == 4
+
+
+def test_legacy_mixed_island_fifth_writer_lands_next_column():
+    """总验收 C: 第 5 writer 到来 → cohort 内重定基 seq 4 → col 1 进下一列;
+    既有四卡 x 不动（重定基保序 —— append-only 回归断言）; transcript 的
+    死 corridor 不受影响。"""
+    ws = ["w1", "w2", "w3", "w4", "w5"]
+    nodes = EFF_NODES[:2] + [
+        _node(w, "text", spec={"tool": "write_post"}, y=0) for w in ws
+    ]
+    edges = [_pedge(A1, T1, "text")] + [_pedge(A1, w, "text") for w in ws]
+    island = _island("isl-legacy", depth=1, cols=2)
+    seated = [nodes[0], _seat(nodes[1], "isl-legacy", 0)] + [
+        _seat(n, "isl-legacy", i + 1) for i, n in enumerate(nodes[2:])
+    ]
+    eff = effective_rank_edges(seated, edges)
+    ranks, dead = display_rank_projection(seated, eff, [island])
+    assert dead == frozenset({T1})
+    assert [ranks[w] for w in ws[:4]] == [2, 2, 2, 2]  # 既有四卡不动
+    assert ranks["w5"] == 3  # 第 5 writer → 岛第二列（cap=4 → seq 4 // 4 = 1）
+
+
+def test_shelf_island_fifth_asset_never_moves_downstream():
+    """总验收 D: 货架岛（多素材同带同父签名）加第 5 成员 —— 岛的 cols 出生
+    定格, slots 记账不变, 全部下游 x 不动（append-only）。"""
+    assets = [
+        _node(f"a{i}", "asset", spec={"asset_id": f"row-{i}", "asset_type": "video"}, y=0)
+        for i in range(4)
+    ]
+    consumer = _node("c1", "video", spec={"tool": "select_clips"}, y=0)
+    edges = [_pedge("a0", "c1", "video")]
+
+    def ranks_with(member_count):
+        island = _island("isl-shelf", depth=0, cols=2)
+        seated = [
+            _seat(n, "isl-shelf", i) for i, n in enumerate(assets[:member_count])
+        ] + [consumer]
+        eff = effective_rank_edges(seated, edges)
+        return display_rank_projection(seated, eff, [island])
+
+    before, dead_before = ranks_with(4)
+    a5 = _node("a4", "asset", spec={"asset_id": "row-4", "asset_type": "video"}, y=0)
+    seated5 = [_seat(n, "isl-shelf", i) for i, n in enumerate(assets)] + [
+        _seat(a5, "isl-shelf", 4),
+        consumer,
+    ]
+    after, dead_after = display_rank_projection(
+        seated5, effective_rank_edges(seated5, edges), [_island("isl-shelf", depth=0, cols=2)]
+    )
+    assert dead_before == frozenset() and dead_after == frozenset()  # 单 cohort 不动
+    assert after["c1"] == before["c1"]  # 下游 x 不动
+    assert [after[f"a{i}"] for i in range(4)] == [before[f"a{i}"] for i in range(4)]
+    assert after["a4"] == 1  # 第 5 成员进岛第二列（带 0 + col 1）
+
+
+def test_single_cohort_island_keeps_legacy_behavior():
+    """单 cohort 岛 = 现行行为不动（即使只剩一个成员——第二次 promotion 出生
+    的岛被删到单员时, 廊道预留照旧; raw island_seq // cap, 不重定基）。"""
+    nodes = [
+        _node("src", "asset", spec={"asset_id": "row-x", "asset_type": "video"}, y=0),
+        _node("lone", "text", y=0),
+        _node("deep", "text", y=0),
+    ]
+    edges = [_pedge("src", "lone", "text"), _pedge("lone", "deep", "text")]
+    island = _island("isl-lone", depth=1, cols=2)
+    seated = [nodes[0], _seat(nodes[1], "isl-lone", 0), nodes[2]]
+    ranks, dead = display_rank_projection(seated, edges, [island])
+    assert dead == frozenset()
+    assert ranks["lone"] == 1
+    # 廊道预留照旧撑开更深带: raw 2 → band_origin(2) = 2 + (2-1) = 3。
+    assert ranks["deep"] == 3
+
+
+def test_asset_deletion_reflows_surviving_consumers():
+    """ADR-098 §3 显式 lifecycle reflow 例外（命名, 非 regression）: 素材删除
+    （remove_asset_node 杀素材孪生 + 转写稿, 边结构级联; 消费者 spec 无
+    asset_id 故幸存）→ 幸存消费者 rank 重算左移（可掉 0）。本测试只断言
+    行为发生且被命名, 不断言不动。"""
+    eff = effective_rank_edges(EFF_NODES, EFF_EDGES)
+    assert display_ranks(EFF_NODES, eff, [])[Q1] == 2
+    # remove_asset_node 之后: asset + transcript 及其边级联消失, quotes 幸存。
+    survivors = [EFF_NODES[2]]
+    assert display_ranks(survivors, [], [])[Q1] == 0  # 左移 = 显式后果

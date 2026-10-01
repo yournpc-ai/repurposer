@@ -150,3 +150,73 @@ describe("projectSettledFrames — C-1 rank projection", () => {
     }
   })
 })
+
+describe("projectSettledFrames — ADR-098 B3 读时归一 (double-mirror fixtures)", () => {
+  /** 事故同构 fixture（mirror of apps/api/tests/test_product_graph_pure.py::
+   * test_accident_isomorph_mixed_island_both_cohorts_dead — SAME ranks, SAME
+   * stamp shape, two runtimes; 项目 62594b0b 取证原型）: the pre-B1 island
+   * {transcript, quotes} cols=2 split into two rank cohorts at read time;
+   * both corridors fully died server-side, so NEITHER node carries a
+   * spec.island stamp — the client mechanism is untouched (rank × PITCH +
+   * spec.island two entries), the dead cohort simply never arrives. */
+  it("dead corridor: no stamp → plain column law, zero reserved_bottom ghost", () => {
+    const nodes = [
+      node("asset", 0, { x: 0, y: 0 }),
+      // Stored frame y stays (append-only, zero migration) — the former
+      // island cell seats ride as plain serverY seats.
+      node("transcript", 1, { x: 524, y: -88 }),
+      node("quotes", 2, { x: 524, y: 488 }),
+      // A later band-1 mate: without the dead corridor's floor it compresses
+      // to the transcript's render bottom — NOT to the ghost reserved bottom
+      // (the accident island's reservation would have floored it at 2216).
+      node("follower", 1, { x: 524, y: 3000 }),
+    ]
+    const edges = [
+      edge("asset", "transcript", "text"),
+      edge("transcript", "quotes", "text"), // the A3-lite synthesized leg
+      edge("asset", "quotes", "text"),
+    ]
+    const { positions, revealOrder, violations } = projectSettledFrames(nodes, edges)
+    // 双镜像同数 (G): ranks 0/1/2 → x = 0/524/1048 — the server's numbers.
+    expect(positions.get("asset")!.x).toBe(0)
+    expect(positions.get("transcript")!.x).toBe(PITCH)
+    expect(positions.get("quotes")!.x).toBe(2 * PITCH)
+    expect(positions.get("transcript")!.y).toBe(-88) // plain law, first in column
+    expect(positions.get("quotes")!.y).toBe(488) // stored seat rides, never moved
+    // reserved_bottom 幽灵死: the follower pulls up to the transcript's real
+    // bottom (DRAFT_H 278 + gap), never to a corridor floor.
+    expect(positions.get("follower")!.y).toBe(-88 + DRAFT_H + GAP_CROSS)
+    // B→C 方向不变量成立 (E); revealOrder 恒 from 先于 to (F).
+    expect(violations).toEqual([])
+    const order = [...revealOrder.entries()].sort(([, i], [, j]) => i - j).map(([id]) => id)
+    expect(order).toEqual(["asset", "transcript", "follower", "quotes"])
+  })
+
+  /** 活廊道对照组（mirror of the server writers fixture
+   * test_display_ranks_writers_share_one_island_band /
+   * test_legacy_mixed_island_writers_cohort_keeps_corridor）: a ≥2 cohort's
+   * corridor LIVES — members render at frozen cell y verbatim and the
+   * reserved bottom floors the column's compression. Server numbers: island
+   * born at band 2, origin_y -176, row_h 576, cap 4 → cells -176/400/976,
+   * reserved_bottom 2112. */
+  it("alive corridor: frozen cells verbatim + reserved_bottom floors a plain band-mate", () => {
+    const stamp = { island: { reserved_bottom: 2112 } }
+    const nodes = [
+      node("asset", 0, { x: 0, y: 0 }),
+      node("transcript", 1, { x: 524, y: -88 }),
+      { ...node("w1", 2, { x: 1048, y: -176 }), spec: stamp },
+      { ...node("w2", 2, { x: 1048, y: 400 }), spec: stamp },
+      { ...node("w3", 2, { x: 1048, y: 976 }), spec: stamp },
+      node("plain", 2, { x: 1048, y: 3000 }),
+    ]
+    const { positions, violations } = projectSettledFrames(nodes, [])
+    expect(positions.get("w1")!.y).toBe(-176)
+    expect(positions.get("w2")!.y).toBe(400)
+    expect(positions.get("w3")!.y).toBe(976)
+    for (const w of ["w1", "w2", "w3"]) expect(positions.get(w)!.x).toBe(2 * PITCH)
+    // The corridor's empty rows are never invaded: the plain band-mate's
+    // compression floors at reserved_bottom + gap (2112 + 16), never higher.
+    expect(positions.get("plain")!.y).toBe(2112 + GAP_CROSS)
+    expect(violations).toEqual([])
+  })
+})

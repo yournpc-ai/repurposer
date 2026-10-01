@@ -290,15 +290,16 @@ def product_ranks(
     return {nid: depth(nid, frozenset()) for nid in visible}
 
 
-def display_ranks(
+def display_rank_projection(
     nodes: Iterable[Any],
     edges: Iterable[Any],
     islands: Iterable[Any],
     *,
     gated: bool = True,
-) -> dict[str, int]:
-    """画布显示 rank（I-PFA-02 的岛化扩展, Workspace 合同 v4.2 C6）——
-    /graph 读面的唯一 rank 来源.
+) -> tuple[dict[str, int], frozenset[str]]:
+    """画布显示 rank 的全事实形态（I-PFA-02 的岛化扩展, Workspace 合同
+    v4.2 C6 + ADR-098 §5）——返回 ``(display_ranks, dead_corridor_ids)``：
+    /graph 读面的唯一 rank 来源 + 读面 ``spec.island`` 戳的抑制名单。
 
     岛 = 局部打包域: a sibling group's island reserves ``cols`` consecutive
     rank SLOTS at its band, frozen at birth (the growth corridor). Members
@@ -318,7 +319,23 @@ def display_ranks(
     The caller feeds the EFFECTIVE edge set（``effective_rank_edges`` 的输
     出——持久边 + A3-lite 合成边, ADR-098 §1）: 读面与写时出生同图。一个岛
     家庭的构造假设 = 成员共享一个 **effective** rank 与一个 **effective**
-    父签名（写时归组与读时投影吃同一层边集——不再是「持久边快照」）。"""
+    父签名（写时归组与读时投影吃同一层边集——不再是「持久边快照」）。
+
+    **Cohort law（ADR-098 §5 — legacy mixed island 读时归一, 零迁移）**：
+    B1 前出生的岛按写时拓扑归组, 读时 effective rank 可能跨带（成员裂到
+    不同 rank）。成员跨带的岛逐 cohort 判定:
+
+    - **单 cohort 岛**（全部成员同 rank——常态）= 行为不动（raw
+      ``island_seq // cap`` 与 slots 记账照旧）;
+    - **mixed 岛** 内 cohort ≥ 2 → 享 corridor（slots 记该带 cols）, col
+      用 **cohort 内重定基序号**（按 ``island_seq`` 排序重编号 0..n-1 再
+      ``// cap``——禁沿用跨 cohort 全局 seq, ≥5 成员时两种编号结果不同）;
+    - **mixed 岛** 内单成员 cohort → corridor **全死**: slots 不记（带
+      宽不为它撑开）、rank = ``band_origin(raw)`` 无 col 加成、成员 id
+      进 dead 集（读面据此不戳 ``spec.island``——冻结格 y 与
+      ``reserved_bottom`` 不下发, 客户端回普通列律; 存储帧 y 不动,
+      append-only）。
+    """
     raw = product_ranks(nodes, edges, gated=gated)
     node_list = list(nodes)
     islands_by_id = {str(_get(i, "id")): i for i in islands}
@@ -328,35 +345,67 @@ def display_ranks(
         if iid is not None and str(iid) in islands_by_id:
             island_of[str(_get(n, "id"))] = islands_by_id[str(iid)]
     if not island_of:
-        return raw
+        return raw, frozenset()
     # The island's band = its members' shared EFFECTIVE raw rank (a sibling
     # family shares one effective rank + one effective parent signature by
     # construction — ADR-098 §1); members absent from the gated read frame
     # contribute nothing.
-    slots: dict[int, int] = {}
+    nodes_by_id = {str(_get(n, "id")): n for n in node_list}
+    cohorts: dict[str, dict[int, list[str]]] = {}
     for nid, isl in island_of.items():
         d = raw.get(nid)
         if d is None:
             continue
-        slots[d] = max(slots.get(d, 1), int(_get(isl, "cols") or 1))
+        cohorts.setdefault(str(_get(isl, "id")), {}).setdefault(d, []).append(nid)
+    slots: dict[int, int] = {}
+    col_of: dict[str, int] = {}
+    dead: set[str] = set()
+    for iid, by_rank in cohorts.items():
+        isl = islands_by_id[iid]
+        cols = max(1, int(_get(isl, "cols") or 1))
+        cap = max(1, int(_get(isl, "cap") or 1))
+        mixed = len(by_rank) > 1
+        for d, members in by_rank.items():
+            if mixed and len(members) < 2:
+                # 单成员 cohort = corridor 全死（读时归一, 零迁移）。
+                dead.update(members)
+                continue
+            slots[d] = max(slots.get(d, 1), cols)
+            if mixed:
+                # cohort 内 seq 重定基（ADR-098 §5——跨 cohort 全局 seq 永禁）。
+                members.sort(
+                    key=lambda nid: int(_get(nodes_by_id[nid], "island_seq") or 0)
+                )
+                for rebased, nid in enumerate(members):
+                    col_of[nid] = min(rebased // cap, cols - 1)
+            else:
+                for nid in members:
+                    seq = int(_get(nodes_by_id[nid], "island_seq") or 0)
+                    col_of[nid] = min(seq // cap, cols - 1)
     if not slots:
-        return raw
+        return raw, frozenset(dead)
 
     def band_origin(d: int) -> int:
         return d + sum(s - 1 for b, s in slots.items() if b < d)
 
-    nodes_by_id = {str(_get(n, "id")): n for n in node_list}
     out: dict[str, int] = {}
     for nid, d in raw.items():
-        isl = island_of.get(nid)
-        col = 0
-        if isl is not None:
-            cap = max(1, int(_get(isl, "cap") or 1))
-            cols = max(1, int(_get(isl, "cols") or 1))
-            seq = int(_get(nodes_by_id[nid], "island_seq") or 0)
-            col = min(seq // cap, cols - 1)
-        out[nid] = band_origin(d) + col
-    return out
+        out[nid] = band_origin(d) + col_of.get(nid, 0)
+    return out, frozenset(dead)
+
+
+def display_ranks(
+    nodes: Iterable[Any],
+    edges: Iterable[Any],
+    islands: Iterable[Any],
+    *,
+    gated: bool = True,
+) -> dict[str, int]:
+    """画布显示 rank（``display_rank_projection`` 的 rank 半面）——/graph
+    读面的 rank 来源; corridor-dead 抑制名单的 consumer 是读面的
+    ``spec.island`` 戳（routes/projects）。"""
+    ranks, _dead = display_rank_projection(nodes, edges, islands, gated=gated)
+    return ranks
 
 
 def topological_order(nodes: Iterable[Any], edges: Iterable[Any]) -> list[str]:
@@ -805,6 +854,7 @@ __all__ = [
     "artifact_fields_for_birth",
     "artifact_role_of",
     "assign_artifact_groups",
+    "display_rank_projection",
     "display_ranks",
     "effective_rank_edges",
     "is_lineage_edge",

@@ -55,7 +55,7 @@ from app.pipeline.lifecycle import project_lifecycle
 from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 from app.pipeline.product_graph import (
     EXPLORATION_NODE_TYPE,
-    display_ranks,
+    display_rank_projection,
     effective_rank_edges,
     project_artifacts,
 )
@@ -620,12 +620,19 @@ async def get_project_graph(
     # where both inputs are the final read frame: nodes carry STORAGE words
     # (the predicate's design input layer — legacy materialize rows ride
     # generator/processor/agent here, so the read-face flip of F1 never
-    # happens) and edges are persisted-minus-removed plus the A3-lite
-    # synthetic text edges (the L5 root fix: synthetic material-flow edges
-    # are legitimate rank input). The canvas never re-derives depth.
+    # happens) and edges are the EFFECTIVE set (persisted-minus-removed plus
+    # the A3-lite synthetic text edges — the L5 root fix: synthetic
+    # material-flow edges are legitimate rank input; ADR-098 §1: read face
+    # and write-time settle eat the same layer).
     # C6 岛化 (v4.2): the island registry widens a band's rank slots by its
     # frozen corridor — the read-time transform keeps every born frame's
-    # display x stable (append-only 保序律 in rank space).
+    # display x stable (append-only 保序律 in rank space). ADR-098 §5: a
+    # LEGACY MIXED island (members spanning effective ranks — born pre-B1
+    # under the write-time topology) is adjudicated per cohort; a
+    # single-member cohort's corridor is fully dead — its members ride
+    # dead_corridor and their spec.island stamp is withheld below (zero
+    # migration; the stored frame y stays, the client falls back to the
+    # plain column law).
     island_rows = list(
         (
             await db.execute(
@@ -635,11 +642,12 @@ async def get_project_graph(
         .scalars()
         .all()
     )
-    ranks = display_ranks(nodes, edges, island_rows)
+    ranks, dead_corridor = display_rank_projection(nodes, edges, island_rows)
     # 岛内格镜像: islanded members carry their island's frozen reserved
     # bottom so the client's air-compression never pulls a later band-mate
     # into empty corridor cells (岛内的事; layout.ts projectSettledFrames
-    # 镜像同律).
+    # 镜像同律). Corridor-dead members (ADR-098 §5) get NO stamp — the
+    # frozen-cell y and reserved_bottom never ship for them.
     island_by_id = {str(i.id): i for i in island_rows}
     from app.pipeline.graph_store import island_reserved_bottom
 
@@ -700,7 +708,7 @@ async def get_project_graph(
     resp_nodes: list[GraphNodeResponse] = []
     for node in nodes:
         spec = dict(node.spec or {})
-        if node.island_id is not None:
+        if node.island_id is not None and str(node.id) not in dead_corridor:
             island = island_by_id.get(str(node.island_id))
             if island is not None:
                 # C6 岛内格镜像: the client renders the member at its frozen
