@@ -2441,3 +2441,39 @@ artifact readiness = 唯一用户完工语义（planned / making / ready / faile
 **Consequences**: 「一次请求一个东西」的用户心智与「全程可检查/可编辑/可计费/可恢复」的工程面同时成立。批次映射 = A/B 照旧（ADR-096 立即批 + 恢复流程）、C 重定义为本 ADR Phase-1 投影（原 tail-wins 读面折叠案废止并入）、D/E 照旧（执行层）、F 收窄为 artifact 级 lineage（§9）。
 
 **Related**: ADR-086（Product Graph 地基——本 ADR 只补身份层）/ ADR-091（work/version——artifact = work 的图层正式身份分组，version 语义沿用）/ ADR-096（渲染所有权与就绪）/ ADR-088（北极星——用户可理解产物）/ ADR-058（命名二源律）/ ADR-087（Lifecycle 合同——readiness 戳座位）
+
+## ADR-098: 画布拓扑时间一致性——Effective Product Graph 唯一拓扑层 + Settled Rank 冻结律
+
+**Status**: Decided (2026-10-01)；施工合同 = `tasks/canvas-effective-topology.md`
+
+**Context**: 一次走查（素材 → 转写稿 → 金句卡三节点画布，两列水平净距 124px vs 708px）取证到两条各自正确的律的组合缺陷：岛出生（`graph_store._assign_islands`）消费**写时拓扑**（持久边 asset→transcript / asset→consumer——两节点同代，兄弟家庭与 cols=2 廊道出生合法），rank 投影（`product_graph.display_ranks`）消费**读时拓扑**（持久边 + A3-lite 读时合成 transcript→consumer——合成边是合法 rank 输入，物料流「源 → 文档 → 装配」三列阅读法）。同一批节点两张 Product Graph：consumer 读时深度 2，被自家岛在带 1 预留的廊道 slot 挤到 rank 3（x=1572）；廊道第二列结构性永远等不到住户（任何未来消费者同样被合成边推到深度 2）——死列。岛在结果画布零可见 chrome（区域框只在配方说明书面），死列对用户是无解释的空隙。根：C6 构造假设「岛成员共享一个拓扑代」写时成立、读时被合成边违反——两条律之间缺一个共享拓扑层。
+
+**Decision**:
+
+### 1. Effective Product Graph = 写时与读时的唯一拓扑层
+
+A3-lite 合成规则抽为 `product_graph` 的纯函数 `effective_rank_edges(nodes, persisted_edges)`（transcript 文档 + asset→consumer 物料流边 ⇒ 合成 transcript→consumer text 边；零图写入），两处消费：`/graph` 读面（rank + 边载荷）与写时统一摆位/岛出生（`_assign_layout`/`_assign_islands` 的 `depth_of`/`rank_parents_of`）。出生帧与读时投影自此同图：新链写时即见 consumer 深度 2；岛家庭按（effective 深度，effective 父签名）归组——transcript（深度 1，父 {asset}）与 consumer（深度 2，父 {asset, transcript}）天然不同家庭，消费者兄弟组自成岛，单成员家庭不生岛。**无 transcript 特判**。执行侧零消费：effective 边永不进 RunOp 闭包 / stale 传播 / 工作流编译（显示/空间事实 ≠ 执行事实，ADR-086 边界不动）。`display_ranks` 构造假设改写为「成员共享一个 effective rank 与一个 effective 父签名」。
+
+**合成去重只看 rank 合法三元组**：lineage 端口标记边（`out:lineage`，血缘而非物料流，rank 豁免）**永不占合成去重三元组**——否则 artifact 盖章链的 deliverable 会被自己的血缘边顶掉合成边（深度退回 1），与 writer 队列裂带。该交互在存量库零行（无 lineage 边项目），律法先于首例落地。
+
+### 2. Settled Rank 冻结律（Z）
+
+普通 topology mutation 下，settled（非 draft）节点的 effective rank 冻结；draft 期拓扑可变，归 provisional 机器（reseat / orphan sweep）。写门执行：rank 三值边（video/audio/text）connect / disconnect 进 `state != "draft"` 的目标 → `WiringRejected`；ctx 边天然豁免（永不入 rank）。`graph_fill` 7b 边对账内嵌同一谓词——rank 边进非 draft 目标的 disconnect 跳过并具名上报（「内部」不是豁免理由）；未来若需 rewire settled 节点，走命名 lifecycle 例外（ADR 明示），不走静默能力。
+
+完备性两证明（入档备查）：① **draft→settled rank 路径不存在**——实证（全库该类边零行，状态对分布全为 旧→新）+ 结构（节点皆生为 draft；盖章方向恒 existing→newborn；门守卫焊死裸 op 通道）+ 自稳定（target-guard 维持的正是它完备性所依赖的不变量），故 target-state guard ≡ 全局 freeze；② 冻结点 = 节点离开 draft，非 DB 行创建。
+
+### 3. 显式 lifecycle reflow 例外
+
+素材删除（`remove_asset_node` 杀素材孪生 + 转写稿，边结构级联；消费者 spec 无 `asset_id` 故幸存）→ 幸存消费者 rank 重算（可掉 0 左移）= 用户显式生命周期操作的受控 reflow——诚实后果，不是洞。验收永不把它当 layout regression。
+
+### 4. A3 派生边 birth-visible（不持久化）
+
+合成边保持读时纯投影、永不落库——transcript 的 `edited_text` 是显示层覆盖（v4.2 C4），真边落库会把「改稿」耦进 stale 传播；显示真相 ≠ 失效真相。晚到不可能：转写稿文档上传即盖章（running 出生），恒先于一切消费者出生，合成边在消费者出生时刻恒可计算。
+
+### 5. Legacy mixed island 读时归一（零迁移）
+
+存量混合岛（成员跨 effective rank）读时拆 cohort：同 rank cohort ≥ 2 才享 corridor，cohort 内 **seq 重定基**（禁沿用跨 cohort 全局 seq——≥5 成员时两种编号结果不同）；单成员 cohort = corridor **全死**——x slot 预留、冻结格 y、`reserved_bottom` 一并不再下发（`spec.island` 不随节点戳出）。行为不依赖 migration；数据清洁（touch-time canonicalize）挂账。
+
+**Consequences**: 新链 consumer 出生即深度 2，三列阅读法保留且列距回到 pitch 节奏（净 gap 差 = 帧宽分档纹理 124 vs 184，非缺陷——验收口径具名，不看像素等距）；存量事故项目读时归一即修复，零迁移；append-only 保序从文档律升为成文 freeze 律 + 门守卫 + 负向测试。否决备查：岛内自管 rank（破单一 rank 权威 + 需方向豁免）/ 合成边降 rank 豁免（翻 L5 案，杀三列阅读法）/ 按实际占据记账（破 append-only——货架岛第 5 成员会推走全部下游）/ transcript 特判（症状药，下一类派生关系再炸）/ topology_rank 与 layout_rank 拆名（Z 成立后两名永不分叉，不开用不到的概念孔）。客户端 `layout.ts` 机制零改动（`x = rank × PITCH` 与 `spec.island` 两入口不动——服务端归一后死 cohort 自然无戳）。
+
+**Related**: ADR-086（Product Graph 合同——空间权威三律同族；A3-lite/L5 出处）/ ADR-097（artifact 本体——读面投影同族 + lineage 真边边界）/ ADR-082（空气压缩——y 侧律不动）/ ADR-057（画布定居取景——出生帧承重）/ ADR-079（worker 认领守卫——零 diff）
