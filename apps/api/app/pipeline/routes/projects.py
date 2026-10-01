@@ -56,6 +56,7 @@ from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 from app.pipeline.product_graph import (
     EXPLORATION_NODE_TYPE,
     display_ranks,
+    effective_rank_edges,
     project_artifacts,
 )
 from app.pipeline.scope_classifier import (
@@ -481,56 +482,18 @@ async def get_project_graph(
             and str(e.to_node) not in hidden_modifier_ids
         ]
     # A3-lite legacy 兼容投影（ADR-097 §9——canonical 真边出生后，本合成只
-    # 服务无 lineage 真边的存量行）: the material-flow reading 源 → 文档 → 装配
-    # — the transcript document fed the consumers' text (ASR words drive
-    # selection + captions + the writers' source text), but the legacy stamp
-    # left it a LEAF (consumers wired from the asset = "the execution truth").
-    # Synthesize the transcript → consumer text edge at READ time for legacy
-    # rows only (display only, zero graph writes): for every video/text flow
-    # out of the transcript's asset, the document carries the same flow's text
-    # leg. New chains carry the canonical birth edge (graph_fill stamp); the
-    # triple dedup below makes the two sources never double-render one leg.
-    asset_node_by_asset = {
-        str((n.spec or {}).get("asset_id")): str(n.id)
-        for n in nodes
-        if n.type == "asset" and (n.spec or {}).get("asset_id")
-    }
-    have_edge_triples = {
-        (str(e.from_node), str(e.to_node), str(e.edge_type)) for e in edges
-    }
-    # Snapshot the ORM edge rows ONCE before the document loop: synthesized
-    # edges append to `edges` as plain dicts — a per-document re-snapshot
-    # would feed those dicts back through attribute access on the next
-    # transcript's pass (≥2 transcripts → AttributeError → /graph 500,
-    # refresh-proof empty canvas). Synthesized rows start from a document
-    # node anyway, so the asset-edge filter would skip them; the ORM-only
-    # snapshot is semantically identical.
-    orm_edges = list(edges)
-    for n in nodes:
-        if n.type != "document" or (n.spec or {}).get("role") != "transcript":
-            continue
-        asset_node_id = asset_node_by_asset.get(str((n.spec or {}).get("asset_id") or ""))
-        if asset_node_id is None:
-            continue
-        # Never iterate a list being grown — the synthesized rows are
-        # appended to `edges`, not to this ORM-only snapshot.
-        for e in orm_edges:
-            if str(e.from_node) != asset_node_id or str(e.edge_type) not in ("video", "text"):
-                continue
-            triple = (str(n.id), str(e.to_node), "text")
-            if triple in have_edge_triples or str(e.to_node) == str(n.id):
-                continue
-            have_edge_triples.add(triple)
-            edges.append(
-                {
-                    "id": uuid4(),
-                    "from_node": n.id,
-                    "from_port": "out:text",
-                    "to_node": e.to_node,
-                    "to_port": "in:text",
-                    "edge_type": "text",
-                }
-            )
+    # 服务无 lineage 真边的存量行）的唯一座 = product_graph.effective_rank_edges
+    # （ADR-098 §1 — Effective Product Graph 唯一拓扑层）: the material-flow
+    # reading 源 → 文档 → 装配 — the transcript document fed the consumers'
+    # text (ASR words drive selection + captions + the writers' source text),
+    # but the legacy stamp left it a LEAF (consumers wired from the asset =
+    # "the execution truth"). Synthesized rows stay dict-born read-time data
+    # (zero graph writes — 合成边永不落库); the write-time settle eats the
+    # SAME layer, so birth frames and this projection share one graph. New
+    # chains carry the canonical birth edge (graph_fill stamp); the function's
+    # rank-legal triple dedup makes the two sources never double-render one
+    # leg (lineage port-marked edges never occupy a triple).
+    edges = effective_rank_edges(nodes, edges)
     if not nodes:
         # 「lifecycle 键恒在」不变量 (Phase 3 Batch C 拍板 A): the zero-node
         # frame carries the same stamp (an empty project's blocked vs

@@ -21,6 +21,9 @@ I-PFA-04, ADR-086; 施工合同 ``docs/tasks/product-flow-alignment.md`` §7 C-0
   presentation-only 边词同样**永不入 rank**（ADR-097 §9 的 transcript→
   deliverable 真边已出生——端口标记 ``out:lineage``，``_rank_inputs`` 显式
   排除；版本血缘的另一半住节点 ``spec.output_ids``，从不是边）。
+  **Effective Product Graph（ADR-098 §1）**：A3-lite 合成规则的唯一座 =
+  ``effective_rank_edges`` 纯函数——``/graph`` 读面（rank + 边载荷）与
+  写时摆位/岛出生（graph_store 定居取景）同吃一层，执行侧零消费。
 - **layout projection** = rank × PITCH 给出 x；y 座位 / w·h 预留 / 稳定锚
   沿用既有服务端帧（append-only 不变）。**layout 是 Product Graph 的
   projection，不是 Product Graph 本身。**
@@ -49,6 +52,7 @@ rows or plain dicts, the read path carries both after A3-lite synthesis).
 from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
+from uuid import uuid4
 
 # ---- 词表（声明，非映射表——与 ADR-076 三轴对齐） -----------------------------
 
@@ -149,6 +153,91 @@ def is_rank_edge(edge_type: str) -> bool:
 # ---- rank 与拓扑序（I-PFA-02 / I-PFA-04） --------------------------------------
 
 
+def effective_rank_edges(
+    nodes: Iterable[Any], persisted_edges: Iterable[Any]
+) -> list[Any]:
+    """The Effective Product Graph's edge set（ADR-098 §1 — 写时与读时的唯一
+    拓扑层）: ``list(persisted_edges)`` + the A3-lite synthesized
+    transcript→consumer text edges. TWO consumers eat this one layer: the
+    ``/graph`` read face（rank + 边载荷）and the write-time settle
+    （``graph_store`` 的摆位与岛出生）——出生帧与读时投影自此同图。执行侧
+    （RunOp 闭包 / stale 传播 / 工作流编译）**零消费**——显示/空间事实 ≠
+    执行事实（ADR-086 边界不动）。
+
+    Synthesis rule（物料流「源 → 文档 → 装配」三列阅读法）: a transcript
+    document（``type == "document" and spec.role == "transcript"``）carries
+    the text leg of every video/text flow out of its asset's node — the ASR
+    words drive selection + captions + the writers' source text, while the
+    legacy stamp leaves the document a LEAF（consumers wired from the asset
+    = the execution truth）。Canonical lineage edges（ADR-097 §5）make new
+    chains need no synthesis; the triple dedup keeps the two sources from
+    ever double-rendering one leg.
+
+    三铁律：
+
+    ① **零图写入** — synthesized rows are plain dicts, read-time data only;
+       the caller NEVER flushes them（写门的边 flush 有 dict 断言防呆）。
+    ② **三元组去重只看 rank 合法边** — a lineage port-marked edge
+       (``out:lineage``，血缘而非物料流，rank 豁免) NEVER occupies a dedup
+       triple — otherwise an artifact 盖章链's deliverable would have its
+       synthesized edge evicted by its own bloodline edge（深度退回 1，与
+       writer 队列裂带）。
+    ③ **自环排除**。
+
+    Pure: inputs never mutated; output order = persisted order, then
+    synthesized rows in (nodes order × persisted-edges order) —
+    deterministic given deterministic inputs.
+    """
+    node_list = list(nodes)
+    persisted = list(persisted_edges)
+    asset_node_by_asset = {
+        str(_spec_of(n).get("asset_id")): str(_get(n, "id"))
+        for n in node_list
+        if str(_get(n, "type") or "") == "asset" and _spec_of(n).get("asset_id")
+    }
+    have_triples = {
+        (
+            str(_get(e, "from_node")),
+            str(_get(e, "to_node")),
+            str(_get(e, "edge_type")),
+        )
+        for e in persisted
+        if is_rank_edge(str(_get(e, "edge_type") or "")) and not is_lineage_edge(e)
+    }
+    out = list(persisted)
+    for n in node_list:
+        if (
+            str(_get(n, "type") or "") != "document"
+            or _spec_of(n).get("role") != "transcript"
+        ):
+            continue
+        asset_node_id = asset_node_by_asset.get(str(_spec_of(n).get("asset_id") or ""))
+        if asset_node_id is None:
+            continue
+        for e in persisted:
+            if (
+                str(_get(e, "from_node")) != asset_node_id
+                or str(_get(e, "edge_type") or "") not in ("video", "text")
+            ):
+                continue
+            to_id = str(_get(e, "to_node"))
+            triple = (str(_get(n, "id")), to_id, "text")
+            if triple in have_triples or to_id == str(_get(n, "id")):
+                continue
+            have_triples.add(triple)
+            out.append(
+                {
+                    "id": uuid4(),
+                    "from_node": _get(n, "id"),
+                    "from_port": "out:text",
+                    "to_node": _get(e, "to_node"),
+                    "to_port": "in:text",
+                    "edge_type": "text",
+                }
+            )
+    return out
+
+
 def _rank_inputs(
     nodes: Iterable[Any], edges: Iterable[Any], gated: bool
 ) -> tuple[list[str], dict[str, list[str]]]:
@@ -224,7 +313,12 @@ def display_ranks(
     Direction invariant holds by construction: slots ≥ 1 per band, so
     rank(to) > rank(from) for every product edge. ``gated`` mirrors
     product_ranks; the RunOp execution topology (gated=False) stays on raw
-    product_ranks — islands are a DISPLAY concern, never execution."""
+    product_ranks — islands are a DISPLAY concern, never execution.
+
+    The caller feeds the EFFECTIVE edge set（``effective_rank_edges`` 的输
+    出——持久边 + A3-lite 合成边, ADR-098 §1）: 读面与写时出生同图。一个岛
+    家庭的构造假设 = 成员共享一个 **effective** rank 与一个 **effective**
+    父签名（写时归组与读时投影吃同一层边集——不再是「持久边快照」）。"""
     raw = product_ranks(nodes, edges, gated=gated)
     node_list = list(nodes)
     islands_by_id = {str(_get(i, "id")): i for i in islands}
@@ -235,9 +329,10 @@ def display_ranks(
             island_of[str(_get(n, "id"))] = islands_by_id[str(iid)]
     if not island_of:
         return raw
-    # The island's band = its members' shared raw rank (siblings share a
-    # topological generation by construction); members absent from the
-    # gated read frame contribute nothing.
+    # The island's band = its members' shared EFFECTIVE raw rank (a sibling
+    # family shares one effective rank + one effective parent signature by
+    # construction — ADR-098 §1); members absent from the gated read frame
+    # contribute nothing.
     slots: dict[int, int] = {}
     for nid, isl in island_of.items():
         d = raw.get(nid)
@@ -711,6 +806,7 @@ __all__ = [
     "artifact_role_of",
     "assign_artifact_groups",
     "display_ranks",
+    "effective_rank_edges",
     "is_lineage_edge",
     "is_product_node",
     "is_rank_edge",

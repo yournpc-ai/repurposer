@@ -37,6 +37,7 @@ from app.models.tables import GraphEdge, GraphIsland, GraphNode, Project, now_ut
 from app.pipeline.product_graph import (
     EXPLORATION_PROTOTYPE,
     RANK_EDGE_TYPES,
+    effective_rank_edges,
     is_lineage_edge,
     product_ranks,
 )
@@ -768,23 +769,44 @@ async def settle_frames_with_edges(
     persisted."""
     by_id = {UUID(str(n.id)): n for n in [*placed, *newborns]}
 
+    # ADR-098 §1 — Effective Product Graph 唯一拓扑层: the settle eats the
+    # EFFECTIVE edge set (persisted + A3-lite synthesized transcript→consumer
+    # legs) from the SAME pure function the /graph read face projects — birth
+    # frames and the read projection share one graph (a consumer is depth 2
+    # AT BIRTH, never re-read deeper later). Two input notes: ① the working
+    # set's transcript documents may be same-batch newborns not yet flushed
+    # — the function consumes the in-memory object collection, never a DB
+    # query; ② synthesized rows are plain dicts (read-time data) — they
+    # stay in THIS local, never join ``edges`` (the door's edge flush
+    # asserts the landed set is dict-free — 合成边永不落库).
+    effective_edges = effective_rank_edges([*placed, *newborns], edges)
+
+    def _eget(edge: Any, key: str) -> Any:
+        # The effective set mixes ORM rows (persisted) and dicts
+        # (synthesized) — one reader for both (routes' _eget precedent).
+        return edge.get(key) if isinstance(edge, dict) else getattr(edge, key)
+
     def parents_of(node_id: UUID) -> list[GraphNode]:
         return [
-            by_id[UUID(str(e.from_node))]
-            for e in edges
-            if UUID(str(e.to_node)) == node_id and UUID(str(e.from_node)) in by_id
+            by_id[UUID(str(_eget(e, "from_node")))]
+            for e in effective_edges
+            if UUID(str(_eget(e, "to_node"))) == node_id
+            and UUID(str(_eget(e, "from_node"))) in by_id
         ]
 
     # Media-flow parents only (物料流三值 — the Product Graph's edge
     # boundary): siblinghood is a product relation; ctx 引用边 never joins
-    # the parent key.
+    # the parent key. The depth/parent-key split is deliberate and kept
+    # as-is (depth_of below walks ALL effective edges, ctx included — the
+    # frame's fresh-column rise is visual placement; only the sibling KEY
+    # is the media-flow relation).
     def rank_parents_of(node_id: UUID) -> list[GraphNode]:
         return [
-            by_id[UUID(str(e.from_node))]
-            for e in edges
-            if UUID(str(e.to_node)) == node_id
-            and e.edge_type in RANK_EDGE_TYPES
-            and UUID(str(e.from_node)) in by_id
+            by_id[UUID(str(_eget(e, "from_node")))]
+            for e in effective_edges
+            if UUID(str(_eget(e, "to_node"))) == node_id
+            and str(_eget(e, "edge_type")) in RANK_EDGE_TYPES
+            and UUID(str(_eget(e, "from_node"))) in by_id
         ]
 
     # Depth = the topological generation (max parent depth + 1, islands 0),
@@ -1292,6 +1314,14 @@ async def apply_wiring_ops(
         db.add(node)
     await db.flush()
     for edge in edges:
+        # 合成边永不落库 (ADR-098 §1 铁律①): the effective topology layer's
+        # synthesized rows are plain dicts living in settle_frames_with_edges'
+        # LOCAL — the persisted working set only ever carries ORM rows; a
+        # dict reaching this flush would be a synthesis leak.
+        assert not isinstance(edge, dict), (
+            "a synthesized effective edge (dict) reached the flush — "
+            "synthesis is read-time projection, never persisted"
+        )
         db.add(edge)
     await db.flush()
     return delta

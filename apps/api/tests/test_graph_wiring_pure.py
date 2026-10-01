@@ -60,7 +60,7 @@ Covered:
   从最新 output 合成) / modifier·materialize 过渡词 / 新行直传
 """
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
@@ -75,7 +75,12 @@ from app.pipeline.graph_fill import (
     stamp_transcript_node,
     sync_graph_node_for_step,
 )
-from app.pipeline.graph_store import WiringRejected, apply_wiring_ops, settle_frames_with_edges
+from app.pipeline.graph_store import (
+    WiringRejected,
+    apply_wiring_ops,
+    executable_children_of,
+    settle_frames_with_edges,
+)
 
 _PROJECT_ID = uuid4()
 
@@ -1485,6 +1490,120 @@ async def test_island_corridor_survives_when_no_deeper_band_occupied():
     )
     assert len(islands) == 1
     assert islands[0].cols == 2
+
+
+# ---- ADR-098 B1: 写时摆位/岛出生吃 Effective Product Graph（与读面同层） ------
+#
+# 事故同构 fixture（项目 62594b0b-c0fd-40a9-89fe-6e0a055f7265, dev DB 实录）:
+# 素材 → 转写稿 → 金句卡（write_quotes draft）。修复前 = 两张图: 写时吃持久
+# 边（两节点同代 → 合法组成兄弟家庭, cols=2 廊道出生）, 读时吃持久+合成边
+#（consumer 深度 2, 被自家廊道挤到 rank 3, x=1572 死列）。B1 后写时同吃
+# effective 边 —— consumer 出生即深度 2, 单成员家庭不生岛。
+
+_PITCH = 524  # product_graph.PITCH ↔ graph_store._PITCH 镜像值（漂移即红）
+
+
+@pytest.mark.asyncio
+async def test_settle_effective_edges_consumer_born_at_depth_2():
+    """asset + transcript + 1 consumer（事故同构）: 持久边 asset→transcript /
+    asset→consumer, 写时 settle 吃 effective 边（合成 transcript→consumer）
+    → consumer 出生即深度 2（x = 2×PITCH = 1048）, 与读面投影同图; 两个
+    单成员家庭 → 零岛行出生。"""
+    asset_id = uuid4()
+    asset = _node("asset", state="done",
+                  spec={"asset_type": "video", "asset_id": str(asset_id)},
+                  layout={"x": 0, "y": 0, "w": 280, "h": 260})
+    transcript = _node(
+        "document",
+        spec={"role": "transcript", "asset_id": str(asset_id), "text": "..."},
+        layout={"x": 0, "y": 284, "w": 340, "h": 280},
+    )
+    quotes = _node(
+        "image",
+        spec={"tool": "write_quotes", "frame_class": "image"},
+        layout={"x": 0, "y": 580, "w": 280, "h": 268},
+    )
+    edges = [
+        _edge(asset.id, transcript.id, "text"),
+        _edge(asset.id, quotes.id, "text"),
+    ]
+    islands: list = []
+    db = _StubDb(nodes=[asset], edges=edges)
+    await settle_frames_with_edges(
+        [transcript, quotes], [asset], edges, island_ctx=(db, _PROJECT_ID, islands),
+    )
+    # 深度 0/1/2 → x = 0/524/1048（读面 display_ranks 同 fixture 同数）。
+    assert transcript.layout["x"] == _PITCH
+    assert quotes.layout["x"] == 2 * _PITCH
+    # 单成员家庭不生岛——transcript（深度 1, 父 {asset}）与 quotes
+    #（深度 2, 父 {asset, transcript}）天然不同家庭。
+    assert islands == []
+    assert transcript.island_id is None and quotes.island_id is None
+    # 合成行是纯数据 —— 永不进写集（零 GraphEdge 落库; 持久输入不被变异）。
+    assert len(db.edges) == 2
+    assert all(not isinstance(e, dict) for e in db.edges)
+
+
+@pytest.mark.asyncio
+async def test_settle_effective_edges_writers_family_self_island():
+    """transcript + 3 writers: 三 writer 共享（effective 深度 2, effective
+    父签名 {asset, transcript}）→ 自成一岛（⌈3/4⌉+1 廊道 = cols 2, 更深带
+    无占位）; transcript 单成员家庭不生岛, 带 1 零廊道预留。"""
+    asset_id = uuid4()
+    asset = _node("asset", state="done",
+                  spec={"asset_type": "video", "asset_id": str(asset_id)},
+                  layout={"x": 0, "y": 0, "w": 280, "h": 260})
+    transcript = _node(
+        "document",
+        spec={"role": "transcript", "asset_id": str(asset_id), "text": "..."},
+        layout={"x": 0, "y": 284, "w": 340, "h": 280},
+    )
+    writers = [
+        _node("text",
+              spec={"tool": "write_post", "fill_key": f"write_post#post#{i}",
+                    "frame_class": "text"},
+              layout={"x": 0, "y": 580 + i * 460, "w": 340, "h": 440})
+        for i in range(3)
+    ]
+    edges = [_edge(asset.id, transcript.id, "text")] + [
+        _edge(asset.id, w.id, "text") for w in writers
+    ]
+    islands: list = []
+    db = _StubDb(nodes=[asset], edges=edges)
+    await settle_frames_with_edges(
+        [transcript, *writers], [asset], edges, island_ctx=(db, _PROJECT_ID, islands),
+    )
+    assert transcript.island_id is None
+    assert transcript.layout["x"] == _PITCH
+    assert len(islands) == 1
+    island = islands[0]
+    assert island.depth == 2 and island.cols == 2
+    # 岛身份 = effective 父签名（asset + transcript, 排序定格）。
+    assert island.parent_ids == sorted([str(asset.id), str(transcript.id)])
+    for seq, w in enumerate(writers):
+        assert w.island_id == island.id and w.island_seq == seq
+        # 同岛同列同 x（cap=4 → 三成员 col 全 0）: x = 岛 origin = 带 2 起点。
+        assert w.layout["x"] == island.origin_x == 2 * _PITCH
+
+
+def test_executable_closure_never_sees_synthesized_edges():
+    """B1 探针锁（执行侧零消费, graph_store 半面）: RunOp 闭包 / stale 传播
+    的边集恒为持久集 —— transcript 的持久子节点为零（合成腿永不过界）。"""
+    asset_id = uuid4()
+    asset = _node("asset", state="done",
+                  spec={"asset_type": "video", "asset_id": str(asset_id)})
+    transcript = _node("document",
+                       spec={"role": "transcript", "asset_id": str(asset_id)})
+    quotes = _node("image", spec={"tool": "write_quotes"})
+    edges = [
+        _edge(asset.id, transcript.id, "text"),
+        _edge(asset.id, quotes.id, "text"),
+    ]
+    assert executable_children_of(edges, UUID(str(transcript.id))) == []
+    assert executable_children_of(edges, UUID(str(asset.id))) == [
+        UUID(str(transcript.id)),
+        UUID(str(quotes.id)),
+    ]
 
 
 # ---- 词表 v3 门层 (ADR-076, C2a): 媒介五值 + legacy 容忍 ---------------------

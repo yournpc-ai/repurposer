@@ -26,6 +26,8 @@ import itertools
 
 from app.pipeline.product_graph import (
     PITCH,
+    display_ranks,
+    effective_rank_edges,
     is_product_node,
     is_rank_edge,
     product_ranks,
@@ -233,3 +235,150 @@ def test_product_ranks_never_return_an_exploration_rank():
     ]
     ranks = product_ranks(nodes, EDGES)
     assert "xcand" not in ranks
+
+
+# ---- ADR-098 B1: effective_rank_edges（Effective Product Graph 唯一拓扑层） ----
+#
+# 事故同构 fixture（项目 62594b0b-c0fd-40a9-89fe-6e0a055f7265 的取证原型,
+# dev DB 实录）: 素材 → 转写稿 → 金句卡（write_quotes draft）。持久边只有
+# asset→transcript / asset→quotes（legacy stamp 把 transcript 留成 LEAF,
+# consumers 从 asset 直连 = 执行真相）; 合成边 transcript→quotes 承载物料流
+# 「源 → 文档 → 装配」三列阅读法。
+
+A1, T1, Q1 = "asset-1", "transcript-1", "quotes-1"
+
+EFF_NODES = [
+    _node(A1, "asset", spec={"asset_id": "asset-row-1", "asset_type": "video"}, y=0),
+    _node(T1, "document", spec={"role": "transcript", "asset_id": "asset-row-1"}, y=0),
+    _node(Q1, "image", spec={"tool": "write_quotes"}, y=0),
+]
+
+
+def _pedge(src, dst, edge_type):
+    """Persisted edge row shape — ports ride along (合成行的判别锚)。"""
+    return {
+        "from_node": src,
+        "to_node": dst,
+        "edge_type": edge_type,
+        "from_port": f"out:{edge_type}",
+        "to_port": f"in:{edge_type}",
+    }
+
+
+EFF_EDGES = [_pedge(A1, T1, "text"), _pedge(A1, Q1, "text")]
+
+
+def test_effective_rank_edges_synthesizes_transcript_consumer_leg():
+    eff = effective_rank_edges(EFF_NODES, EFF_EDGES)
+    # 持久边先行、顺序保留; 合成行追加在后, dict 出生, 端口戳 out:text/in:text。
+    assert eff[: len(EFF_EDGES)] == EFF_EDGES
+    assert len(eff) == len(EFF_EDGES) + 1
+    syn = eff[-1]
+    assert (syn["from_node"], syn["to_node"], syn["edge_type"]) == (T1, Q1, "text")
+    assert (syn["from_port"], syn["to_port"]) == ("out:text", "in:text")
+    assert "id" in syn
+
+
+def test_effective_rank_edges_never_mutates_inputs_and_excludes_self_loops():
+    before = list(EFF_EDGES)
+    eff = effective_rank_edges(EFF_NODES, EFF_EDGES)
+    assert EFF_EDGES == before and eff is not EFF_EDGES
+    # 自环排除: asset→transcript 的出边永不合成 transcript→transcript。
+    assert all(
+        not (e["from_node"] == T1 and e["to_node"] == T1)
+        for e in eff[len(EFF_EDGES):]
+    )
+
+
+def test_effective_rank_edges_no_asset_link_no_synthesis():
+    # transcript 缺 asset_id / asset 节点缺 asset_id → 合成规则不触发
+    #（graph_store 岛测试的既有 fixture 形态——零资产链接, 零合成）。
+    nodes = [
+        _node("a", "asset", spec={"asset_type": "video"}),
+        _node("t", "document", spec={"role": "transcript"}),
+        _node("c", "text"),
+    ]
+    edges = [_pedge("a", "t", "text"), _pedge("a", "c", "text")]
+    assert effective_rank_edges(nodes, edges) == edges
+
+
+def test_lineage_edge_never_occupies_the_dedup_triple():
+    """ADR-098 §1 铁律②（律法先于首例——2026-10-01 dev DB 实测 lineage 边
+    全库零行）: artifact 盖章链的 deliverable 自己的血缘边
+    （transcript→deliverable, 端口戳 out:lineage）**永不占合成去重三元组**
+    ——否则合成边被顶掉, deliverable 深度退回 1, 与 writer 队列裂带。"""
+    d = "deliverable-1"
+    nodes = EFF_NODES[:2] + [_node(d, "video", spec={"tool": "select_clips"})]
+    edges = [
+        _pedge(A1, T1, "text"),
+        _pedge(A1, d, "video"),
+        {
+            "from_node": T1,
+            "to_node": d,
+            "edge_type": "text",
+            "from_port": "out:lineage",
+            "to_port": "in:lineage",
+        },
+    ]
+    eff = effective_rank_edges(nodes, edges)
+    syn = [e for e in eff if e.get("from_port") == "out:text" and e not in edges]
+    assert len(syn) == 1
+    assert (syn[0]["from_node"], syn[0]["to_node"]) == (T1, d)
+    # 合成边生效: deliverable 的 effective 深度 = 2（血缘边永不入 rank）。
+    assert product_ranks(nodes, eff)[d] == 2
+
+
+def test_real_text_edge_still_dedups_synthesis():
+    """rank 合法真边照常占位: canonical 出生边（graph_fill stamp 的 doc 站
+    腿）在场时, 同一 leg 永不double-render（A3-lite 与真边两源去重）。"""
+    d = "asm-1"
+    nodes = EFF_NODES[:2] + [_node(d, "video")]
+    edges = [_pedge(A1, T1, "text"), _pedge(A1, d, "video"), _pedge(T1, d, "text")]
+    assert len(effective_rank_edges(nodes, edges)) == 3
+
+
+def test_execution_side_never_consumes_effective_edges():
+    """B1 探针锁（执行侧零消费）: 同一 fixture 下, RunOp 闭包 / stale 传播 /
+    工作流编译吃**持久边**（ungated product_ranks 的输入永是持久集）——合成
+    边永不过界（显示/空间事实 ≠ 执行事实, ADR-086; ADR-098 §1）。"""
+    exec_ranks = product_ranks(EFF_NODES, EFF_EDGES, gated=False)
+    assert exec_ranks[Q1] == 1  # 持久边只有 asset→quotes —— 执行拓扑不变
+    eff = effective_rank_edges(EFF_NODES, EFF_EDGES)
+    assert product_ranks(EFF_NODES, eff, gated=False)[Q1] == 2  # 显示层吃 effective
+    # 无岛时 display = raw: 新链读面 rank = 0/1/2（事故形状的 B1 后形态）。
+    assert display_ranks(EFF_NODES, eff, []) == {
+        A1: 0,
+        T1: 1,
+        Q1: 2,
+    }
+
+
+def test_display_ranks_writers_share_one_island_band():
+    """B1 验收②: transcript + 3 writers——三 writer 共享一个 effective rank
+    与一个 effective 父签名 → 同岛同列同 rank; transcript 单成员家庭不生岛,
+    带 1 零廊道预留（writers 的 band origin 不被推高）。"""
+    ws = ["w1", "w2", "w3"]
+    nodes = EFF_NODES[:2] + [
+        _node(w, "text", spec={"tool": "write_post"}, y=0) for w in ws
+    ]
+    edges = [_pedge(A1, T1, "text")] + [_pedge(A1, w, "text") for w in ws]
+    eff = effective_rank_edges(nodes, edges)
+    island = {
+        "id": "isl-1",
+        "depth": 2,
+        "cols": 2,
+        "cap": 4,
+        "origin_x": 2 * PITCH,
+        "origin_y": -176,
+        "row_h": 576,
+    }
+    seated = []
+    for n in nodes:
+        n = dict(n)
+        if n["id"] in ws:
+            n["island_id"] = "isl-1"
+            n["island_seq"] = ws.index(n["id"])
+        seated.append(n)
+    ranks = display_ranks(seated, eff, [island])
+    assert ranks[T1] == 1
+    assert [ranks[w] for w in ws] == [2, 2, 2]
