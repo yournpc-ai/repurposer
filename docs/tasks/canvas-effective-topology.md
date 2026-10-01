@@ -1,6 +1,8 @@
 # 画布拓扑时间一致性 — 施工简报（ADR-098）
 
-> Status: 全批待开工。
+> Status: 三批代码层收口——**B1 `7787ee4`**（effective_rank_edges 唯一拓扑层）/ **B2 `a4ee8ee`**（Z 冻结律门守卫 + 7b 对账内嵌同谓词）/ **B3 `042decd`**（legacy 混合岛读时归一，零迁移）。纯测试 862 绿 / 既有 11 基线失败不动；web `layout.test.ts` 10 绿（双镜像 fixture 入座）。
+> **未跑验证项（用户自跑）**：compileall / import 探针 / tsc / e2e 剧本；live 验收 = ① 存量项目 `/graph` 载荷与 B1 前恒等回归 ② 事故项目 `62594b0b` 读时归一确认（rank 0/1/2、无 reserved_bottom 幽灵）③ Start 主链（lineage 豁免承重——无豁免则每个 Start 死于门）④ 素材删除 reflow 走查。live 验收通过前简报留 tasks/ 不归档。
+> 合同措辞澄清（施工记录）：B2 施工点 1 的「rank 三值边…ctx 边豁免」未提 lineage——实现按 rank-relevant 谓词落地（rank 三值 ∧ 非 lineage 端口标记边），依据 = ADR-098 §1 既有「lineage rank 豁免」+ run fill 时序实证（`graph_fill` 复用节点先于门置 queued，lineage 盖章合法落进 queued deliverable）。
 > 架构母法 = ADR-098；Product Graph 地基 = ADR-086；artifact/lineage 边界 = ADR-097。
 
 ## 背景（取证定案）
