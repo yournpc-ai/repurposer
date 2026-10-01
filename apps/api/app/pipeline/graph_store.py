@@ -1051,6 +1051,24 @@ async def apply_wiring_ops(
             )
         if etype not in _accepts(to_node):
             raise WiringRejected(f"connect: {to_node.type} does not accept {etype}")
+        # Settled Rank 冻结律 (ADR-098 §2 — Z): a rank-relevant edge into a
+        # non-draft target would re-rank a settled node — rejected at the
+        # door. Rank-relevant = 物料流三值 minus the lineage port-marked
+        # 真边 (血缘而非物料流, rank 豁免——run fill 的 lineage 盖章合法落
+        # 在 queued deliverable 上, graph_fill §7); ctx 永不入 rank, 天然
+        # 豁免. Draft targets pass untouched — the provisional machine
+        # (reseat / orphan sweep) keeps its old behavior.
+        if (
+            etype in RANK_EDGE_TYPES
+            and not is_lineage_edge({"from_port": from_port or f"out:{etype}"})
+            and str(to_node.state) != "draft"
+        ):
+            raise WiringRejected(
+                f"connect: settled target {to_id} (state {to_node.state!r}) — "
+                "a node's rank freezes when it leaves draft (ADR-098 Z); "
+                "rewiring settled nodes goes through a named lifecycle "
+                "exception, never a bare op"
+            )
         if reaches(to_id, from_id):
             raise WiringRejected("connect: the edge would close a cycle")
         if any(
@@ -1145,6 +1163,22 @@ async def apply_wiring_ops(
             if match is None:
                 raise WiringRejected(
                     f"disconnect: no {op.edge_type} edge {op.from_node} → {op.to_node}"
+                )
+            # Settled Rank 冻结律 (ADR-098 §2 — Z), the disconnect landing's
+            # same predicate: severing a rank-relevant edge into a non-draft
+            # target re-ranks a settled node. Lineage port-marked edges and
+            # ctx are rank-exempt; draft targets pass untouched.
+            disconnect_target = nodes.get(op.to_node)
+            if (
+                match.edge_type in RANK_EDGE_TYPES
+                and not is_lineage_edge(match)
+                and disconnect_target is not None
+                and str(disconnect_target.state) != "draft"
+            ):
+                raise WiringRejected(
+                    f"disconnect: settled target {op.to_node} (state "
+                    f"{disconnect_target.state!r}) — a node's rank freezes "
+                    "when it leaves draft (ADR-098 Z)"
                 )
             edges.remove(match)
             if id(match) in persisted_edge_ids:

@@ -69,9 +69,11 @@ from app.pipeline.outputs import compose_spec_prompt
 from app.pipeline.product_graph import (
     ARTIFACT_KEY_PREFIX,
     LINEAGE_EDGE_PORT,
+    RANK_EDGE_TYPES,
     WORK_KEY_PREFIX,
     artifact_fields_for_birth,
     assign_artifact_groups,
+    is_lineage_edge,
 )
 from app.tools.captions.procedure import TRANSLATION_ARTIFACT_KEY
 from app.tools.clips.transcript import group_cues
@@ -1355,6 +1357,12 @@ async def _stamp_graph_core(
     # edge set, so a topology flip (old B→A stale, new A→B wanted) must see
     # the post-retraction set when its connect is checked — stale edges only
     # ever join reused (pre-existing) nodes, never this batch's newborns.
+    # Settled Rank 冻结律 (ADR-098 §2 — Z) 内嵌同谓词: a rank-relevant edge
+    # (物料流三值 minus lineage 端口标记边) into a NON-DRAFT target is frozen
+    # — the reconciliation SKIPS it with a named report. Never silent (审计
+    # 留痕), never raised (对账是编译器自我修正, 阻断会杀正常 fill); a future
+    # rewire of settled nodes goes through a named lifecycle exception.
+    state_by_id = {str(n.id): str(n.state) for n in existing_nodes}
     disconnect_ops: list[dict[str, Any]] = []
     for e in existing_edges:
         triple = (str(e.from_node), str(e.to_node), str(e.edge_type))
@@ -1363,6 +1371,20 @@ async def _stamp_graph_core(
             and triple[1] in claimed
             and triple not in want_edge
         ):
+            target_state = state_by_id.get(triple[1])
+            if (
+                e.edge_type in RANK_EDGE_TYPES
+                and not is_lineage_edge(e)
+                and target_state != "draft"
+            ):
+                logger.warning(
+                    "graph_fill.reconcile_frozen_edge_skip",
+                    from_node=triple[0],
+                    to_node=triple[1],
+                    edge_type=triple[2],
+                    target_state=target_state,
+                )
+                continue
             disconnect_ops.append(
                 {
                     "op": "disconnect",

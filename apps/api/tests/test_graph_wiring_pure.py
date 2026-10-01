@@ -1606,6 +1606,121 @@ def test_executable_closure_never_sees_synthesized_edges():
     ]
 
 
+# ---- ADR-098 §2: Settled Rank 冻结律（Z）门守卫 --------------------------------
+#
+# 完备性证明①的实证守卫查询形状（备查, dev DB 只读——2026-10-01 实测 0 行;
+# draft 源的任何边亦 0 行; lineage 边全库 0 行）:
+#
+#   SELECT COUNT(*) FROM graph_edges e
+#   JOIN graph_nodes s ON s.id = e.from_node
+#   JOIN graph_nodes t ON t.id = e.to_node
+#   WHERE e.edge_type IN ('video','audio','text')
+#     AND e.from_port IS DISTINCT FROM 'out:lineage'
+#     AND s.state = 'draft' AND t.state <> 'draft';
+#
+# 结构证明: 节点皆生为 draft（asset 生而为 done 但 accepts 为空, 永不成
+# rank 边目标）; 盖章方向恒 existing→newborn; 门守卫焊死裸 op 通道;
+# target-guard 自稳定（它维持的正是它完备性所依赖的不变量）。
+# 冻结点 = 节点离开 draft, 非 DB 行创建（证明②）。
+
+
+@pytest.mark.asyncio
+async def test_rank_connect_into_settled_target_rejected():
+    """Z 守卫 ①: rank 三值边 connect 进非 draft 目标 → WiringRejected;
+    批在 flush 前整体死（零半应用图）。"""
+    asset = _node("asset", state="done", spec={"asset_type": "video"})
+    consumer = _node("video", state="done", spec={"tool": "select_clips"})
+    db = _StubDb(nodes=[asset, consumer])
+    with pytest.raises(WiringRejected, match="settled target"):
+        await apply_wiring_ops(
+            db, _PROJECT_ID,
+            [{"op": "connect", "from_node": asset.id, "to_node": consumer.id,
+              "edge_type": "video"}],
+        )
+    assert db.flush_count == 0
+    assert db.edges == []
+
+
+@pytest.mark.asyncio
+async def test_ctx_connect_into_settled_target_allowed():
+    """Z 守卫 ②: ctx 引用流永不入 rank —— 天然豁免, 进 settled 目标照常落。"""
+    book = _node("document", state="done", spec={"role": "task_book"})
+    writer = _node("text", state="done", spec={"tool": "write_post"})
+    db = _StubDb(nodes=[book, writer])
+    await apply_wiring_ops(
+        db, _PROJECT_ID,
+        [{"op": "connect", "from_node": book.id, "to_node": writer.id,
+          "edge_type": "ctx"}],
+    )
+    assert [(e.from_node, e.to_node, e.edge_type) for e in db.edges] == [
+        (book.id, writer.id, "ctx")
+    ]
+
+
+@pytest.mark.asyncio
+async def test_rank_disconnect_into_settled_target_rejected():
+    """Z 守卫 ③: rank 边 disconnect 进非 draft 目标 → WiringRejected
+    （既有边不动, flush 前整体死）。"""
+    asset = _node("asset", state="done", spec={"asset_type": "video"})
+    consumer = _node("text", state="done", spec={"tool": "write_post"})
+    edge = _edge(asset.id, consumer.id, "text")
+    db = _StubDb(nodes=[asset, consumer], edges=[edge])
+    with pytest.raises(WiringRejected, match="settled target"):
+        await apply_wiring_ops(
+            db, _PROJECT_ID,
+            [{"op": "disconnect", "from_node": asset.id, "to_node": consumer.id,
+              "edge_type": "text"}],
+        )
+    assert db.flush_count == 0
+    assert db.edges == [edge]  # 边幸存
+
+
+@pytest.mark.asyncio
+async def test_rank_connect_disconnect_into_draft_target_allowed():
+    """Z 守卫 ④: draft 目标一切放行 —— provisional 机器（reseat / orphan
+    sweep）原有行为零改动。connect 落、disconnect 落。"""
+    asset = _node("asset", state="done", spec={"asset_type": "video"})
+    writer = _node("text", state="draft", spec={"tool": "write_post"})
+    db = _StubDb(nodes=[asset, writer])
+    await apply_wiring_ops(
+        db, _PROJECT_ID,
+        [{"op": "connect", "from_node": asset.id, "to_node": writer.id,
+          "edge_type": "text"}],
+    )
+    assert [(e.from_node, e.to_node) for e in db.edges] == [(asset.id, writer.id)]
+    await apply_wiring_ops(
+        db, _PROJECT_ID,
+        [{"op": "disconnect", "from_node": asset.id, "to_node": writer.id,
+          "edge_type": "text"}],
+    )
+    assert db.edges == []
+
+
+@pytest.mark.asyncio
+async def test_lineage_edge_into_settled_target_is_rank_exempt():
+    """Z 守卫的 lineage 豁免（承重——每一个 Start 都靠它: graph_fill §7 的
+    lineage 盖章在 run fill 落进 queued deliverable; ADR-098 §1 — 血缘而非
+    物料流, 永不入 rank）。connect 与 disconnect 双向放行。"""
+    transcript = _node("document", state="done",
+                       spec={"role": "transcript", "asset_id": str(uuid4())})
+    deliverable = _node("video", state="queued",
+                        spec={"tool": "select_clips", "artifact_role": "deliverable"})
+    db = _StubDb(nodes=[transcript, deliverable])
+    await apply_wiring_ops(
+        db, _PROJECT_ID,
+        [{"op": "connect", "from_node": transcript.id, "to_node": deliverable.id,
+          "edge_type": "text",
+          "from_port": "out:lineage", "to_port": "in:lineage"}],
+    )
+    assert [(e.from_port, e.to_port) for e in db.edges] == [("out:lineage", "in:lineage")]
+    await apply_wiring_ops(
+        db, _PROJECT_ID,
+        [{"op": "disconnect", "from_node": transcript.id, "to_node": deliverable.id,
+          "edge_type": "text"}],
+    )
+    assert db.edges == []
+
+
 # ---- 词表 v3 门层 (ADR-076, C2a): 媒介五值 + legacy 容忍 ---------------------
 
 
