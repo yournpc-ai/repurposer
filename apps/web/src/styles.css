@@ -766,15 +766,20 @@ body {
   }
 }
 
-/* The right-docked panel's entrance beat (2026-09-06 三形态机): only the
-   full→panel MORPH replays it (gated by the stageMounted latch — refresh /
-   history-open mounts render the final frame directly, 水合首帧永不重播).
-   One fade + a 12px slide from the right edge, delayed 150ms so it lands on
-   the same beat as the canvas's delayed fade-in; reduced motion is instant. */
+/* The right-docked panel's entrance beat (2026-09-06 三形态机; 2026-10-02
+   让位方向修订): only the full→panel MORPH replays it (gated by the
+   stageMounted latch — refresh / history-open mounts render the final frame
+   directly, 水合首帧永不重播). The chat YIELDS RIGHT: the panel starts 40px
+   left of its slot and slides rightward into place (was: a 12px peek from
+   off-screen right — that read as a NEW element entering, not the chat
+   relocating). No delay: the slide starts at the flip, and the canvas's
+   150ms-delayed fade-in follows into the freed space — one causal beat,
+   「chat 让位 → 画布出现」(the shared 150ms delay also left a 150ms blank
+   window: the `both` fill held the card invisible). Reduced motion instant. */
 @keyframes dock-panel-in {
   from {
     opacity: 0;
-    transform: translateX(12px);
+    transform: translateX(-40px);
   }
   to {
     opacity: 1;
@@ -782,7 +787,7 @@ body {
   }
 }
 .dock-panel-in {
-  animation: dock-panel-in 400ms ease-out 150ms both;
+  animation: dock-panel-in 450ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .dock-panel-in {
