@@ -1965,14 +1965,16 @@ async def _plan_turn(
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
-) -> tuple[Message, UUID | None, Message | None, list[UUID]]:
+) -> tuple[Message | None, UUID | None, Message | None, list[UUID]]:
     """Plan path (intent-surface-unification W1): build / refine / confirm
     the plan inside the chat loop — the ONLY intent surface.
 
     Entered for project-scope turns while a plan is pending (refine or
     prose confirmation) or before the project's first run (first turn / after
     a bail). Returns the assistant message (the docked/answered question row
-    for draft/ask/start), the started run id, the answered task-book question
+    for draft/ask/start; None when the material-pending commitment was
+    suppressed at land time — the review turn speaks next), the started run
+    id, the answered task-book question
     (for ChatResponse.answered_question), and cascade-bailed run ids. The
     caller commits — except the start branch, where answer_question commits.
 
@@ -2021,12 +2023,14 @@ async def _propose_turn(
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
-) -> tuple[Message, UUID | None, list[UUID], Message | None]:
+) -> tuple[Message | None, UUID | None, list[UUID], Message | None]:
     """One assistant turn after the user input is settled (CHAT_ARCH §3).
 
     Shared by ``chat()`` and the choice-answer continuation in
     ``answer_question`` (the answer endpoint doubles as resume). Returns the
-    assistant message, the dispatched run id if any, the run ids whose parked
+    assistant message (None when the material-pending commitment was
+    suppressed at land time — the review turn speaks next), the dispatched
+    run id if any, the run ids whose parked
     interrupt was cascade-bailed, and the pending question this turn settled
     by judgment (ADR-053 R2). Flush-only — the caller commits.
 
@@ -2427,7 +2431,14 @@ async def execute_chat_turn(
     return ChatResponse(
         conversation_id=prepared.conversation_id,
         user_message=ChatMessageResponse.model_validate(prepared.user_message),
-        assistant_message=ChatMessageResponse.model_validate(assistant_message),
+        # None = 素材待命承诺被落地时刻压制 (the understanding beat landed
+        # mid-turn; the world-fired review turn speaks next) — the SSE client
+        # closes the preview bubble and waits for the review.
+        assistant_message=(
+            ChatMessageResponse.model_validate(assistant_message)
+            if assistant_message is not None
+            else None
+        ),
         run_id=run_id,
         answered_question=(
             ChatMessageResponse.model_validate(prepared.answered_question)
@@ -2547,6 +2558,48 @@ async def record_material_beat(
     await db.flush()
     await db.refresh(message)
     return message
+
+
+async def material_beat_landed(
+    db: AsyncSession, conversation_id: UUID, beat: str, ref: str
+) -> bool:
+    """The material-pending suppression's world read: the beat's durable row
+    (once-only per (beat, ref)). A landed understanding beat ⟹ the warm tail
+    already called ``fire_trigger``, so the review turn is queued behind this
+    turn's close (the politeness gate) — the commitment's promise is being
+    kept by the world itself, and the stale clause may be dropped."""
+    row = await db.execute(
+        select(Message.id)
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.intent["type"].astext == MATERIAL_BEAT_TYPE,
+            Message.intent["beat"].astext == beat,
+            Message.intent["ref"].astext == ref,
+        )
+        .limit(1)
+    )
+    return row.scalar_one_or_none() is not None
+
+
+def pending_commitment_verdict(
+    *, lane_marked: bool, beat_landed: bool, plan_docked: bool
+) -> str:
+    """The material-pending commitment's land-time verdict (pure):
+    "suppress" | "release".
+
+    "suppress" = the world already speaks (the understanding beat landed →
+    the review turn fires behind this turn's close), so the stale commitment
+    never lands. "release" everywhere else:
+
+    - unmarked answers are ordinary replies (a capability answer with
+      uploads draining in the background must never vanish);
+    - no beat = processing still runs — the commitment is the bridge;
+    - a docked plan self-silences the review turn (单一叙事者律第二谓词),
+      so the commitment must stay or nobody speaks.
+    """
+    if not lane_marked or plan_docked:
+        return "release"
+    return "suppress" if beat_landed else "release"
 
 
 # ---- Activity log persistence (2026-09-25 activity 持久化) -----------------

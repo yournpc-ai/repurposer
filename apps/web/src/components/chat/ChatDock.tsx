@@ -2723,7 +2723,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }
     try {
       const data = await streamChat<{
-        assistant_message: QuestionMessage
+        assistant_message: QuestionMessage | null
         run_id: string | null
         answered_question?: QuestionMessage | null
       }>(
@@ -2787,7 +2787,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // reachable in ANY project, not just an empty one) — always refresh
       // the prompt attachments after a turn.
       void fetchAssets()
-      if (data.run_id) {
+      if (data.run_id && data.assistant_message != null) {
         // G-1: the prose confirmation answered the docked task plan
         // server-side (kind=start) and the run is live. NO QA archive on
         // ANY start path (2026-09-05 用户拍板): the AnsweredQuestion block
@@ -2857,6 +2857,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       if (data.answered_question) {
         setPendingQuestion(null)
         pushAnsweredQuestion(data.answered_question)
+      }
+      if (data.assistant_message == null) {
+        // 素材待命承诺·落地压制: the understanding beat landed mid-turn, so
+        // the server closed the turn silent (zero assistant row) — the
+        // world-fired review turn is the answer and arrives on its own
+        // channel. Drop the preview bubble (nothing was ever streamed into
+        // it) and wait for the review.
+        discardPreviewArtifacts()
+        setMessages((prev) => prev.filter((m) => m.id !== streamId))
+        return
       }
       const message = data.assistant_message
       const isTextQuestion =

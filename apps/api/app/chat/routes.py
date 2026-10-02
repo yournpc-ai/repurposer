@@ -771,6 +771,13 @@ async def regenerate_output(
 
     return {
         "run_id": str(result.run_id) if result.run_id else None,
-        "message_id": str(result.assistant_message.id),
+        # assistant_message is None only on the material-pending suppression
+        # path — unreachable here (a regenerate turn carries no fresh
+        # uploads), guarded for the Optional contract.
+        "message_id": (
+            str(result.assistant_message.id)
+            if result.assistant_message is not None
+            else None
+        ),
         "conversation_id": str(result.conversation_id),
     }

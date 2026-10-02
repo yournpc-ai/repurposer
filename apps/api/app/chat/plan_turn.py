@@ -46,6 +46,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.tool_loop import ToolObservation
+from app.chat.deferred_frames import DeferredFrames
 from app.chat.exploration_compile import (
     compile_plan_rows_package,
     compile_plans_package,
@@ -88,7 +89,9 @@ from app.chat.service import (
     answer_question,
     is_pending_plan,
     latest_pending_question,
+    material_beat_landed,
     merge_brief,
+    pending_commitment_verdict,
     sync_plan_question,
 )
 from app.chat.system_status import observe_phase_callback
@@ -138,8 +141,11 @@ logger = structlog.get_logger()
 
 # The return shape the service layer's callers hold (unchanged):
 # (assistant message, started run id, answered task-book question,
-# cascade-bailed run ids).
-PlanTurnOutcome = tuple[Message, UUID | None, Message | None, list[UUID]]
+# cascade-bailed run ids). The assistant message is None on exactly one
+# path: the material-pending commitment suppressed at land time (the
+# understanding beat landed mid-turn — the world-fired review turn speaks
+# next, so the stale promise never lands).
+PlanTurnOutcome = tuple[Message | None, UUID | None, Message | None, list[UUID]]
 
 
 class PlanTurn:
@@ -189,6 +195,12 @@ class PlanTurn:
         # 资产角色 (ADR-078 判词④): this turn's mention-settled exemplar pin
         # (None = no asset mention this turn — the stored plan's pins ride).
         self.mention_exemplar_id: str | None = None
+        # 素材待命车道 (落地时刻压制批): the assemble saw files still
+        # processing → the turn MAY close on the material-pending commitment,
+        # so the runner arms the frame buffer (SSE path only) and a marked
+        # answer re-reads the world at land time before its prose releases.
+        self.material_pending_stamped = False
+        self.deferred: DeferredFrames | None = None
 
     # ---- assembly (the retired _plan_turn's pre-call block, verbatim) ------
 
@@ -365,6 +377,9 @@ class PlanTurn:
                 f"Material status: {failed_count} uploaded file(s) FAILED "
                 "processing — their content will not become readable."
             )
+        # The commitment lane's plausible scope (the failed line carries no
+        # coming beat, so a failure-only turn never buffers/suppresses).
+        self.material_pending_stamped = processing_count > 0
 
         recent_lines: list[str] = []
         for m in recent or []:
@@ -594,6 +609,19 @@ class PlanTurn:
             getattr(params, "pending_disposition", "none") if params is not None else "none"
         )
         await self._settle_pending_by_disposition(disposition)
+        result = await self._dispatch(name, params, prose)
+        # The deferred-frames resolution (落地时刻压制批): a terminal accept
+        # releases the queue (a rejection-marked queue drops — its words were
+        # retracted speech); a rejection only notes. ToolObservations are
+        # non-terminal (reads) — the queue stays armed.
+        if isinstance(result, str):
+            if self.deferred is not None:
+                self.deferred.note_rejection()
+        elif result is None:
+            await self._resolve_deferred()
+        return result
+
+    async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation:
         if name in EXPLORATION_TOOLS:
             return await self._explore(name, params, prose)
         if name == "present_plan":
@@ -608,6 +636,18 @@ class PlanTurn:
             assert isinstance(params, PlanAnswerArgs)
             return await self._answer(params, prose)
         return f"unknown tool {name!r}"  # unreachable — the driver gates names
+
+    async def _resolve_deferred(self) -> None:
+        """The accepted terminal's frame release: flush the queue in order,
+        or drop it when a rejection marked it (retracted speech — the settled
+        envelope paces out whole, the zero-delta path's law)."""
+        deferred = self.deferred
+        if deferred is None or not deferred.armed:
+            return
+        if deferred.saw_rejection:
+            deferred.drop()
+        else:
+            await deferred.flush()
 
     async def _settle_pending_by_disposition(self, disposition: str) -> None:
         """Settle the pending plain question by the accepted call's judgment
@@ -1582,6 +1622,41 @@ class PlanTurn:
                 "an empty reply says nothing — speak the answer as your "
                 "message text, then call answer."
             )
+        # 素材待命承诺·落地时刻压制: the marked commitment re-reads the world
+        # NOW (the clause was written against the assemble-time world; short
+        # material routinely finishes mid-turn). The digest computes at land
+        # time — content hashes stamp during processing, so an assemble-time
+        # digest could miss them and never match the warm's ref. Suppress =
+        # no assistant row, the queued frames drop unsent, and the review
+        # turn (already fired behind the politeness gate) speaks next. The
+        # assemble stamp guards the lane: a stray marker on an ordinary
+        # answer (no files pending at assemble, an old warm's beat on file)
+        # must never suppress — no review is coming for that beat.
+        if params.material_pending and self.material_pending_stamped:
+            from app.pipeline.step_context import (  # deferred: pipeline weight
+                asset_digest,
+                list_assets,
+            )
+
+            digest = asset_digest(await list_assets(self.db, self.project.id))
+            beat = await material_beat_landed(
+                self.db, self.conversation_id, "understanding", digest
+            )
+            plan_docked = is_pending_plan(
+                await latest_pending_question(self.db, self.conversation_id)
+            )
+            verdict = pending_commitment_verdict(
+                lane_marked=True, beat_landed=beat, plan_docked=plan_docked
+            )
+            if verdict == "suppress":
+                if self.deferred is not None:
+                    self.deferred.drop()
+                logger.info(
+                    "material_pending_commitment_suppressed",
+                    project_id=str(self.project.id),
+                )
+                self.outcome = (None, None, self.settled_pending, [])
+                return None
         # Capability question: the reply lands as a plain assistant message
         # and the stored plan stays untouched — an answer turn never
         # overwrites the plan the user is confirming. When a question
@@ -1609,6 +1684,11 @@ class PlanTurn:
         here (an honest degrade, never a fabricated success)."""
         if self.outcome is not None:
             return self.outcome
+        # The degrade paths land their own message — resolve any still-armed
+        # queue FIRST so its frames precede the envelope: a clean bare reply
+        # flushes (the queued prose IS the reply), a rejection-marked queue
+        # drops (every queued word was rejected speech).
+        await self._resolve_deferred()
         if not result.exhausted:
             # The bare final reply (no tool called) — the read-tolerant
             # answer floor: the prose IS the reply.
@@ -1710,6 +1790,30 @@ async def run_plan_turn(
     one-shot path."""
     turn = PlanTurn(db, user_id, conversation, project, request, on_phase=on_phase, on_activity=on_activity, on_candidates=on_candidates)
     await turn.assemble(recent)
+    # 素材待命车道武装 (落地时刻压制批): files were still processing at
+    # assemble, so the turn MAY close on the commitment — buffer the prose /
+    # structure frames in arrival order (SSE path only; the one-shot path
+    # streams nothing and needs no buffer). The checkpoint channel flushes
+    # the queue FIRST: prose spoken before a read lands before the read's
+    # statement, then the channel streams live.
+    if turn.material_pending_stamped and on_delta is not None:
+        deferred = DeferredFrames(
+            {"delta": on_delta, "tool_call": on_tool_call, "tool_ready": on_tool_ready}
+        )
+        turn.deferred = deferred
+        on_delta = deferred.wrap("delta")
+        on_tool_call = deferred.wrap("tool_call")
+        on_tool_ready = deferred.wrap("tool_ready")
+        base_on_checkpoint = _checkpoint_callback(db, turn.conversation_id, on_checkpoint)
+
+        async def on_checkpoint_after_flush(text: str) -> None:
+            if deferred.armed:
+                await deferred.flush()
+            await base_on_checkpoint(text)
+
+        checkpoint_hook = on_checkpoint_after_flush
+    else:
+        checkpoint_hook = _checkpoint_callback(db, turn.conversation_id, on_checkpoint)
     result = await intent_router.call_loop(
         turn.execute,
         on_delta=on_delta,
@@ -1717,7 +1821,7 @@ async def run_plan_turn(
         on_tool_call=on_tool_call,
         on_tool_ready=on_tool_ready,
         on_observe=observe_phase_callback(on_phase),
-        on_checkpoint=_checkpoint_callback(db, turn.conversation_id, on_checkpoint),
+        on_checkpoint=checkpoint_hook,
         on_loop_event=on_loop_event,
         **turn.infer_kwargs,
     )

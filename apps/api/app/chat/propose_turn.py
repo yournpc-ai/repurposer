@@ -64,6 +64,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.context import build_context
 from app.agents.tool_loop import ToolObservation
+from app.chat.deferred_frames import DeferredFrames
 from app.chat.exploration_compile import (
     compile_plan_rows_package,
     compile_plans_package,
@@ -101,13 +102,17 @@ from app.chat.service import (
     _resume_ack_line,
     _reminder_tail,
     _safe_task_estimate,
+    is_pending_plan,
     latest_pending_question,
+    material_beat_landed,
+    pending_commitment_verdict,
     sync_plan_question,
 )
 from app.chat.system_status import observe_phase_callback
 from app.models.schemas import (
     AnswerPayload,
     AnswerProposal,
+    AssetStatus,
     AssetType,
     Brief,
     ChatAnswerArgs,
@@ -171,8 +176,11 @@ logger = structlog.get_logger()
 
 # The return shape the service layer's callers hold (unchanged):
 # (assistant message, dispatched run id, cascade-bailed run ids, the pending
-# question this turn settled by judgment).
-ProposeTurnOutcome = tuple[Message, UUID | None, list[UUID], Message | None]
+# question this turn settled by judgment). The assistant message is None on
+# exactly one path: the material-pending commitment suppressed at land time
+# (the understanding beat landed mid-turn — the world-fired review turn
+# speaks next, so the stale promise never lands).
+ProposeTurnOutcome = tuple[Message | None, UUID | None, list[UUID], Message | None]
 
 # _dock_plan_as_question's estimate kwarg sentinel: None is a REAL value
 # (an unquotable plan — the gate compared it and chose direct), distinct
@@ -258,6 +266,12 @@ class ChatTurn:
         self.settled_question: Message | None = None
         self.outcome: ProposeTurnOutcome | None = None
         self._bailed_on_skip: list[UUID] = []
+        # 素材待命车道 (落地时刻压制批): the assemble saw files still
+        # processing → the turn MAY close on the material-pending commitment,
+        # so the runner arms the frame buffer (SSE path only) and a marked
+        # answer re-reads the world at land time before its prose releases.
+        self.material_pending_stamped = False
+        self.deferred: DeferredFrames | None = None
 
     async def assemble(self, mentions: list[ChatMention], recent: list[Message]) -> None:
         db, project = self.db, self.project
@@ -286,6 +300,25 @@ class ChatTurn:
             if project
             else {"text": ""}
         )
+        # The commitment lane's plausible scope — the same predicate the plan
+        # path stamps (a file asset still PENDING/PROCESSING at assemble).
+        # Project-less defensive turns never carry uploads.
+        if project is not None:
+            processing_count = sum(
+                1
+                for a in (
+                    await db.execute(
+                        select(Asset).where(
+                            Asset.project_id == project.id,
+                            Asset.file_url.isnot(None),
+                            Asset.processing_status.in_(
+                                [AssetStatus.PENDING, AssetStatus.PROCESSING]
+                            ),
+                        )
+                    )
+                ).scalars().all()
+            )
+            self.material_pending_stamped = processing_count > 0
 
     # ---- 资产角色 pins (ADR-078 判词④), the chat path's dispatch seat --------
 
@@ -400,7 +433,21 @@ class ChatTurn:
             getattr(params, "pending_disposition", "none") if params is not None else "none"
         )
         if await self._settle_by_disposition(disposition):
-            return None  # the parked interrupt's wake IS the continuation
+            result: str | None | ToolObservation = None  # the parked interrupt's wake IS the continuation
+        else:
+            result = await self._dispatch(name, params, prose)
+        # The deferred-frames resolution (落地时刻压制批): a terminal accept
+        # releases the queue (a rejection-marked queue drops — its words were
+        # retracted speech); a rejection only notes. ToolObservations are
+        # non-terminal (reads) — the queue stays armed.
+        if isinstance(result, str):
+            if self.deferred is not None:
+                self.deferred.note_rejection()
+        elif result is None:
+            await self._resolve_deferred()
+        return result
+
+    async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation:
         if name in EXPLORATION_TOOLS:
             return await self._explore(name, params, prose)
         if name == "propose_tasks":
@@ -420,8 +467,20 @@ class ChatTurn:
             return await self._ask_user(params, prose)
         if name == "answer":
             assert isinstance(params, ChatAnswerArgs)
-            return await self._answer(prose)
+            return await self._answer(params, prose)
         return f"unknown tool {name!r}"  # unreachable — the driver gates names
+
+    async def _resolve_deferred(self) -> None:
+        """The accepted terminal's frame release: flush the queue in order,
+        or drop it when a rejection marked it (retracted speech — the settled
+        envelope paces out whole, the zero-delta path's law)."""
+        deferred = self.deferred
+        if deferred is None or not deferred.armed:
+            return
+        if deferred.saw_rejection:
+            deferred.drop()
+        else:
+            await deferred.flush()
 
     async def _propose_tasks(self, params: ProposeTasksArgs, prose: str) -> str | None:
         """task_list → the caption gate, then the Confirmation Dock (ADR-087
@@ -1492,7 +1551,7 @@ class ChatTurn:
         )
         return None
 
-    async def _answer(self, prose: str) -> str | None:
+    async def _answer(self, params: ChatAnswerArgs, prose: str) -> str | None:
         """answer → a purely informational reply lands as a plain assistant
         message — no task, no run, no docked question (G-4, N-21; the same
         archival shape as a plan-path answer turn)."""
@@ -1501,6 +1560,43 @@ class ChatTurn:
                 "an empty reply says nothing — speak the answer as your "
                 "message text, then call answer."
             )
+        # 素材待命承诺·落地时刻压制 (the plan path's mirror): the marked
+        # commitment re-reads the world NOW — the digest computes at land
+        # time (content hashes stamp during processing). Suppress = no
+        # assistant row, the queued frames drop unsent, and the review turn
+        # (already fired behind the politeness gate) speaks next. The
+        # assemble stamp guards the lane: a stray marker on an ordinary
+        # answer (no files pending at assemble, an old warm's beat on file)
+        # must never suppress — no review is coming for that beat.
+        if (
+            params.material_pending
+            and self.material_pending_stamped
+            and self.project is not None
+        ):
+            from app.pipeline.step_context import (  # deferred: pipeline weight
+                asset_digest,
+                list_assets,
+            )
+
+            digest = asset_digest(await list_assets(self.db, self.project.id))
+            beat = await material_beat_landed(
+                self.db, self.conversation_id, "understanding", digest
+            )
+            plan_docked = is_pending_plan(
+                await latest_pending_question(self.db, self.conversation_id)
+            )
+            verdict = pending_commitment_verdict(
+                lane_marked=True, beat_landed=beat, plan_docked=plan_docked
+            )
+            if verdict == "suppress":
+                if self.deferred is not None:
+                    self.deferred.drop()
+                logger.info(
+                    "material_pending_commitment_suppressed",
+                    project_id=str(self.project.id),
+                )
+                self.outcome = (None, None, [], self.settled_question)
+                return None
         assistant_message = await _create_message(
             self.db,
             self.conversation_id,
@@ -1519,31 +1615,42 @@ class ChatTurn:
         interjection) — the reply ends with the code-composed reminder."""
         if self.outcome is not None:
             assistant_message, run_id, bailed_run_ids, settled = self.outcome
-        elif result is None or result.exhausted:
-            # result None = provider failure (the caller maps LLMError here);
-            # exhausted = every call rejected. ask-back is the only failure
-            # form (prohibition #7); adjudication exhaustion reads as
-            # cannot-do (the retired degrade's honest line).
-            content = _ASK_BACK_TEXT if result is None else _cannot_do_text(self.text)
-            if result is not None:
-                logger.info("chat_turn_loop_exhausted", calls=result.calls)
-            assistant_message = await _create_message(
-                self.db, self.conversation_id, "assistant", content
-            )
-            run_id, bailed_run_ids, settled = None, [], self.settled_question
         else:
-            # The bare final reply (no tool called) — the read-tolerant
-            # answer floor: the prose IS the reply.
-            assistant_message = await _create_message(
-                self.db,
-                self.conversation_id,
-                "assistant",
-                result.prose,
-                intent=AnswerProposal(text=result.prose).model_dump(mode="json"),
-            )
-            run_id, bailed_run_ids, settled = None, [], self.settled_question
+            # The degrade/bare paths land their own message — resolve any
+            # still-armed queue FIRST so its frames precede the envelope: a
+            # clean bare reply flushes (the queued prose IS the reply), a
+            # rejection-marked queue drops (every word was rejected speech).
+            await self._resolve_deferred()
+            if result is None or result.exhausted:
+                # result None = provider failure (the caller maps LLMError here);
+                # exhausted = every call rejected. ask-back is the only failure
+                # form (prohibition #7); adjudication exhaustion reads as
+                # cannot-do (the retired degrade's honest line).
+                content = _ASK_BACK_TEXT if result is None else _cannot_do_text(self.text)
+                if result is not None:
+                    logger.info("chat_turn_loop_exhausted", calls=result.calls)
+                assistant_message = await _create_message(
+                    self.db, self.conversation_id, "assistant", content
+                )
+                run_id, bailed_run_ids, settled = None, [], self.settled_question
+            else:
+                # The bare final reply (no tool called) — the read-tolerant
+                # answer floor: the prose IS the reply.
+                assistant_message = await _create_message(
+                    self.db,
+                    self.conversation_id,
+                    "assistant",
+                    result.prose,
+                    intent=AnswerProposal(text=result.prose).model_dump(mode="json"),
+                )
+                run_id, bailed_run_ids, settled = None, [], self.settled_question
         bailed_run_ids = [*self._bailed_on_skip, *bailed_run_ids]
-        if self.pending_judgable and self.pending is not None and assistant_message.question is None:
+        if (
+            assistant_message is not None
+            and self.pending_judgable
+            and self.pending is not None
+            and assistant_message.question is None
+        ):
             still_open = await latest_pending_question(self.db, self.conversation_id)
             if still_open is not None and still_open.id == self.pending.id:
                 assistant_message.content = (
@@ -1582,6 +1689,40 @@ async def run_propose_turn(
     turn = ChatTurn(db, user_id, conversation, project, text, on_phase=on_phase,
                     on_activity=on_activity, on_candidates=on_candidates)
     await turn.assemble(mentions, recent)
+    # 素材待命车道武装 (落地时刻压制批, the plan path's mirror): files were
+    # still processing at assemble → buffer the prose / structure frames in
+    # arrival order (SSE path only). The checkpoint channel flushes FIRST:
+    # prose spoken before a read lands before the read's statement.
+    if turn.material_pending_stamped and on_delta is not None:
+        deferred = DeferredFrames(
+            {"delta": on_delta, "tool_call": on_tool_call, "tool_ready": on_tool_ready}
+        )
+        turn.deferred = deferred
+        on_delta = deferred.wrap("delta")
+        on_tool_call = deferred.wrap("tool_call")
+        on_tool_ready = deferred.wrap("tool_ready")
+        base_on_checkpoint = (
+            _checkpoint_callback(db, turn.conversation_id, on_checkpoint)
+            if turn.project is not None
+            else None
+        )
+
+        async def on_checkpoint_after_flush(text: str) -> None:
+            if deferred.armed:
+                await deferred.flush()
+            if base_on_checkpoint is not None:
+                await base_on_checkpoint(text)
+
+        checkpoint_hook = on_checkpoint_after_flush
+    else:
+        # ADR-085: the checkpoint channel (persist + SSE forward) — a
+        # project-less defensive turn has no conversation to persist into,
+        # so the channel stays closed there.
+        checkpoint_hook = (
+            _checkpoint_callback(db, turn.conversation_id, on_checkpoint)
+            if turn.project is not None
+            else None
+        )
     try:
         result = await chat_intent_agent.call_loop(
             turn.execute,
@@ -1593,14 +1734,7 @@ async def run_propose_turn(
             on_tool_ready=on_tool_ready,
             on_observe=observe_phase_callback(on_phase),
             on_loop_event=on_loop_event,
-            on_checkpoint=(
-                # ADR-085: the checkpoint channel (persist + SSE forward) —
-                # a project-less defensive turn has no conversation to
-                # persist into, so the channel stays closed there.
-                _checkpoint_callback(db, turn.conversation_id, on_checkpoint)
-                if turn.project is not None
-                else None
-            ),
+            on_checkpoint=checkpoint_hook,
         )
     except LLMError:
         capabilities = getattr(chat_intent_agent.client, "capabilities", None)
