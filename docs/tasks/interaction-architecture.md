@@ -1,6 +1,6 @@
 # Agent 交互架构迁移 — 施工简报（ADR-099）
 
-> Status: 批次 B（`cfb3488`）与批次 C·C+（`05e81ba` 暗置 + `1cbdad6` 启用，一个 release unit）已落地——验证全部未跑、在册于各自批次验收节；S/D/E/G 未动工。
+> Status: 批次 B（`cfb3488`）、批次 C·C+（`05e81ba` 暗置 + `1cbdad6` 启用，一个 release unit）与批次 S（S-int-1..9 场景入座）已落地——验证全部未跑、在册于各自批次验收节；D/E/G 未动工。
 > 架构母法 = ADR-099。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
 
 ## 冻结事项（本简报全程不再议）
@@ -84,6 +84,16 @@ B → C·C+ → S → D → E → G1 → G2
 | **must_not_touch** | 生产代码（发现 bug 另开批修，**禁改场景迁就实现**）；G 族场景（repair 静默 / 被拒言语零泄漏 = G1/G2 带入座，S 不含——它们的能力尚未落地） |
 | **acceptance** | **Control**（四形态各一：answer / answer+suggestions / ask_user / present_plan）；**New behavior**（浏览问→answer+suggestions；建议点选→下回合编译；stale 建议→具名不静默；无字幕参数→默认吸收；旧 lane 历史 × 新政策→不出现旧车道腔）；全绿 = E 开工许可 |
 | **rollback** | 纯剧本文件，删场景即回滚；suite 本身无生产面 |
+
+**批次 S 落地记录**（施工会话交付，纯剧本新增零生产代码，验证全部未跑）：
+
+- 场景座：`chat_scenarios.py` 尾部 New Interaction Contract 组，9 场景注册为 `S-int-1`..`S-int-9`（命名键随 `S-explore-2`/`S-edit` 先例）；上方 Legacy Regression 零改动；模块 docstring 场景清单同批补行。
+- Control ×4：纯信息问→answer 无卡无 dock（空项目两问，suggestions 空穴来风即硬红）/ 带素材探索→answer+suggestions（含交互块持久化断言：source_turn 自锚 + source_state 快照点名依据素材）/ rootless wish→ask_user（措辞随 S1 实证面，新项目重试防历史带偏，present_plan 硬红）/ 点名工作→present_plan（S7 同构只锁形态，bail 收尾零 run）。
+- New ×5：浏览问事故④回归锁（先建推荐格局再发"还有其他推荐吗"族自定义措辞，present_plan/字幕闸/ask_user 三硬红）；建议点选 fresh 编译（用户行 suggestion_ref 持久化 + 可见文本恒为 label + 预算内落到计划 dock 或决定性闸门 + 收方向永不跳过确认起 run）；stale 点选三谓词全谱（A 理解落地走 `record_material_beat` 本座 / B run 开工走 run 行种子 / C 依据素材删除——世界改造全走真实座位，零手工注入）；无字幕参数金句卡默认吸收（批次 B 行为锁轻量版，不 Start）；旧 lane 历史 × 新政策（DB 直插旧车道腔 assistant 行，锁 verbatim 鹦鹉 + schema/工具 token 漏出两负形）。
+- 断言面三件套：终态信封形状 + messages 行持久化事实 + 代码组装文本。provenance note 不持久化不上 wire，唯一诚实观察座 = 进程内重放 `resolve_suggestion_note` 本座（真 DB 状态）——fresh/stale 形态与具名理由串是代码强制文本（提醒尾同例可锁），剧本永不手工拼 note 冒充解算。
+- 辅助件：`check_suggestion_block`（载荷边界负形 lint——label 全档/description 收窄档，证据句合法引数不误伤）/ `elicit_suggestions_turn`（方差口径：无卡措辞重试，present_plan/ask_user 错档硬红）/ `seed_keynote_project` / `resolve_note_in_process` / `_stale_pick_round`。
+- **承重观察（在册不处理）**：① `elicit_suggestions_turn` 对 ask_user/present_plan 的硬红是本组最脆断言——探索问被模型判成阻塞问或承诺 dock 时红 = 谱系档选择未立（回调 C·C+ 措辞或批 D 的事），非场景松劲；② "不静默采用"的行为面锁到 `run_id is None` 为止——stale 后如何重新锚定是散文高熵面，确定性强锁不可能；③ S-int-9 只锁 verbatim 与 token 负形，旧腔「质感」传染（推荐 vs 指令语气）超出确定性判定面；④ S-int-8 与 S7-A 前半同构（本组自持行为锁的轻量版），参数链端到端仍是 S7 座位。
+- **未跑验证（用户清单）**：① 全量 pytest（本批零 pytest 面改动，§既有债 11 红不算本批账）；② prompt_gate（唯一基线：对 B 后基线漂移≈零——本批纯剧本，翻剧本 ≠ 本批引起，先重跑排除 provider 漂移）；③ chat_scenarios 全量（重点 S-int-1..9 + S7/S19/S20A·B/S22——S22 空洞绿形态已知勿报新 bug；**S-int 9 场景全绿 = 迭代一收口 = 迭代二开工许可**）；④ web tsc + 构建（本批零前端改动，§既有债两处除外）；⑤ live 事故④全链复跑（浏览问 → answer+建议卡 → 点选 → 下回合编译；stale 点选 → 具名标注；label 无执行参数目检）。
 
 ---
 
