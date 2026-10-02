@@ -273,6 +273,15 @@ def _resume_ack_line(decided: str, outcome: str) -> str:
     )
 
 
+# interaction_policy_version 戳 (ADR-099 §7, 批次 C·C+ commit 2): every
+# assistant row created through _create_message carries the interaction
+# policy's version in its intent dump — observation & regression ONLY (the
+# context assembler never reads intent into the model's surface, so the
+# stamp stays invisible to the model). Bump when the interaction policy
+# (constitution / form spectrum) changes.
+INTERACTION_POLICY_VERSION = "interaction_constitution.v1"
+
+
 async def _create_message(
     db: AsyncSession,
     conversation_id: UUID,
@@ -294,6 +303,10 @@ async def _create_message(
         # line; the ack sentence already covers it and machine vocabulary
         # never reaches the user.
         content = strip_tool_echoes(content)
+        intent = {
+            **(intent or {}),
+            "interaction_policy_version": INTERACTION_POLICY_VERSION,
+        }
     message = Message(
         conversation_id=conversation_id,
         role=role,

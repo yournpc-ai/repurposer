@@ -78,7 +78,10 @@ PLAN_TOOLS = [
         description=(
             "Reply with information only — capability questions, explanations "
             "of the project, small talk. No plan, no question, no run: your "
-            "spoken message IS the reply. Always speak the reply as your "
+            "spoken message IS the reply. It may carry 0-3 non-binding "
+            "next-step options (suggestions) when the context holds concrete "
+            "directions worth choosing between — the user may pick or ignore "
+            "them; they never form a plan. Always speak the reply as your "
             "message text ALONGSIDE the call — a bare answer call that says "
             "nothing is rejected."
         ),
@@ -169,8 +172,11 @@ CHAT_TOOLS = [
             "readouts (call get_run_status first), explanations of existing "
             "outputs, small talk. Work requests go to the proposal tools; an "
             "ambiguous reading goes to ask_user — answer is never the lazy out. "
-            "Always speak the reply as your message text ALONGSIDE the call — "
-            "a bare answer call that says nothing is rejected."
+            "It may carry 0-3 non-binding next-step options (suggestions) "
+            "when the context holds concrete directions worth choosing "
+            "between — the user may pick or ignore them; they never form a "
+            "plan. Always speak the reply as your message text ALONGSIDE the "
+            "call — a bare answer call that says nothing is rejected."
         ),
         params_model=ChatAnswerArgs,
     ),
