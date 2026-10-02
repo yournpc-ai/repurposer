@@ -244,6 +244,79 @@ describe("plain assistant rows + legacy trigger pills", () => {
   })
 })
 
+describe("suggestion lineage (ADR-099 §3, answer+suggestions)", () => {
+  const records = [
+    {
+      id: "1",
+      label: "做一个法语版",
+      description: "the talk's Q&A lands well in French",
+      recommended: true,
+      source_turn: "srv-1",
+      source_state: { asset_ids: ["a1"] },
+    },
+    {
+      id: "2",
+      label: "剪一条高光短片",
+      description: "",
+      recommended: false,
+      source_turn: "srv-1",
+      source_state: { asset_ids: ["a1"] },
+    },
+  ]
+
+  it("a plain row's interaction block rebuilds as the option card", () => {
+    const out = mapHistoryRows(
+      [row({ content: "here are the directions", suggestions: records })],
+      ctx,
+    )
+    expect(out[0].suggestionOptions).toEqual([
+      {
+        id: "1",
+        label: "做一个法语版",
+        description: "the talk's Q&A lands well in French",
+        recommended: true,
+        source_turn: "srv-1",
+      },
+      {
+        id: "2",
+        label: "剪一条高光短片",
+        description: "",
+        recommended: false,
+        source_turn: "srv-1",
+      },
+    ])
+  })
+
+  it("a question-carrying row NEVER double-renders the card (the dock owns it)", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "review",
+          question: { kind: "question", options: [{ id: "1", label: "x" }] },
+          suggestions: records,
+        }),
+      ],
+      ctx,
+    )
+    expect(out[0].suggestionOptions).toBeUndefined()
+  })
+
+  it("off-shape records drop out; empty parses to undefined (read tolerance)", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "hi",
+          suggestions: [{ label: "  " }, { nope: true }, null],
+        }),
+        row({ id: "m2", content: "older row" }),
+      ],
+      ctx,
+    )
+    expect(out[0].suggestionOptions).toBeUndefined()
+    expect(out[1].suggestionOptions).toBeUndefined()
+  })
+})
+
 describe("no lifecycle derivation (恢复不推导 lifecycle)", () => {
   it("the output vocabulary carries no readiness/plan fields at all", () => {
     // The mapper's result type is the flow's display row — if a readiness
@@ -274,6 +347,7 @@ describe("no lifecycle derivation (恢复不推导 lifecycle)", () => {
       "focus",
       "meta",
       "suggestions",
+      "suggestionOptions",
       "beat",
       "milestones",
     ])

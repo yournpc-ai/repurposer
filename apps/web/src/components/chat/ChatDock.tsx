@@ -134,6 +134,7 @@ import {
   triggerSuggestions,
   questionEcho,
   bareQuestion,
+  suggestionOptionsOf,
   type DerivedRow,
   type DecisionPlanRow,
   type HistoryRow,
@@ -141,6 +142,7 @@ import {
   type OverlayMessage,
   type ProjectAsset,
   type QuestionMessage,
+  type SuggestionOption,
   type SuggestionPill,
 } from "./historyReplay"
 import {
@@ -2485,6 +2487,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         role: "assistant",
         content: message.content ?? "",
         runId: message.workflow_run_id,
+        // 建议谱系 (ADR-099 §3): the answer's non-blocking option card —
+        // undefined on question rows and option-less replies.
+        suggestionOptions: suggestionOptionsOf(message),
       })
     }
   }
@@ -2579,6 +2584,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       rollbackMentions?: ChatMention[]
       /** Consumed attachment chips return to the input group on failure. */
       rollbackStaged?: StagedUpload[]
+      /** 建议点选 provenance (ADR-099 §4): this turn IS a suggestion pick —
+       * the server resolves the ref (stale check + the provenance note). */
+      suggestionRef?: { source_turn: string; suggestion_id: string }
     }
   ) => {
     const ctrl = new AbortController()
@@ -2753,6 +2761,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           // = the plan's canvas lives beside this conversation — the reply
           // may name it; every other form stays surface-neutral.
           surface: panel ? "canvas" : "chat",
+          // 建议点选 provenance (ADR-099 §4): this message IS a suggestion
+          // pick — the label is the visible text, the ref rides structured.
+          suggestion_ref: opts?.suggestionRef,
           prior_intent:
             // The panel's current chain rides while the confirm beat is
             // live (裁决 1 derived predicate — never a phase read).
@@ -2963,6 +2974,17 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           message.workflow_run_id,
           message.created_at,
         )
+        // 建议谱系 (ADR-099 §3): the answer's non-blocking options dock
+        // under the drained prose (散文在先、提问随后 — the trigger pills'
+        // own law), parsed off the envelope's interaction block.
+        const opts_ = suggestionOptionsOf(message)
+        if (opts_) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === streamId ? { ...m, suggestionOptions: opts_ } : m
+            )
+          )
+        }
       } else {
         // Zero-delta prose reply: same last-gate pacing as the dock branch.
         discardPreviewArtifacts()
@@ -2977,6 +2999,17 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         } else {
           setMessages((prev) => prev.filter((m) => m.id !== streamId))
           await handleAssistantMessage(message)
+        }
+        // 建议谱系 (ADR-099 §3): same dock-under-drained-prose seat as the
+        // streamed branch (a suppressed bubble keeps no card — the empty-
+        // prose degrade has no row to anchor it to).
+        const opts_ = suggestionOptionsOf(message)
+        if (opts_ && settled) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === streamId ? { ...m, suggestionOptions: opts_ } : m
+            )
+          )
         }
       }
     } catch (e) {
@@ -3359,6 +3392,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       setMessages((prev) =>
         spliceAnswerEnvelope(prev, { optimisticId, previewId, answeredRow, followUp }),
       )
+      // 建议谱系 (ADR-099 §3): the follow-up's non-blocking option card
+      // docks under its (already spliced) prose — undefined for question
+      // rows and option-less follow-ups. The !echoCarried case attaches
+      // inside handleAssistantMessage's plain-row push instead.
+      if (followUp && previewStreamed) {
+        const followUpOpts = suggestionOptionsOf(followUp)
+        if (followUpOpts) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === previewId ? { ...m, suggestionOptions: followUpOpts } : m
+            )
+          )
+        }
+      }
       if (followUp) {
         // The envelope retires the preview pill: the real row REPLACES it
         // inside handleAssistantMessage (identical payload, zero visual
@@ -3971,6 +4018,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     void sendChat(text)
   }
 
+  /** 建议谱系点选 (ADR-099 §3/§4): the pick IS the label as the user's next
+   * message (the legacy pill's posture), with the structured suggestion_ref
+   * riding alongside — source_turn comes from the RECORD (the server row
+   * id), never from the flow's local bubble ids. */
+  const handleSuggestionOptionPick = (s: SuggestionOption) => {
+    const text = s.label.trim()
+    if (!text || !s.source_turn || chatBusy || isStarting) return
+    void sendChat(text, {
+      suggestionRef: { source_turn: s.source_turn, suggestion_id: s.id },
+    })
+  }
+
   const sendSlotEdit = (slot: "topic" | "audience" | "tone", value: string) => {
     if (chatBusy || isStarting) return
     const text = t(`generationOverlay.slotEditMessages.${slot}`, { value })
@@ -4543,6 +4602,41 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                         ) : null}
                         {s.label}
                       </Button>
+                    ))}
+                  </div>
+                </MessageContent>
+              </Message>
+            ) : null}
+            {/* 建议谱系卡 (ADR-099 §3, answer+suggestions): the answer's
+                NON-blocking next-step options under its own prose — pickable
+                or ignorable, never a dock (no settle machinery, no ×): a
+                pick sends the label with its suggestion_ref. Lands only
+                after the prose drains (散文在先、提问随后). */}
+            {m.suggestionOptions && m.suggestionOptions.length > 0 ? (
+              <Message align="start">
+                <MessageContent>
+                  <div className="mt-1 flex flex-col gap-1">
+                    {m.suggestionOptions.map((s) => (
+                      <button
+                        key={`${m.id}-opt${s.id}`}
+                        type="button"
+                        className="flex flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left hover:bg-accent disabled:opacity-50"
+                        disabled={chatBusy || isStarting}
+                        onClick={() => handleSuggestionOptionPick(s)}
+                      >
+                        <span className="text-sm">
+                          {s.label}
+                          {s.recommended ? (
+                            <span className="text-meta">
+                              {" "}
+                              · {t("questionDock.recommended")}
+                            </span>
+                          ) : null}
+                        </span>
+                        {s.description ? (
+                          <span className="text-meta">{s.description}</span>
+                        ) : null}
+                      </button>
                     ))}
                   </div>
                 </MessageContent>

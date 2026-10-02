@@ -62,6 +62,10 @@ export interface ChatTurnBody {
    * reply's review invitation may name that home; "chat" = no canvas
    * beneath (full / dock forms) — the reply stays surface-neutral. */
   surface?: "canvas" | "chat"
+  /** 建议点选 provenance (ADR-099 §4): present only when this message IS a
+   * suggestion pick — the visible text stays the option's label, the ref
+   * rides structured (the mentions pattern). */
+  suggestion_ref?: { source_turn: string; suggestion_id: string }
   prior_intent?: unknown
 }
 

@@ -86,6 +86,8 @@ from app.chat.service import (
     material_beat_landed,
     merge_brief,
     pending_commitment_verdict,
+    resolve_suggestion_note,
+    stamp_suggestions,
     sync_plan_question,
 )
 from app.chat.system_status import observe_phase_callback
@@ -195,6 +197,11 @@ class PlanTurn:
         # answer re-reads the world at land time before its prose releases.
         self.material_pending_stamped = False
         self.deferred: DeferredFrames | None = None
+        # 建议点选 provenance (ADR-099 §4): this turn's message IS a
+        # suggestion pick → the resolution note rides into the router's
+        # message (never into self.text — the gates and keyword detectors
+        # read the user's own words only).
+        self.suggestion_note: str | None = None
 
     # ---- assembly (the retired _plan_turn's pre-call block, verbatim) ------
 
@@ -213,6 +220,18 @@ class PlanTurn:
                 "I'd like made from them.)"
             )
         self.text = text
+
+        # 建议点选落地解算 (ADR-099 §4): a pick-carrying request resolves
+        # its provenance NOW — the note (fresh = the control event named;
+        # stale = WHAT moved + re-grounding advice) rides the router-facing
+        # message below; an unresolvable ref simply yields no note.
+        if request.suggestion_ref is not None:
+            self.suggestion_note = await resolve_suggestion_note(
+                db,
+                self.conversation_id,
+                UUID(str(project.id)),
+                request.suggestion_ref,
+            )
 
         stored = (
             PendingPlan.model_validate(project.pending_brief)
@@ -451,7 +470,11 @@ class PlanTurn:
                 )
             plans_lines = lines or None
         self.infer_kwargs = dict(
-            message=text,
+            message=(
+                f"{text}\n{self.suggestion_note}"
+                if self.suggestion_note
+                else text
+            ),
             brief=brief_in,
             persona=persona,
             pending_question=pending_q,
@@ -1614,6 +1637,12 @@ class PlanTurn:
             )
         assistant_message = await _create_message(
             self.db, self.conversation_id, "assistant", content
+        )
+        # 建议谱系 (ADR-099 §3): the answer's non-blocking options stamp
+        # onto the SAME row, same commit point (no-op when the call carried
+        # none — 零 diff 律).
+        await stamp_suggestions(
+            self.db, assistant_message, params.suggestions, UUID(str(self.project.id))
         )
         self.outcome = (assistant_message, None, self.settled_pending, [])
         return None

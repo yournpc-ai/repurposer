@@ -74,6 +74,48 @@ export interface OverlayMessage {
    * it in place (chat 决策永不成节点 — the card is the selection state's
    * one seat). */
   candidates?: CandidateSurface
+  /** 建议谱系 (ADR-099 §3, answer+suggestions): the row's NON-blocking
+   * next-step options (messages.suggestions — the interaction block, NOT
+   * the legacy intent-dump pills above). Renders as an option card under
+   * the drained prose; a pick sends the label as the user's next message
+   * with its suggestion_ref. */
+  suggestionOptions?: SuggestionOption[]
+}
+
+/** One non-blocking suggestion option on an assistant row (ADR-099 §3/§4):
+ * label = the option row AND the words a pick sends; description = the
+ * one-line reason; recommended = the agent's current lean; source_turn =
+ * the carrying row's server id (the pick's suggestion_ref anchor — the
+ * flow's local bubble ids never serve here). */
+export interface SuggestionOption {
+  id: string
+  label: string
+  description?: string
+  recommended?: boolean
+  source_turn: string
+}
+
+/** Parse a row's persisted suggestion block (messages.suggestions) into
+ * renderable options. Undefined when the row carries a question payload
+ * (a blocking dock — trigger suggestions live there, never double-rendered)
+ * or no records. Read tolerance: off-shape entries drop out, never a crash. */
+export function suggestionOptionsOf(row: {
+  question?: unknown
+  suggestions?: unknown
+}): SuggestionOption[] | undefined {
+  if (row.question) return undefined
+  const raw = Array.isArray(row.suggestions) ? row.suggestions : []
+  const parsed = raw
+    .map((s) => (s ?? {}) as Record<string, unknown>)
+    .filter((s) => typeof s.label === "string" && s.label.trim().length > 0)
+    .map((s, index) => ({
+      id: typeof s.id === "string" && s.id ? s.id : String(index + 1),
+      label: (s.label as string).trim(),
+      description: typeof s.description === "string" ? s.description : undefined,
+      recommended: s.recommended === true,
+      source_turn: typeof s.source_turn === "string" ? s.source_turn : "",
+    }))
+  return parsed.length > 0 ? parsed : undefined
 }
 
 /** The candidate card's data (C8-c): ordinal = the member's array index
@@ -379,6 +421,9 @@ export interface QuestionMessage {
   question: QuestionPayload | null
   answer: QuestionAnswer | null
   workflow_run_id: string | null
+  /** 建议谱系交互块 (ADR-099 §4): the row's persisted non-blocking
+   * suggestion records (empty on every older row — 读容忍). */
+  suggestions?: unknown
   /** ask 预览帧的乐观 dock (2026-09-09): the ask object closed stream-side
    * but the turn's tail — and with it the row's server-side birth — is
    * still generating, so this id does NOT exist server-side yet. A click
@@ -648,6 +693,10 @@ export function mapHistoryRows(
         // 触发回合回放 (T3): a proactive review row's pills rebuild
         // from its intent dump — undefined on every other shape.
         suggestions: triggerSuggestions(m.intent),
+        // 建议谱系回放 (ADR-099 §3): the row's NON-blocking suggestion
+        // card rebuilds from its interaction block — undefined on rows
+        // with a question payload (a blocking dock never double-renders).
+        suggestionOptions: suggestionOptionsOf(m),
       })
     }
   }

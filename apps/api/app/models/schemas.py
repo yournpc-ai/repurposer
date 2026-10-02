@@ -302,6 +302,36 @@ AnswerRequest = Annotated[
 ]
 
 
+class SuggestionRef(BaseModel):
+    """The structured provenance of a suggestion pick (ADR-099 §4): a pick
+    is a control event, not fresh user input — the visible message text
+    stays the option's label, the ref rides structured alongside (the
+    mentions pattern: visible text + structured reference). ``source_turn``
+    is the assistant row that carried the suggestion; ``suggestion_id`` the
+    option's id on that row."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_turn: UUID
+    suggestion_id: str
+
+
+class SuggestionRecord(BaseModel):
+    """One persisted suggestion on an assistant row (messages.suggestions —
+    the 消息 JSONB 交互块): the option plus its code-stamped provenance.
+    ``source_turn`` = the carrying row's own id (the ref's lookup anchor);
+    ``source_state`` = the stale-check snapshot at stamp time (the asset
+    ids the suggestion was grounded against — ADR-099 §4, zero counters).
+    All-default fields = wire read tolerance."""
+
+    id: str = ""
+    label: str = ""
+    description: str = ""
+    recommended: bool = False
+    source_turn: str = ""
+    source_state: dict = Field(default_factory=dict)
+
+
 class ChatMessageResponse(BaseModel):
     """A single chat message returned by the API."""
 
@@ -328,6 +358,13 @@ class ChatMessageResponse(BaseModel):
     intent: dict | None = None
     question: dict | None = None
     answer: dict | None = None
+    # 建议谱系交互块 (ADR-099 §4): non-blocking next-step options this
+    # assistant row offered, provenance included — the OptionDock renders
+    # them under the prose; a pick rides back as suggestion_ref.
+    suggestions: list[SuggestionRecord] = Field(default_factory=list)
+    # 点选引用 (ADR-099 §4): a user row that IS a suggestion pick carries
+    # its structured ref — the visible content stays the picked label.
+    suggestion_ref: SuggestionRef | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -696,17 +733,79 @@ class PresentPlanArgs(BaseModel):
     )
 
 
+# 建议谱系 (ADR-099 §3): one wire shape, two seats — the trigger dock's
+# wrap_up options AND an answer's non-blocking suggestions. The class body
+# stays byte-identical to its pre-move form (零 diff 律 — the docstring is
+# model-facing wire text).
+class SuggestionItem(BaseModel):
+    """One next-step option on the trigger dock (一问拍一体化 2026-09-27 —
+    the pre-integration wire shape was a bare label string, read in as
+    ``label``): the label is the dock row AND the words that ride into the
+    conversation on a pick; ``description`` is the one-line reason under it;
+    ``recommended`` marks the agent's ONE lean (at most one survives)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _upgrade_bare_label(cls, data: Any) -> Any:
+        # 读容忍: the model's old habit emits a bare string per option — it
+        # reads in as the label, never a repair round for a cosmetic upgrade.
+        # A null description means "no reason line" (打字机律牙①) — pop the
+        # key so the "" default applies instead of rejecting the call.
+        if isinstance(data, str):
+            return {"label": data}
+        if isinstance(data, dict) and data.get("description") is None:
+            data = dict(data)
+            data.pop("description", None)
+        return data
+
+    label: str = Field(
+        description="The option row's text — user-voice, a complete short instruction they would plausibly type, interface language, ≤40 chars.",
+    )
+    description: str = Field(
+        default="",
+        description="One short line: why this option — the conclusion the user can judge, never your reasoning process.",
+    )
+    recommended: bool = Field(
+        default=False,
+        description="True on the ONE option you recommend (at most one across the list) — the same lean your speech's verdict named (one judgment, one voice).",
+    )
+
+
+def dock_worthy_suggestions(items: list[SuggestionItem]) -> list[SuggestionItem]:
+    """The shared suggestions validator (校验分层律 — WrapUpArgs and both
+    answer args consume it): a label is the option row's visible text AND
+    the user's pick riding into the continuation — blank labels are dropped
+    (the model means "fewer options"), an overlong one rejects into the loop
+    (the option row cannot carry it). Extra recommendation marks drop
+    silently (cosmetic — never worth a repair round)."""
+    cleaned = []
+    for item in items:
+        item.label = item.label.strip()
+        if item.label:
+            cleaned.append(item)
+    if any(len(item.label) > 40 for item in cleaned):
+        raise ValueError("a suggestion label is at most 40 characters")
+    recommended_seen = False
+    for item in cleaned:
+        if item.recommended and recommended_seen:
+            item.recommended = False
+        recommended_seen = recommended_seen or item.recommended
+    return cleaned
+
+
 class PlanAnswerArgs(BaseModel):
     """``answer`` params, plan path — a purely informational reply. The
-    answer text itself is your spoken message; only the envelope seats ride
-    here."""
+    answer text itself is your spoken message; the envelope seats and any
+    non-blocking next-step options ride here."""
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return _drop_bad_brief(tolerate_null_keys(data, "material_text", "pending_disposition", "material_pending"))
+        return _drop_bad_brief(tolerate_null_keys(data, "material_text", "pending_disposition", "material_pending", "suggestions"))
 
     brief: Brief | None = Field(
         default=None,
@@ -724,6 +823,16 @@ class PlanAnswerArgs(BaseModel):
         default=False,
         description="True ONLY when this answer is the material-pending commitment — the context's Material status line reported files still processing, and this reply is the one-clause 'understood + I will speak once the content read lands' promise. Absent/false on every other answer.",
     )
+    suggestions: list[SuggestionItem] = Field(
+        default_factory=list,
+        max_length=3,
+        description="0-3 next-step options the user may pick or ignore — offer them only when the context holds concrete directions worth choosing between. Each option is a direction with its one-line reason and the evidence it draws on; never execution parameters (no language, caption mode, duration, aspect, count, cost, or recipe — those belong to the plan drafted after the user picks a direction). At most one carries your current lean (recommended). Omit when there is nothing concrete to offer.",
+    )
+
+    @field_validator("suggestions")
+    @classmethod
+    def _suggestions_are_dock_worthy(cls, items: list[SuggestionItem]) -> list[SuggestionItem]:
+        return dock_worthy_suggestions(items)
 
 
 class ProposeTasksArgs(BaseModel):
@@ -827,15 +936,15 @@ class ChatAskArgs(BaseModel):
 
 class ChatAnswerArgs(BaseModel):
     """``answer`` params, chat path (AnswerProposal minus text — the answer
-    IS your spoken message). Only the pending-question disposition rides
-    here."""
+    IS your spoken message). The pending-question disposition and any
+    non-blocking next-step options ride here."""
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "pending_disposition", "material_pending")
+        return tolerate_null_keys(data, "pending_disposition", "material_pending", "suggestions")
 
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
@@ -845,6 +954,16 @@ class ChatAnswerArgs(BaseModel):
         default=False,
         description="True ONLY when this answer is the material-pending commitment — the Assets block reported files still processing, and this reply is the one-clause 'understood + I will speak once the content read lands' promise. Absent/false on every other answer.",
     )
+    suggestions: list[SuggestionItem] = Field(
+        default_factory=list,
+        max_length=3,
+        description="0-3 next-step options the user may pick or ignore — offer them only when the context holds concrete directions worth choosing between. Each option is a direction with its one-line reason and the evidence it draws on; never execution parameters (no language, caption mode, duration, aspect, count, cost, or recipe — those belong to the plan drafted after the user picks a direction). At most one carries your current lean (recommended). Omit when there is nothing concrete to offer.",
+    )
+
+    @field_validator("suggestions")
+    @classmethod
+    def _suggestions_are_dock_worthy(cls, items: list[SuggestionItem]) -> list[SuggestionItem]:
+        return dock_worthy_suggestions(items)
 
 
 class ReviseOutputTarget(BaseModel):
@@ -992,42 +1111,7 @@ class EditOutputArgs(BaseModel):
 
 
 # ---- 触发回合 (T3, ADR-077 判词③) — the proactive turn's terminal --------
-
-
-class SuggestionItem(BaseModel):
-    """One next-step option on the trigger dock (一问拍一体化 2026-09-27 —
-    the pre-integration wire shape was a bare label string, read in as
-    ``label``): the label is the dock row AND the words that ride into the
-    conversation on a pick; ``description`` is the one-line reason under it;
-    ``recommended`` marks the agent's ONE lean (at most one survives)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _upgrade_bare_label(cls, data: Any) -> Any:
-        # 读容忍: the model's old habit emits a bare string per option — it
-        # reads in as the label, never a repair round for a cosmetic upgrade.
-        # A null description means "no reason line" (打字机律牙①) — pop the
-        # key so the "" default applies instead of rejecting the call.
-        if isinstance(data, str):
-            return {"label": data}
-        if isinstance(data, dict) and data.get("description") is None:
-            data = dict(data)
-            data.pop("description", None)
-        return data
-
-    label: str = Field(
-        description="The option row's text — user-voice, a complete short instruction they would plausibly type, interface language, ≤40 chars.",
-    )
-    description: str = Field(
-        default="",
-        description="One short line: why this option — the conclusion the user can judge, never your reasoning process.",
-    )
-    recommended: bool = Field(
-        default=False,
-        description="True on the ONE option you recommend (at most one across the list) — the same lean your speech's verdict named (one judgment, one voice).",
-    )
+# (SuggestionItem lives beside the answer args above — two seats, one shape.)
 
 
 class WrapUpArgs(BaseModel):
@@ -1052,24 +1136,7 @@ class WrapUpArgs(BaseModel):
     @field_validator("suggestions")
     @classmethod
     def _labels_are_dock_worthy(cls, items: list[SuggestionItem]) -> list[SuggestionItem]:
-        """校验分层律: a label is the dock row's visible text AND the user's
-        pick riding into the continuation — blank labels are dropped (the
-        model means "fewer options"), an overlong one rejects into the loop
-        (the dock row cannot carry it). Extra recommendation marks drop
-        silently (cosmetic — never worth a repair round)."""
-        cleaned = []
-        for item in items:
-            item.label = item.label.strip()
-            if item.label:
-                cleaned.append(item)
-        if any(len(item.label) > 40 for item in cleaned):
-            raise ValueError("a suggestion label is at most 40 characters")
-        recommended_seen = False
-        for item in cleaned:
-            if item.recommended and recommended_seen:
-                item.recommended = False
-            recommended_seen = recommended_seen or item.recommended
-        return cleaned
+        return dock_worthy_suggestions(items)
 
     suggestions: list[SuggestionItem] = Field(
         default_factory=list,
@@ -1109,6 +1176,11 @@ class ChatRequest(BaseModel):
     message: str
     attachments: list[ChatAttachment] = Field(default_factory=list)
     mentions: list[ChatMention] = Field(default_factory=list)
+    # 建议点选 provenance (ADR-099 §4): present only when this message IS a
+    # suggestion pick — persisted on the user row, resolved at the turn's
+    # assembly (the stale check + the provenance note; a pick is never
+    # silently adopted nor silently dropped).
+    suggestion_ref: SuggestionRef | None = None
     # Plan-path transports (intent-surface-unification W3 — carry only, never
     # persisted on the message):
     # The review panel's current plan (the user may have hand-edited the

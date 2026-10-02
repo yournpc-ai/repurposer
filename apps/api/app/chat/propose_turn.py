@@ -101,6 +101,8 @@ from app.chat.service import (
     latest_pending_question,
     material_beat_landed,
     pending_commitment_verdict,
+    resolve_suggestion_note,
+    stamp_suggestions,
     sync_plan_question,
 )
 from app.chat.system_status import observe_phase_callback
@@ -123,6 +125,7 @@ from app.models.schemas import (
     QuestionProposal,
     RenderStatus,
     ReviseOutputArgs,
+    SuggestionRef,
     WiringProposal,
     edit_kind_for_params,
     resolve_recommended_id,
@@ -266,10 +269,27 @@ class ChatTurn:
         # answer re-reads the world at land time before its prose releases.
         self.material_pending_stamped = False
         self.deferred: DeferredFrames | None = None
+        # 建议点选 provenance (ADR-099 §4): this turn's message IS a
+        # suggestion pick → the resolution note rides into the agent-facing
+        # message at the call_loop seat (self.text stays the user's own
+        # words).
+        self.suggestion_note: str | None = None
 
-    async def assemble(self, mentions: list[ChatMention], recent: list[Message]) -> None:
+    async def assemble(
+        self,
+        mentions: list[ChatMention],
+        recent: list[Message],
+        suggestion_ref: SuggestionRef | None = None,
+    ) -> None:
         db, project = self.db, self.project
         self.mentions = mentions
+        if suggestion_ref is not None:
+            self.suggestion_note = await resolve_suggestion_note(
+                db,
+                self.conversation_id,
+                UUID(str(project.id)) if project is not None else None,
+                suggestion_ref,
+            )
         pending = (
             await latest_pending_question(db, self.conversation_id) if project else None
         )
@@ -1568,6 +1588,14 @@ class ChatTurn:
             prose,
             intent=AnswerProposal(text=prose).model_dump(mode="json"),
         )
+        # 建议谱系 (ADR-099 §3): the answer's non-blocking options stamp
+        # onto the SAME row, same commit point (no-op when none — 零 diff 律).
+        await stamp_suggestions(
+            self.db,
+            assistant_message,
+            params.suggestions,
+            UUID(str(self.project.id)) if self.project is not None else None,
+        )
         self.outcome = (assistant_message, None, [], self.settled_question)
         return None
 
@@ -1635,6 +1663,7 @@ async def run_propose_turn(
     text: str,
     mentions: list[ChatMention],
     recent: list[Message],
+    suggestion_ref: SuggestionRef | None = None,
     on_delta=None,
     on_reasoning=None,
     on_phase=None,
@@ -1652,7 +1681,7 @@ async def run_propose_turn(
     never the ask-back line."""
     turn = ChatTurn(db, user_id, conversation, project, text, on_phase=on_phase,
                     on_activity=on_activity, on_candidates=on_candidates)
-    await turn.assemble(mentions, recent)
+    await turn.assemble(mentions, recent, suggestion_ref)
     # 素材待命车道武装 (落地时刻压制批, the plan path's mirror): files were
     # still processing at assemble → buffer the prose / structure frames in
     # arrival order (SSE path only). The checkpoint channel flushes FIRST:
@@ -1690,7 +1719,11 @@ async def run_propose_turn(
     try:
         result = await chat_intent_agent.call_loop(
             turn.execute,
-            message=text,
+            message=(
+                f"{text}\n{turn.suggestion_note}"
+                if turn.suggestion_note
+                else text
+            ),
             context=turn.context,
             on_delta=on_delta,
             on_reasoning=on_reasoning,

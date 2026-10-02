@@ -62,6 +62,7 @@ from app.chat.service import (
     _get_or_create_project_conversation,
     _prefers_zh,
     finalize_bailed_runs,
+    stamp_suggestions,
 )
 from app.chat.turn_tools import CHAT_READ_TOOLS
 from app.models.schemas import Option, QuestionPayload, SuggestionItem, WrapUpArgs
@@ -548,6 +549,13 @@ async def run_trigger_turn(
                 )
                 if trigger == TRIGGER_RUN_COMPLETED:
                     message.workflow_run_id = UUID(ref)
+                # 建议谱系 provenance (ADR-099 §4 — the trigger path's
+                # pre-existing gap: a pick used to lose its source): the
+                # options stamp onto the SAME row's interaction block, so
+                # the answer endpoint can reconstruct the pick's ref (the
+                # row = source turn, the option id = suggestion id) and the
+                # directed stale check has its snapshot.
+                await stamp_suggestions(db, message, suggestions, project_id)
                 await db.commit()
                 if bailed_run_ids:
                     await finalize_bailed_runs(bailed_run_ids)

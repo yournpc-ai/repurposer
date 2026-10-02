@@ -60,6 +60,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # at startup (the orchestrator's roster self-check walks it).
 from app.chat.intent import chat_intent_agent as _chat_intent_agent  # noqa: F401
 from app.chat.intent import intent_router as _intent_router  # noqa: F401
+from app.chat.suggestions import (
+    build_suggestion_records,
+    compose_suggestion_note,
+    suggestion_stale_reasons,
+)
 from app.chat.turn_tools import strip_tool_echoes
 from app.models.schemas import (
     AnswerPayload,
@@ -80,6 +85,7 @@ from app.models.schemas import (
     QuestionPayload,
     QuestionProposal,
     PlanEstimate,
+    SuggestionRef,
     TaskItem,
 )
 from app.models.tables import (
@@ -279,6 +285,8 @@ async def _create_message(
     workflow_run_id: UUID | None = None,
     intent: dict[str, Any] | None = None,
     question: dict[str, Any] | None = None,
+    suggestions: list[dict[str, Any]] | None = None,
+    suggestion_ref: dict[str, Any] | None = None,
 ) -> Message:
     if role == "assistant":
         # 工具名回响 sanitizer (2026-09-30 用户拍板 — 彻底删掉): the model
@@ -296,6 +304,8 @@ async def _create_message(
         workflow_run_id=workflow_run_id,
         intent=intent,
         question=question,
+        suggestions=suggestions or [],
+        suggestion_ref=suggestion_ref,
     )
     db.add(message)
     await db.flush()
@@ -1131,6 +1141,20 @@ async def discard_unanswered_plan(
     await db.delete(pending)
 
 
+def _suggestion_ref_for(message: Message, data: AnswerRequest) -> SuggestionRef | None:
+    """The trigger suggestion pick's provenance, code-reconstructed at the
+    answer endpoint (ADR-099 §4): the answered row IS the source turn and
+    the picked option id IS the suggestion id, so no wire change is needed
+    on this path — the ref exists only when the row carries suggestion
+    records and the answer is an option pick. Freeform / record-less rows
+    ride ref-less, exactly as before."""
+    if data.kind != "option" or not (message.suggestions or []):
+        return None
+    return SuggestionRef(
+        source_turn=UUID(str(message.id)), suggestion_id=data.option_id
+    )
+
+
 async def _continue_chat_answer(
     db: AsyncSession,
     user_id: UUID,
@@ -1139,6 +1163,7 @@ async def _continue_chat_answer(
     data: AnswerRequest,
     option_label: str | None,
     *,
+    suggestion_ref: SuggestionRef | None = None,
     on_delta=None,
     on_phase=None,
     on_tool_call=None,
@@ -1154,6 +1179,10 @@ async def _continue_chat_answer(
     rides plan-or-propose by the project's run state. Two seats call this:
     the no-run-id branch and the interrupt branch's not-parked fall-through
     (a trigger suggestion's run id is a display anchor, not a park marker).
+    ``suggestion_ref`` (ADR-099 §4): a trigger suggestion pick's provenance,
+    code-reconstructed from the answered row (the row IS the source turn,
+    the option id IS the suggestion id) — it rides into the turn so the
+    pick lands as a named control event, never as fresh anonymous input.
     Returns (follow_up, run_id, bailed_run_ids, extra) — extra is the plan
     path's answered dump or the proposal path's settled question, both
     advisory to the caller."""
@@ -1227,7 +1256,9 @@ async def _continue_chat_answer(
             user_id,
             conversation,
             project,
-            ChatRequest(project_id=project.id, message=say),
+            ChatRequest(
+                project_id=project.id, message=say, suggestion_ref=suggestion_ref
+            ),
             recent=history[-5:],
             on_delta=on_delta,
             on_phase=on_phase,
@@ -1240,6 +1271,7 @@ async def _continue_chat_answer(
         return follow_up, run_id, bailed, answered
     follow_up, run_id, bailed, settled = await _propose_turn(
         db, user_id, conversation, project, say, [], history[-6:],
+        suggestion_ref=suggestion_ref,
         on_delta=on_delta,
         # I-PFA-06 parity (Batch B 验收修复): the chat-path continuation
         # needs the phase pipe too — without it composing stays silent on
@@ -1636,6 +1668,7 @@ async def answer_question(
             # the no-run-id branch below).
             follow_up, _run_id, bailed_run_ids, _settled = await _continue_chat_answer(
                 db, user_id, conversation, question, data, option_label,
+                suggestion_ref=_suggestion_ref_for(message, data),
                 on_delta=on_delta,
                 on_phase=on_phase,
                 on_tool_call=on_tool_call,
@@ -1655,6 +1688,7 @@ async def answer_question(
             question,
             data,
             option_label,
+            suggestion_ref=_suggestion_ref_for(message, data),
             on_delta=on_delta,
             on_phase=on_phase,
             on_tool_call=on_tool_call,
@@ -1801,6 +1835,7 @@ async def _propose_turn(
     text: str,
     mentions: list[ChatMention],
     recent: list[Message],
+    suggestion_ref: SuggestionRef | None = None,
     on_delta=None,
     on_reasoning=None,
     on_phase=None,
@@ -1838,6 +1873,7 @@ async def _propose_turn(
         text,
         mentions,
         recent,
+        suggestion_ref=suggestion_ref,
         on_delta=on_delta,
         on_reasoning=on_reasoning,
         on_phase=on_phase,
@@ -1929,6 +1965,11 @@ async def prepare_chat_turn(
         request.message,
         attachments=[a.model_dump(mode="json") for a in request.attachments],
         mentions=[m.model_dump(mode="json") for m in request.mentions],
+        suggestion_ref=(
+            request.suggestion_ref.model_dump(mode="json")
+            if request.suggestion_ref is not None
+            else None
+        ),
         # focus_output 写退役 (ADR-058): pointing at a product is an @mention
         # now; old rows keep their stored focus_output (读容忍 — the history
         # replay still renders their gray prefix row), new rows never write it.
@@ -2192,6 +2233,7 @@ async def execute_chat_turn(
             request.message,
             request.mentions,
             prepared.history[-6:],
+            suggestion_ref=request.suggestion_ref,
             on_delta=on_delta,
             on_reasoning=on_reasoning,
             on_phase=on_phase,
@@ -2366,6 +2408,131 @@ async def material_beat_landed(
         .limit(1)
     )
     return row.scalar_one_or_none() is not None
+
+
+# ---- 建议谱系 (ADR-099 §4): 点选 provenance 落地解算 -----------------------
+
+
+async def _project_asset_ids(db: AsyncSession, project_id: UUID) -> list[str]:
+    """The suggestion record's world snapshot (source_state.asset_ids): the
+    project's current file assets — the material any suggestion born this
+    turn was grounded against. The directed stale check re-reads these ids
+    at pick time (deleted = the row is gone; failed = status says so)."""
+    rows = (
+        await db.execute(
+            select(Asset.id).where(
+                Asset.project_id == project_id,
+                Asset.file_url.isnot(None),
+            )
+        )
+    ).scalars().all()
+    return [str(a) for a in rows]
+
+
+async def stamp_suggestions(
+    db: AsyncSession,
+    message: Message,
+    items,
+    project_id: UUID | None,
+) -> None:
+    """Code-stamp an accepted terminal call's options onto its row (ADR-099
+    §3/§4): the SAME commit point as the prose — the records land in the
+    row's interaction block within the turn's one transaction, so a
+    rejected iteration's options never existed and a suppressed answer
+    drops them with its row. No-op on empty items (零 diff 律)."""
+    if not items:
+        return
+    message.suggestions = build_suggestion_records(
+        items,
+        str(message.id),
+        await _project_asset_ids(db, project_id) if project_id is not None else [],
+    )
+    await db.flush()
+
+
+async def resolve_suggestion_note(
+    db: AsyncSession,
+    conversation_id: UUID,
+    project_id: UUID | None,
+    ref: SuggestionRef,
+) -> str | None:
+    """建议点选的落地解算 (ADR-099 §4): locate the source row's record,
+    run the DIRECTED stale check (zero counters — every predicate reads
+    already-persisted fields), and compose the LLM-facing provenance note.
+    An unresolvable ref (a foreign/stale source_turn, a record that isn't
+    there) reads as no note at all — the message processes as plain text,
+    never an error and never a silent drop."""
+    source = await db.get(Message, ref.source_turn)
+    if source is None or UUID(str(source.conversation_id)) != conversation_id:
+        return None
+    record = next(
+        (r for r in (source.suggestions or []) if r.get("id") == ref.suggestion_id),
+        None,
+    )
+    if record is None:
+        return None
+    state = record.get("source_state") or {}
+    asset_ids = [a for a in (state.get("asset_ids") or []) if isinstance(a, str)]
+    assets_missing = assets_failed = False
+    if asset_ids:
+        parsed_ids = []
+        for a in asset_ids:
+            try:
+                parsed_ids.append(UUID(a))
+            except ValueError:
+                continue
+        rows = (
+            await db.execute(select(Asset).where(Asset.id.in_(parsed_ids)))
+        ).scalars().all()
+        found = {str(a.id): a for a in rows}
+        assets_missing = any(a not in found for a in asset_ids)
+        assets_failed = any(
+            found[a].processing_status == AssetStatus.FAILED
+            for a in asset_ids
+            if a in found
+        )
+    new_understanding = (
+        await db.execute(
+            select(Message.id)
+            .where(
+                Message.conversation_id == conversation_id,
+                Message.intent["type"].astext == MATERIAL_BEAT_TYPE,
+                Message.intent["beat"].astext == "understanding",
+                Message.created_at > source.created_at,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none() is not None
+    plan_since = (
+        await db.execute(
+            select(Message.id)
+            .where(
+                Message.conversation_id == conversation_id,
+                Message.question["kind"].astext == "task_book",
+                Message.created_at > source.created_at,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none() is not None
+    run_since = False
+    if project_id is not None:
+        run_since = (
+            await db.execute(
+                select(WorkflowRun.id)
+                .where(
+                    WorkflowRun.project_id == project_id,
+                    WorkflowRun.created_at > source.created_at,
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none() is not None
+    reasons = suggestion_stale_reasons(
+        assets_missing=assets_missing,
+        assets_failed=assets_failed,
+        new_understanding=new_understanding,
+        plan_or_run_since=plan_since or run_since,
+    )
+    return compose_suggestion_note(record.get("label") or "", reasons)
 
 
 def pending_commitment_verdict(

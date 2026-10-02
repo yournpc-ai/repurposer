@@ -725,6 +725,17 @@ class Message(Base):
     # predicate (question IS NOT NULL / answer IS NULL) depends on it.
     question = Column(JSONB(none_as_null=True), nullable=True)
     answer = Column(JSONB(none_as_null=True), nullable=True)
+    # 建议谱系交互块 (ADR-099 §4, messages JSONB 模式同 intent/mentions):
+    # non-blocking next-step options this assistant row offered —
+    # [{id, label, description, recommended, source_turn, source_state}];
+    # source_state is the stale-check snapshot (the grounded asset ids at
+    # stamp time — directed validation, zero version counters). NEVER a
+    # question (blocking = the question payload); lifecycle = the row's.
+    suggestions = Column(JSONB, nullable=False, default=list, server_default="[]")
+    # 点选引用 (ADR-099 §4): a user row that IS a suggestion pick carries
+    # its structured ref {source_turn, suggestion_id} — the visible content
+    # stays the picked label, the ref rides structured (mentions 模式同构).
+    suggestion_ref = Column(JSONB(none_as_null=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
