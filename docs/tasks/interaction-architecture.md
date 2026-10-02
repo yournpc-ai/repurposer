@@ -1,6 +1,6 @@
 # Agent 交互架构迁移 — 施工简报（ADR-099）
 
-> Status: 未动工——前置 = 答复质量在途批（prompt 面 5 文件 + styles.css）落盘，迁移批从干净树出发。
+> Status: 批次 B 已落地（单 commit，验证项未跑、在册于批次 B 验收节）——C·C+ 待 B 合并验证后开工；S/D/E/G 未动工。
 > 架构母法 = ADR-099。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
 
 ## 冻结事项（本简报全程不再议）
@@ -31,6 +31,17 @@ B → C·C+ → S → D → E → G1 → G2
 | **must_not_touch** | suggestions 一切；streaming/DeferredFrames；宪法；其他参数系统（**不升级为参数架构重构**）；FRAMING（批H 需求池行，不随批）；repair 文案 |
 | **acceptance** | 复用既有设施，不新造：`Literal["bilingual","source_only","target_only"]` 校验（schemas.py:673）与 `_caption_choice_is_meaningful` 推导保留；漏斗 = 用户原话 > 暂存 > source_only；Start 经 Confirmed Scope 读**当前卡面值**（非旧 InferredIntent 副本）；手改骑既有 prior_intent 通道。① 无字幕关键词走金句卡配方 → 无 dock 问、卡面见默认行；② 用户原话"双语" → 模型 set 值优先；③ 一句话手改 → 重 dock 生效 |
 | **rollback** | 单 commit git revert；探针红 = 恢复被删闸门并登记承重发现 |
+
+**批次 B 落地记录**（施工会话交付，验证全部未跑）：
+
+- 删除面：plan_turn / propose_turn 的 caption 闸门 + dock 组装；service.py 的 `_needs_caption_mode_question` / `_build_caption_mode_question` / `_recover_caption_mode_from_answer` / `_has_resolved_caption_mode` / `_is_caption_mode_question` / `_replay_stashed_caption_intent` / answer fast path / SOURCE_ONLY·TARGET_ONLY 关键词表。grep 结论：stash/replay 无 caption 以外消费方（stash 只经两座 `_dock_question(intent=…)` 写入、answer fast path 唯一消费）；intent.py 无 caption 链（零引用，未动）。
+- 漏斗落代码：`_derive_chat_caption_mode` 为唯一推导座（registry-native DerivativeWriterNode 链检查内联）——关键词 > 前 dock 值（`_resolved_caption_mode`）> source_only；**source_only 仅在 `_caption_choice_is_meaningful` 为真时盖戳**（该推导件的新座位 = 默认可见性：有独立第二语言才有可选的事实行；无则零戳、卡面静默，runtime narrowing 在 dispatch 自收窄 bilingual → source_only）。
+- 模型面文档双座同法同批：intent_router_system.j2 参数行 + schemas.py `PresentPlanArgs.caption_mode` Field 描述（后者是 tool spec 参数文档本体，"None = chat should ask the user" 不改即成谎——简报只点名 j2，schema 座为同法补齐）。
+- 前端方案卡 derived 区增字幕模式事实行（`captionModeRow`：链含 captionMode 标记工具且 intent.caption_mode 有值时渲染；TOOL_META 增注册式标记；i18n `derive.captions`/`source_only`/`target_only` en/zh 双写）。桌面端不渲染计划卡（既有律），事实行座位 = 移动端卡。
+- 场景座同座换法（非迁就）：`s7_caption_mode_gate` → `s7_caption_mode_default`（A 无关键词→无问+source_only 端到端 / B 原话双语→bilingual 端到端 / C 设定→追问→面板 Start 继承）；`answer_caption_gate` 助手 + `caption_gate` terminal 判别式随删（9 调用点）；S22 竞态座换驱动（caption 答复 → 用户次轮回合 dock 计划，确定性论证同形）。
+- Start 链路证据（当前卡面值，非旧副本）：dock 时 plan_turn 以漏斗结果建 InferredIntent → PendingPlan.intent + task_book 行 intent 列 → 前端 normalizeIntent 原样往返 caption_mode（chatProtocol.ts）→ Start `intent = (data.intent or pending.intent)`（面板当前值优先）→ 缺字段时从 stored pending 继承 → `TaskSpec.caption_mode` → run.context。stash/replay 删除后全链只剩这一条 intent 血统。
+- **未跑验证（用户清单）**：① pytest（含新增 `test_caption_mode_funnel_pure.py` 漏斗锁）；② prompt_gate（caption 参数文档改写为全局扰动面）；③ chat_scenarios 全量（重点 S7 新三拍 / S19 / S20A·B / S22）；④ web tsc + 构建；⑤ live：无字幕关键词走金句卡配方（无 dock 问、卡面见默认行）/ 原话"双语"（set 优先）/ 一句话手改（重 dock 生效）。
+- **承重观察**：S22 未 seed understanding——触发回合若因世界不足而无话可说，`review is None` 会呈空洞绿（既有形态，非本批引入）；recipe 卡 quote-cards 模板自带 "bilingual" 字样，走模板原文 = 用户原话命中关键词，默认吸收只覆盖用户自拟无关键词的通路。
 
 ---
 

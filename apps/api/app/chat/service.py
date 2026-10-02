@@ -81,7 +81,6 @@ from app.models.schemas import (
     QuestionProposal,
     PlanEstimate,
     TaskItem,
-    TaskListProposal,
 )
 from app.models.tables import (
     Asset,
@@ -102,7 +101,6 @@ from app.pipeline.graph import MEDIA, NODE_KINDS
 from app.platform.billing import CreditsInsufficientError
 from app.platform.conversation_context import (
     find_conversation,
-    get_project_prompt,
     is_pending_plan,
     latest_pending_question,
 )
@@ -632,21 +630,21 @@ async def _settle_default_role_pins(db: AsyncSession, project: Project) -> None:
     await _stamp_role_pins(db, project, videos[0], videos[1])
 
 
-# Caption mode for captioned-video runs (Phase 1, 2026-08-25, RECIPES §4.7):
-# the chat path asks the user to pick bilingual / source_only / target_only
-# when a `write_quotes` task is proposed without an explicit caption-mode
-# hint. Three layers of detection, in priority order:
+# Caption mode for captioned-video runs (RECIPES §4.7, ADR-099 §8 default
+# absorption): a parameter a default can carry, so it never blocks the user
+# with a question. Derivation funnel, in priority order:
 #
 #  1. LLM-set on InferredIntent.caption_mode (the intent router recognises the
 #     user's wording — "bilingual subtitles" / "中英双语字幕" — and sets it).
 #  2. Code-level keyword scan on the user prompt (defence-in-depth: the LLM
 #     may miss the phrasing, but a literal "bilingual"/"双语" is unambiguous).
-#  3. Otherwise: dock an options question, the answer rides the QuestionProposal path.
-#
-# Single source of truth for the option_id encoding — answer_question uses
-# the same prefix to recover the choice (caption_mode_bilingual / _source_only
-# / _target_only → Literal value), so the question and the answer share a
-# hand-shake no LLM can break.
+#  3. The previous dock's value, inherited across refinement turns that don't
+#     re-mention it.
+#  4. source_only — stamped only when a distinct second language makes the
+#     choice real; the plan card then shows it as a visible, changeable fact.
+#     With no distinct alt language nothing is stamped (bilingual would print
+#     one language twice — there is no choice to show, and the run narrows
+#     bilingual → source_only on its own at dispatch).
 _CAPTION_MODE_KEYWORDS_BILINGUAL: tuple[str, ...] = (
     "bilingual",
     "bilingual subtitles",
@@ -657,56 +655,30 @@ _CAPTION_MODE_KEYWORDS_BILINGUAL: tuple[str, ...] = (
     "双语字幕",
     "中英",
 )
-_CAPTION_MODE_KEYWORDS_SOURCE_ONLY: tuple[str, ...] = (
-    "source only",
-    "source language only",
-    "源语言",
-    "原文",
-    "原声字幕",
-    "只保留原",
-    "只保留源",
-)
-_CAPTION_MODE_KEYWORDS_TARGET_ONLY: tuple[str, ...] = (
-    "target only",
-    "target language only",
-    "目标语言",
-    "只保留目标",
-)
 
 
 def _detect_caption_mode(prompt: str) -> str | None:
     """Code-level keyword scan — the LLM may set caption_mode too, but a
-    literal "bilingual"/"双语" is unambiguous so we don't waste a question.
-    Source/target-only is intentionally left for the chat to ask: the user's
-    intent is genuinely ambiguous without knowing the source language."""
+    literal "bilingual"/"双语" is unambiguous so the funnel never derives
+    past it. Source/target-only stays LLM-only: their reading is genuinely
+    ambiguous without knowing the source language."""
     text = (prompt or "").lower()
     if any(kw in text for kw in _CAPTION_MODE_KEYWORDS_BILINGUAL):
         return "bilingual"
     return None
 
 
-def _needs_caption_mode_question(tasks: list) -> bool:
-    """Quote-card chain (write_quotes) is the only recipe currently asking
-    for caption mode — registry-native via the DerivativeWriterNode check,
-    no parallel "which tools need subtitles" list."""
-    return any(
-        isinstance(NODE_KINDS.get(t.tool), DerivativeWriterNode)
-        and t.tool == "write_quotes"
-        for t in tasks
-    )
-
-
 async def _caption_choice_is_meaningful(
     db: AsyncSession, project: Project, tasks: list
 ) -> bool:
-    """§2.3/D4 (2026-08-28): is there a DISTINCT second language to offer?
+    """Is there a DISTINCT second language to offer?
 
     Bilingual/target-only only make sense when an alt language exists that
     differs from the source material's language. Derivation order (same as
     the run-time path): the task's own target language (user-named) → the
-    project/UI locale. When every candidate equals the source, the choice
-    question would be theatre — skip it and let the caller stamp
-    ``source_only``.
+    project/UI locale. When every candidate equals the source there is no
+    choice to show — the funnel stamps nothing and the run narrows
+    bilingual → source_only on its own at dispatch.
     """
     source = await project_source_language(db, project)
     task_language = next(
@@ -723,63 +695,14 @@ async def _caption_choice_is_meaningful(
     )
 
 
-def _build_caption_mode_question(text: str) -> QuestionProposal:
-    """The caption-mode options question — bilingual is the canonical default
-    (matches the recipe's example prompt and the reference images). The
-    option_id prefix `caption_mode_` is a handshake the answer path uses to
-    recover the choice (caption_mode_bilingual → Literal "bilingual")."""
-    zh = _prefers_zh(text)
-    if zh:
-        return QuestionProposal(
-            type="ask",
-            question="字幕模式？",
-            options=[
-                Option(id="caption_mode_bilingual", label="双语字幕（推荐）"),
-                Option(id="caption_mode_source_only", label="只保留源语言"),
-                Option(id="caption_mode_target_only", label="只保留目标语言"),
-            ],
-            allow_freeform=False,
-        )
-    return QuestionProposal(
-        type="ask",
-        question="Caption mode?",
-        options=[
-            Option(id="caption_mode_bilingual", label="Bilingual (recommended)"),
-            Option(id="caption_mode_source_only", label="Source language only"),
-            Option(id="caption_mode_target_only", label="Target language only"),
-        ],
-        allow_freeform=False,
-    )
-
-
-def _recover_caption_mode_from_answer(message: Message) -> str | None:
-    """Read a docked caption-mode question's answer off the message row.
-    The option_id prefix `caption_mode_` is the handshake; free-form answers
-    fall back to a keyword scan (the LLM may have written a localised label
-    like 'bilingual' as freeform text)."""
-    answer = message.answer if isinstance(message.answer, dict) else None
-    if not answer:
-        return None
-    option_id = answer.get("option_id")
-    if isinstance(option_id, str) and option_id.startswith("caption_mode_"):
-        return option_id[len("caption_mode_"):]
-    text = (answer.get("text") or "").lower()
-    if any(kw in text for kw in _CAPTION_MODE_KEYWORDS_BILINGUAL):
-        return "bilingual"
-    if any(kw in text for kw in _CAPTION_MODE_KEYWORDS_SOURCE_ONLY):
-        return "source_only"
-    if any(kw in text for kw in _CAPTION_MODE_KEYWORDS_TARGET_ONLY):
-        return "target_only"
-    return None
-
-
 def _resolved_caption_mode(project: Project) -> str | None:
-    """The answered caption mode stashed on the pending brief, if any.
+    """The caption mode the previous dock stamped, if any.
 
-    The answer fast path writes it onto ``pending_brief.intent.caption_mode``
-    and every consumption site (plan-turn overwrite, propose-turn run) must
-    INHERIT it — a fresh call's ``caption_mode=None`` is "not mentioned
-    this turn", never "the user retracted the answer".
+    A refinement turn's fresh call arrives with ``caption_mode=None`` unless
+    the user re-mentions it — None means "not mentioned this turn", never
+    "retracted". The stored ``pending_brief.intent.caption_mode`` is the
+    inherit source the funnel consults before defaulting, and every dock
+    inherits it the same way (a follow-up "改成 5 张" never drops the mode).
     """
     pending = project.pending_brief if isinstance(project.pending_brief, dict) else None
     if not pending:
@@ -789,72 +712,27 @@ def _resolved_caption_mode(project: Project) -> str | None:
     return str(mode) if mode else None
 
 
-def _has_resolved_caption_mode(project: Project) -> bool:
-    """A caption-mode question was already answered and the answer is
-    reflected in the stored pending_brief — the next plan turn re-uses it
-    instead of re-docking the question (the user has spoken). Mirrors the
-    pending_brief's role for the plan (CHAT_ARCH §3)."""
-    return _resolved_caption_mode(project) is not None
-
-
 async def _derive_chat_caption_mode(
     db: AsyncSession, project: Project, tasks: list, text: str
 ) -> str | None:
-    """The propose path's caption-mode derivation for an immediate run:
-    fresh keyword > stashed answer > source_only when no distinct alt
-    language exists (§2.3/D4 — the question would be theatre). Returns
-    None when the chain carries no captioned task.
+    """The caption-mode funnel for a caption-bearing chain: fresh keyword >
+    the previous dock's value > source_only when the choice is real (a
+    distinct second language exists). Returns None for chains without a
+    caption-bearing task — and for caption chains with no distinct alt
+    language, where nothing is stamped because there is nothing to choose.
 
-    The single funnel for every chat-path run birth (2026-08-29): the
-    main dispatch AND both LLM-repair re-dispatches — a repaired
-    task_list is the same run birth and must not lose the mode (the
-    repair sites used to call ``_create_run_from_tasks`` bare)."""
-    if not _needs_caption_mode_question(tasks):
+    Registry-native chain check (DerivativeWriterNode), no parallel "which
+    tools need subtitles" list."""
+    if not any(
+        isinstance(NODE_KINDS.get(t.tool), DerivativeWriterNode)
+        and t.tool == "write_quotes"
+        for t in tasks
+    ):
         return None
     mode = _detect_caption_mode(text) or _resolved_caption_mode(project)
-    if mode is None and not await _caption_choice_is_meaningful(db, project, tasks):
+    if mode is None and await _caption_choice_is_meaningful(db, project, tasks):
         mode = "source_only"
     return mode
-
-
-def _is_caption_mode_question(question: QuestionPayload) -> bool:
-    """Identify a docked caption-mode question by its option_id prefix — the
-    only stable handshake between the dock and the answer paths."""
-    return bool(question.options) and all(
-        o.id.startswith("caption_mode_") for o in question.options
-    )
-
-
-def _replay_stashed_caption_intent(message: Message) -> InferredIntent | None:
-    """Recover the stashed intent the caption-mode question was holding.
-
-    Two shapes ride the question's ``intent`` field:
-      - ``TaskListProposal`` from ``_propose_turn`` (chat_intent_agent path;
-        carries ``type="task_list"`` + ``tasks`` + ``summary``) — we wrap it
-        back into an InferredIntent, the same shape plan-path stores
-      - bare ``InferredIntent`` from ``_plan_turn`` (intent_router path; first
-        turn goes here) — used as-is, the LLM already gave us a complete intent
-
-    Returns None when the stash is missing or unrecognized — the caller
-    degrades to a no-op (the answer is recorded but no follow-up docks).
-    """
-    stashed = message.intent
-    if not isinstance(stashed, dict):
-        return None
-    if stashed.get("type") == "task_list":
-        # _propose_turn path: TaskListProposal
-        try:
-            tlp = TaskListProposal.model_validate(stashed)
-        except Exception:  # noqa: BLE001 — bad stash, degrade
-            return None
-        return InferredIntent(tasks=tlp.tasks)
-    if "tasks" in stashed and "action" in stashed:
-        # _plan_turn path: bare InferredIntent (the intent router's payload)
-        try:
-            return InferredIntent.model_validate(stashed)
-        except Exception:  # noqa: BLE001
-            return None
-    return None
 
 
 async def _compute_plan_reasons(
@@ -1509,97 +1387,6 @@ async def answer_question(
 
     follow_up: Message | None = None
     bailed_run_ids: list[UUID] = []
-
-    # Caption-mode fast path (Phase 1, 2026-08-25, RECIPES §4.7): the question
-    # is one of ours when every option_id starts with ``caption_mode_``. The
-    # user picked a mode, so we re-stitch the stashed intent (a TaskListProposal
-    # from _propose_turn, or a bare InferredIntent from _plan_turn's first
-    # turn) into an InferredIntent + PendingPlan and dock a task_book
-    # question — the user then confirms with Start like any normal generation.
-    # Skipping _propose_turn here is intentional: the LLM would re-derive the
-    # task list from the option label alone, which is the brittle 续聊 path.
-    if (
-        question.kind == "question"
-        and data.kind in ("option", "freeform")
-        and _is_caption_mode_question(question)
-        and message.intent is not None
-        and isinstance(message.intent, dict)
-    ):
-        recovered_mode = _recover_caption_mode_from_answer(message)
-        if recovered_mode is not None:
-            stashed_intent = _replay_stashed_caption_intent(message)
-            if stashed_intent is not None:
-                project = await db.get(Project, conversation.project_id)
-                if project is not None:
-                    # Pull the original user prompt out of the conversation's
-                    # first user message — the stashed intent carries only
-                    # the structural chain, the prompt text is in the
-                    # conversation timeline.
-                    prompt_text = await get_project_prompt(
-                        db, UUID(str(project.id))
-                    ) or ""
-                    # The stashed InferredIntent already carries tasks +
-                    # specific_instruction (from the plan path) — keep them
-                    # verbatim, just stamp caption_mode. The chat path
-                    # stashed a TaskListProposal (no specific_instruction) —
-                    # synthesize one from the prompt so the downstream
-                    # text-tribe agents see the user's intent. caption_mode
-                    # itself rides the structured field end-to-end
-                    # (intent → PendingPlan → TaskSpec → run.context) —
-                    # no machine marker in the prose.
-                    if stashed_intent.specific_instruction:
-                        replay_intent = stashed_intent.model_copy(
-                            update={"caption_mode": recovered_mode}
-                        )
-                    else:
-                        replay_intent = stashed_intent.model_copy(
-                            update={
-                                "specific_instruction": prompt_text or None,
-                                "caption_mode": recovered_mode,
-                            }
-                        )
-                    # The brief rides along verbatim — the caption answer
-                    # is not a plan turn; no merge, just preservation.
-                    preserved_brief = (
-                        Brief.model_validate(project.pending_brief["brief"])
-                        if isinstance(project.pending_brief, dict)
-                        and isinstance(project.pending_brief.get("brief"), dict)
-                        else Brief()
-                    )
-                    project.pending_brief = PendingPlan(
-                        prompt=prompt_text,
-                        intent=replay_intent,
-                        brief=preserved_brief,
-                        reasons=await _compute_plan_reasons(db, project, replay_intent),
-                        persona_id=(
-                            project.pending_brief.get("persona_id")
-                            if isinstance(project.pending_brief, dict)
-                            else None
-                        ),
-                        derived=[],
-                    ).model_dump(mode="json")
-                    # sync_plan_question docks a task_book question; its
-                    # bailed_run_ids are the cascade-bailed run interrupts (none
-                    # here, but the contract is the same).
-                    bailed_run_ids = await sync_plan_question(
-                        db, user_id, project, replay_intent, prompt_text,
-                        reasons=project.pending_brief["reasons"],
-                        brief=preserved_brief,
-                        echo=replay_intent.answer,
-                        estimate=await _safe_task_estimate(
-                            db, project, replay_intent.tasks
-                        ),
-                    )
-                    follow_up = await latest_pending_question(db, UUID(str(conversation.id)))
-                    # Skip the 续聊 fallback below — the plan question is
-                    # the follow_up, no need to re-propose.
-                    await db.commit()
-                    if bailed_run_ids:
-                        await finalize_bailed_runs(bailed_run_ids)
-                    await db.refresh(message)
-                    if follow_up is not None:
-                        await db.refresh(follow_up)
-                    return message, follow_up
 
     if question.kind == "task_book":
         project = await db.get(Project, conversation.project_id)

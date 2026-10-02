@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, Fragment, forwardRef
 import { useTranslation } from "react-i18next"
 import {
   Box,
+  Captions,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -211,6 +212,9 @@ const TOOL_META: Record<
     countDefault?: number
     /** bilingual toggle (param "bilingual") */
     bilingual?: boolean
+    /** caption-mode chain (intent.caption_mode) — the card shows the mode
+     * as a read-only fact row; edits ride the chat (prior_intent) */
+    captionMode?: boolean
   }
 > = {
   select_clips: {
@@ -231,6 +235,7 @@ const TOOL_META: Record<
     langParam: "language",
     countLimits: [1, 20],
     countDefault: 3,
+    captionMode: true,
   },
   write_article: {
     Icon: Newspaper,
@@ -2132,6 +2137,17 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     () => derived.filter((row) => row.type === "video"),
     [derived],
   )
+
+  /** The caption-mode fact row (ADR-099 §8 default absorption): the chain's
+   * caption policy is intent metadata the task rows cannot say — the one
+   * fact besides materialize that earns a derived row. Read-only; a
+   * one-sentence chat edit re-docks with the new mode (prior_intent). */
+  const captionModeRow = useMemo(() => {
+    const needsCaption = intent.tasks.some(
+      (task) => TOOL_META[task.tool]?.captionMode
+    )
+    return needsCaption && intent.caption_mode ? intent.caption_mode : null
+  }, [intent.tasks, intent.caption_mode])
 
   /** Assets carried by a message bubble must not also hang under the opening
    * prompt (a mid-conversation upload refreshed into `assets` would render
@@ -4434,12 +4450,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               )}
 
               {/* Derived preview (ADR-043, 2026-09-02 收窄) — only the
-                  materialize family earns rows: "Full video …" is the one
-                  fact the chain rows cannot say (materialize_source is
-                  compile-injected, never a chain task). Extraction / writer
+                  facts the chain rows cannot say earn rows: the materialize
+                  family ("Full video …" — materialize_source is compile-
+                  injected, never a chain task) and the caption-mode fact
+                  (intent metadata, never a task param). Extraction / writer
                   chains restate their rows 1:1, so the section stays hidden
                   there. Read-only; no section label. */}
-              {materializedRows.length > 0 && (
+              {(materializedRows.length > 0 || captionModeRow !== null) && (
                 <div className="flex flex-col gap-1.5 rounded-md bg-card p-3">
                   {materializedRows.map((row, i) => (
                     <div key={i} className="flex items-center gap-1.5 text-sm">
@@ -4453,6 +4470,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                       <span>{derivedLabel(row)}</span>
                     </div>
                   ))}
+                  {captionModeRow !== null && (
+                    <div className="flex items-center gap-1.5 text-sm">
+                      <Captions className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span>
+                        {t("generationOverlay.derive.captions")} ·{" "}
+                        {t(`generationOverlay.derive.${captionModeRow}`)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -694,8 +694,6 @@ def terminal_tool_of(turn: dict) -> str:
 
     - the plan settles + a run is born → ``start_run``
     - an unanswered task_book question docks → ``present_plan``
-    - an unanswered caption-mode options question → ``caption_gate``
-      (propose_tasks' execution sub-dock, not an ask_user call)
     - any other unanswered plain question → ``ask_user``
     - a run born with no settled question → ``run_birth`` (chat path: after
       Phase 4 B3 the ONLY same-turn birth left is edit_graph's approved-
@@ -717,11 +715,6 @@ def terminal_tool_of(turn: dict) -> str:
     if q.get("kind") == "task_book" and q.get("answer") is None:
         return "present_plan"
     if q.get("kind") == "question":
-        if any(
-            str(o.get("id", "")).startswith("caption_mode_")
-            for o in q.get("options") or []
-        ):
-            return "caption_gate"
         return "ask_user"
     if turn.get("run_id"):
         return "run_birth"
@@ -973,28 +966,6 @@ def check_activity_shape(stream: "StreamTurn", label: str) -> None:
         f"{label}: T16-B — no activity outlives the turn (envelope sweep)",
         dangling,
     )
-
-
-async def answer_caption_gate(ctx: Ctx, turn1: dict) -> dict:
-    """The caption gate (S1 precedent): a chain carrying write_quotes docks
-    the caption_mode options question BEFORE the plan. When turn1 docked
-    it, answer bilingual and re-wrap the follow_up in turn1's shape so the
-    caller's task_book assertions work unchanged; no-op otherwise."""
-    q1 = turn1["assistant_message"].get("question")
-    if q1 is not None and q1.get("kind") == "question" and any(
-        o.get("id", "").startswith("caption_mode_") for o in q1.get("options", [])
-    ):
-        ans = await ctx.answer(
-            turn1["assistant_message"]["id"],
-            {"kind": "option", "option_id": "caption_mode_bilingual"},
-        )
-        check(ans.status_code in (200, 201), "caption_mode answer accepted", ans.text)
-        turn1 = {
-            "assistant_message": ans.json().get("follow_up") or {},
-            "run_id": None,
-            "answered_question": ans.json().get("answered_question"),
-        }
-    return turn1
 
 
 def has_prose(msg: dict) -> bool:
@@ -1440,8 +1411,7 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
                      processed=True)
 
     turn1 = await ctx.chat(pid, "write a LinkedIn post from my talk")
-    conv_id = turn1["conversation_id"]  # the gate's re-wrap drops the key
-    turn1 = await answer_caption_gate(ctx, turn1)  # write_quotes 链先答 caption
+    conv_id = turn1["conversation_id"]
     check(terminal_tool_of(turn1) == "present_plan",
           "turn1 closes on the present_plan call", turn1)
     check(is_plan_dock(turn1["assistant_message"]), "turn1 docks a task_book",
@@ -2181,183 +2151,151 @@ async def s6_interrupt_consolidated(ctx: Ctx) -> None:
 # ---- S7 核⑦ caption mode ----------------------------------------------------------
 
 
-async def s7_caption_mode_gate(ctx: Ctx) -> None:
-    """核⑦ caption mode 三拍（2026-08-29 root-fix 回归座 + ADR-053 形态律
-    wire 面）：caption 选择 = 选项问（options 非空——形态律下前端 pill 化，
-    本脚本锁 wire）——
+async def s7_caption_mode_default(ctx: Ctx) -> None:
+    """核⑦ caption mode 默认吸收（ADR-099 §8）三拍：字幕模式 = 默认值扛得
+    住的方案参数，永不先问——
 
-    A) 有独立第二语言（项目 de / 素材 en）→ 选择问先 dock（不起 run），
-       回答后 replay 出计划：回执 kind=option + 选中的 mode 钉进
-       pending_brief；
-    B) 无独立第二语言（项目 en / 素材 en）→ 不问 caption；计划照常 dock
-       （Phase 4 B3：propose 路同 turn 永不生 run），source_only 随
-       dock 的 intent，Start 后 run.context.caption_mode == "source_only"
-       （§2.3/D4）；
-    C) 答 → 追问 → Start：answered mode 存活于中间修订轮（stash 继承：
-       fresh LLM-set > fresh keyword > stashed answer）。
+    A) 有独立第二语言（项目 de / 素材 en）且无字幕关键词 → 无字幕
+       dock 问，计划直接 dock 且 intent.caption_mode == "source_only"
+       （卡面可见默认行）；Start 后 run.context.caption_mode 同为
+       source_only；
+    B) 用户原话带"双语" → 用户原话恒胜：bilingual 随 dock 的 intent，
+       Start 后 run.context.caption_mode == "bilingual"；
+    C) 关键词设定 → 追问（修订轮不再提字幕）→ 面板 Start：设定值经暂存
+       继承存活（用户原话 > 暂存 > source_only；面板缺字段 = "未提及"
+       非"撤回"，服务端从 stored pending 继承）。
 
     LLM 判定有抖动（"make a quote card" 可能回反问或提别的链——两者都
-    正确地跳过 caption 闸门），各部各给 3 次尝试直到 write_quotes 落地。
+    合法），各部各给 3 次尝试直到 write_quotes 计划落地。
     """
     material = "Some keynote transcript about the future of embodied intelligence."
 
-    # A) distinct alt language exists → dock first, answer, plan follows.
-    pid = await ctx.new_project("S7-A chat caption dock")
+    # A) distinct alt language, no caption wording → no question ever docks;
+    #    the plan carries the visible default (source_only) end-to-end.
+    pid = await ctx.new_project("S7-A caption default absorbed")
     await set_project_language(pid, "de")
-    # Fixture declaration (B-4): the caption gate's language fact is the
-    # declared COMPLETED row's meta — worker-immune by construction.
+    # Fixture declaration (B-4): the language fact is the declared COMPLETED
+    # row's meta — worker-immune by construction.
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
                      extracted_text=material, meta={"language": "en"},
                      processed=True)
     await seed_completed_run(pid)
     docked: dict | None = None
+    tools_seen: list = []
     for prompt in ("make a quote card from the video",
                    "pull the sharpest quotes from my keynote into quote cards",
                    "the quote cards, please"):
         turn = await ctx.chat(pid, prompt)
-        q = turn["assistant_message"].get("question")
-        if q and q.get("kind") == "question" and any(
-            o.get("id", "").startswith("caption_mode_") for o in q.get("options", [])
-        ):
+        q = turn["assistant_message"].get("question") or {}
+        check(
+            not any(str(o.get("id", "")).startswith("caption_mode_")
+                    for o in q.get("options") or []),
+            "A: no caption-mode question ever docks (default absorption)",
+            q,
+        )
+        if not is_plan_dock(turn["assistant_message"]):
+            continue  # ask-back / prose — nudge again
+        plan = await pending_plan(ctx, pid)
+        tools_seen = [t.get("tool") for t in plan_tasks(plan)]
+        if "write_quotes" in tools_seen:
             docked = turn
             break
-        rid = turn.get("run_id")
-        if rid:  # a non-quotes run started (the gate correctly skipped it)
-            await wait_run_terminal(rid)
+        # Wrong chain docked — bail the plan before nudging again (a live
+        # dock would read the next chat message as its revision/Start).
+        await ctx.answer(turn["assistant_message"]["id"], {"kind": "bail"})
     check(docked is not None,
-          "A: the caption question docks for a chat-path quote-cards ask")
-    check(terminal_tool_of(docked) == "caption_gate",
-          "A: the turn closes on the caption gate (propose_tasks' sub-dock)",
+          "A: no write_quotes plan dock after 3 turns", tools_seen)
+    check(terminal_tool_of(docked) == "present_plan",
+          "A: the turn closes straight on the plan dock (no caption gate)",
           docked)
-    check(docked.get("run_id") is None, "A: no run before the answer", docked)
-    check(len((docked["assistant_message"].get("question") or {}).get("options") or []) > 0,
-          "A: the caption ask is an OPTIONS question (形态律 pill 的 wire 面)",
-          docked["assistant_message"].get("question"))
-    ans = await ctx.answer(docked["assistant_message"]["id"],
-                           {"kind": "option", "option_id": "caption_mode_bilingual"})
-    check(ans.status_code in (200, 201), "A: caption answer accepted", ans.text)
-    answered_row = ans.json().get("answered_question") or {}
-    check((answered_row.get("answer") or {}).get("kind") == "option",
-          "A: 答案行落库 kind=option（AnsweredQuestion 已答块的 wire 面）",
-          answered_row.get("answer"))
-    follow = ans.json().get("follow_up") or {}
-    check(is_plan_dock(follow),
-          "A: the answer replays the stashed proposal into a plan", follow)
-    # 计划行自完备（方案 B）：answer 轮的 follow_up 行同样自带链——前端
-    # 从 envelope 直渲计划卡，无需 pending_brief 二次拉取。
-    check(bool(((follow.get("intent") or {}).get("tasks")) or []),
-          "A: the follow-up row self-carries the chain (intent column)",
-          follow.get("intent"))
+    check(docked.get("run_id") is None,
+          "A: no run before Start (B3: same-turn create_run is forbidden)",
+          docked)
     plan = await pending_plan(ctx, pid)
-    check(((plan or {}).get("intent") or {}).get("caption_mode") == "bilingual",
-          "A: the picked mode rides pending_brief end-to-end", plan)
+    check(((plan or {}).get("intent") or {}).get("caption_mode") == "source_only",
+          "A: the visible default rides the docked intent", plan)
+    res = await ctx.answer(docked["assistant_message"]["id"], {"kind": "start"})
+    check(res.status_code == 200, "A: dock Start answers the plan", res.text)
+    run_id = res.json()["answered_question"].get("workflow_run_id")
+    check(run_id, "A: a run was born on Start", res.json())
+    runs = await ctx.client.get(f"/projects/{pid}/runs")
+    born = next((r for r in runs.json() if r.get("id") == run_id), None) or {}
+    check((born.get("context") or {}).get("caption_mode") == "source_only",
+          "A: run.context.caption_mode", born.get("context"))
 
-    # B) no distinct alt (en/en) → no caption question; the plan docks with
-    #    source_only riding the intent, and only Start births the run with
-    #    run.context.caption_mode == "source_only" (Phase 4 B3 翻转: the
-    #    propose path NEVER births same-turn — the dock is the one seat).
-    pid_b = await ctx.new_project("S7-B chat caption source_only")
-    await set_project_language(pid_b, "en")
+    # B) the user's own words always win: a literal "bilingual" stamps the
+    #    mode over any default.
+    pid_b = await ctx.new_project("S7-B user wording wins")
+    await set_project_language(pid_b, "de")
     await seed_asset(pid_b, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
                      extracted_text=material, meta={"language": "en"},
                      processed=True)
     await seed_completed_run(pid_b)
     docked_b: dict | None = None
-    tools_seen: list = []
-    for prompt in ("make a quote card from the video",
-                   "pull the sharpest quotes from my keynote into quote cards",
-                   "the quote cards, please"):
+    for prompt in ("make a bilingual quote card from the video",
+                   "pull the keynote's sharpest lines into bilingual quote cards",
+                   "bilingual quote cards, please"):
         turn = await ctx.chat(pid_b, prompt)
         if not is_plan_dock(turn["assistant_message"]):
-            continue  # ask-back / prose — nudge again
+            continue
         plan_b = await pending_plan(ctx, pid_b)
-        tools_seen = [t.get("tool") for t in plan_tasks(plan_b)]
-        if "write_quotes" in tools_seen:
+        if "write_quotes" in [t.get("tool") for t in plan_tasks(plan_b)]:
             docked_b = turn
             break
-        # Wrong chain docked — bail the plan before nudging again (a live
-        # dock would read the next chat message as its revision/Start).
         await ctx.answer(turn["assistant_message"]["id"], {"kind": "bail"})
-    check(docked_b is not None,
-          "B: no write_quotes plan dock after 3 turns", tools_seen)
-    check(docked_b.get("run_id") is None,
-          "B: no run before Start (B3: same-turn create_run is forbidden)",
-          docked_b)
-    check(terminal_tool_of(docked_b) == "present_plan",
-          "B: the turn closes on the plan dock (propose_tasks' B3 seat)",
-          docked_b)
+    check(docked_b is not None, "B: no write_quotes plan dock after 3 turns")
     plan_b = await pending_plan(ctx, pid_b)
-    check(((plan_b or {}).get("intent") or {}).get("caption_mode") == "source_only",
-          "B: source_only rides the docked intent (no question for en/en)",
-          plan_b)
+    check(((plan_b or {}).get("intent") or {}).get("caption_mode") == "bilingual",
+          "B: the user's wording stamps bilingual on the docked intent", plan_b)
     res_b = await ctx.answer(docked_b["assistant_message"]["id"], {"kind": "start"})
     check(res_b.status_code == 200, "B: dock Start answers the plan", res_b.text)
-    run_id_b = res_b.json()["answered_question"].get("workflow_run_id")
-    check(run_id_b, "B: a run was born on Start", res_b.json())
+    rid_b = res_b.json()["answered_question"].get("workflow_run_id")
     runs = await ctx.client.get(f"/projects/{pid_b}/runs")
-    born = next((r for r in runs.json() if r.get("id") == run_id_b), None) or {}
-    run_ctx = born.get("context") or {}
-    check(run_ctx.get("caption_mode") == "source_only",
-          "B: run.context.caption_mode", run_ctx.get("caption_mode"))
+    born_b = next((r for r in runs.json() if r.get("id") == rid_b), None) or {}
+    check((born_b.get("context") or {}).get("caption_mode") == "bilingual",
+          "B: run.context.caption_mode follows the user's wording",
+          born_b.get("context"))
 
-    # C) 答 → 追问 → Start：the answered mode must survive a refinement turn
-    #    between the answer and Start — the plan path overwrites
-    #    pending_brief wholesale with the fresh call (caption_mode=None
-    #    whenever the turn doesn't re-mention it), which used to drop the
-    #    answer on the floor: the run started single-language and the NEXT
-    #    turn re-asked the already-answered question. Now the stash is
-    #    inherited (fresh LLM-set > fresh keyword > stashed answer).
-    pid_c = await ctx.new_project("S7-C caption answer survives refinement")
+    # C) 设定 → 追问 → Start：the mode survives a refinement turn that
+    #    doesn't re-mention it (stash inherit) AND a panel Start that strips
+    #    the field ("not mentioned" ≠ "retracted" — the server inherits from
+    #    the stored pending brief).
+    pid_c = await ctx.new_project("S7-C mode survives refinement")
     await set_project_language(pid_c, "de")
     await seed_asset(pid_c, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
                      extracted_text=material, meta={"language": "en"},
                      processed=True)
     docked_c: dict | None = None
-    for prompt in ("make quote cards from the video",
-                   "pull the keynote's sharpest quotes into cards",
-                   "the quote cards, please"):
+    for prompt in ("make bilingual quote cards from the video",
+                   "pull the keynote's sharpest quotes into bilingual cards",
+                   "bilingual quote cards, please"):
         turn = await ctx.chat(pid_c, prompt)
-        q = turn["assistant_message"].get("question")
-        if q and q.get("kind") == "question" and any(
-            o.get("id", "").startswith("caption_mode_") for o in q.get("options", [])
-        ):
+        if not is_plan_dock(turn["assistant_message"]):
+            continue
+        plan_c = await pending_plan(ctx, pid_c)
+        if "write_quotes" in [t.get("tool") for t in plan_tasks(plan_c)]:
             docked_c = turn
             break
-    check(docked_c is not None,
-          "C: the caption question docks on the plan path")
-    check(terminal_tool_of(docked_c) == "caption_gate",
-          "C: the turn closes on the caption gate (present_plan's sub-dock)",
-          docked_c)
-    ans = await ctx.answer(docked_c["assistant_message"]["id"],
-                           {"kind": "option", "option_id": "caption_mode_bilingual"})
-    check(ans.status_code in (200, 201), "C: caption answer accepted", ans.text)
-    # The answer's replay already docks the plan; refinement nudges may
-    # re-dock it (superseding the row) — always Start the LATEST live row.
-    follow_c = ans.json().get("follow_up") or {}
-    plan_qid: str | None = follow_c.get("id") if is_plan_dock(follow_c) else None
-    check(plan_qid is not None, "C: the answer replays the stashed plan", follow_c)
-    reasked: dict | None = None
+        await ctx.answer(turn["assistant_message"]["id"], {"kind": "bail"})
+    check(docked_c is not None, "C: no write_quotes plan dock after 3 turns")
+    plan_qid = docked_c["assistant_message"]["id"]
+    plan_c = await pending_plan(ctx, pid_c)
+    check(((plan_c or {}).get("intent") or {}).get("caption_mode") == "bilingual",
+          "C: the keyword stamps bilingual on the first dock", plan_c)
     for nudge in ("make it 3 cards instead",
                   "change that to 3 quote cards",
                   "actually, only 3 cards"):  # 修订措辞 — 散文确认会绕过追问路径
         turn = await ctx.chat(pid_c, nudge)
-        q = turn["assistant_message"].get("question")
-        if q and any(o.get("id", "").startswith("caption_mode_")
-                     for o in q.get("options", [])):
-            reasked = q  # the bug: the answered question is re-asked
-            break
         plan = await pending_plan(ctx, pid_c)
         check(((plan or {}).get("intent") or {}).get("caption_mode") == "bilingual",
-              "C: the refinement turn keeps the answered caption_mode", plan)
+              "C: the refinement turn keeps the stamped caption_mode", plan)
         if is_plan_dock(turn["assistant_message"]):
             plan_qid = turn["assistant_message"]["id"]
             break
-    check(reasked is None, "C: the answered question is never re-asked", reasked)
-    check(plan_qid is not None, "C: a plan docks after the refinement")
     # Start THROUGH THE PANEL: the frontend's normalize strips fields it
     # doesn't edit, so its Start payload carries the plan's intent minus
-    # caption_mode — the server must inherit the answered mode from the
-    # stored pending brief ("not mentioned" ≠ "retracted", 2026-08-29).
+    # caption_mode — the server must inherit the stamped mode from the
+    # stored pending brief ("not mentioned" ≠ "retracted").
     plan = await pending_plan(ctx, pid_c)
     panel_intent = dict((plan or {}).get("intent") or {})
     check(bool(panel_intent), "C: pending plan carries an intent", plan)
@@ -2369,8 +2307,10 @@ async def s7_caption_mode_gate(ctx: Ctx) -> None:
     runs = await ctx.client.get(f"/projects/{pid_c}/runs")
     born_c = next((r for r in runs.json() if r.get("id") == rid_c), None) or {}
     check((born_c.get("context") or {}).get("caption_mode") == "bilingual",
-          "C: run.context.caption_mode survives answer → refine → Start",
+          "C: run.context.caption_mode survives set → refine → Start",
           born_c.get("context"))
+
+
 
 
 # ---- S8 核⑧ research 全链 ---------------------------------------------------------
@@ -2391,7 +2331,6 @@ async def s8_research_grounds_writer(ctx: Ctx) -> None:
         "Write a LinkedIn post about the EU AI Act's 2026 enforcement — "
         "research the latest developments first.",
     )
-    turn1 = await answer_caption_gate(ctx, turn1)  # no-op unless the dock quotes first
     check(terminal_tool_of(turn1) == "present_plan",
           "a rooted topic closes on the present_plan call", turn1)
     check(is_plan_dock(turn1["assistant_message"]),
@@ -2908,7 +2847,6 @@ async def s13_credits_insufficient_birthplace_422(ctx: Ctx) -> None:
                          extracted_text="My talk about grid storage auctions.",
                          processed=True)
         turn1 = await local.chat(pid, "write a LinkedIn post from my talk")
-        turn1 = await answer_caption_gate(local, turn1)
         check(is_plan_dock(turn1["assistant_message"]),
               "turn1 docks a task_book", turn1["assistant_message"])
 
@@ -3606,7 +3544,6 @@ async def s18_idless_asset_read_terminalizes(ctx: Ctx) -> None:
         "Caption my video in Chinese and French — Chinese as bilingual "
         "subtitles.",
     )
-    turn1 = await answer_caption_gate(ctx, turn1)
     terminal = terminal_tool_of(turn1)
     check(
         terminal in ("present_plan", "ask_user"),
@@ -3700,7 +3637,6 @@ async def s19_turn_durability_and_trigger_admission(ctx: Ctx) -> None:
         run_trigger_turn(uuid.UUID(pid), TRIGGER_UNDERSTANDING, "s19-digest")
     )
     turn1 = await chat_task
-    turn1 = await answer_caption_gate(ctx, turn1)
     check(
         terminal_tool_of(turn1) in ("present_plan", "ask_user"),
         "the user turn converges normally under the racing trigger",
@@ -3794,7 +3730,6 @@ async def s20_speech_semantic_contract(ctx: Ctx) -> None:
         "run_id": completed.get("run_id"),
         "answered_question": completed.get("answered_question"),
     }
-    turn1 = await answer_caption_gate(ctx, turn1)
     terminal = terminal_tool_of(turn1)
     check(
         terminal in ("present_plan", "ask_user"),
@@ -3859,16 +3794,11 @@ async def s20_speech_semantic_contract(ctx: Ctx) -> None:
         "run_id": completed.get("run_id"),
         "answered_question": completed.get("answered_question"),
     }
-    # Stream laws compare against THIS turn's own speech — capture the
-    # pre-gate content BEFORE answer_caption_gate: when the caption gate
-    # fires it re-wraps turn1 with the follow-UP turn's message (a separate
-    # /answer generation), and comparing this stream against that prose
-    # would be a cross-turn category error.
-    pre_gate_content = turn1["assistant_message"].get("content") or ""
+    # Stream laws compare against THIS turn's own speech.
+    turn_content = turn1["assistant_message"].get("content") or ""
     check_read_silent_stream(stream, "S20B")
     check_activity_shape(stream, "S20B")
-    check_stream_law(stream, pre_gate_content, "S20B")
-    turn1 = await answer_caption_gate(ctx, turn1)
+    check_stream_law(stream, turn_content, "S20B")
     terminal = terminal_tool_of(turn1)
     check(
         terminal == "present_plan",
@@ -4012,13 +3942,12 @@ async def s21_checkpoint_channel_observation(ctx: Ctx) -> None:
 
 async def s22_trigger_landing_silence(ctx: Ctx) -> None:
     """触发回合落点拍回归座（ADR-080 第二谓词补齐，2026-09-21 拍板修复批）：
-    准入通过（无在途回合、无 pending plan——caption 选项问在场但非计划）
-    → 触发的 LLM loop 在途 → caption 答复回放 dock 计划 → 落点复评命中
-    → 整体静默（永不落建议问 dock 抢确认座——S16-P2 2026-09-21 实证竞态
-    「计划 dock 与 trigger_turn_spoke 同秒」的常驻回归座）。确定性说明：
-    计划 dock 由 caption 答复驱动（回放是代码路径，秒级），触发的 loop
-    恒为 10s+ 量级——计划必在 loop 在途期间落定；罕见的反方向（loop 快
-    于答复）只会误红不会误绿。"""
+    准入通过（无在途回合、无 pending plan）→ 触发的 LLM loop 在途 → 用户
+    次轮回合 dock 计划 → 落点复评命中 → 整体静默（永不落建议问 dock 抢
+    确认座——S16-P2 2026-09-21 实证竞态「计划 dock 与 trigger_turn_spoke
+    同秒」的常驻回归座）。确定性说明：计划 dock 由用户次轮驱动（dock 是
+    代码路径，秒级），触发的 loop 恒为 10s+ 量级——计划必在 loop 在途
+    期间落定；罕见的反方向（loop 快于次轮）只会误红不会误绿。"""
     from app.chat.trigger_turn import TRIGGER_UNDERSTANDING, run_trigger_turn
 
     pid = await ctx.new_project("S22 trigger landing silence")
@@ -4028,25 +3957,20 @@ async def s22_trigger_landing_silence(ctx: Ctx) -> None:
         processed=True,
         meta={"language": "en"},
     )
-    turn1 = await ctx.chat(pid, "把我的视频做成 3 张金句卡")
-    q1 = turn1["assistant_message"].get("question") or {}
+    turn0 = await ctx.chat(pid, "这个视频讲了什么？")
     check(
-        q1.get("kind") == "question"
-        and any(
-            str(o.get("id", "")).startswith("caption_mode_")
-            for o in q1.get("options") or []
-        ),
-        "the quote-card chain docks the caption gate first (S1 precedent)",
-        turn1["assistant_message"],
+        not is_plan_dock(turn0["assistant_message"]),
+        "an informational opener docks no plan",
+        turn0["assistant_message"],
     )
-    # 准入拍此刻通过：无在途用户回合、无 pending plan（caption 问不是计划）。
+    # 准入拍此刻通过：无在途用户回合、无 pending plan。
     trigger_task = asyncio.create_task(
         run_trigger_turn(uuid.UUID(pid), TRIGGER_UNDERSTANDING, "s22-landing")
     )
     await asyncio.sleep(2)  # 让触发回合过准入、进入 LLM loop 窗口
-    turn1 = await answer_caption_gate(ctx, turn1)  # 回放 dock 计划（在 loop 在途期间）
+    turn1 = await ctx.chat(pid, "把我的视频做成 3 张金句卡")
     check(is_plan_dock(turn1["assistant_message"]),
-          "the caption answer docks the plan while the trigger loop runs",
+          "the quote-card turn docks the plan while the trigger loop runs",
           turn1["assistant_message"])
     review = await trigger_task
     check(
@@ -4967,7 +4891,7 @@ SCENARIOS = {
     "S4": s4_material_chain_and_estimate_foundation,
     "S5": s5_revision_chat_always_wins,
     "S6": s6_interrupt_consolidated,
-    "S7": s7_caption_mode_gate,
+    "S7": s7_caption_mode_default,
     "S8": s8_research_grounds_writer,
     "S9": s9_consult_never_books,
     "S10": s10_sse_turn_streaming,

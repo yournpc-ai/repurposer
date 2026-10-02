@@ -1509,6 +1509,11 @@ const en = {
       subs: "captioned",
       dub: "voice-over",
       bilingual: "bilingual",
+      // The caption-mode fact row (ADR-099 §8): the plan card shows the
+      // chain's caption policy as a visible, changeable default.
+      captions: "Captions",
+      source_only: "source language",
+      target_only: "target language",
     },
     // 决策包阅读层 (iter-2 ③, ADR-089 §4 R16): the plan card's reading layer
     // — one Content Plan's output line = kind + language + caption form /

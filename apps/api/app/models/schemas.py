@@ -672,7 +672,7 @@ class PresentPlanArgs(BaseModel):
     )
     caption_mode: Literal["bilingual", "source_only", "target_only"] | None = Field(
         default=None,
-        description="Caption mode for captioned-video runs (write_quotes / caption-bearing recipes). None = chat should ask the user; a value = the answer already recorded.",
+        description="Caption mode for captioned-video runs (write_quotes / caption-bearing recipes). Set it only when the user's own words already name the mode; when omitted, the system derives the default and the plan card shows it as a visible fact the user can change with one sentence.",
     )
     tasks_explicit: bool = Field(
         default=False,

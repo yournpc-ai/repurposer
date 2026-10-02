@@ -39,7 +39,7 @@ skipped (the wake IS the continuation, unchanged).
 Storage shapes preserved: message.intent still carries the proposal dumps
 (TaskListProposal / WiringProposal / QuestionProposal /
 AnswerProposal, built here from the accepted call's params plus the turn's
-prose), and the caption-mode stash stays a TaskListProposal dump.
+prose).
 
 T2b 感知族 (ADR-077 判词②): the read tools (``app/chat/perception/``)
 dispatch straight from ``execute`` — they never carry a disposition, never
@@ -86,18 +86,13 @@ from app.chat.service import (
     _ASK_BACK_TEXT,
     _ask_content,
     _bare_question,
-    _build_caption_mode_question,
     _cannot_do_text,
-    _caption_choice_is_meaningful,
     _checkpoint_callback,
     _compute_plan_reasons,
     _create_message,
     _create_run_from_tasks,
     _derive_chat_caption_mode,
-    _detect_caption_mode,
     _dock_question,
-    _has_resolved_caption_mode,
-    _needs_caption_mode_question,
     _prefers_zh,
     _resume_ack_line,
     _reminder_tail,
@@ -128,7 +123,6 @@ from app.models.schemas import (
     QuestionProposal,
     RenderStatus,
     ReviseOutputArgs,
-    TaskListProposal,
     WiringProposal,
     edit_kind_for_params,
     resolve_recommended_id,
@@ -502,37 +496,6 @@ class ChatTurn:
                 "empty task list — to ask the user first, call ask_user; for "
                 "a purely informational reply, call answer."
             )
-        proposal = TaskListProposal(tasks=params.tasks, summary=prose, name=params.name)
-        # Caption mode for captioned-video runs (RECIPES §4.7): when the chain
-        # asks for a quote card and the user didn't name a caption mode, dock
-        # the choice BEFORE letting the run start — the answer rides
-        # run.context.caption_mode downstream. The stashed TaskListProposal
-        # dump rides the question's `intent` field; the answer path replays
-        # it once the user picks a mode.
-        if (
-            _needs_caption_mode_question(params.tasks)
-            and _detect_caption_mode(text) is None
-            and not _has_resolved_caption_mode(project)
-            and await _caption_choice_is_meaningful(db, project, params.tasks)
-        ):
-            caption_question = _build_caption_mode_question(text)
-            stashed_proposal = proposal.model_dump(mode="json")
-            assistant_message, bailed_run_ids = await _dock_question(
-                db,
-                self.conversation_id,
-                caption_question.question,
-                QuestionPayload(
-                    kind="question",
-                    question=caption_question.question,
-                    options=caption_question.options,
-                    allow_freeform=caption_question.allow_freeform,
-                ),
-                intent=stashed_proposal,
-            )
-            self.outcome = (
-                assistant_message, None, bailed_run_ids, self.settled_question
-            )
-            return None
         try:
             validate_task_list(params.tasks)
         except ToolRejected as e:
@@ -541,10 +504,11 @@ class ChatTurn:
             # adjudication _create_run_from_tasks ran at the birthplace,
             # now BEFORE the dock so only registry-valid chains ever dock.
             return f"{e} (available: {getattr(e, 'suggestions', [])})"
-        # Caption-mode resolution rides the DOCKED intent now (was: the
-        # same-turn run's TaskSpec): keyword > stashed answer >
-        # source_only-if-no-distinct-alt — one shared funnel; Start reads
-        # intent.caption_mode off the stored pending.
+        # Caption mode (ADR-099 §8 default absorption): the funnel derives
+        # what the user didn't name — fresh keyword > the previous dock's
+        # value > source_only when a distinct second language makes the
+        # choice real — and the stamped value rides the docked intent;
+        # Start reads intent.caption_mode off the stored pending.
         caption_mode = await _derive_chat_caption_mode(db, project, params.tasks, text)
         source_pin, exemplar_pin = await self._role_pins_for(params.tasks)
         await self._dock_plan_as_question(

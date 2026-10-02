@@ -25,11 +25,10 @@ brief (出书决策只看 brief).
 
 Storage shapes preserved: docked rows and ``message.intent`` still carry
 ``InferredIntent`` dumps (built here from the accepted call's params plus
-the turn's prose), the caption-mode stash stays a bare ``InferredIntent``
-dump, and an ask turn's brief-only ``pending_brief`` row is byte-identical.
-The 判词⑦ hybrid-flip machinery retired structurally — a tool call IS one
-action; the impossible hybrid shapes have no wire form anymore (their
-outcomes survive as rejections).
+the turn's prose), and an ask turn's brief-only ``pending_brief`` row is
+byte-identical. The 判词⑦ hybrid-flip machinery retired structurally — a
+tool call IS one action; the impossible hybrid shapes have no wire form
+anymore (their outcomes survive as rejections).
 
 T2b 感知族 (ADR-077 判词②): the read tools (``app/chat/perception/``)
 dispatch straight from ``execute`` — never a brief write, never an
@@ -69,21 +68,16 @@ from app.chat.service import (
     _active_run_line,
     _ask_content,
     _bare_question,
-    _build_caption_mode_question,
     _cannot_do_text,
-    _caption_choice_is_meaningful,
     _checkpoint_callback,
     _compute_plan_reasons,
     _create_message,
-    _detect_caption_mode,
+    _derive_chat_caption_mode,
     _dock_question,
     _draft_from_persona_echo,
-    _has_resolved_caption_mode,
-    _needs_caption_mode_question,
     _needs_media,
     _prefers_zh,
     _reminder_tail,
-    _resolved_caption_mode,
     _safe_task_estimate,
     _topic_gate_question,
     answer_question,
@@ -814,69 +808,17 @@ class PlanTurn:
             )
             self.outcome = (assistant_message, None, self.settled_pending, [])
             return None
-        # Caption mode for captioned-video runs (Phase 1 plan-path fix,
-        # 2026-08-25, RECIPES §4.7): dock the bilingual/source/target choice
-        # before the task_book; the accepted call's InferredIntent dump rides
-        # the question's `intent` field, the answer path replays it verbatim
-        # back into PendingPlan.
-        if (
-            _needs_caption_mode_question(params.tasks)
-            and caption_mode is None
-            and _detect_caption_mode(self.text) is None
-            and _detect_caption_mode(params.specific_instruction or "") is None
-            and not _has_resolved_caption_mode(project)
-        ):
-            if await _caption_choice_is_meaningful(db, project, params.tasks):
-                caption_question = _build_caption_mode_question(self.text)
-                stashed_intent = InferredIntent(
-                    action="draft",
-                    tasks=params.tasks,
-                    answer=echo,
-                    specific_instruction=params.specific_instruction,
-                    tasks_explicit=params.tasks_explicit,
-                    brief=params.brief,
-                    material_text=params.material_text,
-                    name=params.name,
-                ).model_dump(mode="json")
-                assistant_message, bailed_run_ids = await _dock_question(
-                    db,
-                    self.conversation_id,
-                    caption_question.question,
-                    QuestionPayload(
-                        kind="question",
-                        question=caption_question.question,
-                        options=caption_question.options,
-                        allow_freeform=caption_question.allow_freeform,
-                    ),
-                    intent=stashed_intent,
-                )
-                self.outcome = (
-                    assistant_message, None, self.settled_pending, bailed_run_ids
-                )
-                return None
-            # §2.3/D4 (2026-08-28): no distinct alt language exists (the source
-            # material's language equals every candidate) — bilingual would
-            # print one language twice. Skip the question entirely and stamp
-            # source_only; the run falls through to the plan dock.
-            caption_mode = "source_only"
-        # Caption-mode keyword auto-classification: an unambiguous bilingual
-        # keyword ("双语" / "bilingual" / "中英对照" / "双语字幕" / "中英双语")
-        # stamps the mode even when the call didn't set it. Source/target-only
-        # keywords stay unset here — they're ambiguous without knowing the
-        # source language, the chat question handles them.
-        keyword_mode = _detect_caption_mode(self.text)
-        if keyword_mode is not None and caption_mode is None:
-            caption_mode = keyword_mode
-        # Inherit the answered caption mode before the pending_brief write
-        # (2026-08-29 追问丢答 root-fix): the fresh call's caption_mode is
-        # None on any refinement turn that doesn't re-mention it — without the
-        # inherit, "answer bilingual → 改成 5 张 → Start" landed a run with no
-        # caption_mode and the NEXT turn re-asked the already-answered
-        # question. Precedence: call-set > fresh keyword > stashed answer.
+        # Caption mode (ADR-099 §8 default absorption): what the call didn't
+        # set rides the shared funnel — the user's own words (literal
+        # bilingual keyword) > the previous dock's value > source_only when a
+        # distinct second language makes the choice real. The stamped value
+        # rides the intent end-to-end (dock → pending_brief → Start) and the
+        # plan card shows it as a visible, changeable fact row — the user
+        # edits it with one sentence, never a blocking question.
         if caption_mode is None:
-            stashed_mode = _resolved_caption_mode(project)
-            if stashed_mode is not None:
-                caption_mode = stashed_mode
+            caption_mode = await _derive_chat_caption_mode(
+                db, project, params.tasks, self.text
+            )
         # Inherit the previous dock's NAME on an identical-chain re-dock
         # (2026-09-09 取证): a bare confirmation the router misjudged as a
         # draft re-proposes the SAME chain unnamed — the inherited name IS the
