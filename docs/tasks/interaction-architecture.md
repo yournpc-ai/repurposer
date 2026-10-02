@@ -1,6 +1,6 @@
 # Agent 交互架构迁移 — 施工简报（ADR-099）
 
-> Status: 批次 B（`cfb3488`）、批次 C·C+（`05e81ba` 暗置 + `1cbdad6` 启用，一个 release unit）与批次 S（S-int-1..9 场景入座）已落地——验证全部未跑、在册于各自批次验收节；D/E/G 未动工。
+> Status: 批次 B（`cfb3488`）、批次 C·C+（`05e81ba` 暗置 + `1cbdad6` 启用，一个 release unit）与批次 S（S-int-1..9 场景入座）已落地；**验收已跑**（用户授权施工会话代跑，结果在批次 S 验收节）——S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因在册（既有债四族 + C·C+ 账判软一项）；D/E/G 未动工。
 > 架构母法 = ADR-099。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
 
 ## 冻结事项（本简报全程不再议）
@@ -94,6 +94,20 @@ B → C·C+ → S → D → E → G1 → G2
 - 辅助件：`check_suggestion_block`（载荷边界负形 lint——label 全档/description 收窄档，证据句合法引数不误伤）/ `elicit_suggestions_turn`（方差口径：无卡措辞重试，present_plan/ask_user 错档硬红）/ `seed_keynote_project` / `resolve_note_in_process` / `_stale_pick_round`。
 - **承重观察（在册不处理）**：① `elicit_suggestions_turn` 对 ask_user/present_plan 的硬红是本组最脆断言——探索问被模型判成阻塞问或承诺 dock 时红 = 谱系档选择未立（回调 C·C+ 措辞或批 D 的事），非场景松劲；② "不静默采用"的行为面锁到 `run_id is None` 为止——stale 后如何重新锚定是散文高熵面，确定性强锁不可能；③ S-int-9 只锁 verbatim 与 token 负形，旧腔「质感」传染（推荐 vs 指令语气）超出确定性判定面；④ S-int-8 与 S7-A 前半同构（本组自持行为锁的轻量版），参数链端到端仍是 S7 座位。
 - **未跑验证（用户清单）**：① 全量 pytest（本批零 pytest 面改动，§既有债 11 红不算本批账）；② prompt_gate（唯一基线：对 B 后基线漂移≈零——本批纯剧本，翻剧本 ≠ 本批引起，先重跑排除 provider 漂移）；③ chat_scenarios 全量（重点 S-int-1..9 + S7/S19/S20A·B/S22——S22 空洞绿形态已知勿报新 bug；**S-int 9 场景全绿 = 迭代一收口 = 迭代二开工许可**）；④ web tsc + 构建（本批零前端改动，§既有债两处除外）；⑤ live 事故④全链复跑（浏览问 → answer+建议卡 → 点选 → 下回合编译；stale 点选 → 具名标注；label 无执行参数目检）。
+
+**批次 S 验收结果**（用户授权施工会话代跑，逐项对账完毕）：
+
+- **pytest**：906 绿 + 11 红——既有债清单逐项命中、零新增。清单更正：graph_wiring 族实为 **8 项**（524 布局族 ×5 + transcript queued ×2 + read_face exploration ×1），总数 11 不变。
+- **web tsc**：既有债两处逐项命中，零新增。
+- **prompt_gate**：11 探针全绿。probe F 首跑 6/12 触阈（threshold 8），按铁律重跑 10/12 过——provider 漂移实证（摆动幅度 6↔10 在册）；A/B/C/H-H4 满分，D 10/12、E 11/12、G 11/12。
+- **S-core 9/9 绿**（收口判据达标）。S-int-5 首跑红：三硬红（无 plan dock / 无字幕闸 / 无 ask_user）全过但三个浏览措辞均收纯 answer 无卡；按纪律重跑转绿。承重观察⑤：**浏览回合建议卡发射率不稳**——首跑 0/3、重跑即中；档选择本身（不劫持）两跑全胜，发射与否是波动面。
+- **Legacy 26 本：17 绿 9 红，归因全部在册**：
+  - **既有债 A（活动帧白名单漂移，一根四本）**：S6f/S10/S20A/S21A——`922c301` 写死五键白名单，`228a1d1`（09-23 活动帧时刻/耗时批）给帧加 `at`/`duration_ms` 未回更场景；与本迭代零交集。修法 = 白名单回更现行线契约（场景维护批，非迁就）。
+  - **既有债 B（探索族漂移）**：S23 确定性 NoResultFound ×2（candidate_set 节点不生）+ S-explore-2 链失速（两跑两个不同失速点：三族出生 / selectsReady 里程碑）；与既有纯测试债 read_face exploration 族同源——stash 实证 `cfb3488` 即红，先于本迭代。需独立取证批定位断点。
+  - **既有债 C（S22 时序假设失效）**：落点拍两跑同红——docstring 自注的"罕见反方向只会误红"已常态化：前缀缓存时代触发 loop 快于剧本的 2s+dock 窗口，竞态假设系统性破裂。场景需重定时（另开批）。
+  - **S16 remix flake 未分清**：两跑两个不同失败点（ReadTimeout / warm decompile 未言语），需独立取证批。
+  - **本迭代账（C·C+ 扰动候选，承重观察⑥）plan 承诺档判软**：clips 类明确点名工作在 S10 首跑与 S5 重跑同形收在散文 answer（散文自陈 "The plan:" 却不 dock，intent 戳 `interaction_constitution.v1` 在场）；S5 首跑另见修订压面板钉失效一次。quote 类点名（S-int-4 ×2、S7 三拍）不受影响——档软化是 ask 依赖的波动，非档消失。处置 = **不修场景**，按 C·C+ 验收既定路径回调措辞（强化「明确点名工作恒收 present_plan——非承诺档是开放探索的去处，永不替代点名工作的 dock」），建议并入批 D 首批同批修。
+- **收口判定**：S-core 全绿达标（S-int-5 一次重跑在纪律内）；gate 全绿；既有账全部归因。**迭代二开工许可由用户拍板**——C·C+ 账判软项建议随批 D 首批处理。
 
 ---
 
