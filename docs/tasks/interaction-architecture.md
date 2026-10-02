@@ -1,6 +1,6 @@
 # Agent 交互架构迁移 — 施工简报（ADR-099）
 
-> Status: 批次 B 已落地（单 commit，验证项未跑、在册于批次 B 验收节）——C·C+ 待 B 合并验证后开工；S/D/E/G 未动工。
+> Status: 批次 B（`cfb3488`）与批次 C·C+（`05e81ba` 暗置 + `1cbdad6` 启用，一个 release unit）已落地——验证全部未跑、在册于各自批次验收节；S/D/E/G 未动工。
 > 架构母法 = ADR-099。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
 
 ## 冻结事项（本简报全程不再议）
@@ -59,6 +59,18 @@ B → C·C+ → S → D → E → G1 → G2
 **suggestions 载荷边界（schema 硬约束优先，不靠 prompt 自觉）**：携带 = 方向 + 一句理由 + 证据来源（如 beat anchor 区间）；禁止 = 语言/字幕模式/时长/画幅/条数/成本/具体 recipe/任何可直接组成 present_plan 的执行承诺。实现 = `SuggestionItem` 既有 ≤40 字符 label 校验 + 探测期内容 lint 断言；**不新建大 validator framework**。
 
 **source_state（ADR-099 §4）**：零计数器——stale ⟺ ① 依据素材已删除/失败 ② source_turn 后有新素材理解落地 ③ source_turn 后有方案 dock 或 run 开工；点选时刻定向查询，全部由已持久化字段驱动。
+
+**批次 C·C+ 落地记录**（施工会话交付，两 commit `05e81ba`+`1cbdad6`，验证全部未跑）：
+
+- commit 1（暗置）：schemas 两座 answer args 增 `suggestions`（共享 `dock_worthy_suggestions` 校验——WrapUpArgs 语义零漂移，纯测试锁实证）；`SuggestionRef`/`SuggestionRecord` 契约；messages 表 `suggestions` JSONB 交互块 + `suggestion_ref` 列（migration `p7c2d4e6f8a1`）；纯核模块 `app/chat/suggestions.py`（record 戳 / stale 谓词 / provenance note 三件，零 DB 零 LLM）；`stamp_suggestions` 单座戳块（plan/propose 两座 `_answer` + trigger `_dock_question` 路径，空集 no-op 保零 diff）；`resolve_suggestion_note` 落地解算（plan/propose 两路装配座 weave 进 LLM-facing message，`self.text` 恒为用户原话不进闸门/关键词检测）；trigger provenance 缺口修复 = answer endpoint `_suggestion_ref_for` **代码重构 ref**（被答行 = source_turn、option id = suggestion id）零 wire 变更；前端 OptionDock 卡渲染（散文排干后落，复用三形态机承重结构）+ 回放重建 + 词表门测试同批登记 `suggestionOptions` 键。
+- commit 2（启用）：`_interaction_constitution.j2` 单定义三消费（SPEECH 总律之后、各分则之前，渲染实证各烘焙一次）；两路 answer catalog line 增 0-3 非承诺选项语义；两处 answer 契约段增载荷边界（方向+一句理由+证据来源；禁执行参数枚举；recommended = 当前倾向唯语义）；`INTERACTION_POLICY_VERSION = "interaction_constitution.v1"` 戳盖进 assistant 行 intent dump（`_create_message` 单座；装配器不读 intent 入模型面——实证 `context.py` 零 intent 引用）。
+- **零 diff 判据的施工裁定（承重，在册）**：params_model 的 JSON schema 全文（含 Field 描述与 SuggestionItem 嵌套描述）直达模型面，commit 1 的 suggestions 字段严格意义上模型可见——「catalog 即开关」成立的经验依据 = 本仓教义（注册表条目扰动 = prompt 扰动，catalog/契约段才是行为驱动主面）；未被 catalog 与 prompt 契约广告的孤立可选参数不驱动发射。仲裁 = 唯一基线（prompt_gate + 全量剧本）；若漂移归因于自发发射，退路 = Field 描述移至 commit 2 或并 commit。且即便自发发射，commit 1 全链（持久化+渲染）已备，表现为功能提前生效而非破碎。
+- **B 验证状态的实证补丁**：纯 pytest 在 HEAD `cfb3488`（B 后、本批前）即 11 红（stash 零假设实证，与本批零交集）——test_decompile（display_name）、test_graph_wiring 六项（524==464 布局族 + transcript queued 族 + read_face exploration 族）、test_import_direction（pipeline→chat import）、test_wire_tiers（reasoning_split vs think_block）。**B 验证状态未知，C·C+ 带此债开工**（交接提示词 §一 已在册）；本批交付时 906 绿 + 同 11 红，零新增。
+- **越名单确认结论**：`PresentPlanArgs.caption_mode` Field 描述（B 同法补齐座）与本批一致——"Set it only when the user's own words already name the mode; when omitted, the system derives the default and the plan card shows it as a visible fact the user can change with one sentence"，无 "None = chat should ask the user" 残留；suggestions 边界明确禁字幕模式参数入载荷，两座无冲突。
+- **未跑验证（用户清单）**：① 全量 pytest（本批新文件 17/17 绿已跑；全量 906 绿 + 11 红 stash 实证既有）；② prompt_gate（catalog 全局扰动面——先重跑一次排除 provider 漂移再判红；翻剧本 → 调宪法措辞或契约边界句，不回调阈值）；③ chat_scenarios 全量（重点 S7 新三拍 / S19 / S20A·B / S22——S22 空洞绿形态已知勿报新 bug）；④ web tsc + 构建（tsc 已跑：仅 flow/FlowNodeCard、flow/layout.test 两处 stash 实证既有债）；⑤ live 事故④复跑（浏览问 → answer+建议卡无 present_plan 无字幕 dock；点选 → 下回合带 suggestion_ref 编译；stale 点选 → 具名标注；label 无执行参数目检）。
+- **承重观察（在册不处理）**：① 前端 suggestion 点选沿用 legacy pill 姿态（无乐观用户气泡、无 rollback 注册）——既有 pill 同形，未随批升级；② trigger 路径的 suggestion_ref 是 answer endpoint 侧代码重构的瞬态件（用于落地解算与 note），未持久化进 answer payload——取证可经 option id + 被答行回join；③ i18n 零新增键——建议卡复用 `questionDock.recommended`，卡面其余文案全来自模型载荷（label/description），符合「展示文案二源律」；④ 版本戳座位 = intent dump（无 metadata 列），material beat / activity log 等直建 Message 的系统行不盖戳（非交互政策产物）。
+- NAMING.md §2 五词行（终态交互形态 / 交互宪法 / 言语提交协议 / suggestion_ref / source_state）已随批登记。
+
 
 ---
 
