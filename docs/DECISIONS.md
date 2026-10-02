@@ -2477,3 +2477,93 @@ A3-lite 合成规则抽为 `product_graph` 的纯函数 `effective_rank_edges(no
 **Consequences**: 新链 consumer 出生即深度 2，三列阅读法保留且列距回到 pitch 节奏（净 gap 差 = 帧宽分档纹理 124 vs 184，非缺陷——验收口径具名，不看像素等距）；存量事故项目读时归一即修复，零迁移；append-only 保序从文档律升为成文 freeze 律 + 门守卫 + 负向测试。否决备查：岛内自管 rank（破单一 rank 权威 + 需方向豁免）/ 合成边降 rank 豁免（翻 L5 案，杀三列阅读法）/ 按实际占据记账（破 append-only——货架岛第 5 成员会推走全部下游）/ transcript 特判（症状药，下一类派生关系再炸）/ topology_rank 与 layout_rank 拆名（Z 成立后两名永不分叉，不开用不到的概念孔）。客户端 `layout.ts` 机制零改动（`x = rank × PITCH` 与 `spec.island` 两入口不动——服务端归一后死 cohort 自然无戳）。
 
 **Related**: ADR-086（Product Graph 合同——空间权威三律同族；A3-lite/L5 出处）/ ADR-097（artifact 本体——读面投影同族 + lineage 真边边界）/ ADR-082（空气压缩——y 侧律不动）/ ADR-057（画布定居取景——出生帧承重）/ ADR-079（worker 认领守卫——零 diff）
+
+## ADR-099: Agent 交互架构——终态交互形态谱系 + 交互宪法 + 言语提交协议
+
+**Status**: Decided (2026-10-02)；施工合同 = `tasks/interaction-architecture.md`
+
+**Context**: 一次 live 会话（project `6b42bd6b`）连环踩四事故：① 能力答复把内部组织指令念成台词（"下面按你想要的动作归类："——`_capability_answer` 的 `group by the user's ACTIONS` 被模型叙述出来）；② 素材评审判定以指令质感落地（"先按金句卡方向走"——trigger beat① "the direction you'd take" 与 beat④ "close ON the verdict" 合流，法里没有任何地方说"判定以提议质感给出"）；③ repair 机械漏成台词（被拒 iteration 的散文已流式送达、活动行"已重新整理好"自白、被拒版本的竖版短片在最终方案里静默消失）；④ 浏览问被两级跳劫持（用户自定义输入"还有其他推荐吗"——没有任何车道匹配 → 落入默认车道 `present_plan` → caption gate dock 出阻塞式「字幕模式？」——用户根本没有决定要做任何东西）。
+
+四事故分属三层，不可统一归因于"车道病"：**speech realization 层**（①②——判断做对、言语实现错）、**decision/control 层**（④第一跳——工具谱系断档：`answer` 纯告知与 `present_plan` 承诺形之间没有"给选项但不形成承诺"这一档，模型无档可选只能向承诺形靠）、**speculative timing 层**（③——言语先于终态裁决 commit，被拒即证伪）。要统一的是架构边界，不是失败症状。根因不是某条 lane 写错，而是**一个 scenario lane 同时承担意图识别/决策/状态转换/工具选择/参数判断/确认策略/文案形态/语气/禁词/校验边界**——职责混合导致 lane 互相覆盖扰动（注册表条目扰动不相干场景有实证），且枚举永远追不上用户表达的自由度（"还有其他推荐吗"这种浏览问在车道清单写成之后才出现）。三轮外部评审收敛后的分流原则：高熵判断归 LLM（原则治理）、事实归代码盖章、低熵且可验证的状态转换与不可逆成本归结构化契约与代码闸门（与校验分层律同族，是其向决策层的延伸）。
+
+**Decision**:
+
+### 1. 架构边界四层
+
+```
+World Truth（代码盖章：素材状态/图状态/交付事实/挂起决定/成本权限）
+    ↓
+Decision（LLM 在结构化形态间选择：当前回合该以哪种交互形态回应）
+    ↓
+Speech（LLM 自由言语：措辞/语气/组织——高熵，宪法治理）
+    ↓
+User
+Code Guard（独立层：付费执行/删除/权限/参数合法/确认——不可逆一律代码闸）
+```
+
+判别式（"什么可以交还给模型"的可操作标准）：**高熵、强上下文依赖、可恢复、主要是言语实现的** → LLM 自主；**有明确状态转换、跨回合一致性要求、不可逆副作用、可确定性验证、错误代价高、影响承诺或付款的** → 结构化/代码，永不依赖原则自觉。
+
+### 2. 终态交互形态谱系
+
+终态工具按交互形态归为四档，属性正交、互相排斥：
+
+| 形态 | 信息输出 | 用户选择 | 阻塞 | 形成方案 |
+|---|---|---|---|---|
+| `answer` | ✅ | 无 | 否 | 否 |
+| `answer` + suggestions | ✅ | 可选（可忽略） | 否 | 否 |
+| `ask_user` | ✅ | 必选 | 是 | 否 |
+| `present_plan` | ✅ | 确认/改 | 是 | 是 |
+
+revision 族（revise_plan / revise_selects / revise_output / edit_output / edit_graph）同入此表：仪式由代码裁决（直跑/重 dock），契约已载 "the system decides, never your call"。trigger 回合 `wrap_up`(+suggestions) 是同一形态的主动变体。**谱系是封闭的**：新增需求先过路由律——「这是新的交互形态，还是现有形态的新内容？」新内容不加 lane；措辞不加形态；新的用户承诺语义才考虑新形态（且必须 ADR）；状态/权限/成本永远优先进结构化契约或代码。
+
+### 3. answer+suggestions = 非承诺选择形态
+
+- **构造性非承诺**：不生成 plan、不修改 work、不产生执行承诺、可忽略——系统从工具后果直接知道无承诺存在，模型永不自报状态（禁 `commitment=none` 式声明字段）。
+- **载荷边界**：suggestions 携带**方向 + 证据**（取自哪段、为什么是这段——用户可判断的依据，如 beat anchor 区间）；**永不携带执行参数**（条数/语言/字幕模式/画幅/时长目标——这些只在用户选定后、`present_plan` 时刻以可见默认值出现）。违界即 shadow plan（无确认位的 mini-present_plan），探测期内容 lint。
+- **同一 commit point**：suggestions 是 terminal interaction payload，与散文同属一个终态信封——校验通过才一并 commit（散文打字机释放 + 卡 dock）；被拒整包丢弃，用户永远只见最终包，不存在"卡闪出再偷换"。
+- **`recommended` 唯一语义** = agent 当前倾向（trigger 与 answer 两路径同义），永不表示已选择/默认执行/系统默认/最终方案。
+- 建议只在**当前上下文存在具体可供选择的下一步方向**时出现；能力目录换皮成按钮 = 噪音，契约禁止。
+
+### 4. 建议点选 provenance
+
+点选是控制事件不是普通用户输入（"接受上一轮候选" ≠ "自发提出同名需求"）。建议项随消息持久化于消息 JSONB 交互块（**不进 `mentions`**——mention 语义是"指认既有实体"）：`suggestions[] = {id, label, description, recommended, source_turn, source_state}`；点选后的用户消息携带 `suggestion_ref = {source_turn, suggestion_id}`。
+
+**`source_state` 是过期判定锚，不是全局版本协议**——全仓无现成 revision 计数器（施工前实证），最小实现 = 点选时刻**定向世界校验**，全部由已持久化字段驱动：stale ⟺ ① 候选依据的素材已删除/处理失败；② source_turn 之后有新素材理解落地（推荐格局已变）；③ source_turn 之后有方案 dock 或 run 开工（offer 语境已过）。三条件即全部 stale 谓词，零新增计数器/零全局版本系统；若运行证据表明确需版本戳，单座 = `projects` 行一整数 + 单点递增（届时补 ADR 注记），不进本批。
+
+过期候选重新落地论证、**永不静默采用**；护栏：provenance 只提供依据与过期信号，**永不静默压过用户自己的话**（用户手打"就做竖版，但不要字幕" 恒高于候选载荷）。trigger 建议卡既有的 provenance 缺口（今天点选即丢源）随谱系批同批修复——不立独立表（建议生命周期 = 消息生命周期）。
+
+### 5. 交互宪法与准入闸
+
+`app/prompts/chat/_interaction_constitution.j2`（单定义，router/chat_intent/trigger 三消费）：
+
+```
+1. JUDGMENT IS YOURS, THE DECISION IS THE USER'S — 每个方向是带理由的
+   推荐，一词可收尾；永不是替用户拍板的指令。
+2. INTERNAL MACHINERY NEVER BECOMES SPEECH — schema/车道/分组方案/管线
+   状态/重试修复，永不叙述（此条同时绑定代码 chrome）。
+3. THE WORLD PRECEDES SPEECH — 只说世界已证明的；可能已变动的事实不
+   用现在时断言；无依据则不言。
+4. DEFAULTS ABSORB DETAILS — 默认值能扛的参数永不阻塞用户；只问答案
+   最改变结果的问题。
+5. NEVER INVENT WHAT THE USER DIDN'T SAY — 平台/场所/受众/事实，用户
+   没说、世界没证的，永不发明。
+6. PLAIN SPEECH — 朴素日常词，用户语言，无营销腔/行话/机器味。
+```
+
+**准入闸**（防宪法膨胀，写进文件头作为元律）：任何新条文过四问——① 跨两个以上场景成立？② 能结构化（schema/状态/校验/代码）吗——能则不准进？③ 现有条文推导不出吗？④ 加一条必须删/并一条？元律原文："The Constitution governs only cross-cutting behavioral principles that cannot be expressed more reliably as state, schema, tool contract, or code. Prefer deletion and generalization over addition."
+
+### 6. 契约/车道判别式
+
+**Contract 定义"允许什么"**——与具体用户措辞无关、可跨场景复用、可独立验证、不规定下一回合完整行为、不规定台词。**Lane 定义"遇到什么就按什么剧本走"**——病灶，拆除对象。工具契约里的 when 子句（如 suggestions 的载荷边界）是契约不是车道；形如"当用户说 X 时做 Y 再说 Z"的行为法才是车道。
+
+### 7. 言语提交协议（Speech Commit Protocol）
+
+**凡依赖终态裁决的言语，裁决落地前永不 commit。** DeferredFrames（缓冲+落地时刻再裁决）从素材待命专用推广到一切可被 validator 拒绝的终态调用（`present_plan` echo 等）：被拒言语从未对用户发生，"落地与已流出不一致"的对账问题随之消亡——**代码永不解析自然语言散文去判定承诺**（已告诉用户什么永远由结构化终态 payload 约束）。与终态裁决无关的安全言语（世界已确认的事实、对话性言语）不缓冲、照常即流。协议最小形态 = 四态机 **OPEN → BUFFERING → ACCEPT→FLUSH / REJECT→DROP→RETRY**（RETRY 陈 buffer 必清）；DeferredFrames 自然演化为此机，不重写、不建第二套 speech routing。打字机律的精确语义 = **禁整段瞬移**，非"首字即流"——校验后打字机释放完全守律；方案回合首字延迟 = 校验时长，定案接受（死寂由 StatusLine 相位叙事覆盖），永不建 token 级"安全段"识别（那要求模型自标安全段 = 自报状态，禁）。代码侧盖 `interaction_policy_version` 戳（观测与回归用，不进模型面）；装配器无独立 few-shot 通道（context.py 明示 "not a chat-history dump"，历史回合 = 会话证据非行为示范）——在途旧会话不做历史清洗，旧腔调风险由新架构 golden suite 的「旧历史 × 新政策」回归场景覆盖。
+
+### 8. 默认值吸收边界
+
+"默认值能扛的参数永不阻塞"的边界判定 = 五词清单：**reversibility / risk / surprise / commitment / cost**——五项全不命中 → 默认吸收（字幕模式/背景音乐/字体）；命中其一 → 必问（公开发布/发布目标/覆盖资产/高成本模式/权限/删除），即便有默认值。caption gate 据此拆除：`_needs_caption_mode_question` 双调用点 + stash/replay 机械整删；既有设施保留复用——`caption_mode` 的 `Literal["bilingual","source_only","target_only"]` schema 校验（schemas.py:673）、`_caption_choice_is_meaningful` 推导（无第二语言时跳过戏剧化提问）、Start 经 Confirmed Scope 读**当前卡面值**。`caption_mode` 落为方案卡**可见可改的事实行**（手改骑既有 prior_intent 通道），局部拆除不升级为参数系统重构。FRAMING（镜头跟人选择）同构，登记需求池候选（批H，不随本批施工）。
+
+**Consequences**: 浏览问有档可去（answer+suggestions），"先按金句卡方向走"式指令与"下面按…归类"式 schema 漏出由宪法①②承接而非新车道；被拒言语永不流出，事故③整类消亡（含"静默丢条目"——未被公开承诺的东西无需交代）；caption 阻塞问消失；宪法替代约 40% 言语形态 lane 文本，删除经逐簇零假设探针（3 smoke → 8-12 关键剧本 → 定点重放，baseline/candidate 交错）在新架构 golden suite 上度量。否决备查：① browse/recommend 车道立法（批A——穷举老路，撤回）；② Decision Contract 自报字段（`mode/commitment/blocking`——模型声明状态与世界漂移的反模式）；③ token 级安全前缀识别（需模型自标，禁）；④ 代码 NLP 解析散文对账（终变成另一个 LLM evaluator）；⑤ suggestions 塞进 mentions（语义不同：指认实体 vs 交互选项）；⑥ 在途会话历史清洗（历史 = 工作上下文，版本戳+回归场景已覆盖）；⑦ 悲观串行（先校验后流出——死寂首字延迟，被乐观缓冲替代）。
+
+**Related**: ADR-052（厚 agent——判断归产品层一个 agent 的延伸）/ ADR-087（Confirmation Doctrine——谱系与确认教义同座）/ ADR-088/089（北极星——付费执行只从已确认范围开始，Code Guard 同族）/ ADR-093（言语真值/起始句言语权）/ ADR-094（方向否决资格——宪法①的执行细节）/ ADR-095（三寄存器——活动行修宪同族）/ ADR-058（二源律）/ ADR-060（echo 防编造——宪法⑤同族）

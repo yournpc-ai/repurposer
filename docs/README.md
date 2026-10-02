@@ -45,6 +45,7 @@
 | 探索产物 / Candidate Set / Select / Content Plan / Execution Scope / Decision Package / Confirmed Scope Snapshot / Work Session / 停顿定律 / 项目记忆分层 | `DECISIONS.md`（ADR-088/089）+ `JOURNEYS.md` 旅程四 | 探索产物族 / 双写门 / I-EXPLORE-01 / 双状态机 / 记忆四层合同只住 ADR-088；能力编译 / 决策包 / 快照 / 停顿定律 / 迁移弧只住 ADR-089；「为什么这样裁」只住旅程四；NAMING.md §2 + N-55 有词汇行，其他文档只引用 |
 | edit_output / quote→range / work / version / archived / confirm_strategy | `DECISIONS.md`（ADR-090/091/092） | 精确编辑词表与解算语义只住 ADR-090；产物两身份与归档不变量只住 ADR-091；计费偏好三档与确认闸座位只住 ADR-092；其他文档只引用 |
 | work_key / artifact_key / artifact_role / deliverable / facet / companion / render owner / artifact readiness | `DECISIONS.md`（ADR-096/097） | 渲染所有权编译期声明 / defer 律删除 / 就绪三合取 / track 原子写 / 恢复纪律只住 ADR-096；Artifact 分层 / 归属 stamp 律（读层禁推断）/ 两层门 / 迟晋升 / 修订不变量 / lineage 边界只住 ADR-097；其他文档只引用 |
+| 终态交互形态谱系 / answer+suggestions / suggestion_ref / source_state / 交互宪法 / 言语提交协议 | `DECISIONS.md`（ADR-099） | 四层边界 / 四档形态表 / 非承诺选择形态载荷边界 / 点选 provenance / 宪法六条与准入闸 / 契约车道判别式 / speech commit protocol / 默认值五词清单只住 ADR-099；施工合同 `tasks/interaction-architecture.md`（迁移收口后现行法归 CHAT_ARCHITECTURE.md）；其他文档只引用 |
 
 ## 文档清单
 
