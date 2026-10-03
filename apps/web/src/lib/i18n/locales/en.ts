@@ -1360,13 +1360,18 @@ const en = {
      * ACTIVE-only (落定即退役 — draft 2026-09-28, extended to run
      * 2026-09-29): the settled receipt retired, the docked plan card / the
      * start speech + RunTaskList receipt is the evidence, so no
-     * draftDone/editDone/runDone keys exist. */
+     * draftDone/editDone/runDone keys exist. The repair pair is
+     * terminal-only (the rework span opens silently — no active frame):
+     * repair fires on the failed terminal (retries exhausted / the turn
+     * failed), repairDone on the redirected terminal (a guardrail steered
+     * the turn's form to another tool) — work facts, never the model's
+     * self-reflection. */
     activity: {
       draft: "Putting the plan together…",
       edit: "Making the change…",
       run: "Getting started…",
-      repair: "That answer didn't come out right — reworking it…",
-      repairDone: "Reworked it",
+      repair: "Couldn't get it done this time",
+      repairDone: "Changed approach",
     },
     /** The activity row's bounded expand detail (iter-3 S7, E7 诚实边界):
      * only the wire whitelist's fields — the raw count rides as a labeled

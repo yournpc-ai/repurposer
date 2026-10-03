@@ -274,19 +274,24 @@ async def _persist_activity_log(
     """activity 持久化 (2026-09-25): the turn's settled frames land as ONE
     activity_log message row, so a refresh replays the settled activity
     rows instead of silently dropping them (they were memory-only — the
-    flow changed on F5). Called on the COMPLETED path only, after the
-    sweep, on its own session (the turn's session already closed — its
-    commit is the turn's; this row is additive history). Best-effort: a
-    log failure degrades to a warning (the pre-persistence behavior),
+    flow changed on F5). The rejection forensic ledger (rejection 取证批)
+    rides the same row's intent — a silently-closed repair span still
+    leaves its rejected calls auditable. Called on the COMPLETED path only,
+    after the sweep, on its own session (the turn's session already closed
+    — its commit is the turn's; this row is additive history). Best-effort:
+    a log failure degrades to a warning (the pre-persistence behavior),
     never a failed turn."""
     frames = [f.to_dict() for f in projector.settled_frames()]
-    if not frames:
+    rejections = projector.rejected_calls()
+    if not frames and not rejections:
         return
     try:
         from app.models.database import AsyncSessionLocal
 
         async with AsyncSessionLocal() as db:
-            await record_activity_log(db, conversation_id, frames, ref=ref)
+            await record_activity_log(
+                db, conversation_id, frames, ref=ref, rejections=rejections
+            )
             await db.commit()
     except Exception as e:  # noqa: BLE001 — additive history is best-effort
         logger.warning(

@@ -65,14 +65,15 @@ run 数 / 落库行——永不锁 LLM 文案（禁令 #7）。例外：代码�
              分镜方向 → plan 链必含 select_clips + reframe_clip → run
              completed → 成片 render_spec 带 crop_track（确定性尾；fixture
              纪律同 S16，需 dev worker + MiniMax 配额）
-    S-int-1..11 New Interaction Contract（批次 S · ADR-099 golden suite，
+    S-int-1..12 New Interaction Contract（批次 S · ADR-099 golden suite，
              两层分离的新架构层——Legacy Regression 零改动）：Control 四
              形态各一（纯信息 answer 无卡无 dock / 探索 answer+suggestions
              / rootless wish ask_user / 点名工作 present_plan）+ 五新行为
              （浏览问事故④回归锁 / 建议点选 fresh 编译 / stale 点选具名
              标注三谓词全谱 / 无字幕参数默认吸收 / 旧 lane 历史 × 新政策）
              + 事故①②回归锁（批 D——能力答答复永不叙述分组方案 / trigger
-             判定提议质感形态面）
+             判定提议质感形态面）+ 事故③ wording 回归锁（批 G1——repair
+             静默开启 / 终态判定树 / rejection 取证台账落库）
 
 S4/S7/S8 起的 run 是真的（worker 会执行；writer 链走真 LLM——S4 用
 ``processing_status=COMPLETED`` 的 transcript 资产走 writer 链到 completed，
@@ -738,9 +739,17 @@ def _work_evidence(stream: "StreamTurn") -> tuple[bool, bool]:
     evidence channel after Phase 3 Batch B (③ deleted the inspecting /
     repairing phase emitters server-side, so the old phase-side
     corroboration and the SCENARIO_ACTIVITY_LEGACY downgrade hatch are gone
-    for good: there is no second signal left to disagree with)."""
+    for good: there is no second signal left to disagree with).
+
+    言语提交协议批 (G1): the repair span opens SILENTLY — a rejection's
+    wire evidence is the half-started call's CANCELLED frame (and the rare
+    born-terminal repair frame), never a repair active row. had_repair
+    keeps its old semantics ("this turn had a rejection" — the stream-law
+    skip): any cancelled frame or any repair-kind frame."""
     had_reads = any(a["kind"] == "read" for a in stream.activities)
-    had_repair = any(a["kind"] == "repair" for a in stream.activities)
+    had_repair = any(
+        a["kind"] == "repair" or a["status"] == "cancelled" for a in stream.activities
+    )
     return had_reads, had_repair
 
 
@@ -5391,6 +5400,104 @@ async def s_int11_trigger_verdict_offer_texture(ctx: Ctx) -> None:
     check_suggestion_block(row.get("suggestions") or [], row["id"], "S-int-11")
 
 
+async def s_int12_repair_never_confesses(ctx: Ctx) -> None:
+    """事故③ wording 回归锁（批次 G1 — repair 修宪 + rejection 取证）：
+    易触发执行护栏的回合（空项目直接点名 media 工作 → present_plan 的
+    出书门槛拒绝 → 护栏引向 answer/ask_user）里若真的发生了被拒迭代
+    （wire 上的 cancelled 帧 = 拒绝的唯一 wire 证据座），判定树必须成立：
+
+    ① 零 repair ACTIVE 帧——重试跨度静默开启，修复机械永不流成台词；
+    ② repair 帧至多一帧且只以终态出现：同形重试 = 零帧（未被公开承诺的
+       东西无需交代），转向 = 恰一 completed 帧（key = repairDone，说工作
+       变化），耗尽 = 恰一 failed 帧（key = repair）——key 永远落在新规
+       词表内（自白文案的静态锁在纯测试，wire 面锁键）；
+    ③ rejection 取证台账随 activity_log 行落库（intent.rejections 形状 =
+       tool_name/kind/iteration/detail/at）——被拒调用从事后不可考变为
+       可取证，且与判定树交叉一致（台账的被拒名 × 终态形态 ⇔ 转向帧有无）。
+
+    无拒绝发生的回合（模型一次过）= 判定树无对象——最多 2 个全新项目，
+    均无拒绝证据 = 硬红（发射面漂移信号，同 S-int-3 口径，防空洞绿）。"""
+    repair_turn: StreamTurn | None = None
+    envelope: dict | None = None
+    for attempt in range(1, 3):
+        pid = await ctx.new_project(f"S-int-12 repair #{attempt}")
+        turn = await ctx.chat_stream(pid, "cut three vertical clips for me")
+        env = turn.completed
+        check(env is not None, "the turn completes", turn.failed)
+        if any(a["status"] == "cancelled" for a in turn.activities):
+            repair_turn, envelope = turn, env
+            break
+    check(
+        repair_turn is not None,
+        "no rejected iteration after 2 fresh projects (发射面漂移——红 = "
+        "护栏拒绝不再发生或拒绝证据座漂移)",
+    )
+    assert repair_turn is not None and envelope is not None
+    acts = repair_turn.activities
+    repair_frames = [a for a in acts if a["kind"] == "repair"]
+    check(
+        not any(a["status"] == "active" for a in repair_frames),
+        "① 零 repair active 帧——重试跨度静默开启",
+        repair_frames,
+    )
+    check(
+        len(repair_frames) <= 1
+        and all(f["status"] in ("completed", "failed") for f in repair_frames)
+        and all(
+            f["key"] in ("chat.activity.repair", "chat.activity.repairDone")
+            for f in repair_frames
+        ),
+        "② repair 帧至多一帧、只以终态出现、键落新词表",
+        repair_frames,
+    )
+    # ③ 取证台账（DB 座）：本回合的 activity_log 行带 rejections。
+    conv = await ctx.conversation(pid)
+    items = await ctx.messages(conv.json()["id"])
+    user_msg_id = envelope["user_message"]["id"]
+    log_row = next(
+        (
+            m
+            for m in items
+            if (m.get("intent") or {}).get("type") == "activity_log"
+            and (m.get("intent") or {}).get("ref") == user_msg_id
+        ),
+        None,
+    )
+    check(log_row is not None, "③ the turn's activity_log row persists", items[-3:])
+    ledger = (log_row.get("intent") or {}).get("rejections") or []
+    check(bool(ledger), "③ the rejections ledger rides the log row", log_row)
+    check(
+        all(
+            set(r) >= {"tool_name", "kind", "iteration", "detail", "duration_ms", "at"}
+            and isinstance(r["iteration"], int)
+            and isinstance(r["duration_ms"], int)
+            and r["kind"]
+            in ("schema_truncation", "unknown_tool", "params_validation", "execute_guardrail")
+            and r["at"]
+            for r in ledger
+        ),
+        "③ ledger entries carry tool_name/kind/iteration/detail/duration_ms/at",
+        ledger,
+    )
+    # 交叉一致：台账的被拒名 × 信封终态 ⇔ 转向帧（completed）的有无。
+    rejected_names = {r["tool_name"] for r in ledger if r["tool_name"]}
+    term = terminal_tool_of(envelope)
+    if rejected_names and term not in rejected_names:
+        check(
+            len(repair_frames) == 1
+            and repair_frames[0]["status"] == "completed"
+            and repair_frames[0]["key"] == "chat.activity.repairDone",
+            f"转向（{sorted(rejected_names)} → {term}）= 恰一 completed 帧",
+            repair_frames,
+        )
+    else:
+        check(
+            not repair_frames,
+            f"同形（{sorted(rejected_names)} → {term}）= 零 repair 帧",
+            repair_frames,
+        )
+
+
 SCENARIOS = {
     "S1": s1_bare_wish_full_journey,
     "S2": s2_skipped_topic_ask_drafts_from_persona,
@@ -5433,6 +5540,9 @@ SCENARIOS = {
     # reply_quality_probe 语义角色维度（断言面分工,简报批 D 施工点 5）。
     "S-int-10": s_int10_capability_answer_never_narrates_grouping,
     "S-int-11": s_int11_trigger_verdict_offer_texture,
+    # 事故③ wording 回归锁（批 G1 带入座）——repair 静默开启/终态判定树/
+    # rejection 取证台账；leak 零泄漏锁随批 G2 入座（能力未落地,本组不含）。
+    "S-int-12": s_int12_repair_never_confesses,
 }
 
 

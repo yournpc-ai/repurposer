@@ -1277,13 +1277,16 @@ const zh: Resources = {
      * ——出方案 / 改已有产物（projector 的 _EDIT_TOOLS 选 key）。draft / run
      * 跨度只有 active 态（落定即退役——2026-09-28 draft、2026-09-29 扩到
      * run）：落定收据行退役，方案卡 / 开工言语 + RunTaskList 收据就是证据，
-     * 故无 draftDone/editDone/runDone 键。 */
+     * 故无 draftDone/editDone/runDone 键。repair 两键 = 言语提交协议批
+     * 终态专用（重试跨度静默开启，无 active 帧）：repair 只在失败终态
+     * （重试耗尽 / 回合失败）发射，repairDone 只在转向终态（护栏把回合
+     * 形式引去别的工具）发射——说工作事实，永不说模型自我反思。 */
     activity: {
       draft: "正在整理方案…",
       edit: "正在修改…",
       run: "正在开工…",
-      repair: "刚才的回答没组织好，我重新整理一下…",
-      repairDone: "已重新整理好",
+      repair: "这次没能完成",
+      repairDone: "换了个方式",
     },
     /** 活动行的有界展开明细（迭代三 S7，E7 诚实边界）：只有 wire 白名单
      * 字段——原始计数带标签成行（耗时内联同行，formatElapsed 是唯一措辞）。 */

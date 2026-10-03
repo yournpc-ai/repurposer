@@ -205,6 +205,26 @@ B → C·C+ → S → D → E → G1 → G2
 | **acceptance** | "已重新整理好"自白形态清零；rejection 事后可取证（调用/原因/迭代序）；带入场景转绿 |
 | **rollback** | 单 commit revert |
 
+**批次 G1 落地记录**（施工会话交付，验证全部未跑）：
+
+- **座位选择（判定树的实施座 = 发射座 + 文案座，两座各取最小）**：文案座单独做不了「静默」（copy 无法让行消失）；发射座单独做则变化/失败两终态仍念旧自白词。故：发射座（`activity.py`）裁可见性（判定树），文案座（i18n 两键原位改写，零新增零删除）供给无自白终态词。repair span 开启不再发射 active 帧（静默开启——重试窗 = 普通 LLM 窗，think 行/StatusLine 覆盖；修复机械自叙述 = 宪法②），span 内部状态照track（T16 双不变量内部成立：`has_active()` 重试窗内仍真）。终态判定树：① read 收口（含探索 observation 族）→ 静默（读行自叙当下工作，转向断言为时过早）；② 终态同形收口（接受名 ∈ 被拒名集）→ 静默（未被公开承诺的东西无需交代）；③ 终态转向收口（被拒名全已知且接受名 ∉）→ 恰一 born-terminal completed 帧（key=`chat.activity.repairDone`，带真实 span 耗时——重试是真 server 工作）；④ 不可证（任一被拒名 None=truncation）→ 静默（无依据则不言）；⑤ LoopExhausted / 失败回合 sweep → 恰一 born-terminal failed 帧（key=`chat.activity.repair`，诚实失败证据，persist）；⑥ completed 回合 sweep（bare reply 收官）→ 静默（答复即终形）。静默 span 零发射零 persist。
+- **i18n 文案修宪（en/zh 同步，键名不动）**：`repair` = 失败终态专用（zh「这次没能完成」/ en "Couldn't get it done this time"）；`repairDone` = 转向终态专用（zh「换了个方式」/ en "Changed approach"）。键名复用红利：存量 failed 帧（旧律 repair 键）回放读新词恰合失败语义；存量 repairDone 行回放自白 retroactively 消失。禁句静态锁入纯测试（`test_repair_copy_keys_carry_no_self_confession`：两键 × 两语言正则负形）。
+- **rejection 取证（落库座 = kernel 事件事实 + projector 台账 + activity_log 行，两 turn 文件零改动）**：`ToolRejected` 扩三事实字段（`iteration` 0-based 迭代序 / `detail` 拒因 verbatim 截 200 字（validation error / guardrail feedback；unknown_tool 的 detail=None——名字即全部事实）/ `duration_ms` 被拒尝试自身墙钟（kernel 每迭代顶打点，monotonic））——kernel 只说发生了什么，冰冻边界不破。projector 新增 `_rejections` 台账（每 ToolRejected 一记 {tool_name, kind, iteration, detail, duration_ms, at}，at=ISO UTC），`rejected_calls()` 访问器；持久化 = `record_activity_log` 增 `rejections` kwarg 落 intent.rejections（回放只读 frames，取证行不渲染；frames 或 rejections 任一非空即落行）。**对话内回注行为零改动**（`_loop_echo` 链未触碰）。「耗时」口径实证：被拒尝试的迭代墙钟（kernel 实测）+ repair span 总耗时（终态帧 duration_ms）双层。取证查询示例（验收用）：
+  ```sql
+  SELECT intent->'rejections' AS rejections
+  FROM messages
+  WHERE intent->>'type' = 'activity_log'
+    AND intent->'rejections' IS NOT NULL
+  ORDER BY created_at DESC
+  LIMIT 5;
+  ```
+- **事故③ wording 回归场景 = S-int-12**：空项目直点 media 工作（出书门槛拒 → 护栏转向），最多 2 个全新项目等到真拒绝证据（cancelled 帧 = 拒绝唯一 wire 证据座），均无 = 硬红（防空洞绿，S-int-3 同口径）。断言三件套：① 零 repair active 帧；② repair 帧 ≤1 且只以终态出现、键落新词表；③ DB 台账形状 + 交叉一致（台账被拒名 × 信封终态 ⇔ 转向帧有无——同形零帧、转向恰一 completed 帧）。harness 维护同批：`_work_evidence` 的 had_repair 改检 cancelled/repair 帧（静默开启后拒绝的 wire 证据 = 半开调用的 cancelled 帧——check_stream_law / check_read_silent_stream 的 replaced-speech 跳过律语义不变）。
+- **纯测试同步改写（新发射律的锁，非迁就）**：test_activity_pure 的 T3/T4/T5/T9/T10/T13/T15/T16b/settled_frames/探索族/route-seam 全部按判定树重写 + 新增六条（转向单帧 / read 收口静默 / 同形静默 / 不可证静默 / 跨 span 名单隔离 / 台账形状与拷贝语义）+ i18n 静态禁句锁；test_tool_loop_pure 四处事件断言改字段级（duration_ms 为真实墙钟，锁类型不锁值）。
+- **场景面已知相互作用（在册不处理）**：`check_activity_shape` 的「每活动首帧必为 active」律与 born-terminal 帧（repair 终态帧 + 既有 milestone 帧）不兼容——该 checker 本就在既有债 A（白名单漂移）账上，场景维护批需同批补 born-terminal carve-out；S-int-12 不调用它，G2 新断言亦不调用。
+- **must_not_touch 对账**：deferred_frames.py 零改动；stream semantics / 帧序 / 缓冲零改动；prompt 文本零改动；plan_turn.py / propose_turn.py 零改动（取证流经共享 projector，两 turn 天然喂同一事件通道）。
+- **未跑验证（用户清单）**：① `uv run --extra dev python -m pytest tests/test_activity_pure.py tests/test_tool_loop_pure.py -q`（新律锁 + 既有债 11 红不算账）；② 全量 pytest（清单外新红 = 异常）；③ `uv run python scripts/chat_scenarios.py --only S-int-12`（事故③ wording 场景转绿）；④ 全量剧本（重点：调 check_stream_law / check_read_silent_stream 的场景——_work_evidence 语义等值性；S10 等 check_activity_shape 调用点仍在既有债 A 账）；⑤ rejection 取证查询（上 SQL 示例，真跑一个被拒回合后查）；⑥ web tsc（i18n 键改动不触 TS 面，预期零新增）。
+- **承重观察（在册不处理）**：① 台账 detail 含 validation error / guardrail feedback 原文（内部取证文本），随消息行 intent 上 wire 不渲染——取证座既定，若日后要脱敏另开批；② 静默开启后重试窗的 now-line = think 行「Thinking…」——T16-A 盲窗由状态行/散文半边覆盖（该不变量本就声明是组合不变量），若实测觉得盲窗偏长，补救座是 StatusLine 相位叙事（G2 死寂覆盖施工点同座），不是恢复 repair 行；③ 转向帧 copy「换了个方式」不带具体去向（projector 无参数面，宪法② 边界）——去向由紧随的 dock/答复自证。
+
 ---
 
 ## 批次 G2：言语提交协议一般化（最高施工规格）

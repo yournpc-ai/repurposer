@@ -101,47 +101,53 @@ def test_t2_two_reads_ordered():
 
 
 # T3 — a read rejected at params validation AFTER its name-known frame:
-# the read is cancelled (explicit terminal), the repair span opens.
+# the read is cancelled (explicit terminal); the repair span opens
+# SILENTLY (the visibility law — no repair frame streams, the span is
+# tracked internally: the retry window stays work-in-flight state).
 def test_t3_read_rejected_after_name_known():
     p = ActivityProjector()
-    frames = _feed(p, "get_asset", ToolRejected("params_validation", "get_asset"))
+    frames = _feed(p, "get_asset", ToolRejected("params_validation", "get_asset", 0, "bad", 0))
     assert _summary(frames) == [
         ("a1", 1, "read", STATUS_ACTIVE, ASSET),
         ("a1", 2, "read", STATUS_CANCELLED, ASSET),
-        ("a2", 3, "repair", STATUS_ACTIVE, REPAIR),
     ]
+    assert p.has_active()  # the silent repair span covers the retry window
 
 
-# T4 — two rejections then an accept aggregate into ONE repair span (N→1).
-def test_t4_repair_aggregation():
+# T4 — two rejections then a 同形 accept aggregate into ONE repair span
+# (N→1) that closes SILENTLY: the final call's own evidence is the whole
+# story — no repair frame ever streams, nothing persists.
+def test_t4_repair_aggregation_silent_same_shape():
     p = ActivityProjector()
     frames = _feed(
         p,
-        "present_plan", ToolRejected("params_validation", "present_plan"),
-        "present_plan", ToolRejected("execute_guardrail", "present_plan"),
+        "present_plan", ToolRejected("params_validation", "present_plan", 0, "bad", 0),
+        "present_plan", ToolRejected("execute_guardrail", "present_plan", 1, "no", 0),
         "present_plan", TerminalAccepted("present_plan"),
     )
     assert _summary(frames) == [
         ("a1", 1, "draft", STATUS_ACTIVE, DRAFT),
         ("a1", 2, "draft", STATUS_CANCELLED, DRAFT),
-        ("a2", 3, "repair", STATUS_ACTIVE, REPAIR),
-        ("a3", 4, "draft", STATUS_ACTIVE, DRAFT),
-        ("a3", 5, "draft", STATUS_CANCELLED, DRAFT),
-        ("a4", 6, "draft", STATUS_ACTIVE, DRAFT),
-        ("a2", 7, "repair", STATUS_COMPLETED, REPAIR_DONE),  # repair closes FIRST
-        ("a4", 8, "draft", STATUS_COMPLETED, DRAFT_DONE),
+        ("a3", 3, "draft", STATUS_ACTIVE, DRAFT),
+        ("a3", 4, "draft", STATUS_CANCELLED, DRAFT),
+        ("a4", 5, "draft", STATUS_ACTIVE, DRAFT),
+        ("a4", 6, "draft", STATUS_COMPLETED, DRAFT_DONE),
     ]
+    assert not any(f.kind == "repair" for f in frames)
+    # Both rejections landed in the forensic ledger (invisible ≠ unaudited).
+    assert [r["tool_name"] for r in p.rejected_calls()] == ["present_plan"] * 2
 
 
-# T5 — exhaustion fails the repair span explicitly (never swept completed).
+# T5 — exhaustion fails the repair span explicitly (never swept completed):
+# ONE born-terminal FAILED frame (no active ever streamed).
 def test_t5_exhausted_fails_repair():
     p = ActivityProjector()
     frames = _feed(
         p,
-        "present_plan", ToolRejected("params_validation", "present_plan"),
+        "present_plan", ToolRejected("params_validation", "present_plan", 0, "bad", 0),
         LoopExhausted(iterations=6),
     )
-    assert _summary(frames)[-1] == ("a2", 4, "repair", STATUS_FAILED, REPAIR)
+    assert _summary(frames)[-1] == ("a2", 3, "repair", STATUS_FAILED, REPAIR)
     assert not p.has_active()
 
 
@@ -173,12 +179,13 @@ def test_t8_run_lifecycle():
 
 
 # T9 — the terminal sweep: a failed turn fails what is still active; a
-# completed turn completes it (the bare-reply-after-rejection case).
+# completed turn closes a still-open repair span SILENTLY (the bare reply
+# IS the final form — the visibility law).
 def test_t9_envelope_sweep():
     p = ActivityProjector()
-    _feed(p, "present_plan", ToolRejected("params_validation", "present_plan"))
+    _feed(p, "present_plan", ToolRejected("params_validation", "present_plan", 0, "bad", 0))
     frames = p.sweep("completed")  # the retry answered with bare prose
-    assert _summary(frames) == [("a2", 4, "repair", STATUS_COMPLETED, REPAIR_DONE)]
+    assert frames == []  # the repair span closes without a trace
     assert not p.has_active()
 
     p2 = ActivityProjector()
@@ -189,7 +196,8 @@ def test_t9_envelope_sweep():
 
 
 # T10 — filtering (1→0): conversation-layer calls and unknown names open
-# nothing; their acceptance still closes an open repair span.
+# nothing; a truncation's rejected name is unknown, so the accept's repair
+# close is UNPROVABLE — silent (无依据则不言).
 def test_t10_conversation_calls_filtered():
     p = ActivityProjector()
     frames = _feed(p, "ask_user", TerminalAccepted("ask_user"))
@@ -198,13 +206,10 @@ def test_t10_conversation_calls_filtered():
     p2 = ActivityProjector()
     frames2 = _feed(
         p2,
-        ToolRejected("schema_truncation", None),  # truncation: name unknown
+        ToolRejected("schema_truncation", None, 0, "eof", 0),  # truncation: name unknown
         "answer", TerminalAccepted("answer"),
     )
-    assert _summary(frames2) == [
-        ("a1", 1, "repair", STATUS_ACTIVE, REPAIR),
-        ("a1", 2, "repair", STATUS_COMPLETED, REPAIR_DONE),
-    ]
+    assert frames2 == []  # silent repair open, unprovable close — zero frames
 
 
 # T11 — the no-leak whitelist: every frame's dict touches exactly the
@@ -215,7 +220,7 @@ def test_t11_frame_field_whitelist():
     frames = _feed(
         p,
         "get_understanding", ReadAccepted("get_understanding"),
-        "present_plan", ToolRejected("execute_guardrail", "present_plan"),
+        "present_plan", ToolRejected("execute_guardrail", "present_plan", 0, "no", 0),
         "propose_tasks", TerminalAccepted("propose_tasks"),
     ) + p.sweep("completed")
     for f in frames:
@@ -243,7 +248,7 @@ def test_t11_frame_field_whitelist():
 def test_t12_determinism():
     seq = (
         "search_music", ReadAccepted("search_music"),
-        "present_plan", ToolRejected("params_validation", "present_plan"),
+        "present_plan", ToolRejected("params_validation", "present_plan", 0, "bad", 0),
         "present_plan", TerminalAccepted("present_plan"),
     )
     a = _summary(_feed(ActivityProjector(), *seq))
@@ -257,7 +262,7 @@ def test_t13_sequence_monotonic():
     frames = _feed(
         p,
         "search_music", ReadAccepted("search_music"),
-        ToolRejected("schema_truncation", None),
+        ToolRejected("schema_truncation", None, 0, "eof", 0),
         "edit_graph", TerminalAccepted("edit_graph"),
     ) + p.sweep("completed")
     seqs = [f.seq for f in frames]
@@ -265,21 +270,20 @@ def test_t13_sequence_monotonic():
 
 
 # T15 — flagship negative: reject → retry → reject → exhaust. The repair
-# span gets exactly one active start and exactly one failed terminal; never
-# two actives, never dangling.
+# span streams NOTHING while open and gets exactly one born-terminal failed
+# frame; never two actives, never dangling.
 def test_t15_flagship_repair_exhaustion():
     p = ActivityProjector()
     frames = _feed(
         p,
-        "present_plan", ToolRejected("params_validation", "present_plan"),
-        "present_plan", ToolRejected("execute_guardrail", "present_plan"),
+        "present_plan", ToolRejected("params_validation", "present_plan", 0, "bad", 0),
+        "present_plan", ToolRejected("execute_guardrail", "present_plan", 1, "no", 0),
         LoopExhausted(iterations=6),
     )
     assert p.sweep("completed") == []  # nothing left for the envelope
     repair_frames = [f for f in frames if f.kind == "repair"]
     assert _summary(repair_frames) == [
-        ("a2", 3, "repair", STATUS_ACTIVE, REPAIR),
-        ("a2", 6, "repair", STATUS_FAILED, REPAIR),
+        ("a2", 5, "repair", STATUS_FAILED, REPAIR),
     ]
     assert not p.has_active()
 
@@ -291,8 +295,8 @@ def test_t16b_no_dangling_after_sweep():
         ("search_music",),
         ("present_plan",),
         ("start_run",),
-        (ToolRejected("schema_truncation", None),),
-        ("get_asset", ToolRejected("params_validation", "get_asset"), "search_music"),
+        (ToolRejected("schema_truncation", None, 0, "eof", 0),),
+        ("get_asset", ToolRejected("params_validation", "get_asset", 0, "bad", 0), "search_music"),
         ("search_music", ReadAccepted("search_music"), "present_plan"),
     ]
     for seq in scenarios:
@@ -304,13 +308,14 @@ def test_t16b_no_dangling_after_sweep():
 
 
 # T16-A (projector half) — while a tool call's work is in flight the
-# projection has an active activity; a rejection keeps one (repair) alive.
+# projection has an active activity; a rejection keeps one (the SILENT
+# repair span — tracked, never streamed) alive.
 def test_t16a_work_in_flight_always_visible():
     p = ActivityProjector()
     p.name_known("present_plan")
     assert p.has_active()  # the draft span covers the dock-work window
-    p.feed_event(ToolRejected("execute_guardrail", "present_plan"))
-    assert p.has_active()  # the repair span covers the retry window
+    p.feed_event(ToolRejected("execute_guardrail", "present_plan", 0, "no", 0))
+    assert p.has_active()  # the silent repair span covers the retry window
 
 
 # T14 — phase coexistence is structural: the projector never sees the
@@ -408,16 +413,17 @@ def test_settled_frames_collects_the_turns_durable_history():
     """activity 持久化 (2026-09-25): settled_frames() is the persist seam —
     every terminal frame in emission (seq) order, ACTIVE frames never join
     (the live wire owns the in-flight face; only the settled form is
-    durable). A whole turn story — rejection, repair, acceptance — reads
-    back complete and ordered. Draft/run spans are the exclusions (落定即退役
-    2026-09-28 draft, 2026-09-29 extended to run): their settles ride the
-    wire but never persist — the docked plan card / the start speech +
-    RunTaskList receipt is the settled evidence."""
+    durable). A whole turn story — rejection, silent repair, acceptance —
+    reads back complete and ordered. Draft/run spans are the exclusions
+    (落定即退役 2026-09-28 draft, 2026-09-29 extended to run): their
+    settles ride the wire but never persist — the docked plan card / the
+    start speech + RunTaskList receipt is the settled evidence."""
     p = ActivityProjector()
-    # A read call: active → rejected (cancelled + repair opens) → accepted
-    # (repair completes, the retried read completes).
+    # A read call: active → rejected (cancelled + the repair span opens
+    # SILENTLY) → 同形 accepted (the repair closes without a trace, the
+    # retried read completes).
     p.name_known("search_transcript")
-    p.feed_event(ToolRejected("search_transcript", "bad params"))
+    p.feed_event(ToolRejected("params_validation", "search_transcript", 0, "bad", 0))
     p.name_known("search_transcript")
     p.feed_event(ReadAccepted("search_transcript"))
     # A draft span still open at the envelope — the sweep settles it on the
@@ -432,7 +438,6 @@ def test_settled_frames_collects_the_turns_durable_history():
     assert [f.seq for f in settled] == sorted(f.seq for f in settled)
     assert [(f.kind, f.status) for f in settled] == [
         ("read", STATUS_CANCELLED),      # the rejected first call
-        ("repair", STATUS_COMPLETED),    # the rework succeeded
         ("read", STATUS_COMPLETED),      # the retried read landed
         ("draft", STATUS_COMPLETED),     # the born-completed milestone
     ]
@@ -457,18 +462,15 @@ def test_draft_span_settles_never_persist():
     assert p.settled_frames() == []
 
     p2 = ActivityProjector()
-    _feed(p2, "edit_graph", ToolRejected("params_validation", "edit_graph"))
+    _feed(p2, "edit_graph", ToolRejected("params_validation", "edit_graph", 0, "bad", 0))
     frames2 = _feed(p2, "edit_graph", TerminalAccepted("edit_graph"))
-    # The wire still says: the retried edit opens, the repair span
-    # completes, the edit completes — only the repair persists.
+    # The wire still says: the retried edit opens and completes — the
+    # 同形 repair span between them streams nothing and persists nothing.
     assert _summary(frames2) == [
         ("a3", 4, "draft", STATUS_ACTIVE, EDIT),
-        ("a2", 5, "repair", STATUS_COMPLETED, REPAIR_DONE),
-        ("a3", 6, "draft", STATUS_COMPLETED, EDIT_DONE),
+        ("a3", 5, "draft", STATUS_COMPLETED, EDIT_DONE),
     ]
-    assert [(f.kind, f.status, f.key) for f in p2.settled_frames()] == [
-        ("repair", STATUS_COMPLETED, REPAIR_DONE),
-    ]
+    assert p2.settled_frames() == []
 
     p3 = ActivityProjector()
     p3.name_known("present_plan")
@@ -517,12 +519,16 @@ def test_frame_count_absent_off_the_wire_otherwise():
 def test_exploration_verbs_open_no_per_call_activity():
     """The exploration verbs' user face is the milestone frame + the canvas
     card + the dock (1→0 同律) — name-known opens nothing, and their
-    rejections still count as repair work."""
+    rejections still count as repair work (the span opens SILENTLY)."""
     p = ActivityProjector()
     assert _feed(p, "propose_candidates") == []
-    # A rejected exploration call opens the aggregated repair span.
-    frames = _feed(p, "propose_plans", ToolRejected("params_validation", "propose_plans"))
-    assert _summary(frames) == [("a1", 1, "repair", STATUS_ACTIVE, REPAIR)]
+    # A rejected exploration call opens the aggregated repair span —
+    # silently: zero frames stream, the span is tracked internally.
+    frames = _feed(
+        p, "propose_plans", ToolRejected("params_validation", "propose_plans", 0, "bad", 0)
+    )
+    assert frames == []
+    assert p.has_active()
     # Every exploration verb classifies (T17's bucket law) — the revision
     # verb (iter-2 ⑦) rides the same 1→0 posture.
     for name in (
@@ -600,15 +606,16 @@ def _wire(queue: asyncio.Queue) -> list[tuple[str, dict]]:
 async def test_route_seam_rejection_then_failed_sweep():
     """cancelled + failed across the seam: the name-known beat queues the
     active frame; the rejection cancels the half-started draft (active key
-    kept) and opens the ONE repair span; the failed turn's sweep settles the
-    repair FAILED. Zero active survives; every frame rides the
-    assistant.activity event with the exact whitelist payload."""
+    kept) and opens the repair span SILENTLY (no frame rides the wire);
+    the failed turn's sweep settles the repair FAILED — its one and only
+    frame. Zero active survives; every frame rides the assistant.activity
+    event with the exact whitelist payload."""
     queue: asyncio.Queue = asyncio.Queue()
     p = ActivityProjector()
     hook = _make_loop_event_hook(queue, p)
     for f in p.name_known("present_plan"):
         await queue.put(_activity_frame(f))
-    await hook(ToolRejected(kind="params_validation", tool_name="present_plan"))
+    await hook(ToolRejected(kind="params_validation", tool_name="present_plan", iteration=0, detail="bad", duration_ms=0))
     await _sweep_activities(queue, p, "failed")
     wire = _wire(queue)
     assert all(event == "assistant.activity" for event, _ in wire)
@@ -617,8 +624,7 @@ async def test_route_seam_rejection_then_failed_sweep():
     ] == [
         ("a1", "draft", "active", DRAFT),
         ("a1", "draft", "cancelled", DRAFT),  # rejection → cancelled, key kept
-        ("a2", "repair", "active", REPAIR),
-        ("a2", "repair", "failed", REPAIR),  # failed turn sweeps repair FAILED
+        ("a2", "repair", "failed", REPAIR),  # failed turn: the span's ONE frame
     ]
     for _, payload in wire:
         assert set(payload.keys()) <= {
@@ -630,14 +636,14 @@ async def test_route_seam_rejection_then_failed_sweep():
 
 @pytest.mark.asyncio
 async def test_route_seam_completed_sweep_settles_every_active():
-    """The completed-turn sweep with TWO actives open (a repair span from a
-    nameless truncation + an in-flight read): both settle COMPLETED in one
-    sweep — repair first (span ordering), past-tense keys on the wire, zero
-    dangling."""
+    """The completed-turn sweep with a SILENT repair span (a nameless
+    truncation) and an in-flight read open: the read settles COMPLETED on
+    the wire, the repair span closes without a trace (the bare reply IS
+    the final form) — zero dangling, zero repair frames."""
     queue: asyncio.Queue = asyncio.Queue()
     p = ActivityProjector()
     hook = _make_loop_event_hook(queue, p)
-    await hook(ToolRejected(kind="schema_truncation", tool_name=None))
+    await hook(ToolRejected(kind="schema_truncation", tool_name=None, iteration=0, detail="eof", duration_ms=0))
     for f in p.name_known("search_music"):
         await queue.put(_activity_frame(f))
     await _sweep_activities(queue, p, "completed")
@@ -645,9 +651,144 @@ async def test_route_seam_completed_sweep_settles_every_active():
     assert [
         (d["activity_id"], d["kind"], d["status"], d["key"]) for _, d in wire
     ] == [
-        ("a1", "repair", "active", REPAIR),
         ("a2", "read", "active", MUSIC),
-        ("a1", "repair", "completed", REPAIR_DONE),
         ("a2", "read", "completed", MUSIC_DONE),
     ]
     assert not p.has_active()
+
+
+# ---- 言语提交协议批 (事故③ 修宪): the repair span's visibility judgment tree ---
+
+
+def test_redirected_close_speaks_the_work_change_once():
+    """实质工作变化 (present_plan ✗ → ask_user ✓ — the guardrail steered
+    the turn's form): ONE born-terminal COMPLETED frame, the work-change
+    key, a real duration — never an active frame, never a self-reflection.
+    The frame persists (it is a settled fact the replay may show)."""
+    p = ActivityProjector()
+    frames = _feed(
+        p,
+        "present_plan", ToolRejected("execute_guardrail", "present_plan", 0, "rootless", 0),
+        "ask_user", TerminalAccepted("ask_user"),
+    )
+    assert _summary(frames) == [
+        ("a1", 1, "draft", STATUS_ACTIVE, DRAFT),
+        ("a1", 2, "draft", STATUS_CANCELLED, DRAFT),
+        ("a2", 3, "repair", STATUS_COMPLETED, REPAIR_DONE),
+    ]
+    done = frames[-1]
+    assert isinstance(done.to_dict()["duration_ms"], int)  # the retry was real work
+    assert [(f.kind, f.status, f.key) for f in p.settled_frames()] == [
+        ("repair", STATUS_COMPLETED, REPAIR_DONE),
+    ]
+
+
+def test_read_close_stays_silent():
+    """A repair closing on an accepted READ (present_plan ✗ → a look at the
+    understanding): silent — the read's own row narrates the work in
+    flight, and the retried terminal may still come (a redirection claim
+    would be premature)."""
+    p = ActivityProjector()
+    frames = _feed(
+        p,
+        "present_plan", ToolRejected("execute_guardrail", "present_plan", 0, "no", 0),
+        "get_understanding", ReadAccepted("get_understanding"),
+    )
+    assert [f.kind for f in frames] == ["draft", "draft", "read", "read"]
+    assert not any(f.kind == "repair" for f in frames)
+
+
+def test_same_shape_terminal_close_stays_silent():
+    """同形 (present_plan ✗ → present_plan ✓): the repair span leaves zero
+    trace — the docked plan is the whole story (未被公开承诺的东西无需交代)."""
+    p = ActivityProjector()
+    frames = _feed(
+        p,
+        "present_plan", ToolRejected("execute_guardrail", "present_plan", 0, "no", 0),
+        "present_plan", TerminalAccepted("present_plan"),
+    )
+    assert not any(f.kind == "repair" for f in frames)
+    assert p.settled_frames() == []
+
+
+def test_unprovable_close_stays_silent():
+    """A truncation among the rejected names makes the 同形/变化 judgment
+    unprovable — silence (无依据则不言), even when the accepted terminal's
+    name differs from every KNOWN rejected name."""
+    p = ActivityProjector()
+    frames = _feed(
+        p,
+        ToolRejected("schema_truncation", None, 0, "eof", 0),
+        "present_plan", ToolRejected("execute_guardrail", "present_plan", 1, "no", 0),
+        "ask_user", TerminalAccepted("ask_user"),
+    )
+    assert not any(f.kind == "repair" for f in frames)
+    assert p.settled_frames() == []
+
+
+def test_second_span_after_a_silent_close_tracks_fresh():
+    """A closed span resets the rejected-names roll: a LATER span's
+    judgment reads only its own rejections (no cross-span contamination)."""
+    p = ActivityProjector()
+    _feed(
+        p,
+        "present_plan", ToolRejected("execute_guardrail", "present_plan", 0, "no", 0),
+        "get_understanding", ReadAccepted("get_understanding"),  # silent close
+    )
+    frames = _feed(
+        p,
+        "ask_user", ToolRejected("params_validation", "ask_user", 2, "bad", 0),
+        "present_plan", TerminalAccepted("present_plan"),
+    )
+    # The second span's rejected names = {ask_user}; present_plan ∉ it and
+    # all known → a REDIRECTED close (the first span's names play no role).
+    assert _summary(frames) == [
+        ("a5", 5, "draft", STATUS_ACTIVE, DRAFT),
+        ("a4", 6, "repair", STATUS_COMPLETED, REPAIR_DONE),
+        ("a5", 7, "draft", STATUS_COMPLETED, DRAFT_DONE),
+    ]
+
+
+def test_rejections_ledger_shape():
+    """rejection 取证批: every rejection lands in the forensic ledger as
+    {tool_name, kind, iteration, detail, at} — independent of the span's
+    visibility (a silently-closed span still leaves its audit trail)."""
+    p = ActivityProjector()
+    _feed(
+        p,
+        "present_plan", ToolRejected("execute_guardrail", "present_plan", 0, "rootless", 0),
+        ToolRejected("schema_truncation", None, 1, "eof", 0),
+        "present_plan", TerminalAccepted("present_plan"),
+    )
+    rejections = p.rejected_calls()
+    assert [r["tool_name"] for r in rejections] == ["present_plan", None]
+    assert [r["kind"] for r in rejections] == ["execute_guardrail", "schema_truncation"]
+    assert [r["iteration"] for r in rejections] == [0, 1]
+    assert [r["detail"] for r in rejections] == ["rootless", "eof"]
+    assert [r["duration_ms"] for r in rejections] == [0, 0]
+    assert all(r["at"] for r in rejections)
+    # The accessor hands out a copy (the ledger is internal state).
+    rejections.append({"fake": True})
+    assert len(p.rejected_calls()) == 2
+
+
+def test_repair_copy_keys_carry_no_self_confession():
+    """事故③ 修宪's copy seat (static): the two repair keys' copy — en AND
+    zh — never carries a model self-reflection (「没组织好/重新整理/
+    rework」式自白). The keys' semantics: repair = the failed terminal,
+    repairDone = the redirected terminal."""
+    import re
+
+    banned = re.compile(
+        r"(没组织好|重新整理|rework|didn'?t come out right|re-?organiz|let me fix)",
+        re.IGNORECASE,
+    )
+    root = Path(__file__).parents[3]  # repo root (tests/ → api → apps → repo)
+    for locale in ("zh", "en"):
+        text = (root / f"apps/web/src/lib/i18n/locales/{locale}.ts").read_text()
+        for key in ("repair", "repairDone"):
+            m = re.search(rf"^\s*{key}: \"([^\"]+)\",\s*$", text, re.MULTILINE)
+            assert m, f"{locale}.ts: chat.activity.{key} missing"
+            assert not banned.search(m.group(1)), (
+                f"{locale}.ts chat.activity.{key} still confesses: {m.group(1)!r}"
+            )

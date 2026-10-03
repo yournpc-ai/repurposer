@@ -710,10 +710,12 @@ async def test_loop_event_rejection_at_the_moment_and_accept() -> None:
     agent = _make_agent("tl_ev_reject", client)
     result = await agent.call_loop(execute, on_loop_event=lambda e: events.append(e))
     assert result.params is not None and result.params.text == "good"
-    assert events == [
-        ToolRejected(kind="execute_guardrail", tool_name="echo"),
-        TerminalAccepted(tool_name="echo"),
+    # duration_ms is real wall time — pinned as a type, never a value.
+    assert [(e.kind, e.tool_name, e.iteration, e.detail) for e in events[:-1]] == [
+        ("execute_guardrail", "echo", 0, "nope"),
     ]
+    assert isinstance(events[0].duration_ms, int) and events[0].duration_ms >= 0
+    assert events[-1] == TerminalAccepted(tool_name="echo")
 
 
 @pytest.mark.asyncio
@@ -727,10 +729,11 @@ async def test_loop_event_truncation_carries_no_name() -> None:
     events: list[object] = []
     agent = _make_agent("tl_ev_trunc", client)
     await agent.call_loop(_always_accept, on_loop_event=lambda e: events.append(e))
-    assert events == [
-        ToolRejected(kind="schema_truncation", tool_name=None),
-        TerminalAccepted(tool_name="echo"),
+    assert [(e.kind, e.tool_name, e.iteration, e.detail) for e in events[:-1]] == [
+        ("schema_truncation", None, 0, "truncated tool_call arguments"),
     ]
+    assert isinstance(events[0].duration_ms, int)
+    assert events[-1] == TerminalAccepted(tool_name="echo")
 
 
 @pytest.mark.asyncio
@@ -744,11 +747,13 @@ async def test_loop_event_unknown_tool_and_params_validation() -> None:
     agent = _make_agent("tl_ev_kinds", client)
     result = await agent.call_loop(_always_accept, on_loop_event=lambda e: events.append(e))
     assert result.params is not None and result.params.text == "ok"
-    assert events == [
-        ToolRejected(kind="unknown_tool", tool_name="nope_tool"),
-        ToolRejected(kind="params_validation", tool_name="echo"),
-        TerminalAccepted(tool_name="echo"),
+    assert [(e.kind, e.tool_name, e.iteration) for e in events[:-1]] == [
+        ("unknown_tool", "nope_tool", 0),
+        ("params_validation", "echo", 1),
     ]
+    assert events[0].detail is None  # the name IS the whole fact
+    assert isinstance(events[1].detail, str) and events[1].detail  # pydantic verbatim
+    assert events[-1] == TerminalAccepted(tool_name="echo")
 
 
 @pytest.mark.asyncio
@@ -786,12 +791,12 @@ async def test_loop_event_exhausted_fires_before_the_honest_degradation() -> Non
     agent = _make_agent("tl_ev_exhaust", client, max_iterations=3)
     result = await agent.call_loop(reject, on_loop_event=lambda e: events.append(e))
     assert result.exhausted
-    assert events == [
-        ToolRejected(kind="execute_guardrail", tool_name="echo"),
-        ToolRejected(kind="execute_guardrail", tool_name="echo"),
-        ToolRejected(kind="execute_guardrail", tool_name="echo"),
-        LoopExhausted(iterations=3),
+    assert [(e.kind, e.tool_name, e.iteration, e.detail) for e in events[:-1]] == [
+        ("execute_guardrail", "echo", 0, "no"),
+        ("execute_guardrail", "echo", 1, "no"),
+        ("execute_guardrail", "echo", 2, "no"),
     ]
+    assert events[-1] == LoopExhausted(iterations=3)
 
 
 @pytest.mark.asyncio

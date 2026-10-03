@@ -30,11 +30,41 @@ Frozen semantics (用户裁定 2026-09-19, PASS WITH CONDITIONS):
 
 Rejected-at-the-moment (拒绝当时): a rejection cancels the call's own
 half-started activity (params validation can reject AFTER the name-known
-frame started one) and opens ONE aggregated ``repair`` activity; further
-rejections keep the same activity (N→1, 对账规则 3). The repair completes
-when the NEXT call is accepted (read or terminal), fails on
-``LoopExhausted``, and — if the model instead ends the turn with a bare
-reply — is swept to completed by the envelope.
+frame started one) and opens ONE aggregated ``repair`` span; further
+rejections keep the same span (N→1, 对账规则 3).
+
+The repair span's visibility law (言语提交协议批 — 事故③ 修宪): the span
+is work-state bookkeeping first, user-facing only when its TERMINAL is
+itself a user-relevant fact. It opens SILENTLY (no active frame — the
+retry window is an ordinary LLM window, covered by the think row /
+StatusLine; narrating the retry itself is 宪法② machinery speech) and its
+terminal follows the judgment tree:
+
+- close by an accepted READ (incl. the exploration observation verbs) →
+  SILENT: the read's own row narrates the work in flight, and the retried
+  terminal may still come — a redirection claim would be premature;
+- close by an accepted TERMINAL whose name is among the span's rejected
+  names (同形 retry) → SILENT: the final call's own evidence (the dock,
+  the reply) is the whole story — nothing was publicly committed, so
+  nothing needs accounting;
+- close by an accepted TERMINAL whose name is NOT among the rejected
+  names, all of which are known (实质工作变化 — the guardrail redirected
+  the turn's form, e.g. present_plan → ask_user) → ONE born-terminal
+  COMPLETED frame saying the work change (``chat.activity.repairDone``),
+  never a model self-reflection; unprovable (any rejected name unknown —
+  a truncation severed it) → SILENT (无依据则不言);
+- ``LoopExhausted``, or a failed turn's sweep → ONE born-terminal FAILED
+  frame (``chat.activity.repair``) — the honest failure evidence;
+- a completed turn's sweep (the retry ended in a bare reply) → SILENT:
+  the reply IS the final form.
+
+Silent spans emit nothing and persist nothing; the two terminal frames
+carry the span's real elapsed as ``duration_ms`` (the retry window was
+genuine server work). The rejection FORENSICS never depend on visibility:
+every rejection lands in the projector's ``_rejections`` ledger (tool
+name / kind / iteration / detail / at), persisted beside the settled
+frames in the activity_log row — the user stream stays clean while the
+attempt stays auditable.
 """
 
 from __future__ import annotations
@@ -218,6 +248,16 @@ class ActivityProjector:
         self._open_call: tuple[str, str | None] | None = None
         # the aggregated repair span's activity id (None = no repair open)
         self._repair_id: str | None = None
+        # the repair span's rejected tool names in span order (None = a
+        # truncation severed the name) — the terminal's 同形/变化 judgment
+        # reads this (see the module docstring's visibility law)
+        self._repair_rejected: list[str | None] = []
+        # The turn's rejection FORENSIC ledger (rejection 取证批): every
+        # ToolRejected as one plain-fact record {tool_name, kind, iteration,
+        # detail, at} — the SSE route persists it beside the settled frames
+        # in the activity_log row, so a rejected attempt is auditable after
+        # the fact even when the span itself stays invisible.
+        self._rejections: list[dict] = []
         # still-active activities in birth order: id -> (kind, active key,
         # monotonic start — the S7 duration_ms source; monotonic, never the
         # wall clock, so a clock adjustment never fabricates a negative span)
@@ -336,16 +376,41 @@ class ActivityProjector:
     def feed_event(self, event: LoopEvent) -> list[ActivityFrame]:
         """The typed loop-event seam (U1)."""
         if isinstance(event, ToolRejected):
-            return self._on_rejection()
+            return self._on_rejection(event)
         if isinstance(event, (ReadAccepted, TerminalAccepted)):
-            return self._on_accepted()
+            return self._on_accepted(event)
         if isinstance(event, LoopExhausted):
             return self._on_exhausted()
         raise AssertionError(f"unknown loop event: {event!r}")  # exhaustive union
 
-    def _on_rejection(self) -> list[ActivityFrame]:
+    def _open_repair_span(self) -> None:
+        """Open (or keep) the ONE aggregated repair span — SILENTLY (the
+        visibility law): the span is tracked like any activity (T16's
+        internal state holds — the retry window is work in flight) but its
+        active frame never streams; the terminal decides what, if anything,
+        the user ever sees of it."""
+        if self._repair_id is None:
+            self._count += 1
+            self._repair_id = f"a{self._count}"
+            self._active[self._repair_id] = (
+                KIND_REPAIR,
+                _ACTIVITY_KEYS[KIND_REPAIR][0],
+                time.monotonic(),
+            )
+
+    def _close_repair_silently(self) -> None:
+        """Settle the repair span with zero trace (the judgment tree's
+        silent branches): no frame, no durable history — nothing was
+        publicly committed, so nothing needs accounting."""
+        if self._repair_id is not None:
+            self._active.pop(self._repair_id, None)
+            self._repair_id = None
+        self._repair_rejected = []
+
+    def _on_rejection(self, event: ToolRejected) -> list[ActivityFrame]:
         """拒绝当时: cancel the call's half-started activity (if the
-        name-known beat started one) and open/keep the ONE repair span."""
+        name-known beat started one), open/keep the ONE repair span
+        SILENTLY, and record the forensic fact."""
         frames: list[ActivityFrame] = []
         if self._open_call is not None:
             _name, activity_id = self._open_call
@@ -353,22 +418,47 @@ class ActivityProjector:
                 kind, key, _started = self._active[activity_id]
                 frames.append(self._settle(activity_id, STATUS_CANCELLED, key))
             self._open_call = None
-        if self._repair_id is None:
-            self._repair_id, frame = self._start(KIND_REPAIR, _ACTIVITY_KEYS[KIND_REPAIR][0])
-            frames.append(frame)
+        self._open_repair_span()
+        self._repair_rejected.append(event.tool_name)
+        self._rejections.append(
+            {
+                "tool_name": event.tool_name,
+                "kind": event.kind,
+                "iteration": event.iteration,
+                "detail": event.detail,
+                "duration_ms": event.duration_ms,
+                "at": datetime.now(UTC).isoformat(),
+            }
+        )
         return frames
 
-    def _on_accepted(self) -> list[ActivityFrame]:
+    def _on_accepted(self, event: ReadAccepted | TerminalAccepted) -> list[ActivityFrame]:
         """An accepted call closes the open repair span FIRST (the rework
-        succeeded), then completes the call's own activity."""
+        resolved), then completes the call's own activity. The repair
+        span's close follows the visibility law's judgment tree: a READ
+        close and a 同形 terminal close stay silent; a provable redirection
+        (实质工作变化) earns ONE born-terminal completed frame saying the
+        work change."""
         frames: list[ActivityFrame] = []
         if self._repair_id is not None:
-            frames.append(
-                self._settle(
-                    self._repair_id, STATUS_COMPLETED, _ACTIVITY_KEYS[KIND_REPAIR][1]
-                )
+            redirected = (
+                isinstance(event, TerminalAccepted)
+                and self._repair_rejected  # a span always has ≥1, defensive
+                and all(name is not None for name in self._repair_rejected)
+                and event.tool_name not in self._repair_rejected
             )
-            self._repair_id = None
+            if redirected:
+                frames.append(
+                    self._settle(
+                        self._repair_id,
+                        STATUS_COMPLETED,
+                        _ACTIVITY_KEYS[KIND_REPAIR][1],
+                    )
+                )
+                self._repair_id = None
+                self._repair_rejected = []
+            else:
+                self._close_repair_silently()
         if self._open_call is not None:
             _name, activity_id = self._open_call
             if activity_id is not None:
@@ -378,6 +468,19 @@ class ActivityProjector:
                 )
             self._open_call = None
         return frames
+
+    def _fail_repair(self) -> ActivityFrame | None:
+        """The repair span's honest failure terminal (LoopExhausted / a
+        failed turn's sweep): ONE born-terminal FAILED frame — the rework
+        did not land, the ✗ and the real elapsed say so."""
+        if self._repair_id is None:
+            return None
+        frame = self._settle(
+            self._repair_id, STATUS_FAILED, _ACTIVITY_KEYS[KIND_REPAIR][0]
+        )
+        self._repair_id = None
+        self._repair_rejected = []
+        return frame
 
     def _on_exhausted(self) -> list[ActivityFrame]:
         """The honest-degradation fact: the repair span FAILED (never swept
@@ -389,29 +492,29 @@ class ActivityProjector:
                 kind, key, _started = self._active[activity_id]
                 frames.append(self._settle(activity_id, STATUS_CANCELLED, key))
             self._open_call = None
-        if self._repair_id is not None:
-            frames.append(
-                self._settle(self._repair_id, STATUS_FAILED, _ACTIVITY_KEYS[KIND_REPAIR][0])
-            )
-            self._repair_id = None
+        failed = self._fail_repair()
+        if failed is not None:
+            frames.append(failed)
         return frames
 
     def sweep(self, outcome: str) -> list[ActivityFrame]:
         """The envelope's closing sweep (终帧律的活动同形 — T16-B): anything
-        still active when the turn ends is settled NOW — ``completed`` on a
-        completed turn (e.g. a bare reply after rejections completes the
-        repair), ``failed`` on a failed turn. After the sweep, zero
+        still active when the turn ends is settled NOW. A still-open repair
+        span follows the visibility law: a COMPLETED turn (the retry ended
+        in a bare reply — the reply IS the final form) closes it SILENTLY;
+        a FAILED turn fails it explicitly (the honest failure evidence).
+        Other still-active spans settle as before — ``completed`` on a
+        completed turn, ``failed`` on a failed turn. After the sweep, zero
         activities are active, structurally."""
         status = STATUS_COMPLETED if outcome == "completed" else STATUS_FAILED
         frames: list[ActivityFrame] = []
         if self._repair_id is not None:
-            key = (
-                _ACTIVITY_KEYS[KIND_REPAIR][1]
-                if status == STATUS_COMPLETED
-                else _ACTIVITY_KEYS[KIND_REPAIR][0]
-            )
-            frames.append(self._settle(self._repair_id, status, key))
-            self._repair_id = None
+            if status == STATUS_COMPLETED:
+                self._close_repair_silently()
+            else:
+                failed = self._fail_repair()
+                if failed is not None:
+                    frames.append(failed)
         if self._open_call is not None:
             _name, activity_id = self._open_call
             if activity_id is not None and activity_id in self._active:
@@ -437,6 +540,15 @@ class ActivityProjector:
         frames never join (the live wire owns the in-flight face; only the
         settled form is durable)."""
         return list(self._settled)
+
+    def rejected_calls(self) -> list[dict]:
+        """The turn's rejection forensic ledger (rejection 取证批): every
+        rejected call as {tool_name, kind, iteration, detail, duration_ms,
+        at} — plain loop facts for after-the-fact audit, persisted beside
+        the settled frames. Independent of the visibility law: a
+        silently-closed repair span still leaves its rejections on the
+        record."""
+        return list(self._rejections)
 
 
 __all__ = [

@@ -52,6 +52,7 @@ would be a lie.
 """
 
 import json
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -215,10 +216,22 @@ class ToolRejected:
     """A call was REJECTED at the moment it happened (拒绝当时) — schema
     truncation / unknown tool / params validation / execute guardrail.
     ``tool_name`` is None when the name never became reliably known (a
-    truncation can sever the stream before/within the arguments)."""
+    truncation can sever the stream before/within the arguments).
+
+    The forensic fields (rejection 取证批): ``iteration`` is the loop's
+    0-based iteration index of the rejected attempt; ``detail`` is the
+    rejection reason verbatim (truncated — the validation error / the
+    guardrail feedback), None when the kind already carries the whole fact
+    (unknown_tool's reason IS the name); ``duration_ms`` is the rejected
+    attempt's own wall time (iteration start → the rejection, monotonic).
+    All plain loop facts, not Activity vocabulary — the frozen boundary
+    holds."""
 
     kind: str  # schema_truncation | unknown_tool | params_validation | execute_guardrail
     tool_name: str | None
+    iteration: int
+    detail: str | None
+    duration_ms: int
 
 
 @dataclass(frozen=True)
@@ -455,6 +468,9 @@ class ToolLoopAgent:
             if iteration and prev_rejected and on_repair is not None:
                 await _emit(on_repair)
             prev_rejected = False
+            # rejection 取证批: the rejected attempt's own wall time rides
+            # its ToolRejected fact (iteration start → the rejection).
+            iteration_started = time.monotonic()
             streaming = on_delta is not None and iteration == 0
             messages = [*base_messages, *observation_tail]
             try:
@@ -490,7 +506,13 @@ class ToolLoopAgent:
                 # can sever inside the arguments) — None is the honest fact.
                 await _emit(
                     on_loop_event,
-                    ToolRejected(kind="schema_truncation", tool_name=None),
+                    ToolRejected(
+                        kind="schema_truncation",
+                        tool_name=None,
+                        iteration=iteration,
+                        detail=str(e)[:200],
+                        duration_ms=int((time.monotonic() - iteration_started) * 1000),
+                    ),
                 )
                 base_messages[1] = {
                     "role": "user",
@@ -534,7 +556,13 @@ class ToolLoopAgent:
                 )
                 await _emit(
                     on_loop_event,
-                    ToolRejected(kind="unknown_tool", tool_name=call.name),
+                    ToolRejected(
+                        kind="unknown_tool",
+                        tool_name=call.name,
+                        iteration=iteration,
+                        detail=None,
+                        duration_ms=int((time.monotonic() - iteration_started) * 1000),
+                    ),
                 )
                 base_messages[1] = {
                     "role": "user",
@@ -574,7 +602,11 @@ class ToolLoopAgent:
                     await _emit(
                         on_loop_event,
                         ToolRejected(
-                            kind="params_validation", tool_name=call.name
+                            kind="params_validation",
+                            tool_name=call.name,
+                            iteration=iteration,
+                            detail=str(e)[:200],
+                            duration_ms=int((time.monotonic() - iteration_started) * 1000),
                         ),
                     )
                     base_messages[1] = {
@@ -690,7 +722,13 @@ class ToolLoopAgent:
             )
             await _emit(
                 on_loop_event,
-                ToolRejected(kind="execute_guardrail", tool_name=call.name),
+                ToolRejected(
+                    kind="execute_guardrail",
+                    tool_name=call.name,
+                    iteration=iteration,
+                    detail=outcome[:200],
+                    duration_ms=int((time.monotonic() - iteration_started) * 1000),
+                ),
             )
             base_messages[1] = {
                 "role": "user",

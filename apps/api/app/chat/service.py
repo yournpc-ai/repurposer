@@ -2589,13 +2589,20 @@ async def record_activity_log(
     frames: list[dict[str, Any]],
     *,
     ref: str,
+    rejections: list[dict[str, Any]] | None = None,
 ) -> Message | None:
     """Persist one turn's settled activity frames as a single message row
     (once-only per ``ref`` — the opening user row's id — so a retried
     persist collapses onto the first landed row). Called by the SSE turn
     routes AFTER the envelope sweep, on the completed path only — a failed
-    turn persists nothing (the stamp_turn_failed doctrine's twin)."""
-    if not frames:
+    turn persists nothing (the stamp_turn_failed doctrine's twin).
+
+    ``rejections`` (rejection 取证批): the turn's rejected tool calls as
+    plain loop facts {tool_name, kind, iteration, detail, duration_ms, at}
+    — the forensic record rides the SAME row's intent dump (never
+    rendered; the replay reads ``frames`` only), so a rejected attempt
+    stays auditable even when the repair span itself was invisible."""
+    if not frames and not rejections:
         return None
     dedup = select(Message.id).where(
         Message.conversation_id == conversation_id,
@@ -2604,13 +2611,16 @@ async def record_activity_log(
     )
     if (await db.execute(dedup.limit(1))).scalar_one_or_none() is not None:
         return None
+    intent: dict[str, Any] = {"type": ACTIVITY_LOG_TYPE, "ref": ref, "frames": frames}
+    if rejections:
+        intent["rejections"] = rejections
     message = Message(
         conversation_id=conversation_id,
         role="assistant",
         content="",
         attachments=[],
         mentions=[],
-        intent={"type": ACTIVITY_LOG_TYPE, "ref": ref, "frames": frames},
+        intent=intent,
     )
     db.add(message)
     await db.flush()
