@@ -267,6 +267,15 @@ B → C·C+ → S → D → E → G1 → G2
 - **未跑验证（用户清单）**：① `uv run --extra dev python -m pytest tests/test_material_pending_pure.py -q`（新四态机锁 + 素材待命车道契约）；② 全量 pytest（既有债 11 红不算账；清单外新红 = 异常）；③ `uv run python scripts/chat_scenarios.py --only S-int-12,S-int-13,S-int-14`（G1 场景在协议推广后不回归 + 两新场景带入）；④ 全量剧本（重点：S10/S21/S23 流式断言面 + check_stream_law/check_read_silent_stream 调用点 + S16 既有 flake 账）；⑤ live 复跑四事故场景的事故③ 同形（被拒回合客户端零散文毛刺）；⑥ web tsc（前端零改动，预期零新增）。
 - **承重观察（在册不处理）**：① preview 的「提前 dock」功能被协议吸收后，question.preview 帧实质退化为信封前奏——若日后实测认为预览帧冗余，退役是独立批次（客户端 rollback/re-dock 机先留）；② clean 回合首字延迟 = 全生成 + 校验时长（缓冲整段持有）——定案不优化；若 live 实测首字延迟体感过长，「安全前缀即流」是 ADR 级翻案议题（本批明条停手点），不是调参；③ 被拒回合的 phase-clear 仍 live（name-known 时刻）——thinking 行标签在重试窗回基态「Thinking…」，若实测觉得相位叙事不够，补救座是 StatusLine 相位文案，不是把 tool_call 塞回缓冲。
 
+**批次 G2 验收裁决落地**（用户裁决 2026-10-03，验证调整随批）：
+
+- **三项关键裁决全部接受**：终态全武装（边界：武装 = 必经安全检查 ≠ 都应被执行；总收尾文档必须写明「为什么没有例外」的裁决理据，不只留名单——防未来新终态工具把清单误读成封闭枚举）；不扩断流重连脚本座（适用范围前提 = 回合提交正确性不依赖客户端完整接收活动流；若未来发现断流致重复提交/错误确认/状态不可恢复，另立连接恢复测试座）；三通道分家为本轮核心架构收敛（活动流/存活性 chrome live 不承担裁决证据完整性；散文通道到达 ≠ 结构化裁决完成；预览缓冲是协议正确性的一部分而非 UI 优化——缓冲必须保留足以恢复语义顺序的信息，否则只是把竞态从 projector 前移到缓冲释放点）。
+- **D3 验收两命题分离**（已落 S-int-13）：① 客户端零预览零散文（deltas strict empty + previews 随 retract 清）；② 服务端零提交零残留（S-int-13 ④：present_plan → pending_brief echo == 信封；ask_user → pending question 与信封同 id；其余终态 → 无 dock 残留）——前者不替代后者。
+- **原始事件序列留存**（验收裁决）：StreamTurn 增 `raw_events`（{event, data} 按到达序——跨类型顺序正是本轮问题面，分型列表丢失它）；`dump_raw_events()` 落盘 `scratch/speech_commit/*.jsonl`；S-int-12/13/14 全覆盖（事故③ live 复跑同要求：浏览器侧保存事件序列，不只 pass/fail）。
+- **cancelled 帧三核对**（验收裁决「不能只检查帧是否存在」）：`check_cancelled_provenance()` = ① 来源（同 activity_id 先行 active 帧，无生而 cancelled 的鬼帧）② 顺序（active→cancelled 对先于 turn.completed）③ 对应（台账被拒名 `kind_for_tool` 映射覆盖 cancelled kind——裁决结果与工作证据描述同一次调用）；S-int-12/13 同座调用（G1 场景证据强化 = 验证调整，不属归因隔离禁项）。
+- **S10 had_repair 跳过边界写明**（验收裁决「只豁免预期修复路径，不吞真正的流式失败」）：had_repair 唯一来源 = 活动通道 cancelled/repair 帧（拒绝 wire 证据座），豁免恰好覆盖「本回合发生过拒绝」；被拒回合的严格零泄漏在 S-int-13（迭代 0 拒绝 = deltas 必空）；S10 不能 blanket 断空——迭代 0 言语先经 checkpoint flush-first 合法释放、后续迭代才被拒时 deltas 非空是协议内形态。
+- **验证执行顺序（用户定）**：① 四态机纯测试（失败先修状态机，不进集成）→ ② 全量 pytest（清单外新红暂停归因）→ ③ S-int-12/13/14 定向（核 cancelled 帧来源/顺序/对应）→ ④ 全量剧本（S10/S21/S23 流式断言全立方证未以牺牲既有流式语义换 G2）→ ⑤ 事故③ live 同形复跑（D3 关键证据 + 事件序列留存）→ ⑥ web tsc（完整性检查）。总收尾铁律：文档反映已验证的实现，不提前把施工假设写成现行法；G2 绿 + 六项无新增异常 + 原始事件证据可复核 + 文档与代码一致 = 收口标准；此前不扩展新场景、不把本轮发现泛化成新的全局流式规则。
+
 ---
 
 ## 总收尾

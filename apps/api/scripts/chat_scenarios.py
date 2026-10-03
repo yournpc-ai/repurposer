@@ -119,6 +119,7 @@ from pydantic import BaseModel  # noqa: E402
 from sqlalchemy import delete, func, select, update  # noqa: E402
 
 from app.agents.base import Agent, StreamingAgent  # noqa: E402
+from app.chat.activity import kind_for_tool  # noqa: E402
 from app.chat.perception import PERCEPTION_TOOLS  # noqa: E402
 from app.providers.llm.base import LLMError, LLMSchemaError  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
@@ -195,6 +196,12 @@ class StreamTurn(NamedTuple):
     # each entry is one assistant.activity payload {activity_id, seq, kind,
     # status, key}. Same constructor discipline as checkpoints.
     activities: list[dict]
+    # 原始事件序列 (批次 G2 验收裁决): every data frame as {event, data} in
+    # ARRIVAL order — the per-type lists above lose the cross-type order,
+    # and the ordering IS this batch's problem surface (the name_known /
+    # accept-reject inversion). Scenarios dump it for review; pass/fail
+    # alone leaves the next ordering bug unlocalizable.
+    raw_events: list[dict]
 
 
 class Ctx:
@@ -251,6 +258,7 @@ class Ctx:
         previews: list[dict] = []
         checkpoints: list[str] = []
         activities: list[dict] = []
+        raw_events: list[dict] = []
         completed: dict | None = None
         failed: dict | None = None
         async with self.client.stream(
@@ -268,6 +276,7 @@ class Ctx:
                 elif line.startswith("data:"):
                     seen += 1
                     payload = json.loads(line[5:].strip())
+                    raw_events.append({"event": event, "data": payload})
                     if event == "assistant.delta":
                         deltas.append(payload["text"])
                     elif event == "assistant.thinking":
@@ -292,6 +301,7 @@ class Ctx:
             failed=failed,
             checkpoints=checkpoints,
             activities=activities,
+            raw_events=raw_events,
         )
 
     async def answer(self, question_id: str, body: dict) -> httpx.Response:
@@ -765,6 +775,69 @@ def _work_evidence(stream: "StreamTurn") -> tuple[bool, bool]:
         a["kind"] == "repair" or a["status"] == "cancelled" for a in stream.activities
     )
     return had_reads, had_repair
+
+
+def dump_raw_events(scenario_id: str, label: str, turn: "StreamTurn") -> None:
+    """批次 G2 验收裁决: persist the turn's raw ordered event sequence for
+    review (scratch/speech_commit/*.jsonl) — the cross-type ordering IS
+    this batch's problem surface; a bare pass/fail leaves the next
+    ordering bug unlocalizable."""
+    out_dir = Path(__file__).resolve().parents[3] / "scratch" / "speech_commit"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / (
+        f"{scenario_id}-{label}-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}.jsonl"
+    )
+    with path.open("w", encoding="utf-8") as f:
+        for entry in turn.raw_events:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    print(f"    · {scenario_id} raw events → {path}")
+
+
+def check_cancelled_provenance(
+    stream: "StreamTurn", ledger: list[dict], label: str
+) -> None:
+    """cancelled 帧三核对 (批次 G2 验收裁决 — 不能只检查帧是否存在):
+    ① 来源: the cancelled frame's activity_id has a PRIOR active frame of
+    the same id in the raw sequence (the half-started call, never a
+    born-cancelled ghost);
+    ② 顺序: the active → cancelled pair precedes turn.completed (the
+    rejection resolves mid-turn, never after the envelope);
+    ③ 对应: the ledger's rejected tool names map (kind_for_tool) onto the
+    cancelled frames' kinds — the rejection's adjudication outcome and the
+    cancelled work evidence describe the SAME call."""
+    raw = stream.raw_events
+    acts = [(i, e["data"]) for i, e in enumerate(raw) if e["event"] == "assistant.activity"]
+    cancelled = [(i, a) for i, a in acts if a["status"] == "cancelled"]
+    check(bool(cancelled), f"{label}: a cancelled frame exists", stream.activities)
+    completed_idx = next(
+        (i for i, e in enumerate(raw) if e["event"] == "turn.completed"), len(raw)
+    )
+    rejected_kinds = {
+        kind_for_tool(r["tool_name"]) for r in ledger if r["tool_name"]
+    }
+    for idx, frame in cancelled:
+        prior_active = any(
+            a["activity_id"] == frame["activity_id"] and a["status"] == "active"
+            for _i, a in acts
+            if _i < idx
+        )
+        check(
+            prior_active,
+            f"{label}: ① the cancelled frame's source is a prior active "
+            f"frame of the same activity_id",
+            frame,
+        )
+        check(
+            idx < completed_idx,
+            f"{label}: ② the cancelled frame precedes turn.completed",
+            {"cancelled_at": idx, "completed_at": completed_idx},
+        )
+        check(
+            frame["kind"] in rejected_kinds,
+            f"{label}: ③ the cancelled span's kind maps from the ledger's "
+            f"rejected tool names (adjudication ⇔ work evidence)",
+            {"cancelled": frame, "ledger": ledger},
+        )
 
 
 def check_stream_law(
@@ -2539,6 +2612,12 @@ async def s10_sse_turn_streaming(ctx: Ctx) -> None:
     # 言语提交协议 (G2): a clean turn's framing flushes at the accept; a
     # turn with a rejected iteration is frame-silent by design (retracted
     # speech) — the prose assertions skip it like the stream law does.
+    # 跳过边界（验收裁决: 只豁免预期修复路径，不吞真正的流式失败）——
+    # had_repair 的唯一来源是活动通道的 cancelled/repair 帧（拒绝的
+    # wire 证据座），即豁免恰好覆盖「本回合发生过拒绝」一种形态；被拒
+    # 回合的严格零泄漏断言在 S-int-13（迭代 0 拒绝 = deltas 必空）——
+    # 此处不能 blanket 断空：若迭代 0 的言语先经 checkpoint flush-first
+    # 合法释放、后续迭代才被拒，deltas 非空是协议内形态。
     _had_reads_ask, had_repair_ask = _work_evidence(stream)
     if not had_repair_ask:
         check(len(stream.deltas) > 0, "ask turn streams the framing prose", q)
@@ -5516,6 +5595,10 @@ async def s_int12_repair_never_confesses(ctx: Ctx) -> None:
             f"同形（{sorted(rejected_names)} → {term}）= 零 repair 帧",
             repair_frames,
         )
+    # cancelled 帧三核对（G2 验收裁决——来源/顺序/对应，不只存在性）+
+    # 原始事件序列留存。
+    check_cancelled_provenance(repair_turn, ledger, "S-int-12")
+    dump_raw_events("S-int-12", "repair", repair_turn)
 
 
 async def s_int13_rejected_speech_never_leaks(ctx: Ctx) -> None:
@@ -5530,7 +5613,14 @@ async def s_int13_rejected_speech_never_leaks(ctx: Ctx) -> None:
        checkpoint 通道走自己的帧（checkpoints 列表），永不混入 deltas；
     ② 信封唯一且自洽——turn.completed 恰一到达；复拉消息流该回合
        assistant 行恰一且 id 与信封一致（无二重身、无半截）；
-    ③ DB 台账含 execute_guardrail 行（G1 取证座在协议推广后仍落库）。
+    ③ DB 台账含 execute_guardrail 行（G1 取证座在协议推广后仍落库）+
+       cancelled 帧三核对（来源 = 同 activity_id 先行 active 帧；顺序 =
+       先于信封；对应 = 台账被拒名 kind_for_tool 映射覆盖 cancelled
+       kind）+ 原始事件序列留存 scratch/speech_commit/；
+    ④ D3 第二命题（服务端协议正确性——不以客户端零泄漏替代）：被拒
+       迭代在服务端零提交零残留，项目世界里只有接受迭代的终态产物
+       （present_plan → pending_brief echo == 信封；ask_user → pending
+       question 与信封同 id；其余 → 无 dock 残留）。
 
     无拒绝发生的回合（模型先问后做）= 判定无对象——最多 2 个全新项目，
     均无拒绝证据 = 硬红（防空洞绿，同 S-int-12 口径）。"""
@@ -5600,24 +5690,58 @@ async def s_int13_rejected_speech_never_leaks(ctx: Ctx) -> None:
         "③ the ledger carries the same-language guardrail rejection",
         ledger,
     )
+    # cancelled 帧三核对（验收裁决——来源/顺序/对应）+ 原始事件序列留存。
+    check_cancelled_provenance(leak_turn, ledger, "S-int-13")
+    dump_raw_events("S-int-13", "leak", leak_turn)
+    # ④ D3 第二命题（服务端协议正确性，不以客户端零泄漏替代）：被拒迭代
+    # 在服务端零提交零残留——项目世界里只有接受迭代的终态产物。
+    term = terminal_tool_of(envelope)
+    brief = (await ctx.results(pid)).get("pending_brief")
+    pending_q = (conv.json() or {}).get("pending_question") or {}
+    if term == "present_plan":
+        check(
+            brief is not None
+            and (brief["intent"].get("answer") or "")
+            == (env_msg.get("content") or ""),
+            "④ 服务端提交恰一：pending_brief 的 echo == 信封内容（无被拒迭代残留）",
+            {"brief": (brief or {}).get("intent", {}).get("answer", "")[:80]},
+        )
+    elif term == "ask_user":
+        check(
+            pending_q.get("id") == env_msg.get("id"),
+            "④ 服务端提交恰一：pending question 与信封 dock 同 id（无被拒迭代残留）",
+            {"pending": pending_q.get("id"), "envelope": env_msg.get("id")},
+        )
+    else:
+        check(
+            brief is None and not pending_q,
+            f"④ {term} 终态：无 dock / brief 残留",
+            {"brief": bool(brief), "pending": bool(pending_q)},
+        )
 
 
 async def s_int14_stream_abort_no_dup_no_loss(ctx: Ctx) -> None:
     """SSE 断流复连座（批次 G2 checklist ④）：SSE 道收到 2 帧后断连
     （言语提交协议下早期帧 = reasoning/phase/activity，散文全部缓冲——
-    断流点必在回合中段），server 侧回合自足走完（提交点在回合尾，
-    socket 生命周期与 server 状态机解耦）：
+    断流点必在回合中段），server 侧回合自足走完。适用范围前提（验收
+    裁决登记）：回合提交正确性不依赖客户端完整接收活动流——提交点在
+    回合尾，socket 生命周期与 server 状态机解耦；本座验收「服务端裁决
+    × 客户端展示一致」，不覆盖全部网络中断组合（若未来发现断流导致
+    重复提交/错误确认/状态不可恢复，另立连接恢复测试座）。
 
     ① 复拉消息流：该回合 assistant 行 0 或 1（永不 2——无半截双写）；
        若 1 则内容非空（行要么完整落库要么不存在）；
     ② 后续回合干净——follow-up 的 SSE 道完整走通（completed 到达、无
        failed），且其流式散文是信封内容的前缀（流式 ⊆ 信封，二源永不
-       分叉；被拒重试回合流式为空 = 前缀平凡成立）。"""
+       分叉；被拒重试回合流式为空 = 前缀平凡成立）；
+    ③ 两段原始事件序列（aborted / follow-up）留存
+       scratch/speech_commit/ 供复核。"""
     pid = await ctx.new_project("S-int-14 abort")
     aborted = await ctx.chat_stream(
         pid, "what can you do? walk me through everything in detail", abort_after=2
     )
     check(aborted.completed is None, "the abort lands before the envelope")
+    dump_raw_events("S-int-14", "aborted", aborted)
     conv = await ctx.conversation(pid)
     conv_id = conv.json()["id"]
 
@@ -5664,6 +5788,7 @@ async def s_int14_stream_abort_no_dup_no_loss(ctx: Ctx) -> None:
         "② 流式 ⊆ 信封（流式散文是信封前缀，二源不分叉）",
         {"streamed": streamed[:80], "envelope": (env_msg.get("content") or "")[:80]},
     )
+    dump_raw_events("S-int-14", "follow-up", follow)
 
 
 SCENARIOS = {
