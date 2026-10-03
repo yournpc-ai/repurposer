@@ -284,6 +284,13 @@ B → C·C+ → S → D → E → G1 → G2
   - **真协议 bug（本轮最重要取证）**：双素材面首跑即复现事故③ 原形——被拒 echo 全文泄到客户端。进程内复现（stub call_loop + 真 run_plan_turn 武装 + 真 finish）定位根因：**`ToolRejected` 类遮蔽**——两 turn 文件里 `app.tools.ToolRejected`（链裁决异常，后导入）遮蔽 `app.agents.tool_loop.ToolRejected`（loop 事件，先导入），wrapper 的 `isinstance(event, ToolRejected)` 恒 False → 转发照跑（projector 台账/cancelled 帧正常——同一 wrapper 的转发支路）但 retract 永不执行 → 收口 rejected=False 全量 flush。修复 = 别名 `ToolRejected as LoopToolRejected`（两文件）+ 静态锁三测试（两 turn 的 retract 座身份断言 + 两类互异断言——遮蔽危害本身在册）。进程内复跑零泄漏。**教训入册：isinstance 守卫的目标类必须随导入面静态锁定，纯测试只测缓冲不测接线时此类 bug 不可见。**
 - **未跑项**：③ 定向复跑（触发面再座 + 别名修复后）、④ 全量剧本、⑤ live 复跑、⑥ web tsc。
 
+**批次 G2 验收次轮（2026-10-04，别名修复 + 触发面再座后，Claude 跑）**：
+
+- **①② 纯测试**：918 passed + 11 failed = 登记债逐名一致（新增遮蔽静态锁三测试绿）。
+- **③ 定向三场景全绿**：S-int-12/13/14 PASS。S-int-13 原始事件序列证据形态（scratch/speech_commit/S-int-13-leak-20261003-175309.jsonl）：`thinking×494 → draft/active → draft/cancelled → repair/completed(repairDone) → turn.completed`，**delta 帧 0、preview 帧 0**——被拒言语零 commit 端到端成立，G1 判定树（转向 = repairDone 单帧）与取证台账在协议推广后同绿。
+- **⑥ web tsc**：2 errors = 登记债两项（FlowNodeCard.tsx / layout.test.ts），零新增。
+- **未跑项**：④ 全量剧本（跑中）、⑤ live 复跑。
+
 ---
 
 ## 总收尾
