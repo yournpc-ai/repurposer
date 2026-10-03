@@ -1,6 +1,6 @@
 # Agent 交互架构迁移 — 施工简报（ADR-099）
 
-> Status: **迭代一已收口**——批次 B（`cfb3488`）、C·C+（`05e81ba`+`1cbdad6`）、S（S-int-1..9）落地且验收已跑（批次 S 验收节在册：S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因）；C·C+ 账判软项（承重观察⑥）由用户拍板并入批 D 首批同批修。**迭代二（D/E）开工**，交接提示词 = `apps/api/scratch/handoff-iter2-speech.md`；G 未动工。
+> Status: **迭代一已收口**——批次 B（`cfb3488`）、C·C+（`05e81ba`+`1cbdad6`）、S（S-int-1..9）落地且验收已跑（批次 S 验收节在册：S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因）；C·C+ 账判软项（承重观察⑥）由用户拍板并入批 D 首批同批修。**迭代二批次 D 已落地**（`30174b6`，含判软修同批一次基线，验证全部未跑——用户自跑清单在批次 D 落地记录节）；批次 E 待 D 验收绿后开工，交接提示词 = `apps/api/scratch/handoff-iter2-speech.md`；G 未动工。
 > 架构母法 = ADR-099。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
 
 ## 冻结事项（本简报全程不再议）
@@ -121,6 +121,17 @@ B → C·C+ → S → D → E → G1 → G2
 | **must_not_touch** | schema / tool 语义 / catalog；payload 条款（grounding hierarchy / beat anchor 表格 / suggestions 三件套 / disclosure）；S 场景（红了修 prompt 不修场景）；**混合段纪律：一段同时含 speech shape + payload 时，只抽 speech 重复，禁整段删** |
 | **acceptance** | 触发回合剧本 + reply_quality_probe 轮替：事故①②形态清零且 payload 不回退；带入的回归场景转绿 |
 | **rollback** | 单 commit revert；探针红 = 恢复该段并登记承重 |
+
+**批次 D 落地记录**（施工会话交付，单 commit `30174b6`，验证全部未跑）：
+
+- **判软修（承重观察⑥，首批同批）**：定座 = 候选①+②、弃③——两路 answer 契约段（router/chat_intent suggestions 边界句尾）增「本档是开放探索与浏览问的去处；明确点名工作恒收承诺 dock（present_plan / propose_tasks 或修订动词）；散文铺计划不 dock 是本档唯一禁形」+ 两路 answer catalog line 增同义短句。**宪法①条未动**：元律问②（能结构化/契约化吗——能，工具契约即座位）裁定该法不入宪法，判软是档边界问题不是判断权问题。
+- **事故②根修**：beat① 「the DELIVERABLE direction you'd take (which output to make first)」→「you recommend making first … the verdict reads as an OFFER the user can accept in one word, never as a decision already made or a go-ahead issued on their behalf」；rejected-alternative 结构、性状否决资格（ADR-094）、one judgment one voice 全保留。beat④「close ON the verdict」→「close ON the offer」（收尾拍 = 同一提议的回落，永不升级为 go-ahead）；介质法全保留（dock 自带问题标题 / 散文永不问号收尾 / 永不预告引出 dock），顺手把引号禁令例（'which direction first?'）抽象化（立法纪律：禁引号示例句，被禁形态用 shape 描述）。run_completed 收尾本已是 offer 质感（offering + default path），未动。
+- **事故①根修**：THE RANGE 增一句「The grouping is the answer's skeleton, never its speech: never announce the scheme and never narrate that you are grouping — the labeled groups simply appear」（宪法②执行细节，抽象表述，未引用事故原句）。
+- **J6 semantic_roles（仪表非闸门）**：五对角色合一维度（推荐=提议非指令 / 提问=邀请非命令 / 默认值=可改非被迫 / 选项=可选非已决 / 观察=有据非断言；0=任一塌禁态 1=边缘 2=出现的全守位、未出现不扣分），覆盖 S-cap 全族 + S-adv + S-warm；RUBRIC_VERSION 5→6。**语言矩阵** = S-cap 六格（prompt 语言 × Accept-Language 地板；dict 序 = 风险加权序 en→zh/mixed→zh 先行、zh→zh/en→en 基线、zh→en/mixed→en 末位，默认场景清单同序）；地板经 per-request Accept-Language 注入（mirror 律下地板只在无语言信号时生效，mixed prompt 是地板有权重之座）；D2/J5 的 S-cap 适用面同批扩为全族。基线纪律提醒：v6 后旧基线只比共有维度，批 D 施工前基线需以 v6 重存。
+- **事故①②回归场景入座**：S-int-10（空项目能力问 ×2 语言——终态 answer + 散文落地 + 极窄机器词负形「归类 / group by the / group these by」+ 零 run）；S-int-11（seed_keynote_project + 进程内 `run_trigger_turn(TRIGGER_UNDERSTANDING)` 确定性点火——无 pending plan 必开口 / 散文非空且永不以 `?`/`？` 收尾（介质法形状锁）/ check_suggestion_block 全谱：1-3 项、id 语法、recommended ≤1、source_turn 自锚、source_state 快照、label ≤40、载荷负形 lint）。断言面分工按施工点 5 定死：场景零措辞正则，推荐 vs 指令判定归 J6。
+- **probe I 入座**：gate 第 12 探针——plan 路素材在库（material_excerpt 同 D）+ recent 轮次已建推荐格局 + browse 问（"anything else you'd recommend?"）→ 终态 answer 且 args 带 1-3 suggestions，present_plan/ask_user 零调用（D 族 NEVER-called 断言式；stub 默认接受 answer，无需新护栏）。阈值 8 随 D/E/F/G 先例，**首读数待测**（注释在册：recalibrate from readings, never to excuse）。点选/stale 不入座（跨回合 provenance 归剧本 S-int-6/7，docstring 注明）。
+- **must_not_touch 对账**：schema / tool 语义零改动（turn_tools 只动 answer 描述句 = 判软修点名座位）；payload 条款零改动（grounding hierarchy / beat anchor 表格 / suggestions 三件套 / disclosure / run_completed 交付事实纪律逐字未动）；S 场景零改动（S-int-10/11 为纯新增）；混合段纪律——beat①/④ 只抽 speech 质感句，rejected-alternative 与 speaker-form payload 句原位保留。
+- **未跑验证（用户清单）**：① 触发回合剧本（S-int-11 为首）+ 事故①②场景转绿（S-int-10/11）；② `reply_quality_probe.py` 轮替（round-robin，J6 + 语言矩阵——先存 v6 新基线再对账）；③ S5/S10 复跑（判软修目标座——clips 类点名工作回收 present_plan）+ S-int-4 不回退 + S-int-2/5 两跑判读（answer+suggestions 档发射率基线 = 波动，判软修不得把该档压回去）；④ prompt_gate 全量 12 探针（probe I 首读数入 THRESHOLDS 注释）；⑤ chat_scenarios 全量（既有债四族不在本批账——A 白名单 / B 探索族 / C S22 时序 / S16 flake）；⑥ 纯 pytest（零 schema 改动，预期 906 绿 + 既有债 11 红，清单外新红 = 异常）；⑦ py_compile / import 冒烟（scripts 三件套本批改动面）。
 
 ---
 
