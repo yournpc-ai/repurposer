@@ -121,6 +121,7 @@ from sqlalchemy import delete, func, select, update  # noqa: E402
 from app.agents.base import Agent, StreamingAgent  # noqa: E402
 from app.chat.activity import kind_for_tool  # noqa: E402
 from app.chat.perception import PERCEPTION_TOOLS  # noqa: E402
+from app.chat.service import _cannot_do_text  # noqa: E402
 from app.providers.llm.base import LLMError, LLMSchemaError  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.schemas import MediaInput, TaskItem  # noqa: E402
@@ -3643,8 +3644,12 @@ async def s18_idless_asset_read_terminalizes(ctx: Ctx) -> None:
     meta 无 language）+ 原事故文案 —— 模型想「先看源语言」时 get_asset 的
     无 id 调用必须成功（工具自证 provenance：prompt 面从不列 asset id，
     必填 id 曾逼模型编造 → schema 拒绝 → 静默 repair 窗）。回合必须收敛
-    到计划 dock，永不落入 exhausted 的 cannot-do 降级。锁终态形态
-    （task_book / 提问），不锁 LLM 言语（禁令 #7）。"""
+    到计划 dock / 提问 / 素材待命承诺（落地时刻压制批起的第三合法终态：
+    PENDING 素材的标记承诺 = answer 终态，世界自证的 review 回合接棒——
+    2026-10-04 验收实证探针：承诺原文 "I'll put the plan together once
+    your video's content read finishes"），永不落入 exhausted 的
+    cannot-do 降级。锁终态形态，不锁 LLM 言语（禁令 #7）；降级行是代码
+    组成常量，逐字比对，非 NLP 判 LLM 散文。"""
     pid = await ctx.new_project("S18 idless asset read")
     await seed_asset(
         pid,
@@ -3656,16 +3661,19 @@ async def s18_idless_asset_read_terminalizes(ctx: Ctx) -> None:
         # PENDING + no meta.language — the incident's pre-ASR window: the
         # plan surface shows the filename with no detected language.
     )
-    turn1 = await ctx.chat(
-        pid,
+    message = (
         "Caption my video in Chinese and French — Chinese as bilingual "
-        "subtitles.",
+        "subtitles."
     )
+    turn1 = await ctx.chat(pid, message)
     terminal = terminal_tool_of(turn1)
+    content = ((turn1.get("assistant_message") or {}).get("content") or "").strip()
     check(
-        terminal in ("present_plan", "ask_user"),
-        "the pre-ASR caption turn terminalizes as a plan dock or an honest "
-        "question — never the exhaustion degrade",
+        terminal in ("present_plan", "ask_user")
+        or (terminal == "answer" and content != _cannot_do_text(message)),
+        "the pre-ASR caption turn terminalizes as a plan dock, an honest "
+        "question, or the material-pending commitment — never the "
+        "exhaustion degrade",
         terminal,
     )
     check(

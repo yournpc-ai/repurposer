@@ -291,6 +291,13 @@ B → C·C+ → S → D → E → G1 → G2
 - **⑥ web tsc**：2 errors = 登记债两项（FlowNodeCard.tsx / layout.test.ts），零新增。
 - **未跑项**：④ 全量剧本（跑中）、⑤ live 复跑。
 
+**批次 G2 验收·全量剧本首轮归因（2026-10-04，Claude 跑）**：
+
+- **31/40，9 红全部归因**：登记债 7（A×4 白名单漂移 S6/S10/S20/S21；B×2 探索族 S23/S-explore-2；S16 flake 族）；清单外 2 归零——
+  - **S5 = 发射方差**：单跑复跑即绿，非持续红。
+  - **S18 = harness 契约漂移（素材待命车道的第三合法终态）**：探针实证 pre-ASR caption 回合收敛为素材待命承诺（answer 终态，"I'll put the plan together once your video's content read finishes"——落地时刻压制批的设计行为），非 cannot-do 降级。场景断言从二终态白名单调为三终态 + 降级行代码常量逐字负形（`_cannot_do_text` 单源比对，非 NLP 判 LLM 散文）。调整后单跑绿。
+- **终轮全量复跑（S18 调整后）进行中**，读数入册后定收口。
+
 ---
 
 ## 总收尾
