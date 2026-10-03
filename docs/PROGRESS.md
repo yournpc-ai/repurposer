@@ -309,6 +309,10 @@
 | 纯 pytest 11 个既有失败复核 | P1 | 纯函数套件（tests/*_pure.py）全绿承诺 | 批次二交付报告（2026-09-29，stash 零假设证为树内既有、与该批无关）：decompile×1 / graph_wiring×8 / import_direction×1 / wire_tiers×1，涉 node_runners.py 等未触文件；回归引入点未定，复核后归位 |
 | trigger beat ③ 引号质感例句（prompt 卫生） | P2 | prompt 面（`trigger_system.j2` beat ③） | 批次三观察项：与 W3 整删的 beat ① 同族——引号例句 = 被抄模板，FREE PHRASING 律违反；风险较低（质感示范非否决判句），下轮 prompt 面批次同批评审 |
 | 能力菜单欠卖族（dub_clip / remove_filler） | P2 | 能力问答面（`_MENU_PHRASES`） | 批次三观察项：dub_clip 不说声纹克隆（catalog description 有 "persona's cloned voice"，差异化 moat）、remove_filler 只说 filler 不说 repeated takes——欠卖类同 reframe 旧行；措辞升格参照 W5 真值先行法（读 procedure 全量再措辞） |
+| 建议卡发射率（probe I 拆双指标 + substrate 先查） | P1 | 无（gate 仪表与 stub execute 在） | 迭代二收口拍板：probe I **不降阈值**（8/12 保留为原始质量目标，首读带 4~6 未达）拆两指标——**路由安全**（present_plan/ask_user 劫持零容忍；本批 24 样本零发生 = 通过）+ **建议发射率**（pre-D 面同带复现 = 既有弱点非回归）；发射率分层——纯能力问建议卡可选（不硬约束），有素材/明确下一步的探索问缺失才计失败（probe I 拆两子场景）；改进路线 substrate 先查（固定模型/参数/场景重复采样，记录原始输出 → 工具调用 → 应用层处理，定位失败在模型未提 / 未调用 / 被丢弃哪层），确认 prompt 约束不清才修 prompt；failure-tag 待补 `answer-args-invalid` + `suggestions-semantic-invalid`（后者先人工标注，不立自动 evaluator） |
+| 发射层 / provider 方差受控复测（S5 族） | P2 | 与上行同取证面，可合批 | 迭代二收口拍板：S5 五跑 2 绿 3 红（dialect ×2 + 散文铺计划 bare reply ×1）——不归因 D/E 也不以 flake 忽略；轻量立项：固定模型/provider/温度/工具定义/输入/初始状态重复采样，每次保留完整模型输出 + 工具调用序列 + 终态响应，按失败签名记频率（不只记绿红）；区分采样波动 / prompt 约束不足 / 应用层处理不稳 / 评测器形态过敏四因；同输入固定条件仍频繁不同终态 → 上 substrate 层约束，不叠 prompt 文字 |
+| 评测系统语义三修（J6 开工暗示 / D3 拒绝项 / S-adv deferral 座） | P2 | reply_quality_probe v6 基线（✅ `baseline-iter2-final` 已存） | 迭代二收口拍板：① J6=1（「先把这块打出来」go-ahead 腔）保留边缘分不降级——补「未确认却暗示已开工」语义断言（推荐 = 建议+理由待确认，执行语义只在确认后），禁固定禁词表；② D3 判读修正——被拒绝备选作上下文说明 = 通过，误述为可选 = 失败（rejected-alternative 是产品结构非缺陷），禁为得分把拒绝项改回可选；③ S-adv 增 `deferred / awaiting-prerequisite` 合法座四条件（指明具体缺口 / 未验证信息不包装成结论 / 说明下一步不虚构已执行 / 前置满足后能续原任务），泛泛「稍后再看」不豁免；评测从 0/1/2 扩为「判断质量 × 是否合理延迟」两维 |
+| fill-keys 读面口径（research facet 折叠 × S1 断言） | P2 | ADR-097 §3 第二层门读面行为（✅ DB 实证在册：research 节点 `artifact_role='facet'` 在库未删，读帧并入 deliverable 卡组） | 迭代二收口登记：research 节点 start 后 stamp 为 facet → 读帧节点数 ≠ draft 节点数 → S1「同节点原地填充」断言红（E3 恢复态同率复现，prompt 零交集）；先拍产品语义（facet 折叠对 research 类节点是否正确的画布呈现），再定修 read model 还是修断言口径 |
 
 ### 可选需求
 
