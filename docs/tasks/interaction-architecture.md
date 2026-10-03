@@ -1,6 +1,6 @@
 # Agent 交互架构迁移 — 施工简报（ADR-099）
 
-> Status: **迭代一已收口**——批次 B（`cfb3488`）、C·C+（`05e81ba`+`1cbdad6`）、S（S-int-1..9）落地且验收已跑（批次 S 验收节在册：S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因）；C·C+ 账判软项（承重观察⑥）由用户拍板并入批 D 首批同批修。**迭代二施工完成**——批次 D（`30174b6` + `2411290` gate 仪表）与批次 E 三簇（E1 `ddde27f` / E2 `4a226ee` / E3 `58c9449`，纯 patch apply 落座，零手工缝合）全部进 main，验证全未跑；**收口验收单冻结待跑**（批次 E 节目落，一次战役，红按 commit 序逆序二分）；G 未动工。
+> Status: **迭代一已收口**——批次 B（`cfb3488`）、C·C+（`05e81ba`+`1cbdad6`）、S（S-int-1..9）落地且验收已跑（批次 S 验收节在册：S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因）；C·C+ 账判软项（承重观察⑥）由用户拍板并入批 D 首批同批修。**迭代二收口验收中**——批次 D（`30174b6` + `2411290`）与批次 E（E1 `ddde27f` / E2 `4a226ee` 删除态保持；E3 `58c9449` 经二分归因 revert 落 `70136d8`：S1 解剖①观察到删除导致回归，该簇暂保留）全部进 main；验收单确定性面/事故①②/判软双向/E1E2 承重座已绿，gate 12 探针 / v6 基线 / 全量剧本在终态树补跑中；新债 fill-keys 族（research facet 读面折叠 × S1 断言口径）登记在批次 E 验收记录，不在本迭代账；G 未动工。
 > 架构母法 = ADR-099。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
 
 ## 冻结事项（本简报全程不再议）
@@ -175,7 +175,17 @@ B → C·C+ → S → D → E → G1 → G2
 - **E2 `4a226ee`**：`git apply --check` 一次过，零手工缝合；只触两 prompt 文件。删除量 = 4 处改写（router present_plan FREE PHRASING 尾句 / router ask_user 尾句 / router start_run FREE PHRASING 尾句 / chat_intent ask_user 尾句），删 4833 字符 / 增 4450 字符（净删 ~383）。partials 零触碰（`_capability_answer` rule 4 同族句原位保留）。
 - **E3 `58c9449`**：`git apply --check` 一次过，零手工缝合；只触两 prompt 文件。删除量 = 2 处改写（router ask_user 段 / chat_intent ask_user 段），删 1649 字符 / 增 975 字符（净删 ~674）。参数座（router `question` no-default-path-tail + `default_path` param / chat_intent `question` bare）保留在收缩行内。
 - **三簇合计**：10 处改写，删 11163 字符 / 增 9791 字符（净删 ~1372）。
-- **收口验收单一致性核对（施工会话代码层对账，非行为验证）**：验收单 8 条命令行与代码终态一致——chat_scenarios.py 含 S-int-1..11 / S1 / S3 / S5 / S10 / S19 全部场景号；prompt_gate THRESHOLDS 恰 12 探针（A..I 含 H2/H3/H4），probe I 注释「first reading pending」在册；reply_quality_probe.py 存在且 RUBRIC_VERSION=6（批 D 已升）。无漂移。
+- **收口验收单一致性核对（施工会话对账）**：验收单 8 条命令行与代码终态一致——chat_scenarios.py 含 S-int-1..11 / S1 / S3 / S5 / S10 / S19 全部场景号；prompt_gate THRESHOLDS 恰 12 探针（A..I 含 H2/H3/H4），probe I 注释「first reading pending」在册；reply_quality_probe.py 存在且 RUBRIC_VERSION=6（批 D 已升）。无漂移。
+
+**批次 E 验收记录**（用户授权施工会话代跑收口验收单，一次战役）：
+
+- **确定性面**：pytest 906 绿 + 11 红（既有债逐项命中、零新增）；py_compile 三脚本 OK。
+- **事故①②回归**：S-int-10 / S-int-11 双绿。
+- **判软修双向**：实质绿——正向 S5 / S-int-4 ✓、反向 S-int-2 / S-int-5 ✓；S10 红 = 既有债 A（活动帧白名单缺 `at` 键，归因表逐项命中，不在账），S10 的 present_plan 回收读数被该债阻挡（场景维护批的事）。
+- **E1/E2 承重疑似座**：S3 / S19 / S-int-1 / S-int-3 / S-int-9 全绿——E1 假绿形态（正常回合不收尾/收尾退闲聊/卡与散文错拍）未出现，E2 anti-parroting 座（S-int-9）未回归。
+- **E3 归因 revert（`70136d8`）**：S1 解剖①红——ask 散文退化为裸问题复述（判断框架消失），E3 删除态基线 1/6 红、恢复态 0/8 红，红形态与判读要点预登记的 E3 介质法三禁删除面精确吻合；预登记预测 × 形态吻合 × 方向性数据三重同向，按协议逆序二分落 revert commit。登记语言纪律：观察到删除导致回归；该簇暂保留——样本量有限（1/6 vs 0/8 未达统计显著），恢复转绿只证删除改变了行为，不证该文本语义不可替代。E3 承重簇永不再探。
+- **新债登记（fill-keys 族，不在本迭代账）**：S1「start 后同节点原地填充」断言在模型把 `research` 组进链时红（删除态 2/6、E3 恢复态 3/8 同率复现）。DB 实证机制 = artifact facet 读面折叠——research 节点 start 后 stamp 为 `facet` 并入 deliverable 卡组（ADR-097 §3 第二层门既有行为，research hoisting 起 2026-09-03 先于批 S），读帧节点数 ≠ draft 节点数，与 prompt 无关。处置 = 场景维护批拍板（断言口径是否计 facet 组），不修场景不回调。
+- **E1/E2 保持删除态**：三簇合计原删 11163 字符，E3 恢复 674 字符后，净删除 = E1 ~315 + E2 ~383 ≈ 700 字符 / 8 处改写。
 
 ---
 
