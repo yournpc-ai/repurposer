@@ -589,6 +589,28 @@ def _passed(probe: str, r: LoopResult) -> bool:
     raise AssertionError(f"no predicate registered for probe {probe!r}")
 
 
+def _failure_tag(probe: str, r: LoopResult) -> str | None:
+    """Failure-reason split for the conjunction predicates (probe I 首座,
+    GPT 评审吸收): a red round must say WHICH clause failed — 'suggestions
+    never landed' and 'the model reached for a commitment form' are
+    different regressions with different fixes, and a bare hit-count
+    conflates them. None = the round passed (or the probe has no split).
+    Priority: commitment-form misuse first (the higher-signal failure),
+    then the terminal, then the payload shape."""
+    if probe != "I":
+        return None
+    if "present_plan" in r.calls:
+        return "present_plan-called"
+    if "ask_user" in r.calls:
+        return "ask_user-called"
+    if r.tool_name != "answer":
+        return f"terminal={r.tool_name}"
+    suggestions = getattr(r.params, "suggestions", None) or []
+    if not (1 <= len(suggestions) <= 3):
+        return "suggestions-range"
+    return None
+
+
 async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=12)
@@ -681,11 +703,15 @@ async def main() -> int:
                 _gate_execute, pending_plan_text=_PROBE_F_PENDING_PLAN
             )
         outcomes = []
+        failure_tags: dict[str, int] = {}
         provider_errors = 0
         for _ in range(args.n):
             try:
                 r = await agent.call_loop(execute, **ctx)
                 outcomes.append(_passed(name, r))
+                tag = _failure_tag(name, r)
+                if tag:
+                    failure_tags[tag] = failure_tags.get(tag, 0) + 1
             except Exception as e:  # noqa: BLE001 — provider errors are NOT behavior
                 # 2026-09-24 实测坑: a mid-gate 402 drained the balance and
                 # the tail probes read 7/3/0/12 — a financial event
@@ -707,7 +733,8 @@ async def main() -> int:
         need = THRESHOLDS[name]
         ok = hits >= need
         failed |= not ok
-        print(f"probe {name}: {hits}/{args.n} (threshold {need}) — {'PASS' if ok else 'FAIL'}")
+        split = f" — failures: {failure_tags}" if failure_tags else ""
+        print(f"probe {name}: {hits}/{args.n} (threshold {need}) — {'PASS' if ok else 'FAIL'}{split}")
     return 1 if failed else 0
 
 
