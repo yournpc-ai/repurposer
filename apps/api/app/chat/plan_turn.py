@@ -44,7 +44,12 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.tool_loop import ToolObservation, ToolRejected
+from app.agents.tool_loop import (
+    ToolObservation,
+    ToolRejected as LoopToolRejected,  # alias: app.tools.ToolRejected (the
+    # chain-adjudication exception, imported below) shadows the loop event's
+    # name in this module — the retract seat must match the LOOP's class
+)
 from app.chat.deferred_frames import DeferredFrames
 from app.chat.exploration_compile import (
     compile_plan_rows_package,
@@ -1785,7 +1790,7 @@ async def run_plan_turn(
         base_on_loop_event = on_loop_event
 
         async def on_loop_event_with_retract(event) -> None:
-            if isinstance(event, ToolRejected):
+            if isinstance(event, LoopToolRejected):
                 deferred.retract()
             if base_on_loop_event is not None:
                 await base_on_loop_event(event)

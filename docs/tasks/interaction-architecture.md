@@ -276,6 +276,14 @@ B → C·C+ → S → D → E → G1 → G2
 - **S10 had_repair 跳过边界写明**（验收裁决「只豁免预期修复路径，不吞真正的流式失败」）：had_repair 唯一来源 = 活动通道 cancelled/repair 帧（拒绝 wire 证据座），豁免恰好覆盖「本回合发生过拒绝」；被拒回合的严格零泄漏在 S-int-13（迭代 0 拒绝 = deltas 必空）；S10 不能 blanket 断空——迭代 0 言语先经 checkpoint flush-first 合法释放、后续迭代才被拒时 deltas 非空是协议内形态。
 - **验证执行顺序（用户定）**：① 四态机纯测试（失败先修状态机，不进集成）→ ② 全量 pytest（清单外新红暂停归因）→ ③ S-int-12/13/14 定向（核 cancelled 帧来源/顺序/对应）→ ④ 全量剧本（S10/S21/S23 流式断言全立方证未以牺牲既有流式语义换 G2）→ ⑤ 事故③ live 同形复跑（D3 关键证据 + 事件序列留存）→ ⑥ web tsc（完整性检查）。总收尾铁律：文档反映已验证的实现，不提前把施工假设写成现行法；G2 绿 + 六项无新增异常 + 原始事件证据可复核 + 文档与代码一致 = 收口标准；此前不扩展新场景、不把本轮发现泛化成新的全局流式规则。
 
+**批次 G2 验收首轮取证（2026-10-03/04，Claude 跑）**：
+
+- **①② 纯测试**：四态机 21/21 绿；全量 915 passed + 11 failed = 登记债逐名一致（曾出第 12 红 `test_draft_span_settles_never_persist`——G1 账测试 seq 误算：静默 repair 开启只占 id 槽不占帧 seq，`_seq` 只计发射帧；纯测试修正，commit 50188da）。
+- **③ 定向首轮 = 两红一绿，红全部归因完毕**：S-int-14 PASS；S-int-12/13 FAIL「no rejected iteration」——防空洞绿正确报警，归因两条：
+  - **触发面漂移（不是护栏漂移）**：探针实证两原触发面已死于 prompt 层规避——空项目 clips 面模型第一发 answer 要素材（坚持二轮仍规避），zh 同语配音面模型第一发纠偏「视频本身就是中文」。这是 E 批言语法的预期效果。**新触发面 = zh+en 双素材 + scope-less「做成英文配音版」**：check_transform_targets 的 scope-less facing 面向全部素材（模型眼中 zh→en 完全合法），模型盲区，拒绝稳定复现（探针实证：draft cancelled + repairDone 转向帧 + execute_guardrail 台账行）。两场景已再座此面。
+  - **真协议 bug（本轮最重要取证）**：双素材面首跑即复现事故③ 原形——被拒 echo 全文泄到客户端。进程内复现（stub call_loop + 真 run_plan_turn 武装 + 真 finish）定位根因：**`ToolRejected` 类遮蔽**——两 turn 文件里 `app.tools.ToolRejected`（链裁决异常，后导入）遮蔽 `app.agents.tool_loop.ToolRejected`（loop 事件，先导入），wrapper 的 `isinstance(event, ToolRejected)` 恒 False → 转发照跑（projector 台账/cancelled 帧正常——同一 wrapper 的转发支路）但 retract 永不执行 → 收口 rejected=False 全量 flush。修复 = 别名 `ToolRejected as LoopToolRejected`（两文件）+ 静态锁三测试（两 turn 的 retract 座身份断言 + 两类互异断言——遮蔽危害本身在册）。进程内复跑零泄漏。**教训入册：isinstance 守卫的目标类必须随导入面静态锁定，纯测试只测缓冲不测接线时此类 bug 不可见。**
+- **未跑项**：③ 定向复跑（触发面再座 + 别名修复后）、④ 全量剧本、⑤ live 复跑、⑥ web tsc。
+
 ---
 
 ## 总收尾

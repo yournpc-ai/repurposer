@@ -112,6 +112,39 @@ class TestChatResponseToleratesSilentClose:
         assert field.default is None
 
 
+class TestRetractSeatMatchesTheLoopClass:
+    """The 2026-10-03 leak's static lock: both turn modules carry TWO
+    ``ToolRejected`` names (the tool_loop event AND app.tools' chain-
+    adjudication exception — the later import shadows the former). The
+    retract seat must isinstance-match the LOOP's class, or every
+    ToolRejected forwards without retracting and the rejected turn's
+    queued prose flushes at the close (the leak, reproduced in-process
+    before the alias fix)."""
+
+    def test_plan_turn_retract_seat_is_the_loop_event_class(self) -> None:
+        import app.agents.tool_loop as tool_loop
+        import app.chat.plan_turn as plan_turn
+
+        assert plan_turn.LoopToolRejected is tool_loop.ToolRejected
+
+    def test_propose_turn_retract_seat_is_the_loop_event_class(self) -> None:
+        import app.agents.tool_loop as tool_loop
+        import app.chat.propose_turn as propose_turn
+
+        assert propose_turn.LoopToolRejected is tool_loop.ToolRejected
+
+    def test_the_two_tool_rejected_classes_are_distinct(self) -> None:
+        """The shadow hazard itself stays on file: app.tools.ToolRejected
+        (the registry exception) is NOT the loop event — a bare
+        ``ToolRejected`` reference in either turn module resolves to the
+        registry's, never the loop's."""
+        import app.agents.tool_loop as tool_loop
+        from app.tools import ToolRejected as RegistryRejected
+
+        assert RegistryRejected is not tool_loop.ToolRejected
+
+
+
 class TestDeferredFrames:
     """The speech-commit state machine's six-item checklist (批次 G2):
     ① reject→zero leak; ② retry→only the final envelope, no A+B double

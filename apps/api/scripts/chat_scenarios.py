@@ -5501,9 +5501,8 @@ async def s_int11_trigger_verdict_offer_texture(ctx: Ctx) -> None:
 
 async def s_int12_repair_never_confesses(ctx: Ctx) -> None:
     """事故③ wording 回归锁（批次 G1 — repair 修宪 + rejection 取证）：
-    易触发执行护栏的回合（空项目直接点名 media 工作 → present_plan 的
-    出书门槛拒绝 → 护栏引向 answer/ask_user）里若真的发生了被拒迭代
-    （wire 上的 cancelled 帧 = 拒绝的唯一 wire 证据座），判定树必须成立：
+    易触发执行护栏的回合里若真的发生了被拒迭代（wire 上的 cancelled
+    帧 = 拒绝的唯一 wire 证据座），判定树必须成立：
 
     ① 零 repair ACTIVE 帧——重试跨度静默开启，修复机械永不流成台词；
     ② repair 帧至多一帧且只以终态出现：同形重试 = 零帧（未被公开承诺的
@@ -5514,13 +5513,43 @@ async def s_int12_repair_never_confesses(ctx: Ctx) -> None:
        tool_name/kind/iteration/detail/at）——被拒调用从事后不可考变为
        可取证，且与判定树交叉一致（台账的被拒名 × 终态形态 ⇔ 转向帧有无）。
 
-    无拒绝发生的回合（模型一次过）= 判定树无对象——最多 2 个全新项目，
-    均无拒绝证据 = 硬红（发射面漂移信号，同 S-int-3 口径，防空洞绿）。"""
+    触发面（2026-10-03 再座）：zh+en 双素材 + scope-less「做成英文配音版」
+    ——check_transform_targets 的 scope-less facing 是模型盲区（它眼中
+    「zh 素材出英配」完全合法，护栏面向全部素材），护栏拒绝稳定复现。
+    原触发面（空项目直点 media 工作 → 出书门槛）已死于 prompt 层规避：
+    模型在第一发就按宪法要素材/纠偏，护栏拒绝不再发生（探针实证——
+    这是 E 批言语法的预期效果，不是护栏漂移）。无拒绝发生 = 最多 2 个
+    全新项目，均无拒绝证据 = 硬红（防空洞绿，同 S-int-3 口径）。"""
     repair_turn: StreamTurn | None = None
     envelope: dict | None = None
+    pid = ""
     for attempt in range(1, 3):
         pid = await ctx.new_project(f"S-int-12 repair #{attempt}")
-        turn = await ctx.chat_stream(pid, "cut three vertical clips for me")
+        await seed_asset(
+            pid,
+            ctx.user_id,
+            AssetType.VIDEO,
+            "keynote-zh.mp4",
+            extracted_text=(
+                "今天我想讲三个话题：为什么我们团队决定重写整个渲染管线，"
+                "这次重写教会我们的三件事，以及接下来半年的路线图。"
+            ),
+            meta={"language": "zh"},
+            processed=True,
+        )
+        await seed_asset(
+            pid,
+            ctx.user_id,
+            AssetType.VIDEO,
+            "talk-en.mp4",
+            extracted_text=(
+                "In this talk I walk through three lessons from a decade "
+                "of field research."
+            ),
+            meta={"language": "en"},
+            processed=True,
+        )
+        turn = await ctx.chat_stream(pid, "帮我把视频做成英文配音版")
         env = turn.completed
         check(env is not None, "the turn completes", turn.failed)
         if any(a["status"] == "cancelled" for a in turn.activities):
@@ -5602,10 +5631,8 @@ async def s_int12_repair_never_confesses(ctx: Ctx) -> None:
 
 
 async def s_int13_rejected_speech_never_leaks(ctx: Ctx) -> None:
-    """事故③ leak 回归锁（批次 G2 — 言语提交协议一般化）：中文素材 +
-    「做成中文配音版」→ 迭代 0 直点同语 dub → check_transform_targets
-    拒绝（execute_guardrail）→ retract 清陈 → 重试收口。若真发生被拒
-    迭代（wire 上的 cancelled 帧 = 拒绝唯一 wire 证据座，同 S-int-12
+    """事故③ leak 回归锁（批次 G2 — 言语提交协议一般化）：若真发生被
+    拒迭代（wire 上的 cancelled 帧 = 拒绝唯一 wire 证据座，同 S-int-12
     口径）：
 
     ① wire 散文零泄漏——全回合 deltas 拼接 strip 必为空：被拒迭代的
@@ -5622,8 +5649,11 @@ async def s_int13_rejected_speech_never_leaks(ctx: Ctx) -> None:
        （present_plan → pending_brief echo == 信封；ask_user → pending
        question 与信封同 id；其余 → 无 dock 残留）。
 
-    无拒绝发生的回合（模型先问后做）= 判定无对象——最多 2 个全新项目，
-    均无拒绝证据 = 硬红（防空洞绿，同 S-int-12 口径）。"""
+    触发面（2026-10-03 再座，与 S-int-12 同源）：zh+en 双素材 +
+    scope-less「做成英文配音版」——模型盲区面（原 zh 单素材同语配音
+    触发面已死于 prompt 层规避：模型第一发直接纠偏「视频本身就是中
+    文」，护栏拒绝不再发生）。无拒绝发生 = 最多 2 个全新项目，均无
+    拒绝证据 = 硬红（防空洞绿，同 S-int-12 口径）。"""
     leak_turn: StreamTurn | None = None
     envelope: dict | None = None
     pid = ""
@@ -5641,7 +5671,19 @@ async def s_int13_rejected_speech_never_leaks(ctx: Ctx) -> None:
             meta={"language": "zh"},
             processed=True,
         )
-        turn = await ctx.chat_stream(pid, "帮我把这个视频做成中文配音版")
+        await seed_asset(
+            pid,
+            ctx.user_id,
+            AssetType.VIDEO,
+            "talk-en.mp4",
+            extracted_text=(
+                "In this talk I walk through three lessons from a decade "
+                "of field research."
+            ),
+            meta={"language": "en"},
+            processed=True,
+        )
+        turn = await ctx.chat_stream(pid, "帮我把视频做成英文配音版")
         env = turn.completed
         check(env is not None, "the turn completes", turn.failed)
         if any(a["status"] == "cancelled" for a in turn.activities):
@@ -5738,7 +5780,7 @@ async def s_int14_stream_abort_no_dup_no_loss(ctx: Ctx) -> None:
        scratch/speech_commit/ 供复核。"""
     pid = await ctx.new_project("S-int-14 abort")
     aborted = await ctx.chat_stream(
-        pid, "what can you do? walk me through everything in detail", abort_after=2
+        pid, "你会做什么？把你能做的事详细介绍一下", abort_after=2
     )
     check(aborted.completed is None, "the abort lands before the envelope")
     dump_raw_events("S-int-14", "aborted", aborted)
@@ -5775,7 +5817,7 @@ async def s_int14_stream_abort_no_dup_no_loss(ctx: Ctx) -> None:
             "① the committed row is whole (非空内容)",
             settled[-1].get("content"),
         )
-    follow = await ctx.chat_stream(pid, "and what about LinkedIn posts?")
+    follow = await ctx.chat_stream(pid, "这个视频有没有什么建议？还有其他想法吗？")
     check(
         follow.completed is not None and follow.failed is None,
         "② the follow-up turn completes clean after the abort",
