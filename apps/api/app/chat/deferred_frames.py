@@ -1,30 +1,40 @@
-"""Deferred SSE frames for the material-pending lane (落地时刻压制批).
+"""Deferred SSE frames — the speech-commit protocol's terminal buffer (言语提交协议).
 
-A turn whose assemble saw files still processing MAY close on the
-material-pending commitment — the one-clause "understood + I will speak
-once the read lands" reply. That clause is written against the
-assemble-time world, and short material routinely finishes processing
-MID-TURN (a 15s video reads in ~10s; the router's own call takes longer).
-When the understanding beat has already landed, the commitment arrives
-stale: a promise whose fulfillment (the world-fired review turn) is
-already queued behind this turn's close, waiting on the politeness gate.
+Speech that depends on a terminal call's adjudication never commits before
+the adjudication lands (ADR-099 §7). On the SSE path every turn arms this
+buffer unconditionally: iteration 0 is the only streaming iteration, so its
+prose deltas and tool-structure frames are exactly the speech at risk — a
+rejected call (loop-level schema/unknown/params, or an execute guardrail)
+retracts them, and retracted speech must leave ZERO trace in the message
+flow / envelope (activity-stream forensics excepted — G1's seat).
 
-So while the lane is possible, this buffer holds the turn's prose deltas
-and tool-structure frames in arrival order instead of streaming them live:
+Four-state machine — OPEN → BUFFERING → ACCEPT→FLUSH / REJECT→DROP→RETRY:
 
-- terminal ACCEPT → :meth:`flush` replays the queue through the real hooks
-  in order (the client paces it with the usual typewriter — buffering
-  never teleports prose); an accept that followed a rejection DROPS
-  instead — the queued words were retracted speech, and the settled
-  envelope paces out whole exactly like the zero-delta path;
-- the marked commitment landing STALE (the beat exists) → :meth:`drop`
-  discards the queue unsent, the turn closes silent, and the review turn
-  speaks next — one narrator, no expired promise;
-- the checkpoint channel flushes FIRST (its frame goes out live mid-loop):
-  prose spoken before a read must land before the read's statement.
+- OPEN: armed, queue empty — frames queue in arrival order instead of
+  streaming live (BUFFERING on the first frame);
+- terminal ACCEPT (clean turn) → :meth:`flush` replays the queue through
+  the real hooks in order (the client paces it with the usual typewriter —
+  buffering never teleports prose), then :meth:`disarm` closes the turn;
+- REJECT (any ToolRejected) → :meth:`retract` clears the stale queue AT
+  ONCE and marks the turn's speech retracted, STAYING ARMED — the retry
+  re-arms by construction (RETRY); a turn once rejected closes frame-silent
+  (:meth:`drop` at the resolution — the settled envelope paces out whole,
+  the zero-delta path's law);
+- mid-turn release stays armed: a read's acceptance keeps the queue (read
+  speech rides the speech ledger into the envelope), and the checkpoint
+  channel flushes FIRST (its frame goes out live mid-loop) without
+  disarming — prose spoken before a read must land before the read's
+  statement, and frames after a checkpoint stay buffered until the close.
+
+The material-pending lane rides the same machine: the marked commitment
+landing STALE (the beat exists) → :meth:`drop` discards the queue unsent,
+the turn closes silent, and the review turn speaks next — one narrator, no
+expired promise.
 
 Liveness never suffers: reasoning keepalives, phase labels, and activity
-frames ride their own channels, undeferred.
+frames ride their own channels, undeferred. The StatusLine covers the
+validation dead-window (``chatBusy && !proseActive`` — no delta has
+reached the client while the terminal call adjudicates).
 """
 
 from collections.abc import Awaitable, Callable
@@ -34,53 +44,75 @@ Hook = Callable[..., Awaitable[None]]
 
 
 class DeferredFrames:
-    """One turn's order-preserving SSE frame buffer. Armed at most once per
-    turn (the runner, when the assemble stamped files-still-processing);
-    ``armed`` reads False after a flush/drop — later frames pass through."""
+    """One turn's order-preserving SSE frame buffer. Armed once per turn by
+    the runner on the SSE path; ``armed`` reads False after a
+    flush-then-:meth:`disarm` close or a :meth:`drop` — later frames pass
+    through. ``rejected`` marks a turn whose speech was retracted: its
+    close drops instead of flushing (retracted speech leaves no trace)."""
 
     def __init__(self, hooks: dict[str, Hook | None]) -> None:
         self._hooks = hooks
-        self._frames: list[tuple[str, tuple[Any, ...]]] | None = []
-        self.saw_rejection = False
+        self._frames: list[tuple[str, tuple[Any, ...]]] = []
+        self._armed = True
+        self._rejected = False
 
     @property
     def armed(self) -> bool:
-        return self._frames is not None
+        return self._armed
+
+    @property
+    def rejected(self) -> bool:
+        return self._rejected
 
     def wrap(self, kind: str) -> Hook | None:
-        """Queueing wrapper for one hook ('delta' / 'tool_call' /
-        'tool_ready'). Returns None when the real hook is None — the
-        one-shot path arms nothing (its caller gates on on_delta)."""
+        """Queueing wrapper for one hook (the runners buffer 'delta' and
+        'tool_ready' — prose and the adjudication-dependent preview;
+        'tool_call' stays live: the Activity projector's name_known feed
+        and the phase-clear are liveness chrome, never retracted speech).
+        Returns None when the real hook is None — the one-shot path arms
+        nothing (its caller gates on on_delta)."""
         hook = self._hooks.get(kind)
         if hook is None:
             return None
 
         async def queued(*args: Any) -> None:
-            if self._frames is not None:
+            if self._armed:
                 self._frames.append((kind, args))
             else:
                 await hook(*args)
 
         return queued
 
-    def note_rejection(self) -> None:
-        """A rejected call's queued prose is retracted speech — the accept's
-        flush becomes a drop (the envelope paces the settled words whole)."""
-        self.saw_rejection = True
+    def retract(self) -> None:
+        """REJECT seat: a rejected call's queued prose is retracted speech —
+        clear the stale queue at once and mark the turn, STAYING ARMED (the
+        retry re-arms by construction; its frames queue fresh). The close
+        drops: the settled envelope paces the final words whole."""
+        self._frames.clear()
+        self._rejected = True
 
     async def flush(self) -> None:
-        """Replay the queue in arrival order through the real hooks, then
-        disarm. No-op once disarmed (the suppress path drops first)."""
-        frames, self._frames = self._frames, None
-        for kind, args in frames or []:
+        """Replay the queue in arrival order through the real hooks, STAYING
+        ARMED — mid-turn releases (the checkpoint channel's flush-first)
+        and the clean close share this seat; the close follows with
+        :meth:`disarm`. Replays each queued frame exactly once."""
+        frames, self._frames = self._frames, []
+        for kind, args in frames:
             hook = self._hooks.get(kind)
             if hook is not None:
                 await hook(*args)
 
     def drop(self) -> None:
-        """Discard unsent (the stale commitment; the exhaustion degrade —
-        every queued word was rejected speech)."""
-        self._frames = None
+        """Terminal discard: clear unsent and disarm (the rejected turn's
+        close — every queued word was retracted speech; the stale
+        material-pending commitment; the exhaustion degrade)."""
+        self._frames.clear()
+        self._armed = False
+
+    def disarm(self) -> None:
+        """Terminal close after a flush: later frames pass through live.
+        Idempotent (a drop already disarmed)."""
+        self._armed = False
 
 
 __all__ = ["DeferredFrames"]

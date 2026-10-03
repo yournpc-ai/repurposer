@@ -65,7 +65,7 @@ run 数 / 落库行——永不锁 LLM 文案（禁令 #7）。例外：代码�
              分镜方向 → plan 链必含 select_clips + reframe_clip → run
              completed → 成片 render_spec 带 crop_track（确定性尾；fixture
              纪律同 S16，需 dev worker + MiniMax 配额）
-    S-int-1..12 New Interaction Contract（批次 S · ADR-099 golden suite，
+    S-int-1..14 New Interaction Contract（批次 S · ADR-099 golden suite，
              两层分离的新架构层——Legacy Regression 零改动）：Control 四
              形态各一（纯信息 answer 无卡无 dock / 探索 answer+suggestions
              / rootless wish ask_user / 点名工作 present_plan）+ 五新行为
@@ -73,7 +73,9 @@ run 数 / 落库行——永不锁 LLM 文案（禁令 #7）。例外：代码�
              标注三谓词全谱 / 无字幕参数默认吸收 / 旧 lane 历史 × 新政策）
              + 事故①②回归锁（批 D——能力答答复永不叙述分组方案 / trigger
              判定提议质感形态面）+ 事故③ wording 回归锁（批 G1——repair
-             静默开启 / 终态判定树 / rejection 取证台账落库）
+             静默开启 / 终态判定树 / rejection 取证台账落库）+ 事故③
+             leak 回归锁与断流座（批 G2——被拒迭代 wire 零泄漏 / SSE 断流
+             复拉不重不漏）
 
 S4/S7/S8 起的 run 是真的（worker 会执行；writer 链走真 LLM——S4 用
 ``processing_status=COMPLETED`` 的 transcript 资产走 writer 链到 completed，
@@ -228,14 +230,22 @@ class Ctx:
         check(res.status_code == 201, f"/chat {message[:30]!r}", res.text)
         return res.json()
 
-    async def chat_stream(self, pid: str, message: str, **extra: object) -> "StreamTurn":
+    async def chat_stream(
+        self, pid: str, message: str, abort_after: int | None = None, **extra: object
+    ) -> "StreamTurn":
         """One SSE chat turn (Accept: text/event-stream) — the FULL frame
         record: ordered prose deltas, the assistant.thinking phase frames
         ({} keepalive / {phase: "composing"} / {phase: null} clear — after
         Phase 3 Batch B the inspecting family's {phase, key} form lives on
         the ACTIVITY channel), the
         question.preview frames (pre-execution, rolled back on a flip), the
-        turn.completed envelope, and turn.failed if any."""
+        turn.completed envelope, and turn.failed if any.
+
+        ``abort_after`` (批次 G2 checklist ④'s 断流 seat): close the
+        connection after that many data frames of any kind — the partial
+        record returns as-is (no envelope), the server-side turn runs its
+        own course, and the scenario asserts the refetched message flow
+        holds no dup / no loss."""
         deltas: list[str] = []
         thinking: list[dict] = []
         previews: list[dict] = []
@@ -251,10 +261,12 @@ class Ctx:
         ) as res:
             check(res.status_code == 200, f"/chat stream {message[:30]!r}", res.status_code)
             event = ""
+            seen = 0
             async for line in res.aiter_lines():
                 if line.startswith("event:"):
                     event = line[6:].strip()
                 elif line.startswith("data:"):
+                    seen += 1
                     payload = json.loads(line[5:].strip())
                     if event == "assistant.delta":
                         deltas.append(payload["text"])
@@ -270,6 +282,8 @@ class Ctx:
                         completed = payload
                     elif event == "turn.failed":
                         failed = payload
+                    if abort_after is not None and seen >= abort_after:
+                        break
         return StreamTurn(
             deltas=deltas,
             thinking=thinking,
@@ -2506,10 +2520,12 @@ async def s10_sse_turn_streaming(ctx: Ctx) -> None:
     check_stream_law(stream, content, "draft turn")
 
     # Ask turn (ask 三分解剖): the framing prose streams like the draft echo;
-    # the pill's whole payload lands EARLY as question.preview (pre-execution
-    # — a rejected iteration re-previews and the client rolls back, so the
-    # LAST preview is the authoritative one) and must match the envelope's
-    # docked payload field for field.
+    # the pill's whole payload lands EARLY as question.preview — under the
+    # speech-commit protocol (G2) the preview rides the buffer and releases
+    # at the accept (a rejected iteration's preview never commits — retracted
+    # with the turn's other stale frames), so the received preview IS the
+    # authoritative one and must match the envelope's docked payload field
+    # for field.
     pid2 = await ctx.new_project("S10 sse ask streaming")
     stream = await ctx.chat_stream(pid2, "I want a social post.")
     check(stream.failed is None, "ask turn has no turn.failed", stream.failed)
@@ -2520,7 +2536,12 @@ async def s10_sse_turn_streaming(ctx: Ctx) -> None:
     q = msg.get("question") or {}
     check(q.get("kind") == "question", "the bare wish docks the ask", msg)
     content = (msg.get("content") or "")
-    check(len(stream.deltas) > 0, "ask turn streams the framing prose", q)
+    # 言语提交协议 (G2): a clean turn's framing flushes at the accept; a
+    # turn with a rejected iteration is frame-silent by design (retracted
+    # speech) — the prose assertions skip it like the stream law does.
+    _had_reads_ask, had_repair_ask = _work_evidence(stream)
+    if not had_repair_ask:
+        check(len(stream.deltas) > 0, "ask turn streams the framing prose", q)
     # Ask-turn stream law (ask 三分解剖, `_ask_content` service.py): an
     # OPTIONS ask's content IS the streamed framing (the question rides the
     # dock title); a TEXT ask keeps the bare question IN the speech —
@@ -2530,7 +2551,6 @@ async def s10_sse_turn_streaming(ctx: Ctx) -> None:
     # takes is the LLM's call, so the harness asserts the BRANCH's law.
     # (C-6 adjudication 2026-09-19: two reds traced to this mismatch —
     # harness contract bug, production unchanged since 2026-09-08.)
-    _had_reads_ask, had_repair_ask = _work_evidence(stream)
     if not had_repair_ask:  # replaced speech voids even the prefix relation
         streamed_ask = "".join(stream.deltas).strip()
         expected_ask = (
@@ -5498,6 +5518,154 @@ async def s_int12_repair_never_confesses(ctx: Ctx) -> None:
         )
 
 
+async def s_int13_rejected_speech_never_leaks(ctx: Ctx) -> None:
+    """事故③ leak 回归锁（批次 G2 — 言语提交协议一般化）：中文素材 +
+    「做成中文配音版」→ 迭代 0 直点同语 dub → check_transform_targets
+    拒绝（execute_guardrail）→ retract 清陈 → 重试收口。若真发生被拒
+    迭代（wire 上的 cancelled 帧 = 拒绝唯一 wire 证据座，同 S-int-12
+    口径）：
+
+    ① wire 散文零泄漏——全回合 deltas 拼接 strip 必为空：被拒迭代的
+       言语在 retract 即清、永不到达客户端；重试迭代 quiet 无 delta；
+       checkpoint 通道走自己的帧（checkpoints 列表），永不混入 deltas；
+    ② 信封唯一且自洽——turn.completed 恰一到达；复拉消息流该回合
+       assistant 行恰一且 id 与信封一致（无二重身、无半截）；
+    ③ DB 台账含 execute_guardrail 行（G1 取证座在协议推广后仍落库）。
+
+    无拒绝发生的回合（模型先问后做）= 判定无对象——最多 2 个全新项目，
+    均无拒绝证据 = 硬红（防空洞绿，同 S-int-12 口径）。"""
+    leak_turn: StreamTurn | None = None
+    envelope: dict | None = None
+    pid = ""
+    for attempt in range(1, 3):
+        pid = await ctx.new_project(f"S-int-13 leak #{attempt}")
+        await seed_asset(
+            pid,
+            ctx.user_id,
+            AssetType.VIDEO,
+            "keynote-zh.mp4",
+            extracted_text=(
+                "今天我想讲三个话题：为什么我们团队决定重写整个渲染管线，"
+                "这次重写教会我们的三件事，以及接下来半年的路线图。"
+            ),
+            meta={"language": "zh"},
+            processed=True,
+        )
+        turn = await ctx.chat_stream(pid, "帮我把这个视频做成中文配音版")
+        env = turn.completed
+        check(env is not None, "the turn completes", turn.failed)
+        if any(a["status"] == "cancelled" for a in turn.activities):
+            leak_turn, envelope = turn, env
+            break
+    check(
+        leak_turn is not None,
+        "no rejected iteration after 2 fresh projects (发射面漂移——红 = "
+        "同语转换拒绝不再发生或拒绝证据座漂移)",
+    )
+    assert leak_turn is not None and envelope is not None
+    check(
+        not "".join(leak_turn.deltas).strip(),
+        "① 被拒回合 wire 散文零泄漏（deltas 拼接必为空）",
+        leak_turn.deltas[:5],
+    )
+    conv = await ctx.conversation(pid)
+    items = await ctx.messages(conv.json()["id"])
+    user_msg_id = envelope["user_message"]["id"]
+    user_idx = next(i for i, m in enumerate(items) if m["id"] == user_msg_id)
+    turn_assistants = [
+        m
+        for m in items[user_idx + 1 :]
+        if m["role"] == "assistant"
+        and (m.get("intent") or {}).get("type") not in ("activity_log", "checkpoint")
+    ]
+    env_msg = envelope.get("assistant_message") or {}
+    check(
+        len(turn_assistants) == 1 and turn_assistants[0]["id"] == env_msg.get("id"),
+        "② 复拉消息流：该回合 assistant 行恰一且与信封同 id（无二重身）",
+        [m["id"] for m in turn_assistants],
+    )
+    log_row = next(
+        (
+            m
+            for m in items
+            if (m.get("intent") or {}).get("type") == "activity_log"
+            and (m.get("intent") or {}).get("ref") == user_msg_id
+        ),
+        None,
+    )
+    check(log_row is not None, "③ the turn's activity_log row persists", items[-3:])
+    ledger = (log_row.get("intent") or {}).get("rejections") or []
+    check(
+        any(r["kind"] == "execute_guardrail" for r in ledger),
+        "③ the ledger carries the same-language guardrail rejection",
+        ledger,
+    )
+
+
+async def s_int14_stream_abort_no_dup_no_loss(ctx: Ctx) -> None:
+    """SSE 断流复连座（批次 G2 checklist ④）：SSE 道收到 2 帧后断连
+    （言语提交协议下早期帧 = reasoning/phase/activity，散文全部缓冲——
+    断流点必在回合中段），server 侧回合自足走完（提交点在回合尾，
+    socket 生命周期与 server 状态机解耦）：
+
+    ① 复拉消息流：该回合 assistant 行 0 或 1（永不 2——无半截双写）；
+       若 1 则内容非空（行要么完整落库要么不存在）；
+    ② 后续回合干净——follow-up 的 SSE 道完整走通（completed 到达、无
+       failed），且其流式散文是信封内容的前缀（流式 ⊆ 信封，二源永不
+       分叉；被拒重试回合流式为空 = 前缀平凡成立）。"""
+    pid = await ctx.new_project("S-int-14 abort")
+    aborted = await ctx.chat_stream(
+        pid, "what can you do? walk me through everything in detail", abort_after=2
+    )
+    check(aborted.completed is None, "the abort lands before the envelope")
+    conv = await ctx.conversation(pid)
+    conv_id = conv.json()["id"]
+
+    def _content_assistants(items: list[dict]) -> list[dict]:
+        # activity_log / checkpoint rows ride role="assistant" too — the
+        # 二重身 count covers CONTENT rows only.
+        return [
+            m
+            for m in items
+            if m["role"] == "assistant"
+            and (m.get("intent") or {}).get("type") not in ("activity_log", "checkpoint")
+        ]
+
+    baseline_assistants = _content_assistants(await ctx.messages(conv_id))
+    # 等中止回合落定：assistant 行出现（server 走完提交）或 90s 无行
+    # （连接中断取消了回合——同样合法，永不许出现 2 行）。
+    settled: list[dict] = baseline_assistants
+    for _ in range(45):
+        await asyncio.sleep(2)
+        settled = _content_assistants(await ctx.messages(conv_id))
+        if len(settled) > len(baseline_assistants):
+            break
+    check(
+        len(settled) <= len(baseline_assistants) + 1,
+        "① the aborted turn commits at most ONE assistant row (无半截双写)",
+        [m["id"] for m in settled],
+    )
+    if len(settled) == len(baseline_assistants) + 1:
+        check(
+            bool((settled[-1].get("content") or "").strip()),
+            "① the committed row is whole (非空内容)",
+            settled[-1].get("content"),
+        )
+    follow = await ctx.chat_stream(pid, "and what about LinkedIn posts?")
+    check(
+        follow.completed is not None and follow.failed is None,
+        "② the follow-up turn completes clean after the abort",
+        follow.failed,
+    )
+    env_msg = (follow.completed or {}).get("assistant_message") or {}
+    streamed = "".join(follow.deltas)
+    check(
+        not streamed or (env_msg.get("content") or "").startswith(streamed),
+        "② 流式 ⊆ 信封（流式散文是信封前缀，二源不分叉）",
+        {"streamed": streamed[:80], "envelope": (env_msg.get("content") or "")[:80]},
+    )
+
+
 SCENARIOS = {
     "S1": s1_bare_wish_full_journey,
     "S2": s2_skipped_topic_ask_drafts_from_persona,
@@ -5543,6 +5711,10 @@ SCENARIOS = {
     # 事故③ wording 回归锁（批 G1 带入座）——repair 静默开启/终态判定树/
     # rejection 取证台账；leak 零泄漏锁随批 G2 入座（能力未落地,本组不含）。
     "S-int-12": s_int12_repair_never_confesses,
+    # 事故③ leak 回归锁 + SSE 断流复连座（批 G2 带入座）——被拒迭代 wire
+    # 零泄漏 / 断流复拉不重不漏。
+    "S-int-13": s_int13_rejected_speech_never_leaks,
+    "S-int-14": s_int14_stream_abort_no_dup_no_loss,
 }
 
 

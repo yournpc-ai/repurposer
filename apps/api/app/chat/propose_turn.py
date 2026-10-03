@@ -63,7 +63,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.context import build_context
-from app.agents.tool_loop import ToolObservation
+from app.agents.tool_loop import ToolObservation, ToolRejected
 from app.chat.deferred_frames import DeferredFrames
 from app.chat.exploration_compile import (
     compile_plan_rows_package,
@@ -450,14 +450,13 @@ class ChatTurn:
             result: str | None | ToolObservation = None  # the parked interrupt's wake IS the continuation
         else:
             result = await self._dispatch(name, params, prose)
-        # The deferred-frames resolution (落地时刻压制批): a terminal accept
-        # releases the queue (a rejection-marked queue drops — its words were
-        # retracted speech); a rejection only notes. ToolObservations are
+        # The speech-commit resolution (言语提交协议): a terminal accept
+        # closes the frame buffer (a rejection-marked turn drops — its
+        # words were retracted speech). Rejections retract at the loop's
+        # ToolRejected event (the runner's wrapped on_loop_event — one seat
+        # catches all four rejection kinds); ToolObservations are
         # non-terminal (reads) — the queue stays armed.
-        if isinstance(result, str):
-            if self.deferred is not None:
-                self.deferred.note_rejection()
-        elif result is None:
+        if result is None:
             await self._resolve_deferred()
         return result
 
@@ -485,16 +484,18 @@ class ChatTurn:
         return f"unknown tool {name!r}"  # unreachable — the driver gates names
 
     async def _resolve_deferred(self) -> None:
-        """The accepted terminal's frame release: flush the queue in order,
-        or drop it when a rejection marked it (retracted speech — the settled
-        envelope paces out whole, the zero-delta path's law)."""
+        """The accepted terminal's frame release: flush the queue in order
+        and disarm, or drop it when a rejection marked the turn (retracted
+        speech — the settled envelope paces out whole, the zero-delta
+        path's law)."""
         deferred = self.deferred
         if deferred is None or not deferred.armed:
             return
-        if deferred.saw_rejection:
+        if deferred.rejected:
             deferred.drop()
         else:
             await deferred.flush()
+            deferred.disarm()
 
     async def _propose_tasks(self, params: ProposeTasksArgs, prose: str) -> str | None:
         """task_list → the caption gate, then the Confirmation Dock (ADR-087
@@ -1682,18 +1683,32 @@ async def run_propose_turn(
     turn = ChatTurn(db, user_id, conversation, project, text, on_phase=on_phase,
                     on_activity=on_activity, on_candidates=on_candidates)
     await turn.assemble(mentions, recent, suggestion_ref)
-    # 素材待命车道武装 (落地时刻压制批, the plan path's mirror): files were
-    # still processing at assemble → buffer the prose / structure frames in
-    # arrival order (SSE path only). The checkpoint channel flushes FIRST:
-    # prose spoken before a read lands before the read's statement.
-    if turn.material_pending_stamped and on_delta is not None:
-        deferred = DeferredFrames(
-            {"delta": on_delta, "tool_call": on_tool_call, "tool_ready": on_tool_ready}
-        )
+    # 言语提交协议武装 (speech-commit protocol, ADR-099 §7, the plan path's
+    # mirror): on the SSE path every turn arms the terminal buffer —
+    # iteration 0 is the only streaming iteration, so its prose / preview
+    # frames are exactly the speech a terminal rejection would retract. The
+    # buffer holds delta + tool_ready ONLY (三通道分家): on_tool_call stays
+    # LIVE — it feeds the Activity projector's name_known (the read/repair
+    # work evidence + G1's cancelled-frame rejection forensics ride their
+    # own undeferred channel) and the phase-clear is liveness chrome, never
+    # adjudication-dependent speech. The rejection seat is the wrapped
+    # on_loop_event (any ToolRejected retracts the stale queue at once;
+    # RETRY re-arms by construction); the checkpoint channel flushes the
+    # queue FIRST, then streams live — the buffer stays armed through it.
+    if on_delta is not None:
+        deferred = DeferredFrames({"delta": on_delta, "tool_ready": on_tool_ready})
         turn.deferred = deferred
         on_delta = deferred.wrap("delta")
-        on_tool_call = deferred.wrap("tool_call")
         on_tool_ready = deferred.wrap("tool_ready")
+        base_on_loop_event = on_loop_event
+
+        async def on_loop_event_with_retract(event) -> None:
+            if isinstance(event, ToolRejected):
+                deferred.retract()
+            if base_on_loop_event is not None:
+                await base_on_loop_event(event)
+
+        on_loop_event = on_loop_event_with_retract
         base_on_checkpoint = (
             _checkpoint_callback(db, turn.conversation_id, on_checkpoint)
             if turn.project is not None

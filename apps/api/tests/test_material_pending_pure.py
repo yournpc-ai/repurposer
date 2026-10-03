@@ -14,9 +14,13 @@ No DB, no LLM, no HTTP (suite discipline). What is gated HERE:
   unknown-key alarm;
 - ``ChatResponse.assistant_message`` tolerates None (the silent close's
   envelope);
-- ``DeferredFrames``: arrival order survives the flush, a drop discards
-  unsent, a disarmed buffer passes frames through live, and a None hook
-  wraps to None (the one-shot path arms nothing).
+- ``DeferredFrames`` (言语提交协议's four-state machine — OPEN → BUFFERING →
+  ACCEPT→FLUSH / REJECT→DROP→RETRY): arrival order survives a flush, a
+  retract clears the stale queue at once and marks the turn frame-silent,
+  a flush stays armed (mid-turn release replays each frame exactly once),
+  a drop discards unsent and disarms, a disarmed buffer passes frames
+  through live, and a None hook wraps to None (the one-shot path arms
+  nothing).
 """
 
 import pytest
@@ -109,8 +113,16 @@ class TestChatResponseToleratesSilentClose:
 
 
 class TestDeferredFrames:
+    """The speech-commit state machine's six-item checklist (批次 G2):
+    ① reject→zero leak; ② retry→only the final envelope, no A+B double
+    flush; ③ accept→frame order stable; ④ (the disconnect seat is the
+    S-int-14 scenario) — here: a buffer replays each frame exactly once;
+    ⑤ zero-delta→the rejected turn's close drops, the envelope paces whole;
+    ⑥ two iterations→the stale buffer is cleared at the rejection."""
+
     @pytest.mark.asyncio
     async def test_flush_replays_in_arrival_order(self) -> None:
+        """③ accept→frame order stable."""
         calls: list[tuple[str, tuple]] = []
 
         async def hook(*args) -> None:
@@ -130,10 +142,63 @@ class TestDeferredFrames:
             ("real", ("的",)),
             ("real", ("answer",)),
         ]
+        assert deferred.armed  # a flush STAYS armed — the close disarms
+        deferred.disarm()
         assert not deferred.armed
 
     @pytest.mark.asyncio
-    async def test_passthrough_after_flush(self) -> None:
+    async def test_reject_leaks_zero_and_retry_sees_only_the_envelope(self) -> None:
+        """①+②+⑤: a retracted turn's frames never reach the hooks — the
+        stale queue clears AT the rejection, the retry's own frames queue
+        fresh, and the rejected close drops them too (the settled envelope
+        paces the final words whole, the zero-delta path's law)."""
+        calls: list[tuple] = []
+
+        async def hook(*args) -> None:
+            calls.append(args)
+
+        deferred = DeferredFrames({"delta": hook, "tool_call": hook})
+        on_delta = deferred.wrap("delta")
+        on_tool_call = deferred.wrap("tool_call")
+        assert on_delta is not None and on_tool_call is not None
+        # iteration 0: the at-risk speech queues
+        await on_delta("给你做成中文配音版")
+        await on_tool_call("present_plan")
+        # REJECT: the stale buffer clears at once, the turn marks
+        deferred.retract()
+        assert deferred.rejected
+        assert deferred.armed  # RETRY re-arms by construction
+        # the retry (quiet iteration) queues its own structure frames fresh
+        await on_tool_call("present_plan")
+        # the rejected close drops — zero frames ever reached the hooks
+        deferred.drop()
+        assert calls == []
+        assert not deferred.armed
+
+    @pytest.mark.asyncio
+    async def test_mid_turn_flush_replays_each_frame_exactly_once(self) -> None:
+        """④'s process-internal half: the checkpoint channel's flush-first
+        replays the queue once and STAYS armed — later frames queue fresh,
+        never a double replay of the pre-flush ones."""
+        calls: list[tuple] = []
+
+        async def hook(*args) -> None:
+            calls.append(args)
+
+        deferred = DeferredFrames({"delta": hook})
+        on_delta = deferred.wrap("delta")
+        assert on_delta is not None
+        await on_delta("先读一段")
+        await deferred.flush()  # the checkpoint's flush-first
+        assert calls == [("先读一段",)]
+        assert deferred.armed
+        await on_delta("收口")
+        await deferred.flush()  # the clean close
+        assert calls == [("先读一段",), ("收口",)]  # no A+B double flush
+        deferred.disarm()
+
+    @pytest.mark.asyncio
+    async def test_passthrough_after_disarm(self) -> None:
         calls: list[tuple] = []
 
         async def hook(*args) -> None:
@@ -143,11 +208,14 @@ class TestDeferredFrames:
         on_delta = deferred.wrap("delta")
         assert on_delta is not None
         await deferred.flush()
+        deferred.disarm()
         await on_delta("live")
         assert calls == [("live",)]
 
     @pytest.mark.asyncio
     async def test_drop_discards_unsent(self) -> None:
+        """The material-pending suppress seat: the stale commitment's queue
+        never sends, the turn closes silent."""
         calls: list[tuple] = []
 
         async def hook(*args) -> None:
@@ -177,8 +245,12 @@ class TestDeferredFrames:
         deferred = DeferredFrames({"delta": None})
         assert deferred.wrap("delta") is None
 
-    def test_rejection_marks(self) -> None:
+    def test_retract_marks_and_clears_stale(self) -> None:
+        """⑥: two iterations — the first's queued frames clear AT the
+        rejection (never linger into the retry), the rejected flag sticks
+        for the close."""
         deferred = DeferredFrames({})
-        assert deferred.saw_rejection is False
-        deferred.note_rejection()
-        assert deferred.saw_rejection is True
+        assert deferred.rejected is False
+        deferred.retract()
+        assert deferred.rejected is True
+        assert deferred.armed  # the retry re-arms by construction
