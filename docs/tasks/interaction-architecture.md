@@ -1,6 +1,6 @@
 # Agent 交互架构迁移 — 施工简报（ADR-099）
 
-> Status: **迭代一已收口**——批次 B（`cfb3488`）、C·C+（`05e81ba`+`1cbdad6`）、S（S-int-1..9）落地且验收已跑（批次 S 验收节在册：S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因）；C·C+ 账判软项（承重观察⑥）由用户拍板并入批 D 首批同批修。**迭代二批次 D 已落地**（`30174b6` + `2411290` gate 仪表，验证未跑）；**批次 E 三簇删除包已备**（scratch patch 三件，apply/revert 往返已验证）。**验收时点用户拍板：迭代二整批施工完成后统一验收**——E 逐簇 apply+commit 不随簇跑探针，归因靠 commit 序逆序二分（协议与收口验收单见批次 E 节）；G 未动工。
+> Status: **迭代一已收口**——批次 B（`cfb3488`）、C·C+（`05e81ba`+`1cbdad6`）、S（S-int-1..9）落地且验收已跑（批次 S 验收节在册：S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因）；C·C+ 账判软项（承重观察⑥）由用户拍板并入批 D 首批同批修。**迭代二施工完成**——批次 D（`30174b6` + `2411290` gate 仪表）与批次 E 三簇（E1 `ddde27f` / E2 `4a226ee` / E3 `58c9449`，纯 patch apply 落座，零手工缝合）全部进 main，验证全未跑；**收口验收单冻结待跑**（批次 E 节目落，一次战役，红按 commit 序逆序二分）；G 未动工。
 > 架构母法 = ADR-099。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
 
 ## 冻结事项（本简报全程不再议）
@@ -168,6 +168,14 @@ B → C·C+ → S → D → E → G1 → G2
 8. `uv run python -m py_compile scripts/prompt_gate.py scripts/reply_quality_probe.py scripts/chat_scenarios.py`（冒烟）
 
 红 → 二分（逆 commit 序）：`git revert --no-commit <E3>` → 红座定点重放 → 绿 = 归因 E3；仍红 → 叠加 revert E2 → 重放 → …→ D。归因确认：revert 落成 commit + 简报登记「观察到删除导致回归；该簇暂保留」；探针红永不回调阈值。全绿 = 迭代二收口：删除总量与承重清单写进本简报批次 E 验收节（迭代三收尾时 CHAT_ARCHITECTURE.md 写现行法的素材）。
+
+**批次 E 落地记录**（施工会话交付，三 commit 线性落座，验证全部未跑）：
+
+- **E1 `ddde27f`**：`git apply --check` 一次过，零手工缝合；只触两 prompt 文件。删除量 = 4 处改写（router present_plan ③ 收尾段 / router propose_plans 收尾 / chat_intent propose_tasks·edit_output·edit_graph 行 / chat_intent propose_plans 收尾），删 4681 字符 / 增 4366 字符（净删 ~315）。per-prompt 定义座留位与设计一致：router = present_plan ③ 全式，chat_intent = propose_tasks 行全式。
+- **E2 `4a226ee`**：`git apply --check` 一次过，零手工缝合；只触两 prompt 文件。删除量 = 4 处改写（router present_plan FREE PHRASING 尾句 / router ask_user 尾句 / router start_run FREE PHRASING 尾句 / chat_intent ask_user 尾句），删 4833 字符 / 增 4450 字符（净删 ~383）。partials 零触碰（`_capability_answer` rule 4 同族句原位保留）。
+- **E3 `58c9449`**：`git apply --check` 一次过，零手工缝合；只触两 prompt 文件。删除量 = 2 处改写（router ask_user 段 / chat_intent ask_user 段），删 1649 字符 / 增 975 字符（净删 ~674）。参数座（router `question` no-default-path-tail + `default_path` param / chat_intent `question` bare）保留在收缩行内。
+- **三簇合计**：10 处改写，删 11163 字符 / 增 9791 字符（净删 ~1372）。
+- **收口验收单一致性核对（施工会话代码层对账，非行为验证）**：验收单 8 条命令行与代码终态一致——chat_scenarios.py 含 S-int-1..11 / S1 / S3 / S5 / S10 / S19 全部场景号；prompt_gate THRESHOLDS 恰 12 探针（A..I 含 H2/H3/H4），probe I 注释「first reading pending」在册；reply_quality_probe.py 存在且 RUBRIC_VERSION=6（批 D 已升）。无漂移。
 
 ---
 
