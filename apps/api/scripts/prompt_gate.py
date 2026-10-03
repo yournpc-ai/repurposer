@@ -50,6 +50,13 @@ same contexts as the A/B instrument:
   list_caption_styles stub). revise_output / propose_tasks / edit_graph
   are misroutes for changes this definite. B1's structural invariant is
   asserted at startup: the chat tool set carries NO raw-ops verb.
+- I:browse-question (迭代二批 D, ADR-099 谱系第二档的 gate 座) — material
+  attached + a recommendation landscape in the recent rounds, and a
+  custom-worded browse question must close on answer carrying 1-3
+  suggestions, with present_plan NEVER called (事故④'s hijack shape on
+  the gate's own seat — same "NEVER called" assertion family as probe D).
+  Pick/stale stay out: provenance spans turns, the gate is single-turn —
+  those live in the scenario suite (S-int-6/7).
 
 Tool-loop form (ADR-077 判词②, 2026-09-14): the agent is the ToolLoopAgent,
 the action IS the terminal tool call, and the predicates read
@@ -67,7 +74,7 @@ thresholds), then bisect with the A/B instrument — never tune the
 thresholds to make a regression pass.
 
 Usage (from apps/api):
-    uv run python scripts/prompt_gate.py [--n 12] [--probe A|B|C|D|E|F|G|H|H2|H3|H4] [--provider minimax]
+    uv run python scripts/prompt_gate.py [--n 12] [--probe A|B|C|D|E|F|G|H|H2|H3|H4|I] [--provider minimax]
 """
 
 import argparse
@@ -127,8 +134,10 @@ PROVIDERS = {
 # bare int), fixed in the SCHEMA (coerce_numbers_to_str, 顺形律), then
 # 12/12. Thresholds hold at 8 with headroom — recalibrate from readings,
 # never to excuse a regression.
+# I introduced at 8 (迭代二批 D) — the first reading is pending; recalibrate
+# from the measured band, never to excuse a regression.
 THRESHOLDS = {"A": 8, "B": 8, "C": 10, "D": 8, "E": 8, "F": 8, "G": 8, "H": 8,
-              "H2": 8, "H3": 8, "H4": 8}
+              "H2": 8, "H3": 8, "H4": 8, "I": 8}
 
 BRIEF_ANSWERED = Brief.model_validate(
     {
@@ -343,6 +352,29 @@ PROBE_D = {
     ),
 }
 
+# I's browse-question substrate (迭代二批 D, ADR-099 谱系第二档): material
+# attached (same footing as D) and a recommendation landscape already spoken
+# in the recent rounds — the browse question asks for MORE directions in the
+# user's own words, so the non-commitment form (answer + suggestions) is the
+# only honest档; a plan dock here is 事故④'s hijack shape.
+PROBE_I = {
+    "message": "anything else you'd recommend?",
+    "brief": Brief.model_validate(
+        {"material_state": {"value": "attached", "source": "default"}}
+    ),
+    "filename": "keynote-2026.mp4",
+    "material_excerpt": (
+        "…Now let me talk about pricing. Our pricing is simple. Every tier "
+        "includes the dashboard. You only pay when you grow…"
+    ),
+    "recent": [
+        "user: what could I make from this keynote? give me a few directions",
+        "assistant: From the pricing section I'd see two strong moves — a "
+        "highlight clip built on the pricing reveal, and a post distilling "
+        "the three pricing lines.",
+    ],
+}
+
 
 class _StubNode:
     """The gate stub's stand-in for a door-born row (the observation
@@ -543,13 +575,24 @@ def _passed(probe: str, r: LoopResult) -> bool:
         # H4: the style must be the enum id mapped off the catalog read,
         # never a free-form phrase.
         return kind == "set_caption_style" and (ep.style or "") == "karaoke-highlight"
+    # I (迭代二批 D): the browse question closes on answer carrying 1-3
+    # suggestions — present_plan never touched (事故④ hijack 负形), ask_user
+    # never gates a browsing question either.
+    if probe == "I":
+        suggestions = getattr(r.params, "suggestions", None) or []
+        return (
+            r.tool_name == "answer"
+            and 1 <= len(suggestions) <= 3
+            and "present_plan" not in r.calls
+            and "ask_user" not in r.calls
+        )
     raise AssertionError(f"no predicate registered for probe {probe!r}")
 
 
 async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=12)
-    parser.add_argument("--probe", choices=["A", "B", "C", "D", "E", "F", "G", "H", "H2", "H3", "H4"], default=None)
+    parser.add_argument("--probe", choices=["A", "B", "C", "D", "E", "F", "G", "H", "H2", "H3", "H4", "I"], default=None)
     parser.add_argument("--provider", choices=sorted(PROVIDERS), default="minimax")
     args = parser.parse_args()
 
@@ -608,6 +651,7 @@ async def main() -> int:
         "H2": PROBE_H2,
         "H3": PROBE_H3,
         "H4": PROBE_H4,
+        "I": PROBE_I,
     }
     # Final Hardening B1 (2026-09-24): the chat tool set must NOT carry the
     # retired raw-ops verb — its presence would make every routing

@@ -65,12 +65,14 @@ run 数 / 落库行——永不锁 LLM 文案（禁令 #7）。例外：代码�
              分镜方向 → plan 链必含 select_clips + reframe_clip → run
              completed → 成片 render_spec 带 crop_track（确定性尾；fixture
              纪律同 S16，需 dev worker + MiniMax 配额）
-    S-int-1..9  New Interaction Contract（批次 S · ADR-099 golden suite，
+    S-int-1..11 New Interaction Contract（批次 S · ADR-099 golden suite，
              两层分离的新架构层——Legacy Regression 零改动）：Control 四
              形态各一（纯信息 answer 无卡无 dock / 探索 answer+suggestions
              / rootless wish ask_user / 点名工作 present_plan）+ 五新行为
              （浏览问事故④回归锁 / 建议点选 fresh 编译 / stale 点选具名
              标注三谓词全谱 / 无字幕参数默认吸收 / 旧 lane 历史 × 新政策）
+             + 事故①②回归锁（批 D——能力答答复永不叙述分组方案 / trigger
+             判定提议质感形态面）
 
 S4/S7/S8 起的 run 是真的（worker 会执行；writer 链走真 LLM——S4 用
 ``processing_status=COMPLETED`` 的 transcript 资产走 writer 链到 completed，
@@ -4896,8 +4898,8 @@ async def s_edit_precise_edit_archive_lifecycle(ctx: Ctx) -> None:
 # 两层分离（简报批次 S · 门禁单调律）：上方 S1–S24 / S-edit = Legacy
 # Regression（旧功能不破，本批一律未动）；本组 = New Interaction
 # Contract——终态交互形态谱系 + 建议点选 provenance 的行为锁，只收
-# 「C·C+ 后即可转绿」的核心场景（事故①②回归随批 D 入座、事故③随
-# G1/G2 入座——能力未落地，本组不含 G 族）。断言面三件套：终态信封形状
+# 「C·C+ 后即可转绿」的核心场景（事故①②回归锁已随批 D 入座 =
+# S-int-10/11；事故③随 G1/G2 入座——能力未落地，本组不含 G 族）。断言面三件套：终态信封形状
 # （terminal_tool_of / suggestions 数组）+ messages 行持久化事实
 # （suggestions 交互块 / suggestion_ref 列）+ 代码组装文本（provenance
 # note = 代码强制文本，可锁——提醒尾同例）。LLM 散文措辞永不锁（禁令 #7）；
@@ -5342,6 +5344,53 @@ async def s_int9_old_lane_history_new_policy(ctx: Ctx) -> None:
     check(turn1.get("run_id") is None, "no run", turn1)
 
 
+async def s_int10_capability_answer_never_narrates_grouping(ctx: Ctx) -> None:
+    """事故①回归锁（批 D · 宪法②执行细节）：能力问的答复永不叙述自己的
+    分组方案——内部组织指令是答复的骨架,不是言语。断言面分工（简报批 D
+    施工点 5）：本场景只锁终态形态 + 极窄机器词负形（schema 味词 =
+    banned shape,禁令 #7 允许的负形）；措辞质感判定归
+    reply_quality_probe 语义角色维度——本场景禁措辞正则、禁锁散文。"""
+    pid = await ctx.new_project("S-int-10 capability grouping")
+    for prompt in ("你会做什么？你能剪辑已有素材吗",
+                   "what can you do with my existing talks?"):
+        turn = await ctx.chat(pid, prompt)
+        msg = turn["assistant_message"]
+        check(terminal_tool_of(turn) == "answer",
+              "a capability question closes on the answer call", turn)
+        check(has_prose(msg), "a prose answer lands", msg)
+        content = msg.get("content") or ""
+        for marker in ("归类", "group by the", "group these by"):
+            check(marker not in content.lower(),
+                  "the grouping scheme never becomes speech (事故① banned shape)",
+                  marker)
+        check(turn["run_id"] is None, "an info question starts no run", turn)
+    check(await count_runs(pid) == 0, "no run the whole journey")
+
+
+async def s_int11_trigger_verdict_offer_texture(ctx: Ctx) -> None:
+    """事故②回归锁（批 D · 宪法①执行细节）：素材评审 trigger 的判定以提
+    议落地、收尾无指令。形态面断言：无 pending plan → 首读开口（ADR-080
+    不静默）；散文非空且永不以问号收尾（介质法——问题住在 dock 自己的
+    标题里）；建议 dock 1-3 项（trigger 契约：零建议拒于门内）+ 载荷边
+    界 lint（check_suggestion_block 全谱）。判定是推荐还是指令的措辞质
+    感归 reply_quality_probe 语义角色维度——本场景禁措辞正则。"""
+    from app.chat.trigger_turn import TRIGGER_UNDERSTANDING, run_trigger_turn
+
+    pid, _ = await seed_keynote_project(ctx, "S-int-11 trigger verdict")
+    review = await run_trigger_turn(uuid.UUID(pid), TRIGGER_UNDERSTANDING,
+                                    "s-int-11-digest")
+    check(review is not None,
+          "no pending plan — the first-read review speaks (ADR-080)", review)
+    row = next(m for m in await conversation_items(ctx, pid)
+               if m["id"] == str(review.id))
+    content = (row.get("content") or "").strip()
+    check(bool(content), "the review's prose lands", row)
+    check(not content.endswith(("?", "？")),
+          "the prose never ends in a question mark (介质法——the card asks it)",
+          content[-40:])
+    check_suggestion_block(row.get("suggestions") or [], row["id"], "S-int-11")
+
+
 SCENARIOS = {
     "S1": s1_bare_wish_full_journey,
     "S2": s2_skipped_topic_ask_drafts_from_persona,
@@ -5380,6 +5429,10 @@ SCENARIOS = {
     "S-int-7": s_int7_suggestion_pick_stale_named,
     "S-int-8": s_int8_quote_card_caption_default_absorbed,
     "S-int-9": s_int9_old_lane_history_new_policy,
+    # 事故①②回归锁（批 D 带入座）——形态 + 极窄机器词负形,措辞质感归
+    # reply_quality_probe 语义角色维度（断言面分工,简报批 D 施工点 5）。
+    "S-int-10": s_int10_capability_answer_never_narrates_grouping,
+    "S-int-11": s_int11_trigger_verdict_offer_texture,
 }
 
 

@@ -81,9 +81,10 @@ PLAN_TOOLS = [
             "spoken message IS the reply. It may carry 0-3 non-binding "
             "next-step options (suggestions) when the context holds concrete "
             "directions worth choosing between — the user may pick or ignore "
-            "them; they never form a plan. Always speak the reply as your "
-            "message text ALONGSIDE the call — a bare answer call that says "
-            "nothing is rejected."
+            "them; they never form a plan. Work the user has explicitly "
+            "named never lands here — it docks as a plan. Always speak the "
+            "reply as your message text ALONGSIDE the call — a bare answer "
+            "call that says nothing is rejected."
         ),
         params_model=PlanAnswerArgs,
     ),
@@ -175,8 +176,10 @@ CHAT_TOOLS = [
             "It may carry 0-3 non-binding next-step options (suggestions) "
             "when the context holds concrete directions worth choosing "
             "between — the user may pick or ignore them; they never form a "
-            "plan. Always speak the reply as your message text ALONGSIDE the "
-            "call — a bare answer call that says nothing is rejected."
+            "plan. Work the user has explicitly named never lands here — it "
+            "docks as a proposal or the fitting revision verb. Always speak "
+            "the reply as your message text ALONGSIDE the call — a bare "
+            "answer call that says nothing is rejected."
         ),
         params_model=ChatAnswerArgs,
     ),

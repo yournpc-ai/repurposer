@@ -16,9 +16,12 @@ fixture 纪律（memory: delete_project 毁共享 key 坑）: 源片先拷 scena
 前缀再 seed——项目删除会 unlink asset 的 file_url，共享 key 直接引用会被
 清理想死（S16 吃过 recipe 卡营销片）。
 
-场景集（批0 三本；S-done 收官触发回合待后续——它要真 run 全程，骑 S4 的
-链另排）:
-- S-cap  能力问:「你会做什么？你能剪辑已有素材吗」(Pexo 图4 同句,直接可比)
+场景集（批0 三本 + 批 D 语言矩阵；S-done 收官触发回合待后续——它要真 run
+全程，骑 S4 的链另排）:
+- S-cap  能力问家族:「你会做什么？你能剪辑已有素材吗」(Pexo 图4 同句,
+         直接可比) × 语言矩阵六格（prompt 语言 × Accept-Language 地板,
+         风险加权序: en→zh / mixed→zh 先行, zh→zh / en→en 基线,
+         zh→en / mixed→en 末位——事故①②活在 ZH 答复里）
 - S-adv  素材处理中建议: 传片即问「这个视频你有什么建议」(截图图1 同句)
 - S-warm 理解落地触发回合（主战场,对标 Pexo 图5 的编辑视角评述）
 
@@ -37,6 +40,9 @@ fixture 纪律（memory: delete_project 毁共享 key 坑）: 源片先拷 scena
   J4 single_next_step        [all]    收尾收敛到一个明确决策点(带选项卡的
                               回合 = 散文干净收进卡,卡即决策点)
   J5 direct_answer           [S-cap]  直接回答先行+接担忧+口语节奏+开放邀请收尾
+  J6 semantic_roles          [all]    语义角色守位五对（批 D 事故①②仪表):
+                              推荐=提议非指令 / 提问=邀请非命令 / 默认值=可改
+                              非被迫 / 选项=可选非已决 / 观察=有据非断言
 
 Judge 的已知偏置: 唯一 provider 座是 minimax——被测与 judge 同族,自偏好
 风险在案,det 半尺是无偏锚;第二 provider 座落地时 --provider 轮转（mirror
@@ -84,7 +90,28 @@ from app.providers.llm.minimax import minimax_client  # noqa: E402
 # 质量尺 v1
 # ---------------------------------------------------------------------------
 
-RUBRIC_VERSION = 5  # v5: J5 示例拍退役——收尾=素材优先开放邀请,替用户写台词不可满分(2026-09-27 用户裁定);v4: J5 入口语节奏轴——规格表腔不可满分(批5 v2 事故尺补);v3: D1 只认无歧义锚(v2 秒数区间被「切 30–60 秒」时长规格假阳);v2: J4 按「选项卡=决策点」校准
+RUBRIC_VERSION = 6  # v6: J6 语义角色维度 + S-cap 语言矩阵（批 D 事故①②仪表——推荐/提问/默认/选项/观察五对角色守位,措辞质感的测量座);v5: J5 示例拍退役——收尾=素材优先开放邀请,替用户写台词不可满分(2026-09-27 用户裁定);v4: J5 入口语节奏轴——规格表腔不可满分(批5 v2 事故尺补);v3: D1 只认无歧义锚(v2 秒数区间被「切 30–60 秒」时长规格假阳);v2: J4 按「选项卡=决策点」校准
+
+# 语言矩阵（批 D · 事故①②语义角色仪表）：能力问家族的 prompt 语言 × 界面
+# 地板语言（Accept-Language——mirror 律下地板只在消息无明确语言信号时
+# 生效,mixed prompt 是地板真正有权重之座）。cell = 「prompt→floor」,答复
+# 实际落地语言随 capture 记录。dict 序 = 风险加权序（EN→ZH 与 mixed→ZH
+# 先行,ZH→ZH / EN→EN 基线,ZH→EN / mixed→EN 末位）——默认场景清单同序。
+CAP_VARIANTS: dict[str, tuple[str, str | None, str]] = {
+    # scenario id: (prompt, Accept-Language floor, lang cell)
+    "S-cap-en2zh": (
+        "What can you do? Can you edit existing material?", "zh", "en→zh"),
+    "S-cap-mixed2zh": (
+        "你会做什么？can you turn my talks into clips and posts?", "zh",
+        "mixed→zh"),
+    "S-cap": ("你会做什么？你能剪辑已有素材吗", None, "zh→zh"),
+    "S-cap-en2en": (
+        "What can you do? Can you edit existing material?", "en", "en→en"),
+    "S-cap-zh2en": ("你会做什么？你能剪辑已有素材吗", "en", "zh→en"),
+    "S-cap-mixed2en": (
+        "What can you do? 能把我的演讲剪成切片和帖子吗？", "en", "mixed→en"),
+}
+CAP_ALL = frozenset(CAP_VARIANTS)
 
 # 菜单对账表（测量仪器,与批1落地的注册表菜单投影 capability_menu_lines()
 # 对齐维护——投影增删产物时本表同批改;zh alias 是应答侧的用户语言叫法,
@@ -119,7 +146,7 @@ DIMENSIONS: dict[str, dict] = {
     },
     "D2": {
         "name": "menu_grounding", "kind": "det",
-        "scenarios": {"S-cap", "S-adv", "S-warm"},
+        "scenarios": CAP_ALL | {"S-adv", "S-warm"},
         "what": "产物名命中菜单表且无平台编造",
     },
     "D3": {
@@ -147,13 +174,20 @@ DIMENSIONS: dict[str, dict] = {
         "what": "收尾收敛到一个明确决策点——普通回合 = 一句话下一步;带选项卡的回合 = 散文干净收进选项卡(0=无/多头/悬空引导 1=有但绕 2=单一明确)",
     },
     "J5": {
-        "name": "direct_answer", "kind": "judged", "scenarios": {"S-cap"},
+        "name": "direct_answer", "kind": "judged", "scenarios": CAP_ALL,
         # v4 校准（批5 v2 事故尺补）: 规格表腔（全量菜单倾倒/SKU 名词清单/
         # 模板分组标签）不可满分——「人机感」入尺,否则规格表答复仍拿 2。
         # v5 校准（2026-09-27 用户裁定）: 收尾示例拍退役——替用户写台词
         # （「试试这样说：…」式脚本化示例请求）= presumption,列 1 分封顶;
         # 满分收尾 = 素材优先的开放邀请（邀请即台阶）。
         "what": "直接回答先行+接住隐含担忧+口语节奏（动词分组、无规格表腔）+收尾=素材优先的开放邀请（0=绕弯或规格表腔倾倒 1=直接但说明书腔、替用户写台词、或缺邀请 2=直接+接担忧+口语化+开放邀请）",
+    },
+    "J6": {
+        "name": "semantic_roles", "kind": "judged",
+        "scenarios": CAP_ALL | {"S-adv", "S-warm"},
+        # v6 新增（批 D 事故①②仪表）：措辞质感的测量座——场景面只锁形态,
+        # 推荐 vs 指令的角色判定归本维度（断言面分工,简报批 D 施工点 5）。
+        "what": "语义角色守位——五对角色：推荐=一词可收尾的提议,非替用户拍板的指令；提问=邀请,非命令；默认值=可改的可见事实,非被迫之选；选项=可选可忽略,非已决定；观察=有据事实,非超出证据的断言（0=任一角色塌成禁态 1=边缘含混 2=出现的角色全部守位,未出现的角色不扣分）",
     },
 }
 
@@ -196,8 +230,9 @@ def check_time_anchors(reply: str) -> dict:
 def check_menu_grounding(reply: str, scenario: str) -> dict:
     hits = _menu_hits(reply)
     platform_hits = [p for p in PLATFORM_BAN if p.lower() in reply.lower()]
-    # S-cap 是能力枚举,期望多命中;建议类场景至少一个不编造。
-    want = 3 if scenario == "S-cap" else 1
+    # 能力问家族（含语言矩阵变体）是能力枚举,期望多命中;建议类场景至少
+    # 一个不编造。
+    want = 3 if scenario in CAP_ALL else 1
     ok = len(hits) >= want and not platform_hits
     return {
         "score": 1 if ok else 0,
@@ -318,16 +353,26 @@ async def _conversation_id(ctx: Ctx, pid: str) -> str:
     return str(cid)
 
 
-async def scenario_cap(ctx: Ctx) -> dict:
-    """S-cap 能力问(Pexo 图4 同句)。"""
-    prompt = "你会做什么？你能剪辑已有素材吗"
-    pid = await ctx.new_project("rq-S-cap")
-    turn = await ctx.chat(pid, prompt)
+async def scenario_cap(ctx: Ctx, scenario: str) -> dict:
+    """S-cap 能力问家族（Pexo 图4 同句 + 批 D 语言矩阵变体）：prompt 语言
+    × Accept-Language 地板按 CAP_VARIANTS 配对,cell 随 capture 记录——
+    语义角色判定的语言覆盖面（事故①②活在 ZH 答复里,mixed/EN prompt +
+    ZH 地板是风险加权序的先行格）。"""
+    prompt, floor, cell = CAP_VARIANTS[scenario]
+    pid = await ctx.new_project(f"rq-{scenario}")
+    res = await ctx.client.post(
+        "/chat",
+        json={"project_id": pid, "message": prompt},
+        headers={"Accept-Language": floor} if floor else None,
+    )
+    if res.status_code != 201:
+        raise ScenarioFailure(f"/chat {prompt[:30]!r}: {res.text}")
+    turn = res.json()
     reply = ((turn.get("assistant_message") or {}).get("content") or "").strip()
     if not reply:  # 非常规形状兜底: 回读会话
         reply = await _last_assistant_content(ctx, await _conversation_id(ctx, pid))
-    return {"scenario": "S-cap", "user_prompt": prompt, "reply": reply,
-            "suggestions": []}
+    return {"scenario": scenario, "user_prompt": prompt, "reply": reply,
+            "suggestions": [], "lang_cell": cell}
 
 
 async def scenario_adv_and_warm(ctx: Ctx, warm_timeout: float) -> list[dict]:
@@ -437,7 +482,8 @@ async def score_capture(capture: dict, with_judge: bool) -> dict:
 
 def print_report(captures: list[dict]) -> None:
     for c in captures:
-        print(f"\n=== {c['scenario']} ===")
+        cell = f" [{c['lang_cell']}]" if c.get("lang_cell") else ""
+        print(f"\n=== {c['scenario']}{cell} ===")
         if c.get("skipped"):
             print(f"  SKIPPED — {c['skipped']}")
             continue
@@ -501,8 +547,9 @@ def diff_baseline(name: str, captures: list[dict]) -> None:
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    parser.add_argument("--scenario", default="S-cap,S-adv,S-warm",
-                        help="comma list (S-cap,S-adv,S-warm)")
+    parser.add_argument("--scenario",
+                        default=",".join([*CAP_VARIANTS, "S-adv", "S-warm"]),
+                        help="comma list (default: S-cap 语言矩阵全格 + S-adv + S-warm)")
     parser.add_argument("--save-baseline", metavar="NAME",
                         help="save this run as the named baseline")
     parser.add_argument("--diff", metavar="NAME",
@@ -520,12 +567,14 @@ async def main() -> None:
     captures: list[dict] = []
     try:
         # 逐场景隔离失败——测量仪器的部分结果也有价值(一本挂了不烧掉已捕获
-        # 的另外两本);场景异常进 error 字段,评分阶段按空答复同律跳过。
-        if "S-cap" in wanted:
+        # 的其他本);场景异常进 error 字段,评分阶段按空答复同律跳过。
+        for cap_id in CAP_VARIANTS:
+            if cap_id not in wanted:
+                continue
             try:
-                captures.append(await scenario_cap(ctx))
+                captures.append(await scenario_cap(ctx, cap_id))
             except Exception as e:  # noqa: BLE001 — per-scenario isolation
-                captures.append({"scenario": "S-cap", "user_prompt": "",
+                captures.append({"scenario": cap_id, "user_prompt": "",
                                  "reply": "", "suggestions": [],
                                  "error": f"{type(e).__name__}: {e}"})
         if {"S-adv", "S-warm"} & wanted:
