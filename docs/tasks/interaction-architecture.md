@@ -1,6 +1,6 @@
 # Agent 交互架构迁移 — 施工简报（ADR-099）
 
-> Status: **迭代一已收口**——批次 B（`cfb3488`）、C·C+（`05e81ba`+`1cbdad6`）、S（S-int-1..9）落地且验收已跑（批次 S 验收节在册：S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因）；C·C+ 账判软项（承重观察⑥）由用户拍板并入批 D 首批同批修。**迭代二收口验收中**——批次 D（`30174b6` + `2411290`）与批次 E（E1 `ddde27f` / E2 `4a226ee` 删除态保持；E3 `58c9449` 经二分归因 revert 落 `70136d8`：S1 解剖①观察到删除导致回归，该簇暂保留）全部进 main；验收单确定性面/事故①②/判软双向/E1E2 承重座已绿，gate 12 探针 / v6 基线 / 全量剧本在终态树补跑中；新债 fill-keys 族（research facet 读面折叠 × S1 断言口径）登记在批次 E 验收记录，不在本迭代账；G 未动工。
+> Status: **迭代一已收口**——批次 B（`cfb3488`）、C·C+（`05e81ba`+`1cbdad6`）、S（S-int-1..9）落地且验收已跑（批次 S 验收节在册：S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因）；C·C+ 账判软项（承重观察⑥）由用户拍板并入批 D 首批同批修。**迭代二收口验收已跑**——批次 D（`30174b6` + `2411290`）与批次 E（E1 `ddde27f` / E2 `4a226ee` 删除态保持；E3 `58c9449` 经二分归因 revert 落 `70136d8`）全部进 main；验收单 8 步全跑：确定性面 ✓ / 事故①② ✓ / 判软双向 ✓ / E1E2 承重座 ✓ / gate 11/12（probe I 首读建带 4~6，pre-D 同带实证非本批回归）/ 全量 25/37（红全部归因，无未归因红）/ v6 基线已存；遗留三拍板项（probe I 阈值校准 / S-warm J6=1·D3=0·S-adv 0s rubric 口径 / S5 发射层方差率取证）在批次 E 验收记录；新债 fill-keys 族登记；G 未动工。
 > 架构母法 = ADR-099。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
 
 ## 冻结事项（本简报全程不再议）
@@ -188,6 +188,9 @@ B → C·C+ → S → D → E → G1 → G2
 - **E1/E2 保持删除态**：三簇合计原删 11163 字符，E3 恢复 674 字符后，净删除 = E1 ~315 + E2 ~383 ≈ 700 字符 / 8 处改写。
 - **prompt_gate 12 探针（终态树）**：11/12 绿——A 12/12、B 11/12、C 12/12、D 11/12、E 11/12、F 9/12（在册摆动带 6↔10 内）、G 12/12、H-H4 满分。**probe I 首读建带：4/12 → 重跑 6/12（铁律重跑排漂移），均低于阈值 8**；failure tag 拆分：terminal=None（bare_reply）为主（6→2→5），suggestions-range 次之（2→3→1），ask_user-called 1 次，**present_plan 劫持零发生（事故④原形态清零 = 批 D 判软修的 gate 实证）**。**归因实验：pre-D prompt 面（`30174b6^` 五文件临时回退）复跑 probe I = 6/12 同带同签名**——bare_reply 发射率弱点先于 D/E 存在，非本迭代回归；probe I 的 8 阈值是沿袭先例非实测，首读建带读数 = 4~6/12。**新账登记：浏览问 answer+suggestions 发射率 ~40-50%（bare_reply 为主，生产有 read-tolerant 散文地板兜底不成错误，但建议卡不发 = 谱系第二档发射弱）**——阈值校准（首读建带是否落地 4 或 6）与发射率改进（prompt 面还是 substrate 面）留用户拍板，铁律：永不回调阈值粉饰回归，但首读建带是测带不是粉饰。
 - **S5 波动面**：panel-edit 存活断言首跑红（count 以串方言 `'3'` 落库 vs 断言 int `3`——顺形律 dialect 族，schema/钉参机械未被 D/E 触碰），重跑即绿（判过）；同族 dialect（`'null'` 串）同现在失败详情，既有 1741b17 兼容层覆盖。
+- **v6 基线（`baseline-iter2-final.json` 已存，建带非审判）**：S-cap 语言矩阵六格 J5/J6 全 2（事故①仪表全守位）；**S-warm（事故②主战场）J1-J4 全 2**（verdict 带拒绝项 / 剪辑事实 / 负向判断 / 单一收尾），**J6=1 边缘**——收尾句「先把这块打出来」仍带 go-ahead 腔（推荐角色守位边缘，非塌禁态）；D3=0——散文点名的拒绝项（长文）按设计不可点选，rubric 口径与 rejected-alternative 结构的冲突待判读；S-adv（素材处理中问建议）J1/J2/J4=0——模型以承诺制 defer（材料未读不可判定是介质法正形），rubric 是否给 deferral 留座待判读。
+- **chat_scenarios 全量（终态树，37 本）**：25 绿 12 红，红全部归因——既有债 A ×4（S6f/S10/S20A/S21A 白名单 `at` 键）、B ×2（S23 NoResultFound / S-explore-2 plansReady 失速）、C ×1（S22 落点拍时序）、S16 族 ×1（warm decompile 未言语，既有债登记的第二失败点）、fill-keys 族 ×1（S1 全量跑为 settle-miss 新形态：模型绕过 pending ask 直接 draft_from_persona 出书——LLM disposition 方差，重跑转绿判过）；**flake 四座重跑**：S1 ✓ / S4 ✓（material_pending 误读一次性）/ S-int-5 ✓（发射率波动，批 S 先例同判）/ **S5 ✘（第三形态：模型把计划 JSON 直接铺进散文的 bare reply——发射层畸形，provider 族，与 D/E 文本面无映射）**。S5 今日五跑 2 绿 3 红（dialect ×2 + 散文计划 ×1），三形态全在发射层，rate 偏高在册待观察。
+- **收口判定移交**：D/E 的账全部结清——每个红都有归因（E3 revert 落 commit；其余红 = 既有债四族 + fill-keys 新债 + probe I 首读建带 + 发射层波动），**无未归因红**。遗留拍板项：① probe I 阈值校准（首读带 4~6 vs 预设 8——建带落地值与发射率改进路线）；② S-warm J6=1 / D3=0 / S-adv 0s 的 rubric 口径判读；③ S5 发射层方差率是否立项取证。
 
 ---
 
