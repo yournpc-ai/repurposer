@@ -466,9 +466,11 @@ def test_draft_span_settles_never_persist():
     frames2 = _feed(p2, "edit_graph", TerminalAccepted("edit_graph"))
     # The wire still says: the retried edit opens and completes — the
     # 同形 repair span between them streams nothing and persists nothing.
+    # Its silent open consumed an id slot (a2) but no seq: _seq counts
+    # EMITTED frames only (a1 active 1, a1 cancelled 2, a3 opens at 3).
     assert _summary(frames2) == [
-        ("a3", 4, "draft", STATUS_ACTIVE, EDIT),
-        ("a3", 5, "draft", STATUS_COMPLETED, EDIT_DONE),
+        ("a3", 3, "draft", STATUS_ACTIVE, EDIT),
+        ("a3", 4, "draft", STATUS_COMPLETED, EDIT_DONE),
     ]
     assert p2.settled_frames() == []
 
