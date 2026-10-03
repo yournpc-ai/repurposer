@@ -1,6 +1,6 @@
 # Agent 交互架构迁移 — 施工简报（ADR-099）
 
-> Status: **迭代一已收口**——批次 B（`cfb3488`）、C·C+（`05e81ba`+`1cbdad6`）、S（S-int-1..9）落地且验收已跑（批次 S 验收节在册：S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因）；C·C+ 账判软项（承重观察⑥）由用户拍板并入批 D 首批同批修。**迭代二批次 D 已落地**（`30174b6`，含判软修同批一次基线，验证全部未跑——用户自跑清单在批次 D 落地记录节）；批次 E 待 D 验收绿后开工，交接提示词 = `apps/api/scratch/handoff-iter2-speech.md`；G 未动工。
+> Status: **迭代一已收口**——批次 B（`cfb3488`）、C·C+（`05e81ba`+`1cbdad6`）、S（S-int-1..9）落地且验收已跑（批次 S 验收节在册：S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因）；C·C+ 账判软项（承重观察⑥）由用户拍板并入批 D 首批同批修。**迭代二批次 D 已落地**（`30174b6`，含判软修同批一次基线，验证全部未跑——用户自跑清单在批次 D 落地记录节）；**批次 E 三簇删除包已备**（scratch patch 三件，apply/revert 往返已验证——D 验收绿后逐簇开工，协议见批次 E 节）；G 未动工。
 > 架构母法 = ADR-099。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
 
 ## 冻结事项（本简报全程不再议）
@@ -145,6 +145,14 @@ B → C·C+ → S → D → E → G1 → G2
 | **must_not_touch** | schema / catalog / 契约段；payload 条款（grounding hierarchy / disclosure / DISCOVERY GOALS / 任务组成规则 / rejection 协议 / partials）；S 场景；混合段纪律同 D |
 | **acceptance** | 每簇：3 次 smoke（critical 即停）→ 8-12 次关键剧本 → 定点重放（受影响簇+历史事故+邻近边界），baseline/candidate 交错 round-robin；一次 green 不证冗余；红 = 承重恢复 + 登记本简报；**ablation 只判"删文本是否行为回归"，不判"旧 lane 是否仍存在"** |
 | **rollback** | 逐簇 revert；承重簇恢复后永不再探 |
+
+**批次 E 施工包**（施工会话已备，D 验收绿前禁 apply）：`apps/api/scratch/iter2-e1-closing-question.patch` / `iter2-e2-free-phrasing.patch` / `iter2-e3-ask-user-form.patch`——累计序列（e1 → e1+e2 → e1+e2+e3），repo 根 `git apply` 入座、`git apply -R` 恢复，apply/revert 全往返已验证（未跑任何行为探针）。逐簇边界：
+
+- **E1**：router present_plan ③ 收尾段（删 "phrased your own way, answerable with a single word" + 两处引号示例，契约全留）/ router propose_plans 收尾收缩为宪法①引用 / chat_intent propose_tasks·edit_graph 行删 magic-word 引号示例（本 prompt 的定义座留全式）/ chat_intent propose_plans 收尾收缩为 propose_tasks 同拍引用。per-prompt 各留一处完整定义座（router=present_plan、chat_intent=propose_tasks 行）——两 prompt 互不可见，收缩不得跨 prompt 引用。
+- **E2**：router 三处（present_plan FREE PHRASING 尾句 + "never reuse a line from an earlier turn" / ask_user 尾句 / start_run FREE PHRASING 尾句）+ chat_intent ask_user 尾句，全部落宪法⑥+直给。partials 零触碰（_capability_answer rule 4 同族句按 must_not_touch 保留）。
+- **E3**：两路 ask_user 长段各收缩为契约一行（prose=判断 card=决定 + `question`/`default_path` 参数座 + recommended_id 同声 + 宪法①④引用）——候选删除面 = 介质法三禁（问号收尾/列举选项/复述理由行）、"say it plainly" 句；参数契约（`question` = bare question, no default-path tail）保留在收缩行内。
+
+**判读要点（施工会话预登记）**：E2 是本批最高疑似承重簇——「never reuse a line」是 anti-parroting 的唯一言语法座位（宪法六条无同义条；S-int-9 锁旧腔 verbatim 负形靠它喂），探针红即恢复不意外；E3 的介质法三禁在 partials 无镜像（_asking_strategy 只载选项策略），删除后 prose 问号收尾可能回归——两簇探针的必看座 = S-int-9 / S1 / S3 / S-int-3 + ask_user 全族（S-int-6/7 的 ask 分支）。E1 判软面随删随张开：S5/S10/S-int-4 同 E 每簇必看。
 
 ---
 
