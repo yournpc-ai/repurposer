@@ -1,6 +1,6 @@
 # Agent 交互架构迁移 — 施工简报（ADR-099）
 
-> Status: 批次 B（`cfb3488`）、批次 C·C+（`05e81ba` 暗置 + `1cbdad6` 启用，一个 release unit）与批次 S（S-int-1..9 场景入座）已落地；**验收已跑**（用户授权施工会话代跑，结果在批次 S 验收节）——S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因在册（既有债四族 + C·C+ 账判软一项）；D/E/G 未动工。
+> Status: **迭代一已收口**——批次 B（`cfb3488`）、C·C+（`05e81ba`+`1cbdad6`）、S（S-int-1..9）落地且验收已跑（批次 S 验收节在册：S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因）；C·C+ 账判软项（承重观察⑥）由用户拍板并入批 D 首批同批修。**迭代二（D/E）开工**，交接提示词 = `apps/api/scratch/handoff-iter2-speech.md`；G 未动工。
 > 架构母法 = ADR-099。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
 
 ## 冻结事项（本简报全程不再议）
