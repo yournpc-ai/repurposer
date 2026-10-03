@@ -1,6 +1,6 @@
 # Agent 交互架构迁移 — 施工简报（ADR-099）
 
-> Status: **迭代一已收口**——批次 B（`cfb3488`）、C·C+（`05e81ba`+`1cbdad6`）、S（S-int-1..9）落地且验收已跑（批次 S 验收节在册：S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因）；C·C+ 账判软项（承重观察⑥）由用户拍板并入批 D 首批同批修。**迭代二批次 D 已落地**（`30174b6`，含判软修同批一次基线，验证全部未跑——用户自跑清单在批次 D 落地记录节）；**批次 E 三簇删除包已备**（scratch patch 三件，apply/revert 往返已验证——D 验收绿后逐簇开工，协议见批次 E 节）；G 未动工。
+> Status: **迭代一已收口**——批次 B（`cfb3488`）、C·C+（`05e81ba`+`1cbdad6`）、S（S-int-1..9）落地且验收已跑（批次 S 验收节在册：S-core 9/9 绿、gate 11 探针全绿、legacy 9 红全部归因）；C·C+ 账判软项（承重观察⑥）由用户拍板并入批 D 首批同批修。**迭代二批次 D 已落地**（`30174b6` + `2411290` gate 仪表，验证未跑）；**批次 E 三簇删除包已备**（scratch patch 三件，apply/revert 往返已验证）。**验收时点用户拍板：迭代二整批施工完成后统一验收**——E 逐簇 apply+commit 不随簇跑探针，归因靠 commit 序逆序二分（协议与收口验收单见批次 E 节）；G 未动工。
 > 架构母法 = ADR-099。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
 
 ## 冻结事项（本简报全程不再议）
@@ -131,7 +131,7 @@ B → C·C+ → S → D → E → G1 → G2
 - **事故①②回归场景入座**：S-int-10（空项目能力问 ×2 语言——终态 answer + 散文落地 + 极窄机器词负形「归类 / group by the / group these by」+ 零 run）；S-int-11（seed_keynote_project + 进程内 `run_trigger_turn(TRIGGER_UNDERSTANDING)` 确定性点火——无 pending plan 必开口 / 散文非空且永不以 `?`/`？` 收尾（介质法形状锁）/ check_suggestion_block 全谱：1-3 项、id 语法、recommended ≤1、source_turn 自锚、source_state 快照、label ≤40、载荷负形 lint）。断言面分工按施工点 5 定死：场景零措辞正则，推荐 vs 指令判定归 J6。
 - **probe I 入座**：gate 第 12 探针——plan 路素材在库（material_excerpt 同 D）+ recent 轮次已建推荐格局 + browse 问（"anything else you'd recommend?"）→ 终态 answer 且 args 带 1-3 suggestions，present_plan/ask_user 零调用（D 族 NEVER-called 断言式；stub 默认接受 answer，无需新护栏）。阈值 8 随 D/E/F/G 先例，**首读数待测**（注释在册：recalibrate from readings, never to excuse）。点选/stale 不入座（跨回合 provenance 归剧本 S-int-6/7，docstring 注明）。
 - **must_not_touch 对账**：schema / tool 语义零改动（turn_tools 只动 answer 描述句 = 判软修点名座位）；payload 条款零改动（grounding hierarchy / beat anchor 表格 / suggestions 三件套 / disclosure / run_completed 交付事实纪律逐字未动）；S 场景零改动（S-int-10/11 为纯新增）；混合段纪律——beat①/④ 只抽 speech 质感句，rejected-alternative 与 speaker-form payload 句原位保留。
-- **未跑验证（用户清单）**：① 触发回合剧本（S-int-11 为首）+ 事故①②场景转绿（S-int-10/11）；② `reply_quality_probe.py` 轮替（round-robin，J6 + 语言矩阵——先存 v6 新基线再对账）；③ **判软修双向断言**（GPT 评审吸收）：S5/S10 复跑 = clips 类点名工作回收 present_plan（正向），S-int-4 不回退 + S-int-2/5 两跑判读 = answer+suggestions 档不得被压回（反向——answer 不得变成"逢工作词就出 plan"的吸尘器）；④ prompt_gate 全量 12 探针（probe I 首读数入 THRESHOLDS 注释——首读 = 建测量带，不是定义产品真理；failure tag 拆分读数同记）；⑤ chat_scenarios 全量（既有债四族不在本批账——A 白名单 / B 探索族 / C S22 时序 / S16 flake）；⑥ 纯 pytest（零 schema 改动，预期 906 绿 + 既有债 11 红，清单外新红 = 异常）；⑦ py_compile / import 冒烟（scripts 三件套本批改动面）；⑧ **四终态边界目检**（GPT 评审吸收）：answer / answer+suggestions / ask_user / present_plan 谱系读数 vs 批次 S 验收读数——D 不得把谱系推歪（事故①②之外无边界漂移）。**E1 apply 门槛（GPT 评审拍板吸收）= ①~⑧ 全绿/归因在册 + 新基线冻结四件（gate 12 读数 / 剧本全量归因 / probe v6 基线文件 / pytest 读数）——缺一件不开 E1。**
+- **未跑验证（用户清单）**：① 触发回合剧本（S-int-11 为首）+ 事故①②场景转绿（S-int-10/11）；② `reply_quality_probe.py` 轮替（round-robin，J6 + 语言矩阵——先存 v6 新基线再对账）；③ **判软修双向断言**（GPT 评审吸收）：S5/S10 复跑 = clips 类点名工作回收 present_plan（正向），S-int-4 不回退 + S-int-2/5 两跑判读 = answer+suggestions 档不得被压回（反向——answer 不得变成"逢工作词就出 plan"的吸尘器）；④ prompt_gate 全量 12 探针（probe I 首读数入 THRESHOLDS 注释——首读 = 建测量带，不是定义产品真理；failure tag 拆分读数同记）；⑤ chat_scenarios 全量（既有债四族不在本批账——A 白名单 / B 探索族 / C S22 时序 / S16 flake）；⑥ 纯 pytest（零 schema 改动，预期 906 绿 + 既有债 11 红，清单外新红 = 异常）；⑦ py_compile / import 冒烟（scripts 三件套本批改动面）；⑧ **四终态边界目检**（GPT 评审吸收）：answer / answer+suggestions / ask_user / present_plan 谱系读数 vs 批次 S 验收读数——D 不得把谱系推歪（事故①②之外无边界漂移）。**验收时点（用户拍板）：①~⑧ 不单独先跑，与 E 二分协议合并为迭代二收口验收单一次战役（批次 E 节目落 = 现行法）。**
 
 ---
 
@@ -143,16 +143,31 @@ B → C·C+ → S → D → E → G1 → G2
 | **files** | `intent_router_system.j2`、`chat_intent_system.j2` |
 | **depends_on** | D 收口（suite 已含事故①②回归） |
 | **must_not_touch** | schema / catalog / 契约段；payload 条款（grounding hierarchy / disclosure / DISCOVERY GOALS / 任务组成规则 / rejection 协议 / partials）；S 场景；混合段纪律同 D |
-| **acceptance** | 每簇：3 次 smoke（critical 即停）→ 8-12 次关键剧本 → 定点重放（受影响簇+历史事故+邻近边界），baseline/candidate 交错 round-robin；一次 green 不证冗余；红 = 承重恢复 + 登记本简报；**ablation 只判"删文本是否行为回归"，不判"旧 lane 是否仍存在"** |
-| **rollback** | 逐簇 revert；承重簇恢复后永不再探 |
+| **acceptance** | **验收时点用户拍板：不随簇跑探针，整批（D+E1+E2+E3）施工完成后统一验收**（收口验收单见本节目落）；归因机制 = commit 序逆序二分——红 → `git revert --no-commit` 逆序（E3→E2→E1→D）定点重放红座，绿 = 归因该簇，承重簇 revert 成 commit + 登记「观察到删除导致回归；该簇暂保留」（恢复转绿只证删除改变了行为，不证该文本语义不可替代）；一次 green 不证冗余；**ablation 只判"删文本是否行为回归"，不判"旧 lane 是否仍存在"** |
+| **rollback** | 逐簇 revert commit（拍板后留痕）；承重簇恢复后永不再探 |
 
-**批次 E 施工包**（施工会话已备，D 验收绿前禁 apply）：`apps/api/scratch/iter2-e1-closing-question.patch` / `iter2-e2-free-phrasing.patch` / `iter2-e3-ask-user-form.patch`——累计序列（e1 → e1+e2 → e1+e2+e3），repo 根 `git apply` 入座、`git apply -R` 恢复，apply/revert 全往返已验证（未跑任何行为探针）。逐簇边界：
+**批次 E 施工协议（现行法，用户拍板后版本）**：三簇 = 三个独立 commit（D → E1 → E2 → E3 线性序），施工会话逐簇 `git apply --check` → `git apply` → commit → 简报登记，**全程零探针零剧本**；apply 漂移 = 停下报告，禁手工硬缝后静默继续。统一验收时若全绿 = 迭代二收口；红 = 按上表 acceptance 行二分，每步 revert 只对红座定点重放（不重跑全量），归因确认后 revert 落成 commit。
+
+**批次 E 施工包**（施工会话已备）：`apps/api/scratch/iter2-e1-closing-question.patch` / `iter2-e2-free-phrasing.patch` / `iter2-e3-ask-user-form.patch`——累计序列（e1 → e1+e2 → e1+e2+e3），repo 根 `git apply` 入座、`git apply -R` 恢复，apply/revert 全往返已验证（未跑任何行为探针）。逐簇边界：
 
 - **E1**：router present_plan ③ 收尾段（删 "phrased your own way, answerable with a single word" + 两处引号示例，契约全留）/ router propose_plans 收尾收缩为宪法①引用 / chat_intent propose_tasks·edit_graph 行删 magic-word 引号示例（本 prompt 的定义座留全式）/ chat_intent propose_plans 收尾收缩为 propose_tasks 同拍引用。per-prompt 各留一处完整定义座（router=present_plan、chat_intent=propose_tasks 行）——两 prompt 互不可见，收缩不得跨 prompt 引用。
 - **E2**：router 三处（present_plan FREE PHRASING 尾句 + "never reuse a line from an earlier turn" / ask_user 尾句 / start_run FREE PHRASING 尾句）+ chat_intent ask_user 尾句，全部落宪法⑥+直给。partials 零触碰（_capability_answer rule 4 同族句按 must_not_touch 保留）。
 - **E3**：两路 ask_user 长段各收缩为契约一行（prose=判断 card=决定 + `question`/`default_path` 参数座 + recommended_id 同声 + 宪法①④引用）——候选删除面 = 介质法三禁（问号收尾/列举选项/复述理由行）、"say it plainly" 句；参数契约（`question` = bare question, no default-path tail）保留在收缩行内。
 
 **判读要点（施工会话预登记 + GPT 评审翻案）**：**E1 升级为并列最高危**（GPT 翻案原登记）——E1 与批 D 同坐收尾语义面（D 刚把 trigger 收尾从 verdict 改成 offer，E1 再删两路 prompt 的收尾法），删除窗口紧邻形态变更窗口，假绿形态具体：事故②表面不回来，但正常回合开始不收尾 / 收尾退成开放闲聊 / 卡与散文重新错拍。**E1 定点重放座 = 四终态全谱**（answer=S-int-1 / answer+suggestions=S-int-2·5 / ask_user=S-int-3·S1·S3 / present_plan=S-int-4·S5·S10）+ trigger=S-int-11·S19，不只是事故①②同形座。E2 疑似承重不变——「never reuse a line」是 anti-parroting 的唯一言语法座位（宪法六条无同义条；S-int-9 锁旧腔 verbatim 负形靠它喂），探针红即恢复不意外；E3 的介质法三禁在 partials 无镜像（_asking_strategy 只载选项策略），删除后 prose 问号收尾可能回归——两簇探针的必看座 = S-int-9 / S1 / S3 / S-int-3 + ask_user 全族（S-int-6/7 的 ask 分支）。E1 判软面随删随张开：S5/S10/S-int-4 同 E 每簇必看。**登记语言纪律（GPT 吸收）**：探针红恢复后登记写「观察到删除导致回归；该簇暂保留」——恢复转绿只证删除改变了行为，不证该文本语义不可替代，永不写"证明唯一承重原因"。
+
+**迭代二收口验收单（现行法——D+E 整批施工完成后用户自跑，一次战役）**：
+
+1. `uv run python scripts/chat_scenarios.py --only S-int-10,S-int-11`（事故①②回归场景转绿）
+2. `uv run python scripts/reply_quality_probe.py --save-baseline iter2-final`（v6 基线 = J6 + 语言矩阵首读建带——此跑是建测量尺度，不是审判；读数入简报）
+3. `uv run python scripts/chat_scenarios.py --only S5,S10,S-int-4,S-int-2,S-int-5`（判软修双向：S5/S10 回收 present_plan = 正向；S-int-4 不回退 + S-int-2/5 两跑判读 = 反向——answer 不得变成"逢工作词就出 plan"的吸尘器；发射率波动面红了重跑一次再判）
+4. `uv run python scripts/chat_scenarios.py --only S-int-1,S-int-3,S1,S3,S19,S-int-9`（E 假绿面 + 承重疑似座：四终态谱系 / ask_user 全族 / E2 anti-parroting 座 / S19 trigger 准入）
+5. `uv run python scripts/prompt_gate.py`（全量 12 探针——probe I 首读数 + failure tag 拆分读数入 THRESHOLDS 注释；红了按铁律先重跑一次排 provider 漂移）
+6. `uv run python scripts/chat_scenarios.py`（全量——既有债四族 A 白名单 / B 探索族 / C S22 时序 / S16 flake 不在账，红了先对批次 S 验收节归因表）
+7. `uv run --extra dev python -m pytest tests/ -q`（预期 906 绿 + 既有债 11 红，清单外新红 = 异常）
+8. `uv run python -m py_compile scripts/prompt_gate.py scripts/reply_quality_probe.py scripts/chat_scenarios.py`（冒烟）
+
+红 → 二分（逆 commit 序）：`git revert --no-commit <E3>` → 红座定点重放 → 绿 = 归因 E3；仍红 → 叠加 revert E2 → 重放 → …→ D。归因确认：revert 落成 commit + 简报登记「观察到删除导致回归；该簇暂保留」；探针红永不回调阈值。全绿 = 迭代二收口：删除总量与承重清单写进本简报批次 E 验收节（迭代三收尾时 CHAT_ARCHITECTURE.md 写现行法的素材）。
 
 ---
 
