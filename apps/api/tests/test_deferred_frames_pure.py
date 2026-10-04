@@ -1,62 +1,25 @@
-"""Pure tests for the land-time suppression's pure core (retirement
-candidate — the machinery's call sites died with ADR-101 W1; this file's
-verdict class lives until W2 removes the function) and the speech-commit
-state machine.
+"""Pure tests for the speech-commit state machine (言语提交协议, G2) and its
+static seats.
 
 No DB, no LLM, no HTTP (suite discipline). What is gated HERE:
 
-- ``pending_commitment_verdict``'s truth table (W2 removes the function
-  with its last consumer);
 - ``ChatResponse.assistant_message`` tolerates None (the silent close's
   envelope);
-- ``DeferredFrames`` (言语提交协议's four-state machine — OPEN → BUFFERING →
+- ``DeferredFrames`` (the four-state machine — OPEN → BUFFERING →
   ACCEPT→FLUSH / REJECT→DROP→RETRY): arrival order survives a flush, a
   retract clears the stale queue at once and marks the turn frame-silent,
   a flush stays armed (mid-turn release replays each frame exactly once),
   a drop discards unsent and disarms, a disarmed buffer passes frames
   through live, and a None hook wraps to None (the one-shot path arms
-  nothing).
+  nothing);
+- the retract seat's static lock: both turn modules isinstance-match the
+  LOOP's ToolRejected class, never app.tools' registry exception.
 """
 
 import pytest
 
 from app.chat.deferred_frames import DeferredFrames
-from app.chat.service import pending_commitment_verdict
 from app.models.schemas import ChatResponse
-
-
-class TestPendingCommitmentVerdict:
-    def test_marked_with_beat_and_no_plan_suppresses(self) -> None:
-        assert (
-            pending_commitment_verdict(
-                lane_marked=True, beat_landed=True, plan_docked=False
-            )
-            == "suppress"
-        )
-
-    def test_unmarked_answer_never_suppresses(self) -> None:
-        assert (
-            pending_commitment_verdict(
-                lane_marked=False, beat_landed=True, plan_docked=False
-            )
-            == "release"
-        )
-
-    def test_no_beat_releases(self) -> None:
-        assert (
-            pending_commitment_verdict(
-                lane_marked=True, beat_landed=False, plan_docked=False
-            )
-            == "release"
-        )
-
-    def test_docked_plan_releases(self) -> None:
-        assert (
-            pending_commitment_verdict(
-                lane_marked=True, beat_landed=True, plan_docked=True
-            )
-            == "release"
-        )
 
 
 class TestChatResponseToleratesSilentClose:
@@ -97,7 +60,6 @@ class TestRetractSeatMatchesTheLoopClass:
         from app.tools import ToolRejected as RegistryRejected
 
         assert RegistryRejected is not tool_loop.ToolRejected
-
 
 
 class TestDeferredFrames:

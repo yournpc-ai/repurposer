@@ -173,10 +173,9 @@ logger = structlog.get_logger()
 
 # The return shape the service layer's callers hold (unchanged):
 # (assistant message, dispatched run id, cascade-bailed run ids, the pending
-# question this turn settled by judgment). The assistant message is None on
-# exactly one path: the material-pending commitment suppressed at land time
-# (the understanding beat landed mid-turn — the world-fired review turn
-# speaks next, so the stale promise never lands).
+# question this turn settled by judgment). The assistant message is None
+# when the turn closes without a row (the degrade paths land their own
+# shape).
 ProposeTurnOutcome = tuple[Message | None, UUID | None, list[UUID], Message | None]
 
 # _dock_plan_as_question's estimate kwarg sentinel: None is a REAL value
@@ -621,6 +620,7 @@ class ChatTurn:
             ),
             derived=derived,
             plans=plans,
+            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         docked = await latest_pending_question(db, self.conversation_id)
         self.outcome = (docked, None, bailed_run_ids, self.settled_question)
@@ -1532,6 +1532,7 @@ class ChatTurn:
                 default_path=params.default_path,
             ),
             intent=ask.model_dump(mode="json"),
+            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         self.outcome = (
             assistant_message, None, bailed_run_ids, self.settled_question

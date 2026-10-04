@@ -950,6 +950,7 @@ async def _dock_question(
     content: str,
     payload: QuestionPayload,
     intent: dict[str, Any] | None = None,
+    consumed_understanding_ref: str | None = None,
 ) -> tuple[Message, list[UUID]]:
     """Raise a new pending question (ask 落库): at most one pending per
     conversation, so any still-open question retires as superseded first.
@@ -974,6 +975,7 @@ async def _dock_question(
         content,
         question=payload.model_dump(mode="json"),
         intent=intent,
+        consumed_understanding_ref=consumed_understanding_ref,
     )
     return message, bailed_run_ids
 
@@ -1025,6 +1027,7 @@ async def sync_plan_question(
     echo: str | None = None,
     estimate: PlanEstimate | None = None,
     plans: list[dict] | None = None,
+    consumed_understanding_ref: str | None = None,
 ) -> list[UUID]:
     """Keep exactly one pending task_book question per project conversation.
 
@@ -1086,12 +1089,12 @@ async def sync_plan_question(
             reasons=reasons or [],
             brief=brief,
             estimate_credits=estimate,
-            derived=derived or [],
-            # 决策包阅读层 (iter-2 ③): the Content Plans behind the compiled
+            derived=derived or [],            # 决策包阅读层 (iter-2 ③): the Content Plans behind the compiled
             # chain; empty on the router-drafted docks (读容忍).
             plans=plans or [],
         ),
         intent=intent.model_dump(mode="json"),
+        consumed_understanding_ref=consumed_understanding_ref,
     )
     # Draft graph (ADR-057 K5 — 图先展示后运行): the docked chain stamps the
     # canvas's preview as DRAFT nodes through the birthplace's own compile
@@ -1819,8 +1822,8 @@ async def _plan_turn(
     Entered for project-scope turns while a plan is pending (refine or
     prose confirmation) or before the project's first run (first turn / after
     a bail). Returns the assistant message (the docked/answered question row
-    for draft/ask/start; None when the material-pending commitment was
-    suppressed at land time — the review turn speaks next), the started run
+    for draft/ask/start; None when the turn closes without a row — the
+    degrade paths land their own shape), the started run
     id, the answered task-book question
     (for ChatResponse.answered_question), and cascade-bailed run ids. The
     caller commits — except the start branch, where answer_question commits.
@@ -1876,8 +1879,8 @@ async def _propose_turn(
 
     Shared by ``chat()`` and the choice-answer continuation in
     ``answer_question`` (the answer endpoint doubles as resume). Returns the
-    assistant message (None when the material-pending commitment was
-    suppressed at land time — the review turn speaks next), the dispatched
+    assistant message (None when the turn closes without a row — the
+    degrade paths land their own shape), the dispatched
     run id if any, the run ids whose parked
     interrupt was cascade-bailed, and the pending question this turn settled
     by judgment (ADR-053 R2). Flush-only — the caller commits.
@@ -2414,27 +2417,6 @@ async def record_material_beat(
     return message
 
 
-async def material_beat_landed(
-    db: AsyncSession, conversation_id: UUID, beat: str, ref: str
-) -> bool:
-    """The material-pending suppression's world read: the beat's durable row
-    (once-only per (beat, ref)). A landed understanding beat ⟹ the warm tail
-    already called ``fire_trigger``, so the review turn is queued behind this
-    turn's close (the politeness gate) — the commitment's promise is being
-    kept by the world itself, and the stale clause may be dropped."""
-    row = await db.execute(
-        select(Message.id)
-        .where(
-            Message.conversation_id == conversation_id,
-            Message.intent["type"].astext == MATERIAL_BEAT_TYPE,
-            Message.intent["beat"].astext == beat,
-            Message.intent["ref"].astext == ref,
-        )
-        .limit(1)
-    )
-    return row.scalar_one_or_none() is not None
-
-
 # ---- 建议谱系 (ADR-099 §4): 点选 provenance 落地解算 -----------------------
 
 
@@ -2558,27 +2540,6 @@ async def resolve_suggestion_note(
         plan_or_run_since=plan_since or run_since,
     )
     return compose_suggestion_note(record.get("label") or "", reasons)
-
-
-def pending_commitment_verdict(
-    *, lane_marked: bool, beat_landed: bool, plan_docked: bool
-) -> str:
-    """The material-pending commitment's land-time verdict (pure):
-    "suppress" | "release".
-
-    "suppress" = the world already speaks (the understanding beat landed →
-    the review turn fires behind this turn's close), so the stale commitment
-    never lands. "release" everywhere else:
-
-    - unmarked answers are ordinary replies (a capability answer with
-      uploads draining in the background must never vanish);
-    - no beat = processing still runs — the commitment is the bridge;
-    - a docked plan self-silences the review turn (单一叙事者律第二谓词),
-      so the commitment must stay or nobody speaks.
-    """
-    if not lane_marked or plan_docked:
-        return "release"
-    return "suppress" if beat_landed else "release"
 
 
 # ---- Activity log persistence (2026-09-25 activity 持久化) -----------------

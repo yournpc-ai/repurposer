@@ -1,6 +1,6 @@
 # 素材待命场景重写 — 施工简报（ADR-101）
 
-> Status: **W1 已落地**（验证全部未跑，用户清单见末节——验证绿后 W2）。架构母法 = ADR-101（回合内有界等待 + 承诺机器退役 + 复读禁止律与 consumed 谓词）。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
+> Status: **W1/W2 已落地**（验证全部未跑，用户清单见末节——验证绿后 W3）。架构母法 = ADR-101（回合内有界等待 + 承诺机器退役 + 复读禁止律与 consumed 谓词）。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
 
 ## 冻结事项（本简报全程不再议）
 
@@ -79,6 +79,17 @@ W1（行为翻转）→ W2（死码清扫 + harness 改靶）→ W3（文档现�
 | **must_not_touch** | W0 表外的一切 trigger/相位/打字机面；阈值不降为红而调 |
 | **acceptance** | ① 纯 pytest 绿（既有债清单核对先行）；② prompt_gate 全绿（改靶探针在册）；③ 全量剧本绿，红全部归因；④ grep 零残留：`material_pending` / `pending_commitment_verdict` / `material_pending_stamped` 无引用（`material_beat_landed` 视消费者定） |
 | **rollback** | 单 commit git revert；改靶红 = 登记读数、不回调阈值 |
+
+**W2 落地记录**（施工会话交付，验证全部未跑）：
+
+- **W1 缺口修补（施工审计新抓）**：dock 行（ask_user / present_plan / topic-ask）也走 `_create_message`——ask_user 纯问题**不受** pending-plan 沉默谓词保护（那只认 task_book），是真实复读面。`_dock_question` / `sync_plan_question` 参数链打通，戳同步骑上 dock 行（plan_turn 15 站点 / propose_turn 9 站点全盖）。
+- **死函数两具**：`material_beat_landed`（service.py:2417）/ `pending_commitment_verdict`（service.py:2542）零消费者连函数删；`test_material_pending_pure.py` → `test_deferred_frames_pure.py`（改名——verdict 类随函数退役，DeferredFrames/None 容忍/retract 静态锁全保留）。
+- **prompt 面新抓**：`intent_router_system.j2` TRUST ANCHOR 段（:16）的回声法还是承诺时代措辞（"you will speak once the content read lands / phrased as your commitment"）——改写为新法（先调 read 有界等待；等不到则零内容宣告、不许诺时刻）；4 处代码注释（两 turn 的 outcome 注释 + service 两处 docstring）同步改写。
+- **harness**：S-wait-1（grounded + 戳 + in-process 点火去重沉默——写口①+OR 子句端到端）/ S-wait-2（超时地板：零戳宣告 + 翻Flip后点火 review 接力必达）双场景新建；S20A 终态集加 `answer`（超时宣告合法化）+ 零戳锁；S20B 加写口②戳锁（assemble 注入 → dock 行带戳）；S18 docstring 退役形态改名（断言结构本已兼容）。**S-wait-3 = 既有覆盖指针**：:4724-4757 warm 首读排序锁（review 必说话两谓词皆空）+ S19 准入门，不新建。
+- **prompt_gate 零改动**（取证在册）：无探针触达处理中路径（B/I/D 探针的 material 全是 READY 基质），S18 族无对应探针。
+- **S-wait-2 的 120s 说明**：config 缓存是进程内的，scenario 进程 `set_config` 无法失效 server 缓存 → 地板路径付真实默认 cap（suite 已有 240s/300s trigger 等待先例）；若日后嫌慢，正解是 server 侧 config 读加 TTL 或 admin 端点，不为测试改架构。
+- **承重观察（在册不处理）**：⑤ S-wait-1 锁①（戳存在）严格——模型不调 read（违法条）即红，那是 prompt 法回归信号不是 harness 抖动，首跑若系统性红 = Material status line 法措辞待调；⑥ S-wait-2 的 review 接力走真 LLM 回合（成本与 S19 同级）。
+- **未跑验证（用户清单）**：见末节全量。
 
 ## 批次 W3：文档现行法收尾（W2 验收绿后同批）
 

@@ -139,10 +139,8 @@ logger = structlog.get_logger()
 
 # The return shape the service layer's callers hold (unchanged):
 # (assistant message, started run id, answered task-book question,
-# cascade-bailed run ids). The assistant message is None on exactly one
-# path: the material-pending commitment suppressed at land time (the
-# understanding beat landed mid-turn — the world-fired review turn speaks
-# next, so the stale promise never lands).
+# cascade-bailed run ids). The assistant message is None when the turn
+# closes without a row (the degrade paths land their own shape).
 PlanTurnOutcome = tuple[Message | None, UUID | None, Message | None, list[UUID]]
 
 
@@ -921,6 +919,7 @@ class PlanTurn:
             brief=merged_brief,
             echo=echo,
             estimate=task_estimate,
+            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         question = await latest_pending_question(db, self.conversation_id)
         assert question is not None  # sync_plan_question just docked it
@@ -1169,6 +1168,7 @@ class PlanTurn:
             echo=prose,
             estimate=task_estimate,
             plans=package_plans,
+            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         question = await latest_pending_question(db, self.conversation_id)
         assert question is not None  # sync_plan_question just docked it
@@ -1300,6 +1300,7 @@ class PlanTurn:
             echo=prose,
             estimate=task_estimate,
             plans=package_plans,
+            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         question = await latest_pending_question(db, self.conversation_id)
         assert question is not None  # sync_plan_question just docked it
@@ -1535,6 +1536,7 @@ class PlanTurn:
                 default_path=params.default_path,
             ),
             intent=intent.model_dump(mode="json"),
+            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         self.outcome = (assistant_message, None, self.settled_pending, bailed_run_ids)
         return None
@@ -1610,6 +1612,7 @@ class PlanTurn:
                 brief=stored.brief,
                 echo=stored.intent.answer,
                 estimate=await _safe_task_estimate(db, self.project, stored.intent.tasks),
+                consumed_understanding_ref=self._consumed_understanding_ref,
             )
             question = await latest_pending_question(db, self.conversation_id)
             assert question is not None  # sync_plan_question just docked it
@@ -1736,6 +1739,7 @@ class PlanTurn:
                     default_path=topic_ask["default_path"],
                 ),
                 intent=topic_intent.model_dump(mode="json"),
+                consumed_understanding_ref=self._consumed_understanding_ref,
             )
             return assistant_message, None, self.settled_pending, bailed_run_ids
         assistant_message = await _create_message(
