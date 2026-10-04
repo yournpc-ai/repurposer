@@ -56,8 +56,12 @@ PLAN_TOOLS = [
         description=(
             "Ask the ONE question whose answer most decides quality. The "
             "question docks with its options; the user's answer (or a safe "
-            "skip) continues the conversation. Speak around the question "
-            "first — claim the request, say why this one question decides it."
+            "skip) continues the conversation. Also the home of open "
+            "exploration and browsing questions — concrete directions worth "
+            "choosing between dock as its options with your lean marked, "
+            "the safe skip keeping it an offer, never a demand. Speak "
+            "around the question first — claim the request, say why this "
+            "one question decides it."
         ),
         params_model=PlanAskArgs,
     ),
@@ -78,10 +82,7 @@ PLAN_TOOLS = [
         description=(
             "Reply with information only — capability questions, explanations "
             "of the project, small talk. No plan, no question, no run: your "
-            "spoken message IS the reply. It may carry 0-3 non-binding "
-            "next-step options (suggestions) when the context holds concrete "
-            "directions worth choosing between — the user may pick or ignore "
-            "them; they never form a plan. Work the user has explicitly "
+            "spoken message IS the reply. Work the user has explicitly "
             "named never lands here — it docks as a plan. Always speak the "
             "reply as your message text ALONGSIDE the call — a bare answer "
             "call that says nothing is rejected."
@@ -161,8 +162,12 @@ CHAT_TOOLS = [
         name="ask_user",
         description=(
             "Ask the ONE question whose answer most decides the next step. "
-            "The question docks with its options. Speak around the question "
-            "first — claim the request, say why this one question decides it."
+            "The question docks with its options. Also the home of open "
+            "exploration and browsing questions — concrete directions worth "
+            "choosing between dock as its options with your lean marked, "
+            "the safe skip keeping it an offer, never a demand. Speak "
+            "around the question first — claim the request, say why this "
+            "one question decides it."
         ),
         params_model=ChatAskArgs,
     ),
@@ -173,10 +178,7 @@ CHAT_TOOLS = [
             "readouts (call get_run_status first), explanations of existing "
             "outputs, small talk. Work requests go to the proposal tools; an "
             "ambiguous reading goes to ask_user — answer is never the lazy out. "
-            "It may carry 0-3 non-binding next-step options (suggestions) "
-            "when the context holds concrete directions worth choosing "
-            "between — the user may pick or ignore them; they never form a "
-            "plan. Work the user has explicitly named never lands here — it "
+            "Work the user has explicitly named never lands here — it "
             "docks as a proposal or the fitting revision verb. Always speak "
             "the reply as your message text ALONGSIDE the call — a bare "
             "answer call that says nothing is rejected."

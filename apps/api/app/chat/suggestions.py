@@ -1,8 +1,9 @@
-"""建议谱系纯核 (ADR-099 §3/§4): the non-blocking suggestion form's pure
-functions — record stamping, the directed stale verdict, and the
-LLM-facing provenance note. NO database, NO LLM here (suite discipline):
-the world reads live in ``app.chat.service.resolve_suggestion_note``,
-which feeds these cores its findings.
+"""建议谱系纯核 (ADR-099 §4, ADR-100 收窄): the trigger suggestion dock's
+provenance pure functions — record stamping, the directed stale verdict,
+and the LLM-facing provenance note. NO database, NO LLM here (suite
+discipline): the world reads live in
+``app.chat.service.resolve_suggestion_note``, which feeds these cores its
+findings.
 
 - ``build_suggestion_records``: an accepted terminal call's options become
   the row's persisted interaction block — the option PLUS its provenance
@@ -79,14 +80,14 @@ def compose_suggestion_note(label: str, stale_reasons: list[str]) -> str:
     silently adopted)."""
     if not stale_reasons:
         return (
-            f'(The user picked "{label}" from your earlier suggestion card '
+            f'(The user picked "{label}" from the options dock '
             "— they are accepting that offered direction, not making a new "
             "request from scratch. Carry it forward accordingly.)"
         )
     reasons = "; ".join(stale_reasons)
     return (
-        f'(The user picked "{label}" from an EARLIER suggestion card, but '
-        f"the project has moved since that suggestion: {reasons}. Re-check "
+        f'(The user picked "{label}" from an EARLIER options dock, but '
+        f"the project has moved since that offer: {reasons}. Re-check "
         "it against the current state before acting — if it no longer "
         "fits, say so plainly and offer what fits now; never adopt it "
         "silently.)"

@@ -1,15 +1,16 @@
-"""Pure tests for the suggestion lineage dark placement (ADR-099 §3/§4 —
-批次 C·C+ commit 1): schemas, record stamping, the directed stale verdict,
-and the provenance note.
+"""Pure tests for the suggestion dock's provenance machine (ADR-099 §4,
+ADR-100 收窄 — the trigger suggestion dock is the machine's sole seat):
+record stamping, the directed stale verdict, and the provenance note.
 
 No DB, no LLM, no HTTP (suite discipline). What is gated HERE:
 
-- 零 diff 锁: with no ``suggestions`` input, both answer args behave exactly
-  as before the field existed (defaults, dump shape, the shared validator
-  leaving WrapUpArgs' semantics untouched);
-- schema read tolerance (打字机律牙①): null suggestions read as the empty
-  default, never a rejection; bare-string labels upgrade; blank labels
-  drop; overlong rejects into the loop; extra recommended marks silence;
+- 形态翻案锁 (ADR-100): both answer args carry NO suggestions seat — the
+  dump has no key and a stray ``suggestions`` payload rejects at the door
+  (extra="forbid"); every pickable option docks as a real question;
+- ``WrapUpArgs`` semantics untouched by the narrowing: null suggestions
+  read as the empty default (打字机律牙①), bare-string labels upgrade,
+  blank labels drop, overlong rejects into the loop, extra recommended
+  marks silence;
 - ``build_suggestion_records``: provenance is code-stamped (1-based dock
   ids, source_turn, source_state.asset_ids) — the model's payload never
   carries it;
@@ -34,40 +35,40 @@ from app.models.schemas import (
 )
 
 
-# ---- 零 diff 锁: no-suggestions behavior is byte-identical -----------------
+# ---- 形态翻案锁 (ADR-100): answer carries zero option seats ----------------
 
 
-def test_chat_answer_args_defaults_unchanged():
-    args = ChatAnswerArgs()
-    assert args.suggestions == []
-    assert args.pending_disposition == "none"
-    assert args.material_pending is False
-    assert args.model_dump(mode="json") == {
+@pytest.mark.parametrize("cls", [ChatAnswerArgs, PlanAnswerArgs])
+def test_answer_args_carry_no_suggestions_seat(cls):
+    assert "suggestions" not in cls().model_dump(mode="json")
+    # extra="forbid" — a stray suggestions payload rejects into the loop,
+    # never a silent drop.
+    with pytest.raises(Exception):
+        cls.model_validate({"suggestions": [{"label": "做一个法语版"}]})
+
+
+def test_answer_args_defaults_unchanged_by_the_removal():
+    assert ChatAnswerArgs().model_dump(mode="json") == {
         "pending_disposition": "none",
         "material_pending": False,
-        "suggestions": [],
     }
+    plan = PlanAnswerArgs()
+    assert plan.pending_disposition == "none"
+    assert plan.material_pending is False
+    assert plan.brief is None
+    assert plan.material_text is None
 
 
-def test_plan_answer_args_defaults_unchanged():
-    args = PlanAnswerArgs()
-    assert args.suggestions == []
-    assert args.pending_disposition == "none"
-    assert args.material_pending is False
-    assert args.brief is None
-    assert args.material_text is None
+# ---- WrapUpArgs: the machine's sole seat, semantics unchanged --------------
 
 
-def test_null_suggestions_read_as_empty_both_seats():
+def test_null_suggestions_read_as_empty():
     # 打字机律牙①: the model writes null when it means "no options" — a
     # rejection here costs the repair round that never streams.
-    assert ChatAnswerArgs.model_validate({"suggestions": None}).suggestions == []
-    assert PlanAnswerArgs.model_validate({"suggestions": None}).suggestions == []
     assert WrapUpArgs.model_validate({"suggestions": None}).suggestions == []
 
 
-def test_wrap_up_validator_semantics_unchanged_by_extraction():
-    # The shared-function extraction must not drift WrapUpArgs' contract:
+def test_wrap_up_validator_semantics():
     # blanks drop, bare strings upgrade, overlong rejects, extra
     # recommended marks silence.
     args = WrapUpArgs.model_validate(
@@ -77,37 +78,6 @@ def test_wrap_up_validator_semantics_unchanged_by_extraction():
     assert [s.recommended for s in args.suggestions] == [False, True]
     with pytest.raises(Exception):
         WrapUpArgs.model_validate({"suggestions": [{"label": "x" * 41}]})
-
-
-# ---- schema validation (校验分层律, both answer seats) ---------------------
-
-
-@pytest.mark.parametrize("cls", [ChatAnswerArgs, PlanAnswerArgs])
-def test_answer_suggestions_validator(cls):
-    args = cls.model_validate(
-        {
-            "suggestions": [
-                "做一个法语版",
-                {"label": "b", "recommended": True},
-                {"label": "c", "recommended": True},
-            ]
-        }
-    )
-    assert [s.label for s in args.suggestions] == ["做一个法语版", "b", "c"]
-    # Extra recommendation marks drop silently (cosmetic, never a repair).
-    assert [s.recommended for s in args.suggestions] == [False, True, False]
-
-
-@pytest.mark.parametrize("cls", [ChatAnswerArgs, PlanAnswerArgs])
-def test_answer_suggestions_overlong_rejects_into_loop(cls):
-    with pytest.raises(Exception):
-        cls.model_validate({"suggestions": [{"label": "x" * 41}]})
-
-
-@pytest.mark.parametrize("cls", [ChatAnswerArgs, PlanAnswerArgs])
-def test_answer_suggestions_capped_at_three(cls):
-    with pytest.raises(Exception):
-        cls.model_validate({"suggestions": [{"label": str(i)} for i in range(4)]})
 
 
 # ---- record stamping (provenance is code's, never the model's) -------------
@@ -192,7 +162,7 @@ def test_stale_reasons_each_predicate_independent():
 def test_fresh_note_names_the_control_event():
     note = compose_suggestion_note("做一个法语版", [])
     assert "做一个法语版" in note
-    assert "earlier suggestion card" in note
+    assert "options dock" in note
     assert "EARLIER" not in note  # fresh = no stale alarm
 
 

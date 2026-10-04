@@ -107,7 +107,6 @@ from app.chat.service import (
     material_beat_landed,
     pending_commitment_verdict,
     resolve_suggestion_note,
-    stamp_suggestions,
     sync_plan_question,
 )
 from app.chat.system_status import observe_phase_callback
@@ -1593,14 +1592,6 @@ class ChatTurn:
             "assistant",
             prose,
             intent=AnswerProposal(text=prose).model_dump(mode="json"),
-        )
-        # 建议谱系 (ADR-099 §3): the answer's non-blocking options stamp
-        # onto the SAME row, same commit point (no-op when none — 零 diff 律).
-        await stamp_suggestions(
-            self.db,
-            assistant_message,
-            params.suggestions,
-            UUID(str(self.project.id)) if self.project is not None else None,
         )
         self.outcome = (assistant_message, None, [], self.settled_question)
         return None

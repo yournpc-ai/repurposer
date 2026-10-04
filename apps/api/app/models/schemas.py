@@ -733,10 +733,11 @@ class PresentPlanArgs(BaseModel):
     )
 
 
-# 建议谱系 (ADR-099 §3): one wire shape, two seats — the trigger dock's
-# wrap_up options AND an answer's non-blocking suggestions. The class body
-# stays byte-identical to its pre-move form (零 diff 律 — the docstring is
-# model-facing wire text).
+# 建议谱系 (ADR-100): one wire shape, one seat — the trigger dock's wrap_up
+# options (the answer+suggestions form is retired: every pickable option
+# docks as a real question, the message flow carries zero options). The
+# class body stays byte-identical to its pre-move form (零 diff 律 — the
+# docstring is model-facing wire text).
 class SuggestionItem(BaseModel):
     """One next-step option on the trigger dock (一问拍一体化 2026-09-27 —
     the pre-integration wire shape was a bare label string, read in as
@@ -774,8 +775,8 @@ class SuggestionItem(BaseModel):
 
 
 def dock_worthy_suggestions(items: list[SuggestionItem]) -> list[SuggestionItem]:
-    """The shared suggestions validator (校验分层律 — WrapUpArgs and both
-    answer args consume it): a label is the option row's visible text AND
+    """The wrap_up suggestions validator (校验分层律 — WrapUpArgs consumes
+    it): a label is the option row's visible text AND
     the user's pick riding into the continuation — blank labels are dropped
     (the model means "fewer options"), an overlong one rejects into the loop
     (the option row cannot carry it). Extra recommendation marks drop
@@ -797,15 +798,14 @@ def dock_worthy_suggestions(items: list[SuggestionItem]) -> list[SuggestionItem]
 
 class PlanAnswerArgs(BaseModel):
     """``answer`` params, plan path — a purely informational reply. The
-    answer text itself is your spoken message; the envelope seats and any
-    non-blocking next-step options ride here."""
+    answer text itself is your spoken message; the envelope seats ride here."""
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return _drop_bad_brief(tolerate_null_keys(data, "material_text", "pending_disposition", "material_pending", "suggestions"))
+        return _drop_bad_brief(tolerate_null_keys(data, "material_text", "pending_disposition", "material_pending"))
 
     brief: Brief | None = Field(
         default=None,
@@ -823,16 +823,6 @@ class PlanAnswerArgs(BaseModel):
         default=False,
         description="True ONLY when this answer is the material-pending commitment — the context's Material status line reported files still processing, and this reply is the one-clause 'understood + I will speak once the content read lands' promise. Absent/false on every other answer.",
     )
-    suggestions: list[SuggestionItem] = Field(
-        default_factory=list,
-        max_length=3,
-        description="0-3 next-step options the user may pick or ignore — offer them only when the context holds concrete directions worth choosing between. Each option is a direction with its one-line reason and the evidence it draws on; never execution parameters (no language, caption mode, duration, aspect, count, cost, or recipe — those belong to the plan drafted after the user picks a direction). At most one carries your current lean (recommended). Omit when there is nothing concrete to offer.",
-    )
-
-    @field_validator("suggestions")
-    @classmethod
-    def _suggestions_are_dock_worthy(cls, items: list[SuggestionItem]) -> list[SuggestionItem]:
-        return dock_worthy_suggestions(items)
 
 
 class ProposeTasksArgs(BaseModel):
@@ -936,15 +926,14 @@ class ChatAskArgs(BaseModel):
 
 class ChatAnswerArgs(BaseModel):
     """``answer`` params, chat path (AnswerProposal minus text — the answer
-    IS your spoken message). The pending-question disposition and any
-    non-blocking next-step options ride here."""
+    IS your spoken message). The pending-question disposition rides here."""
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "pending_disposition", "material_pending", "suggestions")
+        return tolerate_null_keys(data, "pending_disposition", "material_pending")
 
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
@@ -954,16 +943,6 @@ class ChatAnswerArgs(BaseModel):
         default=False,
         description="True ONLY when this answer is the material-pending commitment — the Assets block reported files still processing, and this reply is the one-clause 'understood + I will speak once the content read lands' promise. Absent/false on every other answer.",
     )
-    suggestions: list[SuggestionItem] = Field(
-        default_factory=list,
-        max_length=3,
-        description="0-3 next-step options the user may pick or ignore — offer them only when the context holds concrete directions worth choosing between. Each option is a direction with its one-line reason and the evidence it draws on; never execution parameters (no language, caption mode, duration, aspect, count, cost, or recipe — those belong to the plan drafted after the user picks a direction). At most one carries your current lean (recommended). Omit when there is nothing concrete to offer.",
-    )
-
-    @field_validator("suggestions")
-    @classmethod
-    def _suggestions_are_dock_worthy(cls, items: list[SuggestionItem]) -> list[SuggestionItem]:
-        return dock_worthy_suggestions(items)
 
 
 class ReviseOutputTarget(BaseModel):
