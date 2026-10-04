@@ -2480,7 +2480,7 @@ A3-lite 合成规则抽为 `product_graph` 的纯函数 `effective_rank_edges(no
 
 ## ADR-099: Agent 交互架构——终态交互形态谱系 + 交互宪法 + 言语提交协议
 
-**Status**: Decided (2026-10-02)；施工合同 = `tasks/interaction-architecture.md`
+**Status**: Decided (2026-10-02)；施工合同 = `tasks/interaction-architecture.md`；**翻案注**：§2 谱系表 `answer`+suggestions 行与 §3 全节、§4 的 answer 面已被 ADR-100 翻案（已拍板待施工——§4 收窄为 trigger 建议 dock 的 provenance 座位），施工落地时相应节收窄删除
 
 **Context**: 一次 live 会话（project `6b42bd6b`）连环踩四事故：① 能力答复把内部组织指令念成台词（"下面按你想要的动作归类："——`_capability_answer` 的 `group by the user's ACTIONS` 被模型叙述出来）；② 素材评审判定以指令质感落地（"先按金句卡方向走"——trigger beat① "the direction you'd take" 与 beat④ "close ON the verdict" 合流，法里没有任何地方说"判定以提议质感给出"）；③ repair 机械漏成台词（被拒 iteration 的散文已流式送达、活动行"已重新整理好"自白、被拒版本的竖版短片在最终方案里静默消失）；④ 浏览问被两级跳劫持（用户自定义输入"还有其他推荐吗"——没有任何车道匹配 → 落入默认车道 `present_plan` → caption gate dock 出阻塞式「字幕模式？」——用户根本没有决定要做任何东西）。
 
@@ -2567,3 +2567,21 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 **Consequences**: 浏览问有档可去（answer+suggestions），"先按金句卡方向走"式指令与"下面按…归类"式 schema 漏出由宪法①②承接而非新车道；被拒言语永不流出，事故③整类消亡（含"静默丢条目"——未被公开承诺的东西无需交代）；caption 阻塞问消失；宪法替代约 40% 言语形态 lane 文本，删除经逐簇零假设探针（3 smoke → 8-12 关键剧本 → 定点重放，baseline/candidate 交错）在新架构 golden suite 上度量。否决备查：① browse/recommend 车道立法（批A——穷举老路，撤回）；② Decision Contract 自报字段（`mode/commitment/blocking`——模型声明状态与世界漂移的反模式）；③ token 级安全前缀识别（需模型自标，禁）；④ 代码 NLP 解析散文对账（终变成另一个 LLM evaluator）；⑤ suggestions 塞进 mentions（语义不同：指认实体 vs 交互选项）；⑥ 在途会话历史清洗（历史 = 工作上下文，版本戳+回归场景已覆盖）；⑦ 悲观串行（先校验后流出——死寂首字延迟，被乐观缓冲替代）。
 
 **Related**: ADR-052（厚 agent——判断归产品层一个 agent 的延伸）/ ADR-087（Confirmation Doctrine——谱系与确认教义同座）/ ADR-088/089（北极星——付费执行只从已确认范围开始，Code Guard 同族）/ ADR-093（言语真值/起始句言语权）/ ADR-094（方向否决资格——宪法①的执行细节）/ ADR-095（三寄存器——活动行修宪同族）/ ADR-058（二源律）/ ADR-060（echo 防编造——宪法⑤同族）
+
+## ADR-100: 选项唯一座位——消息流零选项，固定选项全归 dock（ADR-081 恢复全强度）
+
+**Status**: Decided (2026-10-04)，已拍板待施工；施工合同 = `tasks/options-dock-only.md`
+
+**Context**: ADR-099 §3 为浏览问引入 `answer`+suggestions 非承诺选择形态（选项渲染在消息流内、不阻塞、不走问题结算机器）。落地后在真实会话暴露四个结构性问题：① **视觉同构、机器两套**——建议卡与 dock 选项共用完全相同的视觉解剖（label + 一行理由 + 推荐 badge），用户无法预判自己面对的是哪套交互机器（无待决 / 无 QA 归档 / 无 autoResume vs 全机器）；首个实锤 = 用户把正常渲染的建议卡当成「dock 变形失效」的 bug 上报。② **路由灰区常驻**——「可选可忽略」与「必选」的区分是模型的自由裁量，两个同形座位之间的误判没有结构防线。③ **非阻塞是伪收益**——dock 选项问的退出面早已齐备（× = bail 走 default_path，铅笔行 = 自由输入），建议卡没有买到 dock 缺的任何东西。④ **为自造的病配了一整套药**——suggestion_ref / source_state 三条件过期谓词这套 provenance 机器治的是「选项躺在历史里会过期」，而 dock 的待决唯一 + auto-bail 从结构上没这个病。该形态正是 ADR-081 立法要杀的「半结构化 pill」：长得像可选项却不走问题结算机器。
+
+**Decision**:
+
+1. **选项唯一座位律**：系统给出的一切可点选项走 OptionDock（ask_user 选项问 / trigger wrap_up 建议 dock，同一机器）；**消息流零选项**——任何形态的可点选项永不渲染在消息流里。交互语法回到二态：信息 = 散文；选择 = dock。
+2. **answer 回归纯信息**：删 `suggestions` 参数（plan path / chat path 两份工具契约同步），散文即全部答复。浏览问与「下一步方向」的家 = ask_user：选项 + 推荐标记 + default_path + ×/铅笔退出面——「建议」由措辞承载，不由形态承载。
+3. **拆除面 = answer+suggestions 形态专属**：两份 answer 契约的 `suggestions` 参数与 catalog 描述、plan/propose 两 turn 的 answer 路径 stamp、prompt 面两处契约段（intent_router_system / chat_intent_system）、前端 suggestionOptions 渲染块与点选链路。**trigger 建议 dock 全机器原样保留**（wrap_up 的 SuggestionItem 校验、trigger 行 stamp、answer endpoint 的 ref 代码重构、落地解算与 stale note）——它是真问题结算机器的一部分，不是本 ADR 的对象。
+4. **存量读容忍**：`messages.suggestions` / `messages.suggestion_ref` 列保留（trigger 路径照常写入；answer 路径停写），不清洗、不迁移；历史 answer 行的建议块不再渲染卡片，散文保留。
+5. **谱系收敛三档**：`answer`（纯信息）/ `ask_user`（必选·阻塞）/ `present_plan`（确认·阻塞·形成方案）；revision 族与谱系封闭律不变（新内容不加形态，新用户承诺语义才考虑且必须 ADR）。
+
+**Consequences**: 交互语法收敛为二态，「这个选项是阻塞问还是可忽略建议」的辨认负担消亡；answer/ask_user 路由灰区消失（有选项 = ask_user，无第二座位）；需求池「建议卡发射率」行的观测对象随之消亡（substrate 先查方法与路由安全零容忍断言迁移为 browse→ask_user 探针）；浏览问的代价 = 多一次点选或 ×，换来全站选择语法唯一。否决备查：① 保留建议卡作「非阻塞轻建议」（被否——视觉不可区分 + dock 退出面已齐备，Context ①③）；② 给建议卡换一套视觉与 dock 区分（被否——形态增殖治标不治本，语法混乱的根不除）；③ suggestions 塞进 mentions（ADR-099 已否，不重开）。
+
+**Related**: ADR-081（选项语法统一律——本条恢复其全强度）/ ADR-099（§2 suggestions 行 / §3 / §4 answer 面被本条翻案，其余各节不动）/ ADR-053 R1（选项问阻塞形态律）/ ADR-070（确认拍回座 dock——本条是「dock 是固定选择唯一座位」的完全化）
