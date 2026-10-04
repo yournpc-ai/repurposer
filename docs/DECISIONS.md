@@ -2585,3 +2585,22 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 **Consequences**: 交互语法收敛为二态，「这个选项是阻塞问还是可忽略建议」的辨认负担消亡；answer/ask_user 路由灰区消失（有选项 = ask_user，无第二座位）；需求池「建议卡发射率」行的观测对象随之消亡（substrate 先查方法与路由安全零容忍断言迁移为 browse→ask_user 探针）；浏览问的代价 = 多一次点选或 ×，换来全站选择语法唯一。否决备查：① 保留建议卡作「非阻塞轻建议」（被否——视觉不可区分 + dock 退出面已齐备，Context ①③）；② 给建议卡换一套视觉与 dock 区分（被否——形态增殖治标不治本，语法混乱的根不除）；③ suggestions 塞进 mentions（ADR-099 已否，不重开）。
 
 **Related**: ADR-081（选项语法统一律——本条恢复其全强度）/ ADR-099（§2 suggestions 行 / §3 / §4 answer 面被本条翻案，其余各节不动）/ ADR-053 R1（选项问阻塞形态律）/ ADR-070（确认拍回座 dock——本条是「dock 是固定选择唯一座位」的完全化）
+
+## ADR-101: 素材待命场景重写——回合内有界等待 + 承诺机器退役 + trigger 收窄单一叙事者
+
+**Status**: Decided (2026-10-04)，已拍板待施工；施工合同 = `tasks/material-wait-in-turn.md`
+
+**Context**: live 实锤（项目 8a110b8c）：用户在素材处理中提问「有什么建议」，屏幕出现 ① 承诺内容与 beat 事实因果颠倒（「素材理解完成」的 beat 已在屏上，随后落地的承诺仍说「看完给你说」——staleness 压制门三点对齐未入场）；② 35 秒死窗后第二 writer（trigger review 回合）才给出真建议。根因 = **三个独立 writer**（用户回合 / worker pipeline beats / trigger 回合）按 wall-clock 合流，承诺机器（`material_pending` marker / assemble stamp / land-time verdict / DeferredFrames drop 专用道）与 trigger 礼貌门都是为补这个病长出的补丁——每一层都在补上一层造出来的病。目标形态（用户拍板）= Claude Code 因果序四要素：**状态 narrate 等待 → 正文说真话 → 结果随后**，一个 writer。**复读红线（用户拍板）**：任何 agent 永不重复叙述已说过的内容——第一刀散文已说内容（「这是一条关于 X 的演讲…」）后再来「我看了你的素材——你在讲 X」= 复读，永禁；第一刀只宣告等待零内容（「我还没看完，等我看完了给你答复」）→ 等待被 narrate → 接力行「我看了你的素材——你在讲 X」= 有服务感的兑现，正是目标形态。
+
+**Decision**:
+
+1. **回合内有界等待**：`get_understanding` 在素材处理中不再立即返回「不可读」，而是服务端有界等待理解落地——上限 = configs 表运营参数 `chat.material_wait_secs`（注册表默认 120s，后台可改无需 deploy，ADR-055 边界）。答案依赖内容的提问 = **同一回合**等到理解落地后直接给出真答复：无承诺、无第二回合、无死窗。模型词汇零新增（同一把 read 工具的行为升级，无新工具名）。**不变量**：等待上限必须始终小于 trigger 礼貌窗（现 15×20s=300s）减安全余量——否则等待中的回合会把 `understanding_warmed` trigger 耗到 defer-out 丢入沉默，地板路径的接力永不到达；配置注释与简报钉死该上界。
+2. **承诺机器整台退役**：`material_pending` 标记（plan/chat 两份 answer 契约字段）/ `_material_pending.j2` / `material_pending_stamped` / `pending_commitment_verdict` / `material_beat_landed` 的压制消费面 / DeferredFrames 素材待命 drop 专用道全删。等待超时仍不可读 = 普通 answer 诚实陈述（**体验地板**：宣告等待 + 宣告接力，零内容）——长素材的 beat 在数十分钟后，不存在「落地即过期」竞态，无需任何压制机制。
+3. **复读禁止律 + consumed 谓词（trigger 收窄单一叙事者）**：`understanding_warmed` review 只在**理解落地后没有任何回合叙述过素材内容**时发言。机械谓词 = consumed 戳，两个写口（覆盖全部内容到达路径，审计实测）：① chat path——`get_understanding` 返回真实 digest（chat 回合的唯一内容源，assemble 不注入）；② plan path——assemble 信任锚注入 digest（plan_turn.py:346）的回合落地了 assistant 行。戳 = review 去重注册表同 `(trigger, ref)` 三元组同构行 + consumed 旗，**与 assistant 行同一事务提交且先于 turn_state 空闲清除**（否则 admission 见空闲查戳未落 = 复读竞态）。等待超时 / 未读 = 不盖戳 → review 必达（服务感接力）。已知接受残留：理解就绪后纯寒暄回合盖戳吃掉首读（薄残留——主旅程 plan echo 复读是红线，寒暄后无主动首读只是少一次惊喜；用户再开口即被 grounded 服务）。trigger review 的家 = **理解落地后用户一言未发**的旅程（唯一 writer，无竞态）。
+4. **等待期叙事零新 chrome**：等待期间用户看到现有素材相位 StatusLine（asset 状态驱动，与回合 SSE 独立）+ 活动流 beat 行——状态 narrate 等待、正文随后、结果殿后，屏幕序 = 因果序由构造保证，不靠补丁对齐。
+5. **打字机律全确认（用户拍板）**：正文永远打字机节拍，**整段瞬移永禁，散文无一例外出打字机**；动作（活动行 / 状态行 / dock / 结果卡）瞬时。G2 言语提交协议保留（被拒言语零 commit 的座），信封成功路径恒 `drain`（596ad3a 修律即终态），ADR-099 §7 不重开。
+6. **超时答复口径**：宣告等待 + 宣告接力，零内容（「我还没看完你的完整视频，等我看完了给你答复」= 合法第一人称形态——对确定性管线行为的陈述，不是空头承诺）；随后 review 的「我看了你的素材——你在讲 X」是该宣告的兑现，不是复读。
+
+**Consequences**: 素材处理中提问从「承诺 + 35s 死窗 + 二手答案」变为「等待被 narrate + 一个回合真答案」；超时地板从「空头承诺」变为「宣告 + 必达接力」；承诺-压制-礼貌补丁三层整族消亡；需求池「Turn budget」行的「仍在处理」诚实降级形态随本条定形（等待超时 = 宣告座，等待时长计入回合 wall-clock 语义）；等待上限成为运营参数（受 §1 不变量约束）。代价 = 等待中的回合时长拉长（上限 120s，SSE keepalive 与素材相位覆盖）；H3 薄残留（上文在册）。否决备查：① 修压制门（钉 H1 marker 缺失 / H2 stamp 缺失根因）（被否——机器整台退役，取证成本省掉；补丁上叠补丁正是本 ADR 要杀的形态）；② 恢复边生成边流式、重开 ADR-099 §7（被否——用户拍板正文全打字机，G2 + drain 即终态）；③ 等待做成显式新工具 `wait_for_material`（被否——模型词汇零新增，read 工具行为升级即可；新词 = 新路由灰区）；④ consumed 谓词用「任何 assistant 行晚于 beat 即跳过」（被否——理解就绪后的纯寒暄/ack 回合会误吃首读；谓词必须钉在「内容消费」而非「说过话」）；⑤ review 照发不盖戳（被否——主旅程 plan echo 已叙述内容，复读 = 用户红线）。
+
+**Related**: ADR-099（§7 言语提交协议保留确认）/ ADR-100（同族形态收敛）/ ADR-055（configs 运营参数边界——等待上限入表依据）/ 需求池「Turn budget = iteration cap + wall-clock deadline」行（诚实降级形态定形）
