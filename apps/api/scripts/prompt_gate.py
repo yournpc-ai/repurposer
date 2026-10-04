@@ -50,13 +50,11 @@ same contexts as the A/B instrument:
   list_caption_styles stub). revise_output / propose_tasks / edit_graph
   are misroutes for changes this definite. B1's structural invariant is
   asserted at startup: the chat tool set carries NO raw-ops verb.
-- I:browse-question (迭代二批 D, ADR-099 谱系第二档的 gate 座) — material
+- I:browse-question (ADR-100 改靶——一切可点选项归 dock) — material
   attached + a recommendation landscape in the recent rounds, and a
-  custom-worded browse question must close on answer carrying 1-3
-  suggestions, with present_plan NEVER called (事故④'s hijack shape on
+  custom-worded browse question must close on ask_user carrying 1-3
+  options, with present_plan NEVER called (事故④'s hijack shape on
   the gate's own seat — same "NEVER called" assertion family as probe D).
-  Pick/stale stay out: provenance spans turns, the gate is single-turn —
-  those live in the scenario suite (S-int-6/7).
 
 Tool-loop form (ADR-077 判词②, 2026-09-14): the agent is the ToolLoopAgent,
 the action IS the terminal tool call, and the predicates read
@@ -134,8 +132,9 @@ PROVIDERS = {
 # bare int), fixed in the SCHEMA (coerce_numbers_to_str, 顺形律), then
 # 12/12. Thresholds hold at 8 with headroom — recalibrate from readings,
 # never to excuse a regression.
-# I introduced at 8 (迭代二批 D) — the first reading is pending; recalibrate
-# from the measured band, never to excuse a regression.
+# I re-targeted at 8 (ADR-100: browse → ask_user options dock) — the first
+# reading of the new target is pending; recalibrate from the measured band,
+# never to excuse a regression.
 THRESHOLDS = {"A": 8, "B": 8, "C": 10, "D": 8, "E": 8, "F": 8, "G": 8, "H": 8,
               "H2": 8, "H3": 8, "H4": 8, "I": 8}
 
@@ -352,11 +351,11 @@ PROBE_D = {
     ),
 }
 
-# I's browse-question substrate (迭代二批 D, ADR-099 谱系第二档): material
-# attached (same footing as D) and a recommendation landscape already spoken
-# in the recent rounds — the browse question asks for MORE directions in the
-# user's own words, so the non-commitment form (answer + suggestions) is the
-# only honest档; a plan dock here is 事故④'s hijack shape.
+# I's browse-question substrate (ADR-100 改靶): material attached (same
+# footing as D) and a recommendation landscape already spoken in the recent
+# rounds — the browse question asks for MORE directions in the user's own
+# words, so the options dock (ask_user) is the only honest档 (一切可点选项
+# 归 dock，消息流零选项); a plan dock here is 事故④'s hijack shape.
 PROBE_I = {
     "message": "anything else you'd recommend?",
     "brief": Brief.model_validate(
@@ -575,16 +574,15 @@ def _passed(probe: str, r: LoopResult) -> bool:
         # H4: the style must be the enum id mapped off the catalog read,
         # never a free-form phrase.
         return kind == "set_caption_style" and (ep.style or "") == "karaoke-highlight"
-    # I (迭代二批 D): the browse question closes on answer carrying 1-3
-    # suggestions — present_plan never touched (事故④ hijack 负形), ask_user
-    # never gates a browsing question either.
+    # I (ADR-100 改靶): the browse question closes on ask_user carrying 1-3
+    # options — present_plan never touched (事故④ hijack 负形); every
+    # pickable option docks, the message flow carries zero options.
     if probe == "I":
-        suggestions = getattr(r.params, "suggestions", None) or []
+        options = getattr(r.params, "options", None) or []
         return (
-            r.tool_name == "answer"
-            and 1 <= len(suggestions) <= 3
+            r.tool_name == "ask_user"
+            and 1 <= len(options) <= 3
             and "present_plan" not in r.calls
-            and "ask_user" not in r.calls
         )
     raise AssertionError(f"no predicate registered for probe {probe!r}")
 
@@ -601,13 +599,11 @@ def _failure_tag(probe: str, r: LoopResult) -> str | None:
         return None
     if "present_plan" in r.calls:
         return "present_plan-called"
-    if "ask_user" in r.calls:
-        return "ask_user-called"
-    if r.tool_name != "answer":
+    if r.tool_name != "ask_user":
         return f"terminal={r.tool_name}"
-    suggestions = getattr(r.params, "suggestions", None) or []
-    if not (1 <= len(suggestions) <= 3):
-        return "suggestions-range"
+    options = getattr(r.params, "options", None) or []
+    if not (1 <= len(options) <= 3):
+        return "options-range"
     return None
 
 

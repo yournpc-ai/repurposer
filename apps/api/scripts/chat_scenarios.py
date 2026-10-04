@@ -66,11 +66,12 @@ run 数 / 落库行——永不锁 LLM 文案（禁令 #7）。例外：代码�
              completed → 成片 render_spec 带 crop_track（确定性尾；fixture
              纪律同 S16，需 dev worker + MiniMax 配额）
     S-int-1..14 New Interaction Contract（批次 S · ADR-099 golden suite，
-             两层分离的新架构层——Legacy Regression 零改动）：Control 四
-             形态各一（纯信息 answer 无卡无 dock / 探索 answer+suggestions
-             / rootless wish ask_user / 点名工作 present_plan）+ 五新行为
-             （浏览问事故④回归锁 / 建议点选 fresh 编译 / stale 点选具名
-             标注三谓词全谱 / 无字幕参数默认吸收 / 旧 lane 历史 × 新政策）
+             两层分离的新架构层——Legacy Regression 零改动；S-int-2/5 随
+             ADR-100 改靶——一切可点选项归 dock，消息流零选项）：Control
+             四形态各一（纯信息 answer 无卡无 dock / 探索 ask_user 选项
+             dock / rootless wish ask_user / 点名工作 present_plan）+
+             新行为（浏览问事故④回归锁——改靶选项 dock / 无字幕参数默
+             认吸收 / 旧 lane 历史 × 新政策）
              + 事故①②回归锁（批 D——能力答答复永不叙述分组方案 / trigger
              判定提议质感形态面）+ 事故③ wording 回归锁（批 G1——repair
              静默开启 / 终态判定树 / rejection 取证台账落库）+ 事故③
@@ -154,7 +155,6 @@ from app.models.schemas import (  # noqa: E402
     MaterialUnderstanding,
     Option,
     QuestionPayload,
-    SuggestionRef,
     WorkflowStatus,
 )
 from app.platform.auth import create_access_token  # noqa: E402
@@ -5013,16 +5013,16 @@ async def s_edit_precise_edit_archive_lifecycle(ctx: Ctx) -> None:
 #
 # 两层分离（简报批次 S · 门禁单调律）：上方 S1–S24 / S-edit = Legacy
 # Regression（旧功能不破，本批一律未动）；本组 = New Interaction
-# Contract——终态交互形态谱系 + 建议点选 provenance 的行为锁，只收
+# Contract——终态交互形态谱系的行为锁，只收
 # 「C·C+ 后即可转绿」的核心场景（事故①②回归锁已随批 D 入座 =
 # S-int-10/11；事故③随 G1/G2 入座——能力未落地，本组不含 G 族）。断言面三件套：终态信封形状
-# （terminal_tool_of / suggestions 数组）+ messages 行持久化事实
-# （suggestions 交互块 / suggestion_ref 列）+ 代码组装文本（provenance
-# note = 代码强制文本，可锁——提醒尾同例）。LLM 散文措辞永不锁（禁令 #7）；
+# （terminal_tool_of / question payload）+ messages 行持久化事实
+# （question 载荷 / 消息流零选项断言）+ 代码组装文本（提醒尾同例）。
+# LLM 散文措辞永不锁（禁令 #7）；
 # 载荷边界只锁负形（执行参数 lint 是 banned shape，不是文案）。
 
 
-# 建议载荷边界 lint（ADR-099 §3 — 永不携带执行参数）：负形断言。
+# 选项载荷边界 lint（ADR-100 — 选项永不携带执行参数）：负形断言。
 # label 全档（label 是方向名，带参即 shadow plan）；description 收窄
 # 档（证据句合法引用源事实——"the 3 strongest moments" 不是参数，条数
 # 词只在 label 档查）。
@@ -5043,7 +5043,8 @@ _INT_EXPLORATION_PROMPTS = (
 
 
 def check_suggestion_block(records: list[dict], row_id: str, label: str) -> None:
-    """建议卡交互块的谱系锁（ADR-099 §3/§4 + C·C+ 落地记录）：0-3 项 /
+    """trigger 建议交互块的谱系锁（ADR-099 §4, ADR-100 收窄——trigger 建议
+    dock 是这台机器的唯一座位）：0-3 项 /
     1-based id 语法 / recommended 唯语义 / source_turn 自锚 /
     source_state 快照在位 / label ≤40 / 载荷永不携带执行参数（负形
     lint——shadow plan 是本档的定义性违界）。"""
@@ -5090,30 +5091,58 @@ async def seed_keynote_project(ctx: Ctx, title: str) -> tuple[str, str]:
     return pid, asset_id
 
 
-async def elicit_suggestions_turn(
+def check_options_dock(question: dict, label: str) -> None:
+    """选项 dock 的谱系锁（ADR-100：一切可点选项归 dock——ask_user 选项
+    问承接探索/浏览的方向建议）：kind=question / 1-3 选项 / label ≤40 /
+    载荷永不携带执行参数（负形 lint——shadow plan 是本档的定义性违界）/
+    recommended 至多其一且必须指在 docked 选项上 / default_path 恒在
+    （每个问题都可安全跳过）。"""
+    check(question.get("kind") == "question",
+          f"{label}: the directions dock as a real options question", question)
+    options = question.get("options") or []
+    check(1 <= len(options) <= 3,
+          f"{label}: 1-3 options on the dock", options)
+    check(bool((question.get("default_path") or "").strip()),
+          f"{label}: the default path rides every ask (安全跳过)", question)
+    recommended_id = question.get("recommended_id")
+    check(recommended_id is None
+          or recommended_id in {str(o.get("id")) for o in options},
+          f"{label}: recommended_id names at most one docked option", question)
+    for o in options:
+        text = str(o.get("label") or "")
+        check(bool(text.strip()) and len(text) <= 40,
+              f"{label}: label non-empty and ≤40", text)
+        for pat in _INT_LABEL_LINT:
+            check(not pat.search(text),
+                  f"{label}: labels never carry execution params (shadow plan 负形)",
+                  f"{pat.pattern} in {text!r}")
+        desc = str(o.get("description") or "")
+        for pat in _INT_DESC_LINT:
+            check(not pat.search(desc),
+                  f"{label}: descriptions never carry execution params (shadow plan 负形)",
+                  f"{pat.pattern} in {desc!r}")
+
+
+async def elicit_options_dock_turn(
     ctx: Ctx, pid: str, label: str,
     prompts: tuple[str, ...] = _INT_EXPLORATION_PROMPTS,
-) -> tuple[dict, list[dict]]:
-    """驱动一个 answer+suggestions 回合（谱系第二档）→ (turn, records)。
+) -> dict:
+    """驱动一个探索 → ask_user 选项 dock 回合（ADR-100：浏览/探索的方向
+    建议全归 dock）→ turn。
 
-    LLM 方差口径：纯 answer 无卡 = 措辞重试（模型有选择不出卡的自由——
-    契约只保证「有具体下一步时给出」，不保证每个措辞都触发）；
-    present_plan / ask_user = 错档硬红（设计行为锁——探索问永不直接承诺、
-    永不阻塞问；红 = prompt 回归信号，不是剧本松劲）。"""
+    LLM 方差口径：纯 answer 散文 = 措辞重试（模型有选择散文答复的自由）；
+    present_plan = 错档硬红（探索问永不直接承诺——事故④第一跳形态）。"""
     for prompt in prompts:
         turn = await ctx.chat(pid, prompt)
         tool = terminal_tool_of(turn)
         check(tool != "present_plan",
               f"{label}: an exploration question never docks a plan (事故④第一跳形态)",
               turn)
-        check(tool != "ask_user",
-              f"{label}: exploration never gates on a blocking dock (只问答案最改变结果的问题)",
-              turn)
-        records = turn["assistant_message"].get("suggestions") or []
-        if tool == "answer" and records:
-            return turn, records
+        q = turn["assistant_message"].get("question") or {}
+        if tool == "ask_user" and (q.get("options") or []):
+            return turn
     raise ScenarioFailure(
-        f"{label}: no answer+suggestions turn after {len(prompts)} tries"
+        f"{label}: no options-dock turn after {len(prompts)} tries"
     )
 
 
@@ -5136,25 +5165,6 @@ async def conversation_items(ctx: Ctx, pid: str) -> list[dict]:
     return await ctx.messages(res.json()["id"])
 
 
-async def latest_user_row(ctx: Ctx, pid: str) -> dict:
-    items = await conversation_items(ctx, pid)
-    users = [m for m in items if m.get("role") == "user"]
-    check(bool(users), "a user row exists", items)
-    return users[-1]
-
-
-async def resolve_note_in_process(pid: str, ref: dict) -> str | None:
-    """进程内重放落地解算（app.chat.service.resolve_suggestion_note 本座 +
-    真 DB 状态）——provenance note 不持久化、不上 wire，这是唯一诚实的
-    观察座；剧本永不手工拼 note 文本冒充解算。"""
-    from app.chat.service import resolve_suggestion_note
-
-    async with AsyncSessionLocal() as db:
-        return await resolve_suggestion_note(
-            db, await conversation_id_of(pid), uuid.UUID(pid), SuggestionRef(**ref)
-        )
-
-
 async def s_int1_pure_info_plain_answer(ctx: Ctx) -> None:
     """Control ① 纯信息问 → answer 无卡无 dock（谱系第一档）：能力/元问题
     的答案不带任何交互载荷——无 question、无 run、无建议卡（能力目录换皮
@@ -5174,27 +5184,29 @@ async def s_int1_pure_info_plain_answer(ctx: Ctx) -> None:
     check(await count_runs(pid) == 0, "no run the whole journey")
 
 
-async def s_int2_exploration_answer_with_suggestions(ctx: Ctx) -> None:
-    """Control ② 带素材探索 → answer+suggestions（谱系第二档）：素材在库 +
-    开放下一步 → 非阻塞建议卡（可忽略、无 dock、无 run）；交互块持久化随
-    消息行落地（source_turn 自锚 + source_state 快照——建议生命周期 =
-    消息生命周期）。"""
-    pid, asset_id = await seed_keynote_project(ctx, "S-int-2 exploration")
-    turn, records = await elicit_suggestions_turn(ctx, pid, "S-int-2")
+async def s_int2_exploration_options_dock(ctx: Ctx) -> None:
+    """Control ② 带素材探索 → ask_user 选项 dock（ADR-100 改靶——一切可点
+    选项归 dock）：素材在库 + 开放下一步 → 方向 dock 成真实选项问（可
+    点选可 ×，散文恒带默认路径）；消息流零选项——assistant 行永不携带
+    suggestions 交互块。"""
+    pid, _ = await seed_keynote_project(ctx, "S-int-2 exploration")
+    turn = await elicit_options_dock_turn(ctx, pid, "S-int-2")
     msg = turn["assistant_message"]
-    check(terminal_tool_of(turn) == "answer",
-          "the exploration turn closes on answer (never a dock)", turn)
-    check(not msg.get("question"), "suggestions are non-blocking — nothing docks", msg)
-    check(turn["run_id"] is None, "a non-commitment form never starts a run", turn)
-    check_suggestion_block(records, msg["id"], "S-int-2")
-    # 持久化事实：交互块随行落地（同一终态信封同一 commit point）。
+    check(terminal_tool_of(turn) == "ask_user",
+          "the exploration turn closes on the options dock", turn)
+    check_options_dock(msg.get("question") or {}, "S-int-2")
+    check(not (msg.get("suggestions") or []),
+          "消息流零选项 — the row carries no inline suggestion block", msg)
+    check(turn["run_id"] is None, "an options ask never starts a run", turn)
+    # 持久化事实：question payload 随行落地，零行内选项块。
     row = next(m for m in await conversation_items(ctx, pid) if m["id"] == msg["id"])
-    persisted = row.get("suggestions") or []
-    check(len(persisted) == len(records),
-          "the interaction block persists on the message row", row)
-    check(all(asset_id in ((r.get("source_state") or {}).get("asset_ids") or [])
-              for r in persisted),
-          "the stale-check snapshot names the grounded asset", persisted)
+    check((row.get("question") or {}).get("kind") == "question",
+          "the options dock persists on the message row", row)
+    check(not (row.get("suggestions") or []),
+          "the persisted row carries no inline suggestion block", row)
+    bail = await ctx.answer(msg["id"], {"kind": "bail"})
+    check(bail.status_code in (200, 201),
+          "the options dock bails clean (× = safe skip)", bail.text)
     check(await count_runs(pid) == 0, "no run the whole journey")
 
 
@@ -5249,12 +5261,16 @@ async def s_int4_named_work_present_plan(ctx: Ctx) -> None:
 
 
 async def s_int5_browse_question_never_hijacked(ctx: Ctx) -> None:
-    """New ① 浏览问回归锁（事故④）：推荐格局已建立后，用户自定义措辞的
-    浏览问（"还有其他推荐吗"族）→ answer+suggestions——永不两级跳劫持
-    （present_plan 承诺 dock / 字幕闸阻塞问 = 硬红，事故④原形态）。"""
+    """New ① 浏览问回归锁（事故④，ADR-100 改靶）：推荐格局已建立后，用户
+    自定义措辞的浏览问（"还有其他推荐吗"族）→ ask_user 选项 dock——永不
+    两级跳劫持（present_plan 承诺 dock / 字幕闸选项 = 硬红，事故④原形
+    态）。纯散文 answer = 方差重试。"""
     pid, _ = await seed_keynote_project(ctx, "S-int-5 browse question")
-    await elicit_suggestions_turn(ctx, pid, "S-int-5 setup")
-    got: tuple[dict, list[dict]] | None = None
+    setup = await elicit_options_dock_turn(ctx, pid, "S-int-5 setup")
+    bail = await ctx.answer(setup["assistant_message"]["id"], {"kind": "bail"})
+    check(bail.status_code in (200, 201),
+          "the setup dock settles (harness 卫生——浏览问不被待决题吃掉)", bail.text)
+    got: dict | None = None
     for prompt in ("还有其他推荐吗？", "anything else you'd recommend?",
                    "还有别的方向可以看看吗？"):
         turn = await ctx.chat(pid, prompt)
@@ -5266,118 +5282,15 @@ async def s_int5_browse_question_never_hijacked(ctx: Ctx) -> None:
         check(not any(str(o.get("id", "")).startswith("caption_mode_")
                       for o in q.get("options") or []),
               "no caption gate on a browse question (事故④第二跳)", q)
-        check(terminal_tool_of(turn) != "ask_user",
-              "a browse question never gates on a blocking dock", turn)
-        records = msg.get("suggestions") or []
-        if terminal_tool_of(turn) == "answer" and records:
-            got = (turn, records)
+        if terminal_tool_of(turn) == "ask_user" and (q.get("options") or []):
+            got = turn
             break
     check(got is not None,
-          "no answer+suggestions browse answer after 3 tries (浏览问无档可去 = 事故④温床)")
-    check_suggestion_block(got[1], got[0]["assistant_message"]["id"], "S-int-5")
+          "no options-dock browse answer after 3 tries (浏览问无档可去 = 事故④温床)")
+    check_options_dock(got["assistant_message"].get("question") or {}, "S-int-5")
+    bail = await ctx.answer(got["assistant_message"]["id"], {"kind": "bail"})
+    check(bail.status_code in (200, 201), "the browse dock bails clean", bail.text)
     check(await count_runs(pid) == 0, "no run the whole journey")
-
-
-async def s_int6_suggestion_pick_fresh_compiles(ctx: Ctx) -> None:
-    """New ② 建议点选 fresh → 下回合编译：点选 = 控制事件非新需求——用户行
-    持久化 suggestion_ref + 可见文本恒为 label（provenance 永不覆盖用户
-    原话）；LLM-facing note 具名控制事件（fresh 形，代码强制文本，进程内
-    重放解算断言）；方向被承接——回合预算内落到计划 dock 或决定性闸门，
-    且接收方向永不跳过确认直接起 run。"""
-    pid, _ = await seed_keynote_project(ctx, "S-int-6 fresh pick")
-    turn, records = await elicit_suggestions_turn(ctx, pid, "S-int-6")
-    rec = next((r for r in records if r.get("recommended")), records[0])
-    ref = {"source_turn": turn["assistant_message"]["id"], "suggestion_id": rec["id"]}
-    note = await resolve_note_in_process(pid, ref)
-    check(note is not None and "accepting that offered direction" in note,
-          "the fresh pick's note names the control event (code-forced text)", note)
-    check(rec["label"] in note, "the note quotes the picked label", note)
-    turn2 = await ctx.chat(pid, rec["label"], suggestion_ref=ref)
-    row = await latest_user_row(ctx, pid)
-    check((row.get("suggestion_ref") or {}).get("suggestion_id") == rec["id"]
-          and (row.get("suggestion_ref") or {}).get("source_turn") == ref["source_turn"],
-          "the user row persists the pick's structured ref", row)
-    check(row.get("content") == rec["label"],
-          "the visible text stays the label (provenance 永不覆盖用户原话)", row)
-    check(turn2.get("run_id") is None,
-          "accepting a direction never skips confirmation into a run", turn2)
-    carried = terminal_tool_of(turn2) in ("present_plan", "ask_user")
-    for nudge in ("go ahead with that", "就这么做"):
-        if carried:
-            break
-        turn2 = await ctx.chat(pid, nudge)
-        carried = terminal_tool_of(turn2) in ("present_plan", "ask_user")
-    check(carried,
-          "the accepted direction compiles to a decision seat (plan dock or "
-          "decisive gate) within budget — never treated as unheard", turn2)
-    q = turn2["assistant_message"].get("question") or {}
-    if q and q.get("answer") is None:
-        await ctx.answer(turn2["assistant_message"]["id"], {"kind": "bail"})
-    check(await count_runs(pid) == 0, "no run the whole journey")
-
-
-async def _stale_pick_round(
-    ctx: Ctx, pid: str, source_msg_id: str, rec: dict, reason: str, label: str
-) -> None:
-    """stale 点选共用尾：note 具名标注什么动了（代码强制文本，进程内重放
-    解算断言）→ 点选送发 → 用户行 ref 持久化 → 零静默采用（绝不直接执
-    行、绝不静默丢消息）。答复如何重新锚定是散文高熵面，不锁。"""
-    ref = {"source_turn": source_msg_id, "suggestion_id": rec["id"]}
-    note = await resolve_note_in_process(pid, ref)
-    check(note is not None and reason in note,
-          f"{label}: the stale note NAMES what moved (具名标注, code-forced text)",
-          note)
-    check("never adopt it silently" in note,
-          f"{label}: the note orders re-grounding — silent adoption banned", note)
-    turn = await ctx.chat(pid, rec["label"], suggestion_ref=ref)
-    row = await latest_user_row(ctx, pid)
-    check((row.get("suggestion_ref") or {}).get("suggestion_id") == rec["id"],
-          f"{label}: the user row persists the stale pick's ref", row)
-    check(turn.get("run_id") is None,
-          f"{label}: a stale pick never silently executes", turn)
-    msg = turn["assistant_message"]
-    check(bool((msg.get("content") or "").strip()) or bool(msg.get("question")),
-          f"{label}: the turn answers the stale pick (never a silent drop)", msg)
-
-
-async def s_int7_suggestion_pick_stale_named(ctx: Ctx) -> None:
-    """New ③ stale 点选 → 具名标注不静默采用（ADR-099 §4 三谓词全谱）：
-
-    A) source_turn 后新素材理解落地 → "new material understanding landed since"
-    B) source_turn 后有 run 开工 → "a plan was docked or a run started since"
-    C) 依据素材已删除 → "the material it drew on was deleted"
-
-    世界改造全部走真实座位（material beat 本座 / run 行种子 / 资产行删
-    除），解算走 resolve_suggestion_note 本座——零手工注入。"""
-    # A) understanding landed after source_turn（本座 record_material_beat）
-    pid, _ = await seed_keynote_project(ctx, "S-int-7A stale understanding")
-    turn, records = await elicit_suggestions_turn(ctx, pid, "S-int-7A")
-    from app.chat.service import record_material_beat
-
-    async with AsyncSessionLocal() as db:
-        await record_material_beat(
-            db, ctx.user_id, uuid.UUID(pid), "understanding",
-            ref=f"scenario-stale-{pid}", count=1,
-        )
-        await db.commit()
-    await _stale_pick_round(ctx, pid, turn["assistant_message"]["id"], records[0],
-                            "new material understanding landed since", "S-int-7A")
-
-    # B) a run started after source_turn
-    pid, _ = await seed_keynote_project(ctx, "S-int-7B stale run")
-    turn, records = await elicit_suggestions_turn(ctx, pid, "S-int-7B")
-    await seed_completed_run(pid)
-    await _stale_pick_round(ctx, pid, turn["assistant_message"]["id"], records[0],
-                            "a plan was docked or a run started since", "S-int-7B")
-
-    # C) the grounded asset deleted after source_turn
-    pid, asset_id = await seed_keynote_project(ctx, "S-int-7C stale deleted")
-    turn, records = await elicit_suggestions_turn(ctx, pid, "S-int-7C")
-    async with AsyncSessionLocal() as db:
-        await db.execute(delete(Asset).where(Asset.id == uuid.UUID(asset_id)))
-        await db.commit()
-    await _stale_pick_round(ctx, pid, turn["assistant_message"]["id"], records[0],
-                            "the material it drew on was deleted", "S-int-7C")
 
 
 async def s_int8_quote_card_caption_default_absorbed(ctx: Ctx) -> None:
@@ -5871,12 +5784,10 @@ SCENARIOS = {
     # New Interaction Contract（批次 S · ADR-099 golden suite）——两层分离的
     # 新架构层：上方 Legacy Regression 零改动；本组只收 C·C+ 后可转绿场景。
     "S-int-1": s_int1_pure_info_plain_answer,
-    "S-int-2": s_int2_exploration_answer_with_suggestions,
+    "S-int-2": s_int2_exploration_options_dock,
     "S-int-3": s_int3_rootless_wish_ask_user_gate,
     "S-int-4": s_int4_named_work_present_plan,
     "S-int-5": s_int5_browse_question_never_hijacked,
-    "S-int-6": s_int6_suggestion_pick_fresh_compiles,
-    "S-int-7": s_int7_suggestion_pick_stale_named,
     "S-int-8": s_int8_quote_card_caption_default_absorbed,
     "S-int-9": s_int9_old_lane_history_new_policy,
     # 事故①②回归锁（批 D 带入座）——形态 + 极窄机器词负形,措辞质感归
