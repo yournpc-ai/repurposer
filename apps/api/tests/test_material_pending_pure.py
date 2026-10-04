@@ -1,17 +1,12 @@
-"""Pure tests for the material-pending lane's land-time suppression
-(落地时刻压制批) — the marked commitment re-reads the world at land time and
-never lands stale.
+"""Pure tests for the land-time suppression's pure core (retirement
+candidate — the machinery's call sites died with ADR-101 W1; this file's
+verdict class lives until W2 removes the function) and the speech-commit
+state machine.
 
 No DB, no LLM, no HTTP (suite discipline). What is gated HERE:
 
-- ``pending_commitment_verdict``'s truth table: suppress only when the model
-  marked the commitment AND the understanding beat already landed AND no
-  plan sits docked (a docked plan self-silences the review turn — the
-  commitment must stay or nobody speaks);
-- the ``material_pending`` lane marker's wire contract on both answer
-  schemas: absent / explicit null reads as False (打字机律牙① — a rejected
-  iteration never streams), True rides, and ``extra="forbid"`` stays the
-  unknown-key alarm;
+- ``pending_commitment_verdict``'s truth table (W2 removes the function
+  with its last consumer);
 - ``ChatResponse.assistant_message`` tolerates None (the silent close's
   envelope);
 - ``DeferredFrames`` (言语提交协议's four-state machine — OPEN → BUFFERING →
@@ -24,11 +19,10 @@ No DB, no LLM, no HTTP (suite discipline). What is gated HERE:
 """
 
 import pytest
-from pydantic import ValidationError
 
 from app.chat.deferred_frames import DeferredFrames
 from app.chat.service import pending_commitment_verdict
-from app.models.schemas import ChatAnswerArgs, ChatResponse, PlanAnswerArgs
+from app.models.schemas import ChatResponse
 
 
 class TestPendingCommitmentVerdict:
@@ -41,11 +35,6 @@ class TestPendingCommitmentVerdict:
         )
 
     def test_unmarked_answer_never_suppresses(self) -> None:
-        """A capability answer with uploads draining in the background must
-        never vanish. The lane's identity is a DOUBLE gate — the model's
-        marker AND the assemble stamp (files pending at assemble); the turn
-        composes both into ``lane_marked``, so an unmarked input releases
-        even with a beat on file (an old warm's beat has no review coming)."""
         assert (
             pending_commitment_verdict(
                 lane_marked=False, beat_landed=True, plan_docked=False
@@ -54,7 +43,6 @@ class TestPendingCommitmentVerdict:
         )
 
     def test_no_beat_releases(self) -> None:
-        """Processing still runs — the commitment is the bridge."""
         assert (
             pending_commitment_verdict(
                 lane_marked=True, beat_landed=False, plan_docked=False
@@ -63,8 +51,6 @@ class TestPendingCommitmentVerdict:
         )
 
     def test_docked_plan_releases(self) -> None:
-        """A docked plan self-silences the review turn (单一叙事者律第二谓词)
-        — suppressing here would leave nobody speaking."""
         assert (
             pending_commitment_verdict(
                 lane_marked=True, beat_landed=True, plan_docked=True
@@ -73,41 +59,10 @@ class TestPendingCommitmentVerdict:
         )
 
 
-class TestLaneMarkerWireContract:
-    def test_plan_answer_defaults_false(self) -> None:
-        assert PlanAnswerArgs.model_validate({}).material_pending is False
-
-    def test_plan_answer_explicit_null_reads_as_default(self) -> None:
-        args = PlanAnswerArgs.model_validate({"material_pending": None})
-        assert args.material_pending is False
-
-    def test_plan_answer_true_rides(self) -> None:
-        args = PlanAnswerArgs.model_validate({"material_pending": True})
-        assert args.material_pending is True
-
-    def test_plan_answer_unknown_key_still_rejects(self) -> None:
-        with pytest.raises(ValidationError):
-            PlanAnswerArgs.model_validate({"material_pendingg": True})
-
-    def test_chat_answer_defaults_false(self) -> None:
-        assert ChatAnswerArgs.model_validate({}).material_pending is False
-
-    def test_chat_answer_explicit_null_reads_as_default(self) -> None:
-        args = ChatAnswerArgs.model_validate({"material_pending": None})
-        assert args.material_pending is False
-
-    def test_chat_answer_true_rides(self) -> None:
-        args = ChatAnswerArgs.model_validate({"material_pending": True})
-        assert args.material_pending is True
-
-    def test_chat_answer_unknown_key_still_rejects(self) -> None:
-        with pytest.raises(ValidationError):
-            ChatAnswerArgs.model_validate({"material_pendingg": True})
-
-
 class TestChatResponseToleratesSilentClose:
     def test_assistant_message_defaults_to_none(self) -> None:
-        """The suppressed turn's envelope carries no assistant row."""
+        """A turn that closes without an assistant row (the degrade paths)
+        carries None in the envelope."""
         field = ChatResponse.model_fields["assistant_message"]
         assert field.default is None
 
@@ -247,8 +202,8 @@ class TestDeferredFrames:
 
     @pytest.mark.asyncio
     async def test_drop_discards_unsent(self) -> None:
-        """The material-pending suppress seat: the stale commitment's queue
-        never sends, the turn closes silent."""
+        """A dropped queue never sends — the close-without-speech primitive
+        (generic; the failure/abort seat)."""
         calls: list[tuple] = []
 
         async def hook(*args) -> None:

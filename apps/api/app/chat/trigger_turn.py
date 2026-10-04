@@ -47,7 +47,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -303,15 +303,27 @@ async def _already_spoke(
 ) -> bool:
     """The once-only guard: one review per (trigger, ref) per project —
     concurrent fires (the warm's double-materialization race) and repeat
-    invocations collapse onto the first landed row."""
+    invocations collapse onto the first landed row.
+
+    复读禁止律 (ADR-101 §3): a CHAT turn's assistant row that consumed this
+    understanding (the read landed the digest, or the plan path's assemble
+    injected it) carries ``intent.consumed_understanding == ref`` — the
+    first read already has a narrator, so the review never repeats it. The
+    OR clause is ref-keyed (digests never collide with run-id refs), so it
+    needs no trigger-name conditioning."""
     existing = (
         await db.execute(
             select(Message.id)
             .where(
                 Message.conversation_id == conversation_id,
-                Message.intent["type"].astext == TRIGGER_DUMP_TYPE,
-                Message.intent["trigger"].astext == trigger,
-                Message.intent["ref"].astext == ref,
+                or_(
+                    and_(
+                        Message.intent["type"].astext == TRIGGER_DUMP_TYPE,
+                        Message.intent["trigger"].astext == trigger,
+                        Message.intent["ref"].astext == ref,
+                    ),
+                    Message.intent["consumed_understanding"].astext == ref,
+                ),
             )
             .limit(1)
         )

@@ -279,7 +279,10 @@ def _resume_ack_line(decided: str, outcome: str) -> str:
 # context assembler never reads intent into the model's surface, so the
 # stamp stays invisible to the model). Bump when the interaction policy
 # (constitution / form spectrum) changes.
-INTERACTION_POLICY_VERSION = "interaction_constitution.v1"
+# v2 (ADR-101): the material-pending commitment lane retired — replies
+# ground on the bounded-wait read or speak the honest wait, never a marked
+# promise.
+INTERACTION_POLICY_VERSION = "interaction_constitution.v2"
 
 
 async def _create_message(
@@ -296,6 +299,7 @@ async def _create_message(
     question: dict[str, Any] | None = None,
     suggestions: list[dict[str, Any]] | None = None,
     suggestion_ref: dict[str, Any] | None = None,
+    consumed_understanding_ref: str | None = None,
 ) -> Message:
     if role == "assistant":
         # 工具名回响 sanitizer (2026-09-30 用户拍板 — 彻底删掉): the model
@@ -307,6 +311,15 @@ async def _create_message(
             **(intent or {}),
             "interaction_policy_version": INTERACTION_POLICY_VERSION,
         }
+        if consumed_understanding_ref:
+            # 复读禁止律的 consumed 戳 (ADR-101 §3): the mark rides the
+            # assistant row's OWN intent (zero extra rows, zero rendering
+            # surface) and the review's _already_spoke matches it — the
+            # first read was narrated by this turn, so the world-fired
+            # review never repeats it. Same commit as the row (H4: the
+            # mark is atomically visible before the turn's in-flight flag
+            # clears).
+            intent["consumed_understanding"] = consumed_understanding_ref
     message = Message(
         conversation_id=conversation_id,
         role=role,
@@ -2273,9 +2286,8 @@ async def execute_chat_turn(
     return ChatResponse(
         conversation_id=prepared.conversation_id,
         user_message=ChatMessageResponse.model_validate(prepared.user_message),
-        # None = 素材待命承诺被落地时刻压制 (the understanding beat landed
-        # mid-turn; the world-fired review turn speaks next) — the SSE client
-        # closes the preview bubble and waits for the review.
+        # None = the turn closed without an assistant row (a degrade path
+        # lands its own shape) — the SSE client closes the preview bubble.
         assistant_message=(
             ChatMessageResponse.model_validate(assistant_message)
             if assistant_message is not None

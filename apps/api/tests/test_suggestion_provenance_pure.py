@@ -50,11 +50,9 @@ def test_answer_args_carry_no_suggestions_seat(cls):
 def test_answer_args_defaults_unchanged_by_the_removal():
     assert ChatAnswerArgs().model_dump(mode="json") == {
         "pending_disposition": "none",
-        "material_pending": False,
     }
     plan = PlanAnswerArgs()
     assert plan.pending_disposition == "none"
-    assert plan.material_pending is False
     assert plan.brief is None
     assert plan.material_text is None
 

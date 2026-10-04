@@ -102,10 +102,7 @@ from app.chat.service import (
     _resume_ack_line,
     _reminder_tail,
     _safe_task_estimate,
-    is_pending_plan,
     latest_pending_question,
-    material_beat_landed,
-    pending_commitment_verdict,
     resolve_suggestion_note,
     sync_plan_question,
 )
@@ -113,7 +110,6 @@ from app.chat.system_status import observe_phase_callback
 from app.models.schemas import (
     AnswerPayload,
     AnswerProposal,
-    AssetStatus,
     AssetType,
     Brief,
     ChatAnswerArgs,
@@ -267,11 +263,13 @@ class ChatTurn:
         self.settled_question: Message | None = None
         self.outcome: ProposeTurnOutcome | None = None
         self._bailed_on_skip: list[UUID] = []
-        # 素材待命车道 (落地时刻压制批): the assemble saw files still
-        # processing → the turn MAY close on the material-pending commitment,
-        # so the runner arms the frame buffer (SSE path only) and a marked
-        # answer re-reads the world at land time before its prose releases.
-        self.material_pending_stamped = False
+        # 复读禁止律的 consumed 戳 (ADR-101 §3): the digest this turn has
+        # SEEN — stamped by a get_understanding read that landed (the
+        # dispatch sink; the chat path's assemble never injects the digest,
+        # so the read is this path's only content source). Every assistant
+        # row from here carries the mark, so the world-fired review never
+        # repeats the first read.
+        self._consumed_understanding_ref: str | None = None
         self.deferred: DeferredFrames | None = None
         # 建议点选 provenance (ADR-099 §4): this turn's message IS a
         # suggestion pick → the resolution note rides into the agent-facing
@@ -318,25 +316,6 @@ class ChatTurn:
             if project
             else {"text": ""}
         )
-        # The commitment lane's plausible scope — the same predicate the plan
-        # path stamps (a file asset still PENDING/PROCESSING at assemble).
-        # Project-less defensive turns never carry uploads.
-        if project is not None:
-            processing_count = sum(
-                1
-                for a in (
-                    await db.execute(
-                        select(Asset).where(
-                            Asset.project_id == project.id,
-                            Asset.file_url.isnot(None),
-                            Asset.processing_status.in_(
-                                [AssetStatus.PENDING, AssetStatus.PROCESSING]
-                            ),
-                        )
-                    )
-                ).scalars().all()
-            )
-            self.material_pending_stamped = processing_count > 0
 
     # ---- 资产角色 pins (ADR-078 判词④), the chat path's dispatch seat --------
 
@@ -416,6 +395,7 @@ class ChatTurn:
                     self.conversation_id,
                     "assistant",
                     _resume_ack_line(decided, outcome),
+                    consumed_understanding_ref=self._consumed_understanding_ref,
                 )
                 self.outcome = (assistant_message, None, [], self.settled_question)
                 return True
@@ -439,6 +419,12 @@ class ChatTurn:
 
     # ---- the loop's execute dispatch ----------------------------------------
 
+    def _mark_understanding_consumed(self, digest: str) -> None:
+        """复读禁止律写口① (ADR-101 §3): a get_understanding read landed the
+        content this turn — every assistant row from here carries the
+        consumed mark, so the world-fired review never repeats the read."""
+        self._consumed_understanding_ref = digest
+
     async def execute(self, name: str, params, prose: str) -> str | None | ToolObservation:
         """The LoopExecute seat: the disposition preamble, then the tool's
         validate → (reject: feedback, zero writes) → accept: writes + the
@@ -446,7 +432,13 @@ class ChatTurn:
         carries a disposition and never ends the turn — it dispatches to the
         family registry and rides back as a ToolObservation."""
         if name in PERCEPTION_TOOLS:
-            return await run_perception_tool(self.db, self.project, name, params)
+            return await run_perception_tool(
+                self.db,
+                self.project,
+                name,
+                params,
+                consumed_sink=self._mark_understanding_consumed,
+            )
         disposition = (
             getattr(params, "pending_disposition", "none") if params is not None else "none"
         )
@@ -982,7 +974,11 @@ class ChatTurn:
             # beat never lands empty).
             content = prose.strip() or self._select_swap_note(revised)
             assistant_message = await _create_message(
-                db, self.conversation_id, "assistant", content
+                db,
+                self.conversation_id,
+                "assistant",
+                content,
+                consumed_understanding_ref=self._consumed_understanding_ref,
             )
             self.outcome = (assistant_message, None, [], self.settled_question)
             return None
@@ -1203,6 +1199,7 @@ class ChatTurn:
             (prose or "") + (content_note or ""),
             workflow_run_id=run_id,
             intent=proposal.model_dump(mode="json"),
+            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         self.outcome = (assistant_message, run_id, [], self.settled_question)
         return None
@@ -1450,6 +1447,7 @@ class ChatTurn:
                 "kind": kind,
                 "target_output_id": str(output.id),
             },
+            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         try:
             await apply_operations(
@@ -1549,49 +1547,13 @@ class ChatTurn:
                 "an empty reply says nothing — speak the answer as your "
                 "message text, then call answer."
             )
-        # 素材待命承诺·落地时刻压制 (the plan path's mirror): the marked
-        # commitment re-reads the world NOW — the digest computes at land
-        # time (content hashes stamp during processing). Suppress = no
-        # assistant row, the queued frames drop unsent, and the review turn
-        # (already fired behind the politeness gate) speaks next. The
-        # assemble stamp guards the lane: a stray marker on an ordinary
-        # answer (no files pending at assemble, an old warm's beat on file)
-        # must never suppress — no review is coming for that beat.
-        if (
-            params.material_pending
-            and self.material_pending_stamped
-            and self.project is not None
-        ):
-            from app.pipeline.step_context import (  # deferred: pipeline weight
-                asset_digest,
-                list_assets,
-            )
-
-            digest = asset_digest(await list_assets(self.db, self.project.id))
-            beat = await material_beat_landed(
-                self.db, self.conversation_id, "understanding", digest
-            )
-            plan_docked = is_pending_plan(
-                await latest_pending_question(self.db, self.conversation_id)
-            )
-            verdict = pending_commitment_verdict(
-                lane_marked=True, beat_landed=beat, plan_docked=plan_docked
-            )
-            if verdict == "suppress":
-                if self.deferred is not None:
-                    self.deferred.drop()
-                logger.info(
-                    "material_pending_commitment_suppressed",
-                    project_id=str(self.project.id),
-                )
-                self.outcome = (None, None, [], self.settled_question)
-                return None
         assistant_message = await _create_message(
             self.db,
             self.conversation_id,
             "assistant",
             prose,
             intent=AnswerProposal(text=prose).model_dump(mode="json"),
+            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         self.outcome = (assistant_message, None, [], self.settled_question)
         return None
@@ -1619,7 +1581,11 @@ class ChatTurn:
                 if result is not None:
                     logger.info("chat_turn_loop_exhausted", calls=result.calls)
                 assistant_message = await _create_message(
-                    self.db, self.conversation_id, "assistant", content
+                    self.db,
+                    self.conversation_id,
+                    "assistant",
+                    content,
+                    consumed_understanding_ref=self._consumed_understanding_ref,
                 )
                 run_id, bailed_run_ids, settled = None, [], self.settled_question
             else:
@@ -1631,6 +1597,7 @@ class ChatTurn:
                     "assistant",
                     result.prose,
                     intent=AnswerProposal(text=result.prose).model_dump(mode="json"),
+                    consumed_understanding_ref=self._consumed_understanding_ref,
                 )
                 run_id, bailed_run_ids, settled = None, [], self.settled_question
         bailed_run_ids = [*self._bailed_on_skip, *bailed_run_ids]

@@ -102,7 +102,10 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             description=(
                 "Read the material understanding of the project's assets "
                 "(summary, thesis, themes, audience, quotable lines) — before "
-                "summarizing the material or matching a recommendation to it."
+                "summarizing the material or matching a recommendation to it. "
+                "While assets are still processing this read WAITS for the "
+                "understanding to land (bounded), so a content-dependent "
+                "answer can ground itself in the same turn."
             ),
             params_model=None,
             execute=executes.get_understanding,
@@ -259,15 +262,34 @@ def perception_chat_tools(*names: str) -> list[ChatTool]:
     return tools
 
 
-async def run_perception_tool(db, project, name: str, params) -> ToolObservation:
+async def run_perception_tool(
+    db,
+    project,
+    name: str,
+    params,
+    *,
+    consumed_sink: Any = None,
+) -> ToolObservation:
     """The turn runners' read dispatch seat: the project scopes the read
     (tenant law — a read never crosses the turn's project); a project-less
-    turn (defensive shape) reads as an honest empty observation."""
+    turn (defensive shape) reads as an honest empty observation.
+
+    ``consumed_sink`` (ADR-101 复读禁止律): a callable taking the landed
+    digest, invoked only when a get_understanding read actually lands the
+    understanding's content — the turn marks the world-fired review's dedup
+    registry on its assistant rows (the first read has a narrator, so the
+    review never repeats it). None = the caller is not a narrating seat
+    (the trigger turn itself, exploration loops)."""
     if project is None:
         return ToolObservation(
             "No project context is loaded — there is nothing to read."
         )
     entry = PERCEPTION_TOOLS[name]  # membership was gated by the caller
+    if name == "get_understanding":
+        text, digest = await executes.understanding_observation(db, project)
+        if digest is not None and consumed_sink is not None:
+            consumed_sink(digest)
+        return ToolObservation(text)
     return ToolObservation(text=await entry.execute(db, project, params))
 
 

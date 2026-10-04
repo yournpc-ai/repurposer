@@ -805,7 +805,7 @@ class PlanAnswerArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return _drop_bad_brief(tolerate_null_keys(data, "material_text", "pending_disposition", "material_pending"))
+        return _drop_bad_brief(tolerate_null_keys(data, "material_text", "pending_disposition"))
 
     brief: Brief | None = Field(
         default=None,
@@ -818,10 +818,6 @@ class PlanAnswerArgs(BaseModel):
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
         description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — the question settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
-    )
-    material_pending: bool = Field(
-        default=False,
-        description="True ONLY when this answer is the material-pending commitment — the context's Material status line reported files still processing, and this reply is the one-clause 'understood + I will speak once the content read lands' promise. Absent/false on every other answer.",
     )
 
 
@@ -933,15 +929,11 @@ class ChatAnswerArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "pending_disposition", "material_pending")
+        return tolerate_null_keys(data, "pending_disposition")
 
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
         description="Pending-question settlement for this turn: 'answer' = the message ENGAGES the question (answers it, hands the choice back to you, or discusses its options) and it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
-    )
-    material_pending: bool = Field(
-        default=False,
-        description="True ONLY when this answer is the material-pending commitment — the Assets block reported files still processing, and this reply is the one-clause 'understood + I will speak once the content read lands' promise. Absent/false on every other answer.",
     )
 
 

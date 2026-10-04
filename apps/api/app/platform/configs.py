@@ -74,6 +74,18 @@ CONFIG_REGISTRY: dict[str, ConfigDef] = {
         "2026-09-24 用户拍板: 1 hour, was a 5-minute frontend constant; a "
         "failed warm degrades to silence within this bound).",
     ),
+    "chat.material_wait_secs": ConfigDef(
+        default=120,
+        type=int,
+        desc="Seconds the get_understanding read waits for the material "
+        "understanding to land while assets are still processing (ADR-101 "
+        "回合内有界等待 — the turn answers grounded instead of promising). "
+        "HARD UPPER BOUND 240s: the trigger admission's politeness window "
+        "is 300s (trigger_turn 15×20s) — a wait cap at or above it lets an "
+        "in-flight turn drain the understanding_warmed trigger into "
+        "deferred-out silence, and the timeout path's review relay never "
+        "arrives. 0 disables the wait (the read reports unready at once).",
+    ),
 }
 
 _cache: dict[str, Any] = {}

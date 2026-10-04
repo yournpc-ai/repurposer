@@ -1,25 +1,25 @@
 # 素材待命场景重写 — 施工简报（ADR-101）
 
-> Status: **已拍板待施工**。架构母法 = ADR-101（回合内有界等待 + 承诺机器退役 + 复读禁止律与 consumed 谓词）。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
+> Status: **W1 已落地**（验证全部未跑，用户清单见末节——验证绿后 W2）。架构母法 = ADR-101（回合内有界等待 + 承诺机器退役 + 复读禁止律与 consumed 谓词）。**验证纪律：一切 pytest / prompt_gate / 剧本 / live 复跑由用户自跑**；施工会话只做代码层分析与 review，未跑项在批次 Status 在册。
 
 ## 冻结事项（本简报全程不再议）
 
 回合内有界等待（`get_understanding` 行为升级，无新工具名）；等待上限 = configs `chat.material_wait_secs` 默认 120s；承诺机器（marker/stamp/verdict/drop 道）整台退役不修补；复读红线 = 内容重复永禁（不是「review 发不发」）；**复读防守零 prompt——戳/谓词/去重全机械代码路径，prompt 只承载散文内容法（说什么）与工具使用引导（什么时候读），任何「在 prompt 里叮嘱别复读」= 翻案本律**；超时地板 = 宣告等待 + 宣告接力、零内容，review 必达；正文全打字机（G2 + drain 终态，ADR-099 §7 不重开）；trigger 礼貌窗 300s 不动；H3 薄残留（寒暄盖戳吃首读）接受在册。
 
-## W0 彻查清单（施工时逐条以代码验证，验证结论回填本条）
+## W0 彻查清单（W1 施工已逐条回填验证结论）
 
-| # | 隐患 | 锚点 | 处置 |
-|---|---|---|---|
-| H1 | 等待上限 ≥ trigger 礼貌窗（300s）→ 等待中回合把 understanding_warmed trigger 耗到 defer-out 丢沉默 → 地板接力永不到达 | `trigger_turn.py:112-113`（15×20s） | `chat.material_wait_secs` 注册表 desc 钉死合法上界 ≤240s（300−60 余量）；desc 即法 |
-| H2 | plan path assemble 注入 digest（信任锚 plan_turn.py:346-364）→ plan echo 不调工具即可叙述内容 → 之后 review 复读 | `plan_turn.py:346-364` | consumed 写口②：assemble 注入过 digest 的回合落 assistant 行即盖戳 |
-| H3 | 理解就绪后纯寒暄回合盖戳 → 首读被吃 | 同 H2 谓词 | **接受在册**（ADR-101 §3：主旅程复读是红线，寒暄后无主动首读是薄残留） |
-| H4 | consumed 戳与 assistant 行不同事务 / 晚于 turn_state 空闲清除 → admission 见空闲查戳未落 → 复读竞态 | `trigger_turn.py:382-417`（admission 循环在 `_already_spoke` 前） | 戳与 assistant 行**同一事务**提交；施工确认 turn_state 清除在回合提交之后 |
-| H5 | consumed 戳的 ref 与 warm 发火 ref 不同源 → 去重永不命中 | `node_runners.py` warm_understanding 发火处（~:470 族） | 戳的 ref 取与发火处**同一计算**（施工钉 ref 的实际身份——digest 或 row id，以代码为准） |
-| H6 | 120s 工具执行期间 SSE 零帧 → 客户端断连/假死 | tool_loop keepalive / SSE 路由 | 施工验证心跳与素材相位帧在工具执行期持续；无则补（acceptance 项） |
-| H7 | 等待轮询持长事务占连接池 | `perception/executes.py:get_understanding` | 每轮 poll 短事务/expire，间隔 2-3s；不持长事务 |
-| H8 | 剩余资产全部 FAILED → 空等到上限 | 同上 | 等待循环早退：无 PENDING/PROCESSING 即返回失败事实 |
-| H9 | 等待期间客户端只显示冻词 Thinking 而非素材相位 | `ChatDock.tsx` StatusLine 相位优先级 / reviewPending | 施工验证素材相位优先于 thinking 行；零新 chrome |
-| H10 | consumed 戳载体选错 → 消息流渲染空泡 | messages 列表端点 / historyReplay | **首选**：consumed 旗骑 assistant 行自身 intent（零额外行零渲染面）；备选：独立 dump 空行 + 服务端过滤（仅当落行 funnel 不统一时） |
+| # | 隐患 | 结论 |
+|---|---|---|
+| H1 | 等待上限 ≥ trigger 礼貌窗（300s）→ defer-out 丢沉默 | ✅ 落地：`chat.material_wait_secs` 注册表 desc 钉死 HARD UPPER BOUND 240s（configs.py） |
+| H2 | plan assemble 注入 digest → plan echo 复读 | ✅ 落地：写口②（plan_turn assemble：digest 注入即置旗，落行盖戳） |
+| H3 | 寒暄盖戳吃首读 | 接受在册（不动，承重观察①） |
+| H4 | 戳与 assistant 行不同事务 → 复读竞态 | ✅ 验证通过：`turn_state="settled"` 与 assistant 行同一 commit（service.py:2266-2271）；戳骑 assistant 行 intent → 原子可见先于空闲清除 |
+| H5 | 戳 ref 与发火 ref 不同源 | ✅ 验证通过：发火 = `fire_trigger(project_id, TRIGGER_UNDERSTANDING, digest)`（node_runners.py:445）；戳 = `asset_digest(assets)` 同一函数同一资产集 |
+| H6 | 120s 工具执行期 SSE 零帧 | ✅ 验证通过：心跳注释在（chat/routes.py:371 `yield ": heartbeat\n\n"`）+ 素材相位 asset 驱动 + inspecting 活动帧 |
+| H7 | 等待轮询持长事务占池 | ✅ 落地：每轮 poll 独立短 session（AsyncSessionLocal），回合 session 的未提交写零触碰 |
+| H8 | 全 FAILED 空等到上限 | ✅ 落地：`material_wait_verdict` 的 settled_unreadable 早退（纯测试锁） |
+| H9 | 等待期客户端只显示冻词 Thinking | ⏳ 未动代码——live 验证项（素材相位应优先于 thinking 行），挂验收清单 live 场景①观察 |
+| H10 | 戳载体渲染空泡 | ✅ 落地（首选方案）：戳骑 assistant 行自身 intent，零额外行零渲染面 |
 
 ## 拆除面盘点（施工前 grep 复核，以代码为准）
 
@@ -58,6 +58,16 @@ W1（行为翻转）→ W2（死码清扫 + harness 改靶）→ W3（文档现�
 | **must_not_touch** | G2/DeferredFrames 本体；打字机/drain；trigger 礼貌窗数值与 pending plan 谓词；`material_beat_landed` 定义（W2 处置）；SSE/相位前端（H6/H9 只验证不改，除非验证红） |
 | **acceptance** | ① 素材处理中提问 → 单回合 grounded 答复（等待 narrate + 内容落地），无 review 复读；② 等待超时 → 宣告行零内容 + review 接力必达；③ plan echo 叙述内容后 review 零发射；④ 静默上传 review 照常；⑤ schema 无字段 + prompt 无法 + turn 无门，三面同 commit；⑥ H1-H10 验证结论回填 W0 表 |
 | **rollback** | 单 commit git revert |
+
+**W1 落地记录**（施工会话交付，验证全部未跑）：
+
+- **stale-shape 行不盖戳**（施工新抓的边界）：`_render_understanding` 返回 None 表 stale（内容未真正落地）→ 观察文本照旧、digest 返回 None——review 席位留给再生行，与「consumed = 内容消费」谓词严格一致。
+- **写口②的精确条件**：assemble 注入 `understanding_lines` 非空才置旗（空 stub 行 = 无内容可叙述 → 不盖戳）。
+- **propose_turn 的 processing_count 块整段删除**（只喂 stamp）；`is_pending_plan` import 随门退役（plan_turn 仍用，保留）；`AssetStatus` import 随块退役。
+- **测试面 W1 最小手术**：`test_material_pending_pure.py` 删 wire-contract 类（schema 锁随字段消亡），verdict 真值表留到 W2 随函数退役；`test_suggestion_provenance_pure.py` 的 defaults 锁同步；新锁入 `test_material_wait_pure.py`（verdict 真值表 / 形态翻案锁 / 戳骑行三锁 / unready 文本形态）。
+- **INTERACTION_POLICY_VERSION → v2**（承诺车道退役 = 交互策略变更）；`ChatResponse` None 注释改写（压制路径消亡）。
+- **harness 面未动（W2 改靶）**：S18 / prompt_gate 的 material-pending 合法终态断言在 W1 后行为红 = 本批归因，W2 修。
+- **未跑验证（用户清单）**：见末节全量；H9 挂 live 场景①观察。
 
 ## 批次 W2：死码清扫 + harness 改靶（单 commit）
 
