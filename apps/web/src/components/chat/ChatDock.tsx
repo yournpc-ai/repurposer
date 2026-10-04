@@ -2725,7 +2725,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
      * settled content continues what's on screen, only the unseen tail rides
      * the typewriter (same key, no blob, no erase). A non-prefix settled text
      * is replaced speech (a rejected call's flip) and settles as before. Call
-     * AFTER typewriter.flush() so previewText is the full streamed prefix. */
+     * AFTER the typewriter drains so previewText is the full streamed prefix. */
     const paceUnstreamedTail = async (content: string): Promise<void> => {
       if (
         streamedAny &&
@@ -2785,10 +2785,17 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
       )
       // Envelope wins: any in-flight checkpoint delivery finishes FIRST
-      // (its drain waiters ride the same typewriter), then release any
-      // buffered prose and land the turn.
+      // (its drain waiters ride the same typewriter), then the buffered
+      // prose PACES OUT before the turn lands.
       await checkpointChain
-      typewriter.flush()
+      // 打字机律·G2 修律 (2026-10-04): the speech-commit protocol holds the
+      // whole reply's deltas until adjudication, so they burst into this
+      // queue right before the envelope — a flush() here would dump them
+      // whole (整段瞬移, the exact shape the law bans). drain() paces the
+      // burst at the typewriter's cadence (catch-up included) — prose
+      // visibly LEADS, docks/receipts follow. flush() stays on the
+      // failure/abort paths (rollback must not linger).
+      await typewriter.drain()
       // 终帧律 (I-PFA-06 相位清除协议, 2026-09-18): the envelope closes every
       // phase — the landing awaits below (prose pacing drains, then the
       // docks/receipts land) run with chatBusy still true, so a stale label
@@ -3331,7 +3338,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // the settled echo and replayed its entrance animation (a visible
       // flicker right after the last character). The follow-up's prose is
       // already IN the preview → handleAssistantMessage rides echoCarried.
-      typewriter.flush()
+      // 打字机律·G2 修律 (sendChat 同款): the speech-commit protocol's flush
+      // burst lands in this queue right before the envelope — flush() would
+      // teleport it whole; drain() paces it out at cadence before the
+      // archive splice (prose visibly leads, the settled rows follow).
+      await typewriter.drain()
       setThinkingPhase(null)
       settleActivities("completed") // defensive twin of the server sweep
       const answeredRow = buildAnsweredQuestionRow(data.answered_question)
