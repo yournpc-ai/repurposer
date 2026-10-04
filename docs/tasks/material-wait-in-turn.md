@@ -4,7 +4,7 @@
 
 ## 冻结事项（本简报全程不再议）
 
-回合内有界等待（`get_understanding` 行为升级，无新工具名）；等待上限 = configs `chat.material_wait_secs` 默认 120s；承诺机器（marker/stamp/verdict/drop 道）整台退役不修补；复读红线 = 内容重复永禁（不是「review 发不发」）；超时地板 = 宣告等待 + 宣告接力、零内容，review 必达；正文全打字机（G2 + drain 终态，ADR-099 §7 不重开）；trigger 礼貌窗 300s 不动；H3 薄残留（寒暄盖戳吃首读）接受在册。
+回合内有界等待（`get_understanding` 行为升级，无新工具名）；等待上限 = configs `chat.material_wait_secs` 默认 120s；承诺机器（marker/stamp/verdict/drop 道）整台退役不修补；复读红线 = 内容重复永禁（不是「review 发不发」）；**复读防守零 prompt——戳/谓词/去重全机械代码路径，prompt 只承载散文内容法（说什么）与工具使用引导（什么时候读），任何「在 prompt 里叮嘱别复读」= 翻案本律**；超时地板 = 宣告等待 + 宣告接力、零内容，review 必达；正文全打字机（G2 + drain 终态，ADR-099 §7 不重开）；trigger 礼貌窗 300s 不动；H3 薄残留（寒暄盖戳吃首读）接受在册。
 
 ## W0 彻查清单（施工时逐条以代码验证，验证结论回填本条）
 
