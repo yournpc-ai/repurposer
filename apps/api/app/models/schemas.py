@@ -452,10 +452,12 @@ class QuestionProposal(BaseModel):
     # 框架散文 (2026-09-08, ask 三分解剖 ①): the agent's speech around the
     # question — 认领 the request + why this ONE question decides quality.
     # The default path is NEVER woven in (ADR-103: what happens without an
-    # answer renders as the dock's own meta line — world facts are shown by
-    # the card, never spoken by the prose). Streams as the turn's
-    # echo; the question field stays the bare question (the dock title).
-    # Empty only on code-composed questions (caption mode, interrupts).
+    # answer rides the parameter alone — machine-readable, never spoken).
+    # Streams as the turn's echo; the question field stays the bare
+    # question (the dock title). Empty only on code-composed questions
+    # (caption mode, interrupts) — an LLM ask with empty prose is
+    # guardrail-REJECTED into the repair iteration (the bare-call family
+    # has no silent dock).
     prose: str = ""
     question: str
     # Options (提问策略 ② mirror): 3 concrete one-word values sourced from the

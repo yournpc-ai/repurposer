@@ -1397,6 +1397,16 @@ class PlanTurn:
         the loop."""
         stored = self.stored
         merged_brief = await self._absorb(params.brief, params.material_text)
+        # 空散文护栏 (answer 裸调用护栏的对称座): an LLM ask without its
+        # framing speech is NEVER legitimate (schema's empty-prose tolerance
+        # exists for code-composed questions only) — reject it into the
+        # repair iteration instead of docking a silent blocking card.
+        if not prose.strip():
+            return (
+                "an ask never docks without its framing speech — speak what "
+                "you understood and your lean as your message text, then "
+                "call ask_user."
+            )
         if not params.question.strip():
             return (
                 "empty question — speak the framing as your message text and "
