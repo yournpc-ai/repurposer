@@ -2995,11 +2995,17 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               )
               landOnStartedRun(run.id)
             } else {
-              // Refresh while confirming: rebuild the dock + panel plan. A
-              // pending TEXT question needs no rebuild — the history replay
-              // already renders it as a plain flow message (形态律 R1).
+              // Refresh while confirming: rebuild the dock + panel plan.
+              // 归档单一源 (echo 双份事故): a pending question needs NO
+              // rebuild — its echo replays from the archive (mapHistoryRows'
+              // question branch) and its pill revives via the mount pending
+              // fetch, so handleAssistantMessage would push the SAME echo a
+              // second time. Only the task_book (zero archive rendering —
+              // dock + panel plan state) still rides the handler.
               const q = dockWorthyQuestion(await fetchPendingQuestion())
-              if (q) await handleAssistantMessage(q)
+              if (q && q.question?.kind === "task_book") {
+                await handleAssistantMessage(q)
+              }
             }
             return
           }
