@@ -668,8 +668,7 @@ function TurnErrorRow({ text }: { text: string }) {
 }
 
 /** User message — the only bubbled element in the flow (rounded, muted).
- * The opening prompt carries the project's source materials as attachments;
- * an attachment-only message (files dropped into the chat) skips the text
+ * An attachment-only message (files dropped into the chat) skips the text
  * bubble and shows just the chips. */
 function UserBubble({ text, assets }: { text: string; assets?: ProjectAsset[] }) {
   const { t } = useTranslation()
@@ -1328,8 +1327,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // Confirm-phase archive replay (B1): the conversation's message rows are
   // the durable record — on open, rebuild the flow from them so a refresh or
   // another device no longer loses capability answers / past refinements.
-  // The opening prompt renders from the prop (it carries the attachments),
-  // so its seeded row is skipped. 形态律 (ADR-053 R1): a still-pending
+  // 归档单一源: every archived row renders, the opener included (no prop
+  // lane, no skip predicate). 形态律 (ADR-053 R1): a still-pending
   // OPTIONS question docks above the input (the fetch effect holds it),
   // never in the flow; a TEXT question (options-empty) IS a plain flow
   // message, pending or answered. Best-effort: the live flow works without
@@ -1352,7 +1351,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // The row→flow mapping is the extracted PURE seam (historyReplay.ts,
         // Phase 3 Batch A) — same branches, zero lifecycle derivation: a
         // refresh reads the archive, readiness comes from the stamp alone.
-        const history = mapHistoryRows(data.items ?? [], { prompt, t })
+        const history = mapHistoryRows(data.items ?? [], { t })
         // Prepend — anything pushed locally since mount is newer.
         if (!cancelled && history.length > 0) {
           setMessages((prev) => [...history, ...prev])
@@ -2013,19 +2012,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     )
     return needsCaption && intent.caption_mode ? intent.caption_mode : null
   }, [intent.tasks, intent.caption_mode])
-
-  /** Assets carried by a message bubble must not also hang under the opening
-   * prompt (a mid-conversation upload refreshed into `assets` would render
-   * twice — the 2026-08-05 duplication bug). Server-promoted assets (the
-   * declared-material transcript) have no bubble, so they still surface.
-   * A staged-but-unsent upload can sit in `assets` (a fetch saw the row) —
-   * it stays an input-group chip until a message carries it. */
-  const openingAssets = useMemo(() => {
-    const staging = new Set(
-      staged.flatMap((s) => (s.asset ? [s.asset.id] : []))
-    )
-    return assets.filter((a) => !sentAssetIds.has(a.id) && !staging.has(a.id))
-  }, [assets, sentAssetIds, staged])
 
   /** True when the echo bubble of the turn that docked the current plan is
    * in the flow — the card's own echo line then stays hidden. */
@@ -2947,10 +2933,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   }
 
   /** Fresh composer navigation: the handed-over draft is the conversation's
-   * first message — send it once on mount (the opening bubble already
-   * renders it from the prompt prop, so nothing is pushed to the flow).
-   * Router state survives a page refresh, so before firing we check the
-   * server: if the first send already landed, REBUILD from the server
+   * first message — send it once on mount (sendChat's own optimistic push
+   * renders the bubble at once; the archive replay converges on the same
+   * row). Router state survives a page refresh, so before firing we check
+   * the server: if the first send already landed, REBUILD from the server
    * (dock / live run) instead of duplicating the message — there is no
    * server-side dedup by design. */
   useEffect(() => {
@@ -4491,13 +4477,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                       )
                 }
               >
-                {/* Opening prompt */}
-                {prompt ? (
-                  <MessageScrollerItem>
-                    <UserBubble text={prompt} assets={openingAssets} />
-                  </MessageScrollerItem>
-                ) : null}
-
                 {/* Plan card (confirm beat) — pinned bottom-most
                     (order-10) while settled. During an in-flight turn it
                     unpins and renders inline at its echo anchor in the loop

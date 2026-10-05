@@ -451,16 +451,16 @@ export interface HistoryRow extends QuestionMessage {
  * device no longer loses capability answers / past refinements. 形态律
  * (ADR-053 R1): a still-pending OPTIONS question docks above the input (the
  * pending fetch holds it), never in the flow; a TEXT question (options-
- * empty) IS a plain flow message, pending or answered.
+ * empty) IS a plain flow message, pending or answered. 归档单一源
+ * (material-ui-convergence ①): EVERY row renders — the opener included;
+ * there is no prop-rendered side lane and no skip predicate.
  *
  * @param rows   the server rows, oldest first
- * @param ctx.prompt  the opening prompt — its seeded row is skipped (it
- *                    renders from the prop, attachments included)
- * @param ctx.t       i18n for the QA archive's answer line
+ * @param ctx.t  i18n for the QA archive's answer line
  */
 export function mapHistoryRows(
   rows: HistoryRow[],
-  ctx: { prompt: string; t: (key: string) => string },
+  ctx: { t: (key: string) => string },
 ): OverlayMessage[] {
   const history: OverlayMessage[] = []
   // C8-c fold: candidate set id → the OverlayMessage anchoring its card, so
@@ -469,7 +469,6 @@ export function mapHistoryRows(
   const cardBySetId = new Map<string, OverlayMessage>()
   for (const m of rows) {
     if (m.role === "user") {
-      if ((m.content ?? "") === ctx.prompt) continue
       history.push({
         id: m.id,
         role: "user",

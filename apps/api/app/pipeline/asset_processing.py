@@ -36,7 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import AssetStatus, AssetType
-from app.models.tables import Asset, Project
+from app.models.tables import Asset, Conversation, Message, Project
 from app.pipeline.extraction import extract_text, render_pdf_pages_and_upload
 from app.pipeline.graph import media_missing
 from app.pipeline.prosody import prosody_processor
@@ -324,6 +324,25 @@ async def _record_reading_beat(db: AsyncSession, asset: Asset, status: str) -> N
         project = await db.get(Project, asset.project_id)
         if project is None:
             return
+        # beat 抑制 (ADR-102 后续批): a user turn in flight means the read
+        # path triggered this processing — the get_understanding read frame
+        # already narrates the whole wait in the flow, so the beat row would
+        # be a second narrator for the same fact. The run-birthplace path
+        # (no user turn in flight) keeps its beats. SQL 直查 — the pipeline
+        # never imports the chat layer.
+        in_flight = (
+            await db.execute(
+                select(Message.id)
+                .join(Conversation, Message.conversation_id == Conversation.id)
+                .where(
+                    Conversation.project_id == asset.project_id,
+                    Message.turn_state == "in_flight",
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if in_flight is not None:
+            return
         base = select(func.count(Asset.id)).where(Asset.project_id == asset.project_id)
         total = (await db.execute(base)).scalar_one()
         settled = (
@@ -379,6 +398,18 @@ async def process_asset(asset_id: UUID) -> None:
             return
 
         try:
+            # 认领即出生 (ADR-102 后续批): the transcript document is born
+            # HERE — the claim is the first moment "being processed" is a
+            # true world fact (dormant uploads carry no loading card). The
+            # completion/failure paths below re-enter the same stamp
+            # idempotently to flip done/failed.
+            if asset.project_id is not None:
+                from app.pipeline.graph_fill import (  # deferred: runtime edge
+                    stamp_transcript_node,
+                )
+
+                await stamp_transcript_node(db, asset.project_id, asset)
+                await db.commit()
             chain = PROCESSORS.get(asset.type, [_noop_processor])
             result = ProcessResult()
             for processor in chain:
@@ -405,8 +436,9 @@ async def process_asset(asset_id: UUID) -> None:
             # extracted text gets its document node the moment it exists —
             # pre-run projects see it on the canvas without waiting for a
             # plan/run stamp (which re-ensures it idempotently anyway).
-            # 上传即出生 (Phase 1): the card was born queued at upload — this
-            # visit flips it done (text or settle-empty alike).
+            # 认领即出生 (ADR-102 后续): the card was born running at the
+            # claim above — this visit flips it done (text or settle-empty
+            # alike).
             if asset.project_id is not None:
                 from app.pipeline.graph_fill import (  # deferred: runtime edge
                     stamp_transcript_node,
@@ -455,8 +487,9 @@ async def process_asset(asset_id: UUID) -> None:
             asset.processing_error = str(e)
             _clear_processing_stage(asset)
             await db.commit()
-            # 状态随 ASR (Phase 1): the upload-born transcript card flips to
-            # its failed face with the row — never a perpetual loading card.
+            # 状态随处理 (认领即出生): the claim-born transcript card flips
+            # to its failed face with the row — never a perpetual loading
+            # card.
             if asset.project_id is not None:
                 from app.pipeline.graph_fill import (  # deferred: runtime edge
                     stamp_transcript_node,

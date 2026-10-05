@@ -150,16 +150,14 @@ async def _insert_project_asset(
     )
     db.add(asset)
     # 上传即落图 (ADR-057 K2): the asset node is born with its asset row —
-    # flush-only, commits with the asset below. 转写卡同房出生 (Phase 1):
-    # a text-yielding upload's transcript document is born queued (loading)
-    # and flips with ASR.
+    # flush-only, commits with the asset below. 认领即出生 (ADR-102 后续):
+    # the transcript document waits for the worker's claim — a dormant
+    # upload carries no loading card.
     from app.pipeline.graph_fill import (  # deferred: import cycle
         stamp_asset_node,
-        stamp_transcript_node,
     )
 
     await stamp_asset_node(db, project_id, asset)
-    await stamp_transcript_node(db, project_id, asset)
     await db.commit()
     await db.refresh(asset)
     return asset
@@ -262,15 +260,13 @@ async def upload_asset(
     )
     db.add(asset)
     # 上传即落图 (ADR-057 K2): the asset node is born with its asset row.
-    # 转写卡同房出生 (Phase 1): a text-yielding upload's transcript
-    # document is born queued (loading) and flips with ASR.
+    # 认领即出生 (ADR-102 后续): the transcript document waits for the
+    # worker's claim — a dormant upload carries no loading card.
     from app.pipeline.graph_fill import (  # deferred: import cycle
         stamp_asset_node,
-        stamp_transcript_node,
     )
 
     await stamp_asset_node(db, project_id, asset)
-    await stamp_transcript_node(db, project_id, asset)
     await db.commit()
     await db.refresh(asset)
     return asset

@@ -372,13 +372,14 @@ async def stamp_transcript_node(
     (the execution truth); rewiring consumers arrives with 改稿驱动重剪.
     Flush-only.
 
-    上传即出生 (Phase 1, ADR-087 §2 R2 配套缓做项): an ASR-able / text-
-    yielding asset births its transcript card AT UPLOAD in ``running`` —
-    the SHARED loading speaks (node wipe + edge packet ride this state
-    directly; 2026-09-28 用户拍板: 出生即 running, 卡面零自养 loading) —
-    and flips to ``done`` when the text lands (the completion path
-    re-enters this same function), to ``failed`` if processing fails.
-    Asset types without a text yield (image / voice_sample) never birth one.
+    认领即出生 (ADR-102 后续批): an ASR-able / text-yielding asset births
+    its transcript card when the worker CLAIMS it (``process_asset``'s
+    entry) — the claim is the first moment "being processed" is a true
+    world fact, so a dormant upload carries no loading card at all. The
+    card is born ``running`` and flips to ``done`` when the text lands (the
+    completion path re-enters this same function), to ``failed`` if
+    processing fails. Asset types without a text yield (image /
+    voice_sample) never birth one.
 
     时间刻度 (2026-09-29 用户拍板 — 译文稿同形): word-timestamped assets
     (video / audio) also carry ``spec.cued_text`` — the same text baked as
