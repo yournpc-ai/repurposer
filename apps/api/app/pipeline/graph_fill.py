@@ -361,7 +361,7 @@ async def remove_asset_node(db: AsyncSession, project_id: UUID, asset_id: UUID) 
 
 
 async def stamp_transcript_node(
-    db: AsyncSession, project_id: UUID, asset: Asset
+    db: AsyncSession, project_id: UUID, asset: Asset, *, create: bool = True
 ) -> GraphNode | None:
     """转写稿 document (ADR-057 document 型第二实例 — 中间产物升一等公民):
     the asset's transcript / extracted text gets its own card the moment it
@@ -372,13 +372,14 @@ async def stamp_transcript_node(
     (the execution truth); rewiring consumers arrives with 改稿驱动重剪.
     Flush-only.
 
-    认领即出生 (ADR-102 后续批): an ASR-able / text-yielding asset births
-    its transcript card when the worker CLAIMS it (``process_asset``'s
-    entry) — the claim is the first moment "being processed" is a true
-    world fact, so a dormant upload carries no loading card at all. The
-    card is born ``running`` and flips to ``done`` when the text lands (the
-    completion path re-enters this same function), to ``failed`` if
-    processing fails. Asset types without a text yield (image /
+    出生两座 (ADR-102 后续批): the card births only where the transcript is
+    a USER-FACING artifact — ① chat-declared text material (born done with
+    its text) and ② the plan-path ensure (the run's graph materializes it,
+    born running while processing is owed, flipping done/failed with the
+    row). The understanding read path (ASR only feeds the reader) births NO
+    card: its completion/failure visits pass ``create=False`` — they flip an
+    existing card and never birth one, so a discarded-material discussion
+    leaves zero canvas trace. Asset types without a text yield (image /
     voice_sample) never birth one.
 
     时间刻度 (2026-09-29 用户拍板 — 译文稿同形): word-timestamped assets
@@ -436,6 +437,10 @@ async def stamp_transcript_node(
         elif existing.state == "queued":
             existing.state = "running"
         return existing
+    if not create:
+        # 读路径零卡 (出生两座): completion/failure visits flip only — an
+        # understanding-triggered processing leaves no canvas trace.
+        return None
     asset_node = await stamp_asset_node(db, project_id, asset)
     spec: dict = {"role": _TRANSCRIPT_ROLE, "asset_id": str(asset.id)}
     if text:

@@ -25,14 +25,17 @@
 
 安全性（双渲窗口核查）：新项目首挂对话不存在 → 归档 fetch 早退（`if (!conv.id) return`）；刷新时 auto-send 的 server 检查命中走 rebuild 不发送。`prompt` prop 保留逻辑座位（specific_instruction / Start gate），仅失渲染职责。auto-send docstring 等引用「opening bubble renders from the prop」的注释同步核销。
 
-### ② 转写卡认领出生（api）
+### ② 转写卡出生两座（api）
+
+转写稿卡只在它是**用户面向产物**的地方出生；agent 读素材（ASR 只是喂理解的中间件）永不生卡。
 
 | 座位 | 改动 |
 |---|---|
-| `app/pipeline/routes/assets.py` 两处上传路线 | 删 `stamp_transcript_node` 调用（asset node 出生保留） |
-| `app/pipeline/asset_processing.py:process_asset` | claim 落座后（`db.get` 成功、处理链起跑前）补 `stamp_transcript_node` —— born running 即真实事实 |
+| `app/pipeline/routes/assets.py` 两处上传路线 | 删 `stamp_transcript_node` 调用（asset node 出生保留）——休眠素材零 loading 卡 |
+| `app/pipeline/graph_fill.py:stamp_transcript_node` | 加 `create: bool = True`；`create=False` 时只翻既有卡、永不出生 |
+| `app/pipeline/asset_processing.py:process_asset` | 完成/失败两处 stamp 改 `create=False` —— 读路径全程零卡；计划路径已生的卡照常翻 done/failed |
 
-完成/失败路径的既有 `stamp_transcript_node` 翻牌不动（幂等愈合既有行）。`assets.py`（声明式素材，带文本出生即 done）与 `graph_fill.py:921`（计划路径幂等确保）不动。docstring 的「上传即出生」叙事改写为「认领即出生」。
+出生座位只剩两座：`assets.py`（声明式文本素材，带文本出生即 done）与 `graph_fill.py` 计划路径幂等 ensure（born running → 随处理翻牌）。docstring 叙事为「出生两座」。
 
 ### ③ beat 抑制（api）
 
@@ -51,8 +54,9 @@ prompt 作者律：只写现行法，不带日期/事故标签。
 
 1. 刷新页面：开场消息与全部用户消息按归档渲染，不少一行、不重一行。
 2. 上传视频但不问素材：画布只有视频卡，零转写卡、零 beat。
-3. 「这个素材你看看有什么建议？」：等待期画布转写卡 running（认领即出）→ done；对话流只有「正在查看素材内容…」→「已理解素材 · Ns」一行（beat 抑制生效）。
+3. 「这个素材你看看有什么建议？」：等待期到答复全程画布**零转写卡**（读路径不生卡）；对话流只有「正在查看素材内容…」→「已理解素材 · Ns」一行（beat 抑制生效）。
 4. ask_user 回合：散文收尾为自然默认路径表述，全文无「跳过」。
+5. 计划路径（确认方案开工）：转写卡在落图时出生 running，处理完翻 done——run 的进度叙事不受读路径零卡影响。
 
 ## Prohibited Behaviors
 
@@ -60,3 +64,4 @@ prompt 作者律：只写现行法，不带日期/事故标签。
 - 禁在 prompt 里加「不要复读法条词汇」式禁令——减法 = 删掉可复读的词，不是加第二道墙。
 - 禁给 beat 抑制加 stamp 来源标记列——in-flight 谓词已切开两条路，不加 schema。
 - 禁动 `assets.py` 声明式素材的出生（带文本 born done 是正确形态）。
+- 禁在处理链（认领/完成/失败）出生转写卡——处理只翻既有卡（`create=False`），出生座位恒为声明式素材 + 计划路径两座。

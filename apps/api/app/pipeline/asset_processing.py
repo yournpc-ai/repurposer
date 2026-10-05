@@ -398,18 +398,6 @@ async def process_asset(asset_id: UUID) -> None:
             return
 
         try:
-            # 认领即出生 (ADR-102 后续批): the transcript document is born
-            # HERE — the claim is the first moment "being processed" is a
-            # true world fact (dormant uploads carry no loading card). The
-            # completion/failure paths below re-enter the same stamp
-            # idempotently to flip done/failed.
-            if asset.project_id is not None:
-                from app.pipeline.graph_fill import (  # deferred: runtime edge
-                    stamp_transcript_node,
-                )
-
-                await stamp_transcript_node(db, asset.project_id, asset)
-                await db.commit()
             chain = PROCESSORS.get(asset.type, [_noop_processor])
             result = ProcessResult()
             for processor in chain:
@@ -436,15 +424,19 @@ async def process_asset(asset_id: UUID) -> None:
             # extracted text gets its document node the moment it exists —
             # pre-run projects see it on the canvas without waiting for a
             # plan/run stamp (which re-ensures it idempotently anyway).
-            # 认领即出生 (ADR-102 后续): the card was born running at the
-            # claim above — this visit flips it done (text or settle-empty
-            # alike).
+            # 出生两座 (ADR-102 后续): this visit only FLIPS a card the plan
+            # path already birthed — the understanding read path (ASR feeds
+            # the reader, the transcript is mere middleware) births none,
+            # so create=False keeps discarded-material discussions off the
+            # canvas entirely.
             if asset.project_id is not None:
                 from app.pipeline.graph_fill import (  # deferred: runtime edge
                     stamp_transcript_node,
                 )
 
-                await stamp_transcript_node(db, asset.project_id, asset)
+                await stamp_transcript_node(
+                    db, asset.project_id, asset, create=False
+                )
                 await db.commit()
             await _record_reading_beat(db, asset, "completed")
             logger.info(
@@ -487,14 +479,17 @@ async def process_asset(asset_id: UUID) -> None:
             asset.processing_error = str(e)
             _clear_processing_stage(asset)
             await db.commit()
-            # 状态随处理 (认领即出生): the claim-born transcript card flips
-            # to its failed face with the row — never a perpetual loading
-            # card.
+            # 状态随处理 (出生两座): an existing transcript card (birthed by
+            # the plan path) flips to its failed face with the row — never
+            # a perpetual loading card; create=False — the read path births
+            # none even on failure.
             if asset.project_id is not None:
                 from app.pipeline.graph_fill import (  # deferred: runtime edge
                     stamp_transcript_node,
                 )
 
-                await stamp_transcript_node(db, asset.project_id, asset)
+                await stamp_transcript_node(
+                    db, asset.project_id, asset, create=False
+                )
                 await db.commit()
             await _record_reading_beat(db, asset, "failed")
