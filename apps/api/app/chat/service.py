@@ -1188,7 +1188,9 @@ async def _continue_chat_answer(
     on_candidates=None,
 ) -> tuple[Message | None, UUID | None, list[UUID], Any]:
     """The generic question-answer 续聊 continuation: the user's pick is
-    their say for the next turn, with the answered question in context.
+    their say for the next turn, and the turn's inference message carries
+    the answered question's bare text as a factual frame (作答语境帧 —
+    the QA link survives settlement).
     Dispatch: asset_role answers pin by code, brief-slot answers backfill
     user-stated, everything else (ADR-081 trigger suggestions, plain asks)
     rides plan-or-propose by the project's run state. Two seats call this:
@@ -1203,6 +1205,22 @@ async def _continue_chat_answer(
     advisory to the caller."""
     project = await db.get(Project, conversation.project_id)
     say = (data.text if data.kind == "freeform" else None) or option_label or ""
+    # 作答语境帧 (assembly): nothing on this path persists a user row —
+    # the QA archive is the record — so the turn's inference message
+    # carries the one disambiguating world fact the bare say lacks:
+    # WHICH open question it answers. Stripped of it, "就加一个中文字幕
+    # 吧" reads as a fresh standalone ask and the additive misreading
+    # opens ("add subtitles TO the earlier recommendation"). A factual
+    # frame, never a behavioral instruction — the model does the language
+    # understanding (the typed-answer path always had this: its pending
+    # block carries the bare question; the endpoint path lost it at
+    # settlement).
+    bare_q = (question.question or "").strip()
+    turn_say = (
+        f'{say}\n(This message answers your open question: "{bare_q}")'
+        if bare_q
+        else say
+    )
     history = await list_conversation_messages(db, UUID(str(conversation.id)))
     if question.slot == "asset_role" and project is not None:
         # 资产角色消歧的答复落 pin (ADR-078 判词④): the pins settle by
@@ -1216,7 +1234,7 @@ async def _continue_chat_answer(
             user_id,
             conversation,
             project,
-            ChatRequest(project_id=project.id, message=say),
+            ChatRequest(project_id=project.id, message=turn_say),
             recent=history[-5:],
             on_delta=on_delta,
             on_phase=on_phase,
@@ -1239,7 +1257,7 @@ async def _continue_chat_answer(
             user_id,
             conversation,
             project,
-            ChatRequest(project_id=project.id, message=say),
+            ChatRequest(project_id=project.id, message=turn_say),
             recent=history[-5:],
             on_delta=on_delta,
             on_phase=on_phase,
@@ -1272,7 +1290,7 @@ async def _continue_chat_answer(
             conversation,
             project,
             ChatRequest(
-                project_id=project.id, message=say, suggestion_ref=suggestion_ref
+                project_id=project.id, message=turn_say, suggestion_ref=suggestion_ref
             ),
             recent=history[-5:],
             on_delta=on_delta,
@@ -1285,7 +1303,7 @@ async def _continue_chat_answer(
         )
         return follow_up, run_id, bailed, answered
     follow_up, run_id, bailed, settled = await _propose_turn(
-        db, user_id, conversation, project, say, [], history[-6:],
+        db, user_id, conversation, project, turn_say, [], history[-6:],
         suggestion_ref=suggestion_ref,
         on_delta=on_delta,
         # I-PFA-06 parity (Batch B 验收修复): the chat-path continuation
@@ -1327,9 +1345,9 @@ async def answer_question(
                            (kind "start" is the confirmation — no magic
                            option id; the edited plan rides only on it)
     - question + answer  → record, then continue the conversation: the pick
-                           rides into the next intent turn (the answered
-                           question is in context), the follow-up reply
-                           comes back here.
+                           rides into the next intent turn framed with the
+                           answered question's bare text (作答语境帧),
+                           the follow-up reply comes back here.
                            A brief-ask (payload.slot) backfills the brief
                            user-stated and resumes the BOOK path
     - question + bail    → record only (a graceful exit, never a failure) —
