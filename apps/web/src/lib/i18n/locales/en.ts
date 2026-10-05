@@ -1265,13 +1265,12 @@ const en = {
     thinkingPhases: {
       composing: "Putting it together…",
     },
-    /** The now-line's material beats (2026-09-24 user ruling — thinking IS
-     * the activity row's empty state): assets mid-processing → reading (the
-     * filename interpolates); the warm gap (assets settled, the
-     * understanding review not yet landed) → understanding. The *Done /
-     * *Failed forms are the PERSISTED settled rows (素材节拍入库 — the
-     * pipeline records one message row per beat, the replay renders the
-     * past tense); Progress carries the batch count "N/M" (带计数 ruling).
+    /** The now-line's material reading rows (2026-09-24 user ruling —
+     * thinking IS the activity row's empty state): assets mid-processing →
+     * reading (the filename interpolates). The *Done / *Failed forms are the
+     * PERSISTED settled rows (素材节拍入库 — the pipeline records one message
+     * row per beat, the replay renders the past tense); Progress carries the
+     * batch count "N/M" (带计数 ruling).
      * Verb fork (2026-09-27 批「动词」): the verb follows the asset type —
      * video → watch / audio → listen / text & others → read; multi-file
      * batches fall back to the neutral "processing". Both synthesis points
@@ -1284,7 +1283,9 @@ const en = {
      * absent stages keep the verb line. Register law (三寄存器): the live
      * rows are the transient surface (the progressive form is legal there);
      * the persisted rows are the activity LOG — verb-object + fact suffix,
-     * no person, no progressive, no conversational tone. */
+     * no person, no progressive, no conversational tone. understandingDone
+     * stays for the LEGACY beat replay (ADR-102 retired the beat's producer
+     * — old conversations still render their archived rows). */
     material: {
       reading: "Reading {{name}}…",
       reading_video: "Watching {{name}}…",
@@ -1292,12 +1293,6 @@ const en = {
       readingMany: "Processing {{count}} files…",
       transcribing: "Transcribing {{name}}…",
       understandingAsset: "Understanding {{name}}…",
-      understanding: "Understanding your material…",
-      /** The beat → review window's phase row (2026-09-28 user ruling): the
-       * trigger turn composes the review after the understanding beat
-       * lands — this fills what used to be dead air; it dies on the
-       * review's own landing or the trailing window's cap. */
-      reviewing: "Putting together suggestions…",
       readingDone: "Read {{name}}",
       readingDone_video: "Watched {{name}}",
       readingDone_audio: "Listened to {{name}}",
@@ -1318,7 +1313,7 @@ const en = {
     inspecting: {
       outputSpec: "Reading the current settings…",
       node: "Reading the card's full program…",
-      understanding: "Taking another look at your material…",
+      understanding: "Reading your material…",
       captionStyles: "Browsing the caption styles…",
       music: "Searching the music library…",
       runStatus: "Checking the run's progress…",
@@ -1385,7 +1380,7 @@ const en = {
     inspectingDone: {
       outputSpec: "Read the current settings",
       node: "Read the card's full program",
-      understanding: "Reviewed your material",
+      understanding: "Read your material",
       captionStyles: "Browsed the caption styles",
       music: "Searched the music library",
       runStatus: "Checked the run's progress",
@@ -1395,6 +1390,12 @@ const en = {
       asset: "Looked at the asset",
       craftSkeleton: "Read the reference's style breakdown",
       artifact: "Read the card's details",
+    },
+    /** The inspecting family's failed-form mirror (ADR-102 §5): the read
+     * activity's failed-frame label when the read's target is unreadable —
+     * the done family's honest counterweight, never a silent lie. */
+    inspectingFailed: {
+      understanding: "Couldn't read the material",
     },
     completed: "Done",
     failed: "Sorry, I couldn't update this. Please try again.",

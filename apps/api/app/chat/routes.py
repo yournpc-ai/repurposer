@@ -55,10 +55,6 @@ from app.chat.service import (
 )
 from app.providers.llm.base import LLMError
 from app.pipeline.errors import user_error_line
-from app.pipeline.node_runners import (
-    fire_understanding_warm,
-    understanding_opening_missing,
-)
 from app.platform.conversation_context import (
     find_conversation,
     latest_pending_question,
@@ -102,17 +98,6 @@ async def get_conversation(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Conversation not found",
         )
-    # 素材理解自愈座位 (2026-09-27 用户拍板——方案 a): the upload-time warm
-    # fires in the worker on the last asset's completion; a process death in
-    # between strands the dock's "understanding" gap row forever. Opening the
-    # conversation re-fires when the guard finds a complete digestible set
-    # whose understanding beat never landed (digest-precise — a later upload
-    # re-arms it). Fire-and-forget: the response below never waits on the
-    # warm, and the warm's own dedups make a redundant fire a few reads.
-    if await understanding_opening_missing(
-        db, project_id, UUID(str(conversation.id))
-    ):
-        fire_understanding_warm(project_id)
     response = ConversationResponse.model_validate(conversation)
     pending = await latest_pending_question(db, UUID(str(conversation.id)))
     if pending is not None:

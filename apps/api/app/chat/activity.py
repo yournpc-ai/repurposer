@@ -148,6 +148,9 @@ def _active_key_for(kind: str, tool_name: str) -> str | None:
 # single vocabulary source, the done family mirrors it in i18n.
 _INSPECTING_PREFIX = "chat.inspecting."
 _INSPECTING_DONE_PREFIX = "chat.inspectingDone."
+# The failed-form family (ADR-102 §5): an unreadable read settles FAILED with
+# this mirror — the done family's honest counterweight, never a silent lie.
+_INSPECTING_FAILED_PREFIX = "chat.inspectingFailed."
 
 # The work-session family (iter-2 ⑥, N-57): ``chat.explore.searching`` is
 # search_transcript's re-homed activity_key (done mirror = key + "Done",
@@ -463,9 +466,27 @@ class ActivityProjector:
             _name, activity_id = self._open_call
             if activity_id is not None:
                 kind, key, _started = self._active[activity_id]
-                frames.append(
-                    self._settle(activity_id, STATUS_COMPLETED, self._done_key(kind, key))
-                )
+                if (
+                    isinstance(event, ReadAccepted)
+                    and not event.ok
+                    and kind == KIND_READ
+                    and key is not None
+                    and key.startswith(_INSPECTING_PREFIX)
+                ):
+                    # 失败帧 (ADR-102 §5): the read's target is unreadable —
+                    # settle FAILED with the failed-form mirror, never the
+                    # done family's lie.
+                    frames.append(
+                        self._settle(
+                            activity_id,
+                            STATUS_FAILED,
+                            _INSPECTING_FAILED_PREFIX + key[len(_INSPECTING_PREFIX):],
+                        )
+                    )
+                else:
+                    frames.append(
+                        self._settle(activity_id, STATUS_COMPLETED, self._done_key(kind, key))
+                    )
             self._open_call = None
         return frames
 

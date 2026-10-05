@@ -5,9 +5,6 @@ a system event instead of human words. The trigger whitelist is the whole
 proactivity boundary (简报 §4 挂账③ — outside it the agent NEVER speaks
 first):
 
-- ``understanding_warmed`` — the upload-time material understanding
-  materialized (``node_runners.warm_understanding``; 旅程一② 「我看了——
-  你在讲 X」);
 - ``run_completed`` — a run reached its terminal state
   (``orchestrator.maybe_finalize_run``; 旅程一⑦ the closing reviewer).
   The fire gate mirrors ADR-074②'s closing-line truth: a successful run OR
@@ -18,6 +15,8 @@ first):
   vs landed, track/verify facts, captured vs quoted); the prose law (facts
   first, zero subjective quality words, gaps → suggestions) lives in
   ``trigger_system.j2``.
+- ``craft_decompiled`` — the pinned reference video's craft skeleton
+  landed (``decompile``; 旅程二④ the remix offer).
 
 The loop itself: the perception family's reads are the agent's eyes (look
 BEFORE speaking — read-before-speak is the reviewer's honesty base), and
@@ -47,7 +46,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -77,7 +76,6 @@ from app.models.tables import (
 from app.pipeline.trigger_events import (
     TRIGGER_CRAFT_DECOMPILED,
     TRIGGER_RUN_COMPLETED,
-    TRIGGER_UNDERSTANDING,
     TRIGGER_WHITELIST,
 )
 from app.platform.conversation_context import (
@@ -260,21 +258,8 @@ def _wrap_up_rejection(trigger: str, suggestions: list[SuggestionItem]) -> str |
     BEFORE the turn may close — a violation rejects back into the loop
     (the model self-repairs; the user only ever sees the repaired turn).
 
-    - ``understanding_warmed``: hard floor of 1 — the turn fires exactly
-      because the understanding LANDED, so there is always a next step to
-      offer (the prompt's own law: gaps → suggestions; the material's
-      gaps are themselves groundable options). Zero options strands the
-      user at a promised-but-missing dock (the 「下一张卡片里挑一个」
-      broken promise, live-observed 2026-09-29).
     - ``run_completed``: hard ceiling of 0 — the completed work's next
       move rides the closing sentence, never a dock (prompt law)."""
-    if trigger == TRIGGER_UNDERSTANDING and not suggestions:
-        return (
-            "zero options strands the user — your verdict named a direction, "
-            "so make it pickable: pass 1-3 options grounded in what you read "
-            "(a gap in the material is itself an option — name the fix). "
-            "Call wrap_up again with suggestions."
-        )
     if trigger == TRIGGER_RUN_COMPLETED and suggestions:
         return (
             "on run_completed the next move rides your closing sentence, "
@@ -302,27 +287,17 @@ async def _already_spoke(
     db: AsyncSession, conversation_id: UUID, trigger: str, ref: str
 ) -> bool:
     """The once-only guard: one review per (trigger, ref) per project —
-    concurrent fires (the warm's double-materialization race) and repeat
-    invocations collapse onto the first landed row.
-
-    复读禁止律 (ADR-101 §3): a CHAT turn's assistant row that consumed this
-    understanding (the read landed the digest, or the plan path's assemble
-    injected it) carries ``intent.consumed_understanding == ref`` — the
-    first read already has a narrator, so the review never repeats it. The
-    OR clause is ref-keyed (digests never collide with run-id refs), so it
-    needs no trigger-name conditioning."""
+    concurrent fires and repeat invocations collapse onto the first landed
+    row."""
     existing = (
         await db.execute(
             select(Message.id)
             .where(
                 Message.conversation_id == conversation_id,
-                or_(
-                    and_(
-                        Message.intent["type"].astext == TRIGGER_DUMP_TYPE,
-                        Message.intent["trigger"].astext == trigger,
-                        Message.intent["ref"].astext == ref,
-                    ),
-                    Message.intent["consumed_understanding"].astext == ref,
+                and_(
+                    Message.intent["type"].astext == TRIGGER_DUMP_TYPE,
+                    Message.intent["trigger"].astext == trigger,
+                    Message.intent["ref"].astext == ref,
                 ),
             )
             .limit(1)
@@ -483,10 +458,12 @@ async def run_trigger_turn(
                         + "\n".join(review_lines)
                     )
             else:
+                # craft_decompiled — the pinned case's skeleton is the
+                # event; the prompt's own law orders the read first.
                 event_line = (
-                    "The material understanding for this project's current "
-                    "assets just completed. Read it, then tell the user what "
-                    "their material says and what it could become."
+                    "The pinned reference video's craft skeleton just "
+                    "landed. Read it, then tell the user what a remix will "
+                    "borrow from the case."
                 )
 
             outcome: dict[str, Any] = {}
@@ -640,7 +617,6 @@ def fire_trigger(project_id: UUID, trigger: str, ref: str) -> None:
 __all__ = [
     "TRIGGER_WHITELIST",
     "TRIGGER_DUMP_TYPE",
-    "TRIGGER_UNDERSTANDING",
     "TRIGGER_RUN_COMPLETED",
     "WRAP_UP",
     "fire_trigger",

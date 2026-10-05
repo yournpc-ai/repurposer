@@ -56,7 +56,7 @@ def chat_intent_system() -> str:
 
 def trigger_system() -> str:
     """The proactive speaker's system prompt (ADR-077 判词③ — trigger
-    turns: understanding_warmed / run_completed). No BUILDER catalog rides
+    turns: run_completed / craft_decompiled). No BUILDER catalog rides
     here (the trigger turn's verbs are the read tools plus the one terminal
     ``wrap_up``) — but the SPEAKER menu does: the user-language capability
     menu is identity, it rides every surface (without it the turn improvises

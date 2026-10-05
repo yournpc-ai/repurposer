@@ -191,12 +191,6 @@ class PlanTurn:
         # 资产角色 (ADR-078 判词④): this turn's mention-settled exemplar pin
         # (None = no asset mention this turn — the stored plan's pins ride).
         self.mention_exemplar_id: str | None = None
-        # 复读禁止律的 consumed 戳 (ADR-101 §3): the digest this turn has
-        # SEEN — stamped by the assemble's trust-anchor injection (below) or
-        # by a get_understanding read that landed (the dispatch sink). Every
-        # assistant row this turn creates carries the mark, so the
-        # world-fired review never repeats the first read.
-        self._consumed_understanding_ref: str | None = None
         self.deferred: DeferredFrames | None = None
         # 建议点选 provenance (ADR-099 §4): this turn's message IS a
         # suggestion pick → the resolution note rides into the router's
@@ -360,12 +354,6 @@ class PlanTurn:
                     ) or None
                 except Exception:  # noqa: BLE001 — a stale-shaped row reads as absent
                     understanding_lines = None
-                if understanding_lines is not None:
-                    # 复读禁止律写口② (ADR-101 §3): the digest rides the
-                    # context from here on — this turn can narrate the
-                    # content, so its assistant rows carry the consumed mark
-                    # and the world-fired review never repeats the read.
-                    self._consumed_understanding_ref = understanding_digest
 
         # Readiness gate (I-PFA-07, 2026-09-18): the attached-but-unready fact
         # is CODE-stamped into the context — the router never infers readiness
@@ -391,8 +379,9 @@ class PlanTurn:
                 f"Material status: {processing_count} uploaded file(s) are "
                 "STILL PROCESSING — their content is not readable yet. If "
                 "this turn's answer depends on their content, call "
-                "get_understanding: the read waits for the content to land "
-                "(bounded), so the answer can ground itself this turn."
+                "get_understanding: the read waits until the content lands "
+                "(it never returns while the material is still processing), "
+                "so the answer can ground itself this turn."
             )
         elif failed_count:
             material_pending_line = (
@@ -607,12 +596,6 @@ class PlanTurn:
                 self.pending_q = None
         return merged_brief
 
-    def _mark_understanding_consumed(self, digest: str) -> None:
-        """复读禁止律写口① (ADR-101 §3): a get_understanding read landed the
-        content this turn — every assistant row from here carries the
-        consumed mark, so the world-fired review never repeats the read."""
-        self._consumed_understanding_ref = digest
-
     # ---- the loop's execute dispatch ----------------------------------------
 
     async def execute(self, name: str, params, prose: str) -> str | None | ToolObservation:
@@ -627,7 +610,6 @@ class PlanTurn:
                 self.project,
                 name,
                 params,
-                consumed_sink=self._mark_understanding_consumed,
             )
         # 插话判定结算 (ADR-053 R2 — the plan-path seat, 2026-09-27 一问拍
         # 一体化): the disposition rides every terminal call's envelope, the
@@ -850,7 +832,6 @@ class PlanTurn:
                 self.conversation_id,
                 "assistant",
                 active_line,
-                consumed_understanding_ref=self._consumed_understanding_ref,
             )
             self.outcome = (assistant_message, None, self.settled_pending, [])
             return None
@@ -919,7 +900,6 @@ class PlanTurn:
             brief=merged_brief,
             echo=echo,
             estimate=task_estimate,
-            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         question = await latest_pending_question(db, self.conversation_id)
         assert question is not None  # sync_plan_question just docked it
@@ -1129,7 +1109,6 @@ class PlanTurn:
                 self.conversation_id,
                 "assistant",
                 active_line,
-                consumed_understanding_ref=self._consumed_understanding_ref,
             )
             self.outcome = (assistant_message, None, self.settled_pending, [])
             return None
@@ -1168,7 +1147,6 @@ class PlanTurn:
             echo=prose,
             estimate=task_estimate,
             plans=package_plans,
-            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         question = await latest_pending_question(db, self.conversation_id)
         assert question is not None  # sync_plan_question just docked it
@@ -1260,7 +1238,6 @@ class PlanTurn:
                 self.conversation_id,
                 "assistant",
                 active_line,
-                consumed_understanding_ref=self._consumed_understanding_ref,
             )
             self.outcome = (assistant_message, None, self.settled_pending, [])
             return None
@@ -1300,7 +1277,6 @@ class PlanTurn:
             echo=prose,
             estimate=task_estimate,
             plans=package_plans,
-            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         question = await latest_pending_question(db, self.conversation_id)
         assert question is not None  # sync_plan_question just docked it
@@ -1353,7 +1329,6 @@ class PlanTurn:
                 self.conversation_id,
                 "assistant",
                 content,
-                consumed_understanding_ref=self._consumed_understanding_ref,
             )
             self.outcome = (assistant_message, None, self.settled_pending, [])
             return None
@@ -1536,7 +1511,6 @@ class PlanTurn:
                 default_path=params.default_path,
             ),
             intent=intent.model_dump(mode="json"),
-            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         self.outcome = (assistant_message, None, self.settled_pending, bailed_run_ids)
         return None
@@ -1566,7 +1540,6 @@ class PlanTurn:
                     self.conversation_id,
                     "assistant",
                     prose.strip(),
-                    consumed_understanding_ref=self._consumed_understanding_ref,
                 )
             answered, _follow_up = await answer_question(
                 db, self.user_id, UUID(str(pending_question.id)),
@@ -1602,7 +1575,6 @@ class PlanTurn:
                     self.conversation_id,
                     "assistant",
                     active_line,
-                    consumed_understanding_ref=self._consumed_understanding_ref,
                 )
                 self.outcome = (assistant_message, None, self.settled_pending, [])
                 return None
@@ -1612,7 +1584,6 @@ class PlanTurn:
                 brief=stored.brief,
                 echo=stored.intent.answer,
                 estimate=await _safe_task_estimate(db, self.project, stored.intent.tasks),
-                consumed_understanding_ref=self._consumed_understanding_ref,
             )
             question = await latest_pending_question(db, self.conversation_id)
             assert question is not None  # sync_plan_question just docked it
@@ -1653,7 +1624,6 @@ class PlanTurn:
             self.conversation_id,
             "assistant",
             content,
-            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         self.outcome = (assistant_message, None, self.settled_pending, [])
         return None
@@ -1686,7 +1656,6 @@ class PlanTurn:
                 self.conversation_id,
                 "assistant",
                 content,
-                consumed_understanding_ref=self._consumed_understanding_ref,
             )
             return assistant_message, None, self.settled_pending, []
         # Exhaustion — every call rejected. When the rootless rejection was
@@ -1739,7 +1708,6 @@ class PlanTurn:
                     default_path=topic_ask["default_path"],
                 ),
                 intent=topic_intent.model_dump(mode="json"),
-                consumed_understanding_ref=self._consumed_understanding_ref,
             )
             return assistant_message, None, self.settled_pending, bailed_run_ids
         assistant_message = await _create_message(
@@ -1747,7 +1715,6 @@ class PlanTurn:
             self.conversation_id,
             "assistant",
             _cannot_do_text(self.text),
-            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         return assistant_message, None, self.settled_pending, []
 

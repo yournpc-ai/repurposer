@@ -1199,11 +1199,10 @@ const zh: Resources = {
     thinkingPhases: {
       composing: "正在整理…",
     },
-    /** now-line 的素材节拍（2026-09-24 用户拍板——thinking 就是 activity
-     * 行的空态）：素材处理中 → reading（文件名插值）；warm 空窗（素材已
-     * 落定、理解评述未落地）→ understanding。*Done / *Failed 是持久化的
-     * 完成态行（素材节拍入库——pipeline 每节拍落一条消息行，回放映过去
-     * 时）；Progress 带批次计数「N/M」（带计数拍板）。
+    /** now-line 的素材阅读行（2026-09-24 用户拍板——thinking 就是 activity
+     * 行的空态）：素材处理中 → reading（文件名插值）。*Done / *Failed 是
+     * 持久化的完成态行（素材节拍入库——pipeline 每节拍落一条消息行，回放
+     * 映过去时）；Progress 带批次计数「N/M」（带计数拍板）。
      * 动词分叉（2026-09-27 批「动词」）：动词随资产类型——video=看 /
      * audio=听 / 文本及其他=读；多文件批次落中性词「处理」。typed key
      * 缺席时回落基 key（前后端两个合成点同一分叉律：ChatDock now-line
@@ -1213,7 +1212,8 @@ const zh: Resources = {
      * understandingAsset（理解，与 run stepper 共用同一工序词表）；
      * 未知/缺席 stage 回落动词行。寄存器律（三寄存器）：live 行是瞬态面
      * （进行态合法）；入库行是活动日志——动宾 + 事实后缀，无人称、无
-     * 进行态、无省略号、无会话语气。 */
+     * 进行态、无省略号、无会话语气。understandingDone 为旧节拍回放保留
+     * （ADR-102 已退役其生产者——历史会话的归档行照常渲染）。 */
     material: {
       reading: "正在阅读 {{name}}…",
       reading_video: "正在看 {{name}}…",
@@ -1221,8 +1221,6 @@ const zh: Resources = {
       readingMany: "正在处理 {{count}} 个文件…",
       transcribing: "正在转写 {{name}}…",
       understandingAsset: "正在理解 {{name}}…",
-      understanding: "正在理解素材内容…",
-      reviewing: "正在整理建议…",
       readingDone: "读完 {{name}}",
       readingDone_video: "看完 {{name}}",
       readingDone_audio: "听完 {{name}}",
@@ -1241,7 +1239,7 @@ const zh: Resources = {
     inspecting: {
       outputSpec: "正在读当前设置…",
       node: "正在读卡片的完整程序…",
-      understanding: "正在回看素材理解…",
+      understanding: "正在查看素材内容…",
       captionStyles: "正在翻字幕样式…",
       music: "正在查曲库…",
       runStatus: "正在查看运行进度…",
@@ -1298,7 +1296,7 @@ const zh: Resources = {
     inspectingDone: {
       outputSpec: "已读当前设置",
       node: "已读卡片的完整程序",
-      understanding: "已回看素材理解",
+      understanding: "已理解素材",
       captionStyles: "已翻完字幕样式",
       music: "已查曲库",
       runStatus: "已查看运行进度",
@@ -1308,6 +1306,11 @@ const zh: Resources = {
       asset: "已查看素材",
       craftSkeleton: "已读案例的风格拆解",
       artifact: "已读卡片的详情",
+    },
+    /** inspecting 族的失败态镜像（ADR-102 §5）——读目标不可读时读活动
+     * failed 帧的文案（与 done 族互为诚实对偶，永不默谎）。 */
+    inspectingFailed: {
+      understanding: "素材没能读出来",
     },
     completed: "完成",
     failed: "抱歉，这次没能完成修改，请再试一次。",

@@ -176,6 +176,12 @@ class Asset(Base):
     processing_status = Column(
         Enum(AssetStatus), nullable=False, default=AssetStatus.PENDING
     )
+    # 休眠素材 (ADR-102 §1): NULL = dormant — uploaded but nobody has asked
+    # for the content (the worker's claim loop requires non-NULL, so a
+    # dormant asset is never processed: discarded/materials cost zero).
+    # Stamped by the ONLY two request seats: get_understanding's read
+    # attempt (chat) and the run birthplace (production prerequisite).
+    processing_requested_at = Column(DateTime(timezone=True), nullable=True)
     processing_error = Column(Text, nullable=True)
     # Poison-pill counter (R1 B4a): claims of this queue row. The crash-
     # recovery reap keeps counting (that IS the loop being bounded); the

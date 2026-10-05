@@ -130,7 +130,6 @@ import {
   mapHistoryRows,
   materialBeat,
   materialBeatKey,
-  triggerName,
   triggerSuggestions,
   questionEcho,
   bareQuestion,
@@ -288,32 +287,6 @@ const ADDABLE_TOOLS = [
  * and old clients' payloads upgrade on read, never on write). */
 /** The panel geometry's persistence key (float | docked) — 2026-09-06. */
 const PANEL_MODE_KEY = "repurposer-panel-mode"
-
-/** The understanding-window hard cap (2026-09-24 用户拍板): the value lives
- * in the configs table (``trigger.understanding_window_secs``, default 1h —
- * the 5-minute frontend constant retired; the warm's LLM latency runs
- * MINUTES past asset settlement) and rides the /auth/settings read — the
- * trailing poll closes on the understanding_warmed row LANDING, or on this
- * cap (a failed warm degrades to silence by design), never on a latency
- * guess. The fallback mirrors the registry default for a failed fetch. */
-const TRIGGER_WINDOW_FALLBACK_MS = 3_600_000
-let _triggerWindowMs: number | null = null
-
-async function fetchTriggerWindowMs(): Promise<number> {
-  if (_triggerWindowMs !== null) return _triggerWindowMs
-  try {
-    const res = await apiFetch("/auth/settings", { toast: false })
-    if (res.ok) {
-      const data = (await res.json()) as { trigger_window_secs?: number }
-      if (typeof data.trigger_window_secs === "number") {
-        _triggerWindowMs = data.trigger_window_secs * 1000
-      }
-    }
-  } catch {
-    // network failure — the registry default rides (读容忍)
-  }
-  return _triggerWindowMs ?? TRIGGER_WINDOW_FALLBACK_MS
-}
 
 /** A file staged in the input group, mid-lifecycle: picked → uploading
  * (direct-to-storage, same 3-step flow as the composer — XHR-backed so the
@@ -1380,16 +1353,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // Phase 3 Batch A) — same branches, zero lifecycle derivation: a
         // refresh reads the archive, readiness comes from the stamp alone.
         const history = mapHistoryRows(data.items ?? [], { prompt, t })
-        // Understanding-window closure fact (2026-09-24): whether the
-        // understanding_warmed review already landed (the trailing poll
-        // needn't open). The window's recency bound reads the asset rows'
-        // own settlement stamps (lastSettledAt below), not the archive.
-        const items = data.items ?? []
-        if (
-          items.some((r) => triggerName(r.intent) === "understanding_warmed")
-        ) {
-          setUnderstandingLanded(true)
-        }
         // Prepend — anything pushed locally since mount is newer.
         if (!cancelled && history.length > 0) {
           setMessages((prev) => [...history, ...prev])
@@ -1497,13 +1460,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
         const suggestions = triggerSuggestions(row.intent)
         if (suggestions === undefined) continue
-        // Window closure fact: the understanding_warmed review has LANDED —
-        // the trailing poll window shuts on this fact, never on a timer
-        // guess (2026-09-24: the 45s grace closed minutes before the warm's
-        // LLM latency delivered the row — measured 3min on a real project).
-        if (triggerName(row.intent) === "understanding_warmed") {
-          setUnderstandingLanded(true)
-        }
         // Dedup by the SERVER row id — the archive replay and a previous
         // poll arrival land under the same id, so the row is known if it is
         // in the flow already or mid-typing. A PENDING options question
@@ -1623,41 +1579,17 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     () => new Set(messages.flatMap((m) => (m.assets ?? []).map((a) => a.id))),
     [messages],
   )
-  // Watch window A (理解完成): sent assets mid-processing — the warm fires
-  // the moment the whole set completes. The tick refreshes the assets too
-  // (the chips' processing state updates on the same cadence), which flips
-  // the window shut; the trailing window below stays open past the flip
-  // until the review row lands (the warm's LLM latency runs minutes, not
-  // seconds).
+  // Processing watch: sent assets mid-processing — the tick refreshes the
+  // asset rows (the chips' processing state and the now-line's reading rows
+  // update on this cadence) and doubles as the trigger arrival channel while
+  // the batch drains (ADR-102: the understanding beat/review is retired —
+  // nothing proactive rides the settlement edge anymore).
   const assetsProcessing = assets.some(
     (a) =>
       sentAssetIds.has(a.id) &&
       (a.processing_status === "pending" ||
         a.processing_status === "processing"),
   )
-  // Settlement recency = a FACT read off the asset rows themselves
-  // (processed_at, else created_at) — the trailing window's bound, behind
-  // the same send gate. The mount-only archive derivation it replaces (the
-  // last attachment message's moment) was never stamped by a mid-session
-  // upload, so a fast asset settling inside the chat turn left every
-  // re-arm path shut (2026-09-28 walkthrough).
-  const lastSettledAt = useMemo(() => {
-    let latest: number | null = null
-    for (const a of assets) {
-      if (!sentAssetIds.has(a.id)) continue
-      if (
-        a.processing_status === "pending" ||
-        a.processing_status === "processing"
-      ) {
-        continue
-      }
-      const stamp = Date.parse(a.processed_at ?? a.created_at ?? "")
-      if (!Number.isNaN(stamp) && (latest === null || stamp > latest)) {
-        latest = stamp
-      }
-    }
-    return latest
-  }, [assets, sentAssetIds])
   useEffect(() => {
     if (!assetsProcessing) return
     const id = setInterval(() => {
@@ -1667,74 +1599,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     return () => clearInterval(id)
   }, [assetsProcessing, fetchAssets, pollTriggerMessages])
 
-  // Trailing window (理解完成 review 的收口, 2026-09-24 重修): the warm's
-  // understanding beat lands MINUTES after the last asset completes (the
-  // warm is a full LLM call — measured ~3min against the old 45s grace,
-  // which closed long before the row landed and the review never showed).
-  // The window now closes on the FACT (the understanding_warmed row
-  // landing — set by the poll or the archive scan) or the configs-table cap
-  // (trigger.understanding_window_secs, default 1h — a failed warm degrades
-  // to silence by design), never on a latency guess. Stamped on the assets'
-  // falling edge only.
-  const [assetsSettledAt, setAssetsSettledAt] = useState<number | null>(null)
-  const [triggerWindowMs, setTriggerWindowMs] = useState(TRIGGER_WINDOW_FALLBACK_MS)
-  useEffect(() => {
-    let cancelled = false
-    void fetchTriggerWindowMs().then((ms) => {
-      if (!cancelled) setTriggerWindowMs(ms)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-  const [understandingLanded, setUnderstandingLanded] = useState(false)
-  const wasProcessingRef = useRef(false)
-  useEffect(() => {
-    if (assetsProcessing) {
-      // A NEW batch resets the closure fact — a fresh materialization fires
-      // its own understanding_warmed (digest-deduped server-side).
-      if (!wasProcessingRef.current) setUnderstandingLanded(false)
-      wasProcessingRef.current = true
-      return
-    }
-    if (wasProcessingRef.current) {
-      wasProcessingRef.current = false
-      setAssetsSettledAt(Date.now())
-    }
-  }, [assetsProcessing])
-  useEffect(() => {
-    if (assetsSettledAt === null || understandingLanded) return
-    const remaining = triggerWindowMs - (Date.now() - assetsSettledAt)
-    if (remaining <= 0) return
-    const id = setInterval(() => void pollTriggerMessages(), 3000)
-    // The cap closes the window as a FACT too — the now-line's
-    // understanding beat dies with it, never outspins the welcome.
-    const stop = setTimeout(() => {
-      clearInterval(id)
-      setAssetsSettledAt(null)
-    }, remaining)
-    return () => {
-      clearInterval(id)
-      clearTimeout(stop)
-    }
-  }, [assetsSettledAt, understandingLanded, triggerWindowMs, pollTriggerMessages])
-
-  // Re-arm on ANY assets update (was: mount-only): a REFRESH inside the
-  // warm gap — or a fast asset whose settle happened entirely server-side
-  // mid-turn — never passes through the falling edge above; without this
-  // the window simply never opens and the review sits unseen until the
-  // next refresh. Bounded by the settlement's age (older than the cap ⇒
-  // the trigger has either landed — the archive scan saw it — or never
-  // will: a reuse-hit / failed warm stays silent by design).
-  useEffect(() => {
-    if (understandingLanded) return
-    if (assetsProcessing) return
-    if (lastSettledAt === null) return
-    if (Date.now() - lastSettledAt > triggerWindowMs) return
-    setAssetsSettledAt((prev) => prev ?? Date.now())
-  }, [assetsProcessing, understandingLanded, lastSettledAt, triggerWindowMs])
-
-  // Watch window B (run 完成 — the closing reviewer): the terminal frame
+  // Watch window (run 完成 — the closing reviewer): the terminal frame
   // just landed and no review row for this run is in the flow yet. The
   // grace is bounded — if the reviewer never lands (its failure degrades to
   // silence by design), the poll stops; the receipt stands alone.
@@ -3620,12 +3485,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if (staged.some((s) => s.status === "uploading")) return
     const sentAssets = ready.map((s) => s.asset)
     // The assets state learns the upload at SEND, never at stage (the send
-    // gate — 暂存 ≠ 交付, 2026-09-28). The merge arms the watch windows
+    // gate — 暂存 ≠ 交付, 2026-09-28). The merge arms the processing watch
     // from this beat instead of waiting for the post-turn refetch: a long
-    // read shows its "Watching…" line right after the turn's prose, and a
-    // fast one (settled mid-turn) still walks the falling edge into the
-    // trailing window. The message below carries the ids, so the gate's
-    // sentAssetIds covers them in the same batch.
+    // read shows its "Watching…" line right after the turn's prose. The
+    // message below carries the ids, so the gate's sentAssetIds covers them
+    // in the same batch.
     setAssets((prev) => {
       const known = new Set(prev.map((a) => a.id))
       const additions = sentAssets.filter((a) => !known.has(a.id))
@@ -3880,10 +3744,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // active milestone's content while one runs, else the think empty state
   // (spinner + shimmer label, zero glyph, never settles, never history).
   // Label priority: the live milestone > mid-turn phase > the material
-  // beats (between turns: reading the asset still processing, then the
-  // understanding gap before the warm's review lands). Prose in motion IS
-  // the activity evidence (2026-09-09 用户拍板) — the row hides while the
-  // typewriter speaks.
+  // reading rows (between turns: the asset still processing). Prose in
+  // motion IS the activity evidence (2026-09-09 用户拍板) — the row hides
+  // while the typewriter speaks.
   const activeActivity = activities.find((a) => a.status === "active")
   const processingAssets = assets.filter(
     (a) =>
@@ -3891,25 +3754,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       (a.processing_status === "pending" ||
         a.processing_status === "processing"),
   )
-  // The understanding GAP row dies on the beat's OWN fact (2026-09-24
-  // 素材节拍入库): the persisted "已理解素材内容" row closes it even while
-  // the review prose is still landing — never re-show a beat the world
-  // already settled.
-  const understandingBeatLanded = allActivityRows.some(
-    (a) => a.key === "chat.material.understandingDone",
-  )
-  const understandingGap =
-    assetsSettledAt !== null && !understandingLanded && !understandingBeatLanded
-  // The review-composing phase (2026-09-28 user ruling — 死空气禁令): the
-  // beat → review window used to be dead air — the gap row died at the
-  // understanding beat while the trigger turn's review was still a full
-  // LLM latency away, and nothing spoke in between (the user read it as
-  // frozen). This third phase narrates the review's composition — it dies
-  // on the review's own landing (understandingLanded) or the trailing
-  // window's cap (assetsSettledAt clears), same bounded-silence doctrine
-  // as the gap row.
-  const reviewPending =
-    assetsSettledAt !== null && understandingBeatLanded && !understandingLanded
   const nowRow: NowRowPayload | null = (() => {
     if (proseActive) return null
     if (activeActivity) return activeActivity
@@ -3956,8 +3800,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         lone.title ?? undefined,
       )
     }
-    if (understandingGap) return think("chat.material.understanding")
-    if (reviewPending) return think("chat.material.reviewing")
     return null
   })()
 

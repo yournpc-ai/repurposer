@@ -39,25 +39,23 @@ from app.chat.trigger_turn import (
     _wrap_up_rejection,
     trigger_agent,
 )
-from app.pipeline.trigger_events import TRIGGER_RUN_COMPLETED, TRIGGER_UNDERSTANDING
+from app.pipeline.trigger_events import TRIGGER_RUN_COMPLETED
 from app.models.schemas import SuggestionItem, WrapUpArgs
 from app.models.tables import Conversation, Message, WorkflowRun
 from app.pipeline.trigger_events import (
     TRIGGER_CRAFT_DECOMPILED,
     TRIGGER_RUN_COMPLETED,
-    TRIGGER_UNDERSTANDING,
     TRIGGER_WHITELIST,
 )
 
 
 def test_whitelist_is_the_proactivity_boundary() -> None:
-    # 案例拆解完成 (ADR-078 判词③ whitelist #3, 批次⑥ T5) joined on 2026-09-15.
+    # 素材理解接力已死 (ADR-102): the wait-for-material world ended with the
+    # dormant-asset law — the boundary is the two remaining world events.
     assert TRIGGER_WHITELIST == {
-        "understanding_warmed",
         "run_completed",
         "craft_decompiled",
     }
-    assert TRIGGER_UNDERSTANDING in TRIGGER_WHITELIST
     assert TRIGGER_RUN_COMPLETED in TRIGGER_WHITELIST
     assert TRIGGER_CRAFT_DECOMPILED in TRIGGER_WHITELIST
 
@@ -132,17 +130,8 @@ class TestWrapUpArgs:
 
 class TestWrapUpGuardrail:
     """wrap_up 边界护栏 (2026-09-30 用户拍板 — execute_guardrail 同族):
-    suggestions 数对 trigger 旅程法的真值表 — understanding_warmed 硬地板
-    ≥1(零选项 = 「下一张卡片里挑一个」断约,live 实证 2026-09-29),
-    run_completed 硬顶 =0(下一步在收尾句,永不在 dock)。"""
-
-    def test_understanding_warmed_rejects_zero_options(self) -> None:
-        rejection = _wrap_up_rejection(TRIGGER_UNDERSTANDING, [])
-        assert rejection is not None and "wrap_up" in rejection
-
-    def test_understanding_warmed_passes_one_to_three(self) -> None:
-        items = WrapUpArgs.model_validate({"suggestions": ["做一条金句短片"]}).suggestions
-        assert _wrap_up_rejection(TRIGGER_UNDERSTANDING, items) is None
+    suggestions 数对 trigger 旅程法 — run_completed 硬顶 =0(下一步在收尾句,
+    永不在 dock)。素材接力已死 (ADR-102),其硬地板律随之消亡。"""
 
     def test_run_completed_rejects_any_option(self) -> None:
         items = WrapUpArgs.model_validate({"suggestions": ["再做一条"]}).suggestions
@@ -153,7 +142,7 @@ class TestWrapUpGuardrail:
         assert _wrap_up_rejection(TRIGGER_RUN_COMPLETED, []) is None
 
     def test_other_triggers_unpoliced(self) -> None:
-        # 护栏只管有法在身的两个 trigger — 未来新 trigger 默认自由,
+        # 护栏只管有法在身的 trigger — 未来新 trigger 默认自由,
         # 立法时才进表(不过度设计律)。
         assert _wrap_up_rejection("some_future_trigger", []) is None
 

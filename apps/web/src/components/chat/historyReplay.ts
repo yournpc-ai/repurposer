@@ -121,10 +121,9 @@ export function triggerSuggestions(intent: unknown): SuggestionPill[] | undefine
     }))
 }
 
-/** The trigger's own name off a trigger_review dump ("understanding_warmed"
- * / "run_completed" / "craft_decompiled") — the poll windows key their
- * closure on it (the understanding window stays open until ITS row lands).
- * Same read tolerance as triggerSuggestions. */
+/** The trigger's own name off a trigger_review dump ("run_completed" /
+ * "craft_decompiled" — ADR-102 retired "understanding_warmed"). Same read
+ * tolerance as triggerSuggestions. */
 export function triggerName(intent: unknown): string | undefined {
   const data = (intent ?? {}) as Record<string, unknown>
   if (data.type !== "trigger_review") return undefined

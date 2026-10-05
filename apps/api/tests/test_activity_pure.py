@@ -84,6 +84,28 @@ def test_t1_single_read_lifecycle():
     ]
 
 
+# T1b — 失败帧 (ADR-102 §5): a read whose target is unreadable settles
+# FAILED with the failed-form mirror — never the done family's lie.
+def test_t1b_failed_read_settles_failed_mirror():
+    p = ActivityProjector()
+    frames = _feed(
+        p, "get_understanding", ReadAccepted("get_understanding", ok=False)
+    )
+    assert _summary(frames) == [
+        ("a1", 1, "read", STATUS_ACTIVE, "chat.inspecting.understanding"),
+        ("a1", 2, "read", STATUS_FAILED, "chat.inspectingFailed.understanding"),
+    ]
+
+
+# T1c — the default (ok unset) is the landed path, unchanged.
+def test_t1c_ok_defaults_to_landed():
+    p = ActivityProjector()
+    frames = _feed(p, "get_understanding", ReadAccepted("get_understanding"))
+    assert _summary(frames)[-1] == (
+        "a1", 2, "read", STATUS_COMPLETED, "chat.inspectingDone.understanding",
+    )
+
+
 # T2 — two reads chain: distinct identities, order = event order.
 def test_t2_two_reads_ordered():
     p = ActivityProjector()

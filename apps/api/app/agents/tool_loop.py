@@ -195,9 +195,14 @@ class ToolObservation:
     """A NON-terminal tool's accepted result (T2b 感知族 — the read tools'
     return channel). The text is model-facing (compact lines, capped by the
     execute); the loop appends it to the wire as the role:tool message and
-    iterates. A terminal tool's execute never returns this (skew = loud)."""
+    iterates. A terminal tool's execute never returns this (skew = loud).
+
+    ``ok`` (ADR-102 §5): False = the read's target is unreadable (the
+    material failed processing) — the read's activity frame settles FAILED
+    with the honest failed-form key, never the done mirror's lie."""
 
     text: str
+    ok: bool = True
 
 
 # --- Internal loop events (ADR-087 §3 Phase 2, U1 裁定 2026-09-19) ---
@@ -246,9 +251,11 @@ class TerminalAccepted:
 class ReadAccepted:
     """A NON-terminal read's execute returned its observation — the read is
     done; the loop now enters the quiet decision iteration. Pairs with the
-    call's name-known moment."""
+    call's name-known moment. ``ok`` mirrors the observation's landed flag
+    (False → the frame settles FAILED, never the done mirror)."""
 
     tool_name: str
+    ok: bool = True
 
 
 @dataclass(frozen=True)
@@ -692,7 +699,7 @@ class ToolLoopAgent:
                 # is on the wire, the quiet decision iteration begins — the
                 # UI's phase moves on from the inspecting label NOW, not at
                 # the next call's name-known moment (15-25s later).
-                await _emit(on_loop_event, ReadAccepted(tool_name=call.name))
+                await _emit(on_loop_event, ReadAccepted(tool_name=call.name, ok=outcome.ok))
                 await _emit(on_observe, call.name)
                 continue
             if outcome is None:

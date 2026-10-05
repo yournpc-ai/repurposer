@@ -36,7 +36,7 @@ from app.models.schemas import (
     TaskItem,
     WorkflowStatus,
 )
-from app.models.tables import Asset, CreditTransaction, Message, Output, WorkflowStep, Project, WorkflowRun
+from app.models.tables import Asset, AssetStatus, CreditTransaction, Message, Output, WorkflowStep, Project, WorkflowRun
 from app.metering import bind_workflow_step, merge_accrued_cost
 from app.pipeline.derivative_dispatch import derivative_output_types
 from app.pipeline.errors import TransientNodeError, user_error_line
@@ -999,6 +999,21 @@ async def create_run(
     # fresh, so only PENDING/RUNNING block.
     await db.execute(
         select(Project).where(Project.id == project.id).with_for_update()
+    )
+    # 开工兜底盖章 (ADR-102 §6): processing is the run's production
+    # prerequisite — the user may never have asked about the material in
+    # chat, so the birthplace wakes every dormant asset (the chat path's
+    # only other stamp seat = the get_understanding read attempt).
+    from app.models.tables import now_utc
+
+    await db.execute(
+        update(Asset)
+        .where(
+            Asset.project_id == project.id,
+            Asset.processing_status == AssetStatus.PENDING,
+            Asset.processing_requested_at.is_(None),
+        )
+        .values(processing_requested_at=now_utc())
     )
     if await has_active_run(db, project.id):
         # ui_language is pinned above from the requesting browser's locale —

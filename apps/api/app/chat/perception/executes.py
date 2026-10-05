@@ -240,21 +240,7 @@ def speaker_form_lines(assets: list[Asset]) -> list[str]:
     return out
 
 
-_MATERIAL_WAIT_POLL_SECONDS = 2.5
-
-
-def material_wait_verdict(*, pending_count: int, deadline_reached: bool) -> str:
-    """The bounded wait's per-poll verdict (pure, ADR-101 §1):
-    "keep_waiting" | "settled_unreadable" | "timeout".
-
-    "settled_unreadable" = processing ended with no understanding row (a
-    failed set or a non-digestible one) — report the CURRENT facts, never
-    wait out the cap for a row that will never come (H8 early exit).
-    "timeout" = the cap ran out with files still processing — the floor
-    path (the honest clause + the world-fired review relay)."""
-    if pending_count == 0:
-        return "settled_unreadable"
-    return "timeout" if deadline_reached else "keep_waiting"
+_READINESS_POLL_SECONDS = 2.5
 
 
 _STALE_UNDERSTANDING_TEXT = (
@@ -266,8 +252,7 @@ _STALE_UNDERSTANDING_TEXT = (
 def _render_understanding(row: Output, assets: list[Asset]) -> str | None:
     """The understanding row's model-facing digest (one rendering, two read
     seats — the immediate hit and the wait's landed poll). None = the stored
-    shape is stale — content did NOT land, so no consumed mark rides (the
-    review's seat stays open for the regenerated row)."""
+    shape is stale — the content did NOT land."""
     try:
         u = MaterialUnderstanding.model_validate(row.payload)
     except Exception:  # noqa: BLE001 — a stale-shaped row reads honestly
@@ -281,57 +266,69 @@ def _render_understanding(row: Output, assets: list[Asset]) -> str | None:
     return "\n".join(lines)
 
 
-def _unready_text(*, pending_count: int, failed_count: int, waited_secs: int | None) -> str:
-    """The not-readable observation. The timeout shape (``waited_secs`` set)
-    carries the floor path's speech law (ADR-101 §6): 宣告等待 + 宣告接力,
-    zero content — the world-fired review speaks the first read when
-    processing finishes, so this clause never promises a moment and never
-    narrates pipeline state."""
-    if pending_count:
-        if waited_secs is not None:
-            return (
-                f"The material understanding is still not ready after a "
-                f"{waited_secs}s wait — {pending_count} asset(s) are still "
-                "processing. Do NOT guess at the content from filenames. If "
-                "the user's request depends on the content, answer with ONE "
-                "short honest clause: you understood what they want, you are "
-                "still reading their material, and they will get what they "
-                "asked for once you have read it — name what they will GET in "
-                "their own words (an advice ask gets the advice, a make ask "
-                "gets the thing). The first read arrives on its own when "
-                "processing finishes: never promise a moment, never speak "
-                "pipeline machine words (transcript / processing / 素材理解), "
-                "no questions, no option menus in this clause."
+def _failed_text(failed_count: int) -> str:
+    """The failure observation: WORLD FACTS ONLY (一法一座 — the failure's
+    speech law lives in the system prompt's material-readiness line; the
+    observation carries facts, never a phrasable draft)."""
+    return (
+        f"{failed_count} asset(s) FAILED processing — their content is "
+        "unreadable."
+    )
+
+
+_WARM_DEAD_TEXT = (
+    "The material finished processing but its understanding could not be "
+    "built — the content is unreadable."
+)
+
+
+async def _stamp_processing_requested(project_id) -> None:
+    """The chat path's ONLY request seat (ADR-102 §3): the read attempt
+    itself wakes the dormant assets. Own session + commit (H7) — the turn's
+    session may hold uncommitted writes, and the worker's claim loop must
+    see the stamp NOW."""
+    from app.models.database import AsyncSessionLocal  # deferred: worker seat
+    from sqlalchemy import update
+
+    from app.models.tables import now_utc
+
+    async with AsyncSessionLocal() as s:
+        await s.execute(
+            update(Asset)
+            .where(
+                Asset.project_id == project_id,
+                Asset.processing_status == AssetStatus.PENDING,
+                Asset.processing_requested_at.is_(None),
             )
-        return (
-            f"The material understanding is not ready yet — {pending_count} "
-            "asset(s) are still processing. Do NOT guess at the content "
-            "from filenames: answer the request from what the user said, "
-            "and say the content read lands automatically when processing "
-            "finishes (you will speak again then)."
+            .values(processing_requested_at=now_utc())
         )
-    if failed_count:
-        return (
-            f"{failed_count} asset(s) FAILED processing — their content "
-            "will not become readable. Say so plainly and offer the "
-            "re-upload path; never pretend to have read them."
-        )
-    return "No material understanding exists yet for the current assets."
+        await s.commit()
 
 
-async def understanding_observation(
-    db: AsyncSession, project: Project
-) -> tuple[str, str | None]:
-    """The read's full result: (observation text, landed digest | None).
+async def understanding_observation(db: AsyncSession, project: Project) -> tuple[str, bool]:
+    """The read's full result: (observation text, landed flag).
 
-    The digest is the consumed mark's ref (ADR-101 复读禁止律) — non-None
-    only when this read actually landed the understanding's content, so a
-    turn that narrates from it can stamp the world-fired review's dedup
-    registry (the first read already has a narrator)."""
+    ADR-102 §3 — the read is the turn's PRECONDITION, and this tool call is
+    the worker event's ONLY chat-side creation point: a pending asset set +
+    a provider deaf to video audio (``capabilities.understands_video_audio
+    == False``) gets stamped HERE — never at upload, never at send. The
+    wait runs to the TERMINAL state with no time cap: the understanding row
+    lands (content), or the set ends unreadable (assets failed / the warm
+    ran and built nothing). The observation the model ever sees is one of
+    two shapes — content, or failure facts; a pending world never reaches
+    the model.
+
+    landed=False marks the read's activity frame failed (「素材没能读出来」)
+    — the honest counterweight to the settled frame, never a silent lie."""
+    import asyncio
+
+    from app.models.database import AsyncSessionLocal  # deferred: worker seat
     from app.pipeline.node_runners import (  # deferred: pipeline weight
         find_reusable_understanding,
+        kick_warm_inline,
     )
     from app.pipeline.step_context import asset_digest, list_assets
+    from app.providers.llm.minimax import minimax_client
 
     assets = await list_assets(db, project.id)
     if not assets:
@@ -339,82 +336,62 @@ async def understanding_observation(
             "No assets in this project yet — there is no material to read. "
             "If the user means to work from material, they need to upload or "
             "paste it first.",
-            None,
+            False,
         )
-    digest = asset_digest(assets)
-    row = await find_reusable_understanding(db, project, digest)
+    row = await find_reusable_understanding(db, project, asset_digest(assets))
     if row is not None:
         rendered = _render_understanding(row, assets)
-        return (rendered if rendered is not None else _STALE_UNDERSTANDING_TEXT), (
-            digest if rendered is not None else None
+        return (
+            rendered if rendered is not None else _STALE_UNDERSTANDING_TEXT,
+            rendered is not None,
         )
-    # Readiness gate honesty (I-PFA-07, 2026-09-18): pending and failed are
-    # DIFFERENT facts — a failed asset told "still processing" would wait
-    # forever, and guessing from a filename is the「我不能读」/编造 pair.
-    pending = [
-        a
-        for a in assets
-        if a.processing_status in (AssetStatus.PENDING, AssetStatus.PROCESSING)
-    ]
-    failed = [a for a in assets if a.processing_status == AssetStatus.FAILED]
-    if not pending:
-        return _unready_text(
-            pending_count=0, failed_count=len(failed), waited_secs=None
-        ), None
-    # 回合内有界等待 (ADR-101 §1): the read waits for the warm to land so the
-    # turn answers GROUNDED instead of promising. Each poll runs on its own
-    # short session (H7) — the turn's session keeps its uncommitted writes
-    # untouched, and every poll sees the worker's latest commit. cap=0
-    # disables the wait (the registry desc pins the 240s hard upper bound
-    # against the trigger admission's 300s politeness window, H1).
-    from app.models.database import AsyncSessionLocal  # deferred: worker seat
-    from app.platform.configs import get_config
 
-    cap = int(await get_config(db, "chat.material_wait_secs"))
-    if cap <= 0:
-        return _unready_text(
-            pending_count=len(pending), failed_count=len(failed), waited_secs=None
-        ), None
-    import asyncio
-    import time
-
-    deadline = time.monotonic() + cap
-    pending_count, failed_count = len(pending), len(failed)
+    stamped = False
+    warm_kicked = False
     while True:
-        await asyncio.sleep(_MATERIAL_WAIT_POLL_SECONDS)
-        async with AsyncSessionLocal() as poll:
-            p_assets = await list_assets(poll, project.id)
-            p_digest = asset_digest(p_assets)
-            p_row = await find_reusable_understanding(poll, project, p_digest)
-            if p_row is not None:
-                # Render inside the poll session — the ORM rows stay attached.
-                p_rendered = _render_understanding(p_row, p_assets)
-                if p_rendered is not None:
-                    return p_rendered, p_digest
-                return _STALE_UNDERSTANDING_TEXT, None
-            pending_count = sum(
-                1
-                for a in p_assets
+        if not stamped:
+            pending = [
+                a
+                for a in assets
                 if a.processing_status
                 in (AssetStatus.PENDING, AssetStatus.PROCESSING)
-            )
-            failed_count = sum(
-                1 for a in p_assets if a.processing_status == AssetStatus.FAILED
-            )
-        verdict = material_wait_verdict(
-            pending_count=pending_count,
-            deadline_reached=time.monotonic() >= deadline,
-        )
-        if verdict == "settled_unreadable":
-            return _unready_text(
-                pending_count=0, failed_count=failed_count, waited_secs=None
-            ), None
-        if verdict == "timeout":
-            return _unready_text(
-                pending_count=pending_count,
-                failed_count=failed_count,
-                waited_secs=cap,
-            ), None
+            ]
+            if pending and not minimax_client.capabilities.understands_video_audio:
+                await _stamp_processing_requested(project.id)
+            stamped = True
+        await asyncio.sleep(_READINESS_POLL_SECONDS)
+        async with AsyncSessionLocal() as poll:
+            assets = await list_assets(poll, project.id)
+            row = await find_reusable_understanding(poll, project, asset_digest(assets))
+            if row is not None:
+                # Render inside the poll session — the ORM rows stay attached.
+                rendered = _render_understanding(row, assets)
+                return (
+                    rendered if rendered is not None else _STALE_UNDERSTANDING_TEXT,
+                    rendered is not None,
+                )
+            pending = [
+                a
+                for a in assets
+                if a.processing_status
+                in (AssetStatus.PENDING, AssetStatus.PROCESSING)
+            ]
+            if pending:
+                continue
+            failed = [
+                a for a in assets if a.processing_status == AssetStatus.FAILED
+            ]
+            if failed:
+                return _failed_text(len(failed)), False
+            # All completed but no row: the warm is in flight or died (it is
+            # best-effort). Kick it inline — the pile-up guard collapses
+            # concurrent kicks; a completed kick with no row = definitively
+            # dead for this digest.
+            if warm_kicked:
+                return _WARM_DEAD_TEXT, False
+            if not await kick_warm_inline(project.id):
+                continue  # another warm is in flight — keep polling
+            warm_kicked = True
 
 
 async def get_understanding(db: AsyncSession, project: Project, params) -> str:
@@ -423,7 +400,7 @@ async def get_understanding(db: AsyncSession, project: Project, params) -> str:
     Journeys: 「我看了——你在讲 X」的读法 + 推荐配乐/样式前的氛围匹配.
 
     Registry-compatible wrapper (text only); the turn dispatch seat reads
-    :func:`understanding_observation` for the landed digest."""
+    :func:`understanding_observation` for the landed flag."""
     text, _ = await understanding_observation(db, project)
     return text
 

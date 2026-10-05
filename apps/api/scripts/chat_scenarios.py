@@ -463,10 +463,10 @@ async def seed_understanding(pid: str) -> None:
 
 
 async def flip_asset_ready(pid: str, *, text: str) -> None:
-    """Mid-turn processing completion (ADR-101 S-wait scenarios): the asset
-    flips COMPLETED with its content stamped — the digest recomputes off the
-    live rows, and a following :func:`seed_understanding` lands the warm row
-    the waiting read's next poll finds."""
+    """Mid-turn processing completion (ADR-102 S-wait scenarios): the asset
+    flips COMPLETED with its content stamped — a following
+    :func:`seed_understanding` lands the warm row the waiting read's next
+    in-turn poll finds."""
     async with AsyncSessionLocal() as db:
         assets = list(
             (
@@ -483,26 +483,6 @@ async def flip_asset_ready(pid: str, *, text: str) -> None:
             a.extracted_text = text
             a.meta = {**(a.meta or {}), "language": "en"}
         await db.commit()
-
-
-async def current_asset_digest(pid: str) -> str:
-    """The project's live asset digest (the consumed mark / trigger ref —
-    same pipeline computation as the warm's fire and the read's poll)."""
-    from app.pipeline.step_context import asset_digest
-
-    async with AsyncSessionLocal() as db:
-        assets = list(
-            (
-                await db.execute(
-                    select(Asset)
-                    .where(Asset.project_id == uuid.UUID(pid))
-                    .order_by(Asset.created_at)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        return asset_digest(assets)
 
 
 async def seed_completed_run(pid: str) -> None:
@@ -3687,9 +3667,10 @@ async def s18_idless_asset_read_terminalizes(ctx: Ctx) -> None:
     meta 无 language）+ 原事故文案 —— 模型想「先看源语言」时 get_asset 的
     无 id 调用必须成功（工具自证 provenance：prompt 面从不列 asset id，
     必填 id 曾逼模型编造 → schema 拒绝 → 静默 repair 窗）。回合必须收敛
-    到计划 dock / 提问 / answer 终态（ADR-101 后形态：read 有界等待——
-    素材落地即同回合 grounded 作答，等不到 cap 则一句零内容诚实宣告、
-    review 接力），永不落入 exhausted 的 cannot-do 降级。锁终态形态，不锁
+    到计划 dock / 提问 / answer 终态（ADR-102 形态：read 在回合内等终态——
+    素材落地即同回合 grounded 作答，读不出则一句诚实宣告；等待无上限，
+    worker 缺席时悬挂是 ADR-102 在册承重观察），永不落入 exhausted 的
+    cannot-do 降级。锁终态形态，不锁
     LLM 言语（禁令 #7）；降级行是代码组成常量，逐字比对，非 NLP 判
     LLM 散文。"""
     pid = await ctx.new_project("S18 idless asset read")
@@ -3714,8 +3695,8 @@ async def s18_idless_asset_read_terminalizes(ctx: Ctx) -> None:
         terminal in ("present_plan", "ask_user")
         or (terminal == "answer" and content != _cannot_do_text(message)),
         "the pre-ASR caption turn terminalizes as a plan dock, an honest "
-        "question, or an answer (grounded after the bounded wait, or the "
-        "timeout's honest clause) — never the exhaustion degrade",
+        "question, or an answer (grounded after the in-turn wait, or the "
+        "failed read's honest clause) — never the exhaustion degrade",
         terminal,
     )
     check(
@@ -3732,17 +3713,14 @@ async def s18_idless_asset_read_terminalizes(ctx: Ctx) -> None:
         )
 
 
-async def s_wait1_grounded_answer_marks_review_consumed(ctx: Ctx) -> None:
-    """ADR-101 回合内有界等待 + 复读禁止律（写口① + 去重 OR 子句的端到端锁）：
-    PROCESSING 素材上的内容依赖提问——read 有界等待，素材在等待中落地
-    （fixture 翻转 + seed，worker-immune），同一回合 grounded 作答。机械锁
-    三枚（零 NLP）：① 落地行带 intent.consumed_understanding == 当前
-    digest；② 随后 in-process 点火的 understanding_warmed 去重沉默
-    （第一读已有叙述者，review 永不复读）。模型不调 read（违法条）= 锁①
-    红——那是 prompt 法回归信号，不是 harness 抖动。"""
-    from app.chat.trigger_turn import TRIGGER_UNDERSTANDING, run_trigger_turn
-
-    pid = await ctx.new_project("S-wait-1 grounded answer + consumed mark")
+async def s_wait1_in_turn_wait_grounds_answer(ctx: Ctx) -> None:
+    """ADR-102 回合内等待（无时间上限，逻辑阻塞）：PROCESSING 素材上的内容
+    依赖提问——read 在回合内等终态，素材在等待中落地（fixture 翻转 + seed，
+    worker-immune），同一回合 grounded 作答。机械锁两枚（零 NLP）：① 答复
+    落到素材内容词（grounded 的确定性代理——读到才说得出）；② 全会话零
+    consumed_understanding 戳（ADR-101 承诺机器永久退役的负形锁）。模型
+    不调 read（违法条）= 锁①红——prompt 法回归信号，不是 harness 抖动。"""
+    pid = await ctx.new_project("S-wait-1 in-turn wait grounds the answer")
     await seed_asset(
         pid, ctx.user_id, AssetType.VIDEO, "talk.mp4",
         status=AssetStatus.PROCESSING,  # worker-immune (claim takes PENDING only)
@@ -3750,8 +3728,8 @@ async def s_wait1_grounded_answer_marks_review_consumed(ctx: Ctx) -> None:
     chat_task = asyncio.create_task(
         ctx.chat(pid, "这个视频讲了什么？看完给我建议。")
     )
-    # Let the turn reach the read's wait (a poll cycle is 2.5s), then the
-    # world lands the understanding mid-wait.
+    # Let the turn reach the read's in-turn wait (a poll cycle is 2.5s), then
+    # the world lands the understanding mid-wait.
     await asyncio.sleep(6)
     await flip_asset_ready(
         pid,
@@ -3766,77 +3744,54 @@ async def s_wait1_grounded_answer_marks_review_consumed(ctx: Ctx) -> None:
     msg = turn1.get("assistant_message") or {}
     check(
         msg and has_prose(msg),
-        "S-wait-1 the waited turn answers with settled speech (grounded or "
-        "the honest clause when the read landed too late)",
+        "S-wait-1 the waited turn answers with settled speech",
         msg,
+    )
+    content = (msg.get("content") or "").lower()
+    check(
+        any(word in content for word in ("tree", "roof", "roofs", "shade", "cool", "neighborhood")),
+        "S-wait-1 the answer lands on the material's own words (grounded — "
+        "the in-turn wait read the landed understanding this very turn)",
+        content[:200],
     )
     conv_id = turn1.get("conversation_id")
     check(conv_id is not None, "S-wait-1 the envelope carries conversation_id")
-    digest = await current_asset_digest(pid)
     rows = await ctx.messages(str(conv_id))
-    marked = [
-        m
-        for m in rows
-        if (m.get("intent") or {}).get("consumed_understanding") == digest
-    ]
     check(
-        bool(marked),
-        "S-wait-1 the grounded turn's row carries the consumed mark (the "
-        "read landed the digest this turn — 复读禁止律写口①)",
+        not any("consumed_understanding" in (m.get("intent") or {}) for m in rows),
+        "S-wait-1 zero consumed marks anywhere (ADR-101's commitment "
+        "machine is permanently retired — the negative lock)",
         [m.get("intent") for m in rows],
     )
-    fired = await run_trigger_turn(uuid.UUID(pid), TRIGGER_UNDERSTANDING, digest)
-    check(
-        fired is None,
-        "S-wait-1 the world-fired review dedups into silence — the first "
-        "read already has a narrator, never a repeat",
-        fired,
-    )
 
 
-async def s_wait2_timeout_clause_then_review_relays(ctx: Ctx) -> None:
-    """ADR-101 体验地板（超时路径）：PROCESSING 素材永不在 cap 内落地——read
-    等满默认 120s（scenario 进程无法失效 server 的 config 进程内缓存，地板
-    路径付真实等待；suite 已有 240s/300s trigger 等待先例），随后一句零内容
-    的诚实宣告落地（机械锁：行无 consumed 戳 = 什么都没消费）。素材随后
-    可读 → in-process 点火的 review 必达接力（服务感兑现，不是复读——
-    宣告行从没叙述过内容）。若模型本回合不调 read（违法条），等待不
-    发生但零戳 + 接力锁仍然成立。"""
-    from app.chat.trigger_turn import TRIGGER_UNDERSTANDING, run_trigger_turn
-
-    pid = await ctx.new_project("S-wait-2 timeout floor + review relay")
+async def s_wait2_failed_read_honest_clause(ctx: Ctx) -> None:
+    """ADR-102 失败终态（等待的另一出口）：FAILED 素材上的内容依赖提问——
+    read 即刻拿到失败事实（ok=False），同一回合诚实宣告「读不出来」并给
+    重传出路（prompt 法；措辞归 prompt_gate/reply_quality_probe，本座只锁
+    机械面）。机械锁两枚：① 回合收敛且答复带成文言语（不悬挂、不静默）；
+    ② 零 consumed_understanding 戳。失败素材永不落地内容，答复无从
+    grounded——若出现内容词幻觉，归 reply_quality_probe 语义面。"""
+    pid = await ctx.new_project("S-wait-2 failed read honest clause")
     await seed_asset(
         pid, ctx.user_id, AssetType.VIDEO, "talk.mp4",
-        status=AssetStatus.PROCESSING,
+        status=AssetStatus.FAILED,  # S16's FAILED exemplar precedent
     )
     turn1 = await ctx.chat(pid, "这个视频讲了什么？看完给我建议。")
     msg = turn1.get("assistant_message") or {}
-    check(msg and has_prose(msg), "S-wait-2 the floor clause still speaks", msg)
-    clause_intent = msg.get("intent") or {}
     check(
-        "consumed_understanding" not in clause_intent,
-        "S-wait-2 the timeout clause carries NO consumed mark (nothing "
-        "landed — the review's seat stays open)",
-        clause_intent,
+        msg and has_prose(msg),
+        "S-wait-2 the failed read still closes the turn with settled speech",
+        msg,
     )
-    # 接力必达: the material becomes readable → the world-fired review speaks
-    # the first read (the clause's promise kept by the world).
-    await flip_asset_ready(
-        pid,
-        text=(
-            "Cities are getting hotter every year. In this talk I show how "
-            "shade trees and reflective roofs can cool whole neighborhoods."
-        ),
-    )
-    await seed_understanding(pid)
-    digest = await current_asset_digest(pid)
-    review = await run_trigger_turn(uuid.UUID(pid), TRIGGER_UNDERSTANDING, digest)
+    conv_id = turn1.get("conversation_id")
+    check(conv_id is not None, "S-wait-2 the envelope carries conversation_id")
+    rows = await ctx.messages(str(conv_id))
     check(
-        review is not None,
-        "S-wait-2 the review relays the first read after the clause "
-        "(the floor's service beat, never a repeat — the clause carried "
-        "zero content)",
-        review,
+        not any("consumed_understanding" in (m.get("intent") or {}) for m in rows),
+        "S-wait-2 zero consumed marks (nothing landed, nothing consumed — "
+        "and the machine itself is gone)",
+        [m.get("intent") for m in rows],
     )
 
 
@@ -3844,14 +3799,17 @@ async def s19_turn_durability_and_trigger_admission(ctx: Ctx) -> None:
     """交互完整性批 A+B (2026-09-17) 回归：用户消息从回合第一拍即可持久
     （turn_state: in_flight → settled 随回合提交盖章），trigger 准入门永不
     超越在途用户回合 —— 回合进行中 in-process 直接点火 run_trigger_turn。
-    2026-09-16 事故原样：commit-once 回合死亡吞掉用户消息 +
-    understanding_warmed 撞进在途回合盲说。
+    2026-09-16 事故原样：commit-once 回合死亡吞掉用户消息 + 主动回合撞进
+    在途回合盲说。ADR-102 改靶：素材评审 trigger 已死，准入/落序机器与
+    事件内容无关，现骑存活事件 craft_decompiled（零 fixture 依赖——ref
+    只是去重键，事件行不查库）；发言内容由模型按诚信法自处（无 pin 案例
+    时它读项目实况说话），本座只锁准入与落序。
     Phase 4 B8 改写（B3 后语义）：caption 回合收敛即 dock 计划——pending
     plan 在位时 review 按 ADR-080 第二谓词静默（在途 defer → 收敛静默 =
     「永不中途开口」的证明形态）；Start 清 pending 后同一世界事件补发言,
     发言落序锁不变（review 必落在用户回合答复之后）。Start 形随 R10
     生效归位（2026-09-21 修复批——散文降装饰,空 echo dock 可确认）。"""
-    from app.chat.trigger_turn import TRIGGER_UNDERSTANDING, run_trigger_turn
+    from app.chat.trigger_turn import TRIGGER_CRAFT_DECOMPILED, run_trigger_turn
 
     pid = await ctx.new_project("S19 turn durability + admission")
     await seed_asset(
@@ -3909,7 +3867,7 @@ async def s19_turn_durability_and_trigger_admission(ctx: Ctx) -> None:
     # B) 在途点火：准入门必须 defer（纯决策由 test_trigger_turn_pure 锁；
     #    这里锁端到端秩序——review 落在用户回合收敛之后）。
     trigger_task = asyncio.create_task(
-        run_trigger_turn(uuid.UUID(pid), TRIGGER_UNDERSTANDING, "s19-digest")
+        run_trigger_turn(uuid.UUID(pid), TRIGGER_CRAFT_DECOMPILED, "s19-craft")
     )
     turn1 = await chat_task
     check(
@@ -3941,8 +3899,8 @@ async def s19_turn_durability_and_trigger_admission(ctx: Ctx) -> None:
         # present_plan 走了空 content 通道,旧 P8 合取会静默 422,现在必过。）
         res = await ctx.answer(turn1["assistant_message"]["id"], {"kind": "start"})
         check(res.status_code == 200, "dock Start answers the plan", res.text)
-        review = await run_trigger_turn(uuid.UUID(pid), TRIGGER_UNDERSTANDING,
-                                        "s19-digest-after-start")
+        review = await run_trigger_turn(uuid.UUID(pid), TRIGGER_CRAFT_DECOMPILED,
+                                        "s19-craft-after-start")
         check(review is not None,
               "pending plan 清完(Start)后,同一世界事件补发言")
     else:
@@ -3974,12 +3932,12 @@ async def s19_turn_durability_and_trigger_admission(ctx: Ctx) -> None:
 
 async def s20_speech_semantic_contract(ctx: Ctx) -> None:
     """ADR-084 言语语义管线回归（2026-09-17 拍板）：Chat 不是 Agent 的操作日志。
-    A 部（素材未就绪）：PROCESSING 无文本视频 → read 静默（过程话零流式、零
-    持久化）+ 诚实处理中披露（理解需求 ≠ 已读素材）+ 不虚构素材判断；
-    B 部（理解就绪）：COMPLETED 视频 + 内容寻址理解行直种 → echo 落到素材
-    内容词（grounded judgment 的确定性代理断言）+ ≥2 task 计划不邀请言语
-    确认（Start 归 dock）+ 流式律 + ADR-085 checkpoint 形态断言
-    （opportunistic：earned 缺席合法，出现则锁 ≤2 / 非空 / 终答不复读 /
+    A 部（素材不可读）：FAILED 无文本视频 → read 静默（过程话零流式、零
+    持久化）+ 诚实读不出披露（ADR-102：等待无上限，不可读是唯一诚实终态）
+    + 不虚构素材判断；B 部（理解就绪）：COMPLETED 视频 + 内容寻址理解行直种
+    → echo 落到素材内容词（grounded judgment 的确定性代理断言）+ ≥2 task
+    计划不邀请言语确认（Start 归 dock）+ 流式律 + ADR-085 checkpoint 形态
+    断言（opportunistic：earned 缺席合法，出现则锁 ≤2 / 非空 / 终答不复读 /
     intent.type=checkpoint 落库分家）。锁禁令形状（负向标记）与行为面，
     不锁措辞（禁令 #7）。"""
     message = (
@@ -3987,19 +3945,17 @@ async def s20_speech_semantic_contract(ctx: Ctx) -> None:
         "subtitles."
     )
 
-    # ---- Part A: material not ready (PROCESSING, no text anywhere) -------
-    # Fixture declaration (B-4): the state under test is "not ready" — so
-    # the row is declared PROCESSING. claim_pending_asset only ever claims
-    # PENDING rows, and the Lifecycle gatherer folds PROCESSING into
-    # material_pending — the not-ready reading is now worker-immune and the
-    # blocker below is exact, never whichever of pending/failed the worker
-    # race happened to land on. ADR-101 注: when the model answers the read's
-    # call, the bounded wait pays the full default cap here (PROCESSING
-    # never settles) and the timeout's honest clause joins the legal
-    # terminals — its row carries NO consumed mark (nothing landed).
-    pid = await ctx.new_project("S20A speech contract (material not ready)")
+    # ---- Part A: material unreadable (FAILED, no text anywhere) ----------
+    # Fixture declaration (B-4): the state under test is "unreadable" — so
+    # the row is declared FAILED. ADR-102 注: the in-turn wait has NO time
+    # cap — a never-settling PROCESSING fixture would hang the turn forever,
+    # so the honest not-ready terminal is the FAILED read: get_understanding
+    # returns the failure facts at once (ok=False), and the honest
+    # "couldn't read it" clause joins the legal terminals. Zero consumed
+    # marks anywhere (the commitment machine is permanently retired).
+    pid = await ctx.new_project("S20A speech contract (material unreadable)")
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4",
-                     status=AssetStatus.PROCESSING)
+                     status=AssetStatus.FAILED)
     stream = await ctx.chat_stream(pid, message)
     check(stream.failed is None, "S20A the turn did not fail", stream.failed)
     completed = stream.completed or {}
@@ -4012,28 +3968,28 @@ async def s20_speech_semantic_contract(ctx: Ctx) -> None:
     check(
         terminal in ("present_plan", "ask_user", "answer"),
         "S20A terminalizes as a plan dock, an honest question, or the "
-        "wait-timeout's honest clause — never the exhaustion degrade",
+        "failed-read's honest clause — never the exhaustion degrade",
         terminal,
     )
     if terminal == "answer":
         clause_intent = (turn1["assistant_message"] or {}).get("intent") or {}
         check(
             "consumed_understanding" not in clause_intent,
-            "S20A the timeout clause carries NO consumed mark (nothing "
-            "landed — the review's seat stays open)",
+            "S20A the failed-read clause carries NO consumed mark (nothing "
+            "landed — and the machine itself is gone)",
             clause_intent,
         )
-    # Lifecycle stamp: when the plan docks over unready material, the stamp
+    # Lifecycle stamp: when the plan docks over unreadable material, the stamp
     # — never the dock's existence — names the lifecycle truth: material not
     # ready, plan not ready, confirmation not ready, and with the fixture's
-    # PROCESSING declaration the blocker is exactly material_pending.
+    # FAILED declaration the blocker is exactly material_failed.
     if terminal == "present_plan":
         stamp = (await ctx.results(pid))["lifecycle"]
         check(stamp["material_ready"] is False
               and stamp["plan_ready"] is False
               and stamp["confirmation_ready"] is False
-              and "material_pending" in stamp["blockers"],
-              "S20A the stamp names the unready material on a docked plan",
+              and "material_failed" in stamp["blockers"],
+              "S20A the stamp names the unreadable material on a docked plan",
               stamp)
     content = turn1["assistant_message"].get("content") or ""
     check(
@@ -4091,22 +4047,16 @@ async def s20_speech_semantic_contract(ctx: Ctx) -> None:
         "S20B a ready-material caption request docks the plan",
         terminal,
     )
-    # ADR-101 复读禁止律写口②: the assemble injected the ready
-    # understanding's digest — the turn's rows carry the consumed mark, so
-    # the world-fired review never repeats this first read.
+    # ADR-102: the assemble still injects the ready understanding's digest
+    # lines as the plan path's content source, but the commitment machine is
+    # permanently retired — zero consumed marks anywhere (negative lock).
     conv_id_b = completed.get("conversation_id")
     check(conv_id_b is not None, "S20B the envelope carries conversation_id")
-    digest_b = await current_asset_digest(pid)
     rows_b = await ctx.messages(str(conv_id_b))
-    marked_b = [
-        m
-        for m in rows_b
-        if (m.get("intent") or {}).get("consumed_understanding") == digest_b
-    ]
     check(
-        bool(marked_b),
-        "S20B the assembled-digest turn carries the consumed mark "
-        "(写口② — the review dedups on it)",
+        not any("consumed_understanding" in (m.get("intent") or {}) for m in rows_b),
+        "S20B zero consumed marks anywhere (ADR-101's commitment machine "
+        "is permanently retired — the negative lock)",
         [m.get("intent") for m in rows_b],
     )
     content = turn1["assistant_message"].get("content") or ""
@@ -4249,10 +4199,12 @@ async def s22_trigger_landing_silence(ctx: Ctx) -> None:
     准入通过（无在途回合、无 pending plan）→ 触发的 LLM loop 在途 → 用户
     次轮回合 dock 计划 → 落点复评命中 → 整体静默（永不落建议问 dock 抢
     确认座——S16-P2 2026-09-21 实证竞态「计划 dock 与 trigger_turn_spoke
-    同秒」的常驻回归座）。确定性说明：计划 dock 由用户次轮驱动（dock 是
-    代码路径，秒级），触发的 loop 恒为 10s+ 量级——计划必在 loop 在途
-    期间落定；罕见的反方向（loop 快于次轮）只会误红不会误绿。"""
-    from app.chat.trigger_turn import TRIGGER_UNDERSTANDING, run_trigger_turn
+    同秒」的常驻回归座）。ADR-102 改靶：素材评审 trigger 已死，落点拍与
+    事件内容无关，现骑存活事件 craft_decompiled（ref 只是去重键）。确定性
+    说明：计划 dock 由用户次轮驱动（dock 是代码路径，秒级），触发的 loop
+    恒为 10s+ 量级——计划必在 loop 在途期间落定；罕见的反方向（loop 快于
+    次轮）只会误红不会误绿。"""
+    from app.chat.trigger_turn import TRIGGER_CRAFT_DECOMPILED, run_trigger_turn
 
     pid = await ctx.new_project("S22 trigger landing silence")
     await seed_asset(
@@ -4269,7 +4221,7 @@ async def s22_trigger_landing_silence(ctx: Ctx) -> None:
     )
     # 准入拍此刻通过：无在途用户回合、无 pending plan。
     trigger_task = asyncio.create_task(
-        run_trigger_turn(uuid.UUID(pid), TRIGGER_UNDERSTANDING, "s22-landing")
+        run_trigger_turn(uuid.UUID(pid), TRIGGER_CRAFT_DECOMPILED, "s22-landing")
     )
     await asyncio.sleep(2)  # 让触发回合过准入、进入 LLM loop 窗口
     turn1 = await ctx.chat(pid, "把我的视频做成 3 张金句卡")
@@ -4867,10 +4819,9 @@ async def s24_interview_framing_choice_lands_reframe(ctx: Ctx) -> None:
     completed → 成片 render_spec 带非空 crop_track（确定性尾——选了就要像
     配方卡那样成片，静默中央裁剪的结构通路在此锁死）。中间（router 直接出书
     还是先问）是 LLM 裁量，nudge 有界兜底，红了 = prompt 回归信号（S1 同口
-    径）。warm 首读先等到再 bail 掉建议问：触发回合准入口是两静态谓词，首个
-    计划回合前等到它 = 确定性排序，消掉建议问挂 pending 对计划回合的干扰
-    （它不是本剧本的断言对象——首读说得出分镜是 live 验收项，LLM 方差不
-    进确定性尾）。fixture 律：素材先拷 scenario/ 前缀隔离（delete_project
+    径）。ADR-102 注：素材评审 trigger 已死——计划回合前不再有主动首读
+    要排序，原 warm 首读等待/bail 序曲随其退役整段拆除。fixture 律：素材
+    先拷 scenario/ 前缀隔离（delete_project
     会 unlink 资产 file_url——共享 demo key 直接引用随清理被删，S16 首跑
     吃过配方卡营销片）。"""
     fixture_prefix = f"scenario/s24-{uuid.uuid4().hex[:8]}"
@@ -4899,41 +4850,6 @@ async def s24_interview_framing_choice_lands_reframe(ctx: Ctx) -> None:
         wallet = await get_or_create_wallet(db, ctx.user_id)
         wallet.balance = int(wallet.balance) + 200000
         await db.commit()
-
-    # warm 首读排序：理解落库 → 触发回合必说话（无在飞 turn、无 pending plan，
-    # 两谓词皆空）——等它落地、有建议问就 bail 掉（优雅不选），再进计划回合。
-    # conversation GET 的自愈座位保证 warm 必被点燃（worker 完成钩已点过一次，
-    # dedup 收口）。
-    conv_id = None
-    deadline = asyncio.get_event_loop().time() + 60.0
-    while conv_id is None and asyncio.get_event_loop().time() < deadline:
-        res = await ctx.conversation(pid)
-        if res.status_code == 200:
-            conv_id = res.json().get("id")
-            break
-        await asyncio.sleep(2)
-    check(conv_id is not None, "the warm first-read conversation lands (排序前提)")
-    from app.pipeline.step_context import asset_digest
-
-    async with AsyncSessionLocal() as db:
-        assets = list(
-            (
-                await db.execute(
-                    select(Asset)
-                    .where(Asset.project_id == uuid.UUID(pid))
-                    .order_by(Asset.created_at)
-                )
-            ).scalars().all()
-        )
-    review0 = await wait_trigger_review(ctx, conv_id, asset_digest(assets), timeout=300.0)
-    check(review0 is not None,
-          "the understanding_warmed first read speaks before the plan turns "
-          "(排序前提——它的建议问随后 bail 掉，不干扰计划回合)")
-    if (review0.get("question") or {}).get("kind") == "question":
-        bail0 = await ctx.answer(review0["id"], {"kind": "bail"})
-        check(bail0.status_code in (200, 201),
-              "the first read's suggestion dock settles (graceful not-now)",
-              bail0.text)
 
     # 用户口头选定分镜方向——选择执行律：链必含 select_clips + reframe_clip。
     turn = await ctx.chat(pid, "把我的双人访谈剪成竖屏短片，镜头跟着说话人切换。")
@@ -5576,19 +5492,21 @@ async def s_int10_capability_answer_never_narrates_grouping(ctx: Ctx) -> None:
 
 
 async def s_int11_trigger_verdict_offer_texture(ctx: Ctx) -> None:
-    """事故②回归锁（批 D · 宪法①执行细节）：素材评审 trigger 的判定以提
-    议落地、收尾无指令。形态面断言：无 pending plan → 首读开口（ADR-080
-    不静默）；散文非空且永不以问号收尾（介质法——问题住在 dock 自己的
-    标题里）；建议 dock 1-3 项（trigger 契约：零建议拒于门内）+ 载荷边
-    界 lint（check_suggestion_block 全谱）。判定是推荐还是指令的措辞质
-    感归 reply_quality_probe 语义角色维度——本场景禁措辞正则。"""
-    from app.chat.trigger_turn import TRIGGER_UNDERSTANDING, run_trigger_turn
+    """事故②回归锁（批 D · 宪法①执行细节）：主动评审 trigger 的判定以提
+    议落地、收尾无指令。ADR-102 改靶：素材评审 trigger 已死，本座骑存活
+    事件 craft_decompiled——形态面断言不变：无 pending plan → 开口
+    （ADR-080 不静默）；散文非空且永不以问号收尾（介质法——问题住在
+    dock 自己的标题里）；建议 dock 随 craft 契约 0-3 项（素材 trigger 的
+    「零建议拒于门内」硬地板已随 ADR-102 退役——零建议此刻合法），非空
+    时过载荷边界 lint（check_suggestion_block 全谱）。判定是推荐还是指令
+    的措辞质感归 reply_quality_probe 语义角色维度——本场景禁措辞正则。"""
+    from app.chat.trigger_turn import TRIGGER_CRAFT_DECOMPILED, run_trigger_turn
 
     pid, _ = await seed_keynote_project(ctx, "S-int-11 trigger verdict")
-    review = await run_trigger_turn(uuid.UUID(pid), TRIGGER_UNDERSTANDING,
-                                    "s-int-11-digest")
+    review = await run_trigger_turn(uuid.UUID(pid), TRIGGER_CRAFT_DECOMPILED,
+                                    "s-int-11-craft")
     check(review is not None,
-          "no pending plan — the first-read review speaks (ADR-080)", review)
+          "no pending plan — the proactive review speaks (ADR-080)", review)
     row = next(m for m in await conversation_items(ctx, pid)
                if m["id"] == str(review.id))
     content = (row.get("content") or "").strip()
@@ -5596,7 +5514,9 @@ async def s_int11_trigger_verdict_offer_texture(ctx: Ctx) -> None:
     check(not content.endswith(("?", "？")),
           "the prose never ends in a question mark (介质法——the card asks it)",
           content[-40:])
-    check_suggestion_block(row.get("suggestions") or [], row["id"], "S-int-11")
+    suggestions = row.get("suggestions") or []
+    if suggestions:
+        check_suggestion_block(suggestions, row["id"], "S-int-11")
 
 
 async def s_int12_repair_never_confesses(ctx: Ctx) -> None:
@@ -5952,8 +5872,8 @@ SCENARIOS = {
     "S16": s16_remix_flagship_journey,
     "S17": s17_run_authority_park_and_handoff,
     "S18": s18_idless_asset_read_terminalizes,
-    "S-wait-1": s_wait1_grounded_answer_marks_review_consumed,
-    "S-wait-2": s_wait2_timeout_clause_then_review_relays,
+    "S-wait-1": s_wait1_in_turn_wait_grounds_answer,
+    "S-wait-2": s_wait2_failed_read_honest_clause,
     "S19": s19_turn_durability_and_trigger_admission,
     "S20": s20_speech_semantic_contract,
     "S21": s21_checkpoint_channel_observation,

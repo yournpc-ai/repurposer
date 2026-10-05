@@ -96,7 +96,10 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
         count: activity.count,
         total: activity.total,
         name: activity.name,
-        defaultValue: t("chat.thinking"),
+        // 未知键兜底分态：进行中的行回 "Thinking…" 诚实；已落定的行回
+        // 中性 "Done" —— 旧资源包遇到新键时若回 "Thinking…"，一条已完成
+        // 的行会谎称还在进行（素材待命完成帧实测事故）。
+        defaultValue: t(status === "active" ? "chat.thinking" : "chat.completed"),
       })
     : t("chat.thinking")
   // E7 诚实边界: expandability IS the payload fact (a count-carrying

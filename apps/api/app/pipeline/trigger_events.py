@@ -4,12 +4,12 @@ The pipeline PUBLISHES the whitelisted world events; the Agent Interface
 subscribes its trigger turn from the composition root (``app.main`` /
 ``app.worker``). This module is the ONLY legal pipeline → chat edge for the
 trigger seats — Runtime → Events, never an import of ``app.chat``. The
-pipeline's fire points (understanding warm / run terminal / craft decompile)
-call :func:`fire_trigger`; ``chat/trigger_turn.py`` registers its own
+pipeline's fire points (run terminal / craft decompile) call
+:func:`fire_trigger`; ``chat/trigger_turn.py`` registers its own
 ``fire_trigger`` (schedule the turn, track the task) as the handler at
 process boot.
 
-Whitelist discipline (freeze): the three trigger kinds below are the whole
+Whitelist discipline (freeze): the two trigger kinds below are the whole
 proactivity boundary — this is a seam, not an event bus. Adding a kind is an
 ADR-level review (CHAT_ARCH §8.8), never a drive-by.
 """
@@ -22,12 +22,9 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 # The proactivity boundary (白名单): a turn fires ONLY on these world events.
-TRIGGER_UNDERSTANDING = "understanding_warmed"
 TRIGGER_RUN_COMPLETED = "run_completed"
 TRIGGER_CRAFT_DECOMPILED = "craft_decompiled"  # 案例拆解完成 (ADR-078, 旅程二④)
-TRIGGER_WHITELIST = frozenset(
-    {TRIGGER_UNDERSTANDING, TRIGGER_RUN_COMPLETED, TRIGGER_CRAFT_DECOMPILED}
-)
+TRIGGER_WHITELIST = frozenset({TRIGGER_RUN_COMPLETED, TRIGGER_CRAFT_DECOMPILED})
 
 # The subscriber's fire seat: (project_id, trigger, ref) -> schedule the turn
 # and return (fire-and-forget — the world event already landed truthfully;

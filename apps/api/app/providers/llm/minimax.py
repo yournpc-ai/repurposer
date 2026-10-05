@@ -380,6 +380,9 @@ class MiniMaxClient:
         # ~2 折）——逐字节重放实测 17221/17222 命中（2026-09-27 取证）；
         # 逐 pod 独立 + 负载自适应 TTL，冷 pod 首调必 miss，故配启动预热。
         prompt_cache="passive_prefix",
+        # 视频输入 = 抽帧看画面、音轨丢弃（spike 2026-10-05：原视频直发，
+        # 模型自答「无法处理音频」）——语音主导素材走 ASR 文本进上下文。
+        understands_video_audio=False,
     )
 
     def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:

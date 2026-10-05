@@ -83,6 +83,14 @@ class ProviderCapabilities:
     2026-09-27). ``None`` = no known cache. Declarative only — the harness
     never changes behavior off it; it exists so policy layers (warmup,
     observability) can ask.
+
+    ``understands_video_audio`` (ADR-102): the provider natively analyzes a
+    video's AUDIO TRACK when the video rides the context (Gemini-class).
+    False = the model is deaf to speech in videos (M3: frames only — spike
+    2026-10-05, the model itself answered 「无法处理音频」), so speech-driven
+    material must reach the context as ASR transcript text. Assembly reads
+    this declaration deterministically — never a model decision, never an
+    after-the-fact patch.
     """
 
     supports_native_tools: bool = False
@@ -90,6 +98,7 @@ class ProviderCapabilities:
     reasoning_dialect: str | None = None
     supports_constrained_decoding: bool = False
     prompt_cache: str | None = None
+    understands_video_audio: bool = False
 
 
 class WireTier(IntEnum):

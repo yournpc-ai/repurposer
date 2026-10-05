@@ -88,7 +88,13 @@ async def claim_pending_asset(db: AsyncSession) -> UUID | None:
         row = (
             await db.execute(
                 select(Asset)
-                .where(Asset.processing_status == AssetStatus.PENDING)
+                .where(
+                    Asset.processing_status == AssetStatus.PENDING,
+                    # 休眠素材 (ADR-102 §1): NULL = nobody has asked for the
+                    # content — the asset sleeps until a read attempt or a
+                    # run birthplace stamps the request.
+                    Asset.processing_requested_at.is_not(None),
+                )
                 .order_by(Asset.created_at)
                 .with_for_update(skip_locked=True)
                 .limit(1)

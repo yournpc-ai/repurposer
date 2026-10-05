@@ -299,7 +299,6 @@ async def _create_message(
     question: dict[str, Any] | None = None,
     suggestions: list[dict[str, Any]] | None = None,
     suggestion_ref: dict[str, Any] | None = None,
-    consumed_understanding_ref: str | None = None,
 ) -> Message:
     if role == "assistant":
         # 工具名回响 sanitizer (2026-09-30 用户拍板 — 彻底删掉): the model
@@ -311,15 +310,6 @@ async def _create_message(
             **(intent or {}),
             "interaction_policy_version": INTERACTION_POLICY_VERSION,
         }
-        if consumed_understanding_ref:
-            # 复读禁止律的 consumed 戳 (ADR-101 §3): the mark rides the
-            # assistant row's OWN intent (zero extra rows, zero rendering
-            # surface) and the review's _already_spoke matches it — the
-            # first read was narrated by this turn, so the world-fired
-            # review never repeats it. Same commit as the row (H4: the
-            # mark is atomically visible before the turn's in-flight flag
-            # clears).
-            intent["consumed_understanding"] = consumed_understanding_ref
     message = Message(
         conversation_id=conversation_id,
         role=role,
@@ -950,7 +940,6 @@ async def _dock_question(
     content: str,
     payload: QuestionPayload,
     intent: dict[str, Any] | None = None,
-    consumed_understanding_ref: str | None = None,
 ) -> tuple[Message, list[UUID]]:
     """Raise a new pending question (ask 落库): at most one pending per
     conversation, so any still-open question retires as superseded first.
@@ -975,7 +964,6 @@ async def _dock_question(
         content,
         question=payload.model_dump(mode="json"),
         intent=intent,
-        consumed_understanding_ref=consumed_understanding_ref,
     )
     return message, bailed_run_ids
 
@@ -1027,7 +1015,6 @@ async def sync_plan_question(
     echo: str | None = None,
     estimate: PlanEstimate | None = None,
     plans: list[dict] | None = None,
-    consumed_understanding_ref: str | None = None,
 ) -> list[UUID]:
     """Keep exactly one pending task_book question per project conversation.
 
@@ -1094,7 +1081,6 @@ async def sync_plan_question(
             plans=plans or [],
         ),
         intent=intent.model_dump(mode="json"),
-        consumed_understanding_ref=consumed_understanding_ref,
     )
     # Draft graph (ADR-057 K5 — 图先展示后运行): the docked chain stamps the
     # canvas's preview as DRAFT nodes through the birthplace's own compile

@@ -2586,21 +2586,22 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 
 **Related**: ADR-081（选项语法统一律——本条恢复其全强度）/ ADR-099（§2 suggestions 行 / §3 / §4 answer 面被本条翻案，其余各节不动）/ ADR-053 R1（选项问阻塞形态律）/ ADR-070（确认拍回座 dock——本条是「dock 是固定选择唯一座位」的完全化）
 
-## ADR-101: 素材待命场景重写——回合内有界等待 + 承诺机器退役 + trigger 收窄单一叙事者
+## ADR-102: 素材理解 = 回合内前提条件——能力声明 + 休眠素材 + 工具级终态等待（ADR-101 翻案，场景消除）
 
-**Status**: Decided (2026-10-04)，已拍板待施工；施工合同 = `tasks/material-wait-in-turn.md`
+**Status**: Decided (2026-10-05)，已拍板待施工；施工合同 = `tasks/material-wait-in-turn.md`
 
-**Context**: live 实锤（项目 8a110b8c）：用户在素材处理中提问「有什么建议」，屏幕出现 ① 承诺内容与 beat 事实因果颠倒（「素材理解完成」的 beat 已在屏上，随后落地的承诺仍说「看完给你说」——staleness 压制门三点对齐未入场）；② 35 秒死窗后第二 writer（trigger review 回合）才给出真建议。根因 = **三个独立 writer**（用户回合 / worker pipeline beats / trigger 回合）按 wall-clock 合流，承诺机器（`material_pending` marker / assemble stamp / land-time verdict / DeferredFrames drop 专用道）与 trigger 礼貌门都是为补这个病长出的补丁——每一层都在补上一层造出来的病。目标形态（用户拍板）= Claude Code 因果序四要素：**状态 narrate 等待 → 正文说真话 → 结果随后**，一个 writer。**复读红线（用户拍板）**：任何 agent 永不重复叙述已说过的内容——第一刀散文已说内容（「这是一条关于 X 的演讲…」）后再来「我看了你的素材——你在讲 X」= 复读，永禁；第一刀只宣告等待零内容（「我还没看完，等我看完了给你答复」）→ 等待被 narrate → 接力行「我看了你的素材——你在讲 X」= 有服务感的兑现，正是目标形态。
+**Context**: ADR-101 把「chat 读不了素材」当等待问题修（回合内有界等待 + 地板子句 + review 接力 + 复读禁止律，W1/W2 已施工）。live 观察链暴露真因更深一层：**等待的对象——上传即跑的本地 ASR——本身放错了位置**。spike 实证（`scratch/m3_video_spike.py` / `m3_video_transcribe_probe.py`）：MiniMax M3 视频输入 = 抽帧看画面、音轨丢弃（模型自答「无法处理音频」），视频块 ~118k tokens/轮且不吃前缀缓存；而目标用户的素材是说话的内容（采访/讲座/播客），内容在音轨里。三个用户拍板事实：① 对话阶段 = 纯对话——用户可能聊完就换素材，不该启动任何实际 workflow；② 转写文本进上下文比视频帧便宜两个数量级且可缓存；③ 消息 UI 是阻塞形态，不阻塞的接力机制与之打架（第二 writer = 消息打架的根源）。
 
 **Decision**:
 
-1. **回合内有界等待**：`get_understanding` 在素材处理中不再立即返回「不可读」，而是服务端有界等待理解落地——上限 = configs 表运营参数 `chat.material_wait_secs`（注册表默认 120s，后台可改无需 deploy，ADR-055 边界）。答案依赖内容的提问 = **同一回合**等到理解落地后直接给出真答复：无承诺、无第二回合、无死窗。模型词汇零新增（同一把 read 工具的行为升级，无新工具名）。**不变量**：等待上限必须始终小于 trigger 礼貌窗（现 15×20s=300s）减安全余量——否则等待中的回合会把 `understanding_warmed` trigger 耗到 defer-out 丢入沉默，地板路径的接力永不到达；配置注释与简报钉死该上界。
-2. **承诺机器整台退役**：`material_pending` 标记（plan/chat 两份 answer 契约字段）/ `_material_pending.j2` / `material_pending_stamped` / `pending_commitment_verdict` / `material_beat_landed` 的压制消费面 / DeferredFrames 素材待命 drop 专用道全删。等待超时仍不可读 = 普通 answer 诚实陈述（**体验地板**：宣告等待 + 宣告接力，零内容）——长素材的 beat 在数十分钟后，不存在「落地即过期」竞态，无需任何压制机制。
-3. **复读禁止律 + consumed 谓词（trigger 收窄单一叙事者）**：`understanding_warmed` review 只在**理解落地后没有任何回合叙述过素材内容**时发言。机械谓词 = consumed 戳，两个写口（覆盖全部内容到达路径，审计实测）：① chat path——`get_understanding` 返回真实 digest（chat 回合的唯一内容源，assemble 不注入）；② plan path——assemble 信任锚注入 digest（plan_turn.py:346）的回合落地了 assistant 行。戳 = review 去重注册表同 `(trigger, ref)` 三元组同构行 + consumed 旗，**与 assistant 行同一事务提交且先于 turn_state 空闲清除**（否则 admission 见空闲查戳未落 = 复读竞态）。等待超时 / 未读 = 不盖戳 → review 必达（服务感接力）。已知接受残留：理解就绪后纯寒暄回合盖戳吃掉首读（薄残留——主旅程 plan echo 复读是红线，寒暄后无主动首读只是少一次惊喜；用户再开口即被 grounded 服务）。trigger review 的家 = **理解落地后用户一言未发**的旅程（唯一 writer，无竞态）。**实现座 = 代码层（用户拍板）**：戳写入、去重判定、跳过发火全为机械代码路径，**prompt 层永不承担复读防守**——任何「叮嘱模型别重复」式 prompt 法 = 画蛇添足（复读风险来自自造的第二 writer，标准单流 chat 无此病），翻案须新 ADR；prompt 只承载散文内容法（说什么）与工具使用引导（什么时候读），永不承载机制（发不发）。
-4. **等待期叙事零新 chrome**：等待期间用户看到现有素材相位 StatusLine（asset 状态驱动，与回合 SSE 独立）+ 活动流 beat 行——状态 narrate 等待、正文随后、结果殿后，屏幕序 = 因果序由构造保证，不靠补丁对齐。
-5. **打字机律全确认（用户拍板）**：正文永远打字机节拍，**整段瞬移永禁，散文无一例外出打字机**；动作（活动行 / 状态行 / dock / 结果卡）瞬时。G2 言语提交协议保留（被拒言语零 commit 的座），信封成功路径恒 `drain`（596ad3a 修律即终态），ADR-099 §7 不重开。
-6. **超时答复口径**：宣告等待 + 宣告接力，零内容（「我还没看完你的完整视频，等我看完了给你答复」= 合法第一人称形态——对确定性管线行为的陈述，不是空头承诺）；随后 review 的「我看了你的素材——你在讲 X」是该宣告的兑现，不是复读。
+1. **上传 = 纯存储（休眠素材）**：素材创建即休眠——`processing_requested_at` 可空时间戳默认 NULL，worker 认领口加非空条件。被丢弃 / 被围观 / 被冷落的素材处理成本恒为零。
+2. **能力声明驱动路径**：`ProviderCapabilities` 增 `understands_video_audio`（ADR-077 判词④声明位；M3 = False）。声明在装配期被代码确定性读取——永不由模型决策，永不是事后补救。具备音轨理解的 provider（未来接 Gemini 类）= 改一行注册表，路径自动换。
+3. **worker 事件的唯一创建点 = 模型的读企图**：`get_understanding` 的 pending 分支——素材未就绪且 provider 不具备音轨理解 → **此刻才**盖章 `processing_requested_at` 入队 → 工具内等待到**终态**（理解行落地 or 素材全失败提前出，**无时间上限**——H1 的 240s 上界与 300s 礼貌窗耦合随 trigger 素材路径一起消失）→ 观察只有两种：内容 / 失败事实。寒暄 / 能力问 / 聊别的 = 永不创建任何 worker 事件（没东西要跑）。
+4. **逻辑阻塞、零接力、单 writer 由构造保证**：需要素材的回合在工具处等待，同回合同一条消息给出真答案。`understanding_warmed` trigger 路径整族删除（fire 点 / `_already_spoke` / consumed 戳 / 复读禁止律 / 300s 礼貌窗 / trigger prompt 素材段）——屏幕上永远只有用户发起的那一个回合在说话，竞态、轮转、消息打架失去存在前提。
+5. **帧诚实三态**：active「正在查看视频内容…」（全程 active，等待期 SSE 帧心跳保活防代理掐线）→「已理解素材 · Ns」（真实时长）/「素材没能读出来」（失败 + 同回合诚实失败话）。
+6. **生产链不受影响**：ASR / speaker_map / prosody 链保留；开工入口兜底盖章（付费执行的前提条件，与对话无关）。ADR-024 词级时间戳硬前提是渲染前提，不是对话前提。
+7. **ADR-101 的永久继承**：承诺机器（`material_pending` 族）退役维持不复活；打字机律 drain 终态（596ad3a）不变。ADR-101 其余各条（有界等待 / 地板子句 / review 接力 / consumed 戳）随本条翻案，代码整族删除，死亡清单 = 施工合同。
 
-**Consequences**: 素材处理中提问从「承诺 + 35s 死窗 + 二手答案」变为「等待被 narrate + 一个回合真答案」；超时地板从「空头承诺」变为「宣告 + 必达接力」；承诺-压制-礼貌补丁三层整族消亡；需求池「Turn budget」行的「仍在处理」诚实降级形态随本条定形（等待超时 = 宣告座，等待时长计入回合 wall-clock 语义）；等待上限成为运营参数（受 §1 不变量约束）。代价 = 等待中的回合时长拉长（上限 120s，SSE keepalive 与素材相位覆盖）；H3 薄残留（上文在册）。否决备查：① 修压制门（钉 H1 marker 缺失 / H2 stamp 缺失根因）（被否——机器整台退役，取证成本省掉；补丁上叠补丁正是本 ADR 要杀的形态）；② 恢复边生成边流式、重开 ADR-099 §7（被否——用户拍板正文全打字机，G2 + drain 即终态）；③ 等待做成显式新工具 `wait_for_material`（被否——模型词汇零新增，read 工具行为升级即可；新词 = 新路由灰区）；④ consumed 谓词用「任何 assistant 行晚于 beat 即跳过」（被否——理解就绪后的纯寒暄/ack 回合会误吃首读；谓词必须钉在「内容消费」而非「说过话」）；⑤ review 照发不盖戳（被否——主旅程 plan echo 已叙述内容，复读 = 用户红线）。
+**Consequences**: 「素材处理中提问」从四层机器（等待上限 + 地板 + 接力 + 防复读）变为「等终态 + 一个答案」；`chat.material_wait_secs` 运营参数删除（等待无上限，无参数可调）。代价 = 首次读素材的回合时长 = 本地 ASR 实际时长（CPU whisper 分钟级——加速旋钮 GPU / 云 ASR 是运营层另案，不在本条）。已知边界（在册）：对话阶段模型对素材的理解是语义级（无时间码），「把第 2 分钟剪出来」类精确引用由开工后的 ASR 时间码校准。否决备查：① 云 ASR 替代本地（被否——自托管 / GDPR 叙事不动；加速属运营层另案）；② 视频直发多模态（被否——spike 实证 M3 无音轨理解 + token 60× 且不可缓存）；③ send 入口预盖章起跑（被否——寒暄回合不该创建任何 worker 事件）；④ 保留接力做「我看了」惊喜时刻（被否——UI 阻塞心智下第二 writer = 消息打架根源）。
 
-**Related**: ADR-099（§7 言语提交协议保留确认）/ ADR-100（同族形态收敛）/ ADR-055（configs 运营参数边界——等待上限入表依据）/ 需求池「Turn budget = iteration cap + wall-clock deadline」行（诚实降级形态定形）
+**Related**: ADR-101（本条翻案——仅承诺机器退役与打字机 drain 两件继承，余者全删）/ ADR-077（能力声明位）/ ADR-024（词级时间戳 = 渲染前提）/ ADR-055（`chat.material_wait_secs` 删除——等待无上限，无运营参数）/ ADR-092（口头确认律——开工盖章点的语义不变）

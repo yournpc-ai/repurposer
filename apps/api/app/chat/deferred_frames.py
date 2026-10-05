@@ -26,11 +26,6 @@ Four-state machine — OPEN → BUFFERING → ACCEPT→FLUSH / REJECT→DROP→R
   disarming — prose spoken before a read must land before the read's
   statement, and frames after a checkpoint stay buffered until the close.
 
-The material-pending lane rides the same machine: the marked commitment
-landing STALE (the beat exists) → :meth:`drop` discards the queue unsent,
-the turn closes silent, and the review turn speaks next — one narrator, no
-expired promise.
-
 Liveness never suffers: reasoning keepalives, phase labels, and activity
 frames ride their own channels, undeferred. The StatusLine covers the
 validation dead-window (``chatBusy && !proseActive`` — no delta has

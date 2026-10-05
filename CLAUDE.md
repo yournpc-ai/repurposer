@@ -82,6 +82,7 @@ Correct:
 - **修订 = 图变更**：chat 修订骑 `POST /chat` 的 `edit_graph`（wiring 提案）→ `apply_wiring_ops` 唯一写口；卡面 prompt 直改 = 确定性手势走 `POST /projects/{id}/graph/revise`，**dock 零消息**（节点状态周期就是全部反馈），卡面乐观回显永不回闪。
 - **画布只读**：FlowView 无 drag/connect/pan/zoom API；**相机只认用户发起节拍**（draft 图到来整链 fit / 新节点诞生 setCenter；背景 refetch 永不动相机）。
 - **Dock 三形态机**（full / panel / dock）与保草稿承重结构（单一 root + 恒渲染容器 + 恒定子索引，MentionEditor 跨形态翻转永不 remount）：全文 CHAT_ARCH §1 关键形态事实。
+- **chat 修复禁补丁式加禁令（先取证后归因）**：chat bug 的修法 = 先取证再归因到源头，**永不用新增禁令压症状**——上下文盲的禁令（「禁应答粒子」「禁指导用户」式）在合法场景必然拆东墙补西墙。取证 = 回放真实 payload 与机制链：payload 是「代码 × 当时世界状态」的纯函数，无 LLM 台账也能用真实 assemble + 内存拨回世界状态字节级重建（先例 = ADR-101 时代的 `scratch/replay_material_wait_turn.py`，脚本已退役、存档在 git 历史）。源头只有四类：装配 / 工具观察文本 / 法条座位冲突（两部法打架或适用范围未声明）/ 一法多说（同一部法在多个座位各说一遍）。两条结构律：**一部法只在一个座位说**；**工具观察文本只携带世界事实 + 指回法条座位，永不携带可转述的言语草稿**（被复述的法 = 模型的言语草稿，必被 paraphrase 进回复）。
 
 ## Product Positioning
 

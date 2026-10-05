@@ -75,7 +75,6 @@ from app.pipeline.step_context import (
     collect_asset_media,
 )
 from app.pipeline.step_display import set_spec_field, set_summary
-from app.pipeline.trigger_events import TRIGGER_UNDERSTANDING, fire_trigger
 from app.platform.project_context import (
     collect_asset_texts,
     resolve_persona,
@@ -391,10 +390,7 @@ async def warm_understanding(project_id: UUID) -> None:
                     # 唯一索引收口 (migration n4d7e0a3b6c9, 2026-09-28): a
                     # concurrent warm (the worker's completion seat vs the
                     # API's lazy seat) landed the same digest first — the
-                    # race loser IS a reuse-hit discovered late. Roll back
-                    # and fall through to the shared beat + trigger tail
-                    # (deduped downstream), never skip it: the winner may
-                    # still die before its own fire.
+                    # race loser IS a reuse-hit discovered late.
                     await db.rollback()
                     logger.info(
                         "understanding_warm_race_lost", project_id=str(project_id)
@@ -407,82 +403,10 @@ async def warm_understanding(project_id: UUID) -> None:
                         quotes=len(understanding.quotable_lines),
                         beats=len(understanding.topic_boundaries),
                     )
-            # 开场席位两路合一 (2026-09-27 用户拍板): 复用检查在最前，但无论
-            # 新产还是复用命中，结果都是「理解已交代」——理解本身内容寻址
-            # （跨项目共享），而本项目的「已理解素材内容」节拍与「我看了——」
-            # 触发回合属于这个项目，两路走同一段后续代码（此前 reuse 提前
-            # return，本项目节拍与触发回合永不落座，dock 的 understanding
-            # 空档行不死，project cb3b735f 实证）。
-            # 素材节拍入库 (2026-09-24 用户拍板): the settled understanding
-            # persists BEFORE the trigger fires, so the rebuilt timeline
-            # always reads beat-then-prose ("已理解素材内容" → "我看了——…").
-            # Best-effort like the warm itself; both seats dedup on the
-            # digest (the beat once-only per conversation+beat+ref, the turn
-            # once per conversation+trigger+ref), so the warm's
-            # re-materialization race can never double-speak.
-            try:
-                from app.pipeline import conversation_bridge  # deferred: ADR-087 seam
-
-                await conversation_bridge.record_material_beat(
-                    db,
-                    project.user_id,
-                    project_id,
-                    "understanding",
-                    count=len(assets),
-                    ref=digest,
-                )
-                await db.commit()
-            except Exception as e:  # noqa: BLE001 — the beat is best-effort
-                logger.warning(
-                    "material_beat_understanding_failed",
-                    project_id=str(project_id),
-                    error=str(e),
-                )
-            # 触发回合 (T3, ADR-077 判词③): 理解完成 is whitelist trigger #1 —
-            # the agent looks at the material and speaks (旅程一②).
-            # Fire-and-forget — the warm's tick moves on. (Seam:
-            # app.pipeline.trigger_events, ADR-087 §6.)
-            fire_trigger(project_id, TRIGGER_UNDERSTANDING, digest)
     except Exception as e:  # noqa: BLE001 — warm is best-effort, the run path pays later
         logger.warning(
             "understanding_warm_failed", project_id=str(project_id), error=str(e)
         )
-
-
-async def understanding_opening_missing(
-    db: AsyncSession, project_id: UUID, conversation_id: UUID
-) -> bool:
-    """The lazy self-heal guard (2026-09-27 用户拍板——方案 a): True only
-    when the project's asset set is COMPLETE and digestible, but this
-    conversation's 「已理解素材内容」 beat never landed for the CURRENT digest
-    — the signature of the worker dying between the last asset's completion
-    and the warm's landing (the upload-time fire seat's only gap). An
-    incomplete set is the worker seat's business (the next completion
-    re-fires); a landed beat means the opening already happened; the digest
-    comparison re-arms the seat when a later upload changes the set."""
-    assets = await list_assets(db, project_id)
-    if not assets or any(
-        a.processing_status != AssetStatus.COMPLETED for a in assets
-    ):
-        return False
-    if not _understandable(assets):
-        return False
-    digest = asset_digest(assets)
-    from app.chat.service import MATERIAL_BEAT_TYPE  # deferred: ADR-087 seam
-
-    landed = (
-        await db.execute(
-            select(Message.id)
-            .where(
-                Message.conversation_id == conversation_id,
-                Message.intent["type"].astext == MATERIAL_BEAT_TYPE,
-                Message.intent["beat"].astext == "understanding",
-                Message.intent["ref"].astext == digest,
-            )
-            .limit(1)
-        )
-    ).first()
-    return landed is None
 
 
 _lazy_warm_tasks: set[asyncio.Task] = set()
@@ -497,14 +421,11 @@ _lazy_warm_inflight: set[UUID] = set()
 
 
 def fire_understanding_warm(project_id: UUID) -> None:
-    """The API-process fire seat for the warm (lazy self-heal, 2026-09-27
-    用户拍板——方案 a): the worker's asset-completion seat is the primary
-    fire; the conversation-open path re-fires from here when the guard above
-    finds a stranded opening. Same task-set shape as the worker's own warm
-    fire set — schedule, track against GC, move on; the warm itself is
-    idempotent (incomplete-set early return, digest-deduped opening seats).
-    Concurrent calls while one warm is in flight collapse onto it
-    (``_lazy_warm_inflight``)."""
+    """The API-process fire seat for the warm: schedule, track against GC,
+    move on; the warm itself is idempotent (incomplete-set early return,
+    digest-deduped rows). Concurrent calls while one warm is in flight
+    collapse onto it (``_lazy_warm_inflight`` — the 2026-09-28 16-warm
+    pile-up's lesson)."""
     if project_id in _lazy_warm_inflight:
         logger.info(
             "understanding_warm_lazy_skip_inflight", project_id=str(project_id)
@@ -519,6 +440,29 @@ def fire_understanding_warm(project_id: UUID) -> None:
         _lazy_warm_inflight.discard(project_id)
 
     task.add_done_callback(_release)
+
+
+def warm_in_flight(project_id: UUID) -> bool:
+    """The read-side of the pile-up guard (ADR-102 §3): the awaited read's
+    kick checks here first — an in-flight warm lands or dies on its own,
+    and only its absence earns a new inline kick."""
+    return project_id in _lazy_warm_inflight
+
+
+async def kick_warm_inline(project_id: UUID) -> bool:
+    """The awaited read's inline kick (ADR-102 §3): False = a warm is
+    already in flight for this project (the caller keeps polling — that
+    warm lands or dies on its own); True = this call ran the warm to its
+    end, and the caller may judge the outcome definitively (a missing row
+    now = the warm is dead for this digest, never a maybe)."""
+    if project_id in _lazy_warm_inflight:
+        return False
+    _lazy_warm_inflight.add(project_id)
+    try:
+        await warm_understanding(project_id)
+    finally:
+        _lazy_warm_inflight.discard(project_id)
+    return True
 
 
 class Understand(NodeBase):

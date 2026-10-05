@@ -262,13 +262,6 @@ class ChatTurn:
         self.settled_question: Message | None = None
         self.outcome: ProposeTurnOutcome | None = None
         self._bailed_on_skip: list[UUID] = []
-        # 复读禁止律的 consumed 戳 (ADR-101 §3): the digest this turn has
-        # SEEN — stamped by a get_understanding read that landed (the
-        # dispatch sink; the chat path's assemble never injects the digest,
-        # so the read is this path's only content source). Every assistant
-        # row from here carries the mark, so the world-fired review never
-        # repeats the first read.
-        self._consumed_understanding_ref: str | None = None
         self.deferred: DeferredFrames | None = None
         # 建议点选 provenance (ADR-099 §4): this turn's message IS a
         # suggestion pick → the resolution note rides into the agent-facing
@@ -394,7 +387,6 @@ class ChatTurn:
                     self.conversation_id,
                     "assistant",
                     _resume_ack_line(decided, outcome),
-                    consumed_understanding_ref=self._consumed_understanding_ref,
                 )
                 self.outcome = (assistant_message, None, [], self.settled_question)
                 return True
@@ -418,12 +410,6 @@ class ChatTurn:
 
     # ---- the loop's execute dispatch ----------------------------------------
 
-    def _mark_understanding_consumed(self, digest: str) -> None:
-        """复读禁止律写口① (ADR-101 §3): a get_understanding read landed the
-        content this turn — every assistant row from here carries the
-        consumed mark, so the world-fired review never repeats the read."""
-        self._consumed_understanding_ref = digest
-
     async def execute(self, name: str, params, prose: str) -> str | None | ToolObservation:
         """The LoopExecute seat: the disposition preamble, then the tool's
         validate → (reject: feedback, zero writes) → accept: writes + the
@@ -436,7 +422,6 @@ class ChatTurn:
                 self.project,
                 name,
                 params,
-                consumed_sink=self._mark_understanding_consumed,
             )
         disposition = (
             getattr(params, "pending_disposition", "none") if params is not None else "none"
@@ -620,7 +605,6 @@ class ChatTurn:
             ),
             derived=derived,
             plans=plans,
-            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         docked = await latest_pending_question(db, self.conversation_id)
         self.outcome = (docked, None, bailed_run_ids, self.settled_question)
@@ -978,7 +962,6 @@ class ChatTurn:
                 self.conversation_id,
                 "assistant",
                 content,
-                consumed_understanding_ref=self._consumed_understanding_ref,
             )
             self.outcome = (assistant_message, None, [], self.settled_question)
             return None
@@ -1199,7 +1182,6 @@ class ChatTurn:
             (prose or "") + (content_note or ""),
             workflow_run_id=run_id,
             intent=proposal.model_dump(mode="json"),
-            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         self.outcome = (assistant_message, run_id, [], self.settled_question)
         return None
@@ -1447,7 +1429,6 @@ class ChatTurn:
                 "kind": kind,
                 "target_output_id": str(output.id),
             },
-            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         try:
             await apply_operations(
@@ -1532,7 +1513,6 @@ class ChatTurn:
                 default_path=params.default_path,
             ),
             intent=ask.model_dump(mode="json"),
-            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         self.outcome = (
             assistant_message, None, bailed_run_ids, self.settled_question
@@ -1554,7 +1534,6 @@ class ChatTurn:
             "assistant",
             prose,
             intent=AnswerProposal(text=prose).model_dump(mode="json"),
-            consumed_understanding_ref=self._consumed_understanding_ref,
         )
         self.outcome = (assistant_message, None, [], self.settled_question)
         return None
@@ -1586,7 +1565,6 @@ class ChatTurn:
                     self.conversation_id,
                     "assistant",
                     content,
-                    consumed_understanding_ref=self._consumed_understanding_ref,
                 )
                 run_id, bailed_run_ids, settled = None, [], self.settled_question
             else:
@@ -1598,7 +1576,6 @@ class ChatTurn:
                     "assistant",
                     result.prose,
                     intent=AnswerProposal(text=result.prose).model_dump(mode="json"),
-                    consumed_understanding_ref=self._consumed_understanding_ref,
                 )
                 run_id, bailed_run_ids, settled = None, [], self.settled_question
         bailed_run_ids = [*self._bailed_on_skip, *bailed_run_ids]
