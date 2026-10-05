@@ -2384,6 +2384,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       question?: string | null
       options?: { id: string; label: string; description?: string }[]
       recommended_id?: string | null
+      default_path?: string | null
     },
   ) => {
     if (!payload.question) return
@@ -2396,6 +2397,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         question: payload.question,
         options: payload.options ?? [],
         recommended_id: payload.recommended_id ?? null,
+        default_path: payload.default_path ?? null,
       },
       answer: null,
       workflow_run_id: null,
@@ -4621,6 +4623,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         question={bareQuestion(pillQuestion)}
         options={pillQuestion.question?.options ?? []}
         recommendedId={pillQuestion.question?.recommended_id ?? null}
+        defaultPath={pillQuestion.question?.default_path ?? null}
         onAnswer={handleOptionAnswer}
         answering={answering}
         onBail={pillQuestion.preview ? undefined : handleBailQuestion}

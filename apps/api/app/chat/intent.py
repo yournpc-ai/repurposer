@@ -228,7 +228,10 @@ def _assemble_plan_turn(
         if payload.get("slot"):
             lines.append(f"- slot: {payload['slot']}")
         if payload.get("default_path"):
-            lines.append(f"- if the user skips: {payload['default_path']}")
+            lines.append(
+                "- fallback if unanswered (renders on the choice card): "
+                f"{payload['default_path']}"
+            )
         pending_lines = lines
     speech_language = current_ui_language()
     return (

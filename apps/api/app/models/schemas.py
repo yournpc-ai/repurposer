@@ -450,10 +450,10 @@ class QuestionProposal(BaseModel):
 
     type: Literal["ask"] = "ask"
     # 框架散文 (2026-09-08, ask 三分解剖 ①): the agent's speech around the
-    # question — 认领 the request + why this ONE question decides quality +
-    # the default path woven in naturally (提问策略 ③'s visible surface —
-    # the 09-04 ruling retired the dock's default-path row precisely because
-    # "正常对话即可", and this field IS the 正常对话). Streams as the turn's
+    # question — 认领 the request + why this ONE question decides quality.
+    # The default path is NEVER woven in (ADR-103: what happens without an
+    # answer renders as the dock's own meta line — world facts are shown by
+    # the card, never spoken by the prose). Streams as the turn's
     # echo; the question field stays the bare question (the dock title).
     # Empty only on code-composed questions (caption mode, interrupts).
     prose: str = ""
@@ -477,8 +477,9 @@ class QuestionProposal(BaseModel):
     # are CODE-BUILT (id = asset id, _build_role_question) so the answer
     # settles the PendingPlan pins deterministically; the LLM only frames
     # the speech. ``default_path`` is 提问策略 ③'s schema tooth: the skip
-    # path, consumed by the dock's × and the interjection reminder tail —
-    # the prose carries it visibly, the field keeps it machine-readable.
+    # path, consumed by the dock's ×, the dock's own fallback line, and the
+    # interjection reminder tail — the card renders it, the prose never
+    # carries it.
     slot: Literal["topic", "audience", "tone", "asset_role"] | None = None
     default_path: str = ""
 

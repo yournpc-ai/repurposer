@@ -342,6 +342,9 @@ export interface QuestionPayload {
    * recommends — the dock renders its muted suffix. Absent on legacy rows
    * and unrecommended asks. */
   recommended_id?: string | null
+  /** 默认路径行 (ADR-103): what happens without an answer — the dock's
+   * bottom meta line. Absent on legacy rows / code-built questions. */
+  default_path?: string | null
   /** The dock's credits quotation (BILLING §7): task_book only — total
    * [low, high] + the per-task marginal range aligned by task index (Σ
    * per_task ≡ total exactly; null = the task adds no quoted cost). */

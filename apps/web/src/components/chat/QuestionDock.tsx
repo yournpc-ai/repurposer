@@ -24,8 +24,8 @@
  *   the same badge tile — FLORA / Opus "Something else…" 同款解剖; Enter
  *   settles through the answer endpoint — a number/letter/label hit
  *   converts pre-post to the option pick, anything else records
- *   kind="freeform"). No default-path subtitle line (同日拍板：
- *   两家参照均无此行——跳过语义由 × 承担，正常对话即可). 作答反馈座 = 点中
+ *   kind="freeform"). 默认路径行 = 卡底 meta 行（ADR-103: what happens
+ *   without an answer 由卡自证，散文零宣告——世界事实不经模型嘴）. 作答反馈座 = 点中
  *   的行本身（accent 填充 + 行尾 inline spinner，Opus 选中行解剖；作答失败
  *   自动复位），卡底不再另置孤 spinner（同日拍板）. The morph governs
  *   OPTIONS questions only: a text question (options-empty) is plain flow
@@ -83,6 +83,11 @@ interface OptionDockProps {
   /** 推荐标记 (2026-09-27 一问拍一体化): at most one option id the agent
    * recommends — its row carries the muted 推荐 suffix. */
   recommendedId?: string | null
+  /** 默认路径行 (ADR-103): what happens without an answer — the LLM's own
+   * `default_path` copy rendered as the card's deterministic meta line
+   * (世界自证 by chrome), so the prose never announces it. Absent on
+   * legacy rows / code-built questions without one. */
+  defaultPath?: string | null
   /** Reserved anatomy (cost quote, v3) — shown muted when present. */
   estimate?: string | null
   onAnswer: (optionId: string) => void
@@ -179,6 +184,7 @@ function OptionForm({
   question,
   options,
   recommendedId,
+  defaultPath,
   estimate,
   onAnswer,
   answering,
@@ -320,6 +326,13 @@ function OptionForm({
             </div>
           ) : null}
         </div>
+      ) : null}
+      {/* 默认路径行 (ADR-103): the fallback renders as the card's own
+          whisper line — the prose never speaks it. */}
+      {defaultPath ? (
+        <p className="mt-1.5 text-[11px] leading-snug text-meta-foreground">
+          {t("questionDock.defaultPath", { path: defaultPath })}
+        </p>
       ) : null}
     </div>
   )

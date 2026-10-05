@@ -1110,7 +1110,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 2. **双引擎 workflow（概念统一，引擎分离）**：对话 = 事件驱动状态机（router + brief 账本 + 提问机器）；生产 = 编译 DAG。**对话永不编译进 DAG**（开放轮数 / 人是环境 / 报价不适用）；两引擎唯一接口 = 任务书（对话引擎的产出 = 生产引擎的输入，出生地唯一，ADR-043 不变）。
 3. **canonical 词汇，零自造词**：chat 边缘双件 = **intent router**（`plan_agent` / `chat_intent_agent` 同概念两相位 prompt，相位 = 上下文参数）；`director_understand` → **`understand`**、`director_plan` → **`plan`**；`pending_intent` → **`pending_brief`**。业界坐标：Anthropic routing / Plan-and-Execute / AI SDK generateObject / LangGraph node·step。判例归 NAMING N-43~N-47；更名批 = B1（commit 级自绿）。（plan 归两主：chat 侧计划书义 = plan path / presented_plan，pipeline planner 义不动；存储字 `task_book` / `book_summary` 冻结。判例 N-44 / N-52。）
 4. **brief 账本（P0）**：对话引擎的结构化状态（`projects.pending_brief`）——槽位 topic / audience / tone / constraints[] / material_state，**每槽带来源 user-stated > inferred > default，代码侧合并**（LLM proposes, code decides 不变）；账本 = 上下文工程主压缩件，累积 prompt 叙事降存档位。
-5. **ask 一等动作（P0）**：pre-run 相位动作集 = **ask / draft / answer / start**（draft = 起草/修订任务书，从不生成）；ask 复用 shape C（choice 3 项——真二元抉择降 2，对齐 FLORA/Opus 三选项节奏——+ freeform，走 dock 提问机器）。**提问策略三条**：一轮最多一问只问决定质量的那个缺失槽 / 选项一词可答、freeform 恒在 / 散文必带默认路径——**每轮一问、每问可一词答**（顾问姿态的本义是不让用户做创作题，不是不问）。**出书门槛**：brief 有根（主题 / 素材 / 明确配方，三者居一）才 dock 任务书；zero-material safety net / no-material lift 同属此策略。
+5. **ask 一等动作（P0）**：pre-run 相位动作集 = **ask / draft / answer / start**（draft = 起草/修订任务书，从不生成）；ask 复用 shape C（choice 3 项——真二元抉择降 2，对齐 FLORA/Opus 三选项节奏——+ freeform，走 dock 提问机器）。**提问策略三条**：一轮最多一问只问决定质量的那个缺失槽 / 选项一词可答、freeform 恒在 / 默认路径恒带（可见面 = dock 卡底 meta 行，散文零宣告——ADR-103）——**每轮一问、每问可一词答**（顾问姿态的本义是不让用户做创作题，不是不问）。**出书门槛**：brief 有根（主题 / 素材 / 明确配方，三者居一）才 dock 任务书；zero-material safety net / no-material lift 同属此策略。
 6. **任务书卡 = brief 的渲染（P1）**：卡顶 = brief 槽位渲染（有值显示、inferred 可点改、无值不显示、**零空框**）；per-row focus 与 run 级 instruction 两个空文本框**全删**（修订走点值改 / 聊天改，chat 恒胜不变）；确认 pill 按动作命名（"Save & generate" /「保存并开始」）；散文第二句恒为默认路径声明（≤2 句，本条给它 schema 级牙齿）。
 7. **角色 = 节点的 display 属性**：工作流内部永远函数名（动词族零人格）；用户可见进行态叙事 = 节点声明上的可选展示属性（`task_name` 机制升级位），**默认写工艺不写人**（「正在剪辑成片…」✓ /「剪辑师正在…」✗）——N-24 禁令对象是 assistant 的班子包装，步骤级工艺叙事是另一层；人形叙事 = 翻 N-24 的案，门槛维持。
 8. **有界 loop 节点 = 生产侧 agent 性的合法座位**：编译期排不出拓扑的活（搜索 / 阅读，步数不可预知）由 `NodeBase` 子类承接——内部 mini tool-loop（工具 = `app/tools/` 现成注册表）+ **三护栏**：迭代上限（节点声明）/ 报价 = fold（上限 × 单次，估价体系不破）/ 对外 = DAG 单节点（拓扑 / 占位 / SSE / 诞生编排全无感）。业界同构：LangGraph subgraph / Mastra agent-in-step / Anthropic agentic component。会话层有界工具 loop 同合法（ADR-077：生产封闭 / 服务收编 / 执行永拒）；开放式 autonomy（无界循环 / 自主改拓扑 / 自我 steering）永拒不变。首个试点 = research 节点（产出 research brief artifact 喂 writer）。
@@ -2265,7 +2265,7 @@ hold→capture→release 不动；edit→render 维持 $0 定价（自有基建�
 
 **方向说出律**：素材判型为访谈/对话形态（`speaker_map.form == "interview"` 或 understand 产物同等识别）时，分镜（镜头跟人）是该素材的**活方向**——trigger 首读 / 想法问答 / plan 提案都应能把分镜方向说出口（可作 suggestion dock 的选项），永不以素材性状否决（§1）。
 
-**选择执行律（必含）**：用户选定分镜方向后（点选 suggestion 或口头指明），plan path 组链**必含 `select_clips + reframe_clip`**——选了就要像配方卡那样成片，执行不打折。用户未指明方向且诉求为竖屏短片时，plan path 二选一：组合进链，或 ask_user 提出明确 framing choice（全幅切片 vs 分镜跟人，一词可答，散文恒带默认路径）。静默中央裁剪永禁。判型证据缺席（无 speaker_map）时不阻塞——按现有默认走，护栏只在证据在场时生效。
+**选择执行律（必含）**：用户选定分镜方向后（点选 suggestion 或口头指明），plan path 组链**必含 `select_clips + reframe_clip`**——选了就要像配方卡那样成片，执行不打折。用户未指明方向且诉求为竖屏短片时，plan path 二选一：组合进链，或 ask_user 提出明确 framing choice（全幅切片 vs 分镜跟人，一词可答，默认路径恒带）。静默中央裁剪永禁。判型证据缺席（无 speaker_map）时不阻塞——按现有默认走，护栏只在证据在场时生效。
 
 **确定性静默补链否决**：「访谈 + 竖屏即自动插入 reframe、不问不说」的确定性补链方案被否——方向必须经 agent 说出、用户选择，选择面不收缩。确定性兜底（只认用户已选的结构化证据）挂账：实测若 LLM 组链仍有漏选，另批评估（届时需 suggestion 选项的结构化指令载荷，属新机制）。
 
@@ -2605,3 +2605,19 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 **Consequences**: 「素材处理中提问」从四层机器（等待上限 + 地板 + 接力 + 防复读）变为「等终态 + 一个答案」；`chat.material_wait_secs` 运营参数删除（等待无上限，无参数可调）。代价 = 首次读素材的回合时长 = 本地 ASR 实际时长（CPU whisper 分钟级——加速旋钮 GPU / 云 ASR 是运营层另案，不在本条）。已知边界（在册）：对话阶段模型对素材的理解是语义级（无时间码），「把第 2 分钟剪出来」类精确引用由开工后的 ASR 时间码校准。否决备查：① 云 ASR 替代本地（被否——自托管 / GDPR 叙事不动；加速属运营层另案）；② 视频直发多模态（被否——spike 实证 M3 无音轨理解 + token 60× 且不可缓存）；③ send 入口预盖章起跑（被否——寒暄回合不该创建任何 worker 事件）；④ 保留接力做「我看了」惊喜时刻（被否——UI 阻塞心智下第二 writer = 消息打架根源）。
 
 **Related**: ADR-101（本条翻案——仅承诺机器退役与打字机 drain 两件继承，余者全删）/ ADR-077（能力声明位）/ ADR-024（词级时间戳 = 渲染前提）/ ADR-055（`chat.material_wait_secs` 删除——等待无上限，无运营参数）/ ADR-092（口头确认律——开工盖章点的语义不变）
+
+## ADR-103: 默认路径可见面 = dock 承载——散文零宣告（ADR-052 判词 5 翻案）
+
+**Status**: Decided (2026-10-05)
+
+**Context**: ADR-052 判词 5 要求提问散文恒带默认路径（「不答会怎样」由模型说出口，问题才是要约不是债）。live 两度显形同一机制：法条写 "safe to skip" → 模型直译「跳过的话，我按…起草一版」；删种子词后法条改写为「message names what happens without an answer」→ 模型把法条语义转述成「不回复就默认做轮播」。结论：只要法条要求散文宣告元信息，模型就会用机械腔把它说出来，措辞换多少轮都一样——删词治标，宣告本身才是病灶。「不答会怎样」是世界事实，按展示文案二源律应由 UI 自证，不经模型嘴。
+
+**Decision**:
+
+1. **ask_user 的 `default_path` 直渲 QuestionDock 卡底 meta 行**（「默认：…」/「Default: …」，确定性渲染 LLM 原文）——用户不待答也知道后果，要约语义不失。
+2. **散文零宣告**：提问法条三处（`_asking_strategy` ③ + 两份 intent 契约的 ask_user 段）删去「散文命名不答后果」的要求；散文 = 认领 + 理由，问题是唯一收尾。本条翻案「dock 无 default-path 行」的旧拍板（彼时 × 承担跳过语义、散文承担可见面——散文侧已证不可靠，可见面归卡）。
+3. **机制面不动**：× = bail 走默认路径、提醒尾消费 `default_path` 原文、`pending_disposition` 枚举、intent 上下文 pending 块（改述为「renders on the choice card」指回法条座位）全部保留。
+
+**Consequences**: 提问散文失去一类机械腔病灶；任何 code-built 问题的 `default_path` 自动获得可见面（asset_role 等存量文案无需改）。已知边界：present_plan echo 的「散文第二句恒为默认路径声明」（ADR-052 判词 6，计划卡侧）是同族法条，计划卡已有确定性 defaultPathLine UI——是否同律翻案留待拍板，本条不动。
+
+**Related**: ADR-052（判词 5 可见面被本条翻案）/ ADR-058（展示文案二源律——本条的原理层）/ ADR-053 R1（选项问阻塞形态律——dock 解剖增一行）

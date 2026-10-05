@@ -1616,6 +1616,7 @@ const en = {
     bail: "Stop generation",
     skip: "Skip question",
     recommended: "Recommended",
+    defaultPath: "Default: {{path}}",
   },
   clipMenu: {
     more: "More actions",
