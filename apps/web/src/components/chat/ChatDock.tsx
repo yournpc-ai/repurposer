@@ -2933,10 +2933,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   }
 
   /** Fresh composer navigation: the handed-over draft is the conversation's
-   * first message — send it once on mount (sendChat's own optimistic push
-   * renders the bubble at once; the archive replay converges on the same
-   * row). Router state survives a page refresh, so before firing we check
-   * the server: if the first send already landed, REBUILD from the server
+   * first message — send it once on mount (the optimistic bubble pushes
+   * locally first; the archive replay converges on the same server row).
+   * Router state survives a page refresh, so before firing we check the
+   * server: if the first send already landed, REBUILD from the server
    * (dock / live run) instead of duplicating the message — there is no
    * server-side dedup by design. */
   useEffect(() => {
@@ -3005,9 +3005,24 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       } catch {
         /* results unreadable — fall through and send */
       }
+      // The optimistic user bubble rides before the turn (归档单一源后的
+      // 唯一即时座位): same shape as the send-button push — the archive
+      // replay converges on the same server row, rollbackId rolls it back
+      // if the turn never persists.
+      const rollbackId = crypto.randomUUID()
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: rollbackId,
+          role: "user" as const,
+          content: firstMessage.text,
+          at: new Date().toISOString(),
+        },
+      ])
       await sendChat(firstMessage.text, {
         mentions: firstMessage.mentions,
         personaId: firstMessage.personaId,
+        rollbackId,
       })
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
