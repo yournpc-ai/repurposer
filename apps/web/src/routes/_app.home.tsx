@@ -221,10 +221,9 @@ function Home() {
           </div>
           {/* Filter pill row — the chrome's third register, grid-width
               (max-w-6xl + sm:px-2 matches the section's px-4 sm:px-6).
-              Stadium pills are MiniMax parity (2026-09-24 user ruling —
-              the rounded-full law's fifth exception); active = the dark
-              solid pill, inactive = white chip floating on the gray page
-              via the fill step (no border, fill-first law). */}
+              Stadium pills (the rounded-full law's fifth exception);
+              active = the dark solid pill, inactive = gray-fill chip on
+              the white canvas (fill-first, no border). */}
           <div className="mx-auto mt-6 flex w-full max-w-6xl flex-wrap items-center gap-2 sm:px-2">
             {GALLERY_FILTERS.map((key) => (
               <button
@@ -234,7 +233,7 @@ function Home() {
                 className={`h-8 rounded-full px-4 text-sm transition-colors ${
                   filter === key
                     ? "bg-foreground text-background"
-                    : "bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
                 }`}
               >
                 {t(`recipes.filters.${key}`)}

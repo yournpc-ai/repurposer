@@ -55,12 +55,10 @@ export function RecipeCard({
         live ? "cursor-pointer" : ""
       }`}
     >
-      {/* The tile — bg-card RAISED surface on the gray page (light 0.96 →
-          white 1.0, dark 0.12 → 0.21 panel; the elevation fill step, ADR-046),
-          no ring, no shadow. 2026-08-31 user ruling: the covers go white now
-          that the page itself carries the gray underlay (was bg-inset well).
-          16:10 carries the schematic; the inline SVG is the only content. */}
-      <div className="relative aspect-[16/10] overflow-hidden rounded-lg bg-card text-foreground">
+      {/* The tile — white card on the white canvas, separated by the base
+          hairline alone (no shadow: in-flow surface). 16:10 carries the
+          schematic; the inline SVG is the only content. */}
+      <div className="relative aspect-[16/10] overflow-hidden rounded-lg bg-card text-foreground ring-1 ring-foreground/10">
         {Cover ? (
           <Cover />
         ) : (

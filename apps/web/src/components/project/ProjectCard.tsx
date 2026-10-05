@@ -85,11 +85,10 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
         // confirm panel; processing ⟺ the dock attaches to the live run).
         className="group block"
       >
-        {/* Container card — the raised fill step (bg-card on the 0.96 page,
-            ADR-046 elevation law) is the whole separation: no shadow, no
-            ring (the fills already distinguish). The thumbnail insets inside
-            with a concentric radius, the text row lives on the card. */}
-        <div className="rounded-xl bg-card p-1.5">
+        {/* Container card — white on the white canvas, the base hairline is
+            the separation (no shadow: in-flow surface). The thumbnail insets
+            inside with a concentric radius, the text row lives on the card. */}
+        <div className="rounded-xl bg-card p-1.5 ring-1 ring-foreground/10">
           <div
             className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-lg ${
               // Neutral base for the live mist — bg-primary/10 would leak hue
