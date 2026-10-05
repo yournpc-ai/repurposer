@@ -1520,7 +1520,6 @@ const zh: Resources = {
     bail: "停止生成",
     skip: "跳过问题",
     recommended: "推荐",
-    defaultPath: "默认：{{path}}",
   },
   clipMenu: {
     more: "更多操作",

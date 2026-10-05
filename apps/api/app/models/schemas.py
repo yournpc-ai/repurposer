@@ -477,9 +477,8 @@ class QuestionProposal(BaseModel):
     # are CODE-BUILT (id = asset id, _build_role_question) so the answer
     # settles the PendingPlan pins deterministically; the LLM only frames
     # the speech. ``default_path`` is 提问策略 ③'s schema tooth: the skip
-    # path, consumed by the dock's ×, the dock's own fallback line, and the
-    # interjection reminder tail — the card renders it, the prose never
-    # carries it.
+    # path, consumed by the dock's × and the interjection reminder tail —
+    # machine-readable only, the prose never carries it.
     slot: Literal["topic", "audience", "tone", "asset_role"] | None = None
     default_path: str = ""
 
