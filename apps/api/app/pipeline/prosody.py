@@ -234,7 +234,11 @@ async def prosody_processor(asset, prior) -> "Any":
     words = (prior.meta or {}).get("words") or []
     if not words or not asset.file_url:
         return ProcessResult()
-    path = await download_to_temp(asset.file_url)
+    path = prior.local_path
+    own_copy = False
+    if path is None:
+        path = await download_to_temp(asset.file_url)
+        own_copy = path is not None
     if path is None:
         return ProcessResult()
     try:
@@ -252,7 +256,8 @@ async def prosody_processor(asset, prior) -> "Any":
         logger.error("prosody_failed", asset_id=str(asset.id), error=str(e))
         return ProcessResult()
     finally:
-        path.unlink(missing_ok=True)
+        if own_copy:
+            path.unlink(missing_ok=True)
 
 
 def _selftest() -> None:

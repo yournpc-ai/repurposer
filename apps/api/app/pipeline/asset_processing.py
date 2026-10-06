@@ -27,6 +27,7 @@ import hashlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -49,13 +50,23 @@ logger = structlog.get_logger()
 
 @dataclass
 class ProcessResult:
-    """What a processor produces; applied to the asset by :func:`process_asset`."""
+    """What a processor produces; applied to the asset by :func:`process_asset`.
+
+    ``local_path`` is chain-level context, never a processor output:
+    ``process_asset`` downloads the file ONCE before the chain (a VIDEO chain
+    otherwise downloads the same object four times — hash / ASR / speaker_map
+    / prosody — and at throttled storage speeds those round-trips dominated
+    the chain's wall time). Processors read it from ``prior`` and fall back
+    to their own download when absent (standalone-call compatibility);
+    ``merge`` never propagates it from deltas.
+    """
 
     extracted_text: str | None = None
     transcript: str | None = None
     duration_seconds: int | None = None
     slide_pages: list[str] | None = None  # object storage keys to rendered PDF pages
     meta: dict[str, Any] = field(default_factory=dict)
+    local_path: Path | None = None
 
     def merge(self, delta: "ProcessResult") -> "ProcessResult":
         """Fold a processor's delta into the accumulated result."""
@@ -149,24 +160,29 @@ async def _content_hash_processor(asset: Asset, _prior: ProcessResult) -> Proces
     """
     h = hashlib.sha256()
     dims: dict[str, int] = {}
-    if asset.file_url:
+    path = _prior.local_path
+    own_copy = False
+    if path is None and asset.file_url:
         path = await download_to_temp(asset.file_url)
-        if path is None:
-            return ProcessResult()
+        own_copy = path is not None
+    if path is not None:
         try:
             with path.open("rb") as fh:
                 for chunk in iter(lambda: fh.read(1 << 20), b""):
                     h.update(chunk)
-            # Probe while the bytes are still local (the finally below
-            # deletes the temp copy).
+            # Probe while the bytes are still local (a chain-shared path is
+            # reaped by process_asset; our own copy by the finally below).
             dims = _probe_media_dims(asset, path)
         finally:
-            path.unlink(missing_ok=True)
-    else:
+            if own_copy:
+                path.unlink(missing_ok=True)
+    elif not asset.file_url:
         text = (asset.extracted_text or asset.transcript) or ""
         if not text.strip():
             return ProcessResult()
         h.update(text.encode("utf-8"))
+    else:
+        return ProcessResult()
     return ProcessResult(meta={"content_sha256": h.hexdigest(), **dims})
 
 
@@ -195,14 +211,16 @@ def _probe_media_dims(asset: Asset, path) -> dict[str, int]:
         return {}
 
 
-async def _extract_text_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
+async def _extract_text_processor(asset: Asset, prior: ProcessResult) -> ProcessResult:
     """Extract text from a document-like asset (txt/md/pdf)."""
     if not asset.file_url:
         return ProcessResult()
-    return ProcessResult(extracted_text=await extract_text(asset.file_url))
+    return ProcessResult(
+        extracted_text=await extract_text(asset.file_url, local_path=prior.local_path)
+    )
 
 
-async def _slides_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
+async def _slides_processor(asset: Asset, prior: ProcessResult) -> ProcessResult:
     """Slides: render PDF pages to images for stills backing.
 
     The generation agents (understand/plan / clip agents) read slide images
@@ -214,14 +232,20 @@ async def _slides_processor(asset: Asset, _prior: ProcessResult) -> ProcessResul
     slide_pages: list[str] | None = None
     if asset.file_url.lower().endswith(".pdf"):
         prefix = f"{get_project_output_dir(asset.project_id, asset.user_id)}/slides-{asset.id}"
-        pages = await render_pdf_pages_and_upload(asset.file_url, prefix)
+        pages = await render_pdf_pages_and_upload(
+            asset.file_url, prefix, local_path=prior.local_path
+        )
         slide_pages = pages or None
     return ProcessResult(slide_pages=slide_pages)
 
 
-async def _asr_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
+async def _asr_processor(asset: Asset, prior: ProcessResult) -> ProcessResult:
     """Transcribe a video/audio asset to text + word-level timestamps."""
-    path = await download_to_temp(asset.file_url)
+    path = prior.local_path
+    own_copy = False
+    if path is None:
+        path = await download_to_temp(asset.file_url)
+        own_copy = path is not None
     if path is None:
         return ProcessResult()
 
@@ -238,7 +262,8 @@ async def _asr_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
             meta={"words": result["words"], "language": result["language"]},
         )
     finally:
-        path.unlink(missing_ok=True)
+        if own_copy:
+            path.unlink(missing_ok=True)
 
 
 async def _noop_processor(asset: Asset, _prior: ProcessResult) -> ProcessResult:
@@ -397,9 +422,16 @@ async def process_asset(asset_id: UUID) -> None:
             logger.warning("process_asset_missing", asset_id=str(asset_id))
             return
 
+        # 链内单下载 (2026-10-06 用户拍板): one local copy for the whole
+        # chain — processors read it off ``prior.local_path``; the chain
+        # reaps it here. A download failure degrades to per-processor
+        # fallbacks (each downloads its own), never an asset failure.
+        local_path: Path | None = None
+        if asset.file_url:
+            local_path = await download_to_temp(asset.file_url)
         try:
             chain = PROCESSORS.get(asset.type, [_noop_processor])
-            result = ProcessResult()
+            result = ProcessResult(local_path=local_path)
             for processor in chain:
                 # 工序信号上资产面 (ADR-095 §2): the poll-visible stage rides
                 # meta (zero schema); the terminal branches below clear it.
@@ -493,3 +525,8 @@ async def process_asset(asset_id: UUID) -> None:
                 )
                 await db.commit()
             await _record_reading_beat(db, asset, "failed")
+        finally:
+            # The chain-shared local copy (processors' own fallbacks reap
+            # themselves).
+            if local_path is not None:
+                local_path.unlink(missing_ok=True)

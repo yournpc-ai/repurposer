@@ -89,7 +89,11 @@ async def visual_anchors_processor(asset, prior) -> "Any":
 
     if not asset.file_url:
         return ProcessResult()
-    path = await download_to_temp(asset.file_url)
+    path = getattr(prior, "local_path", None)
+    own_copy = False
+    if path is None:
+        path = await download_to_temp(asset.file_url)
+        own_copy = path is not None
     if path is None:
         return ProcessResult()
     try:
@@ -106,7 +110,8 @@ async def visual_anchors_processor(asset, prior) -> "Any":
         logger.error("visual_anchors_failed", asset_id=str(asset.id), error=str(e))
         return ProcessResult()
     finally:
-        path.unlink(missing_ok=True)
+        if own_copy:
+            path.unlink(missing_ok=True)
 
 
 def _selftest() -> None:

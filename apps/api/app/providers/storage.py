@@ -34,6 +34,7 @@ from app.config import settings
 logger = structlog.get_logger()
 
 _s3_client: Any | None = None
+_s3_download_client: Any | None = None
 
 
 def _get_s3_client() -> boto3.client:
@@ -52,6 +53,33 @@ def _get_s3_client() -> boto3.client:
             ),
         )
     return _s3_client
+
+
+def _get_s3_download_client() -> boto3.client:
+    """The download-path client: the direct client unless
+    ``settings.storage_get_proxy`` names a proxy (dev-only knob — uploads
+    never ride it: the local proxy swallows large-PUT responses, so writes
+    stay on ``_get_s3_client`` by construction)."""
+    if not settings.storage_get_proxy:
+        return _get_s3_client()
+    global _s3_download_client  # noqa: PLW0603
+    if _s3_download_client is None:
+        _s3_download_client = boto3.client(
+            "s3",
+            endpoint_url=settings.s3_endpoint_url,
+            region_name=settings.s3_region,
+            aws_access_key_id=settings.s3_access_key_id,
+            aws_secret_access_key=settings.s3_secret_access_key,
+            config=Config(
+                signature_version="s3v4",
+                s3={"addressing_style": "virtual"},
+                proxies={
+                    "http": settings.storage_get_proxy,
+                    "https": settings.storage_get_proxy,
+                },
+            ),
+        )
+    return _s3_download_client
 
 
 def _sanitize_filename(filename: str) -> str:
@@ -347,7 +375,7 @@ async def download_to_temp(key: str | None) -> Path | None:
     """
     if not key:
         return None
-    client = _get_s3_client()
+    client = _get_s3_download_client()
     suffix = Path(key).suffix or ""
     fd, tmp_path = tempfile.mkstemp(suffix=suffix)
     os.close(fd)

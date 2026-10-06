@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     s3_bucket_name: str
     s3_access_key_id: str
     s3_secret_access_key: str
+    # Optional HTTP(S) proxy for DOWNLOADS only (dev machines behind a
+    # throttled direct route: TOS direct ~119KB/s vs proxy ~13MB/s). Empty =
+    # direct everywhere (prod default — never set this on the Docker deploy
+    # unless the host needs it). Uploads NEVER ride this: the local proxy
+    # swallows large-PUT responses (the upload-stall trap), so writes stay
+    # on the direct client by construction.
+    storage_get_proxy: str = ""
     s3_region: str = "ap-southeast-1"
     s3_public_url: str  # public read base URL, e.g. https://bucket.tos-region.volces.com
     s3_force_path_style: bool = False  # MUST be False for Volcengine TOS

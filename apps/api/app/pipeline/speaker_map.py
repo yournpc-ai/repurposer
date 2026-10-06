@@ -569,7 +569,11 @@ async def speaker_map_processor(asset: Asset, prior: ProcessResult) -> ProcessRe
     words = (prior.meta or {}).get("words") or []
     if not asset.file_url:
         return ProcessResult()
-    path = await download_to_temp(asset.file_url)
+    path = prior.local_path
+    own_copy = False
+    if path is None:
+        path = await download_to_temp(asset.file_url)
+        own_copy = path is not None
     if path is None:
         return ProcessResult()
     try:
@@ -579,4 +583,5 @@ async def speaker_map_processor(asset: Asset, prior: ProcessResult) -> ProcessRe
         logger.error("speaker_map_failed", asset_id=str(asset.id), error=str(e))
         return ProcessResult()
     finally:
-        path.unlink(missing_ok=True)
+        if own_copy:
+            path.unlink(missing_ok=True)

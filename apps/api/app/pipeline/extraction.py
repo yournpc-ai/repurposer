@@ -12,15 +12,21 @@ logger = structlog.get_logger()
 FileKey = str
 
 
-async def extract_text(file_key: FileKey) -> str | None:
+async def extract_text(file_key: FileKey, local_path: Path | None = None) -> str | None:
     """Extract text from a file based on its extension.
 
     Supported formats: .txt, .md, .markdown, .pdf
 
     The file is downloaded from object storage to a temporary path, processed,
-    and the temp file is removed before returning.
+    and the temp file is removed before returning. A chain-shared
+    ``local_path`` (asset_processing's single download) is used as-is and
+    left in place — the chain reaps it.
     """
-    tmp_path = await download_to_temp(file_key)
+    own_copy = False
+    tmp_path = local_path
+    if tmp_path is None:
+        tmp_path = await download_to_temp(file_key)
+        own_copy = tmp_path is not None
     if tmp_path is None:
         logger.warning("extract_text_missing", key=file_key)
         return None
@@ -37,7 +43,8 @@ async def extract_text(file_key: FileKey) -> str | None:
         logger.error("text_extraction_failed", key=file_key, error=str(e))
         return None
     finally:
-        tmp_path.unlink(missing_ok=True)
+        if own_copy:
+            tmp_path.unlink(missing_ok=True)
 
 
 def _extract_plaintext(file_path: Path) -> str | None:
@@ -76,6 +83,7 @@ async def render_pdf_pages(
     *,
     max_pages: int = 20,
     target_width: int = 1080,
+    local_path: Path | None = None,
 ) -> list[Path]:
     """Render PDF pages to PNGs in ``out_dir``; return the written page paths.
 
@@ -84,12 +92,17 @@ async def render_pdf_pages(
     or if PyMuPDF is unavailable; the caller falls back to text-only slides.
 
     The source PDF is downloaded from object storage to a temporary path before
-    rendering.
+    rendering, unless a chain-shared ``local_path`` is handed in (used as-is,
+    left in place — the chain reaps it).
     """
     if not file_key.lower().endswith(".pdf"):
         return []
 
-    tmp_path = await download_to_temp(file_key)
+    own_copy = False
+    tmp_path = local_path
+    if tmp_path is None:
+        tmp_path = await download_to_temp(file_key)
+        own_copy = tmp_path is not None
     if tmp_path is None:
         logger.warning("render_pdf_pages_missing", key=file_key)
         return []
@@ -121,7 +134,8 @@ async def render_pdf_pages(
         logger.error("pdf_render_failed", key=file_key, error=str(e))
         return []
     finally:
-        tmp_path.unlink(missing_ok=True)
+        if own_copy:
+            tmp_path.unlink(missing_ok=True)
 
 
 async def render_pdf_pages_and_upload(
@@ -130,6 +144,7 @@ async def render_pdf_pages_and_upload(
     *,
     max_pages: int = 20,
     target_width: int = 1080,
+    local_path: Path | None = None,
 ) -> list[str]:
     """Render PDF pages and upload the PNGs to object storage.
 
@@ -143,6 +158,7 @@ async def render_pdf_pages_and_upload(
             out_dir,
             max_pages=max_pages,
             target_width=target_width,
+            local_path=local_path,
         )
         keys: list[str] = []
         for idx, page_path in enumerate(page_paths, start=1):
