@@ -32,7 +32,6 @@ import { outputMentionLabel } from "@/lib/mentions"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
-import { workspaceBornOf } from "@/lib/workspaceBorn"
 
 import type { IntentSlot, LifecycleStamp, Output, ProjectGraph, WorkflowStep, Project } from "@/lib/types"
 
@@ -242,32 +241,16 @@ function ProjectDetailPage() {
   // artifact existence. The stamp rides BOTH frames (results + graph);
   // the graph frame is the fresher source during live turns.
   const lifecycle = graph?.lifecycle ?? results?.lifecycle ?? null
-  // workspaceBorn (Workspace 合同 v4.2 C3, 2026-09-26 封板): the desktop
-  // world's flip condition is an INDEPENDENT presentation predicate — the
-  // first non-Source workspace entity exists in the graph PAST its
-  // placeholder face, so the canvas arrives WITH the content. The per-face
-  // law lives in lib/workspaceBorn.ts (the upload-born transcript card is
-  // born `running` — its queued birth face retired 2026-09-28 — so the
-  // coarse state read fired at the send beat; the predicate reads its
-  // TERMINAL face instead). Three facts stay separated: graph entity
-  // existence (data truth since upload, unchanged), this predicate
-  // (presentation — it can read another fact source without touching the
-  // data layer), and PLAN_READY (lifecycle projection, unchanged). Source
-  // nodes are read off the joined asset dossier (server: the dossier joins
-  // only on ORM type="asset"); legacy exploration rows (retired swim lane,
-  // v4.2 C1) never count — a candidate is not a workspace entity (and since
-  // C1 they no longer arrive at all: production stopped, legacy rows are
-  // read-filtered server-side).
-  // 翻案注: this supersedes the 2026-09-02 形态机 / ADR-057 K5 flip
-  // condition (`hasRuns || isPlanReady`) — the canvas is born when the
-  // agent STARTS BUILDING the work world (T1), no longer waiting for the
-  // first run or the plan's readiness.
+  // 画布可见性律 (ADR-105, 2026-10-06 用户拍板): node birth and canvas
+  // visibility are TWO separate facts — the graph keeps birthing nodes
+  // server-side (assets at upload, the draft plan at dock, queued/running
+  // faces unchanged), but the canvas PANE only becomes visible once the
+  // user has confirmed generation — the first run. Pre-run the page is the
+  // centered fullscreen chat on every surface (the desktop panel morph and
+  // the mobile dock share the one driver now — the v4.2 C3 workspaceBorn
+  // predicate is retired: draft nodes no longer flip the world open).
   const hasRuns = latestRun != null
-  const workspaceBorn = workspaceBornOf(graph?.nodes)
-  // The driver forks per surface (prohibition #13 — mobile has no canvas):
-  // the desktop world morphs at workspaceBorn; mobile stays run-driven
-  // (its confirm beat stays in the dock).
-  const worldLive = isMobile ? hasRuns : workspaceBorn
+  const worldLive = hasRuns
   // The desktop chat panel is a FROSTED OVERLAY on the full-bleed canvas
   // (2026-09-06 用户拍板, FLORA "Dock panel" parity — float / docked-right,
   // never an in-flow column): the canvas's top-right zoom pill steps clear
@@ -280,7 +263,7 @@ function ProjectDetailPage() {
     docked: false,
   })
   const panelCoversCorner =
-    workspaceBorn && !isMobile && !panelState.hidden && panelState.docked
+    hasRuns && !isMobile && !panelState.hidden && panelState.docked
 
   useEffect(() => {
     setLoading(true)
@@ -369,7 +352,7 @@ function ProjectDetailPage() {
     // (minimally, zoom locked) only if the cluster whose product counts
     // grew sits outside the safe viewport (outputs fill EXISTING nodes, so
     // the newborn id-diff alone never saw landings).
-    if (workspaceBorn && !isMobile) {
+    if (hasRuns && !isMobile) {
       setCameraBeat({ token: Date.now() })
     }
     const timer = setTimeout(() => setCanvasEpoch((e) => e + 1), 600)
@@ -419,7 +402,7 @@ function ProjectDetailPage() {
       // the named element IS the current operation element — center its
       // node on the canvas (pan-locked-zoom; shields inside FlowView).
       const node = graph?.nodes.find((n) => n.spec.output_ids?.includes(output.id))
-      if (node && workspaceBorn && !isMobile) requestCenterNode(node.id)
+      if (node && hasRuns && !isMobile) requestCenterNode(node.id)
       dockRef.current?.insertMention({
         type: "output",
         id: output.id,
@@ -449,7 +432,7 @@ function ProjectDetailPage() {
       setSelectedOutputId((prev) => (prev === output.id ? null : prev))
       await fetchResults()
     }
-  }, [handleOutputClick, fetchResults, graph, workspaceBorn, isMobile, requestCenterNode, t])
+  }, [handleOutputClick, fetchResults, graph, hasRuns, isMobile, requestCenterNode, t])
 
   // 选区引用 (2026-09-11 — 段落级指认): the user selected a passage on a
   // text product's card face and pinned 「引用这段」 — the dock gets an
@@ -460,7 +443,7 @@ function ProjectDetailPage() {
   // pan-locked-zoom capability the 指认 gesture rides).
   const handleQuoteOutput = useCallback((output: Output, quote: string) => {
     const node = graph?.nodes.find((n) => n.spec.output_ids?.includes(output.id))
-    if (node && workspaceBorn && !isMobile) requestCenterNode(node.id)
+    if (node && hasRuns && !isMobile) requestCenterNode(node.id)
     dockRef.current?.insertMention({
       type: "output",
       id: output.id,
@@ -472,7 +455,7 @@ function ProjectDetailPage() {
       ),
       quote,
     })
-  }, [graph, workspaceBorn, isMobile, requestCenterNode, t])
+  }, [graph, hasRuns, isMobile, requestCenterNode, t])
 
   // Asset-node factsbar (2026-08-17 走查拍板): the surface owns the source
   // file's actions — download / delete / reprocess ("open" never arrives
@@ -1048,9 +1031,9 @@ function ProjectDetailPage() {
           fullscreen world — app chrome lives in the studio shell. */}
 
       {!isMobile ? (
-        /* Canvas-first (ADR-051; ADR-057 K3 直读): the desktop page is
-           ALWAYS the canvas — the persistent graph read directly (nodes =
-           graph rows: assets at upload, run fills in place, draft estimate
+        /* Canvas-first (ADR-051; ADR-057 K3 直读): the desktop page's
+           canvas reads the persistent graph directly (nodes = graph rows:
+           assets at upload, run fills in place, draft estimate
            → running wipe → done self-evident). The completion beat = the
            growth-driven birth choreography (ADR-036 补记 3): every node
            born while the surface watches enters staggered in compile order,
@@ -1061,17 +1044,17 @@ function ProjectDetailPage() {
            the panel's in-flow flex-row cut was user-retired same-day — the
            frost must have the canvas living beneath it). A node passing
            under the dock is panned back into view — the canvas is explore
-           navigation. The whole canvas is gated on workspaceBorn (v4.2 C3
-           — 翻案注: was `hasRuns || isPlanReady`, the 2026-09-02 形态机 /
-           ADR-057 K5 condition): pre-birth it is invisible + inert (the
-           full-form chat stage owns the page); the first non-Source
-           entity's arrival (today: the transcript processing card) fades
-           it in on the same beat as the stage's fade-out — 500ms on a
-           150ms delay (2026-09-06 fade-simplified). */
+           navigation. The whole canvas is gated on hasRuns (ADR-105 — node
+           birth ≠ canvas visibility: nodes keep being born server-side
+           pre-confirmation, but the PANE fades in only when the user's
+           confirmed generation starts the first run): pre-run it is
+           invisible + inert (the full-form chat stage owns the page); the
+           first run's arrival fades it in on the same beat as the stage's
+           fade-out — 500ms on a 150ms delay (2026-09-06 fade-simplified). */
         <div
           className={cn(
             "min-h-0 flex-1 transition-opacity duration-500 delay-150 ease-out motion-reduce:transition-none",
-            !workspaceBorn && "pointer-events-none opacity-0"
+            !hasRuns && "pointer-events-none opacity-0"
           )}
         >
           <ResultsCanvas
@@ -1083,9 +1066,9 @@ function ProjectDetailPage() {
             // store (the frozen empty canvas) never survives the run.
             healEpoch={canvasEpoch}
             // The settle key's visibility half (2026-09-06): the canvas is
-            // gated on workspaceBorn, so initial framing joins it with the
+            // gated on hasRuns, so initial framing joins it with the
             // baseline — partial fetch frames never frame.
-            visible={workspaceBorn}
+            visible={hasRuns}
             // Birth baseline (ADR-036 补记 3): ready only when the initial
             // /results AND /graph have both settled for THIS project —
             // an early partial frame must not become the baseline (the
@@ -1149,10 +1132,9 @@ function ProjectDetailPage() {
         key={projectId}
         ref={dockRef}
         projectId={projectId}
-        // The three-form machine (2026-09-06, FLORA-aligned; v4.2 C3 翻案注:
-        // the desktop flip condition is now workspaceBorn — the first
-        // non-Source workspace entity, today the transcript processing card
-        // — superseding K5's first-run / draft-graph arrival): pre-birth
+        // The three-form machine (2026-09-06, FLORA-aligned; ADR-105 翻案注:
+        // the desktop flip condition is the first RUN — the user's confirmed
+        // generation; draft nodes no longer morph the world open): pre-birth
         // the dock is the centered fullscreen chat; the WORKSPACE's birth
         // morphs it into the DESKTOP panel ("panel" — a frosted overlay on
         // the full-bleed canvas, float / docked-right geometry toggled in
@@ -1163,7 +1145,7 @@ function ProjectDetailPage() {
         // pending draft) mount straight in "panel"/"dock" — the loading
         // gate above settles the driver before first render, so the
         // hydrated first frame never replays the morph.
-        form={isMobile ? (hasRuns ? "dock" : "full") : workspaceBorn ? "panel" : "full"}
+        form={hasRuns ? (isMobile ? "dock" : "panel") : "full"}
         // The server-named lifecycle stamp (ADR-087 §2, Phase 1): the
         // dock's confirm-phase mount + Start gate read it — never a local
         // derivation.
@@ -1213,7 +1195,7 @@ function ProjectDetailPage() {
         onRunStarted={() => {
           // C5 相机律: the run fill's newborns land via the refetch loop —
           // arm an ensure-in-view beat toward where they settled.
-          if (workspaceBorn && !isMobile) {
+          if (hasRuns && !isMobile) {
             setCameraBeat({ token: Date.now() })
           }
           void fetchResults()
@@ -1236,7 +1218,7 @@ function ProjectDetailPage() {
           const before = new Set((graph?.nodes ?? []).map((n) => n.id))
           void (async () => {
             const fresh = await fetchGraph()
-            if (!fresh || !workspaceBorn || isMobile) return
+            if (!fresh || !hasRuns || isMobile) return
             const newbornIds = fresh.nodes
               .filter((n) => !before.has(n.id))
               .map((n) => n.id)

@@ -2621,3 +2621,20 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 **Consequences**: 提问散文失去一类机械腔病灶；dock 解剖不变。已知边界：present_plan echo 的「散文第二句恒为默认路径声明」（ADR-052 判词 6，计划卡侧）是同族法条，计划卡已有确定性 defaultPathLine UI——是否同律翻案留待拍板，本条不动。
 
 **Related**: ADR-052（判词 5 可见面被本条翻案）/ ADR-058（展示文案二源律——本条的原理层）/ ADR-053 R1（选项问阻塞形态律）
+
+## ADR-105: 画布可见性 = 首个已确认 run——节点诞生与画布可见性分离（Workspace 合同 v4.2 C3 翻案）
+
+**Status**: Decided (2026-10-06)
+
+**Context**: v4.2 C3 把画布翻开时机定在「agent 开始构建工作世界」（workspaceBorn：首个非 Source 实体越过 queued——draft 计划节点、transcript 卡 done 都触发）。live 走查（项目 378ac591，2026-10-06）显形其代价：present_plan dock 一拍，画布翻出整条 draft 链——三个媒体框尺寸的虚线空洞矩形写着「运行后生成 · 约 N 积分」，用户读作「有三个东西在 loading / 坏掉了」；相机为 fit 虚构链缩到 41%，大面积空画布。用户拍板：**诞生节点归诞生节点，画布可见归可见**——节点照生、loading 面照留，但 present_plan 不该让用户看见画布；用户确认生成才开始可见。
+
+**Decision**:
+
+1. **画布可见性闸门 = `hasRuns`（首个 run 存在）**，全端统一——桌面 panel 形态翻转与移动端 dock 同驱动，v4.2 C3 的 `workspaceBornOf` 谓词整族退役（模块 + 测试删除）。预确认期项目页 = 居中全屏 chat（素材在消息流里：附件 chip + 已理解素材 chip）。
+2. **节点诞生机制零改动**：draft 计划节点照常随 dock 落库、queued/running/done 各面保留；首个 run 起跑、画布淡入时，已诞生的全部节点（素材 + 转写稿 + 计划节点）随首帧一次性出现，running wipe / 排队中 / 估价各行照常。
+3. **相机律同步收紧**：`onDraftGraphChange` 的新节点 setCenter 与 output 点击居中在画布不可见时（pre-run）永不触发；reveal 的初始取景 = 画布挂载自己的 baseline fit。
+4. **surface 报告天然自洽**：`surface: panel ? "canvas" : "chat"`——panel 形态与画布可见性同驱动（hasRuns），模型永不指向一个看不见的画布，提示词零改动。
+
+**Consequences**: 确认前画布永远干净（只有对话）；「loading 味」幽灵矩形、draft 链相机 fit、41% 缩放空画布三个症状同源消失。代价：v4.2 的「draft 图上画布检视」投资退役——计划检视职责完全归 dock 确认卡 / 计划面板（本就承载产物清单 + 估价 + 逐项查看）。回归面：新建项目 → 上传 → dock 出方案，画布不可见；确认开工 → 画布淡入且节点在位；刷新后形态一致。
+
+**Related**: ADR-051（画布优先——预确认期例外由本条收窄为「首个 run 后才优先」）/ ADR-057（K3 直读、K5 翻转条件的历史链：hasRuns || isPlanReady → workspaceBorn → hasRuns）/ ADR-036（诞生编舞——reveal 帧一次性呈现已诞生节点）

@@ -1552,13 +1552,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // never the graph; the page's lifecycle poll arms only off a stamp its
   // stale fetch never saw). Relay every assets-signature edge (a new asset
   // arrives, or one leaves processing — completed OR failed) to the page's
-  // graph refetch: the birth flips workspaceBorn at T1 as the contract
-  // names it, and the card's content flip (queued → full text) arrives on
-  // the same live page instead of waiting for a manual refresh. The mount
+  // graph refetch: the page's graph state stays fresh so the canvas's
+  // first-run reveal (ADR-105 — node birth ≠ canvas visibility) arrives
+  // WITH the content, and a manual reload never brings it back. The mount
   // frame never fires (prev === null — the page's own mount fetch holds
   // that truth). The camera beats nothing here: the page's
-  // onDraftGraphChange pan is gated on workspaceBorn (pre-birth = no move)
-  // and the birth's initial fit is the canvas mount's own (C5).
+  // onDraftGraphChange pan is gated on hasRuns (canvas hidden = no move)
+  // and the reveal's initial fit is the canvas mount's own.
   const assetsSigRef = useRef<string | null>(null)
   useEffect(() => {
     const sig = assets
@@ -3261,7 +3261,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // started a run server-side) must land the dock on the run surface
         // too — setRunId attaches the live run channel (RunTaskList's
         // dynamic row), onRunStarted makes the page refetch the graph so
-        // workspaceBorn recomputes and the canvas actually grows. Without
+        // hasRuns flips and the canvas actually reveals + grows. Without
         // this the run only appears after a manual refresh and the page
         // stays stuck in the full (centered-chat) form.
         if (followUp.workflow_run_id) landOnStartedRun(followUp.workflow_run_id)
