@@ -454,7 +454,9 @@ describe("activity logs (2026-09-25 activity 持久化)", () => {
       kind: "read",
       status: "completed",
       key: "chat.inspectingDone.searchTranscript",
-      at: "2026-09-25T10:00:01Z",
+      // The persisted `at` (10:00:01, the settle stamp) re-anchors to the
+      // TRUE WORK START: −820ms (ADR-104 排序律 — replay and live agree).
+      at: "2026-09-25T10:00:00.180Z",
       duration_ms: 820,
     })
     expect(out[0].milestones?.[1]).toMatchObject({ kind: "draft", count: 3 })

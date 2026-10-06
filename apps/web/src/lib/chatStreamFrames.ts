@@ -31,11 +31,13 @@ export interface ActivityFramePayload {
   /** iter-3 S7 (E7, N-58 ⑥): the frame's birth stamp (ISO, every frame) —
    * the timeline layer interleaves activity rows with messages by real
    * moments. The reducer preserves the FIRST-seen `at` as the activity's
-   * birth (a settle frame's own `at` is its close time, never a move). */
+   * birth EXCEPT a duration-carrying settle, whose walk key derives as
+   * `at − duration_ms` (the true work start, ADR-104 排序律). */
   at?: string
   /** iter-3 S7 (E7): the real elapsed of a genuinely-active span, present
    * only on its settling frame — a born-completed milestone is an instant
-   * fact and carries none. */
+   * fact and carries none. Read/repair spans anchor the elapsed at EXECUTE
+   * entry (ADR-104 排序律), not at the mid-generation name_known beat. */
   duration_ms?: number
 }
 
@@ -97,7 +99,7 @@ export type RoutedStreamFrame =
   | { kind: "thinking"; payload: ThinkingPayload }
   | { kind: "question_preview"; payload: QuestionPreviewPayload }
   | { kind: "candidates"; event: CandidateEventPayload }
-  | { kind: "checkpoint"; text: string }
+  | { kind: "checkpoint"; text: string; at?: string }
   | { kind: "activity"; frame: ActivityFramePayload }
   | { kind: "completed"; envelope: unknown }
   | { kind: "failed"; detail: unknown; persisted: boolean }
@@ -131,8 +133,12 @@ export function routeStreamFrame(
     }
   }
   if (event === "assistant.checkpoint") {
-    const parsed = JSON.parse(data) as { text: string }
-    return { kind: "checkpoint", text: parsed.text }
+    const parsed = JSON.parse(data) as { text: string; at?: string | null }
+    return {
+      kind: "checkpoint",
+      text: parsed.text,
+      at: typeof parsed.at === "string" ? parsed.at : undefined,
+    }
   }
   if (event === "assistant.activity") {
     return { kind: "activity", frame: JSON.parse(data) as ActivityFramePayload }

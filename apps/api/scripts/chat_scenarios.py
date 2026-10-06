@@ -48,9 +48,9 @@ run 数 / 落库行——永不锁 LLM 文案（禁令 #7）。例外：代码�
              hold 再级联删 run——台账闭合、余额回赠额）
     S17 run 执行权仲裁（R1 B3）：A 挂 B 跑 → 答/过期皆 blocked 再挂+明示
              （零状态污染、全程单 owner）→ B 收官交接钩续跑 A
-    S20 言语语义管线（ADR-084）：read 静默（过程话零流式零持久）/
-             Start 归 dock（≥2 task 不邀请言语确认）/ grounding 诚实
-             （未就绪披露处理中，就绪落到素材内容词）
+    S20 言语语义管线（ADR-084/104）：过程话永不入终答（读前言语骑
+             checkpoint 通道成独立段）/ Start 归 dock（≥2 task 不邀请言语
+             确认）/ grounding 诚实（未就绪披露处理中，就绪落到素材内容词）
     S21 checkpoint 通道观察面（ADR-085 评审四场景）：A 单读直出 / B 诱导
              多读 / C 目录读结构性静默——不锁出现与否，锁硬律 + PRINT
              命中率（D 失败回滚归手测）
@@ -193,6 +193,13 @@ class StreamTurn(NamedTuple):
     # No default — a mutable default on a NamedTuple is a shared list; the
     # single constructor (chat_stream) always passes it explicitly.
     checkpoints: list[str]
+    # Parallel to checkpoints: True = the frame arrived BEFORE any read
+    # activity settled — the waiter seat (ADR-104: pre-read speech is legal
+    # waiter talk, exempt from the checkpoints-carry-results bar; with the
+    # pre-execute emission seat the wire order makes the discrimination
+    # exact — a waiter strictly precedes its read's settle frame, result
+    # talk strictly follows its predecessor read's settle).
+    checkpoints_pre_read: list[bool]
     # ADR-087 §3 activity frames (Phase 2): the append-oriented work stream —
     # each entry is one assistant.activity payload {activity_id, seq, kind,
     # status, key}. Same constructor discipline as checkpoints.
@@ -258,8 +265,10 @@ class Ctx:
         thinking: list[dict] = []
         previews: list[dict] = []
         checkpoints: list[str] = []
+        checkpoints_pre_read: list[bool] = []
         activities: list[dict] = []
         raw_events: list[dict] = []
+        read_settled_seen = False
         completed: dict | None = None
         failed: dict | None = None
         async with self.client.stream(
@@ -286,8 +295,13 @@ class Ctx:
                         previews.append(payload)
                     elif event == "assistant.checkpoint":
                         checkpoints.append(payload["text"])
+                        checkpoints_pre_read.append(not read_settled_seen)
                     elif event == "assistant.activity":
                         activities.append(payload)
+                        if payload.get("kind") == "read" and payload.get(
+                            "status"
+                        ) in ("completed", "failed", "cancelled"):
+                            read_settled_seen = True
                     elif event == "turn.completed":
                         completed = payload
                     elif event == "turn.failed":
@@ -301,6 +315,7 @@ class Ctx:
             completed=completed,
             failed=failed,
             checkpoints=checkpoints,
+            checkpoints_pre_read=checkpoints_pre_read,
             activities=activities,
             raw_events=raw_events,
         )
@@ -875,23 +890,21 @@ def check_stream_law(
     - single-iteration turn (no read activities): concat(deltas) == the
       envelope content, exactly;
     - read-first turn (accepted reads in iteration 0 — read ACTIVITY frames
-      present, the only evidence seat after Batch B):
-      the kept read-iteration speech is a PREFIX of the composed
-      content (言语账本: kept parts + the terminal part join on a blank
-      line), so content.startswith(concat(deltas)). Post-ADR-084 the
-      read-silent law makes that concat empty BY DESIGN
-      (check_read_silent_stream asserts it); this prefix tolerance stays as
-      the variance floor;
+      present, the only evidence seat after Batch B): iteration-0 prose
+      either rode the CHECKPOINT channel (eligible read — the waiter seat,
+      ADR-104: flushed pre-execute, never enters the ledger, so the
+      envelope does NOT contain it) or stayed in the ledger (non-eligible
+      read — 账本兜底) and then PREFIXES the composed content
+      (言语账本: kept parts + the terminal part join on a blank line);
     - a rejected iteration breaks even the prefix relation (its streamed
       speech was replaced) — LLM variance the scenarios cannot foresee, so
       this helper skips the turn entirely when a repair ACTIVITY appears
-      (same carve-out as check_read_silent_stream).
+      (same carve-out as the retired read-silent check).
 
     Both relations compare the STRIPPED concat: the envelope is edge-stripped
     by design (``_compose_speech`` strips every part) while the wire carries
     raw provider deltas, so leading "\n\n" tokenizer noise is variance, not
-    a violation (same granularity ruling as check_read_silent_stream,
-    2026-09-17 — assert the visible speech, not the bytes).
+    a violation (2026-09-17 — assert the visible speech, not the bytes).
     """
     concat = "".join(stream.deltas)
     had_reads, had_repair = _work_evidence(stream)
@@ -899,9 +912,13 @@ def check_stream_law(
         return  # replaced speech: even the prefix relation is void
     streamed = concat.strip()
     if had_reads and allow_reads:
+        checkpointed = {c.strip() for c in stream.checkpoints}
         check(
-            not streamed or content.startswith(streamed),
-            f"{label}: the read-first stream law (kept speech prefixes the content)",
+            not streamed
+            or content.startswith(streamed)
+            or streamed in checkpointed,
+            f"{label}: the read-first stream law (kept speech prefixes the "
+            "content, or rode the checkpoint channel — ADR-104)",
             f"{concat[:120]!r} vs {content[:120]!r}",
         )
     else:
@@ -916,9 +933,10 @@ def check_stream_law(
 # NEGATIVE shapes only (禁令 #7 — the LLM's own phrasing is never locked; what
 # the contract bans is a SHAPE, and a banned shape is assertable).
 
-# Process narration: read-iteration speech must never persist into the
-# settled message (the read-silent law — reads leave the message channel
-# empty, the whole speech belongs to the terminal call).
+# Process narration: read-iteration process talk must never persist into the
+# settled message (ADR-104: pre-read speech rides the checkpoint channel as
+# its own segment — the settled reply stands alone; post-read checkpoints
+# carry results, never process narration).
 # 词边界 adjudication（C-6，2026-09-19）：IGNORECASE 下裸 `I'?ll` 会把
 # "will pull from" 的 "ill pull" 误判为第一人称过程叙述（S20A 两连红：
 # "the caption text will pull from …" 是诚实披露而非过程泄漏）。合同不变
@@ -949,33 +967,11 @@ PROCESSING_DISCLOSURE = re.compile(
 )
 
 
-def check_read_silent_stream(stream: "StreamTurn", label: str) -> None:
-    """ADR-084 read-silent law, wire side: a turn that ran accepted reads
-    (read ACTIVITY frames — the sole evidence seat after Batch B) streamed
-    NO prose — read iterations leave
-    the message channel empty and the settled speech paces out at the
-    envelope. Skipped when a repair activity appears (a rejected iteration's
-    replaced speech may have streamed first — the pre-existing variance
-    carve-out, see check_stream_law)."""
-    had_reads, had_repair = _work_evidence(stream)
-    if had_reads and not had_repair:
-        concat = "".join(stream.deltas)
-        # ADR-084 read-silent is a semantic UI contract: no user-visible prose
-        # may stream before a READ tool. The law lives at the prompt layer
-        # (ToolLoop unchanged by the ADR), so whitespace-only tokenizer deltas
-        # ("\n\n" before a tool call) are allowed provider variance — locking
-        # byte-empty would固化 provider noise into product contract (禁令 #7).
-        check(
-            not concat.strip(),
-            f"{label}: reads stream no visible prose (the read-silent law)",
-            repr(concat[:120]),
-        )
-
-
 def check_checkpoint_shape(stream: "StreamTurn", content: str, label: str) -> None:
     """ADR-085 checkpoint shape laws (opportunistic — checkpoints are EARNED,
     so absence is legal; when they fired, the shape must hold): ≤2/turn,
-    never empty, never process narration, and the settled reply never
+    never empty, never process narration POST-READ (pre-read waiter speech
+    is legal — ADR-104 服务员话术律), and the settled reply never
     repeats one verbatim. The acceptance question (2026-09-17 评审):「这条
     消息是用户刚刚真的需要知道的信息，还是系统想证明自己做过某个动作？」
     — the negative markers police the latter."""
@@ -992,8 +988,16 @@ def check_checkpoint_shape(stream: "StreamTurn", content: str, label: str) -> No
         stream.checkpoints,
     )
     check(
-        not PROCESS_NARRATION.search(" ".join(stream.checkpoints)),
-        f"{label}: checkpoints carry results, never process narration",
+        # The waiter exemption (ADR-104): a checkpoint that arrived BEFORE
+        # any read settled is pre-read waiter speech — legal process talk
+        # by the waiter-line law. The results-only bar polices POST-read
+        # checkpoints (grounded judgment, never process narration).
+        not PROCESS_NARRATION.search(
+            " ".join(
+                c for c, pre in zip(stream.checkpoints, stream.checkpoints_pre_read) if not pre
+            )
+        ),
+        f"{label}: post-read checkpoints carry results, never process narration",
         stream.checkpoints,
     )
     for cp in stream.checkpoints:
@@ -4002,7 +4006,6 @@ async def s20_speech_semantic_contract(ctx: Ctx) -> None:
         "S20A no process narration persists into the settled message",
         content[:200],
     )
-    check_read_silent_stream(stream, "S20A")
     check_activity_shape(stream, "S20A")
     if terminal == "present_plan":
         check(
@@ -4038,7 +4041,6 @@ async def s20_speech_semantic_contract(ctx: Ctx) -> None:
     }
     # Stream laws compare against THIS turn's own speech.
     turn_content = turn1["assistant_message"].get("content") or ""
-    check_read_silent_stream(stream, "S20B")
     check_activity_shape(stream, "S20B")
     check_stream_law(stream, turn_content, "S20B")
     terminal = terminal_tool_of(turn1)
@@ -4166,7 +4168,6 @@ async def s21_checkpoint_channel_observation(ctx: Ctx) -> None:
         completed = stream.completed or {}
         content = (completed.get("assistant_message") or {}).get("content") or ""
         check_checkpoint_shape(stream, content, f"S21{label}")
-        check_read_silent_stream(stream, f"S21{label}")
         check_activity_shape(stream, f"S21{label}")
         print(
             f"    · S21{label} reads={_stream_reads(stream)} "

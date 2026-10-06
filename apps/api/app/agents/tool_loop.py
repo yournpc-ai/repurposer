@@ -259,6 +259,20 @@ class ReadAccepted:
 
 
 @dataclass(frozen=True)
+class ReadExecuting:
+    """An accepted NON-terminal read's execute is ABOUT TO run — the work's
+    START stamp (ADR-104 排序律). The Activity projector re-anchors the read
+    span's honest duration here (execute entry): name_known is a
+    mid-generation liveness beat, and a duration anchored there would make
+    the settled row's walk key (close − duration) precede the waiter
+    checkpoint's created_at, inverting the 服务员话 → 读活动 → 读后回复
+    order at settle time. Emitted after the checkpoint seat and before
+    ``execute`` — sequential same-process stamps, never a clock race."""
+
+    tool_name: str
+
+
+@dataclass(frozen=True)
 class LoopExhausted:
     """The iteration cap was hit with every call rejected — the caller
     degrades honestly. The projector's explicit-failure fact (an open repair
@@ -267,7 +281,7 @@ class LoopExhausted:
     iterations: int
 
 
-LoopEvent = ToolRejected | TerminalAccepted | ReadAccepted | LoopExhausted
+LoopEvent = ToolRejected | TerminalAccepted | ReadAccepted | ReadExecuting | LoopExhausted
 
 
 # Execute signature: (tool name, validated params, the turn's composed speech
@@ -375,18 +389,20 @@ class ToolLoopAgent:
           with the read tool's name, once per accepted read; never for a
           rejection (that has ``on_repair``).
         - ``on_checkpoint``: a CHECKPOINT was delivered (ADR-085 判词 2/5) —
-          the prose of a quiet iteration that followed an eligible read and
-          chose ANOTHER read. ``on_observe`` is only the permitting boundary
-          (the observation landed); the checkpoint itself is the NEXT
-          iteration's grounded judgment, emitted here with its full text
-          (quiet iterations never stream — the frontend paces it out under
-          the typewriter law). Checkpoint speech rides its own channel: it
-          never enters ``speech_parts``, so the settled reply must stand
-          alone. Fires at most ``MAX_CHECKPOINTS_PER_TURN`` times per turn;
-          beyond the cap the prose is dropped with a log (earned, never
-          scheduled — a breaching model loses the channel, it does not
-          overflow it). None (the one-shot JSON path) keeps the ledger
-          behavior — the prose composes into the envelope as before.
+          the prose riding a READ call when it has something to stand on
+          (it follows an eligible read, or at iteration 0 precedes one).
+          Emitted BEFORE the read executes (发射座前移, ADR-104 发射时点
+          修订): the read was accepted at params validation, and a waiting
+          read (ADR-102) would otherwise hold the speech hostage for the
+          whole wait. Quiet iterations never stream — the frontend paces
+          the full text out under the typewriter law. Checkpoint speech
+          rides its own channel: it never enters ``speech_parts``, so the
+          settled reply must stand alone. Fires at most
+          ``MAX_CHECKPOINTS_PER_TURN`` times per turn; beyond the cap the
+          prose is dropped with a log (earned, never scheduled — a
+          breaching model loses the channel, it does not overflow it).
+          None (the one-shot JSON path) keeps the ledger behavior — the
+          prose composes into the envelope as before.
         - ``on_loop_event``: the typed internal-event channel (ADR-087 §3
           Phase 2, U1 裁定) — ``ToolRejected`` at the moment of every
           rejection, ``TerminalAccepted`` / ``ReadAccepted`` at the two
@@ -622,8 +638,66 @@ class ToolLoopAgent:
                     }
                     prev_rejected = True
                     continue
+            # The read speech's routing is decided BEFORE execution (发射座
+            # 前移, ADR-104 发射时点修订): a read was ACCEPTED the moment its
+            # params validated — the perception dispatch always observes,
+            # never rejects — so the speech-commit protocol's retraction
+            # window is already closed, and for a WAITING read (ADR-102 —
+            # execute blocks until the material's terminal state) a
+            # post-execution emission would hold the waiter line hostage for
+            # the whole wait: delivered after the silence it exists to
+            # cover, and persisted with a created_at that sorts it AFTER the
+            # read's activity by birth moment. Emitted here, the speech lands
+            # before the wait begins and the activity sorts BETWEEN the two
+            # speeches.
+            #   The ONE routing rule (ADR-085 判词 5), unchanged: prose
+            #   before a TERMINAL call is settled speech (the ledger — the
+            #   ``not tool.terminal`` guard is what keeps the reply itself
+            #   off the checkpoint channel); prose riding a READ is a
+            #   CHECKPOINT when it has something to stand on — it follows an
+            #   eligible read (ADR-085) or, at iteration 0, it precedes an
+            #   eligible read (ADR-104: glued into the ledger it would prefix
+            #   the final reply with a stale「我先看一下」). It rides
+            #   on_checkpoint, never the ledger. Without an on_checkpoint
+            #   channel (the one-shot JSON path) the ledger keeps
+            #   everything; capped prose is dropped (earned, never
+            #   scheduled — never merged back).
+            checkpoint_route = (
+                not tool.terminal
+                and bool(prose.strip())
+                and on_checkpoint is not None
+                and (
+                    (iteration > 0 and last_read_eligible)
+                    or (iteration == 0 and tool.checkpoint_eligible)
+                )
+            )
+            if checkpoint_route and checkpoints_sent < MAX_CHECKPOINTS_PER_TURN:
+                await _emit(on_checkpoint, prose.strip())
+                checkpoints_sent += 1
+                logger.info(
+                    "tool_loop_checkpoint",
+                    agent=self.name,
+                    iteration=iteration,
+                    predecessor=last_read_name,
+                )
+            elif checkpoint_route:
+                logger.info(
+                    "tool_loop_checkpoint_capped",
+                    agent=self.name,
+                    iteration=iteration,
+                )
+            elif not tool.terminal:
+                speech_parts.append(prose)
             await _emit(on_tool_ready, call.name, params)
             speech = _compose_speech([*speech_parts, prose])
+            if not tool.terminal:
+                # The read's work-START stamp (ADR-104 排序律): the projector
+                # re-anchors the span's honest duration at execute entry —
+                # after the checkpoint seat above, so the settled row's walk
+                # key (close − duration) lands deterministically AFTER the
+                # waiter checkpoint's created_at (服务员话 → 读活动 → 读后
+                # 回复; sequential same-process stamps, never a clock race).
+                await _emit(on_loop_event, ReadExecuting(tool_name=call.name))
             outcome = await execute(call.name, params, speech)
             if isinstance(outcome, ToolObservation):
                 if tool.terminal:
@@ -632,39 +706,10 @@ class ToolLoopAgent:
                         "— the declaration and the execute table skewed "
                         "(a terminal call ends the turn, never observes)"
                     )
-                # A read accepted (T2b 感知族): the iteration's speech is
-                # routed (ADR-085 判词 5 — the ONE routing rule): prose before
-                # a TERMINAL call is settled speech (the ledger, unchanged);
-                # prose before another READ in a quiet iteration that follows
-                # an eligible read is a CHECKPOINT — it rides on_checkpoint,
-                # never the ledger. Iteration 0 is exempt (its prose may have
-                # streamed — erasing it would glitch; ADR-084's read-silent
-                # law keeps it empty by design, the ledger is the violation
-                # fallback). Without an on_checkpoint channel (the one-shot
-                # JSON path) the ledger keeps everything.
-                if (
-                    iteration > 0
-                    and prose.strip()
-                    and last_read_eligible
-                    and on_checkpoint is not None
-                ):
-                    if checkpoints_sent < MAX_CHECKPOINTS_PER_TURN:
-                        await _emit(on_checkpoint, prose.strip())
-                        checkpoints_sent += 1
-                        logger.info(
-                            "tool_loop_checkpoint",
-                            agent=self.name,
-                            iteration=iteration,
-                            predecessor=last_read_name,
-                        )
-                    else:
-                        logger.info(
-                            "tool_loop_checkpoint_capped",
-                            agent=self.name,
-                            iteration=iteration,
-                        )
-                else:
-                    speech_parts.append(prose)
+                # A read accepted (T2b 感知族): the iteration's speech was
+                # already routed pre-execution (the seat above); what remains
+                # is the wire continuation — this read becomes the LAST read
+                # for the next iteration's routing.
                 last_read_eligible = tool.checkpoint_eligible
                 last_read_name = call.name
                 accepted_reads.append((call.name, tool.checkpoint_eligible))

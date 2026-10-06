@@ -375,13 +375,23 @@ class PlanTurn:
         )
         material_pending_line: str | None = None
         if processing_count:
+            # 服务员话术律 (2026-10-06 用户拍板): the pre-read speech is a
+            # WAITER line only — you haven't seen the content, so no
+            # proposals, no direction suggestions, no question ride it; the
+            # plan talk comes after the read, never before. (The line lands
+            # as its own checkpoint segment — tool_loop's iteration-0 seat.)
             material_pending_line = (
                 f"Material status: {processing_count} uploaded file(s) are "
                 "STILL PROCESSING — their content is not readable yet. If "
                 "this turn's answer depends on their content, call "
                 "get_understanding: the read waits until the content lands "
                 "(it never returns while the material is still processing), "
-                "so the answer can ground itself this turn."
+                "so the answer can ground itself this turn. Before that call, "
+                "say ONLY a short waiter line in the user's language — you "
+                "have their file, you're going to look at it, the first look "
+                "takes a few minutes. You haven't seen the content, so the "
+                "line carries NO proposals, NO direction suggestions, NO "
+                "question — the plan talk comes after the read, never before."
             )
         elif failed_count:
             material_pending_line = (
@@ -688,9 +698,23 @@ class PlanTurn:
 
     async def _present_plan(self, params: PresentPlanArgs, prose: str) -> str | None:
         """draft → the plan docks. Guardrails first (a rejection writes
-        nothing): the chain adjudication, then the 出书门槛."""
+        nothing): the empty-prose guard, the chain adjudication, then the
+        出书门槛."""
         db, project, stored = self.db, self.project, self.stored
         merged_brief = await self._absorb(params.brief, params.material_text)
+
+        # 空散文护栏 (ask_user 座的同形对称): the plan card carries no title
+        # — the echo IS its introduction (three duties), so a silent dock
+        # leaves the user facing a canvas they cannot read. Reject into the
+        # repair iteration instead of docking speech-less.
+        if not prose.strip():
+            return (
+                "a plan never docks without its introduction speech — the "
+                "card has no title of its own, your message IS the "
+                "introduction. Speak what you saw, the plan in your own "
+                "words, and what 'done' looks like as your message text, "
+                "then call present_plan."
+            )
 
         if not params.tasks:
             return (
@@ -1771,8 +1795,9 @@ async def run_plan_turn(
     # any ToolRejected retracts the stale queue at once (RETRY re-arms by
     # construction) and marks the turn frame-silent; the checkpoint channel
     # flushes the queue FIRST (prose spoken before a read lands before the
-    # read's statement), then streams live — the buffer stays armed
-    # through it.
+    # read EXECUTES — the emission seat sits pre-execute, ADR-104 发射时点
+    # 修订, so a waiting read never holds the waiter line hostage), then
+    # streams live — the buffer stays armed through it.
     if on_delta is not None:
         deferred = DeferredFrames({"delta": on_delta, "tool_ready": on_tool_ready})
         turn.deferred = deferred

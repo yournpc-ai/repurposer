@@ -17,19 +17,40 @@ export function resetActivities(): ActivityFramePayload[] {
   return []
 }
 
+/** The walk key derivation (ADR-104 排序律): a terminal frame carrying
+ * `duration_ms` anchors its walk moment at the TRUE WORK START
+ * (`at − duration_ms`) — the server re-anchors the span's duration at
+ * execute entry (after the waiter checkpoint's created_at), so the settled
+ * row sorts BETWEEN the waiter speech and the post-read reply, never
+ * jumping above a speech that preceded the work. Frames without a duration
+ * (born-completed milestones, active beats) keep their own `at`. */
+export function walkAtFor(frame: ActivityFramePayload): string | undefined {
+  if (frame.status !== "active" && frame.duration_ms != null && frame.at) {
+    const settleAt = Date.parse(frame.at)
+    if (!Number.isNaN(settleAt)) {
+      return new Date(settleAt - frame.duration_ms).toISOString()
+    }
+  }
+  return frame.at
+}
+
 /** Upsert one frame: idempotent by activity_id (a re-delivered frame
  * replaces, never duplicates); first sighting appends in arrival order.
  * S7/E7: the merged row keeps the FIRST-seen `at` as the activity's birth
- * moment (a settle frame's own `at` is its close time — the row never moves
- * in the timeline), while status / key / duration_ms take the latest. */
+ * moment — EXCEPT a duration-carrying settle, whose walk key is the true
+ * work start (`walkAtFor`); status / key / duration_ms take the latest. */
 export function upsertActivityFrame(
   prev: ActivityFramePayload[],
   frame: ActivityFramePayload,
 ): ActivityFramePayload[] {
   const i = prev.findIndex((a) => a.activity_id === frame.activity_id)
-  if (i === -1) return [...prev, frame]
+  if (i === -1) return [...prev, { ...frame, at: walkAtFor(frame) ?? frame.at }]
   const next = [...prev]
-  next[i] = { ...frame, at: prev[i].at ?? frame.at }
+  const at =
+    frame.status !== "active" && frame.duration_ms != null
+      ? walkAtFor(frame) ?? prev[i].at
+      : prev[i].at ?? frame.at
+  next[i] = { ...frame, at }
   return next
 }
 

@@ -102,8 +102,10 @@ export interface StreamChatOptions {
    * segment, type this into a new one, then the settled reply lands in a
    * fresh segment — never merged into one message. Persisted server-side as
    * an intent.type="checkpoint" row, so a failed turn's rollback drops the
-   * bubbles and a refresh re-renders them from history. */
-  onCheckpoint?: (text: string) => void
+   * bubbles and a refresh re-renders them from history. `at` is the row's
+   * server-clock created_at (服务端钟锚定 — the live bubble sorts by the
+   * same moment the replay walk does). */
+  onCheckpoint?: (text: string, at?: string) => void
   /** One activity frame (ADR-087 §3 Phase 2): append-oriented milestones of
    * the agent's work — status flips arrive as new frames on the same
    * activity_id; the server's terminal sweep guarantees zero active
@@ -254,7 +256,7 @@ function streamTurn<T>(
             onQuestionPreview?.(frame.payload)
             break
           case "checkpoint":
-            onCheckpoint?.(frame.text)
+            onCheckpoint?.(frame.text, frame.at)
             break
           case "activity":
             onActivity?.(frame.frame)

@@ -438,7 +438,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                         _sse("assistant.thinking", json.dumps({"phase": phase}))
                     )
 
-                async def on_checkpoint(text: str) -> None:
+                async def on_checkpoint(text: str, at: str | None = None) -> None:
                     # The checkpoint channel (ADR-085): a quiet iteration's
                     # grounded result statement after an eligible read. The
                     # row is persisted runner-side (flush-only, the turn's
@@ -446,9 +446,11 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     # live — the client finalizes the current bubble segment
                     # and types the checkpoint into a new one (the typewriter
                     # law holds: quiet iterations stream nothing, the frame
-                    # paces out client-side).
+                    # paces out client-side). ``at`` is the row's created_at
+                    # (服务端钟锚定 — the live bubble sorts by the same clock
+                    # the replay walk does).
                     await queue.put(
-                        _sse("assistant.checkpoint", json.dumps({"text": text}))
+                        _sse("assistant.checkpoint", json.dumps({"text": text, "at": at}))
                     )
 
                 response = await execute_chat_turn(

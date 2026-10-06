@@ -64,8 +64,12 @@ export function isRunSpanRow(a: ActivityFramePayload): boolean {
  * and the turn's SETTLED activity rows interleave by real moment. Messages
  * claim the lower order numbers (they predate the turn's work); a
  * same-moment tie lands the message first. The activity row's `at` is its
- * BIRTH (the reducer preserves the first-seen stamp) — a settled row never
- * moves.
+ * walk moment: the reducer preserves the first-seen birth stamp EXCEPT a
+ * duration-carrying settle, whose walk key is the TRUE WORK START
+ * (`settle_at − duration_ms`, ADR-104 排序律 — the server re-anchors the
+ * span's duration at execute entry, so the settled read row sorts between
+ * the waiter checkpoint and the post-read reply, never jumping above a
+ * speech that preceded the work).
  *
  * 2026-09-24 合一律: an ACTIVE activity never interleaves — while a
  * milestone is live it is the now-line's content (one mounted row morphing

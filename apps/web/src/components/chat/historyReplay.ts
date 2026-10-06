@@ -16,6 +16,7 @@ import {
   answeredQuestionText,
   type QuestionAnswer,
 } from "./AnsweredQuestion"
+import { walkAtFor } from "./activityReducer"
 import type { ActivityFramePayload } from "@/lib/chat-stream"
 import type { CandidateMemberPayload } from "@/lib/chatStreamFrames"
 
@@ -157,7 +158,7 @@ export function activityLog(intent: unknown): ActivityFramePayload[] | undefined
     ) {
       return undefined
     }
-    frames.push({
+    const frame = {
       activity_id: d.activity_id,
       seq: d.seq,
       kind: d.kind as ActivityFramePayload["kind"],
@@ -166,7 +167,11 @@ export function activityLog(intent: unknown): ActivityFramePayload[] | undefined
       at: typeof d.at === "string" ? d.at : undefined,
       count: typeof d.count === "number" ? d.count : undefined,
       duration_ms: typeof d.duration_ms === "number" ? d.duration_ms : undefined,
-    } as ActivityFramePayload)
+    } as ActivityFramePayload
+    // The persisted `at` is the frame's SETTLE time; the walk key is the
+    // true work start (ADR-104 排序律 — the same derivation the live
+    // reducer applies at the settle frame, so refresh and live agree).
+    frames.push({ ...frame, at: walkAtFor(frame) ?? frame.at })
   }
   return frames
 }

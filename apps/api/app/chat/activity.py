@@ -77,6 +77,7 @@ from app.agents.tool_loop import (
     LoopEvent,
     LoopExhausted,
     ReadAccepted,
+    ReadExecuting,
     TerminalAccepted,
     ToolRejected,
 )
@@ -304,10 +305,14 @@ class ActivityProjector:
         kind, _, started = self._active.pop(activity_id)
         # 诚实耗时 (2026-09-25): the whisper shows only a GENUINE span.
         # Read / repair spans cover real server work (the query, the rework
-        # loop) — honest. Terminal-kind spans (draft / run) open at
-        # name_known, AFTER the LLM already did the drafting — the measured
-        # ~1s is validation noise that reads as a lie ("计划已起草 ·1s"
-        # after a 30s draft), so those settles carry none.
+        # loop) — honest. A read span's start is RE-ANCHORED at execute
+        # entry by ReadExecuting (ADR-104 排序律 — ``_on_read_executing``),
+        # so the measured span is the real work and the settled row's walk
+        # key (settle − duration) lands after the waiter checkpoint.
+        # Terminal-kind spans (draft / run) open at name_known, AFTER the
+        # LLM already did the drafting — the measured ~1s is validation
+        # noise that reads as a lie ("计划已起草 ·1s" after a 30s draft),
+        # so those settles carry none.
         duration_ms = (
             max(0, int((time.monotonic() - started) * 1000))
             if kind in (KIND_READ, KIND_REPAIR)
@@ -380,6 +385,9 @@ class ActivityProjector:
         """The typed loop-event seam (U1)."""
         if isinstance(event, ToolRejected):
             return self._on_rejection(event)
+        if isinstance(event, ReadExecuting):
+            self._on_read_executing()
+            return []
         if isinstance(event, (ReadAccepted, TerminalAccepted)):
             return self._on_accepted(event)
         if isinstance(event, LoopExhausted):
@@ -489,6 +497,22 @@ class ActivityProjector:
                     )
             self._open_call = None
         return frames
+
+    def _on_read_executing(self) -> None:
+        """读活开工戳 (ADR-104 排序律): re-anchor the open read span's
+        honest-duration start at execute entry. name_known births the span
+        mid-generation (liveness); anchoring the duration THERE would make
+        the settled row's walk key (close − duration) precede the waiter
+        checkpoint's created_at and invert the 服务员话 → 读活动 → 读后回复
+        order at settle time. Emitted after the checkpoint seat, before
+        execute — sequential same-process stamps."""
+        if self._open_call is None:
+            return
+        _name, activity_id = self._open_call
+        if activity_id is None or activity_id not in self._active:
+            return
+        kind, key, _started = self._active[activity_id]
+        self._active[activity_id] = (kind, key, time.monotonic())
 
     def _fail_repair(self) -> ActivityFrame | None:
         """The repair span's honest failure terminal (LoopExhausted / a

@@ -52,7 +52,25 @@ describe("upsertActivityFrame", () => {
     expect(next[0].status).toBe("completed")
   })
 
-  it("keeps the FIRST-seen `at` as the birth moment; the settle frame's own at never moves the row (S7/E7)", () => {
+  it("a duration-carrying settle re-anchors the walk key to the TRUE WORK START (at − duration_ms, ADR-104 排序律)", () => {
+    let list: ActivityFramePayload[] = []
+    list = upsertActivityFrame(list, {
+      ...frame("a", "active", 1),
+      at: "2026-09-23T08:00:00.000Z", // the mid-generation name_known beat
+    })
+    list = upsertActivityFrame(list, {
+      ...frame("a", "completed", 2),
+      at: "2026-09-23T08:00:01.200Z", // the settle stamp
+      duration_ms: 700, // the real work started at execute entry
+    })
+    // 08:00:01.200 − 700ms — NOT the first-seen birth: the settled row
+    // sorts after the waiter checkpoint that preceded the work.
+    expect(list[0].at).toBe("2026-09-23T08:00:00.500Z")
+    expect(list[0].status).toBe("completed")
+    expect(list[0].duration_ms).toBe(700)
+  })
+
+  it("a settle WITHOUT a duration keeps the FIRST-seen `at` (born-instant rows never move)", () => {
     let list: ActivityFramePayload[] = []
     list = upsertActivityFrame(list, {
       ...frame("a", "active", 1),
@@ -61,11 +79,17 @@ describe("upsertActivityFrame", () => {
     list = upsertActivityFrame(list, {
       ...frame("a", "completed", 2),
       at: "2026-09-23T08:00:01.200Z",
+    })
+    expect(list[0].at).toBe("2026-09-23T08:00:00.000Z")
+  })
+
+  it("a born-terminal duration frame (first sighting settles) still anchors at the work start", () => {
+    const list = upsertActivityFrame([], {
+      ...frame("a", "completed", 1),
+      at: "2026-09-23T08:00:01.200Z",
       duration_ms: 1200,
     })
     expect(list[0].at).toBe("2026-09-23T08:00:00.000Z")
-    expect(list[0].status).toBe("completed")
-    expect(list[0].duration_ms).toBe(1200)
   })
 
   it("a first frame without `at` yields to the settle frame's stamp (defensive, pre-S7 wire)", () => {

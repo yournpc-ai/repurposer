@@ -1751,7 +1751,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 **Consequences**: 机械感的根（2 句律 + 文件名级认知）消除；判断的诚实性由证据链代码可查证（注入在 assemble，读到的才说）。prompt 面改动过 prompt gate（ADR-071）。验收：**点 Start 前用户能从 Chat 确认 agent 真懂了素材，且不听到重复的 DAG/计划描述**——不是「多了一句话」。
 
 **Related**: ADR-080（单一叙事者——本条是同一 writer 的「 richer turn」兑现）/ ADR-077（感知族读工具——注入复用其格式化律）/ ADR-058（展示文案二源律——判断句的素材认知源自世界自证的物化行）/ ADR-060（echo 防编造律——grounding 链是其素材侧推广）
-## ADR-084: 言语语义管线——read 静默律 + Start CTA 归 dock + grounding 两态诚实
+## ADR-084: 言语语义管线——Start CTA 归 dock + grounding 两态诚实
 
 **Status**: Decided (2026-09-17)
 
@@ -1759,21 +1759,20 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 **Decision**:
 
-1. **read 静默律（G1，最小正确修复）**：SPEECH 契约 = 「speak first, then call the **TERMINAL** tool; before a READ tool say nothing at all」。read 迭代的 liveness 全部由 inspecting 相位帧承担（`on_tool_call` name-known 帧的既有座位）；过程叙事（'I'll pull…'/'Let me check…'/'I'll inspect…'）= banned speech。**`speech_parts` / ToolLoop 账本一行不改**——过程话不再流出，「已流式不可擦」约束不再被触发，账本自然无害化。两个 loop 面（`intent_router_system.j2` / `chat_intent_system.j2`）+ 共享 `_read_tools.j2` 同律。
-2. **语义角色而非句式（维持 ADR-083 意图）**：present_plan 的 echo 定义的是 semantic duties（素材判断 → 用户意图 → 完成标准+下一步），不是机械句数；本条不新增模板。
-3. **grounding 两态诚实**：「理解用户需求」和「已读用户素材」是两个不同的事实，永不混淆。素材内容本回合不可读（仍在处理——read 明说或上下文无文本）时，duty ① 不退化为沉默，而是变成**一句诚实短句**：我理解了你想要什么、内容读取在处理完成后落地、计划先按你自己的话起草。四级证据链（ADR-083 判词 2）不变。
-4. **Start CTA 归属**：≥2 task 的 task_book 回合，Chat 永不邀请言语确认——no 'say the word' / no 'just say start' / no 'tell me when you're ready'；duty ③ 最多一次性平指 dock 的 Start 按钮。Chat 可以解释 Start 的意义，但不拥有 Start 的交互职责（Canvas = 结构，Chat = 理解+简述，Dock = 唯一 Start 动作）。单任务无按钮分支的会话式确认（DENSITY 律）不变。
+1. **语义角色而非句式（维持 ADR-083 意图）**：present_plan 的 echo 定义的是 semantic duties（素材判断 → 用户意图 → 完成标准+下一步），不是机械句数；本条不新增模板。
+2. **grounding 两态诚实**：「理解用户需求」和「已读用户素材」是两个不同的事实，永不混淆。素材内容本回合不可读（仍在处理——read 明说或上下文无文本）时，duty ① 不退化为沉默，而是变成**一句诚实短句**：我理解了你想要什么、内容读取在处理完成后落地、计划先按你自己的话起草。四级证据链（ADR-083 判词 2）不变。
+3. **Start CTA 归属**：≥2 task 的 task_book 回合，Chat 永不邀请言语确认——no 'say the word' / no 'just say start' / no 'tell me when you're ready'；duty ③ 最多一次性平指 dock 的 Start 按钮。Chat 可以解释 Start 的意义，但不拥有 Start 的交互职责（Canvas = 结构，Chat = 理解+简述，Dock = 唯一 Start 动作）。单任务无按钮分支的会话式确认（DENSITY 律）不变。
 
 **明确不做**：不给 `speech_parts` 加 process/value/settled 三角色（harness 层过度修复——prompt 一句话能解决的事不变成机制）；不动 trigger writer（ADR-080 单一叙事者维持）；不动 Canvas；不改 ToolLoop 代码；单任务会话式确认不波及。
 
-**Consequences**: 最终消息只承载三类用户价值言语——「我理解了什么 / 我准备做什么 / 你需要决定什么」；内部执行状态（调用哪个工具、拼几个 task）归 transient 相位帧，永不入持久消息。Interaction Integrity 推进一步：**不是所有真实发生的内部状态都要展示；但展示给用户的每一项状态都必须真实且有用户价值**。回归面 = chat_scenarios S20（A 部未就绪：read-silent 流式空读 + 处理中披露 + 过程话负向标记；B 部就绪：grounded 内容词代理断言 + ≥2 task 无言语确认邀请 + 流式律）。prompt 面改动过 prompt gate（ADR-071）。
+**Consequences**: 最终消息只承载三类用户价值言语——「我理解了什么 / 我准备做什么 / 你需要决定什么」；内部执行状态（调用哪个工具、拼几个 task）归 transient 相位帧，永不入持久消息。Interaction Integrity 推进一步：**不是所有真实发生的内部状态都要展示；但展示给用户的每一项状态都必须真实且有用户价值**。回归面 = chat_scenarios S20（A 部未就绪：处理中披露；B 部就绪：grounded 内容词代理断言 + ≥2 task 无言语确认邀请 + 流式律）。prompt 面改动过 prompt gate（ADR-071）。
 
-**Related**: ADR-083（信任锚 echo——grounding 链与注入机制不动）/ ADR-080（单一叙事者——trigger 静默维持）/ ADR-070（确认拍 = dock pill 唯一座位）/ ADR-077（工具 loop——read 静默律是其言语账本语义的契约层补全）
+**Related**: ADR-083（信任锚 echo——grounding 链与注入机制不动）/ ADR-080（单一叙事者——trigger 静默维持）/ ADR-070（确认拍 = dock pill 唯一座位）/ ADR-077（工具 loop）
 ## ADR-085: 一回合多交付——Phase / Checkpoint / Settled 三层用户可见交付模型
 
 **Status**: **Implemented** (2026-09-17)；机制有意 opportunistic——checkpoint earned 不配额（判词 3），主路径单读直出时结构性零 checkpoint 是设计不是缺陷（见 Consequences）
 
-**落地座位**：路由规则在 `tool_loop.py` 的 observation 分支（quiet 迭代 + eligible 前驱 + 另一条 read → `on_checkpoint`，≤2 闸，超出丢弃记日志；iteration 0 豁免 = 违规回退账本；无通道 = 账本兜底）；资格声明在 `perception/__init__.py`（`checkpoint_eligible`：get_understanding / get_asset / get_craft_skeleton 三席）；持久化在 `service._checkpoint_callback`（`intent={"type":"checkpoint"}` 行，flush-only 随回合一次 commit）；SSE 帧 `assistant.checkpoint` 在 `routes.py`；前端分段在 `ChatDock`（`typeTargetId` + `checkpointChain` 串行化，streamId 主泡不动）；言语语义在 `_read_tools.j2`（CHECKPOINTS 段：结果陈述 = 唯一例外，终答必须独立成文不复读）。确定性回归 = `test_tool_loop_pure.py` 五条路由用例 + `chat_scenarios` S20B opportunistic 形态断言。
+**落地座位**：路由与发射在 `tool_loop.py` 的 execute 前座（参数校验一过、execute 之前即发射——读的裁决是参数校验不是执行结果，感知族派发恒观察恒不拒绝，言语提交协议的撤回窗在校验通过时已关；等待读的 execute 阻塞到素材 terminal 态，押在 execute 后发射会把服务员话扣押整场等待、落库时间戳排在活动诞生之后——ADR-104 发射时点修订）：quiet 迭代 + eligible 前驱 + 另一条 read → `on_checkpoint`，≤2 闸，超出丢弃记日志；iteration 0 散文骑 eligible 读前 = checkpoint 座位（ADR-104），非 eligible 读前 = 回退账本；无通道 = 账本兜底；终态调用前的散文永远不走此通道（`not tool.terminal` 守卫——终答散文骑账本入 envelope，checkpoint 化会双说）；资格声明在 `perception/__init__.py`（`checkpoint_eligible`：get_understanding / get_asset / get_craft_skeleton 三席）；持久化在 `service._checkpoint_callback`（`intent={"type":"checkpoint"}` 行，flush-only 随回合一次 commit）；SSE 帧 `assistant.checkpoint` 在 `routes.py`（帧携带落库行 `created_at` 作气泡时间轴锚——ADR-104 排序律）；前端分段在 `ChatDock`（`typeTargetId` + `checkpointChain` 串行化，streamId 主泡不动）；言语语义在 `_read_tools.j2`（CHECKPOINTS 段：结果陈述 = 唯一例外，终答必须独立成文不复读）。确定性回归 = `test_tool_loop_pure.py` 路由用例群（含发射先于 execute 的顺序断言、terminal 守卫）+ `chat_scenarios` S20B opportunistic 形态断言。
 
 **Context**: ADR-084 关掉过程话之后，「机械感」的结构性根因完整暴露：当前系统只有两个用户可见座位——transient 相位（「在做什么」）与 settled 终答（「最终怎么做」），中间缺了「**我刚发现了什么**」的交付座位。审计坐实 Turn ↔ Message 的 1:1 绑定是**产出契约层**的实现便利而非产品必需：first binding = `LoopResult.prose: str` + `PlanTurnOutcome(Message)`（tool_loop/plan_turn），前端对应物 = streamId 一键一泡；DB（messages 无 turn 分组，assistant 行数无约束）与 SSE（`_sse_pump` 多路复用，`question.preview` 是回合中途结构化帧的现存先例）都不是瓶颈。缺少 checkpoint 座位时，读到的有价值结果只有两个去向：并入终答（ADR-084 已禁的前形态）或退化成无内容的相位标签——「看不到它在干活」与「听到它念操作日志」是同一个缺口的两副面孔。
 
@@ -1783,13 +1782,13 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 2. **`on_observe` 是允许边界，不是生成器**：checkpoint 的真实链路 = ToolObservation → 下一轮 LLM 迭代判断「这个结果值得告诉用户」→ 生成 checkpoint prose → `assistant.checkpoint` 帧。checkpoint 必须是 grounded judgment（同一 ADR-083 证据层级），永不是 raw tool output 的搬运。
 3. **Registry 声明资格，不声明触发**：感知族工具条目带 `checkpoint_eligible`（get_understanding 级 ✅ / get_asset 级 △ / 目录浏览族 ❌），最终是否产生由「是否产生新的用户相关信息」当场判定（同回合重复读取同内容 = 不新 = 不说）；每 turn ≤2，**earned，不是配额**——纯 answer 回合的正确 checkpoint 数是零。
 4. **Checkpoint 落库，且带显式语义类型**：checkpoint 行与普通 settled assistant message 分开（明确 kind/语义标记），四项目标——刷新可恢复 / future context 可选择性读取 / replay 不把 checkpoint 当最终回答 / trigger_review·checkpoint·settled 三语义分家。是一回合多**交付**，不是一回合多**assistant 行**。**持久化语义**：checkpoint 是 **live delivery，不是 durable delivery**——落库 flush-only 随回合一次 commit，回合中途失败则已展示的 checkpoint 随事务回滚（刷新后消失）。**不为此扩大事务模型**；若「已交付事实随失败消失」伤信任被证实，中途 commit 的评估是一条新 ADR。
-5. **Harness 路由机制（ToolLoop 内核不动）**：非终态调用前的散文 = checkpoint 候选（走新通道，**永不入 `speech_parts`**）；终态调用前的散文 = settled speech（账本现状不动）。iteration 0 的 read 前叙事仍被 ADR-084 禁（无先有 observation，无 grounded 内容可说）——**iteration 0 豁免是 streaming safety 的防御兜底，不是产品行为**：模型违规后不让 UI 坏掉，如此而已（测试面 `test_iteration_zero_prose_stays_in_the_ledger` 锁的正是这个兜底语义）。checkpoint 只可能诞生于 observation 之后的迭代。SSE 侧新增 `assistant.checkpoint` 帧（`_sse_pump` 既有队列直过）；前端 stream key 从「一发送一键」变「一键一段」——checkpoint 帧 finalize 当前泡并开新泡，帧携带完整文本走打字机节拍（安静迭代零 delta，打字机律最后闸门同形适用）。
+5. **Harness 路由机制（ToolLoop 内核不动）**：非终态调用前的散文 = checkpoint 候选（走新通道，**永不入 `speech_parts`**）；终态调用前的散文 = settled speech（账本现状不动）。iteration 0 的 read 前言语 = 合法形态（ADR-104）：骑 eligible 读则走 checkpoint 通道成独立段，否则走账本并入终答前缀。checkpoint 的发射座在读调用的 execute **之前**（ADR-104 发射时点修订：参数校验一过即发射，等待读不把言语扣押进阻塞）。SSE 侧新增 `assistant.checkpoint` 帧（`_sse_pump` 既有队列直过）；前端 stream key 从「一发送一键」变「一键一段」——checkpoint 帧 finalize 当前泡并开新泡，帧携带完整文本走打字机节拍（安静迭代零 delta，打字机律最后闸门同形适用）。
 
 **明确不做**：不改 ToolLoop 的 terminal/max_iterations/账本语义；不展示 raw reasoning / 候选方案 / 概率；不为每个 tool 发 checkpoint；不恢复多 writer（ADR-080 维持）；不引入新 execution architecture（ExecutionAttempt / 新 Agent 状态机 / Media IR / 新里程碑）；不把 registry 变成产品规则系统（只声明资格）。
 
 **Consequences**: Chat 从「一个会生成漂亮答案的聊天框」变成「能看到它在干活的 Agent」——用户看到的是有意义的工作进展，不是内部思维日志。caption 场景理想序列：User → [Phase] 正在读取素材 → [Checkpoint] 我看到了——关于 X 的演讲，核心是 Y（grounded in understanding）→ [Phase] 正在整理计划 → [Settled] 两版字幕：中文双语 + 法语，计划在画布上 → Canvas 结构 / Dock Start。Interaction Integrity 的最终形态：**不是所有真实发生的内部状态都展示；但展示的每一项都必须真实、有结果、有用户价值**。checkpoint 的验收问句：**「这条消息是用户刚刚真的需要知道的信息，还是系统只是想证明自己做过某个动作？」**——前者过，后者禁。**已知风险与验证义务**：路由规则要求「结果陈述后再跟一条 read」才出 checkpoint，主路径 `get_understanding → present_plan`（单读直出）**结构性零 checkpoint**——判断句由终答的 duty ① 承载（ADR-083），这不是缺陷；但如果实测发现 earned 条件在主路径上**系统性过低**、理解锚沦为偶然体验，则重审路由（候选：显式 checkpoint 工具 / 终态前分流），那是一次新评审而不是静默扩闸。命中率数据面 = `tool_loop_checkpoint` structlog（含 predecessor）+ **`tool_loop_turn` 每回合一条汇总**（reads 序列 / eligible_reads / checkpoints / outcome——eligible 占比、eligible→checkpoint 转化、checkpoint→settled 三比例及「哪类 read 真挣到 checkpoint」全可算）+ `chat_scenarios` S21 探针（四场景 PRINT read 序列与 checkpoint 计数，只锁硬律不锁出现）。资格纪律：`checkpoint_eligible` 永是资格不是触发；「信息生产 vs 动作证明」的判定永远归 new + user-relevant + changes understanding。回归面 = chat_scenarios S20B/S21 + `test_tool_loop_pure.py` 五条路由用例；prompt 面改动过 prompt gate（ADR-071）。
 
-**Related**: ADR-084（read 静默律——read 前静默不动，read 后的结果言语走 checkpoint 通道）/ ADR-083（信任锚——checkpoint 的 grounding 层级同源）/ ADR-077（工具 loop——checkpoint 是其呈现协议补全，内核不动）/ ADR-080（单一叙事者——checkpoint 不引入第二 writer，它仍是同一 turn 的言语）/ ADR-070（确认拍 = dock pill——Settled 层的 Start 归属不变）
+**Related**: ADR-084 / ADR-104（read 前言语归自然 SPEECH 律，read 后的结果言语走 checkpoint 通道）/ ADR-083（信任锚——checkpoint 的 grounding 层级同源）/ ADR-077（工具 loop——checkpoint 是其呈现协议补全，内核不动）/ ADR-080（单一叙事者——checkpoint 不引入第二 writer，它仍是同一 turn 的言语）/ ADR-070（确认拍 = dock pill——Settled 层的 Start 归属不变）
 
 ## ADR-086: 拓扑空间权威三律 + Product Canvas ≠ Execution Graph——Product Flow Alignment 的架构地基
 
@@ -2621,6 +2620,24 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 **Consequences**: 提问散文失去一类机械腔病灶；dock 解剖不变。已知边界：present_plan echo 的「散文第二句恒为默认路径声明」（ADR-052 判词 6，计划卡侧）是同族法条，计划卡已有确定性 defaultPathLine UI——是否同律翻案留待拍板，本条不动。
 
 **Related**: ADR-052（判词 5 可见面被本条翻案）/ ADR-058（展示文案二源律——本条的原理层）/ ADR-053 R1（选项问阻塞形态律）
+
+## ADR-104: read 静默律废除（ADR-084 G1 翻案）——read 前后言语回归自然 SPEECH 律
+
+**Status**: Decided (2026-10-06)
+
+**Context**: ADR-084 G1 立 read 静默律（"before a READ tool say nothing at all"）治的是一个顺序问题：read 前的过程叙事（"I'll pull…"）流式上屏后按「已流式不可擦」并入终答前缀，最终消息以操作日志开头。但绝对禁言在两个地方误诊：① live 取证（项目 c5020625，2026-10-06）——素材处理 9m43s，模型合法沉默整场等待，用户无法区分「在干活」与「死掉了」；② 静默律把模型按进「禁言模式」，读返回后它没能自行退出——bare 调用 present_plan（args 满、散文空）直 dock，tool-result → tool-call 的机器转移偏置在禁言语境下被放大。曾起草「等待读例外」补丁，评审判为拆东墙补西墙（例外叠示例 = 过度设计）；用户拍板：直接删律最简单。
+
+**Decision**:
+
+1. **read 静默律整条删除**：`_read_tools.j2` 的 READS ARE SILENT 段、两份 intent 契约 SPEECH 行的 read 禁言从句、discovery 链的 "a silent read — say nothing first" 全部移除。read 前后的言语回归自然 SPEECH 律（speak first, then call the TERMINAL tool）——模型自行判断何时说话，包括长等待读前的预期句。
+2. **iteration-0 checkpoint 座位**：读之前的散文若骑在 eligible 读（checkpoint_eligible）之前，走 checkpoint 通道落成自己的独立段（`tool_loop` 路由条件扩一席；原位定稿 = ChatDock 把主泡换键为 cp 段、streamId 重置为全新段，envelope 各律零改动）。**发射座 = 读调用的 execute 之前**（发射时点修订，live 取证项目 6e9aae02 起）：参数校验一过即发射——读的裁决是参数校验不是执行结果（感知族派发恒观察恒不拒绝），言语提交协议的撤回窗在校验通过时已关；若押在 execute 之后，等待读（ADR-102 阻塞到素材 terminal 态）会把服务员话扣押整场等待，落库时间戳还排在活动诞生之后，live/重放双序皆错。等待读的现场因此呈现三单元时序：【服务员话】→【正在理解素材 → 已理解素材 · Ns】→【读完的回复】。
+5. **排序律（settle 跳位修复，live 取证项目 7c9dab44 起）**：活动行的时间轴锚（walk key）不再是 name_known 诞生戳——name_known 是生成中途的 liveness 戳，结构性早于服务员话 checkpoint 的落库戳，活动行 settle 一进时间轴就跳到服务员话上方。新法：① 内核新增 `ReadExecuting` loop 事件（execute 入口前发射，走未缓冲的 `on_loop_event` 通道），投影器把读跨度的诚实耗时起点重锚到 execute 入口；② 前端 reducer/replay 对携带 `duration_ms` 的 settle 帧推导 walk key = `settle_at − duration_ms`（真实开工时刻），其余帧保 first-seen 诞生律；③ checkpoint SSE 帧携带落库行的 `created_at`，live 气泡锚服务端钟（与重放同钟）。三戳同进程顺序发射，确定性无钟竞：checkpoint created_at < execute 入口 < settle。
+3. **服务员话术律**：素材 STILL PROCESSING 时读之前的言语只能是服务员话（收到 + 这就去看 + 要几分钟）——无提案、无方向建议、无问句；方案言语永远在读完之后。座位 = `plan_turn.py` 的 STILL PROCESSING 行。
+4. **空散文护栏补位**：`present_plan` 增空散文拒绝（ask_user 座同形）——静默律删除后言语模式更连贯，bare 终端调用预计减少；但 tool-result → tool-call 偏置永存，护栏是兜底不是主力。
+
+**Consequences**: 过程叙事（"I'll pull…"）重新合法——非 eligible 读前的言语仍并入终答前缀（账本兜底语义不变），接受为代价，以答复质量尺（reply_quality_probe）监测；S20 剧本的「过程话负向标记 / read-silent 流式空读」断言随之翻转，需同步修订；`test_iteration_zero_prose_stays_in_the_ledger` 改写为两席分测（eligible 读前 → checkpoint / 非 eligible 读前 → 账本）。ADR-084 其余决策（语义角色 / grounding 两态 / Start CTA 归属）不动。prompt 面改动过 prompt gate（ADR-071）。
+
+**Related**: ADR-084（G1 被本条翻案，余者不动）/ ADR-085（iteration-0 豁免语义从兜底变常态）/ ADR-102（等待读机制——相位帧 liveness 不变）
 
 ## ADR-105: 画布可见性 = 首个已确认 run——节点诞生与画布可见性分离（Workspace 合同 v4.2 C3 翻案）
 

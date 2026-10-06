@@ -28,6 +28,7 @@ import pytest
 from app.agents.tool_loop import (
     LoopExhausted,
     ReadAccepted,
+    ReadExecuting,
     TerminalAccepted,
     ToolRejected,
 )
@@ -104,6 +105,47 @@ def test_t1c_ok_defaults_to_landed():
     assert _summary(frames)[-1] == (
         "a1", 2, "read", STATUS_COMPLETED, "chat.inspectingDone.understanding",
     )
+
+
+# T1d — 排序律 (ADR-104): ReadExecuting re-anchors the read span's honest
+# duration at EXECUTE ENTRY, not at the mid-generation name_known beat — so
+# the settled row's walk key (settle − duration) lands after the waiter
+# checkpoint's created_at (服务员话 → 读活动 → 读后回复, never inverted).
+def test_t1d_read_executing_reanchors_the_honest_duration(monkeypatch):
+    import app.chat.activity as activity_mod
+
+    ticks = iter([100.0, 200.0, 350.0])  # name_known, execute entry, settle
+    monkeypatch.setattr(
+        activity_mod.time, "monotonic", lambda: next(ticks)
+    )
+    p = ActivityProjector()
+    frames = _feed(
+        p,
+        "get_understanding",
+        ReadExecuting("get_understanding"),
+        ReadAccepted("get_understanding"),
+    )
+    assert _summary(frames) == [
+        ("a1", 1, "read", STATUS_ACTIVE, "chat.inspecting.understanding"),
+        ("a1", 2, "read", STATUS_COMPLETED, "chat.inspectingDone.understanding"),
+    ]
+    # The duration measures the REAL work (execute → observation), not the
+    # generation window that preceded it.
+    assert frames[-1].duration_ms == 150_000
+
+
+# T1e — a read WITHOUT the ReadExecuting beat keeps the name_known anchor
+# (the event is the re-anchor's only seat; absent it, nothing moves).
+def test_t1e_without_read_executing_the_anchor_stays_at_name_known(monkeypatch):
+    import app.chat.activity as activity_mod
+
+    ticks = iter([100.0, 350.0])  # name_known, settle
+    monkeypatch.setattr(
+        activity_mod.time, "monotonic", lambda: next(ticks)
+    )
+    p = ActivityProjector()
+    frames = _feed(p, "get_understanding", ReadAccepted("get_understanding"))
+    assert frames[-1].duration_ms == 250_000
 
 
 # T2 — two reads chain: distinct identities, order = event order.

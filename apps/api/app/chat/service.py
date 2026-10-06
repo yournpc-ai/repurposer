@@ -2157,7 +2157,7 @@ def _checkpoint_callback(db, conversation_id, on_checkpoint=None):
     is the runner's, not the loop's). A failed turn rolls the rows back with
     everything else, and the client's turn.failed path drops the bubbles."""
     async def _emit(text: str) -> None:
-        await _create_message(
+        message = await _create_message(
             db,
             conversation_id,
             "assistant",
@@ -2165,7 +2165,12 @@ def _checkpoint_callback(db, conversation_id, on_checkpoint=None):
             intent={"type": "checkpoint"},
         )
         if on_checkpoint is not None:
-            result = on_checkpoint(text)
+            # 服务端钟锚定 (ADR-104 排序律): forward the row's own
+            # created_at so the live bubble anchors to the same server
+            # clock the replay walk sorts by — the settled read span's
+            # re-anchored walk key (settle − duration) lands AFTER this
+            # stamp deterministically (sequential same-process stamps).
+            result = on_checkpoint(text, message.created_at.isoformat())
             if result is not None:
                 await result
 

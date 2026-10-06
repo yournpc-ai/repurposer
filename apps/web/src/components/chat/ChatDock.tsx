@@ -2490,12 +2490,33 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
      * (quiet iterations stream nothing), so it paces out through the SAME
      * typewriter — never a blob. Serialized on checkpointChain: SSE handlers
      * are sync, and the per-turn cap (2) must never interleave on one
-     * typewriter. Edge note: an ADR-084-violating turn (iteration-0 prose
-     * before a read) leaves the settled bubble ABOVE the checkpoint bubbles
-     * — the tail lands there by id; the prefix relation still holds. */
-    const deliverCheckpoint = async (text: string) => {
+     * typewriter.
+     *
+     * The iteration-0 seat (ADR-104): prose before the turn's FIRST eligible
+     * read has ALREADY streamed into the main bubble when its checkpoint
+     * frame arrives — settle it IN PLACE (rekey the bubble to a cp id, the
+     * frame's text wins) instead of re-typing it into a second bubble, and
+     * reset the main-bubble identity (streamId) to a fresh empty segment:
+     * the read's activity rows then sort BETWEEN the two speeches by birth
+     * moment (lib/chatTimeline), and every downstream streamId law (the
+     * envelope's echoCarried / zero-delta / finalizePreview) reads only the
+     * new segment, untouched. */
+    const deliverCheckpoint = async (text: string, at?: string) => {
       if (!text.trim()) return
       await typewriter.drain()
+      if (typeTargetId === streamId && previewText.trim()) {
+        const cpId = `${streamId}#cp${++checkpointCount}`
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === streamId
+              ? { ...m, id: cpId, content: text, streaming: false, at: at ?? m.at }
+              : m
+          )
+        )
+        previewText = ""
+        streamedAny = false
+        return
+      }
       setMessages((prev) =>
         prev.map((m) =>
           m.id === streamId && m.content ? { ...m, streaming: false } : m
@@ -2510,7 +2531,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           role: "assistant" as const,
           content: "",
           streaming: true,
-          at: new Date().toISOString(),
+          at: at ?? new Date().toISOString(),
         },
       ])
       typewriter.push(text)
@@ -2520,8 +2541,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       )
       typeTargetId = streamId
     }
-    const onCheckpoint = (text: string) => {
-      checkpointChain = checkpointChain.then(() => deliverCheckpoint(text))
+    const onCheckpoint = (text: string, at?: string) => {
+      checkpointChain = checkpointChain.then(() => deliverCheckpoint(text, at))
     }
     /** In-place finalize: the preview bubble becomes the settled message
      * under the SAME key (the envelope's content wins); never a remount. */
