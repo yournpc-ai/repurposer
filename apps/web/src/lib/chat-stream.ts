@@ -10,11 +10,15 @@
  * surface as an HTTP error).
  *
  * Uses fetch-event-source because native EventSource is GET-only and cannot
- * send the Authorization header. Auto-reconnect is DISABLED on both turns: a
- * retried POST would persist the user message a second time (chat) or
+ * send the Authorization header. Reconnect-driven re-POST is DISABLED on both
+ * turns: a retried POST would persist the user message a second time (chat) or
  * double-settle the question (answer — the row-lock turns the retry into a
  * 409, but the optimistic UI must not flicker through a phantom retry), so
- * every close/error path terminates the promise.
+ * every close/error path terminates the promise, and `openWhenHidden: true`
+ * keeps the tab-hide/visible cycle from aborting the in-flight POST and
+ * re-issuing it (fetch-event-source's default re-runs `create()` on
+ * visibility — the server has no dedup, so each return-to-tab persisted a
+ * duplicate user row while the aborted turn was stamped failed).
  */
 
 import { fetchEventSource } from "@microsoft/fetch-event-source"
@@ -201,6 +205,9 @@ function streamTurn<T>(
     }
     fetchEventSource(url, {
       method: "POST",
+      // A tab hide/visible cycle must not abort + re-POST the turn (see the
+      // file header) — the stream stays open while the tab is hidden.
+      openWhenHidden: true,
       ...(signal ? { signal } : {}),
       headers: {
         Authorization: `Bearer ${token}`,
