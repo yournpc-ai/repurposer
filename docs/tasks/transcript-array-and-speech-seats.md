@@ -1,6 +1,8 @@
 # Transcript 数组化 + 言语座位通用化 — 施工合同
 
-> Status: 已拍板待施工（ADR-108 / ADR-109，2026-10-07）。母法 = `docs/DECISIONS.md` ADR-108（数组化）+ ADR-109（言语座位）；行为律全文 = `docs/CHAT_ARCHITECTURE.md`（本批落地后修订其中排序律与 checkpoint 座位段）。
+> Status: **施工完成待验收（2026-10-07）**。W1 数组地基（`e01f7b9` seq + 计数器表 / `6aea321` 每帧一行 + SSE row 镜像）· W3 前端单渲染路径 + 折叠行（`678e2a2`）· W4 内核（`d5b924b` checkpoint 通用化 + cap 4）+ prompt 面（`cd35491` 相位叙事律 / echo 可见性戒律 / 模式承诺句 + TaskItem.params `''→{}` 读容忍）· W5 迁移脚本（`scripts/migrate_activity_log_rows.py`，dev 库已实证：旧聚合行清零、seq 重编 1..N、计数器对齐、取证母本会话 12bb1f29 物化正确）+ S25 回归座（`scripts/chat_scenarios.py`，行序 / wire 镜像一致 / 回放恒等 / 诚实 transcript 形态锁）+ CHAT_ARCHITECTURE §8.6 排序律→数组位置律改写。**待用户自跑验收**（合同 §5）：prompt_gate 全探针 / chat_scenarios 全量 / 取证母本 live 回放三件套。验收通过后本简报归 `docs/archive/tasks-done/`。
+> **candidates_log 结论（W1 论证保留分支）**：保留聚合行，不数组行化。取证：候选卡的消费面 = 单卡数据链（set 出生 + selection 重绘，卡片在原地 repaint，是「面」不是时间线行；chat 决策永不成节点同族）；其数组位偏差（live 中回合中途出生 vs 回放锚在回合末的聚合行位）是一回合内的秒级差，且卡片的回放位置在数组化前后一致（都锚聚合行）——数组化它只会把一张卡拆成多行，收益为零、折叠语义变浑。
+> 母法 = `docs/DECISIONS.md` ADR-108（数组化）+ ADR-109（言语座位）；行为律全文 = `docs/CHAT_ARCHITECTURE.md`（§8.6 已随批改写为数组位置律 + checkpoint 通用座位 + 折叠规格）。
 > 取证母本 = 项目 `3e333147-35e0-41ea-8c80-828d41c71893`（2026-10-07 live 取证，四事故：活动行消失 / 活动行刷屏 / 开工句顺序错乱 / echo 指向不可见工作空间）。
 
 ## 1. Product Goal

@@ -210,6 +210,10 @@ class StreamTurn(NamedTuple):
     # accept-reject inversion). Scenarios dump it for review; pass/fail
     # alone leaves the next ordering bug unlocalizable.
     raw_events: list[dict]
+    # Transcript array mirror (ADR-108 §3): the assistant.row.append /
+    # assistant.row.update frames in arrival order — append fixes a row's
+    # array position, update mutates it in place.
+    row_events: list[dict]
 
 
 class Ctx:
@@ -268,6 +272,7 @@ class Ctx:
         checkpoints_pre_read: list[bool] = []
         activities: list[dict] = []
         raw_events: list[dict] = []
+        row_events: list[dict] = []
         read_settled_seen = False
         completed: dict | None = None
         failed: dict | None = None
@@ -302,6 +307,10 @@ class Ctx:
                             "status"
                         ) in ("completed", "failed", "cancelled"):
                             read_settled_seen = True
+                    elif event == "assistant.row.append":
+                        row_events.append({"op": "append", **payload})
+                    elif event == "assistant.row.update":
+                        row_events.append({"op": "update", **payload})
                     elif event == "turn.completed":
                         completed = payload
                     elif event == "turn.failed":
@@ -318,6 +327,7 @@ class Ctx:
             checkpoints_pre_read=checkpoints_pre_read,
             activities=activities,
             raw_events=raw_events,
+            row_events=row_events,
         )
 
     async def answer(self, question_id: str, body: dict) -> httpx.Response:
@@ -968,18 +978,19 @@ PROCESSING_DISCLOSURE = re.compile(
 
 
 def check_checkpoint_shape(stream: "StreamTurn", content: str, label: str) -> None:
-    """ADR-085 checkpoint shape laws (opportunistic — checkpoints are EARNED,
-    so absence is legal; when they fired, the shape must hold): ≤2/turn,
-    never empty, never process narration POST-READ (pre-read waiter speech
-    is legal — ADR-104 服务员话术律), and the settled reply never
-    repeats one verbatim. The acceptance question (2026-09-17 评审):「这条
-    消息是用户刚刚真的需要知道的信息，还是系统想证明自己做过某个动作？」
-    — the negative markers police the latter."""
+    """Checkpoint shape laws (ADR-109 言语座位通用化; opportunistic —
+    checkpoints are EARNED, so absence is legal; when they fired, the shape
+    must hold): ≤4/turn (节奏护栏), never empty, never process narration
+    POST-READ (pre-read waiter speech is legal — ADR-104 服务员话术律;
+    phase-turn expectation sentences are the legal pre-read form), and the
+    settled reply never repeats one verbatim. The acceptance question
+    (2026-09-17 评审):「这条消息是用户刚刚真的需要知道的信息，还是系统想
+    证明自己做过某个动作？」 — the negative markers police the latter."""
     if not stream.checkpoints:
         return
     check(
-        len(stream.checkpoints) <= 2,
-        f"{label}: checkpoints are capped at ≤2 per turn",
+        len(stream.checkpoints) <= 4,
+        f"{label}: checkpoints are capped at ≤4 per turn (ADR-109 rhythm guardrail)",
         stream.checkpoints,
     )
     check(
@@ -4132,16 +4143,18 @@ def _stream_reads(stream: "StreamTurn") -> list[str]:
 
 
 async def s21_checkpoint_channel_observation(ctx: Ctx) -> None:
-    """ADR-085 评审四场景（2026-09-17）的可复跑探针：checkpoint 是 earned
-    不是 scheduled，所以本剧本**不锁出现与否**（禁令 #7），只锁硬律并
-    PRINT 各形态的 read 序列 + checkpoint 计数——主路径命中率是观察值，
-    不是假设（`tool_loop_checkpoint` 日志是同源数据面）。
+    """ADR-085 评审四场景（2026-09-17）的可复跑探针（ADR-109 修订：座位
+    普适，资格白名单已退役）：checkpoint 是 earned 不是 scheduled，所以
+    本剧本**不锁出现与否**（禁令 #7），只锁硬律（check_checkpoint_shape：
+    ≤4 节奏护栏 / 非空 / 读后小结禁流程旁白 / 终答不复述）并 PRINT 各形态
+    的 read 序列 + checkpoint 计数——主路径命中率是观察值，不是假设
+    （`tool_loop_checkpoint` 日志是同源数据面）。
 
     A 单读直出（理解行 assemble 注入后 `get_understanding → present_plan`
     完全可以零 checkpoint，判断句住终答——ADR-083 duty ①）；B 诱导多读
-    （先问语言与内容再做字幕）；C 目录读静默（catalog 前驱非 eligible，
-    harness 层结构性零 checkpoint——这条是确定性的）；D（checkpoint +
-    回合失败的 live/DB/刷新三面）归手测，不在本剧本。"""
+    （先问语言与内容再做字幕）；C 目录读（座位普适后目录读也可携带
+    checkpoint——纯观察，不锁零）；D（checkpoint + 回合失败的 live/DB/
+    刷新三面）归手测，不在本剧本。"""
     caption_msg = (
         "Caption my video in Chinese and French — Chinese as bilingual "
         "subtitles."
@@ -4183,16 +4196,163 @@ async def s21_checkpoint_channel_observation(ctx: Ctx) -> None:
         "What language is my video in, and what is it about? Then caption it "
         "in Chinese and French — Chinese as bilingual subtitles.",
     )
-    # C) 目录读静默：catalog 前驱非 eligible 是注册表事实——若模型真的读了
-    #    目录（inspecting 帧带 captionStyles 键），checkpoint 结构性为零。
-    stream_c = await run_shape("C", "What caption styles can I choose from?")
-    if any("captionStyles" in k for k in _stream_reads(stream_c)):
+    # C) 目录读（ADR-109 座位普适——目录读也可携带 checkpoint，纯观察）。
+    await run_shape("C", "What caption styles can I choose from?")
+
+
+async def s25_transcript_array_order(ctx: Ctx) -> None:
+    """ADR-108/109 数组位置律回归座（2026-10-07 取证母本 = 项目
+    3e333147 的四事故）：多读回合的**持久化数组序 = 渲染序**。
+
+    锁定面（确定性，全部从 DB 数组 + wire 镜像断言，不锁 LLM 措辞）：
+    ① 每帧一行——回合的读活动各自是独立 intent.type='activity' 数组行，
+       frame 形态合法（终态 + 完成态换过去时键）；
+    ② 行序——user 行 < 每个 activity 行 < 终答行（seq 严格递增即数组序）；
+    ③ 开工句/相位句（checkpoint 行，intent.type='checkpoint'）若出现，
+       位于 user 行与终答行之间；waiter 句（首个读 settle 前到达的
+       checkpoint）对应的行必须在第一个 activity 行之前——顺序错乱类
+       事故（开工句排在读行之后）的结构性反证；
+    ④ wire 镜像一致——每个 row.update 有同 id 的在先 row.append；
+       append 的 seq 按到达序严格递增（append 定位置）；
+    ⑤ 回放恒等——端点返回序 == seq 序，且 DB 里每行的终态 == wire 最后
+       一次 update 的态（live 与刷新同源）；
+    ⑥ 诚实 transcript——若回合发生 schema 拒收，activity_forensics 行
+       存在且 content 为空（永不渲染面由前端过滤，此处只锁形态）。
+    checkpoint 出现与否仍是 earned 观察值（禁令 #7 同律），出现时才锁③。"""
+    pid = await ctx.new_project("S25 transcript array order")
+    await seed_asset(
+        pid,
+        ctx.user_id,
+        AssetType.VIDEO,
+        "keynote.mp4",
+        extracted_text=(
+            "Cities are getting hotter every year. In this talk I show how "
+            "shade trees and reflective roofs can cool whole neighborhoods "
+            "by several degrees. We measured fifty blocks over two summers. "
+            "The coolest blocks all had tree cover above forty percent."
+        ),
+        processed=True,
+        meta={"language": "en"},
+    )
+    await seed_understanding(pid)
+    message = "把讲城市降温的几段找出来，剪成竖屏短片"
+    stream = await ctx.chat_stream(pid, message)
+    check(stream.failed is None, "S25 the turn did not fail", stream.failed)
+    completed = stream.completed or {}
+    reply = (completed.get("assistant_message") or {})
+    reply_id = reply.get("id")
+    check(bool(reply_id), "S25 the envelope carries the reply row", completed)
+    check_checkpoint_shape(stream, reply.get("content") or "", "S25")
+    check_activity_shape(stream, "S25")
+
+    items = await ctx.messages(stream.completed["conversation_id"])
+    seqs = [m.get("seq") for m in items]
+    check(
+        all(isinstance(s, int) for s in seqs),
+        "S25: every row carries a seq (ADR-108 array order key)",
+        seqs,
+    )
+    check(
+        seqs == sorted(seqs) and len(set(seqs)) == len(seqs),
+        "S25: the endpoint's array order IS the strictly-increasing seq order (回放恒等)",
+        seqs,
+    )
+
+    def intent_type(m: dict) -> str:
+        return ((m.get("intent") or {}).get("type")) or ""
+
+    act_rows = [m for m in items if intent_type(m) == "activity"]
+    check(
+        len(act_rows) >= 1,
+        "S25: a multi-read turn persists ≥1 activity array row (每帧一行)",
+        [(intent_type(m)) for m in items],
+    )
+    for m in act_rows:
+        frame = (m.get("intent") or {}).get("frame") or {}
         check(
-            stream_c.checkpoints == [],
-            "S21C a catalog-browse predecessor never earns a checkpoint "
-            "(registry eligibility is structural, not advisory)",
-            stream_c.checkpoints,
+            isinstance(frame.get("activity_id"), str)
+            and frame.get("kind") in _ACTIVITY_KINDS
+            and frame.get("status") in _ACTIVITY_TERMINAL
+            and isinstance(frame.get("key"), str),
+            "S25: every persisted activity frame is terminal and well-formed",
+            frame,
         )
+    user_idx = next(
+        i for i, m in enumerate(items) if m.get("role") == "user" and (m.get("content") or "").strip() == message
+    )
+    reply_idx = next(i for i, m in enumerate(items) if m.get("id") == reply_id)
+    act_idx = [items.index(m) for m in act_rows]
+    check(
+        min(act_idx) > user_idx and max(act_idx) < reply_idx,
+        "S25: user row < every activity row < the final reply row (行序)",
+        {"user": user_idx, "activities": act_idx, "reply": reply_idx},
+    )
+    # ③ checkpoint 行序（出现时）：全部在 user 与终答之间；waiter 句
+    # （wire 上先于首个读 settle 到达）对应的行必须在第一个 activity 行前。
+    cp_rows = [m for m in items if intent_type(m) == "checkpoint"]
+    if cp_rows:
+        cp_idx = [items.index(m) for m in cp_rows]
+        check(
+            all(user_idx < i < reply_idx for i in cp_idx),
+            "S25: checkpoint rows sit between the user row and the reply",
+            cp_idx,
+        )
+        if stream.checkpoints and stream.checkpoints_pre_read[0]:
+            first_cp_idx = min(cp_idx)
+            check(
+                first_cp_idx < min(act_idx),
+                "S25: the waiter checkpoint row precedes the first activity row (开工句顺序)",
+                {"first_checkpoint": first_cp_idx, "first_activity": min(act_idx)},
+            )
+    # ④ wire 镜像一致。
+    appends: dict[str, dict] = {}
+    for ev in stream.row_events:
+        if ev["op"] == "append":
+            row = ev.get("row") or {}
+            check(
+                row.get("id") not in appends,
+                "S25: a row appends exactly once (append 定位置)",
+                ev,
+            )
+            appends[row.get("id")] = row
+        else:
+            check(
+                ev.get("id") in appends,
+                "S25: every row.update has an earlier row.append with the same id",
+                ev,
+            )
+    append_seqs = [r.get("seq") for r in appends.values()]
+    check(
+        all(isinstance(s, int) for s in append_seqs)
+        and append_seqs == sorted(append_seqs),
+        "S25: row.append arrival order == seq order (数组序 = 到达序)",
+        append_seqs,
+    )
+    # ⑤ live 与回放同源：DB 里每个 append 过的行终态 == wire 最后 update。
+    last_update: dict[str, dict] = {}
+    for ev in stream.row_events:
+        if ev["op"] == "update":
+            last_update[ev["id"]] = ev.get("frame") or {}
+    db_by_id = {m.get("id"): m for m in items}
+    for rid, frame in last_update.items():
+        db_frame = ((db_by_id.get(rid) or {}).get("intent") or {}).get("frame") or {}
+        check(
+            db_frame.get("status") == frame.get("status"),
+            "S25: the persisted row's terminal status mirrors the wire's last update",
+            {"row": rid, "wire": frame.get("status"), "db": db_frame.get("status")},
+        )
+    # ⑥ 诚实 transcript 形态锁（拒收台账行若存在：永不渲染面 = 空 content）。
+    for m in items:
+        if intent_type(m) == "activity_forensics":
+            check(
+                not (m.get("content") or "").strip(),
+                "S25: a forensics row never carries renderable content",
+                m.get("id"),
+            )
+    print(
+        f"    · S25 rows={len(items)} activities={len(act_rows)} "
+        f"checkpoints={len(cp_rows)} wire_appends={len(appends)}"
+    )
 
 
 async def s22_trigger_landing_silence(ctx: Ctx) -> None:
@@ -5881,6 +6041,7 @@ SCENARIOS = {
     "S23": s23_exploration_chain_lands_on_canvas,
     "S-explore-2": s_explore_2_decision_package_to_confirmed_scope,
     "S24": s24_interview_framing_choice_lands_reframe,
+    "S25": s25_transcript_array_order,
     "S-edit": s_edit_precise_edit_archive_lifecycle,
     # New Interaction Contract（批次 S · ADR-099 golden suite）——两层分离的
     # 新架构层：上方 Legacy Regression 零改动；本组只收 C·C+ 后可转绿场景。
