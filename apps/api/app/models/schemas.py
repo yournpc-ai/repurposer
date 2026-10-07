@@ -1191,6 +1191,18 @@ class TaskItem(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        # ADR-109 §5: a param-less tool comes back with params '' (or null)
+        # instead of {} — normalize before validation (打字机律牙① read
+        # tolerance extended to plan params: one schema rejection here used
+        # to cost a whole rejected iteration and its streamed prose).
+        if isinstance(data, dict) and not data.get("params"):
+            data = dict(data)
+            data.pop("params", None)
+        return data
+
     tool: str
     params: dict = Field(default_factory=dict)
 
