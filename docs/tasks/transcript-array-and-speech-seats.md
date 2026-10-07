@@ -5,6 +5,7 @@
 > 母法 = `docs/DECISIONS.md` ADR-108（数组化）+ ADR-109（言语座位）；行为律全文 = `docs/CHAT_ARCHITECTURE.md`（§8.6 已随批改写为数组位置律 + checkpoint 通用座位 + 折叠规格）。
 > 取证母本 = 项目 `3e333147-35e0-41ea-8c80-828d41c71893`（2026-10-07 live 取证，四事故：活动行消失 / 活动行刷屏 / 开工句顺序错乱 / echo 指向不可见工作空间）。
 > **挂账（parity 非回归）**：trigger 回合（`/event/sync` 类系统触发写口）不产出 activity 行——与批前行为一致，但基础设施（seq + 每帧一行）现已就位，下次排查勿重新取证。
+> **验收期缺陷修复（2026-10-08，`d4a986b`）**：新生会话首回合 seq 分配 FK 违反（`alloc_message_seq` 独立短事务不可见未提交的父行）——`_get_or_create_project_conversation` 出生时打 `db.info` 标记，首回合分配骑会话内事务，commit 后自动回独立短事务路径。dev 库实证：首回合 seq 1/2 + counter 对齐，第二回合独立路径正常。
 
 ## 1. Product Goal
 
