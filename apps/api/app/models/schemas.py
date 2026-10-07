@@ -365,6 +365,9 @@ class ChatMessageResponse(BaseModel):
     # 点选引用 (ADR-099 §4): a user row that IS a suggestion pick carries
     # its structured ref — the visible content stays the picked label.
     suggestion_ref: SuggestionRef | None = None
+    # Transcript 数组位置 (ADR-108): per-conversation monotonic; the client
+    # renders in seq order and never re-derives interleaving from clocks.
+    seq: int | None = None
     created_at: datetime
     updated_at: datetime | None = None
 

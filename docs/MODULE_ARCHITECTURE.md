@@ -143,6 +143,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `workflow_runs` | Pipeline | **创建收口于 `orchestrator.create_run`**（/generate、chat dispatch 全部经它，全库无旁路）；状态只由 orchestrator/worker 写。run 级成本 = `workflow_steps.cost` 聚合（API 序列化时计算，不落列） |
 | `outputs` | Pipeline | 创建 + `render_status`/`files` 归 Pipeline；内容字段（`payload`/`render_spec`/`publishing`）经 `/outputs` API 编辑，Operation Model 落地后归入其写集；payload 三规则（ADR-030）；`workflow_step_id` 为只读血统；`quality` = 质检裁决（期 3 verify 节点写，NULL = 未质检）；内部类型（`material_understanding`/`storyboard`/`craft_skeleton`；`content_plan` 仅为隐藏 Phase-2 前遗留行保留在过滤集）经 `visible_outputs_stmt()` 统一过滤 |
 | `conversations` / `messages` | Agent Interface | Pipeline 只读（run 关联展示） |
+| `message_seq_counters` | Agent Interface | transcript 数组序计数器（ADR-108）：只由 `alloc_message_seq` 的独立短事务 upsert——**刻意不住 conversations 行**（回合事务从 prepare 起持该行锁数分钟，同表计数器必自死锁） |
 | `personas` | Memory | 各模块注入用只读；内容只由 persona agent 写。终态 schema（ADR-038）：身份卡 + 风格六件 flat + 策略三件（audience/guidelines/cta）+ `voice` JSONB（声纹块，NULL=Auto）+ `brand` JSONB（皮肤块，NULL=系统默认皮肤）+ `learned_from` JSONB + `calibrated_at` + `auto_created_at`（可空时间戳替代 is_default；默认解析链 = run.context pin > 项目挂载 > auto_created_at 非空 > 最早创建）。【已定方向：根改名 `positionings`、人设归位为定位的表达分区、`topics` 新表与 `channel_accounts` 挂根——ADR-042 / `POSITIONING.md`，PROGRESS 第八~十周落地时本行改写】 |
 | `music` | Pipeline（渲染资产库） | 生成/挑选经 music 服务；editor 只读选择 |
 | `workflow_steps` | Pipeline | 节点状态只由 orchestrator/worker 写；outputs 的 `workflow_step_id` 为只读血统引用；`spec` 载荷 JSONB（ADR-028）；`cost` 只由 metering（ADR-025）原子累加 |

@@ -742,8 +742,33 @@ class Message(Base):
     # its structured ref {source_turn, suggestion_id} — the visible content
     # stays the picked label, the ref rides structured (mentions 模式同构).
     suggestion_ref = Column(JSONB(none_as_null=True), nullable=True)
+    # Transcript 数组位置 (ADR-108): per-conversation monotonic, assigned by
+    # alloc_message_seq at append time. 渲染序 = seq 序; created_at 只用于
+    # 显示（时刻/耗时），永不参与排序。NULL = 数组化前的存量行（迁移已回填）。
+    seq = Column(BigInteger, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+
+class MessageSeqCounter(Base):
+    """Per-conversation transcript 数组序计数器 (ADR-108).
+
+    Lives in its OWN table, never on the conversations row: a chat turn's
+    transaction holds the conversations row lock from prepare on
+    (ui_language stamping + first flush) for minutes, so an allocator
+    UPDATE on that row from a fresh short session would self-deadlock
+    against the very turn awaiting it. This table is touched ONLY by
+    alloc_message_seq's short dedicated transactions.
+    """
+
+    __tablename__ = "message_seq_counters"
+
+    conversation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    last_seq = Column(BigInteger, nullable=False, default=0, server_default="0")
 
 
 class Music(Base):

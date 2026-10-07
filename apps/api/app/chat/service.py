@@ -52,6 +52,7 @@ from uuid import UUID
 import structlog
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # The two chat agents no longer take calls HERE (the turn runners —
@@ -92,6 +93,7 @@ from app.models.tables import (
     Asset,
     Conversation,
     Message,
+    MessageSeqCounter,
     Persona,
     Project,
     WorkflowRun,
@@ -285,6 +287,33 @@ def _resume_ack_line(decided: str, outcome: str) -> str:
 INTERACTION_POLICY_VERSION = "interaction_constitution.v2"
 
 
+async def alloc_message_seq(conversation_id: UUID) -> int:
+    """Transcript 数组序分配器 (ADR-108 §1): bump the conversation's counter
+    under its OWN short transaction and return the new value — never call
+    this inside a chat turn's long transaction. The counter lives on the
+    dedicated message_seq_counters row (NEVER the conversations row: the
+    turn transaction holds that row's lock from prepare's first flush on,
+    for minutes — a fresh-session UPDATE on it would self-deadlock against
+    the very turn awaiting the allocation). Gap-tolerant by design: a
+    rolled-back turn leaves holes in seq; monotonicity is the contract,
+    contiguity is not."""
+    from app.models.database import AsyncSessionLocal  # deferred: module-load order
+
+    async with AsyncSessionLocal() as s:
+        result = await s.execute(
+            pg_insert(MessageSeqCounter)
+            .values(conversation_id=conversation_id, last_seq=1)
+            .on_conflict_do_update(
+                index_elements=["conversation_id"],
+                set_={"last_seq": MessageSeqCounter.last_seq + 1},
+            )
+            .returning(MessageSeqCounter.last_seq)
+        )
+        seq = result.scalar_one()
+        await s.commit()
+        return seq
+
+
 async def _create_message(
     db: AsyncSession,
     conversation_id: UUID,
@@ -322,6 +351,7 @@ async def _create_message(
         question=question,
         suggestions=suggestions or [],
         suggestion_ref=suggestion_ref,
+        seq=await alloc_message_seq(conversation_id),
     )
     db.add(message)
     await db.flush()
@@ -2335,11 +2365,14 @@ async def list_conversation_messages(
     db: AsyncSession,
     conversation_id: UUID,
 ) -> list[Message]:
-    """Return messages in a conversation, oldest first."""
+    """Return messages in a conversation, oldest first — 渲染序 = seq 序
+    (ADR-108 数组位置律): persisted array order IS the render order;
+    created_at is display-only (NULL seq = pre-array legacy rows, backfilled
+    by migration r8f1a3c5d7e9; nulls_last + created_at/id 兜底只护迁移窗口)."""
     result = await db.execute(
         select(Message)
         .where(Message.conversation_id == conversation_id)
-        .order_by(Message.created_at.asc())
+        .order_by(Message.seq.asc().nulls_last(), Message.created_at.asc(), Message.id.asc())
     )
     return list(result.scalars().all())
 
@@ -2419,6 +2452,7 @@ async def record_material_beat(
         attachments=[],
         mentions=[],
         intent=intent,
+        seq=await alloc_message_seq(conversation.id),
     )
     db.add(message)
     await db.flush()
@@ -2603,6 +2637,7 @@ async def record_activity_log(
         attachments=[],
         mentions=[],
         intent=intent,
+        seq=await alloc_message_seq(conversation_id),
     )
     db.add(message)
     await db.flush()
@@ -2647,6 +2682,7 @@ async def record_candidates_log(
         attachments=[],
         mentions=[],
         intent={"type": CANDIDATES_LOG_TYPE, "ref": ref, "events": events},
+        seq=await alloc_message_seq(conversation_id),
     )
     db.add(message)
     await db.flush()
