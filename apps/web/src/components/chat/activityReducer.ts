@@ -3,54 +3,34 @@
  *
  * The wire is append-only: a status flip arrives as a NEW frame on the same
  * `activity_id`, so the list keeps the latest frame per id in ARRIVAL
- * (= seq) order. The block is per-turn (v1: no cross-session replay — the
- * contract's no-persistence line): the next turn starts from an empty list,
- * and a settling turn sweeps every still-active frame to the terminal
- * status (the client twin of the server's T16-B sweep — 假活跃禁令: a
- * settling turn never leaves an activity spinning forever). */
+ * (= seq) order. ADR-108 后这座列表是**瞬态面**——它只喂 now-line
+ * (active 帧的内容)，durable 活动行的出生戳/耗时住在服务端的数组行上
+ * （每帧一行，open append / settle 原地 update），所以这里的 upsert 是
+ * 整帧替换，零字段级合并零推导。The block is per-turn: the next turn
+ * starts from an empty list, and a settling turn sweeps every still-active
+ * frame to the terminal status (the client twin of the server's T16-B
+ * sweep — 假活跃禁令: a settling turn never leaves an activity spinning
+ * forever). */
 
 import type { ActivityFramePayload } from "@/lib/chat-stream"
 
-/** The per-turn reset — a new turn's block starts empty (the previous
- * turn's stream settles in place below its bubble, it never carries over). */
+/** The per-turn reset — a new turn's block starts empty. */
 export function resetActivities(): ActivityFramePayload[] {
   return []
 }
 
-/** The walk key derivation (ADR-104 排序律): a terminal frame carrying
- * `duration_ms` anchors its walk moment at the TRUE WORK START
- * (`at − duration_ms`) — the server re-anchors the span's duration at
- * execute entry (after the waiter checkpoint's created_at), so the settled
- * row sorts BETWEEN the waiter speech and the post-read reply, never
- * jumping above a speech that preceded the work. Frames without a duration
- * (born-completed milestones, active beats) keep their own `at`. */
-export function walkAtFor(frame: ActivityFramePayload): string | undefined {
-  if (frame.status !== "active" && frame.duration_ms != null && frame.at) {
-    const settleAt = Date.parse(frame.at)
-    if (!Number.isNaN(settleAt)) {
-      return new Date(settleAt - frame.duration_ms).toISOString()
-    }
-  }
-  return frame.at
-}
-
 /** Upsert one frame: idempotent by activity_id (a re-delivered frame
  * replaces, never duplicates); first sighting appends in arrival order.
- * S7/E7: the merged row keeps the FIRST-seen `at` as the activity's birth
- * moment — EXCEPT a duration-carrying settle, whose walk key is the true
- * work start (`walkAtFor`); status / key / duration_ms take the latest. */
+ * Wholesale replace — the transient list's only consumer is the now-line,
+ * which reads the LATEST frame's key/status/count verbatim. */
 export function upsertActivityFrame(
   prev: ActivityFramePayload[],
   frame: ActivityFramePayload,
 ): ActivityFramePayload[] {
   const i = prev.findIndex((a) => a.activity_id === frame.activity_id)
-  if (i === -1) return [...prev, { ...frame, at: walkAtFor(frame) ?? frame.at }]
+  if (i === -1) return [...prev, frame]
   const next = [...prev]
-  const at =
-    frame.status !== "active" && frame.duration_ms != null
-      ? walkAtFor(frame) ?? prev[i].at
-      : prev[i].at ?? frame.at
-  next[i] = { ...frame, at }
+  next[i] = frame
   return next
 }
 

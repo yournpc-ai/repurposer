@@ -255,13 +255,13 @@ class ReadAccepted:
 @dataclass(frozen=True)
 class ReadExecuting:
     """An accepted NON-terminal read's execute is ABOUT TO run — the work's
-    START stamp (ADR-104 排序律). The Activity projector re-anchors the read
-    span's honest duration here (execute entry): name_known is a
+    START stamp (ADR-108 数组位置律). The Activity projector re-anchors the
+    read span's honest duration here (execute entry): name_known is a
     mid-generation liveness beat, and a duration anchored there would make
-    the settled row's walk key (close − duration) precede the waiter
-    checkpoint's created_at, inverting the 服务员话 → 读活动 → 读后回复
-    order at settle time. Emitted after the checkpoint seat and before
-    ``execute`` — sequential same-process stamps, never a clock race."""
+    the persisted row's ``at``/``duration_ms`` measure LLM generation time
+    instead of the real read work. Emitted after the checkpoint seat and
+    before ``execute`` — sequential same-process stamps, never a clock
+    race."""
 
     tool_name: str
 
@@ -721,12 +721,12 @@ class ToolLoopAgent:
                 speech_parts if not tool.terminal else [*speech_parts, prose]
             )
             if not tool.terminal:
-                # The read's work-START stamp (ADR-104 排序律): the projector
-                # re-anchors the span's honest duration at execute entry —
-                # after the checkpoint seat above, so the settled row's walk
-                # key (close − duration) lands deterministically AFTER the
-                # waiter checkpoint's created_at (服务员话 → 读活动 → 读后
-                # 回复; sequential same-process stamps, never a clock race).
+                # The read's work-START stamp (ADR-108 数组位置律): the
+                # projector re-anchors the span's honest duration at
+                # execute entry — after the checkpoint seat above, so the
+                # waiter row is appended (and persisted) BEFORE the
+                # activity row's birth: 服务员话 → 读活动 → 读后回复 is
+                # array order, never a clock race.
                 await _emit(on_loop_event, ReadExecuting(tool_name=call.name))
             outcome = await execute(call.name, params, speech)
             if isinstance(outcome, ToolObservation):

@@ -329,9 +329,11 @@ class ActivityProjector:
         # 诚实耗时 (2026-09-25): the whisper shows only a GENUINE span.
         # Read / repair spans cover real server work (the query, the rework
         # loop) — honest. A read span's start is RE-ANCHORED at execute
-        # entry by ReadExecuting (ADR-104 排序律 — ``_on_read_executing``),
-        # so the measured span is the real work and the settled row's walk
-        # key (settle − duration) lands after the waiter checkpoint.
+        # entry by ReadExecuting (``_on_read_executing``): name_known is a
+        # mid-generation liveness beat, and the array row born at that beat
+        # would carry an ``at`` stamp that precedes the real work and a
+        # duration inflated by LLM generation time — re-anchoring makes the
+        # persisted row's ``at``/``duration_ms`` measure the work itself.
         # Terminal-kind spans (draft / run) open at name_known, AFTER the
         # LLM already did the drafting — the measured ~1s is validation
         # noise that reads as a lie ("计划已起草 ·1s" after a 30s draft),
@@ -522,12 +524,12 @@ class ActivityProjector:
         return frames
 
     def _on_read_executing(self) -> None:
-        """读活开工戳 (ADR-104 排序律): re-anchor the open read span's
+        """读活开工戳 (ADR-108 数组位置律): re-anchor the open read span's
         honest-duration start at execute entry. name_known births the span
         mid-generation (liveness); anchoring the duration THERE would make
-        the settled row's walk key (close − duration) precede the waiter
-        checkpoint's created_at and invert the 服务员话 → 读活动 → 读后回复
-        order at settle time. Emitted after the checkpoint seat, before
+        the persisted row's ``at``/``duration_ms`` measure LLM generation
+        time instead of the real read work — the re-anchored ``at`` is the
+        row's honest birth stamp. Emitted after the checkpoint seat, before
         execute — sequential same-process stamps."""
         if self._open_call is None:
             return

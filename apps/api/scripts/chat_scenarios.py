@@ -1026,19 +1026,24 @@ _ACTIVITY_TERMINAL = {"completed", "failed", "cancelled"}
 def check_activity_shape(stream: "StreamTurn", label: str) -> None:
     """ADR-087 §3 activity shape laws (opportunistic — a bare-reply turn
     legally has ZERO frames; when frames flew, the shape must hold):
-    ① the wire whitelist is exactly {activity_id, seq, kind, status, key}
-    (no params / results / reasoning ever leak); ② kind is a user-semantic
-    category, never a tool name; ③ seq is strictly increasing (deterministic
+    ① the wire whitelist is {activity_id, seq, kind, status, key} + the
+    S7/E7 timing/fact extensions {at, count, duration_ms} (no params /
+    results / reasoning ever leak); ② kind is a user-semantic category,
+    never a tool name; ③ seq is strictly increasing (deterministic
     ordering); ④ a status flip appends a NEW frame on the same activity_id
-    (never a mutation); ⑤ T16-B wire twin — when the envelope lands, every
-    activity's LAST frame is terminal (no dangling active)."""
+    (never a mutation) — explore milestones are BORN-COMPLETED instant
+    facts (one terminal frame, no active birth — iter-2 ⑥), exempt from
+    the birth/flip laws; ⑤ T16-B wire twin — when the envelope lands,
+    every activity's LAST frame is terminal (no dangling active)."""
     acts = stream.activities
     if not acts:
         return
     for a in acts:
+        keys = set(a.keys())
         check(
-            set(a.keys()) == {"activity_id", "seq", "kind", "status", "key"},
-            f"{label}: activity frame carries exactly the whitelist fields",
+            {"activity_id", "seq", "kind", "status", "key"} <= keys
+            and keys <= {"activity_id", "seq", "kind", "status", "key", "at", "count", "duration_ms"},
+            f"{label}: activity frame carries only the whitelist fields",
             a,
         )
         check(
@@ -1062,24 +1067,28 @@ def check_activity_shape(stream: "StreamTurn", label: str) -> None:
         f"{label}: activity seq is strictly increasing",
         seqs,
     )
-    # Stable identity law (⑤): frames sharing an activity_id are ONE work
-    # item's state flips — the first frame is the active birth, kind never
-    # mutates mid-activity, exactly one terminal frame closes the id (and
-    # nothing follows it), and the copy key follows the status-form law:
-    # failed/cancelled REUSE the active key (the ✗/strikethrough carries
-    # the outcome), completed swaps to the past-tense form.
+    # Stable identity law (④): frames sharing an activity_id are ONE work
+    # item's state flips — a span's first frame is the active birth, kind
+    # never mutates mid-activity, exactly one terminal frame closes the id
+    # (and nothing follows it), and the copy key follows the status-form
+    # law: failed/cancelled REUSE the active key (the ✗/strikethrough
+    # carries the outcome), completed swaps to the past-tense form. A
+    # born-completed milestone (a single terminal frame — explore count
+    # facts) is an instant fact: no birth/flip laws apply.
     by_id: dict[str, list[dict]] = {}
     for a in acts:
         by_id.setdefault(a["activity_id"], []).append(a)
     for aid, frames in by_id.items():
         check(
-            frames[0]["status"] == "active",
-            f"{label}: an activity's first frame is its active birth ({aid})",
-            frames,
-        )
-        check(
             len({f["kind"] for f in frames}) == 1,
             f"{label}: kind never mutates across an activity's flips ({aid})",
+            frames,
+        )
+        if len(frames) == 1 and frames[0]["status"] in _ACTIVITY_TERMINAL:
+            continue  # born-completed milestone — an instant fact
+        check(
+            frames[0]["status"] == "active",
+            f"{label}: a span's first frame is its active birth ({aid})",
             frames,
         )
         check(

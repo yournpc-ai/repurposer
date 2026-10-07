@@ -28,16 +28,17 @@ export interface ActivityFramePayload {
   /** 工作会话里程碑 (iter-2 ⑥, N-57): the whitelist's one extension — the
    * artifact count on `chat.explore.*Ready` frames, absent elsewhere. */
   count?: number
-  /** iter-3 S7 (E7, N-58 ⑥): the frame's birth stamp (ISO, every frame) —
-   * the timeline layer interleaves activity rows with messages by real
-   * moments. The reducer preserves the FIRST-seen `at` as the activity's
-   * birth EXCEPT a duration-carrying settle, whose walk key derives as
-   * `at − duration_ms` (the true work start, ADR-104 排序律). */
+  /** iter-3 S7 (E7, N-58 ⑥): the frame's birth stamp (ISO, every frame).
+   * ADR-108 后它是**展示戳**——持久化行的诚实出生时刻（open append 的
+   * `at` = execute 入口重锚点）；渲染顺序永远来自数组位置（seq），此戳
+   * 不参与排序。The reducer replaces frames wholesale — the latest frame's
+   * `at` wins, no field-level merging. */
   at?: string
   /** iter-3 S7 (E7): the real elapsed of a genuinely-active span, present
    * only on its settling frame — a born-completed milestone is an instant
    * fact and carries none. Read/repair spans anchor the elapsed at EXECUTE
-   * entry (ADR-104 排序律), not at the mid-generation name_known beat. */
+   * entry (the honest-duration re-anchor), not at the mid-generation
+   * name_known beat. */
   duration_ms?: number
 }
 
