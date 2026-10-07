@@ -632,17 +632,13 @@ function ProjectDetailPage() {
 
   const nodes = sseActive ? sse.steps : (latestRun?.steps ?? [])
   // Skeleton count for the clips pane: the confirmed count when the chain
-  // selects clips; ONE for a whole-video chain (transforms without
-  // select_clips — the compile-injected materialize_source makes one
-  // whole-source clip); writers-only chains never render the pane. The bare
-  // fallback mirrors the server's SelectClipsParams default (count unnamed
-  // → 3) — legacy 5-default runs are all settled and never replay skeletons.
+  // selects clips; otherwise ONE — both the whole-video chain (the
+  // compile-injected materialize_source makes one whole-source clip) and
+  // the bare fallback, which mirrors the server's SelectClipsParams default
+  // (count unnamed → 1). Writers-only chains never render the pane.
   const clipsTask = runTasks.find((task) => task.tool === "select_clips")
   const clipsTaskCount = clipsTask?.params?.count
-  const wholeVideoChain =
-    !clipsTask && runTasks.some((task) => NODE_KIND_TO_TAB[task.tool] === "clips")
-  const clipCount =
-    typeof clipsTaskCount === "number" ? clipsTaskCount : wholeVideoChain ? 1 : 3
+  const clipCount = typeof clipsTaskCount === "number" ? clipsTaskCount : 1
 
   const requestedTabs = Array.from(
     new Set(

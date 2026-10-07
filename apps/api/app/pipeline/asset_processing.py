@@ -43,7 +43,7 @@ from app.pipeline.graph import media_missing
 from app.pipeline.prosody import prosody_processor
 from app.pipeline.speaker_map import speaker_map_processor
 from app.pipeline.visual_anchors import visual_anchors_processor
-from app.providers.storage import download_to_temp, get_project_output_dir
+from app.providers.storage import download_to_cache, get_project_output_dir
 
 logger = structlog.get_logger()
 
@@ -163,8 +163,8 @@ async def _content_hash_processor(asset: Asset, _prior: ProcessResult) -> Proces
     path = _prior.local_path
     own_copy = False
     if path is None and asset.file_url:
-        path = await download_to_temp(asset.file_url)
-        own_copy = path is not None
+        # 素材源缓存: shared bytes — never reaped here (own_copy stays False).
+        path = await download_to_cache(asset.file_url)
     if path is not None:
         try:
             with path.open("rb") as fh:
@@ -244,8 +244,8 @@ async def _asr_processor(asset: Asset, prior: ProcessResult) -> ProcessResult:
     path = prior.local_path
     own_copy = False
     if path is None:
-        path = await download_to_temp(asset.file_url)
-        own_copy = path is not None
+        # 素材源缓存: shared bytes — never reaped here (own_copy stays False).
+        path = await download_to_cache(asset.file_url)
     if path is None:
         return ProcessResult()
 
@@ -422,13 +422,16 @@ async def process_asset(asset_id: UUID) -> None:
             logger.warning("process_asset_missing", asset_id=str(asset_id))
             return
 
-        # 链内单下载 (2026-10-06 用户拍板): one local copy for the whole
-        # chain — processors read it off ``prior.local_path``; the chain
-        # reaps it here. A download failure degrades to per-processor
-        # fallbacks (each downloads its own), never an asset failure.
+        # 链内单下载 (2026-10-06 用户拍板) → 素材源缓存 (2026-10-07): one local
+        # copy for the whole chain — processors read it off ``prior.local_path``.
+        # The copy lives in the shared source cache (indexed by object key), so
+        # run-time readers (reframe / extraction) and the render staging reuse
+        # the same bytes — never reaped here, the cache's LRU owns eviction.
+        # A download failure degrades to per-processor fallbacks (each reads
+        # the same cache), never an asset failure.
         local_path: Path | None = None
         if asset.file_url:
-            local_path = await download_to_temp(asset.file_url)
+            local_path = await download_to_cache(asset.file_url)
         try:
             chain = PROCESSORS.get(asset.type, [_noop_processor])
             result = ProcessResult(local_path=local_path)
@@ -525,8 +528,3 @@ async def process_asset(asset_id: UUID) -> None:
                 )
                 await db.commit()
             await _record_reading_beat(db, asset, "failed")
-        finally:
-            # The chain-shared local copy (processors' own fallbacks reap
-            # themselves).
-            if local_path is not None:
-                local_path.unlink(missing_ok=True)

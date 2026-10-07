@@ -546,17 +546,21 @@ export function HomeComposer({
                 0px — the circles touched, 2026-08-31). */}
             <div className="mr-3 flex items-center gap-2">
               <CostConfirmControl popoverSide="bottom" align="end" />
-              <ComposerPanelButton
-                icon={Box}
-                label={t("composer.models")}
-                open={modelsOpen}
-                onOpenChange={setModelsOpen}
-                popoverSide="bottom"
-                align="end"
-                unpadded
-              >
-                <ModelsPanel />
-              </ComposerPanelButton>
+              {/* Models (honest Auto panel) — PARKED: hidden until the panel
+                  has something actionable to show; restore by ungating. */}
+              {false && (
+                <ComposerPanelButton
+                  icon={Box}
+                  label={t("composer.models")}
+                  open={modelsOpen}
+                  onOpenChange={setModelsOpen}
+                  popoverSide="bottom"
+                  align="end"
+                  unpadded
+                >
+                  <ModelsPanel />
+                </ComposerPanelButton>
+              )}
             </div>
           </div>
 

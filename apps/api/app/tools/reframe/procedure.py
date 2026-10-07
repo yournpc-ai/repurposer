@@ -50,6 +50,21 @@ def resolve_mode(speaker_map: dict | None, requested: str) -> str:
     return "static_center"
 
 
+def _anchors_from_speaker_map(speaker_map: dict | None) -> dict[str, Slot] | None:
+    """The persisted position anchors (剪辑复用座 — the speaker_map
+    processor's bootstrap scan, reused verbatim). None = the map predates
+    persisted anchors (legacy) or carries none — the caller re-bootstraps."""
+    out: dict[str, Slot] = {}
+    for s in (speaker_map or {}).get("speakers") or []:
+        a = s.get("anchor") or {}
+        hint = s.get("screen_hint") or s.get("id")
+        if hint in ("left", "right") and all(k in a for k in ("cx", "cy", "w", "n")):
+            out[hint] = Slot(
+                cx=float(a["cx"]), cy=float(a["cy"]), w=float(a["w"]), n=int(a["n"])
+            )
+    return out if len(out) == 2 else None
+
+
 # ---- framing math ----------------------------------------------------------
 
 FACE_FRACTION_INTERVIEW = 0.25  # face width / frame width — medium close-up
@@ -300,8 +315,12 @@ def compute_crop_track(
         turns = (speaker_map or {}).get("turns") or []
         if (speaker_map or {}).get("form") != "interview" or not turns:
             return [], mode  # caller degrades: nothing honest to switch on
-        slots, _detect, _rate = bootstrap_slots(video_path)
-        anchors = {"left": slots[0], "right": slots[1]}
+        anchors = _anchors_from_speaker_map(speaker_map)
+        if anchors is None:
+            # Legacy map without persisted anchors (pre-剪辑复用座): pay the
+            # bootstrap scan once more, then carry on.
+            slots, _detect, _rate = bootstrap_slots(video_path)
+            anchors = {"left": slots[0], "right": slots[1]}
         kfs = _interview_keyframes(turns, windows, anchors, src_w, src_h, ar)
     elif mode == "speaker_follow":
         kfs = _follow_keyframes(video_path, windows, src_w, src_h, fps, ar)

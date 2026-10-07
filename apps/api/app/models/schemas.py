@@ -1331,7 +1331,7 @@ class IntentSlot(BaseModel):
 
     N-20 layering: the IntentSlot says WHAT the user wants; the planner's
     ``StoryboardSlot`` (派工层） says how the work is assigned. ``None`` fields
-    mean "plan default": count → the per-type default (clips 3 / quotes 3
+    mean "plan default": count → the per-type default (clips 1 / quotes 3
     / carousel 6). Language is a per-slot property (2026-08-05 restructure —
     the plan-level field is retired): ``None`` is legacy/read-tolerant and
     inherits the run's derived fallback. Same-type multi slots are how one run
@@ -3477,15 +3477,16 @@ class CaptionTranslation(BaseModel):
 class SpeakerFormGate(BaseModel):
     """M3 form-gate verdict for a video asset's frame grid (ADR-045 D4).
 
-    ``people`` = distinct people visible across the grid; ``scene`` classifies
-    the setup (a two-person face-to-face ``interview``, a one-speaker
-    ``presentation``/stage talk, or ``other``); low ``confidence`` sends the
-    gate to its one confirmation grid (2 calls cap).
+    ``scene`` classifies the setup (a two-person face-to-face ``interview``,
+    a one-speaker ``presentation``/stage talk, or ``other``); low
+    ``confidence`` sends the gate to its one confirmation grid (2 calls cap).
+    The people count is NOT the LLM's job (ADR-106 聚合判定: local per-frame
+    majority) — the grid verdict carries only the scene semantics the
+    aggregate can't see.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    people: int = Field(ge=0)
     scene: Literal["interview", "presentation", "other"]
     confidence: Literal["high", "low"] = "high"
 

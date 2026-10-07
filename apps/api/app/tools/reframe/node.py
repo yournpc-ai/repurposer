@@ -23,7 +23,7 @@ from app.pipeline.morph import (
 from app.pipeline.render_ownership import pend_outputs_for_render
 from app.pipeline.step_display import fill_summary, set_stage, set_summary, ui_lang_of
 from app.tools.reframe.procedure import compute_crop_track, resolve_mode
-from app.providers.storage import download_to_temp
+from app.providers.storage import download_to_cache
 
 logger = structlog.get_logger()
 
@@ -124,24 +124,24 @@ class ReframeClip(NodeBase):
                 continue
 
             try:
-                path = await download_to_temp(asset.file_url)
+                # 素材源缓存: the asset-processing chain already pulled these
+                # bytes — this is a cache hit on every normal path, and the
+                # shared entry is never reaped here.
+                path = await download_to_cache(asset.file_url)
                 if path is None:
                     skipped += 1
                     continue
-                try:
-                    # CPU-bound (decode + detection, minutes on long sources)
-                    # — ride a thread like every other heavy call (ASR /
-                    # speaker_map precedent); a bare call freezes the
-                    # worker's single loop for the whole pass.
-                    keyframes, _resolved = await asyncio.to_thread(
-                        compute_crop_track,
-                        path,
-                        spec.model_dump(mode="json"),
-                        speaker_map,
-                        mode,
-                    )
-                finally:
-                    path.unlink(missing_ok=True)
+                # CPU-bound (decode + detection, minutes on long sources)
+                # — ride a thread like every other heavy call (ASR /
+                # speaker_map precedent); a bare call freezes the
+                # worker's single loop for the whole pass.
+                keyframes, _resolved = await asyncio.to_thread(
+                    compute_crop_track,
+                    path,
+                    spec.model_dump(mode="json"),
+                    speaker_map,
+                    mode,
+                )
             except Exception:
                 logger.warning(
                     "reframe_clip_compute_failed", output_id=str(output.id), exc_info=True

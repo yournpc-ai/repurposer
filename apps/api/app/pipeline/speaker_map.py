@@ -3,9 +3,10 @@
 VIDEO's second processor, chained after ASR in ``asset_processing.py``. The
 form gate runs first so single-person material never pays for attribution:
 
-- gate = whisper turn density (picks the M3 budget: 1 grid call for
-  monologic material, a confirmation grid for dialogic/low-confidence) + an
-  M3 3x3 frame grid judging people count and scene;
+- gate = 人数本地聚合（逐帧人脸计数的多数决——个别帧出现第三人永不升级
+  multi）+ M3 3x3 frame grid 只判 scene 语义（turn density picks the M3
+  budget: 1 grid call for monologic material, a confirmation grid for
+  dialogic/low-confidence）;
 - ``interview`` → full attribution: mouth-ROI frame-diff energy per turn
   (the 08-19 spike's validated metric — 95.2% argmax / 100% confident on
   xy_1), ambiguous turns (energy ratio < 1.6) go to M3 strip arbitration,
@@ -29,8 +30,16 @@ Lands on ``Asset.meta.speaker_map``::
 
     {"version": 1,
      "form": "single" | "interview" | "multi" | "unknown",
-     "speakers": [{"id": "left", "screen_hint": "left"}, ...],
+     "speakers": [{"id": "left", "screen_hint": "left",
+                   "anchor": {"cx": …, "cy": …, "w": …, "n": …}}, ...],
      "turns": [{"start": 2.9, "end": 5.0, "speaker": "left"}, ...]}
+
+``anchor`` (interview only) is the person's position anchor — reframe's
+interview_switch reads it instead of re-running the bootstrap scan per clip
+(剪辑复用座). The gate's raw scan rides the sibling ``Asset.meta.face_scan``
+digest: per-sample face counts + derived face-free / extra-people spans
+(B-roll / cutaway candidates) — one scan feeds the form verdict AND the
+downstream editing facts.
 """
 
 from __future__ import annotations
@@ -64,6 +73,8 @@ ENERGY_RATIO = 1.6  # attribution confidence threshold (spike-validated)
 TURN_FPS = 8  # energy sampling rate inside a turn
 TWO_FACE_GATE = 0.95  # bootstrap two-face rate that stops tier escalation
 ARBITRATION_CALL_CAP = 5  # ADR-045: 每片 1~5 次封顶
+SCAN_STRIDE_S = 2.0  # form-gate face-count sampling stride
+SPAN_MIN_SAMPLES = 2  # a face_scan span needs this many consecutive samples
 
 # A frame → detections callable in full-resolution coordinates (plain or tiled).
 Detect = Callable[[np.ndarray], list[FaceDetection]]
@@ -247,15 +258,25 @@ def _frame_grid(path: Path, n_frames: int, offset: float = 0.0) -> np.ndarray:
     return cv2.vconcat(rows)
 
 
-async def _form_gate(path: Path, turns: list[dict[str, Any]]) -> str:
-    """Decide the asset's speaker form. Turn density picks the M3 budget:
-    monologic material (<=2 turns or median turn >= 20s) gets one grid call;
-    dialogic material gets one confirmation grid when the first is unsure."""
+async def _form_gate(path: Path, turns: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
+    """Decide the asset's speaker form + the reusable face-scan digest.
+    形态是统计不是绝对值 (2026-10-06 用户拍板): the PEOPLE count comes from
+    a local aggregate — every sampled frame's face count votes, the majority
+    count wins, and a third person appearing in a few frames NEVER upgrades
+    the form to multi (a real interview cut to audience shots is still an
+    interview). The LLM grid keeps only what aggregation can't see: the
+    SCENE semantics. Turn density still picks the M3 budget (monologic = one
+    grid; dialogic + low confidence = one confirmation grid)."""
     _fps, n_frames, _w, _h = probe(path)
 
     durations = [t["end"] - t["start"] for t in turns]
     median_turn = float(np.median(durations)) if durations else 0.0
     monologic = len(turns) <= 2 or median_turn >= 20.0
+
+    people, people_share, _faced, counts = await asyncio.to_thread(
+        _people_count_by_majority, path
+    )
+    scan = _face_scan_digest(counts, people, people_share)
 
     grid = MediaInput(
         type=MediaInputType.IMAGE,
@@ -273,13 +294,112 @@ async def _form_gate(path: Path, turns: list[dict[str, Any]]) -> str:
         )
         verdict = await speaker_form_gate.call(grid=grid2)
 
-    if verdict.people == 2 and verdict.scene == "interview":
-        return "interview"
-    if verdict.people == 1:
-        return "single"
-    if verdict.people >= 3:
-        return "multi"
-    return "unknown"
+    # The verdict carries only scene + confidence — the people count is the
+    # local aggregate above (the LLM sees 9 compressed frames and once
+    # miscounted a two-host interview as 3+; the majority count is the law).
+    if people == 2 and verdict.scene == "interview":
+        return "interview", scan
+    if people == 1:
+        return "single", scan
+    if people >= 3:
+        return "multi", scan
+    return "unknown", scan
+
+
+def _detection_tiers(w: int, h: int) -> list[tuple[str, "Detect"]]:
+    """The escalating detection tiers (bootstrap_slots' precedent, shared):
+    640-wide → native (when wider) → 2x2 tiles. Small/far/masked faces that
+    the 640 tier misses surface on the later tiers."""
+    tiers: list[tuple[str, Detect]] = [("640", _plain_detect(_det_size(w, h, 640)))]
+    if w > 640:
+        tiers.append(("native", _plain_detect((w, h))))
+    tiers.append(("tiles", detect_tiled()))
+    return tiers
+
+
+def _majority_people(counts: list[int]) -> tuple[int, float, int]:
+    """Pure majority vote over per-sample face counts → (people, share,
+    faced). Frames with zero faces (B-roll / 空镜) don't dilute the speaking
+    setup; 3+ collapses to one bucket; a count needs a strict majority
+    (>50%) of face-bearing samples to win — no majority reads as 0
+    (unknown), never a coin flip."""
+    from collections import Counter
+
+    faced = [min(c, 3) for c in counts if c > 0]
+    if not faced:
+        return 0, 0.0, 0
+    mode, mode_n = Counter(faced).most_common(1)[0]
+    share = mode_n / len(faced)
+    if share <= 0.5:
+        return 0, share, len(faced)
+    return mode, share, len(faced)
+
+
+def _people_count_by_majority(path: Path) -> tuple[int, float, int, list[int]]:
+    """The form gate's local people count: scan every SCAN_STRIDE_S and
+    majority-vote (形态是统计不是绝对值 — a third person in a few frames
+    never upgrades the form). Escalates detection tiers only while a tier
+    sees ZERO faces anywhere (a pure-PPT deck's honest unknown still costs
+    one 640 scan; the pricier tiers exist for small/far faces). Returns
+    (people, share, faced, counts) — counts rides into the face_scan digest
+    so downstream editing reuses the scan instead of re-running it."""
+    fps, _n, w, h = probe(path)
+    step = max(1, int(SCAN_STRIDE_S * fps))
+    counts: list[int] = []
+    tier = "640"
+    for name, detect in _detection_tiers(w, h):
+        counts = [len(detect(frame)) for _, frame in frames_every(path, step=step)]
+        tier = name
+        if any(c > 0 for c in counts):
+            break
+    people, share, faced = _majority_people(counts)
+    logger.info(
+        "speaker_form_scan",
+        tier=tier,
+        samples=len(counts),
+        people=people,
+        share=round(share, 3),
+        faced_frames=faced,
+    )
+    return people, share, faced, counts
+
+
+def _runs(counts: list[int], pred: "Callable[[int], bool]") -> list[list[float]]:
+    """Maximal runs of consecutive samples satisfying ``pred``, as
+    [start_s, end_s] (1 decimal). A run shorter than SPAN_MIN_SAMPLES is a
+    blip (a transition frame), never a span."""
+    spans: list[list[float]] = []
+    start: int | None = None
+    for i, c in enumerate(counts):
+        if pred(c):
+            if start is None:
+                start = i
+        elif start is not None:
+            if i - start >= SPAN_MIN_SAMPLES:
+                spans.append([round(start * SCAN_STRIDE_S, 1), round(i * SCAN_STRIDE_S, 1)])
+            start = None
+    if start is not None and len(counts) - start >= SPAN_MIN_SAMPLES:
+        spans.append([round(start * SCAN_STRIDE_S, 1), round(len(counts) * SCAN_STRIDE_S, 1)])
+    return spans
+
+
+def _face_scan_digest(counts: list[int], majority: int, share: float) -> dict[str, Any]:
+    """The gate scan's reusable digest (剪辑复用座): the raw per-sample
+    counts plus the two derived span families downstream editing reasons
+    about — face-free stretches (B-roll / 空镜 candidates) and
+    extra-people stretches (audience / reaction-shot cutaway candidates).
+    Extra-people is only defined against a majority form."""
+    return {
+        "version": 1,
+        "stride_s": SCAN_STRIDE_S,
+        "counts": counts,
+        "majority": majority,
+        "share": round(share, 3),
+        "face_free_spans": _runs(counts, lambda c: c == 0),
+        "extra_people_spans": (
+            _runs(counts, lambda c: c > majority) if majority > 0 else []
+        ),
+    }
 
 
 # ------------------------------------------------------ interview attribution
@@ -320,10 +440,7 @@ def bootstrap_slots(path: Path) -> tuple[list[Slot], Detect, float]:
     tiers (640 → native → 2x2 tiles) until the two-face rate reaches 95%.
     Returns the slots, the winning tier's detector, and its two-face rate."""
     fps, _n, w, h = probe(path)
-    candidates: list[tuple[str, Detect]] = [("640", _plain_detect(_det_size(w, h, 640)))]
-    if w > 640:
-        candidates.append(("native", _plain_detect((w, h))))
-    candidates.append(("tiles", detect_tiled()))
+    candidates = _detection_tiers(w, h)
 
     best: tuple[list[Slot], Detect, float] | None = None
     for name, detect in candidates:
@@ -479,14 +596,17 @@ async def _arbitrate(
 ) -> dict[int, str]:
     """M3 video-clip arbitration for ambiguous turns, hardest-first (lowest
     energy ratio), 1-5 calls per asset (ADR-045 cap). Returns turn-index →
-    speaker id; the caller falls back to the energy argmax for the rest."""
-    verdicts: dict[int, str] = {}
+    speaker id; the caller falls back to the energy argmax for the rest.
+    并行仲裁 (2026-10-06 用户拍板): the capped rows are independent — clips
+    cut and verdict calls run concurrently (sequential was conservatism,
+    not a dependency; ~95s → ~one slowest call on a 5-clip batch)."""
     hardest_first = sorted(rows, key=lambda r: r["ratio"])
     overflow = max(0, len(hardest_first) - ARBITRATION_CALL_CAP)
-    for row in hardest_first[:ARBITRATION_CALL_CAP]:
+
+    async def _judge(row: dict[str, Any]) -> tuple[int, str] | None:
         clip = await asyncio.to_thread(_cut_turn_clip, path, row["start"], row["end"])
         if clip is None:
-            continue
+            return None
         media = MediaInput(
             type=MediaInputType.VIDEO,
             mime="video/mp4",
@@ -494,7 +614,13 @@ async def _arbitrate(
         )
         result = await speaker_arbitrate.call(clip=media)
         if result.speaker in ("left", "right"):
-            verdicts[row["turn"]] = result.speaker
+            return row["turn"], result.speaker
+        return None
+
+    judged = await asyncio.gather(
+        *(_judge(row) for row in hardest_first[:ARBITRATION_CALL_CAP])
+    )
+    verdicts = {turn: speaker for pair in judged if pair for turn, speaker in [pair]}
     if overflow > 0:
         logger.warning("speaker_map_arbitration_overflow", fallback_turns=overflow)
     return verdicts
@@ -505,11 +631,13 @@ async def _arbitrate(
 
 async def build_speaker_map(
     asset_file: Path, words: list[dict[str, Any]]
-) -> dict[str, Any]:
-    """Build the speaker_map for a VIDEO asset's local file. CPU-bound
-    detection passes run in threads; M3 calls stay async."""
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build the speaker_map for a VIDEO asset's local file, plus the gate's
+    reusable face-scan digest (剪辑复用座 — one scan feeds the form verdict
+    AND the downstream editing facts). CPU-bound detection passes run in
+    threads; M3 calls stay async. Returns (speaker_map, face_scan)."""
     turns = _words_to_turns(words)
-    form = await _form_gate(asset_file, turns)
+    form, face_scan = await _form_gate(asset_file, turns)
     logger.info("speaker_map_form", form=form, turns=len(turns))
 
     real_turns = [t for t in turns if t["end"] - t["start"] >= MIN_TURN_SECONDS]
@@ -523,14 +651,14 @@ async def build_speaker_map(
                 {"start": round(t["start"], 3), "end": round(t["end"], 3), "speaker": "main"}
                 for t in real_turns
             ],
-        }
+        }, face_scan
     if form != "interview" or not real_turns:
         return {
             "version": SPEAKER_MAP_VERSION,
             "form": form,
             "speakers": [],
             "turns": [],
-        }
+        }, face_scan
 
     slots, detect, _rate = await asyncio.to_thread(bootstrap_slots, asset_file)
     rows = await asyncio.to_thread(_turn_energies, asset_file, real_turns, slots, detect)
@@ -552,11 +680,22 @@ async def build_speaker_map(
         "version": SPEAKER_MAP_VERSION,
         "form": "interview",
         "speakers": [
-            {"id": "left", "screen_hint": "left"},
-            {"id": "right", "screen_hint": "right"},
+            # The position anchor rides the map (剪辑复用座): reframe's
+            # interview_switch reads it instead of re-running the full-video
+            # bootstrap scan per clip.
+            {
+                "id": "left",
+                "screen_hint": "left",
+                "anchor": {"cx": slots[0].cx, "cy": slots[0].cy, "w": slots[0].w, "n": slots[0].n},
+            },
+            {
+                "id": "right",
+                "screen_hint": "right",
+                "anchor": {"cx": slots[1].cx, "cy": slots[1].cy, "w": slots[1].w, "n": slots[1].n},
+            },
         ],
         "turns": out_turns,
-    }
+    }, face_scan
 
 
 async def speaker_map_processor(asset: Asset, prior: ProcessResult) -> ProcessResult:
@@ -577,8 +716,8 @@ async def speaker_map_processor(asset: Asset, prior: ProcessResult) -> ProcessRe
     if path is None:
         return ProcessResult()
     try:
-        speaker_map = await build_speaker_map(path, words)
-        return ProcessResult(meta={"speaker_map": speaker_map})
+        speaker_map, face_scan = await build_speaker_map(path, words)
+        return ProcessResult(meta={"speaker_map": speaker_map, "face_scan": face_scan})
     except Exception as e:  # noqa: BLE001 — degrade to no map, keep ASR's result
         logger.error("speaker_map_failed", asset_id=str(asset.id), error=str(e))
         return ProcessResult()

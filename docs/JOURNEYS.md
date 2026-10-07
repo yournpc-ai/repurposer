@@ -65,8 +65,8 @@
 |---|---|---|---|
 | 0. 目标抵达 | agent 复述目标后**直接开始干活**（「我先看看素材和内容」）——无 dock、无任务清单复述 | 意图路由识别**发现型目标**（R6：实现空间未定 → 探索链；范围清晰的干脆请求走既有短路径） | ✅（R6 生产接线：EXPLORATION_TOOLS 入 intent_router 工具集 + 判定段 prompt + prompt_gate 探针 D；live 复跑待配额） |
 | 1. 理解/索引 | 转写节点出生即 loading → done | understand 链，内容寻址复用 | ✅ 既有 |
-| 2. 搜索候选 | Activity「Searching… / Found 14 relevant sections」→ 画布长**候选合集节点**（默认折叠，展开 = 14 段时间区间 + 一句话摘录） | `search_transcript`（确定性检索 read）+ `get_segment` 精读 → 终态 `propose_candidates`（探索写门）；**R1 合集律**：可见粒度服务「用户纠正 Agent」，不铺 14 张独立卡 | ✅（reads + 写门 + 合集卡；Activity = `chat.explore.searching`/`searchingDone` + `candidatesReady` 里程碑带 count；R6 路由） |
-| 3. 评估 | Activity「Comparing 14 candidates…」 | LLM 逐段判完整性（时长/边界 = 代码算）；**R3：理由 = artifact 属性**（结论 + 证据指针），reasoning 永不持久化 | ✅（写门证据校验三牙 + `selectsReady` 里程碑） |
+| 2. 搜索候选 | Activity「Searching… / Found 14 relevant sections」→ 画布长**候选合集节点**（默认折叠，展开 = 14 段时间区间 + 一句话摘录） | `get_understanding` 锚点全文（短中素材零检索往返；长素材 `search_transcript` + `get_segment`）→ `propose_candidates`（探索写门，range 提案 + 摘录服务端派生 ADR-107）；**R1 合集律**：可见粒度服务「用户纠正 Agent」，不铺 14 张独立卡 | ✅（reads + 写门 + 合集卡；Activity = `chat.explore.searching`/`searchingDone` + `candidatesReady` 里程碑带 count；R6 路由） |
+| 3. 评估 | Activity「Comparing 14 candidates…」 | LLM 逐段判完整性（时长/边界 = 代码算）；**R3：理由 = artifact 属性**（结论 + 证据指针），reasoning 永不持久化 | ✅（写门 range 校验（ADR-107）+ `selectsReady` 里程碑） |
 | 4. 精选 | 画布长 3 个精选节点（各带一句理由）；**用户可随时插话换选**（「第 2 个换第 5 个」——免费、秒级、零仪式） | 终态 `propose_selects`（探索写门）；**R7：Select = 证据引用**，不复制源 | ✅（写门 + 精选卡；插话换选 = `revise_selects` 三金钱态：dock 前零仪式 / dock 后原地更新同确认座 / run 后迷你包重确认；live 待用户走查） |
 | 5. 结构化方案 | 3 个方案节点（draft 虚线）：区间 + 字幕样式 + 语言版本 + 文案草稿 | 终态 `propose_plans`；**R9：persona/默认在 Structure 注入**，不参与选段；**R8：Content Plan ≠ Task** | ✅（写门 + 方案卡 draft 虚线；生产座位 = `_propose_plans`：预检编译 → 写门 → 决策包 dock，`plansReady` 里程碑） |
 | 5a. 方案自检 | Activity「Verifying the 3 plans… ✓」 | 确定性完整性检查（区间/语言/产出类型/字幕/文案/必填输入）；artifact state `draft → ready` | ✅（写门内完整性自检） |

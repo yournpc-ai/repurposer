@@ -4277,9 +4277,9 @@ _S23_SYSTEM = (
     "1. Search the transcript for the user's topic (search_transcript), "
     "then read the exact ranges with get_segment.\n"
     "2. Land ONE candidate collection with propose_candidates — every "
-    "excerpt must be the VERBATIM words inside its own range (you read "
-    "them with get_segment; the door rejects anything not actually said "
-    "there).\n"
+    "member is a RANGE (start/end in seconds from the anchors you read, "
+    "speaker when known; never an excerpt — the system derives the shown "
+    "text from the range itself).\n"
     "3. When asked, land your picks with propose_selects (a verdict and a "
     "one-line reason each). Member indexes are 0-based over the candidate "
     "set's members — a set of 2 members takes indexes 0 and 1.\n"
@@ -4475,7 +4475,6 @@ async def s23_exploration_chain_lands_on_canvas(ctx: Ctx) -> None:
                 {
                     "start": 12.0,
                     "end": 18.9,
-                    "excerpt": "Our pricing is simple. The pro tier costs ten dollars a month.",
                     "speaker": "host",
                 }
             ],

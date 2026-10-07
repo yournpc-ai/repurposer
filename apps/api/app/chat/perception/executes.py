@@ -44,6 +44,7 @@ from app.models.tables import (
     WorkflowStep,
 )
 from app.tools.clips.transcript import (
+    build_anchored_transcript,
     group_cues,
     search_cues,
     speaker_at,
@@ -220,7 +221,11 @@ def speaker_form_lines(assets: list[Asset]) -> list[str]:
     on every surface that reads the material. Only the attributed forms
     render (interview / single — the forms the reframe capability keys its
     modes on); an absent map or an unattributed form (multi / unknown) is
-    NO line, never a guess."""
+    NO line, never a guess. The gate's reusable scan (``meta.face_scan``)
+    adds one footage-facts line when it holds editing-relevant spans —
+    extra-people stretches (cutaway candidates) and face-free stretches
+    (B-roll candidates) — on ANY form, the scan's honesty independent of
+    the form verdict."""
     out: list[str] = []
     for a in assets:
         speaker_map = (a.meta or {}).get("speaker_map") or {}
@@ -237,6 +242,19 @@ def speaker_form_lines(assets: list[Asset]) -> list[str]:
                 f"- Speaker form: {name} is a single-speaker recording — "
                 f"{turns} turns, all attributed to the one speaker"
             )
+        scan = (a.meta or {}).get("face_scan") or {}
+        extra = len(scan.get("extra_people_spans") or [])
+        free = len(scan.get("face_free_spans") or [])
+        if extra or free:
+            parts: list[str] = []
+            if extra:
+                parts.append(
+                    f"{extra} stretch(es) with extra people in frame "
+                    "(audience/reaction shots — cutaway candidates)"
+                )
+            if free:
+                parts.append(f"{free} face-free stretch(es) (B-roll candidates)")
+            out.append(f"- Footage scan: {name} has " + " and ".join(parts))
     return out
 
 
@@ -260,10 +278,46 @@ def _render_understanding(row: Output, assets: list[Asset]) -> str | None:
     lines = ["Material understanding (the current asset set):"]
     lines.extend(understanding_digest_lines(u))
     lines.extend(speaker_form_lines(assets))
+    lines.extend(_anchored_transcript_lines(assets))
     if len(lines) == 1:
         # The stub shape (a no-material chain's placeholder row) — say so.
         lines.append("- (empty stub — the chain ran without material)")
     return "\n".join(lines)
+
+
+# Per-asset inline budget for the anchored transcript (ADR-107): below it
+# the understanding read carries the asset's whole [start-end] transcript —
+# the discovery chain's ranges come straight from these anchors, no search
+# round-trip. Above it the honest pointer keeps the long-asset path on
+# search_transcript / get_segment.
+_TRANSCRIPT_INLINE_LIMIT = 8000
+
+
+def _anchored_transcript_lines(assets: list[Asset]) -> list[str]:
+    """The discovery chain's substrate (ADR-107): each timeline-ready
+    asset's anchored transcript, inline when it fits the prompt budget.
+    The asset_id rides every header — propose_candidates requires it
+    downstream, and a roster-less id forced the model to invent one
+    (the search_transcript header's live-gate lesson, same seat)."""
+    out: list[str] = []
+    for a in assets:
+        words = (a.meta or {}).get("words") or []
+        if not words:
+            continue
+        anchored = build_anchored_transcript(words)
+        if not anchored.strip():
+            continue
+        header = f"Transcript of {_asset_label(a)} (asset_id: {a.id})"
+        if len(anchored) <= _TRANSCRIPT_INLINE_LIMIT:
+            out.append(f"{header}:")
+            out.append(anchored)
+        else:
+            out.append(
+                f"{header} is too long to show ({len(anchored)} chars) — "
+                "find passages with search_transcript and read their ranges "
+                "with get_segment."
+            )
+    return out
 
 
 def _failed_text(failed_count: int) -> str:

@@ -18,6 +18,7 @@ Gated here:
 
 from app.tools.clips.transcript import (
     build_anchored_transcript,
+    derive_excerpt,
     group_cues,
     search_cues,
     speaker_at,
@@ -235,6 +236,23 @@ class TestWordsInRange:
         words = _words(("a", 0.0, 1.0))
         assert words_in_range(words, 5.0, 6.0) == ""
         assert words_in_range([{"word": " ", "start": 0.0, "end": 1.0}], 0.0, 1.0) == ""
+
+
+class TestDeriveExcerpt:
+    """ADR-107: the candidate member's excerpt is server-derived — the
+    range's own speech, capped with an honest marker."""
+
+    def test_short_range_passes_through(self) -> None:
+        words = _words(("a", 0.0, 1.0), ("b", 1.2, 2.0))
+        assert derive_excerpt(words, 0.0, 2.0) == "a b"
+
+    def test_cap_marks_the_cut(self) -> None:
+        words = _words(("abcde", 0.0, 1.0), ("fghij", 1.2, 2.0))
+        assert derive_excerpt(words, 0.0, 2.0, limit=6) == "abcde…"
+
+    def test_no_speech_is_empty(self) -> None:
+        words = _words(("a", 0.0, 1.0))
+        assert derive_excerpt(words, 5.0, 6.0) == ""
 
 
 class TestSpeakerAt:

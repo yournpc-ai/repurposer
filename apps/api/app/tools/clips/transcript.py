@@ -166,6 +166,27 @@ def words_in_range(words: list[dict[str, Any]], start: float, end: float) -> str
     return " ".join(picked)
 
 
+# The candidate card's evidence cap (ADR-107): a member's excerpt is the
+# range's actual speech, derived at the exploration door — capped so a long
+# range's card stays a card (the surface line-clamps regardless).
+EXCERPT_DISPLAY_LIMIT = 400
+
+
+def derive_excerpt(
+    words: list[dict[str, Any]], start: float, end: float, *, limit: int = EXCERPT_DISPLAY_LIMIT
+) -> str:
+    """The range's verbatim speech for display — the ONLY legitimate source
+    of a candidate member's excerpt (ADR-107: the model proposes ranges,
+    the server derives the evidence text, so a paraphrased quote can never
+    veto a true range and the card always shows what the range really
+    says). A cut past ``limit`` carries the honest marker, never a silent
+    window."""
+    text = words_in_range(words, start, end)
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "…"
+
+
 def speaker_at(
     speaker_map: dict[str, Any] | None, start: float, end: float
 ) -> str | None:

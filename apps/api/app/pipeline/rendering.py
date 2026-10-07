@@ -255,6 +255,19 @@ async def render_output(output_id: UUID) -> None:
         spec = _absolutize(copy.deepcopy(output.render_spec))
         files = dict(output.files or {})
         project_id = output.project_id
+        # 素材源缓存桥 (2026-10-07): the render service stages sources into the
+        # SAME shared cache the api side reads (stage.ts ↔ storage
+        # download_to_cache, one sha1 law) — carry the object key on the
+        # ENVELOPE (api↔render, never clip-spec) so staging hits the bytes the
+        # processing chain already downloaded instead of re-pulling the source.
+        source_key: str | None = None
+        source_asset_id = (spec.get("source") or {}).get("asset_id")
+        if source_asset_id:
+            from app.models.tables import Asset  # deferred: rendering stays a leaf
+
+            source_asset = await db.get(Asset, UUID(str(source_asset_id)))
+            if source_asset is not None and source_asset.file_url:
+                source_key = str(source_asset.file_url)
 
     old_video_key = files.get("video")
     old_srt_key = files.get("srt")
@@ -274,6 +287,7 @@ async def render_output(output_id: UUID) -> None:
         )
         payload = {
             "spec": spec,
+            **({"source_key": source_key} if source_key else {}),
             "outputs": {
                 "video": {
                     "key": video_key,

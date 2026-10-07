@@ -510,7 +510,6 @@ body {
   --color-muted-foreground: var(--muted-foreground);
   --color-meta-foreground: var(--meta-foreground);
   --color-muted: var(--muted);
-  --color-subtle: var(--subtle);
   --color-inset: var(--inset);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
@@ -535,14 +534,16 @@ body {
   /* Native chrome (scrollbars, form controls) follows the theme — without
    * this the dark studio keeps light-theme scrollbars. */
   color-scheme: light;
-  /* Gray ladder: the studio canvas is PURE WHITE. Cards are also white and
-   * separate from the canvas via the ring-foreground/10 hairline + whitespace;
-   * the gray fill steps (subtle 0.975 → muted 0.95 → inset 0.92) zone content
-   * INSIDE cards, where every step reads. Page-level chips that must read
-   * against the canvas use a gray fill (e.g. bg-muted), never white-on-white.
-   * In-flow surfaces cast NO shadow; shadows belong to floating layers (see
-   * overlay-surface). Surface hierarchy comes from these steps, never from
-   * one-off alpha fills (bg-muted/50 & co. are retired). Three text tiers:
+  /* Gray ladder: the studio canvas is PURE WHITE. Four surface steps, no
+   * more — cards are also white and separate from the canvas via the
+   * ring-foreground/10 hairline + whitespace; the gray fills zone content
+   * INSIDE cards: muted 0.95 (chips / badges / secondary) → inset 0.92
+   * (wells, doubles as accent hover) → border 0.90 (strokes). Page-level
+   * chips that must read against the canvas use a gray fill (e.g. bg-muted),
+   * never white-on-white. In-flow surfaces cast NO shadow; shadows belong to
+   * floating layers (see overlay-surface). Surface hierarchy comes from
+   * these steps, never from one-off alpha fills (bg-muted/50 & co. are
+   * retired). Three text tiers:
    * foreground → muted-foreground (subtitles) → meta-foreground (caps meta). */
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -555,7 +556,6 @@ body {
   --secondary: oklch(0.95 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.95 0 0);
-  --subtle: oklch(0.975 0 0);
   --inset: oklch(0.92 0 0);
   --muted-foreground: oklch(0.556 0 0);
   --meta-foreground: oklch(0.68 0 0);
@@ -609,9 +609,6 @@ body {
   --secondary: oklch(0.24 0 0);
   --secondary-foreground: oklch(0.95 0 0);
   --muted: oklch(0.24 0 0);
-  /* Dark --subtle == --muted: the faint-lift slot collapses onto the standard
-   * lift (0.24 over the 0.21 card is already whisper-grade). */
-  --subtle: oklch(0.24 0 0);
   --inset: oklch(0.15 0 0);
   --muted-foreground: oklch(0.63 0 0);
   /* Whisper tier — FLORA-measured (2026-09-06 user ruling): their dock

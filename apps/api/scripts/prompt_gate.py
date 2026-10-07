@@ -196,6 +196,14 @@ PROBE_C = {"message": "I want a social post."}
 # context text is hand-assembled in build_context's exact shape (digest
 # doctrine — identity lines only, the reads answer the rest).
 _PROBE_E_ASSET_ID = "66666666-6666-6666-6666-666666666666"
+_PROBE_E_UNDERSTANDING = (
+    "Material understanding (the current asset set):\n"
+    "- Summary: A founder talk on onboarding and retention.\n"
+    f"Transcript of founder-talk.mp4 (asset_id: {_PROBE_E_ASSET_ID}):\n"
+    "[5.0-11.2] Onboarding is where users decide to stay.\n"
+    "[22.4-27.8] The first week sets the habit.\n"
+    "[41.0-46.5] We redesigned onboarding around one aha moment."
+)
 _PROBE_E_SEARCH_HITS = (
     'Search "{query}" — 3 hit(s) across 1 asset(s):\n'
     f"Asset founder-talk.mp4 (asset_id: {_PROBE_E_ASSET_ID}) — 3 hit(s):\n"
@@ -317,14 +325,25 @@ PROBE_H4 = {
 }
 
 # D's discovery substrate: material attached and readable (the excerpt is
-# the search read's honest footing — the stub's search observation below
-# quotes from it verbatim so the chain has real evidence to propose).
+# the reads' honest footing — the stub's understanding/search observations
+# below quote from it so the chain has real ranges to propose).
 _PROBE_D_CSET_ID = "11111111-1111-1111-1111-111111111111"
 _PROBE_D_JOURNEY_ID = "99999999-9999-9999-9999-999999999999"
-# The stub asset's id — the canned search observation names it in the
-# header (the production observation's same handoff: get_segment /
-# propose_candidates read their asset_id from the search hits).
+# The stub asset's id — the canned read observations name it in the
+# header (the production observations' same handoff: get_segment /
+# propose_candidates read their asset_id from the reads).
 _PROBE_D_ASSET_ID = "33333333-3333-3333-3333-333333333333"
+# ADR-107: the understanding read carries the anchored transcript — the
+# chain's主路径 reads its ranges HERE (the production render's shape:
+# digest lines, then the per-asset "Transcript of" section).
+_PROBE_D_UNDERSTANDING = (
+    "Material understanding (the current asset set):\n"
+    "- Summary: A keynote on pricing and growth.\n"
+    f"Transcript of keynote-2026.mp4 (asset_id: {_PROBE_D_ASSET_ID}):\n"
+    "[12.0-18.9] Our pricing is simple.\n"
+    "[34.0-39.4] Every tier includes the dashboard.\n"
+    "[58.2-63.0] You only pay when you grow."
+)
 _PROBE_D_SEARCH_HITS = (
     'Search "{query}" — 3 hit(s) across 1 asset(s):\n'
     f"Asset keynote-2026.mp4 (asset_id: {_PROBE_D_ASSET_ID}) — 3 hit(s):\n"
@@ -393,6 +412,7 @@ async def _gate_execute(
     *,
     search_hits: str = _PROBE_D_SEARCH_HITS,
     segment_text: str = _PROBE_D_SEGMENT,
+    understanding_text: str = _PROBE_D_UNDERSTANDING,
     pending_plan_text: str | None = None,
 ):
     """The gate's execution stub — accepts everything EXCEPT the rootless
@@ -402,10 +422,15 @@ async def _gate_execute(
     answers with a ToolObservation (the probe contexts have nothing readable)
     so the loop iterates on to its terminal call exactly like production.
 
-    ``search_hits`` / ``segment_text`` theme the canned evidence reads per
-    probe (D = pricing, E = onboarding) — the header echoes the call's own
-    query exactly like production (``Search "<query>" — …``)."""
+    ``search_hits`` / ``segment_text`` / ``understanding_text`` theme the
+    canned evidence reads per probe (D = pricing, E = onboarding) — the
+    search header echoes the call's own query exactly like production
+    (``Search "<query>" — …``)."""
     if name in PERCEPTION_TOOLS:
+        if name == "get_understanding":
+            # ADR-107: the understanding read carries the anchored
+            # transcript — the discovery probes'主路径 reads ranges here.
+            return ToolObservation(understanding_text)
         if name == "search_transcript":
             # The discovery probes' evidence substrate: plausible hits
             # quoting the excerpt verbatim, so the chain has real ranges to
@@ -693,6 +718,7 @@ async def main() -> int:
                 _gate_execute,
                 search_hits=_PROBE_E_SEARCH_HITS,
                 segment_text=_PROBE_E_SEGMENT,
+                understanding_text=_PROBE_E_UNDERSTANDING,
             )
         elif name == "F":
             execute = functools.partial(

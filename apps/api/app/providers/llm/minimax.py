@@ -667,6 +667,15 @@ class MiniMaxClient:
             _tool_call_from_object(tc, finish_reason)
             for tc in message.get("tool_calls") or []
         ]
+        if not content and not calls:
+            # 空响应信标 (same law as the streaming twin): words and calls
+            # BOTH empty — log finish_reason/usage so the next occurrence is
+            # evidence, not speculation.
+            logger.warning(
+                "minimax_empty_generation",
+                finish_reason=finish_reason,
+                usage=data.get("usage"),
+            )
         return ToolGeneration(content=content, tool_calls=calls)
 
     async def generate_stream_with_tools(
@@ -815,6 +824,17 @@ class MiniMaxClient:
         # schema class, so the harness's repair round answers it with
         # feedback — never a blind client-side re-roll.
         calls = accumulator.finish(finish_reason)
+        if not content and not calls:
+            # 空响应信标: the turn's words and calls BOTH came back empty —
+            # log the raw finish_reason/usage so the next occurrence is
+            # evidence, not speculation (the harness retries this shape as
+            # empty_bare_reply; this beacon tells provider flake apart from
+            # a seam bug).
+            logger.warning(
+                "minimax_empty_generation",
+                finish_reason=finish_reason,
+                usage=usage,
+            )
         return ToolGeneration(content=content, tool_calls=calls)
 
     def _clean_json(self, raw: str) -> str:

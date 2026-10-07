@@ -12,7 +12,7 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 from pydantic import ValidationError
-from sqlalchemy import cast, func, select, update
+from sqlalchemy import cast, func, literal, select, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import array as pg_array
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -298,10 +298,15 @@ async def apply_precomputed(
     landed = merge_declared_fields(locked.render_spec or {}, new_spec, fields, op=op)
     # One UPDATE, one jsonb_set per declared field — never a Python
     # read-modify-write of the whole blob (the step_display discipline).
+    # The value binds as a SQL literal: a bound parameter inherits the cast's
+    # JSONB type and the driver would serialize the ALREADY-dumped string a
+    # second time (a list lands as a jsonb string — the double-encode that
+    # 500'd /graph on OutputResponse validation). A literal string casts
+    # server-side: '[...]' → array, 'null' → jsonb null (key preserved).
     expr = Output.render_spec
     for f in fields:
         expr = func.jsonb_set(
-            expr, pg_array([f]), cast(json.dumps(landed[f]), JSONB), True
+            expr, pg_array([f]), cast(literal(json.dumps(landed[f])), JSONB), True
         )
     await db.execute(
         update(Output).where(Output.id == locked.id).values(render_spec=expr)

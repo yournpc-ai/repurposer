@@ -39,7 +39,7 @@ from app.agents.tool_loop import ChatTool
 from app.models.schemas import tolerate_null_keys, wrap_single_object_list
 from app.models.tables import Project
 from app.pipeline.exploration_store import (
-    CandidateMember,
+    CandidateRange,
     ExplorationRejected,
     PlanOutput,
     propose_candidates,
@@ -76,13 +76,13 @@ class ProposeCandidatesArgs(BaseModel):
         default=None,
         description="The journey this chain rides — from a previous exploration observation. Omit when opening a new goal.",
     )
-    members: list[CandidateMember] = Field(
+    members: list[CandidateRange] = Field(
         description=(
             "The candidate sections — one per piece of evidence: start/end "
-            "in seconds (from the search hits' [start–end] anchors), excerpt "
-            "as the VERBATIM speech inside that range (read it first with "
-            "get_segment — the door rejects anything not actually said "
-            "there), speaker when known."
+            "in seconds (from the anchored transcript's [start–end] lines, "
+            "or the search hits' anchors on a too-long transcript), speaker "
+            "when known. Never supply an excerpt — the system derives each "
+            "member's shown text from the range's own speech."
         )
     )
 
@@ -261,8 +261,9 @@ EXPLORATION_TOOLS: dict[str, ChatTool] = {
             description=(
                 "Land the evidence collection you found for the user's goal "
                 "— ONE collection card on the canvas (never one card per "
-                "section). Call after searching and reading the sections; "
-                "the reply carries the journey + set ids for the next step."
+                "section). Call after reading the sections' anchored "
+                "transcript lines; the reply carries the journey + set ids "
+                "for the next step."
             ),
             params_model=ProposeCandidatesArgs,
             terminal=True,

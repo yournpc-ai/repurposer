@@ -326,7 +326,7 @@ const en = {
           blurb: "Try the pipeline on your next project.",
           features: {
             f1: "2 projects per month",
-            f2: "3 pieces of content per talk",
+            f2: "1 piece of content per talk",
             f3: "English + 1 language",
             f4: "Community support",
           },
@@ -695,7 +695,7 @@ const en = {
       inputTitle: "Source video",
       inputHint: "A talk, meeting or interview recording — mid-shot framing works best.",
       promptTemplate:
-        "Cut the best moments of my talk into 3 vertical clips — the camera follows the speaker, captions included.",
+        "Cut the best moment of my talk into a vertical clip — the camera follows the speaker, captions included.",
       promptHint:
         "Send it as is, or try “make them landscape”, “cut a few more”…",
     },

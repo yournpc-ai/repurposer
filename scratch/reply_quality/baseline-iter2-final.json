@@ -1,0 +1,224 @@
+{
+  "rubric_version": 6,
+  "created_at": "2026-10-03T11:29:51.076033+00:00",
+  "scenarios": [
+    {
+      "scenario": "S-cap-en2zh",
+      "user_prompt": "What can you do? Can you edit existing material?",
+      "reply": "**Yes**. You can bring video, audio, transcripts, photos, or slides, and I work with all of them.\n\nHere's what I can do, grouped by what you'd want done to your material:\n\n**Turn a talk into written content**\n- social posts\n- long-form articles\n- quote cards\n- carousels (multi-slide image decks)\n\n**Pull out the moments worth sharing**\n- highlight clips cut from the source\n\n**Translate or re-voice for a new audience**\n- subtitles (single-language or bilingual side-by-side)\n- voice dubbing into another language\n\n**Clean up and reshape the recording itself**\n- filler-word removal\n- background music\n- speaker-aware reframing (vertical, square, or horizontal)\n\n**Build something new from what you have**\n- photo-slideshow videos from stills plus audio\n\nWant to give one a try? Send over a file or paste some text, and tell me what you'd like made from it.",
+      "suggestions": [],
+      "lang_cell": "en→zh",
+      "det": {
+        "D2": {
+          "score": 1,
+          "detail": "menu: ['去口头禅', '字幕', '帖子', '相册视频', '轮播图', '配音', '金句卡', '长文', '音乐', '高光切片']; platform violations: ∅ (want ≥3)"
+        }
+      },
+      "judged": {
+        "J5": {
+          "score": 2,
+          "evidence": "以「Yes」直起并紧接动词分组（Turn / Pull out / Translate / Clean up / Build），末句以「Want to give one a try? Send over a file or paste some text」开放邀请、素材优先"
+        },
+        "J6": {
+          "score": 2,
+          "evidence": "选项如「social posts / long-form articles / quote cards」明确为可挑可弃；邀请「Want to give one a try?」为问非令；观察「I work with all of them」未越证据"
+        }
+      }
+    },
+    {
+      "scenario": "S-cap-mixed2zh",
+      "user_prompt": "你会做什么？can you turn my talks into clips and posts?",
+      "reply": "可以，把演讲剪成短片、再写成帖子，都是我的本职。除此之外还能做这些：\n\n**剪出短片**：从一段演讲里挑出最有力的片段，剪成竖版或方形的短片。\n\n**写成内容**：同一段演讲也能变成一篇长帖、一篇文章、几张金句卡，或者一套多页轮播。\n\n**翻译和换语言**：把字幕翻成另一种语言，或者用你的声音配上另一种语言的旁白。\n\n**把原片打磨干净**：去掉口头禅和重复，加上背景音乐，或者把镜头跟着说话的人重新构图。\n\n想先拿哪一段演讲试试？",
+      "suggestions": [],
+      "lang_cell": "mixed→zh",
+      "det": {
+        "D2": {
+          "score": 1,
+          "detail": "menu: ['字幕', '帖子', '轮播图', '金句卡', '音乐']; platform violations: ∅ (want ≥3)"
+        }
+      },
+      "judged": {
+        "J5": {
+          "score": 2,
+          "evidence": "开头「可以，把演讲剪成短片、再写成帖子，都是我的本职」直接接住提问，「都是我的本职」化解隐含能力担忧；动词分组「剪出短片 / 写成内容 / 翻译和换语言 / 把原片打磨干净」口语化、无规格表腔；收尾「想先拿哪一段演讲试试？」是素材优先的开放邀请。"
+        },
+        "J6": {
+          "score": 2,
+          "evidence": "提问=邀请而非命令：「想先拿哪一段演讲试试？」；选项=可选可忽略而非替用户拍板：「竖版或方形的短片」「长帖、一篇文章、几张金句卡，或者一套多页轮播」均为可挑可不挑的备选；推荐未越界、未替用户做决定；观察落在提问范围内（「都是我的本职」）。"
+        }
+      }
+    },
+    {
+      "scenario": "S-cap",
+      "user_prompt": "你会做什么？你能剪辑已有素材吗",
+      "reply": "可以，已有素材能剪也能改。下面是我常做的几类活儿，按你想对素材做的事来分——\n\n**切视频**\n- 切成高光短片\n- 去掉口头禅和重复段\n- 配上背景音乐\n- 横屏重新构图，让镜头跟着说话的人\n\n**加字幕和翻译**\n- 加上字幕，或把字幕翻译成另一种语言\n- 双语字幕并排显示\n- 用另一种语言重新配音\n\n**写出文字内容**\n- 一篇社交媒体帖子\n- 一篇长文\n- 几张金句卡片\n- 多页图文卡片\n\n**把素材拼成视频**\n- 照片配上音频做成一段视频\n\n视频、音频、照片、文字稿都可以发过来。你手头有想加工的东西吗？",
+      "suggestions": [],
+      "lang_cell": "zh→zh",
+      "det": {
+        "D2": {
+          "score": 1,
+          "detail": "menu: ['字幕', '帖子', '配音', '金句卡', '长文', '音乐', '高光切片']; platform violations: ∅ (want ≥3)"
+        }
+      },
+      "judged": {
+        "J4": {
+          "score": 2,
+          "evidence": "收尾一句话明确收敛到单一决策点：「你手头有想加工的东西吗？」"
+        },
+        "J5": {
+          "score": 2,
+          "evidence": "开篇直接答「可以，已有素材能剪也能改」接住剪辑担忧，动词分组口语化（切/加/写出/拼），收尾以「视频、音频、照片、文字稿都可以发过来」做素材优先的开放邀请"
+        },
+        "J6": {
+          "score": 2,
+          "evidence": "推荐守位：「下面是我常做的几类活儿」为提议非指令；提问守位：「你手头有想加工的东西吗？」为邀请非命令；选项守位：四组项目均标注为「可做」而非已决定；观察守位：自我能力描述未超出自身可证实范围"
+        }
+      }
+    },
+    {
+      "scenario": "S-cap-en2en",
+      "user_prompt": "What can you do? Can you edit existing material?",
+      "reply": "I turn existing recordings into publishable content — you bring the material, I handle the cutting, writing, and polishing.\n\n**Cut it into clips** — pull out the strongest moments as short highlight clips, with the camera reframed for vertical or square framing when needed.\n\n**Translate or re-voice it** — add subtitles in another language, side-by-side bilingual captions, or dub the speech itself into another language.\n\n**Polish the audio** — strip filler words and repeated takes, or score it with a background music bed.\n\n**Write from it** — draft a social post, a long-form article, quote cards, or a multi-page carousel.\n\n**Turn photos into video** — pair stills with audio to build a slideshow video.\n\nWhat kind of material are you working with, and where do you want it to land?",
+      "suggestions": [],
+      "lang_cell": "en→en",
+      "det": {
+        "D2": {
+          "score": 1,
+          "detail": "menu: ['去口头禅', '字幕', '帖子', '相册视频', '轮播图', '配音', '金句卡', '长文', '音乐', '高光切片']; platform violations: ∅ (want ≥3)"
+        }
+      },
+      "judged": {
+        "J5": {
+          "score": 2,
+          "evidence": "开头「I turn existing recordings into publishable content — you bring the material, I handle the cutting, writing, and polishing.」直接接住编辑现有素材的隐含担忧；以动词分组的口吻列能力（「Cut it into clips」「Translate or re-voice it」），非规格表；收尾「What kind of material are you working with, and where do you want it to land?」是素材优先的开放邀请。"
+        },
+        "J6": {
+          "score": 2,
+          "evidence": "五项能力以动词短语并列呈现（「Cut it into clips」「Translate or re-voice it」），是可选可忽略的选项而非已决定方案；收尾问句为邀请而非命令（「What kind of material are you working with」）；能力描述为可观察事实（「I turn existing recordings into publishable content」）而非超出证据的断言，未出现禁态角色。"
+        }
+      }
+    },
+    {
+      "scenario": "S-cap-zh2en",
+      "user_prompt": "你会做什么？你能剪辑已有素材吗",
+      "reply": "可以，视频、录音、文字稿、笔记、照片、幻灯都能拿来用。最常见的几类活：\n\n- **剪出短片**：从长视频里挑出高光片段；访谈或单人讲话的素材，竖版还能自动跟着说话人走。\n- **写出文案**：社交长帖、长文、一组金句卡，或一组多页轮播图。\n- **加字幕与换语种**：字幕译成另一种语言，也可以把声音换成另一种语言的配音。\n- **收拾声音**：去掉口头禅和重复的句子；给短片铺一段背景音乐。\n- **做成视频**：把照片和音频拼成一段带字幕的幻灯视频。\n\n手上现有哪段素材，想做成什么？",
+      "suggestions": [],
+      "lang_cell": "zh→en",
+      "det": {
+        "D2": {
+          "score": 1,
+          "detail": "menu: ['字幕', '帖子', '轮播图', '配音', '金句卡', '长文', '音乐']; platform violations: ∅ (want ≥3)"
+        }
+      },
+      "judged": {
+        "J5": {
+          "score": 2,
+          "evidence": "开头「可以，视频、录音、文字稿、笔记、照片、幻灯都能拿来用」直接接住问题并列出可处理素材类型，动词分组（「剪出短片」「写出文案」「加字幕与换语种」「收拾声音」「做成视频」）口语节奏自然，收尾「手上现有哪段素材，想做成什么？」为素材优先的开放邀请。"
+        },
+        "J6": {
+          "score": 2,
+          "evidence": "推荐以「可以」表述，是可收尾的提议而非指令；提问以「手上现有哪段素材，想做成什么？」呈现，是邀请非命令；未给出被迫之选的默认值；未列出已决定的选项；能力描述（「竖版还能自动跟着说话人走」）为功能陈述而非超出证据的断言，五对角色全部守位。"
+        }
+      }
+    },
+    {
+      "scenario": "S-cap-mixed2en",
+      "user_prompt": "What can you do? 能把我的演讲剪成切片和帖子吗？",
+      "reply": "能 — 演讲正好是合适的素材，**切片和帖子**都能做。\n\n**从演讲里挑亮点**\n- 切片（带字幕的短视频）\n- 金句卡\n- 翻译字幕 / 配音成另一种语言\n- 去口头禅、镜头重新构图\n\n**基于演讲写文案**\n- 社交媒体帖子\n- 长文\n- 多页轮播图\n\n切片和配音需要视频或音频文件；金句卡、帖子、长文、轮播图只要文字素材（讲稿、笔记都行）就能出。\n\n把你的视频传过来，或者贴一份讲稿——我看完给你一个具体的方案？",
+      "suggestions": [],
+      "lang_cell": "mixed→en",
+      "det": {
+        "D2": {
+          "score": 1,
+          "detail": "menu: ['去口头禅', '字幕', '帖子', '轮播图', '配音', '金句卡', '长文', '高光切片']; platform violations: ∅ (want ≥3)"
+        }
+      },
+      "judged": {
+        "J5": {
+          "score": 2,
+          "evidence": "直接以「能 — 演讲正好是合适的素材」起手接住隐含需求，动词式分组（「切片（带字幕的短视频）」「金句卡」「去口头禅、镜头重新构图」）保持口语感，并以「把你的视频传过来，或者贴一份讲稿——我看完给你一个具体的方案？」做素材优先的开放邀请收尾。"
+        },
+        "J6": {
+          "score": 2,
+          "evidence": "推荐守位为可一句话收尾的提议（「把你的视频传过来，或者贴一份讲稿——我看完给你一个具体的方案？」是邀请非命令）；提问为「我看完给你一个具体的方案？」邀请式；默认值以可见方式说明（「切片和配音需要视频或音频文件；金句卡、帖子、长文、轮播图只要文字素材」）；选项以「从演讲里挑亮点」「基于演讲写文案」两个动词分组列出，均未替用户拍板；观察为文件类型需求等可核验事实，未越界断言。"
+        }
+      }
+    },
+    {
+      "scenario": "S-adv",
+      "user_prompt": "这个视频你有什么建议",
+      "reply": "好的——看完视频就把建议说给你。",
+      "suggestions": [],
+      "det": {
+        "D2": {
+          "score": 0,
+          "detail": "menu: ∅; platform violations: ∅ (want ≥1)"
+        }
+      },
+      "judged": {
+        "J1": {
+          "score": 0,
+          "evidence": "「好的——看完视频就把建议说给你」全句仅为承诺,未输出任何判定或拒绝项"
+        },
+        "J2": {
+          "score": 0,
+          "evidence": "「好的——看完视频就把建议说给你」无任何剪辑事实,也无内容摘要,属纯元回应"
+        },
+        "J4": {
+          "score": 0,
+          "evidence": "「看完视频就把建议说给你」属于悬空引导,用户侧无明确可执行的决策点"
+        },
+        "J6": {
+          "score": 2,
+          "evidence": "回复仅为应答式承诺,未出现推荐/提问/默认值/选项/观察任一实质角色,无从判定塌位"
+        }
+      }
+    },
+    {
+      "scenario": "S-warm",
+      "user_prompt": "(trigger turn)",
+      "reply": "**先做一条 30 秒的竖屏高光短片**。这段 2 分钟的单人脱口秀笑点密集，结构已经是\"梗加梗加梗\"的形状，把它改写成一篇长文是浪费，原作的笑点在节奏和表演里，落到文字会塌。我会把前 10 秒的自我介绍削掉，从 0:37 那段《机械姬》重述直接起手，到 1:25 的好莱坞梗收一段，竖屏切片，30 秒左右最干净。\n\n编辑事实：单人 stand-up，1:59 长度，段子间隔 10 到 20 秒，能量集中在后段（0:55 到 1:59），开场的 TED 比喻铺陈偏慢。\n\n| 时间 | 内容 | 剪辑价值 |\n| --- | --- | --- |\n| 0:00-0:10 | 自嘲 stand-up 像 mean people 的 TED Talk | 钩子只留 3 秒入场，再多就拖 |\n| 0:11-0:37 | 女性日常恐惧 vs 男性 AI 恐惧的对照 | 段子骨架，必留 |\n| 0:37-0:55 | 把《机械姬》重读为职场骚扰 | 全段节奏转折，必留 |\n| 0:55-1:25 | 好莱坞买单 + \"lucky to see a person\" | **高潮金句，竖屏切片的核心** |\n| 1:31-1:59 | 未来喜剧：男机器人也能上 TED | 收尾强梗，可选作 60 秒版的尾 |\n\n方向定在短高光切片，先把这块打出来。",
+      "suggestions": [
+        "先做一条 30 秒竖屏高光短片",
+        "给视频配上中文字幕",
+        "挑一句金句做张图卡"
+      ],
+      "det": {
+        "D1": {
+          "score": 1,
+          "detail": "anchors: 0:00, 0:10, 0:11, 0:37, 0:55, 1:25"
+        },
+        "D2": {
+          "score": 1,
+          "detail": "menu: ['金句卡', '长文', '高光切片']; platform violations: ∅ (want ≥1)"
+        },
+        "D3": {
+          "score": 0,
+          "detail": "prose: ['金句卡', '长文', '高光切片']; dock: ['字幕', '金句卡', '高光切片']; named-but-not-pickable: ['长文']"
+        }
+      },
+      "judged": {
+        "J1": {
+          "score": 2,
+          "evidence": "开头即「先做一条 30 秒的竖屏高光短片」为判定,并以「把它改写成一篇长文是浪费」「落到文字会塌」构成对长文改写的拒绝项"
+        },
+        "J2": {
+          "score": 2,
+          "evidence": "主体是剪辑事实:「1:59 长度」「段子间隔 10 到 20 秒」「能量集中在后段」「钩子只留 3 秒入场,再多就拖」,表格列明确为「剪辑价值」,不是内容摘要"
+        },
+        "J3": {
+          "score": 2,
+          "evidence": "「把它改写成一篇长文是浪费」「落到文字会塌」「开场的 TED 比喻铺陈偏慢」均给出明确负向判断与理由"
+        },
+        "J4": {
+          "score": 2,
+          "evidence": "散文以「方向定在短高光切片,先把这块打出来」收尾,正好收敛到选项卡首项「先做一条 30 秒竖屏高光短片」,单一明确"
+        },
+        "J6": {
+          "score": 1,
+          "evidence": "「方向定在短高光切片,先把这块打出来」偏向替用户拍板的指令语气而非「一词可收尾的提议」,推荐角色守位边缘含混;选项与观察角色正常,未出现的提问角色不扣分"
+        }
+      }
+    }
+  ]
+}

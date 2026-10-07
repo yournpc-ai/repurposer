@@ -251,7 +251,7 @@ apps/api/
 │   │   │                        #   边缘触发回合——消费座 = chat/trigger_turn._run_review_lines）
 │   │   ├── exploration_store.py   # 探索写门（ADR-088 §2）：
 │   │   │                        #   propose_candidates / propose_selects / propose_plans / revise_plan 四动词
-│   │   │                        #   （savepoint + 证据逐字校验 + 幂等 + 完整性自检；免费但真写门）+
+│   │   │                        #   （savepoint + range 校验与摘录服务端派生（ADR-107）+ 幂等 + 完整性自检；免费但真写门）+
 │   │   │                        #   journey 读座位 read_journey_evidence / read_journey_plans（编译器的
 │   │   │                        #   只读证据来源——读面不是写门）【revise_selects
 │   │   │                        #   门分支（member_index 编辑 + verdict/reason 强制重述 + idem 保留）+
@@ -349,5 +349,6 @@ packages/clip/           # 共享 <Clip> 组件 + clip-spec TS 类型（镜像 P
 - **素材理解前移（产物质量线期 1）**：项目素材集齐（全部 COMPLETED）即由 `process_asset` 完成钩子 fire-and-forget warm 出 `material_understanding` 行（`workflow_step_id=NULL`、`source_ref.warmed=true`）；digest 内容寻址（`understanding_v3` salt + 逐素材 `type|content_sha256` 描述符自排序；无哈希行回退上传身份，仅同项目复用）；复用查询 = **同用户跨项目**最近 20 行内哈希命中，命中行**引用不复制**（删除源项目会使他项目 run 的 output_refs 悬空——重跑即再生，期 1 接受）；warm 无 workflow step 绑定，计量按 request-path 先例静默 no-op（per-call 台账 = 需求池 agent_calls P1）。
 - **认证与隔离**：邮箱验证码无密码登录（Resend）；personas / projects / assets / conversations 全部按 user 隔离；seed 默认用户仅作共享默认 personas 的属主；启动仅播种默认音乐。
 - **存储 key**：DB 只存对象 key，字节在 TOS（ADR-024）；key 前缀 `{user_id}/…` 承载归属；上传走短时 presigned PUT；读取经 API 归属校验后 307 重定向到公开对象 URL（程序拉取走 `?proxy=1` 由 API 转流）。
+- **素材源缓存（共享，api ↔ render 同法）**：源素材字节全机只下载一次。缓存路径律 = `sha1(规范化对象 key)` 落 `$TMPDIR/repurposer-source-cache/`，Python 侧 `providers/storage.source_cache_path` 与 Node 侧 `apps/render/src/stage.ts cachePathFor` 镜像同一律法（带 key 按 key 哈希，无 key 回退按 URL 哈希）；`download_to_cache(key)` 为唯一取字节入口（LRU touch 命中、inflight Future 去重并发下载、4GB 最旧 mtime 逐出）。api 侧消费方：处理链预下载 / content_hash / ASR / prosody / extraction / reframe 全部走它；render 侧经渲染载荷 envelope 字段 `source_key`（非 clip-spec）拿到 key，staging 命中链上已下载的字节 = 零网络。上传永不经缓存，上传也永不走下载代理通道。
 - **EU 数据驻留**：project 级 `data_region` 是未来差异化（PROGRESS 明确不在本周期），未实现。
 - **UI 语言偏好**：future；首屏英文渲染避免 hydration mismatch（见 CLAUDE.md i18n 约定）。

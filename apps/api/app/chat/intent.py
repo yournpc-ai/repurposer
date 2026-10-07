@@ -274,12 +274,11 @@ def _assemble_plan_turn(
 # the system prompts are built once at declaration time.
 #
 # max_iterations=12 (报价 = fold): the discovery chain (iter-2 ⑤, R2 免费
-# 探索区连续工作) rides ONE turn — search_transcript → (get_segment reads)
-# → propose_candidates → propose_selects → propose_plans = up to 6 calls on
-# the designed flow. Live evidence (2026-09-23 S-explore-2 runs): the
-# realistic chain is 8-10 — the model reads every range it means to judge
-# as evidence before proposing (the door's verbatim law makes that
-# thoroughness legitimate; 6 reads observed on a two-island transcript),
+# 探索区连续工作) rides ONE turn — get_understanding (the anchored
+# transcript rides it, ADR-107) → propose_candidates → propose_selects →
+# propose_plans = up to 5 calls on the designed flow. Live evidence
+# (2026-09-23 S-explore-2 runs): the realistic chain is 8-10 — the model
+# reads every range it means to judge as evidence before proposing,
 # and ProposePlansArgs is the router's most complex params shape (plans ×
 # outputs nested lists), so its malformed-call recovery needs real budget:
 # at 8 one rejection starved the plans call; at 10 a plans params

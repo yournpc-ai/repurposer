@@ -547,6 +547,42 @@ class ToolLoopAgent:
             # speech when the content channel stayed empty (读容忍, below).
             prose = result.content
             if not result.tool_calls:
+                if not prose.strip():
+                    # 空裸回复护栏 (2026-10-06, live 取证 96a86172 起 — the
+                    # empty-prose guardrails' third sibling, after answer
+                    # and ask_user): an empty, tool-less response is a
+                    # malformed turn, never a bare reply — fed back and
+                    # retried within the iteration budget, so a provider
+                    # flake gets a repair round instead of lying down as
+                    # the cannot-do floor. Exhaustion on repeats still
+                    # degrades honestly.
+                    logger.info(
+                        "tool_loop_rejection",
+                        agent=self.name,
+                        iteration=iteration,
+                        kind="empty_bare_reply",
+                    )
+                    await _emit(
+                        on_loop_event,
+                        ToolRejected(
+                            kind="empty_bare_reply",
+                            tool_name=None,
+                            iteration=iteration,
+                            detail=None,
+                            duration_ms=int((time.monotonic() - iteration_started) * 1000),
+                        ),
+                    )
+                    base_messages[1] = {
+                        "role": "user",
+                        "content": user_prompt
+                        + _loop_echo(
+                            "your reply came back empty — nothing said, no tool "
+                            "called. Answer the message now: speak the reply as "
+                            "your text, or call exactly one tool."
+                        ),
+                    }
+                    prev_rejected = True
+                    continue
                 # Bare final reply — the read-tolerant answer call (any
                 # kept read-iteration speech composes in front of it).
                 return _finish(
@@ -689,7 +725,18 @@ class ToolLoopAgent:
             elif not tool.terminal:
                 speech_parts.append(prose)
             await _emit(on_tool_ready, call.name, params)
-            speech = _compose_speech([*speech_parts, prose])
+            # The composed speech: a TERMINAL call gets the ledger + this
+            # iteration's prose (it never entered the ledger — the guard
+            # above); a read gets the LEDGER AS IS — its prose either just
+            # entered it (non-routed) or left the ledger for the checkpoint
+            # channel (routed: emitted = the checkpoint owns the words;
+            # capped = dropped, never merged back). Re-adding ``prose``
+            # here would double the non-routed read's speech and leak
+            # checkpoint words back into the ledger (regression caught by
+            # test_read_observation_continues_the_loop_and_keeps_speech).
+            speech = _compose_speech(
+                speech_parts if not tool.terminal else [*speech_parts, prose]
+            )
             if not tool.terminal:
                 # The read's work-START stamp (ADR-104 排序律): the projector
                 # re-anchors the span's honest duration at execute entry —

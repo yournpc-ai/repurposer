@@ -580,6 +580,9 @@ async def get_project_graph(
                 <= deliverable_claims.get(d_id, set())
             )(source_by_id.get(fid))
         }
+        # rank 输入边集 (铁律② 镜像): 默认 = effective set; 有 facet 退出时
+        # 由下面的重锚环重建 (同重锚、无 triple 去重)。
+        rank_edges: list[Any] = edges
         if exiting:
             nodes = [n for n in nodes if str(n.id) not in exiting]
 
@@ -588,6 +591,13 @@ async def get_project_graph(
                 return e.get(k) if isinstance(e, dict) else getattr(e, k)
 
             reanchored: list[Any] = []
+            # rank 输入边集（铁律② 镜像 — product_graph.effective_rank_edges
+            # 同律）: lineage 端口标记边永不占去重 triple——否则盖章链的
+            # deliverable 被自己的血缘边挤掉合成腿, 深度退回 1 (画布同列
+            # 重叠)。载荷边集 (= reanchored) 仍做 triple 去重且血缘真边
+            # 优先说话 (批 C-2); rank 边集只去组内边、不去 triple — 重复
+            # 父边对 longest-path 无害, 合成腿必须活着进 rank。
+            rank_edges: list[Any] = []
             seen_triples: set[tuple[str, str, str]] = set()
             for e in edges:
                 src, dst = str(_eget(e, "from_node")), str(_eget(e, "to_node"))
@@ -596,23 +606,23 @@ async def get_project_graph(
                 new_dst = deliverable_of.get(dst, dst) if dst in exiting else dst
                 if new_src == new_dst:
                     continue  # 组内边消失进卡
+                if new_src == src and new_dst == dst:
+                    landed_edge = e  # untouched — the original row rides
+                else:
+                    landed_edge = {
+                        "id": uuid4(),
+                        "from_node": new_src,
+                        "from_port": str(_eget(e, "from_port") or f"out:{etype}"),
+                        "to_node": new_dst,
+                        "to_port": str(_eget(e, "to_port") or f"in:{etype}"),
+                        "edge_type": etype,
+                    }
+                rank_edges.append(landed_edge)
                 triple = (new_src, new_dst, etype)
                 if triple in seen_triples:
                     continue
                 seen_triples.add(triple)
-                if new_src == src and new_dst == dst:
-                    reanchored.append(e)  # untouched — the original row rides
-                else:
-                    reanchored.append(
-                        {
-                            "id": uuid4(),
-                            "from_node": new_src,
-                            "from_port": str(_eget(e, "from_port") or f"out:{etype}"),
-                            "to_node": new_dst,
-                            "to_port": str(_eget(e, "to_port") or f"in:{etype}"),
-                            "edge_type": etype,
-                        }
-                    )
+                reanchored.append(landed_edge)
             edges = reanchored
 
     # ── Product Graph rank (I-PFA-02 / 合同 §7 C-1) ──────────────────────
@@ -642,7 +652,7 @@ async def get_project_graph(
         .scalars()
         .all()
     )
-    ranks, dead_corridor = display_rank_projection(nodes, edges, island_rows)
+    ranks, dead_corridor = display_rank_projection(nodes, rank_edges, island_rows)
     # 岛内格镜像: islanded members carry their island's frozen reserved
     # bottom so the client's air-compression never pulls a later band-mate
     # into empty corridor cells (岛内的事; layout.ts projectSettledFrames

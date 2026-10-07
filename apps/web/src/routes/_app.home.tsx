@@ -159,8 +159,10 @@ function Home() {
   return (
     <div className="h-svh">
       <div ref={scrollRef} className="h-full overflow-y-auto no-scrollbar">
-        {/* Rest offset — parks the hero+composer cluster center-stage. */}
-        <div className="h-[28vh]" />
+        {/* Rest offset — parks the hero+composer cluster center-stage while
+            letting the gallery's first row peek above the fold (the page's
+            gravity cue that there is more below). */}
+        <div className="h-[20vh]" />
 
         {/* Hero + composer chrome — sticky: at rest the whole cluster sits
             center-stage in flow; scrolling docks it at the top (title
@@ -219,12 +221,20 @@ function Home() {
               onFocus={handleComposerFocus}
             />
           </div>
-          {/* Filter pill row — the chrome's third register, grid-width
-              (max-w-6xl + sm:px-2 matches the section's px-4 sm:px-6).
-              Stadium pills (the rounded-full law's fifth exception);
-              active = the dark solid pill, inactive = gray-fill chip on
-              the white canvas (fill-first, no border). */}
-          <div className="mx-auto mt-6 flex w-full max-w-6xl flex-wrap items-center gap-2 sm:px-2">
+          {/* Filter pill row — the chrome's third register, centered on the
+              page's central spine (hero / composer / pills share one axis;
+              the symmetric 4-col gallery keeps it below). Vertical rhythm is
+              uniform: tagline→composer 48 (pb-12), composer→pills 48,
+              pills→gallery 48 (the chrome's rest padding); docked compacts
+              the composer→pills gap 48→32 with dockP, same pure-function
+              interpolation as the rest of the chrome. Stadium pills (the
+              rounded-full law's fifth exception); active = the dark solid
+              pill, inactive = gray-fill chip on the white canvas (fill-first,
+              no border). */}
+          <div
+            className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-center gap-2 sm:px-2"
+            style={{ marginTop: 48 - 16 * dockP }}
+          >
             {GALLERY_FILTERS.map((key) => (
               <button
                 key={key}

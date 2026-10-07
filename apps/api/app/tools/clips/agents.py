@@ -23,7 +23,7 @@ def _assemble(
     understanding: MaterialUnderstanding,
     storyboard: Storyboard,
     asset_media: list[MediaInput] | None = None,
-    clip_count: int = 3,
+    clip_count: int = 1,
     anchored_transcript: str | None = None,
     music_pieces: list[dict[str, str]] | None = None,
 ):

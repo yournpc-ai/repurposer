@@ -392,6 +392,104 @@ async def download_to_temp(key: str | None) -> Path | None:
         raise
 
 
+# ---- source cache (素材源缓存 — 全链一次下载, 2026-10-07 用户拍板) -------------
+#
+# Every consumer of a project's source media reads it through ONE shared
+# on-host cache indexed by object key: the asset-processing chain (hash /
+# ASR / speaker_map / prosody), run-time readers (reframe / extraction),
+# and the render service's staging (its stage.ts points at the SAME dir —
+# the render payload's ``source_key`` envelope field carries the key across
+# the process boundary; the envelope is api↔render, not clip-spec). A cache
+# hit costs zero network; a miss downloads once via the proxy-aware download
+# client and every later reader rides along. Entries are never caller-reaped
+# — the LRU cap owns eviction. Multi-host deployments get one cache per host
+# (object storage stays the truth; a miss is just a download).
+SOURCE_CACHE_DIR = Path(tempfile.gettempdir()) / "repurposer-source-cache"
+SOURCE_CACHE_MAX_BYTES = 4 * 1024**3
+
+_source_cache_inflight: dict[str, asyncio.Future[Path | None]] = {}
+
+
+def source_cache_path(key: str) -> Path:
+    """The deterministic cache path for an object key (sha1 — the render
+    service's stage.ts mirrors this one hashing law)."""
+    import hashlib
+
+    normalized = _normalize_key(key)
+    suffix = Path(normalized).suffix if len(Path(normalized).suffix) <= 8 else ""
+    digest = hashlib.sha1(normalized.encode()).hexdigest()
+    return SOURCE_CACHE_DIR / f"{digest}{suffix}"
+
+
+async def download_to_cache(key: str | None) -> Path | None:
+    """Ensure ``key`` is in the shared source cache and return its path.
+
+    Indexed by the normalized object key; concurrent callers for the same
+    key share one in-flight download (stage.ts's inflight dedup precedent).
+    The returned path is SHARED — callers must never unlink it.
+    """
+    if not key:
+        return None
+    normalized = _normalize_key(key)
+    dest = source_cache_path(normalized)
+    if dest.exists() and dest.stat().st_size > 0:
+        # LRU touch — eviction sorts by mtime.
+        dest.touch()
+        return dest
+    pending = _source_cache_inflight.get(normalized)
+    if pending is not None:
+        return await pending
+    loop = asyncio.get_running_loop()
+    fut: asyncio.Future[Path | None] = loop.create_future()
+    _source_cache_inflight[normalized] = fut
+    try:
+        result = await _populate_source_cache(normalized, dest)
+        fut.set_result(result)
+        return result
+    except Exception as e:
+        fut.set_exception(e)
+        raise
+    finally:
+        _source_cache_inflight.pop(normalized, None)
+
+
+async def _populate_source_cache(normalized: str, dest: Path) -> Path | None:
+    SOURCE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(f"{dest.name}.part-{os.getpid()}")
+    client = _get_s3_download_client()
+    try:
+        await asyncio.to_thread(
+            client.download_file, settings.s3_bucket_name, normalized, str(tmp)
+        )
+        tmp.rename(dest)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    try:
+        await _evict_source_cache()
+    except Exception as e:  # noqa: BLE001 — eviction is best-effort
+        logger.warning("source_cache_evict_failed", error=str(e))
+    return dest
+
+
+async def _evict_source_cache() -> None:
+    """Oldest-mtime-first eviction once the cache exceeds the cap (stage.ts
+    mirror — one law, two languages)."""
+    entries: list[tuple[float, int, Path]] = []
+    for p in SOURCE_CACHE_DIR.iterdir():
+        if ".part" in p.name or not p.is_file():
+            continue
+        st = p.stat()
+        entries.append((st.st_mtime, st.st_size, p))
+    total = sum(size for _, size, _ in entries)
+    entries.sort()
+    for _, size, p in entries:
+        if total <= SOURCE_CACHE_MAX_BYTES:
+            break
+        p.unlink(missing_ok=True)
+        total -= size
+
+
 async def delete(key: str | None) -> None:
     """Delete a single object by key."""
     if not key:

@@ -2656,6 +2656,40 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 
 **Related**: ADR-051（画布优先——预确认期例外由本条收窄为「首个 run 后才优先」）/ ADR-057（K3 直读、K5 翻转条件的历史链：hasRuns || isPlanReady → workspaceBorn → hasRuns）/ ADR-036（诞生编舞——reveal 帧一次性呈现已诞生节点）
 
+## ADR-106: 素材形态 = 本地聚合判定 + LLM 语义——speaker_map 判定层定型与剪辑复用座
+
+**Status**: Decided (2026-10-06)
+
+**Context**: ADR-045 D4 的 form gate 把「几个人 + 什么场景」一次性交给 M3 看 3x3 抽帧网格判。live 取证（项目 c7adf0f2，2026-10-06）：一条 340s 双人访谈被判 multi（网格抽到了观众/多人镜头），speaker_map 空转——下游全链（reframe 的 interview_switch、chat 的访谈事实行、搜索说话人归属）静默失效；同一视频重放又判 interview，证明单帧网格 + 一次定音结构性不稳。同时取证发现两处浪费：仲裁调用串行（5 段歧义话轮 ~95s）；reframe 每个 clip 重跑一遍全片 bootstrap 扫描（~20s/clip）。用户拍板总原则：**形态是统计不是绝对值——不能出现第三个人就升级 multi，绝大多数画面是什么样才是形态**。
+
+**Decision**:
+
+1. **人数 = 本地聚合多数决**：`_people_count_by_majority` 按 2s stride 逐帧 YuNet 数脸，众数 + 严格过半（>50% 有人帧）胜出；空镜帧不稀释；3+ 折叠一桶；无多数 = unknown 诚实收场。零脸时沿 bootstrap 先例升级检测档（640 → native → tiles）再判，防小脸/远脸/口罩误判。
+2. **LLM 只保留语义轴**：M3 网格只判 scene（interview/presentation/other），`people` 字段从 prompt 与 schema 整族删除（数人数不是 LLM 的活）。测量任务归测量工具，语义判断归 LLM——两轴各配其器。
+3. **仲裁并行化**：`_arbitrate` 的 cap-5 歧义段裁决改 `asyncio.gather` 并发（段间零依赖，串行纯属保守）；访谈片 speaker_map 全程 111s → ~40-55s。
+4. **剪辑复用座**：① interview 的左右槽位锚点（cx/cy/w/n）随 speaker_map 持久化，reframe 的 interview_switch 直接读取、砍掉每 clip 的全片重扫（旧 map 无锚点回退 bootstrap）；② gate 扫描落 `meta.face_scan` digest（counts[] + majority/share + 派生 `face_free_spans` 空镜段 / `extra_people_spans` 观众段），chat 感知层据此加一条 footage-scan 事实行（cutaway/B-roll 候选数）——一次扫描同时喂形态判定与下游分镜原料。
+
+**Consequences**: 访谈误判 multi 的一类 flake 结构性消失（本地计数确定性 + 聚合抗干扰）；纯 PPT/无脸片零脸升级后仍 unknown，诚实不冤枉。明确不做（过度设计防线）：shot boundary 检测是独立工序后补；8fps 帧级轨迹不落库（体积大、消费方不明）；reframe 切点逐帧精检保留自有 pass（2s 粗轨给锚点够用、给切点精度不够）。确定性回归 = `tests/test_speaker_map_pure.py`（多数决/span 推导 13 例）。
+
+**Related**: ADR-045（D3/D4 的判定层被本条定型，仲裁 cap 与能量归属机制不动）/ ADR-102（理解读链——face_scan 事实行经 `speaker_form_lines` 注入同一座位）
+
+## ADR-107: 候选证据 = range 提案 + 服务端派生摘录——verbatim 门退役，锚点全文随理解读（ADR-088 §4 证据门翻案）
+
+**Status**: Decided (2026-10-06)
+
+**Context**: live 取证（项目 bc47c833，2026-10-06）：用户点选推荐片段后，回合内 7 次 search_transcript 全 miss + propose_candidates 三连拒（excerpt not verbatim）→ loop 耗尽 → 用户收到「这个我现在还做不了」，全程零落地。两个根因同构：① 检索面与门口径不一——ASR 词表 80% 单字 token，cue 文本空格 join，search_cues 子串匹配下任何多字 CJK 查询必然 miss（连逐字存在的「伦敦」「合作」都搜不到），而门用的 normalize_evidence 去空白——同一项目两个读取面，一个认「合作」一个不认；② 门用「模型手打的 excerpt 字符串」验证证据，但该字符串的唯一下游是候选卡展示——执行（剪辑）只吃 [start, end] 数字。模型本能把 ASR 粗糙原文抛光成书面语（「全球的合作」→「全球协作」），range 明明选对了，引文不逐字就整回合判死。verbatim 门防的是「没读蒙对」，代价是「读对了但措辞抛光」也全灭——失败成本远超保护收益。
+
+**Decision**:
+
+1. **模型只提案 range**：CandidateMember 的模型输入面收窄为 `CandidateRange`（start/end/speaker）；excerpt 从工具 schema 删除（extra=forbid 同步拦住模型手打）。
+2. **excerpt 服务端派生**：门校验通过后用 `derive_excerpt`（words_in_range + 400 字截断带诚实省略号）从 range 自身语音派生，先于 idem key 计算（重放键与请求散文无关）；持久化 spec 形态不变（members 仍带 excerpt），SSE candidate 帧与 CandidateSurface 卡片零改动。C4 锚链反而加强：卡片展示的引文保证是 range 实际语音，不再是模型挑的漂亮话。
+3. **门校验收窄为 range  sanity**：start < end、end ≤ duration、range 内有语音（落在停顿里 = 无证据，拒）。verbatim 校验与 normalize_evidence 整族删除。
+4. **锚点全文随理解读**：`_render_understanding` 对每个 timeline-ready 资产追加 `build_anchored_transcript` 全文（[start-end] 行，per-asset ≤8000 chars 内联，超出诚实指路 search_transcript/get_segment），header 带 asset_id（复用 search header 的 live-gate 教训）。短中素材的发现链不再需要 search 往返：get_understanding → propose_candidates 两步到位。search_transcript/get_segment 降为长素材专用路径。
+
+**Consequences**: 「range 对但措辞抛光」整个失败类结构性消失；propose_candidates 近乎不可拒，发现链 1-2 次迭代收敛（原事故回合 8 次搜索迭代空转不复存在）。失去「门 = 已读证明」的副产品——全文在上下文里，读过是结构事实不需要证明；挑错 range 的拦截转嫁给用户（候选卡展示 range 真实语音，用户是比字符串校验更好的裁定者），残留风险 = 用户不细看确认 → 错 range 进付费执行，可接受。已知债：长素材路径的 search_cues 子串匹配对单字 token 化 CJK 仍近乎全 miss（本次未修），口径对齐 normalize 是后续批。确定性回归 = `tests/test_exploration_store_pure.py`（range 校验 + 派生断言）+ `tests/test_transcript_cues_pure.py`（derive_excerpt 3 例）+ `tests/test_exploration_tools_pure.py`（excerpt 键在 wire 层拒收）。
+
+**Related**: ADR-088（§2 traceable 含义从「模型自证」翻为「服务端派生」——加强而非放松；§4 证据门收窄）/ ADR-102（理解读链——锚点全文注入同一座位）/ ADR-089（付费执行只从已确认范围开始——确认范围的证据现在由服务端保真）
+
 ## ADR-108: Transcript 数组化——持久化顺序即渲染顺序，运行时交织计算整层退役
 
 **Status**: Decided (2026-10-07)

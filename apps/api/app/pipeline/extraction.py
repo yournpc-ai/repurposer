@@ -5,7 +5,7 @@ from pathlib import Path
 
 import structlog
 
-from app.providers.storage import download_to_temp, save
+from app.providers.storage import download_to_cache, save
 
 logger = structlog.get_logger()
 
@@ -25,8 +25,8 @@ async def extract_text(file_key: FileKey, local_path: Path | None = None) -> str
     own_copy = False
     tmp_path = local_path
     if tmp_path is None:
-        tmp_path = await download_to_temp(file_key)
-        own_copy = tmp_path is not None
+        # 素材源缓存: shared bytes — never reaped here (own_copy stays False).
+        tmp_path = await download_to_cache(file_key)
     if tmp_path is None:
         logger.warning("extract_text_missing", key=file_key)
         return None
@@ -101,8 +101,8 @@ async def render_pdf_pages(
     own_copy = False
     tmp_path = local_path
     if tmp_path is None:
-        tmp_path = await download_to_temp(file_key)
-        own_copy = tmp_path is not None
+        # 素材源缓存: shared bytes — never reaped here (own_copy stays False).
+        tmp_path = await download_to_cache(file_key)
     if tmp_path is None:
         logger.warning("render_pdf_pages_missing", key=file_key)
         return []

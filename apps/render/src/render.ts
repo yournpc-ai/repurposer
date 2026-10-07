@@ -38,6 +38,7 @@ export async function renderClip(
   spec: ClipSpec,
   outDir: string,
   basename: string,
+  sourceKey?: string,
 ): Promise<RenderResult> {
   await fs.mkdir(outDir, { recursive: true });
 
@@ -46,8 +47,10 @@ export async function renderClip(
   // download inside the frame-extraction budget), so a slow origin surfaces
   // as an opaque delayRender timeout. Our staging fetch is proxy-aware,
   // dedupes per URL across this run's clips, and hands Remotion a loopback
-  // URL (see stage.ts).
-  const stagedUrl = await stageRemoteSource(spec.source.url);
+  // URL (see stage.ts). `sourceKey` (the payload's source_key) indexes the
+  // cache by object key — the same law the api side's shared source cache
+  // uses, so chain-downloaded bytes are a zero-network hit.
+  const stagedUrl = await stageRemoteSource(spec.source.url, sourceKey);
   // image_urls + image_shots[i].image_url (stills: the baked composite PNG
   // for stacked quote-cards, RECIPES §4.6.2) ride the same staging path —
   // Remotion's <Img> reads the URL directly from the headless renderer,

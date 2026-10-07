@@ -4846,21 +4846,21 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               2026-09-23 — behavior wiring is a later batch). side="top":
               the dock lives at the viewport's bottom edge. */}
           <CostConfirmControl popoverSide="top" align="end" className="mr-1" />
-          {/* Models — the honest Auto panel, dock seat (2026-09-24 user
-              ruling, OriginCut parity): the same read-only per-modality
-              assignments as the composer's panel, side="top" off the
-              bottom edge. */}
-          <ComposerPanelButton
-            icon={Box}
-            label={t("composer.models")}
-            open={modelsOpen}
-            onOpenChange={setModelsOpen}
-            popoverSide="top"
-            align="end"
-            unpadded
-          >
-            <ModelsPanel />
-          </ComposerPanelButton>
+          {/* Models (honest Auto panel) — PARKED: hidden until the panel has
+              something actionable to show; restore by ungating. */}
+          {false && (
+            <ComposerPanelButton
+              icon={Box}
+              label={t("composer.models")}
+              open={modelsOpen}
+              onOpenChange={setModelsOpen}
+              popoverSide="top"
+              align="end"
+              unpadded
+            >
+              <ModelsPanel />
+            </ComposerPanelButton>
+          )}
           {/* The stop button only exists while a stream is actually
               abortable (the answer path sets chatBusy without one —
               nothing to stop there). */}

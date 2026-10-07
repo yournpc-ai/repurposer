@@ -229,7 +229,7 @@ async def prosody_processor(asset, prior) -> "Any":
     """VIDEO/AUDIO's prosody processor (after ASR): reads the prior result's
     words; degrade-on-error (speaker_map precedent) — never fails the asset."""
     from app.pipeline.asset_processing import ProcessResult  # avoid cycle at import time
-    from app.providers.storage import download_to_temp
+    from app.providers.storage import download_to_cache
 
     words = (prior.meta or {}).get("words") or []
     if not words or not asset.file_url:
@@ -237,8 +237,8 @@ async def prosody_processor(asset, prior) -> "Any":
     path = prior.local_path
     own_copy = False
     if path is None:
-        path = await download_to_temp(asset.file_url)
-        own_copy = path is not None
+        # 素材源缓存: shared bytes — never reaped here (own_copy stays False).
+        path = await download_to_cache(asset.file_url)
     if path is None:
         return ProcessResult()
     try:

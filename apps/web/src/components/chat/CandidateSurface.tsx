@@ -5,8 +5,9 @@
  * Anatomy (合同 Seg C 同构): ordinal as the visual address (「第二个」 speaks
  * to it — two-digit, 01-based) + the source range (mm:ss–mm:ss) + the
  * source-faithful excerpt (C4 锚链: every range/excerpt anchors the SOURCE
- * evidence, never the editable transcript) + the speaker when the ASR
- * named one. Default three recommendations + expand-all (推荐样本，不是只能
+ * evidence, never the editable transcript — and the excerpt is SERVER-DERIVED
+ * from the range's own speech, ADR-107, so the card always shows what the
+ * range really says) + the speaker when the ASR named one. Default three recommendations + expand-all (推荐样本，不是只能
  * 选 3 个). Selection state = the row highlight only (bg-accent token step)
  * — the rows are display, never buttons: selection rides chat language
  * (「第二个」「都做」), the surface just reflects it. No playback (候选试听

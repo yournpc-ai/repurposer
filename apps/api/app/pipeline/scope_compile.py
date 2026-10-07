@@ -234,8 +234,8 @@ def compile_scope(
                 f"the candidate set's {len(cspec.members)} members"
             )
         member = cspec.members[sspec.member_index]
-        # The R7 pointer dereference — the door validated this range verbatim
-        # at the candidate set's birth; the compiler never re-judges it.
+        # The R7 pointer dereference — the door validated this range at the
+        # candidate set's birth (ADR-107); the compiler never re-judges it.
         span_payload = {
             "start": member.start,
             "end": member.end,

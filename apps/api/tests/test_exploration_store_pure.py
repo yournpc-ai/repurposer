@@ -1,10 +1,11 @@
 """Pure tests for the exploration write door (app/pipeline/exploration_store.py).
 
-ADR-088 §2/§4 + I-EXPLORE-01, gated here:
+ADR-088 §2/§4 + ADR-107 + I-EXPLORE-01, gated here:
 
-- **Evidence validation** (the door's teeth): start < end, end inside the
-  timeline, excerpt verbatim inside its OWN range (normalized containment —
-  punctuation retypes pass, paraphrases fail); no timeline → honest reject.
+- **Range validation** (the door's teeth): start < end, end inside the
+  timeline, speech present inside the member's own range; no timeline →
+  honest reject. The excerpt is SERVER-DERIVED (ADR-107): the input is
+  ranges only, the persisted member carries the range's actual speech.
 - **Spec shapes**: CandidateSet / Select / ContentPlan serialize into
   exploration_rows.spec (Workspace 合同 v4.2 C1 — the family's own table)
   with prototype/kind/journey attribution; R7 pointer (no
@@ -23,13 +24,12 @@ from uuid import uuid4
 
 from app.models.tables import Asset, ExplorationRow, Journey, Project
 from app.pipeline.exploration_store import (
-    CandidateMember,
+    CandidateRange,
     ContentPlanSpec,
     ExplorationRejected,
     SelectSpec,
     mark_compiled,
     member_issues,
-    normalize_evidence,
     plan_completeness_issues,
     PlanOutput,
     propose_candidates,
@@ -65,9 +65,9 @@ def _asset(with_words: bool = True) -> Asset:
 
 
 def _members(**over):
-    base = dict(start=0.0, end=1.0, excerpt="Pricing is hard.")
+    base = dict(start=0.0, end=1.0)
     base.update(over)
-    return [CandidateMember(**base)]
+    return [CandidateRange(**base)]
 
 
 # ---- the stub db (test_graph_wiring_pure pattern + Journey) ---------------------
@@ -134,20 +134,11 @@ class _StubDb:
         pass
 
 
-# ---- normalize_evidence / member_issues / completeness ---------------------------
-
-
-class TestNormalizeEvidence:
-    def test_punctuation_and_case_retypes_pass(self) -> None:
-        assert normalize_evidence("Pricing is hard.") == normalize_evidence("pricing is hard")
-        assert normalize_evidence("定价难。") == normalize_evidence("定价难")
-
-    def test_paraphrase_fails(self) -> None:
-        assert normalize_evidence("Pricing is easy") != normalize_evidence("Pricing is hard")
+# ---- member_issues / completeness ---------------------------
 
 
 class TestMemberIssues:
-    def test_verbatim_member_passes(self) -> None:
+    def test_valid_range_passes(self) -> None:
         assert member_issues(_members(), duration_s=60, words=_WORDS) == []
 
     def test_start_not_before_end(self) -> None:
@@ -158,14 +149,10 @@ class TestMemberIssues:
         issues = member_issues(_members(end=99.0), duration_s=60, words=_WORDS)
         assert any("timeline" in i for i in issues)
 
-    def test_excerpt_outside_own_range(self) -> None:
-        # "Fundraising is art." is verbatim speech — but not inside [0,1]
-        issues = member_issues(_members(excerpt="Fundraising is art."), duration_s=60, words=_WORDS)
-        assert any("not verbatim speech inside its own range" in i for i in issues)
-
-    def test_paraphrase_rejected(self) -> None:
-        issues = member_issues(_members(excerpt="Pricing is really hard"), duration_s=60, words=_WORDS)
-        assert issues
+    def test_no_speech_inside_range(self) -> None:
+        # [1.2, 1.8] lands in the pause between the two sentences
+        issues = member_issues(_members(start=1.2, end=1.8), duration_s=60, words=_WORDS)
+        assert any("no speech inside its own range" in i for i in issues)
 
     def test_empty_members(self) -> None:
         assert member_issues([], duration_s=60, words=_WORDS) == ["candidate set carries no members"]
@@ -210,6 +197,8 @@ class TestProposeCandidates:
         assert spec["exploration_kind"] == "candidate_set"
         assert spec["topic"] == "pricing"
         assert len(spec["members"]) == 1
+        # ADR-107: the excerpt is server-derived — the range's actual speech.
+        assert spec["members"][0]["excerpt"] == "Pricing is hard."
         assert len(db.journeys) == 1
         assert db.journeys[0].goal_text.startswith("把定价")
 
@@ -222,13 +211,13 @@ class TestProposeCandidates:
                 members=_members(), goal_text="goal",
             )
 
-    async def test_evidence_reject(self) -> None:
+    async def test_speechless_range_rejected(self) -> None:
         db = _StubDb(assets=[_asset()])
         with pytest.raises(ExplorationRejected, match="candidate evidence rejected"):
             await propose_candidates(
                 db, db.project,
                 asset_id=_ASSET_ID, topic="pricing",
-                members=_members(excerpt="a paraphrase never spoken"),
+                members=_members(start=1.2, end=1.8),
                 goal_text="goal",
             )
 
@@ -266,8 +255,8 @@ class TestProposeSelects:
             db, db.project,
             asset_id=_ASSET_ID, topic="pricing",
             members=[
-                CandidateMember(start=0.0, end=1.0, excerpt="Pricing is hard."),
-                CandidateMember(start=2.0, end=3.2, excerpt="Fundraising is art."),
+                CandidateRange(start=0.0, end=1.0),
+                CandidateRange(start=2.0, end=3.2),
             ],
             goal_text="goal",
         )
@@ -388,7 +377,7 @@ class TestProposePlans:
         cset_b = await propose_candidates(
             db, db.project,
             asset_id=_ASSET_ID, topic="fundraising",
-            members=[CandidateMember(start=2.0, end=3.2, excerpt="Fundraising is art.")],
+            members=[CandidateRange(start=2.0, end=3.2)],
             goal_text="another goal entirely",
         )
         sel_b = (

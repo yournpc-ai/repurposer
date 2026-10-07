@@ -59,13 +59,16 @@ app.get("/health", (_req, res) => {
  * supplied presigned URLs, and returns the object keys.
  */
 app.post("/render", async (req, res) => {
-  const { spec, basename, outputs } = req.body as {
+  const { spec, basename, outputs, source_key } = req.body as {
     spec?: ClipSpec;
     basename?: string;
     outputs?: {
       video?: { key: string; put_url: string; content_type?: string };
       srt?: { key: string; put_url: string; content_type?: string };
     };
+    // Optional object-store key of spec.source.url (envelope field, never
+    // clip-spec) — indexes the shared source cache (see stage.ts).
+    source_key?: string;
   };
 
   const src = spec?.source;
@@ -84,7 +87,7 @@ app.post("/render", async (req, res) => {
   try {
     const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "repurposer-render-"));
     const name = basename ?? `clip-${Date.now()}`;
-    const { videoPath, srtPath } = await renderClip(spec, outDir, name);
+    const { videoPath, srtPath } = await renderClip(spec, outDir, name, source_key);
 
     await uploadFile(outputs.video.put_url, videoPath, outputs.video.content_type);
     if (srtPath && outputs.srt?.put_url) {

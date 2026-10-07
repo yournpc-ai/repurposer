@@ -35,7 +35,7 @@ from app.chat.exploration_tools import (
     SelectItem,
 )
 
-_MEMBER = {"start": 12.0, "end": 18.5, "excerpt": "pricing is hard"}
+_MEMBER = {"start": 12.0, "end": 18.5}  # a RANGE (ADR-107) — never an excerpt
 _CANDIDATES = {
     "asset_id": str(uuid4()),
     "topic": "pricing",
@@ -226,6 +226,14 @@ class TestDriftAlarm:
         with pytest.raises(ValidationError):
             ProposeCandidatesArgs.model_validate(
                 {**_CANDIDATES, "members": [{**_MEMBER, "quote": "copied source"}]}
+            )
+
+    def test_member_excerpt_rejects_at_the_wire(self) -> None:
+        """ADR-107: the excerpt is server-derived — a model-typed one is an
+        invented param, forbidden at the wire like any other."""
+        with pytest.raises(ValidationError):
+            ProposeCandidatesArgs.model_validate(
+                {**_CANDIDATES, "members": [{**_MEMBER, "excerpt": "pricing is hard"}]}
             )
 
     def test_selects_unknown_key_rejects(self) -> None:

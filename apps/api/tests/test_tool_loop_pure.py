@@ -155,6 +155,39 @@ async def test_bare_reply_is_the_answer_floor() -> None:
 
 
 @pytest.mark.asyncio
+async def test_empty_bare_reply_retries_with_feedback() -> None:
+    """空裸回复护栏 (2026-10-06, live 取证 96a86172): an empty, tool-less
+    response is a malformed turn — rejected with feedback and retried within
+    the iteration budget, never laid down as the (empty) answer floor."""
+    client = StubClient([
+        ToolGeneration(content="", tool_calls=[]),
+        ToolGeneration(content="recovered words", tool_calls=[]),
+    ])
+    events: list[object] = []
+    agent = _make_agent("tl_empty_bare", client)
+    result = await agent.call_loop(
+        _always_accept, on_loop_event=lambda e: events.append(e)
+    )
+    assert result.tool_name is None and result.prose == "recovered words"
+    assert not result.exhausted and result.iterations == 2
+    assert [e.kind for e in events] == ["empty_bare_reply"]
+    # The retry carried the feedback echo on the user message.
+    second_user = client.seen_messages[1][1]
+    assert "empty" in second_user["content"]
+
+
+@pytest.mark.asyncio
+async def test_empty_bare_reply_exhaustion_still_degrades_honestly() -> None:
+    """Repeats exhaust within the budget and degrade honestly — the floor
+    stays the floor (empty prose, the caller's cannot-do line)."""
+    client = StubClient([ToolGeneration(content="", tool_calls=[]) for _ in range(3)])
+    agent = _make_agent("tl_empty_bare_x", client, max_iterations=3)
+    result = await agent.call_loop(_always_accept)
+    assert result.exhausted and result.iterations == 3
+    assert result.tool_name is None and result.prose == ""
+
+
+@pytest.mark.asyncio
 async def test_exhaustion_is_an_honest_result_never_a_success() -> None:
     client = StubClient([_call("echo", {"text": "x"}) for _ in range(3)])
 

@@ -21,9 +21,16 @@ import { Agent, fetch, ProxyAgent } from "undici";
  * delayRender timeout and a 500. Staging decouples download from rendering:
  * our own proxy-aware fetch with our own timeouts, deduped per URL so the N
  * clips of one run share a single download.
+ *
+ * 素材源缓存 (2026-10-07): this dir is SHARED with the api side
+ * (providers/storage.download_to_cache) — the render payload's optional
+ * `source_key` envelope field names the object key, and both sides hash it
+ * with the same sha1 law, so a source the processing chain already pulled
+ * (ASR / speaker_map / reframe) is a zero-network hit here. Without the key
+ * the cache falls back to URL hashing (legacy payloads, non-asset sources).
  */
 
-export const CACHE_DIR = path.join(os.tmpdir(), "repurposer-render-cache");
+export const CACHE_DIR = path.join(os.tmpdir(), "repurposer-source-cache");
 const CACHE_MAX_BYTES = 4 * 1024 * 1024 * 1024;
 /** Hard cap for one source download; stalls die much earlier via bodyTimeout. */
 const HARD_TIMEOUT_MS = 15 * 60 * 1000;
@@ -59,11 +66,17 @@ export function dispatcherFor(url: string): Agent | ProxyAgent {
   return proxy ? new ProxyAgent({ uri: proxy, ...opts }) : new Agent(opts);
 }
 
-function cachePathFor(url: string): string {
-  const hash = createHash("sha1").update(url).digest("hex");
+function cachePathFor(url: string, cacheKey?: string): string {
+  // One hashing law with the api side (providers/storage.source_cache_path):
+  // sha1 of the object key when the envelope names one, sha1 of the URL
+  // otherwise — so an api-side download and a render-side staging of the
+  // same source land on the SAME path.
+  const hash = createHash("sha1")
+    .update(cacheKey ?? url)
+    .digest("hex");
   let ext = "";
   try {
-    ext = path.extname(new URL(url).pathname);
+    ext = path.extname(cacheKey ?? new URL(url).pathname);
   } catch {
     // keep "" — content-type comes from the extension, so a bogus one is worse
   }
@@ -77,20 +90,26 @@ function toLoopbackUrl(filePath: string): string {
 
 /**
  * Stage a remote source URL into the local cache; returns its loopback URL.
- * Non-http(s) inputs are returned unchanged (already local).
+ * Non-http(s) inputs are returned unchanged (already local). `cacheKey` is
+ * the object-store key when the caller knows it (render payload's
+ * `source_key`) — the api side's shared source cache is indexed by it, so a
+ * hit costs zero network.
  */
-export async function stageRemoteSource(url: string): Promise<string> {
+export async function stageRemoteSource(
+  url: string,
+  cacheKey?: string,
+): Promise<string> {
   if (!/^https?:\/\//i.test(url)) return url;
-  const pending = inflight.get(url);
+  const pending = inflight.get(cacheKey ?? url);
   if (pending) return pending;
-  const p = doStage(url).finally(() => inflight.delete(url));
-  inflight.set(url, p);
+  const p = doStage(url, cacheKey).finally(() => inflight.delete(cacheKey ?? url));
+  inflight.set(cacheKey ?? url, p);
   return p;
 }
 
-async function doStage(url: string): Promise<string> {
+async function doStage(url: string, cacheKey?: string): Promise<string> {
   await fs.mkdir(CACHE_DIR, { recursive: true });
-  const dest = cachePathFor(url);
+  const dest = cachePathFor(url, cacheKey);
   const existing = await fs.stat(dest).catch(() => null);
   if (existing && existing.size > 0) {
     // LRU touch — eviction sorts by mtime.

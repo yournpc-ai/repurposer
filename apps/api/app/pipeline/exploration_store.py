@@ -19,8 +19,10 @@ target it; the execution door keeps its reverse guard
 **R14 双门**: this door is NOT the execution write door. Two doors, two
 invariant sets — the exploration door is FREE but still a real door:
 savepoint-scoped validation (flush-only, the caller commits —
-``apply_wiring_ops`` precedent), evidence validation (ranges inside the
-asset's timeline, excerpts verbatim from its words), and replay
+``apply_wiring_ops`` precedent), range validation (inside the asset's
+timeline, speech present) with every member's excerpt SERVER-DERIVED from
+its range's actual speech (ADR-107 — the model proposes ranges only; a
+paraphrased quote can never veto a true range), and replay
 idempotency (an identical call returns the existing artifact).
 
 **R24 journey attribution**: every artifact the door births carries the
@@ -37,7 +39,6 @@ unchanged).
 
 import hashlib
 import json
-import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Literal
 from uuid import UUID, uuid4
@@ -48,7 +49,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tables import Asset, ExplorationRow, Journey, Project
 from app.pipeline.product_graph import EXPLORATION_PROTOTYPE
-from app.tools.clips.transcript import words_in_range
+from app.tools.clips.transcript import derive_excerpt, words_in_range
 
 # ---- family vocabulary ---------------------------------------------------------
 
@@ -94,10 +95,27 @@ class ExplorationRejected(ValueError):
 # ---- spec shapes (graph_nodes.spec JSONB contracts) ----------------------------
 
 
+class CandidateRange(BaseModel):
+    """The model-facing proposal shape (ADR-107): a range + best-effort
+    speaker — never the excerpt. The door derives the excerpt from the
+    range's own speech (``derive_excerpt``), so the evidence the card shows
+    is guaranteed to be what the range actually says and a paraphrased
+    quote can never veto a true range. ``speaker`` is best-effort (audio
+    assets carry no speaker_map — ADR-045 D4)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start: float
+    end: float
+    speaker: str | None = None
+
+
 class CandidateMember(BaseModel):
     """One evidence member of a Candidate Set — every field traceable back
-    to the transcript (ADR-088 §2). ``speaker`` is best-effort (audio
-    assets carry no speaker_map — ADR-045 D4)."""
+    to the transcript (ADR-088 §2). The persisted/display shape: ``excerpt``
+    is SERVER-DERIVED at the door from the range's own speech (ADR-107),
+    never model-typed. ``speaker`` is best-effort (audio assets carry no
+    speaker_map — ADR-045 D4)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -204,29 +222,20 @@ class ContentPlanSpec(BaseModel):
     idem: str = ""
 
 
-# ---- evidence validation (pure) -------------------------------------------------
-
-_EVIDENCE_KEEP_RE = re.compile(r"[0-9a-z一-鿿]+")
-
-
-def normalize_evidence(text: str) -> str:
-    """The verbatim-evidence normalization: case-folded, alnum+CJK kept,
-    everything else (punctuation / whitespace / quotes) dropped — 'the
-    LLM retyped the punctuation' never defeats an honest quote, while a
-    paraphrase still fails. CJK-safe by construction."""
-    return "".join(_EVIDENCE_KEEP_RE.findall(text.casefold()))
+# ---- range validation (pure) -------------------------------------------------
 
 
 def member_issues(
-    members: list[CandidateMember],
+    members: list[CandidateRange],
     *,
     duration_s: float,
     words: list[dict[str, Any]],
 ) -> list[str]:
-    """The candidate evidence gate (ADR-088 §4): start < end, end inside
-    the asset's timeline, and every excerpt verbatim-traceable to the
-    words spoken inside ITS OWN range (normalized containment — a member
-    whose quote lives outside its range is not evidence)."""
+    """The candidate range gate (ADR-107): start < end, end inside the
+    asset's timeline, and speech actually present inside each member's own
+    range (a range landing in a pause is no evidence). The excerpt is no
+    longer validated — it is no longer model input; the door derives it
+    from the range's speech after these issues pass."""
     issues: list[str] = []
     if not members:
         return ["candidate set carries no members"]
@@ -239,14 +248,8 @@ def member_issues(
                 f"member {i}: end ({m.end}) beyond the asset's timeline ({duration_s})"
             )
             continue
-        spoken = normalize_evidence(words_in_range(words, m.start, m.end))
-        quote = normalize_evidence(m.excerpt)
-        if not quote:
-            issues.append(f"member {i}: empty excerpt")
-        elif quote not in spoken:
-            issues.append(
-                f"member {i}: excerpt is not verbatim speech inside its own range"
-            )
+        if not words_in_range(words, m.start, m.end):
+            issues.append(f"member {i}: no speech inside its own range")
     return issues
 
 
@@ -409,7 +412,7 @@ async def propose_candidates(
     *,
     asset_id: UUID,
     topic: str,
-    members: list[CandidateMember],
+    members: list[CandidateRange],
     goal_text: str | None = None,
     journey_id: UUID | None = None,
 ) -> ExplorationRow:
@@ -417,12 +420,23 @@ async def propose_candidates(
 
     Mints the journey when the call opens the chain (``goal_text``
     required then); adopts it when the chain continues. Replay = the
-    existing set.
+    existing set. The input members are RANGES (ADR-107) — the door
+    derives every excerpt from its range's own speech BEFORE the idem
+    key, so a replay's key is stable regardless of the request's prose.
     """
     _asset, words, duration = await _timeline_of(db, project, asset_id)
     issues = member_issues(members, duration_s=duration, words=words)
     if issues:
         raise ExplorationRejected("candidate evidence rejected: " + "; ".join(issues))
+    full_members = [
+        CandidateMember(
+            start=m.start,
+            end=m.end,
+            excerpt=derive_excerpt(words, m.start, m.end),
+            speaker=m.speaker,
+        )
+        for m in members
+    ]
 
     if journey_id is not None:
         journey = await db.get(Journey, journey_id)
@@ -457,7 +471,7 @@ async def propose_candidates(
         {
             "asset_id": str(asset_id),
             "topic": topic,
-            "members": [m.model_dump() for m in members],
+            "members": [m.model_dump() for m in full_members],
         },
     )
     lane = await _exploration_nodes(db, project.id)
@@ -468,7 +482,7 @@ async def propose_candidates(
     spec = CandidateSetSpec(
         asset_id=str(asset_id),
         topic=topic,
-        members=members,
+        members=full_members,
         idem=idem,
     )
     node = ExplorationRow(
