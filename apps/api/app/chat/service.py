@@ -248,6 +248,12 @@ async def _get_or_create_project_conversation(
         db.add(conversation)
         await db.flush()
         await db.refresh(conversation)
+        # 新生标记 (ADR-108 §1 FK 取证): the row is flushed but UNCOMMITTED,
+        # so alloc_message_seq's fresh-session upsert would violate the
+        # counter's FK — route this session's allocations in-transaction.
+        db.info.setdefault(_FRESH_CONVERSATIONS_INFO, set()).add(
+            UUID(str(conversation.id))
+        )
     return conversation
 
 
@@ -287,7 +293,15 @@ def _resume_ack_line(decided: str, outcome: str) -> str:
 INTERACTION_POLICY_VERSION = "interaction_constitution.v2"
 
 
-async def alloc_message_seq(conversation_id: UUID) -> int:
+# Session-``info`` key marking conversations BORN in this session (stamped
+# by ``_get_or_create_project_conversation``) — ``alloc_message_seq`` reads
+# it to route the first turn's allocations through the caller's own
+# transaction (the fresh-session path can't see the uncommitted parent and
+# would violate the counter's FK).
+_FRESH_CONVERSATIONS_INFO = "chat.fresh_conversations"
+
+
+async def alloc_message_seq(conversation_id: UUID, db: AsyncSession | None = None) -> int:
     """Transcript 数组序分配器 (ADR-108 §1): bump the conversation's counter
     under its OWN short transaction and return the new value — never call
     this inside a chat turn's long transaction. The counter lives on the
@@ -296,11 +310,24 @@ async def alloc_message_seq(conversation_id: UUID) -> int:
     for minutes — a fresh-session UPDATE on it would self-deadlock against
     the very turn awaiting the allocation). Gap-tolerant by design: a
     rolled-back turn leaves holes in seq; monotonicity is the contract,
-    contiguity is not."""
+    contiguity is not.
+
+    新生会话例外 (2026-10-08 FK 取证): the counter row's FK needs the
+    conversation COMMITTED, but a conversation born this turn is only
+    flushed — a fresh-session upsert violates the FK (parent invisible),
+    and retrying it once the counter exists in-session would block on the
+    speculative-insertion lock (self-deadlock: the turn awaits the
+    allocation). So when ``db`` carries this conversation in its
+    ``_FRESH_CONVERSATIONS_INFO`` mark (stamped by
+    ``_get_or_create_project_conversation`` at birth), the upsert rides the
+    caller's OWN session — same transaction sees its own parent, and the
+    counter lock's lifetime is bounded by the first turn's commit. After
+    that commit the mark is gone with the session and every later
+    allocation takes the short-transaction path again."""
     from app.models.database import AsyncSessionLocal  # deferred: module-load order
 
-    async with AsyncSessionLocal() as s:
-        result = await s.execute(
+    def _upsert_stmt():
+        return (
             pg_insert(MessageSeqCounter)
             .values(conversation_id=conversation_id, last_seq=1)
             .on_conflict_do_update(
@@ -309,6 +336,12 @@ async def alloc_message_seq(conversation_id: UUID) -> int:
             )
             .returning(MessageSeqCounter.last_seq)
         )
+
+    if db is not None and conversation_id in db.info.get(_FRESH_CONVERSATIONS_INFO, ()):
+        result = await db.execute(_upsert_stmt())
+        return result.scalar_one()
+    async with AsyncSessionLocal() as s:
+        result = await s.execute(_upsert_stmt())
         seq = result.scalar_one()
         await s.commit()
         return seq
@@ -351,7 +384,7 @@ async def _create_message(
         question=question,
         suggestions=suggestions or [],
         suggestion_ref=suggestion_ref,
-        seq=await alloc_message_seq(conversation_id),
+        seq=await alloc_message_seq(conversation_id, db),
     )
     db.add(message)
     await db.flush()
@@ -2452,7 +2485,7 @@ async def record_material_beat(
         attachments=[],
         mentions=[],
         intent=intent,
-        seq=await alloc_message_seq(conversation.id),
+        seq=await alloc_message_seq(UUID(str(conversation.id)), db),
     )
     db.add(message)
     await db.flush()
@@ -2619,7 +2652,7 @@ async def append_activity_row(
         attachments=[],
         mentions=[],
         intent={"type": ACTIVITY_ROW_TYPE, "frame": frame},
-        seq=await alloc_message_seq(conversation_id),
+        seq=await alloc_message_seq(conversation_id, db),
     )
     db.add(message)
     await db.flush()
@@ -2669,7 +2702,7 @@ async def record_activity_forensics(
         attachments=[],
         mentions=[],
         intent={"type": ACTIVITY_FORENSICS_TYPE, "ref": ref, "rejections": rejections},
-        seq=await alloc_message_seq(conversation_id),
+        seq=await alloc_message_seq(conversation_id, db),
     )
     db.add(message)
     await db.flush()
@@ -2714,7 +2747,7 @@ async def record_candidates_log(
         attachments=[],
         mentions=[],
         intent={"type": CANDIDATES_LOG_TYPE, "ref": ref, "events": events},
-        seq=await alloc_message_seq(conversation_id),
+        seq=await alloc_message_seq(conversation_id, db),
     )
     db.add(message)
     await db.flush()
