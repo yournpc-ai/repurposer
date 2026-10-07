@@ -23,13 +23,16 @@ import asyncio
 import json
 
 import structlog
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from app.agents.contexts import output_one_liner
+from app.agents.tool_loop import ReadExecuting
 from app.dependencies import DBDep, get_current_user_required
 from app.models.schemas import (
     AnswerRequest,
@@ -40,17 +43,24 @@ from app.models.schemas import (
     ConversationResponse,
     MessageListResponse,
 )
-from app.models.tables import Conversation, Project, User
-from app.chat.activity import ActivityProjector
+from app.models.tables import Conversation, Message, Project, User
+from app.chat.activity import (
+    KIND_READ,
+    STATUS_ACTIVE,
+    ActivityProjector,
+    frame_persistence,
+)
 from app.chat.turn_tools import make_tool_echo_delta_filter
 from app.chat.service import (
     answer_question,
+    append_activity_row,
     chat,
     execute_chat_turn,
     list_conversation_messages,
     prepare_chat_turn,
-    record_activity_log,
+    record_activity_forensics,
     record_candidates_log,
+    settle_activity_row,
     stamp_turn_failed,
 )
 from app.providers.llm.base import LLMError
@@ -206,24 +216,155 @@ def _activity_frame(frame) -> str:
     return _sse("assistant.activity", json.dumps(frame.to_dict(), ensure_ascii=False))
 
 
-def _make_loop_event_hook(queue: asyncio.Queue, projector: ActivityProjector):
+def _row_frame(kind: str, payload: dict) -> str:
+    """One ``assistant.row.append`` / ``assistant.row.update`` frame
+    (ADR-108 §3): the SSE wire mirrors the transcript array's operations —
+    append fixes a row's position, update mutates it in place. The client's
+    live reducer and its history replay eat the SAME semantics."""
+    return _sse(f"assistant.row.{kind}", json.dumps(payload, ensure_ascii=False))
+
+
+def _row_payload(message: Message) -> dict:
+    """The row wire shape mirrors ChatMessageResponse (数组行 = 消息行)."""
+    return {
+        "id": str(message.id),
+        "conversation_id": str(message.conversation_id),
+        "role": message.role,
+        "content": message.content or "",
+        "seq": message.seq,
+        "intent": message.intent,
+        "created_at": message.created_at.isoformat() if message.created_at else None,
+    }
+
+
+def _make_activity_persister(queue: asyncio.Queue, projector: ActivityProjector, conversation_id: UUID):
+    """每帧一行 + SSE 镜像 (ADR-108 §2/§3/§5)。
+
+    Append seats: a READ span's row appends at EXECUTE ENTRY (ReadExecuting
+    — after the checkpoint seat, so 服务员话 → 读活动 的数组序天然成立),
+    never at name_known; born-terminal frames (repair terminals, explore
+    milestones) append at emission. Settle = the SAME row's in-place UPDATE
+    (the array position never moves; the open-time ``at`` stays the birth
+    stamp). Every write rides its own fresh short session — rows survive
+    the turn's outcome (诚实 transcript: a failed turn keeps its work
+    evidence) and never touch the turn's long transaction. Best-effort
+    throughout: a persist failure degrades to a warning, never a failed
+    turn. draft/run spans stay live-only (落定即退役 — the docked plan
+    card / the run receipt is their settled evidence)."""
+    open_rows: dict[str, tuple[UUID, dict]] = {}
+
+    async def _append(frame: dict) -> None:
+        try:
+            from app.models.database import AsyncSessionLocal
+
+            async with AsyncSessionLocal() as db:
+                row = await append_activity_row(db, conversation_id, frame)
+                await db.commit()
+            open_rows[frame["activity_id"]] = (row.id, frame)
+            await queue.put(_row_frame("append", {"row": _row_payload(row)}))
+        except Exception as e:  # noqa: BLE001 — additive history is best-effort
+            logger.warning(
+                "activity_row_append_failed",
+                conversation_id=str(conversation_id),
+                error=str(e),
+            )
+
+    async def append_open_read() -> None:
+        """The ReadExecuting seat: append the open READ span's row."""
+        desc = projector.open_activity()
+        if desc is None:
+            return
+        activity_id, kind, key = desc
+        if kind != KIND_READ or activity_id in open_rows:
+            return
+        await _append(
+            {
+                "activity_id": activity_id,
+                "kind": kind,
+                "status": STATUS_ACTIVE,
+                "key": key,
+                "at": datetime.now(UTC).isoformat(),
+            }
+        )
+
+    async def mirror(frame) -> None:
+        """Persist-side mirror of one emitted activity frame — the mapping
+        lives in ``frame_persistence`` (activity.py, 一法一座)."""
+        action = frame_persistence(frame)
+        if action == "append":
+            await _append(frame.to_dict())  # born-terminal
+            return
+        if action != "settle":
+            return
+        entry = open_rows.pop(frame.activity_id, None)
+        if entry is None:
+            return  # rejected before execute entry — never appended
+        row_id, open_d = entry
+        merged = {
+            **open_d,
+            "status": frame.status,
+            "key": frame.key,
+            "settled_at": frame.at,
+        }
+        if frame.duration_ms is not None:
+            merged["duration_ms"] = frame.duration_ms
+        try:
+            from app.models.database import AsyncSessionLocal
+
+            async with AsyncSessionLocal() as db:
+                await settle_activity_row(db, row_id, merged)
+                await db.commit()
+            await queue.put(_row_frame("update", {"id": str(row_id), "frame": merged}))
+        except Exception as e:  # noqa: BLE001 — additive history is best-effort
+            logger.warning(
+                "activity_row_settle_failed",
+                conversation_id=str(conversation_id),
+                error=str(e),
+            )
+
+    async def cancel_open() -> None:
+        """Client-disconnect path (BaseException — the sweep never runs):
+        settle every appended-but-open row CANCELLED, so the durable
+        transcript never claims a read is still in flight forever."""
+        for row_id, open_d in list(open_rows.values()):
+            merged = {**open_d, "status": "cancelled", "cancelled_at": datetime.now(UTC).isoformat()}
+            try:
+                from app.models.database import AsyncSessionLocal
+
+                async with AsyncSessionLocal() as db:
+                    await settle_activity_row(db, row_id, merged)
+                    await db.commit()
+            except Exception as e:  # noqa: BLE001 — best-effort on teardown
+                logger.warning("activity_row_cancel_failed", error=str(e))
+        open_rows.clear()
+
+    return append_open_read, mirror, cancel_open
+
+
+def _make_loop_event_hook(queue: asyncio.Queue, projector: ActivityProjector, append_open_read, mirror):
     """The typed loop-event channel's SSE seat (U1): internal events in,
     user-safe activity frames out — the translation lives entirely in the
-    projector."""
+    projector. ReadExecuting additionally seats the row append (ADR-108)."""
     async def on_loop_event(event) -> None:
+        if isinstance(event, ReadExecuting):
+            await append_open_read()
         for frame in projector.feed_event(event):
             await queue.put(_activity_frame(frame))
+            await mirror(frame)
 
     return on_loop_event
 
 
-def _make_activity_hook(queue: asyncio.Queue, projector: ActivityProjector):
+def _make_activity_hook(queue: asyncio.Queue, projector: ActivityProjector, mirror):
     """The work-session milestone channel's SSE seat (iter-2 ⑥, N-57): the
     plan turn fires ``explore_milestone`` at the exploration door's
     successes; the frame is born-completed and rides the same
-    ``assistant.activity`` channel as the loop-event frames."""
+    ``assistant.activity`` channel as the loop-event frames — and persists
+    as its own array row (ADR-108 §2)."""
     async def on_activity(key: str, count: int) -> None:
-        await queue.put(_activity_frame(projector.explore_milestone(key, count=count)))
+        frame = projector.explore_milestone(key, count=count)
+        await queue.put(_activity_frame(frame))
+        await mirror(frame)
 
     return on_activity
 
@@ -246,41 +387,40 @@ def _make_candidates_hook(queue: asyncio.Queue, sink: list[dict]):
     return on_candidates
 
 
-async def _sweep_activities(queue: asyncio.Queue, projector: ActivityProjector, outcome: str) -> None:
+async def _sweep_activities(queue: asyncio.Queue, projector: ActivityProjector, outcome: str, mirror=None) -> None:
     """The terminal sweep (T16-B, 终帧律的活动同形): before the envelope,
-    every still-active activity is settled — no activity outlives its turn."""
+    every still-active activity is settled — no activity outlives its turn.
+    Sweep frames persist through the same mirror (ADR-108 §5: a failed
+    turn's rows settle failed, never vanish). mirror=None = a prepare-stage
+    failure that never wired the persister (nothing was appended)."""
     for frame in projector.sweep(outcome):
         await queue.put(_activity_frame(frame))
+        if mirror is not None:
+            await mirror(frame)
 
 
-async def _persist_activity_log(
+async def _persist_activity_forensics(
     conversation_id: UUID, ref: str, projector: ActivityProjector
 ) -> None:
-    """activity 持久化 (2026-09-25): the turn's settled frames land as ONE
-    activity_log message row, so a refresh replays the settled activity
-    rows instead of silently dropping them (they were memory-only — the
-    flow changed on F5). The rejection forensic ledger (rejection 取证批)
-    rides the same row's intent — a silently-closed repair span still
-    leaves its rejected calls auditable. Called on the COMPLETED path only,
-    after the sweep, on its own session (the turn's session already closed
-    — its commit is the turn's; this row is additive history). Best-effort:
-    a log failure degrades to a warning (the pre-persistence behavior),
+    """The turn's rejection forensic ledger (rejection 取证批): ONE
+    never-rendered row, on BOTH turn outcomes (ADR-108 §5 — a failed turn's
+    rejected attempts stay auditable too). Own session (the turn's session
+    already closed), best-effort: a log failure degrades to a warning,
     never a failed turn."""
-    frames = [f.to_dict() for f in projector.settled_frames()]
     rejections = projector.rejected_calls()
-    if not frames and not rejections:
+    if not rejections:
         return
     try:
         from app.models.database import AsyncSessionLocal
 
         async with AsyncSessionLocal() as db:
-            await record_activity_log(
-                db, conversation_id, frames, ref=ref, rejections=rejections
+            await record_activity_forensics(
+                db, conversation_id, ref=ref, rejections=rejections
             )
             await db.commit()
     except Exception as e:  # noqa: BLE001 — additive history is best-effort
         logger.warning(
-            "activity_log_persist_failed",
+            "activity_forensics_persist_failed",
             conversation_id=str(conversation_id),
             error=str(e),
         )
@@ -408,6 +548,11 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
         prepared = None
         turn_user_message_id = None
         turn_conversation_id = None
+        # Persister closures are wired after prepare (the conversation id is
+        # known only then); the failure paths tolerate None (a prepare-stage
+        # rejection has nothing appended yet).
+        mirror = None
+        cancel_open = None
         try:
             async with AsyncSessionLocal() as db:
                 prepared = await prepare_chat_turn(db, user_id, data)
@@ -416,10 +561,13 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                 # after the turn's session has torn down.
                 turn_user_message_id = prepared.user_message.id
                 turn_conversation_id = prepared.conversation_id
+                append_open_read, mirror, cancel_open = _make_activity_persister(
+                    queue, projector, UUID(str(turn_conversation_id))
+                )
                 on_delta = _make_delta_hook(queue)
                 on_tool_call, on_tool_ready = _make_tool_hooks(queue, projector)
-                on_loop_event = _make_loop_event_hook(queue, projector)
-                on_activity = _make_activity_hook(queue, projector)
+                on_loop_event = _make_loop_event_hook(queue, projector, append_open_read, mirror)
+                on_activity = _make_activity_hook(queue, projector, mirror)
                 on_candidates = _make_candidates_hook(queue, candidate_events)
 
                 async def on_reasoning(_fragment: str) -> None:
@@ -462,9 +610,9 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     on_activity=on_activity,
                     on_candidates=on_candidates,
                 )
-            await _sweep_activities(queue, projector, "completed")
+            await _sweep_activities(queue, projector, "completed", mirror)
             if turn_conversation_id is not None and turn_user_message_id is not None:
-                await _persist_activity_log(
+                await _persist_activity_forensics(
                     turn_conversation_id, str(turn_user_message_id), projector
                 )
                 await _persist_candidates_log(
@@ -480,13 +628,21 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
             # persisted=False keeps the old rollback for those.
             if turn_user_message_id is not None:
                 await stamp_turn_failed(turn_user_message_id)
-            await _sweep_activities(queue, projector, "failed")
+            await _sweep_activities(queue, projector, "failed", mirror)
+            if turn_conversation_id is not None and turn_user_message_id is not None:
+                await _persist_activity_forensics(
+                    turn_conversation_id, str(turn_user_message_id), projector
+                )
             await queue.put(
                 ("failed", _failure_detail(exc, ui_language), turn_user_message_id is not None)
             )
         except BaseException:
             # Cancel (the client disconnected mid-turn): same durability
-            # stamp, then let the cancellation propagate.
+            # stamp, then let the cancellation propagate. Appended-but-open
+            # activity rows settle CANCELLED — the durable transcript never
+            # claims a read is still in flight forever (ADR-108 §5).
+            if cancel_open is not None:
+                await cancel_open()
             if turn_user_message_id is not None:
                 await stamp_turn_failed(turn_user_message_id)
             raise
@@ -519,12 +675,25 @@ async def _answer_stream(
     async def run_answer() -> None:
         from app.models.database import AsyncSessionLocal
 
+        mirror = None
+        cancel_open = None
         try:
             async with AsyncSessionLocal() as db:
+                # The answer turn's conversation resolves from the question
+                # row up front — the activity persister (ADR-108) needs it
+                # before the turn's first frame.
+                conversation_id = (
+                    await db.execute(
+                        select(Message.conversation_id).where(Message.id == message_id)
+                    )
+                ).scalar_one()
+                append_open_read, mirror, cancel_open = _make_activity_persister(
+                    queue, projector, UUID(str(conversation_id))
+                )
                 on_delta = _make_delta_hook(queue)
                 on_tool_call, on_tool_ready = _make_tool_hooks(queue, projector)
-                on_loop_event = _make_loop_event_hook(queue, projector)
-                on_activity = _make_activity_hook(queue, projector)
+                on_loop_event = _make_loop_event_hook(queue, projector, append_open_read, mirror)
+                on_activity = _make_activity_hook(queue, projector, mirror)
                 on_candidates = _make_candidates_hook(queue, candidate_events)
 
                 async def on_phase(phase: str) -> None:
@@ -545,8 +714,10 @@ async def _answer_stream(
                     on_activity=on_activity,
                     on_candidates=on_candidates,
                 )
-            await _sweep_activities(queue, projector, "completed")
-            await _persist_activity_log(message.conversation_id, str(message.id), projector)
+            await _sweep_activities(queue, projector, "completed", mirror)
+            await _persist_activity_forensics(
+                UUID(str(conversation_id)), str(message_id), projector
+            )
             await _persist_candidates_log(
                 message.conversation_id, str(message.id), candidate_events
             )
@@ -564,8 +735,14 @@ async def _answer_stream(
                 )
             )
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash
-            await _sweep_activities(queue, projector, "failed")
+            await _sweep_activities(queue, projector, "failed", mirror)
             await queue.put(("failed", _failure_detail(exc, ui_language)))
+        except BaseException:
+            # Cancel (client disconnected): appended-but-open activity rows
+            # settle CANCELLED (ADR-108 §5), then propagate.
+            if cancel_open is not None:
+                await cancel_open()
+            raise
 
     task = asyncio.create_task(run_answer())
     async for frame in _sse_pump(queue, task, "answer.completed", "answer.failed"):

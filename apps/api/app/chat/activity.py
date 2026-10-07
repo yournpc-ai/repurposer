@@ -182,6 +182,29 @@ def kind_for_tool(tool_name: str) -> str | None:
     return None
 
 
+def frame_persistence(frame: ActivityFrame) -> str | None:
+    """ADR-108 §2 — 每帧一行的持久化映射（唯一判定座，纯函数）:
+
+    - ``"append"`` — born-terminal frames land as their OWN array row at
+      emission: explore milestones (born-completed count facts) and repair
+      terminals (the visibility law's one user-relevant frame);
+    - ``"settle"`` — a READ span's terminal frame (completed / failed /
+      cancelled): the row was appended at execute entry (ReadExecuting),
+      the terminal UPDATEs it in place;
+    - ``None`` — live-only: draft/run spans (落定即退役 — the docked plan
+      card / the run receipt is their settled evidence) and the read's
+      ACTIVE frame (the row appends at ReadExecuting, never at name_known —
+      appending there would seat the row before the waiter checkpoint's).
+    """
+    if frame.kind == KIND_READ:
+        return None if frame.status == STATUS_ACTIVE else "settle"
+    if frame.kind == KIND_REPAIR and frame.status in (STATUS_COMPLETED, STATUS_FAILED):
+        return "append"
+    if frame.kind == KIND_DRAFT and frame.key in _EXPLORE_MILESTONE_KEYS:
+        return "append"
+    return None
+
+
 def all_known_tool_names() -> frozenset[str]:
     """Every name the projector can classify — the pure suite's consistency
     gate compares this against the declared tool sets (U6: reference the
@@ -574,6 +597,20 @@ class ActivityProjector:
             self._open_call = None
         return frames
 
+    def open_activity(self) -> tuple[str, str, str | None] | None:
+        """The open call's in-flight activity as (activity_id, kind, key) —
+        the row-append seat's descriptor (ADR-108 §2): the SSE route appends
+        the read span's array row at EXECUTE ENTRY (ReadExecuting), never at
+        name_known — appending at name_known would seat the row BEFORE the
+        waiter checkpoint's row and invert 服务员话 → 读活动 的数组序."""
+        if self._open_call is None:
+            return None
+        _name, activity_id = self._open_call
+        if activity_id is None or activity_id not in self._active:
+            return None
+        kind, key, _started = self._active[activity_id]
+        return (activity_id, kind, key)
+
     def has_active(self) -> bool:
         return bool(self._active)
 
@@ -608,5 +645,6 @@ __all__ = [
     "STATUS_COMPLETED",
     "STATUS_FAILED",
     "all_known_tool_names",
+    "frame_persistence",
     "kind_for_tool",
 ]

@@ -2585,58 +2585,90 @@ async def resolve_suggestion_note(
     return compose_suggestion_note(record.get("label") or "", reasons)
 
 
-# ---- Activity log persistence (2026-09-25 activity 持久化) -----------------
+# ---- Activity row persistence (ADR-108 §2/§5 — transcript 数组化) ----------
 #
-# The turn's milestone stream was MEMORY-ONLY (the dock's activities state,
-# reset per turn) — a refresh silently dropped every settled activity row
-# and the flow changed on F5. The SSE turn route now persists the
-# projector's settled frames as ONE message row per turn (same "activity
-# row = a message intent dump" shape as the material beats above). The
-# replay restores ONLY the LATEST turn's log — parity with the live law
-# (U9: the next turn's stream replaces the previous turn's rows), never
-# inventing rows the live flow didn't show.
+# 每帧一行：a persistable activity frame lands as its OWN array row —
+# appended at execute entry (read spans; the position = work start, after
+# the checkpoint seat) or at born-terminal emission (repair terminals /
+# explore milestones), then settled by an in-place UPDATE. The per-turn
+# aggregate ``activity_log`` row is RETIRED (the replay no longer
+# re-derives interleaving — array position carries it). All writes ride
+# the route's fresh short sessions, so the rows survive the turn's
+# outcome (诚实 transcript: failed/cancelled turns keep their work
+# evidence) and never touch the turn's long transaction.
+# draft/run spans still never persist (落定即退役 — the docked plan card /
+# the run receipt is their settled evidence).
 
+ACTIVITY_ROW_TYPE = "activity"
+ACTIVITY_FORENSICS_TYPE = "activity_forensics"
+# Legacy aggregate type — read only by the W5 migration script
+# (scripts/migrate_activity_log_rows.py); never written anymore.
 ACTIVITY_LOG_TYPE = "activity_log"
 
 
-async def record_activity_log(
+async def append_activity_row(
     db: AsyncSession,
     conversation_id: UUID,
-    frames: list[dict[str, Any]],
-    *,
-    ref: str,
-    rejections: list[dict[str, Any]] | None = None,
-) -> Message | None:
-    """Persist one turn's settled activity frames as a single message row
-    (once-only per ``ref`` — the opening user row's id — so a retried
-    persist collapses onto the first landed row). Called by the SSE turn
-    routes AFTER the envelope sweep, on the completed path only — a failed
-    turn persists nothing (the stamp_turn_failed doctrine's twin).
-
-    ``rejections`` (rejection 取证批): the turn's rejected tool calls as
-    plain loop facts {tool_name, kind, iteration, detail, duration_ms, at}
-    — the forensic record rides the SAME row's intent dump (never
-    rendered; the replay reads ``frames`` only), so a rejected attempt
-    stays auditable even when the repair span itself was invisible."""
-    if not frames and not rejections:
-        return None
-    dedup = select(Message.id).where(
-        Message.conversation_id == conversation_id,
-        Message.intent["type"].astext == ACTIVITY_LOG_TYPE,
-        Message.intent["ref"].astext == ref,
-    )
-    if (await db.execute(dedup.limit(1))).scalar_one_or_none() is not None:
-        return None
-    intent: dict[str, Any] = {"type": ACTIVITY_LOG_TYPE, "ref": ref, "frames": frames}
-    if rejections:
-        intent["rejections"] = rejections
+    frame: dict[str, Any],
+) -> Message:
+    """Append ONE activity row at its array position (open / born-terminal)."""
     message = Message(
         conversation_id=conversation_id,
         role="assistant",
         content="",
         attachments=[],
         mentions=[],
-        intent=intent,
+        intent={"type": ACTIVITY_ROW_TYPE, "frame": frame},
+        seq=await alloc_message_seq(conversation_id),
+    )
+    db.add(message)
+    await db.flush()
+    await db.refresh(message)
+    return message
+
+
+async def settle_activity_row(
+    db: AsyncSession,
+    message_id: UUID,
+    frame: dict[str, Any],
+) -> None:
+    """原地 update (ADR-108 §2): the SAME row's frame gains the terminal
+    status / done-key / duration_ms — the array position never moves."""
+    message = await db.get(Message, message_id)
+    if message is None:
+        return
+    message.intent = {"type": ACTIVITY_ROW_TYPE, "frame": frame}
+    await db.flush()
+
+
+async def record_activity_forensics(
+    db: AsyncSession,
+    conversation_id: UUID,
+    *,
+    ref: str,
+    rejections: list[dict[str, Any]],
+) -> Message | None:
+    """The turn's rejection forensic ledger (rejection 取证批) as ONE
+    never-rendered row (the client filters the type; W3 单路径渲染只认
+    activity 行). Once-only per ``ref`` (the opening user row's id), both
+    turn outcomes — a rejected attempt stays auditable even when the repair
+    span itself was invisible and even when the turn failed."""
+    if not rejections:
+        return None
+    dedup = select(Message.id).where(
+        Message.conversation_id == conversation_id,
+        Message.intent["type"].astext == ACTIVITY_FORENSICS_TYPE,
+        Message.intent["ref"].astext == ref,
+    )
+    if (await db.execute(dedup.limit(1))).scalar_one_or_none() is not None:
+        return None
+    message = Message(
+        conversation_id=conversation_id,
+        role="assistant",
+        content="",
+        attachments=[],
+        mentions=[],
+        intent={"type": ACTIVITY_FORENSICS_TYPE, "ref": ref, "rejections": rejections},
         seq=await alloc_message_seq(conversation_id),
     )
     db.add(message)

@@ -657,6 +657,15 @@ from app.chat.routes import (  # noqa: E402  (after the pure projector block)
 )
 
 
+async def _noop_append_open_read() -> None:
+    """The ADR-108 row-append seat stubbed out — the seam tests assert the
+    WIRE contract (assistant.activity frames), not the persistence mirror."""
+
+
+async def _noop_mirror(_frame) -> None:
+    pass
+
+
 def _wire(queue: asyncio.Queue) -> list[tuple[str, dict]]:
     """Drain the stub queue into (event, payload) pairs."""
     out = []
@@ -678,11 +687,11 @@ async def test_route_seam_rejection_then_failed_sweep():
     event with the exact whitelist payload."""
     queue: asyncio.Queue = asyncio.Queue()
     p = ActivityProjector()
-    hook = _make_loop_event_hook(queue, p)
+    hook = _make_loop_event_hook(queue, p, _noop_append_open_read, _noop_mirror)
     for f in p.name_known("present_plan"):
         await queue.put(_activity_frame(f))
     await hook(ToolRejected(kind="params_validation", tool_name="present_plan", iteration=0, detail="bad", duration_ms=0))
-    await _sweep_activities(queue, p, "failed")
+    await _sweep_activities(queue, p, "failed", _noop_mirror)
     wire = _wire(queue)
     assert all(event == "assistant.activity" for event, _ in wire)
     assert [
@@ -708,11 +717,11 @@ async def test_route_seam_completed_sweep_settles_every_active():
     the final form) — zero dangling, zero repair frames."""
     queue: asyncio.Queue = asyncio.Queue()
     p = ActivityProjector()
-    hook = _make_loop_event_hook(queue, p)
+    hook = _make_loop_event_hook(queue, p, _noop_append_open_read, _noop_mirror)
     await hook(ToolRejected(kind="schema_truncation", tool_name=None, iteration=0, detail="eof", duration_ms=0))
     for f in p.name_known("search_music"):
         await queue.put(_activity_frame(f))
-    await _sweep_activities(queue, p, "completed")
+    await _sweep_activities(queue, p, "completed", _noop_mirror)
     wire = _wire(queue)
     assert [
         (d["activity_id"], d["kind"], d["status"], d["key"]) for _, d in wire
@@ -858,3 +867,50 @@ def test_repair_copy_keys_carry_no_self_confession():
             assert not banned.search(m.group(1)), (
                 f"{locale}.ts chat.activity.{key} still confesses: {m.group(1)!r}"
             )
+
+
+# ---- ADR-108 §2: frame_persistence 唯一判定座 --------------------------------
+
+
+def test_frame_persistence_mapping():
+    """每帧一行的映射表：read 终态 → settle（行在 execute 入口已 append）；
+    born-terminal（explore milestone / repair 终态）→ append；
+    draft/run 跨度与 read active 帧 → None（live-only：落定即退役 /
+    行座位在 ReadExecuting 而非 name_known）。"""
+    from app.chat.activity import frame_persistence
+    from app.chat.activity import ActivityFrame as F
+
+    def fr(kind, status, key="k"):
+        return F(activity_id="a1", seq=1, kind=kind, status=status, key=key, at="t")
+
+    # read spans
+    assert frame_persistence(fr("read", STATUS_ACTIVE)) is None
+    assert frame_persistence(fr("read", STATUS_COMPLETED)) == "settle"
+    assert frame_persistence(fr("read", STATUS_FAILED)) == "settle"
+    assert frame_persistence(fr("read", STATUS_CANCELLED)) == "settle"
+    # born-terminal appends
+    assert frame_persistence(fr("draft", STATUS_COMPLETED, "chat.explore.candidatesReady")) == "append"
+    assert frame_persistence(fr("repair", STATUS_COMPLETED, REPAIR_DONE)) == "append"
+    assert frame_persistence(fr("repair", STATUS_FAILED, REPAIR)) == "append"
+    # live-only
+    assert frame_persistence(fr("draft", STATUS_ACTIVE, DRAFT)) is None
+    assert frame_persistence(fr("draft", STATUS_COMPLETED, DRAFT_DONE)) is None
+    assert frame_persistence(fr("run", STATUS_ACTIVE, "chat.activity.run")) is None
+    assert frame_persistence(fr("repair", STATUS_ACTIVE, REPAIR)) is None
+
+
+def test_open_activity_descriptor_tracks_the_call_slot():
+    """open_activity（row-append 座的描述符）: 跟随 open call slot——
+    name_known 开 read 后在位，settle 后空；无 activity 的工具（ask_user）
+    与空槽都是 None。"""
+    p = ActivityProjector()
+    assert p.open_activity() is None
+    p.name_known("search_music")
+    desc = p.open_activity()
+    assert desc is not None
+    activity_id, kind, key = desc
+    assert kind == "read" and key == MUSIC
+    p.feed_event(ReadAccepted(tool_name="search_music", ok=True))
+    assert p.open_activity() is None
+    p.name_known("ask_user")  # conversation-layer: no activity
+    assert p.open_activity() is None
