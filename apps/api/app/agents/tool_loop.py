@@ -90,18 +90,12 @@ class ChatTool:
     call (``start_run``). ``terminal``: a terminal tool's accepted call ends
     the turn (终态工具一调即停); a non-terminal tool (the perception family's
     reads) returns a ``ToolObservation`` and the loop iterates.
-    ``checkpoint_eligible`` (ADR-085 判词 3): the read's result MAY earn a
-    user-facing checkpoint — the registry declares ELIGIBILITY, never a
-    trigger; whether the next iteration's prose actually rides the
-    checkpoint channel is the loop's routing (earned, capped, never the
-    ledger). Terminal tools never carry it.
     """
 
     name: str
     description: str
     params_model: type[BaseModel] | None
     terminal: bool = True
-    checkpoint_eligible: bool = False
 
 
 def tool_spec(tool: ChatTool) -> dict:
@@ -124,7 +118,7 @@ def tool_spec(tool: ChatTool) -> dict:
 
 # 言语账本 (T2b) 见 ``call_loop``; ADR-085 的 checkpoint 通道与其分家——
 # checkpoint 散文永不入账本。
-MAX_CHECKPOINTS_PER_TURN = 2
+MAX_CHECKPOINTS_PER_TURN = 4  # ADR-109 §2: 节奏护栏（防逐调用啰嗦），非资格限制
 
 
 @dataclass
@@ -388,18 +382,18 @@ class ToolLoopAgent:
           System Status label rides this hook). Fires
           with the read tool's name, once per accepted read; never for a
           rejection (that has ``on_repair``).
-        - ``on_checkpoint``: a CHECKPOINT was delivered (ADR-085 判词 2/5) —
-          the prose riding a READ call when it has something to stand on
-          (it follows an eligible read, or at iteration 0 precedes one).
-          Emitted BEFORE the read executes (发射座前移, ADR-104 发射时点
-          修订): the read was accepted at params validation, and a waiting
-          read (ADR-102) would otherwise hold the speech hostage for the
-          whole wait. Quiet iterations never stream — the frontend paces
-          the full text out under the typewriter law. Checkpoint speech
-          rides its own channel: it never enters ``speech_parts``, so the
-          settled reply must stand alone. Fires at most
-          ``MAX_CHECKPOINTS_PER_TURN`` times per turn; beyond the cap the
-          prose is dropped with a log (earned, never scheduled — a
+        - ``on_checkpoint``: a CHECKPOINT was delivered (ADR-109 言语座位
+          通用化) — the prose riding ANY non-terminal call (before/after
+          are the same seat: an after-report is the next iteration's prose
+          meeting the same before-seat). Emitted BEFORE the call executes
+          (发射座前移, ADR-104 发射时点修订): the call was accepted at
+          params validation, and a waiting read (ADR-102) would otherwise
+          hold the speech hostage for the whole wait. Quiet iterations
+          never stream — the frontend paces the full text out under the
+          typewriter law. Checkpoint speech rides its own channel: it
+          never enters ``speech_parts``, so the settled reply must stand
+          alone. Fires at most ``MAX_CHECKPOINTS_PER_TURN`` times per turn;
+          beyond the cap the prose is dropped with a log (节奏护栏 — a
           breaching model loses the channel, it does not overflow it).
           None (the one-shot JSON path) keeps the ledger behavior — the
           prose composes into the envelope as before.
@@ -442,26 +436,20 @@ class ToolLoopAgent:
         # the LoopResult both carry the composed whole). A rejected call's
         # speech is replaced speech and never enters the parts.
         speech_parts: list[str] = []
-        # Checkpoint channel state (ADR-085 判词 2/5): ``last_read_eligible``
-        # remembers whether the PREVIOUS accepted read's result may earn a
-        # user-facing checkpoint (registry-declared eligibility — the prose
-        # of THIS iteration reports on THAT observation, so eligibility is a
-        # property of the predecessor read, never of the call it precedes).
-        # ``checkpoints_sent`` is the per-turn cap counter (≤2, earned).
-        # ``last_read_name`` rides for the hit-rate log (评审 2026-09-17:
-        # whether the earned condition fires on the MAIN path — e.g.
-        # get_understanding → present_plan carries no checkpoint — is an
-        # observed fact, never an assumption).
-        last_read_eligible = False
+        # Checkpoint channel state (ADR-109 — 言语座位通用化): the seat is
+        # UNIVERSAL — prose riding any non-terminal call checkpoints, no
+        # registry eligibility (白名单退役: the model's speech instinct is
+        # the judge; the harness's job is to provide the seat, not to
+        # license it per tool). ``checkpoints_sent`` is the per-turn
+        # anti-chatter cap (≤4 — a RHYTHM guardrail, never a license).
+        # ``last_read_name`` rides for the hit-rate log (评审 2026-09-17).
         last_read_name: str | None = None
         checkpoints_sent = 0
         # Turn-summary observability (ADR-085 评审 2026-09-17 — 「不需要
-        # dashboard，日志里能查就够」): ONE line per turn answers the three
-        # hit-rate questions — eligible-read share / eligible→checkpoint
-        # conversion / checkpoint→settled — and, over real traffic, WHICH
-        # eligible reads actually earn checkpoints (the registry's future
-        # evidence base). Per-read logging stays out on purpose.
-        accepted_reads: list[tuple[str, bool]] = []
+        # dashboard，日志里能查就够」): ONE line per turn answers the
+        # hit-rate questions — reads × checkpoints conversion (ADR-109:
+        # the eligible axis retired with the whitelist).
+        accepted_reads: list[str] = []
 
         def _finish(result: LoopResult) -> LoopResult:
             logger.info(
@@ -473,8 +461,7 @@ class ToolLoopAgent:
                     else result.tool_name or "bare_reply"
                 ),
                 iterations=result.iterations,
-                reads=[name for name, _ in accepted_reads],
-                eligible_reads=sum(1 for _, eligible in accepted_reads if eligible),
+                reads=accepted_reads,
                 checkpoints=checkpoints_sent,
             )
             return result
@@ -686,26 +673,22 @@ class ToolLoopAgent:
             # read's activity by birth moment. Emitted here, the speech lands
             # before the wait begins and the activity sorts BETWEEN the two
             # speeches.
-            #   The ONE routing rule (ADR-085 判词 5), unchanged: prose
-            #   before a TERMINAL call is settled speech (the ledger — the
+            #   The ONE routing rule (ADR-109 — 言语座位通用化): prose before
+            #   a TERMINAL call is settled speech (the ledger — the
             #   ``not tool.terminal`` guard is what keeps the reply itself
-            #   off the checkpoint channel); prose riding a READ is a
-            #   CHECKPOINT when it has something to stand on — it follows an
-            #   eligible read (ADR-085) or, at iteration 0, it precedes an
-            #   eligible read (ADR-104: glued into the ledger it would prefix
-            #   the final reply with a stale「我先看一下」). It rides
-            #   on_checkpoint, never the ledger. Without an on_checkpoint
-            #   channel (the one-shot JSON path) the ledger keeps
-            #   everything; capped prose is dropped (earned, never
+            #   off the checkpoint channel); prose riding ANY non-terminal
+            #   call is a CHECKPOINT — the seat is universal (白名单退役:
+            #   per-tool eligibility asked the registry to license speech;
+            #   the model's phase-narration instinct is the judge, the
+            #   harness provides the seat, the cap guards the rhythm).
+            #   It rides on_checkpoint, never the ledger. Without an
+            #   on_checkpoint channel (the one-shot JSON path) the ledger
+            #   keeps everything; capped prose is dropped (earned, never
             #   scheduled — never merged back).
             checkpoint_route = (
                 not tool.terminal
                 and bool(prose.strip())
                 and on_checkpoint is not None
-                and (
-                    (iteration > 0 and last_read_eligible)
-                    or (iteration == 0 and tool.checkpoint_eligible)
-                )
             )
             if checkpoint_route and checkpoints_sent < MAX_CHECKPOINTS_PER_TURN:
                 await _emit(on_checkpoint, prose.strip())
@@ -756,10 +739,9 @@ class ToolLoopAgent:
                 # A read accepted (T2b 感知族): the iteration's speech was
                 # already routed pre-execution (the seat above); what remains
                 # is the wire continuation — this read becomes the LAST read
-                # for the next iteration's routing.
-                last_read_eligible = tool.checkpoint_eligible
+                # for the hit-rate log's predecessor field.
                 last_read_name = call.name
-                accepted_reads.append((call.name, tool.checkpoint_eligible))
+                accepted_reads.append(call.name)
                 call_id = call.id or f"call_{iteration}"
                 observation_tail.append(
                     {
