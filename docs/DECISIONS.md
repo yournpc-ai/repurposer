@@ -2655,3 +2655,41 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 **Consequences**: 确认前画布永远干净（只有对话）；「loading 味」幽灵矩形、draft 链相机 fit、41% 缩放空画布三个症状同源消失。代价：v4.2 的「draft 图上画布检视」投资退役——计划检视职责完全归 dock 确认卡 / 计划面板（本就承载产物清单 + 估价 + 逐项查看）。回归面：新建项目 → 上传 → dock 出方案，画布不可见；确认开工 → 画布淡入且节点在位；刷新后形态一致。
 
 **Related**: ADR-051（画布优先——预确认期例外由本条收窄为「首个 run 后才优先」）/ ADR-057（K3 直读、K5 翻转条件的历史链：hasRuns || isPlanReady → workspaceBorn → hasRuns）/ ADR-036（诞生编舞——reveal 帧一次性呈现已诞生节点）
+
+## ADR-108: Transcript 数组化——持久化顺序即渲染顺序，运行时交织计算整层退役
+
+**Status**: Decided (2026-10-07)
+
+**Context**: live 取证（项目 3e333147，2026-10-07）：① 素材理解回合的【已完成理解】活动行在下一回合开始后从消息流消失——根因是三处补丁的合力：回放只演最新一个回合的 activity_log（last-wins）、`logDismissed` 单向闩（发出新消息即剔除旧 log）、每回合投影器 activity_id 从 a1 重新计数导致新帧 upsert 覆盖旧行；② 开工句散文排在全部活动行之后——落库 created_at = settle 时刻，与活动帧 walk key（settle_at − duration_ms）混排时结构性落后，finalizePreview 的服务端钟重锚还会把流式期间在上方的气泡跳到下方。现状 transcript 落库的也是行，但渲染时不用落库顺序，而用四处运行时补丁重算交织（walk key 重锚 / last-wins 回放 / logDismissed 闩 / once-only per ref 去重）——每处都是为修某个具体 bug 打的补丁，补丁咬合产生新 bug 类。凡是要「算」出来的顺序，就一定有算错的那天。行业对标：Claude Code / Codex 的会话 = append-only 类型化对象数组（user / assistant text 块 / tool_use / tool_result 按发生顺序交织落盘），渲染 = 按数组顺序重放，零运行时重排。用户拍板：直接存取，一步到位。
+
+**Decision**:
+
+1. **会话级单调 `seq`**：`messages` 表加 per-conversation 单调序号，写口单写者（chat 回合本有序列化）。**渲染序 = seq 序**；时间戳只用于显示（耗时、时刻），永不参与排序。
+2. **一切可视元素 = 数组一行**：user / assistant 散文 / checkpoint / **activity（每帧一行）** / candidates / question dock。activity 行在 **open 时刻 append**（`at` = execute 入口，诚实开工时刻），settle/failed/cancelled **原地 update 同一行**（填 `duration_ms` 与终态）——行位置 = 工作开始的位置，正是 walk key 想模拟而模拟不好的东西。每回合聚合的 activity_log 消息形态退役（渲染面整删；取证由 activity 行自身承担）。
+3. **SSE 镜像数组操作**：`row.append` / `row.update` / `row.delta`（散文增量）/ `row.settle`。live 消费与历史回放**共用同一 reducer 同一渲染函数**——回放 = `ORDER BY seq` 直渲，双路径不一致这一整类 bug 灭种。
+4. **退役清单**：walk key（`settle_at − duration_ms` 推导）、last-wins latestLog 回放、`logDismissed` 闩、once-only per ref 去重、finalizePreview 服务端钟重锚跳位。散文气泡行在首 delta 到达时 append（内容空、delta 流 update、settle 原地 finalize），位置从此固定。
+5. **失败/中止回合的行照常落库**（failed/cancelled 态随行进 transcript）——诚实 transcript；回合失败不再抹掉工作证据。
+6. **折叠渲染 = 呈现层纯函数**：连续同 kind completed activity 行折叠为一行「已检索转写 ×7 · 共 36s」，可展开明细；瞬态「正在做什么」仍归 StatusLine 一座两行（既有律不动）。折叠只动渲染，不动数组。
+7. **迁移**：一次性脚本把存量 activity_log 帧按帧时刻物化为行序插 seq；物化不了的旧回合接受活动行缺失（greenfield 验收口径先例），散文/checkpoint 行按 created_at 回填 seq。
+
+**Consequences**: 【已完成理解】消失类、顺序跳位类、live/回放不一致类 bug 结构性不可能再发生——它们要解决的问题不再存在。打字机律两牙不动（散文字段读容忍 + settle 散文 drain 节拍释放：零 delta 回合的散文行 append 时点 = 信封到达后，内容照节拍放出，位置不受影响）。DB 写入次数略增（activity 每行 open+settle 两写）量级可忽略。ADR-104 §5 排序律的机制（walk key 重锚）翻案退役，其目标（确定性时序：服务员话 → 读活动 → 读后回复）由数组位置天然达成。
+
+**Related**: ADR-104（§5 排序律机制翻案，checkpoint 发射座时点不动）/ ADR-099 §7（言语提交协议不动——DeferredFrames 管 delta 扣押与撤回，数组化管落库与渲染序，两层正交）/ ADR-105（画布可见性不动）/ ADR-085 需求池收口规则③（checkpoint「回合失败随事务回滚」翻案——数组化后失败/中止回合的行照常落库，诚实 transcript）/ ADR-109（言语座位通用化——checkpoint 行作为数组一等行，时序由 seq 承载）
+
+## ADR-109: 言语座位通用化——checkpoint 白名单退役，before/after 一座两用 + echo 可见性戒律
+
+**Status**: Decided (2026-10-07)
+
+**Context**: 同一取证（项目 3e333147）：用户问「剪哪一句」后，iteration 0 模型说了开工句并调 present_plan，因 `tasks.1.params` 给了空字符串触发 schema 拒收（96.7s 白跑），按言语提交协议 delta 缓冲整体 retract、散文蒸发；iteration 1 起静默，模型重说开工句骑在首次 `search_transcript` 上，但 checkpoint 资格白名单只覆盖 `get_understanding`/`get_asset` 两席（ADR-104），开工句无早发射座，只能沉淀账本随 settle 落库——用户看到一长串「已检索转写 ×7」之后开工句才出现，紧跟着「我推荐剪这句」，顺序颠倒。模型的相位叙事本能天生就在（话已经说了），是 harness 把话扣下。同回合另两起言语越界：dock 后 echo 说「完整计划已经放在工作空间」——此刻零 confirmed run，画布按 ADR-105 不可见，言语指向了用户看不见的面；「原来的长文和金句卡保留」复述计划组成——计划卡枚举自证，散文越界干了卡面的活。用户拍板：工具应有 before/after 通用生命周期，挂在 loop 内核公共座上，不许各工具自写。
+
+**Decision**:
+
+1. **checkpoint 座位通用化**：`checkpoint_route` 删资格白名单——**任何非终态工具调用，模型自带散文且参数校验通过，即在校验后、execute 前发射 checkpoint**（独立消息行 + SSE 帧 + 落库时钟）。`checkpoint_eligible` 注册表键退役；发射座时点（校验后 execute 前）与 ADR-104 的撤回窗论证不变。终态工具散文留账本随 settle 的守卫不动。before/after 一座两用：「after 汇报」= 下一迭代的散文撞上同一 before 座位（上一动作之后 = 下一动作之前，时间轴上同一点），不设独立 after 钩子。
+2. **节奏护栏**：`MAX_CHECKPOINTS_PER_TURN` 保留但从「资格限制」重新定性为「防啰嗦上限」，默认 2 放宽到 4，凭 `tool_loop_checkpoint` 日志与答复质量尺观测再校——逐调用汇报永禁（prompt 律管），座位供给不设资格。
+3. **相位叙事律（prompt 面）**：模型在相位转换时说话——读前预期句（「先去稿子里把高亮句定位出来」）、读后小结句（「找到 3 处候选，第二处最干净」）；逐调用旁白禁。歧义消息（「聊聊」vs「开工」之间）起始句先承诺模式（「这个我先查清楚再说 / 这个我直接出方案」），无歧义时零宣告律（ADR-103）原样压着。
+4. **echo 可见性戒律（prompt 面）**：docked 计划的 echo 收尾**禁指用户当前不可见的面**——无 confirmed run 时永不提「工作空间 / 画布」，计划的检阅面 = 对话流里的 dock 卡本身；**禁复述计划组成**（「原来的长文和金句卡保留」式旁白整类删除，卡面枚举即世界自证，ADR-058）；口头确认律（ADR-092）的朴素收尾问句不动。本条 = echo 防编造律（ADR-060）从「场所来源」轴扩到「场所可见性」轴。
+5. **计划参数读容忍**：`PresentPlanArgs.tasks[].params` 空字符串读容忍（`''` → `{}` 归一后再校验）——打字机律①号牙（schema 读容忍）从散文字段扩到计划参数字段；消除整类「被拒迭代 = 白跑 + 流式蒸发」事故。
+
+**Consequences**: 顺序错乱类根治——开工句/相位句成为数组一等行（ADR-108），落库时刻恒早于其后续读行；iteration ≥1 不流式的规则不变（言语出站仍只有两座：checkpoint 帧 + settle envelope），变的是 checkpoint 座位的准入从白名单变成普适。第一回合「收到视频了…」顺序正确与第二回合顺序错乱的双胞胎差异（同通道、资格有无）从此消失。schema 拒收白跑类削减（96.7s 级事故失去触发点）。需求池「一回合多交付（ADR-085 checkpoint 通道）」行被本条吸收——命中率验证义务与四条收口规则随批继承（资格纪律一条作废，座位已普适）。
+
+**Related**: ADR-104（checkpoint 资格白名单翻案；发射座时点 /  retract 安全网 / settle 自洽守卫全部保留）/ ADR-093（起始句 = LLM 言语——同律延伸到回合中相位句）/ ADR-060（echo 防编造扩轴）/ ADR-058（计划组成归卡面自证）/ ADR-092 / ADR-103 / ADR-105（画布不可见期间言语禁指——戒律的事实前提）/ ADR-108（checkpoint 行的时序承载）
