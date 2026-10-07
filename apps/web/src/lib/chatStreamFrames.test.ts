@@ -58,6 +58,39 @@ describe("activity channel", () => {
   })
 })
 
+describe("transcript array mirror (ADR-108 §3)", () => {
+  it("assistant.row.append → the row payload (append fixes the position)", () => {
+    const row = {
+      id: "row-1",
+      role: "assistant",
+      content: "",
+      seq: 7,
+      intent: { type: "activity", frame: { activity_id: "a1", kind: "read", status: "active", key: "chat.inspecting.transcript" } },
+      created_at: "2026-10-07T10:00:00Z",
+    }
+    expect(
+      routeStreamFrame("assistant.row.append", JSON.stringify({ row }), CHAT_TERMINAL),
+    ).toEqual({ kind: "row_append", row })
+  })
+
+  it("assistant.row.update → id + the settled frame (in-place, position never moves)", () => {
+    const frame = {
+      activity_id: "a1",
+      kind: "read",
+      status: "completed",
+      key: "chat.inspectingDone.transcript",
+      duration_ms: 820,
+    }
+    expect(
+      routeStreamFrame(
+        "assistant.row.update",
+        JSON.stringify({ id: "row-1", frame }),
+        CHAT_TERMINAL,
+      ),
+    ).toEqual({ kind: "row_update", id: "row-1", frame })
+  })
+})
+
 describe("terminal pair", () => {
   it("the terminal names come from the turn, never hardcoded", () => {
     expect(routeStreamFrame("turn.completed", `{"ok":1}`, CHAT_TERMINAL))

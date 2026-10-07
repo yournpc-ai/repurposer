@@ -94,6 +94,29 @@ export type CandidateEventPayload =
 /** One routed stream frame — the onmessage dispatch's discriminated
  * output. `envelope`/`detail` stay `unknown`: the caller owns the envelope
  * type (the two surfaces type it differently). */
+/** The transcript array's SSE mirror (ADR-108 §3): ``assistant.row.append``
+ * fixes a row's position in the array, ``assistant.row.update`` mutates it
+ * in place — the live reducer and the history replay eat the SAME semantics
+ * (persisted order IS render order). The append payload mirrors
+ * ChatMessageResponse; today only activity rows ride this channel. */
+export interface RowAppendPayload {
+  id: string
+  role: "user" | "assistant"
+  content: string
+  seq?: number | null
+  /** The row's intent dump — activity rows carry {type:"activity", frame}. */
+  intent?: unknown
+  created_at?: string | null
+}
+
+/** The persisted activity row's frame shape (the ``intent.frame`` dump):
+ * the wire ``ActivityFramePayload`` minus its live-channel bookkeeping
+ * (`seq` — the array position already carries order), plus the settle
+ * merge's stamps. */
+export type ActivityRowFramePayload = Omit<ActivityFramePayload, "seq"> & {
+  seq?: number
+}
+
 export type RoutedStreamFrame =
   | { kind: "delta"; text: string }
   | { kind: "thinking"; payload: ThinkingPayload }
@@ -101,6 +124,8 @@ export type RoutedStreamFrame =
   | { kind: "candidates"; event: CandidateEventPayload }
   | { kind: "checkpoint"; text: string; at?: string }
   | { kind: "activity"; frame: ActivityFramePayload }
+  | { kind: "row_append"; row: RowAppendPayload }
+  | { kind: "row_update"; id: string; frame: ActivityRowFramePayload }
   | { kind: "completed"; envelope: unknown }
   | { kind: "failed"; detail: unknown; persisted: boolean }
   | { kind: "ignored" }
@@ -142,6 +167,14 @@ export function routeStreamFrame(
   }
   if (event === "assistant.activity") {
     return { kind: "activity", frame: JSON.parse(data) as ActivityFramePayload }
+  }
+  if (event === "assistant.row.append") {
+    const parsed = JSON.parse(data) as { row: RowAppendPayload }
+    return { kind: "row_append", row: parsed.row }
+  }
+  if (event === "assistant.row.update") {
+    const parsed = JSON.parse(data) as { id: string; frame: ActivityRowFramePayload }
+    return { kind: "row_update", id: parsed.id, frame: parsed.frame }
   }
   if (event === terminal.completed) {
     return { kind: "completed", envelope: JSON.parse(data) }

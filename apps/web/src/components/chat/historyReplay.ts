@@ -16,9 +16,20 @@ import {
   answeredQuestionText,
   type QuestionAnswer,
 } from "./AnsweredQuestion"
-import { walkAtFor } from "./activityReducer"
 import type { ActivityFramePayload } from "@/lib/chat-stream"
 import type { CandidateMemberPayload } from "@/lib/chatStreamFrames"
+
+/** One persisted activity row's render frame (ADR-108 数组行): the
+ * transcript array's activity entries — per-frame rows written at
+ * open/settle (intent.type === "activity") and the born-settled material
+ * beats (intent.type === "material_beat") share this shape. Array position
+ * IS the order, so the live-channel `seq` bookkeeping is optional here;
+ * `name`/`total` ride the beats' interpolation fields. */
+export type ActivityRowFrame = Omit<ActivityFramePayload, "seq"> & {
+  seq?: number
+  name?: string
+  total?: number
+}
 
 /** One message row in the dock's flow (live-pushed or replayed). */
 export interface OverlayMessage {
@@ -58,16 +69,12 @@ export interface OverlayMessage {
    * instead and this stays undefined/empty. Set only after the row's prose
    * has drained (散文永远在先、提问随后). */
   suggestions?: SuggestionPill[]
-  /** 素材节拍回放 (2026-09-24 素材节拍入库): a persisted material-beat row
-   * (intent.type === "material_beat") replays as a SETTLED activity row,
-   * never a bubble — the dock splits it out of the message stream into the
-   * activity stream (the settled gray "已读完 X" survives a refresh). */
-  beat?: MaterialBeatRow
-  /** activity 持久化回放 (2026-09-25): a persisted turn's settled milestone
-   * frames (intent.type === "activity_log"). The dock merges ONLY the
-   * LATEST turn's frames into the activity stream — parity with the live
-   * law (U9: a new turn's stream replaces the previous turn's rows). */
-  milestones?: ActivityFramePayload[]
+  /** 素材节拍 + activity 数组行回放 (ADR-108): a persisted activity entry
+   * replays as a SETTLED (or honestly open) activity row IN ITS ARRAY
+   * POSITION — never a bubble, never re-sorted. Two intent shapes share the
+   * field: {type:"material_beat", …} (the pipeline's reading/understanding
+   * beats) and {type:"activity", frame} (the turn's per-frame rows). */
+  activity?: ActivityRowFrame
   /** Candidate Surface (Workspace 合同 v4.2 C8-c): the replayed (or live)
    * candidate card — the set's members + the CURRENT selection highlight
    * (folded from every selection event up to this point). The card renders
@@ -131,58 +138,55 @@ export function triggerName(intent: unknown): string | undefined {
   return typeof data.trigger === "string" ? data.trigger : undefined
 }
 
-/** A persisted turn's settled activity frames (2026-09-25 activity 持久化):
- * the SSE turn route stores the projector's settled_frames() as ONE message
- * row per turn ({type:"activity_log", ref, frames:[…]}). The replay
- * restores ONLY the LATEST turn's log — parity with the live law (U9: the
- * next turn's stream replaces the previous turn's rows), never rows the
- * live flow didn't show. Read tolerance: any off-shape frame drops the
- * whole dump to undefined (a plain assistant row), never a crash. */
-export function activityLog(intent: unknown): ActivityFramePayload[] | undefined {
+/** A persisted activity array row (ADR-108 §2 — 每帧一行): intent =
+ * {type:"activity", frame}. The frame is the server's open/settle dump —
+ * its `at` is the birth stamp (execute entry for a read span), a settle
+ * merge adds the terminal status / past-tense key / duration_ms IN PLACE.
+ * Read tolerance: an off-shape frame parses to undefined and the ROW is
+ * skipped by the caller (a malformed activity entry never becomes an empty
+ * bubble). */
+export function activityRowFrame(intent: unknown): ActivityRowFrame | undefined {
   const data = (intent ?? {}) as Record<string, unknown>
-  if (data.type !== "activity_log") return undefined
-  const raw = Array.isArray(data.frames) ? data.frames : null
-  if (raw === null) return undefined
+  if (data.type !== "activity") return undefined
+  const d = (data.frame ?? {}) as Record<string, unknown>
   const KINDS = new Set(["read", "draft", "run", "repair"])
-  const STATUSES = new Set(["completed", "failed", "cancelled"])
-  const frames: ActivityFramePayload[] = []
-  for (const f of raw) {
-    const d = (f ?? {}) as Record<string, unknown>
-    if (
-      typeof d.activity_id !== "string" ||
-      typeof d.seq !== "number" ||
-      typeof d.kind !== "string" ||
-      !KINDS.has(d.kind) ||
-      typeof d.status !== "string" ||
-      !STATUSES.has(d.status) // settled only — an active frame never persists
-    ) {
-      return undefined
-    }
-    const frame = {
-      activity_id: d.activity_id,
-      seq: d.seq,
-      kind: d.kind as ActivityFramePayload["kind"],
-      status: d.status as ActivityFramePayload["status"],
-      key: typeof d.key === "string" ? d.key : null,
-      at: typeof d.at === "string" ? d.at : undefined,
-      count: typeof d.count === "number" ? d.count : undefined,
-      duration_ms: typeof d.duration_ms === "number" ? d.duration_ms : undefined,
-    } as ActivityFramePayload
-    // The persisted `at` is the frame's SETTLE time; the walk key is the
-    // true work start (ADR-104 排序律 — the same derivation the live
-    // reducer applies at the settle frame, so refresh and live agree).
-    frames.push({ ...frame, at: walkAtFor(frame) ?? frame.at })
+  const STATUSES = new Set(["active", "completed", "failed", "cancelled"])
+  if (
+    typeof d.activity_id !== "string" ||
+    typeof d.kind !== "string" ||
+    !KINDS.has(d.kind) ||
+    typeof d.status !== "string" ||
+    !STATUSES.has(d.status)
+  ) {
+    return undefined
   }
-  return frames
+  return {
+    activity_id: d.activity_id,
+    kind: d.kind as ActivityRowFrame["kind"],
+    status: d.status as ActivityRowFrame["status"],
+    key: typeof d.key === "string" ? d.key : null,
+    at: typeof d.at === "string" ? d.at : undefined,
+    count: typeof d.count === "number" ? d.count : undefined,
+    duration_ms: typeof d.duration_ms === "number" ? d.duration_ms : undefined,
+  }
+}
+
+/** Intent types that never render (ADR-108 greenfield 口径):
+ * ``activity_forensics`` rows are the server-side rejection ledger (audit
+ * only); legacy ``activity_log`` aggregate rows were materialized into
+ * per-frame rows by the W5 migration — an unmigrated leftover accepts the
+ * loss rather than rendering an empty bubble. */
+const NON_RENDER_INTENT_TYPES = new Set(["activity_forensics", "activity_log"])
+
+export function isNonRenderIntent(intent: unknown): boolean {
+  const data = (intent ?? {}) as Record<string, unknown>
+  return typeof data.type === "string" && NON_RENDER_INTENT_TYPES.has(data.type)
 }
 
 /** A persisted material beat replayed as an activity row (2026-09-24
  * 素材节拍入库): wire-frame shape plus the beat's own interpolation fields
  * (the file's `name`, the batch progress `total` for the "N/M" label). */
-export type MaterialBeatRow = ActivityFramePayload & {
-  name?: string
-  total?: number
-}
+type MaterialBeatRow = ActivityRowFrame
 
 /** The material-beat dump on a message row's intent column ({type:
  * "material_beat", beat, status, name?, count?, total?, ref?, duration_ms?})
@@ -582,9 +586,11 @@ export function mapHistoryRows(
         }
       }
     } else {
+      // 永不渲染行 (ADR-108): the rejection forensics ledger and legacy
+      // aggregate logs skip silently — never an empty bubble.
+      if (isNonRenderIntent(m.intent)) continue
       // 素材节拍回放 (2026-09-24): a persisted beat row replays as a
-      // settled activity unit, never a bubble — the dock splits it out of
-      // the message stream (flowMessages / replayedBeats).
+      // settled activity unit IN ITS ARRAY POSITION, never a bubble.
       const beat = materialBeat(m.intent)
       if (beat !== undefined) {
         history.push({
@@ -592,22 +598,27 @@ export function mapHistoryRows(
           role: "assistant",
           content: "",
           at: m.created_at,
-          beat: { ...beat, at: m.created_at },
+          activity: { ...beat, at: beat.at ?? m.created_at },
         })
         continue
       }
-      // activity 持久化回放 (2026-09-25): a turn's settled milestone log
-      // rides as one row's payload — the dock merges the LATEST turn's
-      // frames into the activity stream (U9 parity), never a bubble.
-      const log = activityLog(m.intent)
-      if (log !== undefined) {
+      // activity 数组行回放 (ADR-108 — 每帧一行): one persisted frame per
+      // row, rendered at its array position (persisted order IS render
+      // order — the walk never re-sorts).
+      const frame = activityRowFrame(m.intent)
+      if (frame !== undefined) {
         history.push({
           id: m.id,
           role: "assistant",
           content: "",
           at: m.created_at,
-          milestones: log,
+          activity: frame,
         })
+        continue
+      }
+      // A malformed activity row (frame off-shape) skips — never an empty
+      // bubble.
+      if (((m.intent ?? {}) as Record<string, unknown>).type === "activity") {
         continue
       }
       // Candidate Surface 回放 (v4.2 C8-c): the turn's candidates_log events

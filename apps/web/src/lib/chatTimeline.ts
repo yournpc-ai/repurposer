@@ -1,93 +1,107 @@
-/** The shared moment-ordering layer (iter-3 S7, E7): the runStreamUnits
- * ordering law generalized to EVERY mixed timeline — messages × activity
- * rows sort by real moments into one walk, on and off a run. Pure, no React
+/** The conversation timeline layer (ADR-108 数组位置律): the persisted
+ * array's order IS the render order — this module MAPS rows to units and
+ * never re-sorts (no timestamps, no walk keys, no anchors). Pure, no React
  * (the vitest seam); ChatDock composes the units, this module owns the
- * ORDER (the stream never scrambles — #5 时序拍板's non-run twin). */
+ * SHAPE (message vs activity vs fold) and the folding projection. */
 
-import type { ActivityFramePayload } from "@/lib/chatStreamFrames"
-import type { OverlayMessage } from "@/components/chat/historyReplay"
+import type { ActivityRowFrame, OverlayMessage } from "@/components/chat/historyReplay"
 
-/** One timed entry: `t` is epoch ms (Number.POSITIVE_INFINITY = undated —
- * an optimistic send / a pre-S7 frame is chronologically NOW and lands at
- * the end of the dated walk); `order` is the emission sequence, the stable
- * tiebreak that keeps same-moment entries in arrival order. */
-export interface MomentEntry<U> {
-  t: number
-  order: number
-  unit: U
-}
-
-/** ISO → epoch ms; missing/unparseable = undated (+∞), never a guess. */
-export function momentOf(iso: string | null | undefined): number {
-  const t = iso ? Date.parse(iso) : NaN
-  return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t
-}
-
-/** The ONE sort: real moment first, arrival order as the tiebreak. */
-export function orderMoments<U>(entries: MomentEntry<U>[]): U[] {
-  return [...entries]
-    .sort((a, b) => a.t - b.t || a.order - b.order)
-    .map((entry) => entry.unit)
-}
-
-/** One unit of the non-run conversation timeline: a message or one activity
- * row (the retired fixed bottom block's rows, now flowing at their real
- * moments). */
+/** One unit of the conversation timeline: a message or one activity row. */
 export type ConversationUnit =
   | { kind: "message"; message: OverlayMessage }
-  | { kind: "activity"; activity: ActivityFramePayload }
+  | { kind: "activity"; activity: ActivityRowFrame }
+  | { kind: "activityFold"; rows: ActivityRowFrame[] }
 
 /** The draft span never enters the flow (2026-09-28 user ruling —
- * 落定即退役): its settled receipt (方案整理好了 / 改好了) was hollow — the
- * docked plan card / the run receipt IS the settled evidence — and its
- * persisted row sorted after the run's archive, reading as if the plan was
- * assembled after the render. The span exists only while ACTIVE (the
- * now-line owns it). Explore milestones (chat.explore.* keys, count-carrying
- * born-completed facts) are not spans and keep interleaving. The server
- * twin: draft settles ride the live wire but never persist (activity.py's
- * `_settle`), so replayed logs from before the law are filtered HERE. */
-export function isDraftSpanRow(a: ActivityFramePayload): boolean {
+ * 落定即退役): the docked plan card IS the settled evidence. The server
+ * never persists draft/run spans (activity.py's frame_persistence), so this
+ * filter is the defensive twin for legacy/migrated rows. */
+export function isDraftSpanRow(a: ActivityRowFrame): boolean {
   return a.kind === "draft" && (a.key ?? "").startsWith("chat.activity.")
 }
 
-/** The run span's settle (「已开工」) is the same hollow shape (2026-09-29
- * user ruling — 落定即退役同律): the start speech (ADR-093 §2, a persisted
- * LLM line) and the RunTaskList receipt are the evidence; the settle row
- * adds nothing and never carries a duration. The ACTIVE span (正在开工…)
- * stays — it is the now-line's content during the start_run window. Same
- * server twin: run settles ride the live wire but never persist. */
-export function isRunSpanRow(a: ActivityFramePayload): boolean {
+/** The run span's settle (「已开工」) is the same hollow shape (落定即退役
+ * 同律): the start speech and the RunTaskList receipt are the evidence. */
+export function isRunSpanRow(a: ActivityRowFrame): boolean {
   return a.kind === "run" && (a.key ?? "").startsWith("chat.activity.")
 }
 
-/** The non-run timeline (S7: messages.at × activity.at 单流穿插): messages
- * and the turn's SETTLED activity rows interleave by real moment. Messages
- * claim the lower order numbers (they predate the turn's work); a
- * same-moment tie lands the message first. The activity row's `at` is its
- * walk moment: the reducer preserves the first-seen birth stamp EXCEPT a
- * duration-carrying settle, whose walk key is the TRUE WORK START
- * (`settle_at − duration_ms`, ADR-104 排序律 — the server re-anchors the
- * span's duration at execute entry, so the settled read row sorts between
- * the waiter checkpoint and the post-read reply, never jumping above a
- * speech that preceded the work).
- *
- * 2026-09-24 合一律: an ACTIVE activity never interleaves — while a
- * milestone is live it is the now-line's content (one mounted row morphing
- * think → milestone → think at the bottom of the flow), and it enters this
- * walk only when it settles into history. */
+/** Array map (ADR-108): each message row maps to ONE unit in place —
+ * activity-carrying rows become activity units at their array position.
+ * An ACTIVE activity never renders in the walk (the now-line owns it —
+ * 合一律); draft/run span rows stay retired. */
 export function buildConversationUnits(
   messages: OverlayMessage[],
-  activities: ActivityFramePayload[],
 ): ConversationUnit[] {
-  const entries: MomentEntry<ConversationUnit>[] = []
-  let order = 0
+  const units: ConversationUnit[] = []
   for (const m of messages) {
-    entries.push({ t: momentOf(m.at), order: order++, unit: { kind: "message", message: m } })
-  }
-  for (const a of activities) {
+    const a = m.activity
+    if (a === undefined) {
+      units.push({ kind: "message", message: m })
+      continue
+    }
     if (a.status === "active") continue // the now-line owns the live row
-    if (isDraftSpanRow(a) || isRunSpanRow(a)) continue // 落定即退役 — the card / start speech + receipt is the evidence
-    entries.push({ t: momentOf(a.at), order: order++, unit: { kind: "activity", activity: a } })
+    if (isDraftSpanRow(a) || isRunSpanRow(a)) continue // 落定即退役
+    units.push({ kind: "activity", activity: a })
   }
-  return orderMoments(entries)
+  return units
+}
+
+/** The fold key: consecutive SETTLED activity rows fold only when the user
+ * would read them as the same act repeated — same kind, same copy key, same
+ * named object (a beat's filename). Reading two different files never folds
+ * into one row. */
+function foldKeyOf(a: ActivityRowFrame): string {
+  return `${a.kind}${a.key ?? ""}${a.name ?? ""}`
+}
+
+/** 折叠投影 (呈现层纯函数, ADR-108 §6): a run of ≥2 consecutive settled
+ * activity rows sharing one fold key collapses into ONE aggregate row
+ * (「已检索转写 ×N · 共 Xs」, expandable to the明细). Active rows never
+ * fold (the now-line owns them — they never reach the walk anyway), and a
+ * fold never crosses a message boundary. The折叠 is display-only: the
+ * folded rows keep their own identities for the expanded view. */
+export function foldActivityUnits(units: ConversationUnit[]): ConversationUnit[] {
+  const out: ConversationUnit[] = []
+  let run: ActivityRowFrame[] = []
+  const flush = () => {
+    if (run.length >= 2) {
+      out.push({ kind: "activityFold", rows: run })
+    } else if (run.length === 1) {
+      out.push({ kind: "activity", activity: run[0] })
+    }
+    run = []
+  }
+  for (const unit of units) {
+    // An active row is a hard boundary (进行态不折叠): it passes through
+    // untouched and breaks any run in progress.
+    if (unit.kind !== "activity" || unit.activity.status === "active") {
+      flush()
+      out.push(unit)
+      continue
+    }
+    if (run.length > 0 && foldKeyOf(unit.activity) === foldKeyOf(run[0])) {
+      run.push(unit.activity)
+      continue
+    }
+    flush()
+    run = [unit.activity]
+  }
+  flush()
+  return out
+}
+
+/** The fold row's aggregate facts: the shared copy key (the rows all carry
+ * the same one), the repeat count, and the summed duration whisper (rows
+ * without a duration contribute nothing; null when no row carried one). */
+export function foldSummary(rows: ActivityRowFrame[]): {
+  key: string | null
+  count: number
+  totalMs: number | null
+} {
+  let totalMs: number | null = null
+  for (const r of rows) {
+    if (r.duration_ms != null) totalMs = (totalMs ?? 0) + r.duration_ms
+  }
+  return { key: rows[0]?.key ?? null, count: rows.length, totalMs }
 }

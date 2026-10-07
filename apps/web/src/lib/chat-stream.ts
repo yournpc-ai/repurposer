@@ -38,7 +38,9 @@ export type {
 } from "@/lib/chatStreamFrames"
 import type {
   ActivityFramePayload,
+  ActivityRowFramePayload,
   QuestionPreviewPayload,
+  RowAppendPayload,
   ThinkingPayload,
 } from "@/lib/chatStreamFrames"
 
@@ -95,16 +97,17 @@ export interface StreamChatOptions {
    * terminal envelope stays authoritative (envelope always wins), and a
    * flipped / failed turn rolls the preview back. */
   onQuestionPreview?: (payload: QuestionPreviewPayload) => void
-  /** A user-facing checkpoint (ADR-085): a quiet iteration's grounded result
-   * statement after an eligible read — the FULL text in one frame (quiet
-   * iterations stream nothing; the client paces it out under the typewriter
-   * law). Each checkpoint is its OWN bubble segment: finalize the current
-   * segment, type this into a new one, then the settled reply lands in a
-   * fresh segment — never merged into one message. Persisted server-side as
-   * an intent.type="checkpoint" row, so a failed turn's rollback drops the
+  /** A user-facing checkpoint (ADR-109 言语座位通用化): prose riding ANY
+   * non-terminal call — a phase-turn expectation sentence or a grounded
+   * result statement — the FULL text in one frame (quiet iterations stream
+   * nothing; the client paces it out under the typewriter law). Each
+   * checkpoint is its OWN bubble segment: finalize the current segment, type
+   * this into a new one, then the settled reply lands in a fresh segment —
+   * never merged into one message. Persisted server-side as an
+   * intent.type="checkpoint" row, so a failed turn's rollback drops the
    * bubbles and a refresh re-renders them from history. `at` is the row's
-   * server-clock created_at (服务端钟锚定 — the live bubble sorts by the
-   * same moment the replay walk does). */
+   * server-clock created_at (display stamp only — array position carries
+   * the order, ADR-108). */
   onCheckpoint?: (text: string, at?: string) => void
   /** One activity frame (ADR-087 §3 Phase 2): append-oriented milestones of
    * the agent's work — status flips arrive as new frames on the same
@@ -117,6 +120,13 @@ export interface StreamChatOptions {
    * union). Live cards roll back if the turn fails (the server persists the
    * turn's events as ONE candidates_log row on the completed path only). */
   onCandidates?: (event: CandidateEventPayload) => void
+  /** Transcript array mirror (ADR-108 §3): a row's birth — append fixes its
+   * array position (today: activity rows). Rows persist even on a failed
+   * turn (诚实 transcript) — the client NEVER rolls them back. */
+  onRowAppend?: (row: RowAppendPayload) => void
+  /** A row's in-place mutation (an open read span settling): same id, new
+   * frame — the array position never moves. */
+  onRowUpdate?: (id: string, frame: ActivityRowFramePayload) => void
 }
 
 /** Answer endpoint payload (the answer doubles as resume). */
@@ -187,6 +197,8 @@ function streamTurn<T>(
     onCheckpoint,
     onActivity,
     onCandidates,
+    onRowAppend,
+    onRowUpdate,
   }: {
     signal?: AbortSignal
     onDelta?: (text: string) => void
@@ -195,6 +207,8 @@ function streamTurn<T>(
     onCheckpoint?: StreamChatOptions["onCheckpoint"]
     onActivity?: StreamChatOptions["onActivity"]
     onCandidates?: StreamChatOptions["onCandidates"]
+    onRowAppend?: StreamChatOptions["onRowAppend"]
+    onRowUpdate?: StreamChatOptions["onRowUpdate"]
   },
 ): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -261,6 +275,12 @@ function streamTurn<T>(
           case "activity":
             onActivity?.(frame.frame)
             break
+          case "row_append":
+            onRowAppend?.(frame.row)
+            break
+          case "row_update":
+            onRowUpdate?.(frame.id, frame.frame)
+            break
           case "candidates":
             onCandidates?.(frame.event)
             break
@@ -306,6 +326,8 @@ export function streamAnswer<T>(
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
     onActivity?: StreamChatOptions["onActivity"]
     onCandidates?: StreamChatOptions["onCandidates"]
+    onRowAppend?: StreamChatOptions["onRowAppend"]
+    onRowUpdate?: StreamChatOptions["onRowUpdate"]
   },
 ): Promise<T> {
   return streamTurn(
@@ -323,12 +345,12 @@ export function streamAnswer<T>(
  * `e.name === "AbortError"`). */
 export function streamChat<T>(
   body: ChatTurnBody,
-  { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity, onCandidates }: StreamChatOptions,
+  { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity, onCandidates, onRowAppend, onRowUpdate }: StreamChatOptions,
 ): Promise<T> {
   return streamTurn(
     `${API_URL}/api/v1/chat`,
     body,
     { completed: "turn.completed", failed: "turn.failed" },
-    { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity, onCandidates },
+    { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity, onCandidates, onRowAppend, onRowUpdate },
   )
 }

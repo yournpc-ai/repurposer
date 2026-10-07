@@ -1,161 +1,149 @@
-/** The shared moment-ordering layer's contract (iter-3 S7, E7): one
- * (moment, arrival-order) sort for every mixed timeline — messages ×
- * activity rows interleave by real time and the stream never scrambles. */
+/** The conversation timeline layer's contract (ADR-108 数组位置律): the
+ * persisted array's order IS the render order — buildConversationUnits MAPS
+ * rows to units in place and never re-sorts; foldActivityUnits is the
+ * display-layer folding projection (呈现层纯函数). */
 
 import { describe, expect, it } from "vitest"
 
 import {
   buildConversationUnits,
-  momentOf,
-  orderMoments,
+  foldActivityUnits,
+  foldSummary,
+  type ConversationUnit,
 } from "@/lib/chatTimeline"
-import type { ActivityFramePayload } from "@/lib/chat-stream"
-import type { OverlayMessage } from "@/components/chat/historyReplay"
+import type { ActivityRowFrame, OverlayMessage } from "@/components/chat/historyReplay"
 
 function msg(id: string, at?: string): OverlayMessage {
   return { id, role: "user", content: id, at }
 }
 
-function activity(id: string, at?: string): ActivityFramePayload {
-  return { activity_id: id, seq: 1, kind: "read", status: "completed", key: null, at }
+function activityMsg(
+  id: string,
+  over: Partial<ActivityRowFrame> = {},
+): OverlayMessage {
+  return {
+    id: `row-${id}`,
+    role: "assistant",
+    content: "",
+    activity: {
+      activity_id: id,
+      kind: "read",
+      status: "completed",
+      key: null,
+      ...over,
+    },
+  }
 }
 
-describe("momentOf", () => {
-  it("parses ISO; missing/unparseable = undated (+∞), never a guess", () => {
-    expect(momentOf("2026-09-23T08:00:00Z")).toBe(Date.parse("2026-09-23T08:00:00Z"))
-    expect(momentOf(undefined)).toBe(Number.POSITIVE_INFINITY)
-    expect(momentOf("not-a-date")).toBe(Number.POSITIVE_INFINITY)
+function unitId(u: ConversationUnit): string {
+  if (u.kind === "message") return u.message.id
+  if (u.kind === "activity") return u.activity.activity_id
+  return `fold:${u.rows.map((r) => r.activity_id).join("+")}`
+}
+
+describe("buildConversationUnits — the array map (ADR-108)", () => {
+  it("renders every row at its array position — NEVER re-sorted by timestamp", () => {
+    // The array's order disagrees with the rows' `at` stamps on purpose:
+    // the array wins, always (回放恒等性 — the live arrival order and the
+    // replayed seq order are the same array).
+    const units = buildConversationUnits([
+      msg("user", "2026-09-23T08:00:05Z"),
+      activityMsg("a1", { at: "2026-09-23T08:00:01Z" }),
+      activityMsg("a2", { at: "2026-09-23T08:00:03Z" }),
+      msg("reply", "2026-09-23T08:00:00Z"),
+    ])
+    expect(units.map(unitId)).toEqual(["user", "a1", "a2", "reply"])
+  })
+
+  it("an ACTIVE activity never renders in the walk — the now-line owns it (合一律)", () => {
+    const units = buildConversationUnits([
+      msg("user"),
+      activityMsg("done"),
+      activityMsg("live", { status: "active" }),
+    ])
+    expect(units.map(unitId)).toEqual(["user", "done"])
+  })
+
+  it("draft/run span rows stay retired — 落定即退役 (the card / receipt is the evidence)", () => {
+    const units = buildConversationUnits([
+      msg("user"),
+      activityMsg("draft-done", { kind: "draft", key: "chat.activity.draftDone" }),
+      activityMsg("edit-failed", {
+        kind: "draft",
+        status: "failed",
+        key: "chat.activity.edit",
+      }),
+      activityMsg("milestone", { kind: "draft", key: "chat.explore.plansReady", count: 2 }),
+      activityMsg("run-done", { kind: "run", key: "chat.activity.runDone" }),
+      activityMsg("run-live", { kind: "run", status: "active", key: "chat.activity.run" }),
+      msg("reply"),
+    ])
+    expect(units.map(unitId)).toEqual(["user", "milestone", "reply"])
   })
 })
 
-describe("orderMoments", () => {
-  it("sorts by moment, arrival order as the stable tiebreak", () => {
-    const units = orderMoments<string>([
-      { t: 300, order: 0, unit: "c" },
-      { t: 100, order: 1, unit: "a" },
-      { t: 100, order: 2, unit: "b" },
-    ])
-    expect(units).toEqual(["a", "b", "c"])
-  })
+describe("foldActivityUnits — the display-layer fold (ADR-108 §6)", () => {
+  const read = (id: string, over: Partial<ActivityRowFrame> = {}) =>
+    activityMsg(id, { key: "chat.inspectingDone.transcript", ...over })
 
-  it("never mutates the input", () => {
-    const entries = [
-      { t: 2, order: 0, unit: "b" },
-      { t: 1, order: 1, unit: "a" },
-    ]
-    orderMoments(entries)
-    expect(entries.map((e) => e.unit)).toEqual(["b", "a"])
-  })
-})
-
-describe("buildConversationUnits — the non-run single stream", () => {
-  it("a turn's activity rows land BETWEEN the user echo and the assistant reply", () => {
-    const units = buildConversationUnits(
-      [
-        msg("user", "2026-09-23T08:00:00Z"),
-        msg("reply", "2026-09-23T08:00:05Z"),
-      ],
-      [
-        activity("a1", "2026-09-23T08:00:01Z"),
-        activity("a2", "2026-09-23T08:00:03Z"),
-      ],
+  it("≥2 consecutive settled rows of one act fold into ONE aggregate row", () => {
+    const units = foldActivityUnits(
+      buildConversationUnits([
+        msg("user"),
+        read("r1", { duration_ms: 400 }),
+        read("r2", { duration_ms: 600 }),
+        read("r3"),
+        msg("reply"),
+      ]),
     )
-    expect(units.map((u) => (u.kind === "message" ? u.message.id : u.activity.activity_id))).toEqual([
-      "user",
-      "a1",
-      "a2",
-      "reply",
-    ])
+    expect(units.map(unitId)).toEqual(["user", "fold:r1+r2+r3", "reply"])
+    const fold = units[1]
+    if (fold.kind !== "activityFold") throw new Error("expected a fold")
+    expect(foldSummary(fold.rows)).toEqual({
+      key: "chat.inspectingDone.transcript",
+      count: 3,
+      totalMs: 1000,
+    })
   })
 
-  it("undated rows (optimistic sends / pre-S7 frames) land at the end, arrival order kept", () => {
-    const units = buildConversationUnits(
-      [msg("dated", "2026-09-23T08:00:00Z"), msg("fresh")],
-      [activity("a1", "2026-09-23T08:00:01Z"), activity("legacy")],
+  it("a lone settled row never folds", () => {
+    const units = foldActivityUnits(
+      buildConversationUnits([msg("user"), read("r1"), msg("reply")]),
     )
-    expect(units.map((u) => (u.kind === "message" ? u.message.id : u.activity.activity_id))).toEqual([
-      "dated",
-      "a1",
-      "fresh",
-      "legacy",
-    ])
+    expect(units.map(unitId)).toEqual(["user", "r1", "reply"])
   })
 
-  it("a same-moment tie lands the message first (messages claim the lower order numbers)", () => {
-    const units = buildConversationUnits(
-      [msg("m", "2026-09-23T08:00:00Z")],
-      [activity("a", "2026-09-23T08:00:00Z")],
+  it("a fold never crosses a message boundary or a different key", () => {
+    const units = foldActivityUnits(
+      buildConversationUnits([
+        read("a1"),
+        read("a2"),
+        msg("mid"),
+        read("b1", { key: "chat.inspectingDone.segment" }),
+        read("b2", { key: "chat.inspectingDone.segment" }),
+      ]),
     )
-    expect(units.map((u) => u.kind)).toEqual(["message", "activity"])
+    expect(units.map(unitId)).toEqual(["fold:a1+a2", "mid", "fold:b1+b2"])
   })
 
-  it("empty activities = the messages verbatim (the pre-S7 shape)", () => {
-    const units = buildConversationUnits([msg("a"), msg("b")], [])
-    expect(units.map((u) => u.kind)).toEqual(["message", "message"])
-  })
-
-  it("an ACTIVE activity never interleaves — the now-line owns it until it settles (2026-09-24 合一律)", () => {
-    const live = { ...activity("live", "2026-09-23T08:00:02Z"), status: "active" as const }
-    const units = buildConversationUnits(
-      [msg("user", "2026-09-23T08:00:00Z")],
-      [activity("done", "2026-09-23T08:00:01Z"), live],
+  it("beats naming DIFFERENT files never fold together (the name rides the fold key)", () => {
+    const units = foldActivityUnits(
+      buildConversationUnits([
+        activityMsg("f1", { key: "chat.material.readingDone", name: "a.mp4" }),
+        activityMsg("f2", { key: "chat.material.readingDone", name: "b.mp4" }),
+      ]),
     )
-    expect(units.map((u) => (u.kind === "message" ? u.message.id : u.activity.activity_id))).toEqual([
-      "user",
-      "done",
-    ])
+    expect(units.map(unitId)).toEqual(["f1", "f2"])
   })
 
-  it("draft spans never interleave — 落定即退役 (2026-09-28 user ruling); explore milestones still do", () => {
-    const draftDone = {
-      ...activity("draft-done", "2026-09-23T08:00:02Z"),
-      kind: "draft" as const,
-      key: "chat.activity.draftDone",
-    }
-    const editFailed = {
-      ...activity("edit-failed", "2026-09-23T08:00:03Z"),
-      kind: "draft" as const,
-      status: "failed" as const,
-      key: "chat.activity.edit",
-    }
-    const milestone = {
-      ...activity("milestone", "2026-09-23T08:00:04Z"),
-      kind: "draft" as const,
-      key: "chat.explore.plansReady",
-      count: 2,
-    }
-    const units = buildConversationUnits(
-      [msg("user", "2026-09-23T08:00:00Z"), msg("reply", "2026-09-23T08:00:06Z")],
-      [draftDone, editFailed, milestone],
+  it("failed rows carry the active-form key — they never fold into completed ones", () => {
+    const units = foldActivityUnits(
+      buildConversationUnits([
+        read("ok1", { key: "chat.inspectingDone.transcript" }),
+        read("bad", { key: "chat.inspecting.transcript", status: "failed" }),
+        read("ok2", { key: "chat.inspectingDone.transcript" }),
+      ]),
     )
-    expect(units.map((u) => (u.kind === "message" ? u.message.id : u.activity.activity_id))).toEqual([
-      "user",
-      "milestone",
-      "reply",
-    ])
-  })
-
-  it("the run span's settle (「已开工」) never interleaves — 落定即退役同律 (2026-09-29); its ACTIVE span stays out of the walk too (the now-line owns it)", () => {
-    const runDone = {
-      ...activity("run-done", "2026-09-23T08:00:02Z"),
-      kind: "run" as const,
-      key: "chat.activity.runDone",
-    }
-    const runActive = {
-      ...activity("run-live", "2026-09-23T08:00:03Z"),
-      kind: "run" as const,
-      status: "active" as const,
-      key: "chat.activity.run",
-    }
-    const readDone = activity("read-done", "2026-09-23T08:00:04Z")
-    const units = buildConversationUnits(
-      [msg("user", "2026-09-23T08:00:00Z"), msg("reply", "2026-09-23T08:00:06Z")],
-      [runDone, runActive, readDone],
-    )
-    expect(units.map((u) => (u.kind === "message" ? u.message.id : u.activity.activity_id))).toEqual([
-      "user",
-      "read-done",
-      "reply",
-    ])
+    expect(units.map(unitId)).toEqual(["ok1", "bad", "ok2"])
   })
 })

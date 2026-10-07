@@ -1374,6 +1374,12 @@ const en = {
     activityMeta: {
       count: "Count: {{count}}",
     },
+    /** The fold row (ADR-108 §6): ≥2 consecutive settled rows of the same
+     * act collapse into one — the shared past-tense label + the repeat
+     * count; the summed duration whispers separately (formatElapsed). */
+    activityFold: {
+      repeated: "{{label}} ×{{count}}",
+    },
     /** Past-tense mirrors of the inspecting family — a read activity's
      * completed frames (chat.inspecting.* stays the active form; the keys
      * ride the server registry, this family mirrors it by prefix swap). */

@@ -54,8 +54,12 @@ import { apiFetch } from "@/lib/api"
 import { inferAssetType } from "@/lib/asset-type"
 import { streamAnswer, streamChat, StreamTurnError, questionSettledCode } from "@/lib/chat-stream"
 import type { ActivityFramePayload } from "@/lib/chat-stream"
-import type { CandidateEventPayload } from "@/lib/chatStreamFrames"
-import { buildConversationUnits, isDraftSpanRow, isRunSpanRow, momentOf } from "@/lib/chatTimeline"
+import type {
+  ActivityRowFramePayload,
+  CandidateEventPayload,
+  RowAppendPayload,
+} from "@/lib/chatStreamFrames"
+import { buildConversationUnits, foldActivityUnits } from "@/lib/chatTimeline"
 import {
   asCreditsInsufficient,
   type CreditsInsufficientDetail,
@@ -128,11 +132,14 @@ import { useConfirmStrategy } from "@/components/composer/CostConfirmControl"
 import { ModelsPanel } from "@/components/composer/ModelsPanel"
 import {
   mapHistoryRows,
+  activityRowFrame,
+  isNonRenderIntent,
   materialBeat,
   materialBeatKey,
   triggerSuggestions,
   questionEcho,
   bareQuestion,
+  type ActivityRowFrame,
   type DerivedRow,
   type DecisionPlanRow,
   type HistoryRow,
@@ -167,7 +174,7 @@ import {
 import {
   RunTaskList,
 } from "@/components/chat/RunTaskList"
-import { ActivityRow, type NowRowPayload } from "@/components/chat/ActivityStream"
+import { ActivityRow, FoldedActivityRow, type NowRowPayload } from "@/components/chat/ActivityStream"
 import type { LifecycleStamp, Output } from "@/lib/types"
 import { isConfirmationReady, isPlanReady } from "@/lib/lifecycleStamp"
 import {
@@ -1076,35 +1083,71 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // label in state).
   const [thinkingPhase, setThinkingPhase] = useState<string | null>(null)
 
-  // The turn's Activity Stream (ADR-087 §3 Phase 2): append-oriented
-  // user-safe milestones. The wire is append-only — a status flip arrives as
-  // a NEW frame on the same activity_id — so this list keeps the latest
-  // frame per id in arrival (= seq) order. The block is cleared when the
-  // NEXT turn starts (v1: per-turn block, no cross-session replay — the
-  // contract's no-persistence line) and settles in place at the envelope
-  // (U9: the stream stays as the turn's static history below its bubble).
+  // The turn's Activity Stream (ADR-087 §3 Phase 2): the LIVE transient
+  // channel — it feeds only the now-line (the active row's content). The
+  // durable walk never reads this list: settled activity arrives as
+  // persisted array rows (assistant.row.append/update → `messages`,
+  // ADR-108), and draft/run spans are live-only by law (落定即退役).
   const [activities, setActivities] = useState<ActivityFramePayload[]>([])
-  // activity 持久化 (2026-09-25): the replayed latest-turn milestone log
-  // rides until a NEW turn starts — the live U9 law ("a new turn's stream
-  // replaces the previous turn's rows") applied to the replayed rows, so a
-  // bare-answer turn (zero frames, nothing persisted) still clears them.
-  const [logDismissed, setLogDismissed] = useState(false)
   // The reducer pair is the extracted PURE seam (activityReducer.ts, Phase
   // 3 Batch A) — same upsert/sweep semantics, contract-tested.
   const handleActivityFrame = useCallback((frame: ActivityFramePayload) => {
     setActivities((prev) => upsertActivityFrame(prev, frame))
   }, [])
-  // The defensive sweep (T16-B's client twin — the server sweeps before the
-  // envelope, this catches whatever the stream lost): a settling turn never
-  // leaves an activity spinning forever (假活跃禁令).
-  const settleActivities = useCallback(
-    (status: "completed" | "failed" | "cancelled") =>
-      setActivities((prev) => sweepActivities(prev, status)),
-    [],
-  )
 
   // Conversation below the pinned regions (plan card / progress).
   const [messages, setMessages] = useState<OverlayMessage[]>([])
+  // The defensive sweep (T16-B's client twin — the server sweeps before the
+  // envelope, this catches whatever the stream lost): a settling turn never
+  // leaves an activity spinning forever (假活跃禁令). Sweeps BOTH seats: the
+  // transient now-line list and the array rows embedded in `messages`.
+  const settleActivities = useCallback(
+    (status: "completed" | "failed" | "cancelled") => {
+      setActivities((prev) => sweepActivities(prev, status))
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.activity?.status === "active"
+            ? { ...m, activity: { ...m.activity, status } }
+            : m
+        ),
+      )
+    },
+    [],
+  )
+  // Transcript array mirror (ADR-108 §3): a persisted activity row appends
+  // at its birth (append fixes the position — arrival order IS the array
+  // order) and settles in place (update by row id, the position never
+  // moves). Rows persist even on a failed turn (诚实 transcript) — never
+  // rolled back client-side.
+  const handleRowAppend = useCallback((row: RowAppendPayload) => {
+    const frame = activityRowFrame(row.intent)
+    if (!frame) return
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === row.id)) return prev
+      return [
+        ...prev,
+        {
+          id: row.id,
+          role: "assistant" as const,
+          content: "",
+          at: row.created_at ?? undefined,
+          activity: frame,
+        },
+      ]
+    })
+  }, [])
+  const handleRowUpdate = useCallback(
+    (id: string, frame: ActivityRowFramePayload) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === id && m.activity
+            ? { ...m, activity: { ...m.activity, ...frame } }
+            : m
+        ),
+      )
+    },
+    [],
+  )
   // Candidate Surface (Workspace 合同 v4.2 C8-c, 2026-09-26 封板): the live
   // `assistant.candidates` frames — a set event births its card row at the
   // flow's live edge (an idempotent re-emit replaces in place, keeping the
@@ -1434,11 +1477,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
       for (const row of data.items ?? []) {
         if (row.role !== "assistant") continue
-        // 素材节拍 (2026-09-24 素材节拍入库): a persisted beat row lands in
-        // the flow as a SETTLED activity unit — the now-line's live think
-        // row morphs away on its own facts, this is the durable gray row
-        // behind it. Dedup by the server row id (the poll repeats).
-        const beat = materialBeat(row.intent)
+        // 永不渲染行 (ADR-108): the rejection forensics ledger / legacy
+        // aggregate logs never enter the flow.
+        if (isNonRenderIntent(row.intent)) continue
+        // 素材节拍 + activity 数组行 (ADR-108): a persisted activity entry
+        // lands in the flow as a settled unit AT ITS ARRAY POSITION — the
+        // now-line's live think row morphs away on its own facts, this is
+        // the durable gray row behind it. Dedup by the server row id (the
+        // poll repeats); append-only — the poll's list is seq-ordered, so a
+        // row new to this client is always a tail append.
+        const beat = materialBeat(row.intent) ?? activityRowFrame(row.intent)
         if (beat !== undefined) {
           if (messagesRef.current.some((m) => m.id === row.id)) continue
           setMessages((prev) =>
@@ -1451,7 +1499,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     role: "assistant" as const,
                     content: "",
                     at: row.created_at,
-                    beat: { ...beat, at: row.created_at },
+                    activity: { ...beat, at: beat.at ?? row.created_at },
                   },
                 ],
           )
@@ -2437,8 +2485,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setChatBusy(true)
     setProseActive(false)
     setThinkingPhase(null)
-    setActivities(resetActivities()) // the new turn's own stream replaces the settled one
-    setLogDismissed(true) // U9 parity — the replayed log retires with the live rows
+    setActivities(resetActivities()) // the new turn's own now-line stream starts empty
     // C8-c: a new turn owns the candidate-rollback scope — rows committed
     // by earlier turns are no longer this turn's to roll back.
     liveCandidateRowsRef.current.clear()
@@ -2486,21 +2533,22 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       )
     }
     const typewriter = createTypewriter(appendDelta, setProseActive)
-    /** One checkpoint's delivery (ADR-085): the frame carries the full text
-     * (quiet iterations stream nothing), so it paces out through the SAME
-     * typewriter — never a blob. Serialized on checkpointChain: SSE handlers
-     * are sync, and the per-turn cap (2) must never interleave on one
-     * typewriter.
+    /** One checkpoint's delivery (ADR-085/ADR-109): the frame carries the
+     * full text (quiet iterations stream nothing), so it paces out through
+     * the SAME typewriter — never a blob. Serialized on checkpointChain: SSE
+     * handlers are sync, and the per-turn rhythm cap (4, ADR-109 §2) must
+     * never interleave on one typewriter.
      *
-     * The iteration-0 seat (ADR-104): prose before the turn's FIRST eligible
-     * read has ALREADY streamed into the main bubble when its checkpoint
-     * frame arrives — settle it IN PLACE (rekey the bubble to a cp id, the
-     * frame's text wins) instead of re-typing it into a second bubble, and
-     * reset the main-bubble identity (streamId) to a fresh empty segment:
-     * the read's activity rows then sort BETWEEN the two speeches by birth
-     * moment (lib/chatTimeline), and every downstream streamId law (the
-     * envelope's echoCarried / zero-delta / finalizePreview) reads only the
-     * new segment, untouched. */
+     * The iteration-0 seat (ADR-104): prose before the turn's FIRST read has
+     * ALREADY streamed into the main bubble when its checkpoint frame
+     * arrives — settle it IN PLACE (rekey the bubble to a cp id, the frame's
+     * text wins) instead of re-typing it into a second bubble, and reset the
+     * main-bubble identity (streamId) to a fresh empty segment: the read's
+     * activity rows then sit BETWEEN the two speeches by array position
+     * (ADR-108 — the cp bubble keeps its birth index, the rows append after
+     * it, the next segment appends after them), and every downstream
+     * streamId law (the envelope's echoCarried / zero-delta /
+     * finalizePreview) reads only the new segment, untouched. */
     const deliverCheckpoint = async (text: string, at?: string) => {
       if (!text.trim()) return
       await typewriter.drain()
@@ -2545,8 +2593,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       checkpointChain = checkpointChain.then(() => deliverCheckpoint(text, at))
     }
     /** In-place finalize: the preview bubble becomes the settled message
-     * under the SAME key (the envelope's content wins); never a remount. */
-    const finalizePreview = (content?: string, runId?: string | null, at?: string) =>
+     * under the SAME key (the envelope's content wins); never a remount.
+     * 数组位置律 (ADR-108): the row's POSITION is its array index — the
+     * envelope's created_at is never re-anchored (ordering never reads at). */
+    const finalizePreview = (content?: string, runId?: string | null) =>
       setMessages((prev) =>
         prev.map((m) =>
           m.id === streamId
@@ -2554,9 +2604,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                 ...m,
                 content: content ?? m.content,
                 runId: runId === undefined ? m.runId : runId,
-                // Re-anchor on the server row's created_at when the envelope
-                // carries it — the preview's client clock was only a stand-in.
-                at: at ?? m.at,
                 streaming: false,
               }
             : m
@@ -2571,7 +2618,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     const paceSettledProse = async (
       content: string,
       runId?: string | null,
-      at?: string,
     ) => {
       setMessages((prev) =>
         prev.some((m) => m.id === streamId)
@@ -2589,7 +2635,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       )
       typewriter.push(content)
       await typewriter.drain()
-      finalizePreview(content, runId, at)
+      finalizePreview(content, runId)
     }
     /** 打字机律·工具线重述牙③ (T2b 感知族): the loop's accumulated speech may
      * EXTEND the streamed preview — words spoken before a kept read call are
@@ -2654,6 +2700,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           onCheckpoint,
           onActivity: handleActivityFrame,
           onCandidates: handleCandidatesFrame,
+          onRowAppend: handleRowAppend,
+          onRowUpdate: handleRowUpdate,
         }
       )
       // Envelope wins: any in-flight checkpoint delivery finishes FIRST
@@ -2708,7 +2756,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           finalizePreview(
             data.assistant_message.content ?? undefined,
             data.run_id,
-            data.assistant_message.created_at,
           )
         } else {
           // Zero-delta start (the funnel's repair round never streams): the
@@ -2726,7 +2773,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             await paceSettledProse(
               data.assistant_message.content ?? "",
               data.run_id,
-              data.assistant_message.created_at,
             )
           } else {
             setMessages((prev) => prev.filter((m) => m.id !== streamId))
@@ -2840,7 +2886,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         finalizePreview(
           message.content ?? "",
           message.workflow_run_id,
-          message.created_at,
         )
       } else {
         // Zero-delta prose reply: same last-gate pacing as the dock branch.
@@ -2850,7 +2895,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           await paceSettledProse(
             message.content ?? "",
             message.workflow_run_id,
-            message.created_at,
           )
           await handleAssistantMessage(message, { echoCarried: streamedAny })
         } else {
@@ -3156,7 +3200,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setProseActive(false)
     setThinkingPhase(null)
     setActivities(resetActivities()) // the answer continuation is its own turn — new stream
-    setLogDismissed(true)
     setPendingQuestion(null)
     setMessages((prev) =>
       prev.some((m) => m.id === optimisticId)
@@ -3223,6 +3266,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           dockQuestionPreview(`preview-answer-${optimisticId}`, payload),
         onActivity: handleActivityFrame,
         onCandidates: handleCandidatesFrame,
+        onRowAppend: handleRowAppend,
+        onRowUpdate: handleRowUpdate,
       })
       // Envelope wins (2026-09-06 原地落定，与 sendChat 的 finalizePreview
       // 同一纪律): the optimistic block becomes the real answered row AT
@@ -3637,54 +3682,28 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if (confirmActive && !chatBusy) setDockHidden(false)
   }, [confirmActive, chatBusy])
 
-  // Message-flow chronology (#5 — the Claude Code reference: the stream is
-  // ONE timeline that never scrambles; a QA archives inline at its real
-  // time, and NEWER replies keep flowing BELOW it). Once the run's birth
-  // time is known everything sorts by real time into a single walk: the
-  // THE RUN SECTION (时序律, ADR-073 / ADR-093 §2): the start turn's speech
-  // (the work-start line — the start_run turn's own LLM prose, persisted as
-  // a plain assistant row) opens the section as a normal message unit at its
-  // real time, just before the run's birth; mid-run life (the direction QA
-  // included) sorts at its real time below it, and the task list's dynamic
-  // row pins bottom-most while the run is live (2026-09-13 时序拍板). Once
-  // terminal the task list settles as the run's tombstone AT THE RUN'S END
-  // (same 拍板 — mid-run life sorts by real time ABOVE the receipt, never
-  // below it). A start path with NO LLM turn speaks nothing — the dynamic
-  // row carries the progress alone (honest absence, never a template
-  // stand-in). iter-3 S7: the turn's activity rows join this same walk at
-  // their birth moments (the shared timeline layer — lib/chatTimeline); off
-  // a run, messages × activities interleave by the same law and the fixed
-  // bottom block is retired.
+  // Message-flow chronology (ADR-108 数组位置律): the transcript is ONE
+  // append-only array — the persisted seq order IS the render order, and no
+  // layer ever re-sorts transcript rows (no timestamps, no walk keys, no
+  // latches). THE RUN SECTION (时序律, ADR-073 / ADR-093 §2): the start
+  // turn's speech (the work-start line — the start_run turn's own LLM prose,
+  // persisted as a plain assistant row) opens the section as a normal array
+  // row, just before the run's birth; mid-run life (the direction QA
+  // included) appends below it, and the task list's dynamic row pins
+  // bottom-most while the run is live (2026-09-13 时序拍板). Once terminal
+  // the task list settles as the run's tombstone AT THE RUN'S END (same
+  // 拍板 — mid-run life stays ABOVE the receipt, never below it): the
+  // tombstone is chrome, not a transcript row — its insertion point is the
+  // one derived position in the walk (the first row born after the run's
+  // end), and every transcript row keeps its own array position either way.
+  // A start path with NO LLM turn speaks nothing — the dynamic row carries
+  // the progress alone (honest absence, never a template stand-in).
   const runStartAt = runCreatedAt ? Date.parse(runCreatedAt) : null
-  // 素材节拍入库 (2026-09-24) + activity 持久化 (2026-09-25): a persisted
-  // beat row / a turn's milestone log replays carrying its activity payload
-  // — the message stream drops both (they render NO bubble), the activity
-  // stream gains them (settled by construction, so the 合一律 active-skip
-  // never touches them). The milestone log restores ONLY the LATEST turn's
-  // frames — parity with the live law (U9: a new turn's stream replaces
-  // the previous turn's rows), never rows the live flow didn't show.
-  const { flowMessages, allActivityRows } = useMemo(() => {
-    const flow: OverlayMessage[] = []
-    const beats: ActivityFramePayload[] = []
-    let latestLog: ActivityFramePayload[] | null = null
-    for (const m of messages) {
-      if (m.beat) beats.push(m.beat)
-      else if (m.milestones) latestLog = m.milestones // rows walk oldest→newest — the last wins
-      else flow.push(m)
-    }
-    return {
-      flowMessages: flow,
-      allActivityRows: [
-        ...beats,
-        ...(logDismissed ? [] : (latestLog ?? [])),
-        ...activities,
-      ],
-    }
-  }, [messages, activities, logDismissed])
   type RunStreamUnit =
     | { kind: "taskList" }
     | { kind: "message"; message: OverlayMessage }
-    | { kind: "activity"; activity: ActivityFramePayload }
+    | { kind: "activity"; activity: ActivityRowFrame }
+    | { kind: "activityFold"; rows: ActivityRowFrame[] }
   const runStreamUnits = useMemo<RunStreamUnit[] | null>(() => {
     // ONE render path for every window (2026-09-09 双渲染路收一——the legacy
     // fixed block is dead): the pre-snapshot window (runStartAt == null —
@@ -3694,50 +3713,42 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // B: the gate is the run-ATTACH fact (runId), never a lifecycle phase —
     // archive (terminal) runs render through this same path by design.
     if (runId == null) return null
-    type Timed = { t: number; order: number; unit: RunStreamUnit }
-    const timed: Timed[] = []
-    let order = 0
-    const undated: OverlayMessage[] = []
-    for (const m of flowMessages) {
-      const t = m.at ? Date.parse(m.at) : NaN
-      if (Number.isNaN(t)) undated.push(m)
-      else timed.push({ t, order: order++, unit: { kind: "message", message: m } })
+    // 数组位置律: transcript rows render in array order (active / retired
+    // span rows are already filtered inside buildConversationUnits);
+    // folding is the display-layer projection (ADR-108 §6).
+    const units: RunStreamUnit[] = foldActivityUnits(buildConversationUnits(messages))
+    if (!terminal) {
+      // Pinned bottom-most while live.
+      units.push({ kind: "taskList" })
+      return units
     }
-    // iter-3 S7 (E7 — the fixed bottom block retired into the flow): the
-    // turn's activity rows sort at their real BIRTH moments like any other
-    // unit (the reducer preserved the first-seen `at`); undated rows
-    // (defensive — a pre-S7 wire) land at +∞, and since they push BEFORE
-    // the pinned live chrome below, the tiebreak keeps them above it (the
-    // undated-message law's twin). 2026-09-24 合一律: SETTLED rows only —
-    // an active milestone is the now-line's content, never a flow unit
-    // (lib/chatTimeline's buildConversationUnits holds the same law).
-    for (const a of allActivityRows) {
-      if (a.status === "active") continue
-      // 落定即退役 — the card / start speech + receipt is the evidence
-      if (isDraftSpanRow(a) || isRunSpanRow(a)) continue
-      timed.push({ t: momentOf(a.at), order: order++, unit: { kind: "activity", activity: a } })
+    // The run's end: the receipt anchors at the run's END so everything that
+    // happened DURING the run — the direction QA, interleaved chat — stays
+    // above the receipt (2026-09-13 时序拍板; the birthing echo is mid-run
+    // life too, so the ADR-058 "receipt never above its birthing echo" law
+    // holds by construction). Steps that never started (cascade-skipped)
+    // fall back to the run's birth. Undated rows (a fresh optimistic send)
+    // are chronologically NOW — they land below the tombstone.
+    const lastStepT = Math.max(
+      runStartAt ?? 0,
+      ...steps.map((s) =>
+        Date.parse((s.finished_at ?? s.started_at ?? runCreatedAt) as string),
+      ),
+    )
+    const rowAt = (unit: RunStreamUnit): number => {
+      const iso =
+        unit.kind === "message"
+          ? unit.message.at
+          : unit.kind === "activity"
+            ? unit.activity.at
+            : unit.kind === "activityFold"
+              ? unit.rows[0]?.at
+              : undefined
+      const t = iso ? Date.parse(iso) : NaN
+      return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t
     }
-    // The run's end: the receipt (and the completion line after it) anchors
-    // here so everything that happened DURING the run — the direction QA,
-    // interleaved chat — stays above the receipt (2026-09-13 时序拍板; the
-    // birthing echo is mid-run life too, so the ADR-058 "receipt never
-    // above its birthing echo" law holds by construction). Steps that
-    // never started (cascade-skipped) fall back to the run's birth.
-    const lastStepT = terminal
-      ? Math.max(
-          runStartAt ?? 0,
-          ...steps.map((s) =>
-            Date.parse((s.finished_at ?? s.started_at ?? runCreatedAt) as string),
-          ),
-        )
-      : null
-    // Pinned bottom-most while live (the +∞ sort key); the tombstone at the
-    // run's end once terminal.
-    timed.push({
-      t: lastStepT != null ? lastStepT + 1 : Number.POSITIVE_INFINITY,
-      order: order++,
-      unit: { kind: "taskList" },
-    })
+    const insertAt = units.findIndex((unit) => rowAt(unit) > lastStepT)
+    units.splice(insertAt === -1 ? units.length : insertAt, 0, { kind: "taskList" })
     // The deterministic terminal line ("…做好了，结果在画布上") is RETIRED
     // (2026-09-24 user ruling — 重复): it narrated the same landing the
     // trigger turn's run_completed prose narrates seconds later, richer
@@ -3745,26 +3756,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // row is the instant deterministic surface, the trigger prose is the
     // closing speech. The 2026-09-13 styling law (收官句 = 普通回复消息)
     // survives — the trigger prose IS that ordinary AssistantText message.
-    timed.sort((a, b) => a.t - b.t || a.order - b.order)
-    const units: RunStreamUnit[] = timed.map((entry) => entry.unit)
-    for (const m of undated) {
-      // Undated messages (fresh optimistic sends) are chronologically NOW —
-      // they land above the pinned task list while the run is live.
-      if (!terminal && units[units.length - 1]?.kind === "taskList") {
-        units.splice(units.length - 1, 0, { kind: "message", message: m })
-      } else {
-        units.push({ kind: "message", message: m })
-      }
-    }
     return units
-  }, [runId, runStartAt, runCreatedAt, steps, flowMessages, allActivityRows, terminal, status])
+  }, [runId, runStartAt, runCreatedAt, steps, messages, terminal, status])
 
-  // The NON-run timeline (iter-3 S7): the same moment-ordering law off a
-  // run — messages × the turn's activity rows in one real-time walk (the
-  // retired fixed bottom block's rows now flow at their birth moments).
+  // The NON-run timeline (ADR-108): the same array map off a run — every
+  // row renders at its array position, settled activity rows fold into
+  // aggregate rows as a display-layer projection.
   const conversationUnits = useMemo(
-    () => buildConversationUnits(flowMessages, allActivityRows),
-    [flowMessages, allActivityRows],
+    () => foldActivityUnits(buildConversationUnits(messages)),
+    [messages],
   )
 
   // The now-line (2026-09-24 用户拍板 — thinking 和 activity 是同一个组件):
@@ -4554,6 +4554,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                           </MessageScrollerItem>
                         )
                       }
+                      if (unit.kind === "activityFold") {
+                        return (
+                          <MessageScrollerItem key={`fold-${unit.rows[0]?.activity_id}`}>
+                            <FoldedActivityRow rows={unit.rows} />
+                          </MessageScrollerItem>
+                        )
+                      }
                       // taskList — ONE persistent block (the CC anatomy):
                       // the dynamic row + the rail tree flipping in place.
                       if (unit.kind === "taskList") {
@@ -4591,12 +4598,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     through runStreamUnits — ONE path, the legacy fixed block
                     is dead 2026-09-09). A superseded plan version's chip sits
                     right after the echo bubble whose turn produced it; the
-                    live plan is the bottom-most card. iter-3 S7: messages ×
-                    the turn's activity rows interleave by real moment (the
-                    shared timeline layer — lib/chatTimeline). */}
+                    live plan is the bottom-most card. ADR-108 数组位置律:
+                    every row renders at its array position; consecutive
+                    settled activity rows fold into one aggregate row. */}
                 {conversationUnits.map((unit) =>
                   unit.kind === "message" ? (
                     renderConversationMessage(unit.message)
+                  ) : unit.kind === "activityFold" ? (
+                    <MessageScrollerItem key={`fold-${unit.rows[0]?.activity_id}`}>
+                      <FoldedActivityRow rows={unit.rows} />
+                    </MessageScrollerItem>
                   ) : (
                     <MessageScrollerItem key={unit.activity.activity_id}>
                       <ActivityRow activity={unit.activity} />

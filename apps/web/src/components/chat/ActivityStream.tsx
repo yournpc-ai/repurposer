@@ -46,6 +46,8 @@ import {
 } from "lucide-react"
 
 import type { ActivityFramePayload } from "@/lib/chat-stream"
+import type { ActivityRowFrame } from "@/components/chat/historyReplay"
+import { foldSummary } from "@/lib/chatTimeline"
 import { formatElapsed } from "@/components/chat/RunTaskList"
 import { cn } from "@/lib/utils"
 
@@ -70,9 +72,12 @@ const KIND_ICONS: Record<ActivityFramePayload["kind"], LucideIcon> = {
  * state. "think" is frontend-synthesized, NEVER on the wire (the wire
  * whitelist is unchanged); a think row is always active and never settles —
  * it leaves zero history, the next milestone simply replaces its content in
- * the same mounted row (a morph, never a new row). */
-export type NowRowPayload = Omit<ActivityFramePayload, "kind"> & {
+ * the same mounted row (a morph, never a new row). `seq` is the live
+ * channel's bookkeeping — array rows (ADR-108) order by position and may
+ * omit it. */
+export type NowRowPayload = Omit<ActivityFramePayload, "kind" | "seq"> & {
   kind: ActivityFramePayload["kind"] | "think"
+  seq?: number
   /** Think-state interpolation (the material beats name the file being
    * read); wire milestones never carry it. */
   name?: string
@@ -176,6 +181,56 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
             {t("chat.activityMeta.count", { count: activity.count })}
             {duration ? ` · ${duration}` : ""}
           </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The折叠行 (ADR-108 §6 — 呈现层折叠): ≥2 consecutive settled rows of the
+ * same act collapse into ONE quiet row (「已检索转写 ×7 · 共 3s」), expanding
+ * in place to the individual rows. Same register as ActivityRow's settled
+ * form; the shared glyph leads, the repeat count suffixes the shared
+ * past-tense label, the summed duration whispers. Failed/cancelled rows
+ * carry the active-form key, so they never fold together with completed
+ * ones (the fold key already separates them). */
+export function FoldedActivityRow({ rows }: { rows: ActivityRowFrame[] }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const { key, count, totalMs } = foldSummary(rows)
+  const baseLabel = key
+    ? t(key, { defaultValue: t("chat.completed") })
+    : t("chat.completed")
+  const label = t("chat.activityFold.repeated", { label: baseLabel, count })
+  const duration = totalMs != null ? formatElapsed(totalMs) : null
+  const KindIcon = KIND_ICONS[rows[0]?.kind ?? "read"]
+  return (
+    <div className="flex w-full flex-col gap-1">
+      <div
+        className="flex w-full cursor-pointer select-none items-center gap-2 text-xs text-muted-foreground"
+        role="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <KindIcon className="h-3 w-3 shrink-0" />
+        <span className="min-w-0 truncate">{label}</span>
+        {duration && (
+          <span className="shrink-0 text-xs tabular-nums text-meta-foreground">
+            · {duration}
+          </span>
+        )}
+        <ChevronDown
+          className={cn(
+            "ml-auto h-3 w-3 shrink-0 transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      </div>
+      {open && (
+        <div className="ml-5 flex flex-col gap-1">
+          {rows.map((row) => (
+            <ActivityRow key={row.activity_id} activity={row} />
+          ))}
         </div>
       )}
     </div>

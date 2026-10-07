@@ -318,7 +318,7 @@ describe("material beats (2026-09-24 素材节拍入库)", () => {
     )
     expect(out).toHaveLength(2)
     expect(out[0].content).toBe("")
-    expect(out[0].beat).toMatchObject({
+    expect(out[0].activity).toMatchObject({
       kind: "read",
       status: "completed",
       key: "chat.material.readingDoneProgress",
@@ -327,7 +327,7 @@ describe("material beats (2026-09-24 素材节拍入库)", () => {
       name: "keynote.mp4",
       at: "2026-09-24T10:00:00Z",
     })
-    expect(out[1].beat).toMatchObject({
+    expect(out[1].activity).toMatchObject({
       kind: "read",
       status: "completed",
       key: "chat.material.understandingDone",
@@ -362,8 +362,8 @@ describe("material beats (2026-09-24 素材节拍入库)", () => {
       ],
       ctx,
     )
-    expect(out[0].beat?.key).toBe("chat.material.readingDone")
-    expect(out[1].beat).toMatchObject({
+    expect(out[0].activity?.key).toBe("chat.material.readingDone")
+    expect(out[1].activity).toMatchObject({
       status: "failed",
       key: "chat.material.readingFailed",
       name: "b.mov",
@@ -397,8 +397,8 @@ describe("material beats (2026-09-24 素材节拍入库)", () => {
       ],
       ctx,
     )
-    expect(out[0].beat?.key).toBe("chat.material.readingDone_video")
-    expect(out[1].beat?.key).toBe("chat.material.readingDone_audio")
+    expect(out[0].activity?.key).toBe("chat.material.readingDone_video")
+    expect(out[1].activity?.key).toBe("chat.material.readingDone_audio")
   })
 
   it("an off-shape beat dump degrades to a plain assistant row (read tolerance)", () => {
@@ -406,84 +406,100 @@ describe("material beats (2026-09-24 素材节拍入库)", () => {
       [row({ content: "", intent: { type: "material_beat", beat: "mystery" } })],
       ctx,
     )
-    expect(out[0].beat).toBeUndefined()
+    expect(out[0].activity).toBeUndefined()
   })
 })
 
-describe("activity logs (2026-09-25 activity 持久化)", () => {
+describe("activity array rows (ADR-108 — 每帧一行)", () => {
   const frame = (over: Record<string, unknown>) => ({
     activity_id: "a1",
-    seq: 1,
     kind: "read",
     status: "completed",
     key: "chat.inspectingDone.searchTranscript",
-    at: "2026-09-25T10:00:01Z",
+    at: "2026-09-25T10:00:00.180Z",
     duration_ms: 820,
     ...over,
   })
 
-  it("a persisted turn log replays as settled milestone frames, never a bubble", () => {
+  it("a persisted activity row replays IN ITS ARRAY POSITION as an activity unit, never a bubble", () => {
     const out = mapHistoryRows(
       [
+        row({ id: "u1", role: "user", content: "剪哪一句" }),
         row({
-          id: "log-1",
-          created_at: "2026-09-25T10:00:05Z",
+          id: "act-1",
+          created_at: "2026-09-25T10:00:01Z",
+          intent: { type: "activity", frame: frame({}) },
+        }),
+        row({
+          id: "act-2",
+          created_at: "2026-09-25T10:00:02Z",
           intent: {
-            type: "activity_log",
-            ref: "user-msg-1",
-            frames: [
-              frame({}),
-              frame({
-                activity_id: "a2",
-                seq: 2,
-                kind: "draft",
-                key: "chat.activity.draftDone",
-                count: 3,
-              }),
-            ],
+            type: "activity",
+            frame: frame({ activity_id: "a2", key: "chat.inspectingDone.segment" }),
           },
         }),
+        row({ id: "r1", content: "我推荐剪这句" }),
       ],
       ctx,
     )
-    expect(out).toHaveLength(1)
-    expect(out[0].content).toBe("")
-    expect(out[0].milestones).toHaveLength(2)
-    expect(out[0].milestones?.[0]).toMatchObject({
+    // 数组位置律: the rows render in array order — no timestamp re-sort.
+    expect(out.map((m) => m.id)).toEqual(["u1", "act-1", "act-2", "r1"])
+    expect(out[1].content).toBe("")
+    // The persisted `at` is the birth stamp (execute entry) — replay reads
+    // it verbatim, no derivation.
+    expect(out[1].activity).toMatchObject({
       activity_id: "a1",
       kind: "read",
       status: "completed",
       key: "chat.inspectingDone.searchTranscript",
-      // The persisted `at` (10:00:01, the settle stamp) re-anchors to the
-      // TRUE WORK START: −820ms (ADR-104 排序律 — replay and live agree).
       at: "2026-09-25T10:00:00.180Z",
       duration_ms: 820,
     })
-    expect(out[0].milestones?.[1]).toMatchObject({ kind: "draft", count: 3 })
+    expect(out[2].activity).toMatchObject({
+      activity_id: "a2",
+      key: "chat.inspectingDone.segment",
+    })
   })
 
-  it("an active frame inside the dump drops the whole row (settled-only law, read tolerance)", () => {
+  it("an honestly-open row (a read still in flight when the stream dropped) replays active", () => {
     const out = mapHistoryRows(
       [
         row({
-          content: "",
+          id: "act-open",
           intent: {
-            type: "activity_log",
-            ref: "x",
-            frames: [frame({ status: "active" })],
+            type: "activity",
+            frame: frame({ status: "active", key: "chat.inspecting.transcript", duration_ms: undefined }),
           },
         }),
       ],
       ctx,
     )
-    expect(out[0].milestones).toBeUndefined()
+    expect(out[0].activity).toMatchObject({ status: "active" })
   })
 
-  it("a non-array frames payload degrades to a plain assistant row", () => {
+  it("a malformed frame skips the row entirely — never an empty bubble", () => {
     const out = mapHistoryRows(
-      [row({ content: "", intent: { type: "activity_log", ref: "x", frames: "no" } })],
+      [row({ content: "", intent: { type: "activity", frame: { kind: "mystery" } } })],
       ctx,
     )
-    expect(out[0].milestones).toBeUndefined()
+    expect(out).toHaveLength(0)
+  })
+
+  it("never-render rows skip: the rejection forensics ledger and legacy aggregate logs", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "fx",
+          intent: { type: "activity_forensics", ref: "u1", rejections: [{ reason: "x" }] },
+        }),
+        row({
+          id: "legacy",
+          intent: { type: "activity_log", ref: "u1", frames: [frame({ seq: 1 })] },
+        }),
+        row({ id: "r1", content: "answer" }),
+      ],
+      ctx,
+    )
+    expect(out.map((m) => m.id)).toEqual(["r1"])
   })
 })
