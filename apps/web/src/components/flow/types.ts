@@ -273,7 +273,7 @@ export interface FlowViewProps {
   controlsClassName?: string
   /** Settle-driven initial framing (2026-09-06): surfaces whose data arrives
    * through MULTIPLE async fetches (the results canvas: /results + /assets,
-   * gated visible by hasRuns) pass a key that is non-null exactly when their
+   * gated visible by worldLive) pass a key that is non-null exactly when their
    * visible, settled content is present. Each transition to a new non-null
    * key frames the graph once; growth afterwards never re-frames (explore
    * law). Absent = the legacy count-based initial fit (first non-empty

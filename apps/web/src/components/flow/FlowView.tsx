@@ -175,7 +175,7 @@ function ViewportController({
   // ── Settle-driven initial framing (2026-09-06) ────────────────────────
   // Each transition to a NEW non-null key frames once (the surface's
   // visible, settled content is present — for the results canvas:
-  // baselineReady && hasRuns). The fired mark lands inside the rAF, not
+  // baselineReady && worldLive). The fired mark lands inside the rAF, not
   // the effect body, so a cancelled pass (unmount / StrictMode remount)
   // re-fires instead of latching the key without framing.
   const firedSettleRef = useRef<string | null>(null)

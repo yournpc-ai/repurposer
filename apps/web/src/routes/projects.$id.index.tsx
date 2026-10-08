@@ -32,6 +32,7 @@ import { outputMentionLabel } from "@/lib/mentions"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
+import { isPlanReady } from "@/lib/lifecycleStamp"
 
 import type { IntentSlot, LifecycleStamp, Output, ProjectGraph, WorkflowStep, Project } from "@/lib/types"
 
@@ -241,18 +242,16 @@ function ProjectDetailPage() {
   // artifact existence. The stamp rides BOTH frames (results + graph);
   // the graph frame is the fresher source during live turns.
   const lifecycle = graph?.lifecycle ?? results?.lifecycle ?? null
-  // 画布可见性律 (ADR-105, 2026-10-06 用户拍板): node birth and canvas
-  // visibility are TWO separate facts — the graph keeps birthing nodes
-  // server-side (assets at upload, the draft plan at dock, queued/running
-  // faces unchanged), but the canvas PANE only becomes visible once the
-  // user has confirmed generation — the first run. Pre-run the page is the
-  // centered fullscreen chat on every surface (the desktop panel morph and
-  // the mobile dock share the one driver now — the v4.2 C3 workspaceBorn
-  // predicate is retired: draft nodes no longer flip the world open).
-  // (ADR-111 翻案注: 可见性闸将改挂计划就绪——present_plan dock 即
-  // reveal、dock 确认卡面退役，待施工。)
+  // 画布可见性律 (ADR-111, 2026-10-08 拍板 — ADR-105 翻案): the desktop
+  // canvas reveals at PLAN-READY — the docked plan's draft graph IS the
+  // world waiting to start (one rule, two speeds: a recipe arrives
+  // instantly, a chat turn arrives gradually). The driver is the
+  // server-named lifecycle stamp (ADR-087 §2 — never a local derivation);
+  // runs keep revealing too (hasRuns covers every post-start state).
+  // Mobile stays run-driven (no canvas below iPad width — the plan's
+  // review face there is the prose echo, not a canvas).
   const hasRuns = latestRun != null
-  const worldLive = hasRuns
+  const worldLive = hasRuns || (!isMobile && isPlanReady(lifecycle))
   // The desktop chat panel is a FROSTED OVERLAY on the full-bleed canvas
   // (2026-09-06 用户拍板, FLORA "Dock panel" parity — float / docked-right,
   // never an in-flow column): the canvas's top-right zoom pill steps clear
@@ -265,7 +264,7 @@ function ProjectDetailPage() {
     docked: false,
   })
   const panelCoversCorner =
-    hasRuns && !isMobile && !panelState.hidden && panelState.docked
+    worldLive && !isMobile && !panelState.hidden && panelState.docked
 
   useEffect(() => {
     setLoading(true)
@@ -1042,18 +1041,17 @@ function ProjectDetailPage() {
            the panel's in-flow flex-row cut was user-retired same-day — the
            frost must have the canvas living beneath it). A node passing
            under the dock is panned back into view — the canvas is explore
-           navigation. The whole canvas is gated on hasRuns (ADR-105 — node
-           birth ≠ canvas visibility: nodes keep being born server-side
-           pre-confirmation, but the PANE fades in only when the user's
-           confirmed generation starts the first run; ADR-111 翻案注: 闸将
-           改挂计划就绪，待施工): pre-run it is
+           navigation. The whole canvas is gated on worldLive (ADR-111 —
+           the reveal beat is PLAN-READY: the docked plan's draft graph
+           fades the pane in before any run; runs keep the same gate after
+           the start): pre-world it is
            invisible + inert (the full-form chat stage owns the page); the
-           first run's arrival fades it in on the same beat as the stage's
+           reveal fades it in on the same beat as the stage's
            fade-out — 500ms on a 150ms delay (2026-09-06 fade-simplified). */
         <div
           className={cn(
             "min-h-0 flex-1 transition-opacity duration-500 delay-150 ease-out motion-reduce:transition-none",
-            !hasRuns && "pointer-events-none opacity-0"
+            !worldLive && "pointer-events-none opacity-0"
           )}
         >
           <ResultsCanvas
@@ -1065,9 +1063,11 @@ function ProjectDetailPage() {
             // store (the frozen empty canvas) never survives the run.
             healEpoch={canvasEpoch}
             // The settle key's visibility half (2026-09-06): the canvas is
-            // gated on hasRuns, so initial framing joins it with the
-            // baseline — partial fetch frames never frame.
-            visible={hasRuns}
+            // gated on worldLive, so initial framing joins it with the
+            // baseline — partial fetch frames never frame. The reveal's
+            // first frame = this settle fit (FIT_VIEW_OPTIONS clamps the
+            // zoom, ADR-111 §6).
+            visible={worldLive}
             // Birth baseline (ADR-036 补记 3): ready only when the initial
             // /results AND /graph have both settled for THIS project —
             // an early partial frame must not become the baseline (the
@@ -1100,9 +1100,11 @@ function ProjectDetailPage() {
       ) : (
         /* Mobile keeps the list world (prohibition #13 — no canvas below
            iPad width); the same chat dock floats over it. pt-16 clears the
-           floating chrome; pb-36 keeps the last card above the dock. Same
-           hasRuns gate as the canvas — the list fades in with the first
-           run (same 500ms/150ms-delay beat as the stage's fade-out). */
+           floating chrome; pb-36 keeps the last card above the dock.
+           Mobile stays RUN-driven (ADR-111 — no canvas to reveal at
+           plan-ready, the prose echo is the plan's review face): the list
+           fades in with the first run (same 500ms/150ms-delay beat as the
+           stage's fade-out). */
         <div
           className={cn(
             "min-h-0 flex-1 overflow-y-auto transition-opacity duration-500 delay-150 ease-out motion-reduce:transition-none",
@@ -1131,10 +1133,9 @@ function ProjectDetailPage() {
         key={projectId}
         ref={dockRef}
         projectId={projectId}
-        // The three-form machine (2026-09-06, FLORA-aligned; ADR-105 翻案注:
-        // the desktop flip condition is the first RUN — the user's confirmed
-        // generation; draft nodes no longer morph the world open; ADR-111
-        // 再翻案注: flip 条件将改为计划就绪，dock 确认卡面退役，待施工): pre-birth
+        // The three-form machine (2026-09-06, FLORA-aligned; ADR-111:
+        // the desktop flip condition is PLAN-READY — the docked plan's
+        // draft graph morphs the world open before any run): pre-birth
         // the dock is the centered fullscreen chat; the WORKSPACE's birth
         // morphs it into the DESKTOP panel ("panel" — a frosted overlay on
         // the full-bleed canvas, float / docked-right geometry toggled in
@@ -1145,7 +1146,7 @@ function ProjectDetailPage() {
         // pending draft) mount straight in "panel"/"dock" — the loading
         // gate above settles the driver before first render, so the
         // hydrated first frame never replays the morph.
-        form={hasRuns ? (isMobile ? "dock" : "panel") : "full"}
+        form={worldLive ? (isMobile ? "dock" : "panel") : "full"}
         // The server-named lifecycle stamp (ADR-087 §2, Phase 1): the
         // dock's confirm-phase mount + Start gate read it — never a local
         // derivation.
@@ -1194,8 +1195,10 @@ function ProjectDetailPage() {
         // (declared-material promotion) whose nodes land in the same frame.
         onRunStarted={() => {
           // C5 相机律: the run fill's newborns land via the refetch loop —
-          // arm an ensure-in-view beat toward where they settled.
-          if (hasRuns && !isMobile) {
+          // arm an ensure-in-view beat toward where they settled. worldLive
+          // (not hasRuns): the first run's start beat predates the refetched
+          // latest_run, but the world is already live from the plan's dock.
+          if (worldLive && !isMobile) {
             setCameraBeat({ token: Date.now() })
           }
           void fetchResults()
@@ -1218,7 +1221,13 @@ function ProjectDetailPage() {
           const before = new Set((graph?.nodes ?? []).map((n) => n.id))
           void (async () => {
             const fresh = await fetchGraph()
-            if (!fresh || !hasRuns || isMobile) return
+            // worldLive reads the closure's PRE-dock stamp on the reveal
+            // beat (the callback fires before the refetch re-renders) —
+            // false there, so the reveal's first framing stays the settle
+            // fit's own (the sole automatic fit); only LATER draft changes
+            // (revision restamps on an already-live world) earn the
+            // deterministic newborn-cluster focus (ADR-111 §6 / C5).
+            if (!fresh || !worldLive || isMobile) return
             const newbornIds = fresh.nodes
               .filter((n) => !before.has(n.id))
               .map((n) => n.id)
