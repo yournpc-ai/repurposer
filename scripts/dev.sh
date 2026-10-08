@@ -142,16 +142,32 @@ wait_for_url "http://localhost:8000/health" "API" 60
 # Remotion render service (clip-spec -> MP4+SRT). Node/pnpm, headless Chrome +
 # bundled FFmpeg. Black box the api worker calls; not needed for text-only flows.
 #
-# Proxy: NONE by default (2026-09-18 拍板) — the network is the operator's own
-# setting, code must not sniff it. The old nc-probe of 6152 auto-injected
-# HTTPS_PROXY when a local proxy was up (built for the throttled-direct era);
-# when the proxy later started stalling upload bodies, that injection silently
-# turned every render's result PUT into a HeadersTimeoutError 500. Need a proxy
-# for a throttled TOS link? Say so explicitly:
-#   HTTPS_PROXY=http://127.0.0.1:6152 ./scripts/dev.sh
-# (the render service's staging/upload fetchers honor the env; loopback exempt).
+# Proxy: injected by default (2026-10-08 拍板). The direct TOS link from this
+# network is throttled (~12 KB/s measured) while the local proxy sustains MB/s
+# for both GET and PUT; the render service's staging/upload fetchers honor the
+# env, loopback exempt. The probe validates the REAL path (proxy → TOS), never
+# the bare port — a dead proxy falls back to direct LOUDLY instead of silently
+# breaking every render (the old nc-probe's sin). The probe cannot prove
+# large-PUT health; if PUTs stall, opt out with RENDER_PROXY=off. An
+# operator-exported HTTPS_PROXY is inherited as-is and never overridden.
+# Worker/API stay un-proxied: their TOS legs ride the shared source cache and
+# the LLM path is proven direct.
 echo "Starting render service on http://localhost:3001 ..."
-( cd "$ROOT/apps/render" && pnpm dev ) &
+RENDER_PROXY_ENV=()
+if [ -n "$HTTPS_PROXY" ]; then
+  echo "  render proxy: inherited HTTPS_PROXY=$HTTPS_PROXY"
+elif [ "${RENDER_PROXY:-http://127.0.0.1:6152}" != "off" ]; then
+  RENDER_PROXY=${RENDER_PROXY:-http://127.0.0.1:6152}
+  if curl -s -o /dev/null --max-time 4 -x "$RENDER_PROXY" "https://repurposer.tos-ap-southeast-1.volces.com/"; then
+    RENDER_PROXY_ENV=("HTTPS_PROXY=$RENDER_PROXY")
+    echo "  render proxy: $RENDER_PROXY (probe ok)"
+  else
+    echo "  ✘ render proxy $RENDER_PROXY unreachable — starting WITHOUT proxy (direct TOS may crawl; RENDER_PROXY=off silences this probe)"
+  fi
+else
+  echo "  render proxy: OFF (RENDER_PROXY=off)"
+fi
+( cd "$ROOT/apps/render" && env "${RENDER_PROXY_ENV[@]}" pnpm dev ) &
 RENDER_PID=$!
 
 # --- frontend --------------------------------------------------------------
@@ -181,7 +197,7 @@ echo "Service status:"
 DEAD=0
 check_alive "$API_PID"    "API    http://localhost:8000"  "( cd apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 )" || DEAD=1
 check_alive "$WORKER_PID" "worker (job queue)"            "( cd apps/api && uv run python -m app.worker )"                                   || DEAD=1
-check_alive "$RENDER_PID" "render http://localhost:3001"  "( cd apps/render && pnpm dev )"                                                   || DEAD=1
+check_alive "$RENDER_PID" "render http://localhost:3001"  "( cd apps/render && HTTPS_PROXY=http://127.0.0.1:6152 pnpm dev )"                   || DEAD=1
 check_alive "$WEB_PID"    "web    http://localhost:3000"  "( cd apps/web && pnpm dev )"                                                      || DEAD=1
 # Unique-instance guard (2026-09-08 worker 孤儿教训，2026-09-11 推广到全家):
 # 启动前已两趟模式杀，此刻每个服务家族的匹配进程都该只属于本次启动——
