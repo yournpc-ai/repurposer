@@ -872,9 +872,9 @@ class PlanTurn:
         # set rides the shared funnel — the user's own words (literal
         # bilingual keyword) > the previous dock's value > source_only when a
         # distinct second language makes the choice real. The stamped value
-        # rides the intent end-to-end (dock → pending_brief → Start) and the
-        # plan card shows it as a visible, changeable fact row — the user
-        # edits it with one sentence, never a blocking question.
+        # rides the intent end-to-end (dock → pending_brief → Start) as a
+        # stated default — the user revises it with one sentence, never a
+        # blocking question.
         if caption_mode is None:
             caption_mode = await _derive_chat_caption_mode(
                 db, project, params.tasks, self.text
@@ -1117,6 +1117,12 @@ class PlanTurn:
             None,
         )
         task_estimate = await _safe_task_estimate(db, project, compiled)
+        # 估价尾行 (ADR-111 §2 — present_plan dock 的同座同律): the package
+        # dock's echo carries the code-composed estimate whisper too — the
+        # disclosure duty (BILLING §2.1) holds on every dock seat, and the
+        # tailed echo rides intent.answer so the re-dock replay stays
+        # single-tailed.
+        prose = prose + _estimate_tail(self.text, task_estimate)
         intent = InferredIntent(
             action="draft",
             tasks=compiled,
@@ -1248,6 +1254,9 @@ class PlanTurn:
             None,
         ) or (stored_intent.caption_mode if stored_intent else None)
         task_estimate = await _safe_task_estimate(db, project, compiled)
+        # 估价尾行 (ADR-111 §2 — present_plan dock 的同座同律): the revision
+        # re-dock's echo carries the code-composed estimate whisper too.
+        prose = prose + _estimate_tail(self.text, task_estimate)
         intent = InferredIntent(
             action="draft",
             tasks=compiled,

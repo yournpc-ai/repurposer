@@ -1169,10 +1169,6 @@ function ProjectDetailPage() {
             : null
         }
         initialIntent={dockInitialIntent}
-        initialBrief={pendingBrief?.brief}
-        initialDerived={pendingBrief?.derived}
-        initialReasons={pendingBrief?.reasons}
-        initialPlans={pendingBrief?.plans}
         initialRunId={
           // A node-originated run (ADR-058 — the card-face edit's
           // deterministic revision) never attaches to the dock: zero

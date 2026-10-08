@@ -98,6 +98,7 @@ from app.chat.service import (
     _create_run_from_tasks,
     _derive_chat_caption_mode,
     _dock_question,
+    _estimate_tail,
     _prefers_zh,
     _resume_ack_line,
     _reminder_tail,
@@ -560,10 +561,23 @@ class ChatTurn:
         their exact pre-S2 shape (derived=[], no plans, persona preserved
         from the stored pending)."""
         db, project = self.db, self.project
+        # Resolve the dock's quote BEFORE the intent so the echo tail reads
+        # it (ADR-111 §2 — the plan path's present_plan seat's same law):
+        # the chat path's dock echo carries the code-composed estimate
+        # whisper as its tail — the card row's retirement left no other
+        # total-price face here, and the disclosure duty (BILLING §2.1)
+        # holds on every dock seat. The tailed answer rides intent.answer,
+        # so a stored-echo re-dock replays it single-tailed.
+        resolved_estimate = (
+            await _safe_task_estimate(db, project, tasks)
+            if estimate is _ESTIMATE_UNSET
+            else estimate
+        )
+        answer = (answer or "") + _estimate_tail(self.text, resolved_estimate)
         intent = InferredIntent(
             action="draft",
             tasks=tasks,
-            answer=answer or "",
+            answer=answer,
             specific_instruction=specific_instruction,
             caption_mode=caption_mode,
             name=name,
@@ -598,11 +612,7 @@ class ChatTurn:
             reasons=project.pending_brief["reasons"],
             brief=preserved_brief,
             echo=intent.answer,
-            estimate=(
-                await _safe_task_estimate(db, project, intent.tasks)
-                if estimate is _ESTIMATE_UNSET
-                else estimate
-            ),
+            estimate=resolved_estimate,
             derived=derived,
             plans=plans,
         )

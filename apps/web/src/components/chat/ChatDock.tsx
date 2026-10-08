@@ -143,9 +143,7 @@ import {
   upsertActivityFrame,
 } from "./activityReducer"
 import {
-  normalizeBrief,
   normalizeIntent,
-  type Brief,
   type InferredIntent,
   type TaskItem,
 } from "./chatProtocol"
@@ -450,20 +448,6 @@ interface ChatDockProps {
     personaId?: string
   } | null
   initialIntent?: InferredIntent | null
-  /** The parked plan's merged brief (pending_brief.brief) on a restored
-   * session — the plan card's slot rows (预填评审卡, ADR-052 B3). Live turns
-   * refresh it from the docked question's payload, not this prop. */
-  initialBrief?: unknown
-  /** The parked plan's derived preview (ADR-043 — pending_brief.derived):
-   * the card's "you'll get" section on a restored session. */
-  initialDerived?: DerivedRow[]
-  /** The parked plan's soft-signal reasons (pending_brief.reasons) on a
-   * restored session — drives the clips row's no-media inline warning. */
-  initialReasons?: string[]
-  /** 决策包阅读层 (iter-2 ③ — pending_brief.plans): the Content Plans behind
-   * the compiled chain on a restored session; the live envelope re-stamps
-   * from the docked question's payload. Empty on router-drafted docks. */
-  initialPlans?: DecisionPlanRow[]
   /** Attach to an already-running generation (returning visitor): skips the
    * confirm beat, lands straight on the step flow. */
   initialRunId?: string | null
@@ -471,13 +455,13 @@ interface ChatDockProps {
    * — the page refetches so the landed products show. */
   onComplete: (runId: string | null) => void | Promise<void>
   /** The server-named lifecycle stamp (ADR-087 §2, Phase 1): the confirm
-   * beat's derived gate (confirmActive) and the Start button's enable read
-   * it — the dock never derives lifecycle locally. Null on the
+   * beat's derived gate (confirmActive) reads it — the dock never derives
+   * lifecycle locally. Null on the
    * pre-first-fetch frame (the page's loading gate holds the mount, so this
    * is always settled before the confirm beat can show). */
   lifecycle?: LifecycleStamp | null
-  /** A run STARTED while this dock was watching (Start button / prose
-   * confirmation / 修订 run) — the page refetches immediately so its own
+  /** A run STARTED while this dock was watching (prose confirmation /
+   * 修订 run) — the page refetches immediately so its own
    * SSE attaches and the run 期活画布 (placeholders / wipe / fills) renders
    * from the first beat, not only at terminal. One-shot per run. */
   onRunStarted?: (runId: string) => void | Promise<void>
@@ -774,10 +758,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   form = "dock",
   firstMessage,
   initialIntent,
-  initialBrief,
-  initialDerived,
-  initialReasons,
-  initialPlans,
   initialRunId,
   lifecycle,
   onComplete,
@@ -920,23 +900,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           specific_instruction: prompt,
         }
   )
-  // 停泊计划的载荷镜像 (ADR-111 §3 — pending 状态机保留): the docked
-  // plan's payload (derived preview / merged brief / reasons / decision
-  // plans) is still re-stamped from every dock envelope and the parked
-  // pending_brief on restore — the pending STATE machine is the
-  // correctness floor (paid boundary / refresh rebuild / revision
-  // anchor). The card that rendered them retired (ADR-111 §2); the
-  // mirrors stay wired so the machine's facts are where the envelope
-  // puts them, ready for whatever review face reads them next.
-  const [, setDerived] = useState<DerivedRow[]>(initialDerived ?? [])
-  const [, setBrief] = useState<Brief | null>(() =>
-    normalizeBrief(initialBrief)
-  )
-  const [, setReasons] = useState<string[]>(initialReasons ?? [])
-  const [, setPlans] = useState<DecisionPlanRow[]>(initialPlans ?? [])
-  // The plan card renders only once a real inference has landed (a restored
-  // session hands one over; a fresh navigation gets it from the first /chat
-  // turn's refetch). Attach mode never shows the card, so it starts ready.
+  // (ADR-111 §3: the pending STATE machine stays the correctness floor
+  // server-side — paid boundary / refresh rebuild / revision anchor; the
+  // dock payload's brief/derived/reasons/plans mirrors retired with the
+  // card that rendered them — nothing reads them here anymore.)
+  // intentReady = a real inference has landed (a restored session hands one
+  // over; a fresh navigation gets it from the first /chat turn's refetch) —
+  // it gates the confirm beat (confirmActive) and the revision anchor
+  // chips. Attach mode starts ready.
   const [intentReady, setIntentReady] = useState(!!initialIntent || !!initialRunId)
   const [runId, setRunId] = useState<string | null>(initialRunId ?? null)
   // Mirrored in a ref: async chat continuations capture stale closures, and
@@ -1973,35 +1944,23 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // 后运行 — the world morphs on the draft graph, not just on runs).
         void onDraftGraphChangeRef.current?.()
         // 计划行自完备 (2026-09-08, 方案 B): the docked row IS the whole
-        // plan card — the chain on the row's `intent` column, the derived
-        // preview + brief + reasons + estimate on the payload. The live
-        // path renders it straight off the envelope (one turn = one call);
+        // plan — the chain on the row's `intent` column. The live path
+        // renders it straight off the envelope (one turn = one call);
         // the pending-brief fetch is the RECOVERY seat only, kept as the
         // fallback for rows docked before the seal (intent column null).
-        const questionBrief = normalizeBrief(message.question.brief)
         // Phase 3 Batch B (裁决 1): docking NO LONGER raises a "confirm"
         // phase — the confirm beat derives from the stamp's PLAN_READY
         // (confirmActive), so a dock envelope alone never opens the beat
-        // (task_book exists ≠ PLAN_READY). The intent/brief/derived state
-        // still lands here; the stamp's refetch (onDraftGraphChange above)
-        // flips the surface.
+        // (task_book exists ≠ PLAN_READY). The intent state still lands
+        // here; the stamp's refetch (onDraftGraphChange above) flips the
+        // surface.
         if (message.intent) {
           setIntent(normalizeIntent(message.intent))
-          setBrief(questionBrief)
-          setDerived(message.question.derived ?? [])
-          setReasons(message.question.reasons ?? [])
-          setPlans(message.question.plans ?? [])
           setIntentReady(true)
         } else {
           const pending = await fetchPendingBrief()
           if (pending) {
             setIntent(normalizeIntent(pending.intent))
-            setBrief(questionBrief ?? normalizeBrief(pending.brief))
-            setDerived(pending.derived ?? [])
-            setReasons(pending.reasons ?? [])
-            // 决策包阅读层: the recovery seat restores the stamp from
-            // pending_brief (empty on router-drafted rows).
-            setPlans(pending.plans ?? [])
             setIntentReady(true)
             // No "plan updated" filler line on refinements — the turn's own
             // streamed echo bubble already says what changed.
