@@ -2505,6 +2505,31 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     let typeTargetId: string = streamId
     let checkpointCount = 0
     let checkpointChain: Promise<void> = Promise.resolve()
+    // 出生钉位 (数组位置律的实时侧, 2026-10-08 后台 tab 竞态取证): a speech
+    // row's array position is pinned SYNCHRONOUSLY at its first wire fact
+    // (delta receipt / checkpoint frame) — the typewriter paces CONTENT
+    // only, it never births rows: its 24ms timer throttles to ≥1s in a
+    // hidden tab while SSE events keep landing, and a read's activity row
+    // (sync append) would otherwise claim the array position ahead of the
+    // not-yet-born speech bubble. `receivedAny` tracks RECEIPT (not the
+    // typewriter's release) for the current streamId segment.
+    let receivedAny = false
+    const ensureSpeechRow = (id: string, at?: string) => {
+      setMessages((prev) =>
+        prev.some((m) => m.id === id)
+          ? prev
+          : [
+              ...prev,
+              {
+                id,
+                role: "assistant" as const,
+                content: "",
+                streaming: true,
+                at: at ?? new Date().toISOString(),
+              },
+            ],
+      )
+    }
     const appendDelta = (delta: string) => {
       // streamedAny / previewText are the SETTLED bubble's facts only —
       // checkpoint segments (typeTargetId !== streamId) never flip them, so
@@ -2549,39 +2574,40 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
      * it, the next segment appends after them), and every downstream
      * streamId law (the envelope's echoCarried / zero-delta /
      * finalizePreview) reads only the new segment, untouched. */
-    const deliverCheckpoint = async (text: string, at?: string) => {
-      if (!text.trim()) return
+    /** Path A (the iteration-0 seat, ADR-104): prose before the turn's
+     * FIRST read has streamed into the main bubble — drain it, then settle
+     * IN PLACE (rekey the bubble to the cp id, the frame's text wins). The
+     * row's array position never moves: it was pinned at the first delta's
+     * receipt (ensureSpeechRow), before the read's activity rows exist. The
+     * main-bubble identity (streamId) resets to a fresh empty segment, so
+     * every downstream streamId law (the envelope's echoCarried /
+     * zero-delta / finalizePreview) reads only the new segment, untouched. */
+    const settleStreamedSegment = async (cpId: string, text: string, at?: string) => {
       await typewriter.drain()
-      if (typeTargetId === streamId && previewText.trim()) {
-        const cpId = `${streamId}#cp${++checkpointCount}`
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === streamId
-              ? { ...m, id: cpId, content: text, streaming: false, at: at ?? m.at }
-              : m
-          )
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === streamId
+            ? { ...m, id: cpId, content: text, streaming: false, at: at ?? m.at }
+            : m
         )
-        previewText = ""
-        streamedAny = false
-        return
-      }
+      )
+      previewText = ""
+      streamedAny = false
+      receivedAny = false
+    }
+    /** Path B: a checkpoint-only segment (quiet iterations stream nothing).
+     * Its row was PINNED at the frame's arrival (onCheckpoint — the birth
+     * never waits on the typewriter's drain: while this drain runs, a
+     * read's activity row-append lands synchronously and must find the
+     * checkpoint's position already taken); this paces the text into it. */
+    const deliverCheckpoint = async (cpId: string, text: string) => {
+      await typewriter.drain()
       setMessages((prev) =>
         prev.map((m) =>
           m.id === streamId && m.content ? { ...m, streaming: false } : m
         )
       )
-      const cpId = `${streamId}#cp${++checkpointCount}`
       typeTargetId = cpId
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: cpId,
-          role: "assistant" as const,
-          content: "",
-          streaming: true,
-          at: at ?? new Date().toISOString(),
-        },
-      ])
       typewriter.push(text)
       await typewriter.drain()
       setMessages((prev) =>
@@ -2590,7 +2616,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       typeTargetId = streamId
     }
     const onCheckpoint = (text: string, at?: string) => {
-      checkpointChain = checkpointChain.then(() => deliverCheckpoint(text, at))
+      if (!text.trim()) return
+      const cpId = `${streamId}#cp${++checkpointCount}`
+      if (typeTargetId === streamId && receivedAny) {
+        // Path A — the bubble's position was pinned at the first delta's
+        // receipt; the settle rides the chain (drain first) but never moves.
+        checkpointChain = checkpointChain.then(() =>
+          settleStreamedSegment(cpId, text, at),
+        )
+        return
+      }
+      // Path B — pin the row NOW (出生钉位), the chain paces the text in.
+      ensureSpeechRow(cpId, at)
+      checkpointChain = checkpointChain.then(() => deliverCheckpoint(cpId, text))
     }
     /** In-place finalize: the preview bubble becomes the settled message
      * under the SAME key (the envelope's content wins); never a remount.
@@ -2680,7 +2718,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         },
         {
           signal: ctrl.signal,
-          onDelta: (delta) => typewriter.push(delta),
+          onDelta: (delta) => {
+            // 出生钉位: the row is born at the delta's RECEIPT — never at
+            // the typewriter's first released fragment (a hidden tab
+            // throttles its timer while a read's activity row-append lands
+            // synchronously and would claim the position first).
+            if (typeTargetId === streamId) receivedAny = true
+            ensureSpeechRow(typeTargetId)
+            typewriter.push(delta)
+          },
           onThinking: (payload) => {
             // System Status labels and the explicit clear (I-PFA-06 清除
             // 协议, 2026-09-18; Phase 3 Batch B): `"phase" in payload`
@@ -3250,7 +3296,27 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         answered_question: QuestionMessage
         follow_up: QuestionMessage | null
       }>(question.id, body, {
-        onDelta: (text) => typewriter.push(text),
+        onDelta: (text) => {
+          // 出生钉位 (sendChat 同款): the preview row is born at the
+          // delta's RECEIPT — a hidden tab throttles the typewriter's
+          // timer while a read's row-append lands synchronously and would
+          // otherwise claim the array position ahead of the speech.
+          setMessages((prev) =>
+            prev.some((m) => m.id === previewId)
+              ? prev
+              : [
+                  ...prev,
+                  {
+                    id: previewId,
+                    role: "assistant" as const,
+                    content: "",
+                    streaming: true,
+                    at: new Date().toISOString(),
+                  },
+                ],
+          )
+          typewriter.push(text)
+        },
         onThinking: (payload) => {
           // Same protocol as the sendChat handler above: `"phase" in
           // payload` = a labelled hand-over or the explicit clear
