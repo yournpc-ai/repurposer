@@ -785,6 +785,39 @@ def _pending_plan_lines(plan) -> list[str]:
     return lines
 
 
+async def get_graph(db: AsyncSession, project: Project, params) -> str:
+    """The canvas's whole current face (ADR-111 §7 — the plan-ready reveal
+    makes the canvas visible BEFORE any run; the model that just showed it
+    must be able to read what it shows): every node one line (state · type
+    · label), in visual order (top-to-bottom, left-to-right). READ-ONLY —
+    the model's canvas interface is the plan vocabulary (present_plan /
+    edit_graph), never node handles (北极星 + apply_wiring_ops 唯一写口)."""
+    nodes = (
+        (
+            await db.execute(
+                select(GraphNode).where(GraphNode.project_id == project.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not nodes:
+        return "The canvas is empty — nothing has been born yet."
+
+    def _pos(n: GraphNode) -> tuple[float, float]:
+        lay = n.layout or {}
+        return (float(lay.get("y", 0)), float(lay.get("x", 0)))
+
+    lines = [f"The canvas right now ({len(nodes)} nodes, visual order):"]
+    for n in sorted(nodes, key=_pos):
+        spec = n.spec or {}
+        label = (
+            spec.get("summary") or spec.get("name") or spec.get("tool") or "…"
+        )
+        lines.append(f"- [{n.state}] {n.type}: {label} (id: {n.id})")
+    return "\n".join(lines)
+
+
 async def get_pending_plan(db: AsyncSession, project: Project, params) -> str:
     """The conversation's currently DOCKED plan (the PendingPlan awaiting the
     user's Start) — the chat path's draft-plan read (audit §7(d), 2026-09-22):

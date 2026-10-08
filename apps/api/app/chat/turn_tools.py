@@ -208,6 +208,9 @@ PLAN_READ_TOOLS = perception_chat_tools(
     "search_transcript",
     "get_segment",
     "get_artifact",
+    # get_graph (ADR-111 §7): the plan-ready reveal shows the canvas BEFORE
+    # any run — the plan path's model must be able to read what it shows.
+    "get_graph",
 )
 CHAT_READ_TOOLS = perception_chat_tools(
     "get_output_spec",
@@ -223,6 +226,7 @@ CHAT_READ_TOOLS = perception_chat_tools(
     "search_transcript",
     "get_segment",
     "get_artifact",
+    "get_graph",
 )
 
 

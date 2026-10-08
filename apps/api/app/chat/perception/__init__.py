@@ -156,6 +156,18 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             activity_key="chat.inspecting.pendingPlan",
         ),
         PerceptionTool(
+            name="get_graph",
+            description=(
+                "Read the canvas's current face — every node's state and "
+                "label in visual order — when you need to speak about what "
+                "the user is seeing (the workspace is visible to them once "
+                "a plan is docked, before any run)."
+            ),
+            params_model=None,
+            execute=executes.get_graph,
+            activity_key="chat.inspecting.graph",
+        ),
+        PerceptionTool(
             name="search_transcript",
             description=(
                 "Search the project's transcripts for a topic (deterministic "
