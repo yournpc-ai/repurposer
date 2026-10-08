@@ -1601,7 +1601,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // stale fetch never saw). Relay every assets-signature edge (a new asset
   // arrives, or one leaves processing — completed OR failed) to the page's
   // graph refetch: the page's graph state stays fresh so the canvas's
-  // first-run reveal (ADR-105 — node birth ≠ canvas visibility) arrives
+  // first-run reveal (ADR-105 — node birth ≠ canvas visibility; ADR-111
+  // 翻案注: reveal 触发态将改挂计划就绪，待施工) arrives
   // WITH the content, and a manual reload never brings it back. The mount
   // frame never fires (prev === null — the page's own mount fetch holds
   // that truth). The camera beats nothing here: the page's

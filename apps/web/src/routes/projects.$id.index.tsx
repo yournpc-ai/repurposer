@@ -249,6 +249,8 @@ function ProjectDetailPage() {
   // centered fullscreen chat on every surface (the desktop panel morph and
   // the mobile dock share the one driver now — the v4.2 C3 workspaceBorn
   // predicate is retired: draft nodes no longer flip the world open).
+  // (ADR-111 翻案注: 可见性闸将改挂计划就绪——present_plan dock 即
+  // reveal、dock 确认卡面退役，待施工。)
   const hasRuns = latestRun != null
   const worldLive = hasRuns
   // The desktop chat panel is a FROSTED OVERLAY on the full-bleed canvas
@@ -1043,7 +1045,8 @@ function ProjectDetailPage() {
            navigation. The whole canvas is gated on hasRuns (ADR-105 — node
            birth ≠ canvas visibility: nodes keep being born server-side
            pre-confirmation, but the PANE fades in only when the user's
-           confirmed generation starts the first run): pre-run it is
+           confirmed generation starts the first run; ADR-111 翻案注: 闸将
+           改挂计划就绪，待施工): pre-run it is
            invisible + inert (the full-form chat stage owns the page); the
            first run's arrival fades it in on the same beat as the stage's
            fade-out — 500ms on a 150ms delay (2026-09-06 fade-simplified). */
@@ -1130,7 +1133,8 @@ function ProjectDetailPage() {
         projectId={projectId}
         // The three-form machine (2026-09-06, FLORA-aligned; ADR-105 翻案注:
         // the desktop flip condition is the first RUN — the user's confirmed
-        // generation; draft nodes no longer morph the world open): pre-birth
+        // generation; draft nodes no longer morph the world open; ADR-111
+        // 再翻案注: flip 条件将改为计划就绪，dock 确认卡面退役，待施工): pre-birth
         // the dock is the centered fullscreen chat; the WORKSPACE's birth
         // morphs it into the DESKTOP panel ("panel" — a frosted overlay on
         // the full-bleed canvas, float / docked-right geometry toggled in

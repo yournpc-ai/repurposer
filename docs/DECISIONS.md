@@ -2639,23 +2639,6 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 
 **Related**: ADR-084（G1 被本条翻案，余者不动）/ ADR-085（iteration-0 豁免语义从兜底变常态）/ ADR-102（等待读机制——相位帧 liveness 不变）
 
-## ADR-105: 画布可见性 = 首个已确认 run——节点诞生与画布可见性分离（Workspace 合同 v4.2 C3 翻案）
-
-**Status**: Decided (2026-10-06)
-
-**Context**: v4.2 C3 把画布翻开时机定在「agent 开始构建工作世界」（workspaceBorn：首个非 Source 实体越过 queued——draft 计划节点、transcript 卡 done 都触发）。live 走查（项目 378ac591，2026-10-06）显形其代价：present_plan dock 一拍，画布翻出整条 draft 链——三个媒体框尺寸的虚线空洞矩形写着「运行后生成 · 约 N 积分」，用户读作「有三个东西在 loading / 坏掉了」；相机为 fit 虚构链缩到 41%，大面积空画布。用户拍板：**诞生节点归诞生节点，画布可见归可见**——节点照生、loading 面照留，但 present_plan 不该让用户看见画布；用户确认生成才开始可见。
-
-**Decision**:
-
-1. **画布可见性闸门 = `hasRuns`（首个 run 存在）**，全端统一——桌面 panel 形态翻转与移动端 dock 同驱动，v4.2 C3 的 `workspaceBornOf` 谓词整族退役（模块 + 测试删除）。预确认期项目页 = 居中全屏 chat（素材在消息流里：附件 chip + 已理解素材 chip）。
-2. **节点诞生机制零改动**：draft 计划节点照常随 dock 落库、queued/running/done 各面保留；首个 run 起跑、画布淡入时，已诞生的全部节点（素材 + 转写稿 + 计划节点）随首帧一次性出现，running wipe / 排队中 / 估价各行照常。
-3. **相机律同步收紧**：`onDraftGraphChange` 的新节点 setCenter 与 output 点击居中在画布不可见时（pre-run）永不触发；reveal 的初始取景 = 画布挂载自己的 baseline fit。
-4. **surface 报告天然自洽**：`surface: panel ? "canvas" : "chat"`——panel 形态与画布可见性同驱动（hasRuns），模型永不指向一个看不见的画布，提示词零改动。
-
-**Consequences**: 确认前画布永远干净（只有对话）；「loading 味」幽灵矩形、draft 链相机 fit、41% 缩放空画布三个症状同源消失。代价：v4.2 的「draft 图上画布检视」投资退役——计划检视职责完全归 dock 确认卡 / 计划面板（本就承载产物清单 + 估价 + 逐项查看）。回归面：新建项目 → 上传 → dock 出方案，画布不可见；确认开工 → 画布淡入且节点在位；刷新后形态一致。
-
-**Related**: ADR-051（画布优先——预确认期例外由本条收窄为「首个 run 后才优先」）/ ADR-057（K3 直读、K5 翻转条件的历史链：hasRuns || isPlanReady → workspaceBorn → hasRuns）/ ADR-036（诞生编舞——reveal 帧一次性呈现已诞生节点）
-
 ## ADR-106: 素材形态 = 本地聚合判定 + LLM 语义——speaker_map 判定层定型与剪辑复用座
 
 **Status**: Decided (2026-10-06)
@@ -2708,13 +2691,13 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 
 **Consequences**: 【已完成理解】消失类、顺序跳位类、live/回放不一致类 bug 结构性不可能再发生——它们要解决的问题不再存在。打字机律两牙不动（散文字段读容忍 + settle 散文 drain 节拍释放：零 delta 回合的散文行 append 时点 = 信封到达后，内容照节拍放出，位置不受影响）。DB 写入次数略增（activity 每行 open+settle 两写）量级可忽略。ADR-104 §5 排序律的机制（walk key 重锚）翻案退役，其目标（确定性时序：服务员话 → 读活动 → 读后回复）由数组位置天然达成。
 
-**Related**: ADR-104（§5 排序律机制翻案，checkpoint 发射座时点不动）/ ADR-099 §7（言语提交协议不动——DeferredFrames 管 delta 扣押与撤回，数组化管落库与渲染序，两层正交）/ ADR-105（画布可见性不动）/ ADR-085 需求池收口规则③（checkpoint「回合失败随事务回滚」翻案——数组化后失败/中止回合的行照常落库，诚实 transcript）/ ADR-109（言语座位通用化——checkpoint 行作为数组一等行，时序由 seq 承载）
+**Related**: ADR-104（§5 排序律机制翻案，checkpoint 发射座时点不动）/ ADR-099 §7（言语提交协议不动——DeferredFrames 管 delta 扣押与撤回，数组化管落库与渲染序，两层正交）/ ADR-111（画布可见性 = 计划就绪——与数组律正交）/ ADR-085 需求池收口规则③（checkpoint「回合失败随事务回滚」翻案——数组化后失败/中止回合的行照常落库，诚实 transcript）/ ADR-109（言语座位通用化——checkpoint 行作为数组一等行，时序由 seq 承载）
 
 ## ADR-109: 言语座位通用化——checkpoint 白名单退役，before/after 一座两用 + echo 可见性戒律
 
 **Status**: Decided (2026-10-07)
 
-**Context**: 同一取证（项目 3e333147）：用户问「剪哪一句」后，iteration 0 模型说了开工句并调 present_plan，因 `tasks.1.params` 给了空字符串触发 schema 拒收（96.7s 白跑），按言语提交协议 delta 缓冲整体 retract、散文蒸发；iteration 1 起静默，模型重说开工句骑在首次 `search_transcript` 上，但 checkpoint 资格白名单只覆盖 `get_understanding`/`get_asset` 两席（ADR-104），开工句无早发射座，只能沉淀账本随 settle 落库——用户看到一长串「已检索转写 ×7」之后开工句才出现，紧跟着「我推荐剪这句」，顺序颠倒。模型的相位叙事本能天生就在（话已经说了），是 harness 把话扣下。同回合另两起言语越界：dock 后 echo 说「完整计划已经放在工作空间」——此刻零 confirmed run，画布按 ADR-105 不可见，言语指向了用户看不见的面；「原来的长文和金句卡保留」复述计划组成——计划卡枚举自证，散文越界干了卡面的活。用户拍板：工具应有 before/after 通用生命周期，挂在 loop 内核公共座上，不许各工具自写。
+**Context**: 同一取证（项目 3e333147）：用户问「剪哪一句」后，iteration 0 模型说了开工句并调 present_plan，因 `tasks.1.params` 给了空字符串触发 schema 拒收（96.7s 白跑），按言语提交协议 delta 缓冲整体 retract、散文蒸发；iteration 1 起静默，模型重说开工句骑在首次 `search_transcript` 上，但 checkpoint 资格白名单只覆盖 `get_understanding`/`get_asset` 两席（ADR-104），开工句无早发射座，只能沉淀账本随 settle 落库——用户看到一长串「已检索转写 ×7」之后开工句才出现，紧跟着「我推荐剪这句」，顺序颠倒。模型的相位叙事本能天生就在（话已经说了），是 harness 把话扣下。同回合另两起言语越界：dock 后 echo 说「完整计划已经放在工作空间」——此刻零 confirmed run，画布按当时 ADR-105 的闸门不可见（触发态后由 ADR-111 修订为计划就绪），言语指向了用户看不见的面；「原来的长文和金句卡保留」复述计划组成——计划卡枚举自证，散文越界干了卡面的活。用户拍板：工具应有 before/after 通用生命周期，挂在 loop 内核公共座上，不许各工具自写。
 
 **Decision**:
 
@@ -2726,4 +2709,25 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 
 **Consequences**: 顺序错乱类根治——开工句/相位句成为数组一等行（ADR-108），落库时刻恒早于其后续读行；iteration ≥1 不流式的规则不变（言语出站仍只有两座：checkpoint 帧 + settle envelope），变的是 checkpoint 座位的准入从白名单变成普适。第一回合「收到视频了…」顺序正确与第二回合顺序错乱的双胞胎差异（同通道、资格有无）从此消失。schema 拒收白跑类削减（96.7s 级事故失去触发点）。需求池「一回合多交付（ADR-085 checkpoint 通道）」行被本条吸收——命中率验证义务与四条收口规则随批继承（资格纪律一条作废，座位已普适）。
 
-**Related**: ADR-104（checkpoint 资格白名单翻案；发射座时点 /  retract 安全网 / settle 自洽守卫全部保留）/ ADR-093（起始句 = LLM 言语——同律延伸到回合中相位句）/ ADR-060（echo 防编造扩轴）/ ADR-058（计划组成归卡面自证）/ ADR-092 / ADR-103 / ADR-105（画布不可见期间言语禁指——戒律的事实前提）/ ADR-108（checkpoint 行的时序承载）
+**Related**: ADR-104（checkpoint 资格白名单翻案；发射座时点 /  retract 安全网 / settle 自洽守卫全部保留）/ ADR-093（起始句 = LLM 言语——同律延伸到回合中相位句）/ ADR-060（echo 防编造扩轴）/ ADR-058（计划组成归卡面自证）/ ADR-092 / ADR-103 / ADR-111（画布 reveal 前言语禁指——§4 戒律的触发态由 ADR-111 修订为计划就绪）/ ADR-108（checkpoint 行的时序承载）
+
+## ADR-111: 画布可见性 = 计划就绪——确认 dock 卡面退役（ADR-105 翻案）
+
+**Status**: Decided (2026-10-08)，施工未开始（演示收口后动工；翻案程序 = 原型 + live 走查先行，与 ADR-105 定罪同程序，禁纯纸面翻案）
+
+**Context**: 三源收敛。① **配方卡重读**：配方 = 一份已走到计划就绪态的预承诺计划——对话路径逐步到达的终点与配方路径的出生点是同一状态；「首个 confirmed run 才见画布」对配方路径不成立（用户点了模板，看到的却是空 chat 列）。② **ADR-105 原始事故重诊断**：2026-10-06 走查里画布早开翻车（虚线空洞矩形「运行后生成 · 约 N 积分」读作坏掉 + 41% 缩放空画布）的根因是**等待态设计失败**，不是「预开工画布」概念本身——当年用「隐藏」回答了本该用「设计」回答的问题。③ **双应答面事故**（2026-10-08 取证，项目 f6119b5d）：present_plan dock 卡面的 Start 钮与散文的参数问句同拍出现（「想先剪一条，还是两条一起做？」+ Start 钮并立），用户不知该答还是该点；法条修律（dock 收尾只载开工问句）治标，卡面退役治本——dock 卡面与散文天生竞争同一个确认语义。
+
+**Decision**:
+
+1. **画布可见性 = 计划就绪**：present_plan dock（计划就绪）那一拍画布 reveal；hasRuns 闸门退役。一条规则两种速度——配方路径即时到达（点配方 = 计划就绪 = 画布在），对话路径逐步到达。
+2. **确认 dock 卡 UI 整族退役**：任务清单卡 + 估价行 + Start 钮 + panel 计划面全部删除；计划的检阅面 = 画布（节点即计划项），确认的唯一通道 = 口头确认律（ADR-092：散文开工问句 → 用户一句开工 → start_run——机器既有，零新增）。
+3. **pending 状态机（pending_brief / task_book）保留**：它是正确性地板不是 UX 选择——付费边界（冻结确认范围）、刷新重建、插话、修订锚点都挂它；删的是卡面，不是状态，它转去驱动画布等待态。
+4. **修订座位零改动**：present_plan 整链重发 / revise_plan 整包重述 / edit_graph 经 apply_wiring_ops 唯一写口——画布是图的投影，计划重编译画布自动跟上；「砍掉字幕」类修订链路不变。
+5. **echo 可见性戒律（ADR-109 §4）触发态修订**：从 hasRuns 改为计划就绪——画布 reveal 后 echo 可指认画布（「计划已放在右侧画布」类言语合法），reveal 前永不提（不变）；surface 报告同改挂计划就绪态。
+6. **相机律**：reveal 首帧 = fit 全貌 + 缩放夹（下限防 41% 缩没，上限防过度放大）；其余用户发起节拍律不动。
+7. **LLM 画布接口 = 计划词汇，永不是节点句柄**：新增 get_graph 感知读工具（模型可读图）；节点级 CRUD 永禁（北极星 + apply_wiring_ops 唯一写口两律不变）。
+8. **等待态四承重**（原型必须回答，回答不了不开工）：① 等待态节点面——真实预览（配方营销资产 demo/ 前缀）让节点读作「就绪待发」而非「坏掉」；② 估价面新家——billing 律 capture 前估价必须可见，卡面退役后须有新座；③ 刷新重建面——刷新后 pending 计划的画布形态与 live 一致；④ dock 三形态机与画布 reveal 的联动复述（CHAT_ARCH §1 形态事实随施工更新）。
+
+**Consequences**: 双应答面事故结构性消除（没有 Start 钮就没有竞争）；配方与对话两路径收敛于同一「计划就绪 = 画布在」状态，「到来即彷徨」的接住点从卡面移到画布；ADR-105 定罪的三个症状（幽灵矩形 / draft 链相机 fit / 41% 缩放）以设计而非隐藏回答。代价：计划逐项检视的列表面消失（画布节点承担）；施工期间行为面文档（CHAT_ARCH §1 三形态机等）与目标法分叉，随批更新收口。
+
+**Related**: ADR-092（口头确认律——确认唯一通道，不动）/ ADR-109（§4 echo 可见性戒律触发态由本条修订）/ ADR-051（画布优先——预确认期例外由本条取消：计划就绪即画布优先）/ ADR-036（诞生编舞——reveal 帧呈现已诞生节点，不动）/ ADR-058（展示文案二源律——等待态节点面命名受其约束）/ ADR-088/089（北极星——节点级 CRUD 永禁的依据）/ ADR-100（选项唯一座位——dock 卡退役后 ask_user 选项卡形态不动）
