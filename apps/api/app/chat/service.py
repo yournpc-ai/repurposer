@@ -219,6 +219,36 @@ def _reminder_tail(text: str, question: str, default_path: str | None) -> str:
     return tail
 
 
+def _estimate_tail(text: str, estimate: PlanEstimate | None) -> str:
+    """Dock echo 的估价尾行 (ADR-111 §2 — 确认 dock 卡面退役后总估价的新家;
+    BILLING §2.1 披露义务不变: capture 前估价必须可见): a code-composed
+    whisper appended to the plan's dock echo — the total range plus the
+    hold/settle semantics, in the turn's language (code-forced text, never
+    the LLM's voice — the reminder tail's doctrine; 真实数字 = 世界自证,
+    ADR-058 的合法二源). A deferred (None) quote says so honestly — never
+    a fabricated number. The per-task half stays on the canvas's draft
+    nodes (逐节点估价, ADR-057 K5)."""
+    zh = _prefers_zh(text)
+    if estimate is not None:
+        low, high = estimate.total
+        if zh:
+            return (
+                f"\n\n（估价 {low}–{high} 积分——开始时按上限预扣，"
+                "按实际用量结算，失败的步骤不收费，剩余退回）"
+            )
+        return (
+            f"\n\n(Estimated {low}–{high} credits — on start the high end "
+            "is held; you're charged only for what actually runs, failed "
+            "steps are free, and the remainder is returned.)"
+        )
+    if zh:
+        return "\n\n（估价随运行确定——开始后才计费，失败的步骤不收费）"
+    return (
+        "\n\n(Credits are priced when the run starts — billing begins only "
+        "when you start, and failed steps are free.)"
+    )
+
+
 
 # Final Hardening B1 (2026-09-24): ``_edit_op_items`` / ``_validate_edit_ops``
 # retired with the raw-ops chat verb ``apply_edit_ops`` — the Agent's only

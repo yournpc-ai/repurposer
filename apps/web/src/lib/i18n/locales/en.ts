@@ -1503,11 +1503,6 @@ const en = {
     noRecentChats: "No conversations yet",
   },
   generationOverlay: {
-    planProse:
-      "My understanding: {{summary}}. The plan is below — check it, fix anything I got wrong, then hit Start generation.",
-    planProseSingle:
-      "My understanding: {{summary}}. Shall I go ahead, or would you like to change anything?",
-    addTask: "Add task",
     tools: {
       translate_clip: "Captioned version",
       dub_clip: "Voice-over version",
@@ -1515,80 +1510,11 @@ const en = {
       add_music: "Background music",
     },
     derive: {
-      video: "Full video",
-      clips: "Clips",
-      post: "Post",
-      quotes: "Quote cards",
-      carousel: "Carousel",
-      article: "Article",
-      subs: "captioned",
-      dub: "voice-over",
       bilingual: "bilingual",
-      // The caption-mode fact row (ADR-099 §8): the plan card shows the
-      // chain's caption policy as a visible, changeable default.
-      captions: "Captions",
-      source_only: "source language",
-      target_only: "target language",
     },
-    // 决策包阅读层 (iter-2 ③, ADR-089 §4 R16): the plan card's reading layer
-    // — one Content Plan's output line = kind + language + caption form /
-    // dub / aspect, composed in code from these small keys (never raw task
-    // params — the reading layer speaks product semantics, R8).
-    planOutputs: {
-      clip: "Clip",
-      post: "Post",
-      article: "Article",
-      quotes: "Quote cards",
-      carousel: "Carousel",
-      captionBilingual: "bilingual captions",
-      captionTarget: "translated captions",
-      captionSource: "source captions",
-      dub: "voice-over",
-    },
-    // The evidence layer's expander (tasks 证据可展开): the compiled chain
-    // collapses behind this row when the reading layer is present.
-    chainEvidence: "How it gets made · {{count}} steps",
-    bilingualToggle: "Bilingual",
     planVersion: "Plan v{{n}}",
     versionRestore: "Restore this version",
     versionRestored: "Plan v{{n}} restored — it's the current plan now.",
-    removeSlot: "Remove this task",
-    slotAbout: "About",
-    slotFor: "For",
-    slotTone: "Tone",
-    slotMaterial: "Material",
-    slotMaterialAttached: "Attached",
-    slotMaterialPasted: "Pasted text",
-    slotEditMessages: {
-      topic: "Topic: {{value}}",
-      audience: "Audience: {{value}}",
-      tone: "Tone: {{value}}",
-    },
-    defaultPathLine:
-      "Start as-is and I'll generate exactly this — to change anything, just say so in chat.",
-    // 付费语义耳语 (BILLING §2.1 Held + Actualized, Phase 4 B3): the ONE
-    // disclosure of the hold/settle/refund mechanics, whisper register —
-    // the numberless form rides the heavy plan card (the pill below already
-    // carries the range); the WithEstimate form is the single-task plan's
-    // only price surface (密度律: no card, no pill for one task).
-    chargeNote:
-      "On start, the high estimate is held; you're charged only for what actually runs — failed steps are free — and the remainder is returned.",
-    chargeNoteWithEstimate:
-      "On start, up to {{high}} credits are held; you're charged only for what actually runs — failed steps are free — and the remainder is returned.",
-    clipsNeedMedia: "Needs a video, audio, or image source — upload to unlock, or remove this row.",
-    countDecrease: "Decrease",
-    countIncrease: "Increase",
-    confirmQuestion: "Start with this version?",
-    confirm: "Start generation",
-    // 确认拍归档 = 普通用户气泡 (Workspace 合同 v4.2 C8, 2026-09-26 封板):
-    // the Start pill's click lands in the flow AS this user message (the
-    // pill is the user saying it), then rides the one sendChat channel.
-    confirmUserMessage: "Confirm and generate",
-    // E6 披露强度分级 (ADR-092): the escalated tier's priced CTA — the
-    // gesture is the SAME single Start; only the label carries the price.
-    confirmPriced: "Start · ~{{low}}–{{high}} credits",
-    starting: "Starting…",
-    planUpdated: "Got it — I've updated the plan above.",
     // FAUNA-parity mechanics placeholder (2026-09-06 user ruling, final
     // cut — @ verified working in product): FAUNA's form verbatim minus
     // the '/' clause, minus "your" (single-line nowrap ellipsis at the
@@ -1617,9 +1543,6 @@ const en = {
       file: "File",
     },
     stopped: "Generation stopped.",
-    failed: "Generation failed",
-    scopeUnproven:
-      "This run can't be verified as an approved retry on the server — confirm the plan in the chat below, then start it from there.",
   },
   questionDock: {
     bail: "Stop generation",

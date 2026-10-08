@@ -21,9 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, Fragment, forwardRef
 import { useTranslation } from "react-i18next"
 import {
   Box,
-  Captions,
   ChevronDown,
-  ChevronRight,
   ChevronUp,
   Crosshair,
   Download,
@@ -84,16 +82,8 @@ import { Streamdown } from "streamdown"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Bubble, BubbleContent, BubbleGroup } from "@/components/ui/bubble"
 import { Message, MessageContent } from "@/components/ui/message"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   Attachment,
   AttachmentAction,
@@ -114,13 +104,6 @@ import {
   MessageScrollerViewport,
   useMessageScroller,
 } from "@/components/ui/message-scroller"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { RunCard } from "@/components/chat/RunCard"
 import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
 import { AnsweredQuestion, answeredQuestionText } from "@/components/chat/AnsweredQuestion"
@@ -128,7 +111,6 @@ import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
 import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
 import { ComposerSendButton } from "@/components/composer/ComposerSendButton"
 import { CostConfirmControl } from "@/components/composer/CostConfirmControl"
-import { useConfirmStrategy } from "@/components/composer/CostConfirmControl"
 import { ModelsPanel } from "@/components/composer/ModelsPanel"
 import {
   mapHistoryRows,
@@ -164,7 +146,6 @@ import {
   normalizeBrief,
   normalizeIntent,
   type Brief,
-  type BriefSlot,
   type InferredIntent,
   type TaskItem,
 } from "./chatProtocol"
@@ -186,15 +167,6 @@ import {
 } from "@/lib/stagedFiles"
 import { putWithProgress } from "@/lib/stagingUploads"
 import { useFileDrop } from "@/lib/useFileDrop"
-
-const LANGUAGE_OPTIONS = [
-  { code: "en", labelKey: "languages.en" },
-  { code: "zh", labelKey: "languages.zh" },
-  { code: "fr", labelKey: "languages.fr" },
-  { code: "de", labelKey: "languages.de" },
-  { code: "es", labelKey: "languages.es" },
-  { code: "it", labelKey: "languages.it" },
-] as const
 
 /** Derived preview row (ADR-043): the server dry-run-compiles the chain at
  * dock time and projects what it will MAKE — the card's "you'll get"
@@ -275,19 +247,6 @@ const TOOL_META: Record<
     labelKey: "generationOverlay.tools.add_music",
   },
 }
-
-/** The add-row menu's order (generation tools first, then transforms). */
-const ADDABLE_TOOLS = [
-  "select_clips",
-  "write_post",
-  "write_quotes",
-  "write_article",
-  "write_carousel",
-  "translate_clip",
-  "dub_clip",
-  "remove_filler",
-  "add_music",
-] as const
 
 /** Legacy outputs-grammar slot type → its producing tool (read tolerance,
  * mirrors the server-side `_legacy_slots_to_tasks` — stored run contexts
@@ -545,73 +504,6 @@ export interface ChatDockHandle {
    * — the ONE pointing mechanism, ADR-058; also the @workflow_step 本面限定
    * 候选源, ADR-041 D8). No-op when the editor isn't mounted. */
   insertMention: (mention: ChatMention) => void
-}
-
-/** 预填评审卡 slot row (ADR-052 B3): one valued brief slot. A
- * user-stated value is settled prose (the user's own words); an
- * inferred/default proposal carries a dashed underline and opens an inline
- * editor — Enter commits the new value as a real chat message (chat is the
- * one and only revision channel; this row is its shorthand), Esc or blur
- * cancels. Zero chrome: no buttons, no placeholder, no empty state. */
-function BriefSlotRow({
-  label,
-  value,
-  editable,
-  onCommit,
-}: {
-  label: string
-  value: string
-  editable: boolean
-  onCommit: (value: string) => void
-}) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value)
-  return (
-    <div className="flex items-baseline gap-2 text-sm">
-      <span className="shrink-0 text-muted-foreground">{label}</span>
-      {editing ? (
-        <Input
-          autoFocus
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            // IME composition (zh input): Enter confirms the candidate, not
-            // the edit — let it through untouched.
-            if (e.nativeEvent.isComposing) return
-            if (e.key === "Enter") {
-              e.preventDefault()
-              const next = draft.trim()
-              setEditing(false)
-              if (next && next !== value) onCommit(next)
-            } else if (e.key === "Escape") {
-              setEditing(false)
-              setDraft(value)
-            }
-          }}
-          // Blur CANCELS, never commits — the commit is a real chat send,
-          // so an accidental click-away must not fire it.
-          onBlur={() => {
-            setEditing(false)
-            setDraft(value)
-          }}
-          className="h-7 flex-1 text-sm"
-        />
-      ) : editable ? (
-        <button
-          type="button"
-          onClick={() => {
-            setDraft(value)
-            setEditing(true)
-          }}
-          className="cursor-text text-left underline decoration-muted-foreground/50 decoration-dashed underline-offset-4 hover:decoration-foreground"
-        >
-          {value}
-        </button>
-      ) : (
-        <span>{value}</span>
-      )}
-    </div>
-  )
 }
 
 /** MetaRow — the gray system-layer row (一切入流, the Claude Code anatomy):
@@ -1028,27 +920,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           specific_instruction: prompt,
         }
   )
-  /** Derived preview (ADR-043): the docked chain's server-compiled "you'll
-   * get" projection — rides pending_brief.derived; refetched with the plan. */
-  const [derived, setDerived] = useState<DerivedRow[]>(initialDerived ?? [])
-  /** The merged brief (预填评审卡, ADR-052 B3): the plan card's slot
-   * rows. Initial load reads pending_brief.brief; every live turn re-stamps
-   * it from the docked question's payload (turn-fresh single channel). */
-  const [brief, setBrief] = useState<Brief | null>(() =>
+  // 停泊计划的载荷镜像 (ADR-111 §3 — pending 状态机保留): the docked
+  // plan's payload (derived preview / merged brief / reasons / decision
+  // plans) is still re-stamped from every dock envelope and the parked
+  // pending_brief on restore — the pending STATE machine is the
+  // correctness floor (paid boundary / refresh rebuild / revision
+  // anchor). The card that rendered them retired (ADR-111 §2); the
+  // mirrors stay wired so the machine's facts are where the envelope
+  // puts them, ready for whatever review face reads them next.
+  const [, setDerived] = useState<DerivedRow[]>(initialDerived ?? [])
+  const [, setBrief] = useState<Brief | null>(() =>
     normalizeBrief(initialBrief)
   )
-  /** The docked plan's soft-signal reasons (pending_brief.reasons) — the
-   * clips row's no-media inline warning reads `clips_without_media`. */
-  const [reasons, setReasons] = useState<string[]>(initialReasons ?? [])
-  /** 决策包阅读层 (iter-2 ③, R16): the Content Plans behind the compiled
-   * chain — the plan card's READING layer (the chain stays the evidence
-   * layer). Stamped at dock time; a hand edit clears it together with the
-   * LLM-minted name (the same 让座 law — the plans no longer vouch for the
-   * edited chain). */
-  const [plans, setPlans] = useState<DecisionPlanRow[]>(initialPlans ?? [])
-  /** The evidence layer's expander (tasks 证据可展开, iter-2 ③): collapsed
-   * by default when the reading layer is present. */
-  const [chainOpen, setChainOpen] = useState(false)
+  const [, setReasons] = useState<string[]>(initialReasons ?? [])
+  const [, setPlans] = useState<DecisionPlanRow[]>(initialPlans ?? [])
   // The plan card renders only once a real inference has landed (a restored
   // session hands one over; a fresh navigation gets it from the first /chat
   // turn's refetch). Attach mode never shows the card, so it starts ready.
@@ -1060,8 +945,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   useEffect(() => {
     runIdRef.current = runId
   }, [runId])
-  const [isStarting, setIsStarting] = useState(false)
-  const [startError, setStartError] = useState<string | null>(null)
 
   // ask_user 机器: the pending question docks above the input (task_book in
   // the confirm beat; plain questions from the chat loop afterwards); the
@@ -1808,265 +1691,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     [t, raiseHistory],
   )
 
-  // Plain function, not useCallback: it invokes sendChat (a per-render
-  // const declared below) — a deps array would evaluate that binding during
-  // render, before its initialization (TDZ crash). QuestionDock is not
-  // memoized, so the stable-reference memoization bought nothing anyway.
-  const handleStartGeneration = async () => {
-    // runId && !terminal: a run is LIVE — starting now would double-launch.
-    // (A terminal run does NOT block: the dock's refinement Start launches
-    // the next run — runId set ≠ run live.) chatBusy: a refine turn is in
-    // flight — starting now would race its response (the late task plan
-    // could re-dock over the running flow).
-    if ((runId && !terminal) || isStarting || chatBusy) return
-    setStartError(null)
-    setIsStarting(true)
-    try {
-      if (pendingQuestion) {
-        // 确认拍归档 = 普通用户气泡 (Workspace 合同 v4.2 C8, 2026-09-26
-        // 封板): the Start pill IS the user saying「确认生成」— it rides
-        // the ONE sendChat channel (the typed /answer kind=start seat is
-        // retired for this gesture). The plan path's start_run tool
-        // answers the docked task_book server-side — the G-1 machinery a
-        // typed prose confirmation already uses — so the flow shows a
-        // user bubble + the agent's 开工散文, and no QA archive ever lands
-        // (2026-09-05 拍板不变). The panel's edited plan rides
-        // prior_intent (confirmActive is true whenever the pill renders),
-        // exactly like the retired typed Start's `intent` field; the
-        // credits-422 grey row survives via the stream's turn.failed
-        // frame (双路同语义, see sendChat's catch).
-        const text = t("generationOverlay.confirmUserMessage")
-        const rollbackId = crypto.randomUUID()
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: rollbackId,
-            role: "user",
-            content: text,
-            at: new Date().toISOString(),
-          },
-        ])
-        raiseHistory()
-        scrollerSendRef.current?.() // same live-edge intent as handleSend
-        await sendChat(text, { rollbackId })
-        return
-      }
-      // Legacy fallback: no question row (pre-dock projects) — /generate
-      // settles the open question server-side the same way. The confirmed
-      // chain rides `tasks` (ADR-043 — the only request grammar).
-      const firstLangTask = intent.tasks.find((task) => {
-        const param = TOOL_META[task.tool]?.langParam
-        return param != null && typeof task.params[param] === "string"
-      })
-      const firstLang = firstLangTask
-        ? (firstLangTask.params[
-            TOOL_META[firstLangTask.tool].langParam as string
-          ] as string)
-        : null
-      const res = await apiFetch(`/api/v1/projects/${projectId}/generate`, {
-        method: "POST",
-        body: {
-          tasks: intent.tasks,
-          target_language: firstLang ?? "en",
-          instruction: intent.specific_instruction || prompt,
-        },
-        toast: false,
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        const credits = asCreditsInsufficient(body?.detail)
-        if (credits) {
-          pushCreditsGreyRow(credits)
-          return
-        }
-        // D2 (Phase 4 B5): the /generate gate's machine-readable blocker —
-        // the legacy fallback is NOT an authorization channel, so an
-        // unproven chain reads as the honest confirm-in-chat line, never
-        // a generic failure.
-        if (
-          (body?.detail as { code?: string } | undefined)?.code ===
-          "scope.unproven"
-        ) {
-          throw new Error(t("generationOverlay.scopeUnproven"))
-        }
-        throw new Error(
-          typeof body?.detail === "string" && body.detail
-            ? body.detail
-            : t("generationOverlay.failed"),
-        )
-      }
-      const data = (await res.json()) as { run_id: string }
-      // Same override stamp as the answer path above (ADR-058).
-      setRunTitleOverride(titleOf(intent))
-      setRunId(data.run_id)
-      void onRunStartedRef.current?.(data.run_id)
-    } catch (e) {
-      setStartError(e instanceof Error ? e.message : t("generationOverlay.failed"))
-    } finally {
-      // Success AND failure both release the gate — a stuck isStarting
-      // silently swallows every later chat send (handleSend's guard), which
-      // is exactly how "typed an answer, send does nothing" happens.
-      setIsStarting(false)
-    }
-  }
-
-  /** Cancel retired (2026-09-02, stadium 化): the task-book pill is
-   * NON-blocking — the input group stays live below it, so "don't start" is
-   * said by not starting (chat revises, walking away keeps the plan honestly
-   * pending, /projects deletes). A negative action exists only where the
-   * question BLOCKS: the options question's × (hidden input row + bail stops
-   * a live run). No handler here — nothing to cancel. */
-
-  // The Start gate reads the server-named lifecycle stamp (ADR-087 §2,
-  // Phase 1 门禁二): CONFIRMATION_READY is the ONLY readiness authority —
-  // materials mid-flight / a failed asset / a hanging prerequisite all
-  // read as a disabled Start with the pill still visible (信息补全态,
-  // product goal #3). The tasks.length guard is the LOCAL edit buffer's
-  // emptiness check (the payload being shipped), never a lifecycle
-  // derivation. A hand-edited chain keeps the stamp's stored-chain
-  // verdict — the birthplace 422 guards it for real (T14/U3). Phase 3
-  // 判词 2: a MISSING stamp is unknown → NOT ready — Start stays disabled
-  // until the stamp lands (the retired `: true` fallback could open the
-  // confirm beat on a frame the server never named).
-  const canStartGeneration =
-    intent.tasks.length > 0 && isConfirmationReady(lifecycle)
-
-  // Chain edits (ADR-043): panel controls mutate the task list directly —
-  // the same data structure the intent router proposes, so the edited chain
-  // rides the next refine turn as prior_intent and Start ships it verbatim.
-  // Any hand edit CLEARS the LLM-minted name (2026-09-09 拍板, ADR-058):
-  // the proposal named the work IT proposed — once the user's hand touches
-  // the chain (flip the language dropdown, add/remove a row), that name no
-  // longer vouches for the work, so the deterministic label (read from the
-  // CURRENT params, therefore honest) takes over until the next LLM turn
-  // re-names. No reconciliation — the name simply steps aside.
-  const clearName = (prev: InferredIntent) => (prev.name ? { name: "" } : {})
-  // 手改撤名 (ADR-058) 的同一让座律: any hand edit also clears the decision
-  // package's plans reading layer — the LLM-named plans vouched for the
-  // chain THEY compiled; once the user's hand touches it, the card falls
-  // back to the honest chain view until the next chat turn re-lands one.
-  const clearPlans = () => setPlans((prev) => (prev.length ? [] : prev))
-  const updateTaskParams = (index: number, patch: Record<string, unknown>) => {
-    clearPlans()
-    setIntent((prev) => ({
-      ...prev,
-      ...clearName(prev),
-      tasks: prev.tasks.map((task, i) =>
-        i === index ? { ...task, params: { ...task.params, ...patch } } : task
-      ),
-    }))
-  }
-
-  const addTask = (tool: string) => {
-    clearPlans()
-    setIntent((prev) => {
-      const meta = TOOL_META[tool]
-      const params: Record<string, unknown> = {}
-      if (meta?.langParam) {
-        // A hand-added row starts from the chain's prevailing language —
-        // the dropdown always shows a concrete value (no sentinel).
-        const prevailing = prev.tasks
-          .map((task) => task.params[TOOL_META[task.tool]?.langParam ?? "language"])
-          .find((v): v is string => typeof v === "string" && !!v)
-        params[meta.langParam] = prevailing ?? "en"
-      }
-      return {
-        ...prev,
-        ...clearName(prev),
-        tasks: [...prev.tasks, { tool, params }],
-      }
-    })
-  }
-
-  const removeTask = (index: number) => {
-    clearPlans()
-    setIntent((prev) => ({
-      ...prev,
-      ...clearName(prev),
-      tasks: prev.tasks.filter((_, i) => i !== index),
-    }))
-  }
-
-  /** Honest preprocess copy (chat-flow-sequencing 验收 5): with zero file
-   * uploads the preprocess node validates material / admits the writer
-   * lift — "Analyzing your uploads…" would be a lie. */
-  const hasUploads = assets.some((a) => a.file_url)
-
-  /** One derived-preview row's label: the base type word + variant +
-   * language + count chips (整条视频 · 字幕版（中文）· 双语). */
-  const derivedLabel = useCallback(
-    (row: DerivedRow) => {
-      let label = t(`generationOverlay.derive.${row.type}`, {
-        defaultValue: row.type,
-      })
-      if (row.variant) {
-        label += ` · ${t(`generationOverlay.derive.${row.variant}`, { defaultValue: row.variant })}`
-      }
-      if (row.language) {
-        label += ` (${t(`languages.${row.language}`, { defaultValue: row.language })})`
-      }
-      if (row.count) label += ` ×${row.count}`
-      if (row.bilingual) label += ` · ${t("generationOverlay.derive.bilingual")}`
-      return label
-    },
-    [t]
-  )
-
-  /** 决策包阅读层 (iter-2 ③, R16): one plan output's user-safe line — kind
-   * + language + caption form / dub / aspect + the per-output brief,
-   * composed from the small i18n keys (product semantics, R8 — never raw
-   * task params). The brief is user-named data and rides verbatim. */
-  const planOutputLabel = useCallback(
-    (o: DecisionPlanRow["outputs"][number]) => {
-      const parts = [
-        t(`generationOverlay.planOutputs.${o.kind}`, { defaultValue: o.kind }),
-      ]
-      if (o.language) {
-        parts.push(t(`languages.${o.language}`, { defaultValue: o.language }))
-      }
-      if (o.dub) {
-        parts.push(t("generationOverlay.planOutputs.dub"))
-      } else if (o.caption_mode) {
-        const captionKey = {
-          bilingual: "captionBilingual",
-          target_only: "captionTarget",
-          source_only: "captionSource",
-        }[o.caption_mode]
-        if (captionKey) {
-          parts.push(t(`generationOverlay.planOutputs.${captionKey}`))
-        }
-      }
-      if (o.aspect) parts.push(o.aspect)
-      if (o.brief) parts.push(o.brief)
-      return parts.join(" · ")
-    },
-    [t]
-  )
-
-  /** The card's derived section (2026-09-02 收窄): materialize-family rows
-   * only — "Full video" is the chain rows' blind spot; everything else is
-   * a 1:1 restatement of a task row and never renders. */
-  const materializedRows = useMemo(
-    () => derived.filter((row) => row.type === "video"),
-    [derived],
-  )
-
-  /** The caption-mode fact row (ADR-099 §8 default absorption): the chain's
-   * caption policy is intent metadata the task rows cannot say — the one
-   * fact besides materialize that earns a derived row. Read-only; a
-   * one-sentence chat edit re-docks with the new mode (prior_intent). */
-  const captionModeRow = useMemo(() => {
-    const needsCaption = intent.tasks.some(
-      (task) => TOOL_META[task.tool]?.captionMode
-    )
-    return needsCaption && intent.caption_mode ? intent.caption_mode : null
-  }, [intent.tasks, intent.caption_mode])
-
-  /** True when the echo bubble of the turn that docked the current plan is
-   * in the flow — the card's own echo line then stays hidden. */
-  const liveBubblePresent =
-    livePlanMessageId !== null &&
-    messages.some((m) => m.id === livePlanMessageId)
+  // 确认 = 纯口头 (ADR-111 §2 — dock 确认卡面整族退役): the Start button,
+  // the estimate pill and the panel/mobile plan card are gone — the plan's
+  // review face is the CANVAS (draft nodes born at dock carry the chain and
+  // their per-node quotes) and the confirm gesture is the user's own words
+  // (口头确认律 ADR-092: a natural yes rides sendChat to the router's
+  // start_run — the same machine the retired pill used). No Cancel either
+  // (non-blocking law unchanged): "don't start" is said by not starting —
+  // keep chatting, walk away, or delete the project.
 
   /** Restore a superseded version as the current plan — the chip's snapshot
    * becomes the panel's plan (it rides the next refine as prior_intent, and
@@ -3616,12 +3248,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       (s): s is StagedUpload & { asset: ProjectAsset } =>
         s.status === "done" && !!s.asset
     )
-    // isStarting: the dock's Start is mid-answer — a chat turn now would
-    // race it (it could supersede the question being answered). An in-flight
-    // upload blocks send — the chips must settle first (× removes one).
-    // answering: an option answer is mid-flight — its optimistic archive +
-    // the follow-up LLM turn own the flow until they land.
-    if ((!text && ready.length === 0) || chatBusy || isStarting || answering) return
+    // An in-flight upload blocks send — the chips must settle first
+    // (× removes one). answering: an option answer is mid-flight — its
+    // optimistic archive + the follow-up LLM turn own the flow until they
+    // land.
+    if ((!text && ready.length === 0) || chatBusy || answering) return
     if (staged.some((s) => s.status === "uploading")) return
     const sentAssets = ready.map((s) => s.asset)
     // The assets state learns the upload at SEND, never at stage (the send
@@ -3916,526 +3547,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       return
     }
     const text = (s.text ?? "").trim()
-    if (!text || chatBusy || isStarting) return
+    if (!text || chatBusy) return
     void sendChat(text)
   }
-
-  const sendSlotEdit = (slot: "topic" | "audience" | "tone", value: string) => {
-    if (chatBusy || isStarting) return
-    const text = t(`generationOverlay.slotEditMessages.${slot}`, { value })
-    const rollbackId = crypto.randomUUID()
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: rollbackId,
-        role: "user",
-        content: text,
-        at: new Date().toISOString(),
-      },
-    ])
-    raiseHistory()
-    scrollerSendRef.current?.() // same live-edge intent as handleSend
-    void sendChat(text, { rollbackId, draft: text })
-  }
-
-  /** 预填评审卡 slot rows (B3): valued slots ONLY — an empty slot renders
-   * nothing, never a "not set" placeholder (prohibited: 禁空槽位渲染).
-   * Material shows only when real material exists (attached / pasted —
-   * code-stamped fact, never editable); topic / audience / tone are
-   * clickable proposals unless the user's own words stated them. */
-  const briefSlotRows = useMemo(() => {
-    if (!brief) return []
-    const rows: {
-      slot: "topic" | "audience" | "tone" | "material"
-      label: string
-      value: string
-      editable: boolean
-    }[] = []
-    const push = (
-      slot: "topic" | "audience" | "tone",
-      label: string,
-      s: BriefSlot<string>
-    ) => {
-      if (!s.value) return
-      rows.push({ slot, label, value: s.value, editable: s.source !== "user-stated" })
-    }
-    push("topic", t("generationOverlay.slotAbout"), brief.topic)
-    push("audience", t("generationOverlay.slotFor"), brief.audience)
-    push("tone", t("generationOverlay.slotTone"), brief.tone)
-    const material = brief.material_state.value
-    if (material && material !== "none") {
-      rows.push({
-        slot: "material",
-        label: t("generationOverlay.slotMaterial"),
-        value: t(
-          material === "pasted"
-            ? "generationOverlay.slotMaterialPasted"
-            : "generationOverlay.slotMaterialAttached"
-        ),
-        editable: false,
-      })
-    }
-    return rows
-  }, [brief, t])
-
-  // Plan-card placement (2026-08-06 in-flight rework; 2026-09-08 K5 裁定):
-  // settled → pinned bottom-most (order-10); while a chat turn is in flight
-  // → inline at its echo anchor in the message loop (above the new user
-  // bubble + thinking row), so the flow reads chronologically and the stale
-  // confirm dock can hide. Restored sessions have no echo bubble — the card
-  // stays pinned. K5 形态裁定 (简报「dock 计划卡保留至图节点接管确认节拍后
-  // 退役」): the DESKTOP panel form retires the card — the draft graph IS
-  // the plan's face (图先展示后运行: the chain and its per-node quotes live
-  // on the canvas), so the panel renders only the echo prose. (The confirm
-  // beat went dual-seat 2026-09-11, ADR-070: the dock pill is back in the
-  // panel form — this gate is about the CARD only.) The mobile dock keeps
-  // the card (prohibition #13 — no canvas below iPad width — the dock is
-  // its only plan surface).
-  // 2026-09-13 用户拍板 — desktop retires the card in EVERY form: the plan's
-  // dock and the draft-graph stamp land in the same transaction, so the
-  // world flips full → panel one graph fetch later; rendering the card in
-  // the pre-flip full form made it FLASH in the message flow, then vanish
-  // with the morph. The confirm pill rides all three forms throughout, so
-  // the beat never loses its surface during the fetch window. The card is
-  // now exactly the canvas-less surface = mobile (both its forms).
-  const planCardVisible =
-    confirmActive &&
-    form !== "panel" &&
-    isMobile
-    // 移动端 parity (Phase 1): the plan card IS the mobile review surface —
-    // it reads the same stamp's PLAN_READY as the desktop canvas flip
-    // (confirmActive already carries it). Phase 3 判词 2: stamp missing →
-    // unknown → the card waits (never the retired `: true` fallback's
-    // premature confirm face).
-  const planCardInline = planCardVisible && chatBusy && liveBubblePresent
-  /** chat 修改单价 (BILLING §7): the dock payload's per-task marginal credits,
-   * index-aligned with the plan card's task rows (Σ ≡ the pill's total). */
-  const taskEstimates = pendingQuestion?.question?.estimate_credits?.per_task
-  /** 估价区间 (BILLING §2.1): the dock payload's [low, high] total — the
-   * pill's range AND the single-task charge line's number (hoisted above
-   * planCard, 2026-09-21 — the density-law single case has no pill, so its
-   * whisper line is that plan's only price surface). */
-  const planEstimate = pendingQuestion?.question?.estimate_credits?.total
-  /** 计划密度律 (ADR-054): the review card + confirm pill are the HEAVY
-   * rendering — a chain earns them only with review substance (≥2 tasks).
-   * A one-task plan is pure prose: the echo bubble (live journey) or this
-   * pinned echo line (restored) carries the whole confirm beat, and
-   * starting = the user's next chat message (the router's start_run call,
-   * G-1) — no card, no pill, no Start button. The plan row / payload /
-   * settlement are untouched; a rendering threshold only, derived from the
-   * same intent the card would render. */
-  const singlePlan = planCardVisible && intent.tasks.length === 1
-  /** echo 实体化 (2026-09-04, A2): the echo also lands as a real flow
-   * message (answer-POST follow_ups push it before docking) — the card's
-   * own echo line then stays hidden. Content match is exact: A1 stores
-   * intent.answer verbatim as the question row's content. */
-  const echoInFlow =
-    !!intent.answer &&
-    messages.some(
-      (m) =>
-        m.role === "assistant" &&
-        !m.qa &&
-        !m.streaming &&
-        m.content === intent.answer
-    )
-  const echoCarriedInFlow = liveBubblePresent || echoInFlow
-  /** 付费语义耳语 (BILLING §2.1 Held + Actualized, Phase 4 B3): the confirm
-   * beat's ONE disclosure of the hold/settle/refund mechanics — numberless
-   * when the estimate is deferred (估价随运行, never a fabricated number). */
-  const chargeLine = planEstimate
-    ? t("generationOverlay.chargeNoteWithEstimate", {
-        low: planEstimate[0],
-        high: planEstimate[1],
-      })
-    : t("generationOverlay.chargeNote")
-  /** 披露强度分级 (ADR-092 §2, E6 — S4 集成批): the confirm strategy read
-   * at the confirm beat (the停顿's only seat). `never` = the estimate slot
-   * as-is; `always` = the disclosure row + the priced CTA; `large` = the
-   * same when the quote's HIGH end crosses the configs threshold (the
-   * conservative edge — a range that MIGHT be large escalates). The Start
-   * gesture is the same single click either way (停顿定律零破). */
-  const { strategy: confirmStrategy, threshold: confirmThreshold } =
-    useConfirmStrategy()
-  const pricedConfirm =
-    confirmActive &&
-    (confirmStrategy === "always" ||
-      (confirmStrategy === "large" &&
-        planEstimate != null &&
-        planEstimate[1] > confirmThreshold))
-  const planCard = singlePlan ? (
-    echoCarriedInFlow ? (
-      // 密度律单任务的唯一价格面：echo 已在流里时，耳语独立成行（披露 ≠
-      // echo——确认拍期间恒在）。
-      <Message align="start">
-        <MessageContent>
-          <p className="text-xs text-muted-foreground">{chargeLine}</p>
-        </MessageContent>
-      </Message>
-    ) : (
-      <Message align="start">
-        <MessageContent>
-          <p className="text-sm leading-relaxed">
-            {intent.answer ??
-              t("generationOverlay.planProseSingle", { summary: planSummary })}
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">{chargeLine}</p>
-        </MessageContent>
-      </Message>
-    )
-  ) : (
-    <Message align="start">
-      <MessageContent>
-        <div className="w-full motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
-          {/* Prose echo of the understood plan — the card
-              never lands naked (Opus pattern). The LLM's
-              own introduction (intent.answer, streamed as
-              deltas this turn and persisted in the pending
-              intent) wins; the localized template is the
-              fallback for legacy/null echoes. Hidden when
-              the flow already carries the same echo (the
-              streamed bubble or the pushed echo message —
-              echo 实体化, 2026-09-04). */}
-          {!echoCarriedInFlow && (
-            <p className="mb-3 text-sm leading-relaxed">
-              {intent.answer ??
-                t("generationOverlay.planProse", { summary: planSummary })}
-            </p>
-          )}
-          {/* No shadow/glow here: the scroller's paint
-              containment clips the halo on the sides (it
-              survived only on top, looking like a cut-off
-              shadow). Depth comes from bg contrast alone. */}
-          <Card className="ring-0 bg-muted">
-            <div className="flex flex-col gap-3 p-4">
-              {/* No card header, no section labels (2026-09-02 计划瘦身):
-                  the assistant's own message above IS the introduction, and
-                  the rows explain themselves. The identity echo ("Style: …")
-                  retired into the prose — the card carries only the editable
-                  chain + the incremental derived preview. */}
-              {/* 预填评审卡 (ADR-052 B3): the card TOP renders the agent's
-                  OWN understanding — the merged brief's valued slots
-                  (有值显示，无值不显示；零空框). The review is recognition,
-                  not creation: inferred values are one click from a chat
-                  revision, user-stated values are settled prose. */}
-              {briefSlotRows.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  {briefSlotRows.map((row) => (
-                    <BriefSlotRow
-                      key={row.slot}
-                      label={row.label}
-                      value={row.value}
-                      editable={row.editable}
-                      onCommit={(v) =>
-                        row.slot !== "material" && sendSlotEdit(row.slot, v)
-                      }
-                    />
-                  ))}
-                </div>
-              )}
-              {/* 默认路径声明 (schema 牙齿, ADR-052 B3): the fixed anatomy
-                  line — what "just hit Start" means. Structure guarantees it
-                  is always here; it never depends on the LLM's memory. */}
-              <p className="text-xs text-muted-foreground">
-                {t("generationOverlay.defaultPathLine")}
-              </p>
-              {/* 付费语义耳语 (BILLING §2.1, Phase 4 B3): the numberless
-                  charge-mechanics disclosure — the pill below already carries
-                  the range; same whisper register as the default-path line. */}
-              <p className="text-xs text-muted-foreground">
-                {t("generationOverlay.chargeNote")}
-              </p>
-              {/* 决策包阅读层 (iter-2 ③, ADR-089 §4 R16): the Content Plans
-                  — what the user gets, in the agent's own named product
-                  semantics — sit ON TOP of the card; the compiled chain
-                  below becomes the expandable evidence layer. Title renders
-                  only when the LLM named the plan (展示文案二源律: an
-                  unnamed plan never invents a label). */}
-              {plans.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  {plans.map((plan) => (
-                    <div
-                      key={plan.plan_id}
-                      className="flex flex-col gap-1 rounded-md bg-card p-3"
-                    >
-                      {plan.title ? (
-                        <span className="text-sm">{plan.title}</span>
-                      ) : null}
-                      {plan.outputs.map((o, i) => (
-                        <span
-                          key={i}
-                          className="text-xs text-muted-foreground"
-                        >
-                          {planOutputLabel(o)}
-                        </span>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {/* The task chain (ADR-043) — one row per task, in execution
-                  order. Outputs are the chain's derived projection (the
-                  preview below), never a panel declaration: edits mutate
-                  the task list directly and ride the next refine turn as
-                  prior_intent. Same-tool siblings (e.g. an English and a
-                  German post) are separate rows.
-                  证据层 (R16): with the reading layer present the chain
-                  collapses behind an expander; without it (router-drafted
-                  docks) the chain renders directly as before. */}
-              {plans.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1.5 self-start text-xs text-muted-foreground"
-                  aria-expanded={chainOpen}
-                  onClick={() => setChainOpen((v) => !v)}
-                >
-                  <ChevronRight
-                    className={cn(
-                      "size-3.5 transition-transform",
-                      chainOpen && "rotate-90"
-                    )}
-                  />
-                  {t("generationOverlay.chainEvidence", {
-                    count: intent.tasks.length,
-                  })}
-                </Button>
-              )}
-              {(plans.length === 0 || chainOpen) && (
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-col gap-2">
-                  {intent.tasks.map((task, index) => {
-                    const meta = TOOL_META[task.tool]
-                    if (!meta) return null
-                    const { labelKey, Icon } = meta
-                    const estimate = taskEstimates?.[index] ?? null
-                    const langParam = meta.langParam
-                    const lang = langParam
-                      ? (task.params[langParam] as string | undefined) ?? "en"
-                      : null
-                    const limits = meta.countLimits
-                    const count =
-                      typeof task.params.count === "number"
-                        ? task.params.count
-                        : meta.countDefault
-                    return (
-                      <div
-                        key={index}
-                        className="flex flex-col gap-2 rounded-md bg-card p-3"
-                      >
-                        {/* The row wraps at the panel's 336px content width
-                            (2026-09-06 — count stepper / language select /
-                            price fall to a second line instead of
-                            overflowing); at max-w-3xl nothing changes. */}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="flex min-w-0 items-center gap-1.5 text-sm">
-                            <Icon className="h-3.5 w-3.5" />
-                            {t(labelKey)}
-                          </span>
-                          {estimate ? (
-                            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                              {t("credits.range", {
-                                low: estimate[0],
-                                high: estimate[1],
-                              })}
-                            </span>
-                          ) : null}
-                          {limits && count != null && (
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-7 w-7"
-                                disabled={count <= limits[0]}
-                                aria-label={t(
-                                  "generationOverlay.countDecrease"
-                                )}
-                                onClick={() =>
-                                  updateTaskParams(index, {
-                                    count: Math.max(limits[0], count - 1),
-                                  })
-                                }
-                              >
-                                <Minus className="h-3.5 w-3.5" />
-                              </Button>
-                              <span className="w-7 text-center text-sm tabular-nums">
-                                {count}
-                              </span>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-7 w-7"
-                                disabled={count >= limits[1]}
-                                aria-label={t(
-                                  "generationOverlay.countIncrease"
-                                )}
-                                onClick={() =>
-                                  updateTaskParams(index, {
-                                    count: Math.min(limits[1], count + 1),
-                                  })
-                                }
-                              >
-                                <Plus className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          )}
-                          <div className="ml-auto flex items-center gap-1">
-                            {meta.bilingual && (
-                              <Button
-                                variant={
-                                  task.params.bilingual === true
-                                    ? "secondary"
-                                    : "outline"
-                                }
-                                size="sm"
-                                className="h-8 text-xs"
-                                aria-pressed={task.params.bilingual === true}
-                                onClick={() =>
-                                  updateTaskParams(index, {
-                                    bilingual: task.params.bilingual !== true,
-                                  })
-                                }
-                              >
-                                {t("generationOverlay.bilingualToggle")}
-                              </Button>
-                            )}
-                            {langParam && lang != null && (
-                              <Select
-                                value={lang}
-                                onValueChange={(value) =>
-                                  updateTaskParams(index, {
-                                    [langParam]: (value as string) || "en",
-                                  })
-                                }
-                              >
-                                <SelectTrigger className="h-8 w-28 text-xs">
-                                  <SelectValue>
-                                    {(value: string) =>
-                                      t(`languages.${value}`, {
-                                        defaultValue: value,
-                                      })
-                                    }
-                                  </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {LANGUAGE_OPTIONS.map((lang) => (
-                                    <SelectItem
-                                      key={lang.code}
-                                      value={lang.code}
-                                    >
-                                      {t(lang.labelKey)}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            )}
-                            {intent.tasks.length > 1 && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                aria-label={t(
-                                  "generationOverlay.removeSlot"
-                                )}
-                                onClick={() => removeTask(index)}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        {/* No-media inline warning (2026-09-02 新增): the
-                            S11 signal used to live only in the prose + the
-                            Start 422 — the row itself now names the problem
-                            and the way out. Data = the plan's soft-signal
-                            reasons (clips_without_media). */}
-                        {task.tool === "select_clips" &&
-                          reasons.includes("clips_without_media") && (
-                            <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-                              <TriangleAlert className="h-3.5 w-3.5" />
-                              {t("generationOverlay.clipsNeedMedia")}
-                            </p>
-                          )}
-                      </div>
-                    )
-                  })}
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        // self-start: the section is a flex
-                        // column — without this the trigger
-                        // would stretch to full width.
-                        className="h-9 gap-1.5 self-start"
-                      />
-                    }
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>{t("generationOverlay.addTask")}</span>
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    {ADDABLE_TOOLS.map((tool) => {
-                      const meta = TOOL_META[tool]
-                      return (
-                        <DropdownMenuItem
-                          key={tool}
-                          disabled={
-                            tool === "select_clips" &&
-                            intent.tasks.some((task) => task.tool === "select_clips")
-                          }
-                          onClick={() => addTask(tool)}
-                        >
-                          <meta.Icon className="h-3.5 w-3.5" />
-                          {t(meta.labelKey)}
-                        </DropdownMenuItem>
-                      )
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              )}
-
-              {/* Derived preview (ADR-043, 2026-09-02 收窄) — only the
-                  facts the chain rows cannot say earn rows: the materialize
-                  family ("Full video …" — materialize_source is compile-
-                  injected, never a chain task) and the caption-mode fact
-                  (intent metadata, never a task param). Extraction / writer
-                  chains restate their rows 1:1, so the section stays hidden
-                  there. Read-only; no section label. */}
-              {(materializedRows.length > 0 || captionModeRow !== null) && (
-                <div className="flex flex-col gap-1.5 rounded-md bg-card p-3">
-                  {materializedRows.map((row, i) => (
-                    <div key={i} className="flex items-center gap-1.5 text-sm">
-                      {row.variant === "dub" ? (
-                        <Mic2 className="h-3.5 w-3.5 text-muted-foreground" />
-                      ) : row.variant === "subs" ? (
-                        <Languages className="h-3.5 w-3.5 text-muted-foreground" />
-                      ) : (
-                        <Video className="h-3.5 w-3.5 text-muted-foreground" />
-                      )}
-                      <span>{derivedLabel(row)}</span>
-                    </div>
-                  ))}
-                  {captionModeRow !== null && (
-                    <div className="flex items-center gap-1.5 text-sm">
-                      <Captions className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span>
-                        {t("generationOverlay.derive.captions")} ·{" "}
-                        {t(`generationOverlay.derive.${captionModeRow}`)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </Card>
-        </div>
-      </MessageContent>
-    </Message>
-  )
 
   /* The message flow — one JSX block, two hosts: the fullscreen chat
       region, or the dock's history drawer (never mounted in both at once).
@@ -4484,7 +3598,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                         variant="outline"
                         size="sm"
                         className="gap-1.5 rounded-md"
-                        disabled={s.action === "send" && (chatBusy || isStarting)}
+                        disabled={s.action === "send" && chatBusy}
                         onClick={() => handleSuggestionClick(s)}
                       >
                         {s.action === "download" ? (
@@ -4543,16 +3657,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           </MessageScrollerItem>
         ) : null
       )}
-      {/* In-flight only: the live plan card unpins from the
-          bottom and anchors right after its own echo bubble —
-          above the new user bubble and the thinking row. When
-          the turn lands, the version chip takes this slot and
-          the fresh card pins bottom-most again. */}
-      {planCardInline && planCard && m.id === livePlanMessageId ? (
-        <MessageScrollerItem key={`${m.id}-live-plan`}>
-          {planCard}
-        </MessageScrollerItem>
-      ) : null}
     </Fragment>
   )
 
@@ -4587,18 +3691,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                       )
                 }
               >
-                {/* Plan card (confirm beat) — pinned bottom-most
-                    (order-10) while settled. During an in-flight turn it
-                    unpins and renders inline at its echo anchor in the loop
-                    below (the stale confirm dock hides with it); restored
-                    sessions have no echo bubble to anchor to — the card
-                    stays pinned. */}
-                {planCardVisible && !planCardInline && planCard && (
-                  <MessageScrollerItem className="order-10">
-                    {planCard}
-                  </MessageScrollerItem>
-                )}
-
                 {/* The flow (#5 chronology): everything sorts into ONE
                     timeline — the start turn's speech row (a plain assistant
                     message, ADR-093 §2) at its real time ahead of the run's
@@ -4737,52 +3829,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             : t("questionDock.skip")
         }
         onFreeform={handleFreeformAnswer}
-        freeformDisabled={chatBusy || isStarting}
+        freeformDisabled={chatBusy}
       />
     ) : null
-  // The task-book confirm dock — chromeless content for the question pill
-  // (plain — the pill owns the chrome, 拆粘 2026-09-02). Single row, no
-  // Cancel (non-blocking question = no negative action, stadium 化同批).
-  // 计划密度律 (ADR-054): HEAVY rendering only — a one-task plan's
-  // confirm is the next chat message, no pill. Phase 3 Batch A
-  // (2026-09-19 判词 1, ADR-070 唯一座位律): this pill is the ONLY confirm
-  // seat — the canvas task-book card's in-card Confirm & run is retired;
-  // the canvas reads and reviews, it never starts a run.
-  // Pill visibility reads PLAN_READY off the same stamp (R2 翻案: the
-  // review surface is born at PLAN_READY — while materials process, no
-  // canvas flip AND no confirm pill; the stamp's poll drives the flip).
-  // Phase 3 判词 2: a missing stamp is unknown → no pill (missing ≠ ready).
-  const planDock =
-    confirmActive &&
-    !chatBusy &&
-    !singlePlan ? (
-      <QuestionDock
-        kind="task_book"
-        plain
-        question={t("generationOverlay.confirmQuestion")}
-        onStart={handleStartGeneration}
-        starting={isStarting}
-        startDisabled={!canStartGeneration || chatBusy}
-        estimate={
-          planEstimate
-            ? t("credits.range", {
-                low: planEstimate[0],
-                high: planEstimate[1],
-              })
-            : null
-        }
-        pricedCta={
-          pricedConfirm && planEstimate
-            ? t("generationOverlay.confirmPriced", {
-                low: planEstimate[0],
-                high: planEstimate[1],
-              })
-            : null
-        }
-        chargeNote={pricedConfirm ? chargeLine : null}
-      />
-    ) : null
-
   // (canvas↔chat 联动 onPlanConfirmVisible retired 2026-09-26 — Workspace
   // 合同 v4.2 C5 封板翻案: the 2026-09-25「确认 pill 首现 = 整链 fitNow」
   // beat was reversed in favor of the sealed camera law — the camera never
@@ -5135,9 +4184,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             dockHidden ? "pointer-events-none" : "pointer-events-auto"
           )}
         >
-          {confirmActive && startError && (
-            <p className="mb-2 text-sm text-destructive">{startError}</p>
-          )}
           {/* The history region — its OWN floating layer (2026-09-02 输入框
               独立层律, user-ruled): the input group is always a standalone
               layer, never fused with the message flow; the flow floats
@@ -5159,9 +4205,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               input group below, not to the question pill — a tall option
               list in a capsule is broken geometry anyway). Same dock-surface
               frost + hairline recipe. */}
-          {(planDock || pillDock) && (
+          {pillDock && (
             <div className="dock-surface mb-2.5 overflow-hidden rounded-xl ring-1 ring-foreground/10">
-              {planDock}
               {pillDock}
             </div>
           )}

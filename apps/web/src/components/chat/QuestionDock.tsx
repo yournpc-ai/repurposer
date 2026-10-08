@@ -4,16 +4,12 @@
  * one *pending* decision (the ask_user machinery — at most one at a time). The kind
  * selects the form (NAMING N-19: the use lives in `question.kind`, the
  * mechanism is the dock — no per-kind dock components):
- * - task_book: ONE row (2026-09-02 stadium 化, ADR-051 条款 8 Ⓑ; 2026-09-25
- *   用户拍板: the leading ✓ retired) —
- *   the confirm line + the reserved credit slot (the week-6 cost quote
- *   rides `estimate`) + Start; Cancel retired (non-blocking pill = no
- *   negative action). No reasons line — the agent's inference bookkeeping
- *   (chain_default / clip_count_default) is not user copy; the plan card
- *   above carries the substance and the streamed echo carries the caveats.
- *   Rendered only for ≥2-task chains (计划密度律 ADR-054 — a one-task
- *   plan is pure prose; ChatDock owns the threshold).
- * - question (形态律 ADR-053 R1, 阻塞形态 2026-09-04 用户拍板翻回):
+ * - task_book: RETIRED (ADR-111, 2026-10-08 — the confirm dock card
+ *   family is gone: the plan's review face is the canvas's draft nodes,
+ *   the total estimate rides the dock echo's code-composed tail, and the
+ *   confirm gesture is the user's own words — start_run via sendChat,
+ *   口头确认律 ADR-092).
+ * - question (形态律 ADR-053 R1, 阻塞形态 2026-09-04 用户拍板翻回): * - question (形态律 ADR-053 R1, 阻塞形态 2026-09-04 用户拍板翻回):
  *   while an OPTIONS question is pending the chat input row and the
  *   disclaimer HIDE — the dock IS the question (FLORA/Opus 双参照同款：两家
  *   的选项问都接管输入): the question line (the right-side × is the bail
@@ -29,8 +25,7 @@
  *   的行本身（accent 填充 + 行尾 inline spinner，Opus 选中行解剖；作答失败
  *   自动复位），卡底不再另置孤 spinner（同日拍板）. The morph governs
  *   OPTIONS questions only: a text question (options-empty) is plain flow
- *   speech with the input live, and the task-book pill stays non-blocking
- *   (ADR-051 条款 8 Ⓑ).
+ *   speech with the input live.
  * Answering collapses the question into an answered-question block in the
  * flow.
  */
@@ -52,29 +47,6 @@ export interface DockOption {
   description?: string
 }
 
-interface PlanDockProps {
-  kind: "task_book"
-  /** The confirm display line (localized). */
-  question: string
-  onStart: () => void
-  starting: boolean
-  startDisabled?: boolean
-  /** Reserved anatomy (cost quote, week-8 计费线) — muted at the top-right
-   * when present; the slot is the layout reservation. */
-  estimate?: string | null
-  /** 披露强度分级 (ADR-092 §2, E6): when the confirm strategy escalates
-   * (always, or large over the threshold) the CTA carries the price AND a
-   * charge-semantics disclosure row renders under the main row — the SAME
-   * dock, the SAME single Start gesture; only the disclosure strength
-   * differs (never = the estimate slot as-is). `pricedCta` = the priced
-   * label ("Confirm · 3–13 credits"), `chargeNote` = the disclosure line. */
-  pricedCta?: string | null
-  chargeNote?: string | null
-  /** Chromeless content for the floating question pill (2026-09-02 拆粘):
-   * no fill / rounding / margin of its own — the pill owns the chrome. */
-  plain?: boolean
-}
-
 interface OptionDockProps {
   kind: "question"
   /** The question's human text (LLM-written user data, shown as-is). */
@@ -83,8 +55,6 @@ interface OptionDockProps {
   /** 推荐标记 (2026-09-27 一问拍一体化): at most one option id the agent
    * recommends — its row carries the muted 推荐 suffix. */
   recommendedId?: string | null
-  /** Reserved anatomy (cost quote, v3) — shown muted when present. */
-  estimate?: string | null
   onAnswer: (optionId: string) => void
   answering: boolean
   /** Bail affordance — the question line's × (ADR-051): for an interrupt
@@ -105,81 +75,10 @@ interface OptionDockProps {
   plain?: boolean
 }
 
-export type QuestionDockProps = PlanDockProps | OptionDockProps
-
-function PlanForm({
-  question,
-  onStart,
-  starting,
-  startDisabled,
-  estimate,
-  pricedCta,
-  chargeNote,
-  plain,
-}: PlanDockProps) {
-  const { t } = useTranslation()
-  return (
-    // ONE row (2026-09-02 stadium 化): confirm line … Start — the FLORA
-    // "Save & continue" pill anatomy. Cancel retired the same day: the pill
-    // is NON-blocking (the input group stays live below), so "don't start"
-    // is said by simply not starting — keep chatting (chat revision always
-    // wins), walk away (the plan stays honestly pending), or delete the
-    // project. The task_book pill stays non-blocking even after the options
-    // question's blocking morph returned (ADR-053 R1 翻回 2026-09-04): only
-    // a BLOCKING question earns a negative action — the options question's
-    // × (bail = the default path; interrupt = stops a live paid run).
-    // Single-row content is also what makes the pill's rounded-full
-    // stadium correct geometry.
-    <div className={plain ? "py-2 pl-4 pr-2" : "mb-2 rounded-lg bg-muted px-5 py-4"}>
-      <div className="flex items-center justify-between gap-3">
-        {/* 2026-09-25 用户拍板: no leading ✓ (the pill is a question, not a
-            done mark), and pill text stays regular weight (the pill律). */}
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="truncate text-sm">{question}</span>
-          {estimate ? (
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {estimate}
-            </span>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {/* Start = the pill's single decision CTA (composer-bottom-row
-              discipline: one solid anchor, h-9, px-5 presence). The priced
-              label rides the escalation tier (E6) — the gesture is the
-              SAME single Start either way (停顿定律零破). */}
-          <Button
-            disabled={startDisabled || starting}
-            onClick={onStart}
-            className="h-9 px-5"
-          >
-            {starting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {t("generationOverlay.starting")}
-              </>
-            ) : (
-              (pricedCta ?? t("generationOverlay.confirm"))
-            )}
-          </Button>
-        </div>
-      </div>
-      {/* 披露行 (E6 强制档): charge semantics in one whisper line — the
-          same dock, disclosure strength only; the escalated tier renders
-          it, the estimate-only tier never does. */}
-      {chargeNote ? (
-        <p className="mt-1.5 pl-7 text-[11px] leading-snug text-meta-foreground">
-          {chargeNote}
-        </p>
-      ) : null}
-    </div>
-  )
-}
-
 function OptionForm({
   question,
   options,
   recommendedId,
-  estimate,
   onAnswer,
   answering,
   onBail,
@@ -208,11 +107,6 @@ function OptionForm({
           channel. */}
       <div className="flex items-start gap-2 text-sm">
         <span className="min-w-0 flex-1 break-words">{question}</span>
-        {estimate ? (
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {estimate}
-          </span>
-        ) : null}
         {onBail ? (
           <Button
             variant="ghost"
@@ -325,7 +219,6 @@ function OptionForm({
   )
 }
 
-export function QuestionDock(props: QuestionDockProps) {
-  if (props.kind === "question") return <OptionForm {...props} />
-  return <PlanForm {...props} />
+export function QuestionDock(props: OptionDockProps) {
+  return <OptionForm {...props} />
 }

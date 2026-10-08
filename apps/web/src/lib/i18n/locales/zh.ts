@@ -1415,11 +1415,6 @@ const zh: Resources = {
     noRecentChats: "暂无对话",
   },
   generationOverlay: {
-    planProse:
-      "我的理解：{{summary}}。下面是我的生成计划——检查一遍，有理解不对的地方直接改掉，然后点击开始生成。",
-    planProseSingle:
-      "我的理解：{{summary}}。要我开始吗？想改什么也直接说。",
-    addTask: "添加任务",
     tools: {
       translate_clip: "字幕版",
       dub_clip: "配音版",
@@ -1427,76 +1422,11 @@ const zh: Resources = {
       add_music: "背景音乐",
     },
     derive: {
-      video: "整条视频",
-      clips: "视频片段",
-      post: "帖子",
-      quotes: "金句卡",
-      carousel: "轮播图",
-      article: "文章",
-      subs: "字幕版",
-      dub: "配音版",
       bilingual: "双语",
-      // 字幕模式事实行（ADR-099 §8）：方案卡把链的字幕策略显示为
-      // 可见、可一句话手改的默认值。
-      captions: "字幕",
-      source_only: "源语言",
-      target_only: "目标语言",
     },
-    // 决策包阅读层 (iter-2 ③, ADR-089 §4 R16): 计划卡的阅读层——一条方案
-    // 输出行 = 品类 + 语言 + 字幕形态/配音/画幅，代码用小键拼装（阅读层
-    // 永不说原始任务参数，R8 产品语义）。
-    planOutputs: {
-      clip: "短片",
-      post: "帖子",
-      article: "文章",
-      quotes: "金句卡",
-      carousel: "轮播图",
-      captionBilingual: "双语字幕",
-      captionTarget: "翻译字幕",
-      captionSource: "源语言字幕",
-      dub: "配音",
-    },
-    // 证据层展开器（tasks 证据可展开）：阅读层在场时编译链收进这一行。
-    chainEvidence: "它是怎么做的 · {{count}} 步",
-    bilingualToggle: "双语对照",
     planVersion: "计划 v{{n}}",
     versionRestore: "恢复此版本",
     versionRestored: "已恢复为计划 v{{n}}——它是当前计划了。",
-    removeSlot: "移除此任务",
-    slotAbout: "主题",
-    slotFor: "受众",
-    slotTone: "语气",
-    slotMaterial: "素材",
-    slotMaterialAttached: "已上传",
-    slotMaterialPasted: "已粘贴文本",
-    slotEditMessages: {
-      topic: "主题：{{value}}",
-      audience: "受众：{{value}}",
-      tone: "语气：{{value}}",
-    },
-    defaultPathLine:
-      "直接开始 = 我严格按这本书生成——想改什么，在聊天里说一句就行。",
-    // 付费语义耳语（BILLING §2.1 Held + Actualized，Phase 4 B3）：预扣/结算/
-    // 退还机制的唯一披露，耳语 register——无数字版随重型计划卡（下方 pill
-    // 已带估价区间）；带估价版是单任务计划的唯一价格面（密度律：单任务
-    // 无卡无 pill）。
-    chargeNote: "开始时按估价上限预扣；按实际用量结算，失败的步骤不收费，剩余退回。",
-    chargeNoteWithEstimate:
-      "开始时预扣至多 {{high}} 积分；按实际用量结算，失败的步骤不收费，剩余退回。",
-    clipsNeedMedia: "需要视频、音频或图片素材——上传后即可解锁，或移除本行。",
-    countDecrease: "减少",
-    countIncrease: "增加",
-    confirmQuestion: "按这版开始？",
-    confirm: "开始生成",
-    // 确认拍归档 = 普通用户气泡（Workspace 合同 v4.2 C8，2026-09-26 封板）：
-    // Start pill 的点击以这条用户消息落进消息流（pill 等同代用户说出它），
-    // 然后走唯一 sendChat 通道。
-    confirmUserMessage: "确认生成",
-    // E6 披露强度分级 (ADR-092)：强制档 CTA 显价——手势仍是同一个 Start，
-    // 只是标签带价。
-    confirmPriced: "开始 · ~{{low}}–{{high}} 积分",
-    starting: "启动中…",
-    planUpdated: "好，我记下了——上面的计划已更新。",
     // OriginCut 同位 mechanics placeholder（2026-09-24 用户拍板，照搬其两
     // 行组成式：先问需求，再讲机制——拖拽/粘贴 + @ 引用 + 确认后开工，
     // 确认拍正好教付费边界）。「节点」措辞成立：@ 选择器候选（素材 /
@@ -1519,9 +1449,6 @@ const zh: Resources = {
       file: "文件",
     },
     stopped: "已停止生成。",
-    failed: "生成失败",
-    scopeUnproven:
-      "这次运行在服务端无法核证为已确认的重跑——请在下方对话里确认计划，再从那里开始。",
   },
   questionDock: {
     bail: "停止生成",

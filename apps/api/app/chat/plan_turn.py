@@ -82,6 +82,7 @@ from app.chat.service import (
     _draft_from_persona_echo,
     _needs_media,
     _prefers_zh,
+    _estimate_tail,
     _reminder_tail,
     _safe_task_estimate,
     _topic_gate_question,
@@ -845,6 +846,14 @@ class PlanTurn:
         # quotation (total + per-task marginal), degraded exactly like the
         # preview — an unquotable/uncompilable chain docks quote-less.
         task_estimate = await _safe_task_estimate(db, project, params.tasks)
+        # 估价尾行 (ADR-111 §2 — dock 卡面退役后总估价的新家): the dock echo
+        # carries the code-composed estimate whisper (BILLING §2.1 披露义务 —
+        # capture 前可见). Appended AFTER the prose so the tail lands with
+        # the envelope's settled content (the reminder tail's seat); the
+        # per-task half lives on the canvas's draft nodes. intent.answer and
+        # the question row share the same tailed echo, so the flow's
+        # content-match (echo 实体化) keeps holding.
+        echo = echo + _estimate_tail(self.text, task_estimate)
 
         # The late-turn guard: a concurrent Start committed while this refine
         # was in flight — docking now would raise a plan over an active
