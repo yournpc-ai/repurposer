@@ -63,9 +63,54 @@ export function displayAspectClass(width: number, height: number): string {
 /** Non-clip products (no aspect) get the 16:9 strip. */
 export const PRODUCT_THUMB_DEFAULT_PX = 158
 
-/** The card-face program region (ADR-057 §5 — generator/agent: the prompt;
- * processor: the params facts): meta label + ≤3-line body + padding. */
+/** The card-face program region (ADR-057 §5 — the generator's prompt).
+ * 程序区门控 (ADR-076): the region belongs to GENERATOR media cards alone —
+ * editor/manual cards (and the prototype-less transitional words) have no
+ * program region at all and drop this reservation from their anatomy
+ * (graphNodeSize below; one law, two mirrors — graph_store._frame_of
+ * subtracts the same px). */
 export const PROGRAM_REGION_PX = 88
+
+/** The media-card family (the GraphCard skins) — the program-region anatomy
+ * applies only to these kinds; text/table/asset have their own anatomies. */
+const MEDIA_CARD_KINDS: ReadonlySet<FlowNodeKind> = new Set([
+  "video",
+  "image",
+  "audio",
+  "modifier",
+  "materialize",
+])
+
+/** Whether the node's card anatomy carries the program region. */
+export function hasProgramRegion(node: FlowNode): boolean {
+  return MEDIA_CARD_KINDS.has(node.kind) && node.spec?.prototype === "generator"
+}
+
+/** 角落栈谓词: a media card without a program region has no prompt divider
+ * to anchor a second in-port seat above — ALL its in-ports share one stack
+ * at the card's bottom-left corner, in port order (declaredHandles ↔
+ * FlowNodeCard NodePorts, 一条律两镜像). */
+export function cornerStackedInPorts(node: FlowNode): boolean {
+  return MEDIA_CARD_KINDS.has(node.kind) && !hasProgramRegion(node)
+}
+
+/** The artifact facet strip (deliverable cards, ADR-097 §3/§4): border-t 1 +
+ * py-1.5 12 + rows of text-[11px] leading-snug. Generator cards absorb the
+ * strip in the program region's slack; cards without a program region
+ * reserve it explicitly so the media keeps its aspect-exact size. The server
+ * mirror (graph_store._FACET_STRIP_PX) reserves the birth-time row count
+ * (spec.frame_facets); runtime failed rows grow the strip and the flex media
+ * region absorbs them inside the frame. */
+export const FACET_STRIP_ROW_PX = 16
+export function facetStripPx(node: FlowNode): number {
+  const artifact = node.artifact
+  if (!artifact || artifact.facets.length === 0) return 0
+  const failed = new Set(artifact.activity.failed_node_ids)
+  const rows =
+    artifact.facets.filter((f) => failed.has(f.node_id)).length +
+    (artifact.facets.some((f) => !failed.has(f.node_id) && f.label) ? 1 : 0)
+  return rows > 0 ? 1 + 12 + rows * FACET_STRIP_ROW_PX : 0
+}
 
 /** The draft/quiet body (ADR-057 §5 — 虚线空态): the dashed region's
  * reserved height (「运行后生成 · 约 N 积分」). */
@@ -107,6 +152,9 @@ export const PORT_SIDE_PX = 34
 export const PORT_STEP_PX = 34
 export const OUT_PORT_TOP_PX = 40
 export const IN_MEDIA_PORT_BASE_PX = PRODUCT_TOOLBAR_PX + PROGRAM_REGION_PX + 16
+/** 角落栈基座 (无程序区媒体卡): every in-port parks at the card's
+ * bottom-left corner — the same seat as the media card's text port (60). */
+export const IN_CORNER_PORT_BASE_PX = PRODUCT_TOOLBAR_PX + 16
 /** 词表 v3 (C5): the 全文卡 family (text/table) in-text port base = 16 —
  * its tail furniture lives INSIDE the card (the version pager never adds
  * an external band), so the pager offset applies only to the media-card
@@ -132,13 +180,20 @@ export function declaredHandles(
   // bottom-anchored in-port seats ride the band, so both bases shift (the
   // NodePorts mirror applies the same offset; top-anchored out ports don't).
   const pagerPx = (node.outputs?.length ?? 0) > 1 ? PRODUCT_PAGER_PX : 0
+  const unified = cornerStackedInPorts(node)
+  let corner = 0
   let media = 0
   let text = 0
   for (const t of ports.in) {
     const isMedia = t === "video" || t === "audio"
-    const base = isMedia
-      ? IN_MEDIA_PORT_BASE_PX + pagerPx + media++ * PORT_STEP_PX
-      : inTextPortBasePx(node.kind, pagerPx) + text++ * PORT_STEP_PX
+    // 角落栈 (无程序区媒体卡): one seat at the card's bottom-left, stacking
+    // upward in port order — there is no prompt divider to anchor a second
+    // seat above. Generator cards keep the two-family law.
+    const base = unified
+      ? IN_CORNER_PORT_BASE_PX + pagerPx + corner++ * PORT_STEP_PX
+      : isMedia
+        ? IN_MEDIA_PORT_BASE_PX + pagerPx + media++ * PORT_STEP_PX
+        : inTextPortBasePx(node.kind, pagerPx) + text++ * PORT_STEP_PX
     handles.push({
       id: `in:${t}`,
       type: "target",
@@ -165,7 +220,9 @@ export function declaredHandles(
 
 /** Clip-product card height by aspect (the graph canvas's media node):
  * caption + the aspect-exact thumb + the program region + the factsbar
- * band. Width is the frame's (per-aspect lane since 2026-09-13). */
+ * band — the GENERATOR anatomy; cards without a program region subtract
+ * PROGRAM_REGION_PX and add their facet strip in graphNodeSize. Width is
+ * the frame's (per-aspect lane since 2026-09-13). */
 export function clipNodeHeight(aspect?: string | null): number {
   const thumb = (aspect && PRODUCT_THUMB_PX[aspect]) || PRODUCT_THUMB_DEFAULT_PX
   return PRODUCT_LABEL_PX + thumb + PROGRAM_REGION_PX + PRODUCT_TOOLBAR_PX
@@ -290,15 +347,21 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
     return { width, height: Math.min(Math.max(documentTextHeight(text), DOCUMENT_MIN_H), DOCUMENT_MAX_H) }
   }
   // 媒介卡 (video/image/audio + modifier/materialize 过渡词): product
-  // region + program region + bar.
+  // region + program region (generator 独享——editor/manual 撤预留, 媒体区
+  // 吃满) + facet strip + bar.
   const outputs = node.outputs ?? []
+  const programPx = hasProgramRegion(node) ? PROGRAM_REGION_PX : 0
+  // The facet strip eats the generator program region's slack; without a
+  // program region it reserves its own px (server mirror: _frame_of reads
+  // spec.frame_facets).
+  const facetPx = programPx > 0 ? 0 : facetStripPx(node)
   if (outputs.length === 0) {
     // Draft / queued / running / quiet-done body (the dashed region reads
     // the estimate while unrun; a landed-empty node (research) reads its
     // summary in the same body).
     return {
       width,
-      height: PRODUCT_LABEL_PX + DRAFT_BODY_PX + PROGRAM_REGION_PX + PRODUCT_TOOLBAR_PX,
+      height: PRODUCT_LABEL_PX + DRAFT_BODY_PX + programPx + facetPx + PRODUCT_TOOLBAR_PX,
     }
   }
   // The version pager's stacked row (2026-09-13 用户拍板): one extra band
@@ -312,16 +375,16 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
     const lines = Math.min(textLineCount(body, !!title), textLineCap(frame?.h ?? 440, !!title))
     return {
       width,
-      height: PRODUCT_LABEL_PX + textBodyHeight(lines, !!title) + PROGRAM_REGION_PX + PRODUCT_TOOLBAR_PX + pagerPx,
+      height: PRODUCT_LABEL_PX + textBodyHeight(lines, !!title) + programPx + facetPx + PRODUCT_TOOLBAR_PX + pagerPx,
     }
   }
   // Never outgrow the born frame (the reservation law, 判词②): a node
   // stamped before the source dims were known keeps its conservative
-  // frame — the card's media region caps to fit (FlowNodeCard mirrors the
-  // cap), never an overlap. Frames born with dims are aspect-exact — the
-  // cap is inert. The pager row rides ON TOP of the capped frame (frames
+  // frame — the card's media region flexes to fit (FlowNodeCard's fill
+  // mode), never an overlap. Frames born with dims are aspect-exact — the
+  // flex is inert. The pager row rides ON TOP of the capped frame (frames
   // are born with zero outputs, so the reservation never carries it).
-  const clipH = clipNodeHeight(first.aspect ?? null)
+  const clipH = clipNodeHeight(first.aspect ?? null) - (PROGRAM_REGION_PX - programPx) + facetPx
   return { width, height: (frame?.h ? Math.min(clipH, frame.h) : clipH) + pagerPx }
 }
 

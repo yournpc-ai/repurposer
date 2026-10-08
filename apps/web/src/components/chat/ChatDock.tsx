@@ -3770,7 +3770,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     | { kind: "taskList" }
     | { kind: "message"; message: OverlayMessage }
     | { kind: "activity"; activity: ActivityRowFrame }
-    | { kind: "activityFold"; rows: ActivityRowFrame[] }
+    | { kind: "activityFold"; rows: ActivityRowFrame[]; elapsedMs: number | null }
   const runStreamUnits = useMemo<RunStreamUnit[] | null>(() => {
     // ONE render path for every window (2026-09-09 双渲染路收一——the legacy
     // fixed block is dead): the pre-snapshot window (runStartAt == null —
@@ -3782,7 +3782,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if (runId == null) return null
     // 数组位置律: transcript rows render in array order (active / retired
     // span rows are already filtered inside buildConversationUnits);
-    // folding is the display-layer projection (ADR-108 §6).
+    // folding is the display-layer projection (ADR-110 段聚合).
     const units: RunStreamUnit[] = foldActivityUnits(buildConversationUnits(messages))
     if (!terminal) {
       // Pinned bottom-most while live.
@@ -3827,8 +3827,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   }, [runId, runStartAt, runCreatedAt, steps, messages, terminal, status])
 
   // The NON-run timeline (ADR-108): the same array map off a run — every
-  // row renders at its array position, settled activity rows fold into
-  // aggregate rows as a display-layer projection.
+  // row renders at its array position; each completed activity segment
+  // folds into ONE aggregate summary row as a display-layer projection
+  // (ADR-110).
   const conversationUnits = useMemo(
     () => foldActivityUnits(buildConversationUnits(messages)),
     [messages],
@@ -4624,7 +4625,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                       if (unit.kind === "activityFold") {
                         return (
                           <MessageScrollerItem key={`fold-${unit.rows[0]?.activity_id}`}>
-                            <FoldedActivityRow rows={unit.rows} />
+                            <FoldedActivityRow rows={unit.rows} elapsedMs={unit.elapsedMs} />
                           </MessageScrollerItem>
                         )
                       }
@@ -4666,14 +4667,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     is dead 2026-09-09). A superseded plan version's chip sits
                     right after the echo bubble whose turn produced it; the
                     live plan is the bottom-most card. ADR-108 数组位置律:
-                    every row renders at its array position; consecutive
-                    settled activity rows fold into one aggregate row. */}
+                    every row renders at its array position; each completed
+                    activity segment between two messages folds into ONE
+                    aggregate summary row (ADR-110 段聚合). */}
                 {conversationUnits.map((unit) =>
                   unit.kind === "message" ? (
                     renderConversationMessage(unit.message)
                   ) : unit.kind === "activityFold" ? (
                     <MessageScrollerItem key={`fold-${unit.rows[0]?.activity_id}`}>
-                      <FoldedActivityRow rows={unit.rows} />
+                      <FoldedActivityRow rows={unit.rows} elapsedMs={unit.elapsedMs} />
                     </MessageScrollerItem>
                   ) : (
                     <MessageScrollerItem key={unit.activity.activity_id}>
@@ -5163,39 +5165,22 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               {pillDock}
             </div>
           )}
-          {/* The resident disclaimer (ADR-051 — the FLORA FAUNA-line,
-              verbatim): a whisper directly ABOVE the input container
-              (2026-09-06 user ruling — FAUNA parity; was below the input
-              since the 2026-09-02 拆粘); hidden WITH the input row on the
-              options-question morph (ADR-053 R1 阻塞形态). pb-2 / pb-1.5
-              (dock / panel) is the whisper's bottom air against the input —
-              the panel's tighter register mirrors its tighter column pad. */}
-          {!pillDock && (
-            <p
-              className={cn(
-                "pb-1.5 text-center text-xs leading-tight text-meta-foreground",
-                !panel && "pb-2"
-              )}
-            >
-              {t("results.dock.honesty")}
-            </p>
-          )}
           {/* The input container — 输入框独立层律 (2026-09-02, user-ruled):
               the container owns ONLY the resident input row (+ the staged
               chips band when present) — the history region floats as its
-              own layer above, the question as its own pill. dock-surface
-              (2026-08-15 走查拍板): translucent enough that the canvas's dot
-              grid reads through the frost; hairline only, NO shadow — the
-              dock is the composer's third parking spot and inherits its
-              hero-flat rule (without the ring the glass edge dissolves into
-              the canvas). 形态律 (ADR-053 R1 阻塞形态, 2026-09-04 翻回):
+              own layer above, the question as its own pill. dock-surface:
+              translucent enough that the canvas's dot grid reads through
+              the frost; hairline + the whisper shadow-xl in light (shadow
+              belongs to floating layers — the dock floats over the canvas),
+              dark casts nothing (brightness + the hairline do the
+              separating). 形态律 (ADR-053 R1 阻塞形态, 2026-09-04 翻回):
               while an OPTIONS question is pending the input row morphs
               away — with no second band the container is empty, so the
               whole box hides rather than leaving a frost sliver (the
               editor stays mounted inside, DOM-owned draft intact). */}
           <div
             className={cn(
-              "dock-surface relative overflow-hidden ring-1 ring-foreground/10 transition-[border-radius] duration-300 ease-out motion-reduce:transition-none",
+              "dock-surface relative overflow-hidden shadow-xl ring-1 ring-foreground/10 transition-[border-radius] duration-300 ease-out motion-reduce:transition-none dark:shadow-none",
               fileDragging &&
                 "border-2 border-dashed border-foreground/30 ring-0",
               inputRadius,
@@ -5225,6 +5210,22 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                 handshake). */}
             <div className={cn("p-2", pillDock && "hidden")}>{inputBody}</div>
           </div>
+          {/* The resident disclaimer (ADR-051 — the FLORA FAUNA-line,
+              verbatim): a whisper directly BELOW the input container;
+              hidden WITH the input row on the options-question morph
+              (ADR-053 R1 阻塞形态). pt-2 / pt-1.5 (dock / panel) is the
+              whisper's top air against the input — the panel's tighter
+              register mirrors its tighter column pad. */}
+          {!pillDock && (
+            <p
+              className={cn(
+                "pt-1.5 text-center text-xs leading-tight text-meta-foreground",
+                !panel && "pt-2"
+              )}
+            >
+              {t("results.dock.honesty")}
+            </p>
+          )}
         </div>
       </div>
       </div>

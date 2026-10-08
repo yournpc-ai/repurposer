@@ -109,7 +109,7 @@ const TOUR_VERSION = tourVersionOf(COMPOSER_TOUR_STEPS, tourCopy.composer)
 // transition. An inline style also sidesteps the stock
 // has-data-[align=*]:rounded-md pins (their :has() specificity outranks any
 // plain rounded-* class).
-const EDITOR_H = 96 // expanded band height
+const EDITOR_H = 80 // expanded band height
 const BAR_EDITOR_H = 56 // bar band height (= the whole bar): 16 + 24 line + 16
 const EDITOR_PAD_Y = 20 // pt-5
 const BAR_EDITOR_PAD_Y = 16 // (56 − 24 line) / 2 — the bar line self-centers

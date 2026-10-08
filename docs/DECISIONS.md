@@ -2686,7 +2686,7 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 3. **SSE 镜像数组操作**：`row.append` / `row.update` / `row.delta`（散文增量）/ `row.settle`。live 消费与历史回放**共用同一 reducer 同一渲染函数**——回放 = `ORDER BY seq` 直渲，双路径不一致这一整类 bug 灭种。
 4. **退役清单**：walk key（`settle_at − duration_ms` 推导）、last-wins latestLog 回放、`logDismissed` 闩、once-only per ref 去重、finalizePreview 服务端钟重锚跳位。散文气泡行在首 delta 到达时 append（内容空、delta 流 update、settle 原地 finalize），位置从此固定。
 5. **失败/中止回合的行照常落库**（failed/cancelled 态随行进 transcript）——诚实 transcript；回合失败不再抹掉工作证据。
-6. **折叠渲染 = 呈现层纯函数**：连续同 kind completed activity 行折叠为一行「已检索转写 ×7 · 共 36s」，可展开明细；瞬态「正在做什么」仍归 StatusLine 一座两行（既有律不动）。折叠只动渲染，不动数组。
+6. **折叠渲染 = 呈现层纯函数**：两条消息之间的 completed activity 行段坍缩为一条聚合摘要行（现行法 = ADR-110 段聚合），可展开明细；瞬态「正在做什么」仍归 StatusLine 一座两行（既有律不动）。折叠只动渲染，不动数组。
 7. **迁移**：一次性脚本把存量 activity_log 帧按帧时刻物化为行序插 seq；物化不了的旧回合接受活动行缺失（greenfield 验收口径先例），散文/checkpoint 行按 created_at 回填 seq。
 
 **Consequences**: 【已完成理解】消失类、顺序跳位类、live/回放不一致类 bug 结构性不可能再发生——它们要解决的问题不再存在。打字机律两牙不动（散文字段读容忍 + settle 散文 drain 节拍释放：零 delta 回合的散文行 append 时点 = 信封到达后，内容照节拍放出，位置不受影响）。DB 写入次数略增（activity 每行 open+settle 两写）量级可忽略。ADR-104 §5 排序律的机制（walk key 重锚）翻案退役，其目标（确定性时序：服务员话 → 读活动 → 读后回复）由数组位置天然达成。
@@ -2710,6 +2710,23 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 **Consequences**: 顺序错乱类根治——开工句/相位句成为数组一等行（ADR-108），落库时刻恒早于其后续读行；iteration ≥1 不流式的规则不变（言语出站仍只有两座：checkpoint 帧 + settle envelope），变的是 checkpoint 座位的准入从白名单变成普适。第一回合「收到视频了…」顺序正确与第二回合顺序错乱的双胞胎差异（同通道、资格有无）从此消失。schema 拒收白跑类削减（96.7s 级事故失去触发点）。需求池「一回合多交付（ADR-085 checkpoint 通道）」行被本条吸收——命中率验证义务与四条收口规则随批继承（资格纪律一条作废，座位已普适）。
 
 **Related**: ADR-104（checkpoint 资格白名单翻案；发射座时点 /  retract 安全网 / settle 自洽守卫全部保留）/ ADR-093（起始句 = LLM 言语——同律延伸到回合中相位句）/ ADR-060（echo 防编造扩轴）/ ADR-058（计划组成归卡面自证）/ ADR-092 / ADR-103 / ADR-111（画布 reveal 前言语禁指——§4 戒律的触发态由 ADR-111 修订为计划就绪）/ ADR-108（checkpoint 行的时序承载）
+
+## ADR-110: 活动行段聚合——散文段间整段坍缩为一条聚合摘要行（Claude Code 式）
+
+**Status**: Decided (2026-10-08)
+
+**Context**: Claude Code 对照走查（用户三截图取证）：CC 的 activity 行在工作中原地刷新（一条行承载当下活动，新活动替换旧内容），下一段散文到来时整个活动块**坍缩成一条聚合摘要行**（"Thought for 1m 32s, read 1 file, ran 2 shell commands"——总耗时 + 分类计数，可展开）。我们的 ADR-108 §6 折叠只到「连续 ≥2 条同 kind+key+name 折 ×N」——不同 key 的里程碑永不互折，一个「读素材 → 检索 → 出方案」回合在散文泡之间留下 4~5 条独立落定行，密度远高于参照件。live 的原地刷新两侧本就同形（now-line 原地 morph），差异全在落定后的去向。用户拍板：做成一样的，全收。
+
+**Decision**:
+
+1. **段聚合全收**：两条消息之间的一切 completed 落定活动行（跨 key、含单行段）坍缩成**一条聚合摘要行**——形态「工作了 1m 32s · 已理解素材 · 已检索转写内容 · 找到 12 段候选」。同 key+name 的连续重复合并为一个 ×N 片段（合并即放弃单条 artifact count——两条行说不出一个诚实的计数）；不同 key/name 各成片段，按首次出现序（时序即真相）。折叠仍是呈现层纯函数（`foldActivityUnits`），持久化的每帧一行不动——展开明细与审计继续读落库行。
+2. **总耗时 = 段墙钟**：下一条 assistant 行的 `at` − 首行 `at`（散文到来闭合工作段——CC "Thought for Xs" 的解剖）；边界缺席（live 尾段，散文未到）回落末行自身终点（at + duration_ms），再回落行耗时求和，无可测量则无耗时。**用户行永不做段终点**——失败回合后用户可能数小时才回来，其消息戳会编造「工作了 3 小时」的谎言。
+3. **failed/cancelled 行永不折入**：✗ 划掉行是失败信号，藏进聚合即丢；它们独立留行并打断折段。
+4. **不受动**：now-line 原地 morph（live 已与 CC 同形）、think 空态（永不入流）、draft/run 跨度（本就不落行）、折叠永不跨消息边界（段分组既有律，恰好 = CC 的按散文段坍缩）。
+
+**Consequences**: 散文段间的活动密度从 N 行降到 1 行，与参照件同形；诚实 transcript 不受损（聚合只是投影，数组行还在）。ADR-108 §6 的「同 kind+key ≥2 才折」条款被本条取代（机制同座，`foldActivityUnits` 一处）。
+
+**Related**: ADR-108（数组位置律与每帧一行不动；§6 折叠条款由本条接替）/ ADR-087 §3（活动流白名单不动——聚合文案只读 key/count/name/at/duration_ms）
 
 ## ADR-111: 画布可见性 = 计划就绪——确认 dock 卡面退役（ADR-105 翻案）
 

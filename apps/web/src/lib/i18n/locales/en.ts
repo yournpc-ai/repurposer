@@ -1374,11 +1374,14 @@ const en = {
     activityMeta: {
       count: "Count: {{count}}",
     },
-    /** The fold row (ADR-108 §6): ≥2 consecutive settled rows of the same
-     * act collapse into one — the shared past-tense label + the repeat
-     * count; the summed duration whispers separately (formatElapsed). */
+    /** The aggregate row (ADR-110 段聚合 — the Claude Code collapse): every
+     * segment of consecutive completed activity rows between two messages
+     * folds into ONE summary — the segment's total elapsed (`worked`, the
+     * wall clock from the first row's birth to the prose's arrival) + the
+     * ordered fragments; `repeated` is one fragment's ×N form. */
     activityFold: {
       repeated: "{{label}} ×{{count}}",
+      worked: "Worked for {{elapsed}}",
     },
     /** Past-tense mirrors of the inspecting family — a read activity's
      * completed frames (chat.inspecting.* stays the active form; the keys

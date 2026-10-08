@@ -10,7 +10,7 @@ import type { ActivityRowFrame, OverlayMessage } from "@/components/chat/history
 export type ConversationUnit =
   | { kind: "message"; message: OverlayMessage }
   | { kind: "activity"; activity: ActivityRowFrame }
-  | { kind: "activityFold"; rows: ActivityRowFrame[] }
+  | { kind: "activityFold"; rows: ActivityRowFrame[]; elapsedMs: number | null }
 
 /** The draft span never enters the flow (2026-09-28 user ruling —
  * 落定即退役): the docked plan card IS the settled evidence. The server
@@ -47,61 +47,119 @@ export function buildConversationUnits(
   return units
 }
 
-/** The fold key: consecutive SETTLED activity rows fold only when the user
- * would read them as the same act repeated — same kind, same copy key, same
- * named object (a beat's filename). Reading two different files never folds
- * into one row. */
-function foldKeyOf(a: ActivityRowFrame): string {
-  return `${a.kind}${a.key ?? ""}${a.name ?? ""}`
-}
-
-/** 折叠投影 (呈现层纯函数, ADR-108 §6): a run of ≥2 consecutive settled
- * activity rows sharing one fold key collapses into ONE aggregate row
- * (「已检索转写 ×N · 共 Xs」, expandable to the明细). Active rows never
- * fold (the now-line owns them — they never reach the walk anyway), and a
- * fold never crosses a message boundary. The折叠 is display-only: the
- * folded rows keep their own identities for the expanded view. */
+/** 折叠投影 (呈现层纯函数, ADR-110 段聚合 — the Claude Code collapse):
+ * EVERY run of consecutive COMPLETED settled activity rows between two
+ * messages collapses into ONE aggregate summary row (「工作了 1m 32s ·
+ * 已理解素材 · 找到 12 段候选」) — cross-key, single-row segments included
+ * (全收). failed/cancelled rows never fold: they pass through as their own
+ * rows (the ✗ strike-through is the failure signal) and break the run.
+ * Active rows are hard boundaries too (进行态不折叠 — the now-line owns
+ * them; they never reach the walk anyway). The fold never crosses a
+ * message boundary. Display-only: the folded rows keep their identities
+ * for the expanded view; the persisted array is untouched. */
 export function foldActivityUnits(units: ConversationUnit[]): ConversationUnit[] {
   const out: ConversationUnit[] = []
   let run: ActivityRowFrame[] = []
-  const flush = () => {
-    if (run.length >= 2) {
-      out.push({ kind: "activityFold", rows: run })
-    } else if (run.length === 1) {
-      out.push({ kind: "activity", activity: run[0] })
+  const flush = (boundaryAt?: string) => {
+    if (run.length > 0) {
+      out.push({
+        kind: "activityFold",
+        rows: run,
+        elapsedMs: foldElapsedMs(run, boundaryAt),
+      })
+      run = []
     }
-    run = []
   }
   for (const unit of units) {
-    // An active row is a hard boundary (进行态不折叠): it passes through
-    // untouched and breaks any run in progress.
-    if (unit.kind !== "activity" || unit.activity.status === "active") {
-      flush()
-      out.push(unit)
-      continue
-    }
-    if (run.length > 0 && foldKeyOf(unit.activity) === foldKeyOf(run[0])) {
+    if (unit.kind === "activity" && unit.activity.status === "completed") {
       run.push(unit.activity)
       continue
     }
-    flush()
-    run = [unit.activity]
+    // The segment's wall clock ends at the NEXT row — the turn's prose
+    // (an assistant message) or a neighbouring non-completed activity.
+    // A USER message is no honest segment end: after a failed turn the
+    // user may return hours later, and their message's stamp would
+    // fabricate a multi-hour "工作了 3 小时" lie.
+    const boundaryAt =
+      unit.kind === "message"
+        ? unit.message.role === "assistant"
+          ? unit.message.at
+          : undefined
+        : unit.kind === "activity"
+          ? unit.activity.at
+          : unit.rows[0]?.at
+    flush(boundaryAt)
+    out.push(unit)
   }
   flush()
   return out
 }
 
-/** The fold row's aggregate facts: the shared copy key (the rows all carry
- * the same one), the repeat count, and the summed duration whisper (rows
- * without a duration contribute nothing; null when no row carried one). */
-export function foldSummary(rows: ActivityRowFrame[]): {
-  key: string | null
-  count: number
-  totalMs: number | null
-} {
-  let totalMs: number | null = null
-  for (const r of rows) {
-    if (r.duration_ms != null) totalMs = (totalMs ?? 0) + r.duration_ms
+/** The aggregate row's total elapsed (段墙钟, ADR-110): first row's birth
+ * → the segment's end — the following assistant row's stamp when there is
+ * one (the prose's arrival closes the work segment — the CC "Thought for
+ * Xs" anatomy), else the last row's own end (live tail: the prose hasn't
+ * arrived yet). Falls back to the summed row durations; null when nothing
+ * measurable exists. */
+function foldElapsedMs(
+  rows: ActivityRowFrame[],
+  boundaryAt?: string,
+): number | null {
+  const start = Date.parse(rows[0]?.at ?? "")
+  if (!Number.isNaN(start)) {
+    if (boundaryAt) {
+      const end = Date.parse(boundaryAt)
+      if (!Number.isNaN(end) && end > start) return end - start
+    }
+    const last = rows[rows.length - 1]
+    const lastAt = Date.parse(last?.at ?? "")
+    if (!Number.isNaN(lastAt)) {
+      const lastEnd = lastAt + (last.duration_ms ?? 0)
+      if (lastEnd > start) return lastEnd - start
+    }
   }
-  return { key: rows[0]?.key ?? null, count: rows.length, totalMs }
+  let sum = 0
+  let any = false
+  for (const r of rows) {
+    if (r.duration_ms != null) {
+      sum += r.duration_ms
+      any = true
+    }
+  }
+  return any ? sum : null
+}
+
+/** One aggregate fragment: CONSECUTIVE rows sharing one fold identity
+ * (key + named object) merge into a ×N repeat; a lone row speaks with its
+ * own interpolation (the milestone's artifact count / the beat's
+ * filename). Order = first appearance — chronology is the truth. */
+export interface FoldFragment {
+  key: string | null
+  repeat: number
+  /** The lone row's own artifact count (dropped on merge — two merged
+   * rows can't speak one honest count). */
+  count?: number
+  name?: string
+  total?: number
+}
+
+/** The aggregate row's ordered fragments (ADR-110). */
+export function foldSummary(rows: ActivityRowFrame[]): FoldFragment[] {
+  const fragments: FoldFragment[] = []
+  for (const r of rows) {
+    const last = fragments[fragments.length - 1]
+    if (last && last.key === r.key && last.name === r.name) {
+      last.repeat += 1
+      last.count = undefined
+      continue
+    }
+    fragments.push({
+      key: r.key,
+      repeat: 1,
+      count: r.count ?? undefined,
+      name: r.name,
+      total: r.total,
+    })
+  }
+  return fragments
 }

@@ -186,7 +186,7 @@ function Home() {
             className="absolute inset-0 -z-10 bg-background"
             style={{ opacity: dockP }}
           />
-          <div className="mx-auto w-full max-w-3xl">
+          <div className="mx-auto w-full max-w-2xl">
             {/* Studio hero (MiniMax anatomy, 2026-08-21): the BRAND LOCKUP
                 (LogoMark + wordmark — the core hero, persists and docks
                 smaller; the mark sizes in em so it scales with the font) +
@@ -194,11 +194,14 @@ function Home() {
                 scroll). Colors: brand = foreground, tagline =
                 muted-foreground — no two-tone leftovers. */}
             <h1
-              className={`mb-3 flex items-center justify-center gap-2.5 font-display font-medium tracking-tight text-foreground transition-all duration-300 ${
+              className={`mb-3 flex items-center justify-center gap-2 font-display font-medium tracking-tight text-foreground transition-all duration-300 ${
                 dockP >= 1 ? "text-xl" : "text-3xl sm:text-4xl"
               }`}
             >
-              <LogoMark className="h-[1.05em] w-[1.05em]" />
+              {/* The mark sizes in em so it scales with the font; 0.9em lands
+                  the square on the wordmark's CAP HEIGHT (1em+ floats it
+                  above the glyphs' optical center). */}
+              <LogoMark className="h-[0.9em] w-[0.9em]" />
               <span>Repurposer</span>
             </h1>
             <div
@@ -260,7 +263,7 @@ function Home() {
             (ADR-040). */}
         <section className="flex flex-col items-center px-4 pb-[max(64px,40vh)] sm:px-6">
           <div className="w-full max-w-6xl">
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-4">
               {/* Tour step 4 anchors the FIFTH card (row-2 lead on lg): the
                   tour's scrollIntoView block:"center" then centers it, so the
                   grid fills the viewport under the docked composer bar at ANY

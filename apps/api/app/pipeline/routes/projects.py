@@ -557,6 +557,12 @@ async def get_project_graph(
             continue
         for fid in block.get("facet_node_ids") or []:
             deliverable_of[str(fid)] = str(d_id)
+    # rank 输入边集 (铁律② 镜像): 默认 = effective set; 有 facet 退出时
+    # 由下面的重锚环重建 (同重锚、无 triple 去重)。默认绑定必须在
+    # `if deliverable_of:` 之外——无 facet 组的项目 (如只有素材/草稿节点)
+    # 不进分支, 变量未绑定会在 display_rank_projection 处炸
+    # UnboundLocalError (2026-10-08 走查)。
+    rank_edges: list[Any] = edges
     if deliverable_of:
         source_by_id = {str(n.id): n for n in artifact_source_nodes}
         deliverable_claims: dict[str, set[str]] = {}
@@ -580,9 +586,6 @@ async def get_project_graph(
                 <= deliverable_claims.get(d_id, set())
             )(source_by_id.get(fid))
         }
-        # rank 输入边集 (铁律② 镜像): 默认 = effective set; 有 facet 退出时
-        # 由下面的重锚环重建 (同重锚、无 triple 去重)。
-        rank_edges: list[Any] = edges
         if exiting:
             nodes = [n for n in nodes if str(n.id) not in exiting]
 

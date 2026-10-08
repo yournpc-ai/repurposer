@@ -38,7 +38,7 @@ import { apiPut, toAbsoluteUrl } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { GraphEdgeType, Output, ProjectArtifact } from "@/lib/types"
 
-import { BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX } from "./layout"
+import { BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX, cornerStackedInPorts, hasProgramRegion } from "./layout"
 import { useSoundMutex } from "./sound-mutex"
 import type {
   FlowAssetAction,
@@ -799,11 +799,17 @@ function MediaProductRegion({
   output,
   topClipScore,
   onExpandMedia,
+  fill,
 }: {
   node: FlowNode
   output: Output
   topClipScore?: number
   onExpandMedia?: (nodeId: string, outputId?: string) => void
+  /** 无程序区卡 (editor/manual): the media fills the freed program band —
+   * flex-1 inside the card body, absorbing the frame cap and the facet
+   * strip's growth (letterbox, never a clip); the fixed-px thumb stays the
+   * generator anatomy's law. */
+  fill?: boolean
 }) {
   const { t } = useTranslation()
   const score = typeof output.score?.value === "number" ? output.score.value : null
@@ -828,9 +834,11 @@ function MediaProductRegion({
   // the media caps to the frame's budget (contain slivers return for that
   // legacy/raced case), the next column-mate never bleeds. Frames born with
   // dims are aspect-exact — the cap is inert. graphNodeSize mirrors it.
-  const frameThumbBudget = node.frame?.h
-    ? node.frame.h - PRODUCT_LABEL_PX - PROGRAM_REGION_PX - PRODUCT_TOOLBAR_PX
-    : null
+  // (fill 模式不读这里: the flex region absorbs the frame's shape directly.)
+  const frameThumbBudget =
+    !fill && node.frame?.h
+      ? node.frame.h - PRODUCT_LABEL_PX - PROGRAM_REGION_PX - PRODUCT_TOOLBAR_PX
+      : null
   const thumbPx =
     frameThumbBudget != null
       ? Math.min(wantedThumbPx, frameThumbBudget)
@@ -854,8 +862,12 @@ function MediaProductRegion({
 
   return (
     <div
-      className={cn("group/media relative shrink-0", clipAspect ? "bg-black" : "bg-muted")}
-      style={{ height: thumbPx }}
+      className={cn(
+        "group/media relative",
+        fill ? "min-h-0 flex-1" : "shrink-0",
+        clipAspect ? "bg-black" : "bg-muted",
+      )}
+      style={fill ? undefined : { height: thumbPx }}
     >
       {/* Variant switcher (the reference canvas's hover group): fades in at
           the region's top center on hover; each tile is one produced item.
@@ -1408,14 +1420,13 @@ function ProgramRegion({
   const fillSlack =
     !!firstOutput && firstOutput.type !== "post" && firstOutput.type !== "article"
 
-  // 程序区按 prototype 门控 (ADR-076, C5): only generator cards carry the
-  // prompt area. Editor/manual (and the prototype-less transitional words)
-  // keep the geometry — the reservation stays in the height math (geometry
-  // never shifts) and the slack absorber holds the flex anatomy; the lever
-  // row (批 B4) fills this seat later.
-  if (node.spec?.prototype !== "generator") {
-    return <div aria-hidden className={fillSlack ? "min-h-0 flex-1" : "shrink-0"} />
-  }
+  // 程序区按 prototype 门控 (ADR-076): only generator cards carry the
+  // program region. Editor/manual cards (and the prototype-less
+  // transitional words) drop the region AND its reservation from the
+  // anatomy — the media region fills the freed band (fill mode), the
+  // height math and the in-port corner stack live in layout.ts
+  // (graphNodeSize / declaredHandles, 一条律两镜像).
+  if (node.spec?.prototype !== "generator") return null
   if (!prompt && !editing) return null
 
   const send = () => {
@@ -1742,6 +1753,7 @@ function GraphCard({
               output={output}
               topClipScore={node.topClipScore}
               onExpandMedia={onExpandMedia}
+              fill={!hasProgramRegion(node)}
             />
           )
         ) : (
@@ -1866,35 +1878,37 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
     )
   }
   // The consumption anchor's VERTICAL seat = the consumed region's BOTTOM-
-  // LEFT corner (2026-09-10 用户拍板——红圈裁定，一条角律两个区域): media
-  // flows (video/audio) feed the CONTENT region, so their in-ports park at
-  // the content region's bottom-left — 16px above the PROMPT divider,
-  // stacking upward; text/ctx flows feed the PROMPT region, parking 16px
-  // above the factsbar band (document has no band — its region is the card
-  // bottom). The first red-circle reading (content TOP-left, 09-10 上午) was
-  // the implementer's misread of 「内容区域的左下角」 — the user re-circled
-  // the bottom corner same-day; ElevenLabs' media-high stack is NOT the law
-  // here. Each region stacks its own ports by 34px (clears the 28px
-  // circles); the 34px side offset parks each circle fully outside the card
-  // with a 6px gap (ElevenLabs measured, 2026-09-10 — their circle hugs the
-  // border at ~1/4-diameter clearance; the old 12px gap read as adrift at
-  // 100% zoom).
-  // The version pager's stacked row (2026-09-13 用户拍板) grows the factsbar
-  // band by PRODUCT_PAGER_PX when the node holds more than one product —
-  // both bottom-anchored corner seats ride the band, so both bases shift.
+  // LEFT corner (2026-09-10 用户拍板——红圈裁定，一条角律两个区域). Two
+  // in-port seat laws by anatomy:
+  //  - GENERATOR media cards: media flows (video/audio) feed the CONTENT
+  //    region — their in-ports park 16px above the PROMPT divider, stacking
+  //    upward; text/ctx flows feed the PROMPT region, parking 16px above
+  //    the factsbar band (document has no band — its region is the card
+  //    bottom).
+  //  - Media cards WITHOUT a program region (editor/manual/过渡词): the
+  //    prompt divider does not exist, so every in-port shares ONE corner
+  //    stack at the card's bottom-left, stacking upward in port order
+  //    (角落栈 — mirror of layout.ts cornerStackedInPorts/declaredHandles).
+  // Each family stacks its own ports by 34px (clears the 28px circles); the
+  // 34px side offset parks each circle fully outside the card with a 6px
+  // gap. The version pager's stacked row grows the factsbar band by
+  // PRODUCT_PAGER_PX when the node holds more than one product — every
+  // bottom-anchored corner seat rides the band, so the bases shift.
   const pagerPx = (node.outputs?.length ?? 0) > 1 ? PRODUCT_PAGER_PX : 0
   // 词表 v3 (C5): the 全文卡 family (text/table — the C1-dormant values,
   // now the only document anatomy) takes the 16px text-port base; the
   // mirror constant lives in layout.ts inTextPortBasePx (一条律两镜像).
   const inTextBase = node.kind === "text" || node.kind === "table" ? 16 : 60 + pagerPx
-  // Bottom furniture of a media-consuming card (media × editor/generator):
-  // factsbar band + program region, then the 16px inset into the content
-  // region — the corner seat. Media in-ports never occur on the 全文卡
-  // family (the port law's accepts), so one base covers every real seat.
+  // Bottom furniture of a media-consuming generator card: factsbar band +
+  // program region, then the 16px inset into the content region — the
+  // corner seat. Media in-ports never occur on the 全文卡 family (the port
+  // law's accepts), so one base covers every real seat.
   const inMediaBase = PRODUCT_TOOLBAR_PX + pagerPx + PROGRAM_REGION_PX + 16
   const outBase = 40
+  const unified = cornerStackedInPorts(node)
   const inMediaIdx = new Map<string, number>()
   const inTextIdx = new Map<string, number>()
+  let cornerCount = 0
   let mediaCount = 0
   let textCount = 0
   for (const t of ports.in) {
@@ -1916,11 +1930,14 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
       {ports.in.map((type) => {
         const Icon = PORT_ICON[type]
         const isMedia = type === "video" || type === "audio"
-        // Both families bottom-anchor at their region's corner and stack
-        // upward (34px per sibling of the same family).
-        const base = isMedia
-          ? inMediaBase + (inMediaIdx.get(type) ?? 0) * 34
-          : inTextBase + (inTextIdx.get(type) ?? 0) * 34
+        // 角落栈: bottom-anchored at the card's bottom-left, stacking upward
+        // in port order; generator cards keep the two-family seats (each
+        // region bottom-anchored at its own corner, 34px per sibling).
+        const base = unified
+          ? inTextBase + cornerCount++ * 34
+          : isMedia
+            ? inMediaBase + (inMediaIdx.get(type) ?? 0) * 34
+            : inTextBase + (inTextIdx.get(type) ?? 0) * 34
         return (
           <Handle
             key={`in:${type}`}

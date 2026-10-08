@@ -187,22 +187,40 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
   )
 }
 
-/** The折叠行 (ADR-108 §6 — 呈现层折叠): ≥2 consecutive settled rows of the
- * same act collapse into ONE quiet row (「已检索转写 ×7 · 共 3s」), expanding
- * in place to the individual rows. Same register as ActivityRow's settled
- * form; the shared glyph leads, the repeat count suffixes the shared
- * past-tense label, the summed duration whispers. Failed/cancelled rows
- * carry the active-form key, so they never fold together with completed
- * ones (the fold key already separates them). */
-export function FoldedActivityRow({ rows }: { rows: ActivityRowFrame[] }) {
+/** The aggregate row (ADR-110 段聚合 — the Claude Code collapse): every
+ * segment of consecutive completed activity rows between two messages folds
+ * into ONE quiet summary — the segment's total elapsed + the fragments in
+ * order (「工作了 1m 32s · 已理解素材 · 找到 12 段候选」), expanding in
+ * place to the individual rows. Same register as ActivityRow's settled
+ * form; the first row's glyph leads, the ×N repeat suffixes a fragment
+ * shared by consecutive same-act rows. failed/cancelled rows never reach
+ * here — they stay visible as their own struck-through rows. */
+export function FoldedActivityRow({
+  rows,
+  elapsedMs,
+}: {
+  rows: ActivityRowFrame[]
+  elapsedMs?: number | null
+}) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const { key, count, totalMs } = foldSummary(rows)
-  const baseLabel = key
-    ? t(key, { defaultValue: t("chat.completed") })
-    : t("chat.completed")
-  const label = t("chat.activityFold.repeated", { label: baseLabel, count })
-  const duration = totalMs != null ? formatElapsed(totalMs) : null
+  const fragments = foldSummary(rows).map((f) => {
+    const base = f.key
+      ? t(f.key, {
+          count: f.count,
+          total: f.total,
+          name: f.name,
+          defaultValue: t("chat.completed"),
+        })
+      : t("chat.completed")
+    return f.repeat > 1
+      ? t("chat.activityFold.repeated", { label: base, count: f.repeat })
+      : base
+  })
+  const elapsed = elapsedMs != null ? formatElapsed(elapsedMs) : null
+  const label = elapsed
+    ? `${t("chat.activityFold.worked", { elapsed })} · ${fragments.join(" · ")}`
+    : fragments.join(" · ")
   const KindIcon = KIND_ICONS[rows[0]?.kind ?? "read"]
   return (
     <div className="flex w-full flex-col gap-1">
@@ -214,11 +232,6 @@ export function FoldedActivityRow({ rows }: { rows: ActivityRowFrame[] }) {
       >
         <KindIcon className="h-3 w-3 shrink-0" />
         <span className="min-w-0 truncate">{label}</span>
-        {duration && (
-          <span className="shrink-0 text-xs tabular-nums text-meta-foreground">
-            · {duration}
-          </span>
-        )}
         <ChevronDown
           className={cn(
             "ml-auto h-3 w-3 shrink-0 transition-transform",

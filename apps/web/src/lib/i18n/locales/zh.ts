@@ -1291,10 +1291,12 @@ const zh: Resources = {
     activityMeta: {
       count: "数量：{{count}}",
     },
-    /** 折叠行（ADR-108 §6）：连续 ≥2 条同类落定行折成一条——共享的完成态
-     * 文案 + 重复次数；合计耗时单独低语（formatElapsed）。 */
+    /** 聚合行（ADR-110 段聚合——Claude Code 式坍缩）：两条消息之间的一切
+     * completed 落定行折成一条摘要——段总耗时（`worked`，首行出生 → 散文
+     * 到来的墙钟）+ 按序片段；`repeated` 是单片段的 ×N 形态。 */
     activityFold: {
       repeated: "{{label}} ×{{count}}",
+      worked: "工作了 {{elapsed}}",
     },
     /** inspecting 族的完成态镜像——读活动 completed 帧的文案（键随服务端
      * 注册表，本族按前缀交换镜像）。 */

@@ -294,11 +294,13 @@ def _derive_edge_type(from_node: GraphNode, to_node: GraphNode) -> str:
 # Heights reserve the class's MAX content height (the frontend renders
 # content-driven heights inside the reservation, so a column never overlaps
 # and a node fills into its reservation as products land): clip = the 9:16
-# product card's full anatomy (caption 26 + thumb 498 + program 88 + bar
-# 44); text = the 12-line text card's (caption 26 + body 282 + program 88 +
-# bar 44). A node's class comes from spec.frame_class (the fill stamps it
-# from the family's product vocabulary); an unstamped generator/processor/
-# agent reserves the clip maximum — safe by construction.
+# product card's full GENERATOR anatomy (caption 26 + thumb 498 + program 88
+# + bar 44 — editor/manual cards drop the program reservation, see
+# _frame_of); text = the 12-line text card's (caption 26 + body 282 +
+# program 88 + bar 44). A node's class comes from spec.frame_class (the fill
+# stamps it from the family's product vocabulary); an unstamped
+# generator/processor/agent reserves the clip maximum — safe by
+# construction.
 _GAP_MAIN = 124
 _GAP_CROSS = 16
 
@@ -378,9 +380,10 @@ SHORTS_DEFAULT_ASPECT = "9:16"
 # source's display class — meta.width/height, unknown dims keep the
 # "original" default strip). The math is ONE law with the client (layout.ts
 # clipNodeHeight = caption 26 + PRODUCT_THUMB_PX[aspect] + program 88 + bar
-# 44, media at the lane width) — two mirrors cross-referenced, never a third
-# copy (判词②). 9:16 keeps its 660 (the 4px breath included); an unstamped
-# clip node keeps the class max.
+# 44, media at the lane width — the GENERATOR anatomy; _frame_of subtracts
+# the program reservation for editor/manual) — two mirrors cross-referenced,
+# never a third copy (判词②). 9:16 keeps its 660 (the 4px breath included);
+# an unstamped clip node keeps the class max.
 _CLIP_FRAME: dict[str, tuple[int, int]] = {
     "9:16": (280, 660),
     "1:1": (340, 498),
@@ -388,6 +391,18 @@ _CLIP_FRAME: dict[str, tuple[int, int]] = {
     # "original" with unknown dims — the legacy 280-wide 16:9 strip.
     "original": (280, 316),
 }
+
+# 程序区预留 (client mirror: layout.ts PROGRAM_REGION_PX) — the 88px program
+# region belongs to GENERATOR media cards alone (ADR-076 门控; client
+# predicate layout.ts hasProgramRegion); editor/manual/无戳过渡词媒体卡撤掉
+# 预留, 媒体区吃满.
+_PROGRAM_REGION_PX = 88
+# The artifact facet strip's one-row reservation on deliverable cards
+# (ADR-097 §3 — border 1 + padding 12 + one row 16; client mirror layout.ts
+# facetStripPx). Stamped at birth via spec.frame_facets (graph_fill counts
+# the artifact's facet stations); runtime failed rows grow the strip and the
+# client's flex media region absorbs them inside the frame.
+_FACET_STRIP_PX = 29
 
 # Asset node frames by the source's display class (2026-09-13 — 素材节点同律,
 # media + caption 26 + toolbar 44): stamped at birth by stamp_asset_node from
@@ -473,9 +488,21 @@ def _frame_of(kind: str, spec: dict[str, Any]) -> tuple[int, int]:
         # The aspect-exact reservation when the fill stamped one
         # (frame_aspect) — the class max stays the fallback for unstamped
         # nodes (legacy rows, wiring-born nodes), safe by construction.
-        return _CLIP_FRAME.get(
+        w, h = _CLIP_FRAME.get(
             str(spec.get("frame_aspect") or ""), _FRAME_CLASS["clip"]
         )
+        # 程序区门控 (ADR-076; client mirror layout.ts hasProgramRegion —
+        # 一条律两镜像): the program reservation belongs to generator cards
+        # alone; editor/manual (and prototype-less transitional) media cards
+        # drop it and let the media fill the freed band.
+        if str(spec.get("prototype") or "") != "generator":
+            h -= _PROGRAM_REGION_PX
+            # The deliverable's facet strip reserves its row explicitly when
+            # born with facet stations (graph_fill stamps frame_facets);
+            # generator cards absorb the strip in the program slack instead.
+            if int(spec.get("frame_facets") or 0) > 0:
+                h += _FACET_STRIP_PX
+        return w, h
     return _FRAME_CLASS.get(cls, _FRAME_CLASS["clip"])
 
 

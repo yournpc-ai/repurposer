@@ -20,7 +20,7 @@
  *
  * Per-theme recipe: light = white 75% + blur(48px) saturate(1.6) — over the
  * pure-white canvas the glass reads via content bleed + the whisper shadow;
- * dark = neutral 0.38 gray 50% + blur(64px) saturate(1.3) — the tint sits
+ * dark = neutral 0.33 gray 55% + blur(64px) saturate(1.3) — the tint sits
  * ABOVE the panel tones (canvas 0.12 / card 0.21) so the composite lands
  * lighter than the surfaces it floats over: a lit fog slab, not smoked glass.
  *
@@ -39,7 +39,7 @@
     0 8px 10px -6px oklch(0 0 0 / 0.1);
 
   @variant dark {
-    background-color: oklch(0.38 0 0 / 0.5);
+    background-color: oklch(0.33 0 0 / 0.55);
     -webkit-backdrop-filter: blur(64px) saturate(1.3);
     backdrop-filter: blur(64px) saturate(1.3);
     box-shadow: none;
@@ -596,8 +596,9 @@ body {
   /* Dark system (2026-08-05 reference pass): the canvas is NEAR-BLACK and
    * elevation speaks glass, not ladder — floating layers are translucent
    * (overlay-surface 68% + blur 28px), hover is a white veil (--accent, NOT a
-   * lighter solid step), and inset wells go DARKER than the panel they sit in
-   * (inverted vs light theme: kbd chips, seed values, search inputs). */
+   * lighter solid step), and inset wells are a BLACK VEIL (relative darkening,
+   * not an absolute step) so a well carved into a glass layer sinks BELOW the
+   * glass's composite brightness instead of dropping to a fixed 0.15 pit. */
   --background: oklch(0.12 0 0);
   --foreground: oklch(0.95 0 0);
   --card: oklch(0.21 0 0);
@@ -609,7 +610,7 @@ body {
   --secondary: oklch(0.24 0 0);
   --secondary-foreground: oklch(0.95 0 0);
   --muted: oklch(0.24 0 0);
-  --inset: oklch(0.15 0 0);
+  --inset: oklch(0 0 0 / 0.25);
   --muted-foreground: oklch(0.63 0 0);
   /* Whisper tier — FLORA-measured (2026-09-06 user ruling): their dock
    * disclaimer renders #606060 ≈ 0.42; the whole dark whisper register
@@ -622,7 +623,8 @@ body {
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
   /* Same roles as light — the references resolve against the dark ladder
-   * (inset 0.15 well, meta 0.42 whisper glyph); the icon chip speaks glass. */
+   * (inset black-veil well, meta 0.42 whisper glyph); the icon chip speaks
+   * glass. */
   --disabled: var(--inset);
   --disabled-foreground: var(--meta-foreground);
   --icon-chip: oklch(1 0 0 / 10%);

@@ -1005,6 +1005,19 @@ async def _stamp_graph_core(
         # pre-fill spec 是甄别输入 (re-fill 自己也会写 run_id, 必须读旧值)。
         pre_spec = dict(reused.spec or {}) if reused is not None else {}
         slot_role = artifact_assignments.get(key)
+        # The deliverable's facet-station count — the facet strip's frame
+        # reservation (graph_store._frame_of reads spec.frame_facets; the
+        # strip summarizes the artifact's hidden stations under the media,
+        # ADR-097 §3). Draft births never stamp (assignments 留白).
+        facet_count = (
+            sum(
+                1
+                for slot, role in artifact_assignments.values()
+                if slot == slot_role[0] and role == "facet"
+            )
+            if slot_role is not None
+            else 0
+        )
         frozen_key = str(pre_spec.get("artifact_key") or "") or None
         birth_fields = artifact_fields_for_birth(
             pre_spec,
@@ -1177,6 +1190,13 @@ async def _stamp_graph_core(
                     "estimate": estimate,
                     "frame_class": frame_class,
                     **({"frame_aspect": frame_aspect} if frame_aspect else {}),
+                    # facet strip 预留 (graph_store._frame_of 读取): only the
+                    # deliverable renders the strip — facets/companions 不盖.
+                    **(
+                        {"frame_facets": facet_count}
+                        if facet_count > 0 and effective_role == "deliverable"
+                        else {}
+                    ),
                     "tool": head.kind,
                     **({"doc_node_id": str(doc_node_id)} if doc_node_id is not None else {}),
                     **(

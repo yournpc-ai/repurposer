@@ -105,10 +105,10 @@ export function RecipeCard({
             </span>
           )}
         </div>
-        <p className="mt-0.5 line-clamp-2 min-h-10 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-1.5 line-clamp-2 min-h-10 text-xs leading-relaxed text-muted-foreground">
           {t(`recipes.${card.id}.promise`)}
         </p>
-        <p className="mt-1 truncate text-[10.5px] leading-snug tracking-[0.06em] text-meta">
+        <p className="mt-2 truncate text-[10.5px] leading-snug tracking-[0.06em] text-meta">
           {t(`recipes.${card.id}.inputScenario`)}
         </p>
       </div>

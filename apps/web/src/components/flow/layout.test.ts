@@ -16,8 +16,9 @@ import type { FlowEdge, FlowNode } from "./types"
 // layout.ts PITCH) — hardcoded here so a silent constant drift turns red.
 const PITCH = 524
 // A video-kind draft card's deterministic render height (PRODUCT_LABEL_PX 26
-// + DRAFT_BODY_PX 120 + PROGRAM_REGION_PX 88 + PRODUCT_TOOLBAR_PX 44).
-const DRAFT_H = 278
+// + DRAFT_BODY_PX 120 + PRODUCT_TOOLBAR_PX 44 — the fixture's prototype-less
+// node carries no program region, so the 88 reservation is dropped).
+const DRAFT_H = 190
 const GAP_CROSS = 16
 
 function node(
