@@ -169,14 +169,16 @@ export function ResultsCanvas({
     }
     // The batch's highest clip score (score triage — what to post first):
     // the winning product's badge accents, wherever the pager shows it.
-    const topClipScore = Math.max(
-      0,
-      ...graphNodes.flatMap((n) =>
-        (n.outputs ?? [])
-          .filter((o) => o.type === "clip")
-          .map((o) => (typeof o.score?.value === "number" ? o.score.value : 0)),
-      ),
+    // Triage needs a real choice (2026-10-09 用户拍板): a single scored
+    // clip is trivially the top pick — the badge speaks only when ≥2 scored
+    // clips share the canvas (mirror: projects.$id.index.tsx topClipScore).
+    const scoredClips = graphNodes.flatMap((n) =>
+      (n.outputs ?? [])
+        .filter((o) => o.type === "clip")
+        .map((o) => (typeof o.score?.value === "number" ? o.score.value : 0)),
     )
+    const topClipScore =
+      scoredClips.filter((s) => s > 0).length >= 2 ? Math.max(0, ...scoredClips) : 0
     const nodes: FlowNode[] = graphNodes.map((n: GraphNode, i: number) => {
       const spec = n.spec ?? {}
       const layout = n.layout ?? {}

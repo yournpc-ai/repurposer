@@ -18,6 +18,9 @@ No DB, no LLM, no HTTP (suite discipline). What is gated HERE:
   never a repair round), and the plan path's tools all seat
   ``pending_disposition`` (the deflection settlement the zombie-card
   incident was missing);
+- null-as-string 方言 (2026-10-09): the plan emission's ``"language":
+  "null"`` token scrubs at ``TaskItem``'s boundary — a junk string must
+  never reach spec stamps, spec prompts, or a product's language column;
 - ``extra="forbid"`` stays the unknown-key alarm.
 """
 
@@ -32,6 +35,7 @@ from app.models.schemas import (
     PlanAskArgs,
     PresentPlanArgs,
     ProposeTasksArgs,
+    TaskItem,
     resolve_recommended_id,
 )
 
@@ -69,6 +73,41 @@ class TestProposeTasksArgsSpecificInstruction:
             ProposeTasksArgs.model_validate(
                 {"tasks": [_TASK], "instruction": "the old field name"}
             )
+
+
+class TestTaskItemParamScrub:
+    """null-as-string 方言的边界净化 (2026-10-09, live 取证 = 高光短视频 run
+    context 全链 "null"/"1" 字符串): the model fills absent optional params
+    with the bare token ``"null"``; scrubbed here so it never reaches spec
+    stamps / spec prompts / the product's language column."""
+
+    def test_null_tokens_and_empty_strings_drop(self) -> None:
+        item = TaskItem.model_validate(
+            {
+                "tool": "select_clips",
+                "params": {
+                    "count": 1,
+                    "aspect": "9:16",
+                    "language": "null",
+                    "focus": " NULL ",
+                    "mode": "",
+                },
+            }
+        )
+        assert item.params == {"count": 1, "aspect": "9:16"}
+
+    def test_real_content_survives(self) -> None:
+        """Exact bare-token match only — a focus merely MENTIONING null is
+        content, never junk."""
+        item = TaskItem.model_validate(
+            {"tool": "write_post", "params": {"focus": "null pointer exceptions"}}
+        )
+        assert item.params["focus"] == "null pointer exceptions"
+
+    def test_params_null_or_empty_reads_as_absent(self) -> None:
+        """The ADR-109 §5 seat stays: params ''/null → the {} default."""
+        assert TaskItem.model_validate({"tool": "x", "params": None}).params == {}
+        assert TaskItem.model_validate({"tool": "x", "params": ""}).params == {}
 
 
 # ---- 一问拍一体化 (2026-09-27, Claude-Card parity) -----------------------------

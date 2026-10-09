@@ -106,6 +106,12 @@ export interface FlowNode {
     /** The transcript's user-edited presentation layer (v4.2 C4 — the card
      * displays this over the source mirror when present). */
     edited_text?: string | null
+    /** The transcript's structured cue rows (the hover-timeline display
+     * face): [{start, end, text, label}] with the label preformatted
+     * server-side (m:ss–m:ss — the client never formats time). Display
+     * layer only; the in-place edit surface keeps the plain text/overlay.
+     * Absent on word-less or legacy rows → the plain text face. */
+    cues?: { start?: number; end?: number; text?: string; label?: string }[] | null
     /** 岛内格镜像 (v4.2 C6): island members carry the island's frozen
      * reserved bottom — the projection renders the frozen cell verbatim and
      * floors the column's air-compression there (layout.ts ↔ graph_store). */

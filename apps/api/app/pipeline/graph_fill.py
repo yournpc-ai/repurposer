@@ -382,11 +382,11 @@ async def stamp_transcript_node(
     leaves zero canvas trace. Asset types without a text yield (image /
     voice_sample) never birth one.
 
-    时间刻度 (2026-09-29 用户拍板 — 译文稿同形): word-timestamped assets
-    (video / audio) also carry ``spec.cued_text`` — the same text baked as
-    `start–end text` cue lines. A DISPLAY layer only: the card prefers it
-    under the edit overlay, the in-place edit surface (C4) keeps editing
-    the plain ``spec.text`` — ticks never enter the textarea.
+    时间刻度: word-timestamped assets (video / audio) also carry
+    ``spec.cues`` — the same text as structured cue rows (start / end / text
+    / preformatted label). A DISPLAY layer only: the card renders the rows
+    with hover-time chrome, the in-place edit surface (C4) keeps editing
+    the plain ``spec.text`` — times never enter the textarea.
     """
     text = asset.transcript or asset.extracted_text
     status = str(
@@ -412,17 +412,19 @@ async def stamp_transcript_node(
     ).scalar_one_or_none()
     if existing is not None:
         spec_now = existing.spec or {}
-        cued = _transcript_cued_text((asset.meta or {}).get("words"))
+        cues = _transcript_cue_rows((asset.meta or {}).get("words"))
         spec_next = dict(spec_now)
         if text and spec_now.get("text") != text:
             spec_next["text"] = text
-        # The ticked display layer refreshes with the words (reprocess
+        # The cue-row display layer refreshes with the words (reprocess
         # replaces meta wholesale); text-yielding assets without word
-        # timestamps (paste / extraction) carry no cued_text at all.
-        if cued is None:
-            spec_next.pop("cued_text", None)
+        # timestamps (paste / extraction) carry no cues at all. The legacy
+        # string bake (cued_text) heals away on every sync.
+        if cues is None:
+            spec_next.pop("cues", None)
         else:
-            spec_next["cued_text"] = cued
+            spec_next["cues"] = cues
+        spec_next.pop("cued_text", None)
         if spec_next != spec_now:
             existing.spec = spec_next
         # State follows ASR: text landed → done; processing failed → failed
@@ -445,9 +447,9 @@ async def stamp_transcript_node(
     spec: dict = {"role": _TRANSCRIPT_ROLE, "asset_id": str(asset.id)}
     if text:
         spec["text"] = text
-        cued = _transcript_cued_text((asset.meta or {}).get("words"))
-        if cued:
-            spec["cued_text"] = cued
+        cues = _transcript_cue_rows((asset.meta or {}).get("words"))
+        if cues:
+            spec["cues"] = cues
     delta = await apply_wiring_ops(
         db,
         project_id,
@@ -1005,19 +1007,6 @@ async def _stamp_graph_core(
         # pre-fill spec 是甄别输入 (re-fill 自己也会写 run_id, 必须读旧值)。
         pre_spec = dict(reused.spec or {}) if reused is not None else {}
         slot_role = artifact_assignments.get(key)
-        # The deliverable's facet-station count — the facet strip's frame
-        # reservation (graph_store._frame_of reads spec.frame_facets; the
-        # strip summarizes the artifact's hidden stations under the media,
-        # ADR-097 §3). Draft births never stamp (assignments 留白).
-        facet_count = (
-            sum(
-                1
-                for slot, role in artifact_assignments.values()
-                if slot == slot_role[0] and role == "facet"
-            )
-            if slot_role is not None
-            else 0
-        )
         frozen_key = str(pre_spec.get("artifact_key") or "") or None
         birth_fields = artifact_fields_for_birth(
             pre_spec,
@@ -1190,13 +1179,6 @@ async def _stamp_graph_core(
                     "estimate": estimate,
                     "frame_class": frame_class,
                     **({"frame_aspect": frame_aspect} if frame_aspect else {}),
-                    # facet strip 预留 (graph_store._frame_of 读取): only the
-                    # deliverable renders the strip — facets/companions 不盖.
-                    **(
-                        {"frame_facets": facet_count}
-                        if facet_count > 0 and effective_role == "deliverable"
-                        else {}
-                    ),
                     "tool": head.kind,
                     **({"doc_node_id": str(doc_node_id)} if doc_node_id is not None else {}),
                     **(
@@ -1710,22 +1692,28 @@ def _fmt_cue_time(seconds: Any) -> str:
     return f"{total // 60}:{total % 60:02d}"
 
 
-def _transcript_cued_text(words: Any) -> str | None:
-    """The transcript doc's ticked display face (译文稿同形, 2026-09-29 用户
-    拍板): ASR words baked as `start–end text` cue lines — boundaries from
-    ``group_cues`` (the ONE grouping law), text raw-joined (a space-join
-    would shred Chinese). Rides ``spec.cued_text`` — a DISPLAY layer next
+def _transcript_cue_rows(words: Any) -> list[dict[str, Any]] | None:
+    """The transcript doc's structured cue rows (the hover-timeline display
+    face): ASR words grouped by ``group_cues`` (the ONE grouping law), text
+    raw-joined (a space-join would shred Chinese), each row carrying its
+    preformatted ``m:ss–m:ss`` label — the client never formats time (one
+    formatting law, server-side). Rides ``spec.cues`` — a DISPLAY layer next
     to the source mirror: the in-place edit surface (C4) keeps editing the
-    plain ``spec.text``/overlay, ticks never enter the textarea."""
+    plain ``spec.text``/overlay, times never enter the textarea."""
     if not isinstance(words, list) or not words:
         return None
     cues, _truncated = group_cues(words, raw_words=True)
-    lines = [
-        f"{_fmt_cue_time(c['start'])}–{_fmt_cue_time(c['end'])} {c['text']}"
+    rows = [
+        {
+            "start": c["start"],
+            "end": c["end"],
+            "text": c["text"],
+            "label": f"{_fmt_cue_time(c['start'])}–{_fmt_cue_time(c['end'])}",
+        }
         for c in cues
         if c["text"]
     ]
-    return "\n".join(lines) or None
+    return rows or None
 
 
 def _translation_artifact_text(artifact: Any) -> str | None:

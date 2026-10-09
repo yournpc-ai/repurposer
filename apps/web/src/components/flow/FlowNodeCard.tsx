@@ -516,6 +516,23 @@ export function nodeRenderActive(node: FlowNode): boolean {
   )
 }
 
+/** The transcript card's structured cue rows (spec.cues — the hover-timeline
+ * face) validated for display: one row per cue, text + preformatted time
+ * label (the server formats; the client never re-parses). null = the plain
+ * string face (legacy rows, word-less assets). */
+function readCueRows(spec: FlowNode["spec"]): { text: string; label: string }[] | null {
+  const raw = spec?.cues
+  if (!Array.isArray(raw)) return null
+  const rows = raw.flatMap((c) => {
+    if (typeof c !== "object" || c === null) return []
+    const { text, label } = c as { text?: unknown; label?: unknown }
+    return typeof text === "string" && text !== "" && typeof label === "string" && label !== ""
+      ? [{ text, label }]
+      : []
+  })
+  return rows.length > 0 ? rows : null
+}
+
 function DocumentCard({
   node,
   onOutputAction,
@@ -539,19 +556,22 @@ function DocumentCard({
     output && typeof (output.payload as { content?: unknown } | undefined)?.content === "string"
       ? ((output.payload as { content: string }).content || null)
       : null
-  // Transcript 三层 (Workspace 合同 v4.2 C4 + 2026-09-29 刻度层): the
-  // display text = the user's edited overlay when present, else the ticked
-  // cue-line bake (cued_text — 译文稿同形, the ASR words' display face),
-  // else the plain source mirror. The overlay is presentation only — the
-  // source transcript / word evidence / ranges never move (no code path
+  // Transcript 显示层 (Workspace 合同 v4.2 C4 + hover-timeline 结构层): the
+  // display text = the user's edited overlay when present, else the cue rows
+  // (spec.cues — clean blocks, the time rides the row's hover chrome), else
+  // the legacy ticked string bake (cued_text — pre-cues rows), else the
+  // plain source mirror. The overlay is presentation only — the source
+  // transcript / word evidence / ranges never move (no code path
   // reverse-computes a timecode from this text). The edit surface keeps
-  // editing the PLAIN layer (editedText ?? spec.text) — the tick chrome
-  // never enters the textarea; a saved overlay (the user's own words, no
-  // honest tick alignment) reads unticked.
+  // editing the PLAIN layer (editedText ?? spec.text) — times never enter
+  // the textarea; a saved overlay (the user's own words, no honest time
+  // alignment) reads as plain text.
   const editedText =
     typeof node.spec?.edited_text === "string" ? node.spec.edited_text : null
   const cuedText =
     typeof node.spec?.cued_text === "string" ? node.spec.cued_text : null
+  const cueRows =
+    shownContent === null && editedText === null ? readCueRows(node.spec) : null
   const bodyText = shownContent ?? editedText ?? cuedText ?? node.spec?.text
   // 卡内就地编辑 (C4, 用户拍板 2026-09-26): the transcript document's body
   // IS the edit surface —「可编辑」不是编辑模式，零新 chrome (合同 Δ2).
@@ -565,6 +585,12 @@ function DocumentCard({
   const [draft, setDraft] = useState("")
   const [saving, setSaving] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // 就地编辑入口: a click into the body enters edit (not the node-select
+  // gesture); 零新 chrome — the body itself is the affordance.
+  const enterEdit = () => {
+    setDraft(editedText ?? node.spec?.text ?? "")
+    setEditing(true)
+  }
 
   useEffect(() => {
     if (editing && textareaRef.current) {
@@ -683,19 +709,18 @@ function DocumentCard({
             </>
           ) : (
             <div className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              {bodyText ? (
-                <p
+              {cueRows ? (
+                // The hover-timeline read face: clean cue blocks, the time
+                // label surfaces only on row hover (the industry's transcript
+                // pattern) — never baked into the text flow.
+                <div
                   role={editable ? "button" : undefined}
                   tabIndex={editable ? 0 : undefined}
                   onClick={
                     editable
                       ? (e) => {
-                          // 就地编辑入口: a click into the text enters edit
-                          // (not the node-select gesture); 零新 chrome — the
-                          // body itself is the affordance.
                           e.stopPropagation()
-                          setDraft(editedText ?? node.spec?.text ?? "")
-                          setEditing(true)
+                          enterEdit()
                         }
                       : undefined
                   }
@@ -704,8 +729,46 @@ function DocumentCard({
                       ? (e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault()
-                            setDraft(editedText ?? node.spec?.text ?? "")
-                            setEditing(true)
+                            enterEdit()
+                          }
+                        }
+                      : undefined
+                  }
+                  className={cn("flex flex-col gap-1", editable && "cursor-text")}
+                >
+                  {cueRows.map((cue, i) => (
+                    <div
+                      key={i}
+                      className="group/cue relative rounded-md px-1.5 -mx-1.5 transition-colors hover:bg-accent"
+                    >
+                      <p className="whitespace-pre-wrap text-xs leading-relaxed">{cue.text}</p>
+                      <span
+                        aria-hidden
+                        className="text-meta pointer-events-none absolute bottom-0.5 right-0.5 rounded-md bg-card px-1 py-px text-[10px] tabular-nums ring-1 ring-foreground/10 opacity-0 transition-opacity group-hover/cue:opacity-100"
+                      >
+                        {cue.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : bodyText ? (
+                <p
+                  role={editable ? "button" : undefined}
+                  tabIndex={editable ? 0 : undefined}
+                  onClick={
+                    editable
+                      ? (e) => {
+                          e.stopPropagation()
+                          enterEdit()
+                        }
+                      : undefined
+                  }
+                  onKeyDown={
+                    editable
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            enterEdit()
                           }
                         }
                       : undefined
@@ -1558,24 +1621,19 @@ function ProgramRegion({
   )
 }
 
-/** The deliverable card's facet strip (ADR-097 §3/§4 — the artifact's
- * hidden stations summarized read-only, first version no levers). 失败才展
- * 开工序级定位: healthy facets collapse to one muted names line (the
- * stations' own baked labels, never invented words); each failed station
- * gets its own destructive row. */
+/** The deliverable card's facet strip (ADR-097 §3/§4) — failure-only chrome
+ * (2026-10-09 用户拍板): 失败才展开工序级定位, each failed station gets its
+ * own destructive row; a healthy artifact renders NO strip at all (成功安静 —
+ * a display-typed deliverable card stays a clean media face, same as the
+ * input asset card), so there is no healthy names line and no birth-time
+ * frame reservation (runtime rows are absorbed by the flex media region). */
 function ArtifactFacetStrip({ artifact }: { artifact: ProjectArtifact }) {
   const { t } = useTranslation()
   const failedIds = new Set(artifact.activity.failed_node_ids)
   const failed = artifact.facets.filter((f) => failedIds.has(f.node_id))
-  const healthyNames = artifact.facets
-    .filter((f) => !failedIds.has(f.node_id))
-    .map((f) => f.label)
-    .filter((label): label is string => !!label)
+  if (failed.length === 0) return null
   return (
     <div className="shrink-0 border-t border-foreground/8 px-3 py-1.5 text-[11px] leading-snug">
-      {healthyNames.length > 0 && (
-        <p className="truncate text-muted-foreground">{healthyNames.join(" · ")}</p>
-      )}
       {failed.map((f) => (
         <p key={f.node_id} className="truncate text-destructive">
           {f.label ? `${f.label} · ` : ""}
@@ -1659,8 +1717,15 @@ function GraphCard({
     if (clipAspect && clipAspect !== "original") info.push(clipAspect)
     const duration = output.type === "clip" ? ((output.payload.duration as number | undefined) ?? null) : null
     if (duration !== null && duration > 0) info.push(`${duration}s`)
-    const models = (output.model_facts ?? []).map((f) => f.model)
-    info.push(...models)
+    // 模型事实分面 (2026-10-09 用户拍板): only GENERATOR cards carry the
+    // model chips — a prose-program product's model is provenance of the
+    // writing; an editor/manual card's models are fixed pipeline facts
+    // (never a user choice), which stay in the lightbox's info column
+    // (ADR-051 H) and off the bar.
+    if (node.spec?.prototype === "generator") {
+      const models = (output.model_facts ?? []).map((f) => f.model)
+      info.push(...models)
+    }
   }
   // An un-run / quiet node carries NO factsbar chips (2026-09-11 用户拍板):
   // its params restate what the caption already names (Translate captions

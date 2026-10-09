@@ -171,7 +171,9 @@ export interface Output {
   project_id: string
   workflow_step_id: string | null
   type: string
-  language: string
+  /** null = unpinned (legacy rows / the scrubbed null-as-string plan token)
+   * — the factsbar's language chip simply stays off. */
+  language: string | null
   status: string
   provenance: string
   payload: OutputPayload
@@ -329,6 +331,11 @@ export interface GraphNode {
      * the source mirror in ``text``. Presentation only — the source
      * evidence / word timestamps / ranges never move. */
     edited_text?: string | null
+    /** The transcript's structured cue rows (the hover-timeline display
+     * face): [{start, end, text, label}] — label preformatted server-side
+     * (m:ss–m:ss; the client never formats time). Absent on word-less or
+     * legacy rows → the plain text face. */
+    cues?: { start?: number; end?: number; text?: string; label?: string }[] | null
     /** 岛内格镜像 (Workspace 合同 v4.2 C6): present on island members — the
      * island's frozen reserved bottom, the projection's compression floor. */
     island?: { reserved_bottom?: number }

@@ -18,6 +18,7 @@ from app.models.schemas import (
     INTERNAL_OUTPUT_TYPES,
     StepResponse,
     RunResponse,
+    is_null_token,
 )
 from app.models.tables import Operation, Output, Publication, WorkflowStep, WorkflowRun
 from app.pipeline.graph import fold_estimates, node_for
@@ -181,7 +182,11 @@ def compose_spec_prompt(step: WorkflowStep, ui_language: str) -> str | None:
     spec = step.spec or {}
     zh = ui_language.startswith("zh")
     slot = spec.get("slot") or {}
-    lang = (spec.get("target_language") or slot.get("language") or "").upper()
+    # Junk guard for legacy specs: the null-as-string plan token ("null")
+    # reads as absent — new proposals never carry it (TaskItem's boundary
+    # scrub), this keeps pre-scrub specs honest.
+    raw_lang = spec.get("target_language") or slot.get("language") or ""
+    lang = "" if is_null_token(raw_lang) else str(raw_lang).strip().upper()
 
     if step.kind == "select_clips":
         count = int(slot.get("count") or 1)

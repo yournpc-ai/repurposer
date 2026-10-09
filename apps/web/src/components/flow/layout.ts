@@ -94,21 +94,18 @@ export function cornerStackedInPorts(node: FlowNode): boolean {
   return MEDIA_CARD_KINDS.has(node.kind) && !hasProgramRegion(node)
 }
 
-/** The artifact facet strip (deliverable cards, ADR-097 §3/§4): border-t 1 +
- * py-1.5 12 + rows of text-[11px] leading-snug. Generator cards absorb the
- * strip in the program region's slack; cards without a program region
- * reserve it explicitly so the media keeps its aspect-exact size. The server
- * mirror (graph_store._FACET_STRIP_PX) reserves the birth-time row count
- * (spec.frame_facets); runtime failed rows grow the strip and the flex media
- * region absorbs them inside the frame. */
+/** The artifact facet strip (deliverable cards, ADR-097 §3/§4) — failure-only
+ * chrome (2026-10-09 用户拍板): a healthy artifact renders NO strip (成功安静,
+ * the card stays a clean media face), so there is NO birth-time reservation;
+ * runtime failed rows grow the strip (border 1 + padding 12 + rows) and the
+ * flex media region absorbs them inside the frame. One law, two mirrors —
+ * graph_store._frame_of reserves nothing for facets either. */
 export const FACET_STRIP_ROW_PX = 16
 export function facetStripPx(node: FlowNode): number {
   const artifact = node.artifact
   if (!artifact || artifact.facets.length === 0) return 0
   const failed = new Set(artifact.activity.failed_node_ids)
-  const rows =
-    artifact.facets.filter((f) => failed.has(f.node_id)).length +
-    (artifact.facets.some((f) => !failed.has(f.node_id) && f.label) ? 1 : 0)
+  const rows = artifact.facets.filter((f) => failed.has(f.node_id)).length
   return rows > 0 ? 1 + 12 + rows * FACET_STRIP_ROW_PX : 0
 }
 
@@ -351,9 +348,10 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
   // 吃满) + facet strip + bar.
   const outputs = node.outputs ?? []
   const programPx = hasProgramRegion(node) ? PROGRAM_REGION_PX : 0
-  // The facet strip eats the generator program region's slack; without a
-  // program region it reserves its own px (server mirror: _frame_of reads
-  // spec.frame_facets).
+  // The facet strip is failure-only chrome: it eats the generator program
+  // region's slack when one exists, and reserves its own px only when failed
+  // rows actually render (healthy = 0, the frame carries no reservation —
+  // server mirror: _frame_of).
   const facetPx = programPx > 0 ? 0 : facetStripPx(node)
   if (outputs.length === 0) {
     // Draft / queued / running / quiet-done body (the dashed region reads

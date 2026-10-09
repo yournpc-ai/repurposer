@@ -397,12 +397,11 @@ _CLIP_FRAME: dict[str, tuple[int, int]] = {
 # predicate layout.ts hasProgramRegion); editor/manual/无戳过渡词媒体卡撤掉
 # 预留, 媒体区吃满.
 _PROGRAM_REGION_PX = 88
-# The artifact facet strip's one-row reservation on deliverable cards
-# (ADR-097 §3 — border 1 + padding 12 + one row 16; client mirror layout.ts
-# facetStripPx). Stamped at birth via spec.frame_facets (graph_fill counts
-# the artifact's facet stations); runtime failed rows grow the strip and the
-# client's flex media region absorbs them inside the frame.
-_FACET_STRIP_PX = 29
+# The artifact facet strip is failure-only chrome (失败才展开工序级定位;
+# a healthy artifact renders no strip — 成功安静, the deliverable card stays
+# a clean media face), so the frame carries NO birth-time row reservation;
+# runtime failed rows grow the strip and the client's flex media region
+# absorbs them inside the frame (client mirror: layout.ts facetStripPx).
 
 # Asset node frames by the source's display class (2026-09-13 — 素材节点同律,
 # media + caption 26 + toolbar 44): stamped at birth by stamp_asset_node from
@@ -494,14 +493,11 @@ def _frame_of(kind: str, spec: dict[str, Any]) -> tuple[int, int]:
         # 程序区门控 (ADR-076; client mirror layout.ts hasProgramRegion —
         # 一条律两镜像): the program reservation belongs to generator cards
         # alone; editor/manual (and prototype-less transitional) media cards
-        # drop it and let the media fill the freed band.
+        # drop it and let the media fill the freed band. The facet strip
+        # reserves nothing (failure-only chrome — the flex media region
+        # absorbs a failure-grown strip at runtime).
         if str(spec.get("prototype") or "") != "generator":
             h -= _PROGRAM_REGION_PX
-            # The deliverable's facet strip reserves its row explicitly when
-            # born with facet stations (graph_fill stamps frame_facets);
-            # generator cards absorb the strip in the program slack instead.
-            if int(spec.get("frame_facets") or 0) > 0:
-                h += _FACET_STRIP_PX
         return w, h
     return _FRAME_CLASS.get(cls, _FRAME_CLASS["clip"])
 

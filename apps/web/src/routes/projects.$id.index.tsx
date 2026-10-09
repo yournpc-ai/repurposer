@@ -739,11 +739,14 @@ function ProjectDetailPage() {
   const articles = outputs.filter((o) => o.type === "article")
 
   // Top pick: the highest recommendation score in the batch gets the accent
-  // badge (the score's job is triage — which clip is most worth posting first).
-  const topClipScore = Math.max(
-    0,
-    ...clips.map((c) => (typeof c.score?.value === "number" ? c.score.value : 0))
-  )
+  // badge (the score's job is triage — which clip is most worth posting
+  // first). Triage needs a real choice (2026-10-09 用户拍板): a single
+  // scored clip is trivially the top pick — the badge speaks only when ≥2
+  // scored clips share the surface (mirror: ResultsCanvas.tsx topClipScore).
+  const topClipScore =
+    clips.filter((c) => typeof c.score?.value === "number" && c.score.value > 0).length >= 2
+      ? Math.max(0, ...clips.map((c) => (typeof c.score?.value === "number" ? c.score.value : 0)))
+      : 0
 
   const counts = {
     clips: clips.length,

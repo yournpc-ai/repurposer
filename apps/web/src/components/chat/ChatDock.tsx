@@ -1481,6 +1481,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     () => new Set(messages.flatMap((m) => (m.assets ?? []).map((a) => a.id))),
     [messages],
   )
+  /** Honest preprocess copy (chat-flow-sequencing 验收 5): with zero file
+   * uploads the preprocess node validates material / admits the writer
+   * lift — "Analyzing your uploads…" would be a lie. */
+  const hasUploads = assets.some((a) => a.file_url)
+
   // Processing watch: sent assets mid-processing — the tick refreshes the
   // asset rows (the chips' processing state and the now-line's reading rows
   // update on this cadence) and doubles as the trigger arrival channel while

@@ -2748,3 +2748,21 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 **Consequences**: 双应答面事故结构性消除（没有 Start 钮就没有竞争）；配方与对话两路径收敛于同一「计划就绪 = 画布在」状态，「到来即彷徨」的接住点从卡面移到画布；ADR-105 定罪的三个症状（幽灵矩形 / draft 链相机 fit / 41% 缩放）以设计而非隐藏回答。代价：计划逐项检视的列表面消失（画布节点承担）；施工期间行为面文档（CHAT_ARCH §1 三形态机等）与目标法分叉，随批更新收口。
 
 **Related**: ADR-092（口头确认律——确认唯一通道，不动）/ ADR-109（§4 echo 可见性戒律触发态由本条修订）/ ADR-051（画布优先——预确认期例外由本条取消：计划就绪即画布优先）/ ADR-036（诞生编舞——reveal 帧呈现已诞生节点，不动）/ ADR-058（展示文案二源律——等待态节点面命名受其约束）/ ADR-088/089（北极星——节点级 CRUD 永禁的依据）/ ADR-100（选项唯一座位——dock 卡退役后 ask_user 选项卡形态不动）
+
+## ADR-112: 画布卡面显示律——cue 行时间刻度 / facet strip 失败-only / factsbar 分面 / Top pick 抉择闸门
+
+**Status**: Decided（2026-10-09 用户拍板，同批落地）
+
+**Context**: live 走查（项目 1aeb9787，单条 9:16 高光短视频）四事故同帧暴露：① 成片卡视频两侧黑边——mp4 本身 1080×1920 内容顶满（帧实测 0px 烘焙边），黑边 = facet strip 的 29px 只在 newborn 非 draft 路径预留（`frame_facets`），而 draft→confirm 主路（ADR-111 后唯一主路）在 draft 出生时 assignments 合法为空、run 时 reused 分支不补盖不重排 → fill 媒体区被偷 29px → `object-contain` + `bg-black` 漏柱；② factsbar 渲染字符串 "null"——intent router 把缺省可选参发射为 `"null"` 字符串（`"language": "null"`、`"count": "1"` 同帧，`TaskItem.params` 自由 dict 零净化），经 spec.target_language 一路漏进 `outputs.language` 列与 spec_prompt（"titles in NULL"）；③ 单条 clip 挂「Top pick · 88」——恒真命题，triage 信息为零；④ transcript 卡把 `0:02–0:10` 时间戳烘焙进正文行，工业标准（Descript/剪映）是 cue 块 + hover 显时。
+
+**Decision**:
+
+1. **Transcript 卡 = 结构化 cue 行 + hover 显时**：`spec.cues = [{start, end, text, label}]`，label 服务端预格式化（`m:ss–m:ss`——前端永不自建时间格式化，一法一座）；分组仍走唯一律 `group_cues`。卡面 = 干净文字块，hover 行浮现 muted 时间 chip（overlay chrome，不占栏宽——frame 行高估算两镜像不动）。C4 承重不动：编辑仍编纯文本层，时间永不进 textarea；overlay 存续时回退纯文本面。`cued_text` 字符串烘焙退役（sync 路过即愈合 + `scripts/backfill_transcript_cues.py` 一次性回填）。
+2. **纯展示媒体卡 = 干净媒体面**：facet strip 健康名字行退役（成功安静——健康 artifact 零 strip，卡面与输入素材卡同构）；失败行保留（失败才展开工序级定位不变）。frame 预留座位整个拆除（`frame_facets` 停盖 / `_frame_of` 删 +29 / `facetStripPx` 只数失败行）——① 的黑边不打预留同步补丁，靠座位消失结构性归零；失败行运行时由 flex 媒体区吸收（既有律）。
+3. **factsbar 模型事实分面**：模型 chips 只上 generator（散文程序）卡——散文产物的模型是写作 provenance；editor/manual（参数程序/纯展示）媒体卡的模型是流水线固定事实，只留 lightbox 详情列（ADR-051 条款 5 详情面陈列不动）。语言/画幅/时长芯片不动（媒体事实）。
+4. **Top pick = 抉择闸门**：带分 clip ≥2 同场才有 Top pick 徽章（triage 需要真实抉择）；单条回落裸分（hover 载选段理由，世界自证）。两座镜像（ResultsCanvas 画布徽标 / 结果格 ClipCard）同一规则。
+5. **null-token 净化两座**：写口 = `TaskItem` 读容忍丢弃恰为 `"null"`（大小写不论）或纯空白的参数值（精确裸 token 匹配，「提到 null 的正文」永不误伤）；读面 = `OutputResponse.language` 放宽 `str | None` + junk→None 归一（`_derive_aspect` 的 `"original"→None` 同款座位），`compose_spec_prompt` 同一谓词（`is_null_token`）守卫存量 spec。
+
+**Consequences**: 黑边根因座位（facet 预留双路径分叉）整体消失而非修补；计划参数从此外界垃圾不进 spec/prompt/产物列；单条交付物卡面回到「caption + 媒体 + factsbar」的干净三件套。代价：健康工序在卡面零痕迹（工序自证归 chat 逐步叙事与 stepper）；存量 spec.prompt 里的历史 "titles in NULL" 不迁移重写（读面守卫兜住，快照不可篡改律不动）。
+
+**Related**: ADR-097（artifact 投影四字段/两层门不动——本条只退休卡面 strip 的健康行）/ ADR-051 H（模型事实详情面不动）/ ADR-076（prototype 门控成为 factsbar 分面谓词）/ ADR-109 §5（读容忍扩展到参数值级）/ 打字机律牙①（同族方言吸收）

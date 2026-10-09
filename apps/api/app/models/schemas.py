@@ -607,6 +607,15 @@ def tolerate_null_keys(data: Any, *keys: str) -> Any:
     return data
 
 
+def is_null_token(value: Any) -> bool:
+    """The plan emission's null-as-string dialect (``"language": "null"``):
+    True only for the bare token, exact-match — real content (a focus text
+    mentioning null) never equals it. One predicate shared by the proposal
+    boundary (TaskItem's param scrub) and the display boundary
+    (OutputResponse.language / compose_spec_prompt normalization)."""
+    return isinstance(value, str) and value.strip().lower() == "null"
+
+
 def wrap_single_object_list(data: Any, key: str) -> Any:
     """顺形律 dialect absorption (probe E 实测 2026-09-24): the provider
     emits a one-item list as the BARE OBJECT and never recovers across
@@ -1197,10 +1206,23 @@ class TaskItem(BaseModel):
         # ADR-109 §5: a param-less tool comes back with params '' (or null)
         # instead of {} — normalize before validation (打字机律牙① read
         # tolerance extended to plan params: one schema rejection here used
-        # to cost a whole rejected iteration and its streamed prose).
-        if isinstance(data, dict) and not data.get("params"):
+        # to cost a whole rejected iteration and its streamed prose). The
+        # null-as-string dialect ("language": "null") scrubs at the same
+        # seat: a junk token must never reach spec stamps, spec prompts, or
+        # a product's language column; an empty string means "absent" here
+        # too (every registry param falls back to its default).
+        if isinstance(data, dict):
             data = dict(data)
-            data.pop("params", None)
+            if not data.get("params"):
+                data.pop("params", None)
+            elif isinstance(data["params"], dict):
+                data["params"] = {
+                    k: v
+                    for k, v in data["params"].items()
+                    if not (
+                        isinstance(v, str) and (is_null_token(v) or not v.strip())
+                    )
+                }
         return data
 
     tool: str
@@ -3390,7 +3412,10 @@ class OutputResponse(BaseModel):
     project_id: UUID
     workflow_step_id: UUID | None = None
     type: str
-    language: str
+    # None = unpinned (legacy rows, or the null-as-string plan token that
+    # leaked into early rows' language column — normalized at the boundary
+    # below, same posture as _derive_aspect's "original" → None).
+    language: str | None = None
     status: str
     # work/version 两身份 (ADR-091, N-59): work_id = the user-semantic anchor
     # shared by every version of one work; archived_at NULL = the work's
@@ -3432,6 +3457,13 @@ class OutputResponse(BaseModel):
     model_facts: list[ModelFact] | None = None
     created_at: datetime
     updated_at: datetime | None = None
+
+    @field_validator("language", mode="before")
+    @classmethod
+    def _normalize_language(cls, value: Any) -> Any:
+        # The null-as-string plan token reads as absent — one predicate
+        # (is_null_token) shared with the proposal boundary's scrub.
+        return None if is_null_token(value) else value
 
     @field_validator("payload", mode="before")
     @classmethod
