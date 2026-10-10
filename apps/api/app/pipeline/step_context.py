@@ -21,6 +21,7 @@ from app.models.schemas import (
 )
 from app.models.tables import Asset, Output, Persona, Project
 from app.providers.storage import download_to_temp, file_to_data_url
+from app.pipeline.assets import asset_text_content
 from app.pipeline.clip_spec import total_output_seconds
 
 # Media snippets above these thresholds are not sent directly to the multimodal
@@ -199,7 +200,7 @@ async def _estimate_facts(db: AsyncSession, project: Project) -> dict:
     it needs; ``spec`` and ``input_kinds`` ride per node at the call site.
     """
     assets = await list_assets(db, project.id)
-    texts = [t for a in assets if (t := (a.extracted_text or a.transcript))]
+    texts = [t for a in assets if (t := asset_text_content(a))]
     # Mirrors collect_asset_media's feed surface (no downloads): images with a
     # file, one item per slide page, videos within the direct-feed duration.
     media_count = sum(

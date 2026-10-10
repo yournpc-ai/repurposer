@@ -10,6 +10,9 @@ from app.models.schemas import (
     AssetCreateRequest,
     AssetResponse,
     AssetStatus,
+    AssetTranscriptCue,
+    AssetTranscriptPutRequest,
+    AssetTranscriptResponse,
     AssetType,
     AssetUploadUrlRequest,
     AssetUploadUrlResponse,
@@ -150,9 +153,8 @@ async def _insert_project_asset(
     )
     db.add(asset)
     # 上传即落图 (ADR-057 K2): the asset node is born with its asset row —
-    # flush-only, commits with the asset below. 认领即出生 (ADR-102 后续):
-    # the transcript document waits for the worker's claim — a dormant
-    # upload carries no loading card.
+    # flush-only, commits with the asset below. 认领即出生 (ADR-102): a
+    # dormant upload carries no processing claim until someone asks.
     from app.pipeline.graph_fill import (  # deferred: import cycle
         stamp_asset_node,
     )
@@ -260,8 +262,8 @@ async def upload_asset(
     )
     db.add(asset)
     # 上传即落图 (ADR-057 K2): the asset node is born with its asset row.
-    # 认领即出生 (ADR-102 后续): the transcript document waits for the
-    # worker's claim — a dormant upload carries no loading card.
+    # 认领即出生 (ADR-102): a dormant upload carries no processing claim
+    # until someone asks.
     from app.pipeline.graph_fill import (  # deferred: import cycle
         stamp_asset_node,
     )
@@ -291,6 +293,84 @@ async def get_asset(
             detail="Asset not found",
         )
     return _asset_response(asset)
+
+
+async def _get_project_asset(
+    db: DBDep, project_id: UUID, asset_id: UUID, user_id: UUID | None
+) -> Asset:
+    """The transcript endpoints' shared fetch (owner check + row or 404)."""
+    await _get_user_project(project_id, user_id, db)
+    result = await db.execute(
+        select(Asset).where(Asset.id == asset_id, Asset.project_id == project_id)
+    )
+    asset = result.scalar_one_or_none()
+    if not asset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asset not found",
+        )
+    return asset
+
+
+def _transcript_response(asset: Asset) -> AssetTranscriptResponse:
+    """The asset's content layer, serialized (ADR-113 §1): source text and
+    the edit overlay ride as-is; the cue rows are a READ-TIME derivation of
+    ``meta.words`` through the ONE grouping law (``display_cues``) — cues
+    never persist."""
+    from app.pipeline.assets import asset_text_content
+    from app.tools.clips.transcript import display_cues
+
+    words = (asset.meta or {}).get("words") if isinstance(asset.meta, dict) else None
+    rows, truncated = display_cues(words)
+    return AssetTranscriptResponse(
+        text=asset_text_content(asset),
+        edited_text=asset.edited_transcript,
+        cues=[AssetTranscriptCue(**r) for r in rows] if rows else None,
+        truncated=truncated,
+    )
+
+
+@router.get(
+    "/{project_id}/assets/{asset_id}/transcript",
+    response_model=AssetTranscriptResponse,
+)
+async def get_asset_transcript(
+    project_id: UUID,
+    asset_id: UUID,
+    db: DBDep,
+    current_user: User | None = Depends(get_current_user),
+) -> AssetTranscriptResponse:
+    """The asset card's transcript section (ADR-113): the transcript is the
+    asset's content layer — never a graph node, never a second storage seat.
+    """
+    asset = await _get_project_asset(
+        db, project_id, asset_id, current_user.id if current_user else None
+    )
+    return _transcript_response(asset)
+
+
+@router.put(
+    "/{project_id}/assets/{asset_id}/transcript",
+    response_model=AssetTranscriptResponse,
+)
+async def put_asset_transcript(
+    project_id: UUID,
+    asset_id: UUID,
+    request: AssetTranscriptPutRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> AssetTranscriptResponse:
+    """The transcript's in-place edit (ADR-113 §1 + C4 双层): writes the
+    OVERLAY only (``assets.edited_transcript``) — the source layer and the
+    word-level evidence stay untouched, so an edit never reverse-computes a
+    timecode. ``text`` null = clear the overlay (the source layer shows
+    again). No run, no credits — the edit is not executable work; the card
+    face is the whole feedback."""
+    asset = await _get_project_asset(db, project_id, asset_id, current_user.id)
+    asset.edited_transcript = request.text
+    await db.commit()
+    await db.refresh(asset)
+    return _transcript_response(asset)
 
 
 @router.post(

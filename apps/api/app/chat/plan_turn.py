@@ -115,7 +115,7 @@ from app.models.schemas import (
 )
 from app.models.tables import Asset, ExplorationRow, Message, Persona, Project
 from app.pipeline.asset_processing import has_any_text_material
-from app.pipeline.assets import create_transcript_asset_from_text
+from app.pipeline.assets import asset_text_content, create_transcript_asset_from_text
 from app.pipeline.exploration_store import (
     PHASE_DOCKED,
     PHASE_PRE_DOCK,
@@ -316,12 +316,13 @@ class PlanTurn:
                 self.mention_exemplar_id = str(mentioned.id)
         # The plan layer reads the material's opening, not just its filename
         # (track-model §7.4 折中版 — mechanical slice, zero extra LLM): the first
-        # asset carrying text (transcript beats extracted_text), capped.
+        # asset carrying text, capped — the ONE text seat (ADR-113) picks
+        # the layer (transcript beats extracted_text).
         material_excerpt = next(
             (
                 excerpt
                 for a in assets
-                if (excerpt := (a.transcript or a.extracted_text or "").strip())
+                if (excerpt := asset_text_content(a).strip())
             ),
             None,
         )

@@ -9,7 +9,7 @@ anything chat wiring needs (manual wiring capability MUST exist for chat
 wiring to rest on), but no UI ever exposes manual gestures.
 
 Ops (the registry below): ``add_node`` / ``connect`` / ``edit_prompt`` /
-``edit_text`` / ``delete_node`` / ``run``. Initial generation, revision and
+``delete_node`` / ``run``. Initial generation, revision and
 new builds are the SAME op set — the "revision loop" as a separate concept
 is retired; there is one graph being edited continuously. Islands are
 legal (the graph is a forest, not a single connected DAG).
@@ -33,11 +33,10 @@ from pydantic import BaseModel, Field, TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.tables import GraphEdge, GraphIsland, GraphNode, Project, now_utc
+from app.models.tables import GraphEdge, GraphIsland, GraphNode, Project
 from app.pipeline.product_graph import (
     EXPLORATION_PROTOTYPE,
     RANK_EDGE_TYPES,
-    effective_rank_edges,
     is_lineage_edge,
     product_ranks,
 )
@@ -50,12 +49,12 @@ class WiringRejected(ValueError):
 
 
 def executable_children_of(edges: Any, node_id: UUID) -> list[UUID]:
-    """The run-closure walk's edge set (ADR-097 §5): lineage/display-only
-    真边（端口标记 out:lineage）**永不参与** stale/invalidation 闭包——调
-    度事实源恒为 run 内编译的 step inputs，新真边零编排语义。没有这道排
-    除, 对转写稿节点的 run 闭包会顺着血缘边把下游字幕产物卷进重跑
-    （改 transcript edited_text 误伤下游字幕的那一格）。Module-level and
-    pure so the walk law stays unit-testable off the DB."""
+    """The run-closure walk's edge set: lineage/display-only edges (the
+    ``out:lineage`` port mark) NEVER join the stale/invalidation closure —
+    the scheduling truth is always the run's compiled step inputs. The mark
+    is retired with the transcript node (ADR-113); the exclusion stays as
+    read-tolerance for pre-migration rows. Module-level and pure so the
+    walk law stays unit-testable off the DB."""
     return [
         UUID(str(e.to_node))
         for e in edges
@@ -114,31 +113,6 @@ class EditPromptOp(BaseModel):
     prompt: str
 
 
-class EditTextOp(BaseModel):
-    """Rewrite a document node's EDITABLE text layer (Workspace 合同 v4.2
-    C4 — Transcript 双层, 2026-09-26 封板): the card-face in-place edit and
-    the chat-pointed transcript revision are this one op, through the graph's
-    ONE write door — same entity identity, version evolution (the displaced
-    display text appends to ``spec.text_edits``), never a new work.
-
-    C4 invariants, structural by construction: the write touches ONLY the
-    presentation overlay (``spec.edited_text``) — the source mirror
-    (``spec.text``), the asset's source transcript (``assets.transcript``),
-    the word-level evidence (``assets.meta["words"]``), and every range stay
-    untouched: text changed / evidence unchanged / range unchanged. No code
-    path reverse-computes a timecode from the edited text.
-
-    ``text`` None = clear the overlay (the card reads the source layer
-    again). Gate: a transcript document (``type=="document"`` +
-    ``spec.role=="transcript"`` — the companion caption document's direct
-    edit rides the same op when its surface lands; program-bearing nodes
-    edit via ``edit_prompt``, never this)."""
-
-    op: Literal["edit_text"]
-    node: UUID
-    text: str | None = None
-
-
 class DeleteNodeOp(BaseModel):
     """Remove a node; its edges die with it structurally. Products
     (outputs rows) are NOT touched — they have their own lifecycle
@@ -174,7 +148,7 @@ class RunOp(BaseModel):
 
 
 WiringOp = Annotated[
-    AddNodeOp | ConnectOp | DisconnectOp | EditPromptOp | EditTextOp | DeleteNodeOp | RunOp,
+    AddNodeOp | ConnectOp | DisconnectOp | EditPromptOp | DeleteNodeOp | RunOp,
     Field(discriminator="op"),
 ]
 
@@ -183,7 +157,6 @@ WIRING_OPS: dict[str, type[BaseModel]] = {
     "connect": ConnectOp,
     "disconnect": DisconnectOp,
     "edit_prompt": EditPromptOp,
-    "edit_text": EditTextOp,
     "delete_node": DeleteNodeOp,
     "run": RunOp,
 }
@@ -204,9 +177,6 @@ def wiring_catalog_lines() -> str:
             "- connect: wire a typed flow between two nodes "
             "(edge_type: video|audio|text|ctx — ctx = the reference/context flow)",
             "- edit_prompt: rewrite a node's prompt (nodes carrying spec.tool)",
-            "- edit_text: rewrite a transcript document's editable text layer "
-            "(presentation overlay — the source evidence never changes; "
-            "text: the new text, or null to clear the overlay)",
             "- delete_node: remove a PROVISIONAL draft node (its edges go "
             "with it) — a settled entity is append-only and the door "
             "rejects its deletion",
@@ -415,6 +385,24 @@ _ASSET_FRAME: dict[str, tuple[int, int]] = {
 }
 _ASSET_FRAME_DEFAULT = _FRAME_CLASS["asset"]
 
+# The transcript section's frame reservation (ADR-113 §3 — 素材卡解剖:
+# media + time strip + cue flow): text-yielding media assets (video/audio)
+# grow it BELOW the media; paste/transcript assets are medialess — the
+# section IS the body. ONE law with the client mirror (layout.ts
+# TRANSCRIPT_SECTION_PX / the asset branch of graphNodeSize).
+_TRANSCRIPT_SECTION_PX = 236  # strip 28 + gap 8 + cue flow 200
+_ASSET_TEXT_ONLY_H = 278  # caption 26 + cue flow 200 + toolbar 44 + gap 8
+
+# 轨道栈预留 (ADR-113 §4 — 成片卡解剖: media + 视频轨 + 文字轨 + bar): the
+# tracked clip families' cards carry the two read-only inspection lanes
+# FROM BIRTH (draft renders muted empty rows — the waiting seat, so the
+# video in-port's anchor never moves mid-life; 锚点律). ONE law with the
+# client mirror (layout.ts TRACK_STACK_PX / TRACKED_CLIP_TOOLS — tool-set
+# parity, never a kind+prototype proxy: reframe/music share video×editor
+# without carrying the lanes).
+_TRACK_STACK_PX = 96  # top breath 16 + video lane row 40 + text lane row 40
+_TRACKED_CLIP_TOOLS = frozenset({"select_clips", "translate_clip", "dub_clip"})
+
 # The task-book document's role tag. Production stopped (Workspace 合同
 # v4.2 C1-b de-stamp, 2026-09-26 封板 — the word survives for legacy-row
 # reads: clear_draft_graph's draft sweep and product_graph's HIDDEN_ROLES
@@ -480,9 +468,17 @@ def _frame_of(kind: str, spec: dict[str, Any]) -> tuple[int, int]:
     if cls == "asset":
         # The source's display class, stamped at birth when its dims were
         # known — unknown dims keep the default reservation.
-        return _ASSET_FRAME.get(
+        base = _ASSET_FRAME.get(
             str(spec.get("frame_aspect") or ""), _ASSET_FRAME_DEFAULT
         )
+        # ADR-113 §3: the transcript section rides the asset card for
+        # text-yielding types (one law, the client mirror adds the same).
+        asset_type = str(spec.get("asset_type") or "")
+        if asset_type in ("video", "audio"):
+            return base[0], base[1] + _TRANSCRIPT_SECTION_PX
+        if asset_type in ("transcript", "past_material"):
+            return base[0], _ASSET_TEXT_ONLY_H
+        return base
     if cls == "clip":
         # The aspect-exact reservation when the fill stamped one
         # (frame_aspect) — the class max stays the fallback for unstamped
@@ -498,6 +494,12 @@ def _frame_of(kind: str, spec: dict[str, Any]) -> tuple[int, int]:
         # absorbs a failure-grown strip at runtime).
         if str(spec.get("prototype") or "") != "generator":
             h -= _PROGRAM_REGION_PX
+        # 轨道栈门控 (ADR-113 §4; client mirror layout.ts hasTrackStack):
+        # the tracked clip families reserve the two inspection lanes at
+        # birth — the lanes are in the anatomy from draft on, so the video
+        # in-port's anchor seat (锚点律) never moves mid-life.
+        if str(spec.get("tool") or "") in _TRACKED_CLIP_TOOLS:
+            h += _TRACK_STACK_PX
         return w, h
     return _FRAME_CLASS.get(cls, _FRAME_CLASS["clip"])
 
@@ -792,29 +794,19 @@ async def settle_frames_with_edges(
     persisted."""
     by_id = {UUID(str(n.id)): n for n in [*placed, *newborns]}
 
-    # ADR-098 §1 — Effective Product Graph 唯一拓扑层: the settle eats the
-    # EFFECTIVE edge set (persisted + A3-lite synthesized transcript→consumer
-    # legs) from the SAME pure function the /graph read face projects — birth
-    # frames and the read projection share one graph (a consumer is depth 2
-    # AT BIRTH, never re-read deeper later). Two input notes: ① the working
-    # set's transcript documents may be same-batch newborns not yet flushed
-    # — the function consumes the in-memory object collection, never a DB
-    # query; ② synthesized rows are plain dicts (read-time data) — they
-    # stay in THIS local, never join ``edges`` (the door's edge flush
-    # asserts the landed set is dict-free — 合成边永不落库).
-    effective_edges = effective_rank_edges([*placed, *newborns], edges)
-
-    def _eget(edge: Any, key: str) -> Any:
-        # The effective set mixes ORM rows (persisted) and dicts
-        # (synthesized) — one reader for both (routes' _eget precedent).
-        return edge.get(key) if isinstance(edge, dict) else getattr(edge, key)
+    # ADR-113: the A3-lite synthesized transcript→consumer legs are retired
+    # with the transcript node (the asset row is its ONE seat) — the settle
+    # eats the PERSISTED edge set directly, the same set the /graph read
+    # face projects (birth frames and the read projection share one graph,
+    # a consumer is depth 2 AT BIRTH, never re-read deeper later).
+    effective_edges = list(edges)
 
     def parents_of(node_id: UUID) -> list[GraphNode]:
         return [
-            by_id[UUID(str(_eget(e, "from_node")))]
+            by_id[UUID(str(e.from_node))]
             for e in effective_edges
-            if UUID(str(_eget(e, "to_node"))) == node_id
-            and UUID(str(_eget(e, "from_node"))) in by_id
+            if UUID(str(e.to_node)) == node_id
+            and UUID(str(e.from_node)) in by_id
         ]
 
     # Media-flow parents only (物料流三值 — the Product Graph's edge
@@ -825,11 +817,11 @@ async def settle_frames_with_edges(
     # is the media-flow relation).
     def rank_parents_of(node_id: UUID) -> list[GraphNode]:
         return [
-            by_id[UUID(str(_eget(e, "from_node")))]
+            by_id[UUID(str(e.from_node))]
             for e in effective_edges
-            if UUID(str(_eget(e, "to_node"))) == node_id
-            and str(_eget(e, "edge_type")) in RANK_EDGE_TYPES
-            and UUID(str(_eget(e, "from_node"))) in by_id
+            if UUID(str(e.to_node)) == node_id
+            and str(e.edge_type) in RANK_EDGE_TYPES
+            and UUID(str(e.from_node)) in by_id
         ]
 
     # Depth = the topological generation (max parent depth + 1, islands 0),
@@ -960,9 +952,8 @@ async def apply_wiring_ops(
     default — a settled entity is append-only, and the chat/LLM path never
     gets the bypass. The ONE legal settled-delete caller is the asset
     module's own lifecycle (``remove_asset_node`` — an asset's deletion
-    takes its graph twin and transcript document with it); every
-    provisional cleanup (draft teardown / orphan sweep) deletes draft-state
-    nodes and needs no bypass.
+    takes its graph twin with it); every provisional cleanup (draft
+    teardown / orphan sweep) deletes draft-state nodes and needs no bypass.
     """
     parsed: list[BaseModel] = _OPS_ADAPTER.validate_python(ops)
     project = await db.get(Project, project_id)
@@ -1211,8 +1202,8 @@ async def apply_wiring_ops(
             if node is None:
                 raise WiringRejected(f"edit_prompt: unknown node {op.node}")
             # ADR-076 过渡闸门: the executing body's presence (spec.tool)
-            # marks an editable program — a tool-less document (transcript /
-            # task book / brief) never has one; the legacy two-kind fallback
+            # marks an editable program — a tool-less document (task book /
+            # brief) never has one; the legacy two-kind fallback
             # covers pre-v3 rows stamped without tool. 终态闸门 =
             # prototype=="generator" (批 B4 set_param 落地前 editor 的修订
             # 路不能断), 卡面 hover wash 与本报文同真值 (批 C1).
@@ -1230,39 +1221,6 @@ async def apply_wiring_ops(
                 # The product now predates the program — stale until the
                 # revision reruns it (原型 C: stale = factsbar 可重跑徽章).
                 node.state = "stale"
-            delta.affected.append(op.node)
-        elif isinstance(op, EditTextOp):
-            node = nodes.get(op.node)
-            if node is None:
-                raise WiringRejected(f"edit_text: unknown node {op.node}")
-            # C4 gate: the transcript document's presentation overlay is the
-            # ONLY editable text layer (the source mirror / word evidence /
-            # ranges are never this op's business — structural invariant).
-            if node.type != "document" or (node.spec or {}).get("role") != "transcript":
-                raise WiringRejected(
-                    f"edit_text: a {node.type} node (role "
-                    f"{(node.spec or {}).get('role')!r}) has no editable text layer"
-                )
-            spec = dict(node.spec or {})
-            # Version evolution (C2 — Revision ≠ New Work): the displaced
-            # display layer appends to the edit history (append-only memory,
-            # capped — version memory, not infinite undo); the overlay
-            # replaces it. text=None clears the overlay back to the source
-            # layer (still a version step — the displaced overlay is kept).
-            previous = spec.get("edited_text")
-            if previous is None:
-                previous = spec.get("text")
-            history = list(spec.get("text_edits") or [])
-            history.append(
-                {"text": previous or "", "at": now_utc().isoformat()}
-            )
-            del history[:-50]
-            spec["text_edits"] = history
-            if op.text is None:
-                spec.pop("edited_text", None)
-            else:
-                spec["edited_text"] = op.text
-            node.spec = spec
             delta.affected.append(op.node)
         elif isinstance(op, DeleteNodeOp):
             node = nodes.get(op.node)
@@ -1304,9 +1262,9 @@ async def apply_wiring_ops(
                 resolved.add(seed)
                 # Close over downstream — a node rerun refills what feeds
                 # off it (修订 = edit_prompt + run({node} ∪ downstream)).
-                # ADR-097 §5: the walk EXCLUDES lineage/display-only edges —
-                # a transcript node's rerun closure never swallows the
-                # downstream caption artifact through its bloodline edge.
+                # The walk EXCLUDES lineage/display-only edges (the
+                # ``out:lineage`` port mark — retired with the transcript
+                # node, ADR-113; the exclusion stays as read-tolerance).
                 resolved |= {
                     n
                     for n in nodes

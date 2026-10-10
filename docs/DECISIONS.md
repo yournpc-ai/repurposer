@@ -2766,3 +2766,23 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 **Consequences**: 黑边根因座位（facet 预留双路径分叉）整体消失而非修补；计划参数从此外界垃圾不进 spec/prompt/产物列；单条交付物卡面回到「caption + 媒体 + factsbar」的干净三件套。代价：健康工序在卡面零痕迹（工序自证归 chat 逐步叙事与 stepper）；存量 spec.prompt 里的历史 "titles in NULL" 不迁移重写（读面守卫兜住，快照不可篡改律不动）。
 
 **Related**: ADR-097（artifact 投影四字段/两层门不动——本条只退休卡面 strip 的健康行）/ ADR-051 H（模型事实详情面不动）/ ADR-076（prototype 门控成为 factsbar 分面谓词）/ ADR-109 §5（读容忍扩展到参数值级）/ 打字机律牙①（同族方言吸收）
+
+## ADR-113: Transcript 折叠——素材卡内容层 + 成片轨道栈 + 存储唯一座位
+
+**Status**: Decided（2026-10-09 用户拍板；形态原型 = `scratch/transcript-fold-proposal.html` v1~v5，基于项目 1aeb9787 真实数据）；施工合同 = `docs/tasks/transcript-fold.md`
+
+**Context**: 取证四连（项目 1aeb9787 真实图：4 行 3 卡 4 边）：① 同一转写稿四个存储座位——`assets.transcript` + `assets.meta.words`（真相/证据）+ `graph_nodes.spec.text` + `spec.cues`（落库展示副本），同步靠「sync 路过即愈合」，且 `spec.cues` 落库后**全库零消费者**（search_transcript / select_clips / dub 全部绕过节点直读 asset 行并各自重跑 `group_cues`——一派生四次 + 存一份没人读的）；② 转写节点是**纯展示叶子**——`stamp_transcript_node` docstring 自证「A LEAF face」，两条 text 边（asset→transcript / transcript→clips）皆为装饰，却占画布整列（708px 死列事故 ADR-098 的当事列）；③ 编辑是装饰性的——`edit_text` 只写 `spec.edited_text` overlay，执行真相永不读它，且 overlay 与未编辑的 cue 时间戳同卡自相矛盾；④ hover 时间戳是**死数字**——互指（点句子跳画面）在跨卡画布上结构性不可能。用户判词：「视频和 transcript 是一个 object、全局唯一共享值」；「卡即工作面」（FLORA 剪辑节点截图对照）；「成片 = 完整视频 + 视频轨 + 文字轨」；「锚点与所喂轨道 Y-center 对齐」。
+
+**Decision**:
+
+1. **存储唯一座位 = asset 行**：`assets.transcript` / `extracted_text`（真相）+ `assets.meta.words`（证据）+ 新增列 `assets.edited_transcript`（用户编辑 overlay，从 graph spec 搬家；C4 地板不动——永不反算时间码、证据与区间永不被编辑触碰）。graph spec 的 `text` / `cues` / `cued_text` 三件套随转写节点退役拆除。cue **永不落库**：一切展示面（素材卡时间条 / 成片文字轨 / chat search）从 words 经 `group_cues` 读面派生，label 服务端预格式化一法一座（ADR-112 继承）。`transcript ?? extracted_text` 的两种相反 fallback 顺序收编为同一座。
+2. **转写节点退役**：`stamp_transcript_node` 停生（出生两座废除）；存量 `document/transcript` 行读面隐藏（展示职责由素材卡继承；删资产级联同律，历史行不留痕）。`edit_text` wiring op 的 transcript 门分支退役——编辑写口 = 资产级端点（写 `assets.edited_transcript`，零 run 零积分语义不变）；进不进 Operation Model 账挂账待拍。
+3. **素材卡解剖（卡即工作面）**：媒体区（click-to-play poster）+ **时间条**（cue 块宽 ∝ 时长、停顿诚实留白、播放头）+ 纵向 cue 流（hover 显时 chip——ADR-112 继承；定高卡内滚动，560 封顶同 DocumentCard 全文卡律）+ factsbar。点 cue / 条块 = **同卡 seek**（「文本驱动 seek」交互族入册）。paste / transcript 型资产 = 同组件去掉媒体区与时间条（无词轴即无时间面；估算词轴补强挂账）。转写处理态面（shimmer / 失败红行）收回素材卡承担。
+4. **成片卡轨道栈（检视，不是编排）**：完整视频（顶）+ **视频轨**（片段块，`render_spec.segments` 读面，源时间映射）+ **文字轨**（字幕句块，`caption_track` 经 `group_cues` 句级——词级是渲染细节不上卡）常驻；修饰轨（音乐 / 配音 / filler 划掉行）有内容才出现。轨道只读 + seek，**永不长拖把手、永不长「添加音轨」**——L3 铁律禁的是编排（合成语义），内容解剖的读视图不违反，形态上必须一眼是读视图。
+5. **锚点律修订（端口法则精确化）**：轨道可见时，入边锚 = **所喂轨道左缘 Y-center**（video 边锚视频轨）；锚座位恒为「媒体区正下方第一轨」，轨道栈展开 / 收起锚不跳动；修饰 presence 条骑轨栈**顶**（到来只压媒体 flex，钉死的轨座永不动）。无轨道时现行角律（ADR-067 一族）不变。边保持节点级——边落卡内片段（FLORA 形态）不收，片段级血缘归 §6。
+6. **血缘 = hover cross-highlight（数据驱动）**：hover 成片卡片段块 → 素材卡时间条与文本流中被 `segments[].start/end`（源时间）覆盖的区间亮起。片段块携带**源资产 id**（异源拼接段各指其 donor）+ 预格式化源区间标签（前端永不格式化时间）。**画布级共享 hover 态**是新增的合法跨卡通道（唯一一座，禁泛化）；两条装饰 text 边随转写节点退役不再出生，存量边由迁移硬删（不再有读面兼容）。
+7. **分界与不做**：多轨编排 / 拖片段 / 加轨 / 转场永禁（L3 不动）；改稿驱动重剪（edited transcript → 词轴对齐 → 影响产出）不在本批——本期编辑仍是展示 overlay，但座位已在资产层，未来对齐工程的家就位；时间条拖选区间（选段仪器）本期只做 seek，选段手势分期；paste 资产估算词轴挂账；编辑进 Operation Model 账挂账。
+
+**Consequences**: 转写节点整族消失——画布每素材少一列（708px 族结构性不可能），graph refetch 不再搬运全文；cue 从「派生四次 + 白存一份」收敛为「一座派生」；互指成立（点句子跳画面，时间轴从装饰变导航）；血缘从「画的边」变「读的联动」；编辑 overlay 单座位且写口落资产层（语义更正）。代价：素材卡变重（定高内滚吸收）；存量 transcript 节点行迁移删除（edited_text 先搬家）。
+
+**Related**: ADR-086（判词①枚举修订——transcript 移出「可编辑中间工作产品」枚举，改判「素材卡的内容层」）/ ADR-097（transcript 的 companion 身份退役——不再是 artifact，是 asset 的面）/ ADR-112（cue 结构化 + hover 显时 + 服务端预格式化 label 由本条继承并改写座位：spec 落库 → 读面派生）/ ADR-057（零投影——图不再存显示副本，本条是修法正身）/ ADR-067（出锚语义律不动；入锚精确化）/ ADR-016（clip-spec 唯一渲染契约不动——轨道栈只是它的读面投影）/ Workspace 合同 v4.2 C4（双层不变量搬家，永不反算时间码）/ `docs/VIDEO_EDITOR.md` L3（编排永禁）

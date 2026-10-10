@@ -504,6 +504,7 @@ body {
   --color-disabled: var(--disabled);
   --color-disabled-foreground: var(--disabled-foreground);
   --color-icon-chip: var(--icon-chip);
+  --color-lineage: var(--lineage);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
@@ -571,6 +572,11 @@ body {
   --disabled-foreground: var(--meta-foreground);
   /* Icon chip: the small tile behind type glyphs in chips / file rows. */
   --icon-chip: oklch(1 0 0);
+  /* Lineage cross-highlight (ADR-113 §6): the canvas's ONE hue — hovering a
+   * deliverable card's video-lane block lights the source asset card's
+   * overlapping strip blocks / cue rows in amber. Semantic token, both
+   * schemes; never a per-instance color value. */
+  --lineage: oklch(0.92 0.11 92);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -628,6 +634,9 @@ body {
   --disabled: var(--inset);
   --disabled-foreground: var(--meta-foreground);
   --icon-chip: oklch(1 0 0 / 10%);
+  /* Lineage cross-highlight (ADR-113 §6): the same amber signal, spoken as
+   * a translucent veil per the dark glass doctrine. */
+  --lineage: oklch(0.85 0.13 90 / 22%);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);

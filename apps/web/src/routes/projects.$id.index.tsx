@@ -528,43 +528,6 @@ function ProjectDetailPage() {
     [projectId, fetchResults, t]
   )
 
-  // Transcript 卡内就地编辑 (Workspace 合同 v4.2 C4, 用户拍板 2026-09-26):
-  // the deterministic gesture channel — ONE code-built edit_text op through
-  // the graph's only write door; zero run, zero credits, zero chat echo
-  // (ADR-058 通道分家: the card face itself is the whole feedback). The
-  // overlay never touches the source evidence / ranges (server-side
-  // invariant). Resolves true when the write landed — the card echoes
-  // optimistically; the refetch converges the frame.
-  const handleTextEdit = useCallback(
-    async (nodeId: string, text: string | null): Promise<boolean> => {
-      let res: Response
-      try {
-        res = await apiPost(
-          `/api/v1/projects/${projectId}/graph/edit-text`,
-          { node_id: nodeId, text },
-          { toast: false }
-        )
-      } catch {
-        toast.error(t("common.networkError"))
-        return false
-      }
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as {
-          detail?: unknown
-        }
-        toast.error(
-          typeof body?.detail === "string" && body.detail
-            ? body.detail
-            : t("common.requestFailed")
-        )
-        return false
-      }
-      await fetchGraph()
-      return true
-    },
-    [projectId, fetchGraph, t]
-  )
-
   const completedRun =
     latestRun?.status === "completed" ? latestRun : stickyCompletedRun
 
@@ -1085,7 +1048,6 @@ function ProjectDetailPage() {
             onOutputAction={handleOutputAction}
             onQuoteOutput={handleQuoteOutput}
             onNodeRevise={handleGraphRevise}
-            onTextEdit={handleTextEdit}
             onAssetAction={handleAssetAction}
             selectedOutputId={selectedOutputId}
             onPaneClick={() => {

@@ -170,7 +170,7 @@ plan path 的推理者是 **intent router**——有界工具 loop（`plan_turn.
 - **plan path（draft 载荷）**：计划 dock 即干跑出生地同款编译，把链 stamp 为 **draft 图**（`graph_fill.stamp_draft_graph`——图先展示后运行：节点空态 + 逐节点估价，零消耗直到 Start；bail / 编译失败经 `clear_draft_graph` 拆除）。计划本身 = 图上的 **document 节点**（brief 机制不动——brief = 对话引擎状态，document 节点 = 它的渲染落点）。
 - **chat path 的 `edit_graph`（wiring 提案）**：修订/新建诉求产出 op 序列 + 摘要；`edit_prompt` 改写目标节点程序行，`run` 解出受影响子图（本节点 ∪ 图边下游），经 `graph_revise` 桥翻回 task list 进 `create_run`。
 - **run = 图填充**：`create_run` 仍是 WorkflowRun 唯一出生地（零旁路不变），`compile_graph` 的三职责不变——① **校验**（registry + params schema，不认识 → intent 修复一次，仍败 → "这个我还不会"）；② **拓扑排序**（节点类声明的 `after` / `requires`；生成技能共享去重 plan 前奏；修饰技能挂 clips / 注入的 `materialize_source` 之后，按提议顺序串链）；③ **补默认值**（全部由代码补，不信 LLM 的缺省判断）。产物仍是标准 `workflow_steps`（billing capture / 计量 / 重试的 step 粒度账本不变），steps 住进节点**内部**（组合，不是投影）。同一确定性编译 → 同一 fill_key——run 的 stamp 把 draft 节点**原地**填充（state 重 queue、step 回指、产物反写 `spec.output_ids`），永无双生；新槽位长新节点，图持续编辑从不整体重长。
-- **画布读面**：`GET /projects/{id}/graph`（节点 + 边 + 产物引用一帧）→ FlowView 直渲；`runFlow.ts` 投影适配器与五补丁（`canvas_hidden` / `canvas_key` / 过程脊 / 脊收编 / R1 游走）已火化。
+- **画布读面**：`GET /projects/{id}/graph`（节点 + 边 + 产物引用一帧）→ FlowView 直渲；`runFlow.ts` 投影适配器与五补丁（`canvas_hidden` / `canvas_key` / 过程脊 / 脊收编 / R1 游走）已火化。**transcript 不成节点（ADR-113）**：转写稿 = 素材资产行的内容层（`assets.transcript`/`extracted_text` 唯一座 + `edited_transcript` 改稿覆盖层——C4 双层不变量：改稿只写覆盖层、源层与词级时间戳永不动；写口 = `PUT /assets/{id}/transcript`，零 run 零积分，不是 wiring op）；素材卡解剖 = 媒体 + 时间条（cue 块 ∝ + 播放头）+ cue 流（点击拨头）；cues 永不持久化（读时 `group_cues`/`display_cues` 一法）。**成片卡轨道栈**：video×editor 剪辑族（`select_clips`/`translate_clip`/`dub_clip`）卡面常驻两条只读检视轨——视频轨（保留段块 ∝ 产出轴）+ 文字轨（字幕句块，停顿留白），读 `output.track_stack`（读时从 render_spec 推导，`pipeline/track_stack.py`，/results 与 /graph 两座 stamp）；draft/running = muted 空轨行（座位先钉）；修饰轨（音乐/配音）有内容才出现且骑轨栈顶（到来永不动锚）。**锚点律**：轨道卡的视频入锚离开角落栈，钉在视频轨 Y-center（`bottom = factsbar 带 + 文字轨行 + 视频轨行/2 − 半圆`，layout.ts `trackVideoPortBasePx` ↔ NodePorts 两镜像）。**血缘 = cross-highlight**（唯一跨卡通道，禁泛化）：成片卡视频轨块 hover 上报源区间（`lineageHover`），素材卡时间条/cue 行重叠区间琥珀亮起（`--lineage` token——灰阶画布唯一色相）；血缘真边已退役（编排语义为零）。
 
 ## 6. 对话上下文（context 组装）
 
@@ -273,6 +273,7 @@ chat 的另一半是"改现有产物"。修订目标 = **图节点 id 的确定�
 
 - 指令需要重新生成（改意图 / 改程序）→ **wiring ops**（§5）——`edit_prompt(node)` 改写程序行 + `run({node} ∪ downstream)`（下游由图边遍历确定）；卡面 prompt 直改 = 同一个 op、**确定性通道**（ADR-058 通道分家 + ADR-063 动作内化：定价确认住进程序区——锚定受影响子图 chips、估价随行就地展开，确认后 ops 由代码构建走 `POST /projects/{id}/graph/revise`——直改是手势不是意图，**dock 零消息**，节点状态周期 = 全部反馈，卡面乐观回显永不回闪；chat 唯一意图面不变）。
 - 指令能表达为对某个 output 的 clip-spec diff（trim / 字幕样式等参数精确指令）→ **edit ops** → Operation Model（operations 表）——作为**节点内部**的产物级精修存活。
+- 改稿 = 资产内容层覆盖写（ADR-113）→ `PUT /projects/{id}/assets/{id}/transcript`（素材卡转写区就地编辑，overlay 层）——零 run 零积分，**不是 wiring op 也不是 edit op**；源层词级时间戳永不动，改稿驱动重剪归后续批。
 - 拿不准 → ask_user 反问（**反问是合法输出，不是失败**）。
 
 edit ops（ADR-032 D5 + `archive/tasks-done/operation-model.md`）：产物级 op = `remove_range` / `set_trim` / `set_title` / `set_caption_style` / `set_music` / `set_crop` / `set_aspect` / `set_caption_text` / `restore_version`（+ system 内部 `snapshot` / `set_spec`），chat 已真应用（registry 校验 + message_id 血统）；**plan 级 op（`set_node_params` / `regenerate_node` / `swap_slot`）归 RunPlan 小拓扑，不进 operations 表**——两家族分开登记；`restore_range` 独立 op 否决（判例 N-16：caption 不可复活，恢复语义归快照层）。

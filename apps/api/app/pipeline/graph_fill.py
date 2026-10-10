@@ -68,7 +68,6 @@ from app.pipeline.graph_store import (
 from app.pipeline.outputs import compose_spec_prompt
 from app.pipeline.product_graph import (
     ARTIFACT_KEY_PREFIX,
-    LINEAGE_EDGE_PORT,
     RANK_EDGE_TYPES,
     WORK_KEY_PREFIX,
     artifact_fields_for_birth,
@@ -76,7 +75,7 @@ from app.pipeline.product_graph import (
     is_lineage_edge,
 )
 from app.tools.captions.procedure import TRANSLATION_ARTIFACT_KEY
-from app.tools.clips.transcript import group_cues
+from app.tools.clips.transcript import fmt_cue_time
 
 logger = structlog.get_logger()
 
@@ -107,11 +106,9 @@ _CLIP_FAMILY_KINDS = frozenset({
     "remove_filler", "add_music", "reframe_clip",
 })
 
-# 转写稿 document (ADR-057 document 型第二实例): the asset's ASR transcript /
-# extracted text as a first-class card.
 # (_TASK_BOOK_ROLE's one home is graph_store — the door owns the graph's role
-# vocabulary.)
-_TRANSCRIPT_ROLE = "transcript"
+# vocabulary. The transcript document is retired — ADR-113: the asset row is
+# the transcript's ONE seat; nothing on the graph carries its role anymore.)
 
 # States a DRAFT re-stamp may revisit (K5): a live node (queued/running), a
 # finished one (done), or one mid-revision (stale) belongs to an earlier
@@ -329,8 +326,7 @@ async def stamp_asset_node(
 
 async def remove_asset_node(db: AsyncSession, project_id: UUID, asset_id: UUID) -> None:
     """Asset deletion's graph twin — the node goes through the same wiring
-    door (edges cascade structurally), and its 转写稿 document goes with it
-    (the artifact's owner is gone). Absent node = pre-K2 asset, skip."""
+    door (edges cascade structurally). Absent node = pre-K2 asset, skip."""
     existing = list(
         (
             await db.execute(
@@ -343,12 +339,7 @@ async def remove_asset_node(db: AsyncSession, project_id: UUID, asset_id: UUID) 
         .scalars()
         .all()
     )
-    victims = [
-        n
-        for n in existing
-        if n.type == "asset"
-        or (n.type == "document" and (n.spec or {}).get("role") == _TRANSCRIPT_ROLE)
-    ]
+    victims = [n for n in existing if n.type == "asset"]
     if victims:
         await apply_wiring_ops(
             db,
@@ -358,117 +349,6 @@ async def remove_asset_node(db: AsyncSession, project_id: UUID, asset_id: UUID) 
             # delete caller the door's guard bypasses (v4.2 封板⑤).
             allow_settled_delete=True,
         )
-
-
-async def stamp_transcript_node(
-    db: AsyncSession, project_id: UUID, asset: Asset, *, create: bool = True
-) -> GraphNode | None:
-    """转写稿 document (ADR-057 document 型第二实例 — 中间产物升一等公民):
-    the asset's transcript / extracted text gets its own card the moment it
-    exists, fed by the asset node (text edge — the artifact's derivation
-    face). Born done: it is an intermediate artifact, not an execution unit
-    (same ruling as the asset itself). Idempotent on role+asset_id; the text
-    refreshes on reprocess. A LEAF face — consumers still wire from the asset
-    (the execution truth); rewiring consumers arrives with 改稿驱动重剪.
-    Flush-only.
-
-    出生两座 (ADR-102 后续批): the card births only where the transcript is
-    a USER-FACING artifact — ① chat-declared text material (born done with
-    its text) and ② the plan-path ensure (the run's graph materializes it,
-    born running while processing is owed, flipping done/failed with the
-    row). The understanding read path (ASR only feeds the reader) births NO
-    card: its completion/failure visits pass ``create=False`` — they flip an
-    existing card and never birth one, so a discarded-material discussion
-    leaves zero canvas trace. Asset types without a text yield (image /
-    voice_sample) never birth one.
-
-    时间刻度: word-timestamped assets (video / audio) also carry
-    ``spec.cues`` — the same text as structured cue rows (start / end / text
-    / preformatted label). A DISPLAY layer only: the card renders the rows
-    with hover-time chrome, the in-place edit surface (C4) keeps editing
-    the plain ``spec.text`` — times never enter the textarea.
-    """
-    text = asset.transcript or asset.extracted_text
-    status = str(
-        getattr(asset.processing_status, "value", asset.processing_status)
-    ).lower()
-    text_yielding = asset.type in (
-        AssetType.VIDEO,
-        AssetType.AUDIO,
-        AssetType.TRANSCRIPT,
-        AssetType.PAST_MATERIAL,
-    )
-    if not text and not text_yielding:
-        return None
-    existing = (
-        await db.execute(
-            select(GraphNode).where(
-                GraphNode.project_id == project_id,
-                GraphNode.type == "document",
-                GraphNode.spec["role"].as_string() == _TRANSCRIPT_ROLE,
-                GraphNode.spec["asset_id"].as_string() == str(asset.id),
-            )
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        spec_now = existing.spec or {}
-        cues = _transcript_cue_rows((asset.meta or {}).get("words"))
-        spec_next = dict(spec_now)
-        if text and spec_now.get("text") != text:
-            spec_next["text"] = text
-        # The cue-row display layer refreshes with the words (reprocess
-        # replaces meta wholesale); text-yielding assets without word
-        # timestamps (paste / extraction) carry no cues at all. The legacy
-        # string bake (cued_text) heals away on every sync.
-        if cues is None:
-            spec_next.pop("cues", None)
-        else:
-            spec_next["cues"] = cues
-        spec_next.pop("cued_text", None)
-        if spec_next != spec_now:
-            existing.spec = spec_next
-        # State follows ASR: text landed → done; processing failed → failed
-        # (the 卡内红 face); completed without words (silence / empty
-        # extraction) → done with an empty body, never a perpetual loading
-        # card; still waiting → running (queued 出生面 2026-09-28 退役,
-        # 老行在此愈合).
-        if text or status == "completed":
-            existing.state = "done"
-        elif status == "failed":
-            existing.state = "failed"
-        elif existing.state == "queued":
-            existing.state = "running"
-        return existing
-    if not create:
-        # 读路径零卡 (出生两座): completion/failure visits flip only — an
-        # understanding-triggered processing leaves no canvas trace.
-        return None
-    asset_node = await stamp_asset_node(db, project_id, asset)
-    spec: dict = {"role": _TRANSCRIPT_ROLE, "asset_id": str(asset.id)}
-    if text:
-        spec["text"] = text
-        cues = _transcript_cue_rows((asset.meta or {}).get("words"))
-        if cues:
-            spec["cues"] = cues
-    delta = await apply_wiring_ops(
-        db,
-        project_id,
-        [
-            {
-                "op": "add_node",
-                "type": "document",
-                "spec": spec,
-                "after": [UUID(str(asset_node.id))],
-            }
-        ],
-    )
-    node = await db.get(GraphNode, delta.affected[0])
-    assert node is not None
-    # Born done when the text already exists (paste path bypasses the
-    # worker); running while ASR/extraction is still owed — the shared
-    # wipe + edge packet read this state raw.
-    node.state = "done" if text else "running"
-    return node
 
 
 async def stamp_run_graph(
@@ -917,22 +797,23 @@ async def _stamp_graph_core(
         .all()
     )
     asset_node_ids: list[UUID] = []
-    # 转写稿文档按素材登记 (transcript → 译文稿/配音稿 的 text 边派生,
-    # ADR-072 边派生新规 — the A3-lite read-face synthesis turned production):
-    # asset id → its transcript document's id (textless assets have none).
-    transcript_doc_by_asset: dict[str, UUID] = {}
+    # ADR-113: the transcript is the asset's content layer, never a node —
+    # text-yielding asset nodes feed the doc stations DIRECTLY (the old
+    # transcript → doc-station derivation edge re-anchored to its source).
+    text_asset_node_ids: list[UUID] = []
     for asset in assets:
         node = await stamp_asset_node(db, project_id, asset)
         asset_node_ids.append(UUID(str(node.id)))
-        # 转写稿 document 随素材处理落地（幂等；无转写文本的素材跳过）——
-        # 上传时处理、run 内 preprocess、存量回填三条路在这一个 ensure 汇合。
-        transcript_doc = await stamp_transcript_node(db, project_id, asset)
-        if transcript_doc is not None:
-            transcript_doc_by_asset[str(asset.id)] = UUID(str(transcript_doc.id))
+        if asset.type in (
+            AssetType.VIDEO,
+            AssetType.AUDIO,
+            AssetType.TRANSCRIPT,
+            AssetType.PAST_MATERIAL,
+        ):
+            text_asset_node_ids.append(UUID(str(node.id)))
 
     # ── 4. Generation / editor / doc-station nodes (idempotent by fill_key) ──
     doc_pairs: list[tuple[UUID, UUID]] = []  # (doc station id, its asm id) — §7 wires them
-    deliverable_node_ids: list[UUID] = []  # 本 stamp 的 deliverable 站 — §7 lineage 真边的落点
     for key, fam in families.items():
         fam_steps = sorted(fam["steps"], key=lambda s: s.seq)
         # The family's head drives label / params / tool / prompt — the pick
@@ -1021,11 +902,6 @@ async def _stamp_graph_core(
             name=artifact_name,
         )
         effective_key = frozen_key or birth_fields.get("artifact_key")
-        effective_role = (
-            str(pre_spec.get("artifact_role") or "")
-            if frozen_key
-            else birth_fields.get("artifact_role")
-        )
 
         # ── 两站拆分 (ADR-072): the doc-station companion — ensured BEFORE
         # the reused branch so the draft-restamp guard's `continue` still
@@ -1154,8 +1030,6 @@ async def _stamp_graph_core(
                 **birth_fields,
             }
             reused.state = "draft" if draft else "queued"
-            if not draft and effective_key and effective_role == "deliverable":
-                deliverable_node_ids.append(UUID(str(reused.id)))
             continue
         # Pinned newborn id — known BEFORE the batch, so §7's connect ops
         # reference it directly and the door's frame settle sees the final
@@ -1196,8 +1070,6 @@ async def _stamp_graph_core(
                 },
             }
         )
-        if not draft and effective_key and effective_role == "deliverable":
-            deliverable_node_ids.append(newborn_id)
 
     # ── 7. Edges (dedupe against the existing set) ────────────────────────
     want_edge: set[tuple[str, str, str]] = set()
@@ -1295,8 +1167,6 @@ async def _stamp_graph_core(
     # CONTAINING one materializes the raw source and EVERY root of that run
     # inherits eat-the-asset — otherwise an old project with existing clips
     # would wire the whole-source chain from the old producer (画布撒谎).
-    from app.models.schemas import AssetType  # deferred: schema leaf
-
     _MEDIA_TYPES = {AssetType.VIDEO, AssetType.AUDIO, AssetType.IMAGE, AssetType.SLIDES}
     _SOURCE_CONSUMERS = {"select_clips", "materialize_source"}
     run_materializes = any(s.kind == "materialize_source" for s in steps)
@@ -1319,31 +1189,18 @@ async def _stamp_graph_core(
                 target,
                 "video" if asset.type in _MEDIA_TYPES else "text",
             )
-    # …and the transcript document feeds every doc station its words
-    # translate/dub (按 asset_id 找 transcript 文档 — the A3-lite read-face
-    # synthesis turned production; mode② chains eat existing clips, so the
-    # lineage edge stays the lite patch's business, never stamped here).
+    # …and the text-yielding asset feeds every doc station its words
+    # translate/dub directly (ADR-113: the transcript node is retired — the
+    # asset row is its ONE seat, so the derivation edge re-anchors to the
+    # asset; mode② chains eat existing clips, so their assets stay unwired).
     if asset_fed:
-        for transcript_doc_id in transcript_doc_by_asset.values():
+        for asset_node_id in text_asset_node_ids:
             for doc_id, _asm_id in doc_pairs:
-                connect(transcript_doc_id, doc_id, "text")
-    # lineage 真边 (ADR-097 §5): transcript → 本 stamp 每个 deliverable 站的
-    # 血缘边, 出生即真实写入 (A3-lite 读时合成的正式化; 同一 triple 去重,
-    # /graph 读面在批 C-1 仍过滤它出默认边载荷——画布零变化, 批 C-2 才转
-    # 为投影驱动)。端口标记 out:lineage 是唯一的机器判别——rank 输入
-    # (product_graph._rank_inputs) / RunOp 下游闭包 (graph_store) / 读面
-    # 边载荷三处显式排除, 新真边零编排语义。mode② (asset_fed=False) 与
-    # doc 站腿同律不盖章; draft 预览不盖 (Start 活填时补)。
-    if asset_fed and not draft:
-        for transcript_doc_id in transcript_doc_by_asset.values():
-            for deliverable_id in deliverable_node_ids:
-                connect(
-                    transcript_doc_id,
-                    deliverable_id,
-                    "text",
-                    from_port=f"out:{LINEAGE_EDGE_PORT}",
-                    to_port=f"in:{LINEAGE_EDGE_PORT}",
-                )
+                connect(asset_node_id, doc_id, "text")
+    # lineage 真边 retired (ADR-113 §6): the transcript → deliverable lineage
+    # edge carried zero orchestration semantics (rank / RunOp / read payload
+    # all excluded it) — lineage's one face is the cross-highlight derived
+    # from render_spec.segments, never an edge row.
     for asset_node_id, asset in zip(asset_node_ids, assets):
         for step in writer_heads:
             connect(asset_node_id, node_id_by_key[_fill_key_for_step(step)], "text")
@@ -1683,39 +1540,6 @@ def _research_brief_text(brief: dict) -> str | None:
     return "\n".join(lines) or None
 
 
-def _fmt_cue_time(seconds: Any) -> str:
-    """A cue timestamp as m:ss (the doc station's row prefix)."""
-    try:
-        total = max(0, int(float(seconds or 0)))
-    except (TypeError, ValueError):
-        total = 0
-    return f"{total // 60}:{total % 60:02d}"
-
-
-def _transcript_cue_rows(words: Any) -> list[dict[str, Any]] | None:
-    """The transcript doc's structured cue rows (the hover-timeline display
-    face): ASR words grouped by ``group_cues`` (the ONE grouping law), text
-    raw-joined (a space-join would shred Chinese), each row carrying its
-    preformatted ``m:ss–m:ss`` label — the client never formats time (one
-    formatting law, server-side). Rides ``spec.cues`` — a DISPLAY layer next
-    to the source mirror: the in-place edit surface (C4) keeps editing the
-    plain ``spec.text``/overlay, times never enter the textarea."""
-    if not isinstance(words, list) or not words:
-        return None
-    cues, _truncated = group_cues(words, raw_words=True)
-    rows = [
-        {
-            "start": c["start"],
-            "end": c["end"],
-            "text": c["text"],
-            "label": f"{_fmt_cue_time(c['start'])}–{_fmt_cue_time(c['end'])}",
-        }
-        for c in cues
-        if c["text"]
-    ]
-    return rows or None
-
-
 def _translation_artifact_text(artifact: Any) -> str | None:
     """The doc station's readable face (ADR-072 两站拆分的文档站卡面): the
     translation artifact's cue rows baked as `start–end text` lines, clips
@@ -1732,7 +1556,7 @@ def _translation_artifact_text(artifact: Any) -> str | None:
         if not isinstance(rows, list):
             continue
         lines = [
-            f"{_fmt_cue_time(row.get('start'))}–{_fmt_cue_time(row.get('end'))} "
+            f"{fmt_cue_time(row.get('start'))}–{fmt_cue_time(row.get('end'))} "
             f"{str(row.get('text') or '').strip()}"
             for row in rows
             if isinstance(row, dict)

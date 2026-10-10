@@ -1,5 +1,5 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import {
   ArrowUp,
   AudioLines,
@@ -13,8 +13,11 @@ import {
   Image as ImageIcon,
   Images,
   Maximize2,
+  Mic,
   MoreHorizontal,
+  Music,
   Newspaper,
+  PencilLine,
   Quote,
   Send,
   TriangleAlert,
@@ -34,17 +37,18 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { apiPut, toAbsoluteUrl } from "@/lib/api"
+import { apiPut, fetchAssetTranscript, putAssetTranscript, toAbsoluteUrl, type AssetTranscript } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { GraphEdgeType, Output, ProjectArtifact } from "@/lib/types"
 
-import { BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX, cornerStackedInPorts, hasProgramRegion } from "./layout"
+import { BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX, TRANSCRIPT_SECTION_PX, cornerStackedInPorts, hasProgramRegion, hasTrackStack, trackVideoPortBasePx } from "./layout"
 import { useSoundMutex } from "./sound-mutex"
 import type {
   FlowAssetAction,
   FlowAssetInfo,
   FlowNode,
   FlowOutputAction,
+  LineageHover,
   OutPortType,
 } from "./types"
 
@@ -79,10 +83,6 @@ export interface FlowCardData extends Record<string, unknown> {
    * program; the surface opens the pricing confirmation (锚定子图 + 估价)
    * — nothing touches the graph until the confirm's CODE-built ops land. */
   onPromptEdit?: (nodeId: string, text: string) => void
-  /** Transcript in-place direct edit (v4.2 C4): the card reports the
-   * verbatim text (null = reset to source); the surface lands the
-   * code-built edit_text op. Resolves true when the write landed. */
-  onTextEdit?: (nodeId: string, text: string | null) => Promise<boolean>
   /** The edit's optimistic echo (ADR-058): while the confirm is open or
    * the stamp is in flight, the program region shows the user's verbatim
    * text instead of the domain's last stamp — never a revert flash. */
@@ -103,6 +103,13 @@ export interface FlowCardData extends Record<string, unknown> {
     onConfirm: () => void
     onCancel: () => void
   } | null
+  /** cross-highlight (ADR-113 §6 — 唯一跨卡通道): the deliverable card's
+   * video-lane block hover reports the source interval through this
+   * channel; the surface holds it and hands it back as `lineageHover`. */
+  onLineageHover?: (hover: LineageHover | null) => void
+  /** The live cross-highlight — the asset card whose id matches lights its
+   * overlapping strip blocks / cue rows (`bg-lineage`). */
+  lineageHover?: LineageHover | null
 }
 
 export type FlowCardNode = Node<FlowCardData, "flowCard">
@@ -321,14 +328,474 @@ export const PRODUCT_TYPE_ICON: Record<string, typeof Clapperboard> = {
   article: Newspaper,
 }
 
+/** The asset's content layer (ADR-113 §3 — 素材卡解剖: media + time strip +
+ * cue flow). The transcript is NEVER a node — it lives inside the asset
+ * card. Data: mount-fetched from the asset's transcript endpoint, cached
+ * module-wide by asset id (the canvas's shared seat — several cards of one
+ * asset read one fetch); a save or a processing-stage flip invalidates.
+ *
+ * Faces: word-timestamped assets (video/audio) get the cue flow + the time
+ * strip (click = seek the inline player — 拨头 only, the muted ambient law
+ * untouched); paste/extraction yields carry no time axis — the honest
+ * plain-text face. The edit overlay (edited_text) reads as plain text (the
+ * user's own words carry no honest time alignment); editing writes the
+ * overlay only (C4 — times never enter the textarea). */
+function TranscriptSection({
+  asset,
+  videoRef,
+  fill,
+  highlight,
+}: {
+  asset: FlowAssetInfo
+  videoRef?: RefObject<HTMLVideoElement | null>
+  /** Medialess assets (paste/transcript): the section IS the card body
+   * (flex-1); below media it keeps its fixed reservation (frame law — the
+   * anchor/flex seats never move mid-life). */
+  fill?: boolean
+  /** cross-highlight (ADR-113 §6): the interval a deliverable card's lane
+   * block hover named — strip blocks / cue rows overlapping it light up
+   * (`bg-lineage`). Already resolved to THIS asset by the card. */
+  highlight?: { srcStart: number; srcEnd: number } | null
+}) {
+  const { t } = useTranslation()
+  const assetId = asset.id
+  const projectId = asset.project_id ?? null
+  const [tx, setTx] = useState<AssetTranscript | null | undefined>(() =>
+    transcriptCache.get(assetId)
+  )
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState("")
+  const [saving, setSaving] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // The strip's playhead rides the inline player's own clock (timeupdate is
+  // ~4Hz — cheap; the needle re-renders with it).
+  const [playhead, setPlayhead] = useState(0)
+  useEffect(() => {
+    const v = videoRef?.current
+    if (!v) return
+    const onTime = () => setPlayhead(v.currentTime)
+    v.addEventListener("timeupdate", onTime)
+    return () => v.removeEventListener("timeupdate", onTime)
+  }, [videoRef])
+
+  // A processing flip invalidates the cached read — mid-flight ASR drops
+  // the snapshot and shows the quiet seat (never the empty face — that
+  // would lie); the terminal flip refetches fresh.
+  const processing =
+    asset.processing_status === "pending" || asset.processing_status === "processing"
+  useEffect(() => {
+    if (!projectId) return
+    if (processing) {
+      transcriptCache.delete(assetId)
+      setTx(undefined)
+      return
+    }
+    if (transcriptCache.has(assetId)) {
+      setTx(transcriptCache.get(assetId))
+      return
+    }
+    let cancelled = false
+    void fetchAssetTranscript(projectId, assetId).then((res) => {
+      transcriptCache.set(assetId, res)
+      if (!cancelled) setTx(res)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [assetId, projectId, processing])
+
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus()
+      const len = textareaRef.current.value.length
+      textareaRef.current.setSelectionRange(len, len)
+    }
+  }, [editing])
+
+  // Same native-wheel stop as the retired document card's edit region —
+  // React Flow's pane listens natively, so a synthetic stopPropagation is
+  // not enough.
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el || !editing) return
+    const stopWheel = (e: WheelEvent) => e.stopPropagation()
+    el.addEventListener("wheel", stopWheel, { passive: true })
+    return () => el.removeEventListener("wheel", stopWheel)
+  }, [editing])
+
+  const cues = tx?.edited_text == null ? (tx?.cues ?? null) : null
+  const bodyText = tx ? (tx.edited_text ?? tx.text) : ""
+  const duration = asset.duration_seconds ?? cues?.[cues.length - 1]?.end ?? 0
+  // cross-highlight (ADR-113 §6): does a region overlap the interval the
+  // deliverable card's hover named? Half-open overlap on the source axis.
+  const lit = (start: number, end: number) =>
+    !!highlight && end > highlight.srcStart && start < highlight.srcEnd
+
+  // The section's flex law (一条律两世界): below media it grows to the
+  // frame's reservation (TRANSCRIPT_SECTION_PX) but compresses to its floor
+  // inside a legacy short frame (born pre-section) — the media keeps its
+  // share, the cue flow scrolls tighter, never an overlap/crush. Medialess
+  // assets: the section IS the body (plain flex-1, no cap).
+  const sectionClass = fill
+    ? "flex min-h-0 flex-1 flex-col"
+    : "flex min-h-[96px] flex-1 flex-col"
+  const sectionStyle = fill ? undefined : { maxHeight: TRANSCRIPT_SECTION_PX }
+
+  const seek = (seconds: number) => {
+    const v = videoRef?.current
+    if (v) v.currentTime = seconds
+  }
+
+  const save = async (next: string | null) => {
+    if (!projectId || saving) return
+    const current = tx?.edited_text ?? tx?.text ?? ""
+    if (next !== null && next === current) {
+      setEditing(false)
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await putAssetTranscript(projectId, assetId, next)
+      if (res) {
+        // Optimistic echo + the shared cache's invalidation in one write —
+        // the card face shows the user's words NOW; the next mount agrees.
+        transcriptCache.set(assetId, res)
+        setTx(res)
+        setEditing(false)
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (tx === undefined) {
+    // Load-quiet law: the frame reserved this section at birth — the box
+    // holds its seat empty, never a spinner.
+    return <div className={sectionClass} style={sectionStyle} />
+  }
+
+  return (
+    <div className={cn(sectionClass, "gap-1.5 px-3 pb-3 pt-1.5")} style={sectionStyle}>
+      {/* The section header: title + the edit affordance (✎). Zero-chrome
+          law — the header is quiet meta chrome, the body the content. */}
+      <div className="flex h-5 shrink-0 items-center justify-between">
+        <span className="text-meta text-[10px]">
+          {t("results.canvas.transcript")}
+        </span>
+        {!editing && tx !== null && (tx.text || tx.edited_text) ? (
+          <button
+            type="button"
+            aria-label={t("results.canvas.editTranscript")}
+            onClick={(e) => {
+              e.stopPropagation()
+              setDraft(tx.edited_text ?? tx.text)
+              setEditing(true)
+            }}
+            className="nodrag flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <PencilLine className="h-3 w-3" />
+          </button>
+        ) : null}
+      </div>
+      {editing ? (
+        <div className="relative min-h-0 flex-1">
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => void save(draft)}
+            onWheel={(e) => {
+              e.stopPropagation()
+              e.preventDefault()
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault()
+                setEditing(false)
+              } else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                e.preventDefault()
+                void save(draft)
+              }
+            }}
+            disabled={saving}
+            className="nowheel nopan thin-scroll h-full w-full resize-none overflow-y-auto overscroll-contain bg-transparent text-xs leading-relaxed outline-none"
+          />
+          {tx?.edited_text != null ? (
+            // 恢复原文 (overlay reset): mousedown keeps the textarea's focus
+            // so the blur-save never fires ahead of the reset.
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                e.stopPropagation()
+                void save(null)
+              }}
+              className="nodrag absolute right-1 bottom-1 rounded-md bg-accent px-2 py-1 text-[11px] text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent/70"
+            >
+              {t("results.canvas.resetToSource")}
+            </button>
+          ) : null}
+        </div>
+      ) : cues && cues.length > 0 ? (
+        <>
+          {/* 时间条 (time strip): cue blocks ∝ their duration, pauses read as
+              gaps; click a block to seek the inline player; the playhead
+              rides the player's own clock. */}
+          {videoRef ? (
+            <div className="relative h-6 shrink-0">
+              {cues.map((cue, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  aria-label={cue.label}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    seek(cue.start)
+                  }}
+                  className={cn(
+                    "nodrag absolute top-1 bottom-1 rounded-sm transition-colors",
+                    lit(cue.start, cue.end)
+                      ? "bg-lineage"
+                      : playhead >= cue.start && playhead < cue.end
+                        ? "bg-accent"
+                        : "bg-muted hover:bg-accent",
+                  )}
+                  style={{
+                    left: `${(cue.start / duration) * 100}%`,
+                    width: `${Math.max(((cue.end - cue.start) / duration) * 100, 0.8)}%`,
+                  }}
+                />
+              ))}
+              {/* 播放头: a 1px foreground needle over the strip. */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute top-0 bottom-0 w-px bg-foreground"
+                style={{ left: `${Math.min((playhead / duration) * 100, 100)}%` }}
+              />
+            </div>
+          ) : null}
+          {/* cue 流: the sentence blocks — time rides the row's hover chrome,
+              never baked into the text. Click = seek (with a player). */}
+          <div className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <div className="flex flex-col gap-1">
+              {cues.map((cue, i) => (
+                <div
+                  key={i}
+                  role={videoRef ? "button" : undefined}
+                  tabIndex={videoRef ? 0 : undefined}
+                  onClick={
+                    videoRef
+                      ? (e) => {
+                          e.stopPropagation()
+                          seek(cue.start)
+                        }
+                      : undefined
+                  }
+                  className={cn(
+                    "group/cue relative rounded-md px-1.5 -mx-1.5 transition-colors hover:bg-accent",
+                    videoRef && "cursor-pointer",
+                    // cross-highlight (ADR-113 §6): the interval the
+                    // deliverable card's lane hover named lights here.
+                    lit(cue.start, cue.end) && "bg-lineage",
+                  )}
+                >
+                  <p className="whitespace-pre-wrap text-xs leading-relaxed">{cue.text}</p>
+                  <span
+                    aria-hidden
+                    className="text-meta pointer-events-none absolute bottom-0.5 right-0.5 rounded-md bg-card px-1 py-px text-[10px] tabular-nums ring-1 ring-foreground/10 opacity-0 transition-opacity group-hover/cue:opacity-100"
+                  >
+                    {cue.label}
+                  </span>
+                </div>
+              ))}
+              {tx?.truncated ? (
+                <p className="text-meta px-1.5 text-[10px]">
+                  {t("results.canvas.transcriptTruncated")}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </>
+      ) : bodyText ? (
+        <div className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <p className="whitespace-pre-wrap text-xs leading-relaxed">{bodyText}</p>
+          {tx?.truncated ? (
+            <p className="text-meta mt-1 text-[10px]">
+              {t("results.canvas.transcriptTruncated")}
+            </p>
+          ) : null}
+        </div>
+      ) : tx !== null ? (
+        // 空稿诚实面: ASR completed with zero words (silence / music-only) —
+        // say so, never a blank card. Load-failure (null) renders nothing.
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {t("results.canvas.transcriptEmpty")}
+        </p>
+      ) : (
+        <div className="min-h-0 flex-1" />
+      )}
+    </div>
+  )
+}
+
+/** The transcript section's shared cache (the canvas's seat — keyed by the
+ * asset id, so every card of one asset reads one fetch; a save writes the
+ * fresh response straight back). */
+const transcriptCache = new Map<string, AssetTranscript | null>()
+
+/** The deliverable card's track stack (ADR-113 §4 — 成片轨道栈): two
+ * read-only inspection lanes below the media — the VIDEO lane (the kept
+ * segments as blocks, ∝ their output span) and the TEXT lane (the caption
+ * sentences on the output axis, pauses as air). READ-ONLY + seek (L3 —
+ * never an orchestration surface: no drag, no add/remove track, no
+ * transition handles; the lanes are how the user READS the product).
+ * Both lanes are in the anatomy FROM BIRTH (draft/running render muted
+ * empty rows — the waiting seat), so the video in-port's anchor (锚点律,
+ * NodePorts) never moves mid-life. The modifier presence strip rides
+ * ABOVE the pinned lanes and only when active — its arrival grows into
+ * the media's flex, never shifting an anchor. Block geometry mirrors the
+ * transcript strip's (∝ absolute blocks); time labels arrive preformatted
+ * from the server (the client never formats time). */
+function TrackStackSection({
+  output,
+  videoRef,
+  onLineageHover,
+}: {
+  /** The displayed product (the pager's shown member — a flip re-reads the
+   * lanes off the new member). Stack-less (draft / non-clip) = the muted
+   * empty rows. */
+  output?: Output
+  videoRef?: RefObject<HTMLVideoElement | null>
+  onLineageHover?: FlowCardData["onLineageHover"]
+}) {
+  const { t } = useTranslation()
+  const stack = output?.track_stack ?? null
+  const lane = stack?.video_lane ?? []
+  const sentences = stack?.text_lane ?? []
+  // The output axis total = the video lane's concatenated end (the
+  // product's duration); the server clamps the text blocks inside it.
+  const total = lane.length > 0 ? lane[lane.length - 1].out_end : 0
+  const modifiers = stack?.modifiers ?? {}
+  const activeModifiers = (["music", "dub"] as const).filter((m) => modifiers[m])
+  const seek = (seconds: number) => {
+    // 文本驱动 seek 只拨头 — the ambient-muted law is untouched (never an
+    // autoplay-with-sound side effect).
+    const v = videoRef?.current
+    if (v) v.currentTime = seconds
+  }
+  const blockClass =
+    "nodrag absolute top-0 bottom-0 overflow-hidden rounded-sm bg-muted px-1 text-left text-[10px] leading-6 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+  return (
+    <div className="shrink-0 px-3">
+      {/* 修饰轨 (presence only — the content face is a later batch): rides
+          ABOVE the pinned lanes so its arrival never moves an anchor. */}
+      {activeModifiers.length > 0 && (
+        <div className="flex h-6 items-center gap-1.5 pt-2">
+          {activeModifiers.map((m) => (
+            <span
+              key={m}
+              className="flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+            >
+              {m === "music" ? <Music className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
+              {m === "music"
+                ? t("results.canvas.modifierMusic")
+                : t("results.canvas.modifierDub")}
+            </span>
+          ))}
+        </div>
+      )}
+      {/* 16px top breath + two 40px rows (label 16 + lane 24), the text row
+          flush on the card's bottom inner edge — TRACK_STACK_PX = 96, the
+          anchor formula's zero-pad premise (layout.ts, 一条律两镜像). */}
+      <div className="pt-4">
+        <div className="flex h-4 items-center">
+          <span className="text-meta text-[10px]">{t("results.canvas.videoTrack")}</span>
+        </div>
+        <div className="relative h-6">
+          {lane.length === 0 || total <= 0 ? (
+            <span className="absolute inset-0 rounded-sm bg-muted" />
+          ) : (
+            lane.map((block, i) => {
+              const label = t("results.canvas.trackSegment", {
+                n: i + 1,
+                src: block.src_label,
+              })
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  title={label}
+                  aria-label={label}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    seek(block.out_start)
+                  }}
+                  onMouseEnter={() =>
+                    block.asset_id &&
+                    onLineageHover?.({
+                      assetId: block.asset_id,
+                      srcStart: block.src_start,
+                      srcEnd: block.src_end,
+                    })
+                  }
+                  onMouseLeave={() => onLineageHover?.(null)}
+                  className={blockClass}
+                  style={{
+                    left: `${(block.out_start / total) * 100}%`,
+                    width: `${((block.out_end - block.out_start) / total) * 100}%`,
+                  }}
+                >
+                  <span className="block truncate">{label}</span>
+                </button>
+              )
+            })
+          )}
+        </div>
+        <div className="flex h-4 items-center">
+          <span className="text-meta text-[10px]">{t("results.canvas.textTrack")}</span>
+        </div>
+        <div className="relative h-6">
+          {sentences.length === 0 || total <= 0 ? (
+            <span className="absolute inset-0 rounded-sm bg-muted" />
+          ) : (
+            sentences.map((block, i) => (
+              <button
+                key={i}
+                type="button"
+                title={block.label}
+                aria-label={block.label}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  seek(block.out_start)
+                }}
+                className={blockClass}
+                style={{
+                  left: `${(block.out_start / total) * 100}%`,
+                  width: `${((block.out_end - block.out_start) / total) * 100}%`,
+                }}
+              >
+                <span className="block truncate">{block.text}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ThumbCard({
   node,
   onExpandMedia,
   onAssetAction,
+  lineageHover,
 }: {
   node: FlowNode
   onExpandMedia?: (nodeId: string) => void
   onAssetAction?: FlowCardData["onAssetAction"]
+  /** cross-highlight (ADR-113 §6): the live hover — lights this card's
+   * transcript section when it names THIS asset. */
+  lineageHover?: LineageHover | null
 }) {
   const { t } = useTranslation()
   // The fallback glyph follows the dossier's asset type (graph canvas —
@@ -351,6 +818,7 @@ function ThumbCard({
   // real pixels, never a hardcoded table.
   const [dims, setDims] = useState<string | null>(null)
   const expandable = !!(node.videoUrl || node.thumbUrl) && !!onExpandMedia
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   // The asset toolbar (results canvas only — a node without the action
   // channel, e.g. the recipe manual, renders no bar): media facts on the
@@ -371,6 +839,19 @@ function ThumbCard({
     if (asset) onAssetAction?.(asset, action as FlowAssetAction)
   }
 
+  // ADR-113 §3: the content layer's seat inside the asset card — text-
+  // yielding assets (a dossier on the results canvas; the recipe surface's
+  // dossier-less manual node never grows one).
+  const textBearing =
+    !!asset &&
+    (asset.type === "video" ||
+      asset.type === "audio" ||
+      asset.type === "transcript" ||
+      asset.type === "past_material")
+  // Paste/extraction assets carry no media — the transcript section IS the
+  // card body (no media box, no time strip).
+  const medialess = asset?.type === "transcript" || asset?.type === "past_material"
+
   return (
     <div className="flex h-full w-full flex-col">
       <NodeCaption label={node.label} Icon={asset ? TypeIcon : undefined} />
@@ -380,7 +861,7 @@ function ThumbCard({
           node.videoUrl || node.containThumb ? "bg-black" : "bg-muted",
         )}
       >
-        {node.videoUrl ? (
+        {medialess ? null : node.videoUrl ? (
           /* The source video node plays inline — muted ambient loop, first
              frame instantly (preload=metadata), non-interactive: clicks and
              drags belong to the canvas. object-COVER (2026-09-28 黑底走查):
@@ -389,6 +870,7 @@ function ThumbCard({
              cover fills the box and crops the sub-percent sliver instead of
              showing the bg-black letterbox. */
           <video
+            ref={videoRef}
             src={node.videoUrl}
             aria-label={node.label}
             className="pointer-events-none h-full w-full object-cover"
@@ -446,6 +928,22 @@ function ThumbCard({
           </MediaHoverButton>
         )}
       </div>
+      {/* The transcript section is its OWN band on the card surface, never
+          inside the media box (a video's bg-black surface would swallow the
+          cue text's foreground ink). Medialess assets (paste/transcript):
+          the band is the whole body. */}
+      {textBearing && asset ? (
+        <TranscriptSection
+          asset={asset}
+          videoRef={node.videoUrl ? videoRef : undefined}
+          fill={medialess}
+          highlight={
+            lineageHover && lineageHover.assetId === asset.id
+              ? { srcStart: lineageHover.srcStart, srcEnd: lineageHover.srcEnd }
+              : null
+          }
+        />
+      ) : null}
       {showBar && (
         <div className="flex h-[44px] shrink-0 items-start justify-center pt-2">
           <MediaToolbar
@@ -516,31 +1014,15 @@ export function nodeRenderActive(node: FlowNode): boolean {
   )
 }
 
-/** The transcript card's structured cue rows (spec.cues — the hover-timeline
- * face) validated for display: one row per cue, text + preformatted time
- * label (the server formats; the client never re-parses). null = the plain
- * string face (legacy rows, word-less assets). */
-function readCueRows(spec: FlowNode["spec"]): { text: string; label: string }[] | null {
-  const raw = spec?.cues
-  if (!Array.isArray(raw)) return null
-  const rows = raw.flatMap((c) => {
-    if (typeof c !== "object" || c === null) return []
-    const { text, label } = c as { text?: unknown; label?: unknown }
-    return typeof text === "string" && text !== "" && typeof label === "string" && label !== ""
-      ? [{ text, label }]
-      : []
-  })
-  return rows.length > 0 ? rows : null
-}
-
+/** The legacy text document card (task_book / transcript retired — ADR-113
+ * + Workspace 合同 v4.2 C1-b; only pre-v3 legacy rows render here). Read-only
+ * body + the minimal product tail. */
 function DocumentCard({
   node,
   onOutputAction,
-  onTextEdit,
 }: {
   node: FlowNode
   onOutputAction?: FlowCardData["onOutputAction"]
-  onTextEdit?: FlowCardData["onTextEdit"]
 }) {
   const { t } = useTranslation()
   const outputs = node.outputs ?? []
@@ -556,99 +1038,19 @@ function DocumentCard({
     output && typeof (output.payload as { content?: unknown } | undefined)?.content === "string"
       ? ((output.payload as { content: string }).content || null)
       : null
-  // Transcript 显示层 (Workspace 合同 v4.2 C4 + hover-timeline 结构层): the
-  // display text = the user's edited overlay when present, else the cue rows
-  // (spec.cues — clean blocks, the time rides the row's hover chrome), else
-  // the legacy ticked string bake (cued_text — pre-cues rows), else the
-  // plain source mirror. The overlay is presentation only — the source
-  // transcript / word evidence / ranges never move (no code path
-  // reverse-computes a timecode from this text). The edit surface keeps
-  // editing the PLAIN layer (editedText ?? spec.text) — times never enter
-  // the textarea; a saved overlay (the user's own words, no honest time
-  // alignment) reads as plain text.
-  const editedText =
-    typeof node.spec?.edited_text === "string" ? node.spec.edited_text : null
-  const cuedText =
-    typeof node.spec?.cued_text === "string" ? node.spec.cued_text : null
-  const cueRows =
-    shownContent === null && editedText === null ? readCueRows(node.spec) : null
-  const bodyText = shownContent ?? editedText ?? cuedText ?? node.spec?.text
-  // 卡内就地编辑 (C4, 用户拍板 2026-09-26): the transcript document's body
-  // IS the edit surface —「可编辑」不是编辑模式，零新 chrome (合同 Δ2).
-  // The write rides the surface's deterministic channel (one code-built
-  // edit_text op through the graph's one write door) — same entity, version
-  // evolution (the displaced layer appends to the node's text_edits memory
-  // server-side), never a new work.
-  const editable =
-    node.spec?.role === "transcript" && !!onTextEdit && outputs.length === 0
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState("")
-  const [saving, setSaving] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  // 就地编辑入口: a click into the body enters edit (not the node-select
-  // gesture); 零新 chrome — the body itself is the affordance.
-  const enterEdit = () => {
-    setDraft(editedText ?? node.spec?.text ?? "")
-    setEditing(true)
-  }
-
-  useEffect(() => {
-    if (editing && textareaRef.current) {
-      textareaRef.current.focus()
-      const len = textareaRef.current.value.length
-      textareaRef.current.setSelectionRange(len, len)
-    }
-  }, [editing])
-
-  // Same native-wheel stop as the text product's edit region — React Flow's
-  // pane listens natively, so a synthetic stopPropagation is not enough.
-  useEffect(() => {
-    const el = textareaRef.current
-    if (!el || !editing) return
-    const stopWheel = (e: WheelEvent) => {
-      e.stopPropagation()
-    }
-    el.addEventListener("wheel", stopWheel, { passive: true })
-    return () => el.removeEventListener("wheel", stopWheel)
-  }, [editing])
-
-  const save = async (next: string | null) => {
-    if (saving) return
-    const current = editedText ?? node.spec?.text ?? ""
-    if (next !== null && next === current) {
-      setEditing(false)
-      return
-    }
-    setSaving(true)
-    try {
-      const ok = (await onTextEdit?.(node.id, next)) ?? false
-      if (ok) {
-        // Optimistic echo (the TextProductRegion precedent): the card face
-        // shows the user's words NOW; the next refetch converges.
-        const spec = (node.spec ??= {})
-        if (next === null) delete spec.edited_text
-        else spec.edited_text = next
-        setEditing(false)
-      }
-    } finally {
-      setSaving(false)
-    }
-  }
+  const bodyText = shownContent ?? node.spec?.text
 
   // One running expression with GraphCard: the shared wipe + the incoming
   // edge's packet read this state raw (nodeRenderActive is clip-only —
   // inert here, kept so both cards speak one gate).
   const running = node.status === "running" || nodeRenderActive(node)
 
-  const editAreaClass =
-    "nowheel nopan thin-scroll h-full w-full resize-none overflow-y-auto overscroll-contain bg-transparent text-xs leading-relaxed outline-none"
-
   return (
     <div className="flex h-full w-full flex-col">
       <NodeCaption label={node.label} Icon={FileText} />
       <div className="dock-surface relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl ring-foreground/10 ring-1">
         {/* 公用 loading (2026-09-28 用户拍板): running = 左到右擦除 (封顶
-            96%) + 入边 packet——卡面零自养 loading 表达 (转写占位面同日退役). */}
+            96%) + 入边 packet——卡面零自养 loading 表达。 */}
         {running && <span aria-hidden className="node-fill-wipe" />}
         {/* 收边结构律 (2026-09-13 走查拍板): the padding lives on a WRAPPER
             around the scrollport, never on the scrollport itself — scroll-
@@ -658,139 +1060,14 @@ function DocumentCard({
             NO scroll-fade (2026-09-24 user ruling): the top/bottom mask read
             as a haze over the document's own text — a hard clip at the inset
             edge is the honest boundary for a reading surface. */}
-        <div
-          className={cn("flex min-h-0 flex-1 flex-col p-4", editing && "relative")}
-          onClick={(e) => {
-            // Editing must not select the node (the TextProductRegion
-            // contract — the canvas's onNodeClick would steal the focus).
-            if (editing) e.stopPropagation()
-          }}
-        >
-          {editing ? (
-            <>
-              <textarea
-                ref={textareaRef}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onBlur={() => void save(draft)}
-                onWheel={(e) => {
-                  e.stopPropagation()
-                  e.preventDefault()
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    e.preventDefault()
-                    setEditing(false)
-                  } else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                    e.preventDefault()
-                    void save(draft)
-                  }
-                }}
-                disabled={saving}
-                className={editAreaClass}
-              />
-              {editedText !== null ? (
-                // 恢复原文 (overlay reset — mode-local chrome, visible only
-                // while editing an overlaid transcript): mousedown keeps the
-                // textarea's focus so the blur-save never fires ahead of the
-                // reset (the quote pill's gesture contract).
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void save(null)
-                  }}
-                  className="nodrag absolute right-2 bottom-2 rounded-md bg-accent px-2 py-1 text-[11px] text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent/70"
-                >
-                  {t("results.canvas.resetToSource")}
-                </button>
-              ) : null}
-            </>
-          ) : (
-            <div className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              {cueRows ? (
-                // The hover-timeline read face: clean cue blocks, the time
-                // label surfaces only on row hover (the industry's transcript
-                // pattern) — never baked into the text flow.
-                <div
-                  role={editable ? "button" : undefined}
-                  tabIndex={editable ? 0 : undefined}
-                  onClick={
-                    editable
-                      ? (e) => {
-                          e.stopPropagation()
-                          enterEdit()
-                        }
-                      : undefined
-                  }
-                  onKeyDown={
-                    editable
-                      ? (e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault()
-                            enterEdit()
-                          }
-                        }
-                      : undefined
-                  }
-                  className={cn("flex flex-col gap-1", editable && "cursor-text")}
-                >
-                  {cueRows.map((cue, i) => (
-                    <div
-                      key={i}
-                      className="group/cue relative rounded-md px-1.5 -mx-1.5 transition-colors hover:bg-accent"
-                    >
-                      <p className="whitespace-pre-wrap text-xs leading-relaxed">{cue.text}</p>
-                      <span
-                        aria-hidden
-                        className="text-meta pointer-events-none absolute bottom-0.5 right-0.5 rounded-md bg-card px-1 py-px text-[10px] tabular-nums ring-1 ring-foreground/10 opacity-0 transition-opacity group-hover/cue:opacity-100"
-                      >
-                        {cue.label}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : bodyText ? (
-                <p
-                  role={editable ? "button" : undefined}
-                  tabIndex={editable ? 0 : undefined}
-                  onClick={
-                    editable
-                      ? (e) => {
-                          e.stopPropagation()
-                          enterEdit()
-                        }
-                      : undefined
-                  }
-                  onKeyDown={
-                    editable
-                      ? (e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault()
-                            enterEdit()
-                          }
-                        }
-                      : undefined
-                  }
-                  className={cn(
-                    "text-xs leading-relaxed whitespace-pre-wrap",
-                    editable && "cursor-text",
-                  )}
-                >
-                  {bodyText}
-                </p>
-              ) : node.spec?.role === "transcript" && node.status === "done" ? (
-                // 空稿诚实面 (2026-09-28): ASR completed with zero words
-                // (silence / music-only) — say so, never a blank card.
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  {t("results.canvas.transcriptEmpty")}
-                </p>
-              ) : (
-                <p className="text-xs leading-relaxed text-muted-foreground">{node.detail}</p>
-              )}
-            </div>
-          )}
+        <div className="flex min-h-0 flex-1 flex-col p-4">
+          <div className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            {bodyText ? (
+              <p className="text-xs leading-relaxed whitespace-pre-wrap">{bodyText}</p>
+            ) : (
+              <p className="text-xs leading-relaxed text-muted-foreground">{node.detail}</p>
+            )}
+          </div>
         </div>
         {output ? (
           // 最小产物尾 (C5): version pager + copy + open-inspector — the
@@ -863,6 +1140,7 @@ function MediaProductRegion({
   topClipScore,
   onExpandMedia,
   fill,
+  videoRef,
 }: {
   node: FlowNode
   output: Output
@@ -873,6 +1151,10 @@ function MediaProductRegion({
    * strip's growth (letterbox, never a clip); the fixed-px thumb stays the
    * generator anatomy's law. */
   fill?: boolean
+  /** The card's product video element (ADR-113 §4): the track stack's lane
+   * blocks seek it (`currentTime = out_start` — 只拨头, the ambient-muted
+   * law untouched). */
+  videoRef?: RefObject<HTMLVideoElement | null>
 }) {
   const { t } = useTranslation()
   const score = typeof output.score?.value === "number" ? output.score.value : null
@@ -985,6 +1267,7 @@ function MediaProductRegion({
         </span>
       ) : videoUrl ? (
         <video
+          ref={videoRef}
           src={videoUrl}
           poster={mediaThumb ?? undefined}
           aria-label={node.label}
@@ -1659,6 +1942,7 @@ function GraphCard({
   onPromptEdit,
   pendingProgram,
   promptConfirm,
+  onLineageHover,
 }: {
   node: FlowNode
   selected: boolean
@@ -1669,9 +1953,17 @@ function GraphCard({
   onPromptEdit?: FlowCardData["onPromptEdit"]
   pendingProgram?: FlowCardData["pendingProgram"]
   promptConfirm?: FlowCardData["promptConfirm"]
+  onLineageHover?: FlowCardData["onLineageHover"]
 }) {
   const { t } = useTranslation()
   const outputs = node.outputs ?? []
+  // The card's product video element — the track stack's lane blocks seek
+  // it (ADR-113 §4; the ref lands on MediaProductRegion's <video>).
+  const productVideoRef = useRef<HTMLVideoElement>(null)
+  // 轨道栈谓词 (ADR-113 §4; layout.ts hasTrackStack — the tool-set mirror of
+  // graph_store._TRACKED_CLIP_TOOLS): the two inspection lanes are in the
+  // anatomy from birth, so the video in-port's anchor never moves mid-life.
+  const tracked = hasTrackStack(node)
   // The pager flips the display AND the action target among the node's
   // products; displayId survives refetches (ids are stable).
   const [displayId, setDisplayId] = useState<string | null>(null)
@@ -1819,6 +2111,7 @@ function GraphCard({
               topClipScore={node.topClipScore}
               onExpandMedia={onExpandMedia}
               fill={!hasProgramRegion(node)}
+              videoRef={tracked ? productVideoRef : undefined}
             />
           )
         ) : (
@@ -1864,6 +2157,19 @@ function GraphCard({
             级定位. */}
         {node.artifact && node.artifact.facets.length > 0 && (
           <ArtifactFacetStrip artifact={node.artifact} />
+        )}
+        {/* ADR-113 §4 成片轨道栈: the two inspection lanes — LAST inside
+            the card, flush to its bottom inner edge, so the failure chrome
+            above (failure lines / facet strip) grows INTO the media's flex
+            and the lane seats (the video in-port's anchor, 锚点律) never
+            move. In the anatomy from birth: draft renders muted empty
+            rows. */}
+        {tracked && (
+          <TrackStackSection
+            output={output}
+            videoRef={productVideoRef}
+            onLineageHover={onLineageHover}
+          />
         )}
       </div>
 
@@ -1954,6 +2260,11 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
   //    prompt divider does not exist, so every in-port shares ONE corner
   //    stack at the card's bottom-left, stacking upward in port order
   //    (角落栈 — mirror of layout.ts cornerStackedInPorts/declaredHandles).
+  //  - 锚点律 (ADR-113 §5, the track-stack exception): a TRACKED card's
+  //    video in-port leaves the corner stack and parks at the VIDEO lane's
+  //    Y-center — the edge lands on the lane it feeds. The lanes are in the
+  //    anatomy from birth (draft = muted empty rows), so the seat never
+  //    moves mid-life; the mirror lives in layout.ts trackVideoPortBasePx.
   // Each family stacks its own ports by 34px (clears the 28px circles); the
   // 34px side offset parks each circle fully outside the card with a 6px
   // gap. The version pager's stacked row grows the factsbar band by
@@ -1998,11 +2309,18 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
         // 角落栈: bottom-anchored at the card's bottom-left, stacking upward
         // in port order; generator cards keep the two-family seats (each
         // region bottom-anchored at its own corner, 34px per sibling).
-        const base = unified
-          ? inTextBase + cornerCount++ * 34
-          : isMedia
-            ? inMediaBase + (inMediaIdx.get(type) ?? 0) * 34
-            : inTextBase + (inTextIdx.get(type) ?? 0) * 34
+        // 锚点律 (ADR-113 §5): a tracked card's video in-port leaves the
+        // corner stack for the video lane's Y-center — the edge lands on the
+        // lane it feeds (mirror: layout.ts trackVideoPortBasePx) — and does
+        // NOT consume a corner-stack slot.
+        const laneSeat = type === "video" && hasTrackStack(node)
+        const base = laneSeat
+          ? trackVideoPortBasePx(pagerPx)
+          : unified
+            ? inTextBase + cornerCount++ * 34
+            : isMedia
+              ? inMediaBase + (inMediaIdx.get(type) ?? 0) * 34
+              : inTextBase + (inTextIdx.get(type) ?? 0) * 34
         return (
           <Handle
             key={`in:${type}`}
@@ -2044,7 +2362,7 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
  * Birth choreography: `flow-node-born` keyframe staggered by `bornIndex`
  * (the real compile order, replayed slowly — ADR-036 补记 3). */
 export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
-  const { node, bornIndex, selected, ports, onOutputAction, onQuoteOutput, onExpandMedia, onAssetAction, onDisplayChange, onPromptEdit, onTextEdit, pendingProgram, promptConfirm } = data
+  const { node, bornIndex, selected, ports, onOutputAction, onQuoteOutput, onExpandMedia, onAssetAction, onDisplayChange, onPromptEdit, pendingProgram, promptConfirm, onLineageHover, lineageHover } = data
   // Latch the birth frame: the surface drops bornIndex on the next commit
   // (its seen-set absorbs the id), and a follow-up SSE tick can land inside
   // the 420ms keyframe — the class must outlive the animation. A class that
@@ -2097,6 +2415,7 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
           node={node}
           onExpandMedia={onExpandMedia}
           onAssetAction={onAssetAction}
+          lineageHover={lineageHover}
         />
       ) : node.kind === "text" || node.kind === "table" ? (
         // 词表 v3 (ADR-076, C5): text/table derive the 全文卡 anatomy —
@@ -2104,7 +2423,6 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
         <DocumentCard
           node={node}
           onOutputAction={onOutputAction}
-          onTextEdit={onTextEdit}
         />
       ) : isGraphCard ? (
         <GraphCard
@@ -2117,12 +2435,14 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
           onPromptEdit={onPromptEdit}
           pendingProgram={pendingProgram}
           promptConfirm={promptConfirm}
+          onLineageHover={onLineageHover}
         />
       ) : (
         <ThumbCard
           node={node}
           onExpandMedia={onExpandMedia}
           onAssetAction={onAssetAction}
+          lineageHover={lineageHover}
         />
       )}
       </div>

@@ -138,7 +138,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 |---|---|---|
 | `users` | （平台层，暂不属于任何模块） | 只读 |
 | `verification_codes` | （平台层，暂不属于任何模块） | 无密码登录验证码；只由 platform/auth 写 |
-| `assets` | Pipeline | 其他模块只读；处理状态只由 worker 的 asset_processing 写 |
+| `assets` | Pipeline | 其他模块只读；处理状态只由 worker 的 asset_processing 写。**transcript = 资产行的内容层（ADR-113）**：`transcript`/`extracted_text` = 源层唯一座（读口 `pipeline/assets.py:asset_text_content`），`edited_transcript` = 用户改稿覆盖层（写口 = `PUT /projects/{id}/assets/{id}/transcript`，零 run 零积分；C4 双层不变量——改稿只写覆盖层，源层与 `meta.words` 永不动）；cues 永不持久化（读时 `group_cues`/`display_cues` 一法推导） |
 | `projects` | Pipeline | 各模块只读 |
 | `workflow_runs` | Pipeline | **创建收口于 `orchestrator.create_run`**（/generate、chat dispatch 全部经它，全库无旁路）；状态只由 orchestrator/worker 写。run 级成本 = `workflow_steps.cost` 聚合（API 序列化时计算，不落列） |
 | `outputs` | Pipeline | 创建 + `render_status`/`files` 归 Pipeline；内容字段（`payload`/`render_spec`/`publishing`）经 `/outputs` API 编辑，Operation Model 落地后归入其写集；payload 三规则（ADR-030）；`workflow_step_id` 为只读血统；`quality` = 质检裁决（期 3 verify 节点写，NULL = 未质检）；内部类型（`material_understanding`/`storyboard`/`craft_skeleton`；`content_plan` 仅为隐藏 Phase-2 前遗留行保留在过滤集）经 `visible_outputs_stmt()` 统一过滤 |
@@ -276,7 +276,8 @@ apps/api/
 │   │   │                        #   （step 终态 → 节点聚合态【族头门控：running 只在族头越过 pending 后点亮，
 │   │   │                        #   折叠前奏不借宿主 loading 面；族尾 verify 窗保持亮】+ 产物反写
 │   │   │                        #   spec.output_ids 版本累积）/
-│   │   │                        #   stamp_asset_node / stamp_transcript_node（上传即落图 + 转写稿 document）/
+│   │   │                        #   stamp_asset_node（上传即落图；转写稿 document 已退役——
+│   │   │                        #   ADR-113：transcript = 资产行的内容层，永不成节点）/
 │   │   │                        #   research brief document（agent 节点的产物面，sync 镜像终态与正文）
 │   │   ├── graph_revise.py        # 修订桥（K4）：图节点 → task list（spec.tool/spec.params 展开），
 │   │   │                        #   WiringProposal 的 run op 经它进 create_run（出生地不变）
@@ -290,6 +291,9 @@ apps/api/
 │   │   ├── beat_map.py            # 节拍地图代码半（期 1）：LLM 文本锚吸附 ASR 词轴 + 金句自包含检查 + 理解 prompt 源块装配
 │   │   ├── assets.py              # 服务端源素材创建（chat 声明文本 → transcript 资产）
 │   │   ├── tracks.py              # TRACK_REGISTRY 可执行 catalog：轨分区 fold（烘焙缝/C2PA/ops 寻址/一轨一写者 422，ADR-044）
+│   │   ├── track_stack.py         # 轨道栈读面投影（ADR-113 §4，纯模块）：render_spec → 视频轨（保留段
+│   │   │                        #   产出轴拼接 + 源区间 + 源资产 id）+ 文字轨（字幕句按段分组，切断 = 硬断句）
+│   │   │                        #   + 修饰存在位；读时推导永不持久化，/results 与 /graph 两座 stamp
 │   │   ├── recipes.py             # RECIPE_REGISTRY 服务端静态注册表（配方 = 数据，ADR-040）
 │   │   ├── clip_spec.py / rendering.py / outputs.py / music.py / quality.py / derivative_dispatch.py
 │   │   │                        # （outputs.py 兼报价读面：fold 聚合 aggregate_step_estimate + 偏差回归 step_estimate_deviation）

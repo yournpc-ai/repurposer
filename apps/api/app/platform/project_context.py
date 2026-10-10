@@ -85,16 +85,16 @@ async def collect_asset_texts(
 ) -> list[str]:
     """Collect all textual source material for a project.
 
-    Prefers ``extracted_text`` (documents) and falls back to ``transcript``
-    (audio/video ASR). Empty assets are skipped.
+    Reads the ONE text seat (``asset_text_content``, ADR-113 — transcript
+    before extracted_text); empty assets are skipped. The import is deferred:
+    pipeline already depends on this module (node_runners / verify), so the
+    return edge stays lazy.
     """
+    from app.pipeline.assets import asset_text_content
+
     result = await db.execute(select(Asset).where(Asset.project_id == project_id))
     assets = list(result.scalars().all())
-    return [
-        text
-        for a in assets
-        if (text := (a.extracted_text or a.transcript))
-    ]
+    return [text for a in assets if (text := asset_text_content(a))]
 
 
 async def resolve_persona(

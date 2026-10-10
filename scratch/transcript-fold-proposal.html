@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transcript 折叠提案 v5 — 成片卡双轨 + 锚点 Y-center 律</title>
+<style>
+  :root {
+    --bg: #09090b;
+    --card: #131316;
+    --fg: #ececf1;
+    --muted: #9d9daa;
+    --meta: #6b6b78;
+    --hairline: rgba(255,255,255,0.09);
+    --accent: rgba(255,255,255,0.06);
+    --accent2: rgba(255,255,255,0.12);
+    --video: #7c9ef8;
+    --text: #8fd6a8;
+    --danger: #e5747a;
+    --amber: #d9a756;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 14px/1.65 -apple-system, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+    padding: 48px 32px 96px; max-width: 1280px; margin: 0 auto;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .thesis { color: var(--muted); margin-top: 8px; }
+  .thesis b { color: var(--fg); font-weight: 600; }
+  .section-label {
+    font-size: 12px; color: var(--meta); text-transform: uppercase;
+    letter-spacing: 0.08em; margin: 44px 0 14px;
+  }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+  .panel { border: 1px solid var(--hairline); border-radius: 12px; overflow: hidden; }
+  .panel-head {
+    padding: 12px 16px; border-bottom: 1px solid var(--hairline);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .panel-head h2 { font-size: 13px; margin: 0; }
+  .panel-head .count { font-size: 12px; color: var(--meta); }
+  .count b { color: var(--fg); font-size: 16px; font-weight: 600; }
+
+  .canvas {
+    position: relative; padding: 28px;
+    background-image: radial-gradient(circle, rgba(157,157,170,0.30) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  .node {
+    background: var(--card); border-radius: 10px;
+    box-shadow: 0 0 0 1px var(--hairline);
+    width: 240px; padding: 12px; position: relative;
+  }
+  .node .kind {
+    font-size: 10px; color: var(--meta); letter-spacing: 0.06em;
+    text-transform: uppercase; margin-bottom: 6px;
+  }
+  .node .title { font-size: 13px; font-weight: 500; display:flex; justify-content:space-between; align-items:center; }
+  .node .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .thumb {
+    border-radius: 6px; background: linear-gradient(160deg, #1c1c22, #101014);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--meta); font-size: 11px; margin-top: 8px;
+  }
+  .thumb.wide { aspect-ratio: 16/9; }
+  .thumb.tall { aspect-ratio: 9/16; width: 96px; margin: 8px auto 0; }
+  .cue-mini { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+  .cue-mini .row {
+    font-size: 11px; color: var(--muted); padding: 3px 6px; border-radius: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cue-mini .row .t { color: var(--meta); font-size: 10px; margin-right: 6px; font-variant-numeric: tabular-nums; }
+  .divider {
+    margin: 10px -12px 0; padding: 6px 12px 2px; border-top: 1px solid var(--hairline);
+    font-size: 10px; color: var(--meta); letter-spacing: 0.05em;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .facet-note { font-size: 10px; color: var(--meta); margin-top: 6px; }
+  .edit-ico { font-size: 10px; color: var(--meta); border: 1px solid var(--hairline); border-radius: 4px; padding: 0 5px; }
+  .mini-strip { display: flex; height: 14px; border-radius: 4px; overflow: hidden; margin-top: 6px; }
+  .mini-strip i { display: block; background: var(--accent2); }
+  .mini-strip i.gap { background: transparent; }
+  .mini-strip i.on { background: var(--text); }
+  .mini-lane { position: relative; height: 10px; border-radius: 3px; background: rgba(255,255,255,0.05); margin-top: 6px; }
+  .mini-lane .fill-in { position: absolute; inset: 0; border-radius: 3px; background: rgba(124,158,248,0.4); }
+  .mini-lane .cap-in { position: absolute; top: 2px; bottom: 2px; left: 2%; right: 2%; border-radius: 2px;
+    background: repeating-linear-gradient(90deg, rgba(143,214,168,0.5) 0 8px, transparent 8px 14px); }
+  /* the incoming edge anchor dot, Y-centered on the first lane */
+  .anchor-dot {
+    position: absolute; left: -5px; top: 50%; transform: translateY(-50%);
+    width: 9px; height: 9px; border-radius: 99px;
+    background: var(--bg); border: 2px solid var(--video); z-index: 3;
+  }
+
+  .edge-label {
+    position: absolute; font-size: 10px; color: var(--meta);
+    background: var(--bg); padding: 1px 6px; border-radius: 4px;
+  }
+  .edge-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .edge-svg path { fill: none; stroke-width: 1.5; }
+  .e-video { stroke: var(--video); }
+  .e-decor { stroke: var(--meta); stroke-dasharray: 2 4; opacity: 0.6; }
+
+  .flow-row { display: flex; align-items: flex-start; gap: 90px; position: relative; }
+  .tag {
+    position: absolute; right: -8px; top: -8px; z-index: 2;
+    font-size: 10px; padding: 2px 8px; border-radius: 99px;
+    background: var(--danger); color: #fff; font-weight: 500;
+  }
+  .tag.ok { background: var(--text); color: #07210f; }
+  .annotation {
+    margin: 14px 16px 16px; padding: 10px 14px; border-radius: 8px;
+    background: var(--accent); font-size: 12px; color: var(--muted);
+  }
+  .annotation b { color: var(--fg); font-weight: 600; }
+
+  /* ==== demo cards ==== */
+  .demo2 { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; align-items: start; }
+  .bigcard {
+    background: var(--card); border-radius: 12px;
+    box-shadow: 0 0 0 1px var(--hairline); overflow: visible; position: relative;
+  }
+  .bigcard .head {
+    padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;
+    font-size: 13px; font-weight: 500;
+  }
+  .bigcard .head .meta { font-size: 11px; color: var(--meta); font-weight: 400; }
+  .player {
+    background: #000; aspect-ratio: 16/9; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 0;
+  }
+  .player .frame { color: var(--meta); font-size: 12px; text-align: center; }
+  .player .cap {
+    position: absolute; bottom: 44px; left: 10%; right: 10%; text-align: center;
+    font-size: 14px; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,0.85); font-weight: 500;
+  }
+  .player .tc {
+    position: absolute; bottom: 14px; left: 14px;
+    font-size: 11px; color: #fff; background: rgba(0,0,0,0.55); padding: 2px 8px;
+    border-radius: 5px; font-variant-numeric: tabular-nums;
+  }
+  .player .hoverlab {
+    position: absolute; bottom: 14px; right: 14px;
+    font-size: 11px; color: var(--muted); background: rgba(0,0,0,0.55); padding: 2px 8px;
+    border-radius: 5px; font-variant-numeric: tabular-nums; opacity: 0; transition: opacity .12s;
+  }
+
+  .strip-wrap { padding: 10px 14px 4px; }
+  .strip-label { font-size: 10px; color: var(--meta); letter-spacing: 0.05em; display:flex; justify-content:space-between; margin-bottom: 5px; }
+  .strip {
+    display: flex; height: 26px; border-radius: 6px; overflow: hidden;
+    background: rgba(255,255,255,0.03); position: relative;
+  }
+  .strip .seg {
+    background: var(--accent2); cursor: pointer; position: relative;
+    border-right: 1px solid var(--bg);
+    transition: background 0.12s;
+  }
+  .strip .seg:hover { background: rgba(143,214,168,0.35); }
+  .strip .seg.on { background: var(--text); }
+  .strip .seg.xon { background: var(--amber); }
+  .strip .seg.gap { background: transparent; border-right: none; cursor: default; }
+  .strip .playhead {
+    position: absolute; top: -2px; bottom: -2px; width: 2px; background: #fff;
+    border-radius: 1px; pointer-events: none; left: 0%; transition: left 0.2s;
+    box-shadow: 0 0 6px rgba(255,255,255,0.6);
+  }
+
+  /* track stack on the deliverable card */
+  .track { padding: 6px 14px; position: relative; }
+  .track .tlabel { font-size: 10px; color: var(--meta); letter-spacing: 0.05em; margin-bottom: 4px; display: flex; justify-content: space-between; }
+  .track .lane {
+    position: relative; min-height: 26px; border-radius: 5px;
+    background: rgba(255,255,255,0.03); overflow: hidden;
+    display: flex; align-items: stretch;
+  }
+  .lane .block {
+    position: relative; border-radius: 4px;
+    background: rgba(124,158,248,0.3); border: 1px solid rgba(124,158,248,0.5);
+    cursor: pointer; transition: background 0.12s;
+    display: flex; align-items: center; padding: 0 8px; font-size: 10.5px; color: var(--fg);
+    white-space: nowrap; overflow: hidden;
+  }
+  .lane .block:hover { background: rgba(217,167,86,0.45); border-color: var(--amber); }
+  .lane .cue-block {
+    position: relative; border-radius: 4px;
+    background: rgba(143,214,168,0.22); border: 1px solid rgba(143,214,168,0.35);
+    cursor: pointer; transition: background 0.12s;
+    display: flex; align-items: center; padding: 0 7px; font-size: 10.5px; color: var(--fg);
+    white-space: nowrap; overflow: hidden; margin: 3px 1px;
+  }
+  .lane .cue-block:hover { background: rgba(143,214,168,0.45); }
+  .lane .cue-block.on { background: var(--text); color: #07210f; }
+  .lane .gap-block { flex: none; }
+  /* the incoming edge stub anchored at the video lane's Y-center */
+  .edge-stub {
+    position: absolute; left: -34px; width: 34px; height: 2px;
+    background: var(--video); top: 50%; transform: translateY(-50%);
+  }
+  .track .anchor-dot-big {
+    position: absolute; left: -6px; top: 50%; transform: translateY(-50%);
+    width: 11px; height: 11px; border-radius: 99px;
+    background: var(--bg); border: 2.5px solid var(--video); z-index: 3;
+  }
+
+  .cue-list { overflow-y: auto; max-height: 200px; padding: 8px; }
+  .cue-list .cue {
+    padding: 6px 12px; border-radius: 8px; cursor: pointer; position: relative;
+    color: var(--muted); transition: background 0.12s; font-size: 13px;
+  }
+  .cue-list .cue:hover { background: var(--accent); color: var(--fg); }
+  .cue-list .cue:hover .cue-t { opacity: 1; }
+  .cue-list .cue.active { background: var(--accent); color: var(--fg); }
+  .cue-list .cue.xon { color: var(--amber); }
+  .cue-list .cue.active::before {
+    content: ""; position: absolute; left: 2px; top: 8px; bottom: 8px; width: 2px;
+    background: var(--text); border-radius: 1px;
+  }
+  .cue-t {
+    position: absolute; right: 10px; top: 7px; font-size: 10px; color: var(--meta);
+    background: var(--card); border: 1px solid var(--hairline); border-radius: 4px;
+    padding: 1px 6px; opacity: 0; transition: opacity 0.12s; font-variant-numeric: tabular-nums;
+  }
+  .cue.active .cue-t { opacity: 1; color: var(--text); border-color: rgba(143,214,168,0.35); }
+  .bigcard .factsbar {
+    padding: 8px 14px; border-top: 1px solid var(--hairline);
+    font-size: 11px; color: var(--meta); display: flex; gap: 14px;
+    border-radius: 0 0 12px 12px;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--hairline); }
+  th { color: var(--meta); font-weight: 500; font-size: 11px; }
+  td .mono { font-family: ui-monospace, "SF Mono", monospace; font-size: 11.5px; }
+  .seat-dead { color: var(--meta); text-decoration: line-through; }
+  .seat-live { color: var(--text); }
+  .hint { font-size: 11px; color: var(--meta); margin-top: 8px; }
+  .borrow { color: var(--text); font-weight: 600; }
+  .reject { color: var(--danger); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>Transcript 折叠提案 v5</h1>
+<p class="thesis">项目 <span style="font-family:ui-monospace">1aeb9787</span> · v5 成片卡终态解剖：<b>完整视频（顶）+ 视频轨（片段）+ 文字轨（字幕句块）</b>；入边锚 = 所喂轨道的<b>左缘 Y-center</b>（FLORA 锚点 craft 收编为端口法则修订）。</p>
+
+<div class="section-label">画布对照 — 4 行 3 卡 → 2 节点 1 边</div>
+
+<div class="compare">
+
+  <!-- ============ BEFORE ============ -->
+  <div class="panel">
+    <div class="panel-head"><h2>现在</h2><span class="count"><b>4</b> 行 · <b>3</b> 卡 · <b>4</b> 条边</span></div>
+    <div class="canvas" style="min-height:430px;">
+      <svg class="edge-svg" viewBox="0 0 520 430" preserveAspectRatio="none">
+        <path class="e-decor" d="M 120 78 C 170 78, 170 78, 220 78" />
+        <path class="e-video" d="M 120 84 C 180 84, 180 278, 230 278" />
+        <path class="e-decor" d="M 340 92 C 400 92, 400 270, 445 270" />
+      </svg>
+      <div class="flow-row">
+        <div class="node">
+          <div class="kind">asset · video</div>
+          <div class="title">xy_1.mp4</div>
+          <div class="thumb wide">▶ 16:9 素材</div>
+          <div class="sub">5:40 · zh</div>
+        </div>
+        <div class="node">
+          <span class="tag">独立节点</span>
+          <div class="kind">document · transcript</div>
+          <div class="title">转写稿</div>
+          <div class="cue-mini">
+            <div class="row"><span class="t">0:02–0:10</span>我们就可以进行这个讨论首先…</div>
+            <div class="row"><span class="t">0:10–0:15</span>焦人工智能、机器人、智能制造…</div>
+            <div class="row"><span class="t">0:15–0:18</span>能为全球科技跨境合作带来哪…</div>
+          </div>
+          <div class="sub">spec 里整份复制 · 时间戳指不到视频</div>
+        </div>
+      </div>
+      <div class="flow-row" style="margin-top:26px; justify-content:flex-end;">
+        <div class="node" style="width:260px;">
+          <div class="kind">video · select_clips → <span style="opacity:.6">reframe_clip</span></div>
+          <div class="title">高光短片（deliverable）</div>
+          <div class="thumb tall">9:16 成片</div>
+          <div class="facet-note">＋ facet 站（reframe）· 健康时静默</div>
+        </div>
+      </div>
+      <div class="edge-label" style="left:150px; top:70px;">text · 装饰</div>
+      <div class="edge-label" style="left:378px; top:175px;">text · 装饰血缘</div>
+      <div class="edge-label" style="left:140px; top:200px;">video · 真物料流</div>
+    </div>
+    <div class="annotation">
+      <b>问题</b>：transcript 卡是<b>纯展示叶子</b>——执行消费者全部绕过它直读 asset 行；两条 text 边都是装饰；正文+48 cue 复制进 spec 随每次 refetch 搬运；时间戳是<b>死数字</b>；成片内部结构（哪段素材、哪句字幕）卡面不可见。
+    </div>
+  </div>
+
+  <!-- ============ AFTER ============ -->
+  <div class="panel">
+    <div class="panel-head"><h2>新架构</h2><span class="count"><b>2</b> 节点 · <b>1</b> 条边</span></div>
+    <div class="canvas" style="min-height:430px;">
+      <svg class="edge-svg" viewBox="0 0 520 430" preserveAspectRatio="none">
+        <path class="e-video" d="M 168 190 C 240 190, 260 296, 330 296" />
+      </svg>
+      <div class="flow-row" style="height:100%; align-items:center;">
+        <div class="node" style="width:300px;">
+          <span class="tag ok">内容层合一</span>
+          <div class="kind">asset · video</div>
+          <div class="title">xy_1.mp4 <span class="edit-ico">✎ 就地编辑</span></div>
+          <div class="thumb wide">▶ 视频区（click-to-play）</div>
+          <div class="mini-strip" id="miniStrip"></div>
+          <div class="divider"><span>TRANSCRIPT · 48 段</span><span>5:40</span></div>
+          <div class="cue-mini">
+            <div class="row"><span class="t">0:02–0:10</span>我们就可以进行这个讨论首先…</div>
+            <div class="row"><span class="t">0:10–0:15</span>焦人工智能、机器人、智能制造…</div>
+            <div class="row"><span class="t">0:15–0:18</span>能为全球科技跨境合作带来哪…</div>
+          </div>
+          <div class="facet-note">时间条 ∝ 时长（停顿留白）· 定高内滚 · 点 cue / 条块 → 视频区 seek</div>
+        </div>
+        <div class="node" style="width:210px;">
+          <div class="kind">video · artifact</div>
+          <div class="title">高光短片</div>
+          <div class="thumb tall" style="width:80px;">9:16</div>
+          <div class="mini-lane"><div class="fill-in"></div><div class="anchor-dot"></div></div>
+          <div class="mini-lane"><div class="cap-in"></div></div>
+          <div class="sub">zh · 9:16 · 0:46</div>
+          <div class="facet-note">视频轨 + 文字轨常驻；修饰轨有内容才出现</div>
+        </div>
+      </div>
+      <div class="edge-label" style="left:200px; top:236px;">video · 唯一边<br>锚 = 视频轨 Y-center</div>
+    </div>
+    <div class="annotation">
+      <b>变化</b>：transcript 收进素材卡；成片卡 = 完整视频 + 双轨（视频轨片段 / 文字轨字幕）；video 边锚在<b>视频轨左缘 Y-center</b>（不再是卡角）；血缘由 hover cross-highlight 承载。
+    </div>
+  </div>
+</div>
+
+<div class="section-label">双卡联动 demo（真实 48 cue + 真实 render_spec）— 注意右卡左缘：入边锚在视频轨中心</div>
+
+<div class="demo2">
+
+  <!-- asset card -->
+  <div class="bigcard">
+    <div class="head">xy_1.mp4 <span class="meta">asset · video · 5:40 · zh</span></div>
+    <div class="player">
+      <div class="frame">视频区<br>（click-to-play poster）</div>
+      <div class="cap" id="capA"></div>
+      <div class="tc" id="tcA">0:00 / 5:40</div>
+      <div class="hoverlab" id="hoverlabA"></div>
+    </div>
+    <div class="strip-wrap">
+      <div class="strip-label"><span>TRANSCRIPT · 48 段</span><span>0:00 — 5:40</span></div>
+      <div class="strip" id="stripA"><div class="playhead" id="phA"></div></div>
+    </div>
+    <div class="cue-list" id="cuesA"></div>
+    <div class="factsbar"><span>⬇ 下载</span><span>✎ 编辑转写（写 assets.edited_transcript）</span></div>
+  </div>
+
+  <!-- deliverable card: full video + video lane + text lane -->
+  <div class="bigcard">
+    <div class="head">高光短片 <span class="meta">artifact · 9:16 · 0:46 · zh</span></div>
+    <div class="player" style="aspect-ratio:16/9;">
+      <div class="frame">成片播放区（完整视频）<br>9:16</div>
+      <div class="cap" id="capB"></div>
+      <div class="tc" id="tcB">0:00 / 0:46</div>
+    </div>
+    <div class="track">
+      <div class="tlabel"><span>视频轨</span><span>1 段</span></div>
+      <div class="lane" id="laneSeg">
+        <div class="anchor-dot-big"></div>
+        <div class="edge-stub"></div>
+      </div>
+    </div>
+    <div class="track" style="padding-bottom:10px;">
+      <div class="tlabel"><span>文字轨 · 字幕</span><span>6 句</span></div>
+      <div class="lane" id="laneCap"></div>
+    </div>
+    <div class="factsbar"><span>⬇ 下载</span><span>↗ 发布</span><span style="margin-left:auto;">音乐未添加 · 无配音</span></div>
+  </div>
+</div>
+<p class="hint">
+  锚点律：左缘蓝点 + 入边 stub 锚在<b>视频轨的 Y-center</b>——轨道可见时锚到轨（FLORA craft）；锚座位恒为「媒体区正下方第一轨」，轨道栈收起时锚不跳动。
+  hover 视频轨的片段块 → 左侧 transcript 条源区间 <b style="color:var(--amber)">2:59–3:45 琥珀色亮起</b>；点文字轨的句块 = 成片 seek 到那句。
+  文字轨粒度 = <b>句级 cue 块</b>（词级是渲染细节不上卡）；修饰轨（音乐/配音/口头禅划掉行）有内容才出现——本片音乐未添加，故无音乐轨。
+</p>
+
+<div class="section-label">锚点律修订（端口法则精确化）</div>
+
+<div class="panel" style="padding: 6px 4px;">
+<table>
+  <tr><th style="width:30%">场景</th><th style="width:30%">锚点</th><th>说明</th></tr>
+  <tr>
+    <td>现行（ADR-067 一族）</td>
+    <td>消费区域左下角（角律）</td>
+    <td>卡面无可见轨道时的通用规则，不变</td>
+  </tr>
+  <tr>
+    <td class="seat-live">轨道可见时（新）</td>
+    <td class="seat-live">所喂轨道的左缘 Y-center</td>
+    <td>video 边锚视频轨、（未来的）audio 边锚音频轨——边回答「喂哪条轨」；锚座位恒 = 媒体区正下方第一轨，展开/收起不跳动</td>
+  </tr>
+  <tr>
+    <td>边落到卡内片段上（FLORA 形态）</td>
+    <td class="reject">不收</td>
+    <td>片段级归属由 hover cross-highlight 表达，边保持节点级（ADR-067 出锚语义律不动）</td>
+  </tr>
+</table>
+</div>
+
+<div class="section-label">两个视图的分工（同一份 cue，一法一座 group_cues 派生）</div>
+
+<div class="panel" style="padding: 6px 4px;">
+<table>
+  <tr><th style="width:22%">视图</th><th style="width:34%">回答的问题</th><th>不承担</th></tr>
+  <tr>
+    <td><b>横向时间条 / 轨道</b></td>
+    <td>「在哪里 / 多长 / 哪里有停顿 / 成片由什么构成 / 来自素材哪段」——节奏、位置、seek、血缘</td>
+    <td>文字阅读（pill 放不下句子）；编排（L3 铁律）</td>
+  </tr>
+  <tr>
+    <td><b>纵向 cue 流</b></td>
+    <td>「讲了什么 / 改哪个字」——阅读、校验、编辑（C4 就地）</td>
+    <td>时长感知（10 秒和 0.6 秒的 cue 在列表里一样高）</td>
+  </tr>
+</table>
+</div>
+
+<div class="section-label">FLORA 截图启发对照 — 借什么，拒什么</div>
+
+<div class="panel" style="padding: 6px 4px;">
+<table>
+  <tr><th style="width:30%">截图里的形态</th><th style="width:14%">借 / 拒</th><th>理由</th></tr>
+  <tr>
+    <td>工作面在卡上（不弹窗）</td>
+    <td class="borrow">借</td>
+    <td>与 C4 卡内就地编辑、prompt 卡面直改同族</td>
+  </tr>
+  <tr>
+    <td>锚点与所喂轨道 Y-center 对齐</td>
+    <td class="borrow">借</td>
+    <td>边回答「喂哪条轨」；收编为端口法则修订（带锚座位稳定条款）</td>
+  </tr>
+  <tr>
+    <td>轨道栈卡面（一轨一条）</td>
+    <td class="borrow">借（检视化）</td>
+    <td>clip-spec 轨道模型的读面投影：视频轨 + 文字轨常驻，修饰轨条件出现</td>
+  </tr>
+  <tr>
+    <td>多轨<b>编排</b>（拖片段、加轨、转场）</td>
+    <td class="reject">拒</td>
+    <td>L3 铁律不变——合成语义永禁；轨道永不长拖把手</td>
+  </tr>
+  <tr>
+    <td>每个片段收一条入边（边落到卡内子元素）</td>
+    <td class="reject">拒（用 cross-highlight 替代）</td>
+    <td>片段级血缘由 hover 联动表达（数据驱动），边保持节点级</td>
+  </tr>
+</table>
+</div>
+
+<div class="section-label">存储座位对照 — 全局唯一共享值（不变）</div>
+
+<div class="panel" style="padding: 6px 4px;">
+<table>
+  <tr><th style="width:34%">座位</th><th style="width:22%">现在</th><th style="width:22%">新架构</th><th>说明</th></tr>
+  <tr>
+    <td class="mono">assets.transcript / extracted_text</td>
+    <td class="seat-live">真相</td><td class="seat-live">真相（唯一）</td>
+    <td>两种相反 fallback 顺序收编一法一座</td>
+  </tr>
+  <tr>
+    <td class="mono">assets.meta.words</td>
+    <td class="seat-live">证据</td><td class="seat-live">证据（唯一）</td>
+    <td>ASR 一次性写入；素材卡时间条/cue 流唯一派生源</td>
+  </tr>
+  <tr>
+    <td class="mono">assets.edited_transcript</td>
+    <td style="color:var(--meta)">（新增列）</td><td class="seat-live">用户编辑 overlay</td>
+    <td>从 graph spec 搬家；永不反算时间码（C4 地板不动）</td>
+  </tr>
+  <tr>
+    <td class="mono">outputs.render_spec（segments / caption_track …）</td>
+    <td class="seat-live">产物契约</td><td class="seat-live">产物契约（不变）</td>
+    <td>成片卡轨道栈的读面源；clip-spec 唯一渲染契约不动（ADR-016）</td>
+  </tr>
+  <tr>
+    <td class="mono">graph_nodes.spec.text / cues / cued_text</td>
+    <td class="seat-dead">复制三件套</td><td class="seat-dead">随节点退役拆除</td>
+    <td>零消费者；cues 改读面派生（group_cues 一座）</td>
+  </tr>
+</table>
+</div>
+
+<div class="section-label">待拍板清单</div>
+<div class="annotation" style="margin:0;">
+  ① transcript 区<b>恒在定高</b>还是<b>可折叠</b>——倾向前者；② 「文本驱动 seek」交互族入册 + click-to-play poster；③ paste 资产补不补估算词轴（align_stills 同款）；④ 编辑写口搬家后进不进 Operation Model（独立决策）；⑤ ADR-086 判词①枚举翻案走 ADR 纪律；⑥ 时间条<b>拖选区间</b>（选段仪器）本期只做 seek 还是连选段——建议分期；⑦ 成片卡轨道栈：<b>视频轨 + 文字轨常驻</b>，修饰轨（音乐/配音/filler 划掉行）有内容才出现；⑧ cross-highlight 跨卡协调通道入册（画布级共享 hover 态，新机制）；⑨ 端口法则修订：轨道可见时入边锚 = 所喂轨左缘 Y-center，锚座位恒为媒体区正下方第一轨。
+</div>
+
+<script>
+const CUES = [{"start": 2.9, "end": 10.46, "label": "0:02–0:10", "text": "我们就可以进行这个讨论首先第一个问题本次分会与伦敦科技周同期举办聚"}, {"start": 10.46, "end": 15.42, "label": "0:10–0:15", "text": "焦人工智能、机器人、智能制造的签言领域将您看来这场分会"}, {"start": 15.42, "end": 18.78, "label": "0:15–0:18", "text": "能为全球科技跨境合作带来哪些实际价值"}, {"start": 20.26, "end": 30.66, "label": "0:20–0:30", "text": "这次是在中国和英国的两边的援手呼防之后我们举办的一次很重大的"}, {"start": 30.66, "end": 38.38, "label": "0:30–0:38", "text": "活动这个活动我们有数十亚中国的领先企业和来自其他国家的一些企"}, {"start": 38.38, "end": 47.22, "label": "0:38–0:47", "text": "业来到伦敦来到伦敦跟当地的企业和合作方进行深度的一个"}, {"start": 47.22, "end": 48.92, "label": "0:47–0:48", "text": "交流、面对面的交流"}, {"start": 49.76, "end": 61.7, "label": "0:49–1:01", "text": "我们认为这次活动会对更多的中英之间的企业对方更有兴趣、更"}, {"start": 61.7, "end": 62.8, "label": "1:01–1:02", "text": "有信心"}, {"start": 63.78, "end": 72.28, "label": "1:03–1:12", "text": "然后在这方面做出一些努力刚才其实也看到了英国的国会议员包括这个英"}, {"start": 72.28, "end": 81.5, "label": "1:12–1:21", "text": "国的企业家、包括40万家旗团等等他们的负责人都非常的热衷为这个中英"}, {"start": 81.5, "end": 90.78, "label": "1:21–1:30", "text": "之间的关系天专家网所以我认为这次活动会带来更多的体会好的,"}, {"start": 91.06, "end": 91.68, "label": "1:31–1:31", "text": "感谢您的问题"}, {"start": 92.76, "end": 98.62, "label": "1:32–1:38", "text": "下一个问题作为主办方本次分会选时在伦敦、主大中英科技合作"}, {"start": 98.62, "end": 100.46, "label": "1:38–1:40", "text": "和新规划有目标是什么?"}, {"start": 102.12, "end": 114.48, "label": "1:42–1:54", "text": "在伦敦是一个非常有影响力、有历史也有非常大的全球影响力的输流"}, {"start": 114.48, "end": 121.2, "label": "1:54–2:01", "text": "为什么说他是输流了因为在伦敦不只是辐射英国、他也辐射欧洲他"}, {"start": 121.2, "end": 132.56, "label": "2:01–2:12", "text": "也辐射英联邦的国家他也是一个开化的理念非常先进也比较灵活和开"}, {"start": 132.56, "end": 142.44, "label": "2:12–2:22", "text": "放的一个城市也是属于世界最为一居的城市之一就不能作为人、作为"}, {"start": 142.44, "end": 153.06, "label": "2:22–2:33", "text": "企业、作为技术在伦敦来应该会找到非常多的机会所以选择伦敦不只是"}, {"start": 153.06, "end": 162.22, "label": "2:33–2:42", "text": "因为我们有很多主办方在这边更是因为他本身就具备天然的促进国际"}, {"start": 162.22, "end": 163.24, "label": "2:42–2:43", "text": "合作的优势"}, {"start": 164.86, "end": 172.38, "label": "2:44–2:52", "text": "好的,谢谢你那么,再一个问题您觉得WFT作为国际中立科技联盟面对全"}, {"start": 172.38, "end": 178.3, "label": "2:52–2:58", "text": "球科技竞争和职将如何持续推动跨境技术协动与成果转化吗?"}, {"start": 179.08, "end": 185.22, "label": "2:59–3:05", "text": "我认为在新的技术的推动和浪潮下面"}, {"start": 187.54, "end": 195.28, "label": "3:07–3:15", "text": "应该要促进全球的合作不是某一个国家能够带领人类的进步还有人类"}, {"start": 195.28, "end": 202.66, "label": "3:15–3:22", "text": "文明的进步不能只是说我们技术进步我们需要的是更多的社会理念、价值"}, {"start": 202.66, "end": 211.76, "label": "3:22–3:31", "text": "观的进步所以说我认为WFT的话我们是希望技术与社会价值同步推"}, {"start": 211.76, "end": 215.16, "label": "3:31–3:35", "text": "动让大家因为技术而探讨起来"}, {"start": 215.98, "end": 223.78, "label": "3:35–3:43", "text": "因为社会而合作起来是共同建立共同的Consensors、共同的价值观"}, {"start": 224.98, "end": 232.84, "label": "3:44–3:52", "text": "非常感谢,说得很好那么,再一个问题分会提出中国科技企业从产品出口转向"}];
+
+// real render_spec facts: deliverable = source 179.34–224.98 (45.64s)
+const SEG = {start: 179.34, end: 224.98};
+const SRC_DURATION = 340;
+const OUT_DURATION = SEG.end - SEG.start;
+
+// the deliverable's text lane = the 6 sentence cues covered by the segment (real data)
+const CLIP_CUES = CUES.filter(c => c.start < SEG.end && c.end > SEG.start)
+  .map(c => ({...c, start: Math.max(c.start, SEG.start), end: Math.min(c.end, SEG.end)}));
+
+function fmt(s){ const m = Math.floor(s/60), ss = Math.floor(s%60); return m + ':' + String(ss).padStart(2,'0'); }
+
+/* ---------- asset card ---------- */
+const stripA = document.getElementById('stripA');
+const phA = document.getElementById('phA');
+const listA = document.getElementById('cuesA');
+const capA = document.getElementById('capA');
+const tcA = document.getElementById('tcA');
+const hoverA = document.getElementById('hoverlabA');
+
+let prevEnd = 0;
+const segsA = [], rowsA = [];
+CUES.forEach((c, i) => {
+  if (c.start > prevEnd) {
+    const g = document.createElement('div');
+    g.className = 'seg gap'; g.style.flexGrow = (c.start - prevEnd);
+    stripA.appendChild(g);
+  }
+  const el = document.createElement('div');
+  el.className = 'seg'; el.style.flexGrow = (c.end - c.start);
+  el.onmouseenter = () => { hoverA.textContent = c.label; hoverA.style.opacity = 1; };
+  el.onmouseleave = () => { hoverA.style.opacity = 0; };
+  el.onclick = () => activateA(i);
+  stripA.appendChild(el); segsA.push(el);
+  prevEnd = c.end;
+
+  const row = document.createElement('div');
+  row.className = 'cue';
+  row.innerHTML = `<span class="cue-t">${c.label}</span>${c.text}`;
+  row.onclick = () => activateA(i);
+  listA.appendChild(row); rowsA.push(row);
+});
+
+function activateA(i){
+  segsA.forEach(s => s.classList.remove('on'));
+  rowsA.forEach(r => r.classList.remove('active'));
+  segsA[i].classList.add('on'); rowsA[i].classList.add('active');
+  const c = CUES[i];
+  capA.textContent = c.text;
+  tcA.textContent = fmt(c.start) + ' / 5:40';
+  phA.style.left = (c.start / SRC_DURATION * 100) + '%';
+  rowsA[i].scrollIntoView({block: 'nearest'});
+}
+
+/* ---------- deliverable card ---------- */
+const laneSeg = document.getElementById('laneSeg');
+const laneCap = document.getElementById('laneCap');
+const capB = document.getElementById('capB');
+const tcB = document.getElementById('tcB');
+
+// video lane: one segment block (output 0..45.64 ↔ source 179.34..224.98)
+const segBlock = document.createElement('div');
+segBlock.className = 'block';
+segBlock.style.flex = '1';
+segBlock.textContent = '片段 1 · 源 2:59–3:45';
+laneSeg.appendChild(segBlock);
+
+// text lane: 6 sentence cue blocks, output-time proportional, gaps honest
+const cueBlocks = [];
+let prevClipEnd = 0;
+CLIP_CUES.forEach((c, i) => {
+  const os = c.start - SEG.start, oe = c.end - SEG.start;
+  if (os > prevClipEnd) {
+    const g = document.createElement('div');
+    g.className = 'gap-block';
+    g.style.width = ((os - prevClipEnd) / OUT_DURATION * 100) + '%';
+    laneCap.appendChild(g);
+  }
+  const b = document.createElement('div');
+  b.className = 'cue-block';
+  b.style.flexGrow = (oe - os);
+  b.textContent = c.text;
+  b.onclick = () => {
+    cueBlocks.forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    capB.textContent = c.text;
+    tcB.textContent = fmt(os) + ' / 0:46';
+  };
+  laneCap.appendChild(b); cueBlocks.push(b);
+  prevClipEnd = oe;
+});
+
+/* ---------- cross-highlight ---------- */
+segBlock.onmouseenter = () => {
+  CUES.forEach((c, i) => {
+    if (c.start < SEG.end && c.end > SEG.start) {
+      segsA[i].classList.add('xon');
+      rowsA[i].classList.add('xon');
+    }
+  });
+  const first = CUES.findIndex(c => c.start < SEG.end && c.end > SEG.start);
+  if (first >= 0) rowsA[first].scrollIntoView({block: 'nearest'});
+};
+segBlock.onmouseleave = () => {
+  segsA.forEach(s => s.classList.remove('xon'));
+  rowsA.forEach(r => r.classList.remove('xon'));
+};
+segBlock.onclick = () => {
+  capB.textContent = '片段 1（源 2:59–3:45）';
+  tcB.textContent = '0:00 / 0:46';
+};
+
+/* ---------- mini strip on the small canvas node ---------- */
+const mini = document.getElementById('miniStrip');
+prevEnd = 0;
+CUES.forEach((c) => {
+  if (c.start > prevEnd) {
+    const g = document.createElement('i');
+    g.className = 'gap'; g.style.flexGrow = (c.start - prevEnd);
+    mini.appendChild(g);
+  }
+  const el = document.createElement('i');
+  if (c.start < SEG.end && c.end > SEG.start) el.className = 'on';
+  el.style.flexGrow = (c.end - c.start);
+  mini.appendChild(el);
+  prevEnd = c.end;
+});
+</script>
+
+</body>
+</html>

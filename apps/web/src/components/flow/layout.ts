@@ -130,6 +130,36 @@ export const PRODUCT_TOOLBAR_PX = 44
  * the second version's arrival, one coherent reflow, never a quiet shift. */
 export const PRODUCT_PAGER_PX = 44
 
+/** 轨道栈 (ADR-113 §4 — the deliverable card's inspection anatomy): the
+ * tracked clip families carry two read-only lanes below the media — the
+ * VIDEO lane (kept segments as blocks on the output clock) and the TEXT
+ * lane (caption sentences, pauses as air). Both lanes are in the anatomy
+ * FROM BIRTH (draft renders muted empty rows — the waiting seat, FLORA
+ * 空态先例), so the video in-port's anchor never moves mid-life. ONE law,
+ * two mirrors — the server's frame reservation (graph_store._TRACK_STACK_PX
+ * / _TRACKED_CLIP_TOOLS) lands in the same batch; change one, change both. */
+export const TRACK_LABEL_PX = 16
+export const TRACK_LANE_PX = 24
+export const VIDEO_LANE_ROW_PX = TRACK_LABEL_PX + TRACK_LANE_PX
+export const TEXT_LANE_ROW_PX = TRACK_LABEL_PX + TRACK_LANE_PX
+/** 96 = 16 top breath + the video row + the text row; the text row sits
+ * flush on the card's bottom inner edge (the anchor formula's zero-pad
+ * premise — 锚点律). */
+export const TRACK_STACK_PX = 16 + VIDEO_LANE_ROW_PX + TEXT_LANE_ROW_PX
+
+/** The tracked clip families — tool-set parity with the server mirror
+ * (graph_store._TRACKED_CLIP_TOOLS). NEVER a kind+prototype proxy:
+ * reframe/music share video×editor without carrying the lanes. */
+export const TRACKED_CLIP_TOOLS: ReadonlySet<string> = new Set([
+  "select_clips",
+  "translate_clip",
+  "dub_clip",
+])
+/** Whether the node's card anatomy carries the track stack (ADR-113 §4). */
+export function hasTrackStack(node: FlowNode): boolean {
+  return node.kind === "video" && TRACKED_CLIP_TOOLS.has(String(node.spec?.tool ?? ""))
+}
+
 /** Declared handle geometry (2026-09-13 深夜, the draft-time missing-edge
  * 走查): the port law's numeric half, declared INTO the node payload so edge
  * anchors never wait for xyflow's DOM measurement. xyflow rebuilds
@@ -152,6 +182,14 @@ export const IN_MEDIA_PORT_BASE_PX = PRODUCT_TOOLBAR_PX + PROGRAM_REGION_PX + 16
 /** 角落栈基座 (无程序区媒体卡): every in-port parks at the card's
  * bottom-left corner — the same seat as the media card's text port (60). */
 export const IN_CORNER_PORT_BASE_PX = PRODUCT_TOOLBAR_PX + 16
+/** 锚点律 (ADR-113 §5): on a tracked card the video in-port leaves the
+ * corner stack and parks at the VIDEO lane's Y-center — the edge lands on
+ * the lane it feeds. Circle bottom = the factsbar band + the text lane row
+ * + half the video lane row − half the circle (PORT_PX/2); the text row's
+ * flush-bottom seat is what makes this a constant. Mirror of FlowNodeCard
+ * NodePorts' CSS seat (一条律两镜像 — change one, change both). */
+export const trackVideoPortBasePx = (pagerPx = 0): number =>
+  PRODUCT_TOOLBAR_PX + pagerPx + TEXT_LANE_ROW_PX + VIDEO_LANE_ROW_PX / 2 - PORT_PX / 2
 /** 词表 v3 (C5): the 全文卡 family (text/table) in-text port base = 16 —
  * its tail furniture lives INSIDE the card (the version pager never adds
  * an external band), so the pager offset applies only to the media-card
@@ -185,12 +223,19 @@ export function declaredHandles(
     const isMedia = t === "video" || t === "audio"
     // 角落栈 (无程序区媒体卡): one seat at the card's bottom-left, stacking
     // upward in port order — there is no prompt divider to anchor a second
-    // seat above. Generator cards keep the two-family law.
-    const base = unified
-      ? IN_CORNER_PORT_BASE_PX + pagerPx + corner++ * PORT_STEP_PX
-      : isMedia
-        ? IN_MEDIA_PORT_BASE_PX + pagerPx + media++ * PORT_STEP_PX
-        : inTextPortBasePx(node.kind, pagerPx) + text++ * PORT_STEP_PX
+    // seat above. Generator cards keep the two-family law. 锚点律
+    // (ADR-113 §5): a tracked card's video in-port leaves the corner stack
+    // for the video lane's Y-center — the edge lands on the lane it feeds —
+    // and does NOT consume a corner-stack slot (the remaining ports stack
+    // gapless).
+    const laneSeat = t === "video" && hasTrackStack(node)
+    const base = laneSeat
+      ? trackVideoPortBasePx(pagerPx)
+      : unified
+        ? IN_CORNER_PORT_BASE_PX + pagerPx + corner++ * PORT_STEP_PX
+        : isMedia
+          ? IN_MEDIA_PORT_BASE_PX + pagerPx + media++ * PORT_STEP_PX
+          : inTextPortBasePx(node.kind, pagerPx) + text++ * PORT_STEP_PX
     handles.push({
       id: `in:${t}`,
       type: "target",
@@ -315,16 +360,28 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
   // (API-path uploads) keep the conservative default reservation — the
   // media flexes smaller inside (contain slivers), never an overlap.
   if (node.asset) {
+    // ADR-113 §3: the transcript section rides the asset card for
+    // text-yielding types (media assets: below the media; paste/transcript:
+    // AS the body) — ONE law with the server mirror (graph_store._frame_of's
+    // asset branch).
+    const assetType = node.asset.type
+    const textBearingMedia = assetType === "video" || assetType === "audio"
+    if (assetType === "transcript" || assetType === "past_material") {
+      // Medialess text assets: the transcript section IS the body. Legacy
+      // frames (born pre-section at the 260 default) stay the cap — the
+      // body scrolls tighter inside (never outgrow the born frame).
+      return { width, height: Math.min(ASSET_TEXT_ONLY_H, frame?.h ?? ASSET_TEXT_ONLY_H) }
+    }
     const dimsH = assetDimsHeight(node.asset?.width, node.asset?.height)
     const videoH =
       dimsH != null
-        ? Math.min(dimsH, frame?.h ?? dimsH)
+        ? Math.min(dimsH, (frame?.h ?? dimsH) - (textBearingMedia ? TRANSCRIPT_SECTION_PX : 0))
         : VIDEO_ASSET_NODE_SIZE.height
     return {
       width,
       height: node.videoUrl
-        ? videoH
-        : PRODUCT_LABEL_PX + 190 + PRODUCT_TOOLBAR_PX,
+        ? videoH + (textBearingMedia ? TRANSCRIPT_SECTION_PX : 0)
+        : PRODUCT_LABEL_PX + 190 + PRODUCT_TOOLBAR_PX + (textBearingMedia ? TRANSCRIPT_SECTION_PX : 0),
     }
   }
   if (node.kind === "text" || node.kind === "table") {
@@ -332,13 +389,8 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
     // DOCUMENT_MAX_H — the body scrolls past the cap, so the render never
     // outgrows the reservation (new frames are born with exactly this via
     // the server's mirror math, so the two agree; a legacy frame may be
-    // taller than the cap — extra whitespace, never overlap). The text is
-    // the DISPLAY layer (v4.2 C4: the transcript's edited overlay when
-    // present, the source mirror otherwise).
-    const text =
-      (node.spec?.edited_text as string | undefined) ??
-      (node.spec?.text as string | undefined) ??
-      ""
+    // taller than the cap — extra whitespace, never overlap).
+    const text = (node.spec?.text as string | undefined) ?? ""
     // Floor + cap (DOCUMENT_MIN_H / MAX_H, one law with the server mirror):
     // the body scrolls past the cap; short texts fill the floor with air.
     return { width, height: Math.min(Math.max(documentTextHeight(text), DOCUMENT_MIN_H), DOCUMENT_MAX_H) }
@@ -353,13 +405,18 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
   // rows actually render (healthy = 0, the frame carries no reservation —
   // server mirror: _frame_of).
   const facetPx = programPx > 0 ? 0 : facetStripPx(node)
+  // 轨道栈 (ADR-113 §4): the tracked clip families carry the two inspection
+  // lanes in EVERY state (draft renders muted empty rows — the anchor seat
+  // never moves mid-life), so the reservation rides both the quiet-body and
+  // the product anatomy. Server mirror: graph_store._frame_of's clip branch.
+  const trackPx = hasTrackStack(node) ? TRACK_STACK_PX : 0
   if (outputs.length === 0) {
     // Draft / queued / running / quiet-done body (the dashed region reads
     // the estimate while unrun; a landed-empty node (research) reads its
     // summary in the same body).
     return {
       width,
-      height: PRODUCT_LABEL_PX + DRAFT_BODY_PX + programPx + facetPx + PRODUCT_TOOLBAR_PX,
+      height: PRODUCT_LABEL_PX + DRAFT_BODY_PX + programPx + facetPx + trackPx + PRODUCT_TOOLBAR_PX,
     }
   }
   // The version pager's stacked row (2026-09-13 用户拍板): one extra band
@@ -382,7 +439,7 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
   // mode), never an overlap. Frames born with dims are aspect-exact — the
   // flex is inert. The pager row rides ON TOP of the capped frame (frames
   // are born with zero outputs, so the reservation never carries it).
-  const clipH = clipNodeHeight(first.aspect ?? null) - (PROGRAM_REGION_PX - programPx) + facetPx
+  const clipH = clipNodeHeight(first.aspect ?? null) - (PROGRAM_REGION_PX - programPx) + facetPx + trackPx
   return { width, height: (frame?.h ? Math.min(clipH, frame.h) : clipH) + pagerPx }
 }
 
@@ -427,6 +484,16 @@ export const VIDEO_ASSET_NODE_SIZE = { width: 280, height: 228 }
 /** The reserved toolbar band under every media node (results canvas,
  * 2026-08-17; 做薄 2026-08-19): 8px gap + the 36px frosted bar. */
 export const ASSET_TOOLBAR_PX = 44
+
+/** The transcript section's reservation below the media (ADR-113 §3 —
+ * 素材卡解剖: media + time strip + cue flow): strip 28 + gap 8 + cue flow
+ * 200. ONE law with the server mirror (graph_store._TRANSCRIPT_SECTION_PX)
+ * and the card's flex seat (FlowNodeCard.TranscriptSection). */
+export const TRANSCRIPT_SECTION_PX = 236
+/** Medialess text assets (paste/transcript — the section IS the body):
+ * caption 26 + cue flow 200 + toolbar 44 + gap 8 (server mirror:
+ * graph_store._ASSET_TEXT_ONLY_H). */
+export const ASSET_TEXT_ONLY_H = 278
 
 // 间距常数 (C6, 2026-09-14 拍板 64/16/88; 2026-09-28 用户走查放宽主距
 // 64→124): one law with the server mirror graph_store._GAP_MAIN/_GAP_CROSS

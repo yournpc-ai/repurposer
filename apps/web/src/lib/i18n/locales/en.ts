@@ -1159,10 +1159,23 @@ const en = {
       zoomOut: "Zoom out",
       zoomFit: "Fit to window",
       zoomToPct: "Zoom to {{pct}}%",
-      // The transcript card's empty-truth face (2026-09-28 — born at upload;
-      // in-flight loading rides the shared wipe + edge packet, never a
-      // bespoke placeholder line).
+      // The asset card's transcript section (ADR-113 — the transcript is the
+      // asset's content layer, never a node): the empty-truth face (ASR
+      // completed with zero words), the truncation honesty marker, and the
+      // edit affordance (overlay-only — the source layer never moves, C4).
       transcriptEmpty: "Nothing transcribable was found in this material",
+      transcriptTruncated: "Only the first part of the timeline is shown",
+      editTranscript: "Edit transcript",
+      // The deliverable card's track stack (ADR-113 §4 — 成片轨道栈):
+      // read-only inspection lanes (the kept segments / the caption
+      // sentences, both on the output axis) + the modifier presence strip.
+      // The segment label's time range arrives preformatted from the server
+      // (the client never formats time).
+      videoTrack: "Video track",
+      textTrack: "Text track",
+      trackSegment: "Segment {{n}} · Source {{src}}",
+      modifierMusic: "Music",
+      modifierDub: "Dub",
       // The product dossier (2026-09-06, FLORA node-detail parity): a product
       // click summons it under the zoom pill — 出生证明 rows only, read-only
       // facts (修订只经 chat; FLORA's inline parameter editing stays unported).

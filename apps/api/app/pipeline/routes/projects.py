@@ -16,8 +16,6 @@ from app.models.schemas import (
     GenerateRequest,
     GenerateResponse,
     GraphEdgeResponse,
-    GraphEditTextRequest,
-    GraphEditTextResponse,
     GraphNodeResponse,
     GraphReviseRequest,
     GraphReviseResponse,
@@ -56,7 +54,6 @@ from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 from app.pipeline.product_graph import (
     EXPLORATION_NODE_TYPE,
     display_rank_projection,
-    effective_rank_edges,
     project_artifacts,
 )
 from app.pipeline.scope_classifier import (
@@ -65,6 +62,7 @@ from app.pipeline.scope_classifier import (
     classify_chain_against_history,
     load_historical_chains,
 )
+from app.pipeline.track_stack import build_track_stack
 from app.pipeline.outputs import (
     aggregate_step_cost,
     compose_spec_prompt,
@@ -266,6 +264,12 @@ async def get_project_results(
             if step_id in kind_by_step:
                 output.model_facts = model_facts_for(kind_by_step[step_id], output)
 
+    # The deliverable card's track-stack face (ADR-113 §4): derived at read
+    # time from render_spec (clip products only); a transient stamp, never
+    # persisted — same posture as the dossier facts above.
+    for output in outputs:
+        output.track_stack = build_track_stack(output.render_spec)
+
     # Asset processing statuses power the overlay's pre-run placeholder (the
     # transcribing/parsing phase before the generation run's steps exist).
     assets_result = await db.execute(
@@ -342,8 +346,9 @@ def _read_face(row_type: str, spec: dict, outputs: list) -> tuple[str, dict]:
     - 新行直传 (媒介五值 already carry their face + prototype from the stamp).
     - asset → its asset_type's medium × manual (the asset dossier still
       joins on the ORM type — the response carries it under `asset`).
-    - document (transcript / task_book / research_brief / role-less) →
-      text × manual (spec.role rides along as the internal birth certificate).
+    - document (task_book / research_brief / role-less — transcript retired,
+      ADR-113) → text × manual (spec.role rides along as the internal birth
+      certificate).
     - generator / processor / agent → by spec.tool: writers·research·revise
       → text×generator (writer 卡缺 spec.text 时从最新 joined output 的
       payload.content 合成 — the 全文卡 face); quotes/carousel →
@@ -419,30 +424,26 @@ async def get_project_graph(
         .scalars()
         .all()
     )
-    # ADR-097 §5 (批 C-2): lineage 真边进入读帧——它是 artifact 血缘的
-    # canonical 边 (出生即真实写入), A3-lite 读时合成退为 legacy 兼容投影
-    # (同一 triple 去重: 新图的血缘由真边说话, 旧图继续合成)。它仍永不入
-    # rank (product_graph._rank_inputs 的端口标记排除) 、永不进 RunOp 闭
-    # 包 (graph_store) — 零编排语义不变。
-    # task_book 读面过滤（Workspace 合同 v4.2 C1-b，2026-09-26 封板收口）:
-    # the plan document and every edge touching it are filtered at READ
-    # time — the canvas shows the pure material flow (源 → 文档 → 装配); the
-    # confirm beat's ONLY seat is the dock pill (ADR-070). Production
-    # stopped at the stamp (graph_fill de-stamp) and legacy rows are
-    # hard-deleted by migration; this filter is the read-tolerance for any
-    # pre-migration / replica-lag straggler.
-    hidden_book_ids = {
+    # task_book + transcript 读面过滤（Workspace 合同 v4.2 C1-b / ADR-113）:
+    # both document roles and every edge touching them are filtered at READ
+    # time — the canvas shows the pure material flow (源 → 装配); the plan's
+    # ONLY seat is the dock pill (ADR-070), and the transcript's ONE seat is
+    # the asset row (its content layer, never a node). Production stopped at
+    # the stamps and legacy rows are hard-deleted by migration; this filter
+    # is the read-tolerance for any pre-migration / replica-lag straggler.
+    hidden_doc_ids = {
         str(n.id)
         for n in nodes
-        if n.type == "document" and (n.spec or {}).get("role") == "task_book"
+        if n.type == "document"
+        and (n.spec or {}).get("role") in ("task_book", "transcript")
     }
-    if hidden_book_ids:
-        nodes = [n for n in nodes if str(n.id) not in hidden_book_ids]
+    if hidden_doc_ids:
+        nodes = [n for n in nodes if str(n.id) not in hidden_doc_ids]
         edges = [
             e
             for e in edges
-            if str(e.from_node) not in hidden_book_ids
-            and str(e.to_node) not in hidden_book_ids
+            if str(e.from_node) not in hidden_doc_ids
+            and str(e.to_node) not in hidden_doc_ids
         ]
     # ADR-097 §3: artifact 投影的源快照——B4-lite 之前 (隐藏 modifier 退出
     # 默认投影后仍以 facet 摘要出现在交付物卡上; task_book / exploration
@@ -481,19 +482,11 @@ async def get_project_graph(
             if str(e.from_node) not in hidden_modifier_ids
             and str(e.to_node) not in hidden_modifier_ids
         ]
-    # A3-lite legacy 兼容投影（ADR-097 §9——canonical 真边出生后，本合成只
-    # 服务无 lineage 真边的存量行）的唯一座 = product_graph.effective_rank_edges
-    # （ADR-098 §1 — Effective Product Graph 唯一拓扑层）: the material-flow
-    # reading 源 → 文档 → 装配 — the transcript document fed the consumers'
-    # text (ASR words drive selection + captions + the writers' source text),
-    # but the legacy stamp left it a LEAF (consumers wired from the asset =
-    # "the execution truth"). Synthesized rows stay dict-born read-time data
-    # (zero graph writes — 合成边永不落库); the write-time settle eats the
-    # SAME layer, so birth frames and this projection share one graph. New
-    # chains carry the canonical birth edge (graph_fill stamp); the function's
-    # rank-legal triple dedup makes the two sources never double-render one
-    # leg (lineage port-marked edges never occupy a triple).
-    edges = effective_rank_edges(nodes, edges)
+    # ADR-113: the read face projects the PERSISTED edge set directly — the
+    # transcript→consumer synthesis layer is retired with the transcript
+    # node (assets feed consumers' text legs as first-class stamped edges;
+    # the write-time settle eats the same persisted set, so birth frames and
+    # this projection share one graph).
     if not nodes:
         # 「lifecycle 键恒在」不变量 (Phase 3 Batch C 拍板 A): the zero-node
         # frame carries the same stamp (an empty project's blocked vs
@@ -509,6 +502,11 @@ async def get_project_graph(
     # 先于 rank: facet 退出后 Product DAG 收缩, rank 在收缩后的帧上计算
     # (display x = rank × PITCH 是客户端的显示权威, 空列永不留洞)。
     visible = await list_visible_outputs(db, project_id)
+    # The deliverable card's track-stack face (ADR-113 §4): derived at read
+    # time from render_spec — a transient stamp on the row, so every join
+    # below (node outputs / artifact members) carries it.
+    for output in visible:
+        output.track_stack = build_track_stack(output.render_spec)
     outputs_by_id = {str(o.id): o for o in visible}
 
     # The artifact projection's output facts — live rows are `visible`
@@ -589,22 +587,15 @@ async def get_project_graph(
         if exiting:
             nodes = [n for n in nodes if str(n.id) not in exiting]
 
-            def _eget(e: Any, k: str) -> Any:
-                # A3-lite 合成行是 dict, ORM 行是属性对象 — 一读两用。
-                return e.get(k) if isinstance(e, dict) else getattr(e, k)
-
             reanchored: list[Any] = []
-            # rank 输入边集（铁律② 镜像 — product_graph.effective_rank_edges
-            # 同律）: lineage 端口标记边永不占去重 triple——否则盖章链的
-            # deliverable 被自己的血缘边挤掉合成腿, 深度退回 1 (画布同列
-            # 重叠)。载荷边集 (= reanchored) 仍做 triple 去重且血缘真边
-            # 优先说话 (批 C-2); rank 边集只去组内边、不去 triple — 重复
-            # 父边对 longest-path 无害, 合成腿必须活着进 rank。
+            # 重锚投影的 triple 去重: lineage 端口标记边已随转写节点退役
+            # (ADR-113), 持久边集即全部输入 (读时合成层同批退役)。重锚出的
+            # 新行以 dict 出生 (A3-lite 合成行的先例——读时数据, 永不落库)。
             rank_edges: list[Any] = []
             seen_triples: set[tuple[str, str, str]] = set()
             for e in edges:
-                src, dst = str(_eget(e, "from_node")), str(_eget(e, "to_node"))
-                etype = str(_eget(e, "edge_type"))
+                src, dst = str(e.from_node), str(e.to_node)
+                etype = str(e.edge_type)
                 new_src = deliverable_of.get(src, src) if src in exiting else src
                 new_dst = deliverable_of.get(dst, dst) if dst in exiting else dst
                 if new_src == new_dst:
@@ -615,9 +606,9 @@ async def get_project_graph(
                     landed_edge = {
                         "id": uuid4(),
                         "from_node": new_src,
-                        "from_port": str(_eget(e, "from_port") or f"out:{etype}"),
+                        "from_port": str(e.from_port or f"out:{etype}"),
                         "to_node": new_dst,
-                        "to_port": str(_eget(e, "to_port") or f"in:{etype}"),
+                        "to_port": str(e.to_port or f"in:{etype}"),
                         "edge_type": etype,
                     }
                 rank_edges.append(landed_edge)
@@ -633,19 +624,16 @@ async def get_project_graph(
     # where both inputs are the final read frame: nodes carry STORAGE words
     # (the predicate's design input layer — legacy materialize rows ride
     # generator/processor/agent here, so the read-face flip of F1 never
-    # happens) and edges are the EFFECTIVE set (persisted-minus-removed plus
-    # the A3-lite synthetic text edges — the L5 root fix: synthetic
-    # material-flow edges are legitimate rank input; ADR-098 §1: read face
-    # and write-time settle eat the same layer).
+    # happens) and edges are the persisted set minus the read-filtered /
+    # facet-reanchored rows above (ADR-113: 读面与写时定居同吃持久边集)。
     # C6 岛化 (v4.2): the island registry widens a band's rank slots by its
     # frozen corridor — the read-time transform keeps every born frame's
-    # display x stable (append-only 保序律 in rank space). ADR-098 §5: a
-    # LEGACY MIXED island (members spanning effective ranks — born pre-B1
-    # under the write-time topology) is adjudicated per cohort; a
-    # single-member cohort's corridor is fully dead — its members ride
-    # dead_corridor and their spec.island stamp is withheld below (zero
-    # migration; the stored frame y stays, the client falls back to the
-    # plain column law).
+    # display x stable (append-only 保序律 in rank space). A LEGACY MIXED
+    # island (members spanning ranks — born under an older topology) is
+    # adjudicated per cohort; a single-member cohort's corridor is fully
+    # dead — its members ride dead_corridor and their spec.island stamp is
+    # withheld below (zero migration; the stored frame y stays, the client
+    # falls back to the plain column law).
     island_rows = list(
         (
             await db.execute(
@@ -890,50 +878,6 @@ async def revise_graph_node(
     await db.commit()
     await db.refresh(run)
     return GraphReviseResponse(run_id=run.id, status=run.status)
-
-
-@router.post(
-    "/{project_id}/graph/edit-text",
-    response_model=GraphEditTextResponse,
-)
-async def edit_graph_node_text(
-    project_id: UUID,
-    request: GraphEditTextRequest,
-    db: DBDep,
-    current_user: User = Depends(get_current_user_required),
-) -> GraphEditTextResponse:
-    """The transcript card's in-place direct edit (Workspace 合同 v4.2 C4,
-    卡内就地编辑): the deterministic gesture channel — ops are constructed
-    by CODE (one ``edit_text`` op carrying the user's verbatim text), land
-    through the graph's ONLY write door, and nothing runs (a manual
-    document's text is not executable work — zero credits, zero run, the
-    card face is the whole feedback). C4 invariants live in the op: the
-    source layer / word evidence / ranges are structurally untouched; the
-    displaced display layer appends to the node's version memory."""
-    await get_project_for_user(db, project_id, UUID(str(current_user.id)))
-    node = await db.get(GraphNode, request.node_id)
-    if node is None or UUID(str(node.project_id)) != project_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Node not found")
-
-    from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
-
-    try:
-        await apply_wiring_ops(
-            db,
-            project_id,
-            [{"op": "edit_text", "node": str(request.node_id), "text": request.text}],
-        )
-    except WiringRejected as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        ) from exc
-    await db.commit()
-    await db.refresh(node)
-    spec = node.spec or {}
-    return GraphEditTextResponse(
-        node_id=node.id,
-        text=spec.get("edited_text") if spec.get("edited_text") is not None else None,
-    )
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)

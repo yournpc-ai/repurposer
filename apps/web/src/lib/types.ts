@@ -199,8 +199,45 @@ export interface Output {
    * a selector); stamped only by /results. The lightbox info column is the
    * display surface — the node caption never carries a model name. */
   model_facts?: ModelFact[] | null
+  /** The deliverable card's track-stack inspection face (ADR-113 §4) —
+   * server-derived from render_spec at read time (labels arrive
+   * preformatted; the client never formats time); null on non-clip
+   * products. Stamped by /results AND /graph (both product-join seats). */
+  track_stack?: TrackStack | null
   created_at: string
   updated_at: string | null
+}
+
+/** One kept segment of a clip product on the OUTPUT timeline (ADR-113 §4):
+ * its output span + its SOURCE span + the source asset's id (the
+ * cross-highlight's address). */
+export interface TrackStackVideoBlock {
+  out_start: number
+  out_end: number
+  src_start: number
+  src_end: number
+  asset_id: string | null
+  /** Preformatted `m:ss–m:ss` source range (server-formatted). */
+  src_label: string
+}
+
+/** One caption sentence on the OUTPUT timeline — text + preformatted
+ * `m:ss–m:ss` label. */
+export interface TrackStackTextBlock {
+  out_start: number
+  out_end: number
+  text: string
+  label: string
+}
+
+/** The track-stack read-face projection (ADR-113 §4): video lane (kept
+ * segments concatenated on the output clock) + text lane (caption
+ * sentences per segment, a cut = a hard break) + modifier presence.
+ * Read-only — never an orchestration surface (L3). */
+export interface TrackStack {
+  video_lane: TrackStackVideoBlock[]
+  text_lane: TrackStackTextBlock[]
+  modifiers: Record<string, boolean>
 }
 
 /** One model/provider fact about a product (ADR-051 H): `modality` is the
@@ -306,6 +343,13 @@ export interface GraphNodeAsset {
   file_url: string | null
   stream_url?: string | null
   duration_seconds?: number | null
+  /** The owning project — the transcript endpoint's path seat (ADR-113). */
+  project_id?: string | null
+  /** Processing truth (ADR-113): the transcript section gates its face on
+   * it — mid-processing never shows the empty face (that would lie), and a
+   * terminal flip invalidates the section's cached read. */
+  processing_status?: string | null
+  processing_stage?: string | null
   /** The media's real pixels (meta.width/height — probed at upload /
    * processing); the canvas's aspect truth for the asset node's shape. */
   width?: number | null
@@ -326,16 +370,6 @@ export interface GraphNode {
     params?: Record<string, unknown> | null
     role?: string | null
     text?: string | null
-    /** The transcript's user-edited presentation layer (Workspace 合同 v4.2
-     * C4 — Transcript 双层): when present, the card displays THIS, never
-     * the source mirror in ``text``. Presentation only — the source
-     * evidence / word timestamps / ranges never move. */
-    edited_text?: string | null
-    /** The transcript's structured cue rows (the hover-timeline display
-     * face): [{start, end, text, label}] — label preformatted server-side
-     * (m:ss–m:ss; the client never formats time). Absent on word-less or
-     * legacy rows → the plain text face. */
-    cues?: { start?: number; end?: number; text?: string; label?: string }[] | null
     /** 岛内格镜像 (Workspace 合同 v4.2 C6): present on island members — the
      * island's frozen reserved bottom, the projection's compression floor. */
     island?: { reserved_bottom?: number }
