@@ -2,6 +2,8 @@
 
     uv run python scripts/check_gates.py
 
+Gate numbers are stable — a retired gate leaves a hole (ADR-114).
+
 Gate 0 (boot smoke): ``import app.main`` must succeed in a clean subprocess.
 A boot-level break (e.g. a module-scope forward reference) otherwise kills
 the pytest suite at COLLECTION — every test red with zero signal, and the
@@ -16,11 +18,6 @@ means no LLM at all. The deterministic package set is registry-derived
 package narrows the scan to the deterministic tool's own module (N-56 —
 the law binds the tool, not its neighbor).
 
-Gate 2 (P2 no-parallel-maps rule): every "type → X" fact derives from the
-node classes / the tool registry. The retired parallel-map identifiers
-(``_OUTPUT_TO_NODE_KIND`` and friends) and the retired ``pipeline/registry``
-module must never reappear under ``app/``.
-
 Gate 3 (P3 no-blind-retries rule): every retry carries structured feedback
 and runs exactly one round (the Agent funnel's repair); the retired
 blind-retry identifiers (``auto_retry`` / ``_with_retry``) must never
@@ -28,15 +25,12 @@ reappear under ``app/``. The client layer's tenacity (transport) and the
 graph's step retry budget (``NodeBase.retries``) are not retries in this
 sense.
 
-Gate 4 (naming batch v2 retired identifiers): the renames of N-40/N-41/N-42
-leave no shim — the retired identifiers (``SkillEntry`` / ``SkillRejected``
-/ ``dispatchable_skills``; the retired node KIND ``checkpoint`` as a
-kind-string; imports of ``app.clients`` or ``app.agents.roster``) must
-never reappear under ``app/``, and ``agents/roster.py`` must never come
-back as a file. The WORD ``checkpoint`` is no longer banned bare: ADR-085
-re-claimed it for the Assistant Conversation channel. ``app.skills`` is NOT
-banned — it is the instruction-pack home (N-42 指令包, industry meaning);
-``roster`` as plain prose (the AGENTS roster) stays legitimate.
+Gate 4 (retired flow-control node kind): the retired node KIND
+``checkpoint`` as a kind-string (``kind="checkpoint"`` /
+``kind == 'checkpoint'``) must never reappear under ``app/``. The WORD
+``checkpoint`` is current vocabulary — ADR-085 re-claimed it for the
+Assistant Conversation channel (``on_checkpoint`` hook /
+``assistant.checkpoint`` SSE event / ``intent.type=checkpoint`` row).
 
 Gate 5 (ADR-087 dependency direction, Phase 2.5 — the three-way split made
 grep-provable):
@@ -106,44 +100,18 @@ BANNED_CLIENT_LIFECYCLE_LOCAL = re.compile(
 
 BANNED_LLM_IMPORT = re.compile(r"^\s*(from|import)\s+app\.(agents|clients|providers\.llm)\b")
 
-# P2 retired identifiers: the parallel maps these named now derive from
-# ``pipeline/graph.py`` (NODE_KINDS) or ``app/tools/__init__.py``
-# (TOOL_REGISTRY). A hit means someone reintroduced a second source.
-BANNED_PARALLEL_MAPS = re.compile(
-    r"_OUTPUT_TO_NODE_KIND"
-    r"|_SKILL_TO_OUTPUT"
-    r"|_TOOL_TO_OUTPUT"  # the new-vocabulary twin — same reintroduction
-    r"|_SLOT_ORDER"
-    r"|_SLOT_TYPE_LABEL"
-    r"|\bKNOWN_OUTPUTS\b"
-    r"|\bSLOT_COUNT_LIMITS\b"
-    r"|\bSLOT_DEFAULT_COUNT\b"
-    r"|\bSTEP_RUNNERS\b"
-    r"|\bretries_for_node_kind\b"
-    r"|app\.pipeline\.registry"
-)
-
 # P3 retired identifiers: the blind retries these named were replaced by the
 # Agent funnel's one bounded repair round (structured echo). A hit means
 # someone reintroduced a retry without feedback.
 BANNED_BLIND_RETRY = re.compile(r"auto_retry|_with_retry")
 
-# Naming batch v2 retired identifiers (N-40/N-41/N-42): the renames left no
-# shim, so a hit is always a reintroduction. The N-40 half is scoped to the
-# retired NODE KIND (``kind="checkpoint"``): ADR-085 (2026-09-17) re-claimed
-# the WORD ``checkpoint`` for the Assistant Conversation channel
-# (``on_checkpoint`` hook / ``assistant.checkpoint`` SSE event /
-# ``intent.type=checkpoint`` row) — that vocabulary is current and legal;
-# what must never come back is the flow-control node kind. Bare-word
-# matching was retired when the word gained a lawful sense (Phase 2.5
-# adjudication: the ban outlived its contract).
-BANNED_RETIRED_IDENTIFIERS = re.compile(
-    r"\bSkillEntry\b"
-    r"|\bSkillRejected\b"
-    r"|\bdispatchable_skills\b"
-    r"|kind\s*(?:=|==)\s*[\"']checkpoint[\"']"
-    r"|^\s*(from|import)\s+app\.clients\b"
-    r"|^\s*(from|import)\s+app\.agents\.roster\b",
+# The retired flow-control node KIND (naming batch v2, N-40): ADR-085
+# (2026-09-17) re-claimed the WORD ``checkpoint`` for the Assistant
+# Conversation channel (``on_checkpoint`` hook / ``assistant.checkpoint``
+# SSE event / ``intent.type=checkpoint`` row) — that vocabulary is current
+# and legal; what must never come back is the node kind as a kind-string.
+BANNED_CHECKPOINT_KIND = re.compile(
+    r"kind\s*(?:=|==)\s*[\"']checkpoint[\"']",
     re.IGNORECASE,
 )
 
@@ -204,16 +172,6 @@ def check_purity() -> list[str]:
     return violations
 
 
-def check_parallel_maps() -> list[str]:
-    violations: list[str] = []
-    for path in sorted(APP_DIR.rglob("*.py")):
-        for lineno, line in enumerate(path.read_text().splitlines(), start=1):
-            if BANNED_PARALLEL_MAPS.search(line):
-                rel = path.relative_to(API_ROOT)
-                violations.append(f"{rel}:{lineno}: {line.strip()}")
-    return violations
-
-
 def check_blind_retries() -> list[str]:
     violations: list[str] = []
     for path in sorted(APP_DIR.rglob("*.py")):
@@ -224,14 +182,11 @@ def check_blind_retries() -> list[str]:
     return violations
 
 
-def check_retired_identifiers() -> list[str]:
+def check_checkpoint_node_kind() -> list[str]:
     violations: list[str] = []
-    roster_py = APP_DIR / "agents" / "roster.py"
-    if roster_py.exists():
-        violations.append("app/agents/roster.py: file resurrected (N-41: it is registry.py)")
     for path in sorted(APP_DIR.rglob("*.py")):
         for lineno, line in enumerate(path.read_text().splitlines(), start=1):
-            if BANNED_RETIRED_IDENTIFIERS.search(line):
+            if BANNED_CHECKPOINT_KIND.search(line):
                 rel = path.relative_to(API_ROOT)
                 violations.append(f"{rel}:{lineno}: {line.strip()}")
     return violations
@@ -306,20 +261,15 @@ def main() -> int:
         print("purity gate FAILED (N-29: providers/ never imports the decision layer; deterministic packages never touch the LLM seam):")
         for failure in failures:
             print(f"  {failure}")
-    parallel = check_parallel_maps()
-    if parallel:
-        print("parallel-map gate FAILED (P2: derive from NODE_KINDS / TOOL_REGISTRY):")
-        for failure in parallel:
-            print(f"  {failure}")
     blind = check_blind_retries()
     if blind:
         print("blind-retry gate FAILED (P3: one bounded repair round, with feedback):")
         for failure in blind:
             print(f"  {failure}")
-    retired = check_retired_identifiers()
-    if retired:
-        print("retired-identifier gate FAILED (naming batch v2: no shim, no reintroduction):")
-        for failure in retired:
+    checkpoint = check_checkpoint_node_kind()
+    if checkpoint:
+        print("checkpoint-kind gate FAILED (the retired flow-control node kind must never reappear; the WORD checkpoint belongs to the Assistant Conversation channel — ADR-085):")
+        for failure in checkpoint:
             print(f"  {failure}")
     kernel = check_kernel_boundary()
     if kernel:
@@ -336,9 +286,9 @@ def main() -> int:
         print("client-lifecycle gate FAILED (固定不等式: lifecycle is server-named — read the results/graph `lifecycle.*` stamp; never infer readiness from artifact/run/graph existence):")
         for failure in client:
             print(f"  {failure}")
-    if failures or parallel or blind or retired or kernel or lifecycle or client:
+    if failures or blind or checkpoint or kernel or lifecycle or client:
         return 1
-    print("check_gates: OK (gate 0 boot smoke, providers/+deterministic purity, no parallel maps, no blind retries, no retired identifiers, ADR-087 kernel/lifecycle/client boundaries)")
+    print("check_gates: OK (gate 0 boot smoke, providers/+deterministic purity, no blind retries, no checkpoint-kind resurrection, ADR-087 kernel/lifecycle/client boundaries)")
     return 0
 
 
