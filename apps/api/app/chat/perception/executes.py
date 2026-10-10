@@ -50,6 +50,7 @@ from app.tools.clips.transcript import (
     speaker_at,
     words_in_range,
 )
+from app.pipeline.assets import asset_text_content
 from app.pipeline.exploration_store import (
     KIND_CANDIDATE_SET,
     KIND_CONTENT_PLAN,
@@ -1082,7 +1083,7 @@ async def get_asset(db: AsyncSession, project: Project, params: GetAssetParams) 
         lines.append(f"- Name: {name}")
     if asset.duration_seconds:
         lines.append(f"- Duration: {asset.duration_seconds}s")
-    excerpt = (asset.transcript or asset.extracted_text or "").strip()
+    excerpt = asset_text_content(asset).strip()
     if excerpt:
         lines.append(f"- Opening text: {excerpt[:300]}")
     elif asset.processing_status == AssetStatus.FAILED:

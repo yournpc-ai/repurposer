@@ -113,13 +113,11 @@ CHAT_TOOLS = [
         name="edit_graph",
         description=(
             "Revise the project's persistent graph (add_node / connect / "
-            "edit_prompt / edit_text / delete_node / run). A revision inside "
+            "edit_prompt / delete_node / run). A revision inside "
             "the already-confirmed work re-fills the affected subgraph "
             "directly; one that adds new paid work docks for the user's "
-            "confirmation instead — it does not run. edit_text rewrites a "
-            "transcript document's user-visible text layer only — the source "
-            "evidence never changes. Speak the summary of the revision "
-            "BEFORE calling this."
+            "confirmation instead — it does not run. Speak the summary of "
+            "the revision BEFORE calling this."
         ),
         params_model=EditGraphArgs,
     ),

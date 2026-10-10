@@ -26,6 +26,15 @@ def _material_title(text: str) -> str:
     return (first_line[:40] + "…") if len(first_line) > 40 else (first_line or "transcript")
 
 
+def asset_text_content(asset: Asset) -> str:
+    """The asset's text content — ONE seat (ADR-113 §1): ``transcript`` (ASR
+    yield) before ``extracted_text`` (extraction/paste yield). Every reader
+    (processing chain / prompt assembly / display derivation) funnels
+    through here; the two opposite fallback orders that grew across the
+    codebase are retired."""
+    return (asset.transcript or asset.extracted_text) or ""
+
+
 async def create_transcript_asset_from_text(
     db: AsyncSession,
     project_id: UUID,
@@ -61,12 +70,5 @@ async def create_transcript_asset_from_text(
     from app.pipeline.graph_fill import stamp_asset_node  # deferred: import cycle
 
     await stamp_asset_node(db, project_id, asset)
-    # 转写卡上传即出生 (Phase 1): this path carries its text from birth, so
-    # the transcript document is born done alongside the asset node.
-    from app.pipeline.graph_fill import (  # deferred: import cycle
-        stamp_transcript_node,
-    )
-
-    await stamp_transcript_node(db, project_id, asset)
     await db.flush()
     return asset

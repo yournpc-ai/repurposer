@@ -172,6 +172,10 @@ class Asset(Base):
     title = Column(String(255), nullable=True)
     transcript = Column(Text, nullable=True)
     extracted_text = Column(Text, nullable=True)
+    # User edit overlay (ADR-113 §1 + C4): the card writes HERE only — the
+    # source layer (transcript/extracted_text) and meta.words stay untouched,
+    # so an edit never reverse-computes timecodes. NULL = source shown as-is.
+    edited_transcript = Column(Text, nullable=True)
     slide_pages = Column(JSON, nullable=True)
     processing_status = Column(
         Enum(AssetStatus), nullable=False, default=AssetStatus.PENDING

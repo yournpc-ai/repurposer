@@ -22,6 +22,7 @@ from typing import Any
 import structlog
 
 from app.models.schemas import AssetType, MaterialUnderstanding
+from app.pipeline.assets import asset_text_content
 
 logger = structlog.get_logger()
 
@@ -270,14 +271,15 @@ def _block_label(asset) -> str:
 def build_source_blocks(assets: list) -> list[dict[str, Any]]:
     """Per-asset prompt blocks: anchored cue lines when the asset carries an
     ASR word axis (video/audio), the raw text otherwise. Aligned with the
-    digest texts (same ``extracted_text or transcript`` selection rule)."""
+    digest texts (both read the ONE text seat, ``asset_text_content`` —
+    ADR-113)."""
     # Deferred: the tools door (app.tools.__init__) imports node_runners,
     # which imports this module — a top-level edge would cycle.
     from app.tools.clips.transcript import build_anchored_transcript
 
     blocks: list[dict[str, Any]] = []
     for asset in assets:
-        text = (asset.extracted_text or asset.transcript) or ""
+        text = asset_text_content(asset)
         if not text.strip():
             continue
         words = (asset.meta or {}).get("words") or []

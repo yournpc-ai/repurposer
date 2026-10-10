@@ -1099,9 +1099,22 @@ const zh: Resources = {
       zoomOut: "缩小",
       zoomFit: "适应窗口",
       zoomToPct: "缩放至 {{pct}}%",
-      // 转写卡空稿诚实面 (2026-09-28——上传即出生卡座，ASR 零词时说实话；
-      // 处理中的 loading 走公用擦除+边 packet，不自养占位文案)。
+      // 素材卡转写区（ADR-113——转写 = 素材的内容层，永不成节点）：空稿诚实面
+      // （ASR 零词）、截断诚实标记、编辑入口（只写覆盖层，源层永不动，C4）。
       transcriptEmpty: "这段素材没有读到可转写的内容",
+      transcriptTruncated: "时间轴过长，只显示了前面部分",
+      editTranscript: "编辑转写稿",
+      // 成片卡轨道栈（ADR-113 §4）：只读检视轨（视频片段块 / 字幕句块，都在
+      // 产出轴上）+ 修饰轨存在条。片段标签的时间区间由服务端预格式化
+      // （前端永不自建时间格式化）。
+      videoTrack: "视频轨",
+      textTrack: "文字轨",
+      trackSegment: "片段 {{n}} · 源 {{src}}",
+      // L1 hover chip 两行（ADR-115 信息秩三分）：块名 + 产出/源两轴预格式化区间。
+      trackSegmentTitle: "片段 {{n}}",
+      trackSegmentOut: "产出 {{out}} · 源 {{src}}",
+      modifierMusic: "音乐",
+      modifierDub: "配音",
       // 产物档案面板（2026-09-06，FLORA 节点详情对齐）：点产物节点召唤，
       // 挂在缩放钮下方——只摆出生证明，纯只读事实（修订只经 chat；
       // FLORA 的内联参数编辑有意不搬）。

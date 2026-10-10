@@ -41,6 +41,7 @@ from app.models.tables import (
     WorkflowRun,
     WorkflowStep,
 )
+from app.pipeline.assets import asset_text_content
 from app.pipeline.beat_map import (
     build_source_blocks,
     image_refs_from_assets,
@@ -336,7 +337,7 @@ def _understandable(assets: list) -> bool:
     """The warm's digestibility gate — at least one asset carries text or
     media worth understanding. Shared with the lazy self-heal guard so it
     never fires a warm that would no-op on the same fact."""
-    asset_texts = [t for a in assets if (t := (a.extracted_text or a.transcript))]
+    asset_texts = [t for a in assets if (t := asset_text_content(a))]
     has_media = any(
         (a.type == AssetType.IMAGE and a.file_url)
         or (a.type == AssetType.SLIDES and a.slide_pages)

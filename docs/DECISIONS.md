@@ -2765,3 +2765,41 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 **Consequences**: 黑边根因座位（facet 预留双路径分叉）整体消失而非修补；计划参数从此外界垃圾不进 spec/prompt/产物列；单条交付物卡面回到「caption + 媒体 + factsbar」的干净三件套。代价：健康工序在卡面零痕迹（工序自证归 chat 逐步叙事与 stepper）；存量 spec.prompt 里的历史 "titles in NULL" 不迁移重写（读面守卫兜住，快照不可篡改律不动）。
 
 **Related**: ADR-097（artifact 投影四字段/两层门不动——本条只退休卡面 strip 的健康行）/ ADR-051 H（模型事实详情面不动）/ ADR-076（prototype 门控成为 factsbar 分面谓词）/ ADR-109 §5（读容忍扩展到参数值级）/ 打字机律牙①（同族方言吸收）
+
+## ADR-113: Transcript 折叠——素材卡内容层 + 成片轨道栈 + 存储唯一座位
+
+**Status**: Decided（2026-10-09 用户拍板；形态原型 = `scratch/transcript-fold-proposal.html` v1~v5，基于项目 1aeb9787 真实数据）；施工合同 = `docs/tasks/transcript-fold.md`
+
+**Context**: 取证四连（项目 1aeb9787 真实图：4 行 3 卡 4 边）：① 同一转写稿四个存储座位——`assets.transcript` + `assets.meta.words`（真相/证据）+ `graph_nodes.spec.text` + `spec.cues`（落库展示副本），同步靠「sync 路过即愈合」，且 `spec.cues` 落库后**全库零消费者**（search_transcript / select_clips / dub 全部绕过节点直读 asset 行并各自重跑 `group_cues`——一派生四次 + 存一份没人读的）；② 转写节点是**纯展示叶子**——`stamp_transcript_node` docstring 自证「A LEAF face」，两条 text 边（asset→transcript / transcript→clips）皆为装饰，却占画布整列（708px 死列事故 ADR-098 的当事列）；③ 编辑是装饰性的——`edit_text` 只写 `spec.edited_text` overlay，执行真相永不读它，且 overlay 与未编辑的 cue 时间戳同卡自相矛盾；④ hover 时间戳是**死数字**——互指（点句子跳画面）在跨卡画布上结构性不可能。用户判词：「视频和 transcript 是一个 object、全局唯一共享值」；「卡即工作面」（FLORA 剪辑节点截图对照）；「成片 = 完整视频 + 视频轨 + 文字轨」；「锚点与所喂轨道 Y-center 对齐」。
+
+**Decision**:
+
+1. **存储唯一座位 = asset 行**：`assets.transcript` / `extracted_text`（真相）+ `assets.meta.words`（证据）+ 新增列 `assets.edited_transcript`（用户编辑 overlay，从 graph spec 搬家；C4 地板不动——永不反算时间码、证据与区间永不被编辑触碰）。graph spec 的 `text` / `cues` / `cued_text` 三件套随转写节点退役拆除。cue **永不落库**：一切展示面（素材卡时间条 / 成片文字轨 / chat search）从 words 经 `group_cues` 读面派生，label 服务端预格式化一法一座（ADR-112 继承）。`transcript ?? extracted_text` 的两种相反 fallback 顺序收编为同一座。
+2. **转写节点退役**：`stamp_transcript_node` 停生（出生两座废除）；存量 `document/transcript` 行读面隐藏（展示职责由素材卡继承；删资产级联同律，历史行不留痕）。`edit_text` wiring op 的 transcript 门分支退役——编辑写口 = 资产级端点（写 `assets.edited_transcript`，零 run 零积分语义不变）；进不进 Operation Model 账挂账待拍。
+3. **素材卡解剖（卡即工作面）**：媒体区（click-to-play poster）+ **时间条**（cue 块宽 ∝ 时长、停顿诚实留白、播放头）+ 纵向 cue 流（hover 显时 chip——ADR-112 继承；定高卡内滚动，560 封顶同 DocumentCard 全文卡律）+ factsbar。点 cue / 条块 = **同卡 seek**（「文本驱动 seek」交互族入册）。paste / transcript 型资产 = 同组件去掉媒体区与时间条（无词轴即无时间面；估算词轴补强挂账）。转写处理态面（shimmer / 失败红行）收回素材卡承担。
+4. **成片卡轨道栈（检视，不是编排）**：完整视频（顶）+ **视频轨**（片段块，`render_spec.segments` 读面，源时间映射）+ **文字轨**（字幕句块，`caption_track` 经 `group_cues` 句级——词级是渲染细节不上卡）常驻；修饰轨（音乐 / 配音 / filler 划掉行）有内容才出现。轨道只读 + seek，**永不长拖把手、永不长「添加音轨」**——L3 铁律禁的是编排（合成语义），内容解剖的读视图不违反，形态上必须一眼是读视图。
+5. **锚点律修订（端口法则精确化）**：轨道可见时，入边锚 = **所喂轨道左缘 Y-center**（video 边锚视频轨）；锚座位恒为「媒体区正下方第一轨」，轨道栈展开 / 收起锚不跳动；修饰 presence 条骑轨栈**顶**（到来只压媒体 flex，钉死的轨座永不动）。无轨道时现行角律（ADR-067 一族）不变。边保持节点级——边落卡内片段（FLORA 形态）不收，片段级血缘归 §6。
+6. **血缘 = hover cross-highlight（数据驱动）**：hover 成片卡片段块 → 素材卡时间条与文本流中被 `segments[].start/end`（源时间）覆盖的区间亮起。片段块携带**源资产 id**（异源拼接段各指其 donor）+ 预格式化源区间标签（前端永不格式化时间）。**画布级共享 hover 态**是新增的合法跨卡通道（唯一一座，禁泛化）；两条装饰 text 边随转写节点退役不再出生，存量边由迁移硬删（不再有读面兼容）。
+7. **分界与不做**：多轨编排 / 拖片段 / 加轨 / 转场永禁（L3 不动）；改稿驱动重剪（edited transcript → 词轴对齐 → 影响产出）不在本批——本期编辑仍是展示 overlay，但座位已在资产层，未来对齐工程的家就位；时间条拖选区间（选段仪器）本期只做 seek，选段手势分期；paste 资产估算词轴挂账；编辑进 Operation Model 账挂账。
+
+**Consequences**: 转写节点整族消失——画布每素材少一列（708px 族结构性不可能），graph refetch 不再搬运全文；cue 从「派生四次 + 白存一份」收敛为「一座派生」；互指成立（点句子跳画面，时间轴从装饰变导航）；血缘从「画的边」变「读的联动」；编辑 overlay 单座位且写口落资产层（语义更正）。代价：素材卡变重（定高内滚吸收）；存量 transcript 节点行迁移删除（edited_text 先搬家）。
+
+**Related**: ADR-086（判词①枚举修订——transcript 移出「可编辑中间工作产品」枚举，改判「素材卡的内容层」）/ ADR-097（transcript 的 companion 身份退役——不再是 artifact，是 asset 的面）/ ADR-112（cue 结构化 + hover 显时 + 服务端预格式化 label 由本条继承并改写座位：spec 落库 → 读面派生）/ ADR-057（零投影——图不再存显示副本，本条是修法正身）/ ADR-067（出锚语义律不动；入锚精确化）/ ADR-016（clip-spec 唯一渲染契约不动——轨道栈只是它的读面投影）/ Workspace 合同 v4.2 C4（双层不变量搬家，永不反算时间码）/ `docs/VIDEO_EDITOR.md` L3（编排永禁）
+
+## ADR-115: 卡面解剖 v4——素材卡阅读型 + 成片卡 NLE 检视轴 + 信息秩三分
+
+**Status**: Decided（2026-10-09 用户拍板；形态原型 = `scratch/media-card-anatomy.html` 信息秩三分定稿，基于项目 1aeb9787 真实数据）；施工合同 = `docs/tasks/media-card-anatomy.md`
+
+**Context**: ADR-113 解剖落地后 live 走查三连：① **素材卡四症**——媒体区裸奔无一环边框（卡面读作三块拼件不是一个 object）；媒体高度被 flex 均分挤压 + object-cover 裁切（「舞台应按素材长宽比规划，不允许有黑边」）；转写稿区双向滚动且 hover 时间 chip 盖字；24px 条码时间条读不出结构。② **成片卡「track 在哪」**——24px muted 块 + 截断残字（「片段 1 · 源 2:59–…」看不见全貌），无 ruler 无道高无道头，读不出「完整的多素材时间线表达」；参考形态（Final Cut 式道 + Image #4 逐轨左缘 port）确认方向 = 视频道分块可点的真 NLE 轴。③ **两方向否决入档**——纯舞台 hover 揭示（NN/g 隐藏 = 发现性腰斩 + 全行业零主流先例 + 触屏无手势）与竖屏右挂模具（port 在左缘、道在右栏 = 连线落不到道上，斩断连线语义）。行业证据三路（NN/g hover 边界与渐进披露 / Descript·Premiere·CapCut 的 transcript 面板与底部时间轴停靠惯例 / LibTV·FLORA·ComfyUI 画布卡面收敛 = 预览+名称常驻、参数进点击层）。
+
+**Decision**:
+
+1. **信息秩三分 = 卡面分层法**：L0 结构层**常驻卡面**（道块 / ports / 徽章 / type 身份 / 阅读型卡的转写稿流——必需信息永不 hover）；L1 补充读数 **hover**（句文本 / 时间戳 / 源区间 / 刻度读数——瞬态不占布局，一座 `HoverChip`：portal 到 `document.body`、`overlay-surface` 冰霜、浮于锚行**上方**永不盖字、pointer-events-none）；L2 深详情**点击**（OutputInspector / lightbox 既有座位）。空间不足的压缩答案 = 折叠成摘要行 + 点击展开（Descript 模式，缓做项），永不是 hover 揭示。
+2. **素材卡 = 阅读型一体环**：media + divider + 转写稿区同入一环（媒体不再裸奔）；转写稿区固定解剖（divider 1 + 头 20 + cue 流 150 帽 + pads，预留 236→197 两镜像同批），媒体恢复画幅钉死——frame 数学的预留即舞台，flex-1 只吃预留，不再被均分挤压；object-cover 零黑边，画幅 bucket 兜裁切残差。24px 条码时间条退役 → **3px 舞台检视皮**（cue 段∝ 白纱、播放针、hover 变粗 8px、点击拨头、scrubber 读数入 L1 chip）；时长角标上舞台右下；cue 行时间 chip 上浮行外（ADR-112 hover 显时律继承，座位从行内改行上）；播放中行点亮、血缘区间琥珀（ADR-113 §6 不动）。medialess 素材不渲染空媒体槽（转写稿即卡身）。
+3. **成片卡 = NLE 检视轴**：**轴头行**（评分撤下舞台入轴头右端，ADR-112 ③ 裸分与 Top pick 闸门律不变，座位修订；非 tracked 解剖保留舞台徽标）+ **ruler**（服务端预格式化刻度——「客户端永不格式化时间」法条覆盖轴刻度：≤10 主刻度 nice step、次刻度纯几何、`t=0`/`t=total` 恒带标签；点击 seek）+ **34px 视频道**（真剪辑块：primary 填充、多块多源 ∝ 产出轴、块内「片段 N · 源区间」截断、hover = L1 chip（产出/源两区间）+ 血缘琥珀跨卡联动、click 拨头）+ **22px 字幕道**（连续块**零内嵌文字**，句与区间入 hover chip）+ **修饰道**（音乐/配音存在面，居文字道下，内容面后续批）+ **跨道播放针** + 道头 gutter 图标。全部只读 + seek——L3 编排永禁不动（无拖把手 / 无加轨 / 无转场），形态上一眼是读视图。
+4. **锚点律推广与节拍**：视频道 Y-center = 视频入 port 锚（ADR-113 §5 不动，公式随新解剖重算——两镜像同批）；修饰道到来 = 产品着陆节拍，锚同拍上移 26px/道（版本分页器先例——一次连贯 reflow，永不悄移；取全版本最大道数防翻页重坐）；修饰道 port 化 = 后续批（随 dub/music 输入资产化落地）。
+5. **时间格式化一座的边界**：数据行时间标签 = 服务端预格式化（cue label / 源区间 / 产出区间 / ruler 刻度——`track_stack.py` 一座）；播放器 chrome 读数（检视皮 scrubber「m:ss / m:ss」、时长角标）= `formatDuration` 唯一客户端座（lightbox 播放器同座）——连续几何读数非数据行，豁免成立。
+
+**Consequences**: 两型卡各自成立（素材卡 = 读、成片卡 = 检视）；「track 在哪」结构性回答（道 = 结构常驻 L0，连线落到道上）；血缘 hover 与 NLE 块同构（hover 一块、源区间一片亮）；裸奔/挤压/盖字/条码四症根治；黑边法条（object-cover + bucket）从一卡补丁升为解剖律。代价：帧预留变更（TRACK_STACK 96→NLE_AXIS 116、TRANSCRIPT_SECTION 236→197）——存量帧由 flex 吸收（永不溢出律：媒体让位，contain sliver 回归 legacy/raced 既有条款）；修饰道锚移 = 命名的节拍移位例外（分页器先例）。
+
+**Related**: ADR-113（素材卡内容层 / 轨道栈 / 锚点律 / 血缘通道由本条继承并改解剖）/ ADR-112（cue hover 显时 / 裸分 / Top pick 闸门律不动——评分座位由本条修订）/ ADR-016（clip-spec 唯一渲染契约不动——NLE 轴只是它的读面投影）/ `docs/VIDEO_EDITOR.md` L3（编排永禁不动）/ `docs/UI_GUIDELINES.md`（浮层一律 overlay-surface、视口锚浮层 portal——HoverChip 遵守；in-flow 面零 shadow）

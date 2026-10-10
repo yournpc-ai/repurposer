@@ -888,7 +888,7 @@ class EditGraphArgs(BaseModel):
 
     ops: list[dict] = Field(
         default_factory=list,
-        description="Wiring ops in the registry vocabulary: add_node / connect / edit_prompt / edit_text / delete_node / run.",
+        description="Wiring ops in the registry vocabulary: add_node / connect / edit_prompt / delete_node / run.",
     )
     name: str = Field(
         default="",
@@ -3398,6 +3398,49 @@ class ModelFact(BaseModel):
     model: str
 
 
+class TrackStackVideoBlock(BaseModel):
+    """One kept segment of a clip product on the OUTPUT timeline, plus its
+    SOURCE range and the source asset's id (the cross-highlight's data —
+    ADR-113 §6; None when the spec carries no asset identity). ``src_label``
+    is the preformatted ``m:ss–m:ss`` source range (the client never formats
+    time)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    out_start: float
+    out_end: float
+    src_start: float
+    src_end: float
+    asset_id: str | None = None
+    src_label: str = ""
+
+
+class TrackStackTextBlock(BaseModel):
+    """One caption sentence on the OUTPUT timeline (ADR-113 §4) — text +
+    preformatted ``m:ss–m:ss`` label (the client never formats time)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    out_start: float
+    out_end: float
+    text: str
+    label: str
+
+
+class TrackStackResponse(BaseModel):
+    """The deliverable card's track-stack inspection face (ADR-113 §4):
+    video lane (kept segments concatenated on the output clock) + text lane
+    (caption sentences per segment, cut = hard break) + modifier presence.
+    Read-only — never an orchestration surface (L3). Derived at read time
+    from ``render_spec``; None on non-clip products."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    video_lane: list[TrackStackVideoBlock]
+    text_lane: list[TrackStackTextBlock]
+    modifiers: dict[str, bool]
+
+
 class OutputResponse(BaseModel):
     """Unified product row (ADR-030): clips and derivatives became types.
 
@@ -3455,6 +3498,11 @@ class OutputResponse(BaseModel):
     # and for carried rows. Display-only — the node caption NEVER carries a
     # model name (prohibition #12); the lightbox info column is the surface.
     model_facts: list[ModelFact] | None = None
+    # The track-stack inspection face (ADR-113 §4 — video lane + text lane
+    # on the output timeline): derived at read time from render_spec by the
+    # /graph + /results seats (transient stamp, never persisted); None for
+    # non-clip products and everywhere else.
+    track_stack: TrackStackResponse | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -3615,30 +3663,52 @@ class GraphReviseResponse(BaseModel):
     status: WorkflowStatus
 
 
-class GraphEditTextRequest(BaseModel):
-    """The transcript card's in-place direct edit (Workspace 合同 v4.2 C4 —
-    卡内就地编辑, 用户拍板 2026-09-26): rewrite ONE document node's editable
-    text layer with the user's verbatim words. Same posture as the prompt
-    direct edit (ADR-058): a deterministic graph action, not a chat turn —
-    zero intent recognition, zero chat messages, the node's card face is
-    the whole feedback. ``text`` null = clear the overlay (the source layer
-    shows again). No run, no credits — a manual node's text is not
-    executable work."""
+class AssetTranscriptCue(BaseModel):
+    """One display-face cue row of an asset's transcript (ADR-113 §1 — cues
+    are a read-time derivation of ``meta.words`` via the ONE grouping law,
+    never persisted): timeline anchor + raw-joined text + the preformatted
+    ``m:ss–m:ss`` label (the client never formats time)."""
 
     model_config = ConfigDict(extra="forbid")
 
-    node_id: UUID
+    start: float
+    end: float
+    text: str
+    label: str
+
+
+class AssetTranscriptResponse(BaseModel):
+    """``GET /projects/{id}/assets/{asset_id}/transcript`` — the asset's
+    content layer (ADR-113 §1, the ONE seat):
+
+    - ``text`` = the SOURCE layer (ASR/extraction/paste yield), always.
+    - ``edited_text`` = the user's edit overlay (``assets.edited_transcript``;
+      C4 — the overlay never reverse-computes a timecode). NULL = source
+      shown as-is. The card displays ``edited_text ?? text``.
+    - ``cues`` = the timeline face, derived at read time; NULL when the
+      asset has no word timestamps (paste/extraction yields carry no time
+      axis — the honest plain-text face).
+    - ``truncated`` = words beyond the grouping cap exist (the card renders
+      the honest marker, never a silent window).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    edited_text: str | None
+    cues: list[AssetTranscriptCue] | None
+    truncated: bool
+
+
+class AssetTranscriptPutRequest(BaseModel):
+    """``PUT /projects/{id}/assets/{asset_id}/transcript`` — the card's
+    in-place direct edit writing the OVERLAY only (``edited_transcript``);
+    ``text`` null = clear the overlay (the source layer shows again). No
+    run, no credits — the edit is not executable work."""
+
+    model_config = ConfigDict(extra="forbid")
+
     text: str | None = None
-
-
-class GraphEditTextResponse(BaseModel):
-    """Result of ``POST /projects/{id}/graph/edit-text`` — the node's
-    display layer after the edit (the card reconciles its optimistic echo)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    node_id: UUID
-    text: str | None
 
 
 class GenerateRequest(BaseModel):

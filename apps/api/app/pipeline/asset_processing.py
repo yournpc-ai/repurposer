@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import AssetStatus, AssetType
 from app.models.tables import Asset, Conversation, Message, Project
+from app.pipeline.assets import asset_text_content
 from app.pipeline.extraction import extract_text, render_pdf_pages_and_upload
 from app.pipeline.graph import media_missing
 from app.pipeline.prosody import prosody_processor
@@ -177,7 +178,7 @@ async def _content_hash_processor(asset: Asset, _prior: ProcessResult) -> Proces
             if own_copy:
                 path.unlink(missing_ok=True)
     elif not asset.file_url:
-        text = (asset.extracted_text or asset.transcript) or ""
+        text = asset_text_content(asset)
         if not text.strip():
             return ProcessResult()
         h.update(text.encode("utf-8"))
@@ -455,24 +456,9 @@ async def process_asset(asset_id: UUID) -> None:
             asset.processing_status = AssetStatus.COMPLETED
             asset.processing_error = None
             await db.commit()
-            # 转写稿落图 (ADR-057 document 型第二实例): the transcript /
-            # extracted text gets its document node the moment it exists —
-            # pre-run projects see it on the canvas without waiting for a
-            # plan/run stamp (which re-ensures it idempotently anyway).
-            # 出生两座 (ADR-102 后续): this visit only FLIPS a card the plan
-            # path already birthed — the understanding read path (ASR feeds
-            # the reader, the transcript is mere middleware) births none,
-            # so create=False keeps discarded-material discussions off the
-            # canvas entirely.
-            if asset.project_id is not None:
-                from app.pipeline.graph_fill import (  # deferred: runtime edge
-                    stamp_transcript_node,
-                )
-
-                await stamp_transcript_node(
-                    db, asset.project_id, asset, create=False
-                )
-                await db.commit()
+            # ADR-113: no transcript card to flip — the asset row IS the
+            # transcript's seat; the /graph read face and the transcript
+            # endpoint read this status raw.
             await _record_reading_beat(db, asset, "completed")
             logger.info(
                 "asset_processed",
@@ -514,17 +500,4 @@ async def process_asset(asset_id: UUID) -> None:
             asset.processing_error = str(e)
             _clear_processing_stage(asset)
             await db.commit()
-            # 状态随处理 (出生两座): an existing transcript card (birthed by
-            # the plan path) flips to its failed face with the row — never
-            # a perpetual loading card; create=False — the read path births
-            # none even on failure.
-            if asset.project_id is not None:
-                from app.pipeline.graph_fill import (  # deferred: runtime edge
-                    stamp_transcript_node,
-                )
-
-                await stamp_transcript_node(
-                    db, asset.project_id, asset, create=False
-                )
-                await db.commit()
             await _record_reading_beat(db, asset, "failed")

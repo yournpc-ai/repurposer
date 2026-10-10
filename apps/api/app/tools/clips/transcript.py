@@ -30,6 +30,50 @@ class Cue(TypedDict):
     text: str
 
 
+class CueRow(TypedDict):
+    """The display-face cue row (ADR-113): a cue plus its preformatted
+    ``m:ss–m:ss`` label — the client never formats time (one law, here)."""
+
+    start: float
+    end: float
+    text: str
+    label: str
+
+
+def fmt_cue_time(seconds: Any) -> str:
+    """A cue timestamp as m:ss (the one time-formatting law's atom)."""
+    try:
+        total = max(0, int(float(seconds or 0)))
+    except (TypeError, ValueError):
+        total = 0
+    return f"{total // 60}:{total % 60:02d}"
+
+
+def display_cues(
+    words: Any, max_words: int = 12000
+) -> tuple[list[CueRow], bool]:
+    """The transcript display face, derived at read time (ADR-113 §1 — cues
+    never persist): ``group_cues`` (the ONE grouping law) with raw-joined
+    text (a space-join would shred Chinese), each row carrying its
+    preformatted label. Returns ``(rows, truncated)`` — the caller renders
+    the honest truncation marker, never a silent window. Empty words →
+    ``([], False)`` (a word-less asset has no timeline face at all)."""
+    if not isinstance(words, list) or not words:
+        return [], False
+    cues, truncated = group_cues(words, max_words, raw_words=True)
+    rows = [
+        CueRow(
+            start=c["start"],
+            end=c["end"],
+            text=c["text"],
+            label=f"{fmt_cue_time(c['start'])}–{fmt_cue_time(c['end'])}",
+        )
+        for c in cues
+        if c["text"]
+    ]
+    return rows, truncated
+
+
 def _timed_words(words: list[dict[str, Any]], max_words: int) -> list[dict[str, Any]]:
     """The capped, non-empty word stream (the one both cue consumers share)."""
     return [w for w in words[:max_words] if str(w.get("word") or "").strip()]

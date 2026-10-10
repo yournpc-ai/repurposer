@@ -46,6 +46,7 @@ import type {
   FlowEdge,
   FlowNode,
   FlowOutputAction,
+  LineageHover,
 } from "./types"
 
 export interface ResultsCanvasProps {
@@ -93,12 +94,6 @@ export interface ResultsCanvasProps {
    * the dock — the node's own state cycle is the feedback. Resolves true
    * when the run started. */
   onNodeRevise?: (nodeId: string, text: string) => Promise<boolean>
-  /** The transcript card's in-place direct edit (Workspace 合同 v4.2 C4):
-   * the card reports the user's verbatim text (null = reset to the source
-   * layer); the surface posts ONE code-built edit_text op to the graph's
-   * write door — zero run, zero credits, zero chat echo. Resolves true
-   * when the write landed. */
-  onTextEdit?: (nodeId: string, text: string | null) => Promise<boolean>
   /** An asset node's factsbar action (download / delete / reprocess) — the
    * surface owns them; absent = asset nodes render no bar. */
   onAssetAction?: (asset: FlowAssetInfo, action: FlowAssetAction) => void
@@ -139,7 +134,6 @@ export function ResultsCanvas({
   onOutputAction,
   onQuoteOutput,
   onNodeRevise,
-  onTextEdit,
   onAssetAction,
   selectedOutputId = null,
   onPaneClick,
@@ -214,6 +208,9 @@ export function ResultsCanvas({
             duration_seconds: asset.duration_seconds,
             width: asset.width,
             height: asset.height,
+            project_id: asset.project_id ?? null,
+            processing_status: asset.processing_status ?? null,
+            processing_stage: asset.processing_stage ?? null,
           },
           thumbUrl: asset.type === "image" ? mediaUrl : null,
           videoUrl: asset.type === "video" ? mediaUrl : null,
@@ -238,17 +235,15 @@ export function ResultsCanvas({
           // the station label law.
           artifact?.name ??
           spec.summary ??
-          (spec.role === "transcript"
-            ? t("results.canvas.transcript")
-              : spec.role === "research_brief"
-                ? t("results.canvas.researchBrief")
-                : spec.role === "translation"
-                  ? t("results.canvas.translationDoc")
-                  : spec.role === "dub_script"
-                    ? t("results.canvas.dubScriptDoc")
-                    : spec.role
-                      ? t("results.canvas.document")
-                      : t(`results.canvas.nodeType.${n.type}`, { defaultValue: n.type })),
+          (spec.role === "research_brief"
+            ? t("results.canvas.researchBrief")
+            : spec.role === "translation"
+              ? t("results.canvas.translationDoc")
+              : spec.role === "dub_script"
+                ? t("results.canvas.dubScriptDoc")
+                : spec.role
+                  ? t("results.canvas.document")
+                  : t(`results.canvas.nodeType.${n.type}`, { defaultValue: n.type })),
         // ADR-097 §4 单一 activity owner: the deliverable card carries the
         // artifact's aggregate activity (failed > running > stale > queued
         // > done) — the hidden stations never show a competing liveness.
@@ -349,6 +344,13 @@ export function ResultsCanvas({
   // chips), right the media. Product chips are product facts only (never a
   // model name in the chips row).
   const [lightbox, setLightbox] = useState<MediaLightboxData | null>(null)
+
+  // ── cross-highlight (ADR-113 §6 — 唯一跨卡通道) ────────────────────────
+  // A deliverable card's video-lane block hover names the SOURCE interval
+  // it came from; the matching asset card's transcript strip / cue rows
+  // light amber. The hover state lives here (the surface), cards only
+  // report/read it — never an edge, never a generalized channel.
+  const [lineageHover, setLineageHover] = useState<LineageHover | null>(null)
 
   // Handlers are useCallback-stable (2026-08-19 二轮 R5): FlowView's
   // rfNodes/rfEdges memo keys on them — inline closures rebuilt the whole
@@ -723,9 +725,10 @@ export function ResultsCanvas({
         onAssetAction={onAssetAction}
         onDisplayChange={handleDisplayChange}
         onPromptEdit={handlePromptEdit}
-        onTextEdit={onTextEdit}
         pendingProgram={promptEdit}
         promptConfirm={promptConfirmPayload}
+        onLineageHover={setLineageHover}
+        lineageHover={lineageHover}
         cameraBeat={cameraBeat}
         onCameraBeatConsumed={onCameraBeatConsumed}
         centerRequest={centerRequest}

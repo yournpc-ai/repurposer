@@ -29,13 +29,12 @@ Covered:
   node's existing output_ids (the pager's version lineage), never a cleared
   slate; the v3 text back-writes — a writer node's spec.text reads its
   latest Output's content, a research node's spec.text renders the brief
-- stamp_transcript_node (转写稿 document): born done with the text edge,
-  idempotent, refreshes on reprocess, skips text-less assets
 - _stamp_graph_core 三族化 (ADR-072/076 批 C2b): research collapses to ONE
   text×generator node (no agent, no brief doc — a re-dock without research
   sweeps it); translate/dub stamp the two-station pair (asm video×editor +
   `{fill_key}#doc` table×manual companion, doc_node_id linkage, the new
-  edge law transcript→doc / doc→asm / asset→asm — never transcript→asm);
+  edge law asset→doc / doc→asm / asset→asm — 转写折叠后素材直接喂
+  doc 站);
   materialize_source folds into its nearest downstream family (no node of
   its own, its step id rides the host's step_ids, and a run containing one
   makes EVERY clip root eat the assets — 评审修正 P0-C); the sync mirrors
@@ -72,7 +71,6 @@ from app.pipeline.graph_fill import (
     _fill_key_for_step,
     _split_station_estimate,
     _stamp_graph_core,
-    stamp_transcript_node,
     sync_graph_node_for_step,
 )
 from app.pipeline.graph_store import (
@@ -83,6 +81,15 @@ from app.pipeline.graph_store import (
 )
 
 _PROJECT_ID = uuid4()
+
+
+def _asset(**kw):
+    return Asset(
+        id=uuid4(),
+        project_id=_PROJECT_ID,
+        type=kw.pop("type", AssetType.VIDEO),
+        **kw,
+    )
 
 
 # ---- in-memory session stub (the two graph tables + a Project row) --------
@@ -245,7 +252,7 @@ async def test_add_node_with_after_derives_edge_state_layout():
     # since the 2026-09-13 分档加宽批); a fresh column's first node RISES
     # above its parent (2026-09-09); existing frames never move
     # (append-only 保序律).
-    assert newborn.layout["x"] == 464
+    assert newborn.layout["x"] == 524
     assert newborn.layout["y"] == -88
     assert asset.layout == {"x": 0, "y": 0, "w": 280, "h": 260}
     # TWO flushes (ADR-059 分裂 flush 律): nodes strictly before edges — the
@@ -539,13 +546,13 @@ async def test_run_op_orders_by_topology_never_layout_x():
     node) must NOT leak into execution — producers precede consumers even
     when layout.x says the opposite. Visual coordinates hold no execution
     authority."""
-    producer = _node("generator", layout={"x": 928, "y": 0, "w": 280, "h": 260})
-    middle = _node("processor", layout={"x": 464, "y": 0, "w": 280, "h": 260})
+    producer = _node("generator", layout={"x": 1048, "y": 0, "w": 280, "h": 260})
+    middle = _node("processor", layout={"x": 524, "y": 0, "w": 280, "h": 260})
     consumer = _node("generator", layout={"x": 0, "y": 0, "w": 280, "h": 260})
     edges = [_edge(producer.id, middle.id, "video"), _edge(middle.id, consumer.id, "video")]
     db = _StubDb(nodes=[producer, middle, consumer], edges=edges)
     delta = await apply_wiring_ops(db, _PROJECT_ID, [{"op": "run", "nodes": [producer.id]}])
-    # layout.x says consumer(0) < middle(464) < producer(928); the DAG says
+    # layout.x says consumer(0) < middle(524) < producer(1048); the DAG says
     # producer → middle → consumer. The DAG wins.
     assert delta.run_nodes == [producer.id, middle.id, consumer.id]
 
@@ -557,9 +564,9 @@ async def test_run_op_ranks_canvas_hidden_modifier_between_producer_and_consumer
     an executable step and must order between its producer and consumer."""
     producer = _node("generator", layout={"x": 0, "y": 0, "w": 280, "h": 260})
     mod = _node(
-        "processor", spec={"tool": "reframe_clip"}, layout={"x": 464, "y": 0, "w": 280, "h": 260}
+        "processor", spec={"tool": "reframe_clip"}, layout={"x": 524, "y": 0, "w": 280, "h": 260}
     )
-    consumer = _node("generator", layout={"x": 928, "y": 0, "w": 280, "h": 260})
+    consumer = _node("generator", layout={"x": 1048, "y": 0, "w": 280, "h": 260})
     edges = [_edge(producer.id, mod.id, "video"), _edge(mod.id, consumer.id, "video")]
     db = _StubDb(nodes=[producer, mod, consumer], edges=edges)
     delta = await apply_wiring_ops(db, _PROJECT_ID, [{"op": "run", "nodes": [producer.id]}])
@@ -570,15 +577,15 @@ async def test_run_op_ranks_canvas_hidden_modifier_between_producer_and_consumer
 async def test_run_op_double_kill_shared_fixture():
     """错帧双杀 (shared malicious fixture, 用户点名): the same corrupted
     frames feed BOTH consumers — execution orders A→B→C here while (mirror
-    suite web-side, layout.test.ts) the Canvas projects 0/464/928. If this
+    suite web-side, layout.test.ts) the Canvas projects 0/524/1048. If this
     pair ever diverges, one of the two consumers re-derived topology."""
-    a = _node("generator", layout={"x": 928, "y": 0, "w": 280, "h": 260})
+    a = _node("generator", layout={"x": 1048, "y": 0, "w": 280, "h": 260})
     b = _node("processor", layout={"x": 100, "y": 0, "w": 280, "h": 260})
-    c = _node("generator", layout={"x": 464, "y": 0, "w": 280, "h": 260})
+    c = _node("generator", layout={"x": 524, "y": 0, "w": 280, "h": 260})
     edges = [_edge(a.id, b.id, "video"), _edge(b.id, c.id, "video")]
     db = _StubDb(nodes=[a, b, c], edges=edges)
     delta = await apply_wiring_ops(db, _PROJECT_ID, [{"op": "run", "nodes": [a.id]}])
-    # layout.x says b(100) < c(464) < a(928); the DAG says a → b → c.
+    # layout.x says b(100) < c(524) < a(1048); the DAG says a → b → c.
     assert delta.run_nodes == [a.id, b.id, c.id]
 
 
@@ -759,111 +766,6 @@ def test_fill_key_bare_kind_for_deterministic_steps():
     assert _fill_key_for_step(WorkflowStep(kind="research", spec={"query": "q"})) == "research"
 
 
-# ---- 转写稿 document (stamp_transcript_node) ---------------------------------
-
-
-def _asset(**kw):
-    return Asset(
-        id=uuid4(),
-        project_id=_PROJECT_ID,
-        type=kw.pop("type", AssetType.VIDEO),
-        **kw,
-    )
-
-
-@pytest.mark.asyncio
-async def test_transcript_node_births_queued_for_textless_text_yielding_asset():
-    """上传即出生 (Phase 1, ADR-087 §2 R2): a text-yielding asset with no
-    transcript yet still births its card AT UPLOAD in ``queued`` (loading) —
-    the card holds its canvas seat while ASR/extraction runs; the completion
-    path flips it to done. Idempotent: a second stamp finds the same card."""
-    asset = _asset()  # video, no transcript yet
-    db = _StubDb()
-    doc = await stamp_transcript_node(db, _PROJECT_ID, asset)
-    assert doc is not None
-    assert doc.state == "queued"
-    assert doc.type == "document"
-    assert doc.spec["role"] == "transcript"
-    assert "text" not in doc.spec
-    edge = next(e for e in db.edges if e.to_node == doc.id)
-    assert edge.edge_type == "text"
-    # Idempotent while still waiting: no twin, no second edge, stays queued.
-    db2 = _StubDb(nodes=[doc], edges=list(db.edges))
-    again = await stamp_transcript_node(db2, _PROJECT_ID, asset)
-    assert str(again.id) == str(doc.id)
-    assert db2.added == []
-
-
-@pytest.mark.asyncio
-async def test_transcript_node_skips_non_text_yielding_assets():
-    """Asset types without a text yield never birth a transcript card
-    (Phase 2.5 B-2: the boundary's negative side — the question is never
-    "does text exist yet" but "does this material PRODUCE a transcript
-    product object")."""
-    for t in (AssetType.IMAGE, AssetType.VOICE_SAMPLE, AssetType.SLIDES):
-        db = _StubDb()
-        assert await stamp_transcript_node(db, _PROJECT_ID, _asset(type=t)) is None
-        assert db.added == []
-
-
-@pytest.mark.asyncio
-async def test_transcript_node_births_queued_for_every_text_yielding_type():
-    """Phase 2.5 B-2 boundary positives: the text-yielding family is
-    {VIDEO, AUDIO, TRANSCRIPT, PAST_MATERIAL} (graph_fill's text_yielding
-    set) — each births its queued card at upload, idempotently, even before
-    any text exists. The sharpest edge is TRANSCRIPT itself: the asset IS
-    text, yet its transcript document node still births (the card is the
-    product object, the asset row is the file)."""
-    for t in (
-        AssetType.VIDEO,
-        AssetType.AUDIO,
-        AssetType.TRANSCRIPT,
-        AssetType.PAST_MATERIAL,
-    ):
-        asset = _asset(type=t)
-        db = _StubDb()
-        doc = await stamp_transcript_node(db, _PROJECT_ID, asset)
-        assert doc is not None, f"{t}: text-yielding asset births its card"
-        assert doc.state == "queued", f"{t}: born queued while text is owed"
-        assert doc.spec["role"] == "transcript"
-        # Idempotent per type: a second stamp finds the same card, no twin.
-        db2 = _StubDb(nodes=[doc], edges=list(db.edges))
-        again = await stamp_transcript_node(db2, _PROJECT_ID, asset)
-        assert str(again.id) == str(doc.id), f"{t}: idempotent birth"
-        assert db2.added == []
-
-
-@pytest.mark.asyncio
-async def test_transcript_node_born_done_with_text_edge_and_idempotent():
-    asset = _asset(transcript="the quick brown fox")
-    db = _StubDb()
-    doc = await stamp_transcript_node(db, _PROJECT_ID, asset)
-    assert doc is not None
-    assert doc.state == "done"  # an artifact, not an execution unit
-    assert doc.type == "document"
-    assert doc.spec["role"] == "transcript"
-    assert doc.spec["text"] == "the quick brown fox"
-    edge = next(e for e in db.edges if e.to_node == doc.id)
-    assert edge.edge_type == "text"
-    # idempotent: a second stamp finds the same card — no twin, no second
-    # edge (re-seeded stub: the doc-check's filtered select returns it).
-    db2 = _StubDb(nodes=[doc], edges=list(db.edges))
-    again = await stamp_transcript_node(db2, _PROJECT_ID, asset)
-    assert str(again.id) == str(doc.id)
-    assert db2.added == []
-
-
-@pytest.mark.asyncio
-async def test_transcript_node_text_refreshes_on_reprocess():
-    asset = _asset(transcript="v1")
-    db = _StubDb()
-    doc = await stamp_transcript_node(db, _PROJECT_ID, asset)
-    asset.transcript = "v2 — reprocessed"
-    again = await stamp_transcript_node(_StubDb(nodes=[doc]), _PROJECT_ID, asset)
-    assert str(again.id) == str(doc.id)
-    assert again.spec["text"] == "v2 — reprocessed"
-
-
 # ---- research 单节点塌缩 (批 C2b — agent 族与 brief 文档退役) ---------------
 
 
@@ -983,12 +885,14 @@ async def test_two_station_stamp_asm_and_doc_companion():
     the executor) plus its `{fill_key}#doc` companion (table×manual — the
     persistent editable cue artifact's home), linked by spec.doc_node_id.
     The companion carries NO tool / prompt / step_ids / output_ids — it is
-    not an execution unit. The edge law: 文流经 doc 站中转 (transcript→
-    doc→asm), the media flow feeds the asm direct (asset→asm). ADR-097 §5
-    adds the transcript→asm LINEAGE 真边 (出生即真实写入, 端口标记
-    out:lineage — display-only, 零编排语义); a PLAIN transcript→asm flow
-    edge is still never stamped. The stamp also writes the canonical four
-    artifact fields (ADR-097 §1): asm = deliverable, doc = companion."""
+    not an execution unit. The edge law (ADR-113 转写折叠后): 文流
+    asset→doc→asm — the text-yielding asset feeds the doc station its words
+    DIRECTLY (the transcript node is retired, the asset row is its one
+    seat), the media flow feeds the asm direct (asset→asm). The
+    transcript→asm lineage edge retired with the transcript node — lineage's
+    one face is the cross-highlight derived from render_spec.segments. The
+    stamp also writes the canonical four artifact fields (ADR-097 §1):
+    asm = deliverable, doc = companion."""
     project = Project(id=_PROJECT_ID)
     run = WorkflowRun(id=uuid4(), project_id=_PROJECT_ID, context={})
     steps = _translate_chain()
@@ -999,9 +903,6 @@ async def test_two_station_stamp_asm_and_doc_companion():
     )
     asm = next(n for n in db.nodes if n.type == "video")
     doc = next(n for n in db.nodes if n.type == "table")
-    transcript_doc = next(
-        n for n in db.nodes if n.type == "document" and (n.spec or {}).get("role") == "transcript"
-    )
     asset_node = next(n for n in db.nodes if n.type == "asset")
     key = "translate_clip#fr#False#False"
     # asm 站: the executor's identity (词表 v3 媒介×原型 + tool + 双站链接)
@@ -1034,19 +935,16 @@ async def test_two_station_stamp_asm_and_doc_companion():
     # companion 四字段随 asm 的组降生 (同一 artifact_key)
     assert doc.spec["artifact_key"] == f"artifact:{run.id}:1"
     assert doc.spec["artifact_role"] == "companion"
-    # 边派生: the four flow edges (transcript→asm 的**物料流**直边仍永不
-    # 存在) + the ADR-097 §5 lineage 真边 (out:lineage 端口标记是唯一机器
-    # 判别 — rank / RunOp 闭包 / 读面默认载荷三处显式排除它)。
+    # 边派生 (ADR-113): the three persisted flow edges — 文流 asset→doc→
+    # asm 直连, 媒体流 asset→asm; lineage/合成边整类消亡。
     edge_facts = {
         (str(e.from_node), str(e.to_node), e.edge_type, str(e.from_port))
         for e in db.edges
     }
     assert edge_facts == {
-        (str(asset_node.id), str(transcript_doc.id), "text", "out:text"),
-        (str(transcript_doc.id), str(doc.id), "text", "out:text"),
+        (str(asset_node.id), str(doc.id), "text", "out:text"),
         (str(doc.id), str(asm.id), "text", "out:text"),
         (str(asset_node.id), str(asm.id), "video", "out:video"),
-        (str(transcript_doc.id), str(asm.id), "text", "out:lineage"),
     }
 
 
@@ -1363,7 +1261,7 @@ async def test_add_node_pinned_id_wires_same_batch_born_with_edge_knowledge():
     book = next(n for n in db.nodes if n.id == book_id)
     writer = next(n for n in db.nodes if n.id == writer_id)
     assert (book.layout["x"], book.layout["y"]) == (0, 0)
-    assert writer.layout["x"] == 464
+    assert writer.layout["x"] == 524
     # A fresh column's first node rises above its parent (2026-09-09).
     assert writer.layout["y"] == -88
 
@@ -1398,13 +1296,13 @@ async def test_settle_frames_chain_grows_right_not_down():
     await settle_frames_with_edges([book, writer, verify_free_second], [], edges)
     # The book has no parents — it stays at the origin island.
     assert (book.layout["x"], book.layout["y"]) == (0, 0)
-    # Children settle one depth-pitch right (464 since the 2026-09-13 分档
-    # 加宽批: the widest class 400 + GAP_MAIN 64): the first RISES above
+    # Children settle one depth-pitch right (524 — the widest class 400 +
+    # GAP_MAIN 124, graph_store._PITCH 镜像): the first RISES above
     # the book (2026-09-09), the second stacks INSIDE the shared column
     # (same depth) under its sibling (cross gap).
-    assert writer.layout["x"] == 464
+    assert writer.layout["x"] == 524
     assert writer.layout["y"] == -88
-    assert verify_free_second.layout["x"] == 464
+    assert verify_free_second.layout["x"] == 524
     # The sibling stack's gap derives from the frame-class RESERVATION
     # (text = 560 since 2026-09-10 卡高内容驱动, was 440), never from the
     # node's provisional layout h — the fixture's 440 is deliberately stale
@@ -1422,8 +1320,8 @@ async def test_settle_frames_parent_chain_one_link_per_pass():
     c = _node("processor", spec={"frame_class": "clip"}, layout={"x": 0, "y": 688, "w": 280, "h": 660})
     edges = [_edge(a.id, b.id, "ctx"), _edge(b.id, c.id, "text")]
     await settle_frames_with_edges([a, b, c], [], edges)
-    assert b.layout["x"] == 464
-    assert c.layout["x"] == 2 * 464
+    assert b.layout["x"] == 524
+    assert c.layout["x"] == 2 * 524
     # The rise compounds link by link: b above a, c above b.
     assert c.layout["y"] == -176
 
@@ -1441,8 +1339,8 @@ async def test_settle_frames_never_moves_settled_history():
     await settle_frames_with_edges([book, writer], [asset], edges)
     assert asset.layout == {"x": 0, "y": 0, "w": 280, "h": 260}
     # The book rises above its settled parent; the settled frame is untouched.
-    assert (book.layout["x"], book.layout["y"]) == (464, -88)
-    assert writer.layout["x"] == 2 * 464
+    assert (book.layout["x"], book.layout["y"]) == (524, -88)
+    assert writer.layout["x"] == 2 * 524
 
 
 @pytest.mark.asyncio
@@ -1455,8 +1353,8 @@ async def test_island_corridor_clamps_when_same_batch_deeper_newborn():
     leaving the column gaps uneven."""
     asset = _node("asset", state="done", spec={"asset_type": "video"},
                   layout={"x": 0, "y": 0, "w": 280, "h": 260})
-    t1 = _node("document", spec={"role": "transcript"})
-    t2 = _node("document", spec={"role": "transcript"})
+    t1 = _node("document", spec={"role": "translation"})
+    t2 = _node("document", spec={"role": "translation"})
     clips = _node("generator", spec={"frame_class": "clip"})
     edges = [
         _edge(asset.id, t1.id, "audio"),
@@ -1492,118 +1390,67 @@ async def test_island_corridor_survives_when_no_deeper_band_occupied():
     assert islands[0].cols == 2
 
 
-# ---- ADR-098 B1: 写时摆位/岛出生吃 Effective Product Graph（与读面同层） ------
+# ---- 写时摆位/岛出生与读面同吃持久边（ADR-113 后读时合成层退役） --------------
 #
-# 事故同构 fixture（项目 62594b0b-c0fd-40a9-89fe-6e0a055f7265, dev DB 实录）:
-# 素材 → 转写稿 → 金句卡（write_quotes draft）。修复前 = 两张图: 写时吃持久
-# 边（两节点同代 → 合法组成兄弟家庭, cols=2 廊道出生）, 读时吃持久+合成边
-#（consumer 深度 2, 被自家廊道挤到 rank 3, x=1572 死列）。B1 后写时同吃
-# effective 边 —— consumer 出生即深度 2, 单成员家庭不生岛。
+# 物料流边全部持久落库（素材直接喂消费者, graph_fill 出生即连）——写时
+# settle 与读面投影天然同图, 「effective 边集」概念消亡。两个守卫:
+# consumer 出生深度 = 持久拓扑深度; 同家庭兄弟姐妹自成一岛。
 
 _PITCH = 524  # product_graph.PITCH ↔ graph_store._PITCH 镜像值（漂移即红）
 
 
 @pytest.mark.asyncio
-async def test_settle_effective_edges_consumer_born_at_depth_2():
-    """asset + transcript + 1 consumer（事故同构）: 持久边 asset→transcript /
-    asset→consumer, 写时 settle 吃 effective 边（合成 transcript→consumer）
-    → consumer 出生即深度 2（x = 2×PITCH = 1048）, 与读面投影同图; 两个
-    单成员家庭 → 零岛行出生。"""
-    asset_id = uuid4()
+async def test_settle_persisted_edges_consumer_born_at_depth_1():
+    """asset + 1 consumer（持久 asset→consumer 直边）: consumer 出生即深度
+    1（x = PITCH）, 与读面投影同图; 单成员家庭 → 零岛行出生。"""
     asset = _node("asset", state="done",
-                  spec={"asset_type": "video", "asset_id": str(asset_id)},
+                  spec={"asset_type": "video", "asset_id": str(uuid4())},
                   layout={"x": 0, "y": 0, "w": 280, "h": 260})
-    transcript = _node(
-        "document",
-        spec={"role": "transcript", "asset_id": str(asset_id), "text": "..."},
-        layout={"x": 0, "y": 284, "w": 340, "h": 280},
-    )
     quotes = _node(
         "image",
         spec={"tool": "write_quotes", "frame_class": "image"},
-        layout={"x": 0, "y": 580, "w": 280, "h": 268},
+        layout={"x": 0, "y": 284, "w": 280, "h": 268},
     )
-    edges = [
-        _edge(asset.id, transcript.id, "text"),
-        _edge(asset.id, quotes.id, "text"),
-    ]
+    edges = [_edge(asset.id, quotes.id, "text")]
     islands: list = []
     db = _StubDb(nodes=[asset], edges=edges)
     await settle_frames_with_edges(
-        [transcript, quotes], [asset], edges, island_ctx=(db, _PROJECT_ID, islands),
+        [quotes], [asset], edges, island_ctx=(db, _PROJECT_ID, islands),
     )
-    # 深度 0/1/2 → x = 0/524/1048（读面 display_ranks 同 fixture 同数）。
-    assert transcript.layout["x"] == _PITCH
-    assert quotes.layout["x"] == 2 * _PITCH
-    # 单成员家庭不生岛——transcript（深度 1, 父 {asset}）与 quotes
-    #（深度 2, 父 {asset, transcript}）天然不同家庭。
+    assert quotes.layout["x"] == _PITCH
     assert islands == []
-    assert transcript.island_id is None and quotes.island_id is None
-    # 合成行是纯数据 —— 永不进写集（零 GraphEdge 落库; 持久输入不被变异）。
-    assert len(db.edges) == 2
-    assert all(not isinstance(e, dict) for e in db.edges)
+    assert quotes.island_id is None
 
 
 @pytest.mark.asyncio
-async def test_settle_effective_edges_writers_family_self_island():
-    """transcript + 3 writers: 三 writer 共享（effective 深度 2, effective
-    父签名 {asset, transcript}）→ 自成一岛（⌈3/4⌉+1 廊道 = cols 2, 更深带
-    无占位）; transcript 单成员家庭不生岛, 带 1 零廊道预留。"""
-    asset_id = uuid4()
+async def test_settle_persisted_edges_writers_family_self_island():
+    """asset + 3 writers: 三 writer 共享（深度 1, 父签名 {asset}）→ 自成一
+    岛（⌈3/4⌉+1 廊道 = cols 2, 更深带无占位）; asset 单成员家庭不生岛。"""
     asset = _node("asset", state="done",
-                  spec={"asset_type": "video", "asset_id": str(asset_id)},
+                  spec={"asset_type": "video", "asset_id": str(uuid4())},
                   layout={"x": 0, "y": 0, "w": 280, "h": 260})
-    transcript = _node(
-        "document",
-        spec={"role": "transcript", "asset_id": str(asset_id), "text": "..."},
-        layout={"x": 0, "y": 284, "w": 340, "h": 280},
-    )
     writers = [
         _node("text",
               spec={"tool": "write_post", "fill_key": f"write_post#post#{i}",
                     "frame_class": "text"},
-              layout={"x": 0, "y": 580 + i * 460, "w": 340, "h": 440})
+              layout={"x": 0, "y": 284 + i * 460, "w": 340, "h": 440})
         for i in range(3)
     ]
-    edges = [_edge(asset.id, transcript.id, "text")] + [
-        _edge(asset.id, w.id, "text") for w in writers
-    ]
+    edges = [_edge(asset.id, w.id, "text") for w in writers]
     islands: list = []
     db = _StubDb(nodes=[asset], edges=edges)
     await settle_frames_with_edges(
-        [transcript, *writers], [asset], edges, island_ctx=(db, _PROJECT_ID, islands),
+        [*writers], [asset], edges, island_ctx=(db, _PROJECT_ID, islands),
     )
-    assert transcript.island_id is None
-    assert transcript.layout["x"] == _PITCH
     assert len(islands) == 1
     island = islands[0]
-    assert island.depth == 2 and island.cols == 2
-    # 岛身份 = effective 父签名（asset + transcript, 排序定格）。
-    assert island.parent_ids == sorted([str(asset.id), str(transcript.id)])
+    assert island.depth == 1 and island.cols == 2
+    # 岛身份 = 父签名（asset 单父）。
+    assert island.parent_ids == [str(asset.id)]
     for seq, w in enumerate(writers):
         assert w.island_id == island.id and w.island_seq == seq
-        # 同岛同列同 x（cap=4 → 三成员 col 全 0）: x = 岛 origin = 带 2 起点。
-        assert w.layout["x"] == island.origin_x == 2 * _PITCH
-
-
-def test_executable_closure_never_sees_synthesized_edges():
-    """B1 探针锁（执行侧零消费, graph_store 半面）: RunOp 闭包 / stale 传播
-    的边集恒为持久集 —— transcript 的持久子节点为零（合成腿永不过界）。"""
-    asset_id = uuid4()
-    asset = _node("asset", state="done",
-                  spec={"asset_type": "video", "asset_id": str(asset_id)})
-    transcript = _node("document",
-                       spec={"role": "transcript", "asset_id": str(asset_id)})
-    quotes = _node("image", spec={"tool": "write_quotes"})
-    edges = [
-        _edge(asset.id, transcript.id, "text"),
-        _edge(asset.id, quotes.id, "text"),
-    ]
-    assert executable_children_of(edges, UUID(str(transcript.id))) == []
-    assert executable_children_of(edges, UUID(str(asset.id))) == [
-        UUID(str(transcript.id)),
-        UUID(str(quotes.id)),
-    ]
+        # 同岛同列同 x（cap=4 → 三成员 col 全 0）: x = 岛 origin = 带 1 起点。
+        assert w.layout["x"] == island.origin_x == 1 * _PITCH
 
 
 # ---- ADR-098 §2: Settled Rank 冻结律（Z）门守卫 --------------------------------
@@ -2015,12 +1862,3 @@ async def test_edit_delete_run_touching_exploration_rejected():
     with pytest.raises(WiringRejected, match="I-EXPLORE-01"):
         await apply_wiring_ops(db, _PROJECT_ID, [{"op": "run", "nodes": [str(explore.id)]}])
     assert db.flush_count == 0
-
-
-def test_read_face_passes_exploration_rows_through():
-    """The read face's exploration branch (ADR-088 §4): a family row carries
-    its own face — never remapped into a media word or the manual fallback."""
-    from app.pipeline.routes.projects import _read_face
-
-    spec = {"prototype": "exploration", "exploration_kind": "candidate_set", "topic": "pricing"}
-    assert _read_face("exploration", spec, []) == ("exploration", spec)

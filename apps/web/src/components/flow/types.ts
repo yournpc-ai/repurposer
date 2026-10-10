@@ -64,6 +64,11 @@ export interface FlowAssetInfo {
   file_url: string | null
   stream_url?: string | null
   duration_seconds?: number | null
+  /** The owning project — the transcript endpoint's path seat (ADR-113). */
+  project_id?: string | null
+  /** Processing truth (ADR-113) — see GraphNodeAsset. */
+  processing_status?: string | null
+  processing_stage?: string | null
   /** The media's real pixels — the asset node's display-class sizing reads
    * them (graphNodeSize, 素材节点同律 2026-09-13). */
   width?: number | null
@@ -103,15 +108,6 @@ export interface FlowNode {
     params?: Record<string, unknown> | null
     role?: string | null
     text?: string | null
-    /** The transcript's user-edited presentation layer (v4.2 C4 — the card
-     * displays this over the source mirror when present). */
-    edited_text?: string | null
-    /** The transcript's structured cue rows (the hover-timeline display
-     * face): [{start, end, text, label}] with the label preformatted
-     * server-side (m:ss–m:ss — the client never formats time). Display
-     * layer only; the in-place edit surface keeps the plain text/overlay.
-     * Absent on word-less or legacy rows → the plain text face. */
-    cues?: { start?: number; end?: number; text?: string; label?: string }[] | null
     /** 岛内格镜像 (v4.2 C6): island members carry the island's frozen
      * reserved bottom — the projection renders the frozen cell verbatim and
      * floors the column's air-compression there (layout.ts ↔ graph_store). */
@@ -204,6 +200,17 @@ export interface FlowGroup {
  * locked; only the lineage board explores. */
 export type FlowNavigation = "fit" | "explore"
 
+/** cross-highlight (ADR-113 §6 — 唯一跨卡通道, 禁泛化): the deliverable
+ * card's video-lane block hover reports the SOURCE interval it came from;
+ * the source asset card whose strip blocks / cue rows overlap lights them
+ * in amber (`bg-lineage`). Carried as data, never an edge — the retired
+ * lineage 真边's successor. */
+export interface LineageHover {
+  assetId: string
+  srcStart: number
+  srcEnd: number
+}
+
 export interface FlowViewProps {
   nodes: FlowNode[]
   edges: FlowEdge[]
@@ -235,13 +242,6 @@ export interface FlowViewProps {
    * confirmation (锚定受影响子图 + 估价随行) — nothing touches the graph
    * until the confirm's CODE-built edit_prompt + run lands. */
   onPromptEdit?: (nodeId: string, text: string) => void
-  /** Transcript in-place direct edit (Workspace 合同 v4.2 C4 — 卡内就地
-   * 编辑, 用户拍板 2026-09-26): the card reports the user's verbatim text
-   * (null = reset to the source layer); the surface lands ONE code-built
-   * edit_text op through the graph's write door — zero run, zero credits,
-   * zero chat echo. Resolves true when the write landed (the card then
-   * echoes optimistically). Absent = the document body is read-only. */
-  onTextEdit?: (nodeId: string, text: string | null) => Promise<boolean>
   /** The edit's optimistic echo (ADR-058 乐观回显): while the confirm is
    * open or the stamp is in flight, the edited node's card face shows the
    * user's verbatim program instead of the domain's last-stamped one —
@@ -265,6 +265,13 @@ export interface FlowViewProps {
   /** Pane-only click (node clicks never fire this) — the results canvas's
    * "back to neutral" gesture: collapse the history, clear the focus. */
   onPaneClick?: () => void
+  /** cross-highlight report channel (ADR-113 §6): a deliverable card's
+   * video-lane block hover reports its source interval (null on leave).
+   * Absent = the hover never leaves the card (recipe surface). */
+  onLineageHover?: (hover: LineageHover | null) => void
+  /** cross-highlight read channel (ADR-113 §6): the live hover — asset
+   * cards whose id matches light their overlapping source interval. */
+  lineageHover?: LineageHover | null
   /** "fit" (default) = bounded surface, zoom locked; "explore" = lineage
    * board (zoom / pan / pinch unlocked). */
   navigation?: FlowNavigation
