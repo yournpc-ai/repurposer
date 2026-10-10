@@ -1,14 +1,17 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react"
+import { createPortal } from "react-dom"
 import {
   ArrowUp,
   AudioLines,
+  Captions,
   ChevronLeft,
   ChevronRight,
   Clapperboard,
   Copy,
   Download,
   FileText,
+  Film,
   Image as ImageIcon,
   Images,
   Maximize2,
@@ -40,7 +43,7 @@ import { apiPut, fetchAssetTranscript, putAssetTranscript, toAbsoluteUrl, type A
 import { cn } from "@/lib/utils"
 import type { GraphEdgeType, Output, ProjectArtifact } from "@/lib/types"
 
-import { BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX, TRANSCRIPT_SECTION_PX, cornerStackedInPorts, hasProgramRegion, hasTrackStack, trackVideoPortBasePx } from "./layout"
+import { BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX, TRANSCRIPT_SECTION_PX, cornerStackedInPorts, hasProgramRegion, hasTrackStack, nleModifierLanes, trackVideoPortBasePx } from "./layout"
 import { useSoundMutex } from "./sound-mutex"
 import type {
   FlowAssetAction,
@@ -325,6 +328,49 @@ export const PRODUCT_TYPE_ICON: Record<string, typeof Clapperboard> = {
   quote_frame: ImageIcon,
   carousel: Images,
   article: Newspaper,
+}
+
+/** L1 读数 chip (信息秩三分, ADR-114): the hover layer's ONE shape — a
+ * transient reading floating ABOVE the hovered block (never baked into the
+ * block, never covering the row below it), portal'd to document.body
+ * (视口锚浮层律), pointer-events-none, overlay-surface frost. One instance
+ * per card: the host reports the anchor's rect + content on hover, null on
+ * leave/scroll. Pure presentation — the chip never intercepts a gesture. */
+function HoverChip({
+  chip,
+}: {
+  chip: { rect: DOMRect; content: ReactNode } | null
+}) {
+  if (!chip) return null
+  const W = 300
+  // SSR-safe: a chip exists only after a client pointer event.
+  const cx = Math.min(
+    Math.max(chip.rect.left + chip.rect.width / 2, W / 2 + 8),
+    window.innerWidth - W / 2 - 8,
+  )
+  const above = chip.rect.top > 96
+  return createPortal(
+    <div
+      className="overlay-surface pointer-events-none fixed z-[100] max-w-[300px] rounded-lg px-2 py-1.5 text-[11px] leading-snug text-foreground"
+      style={{
+        left: cx,
+        top: above ? chip.rect.top - 10 : chip.rect.bottom + 10,
+        transform: above ? "translate(-50%, -100%)" : "translate(-50%, 0)",
+      }}
+    >
+      {chip.content}
+    </div>,
+    document.body,
+  )
+}
+
+/** The chip's second line — the quiet reading under the title. */
+function HoverChipMeta({ children }: { children: ReactNode }) {
+  return (
+    <div className="mt-0.5 text-[10px] tabular-nums text-muted-foreground">
+      {children}
+    </div>
+  )
 }
 
 /** The asset's content layer (ADR-113 §3 — 素材卡解剖: media + time strip +
@@ -642,21 +688,26 @@ function TranscriptSection({
  * fresh response straight back). */
 const transcriptCache = new Map<string, AssetTranscript | null>()
 
-/** The deliverable card's track stack (ADR-113 §4 — 成片轨道栈): two
- * read-only inspection lanes below the media — the VIDEO lane (the kept
- * segments as blocks, ∝ their output span) and the TEXT lane (the caption
- * sentences on the output axis, pauses as air). READ-ONLY + seek (L3 —
- * never an orchestration surface: no drag, no add/remove track, no
- * transition handles; the lanes are how the user READS the product).
- * Both lanes are in the anatomy FROM BIRTH (draft/running render muted
- * empty rows — the waiting seat), so the video in-port's anchor (锚点律,
- * NodePorts) never moves mid-life. The modifier presence strip rides
- * ABOVE the pinned lanes and only when active — its arrival grows into
- * the media's flex, never shifting an anchor. Block geometry mirrors the
- * transcript strip's (∝ absolute blocks); time labels arrive preformatted
- * from the server (the client never formats time). */
-function TrackStackSection({
+/** The deliverable card's NLE 检视轴 (ADR-114 — 成片卡检视解剖): below the
+ * media, a read-only timeline — the axis HEAD (the clip's score at the right
+ * end, moved off the media stage), the RULER (server-formatted scale, click
+ * = seek), the VIDEO lane (kept segments as real clip objects — multi-block
+ * multi-source, per-block lineage hover + click seek), the TEXT lane
+ * (caption blocks with ZERO inner text — the sentence and its range ride
+ * the L1 hover chip), and any MODIFIER lanes (music/dub presence face).
+ * READ-ONLY + seek (L3 — never an orchestration surface: no drag, no
+ * add/remove track, no transition handles; the lanes are how the user READS
+ * the product). 信息秩三分: L0 structure persists on the card, L1 readings
+ * hover (HoverChip), L2 detail clicks through to the inspector. The lanes
+ * are in the anatomy FROM BIRTH (draft/running render muted empty rows —
+ * the waiting seat), so the video in-port's anchor (锚点律, NodePorts)
+ * never moves mid-life; modifier lanes arrive on the product-landing beat
+ * and shift the anchor on that same beat (the version pager's precedent).
+ * Block geometry is ∝ the output clock; every time label arrives
+ * preformatted from the server (the client never formats time). */
+function NleAxis({
   output,
+  topClipScore,
   videoRef,
   onLineageHover,
 }: {
@@ -664,6 +715,9 @@ function TrackStackSection({
    * lanes off the new member). Stack-less (draft / non-clip) = the muted
    * empty rows. */
   output?: Output
+  /** The node's top clip score (ADR-112 ③ — the top-pick read needs the
+   * ≥2-scored-clips context, computed by the read face). */
+  topClipScore?: number
   videoRef?: RefObject<HTMLVideoElement | null>
   onLineageHover?: FlowCardData["onLineageHover"]
 }) {
@@ -671,114 +725,254 @@ function TrackStackSection({
   const stack = output?.track_stack ?? null
   const lane = stack?.video_lane ?? []
   const sentences = stack?.text_lane ?? []
+  const ruler = stack?.ruler ?? []
   // The output axis total = the video lane's concatenated end (the
   // product's duration); the server clamps the text blocks inside it.
   const total = lane.length > 0 ? lane[lane.length - 1].out_end : 0
   const modifiers = stack?.modifiers ?? {}
   const activeModifiers = (["music", "dub"] as const).filter((m) => modifiers[m])
+  // The needle rides the inline player's own clock (timeupdate is ~4Hz —
+  // cheap). Re-bind when the displayed member flips (the pager swaps the
+  // <video> element under the stable ref).
+  const [playhead, setPlayhead] = useState(0)
+  useEffect(() => {
+    const v = videoRef?.current
+    if (!v) return
+    const onTime = () => setPlayhead(v.currentTime)
+    v.addEventListener("timeupdate", onTime)
+    return () => v.removeEventListener("timeupdate", onTime)
+  }, [videoRef, output?.id])
   const seek = (seconds: number) => {
     // 文本驱动 seek 只拨头 — the ambient-muted law is untouched (never an
     // autoplay-with-sound side effect).
     const v = videoRef?.current
     if (v) v.currentTime = seconds
   }
-  const blockClass =
-    "nodrag absolute top-0 bottom-0 overflow-hidden rounded-sm bg-muted px-1 text-left text-[10px] leading-6 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+  // L1 读数 chip: one per axis; the hovered block reports its rect + reading.
+  const [chip, setChip] = useState<{ rect: DOMRect; content: ReactNode } | null>(null)
+  const chipFrom = (e: React.MouseEvent, content: ReactNode) =>
+    setChip({ rect: e.currentTarget.getBoundingClientRect(), content })
+  // 评分撤下舞台入轴头 (ADR-114): the bare score at the head's right end —
+  // the same ADR-112 ③ law (top pick only with ≥2 scored clips), quiet meta
+  // chrome instead of the on-stage badge (tracked cards only; the untracked
+  // anatomies keep the stage badge).
+  const score = typeof output?.score?.value === "number" ? output.score.value : null
+  const topPick = !!topClipScore && topClipScore > 0 && score === topClipScore
+  const frac = total > 0 ? Math.min(Math.max(playhead / total, 0), 1) : 0
+  const pct = (v: number) => `${(v / total) * 100}%`
   return (
-    <div className="shrink-0 px-3">
-      {/* 修饰轨 (presence only — the content face is a later batch): rides
-          ABOVE the pinned lanes so its arrival never moves an anchor. */}
-      {activeModifiers.length > 0 && (
-        <div className="flex h-6 items-center gap-1.5 pt-2">
-          {activeModifiers.map((m) => (
-            <span
-              key={m}
-              className="flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
-            >
-              {m === "music" ? <Music className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
-              {m === "music"
-                ? t("results.canvas.modifierMusic")
-                : t("results.canvas.modifierDub")}
+    <div className="shrink-0 px-3 pb-3 pt-1.5">
+      {/* 轴头行: score at the right end (h-4 reservation even when empty —
+          geometry never shifts). Indented past the gutter so its left edge
+          IS the lanes'. */}
+      <div className="ml-[26px] flex h-4 items-center justify-end">
+        {score !== null && (
+          <span
+            title={output?.score?.reason ?? undefined}
+            className="text-[10px] tabular-nums text-muted-foreground"
+          >
+            {topPick ? `${t("results.topPick")} · ${score}` : score}
+          </span>
+        )}
+      </div>
+      {/* Ruler: the server-formatted scale — click seeks, the needle's host
+          box (its left/right edges ARE the lanes'). */}
+      <div
+        className="nodrag relative ml-[26px] h-[22px] cursor-pointer"
+        onClick={(e) => {
+          e.stopPropagation()
+          if (total <= 0) return
+          const r = e.currentTarget.getBoundingClientRect()
+          seek(((e.clientX - r.left) / r.width) * total)
+        }}
+      >
+        {total > 0 &&
+          ruler.map((tick, i) => (
+            <span key={i}>
+              <span
+                aria-hidden
+                className="absolute bottom-0 w-px bg-meta-foreground"
+                style={{
+                  left: pct(tick.t),
+                  height: tick.label ? 9 : 5,
+                  opacity: tick.label ? 0.9 : 0.55,
+                }}
+              />
+              {tick.label ? (
+                <span
+                  aria-hidden
+                  className="text-meta absolute top-0 -translate-x-1/2 text-[9px] tabular-nums"
+                  style={{ left: pct(tick.t) }}
+                >
+                  {tick.label}
+                </span>
+              ) : null}
             </span>
           ))}
-        </div>
-      )}
-      {/* 16px top breath + two 40px rows (label 16 + lane 24), the text row
-          flush on the card's bottom inner edge — TRACK_STACK_PX = 96, the
-          anchor formula's zero-pad premise (layout.ts, 一条律两镜像). */}
-      <div className="pt-4">
-        <div className="flex h-4 items-center">
-          <span className="text-meta text-[10px]">{t("results.canvas.videoTrack")}</span>
-        </div>
-        <div className="relative h-6">
-          {lane.length === 0 || total <= 0 ? (
-            <span className="absolute inset-0 rounded-sm bg-muted" />
-          ) : (
-            lane.map((block, i) => {
-              const label = t("results.canvas.trackSegment", {
-                n: i + 1,
-                src: block.src_label,
+        {total > 0 && (
+          /* 跨道播放头: one needle from the ruler's top through the lanes —
+             its host box spans exactly the lanes' width. */
+          <span
+            aria-hidden
+            className="pointer-events-none absolute top-0 z-10 w-px bg-foreground"
+            style={{
+              left: `${frac * 100}%`,
+              height: 22 + 34 + 4 + 22 + activeModifiers.length * 26,
+            }}
+          >
+            <span className="absolute -top-0.5 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[3.5px] border-t-[5px] border-x-transparent border-t-foreground" />
+          </span>
+        )}
+      </div>
+      {/* The lanes: gutter icon + lane box per row. */}
+      <div className="flex flex-col gap-1">
+        <div
+          className="flex items-center gap-1.5"
+          role="group"
+          aria-label={t("results.canvas.videoTrack")}
+        >
+          <span className="flex w-5 shrink-0 justify-center text-meta-foreground">
+            <Film className="h-3 w-3" />
+          </span>
+          <div className="relative h-[34px] flex-1">
+            {lane.length === 0 || total <= 0 ? (
+              <span className="absolute inset-0 rounded-md bg-muted" />
+            ) : (
+              lane.map((block, i) => {
+                const label = t("results.canvas.trackSegment", {
+                  n: i + 1,
+                  src: block.src_label,
+                })
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={label}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      seek(block.out_start)
+                    }}
+                    onMouseEnter={(e) => {
+                      chipFrom(
+                        e,
+                        <>
+                          <div>
+                            {t("results.canvas.trackSegmentTitle", { n: i + 1 })}
+                          </div>
+                          <HoverChipMeta>
+                            {t("results.canvas.trackSegmentOut", {
+                              out: block.out_label,
+                              src: block.src_label,
+                            })}
+                          </HoverChipMeta>
+                        </>,
+                      )
+                      if (block.asset_id) {
+                        onLineageHover?.({
+                          assetId: block.asset_id,
+                          srcStart: block.src_start,
+                          srcEnd: block.src_end,
+                        })
+                      }
+                    }}
+                    onMouseLeave={() => {
+                      setChip(null)
+                      onLineageHover?.(null)
+                    }}
+                    className="nodrag absolute top-0 bottom-0 flex items-center gap-1.5 overflow-hidden rounded-md bg-primary px-2 text-left text-primary-foreground transition-[filter] hover:brightness-110"
+                    style={{
+                      left: pct(block.out_start),
+                      width: pct(block.out_end - block.out_start),
+                    }}
+                  >
+                    <Film className="h-3 w-3 shrink-0 opacity-80" />
+                    <span className="truncate text-[11px] leading-none">{label}</span>
+                  </button>
+                )
               })
-              return (
+            )}
+          </div>
+        </div>
+        <div
+          className="flex items-center gap-1.5"
+          role="group"
+          aria-label={t("results.canvas.textTrack")}
+        >
+          <span className="flex w-5 shrink-0 justify-center text-meta-foreground">
+            <Captions className="h-3 w-3" />
+          </span>
+          <div className="relative h-[22px] flex-1">
+            {sentences.length === 0 || total <= 0 ? (
+              <span className="absolute inset-0 rounded-sm bg-muted" />
+            ) : (
+              sentences.map((block, i) => (
                 <button
                   key={i}
                   type="button"
-                  title={label}
-                  aria-label={label}
+                  aria-label={block.text}
                   onClick={(e) => {
                     e.stopPropagation()
                     seek(block.out_start)
                   }}
-                  onMouseEnter={() =>
-                    block.asset_id &&
-                    onLineageHover?.({
-                      assetId: block.asset_id,
-                      srcStart: block.src_start,
-                      srcEnd: block.src_end,
-                    })
+                  onMouseEnter={(e) =>
+                    chipFrom(
+                      e,
+                      <>
+                        <div className="whitespace-pre-wrap">{block.text}</div>
+                        <HoverChipMeta>{block.label}</HoverChipMeta>
+                      </>,
+                    )
                   }
-                  onMouseLeave={() => onLineageHover?.(null)}
-                  className={blockClass}
+                  onMouseLeave={() => setChip(null)}
+                  className={cn(
+                    "nodrag absolute top-0 bottom-0 rounded-[2px] bg-muted shadow-[1px_0_0_0_var(--card)] transition-colors hover:bg-accent",
+                    i === 0 && "rounded-l-md",
+                    i === sentences.length - 1 && "rounded-r-md",
+                  )}
                   style={{
-                    left: `${(block.out_start / total) * 100}%`,
-                    width: `${((block.out_end - block.out_start) / total) * 100}%`,
+                    left: pct(block.out_start),
+                    width: pct(block.out_end - block.out_start),
                   }}
-                >
-                  <span className="block truncate">{label}</span>
-                </button>
-              )
-            })
-          )}
+                />
+              ))
+            )}
+          </div>
         </div>
-        <div className="flex h-4 items-center">
-          <span className="text-meta text-[10px]">{t("results.canvas.textTrack")}</span>
-        </div>
-        <div className="relative h-6">
-          {sentences.length === 0 || total <= 0 ? (
-            <span className="absolute inset-0 rounded-sm bg-muted" />
-          ) : (
-            sentences.map((block, i) => (
-              <button
-                key={i}
-                type="button"
-                title={block.label}
-                aria-label={block.label}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  seek(block.out_start)
-                }}
-                className={blockClass}
-                style={{
-                  left: `${(block.out_start / total) * 100}%`,
-                  width: `${((block.out_end - block.out_start) / total) * 100}%`,
-                }}
-              >
-                <span className="block truncate">{block.text}</span>
-              </button>
-            ))
-          )}
-        </div>
+        {/* 修饰道 (presence face — the content face is a later batch): arrive
+            with the product, BELOW the text lane (the NLE order); the anchor
+            shifts on that same beat (pager precedent). */}
+        {activeModifiers.map((m) => (
+          <div
+            key={m}
+            className="flex items-center gap-1.5"
+            role="group"
+            aria-label={
+              m === "music"
+                ? t("results.canvas.modifierMusic")
+                : t("results.canvas.modifierDub")
+            }
+          >
+            <span className="flex w-5 shrink-0 justify-center text-meta-foreground">
+              {m === "music" ? <Music className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
+            </span>
+            <div className="relative h-[22px] flex-1">
+              <span className="absolute inset-0 flex items-center gap-1.5 rounded-md bg-muted px-2 text-muted-foreground">
+                {m === "music" ? (
+                  <Music className="h-3 w-3 shrink-0" />
+                ) : (
+                  <Mic className="h-3 w-3 shrink-0" />
+                )}
+                <span className="truncate text-[10px]">
+                  {m === "music"
+                    ? t("results.canvas.modifierMusic")
+                    : t("results.canvas.modifierDub")}
+                </span>
+              </span>
+            </div>
+          </div>
+        ))}
       </div>
+      <HoverChip chip={chip} />
     </div>
   )
 }
@@ -1140,6 +1334,7 @@ function MediaProductRegion({
   onExpandMedia,
   fill,
   videoRef,
+  hideScore,
 }: {
   node: FlowNode
   output: Output
@@ -1154,6 +1349,10 @@ function MediaProductRegion({
    * blocks seek it (`currentTime = out_start` — 只拨头, the ambient-muted
    * law untouched). */
   videoRef?: RefObject<HTMLVideoElement | null>
+  /** 评分撤下舞台入轴头 (ADR-114): a tracked card reads its score at the
+   * NLE axis's head — the on-stage badge stays the UNtracked anatomies'
+   * seat. */
+  hideScore?: boolean
 }) {
   const { t } = useTranslation()
   const score = typeof output.score?.value === "number" ? output.score.value : null
@@ -1302,11 +1501,12 @@ function MediaProductRegion({
           )}
         </span>
       )}
-      {/* Media meta badges: the score rides the bottom-left corner; the
+      {/* Media meta badges: the score rides the bottom-left corner (unless
+          the card's NLE axis owns it — 评分撤下舞台入轴头, ADR-114); the
           top corners belong to the hover affordances (expand left, sound
           right). The duration is NOT a badge — it lives in the factsbar
           below the card (2026-08-17 二轮走查拍板). */}
-      {score !== null && !renderFailed && (
+      {score !== null && !renderFailed && !hideScore && (
         <span
           title={output.score?.reason ?? undefined}
           className={cn(
@@ -2111,6 +2311,7 @@ function GraphCard({
               onExpandMedia={onExpandMedia}
               fill={!hasProgramRegion(node)}
               videoRef={tracked ? productVideoRef : undefined}
+              hideScore={tracked}
             />
           )
         ) : (
@@ -2157,15 +2358,15 @@ function GraphCard({
         {node.artifact && node.artifact.facets.length > 0 && (
           <ArtifactFacetStrip artifact={node.artifact} />
         )}
-        {/* ADR-113 §4 成片轨道栈: the two inspection lanes — LAST inside
-            the card, flush to its bottom inner edge, so the failure chrome
-            above (failure lines / facet strip) grows INTO the media's flex
-            and the lane seats (the video in-port's anchor, 锚点律) never
-            move. In the anatomy from birth: draft renders muted empty
-            rows. */}
+        {/* ADR-114 NLE 检视轴: the inspection timeline — LAST inside the
+            card, so the failure chrome above (failure lines / facet strip)
+            grows INTO the media's flex and the lane seats (the video
+            in-port's anchor, 锚点律) never move. In the anatomy from birth:
+            draft renders muted empty lanes. */}
         {tracked && (
-          <TrackStackSection
+          <NleAxis
             output={output}
+            topClipScore={node.topClipScore}
             videoRef={productVideoRef}
             onLineageHover={onLineageHover}
           />
@@ -2308,13 +2509,15 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
         // 角落栈: bottom-anchored at the card's bottom-left, stacking upward
         // in port order; generator cards keep the two-family seats (each
         // region bottom-anchored at its own corner, 34px per sibling).
-        // 锚点律 (ADR-113 §5): a tracked card's video in-port leaves the
-        // corner stack for the video lane's Y-center — the edge lands on the
-        // lane it feeds (mirror: layout.ts trackVideoPortBasePx) — and does
-        // NOT consume a corner-stack slot.
+        // 锚点律 (ADR-113 §5; ADR-114 NLE 轴): a tracked card's video
+        // in-port leaves the corner stack for the video lane's Y-center —
+        // the edge lands on the lane it feeds (mirror: layout.ts
+        // trackVideoPortBasePx) — and does NOT consume a corner-stack slot.
+        // Live modifier lanes (below the text lane) raise the seat by
+        // NLE_MODIFIER_ROW_PX each on their arrival beat.
         const laneSeat = type === "video" && hasTrackStack(node)
         const base = laneSeat
-          ? trackVideoPortBasePx(pagerPx)
+          ? trackVideoPortBasePx(pagerPx, nleModifierLanes(node))
           : unified
             ? inTextBase + cornerCount++ * 34
             : isMedia

@@ -1110,6 +1110,9 @@ const zh: Resources = {
       videoTrack: "视频轨",
       textTrack: "文字轨",
       trackSegment: "片段 {{n}} · 源 {{src}}",
+      // L1 hover chip 两行（ADR-114 信息秩三分）：块名 + 产出/源两轴预格式化区间。
+      trackSegmentTitle: "片段 {{n}}",
+      trackSegmentOut: "产出 {{out}} · 源 {{src}}",
       modifierMusic: "音乐",
       modifierDub: "配音",
       // 产物档案面板（2026-09-06，FLORA 节点详情对齐）：点产物节点召唤，

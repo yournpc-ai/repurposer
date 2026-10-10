@@ -130,22 +130,45 @@ export const PRODUCT_TOOLBAR_PX = 44
  * the second version's arrival, one coherent reflow, never a quiet shift. */
 export const PRODUCT_PAGER_PX = 44
 
-/** 轨道栈 (ADR-113 §4 — the deliverable card's inspection anatomy): the
- * tracked clip families carry two read-only lanes below the media — the
- * VIDEO lane (kept segments as blocks on the output clock) and the TEXT
- * lane (caption sentences, pauses as air). Both lanes are in the anatomy
- * FROM BIRTH (draft renders muted empty rows — the waiting seat, FLORA
- * 空态先例), so the video in-port's anchor never moves mid-life. ONE law,
- * two mirrors — the server's frame reservation (graph_store._TRACK_STACK_PX
- * / _TRACKED_CLIP_TOOLS) lands in the same batch; change one, change both. */
-export const TRACK_LABEL_PX = 16
-export const TRACK_LANE_PX = 24
-export const VIDEO_LANE_ROW_PX = TRACK_LABEL_PX + TRACK_LANE_PX
-export const TEXT_LANE_ROW_PX = TRACK_LABEL_PX + TRACK_LANE_PX
-/** 96 = 16 top breath + the video row + the text row; the text row sits
- * flush on the card's bottom inner edge (the anchor formula's zero-pad
- * premise — 锚点律). */
-export const TRACK_STACK_PX = 16 + VIDEO_LANE_ROW_PX + TEXT_LANE_ROW_PX
+/** NLE 检视轴 (ADR-114 — the deliverable card's inspection anatomy): below
+ * the media, a timeline face — the axis HEAD (the clip's score, right end),
+ * the RULER (server-formatted scale), the VIDEO lane (kept segments as real
+ * clip objects), the TEXT lane (caption blocks, zero inner text — readings
+ * ride the hover chip), and any MODIFIER lanes (music/dub, presence face).
+ * All lanes are in the anatomy FROM BIRTH (draft renders muted empty rows —
+ * the waiting seat, FLORA 空态先例), so the video in-port's anchor never
+ * moves mid-life; modifier lanes arrive on the product-landing beat and
+ * shift the anchor on that same beat (the version pager's precedent — one
+ * coherent reflow, never a quiet shift). ONE law, two mirrors — the
+ * server's frame reservation (graph_store._NLE_AXIS_PX /
+ * _TRACKED_CLIP_TOOLS) lands in the same batch; change one, change both. */
+export const NLE_HEAD_PX = 16
+export const NLE_RULER_PX = 22
+/** The lane rows' left gutter: icon 20 + gap 6 — the ruler and the axis
+ * head indent past it so their left edge IS the lanes' left edge. */
+export const NLE_GUTTER_PX = 26
+export const NLE_VIDEO_LANE_PX = 34
+export const NLE_TEXT_LANE_PX = 22
+export const NLE_MODIFIER_LANE_PX = 22
+export const NLE_LANE_GAP_PX = 4
+export const NLE_PAD_TOP_PX = 6
+export const NLE_PAD_BOTTOM_PX = 12
+/** One modifier lane's arrival grows the axis by this (lane + its gap) —
+ * and shifts the video in-port's bottom-anchored seat by the same. */
+export const NLE_MODIFIER_ROW_PX = NLE_MODIFIER_LANE_PX + NLE_LANE_GAP_PX
+/** 116 = head + ruler + video lane + gap + text lane + pads; the text lane
+ * sits 12px above the card's bottom inner edge (the anchor formula's
+ * premise — 锚点律). Modifier lanes add NLE_MODIFIER_ROW_PX each at
+ * runtime (never in the birth reservation — their presence is unknown at
+ * draft; the arrival grows INTO the media's flex). */
+export const NLE_AXIS_PX =
+  NLE_PAD_TOP_PX +
+  NLE_HEAD_PX +
+  NLE_RULER_PX +
+  NLE_VIDEO_LANE_PX +
+  NLE_LANE_GAP_PX +
+  NLE_TEXT_LANE_PX +
+  NLE_PAD_BOTTOM_PX
 
 /** The tracked clip families — tool-set parity with the server mirror
  * (graph_store._TRACKED_CLIP_TOOLS). NEVER a kind+prototype proxy:
@@ -182,14 +205,36 @@ export const IN_MEDIA_PORT_BASE_PX = PRODUCT_TOOLBAR_PX + PROGRAM_REGION_PX + 16
 /** 角落栈基座 (无程序区媒体卡): every in-port parks at the card's
  * bottom-left corner — the same seat as the media card's text port (60). */
 export const IN_CORNER_PORT_BASE_PX = PRODUCT_TOOLBAR_PX + 16
-/** 锚点律 (ADR-113 §5): on a tracked card the video in-port leaves the
- * corner stack and parks at the VIDEO lane's Y-center — the edge lands on
- * the lane it feeds. Circle bottom = the factsbar band + the text lane row
- * + half the video lane row − half the circle (PORT_PX/2); the text row's
- * flush-bottom seat is what makes this a constant. Mirror of FlowNodeCard
- * NodePorts' CSS seat (一条律两镜像 — change one, change both). */
-export const trackVideoPortBasePx = (pagerPx = 0): number =>
-  PRODUCT_TOOLBAR_PX + pagerPx + TEXT_LANE_ROW_PX + VIDEO_LANE_ROW_PX / 2 - PORT_PX / 2
+/** 锚点律 (ADR-113 §5; ADR-114 NLE 轴): on a tracked card the video in-port
+ * leaves the corner stack and parks at the VIDEO lane's Y-center — the edge
+ * lands on the lane it feeds. Circle bottom = the factsbar band + the axis's
+ * below-video-lane anatomy (bottom pad 12 + text lane 22 + gap 4) + half the
+ * video lane − half the circle (PORT_PX/2); each live modifier lane (below
+ * the text lane) raises the seat by NLE_MODIFIER_ROW_PX. Mirror of
+ * FlowNodeCard NodePorts' CSS seat (一条律两镜像 — change one, change both). */
+export const trackVideoPortBasePx = (pagerPx = 0, modifierLanes = 0): number =>
+  PRODUCT_TOOLBAR_PX +
+  pagerPx +
+  modifierLanes * NLE_MODIFIER_ROW_PX +
+  NLE_PAD_BOTTOM_PX +
+  NLE_TEXT_LANE_PX +
+  NLE_LANE_GAP_PX +
+  NLE_VIDEO_LANE_PX / 2 -
+  PORT_PX / 2
+
+/** The tracked card's live modifier-lane count (music/dub) — the anchor's
+ * modifier term. Reads the MAX across the node's products so a pager flip
+ * never re-seats the port (the largest anatomy wins the seat, smaller
+ * members render air in the freed row — the reservation posture). */
+export function nleModifierLanes(node: FlowNode): number {
+  let lanes = 0
+  for (const o of node.outputs ?? []) {
+    const mods = o.track_stack?.modifiers
+    if (!mods) continue
+    lanes = Math.max(lanes, (mods.music ? 1 : 0) + (mods.dub ? 1 : 0))
+  }
+  return lanes
+}
 /** 词表 v3 (C5): the 全文卡 family (text/table) in-text port base = 16 —
  * its tail furniture lives INSIDE the card (the version pager never adds
  * an external band), so the pager offset applies only to the media-card
@@ -230,7 +275,7 @@ export function declaredHandles(
     // gapless).
     const laneSeat = t === "video" && hasTrackStack(node)
     const base = laneSeat
-      ? trackVideoPortBasePx(pagerPx)
+      ? trackVideoPortBasePx(pagerPx, nleModifierLanes(node))
       : unified
         ? IN_CORNER_PORT_BASE_PX + pagerPx + corner++ * PORT_STEP_PX
         : isMedia
@@ -405,11 +450,11 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
   // rows actually render (healthy = 0, the frame carries no reservation —
   // server mirror: _frame_of).
   const facetPx = programPx > 0 ? 0 : facetStripPx(node)
-  // 轨道栈 (ADR-113 §4): the tracked clip families carry the two inspection
-  // lanes in EVERY state (draft renders muted empty rows — the anchor seat
+  // NLE 检视轴 (ADR-114): the tracked clip families carry the inspection
+  // axis in EVERY state (draft renders muted empty lanes — the anchor seat
   // never moves mid-life), so the reservation rides both the quiet-body and
   // the product anatomy. Server mirror: graph_store._frame_of's clip branch.
-  const trackPx = hasTrackStack(node) ? TRACK_STACK_PX : 0
+  const trackPx = hasTrackStack(node) ? NLE_AXIS_PX : 0
   if (outputs.length === 0) {
     // Draft / queued / running / quiet-done body (the dashed region reads
     // the estimate while unrun; a landed-empty node (research) reads its

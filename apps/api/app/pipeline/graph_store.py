@@ -393,14 +393,16 @@ _ASSET_FRAME_DEFAULT = _FRAME_CLASS["asset"]
 _TRANSCRIPT_SECTION_PX = 236  # strip 28 + gap 8 + cue flow 200
 _ASSET_TEXT_ONLY_H = 278  # caption 26 + cue flow 200 + toolbar 44 + gap 8
 
-# 轨道栈预留 (ADR-113 §4 — 成片卡解剖: media + 视频轨 + 文字轨 + bar): the
-# tracked clip families' cards carry the two read-only inspection lanes
-# FROM BIRTH (draft renders muted empty rows — the waiting seat, so the
-# video in-port's anchor never moves mid-life; 锚点律). ONE law with the
-# client mirror (layout.ts TRACK_STACK_PX / TRACKED_CLIP_TOOLS — tool-set
-# parity, never a kind+prototype proxy: reframe/music share video×editor
-# without carrying the lanes).
-_TRACK_STACK_PX = 96  # top breath 16 + video lane row 40 + text lane row 40
+# NLE 检视轴预留 (ADR-114 — 成片卡解剖: media + 轴头 + ruler + 视频道 +
+# 文字道 + bar): the tracked clip families' cards carry the inspection axis
+# FROM BIRTH (draft renders muted empty lanes — the waiting seat, so the
+# video in-port's anchor never moves mid-life; 锚点律). Modifier lanes add
+# 26px each at runtime (their presence is unknown at draft — the arrival
+# grows INTO the media's flex, the birth reservation never carries them).
+# ONE law with the client mirror (layout.ts NLE_AXIS_PX / TRACKED_CLIP_TOOLS
+# — tool-set parity, never a kind+prototype proxy: reframe/music share
+# video×editor without carrying the lanes).
+_NLE_AXIS_PX = 116  # pad 6 + head 16 + ruler 22 + video lane 34 + gap 4 + text lane 22 + pad 12
 _TRACKED_CLIP_TOOLS = frozenset({"select_clips", "translate_clip", "dub_clip"})
 
 # The task-book document's role tag. Production stopped (Workspace 合同
@@ -494,12 +496,12 @@ def _frame_of(kind: str, spec: dict[str, Any]) -> tuple[int, int]:
         # absorbs a failure-grown strip at runtime).
         if str(spec.get("prototype") or "") != "generator":
             h -= _PROGRAM_REGION_PX
-        # 轨道栈门控 (ADR-113 §4; client mirror layout.ts hasTrackStack):
-        # the tracked clip families reserve the two inspection lanes at
-        # birth — the lanes are in the anatomy from draft on, so the video
-        # in-port's anchor seat (锚点律) never moves mid-life.
+        # NLE 轴门控 (ADR-114; client mirror layout.ts hasTrackStack):
+        # the tracked clip families reserve the inspection axis at birth —
+        # the lanes are in the anatomy from draft on, so the video in-port's
+        # anchor seat (锚点律) never moves mid-life.
         if str(spec.get("tool") or "") in _TRACKED_CLIP_TOOLS:
-            h += _TRACK_STACK_PX
+            h += _NLE_AXIS_PX
         return w, h
     return _FRAME_CLASS.get(cls, _FRAME_CLASS["clip"])
 
