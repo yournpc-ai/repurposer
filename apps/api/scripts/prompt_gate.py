@@ -3,8 +3,7 @@ behavioral threshold for the intent router's system prompt.
 
 NOT an A/B instrument (that is `scratch/router_ab_probe.py`, for prompt
 editing sessions) — this gate asserts ABSOLUTE minimum rates for the LIVE
-prompt, so a regression is caught before deploy, not after. Three probes,
-same contexts as the A/B instrument:
+prompt, so a regression is caught before deploy, not after. Ten probes:
 
 - A:start-call — a plan on the table + "looks good, start" must call
   start_run (never a same-chain re-plan). Measured band 9-11/12 across all
@@ -38,23 +37,28 @@ same contexts as the A/B instrument:
   plan's plan_id (序位→id 精确命中, 验收 #3), read off the get_pending_plan
   stub — propose_tasks / edit_graph never called (a package revision never
   re-derives the chain).
-- G:craft-revision (iter-3 S3, N-58) — post-run 'plan 2 的帖子语气再尖锐
-  一点' must end at revise_output with plan_ref relayed verbatim
-  (containing '2'), never edit_graph / propose_tasks.
-- H:precise-edit routing (精确编辑迭代 S3, ADR-090; Final Hardening B1
-  扩为四族 2026-09-24) — a landed clip + a mechanically executable change
-  must end at edit_output with the verb decoded from WHICH param is
-  filled (schemas.edit_kind_for_params — there is no kind field): H =
-  remove_range (quote verbatim), H2 = set_trim (seconds=3), H3 =
-  set_title (title verbatim), H4 = set_caption_style (preset enum via the
-  list_caption_styles stub). revise_output / propose_tasks / edit_graph
-  are misroutes for changes this definite. B1's structural invariant is
-  asserted at startup: the chat tool set carries NO raw-ops verb.
+- G:craft-revision (iter-3 S3, N-58) — the open-craft revision seat:
+  post-run 'plan 2 的帖子语气再尖锐一点' must end at revise_output with
+  plan_ref relayed verbatim (containing '2'), never edit_graph /
+  propose_tasks / edit_output (the precise-edit verb is a misroute for
+  open craft — symmetric with the H family's never-revise_output clause).
+- H:precise-edit routing (ADR-090) — a landed clip + a mechanically
+  executable change must end at edit_output with the verb decoded from
+  WHICH param is filled (schemas.edit_kind_for_params — there is no kind
+  field): H = remove_range (quote verbatim), H4 = set_caption_style
+  (preset enum via the list_caption_styles stub — the one family whose
+  mapping runs through a read tool). revise_output / propose_tasks /
+  edit_graph are misroutes for changes this definite. The structural
+  invariant is asserted at startup: the chat tool set carries NO raw-ops
+  verb.
 - I:browse-question (ADR-100 改靶——一切可点选项归 dock) — material
   attached + a recommendation landscape in the recent rounds, and a
   custom-worded browse question must close on ask_user carrying 1-3
   options, with present_plan NEVER called (事故④'s hijack shape on
   the gate's own seat — same "NEVER called" assertion family as probe D).
+  The threshold is UNCALIBRATED — the first band-reading run calibrates
+  it (the calibration run belongs to the user); never tune it to excuse
+  a regression.
 
 Tool-loop form (ADR-077 判词②, 2026-09-14): the agent is the ToolLoopAgent,
 the action IS the terminal tool call, and the predicates read
@@ -72,7 +76,7 @@ thresholds), then bisect with the A/B instrument — never tune the
 thresholds to make a regression pass.
 
 Usage (from apps/api):
-    uv run python scripts/prompt_gate.py [--n 12] [--probe A|B|C|D|E|F|G|H|H2|H3|H4|I] [--provider minimax]
+    uv run python scripts/prompt_gate.py [--n 12] [--probe A|B|C|D|E|F|G|H|H4|I] [--provider minimax]
 """
 
 import argparse
@@ -132,11 +136,11 @@ PROVIDERS = {
 # bare int), fixed in the SCHEMA (coerce_numbers_to_str, 顺形律), then
 # 12/12. Thresholds hold at 8 with headroom — recalibrate from readings,
 # never to excuse a regression.
-# I re-targeted at 8 (ADR-100: browse → ask_user options dock) — the first
-# reading of the new target is pending; recalibrate from the measured band,
-# never to excuse a regression.
+# I's threshold is UNCALIBRATED (ADR-114) — the first band-reading run
+# calibrates it; the calibration run belongs to the user, and thresholds
+# never move to excuse a regression.
 THRESHOLDS = {"A": 8, "B": 8, "C": 10, "D": 8, "E": 8, "F": 8, "G": 8, "H": 8,
-              "H2": 8, "H3": 8, "H4": 8, "I": 8}
+              "H4": 8, "I": 8}
 
 BRIEF_ANSWERED = Brief.model_validate(
     {
@@ -307,18 +311,10 @@ PROBE_H = {
     },
 }
 
-# Final Hardening B1 (2026-09-24): the four request families each get a
-# probe — same landed-clip context, one mechanically executable change per
-# family. The verb must decode from WHICH param is filled
-# (schemas.edit_kind_for_params — there is no kind field to assert on).
-PROBE_H2 = {
-    "message": "把这条视频结尾剪掉 3 秒",
-    "context": PROBE_H["context"],
-}
-PROBE_H3 = {
-    "message": "把这条视频的标题改成「AI 时代的内容创作」",
-    "context": PROBE_H["context"],
-}
+# H4 (ADR-090): the caption-style seat — same landed-clip context; the
+# style must map to a preset enum id off the list_caption_styles read (the
+# one family whose mapping runs through a read tool), never a free-form
+# phrase.
 PROBE_H4 = {
     "message": "把这条视频的字幕换成卡拉 OK 高亮那种样式",
     "context": PROBE_H["context"],
@@ -566,20 +562,22 @@ def _passed(probe: str, r: LoopResult) -> bool:
         )
     # G (iter-3 S3): the craft revision ends at revise_output with the
     # user's pointing relayed verbatim (plan_ref carries the '2') — never
-    # edit_graph / propose_tasks.
+    # edit_graph / propose_tasks / edit_output (the precise-edit verb is a
+    # misroute for open craft — symmetric with the H family's
+    # never-revise_output clause).
     if probe == "G":
         return (
             r.tool_name == "revise_output"
             and "2" in str(getattr(getattr(r.params, "target", None), "plan_ref", "") or "")
             and "edit_graph" not in r.calls
             and "propose_tasks" not in r.calls
+            and "edit_output" not in r.calls
         )
-    # H/H2/H3/H4 (精确编辑迭代 S3, ADR-090; Final Hardening B1 四族): the
-    # precise edit routes edit_output with the verb decoded from WHICH
-    # param is filled (schemas.edit_kind_for_params — there is no kind
-    # field), the user's words relayed verbatim — the open-craft /
-    # proposal / wiring verbs are all misroutes for a change this
-    # definite.
+    # H/H4 (ADR-090 精确编辑): the precise edit routes edit_output with the
+    # verb decoded from WHICH param is filled (schemas.edit_kind_for_params
+    # — there is no kind field), the user's words relayed verbatim — the
+    # open-craft / proposal / wiring verbs are all misroutes for a change
+    # this definite.
     if probe.startswith("H"):
         ep = getattr(r.params, "params", None)
         if r.tool_name != "edit_output" or ep is None:
@@ -592,10 +590,6 @@ def _passed(probe: str, r: LoopResult) -> bool:
                 "onboarding is where users decide to stay"
                 in str(ep.quote or "").lower()
             )
-        if probe == "H2":
-            return kind == "set_trim" and ep.seconds is not None and abs(ep.seconds - 3) < 0.01
-        if probe == "H3":
-            return kind == "set_title" and (ep.title or "").strip() == "AI 时代的内容创作"
         # H4: the style must be the enum id mapped off the catalog read,
         # never a free-form phrase.
         return kind == "set_caption_style" and (ep.style or "") == "karaoke-highlight"
@@ -635,7 +629,7 @@ def _failure_tag(probe: str, r: LoopResult) -> str | None:
 async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=12)
-    parser.add_argument("--probe", choices=["A", "B", "C", "D", "E", "F", "G", "H", "H2", "H3", "H4", "I"], default=None)
+    parser.add_argument("--probe", choices=["A", "B", "C", "D", "E", "F", "G", "H", "H4", "I"], default=None)
     parser.add_argument("--provider", choices=sorted(PROVIDERS), default="minimax")
     args = parser.parse_args()
 
@@ -691,15 +685,13 @@ async def main() -> int:
         "F": PROBE_F,
         "G": PROBE_G,
         "H": PROBE_H,
-        "H2": PROBE_H2,
-        "H3": PROBE_H3,
         "H4": PROBE_H4,
         "I": PROBE_I,
     }
-    # Final Hardening B1 (2026-09-24): the chat tool set must NOT carry the
-    # retired raw-ops verb — its presence would make every routing
-    # predicate's "never the raw path" clause vacuous. Asserted once here so
-    # the four H-family probes measure a real boundary.
+    # The chat tool set must NOT carry the retired raw-ops verb — its
+    # presence would make every routing predicate's "never the raw path"
+    # clause vacuous. Asserted once here so the H-family probes measure a
+    # real boundary.
     assert "apply_edit_ops" not in {t.name for t in CHAT_TOOLS}, (
         "apply_edit_ops is back in CHAT_TOOLS — the Agent's raw-ops edit "
         "path must stay closed (Final Hardening B1)"
@@ -708,7 +700,7 @@ async def main() -> int:
     for name, ctx in probes.items():
         if args.probe and name != args.probe:
             continue
-        agent = chat_agent if name in ("E", "F", "G", "H", "H2", "H3", "H4") else plan_agent
+        agent = chat_agent if name in ("E", "F", "G", "H", "H4") else plan_agent
         # E's evidence reads quote onboarding, not pricing (the themed
         # canned observations keep the chain honest to the ask); F's
         # get_pending_plan stub carries the docked package's plan_ids.
