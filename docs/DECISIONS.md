@@ -425,14 +425,13 @@ animated text tracks, B-roll library, single-image free layout, waveform animati
 6. **Downloads use presigned GET** carrying `Content-Disposition: attachment` (`/outputs/{key}?download=1`).
 
 **Consequences**:
-- Local `assets/` and `data/` directories are deleted; `scripts/migrate_to_tos.py` performs the one-time upload of MVP assets.
+- Local `assets/` and `data/` directories are deleted.
 - Render service uploads outputs via presigned PUT; no shared volumes anywhere.
 - Frontend receives storage-public URLs at the API boundary (`resolve_stored_url`); the DB keeps bare keys.
 
 **Related files**:
 - `apps/api/app/services/storage.py` (keys, presign, public/resolve URLs)
 - `apps/api/app/routers/files.py` (redirect / proxy / presigned download)
-- `apps/api/scripts/migrate_to_tos.py`
 - `docker-compose.yml` (S3_* env wiring)
 
 ---

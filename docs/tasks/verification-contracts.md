@@ -187,7 +187,6 @@ truth 从「处理中」变成「处理失败」——前置条件被 worker 调
 
 - `dev.sh` 死旗 `DEMO_SEED_ASYNC` 删除（零读者，与 `SKIP_DEMO_SEED` 同族）
 - `scratch/router_ab_probe.py` 移植到 ToolLoopAgent 接口（import 已断；prompt_gate 失败协议点名它做 A/B bisect）
-- 一次性脚本归档判定（`migrate_to_tos.py` / `backfill_graph.py`）
 - S11 `bilingual is True` → truthiness 断言迁移 + 产品侧 params coercion 挂账（B/D 边界，审计 §5 已裁）——2026-09-20 Batch C 验收两连同一形状（LLM 稳定发字符串 `'true'`），与本批零机制关联，确诊在册债的常驻形态。**harness 半已落（Phase 4 B8, 2026-09-21）**：断言迁移 `in (True, "true")` + fixture 律硬化（material ready 声明——B6 Start 门使裸 PENDING fixture 确定性阻塞）；**产品侧 params coercion 仍挂账**
 - CHAT_ARCH §8.6 首段「工具 loop 流式」相位帧表述（drafting/inspecting/repairing/creating_run 现在时）与同节第二段「相位面收窄 = 步⑤，过门禁后施工」——**Phase 3 Batch B 已退役/施工完成的文档残段**（2026-09-21 Phase 4 B8 盘点发现；现行真相：基座/composing/清除帧 + Activity 唯一工作证据座），归 docs 卫生批现在时改写，非 Phase 4 合同面
 

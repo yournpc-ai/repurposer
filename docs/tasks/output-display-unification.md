@@ -105,7 +105,7 @@
 
 ```bash
 cd apps/web && npx tsc --noEmit
-cd apps/api && uv run python -m compileall app && uv run python scripts/accept_prompt_surface.py
+cd apps/api && uv run python -m compileall app
 ```
 
 人工走查（双主题）：overlay 示例 tab（post=textarea / carousel=幻灯栈 / quote=9:16 视频卡）→ 结果页网格（叠卡 9:16 出框）→ 结果画布（竖屏节点不裁）→ /projects 列表（竖屏项目卡 contain）→ chat 产物卡。
