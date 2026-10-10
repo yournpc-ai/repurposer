@@ -2786,3 +2786,21 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 **Consequences**: 转写节点整族消失——画布每素材少一列（708px 族结构性不可能），graph refetch 不再搬运全文；cue 从「派生四次 + 白存一份」收敛为「一座派生」；互指成立（点句子跳画面，时间轴从装饰变导航）；血缘从「画的边」变「读的联动」；编辑 overlay 单座位且写口落资产层（语义更正）。代价：素材卡变重（定高内滚吸收）；存量 transcript 节点行迁移删除（edited_text 先搬家）。
 
 **Related**: ADR-086（判词①枚举修订——transcript 移出「可编辑中间工作产品」枚举，改判「素材卡的内容层」）/ ADR-097（transcript 的 companion 身份退役——不再是 artifact，是 asset 的面）/ ADR-112（cue 结构化 + hover 显时 + 服务端预格式化 label 由本条继承并改写座位：spec 落库 → 读面派生）/ ADR-057（零投影——图不再存显示副本，本条是修法正身）/ ADR-067（出锚语义律不动；入锚精确化）/ ADR-016（clip-spec 唯一渲染契约不动——轨道栈只是它的读面投影）/ Workspace 合同 v4.2 C4（双层不变量搬家，永不反算时间码）/ `docs/VIDEO_EDITOR.md` L3（编排永禁）
+
+## ADR-114: 卡面解剖 v4——素材卡阅读型 + 成片卡 NLE 检视轴 + 信息秩三分
+
+**Status**: Decided（2026-10-09 用户拍板；形态原型 = `scratch/media-card-anatomy.html` 信息秩三分定稿，基于项目 1aeb9787 真实数据）；施工合同 = `docs/tasks/media-card-anatomy.md`
+
+**Context**: ADR-113 解剖落地后 live 走查三连：① **素材卡四症**——媒体区裸奔无一环边框（卡面读作三块拼件不是一个 object）；媒体高度被 flex 均分挤压 + object-cover 裁切（「舞台应按素材长宽比规划，不允许有黑边」）；转写稿区双向滚动且 hover 时间 chip 盖字；24px 条码时间条读不出结构。② **成片卡「track 在哪」**——24px muted 块 + 截断残字（「片段 1 · 源 2:59–…」看不见全貌），无 ruler 无道高无道头，读不出「完整的多素材时间线表达」；参考形态（Final Cut 式道 + Image #4 逐轨左缘 port）确认方向 = 视频道分块可点的真 NLE 轴。③ **两方向否决入档**——纯舞台 hover 揭示（NN/g 隐藏 = 发现性腰斩 + 全行业零主流先例 + 触屏无手势）与竖屏右挂模具（port 在左缘、道在右栏 = 连线落不到道上，斩断连线语义）。行业证据三路（NN/g hover 边界与渐进披露 / Descript·Premiere·CapCut 的 transcript 面板与底部时间轴停靠惯例 / LibTV·FLORA·ComfyUI 画布卡面收敛 = 预览+名称常驻、参数进点击层）。
+
+**Decision**:
+
+1. **信息秩三分 = 卡面分层法**：L0 结构层**常驻卡面**（道块 / ports / 徽章 / type 身份 / 阅读型卡的转写稿流——必需信息永不 hover）；L1 补充读数 **hover**（句文本 / 时间戳 / 源区间 / 刻度读数——瞬态不占布局，一座 `HoverChip`：portal 到 `document.body`、`overlay-surface` 冰霜、浮于锚行**上方**永不盖字、pointer-events-none）；L2 深详情**点击**（OutputInspector / lightbox 既有座位）。空间不足的压缩答案 = 折叠成摘要行 + 点击展开（Descript 模式，缓做项），永不是 hover 揭示。
+2. **素材卡 = 阅读型一体环**：media + divider + 转写稿区同入一环（媒体不再裸奔）；转写稿区固定解剖（divider 1 + 头 20 + cue 流 150 帽 + pads，预留 236→197 两镜像同批），媒体恢复画幅钉死——frame 数学的预留即舞台，flex-1 只吃预留，不再被均分挤压；object-cover 零黑边，画幅 bucket 兜裁切残差。24px 条码时间条退役 → **3px 舞台检视皮**（cue 段∝ 白纱、播放针、hover 变粗 8px、点击拨头、scrubber 读数入 L1 chip）；时长角标上舞台右下；cue 行时间 chip 上浮行外（ADR-112 hover 显时律继承，座位从行内改行上）；播放中行点亮、血缘区间琥珀（ADR-113 §6 不动）。medialess 素材不渲染空媒体槽（转写稿即卡身）。
+3. **成片卡 = NLE 检视轴**：**轴头行**（评分撤下舞台入轴头右端，ADR-112 ③ 裸分与 Top pick 闸门律不变，座位修订；非 tracked 解剖保留舞台徽标）+ **ruler**（服务端预格式化刻度——「客户端永不格式化时间」法条覆盖轴刻度：≤10 主刻度 nice step、次刻度纯几何、`t=0`/`t=total` 恒带标签；点击 seek）+ **34px 视频道**（真剪辑块：primary 填充、多块多源 ∝ 产出轴、块内「片段 N · 源区间」截断、hover = L1 chip（产出/源两区间）+ 血缘琥珀跨卡联动、click 拨头）+ **22px 字幕道**（连续块**零内嵌文字**，句与区间入 hover chip）+ **修饰道**（音乐/配音存在面，居文字道下，内容面后续批）+ **跨道播放针** + 道头 gutter 图标。全部只读 + seek——L3 编排永禁不动（无拖把手 / 无加轨 / 无转场），形态上一眼是读视图。
+4. **锚点律推广与节拍**：视频道 Y-center = 视频入 port 锚（ADR-113 §5 不动，公式随新解剖重算——两镜像同批）；修饰道到来 = 产品着陆节拍，锚同拍上移 26px/道（版本分页器先例——一次连贯 reflow，永不悄移；取全版本最大道数防翻页重坐）；修饰道 port 化 = 后续批（随 dub/music 输入资产化落地）。
+5. **时间格式化一座的边界**：数据行时间标签 = 服务端预格式化（cue label / 源区间 / 产出区间 / ruler 刻度——`track_stack.py` 一座）；播放器 chrome 读数（检视皮 scrubber「m:ss / m:ss」、时长角标）= `formatDuration` 唯一客户端座（lightbox 播放器同座）——连续几何读数非数据行，豁免成立。
+
+**Consequences**: 两型卡各自成立（素材卡 = 读、成片卡 = 检视）；「track 在哪」结构性回答（道 = 结构常驻 L0，连线落到道上）；血缘 hover 与 NLE 块同构（hover 一块、源区间一片亮）；裸奔/挤压/盖字/条码四症根治；黑边法条（object-cover + bucket）从一卡补丁升为解剖律。代价：帧预留变更（TRACK_STACK 96→NLE_AXIS 116、TRANSCRIPT_SECTION 236→197）——存量帧由 flex 吸收（永不溢出律：媒体让位，contain sliver 回归 legacy/raced 既有条款）；修饰道锚移 = 命名的节拍移位例外（分页器先例）。
+
+**Related**: ADR-113（素材卡内容层 / 轨道栈 / 锚点律 / 血缘通道由本条继承并改解剖）/ ADR-112（cue hover 显时 / 裸分 / Top pick 闸门律不动——评分座位由本条修订）/ ADR-016（clip-spec 唯一渲染契约不动——NLE 轴只是它的读面投影）/ `docs/VIDEO_EDITOR.md` L3（编排永禁不动）/ `docs/UI_GUIDELINES.md`（浮层一律 overlay-surface、视口锚浮层 portal——HoverChip 遵守；in-flow 面零 shadow）
