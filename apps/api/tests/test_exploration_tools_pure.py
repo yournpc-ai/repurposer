@@ -11,8 +11,9 @@ plus the iter-1 scenario. What's gated HERE:
   TestRegistryShape too: candidates/selects ride back, propose_plans /
   revise_plan / revise_selects stop the turn, iter-2 ⑤/⑦ N-57, iter-3 S4
   N-58);
-- 迁移弧纪律 (ADR-089 §8): harness-level in iter-1 — the family is NOT
-  registered into the production turn tools (production wiring = iter-2 R6);
+- production distribution (ADR-088 §2): the family reaches the production
+  agents only through ``exploration_chat_tools()`` — the harness-terminal
+  form never lands in the base turn-tool lists;
 - 打字机律牙① (read tolerance): explicit null on the optional fields reads
   as the empty default, never a schema rejection (a rejected iteration
   never streams);
@@ -95,9 +96,13 @@ class TestRegistryShape:
         for name in EXPLORATION_READ_NAMES:
             assert name in PERCEPTION_TOOLS, name
 
-    def test_family_is_not_in_the_production_turn_tools(self) -> None:
-        """迁移弧 (iter-1 harness-level): the verbs must NOT leak into the
-        production chat agent's tool set before iter-2's R6 routing."""
+    def test_family_rides_production_only_via_the_projection(self) -> None:
+        """ADR-088 §2 (iter-2 R6): production distributes the family ONLY
+        through ``exploration_chat_tools()`` (the projection whose terminal
+        law is pinned in test_production_projection_terminal_law) — the
+        harness-terminal form must never land in the base turn-tool lists,
+        or candidates/selects would stop the turn instead of riding back
+        (R2 一回合连续工作)."""
         from app.chat.turn_tools import CHAT_TOOLS, PLAN_TOOLS
 
         production_names = {t.name for t in (*PLAN_TOOLS, *CHAT_TOOLS)}
