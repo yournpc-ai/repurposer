@@ -238,6 +238,55 @@ class TestCompileComposition:
         )
 
 
+# ---- 整条源规则：materialize 注入矩阵（ADR-043 考纲原点，旧剧本 S11 下沉） ------
+
+
+class TestMaterializeProfiles:
+    """出生地画像分发（旧剧本 S11 的进程内矩阵，剧本矩阵批下沉）：链含
+    clip-spec 消费者而无 clips 生产者时编译期注入整条材料化——画像决定
+    前奏形状；无画像可作用 = 编译期指名拒绝，永不静默丢弃。"""
+
+    def test_media_profile_injects_and_wires(self):
+        nodes = _compile(
+            [TaskItem(tool="translate_clip", params={"target_language": "zh", "bilingual": True})],
+            materialize_profile="media",
+        )
+        kinds = [ns.kind for ns in nodes]
+        assert "materialize_source" in kinds
+        assert "select_clips" not in kinds
+        mat = nodes[kinds.index("materialize_source")]
+        assert "preprocess" in [kinds[i] for i in mat.inputs]
+        tr = nodes[kinds.index("translate_clip")]
+        assert "materialize_source" in [kinds[i] for i in tr.inputs]
+
+    def test_stills_profile_aligns_first(self):
+        nodes = _compile(
+            [TaskItem(tool="translate_clip", params={"target_language": "zh", "bilingual": True})],
+            materialize_profile="stills",
+        )
+        kinds = [ns.kind for ns in nodes]
+        assert "align_stills" in kinds
+        mat = nodes[kinds.index("materialize_source")]
+        assert {"preprocess", "align_stills"} <= {kinds[i] for i in mat.inputs}
+
+    def test_existing_profile_needs_no_materialization(self):
+        nodes = _compile(
+            [TaskItem(tool="translate_clip", params={"target_language": "zh", "bilingual": True})],
+            materialize_profile="existing",
+        )
+        kinds = [ns.kind for ns in nodes]
+        assert "materialize_source" not in kinds
+        tr = nodes[kinds.index("translate_clip")]
+        assert tr.inputs == []
+
+    def test_no_profile_rejects_at_compile_naming_the_transform(self):
+        with pytest.raises(ValueError, match="translate clip"):
+            _compile(
+                [TaskItem(tool="translate_clip", params={"target_language": "zh", "bilingual": True})],
+                materialize_profile=None,
+            )
+
+
 # ---- quotation -----------------------------------------------------------------
 
 

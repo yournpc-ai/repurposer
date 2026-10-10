@@ -899,6 +899,58 @@ def test_frame_persistence_mapping():
     assert frame_persistence(fr("repair", STATUS_ACTIVE, REPAIR)) is None
 
 
+def test_frame_persistence_sequence_array_order():
+    """数组位置律的纯函数核（ADR-108 §3，旧剧本 S25 的进程内下沉）：一段多
+    读回合的帧流合成过 frame_persistence——行序的根 = 「append 定位置、
+    settle 原地 update、出生序即数组序」。
+
+    ① read 跨度：帧映射只出一次 settle（append 在帧外的 execute 入口），
+       且 settle 永不在本 id 首帧之前（先出生后原地，顺序错乱类事故的
+       结构性反证）；
+    ② born-terminal 帧（explore milestone / repair 终态）：单次 append，
+       无 settle 跟随；
+    ③ draft/run 帧全程 None（永不持久化——落定即退役）；
+    ④ 跨 id 合成：append 序 == 出生序（数组位由出生定格，update 永不挪行）。
+    """
+    from app.chat.activity import ActivityFrame as F
+    from app.chat.activity import frame_persistence
+
+    def fr(aid, seq, kind, status, key="k"):
+        return F(activity_id=aid, seq=seq, kind=kind, status=status, key=key, at="t")
+
+    frames = [
+        fr("r1", 1, "read", STATUS_ACTIVE),
+        fr("r2", 2, "read", STATUS_ACTIVE),
+        fr("r1", 3, "read", STATUS_COMPLETED, "k.done"),
+        fr("m1", 4, "draft", STATUS_COMPLETED, "chat.explore.candidatesReady"),
+        fr("d1", 5, "draft", STATUS_ACTIVE, DRAFT),
+        fr("r2", 6, "read", STATUS_CANCELLED),
+        fr("x1", 7, "repair", STATUS_COMPLETED, REPAIR_DONE),
+        fr("u1", 8, "run", STATUS_ACTIVE, RUN),
+    ]
+    ops = [frame_persistence(f) for f in frames]
+
+    by_id: dict[str, list[str | None]] = {}
+    for f, op in zip(frames, ops, strict=True):
+        by_id.setdefault(f.activity_id, []).append(op)
+    # ① read 跨度 = 帧外 append + 一次 settle；settle 永随本 id 首帧之后。
+    assert by_id["r1"] == [None, "settle"]
+    assert by_id["r2"] == [None, "settle"]
+    for aid, id_ops in by_id.items():
+        if "settle" in id_ops:
+            assert id_ops[0] is None or id_ops.index("settle") > 0
+    # ② born-terminal = 单次 append，无 settle。
+    assert by_id["m1"] == ["append"]
+    assert by_id["x1"] == ["append"]
+    # ③ draft/run 跨度永不持久化。
+    assert by_id["d1"] == [None]
+    assert by_id["u1"] == [None]
+    # ④ append 序 == 出生序。
+    birth_order = [f.activity_id for f, op in zip(frames, ops, strict=True) if op == "append"]
+    assert birth_order == ["m1", "x1"]
+
+
+
 def test_open_activity_descriptor_tracks_the_call_slot():
     """open_activity（row-append 座的描述符）: 跟随 open call slot——
     name_known 开 read 后在位，settle 后空；无 activity 的工具（ask_user）

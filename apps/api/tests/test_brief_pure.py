@@ -10,10 +10,12 @@ Pure-function coverage only (suite discipline: no DB, no LLM, no HTTP):
 import pytest
 from pydantic import ValidationError
 
+from app.chat.service import merge_brief
 from app.models.schemas import (
     Brief,
     BriefSlot,
     BriefSlotSource,
+    BriefSlotSource as Src,
     InferredIntent,
 )
 
@@ -111,3 +113,105 @@ class TestLayeredValidation:
             InferredIntent.model_validate(
                 {"action": "draft", "answer": "x", "tasks": [{"skill": "write_post"}]}
             )
+
+
+class TestMergeBriefSources:
+    """merge_brief 来源优先级三态矩阵（ADR-052 B2 D1-C1，旧剧本 S12 下沉）：
+    user-stated 永不反向覆盖 / user 重申恒胜 / inferred 压 default /
+    default 永不压 inferred / no-opinion 槽永不落账 / 整账 None 原样返回 /
+    asked 簿永不吃 LLM 提议。"""
+
+    @staticmethod
+    def _brief(**slots) -> Brief:
+        return Brief(**slots)
+
+    @staticmethod
+    def _slot(value, source) -> BriefSlot:
+        return BriefSlot(value=value, source=source)
+
+    def test_user_stated_survives_inferred_and_default(self):
+        stored = self._brief(topic=self._slot("grid storage", Src.USER_STATED))
+        out = merge_brief(
+            self._brief(
+                topic=self._slot("renewables", Src.INFERRED),
+                audience=self._slot("CTOs", Src.INFERRED),
+            ),
+            stored,
+        )
+        assert out.topic.value == "grid storage"
+        assert out.topic.source == Src.USER_STATED
+        out = merge_brief(self._brief(topic=self._slot("anything", Src.DEFAULT)), stored)
+        assert out.topic.value == "grid storage"
+
+    def test_user_restating_always_wins(self):
+        stored = self._brief(topic=self._slot("grid storage", Src.USER_STATED))
+        out = merge_brief(self._brief(topic=self._slot("renewables", Src.USER_STATED)), stored)
+        assert out.topic.value == "renewables"
+        assert out.topic.source == Src.USER_STATED
+
+    def test_inferred_outranks_default_default_never_demotes(self):
+        stored = self._brief(audience=self._slot("general public", Src.DEFAULT))
+        out = merge_brief(
+            self._brief(audience=self._slot("first-time founders", Src.INFERRED)), stored
+        )
+        assert out.audience.value == "first-time founders"
+        assert out.audience.source == Src.INFERRED
+        out = merge_brief(self._brief(audience=self._slot("everyone", Src.DEFAULT)), out)
+        assert out.audience.value == "first-time founders"
+
+    def test_none_update_never_lands_and_same_rank_latest_wins(self):
+        out = merge_brief(
+            self._brief(
+                tone=BriefSlot(source=Src.INFERRED),
+                topic=self._slot("new angle", Src.INFERRED),
+            ),
+            self._brief(
+                tone=self._slot("sharp", Src.USER_STATED),
+                topic=self._slot("old angle", Src.INFERRED),
+            ),
+        )
+        assert out.tone.value == "sharp"
+        assert out.topic.value == "new angle"
+
+    def test_constraints_keyed_union_with_per_item_precedence(self):
+        stored = self._brief(
+            constraints=[self._slot("keep it under 200 words", Src.USER_STATED)]
+        )
+        out = merge_brief(
+            self._brief(
+                constraints=[
+                    self._slot("add hashtags", Src.INFERRED),
+                    self._slot("Keep it under 200  words", Src.INFERRED),  # 同键不同来源
+                ]
+            ),
+            stored,
+        )
+        assert [c.value for c in out.constraints] == [
+            "keep it under 200 words",
+            "add hashtags",
+        ]
+        assert out.constraints[0].source == Src.USER_STATED
+        # 同键重申恒胜（user-stated ≥ user-stated——与标量槽同尺）。
+        out = merge_brief(
+            self._brief(constraints=[self._slot("keep it under 100 words", Src.USER_STATED)]),
+            out,
+        )
+        assert [c.value for c in out.constraints] == [
+            "keep it under 100 words",
+            "add hashtags",
+        ]
+
+    def test_none_update_returns_stored_and_never_mutates(self):
+        stored = self._brief(topic=self._slot("grid storage", Src.USER_STATED))
+        assert merge_brief(None, stored) is stored
+        merge_brief(self._brief(audience=self._slot("CTOs", Src.INFERRED)), stored)
+        assert stored.audience.value is None
+
+    def test_asked_roll_never_lands_from_a_proposal(self):
+        stored = self._brief(topic=self._slot("grid storage", Src.USER_STATED))
+        stored.asked = ["topic"]
+        upd = self._brief()
+        upd.asked = ["audience"]
+        out = merge_brief(upd, stored)
+        assert out.asked == ["topic"]
+
