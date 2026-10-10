@@ -5,94 +5,83 @@
 活 API 的唯一意图表面（``POST /chat`` + answer 端点），断言 = **工具序列 +
 终态帧消息**（ADR-077 判词② 工具 loop 线格式）：terminal_tool_of 从终态
 信封的形状判别回合收在哪个终态工具（工具名永不过线，简报 §3——信封形状
-就是判别面），SSE 侧断言 Activity 帧形态（Phase 3 Batch B 后相位帧
-只剩 composing 一座——工作证据永不过 System Status 通道）与
-question.preview 预览帧，外加既有形态级结果——dock 态 /
-run 数 / 落库行——永不锁 LLM 文案（禁令 #7）。例外：代码强制文本（提醒尾 /
+就是判别面）。永不锁 LLM 文案（禁令 #7）。例外：代码强制文本（提醒尾 /
 机器标记 / 确定性回执）可以锁——那是代码，不是 LLM。
 
-2026-09-04 大浓缩（C4，简报 ``docs/tasks/de-dialect-question-machine.md``）：
-52 本机制碎片（旧 S1–S53，S22 空）浓缩为 **12 条核心用户 story**，编号连续
-重排（本次不再沿用留空洞先例——旧 S 号与现行 S 号无一对应，映射见简报
-§C4 与 ``docs/INTENT_COVERAGE.md`` §6）。每条 = 一个完整用户故事，不是
-机制碎片；进程内纯函数断言（估价 / repair / 编译矩阵 / merge 矩阵）按简报
-「保留并入」随链收编——零 LLM 零方差，是最便宜的覆盖。
+测试体系收敛（ADR-114，施工合同 ``docs/tasks/test-suite-convergence.md``
+§3）：41 本 → **10 本用户旅程矩阵**，编号连续重排 S1–S10（旧 S 号全部作废，
+第二次）。每本 = 一种用户 × 一种创作流 × 全旅程；机制不立独立剧本。harness
+公共断言每本自动携带（见下「harness 公共断言」）；进程内纯函数矩阵
+（materialize 注入 / merge_brief 来源 / transcript 数组序）已下沉 tests/
+（test_cut_segments_pure / test_brief_pure / test_activity_pure）。
 
-    S1  核① 裸愿望全旅程：主题问 → 作答（自由文本 slot 握手 + 选项点选两路）
-             → 评审卡 → start → run（途中锁待决重建 / 一行一答 409 / 选项点选
-             不 500 三张契约拍；K5 草稿图横切：dock 即 stamp draft 节点 +
-             计划 document + 逐节点估价，start 同 id 原地填充无双生）
-    S2  核② 跳过提问 → draft-from-persona 计划 + 默认路径声明
-    S3  核③ 插话：正常回答 + 代码拼装提醒尾 + 保持 pending → 下轮作答回填
-    S4  核④ 素材全链（run completed + 产物落库 + 触发回合 reviewer
-             poll）+ 估价三断言 + repair 只一轮 + 修订 = wiring 横切
-             （K4/K5 验收点：chat 修订 → edit_prompt 原地改写节点程序
-             （同 id 无双生）→ 子图重跑起 run）
-    S5  核⑤ 修订链：手改存活 / chat 恒胜 / supersede 标记 / task_book 不打字母
-             + 草稿图随行（新槽位长新 draft 节点 / 参数微调同 fill_key 零双生）
-    S6  核⑥ interrupt 一条：三答法 + 空白不答 + bail 级联 + 插话后续跑
-    S7  核⑦ caption mode：选项问 → 回执 + run.context + refine 存活
-    S8  核⑧ research 全链（活 DDG，网络全灭时 caveat 降级也算过）
-    S9  核⑨ 问事不出书：能力问 / 闲聊纯 answer，无计划 start 不死路不起 run
-    S10 SSE 流式（工具 loop 线格式）：单轮 concat(deltas) == 信封散文 /
-             读先 startswith 前缀律 / 拒轮方差注记 + draft Activity 帧
-             （Batch B ③ 后 drafting 相位帧退役,Activity 是唯一座位）+
-             question.preview 预览帧
-    S11 整条源规则（整条视频字幕活链）+ materialize 注入矩阵（进程内）
-    S12 merge_brief 来源矩阵（进程内纯函数）
-    S13 积分① 余额不足出生地拦截（typed Start 与 /generate 双路 422
-             同形同义）+ 负余额 hold 必拒（BILLING §5）
-    S14 积分② 失败不扣费（活 worker 缺参探针：FAILED + 级联 skipped →
-             零 capture、hold 全额 release）+ capture 幂等/bounce 差额（进程内）
-    S15 积分③ 孤儿 hold 回收（BILLING §8 边界落地：project 删除先退未结
-             hold 再级联删 run——台账闭合、余额回赠额）
-    S17 run 执行权仲裁（R1 B3）：A 挂 B 跑 → 答/过期皆 blocked 再挂+明示
-             （零状态污染、全程单 owner）→ B 收官交接钩续跑 A
-    S20 言语语义管线（ADR-084/104）：过程话永不入终答（读前言语骑
-             checkpoint 通道成独立段）/ Start 归 dock（≥2 task 不邀请言语
-             确认）/ grounding 诚实（未就绪披露处理中，就绪落到素材内容词）
-    S21 checkpoint 通道观察面（ADR-085 评审四场景）：A 单读直出 / B 诱导
-             多读 / C 目录读结构性静默——不锁出现与否，锁硬律 + PRINT
-             命中率（D 失败回滚归手测）
-    S23 探索族全链 harness 拍（ADR-088 §2, 迭代一）：search → candidates →
-             selects → plans 三族出生 / journey 归属 / rank 盲 / 零边 + 执行门
-             拒收 / 幂等重放 / 无时间轴降级诚实
-    S-explore-2 发现型主链生产 e2e（ADR-088/089, 迭代二 §4.9）：SSE 发现型
-             目标 → chat.explore.* 活动流 → 决策包 dock（plans+编译链+quote）
-             → dock Start → confirmed_scope 快照 → 产物真落地（fixture
-             纪律同 S23/S16；MiniMax 配额是硬前提）
-    S24 分镜呈现律验证座（ADR-094 §2）：访谈 fixture 真处理 → 口头选定
-             分镜方向 → plan 链必含 select_clips + reframe_clip → run
-             completed → 成片 render_spec 带 crop_track（确定性尾；fixture
-             纪律同 S16，需 dev worker + MiniMax 配额）
-    S-int-1..14 New Interaction Contract（批次 S · ADR-099 golden suite，
-             两层分离的新架构层——Legacy Regression 零改动；S-int-2/5 随
-             ADR-100 改靶——一切可点选项归 dock，消息流零选项）：Control
-             四形态各一（纯信息 answer 无卡无 dock / 探索 ask_user 选项
-             dock / rootless wish ask_user / 点名工作 present_plan）+
-             新行为（浏览问事故④回归锁——改靶选项 dock / 无字幕参数默
-             认吸收 / 旧 lane 历史 × 新政策）
-             + 事故①②回归锁（批 D——能力答答复永不叙述分组方案 / trigger
-             判定提议质感形态面）+ 事故③ wording 回归锁（批 G1——repair
-             静默开启 / 终态判定树 / rejection 取证台账落库）+ 事故③
-             leak 回归锁与断流座（批 G2——被拒迭代 wire 零泄漏 / SSE 断流
-             复拉不重不漏）
+    S1  迷失用户全旅程：裸愿望 → 主题问 → 作答（自由文本 + 选项点选两路）
+             / 跳过 → draft-from-persona 计划 → dock → 口头确认 → start_run
+             → run（途中锁待决重建 / 一行一答 409 / 选项点选不 500 /
+             draft 图横切 / lifecycle stamp 三拍）
+    S2  素材→短片全链：真字节素材 → 方向问 → 途中插话（提醒尾 + pending
+             保持 + 下轮回填）→ clips 计划 → 计划期修订（面板钉存活 /
+             chat 恒胜 / supersede / fill-key 幂等 / 打字母不答）→ 确认 →
+             run completed + 产物落库 → 触发回合 reviewer → chat 修订
+             wiring 横切（同 id 原地改写无双生 → 子图重跑）→ 扩张 dock
+             （新付费工作确认门 + 点名工作直达入口变体）
+    S3  素材→建议→探索：方向建议选项 dock → 发现型目标（SSE）→ 探索三族
+             出生（一条 journey）→ 决策包 dock（plans + 编译链 + quote）
+             → Start → confirmed_scope 快照 → 产物落地 + 确定性尾
+             （执行门拒收 / 幂等重放 / 无时间轴降级 / 图面车道律）
+    S4  无素材→图文：写手族（post / quotes / carousel）无素材直生 +
+             caption_mode 默认吸收三拍（默认 source_only / 用户原话恒胜 /
+             设定经修订与面板 Start 存活）
+    S5  调研→写作：research 全链（活 DDG；网络全灭时 caveat 降级也算过）
+    S6  纯咨询不死路：能力问 / 闲聊 / 无根 "start it" → 纯 answer 终态，
+             零计划零 dock 零 run；浏览问永不两级跳劫持
+    S7  修订第二圈：落地 clip → 精确编辑（remove_range / set_caption_style
+             两族实应用）→ 同 id 无双生 → undo → 归档生命周期（409 墙 /
+             换态 / 读面跟随）
+    S8  访谈→分镜：访谈 fixture 真处理 → 口头选定分镜方向 → 链必含
+             select_clips + reframe_clip → run completed → render_spec
+             带 crop_track
+    S9  付费边界：余额不足 → typed Start 与 /generate 双路 422 同形同义
+             + 不可证载荷 scope.unproven + 台账零行 + 负余额 hold 必拒 +
+             活跃 run Start 阻断
+    S10 Remix 旗舰：P1 warm 路径（@mention pin → 拆解即说话）+ P2 run
+             路径（真链 → decompile 新鲜物化 → 产物参数 = 骨架 → 画布无
+             decompile 孤儿）
 
-S4/S7/S8 起的 run 是真的（worker 会执行；writer 链走真 LLM——S4 用
-``processing_status=COMPLETED`` 的 transcript 资产走 writer 链到 completed，
-fixture 媒体字节不存在的 media 链 fail fast 属预期）；S6 seed parked run
-手工行，答题/插话后由 worker 跑零 LLM 的 answer 分支收官——需要 dev
-worker 在跑。
+harness 公共断言（ADR-114 §3.2——每本自动携带，不再单独立本）：
+
+- **SSE 工具 loop 线格式**（``Ctx.chat_stream`` 自动）：concat(deltas) ==
+  信封散文；读先 startswith 前缀律；拒轮方差注记（repair 帧出现即豁免，
+  被拒迭代的言语是被替换的）；文字问 / 选项问的合成枝分流（选项问
+  content == 框架散文，文字问 content == 散文 + 空行 + 裸问题）。
+- **Activity 帧形态**（自动）：白名单字段 / 用户语义 kind / seq 严增 /
+  翻转律（active 出生、终态唯一、completed 换过去时键）/ T16-B 信封
+  清扫——Activity 是工作证据唯一座位（Phase 3 Batch B 后相位帧不再
+  承载工作证据）。
+- **question.preview 预览帧**（选项问 dock 自动）：预览与 dock 载荷
+  逐字段一致（裸问题 / 选项 / slot / allow_freeform / default_path）。
+- **dock 形态**（``Ctx.chat`` 与 ``chat_stream`` 自动）：task_book 自完备
+  （链随 intent 列 + derived 列表 + estimate_credits 良构——Σ per_task ≡
+  total 对账律）；选项问结构律（1–3 选项 / label ≤40 / recommended 至多
+  其一 / 载荷永不携带执行参数的负形 lint）。default_path 恒在律归各
+  旅程的场景级断言（ask 家族专属，不进 harness——trigger dock 是另一族）。
+- **估价三断言 + repair 只一轮**（runner 每本开跑前自动，进程内零 LLM）：
+  fold 对账 / 报价单调性（子图 ≤ 全图，非负）/ NULL 语义 + Agent 漏斗
+  stub 探针（schema 拒收 → 恰一轮修复 / 二次拒收即失败 / 传输故障不修复 /
+  fallback 宣言 / repair_feedback 首轮骑缝 / 流式首试拒轮走非流式 /
+  media 降级与修复的组合律）。
 
 LLM 方差口径：凡锁定的是**设计行为**（裸愿望先问主题 / 插话不结算 / 提醒尾
-必在 / 判定回答必结算），红了 = prompt 或判定回归信号，不是剧本松劲。
+必在 / 判定回答必结算），红了 = prompt 或判定回归信号，不是剧本松劲。flake
+处置（合同 §3.6）：断言只锁形态；红先归因机制（pre-批面复跑分水岭纪律），
+禁调断言放行；矩阵内任何本连续两次同类方差红 → 登记 PROGRESS 需求池。
 
-The server does all LLM work (the intent router / the chat_intent agent); this script only
-mints a scenario user's JWT and seeds DB rows the scenarios need (a fake
-media asset for clips gating, a COMPLETED transcript asset for the writer
-chain, a parked interrupt for the checkpoint family).
-Runs started by the scenarios are real — keep the dev worker's quota in mind;
-every scenario deletes its project afterwards (``--keep`` opts out).
+fixture 纪律：源片一律先拷 ``scenario/`` 前缀（delete_project 会 unlink
+外部共享 key——S16 的课）；真字节素材显式声明 processing_requested_at
+（ADR-102 休眠律：无盖章 = worker 永不认领——fixture 自证比等盖章口
+确定）；常驻 worker 抢跑律（手工验证前后清数据；改 pipeline 代码必须
+重启 worker）。S2/S3/S8/S10 起的 run 是真的（worker 真执行 + MiniMax
+配额是硬前提）；每本结束删项目（``--keep`` 例外）。
 
 Usage (from apps/api/, API running on :8000):
     uv run python scripts/chat_scenarios.py                 # all scenarios
@@ -108,7 +97,7 @@ import os
 import re
 import sys
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 
@@ -120,9 +109,6 @@ from pydantic import BaseModel  # noqa: E402
 from sqlalchemy import delete, func, select, update  # noqa: E402
 
 from app.agents.base import Agent, StreamingAgent  # noqa: E402
-from app.chat.activity import kind_for_tool  # noqa: E402
-from app.chat.perception import PERCEPTION_TOOLS  # noqa: E402
-from app.chat.service import _cannot_do_text  # noqa: E402
 from app.providers.llm.base import LLMError, LLMSchemaError  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.schemas import MediaInput, TaskItem  # noqa: E402
@@ -131,12 +117,10 @@ from app.pipeline.orchestrator import (  # noqa: E402
     TaskSpec,
     assert_runners_registered,
     compile_graph,
-    expire_stale_interrupts,
     maybe_finalize_run,
 )
 from app.models.tables import (  # noqa: E402
     Asset,
-    Conversation,
     CreditTransaction,
     GraphNode,
     Journey,
@@ -148,24 +132,19 @@ from app.models.tables import (  # noqa: E402
     Wallet,
     WorkflowRun,
     WorkflowStep,
+    now_utc,
 )
 from app.models.schemas import (  # noqa: E402
     AssetStatus,
     AssetType,
     MaterialUnderstanding,
-    Option,
-    QuestionPayload,
     WorkflowStatus,
 )
 from app.platform.auth import create_access_token  # noqa: E402
 from app.platform.billing import (  # noqa: E402
     CreditsInsufficientError,
-    capture_step,
     check_hold,
-    cost_usd,
-    credits_for_cost,
     get_or_create_wallet,
-    hold_run,
 )
 
 BASE = os.getenv("SCENARIO_API_BASE", "http://127.0.0.1:8000/api/v1")
@@ -190,25 +169,21 @@ class StreamTurn(NamedTuple):
     completed: dict | None
     failed: dict | None
     # ADR-085 checkpoint frames: each entry is one checkpoint's full text.
-    # No default — a mutable default on a NamedTuple is a shared list; the
-    # single constructor (chat_stream) always passes it explicitly.
     checkpoints: list[str]
     # Parallel to checkpoints: True = the frame arrived BEFORE any read
     # activity settled — the waiter seat (ADR-104: pre-read speech is legal
-    # waiter talk, exempt from the checkpoints-carry-results bar; with the
-    # pre-execute emission seat the wire order makes the discrimination
-    # exact — a waiter strictly precedes its read's settle frame, result
-    # talk strictly follows its predecessor read's settle).
+    # waiter talk; with the pre-execute emission seat the wire order makes
+    # the discrimination exact — a waiter strictly precedes its read's
+    # settle frame, result talk strictly follows its predecessor read's
+    # settle).
     checkpoints_pre_read: list[bool]
-    # ADR-087 §3 activity frames (Phase 2): the append-oriented work stream —
-    # each entry is one assistant.activity payload {activity_id, seq, kind,
-    # status, key}. Same constructor discipline as checkpoints.
+    # ADR-087 §3 activity frames: the append-oriented work stream — each
+    # entry is one assistant.activity payload {activity_id, seq, kind,
+    # status, key}.
     activities: list[dict]
-    # 原始事件序列 (批次 G2 验收裁决): every data frame as {event, data} in
-    # ARRIVAL order — the per-type lists above lose the cross-type order,
-    # and the ordering IS this batch's problem surface (the name_known /
-    # accept-reject inversion). Scenarios dump it for review; pass/fail
-    # alone leaves the next ordering bug unlocalizable.
+    # Every data frame as {event, data} in ARRIVAL order — the per-type
+    # lists lose the cross-type order, and the ordering is the forensic
+    # surface for stream-law failures.
     raw_events: list[dict]
     # Transcript array mirror (ADR-108 §3): the assistant.row.append /
     # assistant.row.update frames in arrival order — append fixes a row's
@@ -247,24 +222,20 @@ class Ctx:
             json={"project_id": pid, "message": message, **extra},
         )
         check(res.status_code == 201, f"/chat {message[:30]!r}", res.text)
-        return res.json()
+        turn = res.json()
+        # harness 公共断言（dock 形态——每个回合信封自动携带）。
+        check_dock_shape(turn.get("assistant_message") or {}, f"/chat {message[:30]!r}")
+        return turn
 
-    async def chat_stream(
-        self, pid: str, message: str, abort_after: int | None = None, **extra: object
-    ) -> "StreamTurn":
+    async def chat_stream(self, pid: str, message: str, **extra: object) -> "StreamTurn":
         """One SSE chat turn (Accept: text/event-stream) — the FULL frame
-        record: ordered prose deltas, the assistant.thinking phase frames
-        ({} keepalive / {phase: "composing"} / {phase: null} clear — after
-        Phase 3 Batch B the inspecting family's {phase, key} form lives on
-        the ACTIVITY channel), the
-        question.preview frames (pre-execution, rolled back on a flip), the
-        turn.completed envelope, and turn.failed if any.
+        record: ordered prose deltas, the assistant.thinking phase frames,
+        the question.preview frames (pre-execution, rolled back on a flip),
+        the turn.completed envelope, and turn.failed if any.
 
-        ``abort_after`` (批次 G2 checklist ④'s 断流 seat): close the
-        connection after that many data frames of any kind — the partial
-        record returns as-is (no envelope), the server-side turn runs its
-        own course, and the scenario asserts the refetched message flow
-        holds no dup / no loss."""
+        harness 公共断言（ADR-114 §3.2）在回合成功收官时自动携带：SSE 线
+        格式律 / Activity 帧形态 / checkpoint 形态 / 选项问预览帧律 /
+        dock 形态。"""
         deltas: list[str] = []
         thinking: list[dict] = []
         previews: list[dict] = []
@@ -284,12 +255,10 @@ class Ctx:
         ) as res:
             check(res.status_code == 200, f"/chat stream {message[:30]!r}", res.status_code)
             event = ""
-            seen = 0
             async for line in res.aiter_lines():
                 if line.startswith("event:"):
                     event = line[6:].strip()
                 elif line.startswith("data:"):
-                    seen += 1
                     payload = json.loads(line[5:].strip())
                     raw_events.append({"event": event, "data": payload})
                     if event == "assistant.delta":
@@ -315,9 +284,7 @@ class Ctx:
                         completed = payload
                     elif event == "turn.failed":
                         failed = payload
-                    if abort_after is not None and seen >= abort_after:
-                        break
-        return StreamTurn(
+        turn = StreamTurn(
             deltas=deltas,
             thinking=thinking,
             previews=previews,
@@ -329,6 +296,9 @@ class Ctx:
             raw_events=raw_events,
             row_events=row_events,
         )
+        if completed is not None and failed is None:
+            check_turn_stream_laws(turn, f"/chat stream {message[:30]!r}")
+        return turn
 
     async def answer(self, question_id: str, body: dict) -> httpx.Response:
         return await self.client.post(f"/chat/messages/{question_id}/answer", json=body)
@@ -404,6 +374,7 @@ async def seed_asset(
     processed: bool = False,
     file_url: str | None = None,
     status: AssetStatus | None = None,
+    request_processing: bool = False,
 ) -> str:
     """A fake file-backed asset row — enough for the clips-media gate and the
     intent router's filename context; the bytes never exist. ``extracted_text``
@@ -411,10 +382,14 @@ async def seed_asset(
     ``meta`` carries e.g. the ASR-detected ``language`` the plan context
     surfaces for transform-target decisions. ``processed`` stamps the row
     COMPLETED (the declared-material promotion's end state) — the worker's
-    asset queue then never touches the fake bytes (S4's writer chain).
-    ``file_url`` points at a REAL bucket object (S16's demo-bucket fixtures —
-    the worker really processes a PENDING one). ``status`` overrides the
-    derived state (S16's FAILED exemplar — the warm never fires for it).
+    asset queue then never touches the fake bytes (writer chains).
+    ``file_url`` points at a REAL bucket object (demo-bucket fixtures — the
+    worker really processes a PENDING one). ``status`` overrides the derived
+    state (S10's FAILED exemplar — the warm never fires for it).
+    ``request_processing`` stamps ``processing_requested_at`` — the ADR-102
+    dormant law's claim gate: without it a real-bytes PENDING row sleeps
+    forever (the worker only claims stamped rows; the scenario's own fixture
+    must declare the request, not wait for a chat-side stamp seat).
     Returns the row's id."""
     async with AsyncSessionLocal() as db:
         asset = Asset(
@@ -428,6 +403,9 @@ async def seed_asset(
             processing_status=(
                 status
                 or (AssetStatus.COMPLETED if processed else AssetStatus.PENDING)
+            ),
+            processing_requested_at=(
+                now_utc() if request_processing and not processed and status is None else None
             ),
         )
         db.add(asset)
@@ -487,32 +465,9 @@ async def seed_understanding(pid: str) -> None:
         await db.commit()
 
 
-async def flip_asset_ready(pid: str, *, text: str) -> None:
-    """Mid-turn processing completion (ADR-102 S-wait scenarios): the asset
-    flips COMPLETED with its content stamped — a following
-    :func:`seed_understanding` lands the warm row the waiting read's next
-    in-turn poll finds."""
-    async with AsyncSessionLocal() as db:
-        assets = list(
-            (
-                await db.execute(
-                    select(Asset).where(Asset.project_id == uuid.UUID(pid))
-                )
-            )
-            .scalars()
-            .all()
-        )
-        check(bool(assets), "flip_asset_ready needs the asset seeded first")
-        for a in assets:
-            a.processing_status = AssetStatus.COMPLETED
-            a.extracted_text = text
-            a.meta = {**(a.meta or {}), "language": "en"}
-        await db.commit()
-
-
 async def seed_completed_run(pid: str) -> None:
     """A settled run row — the plan path must never claim a project that has
-    runs (the chat-path caption gate's phase seat, S7)."""
+    runs (the chat-path caption gate's phase seat, S4)."""
     async with AsyncSessionLocal() as db:
         db.add(
             WorkflowRun(
@@ -526,16 +481,25 @@ async def seed_completed_run(pid: str) -> None:
 
 async def set_project_language(pid: str, language: str) -> None:
     """Pin the project's locale — the caption gate's alt-language candidate
-    (S7) derives off it."""
+    (S4) derives off it."""
     async with AsyncSessionLocal() as db:
         project = await db.get(Project, uuid.UUID(pid))
         project.language = language
         await db.commit()
 
 
+async def topup_wallet(user_id: uuid.UUID, amount: int = 200000) -> None:
+    """Real runs burn real credits — top the scenario wallet up so the
+    journey asserts its own flow, not a 422 (S2/S3/S8/S10)."""
+    async with AsyncSessionLocal() as db:
+        wallet = await get_or_create_wallet(db, user_id)
+        wallet.balance = int(wallet.balance) + amount
+        await db.commit()
+
+
 async def wait_run_terminal(run_id: str, timeout: float = 90.0) -> str:
     """Poll a run to a terminal state (fixture runs fail fast at preprocess —
-    scenario/ bytes never exist). Stray-run retry loops (S7-B) must settle a
+    scenario/ bytes never exist). Stray-run retry loops must settle a
     wrong-tool run before the next turn, or the active-run guard eats it."""
     terminal = {WorkflowStatus.COMPLETED, WorkflowStatus.FAILED}
     for _ in range(int(timeout / 2)):
@@ -547,102 +511,11 @@ async def wait_run_terminal(run_id: str, timeout: float = 90.0) -> str:
     return "TIMEOUT"
 
 
-async def seed_parked_interrupt(
-    pid: str,
-    user_id: uuid.UUID,
-    *,
-    with_downstream: bool = False,
-) -> dict:
-    """A direction interrupt parked for a human answer (期 4 seed shape):
-    WAITING_HUMAN run + waiting ``interrupt`` node (options in
-    spec.suspend_payload) + the docked options-question row carrying the
-    ``workflow_run_id`` dispatch marker. ``with_downstream`` adds a pending
-    child node so the bail cascade has something to skip (S6-e)."""
-    options = [
-        {"id": "a", "label": "Focus: Pricing", "argument_id": "arg-1"},
-        {"id": "b", "label": "Focus: Roadmap", "argument_id": "arg-2"},
-        {"id": "c", "label": "Full-talk highlights", "argument_id": None},
-    ]
-    started_at = datetime.now(UTC)
-    async with AsyncSessionLocal() as db:
-        run = WorkflowRun(
-            project_id=uuid.UUID(pid),
-            status=WorkflowStatus.WAITING_HUMAN,
-            context={
-                "outputs": [{"type": "post"}],
-                "target_language": "en",
-                "autonomy": "review",
-            },
-        )
-        db.add(run)
-        await db.flush()
-        conversation = (
-            await db.execute(
-                select(Conversation).where(
-                    Conversation.project_id == uuid.UUID(pid),
-                    Conversation.asset_id.is_(None),
-                )
-            )
-        ).scalar_one_or_none()
-        if conversation is None:
-            conversation = Conversation(user_id=user_id, project_id=uuid.UUID(pid))
-            db.add(conversation)
-            await db.flush()
-        question = Message(
-            conversation_id=conversation.id,
-            role="assistant",
-            content="Which direction should this run focus on?",
-            question=QuestionPayload(
-                kind="question",
-                options=[Option(id=o["id"], label=o["label"]) for o in options],
-                allow_freeform=True,
-            ).model_dump(mode="json"),
-            workflow_run_id=run.id,
-        )
-        db.add(question)
-        await db.flush()
-        node = WorkflowStep(
-            run_id=run.id,
-            kind="interrupt",
-            status="waiting",
-            seq=1,
-            started_at=started_at,
-            spec={
-                "suspend_payload": {
-                    "question_message_id": str(question.id),
-                    "options": options,
-                }
-            },
-        )
-        db.add(node)
-        await db.flush()
-        child_id: str | None = None
-        if with_downstream:
-            child = WorkflowStep(
-                run_id=run.id,
-                kind="plan",
-                status="pending",
-                seq=2,
-                inputs=[str(node.id)],
-            )
-            db.add(child)
-            await db.flush()
-            child_id = str(child.id)
-        await db.commit()
-        return {
-            "run_id": str(run.id),
-            "node_id": str(node.id),
-            "child_id": child_id,
-            "question_id": str(question.id),
-        }
-
-
 async def seed_active_run(pid: str) -> str:
-    """An authority-holding run (I-EXEC-03 fixture, R1 B3): RUNNING + one
-    inert ``running`` node. The claim loop only takes ``pending`` rows and
-    the per-tick reap (900s) never fires inside a scenario, so the row holds
-    the project's execution authority until ``settle_seeded_run`` ends it.
-    Returns the run id."""
+    """An authority-holding run: RUNNING + one inert ``running`` node. The
+    claim loop only takes ``pending`` rows and the per-tick reap (900s)
+    never fires inside a scenario, so the row holds the project's execution
+    authority until ``settle_seeded_run`` ends it. Returns the run id."""
     async with AsyncSessionLocal() as db:
         run = WorkflowRun(
             project_id=uuid.UUID(pid),
@@ -671,8 +544,7 @@ async def seed_active_run(pid: str) -> str:
 async def settle_seeded_run(run_id: str) -> None:
     """Settle a seeded inert run the way its worker execution would end:
     nodes done, then maybe_finalize_run — the finalizer is the authority-
-    handoff seat (R1 B3), so this drives the parked-run resume hook for real.
-    """
+    handoff seat, so this drives the parked-run resume hook for real."""
     async with AsyncSessionLocal() as db:
         await db.execute(
             update(WorkflowStep)
@@ -686,29 +558,13 @@ async def settle_seeded_run(run_id: str) -> None:
     await maybe_finalize_run(uuid.UUID(run_id))
 
 
-async def count_active_runs(pid: str) -> int:
-    """The I-EXEC-03 witness: a project's {PENDING, RUNNING} run count."""
-    async with AsyncSessionLocal() as db:
-        rows = (
-            await db.execute(
-                select(WorkflowRun.id).where(
-                    WorkflowRun.project_id == uuid.UUID(pid),
-                    WorkflowRun.status.in_(
-                        [WorkflowStatus.PENDING, WorkflowStatus.RUNNING]
-                    ),
-                )
-            )
-        ).all()
-        return len(rows)
-
-
 async def count_runs(pid: str) -> int:
     async with AsyncSessionLocal() as db:
         rows = (
             await db.execute(
                 select(WorkflowRun.id).where(WorkflowRun.project_id == uuid.UUID(pid))
-            )
-        ).all()
+            ).all()
+        )
         return len(rows)
 
 
@@ -747,10 +603,7 @@ async def message_row(message_id: str) -> dict:
 
 
 async def wait_run_status(run_id: str, wanted: set[str], timeout: float = 45.0) -> dict:
-    """Poll a run until it reaches one of ``wanted`` statuses. The wake half
-    of a interrupt answer is synchronous, but settling (the thin node's
-    answer branch → finalize) is worker-driven — hence the poll. Requires the
-    dev worker (the interrupt answer branch is zero-LLM, so this is fast)."""
+    """Poll a run until it reaches one of ``wanted`` statuses."""
     deadline = asyncio.get_event_loop().time() + timeout
     while True:
         row = await run_row(run_id)
@@ -763,415 +616,11 @@ async def wait_run_status(run_id: str, wanted: set[str], timeout: float = 45.0) 
         await asyncio.sleep(2)
 
 
-# ---- Assertion helpers ------------------------------------------------------
-
-
-def is_plan_dock(msg: dict) -> bool:
-    return bool(msg.get("question")) and msg["question"].get("kind") == "task_book" and not msg.get("answer")
-
-
-def terminal_tool_of(turn: dict) -> str:
-    """The terminal tool the turn closed on, discriminated off the terminal
-    envelope (ADR-077 判词② — the tool NAME never crosses the wire, 简报 §3;
-    the envelope's SHAPE is the discriminator):
-
-    - the plan settles + a run is born → ``start_run``
-    - an unanswered task_book question docks → ``present_plan``
-    - any other unanswered plain question → ``ask_user``
-    - a run born with no settled question → ``run_birth`` (chat path: after
-      Phase 4 B3 the ONLY same-turn birth left is edit_graph's approved-
-      continuation branch — propose_tasks always docks; the envelope does
-      not discriminate further, the scenarios assert the wiring outcome
-      instead)
-    - prose only → ``answer``
-    """
-    msg = turn.get("assistant_message") or {}
-    q = msg.get("question") or {}
-    if turn.get("answered_question") is not None and turn.get("run_id"):
-        return "start_run"
-    # The dock's OWN answer state discriminates, not this turn's settlement
-    # of a PREVIOUS question — the enriched-brief answer turn legitimately
-    # settles the pending ask AND docks the plan in one beat (S1 作答轮直接
-    # 出书). (Batch A harness-contract fix: the old guard read
-    # answered_question as "no plan docks this turn", misclassifying the
-    # settle+dock shape as an answer turn.)
-    if q.get("kind") == "task_book" and q.get("answer") is None:
-        return "present_plan"
-    if q.get("kind") == "question":
-        return "ask_user"
-    if turn.get("run_id"):
-        return "run_birth"
-    return "answer"
-
-
-# ---- Activity work evidence (ADR-087 §3) ------------------------------------
-# The Activity channel (assistant.activity frames) is the ONLY work-evidence
-# channel (Phase 3 Batch B: the phase-side corroboration signal retired).
-def _work_evidence(stream: "StreamTurn") -> tuple[bool, bool]:
-    """(had_reads, had_repair) from the ACTIVITY channel — the ONLY work-
-    evidence channel after Phase 3 Batch B (③ deleted the inspecting /
-    repairing phase emitters server-side, so the old phase-side
-    corroboration and the SCENARIO_ACTIVITY_LEGACY downgrade hatch are gone
-    for good: there is no second signal left to disagree with).
-
-    言语提交协议批 (G1): the repair span opens SILENTLY — a rejection's
-    wire evidence is the half-started call's CANCELLED frame (and the rare
-    born-terminal repair frame), never a repair active row. had_repair
-    keeps its old semantics ("this turn had a rejection" — the stream-law
-    skip): any cancelled frame or any repair-kind frame."""
-    had_reads = any(a["kind"] == "read" for a in stream.activities)
-    had_repair = any(
-        a["kind"] == "repair" or a["status"] == "cancelled" for a in stream.activities
-    )
-    return had_reads, had_repair
-
-
-def dump_raw_events(scenario_id: str, label: str, turn: "StreamTurn") -> None:
-    """批次 G2 验收裁决: persist the turn's raw ordered event sequence for
-    review (scratch/speech_commit/*.jsonl) — the cross-type ordering IS
-    this batch's problem surface; a bare pass/fail leaves the next
-    ordering bug unlocalizable."""
-    out_dir = Path(__file__).resolve().parents[3] / "scratch" / "speech_commit"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / (
-        f"{scenario_id}-{label}-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}.jsonl"
-    )
-    with path.open("w", encoding="utf-8") as f:
-        for entry in turn.raw_events:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    print(f"    · {scenario_id} raw events → {path}")
-
-
-def check_cancelled_provenance(
-    stream: "StreamTurn", ledger: list[dict], label: str
-) -> None:
-    """cancelled 帧三核对 (批次 G2 验收裁决 — 不能只检查帧是否存在):
-    ① 来源: the cancelled frame's activity_id has a PRIOR active frame of
-    the same id in the raw sequence (the half-started call, never a
-    born-cancelled ghost);
-    ② 顺序: the active → cancelled pair precedes turn.completed (the
-    rejection resolves mid-turn, never after the envelope);
-    ③ 对应: the ledger's rejected tool names map (kind_for_tool) onto the
-    cancelled frames' kinds — the rejection's adjudication outcome and the
-    cancelled work evidence describe the SAME call."""
-    raw = stream.raw_events
-    acts = [(i, e["data"]) for i, e in enumerate(raw) if e["event"] == "assistant.activity"]
-    cancelled = [(i, a) for i, a in acts if a["status"] == "cancelled"]
-    check(bool(cancelled), f"{label}: a cancelled frame exists", stream.activities)
-    completed_idx = next(
-        (i for i, e in enumerate(raw) if e["event"] == "turn.completed"), len(raw)
-    )
-    rejected_kinds = {
-        kind_for_tool(r["tool_name"]) for r in ledger if r["tool_name"]
-    }
-    for idx, frame in cancelled:
-        prior_active = any(
-            a["activity_id"] == frame["activity_id"] and a["status"] == "active"
-            for _i, a in acts
-            if _i < idx
-        )
-        check(
-            prior_active,
-            f"{label}: ① the cancelled frame's source is a prior active "
-            f"frame of the same activity_id",
-            frame,
-        )
-        check(
-            idx < completed_idx,
-            f"{label}: ② the cancelled frame precedes turn.completed",
-            {"cancelled_at": idx, "completed_at": completed_idx},
-        )
-        check(
-            frame["kind"] in rejected_kinds,
-            f"{label}: ③ the cancelled span's kind maps from the ledger's "
-            f"rejected tool names (adjudication ⇔ work evidence)",
-            {"cancelled": frame, "ledger": ledger},
-        )
-
-
-def check_stream_law(
-    stream: "StreamTurn", content: str, label: str, *, allow_reads: bool = True
-) -> None:
-    """The SSE 打字机律's tool-loop form (tool_loop.py on_delta 的 iteration-0
-    唯一座位): iteration 0's speech streams verbatim; later iterations run
-    quiet (a rejected iteration's speech is REPLACED speech, the repair-
-    never-streams law). Therefore:
-
-    - single-iteration turn (no read activities): concat(deltas) == the
-      envelope content, exactly;
-    - read-first turn (accepted reads in iteration 0 — read ACTIVITY frames
-      present, the only evidence seat after Batch B): iteration-0 prose
-      either rode the CHECKPOINT channel (eligible read — the waiter seat,
-      ADR-104: flushed pre-execute, never enters the ledger, so the
-      envelope does NOT contain it) or stayed in the ledger (non-eligible
-      read — 账本兜底) and then PREFIXES the composed content
-      (言语账本: kept parts + the terminal part join on a blank line);
-    - a rejected iteration breaks even the prefix relation (its streamed
-      speech was replaced) — LLM variance the scenarios cannot foresee, so
-      this helper skips the turn entirely when a repair ACTIVITY appears
-      (same carve-out as the retired read-silent check).
-
-    Both relations compare the STRIPPED concat: the envelope is edge-stripped
-    by design (``_compose_speech`` strips every part) while the wire carries
-    raw provider deltas, so leading "\n\n" tokenizer noise is variance, not
-    a violation (2026-09-17 — assert the visible speech, not the bytes).
-    """
-    concat = "".join(stream.deltas)
-    had_reads, had_repair = _work_evidence(stream)
-    if had_repair:
-        return  # replaced speech: even the prefix relation is void
-    streamed = concat.strip()
-    if had_reads and allow_reads:
-        checkpointed = {c.strip() for c in stream.checkpoints}
-        check(
-            not streamed
-            or content.startswith(streamed)
-            or streamed in checkpointed,
-            f"{label}: the read-first stream law (kept speech prefixes the "
-            "content, or rode the checkpoint channel — ADR-104)",
-            f"{concat[:120]!r} vs {content[:120]!r}",
-        )
-    else:
-        check(
-            streamed == content,
-            f"{label}: the single-iteration stream law (concat(deltas) == content)",
-            f"{concat[:120]!r} vs {content[:120]!r}",
-        )
-
-
-# ---- ADR-084 speech-contract markers (2026-09-17) ---------------------------
-# NEGATIVE shapes only (禁令 #7 — the LLM's own phrasing is never locked; what
-# the contract bans is a SHAPE, and a banned shape is assertable).
-
-# Process narration: read-iteration process talk must never persist into the
-# settled message (ADR-104: pre-read speech rides the checkpoint channel as
-# its own segment — the settled reply stands alone; post-read checkpoints
-# carry results, never process narration).
-# 词边界 adjudication（C-6，2026-09-19）：IGNORECASE 下裸 `I'?ll` 会把
-# "will pull from" 的 "ill pull" 误判为第一人称过程叙述（S20A 两连红：
-# "the caption text will pull from …" 是诚实披露而非过程泄漏）。合同不变
-# （ADR-084 禁的是第一人称过程话入终答），断言补 \b 词界——harness 侧修正，
-# 生产码零改动。
-PROCESS_NARRATION = re.compile(
-    r"(\bI'?ll (pull|check|inspect|look into|fetch|take a look)|"
-    r"\bLet me (check|pull|inspect|look|fetch)|"
-    r"\bI'?m going to (pull|check|inspect|look)|"
-    r"我先(查|看|拉|读)|让我(先)?(查|看|拉|读))",
-    re.IGNORECASE,
-)
-# A ≥2-task plan's echo never invites a verbal go-ahead — the dock's Start
-# button is the ONLY start action.
-VERBAL_GO_INVITATION = re.compile(
-    r"(say the word|say ['\"]?start['\"]?|tell me when you'?re ready|"
-    r"说「?开始|跟我说一?声)",
-    re.IGNORECASE,
-)
-# The not-ready state's honest disclosure (tolerant shape set — the clause is
-# duty-bound, its wording is free).
-PROCESSING_DISCLOSURE = re.compile(
-    r"(still processing|not (yet )?(ready|finished)|hasn'?t finished|"
-    r"(once|when|after) (it|the video|the material|processing) "
-    r"(is |has )?(ready|finish|done|complete)|"
-    r"还在处理|处理中|处理完成[后时]|处理好后)",
-    re.IGNORECASE,
-)
-
-
-def check_checkpoint_shape(stream: "StreamTurn", content: str, label: str) -> None:
-    """Checkpoint shape laws (ADR-109 言语座位通用化; opportunistic —
-    checkpoints are EARNED, so absence is legal; when they fired, the shape
-    must hold): ≤4/turn (节奏护栏), never empty, never process narration
-    POST-READ (pre-read waiter speech is legal — ADR-104 服务员话术律;
-    phase-turn expectation sentences are the legal pre-read form), and the
-    settled reply never repeats one verbatim. The acceptance question
-    (2026-09-17 评审):「这条消息是用户刚刚真的需要知道的信息，还是系统想
-    证明自己做过某个动作？」 — the negative markers police the latter."""
-    if not stream.checkpoints:
-        return
-    check(
-        len(stream.checkpoints) <= 4,
-        f"{label}: checkpoints are capped at ≤4 per turn (ADR-109 rhythm guardrail)",
-        stream.checkpoints,
-    )
-    check(
-        all(c.strip() for c in stream.checkpoints),
-        f"{label}: checkpoints are never empty",
-        stream.checkpoints,
-    )
-    check(
-        # The waiter exemption (ADR-104): a checkpoint that arrived BEFORE
-        # any read settled is pre-read waiter speech — legal process talk
-        # by the waiter-line law. The results-only bar polices POST-read
-        # checkpoints (grounded judgment, never process narration).
-        not PROCESS_NARRATION.search(
-            " ".join(
-                c for c, pre in zip(stream.checkpoints, stream.checkpoints_pre_read) if not pre
-            )
-        ),
-        f"{label}: post-read checkpoints carry results, never process narration",
-        stream.checkpoints,
-    )
-    for cp in stream.checkpoints:
-        check(
-            cp.strip() not in content,
-            f"{label}: the settled reply never repeats a checkpoint verbatim",
-            {"checkpoint": cp[:120], "settled": content[:120]},
-        )
-
-
-_ACTIVITY_KINDS = {"read", "draft", "run", "repair"}
-_ACTIVITY_TERMINAL = {"completed", "failed", "cancelled"}
-
-
-def check_activity_shape(stream: "StreamTurn", label: str) -> None:
-    """ADR-087 §3 activity shape laws (opportunistic — a bare-reply turn
-    legally has ZERO frames; when frames flew, the shape must hold):
-    ① the wire whitelist is {activity_id, seq, kind, status, key} + the
-    S7/E7 timing/fact extensions {at, count, duration_ms} (no params /
-    results / reasoning ever leak); ② kind is a user-semantic category,
-    never a tool name; ③ seq is strictly increasing (deterministic
-    ordering); ④ a status flip appends a NEW frame on the same activity_id
-    (never a mutation) — explore milestones are BORN-COMPLETED instant
-    facts (one terminal frame, no active birth — iter-2 ⑥), exempt from
-    the birth/flip laws; ⑤ T16-B wire twin — when the envelope lands,
-    every activity's LAST frame is terminal (no dangling active)."""
-    acts = stream.activities
-    if not acts:
-        return
-    for a in acts:
-        keys = set(a.keys())
-        check(
-            {"activity_id", "seq", "kind", "status", "key"} <= keys
-            and keys <= {"activity_id", "seq", "kind", "status", "key", "at", "count", "duration_ms"},
-            f"{label}: activity frame carries only the whitelist fields",
-            a,
-        )
-        check(
-            a["kind"] in _ACTIVITY_KINDS,
-            f"{label}: kind is a user-semantic category, never a tool name",
-            a,
-        )
-        check(
-            a["status"] in _ACTIVITY_TERMINAL | {"active"},
-            f"{label}: status is one of active/completed/failed/cancelled",
-            a,
-        )
-        check(
-            a["key"] is None or (isinstance(a["key"], str) and a["key"]),
-            f"{label}: key is null or a non-empty i18n key",
-            a,
-        )
-    seqs = [a["seq"] for a in acts]
-    check(
-        seqs == sorted(seqs) and len(set(seqs)) == len(seqs),
-        f"{label}: activity seq is strictly increasing",
-        seqs,
-    )
-    # Stable identity law (④): frames sharing an activity_id are ONE work
-    # item's state flips — a span's first frame is the active birth, kind
-    # never mutates mid-activity, exactly one terminal frame closes the id
-    # (and nothing follows it), and the copy key follows the status-form
-    # law: failed/cancelled REUSE the active key (the ✗/strikethrough
-    # carries the outcome), completed swaps to the past-tense form. A
-    # born-completed milestone (a single terminal frame — explore count
-    # facts) is an instant fact: no birth/flip laws apply.
-    by_id: dict[str, list[dict]] = {}
-    for a in acts:
-        by_id.setdefault(a["activity_id"], []).append(a)
-    for aid, frames in by_id.items():
-        check(
-            len({f["kind"] for f in frames}) == 1,
-            f"{label}: kind never mutates across an activity's flips ({aid})",
-            frames,
-        )
-        if len(frames) == 1 and frames[0]["status"] in _ACTIVITY_TERMINAL:
-            continue  # born-completed milestone — an instant fact
-        check(
-            frames[0]["status"] == "active",
-            f"{label}: a span's first frame is its active birth ({aid})",
-            frames,
-        )
-        check(
-            all(f["status"] == "active" for f in frames[:-1]),
-            f"{label}: only the terminal frame leaves active ({aid})",
-            frames,
-        )
-        active_keys = {f["key"] for f in frames[:-1]}
-        terminal = frames[-1]
-        if terminal["status"] == "completed":
-            check(
-                terminal["key"] is not None and terminal["key"] not in active_keys,
-                f"{label}: completion swaps to the past-tense key ({aid})",
-                frames,
-            )
-        elif terminal["status"] in ("failed", "cancelled"):
-            check(
-                terminal["key"] in active_keys,
-                f"{label}: failed/cancelled reuse the active key ({aid})",
-                frames,
-            )
-    last_status: dict[str, str] = {}
-    for a in acts:  # append-oriented: the LAST frame per id is its state
-        last_status[a["activity_id"]] = a["status"]
-    dangling = {k: v for k, v in last_status.items() if v not in _ACTIVITY_TERMINAL}
-    check(
-        not dangling,
-        f"{label}: T16-B — no activity outlives the turn (envelope sweep)",
-        dangling,
-    )
-
-
-def has_prose(msg: dict) -> bool:
-    """The assistant message carries a non-empty prose reply."""
-    return bool((msg.get("content") or "").strip())
-
-
-def plan_tasks(plan: dict) -> list[dict]:
-    """The docked chain (ADR-043): pending_brief.intent.tasks — the plan
-    card's rows, one {tool, params} dict per task."""
-    return ((plan or {}).get("intent") or {}).get("tasks") or []
-
-
-def task_params(task: dict) -> dict:
-    return task.get("params") or {}
-
-
-async def pending_plan(ctx: Ctx, pid: str) -> dict | None:
-    """The project's pending plan via the results endpoint (None when none)."""
-    return (await ctx.results(pid)).get("pending_brief")
-
-
-async def wait_trigger_review(
-    ctx: Ctx, conversation_id: str, run_id: str, timeout: float = 90.0
-) -> dict | None:
-    """Poll the conversation for the run-completed trigger turn's review row
-    (ADR-077 判词③ T3): the pipeline fires the proactive turn fire-and-forget
-    at run terminal, and the agent's wrap_up persists an assistant row whose
-    intent dump is ``{type: "trigger_review", trigger, ref, suggestions}``
-    (ADR-081: suggestions = option labels; the row also docks the numbered
-    options question when labels exist). Returns the message row, or None on
-    timeout."""
-    deadline = asyncio.get_event_loop().time() + timeout
-    while asyncio.get_event_loop().time() < deadline:
-        for m in await ctx.messages(conversation_id):
-            intent = m.get("intent") or {}
-            if intent.get("type") == "trigger_review" and intent.get("ref") == run_id:
-                return m
-        await asyncio.sleep(2)
-    return None
-
-
-def has_reminder_tail(content: str) -> bool:
-    """The code-composed interjection reminder tail (ADR-053 R2 — code-forced
-    text, so locking its marker is legal: it is code, never the LLM's voice)."""
-    return "Still waiting for your answer:" in content or "还在等你的回答：" in content
-
-
 async def wait_asset_status(
     asset_id: str, wanted: set[AssetStatus], timeout: float = 420.0
 ) -> AssetStatus:
-    """Poll an asset row to a wanted processing state (S16's real-bytes seed:
-    the dev worker really ASRs the PENDING demo-bucket source)."""
+    """Poll an asset row to a wanted processing state (real-bytes seeds: the
+    dev worker really ASRs the PENDING demo-bucket source)."""
     deadline = asyncio.get_event_loop().time() + timeout
     while True:
         async with AsyncSessionLocal() as db:
@@ -1222,8 +671,6 @@ async def outputs_of(pid: str, type_: str) -> list[Output]:
 async def task_book_step_ids(pid: str) -> list[str]:
     """The task-book node's internal step family (the read frame hides the
     book — B1-lite — so the prelude-membership assertion reads the row)."""
-    from app.models.tables import GraphNode
-
     async with AsyncSessionLocal() as db:
         node = (
             await db.execute(
@@ -1238,474 +685,604 @@ async def task_book_step_ids(pid: str) -> list[str]:
         return [str(s) for s in (node.spec or {}).get("step_ids") or []]
 
 
-def no_decompile_canvas_node(graph: dict) -> bool:
-    """T3 (R1 B1): decompile folds into the prelude — it must never read back
-    as a standalone canvas node (its pre-fold face was a text×manual orphan)."""
-    return not any(
-        (n.get("spec") or {}).get("tool") == "decompile" for n in graph.get("nodes") or []
+# ---- Assertion helpers ------------------------------------------------------
+
+
+def is_plan_dock(msg: dict) -> bool:
+    return bool(msg.get("question")) and msg["question"].get("kind") == "task_book" and not msg.get("answer")
+
+
+def terminal_tool_of(turn: dict) -> str:
+    """The terminal tool the turn closed on, discriminated off the terminal
+    envelope (ADR-077 判词② — the tool NAME never crosses the wire, 简报 §3;
+    the envelope's SHAPE is the discriminator):
+
+    - the plan settles + a run is born → ``start_run``
+    - an unanswered task_book question docks → ``present_plan``
+    - any other unanswered plain question → ``ask_user``
+    - a run born with no settled question → ``run_birth`` (chat path: the
+      ONLY same-turn birth left is edit_graph's approved-continuation
+      branch — propose_tasks always docks; the envelope does not
+      discriminate further, the scenarios assert the wiring outcome instead)
+    - prose only → ``answer``
+    """
+    msg = turn.get("assistant_message") or {}
+    q = msg.get("question") or {}
+    if turn.get("answered_question") is not None and turn.get("run_id"):
+        return "start_run"
+    # The dock's OWN answer state discriminates, not this turn's settlement
+    # of a PREVIOUS question — the enriched-brief answer turn legitimately
+    # settles the pending ask AND docks the plan in one beat.
+    if q.get("kind") == "task_book" and q.get("answer") is None:
+        return "present_plan"
+    if q.get("kind") == "question":
+        return "ask_user"
+    if turn.get("run_id"):
+        return "run_birth"
+    return "answer"
+
+
+# ---- Activity work evidence (ADR-087 §3) ------------------------------------
+# The Activity channel (assistant.activity frames) is the ONLY work-evidence
+# channel (Phase 3 Batch B: the phase-side corroboration signal retired).
+def _work_evidence(stream: "StreamTurn") -> tuple[bool, bool]:
+    """(had_reads, had_repair) from the ACTIVITY channel — the ONLY work-
+    evidence channel after Phase 3 Batch B.
+
+    言语提交协议批 (G1): the repair span opens SILENTLY — a rejection's
+    wire evidence is the half-started call's CANCELLED frame (and the rare
+    born-terminal repair frame), never a repair active row. had_repair
+    keeps its old semantics ("this turn had a rejection" — the stream-law
+    skip): any cancelled frame or any repair-kind frame."""
+    had_reads = any(a["kind"] == "read" for a in stream.activities)
+    had_repair = any(
+        a["kind"] == "repair" or a["status"] == "cancelled" for a in stream.activities
     )
+    return had_reads, had_repair
 
 
-# ---- S1 核① 裸愿望全旅程 ------------------------------------------------------
+def check_stream_law(
+    stream: "StreamTurn", content: str, label: str, *, allow_reads: bool = True
+) -> None:
+    """The SSE 打字机律's tool-loop form (tool_loop.py on_delta 的 iteration-0
+    唯一座位): iteration 0's speech streams verbatim; later iterations run
+    quiet (a rejected iteration's speech is REPLACED speech, the repair-
+    never-streams law). Therefore:
 
+    - single-iteration turn (no read activities): concat(deltas) == the
+      envelope content, exactly;
+    - read-first turn (accepted reads in iteration 0 — read ACTIVITY frames
+      present, the only evidence seat after Batch B): iteration-0 prose
+      either rode the CHECKPOINT channel (eligible read — the waiter seat,
+      ADR-104: flushed pre-execute, never enters the ledger, so the
+      envelope does NOT contain it) or stayed in the ledger (non-eligible
+      read — 账本兜底) and then PREFIXES the composed content
+      (言语账本: kept parts + the terminal part join on a blank line);
+    - a rejected iteration breaks even the prefix relation (its streamed
+      speech was replaced) — LLM variance the scenarios cannot foresee, so
+      this helper skips the turn entirely when a repair ACTIVITY appears.
 
-async def s1_bare_wish_full_journey(ctx: Ctx) -> None:
-    """核① 裸愿望 → 主题问 → 作答回填（自由文本 slot 握手 + 选项点选两路）→
-    评审卡 → start → run 起步（ADR-052 出书门槛 + ADR-053 R2 slot 握手判定
-    结算）。途中锁三张契约拍：待决重建零内存态、一行一答 409、选项点选不
-    500（kind 守卫）。
-
-    LLM 方差说明：router 判 ask 是设计行为（prompt 策略行）；若个别模型把
-    "I want a social post." 直接判 draft，首段断言会红——那是 prompt 回归
-    信号。options 空合法（C2：无 persona 时储藏室为空，策略②豁免）。"""
-    pid = await ctx.new_project("S1 bare wish journey")
-
-    # Lifecycle stamp beat ① (ADR-087 §2 — the stamp is the ONLY lifecycle
-    # read; artifacts never speak): a fresh project is preparing — nothing
-    # ready, no blockers yet (pending → not ready).
-    stamp0 = (await ctx.results(pid))["lifecycle"]
-    check(stamp0["state"] == "preparing" and not stamp0["plan_ready"]
-          and not stamp0["confirmation_ready"] and stamp0["blockers"] == [],
-          "a fresh project reads preparing / not-ready on the stamp", stamp0)
-
-    turn1 = await ctx.chat(pid, "I want a social post.")
-    msg1 = turn1["assistant_message"]
-    check(turn1["run_id"] is None, "a bare wish never starts a run", turn1)
-    check(terminal_tool_of(turn1) == "ask_user",
-          "the rootless wish closes on the ask_user call", turn1)
-    q1 = msg1.get("question") or {}
-    check(q1.get("kind") == "question" and q1.get("slot") == "topic",
-          "the rootless wish docks the topic ask first (never an empty plan)", msg1)
-    check(bool((q1.get("default_path") or "").strip()),
-          "the default path rides as the schema tooth (策略③)", q1)
-    # ask 三分解剖 (2026-09-08): content = 框架散文（①，认领+理由+default
-    # path 织入），payload.question = 裸问题（②，dock 标题 / QA 归档 / 提醒
-    # 尾读它）。散文缺字段时 content 回退裸问题——那即是回归信号。
-    check(bool((q1.get("question") or "").strip()),
-          "the bare question rides the payload (解剖② — dock title's source)", q1)
-    check(has_prose(msg1) and (msg1.get("content") or "") != q1.get("question"),
-          "the framing prose IS the message content (解剖① — the ask's echo)",
-          (msg1.get("content") or "")[:200])
-    options = q1.get("options") or []
-    check(len(options) == 0 or 2 <= len(options) <= 3,
-          "options: 3 one-word picks (2 only for a genuinely binary choice), "
-          "or empty when the persona pantry is empty (C2)",
-          options)
-    plan1 = await pending_plan(ctx, pid)
-    check(plan1 is None or plan1.get("intent") is None,
-          "no plan parks on an ask turn (brief-only row or none)", plan1)
-
-    # 契约拍①：待决重建零内存态（旧 S26 并入）。
-    res = await ctx.conversation(pid)
-    check((res.json().get("pending_question") or {}).get("id") == msg1["id"],
-          "the pending question rebuilds (the refresh / cross-device seat)",
-          res.json())
-
-    # 自由文本作答 —— slot 握手判定结算（ADR-053 R2 plan path：router 在
-    # pending 块上下文里把槽位值提案 user-stated，代码结算 freeform 并回填）。
-    turn2 = await ctx.chat(pid, "Make it about the EU AI Act for researchers.")
-    aq = turn2.get("answered_question")
-    check(aq is not None and aq["id"] == msg1["id"],
-          "the free-text answer settles the pending ask (judged — code settles)",
-          turn2)
-    check((aq.get("answer") or {}).get("kind") == "freeform",
-          "the judged settlement lands kind=freeform (the user's own words)",
-          aq.get("answer"))
-    brief = ((await pending_plan(ctx, pid)) or {}).get("brief") or {}
-    topic = brief.get("topic") or {}
-    check(topic.get("source") == "user-stated" and bool(topic.get("value")),
-          "the slot backfills user-stated from the answer", topic)
-
-    # 契约拍②：一行一答（旧 S25 并入）——已答问题再答 = 409。
-    dup = await ctx.answer(msg1["id"], {"kind": "bail"})
-    check(dup.status_code == 409, "re-answering the settled ask is a conflict",
-          dup.status_code)
-
-    # 契约拍③：选项点选作答（2026-09-04 500 事故补盖——OptionAnswerRequest
-    # 没有 .text 属性，续聊分支的 data.text 直读未 kind 守卫就恒 500；此前
-    # 剧本只有自由文本一条作答路，点选路裸奔正是漏网根因）。第二项目同问
-    # 点选：200（无 500）+ answer.kind=option + slot 回填 user-stated（回填
-    # 的是 label 不是 id）+ plan path 接续带 follow_up。
-    pid2 = await ctx.new_project("S1 option pick")
-    turn1b = await ctx.chat(pid2, "I want a social post.")
-    msg1b = turn1b["assistant_message"]
-    q1b = msg1b.get("question") or {}
-    opts = q1b.get("options") or []
-    if q1b.get("slot") == "topic" and opts:
-        pick = await ctx.answer(msg1b["id"],
-                                {"kind": "option", "option_id": opts[0]["id"]})
-        check(pick.status_code == 200, "the option pick settles (no 500)",
-              pick.text)
-        body = pick.json()
-        check(((body.get("answered_question") or {}).get("answer") or {})
-              .get("kind") == "option",
-              "the pick lands kind=option", body.get("answered_question"))
-        brief2 = ((await pending_plan(ctx, pid2)) or {}).get("brief") or {}
-        topic2 = brief2.get("topic") or {}
-        check(topic2.get("source") == "user-stated"
-              and topic2.get("value") == opts[0]["label"],
-              "the option pick backfills the slot with the LABEL (not the id)",
-              topic2)
-        check(body.get("follow_up") is not None,
-              "the plan path resumes with a follow-up", body)
+    Both relations compare the STRIPPED concat: the envelope is edge-stripped
+    by design (``_compose_speech`` strips every part) while the wire carries
+    raw provider deltas, so leading "\n\n" tokenizer noise is variance, not
+    a violation."""
+    concat = "".join(stream.deltas)
+    had_reads, had_repair = _work_evidence(stream)
+    if had_repair:
+        return  # replaced speech: even the prefix relation is void
+    streamed = concat.strip()
+    if had_reads and allow_reads:
+        checkpointed = {c.strip() for c in stream.checkpoints}
+        check(
+            not streamed
+            or content.startswith(streamed)
+            or streamed in checkpointed,
+            f"{label}: the read-first stream law (kept speech prefixes the "
+            "content, or rode the checkpoint channel — ADR-104)",
+            f"{concat[:120]!r} vs {content[:120]!r}",
+        )
     else:
-        check(True, "option-pick beat skipped (pantry empty — C2 exempt)", q1b)
-
-    # 评审卡：作答轮直接出书，或（answer 裁决时）推一轮——终点断言不变：
-    # present_plan 终态（task_book dock）且 merged brief 钢印进 payload
-    # （预填评审卡 B3）。
-    turn_dock = turn2
-    msg2 = turn_dock["assistant_message"]
-    if not is_plan_dock(msg2):
-        turn_dock = await ctx.chat(pid, "go ahead")
-        msg2 = turn_dock["assistant_message"]
-    check(terminal_tool_of(turn_dock) == "present_plan",
-          "the enriched brief closes on the present_plan call (root now exists)",
-          turn_dock)
-    check(is_plan_dock(msg2),
-          "the enriched brief docks the plan (root now exists)", msg2)
-    ftopic = ((msg2.get("question") or {}).get("brief") or {}).get("topic") or {}
-    check(ftopic.get("source") == "user-stated" and bool(ftopic.get("value")),
-          "the review card stamps the merged brief into the payload", ftopic)
-    # 计划行自完备（方案 B, 2026-09-08）：dock 行自带链（intent 列）+ 派生
-    # 预览（payload derived）——SSE envelope 的行即整张计划卡，前端活路不再
-    # 取 pending_brief（那 GET 退回恢复座）。
-    check(bool(((msg2.get("intent") or {}).get("tasks")) or []),
-          "the dock row self-carries the chain (intent column)",
-          msg2.get("intent"))
-    row_derived = (msg2.get("question") or {}).get("derived")
-    check(isinstance(row_derived, list) and len(row_derived) >= 1,
-          "the dock row self-carries the derived preview (payload)",
-          msg2.get("question"))
-
-    # 草稿图（ADR-057 K5——图先展示后运行）：dock 即 stamp——draft 节点 +
-    # 计划 document + 逐节点估价，零消耗直到 start。
-    draft_graph = await ctx.graph(pid)
-    draft_nodes = [
-        n for n in draft_graph["nodes"]
-        # 词表 v3 (ADR-076, 三族批): the graph read frame carries ``type`` +
-        # ``spec.prototype`` (never the legacy card kinds) — producer draft
-        # nodes = the two working prototypes (generator/editor).
-        if n.get("state") == "draft"
-        and (n.get("spec") or {}).get("prototype") in ("generator", "editor")
-    ]
-    check(len(draft_nodes) >= 1, "the dock stamps the draft graph (图先展示后运行)",
-          draft_graph["nodes"])
-    check(not any(
-        # B1-lite (a82e1a9, 2026-09-13, ADR-070): the task_book node is
-        # stamped server-side but filtered out of the read frame — the
-        # canvas shows the pure material flow, the confirm beat's only seat
-        # is the dock pill. This check locks the CURRENT design (an
-        # accidental un-hiding goes red); it replaces the pre-B1-lite
-        # positive "the plan rides the draft graph" assertion.
-        (n.get("spec") or {}).get("role") == "task_book"
-        for n in draft_graph["nodes"]
-    ), "the read frame hides the task_book node (B1-lite — confirm seat = dock pill)",
-       draft_graph["nodes"])
-    check(any(n.get("estimate_credits") for n in draft_nodes),
-          "draft nodes carry their own quotes (逐节点估价)", draft_nodes)
-
-    # Lifecycle stamp beat ②: the docked, fully-quoted chain reads
-    # plan_ready ∧ confirmation_ready — the 四合取 all hold over a
-    # text-only chain (no material gate), zero blockers, the state rollup
-    # names the stage (ready → plan ready).
-    stamp1 = (await ctx.results(pid))["lifecycle"]
-    check(stamp1["plan_ready"] is True
-          and stamp1["confirmation_ready"] is True
-          and stamp1["blockers"] == []
-          and stamp1["state"] == "confirmation_ready",
-          "the docked plan reads plan_ready ∧ confirmation_ready on the stamp",
-          stamp1)
-
-    # Lifecycle stamp beat ③ (T10 flagship over the wire): an ACTIVE run
-    # holds confirmation back while the plan stays docked — plan_ready
-    # stays true, confirmation_ready flips false, the blocker names
-    # active_run, the rollup reads running (plan ready + confirmation
-    # incomplete → confirmation false; PLAN_READY ≠ confirm authority).
-    # The seeded authority settles immediately after, so the journey's own
-    # start beat below proceeds.
-    seeded_run = await seed_active_run(pid)
-    stamp2 = (await ctx.results(pid))["lifecycle"]
-    check(stamp2["plan_ready"] is True
-          and stamp2["confirmation_ready"] is False
-          and "active_run" in stamp2["blockers"]
-          and stamp2["state"] == "running",
-          "an active run blocks confirmation while the plan stays docked",
-          stamp2)
-    await settle_seeded_run(seeded_run)
-    stamp2b = (await ctx.results(pid))["lifecycle"]
-    check(stamp2b["confirmation_ready"] is True
-          and stamp2b["blockers"] == [],
-          "settling the run hands confirmation readiness back", stamp2b)
-
-    draft_ids = sorted(n["id"] for n in draft_graph["nodes"])
-
-    # 散文确认 start → run 起步（G-1）+ 草稿图原地填充（同 id 无双生）。
-    turn3 = await ctx.chat(pid, "looks good, start")
-    check(terminal_tool_of(turn3) == "start_run",
-          "the prose confirmation closes on the start_run call", turn3)
-    check(turn3["run_id"] is not None, "prose confirmation starts the run", turn3)
-    check(turn3["answered_question"] is not None, "the plan settles on start", turn3)
-    check((await ctx.results(pid)).get("pending_brief") is None,
-          "pending_brief cleared on start")
-    filled_graph = await ctx.graph(pid)
-    check(sorted(n["id"] for n in filled_graph["nodes"]) == draft_ids,
-          "start fills the SAME nodes in place (same compile → same fill keys — never twins)",
-          filled_graph["nodes"])
-    check(not any(n.get("state") == "draft" for n in filled_graph["nodes"]),
-          "the draft world re-queues on start", filled_graph["nodes"])
+        check(
+            streamed == content,
+            f"{label}: the single-iteration stream law (concat(deltas) == content)",
+            f"{concat[:120]!r} vs {content[:120]!r}",
+        )
 
 
-# ---- S2 核② 跳过 → draft-from-persona ------------------------------------------
+def check_turn_stream_law(stream: "StreamTurn", content: str, question: dict, label: str) -> None:
+    """The ask-branch-aware stream law (harness 公共断言的 SSE 线格式座):
+    an OPTIONS ask's content IS the streamed framing (the question rides the
+    dock title); a TEXT ask keeps the bare question IN the speech —
+    content = framing + "\\n\\n" + question, appended at compose, never
+    streamed. The generic single-iteration law (concat == content) is
+    structurally false for TEXT asks; which branch the turn takes is the
+    LLM's call, so the harness asserts the BRANCH's law. Everything else
+    delegates to :func:`check_stream_law`."""
+    _, had_repair = _work_evidence(stream)
+    if had_repair:
+        return  # replaced speech voids even the prefix relation
+    if question.get("kind") == "question" and not (question.get("options") or []):
+        streamed = "".join(stream.deltas).strip()
+        bare = (question.get("question") or "").strip()
+        expected = f"{streamed}\n\n{bare}" if streamed else bare
+        check(
+            content == expected,
+            f"{label}: a TEXT ask's bare question appends at compose "
+            "(blank-line join), never streamed",
+            f"{''.join(stream.deltas)[:120]!r} vs {content[:120]!r}",
+        )
+        return
+    check_stream_law(stream, content, label)
 
 
-async def s2_skipped_topic_ask_drafts_from_persona(ctx: Ctx) -> None:
-    """核② 问完一轮仍无根 → draft-from-persona 计划（ADR-052 B2 D2-C2，验收③）：
-    裸愿望 → 主题问 → × 跳过（bail）→ 默认路径生效——出书门槛 dock
-    draft-from-persona 计划（reason + 散文含默认路径声明），asked 簿记挡住
-    第二轮同槽问（问环有界）。
+# ---- ADR-084 speech-contract markers -----------------------------------------
+# NEGATIVE shapes only (禁令 #7 — the LLM's own phrasing is never locked; what
+# the contract bans is a SHAPE, and a banned shape is assertable).
 
-    LLM 方差说明：跳过后 router 应判 draft（stand-in 行明示默认路径）；
-    若它再判 ask(topic)，asked 簿记把判词翻回 draft 走门槛——两种路径同
-    归宿，断言只看终点。"""
-    pid = await ctx.new_project("S2 skip ask drafts from persona")
-
-    turn1 = await ctx.chat(pid, "I want a social post.")
-    q1 = turn1["assistant_message"].get("question") or {}
-    check(q1.get("kind") == "question" and q1.get("slot") == "topic",
-          "the topic ask docks first (S1's gate)", turn1["assistant_message"])
-
-    ans = await ctx.answer(turn1["assistant_message"]["id"], {"kind": "bail"})
-    check(ans.status_code in (200, 201), "the skip is accepted", ans.text)
-    follow = ans.json().get("follow_up") or {}
-    check(is_plan_dock(follow),
-          "skipping takes the default path — a plan docks", follow)
-    check(ans.json().get("answered_question") is not None,
-          "the skipped ask settles as answered", ans.json())
-
-    plan = await pending_plan(ctx, pid)
-    check(plan is not None, "the draft-from-persona plan persists", plan)
-    reasons = (plan or {}).get("reasons") or []
-    check("draft_from_persona" in reasons,
-          "the draft-from-persona reason rides the docked plan", reasons)
-    asked = ((plan or {}).get("brief") or {}).get("asked") or []
-    check("topic" in asked,
-          "the asked roll records the topic ask (the loop is bounded)", asked)
-    echo = ((plan or {}).get("intent") or {}).get("answer") or ""
-    check("persona" in echo.lower() or "人设" in echo,
-          "the echo carries the default-path declaration (验收③)", echo)
+# Process narration: read-iteration process talk must never persist into the
+# settled message (ADR-104: pre-read speech rides the checkpoint channel as
+# its own segment — the settled reply stands alone; post-read checkpoints
+# carry results, never process narration).
+# 词边界 adjudication（C-6，2026-09-19）：IGNORECASE 下裸 `I'?ll` 会把
+# "will pull from" 的 "ill pull" 误判为第一人称过程叙述（"the caption text
+# will pull from …" 是诚实披露而非过程泄漏）。合同不变（ADR-084 禁的是第一
+# 人称过程话入终答），断言补 \b 词界。
+PROCESS_NARRATION = re.compile(
+    r"(\bI'?ll (pull|check|inspect|look into|fetch|take a look)|"
+    r"\bLet me (check|pull|inspect|look|fetch)|"
+    r"\bI'?m going to (pull|check|inspect|look)|"
+    r"我先(查|看|拉|读)|让我(先)?(查|看|拉|读))",
+    re.IGNORECASE,
+)
 
 
-# ---- S3 核③ 插话支持 -----------------------------------------------------------
-
-
-async def s3_interjection_keeps_pending(ctx: Ctx) -> None:
-    """核③ 插话未答 → 正常回答 + 提醒尾 + 问题保持 pending → 下轮作答回填
-    （ADR-053 R2 plan path）：主题问待决中插一句与问题无关的能力问——
-    router 判 answer 出口，回复末尾接代码拼装提醒尾（原问题 + default_path，
-    代码强制文本可锁）；问题行保持待决；下一轮作答经 slot 握手结算回填。"""
-    pid = await ctx.new_project("S3 interjection")
-
-    turn1 = await ctx.chat(pid, "I want a social post.")
-    msg1 = turn1["assistant_message"]
-    q1 = msg1.get("question") or {}
-    check(q1.get("kind") == "question" and q1.get("slot") == "topic",
-          "the topic ask docks first", msg1)
-    default_path = (q1.get("default_path") or "").strip()
-    check(bool(default_path), "the ask carries its default path", q1)
-
-    turn2 = await ctx.chat(pid, "By the way, what can you generate?")
-    check(terminal_tool_of(turn2) == "answer",
-          "the interjection closes on the answer call", turn2)
-    check(turn2.get("answered_question") is None,
-          "an interjection never settles the pending ask", turn2)
-    msg2 = turn2["assistant_message"]
-    check(not msg2.get("question"),
-          "the interjection turn docks no new question", msg2)
-    check(has_prose(msg2), "the interjection gets its normal answer", msg2)
-    content = msg2.get("content") or ""
-    check(has_reminder_tail(content),
-          "the reply ends with the code-composed reminder tail", content[-200:])
-    check(default_path in content,
-          "the tail carries the ask's default path verbatim", content[-200:])
-    check(bool((q1.get("question") or "").strip())
-          and q1["question"] in content,
-          "the tail quotes the BARE question (解剖②), not the framing prose",
-          content[-200:])
-    res = await ctx.conversation(pid)
-    check((res.json().get("pending_question") or {}).get("id") == msg1["id"],
-          "the ask stays pending through the interjection", res.json())
-
-    # 下轮作答 → slot 握手结算回填（S1 同径）。
-    turn3 = await ctx.chat(pid, "Make it about European research policy.")
-    aq = turn3.get("answered_question")
-    check(aq is not None and aq["id"] == msg1["id"]
-          and (aq.get("answer") or {}).get("kind") == "freeform",
-          "the next-turn answer settles by the slot handshake", turn3)
-    brief = ((await pending_plan(ctx, pid)) or {}).get("brief") or {}
-    check(((brief.get("topic") or {}).get("source")) == "user-stated",
-          "the answer backfills the topic slot user-stated", brief)
-
-
-# ---- S4 核④ 素材全链 + 估价地基（进程内自检并入） ---------------------------------
-
-
-async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
-    """核④ 带素材全链：transcript 素材 → dock 计划 → dock Start → run
-    completed → post 产物落库 → 触发回合 reviewer 发言（T3：trigger_review
-    dump + 0–3 枚良构建议 pill）；估价三断言（fold 对账 / 报价单调性 /
-    NULL 语义）与 repair 只一轮（Agent 漏斗进程内 stub 自检）随链并入
-    （简报 C4「原 S41/S42 保留并入」）。"""
-    # A) 活链：COMPLETED transcript 资产（声明素材升格的终态——worker 资产
-    #    队列不碰假字节），writer 链走真 LLM 到 completed。
-    pid = await ctx.new_project("S4 material chain")
-    await seed_asset(pid, ctx.user_id, AssetType.TRANSCRIPT, "talk.txt",
-                     extracted_text="My talk about grid storage auctions.",
-                     processed=True)
-
-    turn1 = await ctx.chat(pid, "write a LinkedIn post from my talk")
-    conv_id = turn1["conversation_id"]
-    check(terminal_tool_of(turn1) == "present_plan",
-          "turn1 closes on the present_plan call", turn1)
-    check(is_plan_dock(turn1["assistant_message"]), "turn1 docks a task_book",
-          turn1["assistant_message"])
-    res = await ctx.answer(turn1["assistant_message"]["id"], {"kind": "start"})
-    check(res.status_code == 200, "dock Start answers the plan", res.text)
-    run_id = res.json()["answered_question"].get("workflow_run_id")
-    check(run_id, "a run was born", res.json())
-    row = await wait_run_status(run_id, {"completed", "failed"}, timeout=600.0)
-    check(row["status"] == "completed",
-          "the writer chain completes on a text asset", row["status"])
-    async with AsyncSessionLocal() as db:
-        outs = (
-            await db.execute(
-                select(Output).where(
-                    Output.project_id == uuid.UUID(pid), Output.type == "post"
-                )
+def check_checkpoint_shape(stream: "StreamTurn", content: str, label: str) -> None:
+    """Checkpoint shape laws (ADR-109 言语座位通用化; opportunistic —
+    checkpoints are EARNED, so absence is legal; when they fired, the shape
+    must hold): ≤4/turn (节奏护栏), never empty, never process narration
+    POST-READ (pre-read waiter speech is legal — ADR-104 服务员话术律;
+    phase-turn expectation sentences are the legal pre-read form), and the
+    settled reply never repeats one verbatim."""
+    if not stream.checkpoints:
+        return
+    check(
+        len(stream.checkpoints) <= 4,
+        f"{label}: checkpoints are capped at ≤4 per turn (ADR-109 rhythm guardrail)",
+        stream.checkpoints,
+    )
+    check(
+        all(c.strip() for c in stream.checkpoints),
+        f"{label}: checkpoints are never empty",
+        stream.checkpoints,
+    )
+    check(
+        # The waiter exemption (ADR-104): a checkpoint that arrived BEFORE
+        # any read settled is pre-read waiter speech — legal process talk
+        # by the waiter-line law. The results-only bar polices POST-read
+        # checkpoints (grounded judgment, never process narration).
+        not PROCESS_NARRATION.search(
+            " ".join(
+                c for c, pre in zip(stream.checkpoints, stream.checkpoints_pre_read) if not pre
             )
-        ).scalars().all()
-    check(len(outs) >= 1, "the post output lands in the DB", len(outs))
-
-    # A1) 触发回合（ADR-077 判词③ T3 + ADR-081 选项语法统一律）：run 收官
-    #    触发 reviewer 主动发言——持久化为 assistant 行，intent dump =
-    #    {type: "trigger_review", trigger, ref, suggestions=labels}；有建议
-    #    时建议 dock 成真实编号选项问（messages.question payload，id = 1 起
-    #    序号）。断言 dump 形态与 dock 良构；言语内容不锁（LLM 文案，禁令 #7）。
-    review = await wait_trigger_review(ctx, conv_id, run_id)
-    check(review is not None,
-          "the run-completed trigger turn speaks its review row", run_id)
-    rintent = (review or {}).get("intent") or {}
-    check(rintent.get("trigger") == "run_completed" and rintent.get("ref") == run_id,
-          "the review dump names trigger + ref", rintent)
-    sugs = rintent.get("suggestions") or []
-    check(0 <= len(sugs) <= 3, "0–3 suggestion labels (schema-bounded)", sugs)
-    check(all(isinstance(s, str) and s.strip() for s in sugs),
-          "each suggestion is a user-voice label (ADR-081 — pills retired)",
-          sugs)
-    if sugs:
-        question = (review or {}).get("question") or {}
-        check(question.get("kind") == "question",
-              "the suggestions dock as a real options question", question)
-        options = question.get("options") or []
-        check([o.get("id") for o in options] == [str(i + 1) for i in range(len(sugs))]
-              and [o.get("label") for o in options] == sugs,
-              "the dock options are the numbered labels (1/2/3 grammar)",
-              options)
-        # Harness 卫生（非断言）：建议问先 × 跳过收掉——A2 的修订消息不能
-        # 被判定结算吃掉（ADR-053 R2：judged answer settle parked 问后走
-        # 唤醒路、tool dispatch 被跳过——pre-existing 方差，在册于
-        # verification-contracts Known Variance；A2 锁的是 wiring 修订
-        # 路，不是 disposition 判定稳健性）。
-        bail = await ctx.answer(review["id"], {"kind": "bail"})
-        check(bail.status_code in (200, 201),
-              "the review suggestions question is bailed (A2 determinism)",
-              bail.text)
-
-    # A2) 修订 = wiring（ADR-057 K4/K5 横切——修订环根治验收点）: chat 修订
-    #    → WiringProposal（edit_prompt + run 子图）→ 节点程序行原地改写
-    #    （同 id 无双生）→ 子图重跑起 run。锁的是设计行为（shape E 修既有图
-    #    节点）；红了 = chat_intent prompt 回归信号，不是剧本松劲。
-    graph_before = await ctx.graph(pid)
-    post_node = next(
-        (n for n in graph_before["nodes"]
-         if (n.get("spec") or {}).get("tool") == "write_post"),
-        None,
+        ),
+        f"{label}: post-read checkpoints carry results, never process narration",
+        stream.checkpoints,
     )
-    check(post_node is not None, "the run's fill grew the writer's graph node",
-          graph_before["nodes"])
-    prompt_before = (post_node.get("spec") or {}).get("prompt")
-    turn_rev = await ctx.chat(pid, "make the post shorter")
-    check(terminal_tool_of(turn_rev) == "run_birth",
-          "the revision closes on a proposal tool's run birth (chat path)", turn_rev)
-    check(turn_rev["run_id"] is not None,
-          "the revision rides the wiring path — the subgraph rerun is born",
-          turn_rev)
-    graph_after = await ctx.graph(pid)
-    post_after = next(
-        (n for n in graph_after["nodes"] if n["id"] == post_node["id"]), None
+    for cp in stream.checkpoints:
+        check(
+            cp.strip() not in content,
+            f"{label}: the settled reply never repeats a checkpoint verbatim",
+            {"checkpoint": cp[:120], "settled": content[:120]},
+        )
+
+
+_ACTIVITY_KINDS = {"read", "draft", "run", "repair"}
+_ACTIVITY_TERMINAL = {"completed", "failed", "cancelled"}
+
+
+def check_activity_shape(stream: "StreamTurn", label: str) -> None:
+    """ADR-087 §3 activity shape laws (opportunistic — a bare-reply turn
+    legally has ZERO frames; when frames flew, the shape must hold):
+    ① the wire whitelist is {activity_id, seq, kind, status, key} + the
+    timing/fact extensions {at, count, duration_ms} (no params / results /
+    reasoning ever leak); ② kind is a user-semantic category, never a tool
+    name; ③ seq is strictly increasing; ④ a status flip appends a NEW frame
+    on the same activity_id (never a mutation) — explore milestones are
+    BORN-COMPLETED instant facts (one terminal frame, no active birth),
+    exempt from the birth/flip laws; ⑤ T16-B wire twin — when the envelope
+    lands, every activity's LAST frame is terminal (no dangling active)."""
+    acts = stream.activities
+    if not acts:
+        return
+    for a in acts:
+        keys = set(a.keys())
+        check(
+            {"activity_id", "seq", "kind", "status", "key"} <= keys
+            and keys <= {"activity_id", "seq", "kind", "status", "key", "at", "count", "duration_ms"},
+            f"{label}: activity frame carries only the whitelist fields",
+            a,
+        )
+        check(
+            a["kind"] in _ACTIVITY_KINDS,
+            f"{label}: kind is a user-semantic category, never a tool name",
+            a,
+        )
+        check(
+            a["status"] in _ACTIVITY_TERMINAL | {"active"},
+            f"{label}: status is one of active/completed/failed/cancelled",
+            a,
+        )
+        check(
+            a["key"] is None or (isinstance(a["key"], str) and a["key"]),
+            f"{label}: key is null or a non-empty i18n key",
+            a,
+        )
+    seqs = [a["seq"] for a in acts]
+    check(
+        seqs == sorted(seqs) and len(set(seqs)) == len(seqs),
+        f"{label}: activity seq is strictly increasing",
+        seqs,
     )
-    check(post_after is not None,
-          "the revision reuses the SAME node (edit_prompt + rerun — never a twin)",
-          graph_after["nodes"])
-    check((post_after.get("spec") or {}).get("prompt") != prompt_before,
-          "edit_prompt rewrote the node's program in place",
-          (post_after.get("spec") or {}).get("prompt"))
-    check(post_after.get("state") != "draft",
-          "the rerun re-queues its node", post_after.get("state"))
-    # A2's revision run settles before A3 — A3's Start would otherwise hit
-    # the birthplace's active-run 422 (the guard fires at Start too; waiting
-    # is harness hygiene, not an assertion).
-    await wait_run_terminal(turn_rev["run_id"])
+    # Stable identity law (④): frames sharing an activity_id are ONE work
+    # item's state flips — a span's first frame is the active birth, kind
+    # never mutates mid-activity, exactly one terminal frame closes the id
+    # (and nothing follows it), and the copy key follows the status-form
+    # law: failed/cancelled REUSE the active key, completed swaps to the
+    # past-tense form. A born-completed milestone is an instant fact: no
+    # birth/flip laws apply.
+    by_id: dict[str, list[dict]] = {}
+    for a in acts:
+        by_id.setdefault(a["activity_id"], []).append(a)
+    for aid, frames in by_id.items():
+        check(
+            len({f["kind"] for f in frames}) == 1,
+            f"{label}: kind never mutates across an activity's flips ({aid})",
+            frames,
+        )
+        if len(frames) == 1 and frames[0]["status"] in _ACTIVITY_TERMINAL:
+            continue  # born-completed milestone — an instant fact
+        check(
+            frames[0]["status"] == "active",
+            f"{label}: a span's first frame is its active birth ({aid})",
+            frames,
+        )
+        check(
+            all(f["status"] == "active" for f in frames[:-1]),
+            f"{label}: only the terminal frame leaves active ({aid})",
+            frames,
+        )
+        active_keys = {f["key"] for f in frames[:-1]}
+        terminal = frames[-1]
+        if terminal["status"] == "completed":
+            check(
+                terminal["key"] is not None and terminal["key"] not in active_keys,
+                f"{label}: completion swaps to the past-tense key ({aid})",
+                frames,
+            )
+        elif terminal["status"] in ("failed", "cancelled"):
+            check(
+                terminal["key"] in active_keys,
+                f"{label}: failed/cancelled reuse the active key ({aid})",
+                frames,
+            )
+    last_status: dict[str, str] = {}
+    for a in acts:  # append-oriented: the LAST frame per id is its state
+        last_status[a["activity_id"]] = a["status"]
+    dangling = {k: v for k, v in last_status.items() if v not in _ACTIVITY_TERMINAL}
+    check(
+        not dangling,
+        f"{label}: T16-B — no activity outlives the turn (envelope sweep)",
+        dangling,
+    )
 
-    # A3) 扩张 → Confirmation Dock（ADR-087 §4 Rule 6, Phase 4 B3 剧本座）：
-    #    已批图之外的新付费工作（基于 post 新写一篇 article——图上没有
-    #    article 节点，add_node 是唯一自然布线）——无论 LLM 走
-    #    edit_graph(add_node+run) 还是 propose_tasks，回合都必须 dock
-    #    （task_book + 零 run），Start 才放行 run。路由无关断言：信封
-    #    形状 + draft 预览 + Start 后链上生 run。
-    turn_exp: dict | None = None
-    for prompt in ("write a long-form article from the post as a new piece",
-                   "add an article version of the post alongside it",
-                   "the article, please"):
-        cand = await ctx.chat(pid, prompt)
-        check(cand.get("run_id") is None,
-              "A3: 扩张同 turn 直跑 = 教义红线（Rule 1/6——new paid work "
-              "must never run unauthorized）", cand)
-        if is_plan_dock(cand["assistant_message"]):
-            turn_exp = cand
-            break
-    check(turn_exp is not None,
-          "A3: the expansion ask docks a plan within 3 prompts", None)
-    check(terminal_tool_of(turn_exp) == "present_plan",
-          "A3: the turn closes on the plan dock", turn_exp)
-    graph_docked = await ctx.graph(pid)
-    draft_tools = [
-        (n.get("spec") or {}).get("tool")
-        for n in graph_docked["nodes"]
-        if n.get("state") == "draft"
-    ]
-    check("write_article" in draft_tools,
-          "A3: the dock's draft stamp previews the article node (the door's "
-          "mutation rolled back; canonical fill keys)", draft_tools)
-    res_exp = await ctx.answer(turn_exp["assistant_message"]["id"],
-                               {"kind": "start"})
-    check(res_exp.status_code == 200, "A3: dock Start answers the plan",
-          res_exp.text)
-    run_exp = res_exp.json()["answered_question"].get("workflow_run_id")
-    check(run_exp, "A3: a run was born on Start", res_exp.json())
-    runs_exp = await ctx.client.get(f"/projects/{pid}/runs")
-    born_exp = next((r for r in runs_exp.json() if r.get("id") == run_exp),
-                    None) or {}
-    exp_tools = [
-        t.get("tool")
-        for t in (born_exp.get("context") or {}).get("tasks") or []
-    ]
-    check("write_article" in exp_tools,
-          "A3: the born run carries the expansion chain", exp_tools)
 
-    # B) 估价地基（进程内编译，零 LLM）——fold 对账 / 单调性 / NULL 语义。
+# ---- dock 形态（harness 公共断言）--------------------------------------------
+
+# 选项载荷边界 lint（ADR-100 — 选项永不携带执行参数）：负形断言。
+# label 全档（label 是方向名，带参即 shadow plan）；description 收窄
+# 档（证据句合法引用源事实——"the 3 strongest moments" 不是参数，条数
+# 词只在 label 档查）。
+_INT_LABEL_LINT = [
+    re.compile(r"\d+\s*[:×x]\s*\d+"),                                      # 画幅 9:16
+    re.compile(r"\b\d+\s*(seconds?|secs?|minutes?|mins?|秒|分钟)\b", re.I),  # 时长
+    re.compile(r"\b(?:bilingual|source_only|target_only)\b|双语", re.I),      # 字幕模式
+    re.compile(r"\bcredits?\b|积分", re.I),                                  # 成本
+    re.compile(r"\b\d+\s*(?:clips?|cards?|posts?|shorts?|条|张|篇)\b", re.I),  # 条数
+]
+_INT_DESC_LINT = _INT_LABEL_LINT[:4]  # 条数档不进 description（证据句合法引数）
+
+_INT_EXPLORATION_PROMPTS = (
+    "what could I make from this keynote? give me a few directions",
+    "what are some good next steps for this video?",
+    "any ideas for what to do with the keynote?",
+)
+
+
+def check_dock_shape(msg: dict, label: str) -> None:
+    """dock 形态律（harness 公共断言——每个回合信封自动携带）：
+
+    - task_book 计划行自完备：链随 intent 列（非空）+ derived 列表；
+      estimate_credits 在场时良构——total = [low, high] 非负有
+      序、per_task 按任务序对齐（None ≡ 零报价），且 **Σ per_task ≡
+      total**（报价对账律，orchestrator 前缀编译差分三面同源）。
+    - 选项问结构律：1–3 选项 / label 非空 ≤40 / recommended_id 至多其
+      一且指在 docked 选项上 / 载荷永不携带执行参数（负形 lint——
+      shadow plan 是本档的定义性违界）。
+
+    default_path 恒在律不在此（ask 家族专属——trigger 建议 dock 是另
+    一族，归各旅程的场景级断言）。"""
+    q = msg.get("question") or {}
+    if not q:
+        return
+    if q.get("kind") == "task_book":
+        tasks = ((msg.get("intent") or {}).get("tasks")) or []
+        check(
+            bool(tasks),
+            f"{label}: the plan dock self-carries the chain (intent column)",
+            msg.get("intent"),
+        )
+        check(
+            isinstance(q.get("derived"), list),
+            f"{label}: the plan dock's derived preview rides as a list",
+            q,
+        )
+        est = q.get("estimate_credits")
+        if est is not None:
+            total = est.get("total")
+            check(
+                isinstance(total, list)
+                and len(total) == 2
+                and all(isinstance(v, int) for v in total)
+                and 0 <= total[0] <= total[1],
+                f"{label}: estimate total is a non-negative ordered [low, high]",
+                est,
+            )
+            per_task = est.get("per_task")
+            if per_task is not None:
+                check(
+                    len(per_task) == len(tasks),
+                    f"{label}: per_task aligns with the task list by index",
+                    est,
+                )
+                lows = highs = 0
+                for entry in per_task:
+                    check(
+                        entry is None
+                        or (
+                            isinstance(entry, list)
+                            and len(entry) == 2
+                            and all(isinstance(v, int) for v in entry)
+                            and 0 <= entry[0] <= entry[1]
+                        ),
+                        f"{label}: each per_task entry is null or a [low, high] range",
+                        est,
+                    )
+                    if entry is not None:
+                        lows += entry[0]
+                        highs += entry[1]
+                check(
+                    (lows, highs) == (total[0], total[1]),
+                    f"{label}: Σ per_task ≡ total exactly (报价对账律)",
+                    est,
+                )
+    elif q.get("kind") == "question":
+        options = q.get("options") or []
+        if options:
+            check(
+                1 <= len(options) <= 3,
+                f"{label}: 1-3 options on the dock",
+                options,
+            )
+            ids = {str(o.get("id")) for o in options}
+            recommended_id = q.get("recommended_id")
+            check(
+                recommended_id is None or recommended_id in ids,
+                f"{label}: recommended_id names at most one docked option",
+                q,
+            )
+            for o in options:
+                text = str(o.get("label") or "")
+                check(
+                    bool(text.strip()) and len(text) <= 40,
+                    f"{label}: label non-empty and ≤40",
+                    text,
+                )
+                for pat in _INT_LABEL_LINT:
+                    check(
+                        not pat.search(text),
+                        f"{label}: labels never carry execution params (shadow plan 负形)",
+                        f"{pat.pattern} in {text!r}",
+                    )
+                desc = str(o.get("description") or "")
+                for pat in _INT_DESC_LINT:
+                    check(
+                        not pat.search(desc),
+                        f"{label}: descriptions never carry execution params (shadow plan 负形)",
+                        f"{pat.pattern} in {desc!r}",
+                    )
+
+
+def check_turn_stream_laws(stream: "StreamTurn", label: str) -> None:
+    """SSE 回合的 harness 公共断言全家桶（``Ctx.chat_stream`` 在信封成功
+    收官时自动携带）：线格式律（含文字问/选项问合成枝）+ Activity 帧形态
+    + checkpoint 形态 + 选项问预览帧律 + dock 形态。"""
+    msg = stream.completed["assistant_message"]
+    content = msg.get("content") or ""
+    q = msg.get("question") or {}
+    check_turn_stream_law(stream, content, q, label)
+    check_activity_shape(stream, label)
+    check_checkpoint_shape(stream, content, label)
+    # question.preview 预览帧律（言语提交协议 G2：预览骑缓冲、接受才释
+    # 放——收到的预览即权威件，与信封 dock 载荷逐字段一致）。文字类提问
+    # 永不预览 dock（与 R1 文字问门禁同律）——只有选项问 dock 触发本律。
+    if q.get("kind") == "question" and (q.get("options") or []):
+        check(
+            len(stream.previews) >= 1,
+            f"{label}: the ask's question.preview frame precedes the terminal envelope",
+            stream.thinking,
+        )
+        preview = stream.previews[-1]
+        check(
+            preview.get("question") == q.get("question"),
+            f"{label}: the preview's bare question IS the docked payload's",
+            preview,
+        )
+        check(
+            [o.get("id") for o in preview.get("options") or []]
+            == [o.get("id") for o in q.get("options") or []],
+            f"{label}: the preview's options match the docked payload's",
+            preview,
+        )
+        check(
+            preview.get("slot") == q.get("slot"),
+            f"{label}: the preview's slot matches the docked payload's",
+            preview,
+        )
+        check(
+            isinstance(preview.get("allow_freeform"), bool),
+            f"{label}: the preview carries allow_freeform",
+            preview,
+        )
+        check(
+            bool((preview.get("default_path") or "").strip()),
+            f"{label}: the preview carries the default path",
+            preview,
+        )
+    check_dock_shape(msg, label)
+
+
+def has_prose(msg: dict) -> bool:
+    """The assistant message carries a non-empty prose reply."""
+    return bool((msg.get("content") or "").strip())
+
+
+def plan_tasks(plan: dict) -> list[dict]:
+    """The docked chain (ADR-043): pending_brief.intent.tasks — the plan
+    card's rows, one {tool, params} dict per task."""
+    return ((plan or {}).get("intent") or {}).get("tasks") or []
+
+
+def task_params(task: dict) -> dict:
+    return task.get("params") or {}
+
+
+async def pending_plan(ctx: Ctx, pid: str) -> dict | None:
+    """The project's pending plan via the results endpoint (None when none)."""
+    return (await ctx.results(pid)).get("pending_brief")
+
+
+async def wait_trigger_review(
+    ctx: Ctx, conversation_id: str, run_id: str, timeout: float = 90.0
+) -> dict | None:
+    """Poll the conversation for the run-completed trigger turn's review row
+    (ADR-077 判词③ T3): the pipeline fires the proactive turn fire-and-forget
+    at run terminal, and the agent's wrap_up persists an assistant row whose
+    intent dump is ``{type: "trigger_review", trigger, ref, suggestions}``.
+    Returns the message row, or None on timeout."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        for m in await ctx.messages(conversation_id):
+            intent = m.get("intent") or {}
+            if intent.get("type") == "trigger_review" and intent.get("ref") == run_id:
+                return m
+        await asyncio.sleep(2)
+    return None
+
+
+def has_reminder_tail(content: str) -> bool:
+    """The code-composed interjection reminder tail (ADR-053 R2 — code-forced
+    text, so locking its marker is legal: it is code, never the LLM's voice)."""
+    return "Still waiting for your answer:" in content or "还在等你的回答：" in content
+
+
+async def seed_keynote_project(ctx: Ctx, title: str) -> tuple[str, str]:
+    """谱系场景素材种子：一个 COMPLETED 视频资产（worker-immune）+ 内容
+    理解行（plan-turn 装配的 grounding 面）→ (pid, asset_id)。探索类提问
+    的具体下一步方向从这里长出来——suggestions 永不空穴来风（契约：只在
+    当前上下文存在具体可供选择的下一步方向时出现）。"""
+    pid = await ctx.new_project(title)
+    asset_id = await seed_asset(
+        pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
+        extracted_text=(
+            "On urban heat: cities are getting hotter, and shade trees plus "
+            "reflective roofs can cool whole neighborhoods by several degrees."
+        ),
+        processed=True, meta={"language": "en"},
+    )
+    await seed_understanding(pid)
+    return pid, asset_id
+
+
+def check_options_dock(question: dict, label: str) -> None:
+    """选项 dock 的谱系锁（ADR-100：一切可点选项归 dock——ask_user 选项
+    问承接探索/浏览的方向建议）：kind=question / 1-3 选项 / label ≤40 /
+    载荷永不携带执行参数（负形 lint）/ recommended 至多其一且必须指在
+    docked 选项上 / default_path 恒在（每个问题都可安全跳过）。"""
+    check(question.get("kind") == "question",
+          f"{label}: the directions dock as a real options question", question)
+    options = question.get("options") or []
+    check(1 <= len(options) <= 3,
+          f"{label}: 1-3 options on the dock", options)
+    check(bool((question.get("default_path") or "").strip()),
+          f"{label}: the default path rides every ask (安全跳过)", question)
+    recommended_id = question.get("recommended_id")
+    check(recommended_id is None
+          or recommended_id in {str(o.get("id")) for o in options},
+          f"{label}: recommended_id names at most one docked option", question)
+    for o in options:
+        text = str(o.get("label") or "")
+        check(bool(text.strip()) and len(text) <= 40,
+              f"{label}: label non-empty and ≤40", text)
+        for pat in _INT_LABEL_LINT:
+            check(not pat.search(text),
+                  f"{label}: labels never carry execution params (shadow plan 负形)",
+                  f"{pat.pattern} in {text!r}")
+        desc = str(o.get("description") or "")
+        for pat in _INT_DESC_LINT:
+            check(not pat.search(desc),
+                  f"{label}: descriptions never carry execution params (shadow plan 负形)",
+                  f"{pat.pattern} in {desc!r}")
+
+
+async def elicit_options_dock_turn(
+    ctx: Ctx, pid: str, label: str,
+    prompts: tuple[str, ...] = _INT_EXPLORATION_PROMPTS,
+) -> dict:
+    """驱动一个探索 → ask_user 选项 dock 回合（ADR-100：浏览/探索的方向
+    建议全归 dock）→ turn。
+
+    LLM 方差口径：纯 answer 散文 = 措辞重试（模型有选择散文答复的自由）；
+    present_plan = 错档硬红（探索问永不直接承诺——事故④第一跳形态）。"""
+    for prompt in prompts:
+        turn = await ctx.chat(pid, prompt)
+        tool = terminal_tool_of(turn)
+        check(tool != "present_plan",
+              f"{label}: an exploration question never docks a plan (事故④第一跳形态)",
+              turn)
+        q = turn["assistant_message"].get("question") or {}
+        if tool == "ask_user" and (q.get("options") or []):
+            return turn
+    raise ScenarioFailure(
+        f"{label}: no options-dock turn after {len(prompts)} tries"
+    )
+
+
+async def conversation_items(ctx: Ctx, pid: str) -> list[dict]:
+    """The conversation's message list over the wire (持久化事实的客户端观察面)."""
+    res = await ctx.conversation(pid)
+    check(res.status_code == 200, "the conversation exists after the first turn",
+          res.status_text if hasattr(res, "status_text") else res.status_code)
+    return await ctx.messages(res.json()["id"])
+
+
+# ---- 估价三断言 + repair 只一轮（harness 公共断言——runner 每本开跑前自动携带） --
+
+
+def check_estimate_foundation() -> None:
+    """估价地基（进程内编译，零 LLM——每本自动携带）：fold 对账自检 /
+    报价单调性（目标子图 ≤ 全图，非负）/ NULL 语义（初启 fan-out 未估
+    价；修饰技精确报价）/ 悬空 transform 编译期指名拒绝。"""
     assert_runners_registered()
-
     facts = {
         "text_chars": 50_000,
         "text_count": 1,
@@ -1806,7 +1383,7 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
         modifier,
     )
 
-    # translate fan-out (R6's chain shape): same NULL semantics.
+    # translate fan-out: same NULL semantics; fork 一语言一节点。
     with_caps = compile_graph(
         TaskSpec(
             tasks=[
@@ -1851,7 +1428,7 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
     )
     # dangling-transform gate: translate with no clip selection and no
     # materialize profile is a compile-time ValueError naming the transform
-    # (the profile matrix lives in S11).
+    # (the profile matrix lives in tests/test_cut_segments_pure.py).
     try:
         compile_graph(
             TaskSpec(
@@ -1867,7 +1444,61 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
     except ValueError as exc:
         check("translate clip" in str(exc), "dangling translate raises", str(exc))
 
-    # C) repair 只一轮（Agent 漏斗进程内 stub 自检，不打 API 零 LLM）。
+
+class _ProbeResult(BaseModel):
+    text: str
+
+
+class _StubClient:
+    """Scripted MiniMaxClient stand-in: records every call, plays outcomes.
+
+    Script items: ``"schema"`` (raise LLMSchemaError), an exception
+    instance (raise it), or a ``_ProbeResult`` (return it).
+    """
+
+    def __init__(self, script: list[object]) -> None:
+        self.script = list(script)
+        self.calls: list[tuple[str, list[dict]]] = []
+
+    def _play(self, kind: str, messages: list[dict]) -> _ProbeResult:
+        self.calls.append((kind, messages))
+        item = self.script.pop(0)
+        if item == "schema":
+            raise LLMSchemaError("Failed to validate response: boom")
+        if isinstance(item, Exception):
+            raise item
+        return item  # type: ignore[return-value]
+
+    async def generate(self, *, messages, response_model, **_):
+        return self._play("generate", messages)
+
+    async def generate_stream(self, *, messages, response_model, on_delta=None, **_):
+        return self._play("stream", messages)
+
+
+def _probe_agent(client: _StubClient, *, name: str, fallback=None) -> Agent:
+    def _assemble():
+        return ({"context_text": "", "message": "m"}, [])
+
+    return Agent(
+        name=name,
+        prompt="chat_intent.j2",
+        schema=_ProbeResult,
+        system="sys",
+        assemble=_assemble,
+        fallback=fallback,
+        client=client,  # type: ignore[arg-type]
+    )
+
+
+def _user_text(messages: list[dict]) -> str:
+    """The user message's trailing text part (the funnel's prompt carrier)."""
+    return messages[1]["content"][-1]["text"]
+
+
+async def check_repair_once_foundation() -> None:
+    """repair 只一轮（Agent 漏斗进程内 stub 自检，不打 API 零 LLM——每本
+    自动携带）。"""
     # 1. Schema rejection → exactly one repair round, carrying the echo.
     stub = _StubClient(["schema", _ProbeResult(text="ok")])
     result = await _probe_agent(stub, name="scenario_probe_1").call()
@@ -2013,90 +1644,417 @@ async def s4_material_chain_and_estimate_foundation(ctx: Ctx) -> None:
           c_repair["content"])
 
 
-class _ProbeResult(BaseModel):
-    text: str
+# ---- 共享 fixture（demo 桶常住对象，reset_db 保护前缀）--------------------------
+#
+# fixture 纪律：源片一律先拷 ``scenario/`` 前缀——``delete_project`` 会 unlink
+# 每个资产的 ``file_url``，共享 demo 键直接引用随清理被删。真字节素材若需
+# worker 真处理（ASR），seed 时必须显式 ``request_processing=True``（ADR-102
+# 休眠律：无 ``processing_requested_at`` 盖章的 PENDING 行 worker 永不认领）。
+REMIX_SOURCE_KEY = "demo/uploads/demo_talk.mp4"
+REMIX_EXEMPLAR_KEY = "demo/outputs/highlight-clips-preview-ec8e575b.mp4"
+# 14.5s 双人访谈段（xy_1 [172.5,187.0]，约 6.6s 处一次干净的问→答切换——烘焙
+# 配方卡「访谈分镜」demo 的同一源，实证 form=interview + 真 crop_track）。
+INTERVIEW_SOURCE_KEY = "demo/uploads/xy_1_interview_15s.mp4"
 
 
-class _StubClient:
-    """Scripted MiniMaxClient stand-in: records every call, plays outcomes.
+async def copy_fixture(key: str, dest_prefix: str) -> str:
+    """Copy a shared demo-bucket fixture to a scenario-owned key. NEVER seed
+    an asset pointing at the shared object directly: project deletion unlinks
+    every asset's ``file_url`` (``delete_project`` → ``delete_file``), so a
+    shared key referenced by a scenario project dies with its cleanup."""
+    from app.config import settings
+    from app.providers.storage import _get_s3_client
 
-    Script items: ``"schema"`` (raise LLMSchemaError), an exception
-    instance (raise it), or a ``_ProbeResult`` (return it).
-    """
-
-    def __init__(self, script: list[object]) -> None:
-        self.script = list(script)
-        self.calls: list[tuple[str, list[dict]]] = []
-
-    def _play(self, kind: str, messages: list[dict]) -> _ProbeResult:
-        self.calls.append((kind, messages))
-        item = self.script.pop(0)
-        if item == "schema":
-            raise LLMSchemaError("Failed to validate response: boom")
-        if isinstance(item, Exception):
-            raise item
-        return item  # type: ignore[return-value]
-
-    async def generate(self, *, messages, response_model, **_):
-        return self._play("generate", messages)
-
-    async def generate_stream(self, *, messages, response_model, on_delta=None, **_):
-        return self._play("stream", messages)
+    dest = f"{dest_prefix}/{key.rsplit('/', 1)[-1]}"
+    client = _get_s3_client()
+    await asyncio.to_thread(
+        client.copy_object,
+        Bucket=settings.s3_bucket_name,
+        Key=dest,
+        CopySource={"Bucket": settings.s3_bucket_name, "Key": key},
+    )
+    return dest
 
 
-def _probe_agent(client: _StubClient, *, name: str, fallback=None) -> Agent:
-    def _assemble():
-        return ({"context_text": "", "message": "m"}, [])
+# demo_talk（~119s）的合成转写种子：真字节 + 逐词时间轴 + speaker_map，
+# processed=True 自证处理终态（worker 不碰——fixture 自证比等盖章口确定），
+# clips 链的选段/剪切/render 全在真字节上跑。
+_SE2_SENTENCES = [
+    (0.0, "Welcome back to the founder notes."),
+    (6.0, "Today I want to walk through how we think about pricing."),
+    (14.0, "Our pricing is simple."),
+    (18.0, "The starter tier is free forever."),
+    (24.0, "The pro tier costs ten dollars a month."),
+    (30.0, "You only pay when your team actually grows."),
+    (38.0, "Let me switch gears and talk about the roadmap for a moment."),
+    (52.0, "We are shipping the new dashboard next quarter."),
+    (64.0, "Back to pricing for a second."),
+    (68.0, "Every paid tier includes the analytics dashboard."),
+    (76.0, "Annual billing saves you two months."),
+    (84.0, "That is the whole announcement for this week."),
+]
 
-    return Agent(
-        name=name,
-        prompt="chat_intent.j2",
-        schema=_ProbeResult,
-        system="sys",
-        assemble=_assemble,
-        fallback=fallback,
-        client=client,  # type: ignore[arg-type]
+
+def _talk_words() -> list[dict]:
+    words: list[dict] = []
+    for line_start, sentence in _SE2_SENTENCES:
+        t = line_start
+        for w in sentence.split():
+            words.append({"word": w, "start": round(t, 2), "end": round(t + 0.4, 2)})
+            t += 0.5
+    return words
+
+
+def no_decompile_canvas_node(graph: dict) -> bool:
+    """decompile folds into the prelude — it must never read back as a
+    standalone canvas node."""
+    return not any(
+        (n.get("spec") or {}).get("tool") == "decompile" for n in graph.get("nodes") or []
     )
 
 
-def _user_text(messages: list[dict]) -> str:
-    """The user message's trailing text part (the funnel's prompt carrier)."""
-    return messages[1]["content"][-1]["text"]
+# ==============================================================================
+# 十本用户旅程矩阵
+# ==============================================================================
 
 
-# ---- S5 核⑤ 修订链 --------------------------------------------------------------
+async def s1_lost_user_full_journey(ctx: Ctx) -> None:
+    """S1 迷失用户全旅程：裸愿望 → 主题问（SSE——选项预览律的旅程座位）→
+    作答回填（自由文本 slot 握手 + 选项点选两路）/ 跳过 → draft-from-persona
+    计划 → dock → 口头确认 → start_run → run。途中锁契约拍：待决重建零内存
+    态、一行一答 409、选项点选不 500（kind 守卫）、draft 图横切（B1-lite 藏
+    task_book / 逐节点估价）、lifecycle stamp 三拍（preparing →
+    confirmation_ready → 活跃 run 阻断交还）。
+
+    LLM 方差说明：router 判 ask 是设计行为（prompt 策略行）；若个别模型把
+    "I want a social post." 直接判 draft，首段断言会红——那是 prompt 回归
+    信号。options 空合法（无 persona 时储藏室为空）。"""
+    pid = await ctx.new_project("S1 bare wish journey")
+
+    # Lifecycle stamp 拍①：fresh project = preparing / not-ready / 零 blocker
+    #（stamp 是唯一 lifecycle 读面，产物永不说话）。
+    stamp0 = (await ctx.results(pid))["lifecycle"]
+    check(stamp0["state"] == "preparing" and not stamp0["plan_ready"]
+          and not stamp0["confirmation_ready"] and stamp0["blockers"] == [],
+          "a fresh project reads preparing / not-ready on the stamp", stamp0)
+
+    # turn1 走 SSE——选项问预览帧律（harness 自动断言）在此座上 exercised。
+    stream1 = await ctx.chat_stream(pid, "I want a social post.")
+    check(stream1.failed is None, "the ask turn never fails", stream1.failed)
+    check(stream1.completed is not None, "the ask turn completes", stream1.failed)
+    turn1 = stream1.completed
+    msg1 = turn1["assistant_message"]
+    check(turn1["run_id"] is None, "a bare wish never starts a run", turn1)
+    check(terminal_tool_of(turn1) == "ask_user",
+          "the rootless wish closes on the ask_user call", turn1)
+    q1 = msg1.get("question") or {}
+    check(q1.get("kind") == "question" and q1.get("slot") == "topic",
+          "the rootless wish docks the topic ask first (never an empty plan)", msg1)
+    check(bool((q1.get("default_path") or "").strip()),
+          "the default path rides as the schema tooth", q1)
+    # ask 三分解剖：content = 框架散文，payload.question = 裸问题（dock 标题 /
+    # QA 归档 / 提醒尾读它）。散文缺字段时 content 回退裸问题——回归信号。
+    check(bool((q1.get("question") or "").strip()),
+          "the bare question rides the payload (dock title's source)", q1)
+    check(has_prose(msg1) and (msg1.get("content") or "") != q1.get("question"),
+          "the framing prose IS the message content (the ask's echo)",
+          (msg1.get("content") or "")[:200])
+    options = q1.get("options") or []
+    check(len(options) == 0 or 2 <= len(options) <= 3,
+          "options: 3 one-word picks (2 only for a genuinely binary choice), "
+          "or empty when the persona pantry is empty",
+          options)
+    plan1 = await pending_plan(ctx, pid)
+    check(plan1 is None or plan1.get("intent") is None,
+          "no plan parks on an ask turn (brief-only row or none)", plan1)
+
+    # 契约拍①：待决重建零内存态——刷新/跨设备座。
+    res = await ctx.conversation(pid)
+    check((res.json().get("pending_question") or {}).get("id") == msg1["id"],
+          "the pending question rebuilds (the refresh / cross-device seat)",
+          res.json())
+
+    # 自由文本作答 —— slot 握手判定结算（router 在 pending 块上下文里把槽位
+    # 值提案 user-stated，代码结算 freeform 并回填）。
+    turn2 = await ctx.chat(pid, "Make it about the EU AI Act for researchers.")
+    aq = turn2.get("answered_question")
+    check(aq is not None and aq["id"] == msg1["id"],
+          "the free-text answer settles the pending ask (judged — code settles)",
+          turn2)
+    check((aq.get("answer") or {}).get("kind") == "freeform",
+          "the judged settlement lands kind=freeform (the user's own words)",
+          aq.get("answer"))
+    brief = ((await pending_plan(ctx, pid)) or {}).get("brief") or {}
+    topic = brief.get("topic") or {}
+    check(topic.get("source") == "user-stated" and bool(topic.get("value")),
+          "the slot backfills user-stated from the answer", topic)
+
+    # 契约拍②：一行一答——已答问题再答 = 409。
+    dup = await ctx.answer(msg1["id"], {"kind": "bail"})
+    check(dup.status_code == 409, "re-answering the settled ask is a conflict",
+          dup.status_code)
+
+    # 契约拍③：选项点选作答（500 事故补盖——点选路曾裸奔）。第二项目同问
+    # 点选：200 + answer.kind=option + slot 回填 user-stated（回填的是 label
+    # 不是 id）+ plan path 接续带 follow_up。
+    pid2 = await ctx.new_project("S1 option pick")
+    turn1b = await ctx.chat(pid2, "I want a social post.")
+    msg1b = turn1b["assistant_message"]
+    q1b = msg1b.get("question") or {}
+    opts = q1b.get("options") or []
+    if q1b.get("slot") == "topic" and opts:
+        pick = await ctx.answer(msg1b["id"],
+                                {"kind": "option", "option_id": opts[0]["id"]})
+        check(pick.status_code == 200, "the option pick settles (no 500)",
+              pick.text)
+        body = pick.json()
+        check(((body.get("answered_question") or {}).get("answer") or {})
+              .get("kind") == "option",
+              "the pick lands kind=option", body.get("answered_question"))
+        brief2 = ((await pending_plan(ctx, pid2)) or {}).get("brief") or {}
+        topic2 = brief2.get("topic") or {}
+        check(topic2.get("source") == "user-stated"
+              and topic2.get("value") == opts[0]["label"],
+              "the option pick backfills the slot with the LABEL (not the id)",
+              topic2)
+        check(body.get("follow_up") is not None,
+              "the plan path resumes with a follow-up", body)
+    else:
+        check(True, "option-pick beat skipped (pantry empty — exempt)", q1b)
+
+    # 评审卡：作答轮直接出书，或推一轮——终点断言不变：present_plan 终态且
+    # merged brief 钢印进 payload。
+    turn_dock = turn2
+    msg2 = turn_dock["assistant_message"]
+    if not is_plan_dock(msg2):
+        turn_dock = await ctx.chat(pid, "go ahead")
+        msg2 = turn_dock["assistant_message"]
+    check(terminal_tool_of(turn_dock) == "present_plan",
+          "the enriched brief closes on the present_plan call (root now exists)",
+          turn_dock)
+    check(is_plan_dock(msg2),
+          "the enriched brief docks the plan (root now exists)", msg2)
+    ftopic = ((msg2.get("question") or {}).get("brief") or {}).get("topic") or {}
+    check(ftopic.get("source") == "user-stated" and bool(ftopic.get("value")),
+          "the review card stamps the merged brief into the payload", ftopic)
+    row_derived = (msg2.get("question") or {}).get("derived")
+    check(isinstance(row_derived, list) and len(row_derived) >= 1,
+          "the dock row self-carries the derived preview (payload)",
+          msg2.get("question"))
+
+    # 草稿图（图先展示后运行）：dock 即 stamp——draft 节点 + 逐节点估价，
+    # 零消耗直到 start。
+    draft_graph = await ctx.graph(pid)
+    draft_nodes = [
+        n for n in draft_graph["nodes"]
+        if n.get("state") == "draft"
+        and (n.get("spec") or {}).get("prototype") in ("generator", "editor")
+    ]
+    check(len(draft_nodes) >= 1, "the dock stamps the draft graph (图先展示后运行)",
+          draft_graph["nodes"])
+    check(not any(
+        (n.get("spec") or {}).get("role") == "task_book"
+        for n in draft_graph["nodes"]
+    ), "the read frame hides the task_book node (confirm seat = dock pill)",
+       draft_graph["nodes"])
+    check(any(n.get("estimate_credits") for n in draft_nodes),
+          "draft nodes carry their own quotes (逐节点估价)", draft_nodes)
+
+    # Lifecycle stamp 拍②：docked 全估价链读 plan_ready ∧ confirmation_ready。
+    stamp1 = (await ctx.results(pid))["lifecycle"]
+    check(stamp1["plan_ready"] is True
+          and stamp1["confirmation_ready"] is True
+          and stamp1["blockers"] == []
+          and stamp1["state"] == "confirmation_ready",
+          "the docked plan reads plan_ready ∧ confirmation_ready on the stamp",
+          stamp1)
+
+    # Lifecycle stamp 拍③：活跃 run 扣住确认权而计划保持 docked——plan_ready
+    # 恒真、confirmation_ready 翻假、blocker 点名 active_run、rollup 读
+    # running；落定即交还（PLAN_READY ≠ confirm authority）。
+    seeded_run = await seed_active_run(pid)
+    stamp2 = (await ctx.results(pid))["lifecycle"]
+    check(stamp2["plan_ready"] is True
+          and stamp2["confirmation_ready"] is False
+          and "active_run" in stamp2["blockers"]
+          and stamp2["state"] == "running",
+          "an active run blocks confirmation while the plan stays docked",
+          stamp2)
+    await settle_seeded_run(seeded_run)
+    stamp2b = (await ctx.results(pid))["lifecycle"]
+    check(stamp2b["confirmation_ready"] is True
+          and stamp2b["blockers"] == [],
+          "settling the run hands confirmation readiness back", stamp2b)
+
+    draft_ids = sorted(n["id"] for n in draft_graph["nodes"])
+
+    # 散文确认 start → run 起步 + 草稿图原地填充（同 id 无双生）。
+    turn3 = await ctx.chat(pid, "looks good, start")
+    check(terminal_tool_of(turn3) == "start_run",
+          "the prose confirmation closes on the start_run call", turn3)
+    check(turn3["run_id"] is not None, "prose confirmation starts the run", turn3)
+    check(turn3["answered_question"] is not None, "the plan settles on start", turn3)
+    check((await ctx.results(pid)).get("pending_brief") is None,
+          "pending_brief cleared on start")
+    filled_graph = await ctx.graph(pid)
+    check(sorted(n["id"] for n in filled_graph["nodes"]) == draft_ids,
+          "start fills the SAME nodes in place (same compile → same fill keys — never twins)",
+          filled_graph["nodes"])
+    check(not any(n.get("state") == "draft" for n in filled_graph["nodes"]),
+          "the draft world re-queues on start", filled_graph["nodes"])
+
+    # 第三项目：rootless 闸门（措辞方差两连）→ 跳过 → draft-from-persona。
+    pid3 = await ctx.new_project("S1 rootless gate")
+    turn_c = await ctx.chat(pid3, "make me something for my audience")
+    check(not is_plan_dock(turn_c["assistant_message"]),
+          "a rootless wish never docks a groundless plan", turn_c)
+    check(turn_c["run_id"] is None, "a rootless wish never starts a run", turn_c)
+    if terminal_tool_of(turn_c) != "ask_user":
+        # answer 族答复 = 顾问姿态方差，换新项目重试（历史会带偏后续判定）；
+        # 连续两项目无 ask = S1 实证面漂移（红 = router/prompt 回归信号）。
+        pid3 = await ctx.new_project("S1 rootless gate retry")
+        turn_c = await ctx.chat(pid3, "I want a social post.")
+        check(terminal_tool_of(turn_c) == "ask_user",
+              "the rootless wish docks the ask gate", turn_c)
+    q_c = turn_c["assistant_message"]["question"]
+    check(q_c.get("answer") is None, "the gate docks unanswered", q_c)
+
+    # × 跳过 → 默认路径生效：draft-from-persona 计划 dock（reason + 散文含
+    # 默认路径声明），asked 簿记挡住第二轮同槽问（问环有界）。跳过后 router
+    # 应判 draft；若再判 ask(topic)，asked 簿记翻回 draft——同归宿，只看终点。
+    ans = await ctx.answer(turn_c["assistant_message"]["id"], {"kind": "bail"})
+    check(ans.status_code in (200, 201), "the skip is accepted", ans.text)
+    follow = ans.json().get("follow_up") or {}
+    check(is_plan_dock(follow),
+          "skipping takes the default path — a plan docks", follow)
+    check(ans.json().get("answered_question") is not None,
+          "the skipped ask settles as answered", ans.json())
+
+    plan = await pending_plan(ctx, pid3)
+    check(plan is not None, "the draft-from-persona plan persists", plan)
+    reasons = (plan or {}).get("reasons") or []
+    check("draft_from_persona" in reasons,
+          "the draft-from-persona reason rides the docked plan", reasons)
+    asked = ((plan or {}).get("brief") or {}).get("asked") or []
+    check("topic" in asked,
+          "the asked roll records the topic ask (the loop is bounded)", asked)
+    echo = ((plan or {}).get("intent") or {}).get("answer") or ""
+    check("persona" in echo.lower() or "人设" in echo,
+          "the echo carries the default-path declaration", echo)
 
 
-async def s5_revision_chat_always_wins(ctx: Ctx) -> None:
-    """核⑤ 修订链（ADR-043 + ADR-053）：re-dock 旧计划 supersede（机器标记
-    入流）→ 面板手改整链存活于无关 refine → chat 修订恒胜（覆盖面板钉）
-    → task_book 待决打字母永不误答（不参与任何结算）→ 散文确认起 run。"""
-    pid = await ctx.new_project("S5 revision chain")
-    # Fixture declaration (B-4): the revision mechanics under test need a
-    # READY material — declare the processing end state explicitly
-    # (COMPLETED + transcript + language), never the PENDING default whose
-    # fate the resident worker's claim loop would decide mid-scenario.
+async def s2_material_to_clips_full_chain(ctx: Ctx) -> None:
+    """S2 素材→短片全链（旗舰链本，需 dev worker + demo 桶 fixture + MiniMax
+    配额）：真字节素材（合成转写自证处理终态）→ 方向建议 dock（SSE——选项
+    预览律座）→ 途中插话（提醒尾 + pending 保持 + 下轮回填）→ clips 计划
+    dock → 计划期修订链（面板钉存活 / chat 恒胜 / supersede 机器标记 /
+    fill-key 幂等 / 打字母不答）→ SSE 散文确认 → run completed + clip 产物
+    → 触发回合 reviewer → chat 修订 wiring 横切（同 id 原地改写 → 子图重跑）
+    → 扩张 dock（新付费工作确认门 + Start 放行）。
+
+    LLM 方差口径：方向 dock / 计划 dock 的措辞与路由是模型裁量（有界 nudge
+    兜底）；锁的全是设计行为（插话不结算 / 提醒尾必在 / 修订恒胜 / 扩张必
+    经确认门）。红了 = prompt 或机制回归信号，不是剧本松劲。"""
+    fixture_prefix = f"scenario/s2-{uuid.uuid4().hex[:8]}"
+    src_key = await copy_fixture(REMIX_SOURCE_KEY, fixture_prefix)
+    pid = await ctx.new_project("S2 material to clips")
     await seed_asset(
-        pid, ctx.user_id, AssetType.VIDEO, "talk.mp4",
-        extracted_text=(
-            "In this talk I walk through three lessons from a decade of "
-            "field research — what teams get wrong about trust, and how "
-            "the best leaders repair it."
-        ),
-        meta={"language": "en"},
+        pid, ctx.user_id, AssetType.VIDEO, "s2-talk.mp4",
+        file_url=src_key,  # 真字节——select_clips 真的剪
+        extracted_text=" ".join(s for _, s in _SE2_SENTENCES),
+        meta={
+            "words": _talk_words(),
+            "speaker_map": {"turns": [{"start": 0.0, "end": 95.0, "speaker": "host"}]},
+            "language": "en",
+        },
         processed=True,
     )
+    await topup_wallet(ctx.user_id)  # clips 真渲染 + article 真 LLM 都花积分
 
-    turn1 = await ctx.chat(pid, "cut highlight clips from my talk")
-    check(terminal_tool_of(turn1) == "present_plan",
-          "turn1 closes on the present_plan call", turn1)
-    check(is_plan_dock(turn1["assistant_message"]), "turn1 docks a task_book",
-          turn1["assistant_message"])
-    first_qid = turn1["assistant_message"]["id"]
+    # ① 方向建议 dock（SSE——选项问预览帧律的确定性座位：探索 dock 恒带
+    #    1–3 选项）→ 插话 → 自由文本作答回填。
+    dock_turn: dict | None = None
+    for prompt in _INT_EXPLORATION_PROMPTS:
+        stream = await ctx.chat_stream(pid, prompt)
+        check(stream.failed is None, "the exploration turn never fails", stream.failed)
+        turn = stream.completed
+        tool = terminal_tool_of(turn)
+        check(tool != "present_plan",
+              "an exploration question never docks a plan (事故④第一跳形态)", turn)
+        q = turn["assistant_message"].get("question") or {}
+        if tool == "ask_user" and (q.get("options") or []):
+            dock_turn = turn
+            break
+    check(dock_turn is not None, "no options-dock turn after 3 tries", None)
+    conv_id = dock_turn["conversation_id"]
+    q1 = dock_turn["assistant_message"]["question"]
+    check_options_dock(q1, "S2 directions")
+    check(not (dock_turn["assistant_message"].get("suggestions") or []),
+          "消息流零选项 — the row carries no inline suggestion block",
+          dock_turn["assistant_message"])
 
+    # ①b 插话：与待决问题无关的能力问 → 正常回答 + 代码拼装提醒尾（原问题 +
+    #    default_path 逐字，代码强制文本可锁）→ 问题保持待决。
+    default_path = (q1.get("default_path") or "").strip()
+    turn_i = await ctx.chat(pid, "By the way, what can you generate?")
+    check(terminal_tool_of(turn_i) == "answer",
+          "the interjection closes on the answer call", turn_i)
+    check(turn_i.get("answered_question") is None,
+          "an interjection never settles the pending ask", turn_i)
+    check(not turn_i["assistant_message"].get("question"),
+          "the interjection turn docks no new question", turn_i["assistant_message"])
+    content_i = turn_i["assistant_message"].get("content") or ""
+    check(has_prose(turn_i["assistant_message"]),
+          "the interjection gets its normal answer", turn_i["assistant_message"])
+    check(has_reminder_tail(content_i),
+          "the reply ends with the code-composed reminder tail", content_i[-200:])
+    check(default_path in content_i,
+          "the tail carries the ask's default path verbatim", content_i[-200:])
+    check(bool((q1.get("question") or "").strip()) and q1["question"] in content_i,
+          "the tail quotes the BARE question, not the framing prose",
+          content_i[-200:])
+    res = await ctx.conversation(pid)
+    check((res.json().get("pending_question") or {}).get("id")
+          == dock_turn["assistant_message"]["id"],
+          "the ask stays pending through the interjection", res.json())
+
+    # ①c 自由文本作答（点名 clips 方向）→ plan path 接续 → clips 计划 dock。
+    res_a = await ctx.answer(dock_turn["assistant_message"]["id"],
+                             {"kind": "freeform",
+                              "text": "cut 3 vertical highlight clips from the talk"})
+    check(res_a.status_code in (200, 201), "the freeform direction settles",
+          res_a.text)
+    follow = res_a.json().get("follow_up") or {}
+    dock_msg: dict | None = follow if is_plan_dock(follow) else None
+    dock_stream: StreamTurn | None = None
+    for nudge in ("就按这个方向出计划——3 条竖屏高光短片。",
+                  "the highlight clips plan, please",
+                  "cut the highlights — 3 vertical clips"):
+        if dock_msg is not None:
+            break
+        stream = await ctx.chat_stream(pid, nudge)
+        check(stream.failed is None, "the plan nudge never fails", stream.failed)
+        if is_plan_dock(stream.completed["assistant_message"]):
+            dock_msg = stream.completed["assistant_message"]
+            dock_stream = stream
+            break
+    check(dock_msg is not None, "the clips plan docks within 3 nudges", None)
+    plan1 = await pending_plan(ctx, pid)
+    tasks = plan_tasks(plan1)
+    check(any(t["tool"] == "select_clips" for t in tasks),
+          "the docked chain carries the clips tool", tasks)
+    if dock_stream is not None:
+        # SSE draft 律（计划复述座）：信封散文 IS 持久化的计划复述。
+        content = dock_msg.get("content") or ""
+        echo = ((plan1 or {}).get("intent") or {}).get("answer") or ""
+        check(content == echo,
+              "the streamed draft's envelope content IS the persisted plan echo",
+              f"{content[:120]!r} vs {echo[:120]!r}")
+
+    # ② 修订链：面板钉存活 / chat 恒胜 / supersede / fill-key 幂等 / 打字母不答。
     def pin_count(plan: dict, count: int) -> dict:
         """Simulate a panel hand edit: the select_clips count set in params —
-        the edited chain IS the prior_intent (no merge machinery, ADR-043)."""
+        the edited chain IS the prior_intent (no merge machinery)."""
         edited = dict(plan["intent"])
         edited["tasks"] = [
             {**t, "params": {**task_params(t), "count": count}}
@@ -2105,236 +2063,584 @@ async def s5_revision_chat_always_wins(ctx: Ctx) -> None:
         ]
         return edited
 
-    # 面板手改存活 + 旧计划 supersede（已答问题入流的机器标记）。
-    plan1 = (await ctx.results(pid)).get("pending_brief")
+    first_qid = dock_msg["id"]
+    ids1 = {n["id"] for n in (await ctx.graph(pid))["nodes"]}
+    # 面板钉 count=4（区别于作答里的 3，钉存活才可见）+ 无关 refine 加德语版。
     turn2 = await ctx.chat(
-        pid, "also add a German post", prior_intent=pin_count(plan1, 3)
+        pid, "also add a German version of the clips", prior_intent=pin_count(plan1, 4)
     )
     check(terminal_tool_of(turn2) == "present_plan",
-          "turn2 closes on present_plan again (the refinement re-docks)", turn2)
-    check(is_plan_dock(turn2["assistant_message"]), "turn2 re-docks",
+          "the refinement re-docks on present_plan", turn2)
+    check(is_plan_dock(turn2["assistant_message"]), "the refinement re-docks",
           turn2["assistant_message"])
     check(turn2["assistant_message"]["id"] != first_qid,
           "the old plan is superseded by a new question row")
-    tasks = plan_tasks((await ctx.results(pid)).get("pending_brief"))
-    clips = [t for t in tasks if t["tool"] == "select_clips"]
-    check(clips and task_params(clips[0]).get("count") == 3,
+    tasks = plan_tasks(await pending_plan(ctx, pid))
+    clips_tasks = [t for t in tasks if t["tool"] == "select_clips"]
+    check(clips_tasks and task_params(clips_tasks[0]).get("count") == 4,
           "the panel hand edit survives an unrelated refine", tasks)
-    check(any(t["tool"] == "write_post" and task_params(t).get("language") == "de" for t in tasks),
-          "the German post arrived", tasks)
-    # 草稿图随行（K5）：新槽位长新 draft 节点，计划全文进 document。
+    check(any((task_params(t).get("target_language")
+               or task_params(t).get("language")) == "de" for t in tasks),
+          "the German fork arrived", tasks)
     graph2 = await ctx.graph(pid)
-    check(any(
-        (n.get("spec") or {}).get("tool") == "write_post" and n.get("state") == "draft"
-        for n in graph2["nodes"]
-    ), "the German post grows its own draft node on the graph", graph2["nodes"])
-    msgs = await ctx.messages(turn2["conversation_id"])
+    ids2 = {n["id"] for n in graph2["nodes"]}
+    check(ids1 < ids2,
+          "the German fork grows a new draft node (superset, never twins)", ids2 - ids1)
+    msgs = await ctx.messages(conv_id)
     old = next(m for m in msgs if m["id"] == first_qid)
     check((old.get("answer") or {}).get("text") == "superseded",
           "the superseded plan carries the machine marker", old.get("answer"))
 
     # chat 修订恒胜（覆盖面板钉）。
-    plan2 = (await ctx.results(pid)).get("pending_brief")
+    plan2 = await pending_plan(ctx, pid)
     turn3 = await ctx.chat(
-        pid, "clips only needs 2", prior_intent=pin_count(plan2, 3)
+        pid, "clips only need 2", prior_intent=pin_count(plan2, 4)
     )
     check(terminal_tool_of(turn3) == "present_plan",
-          "turn3 closes on present_plan (the chat revision re-docks)", turn3)
-    check(is_plan_dock(turn3["assistant_message"]), "turn3 re-docks",
-          turn3["assistant_message"])
-    tasks = plan_tasks((await ctx.results(pid)).get("pending_brief"))
-    clips = [t for t in tasks if t["tool"] == "select_clips"]
-    check(clips and task_params(clips[0]).get("count") == 2,
+          "the chat revision re-docks", turn3)
+    tasks = plan_tasks(await pending_plan(ctx, pid))
+    clips_tasks = [t for t in tasks if t["tool"] == "select_clips"]
+    check(clips_tasks and task_params(clips_tasks[0]).get("count") == 2,
           "the chat revision overrides the panel pin (chat always wins)", tasks)
-    # 参数微调 = 同 fill_key 复用——图节点零双生（K5 幂等锚）。
+    # 参数微调 = 同 fill_key 复用——图节点零双生。
     graph3 = await ctx.graph(pid)
-    check(sorted(n["id"] for n in graph3["nodes"]) == sorted(n["id"] for n in graph2["nodes"]),
+    check(sorted(n["id"] for n in graph3["nodes"]) == sorted(ids2),
           "a param refine reuses the same nodes (fill-key idempotency — no twins)",
           graph3["nodes"])
 
-    # task_book 待决不参与任何结算：打字母永不当选项答掉（旧 S40 并入）。
+    # task_book 待决不参与任何结算：打字母永不当选项答掉。
     live_qid = turn3["assistant_message"]["id"]
     turn4 = await ctx.chat(pid, "a")
     check(turn4.get("answered_question") is None,
           "a typed letter never answers a task_book", turn4)
-    q = await message_row(live_qid)
-    check(q.get("answer") is None or (q["answer"] or {}).get("text") == "superseded",
+    q_row = await message_row(live_qid)
+    check(q_row.get("answer") is None or (q_row["answer"] or {}).get("text") == "superseded",
           "the plan stays pending or is superseded by a re-dock — never letter-answered",
-          q.get("answer"))
+          q_row.get("answer"))
 
-    turn5 = await ctx.chat(pid, "looks good, start")
-    check(terminal_tool_of(turn5) == "start_run",
-          "the prose confirmation closes on the start_run call", turn5)
-    check(turn5["run_id"] is not None, "prose confirmation starts the run", turn5)
+    # ②d 去掉德语版——收缩修订重 dock，终链 = clips-only count 2。
+    docked5: dict | None = None
+    for prompt in ("drop the German version — just 2 English highlight clips",
+                   "remove the German clips, keep the 2 English ones"):
+        turn5 = await ctx.chat(pid, prompt)
+        if is_plan_dock(turn5["assistant_message"]):
+            tasks5 = plan_tasks(await pending_plan(ctx, pid))
+            if not any((task_params(t).get("target_language")
+                        or task_params(t).get("language")) == "de" for t in tasks5):
+                docked5 = turn5
+                tasks = tasks5
+                break
+    check(docked5 is not None, "the German fork leaves the chain on request", tasks)
+    clips_tasks = [t for t in tasks if t["tool"] == "select_clips"]
+    check(clips_tasks and task_params(clips_tasks[0]).get("count") == 2,
+          "the shrink keeps the chat-won count", tasks)
+    graph5 = await ctx.graph(pid)
 
+    # ③ SSE 散文确认 → start_run + 草稿图原地填充（同 id 无双生）。
+    stream_s = await ctx.chat_stream(pid, "looks good, start")
+    check(stream_s.failed is None, "the confirm turn never fails", stream_s.failed)
+    turn_s = stream_s.completed
+    check(terminal_tool_of(turn_s) == "start_run",
+          "the prose confirmation closes on the start_run call", turn_s)
+    run_id = turn_s["run_id"]
+    check(run_id is not None, "prose confirmation starts the run", turn_s)
+    check(turn_s["answered_question"] is not None, "the plan settles on start", turn_s)
+    check((await ctx.results(pid)).get("pending_brief") is None,
+          "pending_brief cleared on start")
+    filled_graph = await ctx.graph(pid)
+    check(sorted(n["id"] for n in filled_graph["nodes"])
+          == sorted(n["id"] for n in graph5["nodes"]),
+          "start fills the SAME nodes in place (fill-key idempotency — never twins)",
+          filled_graph["nodes"])
+    check(not any(n.get("state") == "draft" for n in filled_graph["nodes"]),
+          "the draft world re-queues on start", filled_graph["nodes"])
 
-# ---- S6 核⑥ interrupt 一条 -------------------------------------------------------
+    # ③b 真链收官 + 触发回合 reviewer 发言：intent dump = {type:
+    #    trigger_review, trigger, ref, suggestions=labels}；建议 dock 成真实
+    #    编号选项问。断言 dump 形态与 dock 良构；言语内容不锁（LLM 文案）。
+    row = await wait_run_status(run_id, {"completed", "failed"}, timeout=600.0)
+    check(row["status"] == "completed",
+          "the clips chain completes on the real bytes", row["status"])
+    check(len(await outputs_of(pid, "clip")) >= 1, "the clip outputs land", None)
+    review = await wait_trigger_review(ctx, conv_id, run_id)
+    check(review is not None,
+          "the run-completed trigger turn speaks its review row", run_id)
+    rintent = (review or {}).get("intent") or {}
+    check(rintent.get("trigger") == "run_completed" and rintent.get("ref") == run_id,
+          "the review dump names trigger + ref", rintent)
+    sugs = rintent.get("suggestions") or []
+    check(0 <= len(sugs) <= 3, "0–3 suggestion labels (schema-bounded)", sugs)
+    check(all(isinstance(s, str) and s.strip() for s in sugs),
+          "each suggestion is a user-voice label", sugs)
+    if sugs:
+        question = (review or {}).get("question") or {}
+        check(question.get("kind") == "question",
+              "the suggestions dock as a real options question", question)
+        options = question.get("options") or []
+        check([o.get("id") for o in options] == [str(i + 1) for i in range(len(sugs))]
+              and [o.get("label") for o in options] == sugs,
+              "the dock options are the numbered labels (1/2/3 grammar)",
+              options)
+        # Harness 卫生（非断言）：建议问先 × 跳过收掉——后续修订消息不能被
+        # 判定结算吃掉（wiring 修订路才是断言对象）。
+        bail = await ctx.answer(review["id"], {"kind": "bail"})
+        check(bail.status_code in (200, 201),
+              "the review suggestions question is bailed (revision determinism)",
+              bail.text)
 
-
-async def s6_interrupt_consolidated(ctx: Ctx) -> None:
-    """核⑥ interrupt 一条（期 4 家族浓缩 + ADR-053 R2 判定结算）：
-    a) option 答（端点）→ 唤醒收官；b) 打字母 → autoResume 确定性结算；
-    c) 自由文本 → 判定结算 freeform + 确定性回执 + 唤醒；d) 空白附件不答；
-    e) bail → 节点 done(bailed) + 下游级联 skipped + run COMPLETED（永不
-    failed）；f) 插话 → 正常回答 + 提醒尾 + 保持 parked → 再答唤醒。"""
-    # a) 按钮：answer 端点 option。
-    pid = await ctx.new_project("S6a option answer")
-    ck = await seed_parked_interrupt(pid, ctx.user_id)
-    res = await ctx.answer(ck["question_id"], {"kind": "option", "option_id": "a"})
-    check(res.status_code == 200, "the option answer lands", res.text)
-    answered = res.json()["answered_question"]
-    check((answered.get("answer") or {}).get("kind") == "option",
-          "answer kind=option", answered.get("answer"))
-    check((answered.get("answer") or {}).get("text") == "Focus: Pricing",
-          "the answered row shows the option's human label", answered.get("answer"))
-    node = (await step_rows(ck["run_id"]))[0]
-    check(node["status"] != "waiting" and "answer" in node["spec"],
-          "the wake is synchronous (spec.answer written, node re-pended)", node)
-    check((await run_row(ck["run_id"]))["status"] != "waiting_human",
-          "the run left WAITING_HUMAN")
-    await wait_run_status(ck["run_id"], {"completed"})
-    await ctx.cleanup()
-
-    # b) 打字母：/chat autoResume 选项命中（零 LLM 确定性结算——ADR-053 后
-    #    唯一的确定性结算）。
-    pid = await ctx.new_project("S6b typed letter")
-    ck = await seed_parked_interrupt(pid, ctx.user_id)
-    turn = await ctx.chat(pid, "a")
-    aq = turn.get("answered_question")
-    check(aq is not None and aq["id"] == ck["question_id"],
-          "the typed letter auto-resumed the interrupt", turn)
-    check((aq.get("answer") or {}).get("kind") == "option", "the letter maps to an option",
-          aq.get("answer"))
-    await wait_run_status(ck["run_id"], {"completed"})
-    await ctx.cleanup()
-
-    # c) 自由文本：判定结算（ADR-053 R2——「任意文本 = freeform 回答」掩盖
-    #    已退役；chat_intent 判 disposition=answer，代码结算 freeform 并
-    #    唤醒，确定性回执收官）。
-    pid = await ctx.new_project("S6c judged freeform")
-    ck = await seed_parked_interrupt(pid, ctx.user_id)
-    turn = await ctx.chat(pid, "focus on the pricing argument")
-    aq = turn.get("answered_question")
-    check(aq is not None and aq["id"] == ck["question_id"],
-          "the free-text answer is judged the interrupt's answer and settles",
-          turn)
-    check((aq.get("answer") or {}).get("kind") == "freeform", "answer kind=freeform",
-          aq.get("answer"))
-    ack = turn["assistant_message"].get("content") or ""
-    check("Resuming the run" in ack or "继续生成" in ack,
-          "the deterministic wake ack lands (code-forced)", ack)
-    await wait_run_status(ck["run_id"], {"completed"})
-    await ctx.cleanup()
-
-    # d) 空白 attachment-only 永不 auto-answer（K6）。
-    pid = await ctx.new_project("S6d blank never answers")
-    ck = await seed_parked_interrupt(pid, ctx.user_id)
-    turn = await ctx.chat(
-        pid, "", attachments=[{"id": "att-1", "name": "notes.txt", "type": "file"}]
+    # ④ 修订 = wiring 横切：chat 修订 → WiringProposal（edit_prompt + run
+    #    子图）→ 节点程序行原地改写（同 id 无双生）→ 子图重跑起 run。锁的是
+    #    设计行为；红了 = chat_intent prompt 回归信号。
+    graph_before = await ctx.graph(pid)
+    clips_node = next(
+        (n for n in graph_before["nodes"]
+         if (n.get("spec") or {}).get("tool") == "select_clips"),
+        None,
     )
-    check(turn.get("answered_question") is None,
-          "a blank attachment-only turn never answers a interrupt", turn)
-    q = await message_row(ck["question_id"])
-    check(q.get("answer") is None or (q["answer"] or {}).get("text") == "superseded",
-          "the interrupt was not auto-answered (a new docked question superseding "
-          "it is the designed cascade)", q.get("answer"))
-    await ctx.cleanup()
+    check(clips_node is not None, "the run's fill grew the clips graph node",
+          graph_before["nodes"])
+    prompt_before = (clips_node.get("spec") or {}).get("prompt")
+    turn_rev = await ctx.chat(pid, "把选段再大胆一点——只留最有冲击力的瞬间。")
+    check(terminal_tool_of(turn_rev) == "run_birth",
+          "the revision closes on a proposal tool's run birth (chat path)", turn_rev)
+    check(turn_rev["run_id"] is not None,
+          "the revision rides the wiring path — the subgraph rerun is born",
+          turn_rev)
+    graph_after = await ctx.graph(pid)
+    clips_after = next(
+        (n for n in graph_after["nodes"] if n["id"] == clips_node["id"]), None
+    )
+    check(clips_after is not None,
+          "the revision reuses the SAME node (edit_prompt + rerun — never a twin)",
+          graph_after["nodes"])
+    check((clips_after.get("spec") or {}).get("prompt") != prompt_before,
+          "edit_prompt rewrote the node's program in place",
+          (clips_after.get("spec") or {}).get("prompt"))
+    check(clips_after.get("state") != "draft",
+          "the rerun re-queues its node", clips_after.get("state"))
+    # 修订 run 先收官（扩张 Start 会撞出生地活跃 422——等待是 harness 卫生）；
+    # 其收官触发回合同样先 bail（否则扩张拍的消息被判定结算吃掉）。
+    await wait_run_status(turn_rev["run_id"], {"completed", "failed"}, timeout=600.0)
+    review2 = await wait_trigger_review(ctx, conv_id, turn_rev["run_id"], timeout=90.0)
+    if review2 is not None and (review2.get("question") or {}).get("kind") == "question":
+        await ctx.answer(review2["id"], {"kind": "bail"})
 
-    # e) bail 级联：节点 done(bailed) + 下游级联 skipped + run COMPLETED。
-    pid = await ctx.new_project("S6e interrupt bail")
-    ck = await seed_parked_interrupt(pid, ctx.user_id, with_downstream=True)
-    res = await ctx.answer(ck["question_id"], {"kind": "bail"})
-    check(res.status_code == 200, "bail lands", res.text)
-    steps = {s["id"]: s for s in await step_rows(ck["run_id"])}
-    node = steps[ck["node_id"]]
-    check(node["status"] == "done" and node["spec"].get("bailed") is True,
-          "the interrupt settles done with spec.bailed", node)
-    child = steps[ck["child_id"]]
-    check(child["status"] == "skipped" and child["error"] == "user bailed",
-          "the downstream cascade-skips with the non-failure reason", child)
-    run = await run_row(ck["run_id"])
-    check(run["status"] == "completed",
-          "the bailed run settles COMPLETED, never failed", run["status"])
-    await ctx.cleanup()
-
-    # f) 插话后续跑（ADR-053 R2 chat path）：进度插话 → get_run_status 读
-    #    （read Activity 帧——Batch B ③ 后相位帧退役）→ 正常回答 + 代码拼装
-    #    提醒尾 + 问题保持 pending + run 保持 parked → 再打字母唤醒。
-    #    LLM 方差说明：进度问先读后答是设计行为（answer 工具契约：run
-    #    readouts call get_run_status first）；不读直接答红了 = chat_intent
-    #    prompt 回归信号，不是剧本松劲。
-    pid = await ctx.new_project("S6f interjection resumes later")
-    ck = await seed_parked_interrupt(pid, ctx.user_id)
-    stream = await ctx.chat_stream(pid, "how is the run doing?")
-    check(stream.failed is None, "the interjection turn has no turn.failed",
-          stream.failed)
-    check(stream.completed is not None, "the interjection turn completes")
-    turn = stream.completed
-    status_key = PERCEPTION_TOOLS["get_run_status"].activity_key
-    # Activity (ADR-087 §3): the read's user-safe evidence is the ACTIVITY
-    # channel — kind=read carrying the perception registry's activity_key
-    # (Batch B ③ deleted the System Status inspecting frame that used to
-    # corroborate it).
-    check(any(a["kind"] == "read" and a["key"] == status_key
-              for a in stream.activities),
-          "the progress question reads first (get_run_status's read activity)",
-          stream.activities)
-    check_activity_shape(stream, "S6f")
-    check(turn.get("answered_question") is None,
-          "an interjection never settles the parked interrupt", turn)
-    check(terminal_tool_of(turn) == "answer",
-          "the progress interjection closes on the answer call", turn)
-    content = turn["assistant_message"].get("content") or ""
-    check_stream_law(stream, content, "the read-first interjection")
-    check(has_reminder_tail(content),
-          "the reply carries the code-composed reminder tail", content[-200:])
-    q = await message_row(ck["question_id"])
-    check(q.get("answer") is None, "the interrupt question stays pending",
-          q.get("answer"))
-    check((await run_row(ck["run_id"]))["status"] == "waiting_human",
-          "the run stays parked through the interjection")
-    turn = await ctx.chat(pid, "a")
-    aq = turn.get("answered_question")
-    check(aq is not None and aq["id"] == ck["question_id"],
-          "the follow-up letter answer wakes the run", turn)
-    await wait_run_status(ck["run_id"], {"completed"})
-    await ctx.cleanup()
+    # ⑤ 扩张 → 确认门（已批图之外的新付费工作必须 dock 确认才放行——无论
+    #    LLM 走 edit_graph(add_node+run) 还是 propose_tasks，回合都 dock
+    #    task_book + 零 run；Start 才生 run。路由无关断言：信封形状 +
+    #    draft 预览 + Start 后链上生 run）。
+    turn_exp: dict | None = None
+    for prompt in ("write a long-form article from the talk as a new piece",
+                   "add an article version alongside the clips",
+                   "the article, please"):
+        cand = await ctx.chat(pid, prompt)
+        check(cand.get("run_id") is None,
+              "扩张同 turn 直跑 = 教义红线（new paid work must never run "
+              "unauthorized）", cand)
+        if is_plan_dock(cand["assistant_message"]):
+            turn_exp = cand
+            break
+    check(turn_exp is not None,
+          "the expansion ask docks a plan within 3 prompts", None)
+    check(terminal_tool_of(turn_exp) == "present_plan",
+          "the expansion turn closes on the plan dock", turn_exp)
+    graph_docked = await ctx.graph(pid)
+    draft_tools = [
+        (n.get("spec") or {}).get("tool")
+        for n in graph_docked["nodes"]
+        if n.get("state") == "draft"
+    ]
+    check("write_article" in draft_tools,
+          "the dock's draft stamp previews the article node (the door's "
+          "mutation rolled back; canonical fill keys)", draft_tools)
+    res_exp = await ctx.answer(turn_exp["assistant_message"]["id"],
+                               {"kind": "start"})
+    check(res_exp.status_code == 200, "dock Start answers the plan", res_exp.text)
+    run_exp = res_exp.json()["answered_question"].get("workflow_run_id")
+    check(run_exp, "a run was born on Start", res_exp.json())
+    runs_exp = await ctx.client.get(f"/projects/{pid}/runs")
+    born_exp = next((r for r in runs_exp.json() if r.get("id") == run_exp),
+                    None) or {}
+    exp_tools = [
+        t.get("tool")
+        for t in (born_exp.get("context") or {}).get("tasks") or []
+    ]
+    check("write_article" in exp_tools,
+          "the born run carries the expansion chain", exp_tools)
+    # Harness 卫生：扩张 run（writer 链读 transcript 文本，会 completed）的
+    # 触发回合是 fire-and-forget；不消费它就 cleanup 会让在飞 LLM 调用撞上
+    # 项目删除（messages conversation FK 竞态）。等到落地就 bail；超时静默。
+    await wait_run_terminal(run_exp, timeout=600.0)
+    review3 = await wait_trigger_review(ctx, conv_id, run_exp, timeout=90.0)
+    if review3 is not None and (review3.get("question") or {}).get("kind") == "question":
+        await ctx.answer(review3["id"], {"kind": "bail"})
 
 
-# ---- S7 核⑦ caption mode ----------------------------------------------------------
+async def s3_material_suggestion_exploration(ctx: Ctx) -> None:
+    """S3 素材→建议→探索（需 dev worker + MiniMax 配额）：方向建议选项 dock
+    （消息流零选项 + 持久化事实 + × 安全跳过）→ 发现型目标（SSE 全链：
+    chat.explore.* 活动键族 + 决策包 dock 三面）→ 探索三族出生（一条
+    journey， ExplorationRow 表座——探索族永不入图）→ Start →
+    run.context.confirmed_scope 五字段快照 → 产物真落地 → 确定性尾
+    （I-EXPLORE-01 执行门拒收 / 幂等重放 / 无时间轴降级诚实 / 图面零探索
+    节点）。fixture 纪律：scenario/ 前缀真桶拷贝；时间轴落在 demo_talk
+    真实时长内（~119s）；words 逐词真值（门在出生时刻逐字校验 excerpt）。"""
+    from app.chat.exploration_tools import execute_exploration_tool
+    from app.chat.perception import SearchTranscriptParams, run_perception_tool
+    from app.models.tables import ExplorationRow
+    from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
+
+    fixture_prefix = f"scenario/s3-{uuid.uuid4().hex[:8]}"
+    src_key = await copy_fixture(REMIX_SOURCE_KEY, fixture_prefix)
+    pid = await ctx.new_project("S3 discovery chain")
+    project_uuid = uuid.UUID(pid)
+    asset_id = await seed_asset(
+        pid, ctx.user_id, AssetType.VIDEO, "s3-talk.mp4",
+        file_url=src_key,  # 真字节——cut_segments 真的剪
+        extracted_text=" ".join(s for _, s in _SE2_SENTENCES),
+        meta={
+            "words": _talk_words(),
+            "speaker_map": {"turns": [{"start": 0.0, "end": 95.0, "speaker": "host"}]},
+            "language": "en",
+        },
+        processed=True,  # worker 的资产队列不碰（时间轴/文本即种子）
+    )
+    await topup_wallet(ctx.user_id)  # cut_segments 真渲染 + writer 真 LLM
+
+    # ① 建议 beat：探索问 → 选项 dock（可点选可 ×，散文恒带默认路径）；
+    #    消息流零选项——assistant 行永不携带 suggestions 交互块。
+    turn0 = await elicit_options_dock_turn(ctx, pid, "S3 directions")
+    msg0 = turn0["assistant_message"]
+    check(terminal_tool_of(turn0) == "ask_user",
+          "the exploration turn closes on the options dock", turn0)
+    check_options_dock(msg0.get("question") or {}, "S3 directions")
+    check(not (msg0.get("suggestions") or []),
+          "消息流零选项 — the row carries no inline suggestion block", msg0)
+    check(turn0["run_id"] is None, "an options ask never starts a run", turn0)
+    row0 = next(m for m in await conversation_items(ctx, pid) if m["id"] == msg0["id"])
+    check((row0.get("question") or {}).get("kind") == "question",
+          "the options dock persists on the message row", row0)
+    check(not (row0.get("suggestions") or []),
+          "the persisted row carries no inline suggestion block", row0)
+    bail = await ctx.answer(msg0["id"], {"kind": "bail"})
+    check(bail.status_code in (200, 201),
+          "the options dock bails clean (× = safe skip)", bail.text)
+
+    # ② 发现型目标（SSE 全链）。
+    stream = await ctx.chat_stream(
+        pid,
+        "Find the parts where I talk about pricing — cut those into a clip, "
+        "and write an English post from them.",
+    )
+    check(stream.failed is None, "the discovery turn never fails", stream.failed)
+    check(stream.completed is not None, "the discovery turn completes", stream.activities)
+
+    # 工作会话活动键族：读的开/收 + 三个里程碑帧（出生即完成，count 唯一载荷）。
+    acts = stream.activities
+    searching = [a for a in acts if a.get("key") == "chat.explore.searching"]
+    searching_done = [a for a in acts if a.get("key") == "chat.explore.searchingDone"]
+    check(
+        searching and all(a["status"] == "active" for a in searching),
+        "search_transcript opens chat.explore.searching (active)",
+        acts,
+    )
+    check(
+        searching_done and all(a["status"] == "completed" for a in searching_done),
+        "the read settles as chat.explore.searchingDone (completed)",
+        acts,
+    )
+    for key in ("candidatesReady", "selectsReady", "plansReady"):
+        frames = [a for a in acts if a.get("key") == f"chat.explore.{key}"]
+        check(
+            len(frames) == 1
+            and frames[0]["kind"] == "draft"
+            and frames[0]["status"] == "completed"
+            and isinstance(frames[0].get("count"), int)
+            and frames[0]["count"] >= 1,
+            f"the {key} milestone lands born-completed with its count",
+            acts,
+        )
+
+    # 决策包 dock：plans 阅读层 + 编译链证据 + quote。
+    dock_msg = stream.completed["assistant_message"]
+    check(is_plan_dock(dock_msg), "the discovery chain docks the decision package", dock_msg)
+    question = dock_msg["question"]
+    plans_payload = question.get("plans") or []
+    check(plans_payload, "the dock carries the plans reading layer", question)
+    check(
+        all(p.get("plan_id") and "title" in p and p.get("outputs") for p in plans_payload),
+        "every plan row carries plan_id / title / outputs",
+        plans_payload,
+    )
+    intent_dump = dock_msg.get("intent") or {}
+    dock_tools = [t.get("tool") for t in intent_dump.get("tasks") or []]
+    check(
+        "cut_segments" in dock_tools and "write_post" in dock_tools,
+        "the compiled chain = cut_segments + write_post (编译移出 LLM)",
+        dock_tools,
+    )
+    check(
+        "select_clips" not in dock_tools,
+        "the compiler never emits select_clips (the execution world has no "
+        "second discoverer)",
+        dock_tools,
+    )
+    check("estimate_credits" in question, "the quote rides the dock (费用语义)", question)
+    check("derived" in question, "the derived preview rides the dock", question)
+
+    # 探索三族出生，一条 journey（ExplorationRow 表座——探索族永不入图）。
+    async with AsyncSessionLocal() as db:
+        explore_rows = list(
+            (
+                await db.execute(
+                    select(ExplorationRow).where(
+                        ExplorationRow.project_id == project_uuid,
+                    )
+                )
+            ).scalars().all()
+        )
+        kinds = {r.spec.get("exploration_kind") for r in explore_rows}
+        check(
+            {"candidate_set", "select", "content_plan"} <= kinds,
+            "the exploration three families are born",
+            kinds,
+        )
+        journey_ids = {str(r.journey_id) for r in explore_rows}
+        check(len(journey_ids) == 1, "the whole chain rides ONE journey", journey_ids)
+        journeys = int(
+            (
+                await db.execute(
+                    select(func.count())
+                    .select_from(Journey)
+                    .where(Journey.project_id == project_uuid)
+                )
+            ).scalar_one()
+        )
+        check(journeys == 1, "exactly one Journey row", journeys)
+    db_plan_ids = {
+        str(r.id) for r in explore_rows if r.spec.get("exploration_kind") == "content_plan"
+    }
+    check(
+        {p["plan_id"] for p in plans_payload} == db_plan_ids,
+        "the dock's plan ids == the table's content_plan rows",
+        (plans_payload, [str(r.id) for r in explore_rows]),
+    )
+
+    # 恢复路复证（plans 双座的第二座）：pending_question 直读 plans。
+    conv = await ctx.conversation(pid)
+    check(conv.status_code == 200, "the conversation reads back", conv.text)
+    pending = conv.json().get("pending_question") or {}
+    check(
+        (pending.get("question") or {}).get("plans"),
+        "the restore path's pending_question carries plans (pending_brief 座)",
+        pending,
+    )
+
+    # ③ 确认 → run 出生 → Confirmed Scope Snapshot。
+    res = await ctx.answer(dock_msg["id"], {"kind": "start"})
+    check(res.status_code == 200, "dock Start answers the decision package", res.text)
+    run_id = res.json()["answered_question"].get("workflow_run_id")
+    check(run_id, "a run was born on Start", res.json())
+
+    run_ctx = (await run_row(run_id))["context"]
+    scope = run_ctx.get("confirmed_scope") or {}
+    check(bool(scope), "the run carries the Confirmed Scope Snapshot", run_ctx)
+    check(
+        scope.get("confirmation_id") == dock_msg["id"],
+        "confirmation_id = the docked message (确认点可追)",
+        scope,
+    )
+    check(bool(scope.get("confirmed_at")), "confirmed_at stamped", scope)
+    check(
+        scope.get("confirmed_via") == "dock_pill",
+        "confirmed_via = dock_pill (typed Start 座位)",
+        scope,
+    )
+    check(
+        {p.get("plan_id") for p in scope.get("plans") or []}
+        == {p["plan_id"] for p in plans_payload},
+        "the snapshot's plans = the docked reading layer",
+        scope,
+    )
+    check(
+        [t.get("tool") for t in scope.get("compiled_scope") or []] == dock_tools,
+        "the snapshot's compiled_scope = the chain the run was born with",
+        (scope.get("compiled_scope"), dock_tools),
+    )
+    check(
+        scope.get("quote") == question.get("estimate_credits"),
+        "the snapshot's quote = the quote shown at confirm time",
+        (scope.get("quote"), question.get("estimate_credits")),
+    )
+
+    # ④ 产物落地（真渲染 + 真 writer）。
+    final = await wait_run_terminal(run_id, timeout=600.0)
+    check(final == "completed", "the discovery run completes", final)
+    clips = await outputs_of(pid, "clip")
+    check(len(clips) >= 1, "cut_segments' clip output lands", len(clips))
+    posts = await outputs_of(pid, "post")
+    check(len(posts) >= 1, "the post output lands", len(posts))
+
+    # ⑤ 确定性尾（零 LLM 进程内——执行门 / 幂等 / 降级 / 图面负形）。
+    async with AsyncSessionLocal() as db:
+        project = (
+            await db.execute(select(Project).where(Project.id == project_uuid))
+        ).scalar_one()
+        rows = list(
+            (
+                await db.execute(
+                    select(ExplorationRow).where(
+                        ExplorationRow.project_id == project_uuid,
+                    )
+                )
+            ).scalars().all()
+        )
+        cset = next(r for r in rows if r.spec.get("exploration_kind") == "candidate_set")
+        sel = next(r for r in rows if r.spec.get("exploration_kind") == "select")
+        explore_ids = {str(r.id) for r in rows}
+
+        # I-EXPLORE-01: 执行门拒收探索产物（run / delete / connect 全拒——
+        # 探索族不在 graph_nodes，任何图写口引用即悬空拒收）。
+        for ops in (
+            [{"op": "run", "nodes": [str(cset.id)]}],
+            [{"op": "delete_node", "node": str(sel.id)}],
+            [{"op": "connect", "from_node": str(cset.id), "to_node": str(sel.id)}],
+        ):
+            try:
+                await apply_wiring_ops(db, project_uuid, ops)
+            except WiringRejected:
+                pass
+            else:
+                raise ScenarioFailure(f"I-EXPLORE-01: the wiring door accepted {ops}")
+
+        # 幂等重放：identical call → the SAME artifact, no twin。
+        idem_args = {
+            "asset_id": asset_id,
+            "topic": "pricing",
+            "goal": "s3 idempotency probe",
+            "members": [{"start": 12.0, "end": 18.9, "speaker": "host"}],
+        }
+        first = await execute_exploration_tool(db, project, "propose_candidates", dict(idem_args))
+        await db.commit()
+        second = await execute_exploration_tool(db, project, "propose_candidates", dict(idem_args))
+        await db.commit()
+        id_of = lambda text: re.search(r"candidate_set_id: ([0-9a-f-]{36})", text).group(1)  # noqa: E731
+        check(
+            id_of(first) == id_of(second),
+            "idempotent replay returns the existing artifact",
+            (first, second),
+        )
+        explore_ids.add(id_of(first))
+
+        # 无时间轴降级: an asset without words is an honest door rejection
+        # and the reads say so — never a fabricated range。
+        bare_asset_id = await seed_asset(
+            pid, ctx.user_id, AssetType.VIDEO, "s3-bare.mp4",
+            extracted_text="A talk without word-level timestamps.",
+            meta={"language": "en"},
+            processed=True,
+        )
+        obs = await run_perception_tool(
+            db, project, "search_transcript",
+            SearchTranscriptParams(query="pricing", asset_id=uuid.UUID(bare_asset_id)),
+        )
+        check(
+            "timeline-ready" in obs.text or "word-level" in obs.text,
+            "the no-timeline read is an honest empty, never a fabricated hit",
+            obs.text,
+        )
+        rejected = await execute_exploration_tool(
+            db, project, "propose_candidates",
+            {**idem_args, "asset_id": bare_asset_id, "goal": "s3 degradation probe"},
+        )
+        check(
+            rejected.startswith("The door rejected"),
+            "exploration on a wordless asset is a door rejection",
+            rejected,
+        )
+        await db.commit()
+
+        journeys = int(
+            (
+                await db.execute(
+                    select(func.count())
+                    .select_from(Journey)
+                    .where(Journey.project_id == project_uuid)
+                )
+            ).scalar_one()
+        )
+        check(
+            journeys == 2,
+            "chain journey + idem-probe journey — adopt never mints twins "
+            "(rejected calls never mint)",
+            journeys,
+        )
+
+    # 图面负形（Workspace v4.2 C1——探索族永不入图，画布零探索节点）。
+    graph = await ctx.graph(pid)
+    check(
+        all(n["id"] not in explore_ids for n in graph["nodes"]),
+        "the exploration family never enters the graph (画布零探索节点)",
+        [n["id"] for n in graph["nodes"] if n["id"] in explore_ids],
+    )
+
+    # Harness 卫生（非断言）：run 收官的 trigger 回合是 fire-and-forget；
+    # 不消费它就 cleanup 会让在飞的 LLM 调用撞上项目删除（messages
+    # conversation FK 竞态）。等到落地就 bail 掉建议问；超时静默通过。
+    conv_id = (stream.completed or {}).get("conversation_id")
+    if conv_id:
+        review = await wait_trigger_review(ctx, conv_id, run_id, timeout=90.0)
+        if review is not None and (review.get("question") or {}).get("kind") == "question":
+            await ctx.answer(review["id"], {"kind": "bail"})
 
 
-async def s7_caption_mode_default(ctx: Ctx) -> None:
-    """核⑦ caption mode 默认吸收（ADR-099 §8）三拍：字幕模式 = 默认值扛得
-    住的方案参数，永不先问——
-
-    A) 有独立第二语言（项目 de / 素材 en）且无字幕关键词 → 无字幕
-       dock 问，计划直接 dock 且 intent.caption_mode == "source_only"
-       （卡面可见默认行）；Start 后 run.context.caption_mode 同为
-       source_only；
+async def s4_no_material_writers(ctx: Ctx) -> None:
+    """S4 无素材→图文 + caption mode 默认吸收：写手族（post / quotes /
+    carousel）无素材直生（root = 主题，六素材硬门全卸）；caption 三拍——
+    A) 有独立第二语言（项目 de / 素材 en）且无字幕关键词 → 无字幕 dock
+       问，计划直接 dock 且 intent.caption_mode == "source_only"；Start 后
+       run.context.caption_mode 同为 source_only；
     B) 用户原话带"双语" → 用户原话恒胜：bilingual 随 dock 的 intent，
        Start 后 run.context.caption_mode == "bilingual"；
     C) 关键词设定 → 追问（修订轮不再提字幕）→ 面板 Start：设定值经暂存
-       继承存活（用户原话 > 暂存 > source_only；面板缺字段 = "未提及"
-       非"撤回"，服务端从 stored pending 继承）。
+       继承存活（"未提及" ≠ "撤回"，服务端从 stored pending 继承）。
 
     LLM 判定有抖动（"make a quote card" 可能回反问或提别的链——两者都
-    合法），各部各给 3 次尝试直到 write_quotes 计划落地。
-    """
+    合法），各部各给 3 次尝试直到目标工具的计划落地。"""
     material = "Some keynote transcript about the future of embodied intelligence."
+
+    async def dock_writer(pid: str, prompts: tuple[str, ...], tool: str,
+                          label: str) -> dict:
+        docked: dict | None = None
+        tools_seen: list = []
+        for prompt in prompts:
+            turn = await ctx.chat(pid, prompt)
+            if not is_plan_dock(turn["assistant_message"]):
+                continue  # ask-back / prose — nudge again
+            plan = await pending_plan(ctx, pid)
+            tools_seen = [t.get("tool") for t in plan_tasks(plan)]
+            if tool in tools_seen:
+                docked = turn
+                break
+            # Wrong chain docked — bail the plan before nudging again (a live
+            # dock would read the next chat message as its revision/Start).
+            await ctx.answer(turn["assistant_message"]["id"], {"kind": "bail"})
+        check(docked is not None, f"{label}: no {tool} plan dock after 3 turns",
+              tools_seen)
+        return docked
 
     # A) distinct alt language, no caption wording → no question ever docks;
     #    the plan carries the visible default (source_only) end-to-end.
-    pid = await ctx.new_project("S7-A caption default absorbed")
+    pid = await ctx.new_project("S4-A caption default absorbed")
     await set_project_language(pid, "de")
-    # Fixture declaration (B-4): the language fact is the declared COMPLETED
-    # row's meta — worker-immune by construction.
+    # Fixture declaration: the language fact is the declared COMPLETED row's
+    # meta — worker-immune by construction.
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
                      extracted_text=material, meta={"language": "en"},
                      processed=True)
     await seed_completed_run(pid)
-    docked: dict | None = None
-    tools_seen: list = []
+    docked_a: dict | None = None
+    tools_seen_a: list = []
     for prompt in ("make a quote card from the video",
                    "pull the sharpest quotes from my keynote into quote cards",
                    "the quote cards, please"):
@@ -2347,27 +2653,25 @@ async def s7_caption_mode_default(ctx: Ctx) -> None:
             q,
         )
         if not is_plan_dock(turn["assistant_message"]):
-            continue  # ask-back / prose — nudge again
+            continue
         plan = await pending_plan(ctx, pid)
-        tools_seen = [t.get("tool") for t in plan_tasks(plan)]
-        if "write_quotes" in tools_seen:
-            docked = turn
+        tools_seen_a = [t.get("tool") for t in plan_tasks(plan)]
+        if "write_quotes" in tools_seen_a:
+            docked_a = turn
             break
-        # Wrong chain docked — bail the plan before nudging again (a live
-        # dock would read the next chat message as its revision/Start).
         await ctx.answer(turn["assistant_message"]["id"], {"kind": "bail"})
-    check(docked is not None,
-          "A: no write_quotes plan dock after 3 turns", tools_seen)
-    check(terminal_tool_of(docked) == "present_plan",
+    check(docked_a is not None, "A: no write_quotes plan dock after 3 turns",
+          tools_seen_a)
+    check(terminal_tool_of(docked_a) == "present_plan",
           "A: the turn closes straight on the plan dock (no caption gate)",
-          docked)
-    check(docked.get("run_id") is None,
-          "A: no run before Start (B3: same-turn create_run is forbidden)",
-          docked)
+          docked_a)
+    check(docked_a.get("run_id") is None,
+          "A: no run before Start (same-turn create_run is forbidden)",
+          docked_a)
     plan = await pending_plan(ctx, pid)
     check(((plan or {}).get("intent") or {}).get("caption_mode") == "source_only",
           "A: the visible default rides the docked intent", plan)
-    res = await ctx.answer(docked["assistant_message"]["id"], {"kind": "start"})
+    res = await ctx.answer(docked_a["assistant_message"]["id"], {"kind": "start"})
     check(res.status_code == 200, "A: dock Start answers the plan", res.text)
     run_id = res.json()["answered_question"].get("workflow_run_id")
     check(run_id, "A: a run was born on Start", res.json())
@@ -2375,28 +2679,23 @@ async def s7_caption_mode_default(ctx: Ctx) -> None:
     born = next((r for r in runs.json() if r.get("id") == run_id), None) or {}
     check((born.get("context") or {}).get("caption_mode") == "source_only",
           "A: run.context.caption_mode", born.get("context"))
+    await wait_run_terminal(run_id)  # harness 卫生：Start 的 run 落定再起下家
 
     # B) the user's own words always win: a literal "bilingual" stamps the
     #    mode over any default.
-    pid_b = await ctx.new_project("S7-B user wording wins")
+    pid_b = await ctx.new_project("S4-B user wording wins")
     await set_project_language(pid_b, "de")
     await seed_asset(pid_b, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
                      extracted_text=material, meta={"language": "en"},
                      processed=True)
     await seed_completed_run(pid_b)
-    docked_b: dict | None = None
-    for prompt in ("make a bilingual quote card from the video",
-                   "pull the keynote's sharpest lines into bilingual quote cards",
-                   "bilingual quote cards, please"):
-        turn = await ctx.chat(pid_b, prompt)
-        if not is_plan_dock(turn["assistant_message"]):
-            continue
-        plan_b = await pending_plan(ctx, pid_b)
-        if "write_quotes" in [t.get("tool") for t in plan_tasks(plan_b)]:
-            docked_b = turn
-            break
-        await ctx.answer(turn["assistant_message"]["id"], {"kind": "bail"})
-    check(docked_b is not None, "B: no write_quotes plan dock after 3 turns")
+    docked_b = await dock_writer(
+        pid_b,
+        ("make a bilingual quote card from the video",
+         "pull the keynote's sharpest lines into bilingual quote cards",
+         "bilingual quote cards, please"),
+        "write_quotes", "B",
+    )
     plan_b = await pending_plan(ctx, pid_b)
     check(((plan_b or {}).get("intent") or {}).get("caption_mode") == "bilingual",
           "B: the user's wording stamps bilingual on the docked intent", plan_b)
@@ -2408,29 +2707,24 @@ async def s7_caption_mode_default(ctx: Ctx) -> None:
     check((born_b.get("context") or {}).get("caption_mode") == "bilingual",
           "B: run.context.caption_mode follows the user's wording",
           born_b.get("context"))
+    await wait_run_terminal(rid_b)  # harness 卫生
 
     # C) 设定 → 追问 → Start：the mode survives a refinement turn that
     #    doesn't re-mention it (stash inherit) AND a panel Start that strips
     #    the field ("not mentioned" ≠ "retracted" — the server inherits from
     #    the stored pending brief).
-    pid_c = await ctx.new_project("S7-C mode survives refinement")
+    pid_c = await ctx.new_project("S4-C mode survives refinement")
     await set_project_language(pid_c, "de")
     await seed_asset(pid_c, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
                      extracted_text=material, meta={"language": "en"},
                      processed=True)
-    docked_c: dict | None = None
-    for prompt in ("make bilingual quote cards from the video",
-                   "pull the keynote's sharpest quotes into bilingual cards",
-                   "bilingual quote cards, please"):
-        turn = await ctx.chat(pid_c, prompt)
-        if not is_plan_dock(turn["assistant_message"]):
-            continue
-        plan_c = await pending_plan(ctx, pid_c)
-        if "write_quotes" in [t.get("tool") for t in plan_tasks(plan_c)]:
-            docked_c = turn
-            break
-        await ctx.answer(turn["assistant_message"]["id"], {"kind": "bail"})
-    check(docked_c is not None, "C: no write_quotes plan dock after 3 turns")
+    docked_c = await dock_writer(
+        pid_c,
+        ("make bilingual quote cards from the video",
+         "pull the keynote's sharpest quotes into bilingual cards",
+         "bilingual quote cards, please"),
+        "write_quotes", "C",
+    )
     plan_qid = docked_c["assistant_message"]["id"]
     plan_c = await pending_plan(ctx, pid_c)
     check(((plan_c or {}).get("intent") or {}).get("caption_mode") == "bilingual",
@@ -2462,22 +2756,68 @@ async def s7_caption_mode_default(ctx: Ctx) -> None:
     check((born_c.get("context") or {}).get("caption_mode") == "bilingual",
           "C: run.context.caption_mode survives set → refine → Start",
           born_c.get("context"))
+    await wait_run_terminal(rid_c)  # harness 卫生
+
+    # D) 无素材直生 — post：主题即根，写手零素材跑（六素材硬门全卸）。
+    pid_d = await ctx.new_project("S4-D post without material")
+    docked_d = await dock_writer(
+        pid_d,
+        ("Write a LinkedIn post about the EU AI Act for researchers.",
+         "draft a LinkedIn post on the EU AI Act, aimed at researchers",
+         "the post, please"),
+        "write_post", "D",
+    )
+    check(docked_d.get("run_id") is None, "D: no run before Start", docked_d)
+    await ctx.answer(docked_d["assistant_message"]["id"], {"kind": "bail"})
+
+    # E) 无素材直生 — quotes：alt-language 项目（de）零素材，全程零字幕
+    #    dock 问（默认值能扛的参数永不阻塞）。
+    pid_e = await ctx.new_project("S4-E quotes without material")
+    await set_project_language(pid_e, "de")
+    docked_e: dict | None = None
+    for prompt in ("make a quote card about remote work",
+                   "pull three sharp lines about remote work into quote cards",
+                   "the quote cards, please"):
+        turn = await ctx.chat(pid_e, prompt)
+        q = turn["assistant_message"].get("question") or {}
+        check(not any(str(o.get("id", "")).startswith("caption_mode_")
+                      for o in q.get("options") or []),
+              "E: no caption-mode question ever docks (默认值能扛的参数永不阻塞)", q)
+        if not is_plan_dock(turn["assistant_message"]):
+            continue
+        plan_e = await pending_plan(ctx, pid_e)
+        if "write_quotes" in [t.get("tool") for t in plan_tasks(plan_e)]:
+            docked_e = turn
+            break
+        await ctx.answer(turn["assistant_message"]["id"], {"kind": "bail"})
+    check(docked_e is not None, "E: no write_quotes plan dock after 3 turns")
+    mode_e = (((await pending_plan(ctx, pid_e)) or {}).get("intent") or {}).get("caption_mode")
+    check(mode_e in (None, "source_only"),
+          "E: the absorbed default never reads bilingual unprompted", mode_e)
+    await ctx.answer(docked_e["assistant_message"]["id"], {"kind": "bail"})
+
+    # F) 无素材直生 — carousel。
+    pid_f = await ctx.new_project("S4-F carousel without material")
+    docked_f = await dock_writer(
+        pid_f,
+        ("make a carousel about remote work",
+         "turn the remote-work theme into a carousel",
+         "the carousel, please"),
+        "write_carousel", "F",
+    )
+    check(docked_f.get("run_id") is None, "F: no run before Start", docked_f)
+    await ctx.answer(docked_f["assistant_message"]["id"], {"kind": "bail"})
 
 
-
-
-# ---- S8 核⑧ research 全链 ---------------------------------------------------------
-
-
-async def s8_research_grounds_writer(ctx: Ctx) -> None:
-    """核⑧ research 试点全链（ADR-052 B4，有界 loop 节点）：chat 出书 → 面板
-    手编 chain 为 [research, write_post] 起步 → research step done +
+async def s5_research_grounds_writer(ctx: Ctx) -> None:
+    """S5 调研→写作：research 全链（有界 loop 节点）——chat 出书 → 面板手编
+    chain 为 [research, write_post] 起步 → research step done +
     spec.research_brief 钢印 + writer 在 research 之后完成 + post 产物存在。
 
     网络方差说明：活 DDG 可能全灭（无网 / 被限流）——诚实降级下 brief 带
     caveat 自述、run 照样 completed。断言只看「钢印存在 + 步骤有序 +
     产物存在」，不看简报内容质量（那是 prompt / provider 层的事）。"""
-    pid = await ctx.new_project("S8 research grounds writer")
+    pid = await ctx.new_project("S5 research grounds writer")
 
     turn1 = await ctx.chat(
         pid,
@@ -2491,7 +2831,7 @@ async def s8_research_grounds_writer(ctx: Ctx) -> None:
     plan = (await ctx.results(pid)).get("pending_brief")
     qid = turn1["assistant_message"]["id"]
 
-    # 面板手编起步（S5 先例）：chain 换成确定性的 [research, write_post]。
+    # 面板手编起步（S2 先例）：chain 换成确定性的 [research, write_post]。
     edited = dict(plan["intent"])
     edited["tasks"] = [
         {
@@ -2532,21 +2872,36 @@ async def s8_research_grounds_writer(ctx: Ctx) -> None:
     check(len(outs) >= 1, "the post output exists", len(outs))
 
 
-# ---- S9 核⑨ 问事不出书 -------------------------------------------------------------
+async def s6_consult_never_deadends(ctx: Ctx) -> None:
+    """S6 纯咨询不死路：能力问（SSE——单轮流式律座）/ 闲聊 / 无根
+    "start it" → 纯 answer 终态，零计划零 dock 零 run，纯信息答永不带
+    建议卡（能力目录换皮 = 噪音）；浏览问（"还有其他推荐吗"族）在推荐
+    格局已建立后仍归 ask_user 选项 dock——永不两级跳劫持（present_plan
+    承诺 dock / 字幕闸选项 = 硬红）。纯散文 answer = 方差重试。"""
+    pid = await ctx.new_project("S6 consult")
 
-
-async def s9_consult_never_books(ctx: Ctx) -> None:
-    """核⑨ 问事不出书：能力提问 / 闲聊 → 纯 answer（无 dock 无 run 无 brief）；
-    无计划 "start it" 不死路不起 run（rootless → 主题问门槛接住，永不裸跑）。"""
-    pid = await ctx.new_project("S9 consult")
-
-    turn1 = await ctx.chat(pid, "what can you do?")
+    # 能力问走 SSE——单轮流式律（concat(deltas) == 信封散文）在此座
+    # exercised（harness 自动断言）。
+    stream1 = await ctx.chat_stream(pid, "what can you do?")
+    check(stream1.failed is None, "the capability turn never fails", stream1.failed)
+    turn1 = stream1.completed
     check(terminal_tool_of(turn1) == "answer",
           "a capability question closes on the answer call", turn1)
-    check(turn1["run_id"] is None, "capability question starts no run")
+    check(turn1["run_id"] is None, "capability question starts no run", turn1)
     check(not turn1["assistant_message"].get("question"), "no question docks",
           turn1["assistant_message"])
+    check(not (turn1["assistant_message"].get("suggestions") or []),
+          "no suggestion card on a bare capability answer (能力目录换皮 = 噪音)",
+          turn1["assistant_message"])
     check(has_prose(turn1["assistant_message"]), "a prose answer lands")
+
+    turn1b = await ctx.chat(pid, "do you support multiple languages?")
+    check(terminal_tool_of(turn1b) == "answer",
+          "a pure info question closes on the answer call", turn1b)
+    check(not turn1b["assistant_message"].get("question")
+          and not (turn1b["assistant_message"].get("suggestions") or []),
+          "an info question docks nothing and suggests nothing",
+          turn1b["assistant_message"])
 
     turn2 = await ctx.chat(pid, "hello, how are you today?")
     check(terminal_tool_of(turn2) == "answer",
@@ -2570,428 +2925,347 @@ async def s9_consult_never_books(ctx: Ctx) -> None:
     check(plan is None or plan.get("intent") is None,
           "no plan parks on consults", plan)
 
+    # 浏览问永不劫持（事故④回归锁）：推荐格局已建立后，自定义措辞的浏览问
+    # → ask_user 选项 dock——present_plan / 字幕闸 = 硬红（事故④原形态）。
+    pid_b, _ = await seed_keynote_project(ctx, "S6 browse question")
+    setup = await elicit_options_dock_turn(ctx, pid_b, "S6 browse setup")
+    bail = await ctx.answer(setup["assistant_message"]["id"], {"kind": "bail"})
+    check(bail.status_code in (200, 201),
+          "the setup dock settles (浏览问不被待决题吃掉)", bail.text)
+    got: dict | None = None
+    for prompt in ("还有其他推荐吗？", "anything else you'd recommend?",
+                   "还有别的方向可以看看吗？"):
+        turn = await ctx.chat(pid_b, prompt)
+        msg = turn["assistant_message"]
+        check(not is_plan_dock(msg),
+              "a browse question is never hijacked into a plan dock (事故④第一跳)",
+              turn)
+        q = msg.get("question") or {}
+        check(not any(str(o.get("id", "")).startswith("caption_mode_")
+                      for o in q.get("options") or []),
+              "no caption gate on a browse question (事故④第二跳)", q)
+        if terminal_tool_of(turn) == "ask_user" and (q.get("options") or []):
+            got = turn
+            break
+    check(got is not None,
+          "no options-dock browse answer after 3 tries (浏览问无档可去 = 事故④温床)")
+    check_options_dock(got["assistant_message"].get("question") or {}, "S6 browse")
+    bail = await ctx.answer(got["assistant_message"]["id"], {"kind": "bail"})
+    check(bail.status_code in (200, 201), "the browse dock bails clean", bail.text)
+    check(await count_runs(pid_b) == 0, "no run the whole journey")
 
-# ---- S10 SSE 流式 --------------------------------------------------------------------
 
+async def s7_second_circle_revision(ctx: Ctx) -> None:
+    """S7 修订第二圈（确定性尾剧本，零 LLM——锁真实 DB + 真实 API 门）：
+    落地 clip → 精确编辑两族实应用（remove_range 删字幕 cue +
+    set_caption_style 换预设）→ 同 id 原地改写无双生 → undo 两连逐级回退
+    → wipe 归档（不删除、publication / journal 不连坐）→ 归档不可变 409
+    墙 → 换态 restore（同 work 至多一 active）→ 读面跟随。"""
+    from app.pipeline.edit_span import ResolvedSpan, resolve_quote_span
+    from app.pipeline.outputs import archive_outputs
+    from app.models.tables import Publication
+    from app.models.schemas import PublicationState
 
-async def s10_sse_turn_streaming(ctx: Ctx) -> None:
-    """S10 SSE 回合（工具 loop 线格式，ADR-077 判词②）：answer 单轮流式
-    （concat(deltas) == 信封散文）；draft 流计划复述 + draft Activity 帧
-    （Batch B ③ 后 drafting 相位帧退役，Activity 是计划工作证据的唯一
-    座位）；ask 流框架散文 + question.preview 预览帧先于终态信封。流式律
-    的两款关系（单轮 == / 读先 startswith / 拒轮方差注记）归
-    check_stream_law。"""
-    pid = await ctx.new_project("S10 sse streaming")
-    # Fixture declaration (B-4): the draft turn's ground truth is a READY
-    # material — declared COMPLETED up front. The old bare-PENDING row let
-    # the resident worker flip it FAILED mid-turn, and whether the draft
-    # turn saw "material ready" or "processing failed" was a race — the
-    # draft race is hereby eliminated by declaration, not by timing luck.
-    await seed_asset(
-        pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
-        extracted_text=(
-            "Welcome back. Today I want to share the three decisions that "
-            "shaped our product year — what we cut, what we kept, and why "
-            "focus beat breadth every single time."
-        ),
-        meta={"language": "en"},
-        processed=True,
+    pid = await ctx.new_project("S7 second circle")
+    asset_id = await seed_asset(
+        pid, ctx.user_id, AssetType.VIDEO, "s7.mp4", processed=True
     )
 
-    # Answer turn: prose streams on the content channel (iteration 0 only —
-    # later iterations run quiet by the repair-never-streams law). The
-    # phrasing mirrors the system prompt's few-shot example verbatim — the
-    # answer/draft judgment is LLM variance, and the single-iteration
-    # relation needs the answer call to be near-deterministic.
-    stream = await ctx.chat_stream(pid, "what can you generate?")
-    check(stream.failed is None, "answer turn has no turn.failed", stream.failed)
-    check(stream.completed is not None, "answer turn ends with turn.completed")
-    check(terminal_tool_of(stream.completed) == "answer",
-          "the capability question closes on the answer call", stream.completed)
-    content = (stream.completed["assistant_message"].get("content") or "")
-    check(len(stream.deltas) > 0, "answer turn streams prose deltas")
-    check_stream_law(stream, content, "answer turn")
-    check_activity_shape(stream, "answer turn")
-    check(stream.completed["run_id"] is None, "answer turn starts no run")
-
-    # Draft turn: the plan echo (intent.answer) streams as deltas; the
-    # present_plan name-known frame births the draft ACTIVITY before the
-    # envelope (Phase 3 Batch B ③ retired the drafting phase beat — the
-    # Activity frame below is the only seat now); the dock rides the
-    # envelope.
-    stream = await ctx.chat_stream(pid, "Cut 3 highlight clips from my talk")
-    check(stream.failed is None, "draft turn has no turn.failed", stream.failed)
-    check(stream.completed is not None, "draft turn ends with turn.completed")
-    check(terminal_tool_of(stream.completed) == "present_plan",
-          "the draft closes on the present_plan call", stream.completed)
-    check(is_plan_dock(stream.completed["assistant_message"]),
-          "draft turn docks the plan via the envelope",
-          stream.completed["assistant_message"])
-    check_activity_shape(stream, "draft turn")
-    check(any(a["kind"] == "draft" and a["status"] == "completed"
-              for a in stream.activities),
-          "the present_plan call births a draft activity that completes at "
-          "the accept (name-known opens, TerminalAccepted settles)",
-          stream.activities)
-    content = (stream.completed["assistant_message"].get("content") or "")
-    plan = (await ctx.results(pid)).get("pending_brief")
-    echo = (plan["intent"].get("answer") or "")
-    check(content == echo, "the envelope content IS the persisted plan echo",
-          f"{content[:120]!r} vs {echo[:120]!r}")
-    check_stream_law(stream, content, "draft turn")
-
-    # Ask turn (ask 三分解剖): the framing prose streams like the draft echo;
-    # the pill's whole payload lands EARLY as question.preview — under the
-    # speech-commit protocol (G2) the preview rides the buffer and releases
-    # at the accept (a rejected iteration's preview never commits — retracted
-    # with the turn's other stale frames), so the received preview IS the
-    # authoritative one and must match the envelope's docked payload field
-    # for field.
-    pid2 = await ctx.new_project("S10 sse ask streaming")
-    stream = await ctx.chat_stream(pid2, "I want a social post.")
-    check(stream.failed is None, "ask turn has no turn.failed", stream.failed)
-    check(stream.completed is not None, "ask turn ends with turn.completed")
-    check(terminal_tool_of(stream.completed) == "ask_user",
-          "the bare wish closes on the ask_user call", stream.completed)
-    msg = stream.completed["assistant_message"]
-    q = msg.get("question") or {}
-    check(q.get("kind") == "question", "the bare wish docks the ask", msg)
-    content = (msg.get("content") or "")
-    # 言语提交协议 (G2): a clean turn's framing flushes at the accept; a
-    # turn with a rejected iteration is frame-silent by design (retracted
-    # speech) — the prose assertions skip it like the stream law does.
-    # 跳过边界（验收裁决: 只豁免预期修复路径，不吞真正的流式失败）——
-    # had_repair 的唯一来源是活动通道的 cancelled/repair 帧（拒绝的
-    # wire 证据座），即豁免恰好覆盖「本回合发生过拒绝」一种形态；被拒
-    # 回合的严格零泄漏断言在 S-int-13（迭代 0 拒绝 = deltas 必空）——
-    # 此处不能 blanket 断空：若迭代 0 的言语先经 checkpoint flush-first
-    # 合法释放、后续迭代才被拒，deltas 非空是协议内形态。
-    _had_reads_ask, had_repair_ask = _work_evidence(stream)
-    if not had_repair_ask:
-        check(len(stream.deltas) > 0, "ask turn streams the framing prose", q)
-    # Ask-turn stream law (ask 三分解剖, `_ask_content` service.py): an
-    # OPTIONS ask's content IS the streamed framing (the question rides the
-    # dock title); a TEXT ask keeps the bare question IN the speech —
-    # content = framing + "\n\n" + question, appended at compose, never
-    # streamed. The generic single-iteration law (concat == content) is
-    # therefore structurally false for TEXT asks; which branch the turn
-    # takes is the LLM's call, so the harness asserts the BRANCH's law.
-    # (C-6 adjudication 2026-09-19: two reds traced to this mismatch —
-    # harness contract bug, production unchanged since 2026-09-08.)
-    if not had_repair_ask:  # replaced speech voids even the prefix relation
-        streamed_ask = "".join(stream.deltas).strip()
-        expected_ask = (
-            streamed_ask
-            if q.get("options")
-            else f"{streamed_ask}\n\n{(q.get('question') or '').strip()}"
+    cues = [
+        {"start": 10.0, "end": 10.8, "text": "Welcome back", "lang": "en"},
+        {"start": 10.8, "end": 11.5, "text": "to the show", "lang": "en"},
+        {"start": 12.0, "end": 13.2, "text": "today we talk pricing", "lang": "en"},
+    ]
+    spec = {
+        "segments": [
+            {
+                "id": "s1",
+                "start": 10.0,
+                "end": 40.0,
+                "hidden": False,
+                "asset_id": asset_id,
+                "url": "scenario/s7.mp4",
+            }
+        ],
+        "caption_track": cues,
+        "source": {
+            "kind": "video",
+            "url": "scenario/s7.mp4",
+            "asset_id": asset_id,
+            "duration": 120.0,
+        },
+        "aspect": "9:16",
+    }
+    async with AsyncSessionLocal() as db:
+        run = WorkflowRun(
+            project_id=uuid.UUID(pid),
+            status=WorkflowStatus.COMPLETED,
+            context={"target_language": "en", "ui_language": "en"},
         )
-        check(content == expected_ask,
-              "ask turn: the framing streams verbatim; a TEXT ask's bare "
-              "question appends at compose (blank-line join), an options "
-              "ask's content is the framing alone",
-              f"{''.join(stream.deltas)[:120]!r} vs {content[:120]!r}")
-    check(bool((q.get("question") or "").strip())
-          and content != q["question"],
-          "the bare question rides the payload, distinct from the prose", q)
-    check(len(stream.previews) >= 1,
-          "the ask's question.preview frame precedes the terminal envelope",
-          stream.thinking)
-    preview = stream.previews[-1]
-    check(preview.get("question") == q.get("question"),
-          "the preview's bare question IS the docked payload's", preview)
-    check([o.get("id") for o in preview.get("options") or []]
-          == [o.get("id") for o in q.get("options") or []],
-          "the preview's options match the docked payload's", preview)
-    check(preview.get("slot") == q.get("slot"),
-          "the preview's slot matches the docked payload's", preview)
-    check(isinstance(preview.get("allow_freeform"), bool),
-          "the preview carries allow_freeform", preview)
-    check(bool((preview.get("default_path") or "").strip()),
-          "the preview carries the default path", preview)
-    check_activity_shape(stream, "ask turn")
+        db.add(run)
+        await db.flush()
+        step = WorkflowStep(
+            run_id=run.id, kind="select_clips", status="done", seq=1,
+        )
+        db.add(step)
+        await db.flush()
+        output = Output(
+            project_id=uuid.UUID(pid),
+            workflow_step_id=step.id,
+            type="clip",
+            language="en",
+            provenance="real",
+            payload={"duration": 30},
+            render_spec=spec,
+        )
+        db.add(output)
+        await db.flush()
+        oid = output.id
+        db.add(
+            WorkflowStep(
+                run_id=run.id, kind="render", status="done", seq=2,
+                inputs=[str(step.id)], spec={"output_id": str(oid)},
+            )
+        )
+        db.add(
+            Publication(
+                user_id=ctx.user_id,
+                project_id=uuid.UUID(pid),
+                output_id=oid,
+                payload={"title": "s7"},
+                state=PublicationState.PUBLISHED,
+                idempotency_key=f"s7-{oid}",
+            )
+        )
+        await db.commit()
+        work_id = output.work_id
 
-
-# ---- S11 整条源规则 + materialize 注入矩阵 ----------------------------------------------
-
-
-async def s11_whole_source_and_materialize_matrix(ctx: Ctx) -> None:
-    """S11 整条源规则（ADR-043 考纲原点）+ materialize 注入矩阵：
-
-    活链——"给我的视频加中英双语字幕" → 链 = translate_clip 单独（无
-    select_clips）；derived 预览 = 整条视频 + 字幕版；Start 后编译图 =
-    materialize_source → translate_clip。
-    进程内——media/stills/existing 三画像注入矩阵 + 无画像编译期指名拒绝 +
-    select_clips 在场不注入。"""
-    # 活链段 (whole-video subs)。
-    pid = await ctx.new_project("S11 whole-video subs")
-    # The source's language is pinned (an English keynote): the 同源语言护栏
-    # prompt (2026-08-17) resolves 中英双语 → target zh deterministically —
-    # without it the planner infers the source language from the zh prompt.
-    # Fixture declaration (§5 fixture 律, Phase 4 B8 硬化): the material is
-    # READY — a bare PENDING row would be claimed by the worker, 404 on the
-    # fictional bytes and flip FAILED, and the B6 Start gate then blocks on
-    # material_failed (2026-09-21 首跑取证).
-    await seed_asset(
-        pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
-        extracted_text="A keynote on the future of embodied intelligence.",
-        meta={"language": "en"}, processed=True,
+    # ① edit door: quote → span (the resolver's exact tier) → remove_range
+    #    op through the real operations API — the door edit_output rides。
+    span = resolve_quote_span(cues, "welcome back")
+    check(isinstance(span, ResolvedSpan) and span.tier == "exact",
+          "the quote resolves at the exact tier", span)
+    res = await ctx.client.post(
+        f"/outputs/{oid}/operations",
+        json={"ops": [{"op": "remove_range", "params": {"start": span.start, "end": span.end}}]},
     )
-
-    turn1 = await ctx.chat(pid, "给我的视频加中英双语字幕")
-    check(terminal_tool_of(turn1) == "present_plan",
-          "turn1 closes on the present_plan call", turn1)
-    check(is_plan_dock(turn1["assistant_message"]), "turn1 docks a task_book",
-          turn1["assistant_message"])
-    plan = (await ctx.results(pid)).get("pending_brief")
-    tasks = plan_tasks(plan)
-    check(not any(t["tool"] == "select_clips" for t in tasks),
-          "whole-source intent never routes through select_clips", tasks)
-    subs = [t for t in tasks if t["tool"] == "translate_clip"]
-    check(len(subs) == 1 and task_params(subs[0]).get("target_language") == "zh",
-          "one translate task into Chinese", tasks)
-    check(task_params(subs[0]).get("bilingual") in (True, "true"),
-          "双语 → bilingual: true（§6 在册债的断言迁移：LLM 两形状都发——"
-          "bool True / 字符串 'true'；产品侧 params coercion 仍挂账）", tasks)
-    derived = (plan or {}).get("derived") or []
-    check(any(r.get("type") == "video" for r in derived),
-          "the derived preview shows the whole video", derived)
-    check(any(r.get("variant") == "subs" for r in derived),
-          "the derived preview shows the subtitled version", derived)
-
-    res = await ctx.answer(turn1["assistant_message"]["id"], {"kind": "start"})
-    check(res.status_code == 200, "dock Start answers the plan", res.text)
-    run_id = res.json()["answered_question"]["workflow_run_id"]
-    steps = await step_rows(run_id)
-    kinds = [s["kind"] for s in steps]
-    check("materialize_source" in kinds,
-          "the compiled graph materializes the source", kinds)
-    check("translate_clip" in kinds, "the translate node is in the graph", kinds)
-    check("select_clips" not in kinds, "no highlight extraction anywhere", kinds)
-    await ctx.cleanup()
-
-    # 进程内矩阵（编译面，零 LLM）。
-    def node_kinds(nodes: list) -> list[str]:
-        return [ns.kind for ns in nodes]
-
-    translate = TaskItem(
-        tool="translate_clip",
-        params={"target_language": "zh", "bilingual": True},
-    )
-
-    # media profile: preprocess → materialize_source → translate.
-    media = compile_graph(
-        TaskSpec(tasks=[translate]),
-        materialize_profile="media",
-    )
-    check("materialize_source" in node_kinds(media),
-          "media profile injects materialize_source", node_kinds(media))
-    check("select_clips" not in node_kinds(media), "no highlight extraction",
-          node_kinds(media))
-    mat = next(ns for ns in media if ns.kind == "materialize_source")
-    check(any(media[i].kind == "preprocess" for i in mat.inputs),
-          "materialize hangs off preprocess", mat.inputs)
-    tr = next(ns for ns in media if ns.kind == "translate_clip")
-    check(any(media[i].kind == "materialize_source" for i in tr.inputs),
-          "translate hangs off materialize via its after declaration", tr.inputs)
-
-    # stills profile: align_stills first, materialize takes both inputs.
-    stills = compile_graph(
-        TaskSpec(tasks=[translate]),
-        materialize_profile="stills",
-    )
-    check("align_stills" in node_kinds(stills),
-          "stills profile injects align_stills first", node_kinds(stills))
-    mat = next(ns for ns in stills if ns.kind == "materialize_source")
-    mat_input_kinds = [stills[i].kind for i in mat.inputs]
-    check("preprocess" in mat_input_kinds and "align_stills" in mat_input_kinds,
-          "materialize takes preprocess + align_stills", mat_input_kinds)
-
-    # existing profile: bare translate with empty inputs (= act on existing clips).
-    existing = compile_graph(
-        TaskSpec(tasks=[translate]),
-        materialize_profile="existing",
-    )
-    check("materialize_source" not in node_kinds(existing),
-          "existing clips need no materialization", node_kinds(existing))
-    tr = next(ns for ns in existing if ns.kind == "translate_clip")
-    check(tr.inputs == [], "the modifier's inputs stay empty (existing clips)", tr.inputs)
-
-    # No profile: compile-time rejection naming the culprit.
-    try:
-        compile_graph(TaskSpec(tasks=[translate]), materialize_profile=None)
-        check(False, "a dangling transform rejects at compile", None)
-    except ValueError as exc:
-        check("translate clip" in str(exc),
-              "the error names the dangling transform", str(exc))
-
-    # select_clips present: no injection, translate hangs off select_clips.
-    with_clips = compile_graph(
-        TaskSpec(
-            tasks=[
-                TaskItem(tool="select_clips", params={"count": 3}),
-                translate,
-            ]
-        ),
-        materialize_profile=None,
-    )
-    check("materialize_source" not in node_kinds(with_clips),
-          "select_clips present — no injection", node_kinds(with_clips))
-    tr = next(ns for ns in with_clips if ns.kind == "translate_clip")
-    check(any(with_clips[i].kind == "select_clips" for i in tr.inputs),
-          "translate hangs off select_clips", tr.inputs)
-
-
-# ---- S12 merge_brief 来源矩阵 ----------------------------------------------------------
-
-
-async def s12_merge_brief_source_matrix(ctx: Ctx) -> None:
-    """S12 brief 来源优先级三态矩阵（ADR-052 B2 D1-C1，进程内纯函数）：
-    user-stated 永不反向覆盖 / user 重申恒胜 / inferred 压 default /
-    default 永不压 inferred / no-opinion 槽永不落账 / 整账 None 原样返回 /
-    asked 簿永不吃 LLM 提议。"""
-    del ctx  # in-process pure-function matrix — no API, no DB rows
-    from app.chat.service import merge_brief
-    from app.models.schemas import Brief, BriefSlot, BriefSlotSource as Src
-
-    def brief(**slots) -> Brief:
-        return Brief(**slots)
-
-    def slot(value, source) -> BriefSlot:
-        return BriefSlot(value=value, source=source)
-
-    # 1. user-stated survives inferred AND default proposals (永不反向覆盖).
-    stored = brief(topic=slot("grid storage", Src.USER_STATED))
-    out = merge_brief(
-        brief(
-            topic=slot("renewables", Src.INFERRED),
-            audience=slot("CTOs", Src.INFERRED),
-        ),
-        stored,
-    )
-    check(out.topic.value == "grid storage"
-          and out.topic.source == Src.USER_STATED,
-          "user-stated topic survives an inferred proposal", out.topic)
-    out = merge_brief(brief(topic=slot("anything", Src.DEFAULT)), stored)
-    check(out.topic.value == "grid storage",
-          "user-stated topic survives a default proposal", out.topic)
-
-    # 2. The user re-stating a slot always wins (user-stated ≥ user-stated —
-    #    chat 修订恒胜).
-    out = merge_brief(brief(topic=slot("renewables", Src.USER_STATED)), stored)
-    check(out.topic.value == "renewables"
-          and out.topic.source == Src.USER_STATED,
-          "a re-stated slot lands (the user spoke again)", out.topic)
-
-    # 3. inferred lands over an empty/default slot and over a default value;
-    #    default never lands over inferred.
-    stored = brief(audience=slot("general public", Src.DEFAULT))
-    out = merge_brief(brief(audience=slot("first-time founders", Src.INFERRED)), stored)
-    check(out.audience.value == "first-time founders"
-          and out.audience.source == Src.INFERRED,
-          "inferred outranks default", out.audience)
-    out = merge_brief(brief(audience=slot("everyone", Src.DEFAULT)), out)
-    check(out.audience.value == "first-time founders",
-          "default never overwrites inferred", out.audience)
-
-    # 4. A no-opinion slot (value=None) never lands — stored survives; and
-    #    fresh inference re-lands over stale inference (same rank, latest wins).
-    out = merge_brief(
-        brief(tone=BriefSlot(source=Src.INFERRED), topic=slot("new angle", Src.INFERRED)),
-        brief(tone=slot("sharp", Src.USER_STATED), topic=slot("old angle", Src.INFERRED)),
-    )
-    check(out.tone.value == "sharp", "a None update never lands", out.tone)
-    check(out.topic.value == "new angle",
-          "same-rank updates land (fresh inference over stale)", out.topic)
-
-    # 5. constraints 是数组槽（ADR-064 顺形律）——按条目 keyed union：新条目
-    #    追加、同文本冲突逐项 precedence（user-stated 永不反向覆盖）、归一化
-    #    键大小写/空白不敏感。
-    stored = brief(constraints=[slot("keep it under 200 words", Src.USER_STATED)])
-    out = merge_brief(
-        brief(constraints=[
-            slot("add hashtags", Src.INFERRED),
-            slot("Keep it under 200  words", Src.INFERRED),  # 同键不同来源
-        ]),
-        stored,
-    )
+    check(res.status_code == 201, "remove_range op applies", res.text)
+    body = res.json()
+    check(body["output"]["id"] == str(oid),
+          "the edit rewrites the SAME row in place (同 id 无双生)", body["output"]["id"])
+    new_track = body["output"]["render_spec"]["caption_track"]
     check(
-        [c.value for c in out.constraints]
-        == ["keep it under 200 words", "add hashtags"],
-        "constraints keyed union: new item appends, same-key user-stated survives",
-        out.constraints,
+        all("Welcome" not in c["text"] for c in new_track),
+        "the cut cue leaves the caption track", new_track,
     )
+    check(len(body["operations"]) == 1, "the op journals", body["operations"])
+
+    # ② 第二族实应用: set_caption_style 换预设（同 id + journal）。
+    res = await ctx.client.post(
+        f"/outputs/{oid}/operations",
+        json={"ops": [{"op": "set_caption_style",
+                       "params": {"preset": "karaoke-highlight", "enabled": True}}]},
+    )
+    check(res.status_code == 201, "set_caption_style op applies", res.text)
+    body = res.json()
+    check(body["output"]["id"] == str(oid),
+          "the style edit rewrites the SAME row too", body["output"]["id"])
+    check(body["output"]["render_spec"].get("caption_style_preset") == "karaoke-highlight",
+          "the caption preset lands on the spec", body["output"]["render_spec"])
+    check(len(body["operations"]) == 2, "both ops journal", body["operations"])
+
+    # ③ undo 两连逐级回退: 先撤样式（预设回退），再撤剪切（cue 回轨）。
+    res = await ctx.client.post(f"/outputs/{oid}/operations/undo")
+    check(res.status_code == 200, "the first undo applies", res.text)
+    check(res.json()["output"]["render_spec"].get("caption_style_preset")
+          != "karaoke-highlight",
+          "undo reverts the caption preset", res.json()["output"]["render_spec"])
+    res = await ctx.client.post(f"/outputs/{oid}/operations/undo")
+    check(res.status_code == 200, "the second undo applies", res.text)
+    restored_track = res.json()["output"]["render_spec"]["caption_track"]
     check(
-        out.constraints[0].source == Src.USER_STATED,
-        "per-item precedence: a same-key inferred item never demotes user-stated",
-        out.constraints,
-    )
-    # 同键重申恒胜（user-stated ≥ user-stated — 与标量槽同尺）。
-    out = merge_brief(
-        brief(constraints=[slot("keep it under 100 words", Src.USER_STATED)]),
-        out,
-    )
-    check(
-        [c.value for c in out.constraints]
-        == ["keep it under 100 words", "add hashtags"],
-        "the user re-stating a constraint wins (chat 修订恒胜)",
-        out.constraints,
-    )
-    # 旧槽形状（对象包数组/对象包字符串）读容忍——存量 pending_brief 行。
-    legacy = Brief.model_validate(
-        {"constraints": {"value": ["a", "b"], "source": "user-stated"}}
-    )
-    check(
-        [c.value for c in legacy.constraints] == ["a", "b"]
-        and all(c.source == Src.USER_STATED for c in legacy.constraints),
-        "legacy object-wrapped constraints normalize on read",
-        legacy.constraints,
-    )
-    legacy_str = Brief.model_validate(
-        {"constraints": {"value": "one long sentence", "source": "inferred"}}
-    )
-    check(
-        [c.value for c in legacy_str.constraints] == ["one long sentence"],
-        "object-wrapped bare-string constraints normalize on read",
-        legacy_str.constraints,
-    )
-    bare = Brief.model_validate({"constraints": ["keep 1:1"]})
-    check(
-        [c.value for c in bare.constraints] == ["keep 1:1"],
-        "bare-string items normalize",
-        bare.constraints,
-    )
-    made_up = Brief.model_validate(
-        {"constraints": [{"value": "x", "source": "explicit"}]}
-    )
-    check(
-        made_up.constraints[0].source == Src.INFERRED,
-        "an off-enum source coerces to inferred (never overclaims user-stated)",
-        made_up.constraints,
+        any("Welcome" in c["text"] for c in restored_track),
+        "undo restores the cut cue", restored_track,
     )
 
-    # 6. update=None returns the stored brief (start/answer calls carry
-    #    no proposal); the merge never mutates the stored input in place.
-    stored = brief(topic=slot("grid storage", Src.USER_STATED))
-    check(merge_brief(None, stored) is stored, "None update returns stored verbatim")
-    merge_brief(brief(audience=slot("CTOs", Src.INFERRED)), stored)
-    check(stored.audience.value is None, "the merge never mutates the stored input")
+    # ④ wipe 归档（不重删）: archive the delivered row, birth the successor
+    #    with the inherited work_id — publication survives, the journal stays
+    #    readable, the visible read face swaps versions。
+    async with AsyncSessionLocal() as db:
+        await archive_outputs(db, [oid])
+        newborn = Output(
+            project_id=uuid.UUID(pid),
+            workflow_step_id=None,
+            type="clip",
+            language="en",
+            provenance="real",
+            payload={"duration": 28},
+            render_spec=spec,
+            work_id=work_id,  # 按位继承 — the wipe's birth-loop shape
+        )
+        db.add(newborn)
+        await db.flush()
+        newborn_id = newborn.id
+        await db.commit()
+    async with AsyncSessionLocal() as db:
+        pub = (
+            await db.execute(
+                select(func.count()).select_from(Publication).where(
+                    Publication.output_id == oid
+                )
+            )
+        ).scalar_one()
+        check(pub == 1, "publication survives the archive (不连坐)", pub)
+        ops_count = (
+            await db.execute(
+                select(func.count()).select_from(Operation).where(
+                    Operation.output_id == oid
+                )
+            )
+        ).scalar_one()
+        check(ops_count >= 2, "the operations journal survives", ops_count)
+    res = await ctx.client.get(f"/outputs/{oid}/operations")
+    check(res.status_code == 200, "the archived row's journal stays readable",
+          res.status_code)
+    res = await ctx.client.get(f"/projects/{pid}/results")
+    check(res.status_code == 200, "results reads", res.text)
+    visible_ids = [o["id"] for o in res.json().get("outputs", [])]
+    check(str(oid) not in visible_ids, "the archived version leaves the read face",
+          visible_ids)
+    check(str(newborn_id) in visible_ids, "the successor is the visible version",
+          visible_ids)
 
-    # 7. The code-owned asked roll never lands from an LLM proposal (禁 LLM
-    #    簿记, D2-C2) — it rides only the stored side of the merge.
-    stored.asked = ["topic"]
-    upd = brief()
-    upd.asked = ["audience"]
-    out = merge_brief(upd, stored)
-    check(out.asked == ["topic"],
-          "an LLM-proposed asked roll never lands (code-owned)", out.asked)
+    # ④b 归档不可变: the archived row is read-only history — every public
+    #    mutate door refuses with 409 while the journal stays readable. The
+    #    ONLY way back to mutable is the 换态 below。
+    res = await ctx.client.post(
+        f"/outputs/{oid}/operations",
+        json={"ops": [{"op": "set_title", "params": {"text": "tamper", "enabled": True}}]},
+    )
+    check(res.status_code == 409, "archived row rejects op writes", res.text)
+    res = await ctx.client.post(f"/outputs/{oid}/operations/undo")
+    check(res.status_code == 409, "archived row rejects undo", res.text)
+    res = await ctx.client.put(f"/outputs/{oid}", json={"payload": {"title": "tamper"}})
+    check(res.status_code == 409, "archived row rejects PUT", res.text)
+    res = await ctx.client.post(f"/outputs/{oid}/regenerate", json={})
+    check(res.status_code == 409, "archived row rejects regenerate", res.text)
+
+    # ⑤ 换态: restore the archived version — it becomes the work's ONE active
+    #    row; the successor archives. A second restore on the now-active row
+    #    refuses (400)。
+    res = await ctx.client.post(f"/outputs/{oid}/restore")
+    check(res.status_code == 200, "restore 换态 applies", res.text)
+    async with AsyncSessionLocal() as db:
+        rows = list(
+            (
+                await db.execute(
+                    select(Output).where(Output.work_id == work_id)
+                )
+            ).scalars().all()
+        )
+        actives = [r for r in rows if r.archived_at is None]
+        check(len(actives) == 1 and actives[0].id == oid,
+              "同 work 内至多一 active — the restored row", rows)
+    res = await ctx.client.post(f"/outputs/{oid}/restore")
+    check(res.status_code == 400, "restoring the active row refuses",
+          res.status_code)
+    res = await ctx.client.get(f"/projects/{pid}/results")
+    visible_ids = [o["id"] for o in res.json().get("outputs", [])]
+    check(str(oid) in visible_ids and str(newborn_id) not in visible_ids,
+          "the read face follows the 换态", visible_ids)
 
 
-async def s13_credits_insufficient_birthplace_422(ctx: Ctx) -> None:
-    """积分① 余额不足出生地拦截：钱包置零 → dock 计划 → typed Start
-    收结构化 422 {code, balance, required}（typed /generate 同形同义）
-    → 零 run、零台账行（hold 与 run 同事务回滚）；负余额用户下一次 hold
-    必拒——含 0 元 hold（BILLING §5：gate at the start）。"""
-    # 专用 fixture 用户：钱包手工置零——不动共享 ctx 用户的余额（S4 等
+async def s8_interview_to_framing(ctx: Ctx) -> None:
+    """S8 访谈→分镜（需 dev worker + demo 桶 fixture + MiniMax 配额）：访谈
+    素材真处理（worker 真 ASR + speaker_map → form=interview 前提断言）→
+    用户口头选定分镜方向（「镜头跟着说话人切换」）→ plan 链必含
+    select_clips + reframe_clip（选择执行律）→ start → run completed →
+    成片 render_spec 带非空 crop_track（确定性尾——选了就要像配方卡那样
+    成片，静默中央裁剪的结构通路在此锁死）。中间（router 直接出书还是先
+    问）是 LLM 裁量，nudge 有界兜底，红了 = prompt 回归信号。fixture 律：
+    素材先拷 scenario/ 前缀隔离 + 显式 request_processing 盖章（ADR-102
+    休眠律——无盖章 worker 永不认领）。"""
+    fixture_prefix = f"scenario/s8-{uuid.uuid4().hex[:8]}"
+    src_key = await copy_fixture(INTERVIEW_SOURCE_KEY, fixture_prefix)
+    pid = await ctx.new_project("S8 interview framing")
+    src = await seed_asset(
+        pid, ctx.user_id, AssetType.VIDEO, "xy_1_interview_15s.mp4",
+        file_url=src_key,  # PENDING — the worker really ASRs + speaker-maps it
+        request_processing=True,  # ADR-102 休眠律：fixture 自证盖章
+    )
+    status = await wait_asset_status(
+        src, {AssetStatus.COMPLETED, AssetStatus.FAILED}
+    )
+    check(status == AssetStatus.COMPLETED,
+          "the interview fixture is really processed (ASR + speaker_map)", status)
+    async with AsyncSessionLocal() as db:
+        asset = await db.get(Asset, uuid.UUID(src))
+        speaker_map = (asset.meta or {}).get("speaker_map") or {}
+    check(speaker_map.get("form") == "interview"
+          and bool(speaker_map.get("turns")),
+          "the seat's premise: the fixture judges interview-form with "
+          "attributed turns (the bake's proven source)",
+          speaker_map.get("form"))
+
+    await topup_wallet(ctx.user_id)  # clips + reframe + render 真链
+
+    # 用户口头选定分镜方向——选择执行律：链必含 select_clips + reframe_clip。
+    turn = await ctx.chat(pid, "把我的双人访谈剪成竖屏短片，镜头跟着说话人切换。")
+    plan = await pending_plan(ctx, pid)
+    for _ in range(2):
+        if plan is not None and plan_tasks(plan):
+            break
+        # LLM 裁量兜底（先问了 caption/数量等）——一句推进，路由恒在 plan path。
+        turn = await ctx.chat(pid, "就按这个方向出计划吧——竖屏切片，镜头跟人。")
+        plan = await pending_plan(ctx, pid)
+    check(plan is not None and plan_tasks(plan),
+          "the framing-chosen turns dock the plan", plan)
+    tools = [t.get("tool") for t in plan_tasks(plan)]
+    check("select_clips" in tools and "reframe_clip" in tools,
+          "选择执行律：the chosen framing direction lands select_clips + "
+          "reframe_clip (never a silent center-crop chain)", tools)
+    check(tools.index("reframe_clip") > tools.index("select_clips"),
+          "the reframe rides after the clips producer (topology order)", tools)
+
+    turn_s = await ctx.chat(pid, "开始吧")
+    check(terminal_tool_of(turn_s) == "start_run",
+          "the prose confirmation closes on start_run", turn_s)
+    run_id = turn_s["run_id"]
+    check(run_id is not None, "the framing run is born", turn_s)
+
+    final = await wait_run_terminal(run_id, timeout=600.0)
+    check(final == "completed",
+          "the framing run completes on the real interview bytes", final)
+    reframe_step = next(
+        (s for s in await step_rows(run_id) if s["kind"] == "reframe_clip"), None
+    )
+    check(reframe_step is not None and reframe_step["status"] == "done",
+          "the reframe step ran and completed", reframe_step)
+    clips = await outputs_of(pid, "clip")
+    check(len(clips) >= 1, "the clips land", len(clips))
+    check(
+        any((o.render_spec or {}).get("crop_track") for o in clips),
+        "确定性尾：at least one clip's render_spec carries a real crop_track "
+        "(选了就要像配方卡那样成片——静默中央裁剪永禁)",
+        [(str(o.id), len((o.render_spec or {}).get("crop_track") or [])) for o in clips],
+    )
+
+    # Harness 卫生（非断言——S3 同款）：run 收官的触发回合是
+    # fire-and-forget；不消费它就 cleanup 会让在飞 LLM 调用撞上项目删除。
+    review = await wait_trigger_review(ctx, turn_s["conversation_id"], run_id,
+                                       timeout=90.0)
+    if review is not None and (review.get("question") or {}).get("kind") == "question":
+        await ctx.answer(review["id"], {"kind": "bail"})
+
+
+async def s9_credits_boundary(ctx: Ctx) -> None:
+    """S9 付费边界：钱包置零 → dock 计划 → typed Start 收结构化 422
+    {code, balance, required}（/generate 同形同义）→ 零 run、零台账行
+    （hold 与 run 同事务回滚）；不可证载荷 scope.unproven 门先于余额检查
+    开火；负余额用户下一次 hold 必拒——含 0 元 hold（gate at the start）；
+    活跃 run 时 Start 服务端 machine-readable 阻断（前端按钮 disabled 只是
+    第一道防线），被阻的 Start 永不生 run。"""
+    # 专用 fixture 用户：钱包手工置零——不动共享 ctx 用户的余额（S2 等
     # 剧本还要起真 run）；结束后清台账/钱包行（FK 序）。
     user_id = await make_user()
     local = Ctx(user_id, keep=False)
@@ -3000,14 +3274,13 @@ async def s13_credits_insufficient_birthplace_422(ctx: Ctx) -> None:
             db.add(Wallet(user_id=user_id, balance=0))
             await db.commit()
 
-        # 账户控制台 credits 槽的供给端：GET /wallet 必须真服务——held() 的
-        # SQL JSONB 分组曾自 Day 2 起恒 500（控制台「—」案，2026-09-06 修）。
+        # 账户控制台 credits 槽的供给端：GET /wallet 必须真服务。
         res_w = await local.client.get("/wallet")
         check(res_w.status_code == 200
               and (res_w.json() or {}).get("balance") == 0,
               "GET /wallet serves the console credits slot", res_w.text)
 
-        pid = await local.new_project("S13 credits 422")
+        pid = await local.new_project("S9 credits 422")
         await seed_asset(pid, user_id, AssetType.TRANSCRIPT, "talk.txt",
                          extracted_text="My talk about grid storage auctions.",
                          processed=True)
@@ -3026,9 +3299,9 @@ async def s13_credits_insufficient_birthplace_422(ctx: Ctx) -> None:
               "required rides the payload", detail)
         check(await count_runs(pid) == 0, "no run was born", None)
 
-        # D2（Phase 4 B5）：/generate 的 tasks 载荷现在必须是服务端可证的
-        # approved retry——先种一条已确认历史链（本请求正是它的 exact
-        # retry），门放行后出生地的 credits 422 才是本断言的目标。
+        # /generate 的 tasks 载荷必须是服务端可证的 approved retry——先种一条
+        # 已确认历史链（本请求正是它的 exact retry），门放行后出生地的
+        # credits 422 才是本断言的目标。
         async with AsyncSessionLocal() as db:
             db.add(
                 WorkflowRun(
@@ -3058,9 +3331,8 @@ async def s13_credits_insufficient_birthplace_422(ctx: Ctx) -> None:
               and detail2.get("balance") == 0 and detail2.get("required", 0) > 0,
               "the /generate payload is the same shape", detail2)
 
-        # D2-B（Phase 4 B5）：不可证载荷 → machine-readable 422
-        # scope.unproven，永不 create_run——门先于余额检查开火（不可证
-        # 即拒，与余额无关），run 计数恒等于刚种的 1。
+        # 不可证载荷 → machine-readable 422 scope.unproven，永不 create_run——
+        # 门先于余额检查开火（不可证即拒，与余额无关），run 计数恒等于刚种的 1。
         res3 = await local.client.post(
             f"/projects/{pid}/generate",
             json={
@@ -3088,7 +3360,7 @@ async def s13_credits_insufficient_birthplace_422(ctx: Ctx) -> None:
             ).scalar_one()
         check(n == 0, "no ledger rows leaked from the rejected births", n)
 
-        # 负余额 hold 必拒（BILLING §5）——含 0 元 hold。
+        # 负余额 hold 必拒——含 0 元 hold。
         async with AsyncSessionLocal() as db:
             wallet = await db.get(Wallet, user_id)
             wallet.balance = -50
@@ -3102,9 +3374,8 @@ async def s13_credits_insufficient_birthplace_422(ctx: Ctx) -> None:
         check(raised is not None and raised.balance == -50,
               "a negative balance fails even a free (0) hold", raised)
 
-        # D3（Phase 4 B6）：Start 服务端四合取强制——活跃 run 冲突时服务端
-        # machine-readable 阻断（前端按钮 disabled 只是第一道防线）；被阻
-        # 的 Start 永不生 run（计数恒 = 历史 1 + 活跃 1）。
+        # Start 服务端四合取强制——活跃 run 冲突时服务端 machine-readable
+        # 阻断；被阻的 Start 永不生 run（计数恒 = 历史 1 + 活跃 1）。
         await seed_active_run(pid)
         res4 = await local.answer(turn1["assistant_message"]["id"], {"kind": "start"})
         check(res4.status_code == 422,
@@ -3125,266 +3396,29 @@ async def s13_credits_insufficient_birthplace_422(ctx: Ctx) -> None:
             await db.commit()
 
 
-async def s14_failed_run_zero_capture_full_release(ctx: Ctx) -> None:
-    """积分② 失败不扣费：确定性失败探针（translate_clip 缺参，08-14 先例）
-    被活 worker 执行到 FAILED、两个下游级联 skipped → 台账零 capture、
-    hold 全额 release、余额回到赠额；进程内 capture 幂等（重复调用结构
-    性 no-op = 复位重跑只记一次）+ QualityBounce 重跑差额落 attempt 键。"""
-    user_id = await make_user()
-    local = Ctx(user_id, keep=False)
-    hold_amount = 120
-    try:
-        pid = await local.new_project("S14 no charge on failure")
-
-        # A) 活 worker 探针：seeded run（缺参 translate_clip + 两个下游
-        #    节点），hold 走真动词 hold_run，认领/失败/级联/收官/释放全
-        #    走真路径（需要 dev worker 在跑——剧本通用前提）。
-        async with AsyncSessionLocal() as db:
-            wallet = await get_or_create_wallet(db, user_id)  # 开户赠额
-            grant = int(wallet.balance)
-            run = WorkflowRun(
-                project_id=uuid.UUID(pid),
-                status=WorkflowStatus.PENDING,
-                context={"outputs": [{"type": "clip"}], "target_language": "en"},
-            )
-            db.add(run)
-            await db.flush()
-            bad = WorkflowStep(run_id=run.id, kind="translate_clip", status="pending",
-                               seq=1, spec={}, estimate=None)
-            down1 = WorkflowStep(run_id=run.id, kind="add_music", status="pending",
-                                 seq=2, spec={}, estimate=None)
-            down2 = WorkflowStep(run_id=run.id, kind="remove_filler", status="pending",
-                                 seq=3, spec={}, estimate=None)
-            db.add_all([bad, down1, down2])
-            await db.flush()
-            down1.inputs = [str(bad.id)]
-            down2.inputs = [str(down1.id)]
-            await hold_run(db, user_id=user_id, run_id=run.id, amount=hold_amount)
-            await db.commit()
-            run_id = str(run.id)
-
-        row = await wait_run_status(run_id, {"failed"}, timeout=120.0)
-        check(row["status"] == "failed", "the probe run settles FAILED", row)
-        steps = await step_rows(run_id)
-        by_kind = {s["kind"]: s["status"] for s in steps}
-        check(by_kind.get("translate_clip") == "failed",
-              "the probe node itself failed", by_kind)
-        check(by_kind.get("add_music") == "skipped"
-              and by_kind.get("remove_filler") == "skipped",
-              "the downstream cascade-skipped", by_kind)
-
-        async with AsyncSessionLocal() as db:
-            txns = list(
-                (
-                    await db.execute(
-                        select(CreditTransaction)
-                        .where(CreditTransaction.user_id == user_id)
-                        .order_by(CreditTransaction.created_at)
-                    )
-                ).scalars().all()
-            )
-        kinds = [t.kind for t in txns]
-        check("capture" not in kinds,
-              "zero capture rows — failed/skipped steps never charge", kinds)
-        hold_row = next((t for t in txns if t.kind == "hold"), None)
-        release_row = next((t for t in txns if t.kind == "release"), None)
-        check(hold_row is not None and hold_row.amount == -hold_amount,
-              "the hold landed at birth", hold_row.amount if hold_row else None)
-        check(release_row is not None and release_row.amount == hold_amount,
-              "the hold releases in full at the terminal state",
-              release_row.amount if release_row else None)
-        async with AsyncSessionLocal() as db:
-            final_balance = int((await db.get(Wallet, user_id)).balance)
-        check(final_balance == grant,
-              "the wallet is whole again (balance back to the grant)",
-              (grant, final_balance))
-
-        # B) capture 幂等（进程内，零 worker 依赖）：重复调用结构性 no-op
-        #    （TransientNodeError 复位重跑只记一次的存储侧保证）；成本累加
-        #    后的第二 capture（QualityBounce 重跑）只记差额、落 attempt 键，
-        #    且 Σ captures ≡ credits(总成本)（与 workflow_steps.cost ×比例
-        #    对账的恒等式，不吃取整抖动）。
-        async with AsyncSessionLocal() as db:
-            run2 = WorkflowRun(
-                project_id=uuid.UUID(pid),
-                status=WorkflowStatus.COMPLETED,
-                context={"target_language": "en"},
-            )
-            db.add(run2)
-            await db.flush()
-            step = WorkflowStep(
-                run_id=run2.id, kind="write_post", status="done", seq=1, spec={},
-                cost={"prompt_tokens": 100_000, "completion_tokens": 50_000},
-            )
-            db.add(step)
-            await db.flush()
-            first = await capture_step(db, user_id=user_id, node=step)
-            check(first is not None and first.idempotency_key.endswith(":capture"),
-                  "the first capture lands at the step key",
-                  getattr(first, "idempotency_key", None))
-            again = await capture_step(db, user_id=user_id, node=step)
-            check(again is None,
-                  "a duplicate capture call is a structural no-op", again)
-            step.cost = {"prompt_tokens": 200_000, "completion_tokens": 100_000}
-            step.attempt = 2
-            delta = await capture_step(db, user_id=user_id, node=step)
-            check(delta is not None and delta.idempotency_key.endswith(":capture:2"),
-                  "the bounce re-run lands at the attempt key",
-                  getattr(delta, "idempotency_key", None))
-            total_credits = await credits_for_cost(db, cost_usd(step.cost))
-            check(abs(int(first.amount)) + abs(int(delta.amount)) == total_credits,
-                  "Σ captures ≡ credits(total cost) — the delta reconciles",
-                  (first.amount, delta.amount, total_credits))
-            await db.commit()
-    finally:
-        await local.cleanup()
-        await local.close()
-        async with AsyncSessionLocal() as db:
-            await db.execute(
-                delete(CreditTransaction).where(CreditTransaction.user_id == user_id)
-            )
-            await db.execute(delete(Wallet).where(Wallet.user_id == user_id))
-            await db.commit()
-
-
-async def s15_orphan_hold_released_on_project_delete(ctx: Ctx) -> None:
-    """积分③ 孤儿 hold 回收（BILLING §8 边界落地）：project 删除先把未结
-    hold 按台账动词退回（同事务；RUNNING 除外——在途 worker 的收官路径
-    从台账结算）。删除后台账 grant+hold+release 闭合、钱包余额回到赠额。
-    与 worker 认领无 racing 依赖：未认领 = 删除路径即退，已认领 = 收官路径
-    即退，幂等键保证只退一笔。专用 fixture 用户（钱包动账），FK 序清理。"""
-    user_id = await make_user()
-    local = Ctx(user_id, keep=False)
-    hold_amount = 77
-    try:
-        pid = await local.new_project("S15 orphan hold recovery")
-
-        # 造一个 PENDING run + 真 hold——从未执行的 run 被删 = 事故现场
-        # 的形状（无任何收官路径会触到它）。
-        async with AsyncSessionLocal() as db:
-            wallet = await get_or_create_wallet(db, user_id)  # 开户赠额
-            grant = int(wallet.balance)
-            run = WorkflowRun(
-                project_id=uuid.UUID(pid),
-                status=WorkflowStatus.PENDING,
-                context={"outputs": [{"type": "clip"}], "target_language": "en"},
-            )
-            db.add(run)
-            await db.flush()
-            db.add(WorkflowStep(run_id=run.id, kind="translate_clip",
-                                status="pending", seq=1, spec={}, estimate=None))
-            await hold_run(db, user_id=user_id, run_id=run.id, amount=hold_amount)
-            await db.commit()
-            run_id = str(run.id)
-
-        res = await local.client.delete(f"/projects/{pid}")
-        check(res.status_code == 204, "project delete succeeds", res.text)
-
-        # 等 release 落定（删除路径同步落；在途路径由 worker 收官落——
-        # 两种路径幂等键相斥，只落一笔）。
-        rows: list = []
-        for _ in range(60):
-            async with AsyncSessionLocal() as db:
-                rows = (
-                    await db.execute(
-                        select(CreditTransaction).where(
-                            CreditTransaction.user_id == user_id,
-                            CreditTransaction.ref["run_id"].astext == run_id,
-                        ).order_by(CreditTransaction.created_at,
-                                   CreditTransaction.id)
-                    )
-                ).scalars().all()
-            if any(r.kind == "release" for r in rows):
-                break
-            await asyncio.sleep(1)
-        kinds = [r.kind for r in rows]
-        check("release" in kinds,
-              "the deleted run's hold settles (delete path or terminal path)",
-              kinds)
-        check(kinds == ["hold", "release"],
-              "the run's ledger closes hold + release — no capture, no drift"
-              " (grant row carries no run ref, by design)",
-              kinds)
-        hold = next(r for r in rows if r.kind == "hold")
-        rel = next(r for r in rows if r.kind == "release")
-        check(int(hold.amount) == -hold_amount and int(rel.amount) == hold_amount,
-              "the hold returns whole — nothing executed",
-              [(r.kind, int(r.amount)) for r in rows])
-        check(int(rel.balance_after) == grant,
-              "wallet is back at the grant", int(rel.balance_after))
-    finally:
-        await local.cleanup()
-        await local.close()
-        async with AsyncSessionLocal() as db:
-            await db.execute(
-                delete(CreditTransaction).where(CreditTransaction.user_id == user_id)
-            )
-            await db.execute(delete(Wallet).where(Wallet.user_id == user_id))
-            await db.commit()
-
-
-# ---- S16 remix 旗舰旅程（旅程二，R1 B1 T5） --------------------------------------
-
-# 固定 fixture（demo 桶常住对象，reset_db 保护前缀）：
-# - 用户素材 = 真演讲片（worker 真 ASR → 真剪辑）；
-# - 参考片 = 特征明显的高光剪辑成品（实测 craft_scan: 9:16 / 2 shots / steady /
-#   clean-bottom 青色 #22D3EE 字幕）——断言全部自洽读骨架行，不硬编码事实。
-REMIX_SOURCE_KEY = "demo/uploads/demo_talk.mp4"
-REMIX_EXEMPLAR_KEY = "demo/outputs/highlight-clips-preview-ec8e575b.mp4"
-
-
-async def copy_fixture(key: str, dest_prefix: str) -> str:
-    """Copy a shared demo-bucket fixture to a scenario-owned key. NEVER seed
-    an asset pointing at the shared object directly: project deletion unlinks
-    every asset's ``file_url`` (``delete_project`` → ``delete_file``), so a
-    shared key referenced by a scenario project dies with its cleanup — S16's
-    first run ate a recipe card's marketing video this way. (Script seam:
-    scripts reach into app internals throughout this file.)"""
-    from app.config import settings
-    from app.providers.storage import _get_s3_client
-
-    dest = f"{dest_prefix}/{key.rsplit('/', 1)[-1]}"
-    client = _get_s3_client()
-    await asyncio.to_thread(
-        client.copy_object,
-        Bucket=settings.s3_bucket_name,
-        Key=dest,
-        CopySource={"Bucket": settings.s3_bucket_name, "Key": key},
-    )
-    return dest
-
-
-async def s16_remix_flagship_journey(ctx: Ctx) -> None:
-    """remix 旗舰（旅程二零自动化验收的收口，需 dev worker + demo 桶 fixture）：
-    P1 warm 路径——@mention 指认参考片（拍 0a 免问路，pin 由代码结算）→ pin 落
-    定即拆解，agent 主动说看懂了案例（零 run 成本）；P2 run 路径——两视频 +
+async def s10_remix_flagship(ctx: Ctx) -> None:
+    """S10 Remix 旗舰（需 dev worker + demo 桶 fixture + MiniMax 配额）：
+    P1 warm 路径——@mention 指认参考片（免问路，pin 由代码结算）→ pin 落定
+    即拆解，agent 主动说看懂了案例（零 run 成本）；P2 run 路径——两视频 +
     一句「做成案例那样子」→ mention pin → plan → start → decompile 新鲜物化
-    （参考片 seeded 为 FAILED 处理态 = warm 永不点火的现实形态，如参考片自身
-    ASR 失败——run 路径不看处理态只读字节，T4 的火因此必走 run 座位）→ 触发
-    回合说话 → 产物参数 = 骨架（条数/画幅/字幕色三断）→ 画布无 decompile 孤儿
-    节点。角色提问机器一路（router 主动问 asset_role）是 LLM 裁量，不做 e2e
-    锁定（登记 INTENT_COVERAGE §6 ⚠️ 行；其代码侧——选项构造 / 答复落 pin /
-    默认路径——由纯测试锁定）。复用不重复发声由结构锁住（reuse 早退在火前
-    60 行）+ (conversation, trigger, ref) 去重（test_trigger_turn_pure），本
-    剧本末尾断言消息恰一条。
-    gatherer 已收窄（2026-09-21 修复批，拍板 = plan-scoped）：pinned exemplar
-    非源时排除出 Start 门控资产集（decompile 读字节不读处理态）——P2 的
-    Start 在 B6 门下绿即此收窄的常驻验收位（原红座：失败的 REFERENCE 资产
-    被项目级 any() 计入 material_failed）。P1 已知轮盘（2026-09-21 B8 取证）：
-    mention 回合若路由直接 dock 默认计划（裁量内形态），ADR-080 第二谓词使
-    warm review 准入即静默、且静默不复燃——wait_trigger_review 240s 超时
-    即「flake」；无计划 dock 的回合则正常发言（复跑即绿的机理，非时序抖动）。"""
-    fixture_prefix = f"scenario/s16-{uuid.uuid4().hex[:8]}"
+    （参考片 seeded 为 FAILED 处理态 = warm 永不点火的现实形态——run 路径
+    不看处理态只读字节）→ 触发回合说话 → 产物参数 = 骨架（条数/画幅/字幕
+    色三断）→ 画布无 decompile 孤儿节点。角色提问机器一路（router 主动问
+    asset_role）是 LLM 裁量，不做 e2e 锁定。复用不重复发声由结构锁住
+    （reuse 早退在火前）+ (conversation, trigger, ref) 去重，本剧本末尾
+    断言消息恰一条。P1 已知轮盘：mention 回合若路由直接 dock 默认计划
+    （裁量内形态），warm review 准入即静默、且静默不复燃——
+    wait_trigger_review 240s 超时即「flake」；无计划 dock 的回合则正常
+    发言（复跑即绿的机理，非时序抖动）。"""
+    fixture_prefix = f"scenario/s10-{uuid.uuid4().hex[:8]}"
     src_key = await copy_fixture(REMIX_SOURCE_KEY, fixture_prefix)
     ex_key = await copy_fixture(REMIX_EXEMPLAR_KEY, fixture_prefix)
     # ---- P1: warm 路径 —— pin 落定即拆解、主动说话（无 run） ------------------
-    # 消歧走 @mention 指认（拍 0a 第二路「免问」）：角色 pin 由代码结算（判词
-    # ④），不依赖 LLM 是否选择提问——提问机器一路的 dock 决策是 LLM 裁量
-    # （两次实测路由在旗舰句上直接出默认 plan，miss 率归 prompt 探针测量，
-    # 登记 INTENT_COVERAGE §6 ⚠️ 行），e2e 只锁确定性路径。
-    pid1 = await ctx.new_project("S16-P1 warm path")
+    # 消歧走 @mention 指认：角色 pin 由代码结算，不依赖 LLM 是否选择提问——
+    # 提问机器一路的 dock 决策是 LLM 裁量，e2e 只锁确定性路径。
+    pid1 = await ctx.new_project("S10-P1 warm path")
     src1 = await seed_asset(
-        pid1, ctx.user_id, AssetType.VIDEO, "s16-p1-source.mp4", processed=True
+        pid1, ctx.user_id, AssetType.VIDEO, "s10-p1-source.mp4", processed=True
     )
     ex1 = await seed_asset(
         pid1,
@@ -3402,9 +3436,9 @@ async def s16_remix_flagship_journey(ctx: Ctx) -> None:
     conv1 = turn1["conversation_id"]
     brief1 = (await ctx.results(pid1)).get("pending_brief") or {}
     # The pin persists on the first PendingPlan WRITE — a bare-answer turn
-    # (the router freeform-asks instead of calling a tool) writes nothing
-    # and the pin evaporates with it. Re-mention on each continuation until
-    # a write lands (bounded — three prose-only turns = stuck, fail loud).
+    # writes nothing and the pin evaporates with it. Re-mention on each
+    # continuation until a write lands (bounded — three prose-only turns =
+    # stuck, fail loud).
     for _ in range(3):
         if brief1.get("exemplar_asset_id") == ex1:
             break
@@ -3415,49 +3449,41 @@ async def s16_remix_flagship_journey(ctx: Ctx) -> None:
         )
         brief1 = (await ctx.results(pid1)).get("pending_brief") or {}
     check(brief1.get("exemplar_asset_id") == ex1,
-          "the @mention pins the exemplar by code (拍 0a 免问路 — 判词④)",
+          "the @mention pins the exemplar by code (免问路)",
           {"brief": brief1,
            "last_content": (turn1["assistant_message"].get("content") or "")[:200]})
     # pin 落定（随 PendingPlan 写入）→ warm 拆解（fire-and-forget）→ 触发回合
-    # 主动说话（拍 1）。
+    # 主动说话。
     review1 = await wait_trigger_review(ctx, conv1, ex1, timeout=240.0)
     check(review1 is not None,
-          "the warm path's decompile speaks (拍 1 — 「我看了你的案例」)", ex1)
+          "the warm path's decompile speaks (「我看了你的案例」)", ex1)
     rintent1 = (review1 or {}).get("intent") or {}
     check(rintent1.get("trigger") == "craft_decompiled" and rintent1.get("ref") == ex1,
           "the warm review dump names trigger + exemplar ref", rintent1)
     check(bool(((review1 or {}).get("content") or "").strip()),
           "the agent's case understanding is spoken, not silent", review1)
 
-    # ---- P2: run 路径 —— 新鲜物化必发声（T4）+ exemplar 参数 + 画布孤儿修复 ----
-    pid2 = await ctx.new_project("S16-P2 run path")
+    # ---- P2: run 路径 —— 新鲜物化必发声 + exemplar 参数 + 画布孤儿修复 ----
+    pid2 = await ctx.new_project("S10-P2 run path")
     src2 = await seed_asset(
         pid2, ctx.user_id, AssetType.VIDEO, "demo_talk.mp4",
         file_url=src_key,  # PENDING — the worker really ASRs it
+        request_processing=True,  # ADR-102 休眠律：fixture 自证盖章
     )
     ex2 = await seed_asset(
         pid2, ctx.user_id, AssetType.VIDEO, "highlight-clips-preview.mp4",
         file_url=ex_key,
         status=AssetStatus.FAILED,  # warm 永不点火的现实形态（如参考片自身
-        # ASR 失败）——run 路径不看处理态只读字节，T4 的火因此必走 run 座位。
-        # 已知代价（在册，勿再「修」）：B6 Start 门的 material gatherer 是
-        # 项目级 any()，失败的 REFERENCE 资产也阻塞 Start（material_failed）
-        # ——plan-scoped 收窄 = 产品侧裁决挂账，verification-contracts §4。
-        # 2026-09-21 B8 曾改 processed=True 绕门，结果 warm 在 pin 落定即点火、
-        # 触发回合在计划 dock 同秒落 dock 抢占确认座（另一在册悬案），且
-        # run 的 decompile 走 reuse 早退使 T4 永不发声——语义破坏更大，回退。
+        # ASR 失败）——run 路径不看处理态只读字节，拆解的火因此必走 run 座位。
+        # 已知代价（在册，勿再「修」）：Start 门的 material gatherer 是项目级
+        # any()，失败的 REFERENCE 资产也阻塞 Start（material_failed）。
     )
     src_status = await wait_asset_status(
         src2, {AssetStatus.COMPLETED, AssetStatus.FAILED}
     )
     check(src_status == AssetStatus.COMPLETED,
           "the real source asset is ASR-processed by the dev worker", src_status)
-    # remix = 全模态真链（decompile + clips + render pending），赠额外补足避免
-    # 422 噪音（S13/S14 的余额断言都按当前值动态读，互不影响）。
-    async with AsyncSessionLocal() as db:
-        wallet = await get_or_create_wallet(db, ctx.user_id)
-        wallet.balance = int(wallet.balance) + 200000
-        await db.commit()
+    await topup_wallet(ctx.user_id)  # remix = 全模态真链，补足避免 422 噪音
 
     turn2 = await ctx.chat(
         pid2,
@@ -3510,7 +3536,7 @@ async def s16_remix_flagship_journey(ctx: Ctx) -> None:
           "the remix plan carries the clips chain (旗舰旅程的合法链)", tasks)
     draft_graph = await ctx.graph(pid2)
     check(no_decompile_canvas_node(draft_graph),
-          "the draft graph carries NO decompile orphan node (T3)", draft_graph["nodes"])
+          "the draft graph carries NO decompile orphan node", draft_graph["nodes"])
 
     turn3 = await ctx.chat(pid2, "looks good, start")
     check(terminal_tool_of(turn3) == "start_run",
@@ -3519,7 +3545,7 @@ async def s16_remix_flagship_journey(ctx: Ctx) -> None:
     check(run_id is not None, "the remix run is born", turn3)
     run_ctx = (await run_row(run_id))["context"]
     check(run_ctx.get("exemplar_asset_id") == ex2,
-          "the exemplar pin rides run.context into the run (判词④) — source stays "
+          "the exemplar pin rides run.context into the run — source stays "
           "None on the mention path (两视频项目素材由 exemplar 排除法确定性解析)",
           run_ctx)
 
@@ -3542,11 +3568,11 @@ async def s16_remix_flagship_journey(ctx: Ctx) -> None:
           skeletons[0].source_ref)
     skel = skeletons[0].payload
 
-    # T4: run 路径拆解 → 触发回合说话（与 warm 同权）；恰一条（复用不重复发声
-    # 的结构锁 + 去重在本项目内同 ref 恒一条）。
+    # run 路径拆解 → 触发回合说话（与 warm 同权）；恰一条（复用不重复发声的
+    # 结构锁 + 去重在本项目内同 ref 恒一条）。
     review2 = await wait_trigger_review(ctx, conv2, ex2, timeout=240.0)
     check(review2 is not None,
-          "the RUN path's fresh decompile speaks (T4 — 与 warm 同权)", ex2)
+          "the RUN path's fresh decompile speaks (与 warm 同权)", ex2)
     rintent2 = (review2 or {}).get("intent") or {}
     check(rintent2.get("trigger") == "craft_decompiled",
           "the run-path review dump names the craft trigger", rintent2)
@@ -3559,12 +3585,9 @@ async def s16_remix_flagship_journey(ctx: Ctx) -> None:
           "exactly one craft speech per (conversation, exemplar) — no double-speak",
           len(craft_msgs))
 
-    # 产物落库 + exemplar 参数断言（自洽读骨架行，ADR-078 判词⑤ code-mapped）：
-    # 画幅 / 字幕色 = 代码映射（确定性，严等）；条数帽 = 优先级律 explicit >
-    # exemplar > default（clips/node.py: slot.count 合法胜过骨架 shot_count——
-    # 2026-09-24 live 验收 S16 红：骨架 2 shots 但计划点名 3 条，3 条在显式帽
-    # 内合法，旧断言把骨架帽当成了无条件硬帽）。实现条数是 agent 的内容判断
-    # （119s 原片挑 1 条高光合法），断言只锁「不超具约束力的帽 + 至少一条」。
+    # 产物落库 + exemplar 参数断言（自洽读骨架行）：画幅 / 字幕色 = 代码映射
+    # （确定性，严等）；条数帽 = 优先级律 explicit > exemplar > default，实现
+    # 条数是 agent 的内容判断，断言只锁「不超具约束力的帽 + 至少一条」。
     clips_step = await wait_step_terminal(run_id, "select_clips", timeout=600.0)
     check(clips_step["status"] == "done",
           "the clips step completes on the real source", clips_step)
@@ -3593,10 +3616,10 @@ async def s16_remix_flagship_journey(ctx: Ctx) -> None:
               "every clip's caption color = the skeleton's palette-snapped color",
               [(s.get("brand") or {}).get("caption_color") for s in specs])
 
-    # T3 终态：run 图无 decompile 孤儿节点；decompile 步骤骑 task book 内部族。
+    # 终态：run 图无 decompile 孤儿节点；decompile 步骤骑 task book 内部族。
     filled_graph = await ctx.graph(pid2)
     check(no_decompile_canvas_node(filled_graph),
-          "the run-filled graph carries NO decompile orphan node (T3)",
+          "the run-filled graph carries NO decompile orphan node",
           filled_graph["nodes"])
     book_steps = await task_book_step_ids(pid2)
     check(dec_step["id"] in book_steps,
@@ -3604,2474 +3627,17 @@ async def s16_remix_flagship_journey(ctx: Ctx) -> None:
           (dec_step["id"], book_steps))
 
 
-async def s17_run_authority_park_and_handoff(ctx: Ctx) -> None:
-    """核⑰ run 执行权仲裁（R1 B3，J6 多轮一致性；I-EXEC-03/04）：
-    a) 答旧问——B 活跃时 A 被答 → 仲裁 blocked → 明示回执（再挂+明示）+
-       A 保持 parked（节点/运行零状态污染）+ 全程单 owner；B 收官 → 交接钩
-       续跑 A → A 完成、B 行零损失。
-    b) 过期路——expire 结算默认答案但 authority 被占 → answered-but-parked，
-       不再制造双 RUNNING；sweep 重试分支不重复结算/计数；B 收官 → A 续跑
-       完成。"""
-
-    # a) 回答路径：blocked → 明示 → B 收官 → 交接钩续跑。
-    pid = await ctx.new_project("S17a answer blocked then handoff")
-    ck = await seed_parked_interrupt(pid, ctx.user_id)
-    b_run = await seed_active_run(pid)
-    res = await ctx.answer(ck["question_id"], {"kind": "option", "option_id": "a"})
-    check(res.status_code == 200, "the answer lands", res.text)
-    follow = res.json().get("follow_up")
-    check(
-        follow is not None and "current generation" in (follow.get("content") or ""),
-        "the blocked arbitration speaks the honest parked line (再挂+明示)",
-        follow,
-    )
-    answered = res.json()["answered_question"]
-    check(
-        (answered.get("answer") or {}).get("text") == "Focus: Pricing",
-        "the answer is settled on the message row even while parked",
-        answered.get("answer"),
-    )
-    a_run = await run_row(ck["run_id"])
-    check(a_run["status"] == "waiting_human", "A stays WAITING_HUMAN (再挂)", a_run)
-    a_node = (await step_rows(ck["run_id"]))[0]
-    check(
-        a_node["status"] == "waiting" and "answer" not in a_node["spec"],
-        "the blocked park writes ZERO node state (no spec.answer)",
-        a_node,
-    )
-    check(
-        await count_active_runs(pid) == 1,
-        "I-EXEC-03: answering the old question never births a second owner",
-    )
-    await settle_seeded_run(b_run)
-    b_after = await run_row(b_run)
-    check(b_after["status"] == "completed", "B settles completed, rows untouched", b_after)
-    await wait_run_status(ck["run_id"], {"completed"})
-    check(
-        await count_active_runs(pid) == 0,
-        "the handoff resumed A only after B settled — authority serialized",
-    )
-    await ctx.cleanup()
-
-    # b) 过期路径：expire = 结算 + 尝试重获执行权；被占 = answered-but-parked。
-    pid = await ctx.new_project("S17b expire blocked then handoff")
-    ck = await seed_parked_interrupt(pid, ctx.user_id)
-    b_run = await seed_active_run(pid)
-    expired = await expire_stale_interrupts(timedelta(0))
-    check(expired == 1, "the sweep settles the default answer", expired)
-    msg = await message_row(ck["question_id"])
-    check(
-        (msg["answer"] or {}).get("text") == "expired",
-        "the default answer settled with the machine marker",
-        msg["answer"],
-    )
-    a_node = (await step_rows(ck["run_id"]))[0]
-    check(
-        a_node["status"] == "waiting" and "answer" not in a_node["spec"],
-        "expire under a held authority parks answered-but-blocked",
-        a_node,
-    )
-    check(
-        await count_active_runs(pid) == 1,
-        "I-EXEC-03: expire never manufactures a double RUNNING",
-    )
-    again = await expire_stale_interrupts(timedelta(0))
-    check(again == 0, "the settled park is never re-expired (retry branch)", again)
-    check(
-        await count_active_runs(pid) == 1,
-        "the sweep retry keeps the single owner",
-    )
-    await settle_seeded_run(b_run)
-    await wait_run_status(ck["run_id"], {"completed"})
-    await ctx.cleanup()
-
-
-async def s18_idless_asset_read_terminalizes(ctx: Ctx) -> None:
-    """交互完整性批 (2026-09-17) 事故场景回归：单视频 pre-ASR（PENDING、
-    meta 无 language）+ 原事故文案 —— 模型想「先看源语言」时 get_asset 的
-    无 id 调用必须成功（工具自证 provenance：prompt 面从不列 asset id，
-    必填 id 曾逼模型编造 → schema 拒绝 → 静默 repair 窗）。回合必须收敛
-    到计划 dock / 提问 / answer 终态（ADR-102 形态：read 在回合内等终态——
-    素材落地即同回合 grounded 作答，读不出则一句诚实宣告；等待无上限，
-    worker 缺席时悬挂是 ADR-102 在册承重观察），永不落入 exhausted 的
-    cannot-do 降级。锁终态形态，不锁
-    LLM 言语（禁令 #7）；降级行是代码组成常量，逐字比对，非 NLP 判
-    LLM 散文。"""
-    pid = await ctx.new_project("S18 idless asset read")
-    await seed_asset(
-        pid,
-        ctx.user_id,
-        AssetType.VIDEO,
-        "talk.mp4",
-        extracted_text="So a company from Oxford University introduced "
-        "some of his new initiative.",
-        # PENDING + no meta.language — the incident's pre-ASR window: the
-        # plan surface shows the filename with no detected language.
-    )
-    message = (
-        "Caption my video in Chinese and French — Chinese as bilingual "
-        "subtitles."
-    )
-    turn1 = await ctx.chat(pid, message)
-    terminal = terminal_tool_of(turn1)
-    content = ((turn1.get("assistant_message") or {}).get("content") or "").strip()
-    check(
-        terminal in ("present_plan", "ask_user")
-        or (terminal == "answer" and content != _cannot_do_text(message)),
-        "the pre-ASR caption turn terminalizes as a plan dock, an honest "
-        "question, or an answer (grounded after the in-turn wait, or the "
-        "failed read's honest clause) — never the exhaustion degrade",
-        terminal,
-    )
-    check(
-        has_prose(turn1["assistant_message"]),
-        "the terminal message carries the settled speech",
-        turn1["assistant_message"],
-    )
-    if terminal == "present_plan":
-        plan = await pending_plan(ctx, pid)
-        check(
-            len(plan_tasks(plan)) >= 1,
-            "the docked chain has at least one task",
-            plan,
-        )
-
-
-async def s_wait1_in_turn_wait_grounds_answer(ctx: Ctx) -> None:
-    """ADR-102 回合内等待（无时间上限，逻辑阻塞）：PROCESSING 素材上的内容
-    依赖提问——read 在回合内等终态，素材在等待中落地（fixture 翻转 + seed，
-    worker-immune），同一回合 grounded 作答。机械锁两枚（零 NLP）：① 答复
-    落到素材内容词（grounded 的确定性代理——读到才说得出）；② 全会话零
-    consumed_understanding 戳（ADR-101 承诺机器永久退役的负形锁）。模型
-    不调 read（违法条）= 锁①红——prompt 法回归信号，不是 harness 抖动。"""
-    pid = await ctx.new_project("S-wait-1 in-turn wait grounds the answer")
-    await seed_asset(
-        pid, ctx.user_id, AssetType.VIDEO, "talk.mp4",
-        status=AssetStatus.PROCESSING,  # worker-immune (claim takes PENDING only)
-    )
-    chat_task = asyncio.create_task(
-        ctx.chat(pid, "这个视频讲了什么？看完给我建议。")
-    )
-    # Let the turn reach the read's in-turn wait (a poll cycle is 2.5s), then
-    # the world lands the understanding mid-wait.
-    await asyncio.sleep(6)
-    await flip_asset_ready(
-        pid,
-        text=(
-            "Cities are getting hotter every year. In this talk I show how "
-            "shade trees and reflective roofs can cool whole neighborhoods "
-            "by several degrees."
-        ),
-    )
-    await seed_understanding(pid)
-    turn1 = await chat_task
-    msg = turn1.get("assistant_message") or {}
-    check(
-        msg and has_prose(msg),
-        "S-wait-1 the waited turn answers with settled speech",
-        msg,
-    )
-    content = (msg.get("content") or "").lower()
-    check(
-        any(word in content for word in ("tree", "roof", "roofs", "shade", "cool", "neighborhood")),
-        "S-wait-1 the answer lands on the material's own words (grounded — "
-        "the in-turn wait read the landed understanding this very turn)",
-        content[:200],
-    )
-    conv_id = turn1.get("conversation_id")
-    check(conv_id is not None, "S-wait-1 the envelope carries conversation_id")
-    rows = await ctx.messages(str(conv_id))
-    check(
-        not any("consumed_understanding" in (m.get("intent") or {}) for m in rows),
-        "S-wait-1 zero consumed marks anywhere (ADR-101's commitment "
-        "machine is permanently retired — the negative lock)",
-        [m.get("intent") for m in rows],
-    )
-
-
-async def s_wait2_failed_read_honest_clause(ctx: Ctx) -> None:
-    """ADR-102 失败终态（等待的另一出口）：FAILED 素材上的内容依赖提问——
-    read 即刻拿到失败事实（ok=False），同一回合诚实宣告「读不出来」并给
-    重传出路（prompt 法；措辞归 prompt_gate/reply_quality_probe，本座只锁
-    机械面）。机械锁两枚：① 回合收敛且答复带成文言语（不悬挂、不静默）；
-    ② 零 consumed_understanding 戳。失败素材永不落地内容，答复无从
-    grounded——若出现内容词幻觉，归 reply_quality_probe 语义面。"""
-    pid = await ctx.new_project("S-wait-2 failed read honest clause")
-    await seed_asset(
-        pid, ctx.user_id, AssetType.VIDEO, "talk.mp4",
-        status=AssetStatus.FAILED,  # S16's FAILED exemplar precedent
-    )
-    turn1 = await ctx.chat(pid, "这个视频讲了什么？看完给我建议。")
-    msg = turn1.get("assistant_message") or {}
-    check(
-        msg and has_prose(msg),
-        "S-wait-2 the failed read still closes the turn with settled speech",
-        msg,
-    )
-    conv_id = turn1.get("conversation_id")
-    check(conv_id is not None, "S-wait-2 the envelope carries conversation_id")
-    rows = await ctx.messages(str(conv_id))
-    check(
-        not any("consumed_understanding" in (m.get("intent") or {}) for m in rows),
-        "S-wait-2 zero consumed marks (nothing landed, nothing consumed — "
-        "and the machine itself is gone)",
-        [m.get("intent") for m in rows],
-    )
-
-
-async def s19_turn_durability_and_trigger_admission(ctx: Ctx) -> None:
-    """交互完整性批 A+B (2026-09-17) 回归：用户消息从回合第一拍即可持久
-    （turn_state: in_flight → settled 随回合提交盖章），trigger 准入门永不
-    超越在途用户回合 —— 回合进行中 in-process 直接点火 run_trigger_turn。
-    2026-09-16 事故原样：commit-once 回合死亡吞掉用户消息 + 主动回合撞进
-    在途回合盲说。ADR-102 改靶：素材评审 trigger 已死，准入/落序机器与
-    事件内容无关，现骑存活事件 craft_decompiled（零 fixture 依赖——ref
-    只是去重键，事件行不查库）；发言内容由模型按诚信法自处（无 pin 案例
-    时它读项目实况说话），本座只锁准入与落序。
-    Phase 4 B8 改写（B3 后语义）：caption 回合收敛即 dock 计划——pending
-    plan 在位时 review 按 ADR-080 第二谓词静默（在途 defer → 收敛静默 =
-    「永不中途开口」的证明形态）；Start 清 pending 后同一世界事件补发言,
-    发言落序锁不变（review 必落在用户回合答复之后）。Start 形随 R10
-    生效归位（2026-09-21 修复批——散文降装饰,空 echo dock 可确认）。"""
-    from app.chat.trigger_turn import TRIGGER_CRAFT_DECOMPILED, run_trigger_turn
-
-    pid = await ctx.new_project("S19 turn durability + admission")
-    await seed_asset(
-        pid,
-        ctx.user_id,
-        AssetType.VIDEO,
-        "talk.mp4",
-        extracted_text="So a company from Oxford University.",
-        processed=True,
-        meta={"language": "en"},
-    )
-    chat_task = asyncio.create_task(
-        ctx.chat(
-            pid,
-            "Caption my video in Chinese and French — Chinese as bilingual "
-            "subtitles.",
-        )
-    )
-    # A) 用户行随回合第一拍持久，且持有 in-flight 标记（轮询等它出现——
-    #    prepare 的前置提交在 LLM 调用之前，几秒内必现）。
-    user_row: dict | None = None
-    for _ in range(30):
-        async with AsyncSessionLocal() as db:
-            row = (
-                await db.execute(
-                    select(Message)
-                    .join(Conversation, Message.conversation_id == Conversation.id)
-                    .where(
-                        Conversation.project_id == uuid.UUID(pid),
-                        Message.role == "user",
-                    )
-                    .order_by(Message.created_at.desc())
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
-            if row is not None:
-                user_row = {
-                    "id": str(row.id),
-                    "turn_state": row.turn_state,
-                    "content": row.content,
-                }
-                break
-        await asyncio.sleep(1)
-    check(user_row is not None, "the user row is durable from the first beat")
-    check(
-        user_row["turn_state"] == "in_flight",
-        "the durable row owns the in-flight marker while the turn runs",
-        user_row,
-    )
-    check(
-        "Caption my video" in (user_row["content"] or ""),
-        "the durable row carries the user's actual words",
-        user_row,
-    )
-    # B) 在途点火：准入门必须 defer（纯决策由 test_trigger_turn_pure 锁；
-    #    这里锁端到端秩序——review 落在用户回合收敛之后）。
-    trigger_task = asyncio.create_task(
-        run_trigger_turn(uuid.UUID(pid), TRIGGER_CRAFT_DECOMPILED, "s19-craft")
-    )
-    turn1 = await chat_task
-    check(
-        terminal_tool_of(turn1) in ("present_plan", "ask_user"),
-        "the user turn converges normally under the racing trigger",
-        terminal_tool_of(turn1),
-    )
-    async with AsyncSessionLocal() as db:
-        settled = await db.get(Message, uuid.UUID(user_row["id"]))
-        check(
-            settled is not None and settled.turn_state == "settled",
-            "the turn's commit stamps the user row settled",
-            settled.turn_state if settled is not None else None,
-        )
-    review = await trigger_task
-    if is_plan_dock(turn1["assistant_message"]):
-        # ADR-080 单一叙事者律第二谓词的端到端座（Phase 4 B8 改写——B3 后
-        # caption 回合收敛即 dock 计划，pending plan 恒在）：计划自己的
-        # echo 散文已经叙述「我看到了什么 / 我要做什么」，主动 review 此刻
-        # 开口 = 抢麦克风——silence, not defer（pending plan 可能挂几小时,
-        # 而世界事件已诚实落在画布上）。在途 defer 链 → 收敛后静默,正是
-        # 「永不超越用户回合」的证明形态。
-        check(review is None,
-              "ADR-080 第二谓词：pending plan 在位,review 静默（计划的 echo "
-              "持有麦克风——在途 defer → 收敛静默,永不中途开口）", review)
-        # Start 清掉 pending plan 后重新点火——世界事件此时才允许说话。
-        # （2026-09-21 R10 生效后 Start 形归位：散文降叙事装饰，空 echo
-        # dock 同样可确认——本拍同时是 R10 的端到端验收座：若本回合的
-        # present_plan 走了空 content 通道,旧 P8 合取会静默 422,现在必过。）
-        res = await ctx.answer(turn1["assistant_message"]["id"], {"kind": "start"})
-        check(res.status_code == 200, "dock Start answers the plan", res.text)
-        review = await run_trigger_turn(uuid.UUID(pid), TRIGGER_CRAFT_DECOMPILED,
-                                        "s19-craft-after-start")
-        check(review is not None,
-              "pending plan 清完(Start)后,同一世界事件补发言")
-    else:
-        check(review is not None, "the deferred review eventually speaks")
-    async with AsyncSessionLocal() as db:
-        rows = list(
-            (
-                await db.execute(
-                    select(Message)
-                    .join(Conversation, Message.conversation_id == Conversation.id)
-                    .where(Conversation.project_id == uuid.UUID(pid))
-                    .order_by(Message.created_at.asc())
-                )
-            )
-            .scalars()
-            .all()
-        )
-    review_row = next(r for r in rows if str(r.id) == str(review.id))
-    assistants_before = [
-        r for r in rows if r.role == "assistant" and r.created_at < review_row.created_at
-    ]
-    check(
-        len(assistants_before) >= 1,
-        "the review lands AFTER the user turn's reply — never mid-turn "
-        "(the 2026-09-16 blind-speech race)",
-        [(r.role, r.created_at.isoformat()) for r in rows],
-    )
-
-
-async def s20_speech_semantic_contract(ctx: Ctx) -> None:
-    """ADR-084 言语语义管线回归（2026-09-17 拍板）：Chat 不是 Agent 的操作日志。
-    A 部（素材不可读）：FAILED 无文本视频 → read 静默（过程话零流式、零
-    持久化）+ 诚实读不出披露（ADR-102：等待无上限，不可读是唯一诚实终态）
-    + 不虚构素材判断；B 部（理解就绪）：COMPLETED 视频 + 内容寻址理解行直种
-    → echo 落到素材内容词（grounded judgment 的确定性代理断言）+ ≥2 task
-    计划不邀请言语确认（Start 归 dock）+ 流式律 + ADR-085 checkpoint 形态
-    断言（opportunistic：earned 缺席合法，出现则锁 ≤2 / 非空 / 终答不复读 /
-    intent.type=checkpoint 落库分家）。锁禁令形状（负向标记）与行为面，
-    不锁措辞（禁令 #7）。"""
-    message = (
-        "Caption my video in Chinese and French — Chinese as bilingual "
-        "subtitles."
-    )
-
-    # ---- Part A: material unreadable (FAILED, no text anywhere) ----------
-    # Fixture declaration (B-4): the state under test is "unreadable" — so
-    # the row is declared FAILED. ADR-102 注: the in-turn wait has NO time
-    # cap — a never-settling PROCESSING fixture would hang the turn forever,
-    # so the honest not-ready terminal is the FAILED read: get_understanding
-    # returns the failure facts at once (ok=False), and the honest
-    # "couldn't read it" clause joins the legal terminals. Zero consumed
-    # marks anywhere (the commitment machine is permanently retired).
-    pid = await ctx.new_project("S20A speech contract (material unreadable)")
-    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "talk.mp4",
-                     status=AssetStatus.FAILED)
-    stream = await ctx.chat_stream(pid, message)
-    check(stream.failed is None, "S20A the turn did not fail", stream.failed)
-    completed = stream.completed or {}
-    turn1 = {
-        "assistant_message": completed.get("assistant_message") or {},
-        "run_id": completed.get("run_id"),
-        "answered_question": completed.get("answered_question"),
-    }
-    terminal = terminal_tool_of(turn1)
-    check(
-        terminal in ("present_plan", "ask_user", "answer"),
-        "S20A terminalizes as a plan dock, an honest question, or the "
-        "failed-read's honest clause — never the exhaustion degrade",
-        terminal,
-    )
-    if terminal == "answer":
-        clause_intent = (turn1["assistant_message"] or {}).get("intent") or {}
-        check(
-            "consumed_understanding" not in clause_intent,
-            "S20A the failed-read clause carries NO consumed mark (nothing "
-            "landed — and the machine itself is gone)",
-            clause_intent,
-        )
-    # Lifecycle stamp: when the plan docks over unreadable material, the stamp
-    # — never the dock's existence — names the lifecycle truth: material not
-    # ready, plan not ready, confirmation not ready, and with the fixture's
-    # FAILED declaration the blocker is exactly material_failed.
-    if terminal == "present_plan":
-        stamp = (await ctx.results(pid))["lifecycle"]
-        check(stamp["material_ready"] is False
-              and stamp["plan_ready"] is False
-              and stamp["confirmation_ready"] is False
-              and "material_failed" in stamp["blockers"],
-              "S20A the stamp names the unreadable material on a docked plan",
-              stamp)
-    content = turn1["assistant_message"].get("content") or ""
-    check(
-        has_prose(turn1["assistant_message"]),
-        "S20A the terminal message carries the settled speech",
-        turn1["assistant_message"],
-    )
-    check(
-        not PROCESS_NARRATION.search(content),
-        "S20A no process narration persists into the settled message",
-        content[:200],
-    )
-    check_activity_shape(stream, "S20A")
-    if terminal == "present_plan":
-        check(
-            PROCESSING_DISCLOSURE.search(content) is not None,
-            "S20A the echo discloses the material is still processing "
-            "(the request is understood ≠ the material is read)",
-            content[:200],
-        )
-
-    # ---- Part B: understanding ready (injected at assemble, ADR-083) -------
-    pid = await ctx.new_project("S20B speech contract (understanding ready)")
-    await seed_asset(
-        pid,
-        ctx.user_id,
-        AssetType.VIDEO,
-        "keynote.mp4",
-        extracted_text=(
-            "Cities are getting hotter every year. In this talk I show how "
-            "shade trees and reflective roofs can cool whole neighborhoods "
-            "by several degrees — the cheapest climate adaptation we have."
-        ),
-        processed=True,
-        meta={"language": "en"},
-    )
-    await seed_understanding(pid)
-    stream = await ctx.chat_stream(pid, message)
-    check(stream.failed is None, "S20B the turn did not fail", stream.failed)
-    completed = stream.completed or {}
-    turn1 = {
-        "assistant_message": completed.get("assistant_message") or {},
-        "run_id": completed.get("run_id"),
-        "answered_question": completed.get("answered_question"),
-    }
-    # Stream laws compare against THIS turn's own speech.
-    turn_content = turn1["assistant_message"].get("content") or ""
-    check_activity_shape(stream, "S20B")
-    check_stream_law(stream, turn_content, "S20B")
-    terminal = terminal_tool_of(turn1)
-    check(
-        terminal == "present_plan",
-        "S20B a ready-material caption request docks the plan",
-        terminal,
-    )
-    # ADR-102: the assemble still injects the ready understanding's digest
-    # lines as the plan path's content source, but the commitment machine is
-    # permanently retired — zero consumed marks anywhere (negative lock).
-    conv_id_b = completed.get("conversation_id")
-    check(conv_id_b is not None, "S20B the envelope carries conversation_id")
-    rows_b = await ctx.messages(str(conv_id_b))
-    check(
-        not any("consumed_understanding" in (m.get("intent") or {}) for m in rows_b),
-        "S20B zero consumed marks anywhere (ADR-101's commitment machine "
-        "is permanently retired — the negative lock)",
-        [m.get("intent") for m in rows_b],
-    )
-    content = turn1["assistant_message"].get("content") or ""
-    check(
-        not PROCESS_NARRATION.search(content),
-        "S20B no process narration persists into the settled message",
-        content[:200],
-    )
-    # ADR-085 checkpoint channel: the shape laws ride the shared helper;
-    # S20B additionally reconciles persistence (one delivery = one
-    # intent.type=checkpoint row, separate from the settled message).
-    check_checkpoint_shape(stream, content, "S20B")
-    if stream.checkpoints:
-        conv_id = completed.get("conversation_id")
-        check(conv_id is not None, "S20B the envelope carries conversation_id")
-        rows = await ctx.messages(str(conv_id))
-        cp_rows = [
-            m for m in rows if (m.get("intent") or {}).get("type") == "checkpoint"
-        ]
-        check(
-            len(cp_rows) == len(stream.checkpoints),
-            "S20B checkpoints persist as intent.type=checkpoint rows "
-            "(one delivery = one row, separate from the settled message)",
-            [len(cp_rows), len(stream.checkpoints)],
-        )
-    plan = await pending_plan(ctx, pid)
-    check(
-        len(plan_tasks(plan)) >= 2,
-        "S20B the zh+fr caption chain docks ≥2 tasks",
-        plan,
-    )
-    check(
-        not VERBAL_GO_INVITATION.search(content),
-        "S20B the echo never invites a verbal go-ahead — Start owns the dock",
-        content[:200],
-    )
-    # Grounded judgment's deterministic proxy (ADR-083 duty ①): with the
-    # understanding row injected at assemble, the echo references the
-    # material's actual content — any-of a distinctive content-vocabulary
-    # set (filename words like 'keynote' are IDENTITY evidence and never
-    # count), never a fixed sentence.
-    check(
-        any(
-            word in content.lower()
-            for word in (
-                "heat", "hot", "cool", "shade", "reflective", "roof",
-                "tree", "climate", "neighborhood", "urban",
-            )
-        ),
-        "S20B the echo carries a grounded material judgment (any content word)",
-        content[:200],
-    )
-    check(
-        PROCESSING_DISCLOSURE.search(content) is None,
-        "S20B a ready material never earns a processing disclosure",
-        content[:200],
-    )
-
-
-def _stream_reads(stream: "StreamTurn") -> list[str]:
-    """The turn's read sequence from the ACTIVITY channel (ADR-087 §3): the
-    read activities' active-frame copy keys in birth order (the tool NAME
-    never crosses the wire, the key is the face). The only channel after
-    Phase 3 Batch B — the inspecting-phase print fallback retired with the
-    emitter."""
-    return [
-        str(a["key"])
-        for a in stream.activities
-        if a["kind"] == "read" and a["status"] == "active" and a["key"]
-    ]
-
-
-async def s21_checkpoint_channel_observation(ctx: Ctx) -> None:
-    """ADR-085 评审四场景（2026-09-17）的可复跑探针（ADR-109 修订：座位
-    普适，资格白名单已退役）：checkpoint 是 earned 不是 scheduled，所以
-    本剧本**不锁出现与否**（禁令 #7），只锁硬律（check_checkpoint_shape：
-    ≤4 节奏护栏 / 非空 / 读后小结禁流程旁白 / 终答不复述）并 PRINT 各形态
-    的 read 序列 + checkpoint 计数——主路径命中率是观察值，不是假设
-    （`tool_loop_checkpoint` 日志是同源数据面）。
-
-    A 单读直出（理解行 assemble 注入后 `get_understanding → present_plan`
-    完全可以零 checkpoint，判断句住终答——ADR-083 duty ①）；B 诱导多读
-    （先问语言与内容再做字幕）；C 目录读（座位普适后目录读也可携带
-    checkpoint——纯观察，不锁零）；D（checkpoint + 回合失败的 live/DB/
-    刷新三面）归手测，不在本剧本。"""
-    caption_msg = (
-        "Caption my video in Chinese and French — Chinese as bilingual "
-        "subtitles."
-    )
-
-    async def run_shape(label: str, message: str) -> "StreamTurn":
-        pid = await ctx.new_project(f"S21{label} checkpoint observation")
-        await seed_asset(
-            pid,
-            ctx.user_id,
-            AssetType.VIDEO,
-            "keynote.mp4",
-            extracted_text=(
-                "Cities are getting hotter every year. In this talk I show "
-                "how shade trees and reflective roofs can cool whole "
-                "neighborhoods by several degrees."
-            ),
-            processed=True,
-            meta={"language": "en"},
-        )
-        await seed_understanding(pid)
-        stream = await ctx.chat_stream(pid, message)
-        check(stream.failed is None, f"S21{label} the turn did not fail", stream.failed)
-        completed = stream.completed or {}
-        content = (completed.get("assistant_message") or {}).get("content") or ""
-        check_checkpoint_shape(stream, content, f"S21{label}")
-        check_activity_shape(stream, f"S21{label}")
-        print(
-            f"    · S21{label} reads={_stream_reads(stream)} "
-            f"checkpoints={len(stream.checkpoints)}"
-        )
-        return stream
-
-    # A) 单读直出主路径——零 checkpoint 是合法形态（判断句住终答）。
-    await run_shape("A", caption_msg)
-    # B) 诱导多读（语言 + 内容两问在前）——命中与否都是观察值。
-    await run_shape(
-        "B",
-        "What language is my video in, and what is it about? Then caption it "
-        "in Chinese and French — Chinese as bilingual subtitles.",
-    )
-    # C) 目录读（ADR-109 座位普适——目录读也可携带 checkpoint，纯观察）。
-    await run_shape("C", "What caption styles can I choose from?")
-
-
-async def s25_transcript_array_order(ctx: Ctx) -> None:
-    """ADR-108/109 数组位置律回归座（2026-10-07 取证母本 = 项目
-    3e333147 的四事故）：多读回合的**持久化数组序 = 渲染序**。
-
-    锁定面（确定性，全部从 DB 数组 + wire 镜像断言，不锁 LLM 措辞）：
-    ① 每帧一行——回合的读活动各自是独立 intent.type='activity' 数组行，
-       frame 形态合法（终态 + 完成态换过去时键）；
-    ② 行序——user 行 < 每个 activity 行 < 终答行（seq 严格递增即数组序）；
-    ③ 开工句/相位句（checkpoint 行，intent.type='checkpoint'）若出现，
-       位于 user 行与终答行之间；waiter 句（首个读 settle 前到达的
-       checkpoint）对应的行必须在第一个 activity 行之前——顺序错乱类
-       事故（开工句排在读行之后）的结构性反证；
-    ④ wire 镜像一致——每个 row.update 有同 id 的在先 row.append；
-       append 的 seq 按到达序严格递增（append 定位置）；
-    ⑤ 回放恒等——端点返回序 == seq 序，且 DB 里每行的终态 == wire 最后
-       一次 update 的态（live 与刷新同源）；
-    ⑥ 诚实 transcript——若回合发生 schema 拒收，activity_forensics 行
-       存在且 content 为空（永不渲染面由前端过滤，此处只锁形态）。
-    checkpoint 出现与否仍是 earned 观察值（禁令 #7 同律），出现时才锁③。"""
-    pid = await ctx.new_project("S25 transcript array order")
-    await seed_asset(
-        pid,
-        ctx.user_id,
-        AssetType.VIDEO,
-        "keynote.mp4",
-        extracted_text=(
-            "Cities are getting hotter every year. In this talk I show how "
-            "shade trees and reflective roofs can cool whole neighborhoods "
-            "by several degrees. We measured fifty blocks over two summers. "
-            "The coolest blocks all had tree cover above forty percent."
-        ),
-        processed=True,
-        meta={"language": "en"},
-    )
-    await seed_understanding(pid)
-    message = "把讲城市降温的几段找出来，剪成竖屏短片"
-    stream = await ctx.chat_stream(pid, message)
-    check(stream.failed is None, "S25 the turn did not fail", stream.failed)
-    completed = stream.completed or {}
-    reply = (completed.get("assistant_message") or {})
-    reply_id = reply.get("id")
-    check(bool(reply_id), "S25 the envelope carries the reply row", completed)
-    check_checkpoint_shape(stream, reply.get("content") or "", "S25")
-    check_activity_shape(stream, "S25")
-
-    items = await ctx.messages(stream.completed["conversation_id"])
-    seqs = [m.get("seq") for m in items]
-    check(
-        all(isinstance(s, int) for s in seqs),
-        "S25: every row carries a seq (ADR-108 array order key)",
-        seqs,
-    )
-    check(
-        seqs == sorted(seqs) and len(set(seqs)) == len(seqs),
-        "S25: the endpoint's array order IS the strictly-increasing seq order (回放恒等)",
-        seqs,
-    )
-
-    def intent_type(m: dict) -> str:
-        return ((m.get("intent") or {}).get("type")) or ""
-
-    act_rows = [m for m in items if intent_type(m) == "activity"]
-    check(
-        len(act_rows) >= 1,
-        "S25: a multi-read turn persists ≥1 activity array row (每帧一行)",
-        [(intent_type(m)) for m in items],
-    )
-    for m in act_rows:
-        frame = (m.get("intent") or {}).get("frame") or {}
-        check(
-            isinstance(frame.get("activity_id"), str)
-            and frame.get("kind") in _ACTIVITY_KINDS
-            and frame.get("status") in _ACTIVITY_TERMINAL
-            and isinstance(frame.get("key"), str),
-            "S25: every persisted activity frame is terminal and well-formed",
-            frame,
-        )
-    user_idx = next(
-        i for i, m in enumerate(items) if m.get("role") == "user" and (m.get("content") or "").strip() == message
-    )
-    reply_idx = next(i for i, m in enumerate(items) if m.get("id") == reply_id)
-    act_idx = [items.index(m) for m in act_rows]
-    check(
-        min(act_idx) > user_idx and max(act_idx) < reply_idx,
-        "S25: user row < every activity row < the final reply row (行序)",
-        {"user": user_idx, "activities": act_idx, "reply": reply_idx},
-    )
-    # ③ checkpoint 行序（出现时）：全部在 user 与终答之间；waiter 句
-    # （wire 上先于首个读 settle 到达）对应的行必须在第一个 activity 行前。
-    cp_rows = [m for m in items if intent_type(m) == "checkpoint"]
-    if cp_rows:
-        cp_idx = [items.index(m) for m in cp_rows]
-        check(
-            all(user_idx < i < reply_idx for i in cp_idx),
-            "S25: checkpoint rows sit between the user row and the reply",
-            cp_idx,
-        )
-        if stream.checkpoints and stream.checkpoints_pre_read[0]:
-            first_cp_idx = min(cp_idx)
-            check(
-                first_cp_idx < min(act_idx),
-                "S25: the waiter checkpoint row precedes the first activity row (开工句顺序)",
-                {"first_checkpoint": first_cp_idx, "first_activity": min(act_idx)},
-            )
-    # ④ wire 镜像一致。
-    appends: dict[str, dict] = {}
-    for ev in stream.row_events:
-        if ev["op"] == "append":
-            row = ev.get("row") or {}
-            check(
-                row.get("id") not in appends,
-                "S25: a row appends exactly once (append 定位置)",
-                ev,
-            )
-            appends[row.get("id")] = row
-        else:
-            check(
-                ev.get("id") in appends,
-                "S25: every row.update has an earlier row.append with the same id",
-                ev,
-            )
-    append_seqs = [r.get("seq") for r in appends.values()]
-    check(
-        all(isinstance(s, int) for s in append_seqs)
-        and append_seqs == sorted(append_seqs),
-        "S25: row.append arrival order == seq order (数组序 = 到达序)",
-        append_seqs,
-    )
-    # ⑤ live 与回放同源：DB 里每个 append 过的行终态 == wire 最后 update。
-    last_update: dict[str, dict] = {}
-    for ev in stream.row_events:
-        if ev["op"] == "update":
-            last_update[ev["id"]] = ev.get("frame") or {}
-    db_by_id = {m.get("id"): m for m in items}
-    for rid, frame in last_update.items():
-        db_frame = ((db_by_id.get(rid) or {}).get("intent") or {}).get("frame") or {}
-        check(
-            db_frame.get("status") == frame.get("status"),
-            "S25: the persisted row's terminal status mirrors the wire's last update",
-            {"row": rid, "wire": frame.get("status"), "db": db_frame.get("status")},
-        )
-    # ⑥ 诚实 transcript 形态锁（拒收台账行若存在：永不渲染面 = 空 content）。
-    for m in items:
-        if intent_type(m) == "activity_forensics":
-            check(
-                not (m.get("content") or "").strip(),
-                "S25: a forensics row never carries renderable content",
-                m.get("id"),
-            )
-    print(
-        f"    · S25 rows={len(items)} activities={len(act_rows)} "
-        f"checkpoints={len(cp_rows)} wire_appends={len(appends)}"
-    )
-
-
-async def s22_trigger_landing_silence(ctx: Ctx) -> None:
-    """触发回合落点拍回归座（ADR-080 第二谓词补齐，2026-09-21 拍板修复批）：
-    准入通过（无在途回合、无 pending plan）→ 触发的 LLM loop 在途 → 用户
-    次轮回合 dock 计划 → 落点复评命中 → 整体静默（永不落建议问 dock 抢
-    确认座——S16-P2 2026-09-21 实证竞态「计划 dock 与 trigger_turn_spoke
-    同秒」的常驻回归座）。ADR-102 改靶：素材评审 trigger 已死，落点拍与
-    事件内容无关，现骑存活事件 craft_decompiled（ref 只是去重键）。确定性
-    说明：计划 dock 由用户次轮驱动（dock 是代码路径，秒级），触发的 loop
-    恒为 10s+ 量级——计划必在 loop 在途期间落定；罕见的反方向（loop 快于
-    次轮）只会误红不会误绿。"""
-    from app.chat.trigger_turn import TRIGGER_CRAFT_DECOMPILED, run_trigger_turn
-
-    pid = await ctx.new_project("S22 trigger landing silence")
-    await seed_asset(
-        pid, ctx.user_id, AssetType.VIDEO, "talk.mp4",
-        extracted_text="On embodied intelligence and why robots need a body.",
-        processed=True,
-        meta={"language": "en"},
-    )
-    turn0 = await ctx.chat(pid, "这个视频讲了什么？")
-    check(
-        not is_plan_dock(turn0["assistant_message"]),
-        "an informational opener docks no plan",
-        turn0["assistant_message"],
-    )
-    # 准入拍此刻通过：无在途用户回合、无 pending plan。
-    trigger_task = asyncio.create_task(
-        run_trigger_turn(uuid.UUID(pid), TRIGGER_CRAFT_DECOMPILED, "s22-landing")
-    )
-    await asyncio.sleep(2)  # 让触发回合过准入、进入 LLM loop 窗口
-    turn1 = await ctx.chat(pid, "把我的视频做成 3 张金句卡")
-    check(is_plan_dock(turn1["assistant_message"]),
-          "the quote-card turn docks the plan while the trigger loop runs",
-          turn1["assistant_message"])
-    review = await trigger_task
-    check(
-        review is None,
-        "落点拍：计划 dock 在触发 loop 在途期间落定 → 落点复评命中即静默"
-        "（永不抢确认座）",
-        review,
-    )
-
-
-# ── S23 探索族全链（ADR-088 §2, Agent Working Loop 迭代一）────────────────────
-#
-# The harness composes its own loop (the prompt_gate precedent): the
-# exploration terminal verbs + the evidence reads, turn-faithful — one
-# terminal call per loop (拍 2/3: candidates → 拍 4: selects → 拍 5: plans),
-# the harness carrying the previous beat's ids from the DB (in production
-# they ride the observations + the graph context). The deterministic tail
-# locks the graph face (lane / rank-blind / zero edges / journey ownership),
-# the execution door's I-EXPLORE-01 rejection, idempotent replay, and the
-# no-timeline asset's honest degradation.
-
-_S23_SENTENCES = [
-    (0.0, "Welcome back to the founder notes."),
-    (6.0, "Today I answer the question everyone asks."),
-    (12.0, "Our pricing is simple."),
-    (15.0, "The pro tier costs ten dollars a month."),
-    (21.0, "You can start free and upgrade when the team grows."),
-    (28.0, "Let me switch gears to the roadmap."),
-    (34.0, "Every pricing tier includes the analytics dashboard."),
-    (41.0, "That is the whole announcement for this week."),
-]
-
-
-def _s23_words() -> list[dict]:
-    words: list[dict] = []
-    for line_start, sentence in _S23_SENTENCES:
-        t = line_start
-        for w in sentence.split():
-            words.append({"word": w, "start": round(t, 2), "end": round(t + 0.4, 2)})
-            t += 0.5
-    return words
-
-
-_S23_SYSTEM = (
-    "You are the Repurposer discovery agent. You work in beats, one "
-    "proposal per reply:\n"
-    "1. Search the transcript for the user's topic (search_transcript), "
-    "then read the exact ranges with get_segment.\n"
-    "2. Land ONE candidate collection with propose_candidates — every "
-    "member is a RANGE (start/end in seconds from the anchors you read, "
-    "speaker when known; never an excerpt — the system derives the shown "
-    "text from the range itself).\n"
-    "3. When asked, land your picks with propose_selects (a verdict and a "
-    "one-line reason each). Member indexes are 0-based over the candidate "
-    "set's members — a set of 2 members takes indexes 0 and 1.\n"
-    "4. When asked, land the content plan with propose_plans.\n"
-    "Every reply closes with exactly one tool call — speak one short "
-    "sentence, then make the call. A reply with no tool call is never "
-    "complete; when you are unsure, call anyway with your best arguments."
-)
-
-
-async def s23_exploration_chain_lands_on_canvas(ctx: Ctx) -> None:
-    """探索族全链（ADR-088 §2, 迭代一 §8）：harness 组 EXPLORATION_TOOLS +
-    证据 reads 三拍驱动 → 三族出生 / journey 归属 / rank 盲 / 零边 / 车道帧；
-    确定性尾 = I-EXPLORE-01 执行门拒收 + 幂等重放 + 无时间轴降级诚实。"""
-    from app.agents.tool_loop import ToolLoopAgent
-    from app.chat.exploration_tools import (
-        EXPLORATION_TOOLS,
-        execute_exploration_tool,
-    )
-    from app.chat.perception import (
-        SearchTranscriptParams,
-        perception_chat_tools,
-        run_perception_tool,
-    )
-    from app.pipeline.exploration_store import KIND_CANDIDATE_SET
-    from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
-    from app.models.tables import GraphNode, Journey
-
-    pid = await ctx.new_project("S23 exploration chain")
-    project_uuid = uuid.UUID(pid)
-    asset_id = await seed_asset(
-        pid, ctx.user_id, AssetType.VIDEO, "explore-talk.mp4",
-        extracted_text=" ".join(s for _, s in _S23_SENTENCES),
-        meta={
-            "words": _s23_words(),
-            "speaker_map": {"turns": [{"start": 0.0, "end": 48.0, "speaker": "host"}]},
-            "language": "en",
-        },
-        processed=True,
-    )
-
-    async with AsyncSessionLocal() as db:
-        project = (
-            await db.execute(select(Project).where(Project.id == project_uuid))
-        ).scalar_one()
-
-        async def execute(name: str, params, prose: str):
-            """The harness's execute seat: reads answer with observations;
-            a door rejection feeds back as the loop echo (the agent reads
-            and retries); a landed proposal accepts the terminal (the
-            turn-faithful beat boundary)."""
-            if name in PERCEPTION_TOOLS:
-                return await run_perception_tool(db, project, name, params)
-            text = await execute_exploration_tool(
-                db, project, name, params.model_dump() if params else {}
-            )
-            if text.startswith("The door rejected"):
-                return text
-            await db.commit()  # the door is flush-only — the caller commits
-            return None
-
-        agent = ToolLoopAgent(
-            name="scenario_s23_explore",
-            # The harness's prompt carrier (the _probe_agent precedent):
-            # chat_intent.j2 renders context_text + message verbatim — the
-            # harness's system text carries the beats instead.
-            prompt="chat_intent.j2",
-            system=_S23_SYSTEM,
-            assemble=lambda message: (
-                {"context_text": "", "message": message},
-                [],
-            ),
-            tools=[
-                *EXPLORATION_TOOLS.values(),
-                *perception_chat_tools(
-                    "search_transcript", "get_segment", "get_asset", "get_understanding"
-                ),
-            ],
-            temperature=0.2,
-            max_iterations=10,
-        )
-
-        # 拍 2/3 — search → read → ONE candidate collection on the canvas.
-        r1 = await agent.call_loop(
-            execute,
-            message=(
-                "Search my talk for the pricing sections, read them, and put "
-                "ONE candidate collection on the canvas. My goal: pricing "
-                "clips for my launch post."
-            ),
-        )
-        check(
-            r1.tool_name == "propose_candidates",
-            "拍 2/3 terminal = propose_candidates",
-            r1.tool_name,
-        )
-        candidate_set = (
-            await db.execute(
-                select(GraphNode).where(
-                    GraphNode.project_id == project_uuid,
-                    GraphNode.type == "exploration",
-                    GraphNode.spec["exploration_kind"].as_string() == KIND_CANDIDATE_SET,
-                )
-            )
-        ).scalar_one()
-        check(
-            candidate_set.journey_id is not None,
-            "the chain's journey minted",
-            candidate_set.id,
-        )
-        journey_id = str(candidate_set.journey_id)
-
-        # 拍 4 — evaluate → selects with verdicts (journey rides from the set).
-        r2 = await agent.call_loop(
-            execute,
-            message=(
-                f"The candidate set {candidate_set.id} is on the canvas. "
-                "Evaluate its members and land your selects — each with a "
-                "verdict and a one-line reason."
-            ),
-        )
-        check(r2.tool_name == "propose_selects", "拍 4 terminal = propose_selects", r2.tool_name)
-        selects = (
-            (
-                await db.execute(
-                    select(GraphNode).where(
-                        GraphNode.project_id == project_uuid,
-                        GraphNode.type == "exploration",
-                        GraphNode.spec["exploration_kind"].as_string() == "select",
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-        check(len(selects) >= 1, "selects landed", len(selects))
-
-        # 拍 5 — structure → a ready content plan.
-        r3 = await agent.call_loop(
-            execute,
-            message=(
-                f"Structure what I get from select {selects[0].id} as a "
-                "content plan — I want a short clip and a post in English."
-            ),
-        )
-        check(r3.tool_name == "propose_plans", "拍 5 terminal = propose_plans", r3.tool_name)
-        plans = (
-            (
-                await db.execute(
-                    select(GraphNode).where(
-                        GraphNode.project_id == project_uuid,
-                        GraphNode.type == "exploration",
-                        GraphNode.spec["exploration_kind"].as_string() == "content_plan",
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-        check(len(plans) >= 1, "content plans landed", len(plans))
-        check(
-            all(p.state == "ready" for p in plans),
-            "plans self-check to ready (complete outputs, no issues)",
-            [(str(p.id), p.state, p.spec.get("issues")) for p in plans],
-        )
-        chain_nodes = [candidate_set, *selects, *plans]
-        check(
-            all(str(n.journey_id) == journey_id for n in chain_nodes),
-            "the whole chain rides ONE journey (R24 ownership, never an edge)",
-            [(str(n.id), str(n.journey_id)) for n in chain_nodes],
-        )
-
-        # ── Deterministic tail ───────────────────────────────────────────
-        # I-EXPLORE-01: the execution door rejects exploration nodes.
-        for ops in (
-            [{"op": "run", "nodes": [str(candidate_set.id)]}],
-            [{"op": "delete_node", "node": str(selects[0].id)}],
-            [{"op": "connect", "from_node": str(candidate_set.id), "to_node": str(selects[0].id)}],
-        ):
-            try:
-                await apply_wiring_ops(db, project_uuid, ops)
-            except WiringRejected:
-                pass
-            else:
-                raise ScenarioFailure(f"I-EXPLORE-01: the wiring door accepted {ops}")
-
-        # Idempotent replay: identical call → the SAME artifact, no twin.
-        idem_args = {
-            "asset_id": asset_id,
-            "topic": "pricing",
-            "goal": "s23 idempotency probe",
-            "members": [
-                {
-                    "start": 12.0,
-                    "end": 18.9,
-                    "speaker": "host",
-                }
-            ],
-        }
-        first = await execute_exploration_tool(db, project, "propose_candidates", dict(idem_args))
-        await db.commit()
-        second = await execute_exploration_tool(db, project, "propose_candidates", dict(idem_args))
-        await db.commit()
-        id_of = lambda text: re.search(r"candidate_set_id: ([0-9a-f-]{36})", text).group(1)  # noqa: E731
-        check(
-            id_of(first) == id_of(second),
-            "idempotent replay returns the existing artifact",
-            (first, second),
-        )
-
-        # 无时间轴降级: an asset without words is an honest door rejection
-        # and the reads say so — never a fabricated range.
-        bare_asset_id = await seed_asset(
-            pid, ctx.user_id, AssetType.VIDEO, "explore-bare.mp4",
-            extracted_text="A talk without word-level timestamps.",
-            meta={"language": "en"},
-            processed=True,
-        )
-        obs = await run_perception_tool(
-            db, project, "search_transcript",
-            SearchTranscriptParams(query="pricing", asset_id=uuid.UUID(bare_asset_id)),
-        )
-        check(
-            "timeline-ready" in obs.text or "word-level" in obs.text,
-            "the no-timeline read is an honest empty, never a fabricated hit",
-            obs.text,
-        )
-        rejected = await execute_exploration_tool(
-            db, project, "propose_candidates",
-            {**idem_args, "asset_id": bare_asset_id, "goal": "s23 degradation probe"},
-        )
-        check(
-            rejected.startswith("The door rejected"),
-            "exploration on a wordless asset is a door rejection",
-            rejected,
-        )
-        await db.commit()
-
-        journeys = int(
-            (
-                await db.execute(
-                    select(func.count())
-                    .select_from(Journey)
-                    .where(Journey.project_id == project_uuid)
-                )
-            ).scalar_one()
-        )
-        check(
-            journeys == 2,
-            "chain journey + idem-probe journey — adopt never mints twins "
-            "(rejected calls never mint)",
-            journeys,
-        )
-
-    # ── The graph face (画布响应形状 — ADR-057 直读零投影) ─────────────────
-    graph = await ctx.graph(pid)
-    explore_nodes = [n for n in graph["nodes"] if n["type"] == "exploration"]
-    check(
-        len(explore_nodes) >= 4,
-        "the chain's three nodes + the idem-probe set ride the graph",
-        len(explore_nodes),
-    )
-    kinds = {n["spec"].get("exploration_kind") for n in explore_nodes}
-    check(
-        kinds == {"candidate_set", "select", "content_plan"},
-        "all three exploration kinds born",
-        kinds,
-    )
-    check(
-        all(n.get("rank") is None for n in explore_nodes),
-        "I-EXPLORE-01: product_ranks is blind to exploration nodes",
-        [(n["id"], n.get("rank")) for n in explore_nodes],
-    )
-    check(
-        all(n.get("journey_id") for n in explore_nodes),
-        "R24: every exploration node carries its journey ownership",
-        [n["id"] for n in explore_nodes],
-    )
-    check(
-        all(int(n["layout"]["x"]) == -464 for n in explore_nodes),
-        "the family's lane sits one pitch left of the island column",
-        [n["layout"] for n in explore_nodes],
-    )
-    touching = [
-        e for e in graph["edges"]
-        if {e["from_node"], e["to_node"]} & {n["id"] for n in explore_nodes}
-    ]
-    check(not touching, "I-EXPLORE-01: zero edges touch exploration nodes", touching)
-
-
-# ── S-explore-2 发现型主链生产 e2e（ADR-088/089, Agent Working Loop 迭代二 §4.9）
-#
-# S23 的 harness 拍在这里收进生产形态：一条 SSE chat 回合跑完整发现链
-# （search_transcript → candidates → selects → plans 终态 dock）——工作会话
-# 活动键族（chat.explore.*，迭代二⑥）、决策包 dock 三面（plans 阅读层 +
-# 编译链证据 + quote，迭代二③）、探索三族出生且一条 journey（迭代一⑤）、
-# 确认 → run 出生带 Confirmed Scope Snapshot（迭代二④）→ 产物真落地
-# （cut_segments 真渲染 + writer 真 LLM）。fixture 纪律同 S23/S16：
-# scenario/ 前缀的真实桶拷贝（共享 demo 键会被项目删除 unlink——S16 的课）、
-# 时间轴落在 demo_talk 真实时长内（~119s）、words 逐词真值（门在出生时刻
-# 逐字校验 excerpt）。MiniMax 配额是硬前提——跑不了标「未跑验证」。
-
-_SE2_SENTENCES = [
-    (0.0, "Welcome back to the founder notes."),
-    (6.0, "Today I want to walk through how we think about pricing."),
-    (14.0, "Our pricing is simple."),
-    (18.0, "The starter tier is free forever."),
-    (24.0, "The pro tier costs ten dollars a month."),
-    (30.0, "You only pay when your team actually grows."),
-    (38.0, "Let me switch gears and talk about the roadmap for a moment."),
-    (52.0, "We are shipping the new dashboard next quarter."),
-    (64.0, "Back to pricing for a second."),
-    (68.0, "Every paid tier includes the analytics dashboard."),
-    (76.0, "Annual billing saves you two months."),
-    (84.0, "That is the whole announcement for this week."),
-]
-
-
-def _se2_words() -> list[dict]:
-    words: list[dict] = []
-    for line_start, sentence in _SE2_SENTENCES:
-        t = line_start
-        for w in sentence.split():
-            words.append({"word": w, "start": round(t, 2), "end": round(t + 0.4, 2)})
-            t += 0.5
-    return words
-
-
-async def s_explore_2_decision_package_to_confirmed_scope(ctx: Ctx) -> None:
-    """发现型主链生产 e2e（迭代二 §4.9）：发现型目标（SSE）→ 探索三族出生
-    （一条 journey）→ chat.explore.* 活动流 → 决策包 dock（plans+tasks+quote）
-    → dock Start → run.context.confirmed_scope 五字段 → run 收官产物落地。"""
-    fixture_prefix = f"scenario/s-explore-2-{uuid.uuid4().hex[:8]}"
-    src_key = await copy_fixture(REMIX_SOURCE_KEY, fixture_prefix)
-
-    pid = await ctx.new_project("S-explore-2 discovery chain")
-    project_uuid = uuid.UUID(pid)
-    await seed_asset(
-        pid, ctx.user_id, AssetType.VIDEO, "se2-talk.mp4",
-        file_url=src_key,  # 真字节——cut_segments 真的剪
-        extracted_text=" ".join(s for _, s in _SE2_SENTENCES),
-        meta={
-            "words": _se2_words(),
-            "speaker_map": {"turns": [{"start": 0.0, "end": 95.0, "speaker": "host"}]},
-            "language": "en",
-        },
-        processed=True,  # worker 的资产队列不碰（时间轴/文本即种子）
-    )
-    # cut_segments 真渲染 + writer 真 LLM 都花积分——赠额外补足避免 422 噪音。
-    async with AsyncSessionLocal() as db:
-        wallet = await get_or_create_wallet(db, ctx.user_id)
-        wallet.balance = int(wallet.balance) + 200000
-        await db.commit()
-
-    # ── 发现型目标（SSE 全链）─────────────────────────────────────────────
-    stream = await ctx.chat_stream(
-        pid,
-        "Find the parts where I talk about pricing — cut those into a clip, "
-        "and write an English post from them.",
-    )
-    check(stream.failed is None, "the discovery turn never fails", stream.failed)
-    check(stream.completed is not None, "the discovery turn completes", stream.activities)
-
-    # 工作会话活动键族（迭代二⑥, N-57）：读的开/收 + 三个里程碑帧（出生即
-    # 完成，count 是唯一载荷）。
-    acts = stream.activities
-    searching = [a for a in acts if a.get("key") == "chat.explore.searching"]
-    searching_done = [a for a in acts if a.get("key") == "chat.explore.searchingDone"]
-    check(
-        searching and all(a["status"] == "active" for a in searching),
-        "search_transcript opens chat.explore.searching (active)",
-        acts,
-    )
-    check(
-        searching_done and all(a["status"] == "completed" for a in searching_done),
-        "the read settles as chat.explore.searchingDone (completed)",
-        acts,
-    )
-    for key in ("candidatesReady", "selectsReady", "plansReady"):
-        frames = [a for a in acts if a.get("key") == f"chat.explore.{key}"]
-        check(
-            len(frames) == 1
-            and frames[0]["kind"] == "draft"
-            and frames[0]["status"] == "completed"
-            and isinstance(frames[0].get("count"), int)
-            and frames[0]["count"] >= 1,
-            f"the {key} milestone lands born-completed with its count",
-            acts,
-        )
-
-    # ── 决策包 dock（迭代二③, ADR-089 §4 R16）─────────────────────────────
-    dock_msg = stream.completed["assistant_message"]
-    check(is_plan_dock(dock_msg), "the discovery chain docks the decision package", dock_msg)
-    question = dock_msg["question"]
-    plans_payload = question.get("plans") or []
-    check(plans_payload, "the dock carries the plans reading layer", question)
-    check(
-        all(p.get("plan_id") and "title" in p and p.get("outputs") for p in plans_payload),
-        "every plan row carries plan_id / title / outputs",
-        plans_payload,
-    )
-    intent_dump = dock_msg.get("intent") or {}
-    dock_tools = [t.get("tool") for t in intent_dump.get("tasks") or []]
-    check(
-        "cut_segments" in dock_tools and "write_post" in dock_tools,
-        "the compiled chain = cut_segments + write_post (R12 编译移出 LLM)",
-        dock_tools,
-    )
-    check(
-        "select_clips" not in dock_tools,
-        "the compiler never emits select_clips (the execution world has no "
-        "second discoverer)",
-        dock_tools,
-    )
-    check("estimate_credits" in question, "the quote rides the dock (费用语义)", question)
-    check("derived" in question, "the derived preview rides the dock", question)
-
-    # ── 探索三族出生，一条 journey（迭代一⑤ 的生产侧复证）─────────────────
-    async with AsyncSessionLocal() as db:
-        explore_rows = list(
-            (
-                await db.execute(
-                    select(GraphNode).where(
-                        GraphNode.project_id == project_uuid,
-                        GraphNode.type == "exploration",
-                    )
-                )
-            ).scalars().all()
-        )
-        kinds = {r.spec.get("exploration_kind") for r in explore_rows}
-        check(
-            {"candidate_set", "select", "content_plan"} <= kinds,
-            "the exploration three families are born",
-            kinds,
-        )
-        journey_ids = {str(r.journey_id) for r in explore_rows}
-        check(len(journey_ids) == 1, "the whole chain rides ONE journey", journey_ids)
-        journeys = int(
-            (
-                await db.execute(
-                    select(func.count())
-                    .select_from(Journey)
-                    .where(Journey.project_id == project_uuid)
-                )
-            ).scalar_one()
-        )
-        check(journeys == 1, "exactly one Journey row", journeys)
-    db_plan_ids = {
-        str(r.id) for r in explore_rows if r.spec.get("exploration_kind") == "content_plan"
-    }
-    check(
-        {p["plan_id"] for p in plans_payload} == db_plan_ids,
-        "the dock's plan ids == the canvas's content_plan rows",
-        (plans_payload, [str(r.id) for r in explore_rows]),
-    )
-
-    # 恢复路复证（plans 双座的第二座）：pending_question 直读 plans。
-    conv = await ctx.conversation(pid)
-    check(conv.status_code == 200, "the conversation reads back", conv.text)
-    pending = conv.json().get("pending_question") or {}
-    check(
-        (pending.get("question") or {}).get("plans"),
-        "the restore path's pending_question carries plans (pending_brief 座)",
-        pending,
-    )
-
-    # ── 确认 → run 出生 → Confirmed Scope Snapshot（迭代二④, R20）──────────
-    res = await ctx.answer(dock_msg["id"], {"kind": "start"})
-    check(res.status_code == 200, "dock Start answers the decision package", res.text)
-    run_id = res.json()["answered_question"].get("workflow_run_id")
-    check(run_id, "a run was born on Start", res.json())
-
-    run_ctx = (await run_row(run_id))["context"]
-    scope = run_ctx.get("confirmed_scope") or {}
-    check(bool(scope), "the run carries the Confirmed Scope Snapshot", run_ctx)
-    check(
-        scope.get("confirmation_id") == dock_msg["id"],
-        "confirmation_id = the docked message (确认点可追)",
-        scope,
-    )
-    check(bool(scope.get("confirmed_at")), "confirmed_at stamped", scope)
-    check(
-        scope.get("confirmed_via") == "dock_pill",
-        "confirmed_via = dock_pill (typed Start 座位)",
-        scope,
-    )
-    check(
-        {p.get("plan_id") for p in scope.get("plans") or []}
-        == {p["plan_id"] for p in plans_payload},
-        "the snapshot's plans = the docked reading layer",
-        scope,
-    )
-    check(
-        [t.get("tool") for t in scope.get("compiled_scope") or []] == dock_tools,
-        "the snapshot's compiled_scope = the chain the run was born with",
-        (scope.get("compiled_scope"), dock_tools),
-    )
-    check(
-        scope.get("quote") == question.get("estimate_credits"),
-        "the snapshot's quote = the quote shown at confirm time",
-        (scope.get("quote"), question.get("estimate_credits")),
-    )
-
-    # ── 产物落地（真渲染 + 真 writer）──────────────────────────────────────
-    final = await wait_run_terminal(run_id, timeout=600.0)
-    check(final == "completed", "the discovery run completes", final)
-    clips = await outputs_of(pid, "clip")
-    check(len(clips) >= 1, "cut_segments' clip output lands", len(clips))
-    posts = await outputs_of(pid, "post")
-    check(len(posts) >= 1, "the post output lands", len(posts))
-
-    # Harness 卫生（非断言——拍 8 收官 reviewer 的硬验收归迭代三）：run 收官
-    # 的 trigger 回合是 fire-and-forget；不消费它就 cleanup 会让在飞的 LLM
-    # 调用撞上项目删除（messages conversation FK 竞态——首跑实测在 worker
-    # 日志留下一条 IntegrityError 噪音）。等到落地就 bail 掉建议问；超时
-    # 静默通过（它本来就不是本剧本的断言对象）。
-    conv_id = (stream.completed or {}).get("conversation_id")
-    if conv_id:
-        review = await wait_trigger_review(ctx, conv_id, run_id, timeout=90.0)
-        if review is not None and (review.get("question") or {}).get("kind") == "question":
-            await ctx.answer(review["id"], {"kind": "bail"})
-
-
-# ---- S24 分镜呈现律：选定分镜方向 → 链必含 reframe（ADR-094 §2 验证座）-----------
-
-# 固定 fixture（demo 桶常住对象，reset_db 保护前缀）：14.5s 双人访谈段（xy_1
-# [172.5,187.0]，约 6.6s 处一次干净的问→答切换——烘焙配方卡「访谈分镜」
-# demo 的同一源，bake_reframe_demos.py 实证 form=interview + 真 crop_track）。
-INTERVIEW_SOURCE_KEY = "demo/uploads/xy_1_interview_15s.mp4"
-
-
-async def s24_interview_framing_choice_lands_reframe(ctx: Ctx) -> None:
-    """分镜呈现律常驻回归（ADR-094 §2 验证座，需 dev worker + demo 桶 fixture
-    + MiniMax 配额）：访谈素材真处理（worker 真 ASR + speaker_map →
-    form=interview 前提断言）→ 用户口头选定分镜方向（「镜头跟着说话人切换」）
-    → plan 链必含 select_clips + reframe_clip（选择执行律）→ start → run
-    completed → 成片 render_spec 带非空 crop_track（确定性尾——选了就要像
-    配方卡那样成片，静默中央裁剪的结构通路在此锁死）。中间（router 直接出书
-    还是先问）是 LLM 裁量，nudge 有界兜底，红了 = prompt 回归信号（S1 同口
-    径）。ADR-102 注：素材评审 trigger 已死——计划回合前不再有主动首读
-    要排序，原 warm 首读等待/bail 序曲随其退役整段拆除。fixture 律：素材
-    先拷 scenario/ 前缀隔离（delete_project
-    会 unlink 资产 file_url——共享 demo key 直接引用随清理被删，S16 首跑
-    吃过配方卡营销片）。"""
-    fixture_prefix = f"scenario/s24-{uuid.uuid4().hex[:8]}"
-    src_key = await copy_fixture(INTERVIEW_SOURCE_KEY, fixture_prefix)
-    pid = await ctx.new_project("S24 interview framing")
-    src = await seed_asset(
-        pid, ctx.user_id, AssetType.VIDEO, "xy_1_interview_15s.mp4",
-        file_url=src_key,  # PENDING — the worker really ASRs + speaker-maps it
-    )
-    status = await wait_asset_status(
-        src, {AssetStatus.COMPLETED, AssetStatus.FAILED}
-    )
-    check(status == AssetStatus.COMPLETED,
-          "the interview fixture is really processed (ASR + speaker_map)", status)
-    async with AsyncSessionLocal() as db:
-        asset = await db.get(Asset, uuid.UUID(src))
-        speaker_map = (asset.meta or {}).get("speaker_map") or {}
-    check(speaker_map.get("form") == "interview"
-          and bool(speaker_map.get("turns")),
-          "the seat's premise: the fixture judges interview-form with "
-          "attributed turns (the bake's proven source)",
-          speaker_map.get("form"))
-
-    # 积分补足（S16 同款）——clips + reframe + render 真链，避免 422 噪音。
-    async with AsyncSessionLocal() as db:
-        wallet = await get_or_create_wallet(db, ctx.user_id)
-        wallet.balance = int(wallet.balance) + 200000
-        await db.commit()
-
-    # 用户口头选定分镜方向——选择执行律：链必含 select_clips + reframe_clip。
-    turn = await ctx.chat(pid, "把我的双人访谈剪成竖屏短片，镜头跟着说话人切换。")
-    plan = await pending_plan(ctx, pid)
-    for _ in range(2):
-        if plan is not None and plan_tasks(plan):
-            break
-        # LLM 裁量兜底（先问了 caption/数量等）——一句推进，路由恒在 plan path。
-        turn = await ctx.chat(pid, "就按这个方向出计划吧——竖屏切片，镜头跟人。")
-        plan = await pending_plan(ctx, pid)
-    check(plan is not None and plan_tasks(plan),
-          "the framing-chosen turns dock the plan", plan)
-    tools = [t.get("tool") for t in plan_tasks(plan)]
-    check("select_clips" in tools and "reframe_clip" in tools,
-          "选择执行律：the chosen framing direction lands select_clips + "
-          "reframe_clip (never a silent center-crop chain)", tools)
-    check(tools.index("reframe_clip") > tools.index("select_clips"),
-          "the reframe rides after the clips producer (topology order)", tools)
-
-    turn_s = await ctx.chat(pid, "开始吧")
-    check(terminal_tool_of(turn_s) == "start_run",
-          "the prose confirmation closes on start_run", turn_s)
-    run_id = turn_s["run_id"]
-    check(run_id is not None, "the framing run is born", turn_s)
-
-    final = await wait_run_terminal(run_id, timeout=600.0)
-    check(final == "completed",
-          "the framing run completes on the real interview bytes", final)
-    reframe_step = next(
-        (s for s in await step_rows(run_id) if s["kind"] == "reframe_clip"), None
-    )
-    check(reframe_step is not None and reframe_step["status"] == "done",
-          "the reframe step ran and completed", reframe_step)
-    clips = await outputs_of(pid, "clip")
-    check(len(clips) >= 1, "the clips land", len(clips))
-    check(
-        any((o.render_spec or {}).get("crop_track") for o in clips),
-        "确定性尾：at least one clip's render_spec carries a real crop_track "
-        "(选了就要像配方卡那样成片——静默中央裁剪永禁)",
-        [(str(o.id), len((o.render_spec or {}).get("crop_track") or [])) for o in clips],
-    )
-
-    # Harness 卫生（非断言——S-explore-2 同款）：run 收官的触发回合是
-    # fire-and-forget；不消费它就 cleanup 会让在飞 LLM 调用撞上项目删除。
-    review = await wait_trigger_review(ctx, conv_id, run_id, timeout=90.0)
-    if review is not None and (review.get("question") or {}).get("kind") == "question":
-        await ctx.answer(review["id"], {"kind": "bail"})
-
-
-# ---- S-edit 精确编辑归档生命周期（确定性尾剧本，精确编辑迭代 S5）-------------
-
-
-async def s_edit_precise_edit_archive_lifecycle(ctx: Ctx) -> None:
-    """S-edit (ADR-090/091, 验收口径 #5/#6): the precise edit's deterministic
-    tail — edit door → journal → undo → wipe 归档（不删除、publication /
-    journal 不连坐）→ 换态 restore → 读面过滤。NO LLM: the four request
-    families' routing is probe H's seat and the live walkthrough's; this
-    seat locks the archive lifecycle against the real DB + the real API
-    doors (the same doors edit_output rides)."""
-    from app.pipeline.edit_span import ResolvedSpan, resolve_quote_span
-    from app.pipeline.outputs import archive_outputs
-    from app.models.tables import Publication
-    from app.models.schemas import PublicationState
-
-    pid = await ctx.new_project("S-edit archive lifecycle")
-    asset_id = await seed_asset(
-        pid, ctx.user_id, AssetType.VIDEO, "s-edit.mp4", processed=True
-    )
-
-    cues = [
-        {"start": 10.0, "end": 10.8, "text": "Welcome back", "lang": "en"},
-        {"start": 10.8, "end": 11.5, "text": "to the show", "lang": "en"},
-        {"start": 12.0, "end": 13.2, "text": "today we talk pricing", "lang": "en"},
-    ]
-    spec = {
-        "segments": [
-            {
-                "id": "s1",
-                "start": 10.0,
-                "end": 40.0,
-                "hidden": False,
-                "asset_id": asset_id,
-                "url": "scenario/s-edit.mp4",
-            }
-        ],
-        "caption_track": cues,
-        "source": {
-            "kind": "video",
-            "url": "scenario/s-edit.mp4",
-            "asset_id": asset_id,
-            "duration": 120.0,
-        },
-        "aspect": "9:16",
-    }
-    async with AsyncSessionLocal() as db:
-        run = WorkflowRun(
-            project_id=uuid.UUID(pid),
-            status=WorkflowStatus.COMPLETED,
-            context={"target_language": "en", "ui_language": "en"},
-        )
-        db.add(run)
-        await db.flush()
-        step = WorkflowStep(
-            run_id=run.id, kind="select_clips", status="done", seq=1,
-        )
-        db.add(step)
-        await db.flush()
-        output = Output(
-            project_id=uuid.UUID(pid),
-            workflow_step_id=step.id,
-            type="clip",
-            language="en",
-            provenance="real",
-            payload={"duration": 30},
-            render_spec=spec,
-        )
-        db.add(output)
-        await db.flush()
-        oid = output.id
-        db.add(
-            WorkflowStep(
-                run_id=run.id, kind="render", status="done", seq=2,
-                inputs=[str(step.id)], spec={"output_id": str(oid)},
-            )
-        )
-        db.add(
-            Publication(
-                user_id=ctx.user_id,
-                project_id=uuid.UUID(pid),
-                output_id=oid,
-                payload={"title": "s-edit"},
-                state=PublicationState.PUBLISHED,
-                idempotency_key=f"s-edit-{oid}",
-            )
-        )
-        await db.commit()
-        work_id = output.work_id
-
-    # ① edit door: quote → span (the resolver's exact tier) → remove_range
-    # op through the real operations API — the door edit_output rides.
-    span = resolve_quote_span(cues, "welcome back")
-    check(isinstance(span, ResolvedSpan) and span.tier == "exact",
-          "the quote resolves at the exact tier", span)
-    res = await ctx.client.post(
-        f"/outputs/{oid}/operations",
-        json={"ops": [{"op": "remove_range", "params": {"start": span.start, "end": span.end}}]},
-    )
-    check(res.status_code == 201, "remove_range op applies", res.text)
-    body = res.json()
-    new_track = body["output"]["render_spec"]["caption_track"]
-    check(
-        all("Welcome" not in c["text"] for c in new_track),
-        "the cut cue leaves the caption track", new_track,
-    )
-    check(len(body["operations"]) == 1, "the op journals", body["operations"])
-
-    # ② undo (API 面) restores the pre-edit spec.
-    res = await ctx.client.post(f"/outputs/{oid}/operations/undo")
-    check(res.status_code == 200, "undo applies", res.text)
-    restored_track = res.json()["output"]["render_spec"]["caption_track"]
-    check(
-        any("Welcome" in c["text"] for c in restored_track),
-        "undo restores the cut cue", restored_track,
-    )
-
-    # ③ wipe 归档（不重删）: the wipe's DB door — archive the delivered row,
-    # birth the successor with the inherited work_id (the positional law's
-    # birth-loop shape), and the world must hold: publication survives,
-    # the journal stays readable, the visible read face swaps versions.
-    async with AsyncSessionLocal() as db:
-        await archive_outputs(db, [oid])
-        newborn = Output(
-            project_id=uuid.UUID(pid),
-            workflow_step_id=None,
-            type="clip",
-            language="en",
-            provenance="real",
-            payload={"duration": 28},
-            render_spec=spec,
-            work_id=work_id,  # 按位继承 — the wipe's birth-loop shape
-        )
-        db.add(newborn)
-        await db.flush()
-        newborn_id = newborn.id
-        await db.commit()
-    async with AsyncSessionLocal() as db:
-        pub = (
-            await db.execute(
-                select(func.count()).select_from(Publication).where(
-                    Publication.output_id == oid
-                )
-            )
-        ).scalar_one()
-        check(pub == 1, "publication survives the archive (不连坐)", pub)
-        ops_count = (
-            await db.execute(
-                select(func.count()).select_from(Operation).where(
-                    Operation.output_id == oid
-                )
-            )
-        ).scalar_one()
-        check(ops_count >= 2, "the operations journal survives", ops_count)
-    res = await ctx.client.get(f"/outputs/{oid}/operations")
-    check(res.status_code == 200, "the archived row's journal stays readable",
-          res.status_code)
-    res = await ctx.client.get(f"/projects/{pid}/results")
-    check(res.status_code == 200, "results reads", res.text)
-    visible_ids = [o["id"] for o in res.json().get("outputs", [])]
-    check(str(oid) not in visible_ids, "the archived version leaves the read face",
-          visible_ids)
-    check(str(newborn_id) in visible_ids, "the successor is the visible version",
-          visible_ids)
-
-    # ③b 归档不可变 (Final Hardening B2, ADR-091 §5): the archived row is
-    # read-only history — every public mutate door refuses with 409 while
-    # the journal stays readable (beat above). The ONLY way back to mutable
-    # is the 换态 in ④.
-    res = await ctx.client.post(
-        f"/outputs/{oid}/operations",
-        json={"ops": [{"op": "set_title", "params": {"text": "tamper", "enabled": True}}]},
-    )
-    check(res.status_code == 409, "archived row rejects op writes", res.text)
-    res = await ctx.client.post(f"/outputs/{oid}/operations/undo")
-    check(res.status_code == 409, "archived row rejects undo", res.text)
-    res = await ctx.client.put(f"/outputs/{oid}", json={"payload": {"title": "tamper"}})
-    check(res.status_code == 409, "archived row rejects PUT", res.text)
-    res = await ctx.client.post(f"/outputs/{oid}/regenerate", json={})
-    check(res.status_code == 409, "archived row rejects regenerate", res.text)
-
-    # ④ 换态: restore the archived version — it becomes the work's ONE active
-    # row; the successor archives. A second restore on the now-active row
-    # refuses (400).
-    res = await ctx.client.post(f"/outputs/{oid}/restore")
-    check(res.status_code == 200, "restore 换态 applies", res.text)
-    async with AsyncSessionLocal() as db:
-        rows = list(
-            (
-                await db.execute(
-                    select(Output).where(Output.work_id == work_id)
-                )
-            ).scalars().all()
-        )
-        actives = [r for r in rows if r.archived_at is None]
-        check(len(actives) == 1 and actives[0].id == oid,
-              "同 work 内至多一 active — the restored row", rows)
-    res = await ctx.client.post(f"/outputs/{oid}/restore")
-    check(res.status_code == 400, "restoring the active row refuses",
-          res.status_code)
-    res = await ctx.client.get(f"/projects/{pid}/results")
-    visible_ids = [o["id"] for o in res.json().get("outputs", [])]
-    check(str(oid) in visible_ids and str(newborn_id) not in visible_ids,
-          "the read face follows the 换态", visible_ids)
-
-
-# ── New Interaction Contract（批次 S · ADR-099 golden suite）──────────────────
-#
-# 两层分离（简报批次 S · 门禁单调律）：上方 S1–S24 / S-edit = Legacy
-# Regression（旧功能不破，本批一律未动）；本组 = New Interaction
-# Contract——终态交互形态谱系的行为锁，只收
-# 「C·C+ 后即可转绿」的核心场景（事故①②回归锁已随批 D 入座 =
-# S-int-10/11；事故③随 G1/G2 入座——能力未落地，本组不含 G 族）。断言面三件套：终态信封形状
-# （terminal_tool_of / question payload）+ messages 行持久化事实
-# （question 载荷 / 消息流零选项断言）+ 代码组装文本（提醒尾同例）。
-# LLM 散文措辞永不锁（禁令 #7）；
-# 载荷边界只锁负形（执行参数 lint 是 banned shape，不是文案）。
-
-
-# 选项载荷边界 lint（ADR-100 — 选项永不携带执行参数）：负形断言。
-# label 全档（label 是方向名，带参即 shadow plan）；description 收窄
-# 档（证据句合法引用源事实——"the 3 strongest moments" 不是参数，条数
-# 词只在 label 档查）。
-_INT_LABEL_LINT = [
-    re.compile(r"\d+\s*[:×x]\s*\d+"),                                      # 画幅 9:16
-    re.compile(r"\b\d+\s*(seconds?|secs?|minutes?|mins?|秒|分钟)\b", re.I),  # 时长
-    re.compile(r"\b(?:bilingual|source_only|target_only)\b|双语", re.I),      # 字幕模式
-    re.compile(r"\bcredits?\b|积分", re.I),                                  # 成本
-    re.compile(r"\b\d+\s*(?:clips?|cards?|posts?|shorts?|条|张|篇)\b", re.I),  # 条数
-]
-_INT_DESC_LINT = _INT_LABEL_LINT[:4]  # 条数档不进 description（证据句合法引数）
-
-_INT_EXPLORATION_PROMPTS = (
-    "what could I make from this keynote? give me a few directions",
-    "what are some good next steps for this video?",
-    "any ideas for what to do with the keynote?",
-)
-
-
-def check_suggestion_block(records: list[dict], row_id: str, label: str) -> None:
-    """trigger 建议交互块的谱系锁（ADR-099 §4, ADR-100 收窄——trigger 建议
-    dock 是这台机器的唯一座位）：0-3 项 /
-    1-based id 语法 / recommended 唯语义 / source_turn 自锚 /
-    source_state 快照在位 / label ≤40 / 载荷永不携带执行参数（负形
-    lint——shadow plan 是本档的定义性违界）。"""
-    check(1 <= len(records) <= 3,
-          f"{label}: 0-3 schema-bounded suggestion options", records)
-    check([r.get("id") for r in records] == [str(i + 1) for i in range(len(records))],
-          f"{label}: option ids follow the 1-based dock grammar", records)
-    check(sum(1 for r in records if r.get("recommended")) <= 1,
-          f"{label}: recommended = the agent's one current leaning (唯语义)", records)
-    for r in records:
-        check(r.get("source_turn") == row_id,
-              f"{label}: provenance self-anchor (source_turn = the carrying row)", r)
-        check(isinstance((r.get("source_state") or {}).get("asset_ids"), list),
-              f"{label}: the stale-check snapshot rides the record", r)
-        text = r.get("label") or ""
-        check(bool(text.strip()) and len(text) <= 40,
-              f"{label}: label non-empty and ≤40 (schema belt)", text)
-        for pat in _INT_LABEL_LINT:
-            check(not pat.search(text),
-                  f"{label}: labels never carry execution params (shadow plan 负形)",
-                  f"{pat.pattern} in {text!r}")
-        desc = r.get("description") or ""
-        for pat in _INT_DESC_LINT:
-            check(not pat.search(desc),
-                  f"{label}: descriptions never carry execution params (shadow plan 负形)",
-                  f"{pat.pattern} in {desc!r}")
-
-
-async def seed_keynote_project(ctx: Ctx, title: str) -> tuple[str, str]:
-    """谱系场景素材种子：一个 COMPLETED 视频资产（worker-immune）+ 内容
-    理解行（plan-turn 装配的 grounding 面）→ (pid, asset_id)。探索类提问
-    的具体下一步方向从这里长出来——suggestions 永不空穴来风（契约：只在
-    当前上下文存在具体可供选择的下一步方向时出现）。"""
-    pid = await ctx.new_project(title)
-    asset_id = await seed_asset(
-        pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
-        extracted_text=(
-            "On urban heat: cities are getting hotter, and shade trees plus "
-            "reflective roofs can cool whole neighborhoods by several degrees."
-        ),
-        processed=True, meta={"language": "en"},
-    )
-    await seed_understanding(pid)
-    return pid, asset_id
-
-
-def check_options_dock(question: dict, label: str) -> None:
-    """选项 dock 的谱系锁（ADR-100：一切可点选项归 dock——ask_user 选项
-    问承接探索/浏览的方向建议）：kind=question / 1-3 选项 / label ≤40 /
-    载荷永不携带执行参数（负形 lint——shadow plan 是本档的定义性违界）/
-    recommended 至多其一且必须指在 docked 选项上 / default_path 恒在
-    （每个问题都可安全跳过）。"""
-    check(question.get("kind") == "question",
-          f"{label}: the directions dock as a real options question", question)
-    options = question.get("options") or []
-    check(1 <= len(options) <= 3,
-          f"{label}: 1-3 options on the dock", options)
-    check(bool((question.get("default_path") or "").strip()),
-          f"{label}: the default path rides every ask (安全跳过)", question)
-    recommended_id = question.get("recommended_id")
-    check(recommended_id is None
-          or recommended_id in {str(o.get("id")) for o in options},
-          f"{label}: recommended_id names at most one docked option", question)
-    for o in options:
-        text = str(o.get("label") or "")
-        check(bool(text.strip()) and len(text) <= 40,
-              f"{label}: label non-empty and ≤40", text)
-        for pat in _INT_LABEL_LINT:
-            check(not pat.search(text),
-                  f"{label}: labels never carry execution params (shadow plan 负形)",
-                  f"{pat.pattern} in {text!r}")
-        desc = str(o.get("description") or "")
-        for pat in _INT_DESC_LINT:
-            check(not pat.search(desc),
-                  f"{label}: descriptions never carry execution params (shadow plan 负形)",
-                  f"{pat.pattern} in {desc!r}")
-
-
-async def elicit_options_dock_turn(
-    ctx: Ctx, pid: str, label: str,
-    prompts: tuple[str, ...] = _INT_EXPLORATION_PROMPTS,
-) -> dict:
-    """驱动一个探索 → ask_user 选项 dock 回合（ADR-100：浏览/探索的方向
-    建议全归 dock）→ turn。
-
-    LLM 方差口径：纯 answer 散文 = 措辞重试（模型有选择散文答复的自由）；
-    present_plan = 错档硬红（探索问永不直接承诺——事故④第一跳形态）。"""
-    for prompt in prompts:
-        turn = await ctx.chat(pid, prompt)
-        tool = terminal_tool_of(turn)
-        check(tool != "present_plan",
-              f"{label}: an exploration question never docks a plan (事故④第一跳形态)",
-              turn)
-        q = turn["assistant_message"].get("question") or {}
-        if tool == "ask_user" and (q.get("options") or []):
-            return turn
-    raise ScenarioFailure(
-        f"{label}: no options-dock turn after {len(prompts)} tries"
-    )
-
-
-async def conversation_id_of(pid: str) -> uuid.UUID:
-    """The project's one conversation row id (post-first-turn)."""
-    async with AsyncSessionLocal() as db:
-        cid = (
-            await db.execute(
-                select(Conversation.id).where(Conversation.project_id == uuid.UUID(pid))
-            )
-        ).scalar_one()
-        return uuid.UUID(str(cid))
-
-
-async def conversation_items(ctx: Ctx, pid: str) -> list[dict]:
-    """The conversation's message list over the wire (持久化事实的客户端观察面)."""
-    res = await ctx.conversation(pid)
-    check(res.status_code == 200, "the conversation exists after the first turn",
-          res.status_code)
-    return await ctx.messages(res.json()["id"])
-
-
-async def s_int1_pure_info_plain_answer(ctx: Ctx) -> None:
-    """Control ① 纯信息问 → answer 无卡无 dock（谱系第一档）：能力/元问题
-    的答案不带任何交互载荷——无 question、无 run、无建议卡（能力目录换皮
-    成按钮 = 噪音，契约禁止；空项目无具体下一步可供，空穴来风即违界）。"""
-    pid = await ctx.new_project("S-int-1 pure info")
-    for prompt in ("what can you do?", "do you support multiple languages?"):
-        turn = await ctx.chat(pid, prompt)
-        check(terminal_tool_of(turn) == "answer",
-              "a pure info question closes on the answer call", turn)
-        check(turn["run_id"] is None, "an info question starts no run", turn)
-        check(not turn["assistant_message"].get("question"),
-              "an info question docks nothing", turn["assistant_message"])
-        check(not (turn["assistant_message"].get("suggestions") or []),
-              "no suggestion card on a bare capability answer (能力目录换皮 = 噪音)",
-              turn["assistant_message"])
-        check(has_prose(turn["assistant_message"]), "a prose answer lands")
-    check(await count_runs(pid) == 0, "no run the whole journey")
-
-
-async def s_int2_exploration_options_dock(ctx: Ctx) -> None:
-    """Control ② 带素材探索 → ask_user 选项 dock（ADR-100 改靶——一切可点
-    选项归 dock）：素材在库 + 开放下一步 → 方向 dock 成真实选项问（可
-    点选可 ×，散文恒带默认路径）；消息流零选项——assistant 行永不携带
-    suggestions 交互块。"""
-    pid, _ = await seed_keynote_project(ctx, "S-int-2 exploration")
-    turn = await elicit_options_dock_turn(ctx, pid, "S-int-2")
-    msg = turn["assistant_message"]
-    check(terminal_tool_of(turn) == "ask_user",
-          "the exploration turn closes on the options dock", turn)
-    check_options_dock(msg.get("question") or {}, "S-int-2")
-    check(not (msg.get("suggestions") or []),
-          "消息流零选项 — the row carries no inline suggestion block", msg)
-    check(turn["run_id"] is None, "an options ask never starts a run", turn)
-    # 持久化事实：question payload 随行落地，零行内选项块。
-    row = next(m for m in await conversation_items(ctx, pid) if m["id"] == msg["id"])
-    check((row.get("question") or {}).get("kind") == "question",
-          "the options dock persists on the message row", row)
-    check(not (row.get("suggestions") or []),
-          "the persisted row carries no inline suggestion block", row)
-    bail = await ctx.answer(msg["id"], {"kind": "bail"})
-    check(bail.status_code in (200, 201),
-          "the options dock bails clean (× = safe skip)", bail.text)
-    check(await count_runs(pid) == 0, "no run the whole journey")
-
-
-async def s_int3_rootless_wish_ask_user_gate(ctx: Ctx) -> None:
-    """Control ③ rootless wish → ask_user 闸门 dock（谱系第三档）：缺决定性
-    信息（无素材无方向）→ 阻塞问接住，永不裸计划永不裸跑（出书门槛）。
-    措辞随 S1 已实证面；answer 族答复 = 顾问姿态方差换新项目重试（历史会
-    带偏后续判定），present_plan = 硬红（无米之炊的计划）。"""
-    for attempt, prompt in enumerate(
-        ("I want a social post.", "make me something for my audience"), start=1
-    ):
-        pid = await ctx.new_project(f"S-int-3 rootless wish #{attempt}")
-        turn = await ctx.chat(pid, prompt)
-        check(not is_plan_dock(turn["assistant_message"]),
-              "a rootless wish never docks a groundless plan", turn)
-        check(turn["run_id"] is None, "a rootless wish never starts a run", turn)
-        if terminal_tool_of(turn) == "ask_user":
-            q = turn["assistant_message"]["question"]
-            check(q.get("answer") is None, "the gate docks unanswered", q)
-            check(await count_runs(pid) == 0, "no run the whole journey")
-            return
-    raise ScenarioFailure(
-        "S-int-3: no ask_user gate after 2 fresh projects (S1 实证面漂移——红 = "
-        "router/prompt 回归信号)"
-    )
-
-
-async def s_int4_named_work_present_plan(ctx: Ctx) -> None:
-    """Control ④ 完整点名工作 → present_plan 承诺 dock（谱系第四档）：素材
-    在库 + 明确指令 → 计划 dock 等确认，Start 前零 run（付费执行只从已确认
-    范围开始）。只锁形态基本盘——参数链断言是 S7 的座位，不重复。"""
-    pid, _ = await seed_keynote_project(ctx, "S-int-4 named work")
-    docked: dict | None = None
-    for prompt in ("make a quote card from the video",
-                   "pull the sharpest quotes from my keynote into quote cards",
-                   "the quote cards, please"):
-        turn = await ctx.chat(pid, prompt)
-        if not is_plan_dock(turn["assistant_message"]):
-            continue  # ask-back / prose — nudge again
-        plan = await pending_plan(ctx, pid)
-        if "write_quotes" in [t.get("tool") for t in plan_tasks(plan)]:
-            docked = turn
-            break
-        await ctx.answer(turn["assistant_message"]["id"], {"kind": "bail"})
-    check(docked is not None, "no write_quotes plan dock after 3 turns")
-    check(terminal_tool_of(docked) == "present_plan",
-          "the turn closes on the commitment dock", docked)
-    check(docked.get("run_id") is None, "no run before Start", docked)
-    res = await ctx.answer(docked["assistant_message"]["id"], {"kind": "bail"})
-    check(res.status_code == 200, "the dock bails clean", res.text)
-    check(await count_runs(pid) == 0, "no run the whole journey")
-
-
-async def s_int5_browse_question_never_hijacked(ctx: Ctx) -> None:
-    """New ① 浏览问回归锁（事故④，ADR-100 改靶）：推荐格局已建立后，用户
-    自定义措辞的浏览问（"还有其他推荐吗"族）→ ask_user 选项 dock——永不
-    两级跳劫持（present_plan 承诺 dock / 字幕闸选项 = 硬红，事故④原形
-    态）。纯散文 answer = 方差重试。"""
-    pid, _ = await seed_keynote_project(ctx, "S-int-5 browse question")
-    setup = await elicit_options_dock_turn(ctx, pid, "S-int-5 setup")
-    bail = await ctx.answer(setup["assistant_message"]["id"], {"kind": "bail"})
-    check(bail.status_code in (200, 201),
-          "the setup dock settles (harness 卫生——浏览问不被待决题吃掉)", bail.text)
-    got: dict | None = None
-    for prompt in ("还有其他推荐吗？", "anything else you'd recommend?",
-                   "还有别的方向可以看看吗？"):
-        turn = await ctx.chat(pid, prompt)
-        msg = turn["assistant_message"]
-        check(not is_plan_dock(msg),
-              "a browse question is never hijacked into a plan dock (事故④第一跳)",
-              turn)
-        q = msg.get("question") or {}
-        check(not any(str(o.get("id", "")).startswith("caption_mode_")
-                      for o in q.get("options") or []),
-              "no caption gate on a browse question (事故④第二跳)", q)
-        if terminal_tool_of(turn) == "ask_user" and (q.get("options") or []):
-            got = turn
-            break
-    check(got is not None,
-          "no options-dock browse answer after 3 tries (浏览问无档可去 = 事故④温床)")
-    check_options_dock(got["assistant_message"].get("question") or {}, "S-int-5")
-    bail = await ctx.answer(got["assistant_message"]["id"], {"kind": "bail"})
-    check(bail.status_code in (200, 201), "the browse dock bails clean", bail.text)
-    check(await count_runs(pid) == 0, "no run the whole journey")
-
-
-async def s_int8_quote_card_caption_default_absorbed(ctx: Ctx) -> None:
-    """New ④ 无字幕参数金句卡 → 默认吸收（批次 B 行为锁的本组剧本化，
-    ADR-099 §8）：无字幕关键词 → 全程零字幕 dock 问（任一回合出现
-    caption_mode_ 选项即硬红——默认值能扛的参数永不阻塞）+ 卡面见默认
-    行（de/en 双语言有意义才盖 source_only 戳）。轻量版：不 Start 不起
-    run，参数链端到端是 S7 的座位。"""
-    pid = await ctx.new_project("S-int-8 caption default")
-    await set_project_language(pid, "de")
-    await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
-                     extracted_text="Some keynote transcript about the future of embodied intelligence.",
-                     meta={"language": "en"}, processed=True)
-    docked: dict | None = None
-    for prompt in ("make a quote card from the video",
-                   "pull the sharpest quotes from my keynote into quote cards",
-                   "the quote cards, please"):
-        turn = await ctx.chat(pid, prompt)
-        q = turn["assistant_message"].get("question") or {}
-        check(not any(str(o.get("id", "")).startswith("caption_mode_")
-                      for o in q.get("options") or []),
-              "no caption-mode question ever docks (默认值能扛的参数永不阻塞)", q)
-        if not is_plan_dock(turn["assistant_message"]):
-            continue
-        plan = await pending_plan(ctx, pid)
-        if "write_quotes" in [t.get("tool") for t in plan_tasks(plan)]:
-            docked = turn
-            break
-        await ctx.answer(turn["assistant_message"]["id"], {"kind": "bail"})
-    check(docked is not None, "no write_quotes plan dock after 3 turns")
-    plan = await pending_plan(ctx, pid)
-    check(((plan or {}).get("intent") or {}).get("caption_mode") == "source_only",
-          "the visible default rides the docked intent (卡面见默认行)", plan)
-    await ctx.answer(docked["assistant_message"]["id"], {"kind": "bail"})
-    check(await count_runs(pid) == 0, "no run the whole journey")
-
-
-async def s_int9_old_lane_history_new_policy(ctx: Ctx) -> None:
-    """New ⑤ 旧 lane 时代历史 × 新政策（ADR-099 §7：历史 = 会话证据非行为
-    示范）：会话史含旧车道腔 assistant 行（schema 漏出 + 指令收尾）→ 新
-    回合答复永不鹦鹉旧腔——verbatim 复述 / schema·工具 token 漏出 = 硬红。
-    锁得到的边界 = verbatim 与 token 负形；措辞质感（推荐 vs 指令）是高熵
-    散文面，本场景不锁。"""
-    pid, _ = await seed_keynote_project(ctx, "S-int-9 old-lane history")
-    turn0 = await ctx.chat(pid, "what's in this video?")
-    check(not is_plan_dock(turn0["assistant_message"]),
-          "an informational opener docks no plan", turn0)
-    legacy_rows = (
-        "Let me GROUP THESE BY THE ACTIONS you can take: first clips, then "
-        "posts, then quote cards. 下面按你想要的动作归类。",
-        "先按金句卡方向走。We'll go with the quote-card direction first — no "
-        "need to confirm, I'll handle it.",
-    )
-    conv_id = await conversation_id_of(pid)
-    async with AsyncSessionLocal() as db:
-        for content in legacy_rows:
-            db.add(
-                Message(
-                    conversation_id=conv_id,
-                    role="assistant",
-                    content=content,
-                    attachments=[],
-                    mentions=[],
-                )
-            )
-        await db.commit()
-    turn1 = await ctx.chat(pid, "so what do you think I should do with it?")
-    msg = turn1["assistant_message"]
-    content = msg.get("content") or ""
-    check(has_prose(msg) or msg.get("question"),
-          "the new turn answers functionally", msg)
-    for marker in ("按你想要的动作归类", "go with the quote-card direction first",
-                   "先按金句卡方向走", "GROUP THESE BY THE ACTIONS"):
-        check(marker.lower() not in content.lower(),
-              "the new policy never parrots old-lane history (verbatim 负形)", marker)
-    for token in ("present_plan", "ask_user", "task_book", "start_run",
-                  "suggestion_ref"):
-        check(token not in content,
-              "schema/tool tokens never leak into speech (宪法② 负形)", token)
-    check(turn1.get("run_id") is None, "no run", turn1)
-
-
-async def s_int10_capability_answer_never_narrates_grouping(ctx: Ctx) -> None:
-    """事故①回归锁（批 D · 宪法②执行细节）：能力问的答复永不叙述自己的
-    分组方案——内部组织指令是答复的骨架,不是言语。断言面分工（简报批 D
-    施工点 5）：本场景只锁终态形态 + 极窄机器词负形（schema 味词 =
-    banned shape,禁令 #7 允许的负形）；措辞质感判定归
-    reply_quality_probe 语义角色维度——本场景禁措辞正则、禁锁散文。"""
-    pid = await ctx.new_project("S-int-10 capability grouping")
-    for prompt in ("你会做什么？你能剪辑已有素材吗",
-                   "what can you do with my existing talks?"):
-        turn = await ctx.chat(pid, prompt)
-        msg = turn["assistant_message"]
-        check(terminal_tool_of(turn) == "answer",
-              "a capability question closes on the answer call", turn)
-        check(has_prose(msg), "a prose answer lands", msg)
-        content = msg.get("content") or ""
-        for marker in ("归类", "group by the", "group these by"):
-            check(marker not in content.lower(),
-                  "the grouping scheme never becomes speech (事故① banned shape)",
-                  marker)
-        check(turn["run_id"] is None, "an info question starts no run", turn)
-    check(await count_runs(pid) == 0, "no run the whole journey")
-
-
-async def s_int11_trigger_verdict_offer_texture(ctx: Ctx) -> None:
-    """事故②回归锁（批 D · 宪法①执行细节）：主动评审 trigger 的判定以提
-    议落地、收尾无指令。ADR-102 改靶：素材评审 trigger 已死，本座骑存活
-    事件 craft_decompiled——形态面断言不变：无 pending plan → 开口
-    （ADR-080 不静默）；散文非空且永不以问号收尾（介质法——问题住在
-    dock 自己的标题里）；建议 dock 随 craft 契约 0-3 项（素材 trigger 的
-    「零建议拒于门内」硬地板已随 ADR-102 退役——零建议此刻合法），非空
-    时过载荷边界 lint（check_suggestion_block 全谱）。判定是推荐还是指令
-    的措辞质感归 reply_quality_probe 语义角色维度——本场景禁措辞正则。"""
-    from app.chat.trigger_turn import TRIGGER_CRAFT_DECOMPILED, run_trigger_turn
-
-    pid, _ = await seed_keynote_project(ctx, "S-int-11 trigger verdict")
-    review = await run_trigger_turn(uuid.UUID(pid), TRIGGER_CRAFT_DECOMPILED,
-                                    "s-int-11-craft")
-    check(review is not None,
-          "no pending plan — the proactive review speaks (ADR-080)", review)
-    row = next(m for m in await conversation_items(ctx, pid)
-               if m["id"] == str(review.id))
-    content = (row.get("content") or "").strip()
-    check(bool(content), "the review's prose lands", row)
-    check(not content.endswith(("?", "？")),
-          "the prose never ends in a question mark (介质法——the card asks it)",
-          content[-40:])
-    suggestions = row.get("suggestions") or []
-    if suggestions:
-        check_suggestion_block(suggestions, row["id"], "S-int-11")
-
-
-async def s_int12_repair_never_confesses(ctx: Ctx) -> None:
-    """事故③ wording 回归锁（批次 G1 — repair 修宪 + rejection 取证）：
-    易触发执行护栏的回合里若真的发生了被拒迭代（wire 上的 cancelled
-    帧 = 拒绝的唯一 wire 证据座），判定树必须成立：
-
-    ① 零 repair ACTIVE 帧——重试跨度静默开启，修复机械永不流成台词；
-    ② repair 帧至多一帧且只以终态出现：同形重试 = 零帧（未被公开承诺的
-       东西无需交代），转向 = 恰一 completed 帧（key = repairDone，说工作
-       变化），耗尽 = 恰一 failed 帧（key = repair）——key 永远落在新规
-       词表内（自白文案的静态锁在纯测试，wire 面锁键）；
-    ③ rejection 取证台账随 activity_log 行落库（intent.rejections 形状 =
-       tool_name/kind/iteration/detail/at）——被拒调用从事后不可考变为
-       可取证，且与判定树交叉一致（台账的被拒名 × 终态形态 ⇔ 转向帧有无）。
-
-    触发面（2026-10-03 再座）：zh+en 双素材 + scope-less「做成英文配音版」
-    ——check_transform_targets 的 scope-less facing 是模型盲区（它眼中
-    「zh 素材出英配」完全合法，护栏面向全部素材），护栏拒绝稳定复现。
-    原触发面（空项目直点 media 工作 → 出书门槛）已死于 prompt 层规避：
-    模型在第一发就按宪法要素材/纠偏，护栏拒绝不再发生（探针实证——
-    这是 E 批言语法的预期效果，不是护栏漂移）。无拒绝发生 = 最多 2 个
-    全新项目，均无拒绝证据 = 硬红（防空洞绿，同 S-int-3 口径）。"""
-    repair_turn: StreamTurn | None = None
-    envelope: dict | None = None
-    pid = ""
-    for attempt in range(1, 3):
-        pid = await ctx.new_project(f"S-int-12 repair #{attempt}")
-        await seed_asset(
-            pid,
-            ctx.user_id,
-            AssetType.VIDEO,
-            "keynote-zh.mp4",
-            extracted_text=(
-                "今天我想讲三个话题：为什么我们团队决定重写整个渲染管线，"
-                "这次重写教会我们的三件事，以及接下来半年的路线图。"
-            ),
-            meta={"language": "zh"},
-            processed=True,
-        )
-        await seed_asset(
-            pid,
-            ctx.user_id,
-            AssetType.VIDEO,
-            "talk-en.mp4",
-            extracted_text=(
-                "In this talk I walk through three lessons from a decade "
-                "of field research."
-            ),
-            meta={"language": "en"},
-            processed=True,
-        )
-        turn = await ctx.chat_stream(pid, "帮我把视频做成英文配音版")
-        env = turn.completed
-        check(env is not None, "the turn completes", turn.failed)
-        if any(a["status"] == "cancelled" for a in turn.activities):
-            repair_turn, envelope = turn, env
-            break
-    check(
-        repair_turn is not None,
-        "no rejected iteration after 2 fresh projects (发射面漂移——红 = "
-        "护栏拒绝不再发生或拒绝证据座漂移)",
-    )
-    assert repair_turn is not None and envelope is not None
-    acts = repair_turn.activities
-    repair_frames = [a for a in acts if a["kind"] == "repair"]
-    check(
-        not any(a["status"] == "active" for a in repair_frames),
-        "① 零 repair active 帧——重试跨度静默开启",
-        repair_frames,
-    )
-    check(
-        len(repair_frames) <= 1
-        and all(f["status"] in ("completed", "failed") for f in repair_frames)
-        and all(
-            f["key"] in ("chat.activity.repair", "chat.activity.repairDone")
-            for f in repair_frames
-        ),
-        "② repair 帧至多一帧、只以终态出现、键落新词表",
-        repair_frames,
-    )
-    # ③ 取证台账（DB 座）：本回合的 activity_log 行带 rejections。
-    conv = await ctx.conversation(pid)
-    items = await ctx.messages(conv.json()["id"])
-    user_msg_id = envelope["user_message"]["id"]
-    log_row = next(
-        (
-            m
-            for m in items
-            if (m.get("intent") or {}).get("type") == "activity_log"
-            and (m.get("intent") or {}).get("ref") == user_msg_id
-        ),
-        None,
-    )
-    check(log_row is not None, "③ the turn's activity_log row persists", items[-3:])
-    ledger = (log_row.get("intent") or {}).get("rejections") or []
-    check(bool(ledger), "③ the rejections ledger rides the log row", log_row)
-    check(
-        all(
-            set(r) >= {"tool_name", "kind", "iteration", "detail", "duration_ms", "at"}
-            and isinstance(r["iteration"], int)
-            and isinstance(r["duration_ms"], int)
-            and r["kind"]
-            in ("schema_truncation", "unknown_tool", "params_validation", "execute_guardrail")
-            and r["at"]
-            for r in ledger
-        ),
-        "③ ledger entries carry tool_name/kind/iteration/detail/duration_ms/at",
-        ledger,
-    )
-    # 交叉一致：台账的被拒名 × 信封终态 ⇔ 转向帧（completed）的有无。
-    rejected_names = {r["tool_name"] for r in ledger if r["tool_name"]}
-    term = terminal_tool_of(envelope)
-    if rejected_names and term not in rejected_names:
-        check(
-            len(repair_frames) == 1
-            and repair_frames[0]["status"] == "completed"
-            and repair_frames[0]["key"] == "chat.activity.repairDone",
-            f"转向（{sorted(rejected_names)} → {term}）= 恰一 completed 帧",
-            repair_frames,
-        )
-    else:
-        check(
-            not repair_frames,
-            f"同形（{sorted(rejected_names)} → {term}）= 零 repair 帧",
-            repair_frames,
-        )
-    # cancelled 帧三核对（G2 验收裁决——来源/顺序/对应，不只存在性）+
-    # 原始事件序列留存。
-    check_cancelled_provenance(repair_turn, ledger, "S-int-12")
-    dump_raw_events("S-int-12", "repair", repair_turn)
-
-
-async def s_int13_rejected_speech_never_leaks(ctx: Ctx) -> None:
-    """事故③ leak 回归锁（批次 G2 — 言语提交协议一般化）：若真发生被
-    拒迭代（wire 上的 cancelled 帧 = 拒绝唯一 wire 证据座，同 S-int-12
-    口径）：
-
-    ① wire 散文零泄漏——全回合 deltas 拼接 strip 必为空：被拒迭代的
-       言语在 retract 即清、永不到达客户端；重试迭代 quiet 无 delta；
-       checkpoint 通道走自己的帧（checkpoints 列表），永不混入 deltas；
-    ② 信封唯一且自洽——turn.completed 恰一到达；复拉消息流该回合
-       assistant 行恰一且 id 与信封一致（无二重身、无半截）；
-    ③ DB 台账含 execute_guardrail 行（G1 取证座在协议推广后仍落库）+
-       cancelled 帧三核对（来源 = 同 activity_id 先行 active 帧；顺序 =
-       先于信封；对应 = 台账被拒名 kind_for_tool 映射覆盖 cancelled
-       kind）+ 原始事件序列留存 scratch/speech_commit/；
-    ④ D3 第二命题（服务端协议正确性——不以客户端零泄漏替代）：被拒
-       迭代在服务端零提交零残留，项目世界里只有接受迭代的终态产物
-       （present_plan → pending_brief echo == 信封；ask_user → pending
-       question 与信封同 id；其余 → 无 dock 残留）。
-
-    触发面（2026-10-03 再座，与 S-int-12 同源）：zh+en 双素材 +
-    scope-less「做成英文配音版」——模型盲区面（原 zh 单素材同语配音
-    触发面已死于 prompt 层规避：模型第一发直接纠偏「视频本身就是中
-    文」，护栏拒绝不再发生）。无拒绝发生 = 最多 2 个全新项目，均无
-    拒绝证据 = 硬红（防空洞绿，同 S-int-12 口径）。"""
-    leak_turn: StreamTurn | None = None
-    envelope: dict | None = None
-    pid = ""
-    for attempt in range(1, 3):
-        pid = await ctx.new_project(f"S-int-13 leak #{attempt}")
-        await seed_asset(
-            pid,
-            ctx.user_id,
-            AssetType.VIDEO,
-            "keynote-zh.mp4",
-            extracted_text=(
-                "今天我想讲三个话题：为什么我们团队决定重写整个渲染管线，"
-                "这次重写教会我们的三件事，以及接下来半年的路线图。"
-            ),
-            meta={"language": "zh"},
-            processed=True,
-        )
-        await seed_asset(
-            pid,
-            ctx.user_id,
-            AssetType.VIDEO,
-            "talk-en.mp4",
-            extracted_text=(
-                "In this talk I walk through three lessons from a decade "
-                "of field research."
-            ),
-            meta={"language": "en"},
-            processed=True,
-        )
-        turn = await ctx.chat_stream(pid, "帮我把视频做成英文配音版")
-        env = turn.completed
-        check(env is not None, "the turn completes", turn.failed)
-        if any(a["status"] == "cancelled" for a in turn.activities):
-            leak_turn, envelope = turn, env
-            break
-    check(
-        leak_turn is not None,
-        "no rejected iteration after 2 fresh projects (发射面漂移——红 = "
-        "同语转换拒绝不再发生或拒绝证据座漂移)",
-    )
-    assert leak_turn is not None and envelope is not None
-    check(
-        not "".join(leak_turn.deltas).strip(),
-        "① 被拒回合 wire 散文零泄漏（deltas 拼接必为空）",
-        leak_turn.deltas[:5],
-    )
-    conv = await ctx.conversation(pid)
-    items = await ctx.messages(conv.json()["id"])
-    user_msg_id = envelope["user_message"]["id"]
-    user_idx = next(i for i, m in enumerate(items) if m["id"] == user_msg_id)
-    turn_assistants = [
-        m
-        for m in items[user_idx + 1 :]
-        if m["role"] == "assistant"
-        and (m.get("intent") or {}).get("type") not in ("activity_log", "checkpoint")
-    ]
-    env_msg = envelope.get("assistant_message") or {}
-    check(
-        len(turn_assistants) == 1 and turn_assistants[0]["id"] == env_msg.get("id"),
-        "② 复拉消息流：该回合 assistant 行恰一且与信封同 id（无二重身）",
-        [m["id"] for m in turn_assistants],
-    )
-    log_row = next(
-        (
-            m
-            for m in items
-            if (m.get("intent") or {}).get("type") == "activity_log"
-            and (m.get("intent") or {}).get("ref") == user_msg_id
-        ),
-        None,
-    )
-    check(log_row is not None, "③ the turn's activity_log row persists", items[-3:])
-    ledger = (log_row.get("intent") or {}).get("rejections") or []
-    check(
-        any(r["kind"] == "execute_guardrail" for r in ledger),
-        "③ the ledger carries the same-language guardrail rejection",
-        ledger,
-    )
-    # cancelled 帧三核对（验收裁决——来源/顺序/对应）+ 原始事件序列留存。
-    check_cancelled_provenance(leak_turn, ledger, "S-int-13")
-    dump_raw_events("S-int-13", "leak", leak_turn)
-    # ④ D3 第二命题（服务端协议正确性，不以客户端零泄漏替代）：被拒迭代
-    # 在服务端零提交零残留——项目世界里只有接受迭代的终态产物。
-    term = terminal_tool_of(envelope)
-    brief = (await ctx.results(pid)).get("pending_brief")
-    pending_q = (conv.json() or {}).get("pending_question") or {}
-    if term == "present_plan":
-        check(
-            brief is not None
-            and (brief["intent"].get("answer") or "")
-            == (env_msg.get("content") or ""),
-            "④ 服务端提交恰一：pending_brief 的 echo == 信封内容（无被拒迭代残留）",
-            {"brief": (brief or {}).get("intent", {}).get("answer", "")[:80]},
-        )
-    elif term == "ask_user":
-        check(
-            pending_q.get("id") == env_msg.get("id"),
-            "④ 服务端提交恰一：pending question 与信封 dock 同 id（无被拒迭代残留）",
-            {"pending": pending_q.get("id"), "envelope": env_msg.get("id")},
-        )
-    else:
-        check(
-            brief is None and not pending_q,
-            f"④ {term} 终态：无 dock / brief 残留",
-            {"brief": bool(brief), "pending": bool(pending_q)},
-        )
-
-
-async def s_int14_stream_abort_no_dup_no_loss(ctx: Ctx) -> None:
-    """SSE 断流复连座（批次 G2 checklist ④）：SSE 道收到 2 帧后断连
-    （言语提交协议下早期帧 = reasoning/phase/activity，散文全部缓冲——
-    断流点必在回合中段），server 侧回合自足走完。适用范围前提（验收
-    裁决登记）：回合提交正确性不依赖客户端完整接收活动流——提交点在
-    回合尾，socket 生命周期与 server 状态机解耦；本座验收「服务端裁决
-    × 客户端展示一致」，不覆盖全部网络中断组合（若未来发现断流导致
-    重复提交/错误确认/状态不可恢复，另立连接恢复测试座）。
-
-    ① 复拉消息流：该回合 assistant 行 0 或 1（永不 2——无半截双写）；
-       若 1 则内容非空（行要么完整落库要么不存在）；
-    ② 后续回合干净——follow-up 的 SSE 道完整走通（completed 到达、无
-       failed），且其流式散文是信封内容的前缀（流式 ⊆ 信封，二源永不
-       分叉；被拒重试回合流式为空 = 前缀平凡成立）；
-    ③ 两段原始事件序列（aborted / follow-up）留存
-       scratch/speech_commit/ 供复核。"""
-    pid = await ctx.new_project("S-int-14 abort")
-    aborted = await ctx.chat_stream(
-        pid, "你会做什么？把你能做的事详细介绍一下", abort_after=2
-    )
-    check(aborted.completed is None, "the abort lands before the envelope")
-    dump_raw_events("S-int-14", "aborted", aborted)
-    conv = await ctx.conversation(pid)
-    conv_id = conv.json()["id"]
-
-    def _content_assistants(items: list[dict]) -> list[dict]:
-        # activity_log / checkpoint rows ride role="assistant" too — the
-        # 二重身 count covers CONTENT rows only.
-        return [
-            m
-            for m in items
-            if m["role"] == "assistant"
-            and (m.get("intent") or {}).get("type") not in ("activity_log", "checkpoint")
-        ]
-
-    baseline_assistants = _content_assistants(await ctx.messages(conv_id))
-    # 等中止回合落定：assistant 行出现（server 走完提交）或 90s 无行
-    # （连接中断取消了回合——同样合法，永不许出现 2 行）。
-    settled: list[dict] = baseline_assistants
-    for _ in range(45):
-        await asyncio.sleep(2)
-        settled = _content_assistants(await ctx.messages(conv_id))
-        if len(settled) > len(baseline_assistants):
-            break
-    check(
-        len(settled) <= len(baseline_assistants) + 1,
-        "① the aborted turn commits at most ONE assistant row (无半截双写)",
-        [m["id"] for m in settled],
-    )
-    if len(settled) == len(baseline_assistants) + 1:
-        check(
-            bool((settled[-1].get("content") or "").strip()),
-            "① the committed row is whole (非空内容)",
-            settled[-1].get("content"),
-        )
-    follow = await ctx.chat_stream(pid, "这个视频有没有什么建议？还有其他想法吗？")
-    check(
-        follow.completed is not None and follow.failed is None,
-        "② the follow-up turn completes clean after the abort",
-        follow.failed,
-    )
-    env_msg = (follow.completed or {}).get("assistant_message") or {}
-    streamed = "".join(follow.deltas)
-    check(
-        not streamed or (env_msg.get("content") or "").startswith(streamed),
-        "② 流式 ⊆ 信封（流式散文是信封前缀，二源不分叉）",
-        {"streamed": streamed[:80], "envelope": (env_msg.get("content") or "")[:80]},
-    )
-    dump_raw_events("S-int-14", "follow-up", follow)
-
-
 SCENARIOS = {
-    "S1": s1_bare_wish_full_journey,
-    "S2": s2_skipped_topic_ask_drafts_from_persona,
-    "S3": s3_interjection_keeps_pending,
-    "S4": s4_material_chain_and_estimate_foundation,
-    "S5": s5_revision_chat_always_wins,
-    "S6": s6_interrupt_consolidated,
-    "S7": s7_caption_mode_default,
-    "S8": s8_research_grounds_writer,
-    "S9": s9_consult_never_books,
-    "S10": s10_sse_turn_streaming,
-    "S11": s11_whole_source_and_materialize_matrix,
-    "S12": s12_merge_brief_source_matrix,
-    "S13": s13_credits_insufficient_birthplace_422,
-    "S14": s14_failed_run_zero_capture_full_release,
-    "S15": s15_orphan_hold_released_on_project_delete,
-    "S16": s16_remix_flagship_journey,
-    "S17": s17_run_authority_park_and_handoff,
-    "S18": s18_idless_asset_read_terminalizes,
-    "S-wait-1": s_wait1_in_turn_wait_grounds_answer,
-    "S-wait-2": s_wait2_failed_read_honest_clause,
-    "S19": s19_turn_durability_and_trigger_admission,
-    "S20": s20_speech_semantic_contract,
-    "S21": s21_checkpoint_channel_observation,
-    "S22": s22_trigger_landing_silence,
-    "S23": s23_exploration_chain_lands_on_canvas,
-    "S-explore-2": s_explore_2_decision_package_to_confirmed_scope,
-    "S24": s24_interview_framing_choice_lands_reframe,
-    "S25": s25_transcript_array_order,
-    "S-edit": s_edit_precise_edit_archive_lifecycle,
-    # New Interaction Contract（批次 S · ADR-099 golden suite）——两层分离的
-    # 新架构层：上方 Legacy Regression 零改动；本组只收 C·C+ 后可转绿场景。
-    "S-int-1": s_int1_pure_info_plain_answer,
-    "S-int-2": s_int2_exploration_options_dock,
-    "S-int-3": s_int3_rootless_wish_ask_user_gate,
-    "S-int-4": s_int4_named_work_present_plan,
-    "S-int-5": s_int5_browse_question_never_hijacked,
-    "S-int-8": s_int8_quote_card_caption_default_absorbed,
-    "S-int-9": s_int9_old_lane_history_new_policy,
-    # 事故①②回归锁（批 D 带入座）——形态 + 极窄机器词负形,措辞质感归
-    # reply_quality_probe 语义角色维度（断言面分工,简报批 D 施工点 5）。
-    "S-int-10": s_int10_capability_answer_never_narrates_grouping,
-    "S-int-11": s_int11_trigger_verdict_offer_texture,
-    # 事故③ wording 回归锁（批 G1 带入座）——repair 静默开启/终态判定树/
-    # rejection 取证台账；leak 零泄漏锁随批 G2 入座（能力未落地,本组不含）。
-    "S-int-12": s_int12_repair_never_confesses,
-    # 事故③ leak 回归锁 + SSE 断流复连座（批 G2 带入座）——被拒迭代 wire
-    # 零泄漏 / 断流复拉不重不漏。
-    "S-int-13": s_int13_rejected_speech_never_leaks,
-    "S-int-14": s_int14_stream_abort_no_dup_no_loss,
+    "S1": s1_lost_user_full_journey,
+    "S2": s2_material_to_clips_full_chain,
+    "S3": s3_material_suggestion_exploration,
+    "S4": s4_no_material_writers,
+    "S5": s5_research_grounds_writer,
+    "S6": s6_consult_never_deadends,
+    "S7": s7_second_circle_revision,
+    "S8": s8_interview_to_framing,
+    "S9": s9_credits_boundary,
+    "S10": s10_remix_flagship,
 }
 
 
@@ -6096,6 +3662,10 @@ async def main() -> int:
         for name, fn in selected:
             print(f"▶ {name} {fn.__doc__.strip() if fn.__doc__ else ''}")
             try:
+                # harness 公共断言（每本自动携带）：估价三断言 + repair 只一轮
+                # ——进程内编译 + Agent 漏斗 stub，零 LLM 零网络。
+                check_estimate_foundation()
+                await check_repair_once_foundation()
                 await fn(ctx)
             except ScenarioFailure as exc:
                 failures[name] = str(exc)
