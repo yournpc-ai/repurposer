@@ -1110,7 +1110,7 @@ const zh: Resources = {
       videoTrack: "视频轨",
       textTrack: "文字轨",
       trackSegment: "片段 {{n}} · 源 {{src}}",
-      // L1 hover chip 两行（ADR-114 信息秩三分）：块名 + 产出/源两轴预格式化区间。
+      // L1 hover chip 两行（ADR-115 信息秩三分）：块名 + 产出/源两轴预格式化区间。
       trackSegmentTitle: "片段 {{n}}",
       trackSegmentOut: "产出 {{out}} · 源 {{src}}",
       modifierMusic: "音乐",

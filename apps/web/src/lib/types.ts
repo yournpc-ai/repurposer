@@ -219,7 +219,7 @@ export interface TrackStackVideoBlock {
   asset_id: string | null
   /** Preformatted `m:ss–m:ss` source range (server-formatted). */
   src_label: string
-  /** Preformatted `m:ss–m:ss` output range (server-formatted, ADR-114). */
+  /** Preformatted `m:ss–m:ss` output range (server-formatted, ADR-115). */
   out_label: string
 }
 
@@ -232,14 +232,14 @@ export interface TrackStackTextBlock {
   label: string
 }
 
-/** One scale tick on the NLE axis's ruler (ADR-114): `label` preformatted
+/** One scale tick on the NLE axis's ruler (ADR-115): `label` preformatted
  * on the major steps, null on the minor ones (geometry only). */
 export interface TrackStackRulerTick {
   t: number
   label: string | null
 }
 
-/** The track-stack read-face projection (ADR-113 §4; ADR-114 NLE 轴): video
+/** The track-stack read-face projection (ADR-113 §4; ADR-115 NLE 轴): video
  * lane (kept segments concatenated on the output clock) + text lane
  * (caption sentences per segment, a cut = a hard break) + the ruler scale +
  * modifier presence. Read-only — never an orchestration surface (L3). */

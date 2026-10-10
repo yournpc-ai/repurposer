@@ -24,7 +24,7 @@ Lane laws:
   then shifted to the output axis. Labels are preformatted ``m:ss–m:ss``
   (the client never formats time).
 - ``ruler``: the NLE axis's scale — ticks at a nice-step density with
-  labels preformatted (``None`` label = a minor tick; ADR-114 — the one
+  labels preformatted (``None`` label = a minor tick; ADR-115 — the one
   time-formatting seat covers the scale too, the client draws geometry
   only). ``t=0`` and ``t=total`` always carry labels.
 - ``modifiers``: presence only (``music`` = music.enabled, ``dub`` = dub
@@ -64,7 +64,7 @@ class TextLaneBlock(TypedDict):
 
 
 class RulerTick(TypedDict):
-    """One scale tick on the output axis (ADR-114): ``label`` preformatted
+    """One scale tick on the output axis (ADR-115): ``label`` preformatted
     ``m:ss`` on the major steps, ``None`` on the minor ones."""
 
     t: float
@@ -107,7 +107,7 @@ def _respaced(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _ruler_ticks(total: float) -> list[RulerTick]:
-    """The NLE axis's scale on the output timeline (ADR-114).
+    """The NLE axis's scale on the output timeline (ADR-115).
 
     Major step = the first nice value keeping ≤10 labeled ticks (a 45s
     clip reads 0:00–0:45 by fives; a 7min clip by minutes); minor = major/5

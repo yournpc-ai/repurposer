@@ -330,7 +330,7 @@ export const PRODUCT_TYPE_ICON: Record<string, typeof Clapperboard> = {
   article: Newspaper,
 }
 
-/** L1 读数 chip (信息秩三分, ADR-114): the hover layer's ONE shape — a
+/** L1 读数 chip (信息秩三分, ADR-115): the hover layer's ONE shape — a
  * transient reading floating ABOVE the hovered block (never baked into the
  * block, never covering the row below it), portal'd to document.body
  * (视口锚浮层律), pointer-events-none, overlay-surface frost. One instance
@@ -379,7 +379,7 @@ const transcriptCache = new Map<string, AssetTranscript | null>()
  * endpoint, cached module-wide; a processing-stage flip invalidates (mid-
  * flight ASR drops the snapshot, the terminal flip refetches); a save
  * writes the fresh response straight back. Lives at the CARD level
- * (ThumbCard, ADR-114) so the stage skin (the media's bottom edge) and the
+ * (ThumbCard, ADR-115) so the stage skin (the media's bottom edge) and the
  * cue flow read one snapshot. */
 function useAssetTranscript(asset: FlowAssetInfo | undefined): {
   tx: AssetTranscript | null | undefined
@@ -445,7 +445,7 @@ type HoverChipState = {
   content: ReactNode
 } | null
 
-/** 舞台检视皮 (ADR-114 素材卡阅读型解剖): the time axis as a 3px skin on
+/** 舞台检视皮 (ADR-115 素材卡阅读型解剖): the time axis as a 3px skin on
  * the media's own bottom edge — cue segments ∝ their span (pauses read as
  * air), the playhead needle riding the player's clock; the media hover
  * fattens it to 8px, a click seeks (只拨头, the ambient-muted law
@@ -519,7 +519,7 @@ function StageSkin({
   )
 }
 
-/** The asset's content layer (ADR-113 §3; ADR-114 阅读型解剖): the cue flow
+/** The asset's content layer (ADR-113 §3; ADR-115 阅读型解剖): the cue flow
  * IS the reading face — the header (title + edit affordance), then the
  * sentence rows on ONE scroll axis. The time axis moved ONTO the stage
  * (StageSkin at the media's bottom edge); the row's time reading floats in
@@ -758,7 +758,7 @@ function TranscriptSection({
   )
 }
 
-/** The deliverable card's NLE 检视轴 (ADR-114 — 成片卡检视解剖): below the
+/** The deliverable card's NLE 检视轴 (ADR-115 — 成片卡检视解剖): below the
  * media, a read-only timeline — the axis HEAD (the clip's score at the right
  * end, moved off the media stage), the RULER (server-formatted scale, click
  * = seek), the VIDEO lane (kept segments as real clip objects — multi-block
@@ -822,7 +822,7 @@ function NleAxis({
   const [chip, setChip] = useState<{ rect: DOMRect; content: ReactNode } | null>(null)
   const chipFrom = (e: React.MouseEvent, content: ReactNode) =>
     setChip({ rect: e.currentTarget.getBoundingClientRect(), content })
-  // 评分撤下舞台入轴头 (ADR-114): the bare score at the head's right end —
+  // 评分撤下舞台入轴头 (ADR-115): the bare score at the head's right end —
   // the same ADR-112 ③ law (top pick only with ≥2 scored clips), quiet meta
   // chrome instead of the on-stage badge (tracked cards only; the untracked
   // anatomies keep the stage badge).
@@ -1115,7 +1115,7 @@ function ThumbCard({
   // card body (no media box, no stage skin).
   const medialess = asset?.type === "transcript" || asset?.type === "past_material"
 
-  // ADR-114 阅读型解剖: the transcript channel lives at the CARD level —
+  // ADR-115 阅读型解剖: the transcript channel lives at the CARD level —
   // the stage skin (the media's bottom edge) and the cue flow read one
   // snapshot. The edit overlay hides the cue axis (no honest alignment).
   const { tx, saving, save } = useAssetTranscript(textBearing ? asset : undefined)
@@ -1143,7 +1143,7 @@ function ThumbCard({
   return (
     <div className="flex h-full w-full flex-col">
       <NodeCaption label={node.label} Icon={asset ? TypeIcon : undefined} />
-      {/* 一体环 (ADR-114): media + transcript inside ONE ring — the card IS
+      {/* 一体环 (ADR-115): media + transcript inside ONE ring — the card IS
           the reading surface. The stage keeps its aspect-pinned reservation
           (flex-1 against the section's fixed anatomy — the frame math pins
           it, never a mid-life squeeze); object-cover = zero letterbox, the
@@ -1223,7 +1223,7 @@ function ThumbCard({
                 )}
               </MediaHoverButton>
             )}
-            {/* 舞台检视皮 (ADR-114): the time axis ON the stage's bottom
+            {/* 舞台检视皮 (ADR-115): the time axis ON the stage's bottom
                 edge — the in-section strip's successor. The edit overlay
                 hides it (cues null — no honest time alignment). */}
             {node.videoUrl && cues && cues.length > 0 ? (
@@ -1478,7 +1478,7 @@ function MediaProductRegion({
    * blocks seek it (`currentTime = out_start` — 只拨头, the ambient-muted
    * law untouched). */
   videoRef?: RefObject<HTMLVideoElement | null>
-  /** 评分撤下舞台入轴头 (ADR-114): a tracked card reads its score at the
+  /** 评分撤下舞台入轴头 (ADR-115): a tracked card reads its score at the
    * NLE axis's head — the on-stage badge stays the UNtracked anatomies'
    * seat. */
   hideScore?: boolean
@@ -1631,7 +1631,7 @@ function MediaProductRegion({
         </span>
       )}
       {/* Media meta badges: the score rides the bottom-left corner (unless
-          the card's NLE axis owns it — 评分撤下舞台入轴头, ADR-114); the
+          the card's NLE axis owns it — 评分撤下舞台入轴头, ADR-115); the
           top corners belong to the hover affordances (expand left, sound
           right). The duration is NOT a badge — it lives in the factsbar
           below the card (2026-08-17 二轮走查拍板). */}
@@ -2487,7 +2487,7 @@ function GraphCard({
         {node.artifact && node.artifact.facets.length > 0 && (
           <ArtifactFacetStrip artifact={node.artifact} />
         )}
-        {/* ADR-114 NLE 检视轴: the inspection timeline — LAST inside the
+        {/* ADR-115 NLE 检视轴: the inspection timeline — LAST inside the
             card, so the failure chrome above (failure lines / facet strip)
             grows INTO the media's flex and the lane seats (the video
             in-port's anchor, 锚点律) never move. In the anatomy from birth:
@@ -2638,7 +2638,7 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
         // 角落栈: bottom-anchored at the card's bottom-left, stacking upward
         // in port order; generator cards keep the two-family seats (each
         // region bottom-anchored at its own corner, 34px per sibling).
-        // 锚点律 (ADR-113 §5; ADR-114 NLE 轴): a tracked card's video
+        // 锚点律 (ADR-113 §5; ADR-115 NLE 轴): a tracked card's video
         // in-port leaves the corner stack for the video lane's Y-center —
         // the edge lands on the lane it feeds (mirror: layout.ts
         // trackVideoPortBasePx) — and does NOT consume a corner-stack slot.

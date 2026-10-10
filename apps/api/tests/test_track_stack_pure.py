@@ -1,4 +1,4 @@
-"""Pure tests for app.pipeline.track_stack (ADR-113 §4 + ADR-114 NLE 轴).
+"""Pure tests for app.pipeline.track_stack (ADR-113 §4 + ADR-115 NLE 轴).
 
 No database, no LLM, no HTTP — build_track_stack maps a render_spec dict to
 the deliverable card's inspection face; branch coverage lives here because
@@ -127,7 +127,7 @@ def test_text_lane_latin_tokens_regain_their_space():
     assert stack["text_lane"][0]["text"] == "hello world"
 
 
-# ---- ruler (ADR-114) -------------------------------------------------------
+# ---- ruler (ADR-115) -------------------------------------------------------
 
 
 def test_ruler_short_clip_steps_by_fives_with_labeled_ends():

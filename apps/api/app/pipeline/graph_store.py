@@ -385,7 +385,7 @@ _ASSET_FRAME: dict[str, tuple[int, int]] = {
 }
 _ASSET_FRAME_DEFAULT = _FRAME_CLASS["asset"]
 
-# The transcript section's frame reservation (ADR-113 §3; ADR-114 素材卡
+# The transcript section's frame reservation (ADR-113 §3; ADR-115 素材卡
 # 阅读型解剖: media + 检视皮(入舞台底缘) + cue 流): text-yielding media
 # assets (video/audio) grow it BELOW the media; paste/transcript assets are
 # medialess — the section IS the body. ONE law with the client mirror
@@ -393,7 +393,7 @@ _ASSET_FRAME_DEFAULT = _FRAME_CLASS["asset"]
 _TRANSCRIPT_SECTION_PX = 197  # divider 1 + pad 8 + header 20 + gap 6 + cue flow 150 + pad 12
 _ASSET_TEXT_ONLY_H = 266  # caption 26 + section 196 + toolbar 44
 
-# NLE 检视轴预留 (ADR-114 — 成片卡解剖: media + 轴头 + ruler + 视频道 +
+# NLE 检视轴预留 (ADR-115 — 成片卡解剖: media + 轴头 + ruler + 视频道 +
 # 文字道 + bar): the tracked clip families' cards carry the inspection axis
 # FROM BIRTH (draft renders muted empty lanes — the waiting seat, so the
 # video in-port's anchor never moves mid-life; 锚点律). Modifier lanes add
@@ -496,7 +496,7 @@ def _frame_of(kind: str, spec: dict[str, Any]) -> tuple[int, int]:
         # absorbs a failure-grown strip at runtime).
         if str(spec.get("prototype") or "") != "generator":
             h -= _PROGRAM_REGION_PX
-        # NLE 轴门控 (ADR-114; client mirror layout.ts hasTrackStack):
+        # NLE 轴门控 (ADR-115; client mirror layout.ts hasTrackStack):
         # the tracked clip families reserve the inspection axis at birth —
         # the lanes are in the anatomy from draft on, so the video in-port's
         # anchor seat (锚点律) never moves mid-life.

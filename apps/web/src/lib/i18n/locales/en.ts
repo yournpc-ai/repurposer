@@ -1174,7 +1174,7 @@ const en = {
       videoTrack: "Video track",
       textTrack: "Text track",
       trackSegment: "Segment {{n}} · Source {{src}}",
-      // The L1 hover chip's two lines (ADR-114 信息秩三分): the block's own
+      // The L1 hover chip's two lines (ADR-115 信息秩三分): the block's own
       // name, then its two preformatted ranges on the output/source axes.
       trackSegmentTitle: "Segment {{n}}",
       trackSegmentOut: "Output {{out}} · Source {{src}}",

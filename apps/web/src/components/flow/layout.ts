@@ -130,7 +130,7 @@ export const PRODUCT_TOOLBAR_PX = 44
  * the second version's arrival, one coherent reflow, never a quiet shift. */
 export const PRODUCT_PAGER_PX = 44
 
-/** NLE 检视轴 (ADR-114 — the deliverable card's inspection anatomy): below
+/** NLE 检视轴 (ADR-115 — the deliverable card's inspection anatomy): below
  * the media, a timeline face — the axis HEAD (the clip's score, right end),
  * the RULER (server-formatted scale), the VIDEO lane (kept segments as real
  * clip objects), the TEXT lane (caption blocks, zero inner text — readings
@@ -205,7 +205,7 @@ export const IN_MEDIA_PORT_BASE_PX = PRODUCT_TOOLBAR_PX + PROGRAM_REGION_PX + 16
 /** 角落栈基座 (无程序区媒体卡): every in-port parks at the card's
  * bottom-left corner — the same seat as the media card's text port (60). */
 export const IN_CORNER_PORT_BASE_PX = PRODUCT_TOOLBAR_PX + 16
-/** 锚点律 (ADR-113 §5; ADR-114 NLE 轴): on a tracked card the video in-port
+/** 锚点律 (ADR-113 §5; ADR-115 NLE 轴): on a tracked card the video in-port
  * leaves the corner stack and parks at the VIDEO lane's Y-center — the edge
  * lands on the lane it feeds. Circle bottom = the factsbar band + the axis's
  * below-video-lane anatomy (bottom pad 12 + text lane 22 + gap 4) + half the
@@ -450,7 +450,7 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
   // rows actually render (healthy = 0, the frame carries no reservation —
   // server mirror: _frame_of).
   const facetPx = programPx > 0 ? 0 : facetStripPx(node)
-  // NLE 检视轴 (ADR-114): the tracked clip families carry the inspection
+  // NLE 检视轴 (ADR-115): the tracked clip families carry the inspection
   // axis in EVERY state (draft renders muted empty lanes — the anchor seat
   // never moves mid-life), so the reservation rides both the quiet-body and
   // the product anatomy. Server mirror: graph_store._frame_of's clip branch.
@@ -531,7 +531,7 @@ export const VIDEO_ASSET_NODE_SIZE = { width: 280, height: 228 }
 export const ASSET_TOOLBAR_PX = 44
 
 /** The transcript section's reservation below the media (ADR-113 §3;
- * ADR-114 素材卡阅读型解剖: media + 检视皮(入舞台底缘) + cue 流): divider 1
+ * ADR-115 素材卡阅读型解剖: media + 检视皮(入舞台底缘) + cue 流): divider 1
  * + pad 8 + header 20 + gap 6 + cue flow 150 + pad 12. ONE law with the
  * server mirror (graph_store._TRANSCRIPT_SECTION_PX) and the card's flex
  * seat (FlowNodeCard.TranscriptSection). */

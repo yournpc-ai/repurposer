@@ -1,6 +1,6 @@
 # 卡面解剖 v4 — 施工合同
 
-> Status: **代码层收口（2026-10-10）**——验证待用户自跑（§5）。母法 = `docs/DECISIONS.md` ADR-114；形态原型 = `scratch/media-card-anatomy.html`（信息秩三分定稿，真实数据 + 交互 demo）。
+> Status: **代码层收口（2026-10-10）**——验证待用户自跑（§5）。母法 = `docs/DECISIONS.md` ADR-115；形态原型 = `scratch/media-card-anatomy.html`（信息秩三分定稿，真实数据 + 交互 demo）。
 > 取证母本 = 项目 `1aeb9787-a5a4-489e-ab4e-b7057164a610`（xy_1.mp4 · 5:40 · 945 词 · 48 cue · 成片 = 源 2:59–3:45）。
 > 提交：`5092834`（track_stack 数据面 + 纯测试）/ `d99065b`（NLE 检视轴 + 锚点 + 两镜像）/ `34b075c`（素材卡阅读型）。
 
