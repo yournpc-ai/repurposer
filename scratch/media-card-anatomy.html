@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>竖屏轨道安放三方向 — 宽高比自适应 / 纯舞台hover / 轴随身(推荐)</title>
+<title>信息秩三分 — 结构常驻 / 读数 hover / 详情点击(行业证据版)</title>
 <style>
   /* ===== 真实 token(抄自 apps/web/src/styles.css)===== */
   :root {
@@ -64,11 +64,13 @@
     -webkit-font-smoothing: antialiased;
   }
   button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  a { color: var(--muted-foreground); }
   .page { max-width: 1520px; margin: 0 auto; padding: 40px 36px 96px; }
 
   header.doc { max-width: 920px; }
   header.doc h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
   header.doc p { margin-top: 10px; color: var(--muted-foreground); font-size: 13px; line-height: 1.7; }
+  header.doc p b { color: var(--foreground); font-weight: 500; }
   header.doc code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; background: var(--inset); padding: 1px 5px; border-radius: 4px; }
   .typetable { margin-top: 14px; width: 100%; border-collapse: collapse; font-size: 12px; }
   .typetable th, .typetable td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--hairline); vertical-align: top; line-height: 1.6; }
@@ -94,13 +96,29 @@
     background: var(--muted); color: var(--muted-foreground); }
   .lawtag.warn { background: oklch(0.577 0.245 27.325 / 0.12); color: var(--destructive); }
 
+  /* 证据卡 */
+  .evgrid { margin-top: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+  .evcard { background: var(--card); border-radius: var(--radius); box-shadow: 0 0 0 1px var(--hairline); padding: 16px 18px; }
+  .evcard h3 { font-size: 13px; font-weight: 600; }
+  .evcard h3 span { font-size: 11px; color: var(--meta-foreground); font-weight: 500; margin-left: 6px; }
+  .evcard ul { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .evcard li { font-size: 12px; color: var(--muted-foreground); line-height: 1.65; list-style: none; padding-left: 14px; position: relative; }
+  .evcard li::before { content: ""; position: absolute; left: 0; top: 8px; width: 5px; height: 5px; border-radius: 1px; background: var(--meta-foreground); }
+  .evcard li b { color: var(--foreground); font-weight: 500; }
+  .evcard li q { color: var(--foreground); quotes: "“" "”"; }
+  .evcard li a { font-size: 11px; word-break: break-all; }
+  .evcard.pending { border: 1px dashed var(--hairline); box-shadow: none; }
+
   .stage {
     margin-top: 18px; border-radius: 16px; padding: 44px 40px 52px;
     background: radial-gradient(circle, var(--dots) 1px, transparent 1px) 0 0 / 32px 32px, var(--background);
     box-shadow: inset 0 0 0 1px var(--hairline);
-    display: flex; gap: 56px; align-items: flex-start; justify-content: center; flex-wrap: wrap;
+    display: flex; gap: 120px; align-items: flex-start; justify-content: center; flex-wrap: wrap;
+    position: relative;
   }
-  .case { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .stage svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+  .stage svg.edges path { fill: none; stroke: var(--muted-foreground); stroke-opacity: .5; stroke-width: 1.5; }
+  .case { display: flex; flex-direction: column; align-items: center; gap: 12px; position: relative; z-index: 2; }
   .case > .tag { font-size: 11px; color: var(--meta-foreground); text-transform: uppercase; letter-spacing: 0.08em; }
   .case > .note { font-size: 12px; color: var(--muted-foreground); max-width: 340px; line-height: 1.7; }
   .case > .note b { color: var(--destructive); font-weight: 500; }
@@ -112,11 +130,11 @@
   .ncaption span.lab { display: flex; min-width: 0; align-items: center; gap: 4px; font-size: 11px; line-height: 1; color: var(--muted-foreground); }
   .ncaption svg { width: 14px; height: 14px; flex-shrink: 0; }
   .ncard { position: relative; background: var(--card); border-radius: var(--radius);
-    box-shadow: 0 0 0 1px var(--hairline); overflow: hidden; display: flex; flex-direction: column; }
-  .ncard.split { flex-direction: row; }
+    box-shadow: 0 0 0 1px var(--hairline); overflow: hidden; display: flex; flex-direction: column; cursor: default; }
   .port { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--card);
     box-shadow: 0 0 0 1.5px var(--hairline), inset 0 0 0 2.5px var(--muted-foreground); top: 40px; z-index: 5; }
   .port.l { left: -5px; } .port.r { right: -5px; left: auto; }
+  .port.lane-port { top: auto; }
 
   .media { position: relative; background: #000; overflow: hidden; flex-shrink: 0; }
   .media svg.scene { display: block; width: 100%; height: 100%; position: absolute; inset: 0; }
@@ -151,21 +169,17 @@
   .metarow .act svg { width: 13px; height: 13px; }
 
   .divider { height: 1px; background: var(--hairline); margin: 0 12px; flex-shrink: 0; }
-  .divider.v { width: 1px; height: auto; margin: 12px 0; align-self: stretch; }
 
-  /* transcript 区 */
   .txsec { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 12px; min-height: 0; }
-  .txsec.grow { flex: 1; }
   .txsec .txhead { display: flex; height: 20px; align-items: center; justify-content: space-between; flex-shrink: 0; }
   .txsec .txhead .t { font-size: 10px; }
   .txsec .txhead .edit { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;
     border-radius: 6px; color: var(--muted-foreground); transition: background .12s, color .12s; }
   .txsec .txhead .edit:hover { background: var(--accent); color: var(--foreground); }
   .txsec .txhead .edit svg { width: 12px; height: 12px; }
-  .cueflow { display: flex; flex-direction: column; gap: 4px; max-height: var(--cfh, 130px);
+  .cueflow { display: flex; flex-direction: column; gap: 4px; max-height: var(--cfh, 150px);
     overflow-y: auto; overflow-x: clip; min-height: 0;
     scrollbar-width: thin; scrollbar-color: color-mix(in oklch, var(--foreground) 12%, transparent) transparent; }
-  .cueflow.grow { flex: 1; max-height: none; }
   .cue { position: relative; border-radius: 6px; padding: 0 6px; margin: 0 -6px; cursor: pointer; transition: background .12s; }
   .cue:hover { background: var(--accent); }
   .cue p { font-size: 12px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -174,18 +188,16 @@
     color: var(--meta-foreground); letter-spacing: 0.08em; font-variant-numeric: tabular-nums;
     opacity: 0; transition: opacity .12s; pointer-events: none; }
   .cue:hover .time { opacity: 1; }
-  .cue.lit, .stripblock.lit, .laneblock.lit, .vclip.lit, .cblock.lit { background: var(--lineage) !important; }
-  .vclip.lit span, .cblock.lit span { color: var(--foreground); }
+  .cue.lit, .stripblock.lit, .vclip.lit, .cblock.lit { background: var(--lineage) !important; }
+  .vclip.lit span { color: inherit; }
   .cue.now { background: var(--accent); }
 
-  /* 现状时间条 */
   .strip { position: relative; height: 24px; flex-shrink: 0; }
   .strip .stripblock { position: absolute; top: 4px; bottom: 4px; border-radius: 2px;
     background: var(--muted); transition: background .12s; }
   .strip .stripblock:hover, .strip .stripblock.now { background: var(--accent); }
   .needle { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--foreground); pointer-events: none; z-index: 2; }
 
-  /* 舞台下缘检视皮 */
   .stageskin { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; z-index: 2;
     background: rgb(255 255 255 / 0.22); transition: height .15s; cursor: pointer; }
   .media:hover .stageskin { height: 8px; }
@@ -193,7 +205,6 @@
   .stageskin .sgtick { position: absolute; top: 0; bottom: 0; width: 1px; background: rgb(0 0 0 / 0.55); }
   .stageskin .needle { background: #fff; width: 2px; }
 
-  /* 现状轨道栈 */
   .tstack { flex-shrink: 0; padding: 0 12px; }
   .trow .tlabel { display: flex; align-items: center; height: 16px; font-size: 10px; }
   .lane { position: relative; height: 24px; }
@@ -239,25 +250,18 @@
   .tl-needle::before { content: ""; position: absolute; top: -2px; left: -3px; border: 3.5px solid transparent;
     border-top: 5px solid var(--foreground); }
 
-  /* 竖屏右栏 */
-  .sidecol { display: flex; flex-direction: column; min-height: 0; flex: 1; }
-  .tele { flex: 1; display: flex; align-items: center; justify-content: center; padding: 12px 20px; min-height: 48px; }
-  .tele span { font-size: 12px; line-height: 1.7; color: var(--muted-foreground); text-align: center; transition: opacity .2s; }
+  /* L2 检视面板演示 */
+  #inspector { position: fixed; right: 24px; top: 88px; width: 300px; z-index: 60;
+    border-radius: var(--radius); padding: 14px 16px; font-size: 12px; line-height: 1.7;
+    color: var(--muted-foreground); display: none; }
+  #inspector.show { display: block; }
+  #inspector h4 { font-size: 13px; color: var(--foreground); display: flex; justify-content: space-between; align-items: center; }
+  #inspector h4 button { color: var(--meta-foreground); font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 6px; }
+  #inspector h4 button:hover { background: var(--accent); color: var(--foreground); }
+  #inspector .kv { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed var(--hairline); }
+  #inspector .kv span:last-child { color: var(--foreground); font-variant-numeric: tabular-nums; }
+  #inspector .layertag { display: inline-block; font-size: 10px; color: var(--meta-foreground); margin-top: 8px; }
 
-  /* 方向 2:纯舞台 + hover 揭示 */
-  .purestage { position: relative; }
-  .hoverveil { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 4;
-    border-radius: var(--radius); padding: 10px 12px 12px;
-    opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity .18s, transform .18s;
-    max-height: 55%; display: flex; flex-direction: column; }
-  .purestage:hover .hoverveil { opacity: 1; transform: none; pointer-events: auto; }
-  .hoverveil .veilhint { position: absolute; top: -30px; right: 0; font-size: 10px; color: #fff;
-    background: rgb(0 0 0 / .45); backdrop-filter: blur(8px); padding: 4px 8px; border-radius: 6px;
-    transition: opacity .15s; }
-  .purestage:hover .hoverveil .veilhint { opacity: 0; }
-  .hoverveil .cueflow { --cfh: 180px; }
-
-  /* 悬浮 chip */
   #hoverchip { position: fixed; z-index: 100; pointer-events: none; max-width: 300px;
     border-radius: 8px; padding: 6px 8px; font-size: 11px; line-height: 1.5;
     opacity: 0; transition: opacity .1s; }
@@ -271,17 +275,13 @@
 <div class="page">
 
 <header class="doc">
-  <h1>竖屏轨道的安放 — 三方向对比</h1>
+  <h1>hover / 卡面 / 点击 — 不是三选一,是按信息秩分层</h1>
   <p>
-    前提已锁:<b>舞台 = 素材本身长宽比,零黑边</b>。于是竖屏(9:16)卡的多轨道 / 转写稿失去下方的天然座位。
-    三个候选:<b>方向 1</b> = 按宽高比换模具(横屏下挂、竖屏右挂);<b>方向 2</b> = 纯舞台,附加物 hover 揭示;<b>方向三</b> = 方向 1 + 舞台检视皮常驻 + 右栏提词行。
+    行业取证(下方§证据)后的结论:<b>结构层常驻卡面,补充读数 hover,深详情点击</b>。
+    纯舞台 + hover 揭示三面受敌:NN/g 证明隐藏使发现性近腰斩、触屏无 hover 手势、全行业零主流先例。
+    布局同时收敛:Image #4 揭示<b>轨道 = 连线接口</b>(每道左缘 port 按道高落位),右挂会斩断连线语义——
+    所以<b>所有比例一律下挂</b>,竖屏的轨道安放在下方(Descript/Premiere/CapCut 的底部停靠惯例)。
   </p>
-  <table class="typetable">
-    <tr><th>模具</th><th>横屏(w≥h)</th><th>竖屏(h>w)</th></tr>
-    <tr><td>素材卡 · 阅读型</td><td>舞台上 / cue 阅读流下</td><td>舞台左 / cue 阅读流右(侧栏,Descript 式)</td></tr>
-    <tr><td>成片卡 · 编辑结构型</td><td>舞台上 / NLE 时间轴下</td><td>舞台左 / NLE 时间轴+提词行右</td></tr>
-    <tr><td>不变量</td><td colspan="2">舞台恒为素材比例零黑边 · 舞台底缘恒带 3px 检视皮(方向三) · 面板只检视不编排(L3) · 句级细节恒在 hover</td></tr>
-  </table>
   <div class="controls">
     <div class="seg" id="themeSeg">
       <button data-theme="" class="on">浅色</button>
@@ -295,72 +295,106 @@
       <button data-mod="0" class="on">无修饰轨</button>
       <button data-mod="1">含配乐+配音</button>
     </div>
-    <span class="hint">hover clip 块/字幕块/cue 行看悬浮详情与血缘高亮 · 点击 seek</span>
+    <span class="hint">hover = 读数 · 点击块 = seek · 点击卡面空白 = L2 检视面板</span>
   </div>
 </header>
 
-<!-- ================= 现状锚点 ================= -->
-<section id="sec-d0">
-  <h2>现状 <span class="en">锚点 — 两型同词,各自不成立</span></h2>
-  <div class="stage" id="stage-d0"></div>
+<!-- ================= 证据 ================= -->
+<section id="sec-evidence">
+  <h2>证据 <span class="en">三路调研 · 2026-10</span></h2>
+  <div class="evgrid">
+    <div class="evcard">
+      <h3>可用性研究 <span>hover 的合法边界</span></h3>
+      <ul>
+        <li><b>NN/g Tooltip 指南</b>:hover 是瞬态元素,<q>Don't use tooltips for information that's essential to task completion</q>——必需信息必须常驻。<a href="https://www.nngroup.com/articles/tooltip-guidelines/">nngroup.com</a></li>
+        <li><b>NN/g 隐藏导航实验(179 人)</b>:隐藏主导航 → 使用率 27% vs 48%,任务慢 39%。「隐藏 = 发现性腰斩」是最广引用的定量证据。<a href="https://www.nngroup.com/articles/hamburger-menus/">nngroup.com</a></li>
+        <li><b>NN/g 渐进披露</b>:可行但两硬标准——主次切分正确 + 进入下一层的路径显而易见;<q>the very fact that something appears on the initial display tells users that it's important</q>。<a href="https://www.nngroup.com/articles/progressive-disclosure/">nngroup.com</a></li>
+        <li><b>Shneiderman(1996,9000+ 引用)</b>:<q>overview first, zoom and filter, then details on demand</q>——概览常驻、细节按需(未规定 hover 还是 click)。</li>
+        <li><b>Figma Dev Mode 教科书</b>:hover = 瞬态读数(移开即逝),click = 持久 inspect 面板——「hover 给 glance,click 给 study」的双层模板。<a href="https://help.figma.com/hc/en-us/articles/22012921621015-Guide-to-inspecting">help.figma.com</a></li>
+        <li><b>触屏</b>:Apple HIG 用 long-press context menu 等价 hover,但发现性同样差;更稳的是<b>选中即展开 inspector</b>(与 Figma click 层同构)。</li>
+        <li><b>反面</b>:Miro 悬浮 toolbar 遮内容遭官方论坛投诉要求可移/可藏;ComfyUI Nodes 2.0 反弹针对的是渲染质量而非「参数常驻」本身。</li>
+      </ul>
+    </div>
+    <div class="evcard">
+      <h3>视频工具惯例 <span>transcript 与 tracks 的座位</span></h3>
+      <ul>
+        <li><b>全行业无主流工具用 hover 揭示时间轴或转写稿</b>(定向搜索零命中)。悬浮形态唯一先例 = Clipchamp 的<b>选中触发</b>浮动 toolbar。</li>
+        <li><b>受限面积的行业答案 = 折叠 + 点击展开</b>,不是 hover:Descript 2025 大改版时间轴默认完全折叠(点底栏箭头展开);Clipchamp 可折叠;CapCut 移动版点按片段 → 底部抽屉。<a href="https://vidpromom.com/descripts-new-timeline-update-must-know-changes/">vidpromom.com</a></li>
+        <li><b>transcript 停靠惯例 = 左/侧面板</b>:Premiere Text 面板(Captions workspace 停靠左)、Resolve 20 转写稿住 Source viewer Transcript Tab、Riverside 三面板(转写稿左/预览右上/时间轴底部)。<a href="https://www.rippletraining.com/blog/davinci-resolve/editing-with-audio-transcriptions-in-davinci-resolve/">rippletraining.com</a></li>
+        <li><b>tracks 停靠惯例 = 底部</b>:CapCut / Veed / Clipchamp / Kapwing / Descript 全部底部时间轴;Resolve 20 新增竖屏自适应布局仍底部。</li>
+        <li><b>反例教材</b>:FCP 11 无完整转写稿视图被评测点名批评;Wisecut 极端案没有时间轴(转写稿即 storyboard),缺点正是「没有轴可修 AI 的坏剪」。<a href="https://larryjordan.com/articles/comparing-captioning-in-final-cut-pro-11-premiere-pro-2025-resolve-20/">larryjordan.com</a></li>
+        <li><b>Descript 杀手特性 = 删字即剪</b>(省 50-70% 时间)——transcript 是阅读+编辑主界面,常驻是它的价值本身。</li>
+      </ul>
+    </div>
+    <div class="evcard" id="ev-canvas">
+      <h3>画布节点产品 <span>LibTV / FLORA / ComfyUI / MiniMax</span></h3>
+      <ul>
+        <li><b>主流收敛:卡面只放预览+名称,参数进双击/侧栏</b>——LibTV(双击→参数、选中→顶部工具栏、右侧栏调模型)、FLORA、Runway Workflows(2025-10)、Krea Nodes(2026-03)一致。ComfyUI 式全参数常驻被公认密度过高(Nodes 2.0 反弹)。<a href="https://post.smzdm.com/p/a4qelowk/">smzdm.com</a></li>
+        <li><b>hover 的先例 = 读数层</b>:FLORA / MiniMax Design 的 hover 提示词框——hover 只装提示词读数,不装结构。<i>(用户实地截图举证)</i></li>
+        <li><b>L2 的行业形态 = 点击开 modal 编辑器</b>:MiniMax「AI剪辑工坊」点卡 → 全屏 modal(播放器+底部时间轴+右 agent 面板);LibTV 连 ≥2 视频节点调出「视频合成」外置时间轴面板。<i>(用户实地截图举证)</i></li>
+        <li><b>逐轨 port 无公开先例</b>:LibTV/FLORA/Runway/Krea 均为节点级 typed port;参考图(Image #4)的「每道左缘独立 port」属少见设计——采用需自证连线可读性,但截图实物本身就是可读性证据。<a href="https://www.varoo.cn/tools/libtv-ai.html">varoo.cn</a></li>
+        <li><b>密度警示</b>:FLORA 4.8/5 高分但「学习曲线陡」居评测首槽点;Morphic 把「无节点无连线」当卖点——节点工具的信息密度是公认市场痛点。<a href="https://morphic.com/resources/compare/node-based-ai-workflows">morphic.com</a></li>
+      </ul>
+    </div>
+  </div>
 </section>
 
-<!-- ================= 方向 1 ================= -->
-<section id="sec-d1">
-  <h2>方向 1 <span class="en">宽高比自适应模具 — 横屏下挂 / 竖屏右挂</span></h2>
-  <p class="sub">
-    面板常驻,type 身份静止可见。竖屏右挂后 cue 阅读流变成 Descript/Premiere 式侧栏,时间轴得 294px 施展。
-    但注意成片卡右栏:<b>时间轴只有 ~100px 高,下面是空的</b>——这个虚空必须有个说法。
-    <span class="lawtag">零翻案</span><span class="lawtag warn">frame 取景按 type×aspect 两模具,动服务端规则</span>
-  </p>
-  <div class="stage" id="stage-d1"></div>
-</section>
-
-<!-- ================= 方向 2 ================= -->
-<section id="sec-d2">
-  <h2>方向 2 <span class="en">纯舞台 — 附加物 hover 揭示</span></h2>
-  <p class="sub">
-    静止时最干净——但<b>两张卡静止时长得一模一样</b>(都是一块纯舞台):刚分清的 type 界线又糊回去了。
-    且揭示帘 hover 时遮住画面下半,触屏无手势,还要翻 ADR-113「检视轨常驻」。
-    <span class="lawtag warn">翻案 ADR-113 常驻轨</span><span class="lawtag warn">触碰 ADR-063 全文律</span><span class="lawtag warn">type 同脸</span>
-  </p>
-  <div class="stage" id="stage-d2"></div>
-</section>
-
-<!-- ================= 方向三(推荐)================= -->
-<section id="sec-d3">
-  <h2>方向三 <span class="en">轴随身 + 面板选位</span><span class="rec">推荐</span></h2>
-  <p class="sub">
-    = 方向 1 的两模具 + <b>舞台底缘恒带 3px 检视皮</b>(播放头+段落刻度,hover 变粗可 seek——轴的名片任何比例都在场)+ 竖屏成片卡右栏虚空放<b>提词行</b>(随播放头同步的当前字幕句)。
-    缝合了方向 2 想要的「不打扰」与方向 1 想要的「常驻身份」。
-    <span class="lawtag">零翻案</span><span class="lawtag">句级细节仍恒在 hover</span>
-  </p>
-  <div class="stage" id="stage-d3"></div>
-</section>
-
-<!-- ================= 决策表 ================= -->
-<section>
-  <h2>三方向 × 维度</h2>
+<!-- ================= 分层法则 ================= -->
+<section id="sec-layers">
+  <h2>分层法则 <span class="en">信息秩三分</span></h2>
   <table class="typetable">
-    <tr><th>维度</th><th>方向 1 · 自适应模具</th><th>方向 2 · 纯舞台 hover</th><th>方向三 · 轴随身(推荐)</th></tr>
-    <tr><td>type 身份静止可见</td><td>✓</td><td style="color:var(--destructive)">✗ 两型同脸</td><td>✓(面板+检视皮双保险)</td></tr>
-    <tr><td>竖屏轨道宽度</td><td>294px(右栏)</td><td>~230px(揭示帘内)</td><td>294px(右栏)</td></tr>
-    <tr><td>静止时打扰度</td><td>中(面板常驻)</td><td>零</td><td>中低(面板+3px 皮)</td></tr>
-    <tr><td>揭示时遮内容</td><td>不遮</td><td style="color:var(--destructive)">遮画面下半</td><td>不遮</td></tr>
-    <tr><td>右栏虚空</td><td style="color:var(--destructive)">有(成片卡)</td><td>—</td><td>填以提词行</td></tr>
-    <tr><td>法条</td><td>零翻案;frame 两模具取景</td><td style="color:var(--destructive)">翻 ADR-113 常驻 + 触 ADR-063</td><td>零翻案;同左 + 检视皮显示律注记</td></tr>
-    <tr><td>触屏手势</td><td>✓ 点击 seek</td><td style="color:var(--destructive)">hover 无对应手势</td><td>✓ 点击 seek</td></tr>
+    <tr><th>层</th><th>内容</th><th>载体</th><th>证据</th></tr>
+    <tr><td><b>L0 结构层</b></td><td>道块 / ports / 徽章 / type 身份 / 阅读型卡的转写稿流</td><td><b>卡面常驻</b></td><td>NN/g 必需信息常驻;transcript 面板惯例;轨道 = 连线落点;ComfyUI WYSIWYG</td></tr>
+    <tr><td><b>L1 补充读数</b></td><td>句文本 / 时间戳 / 源区间 / 刻度</td><td><b>hover chip</b>(瞬态,不占布局)</td><td>NN/g tooltip 指南;Figma hover = 读数;自家 ADR-112 同哲学</td></tr>
+    <tr><td><b>L2 深详情</b></td><td>全文 / 模型事实 / QC 报告 / 完整块签</td><td><b>点击 → OutputInspector / lightbox</b></td><td>Figma click → inspect;MiniMax 点卡开 modal 编辑器;LibTV 双击进参数;触屏选中即展开(免 long-press 发现性坑)</td></tr>
+    <tr><td>空间不足时</td><td>折叠成一行摘要 + 点击展开</td><td>折叠态(永不是 hover)</td><td>Descript 时间轴默认折叠;Clipchamp;CapCut 移动抽屉</td></tr>
+  </table>
+  <p class="sub" style="margin-top:10px">注意最后一行:如果未来嫌竖屏卡太高想压缩,<b>行业答案是「折叠 + 点击展开」而不是 hover</b>——折叠行仍是常驻的结构摘要,展开是 click 手势。这条留作缓做项,本批不做。</p>
+</section>
+
+<!-- ================= 现状锚点 ================= -->
+<section id="sec-current">
+  <h2>现状 <span class="en">锚点 — 两型同词,各自不成立</span></h2>
+  <div class="stage" id="stage-current"></div>
+</section>
+
+<!-- ================= 推荐形态 ================= -->
+<section id="sec-reco">
+  <h2>推荐形态 <span class="en">全比例下挂 + NLE 轴 + 道锚连线</span><span class="rec">推荐</span></h2>
+  <p class="sub">
+    <b>横屏</b>:舞台上 / 检视面板下。<b>竖屏</b>:同构下挂(不再右挂——右挂斩断连线落点语义)。
+    成片卡的<b>道 Y 中心 = 对应输入 port 锚点</b>(锚点律从视频道推广到修饰道)——Image #4「每条线连到对应的轨」的观感。
+    素材卡:一体边框 + 舞台 aspect 钉死 + cue 单向滚动 + 时间 chip 上浮 + 舞台底缘检视皮。
+    <span class="lawtag">零翻案</span><span class="lawtag warn">ruler 刻度标签座位待拍板</span><span class="lawtag warn">修饰道 port 化 = 后续批次</span>
+  </p>
+  <div class="stage" id="stage-reco"></div>
+  <div class="stage" id="stage-reco-tall"></div>
+</section>
+
+<!-- ================= 法条与拍板 ================= -->
+<section>
+  <h2>法条触碰与待拍板</h2>
+  <table class="typetable">
+    <tr><th>改动</th><th>触碰哪条</th><th>性质</th></tr>
+    <tr><td>素材卡画面+转写稿同入一环、aspect 钉死、单向滚动、chip 上浮</td><td>UI §9 / ADR-112 hover 律</td><td>显示律修订,合规</td></tr>
+    <tr><td>成片卡 NLE 轴(ruler/道高 34/gutter/播放头)、字幕道零内嵌文字</td><td>ADR-113 §4 检视轨</td><td>显示律注记:块仍是句块∝产出轴,文字入 hover</td></tr>
+    <tr><td>道 Y 中心 = 输入 port 锚点,推广到修饰道</td><td>ADR-113 锚点律(现仅视频道)</td><td>推广注记;修饰道 port 化随 dub/music 输入资产化落地(后续批次)</td></tr>
+    <tr><td>score/质检撤下舞台入轴头行</td><td>ADR-112 ③ 单条裸分</td><td>位置注记,仍是裸分</td></tr>
+    <tr><td>NLE ruler 刻度标签</td><td>「时间格式化一法一座 = 服务端预格式化」</td><td class="warn" style="color:var(--destructive)"><b>待拍板</b>:服务端给刻度,或「轴刻度豁免」(几何刻度非数据行)</td></tr>
+    <tr><td>纯舞台 hover 揭示(方向 2)</td><td>ADR-113 常驻轨 / ADR-063 / 触屏手势</td><td style="color:var(--destructive)"><b>否决入档</b>:发现性腰斩 + 全行业零先例 + 断连线落点</td></tr>
+    <tr><td>竖屏右挂模具(方向 1 split)</td><td>锚点律连线语义</td><td style="color:var(--destructive)"><b>否决入档</b>:port 在左缘,道在右栏 = 连线落不到道上</td></tr>
+    <tr><td>竖屏卡压缩需求(若未来嫌高)</td><td>ADR-113 常驻轨</td><td>缓做项:折叠成摘要行 + 点击展开(Descript 模式),永不做 hover 揭示</td></tr>
   </table>
 </section>
 
 <footer class="note">
-  <b>已替你们排除的两个方案:</b> ① 竖屏配纵向时间轴(时间轴语法全工业横向,纵轴学习成本大于收益);② 360 信箱舞台(已被「舞台零黑边」前提处决)。
-  1:1 比例归横屏模具(下挂)。<b>交互:</b>顶栏「含配乐+配音」给成片卡加挂修饰道;hover 成片卡视频 clip → 素材卡 cue 行亮琥珀血缘;所有点击 = seek 只拨头。
+  <b>交互演示:</b> 成片卡每条道的左缘 port 按道高落位,素材卡的出线连到成片卡的视频道(修饰轨开关可加挂音乐/配音道与各自入线);hover clip/字幕块/cue 行 = L1 读数 chip + 血缘琥珀;点击任意块 = seek;点击卡面空白 = L2 检视面板(对应自家 OutputInspector 座位)。
 </footer>
 
 </div>
 
 <div id="hoverchip" class="overlay-surface"></div>
+<div id="inspector" class="overlay-surface"></div>
 
 <script>
 /* ================= 真实数据形态 ================= */
@@ -391,7 +425,7 @@ const CUES = [
   [182,190,"主持人:最后一个问题,给正在观望的企业一句话?"],
   [190,200,"受访者:别等准备好了再出发,出发本身就是准备。"]
 ];
-const OUT = { title: "高光短视频", lang: "Chinese", aspect: "9:16", duration: 45, score: 88 };
+const OUT = { title: "高光短视频", lang: "Chinese", duration: 45, score: 88 };
 const SEGS = [ { out_start: 0, out_end: 45, src_start: 179.1, src_end: 223.8, src_label: "2:59–3:44" } ];
 const SENTS = [
   [0,5.5,"主持人:给正在观望的企业一句话?"],
@@ -466,6 +500,17 @@ function showChip(html, x, y) {
 }
 function hideChip() { chipTimer = setTimeout(() => chip.classList.remove("show"), 60); }
 
+/* ================= L2 检视面板演示 ================= */
+const inspector = $("#inspector");
+function showInspector(title, rows) {
+  inspector.innerHTML = `<h4>${title}<button onclick="hideInspector()" aria-label="关闭">×</button></h4>` +
+    rows.map(([k, v]) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`).join("") +
+    `<span class="layertag">L2 深详情层 — 点击开启,对应自家 OutputInspector 座位</span>`;
+  inspector.classList.add("show");
+}
+function hideInspector() { inspector.classList.remove("show"); }
+document.addEventListener("keydown", e => { if (e.key === "Escape") hideInspector(); });
+
 /* ================= 播放引擎 ================= */
 const players = [];
 let playing = true, lastT = performance.now();
@@ -477,7 +522,7 @@ setInterval(() => {
 }, 250);
 function makePlayhead(dur, onTick) {
   let t = 0;
-  return registerPlayer({ dur, get: () => t, set: v => { t = v; onTick(t); } });
+  return registerPlayer({ dur, get: () => t, set: v => { t = v; onTick(v); } });
 }
 
 /* ================= 卡片零件 ================= */
@@ -486,7 +531,7 @@ function caption(label) {
   c.appendChild(el("span", "lab", ICONS.clapper + `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span>`));
   return c;
 }
-function port(node, side) { node.appendChild(el("span", "port " + side)); }
+function port(node, side) { const p = el("span", "port " + side); node.appendChild(p); return p; }
 function hoverBtns(media) {
   const ex = el("button", "mbtn", ICONS.expand); ex.style.cssText = "left:8px;top:8px"; ex.title = "展开";
   const sv = el("button", "mbtn", ICONS.volx); sv.style.cssText = "right:8px;top:8px"; sv.title = "取消静音";
@@ -510,9 +555,8 @@ function metaRow(info, acts) {
   return row;
 }
 
-/* —— cue 流;chipMode: "row"(盖字) | "float"(上浮) —— */
-function cueFlow(seeker, litFns, cfh, chipMode, grow) {
-  const flow = el("div", "cueflow" + (grow ? " grow" : ""));
+function cueFlow(seeker, litFns, cfh, chipMode) {
+  const flow = el("div", "cueflow");
   if (cfh) flow.style.setProperty("--cfh", cfh);
   const rows = CUES.map(([a, b, text]) => {
     const row = el("div", "cue", `<p>${text}</p>`);
@@ -530,7 +574,6 @@ function cueFlow(seeker, litFns, cfh, chipMode, grow) {
   return { el: flow, rows };
 }
 
-/* —— 舞台检视皮;segs = [[start,end],...] 有内容的段 —— */
 function stageSkin(seeker, dur, segs) {
   const s = el("div", "stageskin");
   for (const [a, b] of segs) {
@@ -542,6 +585,7 @@ function stageSkin(seeker, dur, segs) {
   }
   const needle = el("span", "needle"); s.appendChild(needle);
   s.onclick = e => {
+    e.stopPropagation();
     const r = s.getBoundingClientRect();
     seeker.seek(((e.clientX - r.left) / r.width) * dur);
   };
@@ -554,14 +598,13 @@ function stageSkin(seeker, dur, segs) {
   return { el: s, needle };
 }
 
-/* —— NLE 时间轴(自带 26px gutter 系,与容器宽无关) —— */
+/* —— NLE 时间轴 —— */
 function nleTimeline(seeker, srcLit, showMods) {
   const tl = el("div", "tl");
   const head = el("div", "tl-head");
   head.appendChild(el("span", null, ""));
   head.appendChild(el("span", "score", `${OUT.score} 分 · 已核验`));
   tl.appendChild(head);
-
   const ruler = el("div", "tl-ruler");
   for (let s = 0; s <= OUT.duration; s++) {
     const tick = el("span", "rtick" + (s % 5 === 0 ? " big" : ""));
@@ -569,14 +612,16 @@ function nleTimeline(seeker, srcLit, showMods) {
     ruler.appendChild(tick);
     if (s % 5 === 0) { const lab = el("span", "rlab", fmt(s)); lab.style.left = pct(s, OUT.duration); ruler.appendChild(lab); }
   }
-  ruler.onclick = e => { const r = ruler.getBoundingClientRect(); seeker.seek(((e.clientX - r.left)/r.width) * OUT.duration); };
+  ruler.onclick = e => { e.stopPropagation(); const r = ruler.getBoundingClientRect(); seeker.seek(((e.clientX - r.left)/r.width) * OUT.duration); };
   tl.appendChild(ruler);
-
   const lanes = el("div", "tl-lanes");
-  const mkRow = (icon, laneEl) => {
+  const lanePorts = [];
+  // wired = 该道有上游输入(视频道/修饰道);字幕道由剪辑自身派生,不挂 port
+  const mkRow = (icon, laneEl, wired) => {
     const row = el("div", "tl-row");
-    row.appendChild(el("div", "tl-gutter", icon));
-    row.appendChild(laneEl);
+    const g = el("div", "tl-gutter", icon);
+    row.appendChild(g); row.appendChild(laneEl);
+    if (wired) lanePorts.push({ laneEl, gutterEl: g });
     return row;
   };
   const vLane = el("div", "tl-vlane");
@@ -592,7 +637,7 @@ function nleTimeline(seeker, srcLit, showMods) {
     c.onmouseleave = () => { hideChip(); if (srcLit) for (const fn of srcLit) fn([s.src_start, s.src_end], false); };
     vLane.appendChild(c);
   }
-  lanes.appendChild(mkRow(ICONS.film, vLane));
+  lanes.appendChild(mkRow(ICONS.film, vLane, true));
   const cLane = el("div", "tl-clane");
   SENTS.forEach((s, i) => {
     const b = el("button", "cblock" + (i === 0 ? " first" : i === SENTS.length-1 ? " last" : ""));
@@ -602,18 +647,20 @@ function nleTimeline(seeker, srcLit, showMods) {
     b.onmouseleave = hideChip;
     cLane.appendChild(b);
   });
-  lanes.appendChild(mkRow(ICONS.caption, cLane));
+  lanes.appendChild(mkRow(ICONS.caption, cLane, false));
   if (showMods) {
     const mLane = el("div", "tl-clane");
     const m = el("button", "mblock", ICONS.music + "<span>轻快企业 · 全程</span>");
     m.style.cssText = "left:0;width:100%";
+    m.onclick = e => e.stopPropagation();
     mLane.appendChild(m);
-    lanes.appendChild(mkRow(ICONS.music, mLane));
+    lanes.appendChild(mkRow(ICONS.music, mLane, true));
     const dLane = el("div", "tl-clane");
     const d = el("button", "mblock", ICONS.mic + "<span>中文配音 · 0:00–0:45</span>");
     d.style.cssText = "left:0;width:100%";
+    d.onclick = e => e.stopPropagation();
     dLane.appendChild(d);
-    lanes.appendChild(mkRow(ICONS.mic, dLane));
+    lanes.appendChild(mkRow(ICONS.mic, dLane, true));
   }
   tl.appendChild(lanes);
   const nd = el("span", "tl-needle"); tl.appendChild(nd);
@@ -621,38 +668,30 @@ function nleTimeline(seeker, srcLit, showMods) {
     const rl = ruler.getBoundingClientRect(), tr = tl.getBoundingClientRect();
     nd.style.left = `calc(${rl.left - tr.left}px + ${rl.width * t / OUT.duration}px)`;
   };
-  return { el: tl, tick };
+  return { el: tl, tick, lanePorts };
 }
 
-/* ================= 素材卡 ================= */
-function assetCard(mold, litFns, withSkin) {
-  // mold: "stack"(16:9 下挂) | "split"(9:16 右挂)
-  const portrait = mold === "split";
+/* ================= 素材卡(推荐态) ================= */
+function assetCard(aspect, litFns) {
+  const tall = aspect === "9:16";
   const node = el("div", "node");
-  node.style.setProperty("--nw", portrait ? "564px" : "400px");
-  port(node, "r");
+  node.style.setProperty("--nw", tall ? "260px" : "400px");
+  const outPort = port(node, "r");
   node.appendChild(caption("Video"));
-  const card = el("div", "ncard" + (portrait ? " split" : ""));
+  const card = el("div", "ncard");
   const seeker = { seek: t => ph.set(t) };
-
-  const stageH = portrait ? 432 : 225;
   const media = el("div", "media");
-  media.style.cssText = portrait ? "width:243px;height:432px" : "width:100%;height:225px";
-  media.innerHTML = scene(portrait ? "9:16" : "16:9");
+  media.style.cssText = tall ? "width:100%;height:462px" : "width:100%;height:225px";
+  media.innerHTML = scene(aspect);
   hoverBtns(media);
-  let skin = null;
-  if (withSkin) {
-    skin = stageSkin(seeker, SRC.duration, CUES.map(c => [c[0], c[1]]));
-    media.appendChild(skin.el);
-  }
-  const dur = el("span", "cornerchip", fmt(SRC.duration));
-  dur.style.cssText = withSkin ? "right:8px;bottom:14px" : "right:8px;bottom:8px";
+  const skin = stageSkin(seeker, SRC.duration, CUES.map(c => [c[0], c[1]]));
+  media.appendChild(skin.el);
+  const dur = el("span", "cornerchip", fmt(SRC.duration)); dur.style.cssText = "right:8px;bottom:14px";
   media.appendChild(dur);
   card.appendChild(media);
-  card.appendChild(el("div", "divider" + (portrait ? " v" : "")));
-
-  const flow = cueFlow(seeker, litFns, portrait ? null : "150px", "float", portrait);
-  const tx = el("div", "txsec" + (portrait ? " grow" : ""));
+  card.appendChild(el("div", "divider"));
+  const flow = cueFlow(seeker, litFns, "150px", "float");
+  const tx = el("div", "txsec");
   const head = el("div", "txhead");
   head.appendChild(el("span", "t text-meta", "Transcript"));
   const ed = el("button", "edit", ICONS.pencil); ed.title = "编辑转写稿"; head.appendChild(ed);
@@ -660,100 +699,44 @@ function assetCard(mold, litFns, withSkin) {
   card.appendChild(tx);
   node.appendChild(card);
   node.appendChild(metaRow([SRC.name, SRC.res], ["download"]));
+  card.addEventListener("click", () => showInspector("Video · 素材检视", [
+    ["文件名", SRC.name], ["时长", fmt(SRC.duration)], ["分辨率", SRC.res],
+    ["转写句数", CUES.length], ["语言", "中文"], ["ASR", "已核验"]
+  ]));
   const ph = makePlayhead(SRC.duration, t => {
-    if (skin) skin.needle.style.left = pct(t, SRC.duration);
+    skin.needle.style.left = pct(t, SRC.duration);
     for (const row of flow.rows) { const [a, b] = row._range; row.classList.toggle("now", t >= a && t < b); }
   });
-  return { node };
+  return { node, outPort };
 }
 
-/* ================= 成片卡 ================= */
-function clipCard(mold, srcLit, showMods, opts = {}) {
-  // mold: "stack"(16:9 下挂) | "split"(9:16 右挂,右栏带提词行) | "stackV"(9:16 现状式下挂,方向1参考)
-  const portrait = mold !== "stack";
-  const split = mold === "split";
+/* ================= 成片卡(推荐态) ================= */
+function clipCard(aspect, srcLit, showMods) {
+  const tall = aspect === "9:16";
   const node = el("div", "node");
-  node.style.setProperty("--nw", split ? "564px" : portrait ? "280px" : "400px");
-  port(node, "l"); port(node, "r");
+  node.style.setProperty("--nw", tall ? "280px" : "400px");
   node.appendChild(caption(OUT.title));
-  const card = el("div", "ncard" + (split ? " split" : ""));
+  const card = el("div", "ncard");
   const seeker = { seek: t => ph.set(t) };
-
   const media = el("div", "media");
-  media.style.cssText = split ? "width:243px;height:432px" : portrait ? "width:100%;height:498px" : "width:100%;height:225px";
-  media.innerHTML = scene(portrait ? "9:16" : "16:9");
+  media.style.cssText = tall ? "width:100%;height:498px" : "width:100%;height:225px";
+  media.innerHTML = scene(aspect);
   hoverBtns(media);
-  let skin = null;
-  if (opts.skin) {
-    skin = stageSkin(seeker, OUT.duration, SENTS.map(s => [s[0], s[1]]));
-    media.appendChild(skin.el);
-  }
   card.appendChild(media);
-  card.appendChild(el("div", "divider" + (split ? " v" : "")));
-
+  card.appendChild(el("div", "divider"));
   const tl = nleTimeline(seeker, srcLit, showMods);
-  let teleSpan = null;
-  if (split) {
-    const col = el("div", "sidecol");
-    col.appendChild(tl.el);
-    const tele = el("div", "tele");
-    teleSpan = el("span", null, SENTS[0][2]);
-    tele.appendChild(teleSpan);
-    col.appendChild(tele);
-    card.appendChild(col);
-  } else {
-    card.appendChild(tl.el);
-  }
+  card.appendChild(tl.el);
   node.appendChild(card);
-  node.appendChild(metaRow([OUT.lang, portrait ? "9:16" : "16:9", fmt(OUT.duration)], ["download", "send"]));
-  const ph = makePlayhead(OUT.duration, t => {
-    tl.tick(t);
-    if (skin) skin.needle.style.left = pct(t, OUT.duration);
-    if (teleSpan) {
-      const cur = SENTS.find(s => t >= s[0] && t < s[1]);
-      if (cur && teleSpan.textContent !== cur[2]) {
-        teleSpan.style.opacity = 0;
-        setTimeout(() => { teleSpan.textContent = cur[2]; teleSpan.style.opacity = 1; }, 120);
-      }
-    }
-  });
-  return { node };
+  node.appendChild(metaRow([OUT.lang, aspect, fmt(OUT.duration)], ["download", "send"]));
+  card.addEventListener("click", () => showInspector(OUT.title + " · 产物检视", [
+    ["语言", OUT.lang], ["画幅", aspect], ["时长", fmt(OUT.duration)],
+    ["评分", OUT.score + " 分"], ["核验", "通过"], ["片段数", SEGS.length], ["字幕句数", SENTS.length]
+  ]));
+  const ph = makePlayhead(OUT.duration, t => tl.tick(t));
+  return { node, card, tl };
 }
 
-/* ================= 方向 2:纯舞台 + hover 揭示 ================= */
-function pureCard(kind) {
-  const node = el("div", "node"); node.style.setProperty("--nw", "243px");
-  if (kind === "clip") port(node, "l");
-  port(node, "r");
-  node.appendChild(caption(kind === "clip" ? OUT.title : "Video"));
-  const card = el("div", "ncard purestage");
-  const media = el("div", "media"); media.style.cssText = "width:100%;height:432px";
-  media.innerHTML = scene("9:16");
-  hoverBtns(media);
-  card.appendChild(media);
-  const seeker = { seek: t => ph.set(t) };
-  const veil = el("div", "hoverveil overlay-surface");
-  veil.appendChild(el("span", "veilhint", kind === "clip" ? "hover 查看轨道" : "hover 查看转写稿"));
-  if (kind === "clip") {
-    const tl = nleTimeline(seeker, null, false);
-    veil.appendChild(tl.el);
-    var tlTick = tl.tick;
-  } else {
-    const flow = cueFlow(seeker, [], null, "float", false);
-    veil.appendChild(flow.el);
-    var flowRows = flow.rows;
-  }
-  card.appendChild(veil);
-  node.appendChild(card);
-  node.appendChild(metaRow(kind === "clip" ? [OUT.lang, OUT.aspect, fmt(OUT.duration)] : [SRC.name, SRC.res], kind === "clip" ? ["download","send"] : ["download"]));
-  const ph = makePlayhead(kind === "clip" ? OUT.duration : SRC.duration, t => {
-    if (kind === "clip") tlTick(t);
-    else for (const row of flowRows) { const [a, b] = row._range; row.classList.toggle("now", t >= a && t < b); }
-  });
-  return { node };
-}
-
-/* ================= 现状(锚点,压缩版) ================= */
+/* ================= 现状(锚点) ================= */
 function currentAsset(litFns) {
   const node = el("div", "node"); port(node, "r");
   node.appendChild(caption("Video"));
@@ -817,9 +800,28 @@ function currentClip() {
   v.laneEl.appendChild(ndv); t.laneEl.appendChild(ndt);
   card.appendChild(stack);
   node.appendChild(card);
-  node.appendChild(factsToolbar([OUT.lang, OUT.aspect, `${OUT.duration}s`], ["download", "send"]));
+  node.appendChild(factsToolbar([OUT.lang, "9:16", `${OUT.duration}s`], ["download", "send"]));
   const ph = makePlayhead(OUT.duration, tt => { ndv.style.left = pct(tt, OUT.duration); ndt.style.left = pct(tt, OUT.duration); });
   return { node };
+}
+
+/* ================= 连线锚点层 ================= */
+function drawEdges(stage, pairs) {
+  stage.querySelector("svg.edges")?.remove();
+  const sr = stage.getBoundingClientRect();
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "edges");
+  svg.setAttribute("viewBox", `0 0 ${sr.width} ${sr.height}`);
+  for (const [fromEl, toEl] of pairs) {
+    const a = fromEl.getBoundingClientRect(), b = toEl.getBoundingClientRect();
+    const x1 = a.left + a.width/2 - sr.left, y1 = a.top + a.height/2 - sr.top;
+    const x2 = b.left + b.width/2 - sr.left, y2 = b.top + b.height/2 - sr.top;
+    const dx = Math.max(60, (x2 - x1) / 2);
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`);
+    svg.appendChild(path);
+  }
+  stage.prepend(svg);
 }
 
 /* ================= 渲染 ================= */
@@ -832,47 +834,63 @@ function mount(stageSel, cases) {
     if (c.note) box.appendChild(el("div", "note", c.note));
     stage.appendChild(box);
   }
+  return stage;
 }
 
-let SHOW_MODS = false;
+let SHOW_MODS = location.hash.includes("mods");
+if (SHOW_MODS) for (const b of $("#modSeg").children) b.classList.toggle("on", b.dataset.mod === "1");
 function renderAll() {
   players.length = 0;
-  // 现状锚点
+  hideInspector();
   const lit0 = [];
-  mount("#stage-d0", [
+  mount("#stage-current", [
     { tag: "素材卡 · 现状", node: currentAsset(lit0).node,
       note: "<b>①</b> 无一环边框 · <b>②</b> 画面挤压截断 · <b>③</b> 双向滚动 chip 盖字" },
     { tag: "成片卡 · 现状", node: currentClip().node,
       note: "<b>①</b> 无 ruler · <b>②</b> 无道高 · <b>③</b> 截断残片 · <b>④</b> 无道头" }
   ]);
-  // 方向 1:四模具(无检视皮、成片右栏虚空)
-  const lit1 = [], lit1b = [];
-  mount("#stage-d1", [
-    { tag: "素材 16:9 · 下挂", node: assetCard("stack", lit1, false).node },
-    { tag: "素材 9:16 · 右挂", node: assetCard("split", lit1b, false).node,
-      note: "<i>✓</i> 转写稿成侧栏,阅读顺势" },
-    { tag: "成片 16:9 · 下挂", node: clipCard("stack", lit1, SHOW_MODS).node,
-      note: "时间轴在下,358px 施展" },
-    { tag: "成片 9:16 · 右挂", node: clipCard("split", lit1b, SHOW_MODS).node,
-      note: "时间轴 294px · <b>右栏下半是虚空</b>" }
+  // 推荐:横屏连线演示
+  const litR = [];
+  const assetW = assetCard("16:9", litR);
+  const clipW = clipCard("16:9", litR, SHOW_MODS);
+  const stageW = mount("#stage-reco", [
+    { tag: "素材 16:9 · 下挂+皮", node: assetW.node },
+    { tag: "成片 16:9 · NLE 轴+道锚 port", node: clipW.node,
+      note: "<i>✓</i> 视频道 Y 中心 = 入 port;修饰道有内容才出现且各有 port" }
   ]);
-  // 方向 2:纯舞台 hover
-  mount("#stage-d2", [
-    { tag: "素材 9:16 · 纯舞台", node: pureCard("asset").node,
-      note: "静止 = 一块舞台 + meta 行" },
-    { tag: "成片 9:16 · 纯舞台", node: pureCard("clip").node,
-      note: "<b>与素材卡静止同脸</b>——hover 才现形" }
+  // 推荐:竖屏下挂
+  const litT = [];
+  const assetT = assetCard("9:16", litT);
+  const clipT = clipCard("9:16", litT, SHOW_MODS);
+  const stageT = mount("#stage-reco-tall", [
+    { tag: "素材 9:16 · 下挂(不再右挂)", node: assetT.node },
+    { tag: "成片 9:16 · 下挂+道锚 port", node: clipT.node,
+      note: "<i>✓</i> 竖屏同构下挂:轨道即连线接口,观感 = Image #4" }
   ]);
-  // 方向三:四模具 + 检视皮 + 提词行
-  const lit3 = [], lit3b = [];
-  mount("#stage-d3", [
-    { tag: "素材 16:9 · 下挂+皮", node: assetCard("stack", lit3, true).node },
-    { tag: "素材 9:16 · 右挂+皮", node: assetCard("split", lit3b, true).node },
-    { tag: "成片 16:9 · 下挂+皮", node: clipCard("stack", lit3, SHOW_MODS, { skin: true }).node,
-      note: "皮上刻度 = 字幕句界" },
-    { tag: "成片 9:16 · 右挂+皮+提词行", node: clipCard("split", lit3b, SHOW_MODS, { skin: true }).node,
-      note: "<i>✓</i> 右栏:时间轴 + 随播提词行,虚空有了说法" }
-  ]);
+  // 连线:素材出 port → 成片视频道 Y;修饰道各自短线引入
+  requestAnimationFrame(() => {
+    for (const [stage, asset, clip] of [[stageW, assetW, clipW], [stageT, assetT, clipT]]) {
+      // 在成片卡左缘按道 Y 放 port
+      clip.node.querySelectorAll(".port.lane-port").forEach(p => p.remove());
+      const pairs = [];
+      const cardR = clip.card.getBoundingClientRect();
+      clip.tl.lanePorts.forEach(({ laneEl }, i) => {
+        const lr = laneEl.getBoundingClientRect();
+        const p = el("span", "port l lane-port");
+        p.style.top = (lr.top - cardR.top + lr.height/2 - 5) + "px";
+        clip.node.appendChild(p);
+        // 视觉对齐:port 贴卡左缘(node 坐标系卡从 x=0 开始,caption 高 26 已在 cardR 内)
+        if (i === 0) pairs.push([asset.outPort, p]);
+        else {
+          const stub = el("span", "port");
+          stub.style.cssText = `position:absolute;left:8px;top:${lr.top - stage.getBoundingClientRect().top + lr.height/2 - 5}px;opacity:.6`;
+          stage.appendChild(stub);
+          pairs.push([stub, p]);
+        }
+      });
+      drawEdges(stage, pairs);
+    }
+  });
 }
 renderAll();
 
@@ -893,10 +911,11 @@ $("#modSeg").onclick = e => {
   for (const b of $("#modSeg").children) b.classList.toggle("on", b.dataset.mod === m);
   renderAll();
 };
+addEventListener("resize", () => renderAll());
 
 /* 单节直出:#only-<sectionId>;hash 含 dark 则深色直出 */
 if (location.hash.startsWith("#only-")) {
-  const keep = location.hash.slice(6).replace("+dark", "");
+  const keep = location.hash.slice(6).split("+")[0];
   for (const sec of document.querySelectorAll("section, footer.note"))
     sec.style.display = sec.id === keep ? "" : "none";
 }
