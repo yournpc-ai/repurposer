@@ -40,7 +40,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { apiPut, fetchAssetTranscript, putAssetTranscript, toAbsoluteUrl, type AssetTranscript } from "@/lib/api"
-import { cn } from "@/lib/utils"
+import { cn, formatDuration } from "@/lib/utils"
 import type { GraphEdgeType, Output, ProjectArtifact } from "@/lib/types"
 
 import { BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX, TRANSCRIPT_SECTION_PX, cornerStackedInPorts, hasProgramRegion, hasTrackStack, nleModifierLanes, trackVideoPortBasePx } from "./layout"
@@ -336,11 +336,7 @@ export const PRODUCT_TYPE_ICON: Record<string, typeof Clapperboard> = {
  * (视口锚浮层律), pointer-events-none, overlay-surface frost. One instance
  * per card: the host reports the anchor's rect + content on hover, null on
  * leave/scroll. Pure presentation — the chip never intercepts a gesture. */
-function HoverChip({
-  chip,
-}: {
-  chip: { rect: DOMRect; content: ReactNode } | null
-}) {
+function HoverChip({ chip }: { chip: HoverChipState }) {
   if (!chip) return null
   const W = 300
   // SSR-safe: a chip exists only after a client pointer event.
@@ -373,63 +369,33 @@ function HoverChipMeta({ children }: { children: ReactNode }) {
   )
 }
 
-/** The asset's content layer (ADR-113 §3 — 素材卡解剖: media + time strip +
- * cue flow). The transcript is NEVER a node — it lives inside the asset
- * card. Data: mount-fetched from the asset's transcript endpoint, cached
- * module-wide by asset id (the canvas's shared seat — several cards of one
- * asset read one fetch); a save or a processing-stage flip invalidates.
- *
- * Faces: word-timestamped assets (video/audio) get the cue flow + the time
- * strip (click = seek the inline player — 拨头 only, the muted ambient law
- * untouched); paste/extraction yields carry no time axis — the honest
- * plain-text face. The edit overlay (edited_text) reads as plain text (the
- * user's own words carry no honest time alignment); editing writes the
- * overlay only (C4 — times never enter the textarea). */
-function TranscriptSection({
-  asset,
-  videoRef,
-  fill,
-  highlight,
-}: {
-  asset: FlowAssetInfo
-  videoRef?: RefObject<HTMLVideoElement | null>
-  /** Medialess assets (paste/transcript): the section IS the card body
-   * (flex-1); below media it keeps its fixed reservation (frame law — the
-   * anchor/flex seats never move mid-life). */
-  fill?: boolean
-  /** cross-highlight (ADR-113 §6): the interval a deliverable card's lane
-   * block hover named — strip blocks / cue rows overlapping it light up
-   * (`bg-lineage`). Already resolved to THIS asset by the card. */
-  highlight?: { srcStart: number; srcEnd: number } | null
-}) {
-  const { t } = useTranslation()
-  const assetId = asset.id
-  const projectId = asset.project_id ?? null
-  const [tx, setTx] = useState<AssetTranscript | null | undefined>(() =>
-    transcriptCache.get(assetId)
-  )
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState("")
-  const [saving, setSaving] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  // The strip's playhead rides the inline player's own clock (timeupdate is
-  // ~4Hz — cheap; the needle re-renders with it).
-  const [playhead, setPlayhead] = useState(0)
-  useEffect(() => {
-    const v = videoRef?.current
-    if (!v) return
-    const onTime = () => setPlayhead(v.currentTime)
-    v.addEventListener("timeupdate", onTime)
-    return () => v.removeEventListener("timeupdate", onTime)
-  }, [videoRef])
+/** The transcript section's shared cache (the canvas's seat — keyed by the
+ * asset id, so every card of one asset reads one fetch; a save writes the
+ * fresh response straight back). */
+const transcriptCache = new Map<string, AssetTranscript | null>()
 
-  // A processing flip invalidates the cached read — mid-flight ASR drops
-  // the snapshot and shows the quiet seat (never the empty face — that
-  // would lie); the terminal flip refetches fresh.
+/** The asset card's transcript data channel (ADR-113 §1 — the transcript's
+ * ONE seat is the asset row): mount-fetches from the asset's transcript
+ * endpoint, cached module-wide; a processing-stage flip invalidates (mid-
+ * flight ASR drops the snapshot, the terminal flip refetches); a save
+ * writes the fresh response straight back. Lives at the CARD level
+ * (ThumbCard, ADR-114) so the stage skin (the media's bottom edge) and the
+ * cue flow read one snapshot. */
+function useAssetTranscript(asset: FlowAssetInfo | undefined): {
+  tx: AssetTranscript | null | undefined
+  saving: boolean
+  save: (next: string | null) => Promise<boolean>
+} {
+  const assetId = asset?.id ?? ""
+  const projectId = asset?.project_id ?? null
+  const [tx, setTx] = useState<AssetTranscript | null | undefined>(() =>
+    assetId ? transcriptCache.get(assetId) : undefined,
+  )
+  const [saving, setSaving] = useState(false)
   const processing =
-    asset.processing_status === "pending" || asset.processing_status === "processing"
+    asset?.processing_status === "pending" || asset?.processing_status === "processing"
   useEffect(() => {
-    if (!projectId) return
+    if (!assetId || !projectId) return
     if (processing) {
       transcriptCache.delete(assetId)
       setTx(undefined)
@@ -448,6 +414,153 @@ function TranscriptSection({
       cancelled = true
     }
   }, [assetId, projectId, processing])
+
+  const save = useCallback(
+    async (next: string | null): Promise<boolean> => {
+      if (!projectId || !assetId || saving) return false
+      setSaving(true)
+      try {
+        const res = await putAssetTranscript(projectId, assetId, next)
+        if (res) {
+          // Optimistic echo + the shared cache's invalidation in one write —
+          // the card face shows the user's words NOW; the next mount agrees.
+          transcriptCache.set(assetId, res)
+          setTx(res)
+          return true
+        }
+        return false
+      } finally {
+        setSaving(false)
+      }
+    },
+    [assetId, projectId, saving],
+  )
+  return { tx, saving, save }
+}
+
+/** The HoverChip's anchor — a real DOMRect (a hovered row) or a synthetic
+ * one (the stage skin's cursor point). */
+type HoverChipState = {
+  rect: { left: number; width: number; top: number; bottom: number }
+  content: ReactNode
+} | null
+
+/** 舞台检视皮 (ADR-114 素材卡阅读型解剖): the time axis as a 3px skin on
+ * the media's own bottom edge — cue segments ∝ their span (pauses read as
+ * air), the playhead needle riding the player's clock; the media hover
+ * fattens it to 8px, a click seeks (只拨头, the ambient-muted law
+ * untouched), the hover reading ("m:ss / m:ss") floats in the L1 chip. The
+ * axis lives ON the stage it describes — the in-section time strip retired,
+ * the cue flow keeps its full band. Time formatting here is player chrome
+ * (the scrubber readout's one client seat — formatDuration, shared with
+ * the lightbox player), never a data row. The lineage interval lights the
+ * overlapping segments amber (ADR-113 §6). */
+function StageSkin({
+  cues,
+  duration,
+  playhead,
+  onSeek,
+  highlight,
+}: {
+  cues: NonNullable<AssetTranscript["cues"]>
+  duration: number
+  playhead: number
+  onSeek: (seconds: number) => void
+  highlight?: { srcStart: number; srcEnd: number } | null
+}) {
+  const [chip, setChip] = useState<HoverChipState>(null)
+  if (duration <= 0) return null
+  const pct = (v: number) => `${(v / duration) * 100}%`
+  const lit = (start: number, end: number) =>
+    !!highlight && end > highlight.srcStart && start < highlight.srcEnd
+  return (
+    <div
+      className="nodrag absolute inset-x-0 bottom-0 z-[2] h-[3px] cursor-pointer bg-white/20 transition-[height] group-hover/media:h-2"
+      onClick={(e) => {
+        e.stopPropagation()
+        const r = e.currentTarget.getBoundingClientRect()
+        onSeek(((e.clientX - r.left) / r.width) * duration)
+      }}
+      onMouseMove={(e) => {
+        const r = e.currentTarget.getBoundingClientRect()
+        const t = ((e.clientX - r.left) / r.width) * duration
+        setChip({
+          rect: { left: e.clientX, width: 0, top: r.top, bottom: r.top },
+          content: (
+            <span className="tabular-nums text-muted-foreground">
+              {formatDuration(t)} / {formatDuration(duration)}
+            </span>
+          ),
+        })
+      }}
+      onMouseLeave={() => setChip(null)}
+    >
+      {cues.map((cue, i) => (
+        <span
+          key={i}
+          aria-hidden
+          className={cn(
+            "absolute top-0 bottom-0",
+            lit(cue.start, cue.end) ? "bg-lineage" : "bg-white/50",
+          )}
+          style={{
+            left: pct(cue.start),
+            width: `${Math.max(((cue.end - cue.start) / duration) * 100, 0.8)}%`,
+          }}
+        />
+      ))}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute top-0 bottom-0 w-0.5 bg-white"
+        style={{ left: `${Math.min((playhead / duration) * 100, 100)}%` }}
+      />
+      <HoverChip chip={chip} />
+    </div>
+  )
+}
+
+/** The asset's content layer (ADR-113 §3; ADR-114 阅读型解剖): the cue flow
+ * IS the reading face — the header (title + edit affordance), then the
+ * sentence rows on ONE scroll axis. The time axis moved ONTO the stage
+ * (StageSkin at the media's bottom edge); the row's time reading floats in
+ * the L1 chip ABOVE the row (never covers the text). The playing row
+ * lights (`bg-accent`), the cross-highlighted interval lights amber
+ * (`bg-lineage`, ADR-113 §6). Paste/extraction yields carry no time axis —
+ * the honest plain-text face. The edit overlay (edited_text) reads as
+ * plain text (the user's own words carry no honest time alignment);
+ * editing writes the overlay only (C4 — times never enter the textarea). */
+function TranscriptSection({
+  tx,
+  saving,
+  onSave,
+  videoRef,
+  playhead,
+  onSeek,
+  fill,
+  highlight,
+}: {
+  tx: AssetTranscript | null | undefined
+  saving: boolean
+  onSave: (next: string | null) => Promise<boolean>
+  videoRef?: RefObject<HTMLVideoElement | null>
+  /** The inline player's clock — the now-row's light. Absent/0 without a
+   * player (medialess assets read a timeless face). */
+  playhead?: number
+  onSeek: (seconds: number) => void
+  /** Medialess assets (paste/transcript): the section IS the card body
+   * (flex-1); below media it keeps its fixed reservation (frame law — the
+   * anchor/flex seats never move mid-life). */
+  fill?: boolean
+  /** cross-highlight (ADR-113 §6): the interval a deliverable card's lane
+   * block hover named — cue rows overlapping it light up (`bg-lineage`).
+   * Already resolved to THIS asset by the card. */
+  highlight?: { srcStart: number; srcEnd: number } | null
+}) {
+  const { t } = useTranslation()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState("")
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [chip, setChip] = useState<HoverChipState>(null)
 
   useEffect(() => {
     if (editing && textareaRef.current) {
@@ -470,47 +583,32 @@ function TranscriptSection({
 
   const cues = tx?.edited_text == null ? (tx?.cues ?? null) : null
   const bodyText = tx ? (tx.edited_text ?? tx.text) : ""
-  const duration = asset.duration_seconds ?? cues?.[cues.length - 1]?.end ?? 0
   // cross-highlight (ADR-113 §6): does a region overlap the interval the
   // deliverable card's hover named? Half-open overlap on the source axis.
   const lit = (start: number, end: number) =>
     !!highlight && end > highlight.srcStart && start < highlight.srcEnd
+  // The now-row's light — only with a live player.
+  const now = (start: number, end: number) =>
+    !!videoRef && playhead != null && playhead >= start && playhead < end
 
   // The section's flex law (一条律两世界): below media it grows to the
-  // frame's reservation (TRANSCRIPT_SECTION_PX) but compresses to its floor
-  // inside a legacy short frame (born pre-section) — the media keeps its
-  // share, the cue flow scrolls tighter, never an overlap/crush. Medialess
-  // assets: the section IS the body (plain flex-1, no cap).
+  // frame's reservation (TRANSCRIPT_SECTION_PX — the divider holds its
+  // first 1px) but compresses to its floor inside a legacy short frame
+  // (born pre-section) — the media keeps its share, the cue flow scrolls
+  // tighter, never an overlap/crush. Medialess assets: the section IS the
+  // body (plain flex-1, no cap).
   const sectionClass = fill
     ? "flex min-h-0 flex-1 flex-col"
     : "flex min-h-[96px] flex-1 flex-col"
-  const sectionStyle = fill ? undefined : { maxHeight: TRANSCRIPT_SECTION_PX }
+  const sectionStyle = fill ? undefined : { maxHeight: TRANSCRIPT_SECTION_PX - 1 }
 
-  const seek = (seconds: number) => {
-    const v = videoRef?.current
-    if (v) v.currentTime = seconds
-  }
-
-  const save = async (next: string | null) => {
-    if (!projectId || saving) return
+  const saveDraft = async (next: string | null) => {
     const current = tx?.edited_text ?? tx?.text ?? ""
     if (next !== null && next === current) {
       setEditing(false)
       return
     }
-    setSaving(true)
-    try {
-      const res = await putAssetTranscript(projectId, assetId, next)
-      if (res) {
-        // Optimistic echo + the shared cache's invalidation in one write —
-        // the card face shows the user's words NOW; the next mount agrees.
-        transcriptCache.set(assetId, res)
-        setTx(res)
-        setEditing(false)
-      }
-    } finally {
-      setSaving(false)
-    }
+    if (await onSave(next)) setEditing(false)
   }
 
   if (tx === undefined) {
@@ -520,7 +618,7 @@ function TranscriptSection({
   }
 
   return (
-    <div className={cn(sectionClass, "gap-1.5 px-3 pb-3 pt-1.5")} style={sectionStyle}>
+    <div className={cn(sectionClass, "gap-1.5 px-3 pb-3 pt-2")} style={sectionStyle}>
       {/* The section header: title + the edit affordance (✎). Zero-chrome
           law — the header is quiet meta chrome, the body the content. */}
       <div className="flex h-5 shrink-0 items-center justify-between">
@@ -548,7 +646,7 @@ function TranscriptSection({
             ref={textareaRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => void save(draft)}
+            onBlur={() => void saveDraft(draft)}
             onWheel={(e) => {
               e.stopPropagation()
               e.preventDefault()
@@ -559,7 +657,7 @@ function TranscriptSection({
                 setEditing(false)
               } else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
                 e.preventDefault()
-                void save(draft)
+                void saveDraft(draft)
               }
             }}
             disabled={saving}
@@ -573,7 +671,7 @@ function TranscriptSection({
               onMouseDown={(e) => e.preventDefault()}
               onClick={(e) => {
                 e.stopPropagation()
-                void save(null)
+                void saveDraft(null)
               }}
               className="nodrag absolute right-1 bottom-1 rounded-md bg-accent px-2 py-1 text-[11px] text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent/70"
             >
@@ -582,85 +680,61 @@ function TranscriptSection({
           ) : null}
         </div>
       ) : cues && cues.length > 0 ? (
-        <>
-          {/* 时间条 (time strip): cue blocks ∝ their duration, pauses read as
-              gaps; click a block to seek the inline player; the playhead
-              rides the player's own clock. */}
-          {videoRef ? (
-            <div className="relative h-6 shrink-0">
-              {cues.map((cue, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  aria-label={cue.label}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    seek(cue.start)
-                  }}
-                  className={cn(
-                    "nodrag absolute top-1 bottom-1 rounded-sm transition-colors",
-                    lit(cue.start, cue.end)
-                      ? "bg-lineage"
-                      : playhead >= cue.start && playhead < cue.end
-                        ? "bg-accent"
-                        : "bg-muted hover:bg-accent",
-                  )}
-                  style={{
-                    left: `${(cue.start / duration) * 100}%`,
-                    width: `${Math.max(((cue.end - cue.start) / duration) * 100, 0.8)}%`,
-                  }}
-                />
-              ))}
-              {/* 播放头: a 1px foreground needle over the strip. */}
-              <span
-                aria-hidden
-                className="pointer-events-none absolute top-0 bottom-0 w-px bg-foreground"
-                style={{ left: `${Math.min((playhead / duration) * 100, 100)}%` }}
-              />
-            </div>
-          ) : null}
-          {/* cue 流: the sentence blocks — time rides the row's hover chrome,
-              never baked into the text. Click = seek (with a player). */}
-          <div className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            <div className="flex flex-col gap-1">
-              {cues.map((cue, i) => (
-                <div
-                  key={i}
-                  role={videoRef ? "button" : undefined}
-                  tabIndex={videoRef ? 0 : undefined}
-                  onClick={
-                    videoRef
-                      ? (e) => {
-                          e.stopPropagation()
-                          seek(cue.start)
-                        }
-                      : undefined
-                  }
-                  className={cn(
-                    "group/cue relative rounded-md px-1.5 -mx-1.5 transition-colors hover:bg-accent",
-                    videoRef && "cursor-pointer",
-                    // cross-highlight (ADR-113 §6): the interval the
-                    // deliverable card's lane hover named lights here.
-                    lit(cue.start, cue.end) && "bg-lineage",
-                  )}
-                >
-                  <p className="whitespace-pre-wrap text-xs leading-relaxed">{cue.text}</p>
-                  <span
-                    aria-hidden
-                    className="text-meta pointer-events-none absolute bottom-0.5 right-0.5 rounded-md bg-card px-1 py-px text-[10px] tabular-nums ring-1 ring-foreground/10 opacity-0 transition-opacity group-hover/cue:opacity-100"
-                  >
-                    {cue.label}
-                  </span>
-                </div>
-              ))}
-              {tx?.truncated ? (
-                <p className="text-meta px-1.5 text-[10px]">
-                  {t("results.canvas.transcriptTruncated")}
-                </p>
-              ) : null}
-            </div>
+        /* cue 流: the sentence blocks on ONE scroll axis — the time reading
+           floats ABOVE the row (L1 chip, never covers the text); click =
+           seek (with a player); the playing row lights, the lineage
+           interval lights amber. */
+        <div
+          className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          onScroll={() => setChip(null)}
+        >
+          <div className="flex flex-col gap-1">
+            {cues.map((cue, i) => (
+              <div
+                key={i}
+                role={videoRef ? "button" : undefined}
+                tabIndex={videoRef ? 0 : undefined}
+                onClick={
+                  videoRef
+                    ? (e) => {
+                        e.stopPropagation()
+                        onSeek(cue.start)
+                      }
+                    : undefined
+                }
+                onMouseEnter={
+                  videoRef
+                    ? (e) =>
+                        setChip({
+                          rect: e.currentTarget.getBoundingClientRect(),
+                          content: (
+                            <span className="tabular-nums text-muted-foreground">
+                              {cue.label}
+                            </span>
+                          ),
+                        })
+                    : undefined
+                }
+                onMouseLeave={() => setChip(null)}
+                className={cn(
+                  "relative rounded-md px-1.5 -mx-1.5 transition-colors hover:bg-accent",
+                  videoRef && "cursor-pointer",
+                  now(cue.start, cue.end) && "bg-accent",
+                  // cross-highlight (ADR-113 §6): the interval the
+                  // deliverable card's lane hover named lights here.
+                  lit(cue.start, cue.end) && "bg-lineage",
+                )}
+              >
+                <p className="whitespace-pre-wrap text-xs leading-relaxed">{cue.text}</p>
+              </div>
+            ))}
+            {tx?.truncated ? (
+              <p className="text-meta px-1.5 text-[10px]">
+                {t("results.canvas.transcriptTruncated")}
+              </p>
+            ) : null}
           </div>
-        </>
+        </div>
       ) : bodyText ? (
         <div className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <p className="whitespace-pre-wrap text-xs leading-relaxed">{bodyText}</p>
@@ -679,14 +753,10 @@ function TranscriptSection({
       ) : (
         <div className="min-h-0 flex-1" />
       )}
+      <HoverChip chip={chip} />
     </div>
   )
 }
-
-/** The transcript section's shared cache (the canvas's seat — keyed by the
- * asset id, so every card of one asset reads one fetch; a save writes the
- * fresh response straight back). */
-const transcriptCache = new Map<string, AssetTranscript | null>()
 
 /** The deliverable card's NLE 检视轴 (ADR-114 — 成片卡检视解剖): below the
  * media, a read-only timeline — the axis HEAD (the clip's score at the right
@@ -1042,101 +1112,160 @@ function ThumbCard({
       asset.type === "transcript" ||
       asset.type === "past_material")
   // Paste/extraction assets carry no media — the transcript section IS the
-  // card body (no media box, no time strip).
+  // card body (no media box, no stage skin).
   const medialess = asset?.type === "transcript" || asset?.type === "past_material"
+
+  // ADR-114 阅读型解剖: the transcript channel lives at the CARD level —
+  // the stage skin (the media's bottom edge) and the cue flow read one
+  // snapshot. The edit overlay hides the cue axis (no honest alignment).
+  const { tx, saving, save } = useAssetTranscript(textBearing ? asset : undefined)
+  const cues = tx?.edited_text == null ? (tx?.cues ?? null) : null
+  const duration = asset?.duration_seconds ?? cues?.[cues.length - 1]?.end ?? 0
+  // The stage skin's needle + the cue flow's now-row ride the inline
+  // player's own clock (timeupdate is ~4Hz — cheap).
+  const [playhead, setPlayhead] = useState(0)
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v) return
+    const onTime = () => setPlayhead(v.currentTime)
+    v.addEventListener("timeupdate", onTime)
+    return () => v.removeEventListener("timeupdate", onTime)
+  }, [node.videoUrl])
+  const seek = (seconds: number) => {
+    const v = videoRef.current
+    if (v) v.currentTime = seconds
+  }
+  const highlight =
+    lineageHover && asset && lineageHover.assetId === asset.id
+      ? { srcStart: lineageHover.srcStart, srcEnd: lineageHover.srcEnd }
+      : null
 
   return (
     <div className="flex h-full w-full flex-col">
       <NodeCaption label={node.label} Icon={asset ? TypeIcon : undefined} />
-      <div
-        className={cn(
-          "group/media relative min-h-0 flex-1 overflow-hidden rounded-md",
-          node.videoUrl || node.containThumb ? "bg-black" : "bg-muted",
-        )}
-      >
-        {medialess ? null : node.videoUrl ? (
-          /* The source video node plays inline — muted ambient loop, first
-             frame instantly (preload=metadata), non-interactive: clicks and
-             drags belong to the canvas. object-COVER (2026-09-28 黑底走查):
-             the frame's aspect bucket never matches the source's real ratio
-             to the pixel (960×544 in a 16:9 bucket = pillarbox strips) —
-             cover fills the box and crops the sub-percent sliver instead of
-             showing the bg-black letterbox. */
-          <video
-            ref={videoRef}
-            src={node.videoUrl}
-            aria-label={node.label}
-            className="pointer-events-none h-full w-full object-cover"
-            muted={muted}
-            loop
-            playsInline
-            autoPlay
-            preload="metadata"
-            disablePictureInPicture
-            onLoadedMetadata={(e) =>
-              setDims(
-                `${e.currentTarget.videoWidth}×${e.currentTarget.videoHeight}`
-              )
-            }
-          />
-        ) : node.thumbUrl ? (
-          <img
-            src={node.thumbUrl}
-            alt={node.label}
+      {/* 一体环 (ADR-114): media + transcript inside ONE ring — the card IS
+          the reading surface. The stage keeps its aspect-pinned reservation
+          (flex-1 against the section's fixed anatomy — the frame math pins
+          it, never a mid-life squeeze); object-cover = zero letterbox, the
+          display-class bucket bounds the crop. */}
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-card ring-1 ring-foreground/10">
+        {medialess ? null : (
+          <div
             className={cn(
-              "h-full w-full",
-              node.containThumb ? "object-contain" : "object-cover",
+              "group/media relative min-h-0 flex-1",
+              node.videoUrl || node.containThumb ? "bg-black" : "bg-muted",
             )}
-            onLoad={(e) =>
-              setDims(
-                `${e.currentTarget.naturalWidth}×${e.currentTarget.naturalHeight}`
-              )
-            }
-          />
-        ) : (
-          <span className="flex h-full w-full items-center justify-center text-muted-foreground">
-            <FallbackIcon className="h-5 w-5" />
-          </span>
-        )}
-        {expandable && (
-          <MediaHoverButton
-            className="left-2 top-2"
-            label={t("results.canvas.expand")}
-            onClick={() => onExpandMedia(node.id)}
           >
-            <Maximize2 className="h-3.5 w-3.5" />
-          </MediaHoverButton>
-        )}
-        {node.videoUrl && (
-          <MediaHoverButton
-            className="right-2 top-2"
-            label={muted ? t("results.canvas.unmute") : t("results.canvas.mute")}
-            onClick={toggleMuted}
-          >
-            {muted ? (
-              <VolumeX className="h-3.5 w-3.5" />
+            {node.videoUrl ? (
+              /* The source video node plays inline — muted ambient loop,
+                 first frame instantly (preload=metadata), non-interactive:
+                 clicks and drags belong to the canvas. object-COVER
+                 (2026-09-28 黑底走查): the frame's aspect bucket never
+                 matches the source's real ratio to the pixel (960×544 in a
+                 16:9 bucket = pillarbox strips) — cover fills the box and
+                 crops the sub-percent sliver instead of showing the
+                 bg-black letterbox. */
+              <video
+                ref={videoRef}
+                src={node.videoUrl}
+                aria-label={node.label}
+                className="pointer-events-none h-full w-full object-cover"
+                muted={muted}
+                loop
+                playsInline
+                autoPlay
+                preload="metadata"
+                disablePictureInPicture
+                onLoadedMetadata={(e) =>
+                  setDims(
+                    `${e.currentTarget.videoWidth}×${e.currentTarget.videoHeight}`
+                  )
+                }
+              />
+            ) : node.thumbUrl ? (
+              <img
+                src={node.thumbUrl}
+                alt={node.label}
+                className={cn(
+                  "h-full w-full",
+                  node.containThumb ? "object-contain" : "object-cover",
+                )}
+                onLoad={(e) =>
+                  setDims(
+                    `${e.currentTarget.naturalWidth}×${e.currentTarget.naturalHeight}`
+                  )
+                }
+              />
             ) : (
-              <Volume2 className="h-3.5 w-3.5" />
+              <span className="flex h-full w-full items-center justify-center text-muted-foreground">
+                <FallbackIcon className="h-5 w-5" />
+              </span>
             )}
-          </MediaHoverButton>
+            {expandable && (
+              <MediaHoverButton
+                className="left-2 top-2"
+                label={t("results.canvas.expand")}
+                onClick={() => onExpandMedia(node.id)}
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+              </MediaHoverButton>
+            )}
+            {node.videoUrl && (
+              <MediaHoverButton
+                className="right-2 top-2"
+                label={muted ? t("results.canvas.unmute") : t("results.canvas.mute")}
+                onClick={toggleMuted}
+              >
+                {muted ? (
+                  <VolumeX className="h-3.5 w-3.5" />
+                ) : (
+                  <Volume2 className="h-3.5 w-3.5" />
+                )}
+              </MediaHoverButton>
+            )}
+            {/* 舞台检视皮 (ADR-114): the time axis ON the stage's bottom
+                edge — the in-section strip's successor. The edit overlay
+                hides it (cues null — no honest time alignment). */}
+            {node.videoUrl && cues && cues.length > 0 ? (
+              <StageSkin
+                cues={cues}
+                duration={duration}
+                playhead={playhead}
+                onSeek={seek}
+                highlight={highlight}
+              />
+            ) : null}
+            {/* 时长角标: the duration rides the stage's bottom-right corner
+                (clears the fattened skin); player-chrome formatting
+                (formatDuration), never a data row. */}
+            {node.videoUrl && duration > 0 ? (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute right-2 bottom-3.5 z-[2] rounded-md bg-black/45 px-1.5 py-1 text-[10px] leading-none text-white tabular-nums backdrop-blur-sm"
+              >
+                {formatDuration(duration)}
+              </span>
+            ) : null}
+          </div>
         )}
+        {textBearing && asset ? (
+          <>
+            {medialess ? null : (
+              <div aria-hidden className="mx-3 h-px shrink-0 bg-foreground/10" />
+            )}
+            <TranscriptSection
+              tx={tx}
+              saving={saving}
+              onSave={save}
+              videoRef={node.videoUrl ? videoRef : undefined}
+              playhead={playhead}
+              onSeek={seek}
+              fill={medialess}
+              highlight={highlight}
+            />
+          </>
+        ) : null}
       </div>
-      {/* The transcript section is its OWN band on the card surface, never
-          inside the media box (a video's bg-black surface would swallow the
-          cue text's foreground ink). Medialess assets (paste/transcript):
-          the band is the whole body. */}
-      {textBearing && asset ? (
-        <TranscriptSection
-          asset={asset}
-          videoRef={node.videoUrl ? videoRef : undefined}
-          fill={medialess}
-          highlight={
-            lineageHover && lineageHover.assetId === asset.id
-              ? { srcStart: lineageHover.srcStart, srcEnd: lineageHover.srcEnd }
-              : null
-          }
-        />
-      ) : null}
       {showBar && (
         <div className="flex h-[44px] shrink-0 items-start justify-center pt-2">
           <MediaToolbar

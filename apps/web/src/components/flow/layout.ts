@@ -530,15 +530,16 @@ export const VIDEO_ASSET_NODE_SIZE = { width: 280, height: 228 }
  * 2026-08-17; 做薄 2026-08-19): 8px gap + the 36px frosted bar. */
 export const ASSET_TOOLBAR_PX = 44
 
-/** The transcript section's reservation below the media (ADR-113 §3 —
- * 素材卡解剖: media + time strip + cue flow): strip 28 + gap 8 + cue flow
- * 200. ONE law with the server mirror (graph_store._TRANSCRIPT_SECTION_PX)
- * and the card's flex seat (FlowNodeCard.TranscriptSection). */
-export const TRANSCRIPT_SECTION_PX = 236
+/** The transcript section's reservation below the media (ADR-113 §3;
+ * ADR-114 素材卡阅读型解剖: media + 检视皮(入舞台底缘) + cue 流): divider 1
+ * + pad 8 + header 20 + gap 6 + cue flow 150 + pad 12. ONE law with the
+ * server mirror (graph_store._TRANSCRIPT_SECTION_PX) and the card's flex
+ * seat (FlowNodeCard.TranscriptSection). */
+export const TRANSCRIPT_SECTION_PX = 197
 /** Medialess text assets (paste/transcript — the section IS the body):
- * caption 26 + cue flow 200 + toolbar 44 + gap 8 (server mirror:
+ * caption 26 + section 196 + toolbar 44 (server mirror:
  * graph_store._ASSET_TEXT_ONLY_H). */
-export const ASSET_TEXT_ONLY_H = 278
+export const ASSET_TEXT_ONLY_H = 266
 
 // 间距常数 (C6, 2026-09-14 拍板 64/16/88; 2026-09-28 用户走查放宽主距
 // 64→124): one law with the server mirror graph_store._GAP_MAIN/_GAP_CROSS

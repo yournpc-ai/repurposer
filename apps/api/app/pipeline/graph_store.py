@@ -385,13 +385,13 @@ _ASSET_FRAME: dict[str, tuple[int, int]] = {
 }
 _ASSET_FRAME_DEFAULT = _FRAME_CLASS["asset"]
 
-# The transcript section's frame reservation (ADR-113 §3 — 素材卡解剖:
-# media + time strip + cue flow): text-yielding media assets (video/audio)
-# grow it BELOW the media; paste/transcript assets are medialess — the
-# section IS the body. ONE law with the client mirror (layout.ts
-# TRANSCRIPT_SECTION_PX / the asset branch of graphNodeSize).
-_TRANSCRIPT_SECTION_PX = 236  # strip 28 + gap 8 + cue flow 200
-_ASSET_TEXT_ONLY_H = 278  # caption 26 + cue flow 200 + toolbar 44 + gap 8
+# The transcript section's frame reservation (ADR-113 §3; ADR-114 素材卡
+# 阅读型解剖: media + 检视皮(入舞台底缘) + cue 流): text-yielding media
+# assets (video/audio) grow it BELOW the media; paste/transcript assets are
+# medialess — the section IS the body. ONE law with the client mirror
+# (layout.ts TRANSCRIPT_SECTION_PX / the asset branch of graphNodeSize).
+_TRANSCRIPT_SECTION_PX = 197  # divider 1 + pad 8 + header 20 + gap 6 + cue flow 150 + pad 12
+_ASSET_TEXT_ONLY_H = 266  # caption 26 + section 196 + toolbar 44
 
 # NLE 检视轴预留 (ADR-114 — 成片卡解剖: media + 轴头 + ruler + 视频道 +
 # 文字道 + bar): the tracked clip families' cards carry the inspection axis
