@@ -16,12 +16,17 @@ Lane laws:
 - ``video_lane``: the non-hidden segments in order, concatenated — the
   output clock is cumulative (``out`` times) while ``src`` times keep the
   SOURCE range (the cross-highlight's data: hovering a block lights the
-  asset card's matching source interval — ADR-113 §6).
+  asset card's matching source interval — ADR-113 §6). Both ranges also
+  carry preformatted labels (``src_label`` / ``out_label``).
 - ``text_lane``: ``caption_track`` words (SOURCE time) are assigned to the
   kept segment their center falls in, grouped by the ONE cue law
   (``group_cues``) WITHIN each segment — a cut is a hard sentence break —
   then shifted to the output axis. Labels are preformatted ``m:ss–m:ss``
   (the client never formats time).
+- ``ruler``: the NLE axis's scale — ticks at a nice-step density with
+  labels preformatted (``None`` label = a minor tick; ADR-114 — the one
+  time-formatting seat covers the scale too, the client draws geometry
+  only). ``t=0`` and ``t=total`` always carry labels.
 - ``modifiers``: presence only (``music`` = music.enabled, ``dub`` = dub
   non-null) — the modifier lanes' content face is a later batch.
 
@@ -37,8 +42,8 @@ from app.tools.clips.transcript import fmt_cue_time, group_cues
 class VideoLaneBlock(TypedDict):
     """One kept segment: its OUTPUT span + its SOURCE span + the source
     asset's id (the cross-highlight's address — ADR-113 §6; ``None`` when
-    the spec carries no asset identity). ``src_label`` is the preformatted
-    ``m:ss–m:ss`` source range (the client never formats time)."""
+    the spec carries no asset identity). ``src_label`` / ``out_label`` are
+    the preformatted ``m:ss–m:ss`` ranges (the client never formats time)."""
 
     out_start: float
     out_end: float
@@ -46,6 +51,7 @@ class VideoLaneBlock(TypedDict):
     src_end: float
     asset_id: str | None
     src_label: str
+    out_label: str
 
 
 class TextLaneBlock(TypedDict):
@@ -57,9 +63,18 @@ class TextLaneBlock(TypedDict):
     label: str
 
 
+class RulerTick(TypedDict):
+    """One scale tick on the output axis (ADR-114): ``label`` preformatted
+    ``m:ss`` on the major steps, ``None`` on the minor ones."""
+
+    t: float
+    label: str | None
+
+
 class TrackStack(TypedDict):
     video_lane: list[VideoLaneBlock]
     text_lane: list[TextLaneBlock]
+    ruler: list[RulerTick]
     modifiers: dict[str, bool]
 
 
@@ -89,6 +104,41 @@ def _respaced(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def _ruler_ticks(total: float) -> list[RulerTick]:
+    """The NLE axis's scale on the output timeline (ADR-114).
+
+    Major step = the first nice value keeping ≤10 labeled ticks (a 45s
+    clip reads 0:00–0:45 by fives; a 7min clip by minutes); minor = major/5
+    (dropped when sub-second). ``t=0`` and ``t=total`` always labeled —
+    the axis's ends never go unnamed. Labels preformatted (one seat).
+    """
+    if total <= 0:
+        return []
+    big = 600.0
+    for step in (1.0, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0, 300.0, 600.0):
+        big = step
+        if total / step <= 10:
+            break
+    small = big / 5 if big / 5 >= 1 else big
+    ticks: list[RulerTick] = []
+    k = 0
+    while True:
+        t = k * small
+        if t > total + 1e-6:
+            break
+        labeled = abs(t / big - round(t / big)) < 1e-6
+        ticks.append(
+            RulerTick(t=round(t, 3), label=fmt_cue_time(t) if labeled else None)
+        )
+        k += 1
+    if ticks and abs(ticks[-1]["t"] - total) > 0.05:
+        ticks.append(RulerTick(t=round(total, 3), label=fmt_cue_time(total)))
+    elif ticks:
+        # The end lands on a tick — it always carries its label.
+        ticks[-1]["label"] = fmt_cue_time(total)
+    return ticks
 
 
 def build_track_stack(render_spec: Any) -> TrackStack | None:
@@ -130,6 +180,7 @@ def build_track_stack(render_spec: Any) -> TrackStack | None:
                 src_end=src_end,
                 asset_id=seg_asset_id,
                 src_label=f"{fmt_cue_time(src_start)}–{fmt_cue_time(src_end)}",
+                out_label=f"{fmt_cue_time(out_start)}–{fmt_cue_time(out_end)}",
             )
         )
         windows.append((src_start, src_end, out_start, out_end))
@@ -177,5 +228,6 @@ def build_track_stack(render_spec: Any) -> TrackStack | None:
     return TrackStack(
         video_lane=video_lane,
         text_lane=text_lane,
+        ruler=_ruler_ticks(out_cursor),
         modifiers=modifiers,
     )
