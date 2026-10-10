@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import {
   ArrowUp,
   AudioLines,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clapperboard,

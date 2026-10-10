@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from "vitest"
 
-import { flowNodeSize, projectSettledFrames } from "./layout"
+import { projectSettledFrames } from "./layout"
 import type { FlowEdge, FlowNode } from "./types"
 
 // The three-mirror pitch value (product_graph.PITCH ↔ graph_store._PITCH ↔
