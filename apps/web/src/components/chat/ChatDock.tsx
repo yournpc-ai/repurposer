@@ -65,7 +65,6 @@ import {
 import { createTypewriter } from "@/lib/typewriter"
 import { downloadOutput } from "@/components/results/downloadOutput"
 import { useRunEvents } from "@/lib/use-run-events"
-import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { LogoMark } from "@/components/LogoMark"
 import {
@@ -155,7 +154,7 @@ import {
 } from "@/components/chat/RunTaskList"
 import { ActivityRow, FoldedActivityRow, type NowRowPayload } from "@/components/chat/ActivityStream"
 import type { LifecycleStamp, Output } from "@/lib/types"
-import { isConfirmationReady, isPlanReady } from "@/lib/lifecycleStamp"
+import { isPlanReady } from "@/lib/lifecycleStamp"
 import {
   acceptsStagedFile,
   fileIconFor,
@@ -781,7 +780,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const full = form === "full"
   const dock = form === "dock"
   const panel = form === "panel"
-  const isMobile = useIsMobile()
   /** History region (dock D4 修订 — 一体容器两态): in the DOCK form the flow
    * lives INSIDE the input group's container, growing upward; closed = the
    * input group alone (the canvas owns the screen). Agent speech always

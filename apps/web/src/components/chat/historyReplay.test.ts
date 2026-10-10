@@ -25,7 +25,7 @@ function row(overrides: Partial<HistoryRow>): HistoryRow {
   }
 }
 
-const ctx = { prompt: "the opening prompt", t }
+const ctx = { t }
 
 describe("user rows", () => {
   it("map straight through, attachments rebuilt as completed chips", () => {
@@ -49,12 +49,17 @@ describe("user rows", () => {
     })
   })
 
-  it("skips the seeded opening-prompt row (it renders from the prop)", () => {
+  it("the opener row maps straight through (归档单一源: every row renders, the opener included)", () => {
+    // The mapper's own law names this case: no prop-rendered side lane, no
+    // skip predicate — a user row whose content is the opening prompt is a
+    // plain user row like any other.
     const out = mapHistoryRows(
       [row({ role: "user", content: "the opening prompt" })],
       ctx,
     )
-    expect(out).toEqual([])
+    expect(out).toEqual([
+      expect.objectContaining({ id: "m1", role: "user", content: "the opening prompt" }),
+    ])
   })
 })
 
