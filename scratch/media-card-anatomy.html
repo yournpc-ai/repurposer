@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>媒体节点卡解剖方案对比 — 现状 / B / A / C</title>
+<style>
+  /* ===== 真实 token(抄自 apps/web/src/styles.css)===== */
+  :root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --popover: oklch(1 0 0);
+    --muted: oklch(0.95 0 0);
+    --inset: oklch(0.92 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --meta-foreground: oklch(0.68 0 0);
+    --accent: oklch(0.92 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --lineage: oklch(0.92 0.11 92);
+    --destructive: oklch(0.577 0.245 27.325);
+    --hairline: oklch(0.145 0 0 / 0.10);
+    --radius: 10px; --radius-md: 8px; --radius-sm: 6px;
+    --dots: oklch(0.556 0 0 / 0.32);
+    color-scheme: light;
+  }
+  .dark {
+    --background: oklch(0.12 0 0);
+    --foreground: oklch(0.95 0 0);
+    --card: oklch(0.21 0 0);
+    --popover: oklch(0.21 0 0);
+    --muted: oklch(0.24 0 0);
+    --inset: oklch(0 0 0 / 0.25);
+    --muted-foreground: oklch(0.63 0 0);
+    --meta-foreground: oklch(0.42 0 0);
+    --accent: oklch(1 0 0 / 8%);
+    --accent-foreground: oklch(0.95 0 0);
+    --lineage: oklch(0.85 0.13 90 / 30%);
+    --hairline: oklch(0.95 0 0 / 0.10);
+    --dots: oklch(0.95 0 0 / 0.22);
+    color-scheme: dark;
+  }
+  .text-meta { color: var(--meta-foreground); text-transform: uppercase; letter-spacing: 0.08em; }
+  .dock-surface {
+    background: color-mix(in oklch, var(--popover) 65%, transparent);
+    backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  }
+  .overlay-surface {
+    background: color-mix(in oklch, var(--popover) 78%, transparent);
+    backdrop-filter: blur(48px) saturate(1.6); -webkit-backdrop-filter: blur(48px) saturate(1.6);
+    box-shadow: 0 20px 25px -5px oklch(0 0 0 / 0.1), 0 8px 10px -6px oklch(0 0 0 / 0.1);
+  }
+  .dark .overlay-surface { background: oklch(0.33 0 0 / 0.62); box-shadow: 0 20px 40px oklch(0 0 0 / 0.4); }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+    background: var(--background); color: var(--foreground); font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .page { max-width: 1460px; margin: 0 auto; padding: 40px 36px 96px; }
+
+  header.doc { max-width: 860px; }
+  header.doc h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  header.doc p { margin-top: 10px; color: var(--muted-foreground); font-size: 13px; line-height: 1.7; }
+  header.doc code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; background: var(--inset); padding: 1px 5px; border-radius: 4px; }
+  .controls { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 8px;
+    margin: 18px -8px 0; padding: 10px 8px; background: color-mix(in oklch, var(--background) 80%, transparent);
+    backdrop-filter: blur(12px); }
+  .controls .seg { display: flex; align-items: center; gap: 2px; background: var(--muted); border-radius: var(--radius-md); padding: 2px; }
+  .controls .seg button { padding: 4px 10px; font-size: 12px; border-radius: 6px; color: var(--muted-foreground); }
+  .controls .seg button.on { background: var(--card); color: var(--foreground); box-shadow: 0 0 0 1px var(--hairline); }
+  .controls .hint { font-size: 12px; color: var(--meta-foreground); margin-left: auto; }
+
+  section { margin-top: 64px; }
+  section > h2 { font-size: 15px; font-weight: 600; }
+  section > h2 .en { color: var(--meta-foreground); font-weight: 500; font-size: 12px; margin-left: 8px; }
+  section > .sub { margin-top: 6px; font-size: 12.5px; color: var(--muted-foreground); max-width: 900px; line-height: 1.7; }
+  section > .sub b { color: var(--foreground); font-weight: 500; }
+  .lawtag { display: inline-block; font-size: 11px; border-radius: 4px; padding: 1px 6px; margin-right: 4px;
+    background: var(--muted); color: var(--muted-foreground); }
+  .lawtag.warn { background: oklch(0.577 0.245 27.325 / 0.12); color: var(--destructive); }
+
+  .stage {
+    margin-top: 18px; border-radius: 16px; padding: 44px 48px 52px;
+    background: radial-gradient(circle, var(--dots) 1px, transparent 1px) 0 0 / 32px 32px, var(--background);
+    box-shadow: inset 0 0 0 1px var(--hairline);
+    display: flex; gap: 88px; align-items: flex-start; justify-content: center; flex-wrap: wrap;
+  }
+  .case { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .case > .tag { font-size: 11px; color: var(--meta-foreground); text-transform: uppercase; letter-spacing: 0.08em; }
+
+  /* ===== 节点共享解剖 ===== */
+  .node { display: flex; flex-direction: column; width: var(--nw, 400px); position: relative; }
+  .node.narrow { --nw: 280px; }
+  .ncaption { display: flex; align-items: flex-end; gap: 8px; height: 26px; padding: 0 4px 8px; }
+  .ncaption span.lab { display: flex; min-width: 0; align-items: center; gap: 4px; font-size: 11px; line-height: 1; color: var(--muted-foreground); }
+  .ncaption svg { width: 14px; height: 14px; flex-shrink: 0; }
+  .ncard { position: relative; background: var(--card); border-radius: var(--radius);
+    box-shadow: 0 0 0 1px var(--hairline); overflow: hidden; display: flex; flex-direction: column; }
+  .port { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--card);
+    box-shadow: 0 0 0 1.5px var(--hairline), inset 0 0 0 2.5px var(--muted-foreground); top: 40px; z-index: 5; }
+  .port.l { left: -5px; } .port.r { right: -5px; left: auto; }
+
+  .media { position: relative; width: 100%; background: #000; overflow: hidden; }
+  .media svg.scene { display: block; width: 100%; height: 100%; position: absolute; inset: 0; }
+  .mbtn { position: absolute; z-index: 3; display: flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 50%; background: rgb(0 0 0 / 0.6); color: #fff;
+    opacity: 0; transition: opacity .15s; }
+  .media:hover .mbtn { opacity: 1; }
+  .mbtn:hover { background: rgb(0 0 0 / 0.8); }
+  .mbtn svg { width: 14px; height: 14px; }
+  .badge { position: absolute; z-index: 2; font-size: 11px; line-height: 1; }
+
+  /* 底部 factsbar(现状/外置磨砂 pill) */
+  .fband { display: flex; justify-content: center; align-items: flex-start; height: 44px; padding-top: 8px; }
+  .ftoolbar { display: flex; align-items: center; gap: 4px; border-radius: var(--radius); padding: 4px;
+    box-shadow: 0 0 0 1px var(--hairline); }
+  .ftoolbar .info { display: flex; align-items: center; gap: 8px; padding: 0 4px 0 6px;
+    font-size: 11px; white-space: nowrap; color: var(--muted-foreground); }
+  .ftoolbar .divi { width: 1px; height: 14px; background: oklch(0.145 0 0 / 0.15); flex-shrink: 0; }
+  .dark .ftoolbar .divi { background: oklch(0.95 0 0 / 0.15); }
+  .ftoolbar .act { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+    border-radius: 6px; color: var(--foreground); transition: background .12s; }
+  .ftoolbar .act:hover { background: var(--accent); }
+  .ftoolbar .act svg { width: 14px; height: 14px; }
+
+  /* transcript 区(现状/B) */
+  .txsec { display: flex; flex-direction: column; gap: 6px; padding: 6px 12px 12px; }
+  .txsec .txhead { display: flex; height: 20px; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .txsec .txhead .t { font-size: 10px; }
+  .txsec .txhead .edit { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+    border-radius: 6px; color: var(--muted-foreground); transition: background .12s, color .12s; }
+  .txsec .txhead .edit:hover { background: var(--accent); color: var(--foreground); }
+  .txsec .txhead .edit svg { width: 12px; height: 12px; }
+  .cueflow { display: flex; flex-direction: column; gap: 4px; max-height: var(--cfh, 130px); overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: color-mix(in oklch, var(--foreground) 12%, transparent) transparent; }
+  .cue { position: relative; border-radius: 6px; padding: 0 6px; margin: 0 -6px; cursor: pointer; transition: background .12s; }
+  .cue:hover { background: var(--accent); }
+  .cue p { font-size: 12px; line-height: 1.65; white-space: pre-wrap; }
+  .cue .time { position: absolute; right: 2px; bottom: 2px; font-size: 10px; border-radius: 6px;
+    background: var(--card); box-shadow: 0 0 0 1px var(--hairline); padding: 1px 4px;
+    color: var(--meta-foreground); letter-spacing: 0.08em; font-variant-numeric: tabular-nums;
+    opacity: 0; transition: opacity .12s; pointer-events: none; }
+  .cue:hover .time { opacity: 1; }
+  .cue.lit, .stripblock.lit, .laneblock.lit { background: var(--lineage) !important; }
+  .cue.now { background: var(--accent); }
+
+  /* 现状时间条:碎块条码 */
+  .strip { position: relative; height: 24px; flex-shrink: 0; }
+  .strip .stripblock { position: absolute; top: 4px; bottom: 4px; border-radius: 2px;
+    background: var(--muted); transition: background .12s; }
+  .strip .stripblock:hover { background: var(--accent); }
+  .strip .stripblock.now { background: var(--accent); }
+  .needle { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--foreground); pointer-events: none; z-index: 2; }
+
+  /* B/A 连续进度皮 */
+  .skin { position: relative; flex-shrink: 0; border-radius: 99px; background: var(--muted); overflow: visible; }
+  .skin .fillblock { position: absolute; top: 0; bottom: 0; background: var(--muted-foreground); opacity: .38; }
+  .skin .fillblock:first-child { border-radius: 99px 0 0 99px; }
+  .skin .fillblock.last { border-radius: 0 99px 99px 0; }
+  .skin .tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--card); opacity: .9; }
+  .skin:hover { cursor: pointer; }
+
+  /* 轨道栈 */
+  .tstack { flex-shrink: 0; padding: 0 12px; }
+  .trow { }
+  .trow .tlabel { display: flex; align-items: center; height: 16px; font-size: 10px; }
+  .trow .tlabel.iconic { gap: 5px; height: 18px; color: var(--meta-foreground); }
+  .trow .tlabel.iconic svg { width: 11px; height: 11px; }
+  .trow .tlabel.iconic .mods { margin-left: auto; display: flex; gap: 4px; }
+  .lane { position: relative; height: 24px; }
+  .laneblock { position: absolute; top: 0; bottom: 0; overflow: hidden; border-radius: 2px;
+    background: var(--muted); padding: 0 4px; text-align: left; font-size: 10px; line-height: 24px;
+    color: var(--muted-foreground); transition: background .12s, color .12s; }
+  .laneblock:hover { background: var(--accent); color: var(--foreground); }
+  .laneblock span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .laneblock.empty { inset: 0; }
+  /* 连续道(A/B 文字轨) */
+  .lane.solid .laneblock { border-radius: 0; padding: 0; }
+  .lane.solid .laneblock.first { border-radius: 3px 0 0 3px; }
+  .lane.solid .laneblock.last { border-radius: 0 3px 3px 0; }
+  .lane.solid .laneblock.only { border-radius: 3px; }
+  .lane.solid .laneblock { box-shadow: 1px 0 0 0 var(--card); }
+
+  /* A: 舞台下缘进度皮 */
+  .stageskin { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; z-index: 2;
+    background: rgb(255 255 255 / 0.22); transition: height .15s; cursor: pointer; }
+  .media:hover .stageskin { height: 8px; }
+  .stageskin .sg { position: absolute; top: 0; bottom: 0; background: rgb(255 255 255 / 0.55); }
+  .stageskin .sgtick { position: absolute; top: 0; bottom: 0; width: 1px; background: rgb(0 0 0 / 0.55); }
+  .stageskin .needle { background: #fff; width: 2px; }
+
+  /* 舞台角 chip(A) */
+  .cornerchip { position: absolute; z-index: 2; font-size: 10px; line-height: 1; padding: 4px 6px;
+    border-radius: 6px; color: #fff; background: rgb(0 0 0 / 0.45);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-variant-numeric: tabular-nums; }
+
+  /* A/B: 细 meta 行 */
+  .metarow { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 4px;
+    font-size: 11px; color: var(--meta-foreground); }
+  .metarow .acts { margin-left: auto; display: flex; gap: 2px; }
+  .metarow .act { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+    border-radius: 6px; color: var(--muted-foreground); transition: background .12s, color .12s; }
+  .metarow .act:hover { background: var(--accent); color: var(--foreground); }
+  .metarow .act svg { width: 13px; height: 13px; }
+
+  /* 悬浮 chip(hover 详情,共用) */
+  #hoverchip { position: fixed; z-index: 100; pointer-events: none; max-width: 280px;
+    border-radius: 8px; padding: 6px 8px; font-size: 11px; line-height: 1.5;
+    opacity: 0; transition: opacity .1s; }
+  #hoverchip .hc-time { color: var(--muted-foreground); font-variant-numeric: tabular-nums; margin-top: 2px; font-size: 10px; }
+  #hoverchip.show { opacity: 1; }
+
+  /* C: 折叠检视条 + hover 展开浮层 */
+  .peekstrip { position: relative; height: 20px; margin: 0 12px 10px; border-radius: 99px; background: var(--muted); cursor: pointer; }
+  .peekstrip .sg { position: absolute; top: 7px; bottom: 7px; background: var(--muted-foreground); opacity: .4; border-radius: 2px; }
+  .peekstrip .needle { background: var(--foreground); }
+  .peekpop { position: absolute; top: 100%; left: 0; right: 0; z-index: 20; margin-top: 6px;
+    border-radius: var(--radius); padding: 10px 12px 12px;
+    opacity: 0; transform: translateY(-4px); pointer-events: none; transition: opacity .15s, transform .15s; }
+  .peekzone:hover .peekpop, .peekpop:hover { opacity: 1; transform: none; pointer-events: auto; }
+  .peekpop .tlabel { font-size: 10px; }
+
+  table.cmp { margin-top: 20px; width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.cmp th, table.cmp td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hairline); vertical-align: top; line-height: 1.6; }
+  table.cmp th { font-size: 11px; color: var(--meta-foreground); font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; }
+  table.cmp td:first-child { color: var(--muted-foreground); white-space: nowrap; }
+  .good { color: oklch(0.55 0.15 145); } .bad { color: var(--destructive); }
+  footer.note { margin-top: 56px; font-size: 12px; color: var(--muted-foreground); line-height: 1.8; max-width: 900px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="doc">
+  <h1>媒体节点卡解剖方案对比</h1>
+  <p>
+    同一组真实数据(源素材 <code>xy_1.mp4 · 340s</code> 采访 + 成片 <code>高光短视频 · 45s 9:16</code>)渲染四遍:<b>现状</b>、<b>方案 B</b>(最小质感修复)、<b>方案 A</b>(舞台+检视带两区解剖)、<b>方案 C</b>(检视轨折叠)。
+    所有方案遵守:轨道只读+seek(L3 铁律)、cue 流全文、动作白名单(下载/发布)、块签服务端预格式化、血缘 hover 琥珀高亮(画布唯一色相)。
+  </p>
+  <div class="controls">
+    <div class="seg" id="themeSeg">
+      <button data-theme="" class="on">浅色</button>
+      <button data-theme="dark">深色</button>
+    </div>
+    <div class="seg" id="playSeg">
+      <button data-play="1" class="on">▶ 播放中</button>
+      <button data-play="0">⏸ 暂停</button>
+    </div>
+    <span class="hint">hover 文字轨道块 / 成片片段块看悬浮详情与血缘高亮 · 点击任意块 seek</span>
+  </div>
+</header>
+
+<!-- ================= 现状 ================= -->
+<section id="sec-current">
+  <h2>现状 <span class="en">CURRENT — FlowNodeCard 工作区实现</span></h2>
+  <p class="sub">
+    噪音三处:<b>① 24px 碎块时间条</b>(340s ÷ 23 cue → 每块几像素,远看如条码);<b>② 文字轨截断残片</b>(45s 摊 240px,每句只剩两三个字+省略号);<b>③ 三个浮层元素各自为政</b>(score 黑牌 / 质检牌 / 外置磨砂 factsbar pill)。
+  </p>
+  <div class="stage" id="stage-current"></div>
+</section>
+
+<!-- ================= 方案 B ================= -->
+<section id="sec-b">
+  <h2>方案 B <span class="en">最小质感修复 — 不动 DOM 结构</span></h2>
+  <p class="sub">
+    四处一刀:<b>① 时间条 24px→8px 连续进度皮</b>(句界发丝线,不再是碎块容器);<b>② 文字轨去内嵌文字</b>(连续带+停顿留白,句文本挪 hover chip);<b>③ score/质检徽章磨砂小 chip 化</b>;<b>④ 磨砂 pill → 细 meta 行</b>。
+    <span class="lawtag">零法条触碰</span><span class="lawtag">约 2 文件可落</span>
+  </p>
+  <div class="stage" id="stage-b"></div>
+</section>
+
+<!-- ================= 方案 A ================= -->
+<section id="sec-a">
+  <h2>方案 A <span class="en">舞台 + 检视带 两区解剖(推荐终态)</span></h2>
+  <p class="sub">
+    卡片 = <b>舞台区</b>(预览是唯一视觉主体,时长 chip 上舞台角,进度皮贴舞台下缘) + <b>检视带</b>(图标引领的轨道行,修饰 presence 合并进标签行,底部一条细 meta 行)。源卡 transcript 全文保留(ADR-063)。
+    <span class="lawtag">零翻案</span><span class="lawtag">ADR-113 补一条显示律注记:文字轨零内嵌文字</span>
+  </p>
+  <div class="stage" id="stage-a"></div>
+</section>
+
+<!-- ================= 方案 C ================= -->
+<section id="sec-c">
+  <h2>方案 C <span class="en">检视轨折叠 — hover 按需展开</span></h2>
+  <p class="sub">
+    成片卡默认只露舞台 + 一条 20px 细检视条;hover 检视条时完整轨道栈以<b>覆盖浮层</b>向下伸出(不占布局、不推邻居)。源卡同方案 A。
+    <span class="lawtag warn">需翻案 ADR-113「两条常驻检视轨」</span><span class="lawtag warn">血缘 hover 触发面变小</span>
+  </p>
+  <div class="stage" id="stage-c"></div>
+</section>
+
+<!-- ================= 对比表 ================= -->
+<section>
+  <h2>并排对比</h2>
+  <table class="cmp">
+    <tr><th>噪音点</th><th>现状</th><th>方案 B</th><th>方案 A</th><th>方案 C</th></tr>
+    <tr><td>截断文字</td><td class="bad">文字轨每句 2-3 字+…</td><td class="good">零(全文在 hover)</td><td class="good">零</td><td class="good">零</td></tr>
+    <tr><td>源卡时间条</td><td class="bad">24px 碎块条码</td><td class="good">8px 连续进度皮</td><td class="good">舞台下缘 3px→hover 8px</td><td class="good">同 A</td></tr>
+    <tr><td>浮层元素数</td><td class="bad">3(score牌+质检牌+磨砂pill)</td><td>2 磨砂 chip</td><td class="good">舞台角 2 磨砂 chip,底部无 pill</td><td class="good">同 A</td></tr>
+    <tr><td>成片卡高(9:16)</td><td>~664px</td><td>~650px</td><td>~640px</td><td class="good">~560px(检视带折叠)</td></tr>
+    <tr><td>轨道标签</td><td>大写英文两行</td><td>同现状</td><td class="good">图标引领+修饰 presence 同行</td><td>折叠</td></tr>
+    <tr><td>法条触碰</td><td>—</td><td class="good">零</td><td>ADR-113 显示律注记</td><td class="bad">翻案「常驻检视轨」</td></tr>
+    <tr><td>工程量</td><td>—</td><td class="good">小(样式级)</td><td>中(结构调整)</td><td>中大(折叠交互+拍板)</td></tr>
+  </table>
+</section>
+
+<footer class="note">
+  <b>未在原型中展开但已对齐的点:</b>
+  ① 喜欢参考图里的「运行 / +添加音轨 / 音量滑杆」= 编排手势,L3 铁律永禁,四方案均不引入——只取它的视觉语言(大舞台、宽轨道、图标化、零截断);
+  ② 修饰轨(music/dub presence)本组数据未激活,A 方案中它合并进视频轨标签行右端,不单独骑一排;
+  ③ B 是 A 的第一刀——B 落地后若满意,A 的剩余部分(进度皮贴舞台、标签行图标化、meta 行)作为第二步;
+  ④ 血缘高亮演示:hover 成片卡的紫色片段块,源卡重叠 cue 行/进度皮段会亮琥珀色(--lineage,画布唯一色相)。
+</footer>
+
+</div>
+
+<div id="hoverchip" class="overlay-surface"></div>
+
+<script>
+/* ================= 真实数据形态 ================= */
+const SRC = { name: "xy_1.mp4", duration: 340, res: "960×544" };
+const CUES = [
+  [0,8,"我们就可以进行这个讨论。首先第一个问题,"],
+  [8,15,"本次分会与伦敦科技周同期举办,聚焦可持续未来。"],
+  [16.5,25,"过去三年,出口的逻辑已经变了——"],
+  [25,34,"不是某一个国家,能够带领人类的进步。"],
+  [34,42,"产品只是出口是贸易,生态共建是共赢关系。"],
+  [42,48,"这句话直接点透了整个转型的逻辑。"],
+  [50,58,"主持人:怎么完成转型?这个过程中最难的是什么?"],
+  [58,66,"受访者:最难的不是技术,是认知——"],
+  [66,73,"认为在新的技术的驱动下,我们只是把旧的事情做得更好,"],
+  [73,80,"其实应该重新思考文明进步的参与方式。"],
+  [80,87,"客观的讲,中国企业的全球化已经进入第三阶段。"],
+  [87,93,"第一阶段是产品出海,第二阶段是资本出海,"],
+  [93,101,"第三阶段是生态出海——把整套协作方式带出去。"],
+  [103,112,"动因是什么?因为单点的产品优势守不住。"],
+  [112,120,"因为竞争对手可以在六个月内复制你的产品,"],
+  [120,127,"但复制不了你扎根当地十年的供应链和信任。"],
+  [129,138,"主持人:所以我们看到平台化、本地化成为关键词。"],
+  [138,146,"受访者:对,这不是选择题,是生存题。"],
+  [146,153,"你不成为生态的一部分,就会被生态淘汰。"],
+  [155,164,"这也是为什么我们把研发中心直接建在当地。"],
+  [164,172,"不是为了成本,是为了听懂市场在说什么。"],
+  [172,180,"听懂之后,创新才真正开始。"],
+  [182,190,"主持人:最后一个问题,给正在观望的企业一句话?"],
+  [190,200,"受访者:别等准备好了再出发,出发本身就是准备。"]
+];
+const OUT = { title: "高光短视频", lang: "Chinese", aspect: "9:16", duration: 45, score: 88 };
+const SEGS = [ { out_start: 0, out_end: 45, src_start: 179.1, src_end: 223.8, src_label: "2:59–3:44" } ];
+const SENTS = [
+  [0,5.5,"主持人:给正在观望的企业一句话?"],
+  [6.2,11,"别等准备好了再出发,"],
+  [11.5,15,"出发本身就是准备。"],
+  [16,21,"生态共建不是口号,是生存的底线。"],
+  [22,27,"你在当地扎根的深度,"],
+  [27.5,31.5,"决定了你能走多远。"],
+  [33,38,"产品可以被复制,信任不能。"],
+  [39,45,"这就是转型的全部答案。"]
+];
+
+/* ================= 工具 ================= */
+const $ = (s, el=document) => el.querySelector(s);
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+const fmt = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`;
+const rng = (a,b) => `${fmt(a)}–${fmt(b)}`;
+const pct = (a, total) => `${(a/total)*100}%`;
+const ICONS = {
+  clapper: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>',
+  expand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/><path d="M9 21H3v-6"/></svg>',
+  vol: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>',
+  volx: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>',
+  send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 21.7a.5.5 0 0 0 .94-.02l6.5-19a.5.5 0 0 0-.63-.63l-19 6.5a.5.5 0 0 0-.02.94l7.93 3.18a2 2 0 0 1 1.11 1.11z"/><path d="m21.85 2.15-10.94 10.94"/></svg>',
+  pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.4 3.6a2 2 0 0 1 3 3L7.7 18.3 3 20l1.7-4.7Z"/></svg>',
+  film: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M17 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>',
+  caption: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="14" x="3" y="5" rx="2"/><path d="M7 15h4"/><path d="M15 15h2"/><path d="M7 11h2"/><path d="M13 11h4"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>'
+};
+
+/* ================= 场景占位(抽象视频帧) ================= */
+function scene(aspect) {
+  // 抽象采访帧:渐变底 + 两个肩并肩人形剪影 + 讲台光带;成片帧:单人竖屏 + 字幕条
+  if (aspect === "9:16") return `
+    <svg class="scene" viewBox="0 0 280 498" preserveAspectRatio="xMidYMid slice">
+      <defs><linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="oklch(0.32 0.03 250)"/><stop offset="1" stop-color="oklch(0.18 0.02 250)"/></linearGradient></defs>
+      <rect width="280" height="498" fill="url(#bg2)"/>
+      <rect x="0" y="90" width="280" height="46" fill="oklch(0.42 0.05 250)" opacity=".5"/>
+      <text x="26" y="120" font-size="17" fill="oklch(0.85 0 0 / .35)" font-family="inherit">Sustainable Future</text>
+      <ellipse cx="140" cy="330" rx="62" ry="120" fill="oklch(0.55 0.02 250)"/>
+      <circle cx="140" cy="215" r="34" fill="oklch(0.62 0.02 250)"/>
+      <rect x="52" y="392" width="176" height="14" rx="7" fill="oklch(0 0 0 / .55)"/>
+      <rect x="74" y="397" width="132" height="4" rx="2" fill="oklch(0.9 0.1 95)"/>
+      <rect x="96" y="416" width="88" height="10" rx="5" fill="oklch(0 0 0 / .45)"/>
+    </svg>`;
+  return `
+    <svg class="scene" viewBox="0 0 400 225" preserveAspectRatio="xMidYMid slice">
+      <defs><linearGradient id="bg1" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="oklch(0.36 0.03 250)"/><stop offset="1" stop-color="oklch(0.22 0.02 250)"/></linearGradient></defs>
+      <rect width="400" height="225" fill="url(#bg1)"/>
+      <rect x="0" y="30" width="400" height="26" fill="oklch(0.46 0.05 250)" opacity=".5"/>
+      <text x="18" y="48" font-size="11" fill="oklch(0.88 0 0 / .4)" font-family="inherit">Sustainable Future Foundation</text>
+      <ellipse cx="130" cy="185" rx="46" ry="62" fill="oklch(0.58 0.02 250)"/>
+      <circle cx="130" cy="118" r="24" fill="oklch(0.66 0.02 250)"/>
+      <ellipse cx="280" cy="188" rx="44" ry="60" fill="oklch(0.5 0.02 250)"/>
+      <circle cx="280" cy="122" r="23" fill="oklch(0.58 0.02 250)"/>
+      <rect x="205" y="160" width="60" height="34" rx="4" fill="oklch(0.3 0.02 250)"/>
+    </svg>`;
+}
+
+/* ================= 悬浮 chip ================= */
+const chip = $("#hoverchip");
+let chipTimer = null;
+function showChip(html, x, y) {
+  clearTimeout(chipTimer);
+  chip.innerHTML = html;
+  chip.classList.add("show");
+  const r = chip.getBoundingClientRect();
+  let cx = Math.min(Math.max(8, x - r.width/2), innerWidth - r.width - 8);
+  let cy = y - r.height - 10; if (cy < 8) cy = y + 18;
+  chip.style.left = cx + "px"; chip.style.top = cy + "px";
+}
+function hideChip() { chipTimer = setTimeout(() => chip.classList.remove("show"), 60); }
+
+/* ================= 播放引擎 ================= */
+const players = []; // {dur, get, set, tick(t)}
+let playing = true, lastT = performance.now();
+function registerPlayer(p) { players.push(p); return p; }
+setInterval(() => {
+  const now = performance.now(), dt = (now - lastT) / 1000; lastT = now;
+  if (!playing) return;
+  for (const p of players) { let t = p.get() + dt; if (t >= p.dur) t = 0; p.set(t, true); }
+}, 250);
+
+function makePlayhead(dur, onTick) {
+  let t = 0;
+  return registerPlayer({ dur, get: () => t, set: (v, fromTimer) => { t = v; onTick(t); } });
+}
+
+/* ================= 血缘高亮 ================= */
+function lineageBind(hoverEl, srcRange, targets) {
+  hoverEl.addEventListener("mouseenter", () => {
+    for (const fn of targets) fn(srcRange, true);
+  });
+  hoverEl.addEventListener("mouseleave", () => {
+    for (const fn of targets) fn(srcRange, false);
+  });
+}
+
+/* ================= 卡片零件 ================= */
+function caption(label) {
+  const c = el("div", "ncaption");
+  c.appendChild(el("span", "lab", ICONS.clapper + `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span>`));
+  return c;
+}
+function port(node, side) { node.appendChild(el("span", "port " + side)); }
+function hoverBtns(media, sound) {
+  const ex = el("button", "mbtn", ICONS.expand); ex.style.cssText = "left:8px;top:8px"; ex.title = "展开";
+  const sv = el("button", "mbtn", sound ? ICONS.vol : ICONS.volx); sv.style.cssText = "right:8px;top:8px"; sv.title = sound ? "静音" : "取消静音";
+  media.append(ex, sv);
+}
+function factsToolbar(info, acts) {
+  const band = el("div", "fband");
+  const bar = el("div", "ftoolbar dock-surface");
+  bar.appendChild(el("span", "info", info.map(s => `<span>${s}</span>`).join("")));
+  bar.appendChild(el("span", "divi"));
+  for (const a of acts) { const b = el("button", "act", ICONS[a]); b.title = a === "download" ? "下载" : "发布"; bar.appendChild(b); }
+  band.appendChild(bar);
+  return band;
+}
+function metaRow(info, acts) {
+  const row = el("div", "metarow");
+  row.appendChild(el("span", null, info.join(" · ")));
+  const box = el("span", "acts");
+  for (const a of acts) { const b = el("button", "act", ICONS[a]); b.title = a === "download" ? "下载" : "发布"; box.appendChild(b); }
+  row.appendChild(box);
+  return row;
+}
+
+/* —— 时间条:现状碎块版 —— */
+function stripCurrent(seeker) {
+  const s = el("div", "strip");
+  const blocks = CUES.map(([a, b, text]) => {
+    const blk = el("button", "stripblock");
+    blk.style.left = pct(a, SRC.duration);
+    blk.style.width = `max(${pct(b - a, SRC.duration)}, 3px)`;
+    blk.title = text;
+    blk.onclick = e => { e.stopPropagation(); seeker.seek(a); };
+    blk._range = [a, b];
+    s.appendChild(blk);
+    return blk;
+  });
+  const needle = el("span", "needle"); s.appendChild(needle);
+  return { el: s, needle, blocks };
+}
+
+/* —— 进度皮:B 独立 8px / A 舞台下缘 —— */
+function skinBar(seeker, stageMode) {
+  const s = el("div", stageMode ? "stageskin" : "skin");
+  if (!stageMode) s.style.height = "8px";
+  CUES.forEach(([a, b]) => {
+    const f = el("span", stageMode ? "sg" : "fillblock");
+    f.style.left = pct(a, SRC.duration); f.style.width = pct(b - a, SRC.duration);
+    s.appendChild(f);
+    const tick = el("span", stageMode ? "sgtick" : "tick");
+    tick.style.left = pct(b, SRC.duration); s.appendChild(tick);
+  });
+  const needle = el("span", "needle"); s.appendChild(needle);
+  s.onclick = e => {
+    const r = s.getBoundingClientRect();
+    seeker.seek(((e.clientX - r.left) / r.width) * SRC.duration);
+  };
+  s.onmousemove = e => {
+    const r = s.getBoundingClientRect();
+    const t = ((e.clientX - r.left) / r.width) * SRC.duration;
+    showChip(`<span class="hc-time">${fmt(t)} / ${fmt(SRC.duration)}</span>`, e.clientX, r.top);
+  };
+  s.onmouseleave = hideChip;
+  return { el: s, needle };
+}
+
+/* —— cue 流(全文,四方案同) —— */
+function cueFlow(seeker, litFns, cfh) {
+  const flow = el("div", "cueflow");
+  if (cfh) flow.style.setProperty("--cfh", cfh);
+  const rows = CUES.map(([a, b, text]) => {
+    const row = el("div", "cue", `<p>${text}</p><span class="time">${rng(a, b)}</span>`);
+    row.onclick = e => { e.stopPropagation(); seeker.seek(a); };
+    row._range = [a, b];
+    flow.appendChild(row);
+    litFns.push((range, on) => { if (b > range[0] && a < range[1]) row.classList.toggle("lit", on); });
+    return row;
+  });
+  return { el: flow, rows };
+}
+
+/* —— 轨道块行(视频轨/文字轨),textMode: "chips"(现状内嵌文字) | "solid"(连续带) —— */
+function lane(blocks, total, textMode, seeker, opts = {}) {
+  const laneEl = el("div", "lane" + (textMode === "solid" ? " solid" : ""));
+  if (!blocks.length) { laneEl.appendChild(el("span", "laneblock empty")); return laneEl; }
+  blocks.forEach((blk, i) => {
+    const [a, b] = blk.range;
+    const b_ = el("button", "laneblock" +
+      (textMode === "solid" ? (blocks.length === 1 ? " only" : i === 0 ? " first" : i === blocks.length - 1 ? " last" : "") : ""));
+    b_.style.left = pct(a, total); b_.style.width = pct(b - a, total);
+    if (textMode === "chips") b_.appendChild(el("span", null, blk.text));
+    b_.onclick = e => { e.stopPropagation(); seeker.seek(a); };
+    b_.onmouseenter = e => {
+      const r = b_.getBoundingClientRect();
+      showChip(`${blk.text}<div class="hc-time">${blk.timeLabel}</div>`, r.left + r.width / 2, r.top);
+    };
+    b_.onmouseleave = hideChip;
+    if (opts.onHover) { b_.addEventListener("mouseenter", () => opts.onHover(blk, true)); b_.addEventListener("mouseleave", () => opts.onHover(blk, false)); }
+    laneEl.appendChild(b_);
+  });
+  return laneEl;
+}
+function trackRow(labelHTML, laneEl) {
+  const row = el("div", "trow");
+  row.appendChild(el("div", "tlabel" + (labelHTML.startsWith("<svg") ? " iconic text-meta" : " text-meta"), labelHTML));
+  row.appendChild(laneEl);
+  return row;
+}
+
+/* ================= 组装:源素材卡 ================= */
+function sourceCard(mode) {
+  // mode: "current" | "b" | "a"
+  const node = el("div", "node"); port(node, "r");
+  node.appendChild(caption("Video"));
+  const card = el("div", "ncard");
+  const media = el("div", "media"); media.style.height = "225px"; media.innerHTML = scene("16:9");
+  hoverBtns(media, false);
+  card.appendChild(media);
+
+  const litFns = [];
+  const seeker = { seek: t => ph.set(t) };
+  const flow = cueFlow(seeker, litFns, mode === "current" ? "120px" : "130px");
+
+  let strip = null, skin = null;
+  if (mode === "current") {
+    strip = stripCurrent(seeker);
+    strip.blocks.forEach(blk => litFns.push((range, on) => {
+      const [a, b] = blk._range; if (b > range[0] && a < range[1]) blk.classList.toggle("lit", on);
+    }));
+  } else if (mode === "b") {
+    skin = skinBar(seeker, false);
+  } else {
+    skin = skinBar(seeker, true); media.appendChild(skin.el);
+    const dur = el("span", "cornerchip", fmt(SRC.duration)); dur.style.cssText = "right:8px;bottom:14px"; media.appendChild(dur);
+  }
+
+  const ph = makePlayhead(SRC.duration, t => {
+    const needle = strip ? strip.needle : skin.needle;
+    needle.style.left = pct(t, SRC.duration);
+    for (const row of flow.rows) {
+      const [a, b] = row._range;
+      row.classList.toggle("now", t >= a && t < b);
+    }
+    if (strip) for (const blk of strip.blocks) {
+      const [a, b] = blk._range;
+      blk.classList.toggle("now", t >= a && t < b);
+    }
+  });
+
+  const tx = el("div", "txsec");
+  const head = el("div", "txhead");
+  head.appendChild(el("span", "t text-meta", "Transcript"));
+  const ed = el("button", "edit", ICONS.pencil); ed.title = "编辑转写稿";
+  head.appendChild(ed);
+  tx.appendChild(head);
+  if (strip) tx.appendChild(strip.el);
+  else if (skin && mode === "b") tx.appendChild(skin.el);
+  tx.appendChild(flow.el);
+  card.appendChild(tx);
+  node.appendChild(card);
+
+  if (mode === "current") node.appendChild(factsToolbar([SRC.name, `${SRC.duration}s`, SRC.res], ["download"]));
+  else if (mode === "b") node.appendChild(metaRow([SRC.name, fmt(SRC.duration), SRC.res], ["download"]));
+  else node.appendChild(metaRow([SRC.name, SRC.res], ["download"]));
+
+  return { node, litFns };
+}
+
+/* ================= 组装:成片卡 ================= */
+const segBlocks = SEGS.map(s => ({ range: [s.out_start, s.out_end], text: `Segment 1 · Source ${s.src_label}`, timeLabel: `源区间 ${s.src_label}`, src: [s.src_start, s.src_end] }));
+const sentBlocks = SENTS.map(s => ({ range: [s[0], s[1]], text: s[2], timeLabel: rng(s[0], s[1]) }));
+
+function resultCard(mode, srcLit) {
+  // mode: "current" | "b" | "a" | "c"
+  const node = el("div", "node narrow"); port(node, "l"); port(node, "r");
+  node.appendChild(caption(OUT.title));
+  const card = el("div", "ncard");
+  const media = el("div", "media"); media.style.height = "498px"; media.innerHTML = scene("9:16");
+  hoverBtns(media, false);
+
+  // score / qc 徽章
+  if (mode === "current") {
+    const sc = el("span", "badge", `<span style="display:inline-block;background:rgb(0 0 0/.82);color:#fff;padding:5px 7px;border-radius:6px;font-weight:600">${OUT.score}</span>`);
+    sc.style.cssText = "left:10px;bottom:10px"; media.appendChild(sc);
+    const qc = el("span", "badge", `<span style="display:inline-block;background:rgb(0 0 0/.82);color:#fff;padding:5px 6px;border-radius:6px">✓</span>`);
+    qc.style.cssText = "right:10px;bottom:10px"; media.appendChild(qc);
+  } else {
+    const sc = el("span", "cornerchip", `${OUT.score} 分`); sc.style.cssText = "left:8px;bottom:12px"; media.appendChild(sc);
+    const qc = el("span", "cornerchip", "✓ 核验"); qc.style.cssText = "right:8px;bottom:12px"; media.appendChild(qc);
+  }
+  card.appendChild(media);
+
+  const seeker = { seek: t => ph.set(t) };
+  const segHover = (blk, on) => { for (const fn of srcLit) fn(blk.src, on); };
+
+  const stack = el("div", "tstack");
+  let needleLanes = [];
+  if (mode !== "c") {
+    stack.style.paddingTop = mode === "a" ? "10px" : "16px";
+    const vLane = lane(segBlocks, OUT.duration, "chips", seeker, { onHover: segHover });
+    const tLane = lane(sentBlocks, OUT.duration, mode === "current" ? "chips" : "solid", seeker);
+    if (mode === "current") {
+      stack.appendChild(trackRow("Video track", vLane));
+      stack.appendChild(trackRow("Text track", tLane));
+    } else if (mode === "b") {
+      stack.appendChild(trackRow("Video track", vLane));
+      stack.appendChild(trackRow("Text track", tLane));
+    } else {
+      stack.appendChild(trackRow(ICONS.film + "<span>片段</span>", vLane));
+      stack.appendChild(trackRow(ICONS.caption + "<span>字幕</span>", tLane));
+    }
+    // 播放头跨两条道
+    const nd = el("span", "needle"); nd.style.cssText = "top:-16px;bottom:0";
+    const ndv = nd.cloneNode(); vLane.appendChild(ndv); tLane.appendChild(nd);
+    needleLanes = [ndv, nd];
+    card.appendChild(stack);
+  } else {
+    // C: 折叠检视条 + hover 浮层(浮层伸出卡外,卡体解除裁剪)
+    card.style.overflow = "visible";
+    media.style.borderRadius = "10px 10px 0 0";
+    const zone = el("div", "peekzone"); zone.style.cssText = "position:relative;padding-top:10px";
+    const peek = el("div", "peekstrip");
+    for (const s of SEGS) { const g = el("span", "sg"); g.style.left = pct(s.out_start, OUT.duration); g.style.width = pct(s.out_end - s.out_start, OUT.duration); peek.appendChild(g); }
+    const nd = el("span", "needle"); nd.style.top = "4px"; nd.style.bottom = "4px"; peek.appendChild(nd); needleLanes = [nd];
+    peek.onclick = e => { const r = peek.getBoundingClientRect(); seeker.seek(((e.clientX - r.left) / r.width) * OUT.duration); };
+    const pop = el("div", "peekpop overlay-surface");
+    const vLane = lane(segBlocks, OUT.duration, "chips", seeker, { onHover: segHover });
+    const tLane = lane(sentBlocks, OUT.duration, "solid", seeker);
+    pop.appendChild(trackRow(ICONS.film + "<span>片段</span>", vLane));
+    pop.appendChild(trackRow(ICONS.caption + "<span>字幕</span>", tLane));
+    zone.appendChild(peek); zone.appendChild(pop);
+    card.appendChild(zone);
+  }
+
+  const ph = makePlayhead(OUT.duration, t => { for (const n of needleLanes) n.style.left = pct(t, OUT.duration); });
+
+  if (mode === "current") {
+    node.appendChild(card);
+    node.appendChild(factsToolbar([OUT.lang, OUT.aspect, `${OUT.duration}s`], ["download", "send"]));
+  } else {
+    node.appendChild(card);
+    node.appendChild(metaRow([OUT.lang, OUT.aspect, fmt(OUT.duration)], ["download", "send"]));
+  }
+  return { node };
+}
+
+/* ================= 渲染四节 ================= */
+function mount(stageId, builder) {
+  const stage = $(stageId);
+  const srcCase = el("div", "case"); srcCase.appendChild(el("span", "tag", "源素材卡"));
+  const resCase = el("div", "case"); resCase.appendChild(el("span", "tag", "成片剪辑卡"));
+  const { node: s, litFns } = builder.src();
+  const r = builder.res(litFns);
+  srcCase.appendChild(s); resCase.appendChild(r.node);
+  stage.append(srcCase, resCase);
+}
+mount("#stage-current", { src: () => sourceCard("current"), res: lit => resultCard("current", lit) });
+mount("#stage-b", { src: () => sourceCard("b"), res: lit => resultCard("b", lit) });
+mount("#stage-a", { src: () => sourceCard("a"), res: lit => resultCard("a", lit) });
+mount("#stage-c", { src: () => sourceCard("a"), res: lit => resultCard("c", lit) });
+
+/* ================= 顶栏控件 ================= */
+$("#themeSeg").onclick = e => {
+  const t = e.target.dataset.theme; if (t == null) return;
+  document.documentElement.className = t;
+  for (const b of $("#themeSeg").children) b.classList.toggle("on", b.dataset.theme === t);
+};
+$("#playSeg").onclick = e => {
+  const p = e.target.dataset.play; if (p == null) return;
+  playing = p === "1";
+  for (const b of $("#playSeg").children) b.classList.toggle("on", b.dataset.play === p);
+};
+
+/* 单节直出:#only-<sectionId> 只渲染一节(分享/截图用);hash 含 dark 则深色直出 */
+if (location.hash.startsWith("#only-")) {
+  const keep = location.hash.slice(6).replace("+dark", "");
+  for (const sec of document.querySelectorAll("section, footer.note"))
+    sec.style.display = sec.id === keep ? "" : "none";
+}
+if (location.hash.includes("dark")) {
+  document.documentElement.className = "dark";
+  for (const b of $("#themeSeg").children) b.classList.toggle("on", b.dataset.theme === "dark");
+}
+</script>
+</body>
+</html>
