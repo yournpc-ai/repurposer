@@ -12,15 +12,15 @@
 
 目标：测试资产**回归现行用户体验链路**（每个存活座能指认它守的用例），且**各归其家**（仪器 / 运维 / 烘焙 / 一次性探针分家，承重仪器升编）。
 
-## 2. 现状盘点（2026-09-29 实测，以此为锚）
+## 2. 现状盘点
 
 | 家 | 实测 | 处置方向 |
 |---|---|---|
-| `apps/api/tests/` | 42 个纯函数套件 | 不动结构；11 个失败逐座裁决 |
-| `apps/api/scripts/` | 26 个脚本 = 验证仪器（chat_scenarios / prompt_gate / reply_quality_probe / check_gates / verify_beat_map / crop_track_parity / reframe_smoke / accept_* / craft_anatomy / run_anatomy_matrix / track_model_fixture…）+ 运维（reset_db / seed_default_music / cleanup_stuck / reconcile_credits / migrate_to_tos / backfill_graph / restamp_draft_graph）+ 烘焙（bake_* ×6 / spike_reframe / upload_recipe_assets） | 三族分家 |
-| `apps/api/scripts/chat_scenarios.py` | ~5000 行，注册表 27 座（S1~S24 + S-explore-2 + S-edit） | 瘦身后按旅程拆文件 |
-| `apps/web/src/**/*.test.*` | 10 座 vitest 组件旁置（answerSettlement / optionMatch / historyReplay / chatStreamFrames / chatTimeline / activityReducer / lifecycleStamp / stagingUploads / utils / layout） | 不动 |
-| `scratch/` | 13+ 探针/harness（router_ab_probe / reply_quality 已升编先例 / repro_chat_500 / precise_edit_live_drive / probe_F_forensic / ab_tool_wire_probe …） | 承重者升编，一次性留堆 |
+| `apps/api/tests/` | 45 个纯函数套件 | 不动结构 |
+| `apps/api/scripts/` | 22 个脚本 = 验证仪器（chat_scenarios / prompt_gate / reply_quality_probe / check_gates / verify_beat_map / crop_track_parity / accept_quote_card_family / craft_anatomy / run_anatomy_matrix）+ 运维（reset_db / seed_default_music / cleanup_stuck / reconcile_credits / restamp_draft_graph / migrate_activity_log_rows）+ 烘焙（bake_* ×6 / upload_recipe_assets） | 三族分家 |
+| `apps/api/scripts/chat_scenarios.py` | 单文件巨石，注册表 10 座（S1–S10 用户旅程矩阵，ADR-114） | 按旅程拆文件 |
+| `apps/web/src/**/*.test.*` | 10 座 vitest 组件旁置（activityReducer / answerSettlement / historyReplay / optionMatch / camera / layout / chatStreamFrames / chatTimeline / lifecycleStamp / stagingUploads） | 不动 |
+| `scratch/` | 13+ 一次性探针/harness（repro_chat_500 / precise_edit_live_drive / probe_F_forensic / ab_tool_wire_probe …） | 承重者升编，一次性留堆 |
 
 ## 3. 四阶段（删前过堂门是硬闸）
 
