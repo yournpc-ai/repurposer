@@ -2823,3 +2823,19 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 **Consequences**: 两型卡各自成立（素材卡 = 读、成片卡 = 检视）；「track 在哪」结构性回答（道 = 结构常驻 L0，连线落到道上）；血缘 hover 与 NLE 块同构（hover 一块、源区间一片亮）；裸奔/挤压/盖字/条码四症根治；黑边法条（object-cover + bucket）从一卡补丁升为解剖律。代价：帧预留变更（TRACK_STACK 96→NLE_AXIS 116、TRANSCRIPT_SECTION 236→197）——存量帧由 flex 吸收（永不溢出律：媒体让位，contain sliver 回归 legacy/raced 既有条款）；修饰道锚移 = 命名的节拍移位例外（分页器先例）。
 
 **Related**: ADR-113（素材卡内容层 / 轨道栈 / 锚点律 / 血缘通道由本条继承并改解剖）/ ADR-112（cue hover 显时 / 裸分 / Top pick 闸门律不动——评分座位由本条修订）/ ADR-016（clip-spec 唯一渲染契约不动——NLE 轴只是它的读面投影）/ `docs/VIDEO_EDITOR.md` L3（编排永禁不动）/ `docs/UI_GUIDELINES.md`（浮层一律 overlay-surface、视口锚浮层 portal——HoverChip 遵守；in-flow 面零 shadow）
+
+## ADR-116: ask_user 选项数双族律——决断 ≤3 / 探索 ≤5，label 用户语言内容词放行
+
+**Status**: Decided（2026-10-11 用户拍板；取证 = ADR-114 矩阵批 2 复跑 S3/S6 连红——模型在素材丰富的探索回合给 4–5 个各有理由的真实方向，撞 harness 1–3 界；法条缺座位，归用户产品拍板）
+
+**Context**: ADR-052 判词 5 的「每轮一问、一词可答」只给决断问定了三选项节奏（FLORA/Opus 对齐），探索方向问（'what else could we make' 族）从未单独立法——chat_intent 工具描述座的「Give 3 concrete options」双族不分，intent_router 无计数座，harness 公共断言（check_dock_shape / check_options_dock / prompt_gate probe I）锁 1–3。同批边界：选项负形 lint 把中文内容词「双语」当字幕模式参数方言词拦——用户自己说的话被误判 shadow plan；矩阵复跑又实证英文会话里 'bilingual' 同为自然形容词（用户原话回声），description 档的散文句不是参数泄漏面。
+
+**Decision**:
+
+1. **选项数双族律**：决断问 ≤3（真二元抉择降 2，ADR-052 节奏不动）；探索方向问 ≤5（context 持有的真实方向全部可 dock）。prompt 双座镜像承载分族计数（intent_router ask_user 调用律 + chat_intent ask_user 工具描述）；harness 公共断言只守结构外界 1–5——分族节奏是模型裁量面，永不进 harness；S1 slot 问的 0/2–3 断言 = 决断族座，不动。
+2. **label 放行用户语言内容词**：label 档 lint 收窄到英文参数方言词（bilingual/source_only/target_only），「双语」等用户语言内容词合法；description 档再收窄一层——字幕模式族只查标识符形（source_only/target_only），散文里的 bilingual 与双语同律放行（description 收窄档既有教义的延伸：证据句合法引用源事实与用户点名的作品词）。
+3. **harness 不主张 prompt 没教过的法**：lint/断言与 prompt 法条同座同批检查——prompt 从未教「避开用户说过的词」，harness 就永不罚它。
+
+**Consequences**: 探索回合的模型裁量与 harness 界对齐（S3/S6 类红不再误报）；决断节奏保持三选项；label 回声误判关闭。lint 的存活目标收窄为真 shadow plan 签名（标识符形 / 画幅 / 时长 / 成本 / 条数参数）。
+
+**Related**: ADR-052（决断节奏源）/ ADR-100（选项归 dock + 负形 lint 源）/ ADR-107（锚定转录内联预算——同批 S3 读具裁量取证）/ ADR-114（矩阵施工批内取证）

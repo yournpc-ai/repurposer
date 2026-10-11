@@ -593,14 +593,14 @@ def _passed(probe: str, r: LoopResult) -> bool:
         # H4: the style must be the enum id mapped off the catalog read,
         # never a free-form phrase.
         return kind == "set_caption_style" and (ep.style or "") == "karaoke-highlight"
-    # I (ADR-100 改靶): the browse question closes on ask_user carrying 1-3
+    # I (ADR-100 改靶): the browse question closes on ask_user carrying 1-5
     # options — present_plan never touched (事故④ hijack 负形); every
     # pickable option docks, the message flow carries zero options.
     if probe == "I":
         options = getattr(r.params, "options", None) or []
         return (
             r.tool_name == "ask_user"
-            and 1 <= len(options) <= 3
+            and 1 <= len(options) <= 5
             and "present_plan" not in r.calls
         )
     raise AssertionError(f"no predicate registered for probe {probe!r}")
@@ -621,7 +621,7 @@ def _failure_tag(probe: str, r: LoopResult) -> str | None:
     if r.tool_name != "ask_user":
         return f"terminal={r.tool_name}"
     options = getattr(r.params, "options", None) or []
-    if not (1 <= len(options) <= 3):
+    if not (1 <= len(options) <= 5):
         return "options-range"
     return None
 

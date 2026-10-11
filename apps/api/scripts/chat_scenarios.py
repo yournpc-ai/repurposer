@@ -968,15 +968,21 @@ def check_activity_shape(stream: "StreamTurn", label: str) -> None:
 # 选项载荷边界 lint（ADR-100 — 选项永不携带执行参数）：负形断言。
 # label 全档（label 是方向名，带参即 shadow plan）；description 收窄
 # 档（证据句合法引用源事实——"the 3 strongest moments" 不是参数，条数
-# 词只在 label 档查）。
+# 词只在 label 档查；字幕模式族只查标识符形 source_only/target_only——
+# 散文里的 bilingual 是用户语言内容词，与双语同律放行）。
 _INT_LABEL_LINT = [
     re.compile(r"\d+\s*[:×x]\s*\d+"),                                      # 画幅 9:16
     re.compile(r"\b\d+\s*(seconds?|secs?|minutes?|mins?|秒|分钟)\b", re.I),  # 时长
-    re.compile(r"\b(?:bilingual|source_only|target_only)\b|双语", re.I),      # 字幕模式
+    re.compile(r"\b(?:bilingual|source_only|target_only)\b", re.I),         # 字幕模式参数方言词（用户语言内容词合法）
     re.compile(r"\bcredits?\b|积分", re.I),                                  # 成本
     re.compile(r"\b\d+\s*(?:clips?|cards?|posts?|shorts?|条|张|篇)\b", re.I),  # 条数
 ]
-_INT_DESC_LINT = _INT_LABEL_LINT[:4]  # 条数档不进 description（证据句合法引数）
+_INT_DESC_LINT = [
+    _INT_LABEL_LINT[0],
+    _INT_LABEL_LINT[1],
+    re.compile(r"\b(?:source_only|target_only)\b", re.I),  # 只查标识符形
+    _INT_LABEL_LINT[3],
+]
 
 _INT_EXPLORATION_PROMPTS = (
     "what could I make from this keynote? give me a few directions",
@@ -992,9 +998,10 @@ def check_dock_shape(msg: dict, label: str) -> None:
       estimate_credits 在场时良构——total = [low, high] 非负有
       序、per_task 按任务序对齐（None ≡ 零报价），且 **Σ per_task ≡
       total**（报价对账律，orchestrator 前缀编译差分三面同源）。
-    - 选项问结构律：1–3 选项 / label 非空 ≤40 / recommended_id 至多其
-      一且指在 docked 选项上 / 载荷永不携带执行参数（负形 lint——
-      shadow plan 是本档的定义性违界）。
+    - 选项问结构律：1–5 选项（决断 ≤3 / 探索 ≤5 的分族节奏归 prompt
+      法条座位，harness 只守结构外界）/ label 非空 ≤40 / recommended_id
+      至多其一且指在 docked 选项上 / 载荷永不携带执行参数（负形 lint
+      ——shadow plan 是本档的定义性违界）。
 
     default_path 恒在律不在此（ask 家族专属——trigger 建议 dock 是另
     一族，归各旅程的场景级断言）。"""
@@ -1056,8 +1063,8 @@ def check_dock_shape(msg: dict, label: str) -> None:
         options = q.get("options") or []
         if options:
             check(
-                1 <= len(options) <= 3,
-                f"{label}: 1-3 options on the dock",
+                1 <= len(options) <= 5,
+                f"{label}: 1-5 options on the dock",
                 options,
             )
             ids = {str(o.get("id")) for o in options}
@@ -1202,14 +1209,14 @@ async def seed_keynote_project(ctx: Ctx, title: str) -> tuple[str, str]:
 
 def check_options_dock(question: dict, label: str) -> None:
     """选项 dock 的谱系锁（ADR-100：一切可点选项归 dock——ask_user 选项
-    问承接探索/浏览的方向建议）：kind=question / 1-3 选项 / label ≤40 /
+    问承接探索/浏览的方向建议）：kind=question / 1-5 选项 / label ≤40 /
     载荷永不携带执行参数（负形 lint）/ recommended 至多其一且必须指在
     docked 选项上 / default_path 恒在（每个问题都可安全跳过）。"""
     check(question.get("kind") == "question",
           f"{label}: the directions dock as a real options question", question)
     options = question.get("options") or []
-    check(1 <= len(options) <= 3,
-          f"{label}: 1-3 options on the dock", options)
+    check(1 <= len(options) <= 5,
+          f"{label}: 1-5 options on the dock", options)
     check(bool((question.get("default_path") or "").strip()),
           f"{label}: the default path rides every ask (安全跳过)", question)
     recommended_id = question.get("recommended_id")
@@ -1891,7 +1898,9 @@ async def s1_lost_user_full_journey(ctx: Ctx) -> None:
     filled_graph = await ctx.graph(pid)
     check(sorted(n["id"] for n in filled_graph["nodes"]) == draft_ids,
           "start fills the SAME nodes in place (same compile → same fill keys — never twins)",
-          filled_graph["nodes"])
+          # 双侧 dump（取证律——单侧 dump 曾让一轮红无法归因）：draft 拍于
+          # 种子 run 绕行前，filled 拍于 start 后；不等 = 找出多/少的那侧。
+          {"draft": draft_graph["nodes"], "filled": filled_graph["nodes"]})
     check(not any(n.get("state") == "draft" for n in filled_graph["nodes"]),
           "the draft world re-queues on start", filled_graph["nodes"])
 
@@ -2144,7 +2153,8 @@ async def s2_material_to_clips_full_chain(ctx: Ctx) -> None:
     check(sorted(n["id"] for n in filled_graph["nodes"])
           == sorted(n["id"] for n in graph5["nodes"]),
           "start fills the SAME nodes in place (fill-key idempotency — never twins)",
-          filled_graph["nodes"])
+          # 双侧 dump（同上——单侧 dump 无法归因多/少的是哪侧）。
+          {"draft": graph5["nodes"], "filled": filled_graph["nodes"]})
     check(not any(n.get("state") == "draft" for n in filled_graph["nodes"]),
           "the draft world re-queues on start", filled_graph["nodes"])
 
@@ -2329,17 +2339,32 @@ async def s3_material_suggestion_exploration(ctx: Ctx) -> None:
     check(stream.completed is not None, "the discovery turn completes", stream.activities)
 
     # 工作会话活动键族：读的开/收 + 三个里程碑帧（出生即完成，count 唯一载荷）。
+    # 用哪把读具是模型的合法裁量——ADR-107：锚定转录 ≤8000 字符内联进
+    # digest，短文源头不搜索（本 fixture 的 ~119s talk 正在预算内），所以旅
+    # 程锁「发现回合落地前读过素材」不变量，不锁 search_transcript 的帧。
     acts = stream.activities
-    searching = [a for a in acts if a.get("key") == "chat.explore.searching"]
-    searching_done = [a for a in acts if a.get("key") == "chat.explore.searchingDone"]
+    read_opens = [
+        a
+        for a in acts
+        if (a.get("key") or "").startswith("chat.inspecting.")
+        or a.get("key") == "chat.explore.searching"
+    ]
+    read_settles = [
+        a
+        for a in acts
+        if (a.get("key") or "").startswith("chat.inspectingDone.")
+        or (a.get("key") or "").startswith("chat.inspectingFailed.")
+        or a.get("key") == "chat.explore.searchingDone"
+    ]
     check(
-        searching and all(a["status"] == "active" for a in searching),
-        "search_transcript opens chat.explore.searching (active)",
+        read_opens and all(a["status"] == "active" for a in read_opens),
+        "the discovery turn grounds via visible reads (open frames)",
         acts,
     )
     check(
-        searching_done and all(a["status"] == "completed" for a in searching_done),
-        "the read settles as chat.explore.searchingDone (completed)",
+        read_settles
+        and all(a["status"] in ("completed", "failed") for a in read_settles),
+        "the reads settle (done/failed mirror frames)",
         acts,
     )
     for key in ("candidatesReady", "selectsReady", "plansReady"):
@@ -2599,8 +2624,23 @@ async def s4_no_material_writers(ctx: Ctx) -> None:
        继承存活（"未提及" ≠ "撤回"，服务端从 stored pending 继承）。
 
     LLM 判定有抖动（"make a quote card" 可能回反问或提别的链——两者都
-    合法），各部各给 3 次尝试直到目标工具的计划落地。"""
-    material = "Some keynote transcript about the future of embodied intelligence."
+    合法），各部各给 3 次尝试直到目标工具的计划落地。
+
+    fixture 纪律：素材必须可读——单行占位文本 + 无 understanding 会让诚实
+    读路拿到 _WARM_DEAD_TEXT（字节不存在，warm 建不出），模型依法拒 dock
+    或给 paste-text 选项（轮盘式随机命中）。厚转录 + seed_understanding
+    让乐观 dock 与先读后 dock 两条合法路都通。"""
+    material = (
+        "Cities are getting hotter, and the bill lands on the people least "
+        "able to pay it. A shaded street can be ten degrees cooler than the "
+        "block next to it — that is not an amenity, that is infrastructure. "
+        "When we plant a row of trees we are not decorating the neighborhood; "
+        "we are buying the cheapest climate adaptation a city can get. "
+        "Reflective roofs do the same work from the top down, bouncing the "
+        "heat back before it ever enters the building. The mayors who "
+        "understand this are not asking whether to fund shade — they are "
+        "asking why they waited so long."
+    )
 
     async def dock_writer(pid: str, prompts: tuple[str, ...], tool: str,
                           label: str) -> dict:
@@ -2631,6 +2671,7 @@ async def s4_no_material_writers(ctx: Ctx) -> None:
     await seed_asset(pid, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
                      extracted_text=material, meta={"language": "en"},
                      processed=True)
+    await seed_understanding(pid)
     await seed_completed_run(pid)
     docked_a: dict | None = None
     tools_seen_a: list = []
@@ -2681,6 +2722,7 @@ async def s4_no_material_writers(ctx: Ctx) -> None:
     await seed_asset(pid_b, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
                      extracted_text=material, meta={"language": "en"},
                      processed=True)
+    await seed_understanding(pid_b)
     await seed_completed_run(pid_b)
     docked_b = await dock_writer(
         pid_b,
@@ -2711,6 +2753,7 @@ async def s4_no_material_writers(ctx: Ctx) -> None:
     await seed_asset(pid_c, ctx.user_id, AssetType.VIDEO, "keynote.mp4",
                      extracted_text=material, meta={"language": "en"},
                      processed=True)
+    await seed_understanding(pid_c)
     docked_c = await dock_writer(
         pid_c,
         ("make bilingual quote cards from the video",
@@ -3434,6 +3477,11 @@ async def s10_remix_flagship(ctx: Ctx) -> None:
         processed=True,
         file_url=ex_key,
     )
+    # fixture 纪律（S4/S9 同族轮盘）：src1 无真字节，模型「先读源片再承诺」
+    # 是合法路——无 understanding 行时诚实读路拿到 _WARM_DEAD_TEXT / failed
+    # 观察，依法拒 dock（pin 永不落账，红）。seed_understanding 让先读路与
+    # 乐观 dock 路都通（digest 覆盖全项目素材集，与观察的 reuse 键同构）。
+    await seed_understanding(pid1)
     turn1 = await ctx.chat(
         pid1,
         "你能帮我把我的原视频做成 @参考案例 那样子吗？",
