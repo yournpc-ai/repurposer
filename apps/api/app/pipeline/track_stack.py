@@ -112,9 +112,10 @@ def _ruler_ticks(total: float) -> list[RulerTick]:
     """The NLE axis's scale on the output timeline (ADR-115).
 
     Major-only: the first nice step keeping ≤10 labeled ticks (a 45s clip
-    reads 0:00–0:45 by fives; a 7min clip by minutes) — no minor comb, the
+    reads 0–0:45 by fives; a 7min clip by minutes) — no minor comb, the
     lane between labels stays clean. ``t=0`` and ``t=total`` always labeled —
-    the axis's ends never go unnamed. Labels preformatted (one seat).
+    the axis's ends never go unnamed; the origin reads bare "0" (the zero
+    point carries no clock tail). Labels preformatted (one seat).
     A named end riding within ~8% of the axis under the previous label
     would smudge into it (a few px at the lane's width): the earlier label
     surrenders — its tick stays as geometry, the end stays named. ``t=0``
@@ -133,7 +134,7 @@ def _ruler_ticks(total: float) -> list[RulerTick]:
         t = k * big
         if t > total + 1e-6:
             break
-        ticks.append(RulerTick(t=round(t, 3), label=fmt_cue_time(t)))
+        ticks.append(RulerTick(t=round(t, 3), label="0" if t == 0 else fmt_cue_time(t)))
         k += 1
     if ticks and abs(ticks[-1]["t"] - total) > 0.05:
         ticks.append(RulerTick(t=round(total, 3), label=fmt_cue_time(total)))

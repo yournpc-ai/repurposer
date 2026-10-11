@@ -135,7 +135,7 @@ def test_ruler_short_clip_steps_by_fives_with_labeled_ends():
     # Major-only (no minor comb): the ticks ARE the labeled steps.
     assert [t["t"] for t in ticks] == [float(s) for s in range(0, 46, 5)]
     assert all(t["label"] is not None for t in ticks)
-    assert ticks[0]["label"] == "0:00"
+    assert ticks[0]["label"] == "0"
     assert ticks[-1]["label"] == "0:45"
 
 
@@ -155,7 +155,7 @@ def test_ruler_never_exceeds_ten_labels_and_handles_zero():
     for total in (9.0, 59.0, 61.0, 299.0, 601.0, 3599.0):
         labeled = [t for t in _ruler_ticks(total) if t["label"] is not None]
         assert len(labeled) <= 11  # ≤10 steps + the off-step end tick
-        assert labeled[0]["label"] == "0:00"
+        assert labeled[0]["label"] == "0"
     assert _ruler_ticks(0.0) == []
 
 
