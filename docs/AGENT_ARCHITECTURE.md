@@ -223,9 +223,12 @@ verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈�
 
 ## 10. 验收器
 
-- **剧本测试**：`chat_scenarios.py` S1–S12，真实 LLM 跑形态级断言；本架构的回归网。估价三断言在册（S4）：flow 对账自检过 / 报价单调性（子图 ≤ 全图，非负）/ repair 只一轮。
+验证资产只保留两类（ADR-114）：**用户主流程旅程矩阵**与**承重架构防漂移守卫**；事故锁 / 批次产物 / 镜像实现形态的锁不立，退役 = 自然死亡、逐案过堂。
+
+- **剧本矩阵**：`scripts/chat_scenarios.py` S1–S10——每本 = 一种用户 × 一种创作流 × 全旅程，对活 API 真实 LLM 跑形态级断言（永不锁 LLM 文案），本架构的活 LLM 回归网。harness 公共断言每本自动携带：SSE 工具 loop 线格式 / Activity 帧形态 / dock 形态 / 估价三断言（fold 对账 / 报价单调性：子图 ≤ 全图、非负 / repair 恰一轮）。
+- **承重守卫**：`tests/*_pure.py` 纯函数套件（无 DB / LLM / HTTP）+ `scripts/check_gates.py` 静态架构门（boot 冒烟 / 依赖方向 / 盲重试禁令 / 退役节点 kind 不回魂）+ web vitest 十本组件旁置套件。
 - **启动自检**：runner 注册一致性（`assert_runners_registered` 同款）+ 节点→agent 引用存在 + 配方 flow 对账（§4.2）。
-- e2e 真实管线纪律不变（无测试套件）；改 pipeline 代码必重启常驻 worker。
+- 部署前仪式链与仪表层登记归 CLAUDE.md Testing；fixture / worker 抢跑 / flake 处置纪律归 `docs/tasks/test-suite-convergence.md` §3.6 / §5；改 pipeline 代码必重启常驻 worker。
 
 ## 11. Critical files
 

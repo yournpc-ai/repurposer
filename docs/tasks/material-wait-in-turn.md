@@ -60,7 +60,6 @@ send → 直达 LLM 装配（零素材检查）
 ### A5. 测试 / 脚手架 / 保留项
 | 位置 | 处置 |
 |---|---|
-| `tests/test_material_wait_pure.py` | 重写为新闸门锁（见 C） |
 | `tests/test_activity_pure.py` | outcome 锁删 |
 | `scratch/replay_material_wait_turn.py` | 删（replay 方法论在 CLAUDE.md，不依附脚本） |
 | `scratch/m3_video_spike.py` / `m3_video_transcribe_probe.py` | 保留（spike 证据） |

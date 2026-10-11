@@ -151,7 +151,7 @@ GET /wallet/transactions?limit&cursor      → 台账行（W11 计费中心的�
 
 **显式不做（W11 座位已留）**：`/payments/*` 端点、webhook 接收器、admin 侧 configs 读写端点、双桶余额（订阅周期额度 vs 充值包——W11 套餐语义定夺时如需分桶，ledger 加列而非改语义）。
 
-**孤儿 hold 回收**：run 被删（project 级联，台账 append-only 按设计存活）或永停非终态（WAITING_HUMAN 被弃）时，hold 的解冻走双路闭环：① **删除即退**——project 删除端点同事务对非 RUNNING run 调 `release_run`（RUNNING 在途 run 的捕获量仍在增长，提前退会与后落 capture 对不上账；它归 worker 收官路）；② **收官路台账自结算**——`maybe_finalize_run` 对 run 行已删 / 项目已删的残余调用走 `_release_orphaned_hold`（ledger hold 行自带 owner，remainder 从台账重算，幂等键防双退）；WAITING_HUMAN 被弃由 TTL 过期扫荡（`expire_stale_interrupts`）→ run 收官 → 正常 release 兜住。剧本 S15 锁删除路径。reconcile 尺子对「被删 run 的未结 hold」保留 ○ known-open 豁免，活 run 未结仍硬判。
+**孤儿 hold 回收**：run 被删（project 级联，台账 append-only 按设计存活）或永停非终态（WAITING_HUMAN 被弃）时，hold 的解冻走双路闭环：① **删除即退**——project 删除端点同事务对非 RUNNING run 调 `release_run`（RUNNING 在途 run 的捕获量仍在增长，提前退会与后落 capture 对不上账；它归 worker 收官路）；② **收官路台账自结算**——`maybe_finalize_run` 对 run 行已删 / 项目已删的残余调用走 `_release_orphaned_hold`（ledger hold 行自带 owner，remainder 从台账重算，幂等键防双退）；WAITING_HUMAN 被弃由 TTL 过期扫荡（`expire_stale_interrupts`）→ run 收官 → 正常 release 兜住。reconcile 尺子对「被删 run 的未结 hold」保留 ○ known-open 豁免，活 run 未结仍硬判。
 
 ## 9. 模块家与缝合点
 
