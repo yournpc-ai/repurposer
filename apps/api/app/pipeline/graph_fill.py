@@ -1126,8 +1126,9 @@ async def _stamp_graph_core(
                 "video" if upstream.kind in _CLIP_FAMILY_KINDS else "text",
             )
     # The doc station's two text legs (ADR-072 边派生新规 — 文流经 doc 站
-    # 中转, the transcript → 成片 direct edge is never stamped): the asm's
-    # own words arrive from its doc station…
+    # 中转 whenever a doc station exists: the asm's own words arrive from its
+    # doc station; the PURE-cut chain has none, so its text leg wires from
+    # the asset directly — see the select_clips branch below)…
     for doc_id, asm_id in doc_pairs:
         connect(doc_id, asm_id, "text")
     # Assets feed the graph: text into the writers, the
@@ -1189,6 +1190,19 @@ async def _stamp_graph_core(
                 target,
                 "video" if asset.type in _MEDIA_TYPES else "text",
             )
+            # 文字流直腿 (2026-10-11 拍板 — 画布诚实律): a select_clips root's
+            # captions ARE the raw transcript (no doc station stands between),
+            # so the asset's text flow wires directly beside the media flow —
+            # the T out-anchor at the transcript section feeds the text lane's
+            # in-anchor. translate/dub chains keep the ADR-072 doc-station
+            # transit (their captions are the doc's words, not the raw
+            # transcript's). mode② chains eat existing clips — their assets
+            # stay unwired (the producer's own run wired its legs).
+            if step.kind == "select_clips" and asset.type in (
+                AssetType.VIDEO,
+                AssetType.AUDIO,
+            ):
+                connect(asset_node_id, target, "text")
     # …and the text-yielding asset feeds every doc station its words
     # translate/dub directly (ADR-113: the transcript node is retired — the
     # asset row is its ONE seat, so the derivation edge re-anchors to the

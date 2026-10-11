@@ -39,7 +39,7 @@ import { apiPut, fetchAssetTranscript, putAssetTranscript, toAbsoluteUrl, type A
 import { cn, formatDuration } from "@/lib/utils"
 import type { GraphEdgeType, Output, ProjectArtifact } from "@/lib/types"
 
-import { BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX, TRANSCRIPT_SECTION_PX, cornerStackedInPorts, hasProgramRegion, hasTrackStack, nleModifierLanes, trackVideoPortBasePx } from "./layout"
+import { ASSET_TEXT_OUT_BOTTOM_PX, BIRTH_STAGGER_MS, PRODUCT_LABEL_PX, PRODUCT_PAGER_PX, PRODUCT_THUMB_DEFAULT_PX, PRODUCT_THUMB_PX, PROGRAM_REGION_PX, PRODUCT_TOOLBAR_PX, TRANSCRIPT_SECTION_PX, cornerStackedInPorts, hasProgramRegion, hasTrackStack, nleModifierLanes, trackTextPortBasePx, trackVideoPortBasePx } from "./layout"
 import { useSoundMutex } from "./sound-mutex"
 import type {
   FlowAssetAction,
@@ -2603,6 +2603,7 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
   let cornerCount = 0
   let mediaCount = 0
   let textCount = 0
+  let outStackCount = 0
   for (const t of ports.in) {
     if (t === "video" || t === "audio") inMediaIdx.set(t, mediaCount++)
     else inTextIdx.set(t, textCount++)
@@ -2629,11 +2630,15 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
         // in-port leaves the corner stack for the video lane's Y-center —
         // the edge lands on the lane it feeds (mirror: layout.ts
         // trackVideoPortBasePx) — and does NOT consume a corner-stack slot.
-        // Live modifier lanes (below the text lane) raise the seat by
-        // NLE_MODIFIER_ROW_PX each on their arrival beat.
-        const laneSeat = type === "video" && hasTrackStack(node)
+        // 锚点律第二座 (2026-10-11 拍板): the text in-port parks at the TEXT
+        // lane's Y-center (trackTextPortBasePx). Live modifier lanes (below
+        // the text lane) raise both seats by NLE_MODIFIER_ROW_PX each on
+        // their arrival beat.
+        const laneSeat = (type === "video" || type === "text") && hasTrackStack(node)
         const base = laneSeat
-          ? trackVideoPortBasePx(pagerPx, nleModifierLanes(node))
+          ? type === "video"
+            ? trackVideoPortBasePx(pagerPx, nleModifierLanes(node))
+            : trackTextPortBasePx(pagerPx, nleModifierLanes(node))
           : unified
             ? inTextBase + cornerCount++ * 34
             : isMedia
@@ -2652,12 +2657,20 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
           </Handle>
         )
       })}
-      {ports.out.map((type, i) => {
+      {ports.out.map((type) => {
         // 出锚语义律: the out anchor speaks the node's own medium — ctx is
         // structurally impossible here (productionPort never returns it);
         // the fold is a type-level exhaustiveness guard, never a real case.
+        // 出锚产区律 (2026-10-11 拍板): a media asset's T flow parks at the
+        // transcript section's top-right (bottom-anchored — the wire grows
+        // out of the words) and never consumes a top-stack slot.
         const Icon = PORT_ICON[type === "ctx" ? "text" : type]
-        const offset = outBase + i * 34
+        const assetType = node.asset?.type
+        const regionSeat =
+          type === "text" && (assetType === "video" || assetType === "audio")
+        // The region seat does NOT consume a top-stack slot (mirror of
+        // declaredHandles' conditional outStack++ — change one, change both).
+        const offset = regionSeat ? 0 : outBase + outStackCount++ * 34
         return (
           <Handle
             key={`out:${type}`}
@@ -2665,7 +2678,11 @@ function NodePorts({ node, ports }: { node: FlowNode; ports?: { in: Exclude<Grap
             type="source"
             position={Position.Right}
             className={cn("flow-port", `flow-port-${type}`)}
-            style={{ top: offset, right: -34 }}
+            style={
+              regionSeat
+                ? { top: "auto", bottom: ASSET_TEXT_OUT_BOTTOM_PX, right: -34 }
+                : { top: offset, right: -34 }
+            }
           >
             <Icon />
           </Handle>

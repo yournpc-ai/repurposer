@@ -220,7 +220,19 @@ export const trackVideoPortBasePx = (pagerPx = 0, modifierLanes = 0): number =>
   NLE_VIDEO_LANE_PX / 2 -
   PORT_PX / 2
 
-/** The tracked card's live modifier-lane count (music/dub) — the anchor's
+/** 锚点律第二座 (2026-10-11 拍板 — 文字流接线): on a tracked card the TEXT
+ * in-port likewise leaves the corner stack and parks at the TEXT lane's
+ * Y-center — the wire lands on the lane it feeds (its words ARE the
+ * captions). Mirror of FlowNodeCard NodePorts' CSS seat (一条律两镜像). */
+export const trackTextPortBasePx = (pagerPx = 0, modifierLanes = 0): number =>
+  PRODUCT_TOOLBAR_PX +
+  pagerPx +
+  modifierLanes * NLE_MODIFIER_ROW_PX +
+  NLE_PAD_BOTTOM_PX +
+  NLE_TEXT_LANE_PX / 2 -
+  PORT_PX / 2
+
+/** 出锚产区律 (2026-10-11 拍板): the out anchor parks at ITS production
  * modifier term. Reads the MAX across the node's products so a pager flip
  * never re-seats the port (the largest anatomy wins the seat, smaller
  * members render air in the freed row — the reservation posture). */
@@ -270,10 +282,14 @@ export function declaredHandles(
     // (ADR-113 §5): a tracked card's video in-port leaves the corner stack
     // for the video lane's Y-center — the edge lands on the lane it feeds —
     // and does NOT consume a corner-stack slot (the remaining ports stack
-    // gapless).
-    const laneSeat = t === "video" && hasTrackStack(node)
+    // gapless). 锚点律第二座 (2026-10-11 拍板): the text in-port likewise
+    // parks at the TEXT lane's Y-center (the wire lands on the lane it
+    // feeds).
+    const laneSeat = (t === "video" || t === "text") && hasTrackStack(node)
     const base = laneSeat
-      ? trackVideoPortBasePx(pagerPx, nleModifierLanes(node))
+      ? t === "video"
+        ? trackVideoPortBasePx(pagerPx, nleModifierLanes(node))
+        : trackTextPortBasePx(pagerPx, nleModifierLanes(node))
       : unified
         ? IN_CORNER_PORT_BASE_PX + pagerPx + corner++ * PORT_STEP_PX
         : isMedia
@@ -289,17 +305,28 @@ export function declaredHandles(
       height: PORT_PX,
     })
   }
-  ports.out.forEach((t, i) => {
+  let outStack = 0
+  for (const t of ports.out) {
+    // 出锚产区律 (2026-10-11 拍板): the out anchor parks at ITS production
+    // region's top-right. A media asset's T flow leaves from the transcript
+    // section's top-right (bottom-anchored constant — the wire grows out of
+    // the words) and does NOT consume a top-stack slot; every other out
+    // anchor keeps the card's top-right stack.
+    const assetType = node.asset?.type
+    const regionSeat =
+      t === "text" && (assetType === "video" || assetType === "audio")
     handles.push({
       id: `out:${t}`,
       type: "source",
       position: Position.Right,
       x: size.width + PORT_SIDE_PX - PORT_PX,
-      y: OUT_PORT_TOP_PX + i * PORT_STEP_PX,
+      y: regionSeat
+        ? size.height - ASSET_TEXT_OUT_BOTTOM_PX - PORT_PX
+        : OUT_PORT_TOP_PX + outStack++ * PORT_STEP_PX,
       width: PORT_PX,
       height: PORT_PX,
     })
-  })
+  }
   return handles
 }
 
@@ -534,6 +561,15 @@ export const ASSET_TOOLBAR_PX = 44
  * server mirror (graph_store._TRANSCRIPT_SECTION_PX) and the card's flex
  * seat (FlowNodeCard.TranscriptSection). */
 export const TRANSCRIPT_SECTION_PX = 197
+/** 出锚产区律 (2026-10-11 拍板): the out anchor parks at ITS production
+ * region's top-right — the media stage's (OUT_PORT_TOP_PX) for the media
+ * flow, the transcript section's for a text-bearing asset's T flow (the
+ * wire grows out of the words). The section is the ring card's LAST region,
+ * so the seat is bottom-anchored and aspect-free: factsbar band + section
+ * reservation − 6px into the header row − the circle. NodePorts' CSS seat
+ * reads this constant directly; declaredHandles' y = H − this − PORT_PX. */
+export const ASSET_TEXT_OUT_BOTTOM_PX =
+  PRODUCT_TOOLBAR_PX + TRANSCRIPT_SECTION_PX - 6 - PORT_PX
 /** Medialess text assets (paste/transcript — the section IS the body):
  * caption 26 + section 196 + toolbar 44 (server mirror:
  * graph_store._ASSET_TEXT_ONLY_H). */

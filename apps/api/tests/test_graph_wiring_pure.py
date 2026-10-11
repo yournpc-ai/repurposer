@@ -949,6 +949,35 @@ async def test_two_station_stamp_asm_and_doc_companion():
 
 
 @pytest.mark.asyncio
+async def test_pure_cut_chain_stamps_the_direct_text_leg():
+    """文字流直腿 (2026-10-11 拍板 — 画布诚实律): the PURE-cut chain has NO
+    doc station — a select_clips root's captions ARE the raw transcript, so
+    the asset's text flow wires directly beside the media flow (the T
+    out-anchor at the transcript section feeds the text lane's in-anchor).
+    translate/dub keep the ADR-072 doc-station transit — their captions are
+    the doc's words, never the raw transcript's."""
+    project = Project(id=_PROJECT_ID)
+    run = WorkflowRun(id=uuid4(), project_id=_PROJECT_ID, context={})
+    sel = WorkflowStep(id=uuid4(), kind="select_clips", seq=1, spec={}, estimate=None)
+    sel.inputs = []
+    db = _StubDb(steps=[sel], assets=[_asset()])
+    await _stamp_graph_core(
+        db, project, [sel], run=run, ui_language="en", draft=False
+    )
+    asset_node = next(n for n in db.nodes if n.type == "asset")
+    asm = next(n for n in db.nodes if n.type == "video")
+    assert asm.spec["tool"] == "select_clips"
+    edge_facts = {
+        (str(e.from_node), str(e.to_node), e.edge_type, str(e.from_port))
+        for e in db.edges
+    }
+    assert edge_facts == {
+        (str(asset_node.id), str(asm.id), "video", "out:video"),
+        (str(asset_node.id), str(asm.id), "text", "out:text"),
+    }
+
+
+@pytest.mark.asyncio
 async def test_materialize_folds_into_the_translate_family(monkeypatch):
     """materialize 折叠 (ADR-072 ⑦): no node of its own — its step id rides
     the host family's step_ids, the host's tool identity stays the

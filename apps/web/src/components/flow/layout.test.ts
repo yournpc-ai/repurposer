@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from "vitest"
 
-import { projectSettledFrames } from "./layout"
+import { declaredHandles, projectSettledFrames } from "./layout"
 import type { FlowEdge, FlowNode } from "./types"
 
 // The three-mirror pitch value (product_graph.PITCH ↔ graph_store._PITCH ↔
@@ -219,5 +219,62 @@ describe("projectSettledFrames — ADR-098 B3 读时归一 (double-mirror fixtur
     // compression floors at reserved_bottom + gap (2112 + 16), never higher.
     expect(positions.get("plain")!.y).toBe(2112 + GAP_CROSS)
     expect(violations).toEqual([])
+  })
+})
+
+describe("declaredHandles — 文字流锚座 (2026-10-11 拍板: 出锚产区律 + 锚点律第二座)", () => {
+  /** A tracked clip card (select_clips anatomy) — the NLE axis's owner. */
+  const tracked = (overrides: Partial<FlowNode> = {}): FlowNode => ({
+    ...node("clip", 1, { x: 524, y: 0 }),
+    spec: { tool: "select_clips" },
+    ...overrides,
+  })
+  /** A media asset node (the ring card: stage + transcript section). */
+  const mediaAsset = (type: string): FlowNode => ({
+    ...node("asset", 0, { x: 0, y: 0 }),
+    asset: { id: "a1", type, title: null, file_url: null },
+  })
+  const H = { width: 400, height: 700 }
+
+  it("tracked card: video AND text in-ports park at their own lane's Y-center", () => {
+    const handles = declaredHandles(tracked(), H, { in: ["video", "text"], out: [] })!
+    // video base = 44 toolbar + 4 pad + 34 text lane + 8 gap + 17 half-video − 14
+    //            = 93 → y = 700 − 93 − 28
+    expect(handles.find((h) => h.id === "in:video")!.y).toBe(579)
+    // text base = 44 + 4 + 17 − 14 = 51 → y = 700 − 51 − 28 (one lane-row
+    // — 42px — below the video seat).
+    expect(handles.find((h) => h.id === "in:text")!.y).toBe(621)
+  })
+
+  it("a live modifier lane raises BOTH lane seats by one modifier row (42)", () => {
+    const withMusic = tracked({
+      outputs: [{ track_stack: { modifiers: { music: true } } }] as unknown as FlowNode["outputs"],
+    })
+    const handles = declaredHandles(withMusic, H, { in: ["video", "text"], out: [] })!
+    expect(handles.find((h) => h.id === "in:video")!.y).toBe(579 - 42)
+    expect(handles.find((h) => h.id === "in:text")!.y).toBe(621 - 42)
+  })
+
+  it("media asset: the T out-port parks at the transcript section's top-right and never consumes a top-stack slot", () => {
+    const handles = declaredHandles(mediaAsset("video"), H, { in: [], out: ["video", "text"] })!
+    // The media flow keeps the card's top-right stack (y = 40).
+    const video = handles.find((h) => h.id === "out:video")!
+    expect(video.y).toBe(40)
+    // 出锚产区律: bottom-anchored constant = 44 factsbar + 197 section − 6
+    // into the header − 28 circle = 207 → y = 700 − 207 − 28.
+    const text = handles.find((h) => h.id === "out:text")!
+    expect(text.y).toBe(700 - 207 - 28)
+    expect(text.x).toBe(video.x)
+    // Reversed declaration order proves the region seat never eats a stack
+    // slot: the media port still lands on the FIRST stack seat (y = 40).
+    const reversed = declaredHandles(mediaAsset("video"), H, { in: [], out: ["text", "video"] })!
+    expect(reversed.find((h) => h.id === "out:video")!.y).toBe(40)
+    expect(reversed.find((h) => h.id === "out:text")!.y).toBe(700 - 207 - 28)
+  })
+
+  it("non-media asset (image): no transcript section, no region seat — text keeps the top stack", () => {
+    const handles = declaredHandles(mediaAsset("image"), H, { in: [], out: ["video", "text"] })!
+    expect(handles.find((h) => h.id === "out:video")!.y).toBe(40)
+    expect(handles.find((h) => h.id === "out:text")!.y).toBe(40 + 34)
   })
 })

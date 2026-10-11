@@ -734,7 +734,18 @@ export function FlowView({
       if (!target.in.includes(inType)) target.in.push(inType)
       portsByNode.set(e.to, target)
       const src = nodeById.get(e.from)
-      const outType = src ? productionPort(src) : e.edgeType
+      // 出锚产区律 (2026-10-11 拍板): a transcript-bearing media asset's TEXT
+      // edge leaves from its own T anchor (the transcript region's out port —
+      // the wire grows out of the words). Every other case keeps the 出锚语义
+      // 律: the out anchor speaks the source's own medium (an image circle on
+      // a video line IS the "from image to video" story).
+      const srcAssetType = src?.asset?.type
+      const outType =
+        (srcAssetType === "video" || srcAssetType === "audio") && e.edgeType === "text"
+          ? "text"
+          : src
+            ? productionPort(src)
+            : e.edgeType
       const source = portsByNode.get(e.from) ?? { in: [], out: [] }
       if (!source.out.includes(outType)) source.out.push(outType)
       portsByNode.set(e.from, source)
