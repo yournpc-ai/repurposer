@@ -160,6 +160,28 @@ def test_ruler_never_exceeds_ten_labels_and_handles_zero():
     assert _ruler_ticks(0.0) == []
 
 
+def test_ruler_end_label_surrenders_the_cramped_major():
+    # 45.64s with 5s majors: the t=45 major sits 0.64s under the named end —
+    # two labels a few px apart smudge, so the major keeps its tick but
+    # surrenders its label to the end.
+    ticks = _ruler_ticks(45.64)
+    assert ticks[-1] == {"t": 45.64, "label": "0:45"}
+    at45 = next(t for t in ticks if t["t"] == 45.0)
+    assert at45["label"] is None
+    labeled = [t["t"] for t in ticks if t["label"] is not None]
+    assert labeled[:3] == [0.0, 5.0, 10.0] and 40.0 in labeled
+
+
+def test_ruler_end_on_a_minor_tick_still_surrenders():
+    # 46.0 lands exactly on an unlabeled minor (1s minors, 5s majors): the
+    # end takes its label, and the cramped 45s major one second under it
+    # surrenders.
+    ticks = _ruler_ticks(46.0)
+    assert ticks[-1] == {"t": 46.0, "label": "0:46"}
+    at45 = next(t for t in ticks if t["t"] == 45.0)
+    assert at45["label"] is None
+
+
 def test_stack_carries_the_ruler():
     stack = build_track_stack(_spec([_seg(0.0, 45.0)]))
     assert stack is not None

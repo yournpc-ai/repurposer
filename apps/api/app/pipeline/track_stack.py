@@ -113,6 +113,10 @@ def _ruler_ticks(total: float) -> list[RulerTick]:
     clip reads 0:00–0:45 by fives; a 7min clip by minutes); minor = major/5
     (dropped when sub-second). ``t=0`` and ``t=total`` always labeled —
     the axis's ends never go unnamed. Labels preformatted (one seat).
+    A named end riding within ~8% of the axis under the previous label
+    would smudge into it (a few px at the lane's width): the earlier label
+    surrenders — its tick stays as geometry, the end stays named. ``t=0``
+    never surrenders.
     """
     if total <= 0:
         return []
@@ -138,6 +142,17 @@ def _ruler_ticks(total: float) -> list[RulerTick]:
     elif ticks:
         # The end lands on a tick — it always carries its label.
         ticks[-1]["label"] = fmt_cue_time(total)
+    if len(ticks) >= 2 and ticks[-1]["label"] is not None:
+        prev = next(
+            (tick for tick in reversed(ticks[:-1]) if tick["label"] is not None),
+            None,
+        )
+        if (
+            prev is not None
+            and prev["t"] > 0
+            and (ticks[-1]["t"] - prev["t"]) / total < 0.08
+        ):
+            prev["label"] = None
     return ticks
 
 

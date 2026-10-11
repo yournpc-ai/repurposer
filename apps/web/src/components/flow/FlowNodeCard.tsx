@@ -685,7 +685,7 @@ function TranscriptSection({
            seek (with a player); the playing row lights, the lineage
            interval lights amber. */
         <div
-          className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-mask-image:linear-gradient(to_bottom,black_calc(100%_-_26px),transparent_100%)] [mask-image:linear-gradient(to_bottom,black_calc(100%_-_26px),transparent_100%)]"
           onScroll={() => setChip(null)}
         >
           <div className="flex flex-col gap-1">
@@ -871,7 +871,12 @@ function NleAxis({
               {tick.label ? (
                 <span
                   aria-hidden
-                  className="text-meta absolute top-0 -translate-x-1/2 text-[9px] tabular-nums"
+                  className={cn(
+                    "text-meta absolute top-0 text-[9px] tabular-nums",
+                    // The axis's named end hugs the lane's right edge — a
+                    // centered label there would overflow the card.
+                    tick.t >= total ? "-translate-x-full" : "-translate-x-1/2",
+                  )}
                   style={{ left: pct(tick.t) }}
                 >
                   {tick.label}
@@ -1537,7 +1542,13 @@ function MediaProductRegion({
       className={cn(
         "group/media relative",
         fill ? "min-h-0 flex-1" : "shrink-0",
-        clipAspect ? "bg-black" : "bg-muted",
+        clipAspect
+          ? /* 舞台钉死画幅 (ADR-115): the known-aspect stage is an
+               aspect-pinned box centered in the region — card-bg flanks on
+               a legacy short frame, full bleed on an aspect-exact one.
+               Never a black containment field. */
+            "flex items-center justify-center"
+          : "bg-muted",
       )}
       style={fill ? undefined : { height: thumbPx }}
     >
@@ -1593,19 +1604,35 @@ function MediaProductRegion({
           ) : null}
         </span>
       ) : videoUrl ? (
-        <video
-          ref={videoRef}
-          src={videoUrl}
-          poster={mediaThumb ?? undefined}
-          aria-label={node.label}
-          className="pointer-events-none h-full w-full object-contain"
-          muted={muted}
-          loop
-          playsInline
-          autoPlay
-          preload="metadata"
-          disablePictureInPicture
-        />
+        /* The aspect-pinned stage: the box hugs the file's own ratio and
+           the pixels COVER it — zero letterbox, zero crop when the frame's
+           reservation is aspect-exact. Aspect-unknown (legacy) rows keep
+           the honest contain fallback on the muted field. */
+        <div
+          className={cn("relative", clipAspect ? "h-full max-w-full" : "h-full w-full")}
+          style={
+            clipAspect
+              ? { aspectRatio: clipAspect.replace(":", "/") }
+              : undefined
+          }
+        >
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            poster={mediaThumb ?? undefined}
+            aria-label={node.label}
+            className={cn(
+              "pointer-events-none h-full w-full",
+              clipAspect ? "object-cover" : "object-contain",
+            )}
+            muted={muted}
+            loop
+            playsInline
+            autoPlay
+            preload="metadata"
+            disablePictureInPicture
+          />
+        </div>
       ) : mediaThumb ? (
         <img
           src={mediaThumb}
