@@ -147,21 +147,25 @@ export const NLE_RULER_PX = 22
 export const NLE_VIDEO_LANE_PX = 34
 export const NLE_TEXT_LANE_PX = 22
 export const NLE_MODIFIER_LANE_PX = 22
-export const NLE_LANE_GAP_PX = 4
-export const NLE_PAD_TOP_PX = 6
-export const NLE_PAD_BOTTOM_PX = 12
+export const NLE_LANE_GAP_PX = 8
+export const NLE_RULER_GAP_PX = 6
+export const NLE_PAD_TOP_PX = 2
+export const NLE_PAD_BOTTOM_PX = 6
 /** One modifier lane's arrival grows the axis by this (lane + its gap) —
  * and shifts the video in-port's bottom-anchored seat by the same. */
 export const NLE_MODIFIER_ROW_PX = NLE_MODIFIER_LANE_PX + NLE_LANE_GAP_PX
-/** 116 = head + ruler + video lane + gap + text lane + pads; the text lane
- * sits 12px above the card's bottom inner edge (the anchor formula's
- * premise — 锚点律). Modifier lanes add NLE_MODIFIER_ROW_PX each at
- * runtime (never in the birth reservation — their presence is unknown at
- * draft; the arrival grows INTO the media's flex). */
+/** 116 = pad + head + ruler + ruler gap + video lane + gap + text lane +
+ * pad; the text lane sits 6px above the card's bottom inner edge (the
+ * anchor formula's premise — 锚点律). The gaps came out of the pads (the
+ * airy inter-lane beat) so the total — and every frame born against it —
+ * never moves. Modifier lanes add NLE_MODIFIER_ROW_PX each at runtime
+ * (never in the birth reservation — their presence is unknown at draft;
+ * the arrival grows INTO the media's flex). */
 export const NLE_AXIS_PX =
   NLE_PAD_TOP_PX +
   NLE_HEAD_PX +
   NLE_RULER_PX +
+  NLE_RULER_GAP_PX +
   NLE_VIDEO_LANE_PX +
   NLE_LANE_GAP_PX +
   NLE_TEXT_LANE_PX +
@@ -205,7 +209,7 @@ export const IN_CORNER_PORT_BASE_PX = PRODUCT_TOOLBAR_PX + 16
 /** 锚点律 (ADR-113 §5; ADR-115 NLE 轴): on a tracked card the video in-port
  * leaves the corner stack and parks at the VIDEO lane's Y-center — the edge
  * lands on the lane it feeds. Circle bottom = the factsbar band + the axis's
- * below-video-lane anatomy (bottom pad 12 + text lane 22 + gap 4) + half the
+ * below-video-lane anatomy (bottom pad 6 + text lane 22 + gap 8) + half the
  * video lane − half the circle (PORT_PX/2); each live modifier lane (below
  * the text lane) raises the seat by NLE_MODIFIER_ROW_PX. Mirror of
  * FlowNodeCard NodePorts' CSS seat (一条律两镜像 — change one, change both). */

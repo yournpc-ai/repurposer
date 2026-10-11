@@ -827,7 +827,7 @@ function NleAxis({
   const frac = total > 0 ? Math.min(Math.max(playhead / total, 0), 1) : 0
   const pct = (v: number) => `${(v / total) * 100}%`
   return (
-    <div className="shrink-0 px-3 pb-3 pt-1.5">
+    <div className="shrink-0 px-4 pb-1.5 pt-0.5">
       {/* 轴头行: score at the right end (h-4 reservation even when empty —
           geometry never shifts). Flush with the lanes (no gutter). */}
       <div className="flex h-4 items-center justify-end">
@@ -866,12 +866,7 @@ function NleAxis({
               {tick.label ? (
                 <span
                   aria-hidden
-                  className={cn(
-                    "text-meta absolute top-0 text-[9px] tabular-nums",
-                    // The axis's named end hugs the lane's right edge — a
-                    // centered label there would overflow the card.
-                    tick.t >= total ? "-translate-x-full" : "-translate-x-1/2",
-                  )}
+                  className="text-meta absolute top-0 -translate-x-1/2 text-[9px] tabular-nums"
                   style={{ left: pct(tick.t) }}
                 >
                   {tick.label}
@@ -881,13 +876,15 @@ function NleAxis({
           ))}
         {total > 0 && (
           /* 跨道播放头: one needle from the ruler's top through the lanes —
-             its host box spans exactly the lanes' width. */
+             its host box spans exactly the lanes' width. Height = ruler 22 +
+             ruler gap 6 + video 34 + lane gap 8 + text 22 + 30 per modifier
+             lane (mirror of layout.ts NLE_* — change one, change both). */
           <span
             aria-hidden
             className="pointer-events-none absolute top-0 z-10 w-px bg-foreground"
             style={{
               left: `${frac * 100}%`,
-              height: 22 + 34 + 4 + 22 + activeModifiers.length * 26,
+              height: 22 + 6 + 34 + 8 + 22 + activeModifiers.length * 30,
             }}
           >
             <span className="absolute -top-0.5 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[3.5px] border-t-[5px] border-x-transparent border-t-foreground" />
@@ -895,8 +892,10 @@ function NleAxis({
         )}
       </div>
       {/* The lanes: full-width boxes, no gutter icons (the lane's fill hue
-          is its label). */}
-      <div className="flex flex-col gap-1">
+          is its label). mt = the ruler→lane gap; gap = the inter-lane beat
+          (layout.ts NLE_RULER_GAP_PX / NLE_LANE_GAP_PX — one law, two
+          mirrors). */}
+      <div className="mt-1.5 flex flex-col gap-2">
         <div
           className="relative h-[34px]"
           role="group"
