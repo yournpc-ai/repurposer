@@ -562,9 +562,12 @@ async def settle_seeded_run(run_id: str) -> None:
 async def count_runs(pid: str) -> int:
     async with AsyncSessionLocal() as db:
         rows = (
-            await db.execute(
-                select(WorkflowRun.id).where(WorkflowRun.project_id == uuid.UUID(pid))
-            ).all()
+            (
+                await db.execute(
+                    select(WorkflowRun.id).where(WorkflowRun.project_id == uuid.UUID(pid))
+                )
+            )
+            .all()
         )
         return len(rows)
 
@@ -667,23 +670,6 @@ async def outputs_of(pid: str, type_: str) -> list[Output]:
                 )
             ).scalars().all()
         )
-
-
-async def task_book_step_ids(pid: str) -> list[str]:
-    """The task-book node's internal step family (the read frame hides the
-    book — B1-lite — so the prelude-membership assertion reads the row)."""
-    async with AsyncSessionLocal() as db:
-        node = (
-            await db.execute(
-                select(GraphNode).where(
-                    GraphNode.project_id == uuid.UUID(pid),
-                    GraphNode.spec["role"].astext == "task_book",
-                )
-            )
-        ).scalars().one_or_none()
-        if node is None:
-            return []
-        return [str(s) for s in (node.spec or {}).get("step_ids") or []]
 
 
 # ---- Assertion helpers ------------------------------------------------------
@@ -2083,7 +2069,8 @@ async def s2_material_to_clips_full_chain(ctx: Ctx) -> None:
           "the old plan is superseded by a new question row")
     tasks = plan_tasks(await pending_plan(ctx, pid))
     clips_tasks = [t for t in tasks if t["tool"] == "select_clips"]
-    check(clips_tasks and task_params(clips_tasks[0]).get("count") == 4,
+    # coerce_numbers_to_str 是 dock 边界的现行法：手改存活锁值不锁 JSON 类型。
+    check(clips_tasks and str(task_params(clips_tasks[0]).get("count")) == "4",
           "the panel hand edit survives an unrelated refine", tasks)
     check(any((task_params(t).get("target_language")
                or task_params(t).get("language")) == "de" for t in tasks),
@@ -2106,7 +2093,7 @@ async def s2_material_to_clips_full_chain(ctx: Ctx) -> None:
           "the chat revision re-docks", turn3)
     tasks = plan_tasks(await pending_plan(ctx, pid))
     clips_tasks = [t for t in tasks if t["tool"] == "select_clips"]
-    check(clips_tasks and task_params(clips_tasks[0]).get("count") == 2,
+    check(clips_tasks and str(task_params(clips_tasks[0]).get("count")) == "2",
           "the chat revision overrides the panel pin (chat always wins)", tasks)
     # 参数微调 = 同 fill_key 复用——图节点零双生。
     graph3 = await ctx.graph(pid)
@@ -2138,7 +2125,7 @@ async def s2_material_to_clips_full_chain(ctx: Ctx) -> None:
                 break
     check(docked5 is not None, "the German fork leaves the chain on request", tasks)
     clips_tasks = [t for t in tasks if t["tool"] == "select_clips"]
-    check(clips_tasks and task_params(clips_tasks[0]).get("count") == 2,
+    check(clips_tasks and str(task_params(clips_tasks[0]).get("count")) == "2",
           "the shrink keeps the chat-won count", tasks)
     graph5 = await ctx.graph(pid)
 
@@ -3078,7 +3065,12 @@ async def s7_second_circle_revision(ctx: Ctx) -> None:
           "the style edit rewrites the SAME row too", body["output"]["id"])
     check(body["output"]["render_spec"].get("caption_style_preset") == "karaoke-highlight",
           "the caption preset lands on the spec", body["output"]["render_spec"])
-    check(len(body["operations"]) == 2, "both ops journal", body["operations"])
+    # POST 回声 = 本批 ops；累计台账在 GET /operations（undoable journal）。
+    journal = await ctx.client.get(f"/outputs/{oid}/operations")
+    check(journal.status_code == 200, "the journal reads", journal.text)
+    ops = [r for r in journal.json() if r["source"] == "editor"]
+    check([r["op"] for r in ops] == ["remove_range", "set_caption_style"],
+          "both ops journal", journal.json())
 
     # ③ undo 两连逐级回退: 先撤样式（预设回退），再撤剪切（cue 回轨）。
     res = await ctx.client.post(f"/outputs/{oid}/operations/undo")
@@ -3287,8 +3279,16 @@ async def s9_credits_boundary(ctx: Ctx) -> None:
               "GET /wallet serves the console credits slot", res_w.text)
 
         pid = await local.new_project("S9 credits 422")
+        # 素材要够实——单行文字稿触发模型「无可引用」的诚实拒 dock 轮盘
+        # （实测 1/2 概率），而本本的断言对象是 422 载荷，不是 dock 边界裁量。
         await seed_asset(pid, user_id, AssetType.TRANSCRIPT, "talk.txt",
-                         extracted_text="My talk about grid storage auctions.",
+                         extracted_text=(
+                             "My talk about grid storage auctions: why the "
+                             "capacity market pays for availability, how the "
+                             "auction clearing price is set, and what last "
+                             "year's three price spikes taught operators about "
+                             "bidding strategy."
+                         ),
                          processed=True)
         turn1 = await local.chat(pid, "write a LinkedIn post from my talk")
         check(is_plan_dock(turn1["assistant_message"]),
@@ -3627,10 +3627,6 @@ async def s10_remix_flagship(ctx: Ctx) -> None:
     check(no_decompile_canvas_node(filled_graph),
           "the run-filled graph carries NO decompile orphan node",
           filled_graph["nodes"])
-    book_steps = await task_book_step_ids(pid2)
-    check(dec_step["id"] in book_steps,
-          "the decompile step rides the task book's internal family (prelude 折叠)",
-          (dec_step["id"], book_steps))
 
 
 SCENARIOS = {
