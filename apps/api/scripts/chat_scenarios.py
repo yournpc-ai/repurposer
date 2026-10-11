@@ -92,6 +92,7 @@ Usage (from apps/api/, API running on :8000):
 
 import argparse
 import asyncio
+import itertools
 import json
 import os
 import re
@@ -1476,12 +1477,17 @@ class _StubClient:
         return self._play("stream", messages)
 
 
+_PROBE_SEQ = itertools.count(1)  # the agents registry is single-shot
+# ("Duplicate agent declaration") and every probe binds a fresh stub client —
+# each probe run IS a new declaration, so the name carries a per-process seq.
+
+
 def _probe_agent(client: _StubClient, *, name: str, fallback=None) -> Agent:
     def _assemble():
         return ({"context_text": "", "message": "m"}, [])
 
     return Agent(
-        name=name,
+        name=f"{name}.{next(_PROBE_SEQ)}",
         prompt="chat_intent.j2",
         schema=_ProbeResult,
         system="sys",
@@ -1558,7 +1564,7 @@ async def check_repair_once_foundation() -> None:
     # 6. Streaming: a schema rejection repairs via the NON-streaming path.
     stub = _StubClient(["schema", _ProbeResult(text="ok")])
     agent = StreamingAgent(
-        name="scenario_probe_6",
+        name=f"scenario_probe_6.{next(_PROBE_SEQ)}",
         prompt="chat_intent.j2",
         schema=_ProbeResult,
         system="sys",
@@ -1579,7 +1585,7 @@ async def check_repair_once_foundation() -> None:
         media = [MediaInput(type="image", mime="image/png",
                             data_url="data:image/png;base64,x")]
         return Agent(
-            name=name,
+            name=f"{name}.{next(_PROBE_SEQ)}",
             prompt="chat_intent.j2",
             schema=_ProbeResult,
             system="sys",
