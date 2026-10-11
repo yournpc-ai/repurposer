@@ -10,7 +10,7 @@
 
 **对外叙事版**：DAG + 状态机是执行层，不是产品本身——最终产品是一个 **Agentic Content OS**：Agent = 决策层（§3），Structured Media + Decompiler/Compiler = 内容语义层（§9），Execution Kernel = 可靠执行层（§8）。此句只是上一句的展开，不产生任何超出五态表的承诺（统一 Artifact 模型、Media IR 等上层抽象仍为触发制 OPEN）。
 
-**对外口径**：已成立的是**一个 Agent 驱动的 Content Execution System**——Agent → Execution Kernel → Structured Media → Rendered Output 的真实可用闭环（证据 = R1 四条 invariant + S1–S17 剧本族）。「Agentic Content OS」仍是 North Star，但 OS 的高级抽象（统一 Artifact / Media IR / ExecutionAttempt）**不提前承诺、不成 R2/R3 排期暗示**——触发条件满足才进入决策。
+**对外口径**：已成立的是**一个 Agent 驱动的 Content Execution System**——Agent → Execution Kernel → Structured Media → Rendered Output 的真实可用闭环（证据 = R1 四条 invariant + 剧本矩阵回归网）。「Agentic Content OS」仍是 North Star，但 OS 的高级抽象（统一 Artifact / Media IR / ExecutionAttempt）**不提前承诺、不成 R2/R3 排期暗示**——触发条件满足才进入决策。
 
 ### 1.1 愿景词汇 ↔ 现行词汇对照表
 
