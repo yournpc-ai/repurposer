@@ -61,6 +61,21 @@ function productionPort(n: FlowNode): OutPortType {
   return n.spec?.frame_class === "text" ? "text" : "video"
 }
 
+/** 出锚产区律 (2026-10-11 拍板): the out anchor parks at ITS production
+ * region — a transcript-bearing media asset's TEXT edge leaves from its own
+ * T anchor (the transcript section's out port; the wire grows out of the
+ * words). Every other case keeps the 出锚语义律: the out anchor speaks the
+ * source's own medium (an image circle on a video line IS the "from image
+ * to video" story). ONE seat for both consumers — the ports list (which
+ * anchors render) and the edge's sourceHandle (where the wire attaches);
+ * divergence = a wire hanging off the wrong circle. */
+function outPortForEdge(src: FlowNode | undefined, edgeType: GraphEdgeType): OutPortType {
+  if (!src) return edgeType
+  const t = src.asset?.type
+  if ((t === "video" || t === "audio") && edgeType === "text") return "text"
+  return productionPort(src)
+}
+
 /** The one fit recipe, shared by the ViewportController (auto-fit) and the
  * FlowControls pill (manual fit) — two hard-won parameter rules:
  * 1. minZoom must go LOW (0.15) — a wide recipe graph needs ~0.36 on the
@@ -734,18 +749,7 @@ export function FlowView({
       if (!target.in.includes(inType)) target.in.push(inType)
       portsByNode.set(e.to, target)
       const src = nodeById.get(e.from)
-      // 出锚产区律 (2026-10-11 拍板): a transcript-bearing media asset's TEXT
-      // edge leaves from its own T anchor (the transcript region's out port —
-      // the wire grows out of the words). Every other case keeps the 出锚语义
-      // 律: the out anchor speaks the source's own medium (an image circle on
-      // a video line IS the "from image to video" story).
-      const srcAssetType = src?.asset?.type
-      const outType =
-        (srcAssetType === "video" || srcAssetType === "audio") && e.edgeType === "text"
-          ? "text"
-          : src
-            ? productionPort(src)
-            : e.edgeType
+      const outType = outPortForEdge(src, e.edgeType)
       const source = portsByNode.get(e.from) ?? { in: [], out: [] }
       if (!source.out.includes(outType)) source.out.push(outType)
       portsByNode.set(e.from, source)
@@ -837,13 +841,13 @@ export function FlowView({
         target: e.to,
         type: "flow",
         // Typed flows land on their named ports (the visible handles): the
-        // source anchor = the source node's own production medium (出锚语义律),
-        // the target anchor = the carried type — with ctx folded into the
-        // shared T anchor (2026-09-12); untyped surfaces fall back to the
-        // node's default handle pair.
+        // source anchor = 出锚产区律 (outPortForEdge — one seat with the
+        // ports list above), the target anchor = the carried type — with
+        // ctx folded into the shared T anchor (2026-09-12); untyped
+        // surfaces fall back to the node's default handle pair.
         ...(e.edgeType
           ? {
-              sourceHandle: `out:${nodeById.get(e.from) ? productionPort(nodeById.get(e.from)!) : e.edgeType}`,
+              sourceHandle: `out:${outPortForEdge(nodeById.get(e.from), e.edgeType)}`,
               targetHandle: `in:${e.edgeType === "ctx" ? "text" : e.edgeType}`,
             }
           : {}),
