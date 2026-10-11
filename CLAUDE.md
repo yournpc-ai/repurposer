@@ -185,10 +185,21 @@ t("home.allProjects", { count: projects.length })
 
 ## Testing
 
-The API test suite was removed because it had drifted from the rapidly changing implementation. Verify changes by running the relevant flow end-to-end instead of relying on a test suite.
+测试资产只保留两类（ADR-114）：**用户主流程旅程矩阵**（各种类型的用户通过 chat 进行的各种创作流程，全旅程）与**承重架构防漂移守卫**（唯一写口 / 依赖方向 / registry↔prompt 一致性等全站铁律看门）。事故回归锁 / 批次产物 / 镜像实现形态的锁不立；新机制的覆盖需求必须能说出「矩阵哪本旅程的哪一步」，说不出归属旅程先回炉。退役 = 自然死亡：重构使哪本红就删哪本，删除逐案过堂，不留注释尸体。
 
-**Exception — deterministic pure-function suites** (`apps/api/tests/*_pure.py`): no database, no LLM, no HTTP; sessions are in-memory stubs. They cover adjudication / pure-mapping layers where branch coverage matters and drift risk is low (the wiring door `apply_wiring_ops` + `_fill_key_for_step`, stream extraction, registry ↔ prompt enumeration consistency). If a behavior needs a real transaction or an LLM to verify, it belongs to an e2e run (chat_scenarios), not here. Run: `cd apps/api && uv run --extra dev python -m pytest tests/<file> -q`.
+**部署前仪式链**（按序全绿才可部署）：
+
+1. 纯 pytest：`cd apps/api && uv run --extra dev python -m pytest tests/ -q`
+2. check_gates（静态架构门：boot 冒烟 / 依赖方向 / 盲重试禁令 / 退役节点 kind 不回魂）：`cd apps/api && uv run python scripts/check_gates.py`
+3. prompt_gate（仅当改动触及 prompt 面——`app/prompts/chat/`、`chat/prompts.py`、registry catalog lines）：`cd apps/api && uv run python scripts/prompt_gate.py`——10 探针（A–I 族，H 含 H4）绝对阈值，`--provider` 参数化（native-tool providers only，探的是工具 loop 线）。失败协议：复跑一次（provider 漂移在阈值内也存在），仍红则二分归因；**永不为放行回归调阈**。
+4. 剧本矩阵（唯一活 LLM 闸，需活 API + dev worker + MiniMax 配额）：`cd apps/api && uv run python scripts/chat_scenarios.py`——S1–S10 用户旅程矩阵对活 API 跑形态级断言，harness 公共断言每本自动携带（SSE 工具 loop 线格式 / Activity 帧形态 / dock 形态 / 估价三断言）。永不锁 LLM 文案（代码强制文本例外）；客户端法律（打字机 / remount / 形态机）不进剧本断言——服务端真值才进。
+
+**仪表层**（诊断尺子，非闸——读数供人工判读，不阻塞部署）：`scripts/reply_quality_probe.py` / `accept_quote_card_family.py` / `reconcile_credits.py` / `verify_beat_map.py` / `crop_track_parity.py` / `run_anatomy_matrix.py` / `craft_anatomy.py`。
+
+**Deterministic pure-function suites** (`apps/api/tests/*_pure.py`): no database, no LLM, no HTTP; sessions are in-memory stubs. They cover adjudication / pure-mapping layers where branch coverage matters and drift risk is low (the wiring door `apply_wiring_ops` + `_fill_key_for_step`, stream extraction, registry ↔ prompt enumeration consistency). If a behavior needs a real transaction or an LLM to verify, it belongs to the scenario matrix, not here. Run: `cd apps/api && uv run --extra dev python -m pytest tests/<file> -q`.
+
+**Web**：10 本 vitest 组件旁置纯函数套件（纯 node 零 DOM）：`cd apps/web && npm test`。
+
+fixture 纪律 / flake 处置 / 配额纪律归 `docs/tasks/test-suite-convergence.md` §3.6 / §5（剧本素材先拷 `scenario/` 前缀；常驻 worker 抢跑律；断言只锁形态，红先归因机制，禁调断言放行）。
 
 **Prompt authoring law**: prompt files carry ONLY current-state law. Model-facing text never names dates / ADR numbers / batch or incident labels / retired forms — every law reads as if it was always the law. `{# #}` comment headers stay one-anchor-line: what the file is + operational constraints (include placement, mirror contracts) — no incident narratives; history lives in git and `docs/DECISIONS.md`. Prose-field schema changes still carry the two typewriter teeth (null-read tolerance + settled-prose pacing).
-
-**Pre-deploy prompt gate (ADR-071 T2)**: any change touching the prompt surface (`app/prompts/chat/`, `chat/prompts.py`, registry catalog lines) must pass `cd apps/api && uv run python scripts/prompt_gate.py` before deploy — three probes with absolute thresholds (start_run / slot handshake / rootless-wish ask_user), `--provider` parameterized over the PROVIDERS registry (native-tool providers only — the gate probes the tool-loop line). On failure: re-run once (provider drift exists even at threshold), then bisect with the A/B instrument `scratch/router_ab_probe.py` — never retune thresholds to make a regression pass. Full pre-deploy ritual: pure pytest → prompt gate → full `scripts/chat_scenarios.py`.
