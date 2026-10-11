@@ -755,7 +755,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 8. **actor 概念不采用**：非行业标准词；技能包构成即"谁执行"的答案。
 
 **Consequences**:
-- **行为零变化**：compile_graph 同输入同图、chat 四态/裁决/dock/checkpoint 不变、run 行为与渲染链不变；剧本测试（S1–S40）为回归网，新增三断言（flow 对账自检 / 报价单调性 / repair 只一轮）。
+- **行为零变化**：compile_graph 同输入同图、chat 四态/裁决/dock/checkpoint 不变、run 行为与渲染链不变；剧本矩阵（S1–S10）为回归网，估价三断言（flow 对账自检 / 报价单调性 / repair 只一轮）沉为 harness 公共断言、每本自动携带。
 - **DX 目标**：加技能 = 加一个包；加 agent = 加一条声明；加产物 = 加一条注册项。
 - 节点友好名 = `NodeBase.label` 派生，不另起平行表；排期以 PROGRESS 为准。
 - **词汇**：NAMING N-29~N-35（无班组词 / Agent 归一 / 无 actor / outputs 派生 / harness 限定 / estimate / kind 同名）。
@@ -772,8 +772,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 **Decision**:
 1. **发射的全部行为载荷 = 预填模板原文**：无 `ChatRequest.recipe_id`、无 `resolve_recipe_launch`、plan path 无校验块与播种块；配方卡发射与 composer 完全同径（建项目 → 上传 → 首条消息），服务端永不见配方身份。
 2. **注册表瘦身不拆除**：`tasks` 技能链保留为启动对账自检的**声明形态**（flow ⊆ 编译图，AGENT_ARCH §4.2；语法经 ADR-043 与请求层统一），不进请求路径；卡面 / 检视 / 示例资产照旧。
-3. **剧本考法**：S5/S11 发模板原文（与真实前端逐字节一致）；无播种确定性剧本（S22 编号留空不回收）。
-4. **后果自担**：任务书形状由 LLM 从模板文案推断（composer 主路同款保证）——dock 可见 + chat 纠偏是产品核心循环，不再设隐藏确定性通道。
+3. **后果自担**：任务书形状由 LLM 从模板文案推断（composer 主路同款保证）——dock 可见 + chat 纠偏是产品核心循环，不再设隐藏确定性通道。
 
 **Consequences**:
 - 这些符号不存在：`ChatRequest.recipe_id` / `resolve_recipe_launch` / service.py 校验块+播种块 / 前端 `recipeId` 链路（useProjectLaunch / chat-stream / 项目页 router state）。
@@ -1393,7 +1392,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 2. **校验分层律**：校验严格度 ∝ 数据关键度。关键载荷（action / tasks / answer / ask / name——驱动付费运行）= 严格 + 修复轮；brief = 咨询性记录——归一化后仍无法解析时**丢字段不杀回合**（`Brief.model_validate` try/except → structlog warning + `brief=None`，回合照活）。
 3. **constraints 合并 = 键控并集**（`_constraint_key` 归一化 + `_SOURCE_RANK` 逐项优先级 + 存储序追加），装配面只渲染条目文本。
 
-**Consequences**: 两种曾杀死生产的形状现在直接解析；纯函数套件 test_brief_pure（11 用例：正典形状 / 旧对象包两种 / 裸字符串 / off-enum 降级 / 不可辨认按无意见 / typed 实例放行 / garbled brief 丢字段不杀回合 / 关键载荷仍严格拒收）。前端零改动（Brief 卡面类型本就不含 constraints）。S12 case 5 改为键控并集矩阵。
+**Consequences**: 两种曾杀死生产的形状现在直接解析；纯函数套件 test_brief_pure（11 用例：正典形状 / 旧对象包两种 / 裸字符串 / off-enum 降级 / 不可辨认按无意见 / typed 实例放行 / garbled brief 丢字段不杀回合 / 关键载荷仍严格拒收）。前端零改动（Brief 卡面类型本就不含 constraints）。merge_brief 来源矩阵（键控并集）座 = `tests/test_brief_pure.py`（自剧本下沉 tests/）。
 
 ## ADR-065: 服务感两拍——修复轮相位帧 + 失败行第一人称认领
 
@@ -1499,11 +1498,11 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 3. **考古不出 token 律**：日期 / ADR 编号 / 历史注永不进模型可见文本——出处住模板头 `{# #}` 注释与本文档；模型只见规则的当前态。**例外判例**：看似考古的行可能有**语义承重**——「lift applies ONLY to the ask-back refusal」限定弹是承重限定不是考古：剥考古括注、留限定本体（模板保留此弹 + "The two rules cooperate: lift the gating, keep the grounding."）。
 4. **规则减负**（探针 A/B 双闸后执行）：死字段 `confidence` 不进 prompt（零消费方；schema 字段留作读容忍）；风格脚手架三禁令 + never-reuse 并入 FREE PHRASING 一条（保留 banned literal 作例）；目标语言 worked examples 两条（同源护栏本体保留）；参数骑行四规则并一；NO-MATERIAL CASE 两行；answer/draft 例表每类 ≤3，start 例表 6 条全量保留（中文例防语言锚定）；EXCEPTION 1/2 并入 Disclosure 段；无 vague 默认链（判词②）。**承重保留**：碎键不起跑 / never invent platform（ADR-060）/ subtitles vs dubbing / whole-source vs highlights（ADR-043）/ presented chain 保全 / 提问三律 / 出书门槛 / key order（打字机律牙）/ pending-question 段 / **no-material 块的块结构（标题 + 子弹组）与 lift 限定弹**（判词③例外）/ echo 块近逐字旧构（ADR-070 换面中性 Start 句、Disclosure 命名）。
 5. **prompt 散文 = 模型契约单一事实源，schema = 人类侧镜像**：provider 调用发 `response_format: {"type": "json_object"}`（`providers/llm/minimax.py`），Pydantic schema（含全部 Field 描述）**从不发送给模型**，纯做解析侧校验；模型唯一可见的形状规格 = prompt 散文。schemas.py 注释做准确镜像 + 路标（"edit the template first, then sync this mirror"）。**json_schema 路线判负**：MiniMax M3 hosted **接受但完全无视** `json_schema` response format（spike 实证：裸 prompt 下输出自由发明结构，必需顶层字段全缺席）；同一 provider 的 **tool_calls 通道的 parameters schema 模型是遵循的**——结构化约束在 M3 上唯一有效的载体是 tool_calls 通道，json_schema 是摆设。未来若要消灭 schema 拒收失败类，路径 = 原生 tool-calling 迁移（~11% 截断率由「JSON parse 失败按 schema 拒收走修复轮」吸收），独立迁移批。chat_intent shape C 骨架带 `default_path`——两相位共用的 skip 路径牙（dock × 与插话提醒消费），只有 `slot` 是 chat loop 留 null。
-6. **prompt 减肥必须过探针闸，且探针必须轮转（双重流程律）**：① **任何 prompt delta 靠探针实测，不靠文本推理**——bisect 仪器 = `scratch/router_ab_probe.py`（合成上下文直调 router，old/new 同 ctx 对比）：三个探针（start 判决 / slot 握手 / 裸愿望）+ **上下文必须复刻剧本真人设状态**（`persona_exists: False`——带人设的探针会给出假绿）。② **探针调用必须 round-robin 交错，禁按变体顺序连跑**——provider 状态以分钟尺度漂移，顺序批把「变体」与「时间」混杂。③ **冗余与限定不是脂肪，小型 open 模型的指令遵循靠它们承重**——承重件 = no-material 块结构 + lift 限定弹 + start 例表 + echo 块结构，减肥不得动它们。
+6. **prompt 减肥必须过探针闸，且探针必须轮转（双重流程律）**：① **任何 prompt delta 靠探针实测，不靠文本推理**——探针闸 = `scripts/prompt_gate.py`（合成上下文直调 router，绝对阈值）：**上下文必须复刻剧本真人设状态**（`persona_exists: False`——带人设的探针会给出假绿）。② **探针调用必须 round-robin 交错，禁按变体顺序连跑**——provider 状态以分钟尺度漂移，顺序批把「变体」与「时间」混杂。③ **冗余与限定不是脂肪，小型 open 模型的指令遵循靠它们承重**——承重件 = no-material 块结构 + lift 限定弹 + start 例表 + echo 块结构，减肥不得动它们。
 7. **混血形状代码侧顺形（断根修复）**：`draft + tasks=[] + ask 对象在场` 是模型表达「我得先问」的自然混血——链裁决**无回 ask 的活路**（repair 只认非空有效链，retry 改判 ask 也算失败）→ 必落拒答行。`service.py` 出书前加读容忍：该形状直接重读为 ask 判决（ask 分支自有误触/已问轮转护栏接手）——任何 prompt 版本下它都落座提问，永不落拒答行。**扩座**：任何 ask 判决（直判或混血翻转）在仍有待决行（任务书或普通问题）时一律转**插话形态**（ask 散文落普通回答 + 普通问题待决时带提醒尾，待决行保持敞开）——docking 会 supersede 任务书行、使确认成孤儿：书行死而 `project.pending_brief` 活，派发读「无待决书」把后续轮路由进 chat loop，"looks good, start" 落成 bare-run wiring 空转、run 永不起。**`_constraint_key` 数字归 `#`**：同键重申恒胜——"under 200 words" 与 "under 100 words" 数字归一后同键、逐项 precedence 原位替换，不攒自相矛盾的双条目。**第二颗牙**：`draft + tasks=[] + 无 ask + answer 在场` 是混血的对偶——模型把能力/元问题的回答写进 echo、走错 action 字段；重读为 answer 判决：播出的散文即最终内容，无拒答无换面（空链永不可 dock——严格优于必降级结局）。
 8. **被跳过槽位的推断值不算根**：出书门槛 `has_root`——topic 槽已在 asked 簿（用户 × 跳过 = 已选默认路径）时，只有 user-stated 的 topic 才算根；模型推断的 topic 不再把书重新有根化、绕过 draft_from_persona 的代码宣言（reason + code echo 双缺席 = 失败形态）。素材在场仍经 material_state 成根（infer-from-material 路径不受影响）；用户后补原话永远算根。
 
-**Consequences**: prompt 面改动的验收三阶段——byte-identical（机械拆分）→ 渲染级 unified diff（减负 delta 可审）→ 轮转探针 A/B + 全量剧本。部署前仪式：纯函数 pytest → prompt gate（`scripts/prompt_gate.py`，三探针绝对阈值 A≥8/B≥8/C≥10；判负先复跑一次再用 A/B 仪器 bisect，永不调阈值迁就回归）→ 全量剧本。工具名枚举的漂移报警 = `ToolEntry.needs_media_file` 旗标（零行为元数据，人工标定）+ `tests/test_prompt_registry_consistency_pure.py`（media-needing / writers 两枚举与注册表对账 + 全模板枚举名注册校验）——MEDIA∪TRANSCRIPT 派生轴会误纳 align_stills（requires=(TRANSCRIPT,) 却为无录音场景而生），故旗标人工标定、测试对账而非自动派生。slot 握手与 start 判决的残留 flake = 模型侧既有方差，非 prompt 杠杆可解；模型把 brief 写成无槽名来源化条目数组的形状天然有损（无槽名无法映射 topic/audience），代码侧顺形无路，挂账为模型侧课题。
+**Consequences**: prompt 面改动的验收三阶段——byte-identical（机械拆分）→ 渲染级 unified diff（减负 delta 可审）→ 轮转探针实测 + 剧本矩阵。部署前仪式链：纯函数 pytest → check_gates → prompt gate（`scripts/prompt_gate.py`，10 探针绝对阈值；判负先复跑一次再二分归因，永不调阈值迁就回归）→ 剧本矩阵 S1–S10。工具名枚举的漂移报警 = `ToolEntry.needs_media_file` 旗标（零行为元数据，人工标定）+ `tests/test_prompt_registry_consistency_pure.py`（media-needing / writers 两枚举与注册表对账 + 全模板枚举名注册校验）——MEDIA∪TRANSCRIPT 派生轴会误纳 align_stills（requires=(TRANSCRIPT,) 却为无录音场景而生），故旗标人工标定、测试对账而非自动派生。slot 握手与 start 判决的残留 flake = 模型侧既有方差，非 prompt 杠杆可解；模型把 brief 写成无槽名来源化条目数组的形状天然有损（无槽名无法映射 topic/audience），代码侧顺形无路，挂账为模型侧课题。
 
 **Related**: ADR-052（提问三律 / 出书门槛——内容不变）、ADR-054（密度律）、ADR-058 / ADR-060（命名与防编造——保留）、ADR-064（顺形律——brief 形状指导保留）、ADR-070
 
@@ -1764,14 +1763,14 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 **明确不做**：不给 `speech_parts` 加 process/value/settled 三角色（harness 层过度修复——prompt 一句话能解决的事不变成机制）；不动 trigger writer（ADR-080 单一叙事者维持）；不动 Canvas；不改 ToolLoop 代码；单任务会话式确认不波及。
 
-**Consequences**: 最终消息只承载三类用户价值言语——「我理解了什么 / 我准备做什么 / 你需要决定什么」；内部执行状态（调用哪个工具、拼几个 task）归 transient 相位帧，永不入持久消息。Interaction Integrity 推进一步：**不是所有真实发生的内部状态都要展示；但展示给用户的每一项状态都必须真实且有用户价值**。回归面 = chat_scenarios S20（A 部未就绪：处理中披露；B 部就绪：grounded 内容词代理断言 + ≥2 task 无言语确认邀请 + 流式律）。prompt 面改动过 prompt gate（ADR-071）。
+**Consequences**: 最终消息只承载三类用户价值言语——「我理解了什么 / 我准备做什么 / 你需要决定什么」；内部执行状态（调用哪个工具、拼几个 task）归 transient 相位帧，永不入持久消息。Interaction Integrity 推进一步：**不是所有真实发生的内部状态都要展示；但展示给用户的每一项状态都必须真实且有用户价值**。回归面 = 剧本矩阵 S2（素材→短片全链，真字节素材真处理）。prompt 面改动过 prompt gate（ADR-071）。
 
 **Related**: ADR-083（信任锚 echo——grounding 链与注入机制不动）/ ADR-080（单一叙事者——trigger 静默维持）/ ADR-070（确认拍 = dock pill 唯一座位）/ ADR-077（工具 loop）
 ## ADR-085: 一回合多交付——Phase / Checkpoint / Settled 三层用户可见交付模型
 
 **Status**: **Implemented** (2026-09-17)；机制有意 opportunistic——checkpoint earned 不配额（判词 3），主路径单读直出时结构性零 checkpoint 是设计不是缺陷（见 Consequences）
 
-**落地座位**：路由与发射在 `tool_loop.py` 的 execute 前座（参数校验一过、execute 之前即发射——读的裁决是参数校验不是执行结果，感知族派发恒观察恒不拒绝，言语提交协议的撤回窗在校验通过时已关；等待读的 execute 阻塞到素材 terminal 态，押在 execute 后发射会把服务员话扣押整场等待、落库时间戳排在活动诞生之后——ADR-104 发射时点修订）：quiet 迭代 + eligible 前驱 + 另一条 read → `on_checkpoint`，≤2 闸，超出丢弃记日志；iteration 0 散文骑 eligible 读前 = checkpoint 座位（ADR-104），非 eligible 读前 = 回退账本；无通道 = 账本兜底；终态调用前的散文永远不走此通道（`not tool.terminal` 守卫——终答散文骑账本入 envelope，checkpoint 化会双说）；资格声明在 `perception/__init__.py`（`checkpoint_eligible`：get_understanding / get_asset / get_craft_skeleton 三席）；持久化在 `service._checkpoint_callback`（`intent={"type":"checkpoint"}` 行，flush-only 随回合一次 commit）；SSE 帧 `assistant.checkpoint` 在 `routes.py`（帧携带落库行 `created_at` 作气泡时间轴锚——ADR-104 排序律）；前端分段在 `ChatDock`（`typeTargetId` + `checkpointChain` 串行化，streamId 主泡不动）；言语语义在 `_read_tools.j2`（CHECKPOINTS 段：结果陈述 = 唯一例外，终答必须独立成文不复读）。确定性回归 = `test_tool_loop_pure.py` 路由用例群（含发射先于 execute 的顺序断言、terminal 守卫）+ `chat_scenarios` S20B opportunistic 形态断言。
+**落地座位**：路由与发射在 `tool_loop.py` 的 execute 前座（参数校验一过、execute 之前即发射——读的裁决是参数校验不是执行结果，感知族派发恒观察恒不拒绝，言语提交协议的撤回窗在校验通过时已关；等待读的 execute 阻塞到素材 terminal 态，押在 execute 后发射会把服务员话扣押整场等待、落库时间戳排在活动诞生之后——ADR-104 发射时点修订）：quiet 迭代 + eligible 前驱 + 另一条 read → `on_checkpoint`，≤2 闸，超出丢弃记日志；iteration 0 散文骑 eligible 读前 = checkpoint 座位（ADR-104），非 eligible 读前 = 回退账本；无通道 = 账本兜底；终态调用前的散文永远不走此通道（`not tool.terminal` 守卫——终答散文骑账本入 envelope，checkpoint 化会双说）；资格声明在 `perception/__init__.py`（`checkpoint_eligible`：get_understanding / get_asset / get_craft_skeleton 三席）；持久化在 `service._checkpoint_callback`（`intent={"type":"checkpoint"}` 行，flush-only 随回合一次 commit）；SSE 帧 `assistant.checkpoint` 在 `routes.py`（帧携带落库行 `created_at` 作气泡时间轴锚——ADR-104 排序律）；前端分段在 `ChatDock`（`typeTargetId` + `checkpointChain` 串行化，streamId 主泡不动）；言语语义在 `_read_tools.j2`（CHECKPOINTS 段：结果陈述 = 唯一例外，终答必须独立成文不复读）。确定性回归 = `test_tool_loop_pure.py` 路由用例群（含发射先于 execute 的顺序断言、terminal 守卫）。
 
 **Context**: ADR-084 关掉过程话之后，「机械感」的结构性根因完整暴露：当前系统只有两个用户可见座位——transient 相位（「在做什么」）与 settled 终答（「最终怎么做」），中间缺了「**我刚发现了什么**」的交付座位。审计坐实 Turn ↔ Message 的 1:1 绑定是**产出契约层**的实现便利而非产品必需：first binding = `LoopResult.prose: str` + `PlanTurnOutcome(Message)`（tool_loop/plan_turn），前端对应物 = streamId 一键一泡；DB（messages 无 turn 分组，assistant 行数无约束）与 SSE（`_sse_pump` 多路复用，`question.preview` 是回合中途结构化帧的现存先例）都不是瓶颈。缺少 checkpoint 座位时，读到的有价值结果只有两个去向：并入终答（ADR-084 已禁的前形态）或退化成无内容的相位标签——「看不到它在干活」与「听到它念操作日志」是同一个缺口的两副面孔。
 
@@ -1785,7 +1784,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 **明确不做**：不改 ToolLoop 的 terminal/max_iterations/账本语义；不展示 raw reasoning / 候选方案 / 概率；不为每个 tool 发 checkpoint；不恢复多 writer（ADR-080 维持）；不引入新 execution architecture（ExecutionAttempt / 新 Agent 状态机 / Media IR / 新里程碑）；不把 registry 变成产品规则系统（只声明资格）。
 
-**Consequences**: Chat 从「一个会生成漂亮答案的聊天框」变成「能看到它在干活的 Agent」——用户看到的是有意义的工作进展，不是内部思维日志。caption 场景理想序列：User → [Phase] 正在读取素材 → [Checkpoint] 我看到了——关于 X 的演讲，核心是 Y（grounded in understanding）→ [Phase] 正在整理计划 → [Settled] 两版字幕：中文双语 + 法语，计划在画布上 → Canvas 结构 / Dock Start。Interaction Integrity 的最终形态：**不是所有真实发生的内部状态都展示；但展示的每一项都必须真实、有结果、有用户价值**。checkpoint 的验收问句：**「这条消息是用户刚刚真的需要知道的信息，还是系统只是想证明自己做过某个动作？」**——前者过，后者禁。**已知风险与验证义务**：路由规则要求「结果陈述后再跟一条 read」才出 checkpoint，主路径 `get_understanding → present_plan`（单读直出）**结构性零 checkpoint**——判断句由终答的 duty ① 承载（ADR-083），这不是缺陷；但如果实测发现 earned 条件在主路径上**系统性过低**、理解锚沦为偶然体验，则重审路由（候选：显式 checkpoint 工具 / 终态前分流），那是一次新评审而不是静默扩闸。命中率数据面 = `tool_loop_checkpoint` structlog（含 predecessor）+ **`tool_loop_turn` 每回合一条汇总**（reads 序列 / eligible_reads / checkpoints / outcome——eligible 占比、eligible→checkpoint 转化、checkpoint→settled 三比例及「哪类 read 真挣到 checkpoint」全可算）+ `chat_scenarios` S21 探针（四场景 PRINT read 序列与 checkpoint 计数，只锁硬律不锁出现）。资格纪律：`checkpoint_eligible` 永是资格不是触发；「信息生产 vs 动作证明」的判定永远归 new + user-relevant + changes understanding。回归面 = chat_scenarios S20B/S21 + `test_tool_loop_pure.py` 五条路由用例；prompt 面改动过 prompt gate（ADR-071）。
+**Consequences**: Chat 从「一个会生成漂亮答案的聊天框」变成「能看到它在干活的 Agent」——用户看到的是有意义的工作进展，不是内部思维日志。caption 场景理想序列：User → [Phase] 正在读取素材 → [Checkpoint] 我看到了——关于 X 的演讲，核心是 Y（grounded in understanding）→ [Phase] 正在整理计划 → [Settled] 两版字幕：中文双语 + 法语，计划在画布上 → Canvas 结构 / Dock Start。Interaction Integrity 的最终形态：**不是所有真实发生的内部状态都展示；但展示的每一项都必须真实、有结果、有用户价值**。checkpoint 的验收问句：**「这条消息是用户刚刚真的需要知道的信息，还是系统只是想证明自己做过某个动作？」**——前者过，后者禁。**已知风险与验证义务**：路由规则要求「结果陈述后再跟一条 read」才出 checkpoint，主路径 `get_understanding → present_plan`（单读直出）**结构性零 checkpoint**——判断句由终答的 duty ① 承载（ADR-083），这不是缺陷；但如果实测发现 earned 条件在主路径上**系统性过低**、理解锚沦为偶然体验，则重审路由（候选：显式 checkpoint 工具 / 终态前分流），那是一次新评审而不是静默扩闸。命中率数据面 = `tool_loop_checkpoint` structlog（含 predecessor）+ **`tool_loop_turn` 每回合一条汇总**（reads 序列 / eligible_reads / checkpoints / outcome——eligible 占比、eligible→checkpoint 转化、checkpoint→settled 三比例及「哪类 read 真挣到 checkpoint」全可算）。资格纪律：`checkpoint_eligible` 永是资格不是触发；「信息生产 vs 动作证明」的判定永远归 new + user-relevant + changes understanding。回归面 = `test_tool_loop_pure.py` 五条路由用例；prompt 面改动过 prompt gate（ADR-071）。
 
 **Related**: ADR-084 / ADR-104（read 前言语归自然 SPEECH 律，read 后的结果言语走 checkpoint 通道）/ ADR-083（信任锚——checkpoint 的 grounding 层级同源）/ ADR-077（工具 loop——checkpoint 是其呈现协议补全，内核不动）/ ADR-080（单一叙事者——checkpoint 不引入第二 writer，它仍是同一 turn 的言语）/ ADR-070（确认拍 = dock pill——Settled 层的 Start 归属不变）
 
@@ -2105,7 +2104,7 @@ quote 输入 = Content Plan 具体字段（精确区间 → 时长 → 渲染单
 
 新探索流与既有 chat 路（`propose_tasks` / `edit_graph`）**并行 → 证明 → 退役**——一刀切永禁；退役扳机 = 旅程四主链 e2e 全绿 + 迁移期无 regression 在册。干脆请求（ADR-088 §9）在新世界 = Content Plan 的零探索退化形态，词表统一。
 
-**修订动词族（迁移弧现状）**：`revise_plan`（plan/chat 双路）/ `revise_output`（chat 专用终态，骑 `_run_wiring_proposal` 同座）/ `revise_selects`（三金钱态）全在册；「修订动词族表达不了的节点级重写」残座复核为**空集**（prompt 消费族节点重写 = revise_output 覆盖；结构性 graph surgery = 能力完备手势缺席）。`edit_graph` 退役扳机 = 全量剧本绿——扳机未扣前并行期继续，零删。旅程三承接面对账表 = 简报 `docs/tasks/agent-working-loop-iter-3.md` §4。
+**修订动词族（迁移弧现状）**：`revise_plan`（plan/chat 双路）/ `revise_output`（chat 专用终态，骑 `_run_wiring_proposal` 同座）/ `revise_selects`（三金钱态）全在册；「修订动词族表达不了的节点级重写」残座复核为**空集**（prompt 消费族节点重写 = revise_output 覆盖；结构性 graph surgery = 能力完备手势缺席）。`edit_graph` 退役扳机 = 剧本矩阵（S1–S10）全绿——扳机未扣前并行期继续，零删。旅程三承接面对账表 = 简报 `docs/tasks/agent-working-loop-iter-3.md` §4。
 
 **`select_clips` 存留裁决**：
 ① **执行世界永不做发现**——发现工作的唯一座位 = chat 边缘 agent 探索链（R6 路由 + 证据 reads + 探索写门）；plan 来源的工作经编译器走 `cut_segments`（Select 证据指针编译期解引用 → 数值区间确定性裁剪），编译器永不编译 `select_clips`（N-56）。② select_clips **保留为旧路（`propose_tasks` 任务链）的执行工具**——它是零探索退化形态在旧路的唯一机制；其退役随旧路（propose_tasks 退役弧 = PROGRESS 需求池挂账「零探索退化形态」）。③ 候选存留面复核：长素材二次裁切 = chat 侧 reads + `revise_selects`（N-58）覆盖；语义连续处理 / execution-time transformation 无在册需求——均不构成保留 LLM 可见性的理由。④ 调用面清单（退役时的机械削除对照表）：注册表 `app/tools/__init__.py` / 节点 `app/tools/clips/node.py` / prompt 面三处（`intent_router_system.j2` / `_specific_instruction.j2` / `_writers_no_material.j2`）/ recipes 预设链与执行侧声明（tracks / morph / orchestrator / lifecycle / derivative_dispatch / decompile / outputs / verify / graph_fill / schemas）/ web 展示键（ChatDock / chatProtocol / i18n / 项目页）。
@@ -2142,7 +2141,7 @@ edit ops 经既有 operations 机制落账（base_hash/409、snapshot undo/redo 
 
 MVP 四件零 LLM 成本——edit 动作不收钱；重渲染 = render $0（自有基建定价的既有裁决不变）；**edit→render 全程无确认闸、计费偏好不作用于该路径**（$0 路径无闸可落 = 设计非缺口；偏好只作用于付费 run 的 plan-confirm 披露分级）。未来涉 LLM 的 op 族（`set_caption_text` 改写类）按 capture_step 既有座位扣。
 
-**Consequences**: 施工 = 注册表 edit_output 终态工具（loop 终态族）+ 解算器服务化 + 剧本 S 席（精确修订旅程）；**operations 的用户级 undo/restore UI = P1**（REST 面已通；无 `undo_edit` chat 动词）。**认知验收**（PROGRESS §0.4 规则 9）必答：agent 看见了什么（产物卡 + 词级 transcript reads）/ 怎么知道自己对了（解算回声 = 「我把 0.0–4.2s 这段去掉了」的事实句）。验收标准：「把开头那句删掉」「第二条再短 3 秒」「字幕换 karaoke」「标题改成 X」四请求族 e2e 全通且 undo 可回滚（含解算器跨 cue/大小写容忍/未命中拒绝/多义拒绝边界面）。
+**Consequences**: 施工 = 注册表 edit_output 终态工具（loop 终态族）+ 解算器服务化 + 剧本座（矩阵 S7 修订第二圈：精确修订旅程）；**operations 的用户级 undo/restore UI = P1**（REST 面已通；无 `undo_edit` chat 动词）。**认知验收**（PROGRESS §0.4 规则 9）必答：agent 看见了什么（产物卡 + 词级 transcript reads）/ 怎么知道自己对了（解算回声 = 「我把 0.0–4.2s 这段去掉了」的事实句）。验收标准：「把开头那句删掉」「第二条再短 3 秒」「字幕换 karaoke」「标题改成 X」四请求族 e2e 全通且 undo 可回滚（含解算器跨 cue/大小写容忍/未命中拒绝/多义拒绝边界面）。
 
 **Related**: ADR-089（终态词表 / 编译移出 LLM——本条是其词表扩员）/ ADR-088（工作循环——edit 是产物打磨拍的主座）/ ADR-069（quote 指认）/ ADR-058（通道分家——chat 修订唯一意图面）/ ADR-016（clip-spec 唯一契约——edit 的参数域）/ ADR-074②（渲染台账律）/ ADR-091（编辑历史 = work 的 operations 链）/ ADR-092（确认闸复用）
 
@@ -2267,7 +2266,7 @@ hold→capture→release 不动；edit→render 维持 $0 定价（自有基建�
 
 **确定性静默补链否决**：「访谈 + 竖屏即自动插入 reframe、不问不说」的确定性补链方案被否——方向必须经 agent 说出、用户选择，选择面不收缩。确定性兜底（只认用户已选的结构化证据）挂账：实测若 LLM 组链仍有漏选，另批评估（届时需 suggestion 选项的结构化指令载荷，属新机制）。
 
-**验证座**：chat_scenarios 新增常驻回归——访谈素材 → 用户选分镜方向 → 断言链含 reframe_clip 且成片带 crop_track（确定性尾）。
+**验证座**：剧本矩阵 S8（访谈→分镜）——访谈素材真处理 → 用户口头选定分镜方向 → 链必含 select_clips + reframe_clip → 成片 render_spec 带 crop_track。
 
 ### 3. prompt 面修正（prompt authoring law：现在时法律，零引号例句）
 
@@ -2277,7 +2276,7 @@ trigger beat ① 的引号示例判句整删，替换为 §1 护栏的抽象表�
 
 `_MENU_PHRASES` 的 reframe_clip 行从画幅机械语言升格为语义语言（智能分镜 / 镜头跟人），注册表文案 en/zh 同改；能力问答面由此能说出分镜能力。
 
-**Consequences**: 访谈素材静默中央裁剪的结构通路关闭；agent 方向评判获得诚实性约束；想法回合说得出分镜、用户选定后链必含分镜；能力问答能说出分镜。零 schema / 零工具改动——reframe_clip 工具不动，动的全是选择律与措辞面。验证 = prompt_gate 三探针 + chat_scenarios 分镜必含座与相关座回归 + 访谈素材 live e2e（验收 = 想法回合说得出分镜方向、选定后同素材产出分镜成片）。
+**Consequences**: 访谈素材静默中央裁剪的结构通路关闭；agent 方向评判获得诚实性约束；想法回合说得出分镜、用户选定后链必含分镜；能力问答能说出分镜。零 schema / 零工具改动——reframe_clip 工具不动，动的全是选择律与措辞面。验证 = prompt_gate + 剧本矩阵 S8（分镜必含座）与相关座回归 + 访谈素材 live e2e（验收 = 想法回合说得出分镜方向、选定后同素材产出分镜成片）。
 
 **Related**: ADR-058（展示文案二源律）/ ADR-089（能力编译与执行边界——能力清单是编译事实，选择律在本条）/ prompt authoring law（CLAUDE.md Testing 节）/ RECIPES §4.8（配方准入——分镜能力的用户面承诺）
 
@@ -2556,13 +2555,13 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 
 ### 7. 言语提交协议（Speech Commit Protocol）
 
-**凡依赖终态裁决的言语，裁决落地前永不 commit。** DeferredFrames（缓冲+落地时刻再裁决）从素材待命专用推广到一切可被 validator 拒绝的终态调用（`present_plan` echo 等）：被拒言语从未对用户发生，"落地与已流出不一致"的对账问题随之消亡——**代码永不解析自然语言散文去判定承诺**（已告诉用户什么永远由结构化终态 payload 约束）。与终态裁决无关的安全言语（世界已确认的事实、对话性言语）不缓冲、照常即流。协议最小形态 = 四态机 **OPEN → BUFFERING → ACCEPT→FLUSH / REJECT→DROP→RETRY**（RETRY 陈 buffer 必清）；DeferredFrames 自然演化为此机，不重写、不建第二套 speech routing。打字机律的精确语义 = **禁整段瞬移**，非"首字即流"——校验后打字机释放完全守律；方案回合首字延迟 = 校验时长，定案接受（死寂由 StatusLine 相位叙事覆盖），永不建 token 级"安全段"识别（那要求模型自标安全段 = 自报状态，禁）。代码侧盖 `interaction_policy_version` 戳（观测与回归用，不进模型面）；装配器无独立 few-shot 通道（context.py 明示 "not a chat-history dump"，历史回合 = 会话证据非行为示范）——在途旧会话不做历史清洗，旧腔调风险由新架构 golden suite 的「旧历史 × 新政策」回归场景覆盖。
+**凡依赖终态裁决的言语，裁决落地前永不 commit。** DeferredFrames（缓冲+落地时刻再裁决）从素材待命专用推广到一切可被 validator 拒绝的终态调用（`present_plan` echo 等）：被拒言语从未对用户发生，"落地与已流出不一致"的对账问题随之消亡——**代码永不解析自然语言散文去判定承诺**（已告诉用户什么永远由结构化终态 payload 约束）。与终态裁决无关的安全言语（世界已确认的事实、对话性言语）不缓冲、照常即流。协议最小形态 = 四态机 **OPEN → BUFFERING → ACCEPT→FLUSH / REJECT→DROP→RETRY**（RETRY 陈 buffer 必清）；DeferredFrames 自然演化为此机，不重写、不建第二套 speech routing。打字机律的精确语义 = **禁整段瞬移**，非"首字即流"——校验后打字机释放完全守律；方案回合首字延迟 = 校验时长，定案接受（死寂由 StatusLine 相位叙事覆盖），永不建 token 级"安全段"识别（那要求模型自标安全段 = 自报状态，禁）。代码侧盖 `interaction_policy_version` 戳（观测与回归用，不进模型面）；装配器无独立 few-shot 通道（context.py 明示 "not a chat-history dump"，历史回合 = 会话证据非行为示范）——在途旧会话不做历史清洗，旧腔调风险由剧本矩阵 S6（纯咨询不死路：旧 lane 历史不劫持新政策）+ prompt_gate I 探针（浏览问永不两级跳劫持）覆盖。
 
 ### 8. 默认值吸收边界
 
 "默认值能扛的参数永不阻塞"的边界判定 = 五词清单：**reversibility / risk / surprise / commitment / cost**——五项全不命中 → 默认吸收（字幕模式/背景音乐/字体）；命中其一 → 必问（公开发布/发布目标/覆盖资产/高成本模式/权限/删除），即便有默认值。caption gate 据此拆除：`_needs_caption_mode_question` 双调用点 + stash/replay 机械整删；既有设施保留复用——`caption_mode` 的 `Literal["bilingual","source_only","target_only"]` schema 校验（schemas.py:673）、`_caption_choice_is_meaningful` 推导（无第二语言时跳过戏剧化提问）、Start 经 Confirmed Scope 读**当前卡面值**。`caption_mode` 落为方案卡**可见可改的事实行**（手改骑既有 prior_intent 通道），局部拆除不升级为参数系统重构。FRAMING（镜头跟人选择）同构，登记需求池候选（批H，不随本批施工）。
 
-**Consequences**: 浏览问有档可去（answer+suggestions），"先按金句卡方向走"式指令与"下面按…归类"式 schema 漏出由宪法①②承接而非新车道；被拒言语永不流出，事故③整类消亡（含"静默丢条目"——未被公开承诺的东西无需交代）；caption 阻塞问消失；宪法替代约 40% 言语形态 lane 文本，删除经逐簇零假设探针（3 smoke → 8-12 关键剧本 → 定点重放，baseline/candidate 交错）在新架构 golden suite 上度量。否决备查：① browse/recommend 车道立法（批A——穷举老路，撤回）；② Decision Contract 自报字段（`mode/commitment/blocking`——模型声明状态与世界漂移的反模式）；③ token 级安全前缀识别（需模型自标，禁）；④ 代码 NLP 解析散文对账（终变成另一个 LLM evaluator）；⑤ suggestions 塞进 mentions（语义不同：指认实体 vs 交互选项）；⑥ 在途会话历史清洗（历史 = 工作上下文，版本戳+回归场景已覆盖）；⑦ 悲观串行（先校验后流出——死寂首字延迟，被乐观缓冲替代）。
+**Consequences**: 浏览问有档可去（answer+suggestions），"先按金句卡方向走"式指令与"下面按…归类"式 schema 漏出由宪法①②承接而非新车道；被拒言语永不流出，事故③整类消亡（含"静默丢条目"——未被公开承诺的东西无需交代）；caption 阻塞问消失；宪法替代约 40% 言语形态 lane 文本，删除经逐簇零假设探针（3 smoke → 8-12 关键剧本 → 定点重放，baseline/candidate 交错）在剧本矩阵（S1–S10）+ prompt_gate 上度量。否决备查：① browse/recommend 车道立法（批A——穷举老路，撤回）；② Decision Contract 自报字段（`mode/commitment/blocking`——模型声明状态与世界漂移的反模式）；③ token 级安全前缀识别（需模型自标，禁）；④ 代码 NLP 解析散文对账（终变成另一个 LLM evaluator）；⑤ suggestions 塞进 mentions（语义不同：指认实体 vs 交互选项）；⑥ 在途会话历史清洗（历史 = 工作上下文，版本戳+回归场景已覆盖）；⑦ 悲观串行（先校验后流出——死寂首字延迟，被乐观缓冲替代）。
 
 **Related**: ADR-052（厚 agent——判断归产品层一个 agent 的延伸）/ ADR-087（Confirmation Doctrine——谱系与确认教义同座）/ ADR-088/089（北极星——付费执行只从已确认范围开始，Code Guard 同族）/ ADR-093（言语真值/起始句言语权）/ ADR-094（方向否决资格——宪法①的执行细节）/ ADR-095（三寄存器——活动行修宪同族）/ ADR-058（二源律）/ ADR-060（echo 防编造——宪法⑤同族）
 
@@ -2634,7 +2633,7 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 3. **服务员话术律**：素材 STILL PROCESSING 时读之前的言语只能是服务员话（收到 + 这就去看 + 要几分钟）——无提案、无方向建议、无问句；方案言语永远在读完之后。座位 = `plan_turn.py` 的 STILL PROCESSING 行。
 4. **空散文护栏补位**：`present_plan` 增空散文拒绝（ask_user 座同形）——静默律删除后言语模式更连贯，bare 终端调用预计减少；但 tool-result → tool-call 偏置永存，护栏是兜底不是主力。
 
-**Consequences**: 过程叙事（"I'll pull…"）重新合法——非 eligible 读前的言语仍并入终答前缀（账本兜底语义不变），接受为代价，以答复质量尺（reply_quality_probe）监测；S20 剧本的「过程话负向标记 / read-silent 流式空读」断言随之翻转，需同步修订；`test_iteration_zero_prose_stays_in_the_ledger` 改写为两席分测（eligible 读前 → checkpoint / 非 eligible 读前 → 账本）。ADR-084 其余决策（语义角色 / grounding 两态 / Start CTA 归属）不动。prompt 面改动过 prompt gate（ADR-071）。
+**Consequences**: 过程叙事（"I'll pull…"）重新合法——非 eligible 读前的言语仍并入终答前缀（账本兜底语义不变），接受为代价，以答复质量尺（reply_quality_probe）监测；回归座 = `test_tool_loop_pure.py` 的 iteration-zero 散文 checkpoint 路由用例群。ADR-084 其余决策（语义角色 / grounding 两态 / Start CTA 归属）不动。prompt 面改动过 prompt gate（ADR-071）。
 
 **Related**: ADR-084（G1 被本条翻案，余者不动）/ ADR-085（iteration-0 豁免语义从兜底变常态）/ ADR-102（等待读机制——相位帧 liveness 不变）
 
@@ -2805,7 +2804,7 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 
 **Consequences**: 活 LLM 闸从「41 本平铺无人跑」收敛为「10 本矩阵部署前可跑」；check_gates 从僵尸仪式变真闸。故意放弃的覆盖知情在案：失败不扣费（旧 S14）/ 孤儿 hold 回收（旧 S15）/ run 执行权仲裁（旧 S17）/ turn durability（旧 S19）/ SSE 断流复连（旧 S-int-14）/ repair 静默与泄漏锁（旧 S-int-12/13）不再有自动化看护（纯函数层仍有部分残盖：test_execution_fencing / test_run_authority 等承重不动）。文档座位批随施工合同批 3 落地（CLAUDE.md Testing 重写 / AGENT_ARCH §10 / verification-contracts 重写为合同↔承重守卫映射 / 本条 Related 各 ADR 的剧本座句处置）。
 
-**Related**: ADR-071（T2 闸存续；探针计数 3→10 修正、router_ab_probe 死链删除随批 3）/ ADR-099（S-int golden suite 退役；旧腔调风险覆盖改由矩阵 S6 纯咨询 + prompt_gate I 承载）/ ADR-084 / ADR-085 / ADR-093 / ADR-104 / ADR-109（S20/S21 回归座句随批 3 处置——打字机律承重座 = paceSettledProse 与 vitest 层）/ ADR-039 / ADR-040 / ADR-064 / ADR-089 / ADR-090 / ADR-094（剧本编号引用随批 3 同步）/ `docs/tasks/verification-overhaul.md`（P0/P1 翻案，P3 存续）
+**Related**: ADR-071（T2 闸存续）/ ADR-099 / ADR-084 / ADR-085 / ADR-093 / ADR-104 / ADR-109（打字机律承重座 = paceSettledProse 与 vitest 层）/ ADR-039 / ADR-040 / ADR-064 / ADR-089 / ADR-090 / ADR-094 / `docs/tasks/verification-overhaul.md`（P0/P1 翻案，P3 存续）
 
 ## ADR-115: 卡面解剖 v4——素材卡阅读型 + 成片卡 NLE 检视轴 + 信息秩三分
 
