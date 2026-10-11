@@ -34,6 +34,11 @@ Enable thought leaders, subject-matter experts, and executives to **zero-edit** 
 
 > 战略论证（2027 凭什么赢、品味/身份/信任三资产哲学）的唯一事实源是 [STRATEGY.md](./STRATEGY.md)；本表只做结论性陈述，不展开论证。
 
+### 2.4 Capability Doctrine（中心思想）
+
+剪辑操作深度与 AI 生成广度长在 **agent 的技能注册表**里——它是开放的、持续延伸的清单，是后续能力投资的中心。能力增长永不以新增用户操作面为代价：新增能力 = 新增技能注册项，不是新增 UI 面板；用户要会的东西不随能力变多。
+
+
 ---
 
 ## 3. Background & Problem

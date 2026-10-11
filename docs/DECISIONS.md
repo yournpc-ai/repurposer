@@ -2786,6 +2786,27 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 
 **Related**: ADR-086（判词①枚举修订——transcript 移出「可编辑中间工作产品」枚举，改判「素材卡的内容层」）/ ADR-097（transcript 的 companion 身份退役——不再是 artifact，是 asset 的面）/ ADR-112（cue 结构化 + hover 显时 + 服务端预格式化 label 由本条继承并改写座位：spec 落库 → 读面派生）/ ADR-057（零投影——图不再存显示副本，本条是修法正身）/ ADR-067（出锚语义律不动；入锚精确化）/ ADR-016（clip-spec 唯一渲染契约不动——轨道栈只是它的读面投影）/ Workspace 合同 v4.2 C4（双层不变量搬家，永不反算时间码）/ `docs/VIDEO_EDITOR.md` L3（编排永禁）
 
+## ADR-114: 测试体系收敛——主流程矩阵为唯一活 LLM 闸，机制不立锁
+
+**Status**: Decided（2026-10-10 用户拍板：六代理全层审计 + 四组退役名单过堂全数通过）；施工合同 = `docs/tasks/test-suite-convergence.md`
+
+**Context**: 测试资产六层（剧本 41 本 / 纯 pytest 51 本 918 例 / vitest 11 本 / check_gates 8 门 / prompt_gate 12 探针 / scripts 仪器 24 件）全层审计实证：淤积集中在「为某次拍的锁」——剧本层 C4 浓缩 12 本后五周涨回 41 本（事故锁 S-int-10~14、机制锁 S17~S22 族）；check_gates 零接线（dev.sh/CI/Makefile/docs 零引用，只是批次施工时手工想起的仪式）；accept_prompt_surface 自红一个月无人跑（顺形律批把配方模板改成用户腔后脚本内硬抄模板未同步，自带漂移闸必 fail）；prompt_gate H2/H3 与 H 同一条 decode 律的纯参数变体、I 阈值从未实测校准（违反闸门自家「从读数校准」教义）；文档四处漂移（「三探针」计数 / router_ab_probe 死链 / 「S1–S12」/ S50~S53 死引用）。钉现行法的层天然健康——纯 pytest 51 本中死机制实证仅 1 本（repair_visibility 的 on_repair 死槽）+ 1 本假绿（wire_tiers 锁零调用函数且与 loud-failure 现役律矛盾）；vitest 11 本中唯一干净删除是测第三方库的 utils.test.ts。用户判词：不要过度设计，降低心智负担；高速迭代期很多东西都会过时；无需保留为某次而针对的测试内容；始终需要的主流程测试 = 各种类型的用户通过 chat 进行的各种类型的创作流程。
+
+**Decision**:
+
+1. **两类保留三类删除**：保留 = ① 用户主流程旅程（chat 创作全链：进入 → 计划 → 确认 → 开工 → 产物 → 修订）② 承重架构防漂移守卫（唯一写口 / 依赖方向 / registry↔prompt 一致性等全站铁律看门）；删除 = 事故回归锁 / 批次产物 / 死机制与镜像实现形态的锁。
+2. **剧本 = 唯一活 LLM 闸，41 → 10 本用户旅程矩阵**（编号连续重排 S1–S10，旧 S 号全部作废——第二次）：迷失全旅程 / 素材→短片（含途中插话 + chat 修订）/ 素材→探索决策包 / 无素材图文 / 调研写作 / 纯咨询不死路 / 精确编辑第二圈 / 访谈分镜 / 付费边界 / Remix 旗舰。**机制不再立独立剧本**；SSE 线格式 / Activity 帧形态 / dock 形态 / 估价三断言沉为 harness 公共断言、每本自动携带；进程内纯函数矩阵（materialize / merge_brief / transcript 序）下沉 `tests/`。形态级断言纪律不变（永不锁 LLM 文案，代码强制文本例外）。
+3. **退役规则 = 自然死亡**：重构使哪本红就删哪本；不立自动退役制度，删除逐案过堂。
+4. **纯 pytest 删 6 本**：test_repair_visibility_pure（死槽）/ test_wire_tiers_pure（零调用 + 与现役律矛盾）/ test_frame_aspect_pure（私有镜像锁）/ test_material_wait_pure（负空间锁）/ test_output_delete_pure（语句顺序锁）/ test_autofork_pure（演示事故出生）。test_check_gates_pure **保留**（闸接线后它是唯一看守 5a/5b/5c 牙口正则的座）；修 test_exploration_tools_pure 的假绿断言（探索族已在生产分发，前提过时）。vitest 删 utils.test.ts；stagingUploads 保留（事故出生但 pin 的是上传主流程契约）。
+5. **check_gates 删僵尸牙 + 接线**：删 Gate 2（平行映射旧名 grep——新名字的同类违规看不见，守僵尸不守不变式）+ Gate 4 非 checkpoint 条款（`kind="checkpoint"` 字符串条款保留——ADR-085 reclaim 后它是活牙）；门编号留洞不重排；脚本明载进部署前仪式（CLAUDE.md Testing），终结零接线状态。
+6. **prompt_gate 12 → 10**：删 H2/H3（与 H 同一 decode 律的标量/字符串填充变体，每全闸省 24 轮真 LLM 调用零机制损失；H4 保留——四族中唯一经读工具的枚举映射链）；G 补 edit_output-never 负形子句、升格为开放 craft 修订代表；I 保留但阈值标「未校准」，首次定带跑后按读数校准（跑归用户，永不为放行回归调阈）。
+7. **scripts 仪器删 6 件**：spike_reframe（ADR-045 一次性前置闸，产物已内化进 reframe 实现）/ reframe_smoke（依赖仓库外本机文件，重启断链）/ track_model_fixture（一次性验收 fixture 无注册座）/ accept_prompt_surface（验收轴已被顺形律批翻案——模板不再点名工具形态）/ migrate_to_tos / backfill_graph（一次性迁移，git 历史即档案）。migrate_activity_log_rows 生产跑完再删（CHAT_ARCHITECTURE 引用随删同步）。bake_* 六件 = demo 再生路径，刻意留存不动。
+8. **verification-overhaul 部分翻案**：P0 用例目录由 10 本矩阵取代；P1 普查 + 过堂由本审计执行完毕（本 Decision §4~§7 即退役名单）；P2 = 施工合同批 1/2；P3 归位（harness/ 分家 + VERIFICATION.md 升格）保留为后续独立批，其 harness 纪律（fixture 前缀 / worker 抢跑 / 进程卫生 / 配额）继续现行。
+
+**Consequences**: 活 LLM 闸从「41 本平铺无人跑」收敛为「10 本矩阵部署前可跑」；check_gates 从僵尸仪式变真闸。故意放弃的覆盖知情在案：失败不扣费（旧 S14）/ 孤儿 hold 回收（旧 S15）/ run 执行权仲裁（旧 S17）/ turn durability（旧 S19）/ SSE 断流复连（旧 S-int-14）/ repair 静默与泄漏锁（旧 S-int-12/13）不再有自动化看护（纯函数层仍有部分残盖：test_execution_fencing / test_run_authority 等承重不动）。文档座位批随施工合同批 3 落地（CLAUDE.md Testing 重写 / AGENT_ARCH §10 / verification-contracts 重写为合同↔承重守卫映射 / 本条 Related 各 ADR 的剧本座句处置）。
+
+**Related**: ADR-071（T2 闸存续；探针计数 3→10 修正、router_ab_probe 死链删除随批 3）/ ADR-099（S-int golden suite 退役；旧腔调风险覆盖改由矩阵 S6 纯咨询 + prompt_gate I 承载）/ ADR-084 / ADR-085 / ADR-093 / ADR-104 / ADR-109（S20/S21 回归座句随批 3 处置——打字机律承重座 = paceSettledProse 与 vitest 层）/ ADR-039 / ADR-040 / ADR-064 / ADR-089 / ADR-090 / ADR-094（剧本编号引用随批 3 同步）/ `docs/tasks/verification-overhaul.md`（P0/P1 翻案，P3 存续）
+
 ## ADR-115: 卡面解剖 v4——素材卡阅读型 + 成片卡 NLE 检视轴 + 信息秩三分
 
 **Status**: Decided（2026-10-09 用户拍板；形态原型 = `scratch/media-card-anatomy.html` 信息秩三分定稿，基于项目 1aeb9787 真实数据）；施工合同 = `docs/tasks/media-card-anatomy.md`

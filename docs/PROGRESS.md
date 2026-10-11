@@ -19,6 +19,7 @@
 
 | Batch | 内容 | 状态 | 施工合同 |
 |---|---|---|---|
+| **测试体系收敛（ADR-114）** | 哲学收敛：两类保留（主流程旅程 + 承重守卫）三类删除（事故锁 / 批次产物 / 死机制锁）；批 1 删除批（pytest 6 本 + vitest 1 本 + scripts 6 件 + check_gates 僵尸牙 + prompt_gate H2/H3 + G/I 修）→ 批 2 剧本 41→10 主流程矩阵（机制不立锁、公共断言沉 harness、三本下沉 tests/）→ 批 3 文档座位批（CLAUDE.md Testing 重写 + check_gates 接线明载 + 受影响 ADR 条文处置）；退役名单已经用户四组过堂（六代理全层审计 2026-10-10） | 已拍板待开工 | `tasks/test-suite-convergence.md` |
 | Docs Slimming B1+B2 | 文档历史物理隔离（B1 `e7bb212`）+ 本入口恢复（B2 `fde345e`）；B3+（ADR 瘦身 / 架构文档去重等）重新审计后再评估 | ✅ 完成（完成即停线） | `tasks/docs-slimming-b1-b2.md` |
 | **Product Flow Alignment** | Upload Staging Session → 统一相位/readiness gate → Product Graph 语义模型 + Layout（拓扑空间权威三律）→ 画布出生编排 → E2E——root cause 清单 L1-L5；架构地基 = ADR-086；需求池「画布可读性②」随 Batch C 吸收。**Batch A（upload staging）+ Batch B（相位清除协议 I-PFA-06 定型 + readiness gate I-PFA-07）+ Batch C-0（Product Graph 契约模块 `app/pipeline/product_graph.py` + canonical fixture，只定义不碰布局）代码已落**；Batch B 验收 PASS WITH RUNTIME GAPS（P0 runtime checks 用户自跑）；**C-0 收口 = PASS WITH DEBT**（fixture 13/13 绿；F1/F2 消解规则随 C-1 开工落档，F3 ctx 漂移待裁决）；**C-1（rank 单一事实源接线）代码已落**——服务端 `GraphNode.rank` 上线（read-time projection）+ `layout.ts` settled 投影改吃 rank（depthOf 退出图画布路径）；**C-2（RunOp 执行序解耦）代码已落**——排序键 = (rank, id) 拓扑序永不读 layout.x，modifier 执行序经 ungated rank 保全。**验收口径 = Greenfield**（不做旧数据兼容验收；只验全新项目 → 上传 → Generate → Canvas → Revision 链路）——验收中，通过即 C-0/C-1/C-2 收口，C-3/D 是否动工由产品需求倒推裁决 | 施工中 | `tasks/product-flow-alignment.md` |
 
