@@ -685,7 +685,7 @@ function TranscriptSection({
            seek (with a player); the playing row lights, the lineage
            interval lights amber. */
         <div
-          className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-mask-image:linear-gradient(to_bottom,black_calc(100%_-_26px),transparent_100%)] [mask-image:linear-gradient(to_bottom,black_calc(100%_-_26px),transparent_100%)]"
+          className="nowheel nopan thin-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-mask-image:linear-gradient(to_bottom,black_calc(100%_-_32px),transparent_100%)] [mask-image:linear-gradient(to_bottom,black_calc(100%_-_32px),transparent_100%)]"
           onScroll={() => setChip(null)}
         >
           <div className="flex flex-col gap-1">
@@ -954,7 +954,7 @@ function NleAxis({
                       setChip(null)
                       onLineageHover?.(null)
                     }}
-                    className="nodrag absolute top-0 bottom-0 flex items-center gap-1.5 overflow-hidden rounded-md bg-primary px-2 text-left text-primary-foreground transition-[filter] hover:brightness-110"
+                    className="nodrag absolute top-0 bottom-0 flex items-center gap-1.5 overflow-hidden rounded-md bg-track-video px-2 text-left text-track-video-foreground transition-[filter] hover:brightness-[0.96] dark:hover:brightness-110"
                     style={{
                       left: pct(block.out_start),
                       width: pct(block.out_end - block.out_start),
@@ -1031,7 +1031,7 @@ function NleAxis({
               {m === "music" ? <Music className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
             </span>
             <div className="relative h-[22px] flex-1">
-              <span className="absolute inset-0 flex items-center gap-1.5 rounded-md bg-muted px-2 text-muted-foreground">
+              <span className="absolute inset-0 flex items-center gap-1.5 rounded-md bg-track-audio px-2 text-track-audio-foreground">
                 {m === "music" ? (
                   <Music className="h-3 w-3 shrink-0" />
                 ) : (

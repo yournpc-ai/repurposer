@@ -23,9 +23,10 @@ Lane laws:
   (``group_cues``) WITHIN each segment — a cut is a hard sentence break —
   then shifted to the output axis. Labels are preformatted ``m:ss–m:ss``
   (the client never formats time).
-- ``ruler``: the NLE axis's scale — ticks at a nice-step density with
-  labels preformatted (``None`` label = a minor tick; ADR-115 — the one
-  time-formatting seat covers the scale too, the client draws geometry
+- ``ruler``: the NLE axis's scale — major-only ticks at a nice-step
+  density, labels preformatted (``None`` label = a tick whose label
+  surrendered to a cramped named end; it stays as geometry. ADR-115 — the
+  one time-formatting seat covers the scale too, the client draws geometry
   only). ``t=0`` and ``t=total`` always carry labels.
 - ``modifiers``: presence only (``music`` = music.enabled, ``dub`` = dub
   non-null) — the modifier lanes' content face is a later batch.
@@ -65,7 +66,8 @@ class TextLaneBlock(TypedDict):
 
 class RulerTick(TypedDict):
     """One scale tick on the output axis (ADR-115): ``label`` preformatted
-    ``m:ss`` on the major steps, ``None`` on the minor ones."""
+    ``m:ss``; ``None`` = the label surrendered to a cramped named end — the
+    tick stays as geometry."""
 
     t: float
     label: str | None
@@ -109,9 +111,9 @@ def _respaced(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _ruler_ticks(total: float) -> list[RulerTick]:
     """The NLE axis's scale on the output timeline (ADR-115).
 
-    Major step = the first nice value keeping ≤10 labeled ticks (a 45s
-    clip reads 0:00–0:45 by fives; a 7min clip by minutes); minor = major/5
-    (dropped when sub-second). ``t=0`` and ``t=total`` always labeled —
+    Major-only: the first nice step keeping ≤10 labeled ticks (a 45s clip
+    reads 0:00–0:45 by fives; a 7min clip by minutes) — no minor comb, the
+    lane between labels stays clean. ``t=0`` and ``t=total`` always labeled —
     the axis's ends never go unnamed. Labels preformatted (one seat).
     A named end riding within ~8% of the axis under the previous label
     would smudge into it (a few px at the lane's width): the earlier label
@@ -125,17 +127,13 @@ def _ruler_ticks(total: float) -> list[RulerTick]:
         big = step
         if total / step <= 10:
             break
-    small = big / 5 if big / 5 >= 1 else big
     ticks: list[RulerTick] = []
     k = 0
     while True:
-        t = k * small
+        t = k * big
         if t > total + 1e-6:
             break
-        labeled = abs(t / big - round(t / big)) < 1e-6
-        ticks.append(
-            RulerTick(t=round(t, 3), label=fmt_cue_time(t) if labeled else None)
-        )
+        ticks.append(RulerTick(t=round(t, 3), label=fmt_cue_time(t)))
         k += 1
     if ticks and abs(ticks[-1]["t"] - total) > 0.05:
         ticks.append(RulerTick(t=round(total, 3), label=fmt_cue_time(total)))

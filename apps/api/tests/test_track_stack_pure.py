@@ -132,12 +132,11 @@ def test_text_lane_latin_tokens_regain_their_space():
 
 def test_ruler_short_clip_steps_by_fives_with_labeled_ends():
     ticks = _ruler_ticks(45.0)
-    labeled = [t for t in ticks if t["label"] is not None]
-    assert [t["t"] for t in labeled] == [float(s) for s in range(0, 46, 5)]
-    assert labeled[0]["label"] == "0:00"
-    assert labeled[-1]["label"] == "0:45"
-    # Minor ticks carry no label (geometry only).
-    assert any(t["label"] is None for t in ticks)
+    # Major-only (no minor comb): the ticks ARE the labeled steps.
+    assert [t["t"] for t in ticks] == [float(s) for s in range(0, 46, 5)]
+    assert all(t["label"] is not None for t in ticks)
+    assert ticks[0]["label"] == "0:00"
+    assert ticks[-1]["label"] == "0:45"
 
 
 def test_ruler_step_law_scales_with_duration():
@@ -165,6 +164,7 @@ def test_ruler_end_label_surrenders_the_cramped_major():
     # two labels a few px apart smudge, so the major keeps its tick but
     # surrenders its label to the end.
     ticks = _ruler_ticks(45.64)
+    assert [t["t"] for t in ticks] == [float(s) for s in range(0, 46, 5)] + [45.64]
     assert ticks[-1] == {"t": 45.64, "label": "0:45"}
     at45 = next(t for t in ticks if t["t"] == 45.0)
     assert at45["label"] is None
@@ -172,10 +172,9 @@ def test_ruler_end_label_surrenders_the_cramped_major():
     assert labeled[:3] == [0.0, 5.0, 10.0] and 40.0 in labeled
 
 
-def test_ruler_end_on_a_minor_tick_still_surrenders():
-    # 46.0 lands exactly on an unlabeled minor (1s minors, 5s majors): the
-    # end takes its label, and the cramped 45s major one second under it
-    # surrenders.
+def test_ruler_end_on_an_off_step_total_still_surrenders():
+    # 46.0 lands off the 5s majors: the end appends its own named tick, and
+    # the cramped 45s major one second under it surrenders.
     ticks = _ruler_ticks(46.0)
     assert ticks[-1] == {"t": 46.0, "label": "0:46"}
     at45 = next(t for t in ticks if t["t"] == 45.0)

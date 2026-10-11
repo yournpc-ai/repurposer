@@ -232,8 +232,8 @@ export interface TrackStackTextBlock {
   label: string
 }
 
-/** One scale tick on the NLE axis's ruler (ADR-115): `label` preformatted
- * on the major steps, null on the minor ones (geometry only). */
+/** One scale tick on the NLE axis's ruler (ADR-115): `label` preformatted;
+ * null = the label surrendered to a cramped named end (geometry only). */
 export interface TrackStackRulerTick {
   t: number
   label: string | null
