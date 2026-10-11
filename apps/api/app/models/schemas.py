@@ -3402,8 +3402,8 @@ class TrackStackVideoBlock(BaseModel):
     """One kept segment of a clip product on the OUTPUT timeline, plus its
     SOURCE range and the source asset's id (the cross-highlight's data —
     ADR-113 §6; None when the spec carries no asset identity). ``src_label``
-    is the preformatted ``m:ss–m:ss`` source range (the client never formats
-    time)."""
+    / ``out_label`` are the preformatted ``m:ss–m:ss`` source/output ranges
+    (the client never formats time)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -3413,6 +3413,7 @@ class TrackStackVideoBlock(BaseModel):
     src_end: float
     asset_id: str | None = None
     src_label: str = ""
+    out_label: str = ""
 
 
 class TrackStackTextBlock(BaseModel):
@@ -3427,17 +3428,30 @@ class TrackStackTextBlock(BaseModel):
     label: str
 
 
+class TrackStackRulerTick(BaseModel):
+    """One scale tick on the NLE axis's ruler (ADR-115): ``label`` is
+    preformatted on the major steps, None on the minor ones (geometry only;
+    the client never formats time)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    t: float
+    label: str | None = None
+
+
 class TrackStackResponse(BaseModel):
-    """The deliverable card's track-stack inspection face (ADR-113 §4):
-    video lane (kept segments concatenated on the output clock) + text lane
-    (caption sentences per segment, cut = hard break) + modifier presence.
-    Read-only — never an orchestration surface (L3). Derived at read time
-    from ``render_spec``; None on non-clip products."""
+    """The deliverable card's track-stack inspection face (ADR-113 §4;
+    ADR-115 NLE 轴): video lane (kept segments concatenated on the output
+    clock) + text lane (caption sentences per segment, cut = hard break) +
+    the ruler scale + modifier presence. Read-only — never an orchestration
+    surface (L3). Derived at read time from ``render_spec``; None on
+    non-clip products."""
 
     model_config = ConfigDict(extra="forbid")
 
     video_lane: list[TrackStackVideoBlock]
     text_lane: list[TrackStackTextBlock]
+    ruler: list[TrackStackRulerTick] = []
     modifiers: dict[str, bool]
 
 

@@ -176,3 +176,26 @@ def test_modifiers_are_presence_only():
     assert stack["modifiers"] == {"music": True, "dub": True}
     stack = build_track_stack(_spec([_seg(0.0, 5.0)], music={"enabled": False}))
     assert stack["modifiers"] == {"music": False, "dub": False}
+
+
+# ---- response schema parity -------------------------------------------------
+
+
+def test_stack_survives_the_response_schema_round_trip():
+    """Producer↔boundary parity guard: build_track_stack's TypedDict and
+    TrackStackResponse are two seats of one shape — if one grows a field the
+    other must follow in the same batch, else the read path 500s at
+    validation (extra="forbid")."""
+    from app.models.schemas import TrackStackResponse
+
+    stack = build_track_stack(
+        _spec(
+            [_seg(179.0, 225.0)],
+            caption_track=[_word("你好", 179.5, 180.5)],
+            music={"enabled": True},
+        )
+    )
+    assert stack is not None
+    parsed = TrackStackResponse.model_validate(stack)
+    assert parsed.video_lane[0].out_label == "0:00–0:46"
+    assert parsed.ruler[-1].label == "0:46"
