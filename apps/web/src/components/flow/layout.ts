@@ -144,9 +144,6 @@ export const PRODUCT_PAGER_PX = 44
  * _TRACKED_CLIP_TOOLS) lands in the same batch; change one, change both. */
 export const NLE_HEAD_PX = 16
 export const NLE_RULER_PX = 22
-/** The lane rows' left gutter: icon 20 + gap 6 — the ruler and the axis
- * head indent past it so their left edge IS the lanes' left edge. */
-export const NLE_GUTTER_PX = 26
 export const NLE_VIDEO_LANE_PX = 34
 export const NLE_TEXT_LANE_PX = 22
 export const NLE_MODIFIER_LANE_PX = 22

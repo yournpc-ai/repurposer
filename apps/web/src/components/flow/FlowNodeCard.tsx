@@ -4,20 +4,16 @@ import { createPortal } from "react-dom"
 import {
   ArrowUp,
   AudioLines,
-  Captions,
   ChevronLeft,
   ChevronRight,
   Clapperboard,
   Copy,
   Download,
   FileText,
-  Film,
   Image as ImageIcon,
   Images,
   Maximize2,
-  Mic,
   MoreHorizontal,
-  Music,
   Newspaper,
   PencilLine,
   Quote,
@@ -833,9 +829,8 @@ function NleAxis({
   return (
     <div className="shrink-0 px-3 pb-3 pt-1.5">
       {/* 轴头行: score at the right end (h-4 reservation even when empty —
-          geometry never shifts). Indented past the gutter so its left edge
-          IS the lanes'. */}
-      <div className="ml-[26px] flex h-4 items-center justify-end">
+          geometry never shifts). Flush with the lanes (no gutter). */}
+      <div className="flex h-4 items-center justify-end">
         {score !== null && (
           <span
             title={output?.score?.reason ?? undefined}
@@ -848,7 +843,7 @@ function NleAxis({
       {/* Ruler: the server-formatted scale — click seeks, the needle's host
           box (its left/right edges ARE the lanes'). */}
       <div
-        className="nodrag relative ml-[26px] h-[22px] cursor-pointer"
+        className="nodrag relative h-[22px] cursor-pointer"
         onClick={(e) => {
           e.stopPropagation()
           if (total <= 0) return
@@ -899,17 +894,14 @@ function NleAxis({
           </span>
         )}
       </div>
-      {/* The lanes: gutter icon + lane box per row. */}
+      {/* The lanes: full-width boxes, no gutter icons (the lane's fill hue
+          is its label). */}
       <div className="flex flex-col gap-1">
         <div
-          className="flex items-center gap-1.5"
+          className="relative h-[34px]"
           role="group"
           aria-label={t("results.canvas.videoTrack")}
         >
-          <span className="flex w-5 shrink-0 justify-center text-meta-foreground">
-            <Film className="h-3 w-3" />
-          </span>
-          <div className="relative h-[34px] flex-1">
             {lane.length === 0 || total <= 0 ? (
               <span className="absolute inset-0 rounded-md bg-muted" />
             ) : (
@@ -954,29 +946,23 @@ function NleAxis({
                       setChip(null)
                       onLineageHover?.(null)
                     }}
-                    className="nodrag absolute top-0 bottom-0 flex items-center gap-1.5 overflow-hidden rounded-md bg-track-video px-2 text-left text-track-video-foreground transition-[filter] hover:brightness-[0.96] dark:hover:brightness-110"
+                    className="nodrag absolute top-0 bottom-0 flex items-center overflow-hidden rounded-md bg-track-video px-2 text-left text-track-video-foreground transition-[filter] hover:brightness-[0.96] dark:hover:brightness-110"
                     style={{
                       left: pct(block.out_start),
                       width: pct(block.out_end - block.out_start),
                     }}
                   >
-                    <Film className="h-3 w-3 shrink-0 opacity-80" />
                     <span className="truncate text-[11px] leading-none">{label}</span>
                   </button>
                 )
               })
             )}
           </div>
-        </div>
         <div
-          className="flex items-center gap-1.5"
+          className="relative h-[22px]"
           role="group"
           aria-label={t("results.canvas.textTrack")}
         >
-          <span className="flex w-5 shrink-0 justify-center text-meta-foreground">
-            <Captions className="h-3 w-3" />
-          </span>
-          <div className="relative h-[22px] flex-1">
             {sentences.length === 0 || total <= 0 ? (
               <span className="absolute inset-0 rounded-sm bg-muted" />
             ) : (
@@ -1012,14 +998,13 @@ function NleAxis({
               ))
             )}
           </div>
-        </div>
         {/* 修饰道 (presence face — the content face is a later batch): arrive
             with the product, BELOW the text lane (the NLE order); the anchor
             shifts on that same beat (pager precedent). */}
         {activeModifiers.map((m) => (
           <div
             key={m}
-            className="flex items-center gap-1.5"
+            className="relative h-[22px]"
             role="group"
             aria-label={
               m === "music"
@@ -1027,23 +1012,13 @@ function NleAxis({
                 : t("results.canvas.modifierDub")
             }
           >
-            <span className="flex w-5 shrink-0 justify-center text-meta-foreground">
-              {m === "music" ? <Music className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
-            </span>
-            <div className="relative h-[22px] flex-1">
-              <span className="absolute inset-0 flex items-center gap-1.5 rounded-md bg-track-audio px-2 text-track-audio-foreground">
-                {m === "music" ? (
-                  <Music className="h-3 w-3 shrink-0" />
-                ) : (
-                  <Mic className="h-3 w-3 shrink-0" />
-                )}
-                <span className="truncate text-[10px]">
-                  {m === "music"
-                    ? t("results.canvas.modifierMusic")
-                    : t("results.canvas.modifierDub")}
-                </span>
+            <span className="absolute inset-0 flex items-center rounded-md bg-track-audio px-2 text-track-audio-foreground">
+              <span className="truncate text-[10px]">
+                {m === "music"
+                  ? t("results.canvas.modifierMusic")
+                  : t("results.canvas.modifierDub")}
               </span>
-            </div>
+            </span>
           </div>
         ))}
       </div>

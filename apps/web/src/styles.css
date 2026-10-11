@@ -584,10 +584,10 @@ body {
   /* NLE 检视轴道块 (ADR-115): the video lane's kept-segment blocks read in
    * lavender, the modifier lanes (music/dub) in pink — pastel fill + deep
    * same-hue foreground, both schemes; never a per-instance color value. */
-  --track-video: oklch(0.92 0.03 293);
-  --track-video-foreground: oklch(0.40 0.1 293);
-  --track-audio: oklch(0.92 0.035 340);
-  --track-audio-foreground: oklch(0.42 0.11 340);
+  --track-video: oklch(0.85 0.075 293);
+  --track-video-foreground: oklch(0.42 0.16 290);
+  --track-audio: oklch(0.87 0.07 350);
+  --track-audio-foreground: oklch(0.45 0.15 350);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -650,10 +650,10 @@ body {
   --lineage: oklch(0.85 0.13 90 / 22%);
   /* NLE 检视轴道块 (ADR-115): the same lavender/pink lanes, spoken deep in
    * dark mode — the fill sinks, the foreground lifts. */
-  --track-video: oklch(0.36 0.05 293);
-  --track-video-foreground: oklch(0.86 0.06 293);
-  --track-audio: oklch(0.36 0.055 340);
-  --track-audio-foreground: oklch(0.86 0.065 340);
+  --track-video: oklch(0.40 0.08 293);
+  --track-video-foreground: oklch(0.86 0.08 293);
+  --track-audio: oklch(0.42 0.08 350);
+  --track-audio-foreground: oklch(0.87 0.08 350);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
