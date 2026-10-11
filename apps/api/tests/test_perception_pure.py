@@ -51,6 +51,7 @@ def test_registry_shape_and_naming_law() -> None:
         "search_transcript",
         "get_segment",
         "get_artifact",
+        "get_graph",
     }
     for name, entry in PERCEPTION_TOOLS.items():
         assert re.fullmatch(r"(get|list|search)_[a-z_]+", name), name

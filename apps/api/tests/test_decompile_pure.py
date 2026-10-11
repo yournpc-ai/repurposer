@@ -481,6 +481,7 @@ def _video(asset_id: str, name: str, project_id: str | None = None):
         project_id=project_id,
         type=AssetType.VIDEO,
         file_url=f"s3://x/{name}",
+        display_name=name,
     )
 
 
