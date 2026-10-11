@@ -161,24 +161,21 @@ def test_ruler_never_exceeds_ten_labels_and_handles_zero():
 
 def test_ruler_end_label_surrenders_the_cramped_major():
     # 45.64s with 5s majors: the t=45 major sits 0.64s under the named end —
-    # two labels a few px apart smudge, so the major keeps its tick but
-    # surrenders its label to the end.
+    # two ticks a few px apart smudge, so the cramped major leaves the scale
+    # entirely (label AND tick); the named end stays.
     ticks = _ruler_ticks(45.64)
-    assert [t["t"] for t in ticks] == [float(s) for s in range(0, 46, 5)] + [45.64]
+    assert [t["t"] for t in ticks] == [float(s) for s in range(0, 41, 5)] + [45.64]
     assert ticks[-1] == {"t": 45.64, "label": "0:45"}
-    at45 = next(t for t in ticks if t["t"] == 45.0)
-    assert at45["label"] is None
-    labeled = [t["t"] for t in ticks if t["label"] is not None]
-    assert labeled[:3] == [0.0, 5.0, 10.0] and 40.0 in labeled
+    assert all(t["t"] != 45.0 for t in ticks)
+    assert ticks[0]["label"] == "0"
 
 
 def test_ruler_end_on_an_off_step_total_still_surrenders():
     # 46.0 lands off the 5s majors: the end appends its own named tick, and
-    # the cramped 45s major one second under it surrenders.
+    # the cramped 45s major one second under it leaves the scale.
     ticks = _ruler_ticks(46.0)
     assert ticks[-1] == {"t": 46.0, "label": "0:46"}
-    at45 = next(t for t in ticks if t["t"] == 45.0)
-    assert at45["label"] is None
+    assert all(t["t"] != 45.0 for t in ticks)
 
 
 def test_stack_carries_the_ruler():

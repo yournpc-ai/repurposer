@@ -66,11 +66,11 @@ class TextLaneBlock(TypedDict):
 
 class RulerTick(TypedDict):
     """One scale tick on the output axis (ADR-115): ``label`` preformatted
-    ``m:ss``; ``None`` = the label surrendered to a cramped named end — the
-    tick stays as geometry."""
+    ``m:ss`` (the origin reads bare "0"). Every rendered tick is labeled — a
+    major cramped by the named end leaves the scale, never rides unlabeled."""
 
     t: float
-    label: str | None
+    label: str
 
 
 class TrackStack(TypedDict):
@@ -116,10 +116,10 @@ def _ruler_ticks(total: float) -> list[RulerTick]:
     lane between labels stays clean. ``t=0`` and ``t=total`` always labeled —
     the axis's ends never go unnamed; the origin reads bare "0" (the zero
     point carries no clock tail). Labels preformatted (one seat).
-    A named end riding within ~8% of the axis under the previous label
-    would smudge into it (a few px at the lane's width): the earlier label
-    surrenders — its tick stays as geometry, the end stays named. ``t=0``
-    never surrenders.
+    A named end riding within ~8% of the axis under the previous tick
+    would smudge into it (a few px at the lane's width): the cramped tick
+    leaves the scale entirely — the end stays named, ``t=0`` never
+    surrenders.
     """
     if total <= 0:
         return []
@@ -141,17 +141,16 @@ def _ruler_ticks(total: float) -> list[RulerTick]:
     elif ticks:
         # The end lands on a tick — it always carries its label.
         ticks[-1]["label"] = fmt_cue_time(total)
-    if len(ticks) >= 2 and ticks[-1]["label"] is not None:
-        prev = next(
-            (tick for tick in reversed(ticks[:-1]) if tick["label"] is not None),
+    if len(ticks) >= 2:
+        prev_idx = next(
+            (i for i in range(len(ticks) - 2, -1, -1) if ticks[i]["t"] > 0),
             None,
         )
         if (
-            prev is not None
-            and prev["t"] > 0
-            and (ticks[-1]["t"] - prev["t"]) / total < 0.08
+            prev_idx is not None
+            and (ticks[-1]["t"] - ticks[prev_idx]["t"]) / total < 0.08
         ):
-            prev["label"] = None
+            del ticks[prev_idx]
     return ticks
 
 

@@ -232,11 +232,12 @@ export interface TrackStackTextBlock {
   label: string
 }
 
-/** One scale tick on the NLE axis's ruler (ADR-115): `label` preformatted;
- * null = the label surrendered to a cramped named end (geometry only). */
+/** One scale tick on the NLE axis's ruler (ADR-115): `label` preformatted
+ * (the origin reads bare "0"). Every rendered tick is labeled — a major
+ * cramped by the named end leaves the scale, never rides unlabeled. */
 export interface TrackStackRulerTick {
   t: number
-  label: string | null
+  label: string
 }
 
 /** The track-stack read-face projection (ADR-113 §4; ADR-115 NLE 轴): video

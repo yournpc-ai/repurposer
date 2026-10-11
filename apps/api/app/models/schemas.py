@@ -3430,13 +3430,14 @@ class TrackStackTextBlock(BaseModel):
 
 class TrackStackRulerTick(BaseModel):
     """One scale tick on the NLE axis's ruler (ADR-115): ``label`` is
-    preformatted; None = the label surrendered to a cramped named end (the
-    tick stays as geometry; the client never formats time)."""
+    preformatted (the origin reads bare "0"; the client never formats time).
+    Every rendered tick is labeled — a major cramped by the named end leaves
+    the scale, never rides unlabeled."""
 
     model_config = ConfigDict(extra="forbid")
 
     t: float
-    label: str | None = None
+    label: str
 
 
 class TrackStackResponse(BaseModel):

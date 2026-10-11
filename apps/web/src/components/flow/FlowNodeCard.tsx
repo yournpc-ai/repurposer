@@ -755,12 +755,13 @@ function TranscriptSection({
 }
 
 /** The deliverable card's NLE 检视轴 (ADR-115 — 成片卡检视解剖): below the
- * media, a read-only timeline — the axis HEAD (the clip's score at the right
- * end, moved off the media stage), the RULER (server-formatted scale, click
+ * media, a read-only timeline — the RULER (server-formatted scale, click
  * = seek), the VIDEO lane (kept segments as real clip objects — multi-block
  * multi-source, per-block lineage hover + click seek), the TEXT lane
  * (caption blocks with ZERO inner text — the sentence and its range ride
  * the L1 hover chip), and any MODIFIER lanes (music/dub presence face).
+ * All lanes ONE height (34px). The score is NOT here — it rides the media's
+ * hover chrome (MediaProductRegion).
  * READ-ONLY + seek (L3 — never an orchestration surface: no drag, no
  * add/remove track, no transition handles; the lanes are how the user READS
  * the product). 信息秩三分: L0 structure persists on the card, L1 readings
@@ -773,7 +774,6 @@ function TranscriptSection({
  * preformatted from the server (the client never formats time). */
 function NleAxis({
   output,
-  topClipScore,
   videoRef,
   onLineageHover,
 }: {
@@ -781,9 +781,6 @@ function NleAxis({
    * lanes off the new member). Stack-less (draft / non-clip) = the muted
    * empty rows. */
   output?: Output
-  /** The node's top clip score (ADR-112 ③ — the top-pick read needs the
-   * ≥2-scored-clips context, computed by the read face). */
-  topClipScore?: number
   videoRef?: RefObject<HTMLVideoElement | null>
   onLineageHover?: FlowCardData["onLineageHover"]
 }) {
@@ -818,28 +815,10 @@ function NleAxis({
   const [chip, setChip] = useState<{ rect: DOMRect; content: ReactNode } | null>(null)
   const chipFrom = (e: React.MouseEvent, content: ReactNode) =>
     setChip({ rect: e.currentTarget.getBoundingClientRect(), content })
-  // 评分撤下舞台入轴头 (ADR-115): the bare score at the head's right end —
-  // the same ADR-112 ③ law (top pick only with ≥2 scored clips), quiet meta
-  // chrome instead of the on-stage badge (tracked cards only; the untracked
-  // anatomies keep the stage badge).
-  const score = typeof output?.score?.value === "number" ? output.score.value : null
-  const topPick = !!topClipScore && topClipScore > 0 && score === topClipScore
   const frac = total > 0 ? Math.min(Math.max(playhead / total, 0), 1) : 0
   const pct = (v: number) => `${(v / total) * 100}%`
   return (
-    <div className="shrink-0 px-4 pb-1.5 pt-0.5">
-      {/* 轴头行: score at the right end (h-4 reservation even when empty —
-          geometry never shifts). Flush with the lanes (no gutter). */}
-      <div className="flex h-4 items-center justify-end">
-        {score !== null && (
-          <span
-            title={output?.score?.reason ?? undefined}
-            className="text-[10px] tabular-nums text-muted-foreground"
-          >
-            {topPick ? `${t("results.topPick")} · ${score}` : score}
-          </span>
-        )}
-      </div>
+    <div className="shrink-0 px-4 pb-1 pt-1">
       {/* Ruler: the server-formatted scale — click seeks, the needle's host
           box (its left/right edges ARE the lanes'). */}
       <div
@@ -856,35 +835,29 @@ function NleAxis({
             <span key={i}>
               <span
                 aria-hidden
-                className="absolute bottom-0 w-px bg-meta-foreground"
-                style={{
-                  left: pct(tick.t),
-                  height: tick.label ? 9 : 5,
-                  opacity: tick.label ? 0.9 : 0.55,
-                }}
+                className="absolute bottom-0 h-[9px] w-px bg-meta-foreground opacity-90"
+                style={{ left: pct(tick.t) }}
               />
-              {tick.label ? (
-                <span
-                  aria-hidden
-                  className="text-meta absolute top-0 -translate-x-1/2 text-[9px] tabular-nums"
-                  style={{ left: pct(tick.t) }}
-                >
-                  {tick.label}
-                </span>
-              ) : null}
+              <span
+                aria-hidden
+                className="text-meta absolute top-0 -translate-x-1/2 text-[9px] tabular-nums"
+                style={{ left: pct(tick.t) }}
+              >
+                {tick.label}
+              </span>
             </span>
           ))}
         {total > 0 && (
           /* 跨道播放头: one needle from the ruler's top through the lanes —
              its host box spans exactly the lanes' width. Height = ruler 22 +
-             ruler gap 6 + video 34 + lane gap 8 + text 22 + 30 per modifier
+             ruler gap 6 + video 34 + lane gap 8 + text 34 + 42 per modifier
              lane (mirror of layout.ts NLE_* — change one, change both). */
           <span
             aria-hidden
             className="pointer-events-none absolute top-0 z-10 w-px bg-foreground"
             style={{
               left: `${frac * 100}%`,
-              height: 22 + 6 + 34 + 8 + 22 + activeModifiers.length * 30,
+              height: 22 + 6 + 34 + 8 + 34 + activeModifiers.length * 42,
             }}
           >
             <span className="absolute -top-0.5 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[3.5px] border-t-[5px] border-x-transparent border-t-foreground" />
@@ -945,10 +918,16 @@ function NleAxis({
                       setChip(null)
                       onLineageHover?.(null)
                     }}
-                    className="nodrag absolute top-0 bottom-0 flex items-center overflow-hidden rounded-md bg-track-video px-2 text-left text-track-video-foreground transition-[filter] hover:brightness-[0.96] dark:hover:brightness-110"
+                    className="nodrag absolute top-0 bottom-0 flex items-center overflow-hidden rounded-md bg-track-video px-2 text-left text-track-video-foreground ring-1 ring-inset ring-track-video-foreground/25 transition-[filter] hover:brightness-[0.96] dark:hover:brightness-110"
                     style={{
                       left: pct(block.out_start),
-                      width: pct(block.out_end - block.out_start),
+                      // 分段分界: a block that doesn't touch the axis's end
+                      // shaves 1px off its right — ring + hairline air reads
+                      // each kept segment as its own clip object.
+                      width:
+                        block.out_end >= total
+                          ? pct(block.out_end - block.out_start)
+                          : `calc(${pct(block.out_end - block.out_start)} - 1px)`,
                     }}
                   >
                     <span className="truncate text-[11px] leading-none">{label}</span>
@@ -958,12 +937,12 @@ function NleAxis({
             )}
           </div>
         <div
-          className="relative h-[22px]"
+          className="relative h-[34px]"
           role="group"
           aria-label={t("results.canvas.textTrack")}
         >
             {sentences.length === 0 || total <= 0 ? (
-              <span className="absolute inset-0 rounded-sm bg-muted" />
+              <span className="absolute inset-0 rounded-md bg-muted" />
             ) : (
               sentences.map((block, i) => (
                 <button
@@ -984,14 +963,15 @@ function NleAxis({
                     )
                   }
                   onMouseLeave={() => setChip(null)}
-                  className={cn(
-                    "nodrag absolute top-0 bottom-0 rounded-[2px] bg-muted shadow-[1px_0_0_0_var(--card)] transition-colors hover:bg-accent",
-                    i === 0 && "rounded-l-md",
-                    i === sentences.length - 1 && "rounded-r-md",
-                  )}
+                  className="nodrag absolute top-0 bottom-0 rounded-md bg-muted ring-1 ring-inset ring-foreground/10 transition-colors hover:bg-accent"
                   style={{
                     left: pct(block.out_start),
-                    width: pct(block.out_end - block.out_start),
+                    // 分段分界 — same law as the video lane: a block that
+                    // doesn't touch the axis's end shaves 1px off its right.
+                    width:
+                      block.out_end >= total
+                        ? pct(block.out_end - block.out_start)
+                        : `calc(${pct(block.out_end - block.out_start)} - 1px)`,
                   }}
                 />
               ))
@@ -1003,7 +983,7 @@ function NleAxis({
         {activeModifiers.map((m) => (
           <div
             key={m}
-            className="relative h-[22px]"
+            className="relative h-[34px]"
             role="group"
             aria-label={
               m === "music"
@@ -1432,9 +1412,12 @@ function outputVariants(output: Output): { label: string; sub?: string; thumbUrl
 
 /** The media product region (done state, media-carrying product): the
  * clip's MP4 PLAYS INLINE (muted ambient loop, recipe-gallery 同款); hover
- * affordances: expand top-LEFT, sound top-RIGHT; score / quality ride the
- * media's bottom corners as badges; a rendering clip projects its state in
- * place as the BrandLoader (never a spinner, never a status line). */
+ * affordances: expand top-LEFT, sound top-RIGHT; the score is hover chrome
+ * too on tracked cards (the NLE axis carries no head row — 2026-10-11
+ * 走查拍板), a persistent bottom-left badge on the untracked anatomies;
+ * quality rides the media's bottom-right; a rendering clip projects its
+ * state in place as the BrandLoader (never a spinner, never a status
+ * line). */
 function MediaProductRegion({
   node,
   output,
@@ -1442,7 +1425,7 @@ function MediaProductRegion({
   onExpandMedia,
   fill,
   videoRef,
-  hideScore,
+  hoverScore,
 }: {
   node: FlowNode
   output: Output
@@ -1457,10 +1440,10 @@ function MediaProductRegion({
    * blocks seek it (`currentTime = out_start` — 只拨头, the ambient-muted
    * law untouched). */
   videoRef?: RefObject<HTMLVideoElement | null>
-  /** 评分撤下舞台入轴头 (ADR-115): a tracked card reads its score at the
-   * NLE axis's head — the on-stage badge stays the UNtracked anatomies'
-   * seat. */
-  hideScore?: boolean
+  /** score 回舞台 hover (2026-10-11 走查拍板): a tracked card reads its
+   * score as a hover-revealed badge on the media face (the axis carries no
+   * head row); untracked anatomies keep the persistent badge. */
+  hoverScore?: boolean
 }) {
   const { t } = useTranslation()
   const score = typeof output.score?.value === "number" ? output.score.value : null
@@ -1631,17 +1614,21 @@ function MediaProductRegion({
           )}
         </span>
       )}
-      {/* Media meta badges: the score rides the bottom-left corner (unless
-          the card's NLE axis owns it — 评分撤下舞台入轴头, ADR-115); the
-          top corners belong to the hover affordances (expand left, sound
-          right). The duration is NOT a badge — it lives in the factsbar
-          below the card (2026-08-17 二轮走查拍板). */}
-      {score !== null && !renderFailed && !hideScore && (
+      {/* Media meta badges: the score rides the bottom-left corner — hover-
+          revealed on tracked cards (the NLE axis owns no head row), persistent
+          on the untracked anatomies; the top corners belong to the hover
+          affordances (expand left, sound right). The duration is NOT a badge
+          — it lives in the factsbar below the card (2026-08-17 二轮走查拍板). */}
+      {score !== null && !renderFailed && (
         <span
           title={output.score?.reason ?? undefined}
           className={cn(
             "absolute bottom-2 left-2 rounded px-1.5 py-0.5 text-[10px] font-medium",
             topPick ? "bg-primary text-primary-foreground" : "bg-black/70 text-white",
+            // Same reveal law as MediaHoverButton — pointer-hover gated,
+            // always on under (hover: none) (iPad 触摸, 2026-08-19 R4).
+            hoverScore &&
+              "opacity-0 transition-opacity group-hover/media:opacity-100 [@media(hover:none)]:opacity-100",
           )}
         >
           {topPick ? `${t("results.topPick")} · ${score}` : score}
@@ -2441,7 +2428,7 @@ function GraphCard({
               onExpandMedia={onExpandMedia}
               fill={!hasProgramRegion(node)}
               videoRef={tracked ? productVideoRef : undefined}
-              hideScore={tracked}
+              hoverScore={tracked}
             />
           )
         ) : (
@@ -2496,7 +2483,6 @@ function GraphCard({
         {tracked && (
           <NleAxis
             output={output}
-            topClipScore={node.topClipScore}
             videoRef={productVideoRef}
             onLineageHover={onLineageHover}
           />

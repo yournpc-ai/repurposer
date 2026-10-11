@@ -393,16 +393,16 @@ _ASSET_FRAME_DEFAULT = _FRAME_CLASS["asset"]
 _TRANSCRIPT_SECTION_PX = 197  # divider 1 + pad 8 + header 20 + gap 6 + cue flow 150 + pad 12
 _ASSET_TEXT_ONLY_H = 266  # caption 26 + section 196 + toolbar 44
 
-# NLE 检视轴预留 (ADR-115 — 成片卡解剖: media + 轴头 + ruler + 视频道 +
+# NLE 检视轴预留 (ADR-115 — 成片卡解剖: media + ruler + 视频道 +
 # 文字道 + bar): the tracked clip families' cards carry the inspection axis
 # FROM BIRTH (draft renders muted empty lanes — the waiting seat, so the
 # video in-port's anchor never moves mid-life; 锚点律). Modifier lanes add
-# 30px each at runtime (their presence is unknown at draft — the arrival
+# 42px each at runtime (their presence is unknown at draft — the arrival
 # grows INTO the media's flex, the birth reservation never carries them).
 # ONE law with the client mirror (layout.ts NLE_AXIS_PX / TRACKED_CLIP_TOOLS
 # — tool-set parity, never a kind+prototype proxy: reframe/music share
 # video×editor without carrying the lanes).
-_NLE_AXIS_PX = 116  # pad 2 + head 16 + ruler 22 + ruler gap 6 + video lane 34 + gap 8 + text lane 22 + pad 6
+_NLE_AXIS_PX = 112  # pad 4 + ruler 22 + ruler gap 6 + video lane 34 + gap 8 + text lane 34 + pad 4
 _TRACKED_CLIP_TOOLS = frozenset({"select_clips", "translate_clip", "dub_clip"})
 
 # The task-book document's role tag. Production stopped (Workspace 合同
