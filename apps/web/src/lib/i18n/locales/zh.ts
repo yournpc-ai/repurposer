@@ -730,6 +730,14 @@ const zh: Resources = {
     renameTitle: "重命名项目",
     renamePlaceholder: "项目名称",
     deleteDesc: "「{{title}}」及其所有切片、帖子和聊天记录将被永久删除。",
+    selection: {
+      count: "已选 {{count}} 项",
+      delete: "删除",
+      clear: "取消选择",
+      toggle: "选择项目",
+      deleteConfirm: "删除 {{count}} 个项目？",
+      deleteDesc: "所选项目及其所有切片、帖子和聊天记录将被永久删除。",
+    },
   },
   projectMenu: {
     open: "项目菜单",

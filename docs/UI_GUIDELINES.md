@@ -40,7 +40,7 @@
 - **填充优先——发丝线是兜底不是默认**：填充已能区分前后（`bg-muted` chip 在 `bg-card` 面板上、媒体内容在页面上）→ 零环零边。`ring-foreground/10` 只为同 fill 边界存在（白卡在白页上、冰霜 modal 在 backdrop wash 上）。同 fill 元素需要分离时，优先**调它的填充阶**，不画线。
 - **Hero 面 = 完全平**：home composer = 灰页上的白平卡（发丝线、无 shadow）。**Composer 卡禁用 `backdrop-filter`**——祖先 backdrop-filter 会成为 Backdrop Root，后代 MentionPicker 的 blur 只采样其子树（无物可 blur → 退化为纯染色）。
 - 媒体 / 示意图 tile 无环无影（填充步分离）。gallery 封面 tile = **`bg-card` 浮起面**（页面已有灰底，封面是白卡：light 0.96→1.0 / dark 0.12→0.21 高程步）；hover chrome = **仅右上 expand 钮**（`bg-accent` token 步）——整卡 cursor-pointer + expand 已足够表达可点；线条吃 `foreground` alpha。
-- **媒体列表项 = 平时扁平，hover 才出座**（Flora 式，先例 `/projects` 网格的 ProjectCard）：rest 零壳零环零填充（缩略图自身填充就是与页面的唯一分离），hover 整件浮 `bg-accent` 圆角座；行内动作钮（⋯ 族）rest 隐身，`group-hover` / `focus-within` / 菜单 open 三态显形（opacity 互换非 display——保键盘可达与槽位几何）。
+- **媒体列表项 = 平时扁平，hover 才出交互态**（Flora 式，先例 `/projects` 网格的 ProjectCard）：rest 零壳零环零填充（缩略图自身填充就是与页面的唯一分离）；**hover = 媒体区 `ring-foreground/20` 交互环 + 浮动钮显形，非 bg 座**——accent 座是列表行语言，贴在媒体上只沿 padding 缝显形（糊框），环直接抱住媒体区（空井/视频通吃）；交互环归 focus ring 同族（交互不是描边），/10 发丝线禁令不适用于此座。行内动作钮（⋯ 族）rest 隐身，`group-hover` / `focus-within` / 菜单 open 三态显形（opacity 互换非 display——保键盘可达与槽位几何）。**多选解剖**：缩略图左上选择圈（rest 隐身同 ⋯ 律；选中 = `bg-foreground` 实底 + Check——筛选 pill active 同 token，选中态全由圈表达，卡面不加常驻座），底部多选条 = 视口底中锚定的 `overlay-surface` 浮层（计数 + 批量动作 + × 清选），批量动作只放真实存在的（禁虚构货架）。
 
 ### 4.1 Gallery 卡状态机（ADR-048 + RECIPES §4 / §4.8）
 

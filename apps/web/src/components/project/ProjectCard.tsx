@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router"
-import { FolderKanban, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { Check, FolderKanban, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -37,9 +37,14 @@ interface ProjectCardProps {
   project: Project
   /** Refetch hook for the list after a rename/delete goes through. */
   onChanged?: () => void
+  /** Bulk-selection state (page-owned). Selected cards keep the accent seat;
+   * the circle itself hides on live-run projects (delete is refused mid-run,
+   * same law as the ⋯ menu). */
+  selected?: boolean
+  onToggleSelect?: () => void
 }
 
-export function ProjectCard({ project, onChanged }: ProjectCardProps) {
+export function ProjectCard({ project, onChanged, selected, onToggleSelect }: ProjectCardProps) {
   const { t, i18n } = useTranslation()
   // Fall back to the placeholder icon until the video decodes; if it never
   // does (404, corrupt file), stay on the fallback rather than show a blank box.
@@ -88,15 +93,39 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
       >
         {/* Flat at rest (Flora 式): the thumbnail's own fill is the only
             separation from the page — no card shell, no hairline (填充优先,
-            §4)。hover 时整件浮出 bg-accent 座（§4.3 单 token hover 律）。 */}
-        <div className="rounded-xl p-1.5 transition-colors group-hover:bg-accent">
+            §4)。hover 语言 = 媒体区交互环 + 浮动钮（非 bg 座——accent 在
+            6px padding 缝里读作糊框；环直接抱住媒体区，空井/视频通吃）。 */}
+        <div className="rounded-xl p-1.5">
           <div
-            className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-lg ${
+            className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-lg group-hover:ring-1 group-hover:ring-foreground/20 ${
               // Neutral base for the live mist — bg-primary/10 would leak hue
               // through it; the tinted base is only for the settled thumbnail.
               live ? "bg-muted" : "bg-primary/10"
             }`}
           >
+            {!active && onToggleSelect ? (
+              // 多选圈（Flora 式）：rest 隐身，hover / 键盘触及 / 已选显形；
+              // 选中 = bg-foreground 实底 + Check（gallery 筛选 pill 的
+              // active 深底同 token）。点它不导航（⋯ 同款拦截）。
+              <button
+                type="button"
+                aria-label={t("projects.selection.toggle")}
+                aria-pressed={selected}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onToggleSelect()
+                }}
+                className={`absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full transition-opacity ${
+                  selected
+                    ? "bg-foreground text-background opacity-100"
+                    : "bg-background text-transparent opacity-0 ring-1 ring-foreground/20 group-focus-within:opacity-100 group-hover:opacity-100"
+                }`}
+              >
+                <Check className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
             {live ? (
               // Unsettled project — the layered processing tile is the life
               // signal (matte base, light shaft, mist, grain, halo), so the

@@ -144,3 +144,64 @@ export function DeleteProjectDialog({
     </Dialog>
   )
 }
+
+interface DeleteProjectsDialogProps {
+  /** The bulk selection — deleted sequentially through the same per-project
+   * door (no bulk endpoint; selections stay small). */
+  projectIds: string[]
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  /** Called after the pass finishes (the list refetches, selection clears). */
+  onDeleted: () => void
+}
+
+export function DeleteProjectsDialog({
+  projectIds,
+  open,
+  onOpenChange,
+  onDeleted,
+}: DeleteProjectsDialogProps) {
+  const { t } = useTranslation()
+  const [busy, setBusy] = useState(false)
+
+  const handleDelete = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      for (const id of projectIds) {
+        // apiFetch already toasted the failure detail — stop the pass there
+        // and let the refetch show the honest remainder.
+        const res = await apiDelete(`/api/v1/projects/${id}`)
+        if (!res.ok) break
+      }
+      onOpenChange(false)
+      onDeleted()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const count = projectIds.length
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>
+            {t("projects.selection.deleteConfirm", { count })}
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          {t("projects.selection.deleteDesc")}
+        </p>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            {t("common.cancel")}
+          </Button>
+          <Button variant="destructive" disabled={busy} onClick={handleDelete}>
+            {busy ? t("common.loading") : t("common.delete")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}

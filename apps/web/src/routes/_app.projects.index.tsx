@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowUpDown, FolderKanban, Search } from "lucide-react"
+import { ArrowUpDown, FolderKanban, Search, Trash2, X } from "lucide-react"
 
 import { apiFetch } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -19,6 +19,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
 import { ProjectCard } from "@/components/project/ProjectCard"
+import { DeleteProjectsDialog } from "@/components/project/project-dialogs"
 
 interface Project {
   id: string
@@ -118,6 +119,21 @@ function ProjectsPage() {
   const [sortField, setSortField] = useState<SortField>("updated")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [loading, setLoading] = useState(true)
+  // Bulk selection (Flora 式): page-owned id set; the circle on each card
+  // toggles, the bottom floating bar carries the only honest bulk action
+  // (delete) + the clear exit. Selection survives search/sort — ids, not rows.
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), [])
 
   // Lifted so cards can refetch after a rename/delete (onChanged).
   const fetchProjects = useCallback(async () => {
@@ -252,10 +268,52 @@ function ProjectsPage() {
                 key={project.id}
                 project={project}
                 onChanged={fetchProjects}
+                selected={selectedIds.has(project.id)}
+                onToggleSelect={() => toggleSelect(project.id)}
               />
             ))}
           </div>
         )}
+
+        {selectedIds.size > 0 ? (
+          // 多选悬浮条（Flora 式）：视口底中浮层（overlay-surface 冰霜律），
+          // 内容 = 计数 + 唯一真实批量动作（删除）+ × 清选。视口锚定而非
+          // 内容锚定——选中态期间恒可见，不随长网格滚走。
+          <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center">
+            <div className="overlay-surface pointer-events-auto flex items-center gap-2 rounded-xl px-3 py-2">
+              <span className="pl-1 text-sm">
+                {t("projects.selection.count", { count: selectedIds.size })}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2 className="size-4" />
+                {t("projects.selection.delete")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t("projects.selection.clear")}
+                onClick={clearSelection}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        <DeleteProjectsDialog
+          projectIds={[...selectedIds]}
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          onDeleted={() => {
+            clearSelection()
+            fetchProjects()
+          }}
+        />
       </div>
     </div>
   )

@@ -778,6 +778,15 @@ const en = {
     renameTitle: "Rename project",
     renamePlaceholder: "Project name",
     deleteDesc: "\"{{title}}\" and all its clips, posts and conversations will be permanently deleted.",
+    selection: {
+      count: "{{count}} selected",
+      delete: "Delete",
+      clear: "Clear selection",
+      toggle: "Select project",
+      deleteConfirm: "Delete {{count}} projects?",
+      deleteDesc:
+        "The selected projects and all their clips, posts and conversations will be permanently deleted.",
+    },
   },
   projectMenu: {
     open: "Project menu",
