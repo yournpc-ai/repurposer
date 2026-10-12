@@ -101,7 +101,7 @@ class Config(Base):                       # configs — 公共运营参数表（
 2. **读取只有一个漏斗**：`get_config(key)` 类型化取值（进程内缓存 + 写失效）；其他模块永不直接查表；未知 key 直接报错。
 3. **两分界**：**运营参数（改了不该要发版）→ config 表**；**工程参数（改错会炸部署）→ env `config.py` 不动**（连接串 / 密钥 / DB 保险丝）。
 
-首批住户：`wallet.signup_grant` / `credits.per_cost_usd` / `billing.always_confirm_above`（确认守卫线，ADR-117 D6——方案 fold high 端越线或含 NULL 节点时任何权限档恒带价问一次；ops 参数，永不是用户设置）。
+首批住户：`wallet.signup_grant` / `credits.per_cost_usd` / `billing.always_confirm_above`（确认守卫线，ADR-117 D6——方案 fold high 端越线或含 NULL 节点时任何权限档恒带价问一次；ops 参数，永不是用户设置）/ `chat.context_budget_tokens`（装配滑动窗口预算，ADR-117 D4——消息历史超预算折叠近端窗口；ops 参数，永不上 UI）。
 
 ## 5. 负余额语义
 
