@@ -3455,10 +3455,10 @@ async def s10_remix_flagship(ctx: Ctx) -> None:
     色三断）→ 画布无 decompile 孤儿节点。角色提问机器一路（router 主动问
     asset_role）是 LLM 裁量，不做 e2e 锁定。复用不重复发声由结构锁住
     （reuse 早退在火前）+ (conversation, trigger, ref) 去重，本剧本末尾
-    断言消息恰一条。P1 已知轮盘：mention 回合若路由直接 dock 默认计划
-    （裁量内形态），warm review 准入即静默、且静默不复燃——
-    wait_trigger_review 240s 超时即「flake」；无计划 dock 的回合则正常
-    发言（复跑即绿的机理，非时序抖动）。"""
+    断言消息恰一条。P1 合法分支：mention 回合直接 dock 计划（LLM 裁量）→
+    warm review 准入依法静默（ADR-080 永不压 docked plan——计划 echo 已经
+    叙事），该面锁 pin 落账、review 等待合法跳过；无 dock 的回合锁
+    「主动说看懂了案例」。"""
     fixture_prefix = f"scenario/s10-{uuid.uuid4().hex[:8]}"
     src_key = await copy_fixture(REMIX_SOURCE_KEY, fixture_prefix)
     ex_key = await copy_fixture(REMIX_EXEMPLAR_KEY, fixture_prefix)
@@ -3507,15 +3507,23 @@ async def s10_remix_flagship(ctx: Ctx) -> None:
           {"brief": brief1,
            "last_content": (turn1["assistant_message"].get("content") or "")[:200]})
     # pin 落定（随 PendingPlan 写入）→ warm 拆解（fire-and-forget）→ 触发回合
-    # 主动说话。
-    review1 = await wait_trigger_review(ctx, conv1, ex1, timeout=240.0)
-    check(review1 is not None,
-          "the warm path's decompile speaks (「我看了你的案例」)", ex1)
-    rintent1 = (review1 or {}).get("intent") or {}
-    check(rintent1.get("trigger") == "craft_decompiled" and rintent1.get("ref") == ex1,
-          "the warm review dump names trigger + exemplar ref", rintent1)
-    check(bool(((review1 or {}).get("content") or "").strip()),
-          "the agent's case understanding is spoken, not silent", review1)
+    # 主动说话。合法分支：pin 落账回合直接 dock 了计划 = warm review 准入
+    # 依法静默（ADR-080 永不压 docked plan——计划 echo 已经叙事），该面锁
+    # pin 落账 + dock 形态即走完 P1；无 dock 的回合照旧锁主动发言。
+    if is_plan_dock(turn1["assistant_message"]):
+        check(brief1.get("intent") is not None,
+              "the mention turn docked the plan — the warm review's silence "
+              "is lawful (ADR-080: never talk over a docked plan)",
+              brief1)
+    else:
+        review1 = await wait_trigger_review(ctx, conv1, ex1, timeout=240.0)
+        check(review1 is not None,
+              "the warm path's decompile speaks (「我看了你的案例」)", ex1)
+        rintent1 = (review1 or {}).get("intent") or {}
+        check(rintent1.get("trigger") == "craft_decompiled" and rintent1.get("ref") == ex1,
+              "the warm review dump names trigger + exemplar ref", rintent1)
+        check(bool(((review1 or {}).get("content") or "").strip()),
+              "the agent's case understanding is spoken, not silent", review1)
 
     # ---- P2: run 路径 —— 新鲜物化必发声 + exemplar 参数 + 画布孤儿修复 ----
     pid2 = await ctx.new_project("S10-P2 run path")
