@@ -12,6 +12,8 @@ level only; anything a read tool reads is never pre-injected).
 
 from typing import Any
 
+import json
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,9 +33,60 @@ from app.pipeline.exploration_store import (
 )
 from app.pipeline.outputs import list_visible_outputs
 from app.pipeline.product_graph import EXPLORATION_NODE_TYPE
+from app.platform.configs import get_config
 
 _GRAPH_CONTEXT_LIMIT = 16
 _PAST_JOURNEYS_CAP = 3
+
+
+# ---- 滑动窗口装配 (ADR-117 D4): 统一预算谓词 -------------------------------
+#
+# The message history is the ONLY context component that folds — world
+# state (project summary / graph snapshot / asset metadata / the pending
+# line) never rides this window and survives by construction. The fold
+# keeps a STABLE SUFFIX (the newest rows), the only prefix-cache-lawful
+# window shape.
+
+_MESSAGE_OVERHEAD_TOKENS = 4  # role / structure framing per row, estimated
+
+
+def estimate_message_tokens(message: Message) -> int:
+    """One history row's estimated prompt cost — chars/4 on the body plus
+    the question/answer payloads' JSON mass when present. An ESTIMATOR,
+    not an exact count: the budget is an ops-tunable guardrail and
+    overestimating folds earlier, which is the safe side."""
+    total = _MESSAGE_OVERHEAD_TOKENS + len(message.content or "") // 4
+    for payload in (message.question, message.answer):
+        if payload:
+            total += len(json.dumps(payload, ensure_ascii=False)) // 4
+    return max(1, total)
+
+
+def bounded_history(history: list[Message], budget_tokens: int) -> list[Message]:
+    """Keep the most recent rows whose cumulative estimated cost fits the
+    budget (ADR-117 D4 — 保留近端窗口). The newest row always survives
+    (a turn's own prompt never folds away), even when it alone busts the
+    budget; a non-positive budget degenerates to the newest row."""
+    kept: list[Message] = []
+    spent = 0
+    for message in reversed(history):
+        cost = estimate_message_tokens(message)
+        if kept and spent + cost > budget_tokens:
+            break
+        kept.append(message)
+        spent += cost
+    kept.reverse()
+    return kept
+
+
+async def recent_history_within_budget(
+    db: AsyncSession, history: list[Message]
+) -> list[Message]:
+    """The config-backed seat of the budget predicate — the scattered
+    ``history[-n:]`` slices converge here (ops-tunable via
+    ``chat.context_budget_tokens``, no deploy)."""
+    budget = await get_config(db, "chat.context_budget_tokens")
+    return bounded_history(history, budget)
 
 
 async def build_context(

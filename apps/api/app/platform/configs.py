@@ -65,6 +65,16 @@ CONFIG_REGISTRY: dict[str, ConfigDef] = {
         "always gets one priced confirmation, in every confirmation mode. "
         "An operating parameter, never a user setting.",
     ),
+    "chat.context_budget_tokens": ConfigDef(
+        default=120000,
+        type=int,
+        desc="Sliding-window assembly budget (ADR-117 D4): the chat turn's "
+        "message-history window folds to the most recent rows whose "
+        "estimated tokens fit this budget (world state never rides the "
+        "message window — it survives by construction). Calibration source: "
+        "the conversation_usage ledger's per-turn-family prompt_tokens "
+        "distribution; an operating parameter, never a user setting.",
+    ),
 }
 
 _cache: dict[str, Any] = {}

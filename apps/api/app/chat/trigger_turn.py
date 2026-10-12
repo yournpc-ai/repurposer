@@ -50,7 +50,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.chat.context import build_context
+from app.chat.context import build_context, recent_history_within_budget
 from app.agents.tool_loop import ChatTool, ToolLoopAgent
 from app.chat.intent import _speech_language_line
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
@@ -436,7 +436,9 @@ async def run_trigger_turn(
             context = await build_context(
                 db,
                 project,
-                history[-6:],
+                # 滑动窗口装配 (ADR-117 D4): one budget predicate, never a
+                # fixed-count slice — world state survives by construction.
+                await recent_history_within_budget(db, history),
                 [],
                 await latest_pending_question(db, conversation_id),
             )

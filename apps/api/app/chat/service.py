@@ -64,6 +64,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # at startup (the orchestrator's roster self-check walks it).
 from app.chat.intent import chat_intent_agent as _chat_intent_agent  # noqa: F401
 from app.chat.intent import intent_router as _intent_router  # noqa: F401
+from app.chat.context import recent_history_within_budget
 from app.chat.suggestions import (
     build_suggestion_records,
     compose_suggestion_note,
@@ -1503,6 +1504,9 @@ async def _continue_chat_answer(
         else say
     )
     history = await list_conversation_messages(db, UUID(str(conversation.id)))
+    # 滑动窗口装配 (ADR-117 D4): the scattered fixed-count slices converge
+    # on the one budget predicate — world state never rides this window.
+    recent = await recent_history_within_budget(db, history)
     if question.slot == "asset_role" and project is not None:
         # 资产角色消歧的答复落 pin (ADR-078 判词④): the pins settle by
         # CODE (the option id IS the asset id — _settle_role_answer),
@@ -1516,7 +1520,7 @@ async def _continue_chat_answer(
             conversation,
             project,
             ChatRequest(project_id=project.id, message=turn_say),
-            recent=history[-5:],
+            recent=recent,
             on_delta=on_delta,
             on_phase=on_phase,
             on_tool_call=on_tool_call,
@@ -1539,7 +1543,7 @@ async def _continue_chat_answer(
             conversation,
             project,
             ChatRequest(project_id=project.id, message=turn_say),
-            recent=history[-5:],
+            recent=recent,
             on_delta=on_delta,
             on_phase=on_phase,
             on_tool_call=on_tool_call,
@@ -1573,7 +1577,7 @@ async def _continue_chat_answer(
             ChatRequest(
                 project_id=project.id, message=turn_say, suggestion_ref=suggestion_ref
             ),
-            recent=history[-5:],
+            recent=recent,
             on_delta=on_delta,
             on_phase=on_phase,
             on_tool_call=on_tool_call,
@@ -1584,7 +1588,7 @@ async def _continue_chat_answer(
         )
         return follow_up, run_id, bailed, answered
     follow_up, run_id, bailed, settled = await _propose_turn(
-        db, user_id, conversation, project, turn_say, [], history[-6:],
+        db, user_id, conversation, project, turn_say, [], recent,
         suggestion_ref=suggestion_ref,
         on_delta=on_delta,
         # I-PFA-06 parity (Batch B 验收修复): the chat-path continuation
@@ -2052,6 +2056,9 @@ async def answer_question(
                 # (the default_path copy's exact promise).
                 await _settle_default_role_pins(db, project)
             history = await list_conversation_messages(db, UUID(str(conversation.id)))
+            # 滑动窗口装配 (ADR-117 D4): one budget predicate, never a
+            # fixed-count slice.
+            recent = await recent_history_within_budget(db, history)
             with bind_conversation_turn() as _usage_bind:
                 follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
                     db,
@@ -2065,7 +2072,7 @@ async def answer_question(
                             "path and draft the plan.)"
                         ),
                     ),
-                    recent=history[-5:],
+                    recent=recent,
                     on_delta=on_delta,
                     on_phase=on_phase,
                     on_tool_call=on_tool_call,
@@ -2557,11 +2564,13 @@ async def execute_chat_turn(
         with bind_conversation_turn() as _usage_bind:
             if prepared.plan_path:
                 # The intent router's context excludes this turn's own message
-                # (already the prompt being judged); the latest few rounds
-                # before it are the disambiguating conversation (G-7).
-                recent = [
-                    m for m in prepared.history if m.id != prepared.user_message.id
-                ][-5:]
+                # (already the prompt being judged); the latest rounds before
+                # it are the disambiguating conversation (G-7) — budget-
+                # windowed by the one predicate (ADR-117 D4).
+                recent = await recent_history_within_budget(
+                    db,
+                    [m for m in prepared.history if m.id != prepared.user_message.id],
+                )
                 (
                     assistant_message,
                     run_id,
@@ -2599,7 +2608,7 @@ async def execute_chat_turn(
                     prepared.project,
                     request.message,
                     request.mentions,
-                    prepared.history[-6:],
+                    await recent_history_within_budget(db, prepared.history),
                     suggestion_ref=request.suggestion_ref,
                     on_delta=on_delta,
                     on_reasoning=on_reasoning,
