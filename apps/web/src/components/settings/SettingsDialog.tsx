@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react"
 import { useTranslation } from "react-i18next"
-import { Share2 } from "lucide-react"
+import { Coins, Cpu, Share2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
@@ -17,7 +17,9 @@ import {
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { AssistantSection } from "@/components/settings/AssistantSection"
 import { ChannelsSection } from "@/components/settings/ChannelsSection"
+import { CreditsSection } from "@/components/settings/CreditsSection"
 
 /** Settings as a shared DIALOG, never a page (MiniMax / FLORA pattern,
  * 2026-08-21 ruling): one modal — left section nav + right content — that
@@ -27,7 +29,7 @@ import { ChannelsSection } from "@/components/settings/ChannelsSection"
  * callback shim (it toasts, opens this dialog, and bounces home). New deep
  * surfaces register as SECTIONS entries below, never as routes. */
 
-export type SettingsSectionId = "channels"
+export type SettingsSectionId = "channels" | "assistant" | "credits"
 
 interface SettingsSectionDef {
   id: SettingsSectionId
@@ -42,6 +44,18 @@ const SECTIONS: SettingsSectionDef[] = [
     icon: Share2,
     labelKey: "channels.title",
     render: () => <ChannelsSection />,
+  },
+  {
+    id: "assistant",
+    icon: Cpu,
+    labelKey: "assistant.title",
+    render: () => <AssistantSection />,
+  },
+  {
+    id: "credits",
+    icon: Coins,
+    labelKey: "credits.title",
+    render: () => <CreditsSection />,
   },
 ]
 
@@ -106,25 +120,27 @@ function SettingsDialog({
             same copy, so this stays visually hidden). */}
         <DialogTitle className="sr-only">{t("settings.title")}</DialogTitle>
         <div className="flex h-full min-h-0">
-          {/* Left section nav (hidden on mobile until a second section lands —
-              a one-item rail is chrome, not navigation). Selected = the nav
-              law: accent fill + foreground text. */}
-          <nav className="hidden w-48 flex-none flex-col gap-0.5 p-3 sm:flex">
-            <p className="px-2 pb-2 text-sm font-semibold">{t("settings.title")}</p>
+          {/* Left section nav — with multiple sections the rail is real
+              navigation, visible at every width (labels collapse to icons
+              on the smallest screens). Selected = the nav law: accent fill
+              + foreground text. */}
+          <nav className="flex w-12 flex-none flex-col gap-0.5 p-2 sm:w-48 sm:p-3">
+            <p className="hidden px-2 pb-2 text-sm font-semibold sm:block">{t("settings.title")}</p>
             {SECTIONS.map((s) => (
               <button
                 key={s.id}
                 type="button"
                 onClick={() => onSectionChange(s.id)}
+                title={t(s.labelKey)}
                 className={cn(
-                  "flex h-9 items-center gap-2 rounded-md px-2 text-xs transition-colors",
+                  "flex h-9 items-center justify-center gap-2 rounded-md px-2 text-xs transition-colors sm:justify-start",
                   s.id === active.id
                     ? "bg-accent text-foreground"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <s.icon className="h-4 w-4" />
-                {t(s.labelKey)}
+                <span className="hidden sm:inline">{t(s.labelKey)}</span>
               </button>
             ))}
           </nav>

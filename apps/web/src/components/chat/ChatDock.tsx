@@ -109,7 +109,6 @@ import { AnsweredQuestion, answeredQuestionText } from "@/components/chat/Answer
 import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
 import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
 import { ComposerSendButton } from "@/components/composer/ComposerSendButton"
-import { CostConfirmControl } from "@/components/composer/CostConfirmControl"
 import { ModelsPanel } from "@/components/composer/ModelsPanel"
 import {
   mapHistoryRows,
@@ -3933,10 +3932,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             />
           )}
           <span className="min-w-0 flex-1" />
-          {/* Cost-confirmation strategy (UI-only preference this batch,
-              2026-09-23 — behavior wiring is a later batch). side="top":
-              the dock lives at the viewport's bottom edge. */}
-          <CostConfirmControl popoverSide="top" align="end" className="mr-1" />
           {/* Models (honest Auto panel) — PARKED: hidden until the panel has
               something actionable to show; restore by ungating. */}
           {false && (

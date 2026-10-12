@@ -57,13 +57,13 @@ CONFIG_REGISTRY: dict[str, ConfigDef] = {
         "history. NOT the purchase ratio (money→credits is the W11 pricing "
         "decision, deliberately decoupled).",
     ),
-    "billing.confirm_large_threshold": ConfigDef(
-        default=20,
+    "billing.always_confirm_above": ConfigDef(
+        default=5000,
         type=int,
-        desc="Credits at which the 'large' confirm_strategy escalates to the "
-        "full cost disclosure + priced CTA (ADR-092 §2, E6 — the plan dock's "
-        "disclosure tier reads it; display obligation vs confirmation "
-        "obligation stay separate).",
+        desc="Internal guardrail (ADR-117 D6): a plan whose folded quote's "
+        "high end exceeds this — or that carries an unquotable (NULL) node — "
+        "always gets one priced confirmation, in every confirmation mode. "
+        "An operating parameter, never a user setting.",
     ),
 }
 

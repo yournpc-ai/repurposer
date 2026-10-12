@@ -138,10 +138,9 @@ export function ModelsPanel() {
               </span>
               {/* Locked ON like the Auto switch — "this model is in the Auto
                   pool" is a fact displayed, not a control. The bare Check is
-                  the house selection mark (2026-09-23 — PersonaPanel /
-                  CostConfirmControl use the same glyph; the old filled
-                  checkbox was the outlier and read as a second black anchor
-                  next to the Auto switch). */}
+                  the house selection mark (2026-09-23 — PersonaPanel uses
+                  the same glyph; the old filled checkbox was the outlier and
+                  read as a second black anchor next to the Auto switch). */}
               <Check
                 aria-hidden
                 className="mt-1.5 size-4 flex-none text-foreground"

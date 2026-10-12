@@ -37,6 +37,27 @@ const en = {
     networkError: "Network error — check your connection",
     skipToContent: "Skip to content",
   },
+  assistant: {
+    /** SettingsDialog「助手」section (ADR-117 §1) — the two confirmation
+     * prefs' ONLY UI seat. Plain factual copy; the guardrail stays an ops
+     * parameter, the footnote is its single honest mention. */
+    title: "Assistant",
+    subtitle:
+      "When the assistant checks with you before acting. Everything else it just does.",
+    permissions: "Permissions",
+    execution: {
+      label: "Taking action",
+      desc: "After a plan is presented, whether it waits for your go-ahead.",
+    },
+    spending: {
+      label: "Spending credits",
+      desc: "Before a paid plan starts, whether to confirm once with the price.",
+    },
+    mode: { auto: "Automatic", ask: "Ask" },
+    footnote:
+      "The estimate is always shown with the plan. Unusually large or unquotable plans always ask once, whatever you set here.",
+    updateFailed: "Couldn't save the setting — please try again",
+  },
   credits: {
     /** The one estimate range form every surface shares (dock total /
      * per-task price / — three surfaces, one source, BILLING §7). */
@@ -59,6 +80,15 @@ const en = {
     balance: "Balance",
     held: "Held in active runs",
     recent: "Recent activity",
+    /** The SettingsDialog「积分」section (BILLING §7 展示主轴) — the
+     * balance + ledger full-view seat, same two endpoints as the pill. */
+    title: "Credits",
+    subtitle: "Your balance and recent activity.",
+    overview: "Overview",
+    planFree: "Free trial",
+    plansComing: "Paid plans coming soon",
+    showingRecent: "Latest {{count}}",
+    viewAll: "View all →",
     tx: {
       empty: "No transactions yet",
       /** The semantic fold (ADR-057 K4): the user面 only ever sees three
@@ -459,34 +489,6 @@ const en = {
     uploadRetry: "Retry",
     uploadInProgress: "Files are still uploading — give it a moment",
     managePersonas: "Manage personas…",
-    // Cost-confirmation strategy (ADR-092 tiers: always / large / never —
-    // server settings win, localStorage is the read-tolerant fallback).
-    // Trigger copy discipline: ≤12 characters so the pill fits the dock's
-    // control strip.
-    confirmStrategy: {
-      label: "Cost confirmation",
-      trigger: {
-        always: "Always",
-        large: "Large only",
-        never: "Estimate",
-      },
-      options: {
-        always: {
-          title: "Always confirm",
-          desc: "Every plan shows the charge note and a priced confirm button",
-        },
-        large: {
-          title: "Large plans only",
-          desc: "Confirmation required above the credits threshold",
-        },
-        never: {
-          title: "Estimate only",
-          desc: "Just the estimate range — no forced confirmation",
-        },
-      },
-      footnote:
-        "Applies to the plan confirmation before a paid run starts.",
-    },
   },
   // Recipe cards (RECIPES §7) — one block per card id in lib/recipes.ts;
   // reserved cards render disabled with the Soon pill, never launchable.
