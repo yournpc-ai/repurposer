@@ -1453,15 +1453,16 @@ const zh: Resources = {
     versionRestore: "恢复此版本",
     versionRestored: "已恢复为计划 v{{n}}——它是当前计划了。",
     // OriginCut 同位 mechanics placeholder（2026-09-24 用户拍板，照搬其两
-    // 行组成式：先问需求，再讲机制——拖拽/粘贴 + @ 引用 + 确认后开工，
-    // 确认拍正好教付费边界）。「节点」措辞成立：@ 选择器候选（素材 /
-    // 产物）本就是画布节点。对外词 = 助手（N-25），不用 Agent。
-    chatPlaceholder: "描述你的修改想法。可拖拽或粘贴文件，输入 @ 引用节点；助手会与你确认后再开工。",
+    // 行组成式：先问需求，再讲机制——拖拽/粘贴 + @ 引用）。「节点」措辞成立：
+    // @ 选择器候选（素材 / 产物）本就是画布节点。对外词 = 助手（N-25），不用
+    // Agent。ADR-117：「确认后再开工」从句随 ask 默认档退市——静态文案写默认
+    // （auto）档的真相：方案呈现即开工。
+    chatPlaceholder: "描述你的修改想法。可拖拽或粘贴文件，输入 @ 引用节点。",
     // full 形态（首次 run 前、画布未生）专用（2026-09-13 用户拍板）：画布
     // 还不存在时没有「节点」可指——@ 候选只有素材；措辞走世界真相不走
     // 一句通用。画布落地后（panel / dock 形态）回到上面的 nodes 版。
     // 2026-09-24：同随 OriginCut 两行组成式（nodes 版同款，@ 对象换素材）。
-    chatPlaceholderAssets: "描述你想做什么。可拖拽或粘贴文件，输入 @ 引用素材；助手会与你确认后再开工。",
+    chatPlaceholderAssets: "描述你想做什么。可拖拽或粘贴文件，输入 @ 引用素材。",
     attachFiles: "上传文件",
     retryUpload: "重试上传",
     removeAttachment: "移除附件",
@@ -1474,6 +1475,15 @@ const zh: Resources = {
       file: "文件",
     },
     stopped: "已停止生成。",
+    // 确认 pill（ADR-117 §4 — 画板 C）：确认拍仅剩的 chrome，只在 dock 戳记
+    // 说欠一拍时出现。label 族：裸动词（执行=询问）/ 带价（费用=询问 · 守卫线
+    // ——数字恒为服务端 fold 上限，客户端永不自算）/ 延期报价（NULL 族——永不
+    // 编数字）。confirmPillMessage = 点击后骑 chat 道的用户原话（pill 即用户
+    // 本人说这句话——旧 Start pill 的 v4.2 机器）。
+    confirmPillStart: "开始",
+    confirmPillStartPriced: "开始 · 约 {{n}} 积分",
+    confirmPillStartDeferred: "开始 · 估价随运行确定",
+    confirmPillMessage: "确认生成",
   },
   questionDock: {
     bail: "停止生成",

@@ -46,8 +46,11 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from app.pipeline.lifecycle import ConfirmationNeed
 
 import structlog
 from fastapi import HTTPException, status
@@ -86,6 +89,7 @@ from app.models.schemas import (
     QuestionPayload,
     QuestionProposal,
     PlanEstimate,
+    StartAnswerRequest,
     SuggestionRef,
     TaskItem,
 )
@@ -96,6 +100,7 @@ from app.models.tables import (
     MessageSeqCounter,
     Persona,
     Project,
+    User,
     WorkflowRun,
     WorkflowStep,
 )
@@ -107,11 +112,13 @@ from app.pipeline.derivative_dispatch import (
 )
 from app.pipeline.graph import MEDIA, NODE_KINDS
 from app.platform.billing import CreditsInsufficientError
+from app.platform.configs import get_config
 from app.platform.conversation_context import (
     find_conversation,
     is_pending_plan,
     latest_pending_question,
 )
+from app.platform.user_settings import read_confirmation_prefs
 from app.tools import ToolRejected
 
 logger = structlog.get_logger()
@@ -219,7 +226,9 @@ def _reminder_tail(text: str, question: str, default_path: str | None) -> str:
     return tail
 
 
-def _estimate_tail(text: str, estimate: PlanEstimate | None) -> str:
+def _estimate_tail(
+    text: str, estimate: PlanEstimate | None, *, held: bool = False
+) -> str:
     """Dock echo 的估价尾行 (ADR-111 §2 — 确认 dock 卡面退役后总估价的新家;
     BILLING §2.1 披露义务不变: capture 前估价必须可见): a code-composed
     whisper appended to the plan's dock echo — the total range plus the
@@ -227,10 +236,31 @@ def _estimate_tail(text: str, estimate: PlanEstimate | None) -> str:
     the LLM's voice — the reminder tail's doctrine; 真实数字 = 世界自证,
     ADR-058 的合法二源). A deferred (None) quote says so honestly — never
     a fabricated number. The per-task half stays on the canvas's draft
-    nodes (逐节点估价, ADR-057 K5)."""
+    nodes (逐节点估价, ADR-057 K5).
+
+    ``held`` (ADR-117 §4): the auto regime's guardrail/unquotable trip —
+    the echo's spoken close announced the start (the model speaks before
+    the quote exists), but the dock is waiting for the priced beat, so the
+    tail carries the honest correction: this plan starts once confirmed.
+    The clause names the fact plainly (画板 A footnote 的同一措辞族) — the
+    guardrail threshold itself is ops-internal and never appears. The ask
+    regimes never set it: there the model's own closing question IS the
+    confirmation ask, and the tail stays the现行 estimate-only shape."""
     zh = _prefers_zh(text)
     if estimate is not None:
         low, high = estimate.total
+        if held:
+            if zh:
+                return (
+                    f"\n\n（估价 {low}–{high} 积分——金额较高，确认后才开始："
+                    "按上限预扣，按实际用量结算，失败的步骤不收费，剩余退回）"
+                )
+            return (
+                f"\n\n(Estimated {low}–{high} credits — on the high side, "
+                "so the work starts once you confirm: the high end is held, "
+                "you're charged only for what actually runs, failed steps "
+                "are free, and the remainder is returned.)"
+            )
         if zh:
             return (
                 f"\n\n（估价 {low}–{high} 积分——开始时按上限预扣，"
@@ -240,6 +270,17 @@ def _estimate_tail(text: str, estimate: PlanEstimate | None) -> str:
             f"\n\n(Estimated {low}–{high} credits — on start the high end "
             "is held; you're charged only for what actually runs, failed "
             "steps are free, and the remainder is returned.)"
+        )
+    if held:
+        if zh:
+            return (
+                "\n\n（估价随运行确定——这个方案无法提前估价，确认后才开始；"
+                "开始后才计费，失败的步骤不收费）"
+            )
+        return (
+            "\n\n(Credits are priced when the run starts — this plan can't "
+            "be quoted up front, so it starts once you confirm; billing "
+            "begins only when you start, and failed steps are free.)"
         )
     if zh:
         return "\n\n（估价随运行确定——开始后才计费，失败的步骤不收费）"
@@ -514,6 +555,32 @@ async def _safe_task_estimate(
         return await derive_task_estimates(db, project, tasks)
     except (ToolRejected, ValueError):
         return None
+
+
+async def resolve_confirmation_need(
+    db: AsyncSession, user_id: UUID, estimate: PlanEstimate | None
+) -> "ConfirmationNeed":
+    """The dock's confirmation conjunct (ADR-117 §4): read the user's two
+    prefs + the guardrail config, fold the quote, run the pure law. The
+    result is stamped onto the docked question's payload at presentation
+    time — the client's pill predicate and the start gate both read THAT
+    stamp, never a re-derivation."""
+    from app.pipeline.lifecycle import ConfirmationNeed, confirmation_need
+
+    user = await db.get(User, user_id)
+    execution, credits = read_confirmation_prefs(
+        user.settings if user is not None else None
+    )
+    guardrail = await get_config(db, "billing.always_confirm_above")
+    quote_high = int(estimate.total[1]) if estimate is not None else None
+    unquotable = estimate is None or any(t is None for t in estimate.per_task)
+    return confirmation_need(
+        execution=execution,
+        credits=credits,
+        quote_high=quote_high,
+        unquotable=unquotable,
+        always_confirm_above=guardrail,
+    )
 
 
 # ---- brief (DIALOG_WORKFLOW §2.4, ADR-052 B2) --------------------------------
@@ -1108,6 +1175,7 @@ async def sync_plan_question(
     echo: str | None = None,
     estimate: PlanEstimate | None = None,
     plans: list[dict] | None = None,
+    need: "ConfirmationNeed | None" = None,
 ) -> list[UUID]:
     """Keep exactly one pending task_book question per project conversation.
 
@@ -1160,6 +1228,14 @@ async def sync_plan_question(
     # whole plan card (the B3 brief stamp's precedent: frozen with the row,
     # re-stamped every dock), and the SSE envelope needs no pending-brief
     # refetch to render it.
+    # 授权前移 (ADR-117 §4): the confirmation conjunct is computed ONCE here,
+    # at presentation time (prefs + guardrail + the quote fold), and stamped
+    # into the payload — the client's pill predicate and the auto-start
+    # drive both read this stamp, never a re-derivation. A caller that
+    # already computed it (the dock seats, for the echo's held variant)
+    # passes it through — one computation per dock.
+    if need is None:
+        need = await resolve_confirmation_need(db, user_id, estimate)
     _message, bailed_run_ids = await _dock_question(
         db,
         conversation_id,
@@ -1169,6 +1245,10 @@ async def sync_plan_question(
             reasons=reasons or [],
             brief=brief,
             estimate_credits=estimate,
+            requires_confirmation=need.requires_confirmation,
+            confirm_reason=need.reason,
+            quote_high=need.quote_high,
+            unquotable=need.unquotable,
             derived=derived or [],            # 决策包阅读层 (iter-2 ③): the Content Plans behind the compiled
             # chain; empty on the router-drafted docks (读容忍).
             plans=plans or [],
@@ -1199,6 +1279,113 @@ async def sync_plan_question(
         )
         await clear_draft_graph(db, UUID(str(project.id)))
     return bailed_run_ids
+
+
+async def _auto_start_docked_plan(
+    db: AsyncSession,
+    *,
+    user_id: UUID,
+    conversation_id: UUID,
+    project: Project,
+) -> tuple[Message, UUID] | None:
+    """ADR-117 §2 授权前移 — the auto regime's presentation-time start.
+
+    Called right after a plan docks. The dock's presentation-time stamp
+    (``requires_confirmation``/``quote_high``/``unquotable`` — computed once
+    by ``resolve_confirmation_need`` at the dock) is handed back to
+    ``evaluate_start_gate`` as the authorization conjunct: a dock that owes
+    no confirm beat (both prefs auto, quote under the guardrail, quotable)
+    AND a startable lifecycle stamp fire the SAME start machine
+    (``answer_question`` kind="start") immediately with
+    ``confirmed_via="auto"`` — 呈现即开工, zero new chrome. Returns the
+    answered question + run id, or None when the plan stays docked:
+
+    - ``start.needs_confirm`` → the confirm pill's beat (ask modes /
+      guardrail / unquotable) — the dock waits for the user's gesture.
+    - a structural gate block (material unready, a live run, ...) → the
+      dock waits exactly like the ask regime; the user's next beat
+      re-drives it.
+    - the birthplace's own 422 (credits shortfall / a stale-chain reject)
+      → the dock stays; the failure is logged, never swallowed silently.
+
+    A rejected attempt undoes the answer write it made, so the docked
+    question's answer cell stays open for the user's later beat.
+    """
+    pending_question = await latest_pending_question(db, conversation_id)
+    if not is_pending_plan(pending_question):
+        return None
+    assert pending_question is not None  # is_pending_plan guarantees the row
+    payload = QuestionPayload.model_validate(pending_question.question)
+    intent = (
+        InferredIntent.model_validate(pending_question.intent)
+        if isinstance(pending_question.intent, dict)
+        else None
+    )
+    from app.pipeline.lifecycle import (  # deferred: chat → pipeline
+        ConfirmationNeed,
+        evaluate_start_gate,
+        project_lifecycle,
+    )
+    from app.ui_locale import current_ui_language  # deferred: request ctx
+
+    stamp = await project_lifecycle(
+        db,
+        project,
+        pending_question=pending_question,
+        pending_plan=True,
+        ui_language=current_ui_language() or "en",
+    )
+    gate = evaluate_start_gate(
+        has_pending_plan=intent is not None,
+        effective_tasks_nonempty=bool(intent and intent.tasks),
+        stamp=stamp,
+        # The authorization conjunct reads the presentation-time stamp
+        # verbatim (the gate never re-derives prefs/quote — the docked
+        # payload is the single stamp, the client reads the same flag).
+        confirmation=ConfirmationNeed(
+            requires_confirmation=payload.requires_confirmation,
+            reason=payload.confirm_reason,
+            quote_high=payload.quote_high,
+            unquotable=payload.unquotable,
+        ),
+        docked_this_turn=True,
+    )
+    if gate is not None:
+        logger.info(
+            "auto_start_held",
+            project_id=str(project.id),
+            code=gate.code,
+            reason=gate.reason,
+            blockers=list(gate.blockers),
+        )
+        return None
+    try:
+        answered, _follow_up = await answer_question(
+            db,
+            user_id,
+            UUID(str(pending_question.id)),
+            StartAnswerRequest(kind="start"),
+            # The run births on standing authorization (ADR-117 §2) — the
+            # snapshot records the channel, not an explicit gesture.
+            confirmed_via="auto",
+        )
+    except HTTPException as exc:
+        # The birthplace's 422s (credits shortfall / stale-chain reject /
+        # a raced structural block) fire AFTER answer_question's early
+        # answer write — undo exactly that write so the dock stays open
+        # (422s are the post-write family by construction here: the
+        # pre-write kind guards can never fire on a task_book kind=start;
+        # the 409 family is pre-write and leaves the row untouched).
+        if exc.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT:
+            pending_question.answer = None
+            await db.flush()
+        logger.info(
+            "auto_start_rejected",
+            project_id=str(project.id),
+            detail=str(exc.detail)[:200],
+        )
+        return None
+    return answered, UUID(str(answered.workflow_run_id))
 
 
 async def dock_interrupt_question(

@@ -296,8 +296,8 @@ EXPLORATION_TOOLS: dict[str, ChatTool] = {
                 "'use the pricing answer instead'). Restate the verdict and "
                 "reason for the NEW pick — they vouch for the new member, "
                 "never carry over. Free before anything runs; when the "
-                "affected plans were already confirmed and produced, they "
-                "re-confirm as a small package."
+                "affected plans already ran, they dock again as a small "
+                "package."
             ),
             params_model=ReviseSelectsArgs,
             terminal=True,
@@ -308,8 +308,7 @@ EXPLORATION_TOOLS: dict[str, ChatTool] = {
                 "Revise one already-landed Content Plan in place (the user's "
                 "change ask — 'make the second plan French too', 'the clip "
                 "square instead') restated as the plan's FULL new outputs. "
-                "The package re-compiles and re-docks for confirmation — "
-                "every plan-level revision re-confirms."
+                "The package re-compiles and lands back on the dock."
             ),
             params_model=RevisePlanArgs,
             terminal=True,
@@ -369,7 +368,7 @@ def revise_selects_observation(revised: list) -> str:
         )
     lines.append(
         "The plans riding these picks follow the new sections — the system "
-        "re-quotes and re-confirms what needs it; you never re-author them."
+        "re-quotes and re-docks what needs it; you never re-author them."
     )
     return "\n".join(lines)
 
@@ -388,7 +387,7 @@ def revise_observation(node) -> str:
     return (
         f"Plan revised in place — plan_id: {node.id} — "
         f"{spec['title'] or '(unnamed)'}: {outputs} [{state_note}]. The "
-        "decision package re-compiles and re-docks for confirmation."
+        "decision package re-compiles and re-docks."
     )
 
 

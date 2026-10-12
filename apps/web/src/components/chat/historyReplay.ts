@@ -369,6 +369,17 @@ export interface QuestionPayload {
   /** task_book only: the needs-clarification reason KEYS (data, localized
    * at render — never baked into the row's content). */
   reasons?: string[]
+  /** 授权前移 (ADR-117 §4): task_book only — the presentation-time
+   * confirmation stamp. `requires_confirmation` is the Start pill's ONLY
+   * render predicate (the client never derives the need itself); absent on
+   * rows docked before the stamp (读容忍 → treated as owed: those docks all
+   * predated the auto regime). `confirm_reason` keys the pill's label
+   * family; `quote_high` feeds the priced label; `unquotable` forces the
+   * deferred-pricing label (never a fabricated number). */
+  requires_confirmation?: boolean
+  confirm_reason?: string
+  quote_high?: number | null
+  unquotable?: boolean
   /** 决策包阅读层 (iter-2 ③): task_book only — the Content Plans behind
    * the compiled chain; empty on the router-drafted docks (读容忍). */
   plans?: DecisionPlanRow[]

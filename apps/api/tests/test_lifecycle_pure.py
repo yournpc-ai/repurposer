@@ -406,3 +406,165 @@ def test_d3_gate_precedence_structural_before_projection() -> None:
     )
     assert verdict is not None
     assert verdict.code == "start.no_pending_plan"
+
+
+# ---- ADR-117 授权前移: confirmation_need + the gate's authorization conjunct ----
+
+from app.pipeline.lifecycle import confirmation_need  # noqa: E402
+
+GUARDRAIL = 5000
+
+
+def test_confirmation_need_auto_auto_under_guardrail_is_free() -> None:
+    # The default regime: both prefs auto, a quotable plan under the
+    # guardrail — presentation IS the authorization, no beat owed.
+    need = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=800, unquotable=False, always_confirm_above=GUARDRAIL,
+    )
+    assert need.requires_confirmation is False
+    assert need.reason == ""
+    assert need.quote_high == 800
+    assert need.unquotable is False
+
+
+def test_confirmation_need_execution_ask_alone_holds() -> None:
+    # 执行确认=ask alone holds the beat — even a free plan (the execution
+    # pref is about TOOL invocation, not money; quote never shields it).
+    need = confirmation_need(
+        execution="ask", credits="auto",
+        quote_high=0, unquotable=False, always_confirm_above=GUARDRAIL,
+    )
+    assert need.requires_confirmation is True
+    assert need.reason == "execution_pref"
+
+
+def test_confirmation_need_credits_ask_only_fires_on_a_nonzero_quote() -> None:
+    # 费用确认=ask + quote_high=0 (a free plan) → NO beat (D1: asking about
+    # spending when nothing can be spent is noise); a nonzero quote holds.
+    free = confirmation_need(
+        execution="auto", credits="ask",
+        quote_high=0, unquotable=False, always_confirm_above=GUARDRAIL,
+    )
+    assert free.requires_confirmation is False
+    priced = confirmation_need(
+        execution="auto", credits="ask",
+        quote_high=120, unquotable=False, always_confirm_above=GUARDRAIL,
+    )
+    assert priced.requires_confirmation is True
+    assert priced.reason == "credits_pref"
+    assert priced.quote_high == 120
+
+
+def test_confirmation_need_guardrail_beats_prefs_in_any_mode() -> None:
+    # D6: fold high over the guardrail always asks once — both prefs auto
+    # included. Reason precedence names the guardrail over the prefs.
+    need = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=5001, unquotable=False, always_confirm_above=GUARDRAIL,
+    )
+    assert need.requires_confirmation is True
+    assert need.reason == "above_guardrail"
+    # The boundary itself is inclusive-exclusive: exactly at the line is free.
+    at_line = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=5000, unquotable=False, always_confirm_above=GUARDRAIL,
+    )
+    assert at_line.requires_confirmation is False
+
+
+def test_confirmation_need_unquotable_always_asks_and_wins() -> None:
+    # NULL 族恒问: an unquotable plan asks once in every mode, and the
+    # reason names unquotable ahead of the guardrail (the pill's label
+    # follows it — 「估价随运行确定」, never a fabricated number).
+    need = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=9000, unquotable=True, always_confirm_above=GUARDRAIL,
+    )
+    assert need.requires_confirmation is True
+    assert need.reason == "unquotable"
+    assert need.unquotable is True
+    # A deferred quote (None) rides the same clause.
+    deferred = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=None, unquotable=True, always_confirm_above=GUARDRAIL,
+    )
+    assert deferred.requires_confirmation is True
+    assert deferred.reason == "unquotable"
+
+
+def test_confirmation_need_reason_precedence_money_before_execution() -> None:
+    # credits=ask on a priced plan beats a bare execution=ask in the
+    # reason order (the pill's priced label keys on it).
+    need = confirmation_need(
+        execution="ask", credits="ask",
+        quote_high=120, unquotable=False, always_confirm_above=GUARDRAIL,
+    )
+    assert need.reason == "credits_pref"
+
+
+def test_gate_authorization_conjunct_fires_only_in_the_docks_own_turn() -> None:
+    # The auto regime's presentation-time start attempt: a dock that owes
+    # a beat AND docked this turn → 422 start.needs_confirm carrying the
+    # reason + quote. The SAME need on a later-turn start (the user's beat
+    # IS the confirmation) never trips the conjunct.
+    need = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=9000, unquotable=False, always_confirm_above=GUARDRAIL,
+    )
+    blocked = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+        confirmation=need,
+        docked_this_turn=True,
+    )
+    assert blocked is not None
+    assert blocked.http_status == 422
+    assert blocked.code == "start.needs_confirm"
+    assert blocked.reason == "above_guardrail"
+    assert blocked.quote_high == 9000
+    # Later-turn start (verbal yes / pill click) — the beat itself:
+    later = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+        confirmation=need,
+        docked_this_turn=False,
+    )
+    assert later is None
+    # No beat owed — the presentation-time start proceeds (the auto path).
+    free = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=800, unquotable=False, always_confirm_above=GUARDRAIL,
+    )
+    assert (
+        evaluate_start_gate(
+            has_pending_plan=True,
+            effective_tasks_nonempty=True,
+            stamp=_READY_STAMP,
+            confirmation=free,
+            docked_this_turn=True,
+        )
+        is None
+    )
+
+
+def test_gate_authorization_conjunct_yields_to_structural_truth() -> None:
+    # Precedence: the structural guards + the projection verdict report
+    # before the authorization conjunct (a start that cannot run is not
+    # a confirmation question).
+    need = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=9000, unquotable=False, always_confirm_above=GUARDRAIL,
+    )
+    stamp = compute_lifecycle(_ready_facts(assets_pending=True))
+    verdict = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=stamp,
+        confirmation=need,
+        docked_this_turn=True,
+    )
+    assert verdict is not None
+    assert verdict.code == "start.blocked"

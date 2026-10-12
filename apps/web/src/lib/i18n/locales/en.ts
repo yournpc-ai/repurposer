@@ -1553,14 +1553,17 @@ const en = {
     // candidates (assets / outputs) ARE canvas nodes. NO '/' — chat has
     // no slash-command system; advertising it would be a false promise
     // (the 虚构 SKU 货架 ban applies to placeholder copy too). The '/'
-    // half earns its seat only if slash commands ever ship.
-    chatPlaceholder: "Describe your changes. Drag or paste files, or type @ to mention nodes — the assistant confirms with you before starting.",
+    // half earns its seat only if slash commands ever ship. ADR-117: the
+    // old "confirms with you before starting" clause left with the
+    // ask-default regime — static copy describes the default (auto) truth:
+    // presentation IS the authorization.
+    chatPlaceholder: "Describe your changes. Drag or paste files, or type @ to mention nodes.",
     // The full form's sibling (2026-09-13 user ruling): pre-first-run the
     // canvas doesn't exist yet, so there are no "nodes" to point at — the
     // @ picker's candidates are assets only. Copy follows the world's
     // truth per form; the nodes version returns once the canvas lands
     // (panel / dock forms).
-    chatPlaceholderAssets: "Describe what you want to make. Drag or paste files, or type @ to mention assets — the assistant confirms with you before starting.",
+    chatPlaceholderAssets: "Describe what you want to make. Drag or paste files, or type @ to mention assets.",
     attachFiles: "Attach files",
     retryUpload: "Retry upload",
     removeAttachment: "Remove attachment",
@@ -1573,6 +1576,18 @@ const en = {
       file: "File",
     },
     stopped: "Generation stopped.",
+    // 确认 pill (ADR-117 §4 — 画板 C): the confirm beat's only chrome, shown
+    // exactly when the dock's stamp says a beat is owed. The label family:
+    // bare verb (execution ask) / priced (credits ask · guardrail — the
+    // number is the server fold's high end, never client-computed) /
+    // deferred (the NULL-estimate family — never a fabricated number).
+    // confirmPillMessage = the click's canned user words riding the chat
+    // channel (the pill IS the user saying it — the retired Start pill's
+    // own post-v4.2 machine).
+    confirmPillStart: "Start",
+    confirmPillStartPriced: "Start · ~{{n}} credits",
+    confirmPillStartDeferred: "Start · priced when it runs",
+    confirmPillMessage: "Confirm and generate",
   },
   questionDock: {
     bail: "Stop generation",

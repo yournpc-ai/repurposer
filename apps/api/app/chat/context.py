@@ -42,6 +42,7 @@ async def build_context(
     recent: list[Message],
     mentions: list[ChatMention],
     pending: Message | None,
+    confirmation: tuple[str, str] | None = None,
 ) -> dict[str, Any]:
     """Assemble the intent context deterministically (CHAT_ARCH §6, v1 scope):
     project summary (assets / visible outputs / latest run) + the last 3
@@ -50,10 +51,20 @@ async def build_context(
     this module assembles, it never queries the chat store's question
     lifecycle. Pointing at a product is an @mention (ADR-058 — the canvas
     focus mechanism retired into the mentions registry); the mention block
-    below carries the definite id."""
+    below carries the definite id. ``confirmation`` (ADR-117 D1) = the
+    user's two confirmation prefs (execution, credits) — rendered as one
+    fact line the system template's mode-conditional close law reads."""
     lines = [
         f"Project: {project.title} (id={project.id}, language={project.language})",
     ]
+    if confirmation is not None:
+        # The FACT seat — the mode-conditional LAW stays in the static
+        # system template (一法一座; the static prompt's prefix cache
+        # survives per-user settings).
+        lines.append(
+            "Confirmation settings: execution="
+            f"{confirmation[0]}, spending={confirmation[1]}."
+        )
 
     assets = list(
         (

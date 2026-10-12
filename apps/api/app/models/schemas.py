@@ -1864,6 +1864,18 @@ class QuestionPayload(BaseModel):
     # code-supplied, structured (data, localized at render), never a
     # pre-formatted string. None until supplied / for plain questions.
     estimate_credits: PlanEstimate | None = None
+    # 授权前移 (ADR-117 §4): task_book only — the confirmation conjunct
+    # computed ONCE at dock time (the prefs + guardrail + quote fold). The
+    # client's confirm pill renders only when ``requires_confirmation`` is
+    # true — it NEVER derives the need itself; ``confirm_reason`` selects
+    # the pill's label family (execution_pref → bare Start; credits_pref /
+    # above_guardrail → priced Start off ``quote_high``; unquotable → the
+    # deferred-price label). Absent on legacy rows = False/""/None/False
+    # (读容忍 — a pre-flip dock reads as the auto regime's under-line plan).
+    requires_confirmation: bool = False
+    confirm_reason: str = ""
+    quote_high: int | None = None
+    unquotable: bool = False
     # task_book only: the needs_clarification reason KEYS (data, localized at
     # render — never baked into `content`, which is user-facing prose).
     reasons: list[str] = Field(default_factory=list)
