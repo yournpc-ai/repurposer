@@ -101,7 +101,7 @@ class Config(Base):                       # configs — 公共运营参数表（
 2. **读取只有一个漏斗**：`get_config(key)` 类型化取值（进程内缓存 + 写失效）；其他模块永不直接查表；未知 key 直接报错。
 3. **两分界**：**运营参数（改了不该要发版）→ config 表**；**工程参数（改错会炸部署）→ env `config.py` 不动**（连接串 / 密钥 / DB 保险丝）。
 
-首批住户：`wallet.signup_grant` / `credits.per_cost_usd`。
+首批住户：`wallet.signup_grant` / `credits.per_cost_usd` / `billing.always_confirm_above`（确认守卫线，ADR-117 D6——方案 fold high 端越线或含 NULL 节点时任何权限档恒带价问一次；ops 参数，永不是用户设置）。
 
 ## 5. 负余额语义
 
@@ -120,6 +120,15 @@ class Config(Base):                       # configs — 公共运营参数表（
 - **step 级**：终态 failed / skipped → 该 step 用户 charge = 0（不写 capture 行）；成功 step 收 actual 全量（含其内部瞬时重试的真实消耗）。
 - provider 侧成本（`workflow_steps.cost`，含失败尝试）照记不误——那是我们对账与偏差回归的事实，只是不上用户账单。
 - estimate 已 hold 的部分随 run 终态 release 自动结清，无人工介入。
+
+## 6.5 会话层计量与 context 预算（ADR-117 §5）
+
+**会话层 LLM 调用（路由 / 理解 / 规划 / 应答 / 探索 / 触发回合）只计量、不收费。** 对话是产品界面本身——按回合计价 = 出租车计价器焦虑，无一主流 agent 产品这么做；但成本是真实的（m3 $0.30/$1.20 per 1M token，重度话痨项目的会话成本可超生产成本），必须入账可见。
+
+- **`conversation_usage` 表**（owner = 平台层）：每回合一行（user / project / prompt_tokens / completion_tokens / cached_tokens / cost_usd 写入时定型 / model / created_at）。chat 回合入口绑 `bind_conversation_turn()` contextvar，复用 `record_usage` 唯一咽喉（`minimax.py` provider 层），tool loop 多轮迭代聚合为一行；写纪律 = 与回合 assistant 消息同一 commit；计量永不打断生成。
+- **永不上用户账单、永不上 UI**。用途三：COGS 可见性（会话/生产成本比）/ W11 fair-use 配额的数据基础 / context 预算校准数据源。
+- **context 预算**（纯后端零 UI）：装配超 `chat.context_budget_tokens`（ops 参数）→ 消息历史滑动窗口收编（现有 `history[-n:]` 散座归一预算谓词）；世界状态（图快照 / 资产元数据）不走消息窗，天然幸存。LLM 滚动摘要 = 缓做项（真实溢出率由台账观察后再评）。prefix cache 友好装配顺序不动。
+- token 是内部计量单位，credit 是用户面唯一货币——token 数字与 USD 一样永不上 UI。
 
 ## 7. API 与展示面
 
@@ -142,6 +151,8 @@ GET /wallet/transactions?limit&cursor      → 台账行（W11 计费中心的�
 
 **语义账本塌缩**（ADR-057）：hold / release 永不上 UI——CreditsPill popover 的台账投影 = **per-run-event 语义行**（「Post 修订 −3」「初始生成 −42」：一次用户可感知动作 = 一行，hold/capture/release 内部时序折叠进该行净额）；用户面只显**花费 / 赠送 / 充值**三族。裸 kind 列表（`hold`/`capture`/`release` 逐行）是机器视角泄漏，不上 UI。
 
+**展示主轴抉择（ADR-117 同批拍板）**：积分余额是唯一的用户面数字——**百分比永不做主轴**（估价四面同源律：dock 总价 / 修改单价 / 估价贴 / 节点估价全说积分，余额讲 % 则用户无法对账；且 % 的分母在赠额+充值+订阅混合钱包下无意义）。ring 类可视化只是将来订阅落地后的可选 garnish（配额的可视化，不是第二货币）。**SettingsDialog「积分」section** = 余额与台账的全貌座位（概览卡 + 语义行 + 查看全部），与 CreditsPill / 账户控制台三面同源同一投影，零新端点。**确认闸形态**（ADR-117）：默认 auto 档无闸——方案呈现即开工；ask 档与守卫线触发时 Start 钮带价（`开始 · 约 N 积分` / NULL 族「估价随运行确定」），复用既有 pill 零新 chrome。
+
 ## 8. 分期与边界
 
 | 期 | 内容 |
@@ -149,7 +160,7 @@ GET /wallet/transactions?limit&cursor      → 台账行（W11 计费中心的�
 | **W7 积分批（09-03~09-05）** | 三表 + migration + configs 注册表/reconcile + 开户 grant + hold/capture/release 真扣费 + 出生地 shortfall 判定 + 三面展示 + 灰行 + `/wallet` 端点。**积分从这批起就是真的**——只是还没有花钱买的入口 |
 | **W11 支付批** | `platform/payments.py` 适配器（三方对接 + webhook + 订阅生命周期）→ 只写 ledger；套餐语义（周期额度 vs 充值包、购买比例、档位）那时定，`kind`/`ref` 已留座位；用户计费中心 = 台账只读投影 |
 
-**显式不做（W11 座位已留）**：`/payments/*` 端点、webhook 接收器、admin 侧 configs 读写端点、双桶余额（订阅周期额度 vs 充值包——W11 套餐语义定夺时如需分桶，ledger 加列而非改语义）。
+**显式不做（W11 座位已留）**：`/payments/*` 端点、webhook 接收器、admin 侧 configs 读写端点、分桶余额（三桶形状已定：**Subscription 周期额 / Purchased 充值包 / Bonus 赠额**——Pexo 实证的用户可读形态，spend 顺序 = 先扣先到期；订阅桶配「Resets on <date>」行——Flora 先例；ledger 加列而非改语义）、fair-use 会话配额（数据基础 = `conversation_usage` 台账）。auto-spend 闸已提前落地——ADR-117 默认 auto + 守卫线即其形态，W11 不再单独立项。
 
 **孤儿 hold 回收**：run 被删（project 级联，台账 append-only 按设计存活）或永停非终态（WAITING_HUMAN 被弃）时，hold 的解冻走双路闭环：① **删除即退**——project 删除端点同事务对非 RUNNING run 调 `release_run`（RUNNING 在途 run 的捕获量仍在增长，提前退会与后落 capture 对不上账；它归 worker 收官路）；② **收官路台账自结算**——`maybe_finalize_run` 对 run 行已删 / 项目已删的残余调用走 `_release_orphaned_hold`（ledger hold 行自带 owner，remainder 从台账重算，幂等键防双退）；WAITING_HUMAN 被弃由 TTL 过期扫荡（`expire_stale_interrupts`）→ run 收官 → 正常 release 兜住。reconcile 尺子对「被删 run 的未结 hold」保留 ○ known-open 豁免，活 run 未结仍硬判。
 
