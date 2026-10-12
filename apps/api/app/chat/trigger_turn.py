@@ -64,6 +64,7 @@ from app.chat.service import (
     stamp_suggestions,
 )
 from app.chat.turn_tools import CHAT_READ_TOOLS
+from app.metering import bind_conversation_turn, fold_conversation_usage
 from app.models.schemas import Option, QuestionPayload, SuggestionItem, WrapUpArgs
 from app.models.tables import (
     Conversation,
@@ -487,11 +488,21 @@ async def run_trigger_turn(
                 outcome["suggestions"] = params.suggestions
                 return None
 
-            result = await trigger_agent.call_loop(
-                execute,
-                event_line=event_line,
-                context_text=context.get("text", ""),
-                language=language,
+            with bind_conversation_turn() as _usage_bind:
+                result = await trigger_agent.call_loop(
+                    execute,
+                    event_line=event_line,
+                    context_text=context.get("text", ""),
+                    language=language,
+                )
+            # 会话层计量 (ADR-117 D3): the proactive turn IS a conversation
+            # turn — its usage row rides the review row's own commit below
+            # (a silenced landing never commits, so it never writes either).
+            await fold_conversation_usage(
+                db,
+                user_id=UUID(str(project.user_id)),
+                project_id=project_id,
+                accrued=_usage_bind.accrued,
             )
             if result.exhausted:
                 logger.info(

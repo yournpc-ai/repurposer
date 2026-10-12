@@ -70,6 +70,7 @@ from app.chat.suggestions import (
     suggestion_stale_reasons,
 )
 from app.chat.turn_tools import strip_tool_echoes
+from app.metering import bind_conversation_turn, fold_conversation_usage
 from app.models.schemas import (
     AnswerPayload,
     AnswerRequest,
@@ -1732,6 +1733,14 @@ async def answer_question(
 
     follow_up: Message | None = None
     bailed_run_ids: list[UUID] = []
+    # 会话层计量 (ADR-117 D3): the continuation branches below are the LLM
+    # seats — each binds its own ledger (the elif chain is exclusive) and
+    # folds it right there; the row rides this function's own commit.
+    _usage_project_id = (
+        UUID(str(conversation.project_id))
+        if conversation.project_id is not None
+        else None
+    )
 
     if question.kind == "task_book":
         project = await db.get(Project, conversation.project_id)
@@ -1979,36 +1988,54 @@ async def answer_question(
             # suggestion) or the interrupt already expired — the pick is the
             # user's say, carried by the generic continuation (same seat as
             # the no-run-id branch below).
-            follow_up, _run_id, bailed_run_ids, _settled = await _continue_chat_answer(
-                db, user_id, conversation, question, data, option_label,
-                suggestion_ref=_suggestion_ref_for(message, data),
-                on_delta=on_delta,
-                on_phase=on_phase,
-                on_tool_call=on_tool_call,
-                on_tool_ready=on_tool_ready,
-                on_loop_event=on_loop_event,
-                on_activity=on_activity,
-                on_candidates=on_candidates,
+            with bind_conversation_turn() as _usage_bind:
+                follow_up, _run_id, bailed_run_ids, _settled = (
+                    await _continue_chat_answer(
+                        db, user_id, conversation, question, data, option_label,
+                        suggestion_ref=_suggestion_ref_for(message, data),
+                        on_delta=on_delta,
+                        on_phase=on_phase,
+                        on_tool_call=on_tool_call,
+                        on_tool_ready=on_tool_ready,
+                        on_loop_event=on_loop_event,
+                        on_activity=on_activity,
+                        on_candidates=on_candidates,
+                    )
+                )
+            await fold_conversation_usage(
+                db,
+                user_id=user_id,
+                project_id=_usage_project_id,
+                accrued=_usage_bind.accrued,
             )
 
     elif question.kind == "question" and data.kind in ("option", "freeform"):
         # 续聊: the answer unblocks the conversation — the user's pick is
         # their say for the next turn, with the answered question in context.
-        follow_up, _run_id, bailed_run_ids, _extra = await _continue_chat_answer(
+        with bind_conversation_turn() as _usage_bind:
+            follow_up, _run_id, bailed_run_ids, _extra = (
+                await _continue_chat_answer(
+                    db,
+                    user_id,
+                    conversation,
+                    question,
+                    data,
+                    option_label,
+                    suggestion_ref=_suggestion_ref_for(message, data),
+                    on_delta=on_delta,
+                    on_phase=on_phase,
+                    on_tool_call=on_tool_call,
+                    on_tool_ready=on_tool_ready,
+                    on_loop_event=on_loop_event,
+                    on_activity=on_activity,
+                    on_candidates=on_candidates,
+                )
+            )
+        await fold_conversation_usage(
             db,
-            user_id,
-            conversation,
-            question,
-            data,
-            option_label,
-            suggestion_ref=_suggestion_ref_for(message, data),
-            on_delta=on_delta,
-            on_phase=on_phase,
-            on_tool_call=on_tool_call,
-            on_tool_ready=on_tool_ready,
-            on_loop_event=on_loop_event,
-            on_activity=on_activity,
-            on_candidates=on_candidates,
+            user_id=user_id,
+            project_id=_usage_project_id,
+            accrued=_usage_bind.accrued,
         )
 
     elif question.kind == "question" and data.kind == "bail" and question.slot is not None:
@@ -2025,26 +2052,33 @@ async def answer_question(
                 # (the default_path copy's exact promise).
                 await _settle_default_role_pins(db, project)
             history = await list_conversation_messages(db, UUID(str(conversation.id)))
-            follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
-                db,
-                user_id,
-                conversation,
-                project,
-                ChatRequest(
-                    project_id=project.id,
-                    message=(
-                        "(The user skipped my question — take the default "
-                        "path and draft the plan.)"
+            with bind_conversation_turn() as _usage_bind:
+                follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
+                    db,
+                    user_id,
+                    conversation,
+                    project,
+                    ChatRequest(
+                        project_id=project.id,
+                        message=(
+                            "(The user skipped my question — take the default "
+                            "path and draft the plan.)"
+                        ),
                     ),
-                ),
-                recent=history[-5:],
-                on_delta=on_delta,
-                on_phase=on_phase,
-                on_tool_call=on_tool_call,
-                on_tool_ready=on_tool_ready,
-                on_loop_event=on_loop_event,
-                on_activity=on_activity,
-                on_candidates=on_candidates,
+                    recent=history[-5:],
+                    on_delta=on_delta,
+                    on_phase=on_phase,
+                    on_tool_call=on_tool_call,
+                    on_tool_ready=on_tool_ready,
+                    on_loop_event=on_loop_event,
+                    on_activity=on_activity,
+                    on_candidates=on_candidates,
+                )
+            await fold_conversation_usage(
+                db,
+                user_id=user_id,
+                project_id=_usage_project_id,
+                accrued=_usage_bind.accrued,
             )
 
     await db.commit()
@@ -2516,57 +2550,86 @@ async def execute_chat_turn(
         assistant_message = prepared.interrupt_reply
         run_id = None
         bailed_run_ids: list[UUID] = []
-    elif prepared.plan_path:
-        # The intent router's context excludes this turn's own message (already
-        # the prompt being judged); the latest few rounds before it are the
-        # disambiguating conversation (G-7).
-        recent = [
-            m for m in prepared.history if m.id != prepared.user_message.id
-        ][-5:]
-        assistant_message, run_id, plan_answered, bailed_run_ids = await _plan_turn(
-            db,
-            prepared.user_id,
-            prepared.conversation,
-            prepared.project,
-            request,
-            recent=recent,
-            on_delta=on_delta,
-            on_reasoning=on_reasoning,
-            on_phase=on_phase,
-            on_tool_call=on_tool_call,
-            on_tool_ready=on_tool_ready,
-            on_checkpoint=on_checkpoint,
-            on_loop_event=on_loop_event,
-            on_activity=on_activity,
-            on_candidates=on_candidates,
-        )
-        if plan_answered is not None:
-            prepared.answered_question = plan_answered
     else:
-        assistant_message, run_id, bailed_run_ids, chat_settled = await _propose_turn(
+        # 会话层计量 (ADR-117 D3): the turn-entry seam binds the usage
+        # ledger — the canned interrupt reply needs no LLM (empty ledger,
+        # zero rows), the agent branches meter through record_usage.
+        with bind_conversation_turn() as _usage_bind:
+            if prepared.plan_path:
+                # The intent router's context excludes this turn's own message
+                # (already the prompt being judged); the latest few rounds
+                # before it are the disambiguating conversation (G-7).
+                recent = [
+                    m for m in prepared.history if m.id != prepared.user_message.id
+                ][-5:]
+                (
+                    assistant_message,
+                    run_id,
+                    plan_answered,
+                    bailed_run_ids,
+                ) = await _plan_turn(
+                    db,
+                    prepared.user_id,
+                    prepared.conversation,
+                    prepared.project,
+                    request,
+                    recent=recent,
+                    on_delta=on_delta,
+                    on_reasoning=on_reasoning,
+                    on_phase=on_phase,
+                    on_tool_call=on_tool_call,
+                    on_tool_ready=on_tool_ready,
+                    on_checkpoint=on_checkpoint,
+                    on_loop_event=on_loop_event,
+                    on_activity=on_activity,
+                    on_candidates=on_candidates,
+                )
+                if plan_answered is not None:
+                    prepared.answered_question = plan_answered
+            else:
+                (
+                    assistant_message,
+                    run_id,
+                    bailed_run_ids,
+                    chat_settled,
+                ) = await _propose_turn(
+                    db,
+                    prepared.user_id,
+                    prepared.conversation,
+                    prepared.project,
+                    request.message,
+                    request.mentions,
+                    prepared.history[-6:],
+                    suggestion_ref=request.suggestion_ref,
+                    on_delta=on_delta,
+                    on_reasoning=on_reasoning,
+                    on_phase=on_phase,
+                    on_tool_call=on_tool_call,
+                    on_tool_ready=on_tool_ready,
+                    on_checkpoint=on_checkpoint,
+                    on_loop_event=on_loop_event,
+                    on_activity=on_activity,
+                    on_candidates=on_candidates,
+                )
+                if chat_settled is not None:
+                    # 插话判定结算 (ADR-053 R2): the agent judged this very
+                    # message the pending question's answer — surface the
+                    # settled row so the client's pill clears and the
+                    # AnsweredQuestion block lands.
+                    prepared.answered_question = chat_settled
+        # The usage row rides the turn's own commit below (billing write
+        # discipline); a zero-LLM turn (repair-loop canned replies aside)
+        # writes nothing.
+        await fold_conversation_usage(
             db,
-            prepared.user_id,
-            prepared.conversation,
-            prepared.project,
-            request.message,
-            request.mentions,
-            prepared.history[-6:],
-            suggestion_ref=request.suggestion_ref,
-            on_delta=on_delta,
-            on_reasoning=on_reasoning,
-            on_phase=on_phase,
-            on_tool_call=on_tool_call,
-            on_tool_ready=on_tool_ready,
-            on_checkpoint=on_checkpoint,
-            on_loop_event=on_loop_event,
-            on_activity=on_activity,
-            on_candidates=on_candidates,
+            user_id=prepared.user_id,
+            project_id=(
+                UUID(str(prepared.project.id))
+                if prepared.project is not None
+                else None
+            ),
+            accrued=_usage_bind.accrued,
         )
-        if chat_settled is not None:
-            # 插话判定结算 (ADR-053 R2): the agent judged this very message
-            # the pending question's answer — surface the settled row so
-            # the client's pill clears and the AnsweredQuestion block lands.
-            prepared.answered_question = chat_settled
 
     # The turn's outcome stamp rides the SAME commit as its writes (交互
     # 完整性批 A): in_flight → settled is atomic with the assistant row /
