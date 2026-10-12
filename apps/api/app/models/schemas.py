@@ -1988,6 +1988,13 @@ class ProjectUpdate(BaseModel):
     tone_snapshot: ToneSettings | None = None
 
 
+class BulkDeleteRequest(BaseModel):
+    """Batch project deletion (the projects grid's multi-select bar). One
+    request, one transaction — the client never loops the single door."""
+
+    ids: list[UUID] = Field(min_length=1, max_length=100)
+
+
 class ProjectResponse(ProjectBase):
     """Project response."""
 

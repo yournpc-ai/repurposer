@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { apiDelete, apiPut } from "@/lib/api"
+import { apiDelete, apiPost, apiPut } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -146,8 +146,7 @@ export function DeleteProjectDialog({
 }
 
 interface DeleteProjectsDialogProps {
-  /** The bulk selection — deleted sequentially through the same per-project
-   * door (no bulk endpoint; selections stay small). */
+  /** The bulk selection — one bulk-delete call, one server-side transaction. */
   projectIds: string[]
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -168,14 +167,15 @@ export function DeleteProjectsDialog({
     if (busy) return
     setBusy(true)
     try {
-      for (const id of projectIds) {
-        // apiFetch already toasted the failure detail — stop the pass there
-        // and let the refetch show the honest remainder.
-        const res = await apiDelete(`/api/v1/projects/${id}`)
-        if (!res.ok) break
+      // apiFetch already toasts the failure detail — only close + refetch on
+      // success, so a 422/404 leaves the selection on screen for a retry.
+      const res = await apiPost("/api/v1/projects/bulk-delete", {
+        ids: projectIds,
+      })
+      if (res.ok) {
+        onOpenChange(false)
+        onDeleted()
       }
-      onOpenChange(false)
-      onDeleted()
     } finally {
       setBusy(false)
     }

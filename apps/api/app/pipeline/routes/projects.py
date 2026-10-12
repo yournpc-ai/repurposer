@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
     AssetResponse,
+    BulkDeleteRequest,
     ExportRequest,
     GenerateRequest,
     GenerateResponse,
@@ -901,22 +902,15 @@ async def update_project(
     return project
 
 
-@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project(
-    project_id: UUID,
-    db: DBDep,
-    current_user: User = Depends(get_current_user_required),
-) -> None:
-    """Delete project and all associated assets."""
-    project = await get_project_for_user(
-        db, project_id, current_user.id
-    )
-
-    # Delete child rows in FK-safe order, then the project. Asset files are
-    # unlinked individually since we need each file_url before deletion.
-    # operations (journal, NO ACTION on both its FKs) and publications
-    # (RESTRICT on output) must go BEFORE outputs; workflow_steps cascade
-    # from runs, conversations/messages cascade from the project.
+async def _delete_project_rows(db: DBDep, project: Project, user_id: UUID) -> None:
+    """The ONE deletion seat for a project (single + bulk doors share it).
+    Child rows go in FK-safe order, then the project; asset files are
+    unlinked individually since we need each file_url before deletion.
+    operations (journal, NO ACTION on both its FKs) and publications
+    (RESTRICT on output) must go BEFORE outputs; workflow_steps cascade
+    from runs, conversations/messages cascade from the project. The caller
+    owns the transaction boundary (no commit here)."""
+    project_id = UUID(str(project.id))
     result = await db.execute(select(Asset).where(Asset.project_id == project_id))
     for asset in result.scalars().all():
         await delete_file(asset.file_url)
@@ -938,14 +932,47 @@ async def delete_project(
         )
     ).scalars().all()
     for rid in run_ids:
-        await release_run(db, user_id=current_user.id, run_id=rid)
+        await release_run(db, user_id=user_id, run_id=rid)
     await db.execute(delete(WorkflowRun).where(WorkflowRun.project_id == project_id))
     await db.execute(delete(Asset).where(Asset.project_id == project_id))
     await db.delete(project)
+
+
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project(
+    project_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> None:
+    """Delete project and all associated assets."""
+    project = await get_project_for_user(
+        db, project_id, current_user.id
+    )
+    await _delete_project_rows(db, project, current_user.id)
     await db.commit()
 
     # Remove project upload directory after DB commit
     await delete_project_files(project_id, current_user.id)
+
+
+@router.post("/bulk-delete", status_code=status.HTTP_204_NO_CONTENT)
+async def bulk_delete_projects(
+    request: BulkDeleteRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> None:
+    """Delete a batch of projects (the grid's multi-select bar). Ownership
+    for every id is checked BEFORE a single row is touched — one unknown or
+    foreign id 404s the whole request, then one transaction deletes the
+    set (no silent partial passes)."""
+    projects = [
+        await get_project_for_user(db, pid, current_user.id) for pid in request.ids
+    ]
+    for project in projects:
+        await _delete_project_rows(db, project, current_user.id)
+    await db.commit()
+    for pid in request.ids:
+        await delete_project_files(pid, current_user.id)
 
 
 @router.post(
