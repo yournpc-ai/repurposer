@@ -93,11 +93,17 @@ export function ProjectCard({ project, onChanged, selected, onToggleSelect }: Pr
       >
         {/* Flat at rest (Flora 式): the thumbnail's own fill is the only
             separation from the page — no card shell, no hairline (填充优先,
-            §4)。hover 语言 = 媒体区交互环 + 浮动钮（非 bg 座——accent 在
-            6px padding 缝里读作糊框；环直接抱住媒体区，空井/视频通吃）。 */}
+            §4)。hover 语言 = 媒体区 ring-1·/30 交互环 + 浮动钮（非 bg 座——
+            accent 在 6px padding 缝里读作糊框；环直接抱住媒体区，空井/视频
+            通吃）；选中 = 常驻 ring-2·/60（宽度+深度两档差，与实心勾选圈
+            同族），盖住 hover 档。 */}
         <div className="rounded-xl p-1.5">
           <div
-            className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-lg group-hover:ring-1 group-hover:ring-foreground/20 ${
+            className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-lg ${
+              selected
+                ? "ring-2 ring-foreground/60"
+                : "group-hover:ring-1 group-hover:ring-foreground/30"
+            } ${
               // Neutral base for the live mist — bg-primary/10 would leak hue
               // through it; the tinted base is only for the settled thumbnail.
               live ? "bg-muted" : "bg-primary/10"
