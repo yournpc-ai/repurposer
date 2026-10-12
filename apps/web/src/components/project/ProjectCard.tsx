@@ -48,6 +48,7 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
 
   const [renameOpen, setRenameOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const thumbnailSrc = project.thumbnail_url
     ? project.thumbnail_url.startsWith("/")
@@ -85,10 +86,10 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
         // confirm panel; processing ⟺ the dock attaches to the live run).
         className="group block"
       >
-        {/* Container card — white on the white canvas, the base hairline is
-            the separation (no shadow: in-flow surface). The thumbnail insets
-            inside with a concentric radius, the text row lives on the card. */}
-        <div className="rounded-xl bg-card p-1.5 ring-1 ring-foreground/10">
+        {/* Flat at rest (Flora 式): the thumbnail's own fill is the only
+            separation from the page — no card shell, no hairline (填充优先,
+            §4)。hover 时整件浮出 bg-accent 座（§4.3 单 token hover 律）。 */}
+        <div className="rounded-xl p-1.5 transition-colors group-hover:bg-accent">
           <div
             className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-lg ${
               // Neutral base for the live mist — bg-primary/10 would leak hue
@@ -137,18 +138,21 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
               <p className="truncate text-xs text-muted-foreground">
                 {bottomLine}
               </p>
-            {/* "···" menu — the wrapper preventDefault+stopPropagation keeps
-                the wrapping <a> from navigating (stopPropagation alone leaves
-                the browser's default anchor behavior intact). */}
+            {/* "···" menu — rest 态隐身（扁平律的一部分），hover / 键盘
+                触及 / 菜单打开时显形（opacity 互换非 display——保键盘可达
+                与槽位几何，§7 同律）。wrapper 的 preventDefault+
+                stopPropagation 挡住外层 <a> 的导航。 */}
             <div
-              className="shrink-0"
+              className={`shrink-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 ${
+                menuOpen ? "opacity-100" : "opacity-0"
+              }`}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
               }}
             >
-              <DropdownMenu>
+              <DropdownMenu onOpenChange={setMenuOpen}>
                 <DropdownMenuTrigger
                   render={
                     <Button
