@@ -120,7 +120,7 @@ export function ProjectCard({ project, onChanged, selected, onToggleSelect }: Pr
                 className={`absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full transition-opacity ${
                   selected
                     ? "bg-foreground text-background opacity-100"
-                    : "bg-background text-transparent opacity-0 ring-1 ring-foreground/20 group-focus-within:opacity-100 group-hover:opacity-100"
+                    : "bg-background text-transparent opacity-0 ring-1 ring-foreground/20 group-has-[:focus-visible]:opacity-100 group-hover:opacity-100"
                 }`}
               >
                 <Check className="h-3.5 w-3.5" />
@@ -169,10 +169,11 @@ export function ProjectCard({ project, onChanged, selected, onToggleSelect }: Pr
               </p>
             {/* "···" menu — rest 态隐身（扁平律的一部分），hover / 键盘
                 触及 / 菜单打开时显形（opacity 互换非 display——保键盘可达
-                与槽位几何，§7 同律）。wrapper 的 preventDefault+
-                stopPropagation 挡住外层 <a> 的导航。 */}
+                与槽位几何，§7 同律；键盘触及 = has-[:focus-visible]，鼠标
+                点击的粘滞 focus 不算——那是 :focus-visible 的存在意义）。
+                wrapper 的 preventDefault + stopPropagation 挡住外层 <a> 的导航。 */}
             <div
-              className={`shrink-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 ${
+              className={`shrink-0 transition-opacity group-has-[:focus-visible]:opacity-100 group-hover:opacity-100 ${
                 menuOpen ? "opacity-100" : "opacity-0"
               }`}
               onPointerDown={(e) => e.stopPropagation()}
