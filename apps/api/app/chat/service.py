@@ -229,7 +229,7 @@ def _reminder_tail(text: str, question: str, default_path: str | None) -> str:
 
 
 def _estimate_tail(
-    text: str, estimate: PlanEstimate | None, *, held: bool = False
+    text: str, estimate: PlanEstimate | None, *, reason: str = ""
 ) -> str:
     """Dock echo 的估价尾行 (ADR-111 §2 — 确认 dock 卡面退役后总估价的新家;
     BILLING §2.1 披露义务不变: capture 前估价必须可见): a code-composed
@@ -240,18 +240,36 @@ def _estimate_tail(
     a fabricated number. The per-task half stays on the canvas's draft
     nodes (逐节点估价, ADR-057 K5).
 
-    ``held`` (ADR-117 §4): the auto regime's guardrail/unquotable trip —
-    the echo's spoken close announced the start (the model speaks before
-    the quote exists), but the dock is waiting for the priced beat, so the
-    tail carries the honest correction: this plan starts once confirmed.
-    The clause names the fact plainly (画板 A footnote 的同一措辞族) — the
-    guardrail threshold itself is ops-internal and never appears. The ask
-    regimes never set it: there the model's own closing question IS the
-    confirmation ask, and the tail stays the现行 estimate-only shape."""
+    ``reason`` (ADR-117 §4) = the dock's stamped ConfirmationNeed reason.
+    The held clauses key on it — the auto regime's guardrail/unquotable
+    trip: the echo's spoken close announced the start (the model speaks
+    before the quote exists), but the dock waits for the priced beat, so
+    the tail carries the honest correction. ``above_guardrail`` names the
+    high side (the threshold itself is ops-internal, never shown);
+    ``unquotable`` leads with the deferred-pricing truth EVEN when a
+    partial range exists (a NULL per-task with quotable siblings — the
+    pill's deferred label and the tail must say one thing). The prefs
+    family (execution_pref / credits_pref) keeps the standard
+    estimate-only shape: there the model's own closing question IS the
+    confirmation ask."""
     zh = _prefers_zh(text)
     if estimate is not None:
         low, high = estimate.total
-        if held:
+        if reason == "unquotable":
+            if zh:
+                return (
+                    f"\n\n（估价 {low}–{high} 积分起——含暂无法提前估价的步骤，"
+                    "确认后才开始：按上限预扣，按实际用量结算，"
+                    "失败的步骤不收费，剩余退回）"
+                )
+            return (
+                f"\n\n(From {low}–{high} credits — some steps can't be "
+                "quoted up front, so the work starts once you confirm: the "
+                "high end is held, you're charged only for what actually "
+                "runs, failed steps are free, and the remainder is "
+                "returned.)"
+            )
+        if reason == "above_guardrail":
             if zh:
                 return (
                     f"\n\n（估价 {low}–{high} 积分——金额较高，确认后才开始："
@@ -273,7 +291,7 @@ def _estimate_tail(
             "is held; you're charged only for what actually runs, failed "
             "steps are free, and the remainder is returned.)"
         )
-    if held:
+    if reason in ("above_guardrail", "unquotable"):
         if zh:
             return (
                 "\n\n（估价随运行确定——这个方案无法提前估价，确认后才开始；"
@@ -289,6 +307,43 @@ def _estimate_tail(
     return (
         "\n\n(Credits are priced when the run starts — billing begins only "
         "when you start, and failed steps are free.)"
+    )
+
+
+def _auto_start_rejected_line(detail: dict[str, Any] | None) -> str:
+    """The auto 道's birthplace-422 honesty line (ADR-117 §2): the
+    presentation-time start failed AFTER the echo's work-start beat spoke,
+    and no pill / grey row / toast carries it (the ask 道's client-side
+    surfacing never fires on this path) — so the reason lands as a
+    code-composed tail on the dock row's content (the estimate tail's
+    lawful seat: code-forced text, real numbers from the 422 detail, never
+    the LLM's voice). ``credits.insufficient`` names the two numbers
+    (BILLING §5 文案纪律: factual, no top-up CTA — the purchase entry is
+    W11); every other 422 gets the generic retry line (a retry through
+    the ask 道 surfaces the full reason there). Language = the request's
+    ui locale (the wallet route's same seat)."""
+    from app.ui_locale import current_ui_language  # deferred: request ctx
+
+    zh = (current_ui_language() or "").startswith("zh")
+    if detail and detail.get("code") == "credits.insufficient":
+        balance = detail.get("balance")
+        required = detail.get("required")
+        if balance is not None and required is not None:
+            if zh:
+                return (
+                    f"\n\n（开工没有成功——积分不足：当前余额 {balance}，"
+                    f"这个方案约需 {required}。计划保留在这里。）"
+                )
+            return (
+                f"\n\n(The work couldn't start — not enough credits: your "
+                f"balance is {balance}, this plan needs about {required}. "
+                "The plan stays here.)"
+            )
+    if zh:
+        return "\n\n（开工没有成功——计划保留在这里，再说一次「开始」即可重试。）"
+    return (
+        "\n\n(The work couldn't start — the plan stays here; "
+        'say "start" to try again.)'
     )
 
 
@@ -1372,15 +1427,31 @@ async def _auto_start_docked_plan(
             confirmed_via="auto",
         )
     except HTTPException as exc:
-        # The birthplace's 422s (credits shortfall / stale-chain reject /
-        # a raced structural block) fire AFTER answer_question's early
-        # answer write — undo exactly that write so the dock stays open
-        # (422s are the post-write family by construction here: the
-        # pre-write kind guards can never fire on a task_book kind=start;
-        # the 409 family is pre-write and leaves the row untouched).
+        # Undo the answer write whatever the status family — the pre-write
+        # raises never reached it (this is then an idempotent no-op), and
+        # the post-write family must not leave an answered dock with no
+        # run: the birthplace's 422s (credits shortfall / stale-chain
+        # reject / a raced structural block) fire after the early answer
+        # write by construction, and the gate's post-write 409
+        # ``start.no_pending_plan`` would too, should the two plan sources
+        # (the question's intent column vs project.pending_brief) ever
+        # diverge mid-turn.
+        pending_question.answer = None
         if exc.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT:
-            pending_question.answer = None
-            await db.flush()
+            # The auto 道 must not fail silent: the echo's work-start beat
+            # already spoke, no pill renders (requires_confirmation=False),
+            # and the ask 道's surfacing (the client grey row off the 422)
+            # never fires here — so the reason lands as a code-composed
+            # tail on the dock row's content (the estimate tail's lawful
+            # seat: persisted, so live envelope and replay read it alike;
+            # intent.answer stays clean — a future re-dock's echo must not
+            # ghost this moment-in-time fact).
+            line = _auto_start_rejected_line(
+                exc.detail if isinstance(exc.detail, dict) else None
+            )
+            base = (pending_question.content or "").rstrip()
+            pending_question.content = (base + line) if base else line.lstrip()
+        await db.flush()
         logger.info(
             "auto_start_rejected",
             project_id=str(project.id),

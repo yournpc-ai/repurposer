@@ -589,14 +589,10 @@ class ChatTurn:
             else estimate
         )
         # ADR-117 §4: one confirmation-need computation per dock — the
-        # echo's held variant (auto regime's guardrail/unquotable trip)
-        # reads it, the payload stamp takes it by pass-through below.
+        # echo's held clause (keyed on the stamped reason) reads it, the
+        # payload stamp takes it by pass-through below.
         need = await resolve_confirmation_need(db, self.user_id, resolved_estimate)
-        held = need.requires_confirmation and need.reason in (
-            "above_guardrail",
-            "unquotable",
-        )
-        answer = (answer or "") + _estimate_tail(self.text, resolved_estimate, held=held)
+        answer = (answer or "") + _estimate_tail(self.text, resolved_estimate, reason=need.reason)
         intent = InferredIntent(
             action="draft",
             tasks=tasks,

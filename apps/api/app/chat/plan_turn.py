@@ -866,15 +866,11 @@ class PlanTurn:
         # preview — an unquotable/uncompilable chain docks quote-less.
         task_estimate = await _safe_task_estimate(db, project, params.tasks)
         # ADR-117 §4: the confirmation need is computed ONCE here — the
-        # echo's held variant (the auto regime's guardrail/unquotable trip:
-        # the spoken close announced the start, the dock waits for the
-        # priced beat, the tail carries the honest correction) and the dock
-        # payload's stamp read the same object (passed through below).
+        # echo's held clause (keyed on the stamped reason: the auto
+        # regime's guardrail/unquotable trip carries the honest
+        # correction) and the dock payload's stamp read the same object
+        # (passed through below).
         need = await resolve_confirmation_need(db, self.user_id, task_estimate)
-        held = need.requires_confirmation and need.reason in (
-            "above_guardrail",
-            "unquotable",
-        )
         # 估价尾行 (ADR-111 §2 — dock 卡面退役后总估价的新家): the dock echo
         # carries the code-composed estimate whisper (BILLING §2.1 披露义务 —
         # capture 前可见). Appended AFTER the prose so the tail lands with
@@ -882,7 +878,7 @@ class PlanTurn:
         # per-task half lives on the canvas's draft nodes. intent.answer and
         # the question row share the same tailed echo, so the flow's
         # content-match (echo 实体化) keeps holding.
-        echo = echo + _estimate_tail(self.text, task_estimate, held=held)
+        echo = echo + _estimate_tail(self.text, task_estimate, reason=need.reason)
 
         # The late-turn guard: a concurrent Start committed while this refine
         # was in flight — docking now would raise a plan over an active
@@ -1163,14 +1159,10 @@ class PlanTurn:
         # dock's echo carries the code-composed estimate whisper too — the
         # disclosure duty (BILLING §2.1) holds on every dock seat, and the
         # tailed echo rides intent.answer so the re-dock replay stays
-        # single-tailed. The held variant (ADR-117 §4) fires only on the
-        # auto regime's guardrail/unquotable trip.
+        # single-tailed. The held clause (ADR-117 §4) keys on the stamped
+        # reason — the auto regime's guardrail/unquotable trip only.
         need = await resolve_confirmation_need(db, self.user_id, task_estimate)
-        held = need.requires_confirmation and need.reason in (
-            "above_guardrail",
-            "unquotable",
-        )
-        prose = prose + _estimate_tail(self.text, task_estimate, held=held)
+        prose = prose + _estimate_tail(self.text, task_estimate, reason=need.reason)
         intent = InferredIntent(
             action="draft",
             tasks=compiled,
@@ -1316,14 +1308,10 @@ class PlanTurn:
         task_estimate = await _safe_task_estimate(db, project, compiled)
         # 估价尾行 (ADR-111 §2 — present_plan dock 的同座同律): the revision
         # re-dock's echo carries the code-composed estimate whisper too;
-        # the held variant (ADR-117 §4) covers the auto regime's
-        # guardrail/unquotable trip.
+        # the held clause (ADR-117 §4) keys on the stamped reason — the
+        # auto regime's guardrail/unquotable trip only.
         need = await resolve_confirmation_need(db, self.user_id, task_estimate)
-        held = need.requires_confirmation and need.reason in (
-            "above_guardrail",
-            "unquotable",
-        )
-        prose = prose + _estimate_tail(self.text, task_estimate, held=held)
+        prose = prose + _estimate_tail(self.text, task_estimate, reason=need.reason)
         intent = InferredIntent(
             action="draft",
             tasks=compiled,

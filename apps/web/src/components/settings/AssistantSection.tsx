@@ -55,13 +55,23 @@ export function AssistantSection() {
       const prev = prefs
       if (prev === null) return
       setPrefs({ ...prev, [key]: value })
-      const res = await apiPut(
-        "/api/v1/auth/settings",
-        { [key]: value },
-        { toast: t("assistant.updateFailed") },
-      )
-      // Rollback on failure — the global toast already reported it.
-      if (!res.ok) setPrefs(prev)
+      try {
+        const res = await apiPut(
+          "/api/v1/auth/settings",
+          { [key]: value },
+          // A bare string is the SUCCESS toast's copy in apiFetch's
+          // contract (errors still auto-toast the server detail) — the
+          // custom error line rides the `{error}` seat, success stays
+          // silent (动作反馈律).
+          { toast: { error: t("assistant.updateFailed") } },
+        )
+        // Rollback on failure — the global toast already reported it.
+        if (!res.ok) setPrefs(prev)
+      } catch {
+        // Network-level failure: apiFetch toasts then rethrows — the
+        // optimistic flip rolls back too.
+        setPrefs(prev)
+      }
     },
     [prefs, t],
   )

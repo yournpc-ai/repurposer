@@ -50,15 +50,34 @@ _PAST_JOURNEYS_CAP = 3
 _MESSAGE_OVERHEAD_TOKENS = 4  # role / structure framing per row, estimated
 
 
+def _estimate_text_tokens(text: str) -> int:
+    """Estimated prompt cost of one text blob: ~4 chars/token for latin
+    scripts, ~1 token per CJK / kana / hangul / fullwidth char. The
+    chars/4-only estimator reads a zh history ~4× cheaper than reality,
+    so the budget's fold would fire far too late for the product's main
+    language family — the wide-char count keeps the guardrail honest on
+    both scripts (overestimating folds earlier, the safe side)."""
+    wide = sum(
+        1
+        for ch in text
+        if 0x2E80 <= ord(ch) <= 0x9FFF
+        or 0xAC00 <= ord(ch) <= 0xD7AF
+        or 0xFF00 <= ord(ch) <= 0xFFEF
+    )
+    return wide + (len(text) - wide) // 4
+
+
 def estimate_message_tokens(message: Message) -> int:
-    """One history row's estimated prompt cost — chars/4 on the body plus
-    the question/answer payloads' JSON mass when present. An ESTIMATOR,
-    not an exact count: the budget is an ops-tunable guardrail and
-    overestimating folds earlier, which is the safe side."""
-    total = _MESSAGE_OVERHEAD_TOKENS + len(message.content or "") // 4
+    """One history row's estimated prompt cost — the body's script-aware
+    estimate plus the question/answer payloads' JSON mass when present.
+    An ESTIMATOR, not an exact count: the budget is an ops-tunable
+    guardrail and overestimating folds earlier, which is the safe side."""
+    total = _MESSAGE_OVERHEAD_TOKENS + _estimate_text_tokens(message.content or "")
     for payload in (message.question, message.answer):
         if payload:
-            total += len(json.dumps(payload, ensure_ascii=False)) // 4
+            total += _estimate_text_tokens(
+                json.dumps(payload, ensure_ascii=False)
+            )
     return max(1, total)
 
 

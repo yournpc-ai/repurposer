@@ -67,6 +67,16 @@ def test_payload_mass_rides_the_estimate() -> None:
     assert estimate_message_tokens(with_question) > estimate_message_tokens(plain)
 
 
+def test_cjk_text_counts_weighted_not_quartered() -> None:
+    # The product's zh histories: 160 CJK chars ≈ 160 tokens, NOT 40 — the
+    # chars/4-only estimator would fold a Chinese conversation ~4× later
+    # than the budget intends.
+    cjk = _msg("的" * 160)
+    latin = _msg("x" * 160)
+    assert estimate_message_tokens(cjk) >= 160
+    assert estimate_message_tokens(cjk) > estimate_message_tokens(latin) * 2
+
+
 def test_the_window_is_always_a_suffix_never_a_mutation() -> None:
     # 世界状态幸存's message-side tooth: folding only ever drops from the
     # front — the returned rows are the SAME row objects in the SAME order
