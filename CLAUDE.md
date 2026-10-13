@@ -92,7 +92,7 @@ Repurposer serves **European knowledge experts who have content but no time to m
 - **Channels**: LinkedIn, 机构站, 邮件 newsletter。**Multi-output 是能力非承诺**：用户点名什么生成什么，承诺句 = "the user names it, the agent makes it"——打包式「一输入全套出」文案永禁；多语言是入场券（FR/DE/ES/IT/EN 等）。
 - **GDPR / EU 驻留** = 卖点但对外文案保持「ready 角度」，合规实装后改写。
 - **Dual track 命名**（NAMING N-25）：对内 = **agent**；对外 = **assistant / 助手**，"agent" 永不出现于英文文案（zh 用品类句「你的自媒体Agent团队」=品牌妥协，待 N-25 修订）；角色隐喻（运营官/操盘手/班子）禁（N-24）。
-- **Copy doctrine**（论证 → STRATEGY §5）：plain & factual。禁资产话术（"knowledge assets" 否）/ 膨胀隐喻（"bigger stage" 否）/ 审批机械化（"You review. It publishes" 否）；身份从 expertise 出发，**不称用户 influencer / creator / 网红**；承诺句 = "You focus on your craft; we handle the rest."（与 hero "We do the rest" 同源）；**禁 MCN / 代运营 / 变现话术**（我们是 agent 不是 agency，不做变现承诺）；**CTA / 控件 = 直给动词 + 具体名词**（"上传你的原视频"/"生成"），禁产品黑话与造词；写作风格 = 风格/style，"voice" = 音频本义（声纹/dub）；Sparkles icon 禁，assistant 视觉 = `LogoMark`；studio home hero = 品牌锁up + 品类句（剩定位归 landing）。**配方卡素材需求署名在左 Input 小节**（`recipes.<id>.inputTitle`/`inputHint`），上传区文案通用（`recipes.inspect.dropzone`）。
+- **Copy doctrine**（论证 → STRATEGY §5）：plain & factual。禁资产话术（"knowledge assets" 否）/ 膨胀隐喻（"bigger stage" 否）/ 审批机械化（"You review. It publishes" 否）；身份从 expertise 出发，**不称用户 influencer / creator / 网红**；承诺句 = "You focus on your craft; we handle the rest."（与 hero "We do the rest" 同源）；**禁 MCN / 代运营 / 变现话术**（我们是 agent 不是 agency，不做变现承诺）；**CTA / 控件 = 直给动词 + 具体名词**（"上传你的原视频"/"生成"），禁产品黑话与造词；写作风格 = 风格/style，"voice" = 音频本义（声纹/dub）；Sparkles icon 禁，assistant 视觉 = `LogoMark`；studio home hero = 品牌锁up + 品类句（剩定位归 landing）。配方卡点击唯一归宿 = composer 预填 `promptTemplate`（配方 = 提示词），永不是模板编辑器。
 - **用户到来即彷徨**（行为规格 → CHAT_ARCH §3.3）：每步都答「下一步是什么」——开始前配方卡接住 / 计划中确认 dock 接住 / 完成后结果画布闭环接住（ADR-041）。agent 顾问姿态四律：① **每轮一问、每问可一词答、默认路径恒带（散文零宣告）**（ADR-052 判词 5 + ADR-103；只问用户能答的——听众/目的，参数由配方与默认值吸收）② 带理由纠偏（给替代方案，禁静默拒绝）③ 成功定义随计划 ④ 永给唯一下一步；不做职业/变现咨询（诊断是为了更快给出对方案，不是把生产工具变顾问）。
 - **闭环优先于卡片数量**：卡点亮（能力真 + 预览真）≠ 通路；「Remix → 对话定计划 → 生成 → 结果 → 下一步 → 再生产」全通才算；对外叙事单位 = "完全通路"。
 - **闭环叙事与身份命名**（ADR-037 / NAMING N-27）：用户侧闭环 = **管理 IP → 产生 outputs → 发布**，en 用 "personal brand / thought leadership"，zh 用 "IP / 自媒体"；产品内身份模块 = **人设**（多实例扁平：工作号/生活号）。**身份根升格为「定位（Positioning）」已拍板**（ADR-042，目标架构 → `docs/POSITIONING.md`，生产层闭环后动工）——人设收窄为定位的表达分区，渠道/选题/素材挂定位根，品牌/IP 留营销承诺层；落地前代码层只 `persona`。
@@ -104,7 +104,7 @@ Repurposer serves **European knowledge experts who have content but no time to m
 ### Dictionary Structure
 - Source language is English: `apps/web/src/lib/i18n/locales/en.ts` is the source of truth and exports the `Resources` type.
 - Chinese `zh.ts` must satisfy `zh: Resources`, so missing keys will be caught at the TypeScript level.
-- **Baked-example labels (`recipes.materials.*`) are UI copy, not content**: name them in the SYSTEM language like every other label — en: "Chinese dub", zh: "中文配音". Never use each language's own name ("Doublage français" in en.ts is a bug class). (Exception that is NOT UI copy: landing demo-card contents and the `channels.languages` native-name list are marketing content by design.)
+- **Baked-demo labels (`recipes.shelf.demos.*`) are UI copy, not content**: name them in the SYSTEM language like every other label — en: "Chinese dub", zh: "中文配音". Never use each language's own name ("Doublage français" in en.ts is a bug class). (Exception that is NOT UI copy: landing demo-card contents and the `channels.languages` native-name list are marketing content by design.)
 
 ### Adding New Copy
 1. Add the key / value in `en.ts` first.

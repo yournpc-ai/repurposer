@@ -11,7 +11,7 @@
   1. 真圆形图标按钮（如输入框右下角发送箭头 `h-9 w-9 rounded-full`）；
   2. 状态徽章 / 红点（通知角标）；
   3. home composer 钉顶后的**单行探索条**（stadium / 半高圆角；展开的 composer 保持 `rounded-2xl`）——stadium 只属于真单行盒，dock 输入组全形态恒 `rounded-xl`；
-  4. home gallery 的**筛选 pill 行**（stadium pills：active = `bg-foreground` 深底 pill，inactive = `bg-card` 白 chip 靠填充步浮在灰页上）。
+  4. home 配方货架的**一级 family pill 轨**（stadium pills 坐在 `bg-muted` 轨槽上：active = `bg-foreground` 深底 pill，inactive = 透明文字态 + `hover:bg-accent`）。
 - shadcn `Badge` 基座是 `rounded-full`——用于元数据标签（时长 / 画幅 / 标签）时恒 `className="rounded-md"` 覆盖。
 - **同排控件中心线对齐**：动作区控件统一 `h-9`，与发送钮同高；composer 底排整排 `h-9`（圆钮 / cost-confirm pill / send 同高，glyph 统一 `size-4.5`）。
 - pill / 下拉触发器**文字不加粗**（禁 `font-medium`），保持轻量。
@@ -42,13 +42,13 @@
 - 媒体 / 示意图 tile 无环无影（填充步分离）。gallery 封面 tile = **`bg-card` 浮起面**（页面已有灰底，封面是白卡：light 0.96→1.0 / dark 0.12→0.21 高程步）；hover chrome = **仅右上 expand 钮**（`bg-accent` token 步）——整卡 cursor-pointer + expand 已足够表达可点；线条吃 `foreground` alpha。
 - **媒体列表项 = 平时扁平，hover 才出交互态**（Flora 式，先例 `/projects` 网格的 ProjectCard）：rest 零壳零环零填充（缩略图自身填充就是与页面的唯一分离）；**hover = 媒体区 `ring-1 ring-foreground/30` 交互环 + 浮动钮显形，非 bg 座**——accent 座是列表行语言，贴在媒体上只沿 padding 缝显形（糊框），环直接抱住媒体区（空井/视频通吃）；交互环归 focus ring 同族（交互不是描边），/10 发丝线禁令不适用于此座。行内动作钮（⋯ / 选择圈族）rest 隐身，`group-hover` / `group-has-[:focus-visible]` / 菜单 open 三态显形（opacity 互换非 display——保键盘可达与槽位几何；**键盘触及只认 `:focus-visible`，禁 `group-focus-within`**——鼠标点击后按钮保有焦点，focus-within 会把显形粘到鼠标移走之后）。**多选解剖**：缩略图左上选择圈（rest 隐身同 ⋯ 律；选中 = `bg-foreground` 实底 + Check——筛选 pill active 同 token）+ **选中媒体区常驻 `ring-2 ring-foreground/60`**（宽度+深度与 hover 档拉开两档差，与实心勾选圈同族，选中态扫读网格一眼可读），底部多选条 = 视口底中锚定的 `overlay-surface` 浮层（计数 + 批量动作 + × 清选），批量动作只放真实存在的（禁虚构货架）。
 
-### 4.1 Gallery 卡状态机（ADR-048 + RECIPES §4 / §4.8）
+### 4.1 配方货架与卡面（ADR-048 + RECIPES §4 / §4.8）
 
 - 封面是单色工艺示意图，**永不实拍**。rest = 内联 SVG 静态封面（`components/recipes/covers/<id>.svg`，foreground 灰阶自驱双主题反转，16:10，左输入→右输出）；hover 播 CSS keyframe 过程动画（零视频零声音零媒体请求）。
-- 证据入 overlay：网格零真容。**卡没有真实成对示例 = 不进网格**（RECIPES §4.8 准入）。
+- **卡没有真实成对示例 = 不进货架**（RECIPES §4.8 准入）；MG 族货架 = 真渲染 demo 视频 loop/muted，族/子 tab/货架空即整级不渲染（无真 demo 连摆位都不摆）。
+- 货架解剖 = 两级 tab（一级 family pill 轨 + 下划线子 tab，子 tab 唯一时不渲染该行）+ 白容器横滑（`bg-card` + 发丝线 + `rounded-lg`，in-flow 零 shadow；› 翻页钮只在真可翻时出现——禁死按钮）。
+- **卡片点击唯一归宿 = composer 预填** `promptTemplate`（配方 = 提示词，ADR-040）——永不是模板编辑器，无 inspect overlay 形态。
 - 三行卡下文字 = 菜名 / promise（2 行 clamp）/ 适用素材。卡面禁画幅 badge / 类别 chip / 渠道名（卡只承载 genre）；渠道是挂发/排期变量（预填模板默认，chat 覆写）。
-- 网格 = 4/3/2 列等宽，**无 featured 跨列**（编辑优先 = 排序位）。
-- hover 带声音示例住 overlay 的 Examples tab（点击 = 手势，声音原生）。
 
 ### 4.2 灰梯
 
@@ -70,7 +70,7 @@
 - 浮层组件**禁回加 `bg-popover`**；**逐实例 frost 补丁（如 `dark:bg-white/10`）禁**——调共享配方；实例确需不同不透明度时经 `className` 覆盖（组件最后合并它，这是开放的扩展点）。
 - Dialog / Sheet backdrop 分主题：light = `bg-background/60`（白 wash——白页上黑罩读作灰浊）+ `backdrop-blur-[2px]`；dark = `bg-black/30` + `backdrop-blur-[2px]`——冰霜面在调暗但清晰可辨的页面上读出来。
 - **Overlay chrome = Dialog primitive，禁手写**（`fixed` backdrop + glass div）：手写 backdrop 包住面板会杀死玻璃——带 `backdrop-filter` 的祖先成为 Backdrop Root，后代面板的 `overlay-surface` blur 只采样该子树（无物可 blur）→ 静默退化为平染色。primitive 把 overlay 与 content 并排 portal，这是唯一正确结构。
-- **`DialogContent` 经 `-translate-1/2` 居中**——带 transform 的弹窗会成为 `fixed` 后代的包含块，把视口锚浮层传送走。视口锚浮层因此 portal 到 `document.body`（`MentionPicker` 先例），免疫祖先 transform 与 backdrop-filter；必须宿主**非 portal** fixed 浮层的弹窗，手组 `DialogPortal` + `DialogOverlay` + `DialogPrimitive.Popup` 并用 `inset-0 m-auto` 居中（无 transform）。**手组弹窗必须镜像 `DialogContent` chrome**：`overlay-surface` + `ring-1 ring-foreground/10` 发丝 + `shadow-xl` + `rounded-xl`——缺发丝线时 light 主题玻璃会溶进白 backdrop wash（先例 `RecipeInspectOverlay`）。
+- **`DialogContent` 经 `-translate-1/2` 居中**——带 transform 的弹窗会成为 `fixed` 后代的包含块，把视口锚浮层传送走。视口锚浮层因此 portal 到 `document.body`（`MentionPicker` 先例），免疫祖先 transform 与 backdrop-filter；必须宿主**非 portal** fixed 浮层的弹窗，手组 `DialogPortal` + `DialogOverlay` + `DialogPrimitive.Popup` 并用 `inset-0 m-auto` 居中（无 transform）。**手组弹窗必须镜像 `DialogContent` chrome**：`overlay-surface` + `ring-1 ring-foreground/10` 发丝 + `shadow-xl` + `rounded-xl`——缺发丝线时 light 主题玻璃会溶进白 backdrop wash。
 - tooltip 与 sonner toast 有意排除（小型瞬态标签保持实色）。
 - **滚动渐隐**（`scroll-fade-y` / `scroll-fade-x`，styles.css）：让 scrollport 边缘在内容抵达浮动 chrome 前溶解的 mask utility（先例：overlay chat 视口）。**按面施用**，每个渐隐区与该面自身的内容 padding 配对——**永不进共享 primitive**：primitive 里闲置的类名会在同名 `@utility` 定义出现的那一刻活过来。
 
@@ -87,7 +87,7 @@
 - **Models = 诚实 Auto 信息面板**：frosted Popover `w-88` = semibold 标题 + Auto 锁定 Switch（**`readOnly` 非 `disabled`**——readOnly 保全黑 ON 轨不灰化，Auto 是事实展示不是控件）+ **锚点 tabs 行**（Writing / Voice / Captions / Music；tab 是媒体类型名词；`bg-inset` track + `bg-card` thumb 共享 segmented 配方）+ 下方单滚动区按模态分 group（tab 不是过滤器，点击平滑滚动到对应 group，scrollspy 让激活 tab 跟随滚动；滚动区 `relative` 容器保证 group `offsetTop` 相对它测量；**底部 spacer 让末组也能锚到顶**，否则 max-scroll 钳位 tab 无法跟随）。**group 解剖 = muted 组标 + 模型行（裸图标 + semibold 模型名 + muted 用途 desc + 右侧 checkbox）**——行主名 = 模型名（曲库是 AI 生成产物不是模型名）；muted 方 tile 是 Assets 文件行解剖，禁搬到模型面板。无底部脚注。Auto switch 与每行 checkbox 同 register：`readOnly` 锁 ON（非 `disabled`）。除此之外全只读、无可选行、无 badge、无计时 chip——每个模态只有一个 provider 时没有可选择的东西，虚构 SKU 货架永禁。可选 picker 只在真实第二 provider 出现时落地，且用户形态是 policy switch（如 "prefer EU-hosted models"），不是模型 SKU 货架。
 - 卡 padding 由 `CardContent` 控制（`Card` 加 `py-0` 去掉内建垂直 padding，避免双重 padding）。卡中部禁加分隔线 / border 来切开输入区与动作条——保持一整件。
 - **Teaching 在 Tour，placeholder 只带示例**：placeholder = **固定前缀 + 3 条最常见 prompt 轮换**——前缀 "Ask Repurposer to " / "让 Repurposer "（`home.placeholderPrefix`），后缀在 `home.placeholderPrompts` 三条间每 3.5s 轮换（React overlay 实现——CSS `attr()` placeholder 不能动画；仅空编辑器可见，padding 随 dockP 插值）。**过渡 = 滚动窗**：旧行上滚出 + 新行下滚入，同向同时长同缓动（`styles.css` `.placeholder-roll-in/-out` 各 0.5s；`prev` 保持出场行挂载，absolute 不占布局，下行 key 重挂载复播；`prefers-reduced-motion` 出场行 display:none 退化为纯切换）；示例文案 = 直给动词 + 具体名词，保持单行长度（钉顶条只露一行）。
-- **Tour = 3 步**（assets → prompt+send → recipe gallery；锚 `data-tour="composer-*"` / `data-tour="home-recipes"`）；**末步锚 = 第五张配方卡**（tour 滚动走 scrollIntoView block:"center"；row-2 首卡居中 = 任何屏高下网格填满视口、钉顶 composer 在顶；卡数 <5 该步自动跳过；target 串不变 = hash 不变 = 不重放）。**seen 版本 = 内容纯函数**（`lib/tour.ts`：djb2 hash 步骤配置 + EN 副本子树，EN 是 locale 真值源；storage = `localStorage["repurposer-tour-seen"]`；read/write 只在 `useEffect`，禁 SSR）。**任何内容变化触发 Tour 重放一次**——无手工版本号。新 tour 沿用同款：独立 storage 键 + 静态 `TourStepDef[]` + EN 副本 hash + `data-tour` 锚点。
+- **Tour = 3 步**（assets → prompt+send → recipe gallery；锚 `data-tour="composer-*"` / `data-tour="home-recipes"`）；**末步锚 = 第五张配方卡**（tour 滚动走 scrollIntoView block:"center"；货架第五卡居中 = 任何屏高下货架填满视口、钉顶 composer 在顶；卡数 <5 该步自动跳过；target 串不变 = hash 不变 = 不重放）。**seen 版本 = 内容纯函数**（`lib/tour.ts`：djb2 hash 步骤配置 + EN 副本子树，EN 是 locale 真值源；storage = `localStorage["repurposer-tour-seen"]`；read/write 只在 `useEffect`，禁 SSR）。**任何内容变化触发 Tour 重放一次**——无手工版本号。新 tour 沿用同款：独立 storage 键 + 静态 `TourStepDef[]` + EN 副本 hash + `data-tour` 锚点。
 - **Show grid ≠ tool grid**：composer 下方的能力图标行纯展示——不得用它切换产出或触碰 composer 参数。
 - composer 无语言 / 产出 / 条数控件，零推断（行为合同归 `CHAT_ARCHITECTURE.md`）。
 
@@ -100,7 +100,7 @@
 - **右发丝线**：`Sidebar` 保留 primitive 的 `border-r` 并显式发 `border-sidebar-border`（Tailwind v4 默认 border 色 = currentColor，必须显式 token；light oklch(0.9) / dark 白 10%）；`--sidebar == --background` 的填充融合不变（same fill + hairline）。
 - 结构：
   - **Header**：只在展开形态渲染（PC 展开 + 移动 off-canvas）= logo lockup + 尾部 collapse 钮（全端，无 `md:hidden`）。无 "Invite members" 入口——无明确产品决策不得复活。
-  - **Content**：扁平导航（无组标题）：Home、My projects（`/projects`）。Personas（`/personas`）入口隐藏（路由存活，随定位/memory 运营端迭代回归；composer 的 Persona 钮同批隐藏）。项目网格住 `/projects`，不在 home（home 只有 composer）。
+  - **Content**：扁平导航（无组标题）：Home、My projects（`/projects`）。Personas（`/personas`）入口隐藏（路由存活，随定位/memory 运营端迭代回归；composer 的 Persona 钮同批隐藏）。项目网格住 `/projects`，不在 home（home = composer + 配方货架）。
   - **Footer**：用户头像开 **account console**——`Popover`，永不 `DropdownMenu`（它承载内联控件）：身份头（avatar + name + email）→ inset **账户块——只放 value surface**（plan / credits 槽位 / 订阅；settings 永不混进账户块；plan 行带文字**升级链接**）→ **偏好**行（标签行 + 尾部控件——theme / language 尾部 segmented：`bg-inset` track + `bg-card` thumb，theme 纯图标 pill；Settings chevron 行开**共享 `SettingsDialog`**，永不建站：左 section 导航 + 右内容，任何处可经 `useSettingsDialog().openSettings(section)` 唤起；section 在 `components/settings/SettingsDialog.tsx` 注册，channels 居首。`/settings` 只作 channels OAuth 回调 shim 存活——toast、开 dialog、bounce 回 home）→ 帮助区（replay tour——sessionStorage flag + `repurposer:replay-tour` 事件双通道送达，HomeComposer 消费先到者）→ logout。
   - **展开态 footer 行解剖**：`[avatar + name/免费版 两行][升级 pill]`——**一个容器持有 hover/open 填充**，但 **pill hover 时行底色让位**（`:has()` 守卫：`group-data-[state=expanded]:not-has-[[data-slot=button]:hover]:hover:bg-sidebar-accent`；open 态底色由 consoleOpen 驱动——pill 与头像区永不得读作两个独立视觉单元，且 pill 是独立交互目标）；trigger = **PopoverTrigger 原生 button 直挂类名**（不经 Button 组件——ghost variant 自带的 hover/aria-expanded 填充会与容器底色打架）；pill 是独立 `Button variant="outline"`（hover 补 `bg-accent`）`render={<Link to="/" hash="pricing" />}`，**永不嵌进 PopoverTrigger**；折叠 = 仅头像圆（+ tooltip，trigger 自带 `group-data-[state=collapsed]:hover:bg-sidebar-accent`）。升级目的地 = 落地页 pricing 锚，直到 W11 应用内购买入口落地。
 - **无全局 AppHeader（ADR-046）**：studio 无常驻顶栏——工具件住 account console（theme / language），**通知铃 = 内容区右上角唯一浮动 chrome chip**（圆角方块 chip + 未读点；右上角槽位全站保留——页面级控件永不占那个角）。移动端保留浮动 sidebar 触发器。
@@ -112,7 +112,7 @@
 
 - 页面主体放 `SidebarInset` 内；禁自带 `min-h-screen w-full` 覆盖侧栏结构。
 - **`_app` 下页面用 `flex-1` 填满视口，永不 `min-h-svh` / `min-h-screen`**：`SidebarInset` 是 `min-h-svh` flex 列（无全局 header，ADR-046），`flex-1` 让页面贴着它；更高内容滚动窗口。**例外——home 是固定 app-shell 面**：根 `h-svh` 永不滚动；**一个内部 scrollport**（`no-scrollbar`）容纳一切——hero 舞台、composer（sticky chrome，rest 居中停驻、滚动钉顶成单行 stadium 条）与 gallery。未来任何固定面页面同形：根 `h-svh` + 恰好一个内部 scrollport。（落地页 `/` 在 `_app` 外——它的 `min-h-svh` 合法。）
-- gallery 筛选行 = sticky chrome 的第三寄存器（骑 chrome 吸顶，零自养动画），按素材维度过滤（`GALLERY_FILTERS`，宽槽卡多归属）。
+- 配方货架（两级 tab + 横滑货架）= **in-flow**，在 composer sticky chrome 之下、不进 chrome——钉顶态 chrome 只留 hero + composer 单行条。
 - **输入框独立层律**：输入组永远是独立层，永不与消息流融合——历史区作为自有磨砂层浮在它上方（与 question pill 同一 dock-surface 族）。
 - **Dot grid = 结果画布签名，只此一面**：只有 FlowView 的 `dots` prop 携带它——32px 间距 + 2px 直径点（react-flow `size` 是直径）+ muted-foreground 32% light / 30% dark；纯世界空间，随 zoom 缩放（不重铺、不加 zoom 补偿）。home 无点阵——不可平移的面背后放固定纹理是在广告不存在的 affordance，且单面使用让点阵**意味着**「你进入了图」。没有 `dot-grid` CSS utility；任何第二个点阵面即违规（ADR-046 附）。
 

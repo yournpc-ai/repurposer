@@ -1,7 +1,6 @@
 "use client"
 
 import { useTranslation } from "react-i18next"
-import { Maximize2 } from "lucide-react"
 
 import { recipeCovers } from "@/components/recipes/covers"
 import type { RecipePublic } from "@/lib/recipes"
@@ -14,16 +13,12 @@ import type { RecipePublic } from "@/lib/recipes"
  * only (currentColor + opacity), and the same `transform-box: fill-box`
  * CSS keyframes that drive the v2 demo (`docs/tasks/recipe-gallery-v2-covers.html`).
  *
- * Hover state machine (MiniMax anatomy, second pass 2026-08-23; Remix pill
- * retired 2026-08-31 — the whole card is clickable (cursor-pointer) and the
- * expand icon already affords the overlay, so the centered pill only
- * occluded the schematic, which IS the card face):
- *   rest  = the schematic (static, no chrome) — title + promise + input
- *           row always readable under the tile;
- *   hover = the schematic plays its process animation (see styles.css
- *           `rc-*` keyframes, gated by `.group:hover`); an expand
- *           icon-button sits top-right — the tile stays uncovered;
- *   click = the RecipeInspectOverlay (the ONLY launch path).
+ * Click contract (D5, flora-parity-ui 批 — 卡片点击唯一归宿 = composer
+ * 预填, 永不是模板编辑器): a live card's click hands the card up for a
+ * composer prefill — the recipe's behavioral payload is its prompt
+ * template alone (配方 = 提示词, ADR-040), and the composer's send path is
+ * the only launch path. The inspect overlay is retired. Reserved cards
+ * stay non-launchable (Soon pill, no click, no chrome).
  *
  * Color law: the cover's `text-foreground` color governs the schematic;
  * `prefers-reduced-motion` disables every animation (the rest geometry
@@ -31,10 +26,10 @@ import type { RecipePublic } from "@/lib/recipes"
  */
 export function RecipeCard({
   card,
-  onInspect,
+  onSelect,
 }: {
   card: RecipePublic
-  onInspect: (card: RecipePublic) => void
+  onSelect: (card: RecipePublic) => void
 }) {
   const { t } = useTranslation()
   const Cover = recipeCovers[card.id]
@@ -44,20 +39,22 @@ export function RecipeCard({
     <div
       role={live ? "button" : undefined}
       tabIndex={live ? 0 : undefined}
-      onClick={() => live && onInspect(card)}
+      onClick={() => live && onSelect(card)}
       onKeyDown={(e) => {
         if (live && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault() // Space would otherwise scroll the page
-          onInspect(card)
+          onSelect(card)
         }
       }}
       className={`group flex flex-col gap-2.5 outline-none ${
         live ? "cursor-pointer" : ""
       }`}
     >
-      {/* The tile — white card on the white canvas, separated by the base
+      {/* The tile — white card on the white shelf, separated by the base
           hairline alone (no shadow: in-flow surface). 16:10 carries the
-          schematic; the inline SVG is the only content. */}
+          schematic; the inline SVG is the only content. Hover plays the
+          schematic's process animation (styles.css `rc-*` keyframes, gated
+          by `.group:hover`) — the tile carries no chrome. */}
       <div className="relative aspect-[16/10] overflow-hidden rounded-lg bg-card text-foreground ring-1 ring-foreground/10">
         {Cover ? (
           <Cover />
@@ -66,32 +63,9 @@ export function RecipeCard({
             {card.id}
           </div>
         )}
-
-        {/* Hover chrome — ONLY the expand icon top-right (2026-08-31 user
-            ruling: cursor-pointer + this affordance express clickability;
-            the retired centered Remix pill occluded the schematic, which IS
-            the card face). Opens the same overlay as the card click
-            (ADR-040). Reserved cards stay non-launchable: no chrome, no
-            click. The chip uses the bg-accent token step on the white
-            tile. */}
-        {live && (
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-label={t("recipes.expand")}
-            onClick={(e) => {
-              e.stopPropagation()
-              onInspect(card)
-            }}
-            className="pointer-events-none absolute right-2.5 top-2.5 flex h-8 w-8 scale-90 items-center justify-center rounded-md bg-accent text-foreground opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100"
-          >
-            <Maximize2 className="h-3.5 w-3.5" />
-          </button>
-        )}
       </div>
 
-      {/* Three rows under the tile, grid-aligned across the row (consistent
-          baseline across cards): title (with optional Soon pill for
+      {/* Three rows under the tile: title (with optional Soon pill for
           reserved) / promise (2-line clamp) / input scenario row (single-
           line meta, tracked uppercase — `text-meta` only sets color +
           uppercase + tracking, the size must come from a utility class,

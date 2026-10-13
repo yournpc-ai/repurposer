@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useTranslation } from "react-i18next"
 
 import { apiFetch } from "@/lib/api"
@@ -8,8 +8,9 @@ import type { ChatMention } from "@/lib/mentions"
 
 import { HomeComposer } from "@/components/home/HomeComposer"
 import { LogoMark } from "@/components/LogoMark"
-import { RecipeCard as RecipeCardView } from "@/components/home/RecipeCard"
-import { RecipeInspectOverlay } from "@/components/recipes/RecipeInspectOverlay"
+import { RecipeTabs } from "@/components/home/RecipeTabs"
+import { RecipeShelf } from "@/components/home/RecipeShelf"
+import { resolveRecipeFamilies } from "@/components/home/recipeFamilies"
 import type { PersonaPickerEntry } from "@/components/composer/PersonaPanel"
 import type { MentionEditorHandle } from "@/components/mentions/MentionEditor"
 
@@ -30,11 +31,6 @@ export const Route = createFileRoute("/_app/home")({
 const HERO_SCROLL_PX = 160
 const DOCK_WINDOW_PX = 140
 
-/** Gallery filter keys (2026-09-24, user ruling — material-based, MiniMax
- * parity). "all" needs no slot match; the rest match input-slot types
- * ("video" / "transcript" / "images"). i18n: `recipes.filters.<key>`. */
-const GALLERY_FILTERS = ["all", "video", "transcript", "images"] as const
-
 function Home() {
   const { t } = useTranslation()
   const [personas, setPersonas] = useState<Persona[]>([])
@@ -45,15 +41,11 @@ function Home() {
   const [prompt, setPrompt] = useState("")
   const [mentions, setMentions] = useState<ChatMention[]>([])
   const editorRef = useRef<MentionEditorHandle>(null)
-  // Every live-card click (body or hover Remix, 2026-08-10) opens the inspect
-  // overlay — inspect tabs + the launch zone (the composer's send mechanism
-  // parked inside). The composer keeps only the manual @-mention path.
-  const [inspecting, setInspecting] = useState<RecipePublic | null>(null)
 
   // App-shell surface: the route root is exactly the viewport tall (h-svh) and
   // NEVER scrolls.
   // ONE scrollport holds everything (stage spacer / hero+composer chrome /
-  // gallery), no scrollbar (MiniMax parity — position sense comes from
+  // recipe shelf), no scrollbar (MiniMax parity — position sense comes from
   // motion, not chrome).
   const scrollRef = useRef<HTMLDivElement>(null)
   const chromeRef = useRef<HTMLDivElement>(null)
@@ -104,7 +96,8 @@ function Home() {
 
   useEffect(() => {
     // Each fetch degrades to empty independently — a recipes-endpoint hiccup
-    // must not take the composer's personas down with it.
+    // must not take the composer's personas down with it (and with zero
+    // cards the shelf simply renders nothing — 无真内容不上架).
     Promise.all([
       apiFetch("/api/v1/personas")
         .then((r) => (r.ok ? r.json() : []))
@@ -130,19 +123,34 @@ function Home() {
     container.scrollTo({ top: 0, behavior: "smooth" })
   }, [])
 
-  // Gallery filter (2026-09-24, user ruling — MiniMax parity): material-
-  // based categories replace the old section title; "all" shows every card,
-  // a material filter keeps cards whose ANY input slot accepts it (wide
-  // slots like quote-cards' video/images/transcript appear under each).
-  const [filter, setFilter] = useState<string>("all")
-  const filteredCards =
-    filter === "all"
-      ? cards
-      : cards.filter((card) =>
-          card.input_slots.some((slot) =>
-            (slot.type ? [slot.type] : (slot.any_of ?? [])).includes(filter),
-          ),
-        )
+  // 卡片点击唯一归宿 (D5 禁则 8): composer 预填 — never a template editor.
+  // clear + insertText REPLACES the draft (prototype parity; the staged
+  // files ride untouched — the chips band is the valuable payload, the text
+  // is the recipe's launch template). insertText focuses the editor, and
+  // the band's onFocus above scrolls the chrome back to rest — the shelf
+  // lives below the fold, so the prefill lands center-stage.
+  const handlePrefill = useCallback(
+    (prefillKey: string) => {
+      editorRef.current?.clear()
+      editorRef.current?.insertText(t(prefillKey))
+    },
+    [t],
+  )
+
+  // Two-level tab shelf (D5, prototype 屏①): families × subs × horizontal
+  // shelves, resolved data-driven — a family without real content never
+  // renders (上架纪律: 无真 demo 不上架). The selection is the route's; the
+  // per-family sub memory survives family hops (prototype parity), and an
+  // invalidated selection (cards refetch) falls back to the first seat.
+  const families = useMemo(() => resolveRecipeFamilies(cards), [cards])
+  const [activeFamilyId, setActiveFamilyId] = useState<string | null>(null)
+  const [subByFamily, setSubByFamily] = useState<Record<string, string>>({})
+  const activeFamily =
+    families.find((f) => f.id === activeFamilyId) ?? families[0] ?? null
+  const activeSub =
+    activeFamily?.subs.find((s) => s.id === subByFamily[activeFamily.id]) ??
+    activeFamily?.subs[0] ??
+    null
 
   // Subtitle fold: copy-level fade + measured-height collapse (the gap below
   // it is padding, so the fold swallows it too). The TITLE never folds — it
@@ -160,19 +168,16 @@ function Home() {
     <div className="h-svh">
       <div ref={scrollRef} className="h-full overflow-y-auto no-scrollbar">
         {/* Rest offset — parks the hero+composer cluster center-stage while
-            letting the gallery's first row peek above the fold (the page's
-            gravity cue that there is more below). */}
+            letting the shelf peek above the fold (the page's gravity cue
+            that there is more below). */}
         <div className="h-[20vh]" />
 
         {/* Hero + composer chrome — sticky: at rest the whole cluster sits
             center-stage in flow; scrolling docks it at the top (title
             persists smaller, composer morphs into the one-line explore bar).
-            The filter pill row is the chrome's THIRD register (2026-09-24,
-            MiniMax parity): it rides the sticky chrome, so it pins under the
-            docked bar with zero choreography of its own. The backdrop (page
-            fill, scroll-linked opacity) keeps wider gallery cards from
-            peeking beside the narrower bar; the clear space below the bar
-            interpolates 48→56px with dockP (rest-state gallery rhythm ↔
+            The backdrop (page fill, scroll-linked opacity) keeps shelf cards
+            from peeking beside the narrower bar; the clear space below the
+            bar interpolates 48→56px with dockP (rest-state shelf rhythm ↔
             docked-bar protection, same pure-function interpolation as every
             other morph — no clocks), then the 32px bottom mask dissolves
             whatever passes. */}
@@ -224,76 +229,53 @@ function Home() {
               onFocus={handleComposerFocus}
             />
           </div>
-          {/* Filter pill row — the chrome's third register, centered on the
-              page's central spine (hero / composer / pills share one axis;
-              the symmetric 4-col gallery keeps it below). Vertical rhythm is
-              uniform: tagline→composer 48 (pb-12), composer→pills 48,
-              pills→gallery 48 (the chrome's rest padding); docked compacts
-              the composer→pills gap 48→32 with dockP, same pure-function
-              interpolation as the rest of the chrome. Stadium pills (the
-              rounded-full law's fifth exception); active = the dark solid
-              pill, inactive = gray-fill chip on the white canvas (fill-first,
-              no border). */}
-          <div
-            className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-center gap-2 sm:px-2"
-            style={{ marginTop: 48 - 16 * dockP }}
-          >
-            {GALLERY_FILTERS.map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setFilter(key)}
-                className={`h-8 rounded-full px-4 text-sm transition-colors ${
-                  filter === key
-                    ? "bg-foreground text-background"
-                    : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
-                }`}
-              >
-                {t(`recipes.filters.${key}`)}
-              </button>
-            ))}
-          </div>
         </div>
 
-        {/* Recipe gallery (recipe-gallery v2, ADR-048): uniform 4-column grid
-            of process-schematic covers — no real media on the card face, no
-            featured spans, no masonry. Card order = registry insertion order
-            (RECIPES §4: row 1 video sources, row 2 text/image sources).
-            Every click opens the inspect overlay — the ONLY launch path
-            (ADR-040). */}
+        {/* Recipe shelf (D5, flora-parity-ui 批): the two-level tab track
+            (families × subs) sits IN FLOW below the composer chrome, then
+            the active sub's horizontal shelves. Cards reuse RecipeCard
+            (schematic covers); MG families render real demo videos
+            loop/muted. Every card click prefills the composer — the ONLY
+            destination (禁则 8, 永不是模板编辑器). */}
         <section className="flex flex-col items-center px-4 pb-[max(64px,40vh)] sm:px-6">
           <div className="w-full max-w-6xl">
-            <div className="grid grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-4">
-              {/* Tour step 4 anchors the FIFTH card (row-2 lead on lg): the
-                  tour's scrollIntoView block:"center" then centers it, so the
-                  grid fills the viewport under the docked composer bar at ANY
-                  screen height — anchoring card 0 over-scrolled (2026-08-31
-                  user ruling). Fewer than 5 cards → the step auto-skips. */}
-              {filteredCards.map((card, index) => (
-                <div
-                  key={card.id}
-                  data-tour={index === 4 ? "home-recipes" : undefined}
-                >
-                  <RecipeCardView
-                    card={card}
-                    onInspect={(c) => {
-                      // The overlay owns attention from here.
-                      setInspecting(c)
-                    }}
-                  />
+            {activeFamily && (
+              <>
+                <RecipeTabs
+                  families={families}
+                  activeFamilyId={activeFamily.id}
+                  activeSubId={activeSub?.id ?? null}
+                  onSelectFamily={setActiveFamilyId}
+                  onSelectSub={(familyId, subId) =>
+                    setSubByFamily((m) => ({ ...m, [familyId]: subId }))
+                  }
+                />
+                <div className="mt-8 flex flex-col gap-8">
+                  {activeSub?.shelves.map((shelf, shelfIndex) => (
+                    <RecipeShelf
+                      key={shelf.id}
+                      title={t(`recipes.shelf.titles.${shelf.id}`)}
+                      items={shelf.items}
+                      onPrefill={handlePrefill}
+                      // Tour step 3 anchors the FIFTH card of the templates
+                      // family's first shelf (row-1 mid on wide viewports):
+                      // the tour's scrollIntoView block:"center" centers it,
+                      // so the shelf fills the viewport under the docked
+                      // composer bar at any screen height. Fewer than 5
+                      // cards → the step auto-skips.
+                      tourAnchorIndex={
+                        activeFamily.id === "templates" && shelfIndex === 0
+                          ? 4
+                          : undefined
+                      }
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
           </div>
         </section>
       </div>
-
-      {inspecting && (
-        <RecipeInspectOverlay
-          card={inspecting}
-          onClose={() => setInspecting(null)}
-        />
-      )}
     </div>
   )
 }

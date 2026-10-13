@@ -471,112 +471,54 @@ const zh: Resources = {
     },
   },
   // 配方卡（RECIPES §7）—— 与 lib/recipes.ts 的卡 id 一一对应；
-  // reserved 卡在此留座但不渲染发射区。
+  // reserved 卡在此留座但不可点击发射。
   recipes: {
-    // 画廊筛选 pill（2026-09-24 用户拍板，按素材维度，MiniMax 式）——键与
-    // _app.home.tsx 的 GALLERY_FILTERS 一一对应，取代退役的 sectionTitle。
-    filters: {
-      all: "全部",
-      video: "视频",
-      transcript: "文稿",
-      images: "图片",
-    },
     soon: "即将推出",
-    expand: "放大预览",
-    mute: "关闭预览声音",
-    unmute: "播放预览声音",
-    // 静态配方流程图步骤（ADR-035）——共享命名空间；配方的流程 = 选哪些步、什么顺序、几路扇出。
-    flow: {
-      // 流程画布区域框的标注（2026-08-19 走查拍板）：框只包策展步骤（素材/产物
-      // 在框外），署名就署自己——不用配方名（与 overlay 头部标题重复）。
-      frameLabel: "策展步骤",
-      understand: "理解素材",
-      plan: "规划剪辑",
-      align_stills: "按文字稿对齐照片",
-      materialize_source: "整条视频就位",
-      select_clips: "选出高光片段",
-      reframe_clip: "竖屏重构图跟人",
-      translate_clip: "翻译字幕",
-      dub_clip: "用你的声音配音",
-      add_music: "加配乐",
-      render: "渲染",
-      // 文本族流程键（配方画廊 v2, ADR-048）—— social-post / quote-cards /
-      // carousel 三卡解阻后消费；提前落在这里，避免新卡登记时文案键断裂。
-      write_post: "写帖子",
-      write_quotes: "挑金句",
-      write_carousel: "排幻灯",
-    },
-    // 配方标签 chip（信息卡）——共享命名空间。
-    tags: {
-      multilingual: "多语言",
-      "no-footage": "无需录像",
-      "auto-framing": "自动取景",
-      "voice-clone": "声音克隆",
-      "text-output": "文本产物",
-    },
-    // 示例素材 / 成片标签（overlay 堆叠项）。
-    materials: {
-      demo_keynote: "示例登台演讲片段",
-      demo_interview: "示例访谈片段",
-      reframe_output: "竖屏分镜",
-      follow_output: "镜头跟人",
-      demo_photos: "现场照片",
-      demo_article: "演讲文稿",
-      image_video_preview: "轮播预览",
-      subs_en: "英语原声",
-      subs_zh_bilingual: "中英双语",
-      subs_fr: "法语字幕",
-      dub_es: "西语配音",
-      // 文本族示例卡标签（2026-08-24 烘焙落桶后消费）。
-      post_output: "帖子样例",
-      // quote-cards v3 示例矩阵（2026-08-28 P3 烘焙）：形态 A/B × 宽槽
-      // 三路径，一瓦片一条已验证输入路径。
-      quotes_form_a: "人像型",
-      quotes_form_b: "全幅背景型",
-      quotes_photo: "照片+文稿",
-      quotes_text: "纯文稿",
-      demo_stage_photo: "策展舞台照",
-      carousel_output: "轮播样例",
-    },
-    inspect: {
-      tabs: {
-        examples: "示例",
-        flow: "流程",
+    // 两级 tab 货架（D5，flora-parity-ui 批）：一级 family pill 轨 × 下划线
+    // 子 tab × 横滑货架。键与 components/home/recipeFamilies.ts 的
+    // RECIPE_FAMILIES 一一对应。无真 demo 的族不上架——MG demo 预填文案随
+    // 资产（MG 批 D3）落在 `recipes.shelf.demos.<demoId>.prompt`。
+    shelf: {
+      families: {
+        templates: "模板",
+        explainer: "解释视频",
+        ads: "广告和用户生成内容",
+        social: "社交媒体",
       },
-      sections: {
-        outputs: "你会得到",
-        inputs: "原始素材",
+      subs: {
+        all: "全部",
+        animated: "动画讲解",
+        motion: "动态图形",
+        brand: "品牌与业务",
+        saas: "SaaS 和应用",
+        product: "产品",
+        linkedin: "LinkedIn",
       },
-      dropzone: "上传或拖放文件",
-      requiredMissing: "先上传素材：{{input}}",
-      promptTitle: "示例提示词",
-      promptPlaceholder: "说说你想做什么…",
-      send: "生成",
-      estimate: "预计花费：约 {{low}}–{{high}} 积分",
-      estimateRate: "每秒视频约 {{rate}} 积分 · 首次配音 +{{oneShot}}（克隆你的声音，只收一次）",
-      estimateRateSolo: "每秒视频约 {{rate}} 积分",
+      titles: {
+        featured: "推荐配方",
+        animated: "动画讲解",
+        motion: "动态图形",
+        brand: "品牌与业务",
+        saas: "SaaS 和应用",
+        product: "产品",
+        linkedin: "LinkedIn",
+      },
+      nextPage: "下一页",
     },
     "multilingual-subs": {
       title: "多语言字幕",
       promise: "为你的视频配上多语言字幕——单行或双语对照。",
       inputScenario: "适用：演讲 · 会议录像",
-      inputTitle: "原始视频",
-      inputHint: "在这里上传你的原视频。",
       promptTemplate:
         "给我的视频配上中文和法语字幕——中文要中英双语对照。",
-      promptHint: "直接发送，或者试试「中英双语」「法语版」「加德语」等。",
     },
     "voice-dub": {
       title: "原声AI配音",
       promise:
         "用你的声音把同一段视频讲成另一种语言——不是通用合成声。",
       inputScenario: "适用：演讲 · 会议录像",
-      inputTitle: "原始视频",
-      inputHint: "在这里上传你的原视频。",
       promptTemplate:
         "把我的视频配成中文、法语和西班牙语——用我自己的声音，不要合成播音腔。",
-      promptHint:
-        "直接发送，或者试试「改配普通话」「加德语版」等。",
     },
     "social-post": {
       // 配方画廊 v2（ADR-048 §4.6）：承诺句里的环路价值句（"发哪个平台你定"）
@@ -585,93 +527,53 @@ const zh: Resources = {
       promise:
         "讲稿或长文 → 可以直接发的帖子。你的风格来写，发哪个平台你定。",
       inputScenario: "适用：讲稿 · 论文 · 会议纪要",
-      inputTitle: "原始素材",
-      inputHint: "你的演讲文字稿、论文草稿或会议纪要——长文本就行。",
       promptTemplate:
         "帮我写一条社媒帖。",
-      // 2026-08-24 双模板：overlay 已挂附件时预填更具体版本——无素材时仍走小白原声（小声）。
-      promptTemplateWithMaterial:
-        "把这段素材写成一条社媒帖，按我的风格来。哪个平台发——你选合适的就行。纯文本——不要 Markdown（不要 **加粗** / _斜体_ / # 标题 / [链接](url) / 代码块）；主流社交平台都把 Markdown 当源文渲染，看起来是碎的。",
-      promptHint:
-        "直接发送，或者试试「再短一些，钩子先行」「改成 thread」「换成德语」等。",
     },
     "quote-cards": {
       // 2026-08-27 v3（ADR-048 第 7 条）：叠卡就是金句卡本体——承诺句写
       // 叠卡这道菜，不再写"一句话"单卡（单句图归 chat 能力，不上卡面）。
-      // 模板保留双语默认 + chat 字幕模式（Phase 1）。
-      // 2026-08-28 P2 宽槽：三条素材路径——录像、照片+文稿、纯文稿（深色
-      // 文字叠卡）。输入文案点齐三路径，槽位保持可空。
       title: "金句卡",
       promise:
         "挑出最亮的几句话，叠成一张可以直接发的金句卡。",
       inputScenario: "适用：讲座录像 · 访谈 · 文字稿",
-      inputTitle: "讲座录像、照片或文字稿",
-      inputHint: "上传一段讲话视频、照片配文字稿，或只给文字——我们挑出最亮的几句话，叠成一张金句卡。",
-      // 双语 CN+EN 默认例子（用户红线 2026-08-25 §1.6）：真实双语用
-      // 户就这么打字——短、直接、点名形态。
       promptTemplate:
         "做一张中英双语金句卡。",
-      promptTemplateWithMaterial:
-        "从我的演讲里挑几句最亮的，做成中英双语金句卡。",
-      // promptHint 教用户两条可改维度（RECIPES §7.2）：语言对 + 字幕
-      // 模式——都走 chat（按 promptHint = 引导句而非选择器控件的纪律）。
-      promptHint:
-        "默认中英双语。在对话里改你自己的语言对和字幕模式（双语 / 只保留源语言 / 只保留目标语言）。",
     },
     carousel: {
       title: "轮播图",
       promise:
         "讲稿或课件要点，排成可以翻页的图文幻灯。",
       inputScenario: "适用：讲稿 · 课件要点",
-      inputTitle: "原始素材",
-      inputHint: "你的讲稿或课件大纲——我们排成幻灯。",
       promptTemplate:
         "帮我做一组轮播。",
-      promptTemplateWithMaterial:
-        "把这段素材做成一组轮播幻灯——一图一意，可以直接发。",
-      promptHint:
-        "直接发送，或者试试「少几张」「加一个钩子在第一张」「法语版」等。",
     },
     "image-video": {
       title: "图文视频",
       promise: "没有录像——照片加文字稿，变成带字幕和音乐的轮播短片。",
       inputScenario: "适用：文稿 + 照片 · 课件",
-      inputTitle: "文字稿和照片",
-      inputHint: "你的演讲文字稿，加一组照片或直接给课件（PDF/PPT）——现场图、幻灯片、人像都可以。",
       promptTemplate:
         "把我的文稿和照片做成一条图文短片——照片按段落切换，配字幕和背景音乐。",
-      promptHint:
-        "直接发送，或者试试「再短一些」「用课件替换照片」「加更多照片」等。",
     },
     "highlight-clips": {
       title: "高光切片",
       promise: "长视频里最好的几段剪成竖屏短片——镜头自动跟人，最值得先发的也标出来。",
       inputScenario: "适用：长演讲录像",
-      inputTitle: "原始视频",
-      inputHint: "演讲、会议、访谈录像都行——中景画面效果最好。",
       promptTemplate:
         "把我这场演讲最精彩的部分剪成竖屏短片——镜头跟人，带字幕。",
-      promptHint: "直接发送，或者试试「切成横屏」「多剪几段」等。",
     },
     reframe: {
       title: "访谈分镜",
       promise: "横屏双人对话重剪竖屏——镜头跟着说话人走。",
       inputScenario: "适用：双人对谈录像",
-      inputTitle: "输入视频",
-      inputHint: "双人对话的横屏录像——访谈或对谈节目。",
       promptTemplate:
         "把我的双人访谈重剪成竖屏短片——镜头跟着说话的人走。",
-      promptHint:
-        "直接发送，或者试试「多切几段」「覆盖整场访谈」「更快节奏」等。",
     },
     "ai-visuals": {
       title: "虚拟视频",
       promise: "没有素材也没关系——每个画面都根据你的演讲生成。",
       inputScenario: "适用：演讲录音",
-      inputTitle: "输入音频",
-      inputHint: "你的演讲录音——画面全部围绕它生成。",
       promptTemplate: "把我的演讲变成一条短片，画面全部 AI 生成，不需要素材。",
-      promptHint: "使用示例告诉 Repurposer 你的要求，当然你也可以修改。",
     },
   },
   // @-提及系统（MENTIONS §4）：picker 文案与类型名。

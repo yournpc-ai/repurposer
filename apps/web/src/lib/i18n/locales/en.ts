@@ -491,129 +491,54 @@ const en = {
   // Recipe cards (RECIPES §7) — one block per card id in lib/recipes.ts;
   // reserved cards render disabled with the Soon pill, never launchable.
   recipes: {
-    // Gallery filter pills (2026-09-24 user ruling — material-based, MiniMax
-    // parity). Keys mirror GALLERY_FILTERS in _app.home.tsx; replaces the
-    // retired sectionTitle.
-    filters: {
-      all: "All",
-      video: "Video",
-      transcript: "Transcripts",
-      images: "Images",
-    },
     soon: "Soon",
-    expand: "Expand preview",
-    mute: "Mute preview sound",
-    unmute: "Play preview sound",
-    // Static recipe flow steps (ADR-035) — shared namespace; a recipe's flow
-    // is WHICH of these steps, in what order, with what fanout.
-    flow: {
-      // The region frame's label on the 流程 canvas (2026-08-19 走查拍板):
-      // the frame wraps ONLY the curated steps (assets/outputs stay outside),
-      // so it names itself — never the recipe title (that duplicates the
-      // overlay header).
-      frameLabel: "Curated steps",
-      understand: "Understand the material",
-      plan: "Plan the edit",
-      align_stills: "Align photos to the script",
-      materialize_source: "Prepare the full video",
-      select_clips: "Select highlight segments",
-      reframe_clip: "Reframe vertical, follow the speaker",
-      translate_clip: "Translate the captions",
-      dub_clip: "Dub it in your own voice",
-      add_music: "Add music",
-      render: "Render",
-      // Text-tribe flow keys (recipe-gallery v2, ADR-048) — land when the
-      // social-post / quote-cards / carousel cards uncomment into the
-      // registry. Kept here so the flow lookup never breaks the moment a
-      // new card lands.
-      write_post: "Write the post",
-      write_quotes: "Pick the quote lines",
-      write_carousel: "Lay out the slides",
-    },
-    // Recipe tag chips (info card) — shared namespace.
-    tags: {
-      multilingual: "Multilingual",
-      "no-footage": "No footage needed",
-      "auto-framing": "Auto framing",
-      "voice-clone": "Voice clone",
-      "text-output": "Text output",
-    },
-    // Example material / output labels (overlay stack items).
-    materials: {
-      demo_keynote: "Demo keynote excerpt",
-      demo_interview: "Demo interview excerpt",
-      reframe_output: "Vertical reframe",
-      follow_output: "Speaker follow",
-      demo_photos: "Event photos",
-      demo_article: "Talk write-up",
-      image_video_preview: "Slideshow preview",
-      subs_en: "Original (EN)",
-      subs_zh_bilingual: "CN-EN bilingual",
-      subs_fr: "French captions",
-      dub_es: "Spanish dub",
-      // Post-bake labels for the text-tribe cards (2026-08-24 bake landing).
-      post_output: "Post example",
-      // quote-cards v3 example matrix (2026-08-28 P3 bake): 形态 A/B ×
-      // the three wide-slot paths — each tile one verified input path.
-      quotes_form_a: "Speaker layout",
-      quotes_form_b: "Full-bleed layout",
-      quotes_photo: "Photo + transcript",
-      quotes_text: "Transcript only",
-      demo_stage_photo: "Curated stage photo",
-      carousel_output: "Carousel example",
-    },
-    // Inspect overlay (RecipeInspectOverlay, D6 二次修订 2026-08-08):
-    // right = inspect tabs; left = the launch zone (composer's send
-    // mechanism parked inside). The prefilled prompt IS the visible
-    // preset — no picker controls, no mirror chips. The dropzone copy is
-    // generic; the per-recipe material ask lives in `<id>.inputHint`.
-    inspect: {
-      tabs: {
-        examples: "Examples",
-        flow: "Flow",
+    // Two-level tab shelf (D5, flora-parity-ui 批): family pill track ×
+    // underline sub-tabs × horizontal shelves. Keys mirror
+    // components/home/recipeFamilies.ts RECIPE_FAMILIES. A family without real
+    // demos never renders (无真 demo 不上架) — MG demo prefill copy lands
+    // with its assets (MG 批 D3) at `recipes.shelf.demos.<demoId>.prompt`.
+    shelf: {
+      families: {
+        templates: "Templates",
+        explainer: "Explainer videos",
+        ads: "Ads & UGC",
+        social: "Social media",
       },
-      sections: {
-        outputs: "What you get",
-        inputs: "Source material",
+      subs: {
+        all: "All",
+        animated: "Animated explainers",
+        motion: "Motion graphics",
+        brand: "Brand & business",
+        saas: "SaaS & apps",
+        product: "Product",
+        linkedin: "LinkedIn",
       },
-      dropzone: "Upload or drag & drop files",
-      requiredMissing: "Add the material first: {{input}}",
-      promptTitle: "Example prompt",
-      promptPlaceholder: "What do you want to make?",
-      send: "Generate",
-      /** 估价贴: the card's credits quotation on the typical source,
-       * rendered above the send button (BILLING §7). */
-      estimate: "Estimated cost: ~{{low}}–{{high}} credits",
-      /** Usage-priced sticker (per-second cards, e.g. voice-dub): rate per
-       * source-video second + the one-shot voice-clone fee — scales to the
-       * user's real upload in their head. Solo = no one-shot fee. */
-      estimateRate:
-        "~{{rate}} credits/sec of video · first dub +{{oneShot}} (voice clone, billed once)",
-      estimateRateSolo: "~{{rate}} credits/sec of video",
+      titles: {
+        featured: "Featured recipes",
+        animated: "Animated explainers",
+        motion: "Motion graphics",
+        brand: "Brand & business",
+        saas: "SaaS & apps",
+        product: "Product",
+        linkedin: "LinkedIn",
+      },
+      nextPage: "More",
     },
     "multilingual-subs": {
       title: "Multilingual captions",
       promise:
         "Caption your video in any language — single-line, or bilingual side-by-side.",
       inputScenario: "For: talks · meetings",
-      inputTitle: "Source video",
-      inputHint: "Upload your original video here.",
       promptTemplate:
         "Caption my video in Chinese and French — Chinese as bilingual subtitles.",
-      promptHint:
-        "Send it as is, or try “bilingual captions”, “French captions”, “add a German version”…",
     },
     "voice-dub": {
       title: "Your-voice AI dub",
       promise:
         "The same talk, in another language — in your voice, not a stock narrator.",
       inputScenario: "For: talks · meetings",
-      inputTitle: "Source video",
-      inputHint: "Upload your original video here.",
       promptTemplate:
         "Dub my video into Chinese, French, and Spanish — in my own voice, not a stock narrator.",
-      promptHint:
-        "Send it as is, or try “dub it in Mandarin instead”, “add a German version”…",
     },
     "social-post": {
       // Recipe-gallery v2 (ADR-048, §4.6): the loop-value clause on the
@@ -623,103 +548,57 @@ const en = {
       promise:
         "Long-form talk or paper, ready-to-post. Written in your style — pick the channel.",
       inputScenario: "For: talks · papers · meeting notes",
-      inputTitle: "Source material",
-      inputHint: "Your talk transcript, paper draft, or meeting notes — long-form text.",
       promptTemplate:
         "I want a social post.",
-      // 2026-08-24 dual-template: when the overlay already has attached
-      // files, the launch pre-fills with this richer variant — beginner
-      // copy stays on the no-material template (small voice).
-      promptTemplateWithMaterial:
-        "Turn my source into a social post in my style. The platform is up to you — pick whatever fits. Plain text only — no Markdown (no **bold**, _italic_, # headers, [links](url), or code blocks); every mainstream social platform renders Markdown as raw source, which looks broken.",
-      promptHint:
-        "Send it as is, or try “shorter, hook-first”, “make it a thread instead”, “in German”…",
     },
     "quote-cards": {
       // 2026-08-27 v3 (ADR-048 第 7 条): the stacked cascade IS the quote
       // card — the promise names the stacked dish, never the one-liner
       // single card (single-quote images are a chat capability, not the
-      // card face). Templates keep the bilingual default + chat-driven
-      // caption_mode (Phase 1).
-      // 2026-08-28 P2 宽槽: three material paths — a recording, photos +
-      // a transcript, or a transcript alone (the dark text stack). The
-      // input copy names all three, the slot stays optional.
+      // card face).
       title: "Quote cards",
       promise:
         "The sharpest lines of your talk, stacked into one ready-to-post quote card.",
       inputScenario: "For: talk recordings · interviews · transcripts",
-      inputTitle: "Talk recording, photos, or transcript",
-      inputHint: "Upload a talk video, photos with a transcript, or text alone — we'll stack the sharpest lines into one card.",
-      // Bilingual CN+EN default example (per brief 2026-08-25 §1.6):
-      // real bilingual users type this — short, direct, names the format.
       promptTemplate:
         "Make a bilingual quote card.",
-      promptTemplateWithMaterial:
-        "From my talk, pick the sharpest lines and turn them into a bilingual quote card.",
-      // promptHint teaches the user the two customisation axes (RECIPES
-      // §7.2): language pair + caption mode — both are chat-only (no
-      // selector widgets, per the promptHint-as-text-not-control rule).
-      promptHint:
-        "Default is CN+EN bilingual. Tell the chat your own language pair and caption mode (bilingual / source only / target only).",
     },
     carousel: {
       title: "Carousel slides",
       promise:
         "Talk or deck points, paginated into a swipeable slide deck.",
       inputScenario: "For: scripts · slide notes",
-      inputTitle: "Source material",
-      inputHint: "Your talk script or deck outline — we'll lay it out as slides.",
       promptTemplate:
         "I want a carousel.",
-      promptTemplateWithMaterial:
-        "Turn my source into a carousel of slides — one idea per slide, ready to post.",
-      promptHint:
-        "Send it as is, or try “fewer slides”, “add a hook on the first one”, “in French”…",
     },
     "image-video": {
       title: "Photos to video",
       promise: "No footage — photos plus your script, with captions and music.",
       inputScenario: "For: scripts + photos · slide decks",
-      inputTitle: "Script and photos",
-      inputHint: "Your talk transcript, plus photos or a slide deck (PDF/PPT) — event shots, slides, portraits.",
       promptTemplate:
         "Turn my transcript and photos into a slideshow video — photos follow the sections, with captions and background music.",
-      promptHint:
-        "Send it as is, or try “shorter”, “use the slide deck instead”, “add more photos”…",
     },
     "highlight-clips": {
       title: "Highlight clips",
       promise:
         "Your long video's best moments as vertical clips — top pick flagged.",
       inputScenario: "For: long talk recordings",
-      inputTitle: "Source video",
-      inputHint: "A talk, meeting or interview recording — mid-shot framing works best.",
       promptTemplate:
         "Cut the best moment of my talk into a vertical clip — the camera follows the speaker, captions included.",
-      promptHint:
-        "Send it as is, or try “make them landscape”, “cut a few more”…",
     },
     reframe: {
       title: "Interview reframe",
       promise: "Two-person talk recut vertical — the camera follows the speaker.",
       inputScenario: "For: two-person interviews",
-      inputTitle: "Input video",
-      inputHint: "A landscape recording of a two-person conversation — an interview or talk show.",
       promptTemplate:
         "Recut my two-person interview into vertical clips — the camera follows whoever is speaking.",
-      promptHint:
-        "Send it as is, or try “cut a few more”, “cover the full interview”, “faster pace”…",
     },
     "ai-visuals": {
       title: "Virtual scenes",
       promise: "No footage, no photos — every scene is AI-generated for your talk.",
       inputScenario: "For: talk audio",
-      inputTitle: "Input audio",
-      inputHint: "A recording of your talk — every visual is generated around it.",
       promptTemplate:
         "Turn my talk into a short video with AI-generated scenes.",
-      promptHint:
-        "Use the example to tell Repurposer what you need — feel free to edit it.",
     },
   },
   // @-mention system (MENTIONS §4): picker copy and type names.
