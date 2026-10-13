@@ -504,6 +504,14 @@ const zh: Resources = {
         linkedin: "LinkedIn",
       },
       nextPage: "下一页",
+      // MG 货架 demo 预填文案（D3——与 recipeFamilies.ts 的 ShelfDemo id
+      // 一一对应）。prompt 即卡片的全部发射载荷（composer 预填，配方 =
+      // 提示词）：附带 demo 自己的链接作为可跑示例，用户替换成自己的。
+      demos: {
+        "launch-film-linear": {
+          prompt: "把这个网页做成一条发布短片：https://linear.app",
+        },
+      },
     },
     "multilingual-subs": {
       title: "多语言字幕",

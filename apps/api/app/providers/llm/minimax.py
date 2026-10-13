@@ -121,12 +121,22 @@ PRICING = {
 def price_units(units: dict[str, float]) -> float:
     """Money value (USD) of a mechanical-units record against ``PRICING``.
     Each unit kind prices against the SKU line that meters it — unit 种类 →
-    model 价目行是该 SKU 的固定归属（TTS chars 永远按 speech 行计价）."""
+    model 价目行是该 SKU 的固定归属（TTS chars 永远按 speech 行计价）.
+
+    ``film_seconds`` (MG film-spec, ADR-119 D3) is the one own-infra SKU
+    with a menu price: the rate is an operating parameter (``configs`` table
+    ``film.usd_per_second``), read through the warmed-cache peek — the
+    estimate fold and the metering ledger price through this same line, so
+    the knob moves sticker and charge together (单一换算点不破: the value
+    is still USD, credits appear only at the ratio seam)."""
+    from app.platform.configs import peek_config  # deferred: provider layer stays a leaf
+
     return (
         units.get("tts_chars", 0.0) / 1_000_000 * PRICING["speech-2.6-hd"]["tts_per_mchar"]
         + units.get("voice_clones", 0.0) * PRICING["voice-clone"]["voice_clone_per_use"]
         + units.get("images", 0.0) * PRICING["image-01"]["image_per_piece"]
         + units.get("music_pieces", 0.0) * PRICING["music-2.6-free"]["music_per_piece"]
+        + units.get("film_seconds", 0.0) * peek_config("film.usd_per_second")
     )
 
 

@@ -523,6 +523,15 @@ const en = {
         linkedin: "LinkedIn",
       },
       nextPage: "More",
+      // MG shelf demo prefill copy (D3 — one key per ShelfDemo id in
+      // components/home/recipeFamilies.ts). The prompt IS the card's entire
+      // launch payload (composer 预填, 配方 = 提示词): the demo's own link
+      // ships as the working example — the user replaces it with theirs.
+      demos: {
+        "launch-film-linear": {
+          prompt: "Turn this page into a short launch film: https://linear.app",
+        },
+      },
     },
     "multilingual-subs": {
       title: "Multilingual captions",

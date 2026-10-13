@@ -98,7 +98,26 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
     id: "ads",
     subs: [
       { id: "brand", shelves: [{ id: "brand", kind: "demos", demos: [] }] },
-      { id: "saas", shelves: [{ id: "saas", kind: "demos", demos: [] }] },
+      {
+        id: "saas",
+        shelves: [
+          {
+            id: "saas",
+            kind: "demos",
+            demos: [
+              {
+                // MG 批 D3 点亮: the launch_film pipeline's own render
+                // (linear.app → capture → storyboard → film-spec render,
+                // e2e run de3f5e89 — every on-screen word grounds to the
+                // captured page). Content-addressed into the demo/ tree.
+                id: "launch-film-linear",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-linear-6bc23a6a.mp4",
+                orientation: "wide",
+              },
+            ],
+          },
+        ],
+      },
       { id: "product", shelves: [{ id: "product", kind: "demos", demos: [] }] },
     ],
   },

@@ -127,6 +127,12 @@ async def run_worker() -> None:
     assert_runners_registered()
     logger.info("worker_starting", poll_interval=settings.worker_poll_interval)
     async with AsyncSessionLocal() as db:
+        # Warm the configs cache before any claim: the pricing seams
+        # (price_units → peek_config) read it synchronously, and this
+        # process has no reconcile seat — read-only prime, race-safe.
+        from app.platform.configs import warm_config_cache
+
+        await warm_config_cache(db)
         await reap_stale(db)
         await reap_stale_publications(db)
     await finalize_stuck_runs()

@@ -65,6 +65,16 @@ CONFIG_REGISTRY: dict[str, ConfigDef] = {
         "disclosure tier reads it; display obligation vs confirmation "
         "obligation stay separate).",
     ),
+    "film.usd_per_second": ConfigDef(
+        default=0.002,
+        type=float,
+        desc="Menu price (USD) per output second of a film-spec (MG) render "
+        "(ADR-119 D3). launch_film's estimate quotes storyboard seconds × "
+        "this rate and the metering ledger prices the actual seconds "
+        "through the same line (price_units), so one edit moves sticker "
+        "and charge together — the single-conversion-point law applied to "
+        "an own-infra SKU.",
+    ),
 }
 
 _cache: dict[str, Any] = {}
@@ -98,6 +108,26 @@ async def get_config(db: AsyncSession, key: str) -> Any:
     return value
 
 
+def peek_config(key: str) -> Any:
+    """Sync read of the warmed cache — the pricing seams' form of the funnel.
+
+    ``price_units`` runs without an async context (the estimate fold's
+    serialization layer), so it cannot await :func:`get_config`. A warm hit
+    returns the live value; a cold key reads as the registry default — the
+    same answer ``get_config`` gives for a missing row. Override freshness
+    follows the house rule unchanged: the per-process cache makes mid-flight
+    edits invisible until restart either way, and startup priming
+    (:func:`reconcile_configs` / :func:`warm_config_cache`) loads overrides
+    at boot, so a restarted process never prices off a stale default.
+    Unknown keys raise, exactly like the async funnel.
+    """
+    if key not in CONFIG_REGISTRY:
+        raise KeyError(f"Unknown config key: {key!r} (not in CONFIG_REGISTRY)")
+    if key in _cache:
+        return _cache[key]
+    return _coerce(key, CONFIG_REGISTRY[key].default)
+
+
 async def set_config(db: AsyncSession, key: str, value: Any) -> None:
     """Write path (admin-prep). Registry-validated upsert + cache
     invalidation. Callers commit (create_notification precedent — the write
@@ -117,11 +147,24 @@ async def set_config(db: AsyncSession, key: str, value: Any) -> None:
     _cache.pop(key, None)
 
 
+async def warm_config_cache(db: AsyncSession) -> int:
+    """Read-only cache prime: load every stored row into the process cache
+    (missing keys stay default-reading, per :func:`get_config`). The worker's
+    boot calls this — it never inserts (that's the API's reconcile seat), so
+    concurrent boots race-safe by construction. Returns the primed count."""
+    rows = (await db.execute(select(Config))).scalars().all()
+    for row in rows:
+        if row.key in CONFIG_REGISTRY:
+            _cache[row.key] = _coerce(row.key, row.value)
+    return len(rows)
+
+
 async def reconcile_configs(db: AsyncSession) -> list[str]:
     """Startup reconcile (``seed_default_music`` same mechanism): insert
     registry keys missing from the table, with their defaults. Existing rows
     are untouched — their values may be operator overrides. Commits only when
-    something was inserted."""
+    something was inserted. Also primes the process cache (warm boot: the
+    sync pricing seams read overrides from their first call)."""
     existing = set((await db.execute(select(Config.key))).scalars().all())
     missing = [key for key in CONFIG_REGISTRY if key not in existing]
     for key in missing:
@@ -130,4 +173,5 @@ async def reconcile_configs(db: AsyncSession) -> list[str]:
     if missing:
         await db.commit()
         logger.info("configs_reconciled", keys=missing)
+    await warm_config_cache(db)
     return missing

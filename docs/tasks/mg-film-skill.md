@@ -1,6 +1,6 @@
 # MG film skill 批（刀 B，最高优先级插入批 · 4 天冲刺版）
 
-> Status: D2 收口（D1/D2 已落地验证绿；D3 计价+配方卡+e2e、D4 剧本+验收待开工）。架构母法 = ADR 随批短式落档 DECISIONS.md（ADR-119 = film-spec 第二家族 + skill 接入装配线四问分诊）；关联 = ADR-028（双链并列，禁第二条编排链）/ ADR-026（AI 标识分类器）/ ADR-016（clip-spec 零改动承诺）。
+> Status: D3 收口（D1/D2/D3 已落地验证绿；D4 剧本+验收待开工）。架构母法 = ADR 随批短式落档 DECISIONS.md（ADR-119 = film-spec 第二家族 + skill 接入装配线四问分诊）；关联 = ADR-028（双链并列，禁第二条编排链）/ ADR-026（AI 标识分类器）/ ADR-016（clip-spec 零改动承诺）。
 >
 > 已验证基座 = spike：`apps/render/scratch-spike/`（capture→storyboard→render 全链，26s/780 帧/45.5s ≈1.75×实时）。本批 = spike 转正，不是再探索。
 >

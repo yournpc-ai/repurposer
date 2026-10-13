@@ -44,6 +44,7 @@ from sqlalchemy import bindparam, select, text as _text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import Agent, AssembleResult
+from app.metering import record_media_usage
 from app.models.schemas import (
     AssetStatus,
     AssetType,
@@ -121,6 +122,18 @@ _LIST_CAPS = {"words.lines": 4, "divider.roll": 5, "ui.captions": 3, "ui.focuses
 _ZOOM_RANGE = (1.0, 4.0)
 
 MAX_REWRITES = 2  # bounded rejection: 3 candidates total, then FAILED
+
+# 简式计价 (D3): the estimate's film_seconds quote. The storyboard's true
+# length is unborn at compile time (the LLM writes it mid-run, bounded by
+# TOTAL_SECONDS_RANGE), so the quote anchors on the TYPICAL film (the
+# spike's 26s is the one real data point; scene caps keep real films in the
+# 20-40s band). A longer film settles by capture-past-hold, a shorter one by
+# release — the ledger's NULL/under-quote semantics already carry both
+# directions (BILLING §5); the sticker stays honest instead of quoting the
+# 90s validator ceiling 3× over every real charge. The ACTUAL charge is the
+# allocated seconds (record_media_usage at birth) — estimate ≡ meter reads
+# the same price line.
+ESTIMATE_FILM_SECONDS = 30.0
 
 _DEFAULT_THEME = {"canvas": "#F7F6F2", "ink": "#141414"}
 _HEX_COLOR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
@@ -569,15 +582,18 @@ class LaunchFilm(NodeBase):
     agents = (film_storyboarder,)
 
     def estimate(self, ctx: dict) -> dict | None:
-        """Worst case = one storyboard pass per candidate (1 + MAX_REWRITES):
-        the manifests (capped at capture) plus the page screenshots in, one
-        storyboard JSON out. Render seconds quote at D3 (计价批)."""
+        """Orchestration tokens (worst case = one storyboard pass per
+        candidate, 1 + MAX_REWRITES) + the film-seconds flat item (D3 简式
+        计价: ESTIMATE_FILM_SECONDS typical × the ``film.usd_per_second``
+        config rate — the capture settles the storyboard's true allocated
+        seconds through the same price line, hold/release absorb the
+        difference)."""
         single = estimate_agent([1500, 8000], [400, 2000])
         n = 1 + MAX_REWRITES
         return {
             "prompt_tokens": [single["prompt_tokens"][0] * n, single["prompt_tokens"][1] * n],
             "completion_tokens": [single["completion_tokens"][0] * n, single["completion_tokens"][1] * n],
-            "units": {},
+            "units": {"film_seconds": ESTIMATE_FILM_SECONDS},
         }
 
     async def _load_pages(self, db: AsyncSession, project: Project) -> list[StoryboardPage]:
@@ -722,6 +738,12 @@ class LaunchFilm(NodeBase):
 
         spec_dict = build_film_spec(storyboard, pages)
         total_seconds = sum(allocate_frames(storyboard)) / FILM_FPS
+        # 逐次尝试计价的实扣侧 (D3): the storyboard passed the gate — meter
+        # the ACTUAL allocated seconds (what we truly render) so the step's
+        # capture charges them (estimate ≡ meter, one price line). A
+        # rejected storyboard never reaches here, so a grounding-exhausted
+        # FAILED step carries zero film seconds — 失败不扣费 by position.
+        await record_media_usage({"film_seconds": total_seconds})
         output = Output(
             project_id=project.id,
             workflow_step_id=node.id,

@@ -71,9 +71,13 @@ describe("resolveFamilies — 族分组", () => {
 })
 
 describe("resolveFamilies — 空族不渲染(连摆位都不摆)", () => {
-  it("MG 族 demo 全空 → 整族不渲染(本批现状: 只有模板族)", () => {
+  it("未供货 MG 族整族不渲染;供货族上架(D3 首片 = ads/saas)", () => {
     const families = resolveRecipeFamilies(ALL_REGISTRY_IDS.map((id) => card(id)))
-    expect(families.map((f) => f.id)).toEqual(["templates"])
+    expect(families.map((f) => f.id)).toEqual(["templates", "ads"])
+    const ads = families.find((f) => f.id === "ads")
+    // The empty siblings (brand/product) cascade away; only the supplied
+    // sub keeps its seat.
+    expect(ads?.subs.map((s) => s.id)).toEqual(["saas"])
   })
 
   it("空货架 → 空子 tab → 空族 级联丢弃", () => {
@@ -106,8 +110,8 @@ describe("resolveFamilies — 空族不渲染(连摆位都不摆)", () => {
     expect(resolved[0].subs[0].shelves.map((s) => s.id)).toEqual(["real"])
   })
 
-  it("零卡零 demo → 整个货架归零(home 只剩 composer)", () => {
-    expect(resolveRecipeFamilies([])).toEqual([])
+  it("零卡 → 只剩供货 demo 的族(货架与配方卡解耦)", () => {
+    expect(resolveRecipeFamilies([]).map((f) => f.id)).toEqual(["ads"])
   })
 })
 
@@ -166,12 +170,19 @@ describe("RECIPE_FAMILIES 注册表形态守卫", () => {
     expect(templates?.subs[0]?.shelves[0]?.kind).toBe("recipes")
   })
 
-  it("MG 族货架 = demo 视频族(kind = demos)且本批零真片(D3 供货)", () => {
+  it("MG 族货架 = demo 视频族(kind = demos);上架的每一片都是 demo/ 树真片(无真 demo 不成卡)", () => {
     for (const family of RECIPE_FAMILIES.filter((f) => f.id !== "templates")) {
       for (const sub of family.subs) {
         for (const shelf of sub.shelves) {
           expect(shelf.kind).toBe("demos")
-          expect(shelf.demos ?? []).toEqual([])
+          for (const demo of shelf.demos ?? []) {
+            // A shipped seat is a REAL render, content-addressed into the
+            // public demo/ tree — never a placeholder, never a stock URL.
+            expect(demo.url).toMatch(
+              /^https:\/\/repurposer\.tos-ap-southeast-1\.volces\.com\/demo\//,
+            )
+            expect(["wide", "vertical"]).toContain(demo.orientation)
+          }
         }
       }
     }
