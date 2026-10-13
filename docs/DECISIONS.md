@@ -1999,9 +1999,9 @@ Lifecycle Projection       Execution Runtime
 
 **Agent 的主循环不是 Run，而是围绕 User Goal 在 Project World 中连续产生、检查、演化用户可理解的工作产物；Paid Run 是这条连续工作流里的一个授权边界，不是产品主循环。**
 
-> Agent continuously produces and refines user-meaningful project artifacts; it does not compile or directly execute workflow internals. Paid execution begins only at the confirmed scope boundary.
+> Agent continuously produces and refines user-meaningful project artifacts; it does not compile or directly execute workflow internals. Paid execution begins only within the presented and authorized scope (ADR-117).
 
-「Agent 开始工作」≠「Paid Run 开始」——与确认教义 §4 的准备阶段同义，本条从用户体验侧立。
+「Agent 开始工作」≠「Paid Run 开始」——与确认教义 §4 的准备阶段同义，本条从用户体验侧立。授权 = 明示确认（ask 档）或常驻授权（auto 档默认，ADR-117）；呈现义务（方案必须与开工同拍可见）恒在，与授权通道无关。
 
 ### 2. 探索产物族（Exploration Artifacts）
 
@@ -2088,9 +2088,9 @@ Application Command 层（审计认出的 de facto 层：dock / Start / `create_
 
 ### 5. 停顿定律（R15，总纲）
 
-> **Agent stops iff the next act moves money or requires information only the user has; every stop must present a complete, user-judgeable decision package.**（Agent 只在下一步移动金钱或需要用户独有信息时停下；任何停顿必须形成用户可理解、可判断、可执行的完整决策包。）
+> **Agent stops iff the next act exceeds its standing authorization or requires information only the user has; every stop must present a complete, user-judgeable decision package.**（Agent 只在下一步超出常驻授权或需要用户独有信息时停下；任何停顿必须形成用户可理解、可判断、可执行的完整决策包。）常驻授权 = 用户权限档（ADR-117）：auto（默认）= 守卫线以下的付费执行已获预授权；ask = 逐拍确认。
 
-推论：免费探索区不停（ADR-088 §5）；`ask_user` = 信息类停（同律 b 支）；执行中 direction interrupt = 同律在执行侧的投影；确认拍 = 付费边界停——**Confirmation = Agent 已经把需要用户决策的付费边界准备好了**，不是「Agent 做完了所以要确认」。
+推论：免费探索区不停（ADR-088 §5）；`ask_user` = 信息类停（同律 b 支）；执行中 direction interrupt = 同律在执行侧的投影；确认拍 = 授权边界停——ask 档逐拍、auto 档只剩守卫线触发（ADR-117 D6）——**Confirmation = Agent 已经把需要用户决策的授权边界准备好了**，不是「Agent 做完了所以要确认」。
 
 ### 6. 修订分类与范围裁决（R19 执行半边）
 
@@ -2177,31 +2177,17 @@ verify 回退的 best-not-last restore 与 run 内重试 = **产物从未交付*
 
 **Related**: ADR-088（工作循环——「持续修订的产物」承诺的身份地基）/ ADR-090（edit_output——编辑历史 = work 的 operations 链）/ ADR-057（图即产品对象）/ ADR-074②（渲染台账——version 的生产事实）
 
-## ADR-092: 计费偏好集成——三档策略持久化 + 确认闸座位
+## ADR-092: 口头确认律——方案 dock 后的确认拍（ask 档法律）
 
-**Status**: Decided (2026-09-24)；现行法：策略 = 纯披露偏好，一切方案 dock 后恒等确认拍（§2）
-
-**Context**: 六环取证：① 偏好 UI ✅（composer CostConfirmControl 三档 always/large/never）但 localStorage-only（自标 UI ONLY）；② 服务端持久化 ❌；③ 策略读取点 ❌；④ 确认闸 ❌；⑤ ChargeFact 已读真台账 ✅；⑥ hold→capture→release 机器真但在 run 出生地单点。结论：不是计费重设计，是**把已存在的偏好接到已存在的机制上**。
+**Status**: Decided (2026-09-24)；现行法：确认拍仅 ask 档生效；auto 档（默认）由 ADR-117 接管——方案呈现即开工，无确认拍
 
 **Decision**:
 
-### 1. 偏好升格为服务端设置
+**口头确认律（ask 档）**：方案 dock 后恒等用户确认拍——echo 收尾恒为一句朴素的方案判断问句（一词可答）；口头 yes 走普通 chat 道到 start_run，与 Start 钮同一 Start 机器；无任何「存好的策略替你开工」路径在 ask 档内存活；收尾永不带「成片出来后再调」式交付后修订预告。
 
-`confirm_strategy ∈ {always, large, never}` 落用户级设置（API GET/PUT），`large` 的费用阈值走 configs 公共参数表（ADR-055 参数座位）；前端 localStorage 降级为读容忍回退（未登录 / 接口失败），服务端值为准。
+**偏好持久化座位**：用户级设置 = `users.settings` JSONB + GET/PUT `/auth/settings`（服务端为准，前端 localStorage 降级为读容忍回退）——座位不变，住户 = ADR-117 两键（`confirm_execution` / `confirm_credits`）；旧 `confirm_strategy` 三档弃读删除（其从未产生行为，零迁移）。
 
-### 2. 读取点 = 计划确认拍唯一座位
-
-策略在 **plan dock 呈现前**读取一次（确认拍 = 既有付费边界停，ADR-089 §5 停顿定律的唯一停顿形态）：`always` → 任何费用强制显式费用确认；`large` → quote total 超阈值才强制；`never` → 不强制（estimate 面照常显示——**显示义务与确认义务分离**）。闸的形态 = 既有 task_book dock estimate 面的强制档升格（强制档要求一次显式确认手势，非新 dock 类型），具体交互归施工简报。
-
-**口头确认律**：一切方案 dock 后恒等用户确认拍——口头 yes 走普通 chat 道到 start_run，与 Start 钮同一 Start 机器；无任何「存好的策略替你开工」路径（策略直执 / 静默开工永禁——策略只调披露强度，永不替用户开工）。方案 echo 的收尾恒为一句朴素的方案判断问句（一词可答），永不以「成片出来后再调」式交付后修订预告收尾。
-
-### 3. 机制零新增
-
-hold→capture→release 不动；edit→render 维持 $0 定价（自有基建既有裁决）；`edit_output` MVP 零 LLM 成本不收钱（ADR-090 §5）；订阅 / 支付维持 W11 边界不重开。
-
-**Consequences**: 四环 = 持久化 / 读取点 / 闸 / 偏好真生效，UI 环与台账环不变。座位 = settings API（users.settings JSONB + GET/PUT /auth/settings + configs `billing.confirm_large_threshold`）+ composer 读源以服务端为准 + dock estimate 面强制档形态。认知验收必答：用户怎么知道自己设了什么（设置面回显当前档）；agent 怎么知道（确认拍呈现受策略驱动的事实句）。
-
-**Related**: ADR-055（计费母法——三词两层与参数表座位）/ ADR-089 §5（停顿定律——确认拍唯一停顿）/ ADR-087 §2.1（费用语义五面——estimate 面披露纪律）/ ADR-090（edit 计费语义复用）
+**Related**: ADR-117（授权前移——确认教义默认值翻转的母法）/ ADR-089 §5（停顿定律——授权边界停的泛化座）/ ADR-087 §2.1（费用语义五面——estimate 面披露纪律与确认义务分离，两档不变）/ ADR-055（计费母法——参数表座位）
 
 ## ADR-093: chat 言语真值律——信封对账补全 + 起始句言语权恢复
 
@@ -2839,3 +2825,55 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 **Consequences**: 探索回合的模型裁量与 harness 界对齐（S3/S6 类红不再误报）；决断节奏保持三选项；label 回声误判关闭。lint 的存活目标收窄为真 shadow plan 签名（标识符形 / 画幅 / 时长 / 成本 / 条数参数）。
 
 **Related**: ADR-052（决断节奏源）/ ADR-100（选项归 dock + 负形 lint 源）/ ADR-107（锚定转录内联预算——同批 S3 读具裁量取证）/ ADR-114（矩阵施工批内取证）
+
+## ADR-117: 授权前移——两档权限设置与确认教义默认值翻转
+
+**Status**: Decided（2026-10-12 用户拍板；竞品取证 = Pexo / ElevenLabs / Flora 截图走查 + 本产品哲学：用户最希望 agent 在不需要过问的情况下完成所有工作；施工合同 = `tasks/credits-and-permissions.md`）
+
+**Context**: composer 里的 `CostConfirmControl` 三档（always/large/never）持久化环闭合但行为消费端为零（ADR-092 §2 的读取点从未接线），且三档在口头确认律恒在下只是披露强度戏法。竞品对照：ElevenLabs 双轴混装一个 radio（「确认编辑」档把改节点与耗积分缝进一句文案，两轴合并的终点就是这句四不像）；Pexo 纯费用轴（"Only video generation asks to confirm"）；Flora 把费用相关全部放 Settings（显示偏好开关），全站无确认闸。用户裁决：确认只有两种——**执行确认**（调用 tool 前是否询问）与**费用确认**（消耗积分前是否询问），其他类型一律不问；两档默认全 auto。
+
+**Decision**:
+
+### 1. 两档权限设置（users.settings JSONB，默认全 auto）
+
+`confirm_execution ∈ {auto, ask}` / `confirm_credits ∈ {auto, ask}`，缺席与非法值读容忍回 `auto`。理解性提问（`ask_user` 问受众/目的）**不是许可请求**，不在「不询问」射程内。座位 = SettingsDialog「助手」section（权限卡两行 Select），composer / dock 控制条永不再出现确认偏好控件。
+
+### 2. auto 开工道——呈现即授权基础
+
+auto + auto（默认）：方案呈现（dock echo + 草稿图 + 任务列表，呈现义务不变）后**同回合 start_run**——「propose 同 turn create_run 全路径禁止」改为档条件（ask 档维持禁止）。Confirmed Scope Snapshot 语义不变、授权通道加宽：`confirmed_via` 增 `"auto"` 值（常驻授权），`"explicit"` 为 ask 道；快照是 scope 完整性与重试证明的载体，不再是明示确认的签名。scope classifier 判定（continuation / expansion / unproven）零改动——expansion 的目的地按档分流：ask → dock 等确认；auto → 呈现 + 直跑（守卫线照常把关）。
+
+### 3. 内部守卫线（ops 参数，不是用户设置）
+
+configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端越线**或**含 NULL 不可报价节点 → 任何设置下恒带价问一次。start_run 工具路径的阻断回结构化工具结果 `{code:"start.needs_confirm", reason, quote_high}`，模型转呈现带价 dock（NULL 族标「估价随运行确定」），永不静默重试。auto 时代用户的保护栈 = 呈现义务 + 打断权 + 出生地 422 + 失败不扣费 + 本守卫线 + 台账可事后对账。
+
+### 4. 服务端唯一强制点
+
+`evaluate_start_gate` 读两档 + 守卫线 + 报价；计划呈现载荷携带 `requires_confirmation` / `quote_high` / `unquotable`，客户端 Start pill 渲染谓词只读此旗（**客户端永不自行推导要不要确认**）；Start 带价形态 = 既有钮 label 插值，零新 chrome。
+
+### 5. 会话层 token 计量 + context 预算
+
+会话层 LLM 调用（路由/理解/规划/应答/探索/触发回合）**计量但不收费**：`conversation_usage` 表每回合一行（tokens / cache / cost_usd / model），chat 回合入口绑 contextvar 复用 `record_usage` 唯一咽喉；永不上用户账单与 UI（COGS 可见性 + fair-use 数据基础）。context 管理 = 后端装配预算（`chat.context_budget_tokens`）+ 滑动窗口，零 UI。
+
+**Consequences**: 口头确认律（ADR-092）收缩为 ask 档法律；停顿定律（ADR-089 §5）的停止条件从「移动金钱」泛化为「超出常驻授权」；北极星（ADR-088 §1）从「已确认范围」修订为「已呈现且已授权范围」。爆炸半径明账：`evaluate_start_gate` / `_create_run_from_tasks` / scope_classifier 目的地 / prompt 法条（确认律档条件化 + B3 禁令档条件化 + 守卫线转呈现措辞）/ 剧本矩阵 dock-确认断言。默认档下 Start pill 从主路径退役，只在 ask 档或守卫线触发时登场。W11 挂账收窄为：三桶余额 / 订阅过期 / 购买比例 / fair-use 配额 / 支付适配器。
+
+**Related**: ADR-092（口头确认律——ask 档法律由本条接管默认档）/ ADR-089 §5（停顿定律措辞由本条修订）/ ADR-088 §1（北极星英文行由本条修订）/ ADR-087 §4（确认教义——档条件化的母座）/ ADR-055（计费母法——守卫线参数座位）/ ADR-093（起始句言语权——auto 档开工句不变）/ ADR-116（理解性提问边界不动）
+
+## ADR-118: 画布宪法——解耦律 / chat 自足律 / 存在理由 / 退出条件 / 信任优先级
+
+**Status**: Decided（2026-10-13 用户拍板；双端形态 = 桌面固定 Split / 移动端纯 chat，零模式切换控件；锚卡规格与施工合同 = `tasks/flora-parity-ui.md`，原型 = `scratch/skill-mg-ui-proposal.html`）
+
+**Context**: 画布与 chat 的关系、画布的存在理由与去留判据需要宪法级条款固定。「过程可见性 / 剧场」类措辞不得作承重引用。
+
+**Decision**:
+
+1. **解耦律**：关系数据模型 ≠ 节点图。图模型 = 唯一事实源（服务端）；画布 = 图的一种投影，不是图本身。
+2. **chat 自足律**：画布完全隐藏时，产品必须在 chat 里完整可用。这是一切迭代的验收尺——新能力先过「纯 chat 全环」才算通。首个构造物 = 锚卡：`canvas_visible=false` 时，产物以终态收据行下的静态锚卡数组交付（承接句 + 收据行 + 锚卡；点击开 MediaLightbox）。
+3. **画布存在理由**：画布 = **关系视图的观察窗**——产物间血缘 / 来源 / 状态的关系理解面。「剧场」不是画布的存在理由（现存文档中「剧场」均为禁令式用法，同向不动）。
+4. **退出条件**：画布去留由三条行为证据决定——多产物关系理解 / 来源追溯 / 纠错恢复；证据不足 → 收敛纯 chat。**审美证据永不触发结构翻案**。走查施工（3–5 名目标用户跑「多产物 + 隔天修订 + 来源核对」任务，看任务完成表现而非点击率）入需求池。
+5. **信任优先级**：交付可信度 > 来源可信度 > 修订可信度 > 过程可见性 > 剧场。剧场 = 未验证假设，永不作承重引用。
+6. **环境感知与承接句窄门**：chat 装配层注入结构化字段 `canvas_available` / `canvas_visible`——LLM 唯一合法环境源，禁从用户语言 / 设备特征推断环境。echo 防编造律（ADR-060）与展示文案二源律（ADR-058）开一处窄门：唯一合法面指涉 = **交付承接句**——iff `!canvas_visible`，交付回合收尾散文带一句朴素承接句指向紧随其后的锚卡行；`canvas_visible` 时收尾散文永不交接、永不提及任何面。承接句 = 普通 assistant.delta 散文，打字机双牙适用，null 读容忍、无模板回填。
+7. **命名**：形态控件不建，N-25 无例外适用——任何用户可见面不出现「Agent」。
+
+**Consequences**: 模式切换 UI 永禁（控件、view-mode 持久化、形态分叉门控、切换触发相机节拍一律不建）；移动端交付形态 = 承接句 + 收据行 + 锚卡数组；单一渲染面律修订注：锚卡 = 终态收据帧——静态、零订阅、只读消息载荷 `output_refs`、归收据行所有，不是第二个 live 面；画布迭代一律以 chat 自足律为验收尺；画布去留进入证据制。
+
+**Related**: ADR-060 / ADR-058（窄门由本条开）/ ADR-111（plan-ready reveal 保留——桌面恒 Split 下 reveal = 画布列到来，不再耦合任何切换控件）/ ADR-016（clip-spec 契约不动）/ N-25（禁令无例外适用）

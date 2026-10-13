@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<!--
+  积分系统迭代 — UI 提案稿 v2（2026-10-12）
+  三个画板：
+    A. SettingsDialog 新增两个 section：「助手」（两档权限：执行确认 / 费用确认，
+       默认全 auto）与「积分」（钱包 + 台账）
+    B. Chat 侧：auto 档 = 方案呈现即开工（StatusLine 叙事接管），composer 摘除 pill；
+       context 折叠纯后端、零 UI
+    C. 确认 pill 只剩两种触发：任一 ask 档 / 内部守卫线（超高额、NULL 不可报价族）
+  设计语言 = docs/UI_GUIDELINES.md 现行 token（dark 基准）。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>积分系统迭代 — UI 提案 v2</title>
+<style>
+  :root {
+    --background: oklch(0.12 0 0);
+    --foreground: oklch(0.95 0 0);
+    --card: oklch(0.21 0 0);
+    --popover: oklch(0.21 0 0);
+    --muted: oklch(0.24 0 0);
+    --muted-foreground: oklch(0.63 0 0);
+    --meta-foreground: oklch(0.42 0 0);
+    --accent: oklch(1 0 0 / 8%);
+    --border: oklch(1 0 0 / 10%);
+    --radius: 10px;
+    --radius-md: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    font-size: 14px; line-height: 1.5;
+    padding: 48px 32px 96px;
+  }
+  .page-head { max-width: 980px; margin: 0 auto 40px; }
+  .page-head h1 { font-size: 20px; font-weight: 600; }
+  .page-head p { color: var(--muted-foreground); font-size: 13px; margin-top: 6px; }
+
+  .artboard { max-width: 980px; margin: 0 auto 72px; }
+  .artboard-label {
+    font-size: 12px; color: var(--meta-foreground);
+    letter-spacing: 0.04em; margin-bottom: 12px;
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .artboard-label b { color: var(--muted-foreground); font-weight: 600; }
+  .stage {
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 40px;
+    display: flex; justify-content: center;
+    background: radial-gradient(closest-side, oklch(1 0 0 / 0.03), transparent 75%);
+  }
+  .notes {
+    margin-top: 14px; font-size: 12px; color: var(--meta-foreground);
+    display: grid; gap: 4px; padding-left: 2px;
+  }
+  .notes li { list-style: none; }
+  .notes li::before { content: "— "; }
+
+  .overlay {
+    background: color-mix(in oklch, var(--popover) 82%, transparent);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 40px oklch(0 0 0 / 0.45);
+    overflow: hidden; position: relative;
+  }
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: 0 0 0 1px var(--border);
+  }
+
+  /* ============ 画板 A：设置弹窗 ============ */
+  .settings-dialog { width: 720px; display: flex; min-height: 470px; }
+  .settings-nav {
+    width: 168px; flex: none; padding: 14px 10px;
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .settings-nav .nav-title {
+    font-size: 11px; color: var(--meta-foreground); padding: 6px 8px 8px;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 8px;
+    height: 32px; padding: 0 8px; border-radius: var(--radius-md);
+    font-size: 13px; color: var(--muted-foreground);
+  }
+  .nav-item.active { background: var(--accent); color: var(--foreground); }
+  .nav-item svg { width: 15px; height: 15px; }
+
+  .settings-body { flex: 1; padding: 20px 24px; min-width: 0; }
+  .settings-body h2 { font-size: 15px; font-weight: 600; }
+  .settings-sub { font-size: 13px; color: var(--muted-foreground); margin-top: 2px; }
+  .settings-body .card { margin-top: 16px; padding: 4px 14px; }
+  .card-label {
+    font-size: 11px; color: var(--meta-foreground);
+    padding: 10px 0 2px; letter-spacing: 0.02em;
+  }
+
+  .row {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 0; border-bottom: 1px solid oklch(1 0 0 / 5%);
+  }
+  .row:last-child { border-bottom: none; }
+  .row .row-icon { width: 16px; height: 16px; flex: none; color: var(--muted-foreground); margin-top: 2px; }
+  .row .row-label { font-size: 13px; display: block; }
+  .row .row-desc { font-size: 12px; color: var(--muted-foreground); display: block; margin-top: 1px; }
+  .row .row-value {
+    margin-left: auto; font-size: 13px; flex: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .row .row-value.dim { color: var(--muted-foreground); }
+
+  /* 右对齐 Select（Flora「Repeated uploads」同款形态） */
+  .select-pill {
+    margin-left: auto; flex: none;
+    height: 30px; padding: 0 10px;
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: var(--radius-md);
+    background: var(--muted);
+    font-size: 12.5px; color: var(--foreground);
+  }
+  .select-pill svg { width: 12px; height: 12px; color: var(--muted-foreground); }
+
+  .footnote {
+    font-size: 11px; color: var(--meta-foreground);
+    padding: 8px 0 10px; border-top: 1px solid oklch(1 0 0 / 5%);
+    line-height: 1.55;
+  }
+
+  .txn { display: flex; align-items: center; gap: 10px; padding: 7px 0;
+    border-bottom: 1px solid oklch(1 0 0 / 5%); font-size: 13px; }
+  .txn:last-child { border-bottom: none; }
+  .txn .txn-label { flex: 1; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .txn .txn-amount { font-variant-numeric: tabular-nums; flex: none; }
+  .txn .txn-amount.neg { color: var(--muted-foreground); }
+  .txn .txn-time { font-size: 11px; color: var(--meta-foreground); flex: none; }
+  .view-all {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0 8px; font-size: 13px; color: var(--muted-foreground);
+  }
+
+  /* ============ 画板 B：chat dock（auto 默认） ============ */
+  .chat-stage { width: 640px; display: flex; flex-direction: column; gap: 14px; }
+  .msg-agent { font-size: 13.5px; line-height: 1.7; max-width: 560px; }
+  .msg-agent b { font-weight: 600; }
+  /* StatusLine：auto 档的反馈面（当下相位叙事） */
+  .status-line {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px; color: var(--muted-foreground); padding: 2px 0;
+  }
+  .status-line .pulse {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--muted-foreground); flex: none;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+  .composer {
+    display: flex; align-items: flex-end; gap: 8px;
+    background: var(--card); border-radius: 14px;
+    box-shadow: 0 0 0 1px var(--border);
+    padding: 10px 10px 10px 12px;
+    position: relative;
+  }
+  .composer .cbtn {
+    width: 32px; height: 32px; border-radius: var(--radius-md);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted-foreground); flex: none;
+  }
+  .composer .cinput {
+    flex: 1; min-height: 32px; display: flex; align-items: center;
+    color: var(--meta-foreground); font-size: 13.5px; min-width: 0;
+  }
+  .composer .send {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--foreground); color: var(--background);
+    display: flex; align-items: center; justify-content: center; flex: none;
+  }
+  .strike-ghost {
+    position: absolute; right: 44px; bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 10px; border-radius: var(--radius-md);
+    font-size: 12px; color: var(--meta-foreground);
+    border: 1px dashed var(--border); opacity: 0.65;
+  }
+  .strike-ghost span { text-decoration: line-through; }
+
+  /* ============ 画板 C：确认 pill 的仅剩触发 ============ */
+  .pill-variants { display: flex; flex-direction: column; gap: 18px; width: 560px; }
+  .dock-pill {
+    display: flex; align-items: center; gap: 10px;
+    background: color-mix(in oklch, var(--popover) 82%, transparent);
+    backdrop-filter: blur(20px) saturate(1.4);
+    border-radius: 12px;
+    box-shadow: 0 0 0 1px var(--border), 0 8px 28px oklch(0 0 0 / 0.35);
+    padding: 8px 8px 8px 12px;
+  }
+  .dock-pill .q { font-size: 13px; flex: 1; min-width: 0; }
+  .dock-pill .start {
+    height: 30px; padding: 0 13px; border-radius: var(--radius-md);
+    background: var(--foreground); color: var(--background);
+    font-size: 12.5px; font-weight: 500;
+    display: flex; align-items: center; gap: 6px; flex: none;
+  }
+  .dock-pill .start .price {
+    font-variant-numeric: tabular-nums; opacity: 0.72; font-weight: 400;
+  }
+  .variant-caption {
+    font-size: 11.5px; color: var(--meta-foreground); margin-top: -10px;
+    padding-left: 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>积分系统迭代 · UI 提案 v2</h1>
+  <p>确认只有两种：调用工具询问、消耗积分询问——两档设置默认全 auto。画板 A = 设置两个新 section · 画板 B = auto 档的 chat 形态 · 画板 C = 确认 pill 的仅剩触发。数字均为占位。</p>
+</div>
+
+<!-- ================= 画板 A ================= -->
+<div class="artboard">
+  <div class="artboard-label"><b>A</b> SettingsDialog · 新增「助手」与「积分」两个 section</div>
+  <div class="stage">
+    <div class="overlay settings-dialog">
+      <div class="settings-nav">
+        <div class="nav-title">设置</div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          渠道
+        </div>
+        <div class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+          助手
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/></svg>
+          积分
+        </div>
+      </div>
+      <div class="settings-body">
+        <h2>助手</h2>
+        <p class="settings-sub">助手在动手前需要询问的时机。其余事情它一律自己完成。</p>
+
+        <div class="card">
+          <div class="card-label">权限</div>
+          <div class="row">
+            <span style="min-width:0">
+              <span class="row-label">执行操作</span>
+              <span class="row-desc">方案呈现后是否等你确认再开工。</span>
+            </span>
+            <span class="select-pill">自动
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+          </div>
+          <div class="row">
+            <span style="min-width:0">
+              <span class="row-label">消耗积分</span>
+              <span class="row-desc">付费方案开工前，是否需要一次带价确认。</span>
+            </span>
+            <span class="select-pill">自动
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+          </div>
+          <div class="footnote">
+            估价始终随方案显示。超高额或无法提前估价的方案，任何设置下都会先问你一次。
+          </div>
+        </div>
+
+        <!-- 「积分」section 的内容预览（同一弹窗切换） -->
+        <div style="margin-top:28px;border-top:1px dashed var(--border);padding-top:18px">
+          <h2 style="font-size:15px">积分</h2>
+          <p class="settings-sub">余额与消耗记录。</p>
+          <div class="card">
+            <div class="card-label">概览</div>
+            <div class="row" style="align-items:center">
+              <svg class="row-icon" style="margin-top:0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/></svg>
+              <span class="row-label">余额</span>
+              <span class="row-value">8,145</span>
+            </div>
+            <div class="row" style="align-items:center">
+              <span class="row-icon" style="margin-top:0"></span>
+              <span class="row-desc">免费试用版</span>
+              <span class="row-value dim" style="font-size:11px;color:var(--meta-foreground)">付费套餐即将推出</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-label">最近变动</div>
+            <div class="txn"><span class="txn-label">初始生成</span><span class="txn-amount neg">−42</span><span class="txn-time">3 小时前</span></div>
+            <div class="txn"><span class="txn-label">Post 修订</span><span class="txn-amount neg">−3</span><span class="txn-time">昨天</span></div>
+            <div class="txn"><span class="txn-label">注册赠送</span><span class="txn-amount">+100,000</span><span class="txn-time">5 天前</span></div>
+            <div class="view-all"><span style="color:var(--meta-foreground);font-size:12px">显示最近 3 条</span><span>查看全部记录 →</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ul class="notes">
+    <li>「助手」section 收两个权限行（Select 右对齐，Flora「Repeated uploads」同款形态）；「积分」section 纯钱包。两轴分两区，互不混淆。</li>
+    <li>footnote 是诚实线：估价显示义务恒在 + 内部守卫线（超高额 / NULL 不可报价族恒问一次）——守卫线是 ops 参数，不是用户设置。</li>
+    <li>存储：新键（confirm_execution / confirm_credits，默认 auto）；旧 confirm_strategy 直接弃读——它从未产生过行为，零迁移负担。</li>
+    <li>「付费套餐即将推出」零 CTA 占位；W11 后此处长三桶 + Upgrade。</li>
+  </ul>
+</div>
+
+<!-- ================= 画板 B ================= -->
+<div class="artboard">
+  <div class="artboard-label"><b>B</b> auto 默认档的 chat 形态：方案呈现即开工，无确认拍</div>
+  <div class="stage">
+    <div class="chat-stage">
+      <div class="msg-agent">
+        这版我保留了你原来的开头节奏，把字幕换成关键词强调，做 3 张竖版金句卡。<b>我开始了——好了叫你。</b>
+      </div>
+      <!-- auto 档的反馈面 = StatusLine 相位叙事（既有一座两行） -->
+      <div class="status-line">
+        <span class="pulse"></span>
+        正在生成金句卡 1/3…
+      </div>
+      <div class="composer">
+        <div class="cbtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+        <div class="cinput">说说你的想法…（可随时打断或改方向）</div>
+        <div class="strike-ghost">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          <span>Large only</span>（已移至设置）
+        </div>
+        <div class="send">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ul class="notes">
+    <li>auto 档：方案 dock / 草稿图照常呈现（呈现义务是确认的新替身），run 同拍开工；开工句照旧由 LLM 说出并落库（ADR-093 不动）。</li>
+    <li>进行中反馈 = 既有 StatusLine 相位叙事，零新增 chrome；用户随时可从 composer 打断或改方向。</li>
+    <li>context 管理（预算审计 + 滚动折叠摘要）纯后端落地，消息流零新增行——前端将来需要时再加面。</li>
+  </ul>
+</div>
+
+<!-- ================= 画板 C ================= -->
+<div class="artboard">
+  <div class="artboard-label"><b>C</b> 确认 pill 的仅剩两种触发</div>
+  <div class="stage">
+    <div class="pill-variants">
+      <div>
+        <div class="dock-pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted-foreground);flex:none"><path d="M20 6 9 17l-5-5"/></svg>
+          <span class="q">这个方向看起来对吗？</span>
+          <span class="start">开始</span>
+        </div>
+        <div class="variant-caption">触发一：用户在设置里把任一档拨到「询问」。执行=询问 → Start 不带价；费用=询问 → Start 带价（下行）。</div>
+      </div>
+      <div>
+        <div class="dock-pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted-foreground);flex:none"><path d="M20 6 9 17l-5-5"/></svg>
+          <span class="q">这个方向看起来对吗？</span>
+          <span class="start">开始<span class="price">· 约 420 积分</span></span>
+        </div>
+        <div class="variant-caption">费用=询问档：Start 携带预估价，一次点击 = 知情同意。</div>
+      </div>
+      <div>
+        <div class="dock-pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted-foreground);flex:none"><path d="M20 6 9 17l-5-5"/></svg>
+          <span class="q">这套方案无法提前估价，要先做一版看看吗？</span>
+          <span class="start">开始<span class="price">· 估价随运行确定</span></span>
+        </div>
+        <div class="variant-caption">触发二（内部守卫线，任何设置下生效）：方案 fold 超过守卫上限，或含 NULL 不可报价节点——无法报价本身就是最需要披露的事实。</div>
+      </div>
+    </div>
+  </div>
+  <ul class="notes">
+    <li>默认（auto+auto）下此 pill 永不出现——方案呈现即开工。pill 从默认路径退役，只在用户主动要闸或系统守卫时登场。</li>
+    <li>服务端强制点不变：evaluate_start_gate 读两档设置 + 守卫线，前端按钮从不是唯一防线。</li>
+  </ul>
+</div>
+
+</body>
+</html>

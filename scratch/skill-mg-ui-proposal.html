@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>界面思路 · 双端对照（锚卡与承接句）+ 两级 tab + 节点规划</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#ffffff;--fg:#0a0a0a;--mut:#f5f5f5;--mutfg:#737373;--meta:#a3a3a3;
+  --hair:rgba(0,0,0,.10);--hair2:rgba(0,0,0,.06);
+  --amber-bg:#fffbeb;--amber-fg:#92400e;--amber-bd:#fcd34d;
+  /* home 浅（landing 奶油） */
+  --h-bg:#f7f6f2;--h-track:#e9e8e4;--h-ink:#141414;--h-mut:#8a8a83;--h-shelf:#ffffff;
+  /* chat 面（Flora 对齐，默认深） */
+  --d-bg:#0e0e0e;--d-panel:#161616;--d-panel2:#1c1c1e;--d-hover:#1f1f21;--d-seg:#2c2c2e;
+  --d-line:rgba(255,255,255,.08);--d-fg:#f5f5f5;--d-mut:#a3a3a3;--d-meta:#6e6e6e;
+}
+#screen-project[data-theme="light"]{
+  --d-bg:#f6f6f7;--d-panel:#ffffff;--d-panel2:#efeff1;--d-hover:#e7e7ea;--d-seg:#e2e2e6;
+  --d-line:rgba(0,0,0,.09);--d-fg:#18181b;--d-mut:#62626a;--d-meta:#9c9ca4;
+}
+html,body{height:100%}
+body{font-family:-apple-system,"Helvetica Neue","Segoe UI",Arial,sans-serif;background:var(--h-bg);color:var(--fg);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.hidden{display:none!important}
+svg.ic{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+button{font-family:inherit}
+
+/* ---------- 原型外框（非产品） ---------- */
+#chrome{position:fixed;top:0;left:0;right:0;height:38px;z-index:60;display:flex;align-items:center;gap:14px;padding:0 14px;background:var(--amber-bg);border-bottom:1px dashed var(--amber-bd);color:var(--amber-fg);font:11px ui-monospace,Menlo,monospace}
+#chrome nav{display:flex;gap:6px;margin-left:auto}
+#chrome button{font:11px ui-monospace,Menlo,monospace;color:var(--amber-fg);background:transparent;border:1px dashed var(--amber-bd);border-radius:999px;padding:3px 12px;cursor:pointer}
+#chrome button.on{background:#fde68a;border-style:solid}
+.notes{margin:34px auto 0;padding:12px 2px 60px;border-top:1px dashed var(--amber-bd);color:var(--amber-fg);font:11px/2 ui-monospace,Menlo,monospace;white-space:pre-wrap;max-width:1100px}
+.notes b{color:#78350f}
+.tag-soon{display:inline-block;vertical-align:1px;margin-left:8px;font:10px ui-monospace,Menlo,monospace;color:var(--amber-fg);border:1px dashed var(--amber-bd);border-radius:999px;padding:0 8px}
+
+/* ---------- 屏 1：home（浅） ---------- */
+.screen{height:100vh;padding-top:38px;display:flex}
+.home-main{flex:1;overflow-y:auto;min-width:0}
+.h-wrap{max-width:1100px;margin:0 auto;padding:0 28px}
+.h-hero{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:44px}
+.mark{width:26px;height:26px;border-radius:8px;background:var(--h-ink);position:relative;flex:none}
+.mark::after{content:"";position:absolute;left:9px;top:7px;border-left:9px solid #fff;border-top:5.5px solid transparent;border-bottom:5.5px solid transparent}
+.h-hero h1{font-size:19px;font-weight:700;letter-spacing:-.02em;color:var(--h-ink)}
+.h-hero p{color:var(--h-mut);font-size:12.5px}
+.composer{max-width:640px;margin:18px auto 0;display:flex;align-items:center;gap:6px;height:52px;border-radius:999px;background:#fff;box-shadow:inset 0 0 0 1px var(--hair);padding:0 8px 0 10px;transition:box-shadow .3s}
+.composer.pulse{box-shadow:inset 0 0 0 2px var(--h-ink)}
+.cbtn{width:36px;height:36px;border-radius:999px;border:none;background:transparent;color:var(--mutfg);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none}
+.cbtn:hover{background:var(--mut)}
+#composer-input{flex:1;border:none;outline:none;font-size:14.5px;background:transparent;color:var(--fg);min-width:0}
+#composer-input::placeholder{color:var(--meta)}
+.cbtn.send{background:var(--h-ink);color:#fff}
+.cbtn.send:hover{background:#2a2a2a}
+
+/* 一级 tab 轨 */
+.track{display:flex;justify-content:center;margin-top:34px}
+.track-in{display:inline-flex;align-items:center;background:var(--h-track);border-radius:999px;padding:5px;gap:2px}
+.track-in button{display:flex;align-items:center;gap:7px;border:none;background:transparent;padding:0 18px;height:40px;border-radius:999px;font-size:14px;color:var(--h-ink);cursor:pointer;white-space:nowrap}
+.track-in button svg{width:15px;height:15px}
+.track-in button.on{background:var(--h-ink);color:#fff;font-weight:500}
+/* 二级文本 tab */
+.subrow{display:flex;justify-content:center;gap:34px;margin-top:20px}
+.subrow button{border:none;background:transparent;font-size:14.5px;color:var(--h-mut);cursor:pointer;padding:4px 2px 8px;position:relative}
+.subrow button.on{color:var(--h-ink);font-weight:500}
+.subrow button.on::after{content:"";position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:22px;height:2px;background:var(--h-ink);border-radius:2px}
+/* 货架 */
+.sections{margin-top:26px;display:flex;flex-direction:column;gap:30px}
+.shelf-t{font-size:16px;font-weight:600;color:var(--h-ink);margin:0 0 10px}
+.shelf{position:relative;background:var(--h-shelf);border-radius:20px;padding:14px;box-shadow:0 0 0 1px var(--hair2)}
+.shelf-track{display:flex;gap:12px;overflow-x:auto;scrollbar-width:none;border-radius:12px}
+.shelf-track::-webkit-scrollbar{display:none}
+.vcard{flex:none;width:300px;aspect-ratio:16/9;border-radius:12px;overflow:hidden;position:relative;cursor:pointer;border:none;padding:0;text-align:left}
+.vcard.v{ width:170px;aspect-ratio:3/4 }
+.vcard video{width:100%;height:100%;object-fit:cover;display:block}
+.vcard .phg{position:absolute;inset:0}
+.vcard .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.vcard .play span{width:44px;height:44px;border-radius:999px;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;color:var(--h-ink)}
+.vcard .play svg{margin-left:2px}
+.shelf-nav{position:absolute;right:22px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:999px;border:none;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,.14),0 0 0 1px var(--hair2);color:var(--h-ink);cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2}
+.shelf-nav:hover{background:var(--mut)}
+/* 模板 tab = 我们的配方卡 */
+.rcard{flex:none;width:224px;background:#fff;border-radius:14px;box-shadow:0 0 0 1px var(--hair);padding:13px;cursor:pointer;text-align:left;border:none;transition:background .15s}
+.rcard:hover{background:var(--mut)}
+.rcard .icbox{width:30px;height:30px;border-radius:8px;background:var(--mut);display:flex;align-items:center;justify-content:center;margin-bottom:9px;color:var(--h-ink)}
+.rcard .icbox svg{width:15px;height:15px}
+.rcard h4{font-size:13.5px;font-weight:600;color:var(--h-ink)}
+.rcard p{font-size:12px;color:var(--h-mut);margin-top:2px}
+.rcard .meta{margin-top:8px;font-size:11px;color:var(--meta)}
+
+/* ---------- 屏 2：双端对照（锚卡与承接句） ---------- */
+#screen-project{background:var(--d-bg);color:var(--d-fg)}
+.duo-wrap{flex:1;display:flex;flex-direction:column;min-width:0}
+.duo-scroll{flex:1;overflow-y:auto;padding:20px 30px 30px;display:flex;flex-direction:column;gap:26px}
+.duo-cap{font:11.5px/1.7 ui-monospace,Menlo,monospace;color:var(--amber-fg);background:var(--amber-bg);border:1px dashed var(--amber-bd);border-radius:10px;padding:9px 13px;margin-bottom:10px}
+.duo-cap b{color:#78350f}
+.tt{border:1px dashed var(--amber-bd);background:var(--amber-bg);color:var(--amber-fg);border-radius:12px;padding:12px 16px;font:11.5px/1.7 ui-monospace,Menlo,monospace}
+.tt b{color:#78350f}
+.tt table{border-collapse:collapse;margin-top:10px;width:100%}
+.tt th,.tt td{border:1px dashed var(--amber-bd);padding:6px 12px;text-align:left;font-weight:400;vertical-align:top}
+.tt th{color:#78350f;font-weight:700;white-space:nowrap}
+
+/* 桌面对照帧（Split 固定） */
+.deskframe{height:640px;border-radius:16px;overflow:hidden;box-shadow:inset 0 0 0 1px var(--d-line);display:flex;flex-direction:column;background:var(--d-bg)}
+.df-top{height:48px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--d-line)}
+.df-top .ttl b{font-size:13.5px;font-weight:600;display:block;line-height:1.3;color:var(--d-fg)}
+.df-top .ttl span{font-size:11px;color:var(--d-meta)}
+.minibell{width:30px;height:30px;border-radius:999px;border:none;background:var(--d-panel2);box-shadow:inset 0 0 0 1px var(--d-line);color:var(--d-mut);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none}
+.minibell:hover{background:var(--d-hover)}
+.df-body{flex:1;display:grid;grid-template-columns:minmax(0,11fr) minmax(0,12fr);min-height:0}
+.df-chat{border-right:1px solid var(--d-line);display:flex;flex-direction:column;min-height:0;min-width:0}
+.df-chatscroll{flex:1;overflow-y:auto;padding:18px 18px 6px}
+.df-canvas{position:relative;overflow:hidden;min-width:0}
+.df-canvas .world{transform:scale(.62)}
+
+/* 消息 */
+.msg{position:relative;margin-bottom:18px}
+.msg.u{display:flex;flex-direction:column;align-items:flex-end}
+.bubble{background:#2b2b2e;color:#f5f5f5;padding:10px 15px;border-radius:18px;max-width:86%;font-size:14.5px;word-break:break-word}
+.msg .prose{font-size:15px;line-height:1.75;color:#ececec;max-width:96%}
+.msg .prose b{font-weight:650}
+.msg .prose .bl{display:block;padding-left:14px;text-indent:-14px;margin-top:2px}
+.m-actions{display:flex;gap:14px;margin-top:9px;color:#8a8a8a}
+.m-actions button{background:none;border:none;color:#8a8a8a;cursor:pointer;padding:2px;display:flex}
+.m-actions button:hover{color:#d4d4d4}
+.m-actions svg{width:15px;height:15px}
+.msg.u .m-actions{margin-top:6px}
+/* mention 附着卡（用户消息下方） */
+.attach{margin-top:8px;width:236px;background:var(--d-panel2);box-shadow:inset 0 0 0 1px var(--d-line);border-radius:14px;padding:9px;display:flex;align-items:center;gap:10px}
+.attach .th{width:38px;height:38px;border-radius:9px;background:#f7f6f2;flex:none;display:flex;flex-direction:column;gap:4px;padding:8px}
+.attach .th i{display:block;height:4px;border-radius:2px;background:#141414}
+.attach .th i.s{background:#d8d5cf;height:3px}
+.attach b{font-size:13px;font-weight:550;color:var(--d-fg);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.attach span{font-size:11.5px;color:var(--d-meta)}
+/* 行内节点 chip */
+.nchip{display:inline-flex;align-items:center;gap:6px;vertical-align:-3px;background:#262628;box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);border-radius:8px;padding:3px 9px 3px 4px;font-size:13px;font-weight:500;color:#ececec;white-space:nowrap}
+.nchip .th{width:20px;height:20px;border-radius:5px;background:#f7f6f2;flex:none;display:flex;align-items:center;justify-content:center;color:#141414}
+.nchip .th svg{width:12px;height:12px}
+
+/* Ran N tools */
+.tools{margin:0 0 18px}
+.tools-head{display:flex;align-items:center;gap:7px;font-size:13.5px;color:#8e8e8e;cursor:pointer;user-select:none;padding:4px 0}
+.tools-head svg{width:14px;height:14px}
+.tools-head .chev{transition:transform .15s}
+.tools.open .tools-head .chev{transform:rotate(180deg)}
+.tools-list{display:none;padding:8px 0 2px}
+.tools.open .tools-list{display:block}
+.tool-row{display:flex;align-items:center;gap:12px;padding:7px 8px;border-radius:9px;font-size:14.5px;color:#d9d9d9;cursor:default}
+.tool-row:hover{background:var(--d-hover)}
+.tool-row svg{width:17px;height:17px;color:#8e8e8e;flex:none}
+
+/* 收据行 + 锚卡 */
+.receipt{display:flex;align-items:center;gap:7px;margin-top:10px;font:11.5px ui-monospace,Menlo,monospace;color:var(--d-meta)}
+.receipt svg{width:13px;height:13px;flex:none}
+.anchors{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.anchor{display:flex;align-items:center;gap:9px;background:var(--d-panel2);box-shadow:inset 0 0 0 1px var(--d-line);border:none;border-radius:12px;padding:7px 9px;cursor:pointer;text-align:left;font:inherit;max-width:100%;color:var(--d-fg)}
+.anchor:hover{background:var(--d-hover)}
+.anchor .a-th{width:46px;height:46px;border-radius:8px;overflow:hidden;flex:none;background:#0a0a0a;position:relative;display:flex;align-items:center;justify-content:center}
+.anchor .a-th video{width:100%;height:100%;object-fit:cover;display:block}
+.anchor .a-th .thph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#3a3a3e}
+.anchor .a-th .dur{position:absolute;right:3px;bottom:3px;background:rgba(0,0,0,.75);color:#fff;font:9.5px ui-monospace,Menlo,monospace;padding:1px 5px;border-radius:5px}
+.anchor .a-meta{min-width:0}
+.anchor b{display:block;font-size:12.5px;font-weight:550;color:var(--d-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
+.anchor .a-meta>span{font-size:10.5px;color:var(--d-meta)}
+
+/* 免责 + composer */
+.disclaimer{text-align:center;font-size:12px;color:#707070;padding:2px 16px 10px;flex:none}
+.composer-d{margin:0 14px 12px;background:var(--d-panel2);box-shadow:inset 0 0 0 1px var(--d-line);border-radius:24px;padding:12px 14px 9px;flex:none}
+.composer-d textarea{width:100%;border:none;outline:none;resize:none;background:transparent;color:#f5f5f5;font:inherit;font-size:14.5px;line-height:1.5;min-height:56px}
+.composer-d textarea::placeholder{color:#6b6b6b}
+.composer-d .crow{display:flex;align-items:center}
+.composer-d .crow .sp{flex:1}
+.circ{width:36px;height:36px;border-radius:999px;border:none;background:transparent;color:#9a9a9a;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.circ:hover{background:var(--d-hover)}
+.circ.sendb{background:#e8e8e8;color:#141414}
+.circ.sendb:hover{background:#fff}
+
+/* 画布（世界 = 关系视图观察窗） */
+.world{position:absolute;top:0;left:0;width:1200px;height:800px;background:#0b0b0c;background-image:radial-gradient(circle,rgba(255,255,255,.09) 1.1px,transparent 1.1px);background-size:26px 26px;transform-origin:0 0}
+.edges{position:absolute;top:0;left:0;pointer-events:none}
+.edges path{stroke:#3a3a3d;stroke-width:2;fill:none}
+.node{position:absolute;width:280px;background:#161617;border-radius:14px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);padding:12px}
+.node h4{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;color:#f0f0f0}
+.kind{font-size:10.5px;color:var(--d-mut);background:#262628;border-radius:6px;padding:2px 6px;font-weight:400}
+.node .rows{margin-top:8px;font-size:12px;color:var(--d-mut);display:flex;flex-direction:column;gap:4px}
+.node .stat{display:flex;align-items:center;gap:5px;color:var(--d-meta);font-size:11.5px;margin-top:9px}
+.node .stat svg{width:13px;height:13px}
+.mini-page{margin-top:10px;border-radius:8px;background:#f7f6f2;padding:12px;display:flex;flex-direction:column;gap:7px}
+.mini-line{height:9px;border-radius:4px;background:#141414}
+.mini-line.w1{width:82%}.mini-line.w2{width:64%}
+.mini-line.sub{background:#d8d5cf;height:6px;width:88%}
+.node video{width:100%;border-radius:8px;display:block;margin-top:10px;background:#f7f6f2}
+
+/* 手机帧（移动端 = 纯 chat） */
+.phones{display:flex;gap:30px;flex-wrap:wrap}
+.ph-cap{font:11px ui-monospace,Menlo,monospace;color:var(--amber-fg);margin:0 0 8px 4px}
+.phone{width:392px;height:730px;border-radius:34px;box-shadow:inset 0 0 0 1px var(--d-line);background:var(--d-bg);display:flex;flex-direction:column;overflow:hidden;flex:none}
+.ph-top{height:50px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--d-line)}
+.ph-top b{font-size:13.5px;font-weight:600;color:var(--d-fg)}
+.ph-scroll{flex:1;overflow-y:auto;padding:16px 14px 6px}
+.phone .composer-d{margin:0 10px 10px;border-radius:20px;padding:10px 12px 7px}
+.phone .composer-d textarea{min-height:36px;font-size:13.5px}
+.phone .attach{width:216px}
+
+/* MediaLightbox（锚卡点击过渡帧） */
+.lb{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center}
+.lb-back{position:absolute;inset:0;background:rgba(8,8,10,.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.lb-card{position:relative;width:min(880px,92vw);border-radius:16px;overflow:hidden;background:var(--d-panel);box-shadow:inset 0 0 0 1px var(--d-line)}
+.lb-card video{width:100%;display:block;background:#000;aspect-ratio:16/9}
+.lb-ph{aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:#3a3a3e;background:linear-gradient(135deg,#e9e4da,#cfd7dc)}
+.lb-cap{display:flex;align-items:center;gap:10px;padding:11px 14px;font-size:12.5px;color:var(--d-mut)}
+.lb-x{position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:999px;border:none;background:rgba(10,10,12,.55);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.lb-x:hover{background:rgba(10,10,12,.75)}
+
+/* 浅主题覆盖（屏 2 范围） */
+#screen-project[data-theme="light"] .bubble{background:#eaeaee;color:#141414}
+#screen-project[data-theme="light"] .msg .prose{color:#1d1d21}
+#screen-project[data-theme="light"] .m-actions,#screen-project[data-theme="light"] .m-actions button{color:#8e8e96}
+#screen-project[data-theme="light"] .m-actions button:hover{color:#3f3f46}
+#screen-project[data-theme="light"] .nchip{background:#ececf0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);color:#1d1d21}
+#screen-project[data-theme="light"] .tools-head{color:#71717a}
+#screen-project[data-theme="light"] .tool-row{color:#3f3f46}
+#screen-project[data-theme="light"] .tool-row svg{color:#8e8e96}
+#screen-project[data-theme="light"] .disclaimer{color:#a1a1aa}
+#screen-project[data-theme="light"] .composer-d textarea{color:#141414}
+#screen-project[data-theme="light"] .composer-d textarea::placeholder{color:#a1a1aa}
+#screen-project[data-theme="light"] .circ{color:#62626a}
+#screen-project[data-theme="light"] .circ.sendb{background:#1c1c1f;color:#fff}
+#screen-project[data-theme="light"] .node{background:#ffffff;box-shadow:inset 0 0 0 1px rgba(0,0,0,.09)}
+#screen-project[data-theme="light"] .node h4{color:#18181b}
+#screen-project[data-theme="light"] .kind{background:#f0f0f2}
+#screen-project[data-theme="light"] .world{background:#f1f1f2;background-image:radial-gradient(circle,rgba(0,0,0,.10) 1.1px,transparent 1.1px)}
+#screen-project[data-theme="light"] .edges path{stroke:#c9c9d0}
+#screen-project[data-theme="light"] .anchor .a-th{background:#e5e5e8}
+
+/* ---------- 屏 3：节点规划 ---------- */
+#screen-nodes{background:var(--d-bg);color:var(--d-fg)}
+.proj{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+.nodes-wrap{flex:1;overflow-y:auto;padding:26px 30px 30px;min-width:0}
+.flowstrip{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+.fchip{background:var(--d-panel2);box-shadow:inset 0 0 0 1px var(--d-line);border-radius:9px;padding:7px 12px;font-size:12.5px;color:var(--d-mut)}
+.fchip.acc{color:#ececec;box-shadow:inset 0 0 0 1px rgba(255,255,255,.22)}
+.flowstrip .arr{color:var(--d-meta);font-size:12px}
+.planrow{display:grid;grid-template-columns:minmax(0,1fr) 264px;gap:16px}
+.planworld{position:relative;height:540px;border-radius:16px;overflow:hidden;background:#0b0b0c;background-image:radial-gradient(circle,rgba(255,255,255,.09) 1.1px,transparent 1.1px);background-size:26px 26px;box-shadow:inset 0 0 0 1px var(--d-line)}
+.node.draft{outline:1.5px dashed rgba(255,255,255,.3);outline-offset:5px}
+.dchip{display:inline-flex;font-size:10.5px;color:var(--d-meta);background:#1c1c1e;border-radius:6px;padding:2px 7px;margin-left:6px;font-weight:400}
+.spec{margin-top:10px;border-top:1px solid var(--d-line);padding-top:9px;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font:11px/1.6 ui-monospace,Menlo,monospace}
+.spec b{color:#707070;font-weight:400}
+.spec span{color:#d4d4d4}
+.port{position:absolute;width:11px;height:11px;border-radius:999px;background:#0b0b0c;box-shadow:0 0 0 2px #3a3a3d}
+.annotcol{display:flex;flex-direction:column;gap:12px}
+.annot{background:var(--amber-bg);color:var(--amber-fg);border:1px dashed var(--amber-bd);border-radius:10px;padding:10px 12px;font:11px/1.75 ui-monospace,Menlo,monospace}
+.annot b{color:#78350f}
+.statestrip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:18px}
+.statecard{background:var(--d-panel);border-radius:14px;box-shadow:inset 0 0 0 1px var(--d-line);padding:12px;min-height:120px}
+.statecard h5{font-size:11px;color:var(--d-meta);font-weight:500;margin-bottom:10px;font-family:ui-monospace,Menlo,monospace}
+.statecard .mini{border-radius:10px;background:#161617;box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);padding:10px}
+.mini .mh{font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px;color:#f0f0f0;flex-wrap:wrap}
+.mini .st{display:flex;align-items:center;gap:6px;color:var(--d-meta);font-size:11px;margin-top:8px}
+.mini video{width:100%;border-radius:7px;display:block;margin-top:8px}
+.mini.drafty{outline:1.5px dashed rgba(255,255,255,.28);outline-offset:3px;opacity:.8}
+
+#toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(8px);background:#ececec;color:#141414;font-size:12.5px;padding:7px 14px;border-radius:9px;opacity:0;pointer-events:none;transition:.2s;z-index:99}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<div id="chrome">
+  <span>界面思路原型 v4 · 双端对照 · 琥珀色 = 原型标注</span>
+  <nav>
+    <button data-screen="home" class="on">① home · 两级 tab 货架</button>
+    <button data-screen="project">② 双端对照 · 锚卡与承接句</button>
+    <button data-screen="nodes">③ 配方卡 → 节点规划</button>
+    <button id="themebtn" style="border-style:solid">◐ 屏② 深/浅</button>
+  </nav>
+</div>
+
+<!-- ==================== 屏 1：home ==================== -->
+<main id="screen-home" class="screen">
+  <section class="home-main">
+    <div class="h-wrap">
+      <div class="h-hero"><span class="mark"></span><h1>Repurposer</h1><p>你的自媒体 Agent 团队</p></div>
+      <div class="composer" id="composer">
+        <button class="cbtn" title="添加素材"><svg class="ic" viewBox="0 0 24 24" width="18" height="18"><path d="M12 5v14M5 12h14"/></svg></button>
+        <input id="composer-input" placeholder="点名要做的内容——贴链接、传素材都行">
+        <button class="cbtn send" title="发送"><svg class="ic" viewBox="0 0 24 24" width="18" height="18"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+      </div>
+
+      <div class="track"><div class="track-in" id="track"></div></div>
+      <div class="subrow" id="subrow"></div>
+      <div class="sections" id="sections"></div>
+
+      <div class="notes"><b>本屏法则</b>（结构对齐参考截图；浅 = 我们的 landing 奶油底）
+① 两级 tab：一级 = pill 轨（场景族），二级 = 下划线文本 tab（子类）；内容 = 按子类分组的<b>横滑货架</b>（白容器 + › 翻页）
+② <b>琥珀「能力未覆盖」</b> = 该族需要另一套能力栈（发言人/UGC 真人 = avatar·stock footage，不是 MG 引擎）——上架纪律：无真 demo 不成卡（卡点亮律）；第一格视频 = 我们 spike 实渲
+③ 卡片点击 → composer 预填 brief → chat → plan；<b>永远不进「模板编辑器」</b>（self-serve 否决线，试试点任意卡）
+④ 「模板」tab 第一货架 = 我们现有 6 张配方卡，同轨呈现——skill 1:N：一个 MG 引擎托一族卡，新卡 = 零工程
+⑤ 落我们的词表时按真实 skill 覆盖裁剪族名（解释视频/广告 MG 族先行）；一卡只承诺一个产物</div>
+    </div>
+  </section>
+</main>
+
+<!-- ==================== 屏 2：双端对照（锚卡与承接句） ==================== -->
+<main id="screen-project" class="screen hidden" data-theme="dark">
+  <div class="duo-wrap">
+    <div class="duo-scroll">
+
+      <!-- 页顶：环境谓词真值表 -->
+      <section>
+        <div class="tt"><b>页顶法定 · 环境谓词真值表</b>（双键 = chat 装配层结构化字段，LLM 唯一合法环境源——禁从用户语言/设备特征推断；锚卡渲染 ⟺ !canvas_visible，渲染时刻状态、非历史快照）
+          <table>
+            <tr><th>端</th><th>canvas_available</th><th>canvas_visible</th><th>锚卡</th><th>交付承接句</th></tr>
+            <tr><td>桌面</td><td>true</td><td>true</td><td>不渲染</td><td>无——收尾散文零交接、零面指涉</td></tr>
+            <tr><td>移动端</td><td>false</td><td>false</td><td>渲染 · 挂终态收据行之下，N 产物数组平铺</td><td>有——收尾一句，指向紧随其后的产物行</td></tr>
+          </table>
+        </div>
+      </section>
+
+      <!-- 桌面 · Split 固定（对照组） -->
+      <section>
+        <div class="duo-cap"><b>桌面 · Split 固定（对照组 · canvas_available=true / canvas_visible=true）</b>——同一次 run：零锚卡、零承接句，画布在侧即世界自证。形态基座：桌面恒 Split，无切换控件（模式切换 UI 永禁，ADR-118）</div>
+        <div class="deskframe">
+          <div class="df-top">
+            <div class="ttl"><b>Repurposer 发布短片</b><span>sylas's workspace</span></div>
+            <button class="minibell" title="通知"><svg class="ic" viewBox="0 0 24 24" width="16" height="16"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></button>
+          </div>
+          <div class="df-body">
+            <div class="df-chat">
+              <div class="df-chatscroll">
+
+                <div class="msg u">
+                  <div class="bubble">以这个页面为基准，做一条 30 秒的发布短片</div>
+                  <div class="attach">
+                    <span class="th"><i></i><i style="width:70%"></i><i class="s"></i></span>
+                    <div style="min-width:0"><b>repurposer.ai</b><span>Web page</span></div>
+                  </div>
+                  <div class="m-actions">
+                    <button class="copybtn" data-copy="以这个页面为基准，做一条 30 秒的发布短片" title="复制"><svg class="ic" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                  </div>
+                </div>
+
+                <div class="msg a">
+                  <div class="prose">我会保留品牌黑白基调，按<b>大字句 + 界面推镜</b>的结构编排，文案全部取自页面原文。</div>
+                </div>
+
+                <div class="tools open">
+                  <div class="tools-head">Ran 1 tool<svg class="ic chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+                  <div class="tools-list">
+                    <div class="tool-row"><svg class="ic" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>Read web page</div>
+                  </div>
+                </div>
+
+                <div class="msg a">
+                  <div class="prose">已经为你生成了发布短片的分镜方案：
+                    <span class="bl">• <b>结构</b>：开场两板大字句定调，随后界面推镜与字幕胶囊走一遍核心主张，章节卡过渡，片尾品牌卡。</span>
+                    <span class="bl">• <b>当前节点</b>：<span class="nchip"><span class="th"><svg class="ic" viewBox="0 0 24 24"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z"/><path d="M3 11v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7z"/></svg></span>发布短片</span></span>
+                  </div>
+                </div>
+
+                <div class="tools">
+                  <div class="tools-head">Ran 3 tools<svg class="ic chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+                  <div class="tools-list">
+                    <div class="tool-row"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h6.5v3.5M6.5 10v6.5h3.5"/></svg>Created workflow</div>
+                    <div class="tool-row"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16V8M8 12l4-4 4 4"/></svg>Ran nodes</div>
+                    <div class="tool-row"><svg class="ic" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>Viewed media</div>
+                  </div>
+                </div>
+
+                <!-- 交付回合：桌面 = 零承接句 + 收据行无锚卡（JS 注入，与移动端同一次 run） -->
+                <div id="df-delivery"></div>
+
+              </div>
+              <div class="disclaimer">Repurposer is AI and can make mistakes. Check important info.</div>
+              <div class="composer-d">
+                <textarea placeholder="Use '@' to mention nodes, '/' to use skills, and '#' for techniques."></textarea>
+                <div class="crow">
+                  <button class="circ" title="添加"><svg class="ic" viewBox="0 0 24 24" width="19" height="19"><path d="M12 5v14M5 12h14"/></svg></button>
+                  <span class="sp"></span>
+                  <button class="circ" title="语音"><svg class="ic" viewBox="0 0 24 24" width="18" height="18"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1M12 19v3"/></svg></button>
+                  <button class="circ sendb" title="发送"><svg class="ic" viewBox="0 0 24 24" width="18" height="18"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+                </div>
+              </div>
+            </div>
+
+            <div class="df-canvas">
+              <div class="world">
+                <svg class="edges" width="1200" height="800">
+                  <path d="M336,225 C400,225 420,190 470,190"/>
+                </svg>
+                <div class="node" style="left:56px;top:120px">
+                  <h4>repurposer.ai<span class="kind">web_page 资产</span></h4>
+                  <div class="mini-page"><span class="mini-line w1"></span><span class="mini-line w2"></span><span class="mini-line sub"></span></div>
+                  <div class="stat">24 条文案 · 截图 1 张</div>
+                </div>
+                <div class="node" style="left:470px;top:86px;width:380px">
+                  <h4>发布短片<span class="kind">video · generator · launch_film</span></h4>
+                  <div class="rows"><span>分镜 8 场景 · 16:9 · 文案锚定页面原文</span></div>
+                  <video src="launch-film-spike.mp4" autoplay muted loop playsinline></video>
+                  <div class="stat"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>已完成 · 45.5s · 12 积分 · generated</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 移动端 · 纯 chat（单产物 / 多产物两帧） -->
+      <section>
+        <div class="duo-cap"><b>移动端 · 纯 chat（canvas_available=false / canvas_visible=false）</b>——交付回合 = 散文收尾承接句 + 收据行 + 锚卡（点击开 MediaLightbox）。右帧 = 多产物数组平铺 + 名缺回退演示（长文卡未命名 → 「类型词 + 规格」，零模板回填）</div>
+        <div class="phones">
+
+          <div>
+            <div class="ph-cap">单产物帧</div>
+            <div class="phone">
+              <div class="ph-top"><b>Repurposer 发布短片</b>
+                <button class="minibell" title="通知"><svg class="ic" viewBox="0 0 24 24" width="15" height="15"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></button>
+              </div>
+              <div class="ph-scroll">
+                <div class="msg u">
+                  <div class="bubble">以这个页面为基准，做一条 30 秒的发布短片</div>
+                  <div class="attach">
+                    <span class="th"><i></i><i style="width:70%"></i><i class="s"></i></span>
+                    <div style="min-width:0"><b>repurposer.ai</b><span>Web page</span></div>
+                  </div>
+                </div>
+                <div class="tools">
+                  <div class="tools-head">Ran 1 tool<svg class="ic chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+                  <div class="tools-list">
+                    <div class="tool-row"><svg class="ic" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>Read web page</div>
+                  </div>
+                </div>
+                <!-- 交付回合：移动端 = 承接句 + 收据行 + 锚卡（JS 注入） -->
+                <div id="ph1-delivery"></div>
+              </div>
+              <div class="disclaimer">Repurposer is AI and can make mistakes. Check important info.</div>
+              <div class="composer-d">
+                <textarea placeholder="Use '@' to mention nodes, '/' to use skills, and '#' for techniques."></textarea>
+                <div class="crow">
+                  <button class="circ" title="添加"><svg class="ic" viewBox="0 0 24 24" width="18" height="18"><path d="M12 5v14M5 12h14"/></svg></button>
+                  <span class="sp"></span>
+                  <button class="circ sendb" title="发送"><svg class="ic" viewBox="0 0 24 24" width="17" height="17"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="ph-cap">多产物帧 · 数组平铺（禁合集卡）</div>
+            <div class="phone">
+              <div class="ph-top"><b>Repurposer 发布短片</b>
+                <button class="minibell" title="通知"><svg class="ic" viewBox="0 0 24 24" width="15" height="15"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></button>
+              </div>
+              <div class="ph-scroll">
+                <div class="msg u">
+                  <div class="bubble">以这个页面为基准，做一条 30 秒发布短片，再出一张定价章节卡和一条长文初稿</div>
+                  <div class="attach">
+                    <span class="th"><i></i><i style="width:70%"></i><i class="s"></i></span>
+                    <div style="min-width:0"><b>repurposer.ai</b><span>Web page</span></div>
+                  </div>
+                </div>
+                <div class="tools">
+                  <div class="tools-head">Ran 3 tools<svg class="ic chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>
+                  <div class="tools-list">
+                    <div class="tool-row"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h6.5v3.5M6.5 10v6.5h3.5"/></svg>Created workflow</div>
+                    <div class="tool-row"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16V8M8 12l4-4 4 4"/></svg>Ran nodes</div>
+                    <div class="tool-row"><svg class="ic" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>Viewed media</div>
+                  </div>
+                </div>
+                <!-- 交付回合：多产物 = 承接句 + 收据行 + 锚卡数组（JS 注入） -->
+                <div id="ph2-delivery"></div>
+              </div>
+              <div class="disclaimer">Repurposer is AI and can make mistakes. Check important info.</div>
+              <div class="composer-d">
+                <textarea placeholder="Use '@' to mention nodes, '/' to use skills, and '#' for techniques."></textarea>
+                <div class="crow">
+                  <button class="circ" title="添加"><svg class="ic" viewBox="0 0 24 24" width="18" height="18"><path d="M12 5v14M5 12h14"/></svg></button>
+                  <span class="sp"></span>
+                  <button class="circ sendb" title="发送"><svg class="ic" viewBox="0 0 24 24" width="17" height="17"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <div class="notes" style="max-width:none;margin:0;padding-top:14px"><b>本屏法则</b>　① <b>形态基座</b>：桌面固定 Split / 移动纯 chat，模式切换控件永禁（ADR-118）——本页无任何切换控件 ② <b>锚卡 = 终态收据帧</b>：静态、零订阅、只读消息载荷 output_refs、挂收据行之下归收据所有、无内联播放钮、点击开 MediaLightbox；N 产物 = 数组平铺，禁合集卡组件 ③ <b>承接句 = 唯一合法面指涉</b>（ADR-058/060 窄门）：iff !canvas_visible 才说，iff canvas_visible 一字不提——对照两端交付回合，同一 run 只相差这一句与这一组卡 ④ <b>环境双键</b>（canvas_available / canvas_visible）= 装配层结构化字段，LLM 唯一合法环境源，禁从用户语言/设备特征推断 ⑤ 名缺 → 「类型词 + 时长/规格」回退（多产物帧长文卡演示），世界自证、零冻参模板 ⑥ <b>声音互斥</b>：Lightbox 播放接全局互斥（本批检查项）；Queue / 👍👎 / Jump to latest / mic 维持延期，摆位都不摆 ⑦ 深浅双主题 = 原型外框「◐ 屏② 深/浅」切换（产品默认深）</div>
+
+    </div>
+  </div>
+
+  <!-- MediaLightbox（锚卡点击过渡帧） -->
+  <div id="lightbox" class="lb hidden">
+    <div class="lb-back" id="lb-back"></div>
+    <div class="lb-card">
+      <video id="lb-video" src="launch-film-spike.mp4" muted loop playsinline controls></video>
+      <div id="lb-ph" class="lb-ph hidden"><svg class="ic" viewBox="0 0 24 24" width="42" height="42"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.5-3.5a2 2 0 0 0-3 0L6 20"/></svg></div>
+      <div class="lb-cap" id="lb-cap"></div>
+      <button class="lb-x" id="lb-x" title="关闭"><svg class="ic" viewBox="0 0 24 24" width="16" height="16"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+  </div>
+</main>
+
+<!-- ==================== 屏 3：配方卡 → 节点规划 ==================== -->
+<main id="screen-nodes" class="screen hidden">
+  <div class="proj">
+    <div class="nodes-wrap">
+      <div class="flowstrip">
+        <span class="fchip">配方卡「网页发布短片」</span><span class="arr">→</span>
+        <span class="fchip">composer 预填 brief</span><span class="arr">→</span>
+        <span class="fchip">chat 一发即计划（auto 档零确认拍）</span><span class="arr">→</span>
+        <span class="fchip acc">plan-ready：draft 图落画布</span>
+      </div>
+
+      <div class="planrow">
+        <div class="planworld">
+          <svg class="edges" width="1200" height="800">
+            <path d="M330,215 C390,215 410,180 460,180"/>
+          </svg>
+          <div class="node" style="left:50px;top:120px;width:280px">
+            <h4>repurposer.ai<span class="kind">asset · web_page</span></h4>
+            <div class="mini-page"><span class="mini-line w1"></span><span class="mini-line w2"></span><span class="mini-line sub"></span></div>
+            <div class="stat"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>ready · 24 条文案 · 截图 1 张 · 3.2s</div>
+            <span class="port" style="right:-6px;top:95px"></span>
+          </div>
+          <div class="node draft" style="left:460px;top:80px;width:400px">
+            <h4>发布短片<span class="kind">video · generator</span><span class="dchip">draft · 待开工</span></h4>
+            <div class="spec">
+              <b>family</b><span>film（与 clip-spec 平级）</span>
+              <b>tool</b><span>launch_film</span>
+              <b>input</b><span>@repurposer.ai（web_page 资产）</span>
+              <b>vocabulary</b><span>words · hero · ui · divider · reveal · end</span>
+              <b>storyboard</b><span>8 场景 · 26s · 1920×1080（LLM 写，validator 把门）</span>
+              <b>estimate</b><span>≈12 积分（秒 × 费率 + 编排 tokens）</span>
+              <b>provenance</b><span>generated（ADR-026 分类器）</span>
+            </div>
+            <span class="port" style="left:-6px;top:100px"></span>
+          </div>
+        </div>
+
+        <div class="annotcol">
+          <div class="annot"><b>① node face 不变</b>：type=video / prototype=generator 是既有枚举，区分只在 spec.family=film——画布卡面、徽标、下载、估价零分叉。画布上你看不到"新引擎"，只看到新产物。</div>
+          <div class="annot"><b>② 分工宪法</b>：LLM 只写 storyboard JSON；组件库代码人工拥有（禁 LLM 写渲染代码）；grounding validator = 确定性门（文案命中才放行，同构 exit 5）。</div>
+          <div class="annot"><b>③ 修订 = 图变更</b>：@发布短片 + "第 4 场景文案改成 X" → edit_graph → apply_wiring_ops 唯一写口 → 重渲整片约 46s，逐次计价，失败不扣费。</div>
+          <div class="annot"><b>④ 采集侧</b>：URL 在消息入口即资产化（transcript 提升同座）；显式多 URL = 贴几个链接采几个，每页一个 web_page 资产，互相可 @（自动 discover 归需求池）。</div>
+        </div>
+      </div>
+
+      <div class="statestrip">
+        <div class="statecard"><h5>draft（plan-ready）</h5>
+          <div class="mini drafty"><div class="mh">发布短片<span class="dchip">draft</span></div><div class="st">spec 已填 · 估价 ≈12 积分 · 等开工</div></div>
+        </div>
+        <div class="statecard"><h5>running</h5>
+          <div class="mini"><div class="mh">发布短片</div><div class="st"><span class="spin"></span>渲染成片 · 780 帧 · 已 0:23</div></div>
+        </div>
+        <div class="statecard"><h5>settled</h5>
+          <div class="mini"><div class="mh">发布短片<span class="kind">video</span></div><video src="launch-film-spike.mp4" autoplay muted loop playsinline></video><div class="st"><svg class="ic" viewBox="0 0 24 24" width="12" height="12"><path d="M20 6 9 17l-5-5"/></svg>已完成 · 45.5s · 12 积分 · generated</div></div>
+        </div>
+      </div>
+
+      <div class="notes" style="margin-top:26px"><b>本屏法则</b>　① 先图后运行：draft 图 = plan-ready 唯一出生形态　② 节点五型既有枚举零新增，family 是节点内部程序　③ 进度回话走既有活动行/状态行机器，节点不自养进度 UI　④ 失败不扣费 + failed 行永不折叠　⑤ 产物徽标 = generated（世界自证，不说"精心制作"）　⑥ 世界级架构对齐点：SKILL.md 行业标准形态（Claude Code skills 同形）/ tools = 能力唯一家 / registry→prompt 单源投影 / validator 确定性门 / 诚实降级</div>
+    </div>
+  </div>
+</main>
+
+<div id="toast">已复制</div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+
+/* ================= home：两级 tab + 货架（数据驱动） ================= */
+const GRID_ICON='<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
+const PLAY='<span class="play"><span><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M6 4l14 8-14 8z"/></svg></span></span>';
+const HUES=[['#e9e4da','#ded8cb'],['#dfe4e7','#cfd7dc'],['#e7dfd4','#ddd3c4'],['#e2e6df','#d2d9cf'],['#ece6e1','#e0d8d1'],['#dde2e6','#ccd4da'],['#e6e1e8','#d8d2dc'],['#e4e8e2','#d6dcd2']];
+const RECIPES=[
+ ['竖版短片','从长视频剪出竖版高光','输入：演讲视频','把这条视频剪成竖版高光短片：','M6 6a3 3 0 1 0 0-.01M6 18a3 3 0 1 0 0 .01M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12'],
+ ['LinkedIn 长文','把素材写成一条长文','输入：任意素材','把这份素材写成一条 LinkedIn 长文：','M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8'],
+ ['金句卡','3–7 条金句合成一张图','输入：演讲视频','把这条视频里的金句做成一张图：','M10 11H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4zM20 11h-4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4z'],
+ ['轮播','要点拆成滑动卡片','输入：文章或要点','把这些要点做成一组轮播：','M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7H3z'],
+ ['多语言配音','你的声音讲另一种语言','输入：演讲视频','把这条视频配音成另一种语言：','M9 2h6v12a3 3 0 0 1-6 0zM5 10v1a7 7 0 0 0 14 0v-1M12 19v3'],
+ ['翻译字幕','原片加多语言字幕','输入：演讲视频','给这条视频加字幕，语言：','m5 8 6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6'],
+];
+const TABS=[
+ {id:'tpl',label:'模板',icon:true,subs:[{id:'all',label:'全部',sections:[{title:'推荐配方',kind:'recipes'}]}]},
+ {id:'discover',label:'发现',subs:[{id:'hot',label:'热门',sections:[{title:'热门',n:7,v:1}]}]},
+ {id:'explainer',label:'解释视频',subs:[
+   {id:'anim',label:'动画讲解',sections:[{title:'动画讲解',n:4,spike:true},{title:'动态图形',n:4}]},
+   {id:'motion',label:'动态图形',sections:[{title:'动态图形',n:4}]},
+   {id:'spokes',label:'发言人',sections:[{title:'发言人',n:6,v:1,soon:1}]},
+   {id:'edu',label:'教育讲解员',sections:[{title:'教育讲解员',n:6,v:1,soon:1}]},
+ ]},
+ {id:'cartoon',label:'动画片',subs:[{id:'story',label:'故事',sections:[{title:'故事',n:4,soon:1}]}]},
+ {id:'film',label:'故事与电影',subs:[{id:'short',label:'短片',sections:[{title:'短片',n:4,soon:1}]}]},
+ {id:'ads',label:'广告和用户生成内容',subs:[
+   {id:'brand',label:'品牌与业务',sections:[{title:'品牌与业务',n:4},{title:'大学拨款委员会',n:7,v:1,soon:1}]},
+   {id:'grant',label:'大学拨款委员会',sections:[{title:'大学拨款委员会',n:7,v:1,soon:1}]},
+   {id:'saas',label:'SaaS 和应用',sections:[{title:'SaaS 和应用',n:4}]},
+   {id:'product',label:'产品',sections:[{title:'产品',n:4}]},
+ ]},
+ {id:'social',label:'社交媒体',subs:[{id:'li',label:'LinkedIn',sections:[{title:'LinkedIn',n:4}]}]},
+];
+let curTab='explainer', curSub={};
+
+function grad(i){const h=HUES[i%HUES.length];return `background:linear-gradient(135deg,${h[0]},${h[1]})`;}
+
+function renderTrack(){
+  $('#track').innerHTML=TABS.map(t=>
+    `<button data-t="${t.id}" class="${t.id===curTab?'on':''}">${t.icon?GRID_ICON:''}${t.label}</button>`).join('');
+  $$('#track button').forEach(b=>b.onclick=()=>{curTab=b.dataset.t;renderAll();});
+}
+function renderSubs(){
+  const t=TABS.find(t=>t.id===curTab);
+  if(!(curSub[curTab]&&t.subs.some(s=>s.id===curSub[curTab])))curSub[curTab]=t.subs[0].id;
+  $('#subrow').innerHTML=t.subs.map(s=>
+    `<button data-s="${s.id}" class="${s.id===curSub[curTab]?'on':''}">${s.label}</button>`).join('');
+  $$('#subrow button').forEach(b=>b.onclick=()=>{curSub[curTab]=b.dataset.s;renderSubs();renderSections();});
+}
+function vcard(i,vertical,spike,title){
+  if(spike)return `<button class="vcard${vertical?' v':''}" data-prefill="把这个页面做成一条 30 秒发布短片："><video src="launch-film-spike.mp4" autoplay muted loop playsinline></video></button>`;
+  return `<button class="vcard${vertical?' v':''}" data-prefill="做一条「${title}」风格的短片："><span class="phg" style="${grad(i)}"></span>${vertical?'':PLAY}</button>`;
+}
+function renderSections(){
+  const t=TABS.find(t=>t.id===curTab), s=t.subs.find(s=>s.id===curSub[curTab]);
+  $('#sections').innerHTML=s.sections.map(sec=>{
+    let cards='';
+    if(sec.kind==='recipes'){
+      cards=RECIPES.map(r=>`<button class="rcard" data-prefill="${r[3]}"><span class="icbox"><svg class="ic" viewBox="0 0 24 24"><path d="${r[4]}"/></svg></span><h4>${r[0]}</h4><p>${r[1]}</p><div class="meta">${r[2]}</div></button>`).join('');
+    }else{
+      for(let i=0;i<sec.n;i++)cards+=vcard(i,sec.v,sec.spike&&i===0,sec.title);
+    }
+    return `<section><h3 class="shelf-t">${sec.title}${sec.soon?'<span class="tag-soon">能力未覆盖</span>':''}</h3>
+      <div class="shelf"><div class="shelf-track">${cards}</div><button class="shelf-nav" title="下一页"><svg class="ic" viewBox="0 0 24 24" width="18" height="18"><path d="m9 18 6-6-6-6"/></svg></button></div></section>`;
+  }).join('');
+  $$('#sections .shelf-nav').forEach(b=>b.onclick=()=>{b.previousElementSibling.scrollBy({left:330,behavior:'smooth'});});
+  $$('#sections [data-prefill]').forEach(c=>c.onclick=()=>{
+    const i=$('#composer-input');i.value=c.dataset.prefill;i.focus();
+    const cmp=$('#composer');cmp.classList.add('pulse');setTimeout(()=>cmp.classList.remove('pulse'),900);
+    window.scrollTo({top:0});$('.home-main').scrollTo({top:0,behavior:'smooth'});
+  });
+}
+function renderAll(){renderTrack();renderSubs();renderSections();}
+renderAll();
+
+/* ================= 原型外框 ================= */
+$$('#chrome [data-screen]').forEach(b=>b.onclick=()=>{
+  $$('#chrome [data-screen]').forEach(x=>x.classList.toggle('on',x===b));
+  ['home','project','nodes'].forEach(s=>$('#screen-'+s).classList.toggle('hidden',b.dataset.screen!==s));
+});
+$('#themebtn').onclick=()=>{const p=$('#screen-project');p.dataset.theme=p.dataset.theme==='light'?'dark':'light';};
+
+/* ============ 双端对照：同一 run 的交付回合（渲染时刻按谓词分支注入） ============ */
+const CHECK='<svg class="ic" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>';
+const COPYIC='<svg class="ic" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const ICON_IMG='<svg class="ic" viewBox="0 0 24 24" width="18" height="18"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.5-3.5a2 2 0 0 0-3 0L6 20"/></svg>';
+const ICON_TXT='<svg class="ic" viewBox="0 0 24 24" width="18" height="18"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg>';
+
+function anchorHTML(a){
+  const meta=a.dur||a.dims||a.words;
+  const label=a.name||(a.kindWord+' · '+meta);           // 名缺 → 「类型词 + 时长/规格」回退，零模板
+  const sub=meta+' · '+a.kind+' · generated';
+  let th='';
+  if(a.kind==='video')th='<video src="launch-film-spike.mp4" muted playsinline preload="metadata"></video><span class="dur">'+a.dur+'</span>';
+  else if(a.kind==='image')th='<span class="thph" style="background:linear-gradient(135deg,#e9e4da,#cfd7dc)">'+ICON_IMG+'</span>';
+  else th='<span class="thph" style="background:linear-gradient(135deg,#e7dfd4,#d2d9cf)">'+ICON_TXT+'</span>';
+  return '<button class="anchor" data-kind="'+a.kind+'" data-label="'+label+'" data-sub="'+sub+'"><span class="a-th">'+th+'</span><span class="a-meta"><b>'+label+'</b><span>'+sub+'</span></span></button>';
+}
+function deliveryHTML(o){
+  return '<div class="msg a"><div class="prose">'+o.prose+'</div>'
+    +'<div class="receipt">'+CHECK+o.receipt+'</div>'
+    +(o.anchors&&o.anchors.length?'<div class="anchors">'+o.anchors.map(anchorHTML).join('')+'</div>':'')
+    +'<div class="m-actions"><button class="copybtn" data-copy="'+o.copy+'" title="复制">'+COPYIC+'</button></div></div>';
+}
+/* 同一次 run：桌面零承接句零锚卡；移动端承接句 + 锚卡；多产物 = 数组平铺 */
+const RUN_PROSE='已完成发布短片：<b>26 秒横版</b>，开场大字句与界面推镜均按方案落地，文案全部锚定页面原文、零编造。';
+const RUN_COPY='已完成发布短片：26 秒横版，开场大字句与界面推镜均按方案落地，文案零编造。';
+const RUN_RECEIPT='渲染成片 · 45.5s · 12 积分 · generated';
+$('#df-delivery').innerHTML=deliveryHTML({prose:RUN_PROSE,copy:RUN_COPY,receipt:RUN_RECEIPT});
+$('#ph1-delivery').innerHTML=deliveryHTML({prose:RUN_PROSE+'短片好了，就在下面。',copy:RUN_COPY,receipt:RUN_RECEIPT,
+  anchors:[{name:'发布短片 v1',kind:'video',kindWord:'视频',dur:'0:26'}]});
+$('#ph2-delivery').innerHTML=deliveryHTML({prose:'三样都做好了：发布短片、定价章节卡、长文初稿，文案全部锚定页面原文。就在下面。',copy:'三样都做好了：发布短片、定价章节卡、长文初稿，文案全部锚定页面原文。',receipt:'渲染成片 ×1 · 图文 ×2 · 共 21 积分 · generated',
+  anchors:[{name:'发布短片 v1',kind:'video',kindWord:'视频',dur:'0:26'},{name:'章节卡 · 定价',kind:'image',kindWord:'图片',dims:'1080×1080'},{name:null,kind:'text',kindWord:'长文',words:'约 900 字'}]});
+
+/* ================= 事件委托：copy / tools 折叠 / 锚卡 → Lightbox ================= */
+const lb=$('#lightbox'),lbv=$('#lb-video'),lbph=$('#lb-ph'),lbcap=$('#lb-cap');
+function openLb(a){
+  const isV=a.dataset.kind==='video';
+  lbv.classList.toggle('hidden',!isV);lbph.classList.toggle('hidden',isV);
+  lbcap.textContent=a.dataset.label+' · '+a.dataset.sub;
+  lb.classList.remove('hidden');
+  if(isV){lbv.currentTime=0;lbv.play().catch(()=>{});}
+}
+function lbClose(){lb.classList.add('hidden');lbv.pause();}
+$('#lb-back').onclick=lbClose;$('#lb-x').onclick=lbClose;
+document.addEventListener('keydown',e=>{if(e.key==='Escape')lbClose();});
+
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('.copybtn');
+  if(b){
+    try{await navigator.clipboard.writeText(b.dataset.copy);}catch(_){}
+    const t=$('#toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1200);
+    return;
+  }
+  const h=e.target.closest('.tools-head');
+  if(h){h.parentElement.classList.toggle('open');return;}
+  const a=e.target.closest('.anchor');
+  if(a)openLb(a);
+});
+</script>
+</body>
+</html>

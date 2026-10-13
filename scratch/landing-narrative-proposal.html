@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Landing Narrative Proposal — Six Acts + Business Tail (P2)</title>
+<style>
+  /* ---------- theme tokens (adaptive: prefers-color-scheme + manual toggle) ---------- */
+  :root {
+    --bg: oklch(1 0 0);
+    --bg-soft: oklch(0.97 0 0);
+    --fg: oklch(0.18 0 0);
+    --muted: oklch(0.45 0 0);
+    --meta: oklch(0.58 0 0);
+    --hairline: oklch(0.18 0 0 / 8%);
+    --card: oklch(0.985 0 0);
+    --accent-fill: oklch(0.95 0 0);
+    --btn-bg: oklch(0.22 0 0);
+    --btn-fg: oklch(0.99 0 0);
+    --note-bg: oklch(0.96 0.01 95);
+    --note-fg: oklch(0.42 0.03 80);
+    --note-line: oklch(0.75 0.04 90 / 45%);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: oklch(0.14 0 0);
+      --bg-soft: oklch(0.17 0 0);
+      --fg: oklch(0.95 0 0);
+      --muted: oklch(0.72 0 0);
+      --meta: oklch(0.6 0 0);
+      --hairline: oklch(0.95 0 0 / 10%);
+      --card: oklch(0.19 0 0);
+      --accent-fill: oklch(1 0 0 / 8%);
+      --btn-bg: oklch(0.92 0 0);
+      --btn-fg: oklch(0.16 0 0);
+      --note-bg: oklch(0.22 0.02 95);
+      --note-fg: oklch(0.78 0.03 90);
+      --note-line: oklch(0.6 0.04 90 / 35%);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: oklch(0.14 0 0);
+    --bg-soft: oklch(0.17 0 0);
+    --fg: oklch(0.95 0 0);
+    --muted: oklch(0.72 0 0);
+    --meta: oklch(0.6 0 0);
+    --hairline: oklch(0.95 0 0 / 10%);
+    --card: oklch(0.19 0 0);
+    --accent-fill: oklch(1 0 0 / 8%);
+    --btn-bg: oklch(0.92 0 0);
+    --btn-fg: oklch(0.16 0 0);
+    --note-bg: oklch(0.22 0.02 95);
+    --note-fg: oklch(0.78 0.03 90);
+    --note-line: oklch(0.6 0.04 90 / 35%);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+
+  /* ---------- proposal chrome (not landing copy) ---------- */
+  .proposal-banner {
+    position: sticky; top: 0; z-index: 40;
+    background: var(--bg-soft);
+    border-bottom: 1px solid var(--hairline);
+    font-size: 12px; color: var(--meta);
+    padding: 8px 20px;
+    display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap;
+  }
+  .proposal-banner b { color: var(--muted); font-weight: 600; }
+  .controls {
+    position: fixed; right: 16px; bottom: 16px; z-index: 50;
+    display: flex; gap: 8px;
+  }
+  .controls button {
+    font: inherit; font-size: 12px;
+    padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--hairline);
+    background: var(--card); color: var(--muted);
+  }
+  .controls button:hover { background: var(--accent-fill); }
+
+  /* ---------- act scaffolding ---------- */
+  .act {
+    min-height: 92vh;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 96px 24px;
+    position: relative;
+  }
+  .act-inner { width: 100%; max-width: 960px; margin: 0 auto; }
+  .act-tag {
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--meta); margin-bottom: 28px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .act-tag::after { content: ""; flex: 0 0 48px; height: 1px; background: var(--hairline); }
+  .act h2 {
+    font-size: clamp(30px, 4.6vw, 52px);
+    font-weight: 650; letter-spacing: -0.02em; line-height: 1.08;
+    text-wrap: balance;
+  }
+  .act .lede {
+    margin-top: 16px; font-size: 17px; color: var(--muted);
+    max-width: 560px; text-wrap: pretty;
+  }
+
+  /* rationale annotation — proposal layer, toggled */
+  .rationale {
+    display: none;
+    margin-top: 40px; padding: 14px 18px;
+    background: var(--note-bg); color: var(--note-fg);
+    border: 1px solid var(--note-line);
+    border-radius: 10px;
+    font-size: 13px; line-height: 1.65; max-width: 640px;
+  }
+  .rationale b { font-weight: 650; }
+  body.show-rationale .rationale { display: block; }
+
+  /* ---------- buttons ---------- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 15px; font-weight: 550; text-decoration: none;
+    padding: 12px 22px; border-radius: 10px;
+  }
+  .btn-primary { background: var(--btn-bg); color: var(--btn-fg); }
+  .btn-ghost { color: var(--fg); border: 1px solid var(--hairline); }
+  .cta-row { display: flex; gap: 12px; margin-top: 36px; flex-wrap: wrap; }
+
+  /* ---------- act 1: hero ---------- */
+  .hero h1 {
+    font-size: clamp(44px, 8vw, 96px);
+    font-weight: 680; letter-spacing: -0.03em; line-height: 1.02;
+    text-wrap: balance;
+  }
+  .hero h1 .second { color: var(--meta); display: block; }
+
+  /* ---------- act 2: evidence (comparison mock) ---------- */
+  .compare {
+    margin-top: 48px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+    border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--hairline);
+    position: relative;
+  }
+  .compare .pane {
+    aspect-ratio: 16/9; padding: 22px;
+    display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .compare .raw { background: var(--bg-soft); color: var(--meta); }
+  .compare .result { background: var(--card); }
+  .compare .pane .label {
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .compare .result .label { color: var(--meta); }
+  .compare .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .compare .tag {
+    font-size: 11px; padding: 3px 9px; border-radius: 6px;
+    background: var(--accent-fill); color: var(--muted);
+  }
+  .compare .fake-video {
+    flex: 1; margin: 14px 0; border-radius: 8px;
+    background:
+      repeating-linear-gradient(45deg, transparent 0 14px, var(--hairline) 14px 15px),
+      var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--meta);
+  }
+  .compare .divider {
+    position: absolute; left: 50%; top: 0; bottom: 0; width: 2px;
+    background: var(--fg); opacity: 0.5;
+  }
+  .compare .divider::after {
+    content: "↔"; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--btn-bg); color: var(--btn-fg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+
+  /* ---------- act 3: process ---------- */
+  .steps {
+    margin-top: 56px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+  }
+  .step {
+    background: var(--card); border-radius: 12px;
+    padding: 22px 20px;
+  }
+  .step .who {
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--meta); margin-bottom: 10px;
+  }
+  .step h3 { font-size: 16px; font-weight: 620; letter-spacing: -0.01em; }
+  .step p { margin-top: 8px; font-size: 13.5px; color: var(--muted); line-height: 1.6; }
+  .step.you { border-left: 2px solid var(--fg); }
+  .step.it { border-left: 2px solid var(--hairline); }
+
+  /* ---------- act 4: breadth matrix ---------- */
+  .matrix { margin-top: 48px; display: grid; gap: 26px; }
+  .matrix h4 {
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--meta); margin-bottom: 12px; font-weight: 550;
+  }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    font-size: 14px; padding: 9px 16px; border-radius: 9px;
+    background: var(--card); color: var(--fg);
+    display: inline-flex; align-items: baseline; gap: 8px;
+  }
+  .chip small { font-size: 11.5px; color: var(--meta); }
+
+  /* ---------- act 5: recipe cards ---------- */
+  .recipes {
+    margin-top: 48px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+  }
+  .recipe {
+    background: var(--card); border-radius: 12px; padding: 22px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .recipe h3 { font-size: 16.5px; font-weight: 620; letter-spacing: -0.01em; }
+  .recipe .contract { font-size: 13px; color: var(--muted); line-height: 1.65; }
+  .recipe .contract b { color: var(--fg); font-weight: 600; }
+  .slot {
+    border: 1.5px dashed var(--note-line);
+    border-radius: 10px;
+    aspect-ratio: 4/3;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11.5px; color: var(--meta); text-align: center; padding: 12px;
+    line-height: 1.5;
+  }
+  .recipes-note { margin-top: 18px; font-size: 12.5px; color: var(--meta); }
+
+  /* ---------- act 6: vision close ---------- */
+  .vision .manifesto {
+    font-size: clamp(21px, 2.9vw, 30px);
+    line-height: 1.42; font-weight: 480; letter-spacing: -0.01em;
+    max-width: 720px; text-wrap: pretty;
+  }
+  .vision .manifesto em { font-style: normal; color: var(--meta); }
+  .vision .promise {
+    margin-top: 40px;
+    font-size: clamp(26px, 4vw, 44px);
+    font-weight: 650; letter-spacing: -0.02em; line-height: 1.1;
+  }
+
+  /* ---------- business tail ---------- */
+  .tail { background: var(--bg-soft); }
+  .tail-inner { max-width: 960px; margin: 0 auto; padding: 88px 24px; }
+  .tail h2 { font-size: clamp(26px, 3.4vw, 38px); font-weight: 640; letter-spacing: -0.02em; }
+  .tail .lede { margin-top: 10px; color: var(--muted); font-size: 15px; }
+  .tiers { margin-top: 40px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .tier { background: var(--bg); border-radius: 12px; padding: 24px 22px; }
+  .tier h3 { font-size: 16px; font-weight: 620; }
+  .tier .price { margin-top: 6px; font-size: 26px; font-weight: 650; letter-spacing: -0.02em; }
+  .tier .price small { font-size: 13px; color: var(--meta); font-weight: 450; }
+  .tier ul { margin-top: 16px; list-style: none; display: grid; gap: 8px; }
+  .tier li { font-size: 13.5px; color: var(--muted); }
+  .tier li::before { content: "· "; color: var(--meta); }
+  .tier .btn { margin-top: 20px; font-size: 13.5px; padding: 9px 16px; }
+  .faq { margin-top: 72px; }
+  .faq-item { border-top: 1px solid var(--hairline); padding: 18px 0; }
+  .faq-item summary {
+    cursor: pointer; font-size: 15.5px; font-weight: 560; list-style: none;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  }
+  .faq-item summary::after { content: "+"; color: var(--meta); font-weight: 400; }
+  .faq-item[open] summary::after { content: "–"; }
+  .faq-item p { margin-top: 10px; font-size: 14px; color: var(--muted); max-width: 640px; line-height: 1.65; }
+
+  .tail-divider {
+    max-width: 960px; margin: 0 auto; padding: 0 24px;
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--meta);
+    display: flex; align-items: center; gap: 14px;
+  }
+  .tail-divider::after { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+
+  @media (max-width: 640px) {
+    .act { padding: 72px 20px; min-height: 0; }
+    .compare { grid-template-columns: 1fr; }
+    .compare .divider { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="proposal-banner">
+  <b>静态原型 · 非生产代码</b>
+  <span>landing 叙事骨架重构提案（需求池 P2）· 六幕 + 商务尾 · 依据 docs/LANDING.md §4</span>
+  <span>幕标题 ≤8 词 / 正文 ≤25 词 · 背书插槽在幕 5/6 之间（仅注释，无占位文案）</span>
+</div>
+
+<div class="controls">
+  <button id="toggle-rationale" type="button">幕序论证</button>
+  <button id="toggle-theme" type="button">深 / 浅</button>
+</div>
+
+<!-- ================================================================
+     幕 1 · identity — Hero 一句话 + 双 CTA（砍副标题堆叠；文案 = §3 方向 A 推荐稿）
+     ================================================================ -->
+<section class="act hero" id="act-1">
+  <div class="act-inner">
+    <div class="act-tag">Act 1 · Identity</div>
+    <h1>
+      You did the hard part.
+      <span class="second">We do the rest.</span>
+    </h1>
+    <p class="lede">An assistant that turns your talks, reports and transcripts into the content you name.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#act-5">Upload your talk</a>
+      <a class="btn btn-ghost" href="#act-3">See how it works</a>
+    </div>
+    <div class="rationale">
+      <b>为什么在第一幕：</b>目标用户是「有内容、没时间」的知识专家，第一屏只回答一个问题——「这是不是给我的」；对仗标题把分工一句话说死（你做了难的部分 = 身份从 expertise 出发），副标题压成一行事实，双 CTA 给唯二两条路，任何进一步解释都会稀释判断。
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================
+     幕 2 · 证据 — 对比滑块 raw → result（保留现状 VideoShowcase 位；上限不独立成幕，产物即上限）
+     原型为静态骨架：真实部署 = 现状 ComparisonSlider 实物对
+     ================================================================ -->
+<section class="act" id="act-2">
+  <div class="act-inner">
+    <div class="act-tag">Act 2 · Evidence</div>
+    <h2>Raw material in. Finished piece out.</h2>
+    <p class="lede">One keynote becomes a captioned vertical clip. Drag the divider.</p>
+    <div class="compare" aria-hidden="true">
+      <div class="pane raw">
+        <span class="label">Raw</span>
+        <div class="fake-video">[ 真实素材帧插槽 ]</div>
+        <div class="tags">
+          <span class="tag">Landscape</span>
+          <span class="tag">Two people</span>
+          <span class="tag">Muffled audio</span>
+          <span class="tag">No captions</span>
+        </div>
+      </div>
+      <div class="pane result">
+        <span class="label">Generated result</span>
+        <div class="fake-video">[ 真实产物帧插槽 ]</div>
+        <div class="tags">
+          <span class="tag">Vertical solo shot</span>
+          <span class="tag">Captions</span>
+          <span class="tag">Title</span>
+          <span class="tag">Clearer audio</span>
+        </div>
+      </div>
+      <div class="divider"></div>
+    </div>
+    <div class="rationale">
+      <b>为什么在第二幕：</b>知识专家对 AI 生成物的成色天然警惕（feed 里 AI slop 泛滥），承诺之后必须立刻给证据——raw → result 的真实产物对同时回答「做得好不好」和「能做到什么程度」，所以证据幕即上限幕，不另开能力宣讲。
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================
+     幕 3 · 过程 — How it works 四步，叙事改写为单助手视角（用户说 → 它做）
+     ================================================================ -->
+<section class="act" id="act-3">
+  <div class="act-inner">
+    <div class="act-tag">Act 3 · Process</div>
+    <h2>You talk. It works.</h2>
+    <p class="lede">One conversation, from raw material to published piece.</p>
+    <div class="steps">
+      <div class="step you">
+        <div class="who">You</div>
+        <h3>Bring what you have</h3>
+        <p>Talk video, podcast, slides, or a transcript. Say what you need in the same sentence.</p>
+      </div>
+      <div class="step it">
+        <div class="who">It</div>
+        <h3>Plans and drafts</h3>
+        <p>Posts, clips, articles — written in your style, in the languages you named.</p>
+      </div>
+      <div class="step you">
+        <div class="who">You</div>
+        <h3>Steer in chat</h3>
+        <p>Shorten a post, retitle a clip, push a different angle. Every edit is one message.</p>
+      </div>
+      <div class="step it">
+        <div class="who">It</div>
+        <h3>Ships where you say</h3>
+        <p>LinkedIn, your newsletter, your website — per channel, per language. Nothing ships without your word.</p>
+      </div>
+    </div>
+    <div class="rationale">
+      <b>为什么在第三幕：</b>用户不假设工具素养，「怎么工作」必须读成一段关系而不是一份教程——You / It 交替的四步把分工演出来（你只做两件会说话的事：带素材、提意见），回答的是「我要付出什么」，答案越少，转化越近。
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================
+     幕 4 · 广度 — 渠道 × 语言矩阵（原样保留；轴服务欧洲知识专家）
+     ================================================================ -->
+<section class="act" id="act-4">
+  <div class="act-inner">
+    <div class="act-tag">Act 4 · Breadth</div>
+    <h2>Where your audience already is</h2>
+    <p class="lede">Your channels, in the languages your audience speaks — written natively.</p>
+    <div class="matrix">
+      <div>
+        <h4>Channels</h4>
+        <div class="chips">
+          <span class="chip">LinkedIn <small>native posts</small></span>
+          <span class="chip">Newsletter <small>email-ready</small></span>
+          <span class="chip">Your website <small>articles</small></span>
+        </div>
+      </div>
+      <div>
+        <h4>Languages</h4>
+        <div class="chips">
+          <span class="chip">English</span>
+          <span class="chip">Français</span>
+          <span class="chip">Deutsch</span>
+          <span class="chip">Español</span>
+          <span class="chip">Italiano</span>
+          <span class="chip">Nederlands</span>
+        </div>
+      </div>
+    </div>
+    <div class="rationale">
+      <b>为什么在第四幕：</b>质量和省力都已被前两幕证明之后，剩下的顾虑才是「发到哪里、用什么语言」——对欧洲知识专家，多语言不是卖点是入场券，所以这幕是确认信息而非说服信息，放在决定点附近、证据之后。
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================
+     幕 5 · 起步 = 起步证据 — 配方卡带真实产物（输入契约：给什么素材 → 得什么产物）
+     唯一大施工；恢复条件不变：真实产物，禁虚构文案 → 原型中产物槽为空框
+     ================================================================ -->
+<section class="act" id="act-5">
+  <div class="act-inner">
+    <div class="act-tag">Act 5 · First step</div>
+    <h2>Start from what you have</h2>
+    <p class="lede">Each recipe states its contract: what you give it, what you get back.</p>
+    <div class="recipes">
+      <div class="recipe">
+        <h3>Talk → LinkedIn posts</h3>
+        <div class="slot">[ 真实产物插槽 ]<br/>恢复条件：真实产物，禁虚构文案</div>
+        <p class="contract"><b>Give:</b> one talk video.<br/><b>Get:</b> a series of LinkedIn posts in your languages.</p>
+      </div>
+      <div class="recipe">
+        <h3>Talk → vertical clips</h3>
+        <div class="slot">[ 真实产物插槽 ]<br/>恢复条件：真实产物，禁虚构文案</div>
+        <p class="contract"><b>Give:</b> one talk video.<br/><b>Get:</b> captioned vertical clips, sound cleared.</p>
+      </div>
+      <div class="recipe">
+        <h3>Transcript → newsletter</h3>
+        <div class="slot">[ 真实产物插槽 ]<br/>恢复条件：真实产物，禁虚构文案</div>
+        <p class="contract"><b>Give:</b> a transcript, slides optional.<br/><b>Get:</b> an email-ready newsletter issue.</p>
+      </div>
+    </div>
+    <p class="recipes-note">单入口不变：卡片不是双入口发射器，点击只通向同一个开始（chat 首发）。</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#act-6">Try the free beta</a>
+    </div>
+    <div class="rationale">
+      <b>为什么在第五幕：</b>行动前最后一问是「我从哪开始」——配方卡的输入契约（给什么 → 得什么）把起步成本说成具体事实，卡和证据合一幕（我们就几张配方卡，拆不出 FLORA 的两幕）；这幕是 CTA 前最后一次用实物代替形容词。
+    </div>
+  </div>
+</section>
+
+<!-- 第七幕插槽 = 背书：真实可验证背书（用户数 / 机构名 / 可核查引语）到位后插在此处（幕 5/6 之间）。
+     不预留占位文案；Testimonials 维持隐藏。 -->
+
+<!-- ================================================================
+     幕 6 · 愿景收束 — Manifesto 后移 + FinalCta 合一幕
+     ================================================================ -->
+<section class="act vision" id="act-6">
+  <div class="act-inner">
+    <div class="act-tag">Act 6 · Close</div>
+    <p class="manifesto">
+      The talk took months of work and forty minutes to give.
+      <em>Then the room empties.</em>
+      Repurposer exists for everything after.
+    </p>
+    <p class="promise">You focus on your craft; we handle the rest.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#top">Try the free beta</a>
+      <a class="btn btn-ghost" href="#tail">See pricing</a>
+    </div>
+    <div class="rationale">
+      <b>为什么在第六幕：</b>宣言只有读完全部证据之后才不是空话——它把叙事拉回用户的 expertise（房间空了，工作还在），承诺句在此收束成最终 CTA；Manifesto 从第三屏挪到末尾，是因为它本来就不是开场白，是落款。
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================
+     商务尾（不计入叙事幕）：Pricing + FAQ —— 服务已经决定试的人
+     ================================================================ -->
+<div class="tail-divider" id="tail">Business tail · not a narrative act</div>
+<div class="tail">
+  <div class="tail-inner">
+    <h2>Simple pricing</h2>
+    <p class="lede">Start free. Upgrade when your calendar fills up.</p>
+    <div class="tiers">
+      <div class="tier">
+        <h3>Free</h3>
+        <div class="price">€0 <small>forever</small></div>
+        <ul>
+          <li>2 projects per month</li>
+          <li>1 piece of content per talk</li>
+          <li>English + 1 language</li>
+        </ul>
+        <a class="btn btn-ghost" href="#">Start free</a>
+      </div>
+      <div class="tier">
+        <h3>Pro</h3>
+        <div class="price">€29 <small>/mo</small></div>
+        <ul>
+          <li>10 projects per month</li>
+          <li>Unlimited content</li>
+          <li>6 European languages</li>
+          <li>Voice-matched dubbing</li>
+        </ul>
+        <a class="btn btn-primary" href="#">Start with Pro</a>
+      </div>
+      <div class="tier">
+        <h3>Institution</h3>
+        <div class="price">Talk to us</div>
+        <ul>
+          <li>Everything in Pro</li>
+          <li>Unlimited seats</li>
+          <li>GDPR-ready</li>
+          <li>SSO &amp; invoicing</li>
+        </ul>
+        <a class="btn btn-ghost" href="#">Contact us</a>
+      </div>
+    </div>
+
+    <div class="faq">
+      <h2>Questions, answered</h2>
+      <details class="faq-item">
+        <summary>Where is my data stored?</summary>
+        <p>GDPR-ready by design: your uploads and outputs never train third-party models, and you can delete everything at any time.</p>
+      </details>
+      <details class="faq-item">
+        <summary>What can I upload?</summary>
+        <p>Talk videos, podcast audio, slide decks, photos, or just a transcript.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Which languages are supported?</summary>
+        <p>English, French, German, Spanish, Italian and Dutch — written natively, never translated word-for-word.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Does anything get published automatically?</summary>
+        <p>No. Every output waits for your explicit approval first.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Who owns the generated content?</summary>
+        <p>You do, outright. We claim no rights over your outputs.</p>
+      </details>
+    </div>
+    <div class="rationale" style="margin-top:56px">
+      <b>为什么是商务尾：</b>Pricing / FAQ 不计入叙事幕——它们服务的是已经决定试的人，回答的是采购问题不是叙事问题（与 FLORA 九幕同构：它的定价在付费墙）；GDPR 保持 ready 角度，合规实装前不吹实。
+    </div>
+  </div>
+</div>
+
+<script>
+  // 深浅自适应（prefers-color-scheme）+ 手动覆盖；记忆仅本页 session
+  const root = document.documentElement;
+  document.getElementById("toggle-theme").addEventListener("click", () => {
+    const cur = root.getAttribute("data-theme");
+    const sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const next = cur ? null : sysDark ? "light" : "dark";
+    if (next) root.setAttribute("data-theme", next);
+    else root.removeAttribute("data-theme");
+  });
+  document.getElementById("toggle-rationale").addEventListener("click", () => {
+    document.body.classList.toggle("show-rationale");
+  });
+</script>
+</body>
+</html>

@@ -286,6 +286,8 @@ apps/api/
 │   │   ├── errors.py              # 执行错误分类：TransientNodeError（step 级重试判定）
 │   │   ├── jobs.py                # 队列认领（SKIP LOCKED）+ reap_stale
 │   │   ├── asset_processing.py    # 预处理分发（PROCESSORS 链）：内容哈希 → ASR / 文本提取 / 幻灯片转图 → speaker_map / prosody
+│   │   ├── web_capture.py         # WEB_PAGE 采集 processor（MG D1b）：capture 编排 + 截图入对象存储 + meta 回写
+│   │   │                        #   （research 清单为 substance，截图可诚实缺席）；出生时 SSRF 静态门在 assets.py
 │   │   ├── speaker_map.py / prosody.py  # asset 级确定性工序：说话人话轮（ADR-045）/ 韵律特征（期 1，ASR 同族）
 │   │   ├── visual_anchors.py      # IMAGE 确定性视觉半（期 1）：YuNet 人脸/主体框/安全区（归一化坐标）
 │   │   ├── beat_map.py            # 节拍地图代码半（期 1）：LLM 文本锚吸附 ASR 词轴 + 金句自包含检查 + 理解 prompt 源块装配
@@ -312,6 +314,8 @@ apps/api/
 │   │                    #   research = 有界 loop 节点首座（ADR-052 B4）：node（BoundedLoopNode，
 │   │                    #   max_iterations=8）+ agents（researcher）+ web（零键 DDG search/fetch，
 │   │                    #   诚实降级）+ spec.research_brief 钢印 → consumes_research 写手注入；
+│   │                    #   + capture（网页采集 MG D1b：结构化抽取 + headless Chrome 截图，
+│   │                    #   浏览器级 SSRF = 临时策略代理拦截导航/重定向/子资源 + DNS 重验直连）；
 │   │                    #   stills/beats.py = 节拍方案代码半（期 2）：backing 表装配 + 拍锚吸附平铺 +
 │   │                    #   coherence_violations 跨拍连贯性检查 + 两段式编排（大纲→逐拍，handoff 交接）；
 │   │                    #   stills/agents.py = 剪辑师双件声明（stills_editor / stills_editor_outline）
