@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.contexts import output_one_liner
+from app.chat.canvas_visibility import environment_line
 from app.models.schemas import ChatMention
 from app.models.tables import (
     Asset,
@@ -31,6 +32,7 @@ from app.pipeline.exploration_store import (
 )
 from app.pipeline.outputs import list_visible_outputs
 from app.pipeline.product_graph import EXPLORATION_NODE_TYPE
+from app.platform.conversation_context import is_pending_plan
 
 _GRAPH_CONTEXT_LIMIT = 16
 _PAST_JOURNEYS_CAP = 3
@@ -42,6 +44,7 @@ async def build_context(
     recent: list[Message],
     mentions: list[ChatMention],
     pending: Message | None,
+    canvas_available: bool | None = None,
 ) -> dict[str, Any]:
     """Assemble the intent context deterministically (CHAT_ARCH §6, v1 scope):
     project summary (assets / visible outputs / latest run) + the last 3
@@ -50,7 +53,14 @@ async def build_context(
     this module assembles, it never queries the chat store's question
     lifecycle. Pointing at a product is an @mention (ADR-058 — the canvas
     focus mechanism retired into the mentions registry); the mention block
-    below carries the definite id."""
+    below carries the definite id.
+
+    ``canvas_available``: the conversation-stamped client capability bit
+    (ADR-118 §6 双键). The Environment line rides when the bit is known —
+    canvas_visible = canvas_available ∧ world_live (world_live = hasRuns ∨
+    pending-plan — 与客户端谓词同义单源, 互指 app/chat/canvas_visibility.py);
+    unknown → the line is omitted (未知恒闭, the handoff law's seat is
+    prompts/chat/trigger_system.j2)."""
     lines = [
         f"Project: {project.title} (id={project.id}, language={project.language})",
     ]
@@ -150,6 +160,17 @@ async def build_context(
         # per-step progress detail retired behind the get_run_status read
         # tool — the agent knows a run exists and reads the detail on demand.
         lines.append(f"Latest run: status={latest_run.status} id={latest_run.id}")
+
+    # 环境双键 (ADR-118 §6): the structured Environment fact rides directly
+    # under the Project line — canvas_visible = canvas_available ∧ world_live
+    # (world_live = hasRuns ∨ pending-plan — 与客户端谓词同义单源, 互指
+    # app/chat/canvas_visibility.py); 能力位未知 → 行缺席 (未知恒闭).
+    env = environment_line(
+        canvas_available,
+        world_live=latest_run is not None or is_pending_plan(pending),
+    )
+    if env:
+        lines.insert(1, env)
 
     # iter-3 S6 (E5, Memory 窄切 ②): the project's recent journeys ride as
     # ONE bounded identity-level block (goal + counts + the newest plan's

@@ -249,6 +249,11 @@ class ChatTurn:
         self.db = db
         self.user_id = user_id
         self.conversation_id = UUID(str(conversation.id))
+        # 环境能力位 (ADR-118 §6 双键): the conversation-stamped client
+        # capability (prepare_chat_turn 的 last-wins 盖章, ui_language 同律
+        # 座) — the assembly's canvas_available source on request-born
+        # turns; None = never reported → the Environment line stays out.
+        self.canvas_available = conversation.canvas_available
         self.project = project
         self.text = text
         self.on_phase = on_phase
@@ -306,7 +311,10 @@ class ChatTurn:
             and bool(self.text.strip())
         )
         self.context = (
-            await build_context(db, project, recent, mentions, pending)
+            await build_context(
+                db, project, recent, mentions, pending,
+                canvas_available=self.canvas_available,
+            )
             if project
             else {"text": ""}
         )

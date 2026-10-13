@@ -1,6 +1,6 @@
 # UI 对齐批（冲刺版 · D4 一日包 + D5 顺手项）
 
-> Status: 待开工（2026-10-13 拍板插入；随 MG 批压缩至 4 天冲刺，UI 件集中在 D4 = 10-19，溢出滑 10-20 上午、不挤占 MG 验收）。形态原型 = `scratch/skill-mg-ui-proposal.html`（双端对照屏：页顶真值表 / 桌面 Split 对照组 / 移动端锚卡两帧 / MediaLightbox 过渡，深浅双主题）。
+> Status: 施工中（2026-10-13 拍板插入；随 MG 批压缩至 4 天冲刺，UI 件集中在 D4 = 10-19，溢出滑 10-20 上午、不挤占 MG 验收）。web 半边已收口（锚卡组件按 !canvas_visible 渲染就绪）；API 装配半边已收口（环境双键入 `build_context` + 承接句窄门法条一座 = `trigger_system.j2` DELIVERY HANDOFF；能力位线缝 = `ChatTurnBody.canvas_available` 随每条请求送达 + `conversations.canvas_available` 会话行 last-wins 盖章）。形态原型 = `scratch/skill-mg-ui-proposal.html`（双端对照屏：页顶真值表 / 桌面 Split 对照组 / 移动端锚卡两帧 / MediaLightbox 过渡，深浅双主题）。
 >
 > 压缩原则（2027 用户习惯尺）：用户习惯的是"对话里什么都能发生 + Flora 形体顺滑"，不是"货架很满"。冲刺只取体感权重最高的三件；货架作为顺手项收 D5（原型已数据驱动，转正成本低）。
 

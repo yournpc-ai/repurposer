@@ -215,6 +215,10 @@ apps/api/
 │   │                    #   THINKING_PHASE_COMPOSING + observe_phase_callback 公开协议，ADR-087 §1/§6）
 │   │                    #   / context.py（chat 意图上下文装配 build_context——各层自装上下文，
 │   │                    #   harness 不代读 Message/outputs，ADR-087 §6）
+│   │                    #   / canvas_visibility.py（环境谓词 api 半座，ADR-118 §6：
+│   │                    #   canvas_visible = canvas_available ∧ world_live，与 web
+│   │                    #   lib/canvasVisibility.ts 同义互指；conversations.canvas_available
+│   │                    #   能力位戳 = ui_language 同律座）
 │   │                    #   / exploration_tools.py（探索终态工具族，ADR-088 §2：
 │   │                    #   EXPLORATION_TOOLS harness 四动词全终态 + exploration_chat_tools() 生产投影——
 │   │                    #   candidates/selects 非终态一回合连续工作、propose_plans/revise_plan 终态

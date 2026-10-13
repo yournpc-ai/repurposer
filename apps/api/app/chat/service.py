@@ -2083,6 +2083,13 @@ async def prepare_chat_turn(
     _ui = current_ui_language()
     if _ui:
         conversation.ui_language = _ui
+    # 环境能力位盖章 (ADR-118 §6 — ui_language owner 同律座): the request's
+    # raw can-host-canvas bit is the conversation's ONE environment fact —
+    # the worker-born delivery turn (run_trigger_turn) inherits it for
+    # canvas_visible (app/chat/canvas_visibility.py). None-safe, last-wins:
+    # an unreporting client never erases the known bit.
+    if request.canvas_available is not None:
+        conversation.canvas_available = request.canvas_available
 
     user_message = await _create_message(
         db,

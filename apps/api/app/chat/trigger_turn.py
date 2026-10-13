@@ -438,6 +438,12 @@ async def run_trigger_turn(
                 history[-6:],
                 [],
                 await latest_pending_question(db, conversation_id),
+                # 环境能力位 (ADR-118 §6): the worker-born turn has no
+                # request — it inherits the conversation-stamped bit
+                # (last-wins, prepare_chat_turn 的 ui_language 同律座);
+                # None = never reported → Environment line omitted, the
+                # handoff gate stays closed (未知恒闭, 永不编造).
+                canvas_available=conversation.canvas_available,
             )
             language = _trigger_language(run, history, conversation)
             if trigger == TRIGGER_RUN_COMPLETED:

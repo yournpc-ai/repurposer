@@ -2,7 +2,9 @@
  * ——渲染时刻状态，非历史快照。单源律: 项目路由的画布显隐判定与 chat
  * 锚卡共用此谓词；任何组件不得再以视口宽度 / 设备名自行推断环境（禁设
  * 备名硬编码）。双键的另一半（canvas_available / canvas_visible 进
- * context 装配）在服务端装配层；这里只有渲染分支。 */
+ * context 装配）在服务端装配层——互指 api 半座
+ * apps/api/app/chat/canvas_visibility.py（谓词同义；能力位随每条 chat
+ * 请求送达 = ChatTurnBody.canvas_available）；这里只有渲染分支。 */
 
 export interface CanvasEnvironment {
   /** 视口可承载画布（≥768px 事实 —— canvas_available 的客户端读数，

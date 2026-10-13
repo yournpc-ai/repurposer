@@ -1245,6 +1245,16 @@ class ChatRequest(BaseModel):
     # invitation name that home; "chat"/None stays surface-neutral. A
     # transport fact — never persisted on the message.
     surface: Literal["canvas", "chat"] | None = None
+    # 环境能力位 (ADR-118 §6 双键的客户端一半): the viewport's raw
+    # can-host-canvas read (the width breakpoint — 互指 web 半座
+    # lib/canvasVisibility.ts 的 canvasAvailable), NOT the panel form
+    # (``surface`` keeps that seat). Stamped on the conversation every user
+    # turn (last-wins, ui_language owner 同律) so the worker-born delivery
+    # turn inherits the last known environment; never persisted on the
+    # message. None = not reported → the context's Environment line is
+    # omitted and the handoff-sentence gate stays closed (未知恒闭, 永不编
+    # 造).
+    canvas_available: bool | None = None
     # RETIRED (Phase 4 B7 / ADR-087 R9, D1): the autonomy tier is gone —
     # every run is an autonomous continuation. The field stays so old
     # clients keep passing it without a 422 (extra="forbid"); the value is

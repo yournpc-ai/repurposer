@@ -681,6 +681,13 @@ class Conversation(Base):
     # the ONE speech-language fact every assistant writer (plan / chat /
     # trigger) inherits, so two writers never pick divergent languages.
     ui_language = Column(String(10), nullable=True)
+    # 环境能力位 owner (ADR-118 §6 — ui_language 同律座): the client's raw
+    # can-host-canvas read, stamped from the chat request every user turn
+    # (last-wins) — the ONE environment fact the worker-born delivery turn
+    # inherits for canvas_visible (app/chat/canvas_visibility.py). NULL =
+    # never reported → the Environment line is omitted and the handoff
+    # gate stays closed.
+    canvas_available = Column(Boolean, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 

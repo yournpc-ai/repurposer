@@ -486,6 +486,11 @@ interface ChatDockProps {
    * 屏——渲染时刻状态。锚卡渲染 ⟺ !canvasVisible（终态收据行下的静态产
    * 物数组,chat 自足律首个构造物）;桌面 true → 零锚卡。 */
   canvasVisible: boolean
+  /** 环境能力位 (ADR-118 §6 双键的客户端一半): 视口可承载画布（裸能力,
+   * 非 panel 形态位——surface 座不动）,随每条 chat 请求送达; 服务端的
+   * canvas_visible = 此位 ∧ world-liveness (api 半座:
+   * app/chat/canvas_visibility.py)。 */
+  canvasAvailable: boolean
 }
 
 /** Dock controls the page can trigger (D4: 点画布空白回中性 — a pane click
@@ -813,6 +818,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   onDraftGraphChange,
   onPanelStateChange,
   canvasVisible,
+  canvasAvailable,
 }, ref) {
   const { t } = useTranslation()
 
@@ -2354,6 +2360,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           // = the plan's canvas lives beside this conversation — the reply
           // may name it; every other form stays surface-neutral.
           surface: panel ? "canvas" : "chat",
+          // 环境能力位 (ADR-118 §6): the raw can-host-canvas read rides
+          // every send — pre-reveal desktop is surface="chat" yet CAN host
+          // the canvas; the server's canvas_visible = this ∧ world-liveness.
+          canvas_available: canvasAvailable,
           prior_intent:
             // The panel's current chain rides while the confirm beat is
             // live (裁决 1 derived predicate — never a phase read).

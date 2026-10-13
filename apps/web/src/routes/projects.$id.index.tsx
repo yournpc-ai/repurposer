@@ -1123,6 +1123,7 @@ function ProjectDetailPage() {
         lifecycle={lifecycle}
         onPanelStateChange={setPanelState}
         canvasVisible={canvasVis}
+        canvasAvailable={!isMobile}
         prompt={
           firstMessage?.text ??
           pendingBrief?.prompt ??

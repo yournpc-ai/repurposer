@@ -68,6 +68,13 @@ export interface ChatTurnBody {
    * reply's review invitation may name that home; "chat" = no canvas
    * beneath (full / dock forms) — the reply stays surface-neutral. */
   surface?: "canvas" | "chat"
+  /** 环境能力位 (ADR-118 §6 双键的客户端一半): the RAW can-host-canvas
+   * read (canvasAvailable in lib/canvasVisibility — the use-mobile
+   * breakpoint), riding every send. Distinct from `surface` (the panel-form
+   * bit): pre-reveal desktop is surface="chat" yet CAN host the canvas, and
+   * the server's canvas_visible = this ∧ world-liveness (api 半座:
+   * app/chat/canvas_visibility.py). */
+  canvas_available?: boolean
   prior_intent?: unknown
 }
 
