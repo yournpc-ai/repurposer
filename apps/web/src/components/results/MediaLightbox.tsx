@@ -32,9 +32,13 @@ export interface MediaChip {
 }
 
 export interface MediaLightboxData {
-  kind: "video" | "image"
-  /** Absolute media URL (the surface resolves it through toAbsoluteUrl). */
-  url: string
+  kind: "video" | "image" | "text"
+  /** Absolute media URL (the surface resolves it through toAbsoluteUrl).
+   * Absent on the text seat (锚卡的 text 族 — nothing to download). */
+  url?: string
+  /** The text seat's body (kind "text") — scrollable prose in the media
+   * column (锚卡 text 族的展开内容, e.g. a post / article's full copy). */
+  text?: string
   poster?: string | null
   title: string
   createdAt?: string | null
@@ -76,6 +80,7 @@ export function MediaLightbox({
                     ? formatRelativeTime(data.createdAt, i18n.language)
                     : ""}
                 </span>
+                {data.url ? (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -83,13 +88,14 @@ export function MediaLightbox({
                   aria-label={t("results.canvas.download")}
                   title={t("results.canvas.download")}
                   onClick={() =>
-                    downloadFile(data.url, data.downloadName ?? data.title).catch(
+                    downloadFile(data.url as string, data.downloadName ?? data.title).catch(
                       () => {},
                     )
                   }
                 >
                   <Download className="h-4.5 w-4.5" />
                 </Button>
+                ) : null}
               </div>
 
               {data.prompt ? (
@@ -159,12 +165,20 @@ export function MediaLightbox({
                   playsInline
                   preload="metadata"
                 />
-              ) : (
+              ) : data.kind === "image" ? (
                 <img
                   src={data.url}
                   alt={data.title}
                   className="max-h-[78vh] max-w-full rounded-md object-contain"
                 />
+              ) : (
+                /* The text seat (锚卡 text 族): the full copy IS the media —
+                   a quiet reading panel, same max frame as the media. */
+                <div className="thin-scroll max-h-[78vh] w-full max-w-xl overflow-y-auto rounded-md bg-muted p-5">
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {data.text}
+                  </p>
+                </div>
               )}
             </div>
           </div>

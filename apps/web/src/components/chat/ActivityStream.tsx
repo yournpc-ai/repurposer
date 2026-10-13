@@ -123,7 +123,10 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
     <div className="flex w-full flex-col gap-1">
       <div
         className={cn(
-          "flex w-full items-center gap-2 text-xs",
+          // Flora 体感 (flora-parity-ui D4①): every row carries the hover
+          // register (bg-accent, padded hit area reaching 6px past the
+          // label via the negative margin — the text column never shifts).
+          "-mx-1.5 -my-0.5 flex w-full items-center gap-2 rounded-md px-1.5 py-0.5 text-xs transition-colors hover:bg-accent",
           status === "failed" ? "text-destructive" : "text-muted-foreground",
           expandable && "cursor-pointer select-none",
         )}
@@ -225,7 +228,7 @@ export function FoldedActivityRow({
   return (
     <div className="flex w-full flex-col gap-1">
       <div
-        className="flex w-full cursor-pointer select-none items-center gap-2 text-xs text-muted-foreground"
+        className="-mx-1.5 -my-0.5 flex w-full cursor-pointer select-none items-center gap-2 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent"
         role="button"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}

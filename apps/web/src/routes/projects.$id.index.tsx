@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button"
 import { apiDelete, apiFetch, apiPost, downloadFile, toAbsoluteUrl } from "@/lib/api"
 import { outputMentionLabel } from "@/lib/mentions"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { canvasVisible } from "@/lib/canvasVisibility"
 import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
 import { isPlanReady } from "@/lib/lifecycleStamp"
@@ -252,6 +253,10 @@ function ProjectDetailPage() {
   // review face there is the prose echo, not a canvas).
   const hasRuns = latestRun != null
   const worldLive = hasRuns || (!isMobile && isPlanReady(lifecycle))
+  // 环境谓词 (ADR-118 §6 真值表 · lib/canvasVisibility 单源): 画布此刻在
+  // 屏 = 可承载 ∧ 已揭幕 —— chat 锚卡的渲染分支只读此值,任何组件不再以
+  // 视口/设备名自行推断。
+  const canvasVis = canvasVisible({ canvasAvailable: !isMobile, worldLive })
   // The desktop chat panel is a FROSTED OVERLAY on the full-bleed canvas
   // (2026-09-06 用户拍板, FLORA "Dock panel" parity — float / docked-right,
   // never an in-flow column): the canvas's top-right zoom pill steps clear
@@ -1117,6 +1122,7 @@ function ProjectDetailPage() {
         // derivation.
         lifecycle={lifecycle}
         onPanelStateChange={setPanelState}
+        canvasVisible={canvasVis}
         prompt={
           firstMessage?.text ??
           pendingBrief?.prompt ??

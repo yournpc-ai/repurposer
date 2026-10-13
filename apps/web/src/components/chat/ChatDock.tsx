@@ -21,8 +21,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, Fragment, forwardRef
 import { useTranslation } from "react-i18next"
 import {
   Box,
+  Check,
   ChevronDown,
   ChevronUp,
+  Copy,
   Crosshair,
   Download,
   Eraser,
@@ -49,6 +51,7 @@ import {
 } from "lucide-react"
 
 import { apiFetch } from "@/lib/api"
+import { copyMessageText } from "@/lib/messageCopy"
 import { inferAssetType } from "@/lib/asset-type"
 import { streamAnswer, streamChat, StreamTurnError, questionSettledCode } from "@/lib/chat-stream"
 import type { ActivityFramePayload } from "@/lib/chat-stream"
@@ -104,6 +107,8 @@ import {
   useMessageScroller,
 } from "@/components/ui/message-scroller"
 import { RunCard } from "@/components/chat/RunCard"
+import { AnchorCards } from "@/components/chat/AnchorCards"
+import { anchorCardsForRun } from "@/lib/anchorCards"
 import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
 import { AnsweredQuestion, answeredQuestionText } from "@/components/chat/AnsweredQuestion"
 import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
@@ -477,6 +482,10 @@ interface ChatDockProps {
    * only when it can actually be covered (docked = full-height; float
    * starts ~18% down and never reaches the pill). */
   onPanelStateChange?: (state: { hidden: boolean; docked: boolean }) => void
+  /** 环境谓词 (ADR-118 §6 真值表 · lib/canvasVisibility 单源): 画布此刻在
+   * 屏——渲染时刻状态。锚卡渲染 ⟺ !canvasVisible（终态收据行下的静态产
+   * 物数组,chat 自足律首个构造物）;桌面 true → 零锚卡。 */
+  canvasVisible: boolean
 }
 
 /** Dock controls the page can trigger (D4: 点画布空白回中性 — a pane click
@@ -646,6 +655,9 @@ function UserBubble({ text, assets }: { text: string; assets?: ProjectAsset[] })
             )}
           </>
         ) : null}
+        {/* 消息动作条 (D4②): copy = 纯客户端剪贴板,静默档 —— 只认文本消
+            息(attachment-only 无文本可拷)。 */}
+        {text ? <CopyMessageButton text={text} align="end" /> : null}
       </MessageContent>
     </Message>
   )
@@ -667,6 +679,43 @@ function AssistantText({ text, streaming }: { text: string; streaming?: boolean 
         </Streamdown>
       </MessageContent>
     </Message>
+  )
+}
+
+/** 消息 copy (flora-parity-ui D4② — the Flora m-actions line): one quiet
+ * icon under the bubble / prose. 纯客户端剪贴板,静默档 —— 零 toast;成功
+ * = 图标一拍翻 ✓(1.2s 回弹),失败同样安静。打字机律同律:流式中的散文
+ * 不挂(挂载点把守 !streaming,组件只见落定文本)。 */
+function CopyMessageButton({ text, align }: { text: string; align: "start" | "end" }) {
+  const { t } = useTranslation()
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    if (!copied) return
+    const id = setTimeout(() => setCopied(false), 1200)
+    return () => clearTimeout(id)
+  }, [copied])
+  return (
+    <div className={cn("flex", align === "end" ? "justify-end" : "justify-start")}>
+      <button
+        type="button"
+        aria-label={t(copied ? "chat.copied" : "chat.copy")}
+        title={t(copied ? "chat.copied" : "chat.copy")}
+        onClick={() => {
+          void copyMessageText(text, (s) => navigator.clipboard.writeText(s)).then(
+            (ok) => {
+              if (ok) setCopied(true)
+            },
+          )
+        }}
+        className="flex items-center p-1 text-meta-foreground transition-colors hover:text-foreground"
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" />
+        )}
+      </button>
+    </div>
   )
 }
 
@@ -763,6 +812,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   onRunStarted,
   onDraftGraphChange,
   onPanelStateChange,
+  canvasVisible,
 }, ref) {
   const { t } = useTranslation()
 
@@ -3428,6 +3478,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     [messages],
   )
 
+  // 锚卡投影 (flora-parity-ui ③ · ADR-118 §2 chat 自足律): 终态收据行下
+  // 的静态产物数组 —— 只读既有 steps 的 output_refs × 既有 outputs 读数
+  // (mention feed 同一份,零新 SSE 订阅、零新拉取)。渲染 ⟺
+  // !canvasVisible(渲染时刻状态,lib/canvasVisibility 单源),挂载点在
+  // taskList 单元(收据行 = 锚卡唯一父座)。
+  const anchorCards = useMemo(
+    () => anchorCardsForRun(steps, outputs),
+    [steps, outputs],
+  )
+
   // The now-line (2026-09-24 用户拍板 — thinking 和 activity 是同一个组件):
   // ONE mounted row owns the chat world's "现在", morphing in place — an
   // active milestone's content while one runs, else the think empty state
@@ -3543,7 +3603,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         ) : (
           <>
             {m.content ? (
-              <AssistantText text={m.content} streaming={m.streaming} />
+              <>
+                <AssistantText text={m.content} streaming={m.streaming} />
+                {/* 消息动作条 (D4②): 落定的散文才挂 copy —— 流式中的文本
+                    还在打字机节拍里,拷走半成品不诚实。 */}
+                {!m.streaming ? (
+                  <CopyMessageButton text={m.content} align="start" />
+                ) : null}
+              </>
             ) : null}
             {/* 建议 pills (T3 触发回合): the closing review's next steps —
                 quiet outline buttons under the review's own speech, landing
@@ -3707,6 +3774,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                                       : t("results.stepper.queued")
                                   }
                                 />
+                                {/* 锚卡 (ADR-118 真值表): ⟺ !canvasVisible
+                                    —— 桌面画布在侧 = 零锚卡(世界自证);移
+                                    动纯 chat = 收据行下的静态产物数组,点
+                                    击开 MediaLightbox。终态收据帧:落定才
+                                    挂,归收据所有。 */}
+                                {terminal && !canvasVisible ? (
+                                  <AnchorCards cards={anchorCards} />
+                                ) : null}
                               </MessageContent>
                             </Message>
                           </MessageScrollerItem>

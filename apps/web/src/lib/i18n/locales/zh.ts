@@ -1412,6 +1412,20 @@ const zh: Resources = {
     translate: "翻译",
     copy: "复制",
     copied: "已复制",
+    // 锚卡 (flora-parity-ui ③ · ADR-118): 终态收据行下的静态产物数组 —
+    // 类型词供名缺回退(「类型词 · 规格」,零模板回填) + 文本族的字数规格。
+    anchorCards: {
+      view: "查看{{name}}",
+      types: {
+        clip: "短片",
+        post: "社交帖子",
+        quotes: "金句卡",
+        quote_frame: "金句卡",
+        carousel: "轮播图",
+        article: "文章",
+      },
+      words: "约 {{count}} 字",
+    },
     openInEditor: "在编辑器中打开",
     uploadFile: "上传源文件",
     uploading: "上传中...",

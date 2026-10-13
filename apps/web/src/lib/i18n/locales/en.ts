@@ -1505,6 +1505,21 @@ const en = {
     translate: "Translate",
     copy: "Copy",
     copied: "Copied",
+    // 锚卡 (flora-parity-ui ③ · ADR-118): the terminal receipt's static
+    // product array — type words feed the name-missing fallback (「类型词 ·
+    // 规格」, zero template backfill) + the text seat's word-count spec.
+    anchorCards: {
+      view: "View {{name}}",
+      types: {
+        clip: "Clip",
+        post: "Social post",
+        quotes: "Quote card",
+        quote_frame: "Quote card",
+        carousel: "Carousel",
+        article: "Article",
+      },
+      words: "~{{count}} words",
+    },
     openInEditor: "Open in editor",
     uploadFile: "Upload file",
     uploading: "Uploading...",

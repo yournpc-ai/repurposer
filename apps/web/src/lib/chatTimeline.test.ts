@@ -179,6 +179,20 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
     expect(units.map(unitId)).toEqual(["fold:ok1", "bad", "fold:ok2"])
   })
 
+  it("fold 展开 = 原帧归位 (flora-parity-ui D4①): the fold keeps the ORIGINAL row frames — the expanded view renders the same identities, never copies", () => {
+    const units = foldActivityUnits(
+      buildConversationUnits([
+        read("f1", { key: "chat.inspectingDone.transcript" }),
+        read("f2", { key: "chat.inspectingDone.transcript" }),
+      ]),
+    )
+    const rows = foldOf(units[0]).rows
+    expect(rows.map((r) => r.activity_id)).toEqual(["f1", "f2"])
+    // 展开态的每一行就是入折的那一行(显示层投影不改写载荷) —— 折叠永不
+    // 丢失行的 key/count/duration,展开后逐行复明。
+    expect(rows[0]).toMatchObject({ key: "chat.inspectingDone.transcript" })
+  })
+
   it("elapsed = the segment wall clock — first row's birth → the prose's arrival", () => {
     const units = foldActivityUnits(
       buildConversationUnits([
