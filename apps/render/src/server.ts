@@ -6,6 +6,8 @@ import type { ClipSpec } from "@repurposer/clip";
 import express from "express";
 import { fetch } from "undici";
 
+import { renderFilm } from "./film/render";
+import { filmSpecSchema, filmTotalFrames } from "./film/schema";
 import { renderClip } from "./render";
 import { CACHE_DIR, dispatcherFor } from "./stage";
 
@@ -25,6 +27,11 @@ app.use(
 );
 
 const PORT = Number(process.env.RENDER_PORT ?? 3001);
+
+// Film family resource cap (config): total storyboard frames allowed per
+// render. fps is fixed at 30, so this is also the duration cap — the default
+// 3600 = 120 s @ 30 fps.
+const FILM_MAX_FRAMES = Number(process.env.FILM_MAX_FRAMES ?? 3600);
 
 async function uploadFile(url: string, filePath: string, contentType?: string) {
   const buffer = await fs.readFile(filePath);
@@ -52,8 +59,15 @@ app.get("/health", (_req, res) => {
 });
 
 /**
- * Black-box render endpoint: clip-spec in -> MP4 + SRT out.
+ * Black-box render endpoint: spec in -> rendered artifacts out.
  * Body: { spec, out_subdir?, basename?, outputs: { video: { key, put_url, content_type? }, srt: { key, put_url, content_type? } } }.
+ *
+ * The envelope is the shared minimal envelope for both spec families; the
+ * `spec` payload is per-family (clip-spec vs film-spec, each with its own
+ * schema). Dispatch reads only `spec.family` ("film" -> film path; absent ->
+ * clip path) — never node type/name or any out-of-spec field. Every
+ * lifecycle event (first render / preview / retry / revision / recovery)
+ * arrives as this same POST, so this single fork covers the whole lifecycle.
  *
  * The render service renders to a temp dir, PUTs the rendered files to the
  * supplied presigned URLs, and returns the object keys.
@@ -71,6 +85,48 @@ app.post("/render", async (req, res) => {
     source_key?: string;
   };
 
+  // --- film family fork ---------------------------------------------------
+  if ((spec as unknown as { family?: unknown } | undefined)?.family === "film") {
+    const parsed = filmSpecSchema.safeParse(spec);
+    if (!parsed.success) {
+      const issues = parsed.error.issues
+        .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+        .join("; ");
+      res.status(400).json({ error: `invalid film spec: ${issues}` });
+      return;
+    }
+
+    // A film renders to video alone (no caption track -> no SRT artifact).
+    if (!outputs?.video?.put_url) {
+      res.status(400).json({ error: "outputs.video.put_url is required" });
+      return;
+    }
+
+    const totalFrames = filmTotalFrames(parsed.data);
+    if (totalFrames > FILM_MAX_FRAMES) {
+      res
+        .status(400)
+        .json({ error: `film spec total frames ${totalFrames} exceeds cap ${FILM_MAX_FRAMES}` });
+      return;
+    }
+
+    try {
+      const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "repurposer-render-"));
+      const name = basename ?? `film-${Date.now()}`;
+      const { videoPath } = await renderFilm(parsed.data, outDir, name);
+
+      await uploadFile(outputs.video.put_url, videoPath, outputs.video.content_type);
+      await fs.rm(outDir, { recursive: true, force: true }).catch(() => {});
+
+      res.json({ ok: true, video: outputs.video.key });
+    } catch (err) {
+      console.error("film_render_failed", err);
+      res.status(500).json({ error: String(err) });
+    }
+    return;
+  }
+
+  // --- clip family (existing path, unchanged) -----------------------------
   const src = spec?.source;
   const renderable =
     src && (src.kind === "stills" ? (src.image_urls?.length ?? 0) > 0 || !!src.url : !!src.url);
