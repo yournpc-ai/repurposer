@@ -70,6 +70,10 @@ class AssetType(StrEnum):
     IMAGE = "image"
     VOICE_SAMPLE = "voice_sample"
     PAST_MATERIAL = "past_material"
+    # A user-named URL captured server-side (copy manifest + screenshot) —
+    # born through ``assets.create_web_page_asset_from_url``, never through
+    # the file-upload route (no bytes exist at birth).
+    WEB_PAGE = "web_page"
 
 
 class AssetStatus(StrEnum):
@@ -85,6 +89,43 @@ class AssetStatus(StrEnum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class WebPageResearch(BaseModel):
+    """The grounding manifest a WEB_PAGE capture produces (``meta.research``).
+
+    Every on-screen string a downstream skill quotes must trace to one of
+    these lists. Bounds are capture-side (``tools/research/capture.py``):
+    items are 2–90 chars, deduped, capped per field.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str  # the final URL after redirects
+    title: str = ""
+    description: str = ""
+    h1: list[str] = Field(default_factory=list)
+    h2: list[str] = Field(default_factory=list)
+    h3: list[str] = Field(default_factory=list)
+    buttons: list[str] = Field(default_factory=list)
+    links: list[str] = Field(default_factory=list)
+
+
+class WebPageMeta(BaseModel):
+    """``meta`` shape of a WEB_PAGE asset: the source URL, the research
+    manifest, and the screenshot's storage key (absent when the screenshot
+    half degraded honestly).
+
+    ``extra="allow"``: the row's meta dict also carries the generic chain
+    keys (``content_sha256`` / ``processing_stage`` / dims), which are not
+    this type's contract.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    capture_url: str
+    research: WebPageResearch | None = None
+    screenshot_key: str | None = None
 
 
 class ProjectStatus(StrEnum):

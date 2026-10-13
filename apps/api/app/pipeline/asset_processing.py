@@ -15,6 +15,9 @@ the single seam where heavier processors plug in:
 - IMAGE -> visual_anchors (期 1: deterministic faces / subject box / safe
   area — the original image itself still feeds the agents)
 - SLIDES -> per-page render + OCR (future; today plain PDF text)
+- WEB_PAGE -> web_capture (copy manifest + screenshot; the chain head has
+  nothing to hash — no file, no text at birth — so the capture processor
+  stamps content_sha256 from its own yield)
 
 A type maps to an ORDERED chain of processors (ADR-045 D4's "第二处理器"
 shape): each processor receives the asset and the accumulated prior result
@@ -44,6 +47,7 @@ from app.pipeline.graph import media_missing
 from app.pipeline.prosody import prosody_processor
 from app.pipeline.speaker_map import speaker_map_processor
 from app.pipeline.visual_anchors import visual_anchors_processor
+from app.pipeline.web_capture import web_capture_processor
 from app.providers.storage import download_to_cache, get_project_output_dir
 
 logger = structlog.get_logger()
@@ -292,6 +296,10 @@ PROCESSORS: dict[AssetType, list[Processor]] = {
     # IMAGE: content hash + deterministic visual anchors (faces / subject /
     # safe area, 期 1); the agents still consume the original image itself.
     AssetType.IMAGE: [_content_hash_processor, visual_anchors_processor],
+    # WEB_PAGE: single-processor chain — the capture itself yields the bytes
+    # to hash (born with no file and no text), so web_capture stamps
+    # content_sha256 from its own yield (chain-head hash law mirrored).
+    AssetType.WEB_PAGE: [web_capture_processor],
 }
 
 

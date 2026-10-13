@@ -82,6 +82,20 @@ class Settings(BaseSettings):
     asr_device: str = "cpu"  # cpu | cuda
     asr_compute_type: str = "int8"  # int8 (cpu) | float16 (gpu)
 
+    # Web page capture (tools/research/capture.py — URL → web_page asset).
+    # chrome_path empty = platform candidates + PATH lookup (resolve_chrome_path
+    # is the ONE seat — spike/render/worker never re-derive it). no_sandbox for
+    # container workers without user namespaces; keep False on real hosts.
+    chrome_path: str = ""
+    chrome_no_sandbox: bool = False
+    # Capture caps (SSRF browser-level policy): the whole screenshot phase's
+    # wall clock, and the policy proxy's per-capture request/byte budgets.
+    web_capture_timeout_seconds: float = 25.0
+    web_capture_max_requests: int = 200
+    web_capture_max_bytes: int = 40 * 1024 * 1024
+    # HTML fetch half's body cap (the grounding manifest's source).
+    web_capture_html_max_bytes: int = 2 * 1024 * 1024
+
     # Video render service (Remotion, apps/render — black box: spec -> MP4+SRT)
     render_url: str = "http://localhost:3001/render"
     # Public base of this API, used to absolutize source URLs the render service
