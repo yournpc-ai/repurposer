@@ -92,6 +92,13 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
         "en": "This step hit an unexpected error",
         "zh": "这一步出了意外错误",
     },
+    # The film storyboard's bounded rewrite exhausted (3 candidates, each
+    # rejected by the grounding validator) — the honest line names what the
+    # film is made of, never the machinery.
+    "film_storyboard_ungrounded": {
+        "en": "I couldn't draft a faithful film of that page — try a page with clearer copy, or tell me what to lead with.",
+        "zh": "没能为那个页面写出忠实的短片文案——换一页文案更清楚的，或告诉我先突出什么。",
+    },
 }
 
 

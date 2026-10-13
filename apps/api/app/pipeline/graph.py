@@ -28,7 +28,7 @@ from uuid import UUID
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.schemas import AssetType, IntentSlot
+from app.models.schemas import AssetStatus, AssetType, IntentSlot
 from app.models.tables import Asset, Persona, Project
 from app.pipeline.step_display import slot_tag
 
@@ -149,6 +149,35 @@ MEDIA = _MediaRequirement()
 TRANSCRIPT = _TranscriptRequirement()
 PERSONA_PHOTO = _PersonaPhotoRequirement()
 VOICEPRINT = _VoiceprintRequirement()
+
+
+class _WebPageRequirement(Requirement):
+    """A captured page ready to ground on (the film family's input — its
+    honest substitute for source media).
+
+    Missing = NO web_page asset at all, or every one FAILED (the capture
+    truthfully could not read the page → the 422 names the way out).
+    PENDING / PROCESSING is NOT missing: the claim gate holds the run until
+    asset processing drains, so a capture in flight satisfies the gate.
+    """
+
+    key = "web_page"
+
+    async def missing(self, db: AsyncSession, project: Project) -> bool:
+        rows = (
+            await db.execute(
+                select(Asset.processing_status).where(
+                    Asset.project_id == project.id,
+                    Asset.type == AssetType.WEB_PAGE,
+                )
+            )
+        ).scalars().all()
+        if not rows:
+            return True
+        return all(s == AssetStatus.FAILED for s in rows)
+
+
+WEB_PAGE = _WebPageRequirement()
 
 
 # ---- the node protocol ------------------------------------------------------

@@ -1,10 +1,16 @@
-"""Drive the Remotion render service for a clip output.
+"""Drive the Remotion render service for a renderable output (clip or film).
 
 The worker claims an output (``render_status=PENDING`` -> RENDERING) and calls
-this. It absolutizes the clip-spec's source URL (the spec stores a relative
-stream URL via the storage seam; the render service needs an absolute URL it
-can fetch), POSTs the spec to the render service (black box: spec -> MP4+SRT),
+this. It absolutizes the spec's storage-relative URLs (the spec stores relative
+keys via the storage seam; the render service needs absolute URLs it can
+fetch), POSTs the spec to the render service (black box: spec -> MP4[+SRT]),
 and writes the resulting output keys back into ``output.files``.
+
+Two spec families (dispatch reads only ``spec.family``, ADR-016/ADR-119):
+- clip (absent family): source/track URLs resolve through the track registry;
+  the render yields video + srt.
+- film: ``ui.image`` / ``end.logo_url`` resolve here (the film-spec has no
+  track registry); the render yields video alone.
 
 Output keys carry a per-render timestamp suffix (``<output_id>-<ts>.mp4``) so a
 re-render never overwrites the object a browser may have cached under the same
@@ -43,6 +49,26 @@ from app.ui_locale import display_language
 logger = structlog.get_logger()
 
 
+def _resolve_url(value: str) -> str:
+    """One relative value → absolute (the storage seam's two relative forms)."""
+    if value.startswith(("http://", "https://")):
+        return value
+    if value.startswith("/api/"):
+        return f"{settings.api_public_url.rstrip('/')}{value}"
+    return public_url(value) or value
+
+
+def _absolutize_film(spec: dict[str, Any]) -> dict[str, Any]:
+    """The film family's URL absolutization (no track registry — the film-spec
+    carries exactly two URL-bearing slots: ui.image / end.logo_url)."""
+    for scene in spec.get("scenes") or []:
+        if scene.get("type") == "ui" and isinstance(scene.get("image"), str):
+            scene["image"] = _resolve_url(scene["image"])
+        if scene.get("type") == "end" and isinstance(scene.get("logo_url"), str):
+            scene["logo_url"] = _resolve_url(scene["logo_url"])
+    return spec
+
+
 def _absolutize(spec: dict[str, Any]) -> dict[str, Any]:
     """Make storage-relative URLs absolute so the render service can fetch them.
 
@@ -53,20 +79,16 @@ def _absolutize(spec: dict[str, Any]) -> dict[str, Any]:
       before music URLs became direct object URLs) — joined with the API's
       public base URL; those endpoints redirect to object storage.
 
-    Any URL that is already absolute is left untouched.
+    Any URL that is already absolute is left untouched. Dispatch reads only
+    ``spec.family`` (never node type/name): film → its own walk; everything
+    else → the clip track registry.
     """
-
-    def _resolve(value: str) -> str:
-        if value.startswith(("http://", "https://")):
-            return value
-        if value.startswith("/api/"):
-            return f"{settings.api_public_url.rstrip('/')}{value}"
-        return public_url(value) or value
-
+    if spec.get("family") == "film":
+        return _absolutize_film(spec)
     # Registry fold (ADR-044): the slots to resolve are each track's declared
     # url_fields — a newly registered track's URLs absolutize with zero changes
     # here.
-    return resolve_spec_urls(spec, _resolve)
+    return resolve_spec_urls(spec, _resolve_url)
 
 
 async def _mirror_render_node(
@@ -253,6 +275,7 @@ async def render_output(output_id: UUID) -> None:
         # Snapshot everything the render + terminal write need as plain data —
         # the ORM objects die with this session.
         spec = _absolutize(copy.deepcopy(output.render_spec))
+        is_film = spec.get("family") == "film"
         files = dict(output.files or {})
         project_id = output.project_id
         # 素材源缓存桥 (2026-10-07): the render service stages sources into the
@@ -276,14 +299,20 @@ async def render_output(output_id: UUID) -> None:
         video_key = await get_output_path(
             project_id, user_id, f"{output_id}-{render_ts}.mp4"
         )
-        srt_key = await get_output_path(
-            project_id, user_id, f"{output_id}-{render_ts}.srt"
+        # A film renders to video alone (no caption track → no SRT artifact;
+        # the render service's film branch likewise requires only video).
+        srt_key = (
+            None
+            if is_film
+            else await get_output_path(project_id, user_id, f"{output_id}-{render_ts}.srt")
         )
         video_put_url = await presign_upload(
             video_key, content_type="video/mp4", ttl=900
         )
-        srt_put_url = await presign_upload(
-            srt_key, content_type="text/srt", ttl=900
+        srt_put_url = (
+            None
+            if srt_key is None
+            else await presign_upload(srt_key, content_type="text/srt", ttl=900)
         )
         payload = {
             "spec": spec,
@@ -294,11 +323,17 @@ async def render_output(output_id: UUID) -> None:
                     "put_url": video_put_url,
                     "content_type": "video/mp4",
                 },
-                "srt": {
-                    "key": srt_key,
-                    "put_url": srt_put_url,
-                    "content_type": "text/srt",
-                },
+                **(
+                    {
+                        "srt": {
+                            "key": srt_key,
+                            "put_url": srt_put_url,
+                            "content_type": "text/srt",
+                        }
+                    }
+                    if srt_key is not None
+                    else {}
+                ),
             },
         }
         async with httpx.AsyncClient(timeout=900) as client:
@@ -322,7 +357,11 @@ async def render_output(output_id: UUID) -> None:
                     Output.render_claim_token == mine,
                 )
                 .values(
-                    files={**files, "video": data["video"], "srt": data["srt"]},
+                    files={
+                        **files,
+                        "video": data["video"],
+                        **({"srt": data["srt"]} if data.get("srt") else {}),
+                    },
                     render_status=RenderStatus.COMPLETED,
                     render_error=None,
                 )
@@ -330,7 +369,7 @@ async def render_output(output_id: UUID) -> None:
             await db.commit()
         if claimed.rowcount == 0:
             logger.info("render_superseded", output_id=str(output_id))
-            for orphan_key in (video_key, srt_key):
+            for orphan_key in (k for k in (video_key, srt_key) if k):
                 try:
                     await delete(orphan_key)
                 except Exception as e:  # noqa: BLE001

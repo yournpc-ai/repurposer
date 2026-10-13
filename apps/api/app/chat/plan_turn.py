@@ -41,7 +41,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.tool_loop import (
@@ -115,7 +115,11 @@ from app.models.schemas import (
 )
 from app.models.tables import Asset, ExplorationRow, Message, Persona, Project
 from app.pipeline.asset_processing import has_any_text_material
-from app.pipeline.assets import asset_text_content, create_transcript_asset_from_text
+from app.pipeline.assets import (
+    asset_text_content,
+    create_transcript_asset_from_text,
+    create_web_page_asset_from_url,
+)
 from app.pipeline.exploration_store import (
     PHASE_DOCKED,
     PHASE_PRE_DOCK,
@@ -270,7 +274,13 @@ class PlanTurn:
                     select(Asset)
                     .where(
                         Asset.project_id == project.id,
-                        Asset.file_url.isnot(None),
+                        # A captured page has no bytes by design (file_url
+                        # stays NULL) yet IS attached material — the film
+                        # family's whole input.
+                        or_(
+                            Asset.file_url.isnot(None),
+                            Asset.type == AssetType.WEB_PAGE,
+                        ),
                     )
                     # Deterministic "first asset" for filename/excerpt picks —
                     # the repo convention (jobs.py / projects.py).
@@ -540,7 +550,12 @@ class PlanTurn:
 
     # ---- the envelope absorb (once per turn, idempotent) -------------------
 
-    async def _absorb(self, brief: Brief | None, material_text: str | None) -> Brief:
+    async def _absorb(
+        self,
+        brief: Brief | None,
+        material_text: str | None,
+        material_urls: list[str] | None = None,
+    ) -> Brief:
         """The turn's envelope absorb — the retired pre-branch block, run at
         the head of every tool execution that carries the seats. Idempotent:
         the material promotion writes at most once per turn, the merge is a
@@ -561,6 +576,27 @@ class PlanTurn:
             )
             self.assets.append(self.material_asset)
 
+        # Declared-URL capture (网页资产化): the router judged the link
+        # MATERIAL ("make a film of https://…"), so it becomes a WEB_PAGE
+        # asset through the singular creation seat — born PENDING, the
+        # capture rides the queue. Idempotent per page: an existing project
+        # asset with the same capture_url is reused, never duplicated.
+        # CaptureBlocked propagates (the creation seat's SSRF gate).
+        if material_urls:
+            known = {
+                (a.meta or {}).get("capture_url")
+                for a in self.assets
+                if a.type == AssetType.WEB_PAGE
+            }
+            for url in dict.fromkeys(u.strip() for u in material_urls if u and u.strip()):
+                if url in known:
+                    continue
+                asset = await create_web_page_asset_from_url(
+                    db, UUID(str(self.project.id)), self.user_id, url
+                )
+                self.assets.append(asset)
+                known.add(url)
+
         # brief (ADR-052 B2): the call's update proposal lands by source
         # precedence, then the material state is code-stamped over it. Every
         # downstream decision — the ask-loop guard, the 出书门槛, the dock
@@ -571,7 +607,9 @@ class PlanTurn:
         merged_brief.material_state = BriefSlot(
             value=(
                 "attached"
-                if any(a.file_url for a in self.assets)
+                if any(
+                    a.file_url or a.type == AssetType.WEB_PAGE for a in self.assets
+                )
                 else "pasted"
                 if self.has_text_material or self.material_asset is not None
                 else "none"
@@ -703,7 +741,11 @@ class PlanTurn:
         nothing): the empty-prose guard, the chain adjudication, then the
         出书门槛."""
         db, project, stored = self.db, self.project, self.stored
-        merged_brief = await self._absorb(params.brief, params.material_text)
+        merged_brief = await self._absorb(
+            params.brief,
+            params.material_text,
+            getattr(params, "material_urls", None),
+        )
 
         # 空散文护栏 (ask_user 座的同形对称): the plan card carries no title
         # — the echo IS its introduction (three duties), so a silent dock
@@ -1439,7 +1481,11 @@ class PlanTurn:
         Guards first: the pending-question law and the asked-roll bound
         the loop."""
         stored = self.stored
-        merged_brief = await self._absorb(params.brief, params.material_text)
+        merged_brief = await self._absorb(
+            params.brief,
+            params.material_text,
+            getattr(params, "material_urls", None),
+        )
         # 空散文护栏 (answer 裸调用护栏的对称座): an LLM ask without its
         # framing speech is NEVER legitimate (schema's empty-prose tolerance
         # exists for code-composed questions only) — reject it into the
@@ -1653,7 +1699,11 @@ class PlanTurn:
         """answer → a plain assistant message; the stored plan stays
         untouched. The envelope seats still absorb (an answer can carry the
         user's declared material)."""
-        await self._absorb(params.brief, params.material_text)
+        await self._absorb(
+            params.brief,
+            params.material_text,
+            getattr(params, "material_urls", None),
+        )
         if not prose.strip():
             return (
                 "an empty reply says nothing — speak the answer as your "

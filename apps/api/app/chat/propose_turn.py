@@ -143,6 +143,7 @@ from app.models.tables import (
     WorkflowStep,
 )
 from app.operations.service import OpConflict, OpRejected, apply_operations
+from app.pipeline.assets import create_web_page_asset_from_url
 from app.pipeline.edit_ops import EditRefusal, assemble_edit_op
 from app.pipeline.edit_span import resolve_quote_span
 from app.pipeline.exploration_store import (
@@ -506,6 +507,32 @@ class ChatTurn:
             # adjudication _create_run_from_tasks ran at the birthplace,
             # now BEFORE the dock so only registry-valid chains ever dock.
             return f"{e} (available: {getattr(e, 'suggestions', [])})"
+        # Declared-URL capture (same absorb seat as the plan path): a link
+        # the user offered as material becomes a WEB_PAGE asset BEFORE the
+        # dock — born PENDING, the capture rides the queue, the Start-time
+        # birthplace gate reads the settled state. CaptureBlocked propagates
+        # (the creation seat's SSRF gate).
+        if params.material_urls:
+            rows = (
+                await db.execute(
+                    select(Asset).where(
+                        Asset.project_id == project.id,
+                        Asset.type == AssetType.WEB_PAGE,
+                    )
+                )
+            ).scalars().all()
+            known = {
+                (a.meta or {}).get("capture_url") for a in rows
+            }
+            for url in dict.fromkeys(
+                u.strip() for u in params.material_urls if u and u.strip()
+            ):
+                if url in known:
+                    continue
+                await create_web_page_asset_from_url(
+                    db, UUID(str(project.id)), self.user_id, url
+                )
+                known.add(url)
         # Caption mode (ADR-099 §8 default absorption): the funnel derives
         # what the user didn't name — fresh keyword > the previous dock's
         # value > source_only when a distinct second language makes the

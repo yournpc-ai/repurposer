@@ -109,8 +109,11 @@ def _file_size_bytes(path: Path | None) -> int | None:
         return None
 
 
-async def _media_input_for_image(file_url: str, caption: str | None = None):
-    """Build a MediaInput for an image file URL, or None if unreadable."""
+async def media_input_for_image(file_url: str, caption: str | None = None):
+    """Build a MediaInput for an image file URL / storage key, or None if
+    unreadable. Public seam: any node whose agent sees imagery (slides, stills,
+    web-page screenshots) builds its inputs here — one download + data-URL
+    discipline, never re-rolled per caller."""
     path = await download_to_temp(file_url)
     if path is None:
         return None
@@ -174,12 +177,12 @@ async def collect_asset_media(assets: list[Asset]) -> list[MediaInput]:
     inputs: list[MediaInput] = []
     for asset in assets:
         if asset.type == AssetType.IMAGE and asset.file_url:
-            item = await _media_input_for_image(str(asset.file_url))
+            item = await media_input_for_image(str(asset.file_url))
             if item:
                 inputs.append(item)
         elif asset.type == AssetType.SLIDES and asset.slide_pages:
             for idx, page_path in enumerate(asset.slide_pages, start=1):
-                item = await _media_input_for_image(
+                item = await media_input_for_image(
                     str(page_path),
                     caption=f"Slide {idx} from the talk deck.",
                 )

@@ -211,6 +211,14 @@ def compose_spec_prompt(step: WorkflowStep, ui_language: str) -> str | None:
             return base
         return f"配音成 {lang}" if zh else f"Dub into {lang}"
 
+    if step.kind == "launch_film":
+        parts = ["生成发布短片" if zh else "Generate a launch film"]
+        if slot.get("focus"):
+            parts.append(
+                f"主题：{slot['focus']}" if zh else f"focus: {slot['focus']}"
+            )
+        return ("，" if zh else ", ").join(parts)
+
     node_cls = node_for(step.kind)
     if node_cls is None or not node_cls.produces_outputs or not node_cls.output_type:
         return None
@@ -244,6 +252,7 @@ _LLM_PRODUCT_KINDS = (
     "write_article",
     "write_quotes",
     "write_carousel",
+    "launch_film",  # the storyboard is LLM-authored (grounding-validated)
 )
 
 

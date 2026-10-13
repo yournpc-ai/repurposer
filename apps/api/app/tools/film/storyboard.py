@@ -1,0 +1,758 @@
+"""launch_film node + film storyboard agent + grounding validator (MG D2).
+
+One file, three layers:
+
+1. THE VALIDATOR (pure) — the deterministic gate between the LLM's storyboard
+   and the render contract. Every on-screen string must trace to the captured
+   page's research manifest (TEXT_NOT_GROUNDED); camera focus bounds
+   (INVALID_FOCUS); the scene vocabulary is closed (UNSUPPORTED_SCENE);
+   duration intents and content bounds (DURATION_INVALID /
+   CONSTRAINT_VIOLATION). Bounded rewrite: the node offers the model at most
+   MAX_REWRITES repair rounds (3 candidates total); exhaustion settles the
+   node FAILED with the structured codes on ``spec.failure`` — never a blind
+   retry (each rewrite rides the violation echo).
+
+2. THE ALLOCATOR (pure) — deterministic frame assignment. The LLM writes a
+   bounded seconds INTENT per scene; code owns integer frames (fixed 30 fps,
+   structural minimums — the divider roll cadence, the end-card floor — the
+   total is Σ scene frames). The renderer only sums.
+
+3. THE NODE — loads the project's READY web_page assets (the birthplace
+   ∀-check gates presence, the claim gate gates processing; a mid-run
+   capture failure surfaces here as an honest error), drives the bounded
+   loop, births the film output (``render_spec.family == "film"``) and pends
+   its render through the ONE seat (``pend_outputs_for_render``). No second
+   orchestration chain (ADR-028/029).
+
+Grounding normalization: lowercase + every non-word char stripped (markdown
+emphasis ``*``, punctuation, whitespace) — a screen string hits the manifest
+when its normalized form is a substring of a normalized manifest item
+(verbatim quote OR trim). Code-baked chrome is exempt by construction:
+divider ordinals, ui/end display URLs, the ui screenshot, the end logo.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from typing import Any
+from uuid import UUID
+
+import structlog
+from pydantic import BaseModel, Field
+from sqlalchemy import bindparam, select, text as _text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.agents.base import Agent, AssembleResult
+from app.models.schemas import (
+    AssetStatus,
+    AssetType,
+    FilmStoryboard,
+    MediaInput,
+    RenderStatus,
+    WebPageResearch,
+)
+from app.models.tables import Asset, Output, Project, WorkflowRun, WorkflowStep
+from app.pipeline.graph import WEB_PAGE, NodeBase, estimate_agent
+from app.pipeline.outputs import delete_outputs_fk_safe
+from app.pipeline.render_ownership import pend_outputs_for_render
+from app.pipeline.step_context import media_input_for_image
+from app.pipeline.step_display import (
+    fill_summary,
+    node_slot,
+    set_spec_field,
+    slot_tag,
+    ui_lang_of,
+)
+from app.providers.llm.base import LLMSchemaError
+
+logger = structlog.get_logger()
+
+# ---------------------------------------------------------------------------
+# Constants (the contract numbers — the j2 states them as binding bounds, the
+# validator enforces them; craft guidance lives in the launch-film pack)
+# ---------------------------------------------------------------------------
+
+FILM_FPS = 30  # fixed (render Root.tsx FILM_FPS — one law, mirrored here)
+SCENE_COUNT_LIMITS = (3, 8)
+TOTAL_SECONDS_RANGE = (12.0, 90.0)
+# Render-side frame cap (server.ts FILM_MAX_FRAMES default) — the validator's
+# total window stays comfortably under it; this is the post-allocation guard.
+FILM_MAX_FRAMES = 3600
+
+# Per-scene seconds intent bounds (the LLM's legal range per type).
+SCENE_SECONDS: dict[str, tuple[float, float]] = {
+    "words": (1.5, 4.0),
+    "hero": (2.0, 5.0),
+    "ui": (3.0, 10.0),
+    "divider": (2.0, 5.0),
+    "reveal": (2.0, 5.0),
+    "end": (2.5, 6.0),
+}
+
+# Structural frame minimums (the allocator clamps UP to these — code's seat):
+_MIN_SCENE_FRAMES = 30  # 1s — the 7+7 fade veil plus one readable beat
+_END_MIN_FRAMES = 75  # 2.5s — the closing card's floor
+# The divider roll's cadence: one word per 13 frames (perWord in
+# apps/render/src/film/components.tsx — the renderer owns the behavior, this
+# mirror exists so the roll always fits its scene).
+_DIVIDER_ROLL_STEP_FRAMES = 13
+_DIVIDER_ROLL_TAIL_FRAMES = 25  # the last word must land and read
+
+# On-screen copy caps (chars) per (scene type, slot).
+TEXT_CAPS: dict[tuple[str, str], int] = {
+    ("words", "lines"): 30,
+    ("hero", "word"): 16,
+    ("hero", "sub"): 90,
+    ("divider", "label"): 40,
+    ("divider", "roll"): 24,
+    ("reveal", "lead"): 60,
+    ("reveal", "word"): 24,
+    ("reveal", "sub"): 90,
+    ("end", "name"): 24,
+    ("end", "tagline"): 90,
+    ("ui", "captions"): 60,
+}
+# Per-scene item count caps.
+_LIST_CAPS = {"words.lines": 4, "divider.roll": 5, "ui.captions": 3, "ui.focuses": 5}
+
+# Camera bounds: x/y are normalized frame positions; zoom is a magnification
+# (1 = the full frame). The spec's [0,1]³ law covers x/y; zoom lives in [1,4].
+_ZOOM_RANGE = (1.0, 4.0)
+
+MAX_REWRITES = 2  # bounded rejection: 3 candidates total, then FAILED
+
+_DEFAULT_THEME = {"canvas": "#F7F6F2", "ink": "#141414"}
+_HEX_COLOR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+# Error codes (spec.failure.codes + the rewrite echo — the D4 failure
+# ledger reads these).
+UNSUPPORTED_SCENE = "UNSUPPORTED_SCENE"
+TEXT_NOT_GROUNDED = "TEXT_NOT_GROUNDED"
+INVALID_FOCUS = "INVALID_FOCUS"
+DURATION_INVALID = "DURATION_INVALID"
+CONSTRAINT_VIOLATION = "CONSTRAINT_VIOLATION"
+
+
+class FilmStoryboardRejected(Exception):
+    """The bounded rewrite exhausted without a clean storyboard — the node
+    settles FAILED with the structured codes on ``spec.failure``."""
+
+    user_key = "film_storyboard_ungrounded"
+
+    def __init__(self, codes: list[str], detail: str) -> None:
+        super().__init__(f"storyboard rejected ({', '.join(codes)}): {detail[:300]}")
+        self.codes = codes
+
+
+class LaunchFilmParams(BaseModel):
+    """launch_film slot params — the proposal carries a steer, never content."""
+
+    focus: str | None = Field(
+        default=None,
+        description="Optional emphasis steer for the storyboard (e.g. the "
+        "feature or audience the film should lead with). Null = the director "
+        "reads the page and picks.",
+    )
+
+
+@dataclass(frozen=True)
+class FilmViolation:
+    code: str
+    detail: str  # scene index + field + the offending value — echoed verbatim
+
+
+@dataclass(frozen=True)
+class StoryboardPage:
+    """One captured page as the storyboard's grounding universe (and the ui
+    scene's imagery source). ``screenshot_key`` None = the capture's
+    screenshot half degraded — ui scenes pointing here are illegal."""
+
+    asset_id: str
+    research: WebPageResearch
+    screenshot_key: str | None
+    host: str  # display host baked into the ui/end url fields (code's seat)
+
+
+# ---------------------------------------------------------------------------
+# Grounding helpers (pure)
+# ---------------------------------------------------------------------------
+
+
+def _norm(s: str) -> str:
+    """Grounding normalization: lowercase, word chars only (``*`` emphasis,
+    punctuation, whitespace all vanish) — a trim of a quote still hits."""
+    return re.sub(r"[^\w]+", "", s.lower())
+
+
+def _corpus(research: WebPageResearch) -> list[str]:
+    """One page's normalized grounding universe."""
+    raw = [
+        research.title,
+        research.description,
+        *research.h1,
+        *research.h2,
+        *research.h3,
+        *research.buttons,
+        *research.links,
+        *research.paragraphs,
+    ]
+    return [n for n in (_norm(item) for item in raw) if n]
+
+
+def _screen_strings(scene: Any) -> list[tuple[str, str]]:
+    """(slot, text) pairs a scene puts on screen — the grounding surface.
+    Code-baked chrome (divider index, ui/end urls, imagery) never appears
+    here."""
+    t = scene.type
+    if t == "words":
+        return [("lines", line) for line in scene.lines]
+    if t == "hero":
+        return [("word", scene.word), ("sub", scene.sub)]
+    if t == "ui":
+        return [("captions", c.text) for c in scene.captions]
+    if t == "divider":
+        return [("label", scene.label), *[("roll", w) for w in scene.roll]]
+    if t == "reveal":
+        return [("lead", scene.lead), ("word", scene.word), ("sub", scene.sub)]
+    if t == "end":
+        return [("name", scene.name), ("tagline", scene.tagline)]
+    return []
+
+
+# ---------------------------------------------------------------------------
+# The validator (pure)
+# ---------------------------------------------------------------------------
+
+
+def validate_storyboard(
+    storyboard: FilmStoryboard, pages: list[StoryboardPage]
+) -> list[FilmViolation]:
+    """Every violation found, in scene order. Empty list = the storyboard may
+    proceed to frame allocation. The union corpus grounds every scene except
+    ui captions, which ground against the page they show."""
+    violations: list[FilmViolation] = []
+    union_corpus = [item for p in pages for item in _corpus(p.research)]
+
+    def grounded(text: str, corpus: list[str]) -> bool:
+        norm = _norm(text)
+        return bool(norm) and any(norm in item for item in corpus)
+
+    scenes = storyboard.scenes
+    if not (SCENE_COUNT_LIMITS[0] <= len(scenes) <= SCENE_COUNT_LIMITS[1]):
+        violations.append(
+            FilmViolation(
+                CONSTRAINT_VIOLATION,
+                f"scene count {len(scenes)} outside {SCENE_COUNT_LIMITS[0]}..{SCENE_COUNT_LIMITS[1]}",
+            )
+        )
+
+    total_seconds = 0.0
+    seen_screens: set[tuple[str, tuple[str, ...]]] = set()
+    for idx, scene in enumerate(scenes):
+        where = f"scene[{idx}]({scene.type})"
+        if scene.type not in SCENE_SECONDS:
+            # The pydantic union already enforces the closed vocabulary — this
+            # is the defense-in-depth seat (a hand-built spec bypassing it).
+            violations.append(FilmViolation(UNSUPPORTED_SCENE, f"{where}: unknown type"))
+            continue
+
+        lo, hi = SCENE_SECONDS[scene.type]
+        if not (lo <= scene.seconds <= hi):
+            violations.append(
+                FilmViolation(
+                    DURATION_INVALID,
+                    f"{where}: {scene.seconds}s outside {lo}..{hi}s for {scene.type}",
+                )
+            )
+        total_seconds += scene.seconds
+
+        strings = _screen_strings(scene)
+        corpus = (
+            _corpus(pages[scene.page].research)
+            if scene.type == "ui" and 0 <= scene.page < len(pages)
+            else union_corpus
+        )
+        for slot, text in strings:
+            cap = TEXT_CAPS.get((scene.type, "captions" if scene.type == "ui" else slot))
+            if cap is not None and len(text) > cap:
+                violations.append(
+                    FilmViolation(
+                        CONSTRAINT_VIOLATION,
+                        f"{where}.{slot}: {len(text)} chars over the {cap} cap ({text[:40]}…)",
+                    )
+                )
+            if not _norm(text):
+                violations.append(
+                    FilmViolation(CONSTRAINT_VIOLATION, f"{where}.{slot}: empty copy")
+                )
+            elif not grounded(text, corpus):
+                violations.append(
+                    FilmViolation(
+                        TEXT_NOT_GROUNDED,
+                        f"{where}.{slot}: «{text[:60]}» traces to no manifest line — quote or trim the page's own copy",
+                    )
+                )
+
+        # Within-scene duplicate copy.
+        normed = [_norm(text) for _, text in strings]
+        if len(set(normed)) != len(normed):
+            violations.append(
+                FilmViolation(CONSTRAINT_VIOLATION, f"{where}: duplicate copy within one screen")
+            )
+        # A whole screen repeated elsewhere (same type, same strings).
+        signature = (scene.type, tuple(sorted(normed)))
+        if signature in seen_screens:
+            violations.append(
+                FilmViolation(CONSTRAINT_VIOLATION, f"{where}: repeats another scene's screen verbatim")
+            )
+        seen_screens.add(signature)
+
+        # List-size caps.
+        if scene.type == "words" and len(scene.lines) > _LIST_CAPS["words.lines"]:
+            violations.append(FilmViolation(CONSTRAINT_VIOLATION, f"{where}: {len(scene.lines)} lines over {_LIST_CAPS['words.lines']}"))
+        if scene.type == "divider" and len(scene.roll) > _LIST_CAPS["divider.roll"]:
+            violations.append(FilmViolation(CONSTRAINT_VIOLATION, f"{where}: roll of {len(scene.roll)} over {_LIST_CAPS['divider.roll']}"))
+        if scene.type == "ui":
+            if len(scene.captions) > _LIST_CAPS["ui.captions"]:
+                violations.append(FilmViolation(CONSTRAINT_VIOLATION, f"{where}: {len(scene.captions)} captions over {_LIST_CAPS['ui.captions']}"))
+            if len(scene.focuses) > _LIST_CAPS["ui.focuses"]:
+                violations.append(FilmViolation(CONSTRAINT_VIOLATION, f"{where}: {len(scene.focuses)} focuses over {_LIST_CAPS['ui.focuses']}"))
+            if not (0 <= scene.page < len(pages)):
+                violations.append(
+                    FilmViolation(CONSTRAINT_VIOLATION, f"{where}: page {scene.page} names no presented page")
+                )
+            elif pages[scene.page].screenshot_key is None:
+                violations.append(
+                    FilmViolation(
+                        CONSTRAINT_VIOLATION,
+                        f"{where}: page {scene.page} has no screenshot — a ui scene needs the page image",
+                    )
+                )
+            prev_at = -1.0
+            for f in scene.focuses:
+                if not (0.0 <= f.x <= 1.0 and 0.0 <= f.y <= 1.0):
+                    violations.append(
+                        FilmViolation(INVALID_FOCUS, f"{where}: focus ({f.x}, {f.y}) outside [0,1]")
+                    )
+                if not (_ZOOM_RANGE[0] <= f.zoom <= _ZOOM_RANGE[1]):
+                    violations.append(
+                        FilmViolation(INVALID_FOCUS, f"{where}: zoom {f.zoom} outside {_ZOOM_RANGE[0]}..{_ZOOM_RANGE[1]}")
+                    )
+                if not (0.0 <= f.at < scene.seconds):
+                    violations.append(
+                        FilmViolation(INVALID_FOCUS, f"{where}: focus at {f.at}s outside the scene's {scene.seconds}s")
+                    )
+                if f.at <= prev_at:
+                    violations.append(
+                        FilmViolation(INVALID_FOCUS, f"{where}: focus beats must ascend (at {f.at} after {prev_at})")
+                    )
+                prev_at = f.at
+            prev_at = -1.0
+            for c in scene.captions:
+                if not (0.0 <= c.at < scene.seconds):
+                    violations.append(
+                        FilmViolation(INVALID_FOCUS, f"{where}: caption at {c.at}s outside the scene's {scene.seconds}s")
+                    )
+                if c.at < prev_at + 0.5:
+                    violations.append(
+                        FilmViolation(INVALID_FOCUS, f"{where}: captions need 0.5s of air each (at {c.at} after {prev_at})")
+                    )
+                prev_at = c.at
+
+    if not (TOTAL_SECONDS_RANGE[0] <= total_seconds <= TOTAL_SECONDS_RANGE[1]):
+        violations.append(
+            FilmViolation(
+                DURATION_INVALID,
+                f"total {total_seconds:.1f}s outside {TOTAL_SECONDS_RANGE[0]}..{TOTAL_SECONDS_RANGE[1]}s",
+            )
+        )
+
+    if storyboard.theme is not None:
+        for field, value in (("canvas", storyboard.theme.canvas), ("ink", storyboard.theme.ink)):
+            if not _HEX_COLOR.match(value):
+                violations.append(
+                    FilmViolation(CONSTRAINT_VIOLATION, f"theme.{field}: «{value}» is not a hex color")
+                )
+
+    return violations
+
+
+def format_violations(violations: list[FilmViolation]) -> str:
+    """The rewrite echo: codes + offenders, compact (this rides the next
+    candidate call verbatim — the model fixes what it can read)."""
+    lines = [f"- {v.code}: {v.detail}" for v in violations[:12]]
+    extra = len(violations) - len(lines)
+    if extra > 0:
+        lines.append(f"- … and {extra} more")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# The allocator + spec builder (pure)
+# ---------------------------------------------------------------------------
+
+
+def allocate_frames(storyboard: FilmStoryboard) -> list[int]:
+    """Seconds intent → integer frames (fixed fps; structural minimums clamp
+    UP — the divider roll must fit its cadence, the end card holds its floor).
+    Total = Σ scene frames; the renderer only sums."""
+    frames: list[int] = []
+    for scene in storyboard.scenes:
+        n = max(round(scene.seconds * FILM_FPS), _MIN_SCENE_FRAMES)
+        if scene.type == "divider":
+            n = max(
+                n,
+                (len(scene.roll) - 1) * _DIVIDER_ROLL_STEP_FRAMES + _DIVIDER_ROLL_TAIL_FRAMES,
+            )
+        if scene.type == "end":
+            n = max(n, _END_MIN_FRAMES)
+        frames.append(n)
+    return frames
+
+
+def build_film_spec(storyboard: FilmStoryboard, pages: list[StoryboardPage]) -> dict[str, Any]:
+    """The validated storyboard → the persisted film-spec (render contract).
+
+    The ui scene's ``image`` stores the screenshot's RELATIVE object key —
+    absolutized at render time by the render chain (the clip path's storage
+    seam law). Display URLs / divider ordinals / the end logo are baked here,
+    never model-written.
+    """
+    frames = allocate_frames(storyboard)
+    if sum(frames) > FILM_MAX_FRAMES:
+        raise FilmStoryboardRejected(
+            [DURATION_INVALID],
+            f"allocated {sum(frames)} frames over the {FILM_MAX_FRAMES} render cap",
+        )
+    theme = dict(_DEFAULT_THEME)
+    if storyboard.theme is not None:
+        theme = {"canvas": storyboard.theme.canvas, "ink": storyboard.theme.ink}
+    divider_ordinal = 0
+    scenes: list[dict[str, Any]] = []
+    for scene, n in zip(storyboard.scenes, frames, strict=True):
+        if scene.type == "words":
+            scenes.append({"type": "words", "frames": n, "dark": scene.dark, "lines": scene.lines})
+        elif scene.type == "hero":
+            scenes.append({"type": "hero", "frames": n, "word": scene.word, "sub": scene.sub})
+        elif scene.type == "ui":
+            page = pages[scene.page]
+            scenes.append(
+                {
+                    "type": "ui",
+                    "frames": n,
+                    "image": page.screenshot_key,
+                    "url": page.host,
+                    "focuses": [f.model_dump(mode="json") for f in scene.focuses],
+                    "captions": [c.model_dump(mode="json") for c in scene.captions],
+                }
+            )
+        elif scene.type == "divider":
+            divider_ordinal += 1
+            scenes.append(
+                {
+                    "type": "divider",
+                    "frames": n,
+                    "index": f"{divider_ordinal:02d}",
+                    "label": scene.label,
+                    "roll": scene.roll,
+                }
+            )
+        elif scene.type == "reveal":
+            scenes.append(
+                {"type": "reveal", "frames": n, "lead": scene.lead, "word": scene.word, "sub": scene.sub}
+            )
+        elif scene.type == "end":
+            scenes.append(
+                {
+                    "type": "end",
+                    "frames": n,
+                    "name": scene.name,
+                    "tagline": scene.tagline,
+                    "url": pages[0].host,
+                    "logo_url": None,
+                }
+            )
+    return {
+        "family": "film",
+        "name": storyboard.name,  # null-read tolerant (two-source law)
+        "theme": theme,
+        "scenes": scenes,
+    }
+
+
+# ---------------------------------------------------------------------------
+# The storyboard agent
+# ---------------------------------------------------------------------------
+
+
+def _assemble(
+    pages: list[dict[str, Any]],
+    instruction: str | None,
+    focus: str | None,
+    page_images: list[MediaInput],
+) -> AssembleResult:
+    """Purity by signature: the model sees the manifests (its grounding
+    universe), the run's instruction, the slot's focus steer, and the page
+    screenshots (its camera target) — nothing else."""
+    return (
+        {
+            "pages": pages,
+            "instruction": instruction,
+            "focus": focus,
+        },
+        page_images,
+    )
+
+
+film_storyboarder = Agent[FilmStoryboard](
+    name="film_storyboarder",
+    prompt="film_storyboard.j2",
+    schema=FilmStoryboard,
+    system=(
+        "You are a film director cutting a short launch film from a captured "
+        "web page. Every word on screen is quoted or trimmed from the page's "
+        "own copy — you never invent claims. You write a storyboard; the "
+        "system allocates frames and renders it."
+    ),
+    assemble=_assemble,
+    temperature=0.5,
+    packs=["launch-film"],
+    # The screenshots ground the camera plan; a multimodal failure degrades
+    # to text-only (manifests still carry the copy) — the validator's focus
+    # checks keep a blind camera honest.
+    media_text_fallback=True,
+)
+
+
+def page_prompt_dict(page: StoryboardPage, index: int) -> dict[str, Any]:
+    """One page's prompt block (the manifest IS the grounding universe —
+    the j2 prints it verbatim)."""
+    r = page.research
+    return {
+        "index": index,
+        "url": r.url,
+        "host": page.host,
+        "title": r.title,
+        "description": r.description,
+        "h1": r.h1,
+        "h2": r.h2,
+        "h3": r.h3,
+        "buttons": r.buttons,
+        "links": r.links,
+        "paragraphs": r.paragraphs,
+        "has_screenshot": page.screenshot_key is not None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# The node
+# ---------------------------------------------------------------------------
+
+
+class LaunchFilm(NodeBase):
+    kind = "launch_film"
+    node_type = "video"  # 词表 v3 (ADR-076) — 装配站 (发布短片)
+    prototype = "generator"  # 散文程序: the instruction/focus IS the program
+    task_name = "Generate launch film"
+    task_name_zh = "生成发布短片"
+    output_type = "film"
+    slot_label = "Film"
+    slot_label_zh = "发布短片"
+    # The film family needs NO source media — its input is the captured page
+    # (the birthplace ∀-check's film fork: WEB_PAGE presence + readiness,
+    # never MEDIA).
+    requires = (WEB_PAGE,)
+    needs_plan_prelude = False
+    produces_outputs = True
+    retries = 0  # the bounded rewrite absorbs model variance; transports ride tenacity
+    agents = (film_storyboarder,)
+
+    def estimate(self, ctx: dict) -> dict | None:
+        """Worst case = one storyboard pass per candidate (1 + MAX_REWRITES):
+        the manifests (capped at capture) plus the page screenshots in, one
+        storyboard JSON out. Render seconds quote at D3 (计价批)."""
+        single = estimate_agent([1500, 8000], [400, 2000])
+        n = 1 + MAX_REWRITES
+        return {
+            "prompt_tokens": [single["prompt_tokens"][0] * n, single["prompt_tokens"][1] * n],
+            "completion_tokens": [single["completion_tokens"][0] * n, single["completion_tokens"][1] * n],
+            "units": {},
+        }
+
+    async def _load_pages(self, db: AsyncSession, project: Project) -> list[StoryboardPage]:
+        """The project's READY web_page assets → grounding pages (capture
+        order). A COMPLETED capture always carries its manifest; the
+        screenshot may be honestly absent."""
+        assets = list(
+            (
+                await db.execute(
+                    select(Asset)
+                    .where(
+                        Asset.project_id == project.id,
+                        Asset.type == AssetType.WEB_PAGE,
+                        Asset.processing_status == AssetStatus.COMPLETED,
+                    )
+                    .order_by(Asset.created_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        pages: list[StoryboardPage] = []
+        from urllib.parse import urlparse
+
+        for a in assets:
+            meta = a.meta if isinstance(a.meta, dict) else {}
+            raw = meta.get("research")
+            if not isinstance(raw, dict):
+                continue
+            research = WebPageResearch.model_validate(raw)
+            host = urlparse(research.url).netloc or (a.title or "")
+            pages.append(
+                StoryboardPage(
+                    asset_id=str(a.id),
+                    research=research,
+                    screenshot_key=meta.get("screenshot_key"),
+                    host=host,
+                )
+            )
+        return pages
+
+    async def run(
+        self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
+    ) -> list[UUID]:
+        ctx = run.context or {}
+        slot = node_slot(node, ctx, "film")
+        focus = (slot.focus if slot else None) or None
+        instruction = ctx.get("instruction") or None
+
+        pages = await self._load_pages(db, project)
+        if not pages:
+            # The birthplace gates presence+readiness; a capture that FAILED
+            # mid-wait lands here — the honest refusal (never an ungrounded
+            # film).
+            raise ValueError(
+                "The page never became readable (the capture failed) — send the link again to re-capture it."
+            )
+
+        page_images: list[MediaInput] = []
+        for i, page in enumerate(pages):
+            if page.screenshot_key is None:
+                continue
+            item = await media_input_for_image(
+                page.screenshot_key,
+                caption=f"Screenshot of page {i} ({page.host}) — the ui scene's camera target.",
+            )
+            if item is not None:
+                page_images.append(item)
+
+        ui_language = ui_lang_of(run, project)
+        prompt_pages = [page_prompt_dict(p, i) for i, p in enumerate(pages)]
+
+        # The bounded rewrite (打回有界): up to 1 + MAX_REWRITES candidates,
+        # each re-called with the violation echo (never a blind re-roll).
+        storyboard: FilmStoryboard | None = None
+        violations: list[FilmViolation] = []
+        feedback: str | None = None
+        for attempt in range(1 + MAX_REWRITES):
+            try:
+                candidate = await film_storyboarder.call(
+                    pages=prompt_pages,
+                    instruction=instruction,
+                    focus=focus,
+                    page_images=page_images,
+                    repair_feedback=feedback,
+                )
+            except LLMSchemaError:
+                # The funnel's own repair round already fired — a raise here
+                # is the two-strike schema terminal. Stamp the failure stage
+                # for the D4 ledger, then let the node fail.
+                await set_spec_field(node.id, "failure", {"stage": "schema"})
+                raise
+            violations = validate_storyboard(candidate, pages)
+            if not violations:
+                storyboard = candidate
+                break
+            feedback = format_violations(violations)
+            logger.info(
+                "film_storyboard_rejected",
+                node_id=str(node.id),
+                attempt=attempt,
+                codes=sorted({v.code for v in violations}),
+                count=len(violations),
+                detail=(feedback or "")[:400],
+            )
+        if storyboard is None:
+            codes = sorted({v.code for v in violations})
+            await set_spec_field(
+                node.id,
+                "failure",
+                {"stage": "grounding", "codes": codes, "detail": (feedback or "")[:500]},
+            )
+            raise FilmStoryboardRejected(codes, feedback or "")
+
+        await set_spec_field(node.id, "storyboard", storyboard.model_dump(mode="json"))
+
+        # 同 spec 重试幂等: a re-run of this step wipes its own earlier film
+        # rows (mid-production, never delivered — physical delete) and cancels
+        # their pending render mirrors before the fresh birth.
+        prior = list(
+            (
+                await db.execute(
+                    select(Output.id).where(
+                        Output.workflow_step_id == node.id,
+                        Output.type == "film",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if prior:
+            await db.execute(
+                _text(
+                    "UPDATE workflow_steps SET status = 'skipped', updated_at = now() "
+                    "WHERE kind = 'render' AND status = 'pending' "
+                    "AND spec->>'output_id' IN :oids"
+                ).bindparams(bindparam("oids", expanding=True)),
+                {"oids": [str(oid) for oid in prior]},
+            )
+            await delete_outputs_fk_safe(db, prior)
+
+        spec_dict = build_film_spec(storyboard, pages)
+        total_seconds = sum(allocate_frames(storyboard)) / FILM_FPS
+        output = Output(
+            project_id=project.id,
+            workflow_step_id=node.id,
+            type="film",
+            language=str(ctx.get("target_language") or project.language or "en"),
+            # AI-orchestrated render (ADR-026/ADR-119): the on-screen copy is
+            # quoted from the page, the film itself is machine-composed.
+            provenance="generated",
+            payload={
+                "name": storyboard.name or "",
+                "duration": round(total_seconds),
+                "scene_count": len(storyboard.scenes),
+                "aspect": "16:9",
+            },
+            source_ref={"pages": [p.asset_id for p in pages]},
+            render_spec=spec_dict,
+            render_status=RenderStatus.PENDING,
+        )
+        db.add(output)
+        await db.flush()
+
+        # Render fan-out through the ONE pend seat (ADR-096 §1): barrier = the
+        # birth step, mirror born here, claimed via outputs.render_status.
+        await pend_outputs_for_render(db, run, [output])
+
+        await fill_summary(
+            node.id,
+            self.kind,
+            tag=slot_tag(slot),
+            ui_language=ui_language,
+            n=1,
+            total_seconds=int(total_seconds),
+        )
+        return [output.id]

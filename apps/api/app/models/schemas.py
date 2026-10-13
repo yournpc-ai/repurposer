@@ -109,6 +109,10 @@ class WebPageResearch(BaseModel):
     h3: list[str] = Field(default_factory=list)
     buttons: list[str] = Field(default_factory=list)
     links: list[str] = Field(default_factory=list)
+    # Paragraph copy (<p>) — the hero claims / feature blurbs a film quotes.
+    # Longer per-item bound than CTA copy (capture.py _PARAGRAPH_MAX_LEN);
+    # absent on pre-paragraphs captures (read tolerance).
+    paragraphs: list[str] = Field(default_factory=list)
 
 
 class WebPageMeta(BaseModel):
@@ -701,7 +705,7 @@ class PlanAskArgs(BaseModel):
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
         return _drop_bad_brief(
-            tolerate_null_keys(data, "options", "default_path", "slot", "material_text", "recommended_id", "pending_disposition")
+            tolerate_null_keys(data, "options", "default_path", "slot", "material_text", "material_urls", "recommended_id", "pending_disposition")
         )
 
     question: str = Field(
@@ -732,6 +736,10 @@ class PlanAskArgs(BaseModel):
         default=None,
         description="Verbatim source text the user explicitly declared as their own material this turn ('this is my transcript: …'). Null otherwise — a bare request is never material.",
     )
+    material_urls: list[str] | None = Field(
+        default=None,
+        description="URLs the user's own message offers as MATERIAL to work from (a page they paste so you can make something of it — 'make a short film of https://…'). Copy each URL verbatim; the system captures the page into a project asset itself. A link shared only for discussion ('what do you think of this site?') is NOT material — leave it out. Null otherwise.",
+    )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
         description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — the question settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
@@ -750,7 +758,7 @@ class PresentPlanArgs(BaseModel):
     def _read_tolerance(cls, data: Any) -> Any:
         return _drop_bad_brief(
             tolerate_null_keys(
-                data, "tasks", "specific_instruction", "caption_mode", "tasks_explicit", "name", "material_text", "pending_disposition"
+                data, "tasks", "specific_instruction", "caption_mode", "tasks_explicit", "name", "material_text", "material_urls", "pending_disposition"
             )
         )
 
@@ -781,6 +789,10 @@ class PresentPlanArgs(BaseModel):
     material_text: str | None = Field(
         default=None,
         description="Verbatim source text the user explicitly declared as their own material this turn. Null otherwise.",
+    )
+    material_urls: list[str] | None = Field(
+        default=None,
+        description="URLs the user's own message offers as MATERIAL to work from (a page they paste so you can make something of it — 'make a short film of https://…'). Copy each URL verbatim; the system captures the page into a project asset itself. A link shared only for discussion ('what do you think of this site?') is NOT material — leave it out. Null otherwise.",
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
@@ -860,7 +872,7 @@ class PlanAnswerArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return _drop_bad_brief(tolerate_null_keys(data, "material_text", "pending_disposition"))
+        return _drop_bad_brief(tolerate_null_keys(data, "material_text", "material_urls", "pending_disposition"))
 
     brief: Brief | None = Field(
         default=None,
@@ -869,6 +881,10 @@ class PlanAnswerArgs(BaseModel):
     material_text: str | None = Field(
         default=None,
         description="Verbatim source text the user explicitly declared as their own material this turn. Null otherwise.",
+    )
+    material_urls: list[str] | None = Field(
+        default=None,
+        description="URLs the user's own message offers as MATERIAL to work from (a page they paste so you can make something of it — 'make a short film of https://…'). Copy each URL verbatim; the system captures the page into a project asset itself. A link shared only for discussion ('what do you think of this site?') is NOT material — leave it out. Null otherwise.",
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
@@ -886,11 +902,15 @@ class ProposeTasksArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "tasks", "name", "specific_instruction", "pending_disposition")
+        return tolerate_null_keys(data, "tasks", "name", "specific_instruction", "material_urls", "pending_disposition")
 
     tasks: list[TaskItem] = Field(
         default_factory=list,
         description="The proposed tool chain — one task per piece of work, in execution order.",
+    )
+    material_urls: list[str] | None = Field(
+        default=None,
+        description="URLs the user's own message offers as MATERIAL to work from (a page they paste so you can make something of it — 'make a short film of https://…'). Copy each URL verbatim; the system captures the page into a project asset itself. A link shared only for discussion is NOT material — leave it out. Null otherwise.",
     )
     specific_instruction: str | None = Field(
         default=None,
@@ -3118,6 +3138,172 @@ class ClipPayload(BaseModel):
     aspect: str | None = None
 
 
+# ---------------------------------------------------------------------------
+# film family (MG film skill — ADR-119): the LLM-authored storyboard is the
+# orchestration-side contract; the render-side boundary (shape-only zod)
+# lives in apps/render/src/film/schema.ts. Semantic grounding / content
+# constraints are the grounding validator's seat (app/tools/film/storyboard.py)
+# — ONE law, one seat: these models carry shape, never content bounds.
+#
+# Deterministic frame allocation: the LLM writes a bounded SECONDS intent per
+# scene; integer frames are assigned by code (fixed fps, structural minimums,
+# total = Σ scene frames). The renderer only sums integers.
+# ---------------------------------------------------------------------------
+
+
+class FilmFocus(BaseModel):
+    """One camera beat of a ui scene (the screenshot walk)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    at: float  # seconds from scene start
+    x: float  # normalized [0,1] camera center — bounds are the validator's seat
+    y: float
+    zoom: float  # magnification (1 = full frame)
+
+
+class FilmCaption(BaseModel):
+    """One caption pill of a ui scene."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    at: float  # seconds from scene start
+    text: str
+
+
+class FilmSceneWords(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["words"]
+    seconds: float
+    dark: bool
+    lines: list[str] = Field(min_length=1)
+
+
+class FilmSceneHero(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["hero"]
+    seconds: float
+    word: str
+    sub: str
+
+
+class FilmSceneUi(BaseModel):
+    """The page walk: the LLM names the page by its index in the presented
+    manifest list; the screenshot URL / display URL are baked BY CODE (the
+    model never invents URLs)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["ui"]
+    seconds: float
+    page: int  # 0-based index into the presented pages
+    focuses: list[FilmFocus] = Field(min_length=1)
+    captions: list[FilmCaption] = Field(default_factory=list)
+
+
+class FilmSceneDivider(BaseModel):
+    """Section break with a rolling word list. The ordinal index ("01") is
+    chrome — code assigns it, the model never writes it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["divider"]
+    seconds: float
+    label: str
+    roll: list[str] = Field(min_length=1)
+
+
+class FilmSceneReveal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["reveal"]
+    seconds: float
+    lead: str
+    word: str
+    sub: str
+
+
+class FilmSceneEnd(BaseModel):
+    """Closing brand card. The display URL is baked by code from the page's
+    real URL; logo stays text-only in v1 (logo_url never LLM-written)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["end"]
+    seconds: float
+    name: str
+    tagline: str
+
+
+FilmScene = Annotated[
+    FilmSceneWords
+    | FilmSceneHero
+    | FilmSceneUi
+    | FilmSceneDivider
+    | FilmSceneReveal
+    | FilmSceneEnd,
+    Field(discriminator="type"),
+]
+
+
+class FilmStoryboardTheme(BaseModel):
+    """Optional monochrome pair override (hex). Absent = the code default."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    canvas: str
+    ink: str
+
+
+class FilmStoryboard(BaseModel):
+    """The launch film's storyboard — the LLM's ONE artifact in the film
+    chain (grounding-validated, frame-allocated by code, then baked into a
+    film-spec). ``name`` is the two-source display-copy seat: LLM-chosen,
+    null-read tolerant (打字机牙①)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    theme: FilmStoryboardTheme | None = None
+    scenes: list[FilmScene] = Field(min_length=1)
+
+
+class FilmPayload(BaseModel):
+    """Payload for ``outputs[type=film]`` — the launch film's creative facts.
+
+    Timeline semantics: none (a film has no source span — its "source" is the
+    captured page, carried in ``source_ref.pages``); the render pipeline rides
+    ``render_spec``/``render_status`` exactly like clips (ADR-030 rules 2/3).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = ""  # the storyboard's LLM-chosen name (null read as "")
+    duration: int = 0  # seconds — the allocated total (Σ frames / fps)
+    scene_count: int = 0
+    # The display-class stamp (same write-point law as ClipPayload.aspect):
+    # v1 films are landscape-only, so the stamp is constant at birth.
+    aspect: str | None = "16:9"
+
+
+class FilmSpecEnvelope(BaseModel):
+    """film-spec read envelope for OutputResponse.render_spec.
+
+    ADR-016 unchanged: the render-side zod schema (apps/render/src/film/
+    schema.ts) is THE film contract — the API never re-validates film
+    content. This envelope exists so a film output's render_spec survives
+    serialization without impersonating ClipSpec (a clip dict fails the
+    ``family`` literal, a film dict fails ClipSpec's required ``source`` —
+    the union's two branches split deterministically).
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    family: Literal["film"]
+
+
 # Internal types are node artifacts, not user-facing products. Every read path
 # must exclude them via ``services.outputs.visible_outputs`` — never hand-roll a
 # type filter (results/library/export, and future MCP/gallery surfaces).
@@ -3384,6 +3570,7 @@ class CraftSkeleton(BaseModel):
 # forward reference to CraftSkeleton made the whole module unimportable.
 OUTPUT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "clip": ClipPayload,
+    "film": FilmPayload,
     "post": Post,
     "quotes": Quotes,
     "quote_frame": QuoteFrame,
@@ -3532,7 +3719,7 @@ class OutputResponse(BaseModel):
     payload: dict
     files: dict = Field(default_factory=dict)
     source_ref: dict | None = None
-    render_spec: ClipSpec | None = None
+    render_spec: ClipSpec | FilmSpecEnvelope | None = None
     render_status: RenderStatus | None = None
     render_error: str | None = None
     score: dict | None = None
@@ -3610,7 +3797,11 @@ class OutputResponse(BaseModel):
         fall back to their default tier or the shared probe)."""
         declared = self.payload.get("aspect") if isinstance(self.payload, dict) else None
         candidates = (
-            self.render_spec.aspect if self.render_spec is not None else None,
+            # film specs carry no aspect (the family is landscape-fixed) —
+            # getattr, never attribute access: the envelope has no such field.
+            getattr(self.render_spec, "aspect", None)
+            if self.render_spec is not None
+            else None,
             declared,
         )
         self.aspect = next(

@@ -242,7 +242,11 @@ async def claim_pending_render(db: AsyncSession) -> UUID | None:
         row = (
             await db.execute(
                 select(Output)
-                .where(Output.type == "clip")
+                # No type filter: render_status is the sole claim predicate
+                # (tables.py: NULL = render not requested). Every family that
+                # routes to the renderer (clip-spec, film-spec) pends through
+                # the same seats — a type list here would be a parallel map
+                # the second spec family would have to remember to update.
                 .where(Output.render_status == RenderStatus.PENDING)
                 # Archived rows never render (ADR-091 §4 认领面): a wipe
                 # archives delivered versions; their pending mirrors were

@@ -1219,6 +1219,28 @@ async def _stamp_graph_core(
         for step in writer_heads:
             connect(asset_node_id, node_id_by_key[_fill_key_for_step(step)], "text")
 
+    # The captured page feeds the film head (ADR-119): web_page assets carry
+    # their research manifest as the text flow into launch_film — port-legal
+    # (web_page offers "text"; the video node accepts it), and the page is
+    # the family's whole input (it never touches source media). The freeze
+    # law (ADR-098 §2 — Z) binds: rank edges only ever land on DRAFT targets
+    # (newborns / draft re-fills) — a re-run's settled film node keeps its
+    # first-birth edges (the runtime reads ALL ready pages from the DB at
+    # execution; the edge is the canvas's honesty, not the data channel).
+    film_heads = [
+        s for s in steps if s.kind == "launch_film" and node_of(s) is not None
+    ]
+    if film_heads:
+        pre_stamp_state = {str(n.id): str(n.state) for n in existing_nodes}
+        for asset_node_id, asset in zip(asset_node_ids, assets):
+            if asset.type != AssetType.WEB_PAGE:
+                continue
+            for step in film_heads:
+                target = node_id_by_key[_fill_key_for_step(step)]
+                if pre_stamp_state.get(str(target), "draft") != "draft":
+                    continue
+                connect(asset_node_id, target, "text")
+
     # ── 7b. Edge reconciliation among the stamp's own members (边对账律,
     # ADR-062, 2026-09-10): the compiled topology OWNS every edge whose both
     # endpoints it claims — an existing edge the compile no longer emits is
@@ -1339,6 +1361,10 @@ def _frame_class_of(fam_steps: list[WorkflowStep]) -> tuple[str, str | None]:
             if aspect:
                 return "clip", str(aspect)
         return "clip", "original"
+    if any(s.kind == "launch_film" for s in fam_steps):
+        # The film-spec canvas is fixed 1920×1080 (ADR-119) — the frame
+        # reserves the clip family's 16:9 slot exactly.
+        return "clip", "16:9"
     return "text", None
 
 

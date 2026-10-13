@@ -2877,3 +2877,21 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 **Consequences**: 模式切换 UI 永禁（控件、view-mode 持久化、形态分叉门控、切换触发相机节拍一律不建）；移动端交付形态 = 承接句 + 收据行 + 锚卡数组；单一渲染面律修订注：锚卡 = 终态收据帧——静态、零订阅、只读消息载荷 `output_refs`、归收据行所有，不是第二个 live 面；画布迭代一律以 chat 自足律为验收尺；画布去留进入证据制。
 
 **Related**: ADR-060 / ADR-058（窄门由本条开）/ ADR-111（plan-ready reveal 保留——桌面恒 Split 下 reveal = 画布列到来，不再耦合任何切换控件）/ ADR-016（clip-spec 契约不动）/ N-25（禁令无例外适用）
+
+## ADR-119: film-spec 第二家族——storyboard 编排 + grounding validator + skill 接入装配线
+
+**Status**: Decided（MG film skill 批 D1/D2 落地；简报 = `docs/tasks/mg-film-skill.md`）
+
+**Context**: MG 需要一个「给一个链接，生成发布短片」能力：抓取网页 → LLM 写分镜 → 渲染出片。风险面 = LLM 自由文本直接进渲染合约（编造文案、越界相机、失控时长），以及新能力接入时四处散写入口文案/第二编排链。
+
+**Decision**:
+
+1. **film-spec = clip-spec 的平级第二家族**（ADR-016 契约律不变）：渲染侧 zod schema 只锁形状（`apps/render/src/film/schema.ts`，冻结）；语义 grounding 是编排侧 validator 的座位（一法一座）。派发只读 `spec.family`，禁读节点类型/名称推断。
+2. **storyboard 三分层**：LLM 只写有界秒数意图的分镜（`FilmStoryboard`）→ 纯函数 grounding validator 校验（屏上每个字符串必须命中采集 manifest 的归一化子串 / 相机 focus 界 / 场景枚举封闭 / 时长与字数上限，五类错误码）→ 代码确定性分配整数帧（固定 30fps、divider roll 节拍与 end 卡下限、total = Σ 场景帧）；渲染端只加总。
+3. **打回有界**：最多 2 次改写（3 个候选），违规清单骑 repair echo 回灌；耗尽 → 节点 FAILED + `spec.failure.codes` 结构化留痕，禁盲重试。
+4. **skill 接入装配线四问分诊**（launch-film 为首例）：① 出生地门 = 节点声明 `requires`（新 `WEB_PAGE` 需求——web_page 资产存在且非全 FAILED，PENDING 由 claim 门等齐）；② 渲染认领门 = `render_status` 单谓词（类型过滤是 clip 时代遗留平行表，删）；③ spec 落节点 + 经 `pend_outputs_for_render` 唯一渲染座入队，禁第二条编排链；④ 能力菜单/意图目录 = 注册表条目单一注册投影三面，禁手写。
+5. **URL 素材化座位 = chat 信封 `material_urls`**：LLM 判定链接是素材（禁长度/正则启发式），`plan_turn._absorb` / `propose_turn._propose_tasks` 两处 absorb 走既有 `create_web_page_asset_from_url` 单一创建座，按 `capture_url` 去重；web_page 资产计入 material_state=attached（file_url 恒 NULL 是设计不是缺失）。
+
+**Consequences**: `Output.type="film"` 与 clip 平级（render-contracted 谓词集合 `_RENDER_CONTRACTED` 共享交付判定）；`OutputResponse.render_spec` 为 `ClipSpec | FilmSpecEnvelope` 联合（序列化不冒充 clip-spec）；fixture 链（手写 storyboard → validator → render → PyAV probe）与 LLM 实跑（一次通过率/打回率台账）为验收闸；计价/配方卡/e2e 归 D3，剧本与仪式链归 D4。
+
+**Related**: ADR-016（spec 契约律）/ ADR-028（禁第二条编排链）/ ADR-058（name 二源律，null 读容忍）/ ADR-096 §1（渲染 pend 唯一座）/ ADR-052（absorb 信封座）

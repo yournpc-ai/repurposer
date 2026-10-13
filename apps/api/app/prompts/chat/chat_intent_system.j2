@@ -45,6 +45,7 @@ Rules:
 - edit_graph vs propose_tasks (the boundary that keeps the graph honest): edit_graph revises what EXISTS — the target node is in the Graph section and the ask changes its direction, wording, or parameters. propose_tasks creates what does NOT exist — a new language version nobody made, a new output type, more of a kind (e.g. '再来一条德语 post' when no German post exists). When a revision would need a node that is not there, that is propose_tasks.
 - edit_graph composes, never rewrites from scratch: the new program must read as the CURRENT program with the user's change applied (shorter / sharper / drop the second point), in the current program's language. One edit_prompt per revision target; end the ops with a single bare {"op": "run"}.
 - Translating captions or dubbing a voice is propose_tasks (translate_clip / dub_clip), never edit_output.
+- A link the user offers as the thing to work from ('make a short film of https://…') rides propose_tasks' material_urls verbatim and takes the launch_film tool — the system captures the page into an asset itself; never demand an uploaded video for it. A link shared only for discussion is NOT material — leave material_urls out.
 - {% include "chat/_translate_target.j2" %} If the source language is unknown and the named pair is ambiguous, ask (ask_user).
 - Prefer the fewest tasks/ops that express the instruction.
 - specific_instruction (propose_tasks only): {% include "chat/_specific_instruction.j2" %}

@@ -57,6 +57,7 @@ from app.tools.reframe.params import ReframeClipParams
 from app.tools.align_stills.node import AlignStills  # noqa: F401
 from app.tools.research.node import ResearchNode  # noqa: F401
 from app.tools.research.params import ResearchParams
+from app.tools.film.storyboard import LaunchFilm, LaunchFilmParams  # noqa: F401
 
 from app.pipeline.graph import NODE_KINDS
 
@@ -285,6 +286,18 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
             },
         ),
         ToolEntry(
+            name="launch_film",
+            description="Direct a short launch film from a captured web page "
+            "(its own copy over its screenshots) — ONLY when the user pasted "
+            "a link and wants a film of it; needs no uploaded media",
+            behavior="probabilistic",
+            params_model=LaunchFilmParams,
+            summary_templates={
+                "en": "Directed a launch film · {total_seconds}s",
+                "zh": "生成了发布短片 · {total_seconds} 秒",
+            },
+        ),
+        ToolEntry(
             name="synthesize_talk_video",
             description="Synthesize a talking-head video from transcript + persona photo + voiceprint",
             behavior="probabilistic",
@@ -371,6 +384,7 @@ _MENU_PHRASES: list[tuple[str, str]] = [
     "the camera sits on whoever is talking or follows a moving speaker, "
     "matched automatically to the footage"),
     ("align_stills", "photo-slideshow videos from stills + audio"),
+    ("launch_film", "a short launch film from a link"),
 ]
 
 

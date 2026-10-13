@@ -40,7 +40,13 @@ _WRITER_TOOL_TO_TYPE = {
     "write_article": "article",
     "write_quotes": "quotes",
     "write_carousel": "carousel",
+    "launch_film": "film",
 }
+
+# Render-contracted row types (a render_status lifecycle + files.video prove
+# delivery, ADR-096 §4): the clip family and the film family share the one
+# render chain (ADR-119) — "delivered" means the same thing for both.
+_RENDER_CONTRACTED = frozenset({"clip", "film"})
 
 
 @dataclass(frozen=True)
@@ -87,6 +93,7 @@ def landed_fact(output: Any) -> LandedFact:
     quality = getattr(output, "quality", None) or {}
     render_status = getattr(output, "render_status", None)
     is_clip = getattr(output, "type", None) == "clip"
+    is_render_contracted = getattr(output, "type", None) in _RENDER_CONTRACTED
     cut_range = None
     if is_clip:
         start = source_ref.get("start_seconds")
@@ -98,7 +105,7 @@ def landed_fact(output: Any) -> LandedFact:
         language=getattr(output, "language", None),
         duration_s=(
             int(payload["duration"])
-            if is_clip and isinstance(payload.get("duration"), (int, float))
+            if is_render_contracted and isinstance(payload.get("duration"), (int, float))
             else None
         ),
         cut_range_s=cut_range,
@@ -112,7 +119,7 @@ def landed_fact(output: Any) -> LandedFact:
         quality=(quality.get("status") if isinstance(quality, dict) else None),
         # Enum → its value, without importing the models layer (pure seat).
         render=getattr(render_status, "value", render_status),
-        has_file=bool(files.get("video")) if is_clip else None,
+        has_file=bool(files.get("video")) if is_render_contracted else None,
     )
 
 
@@ -190,7 +197,8 @@ def compute_run_review(
         for f in landed
         if f.render != "failed"
         and (
-            f.output_type != "clip" or (f.render == "completed" and f.has_file)
+            f.output_type not in _RENDER_CONTRACTED
+            or (f.render == "completed" and f.has_file)
         )
     ]
     landed_clips = [f for f in delivered if f.output_type == "clip"]
@@ -286,7 +294,7 @@ def review_fact_lines(review: RunReview) -> list[str]:
             )
         if f.render == "failed":
             parts.append("render=FAILED")
-        elif f.output_type == "clip" and not (f.render == "completed" and f.has_file):
+        elif f.output_type in _RENDER_CONTRACTED and not (f.render == "completed" and f.has_file):
             # The quiet lie's marker (ADR-096 §4): payload-complete but no
             # playable file — excluded from the tallies, and the narrator
             # must never read its line as a delivery.

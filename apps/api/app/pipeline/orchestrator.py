@@ -51,6 +51,7 @@ from app.pipeline.step_display import ui_lang_of
 from app.pipeline.graph import (
     MEDIA,
     NODE_KINDS,
+    WEB_PAGE,
     Requirement,
     fold_estimates,
     node_for,
@@ -778,6 +779,8 @@ async def _check_birthplace_requires(
             # ("deselect clips") in plan terms, not tool terms.
             if key == MEDIA.key and has_clips_slot:
                 raise ValueError(CLIPS_NEED_MEDIA)
+            if key == WEB_PAGE.key:
+                raise ValueError(FILM_NEEDS_PAGE)
             raise ValueError(
                 f"Missing required input: {key} (needed by: {', '.join(owners)})"
             )
@@ -796,6 +799,14 @@ async def _check_birthplace_requires(
 # only this user-facing way-out copy lives here).
 CLIPS_NEED_MEDIA = (
     "Clips need a video, audio, or image source. Upload one or deselect clips."
+)
+
+# Birthplace rejection copy for the film gate (WEB_PAGE requirement — the
+# film family's honest substitute for source media): no captured page, or the
+# capture failed. The way out names the paste-a-link motion.
+FILM_NEEDS_PAGE = (
+    "A launch film needs a captured page. Paste the link in chat first "
+    "(or again — the earlier capture didn't succeed)."
 )
 
 # Birthplace rejection copy for the active-run guard (create_run).

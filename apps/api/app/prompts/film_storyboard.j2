@@ -1,0 +1,88 @@
+{# film_storyboard.j2 — the launch film's storyboard call (tools/film/storyboard.py).
+   One law one seat: this file carries ONLY the output schema, the binding
+   numeric bounds, and the grounding mechanics. Craft conventions (pacing,
+   scene semantics, naming) live in the launch-film skill pack ({{ packs }}).
+   Mirror contract: the validator constants in tools/film/storyboard.py
+   enforce every bound stated here — a bound changed here must change there
+   in the same batch. #}
+You are storyboarding a short launch film for the page(s) below.
+
+## The captured page(s) — your ONLY ground truth
+
+{% for page in pages %}
+---
+### Page {{ page.index }}: {{ page.title or page.host }}
+URL: {{ page.url }}
+{% if page.description %}Description: {{ page.description }}
+{% endif %}
+{% if page.h1 %}H1: {{ page.h1 | join(' · ') }}
+{% endif %}
+{% if page.h2 %}H2: {{ page.h2 | join(' · ') }}
+{% endif %}
+{% if page.h3 %}H3: {{ page.h3 | join(' · ') }}
+{% endif %}
+{% if page.buttons %}Buttons: {{ page.buttons | join(' · ') }}
+{% endif %}
+{% if page.links %}Links: {{ page.links | join(' · ') }}
+{% endif %}
+{% if page.paragraphs %}Paragraphs:
+{% for p in page.paragraphs %}- {{ p }}
+{% endfor %}
+{% endif %}
+{% if page.has_screenshot %}(A screenshot of this page is attached — caption names its index.)
+{% else %}(No screenshot for this page — it cannot appear in a ui scene.)
+{% endif %}
+{% endfor %}
+{% if instruction %}
+## The user's ask
+
+{{ instruction }}
+{% endif %}
+{% if focus %}
+## Emphasis steer
+
+{{ focus }}
+{% endif %}
+
+## Grounding (binding)
+
+- Every on-screen string must be QUOTED or TRIMMED from the manifest above —
+  never invented, never paraphrased, never translated. A validator rejects
+  any string that does not trace to a manifest line.
+- The classic rejection: CONNECTIVE copy you compose yourself — a divider
+  label like "One platform", a caption like "developers, agents, and code",
+  a words line that paraphrases the page's claim. If you wrote it instead of
+  copying it, it is wrong. When nothing fits, pick a SHORT manifest item
+  (a button label, an h2) verbatim.
+- Punctuation and emphasis marks may differ; the words may not.
+- ui-scene captions ground against THE PAGE THAT SCENE SHOWS; every other
+  scene grounds against any presented page.
+- `*word*` inside a string marks the accent highlight.
+- If your previous storyboard was rejected: DELETE each rejected string or
+  replace it with a verbatim manifest item — never rephrase a rejected
+  string into new unquoted copy.
+
+## Output (JSON, no prose)
+
+{
+  "name": string | null,   // a short display name for this film; null if unsure
+  "theme": {"canvas": "#RRGGBB", "ink": "#RRGGBB"} | null,  // null = default
+  "scenes": [ ... ]        // 3..8 scenes, ordered
+}
+
+Scene types (discriminator `type`); every scene carries `seconds` (a duration
+INTENT — the system assigns exact frames):
+
+- {"type":"words","seconds":1.5..4,"dark":bool,"lines":[string]}  // 1..4 lines, each ≤30 chars
+- {"type":"hero","seconds":2..5,"word":string,"sub":string}  // word ≤16 chars, sub ≤90
+- {"type":"ui","seconds":3..10,"page":int,"focuses":[{"at":s,"x":0..1,"y":0..1,"zoom":1..4}],"captions":[{"at":s,"text":string}]}
+  // page = a presented page index WITH a screenshot; 1..5 focuses, `at`
+  // ascending, each < seconds; 0..3 captions ≤60 chars, each ≥0.5s apart
+- {"type":"divider","seconds":2..5,"label":string,"roll":[string]}  // label ≤40, 1..5 roll words ≤24 each
+- {"type":"reveal","seconds":2..5,"lead":string,"word":string,"sub":string}  // ≤60 / ≤24 / ≤90
+- {"type":"end","seconds":2.5..6,"name":string,"tagline":string}  // ≤24 / ≤90
+
+Binding bounds: total Σ seconds 12..90; no duplicate string within one scene;
+no two scenes with identical content; no empty strings.
+
+{{ packs }}

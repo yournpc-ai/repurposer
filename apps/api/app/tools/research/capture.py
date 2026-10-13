@@ -57,6 +57,9 @@ _ITEM_MAX_LEN = 90
 _ITEMS_PER_FIELD = 24
 _TITLE_MAX_LEN = 200
 _DESCRIPTION_MAX_LEN = 500
+# Paragraph copy (the hero claim / feature blurb a film quotes) — one <p> can
+# run a sentence-plus; beyond this the parser truncates honestly.
+_PARAGRAPH_MAX_LEN = 240
 
 # The extracted_text rendering of the manifest — the prompt-budget twin of
 # web.py's FETCH_TEXT_CAP.
@@ -65,12 +68,14 @@ MANIFEST_TEXT_CAP = 6000
 
 class _CopyInventoryParser(HTMLParser):
     """Pull the visible copy inventory out of a page: <title>, the meta
-    description, heading text (h1-h3), button labels and anchor text.
+    description, heading text (h1-h3), button labels, anchor text, and
+    paragraph copy (<p> — the hero claims / feature blurbs a film quotes;
+    paragraphs carry their own longer bound, the CTA cap would drop them).
     Script/style/svg bodies are skipped; entities are unescaped by the
     parser (convert_charrefs)."""
 
     _SKIP = {"script", "style", "noscript", "svg", "template"}
-    _CAPTURE = {"title", "h1", "h2", "h3", "button", "a"}
+    _CAPTURE = {"title", "h1", "h2", "h3", "button", "a", "p"}
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -81,6 +86,7 @@ class _CopyInventoryParser(HTMLParser):
         self.h3: list[str] = []
         self.buttons: list[str] = []
         self.links: list[str] = []
+        self.paragraphs: list[str] = []
         self._skip_depth = 0
         self._current: str | None = None  # the capture tag being accumulated
         self._buf: list[str] = []
@@ -118,7 +124,10 @@ class _CopyInventoryParser(HTMLParser):
             if text and not self.title:
                 self.title = text[:_TITLE_MAX_LEN]
             return
-        if not (_ITEM_MIN_LEN <= len(text) <= _ITEM_MAX_LEN):
+        # Paragraphs carry a longer bound (a hero claim is one sentence-plus,
+        # not a CTA); everything else keeps the copy-item cap.
+        max_len = _PARAGRAPH_MAX_LEN if tag == "p" else _ITEM_MAX_LEN
+        if not (_ITEM_MIN_LEN <= len(text) <= max_len):
             return
         target = {
             "h1": self.h1,
@@ -126,6 +135,7 @@ class _CopyInventoryParser(HTMLParser):
             "h3": self.h3,
             "button": self.buttons,
             "a": self.links,
+            "p": self.paragraphs,
         }[tag]
         if text not in target:
             target.append(text)
@@ -152,6 +162,7 @@ def extract_research(html: str, url: str) -> WebPageResearch:
         h3=parser.h3[:_ITEMS_PER_FIELD],
         buttons=parser.buttons[:_ITEMS_PER_FIELD],
         links=parser.links[:_ITEMS_PER_FIELD],
+        paragraphs=parser.paragraphs[:_ITEMS_PER_FIELD],
     )
 
 
@@ -161,7 +172,14 @@ def render_manifest_text(research: WebPageResearch) -> str:
     assembly layer reads it through the ONE text seat (asset_text_content).
     """
     parts = [research.title, research.description]
-    for listing in (research.h1, research.h2, research.h3, research.buttons, research.links):
+    for listing in (
+        research.h1,
+        research.h2,
+        research.h3,
+        research.buttons,
+        research.links,
+        research.paragraphs,
+    ):
         parts.extend(listing)
     text = "\n".join(dict.fromkeys(p for p in parts if p))
     return text[:MANIFEST_TEXT_CAP]
