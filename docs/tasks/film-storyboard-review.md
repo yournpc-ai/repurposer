@@ -1,6 +1,8 @@
 # Film 分镜核对与参数行（E1）+ 配音/BGM（E2）+ 画幅变体（E3）
 
-> Status: **E1（7d77073）+ E2/E3 主体已落码，全部验证待跑**。母法 = ADR-120（短式）；拍板 = 2026-10-14 用户（A 变体：分镜表坐消息流，不进确认 dock；多轮核对全程 chat，口头「可以，就这样吧」开工）。
+> Status: **E1（7d77073）+ E2/E3（a5bbaa3）落码 + 验证链已跑**。母法 = ADR-120（短式）；
+>
+> 验证台账（2026-10-15，我代跑）：pytest 1105 绿 / check_gates 绿 / prompt_gate 绿 / web vitest 153 绿 / render tsc 绿。剧本矩阵首轮 7/11 → 取证修四件（2182043 + 715eee7）：① **采集竞速**——URL 回合 dock 早于采集落地 ~33s，起草读零页 → 核对闸没挂上 → auto 直开未经复核（E1 真洞，draft 座加有界等采集落地，get_understanding 读等同款 poll-new-session 律）；② S2 harness 死断言（message_row 从不返回 intent 键，ADR-117 B2 出生即死，产物世界一直正确）；③ prior_intent 回声带政策戳 422（ChatRequest 加剥戳 validator，bfc2bda 同法）；④ 起草座漏 catch LLMError（provider ReadTimeout 会杀 dock 回合——已降级为无块）。残余悬案：**S2「面板钉存活」座**（born-dead 于 ADR-117 B2，今晚首次可跑即红——router 把修订读成纯 translate_clip 未保留呈现链，需 assemble 回放取证，非本批回归）；**S11 retry 座**（run 失败后模型选 edit_graph 重跑而非 re-dock——合法路径 vs 剧本锁形，待拍板）；S1 双生 flake 照旧；今晚 MiniMax 多模态 degrade（500/ReadTimeout/空 error 三连）污染 S11 归因，film grounding 穷举 ×2 有「截图可见但 manifest 未收」嫌疑（模型引用了页面真实文案但 manifest 没抓到——manifest 覆盖面问题，非 prompt 回归）。拍板 = 2026-10-14 用户（A 变体：分镜表坐消息流，不进确认 dock；多轮核对全程 chat，口头「可以，就这样吧」开工）。
 >
 > E1 待办（接续会话先读这里）：① 用户自跑仪式链——pytest / check_gates / prompt_gate（W6 触 prompt 面必跑）/ chat_scenarios（S11 贴链成片旅程的 dock 行为变了）/ npm test；② 实测验收路径 = §5；③ review 挂账（2026-10-14 自评，未修）：CopyMessageButton Tooltip 改造混入 E1 commit（混批，知情保留）；`StoryboardBlock.instruction` 持久化但全栈无人读（删或补消费场景）；`StoryboardBlock.pages` 实为 hosts 命名失真（改 `page_hosts` 需全栈批）；routes.py `on_storyboard` hook 两处逐字复制（应提 `_make_storyboard_hook` 工厂）；`STORYBOARD_BLOCK_TYPE` 住 schemas.py 而 `CANDIDATES_LOG_TYPE` 住 service.py（同物种常量座位不一）；live 帧 payload 走私 `message_id` + 漏带 policy stamp（无害）；ChatDock live-rows 机械已第二份拷贝（第三块类型出现时必须抽象）。④ 移交：locales 里 recipe demo 预填词（`launch-film-linear/zymix`）仍写 "short launch film"——home 会话 WIP 文件，归他们那批改口。
 >
