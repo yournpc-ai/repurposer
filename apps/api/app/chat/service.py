@@ -1373,8 +1373,18 @@ async def _auto_start_docked_plan(
         return None
     assert pending_question is not None  # is_pending_plan guarantees the row
     payload = QuestionPayload.model_validate(pending_question.question)
+    # Read tolerance (PendingPlan._drop_legacy_flags 同款): _create_message
+    # stamps every assistant intent with INTERACTION_POLICY_VERSION — an
+    # observation key, never part of the router's intent shape; InferredIntent
+    # is extra=forbid, so the stamp must be dropped on read-back.
     intent = (
-        InferredIntent.model_validate(pending_question.intent)
+        InferredIntent.model_validate(
+            {
+                k: v
+                for k, v in pending_question.intent.items()
+                if k != "interaction_policy_version"
+            }
+        )
         if isinstance(pending_question.intent, dict)
         else None
     )
