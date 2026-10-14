@@ -3772,17 +3772,27 @@ async def s11_url_to_launch_film(ctx: Ctx) -> None:
     if final == "TIMEOUT":
         check(False, "the launch-film run settles within the wide lane", final)
     if final != "completed":
-        # 放行闸②反面形态锁：grounding 打回穷举 = 诚实终态——launch_film step
-        # FAILED 且 spec.failure 带 stage/codes（禁盲重试的设计兑现）。这是
-        # 机制的合法终态，不是剧本红——随后走真实用户 retry 旅程。
+        # 失败终态两族分流：① 打回穷举（validator 合法终态）——launch_film
+        # step FAILED 且 spec.failure 带 stage（grounding 族必带 codes），
+        # 闸②反面形态锁只约束这一族；② 无 stamp = 基建崩溃族（transport/IO
+        # 越过 tenacity——归因面 = worker 日志 + 台账 unattributed 桶，形态
+        # 锁不适用）。两族都走真实用户 retry 旅程。
         steps = await step_rows(run_id)
         film_step = next((s for s in steps if s["kind"] == "launch_film"), None)
         failure = ((film_step or {}).get("spec") or {}).get("failure") or {}
-        check(film_step is not None and film_step["status"] == "failed"
-              and bool(failure.get("stage")) and bool(failure.get("codes")),
-              "闸②反面形态：an exhausted storyboard settles FAILED with "
-              "structured spec.failure {stage, codes} (禁盲重试)", film_step)
-        # 用户 retry 旅程（一句话再来一次 → 新 run）。
+        if failure:
+            check(film_step is not None and film_step["status"] == "failed"
+                  and bool(failure.get("stage")),
+                  "闸②反面形态：an exhausted storyboard settles FAILED with "
+                  "structured spec.failure (禁盲重试)", film_step)
+            if failure.get("stage") == "grounding":
+                check(bool(failure.get("codes")),
+                      "grounding 穷举必带结构化 codes（台账归因面）", failure)
+        # 用户 retry 旅程（一句话再来一次 → 新 run）。先消费失败 run 的
+        # 触发回合——它若在 dock 上挂着问题，retry chat 会撞一行一答 409。
+        review = await wait_trigger_review(ctx, conv_id, run_id, timeout=45.0)
+        if review is not None and (review.get("question") or {}).get("kind") == "question":
+            await ctx.answer(review["id"], {"kind": "bail"})
         turn_r = await ctx.chat(pid, "That didn't work — please try the film again.")
         run_id = turn_r.get("run_id")
         if run_id is None:
