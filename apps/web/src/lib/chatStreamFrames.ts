@@ -106,6 +106,12 @@ export interface StoryboardPayload {
   }
   pages: string[]
   instruction?: string | null
+  /** The reviewed plan's film params (ADR-120 E2/E3 参数行): voiceover
+   * toggle / BGM mood / canvas aspect — the table header's chips. Absent =
+   * plan defaults (on / library default / 16:9). */
+  voiceover?: boolean
+  music_mood?: string | null
+  aspect?: string
   message_id?: string
 }
 

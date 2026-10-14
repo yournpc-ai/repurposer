@@ -944,11 +944,20 @@ class PlanTurn:
         # a fresh version.
         storyboard_draft: FilmStoryboard | None = None
         storyboard_hosts: list[str] = []
-        if any(t.tool == "launch_film" for t in params.tasks):
+        # The film task's slot params ride the block (配音/配乐/画幅 chips —
+        # the review table carries what it reviewed).
+        film_task = next((t for t in params.tasks if t.tool == "launch_film"), None)
+        film_params = (film_task.params or {}) if film_task is not None else {}
+        if film_task is not None:
             from app.pipeline.lifecycle import ConfirmationNeed
             from app.tools.film.storyboard import draft_film_storyboard
 
-            drafted = await draft_film_storyboard(db, project, instruction=self.text)
+            drafted = await draft_film_storyboard(
+                db,
+                project,
+                instruction=self.text,
+                focus=film_params.get("focus"),
+            )
             if drafted is not None:
                 storyboard_draft, draft_pages = drafted
                 storyboard_hosts = [p.host for p in draft_pages]
@@ -1045,6 +1054,9 @@ class PlanTurn:
                 storyboard=storyboard_draft,
                 pages=storyboard_hosts,
                 instruction=self.text,
+                voiceover=film_params.get("voiceover") is not False,
+                music_mood=film_params.get("music_mood"),
+                aspect=film_params.get("aspect") or "16:9",
             )
             if self.on_storyboard is not None and isinstance(block_message.intent, dict):
                 await self.on_storyboard(

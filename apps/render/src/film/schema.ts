@@ -5,8 +5,9 @@ import { z } from "zod";
  * unchanged: the spec describes WHAT, zero renderer concepts; the renderer is
  * a black box that reads no DB and resolves no URLs).
  *
- * A film spec is a storyboard: an ordered scene list over a fixed 1920×1080@30
- * canvas. The LLM authors the storyboard upstream; this schema is the
+ * A film spec is a storyboard: an ordered scene list over a canvas whose
+ * dimensions key on ``aspect`` (16:9 / 1:1 / 9:16, all @30fps). The LLM
+ * authors the storyboard upstream; this schema is the
  * render-side boundary and stays MINIMAL ON PURPOSE — shape only. Semantic
  * grounding (on-screen strings quoted from the research manifest, camera
  * focus within [0,1]³, per-screen copy caps, scene-count/duration ranges)
@@ -30,9 +31,17 @@ const themeSchema = z.object({
 /** Integer frames for this scene (fps is fixed at 30 — see Root.tsx). */
 const frames = { frames: z.number().int().positive() };
 
+/**
+ * The scene's spoken narration (配音): an absolute audio URL staged like the
+ * imagery, played inside the scene's Sequence (the boundary trims honestly).
+ * Absent = the scene plays silent. Never rendered as pixels.
+ */
+const narration = { audio: z.string().nullish() };
+
 const wordsScene = z.object({
   type: z.literal("words"),
   ...frames,
+  ...narration,
   dark: z.boolean(),
   lines: z.array(z.string()).min(1),
 });
@@ -40,6 +49,7 @@ const wordsScene = z.object({
 const heroScene = z.object({
   type: z.literal("hero"),
   ...frames,
+  ...narration,
   word: z.string(),
   sub: z.string(),
 });
@@ -47,6 +57,7 @@ const heroScene = z.object({
 const uiScene = z.object({
   type: z.literal("ui"),
   ...frames,
+  ...narration,
   // Absolute image URL (baked upstream from the captured page screenshot);
   // staged to loopback before render. Never a bundle-relative path.
   image: z.string(),
@@ -63,6 +74,7 @@ const uiScene = z.object({
 const dividerScene = z.object({
   type: z.literal("divider"),
   ...frames,
+  ...narration,
   index: z.string(),
   label: z.string(),
   roll: z.array(z.string()).min(1),
@@ -71,6 +83,7 @@ const dividerScene = z.object({
 const revealScene = z.object({
   type: z.literal("reveal"),
   ...frames,
+  ...narration,
   lead: z.string(),
   word: z.string(),
   sub: z.string(),
@@ -79,6 +92,7 @@ const revealScene = z.object({
 const endScene = z.object({
   type: z.literal("end"),
   ...frames,
+  ...narration,
   name: z.string(),
   tagline: z.string(),
   url: z.string(),
@@ -101,6 +115,12 @@ export const filmSpecSchema = z.object({
   // tolerant: null reads as absent, never a render failure.
   name: z.string().nullish(),
   theme: themeSchema,
+  // Canvas aspect — the composition's dimensions read this (16:9 default).
+  aspect: z.enum(["16:9", "1:1", "9:16"]).default("16:9"),
+  // The background-music bed: absolute URL + gain (clip-spec's ClipMusic
+  // semantics, minus the id — the film-spec resolves upstream). Absent =
+  // no bed.
+  music: z.object({ url: z.string(), gain_db: z.number() }).nullish(),
   scenes: z.array(filmSceneSchema).min(1),
 });
 

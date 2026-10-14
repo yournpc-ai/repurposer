@@ -174,7 +174,7 @@ interface LoudnormMeasure {
   target_offset: string;
 }
 
-async function normalizeLoudness(videoPath: string): Promise<void> {
+export async function normalizeLoudness(videoPath: string): Promise<void> {
   const ffmpeg = resolveFfBinary("ffmpeg");
   const ffprobe = resolveFfBinary("ffprobe");
 

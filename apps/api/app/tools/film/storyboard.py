@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 import structlog
@@ -56,6 +56,7 @@ from app.models.schemas import (
 from app.models.tables import Asset, Output, Project, WorkflowRun, WorkflowStep
 from app.pipeline.graph import WEB_PAGE, NodeBase, estimate_agent
 from app.pipeline.outputs import delete_outputs_fk_safe
+from app.platform.project_context import resolve_persona
 from app.pipeline.render_ownership import pend_outputs_for_render
 from app.pipeline.step_context import media_input_for_image
 from app.pipeline.step_display import (
@@ -167,6 +168,24 @@ class LaunchFilmParams(BaseModel):
         description="Optional emphasis steer for the storyboard (e.g. the "
         "feature or audience the film should lead with). Null = the director "
         "reads the page and picks.",
+    )
+    voiceover: bool | None = Field(
+        default=None,
+        description="Spoken narration over the film (配音讲解). Null/true = "
+        "narrated; false = silent cut (music bed only). The storyboard "
+        "drafts per-scene narration either way so the review table shows "
+        "the words; false skips synthesis at render time.",
+    )
+    music_mood: str | None = Field(
+        default=None,
+        description="Background-music mood for the bed (e.g. 'calm', "
+        "'upbeat', 'cinematic'). Null = the persona's skin default, "
+        "falling back to a calm bed.",
+    )
+    aspect: Literal["16:9", "1:1", "9:16"] | None = Field(
+        default=None,
+        description="Canvas aspect: '16:9' (default, landscape), '1:1' "
+        "(square), or '9:16' (portrait). Null = 16:9.",
     )
 
 
@@ -308,6 +327,24 @@ def validate_storyboard(
                     )
                 )
 
+        # 配音词 sanity bound (never grounded — speech rephrases the page's
+        # facts by design; the T2A fit handles fine timing at synthesis).
+        narration = getattr(scene, "narration", None)
+        if narration is not None:
+            if not _norm(narration):
+                violations.append(
+                    FilmViolation(CONSTRAINT_VIOLATION, f"{where}.narration: blank")
+                )
+            else:
+                narr_cap = max(60, int(scene.seconds * 20))
+                if len(narration) > narr_cap:
+                    violations.append(
+                        FilmViolation(
+                            CONSTRAINT_VIOLATION,
+                            f"{where}.narration: {len(narration)} chars over the {narr_cap} cap",
+                        )
+                    )
+
         # Within-scene duplicate copy.
         normed = [_norm(text) for _, text in strings]
         if len(set(normed)) != len(normed):
@@ -425,14 +462,24 @@ def allocate_frames(storyboard: FilmStoryboard) -> list[int]:
     return frames
 
 
-def build_film_spec(storyboard: FilmStoryboard, pages: list[StoryboardPage]) -> dict[str, Any]:
+def build_film_spec(
+    storyboard: FilmStoryboard,
+    pages: list[StoryboardPage],
+    *,
+    narration: dict[int, str] | None = None,
+    music: dict[str, Any] | None = None,
+    aspect: str = "16:9",
+) -> dict[str, Any]:
     """The validated storyboard → the persisted film-spec (render contract).
 
     The ui scene's ``image`` stores the screenshot's RELATIVE object key —
     absolutized at render time by the render chain (the clip path's storage
-    seam law). Display URLs / divider ordinals / the end logo are baked here,
-    never model-written.
+    seam law; narration ``audio`` keys and the ``music`` bed URL ride the
+    same seam). Display URLs / divider ordinals / the end logo are baked
+    here, never model-written. ``aspect`` declares the canvas (16:9 / 1:1 /
+    9:16) — the renderer's dimensions read it, never a second source.
     """
+    narration = narration or {}
     frames = allocate_frames(storyboard)
     if sum(frames) > FILM_MAX_FRAMES:
         raise FilmStoryboardRejected(
@@ -444,7 +491,7 @@ def build_film_spec(storyboard: FilmStoryboard, pages: list[StoryboardPage]) -> 
         theme = {"canvas": storyboard.theme.canvas, "ink": storyboard.theme.ink}
     divider_ordinal = 0
     scenes: list[dict[str, Any]] = []
-    for scene, n in zip(storyboard.scenes, frames, strict=True):
+    for idx, (scene, n) in enumerate(zip(storyboard.scenes, frames, strict=True)):
         if scene.type == "words":
             scenes.append({"type": "words", "frames": n, "dark": scene.dark, "lines": scene.lines})
         elif scene.type == "hero":
@@ -487,12 +534,21 @@ def build_film_spec(storyboard: FilmStoryboard, pages: list[StoryboardPage]) -> 
                     "logo_url": None,
                 }
             )
-    return {
+        # 配音轨 (ADR-120 E2): the scene's narration object key, baked by
+        # code from the synthesis map — absent = the scene plays silent.
+        audio_key = narration.get(idx)
+        if audio_key is not None:
+            scenes[-1]["audio"] = audio_key
+    spec = {
         "family": "film",
         "name": storyboard.name,  # null-read tolerant (two-source law)
         "theme": theme,
+        "aspect": aspect,
         "scenes": scenes,
     }
+    if music is not None:
+        spec["music"] = music
+    return spec
 
 
 # ---------------------------------------------------------------------------
@@ -735,7 +791,13 @@ class LaunchFilm(NodeBase):
         return {
             "prompt_tokens": [single["prompt_tokens"][0] * n, single["prompt_tokens"][1] * n],
             "completion_tokens": [single["completion_tokens"][0] * n, single["completion_tokens"][1] * n],
-            "units": {"film_seconds": ESTIMATE_FILM_SECONDS},
+            "units": {
+                "film_seconds": ESTIMATE_FILM_SECONDS,
+                # E2 配音: speech ≈ 14 chars/s over the estimate window
+                # (voiceover is the plan default; a voiceover-off plan
+                # simply captures less — hold/release absorbs).
+                "tts_chars": ESTIMATE_FILM_SECONDS * 14.0,
+            },
         }
 
     async def run(
@@ -848,14 +910,22 @@ class LaunchFilm(NodeBase):
             )
             await delete_outputs_fk_safe(db, prior)
 
-        spec_dict = build_film_spec(storyboard, pages)
-        total_seconds = sum(allocate_frames(storyboard)) / FILM_FPS
+        frames = allocate_frames(storyboard)
+        total_seconds = sum(frames) / FILM_FPS
         # 逐次尝试计价的实扣侧 (D3): the storyboard passed the gate — meter
         # the ACTUAL allocated seconds (what we truly render) so the step's
         # capture charges them (estimate ≡ meter, one price line). A
         # rejected storyboard never reaches here, so a grounding-exhausted
         # FAILED step carries zero film seconds — 失败不扣费 by position.
         await record_media_usage({"film_seconds": total_seconds})
+
+        # Slot levers (ADR-120 E2/E3): voiceover / music mood / aspect ride
+        # the compiled slot; absent = plan defaults (on / persona-or-calm /
+        # 16:9).
+        aspect = (slot.aspect if slot else None) or "16:9"
+        voiceover = (slot.voiceover if slot else None) is not False
+        music_mood = (slot.music_mood if slot else None) or None
+
         output = Output(
             project_id=project.id,
             workflow_step_id=node.id,
@@ -868,13 +938,72 @@ class LaunchFilm(NodeBase):
                 "name": storyboard.name or "",
                 "duration": round(total_seconds),
                 "scene_count": len(storyboard.scenes),
-                "aspect": "16:9",
+                "aspect": aspect,
             },
             source_ref={"pages": [p.asset_id for p in pages]},
-            render_spec=spec_dict,
             render_status=RenderStatus.PENDING,
         )
         db.add(output)
+        await db.flush()
+
+        # 配音 (ADR-120 E2): one T2A call per narrated scene, fitted to the
+        # scene's window; the synthesis map bakes into the spec as per-scene
+        # ``audio`` keys. Voice = persona voice block → house narrator (the
+        # film has no source footage to clone from). Voiceover off = the
+        # silent cut (music bed only) — the reviewed narration words still
+        # stand in the storyboard, just unsynthesized.
+        persona = await resolve_persona(db, project)  # None-safe
+        narration_keys: dict[int, str] = {}
+        if voiceover and any(
+            getattr(sc, "narration", None) for sc in storyboard.scenes
+        ):
+            from app.tools.film.narration import (
+                resolve_film_voice,
+                synthesize_film_narration,
+            )
+
+            voice_block = (persona.voice or None) if persona is not None else None
+            narration_keys = await synthesize_film_narration(
+                output_id=output.id,
+                project=project,
+                storyboard=storyboard,
+                frames=frames,
+                voice_id=resolve_film_voice(voice_block),
+                language=output.language,
+            )
+
+        # 配乐 (ADR-120 E2): mood → persona skin default → "calm" (the
+        # AddMusic resolution order, one law). An EXPLICITLY named mood that
+        # resolves to nothing fails the step (CHAT_ARCH §10: clear error,
+        # never a silent bed); the default chain always lands on the seeded
+        # library.
+        from app.memory.brand import resolve_music_ref
+        from app.pipeline.music import music_file_path
+
+        music_spec: dict[str, Any] | None = None
+        brand_ref: Any = None
+        if not music_mood and persona is not None:
+            block = persona.brand or {}
+            brand_ref = block.get("musicId") or block.get("musicMood")
+        track = None
+        for ref in (music_mood, brand_ref, "calm"):
+            if not ref:
+                continue
+            track = await resolve_music_ref(db, ref)
+            if track is not None:
+                break
+        if track is None and music_mood:
+            raise ValueError(f"No music track found for mood '{music_mood}'")
+        if track is not None:
+            music_spec = {"url": music_file_path(track.id), "gain_db": -20.0}
+
+        output.render_spec = build_film_spec(
+            storyboard,
+            pages,
+            narration=narration_keys,
+            music=music_spec,
+            aspect=aspect,
+        )
         await db.flush()
 
         # Render fan-out through the ONE pend seat (ADR-096 §1): barrier = the

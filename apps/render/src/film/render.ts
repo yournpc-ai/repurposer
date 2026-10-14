@@ -2,8 +2,10 @@
 // render.ts / srt.ts / stage.ts are untouched; this module REUSES the shared
 // staging cache (stage.ts) and bundles its own entry (film/entry.tsx).
 //
-// A film has no caption track and no audio bed, so there is no SRT artifact
-// and no loudness pass — the output of a film render is the MP4 alone.
+// A film has no caption track, so there is no SRT artifact — but it DOES
+// carry audio (the narration voiceover + the music bed, ADR-120 E2), so the
+// clip path's loudnorm post-pass applies verbatim (shared seat, exported
+// from ../render).
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 
+import { normalizeLoudness } from "../render";
 import { stageRemoteSource } from "../stage";
 import type { FilmSpec } from "./schema";
 
@@ -41,22 +44,30 @@ export async function renderFilm(
 ): Promise<FilmRenderResult> {
   await fs.mkdir(outDir, { recursive: true });
 
-  // Stage scene imagery into the shared local cache first — Remotion's
-  // internal asset fetch ignores HTTPS_PROXY and downloads inside the
-  // delayRender budget (the exact trap stage.ts was written for). Dedup per
-  // URL is inherited from stageRemoteSource.
+  // Stage scene imagery + audio into the shared local cache first —
+  // Remotion's internal asset fetch ignores HTTPS_PROXY and downloads inside
+  // the delayRender budget (the exact trap stage.ts was written for). Dedup
+  // per URL is inherited from stageRemoteSource.
   const stagedScenes = await Promise.all(
     spec.scenes.map(async (s) => {
+      const audio = s.audio ? await stageRemoteSource(s.audio) : s.audio;
       if (s.type === "ui") {
-        return { ...s, image: await stageRemoteSource(s.image) };
+        return { ...s, image: await stageRemoteSource(s.image), audio };
       }
-      if (s.type === "end" && s.logo_url) {
-        return { ...s, logo_url: await stageRemoteSource(s.logo_url) };
+      if (s.type === "end") {
+        const logo_url = s.logo_url ? await stageRemoteSource(s.logo_url) : s.logo_url;
+        return { ...s, logo_url, audio };
       }
-      return s;
+      return audio === s.audio ? s : { ...s, audio };
     }),
   );
-  const stagedSpec: FilmSpec = { ...spec, scenes: stagedScenes };
+  const stagedSpec: FilmSpec = {
+    ...spec,
+    scenes: stagedScenes,
+    ...(spec.music
+      ? { music: { ...spec.music, url: await stageRemoteSource(spec.music.url) } }
+      : {}),
+  };
 
   const serveUrl = await getFilmBundle();
   const inputProps = { spec: stagedSpec };
@@ -74,6 +85,14 @@ export async function renderFilm(
     // compositor startups.
     timeoutInMilliseconds: 180_000,
   });
+
+  // Loudness is an enhancement, not correctness (the clip path's law) —
+  // never fail a finished render over the post-pass.
+  try {
+    await normalizeLoudness(videoPath);
+  } catch (err) {
+    console.error("film loudnorm post-pass failed, keeping original audio:", err);
+  }
 
   return { videoPath };
 }

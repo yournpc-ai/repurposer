@@ -38,6 +38,9 @@ export function storyboardBlock(intent: unknown): StoryboardPayload | undefined 
     },
     pages: Array.isArray(data.pages) ? (data.pages as string[]) : [],
     instruction: typeof data.instruction === "string" ? data.instruction : null,
+    voiceover: data.voiceover !== false,
+    music_mood: typeof data.music_mood === "string" ? data.music_mood : null,
+    aspect: typeof data.aspect === "string" ? data.aspect : "16:9",
   }
 }
 

@@ -70,13 +70,19 @@ def _resolve_url(value: str) -> str:
 
 
 def _absolutize_film(spec: dict[str, Any]) -> dict[str, Any]:
-    """The film family's URL absolutization (no track registry — the film-spec
-    carries exactly two URL-bearing slots: ui.image / end.logo_url)."""
+    """The film family's URL absolutization (no track registry — the
+    film-spec's URL-bearing slots: ui.image / end.logo_url / per-scene
+    narration ``audio`` / the ``music`` bed)."""
     for scene in spec.get("scenes") or []:
         if scene.get("type") == "ui" and isinstance(scene.get("image"), str):
             scene["image"] = _resolve_url(scene["image"])
         if scene.get("type") == "end" and isinstance(scene.get("logo_url"), str):
             scene["logo_url"] = _resolve_url(scene["logo_url"])
+        if isinstance(scene.get("audio"), str):
+            scene["audio"] = _resolve_url(scene["audio"])
+    music = spec.get("music")
+    if isinstance(music, dict) and isinstance(music.get("url"), str):
+        music["url"] = _resolve_url(music["url"])
     return spec
 
 

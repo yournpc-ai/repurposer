@@ -62,6 +62,19 @@ URL: {{ page.url }}
   replace it with a verbatim manifest item — never rephrase a rejected
   string into new unquoted copy.
 
+## Narration (配音词, spoken voiceover)
+
+Every scene MAY carry `"narration"`: the spoken voiceover line for that
+scene — one or two natural sentences, ≤ 20 chars per second of the scene.
+Narration is SPEECH, not on-screen copy: it never renders as text, and the
+verbatim-quote law does NOT apply to it — you rephrase the page's facts
+into natural spoken language. It must still be TRUE to the manifest (never
+invent a claim, a number, or a feature the page does not state), and it
+speaks the film's language. Omit the field (or null) for a scene that
+plays better silent — a divider beat or a fast words cut often wants no
+voiceover. Narrate the scenes where speech carries the story (hero, ui
+walks, reveal, end).
+
 ## Output (JSON, no prose)
 
 {
@@ -81,6 +94,8 @@ INTENT — the system assigns exact frames):
 - {"type":"divider","seconds":2..5,"label":string,"roll":[string]}  // label ≤40, 1..5 roll words ≤24 each
 - {"type":"reveal","seconds":2..5,"lead":string,"word":string,"sub":string}  // ≤60 / ≤24 / ≤90
 - {"type":"end","seconds":2.5..6,"name":string,"tagline":string}  // ≤24 / ≤90
+
+Every scene may add "narration": string | null (see Narration above).
 
 Binding bounds: total Σ seconds 12..90; no duplicate string within one scene;
 no two scenes with identical content; no empty strings.

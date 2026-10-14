@@ -3156,6 +3156,9 @@ async def record_storyboard_block(
     storyboard: FilmStoryboard,
     pages: list[str],
     instruction: str | None,
+    voiceover: bool = True,
+    music_mood: str | None = None,
+    aspect: str = "16:9",
 ) -> Message:
     """Persist the plan-stage storyboard draft as a message-flow block row.
     Never in the confirm dock (ADR-120 §1 — auto 档无确认钮, the dock
@@ -3171,6 +3174,9 @@ async def record_storyboard_block(
         storyboard=storyboard,
         pages=pages,
         instruction=instruction,
+        voiceover=voiceover,
+        music_mood=music_mood,
+        aspect=aspect,
     )
     return await _create_message(
         db,

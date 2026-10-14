@@ -1362,8 +1362,14 @@ def _frame_class_of(fam_steps: list[WorkflowStep]) -> tuple[str, str | None]:
                 return "clip", str(aspect)
         return "clip", "original"
     if any(s.kind == "launch_film" for s in fam_steps):
-        # The film-spec canvas is fixed 1920×1080 (ADR-119) — the frame
-        # reserves the clip family's 16:9 slot exactly.
+        # The film canvas declares its aspect on the slot (ADR-120 E3);
+        # absent = the 16:9 default.
+        for s in fam_steps:
+            if s.kind != "launch_film":
+                continue
+            aspect = ((s.spec or {}).get("slot") or {}).get("aspect")
+            if aspect:
+                return "clip", str(aspect)
         return "clip", "16:9"
     return "text", None
 

@@ -1131,6 +1131,8 @@ const zh: Resources = {
     meta: "v{{version}} · {{count}} 幕 · 约 {{seconds}} 秒",
     source: "文案出自：{{pages}}",
     collapse: "收起",
+    voiceOff: "无配音",
+    music: "配乐 {{mood}}",
     sceneTypes: {
       words: "词卡",
       hero: "主视觉",

@@ -1180,6 +1180,8 @@ const en = {
     meta: "v{{version}} · {{count}} scenes · ~{{seconds}}s",
     source: "Copy grounded on: {{pages}}",
     collapse: "Collapse",
+    voiceOff: "no voiceover",
+    music: "{{mood}} bed",
     sceneTypes: {
       words: "Words",
       hero: "Hero",

@@ -1,6 +1,9 @@
 // Film scene components — the human-owned render vocabulary of the film
 // family (LLMs never write or modify these; they only author storyboards).
-// Scenes: words / hero / ui / divider / reveal / end. Landscape 1920×1080@30.
+// Scenes: words / hero / ui / divider / reveal / end.
+// Layout law (ADR-120 E3): every absolute px scales by `s = width/1920` —
+// the 16:9 canvas IS the design grid, 1:1 and 9:16 are uniform scalings of
+// it (portrait keeps the same vocabulary with more vertical air).
 // Promoted line-by-line from the verified spike (apps/render/scratch-spike);
 // debug residue (bundled storyboard import, staticFile public dir) removed.
 import React from "react";
@@ -43,11 +46,14 @@ export const accentize = (line: string, dark: boolean, theme: FilmTheme) =>
     ),
   );
 
-const enter = (frame: number, delay: number, fps: number) => {
+/** The aspect scale: the 16:9 grid is the design base (1920 wide). */
+const useScale = () => useVideoConfig().width / 1920;
+
+const enter = (frame: number, delay: number, fps: number, s = 1) => {
   const p = spring({ frame: frame - delay, fps, config: { damping: 200 } });
   return {
     opacity: p,
-    transform: `translateY(${(1 - p) * 46}px)`,
+    transform: `translateY(${(1 - p) * 46 * s}px)`,
     filter: `blur(${(1 - p) * 10}px)`,
   };
 };
@@ -59,9 +65,10 @@ export const Words: React.FC<{ lines: string[]; dark: boolean; theme: FilmTheme 
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const s = useScale();
   return (
     <AbsoluteFill
-      style={{ background: dark ? theme.ink : theme.canvas, justifyContent: "center", paddingLeft: 220 }}
+      style={{ background: dark ? theme.ink : theme.canvas, justifyContent: "center", paddingLeft: 220 * s }}
     >
       {lines.map((l, i) => (
         <div
@@ -69,11 +76,11 @@ export const Words: React.FC<{ lines: string[]; dark: boolean; theme: FilmTheme 
           style={{
             fontFamily: FONT,
             fontWeight: 800,
-            fontSize: 168,
+            fontSize: 168 * s,
             letterSpacing: "-0.035em",
             lineHeight: 1.04,
             color: dark ? theme.canvas : theme.ink,
-            ...enter(frame, i * 8, fps),
+            ...enter(frame, i * 8, fps, s),
           }}
         >
           {accentize(l, dark, theme)}
@@ -90,6 +97,7 @@ export const Hero: React.FC<{ word: string; sub: string; theme: FilmTheme }> = (
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const s = useScale();
   const settle = interpolate(frame, [0, 24], [1.07, 1], {
     extrapolateRight: "clamp",
     easing: Easing.out(Easing.cubic),
@@ -100,7 +108,7 @@ export const Hero: React.FC<{ word: string; sub: string; theme: FilmTheme }> = (
         style={{
           fontFamily: FONT,
           fontWeight: 800,
-          fontSize: 200,
+          fontSize: 200 * s,
           letterSpacing: "-0.04em",
           color: theme.ink,
           transform: `scale(${settle})`,
@@ -108,7 +116,7 @@ export const Hero: React.FC<{ word: string; sub: string; theme: FilmTheme }> = (
       >
         {word}
       </div>
-      <div style={{ fontFamily: FONT, fontSize: 44, color: "#6b6b6b", marginTop: 26, ...enter(frame, 10, fps) }}>
+      <div style={{ fontFamily: FONT, fontSize: 44 * s, color: "#6b6b6b", marginTop: 26 * s, ...enter(frame, 10, fps, s) }}>
         {sub}
       </div>
     </AbsoluteFill>
@@ -123,33 +131,35 @@ export const Divider: React.FC<{ index: string; label: string; roll: string[]; t
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const s = useScale();
   const perWord = 13;
   return (
     <AbsoluteFill style={{ background: theme.ink }}>
-      <div style={{ position: "absolute", top: 110, left: 140, fontFamily: FONT, fontSize: 44, color: "#888" }}>
+      <div style={{ position: "absolute", top: 110 * s, left: 140 * s, fontFamily: FONT, fontSize: 44 * s, color: "#888" }}>
         {index}
       </div>
       <div
         style={{
           position: "absolute",
-          top: 200,
-          left: 220,
+          top: 200 * s,
+          left: 220 * s,
+          right: 220 * s,
           fontFamily: FONT,
-          fontSize: 54,
+          fontSize: 54 * s,
           fontWeight: 600,
           color: "#999",
-          ...enter(frame, 0, fps),
+          ...enter(frame, 0, fps, s),
         }}
       >
         {label}
       </div>
-      <div style={{ position: "absolute", top: 300, left: 220, right: 220, height: 220, overflow: "hidden" }}>
+      <div style={{ position: "absolute", top: 300 * s, left: 220 * s, right: 220 * s, height: 220 * s, overflow: "hidden" }}>
         {roll.map((w, i) => {
           const start = i * perWord;
           const isLast = i === roll.length - 1;
           const p = spring({ frame: frame - start, fps, config: { damping: 200 } });
           const out = isLast ? 0 : spring({ frame: frame - (start + perWord), fps, config: { damping: 200 } });
-          const y = (1 - p) * 90 - out * 90;
+          const y = ((1 - p) * 90 - out * 90) * s;
           const blur = Math.max(0, Math.max((1 - p) * 8, out * 8));
           if (frame < start - 1 || (!isLast && frame > start + perWord + 12)) return null;
           return (
@@ -159,7 +169,7 @@ export const Divider: React.FC<{ index: string; label: string; roll: string[]; t
                 position: "absolute",
                 fontFamily: FONT,
                 fontWeight: 800,
-                fontSize: 150,
+                fontSize: 150 * s,
                 letterSpacing: "-0.03em",
                 color: isLast ? theme.canvas : "#777",
                 transform: `translateY(${y}px)`,
@@ -186,9 +196,10 @@ export const UiScene: React.FC<{
 }> = ({ image, url, theme, dur, focuses, captions }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const s = useScale();
   const t = frame / fps;
-  const W = 1440,
-    H = 900;
+  const W = 1440 * s,
+    H = 900 * s;
   const ts = focuses.map((f) => f.at);
   const x = interpolate(t, ts, focuses.map((f) => f.x), {
     extrapolateLeft: "clamp",
@@ -212,38 +223,38 @@ export const UiScene: React.FC<{
         style={{
           width: W,
           background: "white",
-          borderRadius: 26,
+          borderRadius: 26 * s,
           overflow: "hidden",
-          boxShadow: "0 40px 120px rgba(20,20,20,0.16), 0 4px 18px rgba(20,20,20,0.08)",
+          boxShadow: `0 ${40 * s}px ${120 * s}px rgba(20,20,20,0.16), 0 ${4 * s}px ${18 * s}px rgba(20,20,20,0.08)`,
           border: "1px solid rgba(20,20,20,0.08)",
-          transform: `translateY(${(1 - inP) * 60}px) scale(${0.96 + inP * 0.04})`,
+          transform: `translateY(${(1 - inP) * 60 * s}px) scale(${0.96 + inP * 0.04})`,
           opacity: inP,
         }}
       >
         {/* browser chrome */}
         <div
           style={{
-            height: 58,
+            height: 58 * s,
             display: "flex",
             alignItems: "center",
-            gap: 10,
-            padding: "0 22px",
+            gap: 10 * s,
+            padding: `0 ${22 * s}px`,
             borderBottom: "1px solid rgba(20,20,20,0.07)",
             background: "#fbfbfa",
           }}
         >
           {[0, 1, 2].map((i) => (
-            <div key={i} style={{ width: 16, height: 16, borderRadius: 99, background: "#e2e1de" }} />
+            <div key={i} style={{ width: 16 * s, height: 16 * s, borderRadius: 99, background: "#e2e1de" }} />
           ))}
           <div
             style={{
-              marginLeft: 18,
+              marginLeft: 18 * s,
               background: "white",
               border: "1px solid rgba(20,20,20,0.08)",
-              borderRadius: 12,
-              padding: "6px 18px",
+              borderRadius: 12 * s,
+              padding: `${6 * s}px ${18 * s}px`,
               fontFamily: FONT,
-              fontSize: 22,
+              fontSize: 22 * s,
               color: "#666",
             }}
           >
@@ -277,7 +288,7 @@ export const UiScene: React.FC<{
             key={i}
             style={{
               position: "absolute",
-              bottom: 44,
+              bottom: 44 * s,
               left: 0,
               right: 0,
               display: "flex",
@@ -291,9 +302,9 @@ export const UiScene: React.FC<{
                 background: "#141414",
                 color: "#f7f6f2",
                 borderRadius: 999,
-                padding: "16px 40px",
+                padding: `${16 * s}px ${40 * s}px`,
                 fontFamily: FONT,
-                fontSize: 34,
+                fontSize: 34 * s,
                 fontWeight: 600,
               }}
             >
@@ -314,24 +325,25 @@ export const Reveal: React.FC<{ lead: string; word: string; sub: string; theme: 
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const s = useScale();
   return (
     <AbsoluteFill style={{ background: theme.canvas, justifyContent: "center", alignItems: "center" }}>
-      <div style={{ fontFamily: FONT, fontSize: 40, color: "#8a8a8a", marginBottom: 30, ...enter(frame, 0, fps) }}>
+      <div style={{ fontFamily: FONT, fontSize: 40 * s, color: "#8a8a8a", marginBottom: 30 * s, ...enter(frame, 0, fps, s) }}>
         {lead}
       </div>
       <div
         style={{
           fontFamily: FONT,
           fontWeight: 800,
-          fontSize: 150,
+          fontSize: 150 * s,
           letterSpacing: "-0.03em",
           color: theme.ink,
-          ...enter(frame, 6, fps),
+          ...enter(frame, 6, fps, s),
         }}
       >
         {accentize(word, false, theme)}
       </div>
-      <div style={{ fontFamily: FONT, fontSize: 40, color: "#6b6b6b", marginTop: 30, ...enter(frame, 14, fps) }}>
+      <div style={{ fontFamily: FONT, fontSize: 40 * s, color: "#6b6b6b", marginTop: 30 * s, ...enter(frame, 14, fps, s) }}>
         {sub}
       </div>
     </AbsoluteFill>
@@ -347,15 +359,16 @@ export const End: React.FC<{
 }> = ({ name, tagline, url, logoUrl, theme }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const s = useScale();
   return (
     <AbsoluteFill style={{ background: theme.canvas, justifyContent: "center", alignItems: "center" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 28, ...enter(frame, 0, fps) }}>
-        {logoUrl ? <Img src={logoUrl} style={{ width: 92, height: 92 }} /> : null}
+      <div style={{ display: "flex", alignItems: "center", gap: 28 * s, ...enter(frame, 0, fps, s) }}>
+        {logoUrl ? <Img src={logoUrl} style={{ width: 92 * s, height: 92 * s }} /> : null}
         <div
           style={{
             fontFamily: FONT,
             fontWeight: 800,
-            fontSize: 110,
+            fontSize: 110 * s,
             letterSpacing: "-0.035em",
             color: theme.ink,
           }}
@@ -363,10 +376,10 @@ export const End: React.FC<{
           {name}
         </div>
       </div>
-      <div style={{ fontFamily: FONT, fontSize: 40, color: "#6b6b6b", marginTop: 26, ...enter(frame, 8, fps) }}>
+      <div style={{ fontFamily: FONT, fontSize: 40 * s, color: "#6b6b6b", marginTop: 26 * s, ...enter(frame, 8, fps, s) }}>
         {tagline}
       </div>
-      <div style={{ fontFamily: FONT, fontSize: 30, color: "#9a9a9a", marginTop: 54, ...enter(frame, 16, fps) }}>
+      <div style={{ fontFamily: FONT, fontSize: 30 * s, color: "#9a9a9a", marginTop: 54 * s, ...enter(frame, 16, fps, s) }}>
         {url}
       </div>
     </AbsoluteFill>

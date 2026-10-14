@@ -1459,6 +1459,11 @@ class IntentSlot(BaseModel):
     focus: str | None = None
     language: str | None = None
     tone_override: str | None = None
+    # Film-family slots (launch_film): voiceover toggle / BGM mood / canvas
+    # aspect — None = plan default (on / mood default / 16:9).
+    voiceover: bool | None = None
+    music_mood: str | None = None
+    aspect: str | None = None
     # iter-2 ② (N-57): the writer's source narrowing — compiler-emitted on
     # plan-sourced chains, None on every existing path (the whole material).
     source_span: SourceSpan | None = None
@@ -3200,6 +3205,7 @@ class FilmSceneWords(BaseModel):
     seconds: float
     dark: bool
     lines: list[str] = Field(min_length=1)
+    narration: str | None = None
 
 
 class FilmSceneHero(BaseModel):
@@ -3209,6 +3215,7 @@ class FilmSceneHero(BaseModel):
     seconds: float
     word: str
     sub: str
+    narration: str | None = None
 
 
 class FilmSceneUi(BaseModel):
@@ -3223,6 +3230,7 @@ class FilmSceneUi(BaseModel):
     page: int  # 0-based index into the presented pages
     focuses: list[FilmFocus] = Field(min_length=1)
     captions: list[FilmCaption] = Field(default_factory=list)
+    narration: str | None = None
 
 
 class FilmSceneDivider(BaseModel):
@@ -3235,6 +3243,7 @@ class FilmSceneDivider(BaseModel):
     seconds: float
     label: str
     roll: list[str] = Field(min_length=1)
+    narration: str | None = None
 
 
 class FilmSceneReveal(BaseModel):
@@ -3245,6 +3254,7 @@ class FilmSceneReveal(BaseModel):
     lead: str
     word: str
     sub: str
+    narration: str | None = None
 
 
 class FilmSceneEnd(BaseModel):
@@ -3257,6 +3267,7 @@ class FilmSceneEnd(BaseModel):
     seconds: float
     name: str
     tagline: str
+    narration: str | None = None
 
 
 FilmScene = Annotated[
@@ -3283,7 +3294,12 @@ class FilmStoryboard(BaseModel):
     """The launch film's storyboard — the LLM's ONE artifact in the film
     chain (grounding-validated, frame-allocated by code, then baked into a
     film-spec). ``name`` is the two-source display-copy seat: LLM-chosen,
-    null-read tolerant (打字机牙①)."""
+    null-read tolerant (打字机牙①).
+
+    Per-scene ``narration`` (配音词) is SPOKEN copy — it never renders on
+    screen, is never grounding-checked verbatim (the director rephrases the
+    page's facts into speech), and reads as no-voiceover when null (打字机
+    牙① applies to every prose field)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -3314,6 +3330,12 @@ class StoryboardBlock(BaseModel):
     storyboard: FilmStoryboard
     pages: list[str] = Field(default_factory=list)
     instruction: str | None = None
+    # The reviewed plan's film params (配音开关 / 配乐 mood / 画幅) — the
+    # table header's param chips; absent = plan defaults (voiceover on,
+    # mood default, 16:9).
+    voiceover: bool = True
+    music_mood: str | None = None
+    aspect: str = "16:9"
 
 
 class FilmPayload(BaseModel):

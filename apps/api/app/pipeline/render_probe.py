@@ -26,10 +26,10 @@ from pathlib import Path
 from typing import Any
 
 # Film render constants mirrored from apps/render/src/film/Root.tsx
-# (FILM_WIDTH/FILM_HEIGHT/FILM_FPS — one law, mirrored where consumed;
+# (FILM_DIMENSIONS/FILM_FPS — one law, mirrored where consumed;
 # app/tools/film/storyboard.py carries the allocator's FILM_FPS mirror).
-FILM_WIDTH = 1920
-FILM_HEIGHT = 1080
+# The canvas dimensions key on the spec's ``aspect`` (ADR-120 E3).
+FILM_DIMENSIONS = {"16:9": (1920, 1080), "1:1": (1080, 1080), "9:16": (1080, 1920)}
 FILM_FPS = 30
 FILM_CODEC = "h264"
 
@@ -78,10 +78,11 @@ def probe_expectation_for(spec: dict[str, Any]) -> ProbeExpectation:
             # than invent a second schema court here.
             frames = 0
             break
+    width, height = FILM_DIMENSIONS.get(spec.get("aspect") or "16:9", FILM_DIMENSIONS["16:9"])
     return ProbeExpectation(
         codec=FILM_CODEC,
-        width=FILM_WIDTH,
-        height=FILM_HEIGHT,
+        width=width,
+        height=height,
         frames=frames or None,
         fps=FILM_FPS,
     )

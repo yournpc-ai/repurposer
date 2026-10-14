@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ChevronDown, Clapperboard } from "lucide-react"
+import { ChevronDown, Clapperboard, Mic } from "lucide-react"
 
 import type { StoryboardPayload } from "@/lib/chatStreamFrames"
 
@@ -72,6 +72,12 @@ export function StoryboardTable({
     count: scenes.length,
     seconds: Math.round(totalSeconds),
   })
+  // 参数行 (ADR-120 E2/E3): the reviewed plan's film levers as header chips —
+  // aspect always; voiceover only when off (on is the default); the mood
+  // only when the plan named one.
+  const paramChips: string[] = [payload.aspect ?? "16:9"]
+  if (payload.voiceover === false) paramChips.push(t("storyboard.voiceOff"))
+  if (payload.music_mood) paramChips.push(t("storyboard.music", { mood: payload.music_mood }))
 
   if (superseded && !expanded) {
     return (
@@ -82,7 +88,7 @@ export function StoryboardTable({
       >
         <Clapperboard className="size-3.5" />
         <span>
-          {title} · {metaLine}
+          {title} · {metaLine} · {paramChips.join(" · ")}
         </span>
         <ChevronDown className="size-3.5" />
       </button>
@@ -96,7 +102,9 @@ export function StoryboardTable({
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
           {title}
         </span>
-        <span className="flex-none text-[11px] text-meta-foreground">{metaLine}</span>
+        <span className="flex-none text-[11px] text-meta-foreground">
+          {metaLine} · {paramChips.join(" · ")}
+        </span>
       </div>
       <div className="divide-y divide-foreground/5">
         {scenes.map((scene, i) => (
@@ -112,6 +120,14 @@ export function StoryboardTable({
             </span>
             <span className="min-w-0 flex-1 text-xs leading-relaxed text-foreground">
               {sceneCopy(scene, hostFor)}
+              {/* 配音词 (ADR-120 E2): the scene's spoken line — reviewed
+                  here, synthesized at run time; never on-screen. */}
+              {typeof scene.narration === "string" && scene.narration ? (
+                <span className="mt-0.5 flex items-start gap-1 text-[11px] leading-relaxed text-muted-foreground">
+                  <Mic className="mt-px size-3 flex-none" />
+                  {scene.narration}
+                </span>
+              ) : null}
             </span>
           </div>
         ))}

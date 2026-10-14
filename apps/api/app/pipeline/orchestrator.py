@@ -420,7 +420,19 @@ def _compile_task_list(
                     for k, v in params_dict.items()
                     # iter-2 ②: source_span rides the slot like count/focus —
                     # compiler-emitted, the writer narrows its material to it.
-                    if k in ("count", "focus", "language", "tone_override", "source_span")
+                    if k in (
+                        "count",
+                        "focus",
+                        "language",
+                        "tone_override",
+                        "source_span",
+                        # Film-family slot fields (launch_film params) —
+                        # present only when the tool's params model declares
+                        # them, inert for every other tool.
+                        "voiceover",
+                        "music_mood",
+                        "aspect",
+                    )
                 },
             }
             spec = {
