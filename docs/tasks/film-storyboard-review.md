@@ -1,6 +1,8 @@
 # Film 分镜核对与参数行（E1）+ 配音/BGM（E2）+ 画幅变体（E3）
 
-> Status: **E1 施工中**。母法 = ADR-120（短式）；拍板 = 2026-10-14 用户（A 变体：分镜表坐消息流，不进确认 dock；多轮核对全程 chat，口头「可以，就这样吧」开工）。
+> Status: **E1 已落码（7d77073），验证待跑**；E2/E3 未动工。母法 = ADR-120（短式）；拍板 = 2026-10-14 用户（A 变体：分镜表坐消息流，不进确认 dock；多轮核对全程 chat，口头「可以，就这样吧」开工）。
+>
+> E1 待办（接续会话先读这里）：① 用户自跑仪式链——pytest / check_gates / prompt_gate（W6 触 prompt 面必跑）/ chat_scenarios（S11 贴链成片旅程的 dock 行为变了）/ npm test；② 实测验收路径 = §5；③ review 挂账（2026-10-14 自评，未修）：CopyMessageButton Tooltip 改造混入 E1 commit（混批，知情保留）；`StoryboardBlock.instruction` 持久化但全栈无人读（删或补消费场景）；`StoryboardBlock.pages` 实为 hosts 命名失真（改 `page_hosts` 需全栈批）；routes.py `on_storyboard` hook 两处逐字复制（应提 `_make_storyboard_hook` 工厂）；`STORYBOARD_BLOCK_TYPE` 住 schemas.py 而 `CANDIDATES_LOG_TYPE` 住 service.py（同物种常量座位不一）；live 帧 payload 走私 `message_id` + 漏带 policy stamp（无害）；ChatDock live-rows 机械已第二份拷贝（第三块类型出现时必须抽象）。④ 移交：locales 里 recipe demo 预填词（`launch-film-linear/zymix`）仍写 "short launch film"——home 会话 WIP 文件，归他们那批改口。
 >
 > 起源：launch-film skill 内化（MG 批 D1~D4）后与原 skill 效果的三处差距——时长（20–40s vs 75–120s）、无配音/BGM、无画幅变体；真实用户对话取证（项目 e9f60236）显示核对物（时长/文案/分镜）无处呈现。
 
