@@ -303,6 +303,11 @@ apps/api/
 │   │   ├── recipes.py             # RECIPE_REGISTRY 服务端静态注册表（配方 = 数据，ADR-040）
 │   │   ├── clip_spec.py / rendering.py / outputs.py / music.py / quality.py / derivative_dispatch.py
 │   │   │                        # （outputs.py 兼报价读面：fold 聚合 aggregate_step_estimate + 偏差回归 step_estimate_deviation）
+│   │   ├── render_probe.py      # 产物文件校验闸纯核（MG D4 放行闸③，禁无文件校验的成功态）：
+│   │   │                        #   rendering.py 成功路径落 COMPLETED 前唯一闸门，家族分派检查项
+│   │   │                        #   （film：h264/1920×1080/流帧计数 ±1 帧——容器时长有 muxer 衬垫，
+│   │   │                        #   永不作契约面；clip：存在/非零/可读）；未过 = FAILED +
+│   │   │                        #   spec.failure{stage:probe} 盖 render 镜像节点（台账读单字段）
 │   │   ├── verify.py            # 质检环节点（期 3）：确定性矩阵裁决 + QualityBounce 打回 + best-not-last
 │   │   │                        #   快照回退 + 双败 escalation（dock 提问 + Suspend）；quality.py = 检查矩阵
 │   │   │                        #   纯函数半边（fidelity 族 + craft 可测量项 + run_checks 按类型分派）
@@ -349,6 +354,7 @@ packages/clip/           # 共享 <Clip> 组件 + clip-spec TS 类型（镜像 P
 
 - **Postgres 即队列**：`FOR UPDATE SKIP LOCKED` 认领；独立 worker 进程（`python -m app.worker`），与 API 进程物理隔离；不引入 Redis/Celery，横向扩容时再换 arq/Celery，调用方不变。
 - **四个认领源**：`assets.processing_status`（预处理）/ `workflow_runs.status`（生成；deferred claim——项目还有 pending/processing 素材时不认领）/ `outputs.render_status`（渲染）/ `publications`（`state='scheduled'` + `due_at` 部分索引，分发）。
+- **渲染执行形态（MG D4）**：渲染认领后跑 asyncio task（与节点同构），并发上限 `settings.render_concurrency`（默认 2，争用资源 = 渲染服务的 headless Chrome）、单渲染栅栏 `settings.render_timeout_seconds`（默认 900，历史 900s 栅栏可配化）——两者住 env Settings（工程参数座位，configs 边界律 = `platform/configs.py` 头 §3）；任务化同时消除了单渲染内联等待堵 tick 环的旧形态。产物落 COMPLETED 前必过 probe 闸（`render_probe.py`，见 §7.1）。
 - **孤儿回收**：worker 启动时 `reap_stale` 重置中断任务；失败写 `*_error` 列，认领循环不崩。
 - **step 级瞬时重试**：runner 把 provider/网络/存储瞬时故障抛为 `TransientNodeError`（`pipeline/errors.py`）；`execute_step` 按节点类 `retries` 预算（NodeBase 声明，dub/translate = 2）把节点复位 pending（worker 下一 tick 即退避），**不级联跳过下游**；确定性失败（缺输入/空批次）普通异常快速失败。LLM HTTP 层另有 client 内 tenacity，两层不叠加。
 - **morph 记账**：modifier runner（dub/translate/add_music/remove_filler）的 render_spec 改写一律经 `apply_precomputed` 入 operations 账（source 由 `messages.workflow_run_id` 反链派生 chat/system）——chat  morph 可撤销、hash 链不断、ADR-032 写纪律补齐。

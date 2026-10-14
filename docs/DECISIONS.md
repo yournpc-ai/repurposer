@@ -2880,7 +2880,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-119: film-spec 第二家族——storyboard 编排 + grounding validator + skill 接入装配线
 
-**Status**: Decided（MG film skill 批 D1/D2 落地；简报 = `docs/tasks/mg-film-skill.md`）
+**Status**: Decided（MG film skill 批 D1~D4 落地；简报 = `docs/tasks/mg-film-skill.md`）
 
 **Context**: MG 需要一个「给一个链接，生成发布短片」能力：抓取网页 → LLM 写分镜 → 渲染出片。风险面 = LLM 自由文本直接进渲染合约（编造文案、越界相机、失控时长），以及新能力接入时四处散写入口文案/第二编排链。
 
@@ -2894,4 +2894,11 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 **Consequences**: `Output.type="film"` 与 clip 平级（render-contracted 谓词集合 `_RENDER_CONTRACTED` 共享交付判定）；`OutputResponse.render_spec` 为 `ClipSpec | FilmSpecEnvelope` 联合（序列化不冒充 clip-spec）；fixture 链（手写 storyboard → validator → render → PyAV probe）与 LLM 实跑（一次通过率/打回率台账）为验收闸；计价/配方卡/e2e 归 D3，剧本与仪式链归 D4。
 
-**Related**: ADR-016（spec 契约律）/ ADR-028（禁第二条编排链）/ ADR-058（name 二源律，null 读容忍）/ ADR-096 §1（渲染 pend 唯一座）/ ADR-052（absorb 信封座）
+**D4 增补（回归座位拍板）**:
+
+6. **产物文件 probe 校验闸**（放行闸③，禁止事项 10 的座位）：`render_output` 成功路径落 COMPLETED 前必过 `app/pipeline/render_probe.py`——一座闸门、家族分派检查项（film：h264 + 1920×1080 + 视频流帧计数 = Σ场景帧 ±1 帧；clip：存在/非零/容器可读/首帧可解码）。时长判据走**流帧计数**而非容器时长——mp4 容器 duration 带 muxer 衬垫（取证：465 帧流精确 15.5s vs 容器 15.552s），永不作契约面。未过 = 渲染 FAILED + `spec.failure={stage:"probe",codes,detail}` 盖 render 镜像节点（与 storyboard 的 schema/grounding 同字段形状）；被拒产物本体留对象存储作取证，probe 临时副本即清。
+7. **worker 渲染执行形态**：渲染认领后跑 asyncio task（与节点同构），并发上限 `render_concurrency`（默认 2——争用资源是渲染服务的 headless Chrome）+ 单渲染栅栏 `render_timeout_seconds`（默认 900 = 历史栅栏可配化；film 基线 ≈46s/26s 片，clip 长源渲染长尾共享同一栅栏故不收紧）；两键住 env Settings（工程参数，configs 边界律 §3）。并发冒烟（3 并发 fixture 渲染）：cap=2 生效，墙钟 29.3s vs 串行估算 81s，Chrome 2 并发零故障，临时目录零新增泄漏。
+8. **失败分类台账 = 仪表层**（`scripts/film_stage_ledger.py`）：五段通过率（schema/grounding/constraint/render/probe）+ codes Top N，读数供归因，永不阻塞部署；数据源 = `spec.failure` 单字段 + 节点/产物终态。
+9. **S11 = MG 旅程座**（`chat_scenarios.py`）：URL → web_page 真采集 → 分镜方案 dock → 守卫线口头 yes → 真渲染 + probe 闸 → film 产物 + 画布血缘 + 台账 hold=capture+release；只锁形态不锁文案。
+
+**Related**: ADR-016（spec 契约律）/ ADR-028（禁第二条编排链）/ ADR-058（name 二源律，null 读容忍）/ ADR-096 §1（渲染 pend 唯一座）/ ADR-052（absorb 信封座）/ ADR-114（S11 旅程座纪律）

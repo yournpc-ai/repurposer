@@ -192,9 +192,9 @@ t("home.allProjects", { count: projects.length })
 1. 纯 pytest：`cd apps/api && uv run --extra dev python -m pytest tests/ -q`
 2. check_gates（静态架构门：boot 冒烟 / 依赖方向 / 盲重试禁令 / 退役节点 kind 不回魂）：`cd apps/api && uv run python scripts/check_gates.py`
 3. prompt_gate（仅当改动触及 prompt 面——`app/prompts/chat/`、`chat/prompts.py`、registry catalog lines）：`cd apps/api && uv run python scripts/prompt_gate.py`——10 探针（A–I 族，H 含 H4）绝对阈值，`--provider` 参数化（native-tool providers only，探的是工具 loop 线）。失败协议：复跑一次（provider 漂移在阈值内也存在），仍红则二分归因；**永不为放行回归调阈**。
-4. 剧本矩阵（唯一活 LLM 闸，需活 API + dev worker + MiniMax 配额）：`cd apps/api && uv run python scripts/chat_scenarios.py`——S1–S10 用户旅程矩阵对活 API 跑形态级断言，harness 公共断言每本自动携带（SSE 工具 loop 线格式 / Activity 帧形态 / dock 形态 / 估价三断言）。永不锁 LLM 文案（代码强制文本例外）；客户端法律（打字机 / remount / 形态机）不进剧本断言——服务端真值才进。
+4. 剧本矩阵（唯一活 LLM 闸，需活 API + dev worker + MiniMax 配额）：`cd apps/api && uv run python scripts/chat_scenarios.py`——S1–S11 用户旅程矩阵对活 API 跑形态级断言（S11 = MG 贴链成片全旅程），harness 公共断言每本自动携带（SSE 工具 loop 线格式 / Activity 帧形态 / dock 形态 / 估价三断言）。永不锁 LLM 文案（代码强制文本例外）；客户端法律（打字机 / remount / 形态机）不进剧本断言——服务端真值才进。
 
-**仪表层**（诊断尺子，非闸——读数供人工判读，不阻塞部署）：`scripts/reply_quality_probe.py` / `accept_quote_card_family.py` / `reconcile_credits.py` / `verify_beat_map.py` / `crop_track_parity.py` / `run_anatomy_matrix.py` / `craft_anatomy.py`。
+**仪表层**（诊断尺子，非闸——读数供人工判读，不阻塞部署）：`scripts/reply_quality_probe.py` / `accept_quote_card_family.py` / `reconcile_credits.py` / `verify_beat_map.py` / `crop_track_parity.py` / `run_anatomy_matrix.py` / `craft_anatomy.py` / `film_stage_ledger.py`（film 链五段通过率 + failure codes 分布，ADR-119 D4）。
 
 **Deterministic pure-function suites** (`apps/api/tests/*_pure.py`): no database, no LLM, no HTTP; sessions are in-memory stubs. They cover adjudication / pure-mapping layers where branch coverage matters and drift risk is low (the wiring door `apply_wiring_ops` + `_fill_key_for_step`, stream extraction, registry ↔ prompt enumeration consistency). If a behavior needs a real transaction or an LLM to verify, it belongs to the scenario matrix, not here. Run: `cd apps/api && uv run --extra dev python -m pytest tests/<file> -q`.
 
