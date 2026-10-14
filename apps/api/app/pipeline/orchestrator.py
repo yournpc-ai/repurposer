@@ -420,19 +420,12 @@ def _compile_task_list(
                     for k, v in params_dict.items()
                     # iter-2 ②: source_span rides the slot like count/focus —
                     # compiler-emitted, the writer narrows its material to it.
-                    if k in (
-                        "count",
-                        "focus",
-                        "language",
-                        "tone_override",
-                        "source_span",
-                        # Film-family slot fields (launch_film params) —
-                        # present only when the tool's params model declares
-                        # them, inert for every other tool.
-                        "voiceover",
-                        "music_mood",
-                        "aspect",
-                    )
+                    if k in ("count", "focus", "language", "tone_override", "source_span")
+                    # Film-family slot fields (ADR-120 E2/E3) ride ONLY the
+                    # launch_film slot — clips already seat aspect at spec
+                    # top-level; a generic whitelist would fork one fact
+                    # into two seats (the pure cut-chain test guards this).
+                    or (node_cls.kind == "launch_film" and k in ("voiceover", "music_mood", "aspect"))
                 },
             }
             spec = {

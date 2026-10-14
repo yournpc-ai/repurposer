@@ -69,8 +69,13 @@ def test_estimate_quotes_tokens_worst_case_plus_typical_seconds() -> None:
     assert est["prompt_tokens"] == [1500 * n, 8000 * n]
     assert est["completion_tokens"] == [400 * n, 2000 * n]
     # The flat seconds item is the TYPICAL film, not the validator ceiling
-    # (90s) — the sticker must not promise 3× every real charge.
-    assert est["units"] == {"film_seconds": ESTIMATE_FILM_SECONDS}
+    # (90s) — the sticker must not promise 3× every real charge. E2 配音:
+    # narration speech rides the same estimate (voiceover is the plan
+    # default) at ~14 chars/s over the same window.
+    assert est["units"] == {
+        "film_seconds": ESTIMATE_FILM_SECONDS,
+        "tts_chars": ESTIMATE_FILM_SECONDS * 14.0,
+    }
     assert ESTIMATE_FILM_SECONDS < 90.0
 
 
