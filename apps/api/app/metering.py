@@ -22,9 +22,20 @@ node concurrency.
 Usage lands on ``workflow_steps.cost`` as
 ``{prompt_tokens, completion_tokens, fixed_cost, units?}`` — no step-name
 intermediate. Run-level cost is an aggregate view (sum over the run's nodes).
+
+Conversation-layer metering (ADR-117 D3): a SECOND, independent ledger binds
+to a conversation turn via ``bind_conversation_turn`` at the turn-entry seams
+(``execute_chat_turn`` / ``answer_question`` / ``run_trigger_turn``). The same
+``record_usage`` choke point accumulates into whichever ledgers are bound —
+the two never coexist structurally (workflow steps run in the worker, chat
+turns in the request path). The turn's tail folds the accrued tokens into ONE
+``conversation_usage`` row via ``fold_conversation_usage`` — metered, never
+billed, never on any UI; ``cost_usd`` is priced at write time (frozen, never
+drifts with the vendor price list).
 """
 
 import contextvars
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -103,18 +114,135 @@ async def record_usage(usage: dict | None) -> None:
     Silently no-ops when no node is bound (e.g. request-path calls such as
     infer-intent) or when the provider omitted usage. Pure ledger mutation —
     metering must never break generation.
+
+    A bound conversation-turn ledger (ADR-117 D3) accumulates the same call
+    in parallel — the two bindings never coexist structurally, so each call
+    lands on exactly one ledger in practice.
     """
     if not usage:
-        return
-    accrued = _current_cost_ledger.get()
-    if accrued is None:
         return
     prompt = int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
     completion = int(usage.get("completion_tokens") or usage.get("output_tokens") or 0)
     if not prompt and not completion:
         return
-    accrued["prompt_tokens"] += prompt
-    accrued["completion_tokens"] += completion
+    accrued = _current_cost_ledger.get()
+    if accrued is not None:
+        accrued["prompt_tokens"] += prompt
+        accrued["completion_tokens"] += completion
+    conversation = _current_conversation_ledger.get()
+    if conversation is not None:
+        conversation["prompt_tokens"] += prompt
+        conversation["completion_tokens"] += completion
+        cached = _cached_tokens_of(usage)
+        if cached is not None:
+            conversation["cached_tokens"] = (
+                int(conversation["cached_tokens"] or 0) + cached
+            )
+
+
+# ---- conversation-turn ledger (ADR-117 D3 — metered, never billed) ---------
+
+_current_conversation_ledger: contextvars.ContextVar[dict | None] = (
+    contextvars.ContextVar("metering_conversation_ledger", default=None)
+)
+
+
+def _new_conversation_ledger() -> dict:
+    # cached_tokens stays None until the provider actually reports cache
+    # hits (conversation_usage.cached_tokens is nullable — 返回即记).
+    return {"prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": None}
+
+
+def _cached_tokens_of(usage: dict) -> int | None:
+    """The provider's prefix-cache hit count, tolerant over the vendor key
+    shapes (MiniMax ``prompt_cache_hit_tokens`` / OpenAI
+    ``prompt_tokens_details.cached_tokens`` / a bare ``cached_tokens``).
+    None = the provider said nothing about caching on this call."""
+    direct = usage.get("prompt_cache_hit_tokens")
+    if direct is None:
+        direct = usage.get("cached_tokens")
+    if direct is not None:
+        return int(direct)
+    details = usage.get("prompt_tokens_details")
+    if isinstance(details, dict) and details.get("cached_tokens") is not None:
+        return int(details["cached_tokens"])
+    return None
+
+
+class bind_conversation_turn:
+    """Bind an in-memory usage ledger to a conversation turn for the current
+    async context (``bind_workflow_step``'s mirror). ``accrued`` is the
+    ledger itself — the turn-entry seam keeps the reference and folds it
+    into ONE ``conversation_usage`` row with the turn's own commit.
+
+    Fire-and-forget children spawned inside the turn inherit the binding
+    (contextvars copy semantics — same stance as the workflow ledger): a
+    warm call that outlives the turn writes into a ledger nobody folds,
+    which is silently dropped — never miscounted onto another turn."""
+
+    def __init__(self) -> None:
+        self._token: contextvars.Token[dict | None] | None = None
+        self.accrued: dict = _new_conversation_ledger()
+
+    def __enter__(self) -> "bind_conversation_turn":
+        self._token = _current_conversation_ledger.set(self.accrued)
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        if self._token is not None:
+            _current_conversation_ledger.reset(self._token)
+        return False
+
+
+async def fold_conversation_usage(
+    db: Any,
+    *,
+    user_id: UUID,
+    project_id: UUID | None,
+    accrued: dict | None,
+) -> None:
+    """Fold one conversation turn's accrued ledger into ONE
+    ``conversation_usage`` row, added to the turn's own session so the row
+    rides the SAME commit as the assistant message (billing write
+    discipline). An empty turn (no LLM call — typed answers, canned
+    replies) writes NO row. Pricing runs at write time and must never break
+    the turn: a price-list failure degrades to ``cost_usd=0.0`` plus a
+    warning (the token counts stay truthful).
+    """
+    if not accrued or not (
+        accrued.get("prompt_tokens") or accrued.get("completion_tokens")
+    ):
+        return
+    from app.config import settings  # deferred: keep metering import-light
+    from app.models.tables import ConversationUsage  # deferred: model edge
+
+    prompt = int(accrued.get("prompt_tokens") or 0)
+    completion = int(accrued.get("completion_tokens") or 0)
+    try:
+        from app.providers.llm.minimax import price_tokens  # deferred: cycle
+
+        cost = price_tokens(prompt, completion)
+    except Exception as e:  # noqa: BLE001 — metering must never break the turn
+        logger.warning("conversation_usage_price_failed", error=str(e))
+        cost = 0.0
+    db.add(
+        ConversationUsage(
+            user_id=user_id,
+            project_id=project_id,
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            cached_tokens=(
+                int(accrued["cached_tokens"])
+                if accrued.get("cached_tokens") is not None
+                else None
+            ),
+            cost_usd=round(cost, 6),
+            # The conversation layer speaks to ONE provider/model today;
+            # price_tokens prices the same default. A second provider joining
+            # the chat layer must split the ledger per model first.
+            model=settings.minimax_model,
+        )
+    )
 
 
 async def record_media_usage(units: dict[str, float]) -> None:

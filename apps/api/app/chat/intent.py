@@ -107,6 +107,7 @@ def _assemble_plan_turn(
     material_pending_line: str | None = None,
     plans_lines: list[str] | None = None,
     surface: str | None = None,
+    confirmation: tuple[str, str] | None = None,
 ):
     """Plan-turn inputs (ADR-052 B2 D2-C2 — the brief is the state).
 
@@ -172,6 +173,11 @@ def _assemble_plan_turn(
     the conversation, so the review invitation may name that home (the
     system template's law governs the usage); anything else renders
     nothing and the surface-neutral default stands.
+    ``confirmation``: the user's two confirmation prefs (ADR-117 D1 —
+    (execution, credits) ∈ {auto, ask}) — rendered as one fact line the
+    system template's mode-conditional close law reads; None renders
+    nothing (the law's default branch then reads as auto, the
+    server-enforced default).
     """
     brief_lines: list[str] | None = None
     if brief is not None:
@@ -263,6 +269,15 @@ def _assemble_plan_turn(
                 "plan's workspace — the presented plan is laid out there "
                 "as cards the user can open and inspect."
                 if surface == "canvas"
+                else None
+            ),
+            # The confirmation-settings FACT (ADR-117 D1): the system
+            # template carries the mode-conditional close law (one law,
+            # one seat); this line is only the world fact it keys on.
+            "confirmation_line": (
+                "Confirmation settings: execution="
+                f"{confirmation[0]}, spending={confirmation[1]}."
+                if confirmation is not None
                 else None
             ),
         },

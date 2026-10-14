@@ -114,7 +114,6 @@ import { AnsweredQuestion, answeredQuestionText } from "@/components/chat/Answer
 import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
 import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
 import { ComposerSendButton } from "@/components/composer/ComposerSendButton"
-import { CostConfirmControl } from "@/components/composer/CostConfirmControl"
 import { ModelsPanel } from "@/components/composer/ModelsPanel"
 import {
   mapHistoryRows,
@@ -3383,6 +3382,40 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       ? pendingQuestion
       : null
 
+  // 确认 pill (ADR-117 §4 — 画板 C): the ONLY chrome the confirm beat keeps.
+  // Render predicate = the dock's presentation-time stamp
+  // (`requires_confirmation` — the client NEVER derives the need itself):
+  // auto+auto docks never show it (the run started on presentation); it
+  // appears exactly when a beat is owed — an ask regime, the guardrail, or
+  // an unquotable plan. Legacy rows predate the stamp → read as owed (读容忍
+  // in the conservative direction: a waiting dock keeps its affordance).
+  // The beat gate (confirmActive) still rules — the pill never opens on a
+  // frame the server hasn't named ready, and never over a live run.
+  const planPill =
+    pendingQuestion &&
+    !dockSettled &&
+    pendingQuestion.question?.kind === "task_book" &&
+    !pendingQuestion.answer &&
+    (pendingQuestion.question?.requires_confirmation ?? true)
+      ? pendingQuestion
+      : null
+  const confirmPillActive = confirmActive && planPill != null
+  // The label family keys on the stamped reason: money reasons carry the
+  // price (quote_high is the server fold's high end — never a client
+  // computation); the NULL family announces the deferred quote; a bare
+  // execution-ask rides the plain verb. (D1: 执行=ask → 不带价; 费用=ask /
+  // 守卫线 → 带价.)
+  const planPillLabel = (() => {
+    const q = planPill?.question
+    if (!q) return ""
+    if (q.unquotable) return t("generationOverlay.confirmPillStartDeferred")
+    const priced =
+      q.confirm_reason === "credits_pref" || q.confirm_reason === "above_guardrail"
+    return priced && q.quote_high != null
+      ? t("generationOverlay.confirmPillStartPriced", { n: q.quote_high })
+      : t("generationOverlay.confirmPillStart")
+  })()
+
   // Prohibition #6 — the dock never goes silent: new agent speech (a chat
   // reply landing / the run's completion line) raises the history region.
   const lastAssistant = useMemo(() => {
@@ -3415,6 +3448,31 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   useEffect(() => {
     if (confirmActive && !chatBusy) setDockHidden(false)
   }, [confirmActive, chatBusy])
+
+  // 确认 pill 点击 (ADR-117 §4): the pill IS the user saying「确认生成」— it
+  // rides the ONE sendChat channel (Workspace v4.2 C8's machine, the retired
+  // Start pill's own path): the router's start_run answers the docked
+  // task_book server-side (confirmed_via="chat_reply" — the channel is the
+  // chat reply), no QA archive ever lands, and the panel's edits ride
+  // prior_intent automatically (confirmActive ships it). The optimistic
+  // bubble + rollback mirror handleSend's user turn.
+  const handleConfirmPill = () => {
+    if (!confirmPillActive || chatBusy || answering) return
+    const text = t("generationOverlay.confirmPillMessage")
+    const rollbackId = crypto.randomUUID()
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: rollbackId,
+        role: "user",
+        content: text,
+        at: new Date().toISOString(),
+      },
+    ])
+    raiseHistory()
+    scrollerSendRef.current?.() // same live-edge intent as handleSend
+    void sendChat(text, { rollbackId })
+  }
 
   // Message-flow chronology (ADR-108 数组位置律): the transcript is ONE
   // append-only array — the persisted seq order IS the render order, and no
@@ -4025,10 +4083,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             />
           )}
           <span className="min-w-0 flex-1" />
-          {/* Cost-confirmation strategy (UI-only preference this batch,
-              2026-09-23 — behavior wiring is a later batch). side="top":
-              the dock lives at the viewport's bottom edge. */}
-          <CostConfirmControl popoverSide="top" align="end" className="mr-1" />
           {/* Models (honest Auto panel) — PARKED: hidden until the panel has
               something actionable to show; restore by ungating. */}
           {false && (
@@ -4262,6 +4316,34 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           {pillDock && (
             <div className="dock-surface mb-2.5 overflow-hidden rounded-xl ring-1 ring-foreground/10">
               {pillDock}
+            </div>
+          )}
+          {/* 确认 pill (ADR-117 §4 — 画板 C): the confirm beat's only chrome,
+              shown exactly when the dock's stamp says a beat is owed
+              (requires_confirmation — never client-derived). NON-blocking
+              like every task_book pill before it: the input stays live
+              below (a chat message revises the plan; "don't start" is said
+              by not starting). Same floating-layer family as the question
+              pill (dock-surface frost + hairline, mb-2.5 gap). The text
+              slot carries the plan's title (LLM-named, ADR-058's lawful
+              source) — never a restated question: the echo's closing beat
+              above already asked it. The click IS the user saying
+              「确认生成」 through the one sendChat channel. */}
+          {confirmPillActive && (
+            <div className="dock-surface mb-2.5 overflow-hidden rounded-xl ring-1 ring-foreground/10">
+              <div className="flex items-center gap-2.5 px-4 py-2.5">
+                <Check className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate text-sm">
+                  {planSummary}
+                </span>
+                <Button
+                  size="sm"
+                  disabled={chatBusy || answering}
+                  onClick={handleConfirmPill}
+                >
+                  {planPillLabel}
+                </Button>
+              </div>
             </div>
           )}
           {/* The input container — 输入框独立层律 (2026-09-02, user-ruled):

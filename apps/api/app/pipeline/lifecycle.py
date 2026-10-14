@@ -258,6 +258,60 @@ def compute_lifecycle(facts: LifecycleFacts) -> LifecycleStamp:
     )
 
 
+# ---- The confirmation need (ADR-117 §2/§4 — 授权前移) ------------------------
+
+
+@dataclass(frozen=True)
+class ConfirmationNeed:
+    """Whether the presented plan owes one explicit confirm beat before its
+    run births. Computed ONCE at presentation time and stamped onto the
+    docked question's payload — the client never derives it (ADR-117 §4:
+    the Start pill's render predicate reads only this flag).
+
+    ``reason`` names the firing clause: ``execution_pref`` (执行确认=ask) /
+    ``credits_pref`` (费用确认=ask ∧ a nonzero quote) / ``above_guardrail``
+    (fold high end over ``billing.always_confirm_above``) / ``unquotable``
+    (a NULL-estimate node — an unquotable plan always asks once). Empty when
+    no confirmation is required. ``quote_high`` = the fold's high end the
+    priced pill's label interpolates (None when unquotable/deferred)."""
+
+    requires_confirmation: bool
+    reason: str = ""
+    quote_high: int | None = None
+    unquotable: bool = False
+
+
+def confirmation_need(
+    *,
+    execution: str,
+    credits: str,
+    quote_high: int | None,
+    unquotable: bool,
+    always_confirm_above: int,
+) -> ConfirmationNeed:
+    """The pure law (ADR-117 D1/D6):
+
+        needs_confirm = execution=="ask"
+                     or (credits=="ask" and quote_high > 0)
+                     or quote_high > always_confirm_above
+                     or unquotable
+
+    A free plan (quote_high == 0) never triggers the credits pref; a
+    deferred/absent quote reads as unquotable upstream, never as a price.
+    Reason precedence names money first (the pill's priced label follows
+    it): unquotable > above_guardrail > credits_pref > execution_pref.
+    """
+    if unquotable:
+        return ConfirmationNeed(True, "unquotable", quote_high, True)
+    if quote_high is not None and quote_high > always_confirm_above:
+        return ConfirmationNeed(True, "above_guardrail", quote_high)
+    if credits == "ask" and (quote_high or 0) > 0:
+        return ConfirmationNeed(True, "credits_pref", quote_high)
+    if execution == "ask":
+        return ConfirmationNeed(True, "execution_pref", quote_high)
+    return ConfirmationNeed(False, "", quote_high, False)
+
+
 # ---- The Start gate (ADR-087 §4 D3, Phase 4 B6) -----------------------------------
 
 
@@ -270,11 +324,22 @@ class StartGateVerdict:
     button is disabled" is the first line, never the only one).
     ``http_status`` separates the structural guards (409 — the request is
     stale / there is nothing to confirm) from the readiness block (422 —
-    the four-conjunction projection says not yet)."""
+    the four-conjunction projection says not yet).
+
+    ADR-117 §4 adds the authorization conjunct: ``start.needs_confirm``
+    (422, ``reason``/``quote_high`` ride along) fires when the presented
+    plan's stamped ConfirmationNeed demands a beat AND the start attempt
+    arrives in the dock's OWN turn (``docked_this_turn``) — the auto
+    regime's presentation-time start attempt. A later-turn start rides the
+    user's beat (verbal or pill) and never trips this conjunct; the typed
+    endpoint never passes ``docked_this_turn`` (its click IS the beat), so
+    its 422 shapes are unchanged."""
 
     http_status: int
     code: str
     blockers: tuple[str, ...] = ()
+    reason: str = ""
+    quote_high: int | None = None
 
 
 def evaluate_start_gate(
@@ -284,6 +349,8 @@ def evaluate_start_gate(
     has_pending_plan: bool,
     effective_tasks_nonempty: bool,
     stamp: LifecycleStamp,
+    confirmation: ConfirmationNeed | None = None,
+    docked_this_turn: bool = False,
 ) -> StartGateVerdict | None:
     """Every check that must hold before the Start seat reaches paid
     ``create_run``, in evaluation order (the precedence the blockers
@@ -303,6 +370,10 @@ def evaluate_start_gate(
     - the stamp's four conjuncts → 422 ``start.blocked`` carrying the
       projection's own blocker ids (material / adjudication / prerequisite
       / active conflicting run).
+    - the authorization conjunct (ADR-117 §4): ``confirmation`` is the
+      presentation-time-stamped need; ``docked_this_turn=True`` marks the
+      auto regime's presentation-time start attempt → 422
+      ``start.needs_confirm`` (reason / quote_high ride the verdict).
     """
     if superseded:
         return StartGateVerdict(409, "start.scope_mismatch")
@@ -314,6 +385,22 @@ def evaluate_start_gate(
         return StartGateVerdict(422, "start.empty_plan")
     if not stamp.confirmation_ready:
         return StartGateVerdict(422, "start.blocked", stamp.blockers)
+    if (
+        confirmation is not None
+        and confirmation.requires_confirmation
+        and docked_this_turn
+    ):
+        # The presentation owes one explicit beat (ADR-117 D6 guardrail /
+        # unquotable family — the prefs family keeps the plan docked BEFORE
+        # it ever reaches a start attempt). The turn that docked the plan
+        # carries no user gesture by construction, so the same-turn start
+        # converts to the priced presentation, never to a run.
+        return StartGateVerdict(
+            422,
+            "start.needs_confirm",
+            reason=confirmation.reason,
+            quote_high=confirmation.quote_high,
+        )
     return None
 
 

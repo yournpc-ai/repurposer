@@ -308,6 +308,23 @@ class Ctx:
     async def answer(self, question_id: str, body: dict) -> httpx.Response:
         return await self.client.post(f"/chat/messages/{question_id}/answer", json=body)
 
+    async def set_confirmation(self, *, execution: str, credits: str) -> None:
+        """ADR-117 D1: pin the turn's confirmation regime for the journey
+        (PUT /auth/settings one-key merge — each leg explicit, never a
+        partial assumption)."""
+        res = await self.client.put(
+            "/auth/settings",
+            json={"confirm_execution": execution, "confirm_credits": credits},
+        )
+        check(res.status_code == 200, "PUT /auth/settings", res.text)
+        body = res.json()
+        check(
+            body.get("confirm_execution") == execution
+            and body.get("confirm_credits") == credits,
+            "the settings echo the stamped prefs",
+            body,
+        )
+
     async def conversation(self, pid: str, **params: object) -> httpx.Response:
         """GET /chat/conversation — 200 with pending_question, or 404 pre-chat."""
         return await self.client.get(
@@ -1722,16 +1739,19 @@ def no_decompile_canvas_node(graph: dict) -> bool:
 
 
 async def s1_lost_user_full_journey(ctx: Ctx) -> None:
-    """S1 迷失用户全旅程：裸愿望 → 主题问（SSE——选项预览律的旅程座位）→
-    作答回填（自由文本 slot 握手 + 选项点选两路）/ 跳过 → draft-from-persona
-    计划 → dock → 口头确认 → start_run → run。途中锁契约拍：待决重建零内存
-    态、一行一答 409、选项点选不 500（kind 守卫）、draft 图横切（B1-lite 藏
-    task_book / 逐节点估价）、lifecycle stamp 三拍（preparing →
-    confirmation_ready → 活跃 run 阻断交还）。
+    """S1 迷失用户全旅程（auto 档——默认档旅程, ADR-117 §2）：裸愿望 → 主题问
+    （SSE——选项预览律的旅程座位）→ 作答回填（自由文本 slot 握手 + 选项点选
+    两路）/ 跳过 → draft-from-persona 计划 → dock 呈现即开工（同回合
+    settled+born，confirmed_via="auto"）。途中锁契约拍：待决重建零内存
+    态、一行一答 409、选项点选不 500（kind 守卫）、lifecycle stamp 拍①
+    （fresh project preparing）。dock 等待态的 stamp/draft 拍（拍②③ +
+    图先展示后运行）随 ask 档迁到 S3——本旅程跑默认档。
 
     LLM 方差说明：router 判 ask 是设计行为（prompt 策略行）；若个别模型把
     "I want a social post." 直接判 draft，首段断言会红——那是 prompt 回归
     信号。options 空合法（无 persona 时储藏室为空）。"""
+    # 默认档钉住（顺序无关——Ctx 全矩阵共享一个 user）。
+    await ctx.set_confirmation(execution="auto", credits="auto")
     pid = await ctx.new_project("S1 bare wish journey")
 
     # Lifecycle stamp 拍①：fresh project = preparing / not-ready / 零 blocker
@@ -1825,88 +1845,42 @@ async def s1_lost_user_full_journey(ctx: Ctx) -> None:
     else:
         check(True, "option-pick beat skipped (pantry empty — exempt)", q1b)
 
-    # 评审卡：作答轮直接出书，或推一轮——终点断言不变：present_plan 终态且
-    # merged brief 钢印进 payload。
+    # 评审卡：作答轮直接出书，或推一轮。auto 档终点（ADR-117 §2）：
+    # present_plan 呈现即开工——dock 回合的信封读 settled+born
+    # （terminal_tool_of 读作 start_run 形；与口头确认同形 = 设计如此，
+    # 工具名永不过线），零确认拍。
     turn_dock = turn2
-    msg2 = turn_dock["assistant_message"]
-    if not is_plan_dock(msg2):
+    if turn_dock["run_id"] is None and not is_plan_dock(turn_dock["assistant_message"]):
         turn_dock = await ctx.chat(pid, "go ahead")
-        msg2 = turn_dock["assistant_message"]
-    check(terminal_tool_of(turn_dock) == "present_plan",
-          "the enriched brief closes on the present_plan call (root now exists)",
+    msg2 = turn_dock["assistant_message"]
+    check(turn_dock["run_id"] is not None,
+          "auto 档呈现即开工 — the dock turn births the run (no confirm beat)",
           turn_dock)
-    check(is_plan_dock(msg2),
-          "the enriched brief docks the plan (root now exists)", msg2)
-    ftopic = ((msg2.get("question") or {}).get("brief") or {}).get("topic") or {}
+    check(turn_dock["answered_question"] is not None,
+          "the dock settles on the presentation-time start", turn_dock)
+    aq2 = turn_dock["answered_question"]
+    check((aq2.get("question") or {}).get("kind") == "task_book",
+          "the settled row IS the docked plan", aq2)
+    check(((aq2.get("question") or {}).get("requires_confirmation")) is False,
+          "auto 档戳记 = 零确认拍（requires_confirmation=False  stamped at dock）",
+          aq2.get("question"))
+    check((aq2.get("answer") or {}).get("kind") == "start",
+          "the presentation-time start lands kind=start", aq2.get("answer"))
+    ftopic = ((aq2.get("question") or {}).get("brief") or {}).get("topic") or {}
     check(ftopic.get("source") == "user-stated" and bool(ftopic.get("value")),
           "the review card stamps the merged brief into the payload", ftopic)
-    row_derived = (msg2.get("question") or {}).get("derived")
+    row_derived = (aq2.get("question") or {}).get("derived")
     check(isinstance(row_derived, list) and len(row_derived) >= 1,
           "the dock row self-carries the derived preview (payload)",
-          msg2.get("question"))
-
-    # 草稿图（图先展示后运行）：dock 即 stamp——draft 节点 + 逐节点估价，
-    # 零消耗直到 start。
-    draft_graph = await ctx.graph(pid)
-    draft_nodes = [
-        n for n in draft_graph["nodes"]
-        if n.get("state") == "draft"
-        and (n.get("spec") or {}).get("prototype") in ("generator", "editor")
-    ]
-    check(len(draft_nodes) >= 1, "the dock stamps the draft graph (图先展示后运行)",
-          draft_graph["nodes"])
-    check(not any(
-        (n.get("spec") or {}).get("role") == "task_book"
-        for n in draft_graph["nodes"]
-    ), "the read frame hides the task_book node (confirm seat = dock pill)",
-       draft_graph["nodes"])
-    check(any(n.get("estimate_credits") for n in draft_nodes),
-          "draft nodes carry their own quotes (逐节点估价)", draft_nodes)
-
-    # Lifecycle stamp 拍②：docked 全估价链读 plan_ready ∧ confirmation_ready。
-    stamp1 = (await ctx.results(pid))["lifecycle"]
-    check(stamp1["plan_ready"] is True
-          and stamp1["confirmation_ready"] is True
-          and stamp1["blockers"] == []
-          and stamp1["state"] == "confirmation_ready",
-          "the docked plan reads plan_ready ∧ confirmation_ready on the stamp",
-          stamp1)
-
-    # Lifecycle stamp 拍③：活跃 run 扣住确认权而计划保持 docked——plan_ready
-    # 恒真、confirmation_ready 翻假、blocker 点名 active_run、rollup 读
-    # running；落定即交还（PLAN_READY ≠ confirm authority）。
-    seeded_run = await seed_active_run(pid)
-    stamp2 = (await ctx.results(pid))["lifecycle"]
-    check(stamp2["plan_ready"] is True
-          and stamp2["confirmation_ready"] is False
-          and "active_run" in stamp2["blockers"]
-          and stamp2["state"] == "running",
-          "an active run blocks confirmation while the plan stays docked",
-          stamp2)
-    await settle_seeded_run(seeded_run)
-    stamp2b = (await ctx.results(pid))["lifecycle"]
-    check(stamp2b["confirmation_ready"] is True
-          and stamp2b["blockers"] == [],
-          "settling the run hands confirmation readiness back", stamp2b)
-
-    draft_ids = sorted(n["id"] for n in draft_graph["nodes"])
-
-    # 散文确认 start → run 起步 + 草稿图原地填充（同 id 无双生）。
-    turn3 = await ctx.chat(pid, "looks good, start")
-    check(terminal_tool_of(turn3) == "start_run",
-          "the prose confirmation closes on the start_run call", turn3)
-    check(turn3["run_id"] is not None, "prose confirmation starts the run", turn3)
-    check(turn3["answered_question"] is not None, "the plan settles on start", turn3)
+          aq2.get("question"))
     check((await ctx.results(pid)).get("pending_brief") is None,
-          "pending_brief cleared on start")
-    filled_graph = await ctx.graph(pid)
-    check(sorted(n["id"] for n in filled_graph["nodes"]) == draft_ids,
-          "start fills the SAME nodes in place (same compile → same fill keys — never twins)",
-          # 双侧 dump（取证律——单侧 dump 曾让一轮红无法归因）：draft 拍于
-          # 种子 run 绕行前，filled 拍于 start 后；不等 = 找出多/少的那侧。
-          {"draft": draft_graph["nodes"], "filled": filled_graph["nodes"]})
-    check(not any(n.get("state") == "draft" for n in filled_graph["nodes"]),
-          "the draft world re-queues on start", filled_graph["nodes"])
+          "pending_brief cleared on the presentation-time start")
+
+    # confirmed_scope 快照：常驻授权通道的戳（confirmed_via="auto"）。
+    s1_run_ctx = (await run_row(turn_dock["run_id"]))["context"]
+    check((s1_run_ctx.get("confirmed_scope") or {}).get("confirmed_via") == "auto",
+          "confirmed_via = auto（呈现即开工的常驻授权戳）",
+          s1_run_ctx.get("confirmed_scope"))
 
     # 第三项目：rootless 闸门（措辞方差两连）→ 跳过 → draft-from-persona。
     pid3 = await ctx.new_project("S1 rootless gate")
@@ -1924,26 +1898,30 @@ async def s1_lost_user_full_journey(ctx: Ctx) -> None:
     q_c = turn_c["assistant_message"]["question"]
     check(q_c.get("answer") is None, "the gate docks unanswered", q_c)
 
-    # × 跳过 → 默认路径生效：draft-from-persona 计划 dock（reason + 散文含
-    # 默认路径声明），asked 簿记挡住第二轮同槽问（问环有界）。跳过后 router
-    # 应判 draft；若再判 ask(topic)，asked 簿记翻回 draft——同归宿，只看终点。
+    # × 跳过 → 默认路径生效：draft-from-persona 计划 dock 并同拍开工（auto
+    # 档零确认拍——信封的 follow_up 是已结算 dock 行，workflow_run_id 戳在
+    # 上面），asked 簿记挡住第二轮同槽问（问环有界）。跳过后 router 应判
+    # draft；若再判 ask(topic)，asked 簿记翻回 draft——同归宿，只看终点。
     ans = await ctx.answer(turn_c["assistant_message"]["id"], {"kind": "bail"})
     check(ans.status_code in (200, 201), "the skip is accepted", ans.text)
     follow = ans.json().get("follow_up") or {}
-    check(is_plan_dock(follow),
-          "skipping takes the default path — a plan docks", follow)
+    check((follow.get("question") or {}).get("kind") == "task_book"
+          and follow.get("answer") is not None
+          and bool(follow.get("workflow_run_id")),
+          "skipping takes the default path — the plan docks AND starts on "
+          "presentation (auto 档零确认拍)", follow)
     check(ans.json().get("answered_question") is not None,
           "the skipped ask settles as answered", ans.json())
 
-    plan = await pending_plan(ctx, pid3)
-    check(plan is not None, "the draft-from-persona plan persists", plan)
-    reasons = (plan or {}).get("reasons") or []
+    # 开工即清 pending_brief——计划快照读 follow_up 行自带的三座（reasons /
+    # asked / echo 散文），不再读项目行。
+    reasons = ((follow.get("question") or {}).get("reasons")) or []
     check("draft_from_persona" in reasons,
           "the draft-from-persona reason rides the docked plan", reasons)
-    asked = ((plan or {}).get("brief") or {}).get("asked") or []
+    asked = (((follow.get("question") or {}).get("brief") or {}).get("asked")) or []
     check("topic" in asked,
           "the asked roll records the topic ask (the loop is bounded)", asked)
-    echo = ((plan or {}).get("intent") or {}).get("answer") or ""
+    echo = (follow.get("content") or "")
     check("persona" in echo.lower() or "人设" in echo,
           "the echo carries the default-path declaration", echo)
 
@@ -1952,14 +1930,18 @@ async def s2_material_to_clips_full_chain(ctx: Ctx) -> None:
     """S2 素材→短片全链（旗舰链本，需 dev worker + demo 桶 fixture + MiniMax
     配额）：真字节素材（合成转写自证处理终态）→ 方向建议 dock（SSE——选项
     预览律座）→ 途中插话（提醒尾 + pending 保持 + 下轮回填）→ clips 计划
-    dock → 计划期修订链（面板钉存活 / chat 恒胜 / supersede 机器标记 /
-    fill-key 幂等 / 打字母不答）→ SSE 散文确认 → run completed + clip 产物
-    → 触发回合 reviewer → chat 修订 wiring 横切（同 id 原地改写 → 子图重跑）
-    → 扩张 dock（新付费工作确认门 + Start 放行）。
+    dock 呈现即开工（auto 档，ADR-117 §2——settled+born 同拍 + 零确认拍戳
+    记 + confirmed_via=auto）→ auto 出生 run 真收官 → ask 档计划期修订链
+    （面板钉存活 / chat 恒胜 / supersede 机器标记 / fill-key 幂等 / 打字
+    母不答）→ SSE 散文确认 → 修订 run completed + clip 产物 → 触发回合
+    reviewer → chat 修订 wiring 横切（同 id 原地改写 → 子图重跑）→ 扩张
+    dock（新付费工作确认门 + Start 放行）。
 
     LLM 方差口径：方向 dock / 计划 dock 的措辞与路由是模型裁量（有界 nudge
     兜底）；锁的全是设计行为（插话不结算 / 提醒尾必在 / 修订恒胜 / 扩张必
     经确认门）。红了 = prompt 或机制回归信号，不是剧本松劲。"""
+    # 默认档钉住（顺序无关——Ctx 全矩阵共享一个 user）。
+    await ctx.set_confirmation(execution="auto", credits="auto")
     fixture_prefix = f"scenario/s2-{uuid.uuid4().hex[:8]}"
     src_key = await copy_fixture(REMIX_SOURCE_KEY, fixture_prefix)
     pid = await ctx.new_project("S2 material to clips")
@@ -2023,14 +2005,18 @@ async def s2_material_to_clips_full_chain(ctx: Ctx) -> None:
           == dock_turn["assistant_message"]["id"],
           "the ask stays pending through the interjection", res.json())
 
-    # ①c 自由文本作答（点名 clips 方向）→ plan path 接续 → clips 计划 dock。
+    # ①c 自由文本作答（点名 clips 方向）→ plan path 接续 → clips 计划 dock
+    #    呈现即开工（auto 档，ADR-117 §2——settled+born 同拍，零确认拍）。
     res_a = await ctx.answer(dock_turn["assistant_message"]["id"],
                              {"kind": "freeform",
                               "text": "cut 3 vertical highlight clips from the talk"})
     check(res_a.status_code in (200, 201), "the freeform direction settles",
           res_a.text)
     follow = res_a.json().get("follow_up") or {}
-    dock_msg: dict | None = follow if is_plan_dock(follow) else None
+    dock_msg: dict | None = None
+    run1_id: str | None = None
+    if follow.get("workflow_run_id"):
+        dock_msg, run1_id = follow, str(follow["workflow_run_id"])
     dock_stream: StreamTurn | None = None
     for nudge in ("就按这个方向出计划——3 条竖屏高光短片。",
                   "the highlight clips plan, please",
@@ -2039,24 +2025,62 @@ async def s2_material_to_clips_full_chain(ctx: Ctx) -> None:
             break
         stream = await ctx.chat_stream(pid, nudge)
         check(stream.failed is None, "the plan nudge never fails", stream.failed)
-        if is_plan_dock(stream.completed["assistant_message"]):
+        check(not is_plan_dock(stream.completed["assistant_message"]),
+              "a held clips dock (守卫线/不可报价) is off-journey — estimate "
+              "回归信号", stream.completed["assistant_message"])
+        if stream.completed["run_id"] is not None:
             dock_msg = stream.completed["assistant_message"]
+            run1_id = stream.completed["run_id"]
             dock_stream = stream
             break
-    check(dock_msg is not None, "the clips plan docks within 3 nudges", None)
-    plan1 = await pending_plan(ctx, pid)
-    tasks = plan_tasks(plan1)
+    check(dock_msg is not None and run1_id is not None,
+          "auto 档：the clips plan docks AND starts on presentation within "
+          "3 nudges (零确认拍)", None)
+    # 开工戳记（读库行一座，与信封路径无关）：kind=start + 零确认拍 +
+    # 链带 clips + confirmed_via=auto + pending_brief 即清。
+    dock_row = await message_row(dock_msg["id"])
+    check((dock_row.get("answer") or {}).get("kind") == "start",
+          "the presentation-time start lands kind=start", dock_row.get("answer"))
+    check(((dock_row.get("question") or {}).get("requires_confirmation")) is False,
+          "auto 档戳记 = 零确认拍（requires_confirmation=False at dock）",
+          dock_row.get("question"))
+    tasks = ((dock_row.get("intent") or {}).get("tasks")) or []
     check(any(t["tool"] == "select_clips" for t in tasks),
           "the docked chain carries the clips tool", tasks)
+    run1_ctx = (await run_row(run1_id))["context"]
+    check((run1_ctx.get("confirmed_scope") or {}).get("confirmed_via") == "auto",
+          "confirmed_via = auto（呈现即开工的常驻授权戳）",
+          run1_ctx.get("confirmed_scope"))
+    check((await ctx.results(pid)).get("pending_brief") is None,
+          "pending_brief cleared on the presentation-time start")
     if dock_stream is not None:
         # SSE draft 律（计划复述座）：信封散文 IS 持久化的计划复述。
         content = dock_msg.get("content") or ""
-        echo = ((plan1 or {}).get("intent") or {}).get("answer") or ""
+        echo = ((dock_row.get("intent") or {}).get("answer")) or ""
         check(content == echo,
               "the streamed draft's envelope content IS the persisted plan echo",
               f"{content[:120]!r} vs {echo[:120]!r}")
 
+    # ①d auto 出生 run 真收官（出生即真跑——clips 链在真字节上 completed）+
+    # 触发回合消费（建议问先 bail——后续修订消息不能被判定结算吃掉，③b 同
+    # 款卫生）。然后钉 ask 档再进修订链：dock 恒等用户的拍，消除收官竞态
+    # （auto 档的结构 held 与 ask 等待在信封面同形，计划期机器与档无关）。
+    row1 = await wait_run_status(run1_id, {"completed", "failed"}, timeout=600.0)
+    check(row1["status"] == "completed",
+          "the auto-born run delivers on the real bytes", row1["status"])
+    review1 = await wait_trigger_review(ctx, conv_id, run1_id)
+    check(review1 is not None,
+          "the auto-born run's trigger turn speaks its review row", run1_id)
+    if (review1.get("question") or {}).get("kind") == "question":
+        bail1 = await ctx.answer(review1["id"], {"kind": "bail"})
+        check(bail1.status_code in (200, 201),
+              "run1's review question is bailed (revision determinism)",
+              bail1.text)
+    await ctx.set_confirmation(execution="ask", credits="ask")
+
     # ② 修订链：面板钉存活 / chat 恒胜 / supersede / fill-key 幂等 / 打字母不答。
+    #    开工即清的 pending_brief 由 dock_row 的 intent 列顶替（面板钉模拟器
+    #    的胚子）；ids1 = auto 出生 run 的世界（修订 dock 在其上长草稿）。
     def pin_count(plan: dict, count: int) -> dict:
         """Simulate a panel hand edit: the select_clips count set in params —
         the edited chain IS the prior_intent (no merge machinery)."""
@@ -2068,6 +2092,7 @@ async def s2_material_to_clips_full_chain(ctx: Ctx) -> None:
         ]
         return edited
 
+    plan1 = {"intent": dock_row.get("intent") or {}}  # 开工前的链（shim）
     first_qid = dock_msg["id"]
     ids1 = {n["id"] for n in (await ctx.graph(pid))["nodes"]}
     # 面板钉 count=4（区别于作答里的 3，钉存活才可见）+ 无关 refine 加德语版。
@@ -2142,14 +2167,15 @@ async def s2_material_to_clips_full_chain(ctx: Ctx) -> None:
           "the shrink keeps the chat-won count", tasks)
     graph5 = await ctx.graph(pid)
 
-    # ③ SSE 散文确认 → start_run + 草稿图原地填充（同 id 无双生）。
+    # ③ SSE 散文确认（ask 档——dock 等到的口头拍，与 Start 钮同一机器）→
+    #    start_run + 草稿图原地填充（同 id 无双生；run1 世界在其下不动）。
     stream_s = await ctx.chat_stream(pid, "looks good, start")
     check(stream_s.failed is None, "the confirm turn never fails", stream_s.failed)
     turn_s = stream_s.completed
     check(terminal_tool_of(turn_s) == "start_run",
           "the prose confirmation closes on the start_run call", turn_s)
-    run_id = turn_s["run_id"]
-    check(run_id is not None, "prose confirmation starts the run", turn_s)
+    run2_id = turn_s["run_id"]
+    check(run2_id is not None, "prose confirmation starts the run", turn_s)
     check(turn_s["answered_question"] is not None, "the plan settles on start", turn_s)
     check((await ctx.results(pid)).get("pending_brief") is None,
           "pending_brief cleared on start")
@@ -2165,15 +2191,15 @@ async def s2_material_to_clips_full_chain(ctx: Ctx) -> None:
     # ③b 真链收官 + 触发回合 reviewer 发言：intent dump = {type:
     #    trigger_review, trigger, ref, suggestions=labels}；建议 dock 成真实
     #    编号选项问。断言 dump 形态与 dock 良构；言语内容不锁（LLM 文案）。
-    row = await wait_run_status(run_id, {"completed", "failed"}, timeout=600.0)
+    row = await wait_run_status(run2_id, {"completed", "failed"}, timeout=600.0)
     check(row["status"] == "completed",
           "the clips chain completes on the real bytes", row["status"])
     check(len(await outputs_of(pid, "clip")) >= 1, "the clip outputs land", None)
-    review = await wait_trigger_review(ctx, conv_id, run_id)
+    review = await wait_trigger_review(ctx, conv_id, run2_id)
     check(review is not None,
-          "the run-completed trigger turn speaks its review row", run_id)
+          "the run-completed trigger turn speaks its review row", run2_id)
     rintent = (review or {}).get("intent") or {}
-    check(rintent.get("trigger") == "run_completed" and rintent.get("ref") == run_id,
+    check(rintent.get("trigger") == "run_completed" and rintent.get("ref") == run2_id,
           "the review dump names trigger + ref", rintent)
     sugs = rintent.get("suggestions") or []
     check(0 <= len(sugs) <= 3, "0–3 suggestion labels (schema-bounded)", sugs)
@@ -2197,16 +2223,17 @@ async def s2_material_to_clips_full_chain(ctx: Ctx) -> None:
 
     # ④ 修订 = wiring 横切：chat 修订 → WiringProposal（edit_prompt + run
     #    子图）→ 节点程序行原地改写（同 id 无双生）→ 子图重跑起 run。锁的是
-    #    设计行为；红了 = chat_intent prompt 回归信号。
+    #    设计行为；红了 = chat_intent prompt 回归信号。两 run 世界有两个
+    #    clips 节点——模型指认哪一个是 LLM 裁量（wiring 提案自带 node id），
+    #    断言锁「恰一个 clips 节点原地改写」不锁指认。
     graph_before = await ctx.graph(pid)
-    clips_node = next(
-        (n for n in graph_before["nodes"]
-         if (n.get("spec") or {}).get("tool") == "select_clips"),
-        None,
-    )
-    check(clips_node is not None, "the run's fill grew the clips graph node",
+    clips_before = {
+        n["id"]: (n.get("spec") or {}).get("prompt")
+        for n in graph_before["nodes"]
+        if (n.get("spec") or {}).get("tool") == "select_clips"
+    }
+    check(len(clips_before) >= 1, "the runs' fills grew clips graph nodes",
           graph_before["nodes"])
-    prompt_before = (clips_node.get("spec") or {}).get("prompt")
     turn_rev = await ctx.chat(pid, "把选段再大胆一点——只留最有冲击力的瞬间。")
     check(terminal_tool_of(turn_rev) == "run_birth",
           "the revision closes on a proposal tool's run birth (chat path)", turn_rev)
@@ -2214,17 +2241,21 @@ async def s2_material_to_clips_full_chain(ctx: Ctx) -> None:
           "the revision rides the wiring path — the subgraph rerun is born",
           turn_rev)
     graph_after = await ctx.graph(pid)
-    clips_after = next(
-        (n for n in graph_after["nodes"] if n["id"] == clips_node["id"]), None
-    )
-    check(clips_after is not None,
-          "the revision reuses the SAME node (edit_prompt + rerun — never a twin)",
+    check(sorted(n["id"] for n in graph_after["nodes"])
+          == sorted(n["id"] for n in graph_before["nodes"]),
+          "the revision reuses the SAME nodes (edit_prompt + rerun — never a twin)",
           graph_after["nodes"])
-    check((clips_after.get("spec") or {}).get("prompt") != prompt_before,
-          "edit_prompt rewrote the node's program in place",
-          (clips_after.get("spec") or {}).get("prompt"))
-    check(clips_after.get("state") != "draft",
-          "the rerun re-queues its node", clips_after.get("state"))
+    after_by_id = {n["id"]: n for n in graph_after["nodes"]}
+    edited = [
+        nid for nid, prompt in clips_before.items()
+        if (after_by_id[nid].get("spec") or {}).get("prompt") != prompt
+    ]
+    check(len(edited) == 1,
+          "edit_prompt rewrote exactly one clips node's program in place",
+          {nid: (after_by_id[nid].get("spec") or {}).get("prompt")
+           for nid in clips_before})
+    check(after_by_id[edited[0]].get("state") != "draft",
+          "the rerun re-queues its node", after_by_id[edited[0]].get("state"))
     # 修订 run 先收官（扩张 Start 会撞出生地活跃 422——等待是 harness 卫生）；
     # 其收官触发回合同样先 bail（否则扩张拍的消息被判定结算吃掉）。
     await wait_run_status(turn_rev["run_id"], {"completed", "failed"}, timeout=600.0)
@@ -2297,6 +2328,9 @@ async def s3_material_suggestion_exploration(ctx: Ctx) -> None:
     from app.models.tables import ExplorationRow
     from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
 
+    # ask 档钉住（ADR-117——本旅程保留确认拍族断言：dock 等待 / typed Start /
+    # 草稿图横切 / lifecycle stamp 拍②③，均从 S1 迁入或原生）。
+    await ctx.set_confirmation(execution="ask", credits="ask")
     fixture_prefix = f"scenario/s3-{uuid.uuid4().hex[:8]}"
     src_key = await copy_fixture(REMIX_SOURCE_KEY, fixture_prefix)
     pid = await ctx.new_project("S3 discovery chain")
@@ -2409,6 +2443,60 @@ async def s3_material_suggestion_exploration(ctx: Ctx) -> None:
     )
     check("estimate_credits" in question, "the quote rides the dock (费用语义)", question)
     check("derived" in question, "the derived preview rides the dock", question)
+    # ADR-117 §4 戳记（ask 档）：呈现时算好的确认需要——本座断言它欠拍
+    # （两档 ask + 有报价 → reason 归 pref 族），auto 档的对偶戳在 S1。
+    check(question.get("requires_confirmation") is True,
+          "ask 档戳记 = dock 欠确认拍（requires_confirmation=True）", question)
+    check(str(question.get("confirm_reason") or "").endswith("_pref"),
+          "the reason names the pref family (money first when both ask)",
+          question.get("confirm_reason"))
+
+    # 草稿图横切（图先展示后运行——自 S1 迁入 ask 档座）：dock 即 stamp——
+    # draft 节点 + 逐节点估价，零消耗直到 start。
+    draft_graph = await ctx.graph(pid)
+    draft_nodes = [
+        n for n in draft_graph["nodes"]
+        if n.get("state") == "draft"
+        and (n.get("spec") or {}).get("prototype") in ("generator", "editor")
+    ]
+    check(len(draft_nodes) >= 1, "the dock stamps the draft graph (图先展示后运行)",
+          draft_graph["nodes"])
+    check(not any(
+        (n.get("spec") or {}).get("role") == "task_book"
+        for n in draft_graph["nodes"]
+    ), "the read frame hides the task_book node (confirm seat = dock pill)",
+       draft_graph["nodes"])
+    check(any(n.get("estimate_credits") for n in draft_nodes),
+          "draft nodes carry their own quotes (逐节点估价)", draft_nodes)
+    draft_ids = sorted(n["id"] for n in draft_graph["nodes"])
+
+    # Lifecycle stamp 拍②（自 S1 迁入）：docked 全估价链读 plan_ready ∧
+    # confirmation_ready。
+    stamp1 = (await ctx.results(pid))["lifecycle"]
+    check(stamp1["plan_ready"] is True
+          and stamp1["confirmation_ready"] is True
+          and stamp1["blockers"] == []
+          and stamp1["state"] == "confirmation_ready",
+          "the docked plan reads plan_ready ∧ confirmation_ready on the stamp",
+          stamp1)
+
+    # Lifecycle stamp 拍③（自 S1 迁入）：活跃 run 扣住确认权而计划保持
+    # docked——plan_ready 恒真、confirmation_ready 翻假、blocker 点名
+    # active_run、rollup 读 running；落定即交还（PLAN_READY ≠ confirm
+    # authority）。
+    seeded_run = await seed_active_run(pid)
+    stamp2 = (await ctx.results(pid))["lifecycle"]
+    check(stamp2["plan_ready"] is True
+          and stamp2["confirmation_ready"] is False
+          and "active_run" in stamp2["blockers"]
+          and stamp2["state"] == "running",
+          "an active run blocks confirmation while the plan stays docked",
+          stamp2)
+    await settle_seeded_run(seeded_run)
+    stamp2b = (await ctx.results(pid))["lifecycle"]
+    check(stamp2b["confirmation_ready"] is True
+          and stamp2b["blockers"] == [],
+          "settling the run hands confirmation readiness back", stamp2b)
 
     # 探索三族出生，一条 journey（ExplorationRow 表座——探索族永不入图）。
     async with AsyncSessionLocal() as db:
@@ -2463,6 +2551,16 @@ async def s3_material_suggestion_exploration(ctx: Ctx) -> None:
     check(res.status_code == 200, "dock Start answers the decision package", res.text)
     run_id = res.json()["answered_question"].get("workflow_run_id")
     check(run_id, "a run was born on Start", res.json())
+
+    # 同 id 原地填充（自 S1 迁入——same compile → same fill keys, never
+    # twins）：start 后图面 = draft 拍的同批 id，零 draft 态残留。
+    filled_graph = await ctx.graph(pid)
+    check(sorted(n["id"] for n in filled_graph["nodes"]) == draft_ids,
+          "start fills the SAME nodes in place (never twins)",
+          # 双侧 dump（取证律——单侧 dump 曾让一轮红无法归因）。
+          {"draft": draft_graph["nodes"], "filled": filled_graph["nodes"]})
+    check(not any(n.get("state") == "draft" for n in filled_graph["nodes"]),
+          "the draft world re-queues on start", filled_graph["nodes"])
 
     run_ctx = (await run_row(run_id))["context"]
     scope = run_ctx.get("confirmed_scope") or {}
@@ -2634,6 +2732,8 @@ async def s4_no_material_writers(ctx: Ctx) -> None:
     读路拿到 _WARM_DEAD_TEXT（字节不存在，warm 建不出），模型依法拒 dock
     或给 paste-text 选项（轮盘式随机命中）。厚转录 + seed_understanding
     让乐观 dock 与先读后 dock 两条合法路都通。"""
+    # ask 档钉住（ADR-117——本旅程的 typed Start / dock 等待断言全是确认拍族）。
+    await ctx.set_confirmation(execution="ask", credits="ask")
     material = (
         "Cities are getting hotter, and the bill lands on the people least "
         "able to pay it. A shaded street can be ten degrees cooler than the "
@@ -2857,6 +2957,8 @@ async def s5_research_grounds_writer(ctx: Ctx) -> None:
     网络方差说明：活 DDG 可能全灭（无网 / 被限流）——诚实降级下 brief 带
     caveat 自述、run 照样 completed。断言只看「钢印存在 + 步骤有序 +
     产物存在」，不看简报内容质量（那是 prompt / provider 层的事）。"""
+    # ask 档钉住（ADR-117——dock 等待 + 面板手编 typed Start 是确认拍族断言）。
+    await ctx.set_confirmation(execution="ask", credits="ask")
     pid = await ctx.new_project("S5 research grounds writer")
 
     turn1 = await ctx.chat(
@@ -3223,13 +3325,13 @@ async def s7_second_circle_revision(ctx: Ctx) -> None:
 async def s8_interview_to_framing(ctx: Ctx) -> None:
     """S8 访谈→分镜（需 dev worker + demo 桶 fixture + MiniMax 配额）：访谈
     素材真处理（worker 真 ASR + speaker_map → form=interview 前提断言）→
-    用户口头选定分镜方向（「镜头跟着说话人切换」）→ plan 链必含
-    select_clips + reframe_clip（选择执行律）→ start → run completed →
-    成片 render_spec 带非空 crop_track（确定性尾——选了就要像配方卡那样
-    成片，静默中央裁剪的结构通路在此锁死）。中间（router 直接出书还是先
-    问）是 LLM 裁量，nudge 有界兜底，红了 = prompt 回归信号。fixture 律：
-    素材先拷 scenario/ 前缀隔离 + 显式 request_processing 盖章（ADR-102
-    休眠律——无盖章 worker 永不认领）。"""
+    用户口头选定分镜方向（「镜头跟着说话人切换」）→ dock 呈现即开工（auto
+    档，ADR-117 §2）→ plan 链必含 select_clips + reframe_clip（选择执行律）
+    → run completed → 成片 render_spec 带非空 crop_track（确定性尾——选了
+    就要像配方卡那样成片，静默中央裁剪的结构通路在此锁死）。中间（router
+    直接出书还是先问）是 LLM 裁量，nudge 有界兜底，红了 = prompt 回归信号。
+    fixture 律：素材先拷 scenario/ 前缀隔离 + 显式 request_processing 盖章
+    （ADR-102 休眠律——无盖章 worker 永不认领）。"""
     fixture_prefix = f"scenario/s8-{uuid.uuid4().hex[:8]}"
     src_key = await copy_fixture(INTERVIEW_SOURCE_KEY, fixture_prefix)
     pid = await ctx.new_project("S8 interview framing")
@@ -3253,30 +3355,48 @@ async def s8_interview_to_framing(ctx: Ctx) -> None:
           speaker_map.get("form"))
 
     await topup_wallet(ctx.user_id)  # clips + reframe + render 真链
+    # 默认档钉住（Ctx 全矩阵共享一个 user——S3/S4/S5 会把档翻去 ask）。
+    await ctx.set_confirmation(execution="auto", credits="auto")
 
     # 用户口头选定分镜方向——选择执行律：链必含 select_clips + reframe_clip。
-    turn = await ctx.chat(pid, "把我的双人访谈剪成竖屏短片，镜头跟着说话人切换。")
-    plan = await pending_plan(ctx, pid)
+    # auto 档（ADR-117 §2）：dock 回合呈现即开工（settled+born 同信封，零
+    # 确认拍）；守卫线/不可报价 held 时口头确认拍补一枪（任何档恒问一次的
+    # 合法分支）。开工即清 pending_brief——链读 settled 行的 intent 列。
+    turn_dock = await ctx.chat(pid, "把我的双人访谈剪成竖屏短片，镜头跟着说话人切换。")
     for _ in range(2):
-        if plan is not None and plan_tasks(plan):
+        if turn_dock["run_id"] is not None or is_plan_dock(turn_dock["assistant_message"]):
             break
         # LLM 裁量兜底（先问了 caption/数量等）——一句推进，路由恒在 plan path。
-        turn = await ctx.chat(pid, "就按这个方向出计划吧——竖屏切片，镜头跟人。")
-        plan = await pending_plan(ctx, pid)
-    check(plan is not None and plan_tasks(plan),
-          "the framing-chosen turns dock the plan", plan)
-    tools = [t.get("tool") for t in plan_tasks(plan)]
+        turn_dock = await ctx.chat(pid, "就按这个方向出计划吧——竖屏切片，镜头跟人。")
+    born_at_dock = turn_dock["run_id"] is not None
+    if not born_at_dock:
+        check(is_plan_dock(turn_dock["assistant_message"]),
+              "the framing-chosen turns dock the plan",
+              turn_dock["assistant_message"])
+        turn_dock = await ctx.chat(pid, "开始吧")
+    aq = turn_dock.get("answered_question")
+    check(turn_dock["run_id"] is not None and aq is not None
+          and ((aq.get("question") or {}).get("kind") == "task_book"),
+          "the dock settles AND the run is born (auto 档: born at the dock "
+          "turn itself; held 分支: born at the guardrail confirm beat)",
+          turn_dock)
+    check((aq.get("answer") or {}).get("kind") == "start",
+          "the start lands kind=start", aq.get("answer"))
+    if born_at_dock:
+        check(((aq.get("question") or {}).get("requires_confirmation")) is False,
+              "auto 档戳记 = 零确认拍（requires_confirmation=False at dock）",
+              aq.get("question"))
+        s8_run_ctx = (await run_row(turn_dock["run_id"]))["context"]
+        check((s8_run_ctx.get("confirmed_scope") or {}).get("confirmed_via") == "auto",
+              "confirmed_via = auto（呈现即开工的常驻授权戳）",
+              s8_run_ctx.get("confirmed_scope"))
+    tools = [t.get("tool") for t in ((aq.get("intent") or {}).get("tasks") or [])]
     check("select_clips" in tools and "reframe_clip" in tools,
           "选择执行律：the chosen framing direction lands select_clips + "
           "reframe_clip (never a silent center-crop chain)", tools)
     check(tools.index("reframe_clip") > tools.index("select_clips"),
           "the reframe rides after the clips producer (topology order)", tools)
-
-    turn_s = await ctx.chat(pid, "开始吧")
-    check(terminal_tool_of(turn_s) == "start_run",
-          "the prose confirmation closes on start_run", turn_s)
-    run_id = turn_s["run_id"]
-    check(run_id is not None, "the framing run is born", turn_s)
+    run_id = turn_dock["run_id"]
 
     final = await wait_run_terminal(run_id, timeout=600.0)
     check(final == "completed",
@@ -3297,7 +3417,7 @@ async def s8_interview_to_framing(ctx: Ctx) -> None:
 
     # Harness 卫生（非断言——S3 同款）：run 收官的触发回合是
     # fire-and-forget；不消费它就 cleanup 会让在飞 LLM 调用撞上项目删除。
-    review = await wait_trigger_review(ctx, turn_s["conversation_id"], run_id,
+    review = await wait_trigger_review(ctx, turn_dock["conversation_id"], run_id,
                                        timeout=90.0)
     if review is not None and (review.get("question") or {}).get("kind") == "question":
         await ctx.answer(review["id"], {"kind": "bail"})
@@ -3315,6 +3435,10 @@ async def s9_credits_boundary(ctx: Ctx) -> None:
     user_id = await make_user()
     local = Ctx(user_id, keep=False)
     try:
+        # ask 档钉住（ADR-117——本旅程的 typed Start / 422 门断言全是确认拍族；
+        # 默认 auto 档下 dock 回合的 auto-drive 会在零余额门上 held，断言虽同形
+        # 通过，钉住消除该变量）。
+        await local.set_confirmation(execution="ask", credits="ask")
         async with AsyncSessionLocal() as db:
             db.add(Wallet(user_id=user_id, balance=0))
             await db.commit()
@@ -3451,9 +3575,11 @@ async def s9_credits_boundary(ctx: Ctx) -> None:
 
 async def s10_remix_flagship(ctx: Ctx) -> None:
     """S10 Remix 旗舰（需 dev worker + demo 桶 fixture + MiniMax 配额）：
-    P1 warm 路径——@mention 指认参考片（免问路，pin 由代码结算）→ pin 落定
-    即拆解，agent 主动说看懂了案例（零 run 成本）；P2 run 路径——两视频 +
-    一句「做成案例那样子」→ mention pin → plan → start → decompile 新鲜物化
+    P1 warm 路径（ask 档钉住——零 run 成本前提的结构保障：直接 dock 的合法
+    分支在 auto 档会同拍开工，破坏该前提）——@mention 指认参考片（免问路，
+    pin 由代码结算）→ pin 落定即拆解，agent 主动说看懂了案例；P2 run 路径
+    （auto 档，ADR-117 §2——dock 呈现即开工，零确认拍）——两视频 + 一句
+    「做成案例那样子」→ mention pin → dock 同拍 start → decompile 新鲜物化
     （参考片 seeded 为 FAILED 处理态 = warm 永不点火的现实形态——run 路径
     不看处理态只读字节）→ 触发回合说话 → 产物参数 = 骨架（条数/画幅/字幕
     色三断）→ 画布无 decompile 孤儿节点。角色提问机器一路（router 主动问
@@ -3467,8 +3593,12 @@ async def s10_remix_flagship(ctx: Ctx) -> None:
     src_key = await copy_fixture(REMIX_SOURCE_KEY, fixture_prefix)
     ex_key = await copy_fixture(REMIX_EXEMPLAR_KEY, fixture_prefix)
     # ---- P1: warm 路径 —— pin 落定即拆解、主动说话（无 run） ------------------
+    # ask 档钉住（ADR-117——P1 前提是零 run 成本：LLM 裁量的直接 dock 分支在
+    # auto 档会呈现即开工；钉 ask 让 dock 恒等用户的拍，两个合法分支形态不
+    # 变）。P2 开工前再翻回 auto。
     # 消歧走 @mention 指认：角色 pin 由代码结算，不依赖 LLM 是否选择提问——
     # 提问机器一路的 dock 决策是 LLM 裁量，e2e 只锁确定性路径。
+    await ctx.set_confirmation(execution="ask", credits="ask")
     pid1 = await ctx.new_project("S10-P1 warm path")
     src1 = await seed_asset(
         pid1, ctx.user_id, AssetType.VIDEO, "s10-p1-source.mp4", processed=True
@@ -3551,6 +3681,9 @@ async def s10_remix_flagship(ctx: Ctx) -> None:
           "the real source asset is ASR-processed by the dev worker", src_status)
     await topup_wallet(ctx.user_id)  # remix = 全模态真链，补足避免 422 噪音
 
+    # auto 档翻回（ADR-117 §2——run 路径：dock 呈现即开工，零确认拍；开工即
+    # 清 pending_brief，pin/链改读 run.context 与 settled 行的 intent 列）。
+    await ctx.set_confirmation(execution="auto", credits="auto")
     turn2 = await ctx.chat(
         pid2,
         "你能帮我把我的原视频做成 @参考案例 那样子吗？",
@@ -3559,9 +3692,11 @@ async def s10_remix_flagship(ctx: Ctx) -> None:
     conv2 = turn2["conversation_id"]
     brief2 = (await ctx.results(pid2)).get("pending_brief") or {}
     # Same bounded re-mention recovery as P1: the pin only lands with the
-    # first PendingPlan write.
+    # first PendingPlan write. auto 档新增出口——dock 同拍开工（brief 即清，
+    # pin 改读 run.context）。
+    run_id = turn2["run_id"]
     for _ in range(3):
-        if brief2.get("exemplar_asset_id") == ex2:
+        if brief2.get("exemplar_asset_id") == ex2 or run_id is not None:
             break
         turn2 = await ctx.chat(
             pid2,
@@ -3569,51 +3704,81 @@ async def s10_remix_flagship(ctx: Ctx) -> None:
             mentions=[{"type": "asset", "id": ex2, "label": "highlight-clips-preview.mp4"}],
         )
         brief2 = (await ctx.results(pid2)).get("pending_brief") or {}
-    check(brief2.get("exemplar_asset_id") == ex2,
+        run_id = turn2["run_id"]
+    if run_id is not None:
+        pinned2 = (await run_row(run_id))["context"].get("exemplar_asset_id") == ex2
+    else:
+        pinned2 = brief2.get("exemplar_asset_id") == ex2
+    check(pinned2,
           "P2's @mention pins the exemplar by code",
           {"brief": brief2, "terminal": terminal_tool_of(turn2),
-           "run_id": turn2.get("run_id"),
+           "run_id": run_id,
            "question": (turn2["assistant_message"].get("question") or {}),
            "content_head": (turn2["assistant_message"].get("content") or "")[:200]})
 
-    # 计划 dock：mention 回合可能直接出书；若路由仍 dock 了角色问（mention 的
-    # pin 已随写入落账，问题只是再确认），按选项答掉它（答复同样代码落 pin），
-    # 再回推到出书。
+    # 计划 dock：mention 回合可能直接出书（auto 档同拍开工）；若路由仍 dock
+    # 了角色问（mention 的 pin 已随写入落账，问题只是再确认），按选项答掉它
+    # （答复同样代码落 pin），再回推到出书。held 分支（守卫线/不可报价——
+    # ADR-117 §4 任何档恒问一次）留在 dock 等待态，下方口头确认拍开工。
     follow = turn2["assistant_message"]
     q2 = follow.get("question") or {}
-    if q2.get("kind") == "question" and q2.get("slot") == "asset_role":
+    if run_id is None and q2.get("kind") == "question" and q2.get("slot") == "asset_role":
         ans2 = await ctx.answer(follow["id"], {"kind": "option", "option_id": src2})
         check(ans2.status_code in (200, 201), "P2's role answer settles", ans2.text)
         follow = ans2.json().get("follow_up") or {}
-    if not is_plan_dock(follow):
+        if follow.get("workflow_run_id"):
+            run_id = str(follow["workflow_run_id"])
+    if run_id is None and not is_plan_dock(follow):
         # 显式覆盖：骨架缺席不该阻塞出书（读工具已被告知 FAILED = 直接出方案，
         # 此话术兜底 agent 仍犹豫的残差）。
         turn_dock = await ctx.chat(
             pid2, "参考片的骨架暂时拿不到也没关系——按你的判断直接出方案，不用等它。"
         )
         follow = turn_dock["assistant_message"]
-    check(is_plan_dock(follow), "the pinned plan docks", follow)
-    tasks = plan_tasks((await ctx.results(pid2)).get("pending_brief"))
-    if not any(t.get("tool") == "select_clips" for t in tasks):
-        # LLM 路由方差的一次纠偏——旗舰旅程的合法产物就是 clips 链。
-        await ctx.chat(pid2, "把原视频剪成案例那样的竖屏短片")
+        run_id = turn_dock["run_id"]
+    if run_id is None:
+        check(is_plan_dock(follow), "the pinned plan docks", follow)
         tasks = plan_tasks((await ctx.results(pid2)).get("pending_brief"))
-    check(any(t.get("tool") == "select_clips" for t in tasks),
-          "the remix plan carries the clips chain (旗舰旅程的合法链)", tasks)
-    draft_graph = await ctx.graph(pid2)
-    check(no_decompile_canvas_node(draft_graph),
-          "the draft graph carries NO decompile orphan node", draft_graph["nodes"])
+        if not any(t.get("tool") == "select_clips" for t in tasks):
+            # LLM 路由方差的一次纠偏——旗舰旅程的合法产物就是 clips 链。
+            turn_fix = await ctx.chat(pid2, "把原视频剪成案例那样的竖屏短片")
+            run_id = turn_fix["run_id"]
+            if run_id is None:
+                check(is_plan_dock(turn_fix["assistant_message"]),
+                      "the corrective re-docks the clips plan", turn_fix)
+                tasks = plan_tasks((await ctx.results(pid2)).get("pending_brief"))
+            else:
+                tasks = (((turn_fix.get("answered_question") or {}).get("intent")
+                          or {}).get("tasks")) or []
+        check(any(t.get("tool") == "select_clips" for t in tasks),
+              "the remix plan carries the clips chain (旗舰旅程的合法链)", tasks)
+    else:
+        born_tasks = ((await run_row(run_id))["context"].get("tasks")) or []
+        check(any(t.get("tool") == "select_clips" for t in born_tasks),
+              "auto 档 dock 即开工——链在出生时已定（错链开工 = router 回归"
+              "信号）", born_tasks)
+    graph2 = await ctx.graph(pid2)
+    check(no_decompile_canvas_node(graph2),
+          "decompile never reads back as a canvas node (draft or live)",
+          graph2["nodes"])
 
-    turn3 = await ctx.chat(pid2, "looks good, start")
-    check(terminal_tool_of(turn3) == "start_run",
-          "the prose confirmation closes on start_run", turn3)
-    run_id = turn3["run_id"]
-    check(run_id is not None, "the remix run is born", turn3)
+    held_confirm = run_id is None
+    if held_confirm:
+        # held 分支——守卫线/不可报价的口头确认拍（与 Start 钮同一机器）。
+        turn3 = await ctx.chat(pid2, "looks good, start")
+        check(terminal_tool_of(turn3) == "start_run",
+              "the guardrail confirm closes on start_run", turn3)
+        run_id = turn3["run_id"]
+    check(run_id is not None, "the remix run is born", None)
     run_ctx = (await run_row(run_id))["context"]
     check(run_ctx.get("exemplar_asset_id") == ex2,
           "the exemplar pin rides run.context into the run — source stays "
           "None on the mention path (两视频项目素材由 exemplar 排除法确定性解析)",
           run_ctx)
+    if not held_confirm:
+        check((run_ctx.get("confirmed_scope") or {}).get("confirmed_via") == "auto",
+              "confirmed_via = auto（呈现即开工的常驻授权戳）",
+              run_ctx.get("confirmed_scope"))
 
     # decompile 步骤新鲜物化（参考片 FAILED → warm 从未点火 → 非复用）。
     dec_step = await wait_step_terminal(run_id, "decompile", timeout=420.0)

@@ -11,6 +11,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -53,8 +54,8 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     email = Column(String(255), nullable=False, unique=True)
     name = Column(String(255), nullable=True)
-    # 用户级设置 (ADR-092, E5 — persona brand/voice JSONB 的 user 级先例):
-    # confirm_strategy ∈ {always, large, never}; NULL = 全默认（读容忍）.
+    # 用户级设置 (ADR-117 §1 — persona brand/voice JSONB 的 user 级先例):
+    # confirm_execution / confirm_credits ∈ {auto, ask}; NULL = 全默认（读容忍）.
     settings = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
@@ -982,6 +983,42 @@ class CreditTransaction(Base):
     idempotency_key = Column(String(128), nullable=False, unique=True)
     note = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
+
+
+class ConversationUsage(Base):
+    """One conversation turn's LLM token usage (ADR-117 D3) — the COGS
+    ledger for the conversation layer: metered, NEVER billed (the
+    conversation layer is free to the user), never on any bill or UI.
+
+    One row per turn — the tool loop's iterations aggregate in memory
+    (``app.metering.bind_conversation_turn``) and fold into this row with
+    the turn's assistant message in ONE commit (the billing write
+    discipline). ``cost_usd`` is priced at write time via ``price_tokens``
+    — frozen at write, never drifts with the vendor price list.
+    ``cached_tokens`` records the provider's prefix-cache hit report when
+    it returns one (NULL = the provider said nothing). ``project_id`` is
+    nullable for project-less conversation surfaces. Uses: COGS visibility
+    (per-user conversation/production cost ratio), the W11 fair-use quota
+    data base, and the context-budget calibration source (token
+    distribution per turn family).
+    """
+
+    __tablename__ = "conversation_usage"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
+    prompt_tokens = Column(BigInteger, nullable=False)
+    completion_tokens = Column(BigInteger, nullable=False)
+    cached_tokens = Column(BigInteger, nullable=True)
+    cost_usd = Column(Float, nullable=False)
+    model = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+    __table_args__ = (
+        Index("ix_conversation_usage_user_created", "user_id", "created_at"),
+        Index("ix_conversation_usage_project_created", "project_id", "created_at"),
+    )
 
 
 class Config(Base):

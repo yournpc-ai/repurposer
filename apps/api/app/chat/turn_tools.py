@@ -45,8 +45,10 @@ PLAN_TOOLS = [
         name="present_plan",
         description=(
             "Present the plan for the user's work request: the proposed "
-            "plan docks for their confirmation — it never starts a run by "
-            "itself. Speak the plan's short introduction as your message text "
+            "plan docks — the context's confirmation settings key whether "
+            "the run starts on presentation or waits for the user's "
+            "confirmation (the system starts it; this call never does). "
+            "Speak the plan's short introduction as your message text "
             "BEFORE calling this."
         ),
         params_model=PresentPlanArgs,
@@ -102,10 +104,11 @@ CHAT_TOOLS = [
     ChatTool(
         name="propose_tasks",
         description=(
-            "Propose new work as a task list that docks for the user's "
-            "confirmation — it never starts a run by itself; the run starts "
-            "only after the user confirms. Speak the proposal's summary as "
-            "your message text BEFORE calling this."
+            "Propose new work as a task list that docks — the context's "
+            "confirmation settings key whether the run starts on "
+            "presentation or waits for the user's confirmation (the system "
+            "starts it; this call never does). Speak the proposal's "
+            "summary as your message text BEFORE calling this."
         ),
         params_model=ProposeTasksArgs,
     ),
@@ -115,9 +118,10 @@ CHAT_TOOLS = [
             "Revise the project's persistent graph (add_node / connect / "
             "edit_prompt / delete_node / run). A revision inside "
             "the already-confirmed work re-fills the affected subgraph "
-            "directly; one that adds new paid work docks for the user's "
-            "confirmation instead — it does not run. Speak the summary of "
-            "the revision BEFORE calling this."
+            "directly; one that adds new paid work docks first — the "
+            "context's confirmation settings key whether it then runs on "
+            "presentation or waits for the user's confirmation. Speak the "
+            "summary of the revision BEFORE calling this."
         ),
         params_model=EditGraphArgs,
     ),

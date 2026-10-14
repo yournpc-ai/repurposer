@@ -21,7 +21,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, RedirectResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import NotificationListResponse
@@ -35,9 +35,11 @@ from app.platform.auth import (
     verify_code,
 )
 from app.platform.billing import get_or_create_wallet, held, list_transactions
-from app.platform.configs import get_config
+from app.platform.user_settings import (
+    merge_confirmation_pref,
+    read_confirmation_prefs,
+)
 from app.platform.email import InvalidRecipientError, send_verification_email
-from app.platform.user_settings import merge_confirm_strategy, read_confirm_strategy
 from app.providers.storage import (
     download_to_temp,
     owner_from_path,
@@ -165,22 +167,29 @@ class VerifyCodeResponse(BaseModel):
     user: UserResponse
 
 
-# ---- User settings (ADR-092, E5 — confirm_strategy 的用户级座位) -----------
+# ---- User settings (ADR-117 §1 — 两档确认偏好的用户级座位) -------------------
 
 
 class UserSettingsResponse(BaseModel):
-    """The settings read shape: the strategy plus the 'large' threshold (the
-    public operating parameter rides along so the dock's disclosure tier
-    needs ONE read — ADR-055 参数座位, never a secret)."""
+    """The settings read shape: the two confirmation prefs (ADR-117 D1).
+    The internal guardrail (``billing.always_confirm_above``) is an ops
+    parameter — never on this response, never a user setting (D6)."""
 
-    confirm_strategy: str
-    confirm_large_threshold: int
+    confirm_execution: str
+    confirm_credits: str
 
 
 class UserSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    confirm_strategy: Literal["always", "large", "never"]
+    confirm_execution: Literal["auto", "ask"] | None = None
+    confirm_credits: Literal["auto", "ask"] | None = None
+
+    @model_validator(mode="after")
+    def _at_least_one_key(self) -> "UserSettingsUpdate":
+        if self.confirm_execution is None and self.confirm_credits is None:
+            raise ValueError("at least one of confirm_execution / confirm_credits")
+        return self
 
 
 @auth_router.get("/settings", response_model=UserSettingsResponse)
@@ -190,9 +199,10 @@ async def get_settings(
 ) -> UserSettingsResponse:
     """Read the user's settings (读容忍 — absent/unknown values read as the
     defaults)."""
+    execution, credits = read_confirmation_prefs(current_user.settings)
     return UserSettingsResponse(
-        confirm_strategy=read_confirm_strategy(current_user.settings),
-        confirm_large_threshold=await get_config(db, "billing.confirm_large_threshold"),
+        confirm_execution=execution,
+        confirm_credits=credits,
     )
 
 
@@ -212,11 +222,21 @@ async def put_settings(
     user = await db.get(User, current_user.id)
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Account no longer exists")
-    user.settings = merge_confirm_strategy(user.settings, data.confirm_strategy)
+    settings = user.settings
+    if data.confirm_execution is not None:
+        settings = merge_confirmation_pref(
+            settings, "confirm_execution", data.confirm_execution
+        )
+    if data.confirm_credits is not None:
+        settings = merge_confirmation_pref(
+            settings, "confirm_credits", data.confirm_credits
+        )
+    user.settings = settings
     await db.commit()
+    execution, credits = read_confirmation_prefs(user.settings)
     return UserSettingsResponse(
-        confirm_strategy=data.confirm_strategy,
-        confirm_large_threshold=await get_config(db, "billing.confirm_large_threshold"),
+        confirm_execution=execution,
+        confirm_credits=credits,
     )
 
 

@@ -1,0 +1,59 @@
+{
+ "url": "http://localhost:3000/",
+ "title": "Repurposer — You focus on your craft; we handle the rest",
+ "description": "Repurposer is an AI assistant that turns your existing material — talks, reports, podcasts, transcripts — into the content you name: LinkedIn posts, short clips, articles, newsletters, in the languages your audience speaks. GDPR-ready.",
+ "h1": [
+  "You did the talking We do the rest"
+ ],
+ "h2": [
+  "How it works",
+  "Lands where your audience is",
+  "Simple pricing",
+  "Questions, answered"
+ ],
+ "h3": [
+  "Bring whatever you have",
+  "You name it, you get it",
+  "Refine in chat",
+  "One click and it's out",
+  "Free",
+  "Pro",
+  "Institution",
+  "Where is my data stored?",
+  "Which languages are supported?",
+  "What can I upload?",
+  "Does anything get published automatically?",
+  "Who owns the generated content?",
+  "Can I cancel anytime?",
+  "Features"
+ ],
+ "buttons": [
+  "Sign in",
+  "Try the beta",
+  "Monthly",
+  "Yearly",
+  "Where is my data stored?",
+  "Which languages are supported?",
+  "What can I upload?",
+  "Does anything get published automatically?",
+  "Who owns the generated content?",
+  "Can I cancel anytime?",
+  "Try the free beta"
+ ],
+ "links": [
+  "Skip to content",
+  "Repurposer",
+  "Features",
+  "Pricing",
+  "FAQ",
+  "See how it works",
+  "Start free",
+  "Start with Pro",
+  "Contact us",
+  "See pricing",
+  "Try the free beta",
+  "Overview",
+  "How it works"
+ ],
+ "screenshot": "landing.png"
+}

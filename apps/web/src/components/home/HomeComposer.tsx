@@ -19,7 +19,6 @@ import { InputGroup, InputGroupAddon } from "@/components/ui/input-group"
 import { AssetChips } from "@/components/home/AssetChips"
 import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
 import { ComposerSendButton } from "@/components/composer/ComposerSendButton"
-import { CostConfirmControl } from "@/components/composer/CostConfirmControl"
 import { AssetsPanel } from "@/components/composer/AssetsPanel"
 import { ModelsPanel } from "@/components/composer/ModelsPanel"
 import {
@@ -536,8 +535,7 @@ export function HomeComposer({
               )}
             </div>
 
-            {/* Right group — the cost-confirmation pill (UI-only preference
-                this batch, 2026-09-23) + Models, the honest Auto panel
+            {/* Right group — Models, the honest Auto panel
                 (user-ruled 2026-08-30): the pipeline assigns models per
                 modality and there is exactly one provider per modality, so
                 this is a READ-ONLY display of the real assignments — no
@@ -545,7 +543,6 @@ export function HomeComposer({
                 off the absolutely-anchored send button (measured gap was
                 0px — the circles touched, 2026-08-31). */}
             <div className="mr-3 flex items-center gap-2">
-              <CostConfirmControl popoverSide="bottom" align="end" />
               {/* Models (honest Auto panel) — PARKED: hidden until the panel
                   has something actionable to show; restore by ungating. */}
               {false && (

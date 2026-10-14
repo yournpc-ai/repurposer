@@ -72,6 +72,7 @@ from app.chat.perception.executes import speaker_form_lines, understanding_diges
 from app.chat.service import (
     _active_run_line,
     _ask_content,
+    _auto_start_docked_plan,
     _bare_question,
     _cannot_do_text,
     _checkpoint_callback,
@@ -90,6 +91,7 @@ from app.chat.service import (
     is_pending_plan,
     latest_pending_question,
     merge_brief,
+    resolve_confirmation_need,
     resolve_suggestion_note,
     sync_plan_question,
 )
@@ -113,7 +115,7 @@ from app.models.schemas import (
     StartAnswerRequest,
     resolve_recommended_id,
 )
-from app.models.tables import Asset, ExplorationRow, Message, Persona, Project
+from app.models.tables import Asset, ExplorationRow, Message, Persona, Project, User
 from app.pipeline.asset_processing import has_any_text_material
 from app.pipeline.assets import (
     asset_text_content,
@@ -138,6 +140,7 @@ from app.pipeline.exploration_store import (
 )
 from app.pipeline.scope_compile import decision_package_plans
 from app.platform.project_context import resolve_default_persona
+from app.platform.user_settings import read_confirmation_prefs
 from app.tools import ToolRejected, validate_task_list
 
 logger = structlog.get_logger()
@@ -184,6 +187,9 @@ class PlanTurn:
         self.assets: list[Asset] = []
         self.has_text_material = False
         self.persona: Persona | None = None
+        # (execution, credits) — the turn's confirmation prefs (ADR-117 D1),
+        # loaded in assemble; default ("auto", "auto") until then.
+        self.confirmation: tuple[str, str] = ("auto", "auto")
         self.infer_kwargs: dict[str, Any] = {}
         # Loop state:
         self.material_asset: Asset | None = None
@@ -468,6 +474,15 @@ class PlanTurn:
         if persona is None:
             persona = await resolve_default_persona(db, self.user_id)
         self.persona = persona
+        # ADR-117 D1: the turn's confirmation prefs ride the assembled
+        # context as a FACT line (the mode-conditional law stays in the
+        # static system template — 一法一座, prefix-cache intact). The
+        # server-side enforcement reads the SAME two prefs fresh at the
+        # dock (resolve_confirmation_need), never this assembly.
+        user_row = await db.get(User, self.user_id)
+        self.confirmation = read_confirmation_prefs(
+            user_row.settings if user_row is not None else None
+        )
         # The docked decision package (iter-2 ⑦): when a plan-sourced dock is
         # on the table, its Content Plans render as the package block so a
         # change ask can name its plan_id (revise_plan's唯一指认面 — the LLM
@@ -516,6 +531,9 @@ class PlanTurn:
             # review invitation may name that home; None/"chat" = the
             # surface-neutral law stands.
             surface=request.surface,
+            # ADR-117 D1 — the confirmation-settings fact (the system
+            # template's mode-conditional close law reads it).
+            confirmation=self.confirmation,
         )
 
     def _role_pins(self) -> dict[str, str | None]:
@@ -889,6 +907,12 @@ class PlanTurn:
         # quotation (total + per-task marginal), degraded exactly like the
         # preview — an unquotable/uncompilable chain docks quote-less.
         task_estimate = await _safe_task_estimate(db, project, params.tasks)
+        # ADR-117 §4: the confirmation need is computed ONCE here — the
+        # echo's held clause (keyed on the stamped reason: the auto
+        # regime's guardrail/unquotable trip carries the honest
+        # correction) and the dock payload's stamp read the same object
+        # (passed through below).
+        need = await resolve_confirmation_need(db, self.user_id, task_estimate)
         # 估价尾行 (ADR-111 §2 — dock 卡面退役后总估价的新家): the dock echo
         # carries the code-composed estimate whisper (BILLING §2.1 披露义务 —
         # capture 前可见). Appended AFTER the prose so the tail lands with
@@ -896,7 +920,7 @@ class PlanTurn:
         # per-task half lives on the canvas's draft nodes. intent.answer and
         # the question row share the same tailed echo, so the flow's
         # content-match (echo 实体化) keeps holding.
-        echo = echo + _estimate_tail(self.text, task_estimate)
+        echo = echo + _estimate_tail(self.text, task_estimate, reason=need.reason)
 
         # The late-turn guard: a concurrent Start committed while this refine
         # was in flight — docking now would raise a plan over an active
@@ -976,10 +1000,23 @@ class PlanTurn:
             brief=merged_brief,
             echo=echo,
             estimate=task_estimate,
+            need=need,
         )
         question = await latest_pending_question(db, self.conversation_id)
         assert question is not None  # sync_plan_question just docked it
         self.outcome = (question, None, self.settled_pending, bailed_run_ids)
+        # ADR-117 §2 auto 开工道: when the dock owes no confirm beat, the
+        # SAME start machine fires on presentation (None = the dock waits
+        # for the user's beat — ask modes / guardrail / structural hold).
+        auto = await _auto_start_docked_plan(
+            db,
+            user_id=self.user_id,
+            conversation_id=self.conversation_id,
+            project=project,
+        )
+        if auto is not None:
+            answered_q, auto_run_id = auto
+            self.outcome = (question, auto_run_id, answered_q, bailed_run_ids)
         return None
 
     # ---- the exploration seats (iter-2 ③/⑤ — ADR-088 旅程四 chain) -----------
@@ -1164,8 +1201,10 @@ class PlanTurn:
         # dock's echo carries the code-composed estimate whisper too — the
         # disclosure duty (BILLING §2.1) holds on every dock seat, and the
         # tailed echo rides intent.answer so the re-dock replay stays
-        # single-tailed.
-        prose = prose + _estimate_tail(self.text, task_estimate)
+        # single-tailed. The held clause (ADR-117 §4) keys on the stamped
+        # reason — the auto regime's guardrail/unquotable trip only.
+        need = await resolve_confirmation_need(db, self.user_id, task_estimate)
+        prose = prose + _estimate_tail(self.text, task_estimate, reason=need.reason)
         intent = InferredIntent(
             action="draft",
             tasks=compiled,
@@ -1229,10 +1268,22 @@ class PlanTurn:
             echo=prose,
             estimate=task_estimate,
             plans=package_plans,
+            need=need,
         )
         question = await latest_pending_question(db, self.conversation_id)
         assert question is not None  # sync_plan_question just docked it
         self.outcome = (question, None, self.settled_pending, bailed_run_ids)
+        # ADR-117 §2 auto 开工道 (the same seat as _present_plan): a package
+        # dock that owes no confirm beat starts the work on presentation.
+        auto = await _auto_start_docked_plan(
+            db,
+            user_id=self.user_id,
+            conversation_id=self.conversation_id,
+            project=project,
+        )
+        if auto is not None:
+            answered_q, auto_run_id = auto
+            self.outcome = (question, auto_run_id, answered_q, bailed_run_ids)
         return None
 
     async def _revise_plan(self, params: RevisePlanArgs, prose: str) -> str | None:
@@ -1298,8 +1349,11 @@ class PlanTurn:
         ) or (stored_intent.caption_mode if stored_intent else None)
         task_estimate = await _safe_task_estimate(db, project, compiled)
         # 估价尾行 (ADR-111 §2 — present_plan dock 的同座同律): the revision
-        # re-dock's echo carries the code-composed estimate whisper too.
-        prose = prose + _estimate_tail(self.text, task_estimate)
+        # re-dock's echo carries the code-composed estimate whisper too;
+        # the held clause (ADR-117 §4) keys on the stamped reason — the
+        # auto regime's guardrail/unquotable trip only.
+        need = await resolve_confirmation_need(db, self.user_id, task_estimate)
+        prose = prose + _estimate_tail(self.text, task_estimate, reason=need.reason)
         intent = InferredIntent(
             action="draft",
             tasks=compiled,
@@ -1362,10 +1416,23 @@ class PlanTurn:
             echo=prose,
             estimate=task_estimate,
             plans=package_plans,
+            need=need,
         )
         question = await latest_pending_question(db, self.conversation_id)
         assert question is not None  # sync_plan_question just docked it
         self.outcome = (question, None, self.settled_pending, bailed_run_ids)
+        # ADR-117 §2 auto 开工道 (the same seat as _present_plan): a
+        # revision's re-dock owes no confirm beat in auto modes either —
+        # the revised plan starts on presentation (guardrail unchanged).
+        auto = await _auto_start_docked_plan(
+            db,
+            user_id=self.user_id,
+            conversation_id=self.conversation_id,
+            project=project,
+        )
+        if auto is not None:
+            answered_q, auto_run_id = auto
+            self.outcome = (question, auto_run_id, answered_q, bailed_run_ids)
         return None
 
     async def _revise_selects(self, params: ReviseSelectsArgs, prose: str) -> str | None:

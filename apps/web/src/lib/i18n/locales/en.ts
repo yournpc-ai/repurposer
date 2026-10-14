@@ -37,6 +37,27 @@ const en = {
     networkError: "Network error — check your connection",
     skipToContent: "Skip to content",
   },
+  assistant: {
+    /** SettingsDialog「助手」section (ADR-117 §1) — the two confirmation
+     * prefs' ONLY UI seat. Plain factual copy; the guardrail stays an ops
+     * parameter, the footnote is its single honest mention. */
+    title: "Assistant",
+    subtitle:
+      "When the assistant checks with you before acting. Everything else it just does.",
+    permissions: "Permissions",
+    execution: {
+      label: "Taking action",
+      desc: "After a plan is presented, whether it waits for your go-ahead.",
+    },
+    spending: {
+      label: "Spending credits",
+      desc: "Before a paid plan starts, whether to confirm once with the price.",
+    },
+    mode: { auto: "Automatic", ask: "Ask" },
+    footnote:
+      "The estimate is always shown with the plan. Unusually large or unquotable plans always ask once, whatever you set here.",
+    updateFailed: "Couldn't save the setting — please try again",
+  },
   credits: {
     /** The one estimate range form every surface shares (dock total /
      * per-task price / — three surfaces, one source, BILLING §7). */
@@ -59,6 +80,15 @@ const en = {
     balance: "Balance",
     held: "Held in active runs",
     recent: "Recent activity",
+    /** The SettingsDialog「积分」section (BILLING §7 展示主轴) — the
+     * balance + ledger full-view seat, same two endpoints as the pill. */
+    title: "Credits",
+    subtitle: "Your balance and recent activity.",
+    overview: "Overview",
+    planFree: "Free trial",
+    plansComing: "Paid plans coming soon",
+    showingRecent: "Latest {{count}}",
+    viewAll: "View all →",
     tx: {
       empty: "No transactions yet",
       /** The semantic fold (ADR-057 K4): the user面 only ever sees three
@@ -459,34 +489,6 @@ const en = {
     uploadRetry: "Retry",
     uploadInProgress: "Files are still uploading — give it a moment",
     managePersonas: "Manage personas…",
-    // Cost-confirmation strategy (ADR-092 tiers: always / large / never —
-    // server settings win, localStorage is the read-tolerant fallback).
-    // Trigger copy discipline: ≤12 characters so the pill fits the dock's
-    // control strip.
-    confirmStrategy: {
-      label: "Cost confirmation",
-      trigger: {
-        always: "Always",
-        large: "Large only",
-        never: "Estimate",
-      },
-      options: {
-        always: {
-          title: "Always confirm",
-          desc: "Every plan shows the charge note and a priced confirm button",
-        },
-        large: {
-          title: "Large plans only",
-          desc: "Confirmation required above the credits threshold",
-        },
-        never: {
-          title: "Estimate only",
-          desc: "Just the estimate range — no forced confirmation",
-        },
-      },
-      footnote:
-        "Applies to the plan confirmation before a paid run starts.",
-    },
   },
   // Recipe cards (RECIPES §7) — one block per card id in lib/recipes.ts;
   // reserved cards render disabled with the Soon pill, never launchable.
@@ -1454,14 +1456,17 @@ const en = {
     // candidates (assets / outputs) ARE canvas nodes. NO '/' — chat has
     // no slash-command system; advertising it would be a false promise
     // (the 虚构 SKU 货架 ban applies to placeholder copy too). The '/'
-    // half earns its seat only if slash commands ever ship.
-    chatPlaceholder: "Describe your changes. Drag or paste files, or type @ to mention nodes — the assistant confirms with you before starting.",
+    // half earns its seat only if slash commands ever ship. ADR-117: the
+    // old "confirms with you before starting" clause left with the
+    // ask-default regime — static copy describes the default (auto) truth:
+    // presentation IS the authorization.
+    chatPlaceholder: "Describe your changes. Drag or paste files, or type @ to mention nodes.",
     // The full form's sibling (2026-09-13 user ruling): pre-first-run the
     // canvas doesn't exist yet, so there are no "nodes" to point at — the
     // @ picker's candidates are assets only. Copy follows the world's
     // truth per form; the nodes version returns once the canvas lands
     // (panel / dock forms).
-    chatPlaceholderAssets: "Describe what you want to make. Drag or paste files, or type @ to mention assets — the assistant confirms with you before starting.",
+    chatPlaceholderAssets: "Describe what you want to make. Drag or paste files, or type @ to mention assets.",
     attachFiles: "Attach files",
     retryUpload: "Retry upload",
     removeAttachment: "Remove attachment",
@@ -1474,6 +1479,18 @@ const en = {
       file: "File",
     },
     stopped: "Generation stopped.",
+    // 确认 pill (ADR-117 §4 — 画板 C): the confirm beat's only chrome, shown
+    // exactly when the dock's stamp says a beat is owed. The label family:
+    // bare verb (execution ask) / priced (credits ask · guardrail — the
+    // number is the server fold's high end, never client-computed) /
+    // deferred (the NULL-estimate family — never a fabricated number).
+    // confirmPillMessage = the click's canned user words riding the chat
+    // channel (the pill IS the user saying it — the retired Start pill's
+    // own post-v4.2 machine).
+    confirmPillStart: "Start",
+    confirmPillStartPriced: "Start · ~{{n}} credits",
+    confirmPillStartDeferred: "Start · priced when it runs",
+    confirmPillMessage: "Confirm and generate",
   },
   questionDock: {
     bail: "Stop generation",

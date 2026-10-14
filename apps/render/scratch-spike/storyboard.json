@@ -1,0 +1,25 @@
+{
+  "_note": "Spike storyboard — hand-written stand-in for what the LLM would orchestrate. Grounding law (same as launch-film): every on-screen string is quoted or trimmed from research.json's extraction of http://localhost:3000/.",
+  "theme": { "canvas": "#F7F6F2", "ink": "#141414", "accent": "#D8FF3D", "accent2": "#1E1E1E" },
+  "scenes": [
+    { "type": "words", "seconds": 2.6, "dark": false, "lines": ["You did", "the *talking*"] },
+    { "type": "words", "seconds": 2.6, "dark": true, "lines": ["We do", "the *rest*"] },
+    { "type": "hero", "seconds": 3.2, "word": "Repurposer", "sub": "You focus on your craft; we handle the rest" },
+    {
+      "type": "ui", "seconds": 5.4, "image": "landing.png", "url": "repurposer.ai",
+      "focuses": [
+        { "at": 0.0, "x": 0.5, "y": 0.46, "zoom": 1.12 },
+        { "at": 0.9, "x": 0.5, "y": 0.44, "zoom": 1.55 },
+        { "at": 3.2, "x": 0.445, "y": 0.72, "zoom": 2.1 }
+      ],
+      "captions": [
+        { "at": 1.1, "text": "You name it, you get it" },
+        { "at": 3.4, "text": "One click and it's out" }
+      ]
+    },
+    { "type": "divider", "seconds": 3.0, "index": "01", "label": "Bring", "roll": ["slides", "podcasts", "whatever you have"] },
+    { "type": "words", "seconds": 2.8, "dark": false, "lines": ["*You name it,*", "you get it"] },
+    { "type": "reveal", "seconds": 3.0, "lead": "One more thing.", "word": "*GDPR-ready*", "sub": "in the languages your audience speaks" },
+    { "type": "end", "seconds": 3.4, "name": "Repurposer", "tagline": "You focus on your craft; we handle the rest", "url": "repurposer.ai" }
+  ]
+}

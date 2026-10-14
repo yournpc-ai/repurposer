@@ -90,6 +90,7 @@ from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.service import (
     _ASK_BACK_TEXT,
     _ask_content,
+    _auto_start_docked_plan,
     _bare_question,
     _cannot_do_text,
     _checkpoint_callback,
@@ -104,6 +105,7 @@ from app.chat.service import (
     _reminder_tail,
     _safe_task_estimate,
     latest_pending_question,
+    resolve_confirmation_need,
     resolve_suggestion_note,
     sync_plan_question,
 )
@@ -139,6 +141,7 @@ from app.models.tables import (
     Output,
     Persona,
     Project,
+    User,
     WorkflowRun,
     WorkflowStep,
 )
@@ -168,6 +171,7 @@ from app.pipeline.scope_compile import (
     route_revision,
 )
 from app.platform.project_context import resolve_default_persona
+from app.platform.user_settings import read_confirmation_prefs
 from app.providers.llm.base import LLMError
 from app.tools import ToolRejected, validate_task_list
 
@@ -310,10 +314,20 @@ class ChatTurn:
             # is a law, not a judgment (2026-09-05 S6d).
             and bool(self.text.strip())
         )
+        # ADR-117 D1: the confirmation-settings fact rides the chat context
+        # (the chat_intent system template's close law is mode-conditional)
+        # — read tolerant, fresh per turn, rendered by build_context's seat.
+        confirmation: tuple[str, str] | None = None
+        if project:
+            user_row = await db.get(User, self.user_id)
+            confirmation = read_confirmation_prefs(
+                user_row.settings if user_row is not None else None
+            )
         self.context = (
             await build_context(
                 db, project, recent, mentions, pending,
                 canvas_available=self.canvas_available,
+                confirmation=confirmation,
             )
             if project
             else {"text": ""}
@@ -608,7 +622,11 @@ class ChatTurn:
             if estimate is _ESTIMATE_UNSET
             else estimate
         )
-        answer = (answer or "") + _estimate_tail(self.text, resolved_estimate)
+        # ADR-117 §4: one confirmation-need computation per dock — the
+        # echo's held clause (keyed on the stamped reason) reads it, the
+        # payload stamp takes it by pass-through below.
+        need = await resolve_confirmation_need(db, self.user_id, resolved_estimate)
+        answer = (answer or "") + _estimate_tail(self.text, resolved_estimate, reason=need.reason)
         intent = InferredIntent(
             action="draft",
             tasks=tasks,
@@ -650,9 +668,22 @@ class ChatTurn:
             estimate=resolved_estimate,
             derived=derived,
             plans=plans,
+            need=need,
         )
         docked = await latest_pending_question(db, self.conversation_id)
         self.outcome = (docked, None, bailed_run_ids, self.settled_question)
+        # ADR-117 §2 auto 开工道 (the plan path's dock seats' same law — the
+        # chat path's expansion destination included): a dock that owes no
+        # confirm beat starts the work on presentation.
+        auto = await _auto_start_docked_plan(
+            db,
+            user_id=self.user_id,
+            conversation_id=self.conversation_id,
+            project=project,
+        )
+        if auto is not None:
+            _answered_q, auto_run_id = auto
+            self.outcome = (docked, auto_run_id, bailed_run_ids, self.settled_question)
 
     # ---- the exploration seats (iter-3 S2 — R6 parity with the plan path) ----
 
@@ -1120,8 +1151,10 @@ class ChatTurn:
 
         async def _dispatch(p: WiringProposal) -> UUID | None:
             """Returns the born run's id, or None when the turn lands as a
-            dock (an expansion / unproven scope ALWAYS waits for the user's
-            confirmation — 口头确认律, never a silent direct start) or as a
+            dock (an expansion / unproven scope ALWAYS docks — the ask
+            regimes wait for the user's confirmation there; the auto
+            regime's presentation-time start fires off the dock itself,
+            ADR-117 §2 — never a silent direct start either way) or as a
             pure graph edit with nothing to execute."""
             if project is None or not p.ops:
                 raise WiringRejected("wiring: no ops to apply")
@@ -1166,9 +1199,10 @@ class ChatTurn:
                 if verdict.decision == CONTINUATION:
                     await nested.commit()
                 else:
-                    # 口头确认律 (ADR-092 翻案, 2026-09-28): an expansion /
-                    # unproven scope ALWAYS docks for the user's
-                    # confirmation — never a silent direct start. Roll the
+                    # An expansion / unproven scope ALWAYS docks — never a
+                    # silent direct start (ask regimes: the dock waits for
+                    # the user's confirmation; auto regime: the presentation
+                    # fires the start off the dock, ADR-117 §2). Roll the
                     # door's mutation back — the dock's own draft stamp
                     # (inside sync_plan_question) previews the plan with
                     # canonical fill keys instead.

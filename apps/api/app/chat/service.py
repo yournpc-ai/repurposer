@@ -46,8 +46,11 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from app.pipeline.lifecycle import ConfirmationNeed
 
 import structlog
 from fastapi import HTTPException, status
@@ -61,12 +64,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # at startup (the orchestrator's roster self-check walks it).
 from app.chat.intent import chat_intent_agent as _chat_intent_agent  # noqa: F401
 from app.chat.intent import intent_router as _intent_router  # noqa: F401
+from app.chat.context import recent_history_within_budget
 from app.chat.suggestions import (
     build_suggestion_records,
     compose_suggestion_note,
     suggestion_stale_reasons,
 )
 from app.chat.turn_tools import strip_tool_echoes
+from app.metering import bind_conversation_turn, fold_conversation_usage
 from app.models.schemas import (
     AnswerPayload,
     AnswerRequest,
@@ -86,6 +91,7 @@ from app.models.schemas import (
     QuestionPayload,
     QuestionProposal,
     PlanEstimate,
+    StartAnswerRequest,
     SuggestionRef,
     TaskItem,
 )
@@ -96,6 +102,7 @@ from app.models.tables import (
     MessageSeqCounter,
     Persona,
     Project,
+    User,
     WorkflowRun,
     WorkflowStep,
 )
@@ -107,11 +114,13 @@ from app.pipeline.derivative_dispatch import (
 )
 from app.pipeline.graph import MEDIA, NODE_KINDS
 from app.platform.billing import CreditsInsufficientError
+from app.platform.configs import get_config
 from app.platform.conversation_context import (
     find_conversation,
     is_pending_plan,
     latest_pending_question,
 )
+from app.platform.user_settings import read_confirmation_prefs
 from app.tools import ToolRejected
 
 logger = structlog.get_logger()
@@ -219,7 +228,9 @@ def _reminder_tail(text: str, question: str, default_path: str | None) -> str:
     return tail
 
 
-def _estimate_tail(text: str, estimate: PlanEstimate | None) -> str:
+def _estimate_tail(
+    text: str, estimate: PlanEstimate | None, *, reason: str = ""
+) -> str:
     """Dock echo 的估价尾行 (ADR-111 §2 — 确认 dock 卡面退役后总估价的新家;
     BILLING §2.1 披露义务不变: capture 前估价必须可见): a code-composed
     whisper appended to the plan's dock echo — the total range plus the
@@ -227,10 +238,49 @@ def _estimate_tail(text: str, estimate: PlanEstimate | None) -> str:
     the LLM's voice — the reminder tail's doctrine; 真实数字 = 世界自证,
     ADR-058 的合法二源). A deferred (None) quote says so honestly — never
     a fabricated number. The per-task half stays on the canvas's draft
-    nodes (逐节点估价, ADR-057 K5)."""
+    nodes (逐节点估价, ADR-057 K5).
+
+    ``reason`` (ADR-117 §4) = the dock's stamped ConfirmationNeed reason.
+    The held clauses key on it — the auto regime's guardrail/unquotable
+    trip: the echo's spoken close announced the start (the model speaks
+    before the quote exists), but the dock waits for the priced beat, so
+    the tail carries the honest correction. ``above_guardrail`` names the
+    high side (the threshold itself is ops-internal, never shown);
+    ``unquotable`` leads with the deferred-pricing truth EVEN when a
+    partial range exists (a NULL per-task with quotable siblings — the
+    pill's deferred label and the tail must say one thing). The prefs
+    family (execution_pref / credits_pref) keeps the standard
+    estimate-only shape: there the model's own closing question IS the
+    confirmation ask."""
     zh = _prefers_zh(text)
     if estimate is not None:
         low, high = estimate.total
+        if reason == "unquotable":
+            if zh:
+                return (
+                    f"\n\n（估价 {low}–{high} 积分起——含暂无法提前估价的步骤，"
+                    "确认后才开始：按上限预扣，按实际用量结算，"
+                    "失败的步骤不收费，剩余退回）"
+                )
+            return (
+                f"\n\n(From {low}–{high} credits — some steps can't be "
+                "quoted up front, so the work starts once you confirm: the "
+                "high end is held, you're charged only for what actually "
+                "runs, failed steps are free, and the remainder is "
+                "returned.)"
+            )
+        if reason == "above_guardrail":
+            if zh:
+                return (
+                    f"\n\n（估价 {low}–{high} 积分——金额较高，确认后才开始："
+                    "按上限预扣，按实际用量结算，失败的步骤不收费，剩余退回）"
+                )
+            return (
+                f"\n\n(Estimated {low}–{high} credits — on the high side, "
+                "so the work starts once you confirm: the high end is held, "
+                "you're charged only for what actually runs, failed steps "
+                "are free, and the remainder is returned.)"
+            )
         if zh:
             return (
                 f"\n\n（估价 {low}–{high} 积分——开始时按上限预扣，"
@@ -241,11 +291,59 @@ def _estimate_tail(text: str, estimate: PlanEstimate | None) -> str:
             "is held; you're charged only for what actually runs, failed "
             "steps are free, and the remainder is returned.)"
         )
+    if reason in ("above_guardrail", "unquotable"):
+        if zh:
+            return (
+                "\n\n（估价随运行确定——这个方案无法提前估价，确认后才开始；"
+                "开始后才计费，失败的步骤不收费）"
+            )
+        return (
+            "\n\n(Credits are priced when the run starts — this plan can't "
+            "be quoted up front, so it starts once you confirm; billing "
+            "begins only when you start, and failed steps are free.)"
+        )
     if zh:
         return "\n\n（估价随运行确定——开始后才计费，失败的步骤不收费）"
     return (
         "\n\n(Credits are priced when the run starts — billing begins only "
         "when you start, and failed steps are free.)"
+    )
+
+
+def _auto_start_rejected_line(detail: dict[str, Any] | None) -> str:
+    """The auto 道's birthplace-422 honesty line (ADR-117 §2): the
+    presentation-time start failed AFTER the echo's work-start beat spoke,
+    and no pill / grey row / toast carries it (the ask 道's client-side
+    surfacing never fires on this path) — so the reason lands as a
+    code-composed tail on the dock row's content (the estimate tail's
+    lawful seat: code-forced text, real numbers from the 422 detail, never
+    the LLM's voice). ``credits.insufficient`` names the two numbers
+    (BILLING §5 文案纪律: factual, no top-up CTA — the purchase entry is
+    W11); every other 422 gets the generic retry line (a retry through
+    the ask 道 surfaces the full reason there). Language = the request's
+    ui locale (the wallet route's same seat)."""
+    from app.ui_locale import current_ui_language  # deferred: request ctx
+
+    zh = (current_ui_language() or "").startswith("zh")
+    if detail and detail.get("code") == "credits.insufficient":
+        balance = detail.get("balance")
+        required = detail.get("required")
+        if balance is not None and required is not None:
+            if zh:
+                return (
+                    f"\n\n（开工没有成功——积分不足：当前余额 {balance}，"
+                    f"这个方案约需 {required}。计划保留在这里。）"
+                )
+            return (
+                f"\n\n(The work couldn't start — not enough credits: your "
+                f"balance is {balance}, this plan needs about {required}. "
+                "The plan stays here.)"
+            )
+    if zh:
+        return "\n\n（开工没有成功——计划保留在这里，再说一次「开始」即可重试。）"
+    return (
+        "\n\n(The work couldn't start — the plan stays here; "
+        'say "start" to try again.)'
     )
 
 
@@ -514,6 +612,32 @@ async def _safe_task_estimate(
         return await derive_task_estimates(db, project, tasks)
     except (ToolRejected, ValueError):
         return None
+
+
+async def resolve_confirmation_need(
+    db: AsyncSession, user_id: UUID, estimate: PlanEstimate | None
+) -> "ConfirmationNeed":
+    """The dock's confirmation conjunct (ADR-117 §4): read the user's two
+    prefs + the guardrail config, fold the quote, run the pure law. The
+    result is stamped onto the docked question's payload at presentation
+    time — the client's pill predicate and the start gate both read THAT
+    stamp, never a re-derivation."""
+    from app.pipeline.lifecycle import ConfirmationNeed, confirmation_need
+
+    user = await db.get(User, user_id)
+    execution, credits = read_confirmation_prefs(
+        user.settings if user is not None else None
+    )
+    guardrail = await get_config(db, "billing.always_confirm_above")
+    quote_high = int(estimate.total[1]) if estimate is not None else None
+    unquotable = estimate is None or any(t is None for t in estimate.per_task)
+    return confirmation_need(
+        execution=execution,
+        credits=credits,
+        quote_high=quote_high,
+        unquotable=unquotable,
+        always_confirm_above=guardrail,
+    )
 
 
 # ---- brief (DIALOG_WORKFLOW §2.4, ADR-052 B2) --------------------------------
@@ -1108,6 +1232,7 @@ async def sync_plan_question(
     echo: str | None = None,
     estimate: PlanEstimate | None = None,
     plans: list[dict] | None = None,
+    need: "ConfirmationNeed | None" = None,
 ) -> list[UUID]:
     """Keep exactly one pending task_book question per project conversation.
 
@@ -1160,6 +1285,14 @@ async def sync_plan_question(
     # whole plan card (the B3 brief stamp's precedent: frozen with the row,
     # re-stamped every dock), and the SSE envelope needs no pending-brief
     # refetch to render it.
+    # 授权前移 (ADR-117 §4): the confirmation conjunct is computed ONCE here,
+    # at presentation time (prefs + guardrail + the quote fold), and stamped
+    # into the payload — the client's pill predicate and the auto-start
+    # drive both read this stamp, never a re-derivation. A caller that
+    # already computed it (the dock seats, for the echo's held variant)
+    # passes it through — one computation per dock.
+    if need is None:
+        need = await resolve_confirmation_need(db, user_id, estimate)
     _message, bailed_run_ids = await _dock_question(
         db,
         conversation_id,
@@ -1169,6 +1302,10 @@ async def sync_plan_question(
             reasons=reasons or [],
             brief=brief,
             estimate_credits=estimate,
+            requires_confirmation=need.requires_confirmation,
+            confirm_reason=need.reason,
+            quote_high=need.quote_high,
+            unquotable=need.unquotable,
             derived=derived or [],            # 决策包阅读层 (iter-2 ③): the Content Plans behind the compiled
             # chain; empty on the router-drafted docks (读容忍).
             plans=plans or [],
@@ -1199,6 +1336,129 @@ async def sync_plan_question(
         )
         await clear_draft_graph(db, UUID(str(project.id)))
     return bailed_run_ids
+
+
+async def _auto_start_docked_plan(
+    db: AsyncSession,
+    *,
+    user_id: UUID,
+    conversation_id: UUID,
+    project: Project,
+) -> tuple[Message, UUID] | None:
+    """ADR-117 §2 授权前移 — the auto regime's presentation-time start.
+
+    Called right after a plan docks. The dock's presentation-time stamp
+    (``requires_confirmation``/``quote_high``/``unquotable`` — computed once
+    by ``resolve_confirmation_need`` at the dock) is handed back to
+    ``evaluate_start_gate`` as the authorization conjunct: a dock that owes
+    no confirm beat (both prefs auto, quote under the guardrail, quotable)
+    AND a startable lifecycle stamp fire the SAME start machine
+    (``answer_question`` kind="start") immediately with
+    ``confirmed_via="auto"`` — 呈现即开工, zero new chrome. Returns the
+    answered question + run id, or None when the plan stays docked:
+
+    - ``start.needs_confirm`` → the confirm pill's beat (ask modes /
+      guardrail / unquotable) — the dock waits for the user's gesture.
+    - a structural gate block (material unready, a live run, ...) → the
+      dock waits exactly like the ask regime; the user's next beat
+      re-drives it.
+    - the birthplace's own 422 (credits shortfall / a stale-chain reject)
+      → the dock stays; the failure is logged, never swallowed silently.
+
+    A rejected attempt undoes the answer write it made, so the docked
+    question's answer cell stays open for the user's later beat.
+    """
+    pending_question = await latest_pending_question(db, conversation_id)
+    if not is_pending_plan(pending_question):
+        return None
+    assert pending_question is not None  # is_pending_plan guarantees the row
+    payload = QuestionPayload.model_validate(pending_question.question)
+    intent = (
+        InferredIntent.model_validate(pending_question.intent)
+        if isinstance(pending_question.intent, dict)
+        else None
+    )
+    from app.pipeline.lifecycle import (  # deferred: chat → pipeline
+        ConfirmationNeed,
+        evaluate_start_gate,
+        project_lifecycle,
+    )
+    from app.ui_locale import current_ui_language  # deferred: request ctx
+
+    stamp = await project_lifecycle(
+        db,
+        project,
+        pending_question=pending_question,
+        pending_plan=True,
+        ui_language=current_ui_language() or "en",
+    )
+    gate = evaluate_start_gate(
+        has_pending_plan=intent is not None,
+        effective_tasks_nonempty=bool(intent and intent.tasks),
+        stamp=stamp,
+        # The authorization conjunct reads the presentation-time stamp
+        # verbatim (the gate never re-derives prefs/quote — the docked
+        # payload is the single stamp, the client reads the same flag).
+        confirmation=ConfirmationNeed(
+            requires_confirmation=payload.requires_confirmation,
+            reason=payload.confirm_reason,
+            quote_high=payload.quote_high,
+            unquotable=payload.unquotable,
+        ),
+        docked_this_turn=True,
+    )
+    if gate is not None:
+        logger.info(
+            "auto_start_held",
+            project_id=str(project.id),
+            code=gate.code,
+            reason=gate.reason,
+            blockers=list(gate.blockers),
+        )
+        return None
+    try:
+        answered, _follow_up = await answer_question(
+            db,
+            user_id,
+            UUID(str(pending_question.id)),
+            StartAnswerRequest(kind="start"),
+            # The run births on standing authorization (ADR-117 §2) — the
+            # snapshot records the channel, not an explicit gesture.
+            confirmed_via="auto",
+        )
+    except HTTPException as exc:
+        # Undo the answer write whatever the status family — the pre-write
+        # raises never reached it (this is then an idempotent no-op), and
+        # the post-write family must not leave an answered dock with no
+        # run: the birthplace's 422s (credits shortfall / stale-chain
+        # reject / a raced structural block) fire after the early answer
+        # write by construction, and the gate's post-write 409
+        # ``start.no_pending_plan`` would too, should the two plan sources
+        # (the question's intent column vs project.pending_brief) ever
+        # diverge mid-turn.
+        pending_question.answer = None
+        if exc.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT:
+            # The auto 道 must not fail silent: the echo's work-start beat
+            # already spoke, no pill renders (requires_confirmation=False),
+            # and the ask 道's surfacing (the client grey row off the 422)
+            # never fires here — so the reason lands as a code-composed
+            # tail on the dock row's content (the estimate tail's lawful
+            # seat: persisted, so live envelope and replay read it alike;
+            # intent.answer stays clean — a future re-dock's echo must not
+            # ghost this moment-in-time fact).
+            line = _auto_start_rejected_line(
+                exc.detail if isinstance(exc.detail, dict) else None
+            )
+            base = (pending_question.content or "").rstrip()
+            pending_question.content = (base + line) if base else line.lstrip()
+        await db.flush()
+        logger.info(
+            "auto_start_rejected",
+            project_id=str(project.id),
+            detail=str(exc.detail)[:200],
+        )
+        return None
+    return answered, UUID(str(answered.workflow_run_id))
 
 
 async def dock_interrupt_question(
@@ -1315,6 +1575,9 @@ async def _continue_chat_answer(
         else say
     )
     history = await list_conversation_messages(db, UUID(str(conversation.id)))
+    # 滑动窗口装配 (ADR-117 D4): the scattered fixed-count slices converge
+    # on the one budget predicate — world state never rides this window.
+    recent = await recent_history_within_budget(db, history)
     if question.slot == "asset_role" and project is not None:
         # 资产角色消歧的答复落 pin (ADR-078 判词④): the pins settle by
         # CODE (the option id IS the asset id — _settle_role_answer),
@@ -1328,7 +1591,7 @@ async def _continue_chat_answer(
             conversation,
             project,
             ChatRequest(project_id=project.id, message=turn_say),
-            recent=history[-5:],
+            recent=recent,
             on_delta=on_delta,
             on_phase=on_phase,
             on_tool_call=on_tool_call,
@@ -1351,7 +1614,7 @@ async def _continue_chat_answer(
             conversation,
             project,
             ChatRequest(project_id=project.id, message=turn_say),
-            recent=history[-5:],
+            recent=recent,
             on_delta=on_delta,
             on_phase=on_phase,
             on_tool_call=on_tool_call,
@@ -1385,7 +1648,7 @@ async def _continue_chat_answer(
             ChatRequest(
                 project_id=project.id, message=turn_say, suggestion_ref=suggestion_ref
             ),
-            recent=history[-5:],
+            recent=recent,
             on_delta=on_delta,
             on_phase=on_phase,
             on_tool_call=on_tool_call,
@@ -1396,7 +1659,7 @@ async def _continue_chat_answer(
         )
         return follow_up, run_id, bailed, answered
     follow_up, run_id, bailed, settled = await _propose_turn(
-        db, user_id, conversation, project, turn_say, [], history[-6:],
+        db, user_id, conversation, project, turn_say, [], recent,
         suggestion_ref=suggestion_ref,
         on_delta=on_delta,
         # I-PFA-06 parity (Batch B 验收修复): the chat-path continuation
@@ -1545,6 +1808,14 @@ async def answer_question(
 
     follow_up: Message | None = None
     bailed_run_ids: list[UUID] = []
+    # 会话层计量 (ADR-117 D3): the continuation branches below are the LLM
+    # seats — each binds its own ledger (the elif chain is exclusive) and
+    # folds it right there; the row rides this function's own commit.
+    _usage_project_id = (
+        UUID(str(conversation.project_id))
+        if conversation.project_id is not None
+        else None
+    )
 
     if question.kind == "task_book":
         project = await db.get(Project, conversation.project_id)
@@ -1792,36 +2063,54 @@ async def answer_question(
             # suggestion) or the interrupt already expired — the pick is the
             # user's say, carried by the generic continuation (same seat as
             # the no-run-id branch below).
-            follow_up, _run_id, bailed_run_ids, _settled = await _continue_chat_answer(
-                db, user_id, conversation, question, data, option_label,
-                suggestion_ref=_suggestion_ref_for(message, data),
-                on_delta=on_delta,
-                on_phase=on_phase,
-                on_tool_call=on_tool_call,
-                on_tool_ready=on_tool_ready,
-                on_loop_event=on_loop_event,
-                on_activity=on_activity,
-                on_candidates=on_candidates,
+            with bind_conversation_turn() as _usage_bind:
+                follow_up, _run_id, bailed_run_ids, _settled = (
+                    await _continue_chat_answer(
+                        db, user_id, conversation, question, data, option_label,
+                        suggestion_ref=_suggestion_ref_for(message, data),
+                        on_delta=on_delta,
+                        on_phase=on_phase,
+                        on_tool_call=on_tool_call,
+                        on_tool_ready=on_tool_ready,
+                        on_loop_event=on_loop_event,
+                        on_activity=on_activity,
+                        on_candidates=on_candidates,
+                    )
+                )
+            await fold_conversation_usage(
+                db,
+                user_id=user_id,
+                project_id=_usage_project_id,
+                accrued=_usage_bind.accrued,
             )
 
     elif question.kind == "question" and data.kind in ("option", "freeform"):
         # 续聊: the answer unblocks the conversation — the user's pick is
         # their say for the next turn, with the answered question in context.
-        follow_up, _run_id, bailed_run_ids, _extra = await _continue_chat_answer(
+        with bind_conversation_turn() as _usage_bind:
+            follow_up, _run_id, bailed_run_ids, _extra = (
+                await _continue_chat_answer(
+                    db,
+                    user_id,
+                    conversation,
+                    question,
+                    data,
+                    option_label,
+                    suggestion_ref=_suggestion_ref_for(message, data),
+                    on_delta=on_delta,
+                    on_phase=on_phase,
+                    on_tool_call=on_tool_call,
+                    on_tool_ready=on_tool_ready,
+                    on_loop_event=on_loop_event,
+                    on_activity=on_activity,
+                    on_candidates=on_candidates,
+                )
+            )
+        await fold_conversation_usage(
             db,
-            user_id,
-            conversation,
-            question,
-            data,
-            option_label,
-            suggestion_ref=_suggestion_ref_for(message, data),
-            on_delta=on_delta,
-            on_phase=on_phase,
-            on_tool_call=on_tool_call,
-            on_tool_ready=on_tool_ready,
-            on_loop_event=on_loop_event,
-            on_activity=on_activity,
-            on_candidates=on_candidates,
+            user_id=user_id,
+            project_id=_usage_project_id,
+            accrued=_usage_bind.accrued,
         )
 
     elif question.kind == "question" and data.kind == "bail" and question.slot is not None:
@@ -1838,26 +2127,36 @@ async def answer_question(
                 # (the default_path copy's exact promise).
                 await _settle_default_role_pins(db, project)
             history = await list_conversation_messages(db, UUID(str(conversation.id)))
-            follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
-                db,
-                user_id,
-                conversation,
-                project,
-                ChatRequest(
-                    project_id=project.id,
-                    message=(
-                        "(The user skipped my question — take the default "
-                        "path and draft the plan.)"
+            # 滑动窗口装配 (ADR-117 D4): one budget predicate, never a
+            # fixed-count slice.
+            recent = await recent_history_within_budget(db, history)
+            with bind_conversation_turn() as _usage_bind:
+                follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
+                    db,
+                    user_id,
+                    conversation,
+                    project,
+                    ChatRequest(
+                        project_id=project.id,
+                        message=(
+                            "(The user skipped my question — take the default "
+                            "path and draft the plan.)"
+                        ),
                     ),
-                ),
-                recent=history[-5:],
-                on_delta=on_delta,
-                on_phase=on_phase,
-                on_tool_call=on_tool_call,
-                on_tool_ready=on_tool_ready,
-                on_loop_event=on_loop_event,
-                on_activity=on_activity,
-                on_candidates=on_candidates,
+                    recent=recent,
+                    on_delta=on_delta,
+                    on_phase=on_phase,
+                    on_tool_call=on_tool_call,
+                    on_tool_ready=on_tool_ready,
+                    on_loop_event=on_loop_event,
+                    on_activity=on_activity,
+                    on_candidates=on_candidates,
+                )
+            await fold_conversation_usage(
+                db,
+                user_id=user_id,
+                project_id=_usage_project_id,
+                accrued=_usage_bind.accrued,
             )
 
     await db.commit()
@@ -2336,57 +2635,88 @@ async def execute_chat_turn(
         assistant_message = prepared.interrupt_reply
         run_id = None
         bailed_run_ids: list[UUID] = []
-    elif prepared.plan_path:
-        # The intent router's context excludes this turn's own message (already
-        # the prompt being judged); the latest few rounds before it are the
-        # disambiguating conversation (G-7).
-        recent = [
-            m for m in prepared.history if m.id != prepared.user_message.id
-        ][-5:]
-        assistant_message, run_id, plan_answered, bailed_run_ids = await _plan_turn(
-            db,
-            prepared.user_id,
-            prepared.conversation,
-            prepared.project,
-            request,
-            recent=recent,
-            on_delta=on_delta,
-            on_reasoning=on_reasoning,
-            on_phase=on_phase,
-            on_tool_call=on_tool_call,
-            on_tool_ready=on_tool_ready,
-            on_checkpoint=on_checkpoint,
-            on_loop_event=on_loop_event,
-            on_activity=on_activity,
-            on_candidates=on_candidates,
-        )
-        if plan_answered is not None:
-            prepared.answered_question = plan_answered
     else:
-        assistant_message, run_id, bailed_run_ids, chat_settled = await _propose_turn(
+        # 会话层计量 (ADR-117 D3): the turn-entry seam binds the usage
+        # ledger — the canned interrupt reply needs no LLM (empty ledger,
+        # zero rows), the agent branches meter through record_usage.
+        with bind_conversation_turn() as _usage_bind:
+            if prepared.plan_path:
+                # The intent router's context excludes this turn's own message
+                # (already the prompt being judged); the latest rounds before
+                # it are the disambiguating conversation (G-7) — budget-
+                # windowed by the one predicate (ADR-117 D4).
+                recent = await recent_history_within_budget(
+                    db,
+                    [m for m in prepared.history if m.id != prepared.user_message.id],
+                )
+                (
+                    assistant_message,
+                    run_id,
+                    plan_answered,
+                    bailed_run_ids,
+                ) = await _plan_turn(
+                    db,
+                    prepared.user_id,
+                    prepared.conversation,
+                    prepared.project,
+                    request,
+                    recent=recent,
+                    on_delta=on_delta,
+                    on_reasoning=on_reasoning,
+                    on_phase=on_phase,
+                    on_tool_call=on_tool_call,
+                    on_tool_ready=on_tool_ready,
+                    on_checkpoint=on_checkpoint,
+                    on_loop_event=on_loop_event,
+                    on_activity=on_activity,
+                    on_candidates=on_candidates,
+                )
+                if plan_answered is not None:
+                    prepared.answered_question = plan_answered
+            else:
+                (
+                    assistant_message,
+                    run_id,
+                    bailed_run_ids,
+                    chat_settled,
+                ) = await _propose_turn(
+                    db,
+                    prepared.user_id,
+                    prepared.conversation,
+                    prepared.project,
+                    request.message,
+                    request.mentions,
+                    await recent_history_within_budget(db, prepared.history),
+                    suggestion_ref=request.suggestion_ref,
+                    on_delta=on_delta,
+                    on_reasoning=on_reasoning,
+                    on_phase=on_phase,
+                    on_tool_call=on_tool_call,
+                    on_tool_ready=on_tool_ready,
+                    on_checkpoint=on_checkpoint,
+                    on_loop_event=on_loop_event,
+                    on_activity=on_activity,
+                    on_candidates=on_candidates,
+                )
+                if chat_settled is not None:
+                    # 插话判定结算 (ADR-053 R2): the agent judged this very
+                    # message the pending question's answer — surface the
+                    # settled row so the client's pill clears and the
+                    # AnsweredQuestion block lands.
+                    prepared.answered_question = chat_settled
+        # The usage row rides the turn's own commit below (billing write
+        # discipline); a zero-LLM turn (repair-loop canned replies aside)
+        # writes nothing.
+        await fold_conversation_usage(
             db,
-            prepared.user_id,
-            prepared.conversation,
-            prepared.project,
-            request.message,
-            request.mentions,
-            prepared.history[-6:],
-            suggestion_ref=request.suggestion_ref,
-            on_delta=on_delta,
-            on_reasoning=on_reasoning,
-            on_phase=on_phase,
-            on_tool_call=on_tool_call,
-            on_tool_ready=on_tool_ready,
-            on_checkpoint=on_checkpoint,
-            on_loop_event=on_loop_event,
-            on_activity=on_activity,
-            on_candidates=on_candidates,
+            user_id=prepared.user_id,
+            project_id=(
+                UUID(str(prepared.project.id))
+                if prepared.project is not None
+                else None
+            ),
+            accrued=_usage_bind.accrued,
         )
-        if chat_settled is not None:
-            # 插话判定结算 (ADR-053 R2): the agent judged this very message
-            # the pending question's answer — surface the settled row so
-            # the client's pill clears and the AnsweredQuestion block lands.
-            prepared.answered_question = chat_settled
 
     # The turn's outcome stamp rides the SAME commit as its writes (交互
     # 完整性批 A): in_flight → settled is atomic with the assistant row /

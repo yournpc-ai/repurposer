@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>提案演示 — 素材卡 T 出锚 → 成片文字道</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+    background: #f7f7f7;
+    /* Dot grid — FlowView 签名 */
+    background-image: radial-gradient(circle, #d9d9d9 1.2px, transparent 1.2px);
+    background-size: 24px 24px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 64px;
+  }
+
+  header { text-align: center; margin-bottom: 10px; }
+  header h1 { font-size: 18px; font-weight: 600; color: #1a1a1a; }
+  header p { font-size: 13px; color: #777; margin-top: 6px; }
+
+  /* 现状 ↔ 提案 切换 */
+  .toggle {
+    margin: 14px 0 6px;
+    display: inline-flex;
+    background: #ececec;
+    border-radius: 8px;
+    padding: 3px;
+    font-size: 12.5px;
+  }
+  .toggle button {
+    border: none; background: transparent; padding: 6px 16px;
+    border-radius: 6px; cursor: pointer; color: #666; font-weight: 500;
+  }
+  .toggle button.on { background: #fff; color: #111; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+
+  .stage { position: relative; width: 1240px; height: 760px; margin-top: 10px; }
+
+  /* ── 卡片通用 ─────────────────────────────── */
+  .card {
+    position: absolute;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.08);
+    overflow: visible; /* 锚点停在卡外 */
+  }
+  .card-label {
+    position: absolute; top: -22px; left: 0;
+    font-size: 12px; color: #888; display: flex; align-items: center; gap: 5px;
+  }
+
+  /* ── 素材卡（左） ─────────────────────────── */
+  .asset { left: 60px; top: 120px; width: 400px; }
+  .asset .media {
+    height: 225px; border-radius: 12px 12px 0 0;
+    background: linear-gradient(135deg, #2e3a52 0%, #3d4c6e 55%, #2a3550 100%);
+    position: relative; overflow: hidden;
+  }
+  .asset .media::after {
+    content: "2026 Global Innovation Connection";
+    position: absolute; top: 40px; left: 0; right: 0;
+    text-align: center; color: rgba(255,255,255,.28); font-size: 20px; font-weight: 600;
+  }
+  .asset .dur {
+    position: absolute; right: 10px; bottom: 10px;
+    background: rgba(0,0,0,.72); color: #fff;
+    font-size: 10.5px; padding: 2px 7px; border-radius: 5px; font-weight: 500;
+  }
+  .asset .transcript { padding: 12px 14px 14px; border-top: 1px solid rgba(0,0,0,.06); }
+  .asset .transcript .tx-head {
+    font-size: 10px; letter-spacing: .06em; color: #9a9a9a; margin-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .asset .tx-line { font-size: 12px; line-height: 1.75; color: #444; padding: 1px 6px; margin: 0 -6px; border-radius: 5px; }
+  .asset .tx-line:hover { background: #f0f0f0; }
+  .asset .facts {
+    position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.08); border-radius: 8px;
+    font-size: 11px; color: #666; padding: 6px 12px; white-space: nowrap;
+  }
+
+  /* ── 成片卡（右） ─────────────────────────── */
+  .product { left: 780px; top: 60px; width: 280px; }
+  .product .media {
+    height: 498px; border-radius: 12px 12px 0 0;
+    background: linear-gradient(160deg, #232c3d 0%, #33405c 60%, #26304a 100%);
+    position: relative; overflow: hidden;
+  }
+  .product .media .caption {
+    position: absolute; left: 0; right: 0; bottom: 88px; text-align: center;
+    color: #f5c518; font-size: 16px; font-weight: 600; letter-spacing: .05em;
+    text-shadow: 0 1px 4px rgba(0,0,0,.5);
+  }
+  .product .score {
+    position: absolute; left: 10px; bottom: 10px;
+    background: rgba(0,0,0,.72); color: #fff;
+    font-size: 10.5px; padding: 3px 7px; border-radius: 5px; font-weight: 500;
+    opacity: 0; transition: opacity .18s;
+  }
+  .product .media:hover .score { opacity: 1; }
+  .product .score-hint {
+    position: absolute; left: 42px; bottom: 10px;
+    font-size: 10px; color: rgba(255,255,255,.65); opacity: 0; transition: opacity .18s;
+  }
+  .product .media:hover .score-hint { opacity: 1; }
+
+  /* NLE 检视轴：pad4 + ruler22 + gap6 + 视频道34 + gap8 + 文字道34 + pad4 = 112 */
+  .axis { padding: 4px 16px 4px; }
+  .ruler { position: relative; height: 22px; }
+  .ruler .tick { position: absolute; bottom: 0; width: 1px; height: 9px; background: #b6b6b6; }
+  .ruler .tlab { position: absolute; top: 0; transform: translateX(-50%); font-size: 9px; color: #9a9a9a; font-variant-numeric: tabular-nums; }
+  .lane { position: relative; height: 34px; }
+  .lane.video { margin-top: 6px; }
+  .lane.text { margin-top: 8px; }
+  .vblock {
+    position: absolute; top: 0; bottom: 0; left: 0; right: 0;
+    background: oklch(0.85 0.075 293);
+    border-radius: 7px;
+    box-shadow: inset 0 0 0 1px oklch(0.42 0.16 290 / .25);
+    display: flex; align-items: center; padding: 0 9px;
+    font-size: 11px; color: oklch(0.42 0.16 290); font-weight: 500;
+    white-space: nowrap; overflow: hidden;
+  }
+  .tblock {
+    position: absolute; top: 0; bottom: 0;
+    background: #ececec; border-radius: 7px;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+  }
+  .needle {
+    position: absolute; top: 4px; bottom: 4px; left: 34%;
+    width: 1px; background: #1a1a1a; z-index: 2; pointer-events: none;
+  }
+  .needle::before {
+    content: ""; position: absolute; top: -2px; left: -3.5px;
+    border-left: 3.5px solid transparent; border-right: 3.5px solid transparent;
+    border-top: 5px solid #1a1a1a;
+  }
+  .product .facts {
+    position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.08); border-radius: 8px;
+    font-size: 11px; color: #666; padding: 6px 12px; white-space: nowrap;
+  }
+
+  /* ── 锚点（28px 圆，停卡外） ──────────────── */
+  .port {
+    position: absolute; width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; z-index: 5;
+  }
+  .port.video {
+    background: oklch(0.85 0.075 293); color: oklch(0.42 0.16 290);
+  }
+  .port.text { background: #e4e4e4; color: #707070; font-weight: 600; }
+  .port svg { width: 13px; height: 13px; }
+
+  /* ── 连线 SVG ─────────────────────────────── */
+  svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+  .wire-video { stroke: oklch(0.85 0.075 293); stroke-width: 2; fill: none; }
+  .wire-text { stroke: #cfcfcf; stroke-width: 2; fill: none; }
+
+  /* ── 注释 ─────────────────────────────────── */
+  .note {
+    position: absolute; font-size: 11.5px; line-height: 1.5; color: #555;
+    background: rgba(255,255,255,.92); border-radius: 8px; padding: 7px 10px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.07); max-width: 210px; z-index: 6;
+  }
+  .note b { color: #222; }
+  .note .tag {
+    display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px;
+    background: oklch(0.85 0.075 293); color: oklch(0.42 0.16 290); font-weight: 600;
+    margin-right: 4px;
+  }
+  .note .tag.new { background: #e8e8e8; color: #555; }
+
+  /* 切换：现状模式隐藏提案元素 */
+  .new-wire, .new-port, .note-proposal { transition: opacity .25s; }
+  .stage.before .new-wire, .stage.before .new-port, .stage.before .note-proposal { opacity: 0; pointer-events: none; }
+  .note-before { transition: opacity .25s; }
+  .stage.proposal .note-before { opacity: 0; pointer-events: none; }
+  /* 现状下文字道左侧的“缺锚”标记 */
+  .missing {
+    position: absolute; z-index: 6;
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1.5px dashed #c33; background: rgba(255,255,255,.9);
+    color: #c33; font-size: 14px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity .25s;
+  }
+  .stage.proposal .missing { opacity: 0; pointer-events: none; }
+
+  footer { margin-top: 18px; font-size: 12px; color: #999; max-width: 760px; text-align: center; line-height: 1.8; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>文字流接线提案：素材卡 T 出锚 → 成片卡文字道入锚</h1>
+  <p>紫线 = 画面流（今天已有） · 灰线 = 文字流（本提案新增） · 锚点律扩展：文字入锚停文字道 Y 中心</p>
+</header>
+
+<div class="toggle">
+  <button id="btn-before" onclick="setMode('before')">现状（文字道无线可连）</button>
+  <button id="btn-proposal" class="on" onclick="setMode('proposal')">提案（双流双锚）</button>
+</div>
+
+<div class="stage proposal" id="stage">
+
+  <!-- 连线层（路径由 JS 从锚点实际位置计算，永不漂移） -->
+  <svg class="wires" id="wires">
+    <path class="wire-video" id="wireVideo" d=""/>
+    <path class="wire-text new-wire" id="wireText" d=""/>
+  </svg>
+
+  <!-- ══ 素材卡 ══ -->
+  <div class="card asset">
+    <div class="card-label">🎬 Video · 素材（转写已折叠进此卡）</div>
+    <div class="media"><span class="dur">5:40</span></div>
+    <div class="transcript">
+      <div class="tx-head"><span>TRANSCRIPT</span><span>✎</span></div>
+      <div class="tx-line">我们就可以进行这个讨论首先第一个问题本次分会与伦敦科技周同期举办</div>
+      <div class="tx-line">聚焦人工智能、机器人、智能制造的签言领域将您看来这场分会</div>
+      <div class="tx-line">能为全球科技跨境合作带来哪些实际价值</div>
+      <div class="tx-line">这次是在中国和英国的两边的摆手呼防之后我们举办的一次很重大的活动</div>
+    </div>
+    <div class="facts">xy_1.mp4 · 340s · 960×544 ⬇</div>
+
+    <!-- 出锚：视频 = 卡右上角（媒体舞台产区）；T = 转写区右上角（红框案——
+         出锚停在自己产区的右上角，top 由 JS 从转写区实际位置入座） -->
+    <div class="port video" id="portOutVideo" style="right: -34px; top: 40px;" title="out:video — 画面流（已有）">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+    </div>
+    <div class="port text new-port" id="portOutText" style="right: -34px; top: 0;" title="out:text — 转写文字流（本提案新增，停转写区右上角）">T</div>
+  </div>
+
+  <!-- ══ 成片卡 ══ -->
+  <div class="card product">
+    <div class="card-label">🎞 高光短视频 · 成片（tracked）</div>
+    <div class="media">
+      <div class="caption">带领人类的进步</div>
+      <span class="score">88</span>
+      <span class="score-hint">← score 已改为 hover 徽标</span>
+    </div>
+    <div class="axis">
+      <div class="ruler" id="ruler"></div>
+      <div class="lane video" id="videoLane">
+        <div class="vblock">Segment 1 · Source 2:59–3:44</div>
+      </div>
+      <div class="lane text" id="textLane"></div>
+      <div class="needle"></div>
+    </div>
+    <div class="facts">Chinese · 9:16 · 45s ⬇ ✈</div>
+
+    <!-- 入锚：视频道 Y 中心（已有锚点律） / 文字道 Y 中心（本提案扩展）——
+         top 由 JS 从道的实际位置入座 -->
+    <div class="port video" id="portInVideo" style="left: -34px; top: 0;" title="in:video — 停在视频道中心（已有）">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+    </div>
+    <div class="port text new-port" id="portInText" style="left: -34px; top: 0;" title="in:text — 停在文字道中心（新增）">T</div>
+    <!-- 现状：文字道左缘的“缺锚”标记 -->
+    <div class="missing" id="missingMark" style="left: -34px; top: 0;" title="现状：文字道没有入锚">?</div>
+  </div>
+
+  <!-- ══ 注释 ══ -->
+  <div class="note note-proposal" style="left: 510px; top: 372px;">
+    <span class="tag new">新</span><b>T 出锚停转写区右上角（红框案）</b><br>
+    出锚律一般化：停在自己产区的右上角——视频锚 = 舞台右上（不变），文字锚 = TRANSCRIPT 区右上。线从词里长出来，与入锚停文字道中心对称；两条流出生即分离，不再编辫子。
+  </div>
+  <div class="note note-proposal" style="left: 880px; top: 646px;">
+    <span class="tag new">新</span><b>T 入锚停文字道 Y 中心</b><br>
+    锚点律扩展：边落在他喂的那条道上。灰线进文字道 = “字幕从转写来”；紫线进视频道 = “画面从素材来”。
+  </div>
+  <div class="note note-proposal" style="left: 60px; top: 640px; max-width: 300px;">
+    <span class="tag">律</span><b>翻译/配音链不受冲击</b><br>
+    有 doc 站时字幕是译文 → 文字边仍由 doc 站喂入（ADR-072 诚实意图不动）；纯剪辑链才从素材直连。
+  </div>
+  <div class="note note-before" style="left: 620px; top: 560px;">
+    <b>现状的洞</b><br>
+    文字道摆着六块字幕（来自素材转写），但没有任何一条边说它从哪来 —— 画布诚实律破了个口子。
+  </div>
+
+</div>
+
+<footer>
+  切换上方按钮对比现状与提案。演示坐标按真实解剖：锚点 28px 圆停卡外 6px、成片卡轴 = pad4 + ruler22 + gap6 + 视频道34 + gap8 + 文字道34 + pad4；文字入锚座 = pad_bottom + 文字道半高 − 端口半径（修饰道每条再抬 42px）。悬停成片画面可看到 score 徽标（上一批改动）。
+</footer>
+
+<script>
+  // 标尺刻度：0, 0:05 … 0:45（45.64s 终点让位律：45 主刻度离场）
+  const ruler = document.getElementById("ruler");
+  const total = 45.64;
+  const majors = [];
+  for (let t = 0; t <= 45; t += 5) majors.push(t);
+  // 让位：45 距终点 45.64 < 8% → 离场；终点命名 0:45
+  const ticks = majors.filter(t => t === 0 || (total - t) / total >= 0.08);
+  ticks.forEach(t => {
+    const pct = (t / total) * 100;
+    const tick = document.createElement("span");
+    tick.className = "tick"; tick.style.left = pct + "%";
+    ruler.appendChild(tick);
+    const lab = document.createElement("span");
+    lab.className = "tlab"; lab.style.left = pct + "%";
+    lab.textContent = t === 0 ? "0" : `0:${String(t).padStart(2, "0")}`;
+    ruler.appendChild(lab);
+  });
+  // 终点 tick
+  const endTick = document.createElement("span");
+  endTick.className = "tick"; endTick.style.left = "100%";
+  ruler.appendChild(endTick);
+  const endLab = document.createElement("span");
+  endLab.className = "tlab"; endLab.style.left = "100%";
+  endLab.textContent = "0:45";
+  ruler.appendChild(endLab);
+
+  // 文字道：六块字幕（分段分界：inset 发丝环 + 1px 空气缝）
+  const textLane = document.getElementById("textLane");
+  const cues = [[0, 8.5], [9.5, 15.5], [16.5, 21.5], [22.5, 30], [31, 36], [37, 45.64]];
+  cues.forEach(([s, e]) => {
+    const b = document.createElement("div");
+    b.className = "tblock";
+    b.style.left = (s / total * 100) + "%";
+    b.style.width = `calc(${(e - s) / total * 100}% - 1px)`;
+    textLane.appendChild(b);
+  });
+
+  function setMode(m) {
+    const stage = document.getElementById("stage");
+    stage.className = "stage " + m;
+    document.getElementById("btn-before").className = m === "before" ? "on" : "";
+    document.getElementById("btn-proposal").className = m === "proposal" ? "on" : "";
+  }
+
+  // 入锚入座 + 连线几何全部从真实 DOM rect 计算（xyflow 同款水平切线贝塞尔）
+  function layoutPorts() {
+    const stage = document.getElementById("stage");
+    const sr = stage.getBoundingClientRect();
+    const card = document.querySelector(".product");
+    const cr = card.getBoundingClientRect();
+    const seat = (laneId, el) => {
+      const lr = document.getElementById(laneId).getBoundingClientRect();
+      document.getElementById(el).style.top = (lr.top - cr.top + lr.height / 2 - 14) + "px";
+    };
+    seat("videoLane", "portInVideo");
+    seat("textLane", "portInText");
+    seat("textLane", "missingMark");
+    // T 出锚 = 转写区右上角（红框案）：转写区顶边 + 6px，停卡外右缘
+    const assetCard = document.querySelector(".asset");
+    const ar = assetCard.getBoundingClientRect();
+    const tx = assetCard.querySelector(".transcript").getBoundingClientRect();
+    document.getElementById("portOutText").style.top = (tx.top - ar.top + 6) + "px";
+    const rim = (id, side) => {
+      const r = document.getElementById(id).getBoundingClientRect();
+      return { x: (side === "right" ? r.right : r.left) - sr.left, y: r.top + r.height / 2 - sr.top };
+    };
+    const bez = (a, b) => {
+      const dx = Math.max(48, Math.abs(b.x - a.x) / 2);
+      return `M ${a.x} ${a.y} C ${a.x + dx} ${a.y}, ${b.x - dx} ${b.y}, ${b.x} ${b.y}`;
+    };
+    document.getElementById("wireVideo").setAttribute("d", bez(rim("portOutVideo", "right"), rim("portInVideo", "left")));
+    document.getElementById("wireText").setAttribute("d", bez(rim("portOutText", "right"), rim("portInText", "left")));
+  }
+  layoutPorts();
+  window.addEventListener("resize", layoutPorts);
+</script>
+
+</body>
+</html>

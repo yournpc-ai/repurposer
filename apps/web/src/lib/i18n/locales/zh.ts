@@ -39,6 +39,25 @@ const zh: Resources = {
     networkError: "网络错误，请检查连接",
     skipToContent: "跳到主要内容",
   },
+  assistant: {
+    /** SettingsDialog「助手」section（ADR-117 §1）——两档确认偏好的唯一
+     * UI 座位。文案直陈；守卫线是 ops 参数，footnote 是它唯一的用户面提及。 */
+    title: "助手",
+    subtitle: "助手在动手前需要询问的时机。其余事情它一律自己完成。",
+    permissions: "权限",
+    execution: {
+      label: "执行操作",
+      desc: "方案呈现后是否等你确认再开工。",
+    },
+    spending: {
+      label: "消耗积分",
+      desc: "付费方案开工前，是否需要一次带价确认。",
+    },
+    mode: { auto: "自动", ask: "询问" },
+    footnote:
+      "估价始终随方案显示。超高额或无法提前估价的方案，任何设置下都会先问你一次。",
+    updateFailed: "设置保存失败，请重试",
+  },
   credits: {
     range: "约 {{low}}–{{high}} 积分",
     /** 档案面板对账尺的实扣侧（2026-09-06）——产物所属 step 的计量实扣，
@@ -50,6 +69,15 @@ const zh: Resources = {
     balance: "余额",
     held: "预占中",
     recent: "最近变动",
+    /** SettingsDialog「积分」section（BILLING §7 展示主轴）——余额与台账
+     * 的全貌座位，与 pill 同两个端点。 */
+    title: "积分",
+    subtitle: "余额与消耗记录。",
+    overview: "概览",
+    planFree: "免费试用版",
+    plansComing: "付费套餐即将推出",
+    showingRecent: "显示最近 {{count}} 条",
+    viewAll: "查看全部记录 →",
     tx: {
       empty: "暂无变动",
       /** 语义账本塌缩（ADR-057 K4）：用户面只显三族——花费 / 赠送 / 充值；
@@ -443,32 +471,6 @@ const zh: Resources = {
     uploadRetry: "重试",
     uploadInProgress: "文件还在上传中，请稍候",
     managePersonas: "管理人设…",
-    // 扣费确认策略（ADR-092 三档 always / large / never，服务端设置为准，
-    // localStorage 降级为读容忍回退）。trigger 文案纪律：≤12 字符，保证
-    // pill 在 dock 控制条上不溢出。
-    confirmStrategy: {
-      label: "扣费确认",
-      trigger: {
-        always: "每次确认",
-        large: "大额确认",
-        never: "仅估价",
-      },
-      options: {
-        always: {
-          title: "每次确认",
-          desc: "每个方案都列出扣费明细，确认钮上标价格",
-        },
-        large: {
-          title: "大额才确认",
-          desc: "超过积分阈值的方案才要求显式确认",
-        },
-        never: {
-          title: "仅估价",
-          desc: "只显示估价区间，不额外强制确认",
-        },
-      },
-      footnote: "付费运行启动前、确认方案时生效。",
-    },
   },
   // 配方卡（RECIPES §7）—— 与 lib/recipes.ts 的卡 id 一一对应；
   // reserved 卡在此留座但不可点击发射。
@@ -1375,15 +1377,16 @@ const zh: Resources = {
     versionRestore: "恢复此版本",
     versionRestored: "已恢复为计划 v{{n}}——它是当前计划了。",
     // OriginCut 同位 mechanics placeholder（2026-09-24 用户拍板，照搬其两
-    // 行组成式：先问需求，再讲机制——拖拽/粘贴 + @ 引用 + 确认后开工，
-    // 确认拍正好教付费边界）。「节点」措辞成立：@ 选择器候选（素材 /
-    // 产物）本就是画布节点。对外词 = 助手（N-25），不用 Agent。
-    chatPlaceholder: "描述你的修改想法。可拖拽或粘贴文件，输入 @ 引用节点；助手会与你确认后再开工。",
+    // 行组成式：先问需求，再讲机制——拖拽/粘贴 + @ 引用）。「节点」措辞成立：
+    // @ 选择器候选（素材 / 产物）本就是画布节点。对外词 = 助手（N-25），不用
+    // Agent。ADR-117：「确认后再开工」从句随 ask 默认档退市——静态文案写默认
+    // （auto）档的真相：方案呈现即开工。
+    chatPlaceholder: "描述你的修改想法。可拖拽或粘贴文件，输入 @ 引用节点。",
     // full 形态（首次 run 前、画布未生）专用（2026-09-13 用户拍板）：画布
     // 还不存在时没有「节点」可指——@ 候选只有素材；措辞走世界真相不走
     // 一句通用。画布落地后（panel / dock 形态）回到上面的 nodes 版。
     // 2026-09-24：同随 OriginCut 两行组成式（nodes 版同款，@ 对象换素材）。
-    chatPlaceholderAssets: "描述你想做什么。可拖拽或粘贴文件，输入 @ 引用素材；助手会与你确认后再开工。",
+    chatPlaceholderAssets: "描述你想做什么。可拖拽或粘贴文件，输入 @ 引用素材。",
     attachFiles: "上传文件",
     retryUpload: "重试上传",
     removeAttachment: "移除附件",
@@ -1396,6 +1399,15 @@ const zh: Resources = {
       file: "文件",
     },
     stopped: "已停止生成。",
+    // 确认 pill（ADR-117 §4 — 画板 C）：确认拍仅剩的 chrome，只在 dock 戳记
+    // 说欠一拍时出现。label 族：裸动词（执行=询问）/ 带价（费用=询问 · 守卫线
+    // ——数字恒为服务端 fold 上限，客户端永不自算）/ 延期报价（NULL 族——永不
+    // 编数字）。confirmPillMessage = 点击后骑 chat 道的用户原话（pill 即用户
+    // 本人说这句话——旧 Start pill 的 v4.2 机器）。
+    confirmPillStart: "开始",
+    confirmPillStartPriced: "开始 · 约 {{n}} 积分",
+    confirmPillStartDeferred: "开始 · 估价随运行确定",
+    confirmPillMessage: "确认生成",
   },
   questionDock: {
     bail: "停止生成",

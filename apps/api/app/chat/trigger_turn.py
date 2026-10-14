@@ -50,7 +50,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.chat.context import build_context
+from app.chat.context import build_context, recent_history_within_budget
 from app.agents.tool_loop import ChatTool, ToolLoopAgent
 from app.chat.intent import _speech_language_line
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
@@ -64,6 +64,7 @@ from app.chat.service import (
     stamp_suggestions,
 )
 from app.chat.turn_tools import CHAT_READ_TOOLS
+from app.metering import bind_conversation_turn, fold_conversation_usage
 from app.models.schemas import Option, QuestionPayload, SuggestionItem, WrapUpArgs
 from app.models.tables import (
     Conversation,
@@ -435,7 +436,9 @@ async def run_trigger_turn(
             context = await build_context(
                 db,
                 project,
-                history[-6:],
+                # 滑动窗口装配 (ADR-117 D4): one budget predicate, never a
+                # fixed-count slice — world state survives by construction.
+                await recent_history_within_budget(db, history),
                 [],
                 await latest_pending_question(db, conversation_id),
                 # 环境能力位 (ADR-118 §6): the worker-born turn has no
@@ -493,11 +496,21 @@ async def run_trigger_turn(
                 outcome["suggestions"] = params.suggestions
                 return None
 
-            result = await trigger_agent.call_loop(
-                execute,
-                event_line=event_line,
-                context_text=context.get("text", ""),
-                language=language,
+            with bind_conversation_turn() as _usage_bind:
+                result = await trigger_agent.call_loop(
+                    execute,
+                    event_line=event_line,
+                    context_text=context.get("text", ""),
+                    language=language,
+                )
+            # 会话层计量 (ADR-117 D3): the proactive turn IS a conversation
+            # turn — its usage row rides the review row's own commit below
+            # (a silenced landing never commits, so it never writes either).
+            await fold_conversation_usage(
+                db,
+                user_id=UUID(str(project.user_id)),
+                project_id=project_id,
+                accrued=_usage_bind.accrued,
             )
             if result.exhausted:
                 logger.info(
