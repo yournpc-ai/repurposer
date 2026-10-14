@@ -1235,6 +1235,19 @@ class ChatRequest(BaseModel):
     # whole on every revision, so hand edits survive unless the message
     # revises them; None = the stored pending brief is presented, if any.
     prior_intent: "InferredIntent | None" = None
+
+    @field_validator("prior_intent", mode="before")
+    @classmethod
+    def _strip_policy_stamp(cls, v: Any) -> Any:
+        """Read tolerance (ADR-099 戳的回声): the docked plan's intent carries
+        the ``interaction_policy_version`` observation stamp (stamped by
+        ``_create_message`` on every assistant row); the panel echoes the
+        intent back verbatim as ``prior_intent`` — drop the stamp before the
+        router shape's extra=forbid court, exactly like the auto-start
+        read-back."""
+        if isinstance(v, dict):
+            v = {k: val for k, val in v.items() if k != "interaction_policy_version"}
+        return v
     # The composer's persona choice rides the first message; written into the
     # pending brief only when the plan path docks a plan (a later turn
     # omitting it never clobbers the stored choice).

@@ -66,7 +66,7 @@ from app.pipeline.step_display import (
     slot_tag,
     ui_lang_of,
 )
-from app.providers.llm.base import LLMSchemaError
+from app.providers.llm.base import LLMError, LLMSchemaError
 
 logger = structlog.get_logger()
 
@@ -784,7 +784,11 @@ async def draft_film_storyboard(
                 codes=sorted({v.code for v in violations}),
             ),
         )
-    except (FilmStoryboardRejected, LLMSchemaError) as exc:
+    except (FilmStoryboardRejected, LLMSchemaError, LLMError) as exc:
+        # LLMError included (S11 取证 2026-10-15): a provider transport
+        # failure mid-draft must degrade to no-block, NEVER kill the
+        # plan turn's dock (the review simply happens at the node's
+        # birth-time orchestration instead).
         logger.info(
             "film_plan_draft_skipped",
             project_id=str(project.id),
