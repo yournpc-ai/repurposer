@@ -682,6 +682,10 @@ function AssistantText({ text, streaming }: { text: string; streaming?: boolean 
         >
           {text}
         </Streamdown>
+        {/* 消息动作条 (D4②): 落定的散文才挂 copy —— 流式中的文本还在打
+            字机节拍里,拷走半成品不诚实。挂在 Message 内 = hover 渐显作用
+            域与 user bubble 同一 (group/message)。 */}
+        {!streaming ? <CopyMessageButton text={text} align="start" /> : null}
       </MessageContent>
     </Message>
   )
@@ -690,7 +694,9 @@ function AssistantText({ text, streaming }: { text: string; streaming?: boolean 
 /** 消息 copy (flora-parity-ui D4② — the Flora m-actions line): one quiet
  * icon under the bubble / prose. 纯客户端剪贴板,静默档 —— 零 toast;成功
  * = 图标一拍翻 ✓(1.2s 回弹),失败同样安静。打字机律同律:流式中的散文
- * 不挂(挂载点把守 !streaming,组件只见落定文本)。 */
+ * 不挂(挂载点把守 !streaming,组件只见落定文本)。
+ * 非常驻:消息区 hover / 键盘聚焦才渐显(group/message 作用域,布局占
+ * 位保留,不出现时的空白行不跳动)。 */
 function CopyMessageButton({ text, align }: { text: string; align: "start" | "end" }) {
   const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
@@ -700,7 +706,15 @@ function CopyMessageButton({ text, align }: { text: string; align: "start" | "en
     return () => clearTimeout(id)
   }, [copied])
   return (
-    <div className={cn("flex", align === "end" ? "justify-end" : "justify-start")}>
+    <div
+      className={cn(
+        "flex transition-opacity duration-150",
+        align === "end" ? "justify-end" : "justify-start",
+        copied
+          ? "opacity-100"
+          : "pointer-events-none opacity-0 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 group-hover/message:pointer-events-auto group-hover/message:opacity-100",
+      )}
+    >
       <button
         type="button"
         aria-label={t(copied ? "chat.copied" : "chat.copy")}
@@ -3613,14 +3627,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         ) : (
           <>
             {m.content ? (
-              <>
-                <AssistantText text={m.content} streaming={m.streaming} />
-                {/* 消息动作条 (D4②): 落定的散文才挂 copy —— 流式中的文本
-                    还在打字机节拍里,拷走半成品不诚实。 */}
-                {!m.streaming ? (
-                  <CopyMessageButton text={m.content} align="start" />
-                ) : null}
-              </>
+              <AssistantText text={m.content} streaming={m.streaming} />
             ) : null}
             {/* 建议 pills (T3 触发回合): the closing review's next steps —
                 quiet outline buttons under the review's own speech, landing
