@@ -9,8 +9,8 @@
 机器标记 / 确定性回执）可以锁——那是代码，不是 LLM。
 
 测试体系收敛（ADR-114，施工合同 ``docs/tasks/test-suite-convergence.md``
-§3）：41 本 → **10 本用户旅程矩阵**，编号连续重排 S1–S10（旧 S 号全部作废，
-第二次）。每本 = 一种用户 × 一种创作流 × 全旅程；机制不立独立剧本。harness
+§3）：41 本 → **用户旅程矩阵**（旧 S 号两次作废重排；S11 = MG 批新增旅程座）。
+每本 = 一种用户 × 一种创作流 × 全旅程；机制不立独立剧本。harness
 公共断言每本自动携带（见下「harness 公共断言」）；进程内纯函数矩阵
 （materialize 注入 / merge_brief 来源 / transcript 数组序）已下沉 tests/
 （test_cut_segments_pure / test_brief_pure / test_activity_pure）。
@@ -47,6 +47,9 @@
     S10 Remix 旗舰：P1 warm 路径（@mention pin → 拆解即说话）+ P2 run
              路径（真链 → decompile 新鲜物化 → 产物参数 = 骨架 → 画布无
              decompile 孤儿）
+    S11 贴链成片全旅程（MG）：URL → web_page 资产真采集 → 分镜方案 dock
+             （launch_film）→ 守卫线口头 yes → 真渲染 + probe 闸 → film
+             产物 COMPLETED + 画布血缘 + 台账 hold=capture+release
 
 harness 公共断言（ADR-114 §3.2——每本自动携带，不再单独立本）：
 
@@ -139,6 +142,7 @@ from app.models.schemas import (  # noqa: E402
     AssetStatus,
     AssetType,
     MaterialUnderstanding,
+    RenderStatus,
     WorkflowStatus,
 )
 from app.platform.auth import create_access_token  # noqa: E402
@@ -3685,6 +3689,188 @@ async def s10_remix_flagship(ctx: Ctx) -> None:
           filled_graph["nodes"])
 
 
+S11_URL = "https://linear.app"  # D3-proven stable real site (example.com is DNS-polluted on this network)
+
+
+async def s11_url_to_launch_film(ctx: Ctx) -> None:
+    """S11 贴链成片全旅程（MG D4；需活栈 + dev worker 真采集真渲染 + MiniMax
+    配额）：用户贴 URL → material_urls 信封座 absorb 生 web_page 资产 →
+    worker 真采集 COMPLETED（浏览器级 SSRF 链）→ 分镜方案 dock（链必含
+    launch_film——选择执行律同族）→ auto 档守卫线带价问一次 → 口头 yes
+    开工（与 Start 钮同一机器）→ run completed → 血缘三形态：web_page 资产
+    节点 → launch_film 节点（video × generator）驮 film 产物 + launch_film/
+    render 双 step done → film 产物 render COMPLETED + files.video 在场
+    （产物文件本体由 probe 闸兜底——一法一座，剧本不重复 probe）→ 台账
+    hold = capture + release（计价幂等形态锁）。打回穷举 = 机制合法终态：
+    锁闸②反面形态（FAILED + spec.failure codes）后走真实 retry 旅程，
+    连续两次穷举才红（打回率回归信号，非 flake）。只锁形态不锁文案；目标
+    站不可达/采集失败 = 环境 flake，按归因纪律处置（禁调断言放行）。"""
+    pid = await ctx.new_project("S11 url to launch film")
+    await topup_wallet(ctx.user_id)  # launch_film 编排 + 渲染真链
+
+    turn1 = await ctx.chat(pid, f"Turn this page into a short launch film: {S11_URL}")
+
+    # material_urls absorb（ADR-119 §5）：web_page 资产行随回合出生——LLM
+    # 判定链接是素材（禁启发式），出生与否本身就是形态断言。
+    asset_id: str | None = None
+    deadline = asyncio.get_event_loop().time() + 60.0
+    while asyncio.get_event_loop().time() < deadline:
+        async with AsyncSessionLocal() as db:
+            row = (
+                await db.execute(
+                    select(Asset)
+                    .where(
+                        Asset.project_id == uuid.UUID(pid),
+                        Asset.type == AssetType.WEB_PAGE,
+                    )
+                    .order_by(Asset.created_at)
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if row is not None:
+                asset_id = str(row.id)
+                break
+        await asyncio.sleep(2)
+    check(asset_id is not None,
+          "the pasted URL births a web_page asset (material_urls absorb)", None)
+
+    # worker 真采集（真站 linear.app）：FAILED = 环境 flake 或采集链回归，
+    # 都按机制红处置。
+    status = await wait_asset_status(
+        asset_id, {AssetStatus.COMPLETED, AssetStatus.FAILED}
+    )
+    check(status == AssetStatus.COMPLETED,
+          "the web_page capture completes on the real site", status)
+
+    # 分镜方案 dock（plan/dock 形态）；LLM 裁量（先问一句）有界兜底一回。
+    plan = await pending_plan(ctx, pid)
+    if not (plan is not None and plan_tasks(plan)):
+        turn1 = await ctx.chat(pid, "Go ahead — plan the launch film from that page.")
+        plan = await pending_plan(ctx, pid)
+    check(plan is not None and plan_tasks(plan),
+          "the URL turn docks the storyboard plan", plan)
+    tools = [t.get("tool") for t in plan_tasks(plan)]
+    check("launch_film" in tools,
+          "the docked chain carries launch_film (the film family's one node)", tools)
+
+    # auto 档：守卫线（带价族）恒问一次——口头 yes 走普通 chat 道到
+    # start_run；若回合已直开（propose→start_run 同回合标准道）则顺势。
+    run_id = turn1.get("run_id")
+    if run_id is None:
+        turn_s = await ctx.chat(pid, "Yes — go ahead.")
+        check(terminal_tool_of(turn_s) == "start_run",
+              "the verbal yes closes on start_run (Start 钮同一机器)", turn_s)
+        run_id = turn_s["run_id"]
+        conv_id = turn_s["conversation_id"]
+    else:
+        conv_id = turn1["conversation_id"]
+    check(run_id is not None, "the film run is born", turn1)
+
+    # 真渲染全链（采集已齐 → launch_film 编排（有界打回 ≤3 候选）→ 渲染 +
+    # probe 闸）：15-30s 片 ≈1.75×实时 + LLM 编排，900s 是宽车道。
+    final = await wait_run_terminal(run_id, timeout=900.0)
+    if final == "TIMEOUT":
+        check(False, "the launch-film run settles within the wide lane", final)
+    if final != "completed":
+        # 放行闸②反面形态锁：grounding 打回穷举 = 诚实终态——launch_film step
+        # FAILED 且 spec.failure 带 stage/codes（禁盲重试的设计兑现）。这是
+        # 机制的合法终态，不是剧本红——随后走真实用户 retry 旅程。
+        steps = await step_rows(run_id)
+        film_step = next((s for s in steps if s["kind"] == "launch_film"), None)
+        failure = ((film_step or {}).get("spec") or {}).get("failure") or {}
+        check(film_step is not None and film_step["status"] == "failed"
+              and bool(failure.get("stage")) and bool(failure.get("codes")),
+              "闸②反面形态：an exhausted storyboard settles FAILED with "
+              "structured spec.failure {stage, codes} (禁盲重试)", film_step)
+        # 用户 retry 旅程（一句话再来一次 → 新 run）。
+        turn_r = await ctx.chat(pid, "That didn't work — please try the film again.")
+        run_id = turn_r.get("run_id")
+        if run_id is None:
+            plan = await pending_plan(ctx, pid)
+            check(plan is not None and plan_tasks(plan),
+                  "the retry turn re-docks a plan", plan)
+            turn_r = await ctx.chat(pid, "Yes — go ahead.")
+            check(terminal_tool_of(turn_r) == "start_run",
+                  "the retry confirm closes on start_run", turn_r)
+            run_id = turn_r.get("run_id")
+        check(run_id is not None, "the retry run is born", turn_r)
+        conv_id = turn_r["conversation_id"]
+        final = await wait_run_terminal(run_id, timeout=900.0)
+        # 连续两次穷举 ≈ 打回率回归信号（D2 基线一次通过 4/6），不是 flake——
+        # 红了读 prompt/manifest 覆盖面，禁调断言放行。
+        check(final == "completed",
+              "the retry run completes (two consecutive grounding exhaustions "
+              "= 打回率回归信号, not flake)", final)
+
+    steps = await step_rows(run_id)
+    film_step = next((s for s in steps if s["kind"] == "launch_film"), None)
+    render_step = next((s for s in steps if s["kind"] == "render"), None)
+    check(film_step is not None and film_step["status"] == "done",
+          "the launch_film step ran done (grounding 闸通过——穷举终态会带 spec.failure)",
+          film_step)
+    check(render_step is not None and render_step["status"] == "done",
+          "the render step ran done (probe 闸通过——未过校验不算成功)", render_step)
+
+    films = await outputs_of(pid, "film")
+    check(len(films) >= 1, "the film output lands", len(films))
+    film = films[0]
+    check(film.provenance == "generated",
+          "ADR-026: the film's provenance is generated", film.provenance)
+    check(film.render_status == RenderStatus.COMPLETED
+          and bool((film.files or {}).get("video")),
+          "the film artifact is COMPLETED with a video object (probe-gated)",
+          (str(film.render_status), film.render_error))
+
+    # 画布血缘形态：web_page 素材节点 → launch_film 装配节点（video ×
+    # generator，产物驮在卡上）。
+    graph = await ctx.graph(pid)
+    nodes = graph.get("nodes") or []
+    film_node = next(
+        (n for n in nodes if (n.get("spec") or {}).get("tool") == "launch_film"), None
+    )
+    check(film_node is not None and film_node.get("type") == "video"
+          and (film_node.get("spec") or {}).get("prototype") == "generator",
+          "the canvas carries the film assembly node as video × generator", film_node)
+    asset_node = next(
+        (n for n in nodes
+         if (n.get("spec") or {}).get("asset_type") == "web_page"
+         or ((n.get("asset") or {}).get("type") == "web_page")),
+        None,
+    )
+    check(asset_node is not None, "the canvas carries the web_page asset node", nodes)
+    check(str(film.id) in [str(o) for o in (film_node.get("spec") or {}).get("output_ids") or []]
+          or any(str(o.get("id")) == str(film.id) for o in film_node.get("outputs") or []),
+          "the film output rides its assembly node's card", film_node.get("spec"))
+    check(any(str(e.get("from_node")) == str(asset_node["id"])
+              and str(e.get("to_node")) == str(film_node["id"])
+              for e in graph.get("edges") or []),
+          "an edge links web_page → launch_film (画布血缘)", graph.get("edges"))
+
+    # 计价幂等形态锁（放行闸④的血缘面）：本 run 台账 hold = capture + release。
+    async with AsyncSessionLocal() as db:
+        txns = list(
+            (
+                await db.execute(
+                    select(CreditTransaction)
+                    .where(CreditTransaction.user_id == ctx.user_id)
+                )
+            ).scalars().all()
+        )
+    run_txns = [t for t in txns if (t.ref or {}).get("run_id") == str(run_id)]
+    held = sum(-t.amount for t in run_txns if t.kind == "hold")
+    captured = sum(-t.amount for t in run_txns if t.kind == "capture")
+    released = sum(t.amount for t in run_txns if t.kind == "release")
+    check(held > 0 and held == captured + released,
+          "hold == capture + release on the film run's ledger",
+          {"held": held, "captured": captured, "released": released})
+
+    # Harness 卫生（非断言——S8 同款）：run 收官的触发回合是 fire-and-forget；
+    # 不消费它就 cleanup 会让在飞 LLM 调用撞上项目删除。
+    review = await wait_trigger_review(ctx, conv_id, run_id, timeout=90.0)
+    if review is not None and (review.get("question") or {}).get("kind") == "question":
+        await ctx.answer(review["id"], {"kind": "bail"})
+
+
 SCENARIOS = {
     "S1": s1_lost_user_full_journey,
     "S2": s2_material_to_clips_full_chain,
@@ -3696,6 +3882,7 @@ SCENARIOS = {
     "S8": s8_interview_to_framing,
     "S9": s9_credits_boundary,
     "S10": s10_remix_flagship,
+    "S11": s11_url_to_launch_film,
 }
 
 
