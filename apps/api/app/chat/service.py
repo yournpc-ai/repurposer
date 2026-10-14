@@ -54,7 +54,7 @@ if TYPE_CHECKING:
 
 import structlog
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -84,6 +84,7 @@ from app.models.schemas import (
     ChatMessageResponse,
     ChatRequest,
     ChatResponse,
+    FilmStoryboard,
     InferredIntent,
     Option,
     PendingPlan,
@@ -91,7 +92,9 @@ from app.models.schemas import (
     QuestionPayload,
     QuestionProposal,
     PlanEstimate,
+    STORYBOARD_BLOCK_TYPE,
     StartAnswerRequest,
+    StoryboardBlock,
     SuggestionRef,
     TaskItem,
 )
@@ -255,6 +258,22 @@ def _estimate_tail(
     zh = _prefers_zh(text)
     if estimate is not None:
         low, high = estimate.total
+        if reason == "storyboard_review":
+            # ADR-120 §2 复核拍: the storyboard table rides the flow below;
+            # the run waits for the user's review (verbal go or the pill) —
+            # the same hold/capture semantics, the review named first.
+            if zh:
+                return (
+                    f"\n\n（估价 {low}–{high} 积分——分镜已列在下方，你过目确认后才开始："
+                    "按上限预扣，按实际用量结算，失败的步骤不收费，剩余退回）"
+                )
+            return (
+                f"\n\n(Estimated {low}–{high} credits — the storyboard is "
+                "below for your review, and the work starts once you "
+                "confirm: the high end is held, you're charged only for "
+                "what actually runs, failed steps are free, and the "
+                "remainder is returned.)"
+            )
         if reason == "unquotable":
             if zh:
                 return (
@@ -1549,6 +1568,7 @@ async def _continue_chat_answer(
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
+    on_storyboard=None,
 ) -> tuple[Message | None, UUID | None, list[UUID], Any]:
     """The generic question-answer 续聊 continuation: the user's pick is
     their say for the next turn, and the turn's inference message carries
@@ -1609,6 +1629,7 @@ async def _continue_chat_answer(
             on_loop_event=on_loop_event,
             on_activity=on_activity,
             on_candidates=on_candidates,
+            on_storyboard=on_storyboard,
         )
         return follow_up, run_id, bailed, answered
     if question.slot is not None and project is not None:
@@ -1632,6 +1653,7 @@ async def _continue_chat_answer(
             on_loop_event=on_loop_event,
             on_activity=on_activity,
             on_candidates=on_candidates,
+            on_storyboard=on_storyboard,
         )
         return follow_up, run_id, bailed, answered
     # 选项语法统一律 (ADR-081): trigger suggestion questions land here —
@@ -1666,6 +1688,7 @@ async def _continue_chat_answer(
             on_loop_event=on_loop_event,
             on_activity=on_activity,
             on_candidates=on_candidates,
+            on_storyboard=on_storyboard,
         )
         return follow_up, run_id, bailed, answered
     follow_up, run_id, bailed, settled = await _propose_turn(
@@ -1698,6 +1721,7 @@ async def answer_question(
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
+    on_storyboard=None,
     confirmed_via: str = "dock_pill",
 ) -> tuple[Message, Message | None]:
     """Answer a pending question (``POST /chat/messages/{id}/answer``).
@@ -2017,6 +2041,18 @@ async def answer_question(
                     ),
                 ),
             }
+            # confirmed_storyboard (ADR-120 §4): a film chain born from a
+            # reviewed dock renders the storyboard the user OK'd — the
+            # LATEST message-flow block is the reviewed truth (世界自证:
+            # what they saw is what runs). The node re-validates before
+            # use; absent/stale → the birth orchestrates fresh.
+            if any(t.tool == "launch_film" for t in tasks):
+                block = await latest_storyboard_block(db, UUID(str(message.conversation_id)))
+                if block is not None:
+                    run.context = {
+                        **(run.context or {}),
+                        "confirmed_storyboard": block.storyboard.model_dump(mode="json"),
+                    }
             # E3 双态写者 (first half, iter-3 S1): the confirmed package's
             # plan rows settle ready/revised → compiled IN THE SAME
             # TRANSACTION as the snapshot stamp — the artifact state machine
@@ -2085,6 +2121,7 @@ async def answer_question(
                         on_loop_event=on_loop_event,
                         on_activity=on_activity,
                         on_candidates=on_candidates,
+                        on_storyboard=on_storyboard,
                     )
                 )
             await fold_conversation_usage(
@@ -2114,6 +2151,7 @@ async def answer_question(
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
+                    on_storyboard=on_storyboard,
                 )
             )
         await fold_conversation_usage(
@@ -2161,6 +2199,7 @@ async def answer_question(
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
+                    on_storyboard=on_storyboard,
                 )
             await fold_conversation_usage(
                 db,
@@ -2221,6 +2260,7 @@ async def _plan_turn(
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
+    on_storyboard=None,
 ) -> tuple[Message | None, UUID | None, Message | None, list[UUID]]:
     """Plan path (intent-surface-unification W1): build / refine / confirm
     the plan inside the chat loop — the ONLY intent surface.
@@ -2259,6 +2299,7 @@ async def _plan_turn(
         on_loop_event=on_loop_event,
         on_activity=on_activity,
         on_candidates=on_candidates,
+        on_storyboard=on_storyboard,
     )
 
 
@@ -2623,6 +2664,7 @@ async def execute_chat_turn(
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
+    on_storyboard=None,
 ) -> ChatResponse:
     """chat() phase 2: run the agent turn, commit once, assemble the response.
 
@@ -2680,6 +2722,7 @@ async def execute_chat_turn(
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
+                    on_storyboard=on_storyboard,
                 )
                 if plan_answered is not None:
                     prepared.answered_question = plan_answered
@@ -3095,6 +3138,71 @@ async def record_activity_forensics(
 # No endpoint — the audit's 未覆盖 #1 stays closed.
 
 CANDIDATES_LOG_TYPE = "candidates_log"
+
+
+# ---- Storyboard block persistence (ADR-120 §1) ------------------------------
+# The film plan's reviewable draft is message-borne end to end: live it rides
+# the ``assistant.storyboard`` SSE frame; the row itself (persisted at dock
+# time, inside the turn's transaction) is the replay truth. Each revision
+# drafts a FRESH row (version = the conversation's storyboard-row count + 1)
+# — old versions stay in the transcript, the client folds them. The start
+# machine reads the LATEST row into ``run.context.confirmed_storyboard``.
+
+
+async def record_storyboard_block(
+    db: AsyncSession,
+    conversation_id: UUID,
+    *,
+    storyboard: FilmStoryboard,
+    pages: list[str],
+    instruction: str | None,
+) -> Message:
+    """Persist the plan-stage storyboard draft as a message-flow block row.
+    Never in the confirm dock (ADR-120 §1 — auto 档无确认钮, the dock
+    carries no reviewable)."""
+    count = await db.execute(
+        select(func.count(Message.id)).where(
+            Message.conversation_id == conversation_id,
+            Message.intent["type"].astext == STORYBOARD_BLOCK_TYPE,
+        )
+    )
+    block = StoryboardBlock(
+        version=count.scalar_one() + 1,
+        storyboard=storyboard,
+        pages=pages,
+        instruction=instruction,
+    )
+    return await _create_message(
+        db,
+        conversation_id,
+        "assistant",
+        "",
+        intent=block.model_dump(mode="json"),
+    )
+
+
+async def latest_storyboard_block(
+    db: AsyncSession, conversation_id: UUID
+) -> StoryboardBlock | None:
+    """The conversation's newest storyboard row, read-tolerant (a legacy /
+    malformed payload reads as absent, never a 500)."""
+    row = (
+        await db.execute(
+            select(Message)
+            .where(
+                Message.conversation_id == conversation_id,
+                Message.intent["type"].astext == STORYBOARD_BLOCK_TYPE,
+            )
+            .order_by(Message.seq.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if row is None or not isinstance(row.intent, dict):
+        return None
+    try:
+        return StoryboardBlock.model_validate(row.intent)
+    except (ValueError, TypeError):
+        return None
 
 
 async def record_candidates_log(

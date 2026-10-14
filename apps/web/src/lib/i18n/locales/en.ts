@@ -1174,6 +1174,21 @@ const en = {
       noTranscript: "No transcript available.",
     },
   },
+  // 分镜表消息块 (ADR-120 §1) — the film plan's reviewable storyboard.
+  storyboard: {
+    untitled: "Intro film storyboard",
+    meta: "v{{version}} · {{count}} scenes · ~{{seconds}}s",
+    source: "Copy grounded on: {{pages}}",
+    collapse: "Collapse",
+    sceneTypes: {
+      words: "Words",
+      hero: "Hero",
+      ui: "Page",
+      divider: "Break",
+      reveal: "Reveal",
+      end: "End card",
+    },
+  },
   chat: {
     assistantLabel: "Repurposer",
     userLabel: "You",

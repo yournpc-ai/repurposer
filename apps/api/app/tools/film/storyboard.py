@@ -156,6 +156,7 @@ class FilmStoryboardRejected(Exception):
     def __init__(self, codes: list[str], detail: str) -> None:
         super().__init__(f"storyboard rejected ({', '.join(codes)}): {detail[:300]}")
         self.codes = codes
+        self.detail = detail
 
 
 class LaunchFilmParams(BaseModel):
@@ -523,7 +524,7 @@ film_storyboarder = Agent[FilmStoryboard](
     prompt="film_storyboard.j2",
     schema=FilmStoryboard,
     system=(
-        "You are a film director cutting a short launch film from a captured "
+        "You are a film director cutting a polished intro film from a captured "
         "web page. Every word on screen is quoted or trimmed from the page's "
         "own copy — you never invent claims. You write a storyboard; the "
         "system allocates frames and renders it."
@@ -559,19 +560,160 @@ def page_prompt_dict(page: StoryboardPage, index: int) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Shared seats (ADR-120 §2 — the run node and the plan-stage draft ride the
+# SAME load/orchestration loop; no second orchestration chain, ADR-028)
+# ---------------------------------------------------------------------------
+
+
+async def load_storyboard_pages(db: AsyncSession, project: Project) -> list[StoryboardPage]:
+    """The project's READY web_page assets → grounding pages (capture
+    order). A COMPLETED capture always carries its manifest; the
+    screenshot may be honestly absent."""
+    assets = list(
+        (
+            await db.execute(
+                select(Asset)
+                .where(
+                    Asset.project_id == project.id,
+                    Asset.type == AssetType.WEB_PAGE,
+                    Asset.processing_status == AssetStatus.COMPLETED,
+                )
+                .order_by(Asset.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    pages: list[StoryboardPage] = []
+    from urllib.parse import urlparse
+
+    for a in assets:
+        meta = a.meta if isinstance(a.meta, dict) else {}
+        raw = meta.get("research")
+        if not isinstance(raw, dict):
+            continue
+        research = WebPageResearch.model_validate(raw)
+        host = urlparse(research.url).netloc or (a.title or "")
+        pages.append(
+            StoryboardPage(
+                asset_id=str(a.id),
+                research=research,
+                screenshot_key=meta.get("screenshot_key"),
+                host=host,
+            )
+        )
+    return pages
+
+
+async def page_media_inputs(pages: list[StoryboardPage]) -> list[MediaInput]:
+    """The page screenshots → multimodal inputs (the ui scene's camera
+    targets); a missing screenshot degrades honestly (manifests still carry
+    the copy)."""
+    items: list[MediaInput] = []
+    for i, page in enumerate(pages):
+        if page.screenshot_key is None:
+            continue
+        item = await media_input_for_image(
+            page.screenshot_key,
+            caption=f"Screenshot of page {i} ({page.host}) — the ui scene's camera target.",
+        )
+        if item is not None:
+            items.append(item)
+    return items
+
+
+async def orchestrate_storyboard(
+    *,
+    pages: list[StoryboardPage],
+    instruction: str | None,
+    focus: str | None,
+    page_images: list[MediaInput],
+    on_reject=None,
+) -> FilmStoryboard:
+    """THE bounded storyboard loop (打回有界): up to 1 + MAX_REWRITES
+    candidates, each re-called with the violation echo (never a blind
+    re-roll). Returns the first candidate passing the grounding validator.
+
+    Raises ``FilmStoryboardRejected`` on exhaustion (the caller stamps its
+    own terminal); ``LLMSchemaError`` propagates (the two-strike schema
+    terminal). ``on_reject(attempt, violations, feedback)`` is the node's
+    logging hook."""
+    prompt_pages = [page_prompt_dict(p, i) for i, p in enumerate(pages)]
+    violations: list[FilmViolation] = []
+    feedback: str | None = None
+    for attempt in range(1 + MAX_REWRITES):
+        candidate = await film_storyboarder.call(
+            pages=prompt_pages,
+            instruction=instruction,
+            focus=focus,
+            page_images=page_images,
+            repair_feedback=feedback,
+        )
+        violations = validate_storyboard(candidate, pages)
+        if not violations:
+            return candidate
+        feedback = format_violations(violations)
+        if on_reject is not None:
+            on_reject(attempt, violations, feedback)
+    raise FilmStoryboardRejected(
+        sorted({v.code for v in violations}), feedback or ""
+    )
+
+
+async def draft_film_storyboard(
+    db: AsyncSession,
+    project: Project,
+    *,
+    instruction: str | None,
+    focus: str | None = None,
+) -> tuple[FilmStoryboard, list[StoryboardPage]] | None:
+    """The plan-stage storyboard draft (ADR-120 §2): the SAME loop the node
+    runs, against the project's READY pages. Returns ``(storyboard, pages)``
+    — the caller needs the pages for the block's source line. None honestly
+    when the draft can't stand (no readable page / schema terminal /
+    grounding exhaustion): the plan still docks; the run re-orchestrates at
+    birth and the review hold simply doesn't fire."""
+    pages = await load_storyboard_pages(db, project)
+    if not pages:
+        return None
+    page_images = await page_media_inputs(pages)
+    try:
+        storyboard = await orchestrate_storyboard(
+            pages=pages,
+            instruction=instruction,
+            focus=focus,
+            page_images=page_images,
+            on_reject=lambda attempt, violations, feedback: logger.info(
+                "film_plan_draft_rejected",
+                project_id=str(project.id),
+                attempt=attempt,
+                codes=sorted({v.code for v in violations}),
+            ),
+        )
+    except (FilmStoryboardRejected, LLMSchemaError) as exc:
+        logger.info(
+            "film_plan_draft_skipped",
+            project_id=str(project.id),
+            reason=str(exc)[:200],
+        )
+        return None
+    return storyboard, pages
+
+
+# ---------------------------------------------------------------------------
 # The node
 # ---------------------------------------------------------------------------
 
 
 class LaunchFilm(NodeBase):
     kind = "launch_film"
-    node_type = "video"  # 词表 v3 (ADR-076) — 装配站 (发布短片)
+    node_type = "video"  # 词表 v3 (ADR-076) — 装配站 (官网介绍短片)
     prototype = "generator"  # 散文程序: the instruction/focus IS the program
-    task_name = "Generate launch film"
-    task_name_zh = "生成发布短片"
+    task_name = "Generate intro film"
+    task_name_zh = "生成官网介绍短片"
     output_type = "film"
     slot_label = "Film"
-    slot_label_zh = "发布短片"
+    slot_label_zh = "介绍短片"
     # The film family needs NO source media — its input is the captured page
     # (the birthplace ∀-check's film fork: WEB_PAGE presence + readiness,
     # never MEDIA).
@@ -596,45 +738,6 @@ class LaunchFilm(NodeBase):
             "units": {"film_seconds": ESTIMATE_FILM_SECONDS},
         }
 
-    async def _load_pages(self, db: AsyncSession, project: Project) -> list[StoryboardPage]:
-        """The project's READY web_page assets → grounding pages (capture
-        order). A COMPLETED capture always carries its manifest; the
-        screenshot may be honestly absent."""
-        assets = list(
-            (
-                await db.execute(
-                    select(Asset)
-                    .where(
-                        Asset.project_id == project.id,
-                        Asset.type == AssetType.WEB_PAGE,
-                        Asset.processing_status == AssetStatus.COMPLETED,
-                    )
-                    .order_by(Asset.created_at)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        pages: list[StoryboardPage] = []
-        from urllib.parse import urlparse
-
-        for a in assets:
-            meta = a.meta if isinstance(a.meta, dict) else {}
-            raw = meta.get("research")
-            if not isinstance(raw, dict):
-                continue
-            research = WebPageResearch.model_validate(raw)
-            host = urlparse(research.url).netloc or (a.title or "")
-            pages.append(
-                StoryboardPage(
-                    asset_id=str(a.id),
-                    research=research,
-                    screenshot_key=meta.get("screenshot_key"),
-                    host=host,
-                )
-            )
-        return pages
-
     async def run(
         self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
     ) -> list[UUID]:
@@ -642,8 +745,9 @@ class LaunchFilm(NodeBase):
         slot = node_slot(node, ctx, "film")
         focus = (slot.focus if slot else None) or None
         instruction = ctx.get("instruction") or None
+        ui_language = ui_lang_of(run, project)
 
-        pages = await self._load_pages(db, project)
+        pages = await load_storyboard_pages(db, project)
         if not pages:
             # The birthplace gates presence+readiness; a capture that FAILED
             # mid-wait lands here — the honest refusal (never an ungrounded
@@ -652,33 +756,55 @@ class LaunchFilm(NodeBase):
                 "The page never became readable (the capture failed) — send the link again to re-capture it."
             )
 
-        page_images: list[MediaInput] = []
-        for i, page in enumerate(pages):
-            if page.screenshot_key is None:
-                continue
-            item = await media_input_for_image(
-                page.screenshot_key,
-                caption=f"Screenshot of page {i} ({page.host}) — the ui scene's camera target.",
-            )
-            if item is not None:
-                page_images.append(item)
-
-        ui_language = ui_lang_of(run, project)
-        prompt_pages = [page_prompt_dict(p, i) for i, p in enumerate(pages)]
-
-        # The bounded rewrite (打回有界): up to 1 + MAX_REWRITES candidates,
-        # each re-called with the violation echo (never a blind re-roll).
         storyboard: FilmStoryboard | None = None
-        violations: list[FilmViolation] = []
-        feedback: str | None = None
-        for attempt in range(1 + MAX_REWRITES):
+        # confirmed_storyboard (ADR-120 §4): the plan-stage draft the user
+        # reviewed and verbally OK'd rides run.context — the node defensively
+        # re-validates it against the CURRENT pages (world drift: a page
+        # re-captured since the review), then renders it verbatim, skipping
+        # the orchestration. A stale confirmation falls back to a fresh
+        # orchestration — never a film from a void storyboard.
+        confirmed_raw = ctx.get("confirmed_storyboard")
+        if isinstance(confirmed_raw, dict):
             try:
-                candidate = await film_storyboarder.call(
-                    pages=prompt_pages,
+                confirmed = FilmStoryboard.model_validate(confirmed_raw)
+            except (ValueError, TypeError):
+                confirmed = None
+            if confirmed is not None:
+                stale = validate_storyboard(confirmed, pages)
+                if not stale:
+                    storyboard = confirmed
+                    logger.info(
+                        "confirmed_storyboard_used",
+                        node_id=str(node.id),
+                        scenes=len(confirmed.scenes),
+                    )
+                else:
+                    logger.info(
+                        "confirmed_storyboard_stale",
+                        node_id=str(node.id),
+                        codes=sorted({v.code for v in stale}),
+                    )
+
+        if storyboard is None:
+            page_images = await page_media_inputs(pages)
+
+            def _log_reject(attempt, violations, feedback):
+                logger.info(
+                    "film_storyboard_rejected",
+                    node_id=str(node.id),
+                    attempt=attempt,
+                    codes=sorted({v.code for v in violations}),
+                    count=len(violations),
+                    detail=(feedback or "")[:400],
+                )
+
+            try:
+                storyboard = await orchestrate_storyboard(
+                    pages=pages,
                     instruction=instruction,
                     focus=focus,
                     page_images=page_images,
-                    repair_feedback=feedback,
+                    on_reject=_log_reject,
                 )
             except LLMSchemaError:
                 # The funnel's own repair round already fired — a raise here
@@ -686,27 +812,13 @@ class LaunchFilm(NodeBase):
                 # for the D4 ledger, then let the node fail.
                 await set_spec_field(node.id, "failure", {"stage": "schema"})
                 raise
-            violations = validate_storyboard(candidate, pages)
-            if not violations:
-                storyboard = candidate
-                break
-            feedback = format_violations(violations)
-            logger.info(
-                "film_storyboard_rejected",
-                node_id=str(node.id),
-                attempt=attempt,
-                codes=sorted({v.code for v in violations}),
-                count=len(violations),
-                detail=(feedback or "")[:400],
-            )
-        if storyboard is None:
-            codes = sorted({v.code for v in violations})
-            await set_spec_field(
-                node.id,
-                "failure",
-                {"stage": "grounding", "codes": codes, "detail": (feedback or "")[:500]},
-            )
-            raise FilmStoryboardRejected(codes, feedback or "")
+            except FilmStoryboardRejected as exc:
+                await set_spec_field(
+                    node.id,
+                    "failure",
+                    {"stage": "grounding", "codes": exc.codes, "detail": exc.detail[:500]},
+                )
+                raise
 
         await set_spec_field(node.id, "storyboard", storyboard.model_dump(mode="json"))
 

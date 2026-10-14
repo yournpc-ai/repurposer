@@ -91,6 +91,7 @@ from app.chat.service import (
     is_pending_plan,
     latest_pending_question,
     merge_brief,
+    record_storyboard_block,
     resolve_confirmation_need,
     resolve_suggestion_note,
     sync_plan_question,
@@ -104,6 +105,7 @@ from app.models.schemas import (
     BriefSlot,
     BriefSlotSource,
     ChatRequest,
+    FilmStoryboard,
     InferredIntent,
     MaterialUnderstanding,
     PendingPlan,
@@ -167,6 +169,7 @@ class PlanTurn:
         on_phase=None,
         on_activity=None,
         on_candidates=None,
+        on_storyboard=None,
     ) -> None:
         self.db = db
         self.user_id = user_id
@@ -179,6 +182,9 @@ class PlanTurn:
         # path (no stream, no frames).
         self.on_activity = on_activity
         self.on_candidates = on_candidates
+        # 分镜块信道 (ADR-120 §1): the docked film plan's storyboard block
+        # streams live as ``assistant.storyboard``; None = one-shot path.
+        self.on_storyboard = on_storyboard
         # Turn state (filled by the assembly below and the executions):
         self.text = ""
         self.stored: PendingPlan | None = None
@@ -913,14 +919,6 @@ class PlanTurn:
         # correction) and the dock payload's stamp read the same object
         # (passed through below).
         need = await resolve_confirmation_need(db, self.user_id, task_estimate)
-        # 估价尾行 (ADR-111 §2 — dock 卡面退役后总估价的新家): the dock echo
-        # carries the code-composed estimate whisper (BILLING §2.1 披露义务 —
-        # capture 前可见). Appended AFTER the prose so the tail lands with
-        # the envelope's settled content (the reminder tail's seat); the
-        # per-task half lives on the canvas's draft nodes. intent.answer and
-        # the question row share the same tailed echo, so the flow's
-        # content-match (echo 实体化) keeps holding.
-        echo = echo + _estimate_tail(self.text, task_estimate, reason=need.reason)
 
         # The late-turn guard: a concurrent Start committed while this refine
         # was in flight — docking now would raise a plan over an active
@@ -935,6 +933,38 @@ class PlanTurn:
             )
             self.outcome = (assistant_message, None, self.settled_pending, [])
             return None
+
+        # ADR-120 §2: a film-chain plan drafts its storyboard AT THE DOCK —
+        # the reviewable rides the message flow (never the confirm dock), and
+        # the dock owes a review beat until the user's verbal go
+        # (storyboard_review hold — a plan-level fact, the unquotable
+        # clause's species, never a third user pref). A failed draft docks
+        # WITHOUT the hold (the run re-orchestrates at birth — the honest
+        # degrade). Revision turns ride the same seat: every re-dock drafts
+        # a fresh version.
+        storyboard_draft: FilmStoryboard | None = None
+        storyboard_hosts: list[str] = []
+        if any(t.tool == "launch_film" for t in params.tasks):
+            from app.pipeline.lifecycle import ConfirmationNeed
+            from app.tools.film.storyboard import draft_film_storyboard
+
+            drafted = await draft_film_storyboard(db, project, instruction=self.text)
+            if drafted is not None:
+                storyboard_draft, draft_pages = drafted
+                storyboard_hosts = [p.host for p in draft_pages]
+                if not need.requires_confirmation:
+                    need = ConfirmationNeed(
+                        True, "storyboard_review", need.quote_high, need.unquotable
+                    )
+
+        # 估价尾行 (ADR-111 §2 — dock 卡面退役后总估价的新家): the dock echo
+        # carries the code-composed estimate whisper (BILLING §2.1 披露义务 —
+        # capture 前可见). Appended AFTER the prose so the tail lands with
+        # the envelope's settled content (the reminder tail's seat); the
+        # per-task half lives on the canvas's draft nodes. intent.answer and
+        # the question row share the same tailed echo, so the flow's
+        # content-match (echo 实体化) keeps holding.
+        echo = echo + _estimate_tail(self.text, task_estimate, reason=need.reason)
         # Caption mode (ADR-099 §8 default absorption): what the call didn't
         # set rides the shared funnel — the user's own words (literal
         # bilingual keyword) > the previous dock's value > source_only when a
@@ -1004,6 +1034,22 @@ class PlanTurn:
         )
         question = await latest_pending_question(db, self.conversation_id)
         assert question is not None  # sync_plan_question just docked it
+        # ADR-120 §1: the storyboard block lands in the MESSAGE FLOW right
+        # under its dock — live it rides the on_storyboard SSE hook; the row
+        # is the replay truth. The review hold (need stamp above) keeps the
+        # auto gate closed until the user's verbal go.
+        if storyboard_draft is not None:
+            block_message = await record_storyboard_block(
+                db,
+                self.conversation_id,
+                storyboard=storyboard_draft,
+                pages=storyboard_hosts,
+                instruction=self.text,
+            )
+            if self.on_storyboard is not None and isinstance(block_message.intent, dict):
+                await self.on_storyboard(
+                    {**block_message.intent, "message_id": str(block_message.id)}
+                )
         self.outcome = (question, None, self.settled_pending, bailed_run_ids)
         # ADR-117 §2 auto 开工道: when the dock owes no confirm beat, the
         # SAME start machine fires on presentation (None = the dock waits
@@ -1905,6 +1951,7 @@ async def run_plan_turn(
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
+    on_storyboard=None,
 ) -> PlanTurnOutcome:
     """The plan path's turn: assemble → the bounded tool loop → the outcome
     mapping. ``intent_router`` provider failures propagate as LLMError — no
@@ -1916,7 +1963,7 @@ async def run_plan_turn(
     channel's SSE seat — the runner wraps it with persistence (the checkpoint
     row is this turn's own message, intent type 'checkpoint'). None = the
     one-shot path."""
-    turn = PlanTurn(db, user_id, conversation, project, request, on_phase=on_phase, on_activity=on_activity, on_candidates=on_candidates)
+    turn = PlanTurn(db, user_id, conversation, project, request, on_phase=on_phase, on_activity=on_activity, on_candidates=on_candidates, on_storyboard=on_storyboard)
     await turn.assemble(recent)
     # 言语提交协议武装 (speech-commit protocol, ADR-099 §7): on the SSE path
     # every turn arms the terminal buffer — iteration 0 is the only

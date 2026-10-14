@@ -3292,6 +3292,30 @@ class FilmStoryboard(BaseModel):
     scenes: list[FilmScene] = Field(min_length=1)
 
 
+STORYBOARD_BLOCK_TYPE = "storyboard"
+
+
+class StoryboardBlock(BaseModel):
+    """The message-flow storyboard block (ADR-120 §1): an assistant message
+    row's ``intent`` payload (``type == "storyboard"``) — the plan-stage
+    draft the user reviews and revises in chat before the run births. Sits
+    in the message stream, NEVER in the confirm dock.
+
+    ``version`` = the conversation's Nth storyboard row (each revision
+    drafts a fresh block — old versions stay in the transcript, folded by
+    the client). ``storyboard`` = the grounding-validated draft. ``pages``
+    = the reviewed pages' hosts (the table's source line — the world
+    self-evidence of what the copy is grounded on)."""
+
+    model_config = ConfigDict(extra="ignore")  # the intent row also carries the policy stamp
+
+    type: str = STORYBOARD_BLOCK_TYPE
+    version: int = 1
+    storyboard: FilmStoryboard
+    pages: list[str] = Field(default_factory=list)
+    instruction: str | None = None
+
+
 class FilmPayload(BaseModel):
     """Payload for ``outputs[type=film]`` — the launch film's creative facts.
 

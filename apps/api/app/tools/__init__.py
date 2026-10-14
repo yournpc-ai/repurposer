@@ -287,14 +287,15 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
         ),
         ToolEntry(
             name="launch_film",
-            description="Direct a short launch film from a captured web page "
-            "(its own copy over its screenshots) — ONLY when the user pasted "
-            "a link and wants a film of it; needs no uploaded media",
+            description="Direct a polished intro film of a website from a "
+            "captured web page (its own copy over its screenshots) — ONLY "
+            "when the user pasted a link and wants a film of it; needs no "
+            "uploaded media",
             behavior="probabilistic",
             params_model=LaunchFilmParams,
             summary_templates={
-                "en": "Directed a launch film · {total_seconds}s",
-                "zh": "生成了发布短片 · {total_seconds} 秒",
+                "en": "Directed an intro film · {total_seconds}s",
+                "zh": "生成了官网介绍短片 · {total_seconds} 秒",
             },
         ),
         ToolEntry(
@@ -384,7 +385,7 @@ _MENU_PHRASES: list[tuple[str, str]] = [
     "the camera sits on whoever is talking or follows a moving speaker, "
     "matched automatically to the footage"),
     ("align_stills", "photo-slideshow videos from stills + audio"),
-    ("launch_film", "a short launch film from a link"),
+    ("launch_film", "a polished intro film of a website from its link"),
 ]
 
 

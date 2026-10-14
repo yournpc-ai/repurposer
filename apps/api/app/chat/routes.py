@@ -570,6 +570,17 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                 on_activity = _make_activity_hook(queue, projector, mirror)
                 on_candidates = _make_candidates_hook(queue, candidate_events)
 
+                async def on_storyboard(payload: dict) -> None:
+                    # 分镜块信道 (ADR-120 §1): the docked film plan's
+                    # storyboard table streams the moment the plan-stage
+                    # draft lands. The block ROW is persisted inside the
+                    # turn's transaction (message-borne end to end — no
+                    # settle-time log row like candidates); a failed turn
+                    # rolls it back together with everything else.
+                    await queue.put(
+                        _sse("assistant.storyboard", json.dumps(payload, ensure_ascii=False))
+                    )
+
                 async def on_reasoning(_fragment: str) -> None:
                     # Reasoning-content frames: liveness only, never shown.
                     await queue.put(_sse("assistant.thinking", "{}"))
@@ -609,6 +620,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
+                    on_storyboard=on_storyboard,
                 )
             await _sweep_activities(queue, projector, "completed", mirror)
             if turn_conversation_id is not None and turn_user_message_id is not None:
@@ -696,6 +708,17 @@ async def _answer_stream(
                 on_activity = _make_activity_hook(queue, projector, mirror)
                 on_candidates = _make_candidates_hook(queue, candidate_events)
 
+                async def on_storyboard(payload: dict) -> None:
+                    # 分镜块信道 (ADR-120 §1): the docked film plan's
+                    # storyboard table streams the moment the plan-stage
+                    # draft lands. The block ROW is persisted inside the
+                    # turn's transaction (message-borne end to end — no
+                    # settle-time log row like candidates); a failed turn
+                    # rolls it back together with everything else.
+                    await queue.put(
+                        _sse("assistant.storyboard", json.dumps(payload, ensure_ascii=False))
+                    )
+
                 async def on_phase(phase: str) -> None:
                     await queue.put(
                         _sse("assistant.thinking", json.dumps({"phase": phase}))
@@ -713,6 +736,7 @@ async def _answer_stream(
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
+                    on_storyboard=on_storyboard,
                 )
             await _sweep_activities(queue, projector, "completed", mirror)
             await _persist_activity_forensics(

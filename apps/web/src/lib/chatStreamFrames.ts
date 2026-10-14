@@ -92,6 +92,23 @@ export type CandidateEventPayload =
     }
   | { kind: "selection"; candidate_set_id: string; selected: number[] }
 
+/** The message-flow storyboard block (ADR-120 §1): a docked film plan's
+ * storyboard table. Live it rides ``assistant.storyboard``; replay reads
+ * the row's ``intent`` dump — SAME payload shape both paths (the row IS
+ * the block, no settle-time log). ``scenes`` stays loosely typed here (the
+ * render walks scene.type's known shapes read-tolerantly). */
+export interface StoryboardPayload {
+  type: "storyboard"
+  version: number
+  storyboard: {
+    name?: string | null
+    scenes: Array<Record<string, unknown> & { type: string; seconds: number }>
+  }
+  pages: string[]
+  instruction?: string | null
+  message_id?: string
+}
+
 /** One routed stream frame — the onmessage dispatch's discriminated
  * output. `envelope`/`detail` stay `unknown`: the caller owns the envelope
  * type (the two surfaces type it differently). */
@@ -123,6 +140,7 @@ export type RoutedStreamFrame =
   | { kind: "thinking"; payload: ThinkingPayload }
   | { kind: "question_preview"; payload: QuestionPreviewPayload }
   | { kind: "candidates"; event: CandidateEventPayload }
+  | { kind: "storyboard"; payload: StoryboardPayload }
   | { kind: "checkpoint"; text: string; at?: string }
   | { kind: "activity"; frame: ActivityFramePayload }
   | { kind: "row_append"; row: RowAppendPayload }
@@ -156,6 +174,12 @@ export function routeStreamFrame(
     return {
       kind: "candidates",
       event: JSON.parse(data) as CandidateEventPayload,
+    }
+  }
+  if (event === "assistant.storyboard") {
+    return {
+      kind: "storyboard",
+      payload: JSON.parse(data) as StoryboardPayload,
     }
   }
   if (event === "assistant.checkpoint") {

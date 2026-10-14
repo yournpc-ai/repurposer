@@ -27,7 +27,10 @@ import { API_URL, UNAUTHORIZED_EVENT } from "@/lib/api"
 import { clearAuth, getToken } from "@/lib/auth"
 import i18n from "@/lib/i18n"
 import { routeStreamFrame } from "@/lib/chatStreamFrames"
-import type { CandidateEventPayload } from "@/lib/chatStreamFrames"
+import type {
+  CandidateEventPayload,
+  StoryboardPayload,
+} from "@/lib/chatStreamFrames"
 
 // The frame vocabulary's single seat is chatStreamFrames.ts (Phase 3 Batch
 // A test seam) — re-exported here so existing import sites stay put.
@@ -127,6 +130,11 @@ export interface StreamChatOptions {
    * union). Live cards roll back if the turn fails (the server persists the
    * turn's events as ONE candidates_log row on the completed path only). */
   onCandidates?: (event: CandidateEventPayload) => void
+  /** 分镜块 (ADR-120 §1): the docked film plan's storyboard table — the
+   * block row persists inside the turn's transaction (replay reads the
+   * row), so the live payload is render-only; a failed turn's rollback
+   * drops it with everything else. */
+  onStoryboard?: (payload: StoryboardPayload) => void
   /** Transcript array mirror (ADR-108 §3): a row's birth — append fixes its
    * array position (today: activity rows). Rows persist even on a failed
    * turn (诚实 transcript) — the client NEVER rolls them back. */
@@ -204,6 +212,7 @@ function streamTurn<T>(
     onCheckpoint,
     onActivity,
     onCandidates,
+    onStoryboard,
     onRowAppend,
     onRowUpdate,
   }: {
@@ -214,6 +223,7 @@ function streamTurn<T>(
     onCheckpoint?: StreamChatOptions["onCheckpoint"]
     onActivity?: StreamChatOptions["onActivity"]
     onCandidates?: StreamChatOptions["onCandidates"]
+    onStoryboard?: StreamChatOptions["onStoryboard"]
     onRowAppend?: StreamChatOptions["onRowAppend"]
     onRowUpdate?: StreamChatOptions["onRowUpdate"]
   },
@@ -291,6 +301,9 @@ function streamTurn<T>(
           case "candidates":
             onCandidates?.(frame.event)
             break
+          case "storyboard":
+            onStoryboard?.(frame.payload)
+            break
           case "completed":
             resolve(frame.envelope as T)
             break
@@ -333,6 +346,7 @@ export function streamAnswer<T>(
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
     onActivity?: StreamChatOptions["onActivity"]
     onCandidates?: StreamChatOptions["onCandidates"]
+    onStoryboard?: StreamChatOptions["onStoryboard"]
     onRowAppend?: StreamChatOptions["onRowAppend"]
     onRowUpdate?: StreamChatOptions["onRowUpdate"]
   },
@@ -352,12 +366,12 @@ export function streamAnswer<T>(
  * `e.name === "AbortError"`). */
 export function streamChat<T>(
   body: ChatTurnBody,
-  { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity, onCandidates, onRowAppend, onRowUpdate }: StreamChatOptions,
+  { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity, onCandidates, onStoryboard, onRowAppend, onRowUpdate }: StreamChatOptions,
 ): Promise<T> {
   return streamTurn(
     `${API_URL}/api/v1/chat`,
     body,
     { completed: "turn.completed", failed: "turn.failed" },
-    { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity, onCandidates, onRowAppend, onRowUpdate },
+    { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity, onCandidates, onStoryboard, onRowAppend, onRowUpdate },
   )
 }

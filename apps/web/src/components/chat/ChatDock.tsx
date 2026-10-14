@@ -59,6 +59,7 @@ import type {
   ActivityRowFramePayload,
   CandidateEventPayload,
   RowAppendPayload,
+  StoryboardPayload,
 } from "@/lib/chatStreamFrames"
 import { buildConversationUnits, foldActivityUnits } from "@/lib/chatTimeline"
 import {
@@ -84,6 +85,7 @@ import { Streamdown } from "streamdown"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Bubble, BubbleContent, BubbleGroup } from "@/components/ui/bubble"
 import { Message, MessageContent } from "@/components/ui/message"
 import {
@@ -110,6 +112,7 @@ import { RunCard } from "@/components/chat/RunCard"
 import { AnchorCards } from "@/components/chat/AnchorCards"
 import { anchorCardsForRun } from "@/lib/anchorCards"
 import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
+import { StoryboardTable } from "@/components/chat/StoryboardTable"
 import { AnsweredQuestion, answeredQuestionText } from "@/components/chat/AnsweredQuestion"
 import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
 import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
@@ -714,25 +717,37 @@ function CopyMessageButton({ text, align }: { text: string; align: "start" | "en
           : "pointer-events-none opacity-0 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 group-hover/message:pointer-events-auto group-hover/message:opacity-100",
       )}
     >
-      <button
-        type="button"
-        aria-label={t(copied ? "chat.copied" : "chat.copy")}
-        title={t(copied ? "chat.copied" : "chat.copy")}
-        onClick={() => {
-          void copyMessageText(text, (s) => navigator.clipboard.writeText(s)).then(
-            (ok) => {
-              if (ok) setCopied(true)
-            },
-          )
-        }}
-        className="flex items-center p-1 text-meta-foreground transition-colors hover:text-foreground"
-      >
-        {copied ? (
-          <Check className="h-3.5 w-3.5" />
-        ) : (
-          <Copy className="h-3.5 w-3.5" />
-        )}
-      </button>
+      {/* Tooltip = the shared dark pill (Tooltip primitive), NOT the native
+          `title` — the two stacked would double-tip. side=bottom: the row
+          lives directly under the bubble/prose, a top tip would overlap the
+          text it labels. */}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              aria-label={t(copied ? "chat.copied" : "chat.copy")}
+              onClick={() => {
+                void copyMessageText(text, (s) => navigator.clipboard.writeText(s)).then(
+                  (ok) => {
+                    if (ok) setCopied(true)
+                  },
+                )
+              }}
+              className="flex items-center p-1 text-meta-foreground transition-colors hover:text-foreground"
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </button>
+          }
+        />
+        <TooltipContent side="bottom">
+          {t(copied ? "chat.copied" : "chat.copy")}
+        </TooltipContent>
+      </Tooltip>
     </div>
   )
 }
@@ -1133,6 +1148,36 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // turns' rows are immune — the ref clears at every turn's start).
   const rollbackCandidateRows = useCallback(() => {
     const doomed = liveCandidateRowsRef.current
+    if (doomed.size === 0) return
+    setMessages((prev) => prev.filter((m) => !doomed.has(m.id)))
+    doomed.clear()
+  }, [])
+  // 分镜块 (ADR-120 §1): the live `assistant.storyboard` frame appends the
+  // table under its dock — every earlier version folds to a chip in the
+  // same setState pass (版本折叠律). The row rolls back if its turn fails
+  // (the server rolls the block row back with it — candidates 同律).
+  const liveStoryboardRowsRef = useRef<Set<string>>(new Set())
+  const handleStoryboardFrame = useCallback((payload: StoryboardPayload) => {
+    const liveId =
+      payload.message_id ?? `live-sb-v${payload.version}-${Date.now()}`
+    liveStoryboardRowsRef.current.add(liveId)
+    setMessages((prev) => [
+      ...prev.map((m) =>
+        m.storyboard
+          ? { ...m, storyboard: { ...m.storyboard, superseded: true } }
+          : m,
+      ),
+      {
+        id: liveId,
+        role: "assistant" as const,
+        content: "",
+        at: new Date().toISOString(),
+        storyboard: { payload, superseded: false },
+      },
+    ])
+  }, [])
+  const rollbackStoryboardRows = useCallback(() => {
+    const doomed = liveStoryboardRowsRef.current
     if (doomed.size === 0) return
     setMessages((prev) => prev.filter((m) => !doomed.has(m.id)))
     doomed.clear()
@@ -2153,6 +2198,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // C8-c: a new turn owns the candidate-rollback scope — rows committed
     // by earlier turns are no longer this turn's to roll back.
     liveCandidateRowsRef.current.clear()
+    liveStoryboardRowsRef.current.clear()
     const streamId = crypto.randomUUID()
     let streamedAny = false
     // What the preview bubble currently shows (the typewriter-released text)
@@ -2414,6 +2460,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           onCheckpoint,
           onActivity: handleActivityFrame,
           onCandidates: handleCandidatesFrame,
+          onStoryboard: handleStoryboardFrame,
           onRowAppend: handleRowAppend,
           onRowUpdate: handleRowUpdate,
         }
@@ -2620,6 +2667,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       typewriter.flush()
       discardPreviewArtifacts()
       rollbackCandidateRows()
+      rollbackStoryboardRows()
       // 终帧律 (同上): a failed/aborted turn closes every phase too.
       setThinkingPhase(null)
       // The activity stream settles the same way: a user stop marks the
@@ -2906,6 +2954,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   ) => {
     // C8-c: same rollback-scope handover as sendChat's turn start.
     liveCandidateRowsRef.current.clear()
+    liveStoryboardRowsRef.current.clear()
     const optimisticId = stashedAnswerRef.current?.optimisticId ?? crypto.randomUUID()
     stashedAnswerRef.current = null
     const previewId = `answer-preview-${optimisticId}`
@@ -3000,6 +3049,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           dockQuestionPreview(`preview-answer-${optimisticId}`, payload),
         onActivity: handleActivityFrame,
         onCandidates: handleCandidatesFrame,
+          onStoryboard: handleStoryboardFrame,
         onRowAppend: handleRowAppend,
         onRowUpdate: handleRowUpdate,
       })
@@ -3101,6 +3151,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // server-side (the original question restores just below).
       discardPreviewArtifacts()
       rollbackCandidateRows()
+      rollbackStoryboardRows()
       setMessages((prev) =>
         prev.filter((m) => m.id !== optimisticId && m.id !== previewId),
       )
@@ -3738,6 +3789,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                 dump or live-born from the SSE frame, same seat. */}
             {m.candidates ? (
               <CandidateSurfaceCard surface={m.candidates} />
+            ) : null}
+            {/* 分镜表 (ADR-120 §1): the film plan's reviewable table —
+                replayed from the block row or live-pushed, same seat. */}
+            {m.storyboard ? (
+              <StoryboardTable
+                payload={m.storyboard.payload}
+                superseded={m.storyboard.superseded}
+              />
             ) : null}
           </>
         )}

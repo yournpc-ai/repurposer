@@ -17,7 +17,29 @@ import {
   type QuestionAnswer,
 } from "./AnsweredQuestion"
 import type { ActivityFramePayload } from "@/lib/chat-stream"
-import type { CandidateMemberPayload } from "@/lib/chatStreamFrames"
+import type { CandidateMemberPayload, StoryboardPayload } from "@/lib/chatStreamFrames"
+
+/** The storyboard block's row parser (ADR-120 §1 — intent.type ===
+ * "storyboard"): read-tolerant, an off-shape dump reads as no block (the
+ * row then falls through to the plain-prose walk with empty content and
+ * skips via the no-empty-bubble law). */
+export function storyboardBlock(intent: unknown): StoryboardPayload | undefined {
+  const data = (intent ?? {}) as Record<string, unknown>
+  if (data.type !== "storyboard") return undefined
+  const sb = (data.storyboard ?? {}) as Record<string, unknown>
+  const scenes = Array.isArray(sb.scenes) ? sb.scenes : null
+  if (scenes === null) return undefined
+  return {
+    type: "storyboard",
+    version: typeof data.version === "number" ? data.version : 1,
+    storyboard: {
+      name: typeof sb.name === "string" ? sb.name : null,
+      scenes: scenes as StoryboardPayload["storyboard"]["scenes"],
+    },
+    pages: Array.isArray(data.pages) ? (data.pages as string[]) : [],
+    instruction: typeof data.instruction === "string" ? data.instruction : null,
+  }
+}
 
 /** One persisted activity row's render frame (ADR-108 数组行): the
  * transcript array's activity entries — per-frame rows written at
@@ -82,6 +104,11 @@ export interface OverlayMessage {
    * it in place (chat 决策永不成节点 — the card is the selection state's
    * one seat). */
   candidates?: CandidateSurface
+  /** 分镜块 (ADR-120 §1): a film plan's storyboard table in the message
+   * flow — replayed from the row's intent dump ({type:"storyboard"}) or
+   * pushed live. ``superseded`` folds every version but the latest into a
+   * chip (PlanVersionChip 同律 — old versions stay visible, folded). */
+  storyboard?: { payload: StoryboardPayload; superseded: boolean }
 }
 
 /** The candidate card's data (C8-c): ordinal = the member's array index
@@ -600,6 +627,20 @@ export function mapHistoryRows(
       // 永不渲染行 (ADR-108): the rejection forensics ledger and legacy
       // aggregate logs skip silently — never an empty bubble.
       if (isNonRenderIntent(m.intent)) continue
+      // 分镜块回放 (ADR-120 §1): a storyboard row replays as a table block
+      // in its array position — version folding lands after the walk
+      // (every version but the latest marks superseded).
+      const sb = storyboardBlock(m.intent)
+      if (sb !== undefined) {
+        history.push({
+          id: m.id,
+          role: "assistant",
+          content: "",
+          at: m.created_at,
+          storyboard: { payload: sb, superseded: false },
+        })
+        continue
+      }
       // 素材节拍回放 (2026-09-24): a persisted beat row replays as a
       // settled activity unit IN ITS ARRAY POSITION, never a bubble.
       const beat = materialBeat(m.intent)
@@ -677,6 +718,24 @@ export function mapHistoryRows(
         // from its intent dump — undefined on every other shape.
         suggestions: triggerSuggestions(m.intent),
       })
+    }
+  }
+  // 分镜版本折叠 (ADR-120 §1 — PlanVersionChip 同律): every storyboard
+  // version but the LATEST folds to a chip; old versions stay visible,
+  // never rendered as a second full table.
+  let lastStoryboardIdx = -1
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].storyboard !== undefined) {
+      lastStoryboardIdx = i
+      break
+    }
+  }
+  if (lastStoryboardIdx > 0) {
+    for (let i = 0; i < lastStoryboardIdx; i++) {
+      const h = history[i]
+      if (h.storyboard !== undefined) {
+        history[i] = { ...h, storyboard: { ...h.storyboard, superseded: true } }
+      }
     }
   }
   return history

@@ -1125,6 +1125,21 @@ const zh: Resources = {
       noTranscript: "暂无字幕稿。",
     },
   },
+  // 分镜表消息块 (ADR-120 §1) — 官网介绍短片的可核对分镜。
+  storyboard: {
+    untitled: "介绍短片分镜",
+    meta: "v{{version}} · {{count}} 幕 · 约 {{seconds}} 秒",
+    source: "文案出自：{{pages}}",
+    collapse: "收起",
+    sceneTypes: {
+      words: "词卡",
+      hero: "主视觉",
+      ui: "页面",
+      divider: "过场",
+      reveal: "揭晓",
+      end: "尾卡",
+    },
+  },
   chat: {
     assistantLabel: "Repurposer",
     userLabel: "你",

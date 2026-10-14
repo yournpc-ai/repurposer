@@ -2902,3 +2902,21 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 9. **S11 = MG 旅程座**（`chat_scenarios.py`）：URL → web_page 真采集 → 分镜方案 dock → 守卫线口头 yes → 真渲染 + probe 闸 → film 产物 + 画布血缘 + 台账 hold=capture+release；只锁形态不锁文案。
 
 **Related**: ADR-016（spec 契约律）/ ADR-028（禁第二条编排链）/ ADR-058（name 二源律，null 读容忍）/ ADR-096 §1（渲染 pend 唯一座）/ ADR-052（absorb 信封座）/ ADR-114（S11 旅程座纪律）
+
+## ADR-120: film 分镜核对坐消息流——计划期起草 / 消息块逐版 / confirmed_storyboard 直渲
+
+**Status**: Decided（2026-10-14 用户拍板 A 变体；简报 = `tasks/film-storyboard-review.md`）
+
+**Context**: launch-film 内化后（ADR-119）与原 skill 的效果差距 = 核对物（时长/文案/分镜）用户无处可见——分镜在 run 内出生即渲染，用户只能在成品上事后发现「这不是我要的」。真实对话取证（项目 e9f60236）：多轮核对（时长压缩 / 文案替换 / 画幅）是官网介绍短片品类的体验本体。auto 档（ADR-117）确认钮退役后，确认 dock 不能承重核对物。
+
+**Decision**:
+
+1. **分镜表 = 消息流里的一种消息块**（`intent.type="storyboard"`，candidates_log 先例），永不进确认 dock。逐版留痕：每次修订出新版行，旧版折叠 chip（PlanVersionChip 同律）。
+2. **计划期起草**：`_present_plan` 检出 film 链即起草——编排环一座（`orchestrate_storyboard()`：storyboarder agent + grounding validator + 有界打回），node 与计划期共享，禁第二条编排链（ADR-028）。计划期编排 = conversation 层计量不收费（ADR-117 §5）。
+3. **修订复用 dock 座位**：每次 re-dock 重起草（修订言语入 assemble），version = 会话内分镜行数 + 1；E1 修订对象 = 分镜草案，禁整片重跑。
+4. **confirmed_storyboard 直渲**：开工（口头 yes / Start / auto 道同一机器）把最新分镜行 stamp 进 `run.context.confirmed_storyboard`（confirmed_scope 同座）；`LaunchFilm.run` 防御性 validate——通过则跳过编排直渲，世界漂移失效则重编排并 log（confirmed_storyboard_stale），永不用废分镜出片。
+5. **品类措辞**：「官网介绍短片」，非「短视频」——capability menu / echo 引导同批换；参数行（画幅/配音/配乐）随 E2/E3 落地才上 UI，不卖未建能力。
+
+**Consequences**: 多轮核对节奏不靠确认档——高价长片越守卫线恒带价问一次（ADR-117 D6），核对自然发生在 dock 等待期；E2（配音/BGM）的 narration 进分镜表同族核对；时长对齐 75–120s keynote 挂 E2/E3 同批重估。
+
+**Related**: ADR-119（film 家族基座）/ ADR-028（禁第二编排链）/ ADR-117（auto 道与守卫线）/ ADR-052（confirmed_scope 快照座）/ ADR-058（展示文案二源律）
