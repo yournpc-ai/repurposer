@@ -5,9 +5,13 @@ it in a process separate from the API, so heavy jobs (text extraction, LLM
 node execution, video rendering) never compete with online request handling.
 
 Each tick claims at most one asset, up to ``_NODE_CONCURRENCY`` ready plan
-nodes, and one render job via the ``FOR UPDATE SKIP LOCKED`` helpers in
-:mod:`app.pipeline.jobs`. Node execution runs as asyncio tasks so sibling
-nodes of a run keep the parallelism the retired asyncio.gather fan-out had.
+nodes, and up to ``settings.render_concurrency`` render jobs via the
+``FOR UPDATE SKIP LOCKED`` helpers in :mod:`app.pipeline.jobs`. Node AND
+render executions run as asyncio tasks (MG D4: renders were previously
+awaited inline — one 900s render fenced the whole tick loop off assets and
+nodes; the claim token guard (ADR-079) makes parallel render tasks safe),
+so sibling nodes of a run keep the parallelism the retired asyncio.gather
+fan-out had.
 When all sources are empty the loop sleeps for
 ``settings.worker_poll_interval`` seconds. Processor failures are recorded on
 the row and never crash the loop.
@@ -60,6 +64,18 @@ _STAGING_REAP_INTERVAL_SECONDS = 3600
 _last_staging_reap = 0.0
 
 _running_node_tasks: set[asyncio.Task] = set()
+_running_render_tasks: set[asyncio.Task] = set()
+
+
+async def _run_render(output_id: UUID) -> None:
+    """Task wrapper for a claimed render: render_output records every
+    render-chain failure on the row itself, but a failure in its own snapshot
+    phase (before the try) would otherwise escape as an unretrieved task
+    exception — log it here, never crash the loop."""
+    try:
+        await render_output(output_id)
+    except Exception as e:  # noqa: BLE001
+        logger.error("render_task_failed", output_id=str(output_id), error=str(e))
 
 
 async def _tick() -> bool:
@@ -105,11 +121,17 @@ async def _tick() -> bool:
     async with AsyncSessionLocal() as db:
         await reap_stale_nodes_older_than(db, STALE_NODE_REAP_SECONDS)
 
-    async with AsyncSessionLocal() as db:
-        render_id = await claim_pending_render(db)
-    if render_id is not None:
+    # Renders fan out as tasks up to the concurrency cap (same pattern as
+    # nodes): the tick loop stays responsive while Chrome renders.
+    while len(_running_render_tasks) < settings.render_concurrency:
+        async with AsyncSessionLocal() as db:
+            render_id = await claim_pending_render(db)
+        if render_id is None:
+            break
         did_work = True
-        await render_output(render_id)
+        task = asyncio.create_task(_run_render(render_id))
+        _running_render_tasks.add(task)
+        task.add_done_callback(_running_render_tasks.discard)
 
     # Staging GC (Batch A): expired, unreferenced pre-project uploads.
     # Hourly cadence; failures stay inside the reaper (log + next pass).

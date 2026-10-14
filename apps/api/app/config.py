@@ -76,6 +76,17 @@ class Settings(BaseSettings):
     # schedule is invented here.
     asset_max_attempts: int = 3
     render_max_attempts: int = 3
+    # Render execution knobs (MG D4 — engineering parameters, deployment-shaped,
+    # so env Settings, NOT the configs table; boundary rule = platform/configs.py
+    # header §3). render_concurrency caps simultaneous renders per worker process
+    # (the contended resource is headless Chrome in the render service; 2 keeps
+    # one Chrome crash from stalling the queue while bounding memory).
+    # render_timeout_seconds fences one render-service POST: the film baseline is
+    # ≈46s for a 26s film (local spike, ~1.75× realtime), but the SAME fence
+    # covers the clip family, where longer sources legitimately render for
+    # minutes — 900s keeps the historical fence, now tunable per deployment.
+    render_concurrency: int = 2
+    render_timeout_seconds: int = 900
 
     # ASR (faster-whisper, self-hosted — EU/GDPR; CTranslate2, no torch)
     asr_model: str = "base"  # tiny/base/small/medium/large-v3

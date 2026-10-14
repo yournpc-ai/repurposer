@@ -22,8 +22,11 @@ visibility + cost home, the claim stays on ``outputs.render_status`` so
 run-less re-renders (manual render / dub / translate) keep working unchanged.
 """
 
+import asyncio
 import copy
+import json
 import time
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -36,9 +39,17 @@ from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
 from app.models.tables import Output, Project, WorkflowRun
 from app.pipeline.errors import user_line
+from app.pipeline.render_probe import (
+    PROBE_OUTPUT_MISSING,
+    ProbeViolation,
+    probe_expectation_for,
+    probe_rendered_text,
+    probe_rendered_video,
+)
 from app.pipeline.tracks import resolve_spec_urls
 from app.providers.storage import (
     delete,
+    download_to_temp,
     get_output_path,
     output_url,
     presign_upload,
@@ -89,6 +100,78 @@ def _absolutize(spec: dict[str, Any]) -> dict[str, Any]:
     # url_fields — a newly registered track's URLs absolutize with zero changes
     # here.
     return resolve_spec_urls(spec, _resolve_url)
+
+
+async def _stamp_render_failure(output_id: UUID, failure: dict[str, Any]) -> None:
+    """Stamp the structured failure onto the render mirror step's spec — the
+    SAME shape as the storyboard stages (``{stage, codes, detail}``, MG D2) so
+    the failure stage ledger reads ONE field across the whole film chain.
+    Best-effort (the mirror is visibility, not the ledger of record); run-less
+    renders have no mirror row and simply match 0."""
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                text(
+                    "UPDATE workflow_steps SET "
+                    "spec = jsonb_set(spec, '{failure}', CAST(:failure AS jsonb), true), "
+                    "updated_at = now() "
+                    "WHERE kind = 'render' AND spec->>'output_id' = :oid"
+                ),
+                {"failure": json.dumps(failure), "oid": str(output_id)},
+            )
+            await db.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "render_failure_stamp_failed", output_id=str(output_id), error=str(e)
+        )
+
+
+async def _probe_artifacts(
+    spec: dict[str, Any], video_key: str, srt_key: str | None
+) -> list[ProbeViolation]:
+    """放行闸③ (MG D4 / 禁止事项 10 — 禁无文件校验的成功态): download the fresh
+    artifacts and probe them BEFORE the row may settle COMPLETED. ONE seat for
+    both spec families; the check items dispatch on ``spec.family``
+    (``probe_expectation_for``).
+
+    Temp discipline (拍板): the downloaded copy is the probe's read-only
+    working file and is deleted IMMEDIATELY on both outcomes — the artifact
+    itself lives in object storage (a rejected object stays there as the
+    forensic record, its key rides the failure detail), so the temp copy has
+    no retention value.
+    """
+    expect = probe_expectation_for(spec)
+    video_path: Path | None = None
+    srt_path: Path | None = None
+    try:
+        try:
+            video_path = await download_to_temp(video_key)
+        except Exception as e:  # noqa: BLE001 — an unreadable store read is
+            # indistinguishable from a missing object at this seat; the render
+            # fails either way and the attempt cap bounds the re-render.
+            return [
+                ProbeViolation(
+                    PROBE_OUTPUT_MISSING,
+                    f"video object unreadable from storage: {type(e).__name__}: {e}",
+                )
+            ]
+        violations = await asyncio.to_thread(probe_rendered_video, video_path, expect)
+        if srt_key is not None and not violations:
+            try:
+                srt_path = await download_to_temp(srt_key)
+            except Exception as e:  # noqa: BLE001
+                return [
+                    ProbeViolation(
+                        PROBE_OUTPUT_MISSING,
+                        f"srt object unreadable from storage: {type(e).__name__}: {e}",
+                    )
+                ]
+            violations.extend(await asyncio.to_thread(probe_rendered_text, srt_path))
+        return violations
+    finally:
+        for p in (video_path, srt_path):
+            if p is not None:
+                p.unlink(missing_ok=True)
 
 
 async def _mirror_render_node(
@@ -336,10 +419,69 @@ async def render_output(output_id: UUID) -> None:
                 ),
             },
         }
-        async with httpx.AsyncClient(timeout=900) as client:
+        async with httpx.AsyncClient(timeout=settings.render_timeout_seconds) as client:
             resp = await client.post(settings.render_url, json=payload)
             resp.raise_for_status()
             data = resp.json()
+
+        # 放行闸③ (MG D4 / 禁止事项 10): the artifact must pass the probe gate
+        # before the row may settle COMPLETED — a success without a file check
+        # is forbidden. One seat, family-dispatched check items. A failed probe
+        # settles FAILED (attempt-counted, cap-bounded — never a blind retry)
+        # with the structured failure on the render mirror step; the rejected
+        # object stays in storage as the forensic record (its key rides the
+        # failure detail and the structlog event).
+        violations = await _probe_artifacts(
+            spec, data["video"], data.get("srt") if srt_key is not None else None
+        )
+        if violations:
+            codes = sorted({v.code for v in violations})
+            detail = "; ".join(v.detail for v in violations[:6])[:500]
+            logger.warning(
+                "render_probe_rejected",
+                output_id=str(output_id),
+                codes=codes,
+                detail=detail,
+                video_key=video_key,
+            )
+            async with AsyncSessionLocal() as db:
+                failed = await db.execute(
+                    update(Output)
+                    .where(
+                        Output.id == output_id,
+                        Output.render_claim_token == mine,
+                    )
+                    .values(
+                        render_status=RenderStatus.FAILED,
+                        render_error=user_line("render_failed", lang),
+                    )
+                )
+                await db.commit()
+            if failed.rowcount:
+                await _stamp_render_failure(
+                    output_id, {"stage": "probe", "codes": codes, "detail": detail}
+                )
+                await _mirror_render_node(
+                    output_id, "failed", user_line("render_failed", lang)
+                )
+                await _finalize_owning_run(output_id)
+            else:
+                # Fenced (a morph re-pended mid-render): this render's product
+                # is stale regardless of probe outcome — discard the object
+                # exactly like the superseded path.
+                logger.warning(
+                    "render_fenced", output_id=str(output_id), tail="probe"
+                )
+                for orphan_key in (k for k in (video_key, srt_key) if k):
+                    try:
+                        await delete(orphan_key)
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(
+                            "render_superseded_delete_failed",
+                            key=orphan_key,
+                            error=str(e),
+                        )
+            return
 
         # Guarded write (ADR-079): the predicate is the claim TOKEN, not the
         # render_status state — a state guard cannot tell executions apart
