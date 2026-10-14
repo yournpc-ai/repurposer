@@ -13,9 +13,10 @@ detail}`` 盖在 render 镜像节点上（与 storyboard 的 schema/grounding �
 无保留价值）。
 
 家族分派（``probe_expectation_for`` 只读 spec 自身字段）：
-- film：h264 + 1920×1080 + 实际时长 ≈ Σ场景帧/fps（容差 ±1 帧）+ 首帧可解码。
+- film：h264 + 1920×1080 + 实际时长 = Σ场景帧（流帧计数 ±1 帧）+ 首帧可解码。
 - clip（family 缺省）：存在 + 非零 + 容器可读 + 有视频流 + 首帧可解码——
-  clip 的时长/分辨率语义跨段拼接，不在本闸断言。
+  clip 的时长/分辨率语义跨段拼接，不在本闸断言；caption sidecar 存在即法，
+  非零当且仅当 caption_track 非空（空轨的零字节 srt 是合法产物）。
 """
 
 from __future__ import annotations
@@ -172,11 +173,21 @@ def probe_rendered_video(
     return violations
 
 
-def probe_rendered_text(path: Path | None) -> list[ProbeViolation]:
-    """The caption sidecar's gate (clip family): exists + non-zero. Content
-    shape is the render service's contract, not re-judged here."""
+def probe_rendered_sidecar(path: Path | None, *, allow_empty: bool) -> list[ProbeViolation]:
+    """The caption sidecar's gate (clip family). EXISTENCE is the law; the
+    non-empty bar applies iff the spec's caption track carries cues — the
+    render service writes ``captionTrackToSrt([]) == ""``, so a zero-byte srt
+    is a VALID artifact for a captionless clip and must never fail the gate
+    (a non-empty track that produced an empty/missing sidecar is the broken
+    delivery this gate exists to catch). Content shape is the render
+    service's contract, not re-judged here."""
     if path is None or not path.exists():
         return [ProbeViolation(PROBE_OUTPUT_MISSING, "rendered sidecar absent from storage")]
-    if path.stat().st_size == 0:
-        return [ProbeViolation(PROBE_OUTPUT_MISSING, "rendered sidecar is zero bytes")]
+    if not allow_empty and path.stat().st_size == 0:
+        return [
+            ProbeViolation(
+                PROBE_OUTPUT_MISSING,
+                "rendered sidecar is zero bytes despite a non-empty caption track",
+            )
+        ]
     return []

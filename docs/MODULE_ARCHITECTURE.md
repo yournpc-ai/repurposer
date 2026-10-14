@@ -306,7 +306,8 @@ apps/api/
 │   │   ├── render_probe.py      # 产物文件校验闸纯核（MG D4 放行闸③，禁无文件校验的成功态）：
 │   │   │                        #   rendering.py 成功路径落 COMPLETED 前唯一闸门，家族分派检查项
 │   │   │                        #   （film：h264/1920×1080/流帧计数 ±1 帧——容器时长有 muxer 衬垫，
-│   │   │                        #   永不作契约面；clip：存在/非零/可读）；未过 = FAILED +
+│   │   │                        #   永不作契约面；clip：存在/非零/可读 + sidecar 存在即法、非零
+│   │   │                        #   当且仅当 caption_track 非空）；未过 = FAILED +
 │   │   │                        #   spec.failure{stage:probe} 盖 render 镜像节点（台账读单字段）
 │   │   ├── verify.py            # 质检环节点（期 3）：确定性矩阵裁决 + QualityBounce 打回 + best-not-last
 │   │   │                        #   快照回退 + 双败 escalation（dock 提问 + Suspend）；quality.py = 检查矩阵

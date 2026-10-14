@@ -36,12 +36,14 @@ from sqlalchemy import select  # noqa: E402
 
 from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.tables import Output, WorkflowStep  # noqa: E402
+from app.tools.film.storyboard import TEXT_NOT_GROUNDED  # noqa: E402
 
 STAGES = ["schema", "grounding", "constraint", "render", "probe"]
 # Validator codes that belong to the grounding bucket; every other validator
 # code is a constraint violation (the validator terminal carries both stages'
-# codes under stage="grounding" — the bucket split rides the code set).
-_GROUNDING_CODES = {"TEXT_NOT_GROUNDED"}
+# codes under stage="grounding" — the bucket split rides the code set, the
+# constant imported from its single home).
+_GROUNDING_CODES = {TEXT_NOT_GROUNDED}
 
 
 def _failure(step: WorkflowStep) -> dict[str, Any]:

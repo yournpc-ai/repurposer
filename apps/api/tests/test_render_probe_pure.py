@@ -22,7 +22,7 @@ from app.pipeline.render_probe import (
     PROBE_UNREADABLE,
     ProbeExpectation,
     probe_expectation_for,
-    probe_rendered_text,
+    probe_rendered_sidecar,
     probe_rendered_video,
 )
 
@@ -161,16 +161,34 @@ def test_clip_family_still_rejects_garbage(tmp_path: Path) -> None:
 
 
 # ---- the caption sidecar (clip family companion) ------------------------------
+# The law: existence always; the non-empty bar applies iff the caption track
+# carries cues (the render service writes captionTrackToSrt([]) == "" — an
+# empty srt is a VALID artifact for a captionless clip, never a gate failure).
 
 
 def test_sidecar_present_and_nonzero_passes(tmp_path: Path) -> None:
     srt = tmp_path / "clip.srt"
     srt.write_text("1\n00:00:00,000 --> 00:00:01,000\nhello\n", encoding="utf-8")
-    assert probe_rendered_text(srt) == []
+    assert probe_rendered_sidecar(srt, allow_empty=False) == []
 
 
-def test_sidecar_missing_or_empty_is_rejected(tmp_path: Path) -> None:
-    assert _codes(probe_rendered_text(tmp_path / "nope.srt")) == {PROBE_OUTPUT_MISSING}
+def test_sidecar_missing_is_rejected_either_way(tmp_path: Path) -> None:
+    assert _codes(probe_rendered_sidecar(None, allow_empty=True)) == {PROBE_OUTPUT_MISSING}
+    assert _codes(probe_rendered_sidecar(tmp_path / "nope.srt", allow_empty=False)) == {
+        PROBE_OUTPUT_MISSING
+    }
+
+
+def test_sidecar_empty_with_cues_is_rejected(tmp_path: Path) -> None:
     empty = tmp_path / "empty.srt"
     empty.write_bytes(b"")
-    assert _codes(probe_rendered_text(empty)) == {PROBE_OUTPUT_MISSING}
+    assert _codes(probe_rendered_sidecar(empty, allow_empty=False)) == {
+        PROBE_OUTPUT_MISSING
+    }
+
+
+def test_sidecar_empty_without_cues_is_a_valid_artifact(tmp_path: Path) -> None:
+    # captionTrackToSrt([]) == "" — a captionless clip's zero-byte srt is legal.
+    empty = tmp_path / "empty.srt"
+    empty.write_bytes(b"")
+    assert probe_rendered_sidecar(empty, allow_empty=True) == []

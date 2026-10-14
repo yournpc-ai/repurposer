@@ -2896,7 +2896,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 **D4 增补（回归座位拍板）**:
 
-6. **产物文件 probe 校验闸**（放行闸③，禁止事项 10 的座位）：`render_output` 成功路径落 COMPLETED 前必过 `app/pipeline/render_probe.py`——一座闸门、家族分派检查项（film：h264 + 1920×1080 + 视频流帧计数 = Σ场景帧 ±1 帧；clip：存在/非零/容器可读/首帧可解码）。时长判据走**流帧计数**而非容器时长——mp4 容器 duration 带 muxer 衬垫（取证：465 帧流精确 15.5s vs 容器 15.552s），永不作契约面。未过 = 渲染 FAILED + `spec.failure={stage:"probe",codes,detail}` 盖 render 镜像节点（与 storyboard 的 schema/grounding 同字段形状）；被拒产物本体留对象存储作取证，probe 临时副本即清。
+6. **产物文件 probe 校验闸**（放行闸③，禁止事项 10 的座位）：`render_output` 成功路径落 COMPLETED 前必过 `app/pipeline/render_probe.py`——一座闸门、家族分派检查项（film：h264 + 1920×1080 + 视频流帧计数 = Σ场景帧 ±1 帧；clip：存在/非零/容器可读/首帧可解码 + caption sidecar 存在即法、非零当且仅当 `caption_track` 非空——渲染服务对空轨写零字节 srt，空 sidecar 是无字幕 clip 的合法产物）。时长判据走**流帧计数**而非容器时长——mp4 容器 duration 带 muxer 衬垫（取证：465 帧流精确 15.5s vs 容器 15.552s），永不作契约面。未过 = 渲染 FAILED + `spec.failure={stage:"probe",codes,detail}` 盖 render 镜像节点（与 storyboard 的 schema/grounding 同字段形状）；被拒产物本体留对象存储作取证，probe 临时副本即清。
 7. **worker 渲染执行形态**：渲染认领后跑 asyncio task（与节点同构），并发上限 `render_concurrency`（默认 2——争用资源是渲染服务的 headless Chrome）+ 单渲染栅栏 `render_timeout_seconds`（默认 900 = 历史栅栏可配化；film 基线 ≈46s/26s 片，clip 长源渲染长尾共享同一栅栏故不收紧）；两键住 env Settings（工程参数，configs 边界律 §3）。并发冒烟（3 并发 fixture 渲染）：cap=2 生效，墙钟 29.3s vs 串行估算 81s，Chrome 2 并发零故障，临时目录零新增泄漏。
 8. **失败分类台账 = 仪表层**（`scripts/film_stage_ledger.py`）：五段通过率（schema/grounding/constraint/render/probe）+ codes Top N，读数供归因，永不阻塞部署；数据源 = `spec.failure` 单字段 + 节点/产物终态。
 9. **S11 = MG 旅程座**（`chat_scenarios.py`）：URL → web_page 真采集 → 分镜方案 dock → 守卫线口头 yes → 真渲染 + probe 闸 → film 产物 + 画布血缘 + 台账 hold=capture+release；只锁形态不锁文案。

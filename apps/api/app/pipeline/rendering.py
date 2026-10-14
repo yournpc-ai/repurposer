@@ -43,7 +43,7 @@ from app.pipeline.render_probe import (
     PROBE_OUTPUT_MISSING,
     ProbeViolation,
     probe_expectation_for,
-    probe_rendered_text,
+    probe_rendered_sidecar,
     probe_rendered_video,
 )
 from app.pipeline.tracks import resolve_spec_urls
@@ -156,7 +156,21 @@ async def _probe_artifacts(
                 )
             ]
         violations = await asyncio.to_thread(probe_rendered_video, video_path, expect)
-        if srt_key is not None and not violations:
+        # Caption sidecar (clip family only — the film family renders video
+        # alone): the non-empty bar mirrors the renderer, which writes the
+        # srt from spec.caption_track alone (empty track → zero-byte VALID
+        # srt); a non-empty track with a missing/empty sidecar is the broken
+        # delivery this gate exists to catch.
+        cues = bool(spec.get("caption_track"))
+        if srt_key is None:
+            if cues and not violations:
+                violations.append(
+                    ProbeViolation(
+                        PROBE_OUTPUT_MISSING,
+                        "caption track is non-empty but the render returned no srt",
+                    )
+                )
+        elif not violations:
             try:
                 srt_path = await download_to_temp(srt_key)
             except Exception as e:  # noqa: BLE001
@@ -166,7 +180,11 @@ async def _probe_artifacts(
                         f"srt object unreadable from storage: {type(e).__name__}: {e}",
                     )
                 ]
-            violations.extend(await asyncio.to_thread(probe_rendered_text, srt_path))
+            violations.extend(
+                await asyncio.to_thread(
+                    probe_rendered_sidecar, srt_path, allow_empty=not cues
+                )
+            )
         return violations
     finally:
         for p in (video_path, srt_path):
