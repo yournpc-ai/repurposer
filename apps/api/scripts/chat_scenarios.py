@@ -622,6 +622,9 @@ async def message_row(message_id: str) -> dict:
         return {
             "question": msg.question,
             "answer": msg.answer,
+            # The dock 戳记 assertions read the plan chain off the row (the
+            # envelope path is the other seat) — the harness's own contract.
+            "intent": msg.intent,
             "workflow_run_id": str(msg.workflow_run_id) if msg.workflow_run_id else None,
             "content": msg.content,
         }

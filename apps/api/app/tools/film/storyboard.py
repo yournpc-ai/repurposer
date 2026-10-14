@@ -40,7 +40,7 @@ from uuid import UUID
 
 import structlog
 from pydantic import BaseModel, Field
-from sqlalchemy import bindparam, select, text as _text
+from sqlalchemy import bindparam, func, select, text as _text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import Agent, AssembleResult
@@ -76,6 +76,8 @@ logger = structlog.get_logger()
 # ---------------------------------------------------------------------------
 
 FILM_FPS = 30  # fixed (render Root.tsx FILM_FPS — one law, mirrored here)
+_CAPTURE_SETTLE_WAIT_S = 150.0  # capture settle wait ceiling (draft seat)
+_CAPTURE_SETTLE_POLL_S = 2.0
 SCENE_COUNT_LIMITS = (3, 8)
 TOTAL_SECONDS_RANGE = (12.0, 90.0)
 # Render-side frame cap (server.ts FILM_MAX_FRAMES default) — the validator's
@@ -716,6 +718,39 @@ async def orchestrate_storyboard(
     )
 
 
+async def _await_captures_settled(project_id: UUID) -> None:
+    """Wait for the project's in-flight web_page captures to reach a terminal
+    state (bounded). The URL turn docks while the capture is still running
+    (S11 取证: capture landed ~33s after the dock — drafting against zero
+    pages would skip the review hold and let the auto gate start the run
+    unreviewed). Polls on FRESH sessions (the get_understanding read-wait's
+    law — the turn's own session never survives a sleep); a timeout or a
+    FAILED world just lets the draft degrade honestly."""
+    import asyncio
+    import time
+
+    from app.models.database import AsyncSessionLocal  # deferred: worker seat
+
+    deadline = time.monotonic() + _CAPTURE_SETTLE_WAIT_S
+    await asyncio.sleep(_CAPTURE_SETTLE_POLL_S)  # the absorb lands first
+    while time.monotonic() < deadline:
+        async with AsyncSessionLocal() as poll:
+            pending = (
+                await poll.execute(
+                    select(func.count(Asset.id)).where(
+                        Asset.project_id == project_id,
+                        Asset.type == AssetType.WEB_PAGE,
+                        Asset.processing_status.in_(
+                            (AssetStatus.PENDING, AssetStatus.PROCESSING)
+                        ),
+                    )
+                )
+            ).scalar_one()
+        if not pending:
+            return
+        await asyncio.sleep(_CAPTURE_SETTLE_POLL_S)
+
+
 async def draft_film_storyboard(
     db: AsyncSession,
     project: Project,
@@ -728,7 +763,10 @@ async def draft_film_storyboard(
     — the caller needs the pages for the block's source line. None honestly
     when the draft can't stand (no readable page / schema terminal /
     grounding exhaustion): the plan still docks; the run re-orchestrates at
-    birth and the review hold simply doesn't fire."""
+    birth and the review hold simply doesn't fire. In-flight captures are
+    awaited first (bounded) — the review hold may not be raced by the
+    absorb's async capture."""
+    await _await_captures_settled(project.id)
     pages = await load_storyboard_pages(db, project)
     if not pages:
         return None
