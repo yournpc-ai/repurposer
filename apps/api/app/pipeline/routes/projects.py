@@ -6,7 +6,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import Integer, cast, delete, or_, select
+from sqlalchemy import Integer, cast, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import DBDep, get_current_user, get_current_user_required
@@ -33,6 +33,7 @@ from app.models.schemas import (
 from app.models.tables import (
     Asset,
     Conversation,
+    ConversationUsage,
     GraphEdge,
     GraphIsland,
     GraphNode,
@@ -935,6 +936,14 @@ async def _delete_project_rows(db: DBDep, project: Project, user_id: UUID) -> No
         await release_run(db, user_id=user_id, run_id=rid)
     await db.execute(delete(WorkflowRun).where(WorkflowRun.project_id == project_id))
     await db.execute(delete(Asset).where(Asset.project_id == project_id))
+    # conversation_usage is the conversation layer's COGS ledger (ADR-117
+    # D3): append-only, outlives the project — the column is nullable by
+    # design for project-less surfaces, so unhook, never delete.
+    await db.execute(
+        update(ConversationUsage)
+        .where(ConversationUsage.project_id == project_id)
+        .values(project_id=None)
+    )
     await db.delete(project)
 
 
