@@ -88,7 +88,7 @@ walks, reveal, end).
 {
   "name": string | null,   // a short display name for this film; null if unsure
   "theme": {"canvas": "#RRGGBB", "ink": "#RRGGBB"} | null,  // null = default
-  "scenes": [ ... ]        // 3..8 scenes, ordered
+  "scenes": [ ... ]        // 4..16 scenes, ordered
 }
 
 Scene types (discriminator `type`); every scene carries `seconds` (a duration
@@ -96,21 +96,30 @@ INTENT — the system assigns exact frames):
 
 - {"type":"words","seconds":1.5..4,"dark":bool,"lines":[string]}  // 1..4 lines, each ≤30 chars
 - {"type":"hero","seconds":2..5,"word":string,"sub":string}  // word ≤16 chars, sub ≤90
-- {"type":"ui","seconds":3..10,"page":int,"shot":int,"focuses":[{"at":s,"element":"s<shot>e<j>"}],"captions":[{"at":s,"text":string}]}
+- {"type":"ui","seconds":3..10,"page":int,"shot":int,"frame":bool,"focuses":[{"at":s,"element":"s<shot>e<j>"}],"captions":[{"at":s,"text":string}]}
   // page = a presented page index WITH a screenshot; shot = which captured
   // view of it (0 = the top of the page — pick a section shot when the
-  // walk's story lives below the fold). A focus names an element id from
-  // that shot's camera-target list — the system computes the move (never
-  // invent coordinates; the bare {"at","x","y","zoom"} form exists only for
-  // shots that list no targets). 1..5 focuses, `at`
-  // ascending, each < seconds; 0..3 captions ≤60 chars, each ≥0.5s apart
+  // walk's story lives below the fold). frame: true = the page shown in a
+  // browser-chrome card (the "this is a real page" beat); false = full-bleed,
+  // the camera fills the canvas with the page itself (the immersive push).
+  // A focus names an element id from that shot's camera-target list — the
+  // system computes the move (never invent coordinates; the bare
+  // {"at","x","y","zoom"} form exists only for shots that list no targets).
+  // 1..3 focuses, `at` ascending, each < seconds; 0..3 captions ≤60 chars,
+  // each ≥0.5s apart
 - {"type":"divider","seconds":2..5,"label":string,"roll":[string]}  // label ≤40, 1..5 roll words ≤24 each
+- {"type":"plate","seconds":3..7,"title":string,"cards":[{"big":string|null,"label":string}],"backdrop":"aurora"|"dunes"|"mist"|"tide"}
+  // the numbers beat: 2..4 glass cards over a calm backdrop. ONLY when the
+  // page actually carries numbers or very short labels (a card's big/label
+  // is grounded like any other string — never invent a number). big ≤8
+  // chars or null (a phrase card), label ≤24; title ≤40. At most 2 plates
+  // in the whole film.
 - {"type":"reveal","seconds":2..5,"lead":string,"word":string,"sub":string}  // ≤60 / ≤24 / ≤90
 - {"type":"end","seconds":2.5..6,"name":string,"tagline":string}  // ≤24 / ≤90
 
 Every scene may add "narration": string | null (see Narration above).
 
-Binding bounds: total Σ seconds 12..90; no duplicate string within one scene;
+Binding bounds: total Σ seconds 30..115; no duplicate string within one scene;
 no two scenes with identical content; no empty strings.
 
 {{ packs }}

@@ -64,11 +64,17 @@ def _storyboard(scenes: list[dict], **kw) -> FilmStoryboard:
 def _good_scenes() -> list[dict]:
     return [
         {"type": "hero", "seconds": 3.0, "word": "Ship faster", "sub": "Acme turns hours of release work into minutes."},
-        {"type": "ui", "seconds": 6.0, "page": 0,
+        {"type": "ui", "seconds": 9.0, "page": 0,
          "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0},
                      {"at": 2.0, "x": 0.3, "y": 0.4, "zoom": 2.0}],
          "captions": [{"at": 2.0, "text": "Why teams switch"}]},
-        {"type": "end", "seconds": 3.0, "name": "Acme", "tagline": "Ship faster"},
+        {"type": "words", "seconds": 3.0, "dark": False, "lines": ["Ship faster"]},
+        {"type": "divider", "seconds": 3.0, "label": "Why teams switch",
+         "roll": ["Ship faster", "Start free"]},
+        {"type": "ui", "seconds": 9.0, "page": 0,
+         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}],
+         "captions": []},
+        {"type": "end", "seconds": 4.0, "name": "Acme", "tagline": "Ship faster"},
     ]
 
 
@@ -90,6 +96,10 @@ def test_verbatim_quote_and_trim_hit():
         # a trim of the description (leading words dropped)
         {"type": "words", "seconds": 3.5, "dark": True, "lines": ["release work into minutes"]},
         {"type": "hero", "seconds": 5.0, "word": "Acme", "sub": "Start free"},
+        {"type": "ui", "seconds": 9.0, "page": 0,
+         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]},
+        {"type": "divider", "seconds": 5.0, "label": "Why teams switch", "roll": ["Start free"]},
+        {"type": "end", "seconds": 5.0, "name": "Acme", "tagline": "Ship faster"},
     ]
     assert validate_storyboard(_storyboard(scenes), [_page()]) == []
 
@@ -98,7 +108,11 @@ def test_emphasis_marks_and_case_are_normalized():
     scenes = [
         {"type": "hero", "seconds": 4.0, "word": "*Ship* faster!", "sub": "ACME"},
         {"type": "words", "seconds": 4.0, "dark": False, "lines": ["ship faster"]},
-        {"type": "end", "seconds": 4.0, "name": "Acme", "tagline": "Start free"},
+        {"type": "ui", "seconds": 9.0, "page": 0,
+         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]},
+        {"type": "divider", "seconds": 4.0, "label": "WHY TEAMS SWITCH", "roll": ["Start Free"]},
+        {"type": "words", "seconds": 4.0, "dark": True, "lines": ["Release work"]},
+        {"type": "end", "seconds": 5.0, "name": "Acme", "tagline": "Start free"},
     ]
     assert validate_storyboard(_storyboard(scenes), [_page()]) == []
 
@@ -157,7 +171,7 @@ def test_focus_at_must_ascend_within_scene():
 
 def test_focus_at_beyond_scene_seconds_rejected():
     scenes = _good_scenes()
-    scenes[1]["focuses"] = [{"at": 6.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]  # scene is 6s: at must be < 6
+    scenes[1]["focuses"] = [{"at": 9.5, "x": 0.5, "y": 0.5, "zoom": 1.0}]  # scene is 9s: at must be < 9
     assert INVALID_FOCUS in _codes(validate_storyboard(_storyboard(scenes), [_page()]))
 
 
@@ -180,7 +194,8 @@ def test_scene_seconds_out_of_range():
 
 
 def test_total_seconds_window():
-    # 3 scenes × hero-min is fine; a single 1.5s words scene total < 12s fails
+    # a single 1.5s words scene is under the 30s total floor (and the count
+    # floor — the duration violation is what we assert)
     scenes = [{"type": "words", "seconds": 1.5, "dark": False, "lines": ["Ship faster"]}]
     violations = validate_storyboard(_storyboard(scenes), [_page()])
     assert DURATION_INVALID in _codes(violations)
@@ -189,12 +204,12 @@ def test_total_seconds_window():
 def test_scene_count_window():
     two = _good_scenes()[:2]
     assert CONSTRAINT_VIOLATION in _codes(validate_storyboard(_storyboard(two), [_page()]))
-    nine = _good_scenes() + [
+    seventeen = _good_scenes() + [
         {"type": "words", "seconds": 2.0, "dark": False, "lines": [f"Ship faster {i}"]}
-        for i in range(6)
+        for i in range(11)
     ]
     # the words lines are ungrounded too — the count violation is what we assert
-    assert CONSTRAINT_VIOLATION in _codes(validate_storyboard(_storyboard(nine), [_page()]))
+    assert CONSTRAINT_VIOLATION in _codes(validate_storyboard(_storyboard(seventeen), [_page()]))
 
 
 def test_char_caps_and_list_caps():
@@ -227,7 +242,7 @@ def test_cross_scene_callback_allowed():
     """The spike's shape: the hero's word echoing in the end tagline is a
     deliberate callback, not a duplicate (different scene types / strings)."""
     scenes = _good_scenes()
-    scenes[2]["tagline"] = "Ship faster"  # == hero.word, different slot/scene
+    scenes[5]["tagline"] = "Ship faster"  # == hero.word, different slot/scene
     assert validate_storyboard(_storyboard(scenes), [_page()]) == []
 
 
@@ -310,6 +325,67 @@ def test_ui_focus_element_form():
     assert INVALID_FOCUS in _codes(validate_storyboard(_storyboard(scenes), [page]))
 
 
+def _plate_scene(**over) -> dict:
+    scene = {
+        "type": "plate", "seconds": 5.0, "title": "Acme",
+        "cards": [{"big": "256 B", "label": "Start free"},
+                  {"big": None, "label": "Why teams switch"}],
+        "backdrop": "mist",
+    }
+    scene.update(over)
+    return scene
+
+
+def test_plate_scene_grounds_and_bakes():
+    """The numbers beat: title/big/label ground like any other string (a
+    null big = a phrase card), and the spec carries the scene verbatim."""
+    page = _page(h2=["Why teams switch", "256 B"])
+    scenes = _good_scenes()
+    scenes.insert(4, _plate_scene())
+    storyboard = _storyboard(scenes)
+    assert validate_storyboard(storyboard, [page]) == []
+    spec = build_film_spec(storyboard, [page])
+    plate = spec["scenes"][4]
+    assert plate["type"] == "plate"
+    assert plate["title"] == "Acme"
+    assert plate["cards"] == [{"big": "256 B", "label": "Start free"},
+                              {"big": None, "label": "Why teams switch"}]
+    assert plate["backdrop"] == "mist"
+    assert plate["frames"] == 150
+
+
+def test_plate_caps_and_rarity():
+    page = _page(h2=["Why teams switch", "256 B"])
+    scenes = _good_scenes()
+    scenes.insert(4, _plate_scene(cards=[{"big": "256 Bytes!!", "label": "Start free"},
+                                         {"big": None, "label": "Why teams switch"}]))
+    # big cap is 8 — also ungrounded; the cap violation is what we assert
+    assert CONSTRAINT_VIOLATION in _codes(validate_storyboard(_storyboard(scenes), [page]))
+    # Three plates with distinct strings: the rarity law (≤2 per film) is
+    # what fires, not grounding or duplication.
+    scenes = _good_scenes()
+    scenes.insert(2, _plate_scene())
+    scenes.insert(4, _plate_scene(
+        title="Ship faster",
+        cards=[{"big": "256 B", "label": "Docs"}, {"big": None, "label": "Acme"}]))
+    scenes.insert(6, _plate_scene(
+        title="Why teams switch",
+        cards=[{"big": "256 B", "label": "Ship faster"}, {"big": None, "label": "Start free"}]))
+    violations = validate_storyboard(_storyboard(scenes), [page])
+    assert any(v.code == CONSTRAINT_VIOLATION and "plate" in v.detail for v in violations)
+
+
+def test_ui_frame_flag_flows_to_spec():
+    """frame=false = the full-bleed immersive variant; default stays true."""
+    scenes = _good_scenes()
+    scenes[1]["frame"] = False
+    storyboard = _storyboard(scenes)
+    assert validate_storyboard(storyboard, [_page()]) == []
+    spec = build_film_spec(storyboard, [_page()])
+    assert spec["scenes"][1]["frame"] is False
+    assert spec["scenes"][4]["frame"] is True
+
+
 def test_format_violations_is_compact_and_coded():
     scenes = _good_scenes()
     scenes[0]["sub"] = "invented copy nobody wrote"
@@ -324,8 +400,8 @@ def test_format_violations_is_compact_and_coded():
 def test_allocate_frames_rounds_and_floors():
     storyboard = _storyboard(_good_scenes())
     frames = allocate_frames(storyboard)
-    # hero 3.0s → 90; ui 6.0s → 180; end 3.0s → 90 (over the 75 floor)
-    assert frames == [90, 180, 90]
+    # hero 3.0s → 90; ui 9.0s → 270; words/divider 3.0s → 90; end 4.0s → 120
+    assert frames == [90, 270, 90, 90, 270, 120]
     assert all(n % 1 == 0 for n in frames)
 
 
@@ -355,10 +431,11 @@ def test_divider_roll_floor_drives_frames():
 
 
 def test_snap_frames_to_beats_moves_boundaries_within_tolerance():
-    # 120 BPM bed → beats every 0.5s = 15 frames. Boundaries at 90/270/360:
-    # 90 lands exactly on beat 6; 270 → 15*18=270 exact; nothing moves.
+    # 120 BPM bed → beats every 0.5s = 15 frames. Boundaries at 90/360/450/
+    # 540/810: 90 lands exactly on beat 6, 360 on beat 24; the rest sit past
+    # the grid's end (12s) — far beyond tolerance, untouched. Nothing moves.
     storyboard = _storyboard(_good_scenes())
-    frames = allocate_frames(storyboard)  # [90, 180, 90]
+    frames = allocate_frames(storyboard)  # [90, 270, 90, 90, 270, 120]
     beats = [i * 0.5 for i in range(25)]
     snapped = snap_frames_to_beats(storyboard, frames, beats)
     assert snapped == frames  # already on-grid
@@ -367,26 +444,26 @@ def test_snap_frames_to_beats_moves_boundaries_within_tolerance():
 
 def test_snap_frames_to_beats_snaps_off_grid_boundary():
     storyboard = _storyboard(_good_scenes())
-    frames = allocate_frames(storyboard)  # [90, 180, 90]
+    frames = allocate_frames(storyboard)  # [90, 270, 90, 90, 270, 120]
     # Beat at 96 (3.2s) pulls boundary 90 up by 6 (the tolerance edge);
-    # beat at 264 (8.8s) then pulls boundary 270 down by 6 — the ui scene
-    # gives both deltas (180→168), the end scene absorbs them (+6→96).
-    beats = [3.2, 8.8]
+    # beat at 366 (12.2s) then pulls boundary 360 up by 6 — the hero gains
+    # 6, the ui scene nets +6-6, the words scene absorbs the second delta.
+    beats = [3.2, 12.2]
     snapped = snap_frames_to_beats(storyboard, frames, beats)
-    assert snapped == [96, 168, 96]
+    assert snapped == [96, 270, 84, 90, 270, 120]
     assert sum(snapped) == sum(frames)
 
 
 def test_snap_frames_to_beats_respects_tolerance_and_floors():
     storyboard = _storyboard(_good_scenes())
-    frames = allocate_frames(storyboard)  # [90, 180, 90], ui floor = 90
+    frames = allocate_frames(storyboard)  # [90, 270, 90, 90, 270, 120]
     # Boundary 90's nearest beat at frame 100 is 10 frames away > 6-frame
-    # tolerance: untouched. Boundary 270's beat at 264 moves 6 off the ui
-    # scene — 180-6=174 ≥ floor 90, legal; the end scene absorbs +6.
-    snapped = snap_frames_to_beats(storyboard, frames, [100 / FILM_FPS, 8.8])
-    assert snapped == [90, 174, 96]
-    # A beat far past both boundaries (frame 340) is refused at each —
-    # deltas 250/70 both blow the tolerance, so nothing moves.
+    # tolerance: untouched. Boundary 360's beat at 354 moves 6 off the ui
+    # scene — 270-6=264 ≥ floor, legal; the words scene absorbs +6.
+    snapped = snap_frames_to_beats(storyboard, frames, [100 / FILM_FPS, 354 / FILM_FPS])
+    assert snapped == [90, 264, 96, 90, 270, 120]
+    # A beat at frame 340 (11.333s) is 20 frames from boundary 360 — past
+    # tolerance at every boundary, so nothing moves.
     assert snap_frames_to_beats(storyboard, frames, [11.333]) == frames
 
 
@@ -426,10 +503,11 @@ def test_build_spec_bakes_chrome_and_stores_relative_keys():
     ui = spec["scenes"][1]
     assert ui["image"] == "user/capture/shot.png"  # relative key — absolutized at render
     assert ui["url"] == "example.com"  # display URL baked by code
-    end = spec["scenes"][2]
+    assert ui["frame"] is True  # the browser-chrome default
+    end = spec["scenes"][5]
     assert end["url"] == "example.com"
     assert end["logo_url"] is None
-    assert sum(s["frames"] for s in spec["scenes"]) == 360
+    assert sum(s["frames"] for s in spec["scenes"]) == 930
     assert all(isinstance(s["frames"], int) for s in spec["scenes"])
 
 

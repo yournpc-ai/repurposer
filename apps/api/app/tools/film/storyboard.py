@@ -80,8 +80,8 @@ logger = structlog.get_logger()
 FILM_FPS = 30  # fixed (render Root.tsx FILM_FPS — one law, mirrored here)
 _CAPTURE_SETTLE_WAIT_S = 150.0  # capture settle wait ceiling (draft seat)
 _CAPTURE_SETTLE_POLL_S = 2.0
-SCENE_COUNT_LIMITS = (3, 8)
-TOTAL_SECONDS_RANGE = (12.0, 90.0)
+SCENE_COUNT_LIMITS = (4, 16)
+TOTAL_SECONDS_RANGE = (30.0, 115.0)
 # Render-side frame cap (server.ts FILM_MAX_FRAMES default) — the validator's
 # total window stays comfortably under it; this is the post-allocation guard.
 FILM_MAX_FRAMES = 3600
@@ -92,6 +92,7 @@ SCENE_SECONDS: dict[str, tuple[float, float]] = {
     "hero": (2.0, 5.0),
     "ui": (3.0, 10.0),
     "divider": (2.0, 5.0),
+    "plate": (3.0, 7.0),
     "reveal": (2.0, 5.0),
     "end": (2.5, 6.0),
 }
@@ -112,6 +113,9 @@ TEXT_CAPS: dict[tuple[str, str], int] = {
     ("hero", "sub"): 90,
     ("divider", "label"): 40,
     ("divider", "roll"): 24,
+    ("plate", "title"): 40,
+    ("plate", "big"): 8,
+    ("plate", "label"): 24,
     ("reveal", "lead"): 60,
     ("reveal", "word"): 24,
     ("reveal", "sub"): 90,
@@ -120,7 +124,7 @@ TEXT_CAPS: dict[tuple[str, str], int] = {
     ("ui", "captions"): 60,
 }
 # Per-scene item count caps.
-_LIST_CAPS = {"words.lines": 4, "divider.roll": 5, "ui.captions": 3, "ui.focuses": 5}
+_LIST_CAPS = {"words.lines": 4, "divider.roll": 5, "ui.captions": 3, "ui.focuses": 3, "plate.cards": 4}
 
 # Camera bounds: x/y are normalized frame positions; zoom is a magnification
 # (1 = the full frame). The spec's [0,1]³ law covers x/y; zoom lives in [1,4].
@@ -130,15 +134,14 @@ MAX_REWRITES = 2  # bounded rejection: 3 candidates total, then FAILED
 
 # 简式计价 (D3): the estimate's film_seconds quote. The storyboard's true
 # length is unborn at compile time (the LLM writes it mid-run, bounded by
-# TOTAL_SECONDS_RANGE), so the quote anchors on the TYPICAL film (the
-# spike's 26s is the one real data point; scene caps keep real films in the
-# 20-40s band). A longer film settles by capture-past-hold, a shorter one by
-# release — the ledger's NULL/under-quote semantics already carry both
-# directions (BILLING §5); the sticker stays honest instead of quoting the
-# 90s validator ceiling 3× over every real charge. The ACTUAL charge is the
-# allocated seconds (record_media_usage at birth) — estimate ≡ meter reads
-# the same price line.
-ESTIMATE_FILM_SECONDS = 30.0
+# TOTAL_SECONDS_RANGE), so the quote anchors on the TYPICAL film (the craft
+# law's target band is 75-95s). A longer film settles by capture-past-hold,
+# a shorter one by release — the ledger's NULL/under-quote semantics already
+# carry both directions (BILLING §5); the sticker stays honest instead of
+# quoting the validator ceiling over every real charge. The ACTUAL charge is
+# the allocated seconds (record_media_usage at birth) — estimate ≡ meter
+# reads the same price line.
+ESTIMATE_FILM_SECONDS = 85.0
 
 _DEFAULT_THEME = {"canvas": "#F7F6F2", "ink": "#141414"}
 _HEX_COLOR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
@@ -254,6 +257,12 @@ def _screen_strings(scene: Any) -> list[tuple[str, str]]:
         return [("captions", c.text) for c in scene.captions]
     if t == "divider":
         return [("label", scene.label), *[("roll", w) for w in scene.roll]]
+    if t == "plate":
+        return [
+            ("title", scene.title),
+            *[("big", c.big) for c in scene.cards if c.big],
+            *[("label", c.label) for c in scene.cards],
+        ]
     if t == "reveal":
         return [("lead", scene.lead), ("word", scene.word), ("sub", scene.sub)]
     if t == "end":
@@ -286,6 +295,13 @@ def validate_storyboard(
                 CONSTRAINT_VIOLATION,
                 f"scene count {len(scenes)} outside {SCENE_COUNT_LIMITS[0]}..{SCENE_COUNT_LIMITS[1]}",
             )
+        )
+    # The plate is the numbers beat — rare by law (two would already be a
+    # pattern; three is a spreadsheet).
+    plates = sum(1 for s in scenes if s.type == "plate")
+    if plates > 2:
+        violations.append(
+            FilmViolation(CONSTRAINT_VIOLATION, f"{plates} plate scenes — at most 2 per film")
         )
 
     total_seconds = 0.0
@@ -629,6 +645,7 @@ def build_film_spec(
                     "frames": n,
                     "image": image_key,
                     "url": page.host,
+                    "frame": scene.frame,
                     # B2: element-named beats resolve here; the `element` key
                     # never leaks into the render contract.
                     "focuses": [
@@ -646,6 +663,16 @@ def build_film_spec(
                     "index": f"{divider_ordinal:02d}",
                     "label": scene.label,
                     "roll": scene.roll,
+                }
+            )
+        elif scene.type == "plate":
+            scenes.append(
+                {
+                    "type": "plate",
+                    "frames": n,
+                    "title": scene.title,
+                    "cards": [c.model_dump(mode="json") for c in scene.cards],
+                    "backdrop": scene.backdrop,
                 }
             )
         elif scene.type == "reveal":

@@ -7,7 +7,7 @@ The contract locked here:
 
 - **estimate 形状**: launch_film quotes orchestration tokens (worst case =
   one storyboard pass per candidate) + the film_seconds flat item
-  (``ESTIMATE_FILM_SECONDS`` typical — never the 90s validator ceiling).
+  (``ESTIMATE_FILM_SECONDS`` typical — never the 115s validator ceiling).
 - **一条价目线**: the estimate fold and the metering ledger price
   film_seconds through the same ``price_units`` line, whose rate is the
   ``film.usd_per_second`` config knob (peek = the sync form of the funnel).
@@ -69,14 +69,14 @@ def test_estimate_quotes_tokens_worst_case_plus_typical_seconds() -> None:
     assert est["prompt_tokens"] == [1500 * n, 8000 * n]
     assert est["completion_tokens"] == [400 * n, 2000 * n]
     # The flat seconds item is the TYPICAL film, not the validator ceiling
-    # (90s) — the sticker must not promise 3× every real charge. E2 配音:
+    # (115s) — the sticker must not promise 3× every real charge. E2 配音:
     # narration speech rides the same estimate (voiceover is the plan
     # default) at ~14 chars/s over the same window.
     assert est["units"] == {
         "film_seconds": ESTIMATE_FILM_SECONDS,
         "tts_chars": ESTIMATE_FILM_SECONDS * 14.0,
     }
-    assert ESTIMATE_FILM_SECONDS < 90.0
+    assert ESTIMATE_FILM_SECONDS < 115.0
 
 
 def test_estimate_fold_prices_film_seconds_on_both_sides() -> None:

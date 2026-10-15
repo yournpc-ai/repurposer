@@ -2931,10 +2931,46 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 1. **采集引擎 = playwright 驱系统 Chrome**（`executable_path`，免浏览器下载；fallback = playwright 专用 chromium 双轨）。三律不动：`_PolicyProxy`（SSRF 浏览器级）/ 系统 Chrome 优先 / degrade-honest（截图半败 = None）。skill 的 settle / 滚动预载 / cookie 关闭 / anchors 四段已验证 JS 逐字移植为 `page.evaluate()`；产出 = fold + ≤6 张 section 截图（`WebPageMeta.shots`，`extra="allow"` 容忍旧行），`screenshot_key` 保留 = fold。
 2. **相机目标点名元素 id，永不发明坐标**（skill 律原文：name element ids, never coordinates）：元素清单（id/kind/text/box）入 `WebPageMeta.elements`（capture 侧 cap），prompt 印元素表，`FilmFocus.element` 由 `build_film_spec` 确定性解出 x/y/zoom；裸 x/y 仅作旧数据读容忍降级。渲染侧零改动。
-3. **节拍网格 = 音乐库 seed 期预计算**（beat grid + bpm 存 `Music.meta`，seed reconcile 同座缺则补算）；运行时零测速依赖（aubio/librosa 类一律不入）。`build_film_spec` 尾部幕边界 snap 到最近 beat（±0.2s 容差内才动），顺序钉死：narration 合成 → snap → 越界幕按 1.35× 律重合成。
+3. **节拍网格 = 音乐库 seed 期预计算**（beat grid + bpm 存 `Music.meta`，seed reconcile 同座缺则补算）；运行时零测速依赖（aubio/librosa 类一律不入）。幕边界 snap 到最近 beat（±0.2s 容差内才动，结构下限不破），顺序钉死（snap-first）：分配 → 选曲（带人设）→ snap → narration 在 snapped 窗口上合成 → spec——零重合成。
 4. **子页发现 = 首页 manifest 同 host 链接**（`BAD_LINK` 过滤正则移植），cap 3，逐条复用同一 capture 入口产独立 web_page 资产；资产模型一对多零改动。禁爬外站、禁递归深挖。
 5. **排除**：可编辑 HTML 双交付（产品交付面 = canvas 节点 + MP4）、FAL 生成媒体、运行时音频测速库。
 
 **Consequences**: 新依赖唯一 = playwright（pip）；采集时长因滚动预载上升，`web_capture_timeout_seconds` 与 processor 超时预算同批重估；旧 web_page 行（无 shots/elements）走 fold-only 降级路径继续可成片；`FilmSceneUi.shot`（默认 0）让 storyboarder 在一页多图里选取景。验收锚 = 重采 linear.app 出真内容 section 图 + `scratch/demo-films/` 三片重跑端到端。
 
 **Related**: ADR-119（film 家族基座）/ ADR-120（分镜核对与参数行）/ ADR-028（禁第二编排链/采集链）/ ADR-039（工具包一座）
+
+
+## ADR-122: 移动端恒 full 纯 chat——dock 形态与 list world 退役
+
+**Status**: Decided (2026-10-15)
+
+**Context**: 移动端项目页残留两套历史包袱：① ChatDock 三形态机的 `dock` 形态（折叠输入条 + History 图标 + 历史浮层 + Hide/LogoMark 收纳）——对话被收进 History 图标后面，用户看到画布式空壳；② mobile-only 的 list world（ResultsTabs + 结果网格）——与「解耦 canvas、chat 为主、产物在消息流中回复」的方向（ADR-118 chat 自足律）重复且过时。实测移动端 chat 全流程，产物交付（终态收据 + 锚卡 + 分镜卡）已全部在流内工作，dock 形态与 list world 是画蛇添足。
+
+**Decision**:
+1. **ChatDock = 两形态机（full / panel）**：`dock` 形态退役——History 钮、Hide 钮、历史浮层（`historyOpen` / `historySlotOpen` / `dock-history-in`）、`closeHistory` 句柄同批删除。panel 的 minimize/LogoMark 召回与 `dockHidden` 机制保留（panel-only）。
+2. **移动端恒 full**：项目页移动端在任何项目龄都挂 `form="full"`——chat 舞台即页面，无形态翻转；产物交付 = 消息流内（终态收据 + 锚卡 + RunCard + 分镜卡，ADR-118 单一渲染面律不变）。「< iPad 宽度无画布」（prohibition #13）与 `canvas_available=false` 上报不变。
+3. **list world 退役**：ResultsTabs / 结果网格 / 骨架屏 / `results.empty.*` / `results.retry*` 与路由侧的 tab 机器全删；结果卡组件本体保留——`OutputChatCard` 在流内复用它们。
+4. **placeholder 世界自证**：`@` 教学文案从按形态分叉改为按 mention 注册表内容分叉——注册表有产物即 nodes 版，否则 assets 版（移动端 post-run 恒 full 后，形态分叉会永远停在 assets 版，是假事实）。
+5. **prompt 法条表面中立化**：`chat_intent_system.j2` 的 launch_film 分镜法条直述真实座位（分镜 = 消息流内卡片，全端一致），禁位置词/表面名词（'在下面' / '画布' / 'below'）——trigger_system.j2 交付承接句的同族律，防模型把 "the flow" paraphrase 成不存在的面（ADR-060 echo 防编造律）。
+
+**Consequences**: ADR-041 条款 7 与 ADR-051 条款 7/8、ADR-056 条款 2 中描述移动端 dock 形态 / 三形态机 / list world 为现行法的部分被本条翻案；桌面 full→panel morph、画布 reveal 门（ADR-111）、确认教义（ADR-117）零变化。`canvasVisibility` 双键谓词与真值表不变。
+
+**Related**: ADR-118（chat 自足律 / 锚卡交付）/ ADR-111（画布 reveal 门）/ ADR-060（echo 防编造律）/ CHAT_ARCH §1 关键形态事实
+
+
+## ADR-123: film 分镜丰富度——支柱迭代弧线 / plate 数字幕 / ui 全出血变体 / 时长窗升档
+
+**Status**: Decided（2026-10-15——对标原 skill 90 秒成片逐帧取证后拍板）
+
+**Context**: ADR-120/121 落地后的成片对标原 skill 的 90 秒参考片仍单薄：参考片 ~14–16 节拍、支柱迭代结构（逐支柱 divider→ui→plate）、玻璃数字卡、全出血与浏览器框混排；我方 demo 片场景少、时长短。根因四件：分镜窗（scene 3..8 / 总时长 12..90s）系统性压短；场景词汇缺数字幕与全出血；pack 工艺文案仍在布道 30 秒短片节奏；demo instruction 自身写 45–60s。
+
+**Decision**:
+1. **窗升档**：scene count 4..16、总时长 30..115s；ui focuses 收紧 5→3（相机克制入法）。
+2. **新场景 plate（数字节拍）**：title + 2..4 张玻璃卡（`big` ≤8 字符、可空 = 短语卡；`label` ≤24）+ 命名程序化 backdrop（aurora/dunes/mist/tide——确定性渐变，零图像资产零 staging）；全片至多 2 幕；grounding 与 caps 同座 validator，spec 由 build_film_spec 直烘。
+3. **ui 幕 `frame` 旗标**：true = 浏览器框卡（默认——旧 persisted spec 无此键读 true 兼容）；false = 全出血，相机直接填满画布。渲染侧 UiScene 双形态共享 Captions  overlay。
+4. **pack 工艺重写**：一分半目标（75–95s 工艺带）、支柱迭代弧线（冷开场 → hero → 首支 ui → 逐支柱 divider→ui→plate → reveal 回扣 → end）、plate 稀缺律、frame 叙事选择、相机克制（每幕 1–3 focuses、推进间留 ≥2s 空气）。prompt 法条面只载 schema 与 binding bounds，工艺归 pack（一部法一座不变）。
+5. **估价锚重锚定**：`ESTIMATE_FILM_SECONDS = 85`（典型片 = 75–95s 工艺带中点，永远不是校验上限）。
+
+**Consequences**: 渲染器是唯一新代码面（Plate 组件 + ui 全出血变体 + zod schema）；validator/prompt/pack/估价同批换档；验收锚 = zymix.ai 多页采集出 75–95s 支柱走查成片（含 plate 与混排 frame），节拍 snap 复用 ADR-121 B3 零改动。
+
+**Related**: ADR-121（采集升档 / 节拍 snap）/ ADR-120（分镜核对）/ ADR-119（film 家族基座）/ ADR-016（spec 契约律）

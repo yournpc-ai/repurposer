@@ -189,13 +189,14 @@ export const Divider: React.FC<{ index: string; label: string; roll: string[]; t
 export const UiScene: React.FC<{
   image: string;
   url: string;
+  frame: boolean;
   theme: FilmTheme;
   dur: number;
   focuses: { at: number; x: number; y: number; zoom: number }[];
   captions: { at: number; text: string }[];
-}> = ({ image, url, theme, dur, focuses, captions }) => {
+}> = ({ image, url, frame: framed, theme, dur, focuses, captions }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
   const s = useScale();
   const t = frame / fps;
   const W = 1440 * s,
@@ -217,6 +218,24 @@ export const UiScene: React.FC<{
     easing: Easing.inOut(Easing.cubic),
   });
   const inP = spring({ frame, fps, config: { damping: 200 } });
+  if (!framed) {
+    // Full-bleed: the page fills the canvas (no chrome card) — the same
+    // camera law over canvas dimensions instead of the card's viewport.
+    return (
+      <AbsoluteFill style={{ background: theme.canvas, overflow: "hidden" }}>
+        <Img
+          src={image}
+          style={{
+            width,
+            height,
+            transformOrigin: "0 0",
+            transform: `translate(${width / 2 - x * width * z}px, ${height / 2 - y * height * z}px) scale(${z})`,
+          }}
+        />
+        <Captions captions={captions} dur={dur} s={s} />
+      </AbsoluteFill>
+    );
+  }
   return (
     <AbsoluteFill style={{ background: theme.canvas, justifyContent: "center", alignItems: "center" }}>
       <div
@@ -274,6 +293,21 @@ export const UiScene: React.FC<{
           />
         </div>
       </div>
+      <Captions captions={captions} dur={dur} s={s} />
+    </AbsoluteFill>
+  );
+};
+
+/** The ui scene's caption beats (shared by the framed and full-bleed forms). */
+const Captions: React.FC<{ captions: { at: number; text: string }[]; dur: number; s: number }> = ({
+  captions,
+  dur,
+  s,
+}) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  return (
+    <>
       {captions.map((c, i) => {
         const startF = c.at * fps;
         const endF = (captions[i + 1]?.at ?? dur / fps - 0.3) * fps;
@@ -313,6 +347,135 @@ export const UiScene: React.FC<{
           </div>
         );
       })}
+    </>
+  );
+};
+
+/**
+ * The numbers beat: glass cards over a calm procedural backdrop. Backdrops
+ * are deterministic gradients (no image asset, nothing to stage); cards are
+ * frosted glass so the numbers float over the atmosphere.
+ */
+const PLATE_BACKDROPS: Record<string, { base: string; blobs: [string, string, string] }> = {
+  aurora: {
+    base: "#0d1210",
+    blobs: [
+      "radial-gradient(ellipse 900px 620px at 22% 28%, rgba(64,160,120,0.35), transparent 70%)",
+      "radial-gradient(ellipse 820px 600px at 74% 66%, rgba(70,110,180,0.30), transparent 70%)",
+      "radial-gradient(ellipse 700px 500px at 55% 20%, rgba(140,90,180,0.22), transparent 70%)",
+    ],
+  },
+  dunes: {
+    base: "#191410",
+    blobs: [
+      "radial-gradient(ellipse 1000px 640px at 30% 80%, rgba(200,140,70,0.30), transparent 70%)",
+      "radial-gradient(ellipse 860px 560px at 78% 24%, rgba(220,170,100,0.20), transparent 70%)",
+      "radial-gradient(ellipse 720px 520px at 55% 55%, rgba(120,80,50,0.25), transparent 70%)",
+    ],
+  },
+  mist: {
+    base: "#23262b",
+    blobs: [
+      "radial-gradient(ellipse 940px 640px at 25% 30%, rgba(170,180,195,0.22), transparent 70%)",
+      "radial-gradient(ellipse 820px 580px at 75% 70%, rgba(140,150,170,0.20), transparent 70%)",
+      "radial-gradient(ellipse 680px 480px at 55% 15%, rgba(200,205,215,0.14), transparent 70%)",
+    ],
+  },
+  tide: {
+    base: "#0c1420",
+    blobs: [
+      "radial-gradient(ellipse 980px 660px at 28% 72%, rgba(50,110,170,0.32), transparent 70%)",
+      "radial-gradient(ellipse 800px 560px at 76% 26%, rgba(40,80,140,0.28), transparent 70%)",
+      "radial-gradient(ellipse 700px 500px at 50% 50%, rgba(90,140,190,0.16), transparent 70%)",
+    ],
+  },
+};
+
+export const Plate: React.FC<{
+  title: string;
+  cards: { big: string | null; label: string }[];
+  backdrop: keyof typeof PLATE_BACKDROPS;
+}> = ({ title, cards, backdrop }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const s = useScale();
+  const bg = PLATE_BACKDROPS[backdrop] ?? PLATE_BACKDROPS.mist;
+  return (
+    <AbsoluteFill style={{ background: bg.base, justifyContent: "center", alignItems: "center" }}>
+      {/* procedural atmosphere: layered soft blobs over the base wash */}
+      {bg.blobs.map((b, i) => (
+        <AbsoluteFill key={i} style={{ background: b }} />
+      ))}
+      <div
+        style={{
+          position: "absolute",
+          top: 150 * s,
+          left: 0,
+          right: 0,
+          textAlign: "center",
+          fontFamily: FONT,
+          fontSize: 52 * s,
+          fontWeight: 600,
+          color: "rgba(255,255,255,0.82)",
+          ...enter(frame, 0, fps, s),
+        }}
+      >
+        {title}
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "center",
+          gap: 44 * s,
+          maxWidth: 1640 * s,
+          padding: `0 ${120 * s}px`,
+        }}
+      >
+        {cards.map((c, i) => (
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.18)",
+              borderRadius: 28 * s,
+              backdropFilter: `blur(${18 * s}px)`,
+              padding: `${56 * s}px ${64 * s}px`,
+              minWidth: 300 * s,
+              textAlign: "center",
+              ...enter(frame, 6 + i * 6, fps, s),
+            }}
+          >
+            {c.big ? (
+              <div
+                style={{
+                  fontFamily: FONT,
+                  fontWeight: 800,
+                  fontSize: 110 * s,
+                  letterSpacing: "-0.03em",
+                  color: "#ffffff",
+                  lineHeight: 1.05,
+                }}
+              >
+                {c.big}
+              </div>
+            ) : null}
+            <div
+              style={{
+                fontFamily: FONT,
+                fontSize: 30 * s,
+                color: "rgba(255,255,255,0.72)",
+                marginTop: c.big ? 18 * s : 0,
+              }}
+            >
+              {c.label}
+            </div>
+          </div>
+        ))}
+      </div>
     </AbsoluteFill>
   );
 };

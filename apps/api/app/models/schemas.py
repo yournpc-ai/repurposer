@@ -3274,7 +3274,10 @@ class FilmSceneUi(BaseModel):
     """The page walk: the LLM names the page by its index in the presented
     manifest list; the screenshot URL / display URL are baked BY CODE (the
     model never invents URLs). ``shot`` picks WHICH captured view of the page
-    (0 = the fold; sections beyond it — ADR-121 B1)."""
+    (0 = the fold; sections beyond it — ADR-121 B1). ``frame`` chooses the
+    presentation: True = the browser-chrome card (the "this is a real product
+    page" beat), False = full-bleed (the immersive push-in — the camera fills
+    the canvas with the page itself)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -3282,8 +3285,36 @@ class FilmSceneUi(BaseModel):
     seconds: float
     page: int  # 0-based index into the presented pages
     shot: int = 0  # 0-based index into the page's captured shots
+    frame: bool = True  # browser chrome card vs full-bleed
     focuses: list[FilmFocus] = Field(min_length=1)
     captions: list[FilmCaption] = Field(default_factory=list)
+    narration: str | None = None
+
+
+class FilmPlateCard(BaseModel):
+    """One glass card: a big number/short mark over a small label. ``big`` is
+    null for a phrase card (the label carries it, slightly larger)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    big: str | None = None
+    label: str
+
+
+class FilmScenePlate(BaseModel):
+    """The numbers beat: 2-4 glass cards over a calm procedural backdrop —
+    the film's "proof by specs" moment. Only legal when the page actually
+    carries numbers or very short labels (the grounding validator enforces
+    it). ``backdrop`` names a code-rendered scenery variant (a closed enum —
+    never an image URL, never a free prompt)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["plate"]
+    seconds: float
+    title: str
+    cards: list[FilmPlateCard] = Field(min_length=2, max_length=4)
+    backdrop: Literal["aurora", "dunes", "mist", "tide"] = "mist"
     narration: str | None = None
 
 
@@ -3329,6 +3360,7 @@ FilmScene = Annotated[
     | FilmSceneHero
     | FilmSceneUi
     | FilmSceneDivider
+    | FilmScenePlate
     | FilmSceneReveal
     | FilmSceneEnd,
     Field(discriminator="type"),

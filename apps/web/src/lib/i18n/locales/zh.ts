@@ -1138,6 +1138,7 @@ const zh: Resources = {
       hero: "主视觉",
       ui: "页面",
       divider: "过场",
+      plate: "数字",
       reveal: "揭晓",
       end: "尾卡",
     },

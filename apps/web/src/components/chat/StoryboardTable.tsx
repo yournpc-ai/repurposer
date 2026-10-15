@@ -19,6 +19,7 @@ const SCENE_TYPE_KEYS: Record<string, string> = {
   hero: "hero",
   ui: "ui",
   divider: "divider",
+  plate: "plate",
   reveal: "reveal",
   end: "end",
 }
@@ -43,6 +44,14 @@ function sceneCopy(scene: Scene, hostFor: (page: number) => string | null): stri
     }
     case "divider":
       return [scene.label, ...strs(scene.roll)].filter(Boolean).join(" · ")
+    case "plate": {
+      const cards = Array.isArray(scene.cards) ? scene.cards : []
+      const bits = cards.map((c) => {
+        const r = c as Record<string, unknown>
+        return [r.big, r.label].filter((x): x is string => typeof x === "string").join(" ")
+      })
+      return [scene.title, ...bits].filter((x): x is string => typeof x === "string" && x !== "").join(" · ")
+    }
     case "reveal":
       return [scene.lead, scene.word].filter((x): x is string => typeof x === "string").join(" — ")
     case "end":

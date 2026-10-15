@@ -1187,6 +1187,7 @@ const en = {
       hero: "Hero",
       ui: "Page",
       divider: "Break",
+      plate: "Numbers",
       reveal: "Reveal",
       end: "End card",
     },

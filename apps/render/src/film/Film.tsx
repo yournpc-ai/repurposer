@@ -9,7 +9,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, Sequence } from "remotion";
 
-import { Divider, End, Fade, Hero, Reveal, UiScene, Words } from "./components";
+import { Divider, End, Fade, Hero, Plate, Reveal, UiScene, Words } from "./components";
 import type { FilmSpec } from "./schema";
 
 export const Film: React.FC<{ spec: FilmSpec }> = ({ spec }) => {
@@ -32,6 +32,7 @@ export const Film: React.FC<{ spec: FilmSpec }> = ({ spec }) => {
                 <UiScene
                   image={s.image}
                   url={s.url}
+                  frame={s.frame}
                   focuses={s.focuses}
                   captions={s.captions}
                   theme={spec.theme}
@@ -40,6 +41,9 @@ export const Film: React.FC<{ spec: FilmSpec }> = ({ spec }) => {
               )}
               {s.type === "divider" && (
                 <Divider index={s.index} label={s.label} roll={s.roll} theme={spec.theme} />
+              )}
+              {s.type === "plate" && (
+                <Plate title={s.title} cards={s.cards} backdrop={s.backdrop} />
               )}
               {s.type === "reveal" && (
                 <Reveal lead={s.lead} word={s.word} sub={s.sub} theme={spec.theme} />

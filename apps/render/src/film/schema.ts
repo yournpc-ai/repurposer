@@ -63,6 +63,10 @@ const uiScene = z.object({
   image: z.string(),
   // Display text inside the browser chrome address pill (not fetched).
   url: z.string(),
+  // true = the page inside a browser-chrome card (the "this is a real page"
+  // beat); false = full-bleed — the camera fills the canvas with the page
+  // itself (the immersive push). Default true for pre-flag persisted specs.
+  frame: z.boolean().default(true),
   // Camera plan: `at` in seconds from scene start; x/y/zoom are plain
   // numbers here — the [0,1]³ bounds check lives in the grounding validator.
   focuses: z
@@ -78,6 +82,21 @@ const dividerScene = z.object({
   index: z.string(),
   label: z.string(),
   roll: z.array(z.string()).min(1),
+});
+
+/**
+ * The numbers beat: 2–4 glass cards over a calm procedural backdrop. A
+ * card's `big` is the number/short mark (null = a phrase card — the label
+ * carries it). The backdrop is a named deterministic gradient, never an
+ * image asset — nothing to stage.
+ */
+const plateScene = z.object({
+  type: z.literal("plate"),
+  ...frames,
+  ...narration,
+  title: z.string(),
+  cards: z.array(z.object({ big: z.string().nullable(), label: z.string() })).min(1),
+  backdrop: z.enum(["aurora", "dunes", "mist", "tide"]),
 });
 
 const revealScene = z.object({
@@ -105,6 +124,7 @@ export const filmSceneSchema = z.discriminatedUnion("type", [
   heroScene,
   uiScene,
   dividerScene,
+  plateScene,
   revealScene,
   endScene,
 ]);
