@@ -54,8 +54,9 @@
              launch_film）→ 讨论链接先 get_web_page 读页再答（读帧 key
              为观测面）→ discussion 链接永不资产化（负形）→ 讨论后拍板
              做片：历史回合的链接 verbatim 入 material_urls（永不追问
-             对话已有的链接），dock 带 launch_film + 本回合诞生 web_page
-             资产（正形），分镜核对 hold 挡 auto 直开
+             对话已有的链接），链带 launch_film + 本回合诞生 web_page
+             资产（正形）；auto 档两形皆合法——dock 待确认或同回合
+             propose→start_run（分镜核对 hold 在 run 内 checkpoint）
 
 harness 公共断言（ADR-114 §3.2——每本自动携带，不再单独立本）：
 
@@ -4107,22 +4108,28 @@ async def s12_site_entry_variants(ctx: Ctx) -> None:
           [str(a.id) for a in pages])
 
     # ③ 讨论后拍板做片（真实对话 66048d72 的延续路径）：历史回合的链接 =
-    # 对话已携带的素材——router 逐字抄入 material_urls（法条：never ask
-    # for a link the conversation already carries），dock 带 launch_film，
-    # 本回合诞生 web_page 资产；分镜核对 hold 挡 auto 直开（E1 律）零 run。
-    # LLM 裁量（先接一句）有界兜底一回。
+    # 对话已携带的素材——永不反问（法条：never ask for a link the
+    # conversation already carries），本回合诞生 web_page 资产。auto 档两
+    # 形皆合法（ADR-117）：dock 待确认的计划带 launch_film，或同回合
+    # propose→start_run 直开（分镜核对 hold 在 run 内 checkpoint，不在
+    # run 前）。LLM 裁量（先接一句）有界兜底一回。
     turn3 = await ctx.chat(pid_b, "好，那就做它的介绍短片吧")
     plan = await pending_plan(ctx, pid_b)
     tools = [t.get("tool") for t in plan_tasks(plan)] if plan is not None else []
-    if "launch_film" not in tools:
+    run_id = turn3.get("run_id")
+    if "launch_film" not in tools and run_id is None:
         turn3 = await ctx.chat(pid_b, "Go ahead — plan the intro film from that page.")
         plan = await pending_plan(ctx, pid_b)
         tools = [t.get("tool") for t in plan_tasks(plan)] if plan is not None else []
-    check("launch_film" in tools,
-          "the history link becomes material — the docked chain carries "
-          "launch_film without re-asking for the URL", plan)
-    check(turn3["run_id"] is None and await count_runs(pid_b) == 0,
-          "the storyboard-review hold blocks auto-start (E1 law)", turn3)
+        run_id = turn3.get("run_id")
+    check("launch_film" in tools or run_id is not None,
+          "the history link becomes material — the chain carries launch_film "
+          "(docked plan or auto-started run) without re-asking for the URL",
+          {"plan": plan, "run_id": run_id})
+    if run_id is not None:
+        kinds = [s["kind"] for s in await step_rows(run_id)]
+        check("launch_film" in kinds,
+              "the auto-started run's chain carries launch_film", kinds)
     # 资产化正形：本回合诞生 web_page 资产（material_urls absorb 从历史抄链）
     asset_id = None
     for _ in range(15):
