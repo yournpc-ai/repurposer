@@ -479,7 +479,8 @@ async def _sse_pump(
     """The ONE terminal-pump loop both turn streams share (2026-09-05 减法批):
     frames (already-serialized ``str`` items) pass through, tuples terminate
     the stream with ``completed_event`` / ``failed_event``, a quiet client
-    gets heartbeat comments, and a disconnect cancels the turn task — which
+    gets bare-{} thinking keepalives (client-visible liveness — see the
+    TimeoutError branch), and a disconnect cancels the turn task — which
     lands in the task's ``finally`` BEFORE its commit, so the session
     teardown rolls the turn back ("a failed turn persists nothing").
 
@@ -493,7 +494,15 @@ async def _sse_pump(
             try:
                 item = await asyncio.wait_for(queue.get(), timeout=_HEARTBEAT_SECONDS)
             except TimeoutError:
-                yield ": heartbeat\n\n"
+                # The liveness heartbeat rides the assistant.thinking channel
+                # as a bare {} — the SAME keepalive family the reasoning
+                # fragments already use (liveness only, never shown). A
+                # comment line (": heartbeat") would be invisible to the
+                # client's frame handlers; as a real frame the client can
+                # WATCH the cadence — a turn with >N heartbeats of total
+                # silence is a dead pipe by construction (the server
+                # guarantees one frame at least every _HEARTBEAT_SECONDS).
+                yield _sse("assistant.thinking", "{}")
                 continue
             if isinstance(item, str):
                 yield item

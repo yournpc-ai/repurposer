@@ -37,6 +37,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ChevronDown,
+  ChevronRight,
   Eye,
   PenLine,
   Play,
@@ -47,7 +48,7 @@ import {
 
 import type { ActivityFramePayload } from "@/lib/chat-stream"
 import type { ActivityRowFrame } from "@/components/chat/historyReplay"
-import { foldSummary } from "@/lib/chatTimeline"
+import { activityCategoryKey, foldCategories } from "@/lib/chatTimeline"
 import { formatElapsed } from "@/components/chat/RunTaskList"
 import { cn } from "@/lib/utils"
 
@@ -85,22 +86,34 @@ export type NowRowPayload = Omit<ActivityFramePayload, "kind" | "seq"> & {
    * 2026-09-24 素材节拍入库): replay-synthesized beat rows carry it, wire
    * frames never do. */
   total?: number
+  /** The material beat's asset type (replay-only, never on the wire): the
+   * settled category form forks web_page off it (activityCategoryKey). */
+  assetType?: string
 }
 
 export function ActivityRow({ activity }: { activity: NowRowPayload }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const { status } = activity
-  const label = activity.key
+  // 归档归类目 (ADR-110 修订): a COMPLETED row drops the instance name and
+  // speaks the category (the material reading family's keys remap to the
+  // name-free materialCategory form) — the filename was the live phase's
+  // speech. failed/cancelled rows keep the name: which file failed IS the
+  // failure's content.
+  const settled = status === "completed"
+  const labelKey = settled
+    ? activityCategoryKey(activity.key, activity.assetType)
+    : activity.key
+  const label = labelKey
     ? // 工作会话里程碑 (iter-2 ⑥): count rides as the ONLY interpolation
       // (the wire whitelist's one extension, N-57) — frames without it
       // pass undefined and resolve exactly as before. `name` joins for the
       // frontend-synthesized think beats (the material's filename), never
       // for wire frames.
-      t(activity.key, {
+      t(labelKey, {
         count: activity.count,
-        total: activity.total,
-        name: activity.name,
+        total: settled ? undefined : activity.total,
+        name: settled ? undefined : activity.name,
         // 未知键兜底分态：进行中的行回 "Thinking…" 诚实；已落定的行回
         // 中性 "Done" —— 旧资源包遇到新键时若回 "Thinking…"，一条已完成
         // 的行会谎称还在进行（素材待命完成帧实测事故）。
@@ -110,8 +123,11 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
   // E7 诚实边界: expandability IS the payload fact (a count-carrying
   // milestone) — never a chrome affordance on an empty row. Live rows never
   // expand (2026-09-24: the now-line's transient count — "reading N files" —
-  // is the label itself, not a payload to unfold).
-  const expandable = activity.count != null && status !== "active"
+  // is the label itself, not a payload to unfold). Progress beats
+  // (count+total = the N/M batch index) never expand either — a batch index
+  // is no payload, and the settled category label no longer carries it.
+  const expandable =
+    activity.count != null && activity.total == null && status !== "active"
   const duration =
     status !== "active" && activity.duration_ms != null
       ? formatElapsed(activity.duration_ms)
@@ -123,10 +139,12 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
     <div className="flex w-full flex-col gap-1">
       <div
         className={cn(
-          // Flora 体感 (flora-parity-ui D4①): every row carries the hover
-          // register (bg-accent, padded hit area reaching 6px past the
-          // label via the negative margin — the text column never shifts).
-          "-mx-1.5 -my-0.5 flex w-full items-center gap-2 rounded-md px-1.5 py-0.5 text-xs transition-colors hover:bg-accent",
+          // Flora 体感 (flora-parity-ui D4①): the padded hit area reaches 6px
+          // past the label via the negative margin (the text column never
+          // shifts). Hover NEVER washes the row — expandable rows keep their
+          // pointer + click toggle, and hover only brightens the label text.
+          // Row metrics = the Flora tools-row anatomy: min-h-8, gap-2.5.
+          "-mx-1.5 -my-0.5 group/row flex min-h-8 w-full items-center gap-2.5 rounded-md px-1.5 py-0.5 text-xs transition-colors",
           status === "failed" ? "text-destructive" : "text-muted-foreground",
           expandable && "cursor-pointer select-none",
         )}
@@ -156,6 +174,10 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
             "min-w-0 truncate",
             status === "active" && "shimmer",
             status === "cancelled" && "line-through",
+            // Hover brightens the label only — no bg wash; failed rows keep
+            // their destructive ink.
+            status !== "failed" &&
+              "transition-colors group-hover/row:text-foreground",
           )}
         >
           {label}
@@ -168,14 +190,14 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
             · {duration}
           </span>
         )}
-        {expandable && (
-          <ChevronDown
-            className={cn(
-              "ml-auto h-3 w-3 shrink-0 transition-transform",
-              open && "rotate-180",
-            )}
-          />
-        )}
+        {expandable &&
+          // The OS disclosure convention (> collapsed, ⌄ open) — the row
+          // IS the tap target.
+          (open ? (
+            <ChevronDown className="ml-auto h-3 w-3 shrink-0" />
+          ) : (
+            <ChevronRight className="ml-auto h-3 w-3 shrink-0" />
+          ))}
       </div>
       {expandable && open && (
         <div className="ml-5 flex flex-col gap-0.5 text-xs text-muted-foreground">
@@ -190,14 +212,21 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
   )
 }
 
-/** The aggregate row (ADR-110 段聚合 — the Claude Code collapse): every
- * segment of consecutive completed activity rows between two messages folds
- * into ONE quiet summary — the segment's total elapsed + the fragments in
- * order (「工作了 1m 32s · 已理解素材 · 找到 12 段候选」), expanding in
- * place to the individual rows. Same register as ActivityRow's settled
- * form; the first row's glyph leads, the ×N repeat suffixes a fragment
- * shared by consecutive same-act rows. failed/cancelled rows never reach
- * here — they stay visible as their own struck-through rows. */
+/** The aggregate row (ADR-110 段聚合, 修订: Flora 解剖 — 折叠说总量,
+ * 展开说分解): a settled segment folds into ONE quiet total — 「工作了
+ * 2m 7s」; the elapsed is the ONLY collapsed fact (never a fragment
+ * digest — the truncated-URL pathology dies at the root, the single-line
+ * truncate stays as the dormant guard). Expanded = the category
+ * decomposition (foldCategories): rows sharing one copy key merge across
+ * the whole segment into a ×N category line (已读网页 ×3) — glyph +
+ * category text + ×N at the far right, NO per-row durations (telemetry
+ * 不归消费面; the total already rode the header). Ink tiers: the category
+ * rows muted, glyphs + counts meta — the header's resting pose reads
+ * muted like all chrome (hover / expanded brightens it, never the resting
+ * state). The chevron follows the OS disclosure convention (> collapsed,
+ * label; the whole row is the tap target. Elapsed 不可测 (存量行无时间
+ * 戳) falls back to the honest action count. failed/cancelled rows never
+ * reach here — they stay visible as their own struck-through rows. */
 export function FoldedActivityRow({
   rows,
   elapsedMs,
@@ -207,46 +236,69 @@ export function FoldedActivityRow({
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const fragments = foldSummary(rows).map((f) => {
-    const base = f.key
-      ? t(f.key, {
-          count: f.count,
-          total: f.total,
-          name: f.name,
-          defaultValue: t("chat.completed"),
-        })
-      : t("chat.completed")
-    return f.repeat > 1
-      ? t("chat.activityFold.repeated", { label: base, count: f.repeat })
-      : base
-  })
   const elapsed = elapsedMs != null ? formatElapsed(elapsedMs) : null
   const label = elapsed
-    ? `${t("chat.activityFold.worked", { elapsed })} · ${fragments.join(" · ")}`
-    : fragments.join(" · ")
-  const KindIcon = KIND_ICONS[rows[0]?.kind ?? "read"]
+    ? t("chat.activityFold.worked", { elapsed })
+    : t("chat.activityFold.actionCount", { count: rows.length })
+  const cats = foldCategories(rows)
   return (
     <div className="flex w-full flex-col gap-1">
       <div
-        className="-mx-1.5 -my-0.5 flex w-full cursor-pointer select-none items-center gap-2 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent"
+        className={cn(
+          // Flora 同构: the summary hugs its content (bare label + chevron
+          // adjacent — no glyph, never a full-width row with a far-right
+          // chevron); the button metrics are Flora's (h-7, gap-1.5); the
+          // expanded rows below keep the flow width.
+          "-mx-1.5 -my-0.5 group/row flex h-7 w-fit max-w-full cursor-pointer select-none items-center gap-1.5 rounded-md px-1.5 text-xs",
+        )}
         role="button"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <KindIcon className="h-3 w-3 shrink-0" />
-        <span className="min-w-0 truncate">{label}</span>
-        <ChevronDown
+        {/* Resting quiet (muted — chrome, not prose); the brighten is the
+            hover / expanded state, never the resting pose. */}
+        <span
           className={cn(
-            "ml-auto h-3 w-3 shrink-0 transition-transform",
-            open && "rotate-180",
+            "min-w-0 truncate text-muted-foreground transition-colors group-hover/row:text-foreground",
+            open && "text-foreground",
           )}
-        />
+        >
+          {label}
+        </span>
+        {open ? (
+          <ChevronDown className="h-3 w-3 shrink-0 text-meta-foreground" />
+        ) : (
+          <ChevronRight className="h-3 w-3 shrink-0 text-meta-foreground" />
+        )}
       </div>
       {open && (
-        <div className="ml-5 flex flex-col gap-1">
-          {rows.map((row) => (
-            <ActivityRow key={row.activity_id} activity={row} />
-          ))}
+        <div className="flex w-full flex-col gap-1">
+          {cats.map((c, i) => {
+            const Glyph = KIND_ICONS[c.kind] ?? KIND_ICONS.read
+            const key = activityCategoryKey(c.key, c.assetType)
+            const catLabel = key
+              ? t(key, {
+                  count: c.count,
+                  defaultValue: t("chat.completed"),
+                })
+              : t("chat.completed")
+            return (
+              <div
+                key={i}
+                className="-mx-1.5 flex min-h-8 w-full items-center gap-2.5 rounded-md px-1.5 py-0.5 text-xs"
+              >
+                <Glyph className="h-3 w-3 shrink-0 text-meta-foreground" />
+                <span className="min-w-0 truncate text-muted-foreground">
+                  {catLabel}
+                </span>
+                {c.repeat > 1 && (
+                  <span className="ml-auto shrink-0 tabular-nums text-meta-foreground">
+                    ×{c.repeat}
+                  </span>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

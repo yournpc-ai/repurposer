@@ -1,36 +1,23 @@
-import { createFileRoute, Link, useLocation, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, useLocation, useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowLeft } from "lucide-react"
 import { toast } from "sonner"
 
-import { ArticleCard } from "@/components/results/ArticleCard"
-import { CarouselCard } from "@/components/results/CarouselCard"
-import { ClipCard } from "@/components/results/ClipCard"
-import { ClipCardSkeleton } from "@/components/results/ClipCardSkeleton"
-import { DerivativeCardSkeleton } from "@/components/results/DerivativeCardSkeleton"
 import { downloadOutput } from "@/components/results/downloadOutput"
 import { outputFullText } from "@/components/results/outputText"
 import { ChatDock, type DerivedRow, type DecisionPlanRow, type ChatDockHandle } from "@/components/chat/ChatDock"
 import { normalizeIntent, tasksFromRunContext } from "@/components/chat/chatProtocol"
-import { CreditsPill } from "@/components/credits/CreditsPill"
 import { ResultsCanvas } from "@/components/flow/ResultsCanvas"
 import { SoundMutexProvider } from "@/components/flow/sound-mutex"
 import type { FlowAssetAction, FlowAssetInfo, FlowOutputAction } from "@/components/flow/types"
-import { PostCard } from "@/components/results/PostCard"
-import { ProjectMenu } from "@/components/project/ProjectMenu"
+import { ProjectHeader } from "@/components/project/ProjectHeader"
 import { PublishDialog } from "@/components/publish/PublishDialog"
-import { QuotesCard } from "@/components/results/QuotesCard"
-import { QuoteFrameCard } from "@/components/results/QuoteFrameCard"
-import {
-  ResultsTabs,
-  type ResultsTab,
-} from "@/components/results/ResultsTabs"
-import { Button } from "@/components/ui/button"
 import { apiDelete, apiFetch, apiPost, downloadFile, toAbsoluteUrl } from "@/lib/api"
 import { outputMentionLabel } from "@/lib/mentions"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { canvasVisible } from "@/lib/canvasVisibility"
+import { canvasCapableFor, canvasVisible } from "@/lib/canvasVisibility"
+import { useWorkspaceLayout } from "@/hooks/use-workspace-layout"
+import { sseProbe } from "@/lib/sse-probe" // TEMPORARY forensics — delete with the probe
 import { useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
 import { isPlanReady } from "@/lib/lifecycleStamp"
@@ -123,36 +110,6 @@ interface ProjectResults {
   lifecycle?: LifecycleStamp | null
 }
 
-/** Tools (== node kinds, N-35) that own a results tab (ADR-028): the whole
- * chain's clip-side work (selection, whole-source materialization, the
- * transforms) lands on the clips tab; preprocess/persona/plan-prelude/revise/
- * render nodes drive the stepper, not a tab. */
-const NODE_KIND_TO_TAB: Record<string, ResultsTab> = {
-  select_clips: "clips",
-  materialize_source: "clips",
-  translate_clip: "clips",
-  dub_clip: "clips",
-  remove_filler: "clips",
-  add_music: "clips",
-  write_post: "post",
-  write_quotes: "quotes",
-  write_carousel: "carousel",
-  write_article: "article",
-}
-
-/** The producing tool a tab's retry re-runs (a retry replays the producer
- * with its confirmed params — the chain's transforms don't ride it). */
-const TAB_TO_RETRY_TOOL: Record<ResultsTab, string> = {
-  clips: "select_clips",
-  post: "write_post",
-  quotes: "write_quotes",
-  // Frame cards ride the quotes chain — a quoteFrame retry replays
-  // write_quotes, which re-materializes the frame/composite siblings.
-  quoteFrame: "write_quotes",
-  carousel: "write_carousel",
-  article: "write_article",
-}
-
 export const Route = createFileRoute("/projects/$id/")({
   component: ProjectDetailPage,
 })
@@ -176,17 +133,21 @@ function ProjectDetailPage() {
     }
   ).firstMessage
   const [results, setResults] = useState<ProjectResults | null>(null)
-  const [activeTab, setActiveTab] = useState<ResultsTab>("clips")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [retrying, setRetrying] = useState<Partial<Record<ResultsTab, boolean>>>({})
-  const tabInitializedRef = useRef(false)
 
   // ── Results canvas (ADR-041; ADR-051 画布优先) ───────────────────────
   // Desktop (≥768px = iPad up, D1/D10): the page is ALWAYS the canvas + the
   // chat dock — pre-run assets, the live run's projection, and the terminal
-  // frame all render on it; mobile keeps the list world (prohibition #13).
+  // frame all render on it. Mobile has no canvas (prohibition #13) — the
+  // chat dock's full form IS the page at every project age (移动端恒纯
+  // chat), and products deliver in the message flow (receipt + anchor
+  // cards, ADR-118). The user can pin the chat-first workspace on ANY
+  // screen via 设置→通用→工作区布局 = 纯对话 (ADR-123) — canvasCapable is
+  // the ONE composition (viewport ∧ setting, lib/canvasVisibility 单源座).
   const isMobile = useIsMobile()
+  const workspaceLayout = useWorkspaceLayout()
+  const canvasCapable = canvasCapableFor(isMobile, workspaceLayout)
   const dockRef = useRef<ChatDockHandle>(null)
   /** The latest COMPLETED run snapshot — the canvas's terminal frame. The
    * sticky copy survives a later refinement run going active/failed (D9:
@@ -249,14 +210,15 @@ function ProjectDetailPage() {
   // instantly, a chat turn arrives gradually). The driver is the
   // server-named lifecycle stamp (ADR-087 §2 — never a local derivation);
   // runs keep revealing too (hasRuns covers every post-start state).
-  // Mobile stays run-driven (no canvas below iPad width — the plan's
-  // review face there is the prose echo, not a canvas).
+  // Chat-first surfaces stay run-driven (no canvas below iPad width, and
+  // none under the user's 纯对话 setting either — the plan's review face
+  // there is the prose echo, not a canvas).
   const hasRuns = latestRun != null
-  const worldLive = hasRuns || (!isMobile && isPlanReady(lifecycle))
+  const worldLive = hasRuns || (canvasCapable && isPlanReady(lifecycle))
   // 环境谓词 (ADR-118 §6 真值表 · lib/canvasVisibility 单源): 画布此刻在
   // 屏 = 可承载 ∧ 已揭幕 —— chat 锚卡的渲染分支只读此值,任何组件不再以
-  // 视口/设备名自行推断。
-  const canvasVis = canvasVisible({ canvasAvailable: !isMobile, worldLive })
+  // 视口/设备名/设置项自行推断。
+  const canvasVis = canvasVisible({ canvasAvailable: canvasCapable, worldLive })
   // The desktop chat panel is a FROSTED OVERLAY on the full-bleed canvas
   // (2026-09-06 用户拍板, FLORA "Dock panel" parity — float / docked-right,
   // never an in-flow column): the canvas's top-right zoom pill steps clear
@@ -269,7 +231,12 @@ function ProjectDetailPage() {
     docked: false,
   })
   const panelCoversCorner =
-    worldLive && !isMobile && !panelState.hidden && panelState.docked
+    worldLive && canvasCapable && !panelState.hidden && panelState.docked
+
+  // sse-probe: world-liveness flips (TEMPORARY forensics — delete with the probe)
+  useEffect(() => {
+    sseProbe("state.worldLive", { value: worldLive, hasRuns, isMobile })
+  }, [worldLive, hasRuns, isMobile])
 
   useEffect(() => {
     setLoading(true)
@@ -358,7 +325,7 @@ function ProjectDetailPage() {
     // (minimally, zoom locked) only if the cluster whose product counts
     // grew sits outside the safe viewport (outputs fill EXISTING nodes, so
     // the newborn id-diff alone never saw landings).
-    if (hasRuns && !isMobile) {
+    if (hasRuns && canvasCapable) {
       setCameraBeat({ token: Date.now() })
     }
     const timer = setTimeout(() => setCanvasEpoch((e) => e + 1), 600)
@@ -408,7 +375,7 @@ function ProjectDetailPage() {
       // the named element IS the current operation element — center its
       // node on the canvas (pan-locked-zoom; shields inside FlowView).
       const node = graph?.nodes.find((n) => n.spec.output_ids?.includes(output.id))
-      if (node && hasRuns && !isMobile) requestCenterNode(node.id)
+      if (node && hasRuns && canvasCapable) requestCenterNode(node.id)
       dockRef.current?.insertMention({
         type: "output",
         id: output.id,
@@ -438,7 +405,7 @@ function ProjectDetailPage() {
       setSelectedOutputId((prev) => (prev === output.id ? null : prev))
       await fetchResults()
     }
-  }, [handleOutputClick, fetchResults, graph, hasRuns, isMobile, requestCenterNode, t])
+  }, [handleOutputClick, fetchResults, graph, hasRuns, canvasCapable, requestCenterNode, t])
 
   // 选区引用 (2026-09-11 — 段落级指认): the user selected a passage on a
   // text product's card face and pinned 「引用这段」 — the dock gets an
@@ -449,7 +416,7 @@ function ProjectDetailPage() {
   // pan-locked-zoom capability the 指认 gesture rides).
   const handleQuoteOutput = useCallback((output: Output, quote: string) => {
     const node = graph?.nodes.find((n) => n.spec.output_ids?.includes(output.id))
-    if (node && hasRuns && !isMobile) requestCenterNode(node.id)
+    if (node && hasRuns && canvasCapable) requestCenterNode(node.id)
     dockRef.current?.insertMention({
       type: "output",
       id: output.id,
@@ -461,7 +428,7 @@ function ProjectDetailPage() {
       ),
       quote,
     })
-  }, [graph, hasRuns, isMobile, requestCenterNode, t])
+  }, [graph, hasRuns, canvasCapable, requestCenterNode, t])
 
   // Asset-node factsbar (2026-08-17 走查拍板): the surface owns the source
   // file's actions — download / delete / reprocess ("open" never arrives
@@ -536,25 +503,14 @@ function ProjectDetailPage() {
   const completedRun =
     latestRun?.status === "completed" ? latestRun : stickyCompletedRun
 
-  /** The dock's completion hand-off: refetch so the canvas / list world
-   * shows the landed products. (The page's own SSE also refetches — this
-   * covers the dock's watcher beating it.) */
+  /** The dock's completion hand-off: refetch so the canvas shows the landed
+   * products. (The page's own SSE also refetches — this covers the dock's
+   * watcher beating it.) */
   const handleDockComplete = async () => {
     await fetchResults()
   }
 
-  // Default to the first requested output tab once, when a generation is running.
   const runTasks = tasksFromRunContext(latestRun?.context)
-  useEffect(() => {
-    if (tabInitializedRef.current) return
-    if (!runTasks.length) return
-    const tab = NODE_KIND_TO_TAB[runTasks[0].tool]
-    if (tab) {
-      setActiveTab(tab)
-      tabInitializedRef.current = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [latestRun?.context])
 
   // Keep polling only for what SSE does not cover: anonymous viewers (no
   // token → hook no-ops) and outputs still rendering after the run settled
@@ -599,86 +555,6 @@ function ProjectDetailPage() {
     return () => clearInterval(interval)
   }, [materialPending, results?.latest_run, fetchResults])
 
-  const nodes = sseActive ? sse.steps : (latestRun?.steps ?? [])
-  // Skeleton count for the clips pane: the confirmed count when the chain
-  // selects clips; otherwise ONE — both the whole-video chain (the
-  // compile-injected materialize_source makes one whole-source clip) and
-  // the bare fallback, which mirrors the server's SelectClipsParams default
-  // (count unnamed → 1). Writers-only chains never render the pane.
-  const clipsTask = runTasks.find((task) => task.tool === "select_clips")
-  const clipsTaskCount = clipsTask?.params?.count
-  const clipCount = typeof clipsTaskCount === "number" ? clipsTaskCount : 1
-
-  const requestedTabs = Array.from(
-    new Set(
-      runTasks.map((task) => NODE_KIND_TO_TAB[task.tool]).filter(Boolean)
-    )
-  ) as ResultsTab[]
-
-  // When the run itself failed, nodes that never reached a terminal state
-  // are dead too — present them as failed (with a retry) instead of skeletons.
-  const runFailed = latestRun?.status === "failed"
-
-  const runningTabs = nodes
-    .filter(
-      (n) =>
-        NODE_KIND_TO_TAB[n.kind] &&
-        !runFailed &&
-        (n.status === "running" || n.status === "pending")
-    )
-    .map((n) => NODE_KIND_TO_TAB[n.kind])
-
-  const failedTabs = nodes
-    .filter(
-      (n) =>
-        NODE_KIND_TO_TAB[n.kind] &&
-        (n.status === "failed" || (runFailed && n.status !== "done"))
-    )
-    .map((n) => NODE_KIND_TO_TAB[n.kind])
-
-  const handleRetry = async (tab: ResultsTab) => {
-    if (!results) return
-    setRetrying((prev) => ({ ...prev, [tab]: true }))
-    try {
-      const ctx = latestRun?.context
-      // 整类重做 = re-run the tab's own chain verbatim (ADR-043): the clips
-      // family is the chain's clips-family tasks in order (a whole-video
-      // chain has NO select_clips — inventing one would swap the product
-      // from "subtitled whole video" to "highlight cuts"); text families
-      // are their single writer task. Chat-scoped params (target_output_id)
-      // are stripped — a full run deletes the rows they point at.
-      const family =
-        tab === "clips"
-          ? runTasks.filter((task) => NODE_KIND_TO_TAB[task.tool] === "clips")
-          : runTasks.filter((task) => task.tool === TAB_TO_RETRY_TOOL[tab])
-      const tasks = (family.length > 0 ? family : [{ tool: TAB_TO_RETRY_TOOL[tab], params: {} }]).map(
-        (task) => {
-          const params = { ...(task.params ?? {}) }
-          delete params.target_output_id
-          return { tool: task.tool, params }
-        },
-      )
-      // Exact retry = the chain + the spec work-fields echoed verbatim
-      // (ADR-087 §4 D2): the server gate proves equality against persisted
-      // run.context — the echo is the retry REFERENCE, never the proof.
-      await apiPost(`/api/v1/projects/${projectId}/generate`, {
-        tasks,
-        target_language: ctx?.target_language || results.project.language || "en",
-        instruction: ctx?.instruction || undefined,
-        tone_settings: ctx?.tone_settings || undefined,
-        persona_id: ctx?.persona_id ?? undefined,
-        caption_mode: ctx?.caption_mode ?? undefined,
-        source_asset_id: ctx?.source_asset_id ?? undefined,
-        exemplar_asset_id: ctx?.exemplar_asset_id ?? undefined,
-      })
-      await fetchResults()
-    } catch (e) {
-      console.error("Retry failed", e)
-    } finally {
-      setRetrying((prev) => ({ ...prev, [tab]: false }))
-    }
-  }
-
   if (loading) {
     return (
       <div className="grid h-dvh place-items-center bg-background text-muted-foreground">
@@ -695,205 +571,16 @@ function ProjectDetailPage() {
     )
   }
 
-  const { project, prompt, outputs, pending_brief: pendingBrief } = results
-
-  // outputs holds the project's current products (targeted runs update in
-  // place; full runs delete prior rows), so no per-run filtering is needed.
-  const clips = outputs.filter((o) => o.type === "clip")
-  const posts = outputs.filter((o) => o.type === "post")
-  const quotes = outputs.filter((o) => o.type === "quotes")
-  const quoteFrames = outputs.filter((o) => o.type === "quote_frame")
-  const carousels = outputs.filter((o) => o.type === "carousel")
-  const articles = outputs.filter((o) => o.type === "article")
-
-  // Top pick: the highest recommendation score in the batch gets the accent
-  // badge (the score's job is triage — which clip is most worth posting
-  // first). Triage needs a real choice (2026-10-09 用户拍板): a single
-  // scored clip is trivially the top pick — the badge speaks only when ≥2
-  // scored clips share the surface (mirror: ResultsCanvas.tsx topClipScore).
-  const topClipScore =
-    clips.filter((c) => typeof c.score?.value === "number" && c.score.value > 0).length >= 2
-      ? Math.max(0, ...clips.map((c) => (typeof c.score?.value === "number" ? c.score.value : 0)))
-      : 0
-
-  const counts = {
-    clips: clips.length,
-    post: posts.length,
-    quotes: quotes.length,
-    quoteFrame: quoteFrames.length,
-    carousel: carousels.length,
-    article: articles.length,
-  }
-
-  const visibleTabs = Array.from(
-    new Set<ResultsTab>([
-      ...requestedTabs,
-      ...(Object.keys(counts) as ResultsTab[]).filter((tab) => (counts[tab] ?? 0) > 0),
-    ])
-  )
-
-  // The shown tab is always clamped INTO the visible set (终审 P1-2): the
-  // auto-select effect only knows NODE_KIND_TO_TAB, so a run whose first
-  // task is unmapped (revise_script — every hover-框 revision's tool)
-  // leaves activeTab pointing at a tab that isn't rendered — the list
-  // world then shows the wrong empty state under a one-tab bar. Derived,
-  // never written back: the user's own clicks always land in the set.
-  const shownTab: ResultsTab = visibleTabs.includes(activeTab)
-    ? activeTab
-    : (visibleTabs[0] ?? "clips")
-
-  const isOutputFailed = (tab: ResultsTab) => failedTabs.includes(tab)
-  const isOutputRunning = (tab: ResultsTab) => runningTabs.includes(tab)
-
-  const renderSkeletons = (tab: ResultsTab) => {
-    if (tab === "clips") {
-      return (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: clipCount }).map((_, i) => (
-            <ClipCardSkeleton key={i} />
-          ))}
-        </div>
-      )
-    }
-    return (
-      <div className="grid gap-4 md:grid-cols-2">
-        <DerivativeCardSkeleton />
-      </div>
-    )
-  }
-
-  const renderFailed = (tab: ResultsTab) => {
-    const node = nodes.find(
-      (n) =>
-        NODE_KIND_TO_TAB[n.kind] === tab &&
-        (n.status === "failed" || (runFailed && n.status !== "done"))
-    )
-    return (
-      <div className="rounded-lg bg-muted p-8 text-center">
-        <p className="text-sm text-destructive">
-          {node?.error || latestRun?.error || t("results.retryFailed")}
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-4"
-          disabled={retrying[tab]}
-          onClick={() => handleRetry(tab)}
-        >
-          {retrying[tab] ? t("common.loading") : t("results.retry")}
-        </Button>
-      </div>
-    )
-  }
-
-  const renderTabContent = () => {
-    switch (shownTab) {
-      case "clips":
-        if (isOutputFailed("clips")) return renderFailed("clips")
-        if (clips.length === 0 && isOutputRunning("clips")) {
-          return renderSkeletons("clips")
-        }
-        if (clips.length === 0) {
-          return <EmptyState text={t("results.empty.clips")} />
-        }
-        return (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {clips.map((clip) => (
-              <ClipCard
-                key={clip.id}
-                output={clip}
-                isTopPick={
-                  topClipScore > 0 && clip.score?.value === topClipScore
-                }
-              />
-            ))}
-          </div>
-        )
-      case "post":
-        if (isOutputFailed("post")) return renderFailed("post")
-        if (posts.length === 0 && isOutputRunning("post")) {
-          return renderSkeletons("post")
-        }
-        if (posts.length === 0) {
-          return <EmptyState text={t("results.empty.post")} />
-        }
-        return (
-          <div className="grid gap-4 md:grid-cols-2">
-            {posts.map((o) => (
-              <PostCard key={o.id} output={o} onRegenerate={fetchResults} />
-            ))}
-          </div>
-        )
-      case "quotes":
-        if (isOutputFailed("quotes")) return renderFailed("quotes")
-        if (quotes.length === 0 && isOutputRunning("quotes")) {
-          return renderSkeletons("quotes")
-        }
-        if (quotes.length === 0) {
-          return <EmptyState text={t("results.empty.quotes")} />
-        }
-        return (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {quotes.map((o) => (
-              <QuotesCard key={o.id} output={o} onRegenerate={fetchResults} />
-            ))}
-          </div>
-        )
-      case "quoteFrame":
-        // Frame cards are byproducts of the quotes chain — the running /
-        // failed state lives on the quotes tab; this tab is products-only.
-        if (quoteFrames.length === 0 && isOutputRunning("quotes")) {
-          return renderSkeletons("quoteFrame")
-        }
-        if (quoteFrames.length === 0) {
-          return <EmptyState text={t("results.empty.quoteFrame")} />
-        }
-        return (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {quoteFrames.map((o) => (
-              <QuoteFrameCard key={o.id} output={o} />
-            ))}
-          </div>
-        )
-      case "carousel":
-        if (isOutputFailed("carousel")) return renderFailed("carousel")
-        if (carousels.length === 0 && isOutputRunning("carousel")) {
-          return renderSkeletons("carousel")
-        }
-        if (carousels.length === 0) {
-          return <EmptyState text={t("results.empty.carousel")} />
-        }
-        return (
-          <div className="grid gap-4 md:grid-cols-2">
-            {carousels.map((o) => (
-              <CarouselCard key={o.id} output={o} onRegenerate={fetchResults} />
-            ))}
-          </div>
-        )
-      case "article":
-        if (isOutputFailed("article")) return renderFailed("article")
-        if (articles.length === 0 && isOutputRunning("article")) {
-          return renderSkeletons("article")
-        }
-        if (articles.length === 0) {
-          return <EmptyState text={t("results.empty.article")} />
-        }
-        return (
-          <div className="grid gap-4 md:grid-cols-2">
-            {articles.map((o) => (
-              <ArticleCard key={o.id} output={o} onRegenerate={fetchResults} />
-            ))}
-          </div>
-        )
-    }
-  }
+  const { project, prompt, pending_brief: pendingBrief } = results
 
   // ── The one chat dock (ADR-051) ──────────────────────────────────────
-  // The page is ALWAYS canvas (desktop) / list world (mobile) + the chat
-  // dock — project state drives the dock's form: a parked plan docks
-  // the confirm panel, a live run attaches the step flow, a completed run
-  // lands on the results conversation. One mounted instance across all
-  // forms — the input group is never remounted between them.
+  // Desktop = the canvas + the chat dock; mobile = the chat dock's full
+  // form IS the page (移动端恒纯 chat — no canvas below iPad width,
+  // products deliver in the message flow, ADR-118). Project state drives
+  // the dock's form: a parked plan docks the confirm panel, a live run
+  // attaches the step flow, a completed run lands on the results
+  // conversation. One mounted instance across all forms — the input group
+  // is never remounted between them.
 
   /** The dock's plan-summary line, rebuilt from the completed run's context
    * (the same read-tolerance shape the attach flow uses); a run with no
@@ -932,73 +619,38 @@ function ProjectDetailPage() {
     // Fullscreen canvas world (ADR-041 全屏化; ADR-051 画布优先): this route
     // lives OUTSIDE the _app layout — no sidebar / header / title block.
     // Floating chrome: the project menu (top-left) + the canvas's own zoom
-    // pill (top-right, FlowView `controls`); the canvas fills the viewport,
-    // the chat dock floats at the bottom on mobile / docks as the right
-    // panel on desktop (2026-09-06 三形态机: md+ = flex row, the panel is an
-    // in-flow column and the canvas makes room — FLORA docked mode). App
+    // pill (top-right, FlowView `controls`); on desktop the canvas fills the
+    // viewport and the chat dock overlays it as the right panel; on mobile
+    // the chat dock's full form IS the page (两形态机 — 移动端恒纯 chat,
+    // no canvas below iPad width). App
     // chrome (theme / language / notifications) lives in the studio shell —
     // 2026-08-19 走查拍板, confirmed to cover MOBILE too (nearest entry =
     // back to /projects).
     <SoundMutexProvider>
     <div className="relative flex h-dvh flex-col overflow-hidden bg-background">
-      {/* Top-left chrome — a TWO-FORM machine (2026-09-02 形态机, driven by
-          worldLive): pre-generation it is a plain back pill (icon + Projects);
-          the graph world's arrival (first run OR the docked plan's draft
-          graph, desktop) crossfades it into the full ProjectMenu (brand
-          mark + title + ops). Both are stacked in one slot — the active
-          form in flow, the inactive one absolutely overlaid — so the
-          crossfade never shifts layout. z-[60]: above the ChatDock's z-50
-          root — in the full form its stage covers the page and would
-          otherwise swallow the pill's clicks. */}
-      <div className="absolute left-3 top-3 z-[60] md:left-4 md:top-4">
-        <div
-          className={cn(
-            "transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none",
-            worldLive
-              ? "opacity-100"
-              : "pointer-events-none absolute left-0 top-0 -translate-x-2 opacity-0"
-          )}
-          aria-hidden={!worldLive}
-        >
-          <ProjectMenu
-            projectId={project.id}
-            title={project.title}
-            runActive={runActive}
-            onRenamed={(title) =>
-              setResults((prev) =>
-                prev ? { ...prev, project: { ...prev.project, title } } : prev
-              )
-            }
-            onDeleted={() => navigate({ to: "/projects" })}
-          />
-        </div>
-        {/* The pre-generation form — mirrors the ProjectMenu pill anatomy
-            (dock-surface h-9 hairline frosted pill), one quiet hover fill. */}
-        <div
-          className={cn(
-            "transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none",
-            worldLive
-              ? "pointer-events-none absolute left-0 top-0 -translate-x-2 opacity-0"
-              : "opacity-100"
-          )}
-          aria-hidden={worldLive}
-        >
-          <Link
-            to="/projects"
-            tabIndex={worldLive ? -1 : 0}
-            className="dock-surface flex h-9 items-center gap-1.5 rounded-md pl-2 pr-3 text-sm ring-1 ring-foreground/10 transition-colors hover:bg-accent"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            {t("projectMenu.backShort")}
-          </Link>
-        </div>
-      </div>
-      {/* Top-right stays CANVAS chrome (2026-08-19 走查拍板): the zoom pill
-          rides FlowView's `controls` prop inside the canvas; the home-
-          inherited cluster (theme / language / notifications) left the
-          fullscreen world — app chrome lives in the studio shell. */}
+      {/* The full-width glass header (2026-10-15 user ruling — Pexo parity,
+          supersedes the floating-corner top chrome): left = the two-form
+          machine (back button ↔ ProjectMenu crossfade, driven by worldLive),
+          right = the credits read surface. Fixed z-[60] above the ChatDock
+          overlay; the canvas's top-right chrome (zoom pill / inspector
+          dossier) clears it in FlowView's default seat. */}
+      <ProjectHeader
+        projectId={project.id}
+        title={project.title}
+        worldLive={worldLive}
+        runActive={runActive}
+        onRenamed={(title) =>
+          setResults((prev) =>
+            prev ? { ...prev, project: { ...prev.project, title } } : prev
+          )
+        }
+        onDeleted={() => navigate({ to: "/projects" })}
+        creditsRefreshKey={
+          latestRun ? `${latestRun.id}:${latestRun.status}` : "idle"
+        }
+      />
 
-      {!isMobile ? (
+      {canvasCapable ? (
         /* Canvas-first (ADR-051; ADR-057 K3 直读): the desktop page's
            canvas reads the persistent graph directly (nodes = graph rows:
            assets at upload, run fills in place, draft estimate
@@ -1056,8 +708,7 @@ function ProjectDetailPage() {
             onAssetAction={handleAssetAction}
             selectedOutputId={selectedOutputId}
             onPaneClick={() => {
-              // 点画布空白 = 回中性: history 收起 + 选中清除.
-              dockRef.current?.closeHistory()
+              // 点画布空白 = 回中性: 选中清除.
               setSelectedOutputId(null)
             }}
             cameraBeat={cameraBeat}
@@ -1067,35 +718,7 @@ function ProjectDetailPage() {
             occludedRightPx={panelCoversCorner ? 504 : 0}
           />
         </div>
-      ) : (
-        /* Mobile keeps the list world (prohibition #13 — no canvas below
-           iPad width); the same chat dock floats over it. pt-16 clears the
-           floating chrome; pb-36 keeps the last card above the dock.
-           Mobile stays RUN-driven (ADR-111 — no canvas to reveal at
-           plan-ready, the prose echo is the plan's review face): the list
-           fades in with the first run (same 500ms/150ms-delay beat as the
-           stage's fade-out). */
-        <div
-          className={cn(
-            "min-h-0 flex-1 overflow-y-auto transition-opacity duration-500 delay-150 ease-out motion-reduce:transition-none",
-            !hasRuns && "pointer-events-none opacity-0"
-          )}
-        >
-          <div className="mx-auto w-full max-w-7xl space-y-4 px-4 pb-36 pt-16">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <ResultsTabs
-                active={shownTab}
-                onChange={setActiveTab}
-                counts={counts}
-                visible={visibleTabs}
-                running={runningTabs}
-                failed={failedTabs}
-              />
-            </div>
-            <div>{renderTabContent()}</div>
-          </div>
-        </div>
-      )}
+      ) : null}
 
       <ChatDock
         // Remount per project — the message machine's state (run id,
@@ -1103,27 +726,27 @@ function ProjectDetailPage() {
         key={projectId}
         ref={dockRef}
         projectId={projectId}
-        // The three-form machine (2026-09-06, FLORA-aligned; ADR-111:
-        // the desktop flip condition is PLAN-READY — the docked plan's
-        // draft graph morphs the world open before any run): pre-birth
-        // the dock is the centered fullscreen chat; the WORKSPACE's birth
-        // morphs it into the DESKTOP panel ("panel" — a frosted overlay on
-        // the full-bleed canvas, float / docked-right geometry toggled in
-        // its header) or the MOBILE bottom dock ("dock", unchanged — mobile
-        // has no canvas (prohibition #13) and stays run-driven). The stage
-        // fades out in place, the canvas fades in on a slight delay on the
-        // same beat. Projects already born (a transcript card, runs, or a
-        // pending draft) mount straight in "panel"/"dock" — the loading
-        // gate above settles the driver before first render, so the
-        // hydrated first frame never replays the morph.
-        form={worldLive ? (isMobile ? "dock" : "panel") : "full"}
+        // The two-form machine (ADR-111: the desktop flip condition is
+        // PLAN-READY — the docked plan's draft graph morphs the world open
+        // before any run): pre-birth the dock is the centered fullscreen
+        // chat; the WORKSPACE's birth morphs it into the DESKTOP panel
+        // ("panel" — a frosted overlay on the full-bleed canvas, float /
+        // docked-right geometry toggled in its header). MOBILE stays in
+        // "full" at every project age — no canvas below iPad width
+        // (prohibition #13), the chat stage IS the page and products
+        // deliver in the message flow (receipt + anchor cards, ADR-118).
+        // Desktop projects already born (a transcript card, runs, or a
+        // pending draft) mount straight in "panel" — the loading gate above
+        // settles the driver before first render, so the hydrated first
+        // frame never replays the morph.
+        form={canvasCapable && worldLive ? "panel" : "full"}
         // The server-named lifecycle stamp (ADR-087 §2, Phase 1): the
         // dock's confirm-phase mount + Start gate read it — never a local
         // derivation.
         lifecycle={lifecycle}
         onPanelStateChange={setPanelState}
         canvasVisible={canvasVis}
-        canvasAvailable={!isMobile}
+        canvasAvailable={canvasCapable}
         prompt={
           firstMessage?.text ??
           pendingBrief?.prompt ??
@@ -1166,7 +789,7 @@ function ProjectDetailPage() {
           // arm an ensure-in-view beat toward where they settled. worldLive
           // (not hasRuns): the first run's start beat predates the refetched
           // latest_run, but the world is already live from the plan's dock.
-          if (worldLive && !isMobile) {
+          if (worldLive && canvasCapable) {
             setCameraBeat({ token: Date.now() })
           }
           void fetchResults()
@@ -1195,7 +818,7 @@ function ProjectDetailPage() {
             // fit's own (the sole automatic fit); only LATER draft changes
             // (revision restamps on an already-live world) earn the
             // deterministic newborn-cluster focus (ADR-111 §6 / C5).
-            if (!fresh || !worldLive || isMobile) return
+            if (!fresh || !worldLive || !canvasCapable) return
             const newbornIds = fresh.nodes
               .filter((n) => !before.has(n.id))
               .map((n) => n.id)
@@ -1205,21 +828,6 @@ function ProjectDetailPage() {
           })()
         }}
       />
-
-      {/* The credits balance pill (BILLING §7 read surface, 2026-09-06) —
-          bottom-left on the desktop project page: the one surface where
-          credits are spent AND no studio shell carries the account console.
-          Graph-world only (the pre-run fullscreen chat owns the bottom row —
-          the draft world already shows the canvas, K5); the pill itself is
-          hidden below md (the mobile dock owns the small screen's bottom
-          edge). refreshKey rides the latest run's id+status — a run's
-          hold/capture settles server-side and the pill refetches on the
-          flip. */}
-      {worldLive && (
-        <CreditsPill
-          refreshKey={latestRun ? `${latestRun.id}:${latestRun.status}` : "idle"}
-        />
-      )}
 
       {publishOutput && (
         <PublishDialog
@@ -1232,13 +840,5 @@ function ProjectDetailPage() {
       )}
     </div>
     </SoundMutexProvider>
-  )
-}
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <div className="rounded-lg bg-muted p-8 text-center text-sm text-muted-foreground">
-      {text}
-    </div>
   )
 }

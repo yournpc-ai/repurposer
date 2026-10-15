@@ -157,6 +157,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 | `credit_transactions` | （平台层，暂不属于任何模块） | 积分台账（append-only）；只由 `platform/billing.py` 写（`idempotency_key` UNIQUE 去重）；读收口于 `/wallet/transactions` |
 | `conversation_usage` | （平台层，暂不属于任何模块） | 会话层 LLM 计量台账（ADR-117 D3——计量不收费，永不上账单/UI）；每回合一行，只由 `metering.fold_conversation_usage` 在回合入口缝（execute_chat_turn / answer_question / run_trigger_turn）随回合自身 commit 写；读 = 内部审计（COGS / W11 fair-use 数据基础 / context 预算校准），无路由 |
 | `configs` | （平台层，暂不属于任何模块） | 公共运营参数表（key 点号命名空间）；`CONFIG_REGISTRY` 是唯一事实源，一切读取走 `platform/configs.get_config()` 漏斗，模块禁直查表 |
+| `page_readings` | Tools（world 座位层，`app/tools/world.py`） | 项目级页面读本（ADR-124：(project_id, url) 主键 + text + fetched_at，快照语义，随项目级联）；读收口于 `world.page_reading_for_url` 一座，写只经 `world.upsert_page_reading`（chat 读工具写穿走 `world.write_page_reading` 独立短事务；capture 链在 `process_asset` 会话内写） |
 
 **outputs 共享聚合的细则**：`outputs` 行有三个写者——Pipeline（创建、渲染状态）、Operation Model（内容编辑 = payload/render_spec diff）、worker（渲染产物回写 `files.video`/`files.srt`）。规则：任何写者只碰自己的字段子集；内容字段的修改必须能产生一条 operation 记录（Operation Model 落地后强制执行）。
 

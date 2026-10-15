@@ -31,10 +31,17 @@ function card(id: string, status: "live" | "reserved" = "live"): RecipePublic {
 const ALL_REGISTRY_IDS = Object.keys(RECIPE_CARD_FAMILY)
 
 describe("recipeCardFamily — family 字段投影", () => {
-  it("注册表八卡全部归 templates 族", () => {
-    for (const id of ALL_REGISTRY_IDS) {
-      expect(recipeCardFamily(card(id))).toBe("templates")
-    }
+  it("八卡按任务族归位(隐藏卡映射保留,下架 ≠ 删除)", () => {
+    expect(RECIPE_CARD_FAMILY).toMatchObject({
+      "multilingual-subs": "talks",
+      "voice-dub": "talks",
+      "highlight-clips": "talks",
+      reframe: "talks",
+      "social-post": "posts",
+      carousel: "posts",
+      "quote-cards": "posts",
+      "image-video": "templates",
+    })
   })
 
   it("未登记的新卡归 templates(进现有配方行 — MG 批 D3 口径)", () => {
@@ -43,21 +50,38 @@ describe("recipeCardFamily — family 字段投影", () => {
 })
 
 describe("resolveFamilies — 族分组", () => {
-  it("模板族首货架 = recipes 货架,卡按注册表序入驻(live + reserved 都保留座位)", () => {
-    const cards = ALL_REGISTRY_IDS.map((id, i) =>
-      card(id, i === ALL_REGISTRY_IDS.length - 1 ? "reserved" : "live"),
+  it("任务族分组: Ads 旗舰居首(默认 tab),talks 四卡 / posts 两卡按注册表序入驻(reserved 保留座位)", () => {
+    const cards = ALL_REGISTRY_IDS.map((id) =>
+      card(id, id === "reframe" ? "reserved" : "live"),
     )
     const families = resolveRecipeFamilies(cards)
-    const templates = families.find((f) => f.id === "templates")
-    expect(templates).toBeDefined()
-    const firstShelf = templates!.subs[0]?.shelves[0]
-    expect(firstShelf?.id).toBe("featured")
-    expect(firstShelf?.items.map((it) => it.kind)).toEqual(
-      cards.map(() => "recipe"),
-    )
+    expect(families.map((f) => f.id)).toEqual(["ads", "talks", "posts"])
+    const talksShelf = families[1].subs[0]?.shelves[0]
+    expect(talksShelf?.id).toBe("talks")
     expect(
-      firstShelf?.items.map((it) => (it.kind === "recipe" ? it.card.id : "")),
-    ).toEqual(ALL_REGISTRY_IDS)
+      talksShelf?.items.map((it) => (it.kind === "recipe" ? it.card.id : "")),
+    ).toEqual(["multilingual-subs", "voice-dub", "highlight-clips", "reframe"])
+    const postsShelf = families[2].subs[0]?.shelves[0]
+    expect(
+      postsShelf?.items.map((it) => (it.kind === "recipe" ? it.card.id : "")),
+    ).toEqual(["social-post", "carousel"])
+  })
+
+  it("演示期下架清单: quote-cards / image-video 不上任何货架", () => {
+    const families = resolveRecipeFamilies(
+      ALL_REGISTRY_IDS.map((id) => card(id)),
+    )
+    const onShelf = families.flatMap((f) =>
+      f.subs.flatMap((s) =>
+        s.shelves.flatMap((sh) =>
+          sh.items.map((it) =>
+            it.kind === "recipe" ? it.card.id : it.demo.id,
+          ),
+        ),
+      ),
+    )
+    expect(onShelf).not.toContain("quote-cards")
+    expect(onShelf).not.toContain("image-video")
   })
 
   it("卡只落在自己族的 recipes 货架——别族 recipes 货架不串货", () => {
@@ -65,19 +89,20 @@ describe("resolveFamilies — 族分组", () => {
       { id: "templates", subs: [{ id: "all", shelves: [{ id: "featured", kind: "recipes" }] }] },
       { id: "explainer", subs: [{ id: "anim", shelves: [{ id: "anim", kind: "recipes" }] }] },
     ]
-    const resolved = resolveFamilies(families, [card("voice-dub")])
+    // An unregistered card falls back to templates — it must NOT cross-file
+    // into another family's recipes shelf.
+    const resolved = resolveFamilies(families, [card("some-unregistered-card")])
     expect(resolved.map((f) => f.id)).toEqual(["templates"])
   })
 })
 
 describe("resolveFamilies — 空族不渲染(连摆位都不摆)", () => {
-  it("未供货 MG 族整族不渲染;供货族上架(D3 首片 = ads/saas)", () => {
+  it("Ads 族: saas/brand 供货点亮,product 空位级联丢弃——补渲即亮零改动", () => {
     const families = resolveRecipeFamilies(ALL_REGISTRY_IDS.map((id) => card(id)))
-    expect(families.map((f) => f.id)).toEqual(["templates", "ads"])
     const ads = families.find((f) => f.id === "ads")
-    // The empty siblings (brand/product) cascade away; only the supplied
-    // sub keeps its seat.
-    expect(ads?.subs.map((s) => s.id)).toEqual(["saas"])
+    // saas (linear) and brand (zymix) carry real demos; the empty product
+    // sibling cascades away until its render lands.
+    expect(ads?.subs.map((s) => s.id)).toEqual(["saas", "brand"])
   })
 
   it("空货架 → 空子 tab → 空族 级联丢弃", () => {
@@ -118,7 +143,8 @@ describe("resolveFamilies — 空族不渲染(连摆位都不摆)", () => {
 describe("resolveFamilies — 预填载荷(卡片点击唯一归宿 = composer 预填)", () => {
   it("recipe 卡 → recipes.<id>.promptTemplate(配方 = 提示词, ADR-040)", () => {
     const families = resolveRecipeFamilies([card("highlight-clips")])
-    const item = families[0].subs[0].shelves[0].items[0]
+    const talks = families.find((f) => f.id === "talks")
+    const item = talks!.subs[0].shelves[0].items[0]
     expect(item).toMatchObject({
       kind: "recipe",
       prefillKey: "recipes.highlight-clips.promptTemplate",
@@ -165,24 +191,30 @@ describe("RECIPE_FAMILIES 注册表形态守卫", () => {
     }
   })
 
-  it("模板族首货架复用 RecipeCard(kind = recipes)", () => {
-    const templates = RECIPE_FAMILIES.find((f) => f.id === "templates")
-    expect(templates?.subs[0]?.shelves[0]?.kind).toBe("recipes")
+  it("任务族货架 = RecipeCard(kind = recipes)", () => {
+    for (const id of ["templates", "talks", "posts"]) {
+      const family = RECIPE_FAMILIES.find((f) => f.id === id)
+      for (const sub of family?.subs ?? []) {
+        for (const shelf of sub.shelves) {
+          expect(shelf.kind).toBe("recipes")
+        }
+      }
+    }
   })
 
-  it("MG 族货架 = demo 视频族(kind = demos);上架的每一片都是 demo/ 树真片(无真 demo 不成卡)", () => {
-    for (const family of RECIPE_FAMILIES.filter((f) => f.id !== "templates")) {
-      for (const sub of family.subs) {
-        for (const shelf of sub.shelves) {
-          expect(shelf.kind).toBe("demos")
-          for (const demo of shelf.demos ?? []) {
-            // A shipped seat is a REAL render, content-addressed into the
-            // public demo/ tree — never a placeholder, never a stock URL.
-            expect(demo.url).toMatch(
-              /^https:\/\/repurposer\.tos-ap-southeast-1\.volces\.com\/demo\//,
-            )
-            expect(["wide", "vertical"]).toContain(demo.orientation)
-          }
+  it("Ads(MG)族货架 = demo 视频族(kind = demos);上架的每一片都是 demo/ 树真片(无真 demo 不成卡)", () => {
+    const ads = RECIPE_FAMILIES.find((f) => f.id === "ads")
+    expect(ads).toBeDefined()
+    for (const sub of ads!.subs) {
+      for (const shelf of sub.shelves) {
+        expect(shelf.kind).toBe("demos")
+        for (const demo of shelf.demos ?? []) {
+          // A shipped seat is a REAL render, content-addressed into the
+          // public demo/ tree — never a placeholder, never a stock URL.
+          expect(demo.url).toMatch(
+            /^https:\/\/repurposer\.tos-ap-southeast-1\.volces\.com\/demo\//,
+          )
+          expect(["wide", "vertical"]).toContain(demo.orientation)
         }
       }
     }

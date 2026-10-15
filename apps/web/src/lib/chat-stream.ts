@@ -27,6 +27,7 @@ import { API_URL, UNAUTHORIZED_EVENT } from "@/lib/api"
 import { clearAuth, getToken } from "@/lib/auth"
 import i18n from "@/lib/i18n"
 import { routeStreamFrame } from "@/lib/chatStreamFrames"
+import { sseProbe } from "@/lib/sse-probe" // TEMPORARY forensics — delete with the probe
 import type {
   CandidateEventPayload,
   StoryboardPayload,
@@ -255,6 +256,7 @@ function streamTurn<T>(
       },
       body: JSON.stringify(body),
       onopen: async (res) => {
+        sseProbe("stream.open", { url, status: res.status })
         if (res.status === 401) {
           clearAuth()
           window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT))
@@ -276,6 +278,13 @@ function streamTurn<T>(
         // The dispatch is the extracted PURE router (chatStreamFrames.ts —
         // same event names, same JSON.parse-in-place failure semantics).
         const frame = routeStreamFrame(msg.event, msg.data, terminal)
+        sseProbe("stream.frame", {
+          kind: frame.kind,
+          ...(frame.kind === "delta" ? { chars: frame.text.length } : {}),
+          ...(frame.kind === "thinking"
+            ? { bare: !("phase" in frame.payload) }
+            : {}),
+        })
         switch (frame.kind) {
           case "delta":
             onDelta?.(frame.text)
@@ -315,18 +324,33 @@ function streamTurn<T>(
           case "ignored":
             break
         }
-        // heartbeat comment frames never reach onmessage.
+        // Server liveness keepalives arrive as bare-{} assistant.thinking
+        // frames — routed above into onThinking, where the handler no-ops
+        // them (liveness only; the frame cadence is the client watchdog's
+        // dead-pipe signal).
       },
       onclose: () => {
+        sseProbe("stream.close", { url })
         // Server closed the stream. The terminal frame has already settled
         // the promise by now; anything else is a broken stream.
         throw new Error("stream closed")
       },
       onerror: (err) => {
+        sseProbe("stream.error", {
+          url,
+          message: err instanceof Error ? err.message : String(err),
+        })
         // Never retry (see the file header).
         throw err
       },
-    }).catch((err) => reject(err))
+    }).catch((err) => {
+      sseProbe("stream.reject", {
+        url,
+        name: err instanceof Error ? err.name : "?",
+        message: err instanceof Error ? err.message : String(err),
+      })
+      reject(err)
+    })
   })
 }
 

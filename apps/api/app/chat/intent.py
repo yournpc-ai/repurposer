@@ -66,17 +66,24 @@ def _speech_language_line(lang: str, mirror: bool = True) -> str:
     weak against an all-English system prompt.
 
     mirror=False is the worker-born trigger turn's form: the turn's 'user
-    message' there is a system EVENT line (English), not the user's voice,
-    so mirroring is meaningless and the pinned language is absolute."""
+    message' there is a system EVENT line (English), not the user's voice —
+    so never mirror the EVENT; mirror the conversation's own user messages
+    instead (the recent history rides the context), the pinned language
+    demoted to the no-signal floor (2026-10-15 修订: the absolute interface
+    pin split the single narrator in two — an English UI chatting in
+    Chinese got Chinese chat replies but an English delivery)."""
     native = _LANG_NATIVE.get(lang, lang)
     if not mirror:
         return (
-            f"Speech language: {native} ({lang}) — the interface language, "
-            f"absolute for this turn (the event line above is a system "
-            f"signal, not the user's voice). ALL user-facing text you "
-            f"write (prose, every suggestion label) is in {native} "
+            "Speech language: mirror the language of the user's OWN messages "
+            "in this conversation (the recent history rides the context "
+            "above) — the event line below is a system signal, never the "
+            "user's voice, so never mirror its English. ALL user-facing "
+            "text you write (prose, every suggestion label) rides the "
+            "conversation's language. When no user message carries a clear "
+            f"language signal, use the interface language: {native} "
             f"({lang}). (Content-language task params follow their own "
-            f"rules.)"
+            "rules.)"
         )
     return (
         f"Speech language: reply in the language of the user's CURRENT "
@@ -262,12 +269,17 @@ def _assemble_plan_turn(
             # The surface FACT (2026-09-25; 用户话术改口 2026-09-27 — v4.2
             # 封板⑪: the user's word is workspace/工作空间, the internal
             # enum stays "canvas"): a plain statement of where the plan
-            # sits when the client reports the workspace — the system
-            # template's law decides how the review invitation uses it.
+            # sits when the client reports the workspace. 2026-10-15 清扫
+            # (画蛇添足裁决): this line is the workspace noun's ONLY seat —
+            # the system templates carry no conditional naming law, so a
+            # chat-surface turn's prompt contains zero workspace tokens and
+            # the model cannot point at a home it never saw.
             "surface_line": (
                 "The user's surface: this conversation sits beside the "
-                "plan's workspace — the presented plan is laid out there "
-                "as cards the user can open and inspect."
+                "plan's workspace — the presented plan is ALSO laid out "
+                "there as an inspectable graph. You may name that home "
+                "('工作空间' in Chinese, 'the workspace' in English — the "
+                "user's language), never a position word."
                 if surface == "canvas"
                 else None
             ),

@@ -27,8 +27,10 @@ Guardrails (三条军规):
   role:tool result — the standard continuation) and the loop iterates.
 - 零副作用往返 — the loop itself writes nothing and never commits; the
   executions write through the three only doors (edit ops / wiring ops /
-  ``create_run``), flush-only; the read tools carry no writes at all
-  (只读纪律 — their implementations hold zero write functions).
+  ``create_run``), flush-only; the read tools hold no writes in the TURN'S
+  transaction (只读纪律). Carve-out (ADR-124): a read tool's world-fact
+  snapshot write-through (the page readings seat) rides an INDEPENDENT
+  short session — the turn's transaction stays read-only.
 
 打字机律 on the tool wire (the three teeth restated for the loop form,
 T2b): prose = the content channel, streamed on iteration 0. A REJECTED

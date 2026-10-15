@@ -36,6 +36,7 @@ from app.models.schemas import (
     PresentPlanArgs,
     ProposeTasksArgs,
     ReviseOutputArgs,
+    StartRunArgs,
 )
 
 # The plan path (pre-first-run intent router) — InferredIntent's four actions:
@@ -75,9 +76,15 @@ PLAN_TOOLS = [
             "a revision is present_plan, not this). Speak the work-start "
             "line BEFORE calling this — one short sentence: the work is "
             "starting, they can keep chatting or leave, it finishes in "
-            "the background."
+            "the background. A plan carrying a launch_film task holds for "
+            "the storyboard review: the start goes through only after the "
+            "storyboard card has landed in the conversation and the user "
+            "approved it — a plain 'go' before the card lands is rejected "
+            "(answer instead: it's still being drafted); the ONLY waiver "
+            "is the user explicitly saying they don't need the storyboard "
+            "(skip_storyboard_review=true)."
         ),
-        params_model=None,
+        params_model=StartRunArgs,
     ),
     ChatTool(
         name="answer",

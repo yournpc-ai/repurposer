@@ -91,7 +91,6 @@ from app.chat.service import (
     is_pending_plan,
     latest_pending_question,
     merge_brief,
-    record_storyboard_block,
     resolve_confirmation_need,
     resolve_suggestion_note,
     sync_plan_question,
@@ -105,7 +104,6 @@ from app.models.schemas import (
     BriefSlot,
     BriefSlotSource,
     ChatRequest,
-    FilmStoryboard,
     InferredIntent,
     MaterialUnderstanding,
     PendingPlan,
@@ -115,6 +113,7 @@ from app.models.schemas import (
     QuestionPayload,
     QuestionProposal,
     StartAnswerRequest,
+    StartRunArgs,
     resolve_recommended_id,
 )
 from app.models.tables import Asset, ExplorationRow, Message, Persona, Project, User
@@ -721,7 +720,8 @@ class PlanTurn:
             assert isinstance(params, PlanAskArgs)
             return await self._ask_user(params, prose)
         if name == "start_run":
-            return await self._start_run(prose)
+            assert isinstance(params, StartRunArgs)
+            return await self._start_run(params, prose)
         if name == "answer":
             assert isinstance(params, PlanAnswerArgs)
             return await self._answer(params, prose)
@@ -934,37 +934,16 @@ class PlanTurn:
             self.outcome = (assistant_message, None, self.settled_pending, [])
             return None
 
-        # ADR-120 §2: a film-chain plan drafts its storyboard AT THE DOCK —
-        # the reviewable rides the message flow (never the confirm dock), and
-        # the dock owes a review beat until the user's verbal go
-        # (storyboard_review hold — a plan-level fact, the unquotable
-        # clause's species, never a third user pref). A failed draft docks
-        # WITHOUT the hold (the run re-orchestrates at birth — the honest
-        # degrade). Revision turns ride the same seat: every re-dock drafts
-        # a fresh version.
-        storyboard_draft: FilmStoryboard | None = None
-        storyboard_hosts: list[str] = []
-        # The film task's slot params ride the block (配音/配乐/画幅 chips —
-        # the review table carries what it reviewed).
-        film_task = next((t for t in params.tasks if t.tool == "launch_film"), None)
-        film_params = (film_task.params or {}) if film_task is not None else {}
-        if film_task is not None:
-            from app.pipeline.lifecycle import ConfirmationNeed
-            from app.tools.film.storyboard import draft_film_storyboard
+        # ADR-120 §2 (hold/draft 解耦 2026-10-15; 统一迟延 2026-10-16): a
+        # film-chain dock ALWAYS owes the storyboard review hold — a
+        # plan-level fact, never keyed on the draft's success. The draft
+        # NEVER runs inside the turn (the LLM draft is minutes; a turn
+        # never blocks on it): the deferred seat (chat/storyboard_dock.py)
+        # drafts after the capture set drains and lands the block in the
+        # flow; the dock echo's tail says so honestly.
+        from app.chat.storyboard_dock import stamp_film_hold
 
-            drafted = await draft_film_storyboard(
-                db,
-                project,
-                instruction=self.text,
-                focus=film_params.get("focus"),
-            )
-            if drafted is not None:
-                storyboard_draft, draft_pages = drafted
-                storyboard_hosts = [p.host for p in draft_pages]
-                if not need.requires_confirmation:
-                    need = ConfirmationNeed(
-                        True, "storyboard_review", need.quote_high, need.unquotable
-                    )
+        need = stamp_film_hold(params.tasks, need)
 
         # 估价尾行 (ADR-111 §2 — dock 卡面退役后总估价的新家): the dock echo
         # carries the code-composed estimate whisper (BILLING §2.1 披露义务 —
@@ -1043,25 +1022,10 @@ class PlanTurn:
         )
         question = await latest_pending_question(db, self.conversation_id)
         assert question is not None  # sync_plan_question just docked it
-        # ADR-120 §1: the storyboard block lands in the MESSAGE FLOW right
-        # under its dock — live it rides the on_storyboard SSE hook; the row
-        # is the replay truth. The review hold (need stamp above) keeps the
-        # auto gate closed until the user's verbal go.
-        if storyboard_draft is not None:
-            block_message = await record_storyboard_block(
-                db,
-                self.conversation_id,
-                storyboard=storyboard_draft,
-                pages=storyboard_hosts,
-                instruction=self.text,
-                voiceover=film_params.get("voiceover") is not False,
-                music_mood=film_params.get("music_mood"),
-                aspect=film_params.get("aspect") or "16:9",
-            )
-            if self.on_storyboard is not None and isinstance(block_message.intent, dict):
-                await self.on_storyboard(
-                    {**block_message.intent, "message_id": str(block_message.id)}
-                )
+        # ADR-120 §1 (统一迟延): the storyboard block lands LATE via the
+        # deferred seat (fired at this turn's commit and at capture
+        # terminal states) — the review hold stamped above keeps every
+        # start gated until the block lands and the user approves.
         self.outcome = (question, None, self.settled_pending, bailed_run_ids)
         # ADR-117 §2 auto 开工道: when the dock owes no confirm beat, the
         # SAME start machine fires on presentation (None = the dock waits
@@ -1739,13 +1703,19 @@ class PlanTurn:
         self.outcome = (assistant_message, None, self.settled_pending, bailed_run_ids)
         return None
 
-    async def _start_run(self, prose: str) -> str | None:
+    async def _start_run(self, params: StartRunArgs, prose: str) -> str | None:
         """start → the docked plan is answered kind=start (G-1 path: the
         run comes from the only birthplace, answer_question — which commits;
         zero bypass). The turn's speech (the work-start line, ADR-093 §2)
         lands as a plain assistant row first — created before the run
         births, so its stamp orders before the task list by construction,
-        and answer_question's commit lands it atomically with the run."""
+        and answer_question's commit lands it atomically with the run.
+
+        法1后半硬闸 (2026-10-16): a film chain's start is gated on the
+        storyboard block having landed for THIS dock — a plain 'go' before
+        the card lands is a rejection (the question stays open, the model
+        speaks the honest still-drafting beat); the ONLY waiver is the
+        user's explicit skip (params.skip_storyboard_review, 法3)."""
         db, stored = self.db, self.stored
         pending_question = await latest_pending_question(db, self.conversation_id)
         if (
@@ -1753,6 +1723,32 @@ class PlanTurn:
             and stored is not None
             and stored.intent is not None
         ):
+            assert pending_question is not None  # is_pending_plan guarantees the row
+            tasks_as_dicts = [t.model_dump(mode="json") for t in stored.intent.tasks]
+            from app.chat.storyboard_dock import film_start_block
+
+            if (
+                not params.skip_storyboard_review
+                and any(t.get("tool") == "launch_film" for t in tasks_as_dicts)
+                and await film_start_block(
+                    db,
+                    conversation_id=self.conversation_id,
+                    tasks=tasks_as_dicts,
+                    dock_created_at=pending_question.created_at,
+                )
+                is None
+            ):
+                return (
+                    "the plan's storyboard review is still owed: the "
+                    "storyboard card hasn't landed in the conversation yet "
+                    "(it is being drafted and arrives shortly). Do NOT "
+                    "start — answer the user instead: one short sentence "
+                    "that the storyboard is still being drafted and the "
+                    "work starts the moment they've seen it. The question "
+                    "stays open. The only exception: the user explicitly "
+                    "said they don't need the storyboard — then call "
+                    "start_run again with skip_storyboard_review=true."
+                )
             # 起始句 = 普通 assistant 行 (ADR-093 §2): the model's own words
             # persist or nothing does — an empty prose stays an honest
             # absence (a template fill-in is prohibited speech), keeping
@@ -1773,6 +1769,7 @@ class PlanTurn:
                 StartAnswerRequest(
                     kind="start",
                     intent=self.request.prior_intent,
+                    skip_storyboard_review=params.skip_storyboard_review,
                 ),
                 # ④ snapshot channel (N-57): the confirmation arrived as a
                 # chat reply (the start_run tool), not the dock pill.

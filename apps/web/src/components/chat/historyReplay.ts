@@ -23,8 +23,7 @@ import type { CandidateMemberPayload, StoryboardPayload } from "@/lib/chatStream
  * "storyboard"): read-tolerant, an off-shape dump reads as no block (the
  * row then falls through to the plain-prose walk with empty content and
  * skips via the no-empty-bubble law). */
-export function storyboardBlock(intent: unknown): StoryboardPayload | undefined {
-  const data = (intent ?? {}) as Record<string, unknown>
+export function storyboardBlock(intent: unknown): StoryboardPayload | undefined {  const data = (intent ?? {}) as Record<string, unknown>
   if (data.type !== "storyboard") return undefined
   const sb = (data.storyboard ?? {}) as Record<string, unknown>
   const scenes = Array.isArray(sb.scenes) ? sb.scenes : null
@@ -41,7 +40,19 @@ export function storyboardBlock(intent: unknown): StoryboardPayload | undefined 
     voiceover: data.voiceover !== false,
     music_mood: typeof data.music_mood === "string" ? data.music_mood : null,
     aspect: typeof data.aspect === "string" ? data.aspect : "16:9",
+    language: typeof data.language === "string" ? data.language : null,
   }
+}
+
+/** 分镜起草穷举行 (法2, 统一迟延): the deferred seat's terminal draft
+ * failure — intent.type === "storyboard_draft_failed". The row replays as
+ * PLAIN PROSE (the honest speech IS the content); the marker folds the
+ * drafting placeholder (the review hold stands, but the wait is over). */
+export function storyboardDraftFailed(intent: unknown): boolean {
+  return (
+    ((intent ?? {}) as Record<string, unknown>).type ===
+    "storyboard_draft_failed"
+  )
 }
 
 /** One persisted activity row's render frame (ADR-108 数组行): the
@@ -54,6 +65,11 @@ export type ActivityRowFrame = Omit<ActivityFramePayload, "seq"> & {
   seq?: number
   name?: string
   total?: number
+  /** The material beat's asset type (回放层解析字段, never on the SSE wire
+   * whitelist): the settled surface's category fork needs it for web_page
+   * beats — their row key falls to the base form (the verb fork predates
+   * the web_page type). */
+  assetType?: string
 }
 
 /** One message row in the dock's flow (live-pushed or replayed). */
@@ -112,6 +128,9 @@ export interface OverlayMessage {
    * pushed live. ``superseded`` folds every version but the latest into a
    * chip (PlanVersionChip 同律 — old versions stay visible, folded). */
   storyboard?: { payload: StoryboardPayload; superseded: boolean }
+  /** 分镜起草穷举行 (法2): the row is the deferred seat's terminal draft
+   * failure (plain prose) — the marker folds the drafting placeholder. */
+  storyboardDraftFailed?: boolean
 }
 
 /** The candidate card's data (C8-c): ordinal = the member's array index
@@ -257,6 +276,7 @@ export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
       total,
       name,
       duration_ms,
+      assetType,
     }
   }
   if (data.beat === "understanding") {
@@ -641,6 +661,19 @@ export function mapHistoryRows(
           content: "",
           at: m.created_at,
           storyboard: { payload: sb, superseded: false },
+        })
+        continue
+      }
+      // 分镜起草穷举行回放 (法2): plain prose + the marker that folds the
+      // drafting placeholder on refresh (the poll's live branch同律).
+      if (storyboardDraftFailed(m.intent)) {
+        if (!(m.content ?? "").trim()) continue  // no-empty-bubble law
+        history.push({
+          id: m.id,
+          role: "assistant",
+          content: m.content ?? "",
+          at: m.created_at,
+          storyboardDraftFailed: true,
         })
         continue
       }

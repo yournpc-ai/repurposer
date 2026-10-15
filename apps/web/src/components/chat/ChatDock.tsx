@@ -3,16 +3,14 @@
 /** ChatDock — the post-composer conversation surface (改名 2026-09-02, the
  * "Overlay" legacy name retired with the fullscreen shell it described).
  *
- * The project's single chat shell (ADR-051), a TWO-FORM machine (2026-09-02
- * 形态机): before the first run it is the centered fullscreen chat (the
- * composer draft opens the conversation — sent as the first /chat message on
- * mount — and the task plan confirms here); the first run's arrival morphs
- * it into the bottom dock over the canvas, whose steps light up in the flow.
- * The dock form has three visibility states: collapsed (the resident input
- * group), expanded (history grows upward in the same frosted container),
- * hidden (a user gesture folds it to a bottom-right LogoMark dot — agent
- * speech / a pending question / a canvas focus recalls it). The bottom input
- * is always live and every turn goes through the same /chat endpoint
+ * The project's single chat shell (ADR-051), a TWO-FORM machine: "full" =
+ * the centered fullscreen chat — the message stage fills the page above the
+ * input group (mobile stays in this form at every project age: 移动端恒
+ * 纯 chat, no canvas below iPad width); "panel" = the DESKTOP chat panel, a
+ * frosted overlay on the full-bleed canvas the first run's arrival morphs
+ * the stage into. The panel can be tucked away to a bottom-right LogoMark
+ * chip (agent speech / a pending question recalls it). The bottom input is
+ * always live and every turn goes through the same /chat endpoint
  * (intent-surface-unification W2): the server routes plan-path turns
  * (task-book build / refine / confirm) and chat-loop turns itself.
  */
@@ -54,6 +52,7 @@ import { apiFetch } from "@/lib/api"
 import { copyMessageText } from "@/lib/messageCopy"
 import { inferAssetType } from "@/lib/asset-type"
 import { streamAnswer, streamChat, StreamTurnError, questionSettledCode } from "@/lib/chat-stream"
+import { sseProbe } from "@/lib/sse-probe" // TEMPORARY forensics — delete with the probe
 import type { ActivityFramePayload } from "@/lib/chat-stream"
 import type {
   ActivityRowFramePayload,
@@ -124,6 +123,8 @@ import {
   isNonRenderIntent,
   materialBeat,
   materialBeatKey,
+  storyboardBlock,
+  storyboardDraftFailed,
   triggerSuggestions,
   questionEcho,
   bareQuestion,
@@ -257,6 +258,20 @@ const TOOL_META: Record<
  * and old clients' payloads upgrade on read, never on write). */
 /** The panel geometry's persistence key (float | docked) — 2026-09-06. */
 const PANEL_MODE_KEY = "repurposer-panel-mode"
+
+/** Dead-stream detection (2026-10-15, 4427f90f 事故取证): the server
+ * guarantees ONE frame at least every 15s (the bare-{} thinking keepalive),
+ * so a turn with 45s of total frame silence is a dead pipe by construction
+ * — never a slow model. The watchdog aborts the zombie stream; the
+ * reconcile then pulls the turn's landed rows from the archive (the answer
+ * commits server-side regardless — the archive replay proved it). The same
+ * trigger fires on visibility-resume: a page frozen mid-turn (background
+ * tab throttles/suspends the typewriter's timers) wakes to a stream that
+ * will never finish processing, and the archive is again the truth. */
+const STREAM_SILENCE_DEAD_MS = 45_000
+const STREAM_WATCHDOG_TICK_MS = 10_000
+const RECONCILE_POLL_MS = 5_000
+const RECONCILE_CAP_MS = 5 * 60_000
 
 /** A file staged in the input group, mid-lifecycle: picked → uploading
  * (direct-to-storage, same 3-step flow as the composer — XHR-backed so the
@@ -430,21 +445,21 @@ function dockWorthyQuestion(q: QuestionMessage | null): QuestionMessage | null {
 interface ChatDockProps {
   projectId: string
   prompt: string
-  /** The dock's form (2026-09-02 两态形态机; 2026-09-06 三形态机): "full" =
-   * the pre-generation centered fullscreen chat (the message stage fills
-   * the page above the input group); "panel" = the DESKTOP chat panel — a
-   * FROSTED OVERLAY on the full-bleed canvas in two parking geometries
-   * (float = right-anchored floating window, vertically inset ~18%/10%,
-   * the default; docked = flush right edge full-height — the header's
-   * dock toggle, FLORA "Dock panel" parity; the canvas lives under the
-   * frost in BOTH, never an in-flow column); "dock" = the MOBILE bottom dock. The page drives it
-   * off `latestRun` — the first run's arrival morphs full → panel/dock:
-   * the stage fades out in place (300ms) and the canvas fades in on a
-   * slight delay on the same beat. One message machine, pure layout forms
-   * — NOT the retired overlay route / second shell (ADR-051). Projects
-   * with runs mount straight in "panel"/"dock" (the hydrated first frame
-   * never replays). */
-  form?: "full" | "dock" | "panel"
+  /** The dock's form (两形态机): "full" = the centered fullscreen chat (the
+   * message stage fills the page above the input group) — every project's
+   * pre-world form, and the MOBILE form at every age (移动端恒纯 chat, no
+   * canvas below iPad width); "panel" = the DESKTOP chat panel — a FROSTED
+   * OVERLAY on the full-bleed canvas in two parking geometries (float =
+   * right-anchored floating window, vertically inset ~18%/10%, the default;
+   * docked = flush right edge full-height — the header's dock toggle, FLORA
+   * "Dock panel" parity; the canvas lives under the frost in BOTH, never an
+   * in-flow column). The page drives it off `latestRun` — the first run's
+   * arrival morphs full → panel on desktop: the stage fades out in place
+   * (300ms) and the canvas fades in on a slight delay on the same beat. One
+   * message machine, pure layout forms — NOT the retired overlay route /
+   * second shell (ADR-051). Desktop projects with runs mount straight in
+   * "panel" (the hydrated first frame never replays). */
+  form?: "full" | "panel"
   /** The composer's draft, handed over via router state: sent as the first
    * /chat message on mount (mentions + persona choice ride along). Null on
    * restored sessions — the conversation is already on the server. */
@@ -495,10 +510,8 @@ interface ChatDockProps {
   canvasAvailable: boolean
 }
 
-/** Dock controls the page can trigger (D4: 点画布空白回中性 — a pane click
- * closes the history region). */
+/** Dock controls the page can trigger. */
 export interface ChatDockHandle {
-  closeHistory: () => void
   /** Insert an @-mention chip into the input (results canvas's 在对话中指认
    * — the ONE pointing mechanism, ADR-058; also the @workflow_step 本面限定
    * 候选源, ADR-041 D8). No-op when the editor isn't mounted. */
@@ -836,7 +849,7 @@ function PlanVersionChip({
 export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatDock({
   projectId,
   prompt,
-  form = "dock",
+  form = "full",
   firstMessage,
   initialIntent,
   initialRunId,
@@ -850,28 +863,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
 }, ref) {
   const { t } = useTranslation()
 
-  // The dock is the SOLE shell (ADR-051, 2026-08-31) with THREE layout forms
-  // (2026-09-06 三形态机, FLORA-aligned): before the project's first run it is
-  // the centered fullscreen chat ("full" — the message stage owns the page
-  // above the input group); the first run's arrival morphs it into the
-  // DESKTOP panel ("panel" — a FROSTED OVERLAY on the full-bleed canvas in
-  // two parking geometries: float / docked-right, FLORA "Dock panel" parity)
-  // or the MOBILE bottom dock ("dock"). Same message machine, same input
+  // The dock is the SOLE shell (ADR-051, 2026-08-31) with TWO layout forms
+  // (两形态机): "full" = the centered fullscreen chat — the message stage
+  // owns the page above the input group (every project's pre-world form;
+  // mobile stays in it at every age — 移动端恒纯 chat); "panel" = the
+  // DESKTOP panel, a FROSTED OVERLAY on the full-bleed canvas in two parking
+  // geometries (float / docked-right, FLORA "Dock panel" parity) the first
+  // run's arrival morphs the stage into. Same message machine, same input
   // group (immutable slot, zero displacement) — the tree below is
   // form-stable (one root, one always-rendered card wrapper, fixed child
   // indexes), so the MentionEditor never remounts across a runtime form flip
   // and its DOM-owned draft + mention chips survive untouched.
   const full = form === "full"
-  const dock = form === "dock"
   const panel = form === "panel"
-  /** History region (dock D4 修订 — 一体容器两态): in the DOCK form the flow
-   * lives INSIDE the input group's container, growing upward; closed = the
-   * input group alone (the canvas owns the screen). Agent speech always
-   * raises it (#6). Dock form ONLY (2026-09-06): in the full form the stage
-   * is always on, and in the panel form the panel body IS the flow — this
-   * flag stays inert in both, and it resets on the morph so the dock lands
-   * collapsed. */
-  const [historyOpen, setHistoryOpen] = useState(false)
   // The Models button rides the dock's control strip too (2026-09-24 user
   // ruling — OriginCut parity: the model pill isn't composer-only). Same
   // read-only honest-Auto panel as the composer's, same shared leaves.
@@ -918,12 +922,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   useEffect(() => {
     onPanelStateChange?.({ hidden: dockHidden, docked: panelDocked })
   }, [dockHidden, panelDocked, onPanelStateChange])
-  /** History-raising funnel: recalls the hidden dock/panel, and raises the
-   * history region — dock form only (in the panel the flow is always on). */
-  const raiseHistory = useCallback(() => {
+  /** Recall funnel: new information (agent speech / a docking question / a
+   * canvas mention pin) un-tucks the hidden panel so the user always SEES
+   * it — prohibition #6 survives hiding. */
+  const recallDock = useCallback(() => {
     setDockHidden(false)
-    if (dock) setHistoryOpen(true)
-  }, [dock])
+  }, [])
   // The stage's scroller stays mounted through the fade-out (300ms
   // opacity — paced with the canvas's delayed fade-in so the morph reads
   // as ONE beat, 2026-09-06) and unmounts right after — cutting it at the
@@ -937,7 +941,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       setDockHidden(false)
       return
     }
-    setHistoryOpen(false)
     const id = setTimeout(() => setStageMounted(false), 300)
     return () => clearTimeout(id)
   }, [full, form])
@@ -955,7 +958,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form])
   useImperativeHandle(ref, () => ({
-    closeHistory: () => setHistoryOpen(false),
     // A pin arriving from the canvas (在对话中指认 / 选区引用) is new
     // information the user must SEE — recall the hidden dock, then chip in.
     insertMention: (mention: ChatMention) => {
@@ -1237,6 +1239,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
 
   const firstMessageSentRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
+  /** Dead-stream machinery (see the module constants): the last frame's
+   * receipt stamp (the watchdog's liveness read), the dead flag (set before
+   * any machinery-triggered abort so the catch/continuation bail to the
+   * reconcile), the reconcile's generation + running guards, and the server
+   * row ids the reconcile already rendered (double-render guard vs a
+   * hung continuation resuming late). */
+  const lastFrameAtRef = useRef(0)
+  const turnStartMsRef = useRef(0)
+  const deadStreamRef = useRef(false)
+  const reconcileGenRef = useRef(0)
+  const reconcileRunningRef = useRef<number | null>(null)
+  const reconciledIdsRef = useRef<Set<string>>(new Set())
   /** A click on the ask PREVIEW pill, stashed until the envelope docks the
    * persisted row (2026-09-09 用户拍板「选项该和这句话一起来」): the
    * preview's id doesn't exist server-side yet, so the choice registers
@@ -1471,6 +1485,74 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           )
           continue
         }
+        // 分镜迟延块 (ADR-120 hold/draft 解耦): a dock-time-deferred
+        // storyboard lands as a worker-born row while the dock holds for the
+        // user's review — no SSE turn carries it, so this poll is its live
+        // arrival channel. Same dedup-by-row-id law as the beats; the
+        // version fold rides the same map pass as the live frame's.
+        const sbBlock = storyboardBlock(row.intent)
+        if (sbBlock !== undefined) {
+          if (messagesRef.current.some((m) => m.id === row.id)) continue
+          setMessages((prev) => [
+            ...prev.map((m) =>
+              m.storyboard
+                ? { ...m, storyboard: { ...m.storyboard, superseded: true } }
+                : m,
+            ),
+            {
+              id: row.id,
+              role: "assistant" as const,
+              content: "",
+              at: row.created_at,
+              storyboard: { payload: sbBlock, superseded: false },
+            },
+          ])
+          continue
+        }
+        // 分镜起草穷举行 (法2): the deferred seat's terminal failure is
+        // worker-born prose — the typewriter's cadence (server-born prose
+        // never blobs), no pills, no dock. The marker folds the drafting
+        // placeholder.
+        if (storyboardDraftFailed(row.intent)) {
+          if (
+            triggerInFlight.current.has(row.id) ||
+            messagesRef.current.some((m) => m.id === row.id)
+          ) {
+            continue
+          }
+          triggerInFlight.current.add(row.id)
+          const text = (row.content ?? "").trim()
+          try {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: row.id,
+                role: "assistant" as const,
+                content: "",
+                streaming: true,
+                at: row.created_at,
+                storyboardDraftFailed: true,
+              },
+            ])
+            const tw = createTypewriter((fragment) => {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === row.id ? { ...m, content: m.content + fragment } : m
+                )
+              )
+            }, setProseActive)
+            tw.push(text)
+            await tw.drain()
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === row.id ? { ...m, streaming: false } : m
+              )
+            )
+          } finally {
+            triggerInFlight.current.delete(row.id)
+          }
+          continue
+        }
         const suggestions = triggerSuggestions(row.intent)
         if (suggestions === undefined) continue
         // Dedup by the SERVER row id — the archive replay and a previous
@@ -1558,6 +1640,169 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     void fetchAssets()
   }, [fetchAssets])
 
+  /** Dead-stream reconcile (see the module constants): the stream was
+   * declared dead (watchdog silence / visibility-resume with a stale pipe)
+   * and aborted — but the turn commits server-side regardless, so the
+   * archive is the truth. Poll the conversation for the turn's landed
+   * assistant rows and pace them in through the typewriter (the trigger
+   * channel's same law — server-born prose never blobs), dock a pending ask
+   * if the turn left one, and release the composer. Checkpoint / activity
+   * rows are skipped: the live flow already showed them (or they replay on
+   * refresh) — the ANSWER is the substance. Generation-guarded: a new turn
+   * kills a running reconcile. On the cap the honest grey row says the
+   * connection died — the turn may still land; a refresh catches it. */
+  const reconcileTurn = useCallback(
+    async (turnStartMs: number, gen: number) => {
+      if (reconcileRunningRef.current !== null) return
+      reconcileRunningRef.current = gen
+      sseProbe("reconcile.start", { turnStartMs })
+      const deadline = Date.now() + RECONCILE_CAP_MS
+      try {
+        while (gen === reconcileGenRef.current && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, RECONCILE_POLL_MS))
+          if (gen !== reconcileGenRef.current) return
+          let rows: (QuestionMessage & {
+            role: string
+            intent?: unknown
+            created_at?: string
+          })[]
+          try {
+            const convRes = await apiFetch(
+              `/api/v1/chat/conversation?project_id=${projectId}`,
+              { toast: false },
+            )
+            if (!convRes.ok) continue
+            const conv = (await convRes.json()) as { id?: string }
+            if (!conv.id) continue
+            const res = await apiFetch(
+              `/api/v1/chat/conversations/${conv.id}/messages`,
+              { toast: false },
+            )
+            if (!res.ok) continue
+            rows = ((await res.json()) as { items?: typeof rows }).items ?? []
+          } catch {
+            continue
+          }
+          const fresh = rows.filter(
+            (r) =>
+              r.role === "assistant" &&
+              Date.parse(r.created_at ?? "") > turnStartMs &&
+              !isNonRenderIntent(r.intent) &&
+              (r.intent as { type?: string } | undefined)?.type !==
+                "checkpoint" &&
+              materialBeat(r.intent) === undefined &&
+              activityRowFrame(r.intent) === undefined &&
+              !reconciledIdsRef.current.has(r.id) &&
+              !messagesRef.current.some((m) => m.id === r.id),
+          )
+          if (fresh.length === 0) continue
+          sseProbe("reconcile.rows", { fresh: fresh.length })
+          for (const row of fresh) {
+            if (gen !== reconcileGenRef.current) return
+            reconciledIdsRef.current.add(row.id)
+            setMessages((prev) =>
+              prev.some((m) => m.id === row.id)
+                ? prev
+                : [
+                    ...prev,
+                    {
+                      id: row.id,
+                      role: "assistant" as const,
+                      content: "",
+                      streaming: true,
+                      at: row.created_at,
+                      runId: row.workflow_run_id,
+                    },
+                  ],
+            )
+            const tw = createTypewriter((fragment) => {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === row.id ? { ...m, content: m.content + fragment } : m,
+                ),
+              )
+            }, setProseActive)
+            tw.push((row.content ?? "").trim())
+            await tw.drain()
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === row.id ? { ...m, streaming: false } : m,
+              ),
+            )
+          }
+          // The turn's terminal artifacts are in — dock a pending ask if the
+          // turn left one, refresh attachments, settle the line, release the
+          // composer.
+          sseProbe("reconcile.done")
+          const q = await fetchPendingQuestion()
+          setPendingQuestion((prev) => prev ?? dockWorthyQuestion(q))
+          void fetchAssets()
+          settleActivities("completed")
+          setThinkingPhase(null)
+          abortRef.current = null
+          setChatBusy(false)
+          return
+        }
+        if (gen !== reconcileGenRef.current) return
+        sseProbe("reconcile.cap")
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: t("chat.connectionLost"),
+            meta: "error",
+            at: new Date().toISOString(),
+          },
+        ])
+        abortRef.current = null
+        setChatBusy(false)
+      } finally {
+        if (reconcileRunningRef.current === gen) {
+          reconcileRunningRef.current = null
+        }
+      }
+    },
+    [projectId, fetchPendingQuestion, fetchAssets, settleActivities, t],
+  )
+  const reconcileTurnRef = useRef(reconcileTurn)
+  useEffect(() => {
+    reconcileTurnRef.current = reconcileTurn
+  }, [reconcileTurn])
+
+  // sse-probe: state flips (TEMPORARY forensics — delete with the probe)
+  useEffect(() => {
+    sseProbe("state.chatBusy", { value: chatBusy })
+  }, [chatBusy])
+  useEffect(() => {
+    sseProbe("state.form", { value: form })
+  }, [form])
+
+  // Visibility trigger (same machinery): a page frozen mid-turn (background
+  // tab / screen lock suspends the typewriter's timers — the SSE pipe itself
+  // stays alive) wakes to a stream whose continuation may never run; a pipe
+  // that died while hidden wakes to a fetch that will never error. Either
+  // way the signature is identical: busy + no frame for longer than the
+  // server's guaranteed cadence. Abandon the zombie and reconcile.
+  useEffect(() => {
+    const onVisible = () => {
+      sseProbe("visibility", {
+        state: document.visibilityState,
+        busy: abortRef.current !== null,
+        silenceMs: Date.now() - lastFrameAtRef.current,
+      })
+      if (document.visibilityState !== "visible") return
+      if (abortRef.current === null) return
+      if (Date.now() - lastFrameAtRef.current <= STREAM_SILENCE_DEAD_MS) return
+      sseProbe("visibility.dead")
+      deadStreamRef.current = true
+      abortRef.current?.abort()
+      void reconcileTurnRef.current(turnStartMsRef.current, reconcileGenRef.current)
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
+  }, [])
+
   // Workspace Birth relay (Workspace 合同 v4.2 C3): the transcript card is
   // stamped server-side the moment an asset attaches (queued at upload) and
   // flips done + text-filled when processing lands — but an attach-in-dock
@@ -1638,6 +1883,42 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     return () => clearInterval(id)
   }, [terminal, runId, reviewerLanded, pollTriggerMessages])
 
+  // Watch window (分镜迟延块, ADR-120 统一迟延): the film dock's
+  // storyboard_review hold is on and THIS dock's block hasn't landed — the
+  // deferred seat drafts post-commit / post-capture and the block (or the
+  // terminal failure row) arrives through the poll. Dock-scoped reads: a
+  // block predating the dock belongs to an older superseded dock, and the
+  // failure row folds the placeholder (the wait is over, the hold stands).
+  const storyboardDockAt = pendingQuestion?.created_at ?? null
+  const storyboardBlockLanded = messages.some(
+    (m) => m.storyboard && (storyboardDockAt == null || (m.at ?? "") >= storyboardDockAt),
+  )
+  const storyboardDraftFailedLanded = messages.some(
+    (m) =>
+      m.storyboardDraftFailed &&
+      (storyboardDockAt == null || (m.at ?? "") >= storyboardDockAt),
+  )
+  const storyboardBlockDue =
+    pendingQuestion?.question?.confirm_reason === "storyboard_review" &&
+    !pendingQuestion.answer &&
+    !storyboardBlockLanded
+  // The now-line's drafting placeholder (StatusLine 同座): visible while
+  // the draft is legitimately in flight — gone once the block OR the
+  // honest failure row lands.
+  const storyboardDraftDue = storyboardBlockDue && !storyboardDraftFailedLanded
+  useEffect(() => {
+    if (!storyboardBlockDue) return
+    const startedAt = Date.now()
+    const id = setInterval(() => {
+      if (Date.now() - startedAt > 300_000) {
+        clearInterval(id)
+        return
+      }
+      void pollTriggerMessages()
+    }, 3000)
+    return () => clearInterval(id)
+  }, [storyboardBlockDue, pollTriggerMessages])
+
   // The output mention's candidate feed (reference family, MENTIONS §2): a
   // pinned output id resolves the revision target deterministically
   // server-side. Refresh on mount and when a run lands terminal (new
@@ -1683,8 +1964,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // Terminal (ADR-051 — the dock is the sole shell): failure stays put —
   // the failed step rows carry the humanized error in-flow (provider 错误
   // 人话化梯), no toast on top; success hands off to the page (refetch →
-  // the landed products show on the canvas) and the run's completion raises
-  // the history region in place (the lastAgentKey mechanism below).
+  // the landed products show on the canvas) and the run's completion recalls
+  // a tucked-away panel (the lastAgentKey mechanism below).
   useEffect(() => {
     if (!terminal) return
     // 收紧判定 (2026-09-13, ADR-074②): a PARTIAL failure is FAILED now but
@@ -1774,9 +2055,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           at: new Date().toISOString(),
         },
       ])
-      raiseHistory()
+      recallDock()
     },
-    [t, raiseHistory],
+    [t, recallDock],
   )
 
   // 确认 = 纯口头 (ADR-111 §2 — dock 确认卡面整族退役): the Start button,
@@ -1887,7 +2168,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   }
 
   // Drag-drop upload (2026-09-24, user ruling — composer parity): the input
-  // container is the drop target in every form (full / panel / dock);
+  // container is the drop target in every form (full / panel);
   // dropping is a second entry into handleFilesPicked — the staged-chips
   // lifecycle rides unchanged. The gesture machinery (depth counting,
   // files-only arming, the browser-default guard) is the shared
@@ -2192,6 +2473,28 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     const ctrl = new AbortController()
     abortRef.current = ctrl
     setChatBusy(true)
+    // Dead-stream machinery (module constants): a new turn owns the
+    // reconcile generation (kills any running one), stamps the liveness
+    // clock, and arms the watchdog — the server guarantees a frame ≤15s, so
+    // 45s of silence declares the pipe dead and abandons the zombie stream.
+    const reconcileGen = ++reconcileGenRef.current
+    deadStreamRef.current = false
+    const turnStartMs = Date.now()
+    turnStartMsRef.current = turnStartMs
+    lastFrameAtRef.current = turnStartMs
+    const poke = () => {
+      lastFrameAtRef.current = Date.now()
+    }
+    sseProbe("turn.start", { form })
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastFrameAtRef.current > STREAM_SILENCE_DEAD_MS) {
+        sseProbe("watchdog.dead", {
+          silenceMs: Date.now() - lastFrameAtRef.current,
+        })
+        deadStreamRef.current = true
+        ctrl.abort()
+      }
+    }, STREAM_WATCHDOG_TICK_MS)
     setProseActive(false)
     setThinkingPhase(null)
     setActivities(resetActivities()) // the new turn's own now-line stream starts empty
@@ -2433,6 +2736,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         {
           signal: ctrl.signal,
           onDelta: (delta) => {
+            poke()
             // 出生钉位: the row is born at the delta's RECEIPT — never at
             // the typewriter's first released fragment (a hidden tab
             // throttles its timer while a read's activity row-append lands
@@ -2442,6 +2746,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             typewriter.push(delta)
           },
           onThinking: (payload) => {
+            poke()
             // System Status labels and the explicit clear (I-PFA-06 清除
             // 协议, 2026-09-18; Phase 3 Batch B): `"phase" in payload`
             // separates both from bare keepalives, which leave the label
@@ -2455,16 +2760,44 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               setThinkingPhase(payload.phase ?? null)
             }
           },
-          onQuestionPreview: (payload) =>
-            dockQuestionPreview(`preview-${streamId}`, payload),
-          onCheckpoint,
-          onActivity: handleActivityFrame,
-          onCandidates: handleCandidatesFrame,
-          onStoryboard: handleStoryboardFrame,
-          onRowAppend: handleRowAppend,
-          onRowUpdate: handleRowUpdate,
+          onQuestionPreview: (payload) => {
+            poke()
+            dockQuestionPreview(`preview-${streamId}`, payload)
+          },
+          onCheckpoint: (text, at) => {
+            poke()
+            onCheckpoint(text, at)
+          },
+          onActivity: (frame) => {
+            poke()
+            handleActivityFrame(frame)
+          },
+          onCandidates: (event) => {
+            poke()
+            handleCandidatesFrame(event)
+          },
+          onStoryboard: (payload) => {
+            poke()
+            handleStoryboardFrame(payload)
+          },
+          onRowAppend: (row) => {
+            poke()
+            handleRowAppend(row)
+          },
+          onRowUpdate: (id, frame) => {
+            poke()
+            handleRowUpdate(id, frame)
+          },
         }
       )
+      sseProbe("turn.envelope", { dead: deadStreamRef.current })
+      // Dead-stream bail (watchdog / visibility fired): the reconcile owns
+      // the turn now — the envelope's whole completion path is superseded,
+      // never double-rendered.
+      if (deadStreamRef.current) {
+        sseProbe("turn.bail.pre-drain")
+        return
+      }
       // Envelope wins: any in-flight checkpoint delivery finishes FIRST
       // (its drain waiters ride the same typewriter), then the buffered
       // prose PACES OUT before the turn lands.
@@ -2477,6 +2810,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // visibly LEADS, docks/receipts follow. flush() stays on the
       // failure/abort paths (rollback must not linger).
       await typewriter.drain()
+      // Second dead-stream bail: a continuation that hung INSIDE the drains
+      // (a frozen page's timers) resumes here — if the reconcile already
+      // owned the turn meanwhile, everything below is superseded.
+      if (deadStreamRef.current) {
+        sseProbe("turn.bail.post-drain")
+        return
+      }
       // 终帧律 (I-PFA-06 相位清除协议, 2026-09-18): the envelope closes every
       // phase — the landing awaits below (prose pacing drains, then the
       // docks/receipts land) run with chatBusy still true, so a stale label
@@ -2664,6 +3004,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
       }
     } catch (e) {
+      sseProbe("turn.error", {
+        name: e instanceof Error ? e.name : "?",
+        message: e instanceof Error ? e.message : String(e),
+        dead: deadStreamRef.current,
+      })
       typewriter.flush()
       discardPreviewArtifacts()
       rollbackCandidateRows()
@@ -2690,6 +3035,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               : m
           )
         )
+        if (deadStreamRef.current) {
+          // A machinery abort (watchdog / visibility), never the user's
+          // stop: the reconcile pulls the turn's landed rows from the
+          // archive — the server commits the answer regardless.
+          void reconcileTurn(turnStartMs, reconcileGen)
+        }
         return
       }
       // Turn durability (交互完整性批 A): a persisted turn's user message
@@ -2752,6 +3103,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         ])
       }
     } finally {
+      sseProbe("turn.finally", { release: abortRef.current === ctrl })
+      clearInterval(watchdog)
       if (abortRef.current === ctrl) {
         abortRef.current = null
         setChatBusy(false)
@@ -2923,7 +3276,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           at: new Date().toISOString(),
         },
       ])
-      raiseHistory()
+      recallDock()
       scrollerSendRef.current?.() // an option click is the same live-edge intent
       return
     }
@@ -2978,7 +3331,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             },
           ],
     )
-    raiseHistory()
+    recallDock()
     scrollerSendRef.current?.() // an option click is the same live-edge intent
     // Typewriter pacing (same reason as sendChat — 2026-08-05 fix): the
     // reasoning model tends to deliver the echo in one coarse chunk right
@@ -3293,7 +3646,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           at: new Date().toISOString(),
         },
       ])
-      raiseHistory()
+      recallDock()
       scrollerSendRef.current?.() // a freeform answer is the same live-edge intent
       return
     }
@@ -3369,7 +3722,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     editorRef.current?.clear()
     setStaged((prev) => prev.filter((s) => s.status !== "done"))
     // Your own send opens the flow — the reply lands there.
-    raiseHistory()
+    recallDock()
     // Sending = explicit "take me to the live edge" intent (2026-09-24):
     // re-arm the scroller's following-bottom mode AND jump — the library's
     // 8px stickiness (plus content-visibility's height estimates) otherwise
@@ -3393,18 +3746,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       rollbackStaged: ready,
     })
   }
-
-  // Esc closes the history region — the dock itself has no close (it IS the
-  // page's chrome; the fullscreen shell's back-pill/Esc close retired with
-  // it, ADR-051).
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return
-      setHistoryOpen(false)
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [])
 
   // The dock's live form outside the confirm beat: a pending OPTIONS
   // question from the chat loop (task_book docks only while confirming; an
@@ -3450,25 +3791,35 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     (pendingQuestion.question?.requires_confirmation ?? true)
       ? pendingQuestion
       : null
-  const confirmPillActive = confirmActive && planPill != null
+  // 法1后半 (2026-10-16): the film review hold's Start affordance appears
+  // only once the storyboard card has LANDED — before that there is nothing
+  // to confirm (the placeholder row carries the wait; the waiver is verbal
+  // only, never a button). The server's hard gate is the backstop.
+  const storyboardPillHeld =
+    planPill?.question?.confirm_reason === "storyboard_review" &&
+    !storyboardBlockLanded
+  const confirmPillActive = confirmActive && planPill != null && !storyboardPillHeld
   // The label family keys on the stamped reason: money reasons carry the
   // price (quote_high is the server fold's high end — never a client
   // computation); the NULL family announces the deferred quote; a bare
   // execution-ask rides the plain verb. (D1: 执行=ask → 不带价; 费用=ask /
-  // 守卫线 → 带价.)
+  // 守卫线 → 带价. storyboard_review — the film dock's review hold — prices
+  // whenever a quote exists: the hold is the review, never an execution-ask.)
   const planPillLabel = (() => {
     const q = planPill?.question
     if (!q) return ""
     if (q.unquotable) return t("generationOverlay.confirmPillStartDeferred")
     const priced =
-      q.confirm_reason === "credits_pref" || q.confirm_reason === "above_guardrail"
+      q.confirm_reason === "credits_pref" ||
+      q.confirm_reason === "above_guardrail" ||
+      q.confirm_reason === "storyboard_review"
     return priced && q.quote_high != null
       ? t("generationOverlay.confirmPillStartPriced", { n: q.quote_high })
       : t("generationOverlay.confirmPillStart")
   })()
 
   // Prohibition #6 — the dock never goes silent: new agent speech (a chat
-  // reply landing / the run's completion line) raises the history region.
+  // reply landing / the run's completion line) recalls a tucked-away panel.
   const lastAssistant = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i]
@@ -3487,7 +3838,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if (lastAgentKeyRef.current !== lastAgentKey) {
       lastAgentKeyRef.current = lastAgentKey
     }
-    if (!first) raiseHistory()
+    if (!first) recallDock()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastAgentKey])
   // The remaining recall triggers (hidden-state law above): a docking
@@ -3520,7 +3871,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         at: new Date().toISOString(),
       },
     ])
-    raiseHistory()
+    recallDock()
     scrollerSendRef.current?.() // same live-edge intent as handleSend
     void sendChat(text, { rollbackId })
   }
@@ -3655,6 +4006,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if (chatBusy) {
       return think(thinkingPhase ? `chat.thinkingPhases.${thinkingPhase}` : null)
     }
+    // 分镜起草占位 (ADR-120 统一迟延 + 法2): the film dock's storyboard is
+    // being drafted by the deferred seat (minutes) — the now-line carries
+    // the wait so the screen never sits silent between the dock and the
+    // block. Folds on the block's or the failure row's landing (both are
+    // world facts in the flow), never on a timer.
+    if (storyboardDraftDue) {
+      return think("chat.storyboard.drafting")
+    }
     // 带计数 (2026-09-24 用户拍板): several files draining together read as
     // "processing N files" (中性词 — 混合批次不知动谁), a lone one names
     // itself with the verb fork (批「动词」2026-09-27: video=看 / audio=听).
@@ -3706,9 +4065,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     void sendChat(text)
   }
 
-  /* The message flow — one JSX block, two hosts: the fullscreen chat
-      region, or the dock's history drawer (never mounted in both at once).
-      The message machine itself is untouched — only the shell changes. */
+  /* The message flow — one JSX block, one host: the stage region (the
+      fullscreen chat stage in full, the panel body in panel). The message
+      machine itself is untouched — only the shell changes. */
   /** Step marker label — the same chain as RunCard: live summary →
    * friendly stage copy → kind fallback. */
   /** One conversation message with its anchors: superseded plan-version
@@ -3837,10 +4196,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           <ScrollerSendBridge apiRef={scrollerSendRef} />
           <MessageScroller className="h-full">
             <MessageScrollerViewport className="scroll-fade-y thin-scroll">
-              {/* Full form: the stage sits under the floating top chrome
-                  (the ← Projects pill, ~56px) — extra headroom keeps the
-                  first row clear; the dock form hugs the card's top edge;
-                  the panel form fills the 400px column (no max-w centering). */}
+              {/* Full form: the stage's scroller starts below the
+                  transparent ProjectHeader (the wrapper's pt-14), so the
+                  content's own top rhythm is the dock's pt-4 — no extra
+                  headroom needed. The panel form fills the 480px column
+                  (no max-w centering). */}
               <MessageScrollerContent
                 className={
                   panel
@@ -3848,10 +4208,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                       // the message column holds FLORA's px-6; the bottom
                       // register below runs one step tighter (px-4).
                       "w-full gap-6 px-6 pb-6 pt-3"
-                    : cn(
-                        "mx-auto w-full max-w-3xl gap-8 px-4 pb-8",
-                        full ? "pt-16" : "pt-4",
-                      )
+                    : "mx-auto w-full max-w-3xl gap-8 px-4 pb-8 pt-4"
                 }
               >
                 {/* The flow (#5 chronology): everything sorts into ONE
@@ -4009,10 +4366,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // auto-fits; the dock fires no camera beat at the confirm moment. The
   // confirm pill stays the confirm beat's ONLY seat, ADR-070 unchanged.)
   // (RunStatusRow retired 2026-09-08, user ruling: the message flow's
-  // RunTaskList is always on screen in the new three-form machine — the
-  // panel's scroller is resident, the dock's history floats one tap away —
-  // so the folded shimmer line docked above the input was a pure duplicate
-  // of the narrative row. ONE progress surface: the in-flow checklist.)
+  // RunTaskList is always on screen — the stage's scroller is resident in
+  // both forms — so the folded shimmer line docked above the input was a
+  // pure duplicate of the narrative row. ONE progress surface: the in-flow
+  // checklist.)
   const inputBody = (
     <>
       {/* Staged attachments — the upload lifecycle lives here (never
@@ -4041,8 +4398,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           changing flips are structurally unstable) → THIS. In-flow strip:
           no overlay, no measurement, oscillation-proof by construction.
           Strip members: + (attach — ElevenLabs/FLORA's plus; the paperclip
-          RETIRED, composer included), history/hide (dock form only), the
-          flex-1 spacer, stop/send anchored right. Stadium corollary: the
+          RETIRED, composer included), the flex-1 spacer, stop/send anchored
+          right. Stadium corollary: the
           rest box is genuinely two bands now, and a capsule on multi-row
           content is broken geometry — the input is rounded-xl in every
           form (the stadium exception belonged to the retired one-row
@@ -4062,17 +4419,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             target — Enter sends, IME guarded inside the component. */}
         <MentionEditor
           ref={editorRef}
-          // ONE fixed placeholder per form (2026-09-11 user ruling): a
-          // phase-aware swap (confirm → "Ask me to adjust the plan…")
-          // costs more mental load than it guides — the confirm pill right
-          // above already says what the next step is. The FORM split
-          // (2026-09-13): pre-canvas (full) there are no nodes to mention,
-          // so the copy names assets; the nodes version returns with the
-          // canvas (panel / dock).
+          // ONE fixed placeholder per mention world (2026-09-11 user
+          // ruling): a phase-aware swap (confirm → "Ask me to adjust the
+          // plan…") costs more mental load than it guides — the confirm pill
+          // right above already says what the next step is. The world split:
+          // before any products exist there are no nodes to @mention, so
+          // the copy names assets; the nodes version appears the moment the
+          // mention registry carries outputs (世界自证 — the registry's own
+          // content, never a form/viewport read).
           placeholder={
-            full
-              ? t("generationOverlay.chatPlaceholderAssets")
-              : t("generationOverlay.chatPlaceholder")
+            mentionContext.outputs.length > 0
+              ? t("generationOverlay.chatPlaceholder")
+              : t("generationOverlay.chatPlaceholderAssets")
           }
           mentionContext={mentionContext}
           onChange={handleEditorChange}
@@ -4081,21 +4439,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           // visible before scrolling (was max-h-32 ≈ 6). Full-width px-3
           // text band; the vertical padding is SYMMETRIC (2026-09-23 user
           // ruling — py-2.5 both sides; the old pb-1 read lopsided against
-          // the pt-2.5 head). Rest height (2026-09-23 user ruling, MiniMax
-          // chat parity): a taller text band at rest — min-h-20 (≈3 lines
-          // + padding) in the full / panel forms, so the box reads as a
-          // composer, not a one-line search bar; the mobile dock stays
-          // auto-height (screen estate) and still grows with content.
-          className={cn(
-            "block max-h-56 w-full px-3 py-2.5 text-sm thin-scroll",
-            (full || panel) && "min-h-20",
-          )}
+          // the pt-2.5 head). Rest height (2026-10-15 user ruling): the box
+          // hugs its content (the min-h-20 three-line floor retired — it was
+          // 64px of dead air under a one-line draft), with ONE floor left:
+          // min-h-15 = exactly TWO lines — the teaching placeholder is a
+          // composed two-line read (2026-09-24 ruling), so the empty box is
+          // two lines tall; the two-line floor makes a one-line draft the
+          // same height, and the empty→typing transition never jumps.
+          className="block max-h-56 min-h-15 w-full px-3 py-2.5 text-sm thin-scroll"
         />
         {/* The control strip — in-flow under the text band (ElevenLabs'
             bottom row): + opens the file picker (their + opens an upload
             menu; ours has one destination — the picker — so no menu),
-            history/hide ride along in the dock form, send/stop anchor the
-            right end (the flex-1 spacer). Gaps: mt-1 + the text band's
+            send/stop anchor the right end (the flex-1 spacer). Gaps: mt-1 + the text band's
             pb-2.5 = 14px between the input text and the strip (2026-09-23
             user ruling — 10px read cramped), and pb-1.5 → card bottom
             reads 14px (6+8), MiniMax-measured parity (same day, second
@@ -4119,28 +4475,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             className="ml-[3px]"
             onClick={() => fileInputRef.current?.click()}
           />
-          {/* History toggle — dock form only: in the full form the stage IS
-              the history (always on), and in the panel form the panel body
-              IS the flow — the toggle has no meaning in either. */}
-          {dock && (
-            <ComposerIconButton
-              icon={historyOpen ? ChevronDown : History}
-              label={t("results.dock.history")}
-              aria-pressed={historyOpen}
-              onClick={() => setHistoryOpen((v) => !v)}
-            />
-          )}
-          {/* Hide — dock form only (the panel's minimize lives in its
-              header): folds the whole dock to the bottom-right LogoMark
-              dot. In the full form the chat IS the page — nothing to hide
-              to. */}
-          {dock && (
-            <ComposerIconButton
-              icon={Minus}
-              label={t("results.dock.hide")}
-              onClick={() => setDockHidden(true)}
-            />
-          )}
           <span className="min-w-0 flex-1" />
           {/* Models (honest Auto panel) — PARKED: hidden until the panel has
               something actionable to show; restore by ungating. */}
@@ -4187,11 +4521,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     </>
   )
 
-  // The history slot's one condition (2026-09-02 拆粘; 2026-09-06 dock-only):
-  // dock form + the stage's fade latch finished + the region raised. In the
-  // panel form the stage region holds the scroller permanently — the slot
-  // must never open there (the two slots never mount it at once).
-  const historySlotOpen = dock && !stageMounted && historyOpen
   // Radius: the input container is rounded-xl in EVERY form (2026-09-06,
   // two-band ElevenLabs anatomy — the rest box is genuinely two bands:
   // full-width text + the in-flow control strip, and the 2026-09-02 law
@@ -4208,13 +4537,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         is still the hit target and swallows every canvas hover/click even
         though all children opt out individually. The bottom row's inner
         container (and the panel card) re-enables events for the input group
-        / history / docks. Form branches (2026-09-06 三形态机): every form's
-        root is the SAME fixed overlay layer — full = the centered stage,
-        dock = the bottom input group, panel = the frosted card parked over
-        the FULL-BLEED canvas (float / docked-right geometry on the card,
-        never an in-flow column); the panel root hides via `hidden` when
-        tucked away (display:none keeps the MentionEditor's DOM-owned
-        draft). */}
+        and the floating pills. Form branches (两形态机): every form's root
+        is the SAME fixed overlay layer — full = the centered stage, panel =
+        the frosted card parked over the FULL-BLEED canvas (float /
+        docked-right geometry on the card, never an in-flow column); the
+        panel root hides via `hidden` when tucked away (display:none keeps
+        the MentionEditor's DOM-owned draft). */}
     <div
       className={cn(
         "pointer-events-none fixed inset-0 z-50 flex flex-col",
@@ -4222,7 +4550,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       )}
     >
       {/* The card wrapper — ALWAYS rendered (root's child 0): layout-
-          transparent (contents) in full/dock, the frosted panel card in
+          transparent (contents) in full, the frosted panel card in
           panel form. Float = a right-anchored floating WINDOW, vertically
           inset ~18%/10% (FLORA-measured: bottom-weighted, the input parks
           near the canvas's bottom edge) — never full-height; docked =
@@ -4246,7 +4574,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                 // window keeps the full hairline.
                 "dock-surface pointer-events-auto fixed flex w-[480px] flex-col transition-all duration-300 ease-out motion-reduce:transition-none",
                 panelDocked
-                  ? "top-0 right-0 bottom-0 rounded-none border-l border-foreground/10"
+                  ? // top-14: docks BELOW the 56px ProjectHeader glass
+                    // (2026-10-15) — flush top-0 would put the panel's slim
+                    // header under the bar's hit area.
+                    "top-14 right-0 bottom-0 rounded-none border-l border-foreground/10"
                   : "top-[18%] right-4 bottom-[10%] rounded-2xl ring-1 ring-foreground/10",
                 panelEnter && "dock-panel-in"
               )
@@ -4254,20 +4585,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
       >
       {/* The message stage (2026-09-06): the FULL form's chat stage owns the
-          page above the input group; the DOCK form fades it out in place
-          (300ms opacity — the old grid-rows 1fr→0fr collapse read as the
-          whole chat flying up, user-retired); the PANEL form keeps it on as
-          the panel body. The wrapper keeps flex-1 in every form (invisible
-          + click-through in dock), so the bottom row never moves. The
-          scroller stays mounted through the dock fade (stageMounted, 300ms)
-          and unmounts right after; cutting it at the flip would freeze the
-          content mid-fade. */}
+          page above the input group (mobile keeps it at every project age —
+          移动端恒纯 chat); the PANEL form keeps it on as the panel body.
+          The wrapper keeps flex-1 in every form, so the bottom row never
+          moves. The scroller stays mounted through the full→panel morph
+          (stageMounted, 300ms) so the panelEnter entrance beat plays over
+          live content; cutting it at the flip would freeze the content
+          mid-morph. */}
       <div
         className={cn(
-          "min-h-0 flex-1 transition-opacity duration-300 ease-out motion-reduce:transition-none",
-          full || panel
-            ? "pointer-events-auto opacity-100"
-            : "pointer-events-none opacity-0"
+          "pointer-events-auto min-h-0 flex-1 opacity-100",
+          // The full form's scroller starts BELOW the transparent
+          // ProjectHeader (pt-14 = the 56px bar, 2026-10-15): nothing ever
+          // scrolls under the header, so the bar needs no glass of its own.
+          full && "pt-14",
         )}
       >
         <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -4275,8 +4606,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               otherwise keeps the slot indexes stable across the flip):
               quiet label + the geometry toggle (float ↔ docked-right,
               FLORA "Dock panel" parity) + the minimize gesture (tucks the
-              panel to the bottom-right LogoMark dot, same law as the
-              dock's Hide). */}
+              panel to the bottom-right LogoMark dot). */}
           <div
             className={
               panel
@@ -4314,9 +4644,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               </Button>
             </div>
           </div>
-          {/* Slot 1 — the ONE scroller mount point across all forms (the
-              history slot below is gated dock-only and can never open while
-              this slot holds the scroller). */}
+          {/* Slot 1 — the ONE scroller mount point (the stage region holds
+              it in both forms: the full form's chat stage, the panel's
+              body). */}
           <div className="min-h-0 flex-1">
             {(full || stageMounted || panel) && chatScroller}
           </div>
@@ -4327,7 +4657,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           spots (composer / project dock): it never moves. 拆粘 (2026-09-02,
           ADR-051 条款 8): the row is THREE detached registers — the pending
           question floats as its own frosted pill above (decision), the
-          input container holds only the history region + the input group
+          input container holds only the input group
           (action), and the honesty line whispers directly ABOVE the input
           container (FAUNA parity, 2026-09-06 user ruling — it used to sit
           below; the ChatGPT/FLORA below-input position was the 2026-09-02
@@ -4341,8 +4671,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           // Panel rails (2026-09-28 user ruling, two-step): the message
           // column above holds FLORA's px-6; the bottom register (question
           // pill + input) runs one step tighter at px-4.
-          panel ? "px-4 pb-3 pt-2" : "px-4 pb-5 pt-2",
-          dock && dockHidden && "translate-y-3 opacity-0"
+          panel ? "px-4 pb-3 pt-2" : "px-4 pb-5 pt-2"
         )}
       >
         <div
@@ -4351,20 +4680,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             dockHidden ? "pointer-events-none" : "pointer-events-auto"
           )}
         >
-          {/* The history region — its OWN floating layer (2026-09-02 输入框
-              独立层律, user-ruled): the input group is always a standalone
-              layer, never fused with the message flow; the flow floats
-              above it in the same dock-surface frost + hairline family as
-              the question pill, growing upward from the input's top edge.
-              Dock form only: in the full form the stage above IS the
-              history. Gated on !stageMounted too: during the collapse latch
-              the stage still holds the scroller — the two slots must never
-              mount it at once. */}
-          {historySlotOpen && (
-            <div className="dock-surface dock-history-in mb-2.5 h-[min(50vh,480px)] overflow-hidden rounded-xl ring-1 ring-foreground/10">
-              {chatScroller}
-            </div>
-          )}
           {/* The question pill — its own floating layer (拆粘): detached from
               the input container with a small-but-clear gap (mb-2.5 = 10px,
               user两轮裁定: 6px 太近、原型 12px 太大). rounded-xl both kinds
@@ -4407,20 +4722,21 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           )}
           {/* The input container — 输入框独立层律 (2026-09-02, user-ruled):
               the container owns ONLY the resident input row (+ the staged
-              chips band when present) — the history region floats as its
-              own layer above, the question as its own pill. dock-surface:
+              chips band when present) — the question floats as its own pill
+              above. dock-surface:
               translucent enough that the canvas's dot grid reads through
-              the frost; hairline + the whisper shadow-xl in light (shadow
-              belongs to floating layers — the dock floats over the canvas),
-              dark casts nothing (brightness + the hairline do the
-              separating). 形态律 (ADR-053 R1 阻塞形态, 2026-09-04 翻回):
-              while an OPTIONS question is pending the input row morphs
-              away — with no second band the container is empty, so the
-              whole box hides rather than leaving a frost sliver (the
+              the frost; the /10 hairline is the separator — NO shadow in
+              either mode (2026-10-14 user ruling: the light-mode shadow-xl
+              measured invisible bottom-center on the white canvas and read
+              as a gray smudge at the corners — dirt, not elevation; dark
+              already cast nothing). 形态律 (ADR-053 R1 阻塞形态, 2026-09-04
+              翻回): while an OPTIONS question is pending the input row
+              morphs away — with no second band the container is empty, so
+              the whole box hides rather than leaving a frost sliver (the
               editor stays mounted inside, DOM-owned draft intact). */}
           <div
             className={cn(
-              "dock-surface relative overflow-hidden shadow-xl ring-1 ring-foreground/10 transition-[border-radius] duration-300 ease-out motion-reduce:transition-none dark:shadow-none",
+              "dock-surface relative overflow-hidden ring-1 ring-foreground/10 transition-[border-radius] duration-300 ease-out motion-reduce:transition-none",
               fileDragging &&
                 "border-2 border-dashed border-foreground/30 ring-0",
               inputRadius,
@@ -4453,7 +4769,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           {/* The resident disclaimer (ADR-051 — the FLORA FAUNA-line,
               verbatim): a whisper directly BELOW the input container;
               hidden WITH the input row on the options-question morph
-              (ADR-053 R1 阻塞形态). pt-2 / pt-1.5 (dock / panel) is the
+              (ADR-053 R1 阻塞形态). pt-2 / pt-1.5 (full / panel) is the
               whisper's top air against the input — the panel's tighter
               register mirrors its tighter column pad. */}
           {!pillDock && (
@@ -4477,16 +4793,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           click parks the open panel away / recalls the parked one): one true
           circular icon button (the rounded-full exception family, same as
           send) riding the dock-surface frost — bottom-right so it never
-          collides with the canvas's own top-right slot reservation.
-          Visibility: float panel = always (its 10% bottom inset leaves the
-          corner free); docked panel / mobile dock = only when tucked away
-          (the open docked panel's own send button owns the corner).
-          Crossfades in with a scale pop on the same beat as the bottom
-          row's exit. */}
+          collides with the canvas's own top-right slot reservation. PANEL
+          form only: float panel = always visible (its 10% bottom inset
+          leaves the corner free); docked panel = only when tucked away (the
+          open docked panel's own send button owns the corner). Crossfades in
+          with a scale pop on the same beat as the bottom row's exit. */}
       <div
         className={cn(
           "fixed bottom-5 right-4 z-50 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none",
-          (panel && !panelDocked) || dockHidden
+          panel && (!panelDocked || dockHidden)
             ? "pointer-events-auto opacity-100 scale-100"
             : "pointer-events-none opacity-0 scale-75"
         )}
@@ -4496,8 +4811,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           size="icon"
           className="dock-surface h-10 w-10 rounded-full ring-1 ring-foreground/10 hover:bg-accent"
           aria-label={t(dockHidden ? "results.dock.show" : "results.dock.hide")}
-          aria-hidden={!((panel && !panelDocked) || dockHidden)}
-          tabIndex={(panel && !panelDocked) || dockHidden ? 0 : -1}
+          aria-hidden={!(panel && (!panelDocked || dockHidden))}
+          tabIndex={panel && (!panelDocked || dockHidden) ? 0 : -1}
           onClick={() => setDockHidden(!dockHidden)}
         >
           <LogoMark className="h-5 w-5" />

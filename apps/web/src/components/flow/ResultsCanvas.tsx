@@ -737,8 +737,9 @@ export function ResultsCanvas({
         viewportPreserveRef={viewportPreserveRef}
       />
       {/* The dossier rides the zoom pill's corner: right-aligned with it,
-          stacked below (pill = m-3/m-4 + h-9 → 52/60px), and sharing its
-          docked-panel avoidance so both clear the open frost. */}
+          stacked below (pill = header-cleared 64/68px + h-9 → 100/104px, +8px
+          air → 108/112px), and sharing its docked-panel avoidance so both
+          clear the open frost. */}
       {inspectedOutput && (
         <OutputInspector
           output={inspectedOutput}
@@ -750,7 +751,7 @@ export function ResultsCanvas({
           onClose={() => setInspectedId(null)}
           onAction={(output, action) => onOutputAction?.(output, action)}
           className={cn(
-            "absolute top-[52px] right-3 z-30 md:top-[60px] md:right-4",
+            "absolute top-[108px] right-3 z-30 md:top-[112px] md:right-4",
             controlsClassName,
           )}
         />

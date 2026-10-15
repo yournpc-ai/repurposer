@@ -212,6 +212,33 @@ class Asset(Base):
         return self.file_url.rsplit("/", 1)[-1] if self.file_url else None
 
 
+class PageReading(Base):
+    """页面读本 (world-seat 存储层): one stored reading per (project, url).
+
+    Both writers land here — the chat read tool's write-through fetch and
+    the web_page capture chain (process_asset) — and the world seat
+    (``app/tools/world.py:page_reading_for_url``) is the ONE read point.
+    Snapshot semantics: the text is a capture AS OF ``fetched_at``, never
+    a live-truth claim; a re-fetch is an explicit act (the user says the
+    page changed → the read tool's ``refresh`` param), never an implicit
+    TTL. Discussion links never become assets — this row is the
+    persistence without the canvas presence. Cascades with the project.
+    """
+
+    __tablename__ = "page_readings"
+
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # The seat key — world.normalize_page_url's canonical form (scheme/host
+    # lowercased, fragment dropped, bare trailing slash stripped).
+    url = Column(String(512), primary_key=True)
+    text = Column(Text, nullable=False)
+    fetched_at = Column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+
 class WorkflowRun(Base):
     """Workflow run table — run-level state machine only.
 

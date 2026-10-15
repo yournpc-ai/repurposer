@@ -8,6 +8,7 @@ import { I18nProvider } from "@/lib/i18n/I18nProvider"
 import { ThemeProvider } from "@/lib/theme/ThemeProvider"
 
 import { AuthProvider } from "@/components/AuthProvider"
+import { SettingsDialogProvider } from "@/components/settings/SettingsDialog"
 import { LANG_COOKIE, normalizeLocale, type Locale } from "@/lib/i18n"
 import appCss from "../styles.css?url"
 
@@ -76,7 +77,13 @@ function RootComponent() {
       <I18nProvider lang={lang}>
         <TooltipProvider>
           <AuthProvider>
-            <Outlet />
+            {/* Settings = a shared dialog, summonable from ANYWHERE via
+                useSettingsDialog — the seat is the root: both the _app
+                studio (account console) and root-level routes (the project
+                page's CreditsPill deep-links into the credits section). */}
+            <SettingsDialogProvider>
+              <Outlet />
+            </SettingsDialogProvider>
             <Toaster />
           </AuthProvider>
         </TooltipProvider>

@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest"
 
-import { anchorCardsVisible, canvasVisible } from "./canvasVisibility"
+import { anchorCardsVisible, canvasCapableFor, canvasVisible } from "./canvasVisibility"
 
 describe("canvasVisible — 环境谓词真值表 (ADR-118 §6)", () => {
   it("桌面 = 可承载 ∧ 已揭幕 (true/true) → 画布在屏,零锚卡", () => {
@@ -34,5 +34,20 @@ describe("canvasVisible — 环境谓词真值表 (ADR-118 §6)", () => {
         expect(anchorCardsVisible(env)).toBe(!canvasVisible(env))
       }
     }
+  })
+})
+
+describe("canvasCapableFor — 能力位合成 (ADR-123 第二判断源)", () => {
+  it("auto + 桌面 → 可承载", () => {
+    expect(canvasCapableFor(false, "auto")).toBe(true)
+  })
+
+  it("auto + 移动 → 不可承载（prohibition #13 不变）", () => {
+    expect(canvasCapableFor(true, "auto")).toBe(false)
+  })
+
+  it("chat 档钉纯对话 → 任意视口不可承载（只能关画布,永不反向强制）", () => {
+    expect(canvasCapableFor(false, "chat")).toBe(false)
+    expect(canvasCapableFor(true, "chat")).toBe(false)
   })
 })

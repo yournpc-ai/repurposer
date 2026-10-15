@@ -58,6 +58,18 @@ const en = {
       "The estimate is always shown with the plan. Unusually large or unquotable plans always ask once, whatever you set here.",
     updateFailed: "Couldn't save the setting — please try again",
   },
+  general: {
+    /** SettingsDialog「通用」section (ADR-123) — display-class prefs. */
+    title: "General",
+    subtitle: "How the studio lays itself out.",
+    workspaceLayout: {
+      label: "Workspace layout",
+      desc: "Auto pairs the canvas with the chat on wide screens and goes chat-first on narrow ones. Chat-first makes the conversation the workspace on every screen — products arrive in the message flow.",
+      auto: "Auto",
+      chat: "Chat-first",
+    },
+    updateFailed: "Couldn't save the setting — please try again",
+  },
   credits: {
     /** The one estimate range form every surface shares (dock total /
      * per-task price / — three surfaces, one source, BILLING §7). */
@@ -79,6 +91,8 @@ const en = {
      * (BILLING §7 read surface, 2026-09-06). */
     balance: "Balance",
     held: "Held in active runs",
+    /** The pill hero's inline held mention (meta row: "Credits · 12 held"). */
+    heldInline: "{{count}} held",
     recent: "Recent activity",
     /** The SettingsDialog「积分」section (BILLING §7 展示主轴) — the
      * balance + ledger full-view seat, same two endpoints as the pill. */
@@ -94,6 +108,9 @@ const en = {
       /** The semantic fold (ADR-057 K4): the user面 only ever sees three
        * families — spend / grant / top-up; the ledger's hold / capture /
        * release machinery folds server-side and never crosses the wire. */
+      /** Last-resort spend-row title — only when a run carries neither an
+       * LLM-chosen name nor produced types (tx-row.tsx composes the chain). */
+      spent: "Spent",
     },
   },
   nav: {
@@ -104,15 +121,17 @@ const en = {
   },
   home: {
     newChat: "New chat",
-    brandTagline: "The content agent that gets you and gets the job done",
-    // Composer placeholder: fixed prefix + three most-common prompts cycling
-    // behind it (Lovart-style rotating placeholder, 2026-08-30). Keep the
-    // suffixes short enough to stay one line in the docked bar.
-    placeholderPrefix: "Ask Repurposer to ",
+    // Studio hero: one question line above the composer — the rotating
+    // placeholder below answers it with three example prompts.
+    heroQuestion: "What should we make today?",
+    // Composer placeholder: three first-person example prompts rotating
+    // (Lovart-style), NO prefix — each is a complete request in the user's
+    // own voice, answering the hero question above. Keep each short enough
+    // to stay one line in the docked bar.
     placeholderPrompts: [
-      "look at this material and tell me your ideas",
-      "tell me what you can do",
-      "make one just like the video I uploaded",
+      "Make a promo video for my website",
+      "Cut my talk into highlight clips",
+      "Make a promo video for my restaurant",
     ],
     selectPersona: "Persona",
     noPromptError: "Say what you want to make first",
@@ -494,35 +513,34 @@ const en = {
   // reserved cards render disabled with the Soon pill, never launchable.
   recipes: {
     soon: "Soon",
-    // Two-level tab shelf (D5, flora-parity-ui 批): family pill track ×
-    // underline sub-tabs × horizontal shelves. Keys mirror
+    // Two-level tab shelf: family pill track × underline sub-tabs ×
+    // horizontal shelves, organized by USER TASK (2026-10 investor-demo
+    // ruling — never by output media type). Keys mirror
     // components/home/recipeFamilies.ts RECIPE_FAMILIES. A family without real
     // demos never renders (无真 demo 不上架) — MG demo prefill copy lands
     // with its assets (MG 批 D3) at `recipes.shelf.demos.<demoId>.prompt`.
     shelf: {
       families: {
-        templates: "Templates",
-        explainer: "Explainer videos",
         ads: "Ads & UGC",
-        social: "Social media",
+        talks: "Talks & interviews",
+        posts: "Social media",
+        templates: "More",
       },
       subs: {
         all: "All",
-        animated: "Animated explainers",
-        motion: "Motion graphics",
-        brand: "Brand & business",
         saas: "SaaS & apps",
-        product: "Product",
-        linkedin: "LinkedIn",
+        brand: "Brand & business",
+        ugc: "UGC",
+        product: "Products",
       },
       titles: {
         featured: "Featured recipes",
-        animated: "Animated explainers",
-        motion: "Motion graphics",
-        brand: "Brand & business",
         saas: "SaaS & apps",
-        product: "Product",
-        linkedin: "LinkedIn",
+        brand: "Brand & business",
+        ugc: "UGC",
+        product: "Products",
+        talks: "Talks & interviews",
+        posts: "Social media",
       },
       nextPage: "More",
       // MG shelf demo prefill copy (D3 — one key per ShelfDemo id in
@@ -532,6 +550,9 @@ const en = {
       demos: {
         "launch-film-linear": {
           prompt: "Turn this page into a short launch film: https://linear.app",
+        },
+        "launch-film-zymix": {
+          prompt: "Turn this page into a short launch film: https://www.zymix.ai/en/",
         },
       },
     },
@@ -962,34 +983,25 @@ const en = {
       carousel: "Carousel",
       article: "Article",
     },
-    empty: {
-      clips: "No clips generated yet.",
-      post: "No posts generated yet.",
-      quotes: "No quote cards generated yet.",
-      quoteFrame: "No quote frames generated yet.",
-      carousel: "No carousel generated yet.",
-      article: "No articles generated yet.",
-    },
     dock: {
-      history: "History",
       focus: "Working on: {{name}}",
       // The hidden state (2026-09-02 形态机): the user's gesture folds the
       // dock to a bottom-right logo dot; agent speech / questions / focus
       // recall it.
       hide: "Hide chat",
       show: "Show chat",
-      // The right-docked panel's slim header label (2026-09-06 三形态机).
+      // The right-docked panel's slim header label (2026-09-06 两形态机).
       panelTitle: "Chat",
       // The panel's geometry toggle (2026-09-06, FLORA "Dock panel" parity):
       // float = frosted card over the full-bleed canvas (default); docked =
       // flush right edge full-height, still frosted.
       dockPanel: "Dock panel",
       floatPanel: "Float panel",
-      // The dock's resident disclaimer (ADR-051 — the FLORA FAUNA-line,
-      // VERBATIM per user ruling; ABOVE the input container since the
-      // 2026-09-06 FAUNA-parity ruling, hidden with the input on the
-      // question morph).
-      honesty: "Repurposer is AI and can make mistakes. Check important info.",
+      // The dock's resident disclaimer (ADR-051) — names the real risk
+      // point: content about to go out, not factual Q&A. ABOVE the input
+      // container since the 2026-09-06 FAUNA-parity ruling, hidden with
+      // the input on the question morph.
+      honesty: "Repurposer can make mistakes — review before you publish.",
     },
     // Canvas product-card chrome (ADR-041 D5): the always-on action band's
     // labels. (No "preview" — the video plays inline, the hover expand opens
@@ -1144,8 +1156,6 @@ const en = {
       translating_captions: "Translating captions…",
       dubbing: "Dubbing your voice…",
     },
-    retry: "Retry",
-    retryFailed: "Retry failed output",
     clipNotRendered: "Click to render this clip.",
     topPick: "Top pick",
     qualityNeedsReview: "Needs review",
@@ -1199,6 +1209,12 @@ const en = {
     thinkingPhases: {
       composing: "Putting it together…",
     },
+    /** 分镜起草占位 (ADR-120 统一迟延): the now-line between a film dock
+     * and its storyboard block — the deferred seat drafts for minutes, and
+     * the wait is always visible. Folds on the block / failure row. */
+    storyboard: {
+      drafting: "Drafting the storyboard…",
+    },
     /** The now-line's material reading rows (2026-09-24 user ruling —
      * thinking IS the activity row's empty state): assets mid-processing →
      * reading (the filename interpolates). The *Done / *Failed forms are the
@@ -1237,6 +1253,17 @@ const en = {
       readingFailed_video: "Failed to watch {{name}}",
       readingFailed_audio: "Failed to listen to {{name}}",
       understandingDone: "Understood your material",
+    },
+    /** The material reading family's settled category form (ADR-110 修订
+     * — 归档归类目): name-free — the instance name is the live phase's
+     * speech, settled surfaces speak the category. The verb fork mirrors
+     * the reading family (video/audio off the row key's own suffix,
+     * web_page off the beat's asset_type). */
+    materialCategory: {
+      reading: "Read the material",
+      reading_video: "Watched the video",
+      reading_audio: "Listened to the audio",
+      reading_webPage: "Read the page",
     },
     /** The perception family's inspecting chatter (T2b): a read ACTIVITY's
      * active-frame label while a read tool runs (Phase 3 Batch B ③ moved the
@@ -1311,14 +1338,15 @@ const en = {
     activityMeta: {
       count: "Count: {{count}}",
     },
-    /** The aggregate row (ADR-110 段聚合 — the Claude Code collapse): every
-     * segment of consecutive completed activity rows between two messages
-     * folds into ONE summary — the segment's total elapsed (`worked`, the
-     * wall clock from the first row's birth to the prose's arrival) + the
-     * ordered fragments; `repeated` is one fragment's ×N form. */
+    /** The aggregate row (ADR-110 段聚合, 修订 — Flora 解剖): a settled
+     * segment folds into ONE quiet total — `worked` carries the segment's
+     * wall clock (first row's birth → the prose's arrival) as the ONLY
+     * collapsed fact; the expanded view shows the category decomposition
+     * (foldCategories ×N rows). `actionCount` is the honest fallback when
+     * no measurable elapsed exists (legacy rows without stamps). */
     activityFold: {
-      repeated: "{{label}} ×{{count}}",
       worked: "Worked for {{elapsed}}",
+      actionCount: "{{count}} actions",
     },
     /** Past-tense mirrors of the inspecting family — a read activity's
      * completed frames (chat.inspecting.* stays the active form; the keys
@@ -1348,6 +1376,12 @@ const en = {
     },
     completed: "Done",
     failed: "Sorry, I couldn't update this. Please try again.",
+    /** The dead-stream reconcile's give-up row (2026-10-15): the pipe was
+     * declared dead and abandoned, yet no answer row landed within the
+     * reconcile window — the turn may still complete server-side; the
+     * archive replay catches it on refresh. */
+    connectionLost:
+      "The connection dropped and no reply has landed yet — refresh in a moment to check.",
     /** Quiet settles for a dead question's click (2026-09-28 — the answer
      * endpoint's structured 409 codes; the click raced the question's own
      * settlement, so no error toast). */
@@ -1482,13 +1516,13 @@ const en = {
     // old "confirms with you before starting" clause left with the
     // ask-default regime — static copy describes the default (auto) truth:
     // presentation IS the authorization.
-    chatPlaceholder: "Describe your changes. Drag or paste files, or type @ to mention nodes.",
+    chatPlaceholder: "Describe your changes — drag or paste files, or type @ to mention nodes.",
     // The full form's sibling (2026-09-13 user ruling): pre-first-run the
     // canvas doesn't exist yet, so there are no "nodes" to point at — the
     // @ picker's candidates are assets only. Copy follows the world's
     // truth per form; the nodes version returns once the canvas lands
     // (panel / dock forms).
-    chatPlaceholderAssets: "Describe what you want to make. Drag or paste files, or type @ to mention assets.",
+    chatPlaceholderAssets: "Describe what you want to make — drag or paste files, or type @ to mention assets.",
     attachFiles: "Attach files",
     retryUpload: "Retry upload",
     removeAttachment: "Remove attachment",

@@ -29,13 +29,15 @@ interface ProjectMenuProps {
   onDeleted: () => void
 }
 
-/** The fullscreen project page's top-left chrome (ADR-041 canvas world): a
- * frosted pill — brand-mark trigger opens the project menu (navigation +
- * project-level ops), the truncated title rides beside it. The title is a
- * BUTTON (2026-09-23 user ruling, MiniMax click-to-edit parity without
- * their centered title bar — our canvas world keeps the two-corner chrome
- * law, ADR-046): one click opens the rename dialog directly, skipping the
- * dropdown hop (the menu item stays as the second path). */
+/** The project page header's left cluster (ADR-041 canvas world): the
+ * brand-mark trigger opens the project menu (navigation + project-level
+ * ops), the truncated title rides beside it. The title is a BUTTON
+ * (2026-09-23 user ruling, MiniMax click-to-edit parity without their
+ * centered title bar): one click opens the rename dialog directly, skipping
+ * the dropdown hop (the menu item stays as the second path).
+ * Bare anatomy (2026-10-15 header ruling): the cluster lives INSIDE the
+ * glass ProjectHeader, so the frosted-pill tile is gone — controls inside
+ * glass go bare (the MobileHeader bell's law), hover/active bg-accent. */
 export function ProjectMenu({
   projectId,
   title,
@@ -50,14 +52,14 @@ export function ProjectMenu({
 
   return (
     <>
-      <div className="dock-surface flex h-9 items-center rounded-md ring-1 ring-foreground/10">
+      <div className="flex h-9 items-center">
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
               <button
                 type="button"
                 aria-label={t("projectMenu.open")}
-                className="flex h-9 items-center gap-1 rounded-l-md pl-2 pr-1.5 transition-colors hover:bg-accent"
+                className="flex h-9 items-center gap-1 rounded-md pl-2 pr-1.5 transition-colors hover:bg-accent active:bg-accent"
               />
             }
           >
@@ -95,8 +97,7 @@ export function ProjectMenu({
           type="button"
           onClick={() => setRenameOpen(true)}
           aria-label={t("projects.rename")}
-          title={t("projects.rename")}
-          className="h-9 max-w-40 truncate rounded-r-md pl-1.5 pr-3 text-sm transition-colors hover:bg-accent"
+          className="h-9 max-w-40 truncate rounded-md pl-1.5 pr-3 text-[13px] text-foreground transition-colors hover:bg-accent active:bg-accent"
         >
           {title}
         </button>

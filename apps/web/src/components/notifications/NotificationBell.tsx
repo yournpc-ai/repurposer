@@ -121,7 +121,7 @@ function NotificationRow({
   )
 }
 
-export function NotificationBell() {
+export function NotificationBell({ chip = true }: { chip?: boolean }) {
   const { t } = useTranslation()
   const { isAuthenticated } = useAuth()
   const [data, setData] = useState<NotificationList | null>(null)
@@ -171,7 +171,16 @@ export function NotificationBell() {
           <Button
             variant="ghost"
             size="icon"
-            className="relative h-10 w-10 rounded-lg overlay-surface ring-1 ring-foreground/10"
+            aria-label={t("notifications.title")}
+            className={
+              // chip = the floating-corner form (own glass tile + hairline);
+              // bare = lives inside the MobileHeader's glass, no double tile.
+              // active:bg-accent — `hover:` never fires on touch; the press
+              // must still read (the header is a <md surface).
+              chip
+                ? "relative h-10 w-10 rounded-lg overlay-surface ring-1 ring-foreground/10"
+                : "relative h-10 w-10 rounded-lg active:bg-accent"
+            }
           >
             <Bell className="h-5.5 w-5.5" />
             {unread > 0 && (

@@ -52,6 +52,7 @@ from app.tools.clips.transcript import (
     words_in_range,
 )
 from app.tools.research.web import FETCH_TEXT_CAP, fetch_text, web_search
+from app.tools.world import page_reading_for_url, write_page_reading
 from app.pipeline.assets import asset_text_content
 from app.pipeline.exploration_store import (
     KIND_CANDIDATE_SET,
@@ -119,6 +120,13 @@ class GetWebPageParams(BaseModel):
         "(this turn or an earlier one). "
         "The readable text comes back capped; an empty read means the page "
         "could not be read (unreachable / refused / no readable text)."
+    )
+    refresh: bool = Field(
+        default=False,
+        description="False = answer from the project's stored reading when "
+        "one exists (the same page is never re-fetched). True ONLY when the "
+        "user says the page has changed — it fetches fresh and replaces the "
+        "stored reading.",
     )
 
 
@@ -1328,16 +1336,30 @@ _WEB_SNIPPET_CAP = 300
 
 
 async def get_web_page(db: AsyncSession, project: Project, params: GetWebPageParams) -> str:
-    """Read one web page's readable text (fetch_text — SSRF-guarded, capped).
-    「这个网站你看看？」's factual substrate: the link shared for discussion
-    is never material, but it is always readable."""
+    """Read one web page's readable text. consult-first (world-seat 律):
+    the project's stored reading (page_readings) answers when present —
+    snapshot semantics, the capture stamp rides the observation; a fresh
+    fetch happens only on a miss or an explicit ``refresh``, and writes
+    back through the seat's own short session (the turn's transaction
+    stays read-only). 「这个网站你看看？」's factual substrate: the link
+    shared for discussion is never material, but it is always readable."""
     url = params.url.strip()
+    if not params.refresh:
+        stored = await page_reading_for_url(db, project.id, url)
+        if stored is not None:
+            when = stored.fetched_at.date().isoformat()
+            return (
+                f"The project's stored reading of {url} (captured {when} — "
+                "if the user says the page has changed since, re-read with "
+                f"refresh=true):\n\n{stored.text}"
+            )
     text = await fetch_text(url)
     if not text:
         return (
             f"Nothing readable came back from {url} — the page was "
             "unreachable, refused the fetch, or carried no readable text."
         )
+    await write_page_reading(project.id, url, text)
     return f"Readable text of {url} (capped at {FETCH_TEXT_CAP} chars):\n\n{text}"
 
 

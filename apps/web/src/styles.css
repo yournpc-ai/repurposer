@@ -52,17 +52,17 @@
 
 /* The results dock's parked glass (ADR-041 D4 一体容器, 2026-08-15 走查拍板)
  * — one persistent input dock over the calm dotted canvas, not a transient
- * overlay over arbitrary content: far more translucency than overlay-surface
- * so the canvas's dot grid reads through the frost (the Lovart reference
- * anatomy). NO shadow — the dock is the same input group's third parking
- * spot as the home composer and inherits its hero-flat rule (hairline
- * only); the ring rides the component, not this recipe.
- * (FLORA's 90%/12px moved this too on 2026-09-06 — same-day A/B closed:
- * imperceptible on the calm near-black canvas, ~2 lightness points of
- * neutral gray between the two composites. Reference values restored so
- * the dot grid keeps reading through the dock.) */
+ * overlay over arbitrary content: enough translucency for the canvas's
+ * texture to read through the frost. NO shadow — the dock is the same input
+ * group's third parking spot as the home composer and inherits its
+ * hero-flat rule (hairline only); the ring rides the component, not this
+ * recipe. */
 @utility dock-surface {
-  background-color: color-mix(in oklch, var(--popover) 65%, transparent);
+  /* Light: a gray fill (the muted ladder step) — page-level floats must read
+     against the WHITE canvas by FILL, not by their hairline (white-on-white
+     translucent white = zero fill contrast = the ring reads as "a border").
+     The frost stays so canvas texture still whispers through. */
+  background-color: color-mix(in oklch, var(--muted) 82%, transparent);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   backdrop-filter: blur(24px) saturate(1.4);
 
@@ -73,7 +73,11 @@
   }
 
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    background-color: var(--popover);
+    background-color: var(--muted);
+
+    @variant dark {
+      background-color: var(--popover);
+    }
   }
 }
 
@@ -107,6 +111,38 @@
   color: var(--meta-foreground);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+/* shimmer — the ai-elements companion utility (the registry installs the
+ * component files only; the docs list this as a manual globals.css step).
+ * A soft light sweep across live text — the thinking/status labels and
+ * attachment processing placeholders. Same mechanics as upstream's Shimmer
+ * component (background-clip: text, 250% band, backgroundPosition sweep),
+ * token ink only so dark mode follows. NOTE: background-clip:text pins the
+ * visible ink to this gradient — a shimmered label ignores text-* color
+ * overrides (e.g. hover brightening) for the duration. */
+@utility shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 40%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 60%,
+    var(--muted-foreground) 100%
+  );
+  background-size: 250% 100%;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer-sweep 2s linear infinite;
+}
+
+@keyframes shimmer-sweep {
+  from {
+    background-position: 100% center;
+  }
+  to {
+    background-position: 0% center;
+  }
 }
 
 /*
@@ -594,13 +630,16 @@ body {
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(1 0 0);
+  --sidebar: oklch(0.98 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.24 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.92 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.9 0 0);
+  /* The rail↔canvas boundary is a FILL step (--sidebar vs --background) plus
+     this whisper seam — the line accents the tonal difference, it never
+     carries separation alone. */
+  --sidebar-border: oklch(0.94 0 0);
   --sidebar-ring: oklch(0.708 0 0);
   /* Inverse panel (Material's "inverse surface"): dark slab used by the
    * landing's highlighted pricing tier + final CTA. */
@@ -659,7 +698,11 @@ body {
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.12 0 0);
+  /* The rail floats half a step ABOVE the near-black canvas (0.12): layout
+     surfaces separate by FILL first (the 填充优先 law at layout scale), the
+     seam line only accents the tonal step. (Light mode sinks the rail
+     instead — 0.98 on white; each mode follows its reference direction.) */
+  --sidebar: oklch(0.17 0 0);
   --sidebar-foreground: oklch(0.95 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.985 0 0);
@@ -719,6 +762,30 @@ body {
   pointer-events: none;
 }
 
+/* Home bottom-dock entrance (2026-10 bottom-dock ruling): the composer flips
+   from its in-flow slot to `fixed` at the viewport bottom once the slot
+   scrolls out — a DISCRETE state change, so a clock animation is legal here
+   (the scroll-linked morph itself never uses clocks). Transform/opacity
+   only; the bar rises 12px into place. Reduced motion: plain swap. */
+@keyframes home-dock-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.home-dock-in {
+  animation: home-dock-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-dock-in {
+    animation: none;
+  }
+}
+
 /* Composer rotating placeholder (Lovart-style: fixed prefix + cycling
    example prompt, 2026-08-30; rolling window per user ruling 2026-08-31 —
    the first pass was a blink-swap): per cycle the outgoing line rolls up
@@ -762,31 +829,7 @@ body {
   }
 }
 
-/* The dock history layer's mount beat (2026-09-02 输入框独立层律): the
-   region is its own frosted layer above the standalone input group — one
-   fade + an 8px rise on open, the same ease-out register as the bottom
-   row's transitions. Unmount is a plain cut (symmetric with the close
-   gesture's immediacy); reduced motion swaps instantly. */
-@keyframes dock-history-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.dock-history-in {
-  animation: dock-history-in 300ms ease-out both;
-}
-@media (prefers-reduced-motion: reduce) {
-  .dock-history-in {
-    animation: none;
-  }
-}
-
-/* The right-docked panel's entrance beat (2026-09-06 三形态机; 2026-10-02
+/* The right-docked panel's entrance beat (2026-09-06; 2026-10-02
    让位方向修订): only the full→panel MORPH replays it (gated by the
    stageMounted latch — refresh / history-open mounts render the final frame
    directly, 水合首帧永不重播). The chat YIELDS RIGHT: the panel starts 40px

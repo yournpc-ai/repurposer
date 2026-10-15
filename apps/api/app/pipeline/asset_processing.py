@@ -48,6 +48,7 @@ from app.pipeline.prosody import prosody_processor
 from app.pipeline.speaker_map import speaker_map_processor
 from app.pipeline.visual_anchors import visual_anchors_processor
 from app.pipeline.web_capture import web_capture_processor
+from app.tools.world import upsert_page_reading
 from app.providers.storage import download_to_cache, get_project_output_dir
 
 logger = structlog.get_logger()
@@ -348,6 +349,29 @@ def _clear_processing_stage(asset: Asset) -> None:
         asset.meta = cleaned
 
 
+def _fire_deferred_storyboard_check(project_id: UUID) -> None:
+    """Fire-and-forget the film dock's deferred storyboard seat (the
+    warm_understanding pattern): the check runs on its own session inside
+    the bridge command; a failure degrades to a warning — the dock's hold
+    stands regardless, and the next capture's completion re-fires."""
+
+    async def _run() -> None:
+        try:
+            from app.pipeline import conversation_bridge  # deferred: ADR-087 seam
+
+            await conversation_bridge.deferred_storyboard_check(project_id)
+        except Exception as e:  # noqa: BLE001 — best-effort, never a processing failure
+            logger.warning(
+                "deferred_storyboard_check_failed",
+                project_id=str(project_id),
+                error=str(e),
+            )
+
+    task = asyncio.create_task(_run())
+    _warm_tasks.add(task)
+    task.add_done_callback(_warm_tasks.discard)
+
+
 async def _record_reading_beat(db: AsyncSession, asset: Asset, status: str) -> None:
     """素材节拍入库 (2026-09-24 用户拍板): the dock's settled reading row
     ("读完 X") is a plain message row so it survives a refresh — written
@@ -505,6 +529,16 @@ async def process_asset(asset_id: UUID) -> None:
                 result.merge(await processor(asset, result))
             if result.extracted_text is not None:
                 asset.extracted_text = result.extracted_text
+                # 页面读本写回 (world-seat 律): a web_page capture's text
+                # lands in the project's readings seat too — the chat read
+                # tool (get_web_page) consults it before ever re-fetching
+                # the same URL.
+                if asset.type == AssetType.WEB_PAGE and asset.project_id is not None:
+                    capture_url = (result.meta or {}).get("capture_url")
+                    if capture_url:
+                        await upsert_page_reading(
+                            db, asset.project_id, capture_url, result.extracted_text
+                        )
             if result.transcript is not None:
                 asset.transcript = result.transcript
             if result.duration_seconds is not None:
@@ -530,6 +564,14 @@ async def process_asset(asset_id: UUID) -> None:
             # transcript's seat; the /graph read face and the transcript
             # endpoint read this status raw.
             await _record_reading_beat(db, asset, "completed")
+            # 分镜迟延块 (ADR-120 hold/draft 解耦, 2026-10-15): a docked film
+            # plan whose dock-time draft found no readable pages (the URL
+            # turn's capture rides this very queue) gets its review block
+            # the moment the capture set drains — the storyboard_review hold
+            # gates the run meanwhile. Fire-and-forget, the warm's pattern;
+            # every gate inside is a world read, so a stale fire is a no-op.
+            if asset.type == AssetType.WEB_PAGE and asset.project_id is not None:
+                _fire_deferred_storyboard_check(asset.project_id)
             logger.info(
                 "asset_processed",
                 asset_id=str(asset_id),
@@ -571,3 +613,10 @@ async def process_asset(asset_id: UUID) -> None:
             _clear_processing_stage(asset)
             await db.commit()
             await _record_reading_beat(db, asset, "failed")
+            # 分镜迟延块 (ADR-120 hold/draft 解耦): a FAILED page drains the
+            # in-flight predicate too — a sibling's completion may have fired
+            # while this page was still PROCESSING (a no-op then), so the
+            # terminal failure re-fires: the deferred seat drafts from the
+            # pages that DID land, or stands down honestly when none did.
+            if asset.type == AssetType.WEB_PAGE and asset.project_id is not None:
+                _fire_deferred_storyboard_check(asset.project_id)

@@ -12,7 +12,7 @@ Read these before touching a subsystem (check each doc's own status line — som
 - `docs/PROGRESS.md` — 进展快照 + 排期 + 需求池的**唯一事实源**；排期/优先级只准引用它。
 - `docs/MODULE_ARCHITECTURE.md` — 六层模块图 + **表归属契约**（每张表只有一个 owner 模块）+ 跨模块通信规则 + §7 代码地图/队列机制/数据约定（现状架构唯一事实源）；新表/新模块/新认领源必须在此登记。
 - `docs/UI_GUIDELINES.md` — **studio 视觉/交互设计系统唯一事实源**：圆角/纵深/灰梯/hover/浮层冰霜/composer 视觉解剖/侧栏解剖/页面布局/画布形态。动 `_app` UI 前必读。
-- `docs/CHAT_ARCHITECTURE.md` — **chat/画布行为唯一事实源**：终态工具集 / plan path / QuestionDock / SSE / 打字机律 / 三形态机 / 词表 v3 / 相机律。动 chat、dock、画布行为前必读。
+- `docs/CHAT_ARCHITECTURE.md` — **chat/画布行为唯一事实源**：终态工具集 / plan path / QuestionDock / SSE / 打字机律 / 两形态机 / 词表 v3 / 相机律。动 chat、dock、画布行为前必读。
 - `docs/POSITIONING.md` — **定位根概念架构（运营层母文档，ADR-042，已拍板未实施）**：身份根 = 定位（positioning），人设收窄为表达分区，渠道/选题/素材挂根；施工排期 = PROGRESS 第八~十周运营端。动身份模块/渠道/选题/home 前先读它。
 - `docs/AGENT_ARCHITECTURE.md` — 四层工程地图（Model / Harness / Graph / Loop，ADR-039）：工具包 `app/tools/`（能力唯一家）+ agent registry `app/agents/`（一个 Agent 类 + 声明实例）+ `NodeBase` 图内核（报价=fold / 执行=topo / 校验=∀ / 对账=⊆）+ chat 治理环。agent 架构唯一事实源；outputs 可扩展（产物 = 工具的属性，注册表派生）。
 - `docs/DIALOG_WORKFLOW.md` — **对话→生产概念架构母文档（ADR-052）**：厚 agent = 产品层一个 agent、身体 = 一条 workflow（聊天 → 意图路由 → brief/计划 → 生产 DAG → 产出）；双引擎分离 / canonical 词汇（router·understand·plan·brief）/ 有界 loop 节点三护栏 / 施工切分 B1~B4。动 chat 意图层 / plan path / 多轮对话 / agent 概念前必读。
@@ -62,13 +62,13 @@ Correct:
 - **浮层一律 `overlay-surface`**（styles.css 共享冰霜配方）；overlay chrome 只用 Dialog primitive，**禁手写 backdrop**；视口锚浮层 portal 到 `document.body`。
 - **颜色只用 shadcn token**，禁硬编码色值。
 - **布局**：`_app` 页面 `flex-1`，禁 `min-h-svh`/`min-h-screen`（home = `h-svh` + 单内部 scrollport 例外；landing 页合法）；页面主体放 `SidebarInset`。
-- **侧栏**：导航用 `SidebarMenuButton` + `render={<Link />}`；图标 `h-4.5 w-4.5`；新增入口同步 `nav.*` i18n；**通知铃 = 内容区右上角唯一浮动 chip**，该角全站保留；无全局 AppHeader。
+- **侧栏**：导航用 `SidebarMenuButton` + `render={<Link />}`；图标 `h-4.5 w-4.5`；新增入口同步 `nav.*` i18n；**通知铃 = 内容区右上角唯一浮动 chip**，该角全站保留；无全局 AppHeader。（浮动 chip 法适用 md+；<md chrome 全收编进玻璃 `MobileHeader`——品牌/Projects/裸铃/头像 AccountConsole，浮动触发器与浮动铃双撤，侧栏抽屉不再可达。）
 - **Dot grid = FlowView 签名，只此一面**；home 与其余任何面禁用。
 
 ## Composer / Chat 行为硬律（全文 → `docs/CHAT_ARCHITECTURE.md`）
 
 - **Agent 北极星（ADR-088/089/117）**：Agent 持续生产与修订用户可理解的项目产物；不编译、不直接执行 workflow 内部语言；付费执行只从已呈现且已授权的范围开始（授权 = 常驻 auto 档默认或明示确认，守卫线以上恒问）。**确认只有两种**：执行确认（`confirm_execution`）与费用确认（`confirm_credits`），users.settings 两键默认全 auto，唯一座位 = SettingsDialog「助手」section——composer/dock 控制条永不出现确认偏好控件。
-- **composer 零意图识别**：send = spinner（建项目 + 上传素材）→ 直达 `/projects/$id`（canvas + ChatDock 三形态机）。**`POST /chat` 是唯一意图面**——永不新增第二意图入口（如专用 `/intent` 端点）。
+- **composer 零意图识别**：send = spinner（建项目 + 上传素材）→ 直达 `/projects/$id`（canvas + ChatDock 两形态机）。**`POST /chat` 是唯一意图面**——永不新增第二意图入口（如专用 `/intent` 端点）。
 - **Prompt 必填**：空提交本地 toast 拦截。纯 prompt 发送不建资产；intent router 判定消息是「用户自己的内容」还是「请求」（LLM 判定，**禁长度启发式**），是内容则提升为 transcript 资产（`create_transcript_asset_from_text`）；无资产无贴文的生成请求得到要素材的回答，永不无中生有计划。
 - **中途上传走 dock attach 钮**：选中文件暂存为输入组内生命周期 chips（uploading → done/error，× 删且删资产）；**只有 send 钮消费它们**，骑回合作消息 `attachments`（持久化，刷新重渲染）。选文件自身永不发送；附件单发合法；空消息永不自动作答 docked checkpoint。
 - **clips need media**：server 侧双重 enforce——intent router 对纯文本输入排除 clips；`create_run` 出生地镜像 422。
@@ -81,7 +81,7 @@ Correct:
 - **Mentions**：@-entity chips 随消息 `mentions` 字段送达；注册表架构（前端 `MENTION_REGISTRY` + 服务端解算），已注册 = `asset`（请求族）/ `output`（指认族，钉 id 服务端确定性解出修订目标）。**配方永不是 mention**（配方 = 提示词，卡面预填模板即全部发射载荷）。**Chip 三律**：可见（inline + ×）/ 发送消费 / × 净化。方针全文 = `docs/MENTIONS.md`。
 - **修订 = 图变更**：chat 修订骑 `POST /chat` 的 `edit_graph`（wiring 提案）→ `apply_wiring_ops` 唯一写口；卡面 prompt 直改 = 确定性手势走 `POST /projects/{id}/graph/revise`，**dock 零消息**（节点状态周期就是全部反馈），卡面乐观回显永不回闪。
 - **画布只读**：FlowView 无 drag/connect/pan/zoom API；**相机只认用户发起节拍**（draft 图到来整链 fit / 新节点诞生 setCenter；背景 refetch 永不动相机）。
-- **Dock 三形态机**（full / panel / dock）与保草稿承重结构（单一 root + 恒渲染容器 + 恒定子索引，MentionEditor 跨形态翻转永不 remount）：全文 CHAT_ARCH §1 关键形态事实。
+- **Dock 两形态机**（full / panel；移动端恒 full 纯 chat）与保草稿承重结构（单一 root + 恒渲染容器 + 恒定子索引，MentionEditor 跨形态翻转永不 remount）：全文 CHAT_ARCH §1 关键形态事实。
 - **chat 修复禁补丁式加禁令（先取证后归因）**：chat bug 的修法 = 先取证再归因到源头，**永不用新增禁令压症状**——上下文盲的禁令（「禁应答粒子」「禁指导用户」式）在合法场景必然拆东墙补西墙。取证 = 回放真实 payload 与机制链：payload 是「代码 × 当时世界状态」的纯函数，无 LLM 台账也能用真实 assemble + 内存拨回世界状态字节级重建（先例 = ADR-101 时代的 `scratch/replay_material_wait_turn.py`，脚本已退役、存档在 git 历史）。源头只有四类：装配 / 工具观察文本 / 法条座位冲突（两部法打架或适用范围未声明）/ 一法多说（同一部法在多个座位各说一遍）。两条结构律：**一部法只在一个座位说**；**工具观察文本只携带世界事实 + 指回法条座位，永不携带可转述的言语草稿**（被复述的法 = 模型的言语草稿，必被 paraphrase 进回复）。
 
 ## Product Positioning
@@ -92,7 +92,7 @@ Repurposer serves **European knowledge experts who have content but no time to m
 - **Channels**: LinkedIn, 机构站, 邮件 newsletter。**Multi-output 是能力非承诺**：用户点名什么生成什么，承诺句 = "the user names it, the agent makes it"——打包式「一输入全套出」文案永禁；多语言是入场券（FR/DE/ES/IT/EN 等）。
 - **GDPR / EU 驻留** = 卖点但对外文案保持「ready 角度」，合规实装后改写。
 - **Dual track 命名**（NAMING N-25）：对内 = **agent**；对外 = **assistant / 助手**，"agent" 永不出现于英文文案（zh 用品类句「你的自媒体Agent团队」=品牌妥协，待 N-25 修订）；角色隐喻（运营官/操盘手/班子）禁（N-24）。
-- **Copy doctrine**（论证 → STRATEGY §5）：plain & factual。禁资产话术（"knowledge assets" 否）/ 膨胀隐喻（"bigger stage" 否）/ 审批机械化（"You review. It publishes" 否）；身份从 expertise 出发，**不称用户 influencer / creator / 网红**；承诺句 = "You focus on your craft; we handle the rest."（与 hero "We do the rest" 同源）；**禁 MCN / 代运营 / 变现话术**（我们是 agent 不是 agency，不做变现承诺）；**CTA / 控件 = 直给动词 + 具体名词**（"上传你的原视频"/"生成"），禁产品黑话与造词；写作风格 = 风格/style，"voice" = 音频本义（声纹/dub）；Sparkles icon 禁，assistant 视觉 = `LogoMark`；studio home hero = 品牌锁up + 品类句（剩定位归 landing）。配方卡点击唯一归宿 = composer 预填 `promptTemplate`（配方 = 提示词），永不是模板编辑器。
+- **Copy doctrine**（论证 → STRATEGY §5）：plain & factual。禁资产话术（"knowledge assets" 否）/ 膨胀隐喻（"bigger stage" 否）/ 审批机械化（"You review. It publishes" 否）；身份从 expertise 出发，**不称用户 influencer / creator / 网红**；承诺句 = "You focus on your craft; we handle the rest."（与 hero "We do the rest" 同源）；**禁 MCN / 代运营 / 变现话术**（我们是 agent 不是 agency，不做变现承诺）；**CTA / 控件 = 直给动词 + 具体名词**（"上传你的原视频"/"生成"），禁产品黑话与造词；写作风格 = 风格/style，"voice" = 音频本义（声纹/dub）；Sparkles icon 禁，assistant 视觉 = `LogoMark`；studio home hero = **一行问句**（`home.heroQuestion`）指向 composer——页面唯一目的地是输入框，问句与轮换 placeholder 形成一问一答；品牌名不在 hero 重复，由侧栏锁up / MobileHeader 承载（剩定位归 landing）。配方卡点击唯一归宿 = composer 预填 `promptTemplate`（配方 = 提示词），永不是模板编辑器。
 - **用户到来即彷徨**（行为规格 → CHAT_ARCH §3.3）：每步都答「下一步是什么」——开始前配方卡接住 / 计划中确认 dock 接住 / 完成后结果画布闭环接住（ADR-041）。agent 顾问姿态四律：① **每轮一问、每问可一词答、默认路径恒带（散文零宣告）**（ADR-052 判词 5 + ADR-103；只问用户能答的——听众/目的，参数由配方与默认值吸收）② 带理由纠偏（给替代方案，禁静默拒绝）③ 成功定义随计划 ④ 永给唯一下一步；不做职业/变现咨询（诊断是为了更快给出对方案，不是把生产工具变顾问）。
 - **闭环优先于卡片数量**：卡点亮（能力真 + 预览真）≠ 通路；「Remix → 对话定计划 → 生成 → 结果 → 下一步 → 再生产」全通才算；对外叙事单位 = "完全通路"。
 - **闭环叙事与身份命名**（ADR-037 / NAMING N-27）：用户侧闭环 = **管理 IP → 产生 outputs → 发布**，en 用 "personal brand / thought leadership"，zh 用 "IP / 自媒体"；产品内身份模块 = **人设**（多实例扁平：工作号/生活号）。**身份根升格为「定位（Positioning）」已拍板**（ADR-042，目标架构 → `docs/POSITIONING.md`，生产层闭环后动工）——人设收窄为定位的表达分区，渠道/选题/素材挂定位根，品牌/IP 留营销承诺层；落地前代码层只 `persona`。

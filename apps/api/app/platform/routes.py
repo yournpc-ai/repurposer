@@ -21,7 +21,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, RedirectResponse
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import NotificationListResponse
@@ -37,7 +37,9 @@ from app.platform.auth import (
 from app.platform.billing import get_or_create_wallet, held, list_transactions
 from app.platform.user_settings import (
     merge_confirmation_pref,
+    merge_workspace_layout,
     read_confirmation_prefs,
+    read_workspace_layout,
 )
 from app.platform.email import InvalidRecipientError, send_verification_email
 from app.providers.storage import (
@@ -171,12 +173,15 @@ class VerifyCodeResponse(BaseModel):
 
 
 class UserSettingsResponse(BaseModel):
-    """The settings read shape: the two confirmation prefs (ADR-117 D1).
-    The internal guardrail (``billing.always_confirm_above``) is an ops
-    parameter — never on this response, never a user setting (D6)."""
+    """The settings read shape: the two confirmation prefs (ADR-117 D1) +
+    the workspace layout pref (ADR-123 — stored only; the effective
+    ``canvas_available`` is composed client-side and rides every chat
+    request). The internal guardrail (``billing.always_confirm_above``) is
+    an ops parameter — never on this response, never a user setting (D6)."""
 
     confirm_execution: str
     confirm_credits: str
+    workspace_layout: str
 
 
 class UserSettingsUpdate(BaseModel):
@@ -184,11 +189,18 @@ class UserSettingsUpdate(BaseModel):
 
     confirm_execution: Literal["auto", "ask"] | None = None
     confirm_credits: Literal["auto", "ask"] | None = None
+    workspace_layout: Literal["auto", "chat"] | None = None
 
     @model_validator(mode="after")
     def _at_least_one_key(self) -> "UserSettingsUpdate":
-        if self.confirm_execution is None and self.confirm_credits is None:
-            raise ValueError("at least one of confirm_execution / confirm_credits")
+        if (
+            self.confirm_execution is None
+            and self.confirm_credits is None
+            and self.workspace_layout is None
+        ):
+            raise ValueError(
+                "at least one of confirm_execution / confirm_credits / workspace_layout"
+            )
         return self
 
 
@@ -203,6 +215,7 @@ async def get_settings(
     return UserSettingsResponse(
         confirm_execution=execution,
         confirm_credits=credits,
+        workspace_layout=read_workspace_layout(current_user.settings),
     )
 
 
@@ -231,12 +244,15 @@ async def put_settings(
         settings = merge_confirmation_pref(
             settings, "confirm_credits", data.confirm_credits
         )
+    if data.workspace_layout is not None:
+        settings = merge_workspace_layout(settings, data.workspace_layout)
     user.settings = settings
     await db.commit()
     execution, credits = read_confirmation_prefs(user.settings)
     return UserSettingsResponse(
         confirm_execution=execution,
         confirm_credits=credits,
+        workspace_layout=read_workspace_layout(user.settings),
     )
 
 
@@ -347,9 +363,20 @@ class WalletTransactionItem(BaseModel):
     # topup = 充值 (purchase — W11 boundary).
     family: str
     amount: int
-    # The row's display name: a spend names its run (the plan's
-    # instruction, trimmed); grant/topup name their family (+ note).
-    label: str
+    # The row's display name per ADR-058 二源律: grant/topup carry their
+    # server-composed family label (+ note); a spend carries its run's
+    # LLM-chosen plan name or None — the client then composes the honest
+    # fallback from ``output_types`` (世界自证, 产物徽标). The user's prompt
+    # text is NEVER the label: it names what the user asked, not what ran.
+    label: str | None = None
+    # Spend-row facts for the client's honest fallback (the produced PUBLIC
+    # output types, INTERNAL_OUTPUT_TYPES excluded) and meta line.
+    output_types: list[str] = Field(default_factory=list)
+    # A spend's trimmed instruction — the client's last-resort echo (ADR-060:
+    # the user's own words) when a run has neither an LLM name nor public
+    # outputs (understand-only / aborted runs).
+    hint: str | None = None
+    project_name: str | None = None
     created_at: datetime
 
 
@@ -395,7 +422,13 @@ async def get_wallet_transactions(
     negative adjust as 花费. Ledger machine kinds never cross the wire."""
     from sqlalchemy import select as _select
 
-    from app.models.tables import WorkflowRun as _Run
+    from app.models.tables import (
+        Output as _Output,
+        Project as _Project,
+        WorkflowRun as _Run,
+        WorkflowStep as _Step,
+    )
+    from app.models.schemas import INTERNAL_OUTPUT_TYPES
     from app.ui_locale import current_ui_language
 
     keyset = _decode_cursor(cursor) if cursor else None
@@ -416,7 +449,10 @@ async def get_wallet_transactions(
         else:
             ordered.append(("", row))
 
-    # Run labels in one batch (a spend names its run's plan).
+    # Spend-row facts in three batches (ADR-058 二源律): the run's context
+    # carries the LLM-chosen plan name (source ①); the produced PUBLIC output
+    # types are the client's honest-fallback facts (source ② 世界自证);
+    # the project title feeds the row's meta line.
     run_ids = [UUID(rid) for rid in groups]
     run_rows = (
         list(
@@ -429,17 +465,48 @@ async def get_wallet_transactions(
         if run_ids
         else []
     )
-    zh = (current_ui_language() or "").startswith("zh")
-    instruction_by_run = {
-        str(r.id): str(((r.context or {}).get("instruction") or "")).strip()
-        for r in run_rows
+    ctx_by_run = {str(r.id): (r.context or {}) for r in run_rows}
+    project_ids = {r.project_id for r in run_rows}
+    title_by_project = {
+        p.id: p.title
+        for p in (
+            list(
+                (
+                    await db.execute(
+                        _select(_Project).where(_Project.id.in_(project_ids))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if project_ids
+            else []
+        )
     }
-
-    def run_label(run_id: str) -> str:
-        text = instruction_by_run.get(run_id) or ""
-        if not text:
-            return "花费" if zh else "Spent"
-        return text if len(text) <= 36 else text[:36] + "…"
+    project_name_by_run = {
+        str(r.id): title_by_project.get(r.project_id) for r in run_rows
+    }
+    type_rows = (
+        (
+            await db.execute(
+                _select(_Step.run_id, _Output.type)
+                .join(_Output, _Output.workflow_step_id == _Step.id)
+                .where(
+                    _Step.run_id.in_(run_ids),
+                    _Output.type.notin_(INTERNAL_OUTPUT_TYPES),
+                )
+                .order_by(_Step.seq)
+            )
+        ).all()
+        if run_ids
+        else []
+    )
+    types_by_run: dict[str, list[str]] = {}
+    for rid, otype in type_rows:
+        types = types_by_run.setdefault(str(rid), [])
+        if otype not in types:
+            types.append(otype)
+    zh = (current_ui_language() or "").startswith("zh")
 
     items: list[WalletTransactionItem] = []
     emitted: set[str] = set()
@@ -453,12 +520,21 @@ async def get_wallet_transactions(
                 # A run with no metered captures yet — the held strip owns
                 # its frozen part; no row (鸡毛蒜皮不上明面).
                 continue
+            ctx = ctx_by_run.get(key) or {}
+            name = str(ctx.get("name") or "").strip() or None
+            hint_raw = str(ctx.get("instruction") or "").strip()
             items.append(
                 WalletTransactionItem(
                     id=f"run:{key}",
                     family="spend",
                     amount=spent,
-                    label=run_label(key),
+                    label=name,
+                    output_types=types_by_run.get(key, []),
+                    hint=(
+                        hint_raw if len(hint_raw) <= 36 else hint_raw[:36] + "…"
+                    )
+                    or None,
+                    project_name=project_name_by_run.get(key),
                     created_at=groups[key]["at"],
                 )
             )

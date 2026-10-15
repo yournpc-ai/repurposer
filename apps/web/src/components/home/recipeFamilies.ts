@@ -1,17 +1,22 @@
 /**
  * Home 两级 tab 货架 (D5, flora-parity-ui 批) — the data-driven registry
  * behind `RecipeTabs` + `RecipeShelf`: 一级 pill 轨 (families) × 下划线子
- * tab (subs) × 横滑货架 (shelves). Shape follows the prototype
- * (`scratch/skill-mg-ui-proposal.html` 屏①), trimmed to real skill
- * coverage (原型注⑤: 族名按真实 skill 覆盖裁剪——发言人/真人 UGC 是
- * avatar 栈不是 MG 引擎,不占座).
+ * tab (subs) × 横滑货架 (shelves).
+ *
+ * 组织轴 = 用户任务 (2026-10 investor-demo ruling), never 产物介质: the
+ * tabs answer "what can I get done", not "what file type comes out".
+ * Three task families + a catch-all:
+ *
+ *   ads (Ads & UGC — first seat = the home default)   MG 旗舰: launch_film
+ *   talks (Talks & interviews)   一段讲话 → 字幕 / 配音 / 竖屏剪辑 / 重构
+ *   posts (Social media)         LinkedIn 核心: 贴文 / 轮播幻灯 (金句卡演示期隐藏)
+ *   templates (More)             catch-all 座 — 未归类服务端新卡的兜底行,
+ *                                正常为空不渲染
  *
  * 上架纪律 (无真 demo 不成卡): a demos shelf entry ships ONLY with a real
- * rendered demo video — the MG 批 (D3) owns those assets; this registry
- * declares the seats with EMPTY demo lists, and `resolveFamilies` drops
- * empty shelves → empty subs → empty families, so a family without real
- * demos never renders, not even a placeholder (连摆位都不摆). Until D3
- * lands demo URLs, only the templates family resolves.
+ * rendered demo video — `resolveFamilies` drops empty shelves → empty subs
+ * → empty families, so a family without real demos never renders, not even
+ * a placeholder (连摆位都不摆).
  *
  * 卡片点击唯一归宿 = composer 预填 (D5 禁则 8 — 永不是模板编辑器): every
  * resolved shelf item carries its `prefillKey` — a recipe card resolves to
@@ -63,41 +68,50 @@ export interface RecipeFamilyDef {
  * web-side projection: the server registry (apps/api) stays family-
  * agnostic, so the assignment lives here. A card registered server-side
  * WITHOUT an entry here files under "templates" (the catch-all row — MG
- * 批 D3「进现有配方行」). */
+ * 批 D3「进现有配方行」). Hidden cards keep their honest mapping — the
+ * seat reappears the moment the hide lifts. */
 export const RECIPE_CARD_FAMILY: Record<string, string> = {
-  "multilingual-subs": "templates",
-  "voice-dub": "templates",
-  "highlight-clips": "templates",
-  reframe: "templates",
-  "social-post": "templates",
-  "quote-cards": "templates",
-  carousel: "templates",
-  "image-video": "templates",
+  // Talks & interviews — one talk recording in, named cuts out.
+  "multilingual-subs": "talks",
+  "voice-dub": "talks",
+  "highlight-clips": "talks",
+  reframe: "talks",
+  // Social media — the LinkedIn-core written/visual outputs.
+  "social-post": "posts",
+  carousel: "posts",
+  "quote-cards": "posts", // demo-hidden (DEMO_HIDDEN_CARDS)
+  "image-video": "templates", // demo-hidden (DEMO_HIDDEN_CARDS)
 }
+
+/** 演示期下架清单 (2026-10 investor-demo ruling) — HIDE, never delete: the
+ * cards stay in the server registry, the capabilities stay live (the agent
+ * still answers a spoken request), the i18n copy stays. The shelf simply
+ * doesn't list them. Remove an id here and the card reappears in its
+ * mapped family.
+ *
+ *   quote-cards — 内容偏薄 (single composite image), overlaps the posts
+ *                 story the carousel already tells better
+ *   image-video — 照片成片, consumer-flavored, off the knowledge-expert
+ *                 positioning, collides with the MG flagship story */
+export const DEMO_HIDDEN_CARDS: ReadonlySet<string> = new Set([
+  "quote-cards",
+  "image-video",
+])
 
 export function recipeCardFamily(card: RecipePublic): string {
   return RECIPE_CARD_FAMILY[card.id] ?? "templates"
 }
 
-/** The shelf registry. MG families declare their subs/shelves with EMPTY
- * demo lists — D3 turns them on by filling URLs, zero component changes. */
+/** The shelf registry — task families in display order (the first family
+ * is the home's default tab). Ads' RESERVED seats (ugc / product) declare
+ * EMPTY demo lists until their renders land — invisible until then, zero
+ * component changes to turn them on (无真 demo 不上架). */
 export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
   {
-    id: "templates",
-    icon: LayoutGrid,
-    subs: [{ id: "all", shelves: [{ id: "featured", kind: "recipes" }] }],
-  },
-  {
-    id: "explainer",
-    subs: [
-      { id: "animated", shelves: [{ id: "animated", kind: "demos", demos: [] }] },
-      { id: "motion", shelves: [{ id: "motion", kind: "demos", demos: [] }] },
-    ],
-  },
-  {
+    // Ads — the MG flagship (launch_film: paste a link, get a
+    // film). First seat = the home default tab.
     id: "ads",
     subs: [
-      { id: "brand", shelves: [{ id: "brand", kind: "demos", demos: [] }] },
       {
         id: "saas",
         shelves: [
@@ -118,14 +132,44 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
           },
         ],
       },
+      {
+        id: "brand",
+        shelves: [
+          {
+            id: "brand",
+            kind: "demos",
+            demos: [
+              {
+                // Brand-official-site seat: zymix.ai → launch film (run
+                // 8321463d — "One App", 26.6s/1080p, every word grounds to
+                // the site's own copy). Content-addressed into the demo/
+                // tree.
+                id: "launch-film-zymix",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-zymix-9890ad58.mp4",
+                orientation: "wide",
+              },
+            ],
+          },
+        ],
+      },
+      { id: "ugc", shelves: [{ id: "ugc", kind: "demos", demos: [] }] },
       { id: "product", shelves: [{ id: "product", kind: "demos", demos: [] }] },
     ],
   },
   {
-    id: "social",
-    subs: [
-      { id: "linkedin", shelves: [{ id: "linkedin", kind: "demos", demos: [] }] },
-    ],
+    id: "talks",
+    subs: [{ id: "all", shelves: [{ id: "talks", kind: "recipes" }] }],
+  },
+  {
+    id: "posts",
+    subs: [{ id: "all", shelves: [{ id: "posts", kind: "recipes" }] }],
+  },
+  {
+    // Catch-all seat: a server-side card without a family mapping files
+    // here. Empty in the current assignment → never renders.
+    id: "templates",
+    icon: LayoutGrid,
+    subs: [{ id: "all", shelves: [{ id: "featured", kind: "recipes" }] }],
   },
 ]
 
@@ -162,6 +206,9 @@ export function resolveFamilies(
 ): ResolvedFamily[] {
   const cardsByFamily = new Map<string, RecipePublic[]>()
   for (const card of cards) {
+    // 演示期下架 (DEMO_HIDDEN_CARDS): hide ≠ delete — the card's capability
+    // and copy stay live, the shelf just doesn't list it.
+    if (DEMO_HIDDEN_CARDS.has(card.id)) continue
     const familyId = recipeCardFamily(card)
     const list = cardsByFamily.get(familyId)
     if (list) list.push(card)

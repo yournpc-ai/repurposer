@@ -57,6 +57,15 @@ def _clip(delivered: bool = True, **kw) -> LandedFact:
     return landed_fact(_OutputStub("clip", **kw))
 
 
+def _film(delivered: bool = True, **kw) -> LandedFact:
+    """A film fact — the same render contract as the clip family
+    (``_RENDER_CONTRACTED``): delivered = render COMPLETED + the video file."""
+    if delivered:
+        kw.setdefault("render_status", "completed")
+        kw.setdefault("files", {"video": "k.mp4"})
+    return landed_fact(_OutputStub("film", **kw))
+
+
 # ---- extraction (landed_fact) -------------------------------------------------
 
 
@@ -146,6 +155,38 @@ class TestComputeRunReview:
             landed=[landed_fact(_OutputStub("post", language="zh"))],
         )
         assert review.gaps == ()
+
+    def test_film_pinned_language_promises_the_pin(self) -> None:
+        """launch_film rides the same :lang suffix law (2026-10-15 语言钉参):
+        an English-pinned film that landed in Chinese is a proven gap."""
+        review = compute_run_review(
+            confirmed_scope=_scope({"tool": "launch_film", "params": {"language": "en"}}),
+            landed=[_film(language="en")],
+        )
+        assert review.gaps == ()
+        review = compute_run_review(
+            confirmed_scope=_scope({"tool": "launch_film", "params": {"language": "en"}}),
+            landed=[_film(language="zh")],
+        )
+        assert "missing_output:film:en" in review.gaps
+
+    def test_film_unpinned_promises_no_language(self) -> None:
+        """Unpinned = the storyboard declares it at run time — any landed
+        language satisfies the promise."""
+        review = compute_run_review(
+            confirmed_scope=_scope({"tool": "launch_film", "params": {}}),
+            landed=[_film(language="zh")],
+        )
+        assert review.gaps == ()
+
+    def test_film_undelivered_render_counts_as_missing(self) -> None:
+        """The film rides the render contract: a row whose render never
+        completed (or lost its file) never counts toward the promise."""
+        review = compute_run_review(
+            confirmed_scope=_scope({"tool": "launch_film", "params": {"language": "en"}}),
+            landed=[_film(delivered=False, language="en")],
+        )
+        assert "missing_output:film:en" in review.gaps
 
     def test_clip_shortfall_is_a_gap(self) -> None:
         review = compute_run_review(

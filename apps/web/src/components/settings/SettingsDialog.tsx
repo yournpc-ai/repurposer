@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react"
 import { useTranslation } from "react-i18next"
-import { Coins, Cpu, Share2 } from "lucide-react"
+import { Cpu, PanelsTopLeft, Share2, Zap } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
@@ -20,16 +20,18 @@ import {
 import { AssistantSection } from "@/components/settings/AssistantSection"
 import { ChannelsSection } from "@/components/settings/ChannelsSection"
 import { CreditsSection } from "@/components/settings/CreditsSection"
+import { GeneralSection } from "@/components/settings/GeneralSection"
 
-/** Settings as a shared DIALOG, never a page (MiniMax / FLORA pattern,
- * 2026-08-21 ruling): one modal — left section nav + right content — that
- * ANY entry point summons via `useSettingsDialog().openSettings(section)`
- * (the account console's settings row today; memory / asset-center rows
- * later). The retired `/settings` page survives only as the channels OAuth
- * callback shim (it toasts, opens this dialog, and bounces home). New deep
- * surfaces register as SECTIONS entries below, never as routes. */
+/** Settings as a shared DIALOG, never a page (MiniMax / FLORA pattern): one
+ * modal — left section nav + right content — that ANY entry point summons
+ * via `useSettingsDialog().openSettings(section)` (the account console's
+ * settings row; the CreditsPill popover's full-ledger deep link). The
+ * provider seats at the ROOT route so root-level pages (the project page)
+ * reach it too. The retired `/settings` page survives only as the channels
+ * OAuth callback shim (it toasts, opens this dialog, and bounces home). New
+ * deep surfaces register as SECTIONS entries below, never as routes. */
 
-export type SettingsSectionId = "channels" | "assistant" | "credits"
+export type SettingsSectionId = "channels" | "general" | "assistant" | "credits"
 
 interface SettingsSectionDef {
   id: SettingsSectionId
@@ -46,6 +48,12 @@ const SECTIONS: SettingsSectionDef[] = [
     render: () => <ChannelsSection />,
   },
   {
+    id: "general",
+    icon: PanelsTopLeft,
+    labelKey: "general.title",
+    render: () => <GeneralSection />,
+  },
+  {
     id: "assistant",
     icon: Cpu,
     labelKey: "assistant.title",
@@ -53,7 +61,7 @@ const SECTIONS: SettingsSectionDef[] = [
   },
   {
     id: "credits",
-    icon: Coins,
+    icon: Zap,
     labelKey: "credits.title",
     render: () => <CreditsSection />,
   },

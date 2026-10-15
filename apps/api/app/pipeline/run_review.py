@@ -127,7 +127,9 @@ def _promised_from_scope(compiled_scope: list[dict[str, Any]]) -> dict[str, Any]
     """The promise half, derived from the snapshot's compiled scope (the
     exact task chain the user confirmed): writer families (+ language),
     the clip count (cut_segments spans), caption language versions
-    (translate_clip), the dub promise (dub_clip)."""
+    (translate_clip), the dub promise (dub_clip), the film (+ its pinned
+    spoken language — launch_film, 2026-10-15 语言钉参: an unpinned film
+    promises no language, the storyboard declares it)."""
     types: list[str] = []
     clip_count = 0
     caption_languages: list[str] = []

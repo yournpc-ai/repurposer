@@ -28,8 +28,9 @@ next chat turn as the user's own say).
 
 Worker-side seats: both fire points are pipeline code (no request context),
 so the turn opens its OWN session (the ``dock_interrupt_question``
-precedent), inherits the speech language from the conversation's stamped
-interface-language owner (ADR-080 单一叙事者律 — never the material's,
+precedent), mirrors the speech language of the conversation's own user
+messages (2026-10-15 修订 — the interface-language stamp survives only as
+the no-signal floor and the chrome fallback's base; never the material's,
 never a per-writer derivation), and persists the review as a PLAIN
 assistant row — ``intent`` carries the trigger dump
 ``{type: "trigger_review", trigger, ref, suggestions}`` (the row replays
@@ -160,6 +161,17 @@ WRAP_UP = ChatTool(
 )
 
 
+def _chrome_language(speech: str, floor: str) -> str:
+    """The code-side chrome's language (the suggestion dock's title) follows
+    the speech the model ACTUALLY wrote (2026-10-15 语言律修订): the speech
+    mirrors the conversation's own messages (the assembly's directive), so
+    the chrome keys on it — never on the interface floor alone. A
+    CJK-bearing speech gets the zh title; anything else falls to the floor
+    (残留列账: an en-UI conversation in German still gets the English title
+    — one chrome string, only when the suggestion dock lands)."""
+    return "zh" if _prefers_zh(speech) else floor
+
+
 def _trigger_question_line(language: str) -> str:
     """The suggestion dock's bare question (ask 三分解剖 ② — code-assembled,
     never the LLM's voice, same doctrine as the reminder tail): the review
@@ -201,13 +213,17 @@ def _trigger_language(
     history: list[Message],
     conversation: Conversation | None = None,
 ) -> str:
-    """The speech language for a worker-born turn (ADR-080 界面语言唯一
-    owner): the conversation's stamped ``ui_language`` owner FIRST (the
-    request chain's locale, re-stamped every user turn — the ONE fact all
-    assistant writers inherit), then the run's pinned ui_language, then the
-    latest user message's script (owner 缺席时的兜底推导), then English —
-    the project's content language default is NOT a speech signal, so it
-    never votes here."""
+    """The speech-language FLOOR for a worker-born turn (2026-10-15 语言律
+    修订 — the interface owner was previously ABSOLUTE for trigger turns,
+    which split the single narrator: an English UI chatting in Chinese got
+    a Chinese chat but an English delivery). The speech itself mirrors the
+    conversation's own user messages (the assembly's directive does the
+    judging — the history rides the context); this chain only names the
+    floor for a no-signal history and the chrome fallback's base: the
+    conversation's stamped ``ui_language`` owner first, then the run's
+    pinned ui_language, then the latest user message's script, then
+    English — the project's content language default is NOT a speech
+    signal, so it never votes here."""
     owner = (conversation.ui_language if conversation is not None else None) or ""
     if owner:
         return owner.lower()
@@ -552,7 +568,7 @@ async def run_trigger_turn(
                     db,
                     conversation_id,
                     speech,
-                    _suggestions_payload(suggestions, language),
+                    _suggestions_payload(suggestions, _chrome_language(speech, language)),
                     intent=_trigger_dump(trigger, ref, suggestions),
                 )
                 if trigger == TRIGGER_RUN_COMPLETED:

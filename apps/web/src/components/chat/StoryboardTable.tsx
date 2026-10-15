@@ -83,10 +83,12 @@ export function StoryboardTable({
   })
   // 参数行 (ADR-120 E2/E3): the reviewed plan's film levers as header chips —
   // aspect always; voiceover only when off (on is the default); the mood
-  // only when the plan named one.
+  // only when the plan named one; the narration language when pinned or
+  // declared (data chip, like the aspect — never a translated label).
   const paramChips: string[] = [payload.aspect ?? "16:9"]
   if (payload.voiceover === false) paramChips.push(t("storyboard.voiceOff"))
   if (payload.music_mood) paramChips.push(t("storyboard.music", { mood: payload.music_mood }))
+  if (payload.language) paramChips.push(payload.language.toUpperCase())
 
   if (superseded && !expanded) {
     return (

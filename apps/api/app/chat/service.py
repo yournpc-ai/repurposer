@@ -259,20 +259,23 @@ def _estimate_tail(
     if estimate is not None:
         low, high = estimate.total
         if reason == "storyboard_review":
-            # ADR-120 §2 复核拍: the storyboard table rides the flow below;
-            # the run waits for the user's review (verbal go or the pill) —
-            # the same hold/capture semantics, the review named first.
+            # ADR-120 §2 复核拍 (统一迟延 2026-10-16): the draft NEVER runs
+            # in the dock's turn — the block lands late via the deferred
+            # seat, so at dock time the tail always names the draft in
+            # flight, never claims it is below. The run waits for the
+            # user's review (verbal go or the pill) — the same
+            # hold/capture semantics, the review named first.
             if zh:
                 return (
-                    f"\n\n（估价 {low}–{high} 积分——分镜已列在下方，你过目确认后才开始："
+                    f"\n\n（估价 {low}–{high} 积分——分镜稿正在起草，到了你过目确认后才开始："
                     "按上限预扣，按实际用量结算，失败的步骤不收费，剩余退回）"
                 )
             return (
                 f"\n\n(Estimated {low}–{high} credits — the storyboard is "
-                "below for your review, and the work starts once you "
-                "confirm: the high end is held, you're charged only for "
-                "what actually runs, failed steps are free, and the "
-                "remainder is returned.)"
+                "being drafted and lands here shortly; the work starts "
+                "once you've reviewed and confirmed: the high end is "
+                "held, you're charged only for what actually runs, "
+                "failed steps are free, and the remainder is returned.)"
             )
         if reason == "unquotable":
             if zh:
@@ -309,6 +312,21 @@ def _estimate_tail(
             f"\n\n(Estimated {low}–{high} credits — on start the high end "
             "is held; you're charged only for what actually runs, failed "
             "steps are free, and the remainder is returned.)"
+        )
+    if reason == "storyboard_review":
+        # The deferred-quote half of the review hold: no range to show, the
+        # review beat is still the headline (统一迟延: the block is never
+        # below at dock time — always name the draft in flight).
+        if zh:
+            return (
+                "\n\n（估价随运行确定——分镜稿正在起草，到了你过目确认后才开始；"
+                "开始后才计费，失败的步骤不收费）"
+            )
+        return (
+            "\n\n(Credits are priced when the run starts — the storyboard "
+            "is being drafted and lands here shortly; the work starts once "
+            "you confirm; billing begins only when you start, and failed "
+            "steps are free.)"
         )
     if reason in ("above_guardrail", "unquotable"):
         if zh:
@@ -1931,6 +1949,31 @@ async def answer_question(
                 if gate.blockers:
                     detail["blockers"] = list(gate.blockers)
                 raise HTTPException(gate.http_status, detail)
+            # 法1后半硬闸 (2026-10-16): a film chain's start requires the
+            # storyboard block landed for THIS dock — this seat is the pill
+            # path's backstop (the chat path's _start_run rejects pre-answer
+            # with a model-readable reason; a raise here rolls back with the
+            # session, so the dock's answer cell stays open). The ONLY
+            # bypass is the user's explicit waiver (法3 — the field rides
+            # the answer request; the pill never sends it).
+            if not data.skip_storyboard_review and any(
+                t.tool == "launch_film" for t in tasks
+            ):
+                from app.chat.storyboard_dock import film_start_block  # same layer
+
+                if (
+                    await film_start_block(
+                        db,
+                        conversation_id=UUID(str(message.conversation_id)),
+                        tasks=[t.model_dump(mode="json") for t in tasks],
+                        dock_created_at=message.created_at,
+                    )
+                    is None
+                ):
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        {"code": "start.storyboard_pending"},
+                    )
             # The confirmed chain's draft twin must mirror what Start
             # actually runs (K5): the review panel's hand edits (data.intent)
             # may diverge from the last docked stamp — re-sync idempotently
@@ -2045,13 +2088,20 @@ async def answer_question(
             # reviewed dock renders the storyboard the user OK'd — the
             # LATEST message-flow block is the reviewed truth (世界自证:
             # what they saw is what runs). The node re-validates before
-            # use; absent/stale → the birth orchestrates fresh.
+            # use; absent/stale → the birth orchestrates fresh. A birth
+            # without a block is legal ONLY via the user's explicit waiver
+            # (法3) — stamp it for audit (台账可追责).
             if any(t.tool == "launch_film" for t in tasks):
                 block = await latest_storyboard_block(db, UUID(str(message.conversation_id)))
                 if block is not None:
                     run.context = {
                         **(run.context or {}),
                         "confirmed_storyboard": block.storyboard.model_dump(mode="json"),
+                    }
+                if data.skip_storyboard_review:
+                    run.context = {
+                        **(run.context or {}),
+                        "storyboard_review_skipped": True,
                     }
             # E3 双态写者 (first half, iter-3 S1): the confirmed package's
             # plan rows settle ready/revised → compiled IN THE SAME
@@ -2777,6 +2827,16 @@ async def execute_chat_turn(
     # distinct, individually truthful facts (the minimal turn contract).
     prepared.user_message.turn_state = "settled"
     await db.commit()
+    # 分镜迟延座 (ADR-120 统一迟延): a film dock's storyboard draft never
+    # runs inside the turn — it runs HERE, post-commit, fire-and-forget
+    # (the world now visible to the seat's fresh session). The seat's
+    # world-read gates make a stale fire a silent no-op: no film dock /
+    # captures still in flight (the capture's own terminal re-fires) / the
+    # block already landed for this dock.
+    if prepared.project is not None:
+        from app.chat.storyboard_dock import fire_deferred_storyboard_check
+
+        fire_deferred_storyboard_check(UUID(str(prepared.project.id)))
     await finalize_bailed_runs(bailed_run_ids)
     return ChatResponse(
         conversation_id=prepared.conversation_id,
@@ -3159,6 +3219,7 @@ async def record_storyboard_block(
     voiceover: bool = True,
     music_mood: str | None = None,
     aspect: str = "16:9",
+    language: str | None = None,
 ) -> Message:
     """Persist the plan-stage storyboard draft as a message-flow block row.
     Never in the confirm dock (ADR-120 §1 — auto 档无确认钮, the dock
@@ -3177,6 +3238,7 @@ async def record_storyboard_block(
         voiceover=voiceover,
         music_mood=music_mood,
         aspect=aspect,
+        language=language,
     )
     return await _create_message(
         db,

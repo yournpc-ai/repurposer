@@ -562,3 +562,35 @@ def test_registry_and_node_citizenship():
     assert node.produces_outputs and not node.needs_plan_prelude
     # The render claim gate keys on render_status alone — no type list to
     # drift (jobs.py claim_pending_render).
+
+
+# ---- the film language chain (2026-10-15 语言钉参) ------------------------------
+
+
+def test_storyboard_language_read_tolerance():
+    """The drafter-declared language: absent on legacy rows reads as None
+    (the schema carries the read tolerance), a declared code rides verbatim."""
+    assert _storyboard(_good_scenes()).language is None
+    assert _storyboard(_good_scenes(), language=None).language is None
+    assert _storyboard(_good_scenes(), language="en").language == "en"
+
+
+def test_launch_film_params_language_pin():
+    """The plan's pin is an ordinary param (null = declare it from the
+    page); the conversation's own language is never a source — the law lives
+    in the Field description, the pin lives in params.language."""
+    from app.tools.film.storyboard import LaunchFilmParams
+
+    assert LaunchFilmParams.model_validate({}).language is None
+    assert LaunchFilmParams.model_validate({"language": "en"}).language == "en"
+
+
+def test_assemble_carries_the_pinned_language():
+    """Purity by signature: the pin reaches the prompt assembly (and only
+    there — the model never reads the conversation's own language)."""
+    from app.tools.film.storyboard import _assemble
+
+    kwargs, _images = _assemble([], "make it pop", None, "de", [])
+    assert kwargs["language"] == "de"
+    kwargs, _images = _assemble([], None, None, None, [])
+    assert kwargs["language"] is None

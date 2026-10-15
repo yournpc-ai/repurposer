@@ -38,6 +38,11 @@ interface HomeComposerProps {
    * clock transition: the form always matches the scroll position exactly
    * (fast scroll = fast morph, zero lag, zero threshold flap). */
   dockP?: number
+  /** The docked bar's viewport seat: at the BOTTOM (2026-10 bottom-dock
+   * ruling — the composer flips to `fixed` once its flow slot scrolls out).
+   * The bar's panels/tooltips open UPWARD from there (a side="bottom" panel
+   * would leave the screen); the expanded card's panels always open down. */
+  dockedAtBottom?: boolean
   onGenerateStart?: () => void
   /** The draft (prompt + mentions) is the editor's reported mirror — the DOM
    * owns the text (MentionEditor); Home keeps it only as the send payload. */
@@ -46,11 +51,6 @@ interface HomeComposerProps {
   mentions: ChatMention[]
   onMentionsChange: (value: ChatMention[]) => void
   editorRef: RefObject<MentionEditorHandle | null>
-  /** Fired when the prompt band (or any descendant — the MentionEditor
-   * contentEditable) gains focus via click or keyboard. The home route
-   * uses this to scroll the band back into view if the page has been
-   * scrolled past it — keeps the prompt always usable. */
-  onFocus?: () => void
 }
 
 const AUTO_GENERATE = "__auto_generate__"
@@ -98,7 +98,9 @@ const TOUR_VERSION = tourVersionOf(COMPOSER_TOUR_STEPS, tourCopy.composer)
 // AI-composer anatomy: chips block-start / control / actions block-end), so
 // the density recipe lives ON the addons and the editor band, never on the
 // container: 20px sides / 20px top / 12px chin (measured off the MiniMax
-// composer reference). The docked bar is 56px tall — 16px pad + one 24px
+// composer reference); the docked bar narrows the sides to 8px — the attach
+// button and the send reserve already hold the bar's horizontal air. The
+// docked bar is 56px tall — 16px pad + one 24px
 // text-base line + 16px pad, so the single line self-centers by construction
 // and the h-9 send rides with 10px air (MiniMax bar proportions: the button
 // is ~2/3 of the bar height, never stuffed). The radius IS a morph property
@@ -108,11 +110,17 @@ const TOUR_VERSION = tourVersionOf(COMPOSER_TOUR_STEPS, tourCopy.composer)
 // transition. An inline style also sidesteps the stock
 // has-data-[align=*]:rounded-md pins (their :has() specificity outranks any
 // plain rounded-* class).
-const EDITOR_H = 80 // expanded band height
+const EDITOR_H = 80 // rest band FLOOR (the empty/one-line MiniMax card look)
+const EDITOR_MAX_H = 136 // growth cap: 2×20 pad + 4×24 lines — beyond it the
+// editor's own overflow-y-auto scrolls (the band never exceeds four lines)
 const BAR_EDITOR_H = 56 // bar band height (= the whole bar): 16 + 24 line + 16
 const EDITOR_PAD_Y = 20 // pt-5
 const BAR_EDITOR_PAD_Y = 16 // (56 − 24 line) / 2 — the bar line self-centers
-const PAD_X = 20 // px-5 sides
+const PAD_X = 20 // px-5 sides (expanded card)
+const BAR_PAD_X = 8 // bar: the attach button + the row's send reserve already
+// hold the horizontal air — the band's own 20px sides would be dead width
+// (on a phone that's 40px of the text lane, the difference between the
+// placeholder fitting and clipping).
 const RADIUS_REST = 16 // rounded-2xl
 const RADIUS_DOCK = 40 // ≥ half the 56px bar — the cap makes the stadium
 const CHIPS_MAX_H = 160 // ~4 chip rows
@@ -125,20 +133,20 @@ const SEND_BAR_ANCHOR = 10 // (56 − 36) / 2 — centered in the bar
 const BAR_SEND_RESERVE = 54 // 10 anchor + 36 send + 8 gap — bar input's right reserve
 const ATTACH_PAD_X = 10 // bar: the attach glyph's center mirrors the send's (28px)
 const ATTACH_MAX_W = 96
-/** Rotating placeholder cadence (Lovart-style): the fixed prefix stays, the
- * example prompt behind it cycles every this-many ms. */
+/** Rotating placeholder cadence (Lovart-style): one full example prompt
+ * cycles every this-many ms — no prefix, the whole line rolls. */
 const PLACEHOLDER_ROTATE_MS = 3500
 
 export function HomeComposer({
   personas,
   dockP = 0,
+  dockedAtBottom = false,
   onGenerateStart,
   prompt,
   onPromptChange,
   mentions,
   onMentionsChange,
   editorRef,
-  onFocus,
 }: HomeComposerProps) {
   const { t } = useTranslation()
   const { launching: isGenerating, launch } = useProjectLaunch()
@@ -241,17 +249,18 @@ export function HomeComposer({
       },
     })
 
-  // Rotating placeholder (Lovart-style, 2026-08-30): a fixed prefix
-  // ("Ask Repurposer to …") with the three most-common prompts cycling
-  // behind it — teaching by example, inside the placeholder (the tour stays
-  // the how-to surface). Rendered as an overlay (React-rendered, so it can
-  // animate — the CSS attr() placeholder can't); visible ONLY while the
-  // editor is empty. The cycle runs on an interval gated on emptiness; SSR
-  // and the first paint show example 0. The transition is a ROLLING WINDOW
-  // (2026-08-31 user ruling — the first pass was a blink-swap): the outgoing
-  // prompt rolls up and out while the incoming rolls in from below, same
-  // direction, so the motion reads as one continuous scroll; `prev` keeps
-  // the outgoing line mounted for the animation.
+  // Rotating placeholder (Lovart-style): three first-person example prompts
+  // cycling with NO prefix — each line is a complete request in the user's
+  // own voice, i.e. an ANSWER to the hero question above ("What should we
+  // make today?"): teaching by example, inside the placeholder (the tour
+  // stays the how-to surface). Rendered as an overlay (React-rendered, so
+  // it can animate — the CSS attr() placeholder can't); visible ONLY while
+  // the editor is empty. The cycle runs on an interval gated on emptiness;
+  // SSR and the first paint show example 0. The transition is a ROLLING
+  // WINDOW (2026-08-31 user ruling — the first pass was a blink-swap): the
+  // outgoing prompt rolls up and out while the incoming rolls in from
+  // below, same direction, so the motion reads as one continuous scroll;
+  // `prev` keeps the outgoing line mounted for the animation.
   const placeholderPrompts = t("home.placeholderPrompts", {
     returnObjects: true,
   }) as string[]
@@ -293,6 +302,26 @@ export function HomeComposer({
     if ((e.target as HTMLElement).closest("button")) return
     editorRef.current?.focus()
   }
+  // Content-driven band target: re-measured after every content change
+  // (typing / paste / recipe prefill / clear — all funnel through onChange
+  // → the prompt prop) and on viewport rewraps. The rAF defers the read
+  // past the DOM mutation. SSR and first paint = EDITOR_H.
+  const [contentH, setContentH] = useState(EDITOR_H)
+  useEffect(() => {
+    const remeasure = () => {
+      const h = editorRef.current?.getContentHeight()
+      if (!h) return
+      setContentH(
+        Math.min(Math.max(h + 2 * EDITOR_PAD_Y, EDITOR_H), EDITOR_MAX_H),
+      )
+    }
+    const id = requestAnimationFrame(remeasure)
+    window.addEventListener("resize", remeasure)
+    return () => {
+      cancelAnimationFrame(id)
+      window.removeEventListener("resize", remeasure)
+    }
+  }, [prompt, mentions, editorRef])
   // One-place law: the Assets panel IS the chips band's expanded form —
   // while it's open the band folds away, so the file list lives in exactly
   // one place. The fold interpolates maxHeight AND the one-sided padding in
@@ -316,10 +345,19 @@ export function HomeComposer({
   }
   const editorRowStyle: CSSProperties = { paddingRight: dockP * BAR_SEND_RESERVE }
   // The band owns the editor's padding (not the MentionEditor itself) so the
-  // vertical air can morph: py 20→16 leaves exactly one line in the bar.
+  // air can morph: py 20→16 leaves exactly one line in the bar; px 20→8 —
+  // in the docked bar the attach button (left) and the row's send reserve
+  // (right) already hold the horizontal air.
+  // The band's height is CONTENT-DRIVEN at rest (2026-10-15 mobile ruling):
+  // a fixed 80px band left 40px for text = 1.67 lines, so every two-line
+  // prompt on a phone clipped its second line ("下面被遮挡"). The band hugs
+  // the draft between EDITOR_H (floor) and EDITOR_MAX_H (cap, then the
+  // editor scrolls); the measured target only changes on content edits /
+  // rewraps, so the morph stays a pure function of scrollTop — it
+  // interpolates WHATEVER the current target is down to the 56px bar.
   const editorBandStyle: CSSProperties = {
-    height: EDITOR_H + dockP * (BAR_EDITOR_H - EDITOR_H),
-    padding: `${EDITOR_PAD_Y + dockP * (BAR_EDITOR_PAD_Y - EDITOR_PAD_Y)}px ${PAD_X}px`,
+    height: contentH + dockP * (BAR_EDITOR_H - contentH),
+    padding: `${EDITOR_PAD_Y + dockP * (BAR_EDITOR_PAD_Y - EDITOR_PAD_Y)}px ${PAD_X + dockP * (BAR_PAD_X - PAD_X)}px`,
   }
   const controlRowStyle: CSSProperties = {
     maxHeight: (1 - dockP) * CONTROL_ROW_H,
@@ -393,16 +431,18 @@ export function HomeComposer({
             addon only fits single-line shells. */}
         <div className="flex w-full items-center" style={editorRowStyle}>
           <div className="flex-none overflow-hidden" style={attachStyle}>
-            {/* MiniMax-standard one-line layout: attach on the left. Opens
-                DOWNWARD here (side="bottom") — docked at the viewport's top,
-                a side="top" panel would leave the screen. Pure circle icon +
-                function tooltip, stateless (2026-08-30 icon-button ruling):
-                the staged files themselves live in the panel. */}
+            {/* MiniMax-standard one-line layout: attach on the left. Panel
+                direction follows the dock seat: the bar rides the viewport's
+                BOTTOM (2026-10 bottom-dock ruling), so its panel opens
+                UPWARD (side="top") — a downward panel would leave the
+                screen. Pure circle icon + function tooltip, stateless
+                (2026-08-30 icon-button ruling): the staged files themselves
+                live in the panel. */}
             <ComposerPanelButton
               icon={Plus}
               label={t("composer.assets")}
-              tooltipSide="bottom"
-              popoverSide="bottom"
+              tooltipSide={dockedAtBottom ? "top" : "bottom"}
+              popoverSide={dockedAtBottom ? "top" : "bottom"}
               align="start"
               tabIndex={dockP > 0.5 ? 0 : -1}
             >
@@ -419,26 +459,26 @@ export function HomeComposer({
             style={editorBandStyle}
             data-tour="composer-prompt"
             onClick={focusEditor}
-            onFocus={onFocus}
           >
             {/* Rotating placeholder overlay — pointer-events-none so clicks
                 land on the band's focus handler. Padding mirrors the band's
                 (the morph interpolation), so the text sits exactly where the
-                editor's first line is; overflow-hidden clips whatever the
-                one-line docked bar can't show. The suffix is a rolling
-                window: per cycle the outgoing line (absolute, so layout
-                follows the incoming) rolls up-out while the incoming rolls
-                in from below — styles.css `.placeholder-roll-*`. Color =
-                the whisper tier (2026-09-23 user ruling, chat-dock parity:
-                the MentionEditor's CSS placeholder reads --meta-foreground,
-                this overlay was one tier brighter). */}
+                editor's first line is. whitespace-nowrap + overflow-hidden =
+                native-placeholder parity: a placeholder NEVER wraps — on
+                narrow viewports the line clips at the edge instead of the
+                nowrap line dropping to a second row and spilling out of the
+                56px docked bar. The line is a rolling window: per cycle the
+                outgoing line (absolute, so layout follows the incoming) rolls up-out while the incoming rolls in from below
+                — styles.css `.placeholder-roll-*`. Color = the whisper tier
+                (2026-09-23 user ruling, chat-dock parity: the MentionEditor's
+                CSS placeholder reads --meta-foreground, this overlay was one
+                tier brighter). */}
             {promptEmpty && (
               <div
                 aria-hidden
-                className="pointer-events-none absolute inset-0 overflow-hidden text-base break-words whitespace-pre-wrap text-meta-foreground"
+                className="pointer-events-none absolute inset-0 overflow-hidden whitespace-nowrap text-base text-meta-foreground"
                 style={{ padding: editorBandStyle.padding }}
               >
-                <span>{t("home.placeholderPrefix")}</span>
                 <span className="relative inline-block whitespace-nowrap">
                   {placeholderRoll.prev !== null && (
                     <span

@@ -1,14 +1,18 @@
 /** The conversation timeline layer's contract (ADR-108 数组位置律): the
  * persisted array's order IS the render order — buildConversationUnits MAPS
  * rows to units in place and never re-sorts; foldActivityUnits is the
- * display-layer folding projection (呈现层纯函数, ADR-110 段聚合). */
+ * display-layer folding projection (呈现层纯函数, ADR-110 段聚合), and
+ * foldCategories / activityCategoryKey are the aggregate's expanded
+ * decomposition (归档归类目 — settled surfaces speak categories, instance
+ * names belong to the live phase). */
 
 import { describe, expect, it } from "vitest"
 
 import {
+  activityCategoryKey,
   buildConversationUnits,
   foldActivityUnits,
-  foldSummary,
+  foldCategories,
   type ConversationUnit,
 } from "@/lib/chatTimeline"
 import type { ActivityRowFrame, OverlayMessage } from "@/components/chat/historyReplay"
@@ -98,7 +102,7 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
   const read = (id: string, over: Partial<ActivityRowFrame> = {}) =>
     activityMsg(id, { key: "chat.inspectingDone.transcript", ...over })
 
-  it("completed rows fold ACROSS different keys into ONE aggregate — the CC collapse", () => {
+  it("2+ completed rows fold ACROSS different keys into ONE aggregate — the CC collapse", () => {
     const units = foldActivityUnits(
       buildConversationUnits([
         msg("user"),
@@ -109,18 +113,18 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
       ]),
     )
     expect(units.map(unitId)).toEqual(["user", "fold:r1+r2+r3", "reply"])
-    expect(foldSummary(foldOf(units[1]).rows)).toEqual([
-      { key: "chat.inspectingDone.understanding", repeat: 1, count: undefined, name: undefined, total: undefined },
-      { key: "chat.explore.searchingDone", repeat: 1, count: undefined, name: undefined, total: undefined },
-      { key: "chat.explore.candidatesReady", repeat: 1, count: 12, name: undefined, total: undefined },
+    expect(foldCategories(foldOf(units[1]).rows)).toEqual([
+      { kind: "read", key: "chat.inspectingDone.understanding", repeat: 1, count: undefined },
+      { kind: "read", key: "chat.explore.searchingDone", repeat: 1, count: undefined },
+      { kind: "read", key: "chat.explore.candidatesReady", repeat: 1, count: 12 },
     ])
   })
 
-  it("a lone settled row folds too (全收) — no bare rows between speeches", () => {
+  it("a lone settled row passes through as its OWN row (单行段不包折叠壳)", () => {
     const units = foldActivityUnits(
       buildConversationUnits([msg("user"), read("r1"), assistantMsg("reply")]),
     )
-    expect(units.map(unitId)).toEqual(["user", "fold:r1", "reply"])
+    expect(units.map(unitId)).toEqual(["user", "r1", "reply"])
   })
 
   it("a fold never crosses a message boundary", () => {
@@ -136,25 +140,23 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
     expect(units.map(unitId)).toEqual(["fold:a1+a2", "mid", "fold:b1+b2"])
   })
 
-  it("consecutive same-act rows merge into ONE ×N fragment inside the aggregate", () => {
+  it("same-key rows merge into ONE ×N category across the WHOLE segment — adjacency not required", () => {
     const units = foldActivityUnits(
       buildConversationUnits([
         read("r1", { duration_ms: 400 }),
-        read("r2", { duration_ms: 600 }),
-        read("r3", { key: "chat.explore.searchingDone" }),
+        read("r2", { key: "chat.explore.searchingDone" }),
+        read("r3", { duration_ms: 600 }),
         assistantMsg("reply"),
       ]),
     )
     expect(units.map(unitId)).toEqual(["fold:r1+r2+r3", "reply"])
-    // The merged fragment can't speak one honest artifact count — it drops
-    // to undefined (the ×N repeat says the rest).
-    expect(foldSummary(foldOf(units[0]).rows)).toEqual([
-      { key: "chat.inspectingDone.transcript", repeat: 2, count: undefined, name: undefined, total: undefined },
-      { key: "chat.explore.searchingDone", repeat: 1, count: undefined, name: undefined, total: undefined },
+    expect(foldCategories(foldOf(units[0]).rows)).toEqual([
+      { kind: "read", key: "chat.inspectingDone.transcript", repeat: 2, count: undefined },
+      { kind: "read", key: "chat.explore.searchingDone", repeat: 1, count: undefined },
     ])
   })
 
-  it("beats naming DIFFERENT files stay separate fragments of one aggregate", () => {
+  it("beats merge into ONE category regardless of instance names (归档归类目 — 名字是 live 期的言语)", () => {
     const units = foldActivityUnits(
       buildConversationUnits([
         activityMsg("f1", { key: "chat.material.readingDone", name: "a.mp4" }),
@@ -162,9 +164,56 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
       ]),
     )
     expect(units.map(unitId)).toEqual(["fold:f1+f2"])
-    expect(foldSummary(foldOf(units[0]).rows).map((f) => f.name)).toEqual([
-      "a.mp4",
-      "b.mp4",
+    expect(foldCategories(foldOf(units[0]).rows)).toEqual([
+      { kind: "read", key: "chat.material.readingDone", repeat: 2, count: undefined },
+    ])
+  })
+
+  it("progress beats merge and drop the N/M numbering; milestone counts stay individual (two rows can't speak one honest count)", () => {
+    const units = foldActivityUnits(
+      buildConversationUnits([
+        activityMsg("p1", {
+          key: "chat.material.readingDoneProgress",
+          name: "www.zymix.ai/en/",
+          count: 1,
+          total: 3,
+        }),
+        activityMsg("p2", {
+          key: "chat.material.readingDoneProgress",
+          name: "www.zymix.ai/en/about",
+          count: 3,
+          total: 3,
+        }),
+        activityMsg("m1", { key: "chat.explore.candidatesReady", count: 12 }),
+        activityMsg("m2", { key: "chat.explore.candidatesReady", count: 4 }),
+      ]),
+    )
+    expect(foldCategories(foldOf(units[0]).rows)).toEqual([
+      { kind: "read", key: "chat.material.readingDoneProgress", repeat: 2, count: undefined },
+      { kind: "read", key: "chat.explore.candidatesReady", repeat: 1, count: 12 },
+      { kind: "read", key: "chat.explore.candidatesReady", repeat: 1, count: 4 },
+    ])
+  })
+
+  it("same key but different asset types stay separate categories (web_page beats share the base reading key with file beats)", () => {
+    const units = foldActivityUnits(
+      buildConversationUnits([
+        activityMsg("f1", { key: "chat.material.readingDone", name: "a.pdf" }),
+        activityMsg("w1", {
+          key: "chat.material.readingDone",
+          name: "www.zymix.ai/en/",
+          assetType: "web_page",
+        }),
+        activityMsg("w2", {
+          key: "chat.material.readingDone",
+          name: "www.zymix.ai/en/about",
+          assetType: "web_page",
+        }),
+      ]),
+    )
+    expect(foldCategories(foldOf(units[0]).rows)).toEqual([
+      { kind: "read", key: "chat.material.readingDone", assetType: undefined, repeat: 1, count: undefined },
+      { kind: "read", key: "chat.material.readingDone", assetType: "web_page", repeat: 2, count: undefined },
     ])
   })
 
@@ -174,9 +223,12 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
         read("ok1", { key: "chat.inspectingDone.transcript" }),
         read("bad", { key: "chat.inspecting.transcript", status: "failed" }),
         read("ok2", { key: "chat.inspectingDone.transcript" }),
+        read("ok3", { key: "chat.inspectingDone.transcript" }),
       ]),
     )
-    expect(units.map(unitId)).toEqual(["fold:ok1", "bad", "fold:ok2"])
+    // The broken segments each pass through / fold on their own sides of
+    // the failed row (ok1 is a lone row → passthrough; ok2+ok3 fold).
+    expect(units.map(unitId)).toEqual(["ok1", "bad", "fold:ok2+ok3"])
   })
 
   it("fold 展开 = 原帧归位 (flora-parity-ui D4①): the fold keeps the ORIGINAL row frames — the expanded view renders the same identities, never copies", () => {
@@ -188,8 +240,8 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
     )
     const rows = foldOf(units[0]).rows
     expect(rows.map((r) => r.activity_id)).toEqual(["f1", "f2"])
-    // 展开态的每一行就是入折的那一行(显示层投影不改写载荷) —— 折叠永不
-    // 丢失行的 key/count/duration,展开后逐行复明。
+    // 展开态的类目分解从原帧投影(显示层不改写载荷) —— 折叠永不丢失行的
+    // key/count/duration,审计继续读落库行。
     expect(rows[0]).toMatchObject({ key: "chat.inspectingDone.transcript" })
   })
 
@@ -217,6 +269,26 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
     expect(foldOf(units[0]).elapsedMs).toBe(4000)
   })
 
+  it("a run-carrying assistant boundary is no honest end either — the run's span belongs to the receipt row", () => {
+    // The zymix shape: material beats, then the DELIVERY prose stamped at
+    // run completion. The prose's stamp must not stretch the fold's clock
+    // over the whole run — the receipt already reports that total.
+    const units = foldActivityUnits(
+      buildConversationUnits([
+        read("r1", { at: "2026-09-23T08:00:01Z" }),
+        read("r2", { at: "2026-09-23T08:00:03Z", duration_ms: 2000 }),
+        {
+          id: "delivery",
+          role: "assistant",
+          content: "delivered",
+          at: "2026-09-23T08:10:00Z",
+          runId: "run-1",
+        },
+      ]),
+    )
+    expect(foldOf(units[0]).elapsedMs).toBe(4000)
+  })
+
   it("no boundary and no stamps → the summed durations; nothing measurable → null", () => {
     const withDurations = foldActivityUnits(
       buildConversationUnits([
@@ -225,7 +297,52 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
       ]),
     )
     expect(foldOf(withDurations[0]).elapsedMs).toBe(1000)
-    const bare = foldActivityUnits(buildConversationUnits([read("r1")]))
+    const bare = foldActivityUnits(
+      buildConversationUnits([read("r1"), read("r2")]),
+    )
     expect(foldOf(bare[0]).elapsedMs).toBeNull()
+  })
+})
+
+describe("activityCategoryKey — the settled surface's category form (归档归类目)", () => {
+  it("the material reading family remaps to the name-free materialCategory keys", () => {
+    expect(activityCategoryKey("chat.material.readingDone")).toBe(
+      "chat.materialCategory.reading",
+    )
+    expect(activityCategoryKey("chat.material.readingDoneProgress")).toBe(
+      "chat.materialCategory.reading",
+    )
+    expect(activityCategoryKey("chat.material.readingDone_video")).toBe(
+      "chat.materialCategory.reading_video",
+    )
+    expect(activityCategoryKey("chat.material.readingDoneProgress_audio")).toBe(
+      "chat.materialCategory.reading_audio",
+    )
+  })
+
+  it("web_page beats fork off the beat's asset_type (their row key falls to the base form)", () => {
+    expect(activityCategoryKey("chat.material.readingDoneProgress", "web_page")).toBe(
+      "chat.materialCategory.reading_webPage",
+    )
+    expect(activityCategoryKey("chat.material.readingDone", "web_page")).toBe(
+      "chat.materialCategory.reading_webPage",
+    )
+    // The key's own typed suffix wins over a missing/blank asset type.
+    expect(activityCategoryKey("chat.material.readingDone_video", undefined)).toBe(
+      "chat.materialCategory.reading_video",
+    )
+  })
+
+  it("every other family is already category-shaped — the key passes through untouched", () => {
+    expect(activityCategoryKey("chat.inspectingDone.webPage")).toBe(
+      "chat.inspectingDone.webPage",
+    )
+    expect(activityCategoryKey("chat.explore.candidatesReady")).toBe(
+      "chat.explore.candidatesReady",
+    )
+    expect(activityCategoryKey("chat.material.understandingDone")).toBe(
+      "chat.material.understandingDone",
+    )
+    expect(activityCategoryKey(null)).toBeNull()
   })
 })

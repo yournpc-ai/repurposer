@@ -1196,6 +1196,23 @@ async def pending_plan(ctx: Ctx, pid: str) -> dict | None:
     return (await ctx.results(pid)).get("pending_brief")
 
 
+async def wait_storyboard_block(
+    ctx: Ctx, conversation_id: str, timeout: float = 300.0
+) -> dict | None:
+    """Poll the conversation for the message-flow storyboard block (ADR-120
+    hold/draft 解耦): dock-time sync when the pages were already captured,
+    else the capture-settle deferred seat drafts and lands it a beat after
+    the capture completes (the storyboarder agent's own timeout is the
+    bound). Returns the message row, or None on timeout."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        for m in await ctx.messages(conversation_id):
+            if (m.get("intent") or {}).get("type") == "storyboard":
+                return m
+        await asyncio.sleep(2)
+    return None
+
+
 async def wait_trigger_review(
     ctx: Ctx, conversation_id: str, run_id: str, timeout: float = 90.0
 ) -> dict | None:
@@ -3871,15 +3888,18 @@ async def s11_url_to_launch_film(ctx: Ctx) -> None:
     """S11 贴链成片全旅程（MG D4；需活栈 + dev worker 真采集真渲染 + MiniMax
     配额）：用户贴 URL → material_urls 信封座 absorb 生 web_page 资产 →
     worker 真采集 COMPLETED（浏览器级 SSRF 链）→ 分镜方案 dock（链必含
-    launch_film——选择执行律同族）→ auto 档守卫线带价问一次 → 口头 yes
-    开工（与 Start 钮同一机器）→ run completed → 血缘三形态：web_page 资产
-    节点 → launch_film 节点（video × generator）驮 film 产物 + launch_film/
-    render 双 step done → film 产物 render COMPLETED + files.video 在场
-    （产物文件本体由 probe 闸兜底——一法一座，剧本不重复 probe）→ 台账
-    hold = capture + release（计价幂等形态锁）。打回穷举 = 机制合法终态：
-    锁闸②反面形态（FAILED + spec.failure codes）后走真实 retry 旅程，
-    连续两次穷举才红（打回率回归信号，非 flake）。只锁形态不锁文案；目标
-    站不可达/采集失败 = 环境 flake，按归因纪律处置（禁调断言放行）。"""
+    launch_film——选择执行律同族）→ **分镜审查 hold 恒挂**（任何确认档——
+    守卫线/prefs 理由让位 storyboard_review，直开即违法）→ **抢跑 yes 被硬闸
+    拒**（块未落 start_run 拒答、dock 存续；waiver 只能是用户明说的话，模型
+    自作主张带 skip 会在此红）→ 分镜块迟延座落消息流（draft 永不占回合）→
+    口头 yes 开工（与 Start 钮同一机器）→ run completed → 血缘三形态：
+    web_page 资产节点 → launch_film 节点（video × generator）驮 film 产物 +
+    launch_film/render 双 step done → film 产物 render COMPLETED +
+    files.video 在场（产物文件本体由 probe 闸兜底——一法一座，剧本不重复
+    probe）→ 台账 hold = capture + release（计价幂等形态锁）。打回穷举 =
+    机制合法终态：锁闸②反面形态（FAILED + spec.failure codes）后走真实
+    retry 旅程，连续两次穷举才红（打回率回归信号，非 flake）。只锁形态不锁
+    文案；目标站不可达/采集失败 = 环境 flake，按归因纪律处置（禁调断言放行）。"""
     pid = await ctx.new_project("S11 url to launch film")
     await topup_wallet(ctx.user_id)  # launch_film 编排 + 渲染真链
 
@@ -3909,14 +3929,6 @@ async def s11_url_to_launch_film(ctx: Ctx) -> None:
     check(asset_id is not None,
           "the pasted URL births a web_page asset (material_urls absorb)", None)
 
-    # worker 真采集（真站 linear.app）：FAILED = 环境 flake 或采集链回归，
-    # 都按机制红处置。
-    status = await wait_asset_status(
-        asset_id, {AssetStatus.COMPLETED, AssetStatus.FAILED}
-    )
-    check(status == AssetStatus.COMPLETED,
-          "the web_page capture completes on the real site", status)
-
     # 分镜方案 dock（plan/dock 形态）；LLM 裁量（先问一句）有界兜底一回。
     plan = await pending_plan(ctx, pid)
     if not (plan is not None and plan_tasks(plan)):
@@ -3928,17 +3940,58 @@ async def s11_url_to_launch_film(ctx: Ctx) -> None:
     check("launch_film" in tools,
           "the docked chain carries launch_film (the film family's one node)", tools)
 
-    # auto 档：守卫线（带价族）恒问一次——口头 yes 走普通 chat 道到
-    # start_run；若回合已直开（propose→start_run 同回合标准道）则顺势。
-    run_id = turn1.get("run_id")
-    if run_id is None:
-        turn_s = await ctx.chat(pid, "Yes — go ahead.")
-        check(terminal_tool_of(turn_s) == "start_run",
-              "the verbal yes closes on start_run (Start 钮同一机器)", turn_s)
-        run_id = turn_s["run_id"]
-        conv_id = turn_s["conversation_id"]
-    else:
-        conv_id = turn1["conversation_id"]
+    # hold/draft 解耦 (ADR-120, 2026-10-15): the film dock ALWAYS carries the
+    # storyboard review hold — on EVERY confirmation regime (the guardrail /
+    # prefs reason yields its name to storyboard_review), so a same-turn
+    # auto-start is now ILLEGAL for the film chain (the 2026-10-15 取证 bug:
+    # the blind capture-settle wait degraded the draft to None and the auto
+    # gate fired unreviewed).
+    check(turn1.get("run_id") is None,
+          "the film dock NEVER auto-starts (the storyboard_review hold gates it)",
+          turn1)
+    dock_q = (turn1.get("assistant_message") or {}).get("question") or {}
+    check(dock_q.get("kind") == "task_book"
+          and dock_q.get("requires_confirmation") is True
+          and dock_q.get("confirm_reason") == "storyboard_review",
+          "the docked plan carries the storyboard_review hold stamp", dock_q)
+
+    # 法1后半硬闸 (2026-10-16 拍板——静默旁路已废): a premature yes BEFORE
+    # the storyboard block lands is NOT a start — start_run is rejected
+    # (the model answers honestly instead), the dock stays open. A model
+    # slipping skip_storyboard_review=true here would birth a run and fail
+    # this beat — the waiver is the user's explicit words, never the model's
+    # initiative.
+    turn_early = await ctx.chat(pid, "Yes — go ahead.")
+    check(turn_early.get("run_id") is None,
+          "a premature yes never starts the film (the block hasn't landed)",
+          turn_early)
+    plan = await pending_plan(ctx, pid)
+    check(plan is not None and plan_tasks(plan),
+          "the dock survives the premature yes (the hold persists)", plan)
+
+    # worker 真采集（真站 linear.app）：FAILED = 环境 flake 或采集链回归，
+    # 都按机制红处置。抢跑节拍故意排在其前——采集未 drain 时迟延座的在飞门
+    # 保证块不可能落地，抢跑断言零竞态。
+    status = await wait_asset_status(
+        asset_id, {AssetStatus.COMPLETED, AssetStatus.FAILED}
+    )
+    check(status == AssetStatus.COMPLETED,
+          "the web_page capture completes on the real site", status)
+
+    # 分镜块落消息流：dock 时页面未采完 → 迟延座在采集完成后补落（本场景
+    # 采集已 COMPLETED，块经迟延座或 dock 同步落，两者都合法）。
+    conv_id = turn1["conversation_id"]
+    block = await wait_storyboard_block(ctx, conv_id)
+    check(block is not None,
+          "the storyboard block lands in the message flow (sync or deferred seat)",
+          None)
+
+    # 口头确认律：口头 yes 走普通 chat 道到 start_run（与 Start 钮同一机器）。
+    turn_s = await ctx.chat(pid, "Yes — go ahead.")
+    check(terminal_tool_of(turn_s) == "start_run",
+          "the verbal yes closes on start_run (Start 钮同一机器)", turn_s)
+    run_id = turn_s["run_id"]
+    conv_id = turn_s["conversation_id"]
     check(run_id is not None, "the film run is born", turn1)
 
     # 真渲染全链（采集已齐 → launch_film 编排（有界打回 ≤3 候选）→ 渲染 +

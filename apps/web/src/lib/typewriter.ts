@@ -10,6 +10,8 @@
  *
  * Client-side only: use inside event handlers / effects, never during SSR.
  */
+import { sseProbe } from "@/lib/sse-probe" // TEMPORARY forensics — delete with the probe
+
 export function createTypewriter(
   append: (text: string) => void,
   /** Fires on the busy↔idle edge (2026-09-09 thinking 门槛): while the
@@ -44,6 +46,7 @@ export function createTypewriter(
   const settleDrain = () => {
     if (buffer) return
     const waiters = drainWaiters
+    if (waiters.length) sseProbe("tw.drain.done", { waiters: waiters.length })
     drainWaiters = []
     for (const resolve of waiters) resolve()
     markMaybeIdle()
@@ -66,6 +69,7 @@ export function createTypewriter(
         idleTimer = null
       }
       buffer += text
+      sseProbe("tw.push", { chars: text.length, buf: buffer.length })
       if (buffer) setActive(true)
       if (!timer) timer = setInterval(tick, 24)
     },
@@ -74,12 +78,14 @@ export function createTypewriter(
      * the prose visibly LEADS and the question follows (打字机律). */
     drain(): Promise<void> {
       if (!buffer) return Promise.resolve()
+      sseProbe("tw.drain.wait", { buf: buffer.length })
       return new Promise((resolve) => {
         drainWaiters.push(resolve)
       })
     },
     /** Release everything remaining and stop the clock. */
     flush() {
+      sseProbe("tw.flush", { rest: buffer.length })
       if (idleTimer) {
         clearTimeout(idleTimer)
         idleTimer = null

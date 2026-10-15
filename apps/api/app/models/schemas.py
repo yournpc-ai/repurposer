@@ -350,6 +350,11 @@ class StartAnswerRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["start"]
+    # 法3 逃生门 (2026-10-16): the film storyboard review's ONE waiver —
+    # set only through the chat path's start_run when the user explicitly
+    # said they don't need the storyboard; the pill never sends it. The
+    # run's context records the waiver for audit.
+    skip_storyboard_review: bool = False
     # RETIRED (Phase 4 B7 / ADR-087 R9, D1): the autonomy tier is gone —
     # every run is an autonomous continuation. The field stays so old
     # clients keep passing it without a 422 (extra="forbid"); the value is
@@ -894,6 +899,29 @@ def dock_worthy_suggestions(items: list[SuggestionItem]) -> list[SuggestionItem]
             item.recommended = False
         recommended_seen = recommended_seen or item.recommended
     return cleaned
+
+
+class StartRunArgs(BaseModel):
+    """``start_run`` params, plan path — start the confirmed plan's run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "skip_storyboard_review")
+
+    skip_storyboard_review: bool = Field(
+        default=False,
+        description=(
+            "The ONE waiver of the film storyboard review: set true ONLY "
+            "when the user explicitly says they don't need to see the "
+            "storyboard ('不用看分镜，直接做' / 'skip the storyboard, just "
+            "make it'). A plain confirmation ('可以' / 'go ahead') while the "
+            "storyboard card hasn't landed is NOT a waiver — call start_run "
+            "without this and the system tells you it's still drafting."
+        ),
+    )
 
 
 class PlanAnswerArgs(BaseModel):
@@ -3391,6 +3419,12 @@ class FilmStoryboard(BaseModel):
 
     name: str | None = None
     theme: FilmStoryboardTheme | None = None
+    # The film's SPOKEN language, declared by the drafter (2026-10-15 语言钉
+    # 参): the plan's pin when one rode the proposal, else the page's own
+    # language (the product's voice — never the conversation's). Null =
+    # undeclared (legacy rows, 读容忍); the node's output stamp then falls
+    # to the run's legacy language chain.
+    language: str | None = None
     scenes: list[FilmScene] = Field(min_length=1)
 
 
@@ -3416,12 +3450,16 @@ class StoryboardBlock(BaseModel):
     storyboard: FilmStoryboard
     pages: list[str] = Field(default_factory=list)
     instruction: str | None = None
-    # The reviewed plan's film params (配音开关 / 配乐 mood / 画幅) — the
-    # table header's param chips; absent = plan defaults (voiceover on,
-    # mood default, 16:9).
+    # The reviewed plan's film params (配音开关 / 配乐 mood / 画幅 / 旁白语言)
+    # — the table header's param chips; absent = plan defaults (voiceover on,
+    # mood default, 16:9, storyboard-declared language).
     voiceover: bool = True
     music_mood: str | None = None
     aspect: str = "16:9"
+    # The film's spoken language chip (2026-10-15 语言钉参): the plan's pin
+    # when one rode the proposal, else the draft's own declaration. None on
+    # legacy rows (读容忍 — the chip simply doesn't render).
+    language: str | None = None
 
 
 class FilmPayload(BaseModel):

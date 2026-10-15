@@ -29,9 +29,11 @@ import pytest
 from pydantic import ValidationError
 
 from app.chat.perception import PERCEPTION_TOOLS
+from app.chat.intent import _speech_language_line
 from app.chat.service import _match_option
 from app.chat.trigger_turn import (
     TRIGGER_DUMP_TYPE,
+    _chrome_language,
     _suggestions_payload,
     _trigger_admission,
     _trigger_dump,
@@ -244,6 +246,38 @@ class TestTriggerLanguage:
             _trigger_language(None, [Message(role="assistant", content="你好")])
             == "en"
         )
+
+
+class TestTriggerSpeechLanguageLaw:
+    """The trigger's speech-language directive (2026-10-15 语言律修订):
+    mirror=False mirrors the CONVERSATION's user messages (never the English
+    system-event line), with the interface language demoted to a no-signal
+    floor — the absolute interface pin split the single narrator in two."""
+
+    def test_mirror_false_mirrors_the_conversation(self) -> None:
+        line = _speech_language_line("en", mirror=False)
+        assert "mirror" in line.lower()
+        # The event line is named as a system signal, never the voice.
+        assert "system signal" in line
+
+    def test_mirror_false_names_the_floor_in_its_own_tongue(self) -> None:
+        assert "中文" in _speech_language_line("zh", mirror=False)
+        assert "English" in _speech_language_line("en", mirror=False)
+
+    def test_mirror_false_carries_no_absolute_pin(self) -> None:
+        line = _speech_language_line("zh", mirror=False).lower()
+        assert "absolute" not in line
+        assert "never the interface" not in line
+
+    def test_chrome_follows_the_actual_speech(self) -> None:
+        # A Chinese-bearing speech gets the zh chrome even on an en floor —
+        # the model mirrored the conversation, the chrome follows it.
+        assert _chrome_language("成片好了，配乐也在。", "en") == "zh"
+        # A non-CJK speech rides the floor (残留列账: a German conversation
+        # on an en UI gets the English title — the floor IS the fallback).
+        assert _chrome_language("Der Film ist fertig.", "en") == "en"
+        assert _chrome_language("Der Film ist fertig.", "zh") == "zh"
+        assert _chrome_language("", "zh") == "zh"
 
 
 # ---- Turn admission (交互完整性批 B, 2026-09-17) ------------------------------

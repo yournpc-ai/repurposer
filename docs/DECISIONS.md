@@ -788,13 +788,13 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 **Context**: 结果面四个问题：① chat 打勾收官后关窗跳结果页 = 跳切，过程与结果被劈成两个房间；② 网格 / tabs / 消息流同为线性容器，多产物扇出被线性容器物理消灭——空间面是多产物的唯一解法；③ 结果面本身是桌面默认中心的候选；④ 移动端渲不了 canvas 不是方向反证——移动端是降级面不是核心场景，方向是否成立的证据看桌面。结果面 = 整屏只读 canvas，chat 收为底部 dock；**ADR-035 第 2 条（可操作画布永久拒绝）不变**——canvas 正当性三理由：连续性（产物从过程里长出来，无跳切）、扇出全景可见、血缘信任（每个产物出处可溯）。
 
 **Decision**:
-1. **结果画布 = 桌面/iPad 默认中心**：项目页 = FlowView 渲染项目持久图 + 最新产物（真节点真边，output 节点 = 产物卡：媒体内联自播（视频静音循环）/ 分数+top-pick / 磨砂操作条（下载/发布，hover 放大开大屏））；画布直读持久图见 ADR-057。网格重构件作移动端列表渲染件复用。
+1. **结果画布 = 桌面/iPad 默认中心**：项目页 = FlowView 渲染项目持久图 + 最新产物（真节点真边，output 节点 = 产物卡：媒体内联自播（视频静音循环）/ 分数+top-pick / 磨砂操作条（下载/发布，hover 放大开大屏））；画布直读持久图见 ADR-057。网格重构件作消息流内产物卡复用（OutputChatCard）。
 2. **步骤叙事不进图**：打勾流是唯一步骤叙事进度面——形态 = 流内单行动态行 + 平铺步骤（活态 status line / 终态收据同一行，CHAT_ARCH §8.7）；**产物占位/填充 = 图的内容不是进度**（草稿图即占位，产物落地原地填充，ADR-057）；诞生 = 按编译序生长回放——动画 = 真实事件投影；输入组全程零位移；断线重连 / 历史打开直接呈现终态不播回放。
-3. **底部 dock**：chat 外壳 = 居中悬浮输入组（同一消息机器）。dock 可见性三态——收起 = 输入组（唯一常驻 chrome）；展开 = 历史区为**自有磨砂浮层**悬于输入组上方（输入框独立层律：输入组恒为独立一层，永不与消息流融为一体）；hidden = 用户手势收成右下角 LogoMark 磨砂圆点（唤回触发 = agent 发声 / 待决提问——只能藏静态输入组，藏不住新信息）。**agent 发声（新回复落流）历史必自动展开——点卡选择不撑开历史**（点卡开详情时历史乱弹是 jump-scare）；点画布空白 = 回中性（历史收起 + 选择清除，pane 级事件，节点点击不触发）。问句 dock = 独立浮层 pill 悬在输入组上方；免责行钉在输入组**上方**常驻耳语。**系统层灰行入流原则**：一切系统事实（步骤勾选、run 收官 recap）渲染为消息流内的灰色 meta 行（`MetaRow`：muted + xs + 无填充 + 超长截断可点开），永不另立流外 chrome——信息入流，控制留底。画布视口留 bottom safe-area。输入组停靠位两处：首页 composer / 结果 dock。**页级形态机**（现行法 = ADR-056 三形态机）：首个 run 前 = 居中全屏 chat（full 形态），首个 run 到达后桌面 = 右侧面板（panel 形态）/ 移动端 = 底部 dock（dock 形态）——同一台消息机器，纯布局形态，输入组零位移。
+3. **chat dock**：chat 外壳 = 居中悬浮输入组（同一消息机器）。输入框独立层律：输入组恒为独立一层，永不与消息流融为一体。panel 可收成右下角 LogoMark 磨砂圆点（唤回触发 = agent 发声 / 待决提问——只能藏静态输入组，藏不住新信息）；点画布空白 = 回中性（选择清除，pane 级事件，节点点击不触发）。问句 dock = 独立浮层 pill 悬在输入组上方；免责行钉在输入组**上方**常驻耳语。**系统层灰行入流原则**：一切系统事实（步骤勾选、run 收官 recap）渲染为消息流内的灰色 meta 行（`MetaRow`：muted + xs + 无填充 + 超长截断可点开），永不另立流外 chrome——信息入流，控制留底。画布视口留 bottom safe-area。输入组停靠位两处：首页 composer / 结果 dock。**页级形态机**（现行法 = ADR-122 两形态机）：pre-world = 居中全屏 chat（full 形态），桌面图世界到达后 = 右侧面板（panel 形态）；移动端恒 full——同一台消息机器，纯布局形态，输入组零位移。
 4. **产物节点交互边界说死**：点击 = 选中 + 右侧档案（OutputInspector，全产物类型；无居中播放器 modal）；toolbar 装图操作（运行 / 接线）永久禁区。**节点解剖 = caption 恒为类型 icon + 类型名（左上，右槽恒空）+ 媒体区 + factsbar**：信息位（语言 / 分辨率 / 时长 / 画幅）住 factsbar——时长住条内、永不作为视频浮层角标（媒体角标只剩 score），分辨率从媒体元素实读（`onLoadedMetadata` / `naturalWidth`），不立硬编码表；动作 = copy-or-download + 发布（Send），无 ⋯ 菜单、画布无产物删除座位（ADR-063 卡面交互律）；**条随内容自然撑开、信息永不省略**（无截断/省略号/title 兜底）；**产物卡 lane 宽 280**（9:16 → 498 媒体高，源视频素材节点同宽 280）。素材节点同解剖（文件名 / 时长 / 分辨率 + 下载），动作归 surface 所有；删除产物 = `DELETE /outputs/{id}`（连存储对象一起清，fork 派生行不陪葬）。产物对话归 dock（指认走 @mention，ADR-058）——无 ChatModal / AssetChatModal 类独立对话 modal。
 5. **密度 + 渲染单元**：配方说明书 = 策展密度（≤5 节点，只画兑现承诺的步骤）；结果画布 = 名词密度（素材 + 文档 + 产物主角）；run 期画布活（占位卡 run 开始即物化 + 打勾随行）。**step 全量落库**（成本 / 重跑 / 血缘靠它）**住节点内部，画布从持久图直读、零投影**（ADR-057——无 `canvas_key` / 过程脊 / `canvas_hidden` 补丁族）；**过程动词永不上图**——每个动词都是其产物的属性；状态原地投影到产物卡（失败/渲染中 = 卡的原地态，不是独立节点）。节点解剖 = 输入在边上、规格在身上、结果在卡上、改动在 chat。
 6. **导航门禁**：缩放 = 导航不是编辑——配方卡说明书锁 fit；结果画布开放 pan / zoom（无 minimap——稀疏小图无导航价值）；拓扑编辑手势任何面物理缺席。
-7. **移动端 = UI in chat**：不渲染 canvas（< iPad 宽度）；对话沉底与桌面 dock 同心智；一回合一张 RunCard（卡头血缘摘要行 + 可展开过程脊 + 产物缩略条 + chips）；点缩略图进全屏查看器（家族滑动 + 底部迷你输入条）。卡片种类注册表制：计划 / 操作 / 结果三型。
+7. **移动端 = 恒 full 纯 chat**（现行法 = ADR-122）：不渲染 canvas（< iPad 宽度）；chat 舞台即页面，产物经消息流交付（终态收据 + 锚卡 + RunCard，ADR-118）。
 8. **指认 = @mention**：产物指认统一走 @output mention chip（ADR-058）；画布点卡 = 纯选择 + 详情；无 focus 请求字段（`messages.focus_output` 列读容忍保留，旧行历史回放照渲染灰行前缀，永不新写）。
 9. **复核门**：小白复述测试——裁决问题 = "结果画布是否转正"；不过则结果网格回退为默认中心（组件不删），canvas 降为检视入口，零浪费。
 
@@ -1077,8 +1077,8 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 4. **节点交互（卡面 prompt 区 + 变体分页）**：产物卡面常驻 prompt 区展示**该产物自己的 spec**（fork 派生行的目标语言 / hook / 参数，卡说自己的话）；prompt 直改 = 一次 wiring op + 定价确认（ADR-057 K4；通道 = 确定性手势走 `POST /projects/{id}/graph/revise`，chat 修订骑 `POST /chat` 唯一意图面——ADR-058 通道分家），永不开新执行通道。修订/重跑后 → **变体分页（1 of N）**：数据源 = Operation Model 版本快照 + fork 家族，卡上翻页切换展示。无过程脊（ADR-057——step 住节点内部）。
 5. **模型事实陈列**：**模型 / provider 事实可出现在详情面**（灯厢信息栏等 detail surface，陈列事实 = 诚实）；**节点面永无模型选择器、无 SKU 货架**；节点 caption 恒友好名不变。真实第二 provider 出现时可选 picker 的用户形态仍是策略开关（需求池「LLM provider 抽象」不变），本条只解禁事实陈列。
 6. **点阵与免责行**：点阵 = 结果画布唯一签名面（配方见 ADR-046 附）；dock 常驻免责行，en = "Repurposer can make mistakes — review before you publish."（zh 镜像「Repurposer 可能出错，发布前请检查。」——指向真实风险点：即将发布的内容，而非事实问答）——位置 = 输入组**上方**耳语（不回容器内、不夹在问句与输入之间）；文字问不隐藏任何 chrome，选项问待决时免责行随输入行一并让位（ADR-053 R1），其余时刻免责行与输入框同常驻。dock placeholder = @ mention 教学文案，一句连读（先动作，破折号/逗号接机制）：「Describe your changes — drag or paste files, or type @ to mention nodes.」/「描述你的修改想法，可拖拽或粘贴文件，输入 @ 引用节点。」——**只教 '@'，不写 '/'**（chat 无 slash 体系，写了即虚假承诺——虚构 SKU 禁令同适用于 placeholder；「nodes」措辞成立：@ 候选〔素材/产物〕本就是画布节点）。**placeholder 耳语注册**：耳语靠**对比度**不靠字号——渲染 = 继承输入字号 14px + meta-foreground（比正文 muted 暗一档），单行 nowrap 省略；免责行 = 12px。**耳语层色**：meta-foreground 暗色档 = **0.42**（FLORA #606060 实测，整个暗色耳语层〔meta 标签 / disabled / 免责行〕同值）；**用户气泡**：Bubble `muted` 变体暗色 = `dark:bg-white/10`（FLORA #FFFFFF1A 实测，磨砂面板上的半透明 veil 比实心 muted 阶更静；亮色不动），padding px-4 py-2。**dock 输入框增高上限 max-h-56**；暂存附件 chip = **缩略图先行**（`StagedAttachmentChip`：image = 文件本体 / video = 首帧，走共享 `useStagedFileMeta` 探针，object URL 自回收；音频/文档留图标），与 composer 的 AssetChips 同一套暂存文件语言（三处输入面同构：composer / 无画布 full 形态 / 有画布 panel·dock 形态）。**滚动条统一**：`@utility thin-scroll`（6px rounded thumb = foreground 12% / 透明轨 / 无 gutter），挂消息流视口 + dock 编辑器；无 inline `scrollbarWidth`。**输入框解剖 = 两行流式**：rest 即两行——满宽文本带（上）+ 控制条流入（下）（ElevenLabs composer 同构；无覆盖层、无测量、构造上不可能振荡）；输入组全形态恒 `rounded-xl`（stadium 只属于真单行盒）。attach 图标 = **Plus**（dock 与 composer Assets 实体钮同）；暂存 chip 的 ×/重试**悬停显现**（error 态常显防死端，focus-within 罩键盘）；**控制条 glyph 铁轨对齐**——strip 去容器 padding，`+` glyph 左缘 / `↑` glyph 右缘钉文本带 12px 铁轨（36px 钮 − 18px glyph = 9px 内缩，ml/mr-[3px]），双 glyph 同 18px 光学对齐——composer glyph 左缘对齐律的 dock 孪生。
-7. **dock 形态机（现行法 = ADR-056 三形态机）**：**首个 run 到达前**项目页 = 居中全屏 chat（full 形态：消息舞台占满页面上部，输入组同一台消息机器原地不动）+ 左上角仅「← Projects」返回 pill；首个 run 到达同一拍：舞台原地淡出（300ms opacity）、画布延迟 150ms 淡入（500ms）、返回 pill crossfade 成完全体 ProjectMenu，chat 收拢变形为——**桌面 = 右侧面板（panel 形态：full-bleed 画布上的雾面 overlay，float/docked-right 双几何 header 切换，解剖与保草稿结构见 ADR-056）/ 移动端 = 底部 dock（dock 形态）**。驱动 = 页面 `latestRun`（loading 闸保证主树首渲染即定态——带 run 项目直挂 panel/dock 形态，水合首帧永不重播，诞生编排铁律同义）。**hidden 态**（dock 与 panel 通用）：用户手势（dock 输入行 − 钮 / panel 头部 − 钮）把整个 chat 收成右下角 LogoMark 磨砂圆点——节点密集后要看完整画布、截图分享正在使用的产品，是正当场景；唤回触发 = agent 发声 / 待决提问（choice / 任务书 dock）/ mention 插入召回（ADR-069）——用户只能藏起一个**静态输入组**，永远藏不住新信息（禁静默在 hidden 下存活）；活 run 状态行故意不作触发（画布擦除已传达活性，收官 recap 属 agent 发声自行唤回）。**否决的 FLORA 形态**：右下浮动 panel、Queue 条（违反唯一进度面）、多 chat（项目单会话模型 ADR-041 D8）、窗口管理控件。组件名 = ChatDock（`components/chat/`；i18n 命名空间 `generationOverlay.*` 保留——消息键名不是产品概念）。
-8. **dock 拆粘（移动端 dock 法则；桌面 panel 形态的三职责天然分层——问句/任务书 pill 钉面板底寄存、输入钉面板底、历史 = 面板滚动区，见 ADR-056）**：决策（问句）/ 行动（输入）/ 诚实（免责行）三寄存分离：① QuestionDock（task_book / choice）= **独立浮层 pill** 悬在输入组上方，dock-surface 同款磨砂 + 发丝线；② 输入容器只装输入组（+chips 带——无折叠打勾状态行：消息流恒在，折叠行是纯重复）；历史区 = 自有磨砂浮层悬于输入组上方（**输入框独立层律**——输入组恒为独立一层，永不与消息流融为一体）；③ 免责行钉在输入组**上方**常驻耳语。**停靠法则不动**——问句 pill 恒可见，不随计划卡滚走。**否决**：只移免责行（问句+输入焊接还在，解一半）；行动随卡进流（计划卡高时 Start 滚出视口，废停靠法则）。细则：Ⓐ pill↔输入组间距 `mb-2.5`；Ⓑ **task_book pill 单行化 + 无 Cancel**（非阻塞提问不配负向动作：「不开始」用沉默表达——继续聊 = 修订、走开 = 计划如实待确认、/projects 可删；FLORA / ChatGPT 的非阻塞确认 pill 均无负向动作；**选项问的 × = 阻塞形态的 bail 出口**——取 default_path、interrupt 的 × 停活 run），Start 并入顶行成单行解剖（✓ + 问句 + Start）；Ⓒ 输入组全形态恒 `rounded-xl`（两行流式解剖下 dock 输入组 rest 即两带，stadium 只属于真单行盒 = 首页钉顶条）；问句 pill 恒 `rounded-xl`。
+7. **dock 形态机（现行法 = ADR-122 两形态机）**：**pre-world** 项目页 = 居中全屏 chat（full 形态：消息舞台占满页面上部，输入组同一台消息机器原地不动）+ 左上角仅「← Projects」返回 pill；桌面图世界到达同一拍：画布延迟 150ms 淡入（500ms）、返回 pill crossfade 成完全体 ProjectMenu，chat morph 为**右侧面板（panel 形态：full-bleed 画布上的雾面 overlay，float/docked-right 双几何 header 切换，解剖与保草稿结构见 ADR-056）**；移动端恒 full（ADR-122）。桌面驱动 = PLAN-READY（ADR-111；loading 闸保证主树首渲染即定态——带 run 项目直挂 panel 形态，水合首帧永不重播，诞生编排铁律同义）。**hidden 态**（panel）：用户手势（panel 头部 − 钮 / 常驻 LogoMark 切换点）把整个 chat 收成右下角 LogoMark 磨砂圆点——节点密集后要看完整画布、截图分享正在使用的产品，是正当场景；唤回触发 = agent 发声 / 待决提问（choice / 任务书 dock）/ mention 插入召回（ADR-069）——用户只能藏起一个**静态输入组**，永远藏不住新信息（禁静默在 hidden 下存活）；活 run 状态行故意不作触发（画布擦除已传达活性，收官 recap 属 agent 发声自行唤回）。**否决的 FLORA 形态**：右下浮动 panel、Queue 条（违反唯一进度面）、多 chat（项目单会话模型 ADR-041 D8）、窗口管理控件。组件名 = ChatDock（`components/chat/`；i18n 命名空间 `generationOverlay.*` 保留——消息键名不是产品概念）。
+8. **dock 拆粘（三职责分层——问句/任务书 pill 钉面板底寄存、输入钉面板底、消息流 = stage 滚动区，见 ADR-056）**：决策（问句）/ 行动（输入）/ 诚实（免责行）三寄存分离：① QuestionDock（task_book / choice）= **独立浮层 pill** 悬在输入组上方，dock-surface 同款磨砂 + 发丝线；② 输入容器只装输入组（+chips 带——无折叠打勾状态行：消息流恒在，折叠行是纯重复）——**输入框独立层律**：输入组恒为独立一层，永不与消息流融为一体；③ 免责行钉在输入组**上方**常驻耳语。**停靠法则不动**——问句 pill 恒可见，不随计划卡滚走。**否决**：只移免责行（问句+输入焊接还在，解一半）；行动随卡进流（计划卡高时 Start 滚出视口，废停靠法则）。细则：Ⓐ pill↔输入组间距 `mb-2.5`；Ⓑ **task_book pill 单行化 + 无 Cancel**（非阻塞提问不配负向动作：「不开始」用沉默表达——继续聊 = 修订、走开 = 计划如实待确认、/projects 可删；FLORA / ChatGPT 的非阻塞确认 pill 均无负向动作；**选项问的 × = 阻塞形态的 bail 出口**——取 default_path、interrupt 的 × 停活 run），Start 并入顶行成单行解剖（✓ + 问句 + Start）；Ⓒ 输入组全形态恒 `rounded-xl`（两行流式解剖下 dock 输入组 rest 即两带，stadium 只属于真单行盒 = 首页钉顶条）；问句 pill 恒 `rounded-xl`。
 
 **Consequences**:
 
@@ -1233,17 +1233,17 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 **Decision**:
 
-1. **过渡 fade**：舞台 morph = 原地 opacity 淡出 300ms（无 grid-rows 收拢；wrapper 恒 flex-1、隐形+点击穿透，输入组零位移铁律）+ 画布/移动列表 `duration-500 delay-150` 淡入。chrome crossfade 500ms。
-2. **三形态机 + 面板双几何**：`form = "full" | "panel" | "dock"`——pre-first-run = full（全屏 chat）；post-first-run 桌面 = **panel = full-bleed 画布上的雾面 overlay**，两种停泊几何经 header 钮切换（FLORA "Dock panel" 对齐，localStorage `repurposer-panel-mode` 持久）：**float（默认）**= 右锚浮窗（垂直 ~18%/10% 内凹、底偏重——FLORA 浮窗不是全高 sheet，rounded-2xl）；**docked** = 靠右齐边全高（rounded-none）——两态同一 dock-surface 磨砂，300ms inset/半径过渡 morph；**宽度 480px 定宽**（FLORA 右侧面板 fixed 480px 列；发丝线语法对齐 FLORA `border-width: 0 0 0 1px`：docked = 仅左边单线〔齐边三缘不向视口画 ring〕，float 窗口 = 全周发丝线）；移动端 = dock（stadium / 三可见性态 / 拆粘三寄存 / 输入框独立层律 = 移动端 dock 法则）。解剖 = 细长 header（标题 + 几何切换钮 + minimize − 钮）/ chatScroller 主体 / 底寄存（提问·任务书 pill → 免责行〔钉输入组上方〕→ 输入组恒 rounded-xl；无折叠 run 状态行——panel 滚动区常驻消息流，折叠行是纯重复，ADR-051 §2）。panel 两可见性态 = open / minimized（minimize → 右下角 LogoMark 点；唤回触发器与 dock 同一套：agent 发声 / 待决提问 / 确认就绪 / mention 插入召回——复用 `dockHidden` 零新状态；**float 态该点常驻 = 切换钮**（开 → 点收起、收 → 点展开；docked 全高态右下角归 send 钮，点仍只在 minimized 出现，docked-open 收起走 header −）；页面经 `onPanelStateChange`（hidden + 几何）感知，**仅 docked 态**把画布 zoom pill 右移 `md:!mr-[504px]` 让位（480 宽 + 24 呼吸）——float 自 18% 起不触顶角，统一偏移会在浮窗上方留出死区）；面板入场动画只在 full→panel morph 播（stageMounted 闩锁门控，水合首帧永不重播）。**保草稿承重结构**：单一 root（三形态同一 fixed overlay 层，panel 经 `hidden` 隐藏）+ 恒渲染 card 容器（full/dock = `contents` 布局透明，panel = 浮卡）+ 底排恒定子索引——MentionEditor 跨 full→panel 翻转与 float↔docked 切换永不 remount，DOM 拥有草稿 + chips 零丢失（序列化携带必然有损，禁）；scroller 单挂载律 = stage/history/panel 三槽互斥门控（`historySlotOpen` 改键 `dock &&`）。
+1. **过渡 fade**：舞台 morph = 原地 opacity 淡出 300ms（无 grid-rows 收拢；wrapper 恒 flex-1，输入组零位移铁律）+ 画布 `duration-500 delay-150` 淡入。chrome crossfade 500ms。
+2. **两形态机 + 面板双几何**（现行法 = ADR-122）：`form = "full" | "panel"`——pre-world = full（全屏 chat；移动端恒驻此形态，ADR-122）；桌面图世界到达后 = **panel = full-bleed 画布上的雾面 overlay**，两种停泊几何经 header 钮切换（FLORA "Dock panel" 对齐，localStorage `repurposer-panel-mode` 持久）：**float（默认）**= 右锚浮窗（垂直 ~18%/10% 内凹、底偏重——FLORA 浮窗不是全高 sheet，rounded-2xl）；**docked** = 靠右齐边全高（rounded-none）——两态同一 dock-surface 磨砂，300ms inset/半径过渡 morph；**宽度 480px 定宽**（FLORA 右侧面板 fixed 480px 列；发丝线语法对齐 FLORA `border-width: 0 0 0 1px`：docked = 仅左边单线〔齐边三缘不向视口画 ring〕，float 窗口 = 全周发丝线）。解剖 = 细长 header（标题 + 几何切换钮 + minimize − 钮）/ chatScroller 主体 / 底寄存（提问·任务书 pill → 免责行〔钉输入组上方〕→ 输入组恒 rounded-xl；无折叠 run 状态行——panel 滚动区常驻消息流，折叠行是纯重复，ADR-051 §2）。panel 两可见性态 = open / minimized（minimize → 右下角 LogoMark 点；唤回触发器：agent 发声 / 待决提问 / 确认就绪 / mention 插入召回——复用 `dockHidden` 零新状态；**float 态该点常驻 = 切换钮**（开 → 点收起、收 → 点展开；docked 全高态右下角归 send 钮，点仍只在 minimized 出现，docked-open 收起走 header −）；页面经 `onPanelStateChange`（hidden + 几何）感知，**仅 docked 态**把画布 zoom pill 右移 `md:!mr-[504px]` 让位（480 宽 + 24 呼吸）——float 自 18% 起不触顶角，统一偏移会在浮窗上方留出死区）；面板入场动画只在 full→panel morph 播（stageMounted 闩锁门控，水合首帧永不重播）。**保草稿承重结构**：单一 root（两形态同一 fixed overlay 层，panel 经 `hidden` 隐藏）+ 恒渲染 card 容器（full = `contents` 布局透明，panel = 浮卡）+ 底排恒定子索引——MentionEditor 跨 full→panel 翻转与 float↔docked 切换永不 remount，DOM 拥有草稿 + chips 零丢失（序列化携带必然有损，禁）；scroller 单挂载律 = stage 一槽常驻（full 的舞台 = panel 的主体）。
 3. **积分 pill（BILLING §7 第四读面）**：项目页左下角 `CreditsPill`（post-first-run 桌面）——Coins + 余额 tabular-nums，点击 Popover：余额 + held（预占中）+ 最近台账 10 条 + 负余额注记（`credits.negativeNote` 复用）。数据 = `/wallet` + `/wallet/transactions` 现成端点（后端零改动），手卷 apiFetch 静默失败保 "—"（防双报纪律同账户控制台）；刷新 = 挂载 + run 态翻转（refreshKey = latestRun id+status）+ 每次弹窗打开。无百分比无 Upgrade CTA（无套餐无购买入口，W11 座位）。
 4. **维持否决**：Queue 条（违反唯一进度面）、多 chat（ADR-041 D8）、窗口管理控件（面板禁拖动/缩放/多窗——float 是固定停泊几何不是窗口）、左侧工具栏（我们的画布只读，无节点创建工具，编辑只经 chat）。
 
 **Consequences**:
 
-- ADR-051 条款 7/8 的现行法 = 本条（三形态机）；拆粘 / stadium / 独立层律 = 移动端 dock 法则；免责行钉输入组上方（全形态一致）。
+- ADR-051 条款 7/8 的现行法 = 本条 + ADR-122（两形态机）；免责行钉输入组上方（全形态一致）。
 - 消息机器 / 提问机器 / 任务书 / SSE / 占位打勾零变化（本条只动渲染壳）。
 - 面板 overlay 化后画布恒 full-bleed：explore 面 resize 不重框视口（FlowView 门控）天然适配；首帧 fit 不考虑面板遮挡（explore 由用户平移接管，FLORA 同）。
-- 规格落点：CLAUDE.md（rounded-full 例外 / 输入框独立层律 / dock 三态 mobile-only / composer 契约面板段）、CHAT_ARCHITECTURE（关键形态事实三形态机）、BILLING §7（pill 读面）。
+- 规格落点：CLAUDE.md（rounded-full 例外 / 输入框独立层律 / composer 契约面板段）、CHAT_ARCHITECTURE（关键形态事实两形态机）、BILLING §7（pill 读面）。
 
 **Alternatives（翻案条件随附）**:
 
@@ -1622,7 +1622,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 1. **常备否决收窄终裁**（边界三层各自钉死）：
    - **生产层 = 编译期封闭 DAG，永不变**——看什么/做什么编译期可枚举；报价=fold、执行=topo、拓扑代码定（ADR-028）不动摇；
    - **服务感知 = 有界只读 loop，收编**——chat 边缘 agent 可调一族**只读工具**（读 spec / 曲库 / 样式目录 / 理解摘要 / run 状态…）；迭代封顶（`max_iterations` 声明）+ 报价 = fold（上限 × 单次）+ 终产仍是「一份判决 + 工具序列」；
-   - **执行 loop 永拒**——写世界永远走三扇唯一门（edit ops / wiring ops / `create_run`），loop 内零副作用。
+   - **执行 loop 永拒**——写世界永远走三扇唯一门（edit ops / wiring ops / `create_run`），loop 内零副作用。（2026-10-16 修订注：读本类世界事实的快照写穿走独立短事务、回合事务保持只读——ADR-124；「读工具零写函数」的适用面收窄为回合事务内。）
    「是否做 ReAct / 是否做 loop」问题注销：每层各有答案。
 2. **会话层全面工具化**：现有判决 union 机械翻译为工具集——`type` 字段 = 工具名、各态字段 = 工具参数（ask → `ask_user` / draft → `present_plan` / start → `start_run` / task_list → `propose_tasks` / edit_ops → `edit_output`（受控四件，ADR-090）/ WiringProposal → `edit_graph`）。**护栏语义搬进工具执行内**：出书门槛 = `present_plan` 的执行内校验（无根 → 工具拒绝 + 结构化反馈，修复回声的同族座位）；出生地 422 不变（`start_run` 内部仍走 `create_run` 零旁路）；dock 生命周期 / 单待决 / autoResume 结算 = UI 状态机 + 代码，原样保留。读工具一族住 `app/chat/perception/`（注册表纪律同 TOOL_REGISTRY：name + params schema + execute + 碎碎念文案键，静态注册随代码部署；与 `app/tools/` 的分工 = **世界的读法 vs 世界的改法**）。loop 驱动 = harness 新形态（迭代封顶 + **终态工具**（ask_user / present_plan / start_run / 最终回复）一调即停）。
 3. **触发回合（trigger turn）**：chat 回合的「用户消息」可以是系统事件（白名单首批 = 理解完成 / run 完成）——agent 借读工具看世界再说话。**主动发声（感知缺口 B2）与收官 reviewer + 建议 pills（B3）合并为此机制的两个触发器**；建议 pill 点击 = 把文本作为下一条用户消息发出（修订型走 chat 唯一意图面）或直达动作（导出/下载）。reviewer 的产出 = 判断 + 引导——recap 复读机（复读 spec.summary 的清单复读）永禁；reviewer 看过产物后下一步有据可依。
@@ -1849,7 +1849,7 @@ activity.completed ≠ PLAN_READY
 
 estimate completeness 不是 PLAN_READY 必要条件。允许 **PLAN_READY=true ∧ CONFIRMATION_READY=false**（如估价进行中：Canvas + pill 可见，Confirm disabled）。
 
-**Presentation 映射**：PLAN_READY → Review Surface（Canvas + Confirm Dock 出现）；CONFIRMATION_READY → Confirm action enabled。**Canvas 与 Confirm Dock 是同一 lifecycle 状态的两个 presentation effects，不是两个独立 readiness predicates。** 移动端 parity：无画布形态下 plan card 是评审面（已发货形态），同一投影戳驱动，不另造谓词。
+**Presentation 映射**：PLAN_READY → Review Surface（Canvas + Confirm Dock 出现）；CONFIRMATION_READY → Confirm action enabled。**Canvas 与 Confirm Dock 是同一 lifecycle 状态的两个 presentation effects，不是两个独立 readiness predicates。** 移动端 parity：无画布，评审面 = 散文 echo，同一投影戳驱动，不另造谓词。
 
 #### 2.1 费用语义就绪（Charge Semantics Ready——衔接微合同）
 
@@ -2670,7 +2670,7 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 3. **SSE 镜像数组操作**：`row.append` / `row.update` / `row.delta`（散文增量）/ `row.settle`。live 消费与历史回放**共用同一 reducer 同一渲染函数**——回放 = `ORDER BY seq` 直渲，双路径不一致这一整类 bug 灭种。
 4. **退役清单**：walk key（`settle_at − duration_ms` 推导）、last-wins latestLog 回放、`logDismissed` 闩、once-only per ref 去重、finalizePreview 服务端钟重锚跳位。散文气泡行在首 delta 到达时 append（内容空、delta 流 update、settle 原地 finalize），位置从此固定。
 5. **失败/中止回合的行照常落库**（failed/cancelled 态随行进 transcript）——诚实 transcript；回合失败不再抹掉工作证据。
-6. **折叠渲染 = 呈现层纯函数**：两条消息之间的 completed activity 行段坍缩为一条聚合摘要行（现行法 = ADR-110 段聚合），可展开明细；瞬态「正在做什么」仍归 StatusLine 一座两行（既有律不动）。折叠只动渲染，不动数组。
+6. **折叠渲染 = 呈现层纯函数**：两条消息之间 2+ 条 completed activity 行段坍缩为一条聚合总量行（现行法 = ADR-110 段聚合——折叠说总量、展开为类目分解；单行段不包折叠壳）；瞬态「正在做什么」仍归 StatusLine 一座两行（既有律不动）。折叠只动渲染，不动数组。
 7. **迁移**：一次性脚本把存量 activity_log 帧按帧时刻物化为行序插 seq；物化不了的旧回合接受活动行缺失（greenfield 验收口径先例），散文/checkpoint 行按 created_at 回填 seq。
 
 **Consequences**: 【已完成理解】消失类、顺序跳位类、live/回放不一致类 bug 结构性不可能再发生——它们要解决的问题不再存在。打字机律两牙不动（散文字段读容忍 + settle 散文 drain 节拍释放：零 delta 回合的散文行 append 时点 = 信封到达后，内容照节拍放出，位置不受影响）。DB 写入次数略增（activity 每行 open+settle 两写）量级可忽略。ADR-104 §5 排序律的机制（walk key 重锚）翻案退役，其目标（确定性时序：服务员话 → 读活动 → 读后回复）由数组位置天然达成。
@@ -2695,7 +2695,7 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 
 **Related**: ADR-104（checkpoint 资格白名单翻案；发射座时点 /  retract 安全网 / settle 自洽守卫全部保留）/ ADR-093（起始句 = LLM 言语——同律延伸到回合中相位句）/ ADR-060（echo 防编造扩轴）/ ADR-058（计划组成归卡面自证）/ ADR-092 / ADR-103 / ADR-111（画布 reveal 前言语禁指——§4 戒律的触发态由 ADR-111 修订为计划就绪）/ ADR-108（checkpoint 行的时序承载）
 
-## ADR-110: 活动行段聚合——散文段间整段坍缩为一条聚合摘要行（Claude Code 式）
+## ADR-110: 活动行段聚合——散文段间整段坍缩为一条聚合总量行（折叠说总量，展开说分解）
 
 **Status**: Decided (2026-10-08)
 
@@ -2703,8 +2703,8 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 
 **Decision**:
 
-1. **段聚合全收**：两条消息之间的一切 completed 落定活动行（跨 key、含单行段）坍缩成**一条聚合摘要行**——形态「工作了 1m 32s · 已理解素材 · 已检索转写内容 · 找到 12 段候选」。同 key+name 的连续重复合并为一个 ×N 片段（合并即放弃单条 artifact count——两条行说不出一个诚实的计数）；不同 key/name 各成片段，按首次出现序（时序即真相）。折叠仍是呈现层纯函数（`foldActivityUnits`），持久化的每帧一行不动——展开明细与审计继续读落库行。
-2. **总耗时 = 段墙钟**：下一条 assistant 行的 `at` − 首行 `at`（散文到来闭合工作段——CC "Thought for Xs" 的解剖）；边界缺席（live 尾段，散文未到）回落末行自身终点（at + duration_ms），再回落行耗时求和，无可测量则无耗时。**用户行永不做段终点**——失败回合后用户可能数小时才回来，其消息戳会编造「工作了 3 小时」的谎言。
+1. **段聚合 + 总量/分解两态**（2026-10-15 修订——消费面定位重拍：折叠行是安心感不是审计面；原「全收 + fragment 摘要」形态退役）：两条消息之间 2+ 条连续 completed 落定活动行（跨 key）坍缩成**一条聚合总量行**——折叠态只说总耗时「工作了 2m 7s」这**一个事实**，永不带 fragment 摘要（`Read www.z…` 的截断病理与宽度抖动是其结构性失败；URL/文件名截断需求随之消失）。展开态 = **类目分解**：同 key 行跨全段合并为一条 ×N 类目行（「已读网页 ×3」——Flora 解剖），按首次出现序（时序即真相）；逐行时长与实例名不归归档面（遥测不归消费面；实例名是 live 期的言语——material 读取族经 `activityCategoryKey` 重映射到无名的 `materialCategory` 键族，web_page 分叉随节拍 `asset_type`）；产物计数里程碑（count 无 total）永不合并——两条行说不出一个诚实的计数。**单行段不包折叠壳**：一条落定行直接以自己的落定形态渲染（其标签同样说类目）。折叠仍是呈现层纯函数（`foldActivityUnits` + `foldCategories`），持久化的每帧一行不动——审计继续读落库行。chevron 全站统一 OS disclosure 惯例（`>` 收 / `⌄` 展，三个 disclosure 座位：聚合行 / 活动行 / StatusLine 收据行）。
+2. **总耗时 = 段墙钟**：下一条 assistant 行的 `at` − 首行 `at`（散文到来闭合工作段——CC "Thought for Xs" 的解剖）；边界缺席（live 尾段，散文未到）回落末行自身终点（at + duration_ms），再回落行耗时求和，无可测量则无耗时。**用户行永不做段终点**——失败回合后用户可能数小时才回来，其消息戳会编造「工作了 3 小时」的谎言。**带 run 的 assistant 行同样不做段终点**（2026-10-15 修订）：段与边界之间隔着一个 run 时（素材节拍 → run 完成时的交付散文），散文戳会把折叠行的钟拉满整个 run 时长，与收据行的总耗时重复——run 的跨度归收据行说，折叠回落末行自身终点。
 3. **failed/cancelled 行永不折入**：✗ 划掉行是失败信号，藏进聚合即丢；它们独立留行并打断折段。
 4. **不受动**：now-line 原地 morph（live 已与 CC 同形）、think 空态（永不入流）、draft/run 跨度（本就不落行）、折叠永不跨消息边界（段分组既有律，恰好 = CC 的按散文段坍缩）。
 
@@ -2974,3 +2974,38 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 **Consequences**: 渲染器是唯一新代码面（Plate 组件 + ui 全出血变体 + zod schema）；validator/prompt/pack/估价同批换档；验收锚 = zymix.ai 多页采集出 75–95s 支柱走查成片（含 plate 与混排 frame），节拍 snap 复用 ADR-121 B3 零改动。
 
 **Related**: ADR-121（采集升档 / 节拍 snap）/ ADR-120（分镜核对）/ ADR-119（film 家族基座）/ ADR-016（spec 契约律）
+
+
+## ADR-123: 工作区布局用户设置——画布能力位的第二判断源
+
+**Status**: Decided (2026-10-15)
+
+**Context**: 项目页布局形态此前只有一个判断源——视口宽度（768px 断点）。ADR-122 把移动端钉成恒 full 纯 chat 后，「chat 为主」已是成熟形态，用户应能显式选择它（含宽屏桌面），而不是被视口唯一决定。
+
+**Decision**:
+1. **两档设置**：`users.settings.workspace_layout ∈ {auto, chat}`（默认 auto）。auto = 现状（宽屏画布 + panel，窄屏纯 chat）；chat = 任何屏幕恒驻 full 纯 chat。**不设「强制画布」档**——<iPad 无画布是架构禁令（prohibition #13），强制档在移动端是虚假承诺（虚构 SKU 禁令同族）。
+2. **服务端只存不用**：跨设备同步的真值源；谓词消费零新增——有效的 `canvas_available` 由客户端合成并随每条 chat 请求上报（ADR-118 双键机制不变）。存键零迁移（JSONB）；词表/读写纯函数住 `app/platform/user_settings.py`（confirm 双键同构）。
+3. **能力位唯一合成座**：`canvasCapableFor(isMobile, workspaceLayout)`（`lib/canvasVisibility.ts`）——视口 ∧ 设置；项目路由内全部画布门（worldLive 的 plan-ready 项 / canvasVis / 画布挂载 / form / 相机节拍）读这一个合成值，单源律扩展到「禁以设置项自行推断」。
+4. **localStorage 镜像**（`repurposer-workspace-layout`）：首条 chat 消息挂载即发出并给会话盖 `canvas_available` 章（last-wins），设置必须首帧同步可读，否则 chat 档桌面用户首章错盖 true（承接句门会被反向编造）。镜像 = 主题先例；GeneralSection 挂载时以 server 值回写镜像（server wins，跨设备同步点）；hook 初值 `"auto"` + effect 矫正（SSR 律 + use-mobile 同族先例）。
+5. **UI 座位**：SettingsDialog 新增「通用」section（显示类偏好）——「助手」区是确认偏好的唯一座位（CLAUDE.md），布局偏好不混入。主题/语言留 account console 不动。
+
+**Consequences**: chat 档桌面用户得到与移动端完全同构的体验（锚卡交付 + 承接句门自动正确）；auto 档与移动端行为零变化。
+
+**Related**: ADR-122（移动端恒 full 纯 chat）/ ADR-118（环境双键）/ ADR-117 §1（users.settings 座位先例）
+
+## ADR-124: World seats——fetch 型读工具的 consult-first 律与页面读本入库
+
+**Status**: Decided (2026-10-16)
+
+**Context**: zymix 会话取证：同一 URL 在一次对话里被抓取 3+ 次——chat 读工具 `get_web_page` 每回合无条件 `fetch_text`（工具观察不跨回合持久化是上下文预算纪律，不动），资产管道的网页采集是另一条独立抓取链，两层互不通。视频资产的「项目级复用、永不重复下载」模式早已在资产层成立，但读工具层没有等价的通用能力——新工具随时可能重蹈覆辙。
+
+**Decision**:
+
+1. **页面读本入库，随项目终身**：新表 `page_readings`（(project_id, url) 主键 + text + fetched_at，随项目级联删除）。快照语义：文本是 fetched_at 时刻的采集，重抓是显式动作（用户说页面变了 → 工具的 `refresh=true`），永不 TTL 隐式失效。两个写口一个座位：chat 读工具写穿（fetch 成功即写回）+ web_page capture 链在 `process_asset` 落 `extracted_text` 时同写。
+2. **world seats 模块**（`app/tools/world.py`）：每个项目级世界事实一个 canonical 读本函数（首座 = `page_reading_for_url`）；新鲜度政策住座位、永不住工具。URL 归一化（scheme/host 小写、去 fragment、去尾斜杠）保证同一页面的不同拼写命中同一行。
+3. **consult-first 律 + 注册表门禁**：fetch 型读工具先问座位再触网；`PerceptionTool` 加 `seat` 字段声明所问座位（无 canonical 存储的读——如 web 搜索——声明 None = 天然 ephemeral），纯函数套件门禁：声明的 seat 必须指向 world.py 的真实函数，get_web_page 必须带 seat。新工具的复用能力是构造性的——注册表逼你声明，不声明过不了门。
+4. **读工具写纪律的 carve-out**（ADR-077「loop 内零副作用 / 读工具零写函数」修订）：chat 读工具的读本写穿走**独立短事务**（`world.write_page_reading` 自开 session，best-effort 失败只记日志）——回合事务保持只读，快照行是世界 memo 不是领域状态；capture 链写回用 `process_asset` 自有会话。
+
+**Consequences**: 同一 URL 在项目内只抓一次（讨论链接与素材链接收口同一读本）；「读本采集于 N 天前」随观察文本上行，世界自证。讨论链接不落画布的法条不动（读本行不是素材，无资产节点）。`page_readings` 表归属登记 = MODULE_ARCHITECTURE §4。
+
+**Related**: ADR-077（读工具纪律 carve-out 由本条修订）/ ADR-121 B4（web_page 采集链——读本写回的第二写口）

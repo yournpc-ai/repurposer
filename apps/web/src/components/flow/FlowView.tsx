@@ -618,7 +618,11 @@ function FlowControls({
   }, [rf, wrapperRef, occludedRightPx])
 
   return (
-    <Panel position="top-right" className={cn("!m-3 md:!m-4", className)}>
+    // Seat (2026-10-15 ProjectHeader ruling): the project page's glass
+    // header owns the top 56px — the pill's top margin clears it with 8/12px
+    // air (64/68px). The inspector dossier stacks below (ResultsCanvas owns
+    // that arithmetic).
+    <Panel position="top-right" className={cn("!m-3 !mt-[64px] md:!m-4 md:!mt-[68px]", className)}>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={

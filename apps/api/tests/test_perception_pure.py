@@ -70,6 +70,21 @@ def test_registry_shape_and_naming_law() -> None:
             assert entry.activity_key == "chat.explore.searching"
 
 
+def test_declared_seats_resolve_to_world_functions() -> None:
+    """consult-first 律的门禁: a declared `seat` must name a real function
+    in app/tools/world.py (drift = loud, never silent), and the fetch-
+    capable page reader must declare its seat — an undeclared fetch tool
+    is the repeat-fetch bug class reborn."""
+    import app.tools.world as world
+
+    for name, entry in PERCEPTION_TOOLS.items():
+        if entry.seat is not None:
+            assert callable(getattr(world, entry.seat, None)), (
+                f"{name} declares unknown seat {entry.seat}"
+            )
+    assert PERCEPTION_TOOLS["get_web_page"].seat == "page_reading_for_url"
+
+
 def test_projection_is_non_terminal_and_wire_shaped() -> None:
     tools = perception_chat_tools("search_music", "get_run_status")
     assert [t.name for t in tools] == ["search_music", "get_run_status"]

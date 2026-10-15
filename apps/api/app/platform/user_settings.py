@@ -11,6 +11,13 @@ one-key PUT). Pure — the routes stay mechanical.
 credits (whether a priced plan gets one priced confirmation). Both default
 to ``auto`` (standing authorization): the presented plan starts on arrival.
 ``ask`` restores the per-beat confirm (ADR-092 口头确认律是 ask 档法律).
+
+工作区布局 (ADR-123): ``workspace_layout`` = the canvas capability bit's
+second judgment source — ``auto`` (default) follows the viewport; ``chat``
+pins the chat-first workspace on every screen. The server only STORES it
+(cross-device sync): the effective ``canvas_available`` is composed
+client-side and rides every chat request (ADR-118 双键), so nothing
+server-side consumes this key.
 """
 
 from typing import Any, Literal
@@ -22,6 +29,9 @@ CONFIRMATION_KEYS: tuple[ConfirmationKey, ...] = (
     "confirm_execution",
     "confirm_credits",
 )
+
+WORKSPACE_LAYOUTS = ("auto", "chat")
+DEFAULT_WORKSPACE_LAYOUT = "auto"
 
 
 def _read_mode(settings: dict[str, Any] | None, key: ConfirmationKey) -> str:
@@ -47,4 +57,21 @@ def merge_confirmation_pref(
     route's 422); this function never refuses."""
     merged = dict(settings or {})
     merged[key] = value
+    return merged
+
+
+def read_workspace_layout(settings: dict[str, Any] | None) -> str:
+    """Read-tolerant layout pref: absent/unknown reads as ``auto`` (读容忍
+    — the value is a preference, never a gate)."""
+    value = (settings or {}).get("workspace_layout")
+    return value if value in WORKSPACE_LAYOUTS else DEFAULT_WORKSPACE_LAYOUT
+
+
+def merge_workspace_layout(
+    settings: dict[str, Any] | None, value: str
+) -> dict[str, Any]:
+    """One-key merge write — the rest of the settings block survives. The
+    route validates ``value`` against WORKSPACE_LAYOUTS before this."""
+    merged = dict(settings or {})
+    merged["workspace_layout"] = value
     return merged

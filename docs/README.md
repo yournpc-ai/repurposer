@@ -69,7 +69,7 @@
 | `DECISION_MATRIX.md` | 竞品能力 → 采纳/改造/不做矩阵 | 活跃 | 评估竞品功能时 |
 | `DISTRIBUTION.md` | 分发模块设计：数据模型 / 状态机 / OAuth / 审核队列 / 回流 | 活跃（直发链路代码完成，待平台凭据联调） | 动 Distribution 前 |
 | `NAMING.md` | 命名宪法：八条 + 词汇表 + 判例库 | 活跃 | 任何新名字（表/字段/包/skill/API）前；命名争议仲裁 |
-| `CHAT_ARCHITECTURE.md` | Agent Interface 层 + **chat/画布行为唯一事实源**：终态工具集 / plan path / QuestionDock / SSE / 打字机律 / 三形态机 / mentions 运行态 / 词表 v3 / 相机律 / 修订边界 | 活跃（v2 已实现） | 动 chat / dock / 画布行为 / registry / 进度推送前 |
+| `CHAT_ARCHITECTURE.md` | Agent Interface 层 + **chat/画布行为唯一事实源**：终态工具集 / plan path / QuestionDock / SSE / 打字机律 / 两形态机 / mentions 运行态 / 词表 v3 / 相机律 / 修订边界 | 活跃（v2 已实现） | 动 chat / dock / 画布行为 / registry / 进度推送前 |
 | `JOURNEYS.md` | **用户旅程母文档**：四条旅程逐拍 × 分支树 × 系统支撑表 × 缺口登记（ADR-077/078 与 ADR-088/089 的立项依据） | 活跃 | 任何新功能开工前；技术评审倒查「让哪条旅程哪一拍变好」 |
 | `INTENT_COVERAGE.md` | 意图层覆盖全景 | **历史 / retired（ADR-087）**——不再作为 architecture authority；意图路由现状 = CHAT_ARCHITECTURE + DECISIONS | 追溯历史时 |
 | `MENTIONS.md` | @ 提及体系方针：两族分类（请求 / 指认）+ 排除清单（配方/产出/参数/人设永不是 mention）+ 判定三问 + @skill 方针 | 活跃 | 任何新 mention 类型立案前 |

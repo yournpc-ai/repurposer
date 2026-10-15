@@ -8,7 +8,7 @@ import {
   LogOut,
   LogIn,
   Crown,
-  Coins,
+  Zap,
   RotateCcw,
   Settings,
   Palette,
@@ -153,7 +153,7 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
           </Link>
         </div>
         <div className="flex h-8 items-center gap-2 px-2">
-          <Coins className="h-3.5 w-3.5 text-muted-foreground" />
+          <Zap className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs text-foreground">{t("common.credits")}</span>
           <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
             {balance ?? "—"}

@@ -59,6 +59,13 @@ class PerceptionTool:
     params_model: type[BaseModel] | None
     execute: Any  # (db, project, params) -> str — the observation text
     activity_key: str  # i18n key for the inspecting phase frame
+    # consult-first 律 (world seats): a fetch-capable tool declares the
+    # world seat it consults BEFORE any network fetch — the seat names a
+    # function in app/tools/world.py (the pure suite gates the reference).
+    # None = no stored world fact exists for this read (ephemeral by
+    # nature, e.g. web search). A NEW fetch-capable tool without a seat
+    # declaration is the repeat-fetch bug class reborn — declare one.
+    seat: str | None = None
     # ADR-109: checkpoint 资格已通用化——任何非终态调用前的散文都走
     # checkpoint 座位（app/agents/tool_loop.py），注册表不再携带资格字段。
 
@@ -238,12 +245,15 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             description=(
                 "Read one web page's readable text — when the user shares a "
                 "link to discuss or evaluate, or an answer depends on a "
-                "page's current content. An empty read means the page could "
+                "page's current content. A stored reading answers when one "
+                "exists (the same page is never re-fetched unless the user "
+                "says it changed). An empty read means the page could "
                 "not be read — say so, never invent its content."
             ),
             params_model=GetWebPageParams,
             execute=executes.get_web_page,
             activity_key="chat.inspecting.webPage",
+            seat="page_reading_for_url",
         ),
         PerceptionTool(
             name="search_web",

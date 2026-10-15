@@ -51,6 +51,12 @@ URL: {{ page.url }}
 
 {{ focus }}
 {% endif %}
+{% if language %}
+## The film's language (pinned by the plan)
+
+{{ language }} — every narration line you write is in this language, and you
+declare it verbatim in the output's `language` field.
+{% endif %}
 
 ## Grounding (binding)
 
@@ -88,16 +94,23 @@ Narration is SPEECH, not on-screen copy: it never renders as text, and the
 verbatim-quote law does NOT apply to it — you rephrase the page's facts
 into natural spoken language. It must still be TRUE to the manifest (never
 invent a claim, a number, or a feature the page does not state), and it
-speaks the film's language. Omit the field (or null) for a scene that
-plays better silent — a divider beat or a fast words cut often wants no
-voiceover. Narrate the scenes where speech carries the story (hero, ui
-walks, reveal, end).
+speaks the FILM's language: the pinned language above when one is given;
+otherwise the PAGE's own language — the film presents the product, so the
+product's voice leads, and the language of the user's ask / instruction is
+NEVER a source. (On-screen copy stays quoted verbatim in the page's
+language either way — the language choice governs narration only.) Omit
+the field (or null) for a scene that plays better silent — a divider beat
+or a fast words cut often wants no voiceover. Narrate the scenes where
+speech carries the story (hero, ui walks, reveal, end).
 
 ## Output (JSON, no prose)
 
 {
   "name": string | null,   // a short display name for this film; null if unsure
   "theme": {"canvas": "#RRGGBB", "ink": "#RRGGBB"} | null,  // null = default
+  "language": string,      // the film's spoken language (ISO code, e.g. "en") — the
+                           // pinned value when one is given above, else the page's own
+                           // language. Every narration line is written in it.
   "scenes": [ ... ]        // 4..16 scenes, ordered
 }
 

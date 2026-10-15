@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Loader2 } from "lucide-react"
 
 import { Card } from "@/components/ui/card"
 import {
@@ -33,6 +34,10 @@ interface ConfirmationPrefs {
 export function AssistantSection() {
   const { t } = useTranslation()
   const [prefs, setPrefs] = useState<ConfirmationPrefs | null>(null)
+  // Save in flight, per row (2026-10-15 user ruling — GeneralSection 同款
+  // 体感): the flip is optimistic, but the control wears the PUT's pending
+  // state — spinner + disabled until the server acks, rollback on failure.
+  const [saving, setSaving] = useState<ConfirmKey | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -53,8 +58,9 @@ export function AssistantSection() {
   const update = useCallback(
     async (key: ConfirmKey, value: ConfirmMode) => {
       const prev = prefs
-      if (prev === null) return
+      if (prev === null || saving !== null) return
       setPrefs({ ...prev, [key]: value })
+      setSaving(key)
       try {
         const res = await apiPut(
           "/api/v1/auth/settings",
@@ -71,9 +77,11 @@ export function AssistantSection() {
         // Network-level failure: apiFetch toasts then rethrows — the
         // optimistic flip rolls back too.
         setPrefs(prev)
+      } finally {
+        setSaving(null)
       }
     },
-    [prefs, t],
+    [prefs, saving, t],
   )
 
   const prefRow = (
@@ -97,12 +105,15 @@ export function AssistantSection() {
       <Select
         value={prefs?.[key] ?? "auto"}
         onValueChange={(v) => void update(key, v as ConfirmMode)}
-        disabled={prefs === null}
+        disabled={prefs === null || saving !== null}
       >
         <SelectTrigger
           aria-label={t(labelKey)}
-          className="h-8 flex-none border-0 bg-muted px-2.5 text-xs hover:bg-accent dark:bg-muted dark:hover:bg-accent"
+          className="h-8 flex-none gap-1.5 border-0 bg-muted px-2.5 text-xs hover:bg-accent dark:bg-muted dark:hover:bg-accent"
         >
+          {saving === key && (
+            <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+          )}
           <SelectValue />
         </SelectTrigger>
         <SelectContent alignItemWithTrigger={false} align="end">

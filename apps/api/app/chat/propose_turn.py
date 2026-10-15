@@ -626,6 +626,14 @@ class ChatTurn:
         # echo's held clause (keyed on the stamped reason) reads it, the
         # payload stamp takes it by pass-through below.
         need = await resolve_confirmation_need(db, self.user_id, resolved_estimate)
+        # ADR-120 (hold/draft 解耦 + 统一迟延 — the chat path docks through
+        # the SAME seat): a film-chain dock ALWAYS carries the storyboard
+        # review hold; the draft never runs in the turn — the deferred seat
+        # (chat/storyboard_dock.py) lands the block in the flow once the
+        # capture set has drained.
+        from app.chat.storyboard_dock import stamp_film_hold
+
+        need = stamp_film_hold(tasks, need)
         answer = (answer or "") + _estimate_tail(self.text, resolved_estimate, reason=need.reason)
         intent = InferredIntent(
             action="draft",

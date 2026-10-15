@@ -1,38 +1,35 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Coins } from "lucide-react"
+import { Zap } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Card } from "@/components/ui/card"
 import { apiFetch } from "@/lib/api"
-import { cn } from "@/lib/utils"
+import {
+  formatCredits,
+  TransactionRow,
+  type WalletTransaction,
+} from "@/components/credits/tx-row"
 
 /** Credits section of the shared SettingsDialog (BILLING §7 — the balance
  * + ledger full-view seat): overview card (balance / held when active /
  * free-trial placeholder with zero CTA until W11) + recent-activity card.
  * Data rides the SAME two endpoints as the CreditsPill and the account
  * console (三面同源 — zero new endpoints); the semantic fold (spend / grant
- * / top-up rows) is server-side, the client renders label + signed amount
- * + relative time per row. */
+ * / top-up rows) is server-side, and the row display composition rides the
+ * shared tx-row module — a row reads identically in both seats. */
 
 interface WalletState {
   balance: number
   held: number
 }
 
-interface WalletTransaction {
-  id: string
-  family: "spend" | "grant" | "topup" | string
-  amount: number
-  label: string
-  created_at: string
-}
-
 const COLLAPSED_COUNT = 3
+const FETCH_LIMIT = 50
 
 export function CreditsSection() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [wallet, setWallet] = useState<WalletState | null>(null)
   const [items, setItems] = useState<WalletTransaction[] | null>(null)
   const [expanded, setExpanded] = useState(false)
@@ -47,9 +44,10 @@ export function CreditsSection() {
         /* silent — the overview keeps "—" */
       }
       try {
-        const res = await apiFetch("/api/v1/wallet/transactions?limit=10", {
-          toast: false,
-        })
+        const res = await apiFetch(
+          `/api/v1/wallet/transactions?limit=${FETCH_LIMIT}`,
+          { toast: false },
+        )
         if (res.ok && !cancelled) {
           setItems(((await res.json()) as { items: WalletTransaction[] }).items)
         }
@@ -62,16 +60,6 @@ export function CreditsSection() {
     }
   }, [])
 
-  const relativeTime = (iso: string) => {
-    const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
-    if (seconds < 60) return t("notifications.justNow")
-    if (seconds < 3600)
-      return t("notifications.minutesAgo", { count: Math.floor(seconds / 60) })
-    if (seconds < 86400)
-      return t("notifications.hoursAgo", { count: Math.floor(seconds / 3600) })
-    return t("notifications.daysAgo", { count: Math.floor(seconds / 86400) })
-  }
-
   const visible = expanded ? items : items?.slice(0, COLLAPSED_COUNT)
 
   return (
@@ -83,10 +71,10 @@ export function CreditsSection() {
           {t("credits.overview")}
         </p>
         <div className="flex h-9 items-center gap-2">
-          <Coins className="h-3.5 w-3.5 text-muted-foreground" />
+          <Zap className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs text-foreground">{t("credits.balance")}</span>
-          <span className="ml-auto text-sm tabular-nums">
-            {wallet?.balance ?? "—"}
+          <span className="ml-auto text-base font-semibold tabular-nums">
+            {wallet ? formatCredits(wallet.balance, i18n.language) : "—"}
           </span>
         </div>
         {wallet != null && wallet.held > 0 && (
@@ -94,7 +82,7 @@ export function CreditsSection() {
             <span className="h-3.5 w-3.5" aria-hidden />
             <span className="text-xs text-foreground">{t("credits.held")}</span>
             <span className="ml-auto text-sm tabular-nums text-muted-foreground">
-              {wallet.held}
+              {formatCredits(wallet.held, i18n.language)}
             </span>
           </div>
         )}
@@ -127,24 +115,7 @@ export function CreditsSection() {
         ) : (
           <>
             {(visible ?? []).map((item) => (
-              <div key={item.id} className="flex items-center gap-2 py-1.5">
-                <span className="min-w-0 flex-1 truncate text-xs text-foreground">
-                  {item.label}
-                </span>
-                <span
-                  className={cn(
-                    "shrink-0 text-xs tabular-nums",
-                    item.amount >= 0
-                      ? "text-foreground"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  {item.amount >= 0 ? `+${item.amount}` : item.amount}
-                </span>
-                <span className="shrink-0 text-[11px] text-muted-foreground">
-                  {relativeTime(item.created_at)}
-                </span>
-              </div>
+              <TransactionRow key={item.id} item={item} />
             ))}
             <div className="flex items-center justify-between pt-1.5">
               <span className="text-[11px] text-meta">

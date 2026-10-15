@@ -48,6 +48,10 @@ export interface MentionEditorHandle {
   insertText: (text: string) => void
   clear: () => void
   focus: () => void
+  /** The content's intrinsic height (the editable's scrollHeight) — for
+   * hosts whose band grows with the draft (the home composer's
+   * content-driven band). */
+  getContentHeight: () => number
 }
 
 interface MentionEditorProps {
@@ -322,7 +326,13 @@ export function MentionEditor({
 
   useImperativeHandle(
     ref,
-    () => ({ insertMention, insertText, clear, focus }),
+    () => ({
+      insertMention,
+      insertText,
+      clear,
+      focus,
+      getContentHeight: () => editorRef.current?.scrollHeight ?? 0,
+    }),
     [insertMention, insertText, clear, focus],
   )
 

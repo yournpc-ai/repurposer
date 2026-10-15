@@ -35,6 +35,7 @@ from app.models.schemas import (
     PlanAskArgs,
     PresentPlanArgs,
     ProposeTasksArgs,
+    StartRunArgs,
     TaskItem,
     resolve_recommended_id,
 )
@@ -240,3 +241,28 @@ class TestChatAskArgsCardFields:
             ).pending_disposition
             == "none"
         )
+
+
+class TestStartRunArgsWaiver:
+    """start_run's waiver param (法3, 2026-10-16): the film storyboard
+    review's ONE escape — default off, explicit-only, null read-tolerant
+    (打字机律牙①: a null never rejects the call), unknown keys rejected."""
+
+    def test_default_is_no_waiver(self) -> None:
+        assert StartRunArgs.model_validate({}).skip_storyboard_review is False
+
+    def test_explicit_waiver(self) -> None:
+        assert (
+            StartRunArgs.model_validate({"skip_storyboard_review": True}).skip_storyboard_review
+            is True
+        )
+
+    def test_null_reads_as_absent(self) -> None:
+        assert (
+            StartRunArgs.model_validate({"skip_storyboard_review": None}).skip_storyboard_review
+            is False
+        )
+
+    def test_unknown_keys_reject(self) -> None:
+        with pytest.raises(ValidationError):
+            StartRunArgs.model_validate({"skip": True})

@@ -11,7 +11,7 @@
  * anchor); `quiet` drops it into the run's text-xs register (the dock's
  * thinking row stays text-sm). */
 
-import { ChevronDown, ChevronUp } from "lucide-react"
+import { ChevronDown, ChevronRight } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -44,17 +44,31 @@ export function StatusLine({
   const body = (
     <>
       {leading}
-      <span className={cn("min-w-0 truncate", active && "shimmer")}>
+      <span
+        className={cn(
+          "min-w-0 truncate",
+          active && "shimmer",
+          // Hover brightens the label only — the row never washes.
+          onClick && "transition-colors group-hover/row:text-foreground",
+        )}
+      >
         {label}
       </span>
       {trailing ? (
-        <span className="shrink-0 tabular-nums">{trailing}</span>
+        // The clock rides as a meta whisper with the · separator — the
+        // same register the activity rows' settled durations use.
+        <span className="shrink-0 tabular-nums text-meta-foreground">
+          · {trailing}
+        </span>
       ) : null}
       {onClick ? (
+        // The OS disclosure convention: > collapsed, ⌄ open (one
+        // convention across the flow's three disclosure seats — this row,
+        // the activity row, the fold row).
         open ? (
           <ChevronDown className="h-3 w-3 shrink-0" />
         ) : (
-          <ChevronUp className="h-3 w-3 shrink-0" />
+          <ChevronRight className="h-3 w-3 shrink-0" />
         )
       ) : null}
     </>
@@ -62,7 +76,7 @@ export function StatusLine({
   const classes = cn(
     "flex w-full items-center gap-2 text-muted-foreground",
     quiet ? "text-xs" : "text-sm",
-    onClick && "rounded-md text-left transition-colors hover:bg-accent/50",
+    onClick && "group/row rounded-md text-left transition-colors",
     className,
   )
   return onClick ? (

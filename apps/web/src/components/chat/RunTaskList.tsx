@@ -51,6 +51,7 @@ export function useNow(live: boolean): number | null {
  * subtraction batch). */
 export function formatElapsed(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000))
+  if (s === 0 && ms > 0) return "<1s"
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60)
   if (m < 60) return `${m}m ${s % 60}s`
@@ -178,7 +179,12 @@ export function RunTaskList({
         label={
           terminal ? (
             <span
-              className={cn(failed ? "text-destructive" : "text-muted-foreground")}
+              className={cn(
+                "transition-colors",
+                failed
+                  ? "text-destructive"
+                  : "text-muted-foreground group-hover/row:text-foreground",
+              )}
             >
               {title}
             </span>

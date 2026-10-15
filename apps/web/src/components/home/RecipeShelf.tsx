@@ -33,7 +33,8 @@ export function RecipeShelf({
   items: ShelfItem[]
   onPrefill: (prefillKey: string) => void
   /** Index of the item that carries the `home-recipes` tour anchor (the
-   * fifth recipe card — Tour skips the step when fewer render). */
+   * Ads family's launch-film demo card — Tour skips the step when the
+   * anchor renders nothing). */
   tourAnchorIndex?: number
 }) {
   const { t } = useTranslation()
@@ -75,11 +76,19 @@ export function RecipeShelf({
                 <RecipeCard card={item.card} onSelect={() => onPrefill(item.prefillKey)} />
               </div>
             ) : (
-              <DemoCard
+              // data-tour mirror of the recipe branch — tour step 3 anchors
+              // the Ads family's launch-film demo card (home 默认 tab
+              // 旗舰), so the anchor stamp must exist on demo cards too.
+              <div
                 key={item.demo.id}
-                demo={item.demo}
-                onSelect={() => onPrefill(item.prefillKey)}
-              />
+                data-tour={index === tourAnchorIndex ? "home-recipes" : undefined}
+                className="flex-none"
+              >
+                <DemoCard
+                  demo={item.demo}
+                  onSelect={() => onPrefill(item.prefillKey)}
+                />
+              </div>
             ),
           )}
         </div>
@@ -105,8 +114,10 @@ export function RecipeShelf({
 
 /** One MG demo card: the real render IS the card face (loop/muted, no
  * chrome, no caption — prototype .vcard). Media-tile law: rest = the
- * video's own fill separates it from the shelf; hover = the media-list
- * interaction ring (ring-foreground/30), never a bg seat. */
+ * video's own fill separates it from the shelf; hover = cursor only — a
+ * ring reads as a white edge on dark media (2026-10 user ruling), and a
+ * scale would clip inside the track's overflow-x auto (its overflow-y
+ * computes to auto too); never a bg seat. */
 function DemoCard({
   demo,
   onSelect,
@@ -118,7 +129,7 @@ function DemoCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`relative flex-none cursor-pointer overflow-hidden rounded-lg hover:ring-1 hover:ring-foreground/30 ${
+      className={`relative flex-none cursor-pointer overflow-hidden rounded-lg ${
         demo.orientation === "vertical"
           ? "aspect-[3/4] w-44"
           : "aspect-video w-72"

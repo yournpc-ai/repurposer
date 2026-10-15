@@ -194,6 +194,15 @@ class LaunchFilmParams(BaseModel):
         description="Canvas aspect: '16:9' (default, landscape), '1:1' "
         "(square), or '9:16' (portrait). Null = 16:9.",
     )
+    language: str | None = Field(
+        default=None,
+        description="The film's SPOKEN language (the narration voiceover), "
+        "e.g. 'en', 'zh', 'de'. Pin it when the user names one, or when a "
+        "named audience implies one ('英国年轻人' → 'en'); an already-captured "
+        "page's own language is the next signal. The conversation's own "
+        "language is NEVER a source — the film speaks to its audience, not "
+        "to the chat. Null = the storyboard declares it from the page.",
+    )
 
 
 @dataclass(frozen=True)
@@ -716,16 +725,19 @@ def _assemble(
     pages: list[dict[str, Any]],
     instruction: str | None,
     focus: str | None,
+    language: str | None,
     page_images: list[MediaInput],
 ) -> AssembleResult:
     """Purity by signature: the model sees the manifests (its grounding
-    universe), the run's instruction, the slot's focus steer, and the page
+    universe), the run's instruction, the slot's focus steer, the plan's
+    pinned film language (None = declare it from the page), and the page
     screenshots (its camera target) — nothing else."""
     return (
         {
             "pages": pages,
             "instruction": instruction,
             "focus": focus,
+            "language": language,
         },
         page_images,
     )
@@ -874,6 +886,7 @@ async def orchestrate_storyboard(
     instruction: str | None,
     focus: str | None,
     page_images: list[MediaInput],
+    language: str | None = None,
     on_reject=None,
 ) -> FilmStoryboard:
     """THE bounded storyboard loop (打回有界): up to 1 + MAX_REWRITES
@@ -892,6 +905,7 @@ async def orchestrate_storyboard(
             pages=prompt_pages,
             instruction=instruction,
             focus=focus,
+            language=language,
             page_images=page_images,
             repair_feedback=feedback,
         )
@@ -945,15 +959,18 @@ async def draft_film_storyboard(
     *,
     instruction: str | None,
     focus: str | None = None,
+    language: str | None = None,
 ) -> tuple[FilmStoryboard, list[StoryboardPage]] | None:
     """The plan-stage storyboard draft (ADR-120 §2): the SAME loop the node
     runs, against the project's READY pages. Returns ``(storyboard, pages)``
     — the caller needs the pages for the block's source line. None honestly
     when the draft can't stand (no readable page / schema terminal /
-    grounding exhaustion): the plan still docks; the run re-orchestrates at
-    birth and the review hold simply doesn't fire. In-flight captures are
-    awaited first (bounded) — the review hold may not be raced by the
-    absorb's async capture."""
+    grounding exhaustion). The ONE caller is the deferred seat
+    (chat/storyboard_dock.py — 统一迟延 2026-10-16: the draft never runs
+    inside a chat turn); the seat owns the bounded retry and the terminal
+    failure row, and the review hold stands regardless of the outcome.
+    In-flight captures are awaited first (bounded) — the review hold may
+    not be raced by the absorb's async capture."""
     await _await_captures_settled(project.id)
     pages = await load_storyboard_pages(db, project)
     if not pages:
@@ -965,6 +982,7 @@ async def draft_film_storyboard(
             instruction=instruction,
             focus=focus,
             page_images=page_images,
+            language=language,
             on_reject=lambda attempt, violations, feedback: logger.info(
                 "film_plan_draft_rejected",
                 project_id=str(project.id),
@@ -1038,6 +1056,12 @@ class LaunchFilm(NodeBase):
         focus = (slot.focus if slot else None) or None
         instruction = ctx.get("instruction") or None
         ui_language = ui_lang_of(run, project)
+        # 影片语言 (2026-10-15 语言钉参): the plan's pin rides the slot; the
+        # storyboard's own declaration is the unpinned fallback (the page's
+        # voice, drafted from the manifest). ctx.target_language /
+        # project.language stay the LEGACY tail (pre-pin rows) — the chat's
+        # language never leads a film.
+        pinned_language = (slot.language if slot else None) or None
 
         pages = await load_storyboard_pages(db, project)
         if not pages:
@@ -1096,6 +1120,7 @@ class LaunchFilm(NodeBase):
                     instruction=instruction,
                     focus=focus,
                     page_images=page_images,
+                    language=pinned_language,
                     on_reject=_log_reject,
                 )
             except LLMSchemaError:
@@ -1142,9 +1167,9 @@ class LaunchFilm(NodeBase):
 
         frames = allocate_frames(storyboard)
 
-        # Slot levers (ADR-120 E2/E3): voiceover / music mood / aspect ride
-        # the compiled slot; absent = plan defaults (on / persona-or-calm /
-        # 16:9).
+        # Slot levers (ADR-120 E2/E3): voiceover / music mood / aspect /
+        # language ride the compiled slot; absent = plan defaults (on /
+        # persona-or-calm / 16:9 / storyboard-declared).
         aspect = (slot.aspect if slot else None) or "16:9"
         voiceover = (slot.voiceover if slot else None) is not False
         music_mood = (slot.music_mood if slot else None) or None
@@ -1204,7 +1229,13 @@ class LaunchFilm(NodeBase):
             project_id=project.id,
             workflow_step_id=node.id,
             type="film",
-            language=str(ctx.get("target_language") or project.language or "en"),
+            language=str(
+                pinned_language
+                or storyboard.language
+                or ctx.get("target_language")
+                or project.language
+                or "en"
+            ),
             # AI-orchestrated render (ADR-026/ADR-119): the on-screen copy is
             # quoted from the page, the film itself is machine-composed.
             provenance="generated",

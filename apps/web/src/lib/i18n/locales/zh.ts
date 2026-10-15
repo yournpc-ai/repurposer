@@ -58,6 +58,18 @@ const zh: Resources = {
       "估价始终随方案显示。超高额或无法提前估价的方案，任何设置下都会先问你一次。",
     updateFailed: "设置保存失败，请重试",
   },
+  general: {
+    /** SettingsDialog「通用」section（ADR-123）——显示类偏好。 */
+    title: "通用",
+    subtitle: "工作区的布局方式。",
+    workspaceLayout: {
+      label: "工作区布局",
+      desc: "自动 = 宽屏时画布与对话并排，窄屏时纯对话；纯对话 = 任何屏幕都以对话为工作区，产物在消息流里交付。",
+      auto: "自动",
+      chat: "纯对话",
+    },
+    updateFailed: "设置保存失败，请重试",
+  },
   credits: {
     range: "约 {{low}}–{{high}} 积分",
     /** 档案面板对账尺的实扣侧（2026-09-06）——产物所属 step 的计量实扣，
@@ -68,6 +80,8 @@ const zh: Resources = {
     // 项目页左下角积分 pill 与其弹窗（BILLING §7 读面，2026-09-06）。
     balance: "余额",
     held: "预占中",
+    /** pill hero meta 行的预占内联提及（"积分 · 12 预占中"）。 */
+    heldInline: "{{count}} 预占中",
     recent: "最近变动",
     /** SettingsDialog「积分」section（BILLING §7 展示主轴）——余额与台账
      * 的全貌座位，与 pill 同两个端点。 */
@@ -82,6 +96,9 @@ const zh: Resources = {
       empty: "暂无变动",
       /** 语义账本塌缩（ADR-057 K4）：用户面只显三族——花费 / 赠送 / 充值；
        * 账本的 hold / capture / release 机器词服务端折叠，永不上 UI。 */
+      /** 花费行标题的最后兜底——仅在 run 既无 LLM 命名也无产物类型时
+       * 出现（回退链在 tx-row.tsx 一处合成）。 */
+      spent: "花费",
     },
   },
   nav: {
@@ -92,15 +109,16 @@ const zh: Resources = {
   },
   home: {
     newChat: "新对话",
-    brandTagline: "懂你的内容Agent，帮你搞定一切",
-    // Composer placeholder：固定前缀 + 三条最常见 prompt 在前缀后轮换
-    // （Lovart 式轮换 placeholder，2026-08-30）。后缀保持简短，钉顶条里
-    // 不超一行。
-    placeholderPrefix: "让 Repurposer ",
+    // Studio hero：composer 上方的一行问句——下方轮换 placeholder 用三条
+    // 示例 prompt 作答。
+    heroQuestion: "今天做点什么？",
+    // Composer placeholder：三条第一人称示例 prompt 轮换（Lovart 式），
+    // 无前缀——每条都是用户口吻的完整请求，即上方 hero 问句的答句。
+    // 每条保持简短，钉底条里不超一行。
     placeholderPrompts: [
-      "看看这些素材，你有什么想法建议？",
-      "说说你能做些什么？",
-      "照着我上传的视频做一个一样的",
+      "给我的网站做一支宣传视频",
+      "把我的演讲剪成几条高光短视频",
+      "帮我的餐厅制作一部宣传片",
     ],
     selectPersona: "人设",
     noPromptError: "先说说想做什么",
@@ -476,34 +494,33 @@ const zh: Resources = {
   // reserved 卡在此留座但不可点击发射。
   recipes: {
     soon: "即将推出",
-    // 两级 tab 货架（D5，flora-parity-ui 批）：一级 family pill 轨 × 下划线
-    // 子 tab × 横滑货架。键与 components/home/recipeFamilies.ts 的
+    // 两级 tab 货架：一级 family pill 轨 × 下划线
+    // 子 tab × 横滑货架，按用户任务组织（2026-10 投资人演示拍板——
+    // 永不按产物介质分）。键与 components/home/recipeFamilies.ts 的
     // RECIPE_FAMILIES 一一对应。无真 demo 的族不上架——MG demo 预填文案随
     // 资产（MG 批 D3）落在 `recipes.shelf.demos.<demoId>.prompt`。
     shelf: {
       families: {
-        templates: "模板",
-        explainer: "解释视频",
-        ads: "广告和用户生成内容",
-        social: "社交媒体",
+        ads: "广告与 UGC",
+        talks: "演讲与访谈",
+        posts: "社媒",
+        templates: "更多",
       },
       subs: {
         all: "全部",
-        animated: "动画讲解",
-        motion: "动态图形",
-        brand: "品牌与业务",
         saas: "SaaS 和应用",
+        brand: "品牌与业务",
+        ugc: "UGC",
         product: "产品",
-        linkedin: "LinkedIn",
       },
       titles: {
         featured: "推荐配方",
-        animated: "动画讲解",
-        motion: "动态图形",
-        brand: "品牌与业务",
         saas: "SaaS 和应用",
+        brand: "品牌与业务",
+        ugc: "UGC",
         product: "产品",
-        linkedin: "LinkedIn",
+        talks: "演讲与访谈",
+        posts: "社媒",
       },
       nextPage: "下一页",
       // MG 货架 demo 预填文案（D3——与 recipeFamilies.ts 的 ShelfDemo id
@@ -512,6 +529,9 @@ const zh: Resources = {
       demos: {
         "launch-film-linear": {
           prompt: "把这个网页做成一条发布短片：https://linear.app",
+        },
+        "launch-film-zymix": {
+          prompt: "把这个网页做成一条发布短片：https://www.zymix.ai/en/",
         },
       },
     },
@@ -933,30 +953,21 @@ const zh: Resources = {
       carousel: "轮播图",
       article: "长文章",
     },
-    empty: {
-      clips: "尚未生成视频片段。",
-      post: "尚未生成社交长文。",
-      quotes: "尚未生成金句卡。",
-      quoteFrame: "尚未生成帧卡。",
-      carousel: "尚未生成轮播图。",
-      article: "尚未生成长文章。",
-    },
     dock: {
-      history: "历史记录",
       focus: "当前焦点：{{name}}",
       // hidden 态（2026-09-02 形态机）：用户手势把整个 dock 收成右下角
       // logo 点；agent 发言 / 提问 / 焦点会唤回。
       hide: "收起聊天",
       show: "展开聊天",
-      // 右侧 docked 面板的细长 header 标题（2026-09-06 三形态机）。
+      // 右侧 docked 面板的细长 header 标题（2026-09-06 两形态机）。
       panelTitle: "对话",
       // 面板几何切换（2026-09-06，FLORA「Dock panel」对齐）：浮动 = 雾面卡
       // 浮于 full-bleed 画布上（默认）；停靠 = 靠右齐边全高，仍是雾面。
       dockPanel: "停靠面板",
       floatPanel: "浮动面板",
-      // dock 常驻免责行（ADR-051，2026-08-31 —— FLORA FAUNA 行逐字镜像，
-      // 用户拍板；基础形态钉在输入区上方，提问形态随输入行隐藏）。
-      honesty: "Repurposer 是 AI，可能出错。重要信息请核对。",
+      // dock 常驻免责行（ADR-051）——指向真实风险点：即将发布的内容，而非
+      // 事实问答。基础形态钉在输入区上方，提问形态随输入行隐藏。
+      honesty: "Repurposer 可能出错，发布前请检查。",
     },
     // 画布产物卡（ADR-041 D5）：常驻操作带按钮文案。（无「预览」——视频内联自
     // 播，hover 放大开大屏；2026-08-16 走查拍板。）
@@ -1095,8 +1106,6 @@ const zh: Resources = {
       translating_captions: "正在翻译字幕…",
       dubbing: "正在为你的声音配音…",
     },
-    retry: "重试",
-    retryFailed: "重试失败的输出",
     clipNotRendered: "点击渲染此片段。",
     topPick: "首发推荐",
     qualityNeedsReview: "待复核",
@@ -1150,6 +1159,11 @@ const zh: Resources = {
     thinkingPhases: {
       composing: "正在整理…",
     },
+    /** 分镜起草占位（ADR-120 统一迟延）：film dock 到分镜块落地之间的
+     * now-line——迟延座起草数分钟，等待恒可见；块/失败行落地即收。 */
+    storyboard: {
+      drafting: "正在起草分镜…",
+    },
     /** now-line 的素材阅读行（2026-09-24 用户拍板——thinking 就是 activity
      * 行的空态）：素材处理中 → reading（文件名插值）。*Done / *Failed 是
      * 持久化的完成态行（素材节拍入库——pipeline 每节拍落一条消息行，回放
@@ -1182,6 +1196,16 @@ const zh: Resources = {
       readingFailed_video: "看 {{name}} 失败",
       readingFailed_audio: "听 {{name}} 失败",
       understandingDone: "素材理解完成",
+    },
+    /** 素材读取族的落定类目形态（ADR-110 修订——归档归类目）：不带实例
+     * 名——文件名是 live 期的言语，落定面只说类目。动词分叉与 reading
+     * 族同形（video/audio 随行键自身后缀，web_page 随节拍的
+     * asset_type）。 */
+    materialCategory: {
+      reading: "读完素材",
+      reading_video: "看完视频",
+      reading_audio: "听完音频",
+      reading_webPage: "读完网页",
     },
     /** 感知族的查询碎碎念（T2b）：读工具运行期间 read 活动帧的文案
      * （Phase 3 Batch B ③ 自退役的 System Status 行迁入 Activity Stream，
@@ -1245,12 +1269,13 @@ const zh: Resources = {
     activityMeta: {
       count: "数量：{{count}}",
     },
-    /** 聚合行（ADR-110 段聚合——Claude Code 式坍缩）：两条消息之间的一切
-     * completed 落定行折成一条摘要——段总耗时（`worked`，首行出生 → 散文
-     * 到来的墙钟）+ 按序片段；`repeated` 是单片段的 ×N 形态。 */
+    /** 聚合行（ADR-110 段聚合，修订——Flora 解剖）：落定段折成一条安静
+     * 的总量——`worked` 载段墙钟（首行出生 → 散文到来）为折叠态唯一事实；
+     * 展开 = 类目分解（foldCategories 的 ×N 行）。`actionCount` 是无可测
+     * 耗时（存量行无时间戳）时的诚实回落——段内行总数。 */
     activityFold: {
-      repeated: "{{label}} ×{{count}}",
       worked: "工作了 {{elapsed}}",
+      actionCount: "{{count}} 项操作",
     },
     /** inspecting 族的完成态镜像——读活动 completed 帧的文案（键随服务端
      * 注册表，本族按前缀交换镜像）。 */
@@ -1278,6 +1303,9 @@ const zh: Resources = {
     },
     completed: "完成",
     failed: "抱歉，这次没能完成修改，请再试一次。",
+    /** 死流对账的放弃行（2026-10-15）：连接被判死并放弃后，窗口内没有
+     * 等到回答落库——回合仍可能在服务端完成，刷新时归档回放会补上。 */
+    connectionLost: "连接中断了，回复还没有落库——过一会儿刷新页面看看。",
     /** 已落定问题的静默收口（2026-09-28——回答端点的结构化 409 码；
      * 点击与问题自身的落定竞态，不报错误 toast）。 */
     questionOutdated: "这个问题已被更新的提问取代，不用再回答了。",
@@ -1398,17 +1426,18 @@ const zh: Resources = {
     planVersion: "计划 v{{n}}",
     versionRestore: "恢复此版本",
     versionRestored: "已恢复为计划 v{{n}}——它是当前计划了。",
-    // OriginCut 同位 mechanics placeholder（2026-09-24 用户拍板，照搬其两
-    // 行组成式：先问需求，再讲机制——拖拽/粘贴 + @ 引用）。「节点」措辞成立：
+    // OriginCut 同位 mechanics placeholder（2026-09-24 用户拍板，2026-10 改
+    // 一句连读：先动作，逗号接机制——拖拽/粘贴 + @ 引用）。「节点」措辞成立：
     // @ 选择器候选（素材 / 产物）本就是画布节点。对外词 = 助手（N-25），不用
     // Agent。ADR-117：「确认后再开工」从句随 ask 默认档退市——静态文案写默认
     // （auto）档的真相：方案呈现即开工。
-    chatPlaceholder: "描述你的修改想法。可拖拽或粘贴文件，输入 @ 引用节点。",
+    chatPlaceholder: "描述你的修改想法，可拖拽或粘贴文件，输入 @ 引用节点。",
     // full 形态（首次 run 前、画布未生）专用（2026-09-13 用户拍板）：画布
     // 还不存在时没有「节点」可指——@ 候选只有素材；措辞走世界真相不走
     // 一句通用。画布落地后（panel / dock 形态）回到上面的 nodes 版。
-    // 2026-09-24：同随 OriginCut 两行组成式（nodes 版同款，@ 对象换素材）。
-    chatPlaceholderAssets: "描述你想做什么。可拖拽或粘贴文件，输入 @ 引用素材。",
+    // 一句连读（2026-10 用户拍板）：先动作，逗号接机制——两个句号两个
+    // 大写/顿断的双句组合读感像说明书。
+    chatPlaceholderAssets: "描述你想做什么，可拖拽或粘贴文件，输入 @ 引用素材。",
     attachFiles: "上传文件",
     retryUpload: "重试上传",
     removeAttachment: "移除附件",

@@ -568,3 +568,40 @@ def test_gate_authorization_conjunct_yields_to_structural_truth() -> None:
     )
     assert verdict is not None
     assert verdict.code == "start.blocked"
+
+
+# ---- the dock echo's estimate tail (ADR-111 §2 + ADR-120 复核拍措辞) -------------
+
+from app.chat.service import _estimate_tail  # noqa: E402
+from app.models.schemas import PlanEstimate  # noqa: E402
+
+
+def _est() -> PlanEstimate:
+    return PlanEstimate(total=[100, 200], per_task=[])
+
+
+class TestEstimateTailStoryboardReview:
+    """统一迟延 (2026-10-16): the draft NEVER runs in the dock's turn, so
+    the review-hold tail ALWAYS names the draft in flight — the '已列在下方'
+    claim has no lawful seat at dock time. (Code-forced text, so locking
+    its markers is legal — the reminder-tail doctrine.)"""
+
+    def test_review_tail_always_names_the_draft_in_flight(self) -> None:
+        tail = _estimate_tail("好", _est(), reason="storyboard_review")
+        assert "正在起草" in tail
+        assert "已列在下方" not in tail
+
+    def test_review_tail_english(self) -> None:
+        tail = _estimate_tail("go", _est(), reason="storyboard_review")
+        assert "being drafted" in tail
+        assert "below" not in tail
+
+    def test_deferred_quote_half_carries_the_review(self) -> None:
+        tail = _estimate_tail("好", None, reason="storyboard_review")
+        assert "估价随运行确定" in tail
+        assert "正在起草" in tail
+
+    def test_other_reasons_never_speak_storyboard(self) -> None:
+        # The review wording never leaks into the billing reasons.
+        tail = _estimate_tail("go", _est(), reason="above_guardrail")
+        assert "storyboard" not in tail.lower()
