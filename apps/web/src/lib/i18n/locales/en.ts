@@ -1257,6 +1257,8 @@ const en = {
       asset: "Looking at the asset…",
       craftSkeleton: "Reading the reference's style breakdown…",
       artifact: "Reading the card's details…",
+      webPage: "Reading the page…",
+      webSearch: "Searching the web…",
     },
     /** The work-session family (iter-2 ⑥, N-57): the discovery chain's
      * user-safe beats — `searching` rides the read frame (active + done
@@ -1334,6 +1336,8 @@ const en = {
       asset: "Looked at the asset",
       craftSkeleton: "Read the reference's style breakdown",
       artifact: "Read the card's details",
+      webPage: "Read the page",
+      webSearch: "Searched the web",
     },
     /** The inspecting family's failed-form mirror (ADR-102 §5): the read
      * activity's failed-frame label when the read's target is unreadable —

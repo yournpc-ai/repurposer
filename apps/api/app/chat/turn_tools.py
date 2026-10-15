@@ -213,6 +213,10 @@ PLAN_READ_TOOLS = perception_chat_tools(
     # get_graph (ADR-111 §7): the plan-ready reveal shows the canvas BEFORE
     # any run — the plan path's model must be able to read what it shows.
     "get_graph",
+    # The web pair: a link can arrive on the very first turn (「这个网站你
+    # 看看？」/「帮我做支网站介绍短片」) — reading it is altitude-free.
+    "get_web_page",
+    "search_web",
 )
 CHAT_READ_TOOLS = perception_chat_tools(
     "get_output_spec",
@@ -229,6 +233,8 @@ CHAT_READ_TOOLS = perception_chat_tools(
     "get_segment",
     "get_artifact",
     "get_graph",
+    "get_web_page",
+    "search_web",
 )
 
 

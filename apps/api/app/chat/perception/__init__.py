@@ -42,8 +42,10 @@ from app.chat.perception.executes import (
     GetNodeParams,
     GetOutputSpecParams,
     GetSegmentParams,
+    GetWebPageParams,
     SearchMusicParams,
     SearchTranscriptParams,
+    SearchWebParams,
 )
 
 
@@ -230,6 +232,29 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             params_model=GetArtifactParams,
             execute=executes.get_artifact,
             activity_key="chat.inspecting.artifact",
+        ),
+        PerceptionTool(
+            name="get_web_page",
+            description=(
+                "Read one web page's readable text — when the user shares a "
+                "link to discuss or evaluate, or an answer depends on a "
+                "page's current content. An empty read means the page could "
+                "not be read — say so, never invent its content."
+            ),
+            params_model=GetWebPageParams,
+            execute=executes.get_web_page,
+            activity_key="chat.inspecting.webPage",
+        ),
+        PerceptionTool(
+            name="search_web",
+            description=(
+                "Search the web for fresh facts on a topic — when the answer "
+                "or the planned copy depends on current / time-sensitive "
+                "information."
+            ),
+            params_model=SearchWebParams,
+            execute=executes.search_web,
+            activity_key="chat.inspecting.webSearch",
         ),
     ]
 }

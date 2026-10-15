@@ -50,6 +50,12 @@
     S11 贴链成片全旅程（MG）：URL → web_page 资产真采集 → 分镜方案 dock
              （launch_film）→ 守卫线口头 yes → 真渲染 + probe 闸 → film
              产物 COMPLETED + 画布血缘 + 台账 hold=capture+release
+    S12 网站旅程入口变体（轻本）：裸求片先问链接（永不盲 dock
+             launch_film）→ 讨论链接先 get_web_page 读页再答（读帧 key
+             为观测面）→ discussion 链接永不资产化（负形）→ 讨论后拍板
+             做片：历史回合的链接 verbatim 入 material_urls（永不追问
+             对话已有的链接），dock 带 launch_film + 本回合诞生 web_page
+             资产（正形），分镜核对 hold 挡 auto 直开
 
 harness 公共断言（ADR-114 §3.2——每本自动携带，不再单独立本）：
 
@@ -4049,6 +4055,95 @@ async def s11_url_to_launch_film(ctx: Ctx) -> None:
         await ctx.answer(review["id"], {"kind": "bail"})
 
 
+async def s12_site_entry_variants(ctx: Ctx) -> None:
+    """S12 网站旅程入口变体（轻本——纯 chat 回合 + 一次真网页读取，零 run
+    零渲染）：① 裸求片（消息与项目都无链接）→ 先问链接（ask_user 自由问
+    / answer 问句两形皆合法），永不盲 dock launch_film 计划、永不开 run；
+    ② 讨论链接（「这个网站你看看？」）→ get_web_page 读帧必现 → grounded
+    answer/ask，链接永不资产化（discussion ≠ material 卫生律负形）。网络
+    全灭时读帧照样出现（degrade-honest——帧锁的是读动作的发生，不是抓取
+    的成败）。"""
+    # ① 裸求片先问链接（用户拍板的测试形态：「帮我制作一支网站介绍短片」）
+    pid_a = await ctx.new_project("S12 bare film ask")
+    turn1 = await ctx.chat(pid_a, "帮我制作一支网站介绍短片")
+    check(terminal_tool_of(turn1) in ("ask_user", "answer"),
+          "a link-less film ask closes on ask_user / answer — never a blind "
+          "proposal", turn1)
+    check(not is_plan_dock(turn1["assistant_message"]),
+          "a link-less film ask never docks a blind launch_film plan",
+          turn1["assistant_message"])
+    check(turn1["run_id"] is None, "a link-less film ask starts no run", turn1)
+    check(await count_runs(pid_a) == 0, "no run the whole variant", None)
+
+    # ② 讨论链接先读页（独立项目——①的待决问若存活会吃掉②的链接语义）
+    pid_b = await ctx.new_project("S12 discussion link")
+    stream = await ctx.chat_stream(pid_b, f"{S11_URL} 这个网站你看看？")
+    check(stream.failed is None, "the discussion-link turn never fails",
+          stream.failed)
+    keys = {a.get("key") for a in stream.activities}
+    check("chat.inspecting.webPage" in keys,
+          "a discussion link is read before answering (the read frame's key "
+          "is the observable — tool names never cross the wire)", keys)
+    turn2 = stream.completed
+    check(terminal_tool_of(turn2) in ("answer", "ask_user"),
+          "a discussion link closes on answer / ask_user — never a film "
+          "proposal from a 「看看」", turn2)
+    check(turn2["run_id"] is None, "a discussion link starts no run", turn2)
+    check(not is_plan_dock(turn2["assistant_message"]),
+          "a discussion link docks no plan", turn2["assistant_message"])
+    check(has_prose(turn2["assistant_message"]), "a grounded answer lands")
+    # discussion ≠ material：链接永不资产化（卫生律负形断言）
+    async with AsyncSessionLocal() as db:
+        pages = (
+            await db.execute(
+                select(Asset).where(
+                    Asset.project_id == uuid.UUID(pid_b),
+                    Asset.type == AssetType.WEB_PAGE,
+                )
+            )
+        ).scalars().all()
+    check(not pages,
+          "a discussion link never births a web_page asset (material hygiene)",
+          [str(a.id) for a in pages])
+
+    # ③ 讨论后拍板做片（真实对话 66048d72 的延续路径）：历史回合的链接 =
+    # 对话已携带的素材——router 逐字抄入 material_urls（法条：never ask
+    # for a link the conversation already carries），dock 带 launch_film，
+    # 本回合诞生 web_page 资产；分镜核对 hold 挡 auto 直开（E1 律）零 run。
+    # LLM 裁量（先接一句）有界兜底一回。
+    turn3 = await ctx.chat(pid_b, "好，那就做它的介绍短片吧")
+    plan = await pending_plan(ctx, pid_b)
+    tools = [t.get("tool") for t in plan_tasks(plan)] if plan is not None else []
+    if "launch_film" not in tools:
+        turn3 = await ctx.chat(pid_b, "Go ahead — plan the intro film from that page.")
+        plan = await pending_plan(ctx, pid_b)
+        tools = [t.get("tool") for t in plan_tasks(plan)] if plan is not None else []
+    check("launch_film" in tools,
+          "the history link becomes material — the docked chain carries "
+          "launch_film without re-asking for the URL", plan)
+    check(turn3["run_id"] is None and await count_runs(pid_b) == 0,
+          "the storyboard-review hold blocks auto-start (E1 law)", turn3)
+    # 资产化正形：本回合诞生 web_page 资产（material_urls absorb 从历史抄链）
+    asset_id = None
+    for _ in range(15):
+        async with AsyncSessionLocal() as db:
+            row = (
+                await db.execute(
+                    select(Asset).where(
+                        Asset.project_id == uuid.UUID(pid_b),
+                        Asset.type == AssetType.WEB_PAGE,
+                    )
+                )
+            ).scalars().first()
+            if row is not None:
+                asset_id = str(row.id)
+                break
+        await asyncio.sleep(2)
+    check(asset_id is not None,
+          "the history link births a web_page asset on the film turn "
+          "(material_urls absorb from conversation history)", None)
+
+
 SCENARIOS = {
     "S1": s1_lost_user_full_journey,
     "S2": s2_material_to_clips_full_chain,
@@ -4061,6 +4156,7 @@ SCENARIOS = {
     "S9": s9_credits_boundary,
     "S10": s10_remix_flagship,
     "S11": s11_url_to_launch_film,
+    "S12": s12_site_entry_variants,
 }
 
 

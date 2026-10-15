@@ -1,7 +1,8 @@
 """The perception family's read implementations (ADR-077 判词②, T2b).
 
 只读纪律: this module holds ZERO write functions — every execute below only
-SELECTs and renders compact model-facing text (the observation). The world's
+reads (a SELECT, or the web pair's read-only fetch) and renders compact
+model-facing text (the observation). The world's
 READINGS live here; the world's WRITINGS stay behind the three doors
 (edit ops / wiring ops / ``create_run``) — a read tool is never a doorbell
 for a write (简报 §3).
@@ -50,6 +51,7 @@ from app.tools.clips.transcript import (
     speaker_at,
     words_in_range,
 )
+from app.tools.research.web import FETCH_TEXT_CAP, fetch_text, web_search
 from app.pipeline.assets import asset_text_content
 from app.pipeline.exploration_store import (
     KIND_CANDIDATE_SET,
@@ -108,6 +110,22 @@ class GetCraftSkeletonParams(BaseModel):
 class GetArtifactParams(BaseModel):
     artifact_id: UUID = Field(
         description="The exploration artifact's id (a candidate collection / a pick / a plan card — from the Graph section's exploration rows or a discovery-chain observation)."
+    )
+
+
+class GetWebPageParams(BaseModel):
+    url: str = Field(
+        description="The page's full URL, verbatim from the conversation "
+        "(this turn or an earlier one). "
+        "The readable text comes back capped; an empty read means the page "
+        "could not be read (unreachable / refused / no readable text)."
+    )
+
+
+class SearchWebParams(BaseModel):
+    query: str = Field(
+        description="The web search question — specific and self-contained "
+        "(names the topic, never 'the above')."
     )
 
 
@@ -1296,3 +1314,43 @@ async def get_artifact(
         f"Exploration artifact {node.id} (state={node.state}) — unrecognized "
         f"kind {kind!r}."
     )
+
+
+# ---- web reads (the research pair's chat projection) -------------------------
+#
+# The SAME zero-key web pair the research node drives (app/tools/research/
+# web.py), projected into the chat read family unchanged — one capability,
+# one implementation, two altitudes (chat read / DAG loop); no second web
+# tool with qualification clauses. Degrade-honest by construction: an empty
+# read is an honest "nothing came back" observation, never an exception.
+
+_WEB_SNIPPET_CAP = 300
+
+
+async def get_web_page(db: AsyncSession, project: Project, params: GetWebPageParams) -> str:
+    """Read one web page's readable text (fetch_text — SSRF-guarded, capped).
+    「这个网站你看看？」's factual substrate: the link shared for discussion
+    is never material, but it is always readable."""
+    url = params.url.strip()
+    text = await fetch_text(url)
+    if not text:
+        return (
+            f"Nothing readable came back from {url} — the page was "
+            "unreachable, refused the fetch, or carried no readable text."
+        )
+    return f"Readable text of {url} (capped at {FETCH_TEXT_CAP} chars):\n\n{text}"
+
+
+async def search_web(db: AsyncSession, project: Project, params: SearchWebParams) -> str:
+    """Search the web (web_search — DDG zero-key, organic hits only)."""
+    query = params.query.strip()
+    hits = await web_search(query)
+    if not hits:
+        return f"The web search for \"{query}\" came back empty — the trail ran dry."
+    lines = [f"Web results for \"{query}\":"]
+    for h in hits:
+        lines.append(f"- {h['title']} — {h['url']}")
+        snippet = (h.get("snippet") or "")[:_WEB_SNIPPET_CAP]
+        if snippet:
+            lines.append(f"  {snippet}")
+    return "\n".join(lines)

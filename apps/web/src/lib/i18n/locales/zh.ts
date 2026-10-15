@@ -1200,6 +1200,8 @@ const zh: Resources = {
       asset: "正在查看素材…",
       craftSkeleton: "正在读案例的风格拆解…",
       artifact: "正在读卡片的详情…",
+      webPage: "正在读网页…",
+      webSearch: "正在搜网页…",
     },
     /** 工作会话族（迭代二⑥，N-57）：发现链的用户安全节拍——searching 骑
      * 读帧（进行态 + 完成态镜像，与 inspecting→inspectingDone 同律的
@@ -1265,6 +1267,8 @@ const zh: Resources = {
       asset: "已查看素材",
       craftSkeleton: "已读案例的风格拆解",
       artifact: "已读卡片的详情",
+      webPage: "已读网页",
+      webSearch: "已搜网页",
     },
     /** inspecting 族的失败态镜像（ADR-102 §5）——读目标不可读时读活动
      * failed 帧的文案（与 done 族互为诚实对偶，永不默谎）。 */

@@ -69,11 +69,11 @@ def test_tool_set_is_the_reads_plus_one_terminal() -> None:
     )
     # 报价 = fold: the bound plus the reads-plus-one roster stays far under
     # the hallucination line (简报 §4 挂账① — Agno 的 20-tool 线). The budget
-    # tracks the family's REGISTERED growth (12 reads + wrap_up after the
-    # 迭代一 evidence reads, 2026-09-22) — bump it deliberately, never
-    # silently.
+    # tracks the family's REGISTERED growth (16 reads + wrap_up after the
+    # web pair get_web_page/search_web, 2026-10-15) — bump it deliberately,
+    # never silently.
     assert trigger_agent.max_iterations == 6
-    assert len(trigger_agent.tools) <= 16
+    assert len(trigger_agent.tools) <= 17
 
 
 class TestWrapUpArgs:
