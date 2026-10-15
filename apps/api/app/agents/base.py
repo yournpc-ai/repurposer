@@ -141,6 +141,7 @@ class Agent(Generic[OutT]):
         fallback: Callable[..., OutT] | None = None,
         client: MiniMaxClient | None = None,
         packs: list[str] | None = None,
+        timeout_s: float | None = None,
     ) -> None:
         self.name = name
         self.prompt = prompt
@@ -163,6 +164,10 @@ class Agent(Generic[OutT]):
         # Declared skill packs (N-42 指令包): assembly-time prompt injection,
         # never runtime discovery — the assembler weaves the bodies verbatim.
         self.packs = packs or []
+        # Declared per-request timeout override (rides the request call, not
+        # the pool — music_generation 180s 同律): for agents whose payload is
+        # known to run past the pool's 120s default. None = inherit.
+        self.timeout_s = timeout_s
         self.client = client or minimax_client
         if name in AGENTS:
             raise RuntimeError(f"Duplicate agent declaration: {name}")
@@ -292,6 +297,7 @@ class Agent(Generic[OutT]):
                 messages=messages,
                 response_model=self.schema,
                 temperature=self.temperature,
+                timeout_s=self.timeout_s,
             )
         except LLMSchemaError:
             # A schema rejection is NOT media brittleness — it belongs to the

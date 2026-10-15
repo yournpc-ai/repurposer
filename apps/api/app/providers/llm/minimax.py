@@ -413,8 +413,14 @@ class MiniMaxClient:
         response_model: type[T],
         temperature: float = 0.3,
         thinking: bool = False,
+        timeout_s: float | None = None,
     ) -> T:
-        """Generate structured output from MiniMax M3."""
+        """Generate structured output from MiniMax M3.
+
+        ``timeout_s`` overrides the pool's 120s default for agents whose
+        prompt/generation is known to run long (the film storyboarder's
+        20k-token call — 2026-10-15 取证: 成功样本 142s, 已两次撞穿 120s);
+        None inherits the pool timeout."""
         if not self.api_key:
             raise LLMError("MINIMAX_API_KEY not configured")
 
@@ -437,6 +443,7 @@ class MiniMaxClient:
                     "Content-Type": "application/json",
                 },
                 json=payload,
+                **({"timeout": timeout_s} if timeout_s is not None else {}),
             )
             _raise_for_status(response)
             data = response.json()

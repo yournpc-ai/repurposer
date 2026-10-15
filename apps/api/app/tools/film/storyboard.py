@@ -594,6 +594,10 @@ film_storyboarder = Agent[FilmStoryboard](
     # to text-only (manifests still carry the copy) — the validator's focus
     # checks keep a blind camera honest.
     media_text_fallback=True,
+    # 20k-token prompt + full-film generation: 2026-10-15 取证 — a healthy
+    # run took 142s, two degraded-night runs died on the pool's 120s read
+    # timeout. Declared override rides the request call, pool untouched.
+    timeout_s=300,
 )
 
 
