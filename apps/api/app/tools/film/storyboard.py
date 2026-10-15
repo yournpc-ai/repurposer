@@ -34,12 +34,13 @@ divider ordinals, ui/end display URLs, the ui screenshot, the end logo.
 from __future__ import annotations
 
 import re
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID
 
 import structlog
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import bindparam, func, select, text as _text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,6 +52,7 @@ from app.models.schemas import (
     FilmStoryboard,
     MediaInput,
     RenderStatus,
+    ShotRef,
     WebPageResearch,
 )
 from app.models.tables import Asset, Output, Project, WorkflowRun, WorkflowStep
@@ -201,12 +203,16 @@ class FilmViolation:
 class StoryboardPage:
     """One captured page as the storyboard's grounding universe (and the ui
     scene's imagery source). ``screenshot_key`` None = the capture's
-    screenshot half degraded — ui scenes pointing here are illegal."""
+    screenshot half degraded — ui scenes pointing here are illegal.
+    ``shots`` = the fold + section captures (ADR-121 B1; empty on pre-B1
+    rows — the fold-only law then: ui scenes read screenshot_key and their
+    ``shot`` must stay 0)."""
 
     asset_id: str
     research: WebPageResearch
     screenshot_key: str | None
     host: str  # display host baked into the ui/end url fields (code's seat)
+    shots: tuple[ShotRef, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -375,23 +381,69 @@ def validate_storyboard(
                 violations.append(
                     FilmViolation(CONSTRAINT_VIOLATION, f"{where}: page {scene.page} names no presented page")
                 )
-            elif pages[scene.page].screenshot_key is None:
+            elif not pages[scene.page].shots and pages[scene.page].screenshot_key is None:
                 violations.append(
                     FilmViolation(
                         CONSTRAINT_VIOLATION,
                         f"{where}: page {scene.page} has no screenshot — a ui scene needs the page image",
                     )
                 )
+            elif pages[scene.page].shots and not (
+                0 <= scene.shot < len(pages[scene.page].shots)
+            ):
+                violations.append(
+                    FilmViolation(
+                        CONSTRAINT_VIOLATION,
+                        f"{where}: shot {scene.shot} outside the page's {len(pages[scene.page].shots)} captured shots",
+                    )
+                )
+            elif not pages[scene.page].shots and scene.shot != 0:
+                # Fold-only capture (pre-B1 rows): shot 0 is the only legal view.
+                violations.append(
+                    FilmViolation(
+                        CONSTRAINT_VIOLATION,
+                        f"{where}: shot {scene.shot} but the page has only the fold capture",
+                    )
+                )
             prev_at = -1.0
             for f in scene.focuses:
-                if not (0.0 <= f.x <= 1.0 and 0.0 <= f.y <= 1.0):
-                    violations.append(
-                        FilmViolation(INVALID_FOCUS, f"{where}: focus ({f.x}, {f.y}) outside [0,1]")
-                    )
-                if not (_ZOOM_RANGE[0] <= f.zoom <= _ZOOM_RANGE[1]):
-                    violations.append(
-                        FilmViolation(INVALID_FOCUS, f"{where}: zoom {f.zoom} outside {_ZOOM_RANGE[0]}..{_ZOOM_RANGE[1]}")
-                    )
+                # Two legal forms (ADR-121 B2): element-named (resolves at
+                # spec build) or the raw x/y/zoom triple. Never mixed, never
+                # neither.
+                if f.element is not None:
+                    if f.x is not None or f.y is not None or f.zoom is not None:
+                        violations.append(
+                            FilmViolation(INVALID_FOCUS, f"{where}: focus mixes element {f.element} with raw coordinates — one form only")
+                        )
+                    elif 0 <= scene.page < len(pages) and pages[scene.page].shots:
+                        shot_elements = pages[scene.page].shots[scene.shot].elements if scene.shot < len(pages[scene.page].shots) else []
+                        target = next((e for e in shot_elements if e.id == f.element), None)
+                        if target is None:
+                            violations.append(
+                                FilmViolation(INVALID_FOCUS, f"{where}: element {f.element} names nothing in shot {scene.shot}'s inventory")
+                            )
+                        elif target.covered:
+                            violations.append(
+                                FilmViolation(INVALID_FOCUS, f"{where}: element {f.element} was covered at capture — pick another target")
+                            )
+                    else:
+                        violations.append(
+                            FilmViolation(INVALID_FOCUS, f"{where}: element focus but the page lists no element inventory")
+                        )
+                else:
+                    if f.x is None or f.y is None or f.zoom is None:
+                        violations.append(
+                            FilmViolation(INVALID_FOCUS, f"{where}: a raw focus needs the full x/y/zoom triple")
+                        )
+                        continue
+                    if not (0.0 <= f.x <= 1.0 and 0.0 <= f.y <= 1.0):
+                        violations.append(
+                            FilmViolation(INVALID_FOCUS, f"{where}: focus ({f.x}, {f.y}) outside [0,1]")
+                        )
+                    if not (_ZOOM_RANGE[0] <= f.zoom <= _ZOOM_RANGE[1]):
+                        violations.append(
+                            FilmViolation(INVALID_FOCUS, f"{where}: zoom {f.zoom} outside {_ZOOM_RANGE[0]}..{_ZOOM_RANGE[1]}")
+                        )
                 if not (0.0 <= f.at < scene.seconds):
                     violations.append(
                         FilmViolation(INVALID_FOCUS, f"{where}: focus at {f.at}s outside the scene's {scene.seconds}s")
@@ -446,22 +498,84 @@ def format_violations(violations: list[FilmViolation]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _scene_floor(scene: Any) -> int:
+    """One scene's structural frame minimum — the divider roll must fit its
+    cadence, the end card holds its floor (allocate_frames' clamp, factored
+    out so the beat snap respects the same floors)."""
+    n = _MIN_SCENE_FRAMES
+    if scene.type == "divider":
+        n = max(
+            n,
+            (len(scene.roll) - 1) * _DIVIDER_ROLL_STEP_FRAMES + _DIVIDER_ROLL_TAIL_FRAMES,
+        )
+    if scene.type == "end":
+        n = max(n, _END_MIN_FRAMES)
+    return n
+
+
 def allocate_frames(storyboard: FilmStoryboard) -> list[int]:
     """Seconds intent → integer frames (fixed fps; structural minimums clamp
     UP — the divider roll must fit its cadence, the end card holds its floor).
     Total = Σ scene frames; the renderer only sums."""
-    frames: list[int] = []
-    for scene in storyboard.scenes:
-        n = max(round(scene.seconds * FILM_FPS), _MIN_SCENE_FRAMES)
-        if scene.type == "divider":
-            n = max(
-                n,
-                (len(scene.roll) - 1) * _DIVIDER_ROLL_STEP_FRAMES + _DIVIDER_ROLL_TAIL_FRAMES,
-            )
-        if scene.type == "end":
-            n = max(n, _END_MIN_FRAMES)
-        frames.append(n)
-    return frames
+    return [
+        max(round(scene.seconds * FILM_FPS), _scene_floor(scene))
+        for scene in storyboard.scenes
+    ]
+
+
+# Beat snap (ADR-121 B3): scene boundaries move to the bed's nearest beat,
+# never farther than this — beyond it the cut stays where the storyboard put
+# it (the grid serves the cut, never the other way around).
+_BEAT_SNAP_TOLERANCE_S = 0.2
+
+
+def snap_frames_to_beats(
+    storyboard: FilmStoryboard, frames: list[int], beats: list[float]
+) -> list[int]:
+    """Snap internal scene boundaries to the music bed's beat grid. A snap
+    never pushes a scene under its structural floor and never moves a
+    boundary past the tolerance; the first scene still starts at 0, the
+    total floats within ±tolerance per boundary. No grid → the frames pass
+    through untouched (degrade-honest)."""
+    if not beats:
+        return frames
+    tol = round(_BEAT_SNAP_TOLERANCE_S * FILM_FPS)
+    beat_frames = [round(b * FILM_FPS) for b in beats]
+    floors = [_scene_floor(s) for s in storyboard.scenes]
+    out = list(frames)
+    boundary = 0
+    for i in range(len(out) - 1):
+        boundary += out[i]
+        nearest = min(beat_frames, key=lambda b: abs(b - boundary))
+        delta = nearest - boundary
+        if (
+            0 < abs(delta) <= tol
+            and out[i] + delta >= floors[i]
+            and out[i + 1] - delta >= floors[i + 1]
+        ):
+            out[i] += delta
+            out[i + 1] -= delta
+            boundary = nearest
+    return out
+
+
+def _resolve_focus(f: Any, page: StoryboardPage, shot_idx: int) -> dict[str, Any]:
+    """One focus beat → the spec's {at, x, y, zoom} (ADR-121 B2). An
+    element-named beat resolves deterministically: the element's box center,
+    zoom framing the box at ~half the canvas (clamped to the zoom law —
+    a small button never gets a 4x push). Raw triples pass through. The
+    validator bounded both forms; an unresolvable id here means a hand-built
+    storyboard bypassed it — degrade to the shot's center, never crash the
+    render seat."""
+    if f.element is None:
+        return {"at": f.at, "x": f.x, "y": f.y, "zoom": f.zoom}
+    el = next(
+        (e for e in page.shots[shot_idx].elements if e.id == f.element), None
+    ) if page.shots and shot_idx < len(page.shots) else None
+    if el is None:
+        return {"at": f.at, "x": 0.5, "y": 0.5, "zoom": 1.0}
+    zoom = min(2.6, max(1.2, 0.5 / max(el.w, el.h, 0.02)))
+    return {"at": f.at, "x": el.x, "y": el.y, "zoom": round(zoom, 3)}
 
 
 def build_film_spec(
@@ -471,6 +585,7 @@ def build_film_spec(
     narration: dict[int, str] | None = None,
     music: dict[str, Any] | None = None,
     aspect: str = "16:9",
+    frames: list[int] | None = None,
 ) -> dict[str, Any]:
     """The validated storyboard → the persisted film-spec (render contract).
 
@@ -480,33 +595,45 @@ def build_film_spec(
     same seam). Display URLs / divider ordinals / the end logo are baked
     here, never model-written. ``aspect`` declares the canvas (16:9 / 1:1 /
     9:16) — the renderer's dimensions read it, never a second source.
+    ``frames`` = the caller's already-snapped allocation (ADR-121 B3: the
+    run snaps to the beat grid before narration so the T2A windows ARE the
+    snapped windows); None = allocate here (draft/preview seats).
     """
     narration = narration or {}
-    frames = allocate_frames(storyboard)
-    if sum(frames) > FILM_MAX_FRAMES:
+    allocated = frames if frames is not None else allocate_frames(storyboard)
+    if sum(allocated) > FILM_MAX_FRAMES:
         raise FilmStoryboardRejected(
             [DURATION_INVALID],
-            f"allocated {sum(frames)} frames over the {FILM_MAX_FRAMES} render cap",
+            f"allocated {sum(allocated)} frames over the {FILM_MAX_FRAMES} render cap",
         )
     theme = dict(_DEFAULT_THEME)
     if storyboard.theme is not None:
         theme = {"canvas": storyboard.theme.canvas, "ink": storyboard.theme.ink}
     divider_ordinal = 0
     scenes: list[dict[str, Any]] = []
-    for idx, (scene, n) in enumerate(zip(storyboard.scenes, frames, strict=True)):
+    for idx, (scene, n) in enumerate(zip(storyboard.scenes, allocated, strict=True)):
         if scene.type == "words":
             scenes.append({"type": "words", "frames": n, "dark": scene.dark, "lines": scene.lines})
         elif scene.type == "hero":
             scenes.append({"type": "hero", "frames": n, "word": scene.word, "sub": scene.sub})
         elif scene.type == "ui":
             page = pages[scene.page]
+            # ADR-121 B1: the shot picks WHICH captured view of the page
+            # (validator bounded it); fold-only pages read screenshot_key.
+            image_key = (
+                page.shots[scene.shot].key if page.shots else page.screenshot_key
+            )
             scenes.append(
                 {
                     "type": "ui",
                     "frames": n,
-                    "image": page.screenshot_key,
+                    "image": image_key,
                     "url": page.host,
-                    "focuses": [f.model_dump(mode="json") for f in scene.focuses],
+                    # B2: element-named beats resolve here; the `element` key
+                    # never leaks into the render contract.
+                    "focuses": [
+                        _resolve_focus(f, page, scene.shot) for f in scene.focuses
+                    ],
                     "captions": [c.model_dump(mode="json") for c in scene.captions],
                 }
             )
@@ -603,7 +730,8 @@ film_storyboarder = Agent[FilmStoryboard](
 
 def page_prompt_dict(page: StoryboardPage, index: int) -> dict[str, Any]:
     """One page's prompt block (the manifest IS the grounding universe —
-    the j2 prints it verbatim)."""
+    the j2 prints it verbatim). ``shots`` = the captured views the ui scene
+    may pick from (0 = the fold; ADR-121 B1)."""
     r = page.research
     return {
         "index": index,
@@ -617,7 +745,28 @@ def page_prompt_dict(page: StoryboardPage, index: int) -> dict[str, Any]:
         "buttons": r.buttons,
         "links": r.links,
         "paragraphs": r.paragraphs,
-        "has_screenshot": page.screenshot_key is not None,
+        "has_screenshot": bool(page.shots) or page.screenshot_key is not None,
+        "shots": [
+            {
+                "index": i,
+                "heading": s.heading or "(top)",
+                # B2: the camera-target inventory — focuses name these ids.
+                "elements": [
+                    {
+                        "id": e.id,
+                        "kind": e.kind,
+                        "text": e.text,
+                        "x": e.x,
+                        "y": e.y,
+                        "w": e.w,
+                        "h": e.h,
+                        "covered": e.covered,
+                    }
+                    for e in s.elements
+                ],
+            }
+            for i, s in enumerate(page.shots)
+        ],
     }
 
 
@@ -656,12 +805,20 @@ async def load_storyboard_pages(db: AsyncSession, project: Project) -> list[Stor
             continue
         research = WebPageResearch.model_validate(raw)
         host = urlparse(research.url).netloc or (a.title or "")
+        # ADR-121 B1: fold + section shots (pre-B1 rows carry none — the
+        # fold-only law: ui scenes read screenshot_key, shot stays 0).
+        shots: list[ShotRef] = []
+        for s in meta.get("shots") or []:
+            if isinstance(s, dict) and isinstance(s.get("key"), str):
+                with suppress(ValidationError):
+                    shots.append(ShotRef.model_validate(s))
         pages.append(
             StoryboardPage(
                 asset_id=str(a.id),
                 research=research,
                 screenshot_key=meta.get("screenshot_key"),
                 host=host,
+                shots=tuple(shots),
             )
         )
     return pages
@@ -957,13 +1114,6 @@ class LaunchFilm(NodeBase):
             await delete_outputs_fk_safe(db, prior)
 
         frames = allocate_frames(storyboard)
-        total_seconds = sum(frames) / FILM_FPS
-        # 逐次尝试计价的实扣侧 (D3): the storyboard passed the gate — meter
-        # the ACTUAL allocated seconds (what we truly render) so the step's
-        # capture charges them (estimate ≡ meter, one price line). A
-        # rejected storyboard never reaches here, so a grounding-exhausted
-        # FAILED step carries zero film seconds — 失败不扣费 by position.
-        await record_media_usage({"film_seconds": total_seconds})
 
         # Slot levers (ADR-120 E2/E3): voiceover / music mood / aspect ride
         # the compiled slot; absent = plan defaults (on / persona-or-calm /
@@ -971,6 +1121,57 @@ class LaunchFilm(NodeBase):
         aspect = (slot.aspect if slot else None) or "16:9"
         voiceover = (slot.voiceover if slot else None) is not False
         music_mood = (slot.music_mood if slot else None) or None
+
+        # 配乐 (ADR-120 E2): mood → persona skin default → "calm" (the
+        # AddMusic resolution order, one law). Resolved BEFORE narration so
+        # the beat snap below settles the windows the T2A fits into. An
+        # EXPLICITLY named mood that resolves to nothing fails the step
+        # (CHAT_ARCH §10: clear error, never a silent bed); the default
+        # chain always lands on the seeded library.
+        from app.memory.brand import resolve_music_ref
+        from app.pipeline.music import music_file_path
+
+        persona = await resolve_persona(db, project)  # None-safe
+        brand_ref: Any = None
+        if not music_mood and persona is not None:
+            block = persona.brand or {}
+            brand_ref = block.get("musicId") or block.get("musicMood")
+        track = None
+        for ref in (music_mood, brand_ref, "calm"):
+            if not ref:
+                continue
+            track = await resolve_music_ref(db, ref)
+            if track is not None:
+                break
+        if track is None and music_mood:
+            raise ValueError(f"No music track found for mood '{music_mood}'")
+
+        # 节拍锁剪 (ADR-121 B3): the bed's seed-time beat grid snaps the
+        # internal scene boundaries (structural floors respected, tolerance
+        # ±0.2s — see snap_frames_to_beats). Everything downstream — the
+        # metering line, the narration windows, the spec frames — reads the
+        # SNAPPED allocation: one timing truth, zero re-synthesis.
+        beats_raw = (track.meta or {}).get("beats") if track is not None else None
+        beats = (
+            [float(b) for b in beats_raw if isinstance(b, (int, float)) and not isinstance(b, bool)]
+            if isinstance(beats_raw, list)
+            else None
+        )
+        if beats:
+            frames = snap_frames_to_beats(storyboard, frames, beats)
+
+        total_seconds = sum(frames) / FILM_FPS
+        # 逐次尝试计价的实扣侧 (D3): the storyboard passed the gate — meter
+        # the ACTUAL rendered seconds (what we truly render, post-snap) so
+        # the step's capture charges them (estimate ≡ meter, one price
+        # line). A rejected storyboard never reaches here, so a
+        # grounding-exhausted FAILED step carries zero film seconds —
+        # 失败不扣费 by position.
+        await record_media_usage({"film_seconds": total_seconds})
+
+        music_spec: dict[str, Any] | None = None
+        if track is not None:
+            music_spec = {"url": music_file_path(track.id), "gain_db": -20.0}
 
         output = Output(
             project_id=project.id,
@@ -993,12 +1194,11 @@ class LaunchFilm(NodeBase):
         await db.flush()
 
         # 配音 (ADR-120 E2): one T2A call per narrated scene, fitted to the
-        # scene's window; the synthesis map bakes into the spec as per-scene
-        # ``audio`` keys. Voice = persona voice block → house narrator (the
-        # film has no source footage to clone from). Voiceover off = the
-        # silent cut (music bed only) — the reviewed narration words still
-        # stand in the storyboard, just unsynthesized.
-        persona = await resolve_persona(db, project)  # None-safe
+        # scene's SNAPPED window; the synthesis map bakes into the spec as
+        # per-scene ``audio`` keys. Voice = persona voice block → house
+        # narrator (the film has no source footage to clone from).
+        # Voiceover off = the silent cut (music bed only) — the reviewed
+        # narration words still stand in the storyboard, just unsynthesized.
         narration_keys: dict[int, str] = {}
         if voiceover and any(
             getattr(sc, "narration", None) for sc in storyboard.scenes
@@ -1018,37 +1218,13 @@ class LaunchFilm(NodeBase):
                 language=output.language,
             )
 
-        # 配乐 (ADR-120 E2): mood → persona skin default → "calm" (the
-        # AddMusic resolution order, one law). An EXPLICITLY named mood that
-        # resolves to nothing fails the step (CHAT_ARCH §10: clear error,
-        # never a silent bed); the default chain always lands on the seeded
-        # library.
-        from app.memory.brand import resolve_music_ref
-        from app.pipeline.music import music_file_path
-
-        music_spec: dict[str, Any] | None = None
-        brand_ref: Any = None
-        if not music_mood and persona is not None:
-            block = persona.brand or {}
-            brand_ref = block.get("musicId") or block.get("musicMood")
-        track = None
-        for ref in (music_mood, brand_ref, "calm"):
-            if not ref:
-                continue
-            track = await resolve_music_ref(db, ref)
-            if track is not None:
-                break
-        if track is None and music_mood:
-            raise ValueError(f"No music track found for mood '{music_mood}'")
-        if track is not None:
-            music_spec = {"url": music_file_path(track.id), "gain_db": -20.0}
-
         output.render_spec = build_film_spec(
             storyboard,
             pages,
             narration=narration_keys,
             music=music_spec,
             aspect=aspect,
+            frames=frames,
         )
         await db.flush()
 

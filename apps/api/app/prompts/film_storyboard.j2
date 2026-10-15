@@ -29,7 +29,15 @@ URL: {{ page.url }}
 {% for p in page.paragraphs %}- {{ p }}
 {% endfor %}
 {% endif %}
-{% if page.has_screenshot %}(A screenshot of this page is attached — caption names its index.)
+{% if page.has_screenshot %}(This page's fold screenshot — shot 0 — is attached; the list below names every captured view a ui scene may pick.)
+{% if page.shots %}Captured views (a ui scene picks ONE via `shot`, default 0):
+{% for s in page.shots %}- shot {{ s.index }}: {{ s.heading }}
+{% if s.elements %}  camera targets (a focus names ONE of these ids — never invent coordinates):
+{% for e in s.elements %}  - {{ e.id }} {{ e.kind }}{% if e.text %} "{{ e.text }}"{% endif %} at ({{ e.x }},{{ e.y }}) size {{ e.w }}x{{ e.h }}{% if e.covered %} [covered — never target]{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
 {% else %}(No screenshot for this page — it cannot appear in a ui scene.)
 {% endif %}
 {% endfor %}
@@ -88,8 +96,13 @@ INTENT — the system assigns exact frames):
 
 - {"type":"words","seconds":1.5..4,"dark":bool,"lines":[string]}  // 1..4 lines, each ≤30 chars
 - {"type":"hero","seconds":2..5,"word":string,"sub":string}  // word ≤16 chars, sub ≤90
-- {"type":"ui","seconds":3..10,"page":int,"focuses":[{"at":s,"x":0..1,"y":0..1,"zoom":1..4}],"captions":[{"at":s,"text":string}]}
-  // page = a presented page index WITH a screenshot; 1..5 focuses, `at`
+- {"type":"ui","seconds":3..10,"page":int,"shot":int,"focuses":[{"at":s,"element":"s<shot>e<j>"}],"captions":[{"at":s,"text":string}]}
+  // page = a presented page index WITH a screenshot; shot = which captured
+  // view of it (0 = the top of the page — pick a section shot when the
+  // walk's story lives below the fold). A focus names an element id from
+  // that shot's camera-target list — the system computes the move (never
+  // invent coordinates; the bare {"at","x","y","zoom"} form exists only for
+  // shots that list no targets). 1..5 focuses, `at`
   // ascending, each < seconds; 0..3 captions ≤60 chars, each ≥0.5s apart
 - {"type":"divider","seconds":2..5,"label":string,"roll":[string]}  // label ≤40, 1..5 roll words ≤24 each
 - {"type":"reveal","seconds":2..5,"lead":string,"word":string,"sub":string}  // ≤60 / ≤24 / ≤90

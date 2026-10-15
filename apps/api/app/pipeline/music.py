@@ -9,6 +9,7 @@ pieces are also protected this way).
 """
 
 from dataclasses import dataclass
+from typing import Any
 from uuid import NAMESPACE_DNS, UUID, uuid4, uuid5
 
 import httpx
@@ -20,7 +21,7 @@ from app.providers.llm.base import LLMError
 from app.providers.llm.minimax import minimax_client
 from app.metering import record_media_usage
 from app.models.tables import Music, Output
-from app.providers.storage import delete, exists, save, size
+from app.providers.storage import delete, exists, read, save, size
 
 logger = structlog.get_logger()
 
@@ -216,6 +217,16 @@ async def create_music_from_generation(
     title = title or _default_title(prompt, base_mood)
 
     file_path, size_bytes = await persist_music(music_id, generated)
+    # 节拍网格 (ADR-121 B3): computed at birth from the bytes already in
+    # hand — the film cut snap reads ``meta.beats``; None = degrade-honest
+    # (no grid, no snap). Analysis failure never blocks the birth.
+    from app.tools.music.beats import analyze_beat_grid  # deferred: import cycle
+
+    meta: dict[str, Any] | None = None
+    try:
+        meta = analyze_beat_grid(generated.audio_bytes)
+    except Exception as e:  # noqa: BLE001 — analysis is best-effort
+        logger.warning("beat_grid_birth_failed", music_id=str(music_id), error=str(e))
     music = Music(
         id=music_id,
         mood=base_mood,
@@ -232,6 +243,7 @@ async def create_music_from_generation(
         attribution=attribution,
         is_public=is_public,
         generated_by_user_id=user_id,
+        meta=meta,
     )
     db.add(music)
     await db.commit()
@@ -319,6 +331,10 @@ async def seed_default_music(db: AsyncSession) -> list[Music]:
     audio object ``music/{default_music_id(mood)}.mp3`` exists, create the row
     pointing at it; otherwise skip (the one-time seed script generates + uploads
     the files). No MiniMax call here.
+
+    Beat-grid reconcile (ADR-121 B3): catalog rows whose ``meta`` lacks the
+    beat grid (born before the grid existed) get analyzed from the stored
+    bytes here, once — the runtime never analyzes audio.
     """
     created: list[Music] = []
     for entry in DEFAULT_MUSIC_CATALOG:
@@ -355,6 +371,28 @@ async def seed_default_music(db: AsyncSession) -> list[Music]:
         for m in created:
             await db.refresh(m)
         logger.info("seed_default_music_created", count=len(created))
+
+    # Beat-grid backfill: catalog pieces predating the grid get theirs here.
+    # Per-piece failures degrade honest (no grid → no snap), never crash boot.
+    from app.tools.music.beats import analyze_beat_grid  # deferred: import cycle
+
+    gridded = 0
+    for entry in DEFAULT_MUSIC_CATALOG:
+        row = await get_music_by_mood(db, entry["mood"])
+        if row is None or (row.meta or {}).get("beats"):
+            continue
+        try:
+            grid = analyze_beat_grid(await read(row.file_path))
+        except Exception as e:  # noqa: BLE001 — storage/analysis best-effort
+            logger.warning("beat_grid_reconcile_failed", mood=entry["mood"], error=str(e))
+            continue
+        if grid is None:
+            continue
+        row.meta = {**(row.meta or {}), **grid}
+        gridded += 1
+    if gridded:
+        await db.commit()
+        logger.info("beat_grid_reconciled", count=gridded)
     return created
 
 

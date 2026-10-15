@@ -821,6 +821,10 @@ class Music(Base):
     attribution = Column(Text, nullable=True)
     is_public = Column(Boolean, default=True, nullable=False)
     generated_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    # ADR-121 B3: beat grid for film-cut snapping — {"bpm": …, "beats": [s…]},
+    # computed once at seed/reconcile (tools/music/beats.py); NULL = never
+    # analyzed → the spec builder skips the beat snap honestly.
+    meta = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 

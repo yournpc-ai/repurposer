@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import pytest
 
-from app.models.schemas import FilmStoryboard, WebPageResearch
+from app.models.schemas import FilmStoryboard, PageElement, ShotRef, WebPageResearch
 from app.tools.film.storyboard import (
     CONSTRAINT_VIOLATION,
     DURATION_INVALID,
+    FILM_FPS,
     FILM_MAX_FRAMES,
     INVALID_FOCUS,
     TEXT_NOT_GROUNDED,
@@ -23,6 +24,7 @@ from app.tools.film.storyboard import (
     allocate_frames,
     build_film_spec,
     format_violations,
+    snap_frames_to_beats,
     validate_storyboard,
 )
 
@@ -37,6 +39,7 @@ def _page(
     h2: list[str] | None = None,
     buttons: list[str] | None = None,
     screenshot: str | None = "user/capture/shot.png",
+    shots: tuple = (),
 ) -> StoryboardPage:
     research = WebPageResearch(
         url=URL,
@@ -49,7 +52,8 @@ def _page(
         links=["Docs"],
     )
     return StoryboardPage(
-        asset_id="a1", research=research, screenshot_key=screenshot, host="example.com"
+        asset_id="a1", research=research, screenshot_key=screenshot,
+        host="example.com", shots=shots,
     )
 
 
@@ -252,6 +256,60 @@ def test_ui_scene_needs_a_page_with_screenshot():
     assert CONSTRAINT_VIOLATION in _codes(violations)
 
 
+def test_ui_scene_shot_bounds():
+    """ADR-121 B1: the shot picks which captured view the ui scene shows —
+    bounds are the validator's seat (out-of-range / fold-only misuse both
+    reject; a legal section shot passes and projects into the spec image)."""
+    shots = (
+        ShotRef(key="user/capture/a.png", y=0, heading="(top)"),
+        ShotRef(key="user/capture/a-s1.png", y=1400, heading="Why teams switch"),
+    )
+    page = _page(shots=shots)
+    scenes = _good_scenes()
+    scenes[1]["shot"] = 1
+    assert validate_storyboard(_storyboard(scenes), [page]) == []
+    spec = build_film_spec(_storyboard(scenes), [page])
+    assert spec["scenes"][1]["image"] == "user/capture/a-s1.png"
+    # out of range
+    scenes[1]["shot"] = 5
+    assert CONSTRAINT_VIOLATION in _codes(validate_storyboard(_storyboard(scenes), [page]))
+    # fold-only page (pre-B1 rows): shot must stay 0
+    scenes[1]["shot"] = 1
+    assert CONSTRAINT_VIOLATION in _codes(validate_storyboard(_storyboard(scenes), [_page()]))
+
+
+def test_ui_focus_element_form():
+    """ADR-121 B2: focuses name element ids — the spec builder resolves
+    coordinates deterministically; mixed / unknown / covered forms reject."""
+    elts = [
+        PageElement(id="s1e0", kind="heading", text="Why teams switch", x=0.2, y=0.3, w=0.5, h=0.2),
+        PageElement(id="s1e1", kind="button", text="Start free", x=0.8, y=0.7, w=0.1, h=0.05),
+        PageElement(id="s1e2", kind="text", text="hidden note", x=0.5, y=0.5, w=0.3, h=0.1, covered=True),
+    ]
+    shots = (
+        ShotRef(key="user/capture/a.png", y=0, heading="(top)"),
+        ShotRef(key="user/capture/a-s1.png", y=1400, heading="Why teams switch", elements=elts),
+    )
+    page = _page(shots=shots)
+    scenes = _good_scenes()
+    scenes[1]["shot"] = 1
+    scenes[1]["focuses"] = [{"at": 0.0, "element": "s1e0"}, {"at": 2.0, "element": "s1e1"}]
+    assert validate_storyboard(_storyboard(scenes), [page]) == []
+    spec = build_film_spec(_storyboard(scenes), [page])
+    focuses = spec["scenes"][1]["focuses"]
+    assert focuses[0] == {"at": 0.0, "x": 0.2, "y": 0.3, "zoom": 1.2}  # 0.5/0.5 → clamp up
+    assert focuses[1]["x"] == 0.8 and focuses[1]["zoom"] == 2.6  # 0.5/0.1 → clamp down
+    assert "element" not in focuses[0]  # never leaks into the render contract
+    scenes[1]["focuses"] = [{"at": 0.0, "element": "s1e9"}]  # unknown id
+    assert INVALID_FOCUS in _codes(validate_storyboard(_storyboard(scenes), [page]))
+    scenes[1]["focuses"] = [{"at": 0.0, "element": "s1e2"}]  # covered at capture
+    assert INVALID_FOCUS in _codes(validate_storyboard(_storyboard(scenes), [page]))
+    scenes[1]["focuses"] = [{"at": 0.0, "element": "s1e0", "x": 0.5, "y": 0.5, "zoom": 1.0}]  # mixed
+    assert INVALID_FOCUS in _codes(validate_storyboard(_storyboard(scenes), [page]))
+    scenes[1]["focuses"] = [{"at": 0.0, "x": 0.5, "y": 0.5}]  # incomplete raw triple
+    assert INVALID_FOCUS in _codes(validate_storyboard(_storyboard(scenes), [page]))
+
+
 def test_format_violations_is_compact_and_coded():
     scenes = _good_scenes()
     scenes[0]["sub"] = "invented copy nobody wrote"
@@ -294,6 +352,69 @@ def test_divider_roll_floor_drives_frames():
     frames = allocate_frames(_storyboard(scenes))
     # 5 words: (5-1)*13 + 25 = 77 > 60
     assert frames[1] == 77
+
+
+def test_snap_frames_to_beats_moves_boundaries_within_tolerance():
+    # 120 BPM bed → beats every 0.5s = 15 frames. Boundaries at 90/270/360:
+    # 90 lands exactly on beat 6; 270 → 15*18=270 exact; nothing moves.
+    storyboard = _storyboard(_good_scenes())
+    frames = allocate_frames(storyboard)  # [90, 180, 90]
+    beats = [i * 0.5 for i in range(25)]
+    snapped = snap_frames_to_beats(storyboard, frames, beats)
+    assert snapped == frames  # already on-grid
+    assert sum(snapped) == sum(frames)
+
+
+def test_snap_frames_to_beats_snaps_off_grid_boundary():
+    storyboard = _storyboard(_good_scenes())
+    frames = allocate_frames(storyboard)  # [90, 180, 90]
+    # Beat at 96 (3.2s) pulls boundary 90 up by 6 (the tolerance edge);
+    # beat at 264 (8.8s) then pulls boundary 270 down by 6 — the ui scene
+    # gives both deltas (180→168), the end scene absorbs them (+6→96).
+    beats = [3.2, 8.8]
+    snapped = snap_frames_to_beats(storyboard, frames, beats)
+    assert snapped == [96, 168, 96]
+    assert sum(snapped) == sum(frames)
+
+
+def test_snap_frames_to_beats_respects_tolerance_and_floors():
+    storyboard = _storyboard(_good_scenes())
+    frames = allocate_frames(storyboard)  # [90, 180, 90], ui floor = 90
+    # Boundary 90's nearest beat at frame 100 is 10 frames away > 6-frame
+    # tolerance: untouched. Boundary 270's beat at 264 moves 6 off the ui
+    # scene — 180-6=174 ≥ floor 90, legal; the end scene absorbs +6.
+    snapped = snap_frames_to_beats(storyboard, frames, [100 / FILM_FPS, 8.8])
+    assert snapped == [90, 174, 96]
+    # A beat far past both boundaries (frame 340) is refused at each —
+    # deltas 250/70 both blow the tolerance, so nothing moves.
+    assert snap_frames_to_beats(storyboard, frames, [11.333]) == frames
+
+
+def test_snap_frames_to_beats_never_breaks_a_floor():
+    # end at exactly its 75-frame floor; the boundary beat at 66 (in
+    # tolerance) would push it to 69 — refused, the boundary stays at 60.
+    scenes = [
+        {"type": "words", "seconds": 2.0, "dark": False, "lines": ["Ship faster"]},
+        {"type": "end", "seconds": 2.5, "name": "Acme", "tagline": "Ship faster"},
+    ]
+    storyboard = _storyboard(scenes)
+    frames = allocate_frames(storyboard)  # [60, 75]
+    assert snap_frames_to_beats(storyboard, frames, [66 / FILM_FPS]) == frames
+
+
+def test_snap_frames_to_beats_empty_grid_is_identity():
+    storyboard = _storyboard(_good_scenes())
+    frames = allocate_frames(storyboard)
+    assert snap_frames_to_beats(storyboard, frames, []) == frames
+
+
+def test_build_spec_accepts_snapped_frames():
+    pages = [_page()]
+    storyboard = _storyboard(_good_scenes())
+    frames = allocate_frames(storyboard)
+    snapped = snap_frames_to_beats(storyboard, frames, [3.2, 8.8])
+    spec = build_film_spec(storyboard, pages, frames=snapped)
+    assert [s["frames"] for s in spec["scenes"]] == snapped
 
 
 def test_build_spec_bakes_chrome_and_stores_relative_keys():

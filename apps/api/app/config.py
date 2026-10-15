@@ -99,11 +99,14 @@ class Settings(BaseSettings):
     # container workers without user namespaces; keep False on real hosts.
     chrome_path: str = ""
     chrome_no_sandbox: bool = False
-    # Capture caps (SSRF browser-level policy): the whole screenshot phase's
+    # Capture caps (SSRF browser-level policy): the whole browser session's
     # wall clock, and the policy proxy's per-capture request/byte budgets.
-    web_capture_timeout_seconds: float = 25.0
-    web_capture_max_requests: int = 200
-    web_capture_max_bytes: int = 40 * 1024 * 1024
+    # ADR-121 B1 re-estimate: the playwright session scroll-preloads (lazy
+    # loads fire) and shoots fold + ≤5 sections — the one-shot CLI's budgets
+    # (25s / 200 conns) choked that (scroll = more connections, more wall).
+    web_capture_timeout_seconds: float = 90.0
+    web_capture_max_requests: int = 500
+    web_capture_max_bytes: int = 60 * 1024 * 1024
     # HTML fetch half's body cap (the grounding manifest's source).
     web_capture_html_max_bytes: int = 2 * 1024 * 1024
 

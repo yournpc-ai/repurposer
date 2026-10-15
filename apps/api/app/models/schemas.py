@@ -115,6 +115,38 @@ class WebPageResearch(BaseModel):
     paragraphs: list[str] = Field(default_factory=list)
 
 
+class PageElement(BaseModel):
+    """One visible element in a section shot — the ui scene's camera-target
+    inventory (ADR-121 B2: the model names element ids, never coordinates).
+    Box is viewport-normalized within its shot; ``covered`` = visually
+    occluded at capture time (the model should pick another target)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str  # s<shot>e<j> — assigned capture-side
+    kind: str  # heading / text / button / image / video / pinned
+    text: str = ""
+    x: float
+    y: float
+    w: float
+    h: float
+    covered: bool = False
+
+
+class ShotRef(BaseModel):
+    """One captured view of the page (ADR-121 B1): ``shots[0]`` = the fold,
+    the rest are section stops picked from heading anchors. ``key`` = the
+    screenshot's relative object key; ``elements`` = the camera-target
+    inventory at this stop."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    y: int = 0  # page-absolute scroll offset the shot was taken at
+    heading: str = ""  # the anchor's text ("(top)"/"(step)" = code seats)
+    elements: list[PageElement] = Field(default_factory=list)
+
+
 class WebPageMeta(BaseModel):
     """``meta`` shape of a WEB_PAGE asset: the source URL, the research
     manifest, and the screenshot's storage key (absent when the screenshot
@@ -122,14 +154,15 @@ class WebPageMeta(BaseModel):
 
     ``extra="allow"``: the row's meta dict also carries the generic chain
     keys (``content_sha256`` / ``processing_stage`` / dims), which are not
-    this type's contract.
-    """
+    this type's contract. Pre-ADR-121 rows carry no ``shots`` — readers
+    tolerate the empty list (fold-only capture)."""
 
     model_config = ConfigDict(extra="allow")
 
     capture_url: str
     research: WebPageResearch | None = None
     screenshot_key: str | None = None
+    shots: list[ShotRef] = Field(default_factory=list)
 
 
 class ProjectStatus(StrEnum):
@@ -3192,14 +3225,20 @@ class ClipPayload(BaseModel):
 
 
 class FilmFocus(BaseModel):
-    """One camera beat of a ui scene (the screenshot walk)."""
+    """One camera beat of a ui scene (the screenshot walk). Two legal forms
+    (ADR-121 B2): **element-named** — ``element`` ids the shot's captured
+    inventory and the spec builder resolves x/y/zoom deterministically (the
+    model never invents coordinates); or the **raw triple** ``x``/``y``/
+    ``zoom`` (the pre-B2 form — read tolerance for stored storyboards, and
+    the fallback when a shot lists no elements)."""
 
     model_config = ConfigDict(extra="forbid")
 
     at: float  # seconds from scene start
-    x: float  # normalized [0,1] camera center — bounds are the validator's seat
-    y: float
-    zoom: float  # magnification (1 = full frame)
+    element: str | None = None  # s<shot>e<j> from the page block's inventory
+    x: float | None = None  # normalized [0,1] camera center — bounds are the validator's seat
+    y: float | None = None
+    zoom: float | None = None  # magnification (1 = full frame)
 
 
 class FilmCaption(BaseModel):
@@ -3234,13 +3273,15 @@ class FilmSceneHero(BaseModel):
 class FilmSceneUi(BaseModel):
     """The page walk: the LLM names the page by its index in the presented
     manifest list; the screenshot URL / display URL are baked BY CODE (the
-    model never invents URLs)."""
+    model never invents URLs). ``shot`` picks WHICH captured view of the page
+    (0 = the fold; sections beyond it — ADR-121 B1)."""
 
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["ui"]
     seconds: float
     page: int  # 0-based index into the presented pages
+    shot: int = 0  # 0-based index into the page's captured shots
     focuses: list[FilmFocus] = Field(min_length=1)
     captions: list[FilmCaption] = Field(default_factory=list)
     narration: str | None = None

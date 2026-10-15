@@ -29,6 +29,7 @@ dependencies = [
     "pyjwt>=2.8",
     "boto3>=1.34",
     "cryptography>=49.0.0",
+    "playwright>=1.64.0",
 ]
 
 [project.optional-dependencies]

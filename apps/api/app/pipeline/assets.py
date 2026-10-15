@@ -136,8 +136,9 @@ async def create_web_page_assets_from_urls(
     urls: list[str],
 ) -> list[Asset]:
     """Explicit multi-URL entry: N URLs → N assets through the singular
-    seat (同一 processor 循环, 零新机制). Auto-discovery (pulling links off
-    a root page) is deliberately NOT here — 需求池."""
+    seat (同一 processor 循环, 零新机制). Sub-page auto-discovery (ADR-121
+    B4) births through this same seat too — from the processing chain
+    (``asset_processing._spawn_discovered_pages``), never from chat."""
     return [
         await create_web_page_asset_from_url(db, project_id, user_id, url)
         for url in urls

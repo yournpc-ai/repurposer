@@ -71,6 +71,10 @@ class ProcessResult:
     duration_seconds: int | None = None
     slide_pages: list[str] | None = None  # object storage keys to rendered PDF pages
     meta: dict[str, Any] = field(default_factory=dict)
+    # Sub-page discovery (ADR-121 B4): a web_page capture's same-host finds.
+    # Not persisted on the asset — ``process_asset`` births them as child
+    # web_page assets through the singular seat after the parent settles.
+    discovered_urls: list[str] = field(default_factory=list)
     local_path: Path | None = None
 
     def merge(self, delta: "ProcessResult") -> "ProcessResult":
@@ -83,6 +87,8 @@ class ProcessResult:
             self.duration_seconds = delta.duration_seconds
         if delta.slide_pages is not None:
             self.slide_pages = delta.slide_pages
+        if delta.discovered_urls:
+            self.discovered_urls = delta.discovered_urls
         self.meta.update(delta.meta)
         return self
 
@@ -418,6 +424,54 @@ async def _record_reading_beat(db: AsyncSession, asset: Asset, status: str) -> N
         )
 
 
+async def _spawn_discovered_pages(
+    db: AsyncSession, parent: Asset, urls: list[str]
+) -> None:
+    """Birth the capture's discovered sub-pages as child web_page assets.
+
+    Every find goes through ``create_web_page_asset_from_url`` (the singular
+    birth seat — static SSRF gate included), deduped against the project's
+    existing web_page URLs (plan_turn's reuse law), marked
+    ``meta.discovered_from`` = the parent id (the recursion gate the
+    processor honors). Best-effort per URL: one refusal never sinks the rest.
+    """
+    from app.pipeline.assets import create_web_page_asset_from_url  # deferred
+
+    rows = (
+        (
+            await db.execute(
+                select(Asset).where(
+                    Asset.project_id == parent.project_id,
+                    Asset.type == AssetType.WEB_PAGE,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    existing = {
+        (a.meta or {}).get("capture_url") for a in rows if isinstance(a.meta, dict)
+    }
+    born = 0
+    for url in urls:
+        if url in existing:
+            continue
+        try:
+            child = await create_web_page_asset_from_url(
+                db, parent.project_id, parent.user_id, url
+            )
+            child.meta = {**(child.meta or {}), "discovered_from": str(parent.id)}
+            existing.add(url)
+            born += 1
+        except Exception as e:  # noqa: BLE001 — discovery is best-effort
+            logger.info("web_capture_spawn_skipped", url=url, error=str(e))
+    if born:
+        await db.commit()
+        logger.info(
+            "web_capture_spawned", parent=str(parent.id), children=born
+        )
+
+
 async def process_asset(asset_id: UUID) -> None:
     """Run the registered processor for an asset and persist its terminal state.
 
@@ -464,6 +518,14 @@ async def process_asset(asset_id: UUID) -> None:
             asset.processing_status = AssetStatus.COMPLETED
             asset.processing_error = None
             await db.commit()
+            # Sub-page discovery (ADR-121 B4): a homepage capture's same-host
+            # finds are born as child web_page assets through the SAME
+            # singular seat (same processor, same queue — 零新机制), marked
+            # ``discovered_from`` so their own captures never re-discover.
+            # Best-effort: a child birth failure (policy refusal, wiring
+            # error) never disturbs the settled parent.
+            if result.discovered_urls and asset.project_id is not None:
+                await _spawn_discovered_pages(db, asset, result.discovered_urls)
             # ADR-113: no transcript card to flip — the asset row IS the
             # transcript's seat; the /graph read face and the transcript
             # endpoint read this status raw.

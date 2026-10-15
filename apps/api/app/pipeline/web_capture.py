@@ -51,6 +51,12 @@ async def web_capture_processor(asset: Asset, _prior: Any) -> "Any":
         # from the capture's own text yield (期 1 前移 same law).
         "content_sha256": manifest_content_hash(outcome.text),
     }
+    # B4 recursion gate: a discovered child's meta marker rides forward
+    # (this writeback REPLACES asset.meta wholesale), and its own discovery
+    # list never leaves the tool — 禁递归深挖.
+    discovered_from = (asset.meta or {}).get("discovered_from")
+    if discovered_from:
+        meta["discovered_from"] = discovered_from
 
     if outcome.screenshot is not None:
         if asset.project_id is None:
@@ -65,6 +71,30 @@ async def web_capture_processor(asset: Asset, _prior: Any) -> "Any":
         meta["width"] = WINDOW_WIDTH
         meta["height"] = WINDOW_HEIGHT
 
+    # ADR-121 B1: the fold + section shots (shots[0] IS the fold — its key
+    # doubles as screenshot_key above). Each section shot gets its own
+    # storage key; the element inventory rides the shot's meta entry.
+    if outcome.shots:
+        if asset.project_id is None:
+            raise ValueError("web_page asset without project_id")
+        out_dir = get_project_output_dir(asset.project_id, asset.user_id)
+        shots_meta: list[dict] = []
+        for i, shot in enumerate(outcome.shots):
+            if i == 0:
+                shot_key = meta["screenshot_key"]
+            else:
+                shot_key = f"{out_dir}/web-capture-{asset.id}-s{i}.png"
+                await save(shot_key, shot.png, content_type="image/png")
+            shots_meta.append(
+                {
+                    "key": shot_key,
+                    "y": shot.y,
+                    "heading": shot.heading,
+                    "elements": shot.elements,
+                }
+            )
+        meta["shots"] = shots_meta
+
     # Contract check on our own writeback (the meta schema's seat):
     WebPageMeta.model_validate(meta)
 
@@ -74,6 +104,13 @@ async def web_capture_processor(asset: Asset, _prior: Any) -> "Any":
         url=url,
         chars=len(outcome.text),
         screenshot=bool(outcome.screenshot),
+        discovered=len(outcome.discovered),
         warnings=outcome.warnings,
     )
-    return ProcessResult(extracted_text=outcome.text, meta=meta)
+    return ProcessResult(
+        extracted_text=outcome.text,
+        meta=meta,
+        # The spawn seat (process_asset) reads this; a discovered child
+        # never re-discovers (禁递归深挖 — the marker above is the gate).
+        discovered_urls=[] if discovered_from else outcome.discovered,
+    )
