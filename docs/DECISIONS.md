@@ -3039,6 +3039,23 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 2. **消息内 markdown 分镜（呈现面翻 ADR-125 卡面案）**：storyboard_ready 消息 = LLM 就绪短句 + `render_storyboard_markdown`（代码从已解析稿确定性投影——展示=执行，永不二源生成）+ LLM 确认问句，`[[STORYBOARD]]` 哨兵 splice（缺哨兵降级 = 表在前、问句仍在尾）。分镜块降级 = 附件 chip（StoryboardTable 静息 chip、点开结构表；逐版留痕不变）；块行仍是硬闸与 `confirmed_storyboard` 的世界记录座。打字机律两牙同批检查：markdown = 代码拼装世界内容（估价尾同 doctrine），散文部 = LLM 之声走 settled-prose pacing。
 3. **孤儿 dock boot 扫尾**：worker 启动 `sweep_orphaned_storyboard_docks`——重启杀死在飞起草的 dock（无块无失败行）补 fire 一次；失败行对本 dock 也是结算（迟延座新增闸：本 dock 已落穷举行 = 不再重起草，唯一合法重开 = 用户换说法 re-dock）。
 
-**Consequences**: storyboarder 的任务从「抄写」降维成「选择」，grounding 校验从子串匹配变查表；修复回声从「给候选行」变「指认引用错」。prompt 面（film_storyboard.j2 + launch-film pack）重写为引用机制 + 英文统一（原 j2 英文 / pack 中文的语言分裂消除）。用户审阅面 = 一条可读 markdown 消息 + 确认问句，结构表一点即达。
+**Consequences**: storyboarder 的任务从「抄写」降维成「选择」，grounding 校验从子串匹配变查表；修复回声从「给候选行」变「指认引用错」。prompt 面（film_storyboard.j2 + launch-film pack）重写为引用机制 + 英文统一（原 j2 英文 / pack 中文的语言分裂消除）。用户审阅面 = 一条可读 markdown 消息 + 确认问句，结构表一点即达。①的适用范围由 ADR-127 收窄为事实槽位（创作通道扩为 cold-open/reveal lead/narration），`DraftStoryboard`/`resolve_draft` 形态由 `FilmDirection`/`assemble_storyboard` 取代。
 
-**Related**: ADR-125（统一迟延——呈现面由本条修订）/ ADR-120（分镜过目；逐字律不变）/ ADR-093（言语 = LLM 之声；markdown 表 = 代码拼装世界内容，估价尾同例）/ ADR-110（块 chip 折叠同律）
+**Related**: ADR-125（统一迟延——呈现面由本条修订）/ ADR-120（分镜过目；逐字律不变）/ ADR-093（言语 = LLM 之声；markdown 表 = 代码拼装世界内容，估价尾同例）/ ADR-110（块 chip 折叠同律）/ ADR-127（骨架收归代码——①的适用范围由本条收窄）
+
+## ADR-127: 分镜骨架收归代码——固定结构 + 创作槽 + 固定分镜兜底 + 流式传输
+
+**Status**: Decided (2026-10-16)
+
+**Context**: 309340c6/6c2103ee 连续取证——行 ID 化消灭了 grounding 打地鼠（候选一引用层零错），但墙钟病未愈：非流式调用是全有或全无黑盒（服务端整篇生成完才回首字节，健康样本 142s，provider 排队日 300s 零字节），撞穿读超时后 tenacity 盲重试把腹稿整个丢弃，最坏 3×300s ≈ 15 分钟「Drafting the storyboard…」。用户拍板（GPT 任务书同法）：**不要让 LLM 安排分镜——结构是确定性问题，创作才是模型问题**；对齐 launch-film skill（75-120s、3-5 柱、每页 6 shots、discover 3 页——截图侧已对齐）；fallback 走固定分镜；改流式。
+
+**Decision**:
+
+1. **骨架 = 代码（固定模板）**：场景序列/幕数/时长/相机/视图分配全部代码确定性派生（`build_skeleton` + `_scene_plan` + `_assign_seconds`），对齐 skill 的「structure that works」：cold open → hero → home walk → 每柱 divider → walk（页面带数字时第一章后插 plate）→ reveal → proof walk → end。时长带 = 70-118s（skill 75-120，帧帽留余），幕数窗 = 8-20（3 柱 10 幕 ~ 5 柱 18 幕），per-type 秒带同批调整（j2 镜像契约同步）。相机 = 元素清单首选未遮挡 heading/button（大面积优先），无清单 = 诚实中心推近；视图按序消费，视图稀缺 = 章节降为纯 divider（永不编造画面）；< 3 可用视图 = 预检直接诚实失败（INSUFFICIENT_VIEWS），LLM 调用都不烧（skill 同法：站点挡抓取 = 停下来要截图）。
+2. **LLM 只答创作槽（`FilmDirection`，一次调用）**：事实槽仍引用（pillars 3-5 / hero / captions / reveal word·sub / end——`CopyRef` 机制原样，ADR-126①收窄为此）；创作通道 = 自由文本（cold_open 钩子 ≤3 词、reveal_lead 可空走代码固定句、narrations 按场景键对位）——**钩子不是宣称**（创作永不伪装产品事实），校验器 `_CREATIVE_SLOTS` 免 grounding、帽/空白/查重仍查。divider 的 label = 代码 kicker（按影片语言小表），roll = 代码造（下两章循环当 decoy + 真词收尾，签名按序防同集误判）；plate 卡片 = 代码从数字行切 big/label（全引用纪律，创作零需求）。输出从「整篇分镜 JSON」缩到槽位答案——输出 token 量大头消失。
+3. **固定分镜兜底（`fixed_direction`）**：候选穷举 / schema 终局 / 传输失败 → 同一骨架上代码填全槽（pillar = 前 3 个 h2，h3→h1→button 依序补足；hero/end = title/description；cold open 引 title 头部），过装配 + 校验即出片；只有薄到凑不出三章的 manifest 才诚实失败。排序：LLM 多模态（流式）→ 声明式 media_text_fallback → 固定分镜 → 诚实失败行，每级都诚实。
+4. **流式传输（Agent 声明 `stream=True`）**：`generate_stream` 无 delta 消费者（无消费者重试恒合法——下游从未见字节）；reasoning chunk 持续流动使读超时不再误杀慢而活的生成，`llm_first_chunk` 秒级见活，真挂死快速判死。修理轮永不流式（既有律）。
+
+**Consequences**: 起草墙钟的结构大头（巨型输出 + 全有或全无传输 + 盲重试腹稿）移除；「为什么还卡」此后从日志四行可读（gate → llm_request → llm_first_chunk → llm_response/failed + fixed_fallback）。分镜从「模型作曲、代码纠错」变「代码搭骨、模型填肉、代码兜底」——LLM 全挂也必有分镜。呈现面（消息内 markdown 分镜 + 附件 chip）零改动——已解析 FilmStoryboard 仍是唯一持久化/渲染形态。
+
+**Related**: ADR-126（行 ID 化——适用范围由本条收窄为事实槽位；②③不动）/ ADR-125（统一迟延）/ ADR-120（逐字律——事实槽忠于素材，创作通道忠于事实）/ ADR-039 P3（盲重试禁令——流式重试只在首 delta 前）

@@ -1,0 +1,135 @@
+{# film_director.j2 — the launch film's direction call (tools/film/storyboard.py).
+   One law one seat: this file carries ONLY the citation mechanics, the
+   creative-channel law, the output schema, and the binding numeric bounds.
+   Craft conventions (pillar picking, hook writing, narration voice, naming)
+   live in the launch-film skill pack ({{ packs }}).
+   Mirror contract: the assembler + validator constants in
+   tools/film/storyboard.py enforce every bound stated here — a bound changed
+   here must change there in the same batch. #}
+You are directing a keynote-style launch film for the page(s) below. The
+film's STRUCTURE is already decided — scene order, durations and camera
+moves are fixed by the system. You answer only the creative slots.
+
+## The captured page(s) — your ONLY ground truth
+
+{% for page in pages %}
+---
+### Page {{ page.index }}: {{ page.title or page.host }}
+URL: {{ page.url }}
+The page's quotable copy, numbered (you CITE these lines by id — you never
+write a factual on-screen string yourself):
+{% for l in page.lines %}- L{{ l.id }} [{{ l.kind }}] {{ l.text }}
+{% endfor %}
+{% if page.has_screenshot %}(This page's fold screenshot — shot 0 — is attached; the list below names every captured view.)
+{% if page.shots %}Captured views:
+{% for s in page.shots %}- shot {{ s.index }}: {{ s.heading }}
+{% if s.elements %}  elements (the camera's target is named in the skeleton):
+{% for e in s.elements %}  - {{ e.id }} {{ e.kind }}{% if e.text %} "{{ e.text }}"{% endif %}{% if e.covered %} [covered]{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% else %}(No screenshot for this page.){% endif %}
+{% endfor %}
+{% if instruction %}
+## The user's ask
+
+{{ instruction }}
+{% endif %}
+{% if focus %}
+## Emphasis steer
+
+{{ focus }}
+{% endif %}
+{% if language %}
+## The film's language (pinned by the plan)
+
+{{ language }} — every creative line you write (hooks, reveal lead,
+narration) is in this language, and you declare it verbatim in the output's
+`language` field.
+{% endif %}
+
+## The film's fixed skeleton (your answer sheet)
+
+Scene order, durations and camera targets below are FINAL — you do not
+arrange scenes. The arc: a quiet cold open, the hero card, a walk of the
+home page, then one chapter per pillar you pick (a divider, then a walk){% if skeleton.has_plate %}, with a numbers plate after chapter 1{% endif %}, then the reveal, a proof walk, and the closing card.
+Chapters 4-5 exist only if you pick that many pillars.
+{% for s in skeleton.scenes %}
+- `{{ s.key }}`: {{ s.type }}{% if s.chapter %} (chapter {{ s.chapter }}){% endif %}{% if s.page is defined %} — page {{ s.page }} ({{ s.host }}), shot {{ s.shot }}, camera → {% if s.camera.element %}{{ s.camera.element }}{% else %}center push{% endif %}{% endif %}
+{% endfor %}
+
+## Your slots
+
+1. **pillars** — {{ skeleton.min_chapters }}..{{ skeleton.max_chapters }} chapter headings, cited from heading lines
+   (h1/h2/h3): the things the site itself leads with. Each becomes a
+   chapter; their ORDER is your narrative.
+2. **hero** — `hero_word`: the product's name as the site writes it (cite a
+   title/h1 line); `hero_sub`: the site's tagline (cite).
+3. **cold_open** — 1..3 short hook lines, FREE TEXT (your creative channel):
+   at most 3 words each (CJK: at most 8 characters). A hook is the film's
+   own framing — rhythm, a question, a tease. It is NEVER a product claim:
+   no features, numbers, customers or promises the page does not state —
+   anything factual must be cited, and this slot cannot cite.
+4. **captions** — 0..6 walk captions, each `{"scene": "<a ui scene key>",
+   "text": REF}` citing a line FROM THE PAGE THAT SCENE SHOWS; at most 2
+   per scene. A caption names what the camera is pushing in on.
+5. **reveal** — the "one more thing" beat: `reveal_lead` is FREE TEXT (null
+   = the system's standard lead-in); `reveal_word` (1-2 words) and
+   `reveal_sub` (one line) are cited — something true the site states but
+   does not lead with (a free tier, a number, an integration).
+6. **end** — `end_name` (the product's name) and `end_tagline`, both cited.
+7. **narration** — spoken voiceover, keyed by scene key: one or two natural
+   sentences per scene, ≤ 20 chars per second. Speech is your creative
+   channel too: rephrase the page's facts into natural spoken language —
+   TRUE to the manifest (never invent a claim), in the FILM's language (the
+   pinned one above, else the PAGE's own — never the conversation's). Skip
+   scenes that play better silent (a divider beat, the fast cold open);
+   narrate the scenes where speech carries the story (hero, walks, reveal,
+   end).
+8. **name** — a short display name for the film (null if unsure); **theme** —
+   canvas/ink hex pair from the site's look (null = default).
+
+## Citations (binding for every factual slot)
+
+- A factual on-screen string is a REFERENCE, never a composition:
+  `{"line": 7}` renders line L7 verbatim. You choose WHICH line carries
+  each beat; the system renders its exact words. A factual string you typed
+  yourself is wrong by construction — the resolver only accepts ids.
+- Over-long lines: when the line you want exceeds its slot's character cap,
+  set `"fit": "head"` (keep the leading segment) or `"fit": "tail"` (keep
+  the trailing one) — the system trims at a word boundary. With `"fit"`
+  omitted ("full") the line must fit the cap as-is, so cite a shorter line
+  instead of forcing a long one.
+- Accent: `"accent": "<substring>"` wraps one substring of the RESOLVED
+  text in emphasis marks. The substring must exist in the resolved text —
+  a trim that cuts your accent away is a citation error.
+- If your previous direction was rejected: a rejection names the slot and
+  the cause (unknown line id, missed accent, caption from the wrong page,
+  resolved text over its cap, a creative slot blank or over-long). Fix THE
+  SLOT — never answer a rejection by writing factual strings.
+
+## Output (JSON, no prose)
+
+{
+  "name": string | null,
+  "theme": {"canvas": "#RRGGBB", "ink": "#RRGGBB"} | null,
+  "language": string,        // the film's spoken language (ISO code) — the pinned
+                             // value when one is given above, else the page's own
+  "pillars": [REF],          // 3..5 cited heading lines
+  "hero_word": REF,          // resolves to ≤16 chars
+  "hero_sub": REF,           // ≤90
+  "cold_open": [string],     // 1..3 free-text hooks, each ≤30 chars (≤3 words; CJK ≤8 chars)
+  "captions": [{"scene": string, "text": REF}],   // 0..6, each resolves to ≤60 chars
+  "reveal_lead": string | null,  // free text, ≤60 chars; null = the system's lead-in
+  "reveal_word": REF,        // ≤24
+  "reveal_sub": REF,         // ≤90
+  "end_name": REF,           // ≤24
+  "end_tagline": REF,        // ≤90
+  "narrations": {"<scene key>": string}  // only the scenes you narrate
+}
+
+`REF` = `{"line": int, "fit": "full"|"head"|"tail", "accent": string | null}`
+(`fit`/`accent` optional).
+
+{{ packs }}

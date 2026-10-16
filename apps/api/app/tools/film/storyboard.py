@@ -1,35 +1,40 @@
-"""launch_film node + film storyboard agent + citation resolver + grounding
-validator (MG D2).
+"""launch_film node + film direction agent + skeleton assembler + grounding
+validator (MG D2; 骨架收归代码 ADR-127, 2026-10-16 用户拍板).
 
 One file, four layers:
 
-1. THE CITATION RESOLVER (pure, 行 ID 化 2026-10-16 用户拍板) — the LLM
-   never WRITES an on-screen string: its draft cites numbered manifest
-   lines (CopyRef), and code resolves each citation into the final string
-   (verbatim line, word-boundary head/tail fit, accent wrap). The old
-   free-text grounding failure family (TEXT_NOT_GROUNDED whack-a-mole —
-   the model inventing connective copy scene after scene) is impossible by
-   construction; the only citation errors are an unknown line id, a missed
-   accent, or a ui caption citing another page's line (INVALID_COPY_REF).
-   The RESOLVED FilmStoryboard (real strings) stays the persisted and
-   rendered shape — block, film-spec, markdown and renderer never see a
-   reference.
+1. THE SKELETON + ASSEMBLER (pure) — the film's STRUCTURE is code-owned,
+   aligned with the launch-film skill's fixed template (cold open → hero →
+   home walk → per chapter: divider → walk, a plate when the page carries
+   numbers → reveal → proof walk → end; 75-120s total, 3-5 chapters). The
+   LLM's ONE call (``FilmDirection``) answers only the slots: chapter picks
+   and factual on-screen strings as CITATIONS (``CopyRef`` — the model
+   never writes those), plus the creative channel as free text (cold-open
+   hooks, the reveal lead, per-scene narration — hooks, never claims).
+   ``assemble_storyboard`` splices direction into skeleton, resolving
+   citations (verbatim line, word-boundary head/tail fit, accent wrap);
+   the only citation errors are an unknown line id, a missed accent, or a
+   ui caption citing another page's line (INVALID_COPY_REF). The RESOLVED
+   FilmStoryboard (real strings) stays the persisted and rendered shape —
+   block, film-spec, markdown and renderer never see a reference.
+   ``fixed_direction`` is the no-LLM terminal: code fills every slot from
+   the manifest's own semantics over the SAME skeleton.
 
 2. THE VALIDATOR (pure) — the deterministic gate between the resolved
-   storyboard and the render contract: resolved strings re-checked against
-   the manifest (TEXT_NOT_GROUNDED — passes by construction on the draft
-   path; the seat that keeps a hand-built or stale confirmed storyboard
-   honest), camera focus bounds (INVALID_FOCUS), the closed scene
-   vocabulary (UNSUPPORTED_SCENE), duration intents and content bounds
-   (DURATION_INVALID / CONSTRAINT_VIOLATION). Bounded rewrite: the node
-   offers the model at most MAX_REWRITES repair rounds (3 candidates
-   total); exhaustion settles the node FAILED with the structured codes on
-   ``spec.failure`` — never a blind retry (each rewrite rides the
-   violation echo).
+   storyboard and the render contract: cited strings re-checked against
+   the manifest (TEXT_NOT_GROUNDED — passes by construction on the
+   assembly path; the seat that keeps a hand-built or stale confirmed
+   storyboard honest; the creative slots are exempt — ``_CREATIVE_SLOTS``),
+   camera focus bounds (INVALID_FOCUS), the closed scene vocabulary
+   (UNSUPPORTED_SCENE), duration intents and content bounds
+   (DURATION_INVALID / CONSTRAINT_VIOLATION). Bounded rewrite: the
+   orchestrator offers the model at most MAX_REWRITES repair rounds (3
+   candidates total), then falls to ``fixed_direction`` — never a blind
+   retry (each rewrite rides the violation echo).
 
-3. THE ALLOCATOR (pure) — deterministic frame assignment. The LLM writes a
-   bounded seconds INTENT per scene; code owns integer frames (fixed 30
-   fps, structural minimums — the divider roll cadence, the end-card
+3. THE ALLOCATOR (pure) — deterministic frame assignment. Scene seconds
+   are code-owned (``_assign_seconds``); code owns integer frames (fixed
+   30 fps, structural minimums — the divider roll cadence, the end-card
    floor — the total is Σ scene frames). The renderer only sums.
 
 4. THE NODE — loads the project's READY web_page assets (the birthplace
@@ -43,7 +48,8 @@ Grounding normalization: lowercase + every non-word char stripped (markdown
 emphasis ``*``, punctuation, whitespace) — a screen string hits the manifest
 when its normalized form is a substring of a normalized manifest item
 (verbatim quote OR trim). Code-baked chrome is exempt by construction:
-divider ordinals, ui/end display URLs, the ui screenshot, the end logo.
+divider ordinals + kickers, ui/end display URLs, the ui screenshot, the
+end logo.
 """
 
 from __future__ import annotations
@@ -52,7 +58,7 @@ import difflib
 import re
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 from uuid import UUID
 
 import structlog
@@ -108,21 +114,24 @@ logger = structlog.get_logger()
 FILM_FPS = 30  # fixed (render Root.tsx FILM_FPS — one law, mirrored here)
 _CAPTURE_SETTLE_WAIT_S = 150.0  # capture settle wait ceiling (draft seat)
 _CAPTURE_SETTLE_POLL_S = 2.0
-SCENE_COUNT_LIMITS = (4, 16)
-TOTAL_SECONDS_RANGE = (30.0, 115.0)
+SCENE_COUNT_LIMITS = (8, 20)
+# 对齐 launch-film skill (2026-10-16 用户拍板): the film is a 75-120s
+# keynote, never a 30s teaser. 118 stays safely under the render frame cap.
+TOTAL_SECONDS_RANGE = (70.0, 118.0)
 # Render-side frame cap (server.ts FILM_MAX_FRAMES default) — the validator's
 # total window stays comfortably under it; this is the post-allocation guard.
 FILM_MAX_FRAMES = 3600
 
-# Per-scene seconds intent bounds (the LLM's legal range per type).
+# Per-scene seconds intent bounds (code assigns within these — the skeleton's
+# seconds are code-owned, ADR-127).
 SCENE_SECONDS: dict[str, tuple[float, float]] = {
-    "words": (1.5, 4.0),
-    "hero": (2.0, 5.0),
-    "ui": (3.0, 10.0),
-    "divider": (2.0, 5.0),
-    "plate": (3.0, 7.0),
-    "reveal": (2.0, 5.0),
-    "end": (2.5, 6.0),
+    "words": (2.0, 4.0),
+    "hero": (3.0, 6.0),
+    "ui": (4.0, 12.0),
+    "divider": (3.0, 6.0),
+    "plate": (4.0, 8.0),
+    "reveal": (3.0, 6.0),
+    "end": (3.0, 6.0),
 }
 
 # Structural frame minimums (the allocator clamps UP to these — code's seat):
@@ -261,13 +270,15 @@ class StoryboardPage:
 
 
 # ---------------------------------------------------------------------------
-# The citation layer (行 ID 化, 2026-10-16 用户拍板): the LLM never WRITES an
-# on-screen string — it CITES a numbered manifest line. Code resolves the
-# citation into the final string (verbatim, word-boundary fit, accent wrap),
-# so the grounding failure family (TEXT_NOT_GROUNDED whack-a-mole) is
-# impossible by construction on the draft path. The resolved FilmStoryboard
-# (real strings) stays the persisted/rendered shape — block, spec, markdown
-# and renderer are untouched.
+# The citation layer (行 ID 化, 2026-10-16 用户拍板; ADR-127 收窄到事实槽):
+# the LLM never WRITES a factual on-screen string — it CITES a numbered
+# manifest line. Code resolves the citation into the final string (verbatim,
+# word-boundary fit, accent wrap), so the grounding failure family
+# (TEXT_NOT_GROUNDED whack-a-mole) is impossible by construction on the
+# assembly path. The creative channel (cold-open hooks, reveal lead,
+# narration) is free text by design — hooks, never claims. The resolved
+# FilmStoryboard (real strings) stays the persisted/rendered shape — block,
+# spec, markdown and renderer are untouched.
 # ---------------------------------------------------------------------------
 
 
@@ -326,120 +337,179 @@ class CopyRef(BaseModel):
     accent: str | None = None
 
 
-class DraftCaption(BaseModel):
+class DirectionCaption(BaseModel):
+    """One ui caption answer: ``scene`` keys a ui scene of the printed
+    skeleton; the cited line must belong to the page that scene shows."""
+
     model_config = ConfigDict(extra="forbid")
 
-    at: float
+    scene: str
     text: CopyRef
 
 
-class DraftPlateCard(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    big: CopyRef | None = None
-    label: CopyRef
-
-
-class DraftSceneWords(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["words"]
-    seconds: float
-    dark: bool
-    lines: list[CopyRef] = Field(min_length=1)
-    narration: str | None = None
-
-
-class DraftSceneHero(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["hero"]
-    seconds: float
-    word: CopyRef
-    sub: CopyRef
-    narration: str | None = None
-
-
-class DraftSceneUi(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["ui"]
-    seconds: float
-    page: int
-    shot: int = 0
-    frame: bool = True
-    focuses: list[FilmFocus] = Field(min_length=1)
-    captions: list[DraftCaption] = Field(default_factory=list)
-    narration: str | None = None
-
-
-class DraftSceneDivider(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["divider"]
-    seconds: float
-    label: CopyRef
-    roll: list[CopyRef] = Field(min_length=1)
-    narration: str | None = None
-
-
-class DraftScenePlate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["plate"]
-    seconds: float
-    title: CopyRef
-    cards: list[DraftPlateCard] = Field(min_length=2, max_length=4)
-    backdrop: Literal["aurora", "dunes", "mist", "tide"] = "mist"
-    narration: str | None = None
-
-
-class DraftSceneReveal(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["reveal"]
-    seconds: float
-    lead: CopyRef
-    word: CopyRef
-    sub: CopyRef
-    narration: str | None = None
-
-
-class DraftSceneEnd(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["end"]
-    seconds: float
-    name: CopyRef
-    tagline: CopyRef
-    narration: str | None = None
-
-
-DraftScene = Annotated[
-    DraftSceneWords
-    | DraftSceneHero
-    | DraftSceneUi
-    | DraftSceneDivider
-    | DraftScenePlate
-    | DraftSceneReveal
-    | DraftSceneEnd,
-    Field(discriminator="type"),
-]
-
-
-class DraftStoryboard(BaseModel):
-    """The storyboarder's output schema — the citation-world twin of
-    FilmStoryboard (every on-screen slot is a CopyRef). Never persisted:
-    ``resolve_draft`` turns it into the resolved FilmStoryboard, which is
-    the block/spec/markdown shape. ``name``/``language`` keep the resolved
-    schema's null-read tolerance (打字机牙①)."""
+class FilmDirection(BaseModel):
+    """The director's answer — the ONLY thing the LLM produces (ADR-127,
+    2026-10-16 用户拍板): the scene STRUCTURE (order/types/durations/camera)
+    is code-owned, aligned with the launch-film skill's fixed template; the
+    model answers only the slots. Factual slots stay citations (``CopyRef``
+    — product name, taglines, chapter headings, captions); the creative
+    channel is free text (cold-open hooks, the reveal lead, per-scene
+    narration) — hooks, never claims (GPT 任务书法: 创作交给 LLM，正确性
+    与执行交给代码). Never persisted: ``assemble_storyboard`` splices it
+    into the code-built skeleton and resolves citations into the persisted
+    FilmStoryboard shape."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str | None = None
-    theme: FilmStoryboardTheme | None = None
+    # Declared spoken language — the plan's pin rides the prompt and the
+    # model declares it verbatim; null-read tolerance (打字机牙①).
     language: str | None = None
-    scenes: list[DraftScene] = Field(min_length=1)
+    theme: FilmStoryboardTheme | None = None
+    # The chapters: 3-5 heading lines the site itself leads with, cited.
+    pillars: list[CopyRef] = Field(min_length=3, max_length=5)
+    hero_word: CopyRef
+    hero_sub: CopyRef
+    # Creative channel: 1-3 cold-open hook lines (≤3 words each, CJK ≤8
+    # chars) — the film's own framing, never a product fact.
+    cold_open: list[str] = Field(min_length=1, max_length=3)
+    captions: list[DirectionCaption] = Field(default_factory=list, max_length=6)
+    reveal_lead: str | None = None  # creative; null = the code phrase
+    reveal_word: CopyRef
+    reveal_sub: CopyRef
+    end_name: CopyRef
+    end_tagline: CopyRef
+    # Spoken lines keyed by the skeleton's scene keys (a missing key reads
+    # as a silent scene — 读容忍).
+    narrations: dict[str, str] = Field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# The skeleton (code-owned scene structure, ADR-127): scene order, per-scene
+# durations, view/camera assignment, plate inclusion — all deterministic,
+# aligned with the launch-film skill's "structure that works": quiet cold
+# open → hero → home walk → per pillar: divider → walk (a plate after the
+# first chapter when the page carries numbers) → reveal → proof walk → end.
+# ---------------------------------------------------------------------------
+
+_MAX_CHAPTERS = 5  # mirrors FilmDirection.pillars' max (one law)
+
+# Seconds base weights per type — scaled to _TARGET_TOTAL and clamped into
+# SCENE_SECONDS by ``_assign_seconds``.
+_BASE_SECONDS: dict[str, float] = {
+    "words": 3.0,
+    "hero": 5.0,
+    "ui": 8.0,
+    "divider": 4.0,
+    "plate": 6.0,
+    "reveal": 5.0,
+    "end": 5.0,
+}
+_TARGET_TOTAL = 88.0  # mid of the skill's 75-120s band
+
+# The film needs the product's REAL pages on screen (the skill stops and
+# asks for screenshots when a site blocks capture): fewer usable views than
+# this = the arc cannot stand — the orchestrator fails honestly BEFORE
+# burning an LLM call.
+_MIN_VIEWS = 3
+
+# Code-voiced chrome phrases (creative slots the code fills): the divider
+# kicker and the reveal's lead-in, in the film's language (European product
+# — the map covers the launch languages; anything else falls back to en).
+_CHAPTER_KICKER = {
+    "en": "Chapter", "zh": "章节", "fr": "Chapitre",
+    "de": "Kapitel", "es": "Capítulo", "it": "Capitolo",
+}
+_REVEAL_LEAD = {
+    "en": "One more thing.", "zh": "还有一件事。", "fr": "Encore une chose.",
+    "de": "Eine Sache noch.", "es": "Una cosa más.", "it": "Ancora una cosa.",
+}
+
+
+def _phrase(table: dict[str, str], language: str | None) -> str:
+    return table.get((language or "en").split("-")[0].split("_")[0].lower(), table["en"])
+
+
+@dataclass(frozen=True)
+class _Skeleton:
+    """The code-owned half of the film: the usable page views (page, shot)
+    in preference order, each view's code-picked camera focus, and the
+    plate verdict (number-ish manifest lines the cards are split from)."""
+
+    views: tuple[tuple[int, int], ...]
+    focuses: dict[tuple[int, int], FilmFocus]
+    plate_lines: tuple[int, ...]  # manifest ids, number-ish lines (empty = no plate)
+
+
+_FOCUS_KINDS = ("heading", "button", "image", "video")  # camera preference order
+
+
+def build_skeleton(pages: list[StoryboardPage], lines: list[ManifestLine]) -> _Skeleton:
+    """Derive the deterministic half from the captured world. Views = every
+    captured (page, shot) with imagery, fold first per page (pages without
+    any screenshot contribute nothing — a ui scene there is illegal by
+    validator law). Each view's camera names its best uncovered element
+    (headings/buttons/imagery first, largest area wins); a view with no
+    element inventory falls back to the honest raw center push-in."""
+    views: list[tuple[int, int]] = []
+    focuses: dict[tuple[int, int], FilmFocus] = {}
+    for page_idx, page in enumerate(pages):
+        if page.shots:
+            for shot_idx, shot in enumerate(page.shots):
+                key = (page_idx, shot_idx)
+                views.append(key)
+                focuses[key] = _pick_focus(shot.elements)
+        elif page.screenshot_key is not None:
+            key = (page_idx, 0)
+            views.append(key)
+            focuses[key] = _pick_focus([])
+    numberish = tuple(
+        l.id for l in lines if _NUMBERISH.match(l.text) and len(l.text) <= 40
+    )
+    return _Skeleton(
+        views=tuple(views),
+        focuses=focuses,
+        # A plate needs ≥2 cards — a single number-ish line is no plate.
+        plate_lines=numberish[:3] if len(numberish) >= 2 else (),
+    )
+
+
+# A plate card carries a number — the line's first token leads with one
+# (the code split: big = that token, label = the rest; "40 apps a month"
+# → "40" / "apps a month").
+_NUMBERISH = re.compile(r"^\s*\S*\d")
+
+
+def _split_card(text: str) -> tuple[str, str] | None:
+    """big/label split for a number-led line: the leading token is the big
+    (a unit stuck to it rides along — "40%", "256B"), the remainder is the
+    label. None = no clean split (the card degrades to a phrase card)."""
+    parts = text.strip().split(None, 1)
+    if len(parts) != 2 or not any(ch.isdigit() for ch in parts[0]):
+        return None
+    big, label = parts[0].strip(), parts[1].strip(" —-·")
+    if not big or not label:
+        return None
+    return big[: TEXT_CAPS[("plate", "big")]], _fit_to_cap(
+        label, TEXT_CAPS[("plate", "label")], "head"
+    )
+
+
+def _pick_focus(elements: list) -> FilmFocus:
+    """One camera beat for a view: the best uncovered element by kind
+    preference then area, at the skill's 2.5-beat arrival (2.0s here —
+    scenes run 4-12s). No inventory = the raw center push-in (the two legal
+    focus forms, ADR-121 B2)."""
+    candidates = [e for e in elements if not e.covered]
+    for kind in _FOCUS_KINDS:
+        pool = [e for e in candidates if e.kind == kind]
+        if pool:
+            best = max(pool, key=lambda e: e.w * e.h)
+            return FilmFocus(at=2.0, element=best.id)
+    if candidates:
+        best = max(candidates, key=lambda e: e.w * e.h)
+        return FilmFocus(at=2.0, element=best.id)
+    return FilmFocus(at=2.0, x=0.5, y=0.45, zoom=1.4)
 
 
 def _fit_to_cap(text: str, cap: int, fit: str) -> str:
@@ -472,17 +542,99 @@ def _apply_accent(text: str, accent: str) -> str | None:
     return f"{text[:idx]}*{text[idx:idx + len(accent.strip())]}*{text[idx + len(accent.strip()):]}"
 
 
-def resolve_draft(
-    draft: DraftStoryboard,
+@dataclass(frozen=True)
+class _PlannedScene:
+    """One scene of the code-built plan: its skeleton key (the narration
+    dictionary's lookup), type, and — for ui scenes — the assigned view."""
+
+    key: str
+    type: str
+    chapter: int | None = None  # 1-based, divider/ui chapter scenes
+    view: tuple[int, int] | None = None
+
+
+def _scene_plan(n_chapters: int, skeleton: _Skeleton) -> list[_PlannedScene]:
+    """The fixed arc, trimmed to the chapter count and the AVAILABLE views:
+    home walk first, one walk per chapter while views last (a view-poor
+    world degrades to divider-only chapters, never to invented imagery),
+    the plate after chapter 1's beat, the proof walk last. Preflight (the
+    orchestrator's ``_MIN_VIEWS`` gate) guarantees ≥3 views, so the plan
+    always carries ≥3 ui scenes and the seconds assignment can reach the
+    duration floor."""
+    plan = [_PlannedScene("open", "words"), _PlannedScene("hero", "hero")]
+    remaining = list(skeleton.views)
+
+    def take_view() -> tuple[int, int] | None:
+        return remaining.pop(0) if remaining else None
+
+    if (v := take_view()) is not None:
+        plan.append(_PlannedScene("home", "ui", view=v))
+    for i in range(1, n_chapters + 1):
+        plan.append(_PlannedScene(f"ch{i}_divider", "divider", chapter=i))
+        if (v := take_view()) is not None:
+            plan.append(_PlannedScene(f"ch{i}_ui", "ui", chapter=i, view=v))
+        if i == 1 and skeleton.plate_lines:
+            plan.append(_PlannedScene("plate", "plate"))
+    plan.append(_PlannedScene("reveal", "reveal"))
+    if (v := take_view()) is not None:
+        plan.append(_PlannedScene("prove", "ui", view=v))
+    plan.append(_PlannedScene("end", "end"))
+    return plan
+
+
+def _assign_seconds(types: list[str]) -> list[float]:
+    """Code-owned durations: base weights scaled toward _TARGET_TOTAL,
+    clamped into SCENE_SECONDS, snapped to the half-second grid. When
+    clamps bite (a view-poor world), the deficit top-up pushes ui scenes
+    toward their ceiling first (they carry the walk), then dividers —
+    preflight guarantees the ceiling can reach the floor."""
+    base = [_BASE_SECONDS[t] for t in types]
+    scale = _TARGET_TOTAL / sum(base)
+    secs = [
+        min(max(b * scale, SCENE_SECONDS[t][0]), SCENE_SECONDS[t][1])
+        for b, t in zip(base, types)
+    ]
+
+    def _snap(v: float) -> float:
+        return round(v * 2) / 2
+
+    order = sorted(
+        range(len(types)), key=lambda i: (types[i] != "ui", types[i] != "divider")
+    )
+    for target in (_TARGET_TOTAL, TOTAL_SECONDS_RANGE[0]):
+        # Top up toward the target while any scene has headroom.
+        for i in order:
+            if sum(secs) >= target:
+                break
+            head = SCENE_SECONDS[types[i]][1] - secs[i]
+            if head > 0:
+                secs[i] += min(head, target - sum(secs))
+    secs = [_snap(s) for s in secs]
+    # Symmetric trim guard (a maximal structure must stay under the cap):
+    # shave ui scenes toward their floor first.
+    for i in order:
+        if sum(secs) <= TOTAL_SECONDS_RANGE[1]:
+            break
+        lo = SCENE_SECONDS[types[i]][0]
+        if secs[i] > lo:
+            secs[i] = max(lo, secs[i] - (sum(secs) - TOTAL_SECONDS_RANGE[1]))
+    return [_snap(s) for s in secs]
+
+
+def assemble_storyboard(
+    skeleton: _Skeleton,
+    direction: FilmDirection,
     lines: list[ManifestLine],
+    *,
+    pinned_language: str | None = None,
 ) -> tuple[FilmStoryboard | None, list[FilmViolation]]:
-    """Draft (citations) → resolved storyboard (strings). Every citation
-    error is a violation with a precise echo (unknown line id, an accent
-    that misses the resolved text, a ui caption citing another page's
-    line); a clean resolution returns the resolved board, which then faces
-    ``validate_storyboard`` for caps/structure/camera like always. The
-    grounding check there passes by construction — resolved strings are
-    built FROM manifest lines."""
+    """Direction (the model's slot answers) + skeleton (code's structure) →
+    the resolved storyboard. Citation errors resolve with the same precise
+    echo as before (unknown line id, missed accent, a ui caption citing
+    another page's line); the creative slots are length/emptiness checked
+    here, then the whole board faces ``validate_storyboard`` like always.
+    The grounding check there passes by construction for cited slots and
+    exempts the creative ones (_CREATIVE_SLOTS)."""
     by_id = {l.id: l for l in lines}
     violations: list[FilmViolation] = []
 
@@ -519,72 +671,216 @@ def resolve_draft(
                 text = accented
         return text
 
+    def creative(text: str, cap: int, where: str) -> str:
+        """A free-text slot's only law: non-blank, within its cap (hooks,
+        never claims — the prompt's law, not machine-checkable)."""
+        t = text.strip()
+        if not _norm(t):
+            violations.append(FilmViolation(CONSTRAINT_VIOLATION, f"{where}: blank"))
+        elif len(t) > cap:
+            violations.append(
+                FilmViolation(
+                    CONSTRAINT_VIOLATION,
+                    f"{where}: {len(t)} chars over the {cap} cap ({t[:40]}…)",
+                )
+            )
+        return t
+
+    language = direction.language or pinned_language
+    pillars = direction.pillars[:_MAX_CHAPTERS]
+    plan = _scene_plan(len(pillars), skeleton)
+    seconds = _assign_seconds([s.type for s in plan])
+    narr = {
+        k: (v.strip() or None)
+        for k, v in (direction.narrations or {}).items()
+        if isinstance(v, str)
+    }
+
+    # Captions dealt to their named ui scenes (at most 2 per scene — the
+    # skill's law), code-assigned air times.
+    captions_by_scene: dict[str, list[CopyRef]] = {}
+    for c in direction.captions:
+        captions_by_scene.setdefault(c.scene, []).append(c.text)
+
     resolved_scenes: list[FilmScene] = []
-    for idx, scene in enumerate(draft.scenes):
-        where = f"scene[{idx}]({scene.type})"
-        cap = lambda slot: TEXT_CAPS.get((scene.type, slot), 90)  # noqa: E731
-        base = {"seconds": scene.seconds, "narration": scene.narration}
+    ui_count = 0
+    for scene, secs in zip(plan, seconds):
+        where = f"{scene.key}({scene.type})"
+        narration = narr.get(scene.key)
         if scene.type == "words":
             resolved_scenes.append(FilmSceneWords(
-                type="words", **base, dark=scene.dark,
-                lines=[resolve(r, cap("lines"), f"{where}.lines") for r in scene.lines],
+                type="words", seconds=secs, dark=True, narration=narration,
+                lines=[
+                    creative(t, TEXT_CAPS[("words", "lines")], f"{where}.lines")
+                    for t in direction.cold_open
+                ],
             ))
         elif scene.type == "hero":
             resolved_scenes.append(FilmSceneHero(
-                type="hero", **base,
-                word=resolve(scene.word, cap("word"), f"{where}.word"),
-                sub=resolve(scene.sub, cap("sub"), f"{where}.sub"),
+                type="hero", seconds=secs, narration=narration,
+                word=resolve(direction.hero_word, TEXT_CAPS[("hero", "word")], f"{where}.word"),
+                sub=resolve(direction.hero_sub, TEXT_CAPS[("hero", "sub")], f"{where}.sub"),
             ))
         elif scene.type == "ui":
+            assert scene.view is not None  # the plan only builds ui with a view
+            page_idx, shot_idx = scene.view
+            refs = captions_by_scene.get(scene.key, [])
+            if len(refs) > 2:
+                violations.append(
+                    FilmViolation(
+                        CONSTRAINT_VIOLATION,
+                        f"{where}: {len(refs)} captions dealt — at most 2 per ui scene",
+                    )
+                )
+            cap = TEXT_CAPS[("ui", "captions")]
             resolved_scenes.append(FilmSceneUi(
-                type="ui", **base, page=scene.page, shot=scene.shot,
-                frame=scene.frame, focuses=scene.focuses,
+                type="ui", seconds=secs, narration=narration,
+                page=page_idx, shot=shot_idx,
+                # The walk alternates browser-card and full-bleed (code's
+                # rhythm — the skill's "this is a real page" vs the
+                # immersive push).
+                frame=(ui_count % 2 == 0),
+                focuses=[skeleton.focuses[scene.view]],
                 captions=[
-                    FilmCaption(at=c.at, text=resolve(c.text, cap("captions"), f"{where}.captions", page=scene.page))
-                    for c in scene.captions
+                    FilmCaption(
+                        at=2.0 + i * 1.5,
+                        text=resolve(r, cap, f"{where}.captions", page=page_idx),
+                    )
+                    for i, r in enumerate(refs[:2])
                 ],
             ))
+            ui_count += 1
         elif scene.type == "divider":
+            assert scene.chapter is not None
+            own = pillars[scene.chapter - 1]
+            # The roll: two decoys (the NEXT chapters' lines, cyclically —
+            # plausible alternatives by construction, the skill's law) then
+            # the real word last. The cyclic shift keeps every chapter's
+            # roll distinct (a shared set in a different landing order is a
+            # different screen — the validator's divider signature keys on
+            # the roll IN ORDER). Decoys that trim-collide with the real
+            # word drop.
+            n = len(pillars)
+            decoys = [pillars[scene.chapter % n], pillars[(scene.chapter + 1) % n]]
+            roll_cap = TEXT_CAPS[("divider", "roll")]
+            real = resolve(own, roll_cap, f"{where}.roll")
+            roll: list[str] = []
+            for decoy in decoys:
+                text = resolve(decoy, roll_cap, f"{where}.roll")
+                if _norm(text) != _norm(real):
+                    roll.append(text)
+            roll.append(real)
             resolved_scenes.append(FilmSceneDivider(
-                type="divider", **base,
-                label=resolve(scene.label, cap("label"), f"{where}.label"),
-                roll=[resolve(r, cap("roll"), f"{where}.roll") for r in scene.roll],
+                type="divider", seconds=secs, narration=narration,
+                label=_phrase(_CHAPTER_KICKER, language),
+                roll=roll or [real],
             ))
         elif scene.type == "plate":
-            resolved_scenes.append(FilmScenePlate(
-                type="plate", **base, backdrop=scene.backdrop,
-                title=resolve(scene.title, cap("title"), f"{where}.title"),
-                cards=[
-                    FilmPlateCard(
-                        big=(resolve(c.big, cap("big"), f"{where}.cards.big") if c.big else None),
-                        label=resolve(c.label, cap("label"), f"{where}.cards.label"),
+            title_line = next(
+                (l for l in lines if l.kind in ("h1", "title")), lines[0]
+            )
+            cards: list[FilmPlateCard] = []
+            for lid in skeleton.plate_lines:
+                line = by_id.get(lid)
+                if line is None:
+                    continue
+                split = _split_card(line.text)
+                if split is not None:
+                    cards.append(FilmPlateCard(big=split[0], label=split[1]))
+                else:
+                    cards.append(
+                        FilmPlateCard(
+                            big=None,
+                            label=_fit_to_cap(line.text, TEXT_CAPS[("plate", "label")], "head"),
+                        )
                     )
-                    for c in scene.cards
-                ],
+            if len(cards) < 2:
+                # The preflight plate verdict promised 2+ number-ish lines;
+                # a split failure downgrades honestly to NO plate rather
+                # than a thin one — skip this scene.
+                continue
+            resolved_scenes.append(FilmScenePlate(
+                type="plate", seconds=secs, narration=narration, backdrop="mist",
+                title=_fit_to_cap(title_line.text, TEXT_CAPS[("plate", "title")], "head"),
+                cards=cards[:4],
             ))
         elif scene.type == "reveal":
+            lead = (direction.reveal_lead or "").strip() or _phrase(_REVEAL_LEAD, language)
             resolved_scenes.append(FilmSceneReveal(
-                type="reveal", **base,
-                lead=resolve(scene.lead, cap("lead"), f"{where}.lead"),
-                word=resolve(scene.word, cap("word"), f"{where}.word"),
-                sub=resolve(scene.sub, cap("sub"), f"{where}.sub"),
+                type="reveal", seconds=secs, narration=narration,
+                lead=creative(lead, TEXT_CAPS[("reveal", "lead")], f"{where}.lead"),
+                word=resolve(direction.reveal_word, TEXT_CAPS[("reveal", "word")], f"{where}.word"),
+                sub=resolve(direction.reveal_sub, TEXT_CAPS[("reveal", "sub")], f"{where}.sub"),
             ))
         elif scene.type == "end":
             resolved_scenes.append(FilmSceneEnd(
-                type="end", **base,
-                name=resolve(scene.name, cap("name"), f"{where}.name"),
-                tagline=resolve(scene.tagline, cap("tagline"), f"{where}.tagline"),
+                type="end", seconds=secs, narration=narration,
+                name=resolve(direction.end_name, TEXT_CAPS[("end", "name")], f"{where}.name"),
+                tagline=resolve(direction.end_tagline, TEXT_CAPS[("end", "tagline")], f"{where}.tagline"),
             ))
     if violations:
         return None, violations
     return (
         FilmStoryboard(
-            name=draft.name,
-            theme=draft.theme,
-            language=draft.language,
+            name=direction.name,
+            theme=direction.theme,
+            language=language,
             scenes=resolved_scenes,
         ),
         [],
+    )
+
+
+def fixed_direction(
+    lines: list[ManifestLine], *, language: str | None = None
+) -> FilmDirection | None:
+    """The no-LLM direction (固定分镜兜底, 2026-10-16 用户拍板): every slot
+    filled by code from the manifest's own semantics — pillars = the first
+    h2s (padding through h3 → h1 → buttons on a thin page), hero/end from
+    the title + description, the cold open quoting the title's own head.
+    None = the manifest is too thin for three chapters (an honest failure,
+    never an invented one). The same citation discipline applies — code
+    cites line ids exactly like the model would."""
+    by_kind: dict[str, list[ManifestLine]] = {}
+    for l in lines:
+        by_kind.setdefault(l.kind, []).append(l)
+
+    def first(*kinds: str) -> ManifestLine | None:
+        for k in kinds:
+            if by_kind.get(k):
+                return by_kind[k][0]
+        return None
+
+    pillar_lines: list[ManifestLine] = []
+    for kind in ("h2", "h3", "h1", "button"):
+        for l in by_kind.get(kind, []):
+            if len(pillar_lines) < _MAX_CHAPTERS and l not in pillar_lines:
+                pillar_lines.append(l)
+        if len(pillar_lines) >= 3:
+            break
+    if len(pillar_lines) < 3:
+        return None
+    title = first("title") or lines[0]
+    sub_line = first("description", "h1", "paragraph") or title
+    reveal_line = first("h2", "h1") or title
+    cold = _fit_to_cap(title.text, TEXT_CAPS[("words", "lines")], "head")
+    if not _norm(cold):
+        return None
+    return FilmDirection(
+        name=None,
+        language=language,
+        theme=None,
+        pillars=[CopyRef(line=l.id, fit="head") for l in pillar_lines[:3]],
+        hero_word=CopyRef(line=title.id, fit="head"),
+        hero_sub=CopyRef(line=sub_line.id, fit="head"),
+        cold_open=[cold],
+        captions=[],
+        reveal_lead=None,
+        reveal_word=CopyRef(line=reveal_line.id, fit="head"),
+        reveal_sub=CopyRef(line=sub_line.id, fit="head"),
+        end_name=CopyRef(line=title.id, fit="head"),
+        end_tagline=CopyRef(line=sub_line.id, fit="head"),
+        narrations={},
     )
 
 
@@ -664,6 +960,13 @@ def _screen_strings(scene: Any) -> list[tuple[str, str]]:
 # ---------------------------------------------------------------------------
 
 
+# The creative channel (ADR-127): these slots are the film's OWN framing —
+# hooks and lead-ins, never product claims — so the grounding check exempts
+# them (caps, non-blank and the duplicate guards still apply). Every other
+# on-screen slot is a citation and grounds by construction.
+_CREATIVE_SLOTS = {("words", "lines"), ("reveal", "lead"), ("divider", "label")}
+
+
 def validate_storyboard(
     storyboard: FilmStoryboard, pages: list[StoryboardPage]
 ) -> list[FilmViolation]:
@@ -733,7 +1036,7 @@ def validate_storyboard(
                 violations.append(
                     FilmViolation(CONSTRAINT_VIOLATION, f"{where}.{slot}: empty copy")
                 )
-            elif not grounded(text, corpus):
+            elif (scene.type, slot) not in _CREATIVE_SLOTS and not grounded(text, corpus):
                 violations.append(
                     FilmViolation(
                         TEXT_NOT_GROUNDED,
@@ -766,8 +1069,20 @@ def validate_storyboard(
             violations.append(
                 FilmViolation(CONSTRAINT_VIOLATION, f"{where}: duplicate copy within one screen")
             )
-        # A whole screen repeated elsewhere (same type, same strings).
-        signature = (scene.type, tuple(sorted(normed)))
+        # A whole screen repeated elsewhere (same type, same strings). ui
+        # scenes key on their view too — two walks of DIFFERENT views with
+        # no captions are not a repeat (ADR-127: captions are optional now,
+        # so empty-caption walks are the common case, not the exception).
+        signature: tuple = (
+            ("ui", scene.page, scene.shot, tuple(sorted(normed)))
+            if scene.type == "ui"
+            # The roll's ORDER is the screen (it lands on the last word) —
+            # chapters sharing a kicker with cyclically-shifted rolls are
+            # not repeats.
+            else ("divider", normed[0], tuple(normed[1:]))
+            if scene.type == "divider"
+            else (scene.type, tuple(sorted(normed)))
+        )
         if signature in seen_screens:
             violations.append(
                 FilmViolation(CONSTRAINT_VIOLATION, f"{where}: repeats another scene's screen verbatim")
@@ -1157,18 +1472,21 @@ def render_storyboard_markdown(
 
 def _assemble(
     pages: list[dict[str, Any]],
+    skeleton: dict[str, Any],
     instruction: str | None,
     focus: str | None,
     language: str | None,
     page_images: list[MediaInput],
 ) -> AssembleResult:
     """Purity by signature: the model sees the manifests (its grounding
-    universe), the run's instruction, the slot's focus steer, the plan's
-    pinned film language (None = declare it from the page), and the page
-    screenshots (its camera target) — nothing else."""
+    universe), the code-built skeleton (its answer sheet — ADR-127), the
+    run's instruction, the slot's focus steer, the plan's pinned film
+    language (None = declare it from the page), and the page screenshots —
+    nothing else."""
     return (
         {
             "pages": pages,
+            "skeleton": skeleton,
             "instruction": instruction,
             "focus": focus,
             "language": language,
@@ -1177,27 +1495,32 @@ def _assemble(
     )
 
 
-film_storyboarder = Agent[DraftStoryboard](
-    name="film_storyboarder",
-    prompt="film_storyboard.j2",
-    schema=DraftStoryboard,
+film_director = Agent[FilmDirection](
+    name="film_director",
+    prompt="film_director.j2",
+    schema=FilmDirection,
     system=(
-        "You are a film director cutting a polished intro film from a captured "
-        "web page. Every word on screen is cited from the page's own copy by "
-        "line number — you never write screen strings. You compose the "
-        "narration and the shot plan; the system resolves citations, "
-        "allocates frames and renders."
+        "You are a film director. The film's structure is fixed — scene "
+        "order, durations and camera are decided for you; you answer only "
+        "the creative slots: pick the chapters, cite every factual on-screen "
+        "string from the page's own copy by line number (you never write "
+        "those), and write the creative channel in your own words — the "
+        "cold-open hooks, the reveal's lead-in and the narration. Hooks, "
+        "never claims: the creative channel never states a product fact the "
+        "page does not state."
     ),
     assemble=_assemble,
     temperature=0.5,
     packs=["launch-film"],
-    # The screenshots ground the camera plan; a multimodal failure degrades
-    # to text-only (manifests still carry the copy) — the validator's focus
-    # checks keep a blind camera honest.
+    # The screenshots ground the pillar/caption picks; a multimodal failure
+    # degrades to text-only (manifests still carry the copy).
     media_text_fallback=True,
-    # 20k-token prompt + full-film generation: 2026-10-15 取证 — a healthy
-    # run took 142s, two degraded-night runs died on the pool's 120s read
-    # timeout. Declared override rides the request call, pool untouched.
+    # Streaming transport (2026-10-16, 6c2103ee 取证): the non-stream form
+    # was an all-or-nothing black box — a provider-slow day read as a hang,
+    # and every 300s read timeout burned the whole腹稿 on a blind retry
+    # (worst ≈ 15 min of "Drafting the storyboard…"). Reasoning chunks keep
+    # the channel alive; llm_first_chunk proves liveness in seconds.
+    stream=True,
     timeout_s=300,
 )
 
@@ -1249,6 +1572,40 @@ def page_prompt_dict(
 # Shared seats (ADR-120 §2 — the run node and the plan-stage draft ride the
 # SAME load/orchestration loop; no second orchestration chain, ADR-028)
 # ---------------------------------------------------------------------------
+
+
+def skeleton_prompt_dict(
+    skeleton: _Skeleton, pages: list[StoryboardPage]
+) -> dict[str, Any]:
+    """The skeleton's prompt block (ADR-127): the maximal 5-chapter arc the
+    j2 prints as the answer sheet — scene keys (the narration dictionary's
+    lookup), types, and each ui scene's assigned view + code-picked camera
+    target. Durations are deliberately NOT printed (code-owned and trimmed
+    at assembly; a printed number would read as a writable slot)."""
+    plan = _scene_plan(_MAX_CHAPTERS, skeleton)
+    scenes = []
+    for s in plan:
+        entry: dict[str, Any] = {"key": s.key, "type": s.type}
+        if s.chapter is not None:
+            entry["chapter"] = s.chapter
+        if s.view is not None:
+            page_idx, shot_idx = s.view
+            focus = skeleton.focuses[s.view]
+            entry["page"] = page_idx
+            entry["shot"] = shot_idx
+            entry["host"] = pages[page_idx].host
+            entry["camera"] = (
+                {"element": focus.element}
+                if focus.element is not None
+                else {"x": focus.x, "y": focus.y, "zoom": focus.zoom}
+            )
+        scenes.append(entry)
+    return {
+        "max_chapters": _MAX_CHAPTERS,
+        "min_chapters": 3,
+        "has_plate": bool(skeleton.plate_lines),
+        "scenes": scenes,
+    }
 
 
 async def load_storyboard_pages(db: AsyncSession, project: Project) -> list[StoryboardPage]:
@@ -1325,41 +1682,90 @@ async def orchestrate_storyboard(
     language: str | None = None,
     on_reject=None,
 ) -> FilmStoryboard:
-    """THE bounded storyboard loop (打回有界): up to 1 + MAX_REWRITES
-    candidates, each re-called with the violation echo (never a blind
-    re-roll). Returns the first candidate passing the grounding validator.
+    """THE bounded direction loop (打回有界, ADR-127): the skeleton is
+    code-owned; up to 1 + MAX_REWRITES direction candidates, each re-called
+    with the violation echo (never a blind re-roll), each spliced into the
+    skeleton by ``assemble_storyboard`` and then facing the validator.
+    Returns the first assembly that passes.
 
-    Raises ``FilmStoryboardRejected`` on exhaustion (the caller stamps its
-    own terminal); ``LLMSchemaError`` propagates (the two-strike schema
-    terminal). ``on_reject(attempt, violations, feedback)`` is the node's
-    logging hook. Each candidate is a DraftStoryboard (citations); the loop
-    resolves it to the persisted FilmStoryboard shape before the validator
-    runs (行 ID 化 — resolution errors are the only grounding-adjacent
-    family left)."""
+    Terminal ladder (honest at every rung): candidate exhaustion or an
+    LLM failure (schema terminal / transport) falls to ``fixed_direction``
+    — the no-LLM code-filled direction over the SAME skeleton — and only
+    ITS failure raises ``FilmStoryboardRejected`` (the caller stamps its
+    own terminal). A view-poor world (< ``_MIN_VIEWS`` usable page views)
+    never reaches the model at all: the arc cannot stand without the
+    product's real pages, so the rejection fires BEFORE an LLM call is
+    burned (the skill's own law — a blocked site means stop and ask for
+    screenshots). ``on_reject(attempt, violations, feedback)`` is the
+    caller's logging hook."""
     lines = build_line_manifest(pages)
+    skeleton = build_skeleton(pages, lines)
+    if len(skeleton.views) < _MIN_VIEWS:
+        logger.info(
+            "film_direction_preflight_failed",
+            views=len(skeleton.views),
+            need=_MIN_VIEWS,
+        )
+        raise FilmStoryboardRejected(
+            ["INSUFFICIENT_VIEWS"],
+            f"only {len(skeleton.views)} captured page views (need {_MIN_VIEWS}) — "
+            "the film shows the product's real pages; re-send the link to re-capture.",
+        )
     prompt_pages = [page_prompt_dict(p, i, lines) for i, p in enumerate(pages)]
+    prompt_skeleton = skeleton_prompt_dict(skeleton, pages)
     violations: list[FilmViolation] = []
     feedback: str | None = None
-    for attempt in range(1 + MAX_REWRITES):
-        candidate = await film_storyboarder.call(
-            pages=prompt_pages,
-            instruction=instruction,
-            focus=focus,
-            language=language,
-            page_images=page_images,
-            repair_feedback=feedback,
+    try:
+        for attempt in range(1 + MAX_REWRITES):
+            direction = await film_director.call(
+                pages=prompt_pages,
+                skeleton=prompt_skeleton,
+                instruction=instruction,
+                focus=focus,
+                language=language,
+                page_images=page_images,
+                repair_feedback=feedback,
+            )
+            resolved, violations = assemble_storyboard(
+                skeleton, direction, lines, pinned_language=language
+            )
+            if resolved is not None:
+                violations = validate_storyboard(resolved, pages)
+                if not violations:
+                    return resolved
+            feedback = format_violations(violations)
+            if on_reject is not None:
+                on_reject(attempt, violations, feedback)
+        rejection: Exception = FilmStoryboardRejected(
+            sorted({v.code for v in violations}), feedback or ""
         )
-        resolved, violations = resolve_draft(candidate, lines)
+    except (LLMSchemaError, LLMError) as exc:
+        rejection = exc
+    # 固定分镜兜底 (2026-10-16 用户拍板): the LLM path exhausted itself —
+    # the SAME skeleton still stands, so code fills every slot from the
+    # manifest's own semantics and the film ships. Only a world too thin
+    # for three chapters (or a fixed assembly that somehow fails its own
+    # validator) falls through to the honest rejection.
+    logger.info("film_direction_fixed_fallback", reason=str(rejection)[:200])
+    fixed = fixed_direction(lines, language=language)
+    if fixed is not None:
+        resolved, fviolations = assemble_storyboard(
+            skeleton, fixed, lines, pinned_language=language
+        )
         if resolved is not None:
-            violations = validate_storyboard(resolved, pages)
-            if not violations:
+            fviolations = validate_storyboard(resolved, pages)
+            if not fviolations:
+                logger.info(
+                    "film_fixed_storyboard_used",
+                    scenes=len(resolved.scenes),
+                    seconds=sum(s.seconds for s in resolved.scenes),
+                )
                 return resolved
-        feedback = format_violations(violations)
-        if on_reject is not None:
-            on_reject(attempt, violations, feedback)
-    raise FilmStoryboardRejected(
-        sorted({v.code for v in violations}), feedback or ""
-    )
+        logger.warning(
+            "film_fixed_storyboard_rejected",
+            detail=format_violations(fviolations)[:400],
+        )
+    raise rejection
 
 
 async def _await_captures_settled(project_id: UUID) -> None:
@@ -1470,7 +1876,7 @@ class LaunchFilm(NodeBase):
     needs_plan_prelude = False
     produces_outputs = True
     retries = 0  # the bounded rewrite absorbs model variance; transports ride tenacity
-    agents = (film_storyboarder,)
+    agents = (film_director,)
 
     def estimate(self, ctx: dict) -> dict | None:
         """Orchestration tokens (worst case = one storyboard pass per

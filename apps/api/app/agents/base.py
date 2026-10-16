@@ -143,6 +143,7 @@ class Agent(Generic[OutT]):
         client: MiniMaxClient | None = None,
         packs: list[str] | None = None,
         timeout_s: float | None = None,
+        stream: bool = False,
     ) -> None:
         self.name = name
         self.prompt = prompt
@@ -169,6 +170,16 @@ class Agent(Generic[OutT]):
         # the pool — music_generation 180s 同律): for agents whose payload is
         # known to run past the pool's 120s default. None = inherit.
         self.timeout_s = timeout_s
+        # Declared streaming transport (2026-10-16, film_director 拍板): the
+        # call rides ``generate_stream`` with NO delta consumer — reasoning
+        # chunks keep the read timeout honest (a slow-but-alive generation
+        # never false-fires it), ``llm_first_chunk`` gives liveness in
+        # seconds, and a consumer-less retry is always lawful (nothing was
+        # ever emitted downstream). The non-stream form's all-or-nothing
+        # semantics (zero bytes until the whole generation lands) made a
+        # provider-slow day indistinguishable from a hang, and tenacity then
+        # burned the腹稿 on every read timeout (309340c6/6c2103ee 取证).
+        self.stream = stream
         self.client = client or minimax_client
         if name in AGENTS:
             raise RuntimeError(f"Duplicate agent declaration: {name}")
@@ -308,6 +319,15 @@ class Agent(Generic[OutT]):
                     temperature=self.temperature,
                     on_delta=on_delta,
                     on_reasoning=on_reasoning,
+                )
+            if self.stream:
+                # Declared streaming transport, no delta consumer (see the
+                # declaration): liveness + honest read timeouts, the same
+                # validated return as ``generate``.
+                return await self.client.generate_stream(
+                    messages=messages,
+                    response_model=self.schema,
+                    temperature=self.temperature,
                 )
             return await self.client.generate(
                 messages=messages,

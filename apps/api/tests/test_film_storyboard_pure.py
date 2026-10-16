@@ -1,10 +1,13 @@
-"""Pure tests for the film storyboard validator / allocator / spec builder.
+"""Pure tests for the film storyboard skeleton / assembler / validator /
+allocator / spec builder.
 
 No database, no LLM, no HTTP — StoryboardPage carriers are built in memory.
-These lock the deterministic contract between the LLM's storyboard and the
-render chain: grounding (every on-screen string traces to the capture
-manifest), camera bounds, duration intents, content caps, and the frame
-allocator's structural floors.
+These lock the deterministic contract between the director's slot answers
+(FilmDirection, ADR-127) and the render chain: the code-owned skeleton
+(structure, durations, camera), citation resolution, grounding (every
+factual on-screen string traces to the capture manifest; the creative
+channel is exempt), camera bounds, duration intents, content caps, and the
+frame allocator's structural floors.
 """
 
 from __future__ import annotations
@@ -19,15 +22,21 @@ from app.tools.film.storyboard import (
     FILM_MAX_FRAMES,
     INVALID_COPY_REF,
     INVALID_FOCUS,
+    SCENE_COUNT_LIMITS,
+    SCENE_SECONDS,
     TEXT_NOT_GROUNDED,
-    DraftStoryboard,
+    TOTAL_SECONDS_RANGE,
+    FilmDirection,
     FilmStoryboardRejected,
     StoryboardPage,
     allocate_frames,
+    assemble_storyboard,
     build_film_spec,
     build_line_manifest,
+    build_skeleton,
+    fixed_direction,
     format_violations,
-    resolve_draft,
+    skeleton_prompt_dict,
     snap_frames_to_beats,
     validate_storyboard,
 )
@@ -86,11 +95,33 @@ def _codes(violations) -> set[str]:
     return {v.code for v in violations}
 
 
+# Compliant filler boards (ADR-127 contract window: 8..20 scenes, 70..118s)
+# — appended to focused test boards so the validator's global gates stay
+# silent and each test's own point remains the only signal. Distinct
+# signatures throughout (words lines are the creative channel; the divider
+# kicker is code chrome).
+_PAD_SCENES: list[dict] = [
+    {"type": "words", "seconds": 4.0, "dark": True, "lines": ["pad one"]},
+    {"type": "words", "seconds": 4.0, "dark": False, "lines": ["pad two"]},
+    {"type": "divider", "seconds": 6.0, "label": "Chapter", "roll": ["Start free", "Docs"]},
+    {"type": "divider", "seconds": 6.0, "label": "Chapter", "roll": ["Ship faster", "Docs"]},
+    {"type": "reveal", "seconds": 6.0, "lead": "One more thing.", "word": "Acme", "sub": "Start free"},
+    {"type": "hero", "seconds": 6.0, "word": "Acme", "sub": "Why teams switch"},
+    {"type": "end", "seconds": 6.0, "name": "Acme", "tagline": "Why teams switch"},
+    {"type": "words", "seconds": 4.0, "dark": True, "lines": ["pad three"]},
+]
+
+
+def _pad(scenes: list[dict]) -> list[dict]:
+    """Bring a focused test board into the contract window with filler."""
+    return scenes + [dict(s) for s in _PAD_SCENES]
+
+
 # ---- grounding ---------------------------------------------------------------
 
 
 def test_clean_storyboard_passes():
-    assert validate_storyboard(_storyboard(_good_scenes()), [_page()]) == []
+    assert validate_storyboard(_storyboard(_pad(_good_scenes())), [_page()]) == []
 
 
 def test_verbatim_quote_and_trim_hit():
@@ -105,7 +136,7 @@ def test_verbatim_quote_and_trim_hit():
         {"type": "divider", "seconds": 5.0, "label": "Why teams switch", "roll": ["Start free"]},
         {"type": "end", "seconds": 5.0, "name": "Acme", "tagline": "Ship faster"},
     ]
-    assert validate_storyboard(_storyboard(scenes), [_page()]) == []
+    assert validate_storyboard(_storyboard(_pad(scenes)), [_page()]) == []
 
 
 def test_emphasis_marks_and_case_are_normalized():
@@ -118,7 +149,7 @@ def test_emphasis_marks_and_case_are_normalized():
         {"type": "words", "seconds": 4.0, "dark": True, "lines": ["Release work"]},
         {"type": "end", "seconds": 5.0, "name": "Acme", "tagline": "Start free"},
     ]
-    assert validate_storyboard(_storyboard(scenes), [_page()]) == []
+    assert validate_storyboard(_storyboard(_pad(scenes)), [_page()]) == []
 
 
 def test_invented_copy_rejected():
@@ -164,7 +195,7 @@ def test_ui_captions_ground_against_their_own_page():
     assert TEXT_NOT_GROUNDED in _codes(violations)
 
 
-# ---- the citation layer (行 ID 化, 2026-10-16) -------------------------------
+# ---- the skeleton + assembly (ADR-127) ---------------------------------------
 #
 # The default _page()'s line manifest (1-based, kind order title →
 # description → h1 → h2 → button → link):
@@ -176,140 +207,237 @@ def test_ui_captions_ground_against_their_own_page():
 #   L6 [link] Docs
 
 
-def _draft(scenes: list[dict], **kw) -> DraftStoryboard:
-    return DraftStoryboard.model_validate({"scenes": scenes, **kw})
+def _film_shots(n: int = 4) -> tuple:
+    return tuple(
+        ShotRef(
+            key=f"user/capture/a-s{i}.png",
+            y=i * 1200,
+            heading="(top)" if i == 0 else f"Section {i}",
+            elements=[
+                PageElement(
+                    id=f"s{i}e0", kind="heading", text=f"Section {i}",
+                    x=0.5, y=0.4, w=0.6, h=0.2,
+                )
+            ],
+        )
+        for i in range(n)
+    )
 
 
-def _good_draft_scenes() -> list[dict]:
-    return [
-        {"type": "hero", "seconds": 3.0, "word": {"line": 3}, "sub": {"line": 2}},
-        {"type": "ui", "seconds": 9.0, "page": 0,
-         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0},
-                     {"at": 2.0, "x": 0.3, "y": 0.4, "zoom": 2.0}],
-         "captions": [{"at": 2.0, "text": {"line": 4}}]},
-        {"type": "words", "seconds": 3.0, "dark": False, "lines": [{"line": 3}]},
-        {"type": "divider", "seconds": 3.0, "label": {"line": 4},
-         "roll": [{"line": 3}, {"line": 5}]},
-        {"type": "ui", "seconds": 9.0, "page": 0,
-         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}],
-         "captions": []},
-        {"type": "end", "seconds": 4.0, "name": {"line": 1}, "tagline": {"line": 3}},
-    ]
+def _film_page(**kw) -> StoryboardPage:
+    """A page with the full section-shot capture (ADR-121 B1) — the world
+    the skeleton preflight accepts (≥3 usable views)."""
+    kw.setdefault("shots", _film_shots())
+    return _page(**kw)
 
 
-def test_line_manifest_numbering_and_kinds():
-    pages = [_page(), _page(title="Beta", h1=["Docs hub"])]
+def _direction(**over) -> FilmDirection:
+    d: dict = {
+        "pillars": [{"line": 4}, {"line": 5}, {"line": 6}],
+        "hero_word": {"line": 3},
+        "hero_sub": {"line": 2},
+        "cold_open": ["Ship less"],
+        "captions": [],
+        "reveal_word": {"line": 4},
+        "reveal_sub": {"line": 5},
+        "end_name": {"line": 1},
+        "end_tagline": {"line": 3},
+        "narrations": {"hero": "This is Acme.", "end": "Start today."},
+    }
+    d.update(over)
+    return FilmDirection.model_validate(d)
+
+
+def _assemble_with(pages, direction=None, **over):
     lines = build_line_manifest(pages)
-    by_id = {l.id: l for l in lines}
-    assert by_id[1].kind == "title" and by_id[1].text == "Acme — Ship faster"
-    assert by_id[2].kind == "description"
-    assert by_id[3].kind == "h1" and by_id[3].text == "Ship faster"
-    assert by_id[5].kind == "button"
-    # Page 1's lines continue the global numbering and carry their page.
-    page1 = [l for l in lines if l.page == 1]
-    assert page1 and all(l.id > 6 for l in page1)
+    skeleton = build_skeleton(pages, lines)
+    return assemble_storyboard(
+        skeleton, direction or _direction(**over), lines
+    )
 
 
-def test_resolve_draft_clean_citations_become_verbatim_strings():
-    pages = [_page()]
+def test_skeleton_views_focuses_and_plate_verdict():
+    pages = [_film_page()]
     lines = build_line_manifest(pages)
-    resolved, violations = resolve_draft(_draft(_good_draft_scenes()), lines)
+    skeleton = build_skeleton(pages, lines)
+    assert skeleton.views == ((0, 0), (0, 1), (0, 2), (0, 3))
+    # Each view's camera names the shot's heading element (never coordinates).
+    assert skeleton.focuses[(0, 1)].element == "s1e0"
+    # No number-ish lines in the default manifest → no plate.
+    assert skeleton.plate_lines == ()
+    # A fold-only page (pre-B1) still contributes its fold view, with the
+    # raw center push-in (no element inventory).
+    fold_only = build_skeleton([_page()], build_line_manifest([_page()]))
+    assert fold_only.views == ((0, 0),)
+    assert fold_only.focuses[(0, 0)].element is None
+
+
+def test_assemble_clean_direction_passes():
+    pages = [_film_page()]
+    resolved, violations = _assemble_with(pages)
     assert violations == []
     assert resolved is not None
-    hero = resolved.scenes[0]
+    # The fixed arc, 3 chapters, views consumed in order (the 4-view world
+    # walks home + 3 chapters; the proof walk drops honestly).
+    keys = [(s.type, getattr(s, "shot", None)) for s in resolved.scenes]
+    assert [k for k, _ in keys] == [
+        "words", "hero", "ui",
+        "divider", "ui", "divider", "ui", "divider", "ui",
+        "reveal", "end",
+    ]
+    assert [s for t, s in keys if t == "ui"] == [0, 1, 2, 3]
+    hero = resolved.scenes[1]
     assert hero.word == "Ship faster"
     assert hero.sub == "Acme turns hours of release work into minutes."
-    # The resolved board passes the legacy validator by construction.
+    # Narration lands by scene key; unnarrated scenes read None.
+    assert hero.narration == "This is Acme."
+    assert resolved.scenes[0].narration is None
+    # The walk alternates browser-card and full-bleed (code's rhythm).
+    assert [s.frame for s in resolved.scenes if s.type == "ui"] == [True, False, True, False]
+    # The divider roll ends on the real chapter word, decoys first.
+    divider = resolved.scenes[3]
+    assert divider.label == "Chapter"
+    assert divider.roll[-1] == "Why teams switch"
+    assert len(divider.roll) == 3
+    # Durations: every scene in its band, the total in the skill's window.
+    assert all(
+        SCENE_SECONDS[s.type][0] <= s.seconds <= SCENE_SECONDS[s.type][1]
+        for s in resolved.scenes
+    )
+    total = sum(s.seconds for s in resolved.scenes)
+    assert TOTAL_SECONDS_RANGE[0] <= total <= TOTAL_SECONDS_RANGE[1]
+    # The resolved board passes the validator by construction.
     assert validate_storyboard(resolved, pages) == []
 
 
-def test_resolve_fit_trims_at_word_boundary():
-    pages = [_page()]
+def test_assemble_fit_trims_at_word_boundary():
+    pages = [_film_page()]
     lines = build_line_manifest(pages)
-    long_line = lines[1].text  # the 46-char description, over the words 30 cap
-    head, v = resolve_draft(_draft([
-        {"type": "words", "seconds": 3.0, "dark": False,
-         "lines": [{"line": 2, "fit": "head"}]},
-        {"type": "hero", "seconds": 3.0, "word": {"line": 3}, "sub": {"line": 5}},
-        {"type": "ui", "seconds": 9.0, "page": 0,
-         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]},
-        {"type": "end", "seconds": 3.0, "name": {"line": 1}, "tagline": {"line": 3}},
-    ]), lines)
-    assert v == []
-    assert head is not None
-    text = head.scenes[0].lines[0]
-    assert len(text) <= 30 and long_line.startswith(text) and not text.endswith(" ")
-    tail, v = resolve_draft(_draft([
-        {"type": "words", "seconds": 3.0, "dark": False,
-         "lines": [{"line": 2, "fit": "tail"}]},
-        {"type": "hero", "seconds": 3.0, "word": {"line": 3}, "sub": {"line": 5}},
-        {"type": "ui", "seconds": 9.0, "page": 0,
-         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]},
-        {"type": "end", "seconds": 3.0, "name": {"line": 1}, "tagline": {"line": 3}},
-    ]), lines)
-    assert v == []
+    title_line = lines[0].text  # "Acme — Ship faster" (18 chars, over the 16 cap)
+    resolved, violations = _assemble_with(
+        pages, hero_word={"line": 1, "fit": "head"},
+    )
+    assert violations == []
+    assert resolved is not None
+    word = next(s for s in resolved.scenes if s.type == "hero").word
+    assert len(word) <= 16 and title_line.startswith(word) and not word.endswith(" ")
+    long_line = lines[1].text  # the 46-char description
+    tail, violations = _assemble_with(pages, hero_word={"line": 2, "fit": "tail"})
+    assert violations == []
     assert tail is not None
-    text = tail.scenes[0].lines[0]
-    assert len(text) <= 30 and long_line.endswith(text)
+    hero = next(s for s in tail.scenes if s.type == "hero")
+    assert len(hero.word) <= 16 and long_line.endswith(hero.word)
 
 
-def test_resolve_full_fit_over_cap_surfaces_as_constraint_violation():
-    pages = [_page()]
-    lines = build_line_manifest(pages)
-    resolved, violations = resolve_draft(_draft([
-        {"type": "words", "seconds": 3.0, "dark": False, "lines": [{"line": 2}]},
-        {"type": "hero", "seconds": 3.0, "word": {"line": 3}, "sub": {"line": 5}},
-        {"type": "ui", "seconds": 9.0, "page": 0,
-         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]},
-        {"type": "end", "seconds": 3.0, "name": {"line": 1}, "tagline": {"line": 3}},
-    ]), lines)
+def test_assemble_full_fit_over_cap_surfaces_as_constraint_violation():
+    pages = [_film_page()]
+    resolved, violations = _assemble_with(pages, hero_sub={"line": 2})  # full fit, ≤90: fine
+    assert violations == []
+    assert resolved is not None
+    # The end name cap is 24 — the 20-char title fits; force an over-cap via
+    # the reveal word (cap 24, the 46-char description with a full fit).
+    resolved, violations = _assemble_with(pages, reveal_word={"line": 2})
     assert violations == []  # resolution is honest; the cap gate is validate's
     assert resolved is not None
     assert CONSTRAINT_VIOLATION in _codes(validate_storyboard(resolved, pages))
 
 
-def test_resolve_accent_wraps_and_missing_accent_rejected():
-    pages = [_page()]
-    lines = build_line_manifest(pages)
-    resolved, violations = resolve_draft(_draft([
-        {"type": "hero", "seconds": 3.0,
-         "word": {"line": 3, "accent": "Ship"}, "sub": {"line": 5}},
-        {"type": "ui", "seconds": 9.0, "page": 0,
-         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]},
-        {"type": "words", "seconds": 3.0, "dark": False, "lines": [{"line": 4}]},
-        {"type": "end", "seconds": 3.0, "name": {"line": 1}, "tagline": {"line": 3}},
-    ]), lines)
+def test_assemble_accent_wraps_and_missing_accent_rejected():
+    pages = [_film_page()]
+    resolved, violations = _assemble_with(
+        pages, hero_word={"line": 3, "accent": "Ship"}
+    )
     assert violations == []
     assert resolved is not None
-    assert resolved.scenes[0].word == "*Ship* faster"
+    hero = next(s for s in resolved.scenes if s.type == "hero")
+    assert hero.word == "*Ship* faster"
 
-    _, violations = resolve_draft(_draft([
-        {"type": "hero", "seconds": 3.0,
-         "word": {"line": 3, "accent": "zebras"}, "sub": {"line": 5}},
-    ]), lines)
+    _, violations = _assemble_with(pages, hero_word={"line": 3, "accent": "zebras"})
     assert INVALID_COPY_REF in _codes(violations)
 
 
-def test_resolve_unknown_line_and_cross_page_caption_rejected():
+def test_assemble_unknown_line_and_cross_page_caption_rejected():
     pages = [
-        _page(),
+        _film_page(),
         _page(title="Beta — Docs", description="Read the manual.",
               h1=["Documentation"], h2=["Reference"], buttons=["Download"],
               screenshot="user/capture/b.png"),
     ]
-    lines = build_line_manifest(pages)
-    _, violations = resolve_draft(_draft([
-        {"type": "hero", "seconds": 3.0, "word": {"line": 999}, "sub": {"line": 3}},
-    ]), lines)
+    _, violations = _assemble_with(pages, hero_word={"line": 999})
     assert INVALID_COPY_REF in _codes(violations)
 
-    # L3 ("Ship faster") lives on page 0 — a page-1 ui caption may not cite it.
-    _, violations = resolve_draft(_draft([
-        {"type": "ui", "seconds": 6.0, "page": 1,
-         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}],
-         "captions": [{"at": 0.0, "text": {"line": 3}}]},
-    ]), lines)
+    # A page-1 line cited from a page-0 walk's caption is a citation error.
+    _, violations = _assemble_with(
+        pages,
+        captions=[{"scene": "home", "text": {"line": 8}}],  # L8 lives on page 1
+    )
     assert INVALID_COPY_REF in _codes(violations)
+
+
+def test_creative_slots_are_grounding_exempt_but_capped():
+    pages = [_film_page()]
+    # A wholly invented hook is the creative channel — no grounding check.
+    resolved, violations = _assemble_with(
+        pages, cold_open=["Nobody wrote this hook"]
+    )
+    assert violations == []
+    assert resolved is not None
+    assert validate_storyboard(resolved, pages) == []
+    # …but caps and the blank law still apply, at assembly and at validate.
+    _, violations = _assemble_with(pages, cold_open=["x" * 31])
+    assert CONSTRAINT_VIOLATION in _codes(violations)
+    _, violations = _assemble_with(pages, cold_open=["   "])
+    assert CONSTRAINT_VIOLATION in _codes(violations)
+    # The reveal lead is creative too (null → the code phrase).
+    resolved, _ = _assemble_with(pages, reveal_lead=None)
+    assert resolved is not None
+    reveal = next(s for s in resolved.scenes if s.type == "reveal")
+    assert reveal.lead == "One more thing."
+    resolved, _ = _assemble_with(pages, reveal_lead="Wait for it.")
+    assert resolved is not None
+    reveal = next(s for s in resolved.scenes if s.type == "reveal")
+    assert reveal.lead == "Wait for it."
+    assert validate_storyboard(resolved, pages) == []
+
+
+def test_fixed_direction_full_path_validates_clean():
+    """The no-LLM terminal (固定分镜): code fills every slot from the
+    manifest's own semantics; the assembled board passes the validator."""
+    pages = [_film_page()]
+    lines = build_line_manifest(pages)
+    skeleton = build_skeleton(pages, lines)
+    direction = fixed_direction(lines)
+    assert direction is not None
+    resolved, violations = assemble_storyboard(skeleton, direction, lines)
+    assert violations == []
+    assert resolved is not None
+    assert validate_storyboard(resolved, pages) == []
+    hero = next(s for s in resolved.scenes if s.type == "hero")
+    assert hero.word  # resolved from the title line
+    # A manifest too thin for three chapters fails honestly (None).
+    bare = StoryboardPage(
+        asset_id="a9",
+        research=WebPageResearch(
+            url=URL, title="Solo", description="", h1=[], h2=[], h3=[],
+            buttons=[], links=[], paragraphs=[],
+        ),
+        screenshot_key="k", host="example.com",
+    )
+    assert fixed_direction(build_line_manifest([bare])) is None
+
+
+def test_skeleton_prompt_dict_is_the_answer_sheet():
+    pages = [_film_page()]
+    lines = build_line_manifest(pages)
+    skeleton = build_skeleton(pages, lines)
+    block = skeleton_prompt_dict(skeleton, pages)
+    keys = [s["key"] for s in block["scenes"]]
+    assert keys[0] == "open" and keys[-1] == "end"
+    assert "ch5_divider" in keys  # the maximal arc (chapters 4-5 trim at assembly)
+    # Durations are never printed — a printed number reads as a writable slot.
+    assert all("seconds" not in s for s in block["scenes"])
+    home = next(s for s in block["scenes"] if s["key"] == "home")
+    assert home["camera"] == {"element": "s0e0"}
 
 
 # ---- camera bounds -----------------------------------------------------------
@@ -358,12 +486,12 @@ def test_captions_need_air():
 
 def test_scene_seconds_out_of_range():
     scenes = _good_scenes()
-    scenes[0]["seconds"] = 9.0  # hero cap is 5
+    scenes[0]["seconds"] = 9.0  # hero cap is 6
     assert DURATION_INVALID in _codes(validate_storyboard(_storyboard(scenes), [_page()]))
 
 
 def test_total_seconds_window():
-    # a single 1.5s words scene is under the 30s total floor (and the count
+    # a single 1.5s words scene is under the 70s total floor (and the count
     # floor — the duration violation is what we assert)
     scenes = [{"type": "words", "seconds": 1.5, "dark": False, "lines": ["Ship faster"]}]
     violations = validate_storyboard(_storyboard(scenes), [_page()])
@@ -373,12 +501,13 @@ def test_total_seconds_window():
 def test_scene_count_window():
     two = _good_scenes()[:2]
     assert CONSTRAINT_VIOLATION in _codes(validate_storyboard(_storyboard(two), [_page()]))
-    seventeen = _good_scenes() + [
+    too_many = _good_scenes() + [
         {"type": "words", "seconds": 2.0, "dark": False, "lines": [f"Ship faster {i}"]}
-        for i in range(11)
+        for i in range(SCENE_COUNT_LIMITS[1] - len(_good_scenes()) + 1)
     ]
-    # the words lines are ungrounded too — the count violation is what we assert
-    assert CONSTRAINT_VIOLATION in _codes(validate_storyboard(_storyboard(seventeen), [_page()]))
+    # over the 20-scene ceiling — the count violation is what we assert
+    assert len(too_many) > SCENE_COUNT_LIMITS[1]
+    assert CONSTRAINT_VIOLATION in _codes(validate_storyboard(_storyboard(too_many), [_page()]))
 
 
 def test_char_caps_and_list_caps():
@@ -412,7 +541,7 @@ def test_cross_scene_callback_allowed():
     deliberate callback, not a duplicate (different scene types / strings)."""
     scenes = _good_scenes()
     scenes[5]["tagline"] = "Ship faster"  # == hero.word, different slot/scene
-    assert validate_storyboard(_storyboard(scenes), [_page()]) == []
+    assert validate_storyboard(_storyboard(_pad(scenes)), [_page()]) == []
 
 
 def test_empty_after_normalize_rejected():
@@ -451,7 +580,7 @@ def test_ui_scene_shot_bounds():
     page = _page(shots=shots)
     scenes = _good_scenes()
     scenes[1]["shot"] = 1
-    assert validate_storyboard(_storyboard(scenes), [page]) == []
+    assert validate_storyboard(_storyboard(_pad(scenes)), [page]) == []
     spec = build_film_spec(_storyboard(scenes), [page])
     assert spec["scenes"][1]["image"] == "user/capture/a-s1.png"
     # out of range
@@ -478,7 +607,7 @@ def test_ui_focus_element_form():
     scenes = _good_scenes()
     scenes[1]["shot"] = 1
     scenes[1]["focuses"] = [{"at": 0.0, "element": "s1e0"}, {"at": 2.0, "element": "s1e1"}]
-    assert validate_storyboard(_storyboard(scenes), [page]) == []
+    assert validate_storyboard(_storyboard(_pad(scenes)), [page]) == []
     spec = build_film_spec(_storyboard(scenes), [page])
     focuses = spec["scenes"][1]["focuses"]
     assert focuses[0] == {"at": 0.0, "x": 0.2, "y": 0.3, "zoom": 1.2}  # 0.5/0.5 → clamp up
@@ -509,7 +638,7 @@ def test_plate_scene_grounds_and_bakes():
     """The numbers beat: title/big/label ground like any other string (a
     null big = a phrase card), and the spec carries the scene verbatim."""
     page = _page(h2=["Why teams switch", "256 B"])
-    scenes = _good_scenes()
+    scenes = _pad(_good_scenes())
     scenes.insert(4, _plate_scene())
     storyboard = _storyboard(scenes)
     assert validate_storyboard(storyboard, [page]) == []
@@ -549,7 +678,7 @@ def test_ui_frame_flag_flows_to_spec():
     scenes = _good_scenes()
     scenes[1]["frame"] = False
     storyboard = _storyboard(scenes)
-    assert validate_storyboard(storyboard, [_page()]) == []
+    assert validate_storyboard(_storyboard(_pad(scenes)), [_page()]) == []
     spec = build_film_spec(storyboard, [_page()])
     assert spec["scenes"][1]["frame"] is False
     assert spec["scenes"][4]["frame"] is True
@@ -759,7 +888,8 @@ def test_assemble_carries_the_pinned_language():
     there — the model never reads the conversation's own language)."""
     from app.tools.film.storyboard import _assemble
 
-    kwargs, _images = _assemble([], "make it pop", None, "de", [])
+    kwargs, _images = _assemble([], {"scenes": []}, "make it pop", None, "de", [])
     assert kwargs["language"] == "de"
-    kwargs, _images = _assemble([], None, None, None, [])
+    assert kwargs["skeleton"] == {"scenes": []}
+    kwargs, _images = _assemble([], {"scenes": []}, None, None, None, [])
     assert kwargs["language"] is None
