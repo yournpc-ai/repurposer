@@ -570,7 +570,7 @@ def test_gate_authorization_conjunct_yields_to_structural_truth() -> None:
     assert verdict.code == "start.blocked"
 
 
-# ---- the dock echo's estimate tail (ADR-111 §2 + ADR-120 复核拍措辞) -------------
+# ---- the dock echo's estimate tail (ADR-111 §2; storyboard_review 零尾行) -------
 
 from app.chat.service import _estimate_tail  # noqa: E402
 from app.models.schemas import PlanEstimate  # noqa: E402
@@ -581,27 +581,23 @@ def _est() -> PlanEstimate:
 
 
 class TestEstimateTailStoryboardReview:
-    """统一迟延 (2026-10-16): the draft NEVER runs in the dock's turn, so
-    the review-hold tail ALWAYS names the draft in flight — the '已列在下方'
-    claim has no lawful seat at dock time. (Code-forced text, so locking
-    its markers is legal — the reminder-tail doctrine.)"""
+    """2026-10-16 user ruling (画蛇添足): the review-hold dock echo carries
+    NO estimate tail — the draft-in-flight beat rides the echo's prose, and
+    the price's disclosure seat for this dock is the per-node estimates on
+    the canvas's draft nodes (ADR-057 K5 节点锚定). The tail function must
+    stay silent for this reason in every quote shape."""
 
-    def test_review_tail_always_names_the_draft_in_flight(self) -> None:
-        tail = _estimate_tail("好", _est(), reason="storyboard_review")
-        assert "正在起草" in tail
-        assert "已列在下方" not in tail
+    def test_review_reason_carries_no_tail(self) -> None:
+        assert _estimate_tail("好", _est(), reason="storyboard_review") == ""
+        assert _estimate_tail("go", _est(), reason="storyboard_review") == ""
 
-    def test_review_tail_english(self) -> None:
-        tail = _estimate_tail("go", _est(), reason="storyboard_review")
-        assert "being drafted" in tail
-        assert "below" not in tail
+    def test_review_reason_deferred_quote_also_silent(self) -> None:
+        assert _estimate_tail("好", None, reason="storyboard_review") == ""
+        assert _estimate_tail("go", None, reason="storyboard_review") == ""
 
-    def test_deferred_quote_half_carries_the_review(self) -> None:
-        tail = _estimate_tail("好", None, reason="storyboard_review")
-        assert "估价随运行确定" in tail
-        assert "正在起草" in tail
-
-    def test_other_reasons_never_speak_storyboard(self) -> None:
-        # The review wording never leaks into the billing reasons.
-        tail = _estimate_tail("go", _est(), reason="above_guardrail")
-        assert "storyboard" not in tail.lower()
+    def test_other_reasons_keep_their_tails(self) -> None:
+        # The silence is scoped to the review reason — the guardrail /
+        # default disclosure tails are untouched (BILLING §2.1).
+        assert "Estimated" in _estimate_tail("go", _est(), reason="above_guardrail")
+        assert "估价" in _estimate_tail("好", _est())
+        assert "估价随运行确定" in _estimate_tail("好", None, reason="unquotable")

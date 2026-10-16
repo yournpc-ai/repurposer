@@ -254,29 +254,17 @@ def _estimate_tail(
     pill's deferred label and the tail must say one thing). The prefs
     family (execution_pref / credits_pref) keeps the standard
     estimate-only shape: there the model's own closing question IS the
-    confirmation ask."""
+    confirmation ask. ``storyboard_review`` carries NO tail at all
+    (2026-10-16 user ruling — 画蛇添足): the review hold's echo already
+    says the draft is in flight and the work waits for the review, and the
+    price's disclosure seat for this dock is the per-node estimates on the
+    canvas's draft nodes (ADR-057 K5 节点锚定); the abstract total line is
+    retired for this reason."""
     zh = _prefers_zh(text)
+    if reason == "storyboard_review":
+        return ""
     if estimate is not None:
         low, high = estimate.total
-        if reason == "storyboard_review":
-            # ADR-120 §2 复核拍 (统一迟延 2026-10-16): the draft NEVER runs
-            # in the dock's turn — the block lands late via the deferred
-            # seat, so at dock time the tail always names the draft in
-            # flight, never claims it is below. The run waits for the
-            # user's review (verbal go or the pill) — the same
-            # hold/capture semantics, the review named first.
-            if zh:
-                return (
-                    f"\n\n（估价 {low}–{high} 积分——分镜稿正在起草，到了你过目确认后才开始："
-                    "按上限预扣，按实际用量结算，失败的步骤不收费，剩余退回）"
-                )
-            return (
-                f"\n\n(Estimated {low}–{high} credits — the storyboard is "
-                "being drafted and lands here shortly; the work starts "
-                "once you've reviewed and confirmed: the high end is "
-                "held, you're charged only for what actually runs, "
-                "failed steps are free, and the remainder is returned.)"
-            )
         if reason == "unquotable":
             if zh:
                 return (
@@ -312,21 +300,6 @@ def _estimate_tail(
             f"\n\n(Estimated {low}–{high} credits — on start the high end "
             "is held; you're charged only for what actually runs, failed "
             "steps are free, and the remainder is returned.)"
-        )
-    if reason == "storyboard_review":
-        # The deferred-quote half of the review hold: no range to show, the
-        # review beat is still the headline (统一迟延: the block is never
-        # below at dock time — always name the draft in flight).
-        if zh:
-            return (
-                "\n\n（估价随运行确定——分镜稿正在起草，到了你过目确认后才开始；"
-                "开始后才计费，失败的步骤不收费）"
-            )
-        return (
-            "\n\n(Credits are priced when the run starts — the storyboard "
-            "is being drafted and lands here shortly; the work starts once "
-            "you confirm; billing begins only when you start, and failed "
-            "steps are free.)"
         )
     if reason in ("above_guardrail", "unquotable"):
         if zh:
