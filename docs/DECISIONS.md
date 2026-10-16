@@ -3023,6 +3023,22 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 3. **有界打回单座**：候选层（`orchestrate_storyboard` 的 1+MAX_REWRITES）是唯一重试座位；dock 层不整稿重试（双层叠加 = 乘法失控）。修复回声携带最近邻 manifest 候选行（打地鼠取证：只说什么失败、不给候选 = 盲改）。穷尽落代码拼装诚实失败行（不借 LLM 之声），hold 不解除，合法出路两条 = 换说法重试 / 明示放弃。
 4. **就绪拍**：块落地发 `storyboard_ready` trigger——唯一以「待决计划存在」为言语条件的事件（两处 pending-plan 沉默谓词对它反转；dock 已结算 = 静默）。前端零新面：watch-window 轮询通吃；**轮询续航 = 阶段最坏时长包络**（保险丝短于包络 = 假死，此律已入 MODULE_ARCHITECTURE §6 五座位清单）。
 
-**Consequences**: dock 即时到达；起草期有 beats + 状态行叙事；落地 = 一拍言语 + 卡；失败 = 诚实行 + 两条合法出路。分镜阶段成为「新世界事件五座位清单」的原型案例。
+**Consequences**: dock 即时到达；起草期有 beats + 状态行叙事；失败 = 诚实行 + 两条合法出路。分镜阶段成为「新世界事件五座位清单」的原型案例。就绪拍的呈现形态由 ADR-126 修订（卡面 → 消息内 markdown 分镜）。
 
-**Related**: ADR-120（分镜核对坐消息流——起草座位由本条修订）/ ADR-077（trigger 白名单扩名单）/ ADR-117（确认档与守卫线）/ ADR-093（言语 = LLM 之声；穷举诚实失败行 = 法2 的代码拼装例外）
+**Related**: ADR-120（分镜核对坐消息流——起草座位由本条修订）/ ADR-077（trigger 白名单扩名单）/ ADR-117（确认档与守卫线）/ ADR-093（言语 = LLM 之声；穷举诚实失败行 = 法2 的代码拼装例外）/ ADR-126（行 ID 化 + 消息内分镜）
+
+## ADR-126: 分镜行 ID 化 + 消息内 markdown 分镜——grounding 打地鼠的终局与呈现面翻案
+
+**Status**: Decided (2026-10-16)
+
+**Context**: zymix/b0ab991f 取证——自由文本 grounding（屏上字符串逐字/trim 自 manifest，validator 子串校验）对 MiniMax 是结构性受限生成难题：打地鼠签名（«Startups to enterprises»、«AI automations» 等模型自编"连接词"修了再犯），最坏 37 分钟仍败。对照 Claude skill 同尺校验一次过——校验不过严，是模型「作曲本能 vs 摘抄任务」的张力。同期拍板呈现面翻案：ADR-120/125 的块卡呈现（卡自带内容、言语永不复述）改为消息内完整分镜（用户点名的形态）。
+
+**Decision**:
+
+1. **行 ID 化（屏上文案槽位全引用化）**：manifest 行编号（`build_line_manifest`，跨页全局 1-based，kind 保留语义）；LLM 输出 = `DraftStoryboard` 引用稿——一切屏上槽位 = `CopyRef{line, fit, accent}`，模型选行不写字（fit=head/tail 由代码按词界定长裁剪，模型永不数字符；accent = 解析后文本的子串，代码包 `*…*`）。`resolve_draft` 把引用稿解析成已解析 `FilmStoryboard`（真字符串）再过 `validate_storyboard`——打地鼠族结构性消灭；残留引用错三态 = 未知行号 / accent 未命中 / ui caption 跨页（`INVALID_COPY_REF`，回声精确指认）。**逐字律不动**：屏上文案忠于素材的承诺零改动，创作通道仍是 narration（引用律豁免、忠于事实）。已解析形态是唯一的持久化/渲染/markdown 形态——块、spec、渲染器零改动。
+2. **消息内 markdown 分镜（呈现面翻 ADR-125 卡面案）**：storyboard_ready 消息 = LLM 就绪短句 + `render_storyboard_markdown`（代码从已解析稿确定性投影——展示=执行，永不二源生成）+ LLM 确认问句，`[[STORYBOARD]]` 哨兵 splice（缺哨兵降级 = 表在前、问句仍在尾）。分镜块降级 = 附件 chip（StoryboardTable 静息 chip、点开结构表；逐版留痕不变）；块行仍是硬闸与 `confirmed_storyboard` 的世界记录座。打字机律两牙同批检查：markdown = 代码拼装世界内容（估价尾同 doctrine），散文部 = LLM 之声走 settled-prose pacing。
+3. **孤儿 dock boot 扫尾**：worker 启动 `sweep_orphaned_storyboard_docks`——重启杀死在飞起草的 dock（无块无失败行）补 fire 一次；失败行对本 dock 也是结算（迟延座新增闸：本 dock 已落穷举行 = 不再重起草，唯一合法重开 = 用户换说法 re-dock）。
+
+**Consequences**: storyboarder 的任务从「抄写」降维成「选择」，grounding 校验从子串匹配变查表；修复回声从「给候选行」变「指认引用错」。prompt 面（film_storyboard.j2 + launch-film pack）重写为引用机制 + 英文统一（原 j2 英文 / pack 中文的语言分裂消除）。用户审阅面 = 一条可读 markdown 消息 + 确认问句，结构表一点即达。
+
+**Related**: ADR-125（统一迟延——呈现面由本条修订）/ ADR-120（分镜过目；逐字律不变）/ ADR-093（言语 = LLM 之声；markdown 表 = 代码拼装世界内容，估价尾同例）/ ADR-110（块 chip 折叠同律）
