@@ -17,11 +17,16 @@ first):
   ``trigger_system.j2``.
 - ``craft_decompiled`` — the pinned reference video's craft skeleton
   landed (``decompile``; 旅程二④ the remix offer).
-- ``storyboard_ready`` — a film dock's deferred storyboard card landed
+- ``storyboard_ready`` — a film dock's deferred storyboard landed
   (``storyboard_dock.maybe_dock_deferred_storyboard``; ADR-120 就绪拍).
   The ONLY trigger whose speech condition IS a pending plan — the two
   pending-plan silence predicates invert for it (the dock's review hold
-  is the beat's reason; a settled dock silences it).
+  is the beat's reason; a settled dock silences it). 消息内分镜
+  (2026-10-16 呈现面翻案, ADR-125 修订): the message carries the
+  storyboard ITSELF as a code-rendered markdown table
+  (``render_storyboard_markdown`` — the resolved board the render
+  consumes, spliced between the speech's ready line and its closing
+  confirmation question at the ``[[STORYBOARD]]`` sentinel).
 
 The loop itself: the perception family's reads are the agent's eyes (look
 BEFORE speaking — read-before-speak is the reviewer's honesty base), and
@@ -67,10 +72,12 @@ from app.chat.service import (
     _get_or_create_project_conversation,
     _prefers_zh,
     finalize_bailed_runs,
+    latest_storyboard_block,
     stamp_suggestions,
 )
 from app.chat.turn_tools import CHAT_READ_TOOLS
 from app.metering import bind_conversation_turn, fold_conversation_usage
+from app.tools.film.storyboard import render_storyboard_markdown
 from app.models.schemas import Option, QuestionPayload, SuggestionItem, WrapUpArgs
 from app.models.tables import (
     Conversation,
@@ -504,15 +511,21 @@ async def run_trigger_turn(
                         + "\n".join(review_lines)
                     )
             elif trigger == TRIGGER_STORYBOARD_READY:
-                # ADR-120 就绪拍: the deferred draft's card landed under a
-                # film dock whose review hold is still open (the inverted
-                # admission above guarantees it). The card is the review
-                # surface; the speech only announces + invites.
+                # ADR-120 就绪拍 + 消息内分镜 (2026-10-16 呈现面翻案): the
+                # storyboard ITSELF rides the message as a code-rendered
+                # markdown table; the speech only frames it — a short
+                # ready line before, the confirmation question after, the
+                # sentinel between.
                 event_line = (
-                    "The storyboard review card for the user's pending film "
-                    "plan just landed in this conversation. Tell the user it "
-                    "is ready for their review — the card carries the scenes "
-                    "itself; once they approve, the work starts."
+                    "The storyboard for the user's pending film plan is "
+                    "ready. Frame it: write ONE short line telling the user "
+                    "the storyboard is ready for their review — never "
+                    "describe, excerpt or evaluate the scenes; the "
+                    "storyboard itself will be inserted between your lines "
+                    "— then the exact token [[STORYBOARD]] on its own line, "
+                    "then your closing line: one plain confirmation "
+                    "question, answerable in a word (once they say yes, "
+                    "the work starts)."
                 )
             else:
                 # craft_decompiled — the pinned case's skeleton is the
@@ -599,6 +612,20 @@ async def run_trigger_turn(
                     ref=ref,
                 )
                 return None
+            # 消息内分镜 splice (2026-10-16 呈现面翻案): the storyboard's
+            # markdown table joins the speech — between the ready line and
+            # the closing question at the sentinel; a missing sentinel or a
+            # vanished block degrades to table-first (the closing question
+            # still lands last), never to a dropped table.
+            if trigger == TRIGGER_STORYBOARD_READY:
+                block = await latest_storyboard_block(db, conversation_id)
+                if block is not None:
+                    md = render_storyboard_markdown(block.storyboard, block.pages)
+                    parts = speech.split("[[STORYBOARD]]", 1)
+                    if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+                        speech = f"{parts[0].strip()}\n\n{md}\n\n{parts[1].strip()}"
+                    else:
+                        speech = f"{md}\n\n{speech}"
             suggestions: list[SuggestionItem] = outcome.get("suggestions", [])
             if suggestions:
                 # 选项语法统一律 (ADR-081): the next-step labels dock as a

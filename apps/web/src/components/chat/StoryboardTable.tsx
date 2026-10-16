@@ -8,11 +8,12 @@ import type { StoryboardPayload } from "@/lib/chatStreamFrames"
 
 type Scene = StoryboardPayload["storyboard"]["scenes"][number]
 
-/** 分镜表消息块 (ADR-120 §1): the film plan's reviewable storyboard in the
- * message flow — one quiet table: 幕 × 形式 × 时长 × 屏上内容. Every fact
- * is the grounding-validated draft verbatim (世界自证 — the world shows
- * itself, never a code-composed summary). The latest version renders the
- * full table; superseded versions fold to a chip (PlanVersionChip 同律). */
+/** 分镜表消息块 (ADR-120 §1; 消息内分镜 2026-10-16 呈现面翻案): the block's
+ * resting pose is the quiet attachment CHIP for every version — the
+ * storyboard's review face is the trigger message's markdown table (the
+ * resolved board itself), and this chip expands to the structured table on
+ * tap (幕 × 形式 × 时长 × 屏上内容, the grounding-validated draft verbatim).
+ * Superseded versions never expand on their own (PlanVersionChip 同律). */
 
 const SCENE_TYPE_KEYS: Record<string, string> = {
   words: "words",
@@ -63,10 +64,8 @@ function sceneCopy(scene: Scene, hostFor: (page: number) => string | null): stri
 
 export function StoryboardTable({
   payload,
-  superseded,
 }: {
   payload: StoryboardPayload
-  superseded: boolean
 }) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
@@ -90,7 +89,7 @@ export function StoryboardTable({
   if (payload.music_mood) paramChips.push(t("storyboard.music", { mood: payload.music_mood }))
   if (payload.language) paramChips.push(payload.language.toUpperCase())
 
-  if (superseded && !expanded) {
+  if (!expanded) {
     return (
       <button
         type="button"
@@ -148,16 +147,14 @@ export function StoryboardTable({
           {t("storyboard.source", { pages: pages.join(" · ") })}
         </div>
       ) : null}
-      {superseded ? (
-        <button
-          type="button"
-          onClick={() => setExpanded(false)}
-          className="flex w-full items-center justify-center gap-1 px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent"
-        >
-          <ChevronDown className="size-3 rotate-180" />
-          {t("storyboard.collapse")}
-        </button>
-      ) : null}
+      <button
+        type="button"
+        onClick={() => setExpanded(false)}
+        className="flex w-full items-center justify-center gap-1 px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent"
+      >
+        <ChevronDown className="size-3 rotate-180" />
+        {t("storyboard.collapse")}
+      </button>
     </div>
   )
 }

@@ -158,6 +158,14 @@ async def run_worker() -> None:
         await reap_stale(db)
         await reap_stale_publications(db)
     await finalize_stuck_runs()
+    # 孤儿分镜 dock 扫尾 (2026-10-16): a restart kills in-flight deferred
+    # drafts; re-fire the seat for film-carrying pending plans (world-read
+    # gates make a healthy dock's fire a no-op).
+    from app.chat.storyboard_dock import sweep_orphaned_storyboard_docks
+
+    swept = await sweep_orphaned_storyboard_docks()
+    if swept:
+        logger.info("storyboard_dock_sweep_fired", projects=swept)
 
     while True:
         try:

@@ -4156,13 +4156,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             {m.candidates ? (
               <CandidateSurfaceCard surface={m.candidates} />
             ) : null}
-            {/* 分镜表 (ADR-120 §1): the film plan's reviewable table —
-                replayed from the block row or live-pushed, same seat. */}
+            {/* 分镜附件 chip (消息内分镜 2026-10-16 呈现面翻案): the
+                review face is the trigger message's markdown table; the
+                block rests as a chip that expands to the structured table
+                on tap — replayed from the block row or live-pushed, same
+                seat. */}
             {m.storyboard ? (
-              <StoryboardTable
-                payload={m.storyboard.payload}
-                superseded={m.storyboard.superseded}
-              />
+              <StoryboardTable payload={m.storyboard.payload} />
             ) : null}
           </>
         )}

@@ -112,26 +112,36 @@ async def land_storyboard_block(
     return block_message
 
 
-async def _block_newer_than_dock(
-    db: AsyncSession, conversation_id: UUID, dock_created_at
+async def _row_newer_than_dock(
+    db: AsyncSession, conversation_id: UUID, dock_created_at, intent_type: str
 ) -> Message | None:
-    """The storyboard block row validating THIS dock (None = the review is
-    still owed). The dock's question row re-births on every re-dock
-    (sync_plan_question supersedes in place), so 'newer than the dock' is
-    the exact owing predicate — an older dock's block never validates a
-    revised plan."""
+    """The newest intent-typed row validating/settling THIS dock (None =
+    the review is still owed). The dock's question row re-births on every
+    re-dock (sync_plan_question supersedes in place), so 'newer than the
+    dock' is the exact owing predicate — an older dock's row never
+    validates a revised plan."""
     return (
         await db.execute(
             select(Message)
             .where(
                 Message.conversation_id == conversation_id,
                 Message.created_at >= dock_created_at,
-                Message.intent["type"].astext == STORYBOARD_BLOCK_TYPE,
+                Message.intent["type"].astext == intent_type,
             )
             .order_by(Message.seq.desc())
             .limit(1)
         )
     ).scalar_one_or_none()
+
+
+async def _block_newer_than_dock(
+    db: AsyncSession, conversation_id: UUID, dock_created_at
+) -> Message | None:
+    """The storyboard block row validating THIS dock (None = the review is
+    still owed — ``_row_newer_than_dock`` at the block type)."""
+    return await _row_newer_than_dock(
+        db, conversation_id, dock_created_at, STORYBOARD_BLOCK_TYPE
+    )
 
 
 async def film_start_block(
@@ -233,6 +243,17 @@ async def maybe_dock_deferred_storyboard(project_id: UUID) -> None:
         assert question is not None  # is_pending_plan guarantees the row
         if await _block_newer_than_dock(db, conversation_id, question.created_at) is not None:
             return
+        # The exhaustion row settles THIS dock too (法2): without this gate
+        # a stray capture-complete fire (or every boot sweep) would re-draft
+        # a draft the model already failed — a rephrase re-docks the
+        # question row (newer created_at), which is the ONE lawful re-open.
+        if (
+            await _row_newer_than_dock(
+                db, conversation_id, question.created_at, STORYBOARD_DRAFT_FAILED_TYPE
+            )
+            is not None
+        ):
+            return
         film_params = dict(film_task.get("params") or {})
         from app.tools.film.storyboard import draft_film_storyboard  # deferred: tool seam
 
@@ -312,3 +333,35 @@ async def _land_draft_failure_row(
         content,
         intent={"type": STORYBOARD_DRAFT_FAILED_TYPE},
     )
+
+
+async def sweep_orphaned_storyboard_docks() -> int:
+    """Boot sweep (孤儿 dock 扫尾, 2026-10-16 b1d6403b 取证): a process
+    restart kills an in-flight deferred draft mid-flight — the dock then
+    waits forever (no block, no failure row, and no capture event left to
+    re-fire the seat). At worker boot, re-fire the deferred check for
+    every project whose pending plan still carries a film task; every gate
+    inside the seat is a world read (pending plan / no block / no failure
+    row / captures drained), so a healthy dock's sweep fire is a silent
+    no-op. Returns the number of candidate projects fired."""
+    from app.models.database import AsyncSessionLocal  # deferred: worker seat
+
+    async with AsyncSessionLocal() as db:
+        project_ids = (
+            (
+                await db.execute(
+                    select(Project.id).where(
+                        Project.pending_brief.is_not(None),
+                        text(
+                            "pending_brief -> 'intent' -> 'tasks' "
+                            "@> '[{\"tool\": \"launch_film\"}]'::jsonb"
+                        ),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    for pid in project_ids:
+        fire_deferred_storyboard_check(UUID(str(pid)))
+    return len(project_ids)
