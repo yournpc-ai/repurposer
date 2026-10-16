@@ -122,16 +122,26 @@ else
   echo "Postgres does not appear to be available — skipping migrations."
 fi
 
+# --- per-service log files --------------------------------------------------
+# 2026-10-16 取证教训: 终端 scrollback 不是台账——一次 37 分钟的链上失败
+# (film 分镜起草穷举) 的 violation codes 随窗口关闭灭失。每个服务 tee 一份
+# 到 /tmp,启动时截断 (每 session 新鲜,不无限增长);终端输出不变。
+LOG_API=/tmp/rep-api.log
+LOG_WORKER=/tmp/rep-worker.log
+LOG_RENDER=/tmp/rep-render.log
+LOG_WEB=/tmp/rep-web.log
+: > "$LOG_API"; : > "$LOG_WORKER"; : > "$LOG_RENDER"; : > "$LOG_WEB"
+
 # --- backend ---------------------------------------------------------------
 echo "Starting API on http://localhost:8000 ..."
-( cd "$ROOT/apps/api" && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 ) &
+( cd "$ROOT/apps/api" && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 2>&1 | tee "$LOG_API" ) &
 API_PID=$!
 
 # --- worker ----------------------------------------------------------------
 # Processes the Postgres-backed job queue (asset processing + generation) in a
 # separate process so heavy jobs don't compete with the API's online requests.
 echo "Starting background worker ..."
-( cd "$ROOT/apps/api" && uv run python -m app.worker ) &
+( cd "$ROOT/apps/api" && uv run python -m app.worker 2>&1 | tee "$LOG_WORKER" ) &
 WORKER_PID=$!
 
 # Wait for the API to finish startup before launching the frontend, otherwise
@@ -167,12 +177,12 @@ elif [ "${RENDER_PROXY:-http://127.0.0.1:6152}" != "off" ]; then
 else
   echo "  render proxy: OFF (RENDER_PROXY=off)"
 fi
-( cd "$ROOT/apps/render" && env "${RENDER_PROXY_ENV[@]}" pnpm dev ) &
+( cd "$ROOT/apps/render" && env "${RENDER_PROXY_ENV[@]}" pnpm dev 2>&1 | tee "$LOG_RENDER" ) &
 RENDER_PID=$!
 
 # --- frontend --------------------------------------------------------------
 echo "Starting web app on http://localhost:3000 ..."
-( cd "$ROOT/apps/web" && pnpm dev ) &
+( cd "$ROOT/apps/web" && pnpm dev 2>&1 | tee "$LOG_WEB" ) &
 WEB_PID=$!
 
 # --- startup liveness gate ---------------------------------------------------
