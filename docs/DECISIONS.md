@@ -2912,7 +2912,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 **Decision**:
 
 1. **分镜表 = 消息流里的一种消息块**（`intent.type="storyboard"`，candidates_log 先例），永不进确认 dock。逐版留痕：每次修订出新版行，旧版折叠 chip（PlanVersionChip 同律）。
-2. **计划期起草**：`_present_plan` 检出 film 链即起草——编排环一座（`orchestrate_storyboard()`：storyboarder agent + grounding validator + 有界打回），node 与计划期共享，禁第二条编排链（ADR-028）。计划期编排 = conversation 层计量不收费（ADR-117 §5）。
+2. **分镜起草**（座位经 ADR-125 修订为迟延座：永不在 chat 回合内起草）：编排环一座（`orchestrate_storyboard()`：storyboarder agent + grounding validator + 有界打回），计划期与 node 共享，禁第二条编排链（ADR-028）。计划期编排 = conversation 层计量不收费（ADR-117 §5）。
 3. **修订复用 dock 座位**：每次 re-dock 重起草（修订言语入 assemble），version = 会话内分镜行数 + 1；E1 修订对象 = 分镜草案，禁整片重跑。
 4. **confirmed_storyboard 直渲**：开工（口头 yes / Start / auto 道同一机器）把最新分镜行 stamp 进 `run.context.confirmed_storyboard`（confirmed_scope 同座）；`LaunchFilm.run` 防御性 validate——通过则跳过编排直渲，世界漂移失效则重编排并 log（confirmed_storyboard_stale），永不用废分镜出片。
 5. **品类措辞**：「官网介绍短片」，非「短视频」——capability menu / echo 引导同批换；参数行（画幅/配音/配乐）随 E2/E3 落地才上 UI，不卖未建能力。
@@ -3009,3 +3009,20 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 **Consequences**: 同一 URL 在项目内只抓一次（讨论链接与素材链接收口同一读本）；「读本采集于 N 天前」随观察文本上行，世界自证。讨论链接不落画布的法条不动（读本行不是素材，无资产节点）。`page_readings` 表归属登记 = MODULE_ARCHITECTURE §4。
 
 **Related**: ADR-077（读工具纪律 carve-out 由本条修订）/ ADR-121 B4（web_page 采集链——读本写回的第二写口）
+
+## ADR-125: film 分镜统一迟延——hold/draft 解耦 / 过目硬闸 / 就绪拍
+
+**Status**: Decided (2026-10-16)
+
+**Context**: ADR-120 的计划期起草在 dock 回合内同步跑编排环（多模态重调用 × 有界打回），三罪：dock 回合被起草时长绑架（S11 取证：capture 落定于 dock 后 ~33s，回合内起草必然对零页起跑）；起草期间用户无任何可看世界；起草失败语义无处安放。zymix 取证（2026-10-15）：迟延落地后 37 分钟起草期页面假死（轮询保险丝 300s < 起草包络）+ 落地零言语 + 双层重试（dock 层 2 × 候选层 3）叠加失控。
+
+**Decision**:
+
+1. **hold/draft 解耦**：dock 时刻只 stamp `storyboard_review` 保持（hold-only，`stamp_film_hold`），起草永不在 chat 回合内——统一迟延座 = `storyboard_dock.maybe_dock_deferred_storyboard`（worker 侧 fire-and-forget，先等抓取排干，advisory lock 跨进程单飞，一切闸位 = 世界读，过期 fire 静默 no-op）。
+2. **过目硬闸**：块未落地不开工——`film_start_block` 只认本 dock 之后落地的分镜块；唯一逃生门 = 用户明示放弃过目（`start_run` 的 `skip_storyboard_review`），系统永不代决，模型永不主动提议 waiver。
+3. **有界打回单座**：候选层（`orchestrate_storyboard` 的 1+MAX_REWRITES）是唯一重试座位；dock 层不整稿重试（双层叠加 = 乘法失控）。修复回声携带最近邻 manifest 候选行（打地鼠取证：只说什么失败、不给候选 = 盲改）。穷尽落代码拼装诚实失败行（不借 LLM 之声），hold 不解除，合法出路两条 = 换说法重试 / 明示放弃。
+4. **就绪拍**：块落地发 `storyboard_ready` trigger——唯一以「待决计划存在」为言语条件的事件（两处 pending-plan 沉默谓词对它反转；dock 已结算 = 静默）。前端零新面：watch-window 轮询通吃；**轮询续航 = 阶段最坏时长包络**（保险丝短于包络 = 假死，此律已入 MODULE_ARCHITECTURE §6 五座位清单）。
+
+**Consequences**: dock 即时到达；起草期有 beats + 状态行叙事；落地 = 一拍言语 + 卡；失败 = 诚实行 + 两条合法出路。分镜阶段成为「新世界事件五座位清单」的原型案例。
+
+**Related**: ADR-120（分镜核对坐消息流——起草座位由本条修订）/ ADR-077（trigger 白名单扩名单）/ ADR-117（确认档与守卫线）/ ADR-093（言语 = LLM 之声；穷举诚实失败行 = 法2 的代码拼装例外）
