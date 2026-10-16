@@ -347,13 +347,16 @@ async def sweep_orphaned_storyboard_docks() -> int:
     from app.models.database import AsyncSessionLocal  # deferred: worker seat
 
     async with AsyncSessionLocal() as db:
+        # pending_brief is a generic JSON column (无 @> 操作符——同
+        # messages.intent 的 astext 教训): cast to jsonb for the
+        # containment probe.
         project_ids = (
             (
                 await db.execute(
                     select(Project.id).where(
                         Project.pending_brief.is_not(None),
                         text(
-                            "pending_brief -> 'intent' -> 'tasks' "
+                            "pending_brief::jsonb -> 'intent' -> 'tasks' "
                             "@> '[{\"tool\": \"launch_film\"}]'::jsonb"
                         ),
                     )
