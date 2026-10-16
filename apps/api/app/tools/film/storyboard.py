@@ -1,28 +1,43 @@
-"""launch_film node + film storyboard agent + grounding validator (MG D2).
+"""launch_film node + film storyboard agent + citation resolver + grounding
+validator (MG D2).
 
-One file, three layers:
+One file, four layers:
 
-1. THE VALIDATOR (pure) — the deterministic gate between the LLM's storyboard
-   and the render contract. Every on-screen string must trace to the captured
-   page's research manifest (TEXT_NOT_GROUNDED); camera focus bounds
-   (INVALID_FOCUS); the scene vocabulary is closed (UNSUPPORTED_SCENE);
-   duration intents and content bounds (DURATION_INVALID /
-   CONSTRAINT_VIOLATION). Bounded rewrite: the node offers the model at most
-   MAX_REWRITES repair rounds (3 candidates total); exhaustion settles the
-   node FAILED with the structured codes on ``spec.failure`` — never a blind
-   retry (each rewrite rides the violation echo).
+1. THE CITATION RESOLVER (pure, 行 ID 化 2026-10-16 用户拍板) — the LLM
+   never WRITES an on-screen string: its draft cites numbered manifest
+   lines (CopyRef), and code resolves each citation into the final string
+   (verbatim line, word-boundary head/tail fit, accent wrap). The old
+   free-text grounding failure family (TEXT_NOT_GROUNDED whack-a-mole —
+   the model inventing connective copy scene after scene) is impossible by
+   construction; the only citation errors are an unknown line id, a missed
+   accent, or a ui caption citing another page's line (INVALID_COPY_REF).
+   The RESOLVED FilmStoryboard (real strings) stays the persisted and
+   rendered shape — block, film-spec, markdown and renderer never see a
+   reference.
 
-2. THE ALLOCATOR (pure) — deterministic frame assignment. The LLM writes a
-   bounded seconds INTENT per scene; code owns integer frames (fixed 30 fps,
-   structural minimums — the divider roll cadence, the end-card floor — the
-   total is Σ scene frames). The renderer only sums.
+2. THE VALIDATOR (pure) — the deterministic gate between the resolved
+   storyboard and the render contract: resolved strings re-checked against
+   the manifest (TEXT_NOT_GROUNDED — passes by construction on the draft
+   path; the seat that keeps a hand-built or stale confirmed storyboard
+   honest), camera focus bounds (INVALID_FOCUS), the closed scene
+   vocabulary (UNSUPPORTED_SCENE), duration intents and content bounds
+   (DURATION_INVALID / CONSTRAINT_VIOLATION). Bounded rewrite: the node
+   offers the model at most MAX_REWRITES repair rounds (3 candidates
+   total); exhaustion settles the node FAILED with the structured codes on
+   ``spec.failure`` — never a blind retry (each rewrite rides the
+   violation echo).
 
-3. THE NODE — loads the project's READY web_page assets (the birthplace
+3. THE ALLOCATOR (pure) — deterministic frame assignment. The LLM writes a
+   bounded seconds INTENT per scene; code owns integer frames (fixed 30
+   fps, structural minimums — the divider roll cadence, the end-card
+   floor — the total is Σ scene frames). The renderer only sums.
+
+4. THE NODE — loads the project's READY web_page assets (the birthplace
    ∀-check gates presence, the claim gate gates processing; a mid-run
    capture failure surfaces here as an honest error), drives the bounded
-   loop, births the film output (``render_spec.family == "film"``) and pends
-   its render through the ONE seat (``pend_outputs_for_render``). No second
-   orchestration chain (ADR-028/029).
+   loop, births the film output (``render_spec.family == "film"``) and
+   pends its render through the ONE seat (``pend_outputs_for_render``). No
+   second orchestration chain (ADR-028/029).
 
 Grounding normalization: lowercase + every non-word char stripped (markdown
 emphasis ``*``, punctuation, whitespace) — a screen string hits the manifest
@@ -37,11 +52,11 @@ import difflib
 import re
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import structlog
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import bindparam, func, select, text as _text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,7 +65,19 @@ from app.metering import record_media_usage
 from app.models.schemas import (
     AssetStatus,
     AssetType,
+    FilmCaption,
+    FilmFocus,
+    FilmPlateCard,
+    FilmScene,
+    FilmSceneDivider,
+    FilmSceneEnd,
+    FilmSceneHero,
+    FilmScenePlate,
+    FilmSceneReveal,
+    FilmSceneUi,
+    FilmSceneWords,
     FilmStoryboard,
+    FilmStoryboardTheme,
     MediaInput,
     RenderStatus,
     ShotRef,
@@ -154,6 +181,11 @@ TEXT_NOT_GROUNDED = "TEXT_NOT_GROUNDED"
 INVALID_FOCUS = "INVALID_FOCUS"
 DURATION_INVALID = "DURATION_INVALID"
 CONSTRAINT_VIOLATION = "CONSTRAINT_VIOLATION"
+# 行 ID 化 (2026-10-16): a citation that names no manifest line, an accent
+# that misses its resolved text, or a ui caption citing another page's
+# line. The draft path's ONLY grounding-adjacent failure family — the old
+# free-text whack-a-mole is impossible by construction.
+INVALID_COPY_REF = "INVALID_COPY_REF"
 
 
 class FilmStoryboardRejected(Exception):
@@ -226,6 +258,335 @@ class StoryboardPage:
     screenshot_key: str | None
     host: str  # display host baked into the ui/end url fields (code's seat)
     shots: tuple[ShotRef, ...] = ()
+
+
+# ---------------------------------------------------------------------------
+# The citation layer (行 ID 化, 2026-10-16 用户拍板): the LLM never WRITES an
+# on-screen string — it CITES a numbered manifest line. Code resolves the
+# citation into the final string (verbatim, word-boundary fit, accent wrap),
+# so the grounding failure family (TEXT_NOT_GROUNDED whack-a-mole) is
+# impossible by construction on the draft path. The resolved FilmStoryboard
+# (real strings) stays the persisted/rendered shape — block, spec, markdown
+# and renderer are untouched.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ManifestLine:
+    """One quotable line of the captured manifest. ``id`` is 1-based and
+    globally unique across the presented pages (the model cites one number,
+    never a page+line pair); ``kind`` preserves the line's semantics (a
+    button label reads differently from a paragraph)."""
+
+    id: int
+    page: int
+    kind: str  # title / description / h1 / h2 / h3 / button / link / paragraph
+    text: str
+
+
+def build_line_manifest(pages: list[StoryboardPage]) -> list[ManifestLine]:
+    """The citation universe, in presentation order. The kind sequence
+    mirrors the legacy grounding corpus (title → description → h1 → h2 → h3
+    → buttons → links → paragraphs) so the resolved strings trace exactly
+    the lines the old substring validator accepted."""
+    lines: list[ManifestLine] = []
+    next_id = 1
+    for page_idx, p in enumerate(pages):
+        r = p.research
+        groups: list[tuple[str, list[str]]] = [
+            ("title", [r.title] if r.title else []),
+            ("description", [r.description] if r.description else []),
+            ("h1", list(r.h1)),
+            ("h2", list(r.h2)),
+            ("h3", list(r.h3)),
+            ("button", list(r.buttons)),
+            ("link", list(r.links)),
+            ("paragraph", list(r.paragraphs)),
+        ]
+        for kind, items in groups:
+            for item in items:
+                if _norm(item):
+                    lines.append(ManifestLine(next_id, page_idx, kind, item.strip()))
+                    next_id += 1
+    return lines
+
+
+class CopyRef(BaseModel):
+    """One on-screen string, CITED never written. ``line`` names a manifest
+    line id; ``fit`` governs over-cap lines ("full" = the line must fit its
+    slot as-is, "head"/"tail" = code trims the leading/trailing segment at
+    a word boundary — the model never counts characters); ``accent`` names
+    a substring of the RESOLVED text to wrap in emphasis marks (null = no
+    accent)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    line: int
+    fit: Literal["full", "head", "tail"] = "full"
+    accent: str | None = None
+
+
+class DraftCaption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    at: float
+    text: CopyRef
+
+
+class DraftPlateCard(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    big: CopyRef | None = None
+    label: CopyRef
+
+
+class DraftSceneWords(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["words"]
+    seconds: float
+    dark: bool
+    lines: list[CopyRef] = Field(min_length=1)
+    narration: str | None = None
+
+
+class DraftSceneHero(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["hero"]
+    seconds: float
+    word: CopyRef
+    sub: CopyRef
+    narration: str | None = None
+
+
+class DraftSceneUi(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["ui"]
+    seconds: float
+    page: int
+    shot: int = 0
+    frame: bool = True
+    focuses: list[FilmFocus] = Field(min_length=1)
+    captions: list[DraftCaption] = Field(default_factory=list)
+    narration: str | None = None
+
+
+class DraftSceneDivider(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["divider"]
+    seconds: float
+    label: CopyRef
+    roll: list[CopyRef] = Field(min_length=1)
+    narration: str | None = None
+
+
+class DraftScenePlate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["plate"]
+    seconds: float
+    title: CopyRef
+    cards: list[DraftPlateCard] = Field(min_length=2, max_length=4)
+    backdrop: Literal["aurora", "dunes", "mist", "tide"] = "mist"
+    narration: str | None = None
+
+
+class DraftSceneReveal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["reveal"]
+    seconds: float
+    lead: CopyRef
+    word: CopyRef
+    sub: CopyRef
+    narration: str | None = None
+
+
+class DraftSceneEnd(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["end"]
+    seconds: float
+    name: CopyRef
+    tagline: CopyRef
+    narration: str | None = None
+
+
+DraftScene = Annotated[
+    DraftSceneWords
+    | DraftSceneHero
+    | DraftSceneUi
+    | DraftSceneDivider
+    | DraftScenePlate
+    | DraftSceneReveal
+    | DraftSceneEnd,
+    Field(discriminator="type"),
+]
+
+
+class DraftStoryboard(BaseModel):
+    """The storyboarder's output schema — the citation-world twin of
+    FilmStoryboard (every on-screen slot is a CopyRef). Never persisted:
+    ``resolve_draft`` turns it into the resolved FilmStoryboard, which is
+    the block/spec/markdown shape. ``name``/``language`` keep the resolved
+    schema's null-read tolerance (打字机牙①)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    theme: FilmStoryboardTheme | None = None
+    language: str | None = None
+    scenes: list[DraftScene] = Field(min_length=1)
+
+
+def _fit_to_cap(text: str, cap: int, fit: str) -> str:
+    """Apply a ref's fit to its slot cap. "full" returns the line as-is
+    (an over-cap line then surfaces as a CONSTRAINT_VIOLATION downstream —
+    the echo tells the model to fit or cite a shorter line). "head"/"tail"
+    trim at a word boundary when one exists inside the window (CJK and
+    single-word lines hard-cut at the cap)."""
+    text = text.strip()
+    if len(text) <= cap or fit == "full":
+        return text
+    if fit == "head":
+        cut = text[:cap]
+        sp = cut.rfind(" ")
+        return (cut[:sp] if sp > 0 else cut).strip()
+    cut = text[-cap:]
+    sp = cut.find(" ")
+    return (cut[sp + 1:] if 0 < sp < len(cut) - 1 else cut).strip()
+
+
+def _apply_accent(text: str, accent: str) -> str | None:
+    """Wrap the accent substring's first occurrence (case-insensitive) in
+    emphasis marks. None = the accent is absent from the resolved text —
+    a citation error the echo names precisely."""
+    if not accent.strip():
+        return None
+    idx = text.lower().find(accent.strip().lower())
+    if idx < 0:
+        return None
+    return f"{text[:idx]}*{text[idx:idx + len(accent.strip())]}*{text[idx + len(accent.strip()):]}"
+
+
+def resolve_draft(
+    draft: DraftStoryboard,
+    lines: list[ManifestLine],
+    pages: list[StoryboardPage],
+) -> tuple[FilmStoryboard | None, list[FilmViolation]]:
+    """Draft (citations) → resolved storyboard (strings). Every citation
+    error is a violation with a precise echo (unknown line id, an accent
+    that misses the resolved text, a ui caption citing another page's
+    line); a clean resolution returns the resolved board, which then faces
+    ``validate_storyboard`` for caps/structure/camera like always. The
+    grounding check there passes by construction — resolved strings are
+    built FROM manifest lines."""
+    by_id = {l.id: l for l in lines}
+    violations: list[FilmViolation] = []
+
+    def resolve(
+        ref: CopyRef, cap: int, where: str, *, page: int | None = None
+    ) -> str:
+        line = by_id.get(ref.line)
+        if line is None:
+            violations.append(
+                FilmViolation(
+                    INVALID_COPY_REF,
+                    f"{where}: line L{ref.line} names no manifest line",
+                )
+            )
+            return ""
+        if page is not None and line.page != page:
+            violations.append(
+                FilmViolation(
+                    INVALID_COPY_REF,
+                    f"{where}: L{ref.line} belongs to page {line.page} — a ui caption cites only the page it shows (page {page})",
+                )
+            )
+        text = _fit_to_cap(line.text, cap, ref.fit)
+        if ref.accent is not None:
+            accented = _apply_accent(text, ref.accent)
+            if accented is None:
+                violations.append(
+                    FilmViolation(
+                        INVALID_COPY_REF,
+                        f"{where}: accent «{ref.accent[:30]}» is not in the resolved «{text[:40]}»",
+                    )
+                )
+            else:
+                text = accented
+        return text
+
+    resolved_scenes: list[FilmScene] = []
+    for idx, scene in enumerate(draft.scenes):
+        where = f"scene[{idx}]({scene.type})"
+        cap = lambda slot: TEXT_CAPS.get((scene.type, slot), 90)  # noqa: E731
+        base = {"seconds": scene.seconds, "narration": scene.narration}
+        if scene.type == "words":
+            resolved_scenes.append(FilmSceneWords(
+                type="words", **base, dark=scene.dark,
+                lines=[resolve(r, cap("lines"), f"{where}.lines") for r in scene.lines],
+            ))
+        elif scene.type == "hero":
+            resolved_scenes.append(FilmSceneHero(
+                type="hero", **base,
+                word=resolve(scene.word, cap("word"), f"{where}.word"),
+                sub=resolve(scene.sub, cap("sub"), f"{where}.sub"),
+            ))
+        elif scene.type == "ui":
+            resolved_scenes.append(FilmSceneUi(
+                type="ui", **base, page=scene.page, shot=scene.shot,
+                frame=scene.frame, focuses=scene.focuses,
+                captions=[
+                    FilmCaption(at=c.at, text=resolve(c.text, cap("captions"), f"{where}.captions", page=scene.page))
+                    for c in scene.captions
+                ],
+            ))
+        elif scene.type == "divider":
+            resolved_scenes.append(FilmSceneDivider(
+                type="divider", **base,
+                label=resolve(scene.label, cap("label"), f"{where}.label"),
+                roll=[resolve(r, cap("roll"), f"{where}.roll") for r in scene.roll],
+            ))
+        elif scene.type == "plate":
+            resolved_scenes.append(FilmScenePlate(
+                type="plate", **base, backdrop=scene.backdrop,
+                title=resolve(scene.title, cap("title"), f"{where}.title"),
+                cards=[
+                    FilmPlateCard(
+                        big=(resolve(c.big, cap("big"), f"{where}.cards.big") if c.big else None),
+                        label=resolve(c.label, cap("label"), f"{where}.cards.label"),
+                    )
+                    for c in scene.cards
+                ],
+            ))
+        elif scene.type == "reveal":
+            resolved_scenes.append(FilmSceneReveal(
+                type="reveal", **base,
+                lead=resolve(scene.lead, cap("lead"), f"{where}.lead"),
+                word=resolve(scene.word, cap("word"), f"{where}.word"),
+                sub=resolve(scene.sub, cap("sub"), f"{where}.sub"),
+            ))
+        elif scene.type == "end":
+            resolved_scenes.append(FilmSceneEnd(
+                type="end", **base,
+                name=resolve(scene.name, cap("name"), f"{where}.name"),
+                tagline=resolve(scene.tagline, cap("tagline"), f"{where}.tagline"),
+            ))
+    if violations:
+        return None, violations
+    return (
+        FilmStoryboard(
+            name=draft.name,
+            theme=draft.theme,
+            language=draft.language,
+            scenes=resolved_scenes,
+        ),
+        [],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -738,6 +1099,58 @@ def build_film_spec(
     return spec
 
 
+def render_storyboard_markdown(
+    storyboard: FilmStoryboard, hosts: list[str]
+) -> str:
+    """The review markdown (2026-10-16 消息内分镜拍板, ADR-125 呈现面翻案):
+    a deterministic projection of the RESOLVED storyboard — the same object
+    the spec builder consumes, so the storyboard the user reads IS the
+    storyboard that renders (展示=执行, never a second生成逻辑). Code-composed
+    world content (the estimate tail's doctrine: real facts from the world's
+    own records, never the model's voice); the ready speech around it stays
+    the LLM's. ``hosts`` = the block's reviewed-page host line. Scene type
+    names stay the honest parametric labels; ``*word*`` accent markers
+    render as emphasis in markdown — the same fact both ways."""
+    total = sum(s.seconds for s in storyboard.scenes)
+    head_bits = [f"{total:.0f}s", f"{len(storyboard.scenes)} scenes", *hosts]
+    head = ("**" + storyboard.name + "** · " if storyboard.name else "") + " · ".join(head_bits)
+
+    def scene_lines(i: int, s: FilmScene) -> list[str]:
+        out = [f"{i}. **{s.type}** · {s.seconds:g}s"]
+        body: list[str] = []
+        if s.type == "words":
+            body.extend(s.lines)
+            if s.dark:
+                out[0] += " · dark"
+        elif s.type == "hero":
+            body.extend([f"**{s.word}**", s.sub])
+        elif s.type == "ui":
+            host = hosts[s.page] if 0 <= s.page < len(hosts) else f"page {s.page}"
+            out[0] += f" · {host} · shot {s.shot}{' · browser frame' if s.frame else ' · full-bleed'}"
+            body.extend(f"caption: {c.text}" for c in s.captions)
+        elif s.type == "divider":
+            body.append(s.label)
+            body.append(" · ".join(s.roll))
+        elif s.type == "plate":
+            body.append(s.title)
+            body.extend(
+                f"{c.big} — {c.label}" if c.big else c.label for c in s.cards
+            )
+        elif s.type == "reveal":
+            body.extend([s.lead, f"**{s.word}**", s.sub])
+        elif s.type == "end":
+            body.extend([s.name, s.tagline])
+        if s.narration:
+            body.append(f"VO: {s.narration}")
+        out.extend(f"  {line}" for line in body)
+        return out
+
+    lines = [head, ""]
+    for i, s in enumerate(storyboard.scenes, 1):
+        lines.extend(scene_lines(i, s))
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # The storyboard agent
 # ---------------------------------------------------------------------------
@@ -765,15 +1178,16 @@ def _assemble(
     )
 
 
-film_storyboarder = Agent[FilmStoryboard](
+film_storyboarder = Agent[DraftStoryboard](
     name="film_storyboarder",
     prompt="film_storyboard.j2",
-    schema=FilmStoryboard,
+    schema=DraftStoryboard,
     system=(
         "You are a film director cutting a polished intro film from a captured "
-        "web page. Every word on screen is quoted or trimmed from the page's "
-        "own copy — you never invent claims. You write a storyboard; the "
-        "system allocates frames and renders it."
+        "web page. Every word on screen is cited from the page's own copy by "
+        "line number — you never write screen strings. You compose the "
+        "narration and the shot plan; the system resolves citations, "
+        "allocates frames and renders."
     ),
     assemble=_assemble,
     temperature=0.5,
@@ -789,9 +1203,12 @@ film_storyboarder = Agent[FilmStoryboard](
 )
 
 
-def page_prompt_dict(page: StoryboardPage, index: int) -> dict[str, Any]:
-    """One page's prompt block (the manifest IS the grounding universe —
-    the j2 prints it verbatim). ``shots`` = the captured views the ui scene
+def page_prompt_dict(
+    page: StoryboardPage, index: int, lines: list[ManifestLine]
+) -> dict[str, Any]:
+    """One page's prompt block. ``lines`` = the page's slice of the global
+    citation manifest (行 ID 化 — the j2 prints them numbered; the model
+    cites ids, never strings). ``shots`` = the captured views the ui scene
     may pick from (0 = the fold; ADR-121 B1)."""
     r = page.research
     return {
@@ -799,14 +1216,12 @@ def page_prompt_dict(page: StoryboardPage, index: int) -> dict[str, Any]:
         "url": r.url,
         "host": page.host,
         "title": r.title,
-        "description": r.description,
-        "h1": r.h1,
-        "h2": r.h2,
-        "h3": r.h3,
-        "buttons": r.buttons,
-        "links": r.links,
-        "paragraphs": r.paragraphs,
         "has_screenshot": bool(page.shots) or page.screenshot_key is not None,
+        "lines": [
+            {"id": l.id, "kind": l.kind, "text": l.text}
+            for l in lines
+            if l.page == index
+        ],
         "shots": [
             {
                 "index": i,
@@ -918,8 +1333,12 @@ async def orchestrate_storyboard(
     Raises ``FilmStoryboardRejected`` on exhaustion (the caller stamps its
     own terminal); ``LLMSchemaError`` propagates (the two-strike schema
     terminal). ``on_reject(attempt, violations, feedback)`` is the node's
-    logging hook."""
-    prompt_pages = [page_prompt_dict(p, i) for i, p in enumerate(pages)]
+    logging hook. Each candidate is a DraftStoryboard (citations); the loop
+    resolves it to the persisted FilmStoryboard shape before the validator
+    runs (行 ID 化 — resolution errors are the only grounding-adjacent
+    family left)."""
+    lines = build_line_manifest(pages)
+    prompt_pages = [page_prompt_dict(p, i, lines) for i, p in enumerate(pages)]
     violations: list[FilmViolation] = []
     feedback: str | None = None
     for attempt in range(1 + MAX_REWRITES):
@@ -931,9 +1350,11 @@ async def orchestrate_storyboard(
             page_images=page_images,
             repair_feedback=feedback,
         )
-        violations = validate_storyboard(candidate, pages)
-        if not violations:
-            return candidate
+        resolved, violations = resolve_draft(candidate, lines, pages)
+        if resolved is not None:
+            violations = validate_storyboard(resolved, pages)
+            if not violations:
+                return resolved
         feedback = format_violations(violations)
         if on_reject is not None:
             on_reject(attempt, violations, feedback)

@@ -1,10 +1,10 @@
 {# film_storyboard.j2 — the launch film's storyboard call (tools/film/storyboard.py).
-   One law one seat: this file carries ONLY the output schema, the binding
-   numeric bounds, and the grounding mechanics. Craft conventions (pacing,
-   scene semantics, naming) live in the launch-film skill pack ({{ packs }}).
-   Mirror contract: the validator constants in tools/film/storyboard.py
-   enforce every bound stated here — a bound changed here must change there
-   in the same batch. #}
+   One law one seat: this file carries ONLY the citation mechanics, the output
+   schema, and the binding numeric bounds. Craft conventions (pacing, scene
+   semantics, naming) live in the launch-film skill pack ({{ packs }}).
+   Mirror contract: the resolver + validator constants in
+   tools/film/storyboard.py enforce every bound stated here — a bound changed
+   here must change there in the same batch. #}
 You are storyboarding a polished intro film for the page(s) below.
 
 ## The captured page(s) — your ONLY ground truth
@@ -13,22 +13,10 @@ You are storyboarding a polished intro film for the page(s) below.
 ---
 ### Page {{ page.index }}: {{ page.title or page.host }}
 URL: {{ page.url }}
-{% if page.description %}Description: {{ page.description }}
-{% endif %}
-{% if page.h1 %}H1: {{ page.h1 | join(' · ') }}
-{% endif %}
-{% if page.h2 %}H2: {{ page.h2 | join(' · ') }}
-{% endif %}
-{% if page.h3 %}H3: {{ page.h3 | join(' · ') }}
-{% endif %}
-{% if page.buttons %}Buttons: {{ page.buttons | join(' · ') }}
-{% endif %}
-{% if page.links %}Links: {{ page.links | join(' · ') }}
-{% endif %}
-{% if page.paragraphs %}Paragraphs:
-{% for p in page.paragraphs %}- {{ p }}
+The page's quotable copy, numbered (you CITE these lines by id — you never
+write an on-screen string yourself):
+{% for l in page.lines %}- L{{ l.id }} [{{ l.kind }}] {{ l.text }}
 {% endfor %}
-{% endif %}
 {% if page.has_screenshot %}(This page's fold screenshot — shot 0 — is attached; the list below names every captured view a ui scene may pick.)
 {% if page.shots %}Captured views (a ui scene picks ONE via `shot`, default 0):
 {% for s in page.shots %}- shot {{ s.index }}: {{ s.heading }}
@@ -58,50 +46,42 @@ URL: {{ page.url }}
 declare it verbatim in the output's `language` field.
 {% endif %}
 
-## Grounding (binding)
+## Citations (binding)
 
-- Every on-screen string must be QUOTED or TRIMMED from the manifest above —
-  never invented, never paraphrased, never translated. A validator rejects
-  any string that does not trace to a manifest line.
-- The classic rejection: CONNECTIVE copy you compose yourself — a divider
-  label like "One platform", a caption like "developers, agents, and code",
-  a words line that paraphrases the page's claim. If you wrote it instead of
-  copying it, it is wrong. When nothing fits, pick a SHORT manifest item
-  (a button label, an h2) verbatim.
-- Punctuation and emphasis marks may differ; the words may not. TRIMMED
-  means one contiguous cut of the line — keeping a leading or trailing
-  segment. Deleting words from the middle, merging two lines, or changing
-  a word's form (plural ↔ singular, tense) is paraphrase and is rejected.
-  If the line you want is too long for the slot, pick a shorter manifest
-  line — never shrink one by editing it.
-- The page's own language IS the on-screen language: a Chinese page's copy
-  goes on screen in Chinese, quoted verbatim. Translating a manifest line
-  into another language is invention — the validator rejects it. Narration
-  (below) is the only channel that speaks the film's language.
-- ui-scene captions ground against THE PAGE THAT SCENE SHOWS; every other
-  scene grounds against any presented page.
-- `*word*` inside a string marks the accent highlight.
-- If your previous storyboard was rejected: DELETE each rejected string or
-  replace it with a verbatim manifest item — never rephrase a rejected
-  string into new unquoted copy, and never bring the same string back in a
-  slightly altered form. A string named in a rejection is dead.
+- An on-screen string is a REFERENCE, never a composition:
+  `{"line": 7}` renders line L7 verbatim. You choose WHICH line carries each
+  beat; the system renders its exact words. A string you typed yourself is
+  wrong by construction — the resolver only accepts ids.
+- Over-long lines: when the line you want exceeds its slot's character cap,
+  set `"fit": "head"` (keep the leading segment) or `"fit": "tail"` (keep
+  the trailing one) — the system trims at a word boundary. With `"fit"`
+  omitted ("full") the line must fit the cap as-is, so cite a shorter line
+  instead of forcing a long one.
+- Accent: `"accent": "<substring>"` wraps one substring of the RESOLVED
+  text in emphasis marks. The substring must exist in the resolved text —
+  a trim that cuts your accent away is a citation error.
+- ui-scene captions cite ONLY lines from the page that scene shows; every
+  other scene cites any presented line.
+- If your previous storyboard was rejected: a rejection names the slot and
+  the cause (unknown line id, missed accent, caption from the wrong page,
+  resolved text over its cap). Fix THE CITATION — never answer a rejection
+  by writing strings.
 
 ## Narration (配音词, spoken voiceover)
 
 Every scene MAY carry `"narration"`: the spoken voiceover line for that
 scene — one or two natural sentences, ≤ 20 chars per second of the scene.
 Narration is SPEECH, not on-screen copy: it never renders as text, and the
-verbatim-quote law does NOT apply to it — you rephrase the page's facts
-into natural spoken language. It must still be TRUE to the manifest (never
-invent a claim, a number, or a feature the page does not state), and it
-speaks the FILM's language: the pinned language above when one is given;
-otherwise the PAGE's own language — the film presents the product, so the
-product's voice leads, and the language of the user's ask / instruction is
-NEVER a source. (On-screen copy stays quoted verbatim in the page's
-language either way — the language choice governs narration only.) Omit
-the field (or null) for a scene that plays better silent — a divider beat
-or a fast words cut often wants no voiceover. Narrate the scenes where
-speech carries the story (hero, ui walks, reveal, end).
+citation law does NOT apply to it — this is your creative channel: rephrase
+the page's facts into natural spoken language. It must still be TRUE to the
+manifest (never invent a claim, a number, or a feature the page does not
+state), and it speaks the FILM's language: the pinned language above when
+one is given; otherwise the PAGE's own language — the film presents the
+product, so the product's voice leads, and the language of the user's ask /
+instruction is NEVER a source. Omit the field (or null) for a scene that
+plays better silent — a divider beat or a fast words cut often wants no
+voiceover. Narrate the scenes where speech carries the story (hero, ui
+walks, reveal, end).
 
 ## Output (JSON, no prose)
 
@@ -115,11 +95,13 @@ speech carries the story (hero, ui walks, reveal, end).
 }
 
 Scene types (discriminator `type`); every scene carries `seconds` (a duration
-INTENT — the system assigns exact frames):
+INTENT — the system assigns exact frames). `REF` below =
+`{"line": int, "fit": "full"|"head"|"tail", "accent": string | null}`
+(`fit`/`accent` optional):
 
-- {"type":"words","seconds":1.5..4,"dark":bool,"lines":[string]}  // 1..4 lines, each ≤30 chars
-- {"type":"hero","seconds":2..5,"word":string,"sub":string}  // word ≤16 chars, sub ≤90
-- {"type":"ui","seconds":3..10,"page":int,"shot":int,"frame":bool,"focuses":[{"at":s,"element":"s<shot>e<j>"}],"captions":[{"at":s,"text":string}]}
+- {"type":"words","seconds":1.5..4,"dark":bool,"lines":[REF]}  // 1..4 lines; each resolves to ≤30 chars
+- {"type":"hero","seconds":2..5,"word":REF,"sub":REF}  // word resolves to ≤16 chars, sub ≤90
+- {"type":"ui","seconds":3..10,"page":int,"shot":int,"frame":bool,"focuses":[{"at":s,"element":"s<shot>e<j>"}],"captions":[{"at":s,"text":REF}]}
   // page = a presented page index WITH a screenshot; shot = which captured
   // view of it (0 = the top of the page — pick a section shot when the
   // walk's story lives below the fold). frame: true = the page shown in a
@@ -128,21 +110,21 @@ INTENT — the system assigns exact frames):
   // A focus names an element id from that shot's camera-target list — the
   // system computes the move (never invent coordinates; the bare
   // {"at","x","y","zoom"} form exists only for shots that list no targets).
-  // 1..3 focuses, `at` ascending, each < seconds; 0..3 captions ≤60 chars,
-  // each ≥0.5s apart
-- {"type":"divider","seconds":2..5,"label":string,"roll":[string]}  // label ≤40, 1..5 roll words ≤24 each
-- {"type":"plate","seconds":3..7,"title":string,"cards":[{"big":string|null,"label":string}],"backdrop":"aurora"|"dunes"|"mist"|"tide"}
+  // 1..3 focuses, `at` ascending, each < seconds; 0..3 captions, each
+  // resolving to ≤60 chars, each ≥0.5s apart
+- {"type":"divider","seconds":2..5,"label":REF,"roll":[REF]}  // label ≤40; 1..5 roll words, each ≤24
+- {"type":"plate","seconds":3..7,"title":REF,"cards":[{"big":REF|null,"label":REF}],"backdrop":"aurora"|"dunes"|"mist"|"tide"}
   // the numbers beat: 2..4 glass cards over a calm backdrop. ONLY when the
   // page actually carries numbers or very short labels (a card's big/label
-  // is grounded like any other string — never invent a number). big ≤8
+  // cites a line like any other slot — never invent a number). big ≤8
   // chars or null (a phrase card), label ≤24; title ≤40. At most 2 plates
   // in the whole film.
-- {"type":"reveal","seconds":2..5,"lead":string,"word":string,"sub":string}  // ≤60 / ≤24 / ≤90
-- {"type":"end","seconds":2.5..6,"name":string,"tagline":string}  // ≤24 / ≤90
+- {"type":"reveal","seconds":2..5,"lead":REF,"word":REF,"sub":REF}  // ≤60 / ≤24 / ≤90
+- {"type":"end","seconds":2.5..6,"name":REF,"tagline":REF}  // ≤24 / ≤90
 
 Every scene may add "narration": string | null (see Narration above).
 
-Binding bounds: total Σ seconds 30..115; no duplicate string within one scene;
-no two scenes with identical content; no empty strings.
+Binding bounds: total Σ seconds 30..115; no duplicate string within one scene
+(after resolution); no two scenes with identical content; no empty strings.
 
 {{ packs }}

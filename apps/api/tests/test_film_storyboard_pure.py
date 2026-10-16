@@ -17,13 +17,17 @@ from app.tools.film.storyboard import (
     DURATION_INVALID,
     FILM_FPS,
     FILM_MAX_FRAMES,
+    INVALID_COPY_REF,
     INVALID_FOCUS,
     TEXT_NOT_GROUNDED,
+    DraftStoryboard,
     FilmStoryboardRejected,
     StoryboardPage,
     allocate_frames,
     build_film_spec,
+    build_line_manifest,
     format_violations,
+    resolve_draft,
     snap_frames_to_beats,
     validate_storyboard,
 )
@@ -158,6 +162,154 @@ def test_ui_captions_ground_against_their_own_page():
     ]
     violations = validate_storyboard(_storyboard(scenes), pages)
     assert TEXT_NOT_GROUNDED in _codes(violations)
+
+
+# ---- the citation layer (行 ID 化, 2026-10-16) -------------------------------
+#
+# The default _page()'s line manifest (1-based, kind order title →
+# description → h1 → h2 → button → link):
+#   L1 [title] Acme — Ship faster
+#   L2 [description] Acme turns hours of release work into minutes.
+#   L3 [h1] Ship faster
+#   L4 [h2] Why teams switch
+#   L5 [button] Start free
+#   L6 [link] Docs
+
+
+def _draft(scenes: list[dict], **kw) -> DraftStoryboard:
+    return DraftStoryboard.model_validate({"scenes": scenes, **kw})
+
+
+def _good_draft_scenes() -> list[dict]:
+    return [
+        {"type": "hero", "seconds": 3.0, "word": {"line": 3}, "sub": {"line": 2}},
+        {"type": "ui", "seconds": 9.0, "page": 0,
+         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0},
+                     {"at": 2.0, "x": 0.3, "y": 0.4, "zoom": 2.0}],
+         "captions": [{"at": 2.0, "text": {"line": 4}}]},
+        {"type": "words", "seconds": 3.0, "dark": False, "lines": [{"line": 3}]},
+        {"type": "divider", "seconds": 3.0, "label": {"line": 4},
+         "roll": [{"line": 3}, {"line": 5}]},
+        {"type": "ui", "seconds": 9.0, "page": 0,
+         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}],
+         "captions": []},
+        {"type": "end", "seconds": 4.0, "name": {"line": 1}, "tagline": {"line": 3}},
+    ]
+
+
+def test_line_manifest_numbering_and_kinds():
+    pages = [_page(), _page(title="Beta", h1=["Docs hub"])]
+    lines = build_line_manifest(pages)
+    by_id = {l.id: l for l in lines}
+    assert by_id[1].kind == "title" and by_id[1].text == "Acme — Ship faster"
+    assert by_id[2].kind == "description"
+    assert by_id[3].kind == "h1" and by_id[3].text == "Ship faster"
+    assert by_id[5].kind == "button"
+    # Page 1's lines continue the global numbering and carry their page.
+    page1 = [l for l in lines if l.page == 1]
+    assert page1 and all(l.id > 6 for l in page1)
+
+
+def test_resolve_draft_clean_citations_become_verbatim_strings():
+    pages = [_page()]
+    lines = build_line_manifest(pages)
+    resolved, violations = resolve_draft(_draft(_good_draft_scenes()), lines, pages)
+    assert violations == []
+    assert resolved is not None
+    hero = resolved.scenes[0]
+    assert hero.word == "Ship faster"
+    assert hero.sub == "Acme turns hours of release work into minutes."
+    # The resolved board passes the legacy validator by construction.
+    assert validate_storyboard(resolved, pages) == []
+
+
+def test_resolve_fit_trims_at_word_boundary():
+    pages = [_page()]
+    lines = build_line_manifest(pages)
+    long_line = lines[1].text  # the 46-char description, over the words 30 cap
+    head, v = resolve_draft(_draft([
+        {"type": "words", "seconds": 3.0, "dark": False,
+         "lines": [{"line": 2, "fit": "head"}]},
+        {"type": "hero", "seconds": 3.0, "word": {"line": 3}, "sub": {"line": 5}},
+        {"type": "ui", "seconds": 9.0, "page": 0,
+         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]},
+        {"type": "end", "seconds": 3.0, "name": {"line": 1}, "tagline": {"line": 3}},
+    ]), lines, pages)
+    assert v == []
+    assert head is not None
+    text = head.scenes[0].lines[0]
+    assert len(text) <= 30 and long_line.startswith(text) and not text.endswith(" ")
+    tail, v = resolve_draft(_draft([
+        {"type": "words", "seconds": 3.0, "dark": False,
+         "lines": [{"line": 2, "fit": "tail"}]},
+        {"type": "hero", "seconds": 3.0, "word": {"line": 3}, "sub": {"line": 5}},
+        {"type": "ui", "seconds": 9.0, "page": 0,
+         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]},
+        {"type": "end", "seconds": 3.0, "name": {"line": 1}, "tagline": {"line": 3}},
+    ]), lines, pages)
+    assert v == []
+    assert tail is not None
+    text = tail.scenes[0].lines[0]
+    assert len(text) <= 30 and long_line.endswith(text)
+
+
+def test_resolve_full_fit_over_cap_surfaces_as_constraint_violation():
+    pages = [_page()]
+    lines = build_line_manifest(pages)
+    resolved, violations = resolve_draft(_draft([
+        {"type": "words", "seconds": 3.0, "dark": False, "lines": [{"line": 2}]},
+        {"type": "hero", "seconds": 3.0, "word": {"line": 3}, "sub": {"line": 5}},
+        {"type": "ui", "seconds": 9.0, "page": 0,
+         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]},
+        {"type": "end", "seconds": 3.0, "name": {"line": 1}, "tagline": {"line": 3}},
+    ]), lines, pages)
+    assert violations == []  # resolution is honest; the cap gate is validate's
+    assert resolved is not None
+    assert CONSTRAINT_VIOLATION in _codes(validate_storyboard(resolved, pages))
+
+
+def test_resolve_accent_wraps_and_missing_accent_rejected():
+    pages = [_page()]
+    lines = build_line_manifest(pages)
+    resolved, violations = resolve_draft(_draft([
+        {"type": "hero", "seconds": 3.0,
+         "word": {"line": 3, "accent": "Ship"}, "sub": {"line": 5}},
+        {"type": "ui", "seconds": 9.0, "page": 0,
+         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]},
+        {"type": "words", "seconds": 3.0, "dark": False, "lines": [{"line": 4}]},
+        {"type": "end", "seconds": 3.0, "name": {"line": 1}, "tagline": {"line": 3}},
+    ]), lines, pages)
+    assert violations == []
+    assert resolved is not None
+    assert resolved.scenes[0].word == "*Ship* faster"
+
+    _, violations = resolve_draft(_draft([
+        {"type": "hero", "seconds": 3.0,
+         "word": {"line": 3, "accent": "zebras"}, "sub": {"line": 5}},
+    ]), lines, pages)
+    assert INVALID_COPY_REF in _codes(violations)
+
+
+def test_resolve_unknown_line_and_cross_page_caption_rejected():
+    pages = [
+        _page(),
+        _page(title="Beta — Docs", description="Read the manual.",
+              h1=["Documentation"], h2=["Reference"], buttons=["Download"],
+              screenshot="user/capture/b.png"),
+    ]
+    lines = build_line_manifest(pages)
+    _, violations = resolve_draft(_draft([
+        {"type": "hero", "seconds": 3.0, "word": {"line": 999}, "sub": {"line": 3}},
+    ]), lines, pages)
+    assert INVALID_COPY_REF in _codes(violations)
+
+    # L3 ("Ship faster") lives on page 0 — a page-1 ui caption may not cite it.
+    _, violations = resolve_draft(_draft([
+        {"type": "ui", "seconds": 6.0, "page": 1,
+         "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}],
+         "captions": [{"at": 0.0, "text": {"line": 3}}]},
+    ]), lines, pages)
+    assert INVALID_COPY_REF in _codes(violations)
 
 
 # ---- camera bounds -----------------------------------------------------------
