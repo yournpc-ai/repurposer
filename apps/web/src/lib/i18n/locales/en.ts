@@ -1211,9 +1211,13 @@ const en = {
     },
     /** 分镜起草占位 (ADR-120 统一迟延): the now-line between a film dock
      * and its storyboard block — the deferred seat drafts for minutes, and
-     * the wait is always visible. Folds on the block / failure row. */
+     * the wait is always visible. Folds on the block / failure row.
+     * draftingDone (ADR-128): the span's SETTLED row (born-settled material
+     * beat) — the log register (verb-object + fact, no progressive), the
+     * same 三寄存器 law as the material reading family. */
     storyboard: {
       drafting: "Drafting the storyboard…",
+      draftingDone: "Drafted the storyboard",
     },
     /** The now-line's material reading rows (2026-09-24 user ruling —
      * thinking IS the activity row's empty state): assets mid-processing →

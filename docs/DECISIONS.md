@@ -2670,7 +2670,7 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 3. **SSE 镜像数组操作**：`row.append` / `row.update` / `row.delta`（散文增量）/ `row.settle`。live 消费与历史回放**共用同一 reducer 同一渲染函数**——回放 = `ORDER BY seq` 直渲，双路径不一致这一整类 bug 灭种。
 4. **退役清单**：walk key（`settle_at − duration_ms` 推导）、last-wins latestLog 回放、`logDismissed` 闩、once-only per ref 去重、finalizePreview 服务端钟重锚跳位。散文气泡行在首 delta 到达时 append（内容空、delta 流 update、settle 原地 finalize），位置从此固定。
 5. **失败/中止回合的行照常落库**（failed/cancelled 态随行进 transcript）——诚实 transcript；回合失败不再抹掉工作证据。
-6. **折叠渲染 = 呈现层纯函数**：两条消息之间 2+ 条 completed activity 行段坍缩为一条聚合总量行（现行法 = ADR-110 段聚合——折叠说总量、展开为类目分解；单行段不包折叠壳）；瞬态「正在做什么」仍归 StatusLine 一座两行（既有律不动）。折叠只动渲染，不动数组。
+6. **折叠渲染 = 呈现层纯函数**：两条消息之间 2+ 条 completed activity 行段坍缩为一条聚合总量行（现行法 = ADR-110 段聚合——折叠说总量、展开为类目分解；单行段同样收壳）；瞬态「正在做什么」仍归 StatusLine 一座两行（既有律不动）。折叠只动渲染，不动数组。
 7. **迁移**：一次性脚本把存量 activity_log 帧按帧时刻物化为行序插 seq；物化不了的旧回合接受活动行缺失（greenfield 验收口径先例），散文/checkpoint 行按 created_at 回填 seq。
 
 **Consequences**: 【已完成理解】消失类、顺序跳位类、live/回放不一致类 bug 结构性不可能再发生——它们要解决的问题不再存在。打字机律两牙不动（散文字段读容忍 + settle 散文 drain 节拍释放：零 delta 回合的散文行 append 时点 = 信封到达后，内容照节拍放出，位置不受影响）。DB 写入次数略增（activity 每行 open+settle 两写）量级可忽略。ADR-104 §5 排序律的机制（walk key 重锚）翻案退役，其目标（确定性时序：服务员话 → 读活动 → 读后回复）由数组位置天然达成。
@@ -2703,8 +2703,8 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 
 **Decision**:
 
-1. **段聚合 + 总量/分解两态**（2026-10-15 修订——消费面定位重拍：折叠行是安心感不是审计面；原「全收 + fragment 摘要」形态退役）：两条消息之间 2+ 条连续 completed 落定活动行（跨 key）坍缩成**一条聚合总量行**——折叠态只说总耗时「工作了 2m 7s」这**一个事实**，永不带 fragment 摘要（`Read www.z…` 的截断病理与宽度抖动是其结构性失败；URL/文件名截断需求随之消失）。展开态 = **类目分解**：同 key 行跨全段合并为一条 ×N 类目行（「已读网页 ×3」——Flora 解剖），按首次出现序（时序即真相）；逐行时长与实例名不归归档面（遥测不归消费面；实例名是 live 期的言语——material 读取族经 `activityCategoryKey` 重映射到无名的 `materialCategory` 键族，web_page 分叉随节拍 `asset_type`）；产物计数里程碑（count 无 total）永不合并——两条行说不出一个诚实的计数。**单行段不包折叠壳**：一条落定行直接以自己的落定形态渲染（其标签同样说类目）。折叠仍是呈现层纯函数（`foldActivityUnits` + `foldCategories`），持久化的每帧一行不动——审计继续读落库行。chevron 全站统一 OS disclosure 惯例（`>` 收 / `⌄` 展，三个 disclosure 座位：聚合行 / 活动行 / StatusLine 收据行）。
-2. **总耗时 = 段墙钟**：下一条 assistant 行的 `at` − 首行 `at`（散文到来闭合工作段——CC "Thought for Xs" 的解剖）；边界缺席（live 尾段，散文未到）回落末行自身终点（at + duration_ms），再回落行耗时求和，无可测量则无耗时。**用户行永不做段终点**——失败回合后用户可能数小时才回来，其消息戳会编造「工作了 3 小时」的谎言。**带 run 的 assistant 行同样不做段终点**（2026-10-15 修订）：段与边界之间隔着一个 run 时（素材节拍 → run 完成时的交付散文），散文戳会把折叠行的钟拉满整个 run 时长，与收据行的总耗时重复——run 的跨度归收据行说，折叠回落末行自身终点。
+1. **段聚合 + 总量/分解两态**（2026-10-15 修订——消费面定位重拍：折叠行是安心感不是审计面；原「全收 + fragment 摘要」形态退役）：两条消息之间 2+ 条连续 completed 落定活动行（跨 key）坍缩成**一条聚合总量行**——折叠态只说总耗时「工作了 2m 7s」这**一个事实**，永不带 fragment 摘要（`Read www.z…` 的截断病理与宽度抖动是其结构性失败；URL/文件名截断需求随之消失）。展开态 = **类目分解**：同 key 行跨全段合并为一条 ×N 类目行（「已读网页 ×3」——Flora 解剖），按首次出现序（时序即真相）；逐行时长与实例名不归归档面（遥测不归消费面；实例名是 live 期的言语——material 读取族经 `activityCategoryKey` 重映射到无名的 `materialCategory` 键族，web_page 分叉随节拍 `asset_type`）；产物计数里程碑（count 无 total）永不合并——两条行说不出一个诚实的计数。**单行段同样收壳**（2026-10-16 修订——完成就收：裸单行在段未成形时是孤零遥测行，段成形后原地翻壳的闪变比壳本身更吵）。折叠仍是呈现层纯函数（`foldActivityUnits` + `foldCategories`），持久化的每帧一行不动——审计继续读落库行。chevron 全站统一 OS disclosure 惯例（`>` 收 / `⌄` 展，三个 disclosure 座位：聚合行 / 活动行 / StatusLine 收据行）。
+2. **总耗时 = 段墙钟**：下一条 assistant 行的 `at` − 首行 `at`（散文到来闭合工作段——CC "Thought for Xs" 的解剖）；边界缺席（live 尾段，散文未到）回落末行自身终点（at + duration_ms），再回落行耗时求和，无可测量则无耗时。**用户行永不做段终点**——失败回合后用户可能数小时才回来，其消息戳会编造「工作了 3 小时」的谎言。**带 run 的 assistant 行同样不做段终点**（2026-10-15 修订）：段与边界之间隔着一个 run 时（素材节拍 → run 完成时的交付散文），散文戳会把折叠行的钟拉满整个 run 时长，与收据行的总耗时重复——run 的跨度归收据行说，折叠回落末行自身终点。**物化时机律**（2026-10-16 修订）：折叠壳在段闭合（边界散文落地）时物化——未闭合尾段在回合忙碌期不渲染，随闭合散文一并出现（总结的时钟终点 = 总结的出现时刻；忙碌期无 ticking 时钟）；busy 结束仍无边界（孤儿回合 / 历史回放）以末行自身终点的回落时钟渲染。
 3. **failed/cancelled 行永不折入**：✗ 划掉行是失败信号，藏进聚合即丢；它们独立留行并打断折段。
 4. **不受动**：now-line 原地 morph（live 已与 CC 同形）、think 空态（永不入流）、draft/run 跨度（本就不落行）、折叠永不跨消息边界（段分组既有律，恰好 = CC 的按散文段坍缩）。
 
@@ -3059,3 +3059,19 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 **Consequences**: 起草墙钟的结构大头（巨型输出 + 全有或全无传输 + 盲重试腹稿）移除；「为什么还卡」此后从日志四行可读（gate → llm_request → llm_first_chunk → llm_response/failed + fixed_fallback）。分镜从「模型作曲、代码纠错」变「代码搭骨、模型填肉、代码兜底」——LLM 全挂也必有分镜。呈现面（消息内 markdown 分镜 + 附件 chip）零改动——已解析 FilmStoryboard 仍是唯一持久化/渲染形态。
 
 **Related**: ADR-126（行 ID 化——适用范围由本条收窄为事实槽位；②③不动）/ ADR-125（统一迟延）/ ADR-120（逐字律——事实槽忠于素材，创作通道忠于事实）/ ADR-039 P3（盲重试禁令——流式重试只在首 delta 前）
+
+## ADR-128: 分镜起草跨度归位标准工作跨度——开工拍 + 落定节拍 + 全旅程续航
+
+**Status**: Decided (2026-10-16)
+
+**Context**: ADR-125/127 落地后的旅程观感取证——抓取折段（[Worked ~1m18s] 子页节拍）与分镜落地之间只剩一条客户端合成的「Drafting the storyboard…」占位行：它有自己的一套逻辑（storyboardDraftDue 闸 + watch 窗口 + 落块即消失），不入 fold 机器、不留落定痕迹；且块落地即收窗，就绪拍（块后数秒才 commit）只靠刷新才能到达。病灶判定：**Drafting 占位是一条没有生命周期的行**——一切工作跨度的正常解剖 = 开工有言语（ADR-093 开工句先例）→ live 有相位行 → 落定折成 [Worked ~xxx]，起草跨度三缺二。
+
+**Decision**:
+
+1. **开工拍（`storyboard_drafting` trigger，白名单第四席）**：迟延座在 gate=proceed 处 fire（抓取真排干、一切闸位过完、起草真开始的那一刻——永不在 dock 时宣告）。两处 pending-plan 沉默谓词与就绪拍同族反转（dock 已结算 = 静默），另加自身陈旧读：块 ∨ 穷举失败行已落地 = 开工话迟到（`storyboard_draft_settled` 世界读——固定分镜兜底的秒级落地、预检秒败两族竞态都由此吸收），静默。言语法：一句开工话，永不是问句（方案判断问句属就绪拍），永不预告时长，永不偷看分镜内容（还没起草，预览 = 编造）；suggestions 恒 []（`_wrap_up_rejection` 0 上限族）。ref = 本 dock 问题行 id（与就绪拍同 ref 不同 trigger，去重键各自独立；re-dock 重生问题行 = 新 ref = 允许再说一次）。
+2. **落定节拍（born-settled 素材节拍 `beat="storyboard_drafting"`）**：块落地时同批写一条节拍行（数组位置在块前），`at` = 起草真实开始戳、`duration_ms` = 跨度——素材节拍契约加 `at` 字段（跨度先于落地的节拍自带出生戳，fold 时钟量真实跨度，永不量落地瞬间）。回放为 `kind:"draft"` + `chat.storyboard.draftingDone` key 的活动行——落定即退役的过滤器只退 `chat.activity.*` 计划 draft 跨度，born-settled 节拍经得住；落定措辞走活动日志寄存器（「起草完分镜」/ "Drafted the storyboard"，无进行态）。失败路径不写节拍——穷举诚实散文行已是全部叙事（failed 行永不折叠，写了 = 双叙事者）。live 相位不动：合成 now-line 是素材节拍 doctrine 的既有答案（live = 合成行，durable = 落定行）——「独立逻辑」的病灶消除在生命周期补全，不是另起机器。
+3. **watch-window 续航覆盖全旅程**：窗口谓词从「块未落地」改为「就绪拍未到达」（dock → 开工拍 → 块 → 就绪拍）——块落地不再收窗，窗活到就绪拍到达（按其 ref = 本 dock 问题行 id 登记）、失败行落地或用户作答；块后 90s 宽限兜住被合法静默的就绪拍（永不让死窗骑满 45 分钟保险丝）。re-dock 重生问题行 = 新 id = 窗口状态重新武装。
+
+**Consequences**: 起草跨度的完整解剖 = [Worked ~抓取] → 开工话（LLM）→ ● Drafting（live now-line）→ [Worked ~xxx]（落定节拍折段）→ 分镜块 → 就绪拍，每一拍都骑既有机器（trigger 拍 / 素材节拍 / fold 投影 / 轮询窗），零新增机制种类。开工话被丢弃（admission 让位用户回合）时抓取节拍与起草节拍合一折段（类目展开仍分述），诚实不残缺。
+
+**Related**: ADR-125（统一迟延 + 就绪拍——本条补开工拍与落定节拍，三者构成完整跨度）/ ADR-127（骨架收归代码——固定兜底秒级落地的竞态由①的陈旧读吸收）/ ADR-093（开工句 = LLM 言语）/ ADR-108/110（数组位置律与段聚合——落定节拍直接骑乘）/ ADR-095（三寄存器——落定措辞走日志格）

@@ -27,6 +27,13 @@ first):
   (``render_storyboard_markdown`` — the resolved board the render
   consumes, spliced between the speech's ready line and its closing
   confirmation question at the ``[[STORYBOARD]]`` sentinel).
+- ``storyboard_drafting`` — the same dock's draft really STARTED
+  (``storyboard_dock`` at gate=proceed — the capture set drained; ADR-128
+  开工拍). Same inverted predicates as storyboard_ready (the beat serves
+  the pending dock), plus its own staleness read: the block ∨ the
+  exhaustion row already landed → the opening line is late, silence
+  (``storyboard_draft_settled``). One short line, never a question — the
+  review question belongs to the ready beat.
 
 The loop itself: the perception family's reads are the agent's eyes (look
 BEFORE speaking — read-before-speak is the reviewer's honesty base), and
@@ -76,6 +83,7 @@ from app.chat.service import (
     stamp_suggestions,
 )
 from app.chat.turn_tools import CHAT_READ_TOOLS
+from app.chat.storyboard_dock import storyboard_draft_settled
 from app.metering import bind_conversation_turn, fold_conversation_usage
 from app.tools.film.storyboard import render_storyboard_markdown
 from app.models.schemas import Option, QuestionPayload, SuggestionItem, WrapUpArgs
@@ -90,6 +98,7 @@ from app.models.tables import (
 from app.pipeline.trigger_events import (
     TRIGGER_CRAFT_DECOMPILED,
     TRIGGER_RUN_COMPLETED,
+    TRIGGER_STORYBOARD_DRAFTING,
     TRIGGER_STORYBOARD_READY,
     TRIGGER_WHITELIST,
 )
@@ -291,8 +300,14 @@ def _wrap_up_rejection(trigger: str, suggestions: list[SuggestionItem]) -> str |
     - ``run_completed``: hard ceiling of 0 — the completed work's next
       move rides the closing sentence, never a dock (prompt law).
     - ``storyboard_ready``: same ceiling — the next move is the landed
-      card's own review affordance, never a second dock."""
-    if trigger in (TRIGGER_RUN_COMPLETED, TRIGGER_STORYBOARD_READY) and suggestions:
+      card's own review affordance, never a second dock.
+    - ``storyboard_drafting``: same ceiling — the opening line only
+      narrates the wait; the next move belongs to the ready beat's card."""
+    if trigger in (
+        TRIGGER_RUN_COMPLETED,
+        TRIGGER_STORYBOARD_READY,
+        TRIGGER_STORYBOARD_DRAFTING,
+    ) and suggestions:
         return (
             f"on {trigger} the next move rides your closing sentence or "
             "the landed card itself, never a dock — call wrap_up again "
@@ -452,11 +467,28 @@ async def run_trigger_turn(
             # inverts — a pending plan is the condition to speak; NO
             # pending plan means the review already settled (answered /
             # waived / superseded), the card's job is done, silence.
+            # storyboard_drafting 同律 (ADR-128 开工拍) plus its own
+            # staleness read: the draft may have FINISHED while this turn
+            # queued (a fixed-fallback draft lands in seconds) — a block
+            # ∨ exhaustion row newer than the dock retires the opening
+            # line (the ready beat / the honest row speaks instead).
             pending_question = await latest_pending_question(db, conversation_id)
-            if trigger == TRIGGER_STORYBOARD_READY:
+            if trigger in (TRIGGER_STORYBOARD_READY, TRIGGER_STORYBOARD_DRAFTING):
                 if not is_pending_plan(pending_question):
                     logger.info(
                         "trigger_turn_silenced_dock_settled",
+                        trigger=trigger,
+                        ref=ref,
+                    )
+                    return None
+                assert pending_question is not None  # is_pending_plan guarantees
+                if trigger == TRIGGER_STORYBOARD_DRAFTING and await storyboard_draft_settled(
+                    db,
+                    conversation_id=conversation_id,
+                    dock_created_at=pending_question.created_at,
+                ):
+                    logger.info(
+                        "trigger_turn_silenced_draft_settled",
                         trigger=trigger,
                         ref=ref,
                     )
@@ -510,6 +542,22 @@ async def run_trigger_turn(
                         "line names something promised that didn't land):\n"
                         + "\n".join(review_lines)
                     )
+            elif trigger == TRIGGER_STORYBOARD_DRAFTING:
+                # ADR-128 开工拍: the pages are read and the draft really
+                # started — ONE opening line so the wait between the
+                # capture fold and the storyboard's arrival is narrated.
+                # Never a question (the review question belongs to the
+                # ready beat), never a duration promise, never a scene
+                # preview (nothing is drafted yet — a preview would be
+                # invention).
+                event_line = (
+                    "You have just started drafting the storyboard for the "
+                    "user's pending film plan (the web pages are all read). "
+                    "Say ONE short line telling the user the storyboard "
+                    "drafting has begun and it will arrive for their review "
+                    "— never a question, never a duration promise, never a "
+                    "peek at what the storyboard will contain."
+                )
             elif trigger == TRIGGER_STORYBOARD_READY:
                 # ADR-120 就绪拍 + 消息内分镜 (2026-10-16 呈现面翻案): the
                 # storyboard ITSELF rides the message as a code-rendered
@@ -595,12 +643,27 @@ async def run_trigger_turn(
             # clears, a later fire of the same world event may speak.
             # storyboard_ready 同律反转: the pending dock is the speech's
             # condition — if the user settled the review while our loop
-            # ran, the beat is noise; silence.
+            # ran, the beat is noise; silence. storyboard_drafting adds
+            # the staleness read: the draft may have landed (block ∨
+            # exhaustion row) during our loop — the opening line arriving
+            # after its own ending is a phase lie, silence.
             landing_question = await latest_pending_question(db, conversation_id)
-            if trigger == TRIGGER_STORYBOARD_READY:
+            if trigger in (TRIGGER_STORYBOARD_READY, TRIGGER_STORYBOARD_DRAFTING):
                 if not is_pending_plan(landing_question):
                     logger.info(
                         "trigger_turn_silenced_dock_settled_at_landing",
+                        trigger=trigger,
+                        ref=ref,
+                    )
+                    return None
+                assert landing_question is not None  # is_pending_plan guarantees
+                if trigger == TRIGGER_STORYBOARD_DRAFTING and await storyboard_draft_settled(
+                    db,
+                    conversation_id=conversation_id,
+                    dock_created_at=landing_question.created_at,
+                ):
+                    logger.info(
+                        "trigger_turn_silenced_draft_settled_at_landing",
                         trigger=trigger,
                         ref=ref,
                     )

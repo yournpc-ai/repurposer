@@ -1160,9 +1160,12 @@ const zh: Resources = {
       composing: "正在整理…",
     },
     /** 分镜起草占位（ADR-120 统一迟延）：film dock 到分镜块落地之间的
-     * now-line——迟延座起草数分钟，等待恒可见；块/失败行落地即收。 */
+     * now-line——迟延座起草数分钟，等待恒可见；块/失败行落地即收。
+     * draftingDone（ADR-128）：跨度的落定行（born-settled 素材节拍）——
+     * 活动日志寄存器（动宾+事实，无进行态），与素材读取族同三寄存器律。 */
     storyboard: {
       drafting: "正在起草分镜…",
+      draftingDone: "起草完分镜",
     },
     /** now-line 的素材阅读行（2026-09-24 用户拍板——thinking 就是 activity
      * 行的空态）：素材处理中 → reading（文件名插值）。*Done / *Failed 是

@@ -2890,6 +2890,7 @@ async def record_material_beat(
     ref: str | None = None,
     duration_ms: int | None = None,
     asset_type: str | None = None,
+    at: str | None = None,
 ) -> Message | None:
     """Persist one settled material beat as a message row (once-only per
     (beat, ref) — the warm's re-materialization race and the worker's
@@ -2901,13 +2902,18 @@ async def record_material_beat(
     set's drain progress, ``duration_ms`` = the user-perceived reading span
     upload→processed, so the settled row can whisper "· 41s" like every
     other settled activity row) | "understanding" (the warm materialized —
-    ref = the asset digest, ``count`` = the asset count). Returns None when the
+    ref = the asset digest, ``count`` = the asset count) |
+    "storyboard_drafting" (ADR-128 — a film dock's deferred draft settled:
+    ref = the dock's question id, ``duration_ms`` = the drafting span,
+    ``at`` = the draft's REAL start stamp so the replayed row's fold clock
+    measures the span, never the landing instant). Returns None when the
     beat already landed (dedup) so callers stay fire-and-forget.
 
     ``asset_type`` (批「动词」2026-09-27): the reading beat carries the
     asset's type so the replay forks the verb (watch/listen/read) — absent
     on rows predating the fork, the replay's read tolerance falls to the
-    base key."""
+    base key. ``at`` overrides the row's birth stamp for the fold's clock —
+    absent on beats whose span starts at landing (reading/understanding)."""
     conversation = await _get_or_create_project_conversation(db, user_id, project_id)
     dedup = select(Message.id).where(
         Message.conversation_id == conversation.id,
@@ -2931,6 +2937,8 @@ async def record_material_beat(
         intent["duration_ms"] = duration_ms
     if asset_type is not None:
         intent["asset_type"] = asset_type
+    if at is not None:
+        intent["at"] = at
     message = Message(
         conversation_id=conversation.id,
         role="assistant",

@@ -187,6 +187,15 @@ export function triggerName(intent: unknown): string | undefined {
   return typeof data.trigger === "string" ? data.trigger : undefined
 }
 
+/** The trigger dump's ref (ADR-128 — the storyboard beats' ref = the dock's
+ * question id; the dock's watch keys the ready beat's arrival on it).
+ * Same read tolerance as triggerName. */
+export function triggerRef(intent: unknown): string | undefined {
+  const data = (intent ?? {}) as Record<string, unknown>
+  if (data.type !== "trigger_review") return undefined
+  return typeof data.ref === "string" ? data.ref : undefined
+}
+
 /** A persisted activity array row (ADR-108 §2 — 每帧一行): intent =
  * {type:"activity", frame}. The frame is the server's open/settle dump —
  * its `at` is the birth stamp (execute entry for a read span), a settle
@@ -238,12 +247,15 @@ export function isNonRenderIntent(intent: unknown): boolean {
 type MaterialBeatRow = ActivityRowFrame
 
 /** The material-beat dump on a message row's intent column ({type:
- * "material_beat", beat, status, name?, count?, total?, ref?, duration_ms?})
+ * "material_beat", beat, status, name?, count?, total?, ref?, duration_ms?,
+ * at?})
  * — the pipeline's settled reading/understanding rows (app/chat/service's
  * record_material_beat). Beats are BORN SETTLED (the live active row stays
  * the dock's synthesized now-line); the replay renders the past-tense key.
  * `duration_ms` carries the user-perceived reading span (upload→processed)
- * so the settled row whispers "· 41s" like every other settled row.
+ * so the settled row whispers "· 41s" like every other settled row; `at`
+ * (ADR-128) carries the beat's real start when the span predates the
+ * landing (the storyboard draft), feeding the fold's clock.
  * Same read tolerance as triggerSuggestions — anything off-shape parses to
  * undefined (a plain assistant row), never a crash. */
 export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
@@ -256,6 +268,11 @@ export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
   const duration_ms =
     typeof data.duration_ms === "number" ? data.duration_ms : undefined
   const ref = typeof data.ref === "string" ? data.ref : "beat"
+  // The beat's own birth stamp (ADR-128): a beat whose span STARTS before
+  // its row lands (the storyboard draft) carries `at` so the fold's clock
+  // measures the real span, never the landing instant. Absent on beats
+  // whose span starts at landing — the row's created_at falls in.
+  const at = typeof data.at === "string" ? data.at : undefined
   if (data.beat === "reading") {
     // 动词分叉 (批「动词」): the persisted intent carries asset_type (absent
     // on rows predating the fork — read tolerance: they fall to the base key).
@@ -287,6 +304,23 @@ export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
       status,
       key: "chat.material.understandingDone",
       count,
+    }
+  }
+  // 起草落定节拍 (ADR-128): a film dock's deferred draft settled — the
+  // live "Drafting…" now-line folds into the walk as this row, and its
+  // segment (closed by the storyboard block landing right after) reads
+  // [Worked ~xxx] with the REAL drafting span (at = the draft's start).
+  // The draft KIND survives 落定即退役's filter: that retirement keys on
+  // chat.activity.* plan-draft spans, never on a born-settled beat.
+  if (data.beat === "storyboard_drafting") {
+    return {
+      activity_id: `beat-storyboard-${ref}`,
+      seq: 0,
+      kind: "draft",
+      status,
+      key: "chat.storyboard.draftingDone",
+      duration_ms,
+      at,
     }
   }
   return undefined

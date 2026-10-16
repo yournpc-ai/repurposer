@@ -13,7 +13,11 @@ fired from a web_page capture's terminal state (first-URL docks) and from
 the chat turn's post-commit point (revision docks whose pages are already
 captured). It drafts with a bounded retry, lands the block in the message
 flow on success, and on terminal failure lands ONE honest row (the hold
-stands — the plan never starts unreviewed).
+stands — the plan never starts unreviewed). The drafting span rides the
+standard work-span lifecycle (ADR-128): a drafting-start trigger beat
+speaks the opening line when the draft really starts (captures drained),
+the live "Drafting…" now-line carries the wait, and a born-settled
+material beat lands with the block so the span folds into [Worked ~xxx].
 
 The start side (法1后半 + 法3, 2026-10-16): a film chain's start is gated
 on a storyboard block newer than the dock (``film_start_block``) — the ONLY
@@ -24,13 +28,19 @@ deciding for them.
 
 import asyncio
 import time
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.chat.service import _create_message, _prefers_zh, record_storyboard_block
+from app.chat.service import (
+    _create_message,
+    _prefers_zh,
+    record_material_beat,
+    record_storyboard_block,
+)
 from app.models.schemas import (
     STORYBOARD_BLOCK_TYPE,
     AssetStatus,
@@ -38,7 +48,11 @@ from app.models.schemas import (
     FilmStoryboard,
 )
 from app.models.tables import Asset, Message, Project
-from app.pipeline.trigger_events import TRIGGER_STORYBOARD_READY, fire_trigger
+from app.pipeline.trigger_events import (
+    TRIGGER_STORYBOARD_DRAFTING,
+    TRIGGER_STORYBOARD_READY,
+    fire_trigger,
+)
 from app.platform.conversation_context import (
     find_conversation,
     is_pending_plan,
@@ -142,6 +156,22 @@ async def _block_newer_than_dock(
     still owed — ``_row_newer_than_dock`` at the block type)."""
     return await _row_newer_than_dock(
         db, conversation_id, dock_created_at, STORYBOARD_BLOCK_TYPE
+    )
+
+
+async def storyboard_draft_settled(
+    db: AsyncSession, *, conversation_id: UUID, dock_created_at
+) -> bool:
+    """The draft's terminal fact already landed for THIS dock (the block ∨
+    the exhaustion row) — the drafting-start beat's world read (ADR-128):
+    a drafting speech arriving after the draft finished is stale, silence."""
+    if await _block_newer_than_dock(db, conversation_id, dock_created_at) is not None:
+        return True
+    return (
+        await _row_newer_than_dock(
+            db, conversation_id, dock_created_at, STORYBOARD_DRAFT_FAILED_TYPE
+        )
+        is not None
     )
 
 
@@ -271,6 +301,17 @@ async def maybe_dock_deferred_storyboard(project_id: UUID) -> None:
             return
         _gate("proceed")
         t0 = time.monotonic()
+        draft_started_at = datetime.now(UTC)
+        # 起草开工拍 (ADR-128): the draft is REALLY starting now (the capture
+        # set has drained, every gate read the world) — the trigger turn
+        # speaks the one opening line while the draft runs, so the wait
+        # between the capture fold and the block is never silent. Same
+        # ref as the ready beat's (THIS dock's question id): one opening
+        # line per dock, a re-dock licenses a fresh one. Fire-and-forget —
+        # a dropped opening line never fails the draft.
+        fire_trigger(
+            project_id, TRIGGER_STORYBOARD_DRAFTING, str(question.id)
+        )
         film_params = dict(film_task.get("params") or {})
         from app.tools.film.storyboard import draft_film_storyboard  # deferred: tool seam
 
@@ -304,6 +345,23 @@ async def maybe_dock_deferred_storyboard(project_id: UUID) -> None:
             )
             return
         storyboard, draft_pages = drafted
+        draft_duration_ms = int((time.monotonic() - t0) * 1000)
+        # 落定起草节拍 (ADR-128 — born-settled 素材节拍同律): the drafting
+        # span settles as ONE beat row right before its block — the live
+        # "Drafting…" now-line folds into the walk's [Worked ~xxx] segment
+        # (at = the draft's real start, duration_ms = the span), the same
+        # lifecycle every reading beat rides. ref = THIS dock's question id
+        # (the beat dedups per dock; a re-dock's re-draft lands its own).
+        await record_material_beat(
+            db,
+            project.user_id,
+            project_id,
+            "storyboard_drafting",
+            status="completed",
+            ref=str(question.id),
+            duration_ms=draft_duration_ms,
+            at=draft_started_at.isoformat(),
+        )
         await land_storyboard_block(
             db,
             conversation_id=conversation_id,
@@ -316,7 +374,7 @@ async def maybe_dock_deferred_storyboard(project_id: UUID) -> None:
         logger.info(
             "deferred_storyboard_landed",
             project_id=str(project_id),
-            duration_ms=int((time.monotonic() - t0) * 1000),
+            duration_ms=draft_duration_ms,
             scenes=len(storyboard.scenes),
         )
         # 就绪拍 (ADR-120 补言语): the block landed truthfully on its own;

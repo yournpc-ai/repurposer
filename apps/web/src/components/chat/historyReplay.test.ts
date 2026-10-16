@@ -413,6 +413,57 @@ describe("material beats (2026-09-24 素材节拍入库)", () => {
     )
     expect(out[0].activity).toBeUndefined()
   })
+
+  it("storyboard_drafting (ADR-128): a draft-kind settled beat carrying its REAL start stamp", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "beat-sb",
+          created_at: "2026-10-16T10:01:30Z",
+          intent: {
+            type: "material_beat",
+            beat: "storyboard_drafting",
+            status: "completed",
+            ref: "q-9",
+            duration_ms: 90_000,
+            at: "2026-10-16T10:00:00Z",
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toHaveLength(1)
+    // The draft kind with a chat.storyboard.* key survives 落定即退役's
+    // chat.activity.* filter, and the fold's clock reads the beat's own
+    // `at` (the draft's start), never the landing row's created_at.
+    expect(out[0].activity).toMatchObject({
+      kind: "draft",
+      status: "completed",
+      key: "chat.storyboard.draftingDone",
+      duration_ms: 90_000,
+      at: "2026-10-16T10:00:00Z",
+    })
+  })
+
+  it("storyboard_drafting without `at` falls back to the row's created_at (read tolerance)", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "beat-sb-legacy",
+          created_at: "2026-10-16T10:01:30Z",
+          intent: {
+            type: "material_beat",
+            beat: "storyboard_drafting",
+            status: "completed",
+            ref: "q-9",
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out[0].activity?.kind).toBe("draft")
+    expect(out[0].activity?.at).toBe("2026-10-16T10:01:30Z")
+  })
 })
 
 describe("activity array rows (ADR-108 — 每帧一行)", () => {

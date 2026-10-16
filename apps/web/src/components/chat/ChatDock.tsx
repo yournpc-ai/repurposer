@@ -122,6 +122,8 @@ import {
   materialBeatKey,
   storyboardBlock,
   storyboardDraftFailed,
+  triggerName,
+  triggerRef,
   triggerSuggestions,
   questionEcho,
   bareQuestion,
@@ -1195,6 +1197,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   } | null>(null)
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
+  // 就绪拍到达登记 (ADR-128): the film dock's watch window stays open past
+  // the storyboard block's landing until the ready beat's trigger row
+  // arrives — its ref is THIS dock's question id (a re-dock re-arms the
+  // watch). The poll's trigger branch sets it; the reset effect lives
+  // next to the watch window below.
+  const [readyBeatRef, setReadyBeatRef] = useState<string | null>(null)
+  const blockSeenAtRef = useRef<number | null>(null)
   const onRunStartedRef = useRef(onRunStarted)
   onRunStartedRef.current = onRunStarted
   const onDraftGraphChangeRef = useRef(onDraftGraphChange)
@@ -1486,6 +1495,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
         const suggestions = triggerSuggestions(row.intent)
         if (suggestions === undefined) continue
+        // 就绪拍到达登记 (ADR-128): the film dock's watch stays open past
+        // the block's landing specifically for this beat — its ref (THIS
+        // dock's question id) is the watch's stop key.
+        if (triggerName(row.intent) === "storyboard_ready") {
+          setReadyBeatRef(triggerRef(row.intent) ?? row.id)
+        }
         // Dedup by the SERVER row id — the archive replay and a previous
         // poll arrival land under the same id, so the row is known if it is
         // in the flow already or mid-typing. A PENDING options question
@@ -1814,12 +1829,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     return () => clearInterval(id)
   }, [terminal, runId, reviewerLanded, pollTriggerMessages])
 
-  // Watch window (分镜迟延块, ADR-120 统一迟延): the film dock's
-  // storyboard_review hold is on and THIS dock's block hasn't landed — the
-  // deferred seat drafts post-commit / post-capture and the block (or the
-  // terminal failure row) arrives through the poll. Dock-scoped reads: a
-  // block predating the dock belongs to an older superseded dock, and the
-  // failure row folds the placeholder (the wait is over, the hold stands).
+  // Watch window (分镜迟延块, ADR-120 统一迟延 + ADR-128 就绪拍续航):
+  // the film dock's storyboard_review hold is on — the deferred seat
+  // drafts post-commit / post-capture and its arrivals (the drafting
+  // beat's opening line, the block, the ready beat, or the terminal
+  // failure row) ALL land through this poll. Dock-scoped reads: a block
+  // predating the dock belongs to an older superseded dock, and the
+  // failure row folds the placeholder (the wait is over, the hold
+  // stands). The window's own predicate (storyboardWatchDue, below)
+  // spans the whole review journey — it outlives the block's landing so
+  // the ready beat arrives live.
   const storyboardDockAt = pendingQuestion?.created_at ?? null
   const storyboardBlockLanded = messages.some(
     (m) => m.storyboard && (storyboardDockAt == null || (m.at ?? "") >= storyboardDockAt),
@@ -1850,26 +1869,54 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // honest failure row lands.
   const storyboardDraftDue =
     storyboardBlockDue && !storyboardDraftFailedLanded && !webPagesInFlight
+  // 就绪拍续航 (ADR-128): the block's landing is NOT the watch's end —
+  // the ready beat's trigger row commits seconds after the block, and a
+  // watch that dies with the block misses it live (a refresh used to be
+  // its only arrival channel). The watch now spans the whole review
+  // journey: dock → drafting beat → block → ready beat (or the failure
+  // row, or the user's answer). A silenced ready beat never holds the
+  // poll open: the 90s post-block grace covers its turn and no more.
+  const storyboardWatchDue =
+    pendingQuestion?.question?.confirm_reason === "storyboard_review" &&
+    !pendingQuestion.answer &&
+    !storyboardDraftFailedLanded &&
+    readyBeatRef !== (pendingQuestion.id ?? null)
+  // A re-dock re-births the question row (new id) — re-arm the watch.
+  const pendingQuestionId = pendingQuestion?.id ?? null
   useEffect(() => {
-    if (!storyboardBlockDue) return
+    setReadyBeatRef(null)
+    blockSeenAtRef.current = null
+  }, [pendingQuestionId])
+  useEffect(() => {
+    if (!storyboardWatchDue) return
+    // The block's landing starts the ready beat's grace clock. On a
+    // refresh mid-journey the poll never saw it land — arm from mount.
+    if (storyboardBlockLanded && blockSeenAtRef.current == null) {
+      blockSeenAtRef.current = Date.now()
+    }
     const startedAt = Date.now()
     // 续航对齐起草包络 (2026-10-16 zymix 取证 — 37 分钟起草 vs 5 分钟
     // 保险丝 = 页面假死): the healthy draft lands in ~2.5 minutes, a
     // degraded night burns 3 candidates × 300s. Backoff: tight through the
     // healthy window, leisurely through the long tail; the precise landing
-    // predicates (block ∨ failure row) end the watch — the 45-minute cap
-    // only covers a dead deferred seat.
+    // predicates (ready beat ∨ failure row ∨ answer) end the watch — the
+    // 45-minute cap only covers a dead deferred seat.
     let timer: ReturnType<typeof setTimeout>
     const tick = () => {
       const elapsed = Date.now() - startedAt
       if (elapsed > 2_700_000) return
+      // Post-block the only awaited arrival is the ready beat (seconds) —
+      // the grace covers its trigger turn; a silenced beat stops the poll
+      // here instead of riding the 45-minute cap.
+      const blockSeenAt = blockSeenAtRef.current
+      if (blockSeenAt != null && Date.now() - blockSeenAt > 90_000) return
       void pollTriggerMessages()
       void fetchAssets() // the in-flight gate above flips on capture drain
       timer = setTimeout(tick, elapsed < 120_000 ? 3_000 : 15_000)
     }
     timer = setTimeout(tick, 3_000)
     return () => clearTimeout(timer)
-  }, [storyboardBlockDue, pollTriggerMessages, fetchAssets])
+  }, [storyboardWatchDue, storyboardBlockLanded, pollTriggerMessages, fetchAssets])
 
   // The output mention's candidate feed (reference family, MENTIONS §2): a
   // pinned output id resolves the revision target deterministically

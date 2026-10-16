@@ -58,9 +58,10 @@ import { cn } from "@/lib/utils"
  * completed row's leading mark IS the kind glyph (the generic ✓ said
  * "success", which the settled register already says); live rows keep the
  * 6px dot (the RunTaskList narrative row's own live mark, 2026-09-25 对齐批),
- * failed/cancelled keep the ✗ seat. The `draft` glyph seat is unreachable
- * since 落定即退役 (2026-09-28 — draft spans never render settled; the
- * timeline filters them) — it stays for the Record's exhaustiveness. */
+ * failed/cancelled keep the ✗ seat. The `draft` glyph serves the settled
+ * storyboard-drafting beat (ADR-128 — a born-settled material beat, not a
+ * 落定即退役 plan-draft span; the timeline's draft filter keys on
+ * chat.activity.* keys and never touches it). */
 const KIND_ICONS: Record<ActivityFramePayload["kind"], LucideIcon> = {
   read: Eye,
   draft: PenLine,

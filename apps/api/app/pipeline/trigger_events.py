@@ -9,7 +9,7 @@ pipeline's fire points (run terminal / craft decompile) call
 ``fire_trigger`` (schedule the turn, track the task) as the handler at
 process boot.
 
-Whitelist discipline (freeze): the two trigger kinds below are the whole
+Whitelist discipline (freeze): the trigger kinds below are the whole
 proactivity boundary — this is a seam, not an event bus. Adding a kind is an
 ADR-level review (CHAT_ARCH §8.8), never a drive-by.
 """
@@ -25,8 +25,14 @@ logger = structlog.get_logger(__name__)
 TRIGGER_RUN_COMPLETED = "run_completed"
 TRIGGER_CRAFT_DECOMPILED = "craft_decompiled"  # 案例拆解完成 (ADR-078, 旅程二④)
 TRIGGER_STORYBOARD_READY = "storyboard_ready"  # 分镜审阅卡落地 (ADR-120 迟延起草的就绪拍)
+TRIGGER_STORYBOARD_DRAFTING = "storyboard_drafting"  # 分镜起草开工拍 (ADR-128)
 TRIGGER_WHITELIST = frozenset(
-    {TRIGGER_RUN_COMPLETED, TRIGGER_CRAFT_DECOMPILED, TRIGGER_STORYBOARD_READY}
+    {
+        TRIGGER_RUN_COMPLETED,
+        TRIGGER_CRAFT_DECOMPILED,
+        TRIGGER_STORYBOARD_READY,
+        TRIGGER_STORYBOARD_DRAFTING,
+    }
 )
 
 # The subscriber's fire seat: (project_id, trigger, ref) -> schedule the turn
