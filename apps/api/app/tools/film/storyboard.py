@@ -475,7 +475,6 @@ def _apply_accent(text: str, accent: str) -> str | None:
 def resolve_draft(
     draft: DraftStoryboard,
     lines: list[ManifestLine],
-    pages: list[StoryboardPage],
 ) -> tuple[FilmStoryboard | None, list[FilmViolation]]:
     """Draft (citations) → resolved storyboard (strings). Every citation
     error is a violation with a precise echo (unknown line id, an accent
@@ -1350,7 +1349,7 @@ async def orchestrate_storyboard(
             page_images=page_images,
             repair_feedback=feedback,
         )
-        resolved, violations = resolve_draft(candidate, lines, pages)
+        resolved, violations = resolve_draft(candidate, lines)
         if resolved is not None:
             violations = validate_storyboard(resolved, pages)
             if not violations:
@@ -1431,6 +1430,9 @@ async def draft_film_storyboard(
                 project_id=str(project.id),
                 attempt=attempt,
                 codes=sorted({v.code for v in violations}),
+                # 全链日志律 (2026-10-16): the violation DETAIL is the whole
+                # point of the echo — codes alone hide WHICH slot failed.
+                detail=(feedback or "")[:600],
             ),
         )
     except (FilmStoryboardRejected, LLMSchemaError, LLMError) as exc:

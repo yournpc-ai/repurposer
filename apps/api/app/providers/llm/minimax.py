@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -77,6 +78,26 @@ def _log_usage(usage: dict | None) -> None:
         "minimax_usage",
         **{k: v for k, v in usage.items() if "token" in k or "cache" in k},
     )
+
+
+def _payload_chars(messages: list[dict]) -> int:
+    """Approximate request size for transport logs (2026-10-16 全链日志律):
+    text parts + media data-url lengths — content itself never logs."""
+    total = 0
+    for m in messages:
+        c = m.get("content")
+        if isinstance(c, str):
+            total += len(c)
+        elif isinstance(c, list):
+            for part in c:
+                if not isinstance(part, dict):
+                    continue
+                total += len(part.get("text") or "")
+                for key in ("image_url", "video_url", "audio_url"):
+                    v = part.get(key)
+                    if isinstance(v, dict) and v.get("url"):
+                        total += len(v["url"])
+    return total
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -435,18 +456,43 @@ class MiniMaxClient:
         if thinking:
             payload["thinking"] = True
 
-        async with _pooled_client() as client:
-            response = await client.post(
-                f"{self.base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-                **({"timeout": timeout_s} if timeout_s is not None else {}),
+        t0 = time.monotonic()
+        logger.info(
+            "llm_request",
+            model=settings.minimax_model,
+            stream=False,
+            payload_chars=_payload_chars(messages),
+            timeout_s=timeout_s,
+        )
+        try:
+            async with _pooled_client() as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    **({"timeout": timeout_s} if timeout_s is not None else {}),
+                )
+                _raise_for_status(response)
+                data = response.json()
+        except Exception as e:
+            logger.warning(
+                "llm_request_failed",
+                model=settings.minimax_model,
+                stream=False,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                error=f"{type(e).__name__}: {str(e)[:200]}",
             )
-            _raise_for_status(response)
-            data = response.json()
+            raise
+        logger.info(
+            "llm_response",
+            model=settings.minimax_model,
+            stream=False,
+            duration_ms=int((time.monotonic() - t0) * 1000),
+            content_chars=len(data["choices"][0]["message"].get("content") or ""),
+        )
 
         # ADR-025 metering: report usage to the bound workflow step (no-op when
         # unbound). Done before validation — tokens were consumed either way.
@@ -518,10 +564,24 @@ class MiniMaxClient:
         if thinking:
             payload["thinking"] = True
 
+        t0 = time.monotonic()
+        logger.info(
+            "llm_request",
+            model=settings.minimax_model,
+            stream=True,
+            payload_chars=_payload_chars(messages),
+        )
+        first_chunk_ms: int | None = None
         emitted = False
         last_exc: Exception | None = None
         for attempt in range(3):
             if attempt:
+                logger.warning(
+                    "llm_stream_retry",
+                    model=settings.minimax_model,
+                    attempt=attempt,
+                    error=f"{type(last_exc).__name__}: {str(last_exc)[:200]}" if last_exc else None,
+                )
                 await asyncio.sleep(min(2**attempt, 10))
             accumulated = ""
             stripper = _ThinkStripper()
@@ -551,6 +611,14 @@ class MiniMaxClient:
                             except json.JSONDecodeError:
                                 logger.warning("minimax_stream_bad_frame", frame=data[:200])
                                 continue
+                            if first_chunk_ms is None:
+                                first_chunk_ms = int((time.monotonic() - t0) * 1000)
+                                logger.info(
+                                    "llm_first_chunk",
+                                    model=settings.minimax_model,
+                                    stream=True,
+                                    first_chunk_ms=first_chunk_ms,
+                                )
                             if chunk.get("usage"):
                                 usage = chunk["usage"]
                             choices = chunk.get("choices") or []
@@ -583,6 +651,14 @@ class MiniMaxClient:
             except (httpx.TransportError, LLMError) as exc:
                 last_exc = exc
                 if emitted or attempt == 2:
+                    logger.warning(
+                        "llm_request_failed",
+                        model=settings.minimax_model,
+                        stream=True,
+                        duration_ms=int((time.monotonic() - t0) * 1000),
+                        first_chunk_ms=first_chunk_ms,
+                        error=f"{type(exc).__name__}: {str(exc)[:200]}",
+                    )
                     if isinstance(exc, LLMError):
                         # Already keyed — re-raise intact, never re-wrap.
                         raise
@@ -595,6 +671,15 @@ class MiniMaxClient:
             if isinstance(last_exc, LLMError):
                 raise last_exc
             raise LLMError(str(last_exc), user_key="provider_unreachable")
+
+        logger.info(
+            "llm_response",
+            model=settings.minimax_model,
+            stream=True,
+            duration_ms=int((time.monotonic() - t0) * 1000),
+            first_chunk_ms=first_chunk_ms,
+            content_chars=len(accumulated),
+        )
 
         # ADR-025 metering (same contract as ``generate``: report before
         # validation — tokens were consumed either way).
@@ -740,10 +825,25 @@ class MiniMaxClient:
         if thinking:
             payload["thinking"] = True
 
+        t0 = time.monotonic()
+        logger.info(
+            "llm_request",
+            model=settings.minimax_model,
+            stream=True,
+            tool_calls=True,
+            payload_chars=_payload_chars(messages),
+        )
+        first_chunk_ms: int | None = None
         emitted = False
         last_exc: Exception | None = None
         for attempt in range(3):
             if attempt:
+                logger.warning(
+                    "llm_stream_retry",
+                    model=settings.minimax_model,
+                    attempt=attempt,
+                    error=f"{type(last_exc).__name__}: {str(last_exc)[:200]}" if last_exc else None,
+                )
                 await asyncio.sleep(min(2**attempt, 10))
             accumulated = ""
             stripper = _ThinkStripper()
@@ -775,6 +875,14 @@ class MiniMaxClient:
                             except json.JSONDecodeError:
                                 logger.warning("minimax_stream_bad_frame", frame=data[:200])
                                 continue
+                            if first_chunk_ms is None:
+                                first_chunk_ms = int((time.monotonic() - t0) * 1000)
+                                logger.info(
+                                    "llm_first_chunk",
+                                    model=settings.minimax_model,
+                                    stream=True,
+                                    first_chunk_ms=first_chunk_ms,
+                                )
                             if chunk.get("usage"):
                                 usage = chunk["usage"]
                             choices = chunk.get("choices") or []
@@ -816,6 +924,15 @@ class MiniMaxClient:
             except (httpx.TransportError, LLMError) as exc:
                 last_exc = exc
                 if emitted or attempt == 2:
+                    logger.warning(
+                        "llm_request_failed",
+                        model=settings.minimax_model,
+                        stream=True,
+                        tool_calls=True,
+                        duration_ms=int((time.monotonic() - t0) * 1000),
+                        first_chunk_ms=first_chunk_ms,
+                        error=f"{type(exc).__name__}: {str(exc)[:200]}",
+                    )
                     if isinstance(exc, LLMError):
                         # Already keyed — re-raise intact, never re-wrap.
                         raise
@@ -828,6 +945,16 @@ class MiniMaxClient:
             if isinstance(last_exc, LLMError):
                 raise last_exc
             raise LLMError(str(last_exc), user_key="provider_unreachable")
+
+        logger.info(
+            "llm_response",
+            model=settings.minimax_model,
+            stream=True,
+            tool_calls=True,
+            duration_ms=int((time.monotonic() - t0) * 1000),
+            first_chunk_ms=first_chunk_ms,
+            content_chars=len(accumulated),
+        )
 
         # ADR-025 metering (same contract as ``generate``: report before
         # validation — tokens were consumed either way).

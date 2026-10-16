@@ -23,6 +23,7 @@ deciding for them.
 """
 
 import asyncio
+import time
 from uuid import UUID
 
 import structlog
@@ -202,6 +203,12 @@ async def maybe_dock_deferred_storyboard(project_id: UUID) -> None:
     """
     from app.models.database import AsyncSessionLocal  # deferred: worker seat
 
+    def _gate(name: str, **extra) -> None:
+        # 全链日志律 (2026-10-16): every silent no-op gate names itself —
+        # "why didn't it draft" must be readable from the log, never
+        # re-derived by replaying gates by hand.
+        logger.info("deferred_storyboard_gate", project_id=str(project_id), gate=name, **extra)
+
     async with AsyncSessionLocal() as db:
         locked = (
             await db.execute(
@@ -210,15 +217,18 @@ async def maybe_dock_deferred_storyboard(project_id: UUID) -> None:
             )
         ).scalar_one()
         if not locked:
+            _gate("lock_held")
             return
         project = await db.get(Project, project_id)
         if project is None:
+            _gate("project_gone")
             return
         pending = project.pending_brief if isinstance(project.pending_brief, dict) else None
         intent = (pending or {}).get("intent") or {}
         tasks = intent.get("tasks") or []
         film_task = next((t for t in tasks if t.get("tool") == "launch_film"), None)
         if film_task is None:
+            _gate("no_film_task")
             return
         in_flight = (
             await db.execute(
@@ -232,16 +242,20 @@ async def maybe_dock_deferred_storyboard(project_id: UUID) -> None:
             )
         ).scalar_one()
         if in_flight:
+            _gate("captures_in_flight", count=in_flight)
             return
         conversation = await find_conversation(db, project.user_id, project_id)
         if conversation is None:
+            _gate("no_conversation")
             return
         conversation_id = UUID(str(conversation.id))
         question = await latest_pending_question(db, conversation_id)
         if not is_pending_plan(question):
+            _gate("no_pending_plan")
             return
         assert question is not None  # is_pending_plan guarantees the row
         if await _block_newer_than_dock(db, conversation_id, question.created_at) is not None:
+            _gate("block_landed")
             return
         # The exhaustion row settles THIS dock too (法2): without this gate
         # a stray capture-complete fire (or every boot sweep) would re-draft
@@ -253,7 +267,10 @@ async def maybe_dock_deferred_storyboard(project_id: UUID) -> None:
             )
             is not None
         ):
+            _gate("failure_row_landed")
             return
+        _gate("proceed")
+        t0 = time.monotonic()
         film_params = dict(film_task.get("params") or {})
         from app.tools.film.storyboard import draft_film_storyboard  # deferred: tool seam
 
@@ -280,6 +297,11 @@ async def maybe_dock_deferred_storyboard(project_id: UUID) -> None:
                 prompt=(pending or {}).get("prompt"),
             )
             await db.commit()
+            logger.info(
+                "deferred_storyboard_failed",
+                project_id=str(project_id),
+                duration_ms=int((time.monotonic() - t0) * 1000),
+            )
             return
         storyboard, draft_pages = drafted
         await land_storyboard_block(
@@ -291,6 +313,12 @@ async def maybe_dock_deferred_storyboard(project_id: UUID) -> None:
             instruction=(pending or {}).get("prompt"),
         )
         await db.commit()
+        logger.info(
+            "deferred_storyboard_landed",
+            project_id=str(project_id),
+            duration_ms=int((time.monotonic() - t0) * 1000),
+            scenes=len(storyboard.scenes),
+        )
         # 就绪拍 (ADR-120 补言语): the block landed truthfully on its own;
         # the trigger turn speaks one beat over it. ref = THIS dock's
         # question id — a re-docked plan re-births the row, licensing one

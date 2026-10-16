@@ -213,7 +213,7 @@ def test_line_manifest_numbering_and_kinds():
 def test_resolve_draft_clean_citations_become_verbatim_strings():
     pages = [_page()]
     lines = build_line_manifest(pages)
-    resolved, violations = resolve_draft(_draft(_good_draft_scenes()), lines, pages)
+    resolved, violations = resolve_draft(_draft(_good_draft_scenes()), lines)
     assert violations == []
     assert resolved is not None
     hero = resolved.scenes[0]
@@ -234,7 +234,7 @@ def test_resolve_fit_trims_at_word_boundary():
         {"type": "ui", "seconds": 9.0, "page": 0,
          "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]},
         {"type": "end", "seconds": 3.0, "name": {"line": 1}, "tagline": {"line": 3}},
-    ]), lines, pages)
+    ]), lines)
     assert v == []
     assert head is not None
     text = head.scenes[0].lines[0]
@@ -246,7 +246,7 @@ def test_resolve_fit_trims_at_word_boundary():
         {"type": "ui", "seconds": 9.0, "page": 0,
          "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]},
         {"type": "end", "seconds": 3.0, "name": {"line": 1}, "tagline": {"line": 3}},
-    ]), lines, pages)
+    ]), lines)
     assert v == []
     assert tail is not None
     text = tail.scenes[0].lines[0]
@@ -262,7 +262,7 @@ def test_resolve_full_fit_over_cap_surfaces_as_constraint_violation():
         {"type": "ui", "seconds": 9.0, "page": 0,
          "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]},
         {"type": "end", "seconds": 3.0, "name": {"line": 1}, "tagline": {"line": 3}},
-    ]), lines, pages)
+    ]), lines)
     assert violations == []  # resolution is honest; the cap gate is validate's
     assert resolved is not None
     assert CONSTRAINT_VIOLATION in _codes(validate_storyboard(resolved, pages))
@@ -278,7 +278,7 @@ def test_resolve_accent_wraps_and_missing_accent_rejected():
          "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}]},
         {"type": "words", "seconds": 3.0, "dark": False, "lines": [{"line": 4}]},
         {"type": "end", "seconds": 3.0, "name": {"line": 1}, "tagline": {"line": 3}},
-    ]), lines, pages)
+    ]), lines)
     assert violations == []
     assert resolved is not None
     assert resolved.scenes[0].word == "*Ship* faster"
@@ -286,7 +286,7 @@ def test_resolve_accent_wraps_and_missing_accent_rejected():
     _, violations = resolve_draft(_draft([
         {"type": "hero", "seconds": 3.0,
          "word": {"line": 3, "accent": "zebras"}, "sub": {"line": 5}},
-    ]), lines, pages)
+    ]), lines)
     assert INVALID_COPY_REF in _codes(violations)
 
 
@@ -300,7 +300,7 @@ def test_resolve_unknown_line_and_cross_page_caption_rejected():
     lines = build_line_manifest(pages)
     _, violations = resolve_draft(_draft([
         {"type": "hero", "seconds": 3.0, "word": {"line": 999}, "sub": {"line": 3}},
-    ]), lines, pages)
+    ]), lines)
     assert INVALID_COPY_REF in _codes(violations)
 
     # L3 ("Ship faster") lives on page 0 — a page-1 ui caption may not cite it.
@@ -308,7 +308,7 @@ def test_resolve_unknown_line_and_cross_page_caption_rejected():
         {"type": "ui", "seconds": 6.0, "page": 1,
          "focuses": [{"at": 0.0, "x": 0.5, "y": 0.5, "zoom": 1.0}],
          "captions": [{"at": 0.0, "text": {"line": 3}}]},
-    ]), lines, pages)
+    ]), lines)
     assert INVALID_COPY_REF in _codes(violations)
 
 

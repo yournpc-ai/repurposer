@@ -30,6 +30,7 @@ agents' streaming form (N-26).
 
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+import time
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 if TYPE_CHECKING:  # the loop form's sibling declaration (no runtime import — tool_loop imports THIS module)
@@ -202,7 +203,13 @@ class Agent(Generic[OutT]):
         user_prompt = jinja_env.get_template(self.prompt).render(**template_kwargs)
         if repair_feedback is not None:
             user_prompt += _repair_echo(str(repair_feedback))
-        logger.info("agent_call_started", agent=self.name, media_count=len(media))
+        t0 = time.monotonic()
+        logger.info(
+            "agent_call_started",
+            agent=self.name,
+            media_count=len(media),
+            prompt_chars=len(user_prompt),
+        )
         try:
             result = await self._attempt(user_prompt, media, on_delta, on_reasoning, on_repair)
         except LLMError:
@@ -211,11 +218,20 @@ class Agent(Generic[OutT]):
             logger.warning("agent_declared_fallback", agent=self.name)
             return self.fallback(**ctx)
         except Exception as e:  # noqa: BLE001
-            logger.error("agent_call_failed", agent=self.name, error=str(e))
+            logger.error(
+                "agent_call_failed",
+                agent=self.name,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                error=str(e),
+            )
             raise LLMError(f"{self.name} failed: {e}") from e
         if self.postprocess is not None:
             result = self.postprocess(result, ctx)
-        logger.info("agent_call_completed", agent=self.name)
+        logger.info(
+            "agent_call_completed",
+            agent=self.name,
+            duration_ms=int((time.monotonic() - t0) * 1000),
+        )
         return result
 
     async def _attempt(
