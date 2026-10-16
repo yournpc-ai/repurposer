@@ -33,7 +33,7 @@
  * copy line + the raw count + the duration) — candidate CONTENT lives on
  * the canvas cards (R1/R3 seats), never copied onto an activity row. */
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ChevronDown,
@@ -226,45 +226,25 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
  * muted like all chrome (hover / expanded brightens it, never the resting
  * state). The chevron follows the OS disclosure convention (> collapsed,
  * label; the whole row is the tap target. Elapsed 不可测 (存量行无时间
- * 戳) falls back to the honest action count. An open-tail fold (the turn's
- * prose hasn't landed) ticks its total live while busy — the boundary
- * recompute then settles the number where the tick stood, never a flip.
- * failed/cancelled rows never
+ * 戳) falls back to the honest action count.
+ *
+ * 物化时机律: this component only ever sees a CLOSED segment — a fold
+ * whose boundary doesn't exist yet (the turn's prose hasn't landed) is
+ * withheld by the renderer while the turn is busy and materializes with
+ * the closing prose (the summary's clock ends where the summary
+ * appears); an orphaned turn's tail arrives here once busy ends, on the
+ * fallback clock. failed/cancelled rows never
  * reach here — they stay visible as their own struck-through rows. */
 export function FoldedActivityRow({
   rows,
   elapsedMs,
-  live = false,
 }: {
   rows: ActivityRowFrame[]
   elapsedMs?: number | null
-  /** The fold is the turn's open tail AND the turn is still busy: the
-   * boundary stamp (the prose's arrival) doesn't exist yet, so the total
-   * ticks from the first row's birth instead of freezing at the premature
-   * last-row total — when the prose lands, the recomputed boundary value
-   * simply stops the tick where it stood (no 「<1s → 11s」 flip). While
-   * live, `elapsedMs` is only the pre-tick paint; when busy ends without
-   * a boundary (an orphaned turn), the render falls back to it. */
-  live?: boolean
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  // now starts null (SSR/hydration-safe: no Date.now() in the initial
-  // render); the interval owns the clock from mount while `live` holds.
-  const [now, setNow] = useState<number | null>(null)
-  useEffect(() => {
-    if (!live) return
-    setNow(Date.now())
-    const id = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [live])
-  const birth = Date.parse(rows[0]?.at ?? "")
-  const liveElapsedMs =
-    live && now != null && !Number.isNaN(birth) && now > birth
-      ? now - birth
-      : null
-  const shownMs = liveElapsedMs ?? elapsedMs
-  const elapsed = shownMs != null ? formatElapsed(shownMs) : null
+  const elapsed = elapsedMs != null ? formatElapsed(elapsedMs) : null
   const label = elapsed
     ? t("chat.activityFold.worked", { elapsed })
     : t("chat.activityFold.actionCount", { count: rows.length })

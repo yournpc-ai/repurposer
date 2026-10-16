@@ -4327,8 +4327,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     activity row's empty state): ONE mounted ActivityRow owns
                     the chat world's "现在" for both the run and non-run
                     walks above — an active milestone morphs it in place, a
-                    settled milestone leaves it for the flow's history and
-                    the row falls back to think (or the material beats).
+                    settled milestone leaves it for its segment's fold (the
+                    fold materializes at this same bottom seat when the
+                    closing prose lands — 物化时机律) and the row falls back
+                    to think (or the material beats).
                     Zero history for think: it unmounts, never settles. */}
                 {nowRow && (
                   <MessageScrollerItem>

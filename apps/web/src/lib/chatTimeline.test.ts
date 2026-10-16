@@ -290,11 +290,11 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
     expect(foldOf(units[0]).elapsedMs).toBe(4000)
   })
 
-  it("openTail marks ONLY the walk's trailing fold — the renderer ticks its clock while busy (no 「<1s → 11s」 flip)", () => {
+  it("openTail marks ONLY the walk's trailing fold — the renderer withholds it while busy (the summary materializes with the closing prose)", () => {
     // A fold closed by ANY following unit (the prose's boundary, a user
     // message, a run-carrying row) is settled — openTail stays false. The
     // trailing fold (no boundary exists yet) is the one open segment.
-    const settled = foldActivityUnits(
+    const units = foldActivityUnits(
       buildConversationUnits([
         read("a1", { at: "2026-09-23T08:00:01Z" }),
         assistantMsg("reply", "2026-09-23T08:00:10Z"),

@@ -7,11 +7,12 @@
 import type { ActivityRowFrame, OverlayMessage } from "@/components/chat/historyReplay"
 
 /** One unit of the conversation timeline: a message or one activity row.
- * `openTail` on a fold = the segment is the walk's live tail (the turn's
- * prose hasn't landed yet — the fold's true boundary doesn't exist). The
- * renderer ticks such a fold's elapsed while the turn is busy instead of
- * flashing the premature last-row total and then flipping it when the
- * prose stamps the boundary (「<1s → 11s」闪变, 2026-10-16). A mid-walk
+ * `openTail` on a fold = the walk's trailing segment whose boundary (the
+ * turn's closing prose) doesn't exist yet. The renderer WITHHOLDS such a
+ * fold while the turn is busy — the summary materializes with the prose
+ * that closes the segment (the "Thought for Xs" anatomy: the clock ends
+ * where the summary appears). When busy ends without a boundary (an
+ * orphaned turn), the fold renders with the fallback clock. A mid-walk
  * flush without a boundary (a USER message, a run-carrying assistant row)
  * is a SETTLED segment — openTail stays false there (the wall clock
  * deliberately ends at the last row, never the neighbour's stamp). */
@@ -69,7 +70,10 @@ export function buildConversationUnits(
  * through as their own rows (the ✗ strike-through is the failure signal)
  * and break the run. Active rows are hard boundaries too (进行态不折叠 —
  * the now-line owns them; they never reach the walk anyway). The fold
- * never crosses a message boundary. Display-only: the folded rows keep
+ * never crosses a message boundary. The trailing unclosed segment carries
+ * `openTail` — the renderer withholds it while the turn is busy (物化时机
+ * 律: a fold appears exactly when its segment closes; the never-closed
+ * tail appears when busy ends). Display-only: the folded rows keep
  * their identities for the expanded view; the persisted array is
  * untouched. */
 export function foldActivityUnits(units: ConversationUnit[]): ConversationUnit[] {
@@ -113,9 +117,10 @@ export function foldActivityUnits(units: ConversationUnit[]): ConversationUnit[]
     flush(boundaryAt)
     out.push(unit)
   }
-  // The trailing fold is the turn's live tail — its boundary (the prose's
-  // stamp) doesn't exist yet, so the renderer owns its clock until the
-  // prose lands and this recompute settles it.
+  // The trailing fold's boundary (the closing prose's stamp) doesn't exist
+  // yet — it carries openTail so the renderer can withhold it while the
+  // turn is busy; the summary materializes when the prose lands and this
+  // recompute stamps the boundary.
   flush(undefined, true)
   return out
 }
@@ -123,11 +128,9 @@ export function foldActivityUnits(units: ConversationUnit[]): ConversationUnit[]
 /** The aggregate row's total elapsed (段墙钟, ADR-110): first row's birth
  * → the segment's end — the following assistant row's stamp when there is
  * one (the prose's arrival closes the work segment — the CC "Thought for
- * Xs" anatomy), else the last row's own end (open tail: the prose hasn't
- * arrived yet — for the live tail this value is only the pre-tick paint
- * and the orphan fallback; the renderer's ticking clock supersedes it
- * while the turn is busy). Falls back to the summed row durations; null
- * when nothing measurable exists. */
+ * Xs" anatomy), else the last row's own end (the never-closed tail's
+ * honest fallback — the prose hasn't arrived). Falls back to the summed
+ * row durations; null when nothing measurable exists. */
 function foldElapsedMs(
   rows: ActivityRowFrame[],
   boundaryAt?: string,
