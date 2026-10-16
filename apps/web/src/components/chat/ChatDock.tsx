@@ -22,7 +22,6 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  Copy,
   Crosshair,
   Download,
   Eraser,
@@ -49,7 +48,6 @@ import {
 } from "lucide-react"
 
 import { apiFetch } from "@/lib/api"
-import { copyMessageText } from "@/lib/messageCopy"
 import { inferAssetType } from "@/lib/asset-type"
 import { streamAnswer, streamChat, StreamTurnError, questionSettledCode } from "@/lib/chat-stream"
 import { sseProbe } from "@/lib/sse-probe" // TEMPORARY forensics — delete with the probe
@@ -84,7 +82,6 @@ import { Streamdown } from "streamdown"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Bubble, BubbleContent, BubbleGroup } from "@/components/ui/bubble"
 import { Message, MessageContent } from "@/components/ui/message"
 import {
@@ -675,9 +672,6 @@ function UserBubble({ text, assets }: { text: string; assets?: ProjectAsset[] })
             )}
           </>
         ) : null}
-        {/* 消息动作条 (D4②): copy = 纯客户端剪贴板,静默档 —— 只认文本消
-            息(attachment-only 无文本可拷)。 */}
-        {text ? <CopyMessageButton text={text} align="end" /> : null}
       </MessageContent>
     </Message>
   )
@@ -697,71 +691,8 @@ function AssistantText({ text, streaming }: { text: string; streaming?: boolean 
         >
           {text}
         </Streamdown>
-        {/* 消息动作条 (D4②): 落定的散文才挂 copy —— 流式中的文本还在打
-            字机节拍里,拷走半成品不诚实。挂在 Message 内 = hover 渐显作用
-            域与 user bubble 同一 (group/message)。 */}
-        {!streaming ? <CopyMessageButton text={text} align="start" /> : null}
       </MessageContent>
     </Message>
-  )
-}
-
-/** 消息 copy (flora-parity-ui D4② — the Flora m-actions line): one quiet
- * icon under the bubble / prose. 纯客户端剪贴板,静默档 —— 零 toast;成功
- * = 图标一拍翻 ✓(1.2s 回弹),失败同样安静。打字机律同律:流式中的散文
- * 不挂(挂载点把守 !streaming,组件只见落定文本)。
- * 非常驻:消息区 hover / 键盘聚焦才渐显(group/message 作用域,布局占
- * 位保留,不出现时的空白行不跳动)。 */
-function CopyMessageButton({ text, align }: { text: string; align: "start" | "end" }) {
-  const { t } = useTranslation()
-  const [copied, setCopied] = useState(false)
-  useEffect(() => {
-    if (!copied) return
-    const id = setTimeout(() => setCopied(false), 1200)
-    return () => clearTimeout(id)
-  }, [copied])
-  return (
-    <div
-      className={cn(
-        "flex transition-opacity duration-150",
-        align === "end" ? "justify-end" : "justify-start",
-        copied
-          ? "opacity-100"
-          : "pointer-events-none opacity-0 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 group-hover/message:pointer-events-auto group-hover/message:opacity-100",
-      )}
-    >
-      {/* Tooltip = the shared dark pill (Tooltip primitive), NOT the native
-          `title` — the two stacked would double-tip. side=bottom: the row
-          lives directly under the bubble/prose, a top tip would overlap the
-          text it labels. */}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              aria-label={t(copied ? "chat.copied" : "chat.copy")}
-              onClick={() => {
-                void copyMessageText(text, (s) => navigator.clipboard.writeText(s)).then(
-                  (ok) => {
-                    if (ok) setCopied(true)
-                  },
-                )
-              }}
-              className="flex items-center p-1 text-meta-foreground transition-colors hover:text-foreground"
-            >
-              {copied ? (
-                <Check className="h-3.5 w-3.5" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" />
-              )}
-            </button>
-          }
-        />
-        <TooltipContent side="bottom">
-          {t(copied ? "chat.copied" : "chat.copy")}
-        </TooltipContent>
-      </Tooltip>
-    </div>
   )
 }
 
@@ -1902,10 +1833,23 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     pendingQuestion?.question?.confirm_reason === "storyboard_review" &&
     !pendingQuestion.answer &&
     !storyboardBlockLanded
+  // 相位诚实 (2026-10-16 zymix 取证): the deferred seat only STARTS
+  // drafting once the capture set has drained (its captures_in_flight
+  // gate) — while sub-pages are still being read, the work on screen is
+  // the capture beats' own rows, and a "Drafting" line here both LIES
+  // about the phase and doubles the indicators. The client's asset list
+  // carries the same world truth as the server's gate (zero new seat).
+  const webPagesInFlight = assets.some(
+    (a) =>
+      a.type === "web_page" &&
+      (a.processing_status === "pending" ||
+        a.processing_status === "processing"),
+  )
   // The now-line's drafting placeholder (StatusLine 同座): visible while
   // the draft is legitimately in flight — gone once the block OR the
   // honest failure row lands.
-  const storyboardDraftDue = storyboardBlockDue && !storyboardDraftFailedLanded
+  const storyboardDraftDue =
+    storyboardBlockDue && !storyboardDraftFailedLanded && !webPagesInFlight
   useEffect(() => {
     if (!storyboardBlockDue) return
     const startedAt = Date.now()
@@ -1920,11 +1864,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       const elapsed = Date.now() - startedAt
       if (elapsed > 2_700_000) return
       void pollTriggerMessages()
+      void fetchAssets() // the in-flight gate above flips on capture drain
       timer = setTimeout(tick, elapsed < 120_000 ? 3_000 : 15_000)
     }
     timer = setTimeout(tick, 3_000)
     return () => clearTimeout(timer)
-  }, [storyboardBlockDue, pollTriggerMessages])
+  }, [storyboardBlockDue, pollTriggerMessages, fetchAssets])
 
   // The output mention's candidate feed (reference family, MENTIONS §2): a
   // pinned output id resolves the revision target deterministically
@@ -4242,12 +4187,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                         )
                       }
                       if (unit.kind === "activityFold") {
+                        // 物化时机律: the unclosed tail's summary waits for
+                        // its boundary — while the turn is busy the fold
+                        // renders nothing; the closing prose's arrival
+                        // recomputes the walk and the fold materializes
+                        // with it (the clock ends where the summary
+                        // appears). Once busy ends, an orphaned tail
+                        // renders on its fallback clock.
+                        if (unit.openTail && chatBusy) return null
                         return (
                           <MessageScrollerItem key={`fold-${unit.rows[0]?.activity_id}`}>
                             <FoldedActivityRow
                               rows={unit.rows}
                               elapsedMs={unit.elapsedMs}
-                              live={unit.openTail && chatBusy}
                             />
                           </MessageScrollerItem>
                         )
@@ -4305,13 +4257,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   unit.kind === "message" ? (
                     renderConversationMessage(unit.message)
                   ) : unit.kind === "activityFold" ? (
+                    // 物化时机律 (the run path above holds the same law):
+                    // the unclosed tail's fold waits for its closing prose.
+                    unit.openTail && chatBusy ? null : (
                     <MessageScrollerItem key={`fold-${unit.rows[0]?.activity_id}`}>
                       <FoldedActivityRow
                         rows={unit.rows}
                         elapsedMs={unit.elapsedMs}
-                        live={unit.openTail && chatBusy}
                       />
                     </MessageScrollerItem>
+                    )
                   ) : (
                     <MessageScrollerItem key={unit.activity.activity_id}>
                       <ActivityRow activity={unit.activity} />
