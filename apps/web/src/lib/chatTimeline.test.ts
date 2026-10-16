@@ -52,6 +52,7 @@ function unitId(u: ConversationUnit): string {
 function foldOf(u: ConversationUnit): {
   rows: ActivityRowFrame[]
   elapsedMs: number | null
+  openTail: boolean
 } {
   if (u.kind !== "activityFold") throw new Error("expected a fold")
   return u
@@ -120,11 +121,11 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
     ])
   })
 
-  it("a lone settled row passes through as its OWN row (单行段不包折叠壳)", () => {
+  it("a lone settled row folds too (2026-10-16 ruling — 完成就收, no single-row exemption)", () => {
     const units = foldActivityUnits(
       buildConversationUnits([msg("user"), read("r1"), assistantMsg("reply")]),
     )
-    expect(units.map(unitId)).toEqual(["user", "r1", "reply"])
+    expect(units.map(unitId)).toEqual(["user", "fold:r1", "reply"])
   })
 
   it("a fold never crosses a message boundary", () => {
@@ -226,9 +227,9 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
         read("ok3", { key: "chat.inspectingDone.transcript" }),
       ]),
     )
-    // The broken segments each pass through / fold on their own sides of
-    // the failed row (ok1 is a lone row → passthrough; ok2+ok3 fold).
-    expect(units.map(unitId)).toEqual(["ok1", "bad", "fold:ok2+ok3"])
+    // The broken segments each fold on their own sides of the failed row
+    // (ok1 folds as a single-row segment too — 完成就收, no exemption).
+    expect(units.map(unitId)).toEqual(["fold:ok1", "bad", "fold:ok2+ok3"])
   })
 
   it("fold 展开 = 原帧归位 (flora-parity-ui D4①): the fold keeps the ORIGINAL row frames — the expanded view renders the same identities, never copies", () => {
@@ -287,6 +288,25 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
       ]),
     )
     expect(foldOf(units[0]).elapsedMs).toBe(4000)
+  })
+
+  it("openTail marks ONLY the walk's trailing fold — the renderer ticks its clock while busy (no 「<1s → 11s」 flip)", () => {
+    // A fold closed by ANY following unit (the prose's boundary, a user
+    // message, a run-carrying row) is settled — openTail stays false. The
+    // trailing fold (no boundary exists yet) is the one open segment.
+    const settled = foldActivityUnits(
+      buildConversationUnits([
+        read("a1", { at: "2026-09-23T08:00:01Z" }),
+        assistantMsg("reply", "2026-09-23T08:00:10Z"),
+        read("b1", { at: "2026-09-23T08:00:20Z" }),
+        msg("user", "2026-09-23T11:00:00Z"),
+        read("c1", { at: "2026-09-23T11:00:05Z" }),
+      ]),
+    )
+    expect(units.map(unitId)).toEqual(["fold:a1", "reply", "fold:b1", "user", "fold:c1"])
+    expect(foldOf(units[0]).openTail).toBe(false)
+    expect(foldOf(units[2]).openTail).toBe(false)
+    expect(foldOf(units[4]).openTail).toBe(true)
   })
 
   it("no boundary and no stamps → the summed durations; nothing measurable → null", () => {

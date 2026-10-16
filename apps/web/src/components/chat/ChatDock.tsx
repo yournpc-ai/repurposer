@@ -1909,14 +1909,21 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   useEffect(() => {
     if (!storyboardBlockDue) return
     const startedAt = Date.now()
-    const id = setInterval(() => {
-      if (Date.now() - startedAt > 300_000) {
-        clearInterval(id)
-        return
-      }
+    // 续航对齐起草包络 (2026-10-16 zymix 取证 — 37 分钟起草 vs 5 分钟
+    // 保险丝 = 页面假死): the healthy draft lands in ~2.5 minutes, a
+    // degraded night burns 3 candidates × 300s. Backoff: tight through the
+    // healthy window, leisurely through the long tail; the precise landing
+    // predicates (block ∨ failure row) end the watch — the 45-minute cap
+    // only covers a dead deferred seat.
+    let timer: ReturnType<typeof setTimeout>
+    const tick = () => {
+      const elapsed = Date.now() - startedAt
+      if (elapsed > 2_700_000) return
       void pollTriggerMessages()
-    }, 3000)
-    return () => clearInterval(id)
+      timer = setTimeout(tick, elapsed < 120_000 ? 3_000 : 15_000)
+    }
+    timer = setTimeout(tick, 3_000)
+    return () => clearTimeout(timer)
   }, [storyboardBlockDue, pollTriggerMessages])
 
   // The output mention's candidate feed (reference family, MENTIONS §2): a
@@ -3897,7 +3904,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     | { kind: "taskList" }
     | { kind: "message"; message: OverlayMessage }
     | { kind: "activity"; activity: ActivityRowFrame }
-    | { kind: "activityFold"; rows: ActivityRowFrame[]; elapsedMs: number | null }
+    | { kind: "activityFold"; rows: ActivityRowFrame[]; elapsedMs: number | null; openTail: boolean }
   const runStreamUnits = useMemo<RunStreamUnit[] | null>(() => {
     // ONE render path for every window (2026-09-09 双渲染路收一——the legacy
     // fixed block is dead): the pre-snapshot window (runStartAt == null —
@@ -4237,7 +4244,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                       if (unit.kind === "activityFold") {
                         return (
                           <MessageScrollerItem key={`fold-${unit.rows[0]?.activity_id}`}>
-                            <FoldedActivityRow rows={unit.rows} elapsedMs={unit.elapsedMs} />
+                            <FoldedActivityRow
+                              rows={unit.rows}
+                              elapsedMs={unit.elapsedMs}
+                              live={unit.openTail && chatBusy}
+                            />
                           </MessageScrollerItem>
                         )
                       }
@@ -4295,7 +4306,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     renderConversationMessage(unit.message)
                   ) : unit.kind === "activityFold" ? (
                     <MessageScrollerItem key={`fold-${unit.rows[0]?.activity_id}`}>
-                      <FoldedActivityRow rows={unit.rows} elapsedMs={unit.elapsedMs} />
+                      <FoldedActivityRow
+                        rows={unit.rows}
+                        elapsedMs={unit.elapsedMs}
+                        live={unit.openTail && chatBusy}
+                      />
                     </MessageScrollerItem>
                   ) : (
                     <MessageScrollerItem key={unit.activity.activity_id}>

@@ -6,11 +6,24 @@
 
 import type { ActivityRowFrame, OverlayMessage } from "@/components/chat/historyReplay"
 
-/** One unit of the conversation timeline: a message or one activity row. */
+/** One unit of the conversation timeline: a message or one activity row.
+ * `openTail` on a fold = the segment is the walk's live tail (the turn's
+ * prose hasn't landed yet — the fold's true boundary doesn't exist). The
+ * renderer ticks such a fold's elapsed while the turn is busy instead of
+ * flashing the premature last-row total and then flipping it when the
+ * prose stamps the boundary (「<1s → 11s」闪变, 2026-10-16). A mid-walk
+ * flush without a boundary (a USER message, a run-carrying assistant row)
+ * is a SETTLED segment — openTail stays false there (the wall clock
+ * deliberately ends at the last row, never the neighbour's stamp). */
 export type ConversationUnit =
   | { kind: "message"; message: OverlayMessage }
   | { kind: "activity"; activity: ActivityRowFrame }
-  | { kind: "activityFold"; rows: ActivityRowFrame[]; elapsedMs: number | null }
+  | {
+      kind: "activityFold"
+      rows: ActivityRowFrame[]
+      elapsedMs: number | null
+      openTail: boolean
+    }
 
 /** The draft span never enters the flow (2026-09-28 user ruling —
  * 落定即退役): the docked plan card IS the settled evidence. The server
@@ -48,27 +61,27 @@ export function buildConversationUnits(
 }
 
 /** 折叠投影 (呈现层纯函数, ADR-110 段聚合——Claude Code 式坍缩 +
- * Flora 解剖): 两条消息之间 2+ 条连续 COMPLETED 落定活动行折成一条
- * 聚合行「工作了 2m 7s」——折叠态只说总耗时这一个事实(分解一击可达,
- * 永不带 fragment 摘要)。单行段不包折叠壳:一条「已读网页 · 48s」直接
- * 说,不套「工作了 5s」的壳。failed/cancelled rows never fold: they
- * pass through as their own rows (the ✗ strike-through is the failure
- * signal) and break the run. Active rows are hard boundaries too
- * (进行态不折叠 — the now-line owns them; they never reach the walk
- * anyway). The fold never crosses a message boundary. Display-only: the
- * folded rows keep their identities for the expanded view; the persisted
- * array is untouched. */
+ * Flora 解剖): 两条消息之间的连续 COMPLETED 落定活动行折成一条聚合行
+ * 「工作了 2m 7s」——折叠态只说总耗时这一个事实(分解一击可达,永不带
+ * fragment 摘要)。单行段同样收壳(2026-10-16 用户拍板——完成就收:
+ * 裸单行在段尚未成形的窗口里是孤零遥测行,段成形后又原地翻成折叠壳,
+ * 一次闪变比壳本身更吵)。failed/cancelled rows never fold: they pass
+ * through as their own rows (the ✗ strike-through is the failure signal)
+ * and break the run. Active rows are hard boundaries too (进行态不折叠 —
+ * the now-line owns them; they never reach the walk anyway). The fold
+ * never crosses a message boundary. Display-only: the folded rows keep
+ * their identities for the expanded view; the persisted array is
+ * untouched. */
 export function foldActivityUnits(units: ConversationUnit[]): ConversationUnit[] {
   const out: ConversationUnit[] = []
   let run: ActivityRowFrame[] = []
-  const flush = (boundaryAt?: string) => {
-    if (run.length === 1) {
-      out.push({ kind: "activity", activity: run[0] })
-    } else if (run.length > 0) {
+  const flush = (boundaryAt?: string, openTail = false) => {
+    if (run.length > 0) {
       out.push({
         kind: "activityFold",
         rows: run,
         elapsedMs: foldElapsedMs(run, boundaryAt),
+        openTail,
       })
     }
     run = []
@@ -100,16 +113,21 @@ export function foldActivityUnits(units: ConversationUnit[]): ConversationUnit[]
     flush(boundaryAt)
     out.push(unit)
   }
-  flush()
+  // The trailing fold is the turn's live tail — its boundary (the prose's
+  // stamp) doesn't exist yet, so the renderer owns its clock until the
+  // prose lands and this recompute settles it.
+  flush(undefined, true)
   return out
 }
 
 /** The aggregate row's total elapsed (段墙钟, ADR-110): first row's birth
  * → the segment's end — the following assistant row's stamp when there is
  * one (the prose's arrival closes the work segment — the CC "Thought for
- * Xs" anatomy), else the last row's own end (live tail: the prose hasn't
- * arrived yet). Falls back to the summed row durations; null when nothing
- * measurable exists. */
+ * Xs" anatomy), else the last row's own end (open tail: the prose hasn't
+ * arrived yet — for the live tail this value is only the pre-tick paint
+ * and the orphan fallback; the renderer's ticking clock supersedes it
+ * while the turn is busy). Falls back to the summed row durations; null
+ * when nothing measurable exists. */
 function foldElapsedMs(
   rows: ActivityRowFrame[],
   boundaryAt?: string,
