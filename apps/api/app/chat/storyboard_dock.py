@@ -37,6 +37,7 @@ from app.models.schemas import (
     FilmStoryboard,
 )
 from app.models.tables import Asset, Message, Project
+from app.pipeline.trigger_events import TRIGGER_STORYBOARD_READY, fire_trigger
 from app.platform.conversation_context import (
     find_conversation,
     is_pending_plan,
@@ -51,9 +52,10 @@ logger = structlog.get_logger(__name__)
 # the shared seat). Loser no-ops: both fires observe the same world.
 _DRAFT_LOCK_KEY = "film_storyboard_draft"
 
-# 法2 有界后台重试: the dock draft's own validation loop already retries
-# inside one call; a full re-draft is ONE more shot, then the honest row.
-_DRAFT_ATTEMPTS = 2
+# 打回有界的唯一座位在候选层 (orchestrate_storyboard 的 1+MAX_REWRITES)——
+# 外层整稿重试与内层叠加成乘法失控 (2×3=6 次重多模态调用，2026-10-15
+# zymix 取证: 37 分钟全灭)，dock 层只跑一次，穷尽即落诚实行。
+_DRAFT_ATTEMPTS = 1
 
 STORYBOARD_DRAFT_FAILED_TYPE = "storyboard_draft_failed"
 
@@ -182,10 +184,11 @@ async def maybe_dock_deferred_storyboard(project_id: UUID) -> None:
     pending film plan / the dock already settled (answered = the user beat
     the block to it — but with the hard gate that only happens via an
     explicit waiver) / a block already landed for THIS dock / captures
-    still in flight. The draft gets ``_DRAFT_ATTEMPTS`` shots; terminal
-    failure lands ONE honest row (法2 — the hold stands, the plan never
-    starts unreviewed, the user may rephrase or explicitly waive). Own
-    session + own commit (the worker's fire-and-forget law).
+    still in flight. The bounded retry lives in the candidate loop
+    (``orchestrate_storyboard``); terminal failure lands ONE honest row
+    (法2 — the hold stands, the plan never starts unreviewed, the user may
+    rephrase or explicitly waive). Own session + own commit (the worker's
+    fire-and-forget law).
     """
     from app.models.database import AsyncSessionLocal  # deferred: worker seat
 
@@ -267,6 +270,14 @@ async def maybe_dock_deferred_storyboard(project_id: UUID) -> None:
             instruction=(pending or {}).get("prompt"),
         )
         await db.commit()
+        # 就绪拍 (ADR-120 补言语): the block landed truthfully on its own;
+        # the trigger turn speaks one beat over it. ref = THIS dock's
+        # question id — a re-docked plan re-births the row, licensing one
+        # fresh speech per revision. Fire-and-forget: no subscriber = the
+        # card still lands, silence never fails the seat.
+        fire_trigger(
+            project_id, TRIGGER_STORYBOARD_READY, str(question.id)
+        )
 
 
 async def _land_draft_failure_row(

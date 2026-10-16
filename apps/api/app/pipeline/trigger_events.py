@@ -24,7 +24,10 @@ logger = structlog.get_logger(__name__)
 # The proactivity boundary (白名单): a turn fires ONLY on these world events.
 TRIGGER_RUN_COMPLETED = "run_completed"
 TRIGGER_CRAFT_DECOMPILED = "craft_decompiled"  # 案例拆解完成 (ADR-078, 旅程二④)
-TRIGGER_WHITELIST = frozenset({TRIGGER_RUN_COMPLETED, TRIGGER_CRAFT_DECOMPILED})
+TRIGGER_STORYBOARD_READY = "storyboard_ready"  # 分镜审阅卡落地 (ADR-120 迟延起草的就绪拍)
+TRIGGER_WHITELIST = frozenset(
+    {TRIGGER_RUN_COMPLETED, TRIGGER_CRAFT_DECOMPILED, TRIGGER_STORYBOARD_READY}
+)
 
 # The subscriber's fire seat: (project_id, trigger, ref) -> schedule the turn
 # and return (fire-and-forget — the world event already landed truthfully;

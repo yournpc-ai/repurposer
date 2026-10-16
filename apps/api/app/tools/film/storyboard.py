@@ -33,6 +33,7 @@ divider ordinals, ui/end display URLs, the ui screenshot, the end logo.
 
 from __future__ import annotations
 
+import difflib
 import re
 from contextlib import suppress
 from dataclasses import dataclass
@@ -238,8 +239,9 @@ def _norm(s: str) -> str:
     return re.sub(r"[^\w]+", "", s.lower())
 
 
-def _corpus(research: WebPageResearch) -> list[str]:
-    """One page's normalized grounding universe."""
+def _corpus_pairs(research: WebPageResearch) -> list[tuple[str, str]]:
+    """(normalized, original) grounding pairs — the norm drives matching,
+    the original rides the repair echo's nearest-candidate hints."""
     raw = [
         research.title,
         research.description,
@@ -250,7 +252,25 @@ def _corpus(research: WebPageResearch) -> list[str]:
         *research.links,
         *research.paragraphs,
     ]
-    return [n for n in (_norm(item) for item in raw) if n]
+    return [(n, item) for item in raw if (n := _norm(item))]
+
+
+def _nearest_hint(norm_text: str, pairs: list[tuple[str, str]]) -> str:
+    """The repair echo's menu (2026-10-16 zymix 取证 — 打地鼠形态): a
+    rejected line told the model WHAT failed but never WHAT was available,
+    so each rewrite re-invented on another scene. Up to 3 nearest manifest
+    lines (similarity order) turn the blind re-roll into a pick."""
+    near = difflib.get_close_matches(
+        norm_text, [n for n, _ in pairs], n=3, cutoff=0.25
+    )
+    if not near:
+        return ""
+    first: dict[str, str] = {}
+    for n, orig in pairs:
+        first.setdefault(n, orig.strip())
+    return "; closest manifest lines: " + " / ".join(
+        f"«{first[n][:80]}»" for n in near
+    )
 
 
 def _screen_strings(scene: Any) -> list[tuple[str, str]]:
@@ -291,7 +311,7 @@ def validate_storyboard(
     proceed to frame allocation. The union corpus grounds every scene except
     ui captions, which ground against the page they show."""
     violations: list[FilmViolation] = []
-    union_corpus = [item for p in pages for item in _corpus(p.research)]
+    union_pairs = [pair for p in pages for pair in _corpus_pairs(p.research)]
 
     def grounded(text: str, corpus: list[str]) -> bool:
         norm = _norm(text)
@@ -334,11 +354,12 @@ def validate_storyboard(
         total_seconds += scene.seconds
 
         strings = _screen_strings(scene)
-        corpus = (
-            _corpus(pages[scene.page].research)
+        pairs = (
+            _corpus_pairs(pages[scene.page].research)
             if scene.type == "ui" and 0 <= scene.page < len(pages)
-            else union_corpus
+            else union_pairs
         )
+        corpus = [norm for norm, _ in pairs]
         for slot, text in strings:
             cap = TEXT_CAPS.get((scene.type, "captions" if scene.type == "ui" else slot))
             if cap is not None and len(text) > cap:
@@ -356,7 +377,8 @@ def validate_storyboard(
                 violations.append(
                     FilmViolation(
                         TEXT_NOT_GROUNDED,
-                        f"{where}.{slot}: «{text[:60]}» traces to no manifest line — quote or trim the page's own copy",
+                        f"{where}.{slot}: «{text[:60]}» traces to no manifest line — quote or trim the page's own copy"
+                        + _nearest_hint(_norm(text), pairs),
                     )
                 )
 

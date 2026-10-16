@@ -124,6 +124,23 @@ def test_invented_copy_rejected():
     assert TEXT_NOT_GROUNDED in _codes(violations)
 
 
+def test_grounding_rejection_carries_nearest_manifest_lines():
+    """The repair echo's menu (2026-10-16): a rejected line names its nearest
+    quotable candidates, so the rewrite picks instead of re-inventing."""
+    scenes = _good_scenes()
+    scenes[0]["sub"] = "Ship faster with your team"  # near "Ship faster"
+    violations = validate_storyboard(_storyboard(scenes), [_page()])
+    detail = next(v.detail for v in violations if v.code == TEXT_NOT_GROUNDED)
+    assert "closest manifest lines:" in detail
+    assert "Ship faster" in detail
+
+    scenes = _good_scenes()
+    scenes[0]["sub"] = "zzz qqq unrelated gibberish 12345"
+    violations = validate_storyboard(_storyboard(scenes), [_page()])
+    detail = next(v.detail for v in violations if v.code == TEXT_NOT_GROUNDED)
+    assert "closest manifest lines:" not in detail  # 无近邻 = 零噪音
+
+
 def test_ui_captions_ground_against_their_own_page():
     pages = [
         _page(),
