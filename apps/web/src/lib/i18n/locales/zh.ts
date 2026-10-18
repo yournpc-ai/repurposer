@@ -1145,7 +1145,7 @@ const zh: Resources = {
     userLabel: "你",
     thinking: "思考中...",
     thinkingPhases: {
-      capturing: "正在等待网页采集完成…",
+      capturing: "正在读网页…",
       storyboarding: "正在设计分镜…",
       storyboard_revision: "正在调整分镜…",
     },

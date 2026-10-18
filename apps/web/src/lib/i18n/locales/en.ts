@@ -1196,7 +1196,7 @@ const en = {
     userLabel: "You",
     thinking: "Thinking...",
     thinkingPhases: {
-      capturing: "Waiting for the page captures…",
+      capturing: "Reading the pages…",
       storyboarding: "Designing the storyboard…",
       storyboard_revision: "Adjusting the storyboard…",
     },
