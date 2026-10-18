@@ -1200,6 +1200,10 @@ const en = {
       storyboarding: "Designing the storyboard…",
       storyboard_revision: "Adjusting the storyboard…",
     },
+    /** The now-line for the closing review's generation window (a terminal
+     * run's closing speech is an LLM call the trigger poll picks up — an
+     * in-flight LLM call always owns a now-line). */
+    closingReview: "Wrapping up…",
     /** 分镜起草落定行（legacy 节拍回放）: the drafting span's
      * SETTLED row (a born-settled material beat) — the log register
      * (verb-object + fact, no progressive), the same 三寄存器 law as the

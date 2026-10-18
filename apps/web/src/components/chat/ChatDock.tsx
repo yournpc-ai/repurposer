@@ -1751,17 +1751,28 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const reviewerLanded = messages.some(
     (m) => m.runId === runId && m.suggestions !== undefined,
   )
+  // 有 LLM 调用就必定要有 now-line (2026-10-19 用户拍板): the closing
+  // speech's generation is an LLM call the poll below picks up — while the
+  // watch is armed, the now-line narrates it. The state lives and dies with
+  // the watch window itself (lands → off, grace expires → off), so the row
+  // can never stick (假活跃禁令).
+  const [reviewPending, setReviewPending] = useState(false)
   useEffect(() => {
     if (!terminal || !runId || reviewerLanded) return
+    setReviewPending(true)
     const startedAt = Date.now()
     const id = setInterval(() => {
       if (Date.now() - startedAt > 60_000) {
         clearInterval(id)
+        setReviewPending(false)
         return
       }
       void pollTriggerMessages()
     }, 3000)
-    return () => clearInterval(id)
+    return () => {
+      clearInterval(id)
+      setReviewPending(false)
+    }
   }, [terminal, runId, reviewerLanded, pollTriggerMessages])
 
   // The output mention's candidate feed (reference family, MENTIONS §2): a
@@ -3954,6 +3965,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         materialBeatKey("chat.material.reading", lone.type),
         lone.title ?? undefined,
       )
+    }
+    // The closing review's generation window (run terminal → the speech row
+    // lands and types): an LLM call is in flight, so the now-line narrates
+    // it. proseActive still wins above — the typing speech IS the evidence.
+    if (reviewPending) {
+      return think("chat.closingReview")
     }
     return null
   })()

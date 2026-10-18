@@ -1149,6 +1149,9 @@ const zh: Resources = {
       storyboarding: "正在设计分镜…",
       storyboard_revision: "正在调整分镜…",
     },
+    /** 收官言语生成窗口的 now-line（终态 run 的收官言语是一次 LLM 调用，
+     * 由触发轮询拾取——有 LLM 调用就必定有 now-line）。 */
+    closingReview: "正在收尾…",
     /** 分镜起草落定行（legacy 节拍回放）：跨度的落定行（born-settled
      * 素材节拍）——活动日志寄存器（动宾+事实，无进行态），与素材读取族同
      * 三寄存器律。 */
