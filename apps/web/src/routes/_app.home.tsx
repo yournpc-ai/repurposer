@@ -409,7 +409,7 @@ function Home() {
                   dissolves whatever scrolls under. */}
               <div
                 ref={tabsBarRef}
-                className="sticky top-0 z-20 bg-background px-4 pb-4 pt-6 [mask-image:linear-gradient(to_bottom,black_calc(100%-16px),transparent)] max-md:top-14 sm:px-6"
+                className="sticky top-0 z-20 bg-background px-4 pb-6 pt-6 [mask-image:linear-gradient(to_bottom,black_calc(100%-16px),transparent)] max-md:top-14 sm:px-6"
               >
                 <div className="mx-auto w-full max-w-6xl">
                   <RecipeTabs

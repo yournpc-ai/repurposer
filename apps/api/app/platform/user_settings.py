@@ -13,8 +13,8 @@ to ``auto`` (standing authorization): the presented plan starts on arrival.
 ``ask`` restores the per-beat confirm (ADR-092 口头确认律是 ask 档法律).
 
 工作区布局 (ADR-123): ``workspace_layout`` = the canvas capability bit's
-second judgment source — ``auto`` (default) follows the viewport; ``chat``
-pins the chat-first workspace on every screen. The server only STORES it
+second judgment source — ``chat`` (default) pins the chat-first workspace on
+every screen; ``auto`` follows the viewport. The server only STORES it
 (cross-device sync): the effective ``canvas_available`` is composed
 client-side and rides every chat request (ADR-118 双键), so nothing
 server-side consumes this key.
@@ -31,7 +31,7 @@ CONFIRMATION_KEYS: tuple[ConfirmationKey, ...] = (
 )
 
 WORKSPACE_LAYOUTS = ("auto", "chat")
-DEFAULT_WORKSPACE_LAYOUT = "auto"
+DEFAULT_WORKSPACE_LAYOUT = "chat"
 
 
 def _read_mode(settings: dict[str, Any] | None, key: ConfirmationKey) -> str:
@@ -61,7 +61,7 @@ def merge_confirmation_pref(
 
 
 def read_workspace_layout(settings: dict[str, Any] | None) -> str:
-    """Read-tolerant layout pref: absent/unknown reads as ``auto`` (读容忍
+    """Read-tolerant layout pref: absent/unknown reads as ``chat`` (读容忍
     — the value is a preference, never a gate)."""
     value = (settings or {}).get("workspace_layout")
     return value if value in WORKSPACE_LAYOUTS else DEFAULT_WORKSPACE_LAYOUT

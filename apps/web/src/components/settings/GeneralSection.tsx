@@ -42,7 +42,7 @@ export function GeneralSection() {
         if (!res.ok) return
         const data = (await res.json()) as { workspace_layout?: string }
         const value: WorkspaceLayout =
-          data.workspace_layout === "chat" ? "chat" : "auto"
+          data.workspace_layout === "auto" ? "auto" : "chat"
         if (cancelled) return
         setLayout(value)
         // Server wins: resync the mirror so other devices' choices reach
@@ -105,7 +105,7 @@ export function GeneralSection() {
             </p>
           </div>
           <Select
-            value={layout ?? "auto"}
+            value={layout ?? "chat"}
             onValueChange={(v) => void update(v as WorkspaceLayout)}
             disabled={layout === null || saving}
           >

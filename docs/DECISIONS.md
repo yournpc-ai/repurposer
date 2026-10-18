@@ -2965,10 +2965,10 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 **Context**: 项目页布局形态此前只有一个判断源——视口宽度（768px 断点）。ADR-122 把移动端钉成恒 full 纯 chat 后，「chat 为主」已是成熟形态，用户应能显式选择它（含宽屏桌面），而不是被视口唯一决定。
 
 **Decision**:
-1. **两档设置**：`users.settings.workspace_layout ∈ {auto, chat}`（默认 auto）。auto = 现状（宽屏画布 + panel，窄屏纯 chat）；chat = 任何屏幕恒驻 full 纯 chat。**不设「强制画布」档**——<iPad 无画布是架构禁令（prohibition #13），强制档在移动端是虚假承诺（虚构 SKU 禁令同族）。
+1. **两档设置**：`users.settings.workspace_layout ∈ {auto, chat}`（默认 chat）。chat = 任何屏幕恒驻 full 纯 chat；auto = 视口跟随（宽屏画布 + panel，窄屏纯 chat）。**不设「强制画布」档**——<iPad 无画布是架构禁令（prohibition #13），强制档在移动端是虚假承诺（虚构 SKU 禁令同族）。
 2. **服务端只存不用**：跨设备同步的真值源；谓词消费零新增——有效的 `canvas_available` 由客户端合成并随每条 chat 请求上报（ADR-118 双键机制不变）。存键零迁移（JSONB）；词表/读写纯函数住 `app/platform/user_settings.py`（confirm 双键同构）。
 3. **能力位唯一合成座**：`canvasCapableFor(isMobile, workspaceLayout)`（`lib/canvasVisibility.ts`）——视口 ∧ 设置；项目路由内全部画布门（worldLive 的 plan-ready 项 / canvasVis / 画布挂载 / form / 相机节拍）读这一个合成值，单源律扩展到「禁以设置项自行推断」。
-4. **localStorage 镜像**（`repurposer-workspace-layout`）：首条 chat 消息挂载即发出并给会话盖 `canvas_available` 章（last-wins），设置必须首帧同步可读，否则 chat 档桌面用户首章错盖 true（承接句门会被反向编造）。镜像 = 主题先例；GeneralSection 挂载时以 server 值回写镜像（server wins，跨设备同步点）；hook 初值 `"auto"` + effect 矫正（SSR 律 + use-mobile 同族先例）。
+4. **localStorage 镜像**（`repurposer-workspace-layout`）：首条 chat 消息挂载即发出并给会话盖 `canvas_available` 章（last-wins），设置必须首帧同步可读，否则 chat 档桌面用户首章错盖 true（承接句门会被反向编造）。镜像 = 主题先例；GeneralSection 挂载时以 server 值回写镜像（server wins，跨设备同步点）；hook 初值 `"chat"` + effect 矫正（SSR 律 + use-mobile 同族先例）。
 5. **UI 座位**：SettingsDialog 新增「通用」section（显示类偏好）——「助手」区是确认偏好的唯一座位（CLAUDE.md），布局偏好不混入。主题/语言留 account console 不动。
 
 **Consequences**: chat 档桌面用户得到与移动端完全同构的体验（锚卡交付 + 承接句门自动正确）；auto 档与移动端行为零变化。

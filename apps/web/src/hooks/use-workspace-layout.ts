@@ -5,7 +5,7 @@
  * 值回写镜像（server wins）。
  *
  * SSR 律：localStorage 只在 effect / 事件处理器读——hook 初值恒
- * `"auto"`（SSR 与首渲一致），挂载 effect 矫正（use-mobile 同族先例）。
+ * `"chat"`（SSR 与首渲一致），挂载 effect 矫正（use-mobile 同族先例）。
  * 画布 reveal 依赖网络帧，矫正远早于它，无闪烁。 */
 
 import { useEffect, useState } from "react"
@@ -16,7 +16,7 @@ const MIRROR_KEY = "repurposer-workspace-layout"
 const CHANGE_EVENT = "repurposer:workspace-layout"
 
 function readMirror(): WorkspaceLayout {
-  return window.localStorage.getItem(MIRROR_KEY) === "chat" ? "chat" : "auto"
+  return window.localStorage.getItem(MIRROR_KEY) === "auto" ? "auto" : "chat"
 }
 
 /** The mirror's one write seat: the settings dialog's successful PUT (and
@@ -32,7 +32,7 @@ export function writeWorkspaceLayoutMirror(value: WorkspaceLayout) {
 }
 
 export function useWorkspaceLayout(): WorkspaceLayout {
-  const [layout, setLayout] = useState<WorkspaceLayout>("auto")
+  const [layout, setLayout] = useState<WorkspaceLayout>("chat")
   useEffect(() => {
     setLayout(readMirror())
     const onChange = () => setLayout(readMirror())
