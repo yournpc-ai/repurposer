@@ -1178,6 +1178,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const lastFrameAtRef = useRef(0)
   const turnStartMsRef = useRef(0)
   const deadStreamRef = useRef(false)
+  // 终帧落旗: set the moment the turn.completed envelope arrives — the pipe
+  // is DONE then (no frame ever follows), so the dead-stream machinery's
+  // whole domain ends there. The watchdog and the visibility trigger both
+  // retire on this flag: post-terminal silence is expected, never death.
+  const terminalReceivedRef = useRef(false)
   const reconcileGenRef = useRef(0)
   const reconcileRunningRef = useRef<number | null>(null)
   const reconciledIdsRef = useRef<Set<string>>(new Set())
@@ -1663,6 +1668,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       })
       if (document.visibilityState !== "visible") return
       if (abortRef.current === null) return
+      // Post-terminal the pipe is DONE by definition: the wake's "no frame
+      // for >45s" signature misfires on a healthy completed turn whose
+      // typewriter is still pacing (hidden-tab throttle stretches the drain
+      // past the silence gate) — reconcile here would only twin the row the
+      // envelope is already rendering.
+      if (terminalReceivedRef.current) return
       if (Date.now() - lastFrameAtRef.current <= STREAM_SILENCE_DEAD_MS) return
       sseProbe("visibility.dead")
       deadStreamRef.current = true
@@ -2313,6 +2324,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // 45s of silence declares the pipe dead and abandons the zombie stream.
     const reconcileGen = ++reconcileGenRef.current
     deadStreamRef.current = false
+    terminalReceivedRef.current = false
     const turnStartMs = Date.now()
     turnStartMsRef.current = turnStartMs
     lastFrameAtRef.current = turnStartMs
@@ -2321,10 +2333,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }
     sseProbe("turn.start", { form })
     const watchdog = setInterval(() => {
+      // Retired post-terminal (terminalReceivedRef): after turn.completed no
+      // frame will ever arrive, so silence past the envelope is the drain's
+      // own pacing (a hidden tab's throttled timers stretch it to minutes) —
+      // never a dead pipe.
+      if (terminalReceivedRef.current) return
       if (Date.now() - lastFrameAtRef.current > STREAM_SILENCE_DEAD_MS) {
         sseProbe("watchdog.dead", {
           silenceMs: Date.now() - lastFrameAtRef.current,
         })
+        // One-shot: death is declared once (deadStreamRef sticks, the abort
+        // is issued) — re-firing only re-aborts a corpse, and if the turn's
+        // promise never settles the interval would leak-fire forever.
+        clearInterval(watchdog)
         deadStreamRef.current = true
         ctrl.abort()
       }
@@ -2620,6 +2641,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
       )
       sseProbe("turn.envelope", { dead: deadStreamRef.current })
+      // 终帧缴械: the pipe is DONE — no frame ever follows turn.completed,
+      // so the dead-stream machinery's domain ends here. Post-envelope the
+      // only work left is the typewriter pacing data already in hand, and a
+      // hidden tab's throttled timers must never again read as pipe death.
+      terminalReceivedRef.current = true
+      clearInterval(watchdog)
       // Dead-stream bail (watchdog / visibility fired): the reconcile owns
       // the turn now — the envelope's whole completion path is superseded,
       // never double-rendered.
@@ -2645,6 +2672,17 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       if (deadStreamRef.current) {
         sseProbe("turn.bail.post-drain")
         return
+      }
+      // 收编即登记: the envelope owns these rows from here — but the live
+      // bubble keeps its LOCAL streamId forever, so reconcile's id-dedup is
+      // blind to what we are rendering unless the real row ids are
+      // registered at the ownership handoff (symmetric to reconcile's own
+      // registration). Any reconcile that still fires later skips them.
+      if (data.assistant_message != null) {
+        reconciledIdsRef.current.add(data.assistant_message.id)
+      }
+      if (data.answered_question != null) {
+        reconciledIdsRef.current.add(data.answered_question.id)
       }
       // 终帧律 (I-PFA-06 相位清除协议, 2026-09-18): the envelope closes every
       // phase — the landing awaits below (prose pacing drains, then the
