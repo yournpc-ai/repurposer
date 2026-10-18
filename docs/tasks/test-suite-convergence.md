@@ -77,7 +77,7 @@
 ### 3.2 harness 公共断言（每本自动携带，不再单独立本）
 
 - SSE 工具 loop 线格式：`concat(deltas) == 信封散文`；读先 startswith 前缀律；拒轮方差注记
-- Activity 帧形态（composing 唯一相位座）+ question.preview 预览帧
+- Activity 帧形态 + question.preview 预览帧
 - dock 三形态机
 - 估价三断言：flow 对账自检过 / 报价单调性（子图 ≤ 全图，非负）/ repair 只一轮
 - 形态级断言纪律不变：永不锁 LLM 文案（提醒尾 / 机器标记 / 确定性回执等代码强制文本例外）

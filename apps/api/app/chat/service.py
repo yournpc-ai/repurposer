@@ -1759,9 +1759,9 @@ async def _continue_chat_answer(
         suggestion_ref=suggestion_ref,
         on_delta=on_delta,
         # I-PFA-06 parity (Batch B 验收修复): the chat-path continuation
-        # needs the phase pipe too — without it composing stays silent on
-        # this branch and a stale label could linger until the envelope
-        # (the exact gap 交互完整性批 C closed on the main paths).
+        # needs the phase pipe too — a film design span on this branch
+        # reports its System Status labels through it (and clears them at
+        # the span's exit).
         on_phase=on_phase,
         on_tool_call=on_tool_call,
         on_tool_ready=on_tool_ready,
@@ -2849,10 +2849,11 @@ async def execute_chat_turn(
     reply itself now (ADR-077 判词②: speech left the action JSON; the
     typewriter law holds natively); ``on_reasoning`` receives reasoning
     fragments as a liveness signal; ``on_phase`` receives System Status
-    labels at REAL macro-state switches — the read→think takeover =
-    "composing" (the sole survivor after Phase 3 Batch B retired every
-    stand-in: ③ drafting/inspecting/repairing, ⑤ creating_run after the
-    B4 CDP dead-window forensics).
+    labels at REAL macro-state switches — the film design span's
+    capturing / storyboarding / storyboard_revision at real transitions,
+    and None as the span's exit clear. Every other LLM window wears the
+    base label "Thinking…" (2026-09-10 用户拍板) — a plain black-box
+    window needs no alias, however long it runs.
     ``on_tool_call`` / ``on_tool_ready`` carry the structure frames: a tool
     call's name became known (the Activity beat's seat + the explicit phase
     clear) / a call's arguments validated (the
