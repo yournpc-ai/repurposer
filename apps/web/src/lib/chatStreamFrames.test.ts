@@ -32,10 +32,12 @@ describe("system status channel", () => {
   it("assistant.thinking routes the payload verbatim (keepalive `{}` included)", () => {
     expect(routeStreamFrame("assistant.thinking", `{}`, CHAT_TERMINAL))
       .toEqual({ kind: "thinking", payload: {} })
-    // The surviving System Status label (Batch B ③ retired drafting/
-    // inspecting/repairing to the Activity channel).
-    expect(routeStreamFrame("assistant.thinking", `{"phase":"composing"}`, CHAT_TERMINAL))
-      .toEqual({ kind: "thinking", payload: { phase: "composing" } })
+    // The surviving System Status labels are the film design span's
+    // (Batch B ③ retired drafting/inspecting/repairing to the Activity
+    // channel; composing retired later — a plain LLM window wears the base
+    // thinking word, never an alias).
+    expect(routeStreamFrame("assistant.thinking", `{"phase":"storyboarding"}`, CHAT_TERMINAL))
+      .toEqual({ kind: "thinking", payload: { phase: "storyboarding" } })
   })
 
   it("the explicit phase clear ({phase: null}) routes as a payload, not an ignore", () => {

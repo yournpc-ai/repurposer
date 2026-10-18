@@ -1148,7 +1148,6 @@ const zh: Resources = {
       capturing: "正在等待网页采集完成…",
       storyboarding: "正在设计分镜…",
       storyboard_revision: "正在调整分镜…",
-      composing: "正在整理…",
     },
     /** 分镜起草落定行（legacy 节拍回放）：跨度的落定行（born-settled
      * 素材节拍）——活动日志寄存器（动宾+事实，无进行态），与素材读取族同

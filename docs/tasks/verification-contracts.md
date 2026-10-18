@@ -53,7 +53,7 @@ Activity 帧形态 / dock 形态 / 估价三断言。
 | Execution（fenced 零副作用 / SKIP LOCKED 认领 / 毒丸护栏 / run 执行权） | `app/pipeline/jobs.py` + worker | ADR-017 / ADR-039 | `test_execution_fencing_pure.py` / `test_poison_pill_pure.py` / `test_run_authority_pure.py` | 矩阵 S9（付费边界双路 422） | — | 🟢 ｜ 失败不扣费 / 孤儿 hold 回收无自动化看护（ADR-114 知情放弃，Consequences 在案） |
 | 计费账本（hold→capture→release / 负余额语义） | `app/platform/billing` | ADR-055 | — | `scripts/reconcile_credits.py`（仪表层）+ 矩阵 S9（负余额 hold 必拒） | — | 🟢 |
 | Prompt 面（10 探针绝对阈值 / 枚举漂移） | `app/prompts/chat/` | ADR-071 T2 | `test_prompt_registry_consistency_pure.py`（registry ↔ prompt 枚举一致性） | `scripts/prompt_gate.py` | — | 🟢 ｜ I 探针阈值未校准——首次定带跑后按读数校准（校准跑归用户，永不为放行回归调阈） |
-| 三通道分家（System Status / Activity / Conversation） | routes + ChatDock | ADR-087 §1 | `test_activity_pure.py`（投影器无 phase 面反向锁） | harness 公共断言（composing = System Status 唯一相位座） | gate 5a / 5c | 🟢 ｜ 永不建「相位帧 → lifecycle readiness」正向锁 |
+| 三通道分家（System Status / Activity / Conversation） | routes + ChatDock | ADR-087 §1 | `test_activity_pure.py`（投影器无 phase 面反向锁） | harness 公共断言（SSE/Activity 帧形态；相位文案永不锁） | gate 5a / 5c | 🟢 ｜ 永不建「相位帧 → lifecycle readiness」正向锁 |
 | Agent Working Loop 修订回路 + 收官审计 + 记忆窄切（revise_plan / revise_selects 三金钱态 / revise_output craft 续跑·迷你包 / run_review 兑现清单 / 快照路由 / get_artifact + Past journeys + exemplar） | `app/pipeline/exploration_store.py` + `run_review.py` + `scope_compile.py`（route_revision / assemble_craft_revision）+ `app/chat/perception` | ADR-088 §6~§8·§10 / ADR-089 §4·§6·§8 | `test_revise_selects_pure.py` / `test_run_review_pure.py` / `test_memory_narrow_pure.py` + scope_compile / exploration_tools / perception 既有面漂 guard | 矩阵 S3（素材→建议→探索：探索三族出生 / 决策包 dock / confirmed_scope 快照 / 产物落地 + 确定性尾） | — | 🟢 |
 
 ## 3. Charge Semantics 等价登记（ADR-063 终读）

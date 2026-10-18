@@ -2570,54 +2570,61 @@ async def draft_film_storyboard(
     half-captured world). The ONE caller is the dock seats'
     ``prepare_dock_storyboard``. ``current`` = the board under review when
     this is a feedback redraft — the director revises IT (修订基于当前稿),
-    never a from-scratch re-roll."""
+    never a from-scratch re-roll. The phase labels (capturing /
+    storyboarding / storyboard_revision) belong to THIS span: they are
+    cleared on every exit (``on_progress(None)`` — the explicit clear
+    frame), so a label never outlives its work."""
     if on_progress is not None:
         await on_progress("capturing")
-    await _await_captures_settled(project.id)
-    pages = await load_storyboard_pages(db, project)
-    if not pages:
-        return None
-    if on_progress is not None:
-        await on_progress("storyboarding")
-    page_images = await page_media_inputs(pages)
-
-    async def rejected(attempt, violations, feedback):
-        logger.info("film_plan_draft_rejected", project_id=str(project.id),
-                    attempt=attempt, codes=sorted({v.code for v in violations}),
-                    detail=(feedback or "")[:600])
-        if on_progress is not None:
-            await on_progress("storyboard_revision")
     try:
-        storyboard = await orchestrate_storyboard(
-            pages=pages,
-            instruction=instruction,
-            focus=focus,
-            page_images=page_images,
-            language=language,
-            current=current,
-            on_reject=rejected,
-            # 设计旅程诚实终局 (2026-10-18 用户拍板): a user is watching
-            # this board and will judge it — an exhausted ladder raises the
-            # original rejection (timeout keeps its own key) instead of
-            # shipping the fixed board as if it were a designed one. The
-            # retry is a real redesign, never a dressed-up fallback.
-            allow_fixed_fallback=False,
-            voiceover=voiceover,
-        )
-    except (FilmStoryboardRejected, LLMSchemaError, LLMError) as exc:
-        # A direction-budget timeout keeps its OWN honest key all the way to
-        # the user ("took too long") — converting it to None would relabel a
-        # provider-slowness failure as an ungrounded-world failure.
-        if getattr(exc, "user_key", None) == "film_storyboard_timeout":
-            raise
-        # The dock caller converts absence into an honest failed turn.
-        logger.info(
-            "film_plan_draft_failed",
-            project_id=str(project.id),
-            reason=str(exc)[:200],
-        )
-        return None
-    return storyboard, pages
+        await _await_captures_settled(project.id)
+        pages = await load_storyboard_pages(db, project)
+        if not pages:
+            return None
+        if on_progress is not None:
+            await on_progress("storyboarding")
+        page_images = await page_media_inputs(pages)
+
+        async def rejected(attempt, violations, feedback):
+            logger.info("film_plan_draft_rejected", project_id=str(project.id),
+                        attempt=attempt, codes=sorted({v.code for v in violations}),
+                        detail=(feedback or "")[:600])
+            if on_progress is not None:
+                await on_progress("storyboard_revision")
+        try:
+            storyboard = await orchestrate_storyboard(
+                pages=pages,
+                instruction=instruction,
+                focus=focus,
+                page_images=page_images,
+                language=language,
+                current=current,
+                on_reject=rejected,
+                # 设计旅程诚实终局 (2026-10-18 用户拍板): a user is watching
+                # this board and will judge it — an exhausted ladder raises the
+                # original rejection (timeout keeps its own key) instead of
+                # shipping the fixed board as if it were a designed one. The
+                # retry is a real redesign, never a dressed-up fallback.
+                allow_fixed_fallback=False,
+                voiceover=voiceover,
+            )
+        except (FilmStoryboardRejected, LLMSchemaError, LLMError) as exc:
+            # A direction-budget timeout keeps its OWN honest key all the way to
+            # the user ("took too long") — converting it to None would relabel a
+            # provider-slowness failure as an ungrounded-world failure.
+            if getattr(exc, "user_key", None) == "film_storyboard_timeout":
+                raise
+            # The dock caller converts absence into an honest failed turn.
+            logger.info(
+                "film_plan_draft_failed",
+                project_id=str(project.id),
+                reason=str(exc)[:200],
+            )
+            return None
+        return storyboard, pages
+    finally:
+        if on_progress is not None:
+            await on_progress(None)
 
 
 # ---------------------------------------------------------------------------
