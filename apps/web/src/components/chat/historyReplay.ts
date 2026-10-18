@@ -39,6 +39,15 @@ export type ActivityRowFrame = Omit<ActivityFramePayload, "seq"> & {
 /** One message row in the dock's flow (live-pushed or replayed). */
 export interface OverlayMessage {
   id: string
+  /** The RENDER key law (2026-10-19 checkpoint-flicker fix): React keys the
+   * flow by `birthKey ?? id`. Stamped ONCE at birth for rows whose semantic
+   * id can be PROMOTED mid-life — the checkpoint settle renames a streamed
+   * bubble `streamId → ${streamId}#cpN` (settleStreamedSegment), and an
+   * id-keyed list remounts there, replaying the entrance animation (the
+   * visible blink). The rename spreads `...m`, so the birthKey survives the
+   * promotion and the row never remounts. Rows without it key by `id`,
+   * which never changes for them. */
+  birthKey?: string
   role: "user" | "assistant"
   content: string
   runId?: string | null

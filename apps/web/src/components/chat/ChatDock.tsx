@@ -2389,6 +2389,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               ...prev,
               {
                 id,
+                // The render key (OverlayMessage law): unique per BIRTH (the
+                // checkpoint settle renames this row to `${streamId}#cpN` and
+                // the trailing speech re-births under the bare streamId —
+                // keying by id would collide; the uuid rides the rename's
+                // spread, so the promoted row never remounts).
+                birthKey: crypto.randomUUID(),
                 role: "assistant" as const,
                 content: "",
                 streaming: true,
@@ -2531,6 +2537,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               ...prev,
               {
                 id: streamId,
+                birthKey: crypto.randomUUID(), // the render-key law (OverlayMessage)
                 role: "assistant" as const,
                 content: "",
                 streaming: true,
@@ -3981,7 +3988,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * chips sit right after the echo bubble whose turn produced them; an
    * in-flight live plan card anchors after its own echo bubble. */
   const renderConversationMessage = (m: OverlayMessage) => (
-    <Fragment key={m.id}>
+    // Keyed by birthKey (OverlayMessage law): a checkpoint-promoted row's
+    // id changes (streamId → #cpN) but its key must not — an id-keyed list
+    // remounts at the promotion and replays the entrance animation (the
+    // flicker). Every other row's id never changes, so the fallback is free.
+    <Fragment key={m.birthKey ?? m.id}>
       <MessageScrollerItem messageId={m.id}>
         {m.qa ? (
           <AnsweredQuestion
