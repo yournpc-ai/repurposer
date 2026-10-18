@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 /**
- * Tour — spotlight step-by-step guide (see docs/tasks/tour-component.md).
+ * Tour — spotlight step-by-step guide (see docs/UI_GUIDELINES.md §6).
  *
  * Pure mechanism, zero behavior lock-in: `open` is controlled, persistence
  * (seen flags) and analytics belong to the caller via `onComplete`/`onSkip`.

@@ -1493,18 +1493,13 @@ const zh: Resources = {
     done: "完成",
     stepOf: "第 {{current}} 步，共 {{total}} 步",
     composer: {
-      assetsTitle: "上传你的素材",
+      assetsTitle: "添加你的素材",
       assetsDesc:
-        "视频、录音、照片、文字稿都行，有什么放什么——也可以什么都不放，直接在下面写想法。",
-      personaTitle: "以什么风格生成",
-      personaDesc:
-        "当素材不够的时候用什么风格写和说。一般不用改，「自动」会根据你的素材自动生成。",
-      promptTitle: "描述你的期望",
-      promptDesc:
-        "想生成什么就写什么。用 @ 可以点名具体素材，告诉我们怎么处理它。",
-      recipesTitle: "不知道写什么？看看模板",
-      recipesDesc:
-        "点开一张模板——上传你自己的素材，按需要微调提示词，就能生成预设效果的视频。",
+        "视频、音频、幻灯片、照片或文字稿都行，有什么放什么。也可以先不上传，直接在下面写想法。",
+      promptTitle: "说明要做什么",
+      promptDesc: "写下想要的结果。用 @ 点名已上传的素材，然后发送。",
+      recipesTitle: "从卡片开始",
+      recipesDesc: "点卡片上的「使用提示词」，把提示词填入输入框，再按你的素材调整。",
     },
   },
   notifications: {

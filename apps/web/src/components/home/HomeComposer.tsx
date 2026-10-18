@@ -10,6 +10,7 @@ import { useStagingUploads } from "@/lib/stagingUploads"
 import { acceptsStagedFile } from "@/lib/stagedFiles"
 import { useFileDrop } from "@/lib/useFileDrop"
 import { fileKindOf, type ChatMention } from "@/lib/mentions"
+import { useAuth } from "@/lib/auth-context"
 import {
   MentionEditor,
   type MentionEditorHandle,
@@ -26,7 +27,13 @@ import {
   type PersonaPickerEntry,
 } from "@/components/composer/PersonaPanel"
 import { Tour, type TourStep } from "@/components/ui/tour"
-import { tourCopy, tourVersionOf, type TourStepDef } from "@/lib/tour"
+import {
+  canOpenTour,
+  shouldAutoOpenTour,
+  tourCopy,
+  tourVersionOf,
+  type TourStepDef,
+} from "@/lib/tour"
 
 type Persona = PersonaPickerEntry
 
@@ -68,8 +75,8 @@ const TOUR_SEEN_KEY = "repurposer-tour-seen"
 const SHOW_PERSONA = false
 
 /** Composer teaching tour (3 steps while the persona entry is hidden):
- * assets → prompt (send folded in) → the recipe gallery as the alternative
- * entry (lands last; Tour skips the step if the cards haven't loaded yet). */
+ * assets → prompt (send folded in) → the recipe gallery's Use-prompt entry
+ * (lands last; Tour skips the step if the cards haven't loaded yet). */
 const COMPOSER_TOUR_STEPS: TourStepDef[] = [
   {
     target: "[data-tour='composer-assets']",
@@ -149,7 +156,9 @@ export function HomeComposer({
   editorRef,
 }: HomeComposerProps) {
   const { t } = useTranslation()
+  const { isAuthenticated, loginOpen } = useAuth()
   const { launching: isGenerating, launch } = useProjectLaunch()
+  const tourAllowed = canOpenTour(isAuthenticated, loginOpen)
 
   const [personaId, setPersonaId] = useState(AUTO_GENERATE)
   // Batch A (2026-09-18): picked files upload IMMEDIATELY into a pre-project
@@ -177,16 +186,27 @@ export function HomeComposer({
     addFiles(accepted)
   }, isGenerating)
 
-  // First-visit teaching: open the composer tour once per tour version. Read
-  // in an effect only — localStorage is never touched during SSR.
+  // First-visit teaching: open the composer tour once per tour version, but
+  // only behind the signed-in studio boundary. Read in an effect only —
+  // localStorage is never touched during SSR.
   useEffect(() => {
+    if (!tourAllowed) return
     try {
-      if (window.localStorage.getItem(TOUR_SEEN_KEY) !== TOUR_VERSION)
+      const seenVersion = window.localStorage.getItem(TOUR_SEEN_KEY)
+      if (
+        shouldAutoOpenTour(seenVersion, TOUR_VERSION, isAuthenticated, loginOpen)
+      )
         setTourOpen(true)
     } catch {
       // storage unavailable (private mode) — tour simply never auto-opens
     }
-  }, [])
+  }, [isAuthenticated, loginOpen, tourAllowed])
+
+  // The tour never shares the screen with the login dialog: auth loss or a
+  // reopened login flow closes it immediately (401 / logout mid-tour).
+  useEffect(() => {
+    if (!tourAllowed) setTourOpen(false)
+  }, [tourAllowed])
 
   // Manual replay (account console → 帮助): two delivery paths — a
   // sessionStorage flag consumed on mount (covers the not-on-home case: the
@@ -194,6 +214,7 @@ export function HomeComposer({
   // composer is already mounted. First consumer wins; both clear the flag.
   useEffect(() => {
     const consume = () => {
+      if (!tourAllowed) return
       try {
         if (window.sessionStorage.getItem("repurposer-replay-tour") !== "1") return
         window.sessionStorage.removeItem("repurposer-replay-tour")
@@ -205,7 +226,7 @@ export function HomeComposer({
     consume()
     window.addEventListener("repurposer:replay-tour", consume)
     return () => window.removeEventListener("repurposer:replay-tour", consume)
-  }, [])
+  }, [tourAllowed])
 
   const markTourSeen = () => {
     try {
@@ -627,7 +648,7 @@ export function HomeComposer({
 
     <Tour
       steps={tourSteps}
-      open={tourOpen}
+      open={tourOpen && tourAllowed}
       onOpenChange={setTourOpen}
       onComplete={markTourSeen}
       onSkip={markTourSeen}

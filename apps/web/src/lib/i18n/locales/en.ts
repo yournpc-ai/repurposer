@@ -1587,18 +1587,15 @@ const en = {
     done: "Done",
     stepOf: "Step {{current}} of {{total}}",
     composer: {
-      assetsTitle: "Upload your material",
+      assetsTitle: "Add your material",
       assetsDesc:
-        "A recording, audio, photos or a transcript — whatever you have. Or skip this and just write your idea below.",
-      personaTitle: "Whose style and voice",
-      personaDesc:
-        "If the material doesn't say it already, whose style should we write and speak in? Usually you can leave this on Auto — we generate a style from your material.",
-      promptTitle: "Say what you want",
+        "Video, audio, slides, photos, or a transcript — use whatever you have. You can also skip this and write your idea below.",
+      promptTitle: "Say what to make",
       promptDesc:
-        "Write whatever you want made. Use @ to point at specific uploaded assets — that tells us what to do with them.",
-      recipesTitle: "Stuck? Browse the templates",
+        "Write the result you want. Use @ to point to an uploaded asset, then send it.",
+      recipesTitle: "Start from a card",
       recipesDesc:
-        "Click a template — upload your own material, tweak the prompt to fit your needs, and generate the preset video effect.",
+        "Choose Use prompt on a card to fill the composer, then adjust the prompt for your material.",
     },
   },
   notifications: {

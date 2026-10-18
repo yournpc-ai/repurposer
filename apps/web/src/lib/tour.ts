@@ -22,6 +22,21 @@ export interface TourStepDef {
   align?: "start" | "center" | "end"
 }
 
+/** Tours are studio UI: they never open over signed-out or login UI. */
+export function canOpenTour(authed: boolean, loginOpen: boolean): boolean {
+  return authed && !loginOpen
+}
+
+/** Auto-open adds the seen-version check to the same auth boundary. */
+export function shouldAutoOpenTour(
+  seenVersion: string | null,
+  version: string,
+  authed: boolean,
+  loginOpen: boolean,
+): boolean {
+  return canOpenTour(authed, loginOpen) && seenVersion !== version
+}
+
 /** djb2 — a tiny deterministic string hash (tour versioning, not security). */
 export function tourVersionOf(steps: TourStepDef[], copy: unknown): string {
   const serialized = JSON.stringify({ steps, copy })
