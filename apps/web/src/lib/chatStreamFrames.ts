@@ -92,31 +92,6 @@ export type CandidateEventPayload =
     }
   | { kind: "selection"; candidate_set_id: string; selected: number[] }
 
-/** The message-flow storyboard block (ADR-120 §1): a docked film plan's
- * storyboard table. Live it rides ``assistant.storyboard``; replay reads
- * the row's ``intent`` dump — SAME payload shape both paths (the row IS
- * the block, no settle-time log). ``scenes`` stays loosely typed here (the
- * render walks scene.type's known shapes read-tolerantly). */
-export interface StoryboardPayload {
-  type: "storyboard"
-  version: number
-  storyboard: {
-    name?: string | null
-    scenes: Array<Record<string, unknown> & { type: string; seconds: number }>
-  }
-  pages: string[]
-  instruction?: string | null
-  /** The reviewed plan's film params (ADR-120 E2/E3 参数行): voiceover
-   * toggle / BGM mood / canvas aspect / narration language — the table
-   * header's chips. Absent = plan defaults (on / library default / 16:9 /
-   * storyboard-declared language). */
-  voiceover?: boolean
-  music_mood?: string | null
-  aspect?: string
-  language?: string | null
-  message_id?: string
-}
-
 /** One routed stream frame — the onmessage dispatch's discriminated
  * output. `envelope`/`detail` stay `unknown`: the caller owns the envelope
  * type (the two surfaces type it differently). */
@@ -124,7 +99,9 @@ export interface StoryboardPayload {
  * fixes a row's position in the array, ``assistant.row.update`` mutates it
  * in place — the live reducer and the history replay eat the SAME semantics
  * (persisted order IS render order). The append payload mirrors
- * ChatMessageResponse; today only activity rows ride this channel. */
+ * ChatMessageResponse; two families ride the channel — activity rows
+ * (intent carries the frame) and plain assistant rows (ADR-129: the design
+ * beat's published storyboard message). */
 export interface RowAppendPayload {
   id: string
   role: "user" | "assistant"
@@ -148,7 +125,6 @@ export type RoutedStreamFrame =
   | { kind: "thinking"; payload: ThinkingPayload }
   | { kind: "question_preview"; payload: QuestionPreviewPayload }
   | { kind: "candidates"; event: CandidateEventPayload }
-  | { kind: "storyboard"; payload: StoryboardPayload }
   | { kind: "checkpoint"; text: string; at?: string }
   | { kind: "activity"; frame: ActivityFramePayload }
   | { kind: "row_append"; row: RowAppendPayload }
@@ -182,12 +158,6 @@ export function routeStreamFrame(
     return {
       kind: "candidates",
       event: JSON.parse(data) as CandidateEventPayload,
-    }
-  }
-  if (event === "assistant.storyboard") {
-    return {
-      kind: "storyboard",
-      payload: JSON.parse(data) as StoryboardPayload,
     }
   }
   if (event === "assistant.checkpoint") {

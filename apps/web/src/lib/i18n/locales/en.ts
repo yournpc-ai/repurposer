@@ -682,7 +682,6 @@ const en = {
     status: {
       uploading: "Uploading…",
       processing: "Generating…",
-      draft: "Awaiting confirmation",
     },
     menuMore: "More actions",
     rename: "Rename",
@@ -1184,39 +1183,21 @@ const en = {
       noTranscript: "No transcript available.",
     },
   },
-  // 分镜表消息块 (ADR-120 §1) — the film plan's reviewable storyboard.
-  storyboard: {
-    untitled: "Intro film storyboard",
-    meta: "v{{version}} · {{count}} scenes · ~{{seconds}}s",
-    source: "Copy grounded on: {{pages}}",
-    collapse: "Collapse",
-    voiceOff: "no voiceover",
-    music: "{{mood}} bed",
-    sceneTypes: {
-      words: "Words",
-      hero: "Hero",
-      ui: "Page",
-      divider: "Break",
-      plate: "Numbers",
-      reveal: "Reveal",
-      end: "End card",
-    },
-  },
   chat: {
     assistantLabel: "Repurposer",
     userLabel: "You",
     thinking: "Thinking...",
     thinkingPhases: {
+      capturing: "Waiting for the page captures…",
+      storyboarding: "Designing the storyboard…",
+      storyboard_revision: "Adjusting the storyboard…",
       composing: "Putting it together…",
     },
-    /** 分镜起草占位 (ADR-120 统一迟延): the now-line between a film dock
-     * and its storyboard block — the deferred seat drafts for minutes, and
-     * the wait is always visible. Folds on the block / failure row.
-     * draftingDone (ADR-128): the span's SETTLED row (born-settled material
-     * beat) — the log register (verb-object + fact, no progressive), the
-     * same 三寄存器 law as the material reading family. */
+    /** 分镜起草落定行（legacy 节拍回放）: the drafting span's
+     * SETTLED row (a born-settled material beat) — the log register
+     * (verb-object + fact, no progressive), the same 三寄存器 law as the
+     * material reading family. */
     storyboard: {
-      drafting: "Drafting the storyboard…",
       draftingDone: "Drafted the storyboard",
     },
     /** The now-line's material reading rows (2026-09-24 user ruling —
@@ -1323,7 +1304,8 @@ const en = {
      * ACTIVE-only (落定即退役 — draft 2026-09-28, extended to run
      * 2026-09-29): the settled receipt retired, the docked plan card / the
      * start speech + RunTaskList receipt is the evidence, so no
-     * draftDone/editDone/runDone keys exist. The repair pair is
+     * draftDone/editDone/runDone keys exist (the storyboard pair below is
+     * the ONE exception — 分镜不是开工, its settle persists). The repair pair is
      * terminal-only (the rework span opens silently — no active frame):
      * repair fires on the failed terminal (retries exhausted / the turn
      * failed), repairDone on the redirected terminal (a guardrail steered
@@ -1335,6 +1317,12 @@ const en = {
       run: "Getting started…",
       repair: "Couldn't get it done this time",
       repairDone: "Changed approach",
+      /** The storyboard span's pair (2026-10-17 user ruling — 分镜不是开工):
+       * the ONE draft-family span whose settle persists (its markdown
+       * message is the deliverable, no dock card absorbs the beat) — the
+       * done form renders in the fold's category decomposition. */
+      storyboard: "Designing the storyboard…",
+      storyboardDone: "Designed the storyboard",
     },
     /** The activity row's bounded expand detail (iter-3 S7, E7 诚实边界):
      * only the wire whitelist's fields — the raw count rides as a labeled
@@ -1543,14 +1531,12 @@ const en = {
     // exactly when the dock's stamp says a beat is owed. The label family:
     // bare verb (execution ask) / priced (credits ask · guardrail — the
     // number is the server fold's high end, never client-computed) /
-    // deferred (the NULL-estimate family — never a fabricated number).
-    // confirmPillMessage = the click's canned user words riding the chat
-    // channel (the pill IS the user saying it — the retired Start pill's
-    // own post-v4.2 machine).
+    // deferred (the NULL-estimate family — never a fabricated number). The
+    // click rides the typed answer machine (kind="start"), never a canned
+    // chat message (ADR-129).
     confirmPillStart: "Start",
     confirmPillStartPriced: "Start · ~{{n}} credits",
     confirmPillStartDeferred: "Start · priced when it runs",
-    confirmPillMessage: "Confirm and generate",
   },
   questionDock: {
     bail: "Stop generation",

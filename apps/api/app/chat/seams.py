@@ -14,7 +14,6 @@ from app.chat.service import (
     record_material_beat,
     seed_project_prompt,
 )
-from app.chat.storyboard_dock import maybe_dock_deferred_storyboard
 from app.chat.trigger_turn import fire_trigger
 from app.pipeline.conversation_bridge import (
     ConversationBridge,
@@ -33,6 +32,5 @@ def wire_pipeline_seams() -> None:
             seed_project_prompt=seed_project_prompt,
             discard_unanswered_plan=discard_unanswered_plan,
             record_material_beat=record_material_beat,
-            deferred_storyboard_check=maybe_dock_deferred_storyboard,
         )
     )

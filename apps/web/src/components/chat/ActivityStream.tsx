@@ -59,7 +59,7 @@ import { cn } from "@/lib/utils"
  * "success", which the settled register already says); live rows keep the
  * 6px dot (the RunTaskList narrative row's own live mark, 2026-09-25 对齐批),
  * failed/cancelled keep the ✗ seat. The `draft` glyph serves the settled
- * storyboard-drafting beat (ADR-128 — a born-settled material beat, not a
+ * storyboard-drafting beat (a born-settled legacy material beat, not a
  * 落定即退役 plan-draft span; the timeline's draft filter keys on
  * chat.activity.* keys and never touches it). */
 const KIND_ICONS: Record<ActivityFramePayload["kind"], LucideIcon> = {

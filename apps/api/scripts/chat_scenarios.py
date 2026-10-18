@@ -47,16 +47,18 @@
     S10 Remix 旗舰：P1 warm 路径（@mention pin → 拆解即说话）+ P2 run
              路径（真链 → decompile 新鲜物化 → 产物参数 = 骨架 → 画布无
              decompile 孤儿）
-    S11 贴链成片全旅程（MG）：URL → web_page 资产真采集 → 分镜方案 dock
-             （launch_film）→ 守卫线口头 yes → 真渲染 + probe 闸 → film
-             产物 COMPLETED + 画布血缘 + 台账 hold=capture+release
+    S11 贴链成片全旅程（MG）：URL → web_page 资产真采集 → 分镜设计拍
+             （design_storyboard 普通消息呈现 markdown，无 dock 无 run，
+             跨度落定留存带真实耗时）→ 认可后方案 dock（launch_film，指纹
+             复用，通用确认设置）→ 开工 → 真渲染 + probe 闸 → film 产物
+             COMPLETED + 画布血缘 + 台账 hold=capture+release
     S12 网站旅程入口变体（轻本）：裸求片先问链接（永不盲 dock
              launch_film）→ 讨论链接先 get_web_page 读页再答（读帧 key
              为观测面）→ discussion 链接永不资产化（负形）→ 讨论后拍板
              做片：历史回合的链接 verbatim 入 material_urls（永不追问
-             对话已有的链接），链带 launch_film + 本回合诞生 web_page
-             资产（正形）；auto 档两形皆合法——dock 待确认或同回合
-             propose→start_run（分镜核对 hold 在 run 内 checkpoint）
+             对话已有的链接）→ 方向拍或直达 design_storyboard（指纹守卫
+             使未呈现即 dock 机械不可能）→ 分镜 markdown 骑普通消息 +
+             web_page 资产诞生（正形）
 
 harness 公共断言（ADR-114 §3.2——每本自动携带，不再单独立本）：
 
@@ -1194,23 +1196,6 @@ def task_params(task: dict) -> dict:
 async def pending_plan(ctx: Ctx, pid: str) -> dict | None:
     """The project's pending plan via the results endpoint (None when none)."""
     return (await ctx.results(pid)).get("pending_brief")
-
-
-async def wait_storyboard_block(
-    ctx: Ctx, conversation_id: str, timeout: float = 300.0
-) -> dict | None:
-    """Poll the conversation for the message-flow storyboard block (ADR-120
-    hold/draft 解耦): dock-time sync when the pages were already captured,
-    else the capture-settle deferred seat drafts and lands it a beat after
-    the capture completes (the storyboarder agent's own timeout is the
-    bound). Returns the message row, or None on timeout."""
-    deadline = asyncio.get_event_loop().time() + timeout
-    while asyncio.get_event_loop().time() < deadline:
-        for m in await ctx.messages(conversation_id):
-            if (m.get("intent") or {}).get("type") == "storyboard":
-                return m
-        await asyncio.sleep(2)
-    return None
 
 
 async def wait_trigger_review(
@@ -3887,23 +3872,66 @@ S11_URL = "https://linear.app"  # D3-proven stable real site (example.com is DNS
 async def s11_url_to_launch_film(ctx: Ctx) -> None:
     """S11 贴链成片全旅程（MG D4；需活栈 + dev worker 真采集真渲染 + MiniMax
     配额）：用户贴 URL → material_urls 信封座 absorb 生 web_page 资产 →
-    worker 真采集 COMPLETED（浏览器级 SSRF 链）→ 分镜方案 dock（链必含
-    launch_film——选择执行律同族）→ **分镜审查 hold 恒挂**（任何确认档——
-    守卫线/prefs 理由让位 storyboard_review，直开即违法）→ **抢跑 yes 被硬闸
-    拒**（块未落 start_run 拒答、dock 存续；waiver 只能是用户明说的话，模型
-    自作主张带 skip 会在此红）→ 分镜块迟延座落消息流（draft 永不占回合）→
-    口头 yes 开工（与 Start 钮同一机器）→ run completed → 血缘三形态：
-    web_page 资产节点 → launch_film 节点（video × generator）驮 film 产物 +
-    launch_film/render 双 step done → film 产物 render COMPLETED +
-    files.video 在场（产物文件本体由 probe 闸兜底——一法一座，剧本不重复
-    probe）→ 台账 hold = capture + release（计价幂等形态锁）。打回穷举 =
-    机制合法终态：锁闸②反面形态（FAILED + spec.failure codes）后走真实
-    retry 旅程，连续两次穷举才红（打回率回归信号，非 flake）。只锁形态不锁
-    文案；目标站不可达/采集失败 = 环境 flake，按归因纪律处置（禁调断言放行）。"""
+    worker 真采集 COMPLETED（浏览器级 SSRF 链）→ 方向商定拍（answer 收尾）
+    → 分镜设计拍 = design_storyboard 非终态调用（markdown 骑普通消息呈现;
+    跨度落定留存 chat.activity.storyboardDone 带真实耗时）→ 原始制作意图在
+    场且无 review hold 时同回合继续方案拍 dock（链必含 launch_film——指纹
+    命中当前版本;markdown 不重嵌;确认行为全走通用设置）→ auto 档呈现即开工,
+    run 携带设计拍定稿分镜（run.context.prepared_storyboard——用户看到的稿
+    就是渲染的稿）
+    → run completed → 血缘三形态：web_page 资产节点 → launch_film 节点
+    （video × generator）驮 film 产物 + launch_film/render 双 step done →
+    film 产物 render COMPLETED + files.video 在场（产物文件本体由 probe 闸
+    兜底——一法一座，剧本不重复 probe）→ 台账 hold = capture + release
+    （计价幂等形态锁）。打回穷举 = 机制合法终态：锁闸②反面形态（FAILED +
+    spec.failure codes）后走真实 retry 旅程，连续两次穷举才红（打回率回归
+    信号，非 flake）。只锁形态不锁文案；目标站不可达/采集失败 = 环境 flake，
+    按归因纪律处置（禁调断言放行）。"""
     pid = await ctx.new_project("S11 url to launch film")
     await topup_wallet(ctx.user_id)  # launch_film 编排 + 渲染真链
 
-    turn1 = await ctx.chat(pid, f"Turn this page into a short launch film: {S11_URL}")
+    direction = await ctx.chat_stream(pid, f"Turn this page into a short launch film: {S11_URL}")
+    check(direction.failed is None, "site direction reply succeeds", direction.failed)
+    turn0 = direction.completed
+    check(turn0 is not None and turn0.get("run_id") is None,
+          "direction discussion starts no production", turn0)
+    check(not is_plan_dock(turn0["assistant_message"]),
+          "general website request ends before storyboard design", turn0)
+    check(any(a.get("key") == "chat.inspectingDone.webPage"
+              for a in direction.activities), "site read finishes before the direction reply")
+    check(has_prose(turn0["assistant_message"]), "site understanding and direction are delivered")
+
+    # 分镜设计拍 + auto 开工道（ADR-129 修订）: design_storyboard 非终态——
+    # markdown 骑普通消息呈现; 原始制作意图在场且 review_hold off 时, 同回合
+    # 继续方案 dock, 默认 auto/auto 设置由通用授权道直接开工。分镜 markdown
+    # 读 row.append 帧（终封筒可能被方案/run 行接管）。
+    design = await ctx.chat_stream(pid, "Yes, design the storyboard in that direction.")
+    turn1 = design.completed
+    check(design.failed is None, "the storyboard design turn succeeds", design.failed)
+    check(turn1 is not None, "the storyboard design turn completes", turn1)
+    storyboard_rows = [
+        (event.get("row") or {}).get("content") or ""
+        for event in design.row_events
+        if event.get("op") == "append"
+    ]
+    check(any(re.search(r"\d+\.\s+\*\*\w+\*\*\s+·\s+\d+s", row)
+              for row in storyboard_rows),
+          "the design beat publishes the storyboard markdown as its own row "
+          "(numbered scene rows)",
+          [row[-240:] for row in storyboard_rows])
+    check(turn1.get("run_id") is not None,
+          "auto + no review hold: the original production intent continues "
+          "from storyboard presentation through the dock into the run",
+          turn1)
+
+    # 分镜跨度落定留存（诚实耗时）: chat.activity.storyboardDone 带真实
+    # duration —— draft 族落定即退役的唯一例外（分镜消息就是交付物, 该行是收据）。
+    check(any(a.get("key") == "chat.activity.storyboardDone"
+              and a.get("duration_ms") is not None
+              for a in design.activities),
+          "the storyboard span settles with its honest duration "
+          "(chat.activity.storyboardDone)",
+          [a.get("key") for a in design.activities])
 
     # material_urls absorb（ADR-119 §5）：web_page 资产行随回合出生——LLM
     # 判定链接是素材（禁启发式），出生与否本身就是形态断言。
@@ -3929,70 +3957,26 @@ async def s11_url_to_launch_film(ctx: Ctx) -> None:
     check(asset_id is not None,
           "the pasted URL births a web_page asset (material_urls absorb)", None)
 
-    # 分镜方案 dock（plan/dock 形态）；LLM 裁量（先问一句）有界兜底一回。
-    plan = await pending_plan(ctx, pid)
-    if not (plan is not None and plan_tasks(plan)):
-        turn1 = await ctx.chat(pid, "Go ahead — plan the launch film from that page.")
-        plan = await pending_plan(ctx, pid)
-    check(plan is not None and plan_tasks(plan),
-          "the URL turn docks the storyboard plan", plan)
-    tools = [t.get("tool") for t in plan_tasks(plan)]
-    check("launch_film" in tools,
-          "the docked chain carries launch_film (the film family's one node)", tools)
-
-    # hold/draft 解耦 (ADR-120, 2026-10-15): the film dock ALWAYS carries the
-    # storyboard review hold — on EVERY confirmation regime (the guardrail /
-    # prefs reason yields its name to storyboard_review), so a same-turn
-    # auto-start is now ILLEGAL for the film chain (the 2026-10-15 取证 bug:
-    # the blind capture-settle wait degraded the draft to None and the auto
-    # gate fired unreviewed).
-    check(turn1.get("run_id") is None,
-          "the film dock NEVER auto-starts (the storyboard_review hold gates it)",
-          turn1)
-    dock_q = (turn1.get("assistant_message") or {}).get("question") or {}
-    check(dock_q.get("kind") == "task_book"
-          and dock_q.get("requires_confirmation") is True
-          and dock_q.get("confirm_reason") == "storyboard_review",
-          "the docked plan carries the storyboard_review hold stamp", dock_q)
-
-    # 法1后半硬闸 (2026-10-16 拍板——静默旁路已废): a premature yes BEFORE
-    # the storyboard block lands is NOT a start — start_run is rejected
-    # (the model answers honestly instead), the dock stays open. A model
-    # slipping skip_storyboard_review=true here would birth a run and fail
-    # this beat — the waiver is the user's explicit words, never the model's
-    # initiative.
-    turn_early = await ctx.chat(pid, "Yes — go ahead.")
-    check(turn_early.get("run_id") is None,
-          "a premature yes never starts the film (the block hasn't landed)",
-          turn_early)
-    plan = await pending_plan(ctx, pid)
-    check(plan is not None and plan_tasks(plan),
-          "the dock survives the premature yes (the hold persists)", plan)
-
     # worker 真采集（真站 linear.app）：FAILED = 环境 flake 或采集链回归，
-    # 都按机制红处置。抢跑节拍故意排在其前——采集未 drain 时迟延座的在飞门
-    # 保证块不可能落地，抢跑断言零竞态。
+    # 都按机制红处置。
     status = await wait_asset_status(
         asset_id, {AssetStatus.COMPLETED, AssetStatus.FAILED}
     )
     check(status == AssetStatus.COMPLETED,
           "the web_page capture completes on the real site", status)
 
-    # 分镜块落消息流：dock 时页面未采完 → 迟延座在采集完成后补落（本场景
-    # 采集已 COMPLETED，块经迟延座或 dock 同步落，两者都合法）。
     conv_id = turn1["conversation_id"]
-    block = await wait_storyboard_block(ctx, conv_id)
-    check(block is not None,
-          "the storyboard block lands in the message flow (sync or deferred seat)",
-          None)
+    run_id = turn1["run_id"]
 
-    # 口头确认律：口头 yes 走普通 chat 道到 start_run（与 Start 钮同一机器）。
-    turn_s = await ctx.chat(pid, "Yes — go ahead.")
-    check(terminal_tool_of(turn_s) == "start_run",
-          "the verbal yes closes on start_run (Start 钮同一机器)", turn_s)
-    run_id = turn_s["run_id"]
-    conv_id = turn_s["conversation_id"]
-    check(run_id is not None, "the film run is born", turn1)
+    # 开工 run 携带设计拍定稿分镜（pending_brief 缓存 → start_run 原样
+    # stamp——展示=执行，永不用废分镜出片）。
+    async with AsyncSessionLocal() as db:
+        born_run = await db.get(WorkflowRun, uuid.UUID(run_id))
+    check(born_run is not None
+          and bool((born_run.context or {}).get("prepared_storyboard")),
+          "the born run carries the dock-stage storyboard "
+          "(run.context.prepared_storyboard)",
+          sorted((born_run.context or {}).keys()) if born_run else None)
 
     # 真渲染全链（采集已齐 → launch_film 编排（有界打回 ≤3 候选）→ 渲染 +
     # probe 闸）：15-30s 片 ≈1.75×实时 + LLM 编排，900s 是宽车道。
@@ -4058,6 +4042,55 @@ async def s11_url_to_launch_film(ctx: Ctx) -> None:
           and bool((film.files or {}).get("video")),
           "the film artifact is COMPLETED with a video object (probe-gated)",
           (str(film.render_status), film.render_error))
+
+    # 展示=执行的时序面：spec 自带 fps/frames；音乐网格随 spec 留血；
+    # 有配音的幕必带同文本字幕 cue（cue 在幕窗内递增，下一 cue/幕尾闭合）。
+    spec = film.render_spec or {}
+    scene_frames = [s.get("frames") for s in spec.get("scenes") or []]
+    check(spec.get("fps") == 30
+          and scene_frames
+          and all(isinstance(n, int) and n > 0 for n in scene_frames),
+          "the film spec carries its own fps + integer scene frames",
+          {"fps": spec.get("fps"), "frames": scene_frames})
+    music = spec.get("music") or {}
+    check(not music or (isinstance(music.get("bpm"), (int, float))
+                        and isinstance(music.get("beats"), list)
+                        and bool(music.get("beats"))),
+          "the music bed carries the beat grid the cut snapped against",
+          music)
+
+    # digest 三断言（ADR-129 fail-closed 的正面形态）: the delivered film's
+    # render spec carries ONLY the digests the worker recomputed and proved
+    # — 呈现稿 digest = run context digest = render spec digest, one truth.
+    async with AsyncSessionLocal() as db:
+        done_run = await db.get(WorkflowRun, uuid.UUID(run_id))
+    done_ctx = (done_run.context or {}) if done_run is not None else {}
+    provenance = spec.get("provenance") or {}
+    check(bool(provenance.get("storyboard_digest"))
+          and provenance.get("storyboard_digest")
+          == done_ctx.get("film_storyboard_content_digest"),
+          "render spec provenance = the stamped storyboard content digest",
+          {"spec": provenance, "ctx": done_ctx.get("film_storyboard_content_digest")})
+    check(bool(provenance.get("execution_digest"))
+          and provenance.get("execution_digest")
+          == ((done_ctx.get("film_execution") or {}).get("digest")),
+          "render spec provenance = the stamped execution snapshot digest",
+          {"spec": provenance,
+           "ctx": (done_ctx.get("film_execution") or {}).get("digest")})
+    check((film.payload or {}).get("provenance") == provenance,
+          "the output payload carries the same provenance pair",
+          film.payload)
+    narrated = [s for s in spec.get("scenes") or [] if s.get("audio")]
+    check(all(
+        isinstance(s.get("captions"), list)
+        and bool(s["captions"])
+        and [c.get("at") for c in s["captions"]] == sorted(c.get("at") for c in s["captions"])
+        and all(isinstance(c.get("at"), (int, float)) and c.get("at") >= 0
+                and isinstance(c.get("end"), (int, float))
+                and c.get("at") < c.get("end") <= s["frames"] / 30
+                for c in s["captions"])
+        for s in narrated
+    ), "every narrated scene carries in-window caption cues", narrated[:2])
 
     # 画布血缘形态：web_page 素材节点 → launch_film 装配节点（video ×
     # generator，产物驮在卡上）。
@@ -4162,28 +4195,38 @@ async def s12_site_entry_variants(ctx: Ctx) -> None:
 
     # ③ 讨论后拍板做片（真实对话 66048d72 的延续路径）：历史回合的链接 =
     # 对话已携带的素材——永不反问（法条：never ask for a link the
-    # conversation already carries），本回合诞生 web_page 资产。auto 档两
-    # 形皆合法（ADR-117）：dock 待确认的计划带 launch_film，或同回合
-    # propose→start_run 直开（分镜核对 hold 在 run 内 checkpoint，不在
-    # run 前）。LLM 裁量（先接一句）有界兜底一回。
+    # conversation already carries）。分阶段旅程（分镜不是开工, 分镜也不是
+    # 方案 dock）：本回合合法终态 = 方向建议（answer/ask_user）或直达分镜
+    # 设计（design_storyboard——用户授权直达时跳方向问）；指纹守卫使「未
+    # 呈现分镜即 dock launch_film 方案」机械不可能（守卫引回设计拍）。
+    # LLM 裁量（先接一句）有界兜底一回。
     turn3 = await ctx.chat(pid_b, "好，那就做它的介绍短片吧")
-    plan = await pending_plan(ctx, pid_b)
-    tools = [t.get("tool") for t in plan_tasks(plan)] if plan is not None else []
-    run_id = turn3.get("run_id")
-    if "launch_film" not in tools and run_id is None:
-        turn3 = await ctx.chat(pid_b, "Go ahead — plan the intro film from that page.")
-        plan = await pending_plan(ctx, pid_b)
-        tools = [t.get("tool") for t in plan_tasks(plan)] if plan is not None else []
-        run_id = turn3.get("run_id")
-    check("launch_film" in tools or run_id is not None,
-          "the history link becomes material — the chain carries launch_film "
-          "(docked plan or auto-started run) without re-asking for the URL",
-          {"plan": plan, "run_id": run_id})
-    if run_id is not None:
-        kinds = [s["kind"] for s in await step_rows(run_id)]
-        check("launch_film" in kinds,
-              "the auto-started run's chain carries launch_film", kinds)
-    # 资产化正形：本回合诞生 web_page 资产（material_urls absorb 从历史抄链）
+    t3_tool = terminal_tool_of(turn3)
+    design_turn = None
+    if t3_tool == "design_storyboard":
+        design_turn = turn3
+    else:
+        check(t3_tool in ("answer", "ask_user"),
+              "the film decision closes on a direction beat "
+              "(answer / ask_user) or straight to design_storyboard — "
+              "never a blind dock", turn3)
+        turn3b = await ctx.chat(pid_b, "可以，就按这个方向设计分镜")
+        if terminal_tool_of(turn3b) != "design_storyboard":
+            turn3b = await ctx.chat(pid_b, "Just design the storyboard now.")
+        check(terminal_tool_of(turn3b) == "design_storyboard",
+              "the direction's approval lands on design_storyboard", turn3b)
+        design_turn = turn3b
+    check(design_turn.get("run_id") is None,
+          "the design beat starts no run (分镜不是开工)", design_turn)
+    check(not is_plan_dock(design_turn["assistant_message"]),
+          "the design beat docks no plan (分镜也不是方案 dock)",
+          design_turn["assistant_message"])
+    echo3 = (design_turn.get("assistant_message") or {}).get("content") or ""
+    check(re.search(r"\d+\.\s+\*\*\w+\*\*\s+·\s+\d+s", echo3) is not None,
+          "the design beat's message carries the storyboard markdown",
+          echo3[-400:])
+    # 资产化正形：历史链接在旅程中资产化（方向拍 answer.material_urls 或
+    # 设计拍 design_storyboard.material_urls 两 absorb 座之一）。
     asset_id = None
     for _ in range(15):
         async with AsyncSessionLocal() as db:
@@ -4200,7 +4243,7 @@ async def s12_site_entry_variants(ctx: Ctx) -> None:
                 break
         await asyncio.sleep(2)
     check(asset_id is not None,
-          "the history link births a web_page asset on the film turn "
+          "the history link births a web_page asset on the film journey "
           "(material_urls absorb from conversation history)", None)
 
 

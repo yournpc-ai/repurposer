@@ -2704,7 +2704,7 @@ revision 族（revise_plan / revise_selects / revise_output / edit_output / edit
 **Decision**:
 
 1. **段聚合 + 总量/分解两态**（2026-10-15 修订——消费面定位重拍：折叠行是安心感不是审计面；原「全收 + fragment 摘要」形态退役）：两条消息之间 2+ 条连续 completed 落定活动行（跨 key）坍缩成**一条聚合总量行**——折叠态只说总耗时「工作了 2m 7s」这**一个事实**，永不带 fragment 摘要（`Read www.z…` 的截断病理与宽度抖动是其结构性失败；URL/文件名截断需求随之消失）。展开态 = **类目分解**：同 key 行跨全段合并为一条 ×N 类目行（「已读网页 ×3」——Flora 解剖），按首次出现序（时序即真相）；逐行时长与实例名不归归档面（遥测不归消费面；实例名是 live 期的言语——material 读取族经 `activityCategoryKey` 重映射到无名的 `materialCategory` 键族，web_page 分叉随节拍 `asset_type`）；产物计数里程碑（count 无 total）永不合并——两条行说不出一个诚实的计数。**单行段同样收壳**（2026-10-16 修订——完成就收：裸单行在段未成形时是孤零遥测行，段成形后原地翻壳的闪变比壳本身更吵）。折叠仍是呈现层纯函数（`foldActivityUnits` + `foldCategories`），持久化的每帧一行不动——审计继续读落库行。chevron 全站统一 OS disclosure 惯例（`>` 收 / `⌄` 展，三个 disclosure 座位：聚合行 / 活动行 / StatusLine 收据行）。
-2. **总耗时 = 段墙钟**：下一条 assistant 行的 `at` − 首行 `at`（散文到来闭合工作段——CC "Thought for Xs" 的解剖）；边界缺席（live 尾段，散文未到）回落末行自身终点（at + duration_ms），再回落行耗时求和，无可测量则无耗时。**用户行永不做段终点**——失败回合后用户可能数小时才回来，其消息戳会编造「工作了 3 小时」的谎言。**带 run 的 assistant 行同样不做段终点**（2026-10-15 修订）：段与边界之间隔着一个 run 时（素材节拍 → run 完成时的交付散文），散文戳会把折叠行的钟拉满整个 run 时长，与收据行的总耗时重复——run 的跨度归收据行说，折叠回落末行自身终点。**物化时机律**（2026-10-16 修订）：折叠壳在段闭合（边界散文落地）时物化——未闭合尾段在回合忙碌期不渲染，随闭合散文一并出现（总结的时钟终点 = 总结的出现时刻；忙碌期无 ticking 时钟）；busy 结束仍无边界（孤儿回合 / 历史回放）以末行自身终点的回落时钟渲染。
+2. **完成即收尾**：完成活动即物化为折叠壳，忙碌回合的尾段同样显示。总耗时 = 末条活动自身终点（at + duration_ms）− 首行 at；缺时间戳回落耗时求和，无可测量则无耗时。后续回复、分镜生成、用户思考或 run 都不延长已完成活动的时钟。实时与回放同一投影。
 3. **failed/cancelled 行永不折入**：✗ 划掉行是失败信号，藏进聚合即丢；它们独立留行并打断折段。
 4. **不受动**：now-line 原地 morph（live 已与 CC 同形）、think 空态（永不入流）、draft/run 跨度（本就不落行）、折叠永不跨消息边界（段分组既有律，恰好 = CC 的按散文段坍缩）。
 
@@ -2899,33 +2899,15 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 6. **产物文件 probe 校验闸**（放行闸③，禁止事项 10 的座位）：`render_output` 成功路径落 COMPLETED 前必过 `app/pipeline/render_probe.py`——一座闸门、家族分派检查项（film：h264 + 1920×1080 + 视频流帧计数 = Σ场景帧 ±1 帧；clip：存在/非零/容器可读/首帧可解码 + caption sidecar 存在即法、非零当且仅当 `caption_track` 非空——渲染服务对空轨写零字节 srt，空 sidecar 是无字幕 clip 的合法产物）。时长判据走**流帧计数**而非容器时长——mp4 容器 duration 带 muxer 衬垫（取证：465 帧流精确 15.5s vs 容器 15.552s），永不作契约面。未过 = 渲染 FAILED + `spec.failure={stage:"probe",codes,detail}` 盖 render 镜像节点（与 storyboard 的 schema/grounding 同字段形状）；被拒产物本体留对象存储作取证，probe 临时副本即清。
 7. **worker 渲染执行形态**：渲染认领后跑 asyncio task（与节点同构），并发上限 `render_concurrency`（默认 2——争用资源是渲染服务的 headless Chrome）+ 单渲染栅栏 `render_timeout_seconds`（默认 900 = 历史栅栏可配化；film 基线 ≈46s/26s 片，clip 长源渲染长尾共享同一栅栏故不收紧）；两键住 env Settings（工程参数，configs 边界律 §3）。并发冒烟（3 并发 fixture 渲染）：cap=2 生效，墙钟 29.3s vs 串行估算 81s，Chrome 2 并发零故障，临时目录零新增泄漏。
 8. **失败分类台账 = 仪表层**（`scripts/film_stage_ledger.py`）：五段通过率（schema/grounding/constraint/render/probe）+ codes Top N，读数供归因，永不阻塞部署；数据源 = `spec.failure` 单字段 + 节点/产物终态。
-9. **S11 = MG 旅程座**（`chat_scenarios.py`）：URL → web_page 真采集 → 分镜方案 dock → 守卫线口头 yes → 真渲染 + probe 闸 → film 产物 + 画布血缘 + 台账 hold=capture+release；只锁形态不锁文案。
+9. **S11 = MG 旅程座**（`chat_scenarios.py`）：URL → web_page 真采集 → 分镜方案 dock（echo 内嵌分镜 markdown）→ 口头 yes 开工 → 真渲染 + probe 闸 → film 产物 + 画布血缘 + 台账 hold=capture+release；只锁形态不锁文案。
 
 **Related**: ADR-016（spec 契约律）/ ADR-028（禁第二条编排链）/ ADR-058（name 二源律，null 读容忍）/ ADR-096 §1（渲染 pend 唯一座）/ ADR-052（absorb 信封座）/ ADR-114（S11 旅程座纪律）
-
-## ADR-120: film 分镜核对坐消息流——计划期起草 / 消息块逐版 / confirmed_storyboard 直渲
-
-**Status**: Decided（2026-10-14 用户拍板 A 变体；简报 = `tasks/film-storyboard-review.md`）
-
-**Context**: launch-film 内化后（ADR-119）与原 skill 的效果差距 = 核对物（时长/文案/分镜）用户无处可见——分镜在 run 内出生即渲染，用户只能在成品上事后发现「这不是我要的」。真实对话取证（项目 e9f60236）：多轮核对（时长压缩 / 文案替换 / 画幅）是官网介绍短片品类的体验本体。auto 档（ADR-117）确认钮退役后，确认 dock 不能承重核对物。
-
-**Decision**:
-
-1. **分镜表 = 消息流里的一种消息块**（`intent.type="storyboard"`，candidates_log 先例），永不进确认 dock。逐版留痕：每次修订出新版行，旧版折叠 chip（PlanVersionChip 同律）。
-2. **分镜起草**（座位经 ADR-125 修订为迟延座：永不在 chat 回合内起草）：编排环一座（`orchestrate_storyboard()`：storyboarder agent + grounding validator + 有界打回），计划期与 node 共享，禁第二条编排链（ADR-028）。计划期编排 = conversation 层计量不收费（ADR-117 §5）。
-3. **修订复用 dock 座位**：每次 re-dock 重起草（修订言语入 assemble），version = 会话内分镜行数 + 1；E1 修订对象 = 分镜草案，禁整片重跑。
-4. **confirmed_storyboard 直渲**：开工（口头 yes / Start / auto 道同一机器）把最新分镜行 stamp 进 `run.context.confirmed_storyboard`（confirmed_scope 同座）；`LaunchFilm.run` 防御性 validate——通过则跳过编排直渲，世界漂移失效则重编排并 log（confirmed_storyboard_stale），永不用废分镜出片。
-5. **品类措辞**：「官网介绍短片」，非「短视频」——capability menu / echo 引导同批换；参数行（画幅/配音/配乐）随 E2/E3 落地才上 UI，不卖未建能力。
-
-**Consequences**: 多轮核对节奏不靠确认档——高价长片越守卫线恒带价问一次（ADR-117 D6），核对自然发生在 dock 等待期；E2（配音/BGM）的 narration 进分镜表同族核对；时长对齐 75–120s keynote 挂 E2/E3 同批重估。
-
-**Related**: ADR-119（film 家族基座）/ ADR-028（禁第二编排链）/ ADR-117（auto 道与守卫线）/ ADR-052（confirmed_scope 快照座）/ ADR-058（展示文案二源律）
 
 ## ADR-121: film 采集升档——playwright 引擎 / 逐 section 截图 / 元素点名相机 / 节拍预计算 / 子页发现
 
 **Status**: Decided（2026-10-15 用户拍板「全上」——四批一次放行；简报 = `tasks/film-capture-parity.md`）
 
-**Context**: ADR-120 三批收口后，与原 launch-film skill 的残余差距全部在采集与素材侧：one-shot CLI 截图无滚动无等待（canvas/JS 首屏实证黑屏——linear.app fold 截图除 nav 条全黑）/ ui 幕相机坐标模型盲猜（validator 只查 [0,1] 界）/ BGM 只铺床不锁节拍 / 一次只采一个显式 URL。skill 侧四件做法均已验证（capture.mjs playwright + anchors/elements/beats），本决策 = 复刻已验证件，非新发明。chat 读面的 web 工具对（get_web_page/search_web）是讨论高度的文本读，与本决策的素材高度采集互不替代。
+**Context**: film 分镜核对批收口后，与原 launch-film skill 的残余差距全部在采集与素材侧：one-shot CLI 截图无滚动无等待（canvas/JS 首屏实证黑屏——linear.app fold 截图除 nav 条全黑）/ ui 幕相机坐标模型盲猜（validator 只查 [0,1] 界）/ BGM 只铺床不锁节拍 / 一次只采一个显式 URL。skill 侧四件做法均已验证（capture.mjs playwright + anchors/elements/beats），本决策 = 复刻已验证件，非新发明。chat 读面的 web 工具对（get_web_page/search_web）是讨论高度的文本读，与本决策的素材高度采集互不替代。
 
 **Decision**:
 
@@ -2937,21 +2919,21 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 **Consequences**: 新依赖唯一 = playwright（pip）；采集时长因滚动预载上升，`web_capture_timeout_seconds` 与 processor 超时预算同批重估；旧 web_page 行（无 shots/elements）走 fold-only 降级路径继续可成片；`FilmSceneUi.shot`（默认 0）让 storyboarder 在一页多图里选取景。验收锚 = 重采 linear.app 出真内容 section 图 + `scratch/demo-films/` 三片重跑端到端。
 
-**Related**: ADR-119（film 家族基座）/ ADR-120（分镜核对与参数行）/ ADR-028（禁第二编排链/采集链）/ ADR-039（工具包一座）
+**Related**: ADR-119（film 家族基座）/ ADR-129（分镜核对与参数行）/ ADR-028（禁第二编排链/采集链）/ ADR-039（工具包一座）
 
 
 ## ADR-122: 移动端恒 full 纯 chat——dock 形态与 list world 退役
 
 **Status**: Decided (2026-10-15)
 
-**Context**: 移动端项目页残留两套历史包袱：① ChatDock 三形态机的 `dock` 形态（折叠输入条 + History 图标 + 历史浮层 + Hide/LogoMark 收纳）——对话被收进 History 图标后面，用户看到画布式空壳；② mobile-only 的 list world（ResultsTabs + 结果网格）——与「解耦 canvas、chat 为主、产物在消息流中回复」的方向（ADR-118 chat 自足律）重复且过时。实测移动端 chat 全流程，产物交付（终态收据 + 锚卡 + 分镜卡）已全部在流内工作，dock 形态与 list world 是画蛇添足。
+**Context**: 移动端项目页残留两套历史包袱：① ChatDock 三形态机的 `dock` 形态（折叠输入条 + History 图标 + 历史浮层 + Hide/LogoMark 收纳）——对话被收进 History 图标后面，用户看到画布式空壳；② mobile-only 的 list world（ResultsTabs + 结果网格）——与「解耦 canvas、chat 为主、产物在消息流中回复」的方向（ADR-118 chat 自足律）重复且过时。实测移动端 chat 全流程，产物交付（终态收据 + 锚卡）已全部在流内工作，dock 形态与 list world 是画蛇添足。
 
 **Decision**:
 1. **ChatDock = 两形态机（full / panel）**：`dock` 形态退役——History 钮、Hide 钮、历史浮层（`historyOpen` / `historySlotOpen` / `dock-history-in`）、`closeHistory` 句柄同批删除。panel 的 minimize/LogoMark 召回与 `dockHidden` 机制保留（panel-only）。
-2. **移动端恒 full**：项目页移动端在任何项目龄都挂 `form="full"`——chat 舞台即页面，无形态翻转；产物交付 = 消息流内（终态收据 + 锚卡 + RunCard + 分镜卡，ADR-118 单一渲染面律不变）。「< iPad 宽度无画布」（prohibition #13）与 `canvas_available=false` 上报不变。
+2. **移动端恒 full**：项目页移动端在任何项目龄都挂 `form="full"`——chat 舞台即页面，无形态翻转；产物交付 = 消息流内（终态收据 + 锚卡 + RunCard，ADR-118 单一渲染面律不变）。「< iPad 宽度无画布」（prohibition #13）与 `canvas_available=false` 上报不变。
 3. **list world 退役**：ResultsTabs / 结果网格 / 骨架屏 / `results.empty.*` / `results.retry*` 与路由侧的 tab 机器全删；结果卡组件本体保留——`OutputChatCard` 在流内复用它们。
 4. **placeholder 世界自证**：`@` 教学文案从按形态分叉改为按 mention 注册表内容分叉——注册表有产物即 nodes 版，否则 assets 版（移动端 post-run 恒 full 后，形态分叉会永远停在 assets 版，是假事实）。
-5. **prompt 法条表面中立化**：`chat_intent_system.j2` 的 launch_film 分镜法条直述真实座位（分镜 = 消息流内卡片，全端一致），禁位置词/表面名词（'在下面' / '画布' / 'below'）——trigger_system.j2 交付承接句的同族律，防模型把 "the flow" paraphrase 成不存在的面（ADR-060 echo 防编造律）。
+5. **prompt 法条表面中立化**：`chat_intent_system.j2` 的 launch_film 分镜法条直述真实座位（分镜 = 消息流内 dock echo 内嵌 markdown，全端一致），禁位置词/表面名词（'在下面' / '画布' / 'below'）——trigger_system.j2 交付承接句的同族律，防模型把 "the flow" paraphrase 成不存在的面（ADR-060 echo 防编造律）。
 
 **Consequences**: ADR-041 条款 7 与 ADR-051 条款 7/8、ADR-056 条款 2 中描述移动端 dock 形态 / 三形态机 / list world 为现行法的部分被本条翻案；桌面 full→panel morph、画布 reveal 门（ADR-111）、确认教义（ADR-117）零变化。`canvasVisibility` 双键谓词与真值表不变。
 
@@ -2962,7 +2944,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 **Status**: Decided（2026-10-15——对标原 skill 90 秒成片逐帧取证后拍板）
 
-**Context**: ADR-120/121 落地后的成片对标原 skill 的 90 秒参考片仍单薄：参考片 ~14–16 节拍、支柱迭代结构（逐支柱 divider→ui→plate）、玻璃数字卡、全出血与浏览器框混排；我方 demo 片场景少、时长短。根因四件：分镜窗（scene 3..8 / 总时长 12..90s）系统性压短；场景词汇缺数字幕与全出血；pack 工艺文案仍在布道 30 秒短片节奏；demo instruction 自身写 45–60s。
+**Context**: film 分镜核对与采集升档落地后的成片对标原 skill 的 90 秒参考片仍单薄：参考片 ~14–16 节拍、支柱迭代结构（逐支柱 divider→ui→plate）、玻璃数字卡、全出血与浏览器框混排；我方 demo 片场景少、时长短。根因四件：分镜窗（scene 3..8 / 总时长 12..90s）系统性压短；场景词汇缺数字幕与全出血；pack 工艺文案仍在布道 30 秒短片节奏；demo instruction 自身写 45–60s。
 
 **Decision**:
 1. **窗升档**：scene count 4..16、总时长 30..115s；ui focuses 收紧 5→3（相机克制入法）。
@@ -2973,7 +2955,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 **Consequences**: 渲染器是唯一新代码面（Plate 组件 + ui 全出血变体 + zod schema）；validator/prompt/pack/估价同批换档；验收锚 = zymix.ai 多页采集出 75–95s 支柱走查成片（含 plate 与混排 frame），节拍 snap 复用 ADR-121 B3 零改动。
 
-**Related**: ADR-121（采集升档 / 节拍 snap）/ ADR-120（分镜核对）/ ADR-119（film 家族基座）/ ADR-016（spec 契约律）
+**Related**: ADR-121（采集升档 / 节拍 snap）/ ADR-129（分镜核对）/ ADR-119（film 家族基座）/ ADR-016（spec 契约律）
 
 
 ## ADR-123: 工作区布局用户设置——画布能力位的第二判断源
@@ -3010,39 +2992,6 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 **Related**: ADR-077（读工具纪律 carve-out 由本条修订）/ ADR-121 B4（web_page 采集链——读本写回的第二写口）
 
-## ADR-125: film 分镜统一迟延——hold/draft 解耦 / 过目硬闸 / 就绪拍
-
-**Status**: Decided (2026-10-16)
-
-**Context**: ADR-120 的计划期起草在 dock 回合内同步跑编排环（多模态重调用 × 有界打回），三罪：dock 回合被起草时长绑架（S11 取证：capture 落定于 dock 后 ~33s，回合内起草必然对零页起跑）；起草期间用户无任何可看世界；起草失败语义无处安放。zymix 取证（2026-10-15）：迟延落地后 37 分钟起草期页面假死（轮询保险丝 300s < 起草包络）+ 落地零言语 + 双层重试（dock 层 2 × 候选层 3）叠加失控。
-
-**Decision**:
-
-1. **hold/draft 解耦**：dock 时刻只 stamp `storyboard_review` 保持（hold-only，`stamp_film_hold`），起草永不在 chat 回合内——统一迟延座 = `storyboard_dock.maybe_dock_deferred_storyboard`（worker 侧 fire-and-forget，先等抓取排干，advisory lock 跨进程单飞，一切闸位 = 世界读，过期 fire 静默 no-op）。
-2. **过目硬闸**：块未落地不开工——`film_start_block` 只认本 dock 之后落地的分镜块；唯一逃生门 = 用户明示放弃过目（`start_run` 的 `skip_storyboard_review`），系统永不代决，模型永不主动提议 waiver。
-3. **有界打回单座**：候选层（`orchestrate_storyboard` 的 1+MAX_REWRITES）是唯一重试座位；dock 层不整稿重试（双层叠加 = 乘法失控）。修复回声携带最近邻 manifest 候选行（打地鼠取证：只说什么失败、不给候选 = 盲改）。穷尽落代码拼装诚实失败行（不借 LLM 之声），hold 不解除，合法出路两条 = 换说法重试 / 明示放弃。
-4. **就绪拍**：块落地发 `storyboard_ready` trigger——唯一以「待决计划存在」为言语条件的事件（两处 pending-plan 沉默谓词对它反转；dock 已结算 = 静默）。前端零新面：watch-window 轮询通吃；**轮询续航 = 阶段最坏时长包络**（保险丝短于包络 = 假死，此律已入 MODULE_ARCHITECTURE §6 五座位清单）。
-
-**Consequences**: dock 即时到达；起草期有 beats + 状态行叙事；失败 = 诚实行 + 两条合法出路。分镜阶段成为「新世界事件五座位清单」的原型案例。就绪拍的呈现形态由 ADR-126 修订（卡面 → 消息内 markdown 分镜）。
-
-**Related**: ADR-120（分镜核对坐消息流——起草座位由本条修订）/ ADR-077（trigger 白名单扩名单）/ ADR-117（确认档与守卫线）/ ADR-093（言语 = LLM 之声；穷举诚实失败行 = 法2 的代码拼装例外）/ ADR-126（行 ID 化 + 消息内分镜）
-
-## ADR-126: 分镜行 ID 化 + 消息内 markdown 分镜——grounding 打地鼠的终局与呈现面翻案
-
-**Status**: Decided (2026-10-16)
-
-**Context**: zymix/b0ab991f 取证——自由文本 grounding（屏上字符串逐字/trim 自 manifest，validator 子串校验）对 MiniMax 是结构性受限生成难题：打地鼠签名（«Startups to enterprises»、«AI automations» 等模型自编"连接词"修了再犯），最坏 37 分钟仍败。对照 Claude skill 同尺校验一次过——校验不过严，是模型「作曲本能 vs 摘抄任务」的张力。同期拍板呈现面翻案：ADR-120/125 的块卡呈现（卡自带内容、言语永不复述）改为消息内完整分镜（用户点名的形态）。
-
-**Decision**:
-
-1. **行 ID 化（屏上文案槽位全引用化）**：manifest 行编号（`build_line_manifest`，跨页全局 1-based，kind 保留语义）；LLM 输出 = `DraftStoryboard` 引用稿——一切屏上槽位 = `CopyRef{line, fit, accent}`，模型选行不写字（fit=head/tail 由代码按词界定长裁剪，模型永不数字符；accent = 解析后文本的子串，代码包 `*…*`）。`resolve_draft` 把引用稿解析成已解析 `FilmStoryboard`（真字符串）再过 `validate_storyboard`——打地鼠族结构性消灭；残留引用错三态 = 未知行号 / accent 未命中 / ui caption 跨页（`INVALID_COPY_REF`，回声精确指认）。**逐字律不动**：屏上文案忠于素材的承诺零改动，创作通道仍是 narration（引用律豁免、忠于事实）。已解析形态是唯一的持久化/渲染/markdown 形态——块、spec、渲染器零改动。
-2. **消息内 markdown 分镜（呈现面翻 ADR-125 卡面案）**：storyboard_ready 消息 = LLM 就绪短句 + `render_storyboard_markdown`（代码从已解析稿确定性投影——展示=执行，永不二源生成）+ LLM 确认问句，`[[STORYBOARD]]` 哨兵 splice（缺哨兵降级 = 表在前、问句仍在尾）。分镜块降级 = 附件 chip（StoryboardTable 静息 chip、点开结构表；逐版留痕不变）；块行仍是硬闸与 `confirmed_storyboard` 的世界记录座。打字机律两牙同批检查：markdown = 代码拼装世界内容（估价尾同 doctrine），散文部 = LLM 之声走 settled-prose pacing。
-3. **孤儿 dock boot 扫尾**：worker 启动 `sweep_orphaned_storyboard_docks`——重启杀死在飞起草的 dock（无块无失败行）补 fire 一次；失败行对本 dock 也是结算（迟延座新增闸：本 dock 已落穷举行 = 不再重起草，唯一合法重开 = 用户换说法 re-dock）。
-
-**Consequences**: storyboarder 的任务从「抄写」降维成「选择」，grounding 校验从子串匹配变查表；修复回声从「给候选行」变「指认引用错」。prompt 面（film_storyboard.j2 + launch-film pack）重写为引用机制 + 英文统一（原 j2 英文 / pack 中文的语言分裂消除）。用户审阅面 = 一条可读 markdown 消息 + 确认问句，结构表一点即达。①的适用范围由 ADR-127 收窄为事实槽位（创作通道扩为 cold-open/reveal lead/narration），`DraftStoryboard`/`resolve_draft` 形态由 `FilmDirection`/`assemble_storyboard` 取代。
-
-**Related**: ADR-125（统一迟延——呈现面由本条修订）/ ADR-120（分镜过目；逐字律不变）/ ADR-093（言语 = LLM 之声；markdown 表 = 代码拼装世界内容，估价尾同例）/ ADR-110（块 chip 折叠同律）/ ADR-127（骨架收归代码——①的适用范围由本条收窄）
-
 ## ADR-127: 分镜骨架收归代码——固定结构 + 创作槽 + 固定分镜兜底 + 流式传输
 
 **Status**: Decided (2026-10-16)
@@ -3051,27 +3000,79 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 **Decision**:
 
-1. **骨架 = 代码（固定模板）**：场景序列/幕数/时长/相机/视图分配全部代码确定性派生（`build_skeleton` + `_scene_plan` + `_assign_seconds`），对齐 skill 的「structure that works」：cold open → hero → home walk → 每柱 divider → walk（页面带数字时第一章后插 plate）→ reveal → proof walk → end。时长带 = 70-118s（skill 75-120，帧帽留余），幕数窗 = 8-20（3 柱 10 幕 ~ 5 柱 18 幕），per-type 秒带同批调整（j2 镜像契约同步）。相机 = 元素清单首选未遮挡 heading/button（大面积优先），无清单 = 诚实中心推近；视图按序消费，视图稀缺 = 章节降为纯 divider（永不编造画面）；< 3 可用视图 = 预检直接诚实失败（INSUFFICIENT_VIEWS），LLM 调用都不烧（skill 同法：站点挡抓取 = 停下来要截图）。
-2. **LLM 只答创作槽（`FilmDirection`，一次调用）**：事实槽仍引用（pillars 3-5 / hero / captions / reveal word·sub / end——`CopyRef` 机制原样，ADR-126①收窄为此）；创作通道 = 自由文本（cold_open 钩子 ≤3 词、reveal_lead 可空走代码固定句、narrations 按场景键对位）——**钩子不是宣称**（创作永不伪装产品事实），校验器 `_CREATIVE_SLOTS` 免 grounding、帽/空白/查重仍查。divider 的 label = 代码 kicker（按影片语言小表），roll = 代码造（下两章循环当 decoy + 真词收尾，签名按序防同集误判）；plate 卡片 = 代码从数字行切 big/label（全引用纪律，创作零需求）。输出从「整篇分镜 JSON」缩到槽位答案——输出 token 量大头消失。
-3. **固定分镜兜底（`fixed_direction`）**：候选穷举 / schema 终局 / 传输失败 → 同一骨架上代码填全槽（pillar = 前 3 个 h2，h3→h1→button 依序补足；hero/end = title/description；cold open 引 title 头部），过装配 + 校验即出片；只有薄到凑不出三章的 manifest 才诚实失败。排序：LLM 多模态（流式）→ 声明式 media_text_fallback → 固定分镜 → 诚实失败行，每级都诚实。
+1. **骨架 = 代码（固定模板）**：场景序列/幕数/时长/相机/视图分配全部代码确定性派生（`build_skeleton` + `_scene_plan` + `_assign_seconds`），对齐 skill 的「structure that works」：cold open → hero → home walk → 每柱 divider → walk（页面带数字时第一章后插 plate）→ reveal → proof walk → end。时长带 = 70-118s（帧帽留余；skill / prompt / markdown 同此一法），幕数窗 = 8-20（3 柱 10 幕 ~ 5 柱 18 幕），per-type 秒带同批调整（j2 镜像契约同步）。相机 = 元素清单首选未遮挡 heading/button（大面积优先），无清单 = 诚实中心推近；视图按序消费，divider 后无 walk 的章节 = EMPTY_CHAPTER 硬违规（打回减柱，永不编造画面也不出空章），同图同呈现 = REPEATED_VIEW，零相机 beat / 相邻近重复 = PADDING_SCENE；< 4 可用视图（home + 三章 walk 的最低配置）= 预检直接诚实失败（INSUFFICIENT_VIEWS），LLM 调用都不烧（skill 同法：站点挡抓取 = 停下来要截图）。
+2. **LLM 只答创作槽（`FilmDirection`，一次调用）**：事实槽仍引用（pillars 3-5 / hero / captions / reveal word·sub / end——`CopyRef{line, fit, accent}` 选行不写字，fit=head/tail 代码按词界裁剪，accent = 解析后文本的子串）；创作通道 = 自由文本（cold_open 钩子 ≤3 词、reveal_lead 可空走代码固定句、narrations 按场景键对位）——**钩子不是宣称**（创作永不伪装产品事实），校验器 `_CREATIVE_SLOTS` 免 grounding、帽/空白/查重仍查。divider 的 label = 代码 kicker（按影片语言小表），roll = 代码造（下两章循环当 decoy + 真词收尾，签名按序防同集误判）；plate 卡片 = 代码从数字行切 big/label（全引用纪律，创作零需求）。输出从「整篇分镜 JSON」缩到槽位答案——输出 token 量大头消失。
+3. **固定分镜兜底（`fixed_direction`）**：候选穷举 / schema 终局 / 传输失败 → 同一骨架上代码填全槽（pillar = 前 3 个 h2，h3→h1→button 依序补足；hero/end = title/description；cold open 引 title 头部），过装配 + 校验即出片；只有薄到凑不出三章的 manifest 才诚实失败。**适用面收窄（ADR-131）**：固定兜底只保留给无人值守 worker 节点；对话设计旅程永无固定兜底，失败 = 诚实说明 + 有效重试。排序（worker 道）：LLM 多模态（流式）→ 声明式 media_text_fallback → 固定分镜 → 诚实失败行，每级都诚实。
 4. **流式传输（Agent 声明 `stream=True`）**：`generate_stream` 无 delta 消费者（无消费者重试恒合法——下游从未见字节）；reasoning chunk 持续流动使读超时不再误杀慢而活的生成，`llm_first_chunk` 秒级见活，真挂死快速判死。修理轮永不流式（既有律）。
 
-**Consequences**: 起草墙钟的结构大头（巨型输出 + 全有或全无传输 + 盲重试腹稿）移除；「为什么还卡」此后从日志四行可读（gate → llm_request → llm_first_chunk → llm_response/failed + fixed_fallback）。分镜从「模型作曲、代码纠错」变「代码搭骨、模型填肉、代码兜底」——LLM 全挂也必有分镜。呈现面（消息内 markdown 分镜 + 附件 chip）零改动——已解析 FilmStoryboard 仍是唯一持久化/渲染形态。
+**Consequences**: 起草墙钟的结构大头（巨型输出 + 全有或全无传输 + 盲重试腹稿）移除；「为什么还卡」此后从日志四行可读（gate → llm_request → llm_first_chunk → llm_response/failed + fixed_fallback）。分镜从「模型作曲、代码纠错」变「代码搭骨、模型填肉、代码兜底」——worker 道 LLM 全挂也必有分镜。呈现面 = 工具返回完整执行事实、LLM 唯一表达（ADR-131）——已解析 FilmStoryboard 仍是唯一持久化/渲染形态。
 
-**Related**: ADR-126（行 ID 化——适用范围由本条收窄为事实槽位；②③不动）/ ADR-125（统一迟延）/ ADR-120（逐字律——事实槽忠于素材，创作通道忠于事实）/ ADR-039 P3（盲重试禁令——流式重试只在首 delta 前）
+**Related**: ADR-129（设计拍同步起草——本条运行时骨架法不动）/ ADR-131（呈现位移与预算——兜底收窄）/ ADR-119（film 家族基座）/ ADR-093（言语 = LLM 之声）/ ADR-039 P3（盲重试禁令——流式重试只在首 delta 前）
 
-## ADR-128: 分镜起草跨度归位标准工作跨度——开工拍 + 落定节拍 + 全旅程续航
+## ADR-129: film 分镜 = 设计拍普通工具调用——版本化呈现 / 全局生产授权 / 禁静默换稿
 
-**Status**: Decided (2026-10-16)
+**Status**: Decided（2026-10-16 用户拍板；2026-10-17 用户拍板修订；版本闭环施工合同 = `docs/tasks/film-storyboard-journey-closure.md`，未施工）
 
-**Context**: ADR-125/127 落地后的旅程观感取证——抓取折段（[Worked ~1m18s] 子页节拍）与分镜落地之间只剩一条客户端合成的「Drafting the storyboard…」占位行：它有自己的一套逻辑（storyboardDraftDue 闸 + watch 窗口 + 落块即消失），不入 fold 机器、不留落定痕迹；且块落地即收窗，就绪拍（块后数秒才 commit）只靠刷新才能到达。病灶判定：**Drafting 占位是一条没有生命周期的行**——一切工作跨度的正常解剖 = 开工有言语（ADR-093 开工句先例）→ live 有相位行 → 落定折成 [Worked ~xxx]，起草跨度三缺二。
+**Context**: 分镜核对的目标是让用户在开工前看到、讨论并修订将要渲染的稿。对话不是固定拍数剧本：方向可反复讨论，分镜可反复修改，解释性问答不触发重起草，制作中与交付后的修改都生成后续版本；正在执行的 run 永远保持出生时的快照。
 
 **Decision**:
 
-1. **开工拍（`storyboard_drafting` trigger，白名单第四席）**：迟延座在 gate=proceed 处 fire（抓取真排干、一切闸位过完、起草真开始的那一刻——永不在 dock 时宣告）。两处 pending-plan 沉默谓词与就绪拍同族反转（dock 已结算 = 静默），另加自身陈旧读：块 ∨ 穷举失败行已落地 = 开工话迟到（`storyboard_draft_settled` 世界读——固定分镜兜底的秒级落地、预检秒败两族竞态都由此吸收），静默。言语法：一句开工话，永不是问句（方案判断问句属就绪拍），永不预告时长，永不偷看分镜内容（还没起草，预览 = 编造）；suggestions 恒 []（`_wrap_up_rejection` 0 上限族）。ref = 本 dock 问题行 id（与就绪拍同 ref 不同 trigger，去重键各自独立；re-dock 重生问题行 = 新 ref = 允许再说一次）。
-2. **落定节拍（born-settled 素材节拍 `beat="storyboard_drafting"`）**：块落地时同批写一条节拍行（数组位置在块前），`at` = 起草真实开始戳、`duration_ms` = 跨度——素材节拍契约加 `at` 字段（跨度先于落地的节拍自带出生戳，fold 时钟量真实跨度，永不量落地瞬间）。回放为 `kind:"draft"` + `chat.storyboard.draftingDone` key 的活动行——落定即退役的过滤器只退 `chat.activity.*` 计划 draft 跨度，born-settled 节拍经得住；落定措辞走活动日志寄存器（「起草完分镜」/ "Drafted the storyboard"，无进行态）。失败路径不写节拍——穷举诚实散文行已是全部叙事（failed 行永不折叠，写了 = 双叙事者）。live 相位不动：合成 now-line 是素材节拍 doctrine 的既有答案（live = 合成行，durable = 落定行）——「独立逻辑」的病灶消除在生命周期补全，不是另起机器。
-3. **watch-window 续航覆盖全旅程**：窗口谓词从「块未落地」改为「就绪拍未到达」（dock → 开工拍 → 块 → 就绪拍）——块落地不再收窗，窗活到就绪拍到达（按其 ref = 本 dock 问题行 id 登记）、失败行落地或用户作答；块后 90s 宽限兜住被合法静默的就绪拍（永不让死窗骑满 45 分钟保险丝）。re-dock 重生问题行 = 新 id = 窗口状态重新武装。
+1. **设计拍独立于生产拍**：`design_storyboard` 呈现分镜，不分镜 dock、不创建 run、不携带分镜专属确认控件；设计授权只授权设计，生产授权仍由全局 ask/auto/credit 规则管辖。
+2. **版本化闭环**：已呈现分镜有版本、不可变内容 digest 与执行快照；方案座只引用当前版本，worker 只执行被引用的版本，漂移即停止并回到重新设计，永不静默换稿。
+3. **修订基于当前稿**：明确的修改请求本身就是对应修改的授权；修订保留用户未要求改变的内容并产生新版本。无关提问只解释当前稿，不设计、不启动。
+4. **目标差异与验收住施工合同**：本 ADR 只保留决策理由；对话行为的现行正文在 `CHAT_ARCHITECTURE.md`，本次待实施差异、批次边界与验收在 `tasks/film-storyboard-journey-closure.md`。
 
-**Consequences**: 起草跨度的完整解剖 = [Worked ~抓取] → 开工话（LLM）→ ● Drafting（live now-line）→ [Worked ~xxx]（落定节拍折段）→ 分镜块 → 就绪拍，每一拍都骑既有机器（trigger 拍 / 素材节拍 / fold 投影 / 轮询窗），零新增机制种类。开工话被丢弃（admission 让位用户回合）时抓取节拍与起草节拍合一折段（类目展开仍分述），诚实不残缺。
+**Consequences**: 分镜不获得独立确认偏好座位；`confirmed_scope` 仍是生产授权快照座；旧确认失效与并发防护是版本闭环的一部分，但不删除无关任务或用户内容。
 
-**Related**: ADR-125（统一迟延 + 就绪拍——本条补开工拍与落定节拍，三者构成完整跨度）/ ADR-127（骨架收归代码——固定兜底秒级落地的竞态由①的陈旧读吸收）/ ADR-093（开工句 = LLM 言语）/ ADR-108/110（数组位置律与段聚合——落定节拍直接骑乘）/ ADR-095（三寄存器——落定措辞走日志格）
+**Related**: ADR-127（骨架收归代码）/ ADR-119（film 家族基座）/ ADR-117（确认档普通法与守卫线）/ ADR-028（编排环一座）/ ADR-093（言语 = LLM 之声）/ ADR-052（confirmed_scope 快照座）
+
+## ADR-130: film 时序执行契约——beat-locked frames / 配音字幕 / camera walk / split reveal
+
+**Status**: Decided（2026-10-17 用户拍板；字段级正文 = `docs/RENDERING.md` film-spec 段）
+
+**Context**: 用户核对的帧/拍/音乐必须与成片执行同源；配音、字幕、幕边界与 reveal 节奏不能各有一套时序。
+
+**Decision**:
+
+1. **同一时序源**：分镜展示、执行快照与 film-spec 读同一 resolved music grid；曲目缺节奏信息时先走现有分析补齐，仍无法获得才诚实失败。
+2. **spec 自带执行血缘**：film-spec 携带 fps、帧数、音乐节奏信息、逐幕 narration audio 与同文本 captions、camera/reveal 的执行锚点。
+3. **真实 beat 律**：reveal 黑场是一拍真实 beat interval；固定 0.5s 不得被当作一拍。
+4. **字段契约一座**：字段级渲染契约只维护在 `docs/RENDERING.md`；本 ADR 不复述字段表，质量收紧差异归 `tasks/film-storyboard-journey-closure.md` Batch 2。
+
+**Consequences**: 渲染器只求和、播放并消费 spec 中的锚点，不发明时长、字幕或 reveal 停顿；旧 spec 由 schema 读容忍处理。
+
+**Related**: ADR-129（分镜版本闭环）/ ADR-127（骨架与创作槽）/ ADR-121（capture parity 与 beat grid）/ ADR-016（renderer 黑盒契约律）
+
+## ADR-131: film 分镜呈现位移与生成预算——LLM 唯一表达 / 程序 markdown 退役 / 1800s 上限 / 设计旅程无固定兜底
+
+**Status**: Decided（2026-10-18 用户拍板）
+
+**Context**: 项目 17cce3f2 取证：同一回合出现两份分镜且内容不一致——程序把 `render_storyboard_markdown` 拼成一条独立 assistant 消息，聊天 LLM 拿到的观察却只有摘要（版本/幕数/时长），拿不到真实内容只能另编一份漂亮稿（镜头顺序、时长、旁白均与保存稿不符）。同案第二层：方向生成预算 180s 先于单次生成（读超时 300s）耗尽，静默落 `fixed_direction` 固定稿（网页按钮文案入片）冒充成功。修法在真实责任层，不靠前端隐藏或 prompt 掩盖。
+
+**Decision**:
+
+1. **工具产生真实分镜，LLM 负责唯一表达**：`design_storyboard` 设计/校验/保存真实分镜，并返回已保存稿的完整结构化事实（`storyboard_presentation`——版本/名称/旁白语言/画幅/FPS/执行时间轴总秒数总帧数/音乐 BPM/每幕顺序·类型·时间段·时长·帧数·所见·相机·逐字旁白·素材来源）；设计拍的下一条普通 assistant 消息是分镜的唯一呈现（短引言 → 幕表 → 衔接下一步），程序独立 markdown 消息形态（`render_storyboard_markdown` / `publish_storyboard`）退役。展示时间必须来自同一执行时间轴（allocate_frames → snap_frames_to_beats），LLM 永不自算。
+2. **呈现关联在落定后**：`film_presented_message_id` 只在最终 LLM 呈现消息成功持久化后关联（finish() 盖章座位——终态行与 bare-reply 行；降级行永不盖章），且关联到本次工具返回的具体版本（版本守卫——版本移动/无稿不盖；同版本重呈现重盖最新）；失败/取消/断连随回合回滚，不留幻影「已展示」。刷新前后只有一份分镜。
+3. **方向/分镜生成预算 = 1800s 允许上限**（非固定等待）：派生层（draft 预算 / inflight marker 过期）随动；per-request 流式读超时 300s 保留，SSE 15s 心跳覆盖前端看门狗。
+4. **超时兜底必须诚实**：对话设计旅程关闭固定兜底（`allow_fixed_fallback=False`）——候选穷举/预算耗尽/传输失败 = 诚实说明 + 有效重试（`film_storyboard_timeout` 人话行），静默低质稿冒充成功永禁，不误报 grounding 失败，不触发制作；固定兜底只保留给无人值守 worker 节点。
+
+**Consequences**: 同一回合双份分镜结构性不可能（呈现面只剩一座）；用户看到的稿与保存/执行的稿同源；LLM 误呈现永不进入执行（生产消费 digest 锁定稿的既有门禁未动——呈现层诚实靠法条 + 完整事实，不解析 LLM markdown）；180s 级预算误杀慢而活的生成消失。
+
+**Related**: ADR-129（设计拍与版本闭环）/ ADR-127（骨架与兜底——适用面被本条收窄）/ ADR-130（时序同源）/ ADR-093（言语 = LLM 之声）/ ADR-060（echo 防编造律）
+
+## ADR-132: film 批准语义与配音承诺——批准 = 消费呈现版 / 守卫分腿 / voiceover 直达设计层 / 全静默即违规
+
+**Status**: Decided（2026-10-18 用户拍板）
+
+**Context**: 项目 4ad7963e 取证（api.log + DB 双证）：分镜 v1 呈现后 present_plan 被 dock 守卫拒绝（具体腿无日志不可考），拒绝引导文本一律指向「Call design_storyboard」；用户回答「可以」后模型真的重起草——且把方向复述塞进 specific_instruction（强制全新稿而非指纹复用），v2 在「视觉优先」措辞下 16 幕旁白全空，链上六道洞（voiceover 不到设计层 / 导演不知情 / narrations 空 dict 照收 / 键不匹配静默吞 / 校验无全静默规则 / worker 跳过 TTS 仍成功交付）无一拦住，最终交付无配音无字幕的"成功"影片。
+
+**Decision**:
+
+1. **批准 = 消费呈现版**：呈现收尾只许一句直接的制作问句（「要不要按这版开始制作？」），内部动作问句（「挂方案/定稿入库」）永禁；用户批准已呈现分镜 = 用同参数 dock 提案 + 一句真实开工说明，不重印分镜表、不产生新版本、不再现设计 activity。重设计的唯一触发 = 用户的修改原话，且 specific_instruction 只携带修改本身，永不复述既定方向。
+2. **dock 守卫分腿**：版本守卫的每个失败腿（在飞设计 / 无版本 / 状态残缺逐项 / 指纹移动）记 structlog 且引导文本只指该腿自己的修复——复呈现/修复性复呈现（原参数裸调 design_storyboard，禁 specific_instruction）或等待，永不一律导向重设计；批准路径上的守卫拒绝永不是重设计许可。
+3. **voiceover 直达设计层**：`voiceover` 从计划参数传入 orchestrate → 导演 prompt 明示本片是否带配音（「视觉优先」描述画面不取消声音；修订时未被点名的旁白必须保留）；`voiceover=true` 而全片无旁白 = `NARRATION_MISSING` 校验违规（有界打回修复，冷开场/divider 合理静默合法）；旁白键不匹配任何场景 = `NARRATION_KEY_UNKNOWN`（点名有效键），静默吞键永禁。
+4. **worker 两道防线**：prepared 稿防御性重校验带 `narration_required`（voiceover 承诺下无声稿 = stale 诚实失败）；配音合成门前全片无旁白即 fail-closed，永不无声交付，worker 也永不替用户写未看过的旁白。
+
+**Consequences**: 「按这版做」= 不换稿、不取消旁白、不再绕一轮设计；守卫拒绝从此自带可定位的腿名（04:15 式不可考拒绝不再重演）；voiceover 承诺在设计/校验/执行三层同法，静默影片只有 voiceover=false 一条合法路径。
+
+**Related**: ADR-129（版本闭环——批准消费的是它）/ ADR-131（呈现位移——呈现即唯一表达）/ ADR-127（骨架与创作槽——旁白槽的完整性门）/ ADR-130（执行契约——配音/字幕同源）/ ADR-093（言语 = LLM 之声——开工说明一句真话）

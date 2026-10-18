@@ -197,7 +197,7 @@ Distribution 📋：channel_accounts ──► publications ──► publicatio
 - **新功能先问归属**：归属不清时按"谁写这张表"判定；都不写表的功能（纯 UI）归最近的前端模块。
 - **新模块准入**：必须有独立的表归属或独立的队列认领源，否则只是现有模块的职责扩充。
 - **命名注意**：竞品文档中 "pipeline" 也指 Opus 范式（见 DECISION_MATRIX 范式短名）；内部模块语境下 Pipeline = 我们的生成管线，引用竞品时写 `Pipeline 范式`。
-- **新世界事件/阶段的用户可感效果 = 五座位登记**（分镜迟延阶段漏就绪言语的教训）：任何新的异步阶段或世界事件上线时，必须逐一登记——① trigger 白名单条目 + fire 点（`pipeline/trigger_events.py`，扩名单 = ADR 评审）；② `chat/trigger_turn.py` 的 case（含两处 pending-plan 沉默谓词的豁免判断——该事件的言语条件是否恰是待决 dock 本身）；③ 对应 prompt bullet（`trigger_system.j2` 或当事 prompt）；④ 前端到达通道（SSE 帧或 watch-window 轮询——**轮询续航 ≥ 该阶段的最坏时长包络**，保险丝短于包络 = 页面假死）；⑤ activity / i18n 键（如该阶段有 live 里程碑行）。缺任何一个座位，该阶段就在某一面对用户失声。
+- **新世界事件/阶段的用户可感效果 = 五座位登记**：任何新的异步阶段或世界事件上线时，必须逐一登记——① trigger 白名单条目 + fire 点（`pipeline/trigger_events.py`，扩名单 = ADR 评审）；② `chat/trigger_turn.py` 的 case；③ 对应 prompt bullet（`trigger_system.j2` 或当事 prompt）；④ 前端到达通道（SSE 帧或 watch-window 轮询——**轮询续航 ≥ 该阶段的最坏时长包络**，保险丝短于包络 = 页面假死）；⑤ activity / i18n 键（如该阶段有 live 里程碑行）。缺任何一个座位，该阶段就在某一面对用户失声。
 - **本契约的变更 = ADR**：表归属调整、新横切切面、认领源增减都要写 ADR 并更新本文。
 
 ## 7. 代码地图与运行约定
@@ -266,7 +266,7 @@ apps/api/
 │   │   │                        #   mark_compiled / supersede_plan 双态写者（E3）+ select_revision_phase
 │   │   │                        #   三金钱态纯判别 + read_journey_summaries / output_fact 记忆读座（S6）】
 │   │   ├── trigger_events.py      # trigger 白名单事件缝（ADR-087 §6）：kind ∈
-│   │   │                        #   {understanding_warmed, run_completed, craft_decompiled} 冻结白名单
+│   │   │                        #   {run_completed, craft_decompiled} 冻结白名单
 │   │   │                        #   （扩名单 = ADR 评审）；fire-and-forget，未注册 = 静默降级永不
 │   │   │                        #   pipeline 失败；handler 由组合根注册——pipeline 零 app.chat import
 │   │   ├── conversation_bridge.py # 会话写命令显式 protocol（ADR-087 §6）：

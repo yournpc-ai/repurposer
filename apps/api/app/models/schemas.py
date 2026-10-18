@@ -350,10 +350,11 @@ class StartAnswerRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["start"]
-    # 法3 逃生门 (2026-10-16): the film storyboard review's ONE waiver —
-    # set only through the chat path's start_run when the user explicitly
-    # said they don't need the storyboard; the pill never sends it. The
-    # run's context records the waiver for audit.
+    # RETIRED: the film storyboard presents at the design beat (a plain
+    # design_storyboard message); there is no review gate to waive. The
+    # field stays so old clients keep passing it without a 422
+    # (extra="forbid"); the value is accepted and IGNORED, never carried
+    # into the run (the autonomy precedent below).
     skip_storyboard_review: bool = False
     # RETIRED (Phase 4 B7 / ADR-087 R9, D1): the autonomy tier is gone —
     # every run is an autonomous continuation. The field stays so old
@@ -838,6 +839,62 @@ class PresentPlanArgs(BaseModel):
     )
 
 
+class DesignStoryboardArgs(BaseModel):
+    """``design_storyboard`` params (both paths) — the film family's review
+    beat (分镜不是开工, 分镜也不是方案 dock): a plain tool call that designs
+    the storyboard and presents its markdown as an ordinary message; NO plan
+    docks and NO run starts here. The params mirror the launch_film task's
+    storyboard-relevant fields verbatim — the dock that follows the user's
+    approval reuses THIS board only when the params match (the fingerprint's
+    params half), so carry the same values through."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(
+            data, "focus", "language", "voiceover", "music_mood", "aspect", "specific_instruction", "material_urls", "pending_disposition", "review_hold"
+        )
+
+    focus: str | None = Field(
+        default=None,
+        description="The agreed creative direction as the storyboard's emphasis steer (launch_film's focus, verbatim).",
+    )
+    language: str | None = Field(
+        default=None,
+        description="The film's spoken language when one was agreed or named (launch_film's language, verbatim). Null = the page's own.",
+    )
+    voiceover: bool | None = Field(
+        default=None,
+        description="Spoken narration (launch_film's voiceover, verbatim). Null/true = narrated; false = silent cut.",
+    )
+    music_mood: str | None = Field(
+        default=None,
+        description="Background-music mood when one was agreed (launch_film's music_mood, verbatim).",
+    )
+    aspect: Literal["16:9", "1:1", "9:16"] | None = Field(
+        default=None,
+        description="Canvas aspect when one was agreed (launch_film's aspect, verbatim). Null = 16:9.",
+    )
+    specific_instruction: str | None = Field(
+        default=None,
+        description="THIS beat's new storyboard feedback ('重点讲社交功能') — a redraft trigger that revises the CURRENT board (what the feedback does not name stays); omit it when designing the first board.",
+    )
+    review_hold: bool | None = Field(
+        default=None,
+        description="True when the user scoped this to review only ('只看分镜，先别制作') — the hold then persists across turns until they explicitly ask for production; false explicitly releases it. Omit = unchanged.",
+    )
+    material_urls: list[str] | None = Field(
+        default=None,
+        description="The site's URL when no captured page exists in the project yet (the direction stage ran as a discussion, or the design beat came first) — copy it verbatim from the conversation; the system captures it BEFORE drafting so the board is grounded.",
+    )
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — the question settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
+    )
+
+
 # 建议谱系 (ADR-100): one wire shape, one seat — the trigger dock's wrap_up
 # options (the answer+suggestions form is retired: every pickable option
 # docks as a real question, the message flow carries zero options). The
@@ -911,17 +968,11 @@ class StartRunArgs(BaseModel):
     def _read_tolerance(cls, data: Any) -> Any:
         return tolerate_null_keys(data, "skip_storyboard_review")
 
-    skip_storyboard_review: bool = Field(
-        default=False,
-        description=(
-            "The ONE waiver of the film storyboard review: set true ONLY "
-            "when the user explicitly says they don't need to see the "
-            "storyboard ('不用看分镜，直接做' / 'skip the storyboard, just "
-            "make it'). A plain confirmation ('可以' / 'go ahead') while the "
-            "storyboard card hasn't landed is NOT a waiver — call start_run "
-            "without this and the system tells you it's still drafting."
-        ),
-    )
+    # RETIRED: the film storyboard presents at the design beat (a plain
+    # design_storyboard message), so no review gate remains to waive. The
+    # field stays so cached tool calls keep validating (extra="forbid");
+    # the value is accepted and IGNORED, never consulted.
+    skip_storyboard_review: bool = False
 
 
 class PlanAnswerArgs(BaseModel):
@@ -2061,6 +2112,21 @@ class QuestionPayload(BaseModel):
     # compiled tasks (evidence layer) + estimate_credits (费用语义五面).
     # Empty on every non-exploration dock (读容忍: 旧行无此键).
     plans: list[dict] = Field(default_factory=list)
+    # task_book only, server-stamped: the dock echo's content carries the
+    # film storyboard's code-rendered markdown. On refresh the row's content
+    # replays as a flow message while the dock revives separately. Absent on
+    # legacy / non-film rows (读容忍 — reads False).
+    storyboard_echo: bool = False
+    # task_book only, film chains (ADR-129): the draft token of the
+    # storyboard version this dock presents. A newer design beat mints a new
+    # token, and the start gate rejects this row's Start as stale (旧 Start
+    # 失效, nothing deleted). Absent on non-film and pre-version rows
+    # (读容忍: the gate then falls back to the fingerprint comparison).
+    film_draft_token: str | None = None
+    # The presented version stamped with the draft token. Start compares
+    # both — token binds the draft identity, version makes the compared
+    # revision explicit. Absent on legacy rows (读容忍).
+    film_storyboard_version: int | None = None
 
 
 class PendingPlan(BaseModel):
@@ -2124,6 +2190,62 @@ class PendingPlan(BaseModel):
     # None on router-drafted / legacy rows — the revision router degrades
     # honestly to the @output channel (读容忍).
     plan_task_map: dict[str, list[int]] | None = None
+    # The docked film storyboard handoff (internal, never user-facing
+    # structure): the RESOLVED FilmStoryboard dump whose code-rendered
+    # markdown rode the dock echo — Start stamps it onto run.context so the
+    # run consumes exactly the storyboard the user last saw (the node
+    # revalidates against the current pages). ``film_storyboard_fingerprint``
+    # is the dock seat's reuse key (launch_film params + the instruction —
+    # a revision that moves either redrafts; anything else reuses). None on
+    # non-film / pre-storyboard rows (读容忍).
+    film_storyboard: dict | None = None
+    film_storyboard_fingerprint: str | None = None
+    # 版本化分镜状态 (ADR-129, film 旅程闭环 Batch 1): the presented board is
+    # a VERSIONED draft — every field below is stamped by the design beat
+    # (design_storyboard) and only READ by the dock / start / worker seats
+    # (禁 dock 期重起草). All read-tolerant: None/absent on legacy rows.
+    #
+    # ``film_storyboard_version``: 1 on the first presented board, +1 per
+    # redraft; a reuse (same fingerprint, no fresh feedback) keeps it.
+    film_storyboard_version: int | None = None
+    # The design params that produced the current version (focus / language /
+    # voiceover / music_mood / aspect as named — nulls preserved): the dock
+    # seats rewrite the launch_film task's params from THIS, so the confirmed
+    # chain carries exactly what the presented board was designed with.
+    film_storyboard_params: dict | None = None
+    # sha256 over the resolved board's canonical dump — the presented-draft
+    # identity (呈现稿 digest = run context digest = render spec digest).
+    film_storyboard_content_digest: str | None = None
+    # The execution snapshot frozen at design time (ADR-130 §1): the pages
+    # the board was grounded on, the resolved music grid (track id / bpm /
+    # beats), the timing constants, and its own ``digest`` — LaunchFilm
+    # consumes THIS, and drift against it fails honestly (never a silent
+    # re-orchestration).
+    film_storyboard_execution: dict | None = None
+    # Provenance: the user message that authorized THIS version's design
+    # (the direction yes / the revision request), and the assistant message
+    # that presented its markdown.
+    film_design_authorized_by: str | None = None
+    film_presented_message_id: str | None = None
+    # 「只看分镜」review hold (ADR-129): set by the design beat's
+    # review_hold param, cleared only by an explicit production request (a
+    # film proposal docking) — never by a new turn, a refresh, or an
+    # unrelated Q&A. The start gate blocks while it stands.
+    film_review_hold: bool = False
+    # Per-version draft token: a fresh draft mints a new one; the dock
+    # stamps it onto the task_book payload, and the start gate rejects a
+    # Start whose stamped token is not the current draft's (旧 Start 失效 —
+    # the row, its messages, assets and run history all stay).
+    film_draft_token: str | None = None
+    # In-flight draft marker (并发护栏): written by the design beat's BEGIN
+    # in its own committed mini-transaction ({draft_id, base_version,
+    # started_at, user_message_id}), before the long draft starts; a fresh
+    # begin supersedes the old film confirmation (the token clears). While a
+    # non-stale marker stands, Start fails closed and a second begin is
+    # refused; the publish beat writes only if the marker still names ITS
+    # draft; failure clears only its own marker; a marker older than the
+    # design budget is stale.
+    film_draft_inflight: dict | None = None
 
 
 class ProjectBase(BaseModel):
@@ -3269,15 +3391,6 @@ class FilmFocus(BaseModel):
     zoom: float | None = None  # magnification (1 = full frame)
 
 
-class FilmCaption(BaseModel):
-    """One caption pill of a ui scene."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    at: float  # seconds from scene start
-    text: str
-
-
 class FilmSceneWords(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -3315,7 +3428,6 @@ class FilmSceneUi(BaseModel):
     shot: int = 0  # 0-based index into the page's captured shots
     frame: bool = True  # browser chrome card vs full-bleed
     focuses: list[FilmFocus] = Field(min_length=1)
-    captions: list[FilmCaption] = Field(default_factory=list)
     narration: str | None = None
 
 
@@ -3367,6 +3479,11 @@ class FilmSceneReveal(BaseModel):
     lead: str
     word: str
     sub: str
+    # The lead-in holds alone for the scene's FIRST HALF, then a one-beat
+    # black pause, then the word lands on the music grid (the split reveal's
+    # lead → beat → word arc); seconds-from-scene-start, code-assigned at
+    # assembly. The default only covers pre-split persisted boards.
+    lead_seconds: float = 1.5
     narration: str | None = None
 
 
@@ -3410,10 +3527,11 @@ class FilmStoryboard(BaseModel):
     film-spec). ``name`` is the two-source display-copy seat: LLM-chosen,
     null-read tolerant (打字机牙①).
 
-    Per-scene ``narration`` (配音词) is SPOKEN copy — it never renders on
-    screen, is never grounding-checked verbatim (the director rephrases the
-    page's facts into speech), and reads as no-voiceover when null (打字机
-    牙① applies to every prose field)."""
+    Per-scene ``narration`` (配音词) is SPOKEN copy — code synthesizes it and
+    projects the same words into deterministic subtitle cues at spec time; it
+    is never grounding-checked verbatim (the director rephrases the page's
+    facts into speech), and reads as no-voiceover/no-captions when null
+    (打字机牙① applies to every prose field)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -3428,38 +3546,16 @@ class FilmStoryboard(BaseModel):
     scenes: list[FilmScene] = Field(min_length=1)
 
 
-STORYBOARD_BLOCK_TYPE = "storyboard"
+class FilmProvenance(BaseModel):
+    """交付物血缘 (ADR-129): the presented storyboard's content digest + the
+    execution snapshot digest this film was built from — written by the
+    birth node after re-proof, never copied blind. Absent on rows born
+    before versioning."""
 
+    model_config = ConfigDict(extra="forbid")
 
-class StoryboardBlock(BaseModel):
-    """The message-flow storyboard block (ADR-120 §1): an assistant message
-    row's ``intent`` payload (``type == "storyboard"``) — the plan-stage
-    draft the user reviews and revises in chat before the run births. Sits
-    in the message stream, NEVER in the confirm dock.
-
-    ``version`` = the conversation's Nth storyboard row (each revision
-    drafts a fresh block — old versions stay in the transcript, folded by
-    the client). ``storyboard`` = the grounding-validated draft. ``pages``
-    = the reviewed pages' hosts (the table's source line — the world
-    self-evidence of what the copy is grounded on)."""
-
-    model_config = ConfigDict(extra="ignore")  # the intent row also carries the policy stamp
-
-    type: str = STORYBOARD_BLOCK_TYPE
-    version: int = 1
-    storyboard: FilmStoryboard
-    pages: list[str] = Field(default_factory=list)
-    instruction: str | None = None
-    # The reviewed plan's film params (配音开关 / 配乐 mood / 画幅 / 旁白语言)
-    # — the table header's param chips; absent = plan defaults (voiceover on,
-    # mood default, 16:9, storyboard-declared language).
-    voiceover: bool = True
-    music_mood: str | None = None
-    aspect: str = "16:9"
-    # The film's spoken language chip (2026-10-15 语言钉参): the plan's pin
-    # when one rode the proposal, else the draft's own declaration. None on
-    # legacy rows (读容忍 — the chip simply doesn't render).
-    language: str | None = None
+    storyboard_digest: str | None = None
+    execution_digest: str | None = None
 
 
 class FilmPayload(BaseModel):
@@ -3478,6 +3574,7 @@ class FilmPayload(BaseModel):
     # The display-class stamp (same write-point law as ClipPayload.aspect):
     # v1 films are landscape-only, so the stamp is constant at birth.
     aspect: str | None = "16:9"
+    provenance: FilmProvenance | None = None
 
 
 class FilmSpecEnvelope(BaseModel):

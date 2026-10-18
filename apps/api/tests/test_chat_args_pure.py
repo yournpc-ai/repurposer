@@ -30,6 +30,7 @@ from pydantic import ValidationError
 from app.models.schemas import (
     ChatAnswerArgs,
     ChatAskArgs,
+    DesignStoryboardArgs,
     Option,
     PlanAnswerArgs,
     PlanAskArgs,
@@ -244,9 +245,12 @@ class TestChatAskArgsCardFields:
 
 
 class TestStartRunArgsWaiver:
-    """start_run's waiver param (法3, 2026-10-16): the film storyboard
-    review's ONE escape — default off, explicit-only, null read-tolerant
-    (打字机律牙①: a null never rejects the call), unknown keys rejected."""
+    """start_run's retired waiver param: the film storyboard rides the dock
+    echo now (generated before the dock), so no review gate remains to
+    waive. The field stays accepted-and-ignored for old clients (the
+    autonomy precedent): default off, explicit values accepted, null
+    read-tolerant (打字机律牙①: a null never rejects the call), unknown keys
+    rejected."""
 
     def test_default_is_no_waiver(self) -> None:
         assert StartRunArgs.model_validate({}).skip_storyboard_review is False
@@ -266,3 +270,62 @@ class TestStartRunArgsWaiver:
     def test_unknown_keys_reject(self) -> None:
         with pytest.raises(ValidationError):
             StartRunArgs.model_validate({"skip": True})
+
+
+class TestDesignStoryboardArgs:
+    """design_storyboard params (ADR-129 — 分镜不是开工, 分镜也不是方案
+    dock): the film family's review beat rides BOTH paths as a NON-terminal
+    call (the system drafts inside execute, publishes the markdown as its
+    own message, and hands the design facts back for the model's reply).
+    The params mirror launch_film's design fields so the approval dock's
+    fingerprint can match (null = default on every key); material_urls lets
+    the design beat absorb a conversation-carried URL before drafting (the
+    proposal seats' same absorb law). ``review_hold`` carries the
+    review-only scope (「只看分镜，先别制作」) — True holds, False
+    releases, absent leaves the stored hold untouched."""
+
+    def test_defaults_are_all_absent(self) -> None:
+        args = DesignStoryboardArgs.model_validate({})
+        assert args.focus is None
+        assert args.language is None
+        assert args.voiceover is None
+        assert args.music_mood is None
+        assert args.aspect is None
+        assert args.specific_instruction is None
+        assert args.material_urls is None
+        assert args.review_hold is None
+        assert args.pending_disposition == "none"
+
+    def test_nulls_read_as_absent(self) -> None:
+        # 打字机律牙①: a null never rejects the call (a rejected iteration
+        # never streams — 整段瞬移永禁).
+        args = DesignStoryboardArgs.model_validate(
+            {"focus": None, "voiceover": None, "material_urls": None,
+             "specific_instruction": None, "review_hold": None,
+             "pending_disposition": None}
+        )
+        assert args.focus is None and args.voiceover is None
+        assert args.material_urls is None
+        assert args.review_hold is None
+        assert args.pending_disposition == "none"
+
+    def test_values_ride_verbatim(self) -> None:
+        args = DesignStoryboardArgs.model_validate(
+            {
+                "focus": "the social features",
+                "language": "en",
+                "voiceover": True,
+                "aspect": "9:16",
+                "specific_instruction": "重点讲社交功能",
+                "review_hold": True,
+                "material_urls": ["https://example.com"],
+            }
+        )
+        assert args.focus == "the social features"
+        assert args.aspect == "9:16"
+        assert args.review_hold is True
+        assert args.material_urls == ["https://example.com"]
+
+    def test_unknown_keys_reject(self) -> None:
+        with pytest.raises(ValidationError):
+            DesignStoryboardArgs.model_validate({"scenes": 5})

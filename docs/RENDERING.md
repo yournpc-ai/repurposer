@@ -32,6 +32,8 @@ preview == 成片 是结构性的，不是测试出来的。
 
 两条铁律（ADR-016）：**spec 只描述"是什么"，零 Remotion/React 概念**（渲染器可换，§7）；**渲染器是黑盒**——不读 DB、不吃相对 URL、不知项目/人设，一切在烘焙缝解析完毕。
 
+**film-spec 第二家族（ADR-119）**同受这两条铁律：`family="film"`，顶层自带 `aspect` + `fps`（现行恒 30）+ `music`（`url/gain_db`，可带 `bpm/beats` 作为幕边界 snap 的时序血缘）+ `scenes[]`，可带 `provenance`（设计拍 digest 血缘：`storyboard_digest`/`execution_digest`，ADR-129）。每幕自带整数 `frames`（总时长 = Σ frames，渲染器只求和）、可选 `audio`（逐幕配音对象）与同文本投影的 `captions` cue（`at/end/text`，句读/从句切分、语音单位加权——CJK 字 = 4 单位，末 cue 在真实配音时长处闭合；`subtitles` 是改名前的遗留键，渲染器读容忍）；ui 幕的 `focuses` 是完整 camera walk（wide → hold → glide → settle），reveal 幕的 `lead_frames` 是 split reveal 的 word onset 帧（lead 独占前半幕 → 一拍黑场 → word 压音乐网格进场；渲染器只在 onset 前一拍淡出 lead，永不自造锚点）。字幕烧录进画面，不产 SRT sidecar。时长法 = 70–118s（`TOTAL_SECONDS_RANGE` 一座）；probe 闸在视频形状外补音频流存在性（spec 承诺 music/narration 即须带音频流）。
+
 ## 2. 三个包与一个 API 侧
 
 | 家 | 角色 |
@@ -260,3 +262,5 @@ TrackDef(
 family / timeline 分类是文档（§4 表），不进 schema；确定性工艺检查（crop 不出人脸框 / 驻留达标 / 字幕不溢出）随首个住户与其消费方同批回归，禁先注册空座位。
 
 **加一条轨的成本** = TS 分区一项（tsc 强制）+ Python TrackDef 一条（启动对账强制）+ 一个渲染件（新 family 才有）。`crop_track` 是第一条按此成本进场的轨（reframe 能力批，ADR-045）。
+
+网站介绍片先读网页并商定方向，再在提案阶段设计分镜；明确直接设计可跳过方向询问。分镜生成含返工共用 180 秒预算，dock 含采集等待总预算 240 秒，无可用定稿时不自动开工。divider 的共享原文引用按自身 24 字符展示窗口做单词边界裁切，避免把可确定处理的长度问题交回模型整稿重写。对话行为详见 CHAT_ARCHITECTURE「网站介绍片的方向与分镜阶段」。

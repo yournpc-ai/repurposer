@@ -746,6 +746,50 @@ async def test_checkpoint_emits_before_the_read_executes() -> None:
 
 
 @pytest.mark.asyncio
+async def test_design_storyboard_checkpoint_empty_execute_speech_is_legal() -> None:
+    """Non-terminal design beat regression: the framing prose rides the real
+    on_checkpoint channel, so ``design_storyboard`` legally executes with an
+    EMPTY remaining speech. The runner-shaped ReadAccepted hook then
+    publishes the board, and the model closes with a separate reply."""
+    tools = [
+        ChatTool("design_storyboard", "Design the board.", None, terminal=False),
+        ChatTool("answer", "Close the turn.", None),
+    ]
+    client = StubClient([
+        _call("design_storyboard", {}, prose="好的，按这个方向设计分镜"),
+        _call("answer", {}, prose="分镜已经发布，你可以看当前版本"),
+    ])
+    order: list[str] = []
+
+    async def execute(name: str, params: Any, prose: str):
+        order.append(f"execute:{name}:{prose!r}")
+        if name == "design_storyboard":
+            assert prose == ""
+            return ToolObservation("Storyboard version 1 published.")
+        assert name == "answer"
+        return None
+
+    async def on_event(event: object) -> None:
+        if isinstance(event, ReadAccepted) and event.tool_name == "design_storyboard":
+            order.append("publish:storyboard")
+
+    agent = _make_agent("tl_design_cp", client, tools=tools)
+    result = await agent.call_loop(
+        execute,
+        on_checkpoint=lambda text: order.append(f"checkpoint:{text}"),
+        on_loop_event=on_event,
+    )
+    assert order == [
+        "checkpoint:好的，按这个方向设计分镜",
+        "execute:design_storyboard:''",
+        "publish:storyboard",
+        "execute:answer:'分镜已经发布，你可以看当前版本'",
+    ]
+    assert result.tool_name == "answer"
+    assert result.prose == "分镜已经发布，你可以看当前版本"
+
+
+@pytest.mark.asyncio
 async def test_terminal_call_prose_never_takes_the_checkpoint_route() -> None:
     """The pre-execution seat's terminal guard: reply prose riding the
     TERMINAL call is settled speech — routing it to the checkpoint channel

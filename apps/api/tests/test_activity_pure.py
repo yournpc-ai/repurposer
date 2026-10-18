@@ -545,6 +545,92 @@ def test_draft_span_settles_never_persist():
     assert p3.settled_frames() == []
 
 
+STORYBOARD = "chat.activity.storyboard"
+STORYBOARD_DONE = "chat.activity.storyboardDone"
+
+
+def test_storyboard_span_settle_persists_with_honest_duration(monkeypatch):
+    """分镜不是开工 (ADR-129 非终态设计拍): design_storyboard's span is the
+    ONE draft-family exception to 落定即退役 — the drafting happens INSIDE
+    execute (the film_director call + validation are real server work
+    between ReadExecuting and ReadAccepted), so the settle persists WITH its
+    honest duration: the markdown message is the deliverable, no docked card
+    absorbs the beat, and the 「Worked for Xs」 row is its receipt. The span
+    OPENS at ReadExecuting (never at name_known — 开工戳座): the framing
+    checkpoint lands before any visible 「正在设计分镜」, and the duration
+    measures the draft itself, never the speech before it."""
+    import app.chat.activity as activity_mod
+
+    ticks = iter([10.0, 42.5])  # ReadExecuting (open), settle
+    monkeypatch.setattr(activity_mod.time, "monotonic", lambda: next(ticks))
+    p = ActivityProjector()
+    frames = _feed(
+        p,
+        "design_storyboard",
+        ReadExecuting("design_storyboard"),
+        ReadAccepted("design_storyboard"),
+    )
+    assert _summary(frames) == [
+        ("a1", 1, "draft", STATUS_ACTIVE, STORYBOARD),
+        ("a1", 2, "draft", STATUS_COMPLETED, STORYBOARD_DONE),
+    ]
+    settled = p.settled_frames()
+    assert [(f.kind, f.status, f.key) for f in settled] == [
+        ("draft", STATUS_COMPLETED, STORYBOARD_DONE)
+    ]
+    assert settled[0].duration_ms == 32500  # the execute-entry-to-settle span
+
+
+def test_storyboard_span_never_opens_at_name_known():
+    """开工戳座 (2026-10-17 用户拍板): the tool NAME recognized mid-stream is
+    not the work starting — name_known keeps the slot SILENT (the user reads
+    Thinking while the framing checkpoint lands), the 「正在设计分镜」 line
+    appears only at execute entry. A pre-execute rejection leaves NO
+    crossed-out 0s storyboard row (the span never existed)."""
+    p = ActivityProjector()
+    assert p.name_known("design_storyboard") == []
+    # A rejection before ReadExecuting (e.g. params invalid): no phantom row.
+    frames = _feed(
+        p,
+        ToolRejected(
+            kind="params_validation", tool_name="design_storyboard",
+            iteration=0, detail="x", duration_ms=3,
+        ),
+    )
+    assert frames == []
+    # The retry's real attempt opens the span at execute entry as usual
+    # (a2 — the rejection's silent repair span holds a1).
+    frames = _feed(p, "design_storyboard", ReadExecuting("design_storyboard"))
+    assert [(f.kind, f.status, f.key) for f in frames] == [
+        ("draft", STATUS_ACTIVE, STORYBOARD)
+    ]
+
+
+def test_storyboard_span_persistence_mapping():
+    """frame_persistence (ADR-108 §2): the storyboard span's ACTIVE frame is
+    live-only (the now-line owns it); its terminal frame lands as its OWN
+    persisted row ("append") — the draft family's one exception."""
+    from app.chat.activity import frame_persistence
+
+    p = ActivityProjector()
+    active = _feed(p, "design_storyboard", ReadExecuting("design_storyboard"))[0]
+    assert frame_persistence(active) is None
+    settled = _feed(p, ReadAccepted("design_storyboard"))[0]
+    assert frame_persistence(settled) == "append"
+
+
+def test_storyboard_tool_lands_in_one_bucket():
+    """U6 同律: design_storyboard is a declared NON-terminal tool on BOTH
+    paths (the read tools' seat — the design beat observes and iterates like
+    a read; ADR-129) and lands in exactly one projector bucket (draft)."""
+    assert "design_storyboard" in all_known_tool_names()
+    assert kind_for_tool("design_storyboard") == "draft"
+    assert any(t.name == "design_storyboard" for t in PLAN_READ_TOOLS)
+    assert any(t.name == "design_storyboard" for t in CHAT_READ_TOOLS)
+    assert not any(t.name == "design_storyboard" for t in PLAN_TOOLS)
+    assert not any(t.name == "design_storyboard" for t in CHAT_TOOLS)
+
+
 def test_run_span_settles_never_persist():
     """落定即退役同律 (2026-09-29 用户拍板 — the run span joins the draft
     law): start_run's settle (「已开工」) rides the live wire unchanged but

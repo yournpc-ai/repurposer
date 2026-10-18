@@ -252,7 +252,7 @@ _LLM_PRODUCT_KINDS = (
     "write_article",
     "write_quotes",
     "write_carousel",
-    "launch_film",  # the storyboard is LLM-authored (grounding-validated)
+    "launch_film",  # the storyboard's creative slots are LLM-answered (grounding-validated, code skeleton + fixed fallback)
 )
 
 

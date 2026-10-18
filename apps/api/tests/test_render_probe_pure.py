@@ -6,7 +6,8 @@ No database, no LLM, no HTTP, NO REAL RENDER — fixtures are tiny MP4s encoded
 in-memory by PyAV (a few blank frames; the render service is never involved).
 The suite locks: the family dispatch (film = strict expectations read from the
 spec's own frames; clip = minimal readability), every failure code's trigger,
-and the ±1-frame duration tolerance.
+the ±1-frame duration tolerance, and the audio-stream expectation (a spec
+promising music or narration must render a container WITH an audio stream).
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from pathlib import Path
 
 from app.pipeline.render_probe import (
     FILM_FPS,
+    PROBE_AUDIO_MISSING,
     PROBE_CODEC_MISMATCH,
     PROBE_DURATION_MISMATCH,
     PROBE_OUTPUT_MISSING,
@@ -35,21 +37,50 @@ def _encode_mp4(
     height: int = 1080,
     frames: int = FILM_FPS,  # exactly 1.0s at the fixed film fps
     fps: int = FILM_FPS,
+    audio: bool = False,
 ) -> Path:
     """Encode a blank-video MP4 fixture. Real bytes through the real decoder
-    stack — the honest stand-in for a render (never a render-service call)."""
+    stack — the honest stand-in for a render (never a render-service call).
+    ``audio=True`` adds a silent AAC track (zero-dependency: planes filled
+    with NUL bytes, no numpy)."""
     import av
 
     container = av.open(str(path), "w")
     stream = container.add_stream(codec, rate=fps)
     stream.width, stream.height = width, height
     stream.pix_fmt = "yuv420p"
+    # Both streams must EXIST before the first mux — a stream added after
+    # muxing started keeps a zero time_base and its packets fail to rebase.
+    astream = container.add_stream("aac", rate=44100) if audio else None
     for _ in range(frames):
         frame = av.VideoFrame(width, height, "yuv420p")
         for packet in stream.encode(frame):
             container.mux(packet)
     for packet in stream.encode():
         container.mux(packet)
+    if astream is not None:
+        remaining = int(frames / fps * 44100)
+        pts = 0  # samples — PyAV cannot rebase a pts-less packet to zero time
+        while remaining > 0:
+            n = min(1024, remaining)
+            aframe = av.AudioFrame(format="fltp", layout="mono", samples=n)
+            aframe.sample_rate = 44100
+            aframe.pts = pts
+            pts += n
+            for plane in aframe.planes:
+                plane.update(b"\x00" * plane.buffer_size)
+            for packet in astream.encode(aframe):
+                # AAC encoder priming: the first packet(s) carry a negative
+                # pts (encoder delay) which mp4 cannot mux — drop them; the
+                # probe only needs a present, decodable audio stream.
+                if packet.pts is None or packet.pts < 0:
+                    continue
+                container.mux(packet)
+            remaining -= n
+        for packet in astream.encode():
+            if packet.pts is None or packet.pts < 0:
+                continue
+            container.mux(packet)
     container.close()
     return path
 
@@ -144,6 +175,45 @@ def test_duration_within_one_frame_passes(tmp_path: Path) -> None:
     video = _encode_mp4(tmp_path / "ok.mp4", frames=2 * FILM_FPS + 1)
     expect = probe_expectation_for(_film_spec([2 * FILM_FPS]))
     assert probe_rendered_video(video, expect) == []
+
+
+# ---- the audio-stream expectation (Batch 2) ---------------------------------
+# The spec's own promises decide: a music bed or any per-scene narration
+# ``audio`` key means the rendered container MUST carry an audio stream; a
+# silent cut (neither) asserts nothing about audio.
+
+
+def test_music_or_narration_in_spec_expects_audio() -> None:
+    spec = _film_spec([FILM_FPS])
+    assert probe_expectation_for(spec).audio is None  # silent cut: unasserted
+    with_music = {**spec, "music": {"url": "music/x.mp3", "gain_db": -20.0}}
+    assert probe_expectation_for(with_music).audio is True
+    with_narration = _film_spec([FILM_FPS])
+    with_narration["scenes"][0]["audio"] = "user/out/narr-0.mp3"
+    assert probe_expectation_for(with_narration).audio is True
+
+
+def test_expected_audio_stream_missing_is_rejected(tmp_path: Path) -> None:
+    silent = _encode_mp4(tmp_path / "silent.mp4", frames=FILM_FPS)
+    expect = probe_expectation_for({**_film_spec([FILM_FPS]), "music": {"url": "m.mp3"}})
+    violations = probe_rendered_video(silent, expect)
+    assert PROBE_AUDIO_MISSING in _codes(violations)
+
+
+def test_expected_audio_stream_present_passes(tmp_path: Path) -> None:
+    sounded = _encode_mp4(tmp_path / "sounded.mp4", frames=FILM_FPS, audio=True)
+    expect = probe_expectation_for({**_film_spec([FILM_FPS]), "music": {"url": "m.mp3"}})
+    assert probe_rendered_video(sounded, expect) == []
+
+
+def test_silent_cut_never_asserts_audio(tmp_path: Path) -> None:
+    # A spec promising neither music nor narration: the audio check stays out
+    # either way (a silent film is a legal film).
+    silent = _encode_mp4(tmp_path / "silent.mp4", frames=FILM_FPS)
+    sounded = _encode_mp4(tmp_path / "sounded.mp4", frames=FILM_FPS, audio=True)
+    expect = probe_expectation_for(_film_spec([FILM_FPS]))
+    assert probe_rendered_video(silent, expect) == []
+    assert probe_rendered_video(sounded, expect) == []
 
 
 # ---- clip family (minimal checks, same seat) ----------------------------------

@@ -1362,7 +1362,7 @@ def _frame_class_of(fam_steps: list[WorkflowStep]) -> tuple[str, str | None]:
                 return "clip", str(aspect)
         return "clip", "original"
     if any(s.kind == "launch_film" for s in fam_steps):
-        # The film canvas declares its aspect on the slot (ADR-120 E3);
+        # The film canvas declares its aspect on the slot (ADR-130);
         # absent = the 16:9 default.
         for s in fam_steps:
             if s.kind != "launch_film":

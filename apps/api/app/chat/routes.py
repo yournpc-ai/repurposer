@@ -62,6 +62,7 @@ from app.chat.service import (
     record_candidates_log,
     settle_activity_row,
     stamp_turn_failed,
+    persist_turn_failed_line,
 )
 from app.providers.llm.base import LLMError
 from app.pipeline.errors import user_error_line
@@ -467,6 +468,11 @@ def _failure_detail(exc: Exception, ui_language: str) -> str | dict:
         return exc.detail if isinstance(exc.detail, dict) else str(exc.detail)
     if isinstance(exc, LLMError):
         return user_error_line(exc, ui_language)
+    # Any user_key-bearing exception (e.g. FilmCaptureTimeout — deliberately
+    # NOT an LLMError so the drafting seat never swallows it) still earns its
+    # authored localized line; the generic veil is for key-less innards.
+    if getattr(exc, "user_key", None):
+        return user_error_line(exc, ui_language)
     return "Internal server error"
 
 
@@ -579,16 +585,6 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                 on_activity = _make_activity_hook(queue, projector, mirror)
                 on_candidates = _make_candidates_hook(queue, candidate_events)
 
-                async def on_storyboard(payload: dict) -> None:
-                    # 分镜块信道 (ADR-120 §1): the docked film plan's
-                    # storyboard table streams the moment the plan-stage
-                    # draft lands. The block ROW is persisted inside the
-                    # turn's transaction (message-borne end to end — no
-                    # settle-time log row like candidates); a failed turn
-                    # rolls it back together with everything else.
-                    await queue.put(
-                        _sse("assistant.storyboard", json.dumps(payload, ensure_ascii=False))
-                    )
 
                 async def on_reasoning(_fragment: str) -> None:
                     # Reasoning-content frames: liveness only, never shown.
@@ -621,6 +617,17 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                         _sse("assistant.checkpoint", json.dumps({"text": text, "at": at}))
                     )
 
+                async def on_row_append(message: Message) -> None:
+                    # ADR-129: the storyboard markdown's publish seat. The
+                    # design beat's activity row settles FIRST (the append/
+                    # update frames above — the span carries its real
+                    # duration), then this frame lands the board as its own
+                    # transcript row, so live SSE and the replay walk read
+                    # the same 活动落定 → 分镜消息 → 后续回复 ordering.
+                    await queue.put(
+                        _row_frame("append", {"row": _row_payload(message)})
+                    )
+
                 response = await execute_chat_turn(
                     db, prepared, data, on_delta=on_delta, on_reasoning=on_reasoning,
                     on_phase=on_phase,
@@ -629,7 +636,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
-                    on_storyboard=on_storyboard,
+                    on_row_append=on_row_append,
                 )
             await _sweep_activities(queue, projector, "completed", mirror)
             if turn_conversation_id is not None and turn_user_message_id is not None:
@@ -649,13 +656,20 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
             # persisted=False keeps the old rollback for those.
             if turn_user_message_id is not None:
                 await stamp_turn_failed(turn_user_message_id)
+            detail = _failure_detail(exc, ui_language)
+            # 失败行持久化: the honest line lands as a durable assistant row
+            # (fresh session inside) so a refresh keeps the failure's stage
+            # and next step; a STRUCTURED detail (typed credits shortfall)
+            # stays frame-only — its seat is the dock's typed row.
+            if isinstance(detail, str) and turn_conversation_id is not None:
+                await persist_turn_failed_line(turn_conversation_id, detail)
             await _sweep_activities(queue, projector, "failed", mirror)
             if turn_conversation_id is not None and turn_user_message_id is not None:
                 await _persist_activity_forensics(
                     turn_conversation_id, str(turn_user_message_id), projector
                 )
             await queue.put(
-                ("failed", _failure_detail(exc, ui_language), turn_user_message_id is not None)
+                ("failed", detail, turn_user_message_id is not None)
             )
         except BaseException:
             # Cancel (the client disconnected mid-turn): same durability
@@ -698,6 +712,7 @@ async def _answer_stream(
 
         mirror = None
         cancel_open = None
+        conversation_id = None  # bound inside the try; the failure seat guards
         try:
             async with AsyncSessionLocal() as db:
                 # The answer turn's conversation resolves from the question
@@ -717,20 +732,20 @@ async def _answer_stream(
                 on_activity = _make_activity_hook(queue, projector, mirror)
                 on_candidates = _make_candidates_hook(queue, candidate_events)
 
-                async def on_storyboard(payload: dict) -> None:
-                    # 分镜块信道 (ADR-120 §1): the docked film plan's
-                    # storyboard table streams the moment the plan-stage
-                    # draft lands. The block ROW is persisted inside the
-                    # turn's transaction (message-borne end to end — no
-                    # settle-time log row like candidates); a failed turn
-                    # rolls it back together with everything else.
-                    await queue.put(
-                        _sse("assistant.storyboard", json.dumps(payload, ensure_ascii=False))
-                    )
 
                 async def on_phase(phase: str) -> None:
                     await queue.put(
                         _sse("assistant.thinking", json.dumps({"phase": phase}))
+                    )
+
+                async def on_row_append(message: Message) -> None:
+                    # ADR-129 (the _turn_stream hook's twin): an answer
+                    # continuation can carry the film design beat (a "yes" to
+                    # the direction question designs the board) — the
+                    # published storyboard rides the same row frame so the
+                    # answer stream's ordering matches the chat stream's.
+                    await queue.put(
+                        _row_frame("append", {"row": _row_payload(message)})
                     )
 
                 message, follow_up = await answer_question(
@@ -745,7 +760,7 @@ async def _answer_stream(
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
-                    on_storyboard=on_storyboard,
+                    on_row_append=on_row_append,
                 )
             await _sweep_activities(queue, projector, "completed", mirror)
             await _persist_activity_forensics(
@@ -768,8 +783,13 @@ async def _answer_stream(
                 )
             )
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash
+            detail = _failure_detail(exc, ui_language)
+            # Same durable failure line as the chat pump's seat — a refresh
+            # after a failed answer continuation keeps the honest row.
+            if isinstance(detail, str) and conversation_id is not None:
+                await persist_turn_failed_line(UUID(str(conversation_id)), detail)
             await _sweep_activities(queue, projector, "failed", mirror)
-            await queue.put(("failed", _failure_detail(exc, ui_language)))
+            await queue.put(("failed", detail))
         except BaseException:
             # Cancel (client disconnected): appended-but-open activity rows
             # settle CANCELLED (ADR-108 §5), then propagate.

@@ -41,33 +41,25 @@ from app.chat.trigger_turn import (
     _wrap_up_rejection,
     trigger_agent,
 )
-from app.pipeline.trigger_events import TRIGGER_RUN_COMPLETED
 from app.models.schemas import SuggestionItem, WrapUpArgs
 from app.models.tables import Conversation, Message, WorkflowRun
 from app.pipeline.trigger_events import (
     TRIGGER_CRAFT_DECOMPILED,
     TRIGGER_RUN_COMPLETED,
-    TRIGGER_STORYBOARD_DRAFTING,
-    TRIGGER_STORYBOARD_READY,
     TRIGGER_WHITELIST,
 )
 
 
 def test_whitelist_is_the_proactivity_boundary() -> None:
     # 素材理解接力已死 (ADR-102): the wait-for-material world ended with the
-    # dormant-asset law. The film dock's deferred draft owns two beats
-    # (ADR-125 就绪拍 / ADR-128 开工拍) — the boundary is the four world
-    # events; adding a kind is an ADR-level review, never a drive-by.
+    # dormant-asset law. The boundary is the two world events; adding a kind
+    # is an ADR-level review, never a drive-by.
     assert TRIGGER_WHITELIST == {
         "run_completed",
         "craft_decompiled",
-        "storyboard_ready",
-        "storyboard_drafting",
     }
     assert TRIGGER_RUN_COMPLETED in TRIGGER_WHITELIST
     assert TRIGGER_CRAFT_DECOMPILED in TRIGGER_WHITELIST
-    assert TRIGGER_STORYBOARD_READY in TRIGGER_WHITELIST
-    assert TRIGGER_STORYBOARD_DRAFTING in TRIGGER_WHITELIST
 
 
 def test_tool_set_is_the_reads_plus_one_terminal() -> None:
@@ -150,16 +142,6 @@ class TestWrapUpGuardrail:
 
     def test_run_completed_passes_empty(self) -> None:
         assert _wrap_up_rejection(TRIGGER_RUN_COMPLETED, []) is None
-
-    def test_storyboard_beats_reject_any_option(self) -> None:
-        # 就绪拍 (ADR-125): the next move rides the landed card's own review
-        # affordance; 开工拍 (ADR-128): the opening line only narrates the
-        # wait, the next move belongs to the ready beat. Both ceiling-0.
-        items = WrapUpArgs.model_validate({"suggestions": ["直接开工"]}).suggestions
-        for trigger in (TRIGGER_STORYBOARD_READY, TRIGGER_STORYBOARD_DRAFTING):
-            rejection = _wrap_up_rejection(trigger, items)
-            assert rejection is not None and "suggestions=[]" in rejection
-            assert _wrap_up_rejection(trigger, []) is None
 
     def test_other_triggers_unpoliced(self) -> None:
         # 护栏只管有法在身的 trigger — 未来新 trigger 默认自由,

@@ -106,7 +106,16 @@ STATUS_CANCELLED = "cancelled"  # schema-complete; see the module docstring
 # edit_output (S3, N-59): the precise edit's user face is the draft-work row
 # too (op write + re-pend + re-render).
 # (Final Hardening B1, 2026-09-24: apply_edit_ops retired — removed here.)
-_DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "edit_graph", "revise_output", "edit_output"})
+# design_storyboard (2026-10-17 用户拍板 — 分镜不是开工): the film review
+# beat is a plain tool call whose drafting happens INSIDE execute (the
+# film_director call + validation are real server work) — a draft-kind span
+# that OPENS at execute entry (``_on_executing``; its name_known slot stays
+# silent so the framing checkpoint lands first) and whose settle DOES persist
+# with its honest duration (the carve-outs below), breaking the draft
+# family's 落定即退役 default: no docked plan card absorbs this beat — the
+# markdown message IS the deliverable, and the settled "Worked for Xs" row is
+# its evidence.
+_DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "edit_graph", "revise_output", "edit_output", "design_storyboard"})
 _RUN_TOOLS = frozenset({"start_run"})
 _CONVERSATION_TOOLS = frozenset({"ask_user", "answer"})
 # The exploration proposal verbs (iter-2 ⑤/⑥, ADR-088 旅程四): their user
@@ -124,7 +133,8 @@ _EXPLORATION_VERBS: frozenset[str] = frozenset(EXPLORATION_TOOLS)
 # The draft/run DONE keys ride the live wire only: their settles never
 # persist and never render (落定即退役 2026-09-28 draft, 2026-09-29 run —
 # the docked plan card / the start speech + RunTaskList receipt is the
-# settled evidence).
+# settled evidence; the ONE exception is the storyboard span — its settle
+# persists with its honest duration, 分镜不是开工 2026-10-17).
 _ACTIVITY_KEYS = {
     KIND_DRAFT: ("chat.activity.draft", "chat.activity.draftDone"),
     KIND_RUN: ("chat.activity.run", "chat.activity.runDone"),
@@ -135,12 +145,24 @@ _ACTIVITY_KEYS = {
 # propose_tasks / present_plan keep the kind default above).
 _EDIT_TOOLS = frozenset({"edit_graph", "revise_output", "edit_output"})
 _EDIT_KEYS = ("chat.activity.edit", "chat.activity.editDone")
+# design_storyboard's own key pair (分镜不是开工): the film review beat reads
+# as its own span — 「正在设计分镜」/「正在调整分镜」 ride the phase channel
+# (on_phase) inside it; the span's settle is the ONE draft-family frame that
+# persists (its markdown message is the deliverable, no dock card absorbs it).
+_STORYBOARD_TOOLS = frozenset({"design_storyboard"})
+_STORYBOARD_KEYS = ("chat.activity.storyboard", "chat.activity.storyboardDone")
+
+
+def _is_storyboard_key(key: str | None) -> bool:
+    return key in _STORYBOARD_KEYS
 
 
 def _active_key_for(kind: str, tool_name: str) -> str | None:
     """The open-time key: the draft kind's two user faces split by tool."""
     if kind == KIND_DRAFT and tool_name in _EDIT_TOOLS:
         return _EDIT_KEYS[0]
+    if kind == KIND_DRAFT and tool_name in _STORYBOARD_TOOLS:
+        return _STORYBOARD_KEYS[0]
     pair = _ACTIVITY_KEYS.get(kind)
     return pair[0] if pair else None
 
@@ -202,6 +224,12 @@ def frame_persistence(frame: ActivityFrame) -> str | None:
         return "append"
     if frame.kind == KIND_DRAFT and frame.key in _EXPLORE_MILESTONE_KEYS:
         return "append"
+    # 分镜跨度落定留存 (2026-10-17 用户拍板): the storyboard span's terminal
+    # frame lands as its OWN persisted row — the draft family's 落定即退役
+    # law's one exception (no docked card absorbs the beat; the "Worked for
+    # Xs" row is the deliverable's receipt).
+    if frame.kind == KIND_DRAFT and _is_storyboard_key(frame.key):
+        return "append" if frame.status != STATUS_ACTIVE else None
     return None
 
 
@@ -325,11 +353,11 @@ class ActivityProjector:
         return activity_id, self._frame(activity_id, kind, STATUS_ACTIVE, key)
 
     def _settle(self, activity_id: str, status: str, key: str | None) -> ActivityFrame:
-        kind, _, started = self._active.pop(activity_id)
+        kind, active_key, started = self._active.pop(activity_id)
         # 诚实耗时 (2026-09-25): the whisper shows only a GENUINE span.
         # Read / repair spans cover real server work (the query, the rework
         # loop) — honest. A read span's start is RE-ANCHORED at execute
-        # entry by ReadExecuting (``_on_read_executing``): name_known is a
+        # entry by ReadExecuting (``_on_executing``): name_known is a
         # mid-generation liveness beat, and the array row born at that beat
         # would carry an ``at`` stamp that precedes the real work and a
         # duration inflated by LLM generation time — re-anchoring makes the
@@ -337,10 +365,15 @@ class ActivityProjector:
         # Terminal-kind spans (draft / run) open at name_known, AFTER the
         # LLM already did the drafting — the measured ~1s is validation
         # noise that reads as a lie ("计划已起草 ·1s" after a 30s draft),
-        # so those settles carry none.
+        # so those settles carry none. The storyboard span is the ONE
+        # exception (2026-10-17 用户拍板): design_storyboard's drafting
+        # happens INSIDE execute (the film_director call + validation are
+        # real server work between ReadExecuting and settle), and the span
+        # OPENS at execute entry (``_on_executing`` — never at name_known),
+        # so its duration is the span's honest length.
         duration_ms = (
             max(0, int((time.monotonic() - started) * 1000))
-            if kind in (KIND_READ, KIND_REPAIR)
+            if kind in (KIND_READ, KIND_REPAIR) or _is_storyboard_key(active_key)
             else None
         )
         frame = self._frame(activity_id, kind, status, key, duration_ms=duration_ms)
@@ -351,8 +384,12 @@ class ActivityProjector:
         # the hollow receipt rows (方案整理好了 / 改好了 / 已开工) retired
         # from the flow (the web timeline filters legacy rows). Explore
         # milestones append through their own seat (``explore_milestone``) —
-        # they are born-completed count facts, untouched by this law.
-        if kind not in (KIND_DRAFT, KIND_RUN):
+        # they are born-completed count facts, untouched by this law. The
+        # storyboard span's settle is the ONE draft-family exception
+        # (2026-10-17 用户拍板 — 分镜不是开工): no dock card absorbs the
+        # review beat — the markdown message is the deliverable and this
+        # "Worked for Xs" row is its receipt.
+        if kind not in (KIND_DRAFT, KIND_RUN) or _is_storyboard_key(active_key):
             self._settled.append(frame)
         return frame
 
@@ -367,6 +404,8 @@ class ActivityProjector:
             return active_key + "Done"
         if active_key == _EDIT_KEYS[0]:
             return _EDIT_KEYS[1]
+        if _is_storyboard_key(active_key):
+            return _STORYBOARD_KEYS[1]
         pair = _ACTIVITY_KEYS.get(kind)
         return pair[1] if pair else None
 
@@ -389,9 +428,17 @@ class ActivityProjector:
     def name_known(self, tool_name: str) -> list[ActivityFrame]:
         """The existing on_tool_call seam: a call's name became known.
         Opens the call slot; starts the call's activity when the name maps
-        to a user-semantic kind."""
+        to a user-semantic kind. ONE silence carve-out: the storyboard span
+        never opens here — a tool NAME recognized mid-stream is not the work
+        starting (the framing checkpoint hasn't even landed yet); its open
+        seat is execute entry (``_on_executing``), so the user reads
+        Thinking → 开场白 → 「正在设计分镜」, never an inverted early
+        Designing that the prose then hides."""
         if self._open_call is not None:
             # The loop's dropped parallel extras (it executes call[0] only).
+            return []
+        if tool_name in _STORYBOARD_TOOLS:
+            self._open_call = (tool_name, None)
             return []
         kind = kind_for_tool(tool_name)
         if kind is None:
@@ -411,8 +458,7 @@ class ActivityProjector:
         if isinstance(event, ToolRejected):
             return self._on_rejection(event)
         if isinstance(event, ReadExecuting):
-            self._on_read_executing()
-            return []
+            return self._on_executing(event)
         if isinstance(event, (ReadAccepted, TerminalAccepted)):
             return self._on_accepted(event)
         if isinstance(event, LoopExhausted):
@@ -523,21 +569,34 @@ class ActivityProjector:
             self._open_call = None
         return frames
 
-    def _on_read_executing(self) -> None:
-        """读活开工戳 (ADR-108 数组位置律): re-anchor the open read span's
-        honest-duration start at execute entry. name_known births the span
-        mid-generation (liveness); anchoring the duration THERE would make
-        the persisted row's ``at``/``duration_ms`` measure LLM generation
-        time instead of the real read work — the re-anchored ``at`` is the
-        row's honest birth stamp. Emitted after the checkpoint seat, before
-        execute — sequential same-process stamps."""
+    def _on_executing(self, event: ReadExecuting) -> list[ActivityFrame]:
+        """开工戳 (execute entry — ADR-108 数组位置律): the ONE seat where a
+        non-terminal call's work visibly starts. Emitted after the
+        checkpoint seat, before execute — sequential same-process stamps.
+
+        - A READ span re-anchors its honest-duration start here: name_known
+          births the span mid-generation (liveness); anchoring the duration
+          THERE would make the persisted row's ``at``/``duration_ms``
+          measure LLM generation time instead of the real read work.
+        - The STORYBOARD span OPENS here (its silent name_known slot gets
+          its activity now): the framing checkpoint has landed, so the
+          「正在设计分镜」 line and its duration both measure the real draft
+          — never the speech before it. Returns the open frame so the wire
+          sees the birth at this exact beat."""
         if self._open_call is None:
-            return
-        _name, activity_id = self._open_call
-        if activity_id is None or activity_id not in self._active:
-            return
+            return []
+        name, activity_id = self._open_call
+        if activity_id is None:
+            if name not in _STORYBOARD_TOOLS:
+                return []
+            activity_id, frame = self._start(KIND_DRAFT, _STORYBOARD_KEYS[0])
+            self._open_call = (name, activity_id)
+            return [frame]
+        if activity_id not in self._active:
+            return []
         kind, key, _started = self._active[activity_id]
         self._active[activity_id] = (kind, key, time.monotonic())
+        return []
 
     def _fail_repair(self) -> ActivityFrame | None:
         """The repair span's honest failure terminal (LoopExhausted / a

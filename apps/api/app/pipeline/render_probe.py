@@ -13,7 +13,8 @@ detail}`` 盖在 render 镜像节点上（与 storyboard 的 schema/grounding �
 无保留价值）。
 
 家族分派（``probe_expectation_for`` 只读 spec 自身字段）：
-- film：h264 + 1920×1080 + 实际时长 = Σ场景帧（流帧计数 ±1 帧）+ 首帧可解码。
+- film：h264 + 1920×1080 + 实际时长 = Σ场景帧（流帧计数 ±1 帧）+ 首帧可解码；
+  spec 承诺声音（music 或逐幕 audio）时容器必须带音频流（PROBE_AUDIO_MISSING）。
 - clip（family 缺省）：存在 + 非零 + 容器可读 + 有视频流 + 首帧可解码——
   clip 的时长/分辨率语义跨段拼接，不在本闸断言；caption sidecar 存在即法，
   非零当且仅当 caption_track 非空（空轨的零字节 srt 是合法产物）。
@@ -28,7 +29,7 @@ from typing import Any
 # Film render constants mirrored from apps/render/src/film/Root.tsx
 # (FILM_DIMENSIONS/FILM_FPS — one law, mirrored where consumed;
 # app/tools/film/storyboard.py carries the allocator's FILM_FPS mirror).
-# The canvas dimensions key on the spec's ``aspect`` (ADR-120 E3).
+# The canvas dimensions key on the spec's ``aspect`` (ADR-130).
 FILM_DIMENSIONS = {"16:9": (1920, 1080), "1:1": (1080, 1080), "9:16": (1080, 1920)}
 FILM_FPS = 30
 FILM_CODEC = "h264"
@@ -39,6 +40,10 @@ PROBE_UNREADABLE = "PROBE_UNREADABLE"  # container unreadable / no video stream 
 PROBE_CODEC_MISMATCH = "PROBE_CODEC_MISMATCH"
 PROBE_RESOLUTION_MISMATCH = "PROBE_RESOLUTION_MISMATCH"
 PROBE_DURATION_MISMATCH = "PROBE_DURATION_MISMATCH"
+# The spec promised sound (a music bed and/or per-scene narration audio) but
+# the rendered container carries no audio stream — a silent film sold as a
+# narrated one is a broken delivery, not a stylistic choice.
+PROBE_AUDIO_MISSING = "PROBE_AUDIO_MISSING"
 
 
 @dataclass(frozen=True)
@@ -60,6 +65,10 @@ class ProbeExpectation:
     height: int | None = None
     frames: int | None = None
     fps: float = FILM_FPS
+    # True = the container MUST carry an audio stream (the spec promised a
+    # music bed and/or narration); None = audio is not asserted either way
+    # (a silent cut is a legal film).
+    audio: bool | None = None
 
 
 def probe_expectation_for(spec: dict[str, Any]) -> ProbeExpectation:
@@ -79,12 +88,27 @@ def probe_expectation_for(spec: dict[str, Any]) -> ProbeExpectation:
             frames = 0
             break
     width, height = FILM_DIMENSIONS.get(spec.get("aspect") or "16:9", FILM_DIMENSIONS["16:9"])
+    fps_raw = spec.get("fps")
+    fps = (
+        float(fps_raw)
+        if isinstance(fps_raw, (int, float)) and not isinstance(fps_raw, bool)
+        else FILM_FPS
+    )
+    # Audio expectation (Batch 2): the spec's own promises decide — a music
+    # bed (``music``) or any per-scene narration (``audio``) means the
+    # rendered container must carry an audio stream. A silent cut (neither)
+    # asserts nothing about audio.
+    scenes = spec.get("scenes") or []
+    expects_audio = bool(spec.get("music")) or any(
+        isinstance(s, dict) and s.get("audio") for s in scenes
+    )
     return ProbeExpectation(
         codec=FILM_CODEC,
         width=width,
         height=height,
         frames=frames or None,
-        fps=FILM_FPS,
+        fps=fps,
+        audio=True if expects_audio else None,
     )
 
 
@@ -171,6 +195,17 @@ def probe_rendered_video(
                         f"fps {rate:g} ≠ expected {expect.fps:g}",
                     )
                 )
+
+        # 音频流存在性 (Batch 2): the spec promised sound (music bed and/or
+        # narration) — the container must carry an audio stream. Presence is
+        # the contract here; content quality stays the render service's seat.
+        if expect.audio and not any(s.type == "audio" for s in container.streams):
+            violations.append(
+                ProbeViolation(
+                    PROBE_AUDIO_MISSING,
+                    "spec expects music/narration but the container has no audio stream",
+                )
+            )
     return violations
 
 

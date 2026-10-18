@@ -42,10 +42,6 @@ class ConversationBridge:
     record_material_beat: Callable[..., Awaitable[Message | None]]
     """``(db, user_id, project_id, beat, *, status, name, count, total, ref)``
     — ``...`` because ``Callable`` cannot spell keyword-only extras."""
-    deferred_storyboard_check: Callable[[UUID], Awaitable[None]]
-    """The film dock's deferred storyboard seat (ADR-120 hold/draft 解耦):
-    fired from a web_page capture's completion — lands the review block when
-    the capture set has drained and the dock's hold is still on."""
 
 
 _bridge: ConversationBridge | None = None
@@ -100,12 +96,6 @@ async def discard_unanswered_plan(
 ) -> None:
     """Bridge delegate — the implementation lives in ``app.chat.service``."""
     await _require().discard_unanswered_plan(db, user_id, project_id)
-
-
-async def deferred_storyboard_check(project_id: UUID) -> None:
-    """Bridge delegate — the implementation lives in
-    ``app.chat.storyboard_dock``."""
-    await _require().deferred_storyboard_check(project_id)
 
 
 async def record_material_beat(

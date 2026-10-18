@@ -1,7 +1,7 @@
 // Film scene components — the human-owned render vocabulary of the film
 // family (LLMs never write or modify these; they only author storyboards).
 // Scenes: words / hero / ui / divider / reveal / end.
-// Layout law (ADR-120 E3): every absolute px scales by `s = width/1920` —
+// Layout law (ADR-130): every absolute px scales by `s = width/1920` —
 // the 16:9 canvas IS the design grid, 1:1 and 9:16 are uniform scalings of
 // it (portrait keeps the same vocabulary with more vertical air).
 // Promoted line-by-line from the verified spike (apps/render/scratch-spike);
@@ -193,8 +193,7 @@ export const UiScene: React.FC<{
   theme: FilmTheme;
   dur: number;
   focuses: { at: number; x: number; y: number; zoom: number }[];
-  captions: { at: number; text: string }[];
-}> = ({ image, url, frame: framed, theme, dur, focuses, captions }) => {
+}> = ({ image, url, frame: framed, theme, dur, focuses }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const s = useScale();
@@ -232,7 +231,6 @@ export const UiScene: React.FC<{
             transform: `translate(${width / 2 - x * width * z}px, ${height / 2 - y * height * z}px) scale(${z})`,
           }}
         />
-        <Captions captions={captions} dur={dur} s={s} />
       </AbsoluteFill>
     );
   }
@@ -293,61 +291,7 @@ export const UiScene: React.FC<{
           />
         </div>
       </div>
-      <Captions captions={captions} dur={dur} s={s} />
     </AbsoluteFill>
-  );
-};
-
-/** The ui scene's caption beats (shared by the framed and full-bleed forms). */
-const Captions: React.FC<{ captions: { at: number; text: string }[]; dur: number; s: number }> = ({
-  captions,
-  dur,
-  s,
-}) => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  return (
-    <>
-      {captions.map((c, i) => {
-        const startF = c.at * fps;
-        const endF = (captions[i + 1]?.at ?? dur / fps - 0.3) * fps;
-        if (frame < startF - 1 || frame > endF) return null;
-        const p = spring({ frame: frame - startF, fps, config: { damping: 200 } });
-        const out = interpolate(frame, [endF - 8, endF], [0, 1], {
-          extrapolateLeft: "clamp",
-          extrapolateRight: "clamp",
-        });
-        return (
-          <div
-            key={i}
-            style={{
-              position: "absolute",
-              bottom: 44 * s,
-              left: 0,
-              right: 0,
-              display: "flex",
-              justifyContent: "center",
-              opacity: p * (1 - out),
-              transform: `translateY(${(1 - p) * 30}px)`,
-            }}
-          >
-            <div
-              style={{
-                background: "#141414",
-                color: "#f7f6f2",
-                borderRadius: 999,
-                padding: `${16 * s}px ${40 * s}px`,
-                fontFamily: FONT,
-                fontSize: 34 * s,
-                fontWeight: 600,
-              }}
-            >
-              {c.text}
-            </div>
-          </div>
-        );
-      })}
-    </>
   );
 };
 
@@ -480,18 +424,34 @@ export const Plate: React.FC<{
   );
 };
 
-export const Reveal: React.FC<{ lead: string; word: string; sub: string; theme: FilmTheme }> = ({
-  lead,
-  word,
-  sub,
-  theme,
-}) => {
+export const Reveal: React.FC<{
+  lead: string;
+  leadFrames: number;
+  word: string;
+  sub: string;
+  theme: FilmTheme;
+  beatFrames?: number;
+}> = ({ lead, leadFrames, word, sub, theme, beatFrames }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const s = useScale();
+  // lead → beat pause → word: the spec's leadFrames IS the word's onset
+  // (already snapped onto the music grid upstream). The pause IS the bed's
+  // real beat interval (ADR-130 — the black frame reads as a beat because
+  // it IS one); no bed → 0, the lead hands straight to the word and no
+  // fabricated pause pretends to be rhythm.
+  const wordAt = Math.max(12, leadFrames);
+  const pause = Math.max(0, Math.round(beatFrames ?? 0));
+  const leadOut = interpolate(
+    frame,
+    [Math.max(0, wordAt - pause - 8), Math.max(8, wordAt - pause)],
+    [1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+  );
+  const leadIn = enter(frame, 0, fps, s);
   return (
     <AbsoluteFill style={{ background: theme.canvas, justifyContent: "center", alignItems: "center" }}>
-      <div style={{ fontFamily: FONT, fontSize: 40 * s, color: "#8a8a8a", marginBottom: 30 * s, ...enter(frame, 0, fps, s) }}>
+      <div style={{ fontFamily: FONT, fontSize: 40 * s, color: "#8a8a8a", marginBottom: 30 * s, ...leadIn, opacity: leadIn.opacity * leadOut }}>
         {lead}
       </div>
       <div
@@ -501,12 +461,12 @@ export const Reveal: React.FC<{ lead: string; word: string; sub: string; theme: 
           fontSize: 150 * s,
           letterSpacing: "-0.03em",
           color: theme.ink,
-          ...enter(frame, 6, fps, s),
+          ...enter(frame, wordAt, fps, s),
         }}
       >
         {accentize(word, false, theme)}
       </div>
-      <div style={{ fontFamily: FONT, fontSize: 40 * s, color: "#6b6b6b", marginTop: 30 * s, ...enter(frame, 14, fps, s) }}>
+      <div style={{ fontFamily: FONT, fontSize: 40 * s, color: "#6b6b6b", marginTop: 30 * s, ...enter(frame, wordAt + 10, fps, s) }}>
         {sub}
       </div>
     </AbsoluteFill>
@@ -546,6 +506,65 @@ export const End: React.FC<{
         {url}
       </div>
     </AbsoluteFill>
+  );
+};
+
+/** Narration captions — one deterministic cue track per scene, the film's
+ * ONLY on-screen text overlay: one solid pill at the canvas bottom, every
+ * scene alike. */
+export const Captions: React.FC<{
+  cues: { at: number; end?: number; text: string }[];
+  dur: number;
+}> = ({ cues, dur }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const s = useScale();
+  return (
+    <>
+      {cues.map((cue, i) => {
+        const startF = cue.at * fps;
+        const endF = (cue.end ?? cues[i + 1]?.at ?? dur / fps - 0.05) * fps;
+        if (frame < startF - 1 || frame > endF) return null;
+        const p = spring({ frame: frame - startF, fps, config: { damping: 200 } });
+        const out = interpolate(frame, [endF - 8, endF], [0, 1], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        });
+        return (
+          <div
+            key={i}
+            style={{
+              position: "absolute",
+              bottom: 44 * s,
+              left: 0,
+              right: 0,
+              display: "flex",
+              justifyContent: "center",
+              pointerEvents: "none",
+              opacity: p * (1 - out),
+              transform: `translateY(${(1 - p) * 30}px)`,
+            }}
+          >
+            <div
+              style={{
+                maxWidth: 1500 * s,
+                background: "#141414",
+                borderRadius: 999,
+                color: "#f7f6f2",
+                fontFamily: FONT,
+                fontSize: 34 * s,
+                fontWeight: 600,
+                lineHeight: 1.3,
+                padding: `${16 * s}px ${40 * s}px`,
+                textAlign: "center",
+              }}
+            >
+              {cue.text}
+            </div>
+          </div>
+        );
+      })}
+    </>
   );
 };
 

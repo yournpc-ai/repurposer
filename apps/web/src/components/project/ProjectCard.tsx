@@ -62,21 +62,15 @@ export function ProjectCard({ project, onChanged, selected, onToggleSelect }: Pr
     : null
   const showVideo = thumbnailSrc && !videoFailed
 
-  // Bottom line: one slot, two facts — the stage label (while unsettled) and
-  // the relative time. The list is sorted by time, so the time must always be
-  // readable; a bare status without its timestamp hides the sort's readout.
+  // Bottom line: one slot, two facts — the stage label (while a run is live)
+  // and the relative time. The list is sorted by time, so the time must always
+  // be readable; a bare status without its timestamp hides the sort's readout.
   const active = project.status === "processing" || project.status === "uploading"
-  // Unsettled projects (draft included) never show a bare static tile: the
-  // card stays alive — drifting glow + brand fill. A draft is "waiting on
-  // you", a live run is "working"; the label below disambiguates.
-  const live = active || project.status === "draft"
-  const stageLabel = active
-    ? t(`projects.status.${project.status}`)
-    : project.status === "draft"
-      ? // Same muted gray as every other status in this slot — no amber dot,
-        // no color coding.
-        t("projects.status.draft")
-      : null
+  // Only a live run gets the mist tile + stage label. Draft carries no status
+  // readout (auto 档默认下它不再意味着 "awaiting confirmation" — ADR-117)：
+  // 草稿卡渲染同 settled 卡，底行只剩时间。
+  const live = active
+  const stageLabel = active ? t(`projects.status.${project.status}`) : null
   const when = project.updated_at ?? project.created_at
   const timeLabel = when ? formatRelativeTime(when, i18n.language) : null
   const bottomLine = [stageLabel, timeLabel].filter(Boolean).join(" · ")
@@ -133,8 +127,8 @@ export function ProjectCard({ project, onChanged, selected, onToggleSelect }: Pr
               </button>
             ) : null}
             {live ? (
-              // Unsettled project — the layered processing tile is the life
-              // signal (matte base, light shaft, mist, grain, halo), so the
+              // Live run — the layered processing tile is the life signal
+              // (matte base, light shaft, mist, grain, halo), so the
               // stage label below stays plain text.
               <ProcessingTile>
                 <BrandLoader className="relative h-8 w-8" />

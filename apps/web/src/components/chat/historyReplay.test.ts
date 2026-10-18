@@ -214,6 +214,38 @@ describe("pending questions", () => {
     )
     expect(out).toEqual([])
   })
+
+  it("a pending storyboard_echo task_book replays its echo as a flow message (the dock revives via the pending fetch)", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "prose\n\n| scene | seconds |\n|---|---|\n| words | 3 |\n\n~30 credits",
+          question: { kind: "task_book", storyboard_echo: true },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toEqual([
+      expect.objectContaining({
+        id: "m1-echo",
+        role: "assistant",
+        content: "prose\n\n| scene | seconds |\n|---|---|\n| words | 3 |\n\n~30 credits",
+      }),
+    ])
+  })
+
+  it("a pending storyboard_echo task_book with empty content pushes no echo (no-empty-bubble law)", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: " ",
+          question: { kind: "task_book", storyboard_echo: true },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toEqual([])
+  })
 })
 
 describe("plain assistant rows + legacy trigger pills", () => {
@@ -287,6 +319,85 @@ describe("no lifecycle derivation (恢复不推导 lifecycle)", () => {
         expect(ALLOWED.has(key)).toBe(true)
       }
     }
+  })
+})
+
+describe("legacy storyboard rows (dock echo 形态)", () => {
+  it("an intent.type='storyboard' block row skips silently — old projects show only the storyboard_ready markdown row", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "sb-1",
+          intent: {
+            type: "storyboard",
+            version: 1,
+            storyboard: { name: "board", scenes: [{ type: "words", seconds: 3 }] },
+            pages: ["https://example.com"],
+          },
+        }),
+        row({ id: "r1", content: "review this" }),
+      ],
+      ctx,
+    )
+    expect(out.map((m) => m.id)).toEqual(["r1"])
+  })
+
+  it("a legacy storyboard_draft_failed row's prose replays as ordinary text (no marker)", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "sb-fail",
+          content: "the storyboard draft failed",
+          intent: { type: "storyboard_draft_failed" },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toEqual([
+      expect.objectContaining({ id: "sb-fail", content: "the storyboard draft failed" }),
+    ])
+  })
+
+  it("an empty storyboard_draft_failed row skips (no-empty-bubble law)", () => {
+    const out = mapHistoryRows(
+      [row({ content: "", intent: { type: "storyboard_draft_failed" } })],
+      ctx,
+    )
+    expect(out).toEqual([])
+  })
+
+  it("an unknown empty material beat skips — never an empty bubble", () => {
+    const out = mapHistoryRows(
+      [row({ content: "", intent: { type: "material_beat", beat: "mystery" } })],
+      ctx,
+    )
+    expect(out).toEqual([])
+  })
+})
+
+describe("turn_failed rows (失败行回放)", () => {
+  it("a persisted turn-failure row replays as the grey meta error row", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "tf-1",
+          content: "The storyboard took too long. No production has started; ask me to retry the storyboard.",
+          intent: { type: "turn_failed" },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toEqual([
+      expect.objectContaining({ id: "tf-1", meta: "error", content: expect.stringContaining("took too long") }),
+    ])
+  })
+
+  it("an empty turn_failed row skips (no-empty-bubble law)", () => {
+    const out = mapHistoryRows(
+      [row({ content: "", intent: { type: "turn_failed" } })],
+      ctx,
+    )
+    expect(out).toEqual([])
   })
 })
 
@@ -406,15 +517,16 @@ describe("material beats (2026-09-24 素材节拍入库)", () => {
     expect(out[1].activity?.key).toBe("chat.material.readingDone_audio")
   })
 
-  it("an off-shape beat dump degrades to a plain assistant row (read tolerance)", () => {
+  it("an off-shape beat dump with prose degrades to a plain assistant row (read tolerance)", () => {
     const out = mapHistoryRows(
-      [row({ content: "", intent: { type: "material_beat", beat: "mystery" } })],
+      [row({ content: "a note", intent: { type: "material_beat", beat: "mystery" } })],
       ctx,
     )
     expect(out[0].activity).toBeUndefined()
+    expect(out[0].content).toBe("a note")
   })
 
-  it("storyboard_drafting (ADR-128): a draft-kind settled beat carrying its REAL start stamp", () => {
+  it("storyboard_drafting (legacy): a draft-kind settled beat carrying its REAL start stamp", () => {
     const out = mapHistoryRows(
       [
         row({

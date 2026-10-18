@@ -34,9 +34,18 @@ const frames = { frames: z.number().int().positive() };
 /**
  * The scene's spoken narration (配音): an absolute audio URL staged like the
  * imagery, played inside the scene's Sequence (the boundary trims honestly).
- * Absent = the scene plays silent. Never rendered as pixels.
+ * Absent = the scene plays silent. ``captions`` are the code-projected cue
+ * list for that narration (``at``/``end`` seconds from scene start; a missing
+ * ``end`` falls back to the next cue or scene end). No narration ⇒ no
+ * caption cues. ``captions`` is the ONLY caption field — no legacy keys.
  */
-const narration = { audio: z.string().nullish() };
+const captionCues = z.array(
+  z.object({ at: z.number(), end: z.number().optional(), text: z.string() }),
+);
+const narration = {
+  audio: z.string().nullish(),
+  captions: captionCues.default([]),
+};
 
 const wordsScene = z.object({
   type: z.literal("words"),
@@ -72,7 +81,6 @@ const uiScene = z.object({
   focuses: z
     .array(z.object({ at: z.number(), x: z.number(), y: z.number(), zoom: z.number() }))
     .min(1),
-  captions: z.array(z.object({ at: z.number(), text: z.string() })).default([]),
 });
 
 const dividerScene = z.object({
@@ -104,6 +112,11 @@ const revealScene = z.object({
   ...frames,
   ...narration,
   lead: z.string(),
+  // The split reveal (lead → beat pause → word): the lead holds alone, then
+  // fades out one REAL beat interval (the bed's bpm / beats grid — ADR-130)
+  // before the word lands at this frame; the spec builder snaps the onset
+  // onto the music grid. Pre-split persisted specs read as 1.6s.
+  lead_frames: z.number().int().positive().default(48),
   word: z.string(),
   sub: z.string(),
 });
@@ -135,12 +148,33 @@ export const filmSpecSchema = z.object({
   // tolerant: null reads as absent, never a render failure.
   name: z.string().nullish(),
   theme: themeSchema,
-  // Canvas aspect — the composition's dimensions read this (16:9 default).
+  // Canvas aspect + frame rate (16:9 @30fps default) — calculateMetadata
+  // reads ``aspect``; fps is pinned by the Composition and this literal, so
+  // the spec still carries its own timing contract for every consumer.
   aspect: z.enum(["16:9", "1:1", "9:16"]).default("16:9"),
+  fps: z.literal(30).default(30),
   // The background-music bed: absolute URL + gain (clip-spec's ClipMusic
-  // semantics, minus the id — the film-spec resolves upstream). Absent =
-  // no bed.
-  music: z.object({ url: z.string(), gain_db: z.number() }).nullish(),
+  // semantics, minus the id — the film-spec resolves upstream). BPM/beats
+  // ride as the timing provenance the cut was snapped against; the renderer
+  // needs no re-analysis. Absent = no bed.
+  music: z
+    .object({
+      url: z.string(),
+      gain_db: z.number(),
+      bpm: z.number().positive().optional(),
+      beats: z.array(z.number()).optional(),
+    })
+    .nullish(),
+  // Provenance digests (ADR-129): the presented storyboard's content digest
+  // and the execution snapshot's digest this spec was built from — 呈现稿
+  // digest = run context digest = render spec digest, one truth. Absent on
+  // specs built before versioning.
+  provenance: z
+    .object({
+      storyboard_digest: z.string().optional(),
+      execution_digest: z.string().optional(),
+    })
+    .nullish(),
   scenes: z.array(filmSceneSchema).min(1),
 });
 

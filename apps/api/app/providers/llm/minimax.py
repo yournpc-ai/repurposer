@@ -522,6 +522,7 @@ class MiniMaxClient:
         thinking: bool = False,
         on_delta: Callable[[str], Awaitable[None] | None] | None = None,
         on_reasoning: Callable[[str], Awaitable[None] | None] | None = None,
+        timeout_s: float | None = None,
     ) -> T:
         """Streaming variant of ``generate`` — same single call, but the
         raw response text is also forwarded chunk-by-chunk via ``on_delta`` as
@@ -584,6 +585,8 @@ class MiniMaxClient:
                 )
                 await asyncio.sleep(min(2**attempt, 10))
             accumulated = ""
+            reasoning_chars = 0
+            last_progress_at = time.monotonic()
             stripper = _ThinkStripper()
             usage: dict | None = None
             try:
@@ -596,6 +599,7 @@ class MiniMaxClient:
                             "Content-Type": "application/json",
                         },
                         json=payload,
+                        **({"timeout": timeout_s} if timeout_s is not None else {}),
                     ) as response:
                         if response.status_code != 200:
                             await response.aread()
@@ -604,7 +608,9 @@ class MiniMaxClient:
                             if not line.startswith("data:"):
                                 continue
                             data = line[5:].strip()
-                            if not data or data == "[DONE]":
+                            if data == "[DONE]":
+                                break
+                            if not data:
                                 continue
                             try:
                                 chunk = json.loads(data)
@@ -626,6 +632,15 @@ class MiniMaxClient:
                                 continue
                             delta = choices[0].get("delta") or {}
                             reasoning = delta.get("reasoning_content")
+                            reasoning_chars += len(reasoning or "")
+                            now = time.monotonic()
+                            if now - last_progress_at >= 15:
+                                logger.info(
+                                    "llm_stream_progress", model=settings.minimax_model,
+                                    attempt=attempt, duration_ms=int((now - t0) * 1000),
+                                    content_chars=len(accumulated), reasoning_chars=reasoning_chars,
+                                )
+                                last_progress_at = now
                             if reasoning and on_reasoning is not None:
                                 # Reasoning fragments are a liveness signal
                                 # only — never accumulated into the JSON

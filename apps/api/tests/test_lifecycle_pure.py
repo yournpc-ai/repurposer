@@ -408,6 +408,130 @@ def test_d3_gate_precedence_structural_before_projection() -> None:
     assert verdict.code == "start.no_pending_plan"
 
 
+# ---- ADR-129: the Start gate's film conjuncts ----
+
+from app.pipeline.lifecycle import FilmGateFacts  # noqa: E402
+
+
+def test_film_gate_no_active_draft_is_409() -> None:
+    # A film chain with no active storyboard draft has nothing versioned to
+    # confirm → 409 start.no_storyboard.
+    verdict = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+        film=FilmGateFacts(film_chain=True, has_active_draft=False),
+    )
+    assert verdict is not None
+    assert verdict.http_status == 409
+    assert verdict.code == "start.no_storyboard"
+
+
+def test_film_gate_stale_draft_is_409() -> None:
+    # A dock presenting a superseded draft → 409 start.stale_storyboard
+    # (the dock moved on — the scope_mismatch family).
+    verdict = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+        film=FilmGateFacts(film_chain=True, has_active_draft=True, draft_match=False),
+    )
+    assert verdict is not None
+    assert verdict.http_status == 409
+    assert verdict.code == "start.stale_storyboard"
+
+
+def test_film_gate_inflight_draft_is_409() -> None:
+    # A redesign's in-flight marker voids the docked confirmation for the
+    # duration → 409 start.stale_storyboard even when the docked token still
+    # matches the stored draft (并发护栏: the old Start fails closed while
+    # the marker stands).
+    verdict = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+        film=FilmGateFacts(
+            film_chain=True,
+            has_active_draft=True,
+            draft_match=True,
+            draft_inflight=True,
+        ),
+    )
+    assert verdict is not None
+    assert verdict.http_status == 409
+    assert verdict.code == "start.stale_storyboard"
+
+
+def test_film_gate_review_hold_is_422() -> None:
+    # An active review hold (「只看分镜，先别制作」) → 422
+    # start.review_hold — the readiness family.
+    verdict = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+        film=FilmGateFacts(film_chain=True, has_active_draft=True, review_hold=True),
+    )
+    assert verdict is not None
+    assert verdict.http_status == 422
+    assert verdict.code == "start.review_hold"
+
+
+def test_film_gate_matching_active_draft_is_allowed() -> None:
+    verdict = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+        film=FilmGateFacts(film_chain=True, has_active_draft=True, draft_match=True),
+    )
+    assert verdict is None
+
+
+def test_film_gate_conjuncts_stay_dark_off_film_chains() -> None:
+    # film_chain=False disables every film conjunct — a non-film start
+    # never trips them, whatever the other flags say.
+    verdict = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+        film=FilmGateFacts(
+            film_chain=False,
+            has_active_draft=False,
+            draft_match=False,
+            review_hold=True,
+        ),
+    )
+    assert verdict is None
+
+
+def test_film_gate_precedence_stale_before_empty_plan() -> None:
+    # The 409 staleness family precedes the 422 readiness family: a dock
+    # presenting a superseded draft reports the stale code even when the
+    # chain is also empty.
+    verdict = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=False,
+        stamp=_READY_STAMP,
+        film=FilmGateFacts(film_chain=True, has_active_draft=True, draft_match=False),
+    )
+    assert verdict is not None
+    assert verdict.code == "start.stale_storyboard"
+
+
+def test_film_gate_precedence_hold_before_projection_block() -> None:
+    # The review hold precedes the stamp's projection blockers: the user
+    # scoped review only — that is the answer even when material is also
+    # unready.
+    not_ready = compute_lifecycle(_ready_facts(assets_pending=True))
+    verdict = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=not_ready,
+        film=FilmGateFacts(film_chain=True, has_active_draft=True, review_hold=True),
+    )
+    assert verdict is not None
+    assert verdict.code == "start.review_hold"
+
+
 # ---- ADR-117 授权前移: confirmation_need + the gate's authorization conjunct ----
 
 from app.pipeline.lifecycle import confirmation_need  # noqa: E402
@@ -570,7 +694,7 @@ def test_gate_authorization_conjunct_yields_to_structural_truth() -> None:
     assert verdict.code == "start.blocked"
 
 
-# ---- the dock echo's estimate tail (ADR-111 §2; storyboard_review 零尾行) -------
+# ---- the dock echo's estimate tail (ADR-111 §2) ------------------------------
 
 from app.chat.service import _estimate_tail  # noqa: E402
 from app.models.schemas import PlanEstimate  # noqa: E402
@@ -580,24 +704,11 @@ def _est() -> PlanEstimate:
     return PlanEstimate(total=[100, 200], per_task=[])
 
 
-class TestEstimateTailStoryboardReview:
-    """2026-10-16 user ruling (画蛇添足): the review-hold dock echo carries
-    NO estimate tail — the draft-in-flight beat rides the echo's prose, and
-    the price's disclosure seat for this dock is the per-node estimates on
-    the canvas's draft nodes (ADR-057 K5 节点锚定). The tail function must
-    stay silent for this reason in every quote shape."""
+class TestEstimateTail:
+    """The disclosure tails key on the dock's stamped confirmation reason
+    (BILLING §2.1): guardrail / default / unquotable shapes."""
 
-    def test_review_reason_carries_no_tail(self) -> None:
-        assert _estimate_tail("好", _est(), reason="storyboard_review") == ""
-        assert _estimate_tail("go", _est(), reason="storyboard_review") == ""
-
-    def test_review_reason_deferred_quote_also_silent(self) -> None:
-        assert _estimate_tail("好", None, reason="storyboard_review") == ""
-        assert _estimate_tail("go", None, reason="storyboard_review") == ""
-
-    def test_other_reasons_keep_their_tails(self) -> None:
-        # The silence is scoped to the review reason — the guardrail /
-        # default disclosure tails are untouched (BILLING §2.1).
+    def test_reasoned_and_default_tails(self) -> None:
         assert "Estimated" in _estimate_tail("go", _est(), reason="above_guardrail")
         assert "估价" in _estimate_tail("好", _est())
         assert "估价随运行确定" in _estimate_tail("好", None, reason="unquotable")

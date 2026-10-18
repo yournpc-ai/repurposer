@@ -345,6 +345,7 @@ def build_confirmed_scope(
     tasks: list[TaskItem],
     quote: dict[str, Any] | None,
     plan_task_map: dict[str, list[int]] | None = None,
+    settings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The Confirmed Scope Snapshot (ADR-089 §4 R20, iter-2 ④ — 销 P0-①):
     the immutable record of WHAT the user confirmed at the paid boundary,
@@ -362,7 +363,11 @@ def build_confirmed_scope(
     rides as an ADDITIVE key when the dock carried one — it is the revision
     router's mapping substrate. Snapshots without it (legacy runs /
     router-drafted docks) are read-tolerated: the router degrades honestly
-    to the @output channel."""
+    to the @output channel. ``settings`` (ADR-117 授权快照) records the
+    confirmation prefs + guardrail that governed THIS boundary — standing
+    authorization (``confirmed_via="auto"``) is only auditable if the
+    settings it stood on are frozen with the snapshot; additive and
+    read-tolerant like plan_task_map."""
     snapshot: dict[str, Any] = {
         "confirmation_id": confirmation_id,
         "confirmed_at": confirmed_at,
@@ -373,6 +378,8 @@ def build_confirmed_scope(
     }
     if plan_task_map:
         snapshot["plan_task_map"] = plan_task_map
+    if settings:
+        snapshot["settings"] = settings
     return snapshot
 
 

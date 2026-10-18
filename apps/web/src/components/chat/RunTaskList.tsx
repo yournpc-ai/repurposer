@@ -48,10 +48,11 @@ export function useNow(live: boolean): number | null {
 
 /** "1m 6s" / "45s" / "1h 3m" — the Claude Code elapsed shorthand, the ONE
  * copy (the thinking row consumed a byte-identical twin until the same
- * subtraction batch). */
+ * subtraction batch). Sub-second reads as "1s" — a "<1s" form is a lie of
+ * precision about a row that visibly existed. */
 export function formatElapsed(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000))
-  if (s === 0 && ms > 0) return "<1s"
+  if (ms > 0 && s === 0) return "1s"
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60)
   if (m < 60) return `${m}m ${s % 60}s`

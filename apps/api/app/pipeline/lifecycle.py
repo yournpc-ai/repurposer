@@ -342,6 +342,38 @@ class StartGateVerdict:
     quote_high: int | None = None
 
 
+@dataclass(frozen=True)
+class FilmGateFacts:
+    """The film chain's Start-gate facts (ADR-129 — 版本化分镜 + 开工闸门),
+    computed by the caller from the PendingPlan and the docked question's
+    stamp, read by the gate as plain conjuncts:
+
+    - ``film_chain`` — the confirmed chain carries a launch_film task. False
+      disables every film conjunct (a non-film start never trips them).
+    - ``has_active_draft`` — the project's pending plan holds an active
+      storyboard draft. A film chain without one has nothing versioned to
+      confirm → 409 ``start.no_storyboard``.
+    - ``draft_match`` — the docked question presents the ACTIVE draft (its
+      stamped draft token / fingerprint agrees with the pending plan's). A
+      newer design voided the dock's confirmation → 409
+      ``start.stale_storyboard``.
+    - ``review_hold`` — the active draft is review-only scoped (「只看分
+      镜，先别制作」), the hold surviving across turns until an explicit
+      production request re-docks → 422 ``start.review_hold``.
+    - ``draft_inflight`` — a storyboard redesign's in-flight marker stands
+      (the design beat's BEGIN committed, the publish not yet landed). The
+      dock's confirmation is void for the duration → 409
+      ``start.stale_storyboard`` (the dock-moved-on family; the marker's
+      own staleness budget bounds the block).
+    """
+
+    film_chain: bool = False
+    has_active_draft: bool = False
+    draft_match: bool = True
+    review_hold: bool = False
+    draft_inflight: bool = False
+
+
 def evaluate_start_gate(
     *,
     already_answered: bool = False,
@@ -351,6 +383,7 @@ def evaluate_start_gate(
     stamp: LifecycleStamp,
     confirmation: ConfirmationNeed | None = None,
     docked_this_turn: bool = False,
+    film: FilmGateFacts | None = None,
 ) -> StartGateVerdict | None:
     """Every check that must hold before the Start seat reaches paid
     ``create_run``, in evaluation order (the precedence the blockers
@@ -370,6 +403,13 @@ def evaluate_start_gate(
     - the stamp's four conjuncts → 422 ``start.blocked`` carrying the
       projection's own blocker ids (material / adjudication / prerequisite
       / active conflicting run).
+    - the film conjuncts (ADR-129): a film chain with no active draft →
+      409 ``start.no_storyboard``; a dock presenting a superseded draft —
+      or a redesign's in-flight marker still standing → 409
+      ``start.stale_storyboard`` (the dock moved on — same family as
+      scope_mismatch); an active review hold → 422 ``start.review_hold``
+      (readiness family — the user scoped review only and never asked for
+      production).
     - the authorization conjunct (ADR-117 §4): ``confirmation`` is the
       presentation-time-stamped need; ``docked_this_turn=True`` marks the
       auto regime's presentation-time start attempt → 422
@@ -381,8 +421,15 @@ def evaluate_start_gate(
         return StartGateVerdict(409, "start.already_answered")
     if not has_pending_plan:
         return StartGateVerdict(409, "start.no_pending_plan")
+    if film is not None and film.film_chain:
+        if not film.has_active_draft:
+            return StartGateVerdict(409, "start.no_storyboard")
+        if film.draft_inflight or not film.draft_match:
+            return StartGateVerdict(409, "start.stale_storyboard")
     if not effective_tasks_nonempty:
         return StartGateVerdict(422, "start.empty_plan")
+    if film is not None and film.film_chain and film.review_hold:
+        return StartGateVerdict(422, "start.review_hold")
     if not stamp.confirmation_ready:
         return StartGateVerdict(422, "start.blocked", stamp.blockers)
     if (

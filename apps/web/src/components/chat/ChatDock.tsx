@@ -56,7 +56,6 @@ import type {
   ActivityRowFramePayload,
   CandidateEventPayload,
   RowAppendPayload,
-  StoryboardPayload,
 } from "@/lib/chatStreamFrames"
 import { buildConversationUnits, foldActivityUnits } from "@/lib/chatTimeline"
 import {
@@ -108,7 +107,6 @@ import { RunCard } from "@/components/chat/RunCard"
 import { AnchorCards } from "@/components/chat/AnchorCards"
 import { anchorCardsForRun } from "@/lib/anchorCards"
 import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
-import { StoryboardTable } from "@/components/chat/StoryboardTable"
 import { AnsweredQuestion, answeredQuestionText } from "@/components/chat/AnsweredQuestion"
 import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
 import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
@@ -120,10 +118,6 @@ import {
   isNonRenderIntent,
   materialBeat,
   materialBeatKey,
-  storyboardBlock,
-  storyboardDraftFailed,
-  triggerName,
-  triggerRef,
   triggerSuggestions,
   questionEcho,
   bareQuestion,
@@ -985,14 +979,33 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     },
     [],
   )
-  // Transcript array mirror (ADR-108 §3): a persisted activity row appends
-  // at its birth (append fixes the position — arrival order IS the array
-  // order) and settles in place (update by row id, the position never
-  // moves). Rows persist even on a failed turn (诚实 transcript) — never
-  // rolled back client-side.
+  // Transcript array mirror (ADR-108 §3): a persisted row appends at its
+  // birth (append fixes the position — arrival order IS the array order)
+  // and settles in place (update by row id, the position never moves).
+  // Rows persist even on a failed turn (诚实 transcript) — never rolled
+  // back client-side. Two row families ride the channel: activity rows
+  // (intent carries {type:"activity", frame}) and PLAIN assistant rows —
+  // the design beat's published storyboard (ADR-129) is code-composed
+  // markdown, so it lands atomically (never through the typewriter — the
+  // law's atomic-landing twin), after its design activity's settle row.
   const handleRowAppend = useCallback((row: RowAppendPayload) => {
     const frame = activityRowFrame(row.intent)
-    if (!frame) return
+    if (!frame) {
+      if (row.role !== "assistant" || !row.content) return
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === row.id)) return prev
+        return [
+          ...prev,
+          {
+            id: row.id,
+            role: "assistant" as const,
+            content: row.content,
+            at: row.created_at ?? undefined,
+          },
+        ]
+      })
+      return
+    }
     setMessages((prev) => {
       if (prev.some((m) => m.id === row.id)) return prev
       return [
@@ -1087,36 +1100,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setMessages((prev) => prev.filter((m) => !doomed.has(m.id)))
     doomed.clear()
   }, [])
-  // 分镜块 (ADR-120 §1): the live `assistant.storyboard` frame appends the
-  // table under its dock — every earlier version folds to a chip in the
-  // same setState pass (版本折叠律). The row rolls back if its turn fails
-  // (the server rolls the block row back with it — candidates 同律).
-  const liveStoryboardRowsRef = useRef<Set<string>>(new Set())
-  const handleStoryboardFrame = useCallback((payload: StoryboardPayload) => {
-    const liveId =
-      payload.message_id ?? `live-sb-v${payload.version}-${Date.now()}`
-    liveStoryboardRowsRef.current.add(liveId)
-    setMessages((prev) => [
-      ...prev.map((m) =>
-        m.storyboard
-          ? { ...m, storyboard: { ...m.storyboard, superseded: true } }
-          : m,
-      ),
-      {
-        id: liveId,
-        role: "assistant" as const,
-        content: "",
-        at: new Date().toISOString(),
-        storyboard: { payload, superseded: false },
-      },
-    ])
-  }, [])
-  const rollbackStoryboardRows = useCallback(() => {
-    const doomed = liveStoryboardRowsRef.current
-    if (doomed.size === 0) return
-    setMessages((prev) => prev.filter((m) => !doomed.has(m.id)))
-    doomed.clear()
-  }, [])
   const [input, setInput] = useState("")
   const [mentions, setMentions] = useState<ChatMention[]>([])
   const [chatBusy, setChatBusy] = useState(false)
@@ -1197,13 +1180,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   } | null>(null)
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
-  // 就绪拍到达登记 (ADR-128): the film dock's watch window stays open past
-  // the storyboard block's landing until the ready beat's trigger row
-  // arrives — its ref is THIS dock's question id (a re-dock re-arms the
-  // watch). The poll's trigger branch sets it; the reset effect lives
-  // next to the watch window below.
-  const [readyBeatRef, setReadyBeatRef] = useState<string | null>(null)
-  const blockSeenAtRef = useRef<number | null>(null)
   const onRunStartedRef = useRef(onRunStarted)
   onRunStartedRef.current = onRunStarted
   const onDraftGraphChangeRef = useRef(onDraftGraphChange)
@@ -1425,82 +1401,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           )
           continue
         }
-        // 分镜迟延块 (ADR-120 hold/draft 解耦): a dock-time-deferred
-        // storyboard lands as a worker-born row while the dock holds for the
-        // user's review — no SSE turn carries it, so this poll is its live
-        // arrival channel. Same dedup-by-row-id law as the beats; the
-        // version fold rides the same map pass as the live frame's.
-        const sbBlock = storyboardBlock(row.intent)
-        if (sbBlock !== undefined) {
-          if (messagesRef.current.some((m) => m.id === row.id)) continue
-          setMessages((prev) => [
-            ...prev.map((m) =>
-              m.storyboard
-                ? { ...m, storyboard: { ...m.storyboard, superseded: true } }
-                : m,
-            ),
-            {
-              id: row.id,
-              role: "assistant" as const,
-              content: "",
-              at: row.created_at,
-              storyboard: { payload: sbBlock, superseded: false },
-            },
-          ])
-          continue
-        }
-        // 分镜起草穷举行 (法2): the deferred seat's terminal failure is
-        // worker-born prose — the typewriter's cadence (server-born prose
-        // never blobs), no pills, no dock. The marker folds the drafting
-        // placeholder.
-        if (storyboardDraftFailed(row.intent)) {
-          if (
-            triggerInFlight.current.has(row.id) ||
-            messagesRef.current.some((m) => m.id === row.id)
-          ) {
-            continue
-          }
-          triggerInFlight.current.add(row.id)
-          const text = (row.content ?? "").trim()
-          try {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: row.id,
-                role: "assistant" as const,
-                content: "",
-                streaming: true,
-                at: row.created_at,
-                storyboardDraftFailed: true,
-              },
-            ])
-            const tw = createTypewriter((fragment) => {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === row.id ? { ...m, content: m.content + fragment } : m
-                )
-              )
-            }, setProseActive)
-            tw.push(text)
-            await tw.drain()
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === row.id ? { ...m, streaming: false } : m
-              )
-            )
-          } finally {
-            triggerInFlight.current.delete(row.id)
-          }
-          continue
-        }
         const suggestions = triggerSuggestions(row.intent)
         if (suggestions === undefined) continue
-        // 就绪拍到达登记 (ADR-128): the film dock's watch stays open past
-        // the block's landing specifically for this beat — its ref (THIS
-        // dock's question id) is the watch's stop key.
-        if (triggerName(row.intent) === "storyboard_ready") {
-          setReadyBeatRef(triggerRef(row.intent) ?? row.id)
-        }
         // Dedup by the SERVER row id — the archive replay and a previous
         // poll arrival land under the same id, so the row is known if it is
         // in the flow already or mid-typing. A PENDING options question
@@ -1828,95 +1730,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }, 3000)
     return () => clearInterval(id)
   }, [terminal, runId, reviewerLanded, pollTriggerMessages])
-
-  // Watch window (分镜迟延块, ADR-120 统一迟延 + ADR-128 就绪拍续航):
-  // the film dock's storyboard_review hold is on — the deferred seat
-  // drafts post-commit / post-capture and its arrivals (the drafting
-  // beat's opening line, the block, the ready beat, or the terminal
-  // failure row) ALL land through this poll. Dock-scoped reads: a block
-  // predating the dock belongs to an older superseded dock, and the
-  // failure row folds the placeholder (the wait is over, the hold
-  // stands). The window's own predicate (storyboardWatchDue, below)
-  // spans the whole review journey — it outlives the block's landing so
-  // the ready beat arrives live.
-  const storyboardDockAt = pendingQuestion?.created_at ?? null
-  const storyboardBlockLanded = messages.some(
-    (m) => m.storyboard && (storyboardDockAt == null || (m.at ?? "") >= storyboardDockAt),
-  )
-  const storyboardDraftFailedLanded = messages.some(
-    (m) =>
-      m.storyboardDraftFailed &&
-      (storyboardDockAt == null || (m.at ?? "") >= storyboardDockAt),
-  )
-  const storyboardBlockDue =
-    pendingQuestion?.question?.confirm_reason === "storyboard_review" &&
-    !pendingQuestion.answer &&
-    !storyboardBlockLanded
-  // 相位诚实 (2026-10-16 zymix 取证): the deferred seat only STARTS
-  // drafting once the capture set has drained (its captures_in_flight
-  // gate) — while sub-pages are still being read, the work on screen is
-  // the capture beats' own rows, and a "Drafting" line here both LIES
-  // about the phase and doubles the indicators. The client's asset list
-  // carries the same world truth as the server's gate (zero new seat).
-  const webPagesInFlight = assets.some(
-    (a) =>
-      a.type === "web_page" &&
-      (a.processing_status === "pending" ||
-        a.processing_status === "processing"),
-  )
-  // The now-line's drafting placeholder (StatusLine 同座): visible while
-  // the draft is legitimately in flight — gone once the block OR the
-  // honest failure row lands.
-  const storyboardDraftDue =
-    storyboardBlockDue && !storyboardDraftFailedLanded && !webPagesInFlight
-  // 就绪拍续航 (ADR-128): the block's landing is NOT the watch's end —
-  // the ready beat's trigger row commits seconds after the block, and a
-  // watch that dies with the block misses it live (a refresh used to be
-  // its only arrival channel). The watch now spans the whole review
-  // journey: dock → drafting beat → block → ready beat (or the failure
-  // row, or the user's answer). A silenced ready beat never holds the
-  // poll open: the 90s post-block grace covers its turn and no more.
-  const storyboardWatchDue =
-    pendingQuestion?.question?.confirm_reason === "storyboard_review" &&
-    !pendingQuestion.answer &&
-    !storyboardDraftFailedLanded &&
-    readyBeatRef !== (pendingQuestion.id ?? null)
-  // A re-dock re-births the question row (new id) — re-arm the watch.
-  const pendingQuestionId = pendingQuestion?.id ?? null
-  useEffect(() => {
-    setReadyBeatRef(null)
-    blockSeenAtRef.current = null
-  }, [pendingQuestionId])
-  useEffect(() => {
-    if (!storyboardWatchDue) return
-    // The block's landing starts the ready beat's grace clock. On a
-    // refresh mid-journey the poll never saw it land — arm from mount.
-    if (storyboardBlockLanded && blockSeenAtRef.current == null) {
-      blockSeenAtRef.current = Date.now()
-    }
-    const startedAt = Date.now()
-    // 续航对齐起草包络 (2026-10-16 zymix 取证 — 37 分钟起草 vs 5 分钟
-    // 保险丝 = 页面假死): the healthy draft lands in ~2.5 minutes, a
-    // degraded night burns 3 candidates × 300s. Backoff: tight through the
-    // healthy window, leisurely through the long tail; the precise landing
-    // predicates (ready beat ∨ failure row ∨ answer) end the watch — the
-    // 45-minute cap only covers a dead deferred seat.
-    let timer: ReturnType<typeof setTimeout>
-    const tick = () => {
-      const elapsed = Date.now() - startedAt
-      if (elapsed > 2_700_000) return
-      // Post-block the only awaited arrival is the ready beat (seconds) —
-      // the grace covers its trigger turn; a silenced beat stops the poll
-      // here instead of riding the 45-minute cap.
-      const blockSeenAt = blockSeenAtRef.current
-      if (blockSeenAt != null && Date.now() - blockSeenAt > 90_000) return
-      void pollTriggerMessages()
-      void fetchAssets() // the in-flight gate above flips on capture drain
-      timer = setTimeout(tick, elapsed < 120_000 ? 3_000 : 15_000)
-    }
-    timer = setTimeout(tick, 3_000)
-    return () => clearTimeout(timer)
-  }, [storyboardWatchDue, storyboardBlockLanded, pollTriggerMessages, fetchAssets])
 
   // The output mention's candidate feed (reference family, MENTIONS §2): a
   // pinned output id resolves the revision target deterministically
@@ -2500,7 +2313,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // C8-c: a new turn owns the candidate-rollback scope — rows committed
     // by earlier turns are no longer this turn's to roll back.
     liveCandidateRowsRef.current.clear()
-    liveStoryboardRowsRef.current.clear()
     const streamId = crypto.randomUUID()
     let streamedAny = false
     // What the preview bubble currently shows (the typewriter-released text)
@@ -2775,10 +2587,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             poke()
             handleCandidatesFrame(event)
           },
-          onStoryboard: (payload) => {
-            poke()
-            handleStoryboardFrame(payload)
-          },
           onRowAppend: (row) => {
             poke()
             handleRowAppend(row)
@@ -3011,7 +2819,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       typewriter.flush()
       discardPreviewArtifacts()
       rollbackCandidateRows()
-      rollbackStoryboardRows()
       // 终帧律 (同上): a failed/aborted turn closes every phase too.
       setThinkingPhase(null)
       // The activity stream settles the same way: a user stop marks the
@@ -3306,7 +3113,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   ) => {
     // C8-c: same rollback-scope handover as sendChat's turn start.
     liveCandidateRowsRef.current.clear()
-    liveStoryboardRowsRef.current.clear()
     const optimisticId = stashedAnswerRef.current?.optimisticId ?? crypto.randomUUID()
     stashedAnswerRef.current = null
     const previewId = `answer-preview-${optimisticId}`
@@ -3401,7 +3207,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           dockQuestionPreview(`preview-answer-${optimisticId}`, payload),
         onActivity: handleActivityFrame,
         onCandidates: handleCandidatesFrame,
-          onStoryboard: handleStoryboardFrame,
         onRowAppend: handleRowAppend,
         onRowUpdate: handleRowUpdate,
       })
@@ -3503,7 +3308,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // server-side (the original question restores just below).
       discardPreviewArtifacts()
       rollbackCandidateRows()
-      rollbackStoryboardRows()
       setMessages((prev) =>
         prev.filter((m) => m.id !== optimisticId && m.id !== previewId),
       )
@@ -3790,28 +3594,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     (pendingQuestion.question?.requires_confirmation ?? true)
       ? pendingQuestion
       : null
-  // 法1后半 (2026-10-16): the film review hold's Start affordance appears
-  // only once the storyboard card has LANDED — before that there is nothing
-  // to confirm (the placeholder row carries the wait; the waiver is verbal
-  // only, never a button). The server's hard gate is the backstop.
-  const storyboardPillHeld =
-    planPill?.question?.confirm_reason === "storyboard_review" &&
-    !storyboardBlockLanded
-  const confirmPillActive = confirmActive && planPill != null && !storyboardPillHeld
+  const confirmPillActive = confirmActive && planPill != null
   // The label family keys on the stamped reason: money reasons carry the
   // price (quote_high is the server fold's high end — never a client
   // computation); the NULL family announces the deferred quote; a bare
   // execution-ask rides the plain verb. (D1: 执行=ask → 不带价; 费用=ask /
-  // 守卫线 → 带价. storyboard_review — the film dock's review hold — prices
-  // whenever a quote exists: the hold is the review, never an execution-ask.)
+  // 守卫线 → 带价.)
   const planPillLabel = (() => {
     const q = planPill?.question
     if (!q) return ""
     if (q.unquotable) return t("generationOverlay.confirmPillStartDeferred")
     const priced =
       q.confirm_reason === "credits_pref" ||
-      q.confirm_reason === "above_guardrail" ||
-      q.confirm_reason === "storyboard_review"
+      q.confirm_reason === "above_guardrail"
     return priced && q.quote_high != null
       ? t("generationOverlay.confirmPillStartPriced", { n: q.quote_high })
       : t("generationOverlay.confirmPillStart")
@@ -3850,29 +3645,81 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if (confirmActive && !chatBusy) setDockHidden(false)
   }, [confirmActive, chatBusy])
 
-  // 确认 pill 点击 (ADR-117 §4): the pill IS the user saying「确认生成」— it
-  // rides the ONE sendChat channel (Workspace v4.2 C8's machine, the retired
-  // Start pill's own path): the router's start_run answers the docked
-  // task_book server-side (confirmed_via="chat_reply" — the channel is the
-  // chat reply), no QA archive ever lands, and the panel's edits ride
-  // prior_intent automatically (confirmActive ships it). The optimistic
-  // bubble + rollback mirror handleSend's user turn.
-  const handleConfirmPill = () => {
-    if (!confirmPillActive || chatBusy || answering) return
-    const text = t("generationOverlay.confirmPillMessage")
-    const rollbackId = crypto.randomUUID()
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: rollbackId,
-        role: "user",
-        content: text,
-        at: new Date().toISOString(),
-      },
-    ])
-    recallDock()
-    scrollerSendRef.current?.() // same live-edge intent as handleSend
-    void sendChat(text, { rollbackId })
+  // 确认 pill 点击 (ADR-117 §4 + ADR-129 typed answer transport): the pill
+  // IS the user pressing Start — it rides the TYPED answer machine
+  // (answer_question kind="start", the same seat the chat-path start_run
+  // funnels into), never a fabricated chat message: no optimistic user
+  // bubble, no canned text the router must re-read, no QA archive on any
+  // start path (the sendChat start branch's same 拍板 — the record = the
+  // run receipt). The panel's edits ride body.intent exactly like the
+  // chat channel's prior_intent (confirmActive ships it). Landing mirrors
+  // the start branch: the receipt titles the run by the answered plan's
+  // fresh intent, and the run id lands the dock on the run surface.
+  const handleConfirmPill = async () => {
+    if (!confirmPillActive || chatBusy || answering || !planPill) return
+    const question = planPill
+    setAnswering(true)
+    setChatBusy(true)
+    setPendingQuestion(null) // the pill's beat is taken — failure restores it
+    try {
+      const data = await streamAnswer<{
+        answered_question: QuestionMessage
+        follow_up: QuestionMessage | null
+      }>(
+        question.id,
+        { kind: "start", intent: confirmActive ? intent : undefined },
+        {
+          onActivity: handleActivityFrame,
+          onCandidates: handleCandidatesFrame,
+          onRowAppend: handleRowAppend,
+          onRowUpdate: handleRowUpdate,
+        },
+      )
+      settleActivities("completed") // defensive twin of the server sweep
+      // The receipt titles the RUN by its birthing proposal (ADR-058, the
+      // sendChat start branch's same seat): the answered plan row carries
+      // the fresh intent server-side — its LLM name leads, the chain label
+      // falls back.
+      const birthIntent = data.answered_question?.intent
+      if (birthIntent) {
+        const birthTitle = titleOf(normalizeIntent(birthIntent))
+        if (birthTitle) setRunTitleOverride(birthTitle)
+      }
+      if (data.answered_question?.workflow_run_id) {
+        landOnStartedRun(data.answered_question.workflow_run_id)
+      }
+    } catch (e) {
+      settleActivities("failed")
+      const settledCode =
+        e instanceof StreamTurnError ? questionSettledCode(e.detail) : null
+      if (settledCode) {
+        // A settled question never re-docks (the option path's same grace):
+        // the click raced the plan's own settlement — the pill stays GONE.
+        setPendingQuestion(null)
+        toast.info(
+          t(
+            settledCode === "question.superseded"
+              ? "chat.questionOutdated"
+              : "chat.questionAnswered",
+          ),
+        )
+      } else {
+        // Failure restores the pill's beat — the dock still owes it. A
+        // structured credits shortfall lands as the in-flow grey row
+        // (双路同语义 with the option path), never a bare toast.
+        setPendingQuestion(question)
+        const credits =
+          e instanceof StreamTurnError ? asCreditsInsufficient(e.detail) : null
+        if (credits) {
+          pushCreditsGreyRow(credits)
+        } else {
+          toast.error(e instanceof Error ? e.message : t("chat.failed"))
+        }
+      }
+    } finally {
+      setAnswering(false)
+      setChatBusy(false)
+    }
   }
 
   // Message-flow chronology (ADR-108 数组位置律): the transcript is ONE
@@ -3988,7 +3835,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   )
   const nowRow: NowRowPayload | null = (() => {
     if (proseActive) return null
-    if (activeActivity) return activeActivity
+    // Concrete film phases refine the generic plan activity.
+    if (activeActivity && !(activeActivity.kind === "draft" &&
+      ["capturing", "storyboarding", "storyboard_revision"].includes(thinkingPhase ?? ""))) {
+      return activeActivity
+    }
     const think = (
       key: string | null,
       name?: string,
@@ -4004,14 +3855,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     })
     if (chatBusy) {
       return think(thinkingPhase ? `chat.thinkingPhases.${thinkingPhase}` : null)
-    }
-    // 分镜起草占位 (ADR-120 统一迟延 + 法2): the film dock's storyboard is
-    // being drafted by the deferred seat (minutes) — the now-line carries
-    // the wait so the screen never sits silent between the dock and the
-    // block. Folds on the block's or the failure row's landing (both are
-    // world facts in the flow), never on a timer.
-    if (storyboardDraftDue) {
-      return think("chat.storyboard.drafting")
     }
     // 带计数 (2026-09-24 用户拍板): several files draining together read as
     // "processing N files" (中性词 — 混合批次不知动谁), a lone one names
@@ -4148,14 +3991,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             {m.candidates ? (
               <CandidateSurfaceCard surface={m.candidates} />
             ) : null}
-            {/* 分镜附件 chip (消息内分镜 2026-10-16 呈现面翻案): the
-                review face is the trigger message's markdown table; the
-                block rests as a chip that expands to the structured table
-                on tap — replayed from the block row or live-pushed, same
-                seat. */}
-            {m.storyboard ? (
-              <StoryboardTable payload={m.storyboard.payload} />
-            ) : null}
           </>
         )}
       </MessageScrollerItem>
@@ -4234,14 +4069,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                         )
                       }
                       if (unit.kind === "activityFold") {
-                        // 物化时机律: the unclosed tail's summary waits for
-                        // its boundary — while the turn is busy the fold
-                        // renders nothing; the closing prose's arrival
-                        // recomputes the walk and the fold materializes
-                        // with it (the clock ends where the summary
-                        // appears). Once busy ends, an orphaned tail
-                        // renders on its fallback clock.
-                        if (unit.openTail && chatBusy) return null
+                        // Completed evidence stays visible while later work runs.
                         return (
                           <MessageScrollerItem key={`fold-${unit.rows[0]?.activity_id}`}>
                             <FoldedActivityRow
@@ -4304,9 +4132,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                   unit.kind === "message" ? (
                     renderConversationMessage(unit.message)
                   ) : unit.kind === "activityFold" ? (
-                    // 物化时机律 (the run path above holds the same law):
-                    // the unclosed tail's fold waits for its closing prose.
-                    unit.openTail && chatBusy ? null : (
+                    // Completed evidence remains visible while the next stage runs.
+                    (
                     <MessageScrollerItem key={`fold-${unit.rows[0]?.activity_id}`}>
                       <FoldedActivityRow
                         rows={unit.rows}
@@ -4447,7 +4274,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           // mention registry carries outputs (世界自证 — the registry's own
           // content, never a form/viewport read).
           placeholder={
-            mentionContext.outputs.length > 0
+            (mentionContext.outputs?.length ?? 0) > 0
               ? t("generationOverlay.chatPlaceholder")
               : t("generationOverlay.chatPlaceholderAssets")
           }

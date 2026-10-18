@@ -1,0 +1,167 @@
+{
+ "family": "film",
+ "name": "Linear",
+ "theme": {
+  "canvas": "#0B0B0B",
+  "ink": "#FFFFFF"
+ },
+ "aspect": "16:9",
+ "scenes": [
+  {
+   "type": "hero",
+   "frames": 120,
+   "word": "Linear",
+   "sub": "Built for the future. Available today.",
+   "audio": "https://repurposer.tos-ap-southeast-1.volces.com/8cdabcaa-b16b-45f3-b5b5-7e883037147b/outputs/projects/9efdd699-3fcd-4983-9373-441557cfe507/5bc00e3c-3bc2-4659-9423-7b41e2356b3b_narr_0.mp3"
+  },
+  {
+   "type": "words",
+   "frames": 95,
+   "dark": true,
+   "lines": [
+    "Purpose-built for planning",
+    "and building products.",
+    "*Designed* for the AI era."
+   ]
+  },
+  {
+   "type": "ui",
+   "frames": 235,
+   "image": "https://repurposer.tos-ap-southeast-1.volces.com/8cdabcaa-b16b-45f3-b5b5-7e883037147b/outputs/projects/9efdd699-3fcd-4983-9373-441557cfe507/demo-film-s0.png",
+   "url": "linear.app",
+   "focuses": [
+    {
+     "at": 0.0,
+     "x": 0.4993,
+     "y": 0.3733,
+     "zoom": 1.2
+    },
+    {
+     "at": 3.0,
+     "x": 0.0865,
+     "y": 0.6189,
+     "zoom": 2.6
+    },
+    {
+     "at": 6.0,
+     "x": 0.323,
+     "y": 0.6194,
+     "zoom": 2.6
+    }
+   ],
+   "captions": [
+    {
+     "at": 1.0,
+     "text": "Faster app launch"
+    },
+    {
+     "at": 5.0,
+     "text": "Reviews"
+    }
+   ],
+   "audio": "https://repurposer.tos-ap-southeast-1.volces.com/8cdabcaa-b16b-45f3-b5b5-7e883037147b/outputs/projects/9efdd699-3fcd-4983-9373-441557cfe507/5bc00e3c-3bc2-4659-9423-7b41e2356b3b_narr_2.mp3"
+  },
+  {
+   "type": "divider",
+   "frames": 91,
+   "index": "01",
+   "label": "Planning and monitoring",
+   "roll": [
+    "Intake",
+    "Plan",
+    "AI",
+    "Build",
+    "Agents"
+   ]
+  },
+  {
+   "type": "ui",
+   "frames": 271,
+   "image": "https://repurposer.tos-ap-southeast-1.volces.com/8cdabcaa-b16b-45f3-b5b5-7e883037147b/outputs/projects/9efdd699-3fcd-4983-9373-441557cfe507/demo-film-s2.png",
+   "url": "linear.app",
+   "focuses": [
+    {
+     "at": 0.0,
+     "x": 0.2422,
+     "y": 0.2491,
+     "zoom": 1.329
+    },
+    {
+     "at": 4.0,
+     "x": 0.5671,
+     "y": 0.4918,
+     "zoom": 2.6
+    },
+    {
+     "at": 7.0,
+     "x": 0.5566,
+     "y": 0.3629,
+     "zoom": 2.6
+    }
+   ],
+   "captions": [
+    {
+     "at": 1.0,
+     "text": "Plan and navigate from idea to launch."
+    },
+    {
+     "at": 6.0,
+     "text": "Learn more →"
+    }
+   ],
+   "audio": "https://repurposer.tos-ap-southeast-1.volces.com/8cdabcaa-b16b-45f3-b5b5-7e883037147b/outputs/projects/9efdd699-3fcd-4983-9373-441557cfe507/5bc00e3c-3bc2-4659-9423-7b41e2356b3b_narr_4.mp3"
+  },
+  {
+   "type": "ui",
+   "frames": 299,
+   "image": "https://repurposer.tos-ap-southeast-1.volces.com/8cdabcaa-b16b-45f3-b5b5-7e883037147b/outputs/projects/9efdd699-3fcd-4983-9373-441557cfe507/demo-film-s3.png",
+   "url": "linear.app",
+   "focuses": [
+    {
+     "at": 0.0,
+     "x": 0.2422,
+     "y": 0.2489,
+     "zoom": 1.329
+    },
+    {
+     "at": 5.0,
+     "x": 0.1057,
+     "y": 0.5483,
+     "zoom": 2.6
+    }
+   ],
+   "captions": [
+    {
+     "at": 1.0,
+     "text": "Build, review, and ship"
+    },
+    {
+     "at": 6.0,
+     "text": "iOS"
+    }
+   ],
+   "audio": "https://repurposer.tos-ap-southeast-1.volces.com/8cdabcaa-b16b-45f3-b5b5-7e883037147b/outputs/projects/9efdd699-3fcd-4983-9373-441557cfe507/5bc00e3c-3bc2-4659-9423-7b41e2356b3b_narr_5.mp3"
+  },
+  {
+   "type": "reveal",
+   "frames": 119,
+   "lead": "Powering",
+   "word": "40,000",
+   "sub": "From ambitious startups to major enterprises.",
+   "audio": "https://repurposer.tos-ap-southeast-1.volces.com/8cdabcaa-b16b-45f3-b5b5-7e883037147b/outputs/projects/9efdd699-3fcd-4983-9373-441557cfe507/5bc00e3c-3bc2-4659-9423-7b41e2356b3b_narr_6.mp3"
+  },
+  {
+   "type": "end",
+   "frames": 180,
+   "name": "Linear",
+   "tagline": "Designed for workflows shared by humans and agents. From drafting PRDs to pushing PRs.",
+   "url": "linear.app",
+   "logo_url": null,
+   "audio": "https://repurposer.tos-ap-southeast-1.volces.com/8cdabcaa-b16b-45f3-b5b5-7e883037147b/outputs/projects/9efdd699-3fcd-4983-9373-441557cfe507/5bc00e3c-3bc2-4659-9423-7b41e2356b3b_narr_7.mp3"
+  }
+ ],
+ "music": {
+  "url": "https://repurposer.tos-ap-southeast-1.volces.com/music/d7f2b20b-f951-57d8-945f-ba5ca09d5339.mp3",
+  "gain_db": -20.0
+ }
+}

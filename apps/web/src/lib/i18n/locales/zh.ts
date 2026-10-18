@@ -655,7 +655,6 @@ const zh: Resources = {
     status: {
       uploading: "上传中…",
       processing: "生成中…",
-      draft: "待确认",
     },
     menuMore: "更多操作",
     rename: "重命名",
@@ -1134,37 +1133,20 @@ const zh: Resources = {
       noTranscript: "暂无字幕稿。",
     },
   },
-  // 分镜表消息块 (ADR-120 §1) — 官网介绍短片的可核对分镜。
-  storyboard: {
-    untitled: "介绍短片分镜",
-    meta: "v{{version}} · {{count}} 幕 · 约 {{seconds}} 秒",
-    source: "文案出自：{{pages}}",
-    collapse: "收起",
-    voiceOff: "无配音",
-    music: "配乐 {{mood}}",
-    sceneTypes: {
-      words: "词卡",
-      hero: "主视觉",
-      ui: "页面",
-      divider: "过场",
-      plate: "数字",
-      reveal: "揭晓",
-      end: "尾卡",
-    },
-  },
   chat: {
     assistantLabel: "Repurposer",
     userLabel: "你",
     thinking: "思考中...",
     thinkingPhases: {
+      capturing: "正在等待网页采集完成…",
+      storyboarding: "正在设计分镜…",
+      storyboard_revision: "正在调整分镜…",
       composing: "正在整理…",
     },
-    /** 分镜起草占位（ADR-120 统一迟延）：film dock 到分镜块落地之间的
-     * now-line——迟延座起草数分钟，等待恒可见；块/失败行落地即收。
-     * draftingDone（ADR-128）：跨度的落定行（born-settled 素材节拍）——
-     * 活动日志寄存器（动宾+事实，无进行态），与素材读取族同三寄存器律。 */
+    /** 分镜起草落定行（legacy 节拍回放）：跨度的落定行（born-settled
+     * 素材节拍）——活动日志寄存器（动宾+事实，无进行态），与素材读取族同
+     * 三寄存器律。 */
     storyboard: {
-      drafting: "正在起草分镜…",
       draftingDone: "起草完分镜",
     },
     /** now-line 的素材阅读行（2026-09-24 用户拍板——thinking 就是 activity
@@ -1256,7 +1238,8 @@ const zh: Resources = {
      * ——出方案 / 改已有产物（projector 的 _EDIT_TOOLS 选 key）。draft / run
      * 跨度只有 active 态（落定即退役——2026-09-28 draft、2026-09-29 扩到
      * run）：落定收据行退役，方案卡 / 开工言语 + RunTaskList 收据就是证据，
-     * 故无 draftDone/editDone/runDone 键。repair 两键 = 言语提交协议批
+     * 故无 draftDone/editDone/runDone 键（下方分镜两键是唯一例外——分镜
+     * 不是开工，其落定留存）。repair 两键 = 言语提交协议批
      * 终态专用（重试跨度静默开启，无 active 帧）：repair 只在失败终态
      * （重试耗尽 / 回合失败）发射，repairDone 只在转向终态（护栏把回合
      * 形式引去别的工具）发射——说工作事实，永不说模型自我反思。 */
@@ -1266,6 +1249,8 @@ const zh: Resources = {
       run: "正在开工…",
       repair: "这次没能完成",
       repairDone: "换了个方式",
+      storyboard: "正在设计分镜…",
+      storyboardDone: "已设计分镜",
     },
     /** 活动行的有界展开明细（迭代三 S7，E7 诚实边界）：只有 wire 白名单
      * 字段——原始计数带标签成行（耗时内联同行，formatElapsed 是唯一措辞）。 */
@@ -1456,12 +1441,11 @@ const zh: Resources = {
     // 确认 pill（ADR-117 §4 — 画板 C）：确认拍仅剩的 chrome，只在 dock 戳记
     // 说欠一拍时出现。label 族：裸动词（执行=询问）/ 带价（费用=询问 · 守卫线
     // ——数字恒为服务端 fold 上限，客户端永不自算）/ 延期报价（NULL 族——永不
-    // 编数字）。confirmPillMessage = 点击后骑 chat 道的用户原话（pill 即用户
-    // 本人说这句话——旧 Start pill 的 v4.2 机器）。
+    // 编数字）。点击走 typed answer 机（kind="start"），永不骑罐头 chat 文案
+    // （ADR-129）。
     confirmPillStart: "开始",
     confirmPillStartPriced: "开始 · 约 {{n}} 积分",
     confirmPillStartDeferred: "开始 · 估价随运行确定",
-    confirmPillMessage: "确认生成",
   },
   questionDock: {
     bail: "停止生成",

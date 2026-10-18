@@ -7,14 +7,19 @@ assets (the capture half of the "URL → asset" recipe).
 """
 
 import hashlib
+import re
 from urllib.parse import urlparse
 from uuid import UUID
 
+import structlog
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import AssetStatus, AssetType
 from app.models.tables import Asset, now_utc
 from app.providers.storage import get_upload_path, save
+
+logger = structlog.get_logger()
 
 
 def _material_title(text: str) -> str:
@@ -143,3 +148,120 @@ async def create_web_page_assets_from_urls(
         await create_web_page_asset_from_url(db, project_id, user_id, url)
         for url in urls
     ]
+
+
+async def create_web_page_assets_committed_from_urls(
+    project_id: UUID,
+    user_id: UUID,
+    urls: list[str],
+) -> list[UUID]:
+    """Commit user-named URL assets in their OWN transaction and return the
+    newborn ids (existing captures dedupe to no id).
+
+    The dock-seat storyboard waits for the capture inside the same chat
+    turn. A flush-only row is invisible to both the worker and the settle
+    poll until the turn commits — waiting on it would deadlock the dock.
+    This seat commits just the asset (+ its canvas node, through the
+    singular creation seat) so the queue can claim it while the chat
+    transaction stays open; the caller then re-reads the committed row
+    through its own session.
+    """
+    from app.models.database import AsyncSessionLocal  # deferred: worker seat
+
+    wanted = list(dict.fromkeys(u.strip() for u in urls if u and u.strip()))
+    if not wanted:
+        return []
+    async with AsyncSessionLocal() as session:
+        rows = list(
+            (
+                await session.execute(
+                    select(Asset).where(
+                        Asset.project_id == project_id,
+                        Asset.type == AssetType.WEB_PAGE,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        known: dict[str, list[Asset]] = {}
+        for a in rows:
+            url = (a.meta or {}).get("capture_url")
+            if url:
+                known.setdefault(url, []).append(a)
+        created: list[UUID] = []
+        for url in wanted:
+            siblings = known.pop(url, [])
+            if any(a.processing_status != AssetStatus.FAILED for a in siblings):
+                continue  # live or captured — the URL is genuinely known
+            if siblings:
+                # A FAILED capture is NOT "known": re-sending the link is the
+                # documented recovery ("re-send the link to re-capture"), so
+                # re-arm the dead row through the ONE reset seat (status +
+                # counter + error move together — a status-only flip would
+                # re-fail terminally on the next tick) instead of birthing a
+                # duplicate row.
+                from app.pipeline.jobs import reset_asset_processing
+
+                for a in siblings:
+                    reset_asset_processing(a)
+                created.extend(UUID(str(a.id)) for a in siblings)
+                continue
+            asset = await create_web_page_asset_from_url(
+                session, project_id, user_id, url
+            )
+            created.append(UUID(str(asset.id)))
+        await session.commit()
+    return created
+
+
+# Direction-turn capture priming (2026-10-17 用户拍板): the website-film
+# direction beat lawfully ends in a bare reply — NO tool seat runs, so the
+# model's material_urls declaration may never happen and the capture would
+# start cold at the design beat (the 2026-10-17 f5743045 incident: 151s of
+# the design budget burned on waiting). The plan path IS the production
+# planning phase, so a URL the user's own message carries there is the
+# work's subject: birth its capture asset at turn assembly and the capture
+# runs in the background through the direction conversation. The extraction
+# is mechanical; the read tool's 「discussion link is not material」 law is
+# untouched (it governs what get_web_page's READ implies, not what the plan
+# path primes).
+_URL_IN_TEXT_RE = re.compile(r"https?://[^\s<>\"'】」)\]]+")
+# Sentence punctuation that trails a pasted link is never part of it.
+_URL_TRAILING_STRIP = "\"'<>)]}.,;:!?…。，、；：！？"
+
+
+def urls_in_text(text: str) -> list[str]:
+    """The message's URLs — order-kept, deduped, trailing punctuation
+    stripped. Pure (the priming seat's one testable half)."""
+    urls: list[str] = []
+    for raw in _URL_IN_TEXT_RE.findall(text or ""):
+        url = raw.rstrip(_URL_TRAILING_STRIP)
+        if url and url not in urls:
+            urls.append(url)
+    return urls
+
+
+async def prime_web_page_captures_from_text(
+    project_id: UUID,
+    user_id: UUID,
+    text: str,
+) -> list[UUID]:
+    """Birth committed WEB_PAGE capture assets for the message's URLs (the
+    direction-turn priming seat above). Idempotent per capture_url through
+    the singular creation seat; best-effort per URL — a policy-blocked link
+    logs and skips here (the point-of-use absorb speaks the refusal when
+    the URL is actually used). Returns the newborn ids."""
+    from app.tools.research.capture import CaptureBlocked  # deferred: tool seam
+
+    created: list[UUID] = []
+    for url in urls_in_text(text):
+        try:
+            created.extend(
+                await create_web_page_assets_committed_from_urls(
+                    project_id, user_id, [url]
+                )
+            )
+        except CaptureBlocked as e:
+            logger.info("web_capture_prime_blocked", url=url, error=str(e))
+    return created

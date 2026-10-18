@@ -6,16 +6,8 @@
 
 import type { ActivityRowFrame, OverlayMessage } from "@/components/chat/historyReplay"
 
-/** One unit of the conversation timeline: a message or one activity row.
- * `openTail` on a fold = the walk's trailing segment whose boundary (the
- * turn's closing prose) doesn't exist yet. The renderer WITHHOLDS such a
- * fold while the turn is busy — the summary materializes with the prose
- * that closes the segment (the "Thought for Xs" anatomy: the clock ends
- * where the summary appears). When busy ends without a boundary (an
- * orphaned turn), the fold renders with the fallback clock. A mid-walk
- * flush without a boundary (a USER message, a run-carrying assistant row)
- * is a SETTLED segment — openTail stays false there (the wall clock
- * deliberately ends at the last row, never the neighbour's stamp). */
+/** One unit of the conversation timeline. openTail marks position only;
+ * completed folds are visible even while the next stage is still busy. */
 export type ConversationUnit =
   | { kind: "message"; message: OverlayMessage }
   | { kind: "activity"; activity: ActivityRowFrame }
@@ -29,9 +21,16 @@ export type ConversationUnit =
 /** The draft span never enters the flow (2026-09-28 user ruling —
  * 落定即退役): the docked plan card IS the settled evidence. The server
  * never persists draft/run spans (activity.py's frame_persistence), so this
- * filter is the defensive twin for legacy/migrated rows. */
+ * filter is the defensive twin for legacy/migrated rows. The storyboard
+ * span is the ONE exception (2026-10-17 user ruling — 分镜不是开工): its
+ * settle DOES persist with its honest duration — the markdown message is
+ * the deliverable, no dock card absorbs the beat. */
 export function isDraftSpanRow(a: ActivityRowFrame): boolean {
-  return a.kind === "draft" && (a.key ?? "").startsWith("chat.activity.")
+  const key = a.key ?? ""
+  if (key === "chat.activity.storyboardDone" || key === "chat.activity.storyboard") {
+    return false
+  }
+  return a.kind === "draft" && key.startsWith("chat.activity.")
 }
 
 /** The run span's settle (「已开工」) is the same hollow shape (落定即退役
@@ -70,21 +69,19 @@ export function buildConversationUnits(
  * through as their own rows (the ✗ strike-through is the failure signal)
  * and break the run. Active rows are hard boundaries too (进行态不折叠 —
  * the now-line owns them; they never reach the walk anyway). The fold
- * never crosses a message boundary. The trailing unclosed segment carries
- * `openTail` — the renderer withholds it while the turn is busy (物化时机
- * 律: a fold appears exactly when its segment closes; the never-closed
- * tail appears when busy ends). Display-only: the folded rows keep
- * their identities for the expanded view; the persisted array is
- * untouched. */
+ * never crosses a message boundary. Completed rows appear immediately,
+ * including the tail while another stage runs. openTail records position
+ * only; it does not gate visibility. The clock ends at the last completed
+ * activity, never at later prose or a storyboard's completion. */
 export function foldActivityUnits(units: ConversationUnit[]): ConversationUnit[] {
   const out: ConversationUnit[] = []
   let run: ActivityRowFrame[] = []
-  const flush = (boundaryAt?: string, openTail = false) => {
+  const flush = (openTail = false) => {
     if (run.length > 0) {
       out.push({
         kind: "activityFold",
         rows: run,
-        elapsedMs: foldElapsedMs(run, boundaryAt),
+        elapsedMs: foldElapsedMs(run),
         openTail,
       })
     }
@@ -95,52 +92,21 @@ export function foldActivityUnits(units: ConversationUnit[]): ConversationUnit[]
       run.push(unit.activity)
       continue
     }
-    // The segment's wall clock ends at the NEXT row — the turn's prose
-    // (an assistant message) or a neighbouring non-completed activity.
-    // A USER message is no honest segment end: after a failed turn the
-    // user may return hours later, and their message's stamp would
-    // fabricate a multi-hour "工作了 3 小时" lie. A run-carrying
-    // assistant message is no honest end either (ADR-110 修订): when a
-    // run intervenes between the segment and its boundary (material beats,
-    // then the delivery prose at run completion), the prose's stamp would
-    // stretch the fold's clock over the whole run — duplicating the
-    // receipt row's own total. The run's span belongs to the receipt; the
-    // fold falls back to the last row's own end.
-    const boundaryAt =
-      unit.kind === "message"
-        ? unit.message.role === "assistant" && !unit.message.runId
-          ? unit.message.at
-          : undefined
-        : unit.kind === "activity"
-          ? unit.activity.at
-          : unit.rows[0]?.at
-    flush(boundaryAt)
+    flush()
     out.push(unit)
   }
-  // The trailing fold's boundary (the closing prose's stamp) doesn't exist
-  // yet — it carries openTail so the renderer can withhold it while the
-  // turn is busy; the summary materializes when the prose lands and this
-  // recompute stamps the boundary.
-  flush(undefined, true)
+  // The completed tail is visible even before the next message arrives.
+  flush(true)
   return out
 }
 
-/** The aggregate row's total elapsed (段墙钟, ADR-110): first row's birth
- * → the segment's end — the following assistant row's stamp when there is
- * one (the prose's arrival closes the work segment — the CC "Thought for
- * Xs" anatomy), else the last row's own end (the never-closed tail's
- * honest fallback — the prose hasn't arrived). Falls back to the summed
- * row durations; null when nothing measurable exists. */
+/** Completed work's elapsed wall time, ending at its own final row.
+ * Later generation or user think time never changes this settled fact. */
 function foldElapsedMs(
   rows: ActivityRowFrame[],
-  boundaryAt?: string,
 ): number | null {
   const start = Date.parse(rows[0]?.at ?? "")
   if (!Number.isNaN(start)) {
-    if (boundaryAt) {
-      const end = Date.parse(boundaryAt)
-      if (!Number.isNaN(end) && end > start) return end - start
-    }
     const last = rows[rows.length - 1]
     const lastAt = Date.parse(last?.at ?? "")
     if (!Number.isNaN(lastAt)) {

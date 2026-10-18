@@ -21,7 +21,12 @@ viewer must be able to answer "what is this, what does it do for me, where
 do I go next". The film's skeleton is fixed — a quiet cold open, the hero
 card, a walk of the home page, one chapter per pillar (a divider, then a
 walk; a numbers plate after chapter 1 when the page carries numbers), the
-reveal, a proof walk, the closing card, 75–120 seconds in all. You never
+reveal, a proof walk, the closing card, 70–118 seconds in all. Everything
+on screen is one of those elements — motion text, the brand hero, camera
+walks over the page's real screenshots, chapter cards, a numbers-evidence
+plate, the reveal and the closing card, plus the music bed, the spoken
+narration and its captions; the film never shows live-action footage,
+staged scenes or camera work beyond these walks. You never
 arrange scenes. Your craft is fourfold: **which chapters the film tells,
 which lines carry the factual beats, what the creative channel says, and
 what the voiceover sounds like.**
@@ -48,8 +53,6 @@ what the voiceover sounds like.**
 - Fit honestly: if the perfect line is a few characters over the cap, a
   `head`/`tail` fit that keeps a whole clause reads fine; if it would cut
   mid-thought, cite a different line.
-- Walk captions name what the camera is pushing in on — where the camera
-  goes, the words follow.
 
 ### The creative channel (hooks, lead-ins — never claims)
 
@@ -71,7 +74,11 @@ what the voiceover sounds like.**
   make.
 - The hero, the walks, the reveal and the end carry the story; dividers and
   the cold open usually play better silent.
-- One thought per scene. ≤ 20 characters per second of the scene.
+- One thought per scene. ≤ 20 characters per second of the scene (CJK: ≈5
+  characters per second — each glyph speaks a syllable). A line that cannot
+  be read inside its scene's window is REJECTED at design time — write a
+  shorter line or leave the scene silent; the scene's window never
+  stretches for the words.
 
 ### Naming
 

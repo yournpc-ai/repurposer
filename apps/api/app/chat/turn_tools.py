@@ -29,6 +29,7 @@ from app.chat.perception import perception_chat_tools
 from app.models.schemas import (
     ChatAnswerArgs,
     ChatAskArgs,
+    DesignStoryboardArgs,
     EditGraphArgs,
     EditOutputArgs,
     PlanAnswerArgs,
@@ -41,6 +42,36 @@ from app.models.schemas import (
 
 # The plan path (pre-first-run intent router) — InferredIntent's four actions:
 # draft → present_plan, ask → ask_user, start → start_run, answer → answer.
+# design_storyboard (ADR-129 非终态): the film family's design beat is a
+# NON-terminal call — the system drafts and validates the board inside
+# execute, settles the design activity with its real elapsed, and hands the
+# SAVED board's full fact sheet back to the model, whose ONE next message
+# is the board's only presentation (2026-10-18 裁决 — 工具产生真实分镜,
+# LLM 负责唯一表达; no program markdown row exists). The model then
+# answers or — when production intent is already present and no review
+# hold stands — enters the proposal tools.
+_DESIGN_STORYBOARD_TOOL = ChatTool(
+    name="design_storyboard",
+    terminal=False,
+    description=(
+        "Design the website film's storyboard (or revise the presented one "
+        "with new feedback): the system drafts and validates the board "
+        "inside the call and saves it with its version — no plan docks "
+        "and nothing starts here. The call returns the saved board's FULL "
+        "facts (execution timeline, per-scene content and narration); your "
+        "ONE next message is the board's only presentation — introduce it, "
+        "render the scene table from those facts verbatim, then the next "
+        "step. When production intent is already present and no review "
+        "hold stands, follow with the film plan (present_plan / "
+        "propose_tasks) carrying the same params. Call it once the "
+        "creative direction is agreed (a 'yes' to your direction "
+        "question, an explicit storyboard request, or new feedback on the "
+        "presented board). Speak the direction you're designing in as your "
+        "message text BEFORE calling this."
+    ),
+    params_model=DesignStoryboardArgs,
+)
+
 PLAN_TOOLS = [
     ChatTool(
         name="present_plan",
@@ -76,13 +107,7 @@ PLAN_TOOLS = [
             "a revision is present_plan, not this). Speak the work-start "
             "line BEFORE calling this — one short sentence: the work is "
             "starting, they can keep chatting or leave, it finishes in "
-            "the background. A plan carrying a launch_film task holds for "
-            "the storyboard review: the start goes through only after the "
-            "storyboard card has landed in the conversation and the user "
-            "approved it — a plain 'go' before the card lands is rejected "
-            "(answer instead: it's still being drafted); the ONLY waiver "
-            "is the user explicitly saying they don't need the storyboard "
-            "(skip_storyboard_review=true)."
+            "the background."
         ),
         params_model=StartRunArgs,
     ),
@@ -90,9 +115,11 @@ PLAN_TOOLS = [
         name="answer",
         description=(
             "Reply with information only — capability questions, explanations "
-            "of the project, small talk. No plan, no question, no run: your "
+            "of the project, small talk. No plan or run: your "
             "spoken message IS the reply. Work the user has explicitly "
-            "named never lands here — it docks as a plan. Always speak the "
+            "named docks as a plan once its creative direction is agreed. The "
+            "website-film direction stage may end here with its grounded "
+            "summary and next-step question. Always speak the "
             "reply as your message text ALONGSIDE the call — a bare answer "
             "call that says nothing is rejected."
         ),
@@ -187,8 +214,9 @@ CHAT_TOOLS = [
             "readouts (call get_run_status first), explanations of existing "
             "outputs, small talk. Work requests go to the proposal tools; an "
             "ambiguous reading goes to ask_user — answer is never the lazy out. "
-            "Work the user has explicitly named never lands here — it "
-            "docks as a proposal or the fitting revision verb. Always speak "
+            "The website-film creative-direction stage may end here before "
+            "a proposal exists; other work docks as a proposal or the "
+            "fitting revision verb. Always speak "
             "the reply as your message text ALONGSIDE the call — a bare "
             "answer call that says nothing is rejected."
         ),
@@ -205,44 +233,54 @@ CHAT_TOOLS = [
 # get_artifact rides BOTH paths (iter-3 S6): the exploration artifacts the
 # discovery chain births are plan-path rows too, and revise_selects (its
 # edit-prep reader) lives on both paths.
-PLAN_READ_TOOLS = perception_chat_tools(
-    "get_understanding",
-    "get_asset",
-    "get_craft_skeleton",
-    "search_music",
-    "list_caption_styles",
-    # 证据 reads (迭代一): material reads by family — a discovery goal's
-    # first turn is plan-path (fresh project), so the transcript evidence
-    # substrate rides here too (2026-09-22).
-    "search_transcript",
-    "get_segment",
-    "get_artifact",
-    # get_graph (ADR-111 §7): the plan-ready reveal shows the canvas BEFORE
-    # any run — the plan path's model must be able to read what it shows.
-    "get_graph",
-    # The web pair: a link can arrive on the very first turn (「这个网站你
-    # 看看？」/「帮我做支网站介绍短片」) — reading it is altitude-free.
-    "get_web_page",
-    "search_web",
-)
-CHAT_READ_TOOLS = perception_chat_tools(
-    "get_output_spec",
-    "get_node",
-    "get_understanding",
-    "list_caption_styles",
-    "search_music",
-    "get_run_status",
-    "list_runs",
-    "get_pending_plan",
-    "get_asset",
-    "get_craft_skeleton",
-    "search_transcript",
-    "get_segment",
-    "get_artifact",
-    "get_graph",
-    "get_web_page",
-    "search_web",
-)
+# design_storyboard (ADR-129 非终态) rides BOTH paths' NON-terminal sets:
+# the design beat observes and iterates like a read — the loop's checkpoint
+# seat carries its framing speech, the observation carries the design facts,
+# the model answers or enters the proposal tools afterwards.
+PLAN_READ_TOOLS = [
+    *perception_chat_tools(
+        "get_understanding",
+        "get_asset",
+        "get_craft_skeleton",
+        "search_music",
+        "list_caption_styles",
+        # 证据 reads (迭代一): material reads by family — a discovery goal's
+        # first turn is plan-path (fresh project), so the transcript evidence
+        # substrate rides here too (2026-09-22).
+        "search_transcript",
+        "get_segment",
+        "get_artifact",
+        # get_graph (ADR-111 §7): the plan-ready reveal shows the canvas BEFORE
+        # any run — the plan path's model must be able to read what it shows.
+        "get_graph",
+        # The web pair: a link can arrive on the very first turn (「这个网站你
+        # 看看？」/「帮我做支网站介绍短片」) — reading it is altitude-free.
+        "get_web_page",
+        "search_web",
+    ),
+    _DESIGN_STORYBOARD_TOOL,
+]
+CHAT_READ_TOOLS = [
+    *perception_chat_tools(
+        "get_output_spec",
+        "get_node",
+        "get_understanding",
+        "list_caption_styles",
+        "search_music",
+        "get_run_status",
+        "list_runs",
+        "get_pending_plan",
+        "get_asset",
+        "get_craft_skeleton",
+        "search_transcript",
+        "get_segment",
+        "get_artifact",
+        "get_graph",
+        "get_web_page",
+        "search_web",
+    ),
+    _DESIGN_STORYBOARD_TOOL,
+]
 
 
 # ── 工具名回响 sanitizer (2026-09-30 用户拍板 — 彻底删掉) ──────────────────

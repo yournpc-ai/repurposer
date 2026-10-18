@@ -17,43 +17,7 @@ import {
   type QuestionAnswer,
 } from "./AnsweredQuestion"
 import type { ActivityFramePayload } from "@/lib/chat-stream"
-import type { CandidateMemberPayload, StoryboardPayload } from "@/lib/chatStreamFrames"
-
-/** The storyboard block's row parser (ADR-120 §1 — intent.type ===
- * "storyboard"): read-tolerant, an off-shape dump reads as no block (the
- * row then falls through to the plain-prose walk with empty content and
- * skips via the no-empty-bubble law). */
-export function storyboardBlock(intent: unknown): StoryboardPayload | undefined {  const data = (intent ?? {}) as Record<string, unknown>
-  if (data.type !== "storyboard") return undefined
-  const sb = (data.storyboard ?? {}) as Record<string, unknown>
-  const scenes = Array.isArray(sb.scenes) ? sb.scenes : null
-  if (scenes === null) return undefined
-  return {
-    type: "storyboard",
-    version: typeof data.version === "number" ? data.version : 1,
-    storyboard: {
-      name: typeof sb.name === "string" ? sb.name : null,
-      scenes: scenes as StoryboardPayload["storyboard"]["scenes"],
-    },
-    pages: Array.isArray(data.pages) ? (data.pages as string[]) : [],
-    instruction: typeof data.instruction === "string" ? data.instruction : null,
-    voiceover: data.voiceover !== false,
-    music_mood: typeof data.music_mood === "string" ? data.music_mood : null,
-    aspect: typeof data.aspect === "string" ? data.aspect : "16:9",
-    language: typeof data.language === "string" ? data.language : null,
-  }
-}
-
-/** 分镜起草穷举行 (法2, 统一迟延): the deferred seat's terminal draft
- * failure — intent.type === "storyboard_draft_failed". The row replays as
- * PLAIN PROSE (the honest speech IS the content); the marker folds the
- * drafting placeholder (the review hold stands, but the wait is over). */
-export function storyboardDraftFailed(intent: unknown): boolean {
-  return (
-    ((intent ?? {}) as Record<string, unknown>).type ===
-    "storyboard_draft_failed"
-  )
-}
+import type { CandidateMemberPayload } from "@/lib/chatStreamFrames"
 
 /** One persisted activity row's render frame (ADR-108 数组行): the
  * transcript array's activity entries — per-frame rows written at
@@ -123,14 +87,6 @@ export interface OverlayMessage {
    * it in place (chat 决策永不成节点 — the card is the selection state's
    * one seat). */
   candidates?: CandidateSurface
-  /** 分镜块 (ADR-120 §1): a film plan's storyboard table in the message
-   * flow — replayed from the row's intent dump ({type:"storyboard"}) or
-   * pushed live. ``superseded`` folds every version but the latest into a
-   * chip (PlanVersionChip 同律 — old versions stay visible, folded). */
-  storyboard?: { payload: StoryboardPayload; superseded: boolean }
-  /** 分镜起草穷举行 (法2): the row is the deferred seat's terminal draft
-   * failure (plain prose) — the marker folds the drafting placeholder. */
-  storyboardDraftFailed?: boolean
 }
 
 /** The candidate card's data (C8-c): ordinal = the member's array index
@@ -176,24 +132,6 @@ export function triggerSuggestions(intent: unknown): SuggestionPill[] | undefine
       text: (s.text as string | null) ?? null,
       output_id: (s.output_id as string | null) ?? null,
     }))
-}
-
-/** The trigger's own name off a trigger_review dump ("run_completed" /
- * "craft_decompiled" — ADR-102 retired "understanding_warmed"). Same read
- * tolerance as triggerSuggestions. */
-export function triggerName(intent: unknown): string | undefined {
-  const data = (intent ?? {}) as Record<string, unknown>
-  if (data.type !== "trigger_review") return undefined
-  return typeof data.trigger === "string" ? data.trigger : undefined
-}
-
-/** The trigger dump's ref (ADR-128 — the storyboard beats' ref = the dock's
- * question id; the dock's watch keys the ready beat's arrival on it).
- * Same read tolerance as triggerName. */
-export function triggerRef(intent: unknown): string | undefined {
-  const data = (intent ?? {}) as Record<string, unknown>
-  if (data.type !== "trigger_review") return undefined
-  return typeof data.ref === "string" ? data.ref : undefined
 }
 
 /** A persisted activity array row (ADR-108 §2 — 每帧一行): intent =
@@ -254,8 +192,8 @@ type MaterialBeatRow = ActivityRowFrame
  * the dock's synthesized now-line); the replay renders the past-tense key.
  * `duration_ms` carries the user-perceived reading span (upload→processed)
  * so the settled row whispers "· 41s" like every other settled row; `at`
- * (ADR-128) carries the beat's real start when the span predates the
- * landing (the storyboard draft), feeding the fold's clock.
+ * carries the beat's real start when the span predates the
+ * landing (the retired storyboard draft beat), feeding the fold's clock.
  * Same read tolerance as triggerSuggestions — anything off-shape parses to
  * undefined (a plain assistant row), never a crash. */
 export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
@@ -268,7 +206,7 @@ export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
   const duration_ms =
     typeof data.duration_ms === "number" ? data.duration_ms : undefined
   const ref = typeof data.ref === "string" ? data.ref : "beat"
-  // The beat's own birth stamp (ADR-128): a beat whose span STARTS before
+  // The beat's own birth stamp: a beat whose span STARTS before
   // its row lands (the storyboard draft) carries `at` so the fold's clock
   // measures the real span, never the landing instant. Absent on beats
   // whose span starts at landing — the row's created_at falls in.
@@ -306,12 +244,11 @@ export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
       count,
     }
   }
-  // 起草落定节拍 (ADR-128): a film dock's deferred draft settled — the
-  // live "Drafting…" now-line folds into the walk as this row, and its
-  // segment (closed by the storyboard block landing right after) reads
-  // [Worked ~xxx] with the REAL drafting span (at = the draft's start).
-  // The draft KIND survives 落定即退役's filter: that retirement keys on
-  // chat.activity.* plan-draft spans, never on a born-settled beat.
+  // 起草落定节拍（legacy 回放）: a film dock's deferred draft
+  // settled — the row replays as this settled activity unit, its `at`
+  // carrying the REAL drafting span's start. The draft KIND survives
+  // 落定即退役's filter: that retirement keys on chat.activity.* plan-draft
+  // spans, never on a born-settled beat.
   if (data.beat === "storyboard_drafting") {
     return {
       activity_id: `beat-storyboard-${ref}`,
@@ -467,6 +404,12 @@ export interface QuestionPayload {
   /** 决策包阅读层 (iter-2 ③): task_book only — the Content Plans behind
    * the compiled chain; empty on the router-drafted docks (读容忍). */
   plans?: DecisionPlanRow[]
+  /** 分镜 echo (dock echo 形态): task_book only — the row's content is the
+   * film dock's echo (prose + the code-rendered storyboard markdown + the
+   * estimate tail), which replays as a normal flow message even while the
+   * dock is still pending (the dock itself revives via the pending
+   * fetch). Absent on every other dock shape. */
+  storyboard_echo?: boolean
 }
 
 /** A question-carrying chat message (the ask_user machinery): the dock's pending
@@ -655,6 +598,20 @@ export function mapHistoryRows(
             at: m.created_at,
           })
         }
+      } else if (m.question.kind === "task_book" && m.question.storyboard_echo) {
+        // 分镜 echo 回放 (dock echo 形态): a PENDING film dock's echo —
+        // prose + the code-rendered storyboard markdown + the estimate
+        // tail — replays as a normal flow message while the dock itself
+        // revives through the pending-question fetch. No run stamp: the
+        // run only exists once the dock is answered.
+        if ((m.content ?? "").trim()) {
+          history.push({
+            id: `${m.id}-echo`,
+            role: "assistant",
+            content: m.content ?? "",
+            at: m.created_at,
+          })
+        }
       } else if (m.question.kind === "question" && !hasOptions) {
         // 形态律 (ADR-053 R1): a pending TEXT question never docks —
         // it lives in the flow as a plain assistant message (only
@@ -684,30 +641,25 @@ export function mapHistoryRows(
       // 永不渲染行 (ADR-108): the rejection forensics ledger and legacy
       // aggregate logs skip silently — never an empty bubble.
       if (isNonRenderIntent(m.intent)) continue
-      // 分镜块回放 (ADR-120 §1): a storyboard row replays as a table block
-      // in its array position — version folding lands after the walk
-      // (every version but the latest marks superseded).
-      const sb = storyboardBlock(m.intent)
-      if (sb !== undefined) {
-        history.push({
-          id: m.id,
-          role: "assistant",
-          content: "",
-          at: m.created_at,
-          storyboard: { payload: sb, superseded: false },
-        })
-        continue
-      }
-      // 分镜起草穷举行回放 (法2): plain prose + the marker that folds the
-      // drafting placeholder on refresh (the poll's live branch同律).
-      if (storyboardDraftFailed(m.intent)) {
-        if (!(m.content ?? "").trim()) continue  // no-empty-bubble law
+      const intentType = ((m.intent ?? {}) as Record<string, unknown>).type
+      // 退役分镜块 (dock echo 形态): legacy storyboard block rows (usually
+      // empty content) skip silently — an old project shows only the old
+      // storyboard_ready markdown row. A legacy draft-failure row's real
+      // prose falls through and replays as ordinary text (no marker); an
+      // empty one skips (no-empty-bubble law).
+      if (intentType === "storyboard") continue
+      if (intentType === "storyboard_draft_failed" && !(m.content ?? "").trim()) continue
+      // 失败行回放: a persisted turn-failure row replays as the SAME grey
+      // meta row the live turn.failed frame renders — a refresh keeps the
+      // failure's stage and its lawful next step instead of dropping them.
+      if (intentType === "turn_failed") {
+        if (!(m.content ?? "").trim()) continue // never an empty bubble
         history.push({
           id: m.id,
           role: "assistant",
           content: m.content ?? "",
+          meta: "error",
           at: m.created_at,
-          storyboardDraftFailed: true,
         })
         continue
       }
@@ -724,6 +676,8 @@ export function mapHistoryRows(
         })
         continue
       }
+      // An unknown (or empty) beat row skips — never an empty bubble.
+      if (intentType === "material_beat" && !(m.content ?? "").trim()) continue
       // activity 数组行回放 (ADR-108 — 每帧一行): one persisted frame per
       // row, rendered at its array position (persisted order IS render
       // order — the walk never re-sorts).
@@ -740,7 +694,7 @@ export function mapHistoryRows(
       }
       // A malformed activity row (frame off-shape) skips — never an empty
       // bubble.
-      if (((m.intent ?? {}) as Record<string, unknown>).type === "activity") {
+      if (intentType === "activity") {
         continue
       }
       // Candidate Surface 回放 (v4.2 C8-c): the turn's candidates_log events
@@ -788,24 +742,6 @@ export function mapHistoryRows(
         // from its intent dump — undefined on every other shape.
         suggestions: triggerSuggestions(m.intent),
       })
-    }
-  }
-  // 分镜版本折叠 (ADR-120 §1 — PlanVersionChip 同律): every storyboard
-  // version but the LATEST folds to a chip; old versions stay visible,
-  // never rendered as a second full table.
-  let lastStoryboardIdx = -1
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i].storyboard !== undefined) {
-      lastStoryboardIdx = i
-      break
-    }
-  }
-  if (lastStoryboardIdx > 0) {
-    for (let i = 0; i < lastStoryboardIdx; i++) {
-      const h = history[i]
-      if (h.storyboard !== undefined) {
-        history[i] = { ...h, storyboard: { ...h.storyboard, superseded: true } }
-      }
     }
   }
   return history

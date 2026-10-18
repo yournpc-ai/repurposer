@@ -288,7 +288,12 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
         ToolEntry(
             name="launch_film",
             description="Direct a polished intro film of a website from a "
-            "captured web page (its own copy over its screenshots) — ONLY "
+            "captured web page — a fixed keynote arc built from the page's "
+            "own words over its real screenshots: motion text, a brand hero "
+            "card, camera walks over the captured sections, chapter cards, "
+            "a numbers-evidence plate, a reveal and a closing card, with a "
+            "music bed, spoken narration and burned-in captions. Never "
+            "live-action footage, staged scenes or free camera work. ONLY "
             "when the user pasted a link and wants a film of it; needs no "
             "uploaded media",
             behavior="probabilistic",
@@ -385,7 +390,8 @@ _MENU_PHRASES: list[tuple[str, str]] = [
     "the camera sits on whoever is talking or follows a moving speaker, "
     "matched automatically to the footage"),
     ("align_stills", "photo-slideshow videos from stills + audio"),
-    ("launch_film", "a polished intro film of a website from its link"),
+    ("launch_film", "a narrated intro film of a website from its link — its "
+    "real pages walked on camera, motion text, music and captions"),
 ]
 
 

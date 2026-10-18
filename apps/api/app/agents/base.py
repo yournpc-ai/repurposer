@@ -328,6 +328,7 @@ class Agent(Generic[OutT]):
                     messages=messages,
                     response_model=self.schema,
                     temperature=self.temperature,
+                    timeout_s=self.timeout_s,
                 )
             return await self.client.generate(
                 messages=messages,

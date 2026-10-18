@@ -1,0 +1,78 @@
+{
+ "family": "film",
+ "name": "smoke",
+ "theme": {
+  "canvas": "#0B0B0B",
+  "ink": "#FFFFFF"
+ },
+ "aspect": "16:9",
+ "scenes": [
+  {
+   "type": "ui",
+   "frames": 90,
+   "image": "https://repurposer.tos-ap-southeast-1.volces.com/8cdabcaa-b16b-45f3-b5b5-7e883037147b/outputs/projects/9efdd699-3fcd-4983-9373-441557cfe507/demo-film-s0.png",
+   "url": "linear.app",
+   "frame": false,
+   "focuses": [
+    {
+     "at": 0.0,
+     "x": 0.5,
+     "y": 0.5,
+     "zoom": 1.0
+    },
+    {
+     "at": 1.5,
+     "x": 0.3,
+     "y": 0.6,
+     "zoom": 1.8
+    }
+   ],
+   "captions": [
+    {
+     "at": 1.0,
+     "text": "Full-bleed camera test"
+    }
+   ]
+  },
+  {
+   "type": "plate",
+   "frames": 120,
+   "title": "Proof by numbers",
+   "backdrop": "aurora",
+   "cards": [
+    {
+     "big": "256 B",
+     "label": "Key size"
+    },
+    {
+     "big": "99.99%",
+     "label": "Uptime"
+    },
+    {
+     "big": null,
+     "label": "Open standards"
+    }
+   ]
+  },
+  {
+   "type": "plate",
+   "frames": 90,
+   "title": "Mist variant",
+   "backdrop": "mist",
+   "cards": [
+    {
+     "big": "10x",
+     "label": "Faster"
+    }
+   ]
+  },
+  {
+   "type": "end",
+   "frames": 75,
+   "name": "Acme",
+   "tagline": "Ship faster",
+   "url": "example.com",
+   "logo_url": null
+  }
+ ]
+}

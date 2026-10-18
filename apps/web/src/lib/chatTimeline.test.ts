@@ -97,6 +97,26 @@ describe("buildConversationUnits — the array map (ADR-108)", () => {
     ])
     expect(units.map(unitId)).toEqual(["user", "milestone", "reply"])
   })
+
+  it("the storyboard span's settle RENDERS — the one 落定即退役 exception (分镜不是开工)", () => {
+    // 2026-10-17 user ruling: no docked card absorbs the design beat — the
+    // markdown message is the deliverable and the settled row (carrying its
+    // honest duration) is the receipt; it folds like any completed span.
+    const units = buildConversationUnits([
+      msg("user"),
+      activityMsg("sb-done", {
+        kind: "draft",
+        key: "chat.activity.storyboardDone",
+        duration_ms: 32500,
+      }),
+      msg("reply"),
+    ])
+    expect(units.map(unitId)).toEqual(["user", "sb-done", "reply"])
+    const folded = foldActivityUnits(units)
+    const fold = foldOf(folded[1])
+    expect(fold.rows.map((r) => r.activity_id)).toEqual(["sb-done"])
+    expect(fold.rows[0].duration_ms).toBe(32500)
+  })
 })
 
 describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
@@ -246,7 +266,7 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
     expect(rows[0]).toMatchObject({ key: "chat.inspectingDone.transcript" })
   })
 
-  it("elapsed = the segment wall clock — first row's birth → the prose's arrival", () => {
+  it("elapsed ends at completed work, never at a later prose reply", () => {
     const units = foldActivityUnits(
       buildConversationUnits([
         read("r1", { at: "2026-09-23T08:00:01Z", duration_ms: 400 }),
@@ -254,7 +274,7 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
         assistantMsg("reply", "2026-09-23T08:00:10Z"),
       ]),
     )
-    expect(foldOf(units[0]).elapsedMs).toBe(9000)
+    expect(foldOf(units[0]).elapsedMs).toBe(2000)
   })
 
   it("a USER-message boundary is no honest end — falls back to the last row's own end", () => {
@@ -290,7 +310,7 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
     expect(foldOf(units[0]).elapsedMs).toBe(4000)
   })
 
-  it("openTail marks ONLY the walk's trailing fold — the renderer withholds it while busy (the summary materializes with the closing prose)", () => {
+  it("openTail marks ONLY the walk's trailing fold — completed tail remains displayable while the turn continues", () => {
     // A fold closed by ANY following unit (the prose's boundary, a user
     // message, a run-carrying row) is settled — openTail stays false. The
     // trailing fold (no boundary exists yet) is the one open segment.

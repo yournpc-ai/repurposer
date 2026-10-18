@@ -62,6 +62,13 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
         "en": "The voice service is unavailable right now — please try again later",
         "zh": "配音服务暂时不可用，请稍后重试",
     },
+    # A film narration line does not fit its scene even after the bounded
+    # speed ladder — a design problem (the line is too long), never an
+    # outage. The fix is a shorter line via the design beat.
+    "film_narration_fit": {
+        "en": "One narration line ran longer than its scene even after pacing adjustments — ask me to redesign the storyboard with a shorter line.",
+        "zh": "有一句旁白调速后仍然放不下它的场景——让我重新设计分镜，把这句改短一点。",
+    },
     "storage_unavailable": {
         "en": "Saving the file failed — please try again",
         "zh": "文件保存失败，请重试",
@@ -95,6 +102,16 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
     # The film storyboard's bounded rewrite exhausted (3 candidates, each
     # rejected by the grounding validator) — the honest line names what the
     # film is made of, never the machinery.
+    "film_storyboard_timeout": {
+        "en": "The storyboard took too long. No production has started; ask me to retry the storyboard.",
+        "zh": "分镜设计等待过久，尚未开工。可以让我重新设计分镜。",
+    },
+    # The design beat's capture wait outlasted its ceiling — the draft
+    # refused a half-captured world; nothing was designed, nothing started.
+    "film_capture_timeout": {
+        "en": "The page capture didn't finish in time, so no storyboard was designed — ask me to design it again.",
+        "zh": "网页采集没能及时完成，分镜尚未设计。可以让我重新设计。",
+    },
     "film_storyboard_ungrounded": {
         "en": "I couldn't draft a faithful film of that page — try a page with clearer copy, or tell me what to lead with.",
         "zh": "没能为那个页面写出忠实的短片文案——换一页文案更清楚的，或告诉我先突出什么。",

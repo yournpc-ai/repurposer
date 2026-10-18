@@ -27,8 +27,16 @@ class VoiceError(Exception):
     client (N-29), so the voice wrapper speaks its own error; callers up the
     stack (dub procedure) map it onto their error contract."""
 
-    # Every voice failure reads as the same user line (pipeline/errors.py).
+    # Every voice failure reads as the same user line (pipeline/errors.py)
+    # unless the raise site names a more honest one (e.g. the film narration
+    # fit failure is a design problem — a line too long for its scene —
+    # never an outage, so it carries its own key).
     user_key = "voice_unavailable"
+
+    def __init__(self, message: str, *, user_key: str | None = None) -> None:
+        super().__init__(message)
+        if user_key is not None:
+            self.user_key = user_key
 
 # Map our ISO codes to MiniMax `language_boost` names.
 _LANG_BOOST = {

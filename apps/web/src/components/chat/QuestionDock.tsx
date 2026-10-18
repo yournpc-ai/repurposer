@@ -6,10 +6,7 @@
  * mechanism is the dock — no per-kind dock components):
  * - task_book: RETIRED (ADR-111, 2026-10-08 — the confirm dock card
  *   family is gone: the plan's review face is the canvas's draft nodes,
- *   the total estimate rides the dock echo's code-composed tail (the
- *   storyboard_review hold excepted — 2026-10-16 ruling: its price
- *   disclosure is the draft nodes' per-node estimates, the echo stays
- *   bare), and the
+ *   the total estimate rides the dock echo's code-composed tail), and the
  *   confirm gesture is the user's own words — start_run via sendChat,
  *   口头确认律 ADR-092).
  * - question (形态律 ADR-053 R1, 阻塞形态 2026-09-04 用户拍板翻回): * - question (形态律 ADR-053 R1, 阻塞形态 2026-09-04 用户拍板翻回):
