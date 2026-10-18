@@ -3127,3 +3127,21 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 **Consequences**: 全灭 run 的用户体验从「静默红收据」变为「通报原因 + 可点下一步」；既有入场/落点双门（在飞 defer、pending plan 静默）、按 (trigger, ref) 去重、fire-and-forget 教义全部原样继承。仪表层可后补 staged-failure 剧本（活闸矩阵暂不锁失败通报形态——制造确定性全败 run 需专用 fixture）。
 
 **Related**: ADR-077（触发回合机制）/ ADR-074②（run 判决——全灭沉默腿被本条翻案）/ ADR-081（选项语法统一律）/ ADR-134（同批 L1：设计期可讲性闸校准，治本；本条 = 治标的诚实面）
+
+## ADR-136: film 旁白窗口弹性——有界零和借帧 + 披露，永不静默改写分镜
+
+**Status**: Decided（2026-10-18 用户拍板：三层修复的 L2——「一开始的相关参数不对，所以合成才出现问题；结果一定是要产出的呀」）
+
+**Context**: ADR-130 的适配法在「速度梯也救不回」时只有一条路：honest fail（`film_narration_fit`）。7048c4b4 事故实证这条路对演示场景太脆——结尾场景一句旁白差 0.7s，整部片 FAILED，零产出。设计期闸（L1 校准）能大幅降低发生率，但嗓音方差永远存在；合成期需要一个介于「1.35× 超速梯」与「整个 run 失败」之间的有界缓冲。
+
+**Decision**:
+
+1. **窗口弹性（window flex）= 速度梯与 honest fail 之间的唯一救援座**（`tools/film/narration.py` 的 `_flex_frames_for_overruns` 纯核）：旁白场景从**静音场景**借帧把窗口撑到放得下已合成的音频——音频不重合成不重计费，帧动音频不动。
+2. **三条硬界**：① 零和——Σ frames（总时长、已计费的 film_seconds）永不动；② 双侧封顶——捐赠场景总计最多让出 30% 且永不跌破结构地板（`_scene_floor`），接收场景最多撑 +40%；③ 只在今天会失败的路径上激活——速度梯能放下的词永不触碰 flex，绿色渲染逐字节不变。
+3. **救不回 = 原法不变**：有界借帧盖不住缺口时按原样 honest fail，错误明细同时点名真实尝试与被尝试的 flex 界（设计问题走设计拍，永不是渲染期糊弄）。
+4. **披露是法律**：flex 移动记在 output payload（`narration_flex`），run_completed 收官评审的 DELIVERY FACTS 携带 `pace=adjusted(+Xs)` 事实行，叙述者**必须**如实转述（自己的节奏调整口吻，永不说是缺陷，永不跳过不说）——这是「展示=执行」的有界披露容差修正案：分镜表的逐场景秒数允许 ±界内偏差，代价 = 收官句必说。
+5. 节拍吸附让位：flex 在 beat snap 之后运行且不再回吸——词放得下是硬需求，节拍对齐是 ±0.2s 的软服务（法条本就说「the grid serves the cut」）。
+
+**Consequences**: 7048c4b4 形态（差 <1s）今后自愈且总时长不变；验收表上的分镜秒数与成片可在界内偏差（收官句披露）；超出边界的失败路径与文案完全不变。捐赠顺序确定性（余量降序 + 场景序 tiebreak），回放可复现。
+
+**Related**: ADR-130（配音拟合梯——flex 是其 exhausted 分支的延伸）/ ADR-135（同批 L3：救不回时 run_failed 通报座）/ ADR-129（展示=执行——本条引入有界披露容差）/ ADR-134（同批 L1：设计期可讲性闸校准，治本）

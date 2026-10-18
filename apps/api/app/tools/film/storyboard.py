@@ -4050,14 +4050,32 @@ class LaunchFilm(NodeBase):
 
             persona = await resolve_persona(db, project)  # None-safe
             voice_block = (persona.voice or None) if persona is not None else None
-            narration_keys = await synthesize_film_narration(
+            # 窗口弹性 (ADR-136): a line that outruns its scene past the
+            # whole speed ladder gets ONE bounded rescue — frames stolen
+            # from silent scenes, zero-sum (the pre-metered film seconds
+            # stay exact), disclosed on the output payload. ``frames`` is
+            # reassigned to the adjusted allocation the spec MUST build
+            # from; untouched when no flex fires (green renders stay
+            # byte-identical).
+            narration_keys, frames, flex_moves = await synthesize_film_narration(
                 output_id=output.id,
                 project=project,
                 storyboard=storyboard,
                 frames=frames,
+                floors=[_scene_floor(sc) for sc in storyboard.scenes],
                 voice_id=resolve_film_voice(voice_block),
                 language=output.language,
             )
+            if flex_moves:
+                output.payload = {
+                    **output.payload,
+                    "narration_flex": {
+                        "borrowed_s": round(
+                            sum(m["gained_s"] for m in flex_moves), 2
+                        ),
+                        "moves": flex_moves,
+                    },
+                }
 
         output.render_spec = build_film_spec(
             storyboard,

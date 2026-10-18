@@ -4,12 +4,22 @@ One T2A call per narrated scene, fitted to the scene's allocated window
 over a bounded ladder (pass 1 at speed 1.0; an overrun re-synthesizes
 faster, scaled by the measured shortfall, ≤1.35× — the dub chain's fit
 law, one narration per scene, at most ``_FIT_PASSES`` passes). A line
-that STILL does not fit fails the step honestly (VoiceError with the
-``film_narration_fit`` key — a design problem, never an outage line),
-naming the real attempts. The approved storyboard is never silently
-rewritten, and its audio is never quietly trimmed past meaning; the fix
-is a shorter line through the design beat, not a render-time fudge. One
-scene's failure cancels its siblings — a dead step bills no further
+that STILL does not fit gets ONE bounded rescue before failing: the
+window flex (ADR-136) — the scene steals frames from the film's SILENT
+scenes (zero-sum: the total runtime never moves; bounded on both sides:
+a donor never loses more than ``_FLEX_DONOR_MAX_FRAC`` and never dips
+under its structural floor, a receiver never gains more than
+``_FLEX_STRETCH_MAX_FRAC``). The flex activates ONLY on the
+otherwise-fatal path — a line the ladder fits never touches it, so green
+renders stay byte-identical — and every steal is disclosed on the
+output's payload for the closing review's facts (展示=执行's bounded
+tolerance, disclosed, never silent). A line the flex cannot cover fails
+the step honestly (VoiceError with the ``film_narration_fit`` key — a
+design problem, never an outage line), naming the real attempts AND the
+tried flex. The approved storyboard is never silently rewritten, and its
+audio is never quietly trimmed past meaning; beyond the bounded flex the
+fix is a shorter line through the design beat, not a render-time fudge.
+One scene's failure cancels its siblings — a dead step bills no further
 synthesis passes. Each scene's audio is its own storage object
 (``<output_id>_narr_<i>.mp3``); the renderer plays it inside the scene's
 Sequence, so scene boundaries trim honestly. The synthesis also returns the
@@ -26,7 +36,9 @@ narration lines), audio keys out.
 
 import asyncio
 import io
-from typing import TYPE_CHECKING
+import math
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from starlette.concurrency import run_in_threadpool
@@ -55,6 +67,106 @@ DEFAULT_FILM_VOICE_ID = "presenter_male"
 # pass fires (the renderer trims at the scene boundary — a small overhang
 # reads as a natural sentence tail).
 _WINDOW_ALLOW = 0.4
+# Window flex bounds (ADR-136): the steal is zero-sum (Σ frames — the
+# film's total runtime — never moves) and doubly bounded — a silent donor
+# never loses more than this fraction of its frames across ALL steals and
+# never dips under its structural floor; a narrated receiver never gains
+# more than this fraction on top of its own frames. Beyond the bounds the
+# step fails honestly — the flex is a rescue, never a rewrite.
+_FLEX_DONOR_MAX_FRAC = 0.30
+_FLEX_STRETCH_MAX_FRAC = 0.40
+
+
+@dataclass
+class _SceneOverrun:
+    """A scene whose line outruns its window past the WHOLE ladder. The
+    audio rides in memory (billed, decoded, never yet saved) until the
+    flex verdict: covered → saved against the stretched window; uncovered
+    → dropped unsaved and the step fails honestly (the pre-flex law)."""
+
+    audio: bytes
+    duration: float
+    attempts: list[tuple[float, float]]
+
+
+async def _save_narration(project: "Project", output_id: "UUID", index: int, audio: bytes) -> str:
+    """One scene's audio → its own storage object (the renderer reads it
+    inside the scene's Sequence)."""
+    key = str(
+        await get_output_path(
+            project.id, project.user_id, f"{output_id}_narr_{index}.mp3"
+        )
+    )
+    await save(key, audio, content_type="audio/mpeg")
+    return key
+
+
+def _flex_frames_for_overruns(
+    *,
+    frames: list[int],
+    floors: list[int],
+    silent: set[int],
+    overruns: dict[int, float],
+    fps: int,
+) -> tuple[list[int], list[dict[str, Any]]] | None:
+    """The window flex's pure core (ADR-136): overrun scenes steal frames
+    from the film's SILENT scenes so the decoded line fits its stretched
+    window (the already-synthesized audio is kept — the frames move, the
+    audio never re-bills). Zero-sum by construction (Σ frames invariant),
+    bounded on both sides, deterministic (donors give in descending spare
+    capacity, ties by scene order; a donor's 30% loss cap spans ALL the
+    steals it feeds). Returns ``(adjusted_frames, disclosure_moves)``, or
+    None when the bounded steal cannot cover a shortfall — the caller
+    then fails honestly, exactly the pre-flex law."""
+    adjusted = list(frames)
+    stolen: dict[int, int] = {}
+    moves: list[dict[str, Any]] = []
+    for i in sorted(overruns):
+        need = math.ceil((overruns[i] - _WINDOW_ALLOW) * fps) - adjusted[i]
+        if need <= 0:
+            continue  # defensive: an overrun by definition needs ≥1 frame
+        if need > int(frames[i] * _FLEX_STRETCH_MAX_FRAC):
+            return None  # the stretch cap binds — a redesign, not a rescue
+        donors = sorted(
+            (
+                (
+                    j,
+                    min(
+                        adjusted[j] - floors[j],
+                        int(frames[j] * _FLEX_DONOR_MAX_FRAC) - stolen.get(j, 0),
+                    ),
+                )
+                for j in silent
+                if j != i
+            ),
+            key=lambda pair: (-pair[1], pair[0]),
+        )
+        gained = 0
+        gifts: list[tuple[int, int]] = []
+        for j, capacity in donors:
+            if gained >= need:
+                break
+            take = min(capacity, need - gained)
+            if take <= 0:
+                continue
+            adjusted[j] -= take
+            stolen[j] = stolen.get(j, 0) + take
+            gained += take
+            gifts.append((j, take))
+        if gained < need:
+            return None
+        adjusted[i] += gained
+        moves.append(
+            {
+                "scene": i,
+                "gained_s": round(gained / fps, 2),
+                "donors": [
+                    {"scene": j, "gave_s": round(take / fps, 2)} for j, take in gifts
+                ],
+            }
+        )
+    assert sum(adjusted) == sum(frames)  # zero-sum by construction
+    return adjusted, moves
 
 
 def resolve_film_voice(persona_voice: dict | None) -> str:
@@ -92,28 +204,36 @@ async def synthesize_film_narration(
     project: "Project",
     storyboard: "FilmStoryboard",
     frames: list[int],
+    floors: list[int],
     voice_id: str,
     language: str,
-) -> dict[int, tuple[str, float]]:
-    """Synthesize every narrated scene → {scene_index: (object key, seconds)}.
+) -> tuple[dict[int, tuple[str, float]], list[int], list[dict[str, Any]]]:
+    """Synthesize every narrated scene → ``(audio_map, frames, flex_moves)``.
 
-    Scenes without narration simply absent from the map (the renderer
-    reads ``audio`` null as silent). The decoded duration rides along so the
-    spec builder can lay the subtitle cues over the REAL spoken span instead
-    of re-guessing the timing. Provider failures propagate as VoiceError —
-    voiceover was promised in the review, a silent film would be a quiet
-    gap, so the step fails honestly.
+    ``audio_map``: {scene_index: (object key, seconds)} — scenes without
+    narration simply absent (the renderer reads ``audio`` null as silent).
+    The decoded duration rides along so the spec builder lays the subtitle
+    cues over the REAL spoken span instead of re-guessing the timing.
+    ``frames``: the scene allocation the spec MUST build from — identical
+    to the caller's unless the window flex (ADR-136) rescued an overrun
+    (zero-sum: Σ never moves). ``flex_moves``: the disclosure records
+    (empty when no flex fired) — the caller bakes them onto the output
+    payload for the closing review's facts. Provider failures propagate
+    as VoiceError — voiceover was promised in the review, a silent film
+    would be a quiet gap, so the step fails honestly.
     """
     from app.tools.film.storyboard import FILM_FPS  # one law, one seat
 
-    async def _one(index: int, text: str, window_s: float, sem: asyncio.Semaphore) -> tuple[int, tuple[str, float]]:
+    async def _one(index: int, text: str, window_s: float, sem: asyncio.Semaphore) -> tuple[int, tuple[str, float] | None, _SceneOverrun | None]:
         """One scene's narration, fitted over a BOUNDED ladder of passes:
         pass 1 at speed 1.0; each overrun re-synthesizes faster, scaled by
         THIS pass's measured shortfall (the provider's speed response is not
         guaranteed linear — correct against what we actually decoded), never
         past ``_SPEED_MAX``. Every pass logs its requested speed, decoded
-        seconds and the scene window; the terminal failure names the real
-        attempts — never a blanket "max speed applied" when it wasn't."""
+        seconds and the scene window. A terminal overrun is NOT raised here
+        — it returns the overrun (audio in memory, billed, decoded, unsaved)
+        for the flex verdict (ADR-136); the pre-flex law's honest failure
+        fires only after the flex falls short, naming the real attempts."""
         attempts: list[tuple[float, float]] = []
         speed = 1.0
         audio = b""
@@ -138,29 +258,11 @@ async def synthesize_film_narration(
             if duration <= window_s + _WINDOW_ALLOW:
                 break
             if pass_no == _FIT_PASSES or speed >= _SPEED_MAX:
-                # 适配法 (Batch 2): the line no longer reads inside its scene
-                # even at the fastest natural speed. The approved storyboard
-                # is NEVER silently rewritten or its audio quietly trimmed
-                # past meaning — the step fails honestly, naming the REAL
-                # attempts, and asks for a shorter line through the design
-                # beat. This is a design problem, not an outage — it carries
-                # its own user_key, never "voice unavailable".
-                detail = ", ".join(f"{s:.2f}x→{d:.1f}s" for s, d in attempts)
-                raise VoiceError(
-                    f"scene {index} narration overruns its {window_s:.1f}s "
-                    f"scene window after {len(attempts)} synthesis passes "
-                    f"({detail}; fastest natural speed is {_SPEED_MAX}x) — "
-                    "redesign the storyboard with a shorter narration line "
-                    "for this scene.",
-                    user_key="film_narration_fit",
+                return index, None, _SceneOverrun(
+                    audio=audio, duration=duration, attempts=attempts
                 )
             speed = min(speed * duration / max(window_s, 0.2), _SPEED_MAX)
-        key = str(
-            await get_output_path(
-                project.id, project.user_id, f"{output_id}_narr_{index}.mp3"
-            )
-        )
-        await save(key, audio, content_type="audio/mpeg")
+        key = await _save_narration(project, output_id, index, audio)
         logger.info(
             "film_narration_scene",
             output_id=str(output_id),
@@ -169,7 +271,7 @@ async def synthesize_film_narration(
             seconds=round(duration, 2),
             window_s=round(window_s, 2),
         )
-        return index, (key, duration)
+        return index, (key, duration), None
 
     sem = asyncio.Semaphore(_TTS_CONCURRENCY)
     tasks: list[asyncio.Task] = []
@@ -181,7 +283,7 @@ async def synthesize_film_narration(
             asyncio.create_task(_one(i, narration.strip(), frames[i] / FILM_FPS, sem))
         )
     if not tasks:
-        return {}
+        return {}, list(frames), []
     try:
         results = await asyncio.gather(*tasks)
     except BaseException:
@@ -194,4 +296,71 @@ async def synthesize_film_narration(
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         raise
-    return dict(results)
+
+    fitted: dict[int, tuple[str, float]] = {}
+    overruns: dict[int, _SceneOverrun] = {}
+    for index, fit, overrun in results:
+        if fit is not None:
+            fitted[index] = fit
+        if overrun is not None:
+            overruns[index] = overrun
+
+    adjusted = list(frames)
+    flex_moves: list[dict[str, Any]] = []
+    if overruns:
+        # 窗口弹性 (ADR-136): the ladder exhausted — one bounded rescue
+        # before the honest failure. The steal is zero-sum (total runtime
+        # never moves — the pre-metered film seconds stay exact), silent
+        # scenes only, floors and both caps bind, every move disclosed.
+        silent = {
+            i
+            for i, scene in enumerate(storyboard.scenes)
+            if not (getattr(scene, "narration", None) or "").strip()
+        }
+        verdict = _flex_frames_for_overruns(
+            frames=frames,
+            floors=floors,
+            silent=silent,
+            overruns={i: ov.duration for i, ov in overruns.items()},
+            fps=FILM_FPS,
+        )
+        if verdict is None:
+            # 适配法 (Batch 2 + ADR-136): the line no longer reads inside
+            # its scene even at the fastest natural speed, and the bounded
+            # flex cannot cover the difference. The approved storyboard is
+            # NEVER silently rewritten or its audio quietly trimmed past
+            # meaning — the step fails honestly, naming the REAL attempts
+            # AND the tried flex, and asks for a shorter line through the
+            # design beat. A design problem, not an outage — its own
+            # user_key, never "voice unavailable".
+            detail = "; ".join(
+                f"scene {i}: "
+                + ", ".join(f"{s:.2f}x→{d:.1f}s" for s, d in ov.attempts)
+                for i, ov in sorted(overruns.items())
+            )
+            raise VoiceError(
+                f"narration overruns its scene window after the bounded "
+                f"speed ladder AND the silent scenes could not spare the "
+                f"difference ({detail}; fastest natural speed is "
+                f"{_SPEED_MAX}x, flex bounded at "
+                f"+{_FLEX_STRETCH_MAX_FRAC:.0%} stretch / "
+                f"-{_FLEX_DONOR_MAX_FRAC:.0%} per silent scene) — redesign "
+                f"the storyboard with a shorter narration line for this "
+                f"scene.",
+                user_key="film_narration_fit",
+            )
+        adjusted, flex_moves = verdict
+        # The flex covered every overrun — the kept audio (never re-billed)
+        # saves now, against the stretched windows.
+        for i, ov in sorted(overruns.items()):
+            key = await _save_narration(project, output_id, i, ov.audio)
+            logger.info(
+                "film_narration_scene",
+                output_id=str(output_id),
+                scene=i,
+                seconds=round(ov.duration, 2),
+                window_s=round(adjusted[i] / FILM_FPS, 2),
+                flex=True,
+            )
+            fitted[i] = (key, ov.duration)
+    return fitted, adjusted, flex_moves

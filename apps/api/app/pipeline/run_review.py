@@ -15,7 +15,9 @@ gets back the 兑现事实清单 (delivery-fact list):
   — a render-FAILED row never counts toward the delivery tallies and fires
   the ``render_failed:<type>`` gap), and the delivery pair (COMPLETED +
   ``files.video`` present — a payload-complete but file-missing clip never
-  counts toward the tallies either, ADR-096 §4).
+  counts toward the tallies either, ADR-096 §4). Films additionally carry
+  the narration pace adjustment when one fired (ADR-136 — bounded, zero-sum
+  scene-second rebalancing, always disclosed, never hidden).
 
 Spend is NEVER a closing-beat fact (2026-09-24 用户拍板 — Claude/Codex
 parity: a finished task does not report what it cost; the wallet owns the
@@ -63,6 +65,7 @@ class LandedFact:
     quality: str | None = None  # passed | needs_human | None (never verified)
     render: str | None = None  # pending | rendering | completed | failed | None (no render contract)
     has_file: bool | None = None  # clips only: files.video present (None = not a clip)
+    narration_flex_s: float | None = None  # films: scene seconds rebalanced to fit the spoken lines (zero-sum, ADR-136)
 
 
 @dataclass(frozen=True)
@@ -100,6 +103,7 @@ def landed_fact(output: Any) -> LandedFact:
         end = source_ref.get("end_seconds")
         if isinstance(start, (int, float)) and isinstance(end, (int, float)):
             cut_range = (float(start), float(end))
+    flex = payload.get("narration_flex")
     return LandedFact(
         output_type=str(getattr(output, "type", "") or "unknown"),
         language=getattr(output, "language", None),
@@ -120,6 +124,15 @@ def landed_fact(output: Any) -> LandedFact:
         # Enum → its value, without importing the models layer (pure seat).
         render=getattr(render_status, "value", render_status),
         has_file=bool(files.get("video")) if is_render_contracted else None,
+        # 窗口弹性披露 (ADR-136): the flex's borrowed seconds ride the
+        # output payload — the closing review narrates the adjustment,
+        # never hides it.
+        narration_flex_s=(
+            float(flex["borrowed_s"])
+            if isinstance(flex, dict)
+            and isinstance(flex.get("borrowed_s"), (int, float))
+            else None
+        ),
     )
 
 
@@ -285,6 +298,12 @@ def review_fact_lines(review: RunReview) -> list[str]:
             parts.append("translated=yes")
         if f.dubbed:
             parts.append("dubbed=yes")
+        if f.narration_flex_s:
+            # 窗口弹性披露 (ADR-136): scene timings rebalanced to fit the
+            # spoken lines — a fact the narrator relays plainly, never a
+            # defect, never silently skipped (展示=执行's bounded,
+            # disclosed tolerance).
+            parts.append(f"pace=adjusted(+{f.narration_flex_s:g}s narration room)")
         if f.quality:
             # The token is echoed by the narrator — keep it human words even
             # in the machine block (a raw `needs_human` leaked into the closing
