@@ -56,12 +56,12 @@ def chat_intent_system() -> str:
 
 def trigger_system() -> str:
     """The proactive speaker's system prompt (ADR-077 判词③ — trigger
-    turns: run_completed / craft_decompiled). No BUILDER catalog rides
-    here (the trigger turn's verbs are the read tools plus the one terminal
-    ``wrap_up``) — but the SPEAKER menu does: the user-language capability
-    menu is identity, it rides every surface (without it the turn improvises
-    deliverables and venues). The template teaches the judgment law and the
-    suggestions contract."""
+    turns: run_completed / run_failed / craft_decompiled). No BUILDER catalog
+    rides here (the trigger turn's verbs are the read tools plus the one
+    terminal ``wrap_up``) — but the SPEAKER menu does: the user-language
+    capability menu is identity, it rides every surface (without it the
+    turn improvises deliverables and venues). The template teaches the
+    judgment law and the suggestions contract."""
     return jinja_env.get_template("chat/trigger_system.j2").render(
         menu_lines=capability_menu_lines(),
     )

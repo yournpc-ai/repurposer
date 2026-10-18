@@ -32,8 +32,10 @@ from app.chat.perception import PERCEPTION_TOOLS
 from app.chat.intent import _speech_language_line
 from app.chat.service import _match_option
 from app.chat.trigger_turn import (
+    _FAILURE_FACT_CAP,
     TRIGGER_DUMP_TYPE,
     _chrome_language,
+    _failure_fact_lines,
     _suggestions_payload,
     _trigger_admission,
     _trigger_dump,
@@ -42,23 +44,28 @@ from app.chat.trigger_turn import (
     trigger_agent,
 )
 from app.models.schemas import SuggestionItem, WrapUpArgs
-from app.models.tables import Conversation, Message, WorkflowRun
+from app.models.tables import Conversation, Message, WorkflowRun, WorkflowStep
 from app.pipeline.trigger_events import (
     TRIGGER_CRAFT_DECOMPILED,
     TRIGGER_RUN_COMPLETED,
+    TRIGGER_RUN_FAILED,
     TRIGGER_WHITELIST,
 )
 
 
 def test_whitelist_is_the_proactivity_boundary() -> None:
     # 素材理解接力已死 (ADR-102): the wait-for-material world ended with the
-    # dormant-asset law. The boundary is the two world events; adding a kind
-    # is an ADR-level review, never a drive-by.
+    # dormant-asset law. The boundary is the three world events (a total
+    # failure speaks since ADR-135 — the receipt alone carries neither the
+    # reason nor the next step); adding a kind is an ADR-level review,
+    # never a drive-by.
     assert TRIGGER_WHITELIST == {
         "run_completed",
+        "run_failed",
         "craft_decompiled",
     }
     assert TRIGGER_RUN_COMPLETED in TRIGGER_WHITELIST
+    assert TRIGGER_RUN_FAILED in TRIGGER_WHITELIST
     assert TRIGGER_CRAFT_DECOMPILED in TRIGGER_WHITELIST
 
 
@@ -133,7 +140,9 @@ class TestWrapUpArgs:
 class TestWrapUpGuardrail:
     """wrap_up 边界护栏 (2026-09-30 用户拍板 — execute_guardrail 同族):
     suggestions 数对 trigger 旅程法 — run_completed 硬顶 =0(下一步在收尾句,
-    永不在 dock)。素材接力已死 (ADR-102),其硬地板律随之消亡。"""
+    永不在 dock);run_failed 硬顶 =2(ADR-135: 零落地没有产物卡可骑,下一
+    步 dock 成可点选项,但每个都必须是能成功的步)。素材接力已死
+    (ADR-102),其硬地板律随之消亡。"""
 
     def test_run_completed_rejects_any_option(self) -> None:
         items = WrapUpArgs.model_validate({"suggestions": ["再做一条"]}).suggestions
@@ -143,10 +152,66 @@ class TestWrapUpGuardrail:
     def test_run_completed_passes_empty(self) -> None:
         assert _wrap_up_rejection(TRIGGER_RUN_COMPLETED, []) is None
 
+    def test_run_failed_allows_the_next_step_and_one_fallback(self) -> None:
+        # ADR-135: nothing landed — the dock IS the next step's affordance.
+        one = WrapUpArgs.model_validate({"suggestions": ["把旁白改短,重新设计分镜"]}).suggestions
+        assert _wrap_up_rejection(TRIGGER_RUN_FAILED, one) is None
+        two = WrapUpArgs.model_validate(
+            {"suggestions": ["把旁白改短,重新设计分镜", "再试一次"]}
+        ).suggestions
+        assert _wrap_up_rejection(TRIGGER_RUN_FAILED, two) is None
+        assert _wrap_up_rejection(TRIGGER_RUN_FAILED, []) is None
+
+    def test_run_failed_rejects_a_third_option(self) -> None:
+        three = WrapUpArgs.model_validate({"suggestions": ["a", "b", "c"]}).suggestions
+        rejection = _wrap_up_rejection(TRIGGER_RUN_FAILED, three)
+        assert rejection is not None and "at most 2" in rejection
+
     def test_other_triggers_unpoliced(self) -> None:
         # 护栏只管有法在身的 trigger — 未来新 trigger 默认自由,
         # 立法时才进表(不过度设计律)。
         assert _wrap_up_rejection("some_future_trigger", []) is None
+
+
+class TestFailureFactLines:
+    """The FAILURE FACTS pure core (ADR-135): one line per failed VERDICT
+    step (non-fanout — the run verdict's own predicate), the baked
+    user-facing error line carried verbatim (never re-derived), bounded
+    by the cap."""
+
+    def test_failed_verdict_steps_each_get_a_line(self) -> None:
+        steps = [
+            WorkflowStep(
+                kind="film_narration",
+                status="failed",
+                error="有一句旁白调速后仍然放不下它的场景——让我重新设计分镜,把这句改短一点。",
+            ),
+            WorkflowStep(kind="render_film", status="skipped"),
+            WorkflowStep(kind="capture", status="done"),
+        ]
+        lines = _failure_fact_lines(steps, frozenset())
+        assert lines == [
+            "FAILED STEP: film_narration — "
+            "有一句旁白调速后仍然放不下它的场景——让我重新设计分镜,把这句改短一点。"
+        ]
+
+    def test_fanout_failures_never_enter_the_block(self) -> None:
+        # 判决同一谓词: fanout render failure = per-output canvas fact,
+        # never the run's cause.
+        steps = [
+            WorkflowStep(kind="render_clip", status="failed", error="视频渲染失败,请重试"),
+            WorkflowStep(kind="dub", status="done"),
+        ]
+        assert _failure_fact_lines(steps, frozenset({"render_clip"})) == []
+
+    def test_missing_error_reads_honestly_and_the_cap_binds(self) -> None:
+        steps = [
+            WorkflowStep(kind=f"step_{i}", status="failed", error=None)
+            for i in range(_FAILURE_FACT_CAP + 2)
+        ]
+        lines = _failure_fact_lines(steps, frozenset())
+        assert len(lines) == _FAILURE_FACT_CAP
+        assert all("no error recorded" in line for line in lines)
 
 
 class TestSuggestionsPayload:

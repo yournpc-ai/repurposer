@@ -3110,3 +3110,20 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 **Consequences**: 命令式入口变成两回合流（设计拍呈现即停 → 放行拍 dock 即开工）；修订重稿同样等放行。既有挂单（另立批处置，不在本决策）：① ADR-129 的 `on_row_append` 分镜发布座从未接线（零调用点）——分镜行目前只骑终封筒，长跨度窗口内流死即直播不可见、刷新 replay 才现身；② 无前置挂单时设计拍的 birth prompt 冻结为当回合文本（如 "ok"）而非原始求片句。
 
 **Related**: ADR-129（分镜拍与版本闭环）/ ADR-117（auto 档呈现即开工——hold ON 时 dock 等待拍先行）/ ADR-131（呈现 = LLM 散文唯一座）
+
+## ADR-135: 全败 run 必须开口——run_failed 入触发白名单
+
+**Status**: Decided（2026-10-18 用户拍板：发版前事故复盘——「给投资人演示的时候也这样吗？那肯定不行，结果一定是要产出的呀」；三层修复的 L3）
+
+**Context**: ADR-074② 的全灭沉默教义（「收据即失败面」）在 7048c4b4 事故中实证破产：film run 因旁白放不下场景而全灭，billing 正确地零扣费、画布收据正确地红 ✗，但 chat 里**一个字都没有**——用户不知道败了、不知道为什么、不知道下一步。收据能自证「败了」（红 ✗），但自证不了「为什么败」（`film_narration_fit` 的人话行只住在 step.error 里，收据不展示），更给不出「下一步」（重设计分镜）。投资人演示场景下沉默 = 失联。
+
+**Decision**:
+
+1. **`run_failed` 入触发白名单**（`pipeline/trigger_events.py`——扩名单本为 ADR 级评审，此条即评审记录）。fire gate 与 run_completed 互斥：`FAILED 且零产物落地` 才 fire（部分失败仍走 run_completed 收官评审，GAP 行说部分真相）。
+2. **FAILURE FACTS 块**（`_failure_fact_lines` 纯核 + `_run_failure_lines` 装配，与 DELIVERY FACTS 同教义）：每个失败判决步一行，`step.error` 的烘焙人话行（bake-at-write, errors.py）原样携带——确定性事实，turn 只许叙述永不重推导原因；fanout 渲染失败用判决同一谓词排除（产物级事实永不是 run 死因）。
+3. **下一步 dock 成 ≤2 个「能成功」的选项**（`_wrap_up_rejection` 新腿：run_completed 硬顶 0 不变，run_failed 硬顶 2）：零落地没有产物卡可骑，下一步的可点形态 = ADR-081 真实选项问，作答骑 answer 端点 generic 续聊零新机制。prompt 法：确定性死因（如旁白超长）永不给「原样重试」，暂态死因才给；无可行动死因时 suggestions=[]，收尾句口头给重试。
+4. **花费沉默绝对**：失败 run 零扣费是事实，但收官/通报拍永不说钱（2026-09-24 拍板不变）。
+
+**Consequences**: 全灭 run 的用户体验从「静默红收据」变为「通报原因 + 可点下一步」；既有入场/落点双门（在飞 defer、pending plan 静默）、按 (trigger, ref) 去重、fire-and-forget 教义全部原样继承。仪表层可后补 staged-failure 剧本（活闸矩阵暂不锁失败通报形态——制造确定性全败 run 需专用 fixture）。
+
+**Related**: ADR-077（触发回合机制）/ ADR-074②（run 判决——全灭沉默腿被本条翻案）/ ADR-081（选项语法统一律）/ ADR-134（同批 L1：设计期可讲性闸校准，治本；本条 = 治标的诚实面）

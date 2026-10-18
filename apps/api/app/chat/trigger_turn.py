@@ -9,12 +9,20 @@ first):
   (``orchestrator.maybe_finalize_run``; 旅程一⑦ the closing reviewer).
   The fire gate mirrors ADR-074②'s closing-line truth: a successful run OR
   a partial failure with landed products (done + output_refs); a run where
-  nothing landed fires nothing — the receipt IS its failure surface.
-  Iter-3 S5 (ADR-088 §8 R21): the turn's event line carries the
-  deterministic DELIVERY FACTS block (``run_review``'s pure core — promised
-  vs landed, track/verify facts, captured vs quoted); the prose law (facts
-  first, zero subjective quality words, gaps → suggestions) lives in
+  nothing landed fires ``run_failed`` instead (ADR-135). Iter-3 S5
+  (ADR-088 §8 R21): the turn's event line carries the deterministic
+  DELIVERY FACTS block (``run_review``'s pure core — promised vs landed,
+  track/verify facts, captured vs quoted); the prose law (facts first,
+  zero subjective quality words, gaps → suggestions) lives in
   ``trigger_system.j2``.
+- ``run_failed`` — a run FAILED and nothing landed
+  (``orchestrator.maybe_finalize_run``; ADR-135). The receipt alone can
+  carry neither the reason nor the next step, so the turn speaks: the
+  event line carries the deterministic FAILURE FACTS block (one line per
+  failed verdict step — the baked user-facing error line, never
+  re-derived), and the one next step docks as 1-2 pickable options, each
+  a step that can plausibly succeed (never a verbatim retry of a
+  deterministic failure).
 - ``craft_decompiled`` — the pinned reference video's craft skeleton
   landed (``decompile``; 旅程二④ the remix offer).
 
@@ -78,6 +86,7 @@ from app.models.tables import (
 from app.pipeline.trigger_events import (
     TRIGGER_CRAFT_DECOMPILED,
     TRIGGER_RUN_COMPLETED,
+    TRIGGER_RUN_FAILED,
     TRIGGER_WHITELIST,
 )
 from app.platform.conversation_context import (
@@ -282,12 +291,22 @@ def _wrap_up_rejection(trigger: str, suggestions: list[SuggestionItem]) -> str |
     (the model self-repairs; the user only ever sees the repaired turn).
 
     - ``run_completed``: hard ceiling of 0 — the completed work's next
-      move rides the closing sentence, never a dock (prompt law)."""
+      move rides the closing sentence, never a dock (prompt law).
+    - ``run_failed``: ceiling of 2 (ADR-135) — nothing landed, so there is
+      no card for the next step to ride; it docks as pickable options,
+      each one a step that can plausibly SUCCEED (prompt law: never a
+      verbatim retry of a deterministic failure)."""
     if trigger == TRIGGER_RUN_COMPLETED and suggestions:
         return (
             f"on {trigger} the next move rides your closing sentence or "
             "the landed card itself, never a dock — call wrap_up again "
             "with suggestions=[]."
+        )
+    if trigger == TRIGGER_RUN_FAILED and len(suggestions) > 2:
+        return (
+            f"on {trigger} the dock carries the one next step (a real "
+            "fallback at most) — call wrap_up again with at most 2 "
+            "suggestions."
         )
     return None
 
@@ -373,6 +392,50 @@ async def _run_review_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
     return review_fact_lines(review)
 
 
+_FAILURE_FACT_CAP = 6
+
+
+def _failure_fact_lines(
+    steps: list[WorkflowStep], fanout_kinds: frozenset[str]
+) -> list[str]:
+    """The FAILURE FACTS block's pure core (ADR-135): one line per failed
+    VERDICT step — the same predicate as the run verdict (non-fanout; a
+    fanout render failure is a per-output canvas fact, never the run's
+    cause). ``step.error`` is already the baked user-facing line in the
+    run's UI locale (bake-at-write discipline, errors.py) — the turn
+    narrates it verbatim, never re-derives a cause. Bounded by
+    ``_FAILURE_FACT_CAP`` (a dying run rarely fails more steps than a
+    reader should have to scan)."""
+    lines: list[str] = []
+    for step in steps:
+        if step.status != "failed" or step.kind in fanout_kinds:
+            continue
+        lines.append(
+            f"FAILED STEP: {step.kind} — {step.error or 'no error recorded'}"
+        )
+        if len(lines) >= _FAILURE_FACT_CAP:
+            break
+    return lines
+
+
+async def _run_failure_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
+    """Fetch the failed run's steps and project the FAILURE FACTS block
+    (ADR-135). Zero LLM here, same doctrine as ``_run_review_lines``; the
+    prose law lives in ``trigger_system.j2``."""
+    from app.pipeline.graph import runtime_fanout_kinds  # deferred: pipeline weight
+
+    steps = list(
+        (
+            await db.execute(
+                select(WorkflowStep).where(WorkflowStep.run_id == run.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return _failure_fact_lines(steps, runtime_fanout_kinds())
+
+
 async def run_trigger_turn(
     project_id: UUID, trigger: str, ref: str
 ) -> Message | None:
@@ -415,7 +478,7 @@ async def run_trigger_turn(
             if project is None:
                 return None
             run: WorkflowRun | None = None
-            if trigger == TRIGGER_RUN_COMPLETED:
+            if trigger in (TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED):
                 run = await db.get(WorkflowRun, UUID(ref))
                 if run is None:
                     # The run row is gone (deleted mid-flight) — there is
@@ -487,6 +550,23 @@ async def run_trigger_turn(
                         "records — narrate them, never contradict them; a GAP "
                         "line names something promised that didn't land):\n"
                         + "\n".join(review_lines)
+                    )
+            elif trigger == TRIGGER_RUN_FAILED:
+                event_line = (
+                    f"Run {ref} FAILED and nothing landed — the user got "
+                    "no result. Read what happened, then close with the "
+                    "honest reason and the one next step."
+                )
+                # 失败事实注入 (ADR-135): the failed verdict steps' baked
+                # user-facing lines ride the event line — deterministic,
+                # narrate-never-contradict, same doctrine as DELIVERY FACTS.
+                failure_lines = await _run_failure_lines(db, run)
+                if failure_lines:
+                    event_line += (
+                        "\n\nFAILURE FACTS (deterministic, from the run's own "
+                        "records — narrate them, never contradict them, never "
+                        "invent a cause beyond them):\n"
+                        + "\n".join(failure_lines)
                     )
             else:
                 # craft_decompiled — the pinned case's skeleton is the
@@ -576,7 +656,7 @@ async def run_trigger_turn(
                     _suggestions_payload(suggestions, _chrome_language(speech, language)),
                     intent=_trigger_dump(trigger, ref, suggestions),
                 )
-                if trigger == TRIGGER_RUN_COMPLETED:
+                if trigger in (TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED):
                     message.workflow_run_id = UUID(ref)
                 # 建议谱系 provenance (ADR-099 §4 — the trigger path's
                 # pre-existing gap: a pick used to lose its source): the
@@ -595,7 +675,9 @@ async def run_trigger_turn(
                     "assistant",
                     speech,
                     workflow_run_id=(
-                        UUID(ref) if trigger == TRIGGER_RUN_COMPLETED else None
+                        UUID(ref)
+                        if trigger in (TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED)
+                        else None
                     ),
                     intent=_trigger_dump(trigger, ref, suggestions),
                 )

@@ -66,7 +66,11 @@ from app.pipeline.graph_fill import stamp_run_graph, sync_graph_node_for_step
 from app.pipeline.recipes import RECIPE_QUOTE_FACTS, RECIPE_REGISTRY, RecipeEntry
 from app.pipeline.step_context import _estimate_facts
 from app.pipeline.tracks import assert_single_writer_per_track, autofork_parallel_variants
-from app.pipeline.trigger_events import TRIGGER_RUN_COMPLETED, fire_trigger
+from app.pipeline.trigger_events import (
+    TRIGGER_RUN_COMPLETED,
+    TRIGGER_RUN_FAILED,
+    fire_trigger,
+)
 from app.platform.billing import (
     capture_step,
     check_hold,
@@ -1956,20 +1960,24 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             logger.warning(
                 "authority_handoff_failed", run_id=str(run_id), exc_info=True
             )
-        # 触发回合 (T3, ADR-077 判词③): run 完成 is whitelist trigger #2 —
-        # the closing reviewer reads the products and speaks (旅程一⑦). The
-        # fire gate IS ADR-074②'s closing-line truth (前端门与判决同一真值):
-        # a succeeded run or a partial failure with landings speaks; a run
-        # where NOTHING landed stays silent (its receipt is the failure
-        # surface). This line runs once per terminal transition (an
-        # already-terminal run early-returns above), and the turn dedups on
-        # the run id regardless. Fire-and-forget — finalization never waits
-        # on the agent's speech. (Seam: app.pipeline.trigger_events, ADR-087 §6.)
+        # 触发回合 (T3, ADR-077 判词③): run 终态按判决分两族白名单事件——
+        # 成功或有产物落地的部分失败 → run_completed 收官评审 (旅程一⑦,
+        # fire gate = ADR-074② 判决真值);全灭 (FAILED 且零落地) →
+        # run_failed 失败通报 (ADR-135: 收据自证不了失败原因,也给不出下
+        # 一步——开口是唯一诚实面,沉默即失联)。两族互斥,按 run id 各自
+        # 去重。This line runs once per terminal transition (an
+        # already-terminal run early-returns above). Fire-and-forget —
+        # finalization never waits on the agent's speech. (Seam:
+        # app.pipeline.trigger_events, ADR-087 §6.)
         if project is not None and (
             run.status == WorkflowStatus.COMPLETED or any_landed
         ):
             fire_trigger(
                 UUID(str(project.id)), TRIGGER_RUN_COMPLETED, str(run_id)
+            )
+        elif project is not None and run.status == WorkflowStatus.FAILED:
+            fire_trigger(
+                UUID(str(project.id)), TRIGGER_RUN_FAILED, str(run_id)
             )
 
 

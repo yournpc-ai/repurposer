@@ -270,7 +270,7 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 
 ### 8.8 触发回合（主动说话，ADR-077 判词③）
 
-世界事件到达 = agent 自己开口：pipeline 在白名单座位 fire-and-forget 触发 `chat/trigger_turn.py` 的触发 agent——ToolLoopAgent 家族的第三座（与 plan path / chat path 两回合 runner 同族），读工具看世界后 `wrap_up` 终态落一条 assistant 行（`intent={type:"trigger_review", trigger, ref, suggestions}`）。`_already_spoke` 按 (trigger, ref) 去重——一个事件最多说一次。触发回合永不起 run——它是说话，不是第二意图表面（建议的作答仍走 answer 端点 / autoResume 的既有结算，trigger 自身不结算）。**缝注（ADR-087 §6）**：pipeline 侧一切 fire 走 `pipeline/trigger_events.py` 白名单事件缝——kind ∈ {`run_completed`, `craft_decompiled`} 冻结白名单（扩名单 = ADR 评审；素材评审事件已随 ADR-102 退役——素材理解是回合内前提，永不是世界事件）；handler 由组合根（app.main / app.worker）经 `chat/seams.py` 注册，未注册 = 静默降级永不 pipeline 失败；pipeline 零 `app.chat` import（冷导入探针可证）。
+世界事件到达 = agent 自己开口：pipeline 在白名单座位 fire-and-forget 触发 `chat/trigger_turn.py` 的触发 agent——ToolLoopAgent 家族的第三座（与 plan path / chat path 两回合 runner 同族），读工具看世界后 `wrap_up` 终态落一条 assistant 行（`intent={type:"trigger_review", trigger, ref, suggestions}`）。`_already_spoke` 按 (trigger, ref) 去重——一个事件最多说一次。触发回合永不起 run——它是说话，不是第二意图表面（建议的作答仍走 answer 端点 / autoResume 的既有结算，trigger 自身不结算）。**缝注（ADR-087 §6）**：pipeline 侧一切 fire 走 `pipeline/trigger_events.py` 白名单事件缝——kind ∈ {`run_completed`, `run_failed`, `craft_decompiled`} 冻结白名单（扩名单 = ADR 评审；素材评审事件已随 ADR-102 退役——素材理解是回合内前提，永不是世界事件）；handler 由组合根（app.main / app.worker）经 `chat/seams.py` 注册，未注册 = 静默降级永不 pipeline 失败；pipeline 零 `app.chat` import（冷导入探针可证）。**`run_failed`（ADR-135）= 全败 run 的失败通报座**：fire gate 与 run_completed 互斥（FAILED 且零产物落地才 fire）；事件行携带确定性 FAILURE FACTS 块（每个失败判决步一行——`step.error` 的烘焙人话行，永不重推导）；下一步 dock 成 ≤2 个「能成功」的选项（确定性死因永不给原样重试），收据自证不了原因也说不出下一步——沉默即失联。
 
 - **单一叙事者律（ADR-080）**：准入门 = 叙事所有权门，两张静态谓词——会话内有用户 turn 在飞（`turn_state='in_flight'`）→ **defer**（20s × 15 周期）；无在飞但有 **pending task_book 计划** → **静默**（「我看了什么」的叙事已被计划 echo 覆盖，再说只有抢麦）；两者皆无才可说话。超限/失势一律落静默教义：盲评不如不说。
 - **界面语言唯一 owner（ADR-080）**：`conversations.ui_language` 列 = 单一事实源（prepare 每个用户回合从请求 Accept-Language 盖章），一切 assistant 写者（plan / chat / trigger）继承它——`_trigger_language` 链 = owner → run pin → history 兜底推导 → en，无 per-writer 推导。
@@ -292,7 +292,7 @@ edit ops（ADR-032 D5 + `archive/tasks-done/operation-model.md`）：产物级 o
 - 单节点失败：打 ✗ + 对话内给替代方案（"曲库没有合适的，要上传还是换个风格？"），对话继续，不阻塞。
 - skill 拒收（§5 修复失败）：回复"这个我还不会"+ 列出全部可派发 skill（difflib 相近匹配只进 repair_feedback，不上用户面）。
 - **同语目标死链 = 编译期裁决，不跑到 run**（ADR-074①）：translate/dub 的目标语言 = 实际面对的源语言即拒——chat 侧 = present_plan / propose_tasks 的执行内校验，拒绝反馈回 loop 重拟（修法指名、方向感知：zh 源双语目标 en / en 源目标 zh；再拒 degrade 答话，永不 dock 死链），出生地 422 兜底 typed start_run / 手改计划面板（钱动之前拒）；语言未知静默，运行时护栏只是最后兜底（陈旧计划 / wiring 出生 run）。
-- **run 判决（ADR-074②）**：任何非 runtime-fanout 步骤 failed ⇒ run FAILED——部分失败不再有绿收据（收据红 ✗，§8.7）；部分失败（有产物落地 = done 且带 `output_refs` 的步骤，预备步不算）= project → REVIEW + 收官句说部分真相 + 完成 refetch 照发，全灭 = project → DRAFT + 收据即失败面（无收官句）。render fanout 失败永不是 run 判决（产物级事实，画布卡红 + 重试入口）。
+- **run 判决（ADR-074② + ADR-135 修订）**：任何非 runtime-fanout 步骤 failed ⇒ run FAILED——部分失败不再有绿收据（收据红 ✗，§8.7）；部分失败（有产物落地 = done 且带 `output_refs` 的步骤，预备步不算）= project → REVIEW + 收官句说部分真相 + 完成 refetch 照发；全灭 = project → DRAFT + **`run_failed` 触发回合开口**（失败原因 + 唯一下一步，§8.8——收据即失败面的沉默教义已翻案：收据自证不了为什么败）。render fanout 失败永不是 run 判决（产物级事实，画布卡红 + 重试入口）。
 
 ## 11. 分期
 
