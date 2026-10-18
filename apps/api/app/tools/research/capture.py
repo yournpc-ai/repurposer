@@ -1037,7 +1037,16 @@ async def _capture_visuals_with_policy(
                 page = await browser.new_page(
                     viewport={"width": WINDOW_WIDTH, "height": WINDOW_HEIGHT}
                 )
-                await page.goto(url, wait_until="load", timeout=_NAV_TIMEOUT_MS)
+                # Navigation waits only for the EARLY commit signal, never
+                # `load`: one stalled sub-resource (a font / analytics chunk
+                # on a slow path) blocks the `load` event and burns the whole
+                # budget without a single pixel painted (the 2026-10-18
+                # snappify incident — text fetched fine, zero page views).
+                # Settling is the ladder's job below: best-effort networkidle
+                # (suppressed) + fixed beats + scroll preloading.
+                await page.goto(
+                    url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS
+                )
                 await _settle(page)
                 consent = await _dismiss_consent(page)
                 overlays = await _dismiss_overlays(page)

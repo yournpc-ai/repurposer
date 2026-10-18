@@ -252,10 +252,17 @@ class FilmStoryboardRejected(Exception):
 
     user_key = "film_storyboard_ungrounded"
 
-    def __init__(self, codes: list[str], detail: str) -> None:
+    def __init__(
+        self, codes: list[str], detail: str, *, user_key: str | None = None
+    ) -> None:
         super().__init__(f"storyboard rejected ({', '.join(codes)}): {detail[:300]}")
         self.codes = codes
         self.detail = detail
+        # The preflight's view-poor rejection speaks a different remedy than
+        # the grounding exhaustion (the page's VISUALS never captured — the
+        # fix is a re-capture or user-supplied shots, never clearer copy).
+        if user_key is not None:
+            self.user_key = user_key
 
 
 class FilmCaptureTimeout(Exception):
@@ -2424,6 +2431,7 @@ async def orchestrate_storyboard(
             ["INSUFFICIENT_VIEWS"],
             f"only {len(skeleton.views)} captured page views (need {_MIN_VIEWS}) — "
             "the film shows the product's real pages; re-send the link to re-capture.",
+            user_key="film_views_missing",
         )
     prompt_pages = [page_prompt_dict(p, i, lines) for i, p in enumerate(pages)]
     prompt_skeleton = skeleton_prompt_dict(skeleton, pages)

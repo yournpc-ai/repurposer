@@ -116,6 +116,15 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
         "en": "I couldn't draft a faithful film of that page — try a page with clearer copy, or tell me what to lead with.",
         "zh": "没能为那个页面写出忠实的短片文案——换一页文案更清楚的，或告诉我先突出什么。",
     },
+    # The direction preflight found a view-poor world: the page's VISUALS
+    # never captured (a blocked / timed-out browser half), rejected before
+    # any LLM call. The honest remedy is a re-capture (re-sending the link
+    # re-arms the hollow asset — the dedup seat's law) or user-supplied
+    # shots — never clearer copy.
+    "film_views_missing": {
+        "en": "I couldn't capture that page's visuals — re-send the link so I can retry, or paste a few screenshots of the page and I'll design from those.",
+        "zh": "那个页面的画面没能抓下来——重发一次链接让我重抓，或直接贴几张页面截图，我照着设计。",
+    },
 }
 
 

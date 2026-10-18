@@ -150,6 +150,25 @@ async def create_web_page_assets_from_urls(
     ]
 
 
+def web_page_capture_known(status: AssetStatus, meta: dict | None) -> bool:
+    """The dedup law for a same-URL sibling: is the page genuinely KNOWN?
+
+    - In-flight rows (PENDING/PROCESSING) count — the capture is running.
+    - FAILED rows never counted — re-sending re-arms them below.
+    - A COMPLETED row WITHOUT captured page views lost its browser half
+      (``screenshot_failed`` — the text half alone is not the film's raw
+      material, and the design preflight will reject it on
+      INSUFFICIENT_VIEWS). It counts as UNKNOWN too: re-sending the link
+      re-arms it through the same reset seat instead of bouncing off a
+      hollow capture forever (the 2026-10-18 snappify dead-end).
+    """
+    if status in (AssetStatus.PENDING, AssetStatus.PROCESSING):
+        return True
+    if status == AssetStatus.FAILED:
+        return False
+    return bool((meta or {}).get("shots"))
+
+
 async def create_web_page_assets_committed_from_urls(
     project_id: UUID,
     user_id: UUID,
@@ -192,10 +211,14 @@ async def create_web_page_assets_committed_from_urls(
         created: list[UUID] = []
         for url in wanted:
             siblings = known.pop(url, [])
-            if any(a.processing_status != AssetStatus.FAILED for a in siblings):
-                continue  # live or captured — the URL is genuinely known
+            if any(
+                web_page_capture_known(a.processing_status, a.meta)
+                for a in siblings
+            ):
+                continue  # live or genuinely captured — the URL is known
             if siblings:
-                # A FAILED capture is NOT "known": re-sending the link is the
+                # A not-known capture (FAILED, or COMPLETED without page
+                # views) is NOT "known": re-sending the link is the
                 # documented recovery ("re-send the link to re-capture"), so
                 # re-arm the dead row through the ONE reset seat (status +
                 # counter + error move together — a status-only flip would
