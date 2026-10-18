@@ -883,7 +883,7 @@ class DesignStoryboardArgs(BaseModel):
     )
     review_hold: bool | None = Field(
         default=None,
-        description="True when the user scoped this to review only ('只看分镜，先别制作') — the hold then persists across turns until they explicitly ask for production; false explicitly releases it. Omit = unchanged.",
+        description="True when the user scoped this to review only ('只看分镜，先别制作') — the hold then persists across turns until they explicitly ask for production; false waives the review when the user explicitly said to skip it ('不用看分镜，直接做'). Omit = a fresh draft holds for review by default; a re-presentation of the same board keeps the stored hold.",
     )
     material_urls: list[str] | None = Field(
         default=None,

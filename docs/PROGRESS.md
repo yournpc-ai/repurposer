@@ -333,6 +333,8 @@
 | 评测系统语义三修（J6 开工暗示 / D3 拒绝项 / S-adv deferral 座） | P2 | reply_quality_probe v6 基线（✅ `baseline-iter2-final` 已存） | 迭代二收口拍板：① J6=1（「先把这块打出来」go-ahead 腔）保留边缘分不降级——补「未确认却暗示已开工」语义断言（推荐 = 建议+理由待确认，执行语义只在确认后），禁固定禁词表；② D3 判读修正——被拒绝备选作上下文说明 = 通过，误述为可选 = 失败（rejected-alternative 是产品结构非缺陷），禁为得分把拒绝项改回可选；③ S-adv 增 `deferred / awaiting-prerequisite` 合法座四条件（指明具体缺口 / 未验证信息不包装成结论 / 说明下一步不虚构已执行 / 前置满足后能续原任务），泛泛「稍后再看」不豁免；评测从 0/1/2 扩为「判断质量 × 是否合理延迟」两维 |
 | fill-keys 读面口径（research facet 折叠 × S1 断言） | P2 | ADR-097 §3 第二层门读面行为（✅ DB 实证在册：research 节点 `artifact_role='facet'` 在库未删，读帧并入 deliverable 卡组） | 迭代二收口登记：research 节点 start 后 stamp 为 facet → 读帧节点数 ≠ draft 节点数 → S1「同节点原地填充」断言红（E3 恢复态同率复现，prompt 零交集）；先拍产品语义（facet 折叠对 research 类节点是否正确的画布呈现），再定修 read model 还是修断言口径 |
 | ADR-105 翻案批（画布可见性 = 计划就绪 + 确认 dock 卡面退役） | P1 | 演示收口后动工；翻案程序 = 原型 + live 走查先行（与 ADR-105 定罪同程序） | ADR-111：dock 卡 UI 整族退役（任务清单卡 / 估价行 / Start 钮 / panel 计划面），计划检阅面 = 画布，口头确认律成唯一确认通道；pending 状态机保留（付费边界 / 刷新重建 / 插话 / 修订锚）转驱动画布等待态；四承重设计题——等待态节点面（配方 demo 资产预览读作「就绪待发」）/ 相机 fit 缩放夹 / 估价面新家（billing 律 capture 前可见）/ 刷新重建面；get_graph 读工具新增、节点级 CRUD 永禁；简报待原型走查后立 |
+| 分镜发布座接线（`on_row_append` 死线） | P1 | 无 | ADR-134 Consequences ①：routes.py 的 `on_row_append`（ADR-129 分镜发布座——活动落定后分镜作为独立消息行直播落地）声明/穿线/接 SSE 全齐但**零调用点**（grep 可证），分镜行目前只骑终封筒；长设计跨度（分钟级）内流被判死（看门狗 / 切后台）时信封完成路径按设计 supersede、reconcile 轮询窗盖不到回合末才落库的行 → 直播不可见、刷新 replay 才现身（fdc7682c 实发）。接线需先设计双渲染交接（row.append 已落地的行，信封 finalizePreview 不得重放）与文档行的打字机语义 |
+| film birth prompt 冻结义 | P2 | 无 | ADR-134 Consequences ②：无前置挂单时设计拍把 `PendingPlan.prompt` 冻结为当回合文本（如 "ok"）而非原始求片句——功能无碍（指纹 instruction 腿稳定、Start 兜底少用），语义错误；修法 = 设计拍出生时向对话回溯最近的生产意图句 |
 
 ### 可选需求
 

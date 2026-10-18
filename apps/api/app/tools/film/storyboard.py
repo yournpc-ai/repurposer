@@ -2799,9 +2799,13 @@ def film_design_state(
       is shown again, nothing is invalidated (a token the begin beat
       cleared re-mints: the old confirmation was already voided).
 
-    ``review_hold``: True sets the「只看分镜」hold, False releases it, None
-    keeps the stored hold (a fresh first draft defaults to no hold). The
-    content digest re-stamps on both paths (same input → same digest).
+    ``review_hold``: True sets the「只看分镜」hold, False releases it. None:
+    a FRESH draft holds for review by default — a storyboard is a creation,
+    so production never starts from a board the user has not seen; the one
+    release seat is the user's explicit production request (the approval
+    dock clears it). A REUSE re-presentation keeps the stored hold (that
+    board was already seen). The content digest re-stamps on both paths
+    (same input → same digest).
     Returns PendingPlan field kwargs only — the caller merges its own
     preserved fields and the presentation message id lands separately."""
     from uuid import uuid4
@@ -2814,9 +2818,9 @@ def film_design_state(
         params_snapshot = canonical_film_params(design_params)
         execution = film.execution
         authorized = authorized_by
-        hold = review_hold if review_hold is not None else (
-            stored.film_review_hold if stored is not None else False
-        )
+        # 首稿默认 hold ON: production never starts from a board the user
+        # has not seen — the approval dock is the one release seat.
+        hold = review_hold if review_hold is not None else True
     else:
         # The begin beat cleared the stored token (旧确认作废), so a reuse
         # re-presentation RE-MINTS when it finds none — the same board, a
@@ -2894,10 +2898,13 @@ def presentation_stamp_update(
 
 def rewrite_film_task_params(tasks: list, version_params: dict | None) -> None:
     """The dock's canonical rewrite (ADR-129 — dock 全座位只读当前版本并重
-    写 launch_film 参数): the launch_film task's params align to the
-    presented version's canonical params (omitted defaults pinned) — the
-    confirmed chain carries exactly what the presented board was designed
-    with. In-place; dicts and TaskItems alike; no-op without a version."""
+    写 launch_film 参数): the launch_film task's params BECOME the presented
+    version's params verbatim — the confirmed chain carries exactly what the
+    presented board was designed with. REPLACE, never merge: a key the model
+    spelled beyond the version (e.g. a music_mood echoed from the board's
+    narration text) would survive a merge into the fingerprint's canonical
+    set and read as drift, rejecting every honest approval dock. In-place;
+    dicts and TaskItems alike; no-op without a version."""
     if not version_params:
         return
     for t in tasks:
@@ -2905,9 +2912,9 @@ def rewrite_film_task_params(tasks: list, version_params: dict | None) -> None:
         if tool != "launch_film":
             continue
         if isinstance(t, dict):
-            t["params"] = {**(t.get("params") or {}), **version_params}
+            t["params"] = dict(version_params)
         else:
-            t.params = {**(t.params or {}), **version_params}
+            t.params = dict(version_params)
 
 
 def film_carry_state(stored: Any) -> dict:

@@ -3093,3 +3093,20 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 **Consequences**: 读后决策窗与回复生成窗回到基座词，窗口时长不变、词不再怪；前端未知相位落 `defaultValue` 回退基座（`ActivityStream.tsx`），新旧端互撞零风险。分镜跨度的真相位机制不受影响。
 
 **Related**: ADR-087 §1（三通道分家——相位面的归宿）/ ADR-110（段聚合——收据行接管「干完了」的证明）/ ADR-129（分镜跨度——真相位的唯一在册族）
+
+## ADR-134: film 首稿分镜默认 hold——用户没见过的稿永不开工
+
+**Status**: Decided（2026-10-18 用户拍板：「分镜是创作物，用户没见过就开工违反直觉——首稿默认 hold ON，用户说『按这版做』才放行」）
+
+**Context**: ADR-129 的法条（生产意图在场 + hold off → 呈现后继续 present_plan）配上 fresh 草稿 hold 默认 OFF，使命令式入口（配方 Use prompt / 贴链求片）在分镜呈现后同回合自动 dock + auto 开工——用户从发消息到拿到成片始终没见过分镜。取证另实锤批准链守卫洞：`rewrite_film_task_params` 的 merge 语义让模型从分镜旁白文本忠实补出的 `music_mood`（不在版本参数里）存活进指纹 canonical 集合 → 每次诚实批准 dock 都判 fingerprint_mismatch → 四轮拒绝 + 截断 + 空散文拒绝 → 十二迭代耗尽降级「做不了」。
+
+**Decision**:
+
+1. **fresh 草稿（新版面，含修订重稿）默认 `film_review_hold=True`**——`film_design_state` fresh 分支 None 即 ON，不再继承 stored hold；REUSE 再呈现（同一稿）保持继承（稿已见过）。显式 `review_hold=False` 仍是逃生门（用户明说「不用看分镜，直接做」）。
+2. 释放座不变：approval dock（`film_dock_state`）是 hold 的唯一释放座；Start 门 `422 start.review_hold` 是确定性兜底。法条观察文案分叉不变（`hold_fact` 自适应）。
+3. **`rewrite_film_task_params` 改替换语义**：launch_film 的 params 整体变成呈现版参数（`dict(version_params)`），永不再 merge——确认链携带的恰好是呈现稿的设计参数，模型多写的 canonical 相关键不落盘。
+4. 剧本 S11 增放行拍：设计拍断言无 run（hold ON 呈现即停）→ 放行消息 dock + auto 开工；分镜呈现断言不锁信道（row.append 帧或终封筒 assistant_message 皆可——契约 = 用户看到分镜消息）。
+
+**Consequences**: 命令式入口变成两回合流（设计拍呈现即停 → 放行拍 dock 即开工）；修订重稿同样等放行。既有挂单（另立批处置，不在本决策）：① ADR-129 的 `on_row_append` 分镜发布座从未接线（零调用点）——分镜行目前只骑终封筒，长跨度窗口内流死即直播不可见、刷新 replay 才现身；② 无前置挂单时设计拍的 birth prompt 冻结为当回合文本（如 "ok"）而非原始求片句。
+
+**Related**: ADR-129（分镜拍与版本闭环）/ ADR-117（auto 档呈现即开工——hold ON 时 dock 等待拍先行）/ ADR-131（呈现 = LLM 散文唯一座）

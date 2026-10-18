@@ -270,7 +270,9 @@ class TestFilmDesignState:
         assert state["film_storyboard_execution"] == _EXECUTION
         assert state["film_design_authorized_by"] == "msg-1"
         assert state["film_presented_message_id"] is None  # the publish beat stamps it
-        assert state["film_review_hold"] is False
+        # 首稿默认 hold ON: a board the user has never seen never goes
+        # straight to production — the approval dock is the release seat.
+        assert state["film_review_hold"] is True
 
     def test_fresh_redraft_bumps_version_and_rotates_token(self) -> None:
         stored = PendingPlan(
@@ -292,6 +294,9 @@ class TestFilmDesignState:
         assert state["film_draft_token"] != "old-tok"
         assert state["film_design_authorized_by"] == "msg-2"
         assert state["film_presented_message_id"] is None  # re-stamped by the new publish
+        # a redraft is also a board the user has not seen — the default
+        # re-holds even though the stored hold was cleared at the v1 dock.
+        assert state["film_review_hold"] is True
 
     def test_reuse_keeps_version_token_and_hold(self) -> None:
         stored = PendingPlan(
@@ -393,6 +398,21 @@ class TestResolveFilmDockState:
         assert resolved.state["film_storyboard_version"] == 1
         assert resolved.state["film_draft_token"] == "tok-1"
         assert resolved.state["film_review_hold"] is False
+
+    def test_call_key_beyond_the_version_is_not_drift(self) -> None:
+        # The version's params REPLACE the call's: a music_mood echoed from
+        # the board's narration text (never a design param) must not move
+        # the fingerprint — approval of the presented board is never drift.
+        stored = _versioned_pending()
+        tasks = [_film_task(focus="pricing", music_mood="calm academic")]
+        resolved = resolve_film_dock_state(stored, tasks, "make a film")
+        assert not isinstance(resolved, str)
+        assert resolved.film_chain is True
+        assert tasks[0].params == {
+            "focus": "pricing",
+            "aspect": "16:9",
+            "voiceover": True,
+        }
 
     def test_digest_or_version_drift_fails_closed(self) -> None:
         stale_digest = _versioned_pending(
@@ -685,6 +705,22 @@ class TestRewriteFilmTaskParams:
             "voiceover": True,
         }
         assert tasks[1].params == {}  # sibling tasks untouched
+
+    def test_extra_key_beyond_the_version_drops(self) -> None:
+        # REPLACE, never merge: a key the call spelled beyond the version
+        # (a music_mood faithfully echoed from the board's narration line)
+        # never survives into the fingerprint's canonical set — otherwise
+        # every honest approval dock reads as drift. The confirmed chain
+        # carries exactly the presented version's params.
+        tasks = [_film_task(focus="reworded", music_mood="calm academic")]
+        rewrite_film_task_params(
+            tasks, {"focus": "pricing", "aspect": "16:9", "voiceover": True}
+        )
+        assert tasks[0].params == {
+            "focus": "pricing",
+            "aspect": "16:9",
+            "voiceover": True,
+        }
 
     def test_dict_tasks_rewrite_alike(self) -> None:
         tasks = [{"tool": "launch_film", "params": {"focus": "x"}}]

@@ -3873,10 +3873,11 @@ async def s11_url_to_launch_film(ctx: Ctx) -> None:
     """S11 贴链成片全旅程（MG D4；需活栈 + dev worker 真采集真渲染 + MiniMax
     配额）：用户贴 URL → material_urls 信封座 absorb 生 web_page 资产 →
     worker 真采集 COMPLETED（浏览器级 SSRF 链）→ 方向商定拍（answer 收尾）
-    → 分镜设计拍 = design_storyboard 非终态调用（markdown 骑普通消息呈现;
-    跨度落定留存 chat.activity.storyboardDone 带真实耗时）→ 原始制作意图在
-    场且无 review hold 时同回合继续方案拍 dock（链必含 launch_film——指纹
-    命中当前版本;markdown 不重嵌;确认行为全走通用设置）→ auto 档呈现即开工,
+    → 分镜设计拍 = design_storyboard 呈现即终态（首稿默认 hold ON——分镜是
+    创作物, 用户没见过就开工违反直觉; markdown 呈现后无 dock 无 run; 跨度
+    落定留存 chat.activity.storyboardDone 带真实耗时）→ 用户放行拍 =
+    approval dock（链必含 launch_film——指纹命中呈现版本; dock 清 hold;
+    markdown 不重嵌; 确认行为全走通用设置）→ auto 档 dock 即开工,
     run 携带设计拍定稿分镜（run.context.prepared_storyboard——用户看到的稿
     就是渲染的稿）
     → run completed → 血缘三形态：web_page 资产节点 → launch_film 节点
@@ -3901,28 +3902,40 @@ async def s11_url_to_launch_film(ctx: Ctx) -> None:
               for a in direction.activities), "site read finishes before the direction reply")
     check(has_prose(turn0["assistant_message"]), "site understanding and direction are delivered")
 
-    # 分镜设计拍 + auto 开工道（ADR-129 修订）: design_storyboard 非终态——
-    # markdown 骑普通消息呈现; 原始制作意图在场且 review_hold off 时, 同回合
-    # 继续方案 dock, 默认 auto/auto 设置由通用授权道直接开工。分镜 markdown
-    # 读 row.append 帧（终封筒可能被方案/run 行接管）。
+    # 分镜设计拍 + 首稿 hold（ADR-134）: design_storyboard 呈现即终态——
+    # 首稿默认 review_hold ON（分镜是创作物, 用户没见过就开工违反直觉）,
+    # markdown 呈现后回合结束, 无 dock 无 run。呈现信道不锁（契约 = 用户
+    # 看到分镜消息）：row.append 帧或终封筒 assistant_message 皆可。
     design = await ctx.chat_stream(pid, "Yes, design the storyboard in that direction.")
     turn1 = design.completed
     check(design.failed is None, "the storyboard design turn succeeds", design.failed)
     check(turn1 is not None, "the storyboard design turn completes", turn1)
-    storyboard_rows = [
+    presented_texts = [
         (event.get("row") or {}).get("content") or ""
         for event in design.row_events
         if event.get("op") == "append"
-    ]
-    check(any(re.search(r"\d+\.\s+\*\*\w+\*\*\s+·\s+\d+s", row)
-              for row in storyboard_rows),
-          "the design beat publishes the storyboard markdown as its own row "
+    ] + [((turn1.get("assistant_message") or {}).get("content") or "")]
+    check(any(re.search(r"\d+\.\s+\*\*\w+\*\*\s+·\s+\d+s", text)
+              for text in presented_texts),
+          "the design beat presents the storyboard markdown "
           "(numbered scene rows)",
-          [row[-240:] for row in storyboard_rows])
-    check(turn1.get("run_id") is not None,
-          "auto + no review hold: the original production intent continues "
-          "from storyboard presentation through the dock into the run",
+          [text[-240:] for text in presented_texts])
+    check(turn1.get("run_id") is None,
+          "the first draft holds for review — no dock, no run before the "
+          "user approves the board",
           turn1)
+
+    # 放行拍（ADR-134）: 用户明说「按这版做」= hold 的唯一释放座——approval
+    # dock 清 hold（指纹复用呈现版, 永不重设计, markdown 不重嵌）, auto 档
+    # dock 即开工。
+    approve = await ctx.chat_stream(pid, "Go ahead with this board.")
+    turn2 = approve.completed
+    check(approve.failed is None, "the approval turn succeeds", approve.failed)
+    check(turn2 is not None, "the approval turn completes", turn2)
+    check(turn2.get("run_id") is not None,
+          "the user's approval docks the presented version and the auto "
+          "regime starts the run on the dock",
+          turn2)
 
     # 分镜跨度落定留存（诚实耗时）: chat.activity.storyboardDone 带真实
     # duration —— draft 族落定即退役的唯一例外（分镜消息就是交付物, 该行是收据）。
@@ -3965,8 +3978,8 @@ async def s11_url_to_launch_film(ctx: Ctx) -> None:
     check(status == AssetStatus.COMPLETED,
           "the web_page capture completes on the real site", status)
 
-    conv_id = turn1["conversation_id"]
-    run_id = turn1["run_id"]
+    conv_id = turn2["conversation_id"]
+    run_id = turn2["run_id"]
 
     # 开工 run 携带设计拍定稿分镜（pending_brief 缓存 → start_run 原样
     # stamp——展示=执行，永不用废分镜出片）。
