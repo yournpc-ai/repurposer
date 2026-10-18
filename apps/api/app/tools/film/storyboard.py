@@ -999,7 +999,7 @@ def _norm(s: str) -> str:
 # units. The validator's narration cap, the caption cue weights and the
 # cue-length cap all read this ONE measure.
 _CJK_CHAR = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
-# CJK speech-rate factor: 20 latin chars/s ÷ ≈5 CJK chars/s.
+# CJK speech weight: one glyph ≈ one spoken syllable ≈ 4 latin chars.
 _CJK_UNIT_WEIGHT = 4
 
 
@@ -1212,11 +1212,16 @@ def validate_storyboard(
                 )
 
         # 配音词 sanity bound (never grounded — speech rephrases the page's
-        # facts by design). The cap is the DESIGN-TIME fit law: the line must
-        # read inside the scene's window at ≈20 latin chars/s (CJK glyphs
-        # weigh _CJK_UNIT_WEIGHT each — ≈5 chars/s). Over cap = 打回: the
-        # bounded rewrite shortens the line or drops the scene's narration
-        # (a new version over the current draft), never a stretched window.
+        # facts by design). The cap is the DESIGN-TIME fit law, calibrated
+        # to the REAL synthesized rate (≈13 latin units/s at 1.0×, measured
+        # against decoded TTS audio — CJK glyphs weigh _CJK_UNIT_WEIGHT
+        # each): a passing line reads inside its scene at NATURAL speed, so
+        # the synthesis ladder (≤1.35×) stays headroom for voice variance,
+        # never the plan. The floor fits even the shortest scene through
+        # the ladder (38 units ≈ 2.9s natural → inside a 2s+allowance
+        # window at cap speed). Over cap = 打回: the bounded rewrite
+        # shortens the line or drops the scene's narration (a new version
+        # over the current draft), never a stretched window.
         narration = getattr(scene, "narration", None)
         if narration is not None:
             if not _norm(narration):
@@ -1224,7 +1229,7 @@ def validate_storyboard(
                     FilmViolation(CONSTRAINT_VIOLATION, f"{where}.narration: blank")
                 )
             else:
-                narr_cap = max(60, int(scene.seconds * 20))
+                narr_cap = max(38, int(scene.seconds * 13))
                 units = _speech_units(narration)
                 if units > narr_cap:
                     violations.append(
@@ -1232,7 +1237,7 @@ def validate_storyboard(
                             CONSTRAINT_VIOLATION,
                             f"{where}.narration: {units} speech units over the "
                             f"{narr_cap} cap for a {scene.seconds:g}s scene "
-                            "(≈20 latin chars/s, CJK glyph = 4) — shorten the "
+                            "(≈13 latin chars/s, CJK glyph = 4) — shorten the "
                             "line or leave this scene silent",
                         )
                     )

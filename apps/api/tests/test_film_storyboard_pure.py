@@ -266,14 +266,25 @@ def test_adjacent_near_repeat_is_padding():
 
 
 def test_narration_cap_is_cjk_aware():
-    """The 20 chars/s narration law is Latin-calibrated; a CJK glyph speaks
-    a syllable of its own (4 units) — 20 hanzi NEVER fit a 3s scene."""
+    """The design-time fit law is calibrated to the REAL synthesized rate:
+    13 latin units/s at natural speed (a CJK glyph = one syllable = 4
+    units), so a passing line reads at 1.0× and the synthesis speed ladder
+    (≤1.35×) stays headroom for voice variance — never the plan. The 3s
+    hero scene's cap = max(38, int(3.0*13)) = 39 units."""
     scenes = _good_scenes()
-    scenes[0]["narration"] = "这" * 20  # 80 units over the 60-unit cap
+    scenes[0]["narration"] = "这" * 20  # 80 units over the 39-unit cap
     violations = validate_storyboard(_storyboard(_pad(scenes)), [_page()])
     assert any("speech units" in v.detail for v in violations)
-    scenes[0]["narration"] = "这" * 15  # 60 units exactly — reads fine
+    scenes[0]["narration"] = "这" * 9  # 36 units — reads at natural speed
     assert validate_storyboard(_storyboard(_pad(scenes)), [_page()]) == []
+    # The 40–60 latin-unit band in a 3s scene only fits through the speed
+    # ladder (or fails synthesis outright) — the design law rejects it so
+    # the bounded rewrite shortens the line before any synthesis runs.
+    scenes[0]["narration"] = "a" * 40
+    assert any(
+        "speech units" in v.detail
+        for v in validate_storyboard(_storyboard(_pad(scenes)), [_page()])
+    )
 
 
 def test_caption_cues_split_latin_sentences_never_decimals():
