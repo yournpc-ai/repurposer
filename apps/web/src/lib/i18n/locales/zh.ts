@@ -523,15 +523,22 @@ const zh: Resources = {
         posts: "社媒",
       },
       nextPage: "下一页",
+      usePrompt: "使用提示词",
+      playSound: "播放声音",
+      mute: "静音",
+      // MG 货架预填空位：可见占位符，插入后即选中，粘贴一次完成替换；
+      // 永不变成隐藏字段或第二个输入面。
+      urlPlaceholder: "［网站链接］",
+      urlRequired: "先填入你的网站链接",
       // MG 货架 demo 预填文案（D3——与 recipeFamilies.ts 的 ShelfDemo id
       // 一一对应）。prompt 即卡片的全部发射载荷（composer 预填，配方 =
-      // 提示词）：附带 demo 自己的链接作为可跑示例，用户替换成自己的。
+      // 提示词）；{{placeholder}} 是发送前由用户替换的网站空位。
       demos: {
         "launch-film-linear": {
-          prompt: "把这个网页做成一条发布短片：https://linear.app",
+          prompt: "把这个网站做成一条官网介绍短片：{{placeholder}}",
         },
         "launch-film-zymix": {
-          prompt: "把这个网页做成一条发布短片：https://www.zymix.ai/en/",
+          prompt: "把这个网站做成一条官网介绍短片：{{placeholder}}",
         },
       },
     },

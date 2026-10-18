@@ -46,6 +46,19 @@ function Home() {
   const [prompt, setPrompt] = useState("")
   const [mentions, setMentions] = useState<ChatMention[]>([])
   const editorRef = useRef<MentionEditorHandle>(null)
+  // Demo sound is a HOME-GLOBAL singleton: every video keeps playing, but
+  // only the hovered/focused card may be audible; claiming sound mutes the
+  // previous owner without pausing it.
+  const [demoSoundOwner, setDemoSoundOwner] = useState<string | null>(null)
+  const claimDemoSound = useCallback(
+    (id: string) => setDemoSoundOwner(id),
+    [],
+  )
+  const releaseDemoSound = useCallback(
+    (id: string) =>
+      setDemoSoundOwner((owner) => (owner === id ? null : owner)),
+    [],
+  )
 
   // App-shell surface: the route root is exactly the viewport tall (h-svh) and
   // NEVER scrolls.
@@ -172,17 +185,39 @@ function Home() {
     })
   }, [])
 
+  // Bring an in-flow composer back into view before asking the user to edit
+  // the prefill. The home root never scrolls, so measure against the ONE
+  // internal scrollport; a docked composer is already visible and needs no
+  // camera move at all.
+  const scrollComposerIntoView = useCallback(() => {
+    const scroller = scrollRef.current
+    const slot = slotRef.current
+    if (!scroller || !slot) return
+    const scrollerRect = scroller.getBoundingClientRect()
+    const slotRect = slot.getBoundingClientRect()
+    const top =
+      slotRect.top -
+      scrollerRect.top +
+      scroller.scrollTop -
+      (scroller.clientHeight - slotRect.height) / 2
+    scroller.scrollTo({ top, behavior: "smooth" })
+  }, [])
+
   // 卡片点击唯一归宿 (D5 禁则 8): composer 预填 — never a template editor.
   // clear + insertText REPLACES the draft (prototype parity; the staged
   // files ride untouched — the chips band is the valuable payload, the text
-  // is the recipe's launch template). insertText focuses the editor — the
-  // shelf lives below the fold, so the prefill lands in the bottom dock.
+  // is the recipe's launch template). A visible placeholder is the recipe's
+  // only blank: insert it selected so paste replaces it in one gesture; it
+  // never becomes a hidden field or a second input surface.
   const handlePrefill = useCallback(
     (prefillKey: string) => {
+      const placeholder = t("recipes.shelf.urlPlaceholder")
       editorRef.current?.clear()
-      editorRef.current?.insertText(t(prefillKey))
+      editorRef.current?.insertText(t(prefillKey, { placeholder }))
+      editorRef.current?.selectText(placeholder)
+      if (!docked) scrollComposerIntoView()
     },
-    [t],
+    [t, docked, scrollComposerIntoView],
   )
 
   // Two-level tab shelf (D5, prototype 屏①): families × subs × horizontal
@@ -345,8 +380,9 @@ function Home() {
             every sub of the active family renders its shelves stacked below
             and the whole stack scrolls beneath the bar. Cards reuse
             RecipeCard (schematic covers); MG families render real demo
-            videos loop/muted. Every card click prefills the composer — the
-            ONLY destination (禁则 8, 永不是模板编辑器).
+            videos as muted autoplay loops with hover sound/action veils.
+            Every card click prefills the composer — the ONLY destination
+            (禁则 8, 永不是模板编辑器).
             mt-0.5 = ring air: the composer's hairline is an OUTSET
             box-shadow ring protruding 1 CSS px below its border box, and the
             sticky bar's opaque bg-background starts flush at that exact line
@@ -398,12 +434,15 @@ function Home() {
                         title={t(`recipes.shelf.titles.${shelf.id}`)}
                         items={shelf.items}
                         onPrefill={handlePrefill}
-                        // Tour step 3 anchors the launch-film demo card — the
-                        // Marketing family's first shelf item, the flagship
-                        // the home page opens on. The tour's scrollIntoView
-                        // block:"center" centers it in the viewport between
-                        // the pinned tabs and the bottom dock; a missing demo
-                        // asset → the step auto-skips.
+                        soundOwner={demoSoundOwner}
+                        onSoundStart={claimDemoSound}
+                        onSoundStop={releaseDemoSound}
+                        // Tour step 3 anchors the launch-film demo card's
+                        // Use-prompt entry — the Ads family's first shelf
+                        // item, the flagship the home page opens on. The
+                        // tour's scrollIntoView block:"center" centers it in
+                        // the viewport between the pinned tabs and the bottom
+                        // dock; a missing demo asset → the step auto-skips.
                         tourAnchorIndex={
                           activeFamily.id === "ads" &&
                           subIndex === 0 &&

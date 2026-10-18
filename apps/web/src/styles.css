@@ -81,6 +81,18 @@
   }
 }
 
+/* Media scrim — the hover/focus interaction veil INSIDE a media tile (home
+ * demo shelf). It darkens the media just enough for the primary controls,
+ * using theme tokens instead of a one-off black alpha; it is not a floating
+ * layer, so no blur and no shadow. */
+@utility media-scrim {
+  background-color: color-mix(in oklch, var(--inverse) 58%, transparent);
+
+  @variant dark {
+    background-color: color-mix(in oklch, var(--background) 58%, transparent);
+  }
+}
+
 /* Thin scroller (2026-09-06, FLORA-parity): 6px rounded thumb at 12%
  * foreground on a transparent track — quiet scroll chrome for the dock
  * family (message viewport / editor / history). Overlay-style: no

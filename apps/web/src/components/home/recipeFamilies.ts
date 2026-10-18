@@ -29,7 +29,8 @@ import { LayoutGrid } from "lucide-react"
 
 import type { RecipePublic } from "@/lib/recipes"
 
-/** One demo video card on a MG family shelf (loop/muted, loop 播放即证据). */
+/** One demo video card on a MG family shelf (autoplay muted loop + hover
+ * sound veil; the render itself is the evidence). */
 export interface ShelfDemo {
   /** Demo id — prefill copy lives at `recipes.shelf.demos.<id>.prompt`. */
   id: string
@@ -128,22 +129,10 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
                 url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-linear-6bc23a6a.mp4",
                 orientation: "wide",
               },
-            ],
-          },
-        ],
-      },
-      {
-        id: "brand",
-        shelves: [
-          {
-            id: "brand",
-            kind: "demos",
-            demos: [
               {
-                // Brand-official-site seat: zymix.ai → launch film (run
-                // 8321463d — "One App", 26.6s/1080p, every word grounds to
-                // the site's own copy). Content-addressed into the demo/
-                // tree.
+                // zymix.ai → launch film (run 8321463d — "One App",
+                // 26.6s/1080p, every word grounds to the site's own copy).
+                // Content-addressed into the demo/ tree.
                 id: "launch-film-zymix",
                 url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-zymix-9890ad58.mp4",
                 orientation: "wide",
@@ -152,6 +141,7 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
           },
         ],
       },
+      { id: "brand", shelves: [{ id: "brand", kind: "demos", demos: [] }] },
       { id: "ugc", shelves: [{ id: "ugc", kind: "demos", demos: [] }] },
       { id: "product", shelves: [{ id: "product", kind: "demos", demos: [] }] },
     ],

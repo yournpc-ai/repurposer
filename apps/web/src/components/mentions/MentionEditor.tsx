@@ -46,6 +46,9 @@ export interface MentionEditorHandle {
   insertMention: (mention: ChatMention) => void
   /** Insert plain text at the end ("\n" becomes a line break). */
   insertText: (text: string) => void
+  /** Select the first occurrence of plain text (recipe prefill placeholders).
+   * Returns whether the text was found. */
+  selectText: (text: string) => boolean
   clear: () => void
   focus: () => void
   /** The content's intrinsic height (the editable's scrollHeight) — for
@@ -311,6 +314,32 @@ export function MentionEditor({
     syncNow()
   }, [syncNow])
 
+  /** Select a literal text run inside the editable (the recipe prefill's
+   * visible blank). The DOM walker keeps this honest for the plain-text
+   * prefill while never reaching into mention chips. */
+  const selectText = useCallback((needle: string) => {
+    const el = editorRef.current
+    if (!el || !needle) return false
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    let node = walker.nextNode()
+    while (node) {
+      const text = node.textContent ?? ""
+      const start = text.indexOf(needle)
+      if (start >= 0) {
+        el.focus()
+        const range = document.createRange()
+        range.setStart(node, start)
+        range.setEnd(node, start + needle.length)
+        const sel = window.getSelection()
+        sel?.removeAllRanges()
+        sel?.addRange(range)
+        return true
+      }
+      node = walker.nextNode()
+    }
+    return false
+  }, [])
+
   const focus = useCallback(() => {
     const el = editorRef.current
     if (!el) return
@@ -329,11 +358,12 @@ export function MentionEditor({
     () => ({
       insertMention,
       insertText,
+      selectText,
       clear,
       focus,
       getContentHeight: () => editorRef.current?.scrollHeight ?? 0,
     }),
-    [insertMention, insertText, clear, focus],
+    [insertMention, insertText, selectText, clear, focus],
   )
 
   const handleKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {

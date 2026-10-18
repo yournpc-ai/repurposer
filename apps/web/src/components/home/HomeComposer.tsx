@@ -229,14 +229,21 @@ export function HomeComposer({
   // navigating), × purifies (removing the chip removes every trace — no
   // residual pin).
   //
-  // The send mechanism is the shared `useProjectLaunch` (2026-08-08, D6 二次
-  // 修订): composer and the recipe overlay's launch zone ride the identical
-  // path — since Batch A (2026-09-18) a light one: the files are already
-  // uploaded (staging), so send = create project → attach → navigate →
-  // first /chat message. A recipe launch is just its prompt template
+  // The send mechanism is the shared `useProjectLaunch`: picked files are
+  // already uploaded (staging), so send = create project → attach → navigate
+  // → first /chat message. A recipe launch is just its prompt template
   // (配方 = 提示词, 2026-08-11) — the composer never builds a prior
   // (MENTIONS §3).
-  const handleGenerate = () =>
+  // The recipe prefill's visible blank is a launch gate in the same family
+  // as the empty-prompt toast: the prompt stays the entire payload (no hidden
+  // URL field), but an unresolved placeholder must never burn a chat turn.
+  const urlPlaceholder = t("recipes.shelf.urlPlaceholder")
+  const handleGenerate = () => {
+    if (urlPlaceholder && prompt.includes(urlPlaceholder)) {
+      toast.error(t("recipes.shelf.urlRequired"))
+      editorRef.current?.selectText(urlPlaceholder)
+      return
+    }
     launch({
       prompt,
       mentions,
@@ -248,6 +255,7 @@ export function HomeComposer({
         clearStaged()
       },
     })
+  }
 
   // Rotating placeholder (Lovart-style): three first-person example prompts
   // cycling with NO prefix — each line is a complete request in the user's

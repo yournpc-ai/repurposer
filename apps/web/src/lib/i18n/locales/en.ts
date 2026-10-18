@@ -543,16 +543,24 @@ const en = {
         posts: "Social media",
       },
       nextPage: "More",
+      usePrompt: "Use prompt",
+      playSound: "Play sound",
+      mute: "Mute",
+      // MG shelf prefill blank: a VISIBLE placeholder, inserted selected so
+      // paste replaces it in one gesture; it never becomes a hidden field or
+      // a second input surface.
+      urlPlaceholder: "[your website URL]",
+      urlRequired: "Add your website link first",
       // MG shelf demo prefill copy (D3 — one key per ShelfDemo id in
       // components/home/recipeFamilies.ts). The prompt IS the card's entire
-      // launch payload (composer 预填, 配方 = 提示词): the demo's own link
-      // ships as the working example — the user replaces it with theirs.
+      // launch payload (composer 预填, 配方 = 提示词); {{placeholder}} is the
+      // visible website blank the user replaces before send.
       demos: {
         "launch-film-linear": {
-          prompt: "Turn this page into a short launch film: https://linear.app",
+          prompt: "Turn this website into a short intro film: {{placeholder}}",
         },
         "launch-film-zymix": {
-          prompt: "Turn this page into a short launch film: https://www.zymix.ai/en/",
+          prompt: "Turn this website into a short intro film: {{placeholder}}",
         },
       },
     },

@@ -97,12 +97,12 @@ describe("resolveFamilies — 族分组", () => {
 })
 
 describe("resolveFamilies — 空族不渲染(连摆位都不摆)", () => {
-  it("Ads 族: saas/brand 供货点亮,product 空位级联丢弃——补渲即亮零改动", () => {
+  it("Ads 族: saas 供货点亮,brand/product 空位级联丢弃——补渲即亮零改动", () => {
     const families = resolveRecipeFamilies(ALL_REGISTRY_IDS.map((id) => card(id)))
     const ads = families.find((f) => f.id === "ads")
-    // saas (linear) and brand (zymix) carry real demos; the empty product
-    // sibling cascades away until its render lands.
-    expect(ads?.subs.map((s) => s.id)).toEqual(["saas", "brand"])
+    // saas carries both real demos (linear + zymix); the empty brand/product
+    // siblings cascade away until their renders land.
+    expect(ads?.subs.map((s) => s.id)).toEqual(["saas"])
   })
 
   it("空货架 → 空子 tab → 空族 级联丢弃", () => {
