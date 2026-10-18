@@ -44,8 +44,8 @@ export interface ActivityFramePayload {
 
 /** The thinking frame's payload: `{}` = a pure keepalive (drive the
  * indicator, never render); `{phase}` = a REAL System Status label
- * (the film design span's capturing / storyboarding / storyboard_revision
- * are the sole survivors after Phase 3 Batch B); `{phase: null}` = the
+ * (`composing` — the sole survivor after Phase 3 Batch B retired
+ * `creating_run` on the B4 dead-window forensics); `{phase: null}` = the
  * EXPLICIT phase clear (I-PFA-06 清除协议, 2026-09-18). `"phase" in
  * payload` separates the clear from a bare keepalive. Work evidence never
  * rides this channel (Phase 3 Batch B ③ — the retired inspecting key and

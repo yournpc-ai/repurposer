@@ -109,6 +109,7 @@ from app.chat.service import (
     resolve_suggestion_note,
     sync_plan_question,
 )
+from app.chat.system_status import observe_phase_callback
 from app.models.schemas import (
     AnswerPayload,
     AnswerProposal,
@@ -2066,6 +2067,7 @@ async def run_propose_turn(
             on_reasoning=on_reasoning,
             on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready,
+            on_observe=observe_phase_callback(on_phase),
             on_loop_event=on_loop_event,
             on_checkpoint=checkpoint_hook,
         )

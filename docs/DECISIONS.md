@@ -1979,7 +1979,7 @@ Lifecycle Projection       Execution Runtime
 
 - **Lifecycle Projection 座位**：`app/pipeline/lifecycle.py`（纯核 + 装配器，MODULE_ARCH §7.1）；CONFIRMATION_READY 四合取（PLAN_READY ∧ ConfirmationScopeReady ∧ ChargeSemanticsReady ∧ NoActiveConflictingRun，payload-existence 捷径永禁）；素材处理中 Review Surface 不出现、PLAN_READY 同拍出现、CONFIRMATION_READY=false 时 Confirm disabled；客户端零 lifecycle 推导（无 `hasDraftGraph` 族旧谓词）。
 - **Activity Projection 座位**：`agents/tool_loop.py` typed `LoopEvent`（内核只说发生了什么）+ `chat/activity.py` 纯投影器（kind 用户语义四值，MODULE_ARCH §7.1）+ `assistant.activity` SSE 帧 + dock `ActivityStream` 组件；相位帧保留（并行渲染），打字机律不破。
-- **Presentation Contract 归位**：Confirm/Start 唯 dock pill（无 Canvas Confirmation Seat）；`lib/lifecycleStamp.ts` 三态谓词（stamp missing = unknown ≠ ready，无 fallback-to-true）；confirm/running 两腿由戳派生（`confirmActive = intentReady && isPlanReady(lifecycle) && !runAttached`，无 phase 状态机）；System Status 相位面 = 基座 Thinking… + 分镜跨度三相位 + 显式清除帧（ADR-133：通用 LLM 黑盒窗不设别名），永不建相位帧 → lifecycle readiness 正向锁；**「lifecycle 键恒在」不变量**（graph 响应零节点也补戳）；**run 活性/存在是 transport 事实，非 lifecycle 推导**（合法读者在册：ChatDock `runAttached` / `projects.$id.index` `hasRuns` / `runActive`——禁补戳读者）；`render_superseded` 入 `USER_ERROR_LINES`；ChatDock normalize* 族住 `chatProtocol.ts`；无 `_DOCUMENT_CONFIRM_PX` 几何债。
+- **Presentation Contract 归位**：Confirm/Start 唯 dock pill（无 Canvas Confirmation Seat）；`lib/lifecycleStamp.ts` 三态谓词（stamp missing = unknown ≠ ready，无 fallback-to-true）；confirm/running 两腿由戳派生（`confirmActive = intentReady && isPlanReady(lifecycle) && !runAttached`，无 phase 状态机）；composing = System Status 唯一宏观叙事（住 `app/chat/system_status.py`），永不建相位帧 → lifecycle readiness 正向锁；**「lifecycle 键恒在」不变量**（graph 响应零节点也补戳）；**run 活性/存在是 transport 事实，非 lifecycle 推导**（合法读者在册：ChatDock `runAttached` / `projects.$id.index` `hasRuns` / `runActive`——禁补戳读者）；`render_superseded` 入 `USER_ERROR_LINES`；ChatDock normalize* 族住 `chatProtocol.ts`；无 `_DOCUMENT_CONFIRM_PX` 几何债。
 - **Confirmation Doctrine 统一实现座位**：deterministic scope classifier（零 op 词汇纯核 + 装配器）裁决 edit_graph 按 resulting-scope（continuation 自治 / expansion·unproven 转 dock）；`propose_tasks` → Confirmation Dock（同 turn create_run 全路径禁止，`_dock_plan_as_question` 唯一 dock 座）；/generate server gate（exact/family 两级 retry 证明，不可证 → machine-readable 422 `scope.unproven` 先于余额检查）；Start 服务端四合取（`evaluate_start_gate` + 机器可读码，dock pill 与散文确认同一座）。施工合同 = `docs/tasks/lifecycle-phase-4-confirmation-doctrine.md`。
 - **依赖方向座位（四族合法缝，§6 唯一通道）**：① trigger fires（understanding_warmed / run_completed / craft_decompiled）→ `pipeline/trigger_events.py` 白名单事件缝（白名单冻结，扩名单 = ADR 评审；fire-and-forget 未注册 = 静默降级永不 pipeline 失败；`app.main` / `app.worker` 两组合根双注册）；② 同步会话写四命令（dock_interrupt_question / finalize_bailed_runs / seed_project_prompt / discard_unanswered_plan）→ `pipeline/conversation_bridge.py` 显式 protocol（未注册 fail-loudly）；③ 会话读四助手 → `platform/conversation_context.py` 只读协议座；④ 完整 chat 回合（POST /outputs/{id}/regenerate）→ 端点住 `chat/routes.py`（URL/method/OpenAPI 不变）。`build_context` 住 `chat/context.py`（各层自装上下文）。pipeline→chat import 清零、跨模块私有 import 清零、零新增 deferred import——常驻守卫 = `tests/test_import_direction_pure.py`（AST 双门 + 冷导入探针 + 组合根接线保险 + 自引用改名碰撞扫描）。
 - **Hygiene 挂账**：service.py / schemas.py / graph_fill.py 拆分、Message.intent typed union、edit_output operations 路径 commit 律对齐——永不进关键路径，排期见 PROGRESS。
@@ -3076,20 +3076,3 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 **Consequences**: 「按这版做」= 不换稿、不取消旁白、不再绕一轮设计；守卫拒绝从此自带可定位的腿名（04:15 式不可考拒绝不再重演）；voiceover 承诺在设计/校验/执行三层同法，静默影片只有 voiceover=false 一条合法路径。
 
 **Related**: ADR-129（版本闭环——批准消费的是它）/ ADR-131（呈现位移——呈现即唯一表达）/ ADR-127（骨架与创作槽——旁白槽的完整性门）/ ADR-130（执行契约——配音/字幕同源）/ ADR-093（言语 = LLM 之声——开工说明一句真话）
-
-## ADR-133: System Status 相位面终态——通用 LLM 黑盒窗只叫 Thinking…，composing 退役
-
-**Status**: Decided（2026-10-18 用户拍板）
-
-**Context**: composing（"Putting it together…" / 「正在整理…」）生在收据行之前——当时的职责是证明「工具已干完、轮到模型想」（read→think takeover，交互完整性批 C）。收据行（Worked for Xs 折壳，ADR-110）落地后，这个证明由世界自证承担，词退化为每回合占比最高的冻词。逐回合取证（项目 f544592c 全程）另证实：该相位覆盖的窗口 = quiet 迭代的一次阻塞式 LLM 调用（`tool_loop.py` 只有 iteration 0 流式），窗口内连服务端都无任何可传播的子状态——它不是信息，是糊在盲窗上的词。拍板律：**时长不设限，词语不许怪**——想得久不怪，词不对才怪。
-
-**Decision**:
-
-1. `assistant.thinking` 相位面 = 基座（Thinking…）+ 分镜设计跨度三真相位（capturing / storyboarding / storyboard_revision，`design_storyboard` 执行内真实转换点发射）+ 显式清除帧。**通用 LLM 黑盒窗（读后决策 / 回复生成 / 一切无名窗口）只戴基座词，无论多长不设别名。**
-2. 清除帧合法发射座两座：每个调用名的 name-known 时刻（`routes.py:_make_tool_hooks`，无相位在戴 = no-op）+ 分镜跨度自身退出（`draft_film_storyboard` 的 finally——跨度的词跨度自己收；bare-reply 终局没有 name-known 兜底，此座承重）。
-3. loop 内核 `on_observe` 钩子随唯一消费者（`chat/system_status.py`，整删）退役而删除——内核自带律：无消费者的事件是等待漂移的谎言；`ReadAccepted` 仍骑 `on_loop_event`，Activity 投影不受影响。
-4. 新相位准入：它必须命名一段结构性不同的真实活动，且该活动没有更诚实的通道（Activity / prose）——通用决策窗别名永不复活。
-
-**Consequences**: 读后决策窗与回复生成窗回到基座词，窗口时长不变、词不再怪；前端未知相位落 `defaultValue` 回退基座（`ActivityStream.tsx`），新旧端互撞零风险。分镜跨度的真相位机制不受影响。
-
-**Related**: ADR-087 §1（三通道分家——相位面的归宿）/ ADR-110（段聚合——收据行接管「干完了」的证明）/ ADR-129（分镜跨度——真相位的唯一在册族）

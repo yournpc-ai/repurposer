@@ -12,10 +12,9 @@ header. Plain callers get the one-shot JSON ``ChatResponse`` (unchanged);
 the action JSON retired into terminal tool calls, so the prose channel IS
 the reply — ``assistant.delta`` frames carry it verbatim (dialect-stripped at
 the client seam, typewriter law native); ``assistant.thinking`` carries
-liveness keepalives, the film design span's System Status labels
-(``capturing`` / ``storyboarding`` / ``storyboard_revision`` — emitted at
-real transitions inside ``design_storyboard`` and cleared at its exit),
-and the explicit clear frame; ``question.preview`` docks the
+liveness keepalives, the System Status label (``composing`` — the sole
+survivor after Phase 3 Batch B retired creating_run on the B4 dead-window
+forensics), and the explicit clear frame; ``question.preview`` docks the
 pill the moment an ask_user call's arguments validate. The terminal envelope
 (``turn.completed`` / ``turn.failed``) stays authoritative.
 """
@@ -171,9 +170,9 @@ def _make_tool_hooks(queue: asyncio.Queue, projector: ActivityProjector | None =
       repairing) are gone — the Activity frames speak for the work now
       (三通道分家). Every name-known moment ALSO emits the explicit phase
       clear ``{"phase": null}`` (I-PFA-06 清除协议, 2026-09-18 定型):
-      a System Status label (the film design span's — the only surviving
-      labels) never outlives its activity by inheritance; a no-op when no
-      label is set.
+      whatever System Status label preceded it (``composing`` — the only
+      surviving label, emitted at a read's observation-acceptance) never
+      outlives its activity by inheritance; a no-op when no label is set.
       The terminal envelope closes whatever remains (终帧律, client-side).
     - ``on_tool_ready``: an ask_user call's arguments completed and validated
       (pre-execution) — preview-dock the pill NOW instead of waiting out the
@@ -591,13 +590,12 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     # Reasoning-content frames: liveness only, never shown.
                     await queue.put(_sse("assistant.thinking", "{}"))
 
-                async def on_phase(phase: str | None) -> None:
+                async def on_phase(phase: str) -> None:
                     # A REAL System Status switch: a labelled thinking frame
-                    # ({"phase": "storyboarding"}) — the dock's status row
-                    # shows the phase copy instead of the static fallback;
-                    # {"phase": null} (the film span's exit) resets it. The
-                    # bare {} keepalive frames above never carry a phase and
-                    # never touch the client's label. Work evidence rides the
+                    # ({"phase": "composing"}) — the dock's status row shows
+                    # the phase copy instead of the static fallback. The bare
+                    # {} keepalive frames above never carry a phase and never
+                    # touch the client's label. Work evidence rides the
                     # Activity channel, never this one (三通道分家, Phase 3
                     # Batch B).
                     await queue.put(
@@ -735,7 +733,7 @@ async def _answer_stream(
                 on_candidates = _make_candidates_hook(queue, candidate_events)
 
 
-                async def on_phase(phase: str | None) -> None:
+                async def on_phase(phase: str) -> None:
                     await queue.put(
                         _sse("assistant.thinking", json.dumps({"phase": phase}))
                     )

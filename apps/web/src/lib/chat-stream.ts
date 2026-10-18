@@ -85,11 +85,11 @@ export interface StreamChatOptions {
   onDelta?: (text: string) => void
   /** System Status frame: fires with `{}` as a pure keepalive (reasoning
    * fragments / non-prose JSON chunks — drive the indicator, never render),
-   * or with `{phase: <label>}` at a REAL macro-state switch (the surviving
-   * labels are the film design span's — capturing / storyboarding /
-   * storyboard_revision) — the client labels its status row from the phase
-   * and leaves it untouched on bare keepalives. Work evidence never rides
-   * this channel (Phase 3 Batch B ③:
+   * or with `{phase: "composing"}` at a REAL macro-state switch (the sole
+   * survivor — `"creating_run"` was deleted in Batch B ⑤ after the B4 CDP
+   * dead-window forensics proved it never the sole cover) — the client
+   * labels its status row from the phase and leaves it untouched on bare
+   * keepalives. Work evidence never rides this channel (Phase 3 Batch B ③:
    * the retired drafting/inspecting/repairing labels live on the Activity
    * channel).
    * `{phase: null}` is the EXPLICIT phase clear

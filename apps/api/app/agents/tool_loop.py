@@ -342,6 +342,7 @@ class ToolLoopAgent:
         on_tool_call: _Hook | None = None,
         on_tool_ready: _Hook | None = None,
         on_repair: _Hook | None = None,
+        on_observe: _Hook | None = None,
         on_checkpoint: _Hook | None = None,
         on_loop_event: _Hook | None = None,
         **ctx: Any,
@@ -375,6 +376,14 @@ class ToolLoopAgent:
           never wears the label (2026-09-17 交互完整性批 ②: the read-before-
           write journey used to light "reworking it…" right after a
           successful read — a lie about the world).
+        - ``on_observe``: an observation was ACCEPTED (a non-terminal read's
+          result is on the wire) and the loop enters the quiet decision
+          iteration — the read→think takeover seat (交互完整性批 C: tool
+          completion used to have no signal, so the UI kept wearing a stale
+          label through the 15-25s quiet window; the surviving "composing"
+          System Status label rides this hook). Fires
+          with the read tool's name, once per accepted read; never for a
+          rejection (that has ``on_repair``).
         - ``on_checkpoint``: a CHECKPOINT was delivered (ADR-109 言语座位
           通用化) — the prose riding ANY non-terminal call (before/after
           are the same seat: an after-report is the next iteration's prose
@@ -398,7 +407,7 @@ class ToolLoopAgent:
           meaning is the Activity Projection's job, never the kernel's.
           The iteration boundary has no separate event: its two causes
           (retry-after-rejection / continuation-after-read) already ride
-          ``on_repair`` / ``ReadAccepted`` — an event without a consumer is
+          ``on_repair`` / ``on_observe`` — an event without a consumer is
           a lie waiting to drift.
         """
         capabilities = getattr(self.client, "capabilities", None)
@@ -762,7 +771,12 @@ class ToolLoopAgent:
                         "content": outcome.text,
                     }
                 )
+                # The read→think takeover (交互完整性批 C): the observation
+                # is on the wire, the quiet decision iteration begins — the
+                # UI's phase moves on from the inspecting label NOW, not at
+                # the next call's name-known moment (15-25s later).
                 await _emit(on_loop_event, ReadAccepted(tool_name=call.name, ok=outcome.ok))
+                await _emit(on_observe, call.name)
                 continue
             if outcome is None:
                 if not tool.terminal:

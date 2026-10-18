@@ -934,16 +934,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const [pendingQuestion, setPendingQuestion] = useState<QuestionMessage | null>(null)
   const [answering, setAnswering] = useState(false)
   // System Status label (三概念分家, ADR-087 §1; Phase 3 Batch B): set
-  // from the server's labelled assistant.thinking frames — the surviving
-  // labels are the film design span's (capturing / storyboarding /
-  // storyboard_revision, emitted at real transitions and cleared at the
-  // span's exit); every other LLM window wears the base chat.thinking
-  // word — a plain black-box window needs no alias, however long it runs.
-  // Bare keepalive frames never touch the label.
+  // from the server's labelled assistant.thinking frames — the sole
+  // survivor is "composing" (the read→think takeover); the retired
+  // work-evidence labels (drafting/inspecting/repairing) live on the
+  // Activity channel, and creating_run was deleted in Batch B ⑤ after the
+  // B4 CDP dead-window forensics proved it never the sole cover. Bare
+  // keepalive frames never touch the label, and without one the row falls
+  // back to chat.thinking.
   // Lifecycle (I-PFA-06 清除协议, 2026-09-18): a label dies two ways — the
   // server's explicit clear frame {phase: null} ends it (every call's
-  // name-known moment, and the film span's own exit), or the terminal
-  // envelope closes the turn (终帧律 —
+  // name-known moment), or the terminal envelope closes the turn (终帧律 —
   // both stream paths reset at envelope AND failure, never leaving a stale
   // label in state).
   const [thinkingPhase, setThinkingPhase] = useState<string | null>(null)
@@ -2561,8 +2561,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             // System Status labels and the explicit clear (I-PFA-06 清除
             // 协议, 2026-09-18; Phase 3 Batch B): `"phase" in payload`
             // separates both from bare keepalives, which leave the label
-            // as-is. A string phase hands the row over (the film design
-            // span's labels are the sole survivors); `phase: null`
+            // as-is. A string phase hands the row over (composing is the
+            // sole survivor — creating_run deleted in B ⑤); `phase: null`
             // is the server's clear frame (every call's name-known
             // moment) — reset to the base label. Work evidence never rides
             // this channel (Activity owns it); a phase-only frame drops

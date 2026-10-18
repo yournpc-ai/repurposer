@@ -1199,6 +1199,7 @@ const en = {
       capturing: "Waiting for the page captures…",
       storyboarding: "Designing the storyboard…",
       storyboard_revision: "Adjusting the storyboard…",
+      composing: "Putting it together…",
     },
     /** 分镜起草落定行（legacy 节拍回放）: the drafting span's
      * SETTLED row (a born-settled material beat) — the log register
