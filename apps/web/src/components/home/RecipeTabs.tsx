@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+
 import type { ResolvedFamily } from "./recipeFamilies"
 
 /**
@@ -114,20 +116,33 @@ export function RecipeTabs({
           {families.map((family) => {
             const Icon = family.icon
             const on = family.id === activeFamilyId
-            return (
+            const disabled = family.disabled === true
+            const button = (
               <button
                 key={family.id}
                 type="button"
-                onClick={() => onSelectFamily(family.id)}
+                aria-disabled={disabled || undefined}
+                onClick={disabled ? undefined : () => onSelectFamily(family.id)}
                 className={`flex h-9 flex-none items-center gap-1.5 rounded-full px-4 text-sm transition-colors ${
                   on
                     ? "bg-foreground text-background"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    : disabled
+                      ? "cursor-not-allowed text-muted-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 }`}
               >
                 {Icon && <Icon className="h-4 w-4" />}
                 {t(`recipes.shelf.families.${family.id}`)}
               </button>
+            )
+            if (!disabled) return button
+            return (
+              <Tooltip key={family.id}>
+                <TooltipTrigger render={button} />
+                <TooltipContent side="bottom">
+                  {t("recipes.shelf.upgrading")}
+                </TooltipContent>
+              </Tooltip>
             )
           })}
         </div>

@@ -229,7 +229,9 @@ function Home() {
   const [activeFamilyId, setActiveFamilyId] = useState<string | null>(null)
   const [subByFamily, setSubByFamily] = useState<Record<string, string>>({})
   const activeFamily =
-    families.find((f) => f.id === activeFamilyId) ?? families[0] ?? null
+    families.find((f) => f.id === activeFamilyId && !f.disabled) ??
+    families[0] ??
+    null
   const activeSub =
     activeFamily?.subs.find((s) => s.id === subByFamily[activeFamily.id]) ??
     activeFamily?.subs[0] ??
@@ -306,7 +308,7 @@ function Home() {
     // the blur nothing to blur (white veil over white page = a solid white
     // bar). The pinned tabs bar compensates with max-md:top-14 below.
     <div className="h-svh max-md:-mt-14">
-      <div ref={scrollRef} className="h-full overflow-y-auto no-scrollbar">
+      <div ref={scrollRef} className="h-full overflow-x-hidden overflow-y-auto no-scrollbar">
         {/* Rest offset — anchors the hero cluster near the top (~15% of the
             viewport, the reference rhythm) while letting the shelf peek
             above the fold (the page's gravity cue that there is more
@@ -419,41 +421,43 @@ function Home() {
                   />
                 </div>
               </div>
-              <div className="mx-auto mt-4 flex w-full max-w-6xl flex-col gap-10 px-4 sm:px-6">
-                {activeFamily.subs.map((sub, subIndex) => (
-                  <div
-                    key={sub.id}
-                    ref={(el) => {
-                      subSectionRefs.current[sub.id] = el
-                    }}
-                    className="flex flex-col gap-8"
-                  >
-                    {sub.shelves.map((shelf, shelfIndex) => (
-                      <RecipeShelf
-                        key={shelf.id}
-                        title={t(`recipes.shelf.titles.${shelf.id}`)}
-                        items={shelf.items}
-                        onPrefill={handlePrefill}
-                        soundOwner={demoSoundOwner}
-                        onSoundStart={claimDemoSound}
-                        onSoundStop={releaseDemoSound}
-                        // Tour step 3 anchors the launch-film demo card's
-                        // Use-prompt entry — the Ads family's first shelf
-                        // item, the flagship the home page opens on. The
-                        // tour's scrollIntoView block:"center" centers it in
-                        // the viewport between the pinned tabs and the bottom
-                        // dock; a missing demo asset → the step auto-skips.
-                        tourAnchorIndex={
-                          activeFamily.id === "ads" &&
-                          subIndex === 0 &&
-                          shelfIndex === 0
-                            ? 0
-                            : undefined
-                        }
-                      />
-                    ))}
-                  </div>
-                ))}
+              <div className="mt-4 px-4 sm:px-6">
+                <div className="mx-auto flex w-full min-w-0 max-w-6xl flex-col gap-10">
+                  {activeFamily.subs.map((sub, subIndex) => (
+                    <div
+                      key={sub.id}
+                      ref={(el) => {
+                        subSectionRefs.current[sub.id] = el
+                      }}
+                      className="flex w-full min-w-0 max-w-full flex-col gap-8"
+                    >
+                      {sub.shelves.map((shelf, shelfIndex) => (
+                        <RecipeShelf
+                          key={shelf.id}
+                          title={t(`recipes.shelf.titles.${shelf.id}`)}
+                          items={shelf.items}
+                          onPrefill={handlePrefill}
+                          soundOwner={demoSoundOwner}
+                          onSoundStart={claimDemoSound}
+                          onSoundStop={releaseDemoSound}
+                          // Tour step 3 anchors the launch-film demo card's
+                          // Use-prompt entry — the Ads family's first shelf
+                          // item, the flagship the home page opens on. The
+                          // tour's scrollIntoView block:"center" centers it in
+                          // the viewport between the pinned tabs and the bottom
+                          // dock; a missing demo asset → the step auto-skips.
+                          tourAnchorIndex={
+                            activeFamily.id === "ads" &&
+                            subIndex === 0 &&
+                            shelfIndex === 0
+                              ? 0
+                              : undefined
+                          }
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
               </div>
             </>
           )}

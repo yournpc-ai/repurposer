@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ChevronRight, Volume2, VolumeX } from "lucide-react"
+import { ChevronLeft, ChevronRight, Maximize2, Volume2, VolumeX } from "lucide-react"
 
 import { RecipeCard } from "@/components/home/RecipeCard"
 import { Button } from "@/components/ui/button"
@@ -20,10 +20,10 @@ import type { ShelfDemo, ShelfItem } from "./recipeFamilies"
  * `prefillKey` up; the shelf itself never navigates and never opens any
  * template-editing surface.
  *
- * The › pager is honest chrome (禁死按钮): it renders ONLY while there is
- * more to page to (scrollable AND not at the end), one viewport-ish step
- * per click. Circular icon button = the rounded-full law's first exception;
- * same-fill boundary on the white shelf = the hairline ring's legal seat.
+ * The ‹ › pagers are honest chrome (禁死按钮): each renders ONLY while there
+ * is more to page to in its direction, one viewport-ish step per click.
+ * Circular icon buttons = the rounded-full law's first exception; same-fill
+ * boundary on the white shelf = the hairline ring's legal seat.
  */
 export function RecipeShelf({
   title,
@@ -50,15 +50,18 @@ export function RecipeShelf({
 }) {
   const { t } = useTranslation()
   const trackRef = useRef<HTMLDivElement>(null)
-  const [canPage, setCanPage] = useState(false)
+  const [canPageBack, setCanPageBack] = useState(false)
+  const [canPageForward, setCanPageForward] = useState(false)
 
   // SSR-safe: measurement lives in an effect; the first paint simply has
   // no pager (it appears once the track reports overflow).
   useEffect(() => {
     const el = trackRef.current
     if (!el) return
-    const update = () =>
-      setCanPage(el.scrollWidth - el.clientWidth - el.scrollLeft > 8)
+    const update = () => {
+      setCanPageBack(el.scrollLeft > 8)
+      setCanPageForward(el.scrollWidth - el.clientWidth - el.scrollLeft > 8)
+    }
     update()
     el.addEventListener("scroll", update, { passive: true })
     const ro = new ResizeObserver(update)
@@ -70,12 +73,12 @@ export function RecipeShelf({
   }, [items])
 
   return (
-    <section>
+    <section className="w-full min-w-0 max-w-full">
       <h3 className="mb-2.5 text-base font-medium">{title}</h3>
-      <div className="relative rounded-lg bg-card p-3.5 ring-1 ring-foreground/10">
+      <div className="relative w-full min-w-0 max-w-full overflow-hidden rounded-lg bg-card p-3.5 ring-1 ring-foreground/10">
         <div
           ref={trackRef}
-          className="flex gap-3 overflow-x-auto no-scrollbar"
+          className="flex w-full min-w-0 max-w-full gap-3 overflow-x-auto no-scrollbar"
         >
           {items.map((item, index) =>
             item.kind === "recipe" ? (
@@ -104,7 +107,22 @@ export function RecipeShelf({
             ),
           )}
         </div>
-        {canPage && (
+        {canPageBack && (
+          <button
+            type="button"
+            aria-label={t("recipes.shelf.previousPage")}
+            onClick={() =>
+              trackRef.current?.scrollBy({
+                left: -(trackRef.current.clientWidth ?? 320) * 0.85,
+                behavior: "smooth",
+              })
+            }
+            className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        )}
+        {canPageForward && (
           <button
             type="button"
             aria-label={t("recipes.shelf.nextPage")}
@@ -125,11 +143,11 @@ export function RecipeShelf({
 }
 
 /** One MG demo card: the real render IS the card face. Rest = autoplaying
- * muted loop with no chrome; hover/focus = a media-scrim veil with the
- * card's one action (use the prompt) plus sound. Claiming sound unmutes
- * this card and mutes the previous owner WITHOUT pausing it. If the
- * browser refuses unmuted hover playback, the card falls back to muted
- * autoplay and the sound button's real click can unlock audio. */
+ * muted loop with no chrome; hover/focus = a translucent gray veil with the
+ * card's one action (use the prompt), sound, and a decorative expand mark.
+ * Claiming sound unmutes this card and mutes the previous owner WITHOUT
+ * pausing it. If the browser refuses unmuted hover playback, the card falls
+ * back to muted autoplay and the sound button's real click can unlock audio. */
 function DemoCard({
   demo,
   onSelect,
@@ -166,27 +184,25 @@ function DemoCard({
     onSoundStart(demo.id)
     video.volume = 1
     video.muted = false
-    // The card is already autoplaying muted. Unmuting must NOT issue a
-    // fresh play(): browsers read that as audible autoplay, reject it, and
-    // the fallback would immediately re-mute the hover. play() is only for
-    // the genuinely paused case (autoplay was blocked or the browser was
-    // backgrounded).
-    if (video.paused) {
+    // Always re-assert play() after unmuting: if the browser treats the
+    // hover unmute as blocked audible autoplay and pauses the loop, this is
+    // the one place that can catch it. A rejected attempt falls back to the
+    // muted loop; a real click on the sound button supplies activation.
+    try {
+      await video.play()
+    } catch {
+      video.muted = true
+      setMuted(true)
       try {
         await video.play()
       } catch {
-        // Autoplay policies do not treat hover as activation: keep the loop
-        // alive muted; the sound button's real click unlocks audio later.
-        video.muted = true
-        try {
-          await video.play()
-        } catch {
-          onSoundStop(demo.id)
-          return
-        }
+        // The paused frame is preferable to a broken hover.
       }
+      onSoundStop(demo.id)
+      return
     }
     setMuted(video.muted)
+    if (video.muted) onSoundStop(demo.id)
   }, [demo.id, onSoundStart, onSoundStop])
 
   const deactivate = useCallback(() => {
@@ -225,10 +241,8 @@ function DemoCard({
   return (
     <div
       ref={rootRef}
-      className={`relative flex-none overflow-hidden rounded-lg ${
-        demo.orientation === "vertical"
-          ? "aspect-[3/4] w-44"
-          : "aspect-video w-72"
+      className={`relative h-60 flex-none overflow-hidden rounded-lg ${
+        demo.orientation === "vertical" ? "aspect-[3/4]" : "aspect-video"
       }`}
       onPointerEnter={(event) => {
         if (event.pointerType !== "mouse") return
@@ -275,14 +289,17 @@ function DemoCard({
 
       {controlsVisible && (
         <>
-          <div aria-hidden className="pointer-events-none absolute inset-0 bg-media-scrim" />
+          <div
+            aria-hidden
+            className="media-scrim pointer-events-none absolute inset-0 rounded-[inherit]"
+          />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <Button
               type="button"
               variant="secondary"
               size="lg"
               onClick={handleSelect}
-              className="pointer-events-auto h-9 px-3.5 text-sm font-normal"
+              className="pointer-events-auto h-9 px-3.5 text-sm font-normal ring-1 ring-foreground/10"
             >
               {t("recipes.shelf.usePrompt")}
             </Button>
@@ -297,10 +314,18 @@ function DemoCard({
               event.stopPropagation()
               toggleSound()
             }}
-            className="absolute bottom-2 left-2 size-9 rounded-full"
+            className="absolute bottom-2 left-2 size-9 rounded-full ring-1 ring-foreground/10"
           >
             {muted ? <VolumeX className="size-4.5" /> : <Volume2 className="size-4.5" />}
           </Button>
+          {/* Decorative affordance — no zoom behavior; clicks stay with the
+              card's single Use-prompt action. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute bottom-2 right-2 flex size-9 items-center justify-center rounded-full bg-secondary text-secondary-foreground ring-1 ring-foreground/10"
+          >
+            <Maximize2 className="size-4.5" />
+          </div>
         </>
       )}
     </div>

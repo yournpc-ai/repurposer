@@ -62,6 +62,8 @@ export interface RecipeFamilyDef {
   /** Optional leading glyph on the level-1 pill (prototype: the templates
    * tab carries the grid icon). */
   icon?: LucideIcon
+  /** Keep the tab visible as a registry seat while disabling selection. */
+  disabled?: boolean
   subs: RecipeSubTabDef[]
 }
 
@@ -130,6 +132,18 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
                 orientation: "wide",
               },
               {
+                // snappify → vertical launch film ("Code, animated.").
+                id: "launch-film-snappify-code",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-snappify-code-adc0737d.mp4",
+                orientation: "vertical",
+              },
+              {
+                // snappify → vertical launch film ("Frame by Frame").
+                id: "launch-film-snappify-frame",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-snappify-frame-0ef913dd.mp4",
+                orientation: "vertical",
+              },
+              {
                 // zymix.ai → launch film (run 8321463d — "One App",
                 // 26.6s/1080p, every word grounds to the site's own copy).
                 // Content-addressed into the demo/ tree.
@@ -148,10 +162,12 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
   },
   {
     id: "talks",
+    disabled: true,
     subs: [{ id: "all", shelves: [{ id: "talks", kind: "recipes" }] }],
   },
   {
     id: "posts",
+    disabled: true,
     subs: [{ id: "all", shelves: [{ id: "posts", kind: "recipes" }] }],
   },
   {
@@ -182,6 +198,7 @@ export interface ResolvedSub {
 export interface ResolvedFamily {
   id: string
   icon?: LucideIcon
+  disabled?: boolean
   subs: ResolvedSub[]
 }
 
@@ -208,6 +225,7 @@ export function resolveFamilies(
     .map((family) => ({
       id: family.id,
       icon: family.icon,
+      disabled: family.disabled,
       subs: family.subs
         .map((sub) => ({
           id: sub.id,

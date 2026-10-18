@@ -82,14 +82,14 @@
 }
 
 /* Media scrim — the hover/focus interaction veil INSIDE a media tile (home
- * demo shelf). It darkens the media just enough for the primary controls,
- * using theme tokens instead of a one-off black alpha; it is not a floating
- * layer, so no blur and no shadow. */
+ * demo shelf). A translucent gray token wash keeps the render legible while
+ * the controls float above it; no filter, so the media's rounded corners stay
+ * clean. */
 @utility media-scrim {
-  background-color: color-mix(in oklch, var(--inverse) 58%, transparent);
+  background-color: color-mix(in oklch, var(--muted) 72%, transparent);
 
   @variant dark {
-    background-color: color-mix(in oklch, var(--background) 58%, transparent);
+    background-color: color-mix(in oklch, var(--muted) 58%, transparent);
   }
 }
 

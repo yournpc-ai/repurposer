@@ -45,8 +45,8 @@
 ### 4.1 配方货架与卡面（ADR-048 + RECIPES §4 / §4.8）
 
 - 封面是单色工艺示意图，**永不实拍**。rest = 内联 SVG 静态封面（`components/recipes/covers/<id>.svg`，foreground 灰阶自驱双主题反转，16:10，左输入→右输出）；hover 播 CSS keyframe 过程动画（零视频零声音零媒体请求）。
-- **卡没有真实成对示例 = 不进货架**（RECIPES §4.8 准入）；MG 族货架 = 真渲染 demo 视频 autoplay loop/muted，hover / keyboard focus = `media-scrim` 操作显影（中央「使用提示词」+ 左下声音钮）并尽力开声（浏览器 autoplay 拒声则保持静音，声音钮的真实点击解锁）；声音 = home 全局单例，后一张开声只静音前一张、前一张视频继续播放；族/子 tab/货架空即整级不渲染（无真 demo 连摆位都不摆）。
-- 货架解剖 = 两级 tab（一级 family pill 轨 + 下划线子 tab，子 tab 唯一时不渲染该行）+ 白容器横滑（`bg-card` + 发丝线 + `rounded-lg`，in-flow 零 shadow；› 翻页钮只在真可翻时出现——禁死按钮）。
+- **卡没有真实成对示例 = 不进货架**（RECIPES §4.8 准入）；MG 族货架 = 真渲染 demo 视频 autoplay loop/muted，hover / keyboard focus = 半透明灰色 `media-scrim` 操作显影（中央「使用提示词」+ 左下声音钮 + 右下纯视觉放大标记）并尽力开声（浏览器 autoplay 拒声则保持静音，声音钮的真实点击解锁）；声音 = home 全局单例，后一张开声只静音前一张、前一张视频继续播放；族/子 tab/货架空即整级不渲染（无真 demo 连摆位都不摆）。
+- 货架解剖 = 两级 tab（一级 family pill 轨 + 下划线子 tab，子 tab 唯一时不渲染该行）+ 白容器横滑（`bg-card` + 发丝线 + `rounded-lg`，in-flow 零 shadow；‹ › 翻页钮按方向在真可翻时出现——禁死按钮）。
 - **卡片点击唯一归宿 = composer 预填** `promptTemplate`（配方 = 提示词，ADR-040）——永不是模板编辑器，无 inspect overlay 形态。预填同时把 composer 带回视口（钉底态零滚动，文档流态滚内部 scrollport 至居中）并聚焦；模板必填空位 = 提示词文本内的可见占位符（当前 MG demo = 网站链接），插入后即选中，未替换发送本地拦截；占位符永不变成隐藏字段或第二个输入面。
 - 三行卡下文字 = 菜名 / promise（2 行 clamp）/ 适用素材。卡面禁画幅 badge / 类别 chip / 渠道名（卡只承载 genre）；渠道是挂发/排期变量（预填模板默认，chat 覆写）。
 

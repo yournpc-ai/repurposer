@@ -523,6 +523,8 @@ const zh: Resources = {
         posts: "社媒",
       },
       nextPage: "下一页",
+      previousPage: "上一页",
+      upgrading: "内容升级中",
       usePrompt: "使用提示词",
       playSound: "播放声音",
       mute: "静音",
@@ -535,10 +537,16 @@ const zh: Resources = {
       // 提示词）；{{placeholder}} 是发送前由用户替换的网站空位。
       demos: {
         "launch-film-linear": {
-          prompt: "把这个网站做成一条官网介绍短片：{{placeholder}}",
+          prompt: "把这个网站做成一条 16:9 横屏官网介绍短片：{{placeholder}}",
+        },
+        "launch-film-snappify-code": {
+          prompt: "把这个网站做成一条 9:16 竖屏官网介绍短片：{{placeholder}}",
+        },
+        "launch-film-snappify-frame": {
+          prompt: "把这个网站做成一条 9:16 竖屏官网介绍短片：{{placeholder}}",
         },
         "launch-film-zymix": {
-          prompt: "把这个网站做成一条官网介绍短片：{{placeholder}}",
+          prompt: "把这个网站做成一条 16:9 横屏官网介绍短片：{{placeholder}}",
         },
       },
     },

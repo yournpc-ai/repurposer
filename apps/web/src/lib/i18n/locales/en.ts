@@ -543,6 +543,8 @@ const en = {
         posts: "Social Media",
       },
       nextPage: "More",
+      previousPage: "Previous",
+      upgrading: "Content is being upgraded",
       usePrompt: "Use prompt",
       playSound: "Play sound",
       mute: "Mute",
@@ -557,10 +559,16 @@ const en = {
       // visible website blank the user replaces before send.
       demos: {
         "launch-film-linear": {
-          prompt: "Turn this website into a short intro film: {{placeholder}}",
+          prompt: "Turn this website into a short 16:9 intro film: {{placeholder}}",
+        },
+        "launch-film-snappify-code": {
+          prompt: "Turn this website into a short 9:16 vertical intro film: {{placeholder}}",
+        },
+        "launch-film-snappify-frame": {
+          prompt: "Turn this website into a short 9:16 vertical intro film: {{placeholder}}",
         },
         "launch-film-zymix": {
-          prompt: "Turn this website into a short intro film: {{placeholder}}",
+          prompt: "Turn this website into a short 16:9 intro film: {{placeholder}}",
         },
       },
     },
