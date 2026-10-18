@@ -1154,6 +1154,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const [assets, setAssets] = useState<ProjectAsset[]>([])
 
   const firstMessageSentRef = useRef(false)
+  /** Mount-order law (首条重复事故): the archive replay below prepends with
+   * NO dedup — it assumes the flow is still empty. The firstMessage handoff
+   * pushes the optimistic user bubble and POSTs within the same mount
+   * window; a fast prepare commits the server row BEFORE the replay's
+   * messages fetch resolves, and the replay then prepends the twin next to
+   * the bubble (the duplicate-first-message bug). So the handoff awaits the
+   * replay's first pass: history settles first, the send starts after. */
+  const [historyReady] = useState(() => {
+    let resolve!: () => void
+    const promise = new Promise<void>((r) => {
+      resolve = r
+    })
+    return { promise, resolve }
+  })
   const abortRef = useRef<AbortController | null>(null)
   /** Dead-stream machinery (see the module constants): the last frame's
    * receipt stamp (the watchdog's liveness read), the dead flag (set before
@@ -1297,10 +1311,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
       } catch {
         /* the archive replay is best-effort */
+      } finally {
+        // Settled either way (empty archive counts) — the firstMessage
+        // handoff waits on this pass before its optimistic push, never on
+        // the fetch succeeding.
+        historyReady.resolve()
       }
     })()
     return () => {
       cancelled = true
+      // An unmount also settles the gate (idempotent resolve) — a pending
+      // firstMessage handoff must never hang on a torn-down replay.
+      historyReady.resolve()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
@@ -2930,6 +2952,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     firstMessageSentRef.current = true
     void (async () => {
       try {
+        // The mount-order law: the archive replay's first pass settles
+        // BEFORE the optimistic push / send — a replay landing mid-send
+        // would prepend the server twin next to the local bubble (the
+        // duplicate first message).
+        await historyReady.promise
         const res = await apiFetch(`/api/v1/projects/${projectId}/results`, {
           toast: false,
         })
