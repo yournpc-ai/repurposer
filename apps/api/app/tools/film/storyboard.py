@@ -2622,10 +2622,14 @@ async def draft_film_storyboard(
                 voiceover=voiceover,
             )
         except (FilmStoryboardRejected, LLMSchemaError, LLMError) as exc:
-            # A direction-budget timeout keeps its OWN honest key all the way to
-            # the user ("took too long") — converting it to None would relabel a
-            # provider-slowness failure as an ungrounded-world failure.
-            if getattr(exc, "user_key", None) == "film_storyboard_timeout":
+            # Preflight and budget failures keep their OWN honest keys all the
+            # way to the user — converting them to None would relabel a known
+            # cause (missing captures / provider slowness) as an ungrounded
+            # copy problem.
+            if getattr(exc, "user_key", None) in {
+                "film_storyboard_timeout",
+                "film_views_missing",
+            }:
                 raise
             # The dock caller converts absence into an honest failed turn.
             logger.info(

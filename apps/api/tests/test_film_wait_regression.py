@@ -74,6 +74,31 @@ async def test_failed_draft_cannot_dock_without_storyboard(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_missing_views_keep_their_user_key(monkeypatch):
+    async def settled(_project_id):
+        return None
+    async def pages(_db, _project):
+        return [_film_page()]
+    async def images(_pages):
+        return []
+    async def insufficient_views(**_kwargs):
+        raise module.FilmStoryboardRejected(
+            ["INSUFFICIENT_VIEWS"],
+            "only 0 captured page views (need 4)",
+            user_key="film_views_missing",
+        )
+    monkeypatch.setattr(module, "_await_captures_settled", settled)
+    monkeypatch.setattr(module, "load_storyboard_pages", pages)
+    monkeypatch.setattr(module, "page_media_inputs", images)
+    monkeypatch.setattr(module, "orchestrate_storyboard", insufficient_views)
+    with pytest.raises(module.FilmStoryboardRejected) as error:
+        await module.draft_film_storyboard(
+            None, SimpleNamespace(id="project"), instruction="intro"
+        )
+    assert error.value.user_key == "film_views_missing"
+
+
+@pytest.mark.asyncio
 async def test_dock_budget_covers_capture_and_forwards_progress(monkeypatch):
     phases = []
     async def phase(value):

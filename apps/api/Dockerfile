@@ -5,9 +5,17 @@
 FROM python:3.11-slim
 
 # ctranslate2 (pulled in by faster-whisper) dlopen's the OpenMP runtime at
-# import time; it's the one system lib the manylinux wheels don't bundle.
+# import time; Chromium is the web_page capture's browser (the worker shares
+# this image). The font packages keep headless captures readable across the
+# product's target languages.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgomp1 \
+        chromium \
+        ca-certificates \
+        fontconfig \
+        fonts-liberation \
+        fonts-noto-cjk \
+        fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
 # uv: reproducible installs straight from the committed uv.lock.

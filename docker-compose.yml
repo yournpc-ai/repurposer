@@ -46,6 +46,8 @@ services:
       - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
       - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
       - CHANNEL_CREDENTIALS_KEY=${CHANNEL_CREDENTIALS_KEY}
+      - CHROME_PATH=/usr/bin/chromium
+      - CHROME_NO_SANDBOX=true
     depends_on:
       db:
         condition: service_healthy
@@ -80,6 +82,8 @@ services:
       - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
       - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
       - CHANNEL_CREDENTIALS_KEY=${CHANNEL_CREDENTIALS_KEY}
+      - CHROME_PATH=/usr/bin/chromium
+      - CHROME_NO_SANDBOX=true
     depends_on:
       db:
         condition: service_healthy
