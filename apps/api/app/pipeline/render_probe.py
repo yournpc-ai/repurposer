@@ -95,12 +95,23 @@ def probe_expectation_for(spec: dict[str, Any]) -> ProbeExpectation:
         else FILM_FPS
     )
     # Audio expectation (Batch 2): the spec's own promises decide — a music
-    # bed (``music``) or any per-scene narration (``audio``) means the
-    # rendered container must carry an audio stream. A silent cut (neither)
-    # asserts nothing about audio.
+    # bed (``music``), any per-scene narration (``audio``), or any composite
+    # element keeping its original sound (``keep_audio``, ADR-140) means the
+    # rendered container must carry an audio stream. A silent cut (none of
+    # these) asserts nothing about audio.
     scenes = spec.get("scenes") or []
-    expects_audio = bool(spec.get("music")) or any(
-        isinstance(s, dict) and s.get("audio") for s in scenes
+    expects_audio = (
+        bool(spec.get("music"))
+        or any(isinstance(s, dict) and s.get("audio") for s in scenes)
+        or any(
+            isinstance(s, dict)
+            and s.get("type") == "composite"
+            and any(
+                isinstance(e, dict) and e.get("kind") == "video" and e.get("keep_audio")
+                for e in s.get("elements") or []
+            )
+            for s in scenes
+        )
     )
     return ProbeExpectation(
         codec=FILM_CODEC,

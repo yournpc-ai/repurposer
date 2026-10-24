@@ -54,6 +54,7 @@ def test_registry_shape_and_naming_law() -> None:
         "get_graph",
         "get_web_page",
         "search_web",
+        "list_project_media",
     }
     for name, entry in PERCEPTION_TOOLS.items():
         assert re.fullmatch(r"(get|list|search)_[a-z_]+", name), name
@@ -520,3 +521,164 @@ class TestSegmentBody:
         text, truncated = _segment_body(words, 0.0, 2.0)
         assert truncated is True
         assert f"truncated at {_SEGMENT_TEXT_LIMIT}" in text
+
+
+# ---- 素材发现读 (ADR-140 下批 A1): list_project_media ------------------------
+#
+# The discovery read's honest-formatting law: the facts ride the ONE listing
+# seat (project_media_candidates — stubbed here; its own mapping law lives in
+# test_film_storyboard_pure.py, tenant scoping in the isolated-DB lifecycle
+# test). Gated here: the empty project's honest empty, the per-row fact
+# bits (known vs UNKNOWN duration / dimensions, no-bytes unusable, the
+# failed-analysis-still-footage note), the cap's honest truncation line, and
+# the metadata-is-not-a-viewing trailer (the never-claim-watching law).
+
+
+def _candidate(**over) -> dict:
+    base = dict(
+        id=str(uuid4()),
+        kind="video",
+        title="clip.mp4",
+        duration_seconds=15.42,
+        width=1920,
+        height=1080,
+        usable=True,
+        processing="completed",
+    )
+    base.update(over)
+    return base
+
+
+def _stub_candidates(monkeypatch, candidates) -> None:
+    async def _fake(db, project, *, pinned_ids=None):
+        if pinned_ids:
+            by_id = {c["id"]: c for c in candidates}
+            return [by_id[i] for i in pinned_ids if i in by_id] + [
+                c for c in candidates if c["id"] not in pinned_ids
+            ]
+        return candidates
+
+    monkeypatch.setattr(
+        "app.tools.film.storyboard.project_media_candidates", _fake
+    )
+
+
+@pytest.mark.asyncio
+async def test_media_read_empty_project_is_an_honest_empty(monkeypatch) -> None:
+    from app.chat.perception.executes import list_project_media
+
+    _stub_candidates(monkeypatch, [])
+    text = await list_project_media(None, SimpleNamespace(id=uuid4()), None)
+    assert "No video or image assets" in text
+    assert "citable by id" in text
+
+
+@pytest.mark.asyncio
+async def test_media_read_rows_carry_the_facts(monkeypatch) -> None:
+    from app.chat.perception.executes import list_project_media
+
+    known = _candidate()
+    unknown = _candidate(
+        title=None, duration_seconds=None, width=None, height=None
+    )
+    image = _candidate(kind="image", title="cover.png")
+    _stub_candidates(monkeypatch, [known, unknown, image])
+    text = await list_project_media(None, SimpleNamespace(id=uuid4()), None)
+
+    # Header: the count + the cite-only-these-ids law.
+    assert "3 asset(s)" in text
+    assert "an id not listed does not exist" in text
+    # Known facts render; the id is the citation handle.
+    assert f"- {known['id']}" in text and '"clip.mp4"' in text
+    assert "video · 15.42s · 1920×1080" in text
+    # Unknowns read as unknowns — never guessed.
+    assert "duration unknown" in text
+    assert "verified against the real bytes" in text
+    assert "dimensions unknown" in text
+    # An image carries no duration bit.
+    image_line = next(l for l in text.splitlines() if "cover.png" in l)
+    assert "image" in image_line and "s ·" not in image_line
+    # The metadata-is-not-a-viewing trailer rides every non-empty read.
+    assert "not a viewing" in text
+    assert "ask for the time range" in text
+
+
+@pytest.mark.asyncio
+async def test_media_read_usability_and_processing_notes(monkeypatch) -> None:
+    from app.chat.perception.executes import list_project_media
+
+    no_bytes = _candidate(usable=False, title="ghost.mp4")
+    failed = _candidate(processing="failed", title="unanalyzed.mp4")
+    _stub_candidates(monkeypatch, [no_bytes, failed])
+    text = await list_project_media(None, SimpleNamespace(id=uuid4()), None)
+
+    ghost_line = next(l for l in text.splitlines() if "ghost.mp4" in l)
+    assert "NOT usable — no media bytes" in ghost_line
+    failed_line = next(l for l in text.splitlines() if "unanalyzed.mp4" in l)
+    assert "content analysis failed — still usable as footage" in failed_line
+
+
+@pytest.mark.asyncio
+async def test_media_read_cap_truncates_honestly(monkeypatch) -> None:
+    from app.chat.perception.executes import list_project_media
+
+    monkeypatch.setattr("app.tools.film.storyboard.MEDIA_LISTING_CAP", 2)
+    _stub_candidates(monkeypatch, [_candidate() for _ in range(3)])
+    text = await list_project_media(None, SimpleNamespace(id=uuid4()), None)
+    # The truncation note is a RECOVERY path (截断 ≠ 不存在): the printed
+    # range + the offset that reaches the older rows.
+    assert "(showing 1–2 of 3" in text
+    assert "offset=2" in text
+    assert len([l for l in text.splitlines() if l.startswith("- ")]) == 2
+
+
+# ---- 复审③: discovery recovery past the print cap ---------------------------
+
+
+@pytest.mark.asyncio
+async def test_media_read_pages_older_assets(monkeypatch) -> None:
+    """Pagination: page 1 says how to reach older rows (截断 ≠ 不存在 —
+    the misleading 'not listed = does not exist' wording is gone); page 2
+    surfaces the 41st asset; paging past the end is an honest end."""
+    from app.chat.perception.executes import ListProjectMediaParams, list_project_media
+
+    candidates = [_candidate() for _ in range(45)]
+    _stub_candidates(monkeypatch, candidates)
+    page1 = await list_project_media(
+        None, SimpleNamespace(id=uuid4()), ListProjectMediaParams()
+    )
+    assert "(showing 1–40 of 45" in page1
+    assert "offset=40" in page1  # the recovery path is named
+    assert "an id not listed does not exist" not in page1  # 截断 ≠ 不存在
+    assert "cite only this project" in page1
+    page2 = await list_project_media(
+        None, SimpleNamespace(id=uuid4()), ListProjectMediaParams(offset=40)
+    )
+    rows = [l for l in page2.splitlines() if l.startswith("- ")]
+    assert len(rows) == 5
+    assert str(candidates[40]["id"]) in page2
+    # Paging past the end reads as an honest end, never a crash.
+    end = await list_project_media(
+        None, SimpleNamespace(id=uuid4()), ListProjectMediaParams(offset=45)
+    )
+    assert "no assets in this page" in end
+
+
+@pytest.mark.asyncio
+async def test_media_read_scoped_ids_selection(monkeypatch) -> None:
+    """Precise selection: a scoped read by ids returns exactly the named
+    project assets (the user's explicit pick — past the cap or not), and
+    names unknown/foreign ids honestly (project scoping never relaxes)."""
+    from app.chat.perception.executes import ListProjectMediaParams, list_project_media
+
+    picked = _candidate(title="picked.mp4")
+    other = _candidate()
+    _stub_candidates(monkeypatch, [picked, other])
+    text = await list_project_media(
+        None,
+        SimpleNamespace(id=uuid4()),
+        ListProjectMediaParams(ids=[picked["id"], "not-a-real-id"]),
+    )
+    assert '"picked.mp4"' in text
+    assert str(other["id"]) not in text
+    assert "not-a-real-id" in text and "not one of this project" in text

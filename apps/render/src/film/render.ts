@@ -54,6 +54,16 @@ export async function renderFilm(
       if (s.type === "ui") {
         return { ...s, image: await stageRemoteSource(s.image), audio };
       }
+      if (s.type === "composite") {
+        // ADR-140: stage each media element's src (text elements carry no
+        // bytes); dedup per URL is inherited from stageRemoteSource.
+        const elements = await Promise.all(
+          s.elements.map(async (el) =>
+            el.kind === "text" ? el : { ...el, src: await stageRemoteSource(el.src) },
+          ),
+        );
+        return { ...s, elements, audio };
+      }
       if (s.type === "end") {
         const logo_url = s.logo_url ? await stageRemoteSource(s.logo_url) : s.logo_url;
         return { ...s, logo_url, audio };

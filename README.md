@@ -6,30 +6,30 @@ Core channels are LinkedIn, institutional websites, and email newsletters; multi
 
 ## Core Capabilities
 
-- **Named outputs, not a fixed bundle** — the plan is built per request from a skill registry: vertical clips, LinkedIn posts, articles, quote cards, carousels, multi-language versions. The user names it, the agent makes it.
+- **Named outputs, not a fixed bundle** — the plan is built per request from the tool registry: vertical clips, films, LinkedIn posts, articles, quote cards, carousels, and multi-language versions. The user names it, the agent makes it.
 - **Vertical clips with or without footage** — speaker footage → cropped, subtitled segments; pure audio / images / slides → still-frame videos.
 - **Multilingual** — subtitle translation plus voice-cloned dubbing (the speaker's own voice via MiniMax voice_clone + T2A).
 - **Persona = persisted identity memory** — tone, style, taboos, voice binding, and visual skin (caption style / title / intro-outro / music) in one object; user-isolated, multi-instance, auto-created from task material when not explicitly selected (ADR-037/038). The persona page edits the skin with a live Remotion `<Player>` preview, pixel-identical to the rendered output.
 - **AI understanding** — M3 vision reads slides and charts; self-hosted ASR produces word-level timestamps.
-- **Chat is the single intent surface** — every request (generation, refinement, revision) goes through the project chat: the plan agent builds the task book, the user confirms, the skill DAG runs.
+- **Chat is the single intent surface** — every request (generation, refinement, revision) goes through `POST /chat`. The agent presents a plan; the default auto setting can waive ordinary approval only when production intent exists, while ask mode and fee guards still confirm. A Film's first storyboard version is always fully presented before production.
 
 ## Core Usage Flow
 
 The main entry point is the home composer, not the project list:
 
-1. The user drops files (video / audio / transcript / slides / images) or pastes text into the home composer, and writes what they want. Optional Assets / Persona blocks ride the composer's top edge; neither is mandatory.
-2. Send creates the project, uploads the assets, and hands the draft to the project chat (`/projects/$id?overlay=chat`) as the first `POST /chat` message.
-3. The plan agent proposes a task book (outputs, languages, clip count); the user refines it in chat and confirms — confirmation creates the run.
-4. The worker processes assets asynchronously (ASR / text extraction / vision reading), then executes the skill DAG: `select_clips`, `write_post`, `write_quotes`, `write_carousel`, `write_article`, `dub_clip`, `translate_clip`, `add_music`, and friends.
-5. Clips render automatically on generation — the worker claims pending `Clip` rows and calls the Remotion service; there is no manual "Render" button.
-6. Outputs land on the results canvas; the user refines them through the chat dock and exports copy, images, or videos.
+1. The user drops files (video / audio / transcript / slides / images) or pastes text into the home composer and writes what they want. Optional Assets / Persona controls ride the composer; neither is mandatory. Clicking a recipe/demo card only prefills an editable prompt.
+2. Send shows progress, creates the project, uploads and attaches any selected assets, then navigates directly to `/projects/$id` and sends the first `POST /chat` message. Prompt-only sends create no asset; selecting a file alone never sends it.
+3. The agent reads/explores as needed and presents a plan. Production intent, auto/ask settings, confirmed scope and fee guards share the same Start machine; no separate `/intent` endpoint or automatic run is created by a recipe card.
+4. The worker processes requested assets asynchronously (ASR / text extraction / vision reading), then executes the compiled tool DAG. Upload alone leaves media dormant until a read intent or run needs it.
+5. Clip/film outputs use the render queue and the Remotion service; terminal writes carry render claim tokens. Text and image outputs use their own registered production paths.
+6. Outputs land in the project workspace; the user reviews them through output cards/canvas, refines through ChatDock and deterministic edit gestures, and exports the actual delivered files.
 
 ## Tech Stack
 
 - **Backend**: FastAPI + Python, plus a standalone queue worker process
 - **Core Model**: MiniMax M3 (multimodal: text + vision reading + voice clone / T2A)
 - **Frontend**: TanStack Start + TypeScript
-- **Video Rendering**: Remotion (`apps/render`, Node service, clip-spec → MP4+SRT)
+- **Video Rendering**: Remotion (`apps/render`, Node service; clip-spec / film-spec → rendered media)
 - **Speech Recognition**: faster-whisper (self-hosted, word-level timestamps)
 - **Task Queue**: Postgres (`FOR UPDATE SKIP LOCKED`) + standalone worker, no Redis
 - **Package Management**: backend uses `uv`; frontend / render / shared components use a `pnpm` workspace (`web` / `render` / `clip`)
@@ -43,10 +43,10 @@ The main entry point is the home composer, not the project list:
 ```
 repurposer/
 ├── apps/
-│   ├── api/                 # FastAPI backend (agents / skills / chat / pipeline / queue worker / ASR)
+│   ├── api/                 # FastAPI backend (agents / tools / skills / chat / pipeline / queue worker / ASR)
 │   │   └── migrations/      # Alembic database migrations
 │   ├── web/                 # TanStack Start frontend (includes vertical video editor)
-│   └── render/              # Remotion rendering service (clip-spec → MP4+SRT, Node)
+│   └── render/              # Remotion rendering service (clip-spec / film-spec → media, Node)
 ├── packages/
 │   └── clip/                # Shared Remotion <Clip> component (web preview + render output, parity guaranteed)
 ├── docs/                    # Project documentation — governed index in docs/README.md
@@ -54,8 +54,8 @@ repurposer/
 │   ├── PROGRESS.md          # Progress snapshot + schedule + backlog (sole source of truth for priorities)
 │   ├── MODULE_ARCHITECTURE.md  # Module map, table ownership, current architecture
 │   ├── DECISIONS.md         # Current ADRs
-│   ├── RENDERING.md         # clip-spec field contract + render chain
-│   └── tasks/               # Per-feature implementation briefs
+│   ├── RENDERING.md         # clip-spec / film-spec field contracts + render chain
+│   └── tasks/               # Current implementation / acceptance contracts
 ├── scripts/
 │   └── dev.sh               # One-command local startup
 ├── pnpm-workspace.yaml      # web/render/clip workspace (api uses uv independently, not in workspace)
@@ -177,7 +177,7 @@ Once started, open **http://localhost:3000** in your browser.
 | API Docs (Swagger) | http://localhost:8000/docs |
 | Render Service (Remotion) | http://localhost:3001 |
 
-> The render service (`apps/render`) is a black box called by the API worker (clip-spec → MP4+SRT); pure text output flows do not need it.
+> The render service (`apps/render`) is a black box called by the API worker (clip-spec / film-spec → media); pure text output flows do not need it.
 
 ### 6. (Optional) Full-Stack Docker One-Command Run
 
@@ -224,8 +224,15 @@ location /api/ {
 
 ## Tests
 
-- **Frontend**: `cd apps/web && pnpm test` (vitest).
-- **Backend**: the API test suite was removed after it drifted from the rapidly changing implementation — verify backend changes by running the relevant flow end-to-end. A few pure unit tests remain under `apps/api/tests/` (`uv run pytest tests/ -q`).
+Deployment requires the applicable ritual in `CLAUDE.md` to be green, in order:
+
+1. **Backend pure tests**: `cd apps/api && uv run --extra dev python -m pytest tests/ -q`.
+2. **Static architecture gates**: `cd apps/api && uv run python scripts/check_gates.py`.
+3. **Prompt gate when the prompt/registry surface changes**: `cd apps/api && uv run python scripts/prompt_gate.py`.
+4. **Live journey matrix**: `cd apps/api && uv run python scripts/chat_scenarios.py` against a live API + dev worker with the required provider quota. LLM/paid verification needs separate authorization.
+5. **Web pure suites**: `cd apps/web && pnpm test`.
+
+Scenario assertions lock server-observable shapes, not LLM wording or client-only typewriter/DOM behavior. Browser, real-model, disconnect, audio/visual and manual acceptance remain separate evidence layers; an old green run is not current-HEAD evidence.
 
 ## Documentation
 
@@ -235,7 +242,7 @@ The governed doc index — which doc owns which truth — lives in [docs/README.
 - [Progress & Schedule](./docs/PROGRESS.md) — sole source of truth for priorities and the backlog
 - [Module Architecture](./docs/MODULE_ARCHITECTURE.md) — module map, table ownership, current system architecture
 - [Architecture Decision Records](./docs/DECISIONS.md) — current ADRs only
-- [Rendering & clip-spec](./docs/RENDERING.md) — the sole render contract
+- [Rendering & spec families](./docs/RENDERING.md) — clip-spec / film-spec contracts and the render chain
 - [API Specification](./docs/API.md)
 
 ## Development Conventions

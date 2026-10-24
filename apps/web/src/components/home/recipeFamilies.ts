@@ -13,10 +13,15 @@
  *   templates (More)             catch-all 座 — 未归类服务端新卡的兜底行,
  *                                正常为空不渲染
  *
- * 上架纪律 (无真 demo 不成卡): a demos shelf entry ships ONLY with a real
- * rendered demo video — `resolveFamilies` drops empty shelves → empty subs
- * → empty families, so a family without real demos never renders, not even
- * a placeholder (连摆位都不摆).
+ * 上架纪律: `resolveFamilies` drops empty shelves → empty subs → empty
+ * families, so a family without demos never renders, not even a placeholder
+ * seat (连摆位都不摆). A demo video SHOULD be a real render of the shelf's
+ * capability; the text-anim / product-demo shelves temporarily ride REUSED
+ * existing renders as pure layout placeholders (each entry's comment names
+ * its source) — a placeholder proves the shelf's layout, never the
+ * capability, and swapping in the real sample is a data-only edit.
+ * Placeholders are recorded in data comments and the batch brief, never
+ * bannered in the UI.
  *
  * 卡片点击唯一归宿 = composer 预填 (D5 禁则 8 — 永不是模板编辑器): every
  * resolved shelf item carries its `prefillKey` — a recipe card resolves to
@@ -32,12 +37,17 @@ import type { RecipePublic } from "@/lib/recipes"
 /** One demo video card on a MG family shelf (autoplay muted loop + hover
  * sound veil; the render itself is the evidence). */
 export interface ShelfDemo {
-  /** Demo id — prefill copy lives at `recipes.shelf.demos.<id>.prompt`. */
+  /** Demo id — prefill copy lives at `recipes.shelf.demos.<id>.prompt`. The
+   * id is the card's stable business key (React key + sound-owner id): it
+   * never derives from the url, so a video swap touches nothing else. */
   id: string
-  /** Real rendered demo video URL. An entry ships ONLY with a real render;
-   * a family whose demos are all missing never renders. */
+  /** Demo video URL. The standard is a real render of the shelf's
+   * capability; placeholder entries (a reused existing render, its source
+   * named in the entry's comment) exist only to ship a shelf's layout
+   * before its own samples land — replacing one is a data-only edit. */
   url: string
-  /** Card frame: "wide" = 16:9, "vertical" = 3/4 (prototype .vcard / .v). */
+  /** Card frame: "wide" = 16:9, "vertical" = 3/4 (prototype .vcard / .v).
+   * Always the file's real aspect — never stretch a placeholder. */
   orientation: "wide" | "vertical"
 }
 
@@ -106,9 +116,10 @@ export function recipeCardFamily(card: RecipePublic): string {
 }
 
 /** The shelf registry — task families in display order (the first family
- * is the home's default tab). Ads' RESERVED seats (ugc / product) declare
- * EMPTY demo lists until their renders land — invisible until then, zero
- * component changes to turn them on (无真 demo 不上架). */
+ * is the home's default tab). Ads' RESERVED seats (brand / ugc / product)
+ * declare EMPTY demo lists until their renders land — invisible until then,
+ * zero component changes to turn them on. The text-anim / product-demo subs
+ * are LIVE placeholder shelves (see their entry comments). */
 export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
   {
     // Ads — the MG flagship (launch_film: paste a link, get a
@@ -150,6 +161,79 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
                 id: "launch-film-zymix",
                 url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-zymix-9890ad58.mp4",
                 orientation: "wide",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        // 文字动画短片 (home 内容扩展批) — PLACEHOLDER shelf: every card
+        // reuses one of the saas shelf's existing renders (source named per
+        // entry) so the layout/interaction ships before the real text-
+        // animation samples land. Replacing a video = swap the entry's url
+        // (+ orientation to the new file's real frame); the id and its
+        // prefill copy stay put.
+        id: "text-anim",
+        shelves: [
+          {
+            id: "text-anim",
+            kind: "demos",
+            demos: [
+              {
+                // 短句依次出现 — placeholder: reuses the snappify "Code"
+                // vertical launch film.
+                id: "text-anim-lines",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-snappify-code-adc0737d.mp4",
+                orientation: "vertical",
+              },
+              {
+                // 品牌文案短片 — placeholder: reuses the linear.app wide
+                // launch film.
+                id: "text-anim-brand",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-linear-6bc23a6a.mp4",
+                orientation: "wide",
+              },
+              {
+                // 两行错时强调 — placeholder: reuses the snappify "Frame"
+                // vertical launch film.
+                id: "text-anim-two-lines",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-snappify-frame-0ef913dd.mp4",
+                orientation: "vertical",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        // 产品演示 (home 内容扩展批) — same placeholder discipline as
+        // text-anim above. The prompts name the user's OWN uploaded
+        // video/screen recording as the source — no auto-record promises.
+        id: "product-demo",
+        shelves: [
+          {
+            id: "product-demo",
+            kind: "demos",
+            demos: [
+              {
+                // 操作流程演示 — placeholder: reuses the zymix.ai wide
+                // launch film.
+                id: "product-demo-walkthrough",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-zymix-9890ad58.mp4",
+                orientation: "wide",
+              },
+              {
+                // 功能亮点介绍 — placeholder: reuses the snappify "Code"
+                // vertical launch film.
+                id: "product-demo-highlights",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-snappify-code-adc0737d.mp4",
+                orientation: "vertical",
+              },
+              {
+                // 视频配文字说明 — placeholder: reuses the snappify "Frame"
+                // vertical launch film.
+                id: "product-demo-captioned",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-snappify-frame-0ef913dd.mp4",
+                orientation: "vertical",
               },
             ],
           },

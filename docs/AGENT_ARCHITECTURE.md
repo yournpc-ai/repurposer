@@ -1,6 +1,6 @@
 # Repurposer Agent Architecture
 
-> Status: Active（最后更新 2026-09-14）。会话层 = ADR-077 有界工具 loop（读工具 + 门动作工具 + 终态工具停环，ToolLoopAgent），生产层 Graph/Harness/Model 脊柱；施工简报 `docs/archive/tasks-done/chat-tool-loop-migration.md`。
+> Status: Active（最后更新 2026-09-14）。会话层 = ADR-077 有界工具 loop（读工具 + 门动作工具 + 终态工具停环，ToolLoopAgent），生产层 Graph/Harness/Model 脊柱；施工简报 现行规范 `CHAT_ARCHITECTURE.md`。
 > 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 工具包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29 起）；loop 层行为规格见 CHAT_ARCHITECTURE.md；行业座位映射见 §2.5；**概念层母文档（厚 agent 判词 / 双引擎 workflow / 有界 loop 节点）见 `DIALOG_WORKFLOW.md`（ADR-052）**。
 
 ## 1. 叙事
@@ -177,6 +177,7 @@ class Agent[OutT]:
 - `agents/base.py` = 唯一 Agent 类；`agents/registry.py` = 共享 crew 声明（understand / plan / persona / translator…）；**工具私有声明住工具包**（选段编剧、各 writer、reviser）。
 - `AGENTS` dict 收编全部声明，可枚举；启动自检节点→agent 引用存在。
 - 流式 = chat 侧形态（ToolLoopAgent 的言语直推 `assistant.delta`，N-26；pipeline 侧 StreamingAgent 子类照旧服务 researcher/judge 家族）。
+- ToolLoopAgent 的拒绝停止是**调用方策略**，不是内核业务规则：可选 `should_stop_rejection(current, previous)` 读取真实 `ToolRejected` 历史，命中即返回独立 `no_progress_tool` 终态（非 exhausted / TerminalRefusal），不再发起模型调用；当前只有 Chat 的 `design_storyboard` 使用它（同签名第 2 次即停；同回合累计第 3 次设计拒绝无论签名都停）。内核不 import Film，其他 agent 的默认重试不变，统一嵌套预算仍属 R8-M。
 - context 装配：`agents/contexts.py` = 节点侧装配层（GenerationContext，run 计划 → GenerationContext）；chat 意图上下文（项目摘要 / per-step 状态段 / mentions 注入 / recent 轮次收口）住 `chat/context.py`（ADR-087 §6，各层自装上下文）。各 agent 声明的 `assemble` 回调是每 agent 的输入契约（签名即纯度）。`pipeline/step_context.py` 只留机械助手（多模态收集 / 素材摘要 / 行助手）。
 
 ### 5.4 明确不建的 harness 部件

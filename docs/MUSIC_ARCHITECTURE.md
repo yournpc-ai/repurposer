@@ -1,284 +1,155 @@
 # Repurposer Music Architecture
 
-> Status: Implemented（`Music` 表、MiniMax music-2.6 生成、管线集成；音乐质检归 verify 节点 Phase 3，未实现；音乐默认住人设皮肤块、自定义生成端点 inline）
-> Related: ADR-023（AI 生成音乐库决策）、实施简报 `docs/archive/tasks-done/music-asset-library.md`
+> Status: 当前规范（2026-10-25）。音乐库、默认选曲、persona 面板自定义生成与 clip 换曲是当前能力；上传、配额/缓存、Chat 自定义生成和高级音频编辑仍未完成。
+> Related: ADR-023；字段级事实源为当前 models、routes 与 `app/tools/music/`。
 
----
+## 1. 范围与命名
 
-## 1. Background
+音乐系统由 **`Music` 表 + 对象存储 `music/` 前缀 + clip-spec 音乐块**组成。一条 Music 是库中的一首背景乐，不是视频时间线上的一条自由音轨。
 
-静态 mood 枚举配乐（mood → 磁盘文件）的病灶：版权采集脆弱、选择静态、生成/精修两侧都无智能。本架构 = **AI 生成音乐库 + 专用 `Music` 表**。
+默认使用平台生成/策展音乐，减少静态磁盘 mood 文件与不明版权素材的依赖。AI 生成并不自动等于可商用，provider 条款仍是独立上线条件（§10）。
 
-> **命名**：`Music` 是音乐库条目的内部表/实体名；用户侧文案与 API 路径用 "music"（`/api/v1/music`）。一条 Music 是库里的**一首背景乐**，不是视频时间线意义上的音轨。
+## 2. 当前能力与非目标
 
----
+当前能力：
 
-## 2. Goals
+1. 平台默认曲目、用户生成曲目和公开/自有库查询；
+2. persona 皮肤的音乐默认与启用开关；
+3. clip 生成时从现有库选曲，不在每次 clip 生成中自动创作新音乐；
+4. persona 皮肤 Music 面板试听、选默认和从 prompt 生成新曲；
+5. `set_music` 换曲/开关/增益并重渲染；Chat `add_music` 确定性选择现有库曲目；
+6. `POST /api/v1/music/generate` 直接生成一条新 Music。
 
-1. **Eliminate copyright uncertainty** for the platform and its users by defaulting to AI-generated music.
-2. **Make music a clip-level creative decision** selected by the Clip Agent based on content and brand defaults.
-3. **Enable chat/editor-driven regeneration** so users can refine music with natural language.
-4. **Build a reusable asset library** where generated music can be shared across projects and, eventually, across users.
-5. **Keep the render pipeline contract unchanged**: Remotion still consumes `render_spec.music.url`.
-6. **Defer user uploads** to a future phase with explicit rights management.
+当前不做：
 
----
+- 用户上传音乐；
+- 多轨音频时间线、自由增益自动化、起止裁剪或淡入淡出编辑器；
+- 在 Chat 或 result editor 中“Generate new”自定义音乐；
+- prompt 去重缓存、生成配额或该路由的 credits 收费；
+- 未经明确授权把私有用户音乐公开。
 
-## 3. Non-Goals
+## 3. 当前架构
 
-1. **No user-uploaded music in MVP.** The legal and product overhead exceeds MVP value.
-2. **No manual audio timeline editing in MVP.** Trim/offset/fade are Phase 4+ features.
-3. **No real-time music generation during clip generation.** Music is selected from pre-generated assets; generation only happens on explicit user request via chat/editor.
-
----
-
-## 4. High-Level Architecture
-
-```
-Music Library（Music 表 + 对象存储 music/ 前缀，预生成 + 用户触发生成）
-        │
-        ▼
-默认曲（musicEnabled / musicId / musicGainDb；住人设皮肤块 persona.brand——
-DEFAULT_BRAND_CONFIG 含音乐默认，persona.brand 合并覆盖，app/memory/brand.py）
-        │
-        ▼
-Clip Agent 生成时选曲（看到库清单 + 品牌默认，输出 music_id / enabled / gain_db）
-        │
-        ▼
-烘焙进 outputs[type=clip].render_spec.music（渲染器唯一契约，不读 DB）
-        │
-        ▼
-Remotion <Audio url>（loop + gain_db 混音）
-        │
-        ▼
-精修（chat / editor）：set_music 换曲/开关/增益 → 重渲染；
-                      自定义新曲 → MiniMax 生成入库 → set_music 应用
+```text
+Music Library（music 表 + music/ 对象）
+  ├─ 平台默认：启动 reconcile 只补记录，不在启动时调用模型
+  └─ 用户显式生成：persona Music 面板 → POST /music/generate（inline）
+                         │
+                         ▼
+persona.brand 默认（musicEnabled / musicId / musicMood / musicGainDb）
+                         │
+                         ▼
+clip 计划 / add_music 从现有库选曲
+                         │
+                         ▼
+outputs.render_spec.music（url / enabled / gain_db / music_id）
+                         │
+                         ▼
+renderer 只消费 spec；换曲通过 set_music → render PENDING → worker
 ```
 
----
+`add_music` 是库选择技能，不是音乐生成技能。 Film 的音乐与旁白有其自身 spec/版本合同，不得借本模块把 Film 变成自由多轨音频编辑器。
 
-## 5. Source of Truth
+## 4. 数据归属
 
-| Data | Source of Truth | Rationale |
+| 数据 | 事实源 | 规则 |
 |---|---|---|
-| **Audio bytes** | Object storage (`music/{music_id}.{ext}`) | 与 uploads/outputs 同约定（ADR-024） |
-| **Music metadata** | `music` table | 结构化元数据（mood/prompt/license/duration/attribution/is_public）值得类型化列；全局共享资源不进 Asset（Asset 必须属 project 或 persona） |
-| **默认曲目** | 人设皮肤块 `persona.brand` 的 `musicId`（`musicMood` 为兜底键；系统默认皮肤 `DEFAULT_BRAND_CONFIG` 垫底，`app/memory/brand.py`） | 用户侧 = "default music" |
-| **Per-clip music choice** | `outputs[type=clip].render_spec.music` | 渲染契约是运行时事实源 |
+| 音频字节 | 对象存储 `music/{music_id}.{ext}` | DB 只存 key；reset 保留 `music/` 前缀 |
+| Music 元数据 | `music` 表 | mood、prompt、license、duration、attribution、visibility 等按当前 schema |
+| 默认音乐 | `persona.brand` + 系统默认皮肤 | `musicId` 为显式选择，`musicMood` 为回退；`musicEnabled` 是总开关 |
+| 单个 clip 选择 | `outputs.render_spec.music` | 渲染运行时事实；renderer 不读 Music 表 |
 
----
+三种数据形态：
 
-## 6. Data Model
+- **平台默认**：`generated_by_user_id=NULL`、`is_public=TRUE`。
+- **用户生成**：`generated_by_user_id=<user>`；当前新建行默认 `is_public=TRUE`，进入共享库。
+- **未来上传**：必须默认私有；显式分享、权利证明和审核未完成前不得沿用用户生成曲的公开默认。
 
-字段级事实源 = 代码（`app/models/tables.py` + `migrations/`），此处只记归属与绑定模型。
+当前“用户生成即公开”是数据行为，不等于已经具备完整的公开库审核与告知体验。公开库 moderation、撤下与用户可见告知仍是开放事项。
 
-**`music` 表归属 Pipeline**（渲染资产库，MODULE_ARCH §4 已登记）。三种行：
+## 5. 默认库与启动对账
 
-- **Platform/default pieces**: `generated_by_user_id = NULL`, `is_public = TRUE`。平台所有，全员可用。
-- **User-generated pieces (MiniMax)**: `generated_by_user_id = <user_id>`, `is_public = TRUE` 默认。用户触发生成，但进入共享库。
-- **Future user uploads**: `generated_by_user_id = <user_id>`, `is_public = FALSE` 默认。私有，显式分享 + 审核后才公开。
+默认 catalog 当前按 `calm` / `uplifting` / `corporate` 三种 mood 组织，具体行、标题与对象 key 以 seed 注册表和数据库为准。
 
-**默认曲配置**：`musicEnabled: bool`、`musicId: str | null`、`musicGainDb: float = -18.0`——住人设皮肤块（`DEFAULT_BRAND_CONFIG` 含此三键 + `musicMood` 兜底，`persona.brand` 合并覆盖，`app/memory/brand.py`）。
+- `app/pipeline/music.py:seed_default_music` 在应用启动时 reconcile：按 mood 查缺，对象存在而记录缺失时补记录。
+- 启动 reconcile **不调用 MiniMax、不生成音频、不花配额**；对象不存在时保持缺失并诚实跳过。
+- 一次性生成/上传由 `apps/api/scripts/seed_default_music.py` 承担，需独立授权与配额。
+- reset_db 保留 `music/` 对象前缀，清库后重启只重建可对应记录。
 
-**Render spec contract（不变）**：
+## 6. 选曲与 spec
 
-```typescript
+1. persona 的 `brand` 合并系统默认后得到音乐默认。
+2. clip 计划可依据品牌默认与内容 mood 选择现有 Music；Chat `add_music` 确定性选择已有曲目，不隐式调用生成端点。
+3. `app/memory/brand.py` 与当前烘焙链把 Music 解析为 `ClipMusic`，写入 `render_spec.music`。
+4. renderer 只消费 `url / enabled / gain_db / music_id` 等 spec 字段，不知道 Music、mood 或 persona 的存在。
+
+```ts
 interface ClipMusic {
-  music_id: string | null;
-  url: string | null;   // 音乐文件的公开对象 URL（生成时从 Music.file_path 烘焙）
-  enabled: boolean;
-  gain_db: number;
-  // Future (not implemented): start/end trim fields
+  music_id: string | null
+  url: string | null
+  enabled: boolean
+  gain_db: number
 }
 ```
 
-渲染器不知道音乐库、mood、Music 行的存在——`enabled` 为真时播 `url`，仅此而已。
+trim/start/end、自动增益与多曲混音不在当前契约中；新增前必须同时评审 clip-spec、libass/FFmpeg 替身成本和 L3 边界。
 
----
+## 7. 自定义生成
 
-## 7. Music Library: Pre-Generated Default Music
+`POST /api/v1/music/generate` 的当前行为：
 
-### 7.1 Rationale
+- 唯一已核实的 Web 调用面是 persona 皮肤编辑器的 Music 面板；
+- 请求处理器直接 await provider 生成并上传，随后插入一个新 UUID 的 Music 行；不经过 worker；
+- 每次请求走当前生成路径，**没有 prompt 去重/cache 命中承诺**；
+- 当前路由没有项目级生成配额或 credits 守卫，不能在 UI/文档中称其已按套餐收费或限量；
+- 新行默认公开，权限、条款和公开告知必须与该行为一起验收。
 
-We do **not** generate music during clip generation because:
-- It adds latency and cost to every generation.
-- The same 3 moods cover the vast majority of speech/conference clips.
-- Pre-generated music pieces can be quality-controlled and loop-ready.
+它是 `MODULE_ARCHITECTURE.md` §5 已登记的 request-inline 例外，不是新重活绕开队列的通用先例。若生成时长、重试或成本控制要求改变，应先迁入队列并设计配额/授权，而不是增加隐藏轮询。
 
-Users who want custom music can trigger generation later via chat/editor.
+## 8. 精修与 UI
 
-### 7.2 Default Catalog
+- `set_music` 负责换曲、开关和增益；journal/undo 与重渲染按 Operation Model 和 render fencing 执行。
+- Chat `add_music` 只选择现有库；用户要求创作新曲时，应导向当前 persona Music 面板或明确回答能力边界，不能假装 Chat 已生成。
+- persona Music 面板提供公开 + 自己曲目的列表、试听、默认选择与 prompt 生成。
+- result editor 的当前换曲能力不等于有“Generate new”按钮；独立 `/library/music` 全库管理页仍属后续。
 
-| Music ID | Title | Mood | Target Content | Suggested Prompt |
-|---|---|---|---|---|
-| `{calm-uuid}` | Calm Academic | calm | Thoughtful analysis, data explanation, reflective moments | "Minimal ambient piano, no vocals, calm and intellectual, background music for an academic speech, 60 seconds, seamless loop" |
-| `{uplifting-uuid}` | Inspiring Vision | uplifting | Call-to-action, emotional climax, vision statements | "Inspiring orchestral strings with gentle piano, no vocals, uplifting and hopeful, cinematic, 60 seconds, seamless loop" |
-| `{corporate-uuid}` | Corporate Drive | corporate | Business updates, product launches, growth metrics | "Modern corporate electronic beat, no vocals, confident and professional, steady mid-tempo, 60 seconds, seamless loop" |
+## 9. 用户上传（PLANNED）
 
-### 7.3 Seeding
+重启上传前必须具备：
 
-Default music pieces are created at application startup if they do not exist（启动对账 = `app/pipeline/music.py:seed_default_music`，由 `main.py` lifespan 调用：按 `mood` 查重，行不存在但对象在库则建行指过去，对象也不在则跳过——**全程不调 MiniMax**；一次性生成+上传脚本 = `apps/api/scripts/seed_default_music.py`，幂等）。reset_db 保护 `music/` 前缀（对象永不清），清库后重启 API 即对账建行、零 MiniMax 配额花费。Audio files live at `music/{music_id}.{ext}` in object storage.
+1. 明确权利声明并持久化到上传记录；
+2. ToS 中用户责任、平台撤下权与投诉流程；
+3. 默认 `is_public=FALSE`，公开分享需要显式 opt-in 与平台审核；
+4. 文件类型、大小、存储、租户隔离与审计限制；
+5. DMCA/当地法适用的投诉、删除和争议流程；
+6. 法务评估“平台把上传音乐合成进衍生视频”是否影响 safe harbor。
 
-### 7.4 Artist-Generated Music Pieces (Future)
+未满足这些条件时，不得仅复用普通 Asset 上传就开放音乐库。
 
-When the platform has artists or power users, their generated music pieces can also be seeded into the library:
+## 10. 版权与公开库
 
-- `kind` is implied by the `prompt` / `model` fields being present.
-- `generated_by_user_id: <user_id>`
-- `is_public: true` (after review) or `false` (private)
-- Artists may receive attribution or revenue share (business decision TBD).
+**仍需核实 provider 当前条款**：商业使用、再分发/平台托管、输出权属、终端用户视频分发、是否要求署名。文档中的“AI 生成默认更安全”不是法律结论。
 
----
+条款不足时的回退顺序：换有明确商业许可的 provider、委托并取得原创音乐权利，或关闭音乐能力。不得用技术生成事实替代授权。
 
-## 8. Generation Flow
+公开库还需决定：
 
-1. **默认曲**：人设皮肤块 `musicId`（`persona.brand` 合并系统默认皮肤后解析）→ `GenerationContext.brand_music_id`。
-2. **Clip Agent 选曲**：prompt 收到库清单（mood + 一句话描述）与品牌默认曲，为每条 clip 输出 `music_id` / `music_enabled` / `music_gain_db`。选择逻辑：① 品牌默认契合即用；② 按 clip 内容调性推断。
-3. **烘焙**：`app/memory/brand.py` 的 `music_from_plan` / `music_from_block` 解析 `Music` 行并把公开对象 URL 烘成 `ClipMusic`；`build_clip_spec` 只收现成 `ClipMusic` 入参 → `render_spec.music`。**生成时零 MiniMax 调用**。
+- 谁审核用户生成公开曲、如何处理投诉与撤下；
+- 是否允许艺术家署名或收益分配（未拍板，不是当前承诺）；
+- 自定义生成的配额、付费和公平使用模型；
+- 是否做 prompt/内容缓存，以及缓存键、跨用户共享和隐私边界。
 
----
+## 11. 质量与验收
 
-## 9. Refinement: Edit Ops + Custom Generation
+- 默认库 reconcile 必须离线可启动，缺失对象不触发隐式生成。
+- 选曲、换曲、开关与增益在 preview/export 一致；离屏播放与全局声音互斥遵守 UI 合同。
+- 自定义生成分别验证 provider 成功、上传、DB 行、权限、公开默认、失败与重复点击；当前没有缓存/配额时不得写对应通过结论。
+- 音乐特定的感知质量、响度、循环自然度和与旁白/人声的动态混音仍需真实试听；通用 verify 或文件存在不等于音乐质量通过。
+- 高级音频编辑、用户上传和公开库运营在各自合同完成前保持 PLANNED。
 
-- **换曲 / 开关 / 调增益** = `set_music` edit op（CHAT_ARCH §9，operations 表，editor 与 chat 两前端共用）→ `outputs.render_status=PENDING` → worker 重渲染。
-- **自定义新曲** = `POST /api/v1/music/generate` 触发 MiniMax 生成——**请求处理器内 inline 完成**（直接 await 生成，无 worker 无排队）→ 新 `Music` 行入库（默认 `is_public=True`，进共享库）→ `set_music` 应用到 clip → 重渲染。
-- **chat 词汇**：`add_music` skill（registry 已登记，配乐殿后的 `after` 约束）。
+## 12. 相关文档
 
-### 9.1 Cost Control
-
-Music generation is more expensive than selection. To avoid runaway costs:
-- Each project has a budget or generation quota (future，归计费线，排期见 PROGRESS).
-- Free tier defaults to the 3 pre-generated music pieces; custom generation is a paid/limited feature.
-- Generated music pieces are cached as assets so the same prompt does not re-generate.
-
----
-
-## 10. Music Library UI
-
-- **默认曲设置 = 人设皮肤分区的 Music 分组**：人设页皮肤编辑器内的 Music 面板（`components/persona/music-panel.tsx`）列出可选曲目（公开 + 自己的）、试听、选默认、从 prompt 生成新曲；`musicEnabled` 是皮肤级总开关。
-- **In Result Editor**：clip 编辑器可换曲、开关、增益滑杆、"Generate new"。
-- **Future: Standalone Music Library** (`/library/music`)：浏览/搜索/管理全库，Phase 2+ 后置。
-
----
-
-## 11. User Uploads (Future Phase)
-
-### 11.1 Why Deferred
-
-1. **Copyright liability**: Users may upload copyrighted material without realizing it.
-2. **Verification cost**: Detecting ownership is hard and error-prone.
-3. **Product focus**: AI-generated music satisfies MVP needs for a European knowledge-speaking audience.
-
-### 11.2 If Added Later
-
-User uploads must include:
-
-1. **Explicit rights attestation**:
-   - Checkbox: "I confirm I own the copyright or have a valid license to use this audio."
-   - Stored in `Asset.meta.uploader_attestation`.
-
-2. **Terms of Service update**:
-   - User retains responsibility for uploaded content.
-   - Platform reserves the right to remove infringing content.
-
-3. **Default visibility**:
-   - Uploaded music pieces default to `is_public=False`.
-   - User can opt-in to share; shared music pieces require platform review before becoming public.
-
-4. **Technical guardrails**:
-   - File type restriction: `.mp3`, `.m4a`, `.aac`, `.ogg`, `.wav`.
-   - File size limit.
-   - Metadata stripping is not required but may be considered.
-
-5. **DMCA / takedown process**:
-   - Provide a reporting mechanism.
-   - Maintain an audit log of uploads.
-
-### 11.3 Legal Note
-
-Even with attestations, platforms that actively transform user-uploaded copyrighted audio into derivative videos (e.g., background music for a clip) may not fully qualify for DMCA safe harbor in all jurisdictions. Legal counsel should review the Terms of Service and operational model before launching user uploads.
-
----
-
-## 12. Copyright Strategy
-
-### 12.1 AI-Generated Music
-
-Assuming MiniMax (or chosen provider) grants commercial usage rights for generated audio:
-
-- Default music pieces are platform-owned outputs of the provider's model.
-- User-generated music pieces are owned by the user per provider terms, with platform license to host and stream.
-- No attribution required for most AI music providers (verify MiniMax terms).
-
-**Action item**: Verify MiniMax music generation Terms of Service for:
-- Commercial use allowance.
-- Redistribution / platform hosting rights.
-- User ownership of generated outputs.
-- Whether generated music can be used in videos distributed by end users.
-
-### 12.2 Fallback If AI Terms Are Insufficient
-
-If MiniMax does not grant adequate rights:
-
-1. Use a provider with explicit commercial licenses (e.g., Mubert API, AIVA, Soundraw).
-2. Or commission original royalty-free music pieces and own them outright.
-3. Or remove music from clips entirely until a clean solution is found.
-
-### 12.3 Public Music Library
-
-When user-generated music becomes public:
-
-- Music pieces with a `prompt` / `model` (AI-generated) are public by default.
-- Uploaded music pieces require explicit rights proof before public sharing.
-- Platform may watermark or tag public music pieces for auditability.
-
----
-
-## 13. Integration
-
-- **Agent 编排**：`GenerationContext.brand_music_id`；clip 技能选曲；音乐质检归 verify 节点（Phase 3，未实现——AGENT_ARCH §9）。
-- **队列**：自定义生成在请求处理器内 inline 完成（`POST /api/v1/music/generate` 直接 await MiniMax），不进 worker 队列。
-- **存储缝**（ADR-024）：`music/` 前缀、DB 只存 key、渲染取公开对象 URL。
-- **渲染服务零改动**：`packages/clip` 与 `apps/render` 只播 `spec.music.url`。
-
----
-
-## 14. Status & Phases
-
-| 期 | 内容 | 状态 |
-|---|---|---|
-| Phase 1 | Music 表 + 迁移 + MiniMax 生成 + 3 首默认曲 seed + `/api/v1/music` 端点 + Brand `musicId` + clip agent 选曲 + UI | ✅ |
-| Phase 2 | chat/editor 换曲与生成（`set_music` edit op + `add_music` skill + 重渲染） | ✅ |
-| Phase 3 | 用户上传（权利声明 + 默认私有 + 审核 + ToS/DMCA） | 📋（§11） |
-| Phase 4 | 高级音频编辑（增益自动化 / 起止裁剪 / 淡入淡出；多曲明确 L3 外） | 📋 |
-
----
-
-## 15. Open Questions
-
-1. **Public library moderation**: who reviews user-generated public music pieces?
-2. **Revenue sharing**: if artists contribute music pieces, how are they credited/compensated?
-3. **Quota model**: how many custom music generations per user/tier?（随计费线一并设计）
-
----
-
-## 16. Related Documents
-
-- `docs/DECISIONS.md` ADR-023: Music becomes an AI-generated, asset-based library.
-- `docs/VIDEO_EDITOR.md` (`render_spec.music` contract).
-- `docs/AGENT_ARCHITECTURE.md` (agent 编排集成).
-- `docs/archive/tasks-done/music-asset-library.md`: Implementation record.
-
----
-
-## 17. Summary
-
-Repurposer’s music architecture is an **AI-generated music library backed by a dedicated `music` table**:
-
-- **Default**: 3 pre-generated AI music pieces (`calm`, `uplifting`, `corporate`) cover most speech/conference clips.
-- **Selection**: Clip Agent picks the best existing music piece per clip, influenced by brand defaults and content mood.
-- **Refinement**: Users can switch music pieces or generate custom music via chat/editor.
-- **Reusability**: All generated music becomes a `Music` in the library, shareable across projects and eventually users.
-- **Copyright**: Platform defaults to AI-generated music to avoid licensing fragility; user uploads are deferred and will require explicit rights management.
-
-This design keeps the render contract stable, integrates cleanly with the agent architecture, and gives the product a scalable path from MVP to a community-driven music library.
+- `DECISIONS.md` ADR-023：音乐库决策。
+- `RENDERING.md` / `VIDEO_EDITOR.md`：spec 与编辑边界。
+- `MODULE_ARCHITECTURE.md`：表归属、inline 例外与队列规则。
+- `BILLING.md`：若未来给自定义生成计费，必须接入同一报价、授权与台账体系。

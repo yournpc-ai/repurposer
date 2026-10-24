@@ -1,6 +1,6 @@
 # UI Guidelines — Studio 视觉与交互设计系统
 
-> Status: 活跃（2026-09-28 建——自 CLAUDE.md 迁入，现行法全文唯一家）
+> Status: 当前规范（2026-10-25；视觉与交互形态全文唯一家）
 > **Scope**：studio（`_app` 路由 + 共享组件）。落地页（`/` + `components/landing/`）是营销面，自有视觉语言，其 `rounded-full` / `border-border` / `font-medium` 用法是模板原生，不受本文约束。
 > 行为层规格（chat 回合 / dock 状态机 / 画布数据面）归 `CHAT_ARCHITECTURE.md`；本文只管视觉与交互形态。整体风格：克制、轻量、统一。
 
@@ -45,10 +45,10 @@
 ### 4.1 配方货架与卡面（ADR-048 + RECIPES §4 / §4.8）
 
 - 封面是单色工艺示意图，**永不实拍**。rest = 内联 SVG 静态封面（`components/recipes/covers/<id>.svg`，foreground 灰阶自驱双主题反转，16:10，左输入→右输出）；hover 播 CSS keyframe 过程动画（零视频零声音零媒体请求）。
-- **卡没有真实成对示例 = 不进货架**（RECIPES §4.8 准入）；MG 族货架 = 真渲染 demo 视频 autoplay loop/muted，hover / keyboard focus = 半透明灰色 `media-scrim` 操作显影（中央「使用提示词」+ 左下声音钮 + 右下纯视觉放大标记）并尽力开声（浏览器 autoplay 拒声则保持静音，声音钮的真实点击解锁）；声音 = home 全局单例，后一张开声只静音前一张、前一张视频继续播放；族/子 tab/货架空即整级不渲染（无真 demo 连摆位都不摆）。
+- **卡没有真实成对示例 = 不进货架**（RECIPES §4.8 准入）；MG 族货架 = demo 视频 autoplay loop/muted（标准为真渲染；占位例外见下），hover / keyboard focus = 半透明灰色 `media-scrim` 操作显影（中央「使用提示词」+ 左下声音钮 + 右下纯视觉放大标记）并尽力开声（浏览器 autoplay 拒声则保持静音，声音钮的真实点击解锁）；声音 = home 全局单例，后一张开声只静音前一张、前一张视频继续播放；族/子 tab/货架空即整级不渲染（无 demo 连摆位都不摆）；离屏卡片暂停解码（可见性闸），回视口恢复静音循环。**占位例外**：文字动画短片 / 产品演示货架在真实样片落地前复用既有渲染作纯布局占位（数据注释逐卡标注来源，界面零占位标记；占位只验证货架形态，不作为对应能力的验收产物，真片落地仅在注册表数据层换 URL）。
 - 货架解剖 = 两级 tab（一级 family pill 轨 + 下划线子 tab，子 tab 唯一时不渲染该行）+ 白容器横滑（`bg-card` + 发丝线 + `rounded-lg`，in-flow 零 shadow；‹ › 翻页钮按方向在真可翻时出现——禁死按钮）。
 - **卡片点击唯一归宿 = composer 预填** `promptTemplate`（配方 = 提示词，ADR-040）——永不是模板编辑器，无 inspect overlay 形态。预填同时把 composer 带回视口（钉底态零滚动，文档流态滚内部 scrollport 至居中）并聚焦；模板必填空位 = 提示词文本内的可见占位符（当前 MG demo = 网站链接），插入后即选中，未替换发送本地拦截；占位符永不变成隐藏字段或第二个输入面。
-- 三行卡下文字 = 菜名 / promise（2 行 clamp）/ 适用素材。卡面禁画幅 badge / 类别 chip / 渠道名（卡只承载 genre）；渠道是挂发/排期变量（预填模板默认，chat 覆写）。
+- 三行卡下文字 = 菜名 / promise（2 行 clamp）/ 适用素材。卡面禁画幅 badge / 类别 chip / 渠道名（卡只承载 genre）；渠道是用户点名或渠道授权后的发布/排期变量，预填模板不得把默认平台写成用户选择，chat 修改恒胜。
 
 ### 4.2 灰梯
 
@@ -120,7 +120,7 @@
 
 > 数据面 / 相机律 / 图契约归 `CHAT_ARCHITECTURE.md` §5（词表 v3、相机 C6、直读持久图）；本节是它的视觉与交互形态。
 
-- DAG 用户形态 = 只读图（`components/flow/`），无 drag/connect/pan/zoom API（结构，非约定）；缩放/平移按面门禁（配方说明书 = 锁 fit，结果画布 = 开）。手动布线 UI 永不开放。
+- DAG 用户形态 = 只读图（`components/flow/`），无 drag/connect/手动布局等结构编辑 API；消费面不获得供背景流程调用的第二套通用相机命令。组件内部的 explore 导航可提供用户 pan/zoom，按面门禁（配方说明书 = 锁 fit，结果画布 = 开）；程序相机只响应用户发起的呈现节拍，背景 refetch 不动相机。手动布线 UI 永不开放。
 - **端口法则**：**进 = 消费区域的左下角，一条角律两个区域**——媒体流 video/audio 的消费区域 = 内容区，锚内容区左下角（PROMPT 分界上 16px，底锚上堆）；文本流 text/ctx = 提示词区左下（factsbar 带上）。**锚点律（ADR-113 §5）**：轨道卡（成片轨道栈族）的视频入锚离开角落栈，钉在**视频轨 Y-center**——边落在它喂的那条轨上（`bottom = factsbar 带 + 文字轨行 40 + 视频轨行 40/2 − 半圆 14`，layout.ts `trackVideoPortBasePx` ↔ NodePorts CSS 两镜像同批）；非轨道卡角落栈不动。**出 = 生产区域右上，出锚语义律（ADR-067）**：出锚 = 节点自身产出媒介（媒介五值直出、text/table 读 prose，素材档案按 asset_type，modifier/materialize 过渡词按 frame_class——一节点一出发锚，出边同点出发），入锚 = 边承载类型；跨媒介边 = 边上转译叙事（video→text），源节点永不长外来 glyph；image/slides 出锚 = 渲染侧第五 glyph（从不过线），ctx 引用流无自有 glyph——入锚并入共享 T（@ 永不上画布：node 左舷只有 T / image / video 三类 icon）；video/audio/text/ctx 类型化着色；连线 = 圆缘贝塞尔（可见圆即 Handle，xyflow 原生锚 = 矩形位向外缘，切线水平出右缘入左缘）。
 - **节点态原地表达**：draft 虚线估价 / running CSS 擦除封顶 96% / done 内容自证 / failed 卡内红 / stale factsbar 徽；caption 右槽恒空。**失败人话行**：failed 卡读 `spec.error`（sync 时从 failed family step 烤入、家族恢复即清）。
 - **卡面交互律**：factsbar 动作 = copy-or-download + 发布（Send——发布取代删除上栏，产物删除在画布无家；素材条只保下载——删除全画布无家）；无 ⋯ 菜单。**点击 = 选中 + 右侧档案（OutputInspector，全产物类型）**；大屏查看归 hover expand 钮的 lightbox，无居中播放器 modal。

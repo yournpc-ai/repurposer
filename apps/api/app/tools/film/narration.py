@@ -20,11 +20,27 @@ tried flex. The approved storyboard is never silently rewritten, and its
 audio is never quietly trimmed past meaning; beyond the bounded flex the
 fix is a shorter line through the design beat, not a render-time fudge.
 One scene's failure cancels its siblings — a dead step bills no further
-synthesis passes. Each scene's audio is its own storage object
-(``<output_id>_narr_<i>.mp3``); the renderer plays it inside the scene's
-Sequence, so scene boundaries trim honestly. The synthesis also returns the
-decoded seconds so the film-spec's subtitle cues time against the real
-spoken span (never a second duration guess).
+synthesis passes. Each scene's audio is its own storage object; the
+renderer plays it inside the scene's Sequence, so scene boundaries trim
+honestly. The synthesis also returns the decoded seconds so the film-spec's
+subtitle cues time against the real spoken span (never a second duration
+guess).
+
+Reuse (ADR-138 §10.1 — the five concurrency laws' full text lives in
+``narration_store.py``): every line first resolves against the project's
+narration store — identity = normalized text | RESOLVED voice | language |
+synthesis config, never a display name, never an unresolved Auto. The store
+holds ONLY the speed-1.0 ORIGINAL; adaptation is a runtime RE-SYNTHESIS.
+A hash hit answers the "pass 1" duration with ZERO synthesis: fits → the
+original's object key rides straight into the spec (reuse bills nothing);
+does not fit → re-synthesize faster from the KNOWN 1.0 duration — a real,
+metered vendor call — into the run's own staging file
+(``<output_id>_narr_<i>.mp3`` — never stored; a lost staging file is
+recovered only by re-synthesizing, never by transforming the original's
+bytes — no zero-TTS or deterministic-recovery claim). A miss makes this run
+the owner: its pass 1 IS the original, published to the store BEFORE the
+fit verdict (another window reuses it even when this scene adapts; a failed
+later pass never poisons the published original).
 
 Voice resolution (all by code, never the LLM): the persona's voice block
 (cloned voice_id / stock id) → the default narrator. The persona block is
@@ -46,6 +62,14 @@ from starlette.concurrency import run_in_threadpool
 from app.metering import record_media_usage
 from app.providers.storage import get_output_path, save
 from app.providers.voice import VoiceError, synthesize
+from app.tools.film.narration_store import (
+    adaptation_speed,
+    fail_narration,
+    finalize_narration,
+    narration_content_hash,
+    narration_synth_config,
+    resolve_narration,
+)
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -99,6 +123,55 @@ async def _save_narration(project: "Project", output_id: "UUID", index: int, aud
     )
     await save(key, audio, content_type="audio/mpeg")
     return key
+
+
+async def _publish_original(
+    project: "Project",
+    *,
+    text: str,
+    voice_id: str,
+    language: str,
+    owner_token: str,
+    audio: bytes,
+    duration: float,
+) -> tuple[str, float]:
+    """The miss path's store publish: the pass-1 (speed 1.0) audio lands at
+    a token-suffixed staging object under the project output prefix (the
+    project cascade reaps it with the project, mirroring the row's own
+    CASCADE), then the owner-conditional finalize adopts it (store laws
+    3–4: a lost finalize deletes ONLY our own staging and reads the
+    winner's committed result). Returns the AUTHORITATIVE
+    ``(storage_key, duration_s)`` pair — on an ownership straddle the pair
+    is the winner's, never our decode coupled to someone else's audio."""
+    content_hash, _ = narration_content_hash(
+        text=text,
+        voice_id=voice_id,
+        language=language,
+        config=narration_synth_config(),
+    )
+    staging_key = str(
+        await get_output_path(
+            project.id,
+            project.user_id,
+            f"narr_{content_hash[:16]}-{owner_token[:12]}.mp3",
+        )
+    )
+    await save(staging_key, audio, content_type="audio/mpeg")
+    try:
+        return await finalize_narration(
+            project.id,
+            text=text,
+            voice_id=voice_id,
+            language=language,
+            owner_token=owner_token,
+            staging_key=staging_key,
+            duration_s=duration,
+        )
+    except TimeoutError as e:
+        # The straddle tail: ownership lost AND no committed result stands
+        # (the takeover is still synthesizing) — a transient store
+        # condition, not a design problem; the next attempt re-resolves.
+        raise VoiceError(f"narration reuse store publish lost: {e}") from e
 
 
 def _flex_frames_for_overruns(
@@ -233,35 +306,156 @@ async def synthesize_film_narration(
         seconds and the scene window. A terminal overrun is NOT raised here
         — it returns the overrun (audio in memory, billed, decoded, unsaved)
         for the flex verdict (ADR-136); the pre-flex law's honest failure
-        fires only after the flex falls short, naming the real attempts."""
+        fires only after the flex falls short, naming the real attempts.
+
+        The reuse store sits in front of the ladder (ADR-138 §10.1): a hash
+        HIT answers pass 1 for free (the stored original's real duration —
+        fit = zero-synthesis reuse; unfit = the ladder resumes at pass 2
+        from the known 1.0 fact, and the adapted product is this run's own
+        staging file, never the store's). A MISS makes this run the owner —
+        its pass 1 is published as the original BEFORE the fit verdict, so
+        a wider window elsewhere reuses it even when this scene adapts."""
+        # 复用座位: identity = normalized text | resolved voice | language |
+        # synth config; the store's bounded wait / takeover laws ride along
+        # (a budget exhaustion is a transient store condition, never a
+        # design problem — it reads as voice_unavailable, not the fit key).
+        try:
+            reuse = await resolve_narration(
+                project.id, text=text, voice_id=voice_id, language=language
+            )
+        except TimeoutError as e:
+            raise VoiceError(f"narration reuse store wait exhausted: {e}") from e
+
         attempts: list[tuple[float, float]] = []
         speed = 1.0
         audio = b""
         duration = 0.0
-        for pass_no in range(1, _FIT_PASSES + 1):
-            async with sem:
-                audio = await run_in_threadpool(synthesize, text, voice_id, language, speed)
-            # Every synthesis call bills its characters (the dub chain's
-            # metering law — a re-fit is a second call).
-            await record_media_usage({"tts_chars": float(len(text))})
-            duration = await run_in_threadpool(_decode_duration_s, audio)
-            attempts.append((speed, duration))
+        start_pass = 1
+        owner_token = reuse.owner_token
+        if reuse.reusable:
+            stored = reuse.duration_s
+            if stored is None or stored <= 0:
+                # done ⇒ (key, duration) is ONE atomic write — a violation
+                # is a bug: fail loud, never guess a timing.
+                raise VoiceError(
+                    "narration store row corrupt: done without duration "
+                    f"(key={reuse.storage_key})"
+                )
+            duration = stored
+            attempts.append((1.0, duration))
+            if duration <= window_s + _WINDOW_ALLOW:
+                # 命中且适配: zero synthesis, zero billing — the original's
+                # object key rides straight into the spec.
+                logger.info(
+                    "film_narration_reuse",
+                    output_id=str(output_id),
+                    scene=index,
+                    seconds=round(duration, 2),
+                    window_s=round(window_s, 2),
+                )
+                return index, (reuse.storage_key, duration), None
+            # 命中不适配: adapt — the ladder resumes from the KNOWN 1.0
+            # duration with a REAL, metered re-synthesis at the computed
+            # speed; the adapted product lands at the per-output staging
+            # key (never stored; recovered only by re-synthesizing, never
+            # by transforming the original's bytes).
+            speed = (
+                adaptation_speed(
+                    duration_s=duration, window_s=window_s, speed_max=_SPEED_MAX
+                )
+                or _SPEED_MAX
+            )
+            start_pass = 2
             logger.info(
-                "film_narration_pass",
+                "film_narration_adapt",
                 output_id=str(output_id),
                 scene=index,
-                pass_no=pass_no,
-                requested_speed=round(speed, 3),
                 seconds=round(duration, 2),
                 window_s=round(window_s, 2),
+                requested_speed=round(speed, 3),
             )
-            if duration <= window_s + _WINDOW_ALLOW:
-                break
-            if pass_no == _FIT_PASSES or speed >= _SPEED_MAX:
-                return index, None, _SceneOverrun(
-                    audio=audio, duration=duration, attempts=attempts
+
+        try:
+            for pass_no in range(start_pass, _FIT_PASSES + 1):
+                async with sem:
+                    audio = await run_in_threadpool(synthesize, text, voice_id, language, speed)
+                # Every synthesis call bills its characters (the dub chain's
+                # metering law — a re-fit is a second call). A FITTING store
+                # hit never reaches this loop (zero synthesis, zero billing);
+                # an unfit hit's adaptation passes bill like any synthesis.
+                await record_media_usage({"tts_chars": float(len(text))})
+                duration = await run_in_threadpool(_decode_duration_s, audio)
+                attempts.append((speed, duration))
+                logger.info(
+                    "film_narration_pass",
+                    output_id=str(output_id),
+                    scene=index,
+                    pass_no=pass_no,
+                    requested_speed=round(speed, 3),
+                    seconds=round(duration, 2),
+                    window_s=round(window_s, 2),
                 )
-            speed = min(speed * duration / max(window_s, 0.2), _SPEED_MAX)
+                if owner_token is not None:
+                    # The miss path's first synthesis IS the speed-1.0
+                    # original — publish it BEFORE the fit verdict. The
+                    # token stays armed until the publish RETURNS: a
+                    # pre-finalize failure (staging save hiccup) still owns
+                    # the placeholder and the BaseException cleanup reaps
+                    # it; a straddle raise finds the row already owned by
+                    # the takeover, where the double-conditioned fail is a
+                    # safe no-op.
+                    committed_key, committed_duration = await _publish_original(
+                        project,
+                        text=text,
+                        voice_id=voice_id,
+                        language=language,
+                        owner_token=owner_token,
+                        audio=audio,
+                        duration=duration,
+                    )
+                    owner_token = None
+                    # On an ownership straddle the committed pair is the
+                    # winner's — key AND duration travel together.
+                    duration = committed_duration
+                    if duration <= window_s + _WINDOW_ALLOW:
+                        logger.info(
+                            "film_narration_scene",
+                            output_id=str(output_id),
+                            scene=index,
+                            chars=len(text),
+                            seconds=round(duration, 2),
+                            window_s=round(window_s, 2),
+                            store="original",
+                        )
+                        return index, (committed_key, duration), None
+                    # The original stands in the store; THIS scene still
+                    # needs its adaptation — keep climbing from the 1.0 fact.
+                    speed = min(speed * duration / max(window_s, 0.2), _SPEED_MAX)
+                    continue
+                if duration <= window_s + _WINDOW_ALLOW:
+                    break
+                if pass_no == _FIT_PASSES or speed >= _SPEED_MAX:
+                    return index, None, _SceneOverrun(
+                        audio=audio, duration=duration, attempts=attempts
+                    )
+                speed = min(speed * duration / max(window_s, 0.2), _SPEED_MAX)
+        except BaseException:
+            if owner_token is not None:
+                # 失败不留毒 (store law 5): the double-conditioned delete
+                # reaps ONLY our own still-synthesizing placeholder.
+                try:
+                    await fail_narration(
+                        project.id,
+                        text=text,
+                        voice_id=voice_id,
+                        language=language,
+                        owner_token=owner_token,
+                    )
+                except Exception as cleanup_err:  # noqa: BLE001 — cleanup never masks the real failure
+                    logger.warning(
+                        "film_narration_fail_cleanup_failed", error=str(cleanup_err)
+                    )
+            raise
         key = await _save_narration(project, output_id, index, audio)
         logger.info(
             "film_narration_scene",

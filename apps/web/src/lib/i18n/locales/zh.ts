@@ -47,7 +47,7 @@ const zh: Resources = {
     permissions: "权限",
     execution: {
       label: "执行操作",
-      desc: "方案呈现后是否等你确认再开工。",
+      desc: "你要求制作之后，是否再等你确认一次才开工。",
     },
     spending: {
       label: "消耗积分",
@@ -509,6 +509,8 @@ const zh: Resources = {
       subs: {
         all: "全部",
         saas: "SaaS 和应用",
+        "text-anim": "文字动画短片",
+        "product-demo": "产品演示",
         brand: "品牌与业务",
         ugc: "UGC",
         product: "产品",
@@ -516,6 +518,8 @@ const zh: Resources = {
       titles: {
         featured: "推荐配方",
         saas: "SaaS 和应用",
+        "text-anim": "文字动画短片",
+        "product-demo": "产品演示",
         brand: "品牌与业务",
         ugc: "UGC",
         product: "产品",
@@ -547,6 +551,34 @@ const zh: Resources = {
         },
         "launch-film-zymix": {
           prompt: "把这个网站做成一条 16:9 横屏官网介绍短片：{{placeholder}}",
+        },
+        // 占位货架（home 内容扩展批——text-anim / product-demo）：
+        // 用户口吻的需求句——不写工具名、不锁工艺参数、不写"像这个视频
+        // 一模一样"（货架视频是复用占位，永不是用户选定的参考）。不带
+        // {{placeholder}} 空位——这些提示词自身完整。
+        "text-anim-lines": {
+          prompt:
+            "我想把文案做成短句依次出现的文字动画视频。请先和我确定文字如何分组、出现和切换，再给我看方案。",
+        },
+        "text-anim-brand": {
+          prompt:
+            "我想做一支以文字为主的品牌短片，用简洁排版、轻微缩放和重点文字表达核心信息。请先帮我梳理文案和节奏，再给出方案。",
+        },
+        "text-anim-two-lines": {
+          prompt:
+            "我想做一支文字短片：先出现第一句话，再出现第二句重点文字，形成呼应。请先结合我的文案讨论画面和节奏。",
+        },
+        "product-demo-walkthrough": {
+          prompt:
+            "我想用上传的视频或录屏做一支操作演示，选取关键步骤并配上简短说明。请先看素材，和我确定演示重点，再给出方案。",
+        },
+        "product-demo-highlights": {
+          prompt:
+            "我想用已有视频和图片介绍产品的主要功能，用简短文字突出亮点。请先结合素材建议内容顺序和表达方式。",
+        },
+        "product-demo-captioned": {
+          prompt:
+            "我想在视频片段上加入文字说明，并控制文字出现的时间和位置。请先根据我的素材和需求给出方案。",
         },
       },
     },
@@ -1158,8 +1190,9 @@ const zh: Resources = {
       storyboard_revision: "正在调整分镜…",
     },
     /** 收官言语生成窗口的 now-line（终态 run 的收官言语是一次 LLM 调用，
-     * 由触发轮询拾取——有 LLM 调用就必定有 now-line）。 */
-    closingReview: "正在收尾…",
+     * 由触发轮询拾取——有 LLM 调用就必定有 now-line）。文案只说在整理
+     * 制作结果，永不暗示仍在渲染或在检查视频画面。 */
+    closingReview: "正在整理制作结果…",
     /** 分镜起草落定行（legacy 节拍回放）：跨度的落定行（born-settled
      * 素材节拍）——活动日志寄存器（动宾+事实，无进行态），与素材读取族同
      * 三寄存器律。 */
@@ -1225,6 +1258,7 @@ const zh: Resources = {
       graph: "正在看画布…",
       segment: "正在读片段…",
       asset: "正在查看素材…",
+      projectMedia: "正在列出项目素材…",
       craftSkeleton: "正在读案例的风格拆解…",
       artifact: "正在读卡片的详情…",
       webPage: "正在读网页…",
@@ -1249,14 +1283,16 @@ const zh: Resources = {
       less: "收起",
     },
     /** 活动流里程碑文案（ADR-087 §3 Phase 2）：active 帧带进行态、completed
-     * 帧带完成态；failed/cancelled 复用进行态（✗/删除线说剩下的）。 */
+     * 帧带完成态；failed 保留诚实的进行态键，cancelled 尝试从可见时间线
+     * 退役，不变成删除线历史。 */
     /** 2026-09-25 文案批 (用户拍板——「计划已起草 / 创建 workflow」那套
      * 机器状态腔退役): 说人话，说当下在干的事。draft 按工具分两副面孔
      * ——出方案 / 改已有产物（projector 的 _EDIT_TOOLS 选 key）。draft / run
      * 跨度只有 active 态（落定即退役——2026-09-28 draft、2026-09-29 扩到
      * run）：落定收据行退役，方案卡 / 开工言语 + RunTaskList 收据就是证据，
-     * 故无 draftDone/editDone/runDone 键（下方分镜两键是唯一例外——分镜
-     * 不是开工，其落定留存）。repair 两键 = 言语提交协议批
+     * 故无 draftDone/editDone/runDone 键（下方分镜键族是唯一例外——分镜
+     * 不是开工，其落定留存；storyboardEdit 两键 = 定点调整的 patch 变体，
+     * 说调整永不说新设计）。repair 两键 = 言语提交协议批
      * 终态专用（重试跨度静默开启，无 active 帧）：repair 只在失败终态
      * （重试耗尽 / 回合失败）发射，repairDone 只在转向终态（护栏把回合
      * 形式引去别的工具）发射——说工作事实，永不说模型自我反思。 */
@@ -1268,16 +1304,18 @@ const zh: Resources = {
       repairDone: "换了个方式",
       storyboard: "正在设计分镜…",
       storyboardDone: "已设计分镜",
+      storyboardEdit: "正在调整分镜…",
+      storyboardEditDone: "已调整分镜",
     },
     /** 活动行的有界展开明细（迭代三 S7，E7 诚实边界）：只有 wire 白名单
      * 字段——原始计数带标签成行（耗时内联同行，formatElapsed 是唯一措辞）。 */
     activityMeta: {
       count: "数量：{{count}}",
     },
-    /** 聚合行（ADR-110 段聚合，修订——Flora 解剖）：落定段折成一条安静
-     * 的总量——`worked` 载段墙钟（首行出生 → 散文到来）为折叠态唯一事实；
-     * 展开 = 类目分解（foldCategories 的 ×N 行）。`actionCount` 是无可测
-     * 耗时（存量行无时间戳）时的诚实回落——段内行总数。 */
+    /** 聚合行（ADR-110 段聚合）：落定工作段折成一条安静的总量。实时
+     * `worked` 从真实工作边界计到正文首显（或无正文真实终态）并冻结；
+     * 回放缺少该客户端事实时只报可观察活动跨度。展开 = 类目分解
+     * （foldCategories 的 ×N 行）；无墙钟事实时 `actionCount` 诚实显示操作数。 */
     activityFold: {
       worked: "工作了 {{elapsed}}",
       actionCount: "{{count}} 项操作",
@@ -1296,6 +1334,7 @@ const zh: Resources = {
       graph: "已看画布",
       segment: "已读片段",
       asset: "已查看素材",
+      projectMedia: "已列出项目素材",
       craftSkeleton: "已读案例的风格拆解",
       artifact: "已读卡片的详情",
       webPage: "已读网页",
@@ -1315,6 +1354,19 @@ const zh: Resources = {
      * 点击与问题自身的落定竞态，不报错误 toast）。 */
     questionOutdated: "这个问题已被更新的提问取代，不用再回答了。",
     questionAnswered: "这个问题已经回答过了。",
+    /** Start 断流恢复文案（2026-10-22——后端已接受、回执丢失）：Start 回答
+     * 的管道静默死亡后，恢复机制以**原问题行优先**重读世界（新 dock 永不
+     * 能证明原 Start 失败），只说一个诚实状态——已启动 / 尚未确认启动 /
+     * 暂时无法确定，永不声称无法证明的事实，永不自动重试（第二次 start
+     * 只可能是用户的再次点击，服务器侧去重）。started → run 面板挂载
+     * （info）；unconfirmed → pill 恢复（info——请求可能仍在处理中）；
+     * unknown → 当前无法确认（error）。 */
+    startRecovery: {
+      started: "连接中断了，但制作已经开始——进度见下方任务列表。",
+      unconfirmed:
+        "连接中断，尚未确认制作是否启动——请求可能仍在处理中。可以稍等片刻，或重新开始（重复请求会被安全忽略）。",
+      unknown: "连接中断——暂时无法确认制作是否已开始。可以重试，或刷新页面确认。",
+    },
     runFailed: "运行失败",
     /** 收官句已于 2026-09-24 退役（用户拍板——与 trigger 回合的
      * run_completed 散文重复；现在只有 trigger 一个叙事者）。 */

@@ -309,6 +309,34 @@ class TestDesignStoryboardArgs:
         assert args.review_hold is None
         assert args.pending_disposition == "none"
 
+    def test_text_shape_null_is_a_real_clear_not_an_omission(self) -> None:
+        keys = ("target_seconds", "scene_count", "group_chars")
+        omitted = DesignStoryboardArgs.model_validate({})
+        assert all(key not in omitted.model_fields_set for key in keys)
+
+        cleared = DesignStoryboardArgs.model_validate({key: None for key in keys})
+        assert all(key in cleared.model_fields_set for key in keys)
+        assert cleared.target_seconds is None
+        assert cleared.scene_count is None
+        assert cleared.group_chars is None
+
+        overridden = DesignStoryboardArgs.model_validate(
+            {"target_seconds": 20.0, "scene_count": 8, "group_chars": [2, 4]}
+        )
+        assert overridden.target_seconds == 20.0
+        assert overridden.scene_count == 8
+        assert overridden.group_chars == [2, 4]
+        assert all(key in overridden.model_fields_set for key in keys)
+
+    def test_patch_rejects_an_explicit_null_compose_field(self) -> None:
+        base = {
+            "base_ref": "read-reference",
+            "edits": [{"op": "update_scene", "scene_id": "s2", "dark": True}],
+        }
+        DesignStoryboardArgs.model_validate(base)
+        with pytest.raises(ValidationError, match="edits never mix with target_seconds"):
+            DesignStoryboardArgs.model_validate({**base, "target_seconds": None})
+
     def test_values_ride_verbatim(self) -> None:
         args = DesignStoryboardArgs.model_validate(
             {
@@ -329,3 +357,69 @@ class TestDesignStoryboardArgs:
     def test_unknown_keys_reject(self) -> None:
         with pytest.raises(ValidationError):
             DesignStoryboardArgs.model_validate({"scenes": 5})
+
+
+class TestProductionIntentBirthFact:
+    """ADR-139: every dock-capable args model carries the birth fact — the
+    model's judgment whether the user's message asks for the work to be
+    MADE now. Null-tolerant (打字机律牙①): an explicit null or an absent key
+    reads as None = unasserted = the safe-side hold; true/false keep."""
+
+    _MINIMAL = {
+        "PresentPlanArgs": {},
+        "ProposeTasksArgs": {},
+        "EditGraphArgs": {},
+        "ProposePlansArgs": {"plans": []},
+        "RevisePlanArgs": {
+            "plan_id": "12345678-1234-1234-1234-123456789012",
+            "outputs": [],
+        },
+        "ReviseSelectsArgs": {"selects": []},
+    }
+
+    def _models(self):
+        from app.chat.exploration_tools import (
+            ProposePlansArgs,
+            RevisePlanArgs,
+            ReviseSelectsArgs,
+        )
+        from app.models.schemas import (
+            EditGraphArgs,
+            PresentPlanArgs,
+            ProposeTasksArgs,
+        )
+
+        return {
+            m.__name__: m
+            for m in (
+                PresentPlanArgs,
+                ProposeTasksArgs,
+                EditGraphArgs,
+                ProposePlansArgs,
+                RevisePlanArgs,
+                ReviseSelectsArgs,
+            )
+        }
+
+    def test_all_six_dock_models_carry_the_field(self) -> None:
+        models = self._models()
+        assert set(models) == set(self._MINIMAL)
+        for name, model in models.items():
+            assert "production_intent" in model.model_fields, name
+
+    def test_absent_and_explicit_null_read_as_unasserted(self) -> None:
+        for name, model in self._models().items():
+            absent = model.model_validate({**self._MINIMAL[name]})
+            assert absent.production_intent is None, name
+            nulled = model.model_validate(
+                {**self._MINIMAL[name], "production_intent": None}
+            )
+            assert nulled.production_intent is None, name
+
+    def test_true_and_false_keep(self) -> None:
+        for name, model in self._models().items():
+            for value in (True, False):
+                args = model.model_validate(
+                    {**self._MINIMAL[name], "production_intent": value}
+                )
+                assert args.production_intent is value, name

@@ -856,6 +856,61 @@ class Music(Base):
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
 
+class FilmNarration(Base):
+    """Film narration reuse store (ADR-138 R4-A, 总设计 §10.1): one row per
+    (project, content_hash) — the ORIGINAL speed-1.0 synthesis of one
+    narration line, reusable across versions/runs of the same project.
+
+    ``content_hash`` = sha256 over the canonical synthesis identity
+    (normalized text | resolved voice_id | language | synthesis config) —
+    reuse keys on the ACTUAL synthesis configuration, never a display name
+    or an unresolved Auto. The row holds the original audio's object key +
+    its decoded duration; speed adaptation is a runtime transform whose
+    product is a run-level staging file (never stored here, never in the
+    hash — re-derived from the original on recovery).
+
+    Concurrency (闸 16 — the unique index does NOT prevent duplicate TTS
+    calls by itself, every write is ownership-conditioned): a claim is an
+    atomic INSERT … ON CONFLICT DO NOTHING; the placeholder carries
+    ``owner_token`` + ``lease_expires_at``; a timed-out owner is taken over
+    by a conditional UPDATE that lands only while the row is still
+    ``synthesizing`` past its lease; finalize/expire writes carry the
+    ``owner_token + status`` double condition so an expired owner never
+    overwrites or deletes a takeover's result. Rows cascade with the
+    project (same law as assets).
+    """
+
+    __tablename__ = "film_narrations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    content_hash = Column(String(64), nullable=False)
+    # The synthesized identity facts (the hash's inputs, readable for audit
+    # and the 按需收割 compatibility path).
+    voice_id = Column(String(255), nullable=False)
+    language = Column(String(16), nullable=False)
+    config_hash = Column(String(64), nullable=False)
+    text = Column(Text, nullable=False)
+    # The ORIGINAL synthesis artifact + its decoded truth.
+    storage_key = Column(String(512), nullable=True)  # NULL while synthesizing
+    duration_s = Column(Float, nullable=True)
+    status = Column(String(16), nullable=False, default="synthesizing")
+    owner_token = Column(String(64), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id", "content_hash", name="uq_film_narrations_project_hash"
+        ),
+    )
+
+
 class ChannelAccount(Base):
     """OAuth-connected social account (Distribution module — DISTRIBUTION.md §3.1).
 

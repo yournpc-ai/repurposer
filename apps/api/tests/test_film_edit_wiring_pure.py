@@ -18,9 +18,10 @@ The covered laws (设计 = docs/tasks/film-storyboard-orchestration.md §7.2):
    a side effect; the explicit param is the two-way escape door.
 5. **报价分叉** — a versioned board quotes its ACTUAL seconds + full
    narration chars (interim = full re-synthesis, no reuse pre-claim).
-6. **呈现契约** — the observation carries ONLY the system-computed change
-   lines + the next version's base_ref; the patched version's fingerprint
-   recomputes equal at the approval dock (reuse, never a redraft).
+6. **呈现契约** — the observation carries the system-computed change
+   summary, the shared FULL current-version fact sheet and the next
+   version's base_ref; the patched version's fingerprint recomputes equal
+   at the approval dock (reuse, never a redraft).
 7. **冻结时间轴 = 版本状态** — the established cut inherits across
    timeline-preserving edits (never keyed on this batch naming set_music);
    a structural change or a surviving recut re-establishes it fresh; an
@@ -41,6 +42,7 @@ from app.models.schemas import (
 )
 from app.tools.film.edits import (
     change_set_presentation,
+    film_base_cut,
     film_edit_repair_echo,
     film_version_identity_digest,
 )
@@ -121,8 +123,10 @@ def _board(**over) -> FilmStoryboard:
     return FilmStoryboard.model_validate({"scenes": _board_scenes(), **over})
 
 
-def _base_ref(board: FilmStoryboard, params: dict, *, version: int) -> str:
-    return film_version_identity_digest(board, params, version=version)
+def _base_ref(
+    board: FilmStoryboard, params: dict, *, version: int, cut=None
+) -> str:
+    return film_version_identity_digest(board, params, version=version, cut=cut)
 
 
 def _pending_with_film(
@@ -213,40 +217,80 @@ class _StubDB:
         return None
 
 
-class _GuardStubs:
-    """Recording stubs for the marker machinery (patched onto
-    app.tools.film.storyboard)."""
+_UNMOVED = object()  # the committed row IS the project's own live pending
 
-    def __init__(self, *, live_version=None, marker_base_version=None):
+
+class _GuardStubs:
+    """Recording stubs for the begin/clear seats (patched onto
+    app.tools.film.storyboard). The publish guard's committed-state read
+    runs the REAL ``read_committed_film_state`` over a stubbed side session
+    whose row carries ``committed`` (``_UNMOVED`` = the project's current
+    pending — the world did not move) with THIS draft's marker injected
+    (simulating our own begin's committed write)."""
+
+    def __init__(self, *, marker_base_version=None, committed=_UNMOVED,
+                 marker_started_at=None):
         self.begin_calls: list[dict] = []
         self.cleared: list[str] = []
-        self.live_version = live_version
         self.marker_base_version = marker_base_version
+        self.committed = committed
+        self.marker_started_at = marker_started_at
+        self.marker_draft_id = "draft-test"  # flip to simulate a takeover
+        self.project = None  # set by _patch_world
 
     async def begin(self, db, project, *, base_version, user_message_id):
+        from app.tools.film.storyboard import FilmDraftBegin
+
         self.begin_calls.append({"base_version": base_version})
-        return "draft-test"
+        return FilmDraftBegin(draft_id="draft-test")
 
     async def clear(self, db, project, *, draft_id):
         self.cleared.append(draft_id)
 
-    async def read_state(self, project_id):
-        return (
-            {"draft_id": "draft-test", "base_version": self.marker_base_version},
-            self.live_version,
-        )
+    def committed_row(self):
+        raw = self.committed
+        if raw is _UNMOVED:
+            raw = self.project.pending_brief if self.project is not None else None
+        if not isinstance(raw, dict):
+            return raw
+        pend = dict(raw)  # never mutate the project's own dict
+        marker = {
+            "draft_id": self.marker_draft_id,
+            "base_version": self.marker_base_version,
+        }
+        if self.marker_started_at is not None:
+            marker["started_at"] = self.marker_started_at
+        pend["film_draft_inflight"] = marker
+        return pend
 
 
-def _patch_world(monkeypatch, guards: _GuardStubs, *, resolve_base=None):
+def _patch_world(monkeypatch, guards: _GuardStubs, *, resolve_base=None,
+                 project=None):
     """Wire the stub seats: marker machinery + revision-base resolution +
     the patch beat's DB dependencies (pages present, silent snapshot music).
+    The committed-state read keeps its REAL seat — only the side session
+    factory is stubbed, so the read's own extraction law stays under test.
     """
+    import app.models.database as db_mod
     import app.tools.film.edits as edits_mod
     import app.tools.film.storyboard as sb_mod
 
     monkeypatch.setattr(sb_mod, "begin_film_draft", guards.begin)
     monkeypatch.setattr(sb_mod, "clear_film_draft_marker", guards.clear)
-    monkeypatch.setattr(sb_mod, "read_committed_film_state", guards.read_state)
+    guards.project = project
+
+    class _CommittedSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def execute(self, *args, **kwargs):
+            pend = guards.committed_row()
+            return SimpleNamespace(scalar_one_or_none=lambda: pend)
+
+    monkeypatch.setattr(db_mod, "AsyncSessionLocal", lambda: _CommittedSession())
     if resolve_base is not None:
         monkeypatch.setattr(sb_mod, "resolve_film_revision_base", resolve_base)
 
@@ -291,6 +335,11 @@ def _chat_turn(project, *, text="把第二章的旁白缩短一点", mentions=No
     turn.on_candidates = None
     turn.on_row_append = None
     turn._presentation_pending = None
+    turn._designed_this_turn = None
+    turn._design_draft_id = None
+    turn._design_begin_refusal = None
+    turn._design_corrections = 0
+    turn._design_shortfalls = []
     turn.pending = None
     turn.pending_judgable = False
     turn.context = {"text": ""}
@@ -305,6 +354,39 @@ def _chat_turn(project, *, text="把第二章的旁白缩短一点", mentions=No
 
 def _edit_args(**kw) -> DesignStoryboardArgs:
     return DesignStoryboardArgs.model_validate(kw)
+
+
+def _ledger_keys(turn) -> list[str]:
+    """The shortfall ledger's mechanical keys (entries are
+    ``design_call_record`` dicts — {key, target})."""
+    return [e["key"] for e in turn._design_shortfalls]
+
+
+def _plan_turn(project, *, text="换掉配乐"):
+    """A PlanTurn mid-turn stand-in (the chat path's mirror — _chat_turn's
+    plan-path twin)."""
+    from app.chat.plan_turn import PlanTurn
+
+    turn = PlanTurn.__new__(PlanTurn)
+    turn.db = _StubDB()
+    turn.user_id = uuid4()
+    turn.conversation_id = uuid4()
+    turn.project = project
+    turn.request = SimpleNamespace(mentions=[], persona_id=None)
+    turn.text = text
+    turn.on_phase = None
+    turn.on_activity = None
+    turn.on_candidates = None
+    turn.on_row_append = None
+    turn._presentation_pending = None
+    turn._designed_this_turn = None
+    turn._design_draft_id = None
+    turn._design_begin_refusal = None
+    turn._design_corrections = 0
+    turn._design_shortfalls = []
+    turn.stored = None
+    turn.mention_exemplar_id = None
+    return turn
 
 
 @pytest.fixture(autouse=True)
@@ -335,7 +417,7 @@ async def test_stale_edit_rejects_and_the_live_version_stays_byte_identical(
     turn = _chat_turn(project)
 
     guards = _GuardStubs()
-    _patch_world(monkeypatch, guards)
+    _patch_world(monkeypatch, guards, project=project)
 
     async def _patch_never_called(*args, **kwargs):
         raise AssertionError("prepare_film_patch reached on a stale base")
@@ -376,13 +458,13 @@ async def test_pinned_old_output_branches_from_that_version(monkeypatch):
     )
 
     guards = _GuardStubs(
-        live_version=3, marker_base_version=1  # committed world still holds v3
+        marker_base_version=1  # committed world still holds the live v3 (UNMOVED)
     )
 
     async def _resolve(db, project, *, output_id=None):
         return base
 
-    _patch_world(monkeypatch, guards, resolve_base=_resolve)
+    _patch_world(monkeypatch, guards, resolve_base=_resolve, project=project)
     _kill_switch(monkeypatch)
 
     new_narration = "A tighter chapter walk."
@@ -413,7 +495,7 @@ async def test_pinned_old_output_branches_from_that_version(monkeypatch):
     change_set = pending.film_change_set
     assert change_set is not None
     assert change_set["edited"] == [
-        {"scene_id": "s5", "fields": ["narration"]}
+        {"scene_id": "s5", "fields": ["narration"], "notes": []}
     ]
     assert change_set["moved"] == [] and change_set["removed"] == []
     board = FilmStoryboard.model_validate(pending.film_storyboard)
@@ -438,9 +520,13 @@ async def test_pinned_old_output_branches_from_that_version(monkeypatch):
         [{"tool": "launch_film", "params": pending.film_storyboard_params}],
         pending.prompt,
     )
-    # The observation presents ONLY the change lines + the next base_ref.
+    # The observation carries the computed delta, the FULL current fact
+    # sheet, and the next base_ref — never a diff-only presentation.
     assert "PATCH of version 1" in result.text
     assert "edited — fields: narration" in result.text
+    assert "FULL CURRENT SAVED BOARD" in result.text
+    assert "scene 1" in result.text
+    assert "never re-print the whole scene table" not in result.text
     next_ref = _base_ref(board, pending.film_storyboard_params, version=2)
     assert next_ref in result.text
     # 呈现挂号: finish will stamp the presentation's provenance.
@@ -461,8 +547,11 @@ async def test_commit_time_recheck_discards_a_patch_whose_base_moved(
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
     turn = _chat_turn(project)
 
-    guards = _GuardStubs(live_version=3, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    guards = _GuardStubs(
+        marker_base_version=2,
+        committed=_pending_with_film(_board(), _PARAMS, version=3),
+    )
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     result = await turn._design_storyboard(
@@ -494,7 +583,7 @@ async def test_recut_only_new_version_invalidates_earlier_base_refs(
     turn = _chat_turn(project)
 
     guards = _GuardStubs()
-    _patch_world(monkeypatch, guards)
+    _patch_world(monkeypatch, guards, project=project)
 
     async def _patch_never_called(*args, **kwargs):
         raise AssertionError("prepare_film_patch reached on a stale base")
@@ -534,14 +623,15 @@ async def test_provenance_base_publish_rechecks_a_committed_pending(
     turn = _chat_turn(project)
 
     guards = _GuardStubs(
-        live_version=2,  # 本 patch 的 begin 之后, committed pending 推进到 v2
+        # 本 patch 的 begin 之后, committed pending 推进到 v2
         marker_base_version=1,
+        committed=_pending_with_film(_board(), _PARAMS, version=2),
     )
 
     async def _resolve(db, project, *, output_id=None):
         return base
 
-    _patch_world(monkeypatch, guards, resolve_base=_resolve)
+    _patch_world(monkeypatch, guards, resolve_base=_resolve, project=project)
     _kill_switch(monkeypatch)
 
     result = await turn._design_storyboard(
@@ -563,6 +653,307 @@ async def test_provenance_base_publish_rechecks_a_committed_pending(
 
 
 @pytest.mark.asyncio
+async def test_same_numbered_foreign_pending_discards_the_patch(monkeypatch):
+    """复审遗留问题② + 全身份法: 版本号相同 ≠ 同一版本——base 从 provenance
+    恢复 (v1, 读取时无 pending), resolve 与 begin 之间另一个设计提交了同为
+    v1 但内容不同的 pending (分支同号异稿) → 发布重检按全身份识别异稿,
+    诚实丢弃; 同号同稿同参数同冻结态 (字节级同一版本状态的再提交 — 「读取
+    时无 pending、随后出现并发 pending」的唯一安全形) 照常发布."""
+    v1 = _board()
+    base = _provenance_base(v1, _PARAMS, version=1)
+    project = SimpleNamespace(id=uuid4(), pending_brief={})
+    turn = _chat_turn(project)
+
+    foreign = _board()
+    foreign.scenes[0].lines = ["a different opening"]  # 同号异内容
+    guards = _GuardStubs(
+        marker_base_version=1,
+        # 与 base 同号 — 版本号比对看不出来; 内容 digest 才看出来
+        committed=_pending_with_film(foreign, _PARAMS, version=1),
+    )
+
+    async def _resolve(db, project, *, output_id=None):
+        return base
+
+    _patch_world(monkeypatch, guards, resolve_base=_resolve, project=project)
+    _kill_switch(monkeypatch)
+
+    result = await turn._design_storyboard(
+        _edit_args(
+            edits=[
+                {"op": "update_scene", "scene_id": "s5",
+                 "narration": "A tighter chapter walk."}
+            ],
+            base_ref=_base_ref(v1, _PARAMS, version=1),
+        ),
+        "",
+    )
+    assert isinstance(result, str)
+    assert "discarded" in result and "base_ref" in result
+    assert project.pending_brief == {}
+    assert guards.cleared == ["draft-test"]
+
+    # 对照腿: 出现的 pending 与读取基准字节级同一版本状态 (同号同稿同参数
+    # 同冻结态) — 世界未动, 照常发布.
+    project2 = SimpleNamespace(id=uuid4(), pending_brief={})
+    turn2 = _chat_turn(project2)
+    guards2 = _GuardStubs(
+        marker_base_version=1,
+        committed=_pending_with_film(v1, _PARAMS, version=1),
+    )
+    _patch_world(monkeypatch, guards2, resolve_base=_resolve, project=project2)
+    _kill_switch(monkeypatch)
+
+    from app.agents.tool_loop import ToolObservation
+
+    result2 = await turn2._design_storyboard(
+        _edit_args(
+            edits=[
+                {"op": "update_scene", "scene_id": "s5",
+                 "narration": "A tighter chapter walk."}
+            ],
+            base_ref=_base_ref(v1, _PARAMS, version=1),
+        ),
+        "",
+    )
+    assert isinstance(result2, ToolObservation), result2
+    pending2 = PendingPlan.model_validate(project2.pending_brief)
+    assert pending2.film_storyboard_version == 2
+    assert guards2.cleared == []
+
+
+@pytest.mark.asyncio
+async def test_publish_guard_full_identity_params_drift_discards(monkeypatch):
+    """发布守卫全身份 (定点修复): committed pending 与 base 同号同内容但
+    PARAMS 不同 (并发稿改了 music_mood) —— 旧的「版本号 + 内容 digest」比对
+    放行此形, 全身份比对诚实丢弃; pending 字节不动, 本 draft marker 清,
+    指引重读."""
+    v2 = _board()
+    pending_before = _pending_with_film(v2, _PARAMS, version=2)
+    project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
+    turn = _chat_turn(project)
+
+    guards = _GuardStubs(
+        marker_base_version=2,
+        # 同号同内容, 参数已移动 (并发稿换音乐) —— 版本号与内容 digest 都
+        # 看不出来, 只有全身份 (canonical params 在内) 看得出来.
+        committed=_pending_with_film(
+            v2, {**_PARAMS, "music_mood": "upbeat"}, version=2
+        ),
+    )
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    result = await turn._design_storyboard(
+        _edit_args(
+            edits=[
+                {"op": "update_scene", "scene_id": "s5",
+                 "narration": "A tighter chapter walk."}
+            ],
+            base_ref=_base_ref(v2, _PARAMS, version=2),
+        ),
+        "",
+    )
+    assert isinstance(result, str)
+    assert "discarded" in result and "base_ref" in result
+    assert project.pending_brief == pending_before
+    assert guards.cleared == ["draft-test"]
+
+
+@pytest.mark.asyncio
+async def test_plan_publish_guard_full_identity_params_drift_discards(
+    monkeypatch,
+):
+    """plan 路镜像 (双路行为一致): 同号同内容异参数 → 丢弃."""
+    from app.chat.plan_turn import PlanTurn
+
+    v2 = _board()
+    pending_before = _pending_with_film(v2, _PARAMS, version=2)
+    project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
+
+    turn = _plan_turn(project, text="把第五场的旁白缩短一点")
+
+    guards = _GuardStubs(
+        marker_base_version=2,
+        committed=_pending_with_film(
+            v2, {**_PARAMS, "music_mood": "upbeat"}, version=2
+        ),
+    )
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    result = await turn._design_storyboard(
+        _edit_args(
+            edits=[
+                {"op": "update_scene", "scene_id": "s5",
+                 "narration": "A tighter chapter walk."}
+            ],
+            base_ref=_base_ref(v2, _PARAMS, version=2),
+        ),
+        "",
+    )
+    assert isinstance(result, str) and "discarded" in result
+    assert project.pending_brief == pending_before
+    assert guards.cleared == ["draft-test"]
+
+
+@pytest.mark.asyncio
+async def test_publish_guard_full_identity_frozen_cut_drift_discards(
+    monkeypatch,
+):
+    """同号同内容同参数但冻结时间轴不同 —— cut 三元组 (state/frames/onsets)
+    是版本状态的一部分: 并发稿的冻结帧或落字拍漂移 ⇒ 诚实丢弃 (两腿)."""
+    from app.tools.film.storyboard import draft_reveal_onsets, execution_frames
+
+    v2 = _board()
+    frames = execution_frames(v2, _OLD_BEATS)
+    onsets = draft_reveal_onsets(
+        v2, frames, {"bpm": 60.0, "beats": _OLD_BEATS}
+    )
+    # base = live pending v2 carrying a frozen cut (kept frames + onsets).
+    pending_before = _pending_with_film(
+        v2, _PARAMS, version=2,
+        track=_track("calm", _OLD_BEATS),
+        kept_frames=frames,
+        kept_reveal_onsets=onsets,
+    )
+    base_cut = ("kept", frames, onsets)
+
+    for moved_frames, moved_onsets in (
+        ([frames[0] + 30] + frames[1:], onsets),  # frames 漂移
+        (frames, [None] * 5 + [onsets[5] + 6] + [None] * 8),  # onsets 漂移
+    ):
+        project = SimpleNamespace(
+            id=uuid4(), pending_brief=dict(pending_before)
+        )
+        turn = _chat_turn(project)
+        guards = _GuardStubs(
+            marker_base_version=2,
+            committed=_pending_with_film(
+                v2, _PARAMS, version=2,
+                track=_track("calm", _OLD_BEATS),
+                kept_frames=moved_frames,
+                kept_reveal_onsets=moved_onsets,
+            ),
+        )
+        _patch_world(monkeypatch, guards, project=project)
+        _kill_switch(monkeypatch)
+
+        result = await turn._design_storyboard(
+            _edit_args(
+                edits=[
+                    {"op": "update_scene", "scene_id": "s5",
+                     "narration": "A tighter chapter walk."}
+                ],
+                base_ref=_base_ref(v2, _PARAMS, version=2, cut=base_cut),
+            ),
+            "",
+        )
+        assert isinstance(result, str), (moved_frames[:1], result)
+        assert "discarded" in result and "base_ref" in result
+        assert project.pending_brief == pending_before
+        assert guards.cleared == ["draft-test"]
+
+
+@pytest.mark.asyncio
+async def test_publish_guard_legacy_identity_provable_or_honest_discard(
+    monkeypatch,
+):
+    """legacy 缺字段律: 版本号相等永不当身份证明 ——
+    ① committed 行的 params 缺失 (无法证明身份) → 诚实丢弃并指引重读;
+    ② committed 行缺 stored content digest 但板/参数/版本齐 (digest 从板
+       自重算 = 可证明, legacy 无 scene_id 板同律派生) → 照常发布."""
+    v2 = _board()
+    pending_before = _pending_with_film(v2, _PARAMS, version=2)
+
+    # ① 无法证明: params 缺失 —— 同号同内容也丢弃 (fail closed).
+    legacy_unprovable = _pending_with_film(v2, _PARAMS, version=2)
+    legacy_unprovable["film_storyboard_params"] = None
+    project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
+    turn = _chat_turn(project)
+    guards = _GuardStubs(marker_base_version=2, committed=legacy_unprovable)
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    result = await turn._design_storyboard(
+        _edit_args(
+            edits=[
+                {"op": "update_scene", "scene_id": "s5",
+                 "narration": "A tighter chapter walk."}
+            ],
+            base_ref=_base_ref(v2, _PARAMS, version=2),
+        ),
+        "",
+    )
+    assert isinstance(result, str)
+    assert "discarded" in result and "base_ref" in result
+    assert project.pending_brief == pending_before
+    assert guards.cleared == ["draft-test"]
+
+    # ② 可证明: stored digest 缺失不碍事 —— 身份从板本身重算, 照常发布.
+    legacy_provable = _pending_with_film(v2, _PARAMS, version=2)
+    legacy_provable["film_storyboard_content_digest"] = None
+    project2 = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
+    turn2 = _chat_turn(project2)
+    guards2 = _GuardStubs(marker_base_version=2, committed=legacy_provable)
+    _patch_world(monkeypatch, guards2, project=project2)
+    _kill_switch(monkeypatch)
+
+    from app.agents.tool_loop import ToolObservation
+
+    result2 = await turn2._design_storyboard(
+        _edit_args(
+            edits=[
+                {"op": "update_scene", "scene_id": "s5",
+                 "narration": "A tighter chapter walk."}
+            ],
+            base_ref=_base_ref(v2, _PARAMS, version=2),
+        ),
+        "",
+    )
+    assert isinstance(result2, ToolObservation), result2
+    pending2 = PendingPlan.model_validate(project2.pending_brief)
+    assert pending2.film_storyboard_version == 3
+    assert guards2.cleared == []
+
+
+@pytest.mark.asyncio
+async def test_publish_guard_stale_own_marker_discards(monkeypatch):
+    """提交前检查→写入窗口的 fail-closed 半: 本 draft marker 已越过设计预算
+    (staleness) ⇒ 所有权按协议失效 (接管者可能已合法进场) —— 诚实丢弃,
+    永不覆盖; 对照腿 (live marker + 世界未动) 照常发布."""
+    import time as _time
+
+    from app.tools.film.storyboard import _DOCK_DRAFT_BUDGET_S
+
+    v2 = _board()
+    pending_before = _pending_with_film(v2, _PARAMS, version=2)
+    project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
+    turn = _chat_turn(project)
+    guards = _GuardStubs(
+        marker_base_version=2,
+        marker_started_at=_time.time() - _DOCK_DRAFT_BUDGET_S - 1.0,
+    )
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    result = await turn._design_storyboard(
+        _edit_args(
+            edits=[
+                {"op": "update_scene", "scene_id": "s5",
+                 "narration": "A tighter chapter walk."}
+            ],
+            base_ref=_base_ref(v2, _PARAMS, version=2),
+        ),
+        "",
+    )
+    assert isinstance(result, str)
+    assert "discarded" in result and "base_ref" in result
+    assert project.pending_brief == pending_before
+    assert guards.cleared == ["draft-test"]
+
+
+@pytest.mark.asyncio
 async def test_happy_path_on_the_live_pending_with_zero_director_calls(
     monkeypatch,
 ):
@@ -573,8 +964,8 @@ async def test_happy_path_on_the_live_pending_with_zero_director_calls(
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
     turn = _chat_turn(project)
 
-    guards = _GuardStubs(live_version=2, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     result = await turn._design_storyboard(
@@ -630,8 +1021,8 @@ async def test_unchanged_batch_echoes_and_creates_no_version(monkeypatch):
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
     turn = _chat_turn(project)
 
-    guards = _GuardStubs(live_version=2, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     result = await turn._design_storyboard(
@@ -655,8 +1046,8 @@ async def test_validation_failure_echoes_the_violations_verbatim(monkeypatch):
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
     turn = _chat_turn(project)
 
-    guards = _GuardStubs(live_version=2, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     result = await turn._design_storyboard(
@@ -689,8 +1080,8 @@ async def test_unknown_scene_echoes_the_structural_rejection(monkeypatch):
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
     turn = _chat_turn(project)
 
-    guards = _GuardStubs(live_version=2, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     result = await turn._design_storyboard(
@@ -715,7 +1106,7 @@ async def test_edit_without_a_base_is_an_honest_refusal(monkeypatch):
     async def _resolve_none(db, project, *, output_id=None):
         return None
 
-    _patch_world(monkeypatch, _GuardStubs(), resolve_base=_resolve_none)
+    _patch_world(monkeypatch, _GuardStubs(), resolve_base=_resolve_none, project=project)
     _kill_switch(monkeypatch)
 
     result = await turn._design_storyboard(
@@ -739,8 +1130,8 @@ async def test_music_gate_names_the_unresolvable_mood(monkeypatch):
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
     turn = _chat_turn(project)
 
-    guards = _GuardStubs(live_version=2, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     import app.tools.film.edits as edits_mod
@@ -775,14 +1166,14 @@ async def test_set_music_success_rebuilds_the_snapshot_with_the_new_grid(
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
     turn = _chat_turn(project)
 
-    guards = _GuardStubs(live_version=2, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     import app.tools.film.edits as edits_mod
 
     track = SimpleNamespace(
-        id=uuid4(), mood="upbeat",
+        id=uuid4(), mood="upbeat", title="Upbeat",
         meta={"bpm": 120.0, "beats": [0.0, 0.5, 1.0, 1.5]},
     )
 
@@ -816,6 +1207,145 @@ async def test_set_music_success_rebuilds_the_snapshot_with_the_new_grid(
     assert "re-cut" in result.text
 
 
+@pytest.mark.asyncio
+async def test_set_music_off_skips_the_track_gate_and_lands(monkeypatch):
+    """音频三态 (闸 21): set_music('off') 是真实关闭态——严格曲目门对它不
+    触发 (无可解曲目), 快照不带床, change_set 呈现 off; 版本照常落库."""
+    v2 = _board()
+    pending_before = _pending_with_film(v2, _PARAMS, version=2, hold=False)
+    project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
+    turn = _chat_turn(project)
+
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    import app.tools.film.edits as edits_mod
+
+    async def _gate_must_not_fire(*args, **kwargs):
+        raise AssertionError("the strict track gate fired on the explicit OFF")
+
+    monkeypatch.setattr(edits_mod, "resolve_named_film_track", _gate_must_not_fire)
+
+    from app.agents.tool_loop import ToolObservation
+
+    result = await turn._design_storyboard(
+        _edit_args(
+            edits=[{"op": "set_music", "mood": "off", "retime": "keep_cut"}],
+            base_ref=_base_ref(v2, _PARAMS, version=2),
+        ),
+        "",
+    )
+    assert isinstance(result, ToolObservation), result
+    pending = PendingPlan.model_validate(project.pending_brief)
+    assert pending.film_storyboard_version == 3
+    assert pending.film_storyboard_params.get("music_mood") == "off"
+    assert pending.film_change_set["music"]["mood_after"] == "off"
+    assert (pending.film_storyboard_execution or {}).get("music") is None
+    assert "off (no bed)" in result.text
+
+
+@pytest.mark.asyncio
+async def test_set_voiceover_on_patch_lands_with_zero_director_calls(monkeypatch):
+    """闸 21 重开配音零重设计: set_voiceover(true) 让既有旁白行在 run 期
+    走合成/复用——编辑拍只翻参数: 板字节不动、零导演调用 (_kill_switch)、
+    版本落库、呈现行报 on."""
+    from app.tools.film.edits import ensure_scene_ids
+
+    v2 = _board()
+    off_params = {**_PARAMS, "voiceover": False}
+    pending_before = _pending_with_film(v2, off_params, version=2, hold=False)
+    project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
+    turn = _chat_turn(project)
+
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    from app.agents.tool_loop import ToolObservation
+
+    result = await turn._design_storyboard(
+        _edit_args(
+            edits=[{"op": "set_voiceover", "enabled": True}],
+            base_ref=_base_ref(v2, off_params, version=2),
+        ),
+        "",
+    )
+    assert isinstance(result, ToolObservation), result
+    pending = PendingPlan.model_validate(project.pending_brief)
+    assert pending.film_storyboard_version == 3
+    assert pending.film_storyboard_params.get("voiceover") is True
+    assert pending.film_change_set["voiceover"] is True
+    # The board bytes ride through untouched — zero redesign.
+    assert pending.film_storyboard == ensure_scene_ids(v2).model_dump(mode="json")
+    assert "voiceover: now on" in result.text
+
+
+@pytest.mark.asyncio
+async def test_set_voiceover_on_without_narration_echoes_content_gap(monkeypatch):
+    """旁白存在律 (闸 21): 零旁白行开配音 = 结构化内容缺口拒答 (点名先用
+    update_scene 写旁白内容, 明示这不是 synthesis/voice 问题); 零版本落库,
+    本 draft marker 清."""
+    silent_board = FilmStoryboard.model_validate(
+        {"scenes": [
+            {k: v for k, v in s.items() if k != "narration"}
+            for s in _board_scenes()
+        ]}
+    )
+    off_params = {**_PARAMS, "voiceover": False}
+    pending_before = _pending_with_film(silent_board, off_params, version=2, hold=False)
+    project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
+    turn = _chat_turn(project)
+
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    result = await turn._design_storyboard(
+        _edit_args(
+            edits=[{"op": "set_voiceover", "enabled": True}],
+            base_ref=_base_ref(silent_board, off_params, version=2),
+        ),
+        "",
+    )
+    assert isinstance(result, str)
+    assert "voiceover_needs_narration" in result
+    assert "update_scene" in result  # the ONE next move: author the lines
+    assert "never a synthesis or voice problem" in result
+    assert project.pending_brief == pending_before  # no version landed
+    assert guards.cleared == ["draft-test"]
+
+
+@pytest.mark.asyncio
+async def test_music_off_short_circuits_the_resolution_chain(monkeypatch):
+    """闸 21 off 不被重开: 明确关闭在解析链入口短路——persona 皮肤默认与
+    calm 兜底永不重开被关闭的床; 未指定 (None) 照常走 persona 链 (对照腿)."""
+    import app.memory.brand as brand_mod
+    import app.tools.film.storyboard as sb_mod
+
+    persona_calls: list[int] = []
+
+    async def _persona(db, project):
+        persona_calls.append(1)
+        return SimpleNamespace(brand={"musicId": "brand-track-ref"})
+
+    seen: list[str] = []
+
+    async def _resolve_ref(db, ref):
+        seen.append(ref)
+        return SimpleNamespace(id=uuid4(), mood=ref, meta={})
+
+    monkeypatch.setattr(sb_mod, "resolve_persona", _persona)
+    monkeypatch.setattr(brand_mod, "resolve_music_ref", _resolve_ref)
+
+    # OFF: returns None before the persona lookup — no ref is ever tried.
+    assert await sb_mod.resolve_film_music(None, SimpleNamespace(), "off") is None
+    assert persona_calls == [] and seen == []
+    # Control: an UNSET mood still rides the persona skin default.
+    assert await sb_mod.resolve_film_music(None, SimpleNamespace(), None) is not None
+    assert seen == ["brand-track-ref"]
+
+
 # ---------------------------------------------------------------------------
 # 3. PlanTurn parity — the plan path's patch branch rides the same seats
 # ---------------------------------------------------------------------------
@@ -829,23 +1359,9 @@ async def test_plan_turn_patch_branch_lands_the_version(monkeypatch):
     pending_before = _pending_with_film(v2, _PARAMS, version=2, hold=False)
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
 
-    turn = PlanTurn.__new__(PlanTurn)
-    turn.db = _StubDB()
-    turn.user_id = uuid4()
-    turn.conversation_id = uuid4()
-    turn.project = project
-    turn.request = SimpleNamespace(mentions=[], persona_id=None)
-    turn.text = "换掉配乐"
-    turn.on_phase = None
-    turn.on_activity = None
-    turn.on_candidates = None
-    turn.on_row_append = None
-    turn._presentation_pending = None
-    turn.stored = None
-    turn.mention_exemplar_id = None
-
-    guards = _GuardStubs(live_version=2, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    turn = _plan_turn(project)
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     from app.agents.tool_loop import ToolObservation
@@ -901,6 +1417,31 @@ def test_hold_matrix_compose_fresh_defaults_on():
     assert state["film_created_via"] == "compose"
     assert state["film_base_version"] is None
     assert state["film_change_set"] is None
+
+
+def test_compose_birth_stores_the_explicit_voiceover_pin():
+    """默认无配音 (2026-10-21): the design seats pin voiceover EXPLICITLY at
+    birth (film_voiceover_birth_pin) — the stored version params carry the
+    pinned value byte-for-byte (the dock restore, the Start draft-match and
+    the run's slot all read the same explicit key)."""
+    off = film_design_state(
+        None,
+        film=_film(reused=False),
+        design_params={"focus": "x", "voiceover": False},
+        review_hold=None,
+        authorized_by="u1",
+        created_via="compose",
+    )
+    assert off["film_storyboard_params"]["voiceover"] is False
+    on = film_design_state(
+        None,
+        film=_film(reused=False),
+        design_params={"voiceover": True},
+        review_hold=None,
+        authorized_by="u1",
+        created_via="compose",
+    )
+    assert on["film_storyboard_params"]["voiceover"] is True
 
 
 def test_hold_matrix_patch_on_unheld_base_adds_no_hold():
@@ -1011,6 +1552,199 @@ def test_launch_film_estimate_fork_reads_actual_facts():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.asyncio
+async def test_film_revision_without_production_intent_answers_before_any_dock(
+    monkeypatch,
+):
+    """Both turn paths: a saved film revision without CURRENT production
+    intent closes through answer, never a launch_film dock/run. An explicit
+    current-turn delegation remains the existing proposal path; non-film
+    proposals and turns without a fresh film design are untouched."""
+    from app.models.schemas import PresentPlanArgs, ProposeTasksArgs
+    from app.chat.turn_tools import film_revision_proposal_guard
+
+    tasks = [{"tool": "launch_film", "params": {}}]
+    assert film_revision_proposal_guard(
+        designed_version=2, tasks=tasks, production_intent=True
+    ) is None
+    assert film_revision_proposal_guard(
+        designed_version=None, tasks=tasks, production_intent=False
+    ) is None
+    assert film_revision_proposal_guard(
+        designed_version=2,
+        tasks=[{"tool": "write_post", "params": {}}],
+        production_intent=False,
+    ) is None
+
+    for make_turn in (_chat_turn, _plan_turn):
+        for intent in (None, False):
+            project = SimpleNamespace(id=uuid4(), pending_brief={})
+            turn = make_turn(project)
+            turn._designed_this_turn = 2
+            if make_turn is _chat_turn:
+                monkeypatch.setattr(
+                    "app.chat.propose_turn.validate_task_list", lambda _tasks: None
+                )
+
+                async def _dock_never(**_kwargs):
+                    raise AssertionError("a revision without intent docked")
+
+                monkeypatch.setattr(turn, "_dock_plan_as_question", _dock_never)
+                result = await turn._propose_tasks(
+                    ProposeTasksArgs.model_validate(
+                        {"tasks": tasks, "production_intent": intent}
+                    ),
+                    "the revised board",
+                )
+            else:
+                monkeypatch.setattr(
+                    "app.chat.plan_turn.validate_task_list", lambda _tasks: None
+                )
+                result = await turn._present_plan(
+                    PresentPlanArgs.model_validate(
+                        {"tasks": tasks, "production_intent": intent}
+                    ),
+                    "the revised board",
+                )
+            assert isinstance(result, str), type(turn).__name__
+            assert "Call answer" in result
+            assert "FULL current saved-board facts" in result
+            assert "review only" in result
+            assert project.pending_brief == {}
+
+
+def test_film_rejection_stop_is_narrow_and_bounded():
+    from app.agents.tool_loop import ToolRejected
+    from app.chat.turn_tools import film_rejection_stop
+
+    first = ToolRejected("params_validation", "design_storyboard", 0, "same", 0)
+    repeated = ToolRejected("params_validation", "design_storyboard", 1, "same", 0)
+    changed = ToolRejected("params_validation", "design_storyboard", 1, "changed", 0)
+    assert film_rejection_stop(repeated, (first,)) is True
+    assert film_rejection_stop(repeated, ()) is False
+    assert film_rejection_stop(changed, (first,)) is False
+    # Different errors still get a repair attempt, but the THIRD failed
+    # design in the same turn closes even when every signature differs.
+    assert film_rejection_stop(
+        ToolRejected("execute_guardrail", "design_storyboard", 2, "third", 0),
+        (first, changed),
+    ) is True
+    assert film_rejection_stop(
+        ToolRejected("execute_guardrail", "design_storyboard", 1, "same", 0),
+        (first,),
+    ) is False
+    assert film_rejection_stop(
+        ToolRejected("params_validation", "get_output_spec", 1, "same", 0),
+        (first,),
+    ) is False
+
+
+def test_film_wiring_guard_blocks_only_the_bare_film_execution_paths():
+    from app.chat.turn_tools import film_wiring_guard
+
+    film_id = uuid4()
+    other_id = uuid4()
+    nodes = [
+        SimpleNamespace(id=film_id, tool="launch_film"),
+        SimpleNamespace(id=other_id, tool="write_post"),
+    ]
+    assert film_wiring_guard(
+        ops=[{"op": "edit_prompt", "node": str(film_id), "prompt": "new"}],
+        pre_nodes=nodes,
+    ) is not None
+    assert film_wiring_guard(
+        ops=[{"op": "edit_prompt", "node": str(other_id), "prompt": "new"}],
+        pre_nodes=nodes,
+    ) is None
+    assert film_wiring_guard(tasks=[{"tool": "launch_film", "params": {}}]) is not None
+    assert film_wiring_guard(tasks=[SimpleNamespace(tool="launch_film")]) is not None
+    assert film_wiring_guard(tasks=[{"tool": "write_post", "params": {}}]) is None
+
+
+@pytest.mark.asyncio
+async def test_generic_chat_run_dispatcher_backstops_a_bare_film_run(monkeypatch):
+    from app.chat.service import _create_run_from_tasks
+
+    async def _create_never(*args, **kwargs):
+        raise AssertionError("create_run was reached for a bare chat Film run")
+
+    monkeypatch.setattr("app.pipeline.orchestrator.create_run", _create_never)
+    project = SimpleNamespace(id=uuid4(), language="en")
+    with pytest.raises(ValueError, match="versioned Start"):
+        await _create_run_from_tasks(
+            _StubDB(), project, [SimpleNamespace(tool="launch_film")], "remake"
+        )
+
+
+@pytest.mark.asyncio
+async def test_edit_graph_preserves_the_current_production_intent(monkeypatch):
+    from app.models.schemas import EditGraphArgs
+
+    turn = _chat_turn(SimpleNamespace(id=uuid4(), pending_brief={}))
+    captured = {}
+
+    async def _capture(proposal, prose, **kwargs):
+        captured["proposal"] = proposal
+        captured["prose"] = prose
+        return "sentinel"
+
+    monkeypatch.setattr(turn, "_run_wiring_proposal", _capture)
+    result = await turn._edit_graph(
+        EditGraphArgs.model_validate({"ops": [], "production_intent": True}),
+        "make the current revision",
+    )
+    assert result == "sentinel"
+    assert captured["proposal"].production_intent is True
+    assert captured["prose"] == "make the current revision"
+
+
+@pytest.mark.asyncio
+async def test_no_progress_finish_closes_both_paths_without_a_run(monkeypatch):
+    from app.agents.tool_loop import LoopResult
+
+    for make_turn, module in (
+        (_chat_turn, "app.chat.propose_turn"),
+        (_plan_turn, "app.chat.plan_turn"),
+    ):
+        for version_saved in (False, True):
+            project = SimpleNamespace(id=uuid4(), pending_brief={})
+            turn = make_turn(project)
+            turn._designed_this_turn = 2 if version_saved else None
+            turn.outcome = None
+            if make_turn is _plan_turn:
+                turn.settled_pending = None
+
+            async def _resolved():
+                return None
+
+            monkeypatch.setattr(turn, "_resolve_deferred", _resolved)
+
+            async def _create(db, conversation_id, role, content, **kwargs):
+                return SimpleNamespace(
+                    id=uuid4(), role=role, content=content, question=None
+                )
+
+            monkeypatch.setattr(f"{module}._create_message", _create)
+            outcome = await turn.finish(
+                LoopResult(
+                    prose="",
+                    tool_name=None,
+                    params=None,
+                    iterations=2,
+                    no_progress_tool="design_storyboard",
+                )
+            )
+            message, run_id = outcome[0], outcome[1]
+            assert run_id is None
+            assert "停止重复尝试" in message.content
+            assert "没有开始" in message.content
+            if version_saved:
+                assert "最近保存的分镜版本" in message.content
+            else:
+                assert "没有保存新的分镜" in message.content
+            assert project.pending_brief == {}
+
+
 def test_change_set_presentation_lists_only_changes_one_based():
     from app.models.schemas import (
         FilmChangeMoved,
@@ -1047,6 +1781,10 @@ def test_repair_echo_steers_per_code():
     )
     structural = film_edit_repair_echo(FilmEditError("unknown_scene", "no scene s99"))
     assert "unknown_scene" in structural and "no scene s99" in structural
+    # 旁白存在律 (音频三态): the content-gap echo names the authoring move
+    # and explicitly never reads as a synthesis/voice failure.
+    gap = film_edit_repair_echo(FilmEditError("voiceover_needs_narration", "x"))
+    assert "update_scene" in gap and "never a synthesis or voice problem" in gap
 
 
 # ---------------------------------------------------------------------------
@@ -1071,6 +1809,13 @@ def test_edits_args_discipline():
             base_ref="x",
             music_mood="calm",
         )
+    for design_param in ({"voiceover": False}, {"aspect": "9:16"}):
+        with pytest.raises(Exception, match="never mix"):
+            _edit_args(
+                edits=[{"op": "set_voiceover", "enabled": False}],
+                base_ref="x",
+                **design_param,
+            )
     # review_hold is the legal companion; null tolerance on both new keys
     ok = _edit_args(
         edits=[{"op": "set_voiceover", "enabled": False}],
@@ -1078,6 +1823,10 @@ def test_edits_args_discipline():
         review_hold=True,
     )
     assert ok.review_hold is True
+    # set_voiceover rides both directions (音频三态 — re-opening synthesizes
+    # the board's own lines, zero redesign).
+    reopen = _edit_args(edits=[{"op": "set_voiceover", "enabled": True}], base_ref="x")
+    assert reopen.edits[0].enabled is True
     tolerated = DesignStoryboardArgs.model_validate({"edits": None, "base_ref": None})
     assert tolerated.edits is None and tolerated.base_ref is None
 
@@ -1124,16 +1873,22 @@ async def test_get_output_spec_film_branch_mints_the_base_ref(monkeypatch):
     assert "Timeline: planned" in text
     assert (
         f'[s1] words · authored 4s · planned {frames[0] / 30:g}s '
-        f'({frames[0]}f) · shows: "Ship faster" (dark) · silent'
+        f'({frames[0]}f) · at 0–{round(frames[0] / 30, 1):g}s · shows: '
+        '"Ship faster" (dark) · silent'
     ) in text
     assert (
         f'[s2] hero · authored 5s · planned {frames[1] / 30:g}s ({frames[1]}f) '
+        f'· at {round(frames[0] / 30, 1):g}–'
+        f'{round((frames[0] + frames[1]) / 30, 1):g}s '
         '· shows: word: "Ship faster" · sub: "Acme turns hours of release '
         'work into minutes." · narration: "Meet Acme."'
     ) in text
     # 取景/视图引用: the ui scene's view + camera text ride the scene line.
     assert '[s3] ui · authored 9s' in text and 'view: page 0 shot 0 "(top)"' in text
-    assert 'music mood "none"' in text
+    # 配乐事实两分 (7886d879): params 行是「选择」（unset ≠ off），Music 行是
+    # 该版本冻结记录里的事实——此 base 的快照无床，如实说设计期没解析到床。
+    assert "music unset (not off" in text
+    assert "- Music: no bed in this version's frozen execution record" in text
     assert "aspect 16:9" in text
 
 
@@ -1152,6 +1907,14 @@ def test_wire_spec_prunes_the_edit_slice_when_gated_off(monkeypatch):
     assert "edits" in on["parameters"]["properties"]
     assert "base_ref" in on["parameters"]["properties"]
     assert "TARGETED EDITS" in on["description"]
+    # update_element (下批 A4 声明面): the composite element edit's
+    # vocabulary rides the same gated slice — addressing, kind-applicability,
+    # presence semantics, the no-asset-swap law.
+    assert "update_element" in on["description"]
+    assert "scene_id + element_id" in on["description"]
+    assert "keep_audio" in on["description"]
+    edits_field = on["parameters"]["properties"]["edits"]
+    assert "update_element" in str(edits_field)
     # 画幅诚实文案: 不再导向重设计, 而是诚实「暂不支持」
     assert "no aspect change" not in on["description"]
     assert "never offer a redesign as the workaround" in on["description"]
@@ -1161,19 +1924,74 @@ def test_wire_spec_prunes_the_edit_slice_when_gated_off(monkeypatch):
     props = off["parameters"].get("properties", {})
     assert "edits" not in props and "base_ref" not in props
     assert "TARGETED EDITS" not in off["description"]
+    assert "update_element" not in off["description"]
     assert "base_ref" not in off["description"]
     assert not off["parameters"].get("$defs")  # op models never leak
     # The compose capability stands either way.
-    assert "Design the website film's storyboard" in off["description"]
+    assert "Design the film's storyboard" in off["description"]
     monkeypatch.setattr("app.config.settings.film_edits_enabled", True)
     assert "edits" in tool_spec(_DESIGN_STORYBOARD_TOOL)["function"]["parameters"]["properties"]
 
 
+def test_wire_spec_states_patch_contract_and_live_copy_bounds(monkeypatch):
+    """The model sees the patch-only fields and the validator's own copy
+    bounds BEFORE its first call; no second numeric table may drift in."""
+    from app.agents.tool_loop import tool_spec
+    from app.chat.turn_tools import _DESIGN_STORYBOARD_TOOL
+    from app.tools.film import storyboard as sb
+
+    def descriptions() -> tuple[str, str]:
+        parameters = tool_spec(_DESIGN_STORYBOARD_TOOL)["function"]["parameters"]
+        return (
+            parameters["properties"]["edits"]["description"],
+            parameters["$defs"]["FilmEditUpdateScene"]["properties"][
+                "copy_slots"
+            ]["description"],
+        )
+
+    patch, copy = descriptions()
+    for field in (
+        "focus", "language", "voiceover", "music_mood", "aspect",
+        "specific_instruction", "material_urls", "text", "verbatim",
+        "target_seconds", "scene_count", "group_chars",
+    ):
+        assert field in patch
+    assert "review_hold and pending_disposition" in patch
+    assert '"op":"set_voiceover","enabled":false' in patch
+    assert '"op":"update_scene"' in patch
+    assert "complete grammatical sentences" in copy
+    assert "never truncate, drop or rewrite" in copy
+    assert (
+        f"lines: 1..{sb._LIST_CAPS['words.lines']} entries, each "
+        f"≤{sb.TEXT_CAPS[('words', 'lines')]} characters"
+    ) in copy
+    assert (
+        f"default/medium={sb.film_text_line_cap(None, seat='words')} units"
+    ) in copy
+
+    # Change the SOURCE, not an expected literal in a duplicated table: the
+    # very next wire render must project both new values.
+    monkeypatch.setitem(sb.TEXT_CAPS, ("words", "lines"), 31)
+    monkeypatch.setattr(sb, "_TEXT_DISPLAY_CAP", 32)
+    _, changed = descriptions()
+    assert "lines: 1..4 entries, each ≤31 characters" in changed
+    assert "default/medium=32 units" in changed
+
+
 def test_prompt_law_prunes_the_edit_path_when_gated_off(monkeypatch):
-    """prompt 面门控: 两个系统 prompt 的编辑法条随门控收放; compose 法不动."""
+    """prompt 面门控: 两个系统 prompt 的编辑法条随门控收放; compose 法不动.
+    下批 A4: update_element 词表 (_website_film) 与组合创建段
+    (_text_film 的 MEDIA COMPOSITION + list_project_media 发现律) 同一道门."""
     from app.chat.prompts import chat_intent_system, intent_router_system
 
     assert "base_ref" in intent_router_system()  # autouse gate ON
+    on_router = intent_router_system()
+    on_chat = chat_intent_system()
+    for text in (on_router, on_chat):
+        assert "update_element" in text
+        assert "MEDIA COMPOSITION" in text
+        assert "list_project_media" in text
+        assert "keep_audio" in text
 
     monkeypatch.setattr("app.config.settings.film_edits_enabled", False)
     off_router = intent_router_system()
@@ -1182,6 +2000,9 @@ def test_prompt_law_prunes_the_edit_path_when_gated_off(monkeypatch):
         assert "base_ref" not in text
         assert "A TARGETED change" not in text
         assert "An edited version carries NO new hold" not in text
+        assert "update_element" not in text
+        assert "MEDIA COMPOSITION" not in text
+        assert "list_project_media" not in text
         # compose law untouched
         assert "design_storyboard" in text
         assert "specific_instruction" in text
@@ -1202,8 +2023,8 @@ async def test_gate_off_execution_refuses_edits_on_both_paths(monkeypatch):
     # chat path
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
     turn = _chat_turn(project)
-    guards = _GuardStubs(live_version=2, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
     result = await turn._design_storyboard(
         _edit_args(
             edits=[{"op": "set_voiceover", "enabled": False}],
@@ -1217,23 +2038,8 @@ async def test_gate_off_execution_refuses_edits_on_both_paths(monkeypatch):
     assert guards.begin_calls == [] and guards.cleared == []
 
     # plan path (mirror)
-    from app.chat.plan_turn import PlanTurn
-
     project2 = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
-    pturn = PlanTurn.__new__(PlanTurn)
-    pturn.db = _StubDB()
-    pturn.user_id = uuid4()
-    pturn.conversation_id = uuid4()
-    pturn.project = project2
-    pturn.request = SimpleNamespace(mentions=[], persona_id=None)
-    pturn.text = "换掉配乐"
-    pturn.on_phase = None
-    pturn.on_activity = None
-    pturn.on_candidates = None
-    pturn.on_row_append = None
-    pturn._presentation_pending = None
-    pturn.stored = None
-    pturn.mention_exemplar_id = None
+    pturn = _plan_turn(project2)
     result2 = await pturn._design_storyboard(
         _edit_args(
             edits=[{"op": "set_voiceover", "enabled": False}],
@@ -1243,6 +2049,32 @@ async def test_gate_off_execution_refuses_edits_on_both_paths(monkeypatch):
     )
     assert isinstance(result2, str) and "does not accept edits" in result2
     assert project2.pending_brief == pending_before
+
+
+def test_media_discovery_read_rides_the_same_gate(monkeypatch):
+    """素材发现读的门控 (下批 A1): list_project_media 与编辑/组合出生同一道
+    deployment gate. The loop's tool lists are built ONCE at import (the gate
+    reads at process start), so membership itself is environment-set; gated
+    here: the helper is deterministic in BOTH gate states, and the two read
+    lists wire the read through the SAME gated seat (both carry it or
+    neither does — never one list drifting)."""
+    from app.chat.turn_tools import (
+        CHAT_READ_TOOLS,
+        PLAN_READ_TOOLS,
+        _film_composite_read_tools,
+    )
+
+    # autouse gate ON: the helper yields the read.
+    assert [t.name for t in _film_composite_read_tools()] == ["list_project_media"]
+    monkeypatch.setattr("app.config.settings.film_edits_enabled", False)
+    assert _film_composite_read_tools() == []
+
+    # Both lists ride the one helper — same treatment either way.
+    plan_names = [t.name for t in PLAN_READ_TOOLS]
+    chat_names = [t.name for t in CHAT_READ_TOOLS]
+    assert ("list_project_media" in plan_names) == (
+        "list_project_media" in chat_names
+    )
 
 
 def _compose_world(monkeypatch, guards, *, marker_draft="draft-test"):
@@ -1272,6 +2104,69 @@ def _compose_world(monkeypatch, guards, *, marker_draft="draft-test"):
     monkeypatch.setattr(sb_mod, "prepare_dock_storyboard", _prepared)
     monkeypatch.setattr(sb_mod, "resolve_film_revision_base", _no_base)
     monkeypatch.setattr(sb_mod, "read_committed_film_marker", _marker)
+
+
+@pytest.mark.asyncio
+async def test_compose_shape_pin_presence_reaches_both_design_paths(monkeypatch):
+    """Wire-level proof for the redraft pin: omission inherits all three
+    constraints; explicit null removes them from the synthetic launch task.
+    The text source itself still inherits in both cases."""
+    from app.agents.tool_loop import ToolObservation
+
+    source_params = {
+        "text": "用户原文",
+        "verbatim": True,
+        "target_seconds": 42.4,
+        "scene_count": 11,
+        "group_chars": [1, 3],
+        "voiceover": False,
+    }
+    for make_turn in (_chat_turn, _plan_turn):
+        for clear in (False, True):
+            project = SimpleNamespace(id=uuid4(), pending_brief={})
+            turn = make_turn(project, text="调整当前文字片")
+            _compose_world(monkeypatch, _GuardStubs())
+            base = _provenance_base(_text_board(), source_params, version=2)
+
+            async def _base(db, project, **kwargs):
+                return base
+
+            async def _marker(project_id):
+                return {"draft_id": "draft-test", "base_version": 2}
+
+            captured = {}
+
+            async def _prepared(db, project, **kwargs):
+                captured.update(kwargs)
+                return DockStoryboard(
+                    presentation="fact sheet",
+                    storyboard=_text_board().model_dump(mode="json"),
+                    fingerprint="fp-compose",
+                    reused=False,
+                    execution=None,
+                )
+
+            import app.tools.film.storyboard as sb_mod
+
+            monkeypatch.setattr(sb_mod, "resolve_film_revision_base", _base)
+            monkeypatch.setattr(sb_mod, "read_committed_film_marker", _marker)
+            monkeypatch.setattr(sb_mod, "prepare_dock_storyboard", _prepared)
+            raw = {"specific_instruction": "调整当前分镜"}
+            if clear:
+                raw.update(target_seconds=None, scene_count=None, group_chars=None)
+            result = await turn._design_storyboard(_edit_args(**raw), "")
+            assert isinstance(result, ToolObservation), result
+            params = captured["tasks"][0]["params"]
+            assert params["text"] == "用户原文"
+            if clear:
+                assert all(
+                    key not in params
+                    for key in ("target_seconds", "scene_count", "group_chars")
+                )
+            else:
+                assert params["target_seconds"] == 42.4
+                assert params["scene_count"] == 11
+                assert params["group_chars"] == [1, 3]
 
 
 @pytest.mark.asyncio
@@ -1335,7 +2230,8 @@ async def test_get_output_spec_omits_base_ref_when_gated_off(monkeypatch):
     frames = execution_frames(board, None)
     assert (
         f'[s1] words · authored 4s · planned {frames[0] / 30:g}s '
-        f'({frames[0]}f) · shows: "Ship faster" (dark) · silent'
+        f'({frames[0]}f) · at 0–{round(frames[0] / 30, 1):g}s · shows: '
+        '"Ship faster" (dark) · silent'
     ) in text
 
 
@@ -1353,8 +2249,8 @@ async def test_patch_observation_never_demands_an_unconditional_question(monkeyp
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
     turn = _chat_turn(project)
 
-    guards = _GuardStubs(live_version=2, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     from app.agents.tool_loop import ToolObservation
@@ -1369,11 +2265,11 @@ async def test_patch_observation_never_demands_an_unconditional_question(monkeyp
     )
     assert isinstance(result, ToolObservation), result
     assert "then ONE direct question" not in result.text
-    assert "keyed by the standing authorization" in result.text
+    assert "The next step keys on the CURRENT request" in result.text
     # The hold fork: this base carries a standing hold → the observation
     # says so and names the hold's release seat.
     assert "review hold ON" in result.text
-    assert "the ONE production question" in result.text
+    assert "the one question whether to remake this version" in result.text
     assert "propose_tasks" in result.text
 
 
@@ -1386,23 +2282,9 @@ async def test_patch_observation_plan_path_same_deconfliction(monkeypatch):
     pending_before = _pending_with_film(v2, _PARAMS, version=2, hold=False)
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
 
-    turn = PlanTurn.__new__(PlanTurn)
-    turn.db = _StubDB()
-    turn.user_id = uuid4()
-    turn.conversation_id = uuid4()
-    turn.project = project
-    turn.request = SimpleNamespace(mentions=[], persona_id=None)
-    turn.text = "换掉配乐"
-    turn.on_phase = None
-    turn.on_activity = None
-    turn.on_candidates = None
-    turn.on_row_append = None
-    turn._presentation_pending = None
-    turn.stored = None
-    turn.mention_exemplar_id = None
-
-    guards = _GuardStubs(live_version=2, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    turn = _plan_turn(project)
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     from app.agents.tool_loop import ToolObservation
@@ -1416,7 +2298,7 @@ async def test_patch_observation_plan_path_same_deconfliction(monkeypatch):
     )
     assert isinstance(result, ToolObservation), result
     assert "then ONE direct question" not in result.text
-    assert "keyed by the standing authorization" in result.text
+    assert "The next step keys on the CURRENT request" in result.text
     assert "review hold off" in result.text
     assert "present_plan" in result.text
 
@@ -1435,23 +2317,13 @@ async def test_plan_patch_superseded_releases_its_own_marker(monkeypatch):
     pending_before = _pending_with_film(v2, _PARAMS, version=2)
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
 
-    turn = PlanTurn.__new__(PlanTurn)
-    turn.db = _StubDB()
-    turn.user_id = uuid4()
-    turn.conversation_id = uuid4()
-    turn.project = project
-    turn.request = SimpleNamespace(mentions=[], persona_id=None)
-    turn.text = "删掉第十场"
-    turn.on_phase = None
-    turn.on_activity = None
-    turn.on_candidates = None
-    turn.on_row_append = None
-    turn._presentation_pending = None
-    turn.stored = None
-    turn.mention_exemplar_id = None
+    turn = _plan_turn(project, text="删掉第十场")
 
-    guards = _GuardStubs(live_version=3, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    guards = _GuardStubs(
+        marker_base_version=2,
+        committed=_pending_with_film(_board(), _PARAMS, version=3),
+    )
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     result = await turn._design_storyboard(
@@ -1483,29 +2355,954 @@ async def test_compose_superseded_releases_its_own_marker_both_paths(monkeypatch
     assert project.pending_brief is None
 
     # plan path compose
-    from app.chat.plan_turn import PlanTurn
-
     project2 = SimpleNamespace(id=uuid4(), pending_brief=None)
-    pturn = PlanTurn.__new__(PlanTurn)
-    pturn.db = _StubDB()
-    pturn.user_id = uuid4()
-    pturn.conversation_id = uuid4()
-    pturn.project = project2
-    pturn.request = SimpleNamespace(mentions=[], persona_id=None)
-    pturn.text = "做一支官网短片"
-    pturn.on_phase = None
-    pturn.on_activity = None
-    pturn.on_candidates = None
-    pturn.on_row_append = None
-    pturn._presentation_pending = None
-    pturn.stored = None
-    pturn.mention_exemplar_id = None
+    pturn = _plan_turn(project2, text="做一支官网短片")
     guards2 = _GuardStubs()
     _compose_world(monkeypatch, guards2, marker_draft="other-draft")
     result2 = await pturn._design_storyboard(_edit_args(focus="x"), "")
     assert isinstance(result2, str) and "discarded" in result2
     assert guards2.cleared == ["draft-test"]
     assert project2.pending_brief is None
+
+
+@pytest.mark.asyncio
+async def test_lock_contention_dbapierror_reads_as_honest_refusal(monkeypatch):
+    """并发护栏的异常类回归 (2026-10-23 T3 崩溃取证): asyncpg 的
+    LockNotAvailableError (SQLSTATE 55P03) 映射为普通 DBAPIError 而非
+    OperationalError — begin/clear 两座必须把它读成设计好的诚实拒绝
+    (begin=None / clear 吞没), 而不是让 'Internal server error' 上屏;
+    非锁类 DBAPI 失败照常抛."""
+    import app.models.database as db_mod
+    from sqlalchemy.exc import DBAPIError
+    from app.tools.film.storyboard import (
+        _is_lock_contention,
+        begin_film_draft,
+        clear_film_draft_marker,
+    )
+
+    lock_err = DBAPIError("SELECT ... FOR UPDATE NOWAIT", {}, Exception())
+    lock_err.orig = type("LockNotAvailableError", (Exception,), {})()
+    # The REAL asyncpg wrap (live-dialect forensics 2026-10-23): orig is the
+    # dialect's translated `Error` whose sqlstate carries 55P03 and whose
+    # __cause__ is the driver error — neither the DBAPIError.sqlstate nor
+    # orig's type name betrays the lock.
+    dialect_err = type("Error", (Exception,), {})()
+    dialect_err.sqlstate = "55P03"
+    dialect_err.__cause__ = type("LockNotAvailableError", (Exception,), {})()
+    wrapped_err = DBAPIError("SELECT ... FOR UPDATE NOWAIT", {}, Exception())
+    wrapped_err.orig = dialect_err
+    other_err = DBAPIError("SELECT 1", {}, Exception())
+    assert _is_lock_contention(lock_err) is True
+    assert _is_lock_contention(wrapped_err) is True
+    assert _is_lock_contention(other_err) is False
+
+    class _LockSession:
+        def __init__(self, exc):
+            self.exc = exc
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, model, key, with_for_update=None):
+            raise self.exc
+
+    project = SimpleNamespace(id=uuid4())
+
+    async def _flush():
+        return None
+
+    # begin: contention → the structured "locked" refusal (the designed
+    # refusal), never a crash.
+    monkeypatch.setattr(db_mod, "AsyncSessionLocal", lambda: _LockSession(lock_err))
+    db = SimpleNamespace(flush=_flush)
+    refused = await begin_film_draft(db, project, base_version=None, user_message_id=None)
+    assert refused.draft_id is None and refused.refusal == "locked"
+    # clear: contention → swallowed (the row's owner decides), never a crash.
+    db2 = SimpleNamespace(is_modified=lambda project: True)
+    await clear_film_draft_marker(db2, project, draft_id="mine")
+    # A non-lock DBAPI failure still raises from both seats.
+    monkeypatch.setattr(db_mod, "AsyncSessionLocal", lambda: _LockSession(other_err))
+    with pytest.raises(DBAPIError):
+        await begin_film_draft(db, project, base_version=None, user_message_id=None)
+    with pytest.raises(DBAPIError):
+        await clear_film_draft_marker(db2, project, draft_id="mine")
+
+    # OperationalError parity (the begin seat once mapped EVERY
+    # OperationalError to contention): a lock-classified one reads as the
+    # "locked" refusal, a non-lock one keeps its real category and raises
+    # from BOTH seats.
+    from sqlalchemy.exc import OperationalError
+
+    op_lock = OperationalError("SELECT ... FOR UPDATE NOWAIT", {}, Exception())
+    op_lock.orig = dialect_err
+    op_other = OperationalError("SELECT 1", {}, Exception())
+    monkeypatch.setattr(db_mod, "AsyncSessionLocal", lambda: _LockSession(op_lock))
+    refused = await begin_film_draft(db, project, base_version=None, user_message_id=None)
+    assert refused.draft_id is None and refused.refusal == "locked"
+    await clear_film_draft_marker(db2, project, draft_id="mine")
+    monkeypatch.setattr(db_mod, "AsyncSessionLocal", lambda: _LockSession(op_other))
+    with pytest.raises(OperationalError):
+        await begin_film_draft(db, project, base_version=None, user_message_id=None)
+    with pytest.raises(OperationalError):
+        await clear_film_draft_marker(db2, project, draft_id="mine")
+
+
+# ---------------------------------------------------------------------------
+# 11. 同回合纠正道 + 带条件授权守卫 (7276ef13 修复批 A): a same-turn
+# correction drafts against THIS turn's standing version under the turn's
+# own standing marker (never a second begin — the self-lock), the cap
+# refuses honestly with the shortfall marked, and a lapsed-budget takeover
+# discards without touching the foreign marker.
+# ---------------------------------------------------------------------------
+
+
+def _correction_turn(project, *, corrections=0, draft_id="draft-test"):
+    """A ChatTurn whose FIRST design already published this turn (version 2
+    stands in the in-memory pending; the turn's committed marker ids
+    ``draft_id``)."""
+    turn = _chat_turn(project, text="按逗号拆成八屏")
+    turn._designed_this_turn = 2
+    turn._design_draft_id = draft_id
+    turn._design_corrections = corrections
+    turn._design_shortfalls = []
+    return turn
+
+
+@pytest.mark.asyncio
+async def test_same_turn_correction_designs_on_the_in_turn_version(monkeypatch):
+    """7276ef13 ②: 同回合纠错不再被「一回合一次设计」闸挡下 — the
+    correction drafts against THIS turn's just-published version (never a
+    second begin: the turn's own committed marker still stands, so Start
+    fails closed and any concurrent begin is refused throughout), and
+    publishes as the next version with the in-turn version as its base."""
+    from app.agents.tool_loop import ToolObservation
+
+    v2 = _board()
+    project = SimpleNamespace(
+        id=uuid4(),
+        pending_brief=dict(_pending_with_film(v2, _PARAMS, version=2)),
+    )
+    turn = _correction_turn(project)
+    guards = _GuardStubs(marker_base_version=1)  # draft-1's OWN (pre-turn) base
+    _compose_world(monkeypatch, guards)
+
+    result = await turn._design_storyboard(
+        _edit_args(specific_instruction="按逗号拆成更多屏"), ""
+    )
+    assert isinstance(result, ToolObservation), result
+    assert guards.begin_calls == []  # never a second begin (the self-lock)
+    assert guards.cleared == []  # a successful correction never clears the marker
+    pending = PendingPlan.model_validate(project.pending_brief)
+    assert pending.film_storyboard_version == 3
+    assert pending.film_base_version == 2  # built on the IN-TURN version
+    assert turn._designed_this_turn == 3
+    assert turn._design_corrections == 1
+    assert turn._design_shortfalls == []  # nothing failed this turn
+
+
+@pytest.mark.asyncio
+async def test_same_turn_correction_cap_refuses_honestly_and_marks_shortfall(
+    monkeypatch,
+):
+    """同回合纠正上限: the correction budget (=2) spent, a further design
+    call this turn is refused at the dispatch seat — the standing version
+    is named, the honest-presentation duty is stated (never present the
+    standing version as if the change had landed), the shortfall rides the
+    turn for the conditional-authorization guard, and neither a begin nor
+    a draft ever runs. 两座 (chat/plan) 同一法律."""
+    from app.chat.turn_tools import MAX_DESIGN_CORRECTIONS_PER_TURN
+
+    for build in (_correction_turn, None):
+        v2 = _board()
+        project = SimpleNamespace(
+            id=uuid4(),
+            pending_brief=dict(_pending_with_film(v2, _PARAMS, version=2)),
+        )
+        if build is not None:
+            turn = build(project, corrections=MAX_DESIGN_CORRECTIONS_PER_TURN)
+        else:
+            turn = _plan_turn(project, text="再改一次")
+            turn._designed_this_turn = 2
+            turn._design_draft_id = "draft-test"
+            turn._design_corrections = MAX_DESIGN_CORRECTIONS_PER_TURN
+        guards = _GuardStubs()
+        _compose_world(monkeypatch, guards)
+        result = await turn._design_storyboard(
+            _edit_args(specific_instruction="再改一次"), ""
+        )
+        assert isinstance(result, str), type(turn).__name__
+        assert "version 2" in result, result
+        assert "did not land" in result, result
+        # 台账记账: the refused call's signature joins the ledger (a
+        # specific_instruction-only call signs as "compose").
+        assert _ledger_keys(turn) == ["compose"]
+        assert guards.begin_calls == []
+        # The refused correction changed nothing.
+        assert (
+            PendingPlan.model_validate(project.pending_brief)
+            .film_storyboard_version
+            == 2
+        )
+
+
+@pytest.mark.asyncio
+async def test_same_turn_correction_marker_takeover_discards_honestly(monkeypatch):
+    """The correction publish guard: the committed marker no longer names
+    THIS turn's draft (our budget lapsed and a takeover landed) → the
+    correction draft discards honestly, the in-turn version stands, the
+    shortfall is marked — and the foreign marker is never cleared."""
+    v2 = _board()
+    pending_before = _pending_with_film(v2, _PARAMS, version=2)
+    project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
+    turn = _correction_turn(project)
+    guards = _GuardStubs()
+    _compose_world(monkeypatch, guards, marker_draft="other-draft")
+
+    result = await turn._design_storyboard(
+        _edit_args(specific_instruction="按逗号拆成更多屏"), ""
+    )
+    assert isinstance(result, str)
+    assert "discarded" in result
+    assert _ledger_keys(turn) == ["compose"]  # the discard joins the ledger
+    assert guards.cleared == []  # a correction never touches the marker
+    assert project.pending_brief == pending_before
+
+
+@pytest.mark.asyncio
+async def test_same_turn_correction_patch_builds_on_the_in_turn_version(monkeypatch):
+    """编辑拍纠正: the patch's base is THIS turn's just-published version
+    (still uncommitted), so the committed world legitimately reads PRE-turn
+    — the correction publish guard checks only that the committed marker
+    still names this turn's draft (the committed-identity half would
+    discard every correction by construction)."""
+    from app.agents.tool_loop import ToolObservation
+
+    v2 = _board()
+    project = SimpleNamespace(
+        id=uuid4(),
+        pending_brief=dict(_pending_with_film(v2, _PARAMS, version=2)),
+    )
+    turn = _correction_turn(project)
+    # The committed world = the PRE-TURN version 1 + this turn's marker.
+    guards = _GuardStubs(
+        marker_base_version=1,
+        committed=dict(_pending_with_film(_board(), _PARAMS, version=1)),
+    )
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    result = await turn._design_storyboard(
+        _edit_args(
+            edits=[{"op": "set_voiceover", "enabled": False}],
+            base_ref=_base_ref(v2, _PARAMS, version=2),
+        ),
+        "",
+    )
+    assert isinstance(result, ToolObservation), result
+    assert guards.begin_calls == []  # the patch correction never re-begins
+    pending = PendingPlan.model_validate(project.pending_brief)
+    assert pending.film_storyboard_version == 3
+    assert pending.film_base_version == 2
+    assert pending.film_storyboard_params.get("voiceover") is False
+    assert turn._design_corrections == 1
+
+
+@pytest.mark.asyncio
+async def test_verbatim_redraft_restating_drifted_copy_carries_the_drift_note(
+    monkeypatch,
+):
+    """抄录漂移注记上线 (7276ef13 v3): a verbatim redraft that RE-PASTES a
+    drifted copy publishes (a deliberate copy edit stays legal) but the
+    observation carries the honest COPY DRIFT note; an identical re-paste
+    carries none."""
+    from app.agents.tool_loop import ToolObservation
+
+    base_text = "如果觉得身边的一切都太不如意，那就去见喜欢的人，做喜欢的事，买喜欢的东西"
+    base = _provenance_base(
+        _board(), {**_PARAMS, "text": base_text, "verbatim": True}, version=2
+    )
+
+    async def _resolve(db, project, *, output_id=None):
+        return base
+
+    async def _marker(project_id):
+        # The compose publish guard reads the committed marker naming THIS
+        # draft on ITS base (version 2 — the redraft's resolved base).
+        return {"draft_id": "draft-test", "base_version": 2}
+
+    for restated, expect in (
+        (base_text.replace("买喜欢的东西", "买喜欢的事"), True),
+        (base_text, False),
+    ):
+        project = SimpleNamespace(id=uuid4(), pending_brief=None)
+        turn = _chat_turn(project, text="重新剪一版")
+        guards = _GuardStubs()
+        _compose_world(monkeypatch, guards)
+        import app.tools.film.storyboard as sb_mod
+
+        monkeypatch.setattr(sb_mod, "resolve_film_revision_base", _resolve)
+        monkeypatch.setattr(sb_mod, "read_committed_film_marker", _marker)
+        result = await turn._design_storyboard(
+            _edit_args(text=restated, verbatim=True), ""
+        )
+        assert isinstance(result, ToolObservation), result
+        assert ("COPY DRIFT" in result.text) is expect
+        if expect:
+            assert "买喜欢的东西" in result.text and "买喜欢的事" in result.text
+
+
+# ---------------------------------------------------------------------------
+# 11b. 定点收尾① — 签名台账: EVERY failed design exit joins the ledger
+# (keyed by design_call_signature); a COMPOSE success clears all, a PATCH
+# success clears only its OWN matching signature — an unrelated successful
+# change never clears a failure it did not resolve. ② — 原文继承守卫:
+# unproven drift sets the copy_drift hold (the note informs, never
+# green-lights); user-pasted copy is proven and proceeds.
+# ---------------------------------------------------------------------------
+
+
+def test_design_call_signature_keys_repair_retry_vs_unrelated_change():
+    """签名律 (定点收尾①): the signature is mechanical — op names + target
+    handles in EXECUTION order (2026-10-23 拍板: 执行序即语义——同一幕先改
+    深底再改浅底与反过来结果不同), VALUES-FREE. A repair retry (same op +
+    handles, only the offending value changed) signs IDENTICALLY to its
+    failure; an unrelated change signs differently and never clears it;
+    every compose (no edits) is one family key."""
+    from app.chat.turn_tools import design_call_signature
+
+    failed = _edit_args(
+        edits=[{"op": "update_element", "scene_id": "s2", "element_id": "e1",
+                "source_start": 20.0, "source_end": 28.0}],
+        base_ref="x",
+    )
+    retry = _edit_args(
+        edits=[{"op": "update_element", "scene_id": "s2", "element_id": "e1",
+                "source_start": 12.0, "source_end": 20.0}],
+        base_ref="y",
+    )
+    unrelated = _edit_args(
+        edits=[{"op": "update_element", "scene_id": "s2", "element_id": "e2",
+                "lines": ["下周三上线"]}],
+        base_ref="x",
+    )
+    assert design_call_signature(failed) == design_call_signature(retry)
+    assert design_call_signature(failed) != design_call_signature(unrelated)
+    # 复审①的洞: same op + same scene, DIFFERENT field — 同一幕换背景永不
+    # 配对同一幕的动画时序失败.
+    timing = _edit_args(
+        edits=[{"op": "update_scene", "scene_id": "s2", "enter_interval": 0.9}],
+        base_ref="x",
+    )
+    background = _edit_args(
+        edits=[{"op": "update_scene", "scene_id": "s2", "dark": True}],
+        base_ref="x",
+    )
+    assert design_call_signature(timing) != design_call_signature(background)
+    # The target-VALUE joins only where the value IS the identity: a
+    # reorder's arrangement, set_music's mood, set_voiceover's on/off.
+    reorder_a = _edit_args(
+        edits=[{"op": "reorder_scenes", "order": ["s2", "s1"]}], base_ref="x"
+    )
+    reorder_b = _edit_args(
+        edits=[{"op": "reorder_scenes", "order": ["s1", "s2"]}], base_ref="x"
+    )
+    assert design_call_signature(reorder_a) != design_call_signature(reorder_b)
+    mood_on = _edit_args(edits=[{"op": "set_music", "mood": "calm"}], base_ref="x")
+    mood_off = _edit_args(edits=[{"op": "set_music", "mood": "off"}], base_ref="x")
+    assert design_call_signature(mood_on) != design_call_signature(mood_off)
+    # Compose = one family key (no edits at all).
+    assert design_call_signature(_edit_args(text="文案")) == "compose"
+    assert design_call_signature(_edit_args(specific_instruction="改")) == "compose"
+
+
+def test_design_call_record_only_exact_equivalence_auto_clears():
+    """复审再收紧 (「同字段不同值」洞): the ledger record carries the
+    requested TARGET VALUES — the mechanical key is necessary but never
+    sufficient. Only a byte-equivalent retry (same key AND same values)
+    pairs with its failure for auto-clearing; a swapped-in value, a
+    dropped field, or an added field never pairs. 「已经呈现」≠ 用户接受."""
+    from app.chat.turn_tools import design_call_record
+
+    asked = _edit_args(
+        edits=[{"op": "update_scene", "scene_id": "s2",
+                "enter": "words", "enter_hold_until": 99.0}],
+        base_ref="x",
+    )
+    same = _edit_args(
+        edits=[{"op": "update_scene", "scene_id": "s2",
+                "enter": "words", "enter_hold_until": 99.0}],
+        base_ref="y",  # base_ref never enters the record (read protocol)
+    )
+    other_value = _edit_args(
+        edits=[{"op": "update_scene", "scene_id": "s2",
+                "enter": "words", "enter_hold_until": 4.0}],
+        base_ref="x",
+    )
+    dropped_field = _edit_args(
+        edits=[{"op": "update_scene", "scene_id": "s2",
+                "enter": "words"}],
+        base_ref="x",
+    )
+    added_field = _edit_args(
+        edits=[{"op": "update_scene", "scene_id": "s2",
+                "enter": "words", "enter_hold_until": 99.0, "dark": True}],
+        base_ref="x",
+    )
+    assert design_call_record(asked) == design_call_record(same)
+    for variant in (other_value, dropped_field, added_field):
+        assert design_call_record(asked) != design_call_record(variant)
+    # Op order inside one batch IS the record (2026-10-23 拍板: 执行序即
+    # 语义——同一幕先改深底再改浅底，与反过来的结果不同); only each op
+    # object's INTERNAL field order is normalized away.
+    reordered = _edit_args(
+        edits=[
+            {"op": "update_element", "scene_id": "s2", "element_id": "e2",
+             "lines": ["a"]},
+            {"op": "update_element", "scene_id": "s2", "element_id": "e1",
+             "source_start": 1.0},
+        ],
+        base_ref="x",
+    )
+    swapped = _edit_args(
+        edits=list(reversed(reordered.edits)), base_ref="x"
+    )
+    assert design_call_record(reordered) != design_call_record(swapped)
+
+
+@pytest.mark.asyncio
+async def test_patch_failure_then_unrelated_patch_success_keeps_the_hold(
+    monkeypatch,
+):
+    """失败后仅完成其他修改 (定点收尾①): a failed patch joins the ledger; a
+    LATER unrelated successful patch (a different element's change that
+    never claimed to resolve the failure) leaves the hold standing — the
+    dock's unmet_condition conjunct still blocks the auto start (零新
+    run)."""
+    board = _composite_text_board()
+    params = dict(_TEXT_PARAMS)
+    project = SimpleNamespace(
+        id=uuid4(),
+        pending_brief=dict(_pending_with_film(board, params, version=1)),
+    )
+    turn = _chat_turn(project, text="素材往后挪，再把第二章文案改一下")
+
+    guards = _GuardStubs(marker_base_version=1)
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    import app.tools.film.edits as edits_mod
+
+    _media_stub(monkeypatch, edits_mod, _composite_media(duration=25.0))
+
+    # ① The out-of-range edit fails (the REAL validator) — a repair echo,
+    # nothing lands, and the failure's signature joins the ledger.
+    failed = await turn._design_storyboard(
+        _edit_args(
+            edits=[
+                {"op": "update_element", "scene_id": "s2", "element_id": "e1",
+                 "source_start": 20.0, "source_end": 28.0},
+            ],
+            base_ref=_base_ref(board, params, version=1),
+        ),
+        "",
+    )
+    assert isinstance(failed, str)
+    assert _ledger_keys(turn) == [
+        "patch:update_element:s2:e1[source_end,source_start]"
+    ]
+    assert project.pending_brief["film_storyboard_version"] == 1
+
+    # ② An UNRELATED change (the text element's copy) lands — its
+    # matching-signature clear removes nothing it did not resolve.
+    from app.agents.tool_loop import ToolObservation
+
+    landed = await turn._design_storyboard(
+        _edit_args(
+            edits=[
+                {"op": "update_element", "scene_id": "s2", "element_id": "e2",
+                 "lines": ["下周三上线，", "记得来看"]},
+            ],
+            base_ref=_base_ref(board, params, version=1),
+        ),
+        "",
+    )
+    assert isinstance(landed, ToolObservation), landed
+    assert project.pending_brief["film_storyboard_version"] == 2
+    # The unresolved failure's hold STANDS (the success never claimed it).
+    assert _ledger_keys(turn) == [
+        "patch:update_element:s2:e1[source_end,source_start]"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_patch_failure_then_matching_retry_clears_the_hold(monkeypatch):
+    """等价重试销账 (定点收尾①, 复审再收紧; 失败座 2026-10-24 换位): the ONE
+    auto-clearing path — the failure is the publish SUPERSEDE (a foreign
+    draft's marker took the row mid-patch; no value was ever judged), and
+    the retry is BYTE-EQUIVALENT (same key AND same requested target
+    values). Its landing clears the record. (A retry that swaps in a
+    DIFFERENT value never auto-clears — the same-field-different-value
+    regression below. A BEGIN refusal is no longer this law's failure
+    seat: it latches the design entry for the turn — see
+    test_begin_refusal_latches_the_entry_for_the_turn.)"""
+    board = _composite_text_board()
+    params = dict(_TEXT_PARAMS)
+    project = SimpleNamespace(
+        id=uuid4(),
+        pending_brief=dict(_pending_with_film(board, params, version=1)),
+    )
+    turn = _chat_turn(project, text="素材往后挪一点")
+
+    guards = _GuardStubs(marker_base_version=1)
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    import app.tools.film.edits as edits_mod
+
+    _media_stub(monkeypatch, edits_mod, _composite_media(duration=25.0))
+
+    # The first publish reads a FOREIGN marker (a newer draft took the row
+    # mid-patch) → the draft discards; the retry's marker matches again.
+    guards.marker_draft_id = "foreign-takeover"
+
+    ops = [
+        {"op": "update_element", "scene_id": "s2", "element_id": "e1",
+         "source_start": 12.0, "source_end": 20.0},
+    ]
+    failed = await turn._design_storyboard(
+        _edit_args(edits=ops, base_ref=_base_ref(board, params, version=1)),
+        "",
+    )
+    assert isinstance(failed, str) and "discarded" in failed
+    assert _ledger_keys(turn) == [
+        "patch:update_element:s2:e1[source_end,source_start]"
+    ]
+    guards.marker_draft_id = "draft-test"
+
+    from app.agents.tool_loop import ToolObservation
+
+    # The EXACTLY EQUIVALENT retry (same op, handles, fields AND values).
+    retried = await turn._design_storyboard(
+        _edit_args(edits=ops, base_ref=_base_ref(board, params, version=1)),
+        "",
+    )
+    assert isinstance(retried, ToolObservation), retried
+    assert project.pending_brief["film_storyboard_version"] == 2
+    assert turn._design_shortfalls == []  # the equivalent retry resolves it
+
+
+@pytest.mark.asyncio
+async def test_begin_refusal_latches_the_entry_for_the_turn(monkeypatch):
+    """入口锁存 (2026-10-24 d02bf85a 事故法 — the self-lock storm's law):
+    a refused FIRST begin latches the design entry for the rest of the
+    turn. The refusal feedback carries the facts + the closed-entry law;
+    the SAME-turn repeat never touches begin again — it returns the
+    deterministic TerminalRefusal (the loop ends, the ledger keeps the
+    record — the hold is this turn's unmet condition, and the user's NEXT
+    message re-enters). Both compose and patch seats, both turn paths."""
+    import app.tools.film.storyboard as sb_mod
+    from app.agents.tool_loop import TerminalRefusal
+    from app.pipeline.lifecycle import confirmation_need
+    from app.tools.film.storyboard import FilmDraftBegin
+
+    for make_turn in (_chat_turn, _plan_turn):  # chat 路 + plan 路同一法律
+        # -- compose seat --
+        project = SimpleNamespace(id=uuid4(), pending_brief=None)
+        turn = make_turn(project, text="逐字稿成片")
+        guards = _GuardStubs()
+        _compose_world(monkeypatch, guards)
+        calls = {"n": 0}
+        real_begin = guards.begin
+
+        async def _refuse(db, project, *, base_version, user_message_id):
+            calls["n"] += 1
+            return FilmDraftBegin(refusal="locked")
+
+        monkeypatch.setattr(sb_mod, "begin_film_draft", _refuse)
+
+        n0 = calls["n"]
+        refused = await turn._design_storyboard(
+            _edit_args(text="第一句，第二句。", verbatim=True), ""
+        )
+        assert isinstance(refused, str), type(turn).__name__
+        assert "design entry is CLOSED" in refused
+        assert "unknown" in refused  # the locked holder is never narrated
+        assert turn._design_begin_refusal == "locked"
+        assert _ledger_keys(turn) == ["compose"]
+
+        repeated = await turn._design_storyboard(
+            _edit_args(text="第一句，第二句。", verbatim=True), ""
+        )
+        assert isinstance(repeated, TerminalRefusal), type(turn).__name__
+        assert calls["n"] == n0 + 1  # the repeat never re-hit the row
+        assert project.pending_brief is None  # nothing drafted
+        assert _ledger_keys(turn) == ["compose"]  # deduped record stands
+        need = confirmation_need(
+            execution="auto", credits="auto",
+            quote_high=120, unquotable=False, always_confirm_above=10000,
+            production_intent=True,
+            unmet_condition=bool(turn._design_shortfalls),
+        )
+        assert need.requires_confirmation and need.reason == "unmet_condition"
+
+        # -- patch seat --
+        board = _composite_text_board()
+        params = dict(_TEXT_PARAMS)
+        project2 = SimpleNamespace(
+            id=uuid4(),
+            pending_brief=dict(_pending_with_film(board, params, version=1)),
+        )
+        turn2 = make_turn(project2, text="素材往后挪一点")
+        guards2 = _GuardStubs(marker_base_version=1)
+        _patch_world(monkeypatch, guards2, project=project2)
+        _kill_switch(monkeypatch)
+        import app.tools.film.edits as edits_mod
+
+        _media_stub(monkeypatch, edits_mod, _composite_media(duration=25.0))
+
+        async def _refuse_in_flight(db, project, *, base_version, user_message_id):
+            calls["n"] += 1
+            return FilmDraftBegin(refusal="in_flight")
+
+        monkeypatch.setattr(sb_mod, "begin_film_draft", _refuse_in_flight)
+        ops = [
+            {"op": "update_element", "scene_id": "s2", "element_id": "e1",
+             "source_start": 12.0, "source_end": 20.0},
+        ]
+        n1 = calls["n"]
+        refused2 = await turn2._design_storyboard(
+            _edit_args(edits=ops, base_ref=_base_ref(board, params, version=1)),
+            "",
+        )
+        assert isinstance(refused2, str), type(turn2).__name__
+        assert "in flight" in refused2  # a live marker MAY narrate a design
+        assert turn2._design_begin_refusal == "in_flight"
+        assert _ledger_keys(turn2) == [
+            "patch:update_element:s2:e1[source_end,source_start]"
+        ]
+
+        repeated2 = await turn2._design_storyboard(
+            _edit_args(edits=ops, base_ref=_base_ref(board, params, version=1)),
+            "",
+        )
+        assert isinstance(repeated2, TerminalRefusal), type(turn2).__name__
+        assert calls["n"] == n1 + 1  # the repeat never re-hit the row
+        assert project2.pending_brief["film_storyboard_version"] == 1
+
+
+@pytest.mark.asyncio
+async def test_same_scene_different_field_success_never_clears_the_failure(
+    monkeypatch,
+):
+    """复审①的洞 + 再收紧 (双路覆盖): 同一幕的动画时序修改失败 → 同一幕换
+    背景成功 — a different FIELD on the SAME scene signs differently, so
+    the background success never clears the timing failure; 随后模型改用
+    其他时间值成功（同字段不同值）同样不销账 — the dock's unmet_condition
+    hold keeps the auto start blocked throughout (零新 run), until the
+    user's OWN later explicit start (a conscious acceptance — the gate's
+    docked_this_turn conjunct scopes the hold)."""
+    from app.pipeline.lifecycle import confirmation_need
+
+    for make_turn in (_chat_turn, None):  # chat 路 + plan 路同一法律
+        board = _text_board()
+        params = dict(_TEXT_PARAMS)
+        project = SimpleNamespace(
+            id=uuid4(),
+            pending_brief=dict(_pending_with_film(board, params, version=1)),
+        )
+        if make_turn is not None:
+            turn = make_turn(project, text="第二幕文字动画再快点")
+        else:
+            turn = _plan_turn(project, text="第二幕文字动画再快点")
+        guards = _GuardStubs(marker_base_version=1)
+        _patch_world(monkeypatch, guards, project=project)
+        _kill_switch(monkeypatch)
+
+        failed_sig = "patch:update_scene:s2:[enter,enter_hold_until]"
+        # ① The timing edit overflows the 5s scene window (REAL validator).
+        failed = await turn._design_storyboard(
+            _edit_args(
+                edits=[{"op": "update_scene", "scene_id": "s2",
+                        "enter": "words", "enter_hold_until": 99.0}],
+                base_ref=_base_ref(board, params, version=1),
+            ),
+            "",
+        )
+        assert isinstance(failed, str), type(turn).__name__
+        assert _ledger_keys(turn) == [failed_sig]
+
+        # ② Same scene, different field (the background polarity — s2
+        # stands dark, so this LANDS) — and the unresolved timing failure's
+        # hold STANDS.
+        from app.agents.tool_loop import ToolObservation
+
+        landed = await turn._design_storyboard(
+            _edit_args(
+                edits=[{"op": "update_scene", "scene_id": "s2", "dark": False}],
+                base_ref=_base_ref(board, params, version=1),
+            ),
+            "",
+        )
+        assert isinstance(landed, ToolObservation), type(turn).__name__
+        assert _ledger_keys(turn) == [failed_sig]
+        # 保护仍在 → 自动制作被阻止 (the REAL law on the turn's ledger).
+        need = confirmation_need(
+            execution="auto", credits="auto",
+            quote_high=120, unquotable=False, always_confirm_above=10000,
+            production_intent=True,
+            unmet_condition=bool(turn._design_shortfalls),
+        )
+        assert need.requires_confirmation and need.reason == "unmet_condition"
+
+        # ③ 复审再收紧 (用户点名回归): same op + same FIELDS but a
+        # DIFFERENT target value (99.0 → 4.0) LANDS — the requested timing
+        # never landed, so the hold STILL STANDS and the auto start stays
+        # blocked. 「已经呈现」≠ 用户接受.
+        v2 = PendingPlan.model_validate(project.pending_brief)
+        guards.marker_base_version = 2
+        retried = await turn._design_storyboard(
+            _edit_args(
+                edits=[{"op": "update_scene", "scene_id": "s2",
+                        "enter": "words", "enter_hold_until": 4.0}],
+                base_ref=_base_ref(
+                    FilmStoryboard.model_validate(v2.film_storyboard),
+                    dict(v2.film_storyboard_params),
+                    version=2,
+                ),
+            ),
+            "",
+        )
+        assert isinstance(retried, ToolObservation), type(turn).__name__
+        assert PendingPlan.model_validate(
+            project.pending_brief
+        ).film_storyboard_version == 3
+        assert _ledger_keys(turn) == [failed_sig]  # 值变了 ≠ 修复
+        need2 = confirmation_need(
+            execution="auto", credits="auto",
+            quote_high=120, unquotable=False, always_confirm_above=10000,
+            production_intent=True,
+            unmet_condition=bool(turn._design_shortfalls),
+        )
+        assert need2.requires_confirmation
+
+        # ④ 用户明确接受当前方案后可启动: a LATER-turn explicit Start (the
+        # user saw the standing version and chose) is legal — the gate's
+        # docked_this_turn conjunct scopes the hold (the acceptance path
+        # rides the existing confirmation mechanism, no ledger verdict).
+        from app.pipeline.lifecycle import (
+            LifecycleFacts,
+            compute_lifecycle,
+            evaluate_start_gate,
+        )
+
+        stamp = compute_lifecycle(
+            LifecycleFacts(
+                has_pending_plan=True,
+                plan_tasks=({"tool": "launch_film", "params": {}},),
+                plan_prose="Plan: one film.",
+                estimate_total=(10, 20),
+                required_inputs=(),
+            )
+        )
+        assert (
+            evaluate_start_gate(
+                has_pending_plan=True,
+                effective_tasks_nonempty=True,
+                stamp=stamp,
+                confirmation=need2,
+                docked_this_turn=True,
+            )
+            is not None
+        )
+        assert (
+            evaluate_start_gate(
+                has_pending_plan=True,
+                effective_tasks_nonempty=True,
+                stamp=stamp,
+                confirmation=need2,
+                docked_this_turn=False,  # the user's own later beat
+            )
+            is None
+        )
+
+
+@pytest.mark.asyncio
+async def test_compose_success_never_clears_an_unresolved_failure(monkeypatch):
+    """复审① — 删除「重稿成功无条件清账」: a compose failure (the publish
+    SUPERSEDE — a foreign draft's marker took the row mid-design; the
+    begin-refusal failure seat retired with the 2026-10-24 入口锁存) followed
+    by a SUCCESSFUL redraft keeps the ledger standing: 重稿成功不证明原请求落实
+    (the incident's own shape). The dock's unmet_condition hold survives —
+    the auto start stays blocked until the user sees the standing version
+    and chooses."""
+    import app.tools.film.storyboard as sb_mod
+    from app.pipeline.lifecycle import confirmation_need
+
+    project = SimpleNamespace(id=uuid4(), pending_brief=None)
+    turn = _chat_turn(project, text="逐字稿成片，改完开工")
+    guards = _GuardStubs()
+
+    # The first publish reads a FOREIGN marker (a newer draft took the row
+    # mid-design) → the draft discards; the retry's marker matches again.
+    marker_holder = {"draft_id": "foreign-takeover", "base_version": None}
+
+    async def _marker(project_id):
+        return dict(marker_holder)
+
+    _compose_world(monkeypatch, guards)
+    monkeypatch.setattr(sb_mod, "read_committed_film_marker", _marker)
+
+    refused = await turn._design_storyboard(_edit_args(text="第一句，第二句。", verbatim=True), "")
+    assert isinstance(refused, str) and "discarded" in refused
+    assert _ledger_keys(turn) == ["compose"]
+    marker_holder["draft_id"] = "draft-test"
+
+    from app.agents.tool_loop import ToolObservation
+
+    landed = await turn._design_storyboard(_edit_args(text="第一句，第二句。", verbatim=True), "")
+    assert isinstance(landed, ToolObservation), landed
+    assert project.pending_brief["film_storyboard_version"] == 1
+    # 重稿成功 ≠ 销账: the earlier refusal's record STANDS.
+    assert _ledger_keys(turn) == ["compose"]
+    need = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=120, unquotable=False, always_confirm_above=10000,
+        production_intent=True,
+        unmet_condition=bool(turn._design_shortfalls),
+    )
+    assert need.requires_confirmation and need.reason == "unmet_condition"
+
+
+@pytest.mark.asyncio
+async def test_layout_request_with_model_added_sentence_holds_the_auto_start(
+    monkeypatch,
+):
+    """布局请求中模型误加一句 (定点收尾② — 事故形态): a LAYOUT-ONLY request
+    (the user never pasted any copy this turn) whose redraft re-states the
+    board text WITH an added sentence publishes with the honest COPY DRIFT
+    note AND sets the copy_drift hold — the note informs, but never
+    green-lights the auto start by itself. The pinned source text is the
+    version's own (原文继承): the drift is measured against the BASE
+    version's pinned copy, never the model's re-transcription."""
+    from app.agents.tool_loop import ToolObservation
+
+    base_text = "如果觉得身边的一切都太不如意，那就去见喜欢的人，做喜欢的事，买喜欢的东西"
+    base = _provenance_base(
+        _board(), {**_PARAMS, "text": base_text, "verbatim": True}, version=2
+    )
+
+    async def _resolve(db, project, *, output_id=None):
+        return base
+
+    async def _marker(project_id):
+        return {"draft_id": "draft-test", "base_version": 2}
+
+    drifted = base_text + "，顺便加一句模型自作主张的话"
+    project = SimpleNamespace(id=uuid4(), pending_brief=None)
+    # 布局请求: the user's words carry NO copy — the drift is unproven.
+    turn = _chat_turn(project, text="只调整排版布局，文案别动")
+    guards = _GuardStubs()
+    _compose_world(monkeypatch, guards)
+    import app.tools.film.storyboard as sb_mod
+
+    monkeypatch.setattr(sb_mod, "resolve_film_revision_base", _resolve)
+    monkeypatch.setattr(sb_mod, "read_committed_film_marker", _marker)
+    result = await turn._design_storyboard(_edit_args(text=drifted, verbatim=True), "")
+    assert isinstance(result, ToolObservation), result
+    assert "COPY DRIFT" in result.text  # the honest note still rides
+    assert turn._design_shortfalls == []  # nothing FAILED — copy_drift, not unmet_condition
+
+    # 保护在场 = 版本封套上的世界真值 (never a turn-local flag): the
+    # published version carries the unaccepted-drift state…
+    from app.tools.film.storyboard import film_text_drift_held
+
+    assert film_text_drift_held(project.pending_brief) is True
+    # …and that state, fed to the REAL confirmation law, BLOCKS the
+    # same-turn auto start (零新 run) — 保护仍在 → 自动制作被阻止 (the gate
+    # conjunct half is law-tested in test_lifecycle_pure's copy_drift
+    # precedence test: docked_this_turn=True → start.needs_confirm).
+    from app.pipeline.lifecycle import confirmation_need
+
+    need = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=120, unquotable=False, always_confirm_above=10000,
+        production_intent=True,
+        copy_drift=film_text_drift_held(project.pending_brief),
+    )
+    assert need.requires_confirmation and need.reason == "copy_drift"
+
+    # A→B→继承 B 洞 (复审②): a SAME-TURN follow-up that only adjusts layout
+    # (omits text — the pin inherits the drifted B) must NOT wash the hold:
+    # the new version still carries the unaccepted-drift state against the
+    # LAST ACCEPTED baseline (A), and the gate still blocks.
+    drifted_v3 = dict(project.pending_brief)
+    follow_up = await turn._design_storyboard(
+        _edit_args(specific_instruction="再调一下布局"), ""
+    )
+    assert isinstance(follow_up, ToolObservation), follow_up
+    assert PendingPlan.model_validate(
+        project.pending_brief
+    ).film_storyboard_version == 4  # the correction landed as a new version
+    assert film_text_drift_held(project.pending_brief) is True  # 保护仍在
+    # 跨回合: a REBUILT turn over the same standing version reads the same
+    # world truth (the dock seat's copy_drift never depends on turn state).
+    fresh_turn = _chat_turn(project, text="继续")
+    assert film_text_drift_held(fresh_turn.project.pending_brief) is True
+    assert drifted_v3["film_text_drift"]  # the drifted version itself carried it
+
+
+@pytest.mark.asyncio
+async def test_user_pasted_copy_edit_is_proven_and_proceeds(monkeypatch):
+    """明确改文字的正例 (定点收尾②): the user pastes the new copy THEMSELVES
+    this turn — the restated text is provably theirs
+    (``text_drift_user_proven`` — whitespace-insensitive substring), so the
+    drift note rides but NO hold sets: a deliberate copy edit stays legal
+    and never blocks the auto start."""
+    from app.agents.tool_loop import ToolObservation
+
+    base_text = "如果觉得身边的一切都太不如意，那就去见喜欢的人，做喜欢的事，买喜欢的东西"
+    base = _provenance_base(
+        _board(), {**_PARAMS, "text": base_text, "verbatim": True}, version=2
+    )
+
+    async def _resolve(db, project, *, output_id=None):
+        return base
+
+    async def _marker(project_id):
+        return {"draft_id": "draft-test", "base_version": 2}
+
+    new_copy = base_text.replace("买喜欢的东西", "买让自己安心的东西")
+    project = SimpleNamespace(id=uuid4(), pending_brief=None)
+    # The user pastes the new copy in their own message (whitespace and a
+    # framing prefix around it — the proven check is substring-based).
+    turn = _chat_turn(project, text=f"文案换成这句：\n{new_copy}\n就按这个来")
+    guards = _GuardStubs()
+    _compose_world(monkeypatch, guards)
+    import app.tools.film.storyboard as sb_mod
+
+    monkeypatch.setattr(sb_mod, "resolve_film_revision_base", _resolve)
+    monkeypatch.setattr(sb_mod, "read_committed_film_marker", _marker)
+    result = await turn._design_storyboard(
+        _edit_args(text=new_copy, verbatim=True), ""
+    )
+    assert isinstance(result, ToolObservation), result
+    assert "COPY DRIFT" in result.text  # drifted from the BASE — the note rides
+    # …but the user proved it: no drift state on the version, no hold, and
+    # the auto fast path stays free (正常成功旅程仍可直接开工).
+    from app.pipeline.lifecycle import confirmation_need
+    from app.tools.film.storyboard import film_text_drift_held
+
+    assert film_text_drift_held(project.pending_brief) is False
+    assert not confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=120, unquotable=False, always_confirm_above=10000,
+        production_intent=True,
+        copy_drift=film_text_drift_held(project.pending_brief),
+    ).requires_confirmation
+
 
 
 @pytest.mark.asyncio
@@ -1681,14 +3478,15 @@ def _stub_run_peripherals(monkeypatch, pages):
     return sb_mod
 
 
-async def _run_film(board, track, ctx_extra: dict):
+async def _run_film(board, track, ctx_extra: dict, slot_extra: dict | None = None):
     """真 LaunchFilm.run (stub 外设) → 产出 spec 的逐场 frames."""
     from app.tools.film.storyboard import LaunchFilm
 
     pages = [_page()]
     db = _RunDB(track)
     node = SimpleNamespace(
-        id=uuid4(), spec={"slot": {"type": "film", "voiceover": False}}
+        id=uuid4(),
+        spec={"slot": {"type": "film", "voiceover": False, **(slot_extra or {})}},
     )
     project = SimpleNamespace(id=uuid4(), language="en")
     ctx = {
@@ -1731,8 +3529,8 @@ async def test_keep_cut_run_consumes_the_executed_base_cut(monkeypatch):
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
     turn = _chat_turn(project, mentions=[SimpleNamespace(type="output", id=uuid4())])
 
-    guards = _GuardStubs(live_version=3, marker_base_version=1)
-    _patch_world(monkeypatch, guards, resolve_base=None)
+    guards = _GuardStubs(marker_base_version=1)
+    _patch_world(monkeypatch, guards, resolve_base=None, project=project)
 
     import app.tools.film.edits as edits_mod
 
@@ -1757,7 +3555,7 @@ async def test_keep_cut_run_consumes_the_executed_base_cut(monkeypatch):
     result = await turn._design_storyboard(
         _edit_args(
             edits=[{"op": "set_music", "mood": "upbeat", "retime": "keep_cut"}],
-            base_ref=_base_ref(board, _PARAMS, version=1),
+            base_ref=_base_ref(board, _PARAMS, version=1, cut=film_base_cut(base)),
         ),
         "",
     )
@@ -1797,6 +3595,30 @@ async def test_keep_cut_run_consumes_the_executed_base_cut(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_music_off_run_consumes_no_bed(monkeypatch):
+    """闸 21 执行面: 明确关闭的版本在 run 期走短路——快照无 track_id 时的
+    resolve 回落永不碰 persona/曲库 (off 短路), 不硬失败、不落 calm 默认;
+    spec 无 music 键, 帧按无网格分配 (execution_frames 的 beats=None 道)."""
+    board = _board()
+    _stub_run_peripherals(monkeypatch, [_page()])
+
+    import app.tools.film.storyboard as sb_mod
+
+    async def _chain_must_not_run(*args, **kwargs):
+        raise AssertionError("the mood chain fired on the explicit OFF")
+
+    # resolve_film_music itself stays REAL (the law under test); its chain
+    # rungs trip the assertion if OFF ever falls through to them.
+    monkeypatch.setattr(sb_mod, "resolve_persona", _chain_must_not_run)
+
+    output = await _run_film(board, None, {}, slot_extra={"music_mood": "off"})
+    assert "music" not in output.render_spec
+    assert [
+        s["frames"] for s in output.render_spec["scenes"]
+    ] == execution_frames(board, None)  # allocated, never snapped to a grid
+
+
+@pytest.mark.asyncio
 async def test_keep_cut_draft_base_consumes_the_presented_timeline(monkeypatch):
     """未执行草稿 base: keep_cut 消费其已呈现计划时间轴 (base 板按 base 床
     网格 snap 的呈现值), 同样不是裸分配帧."""
@@ -1812,8 +3634,8 @@ async def test_keep_cut_draft_base_consumes_the_presented_timeline(monkeypatch):
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
     turn = _chat_turn(project)
 
-    guards = _GuardStubs(live_version=2, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     import app.tools.film.edits as edits_mod
@@ -1871,8 +3693,8 @@ async def test_keep_cut_rejects_a_timeline_changing_batch(monkeypatch):
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
     turn = _chat_turn(project)
 
-    guards = _GuardStubs(live_version=2, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     result = await turn._design_storyboard(
@@ -2002,14 +3824,16 @@ async def test_edit_presentation_law_and_observation_speak_one_fork(monkeypatch)
     prompt = chat_intent_system()  # autouse gate ON
     assert "then the same ONE question" not in prompt
     assert "After an EDIT call" in prompt
-    assert "review hold off" in prompt and "review hold on" in prompt
+    assert "Review hold off" in prompt and "review hold on" in prompt
+    assert "COMPLETE CURRENT scene table" in prompt
+    assert "ordinary modification calls answer" in prompt
 
     v2 = _board()
     pending_before = _pending_with_film(v2, _PARAMS, version=2, hold=False)
     project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
     turn = _chat_turn(project)
-    guards = _GuardStubs(live_version=2, marker_base_version=2)
-    _patch_world(monkeypatch, guards)
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     from app.agents.tool_loop import ToolObservation
@@ -2024,9 +3848,12 @@ async def test_edit_presentation_law_and_observation_speak_one_fork(monkeypatch)
     assert isinstance(result, ToolObservation), result
     obs = result.text
     assert "then ONE direct question" not in obs
-    assert "keyed by the standing authorization" in obs
-    # One fork, two seats: both key the next step on review hold + intent.
-    assert "review hold off" in obs and "review hold on" in obs
+    assert "keyed by the standing authorization" not in obs
+    assert "FULL CURRENT SAVED BOARD" in obs
+    assert "no new film has been produced" in obs
+    # One fork, two seats: both key the next step on current intent + hold.
+    assert "Review hold off" in obs and "review hold on" in obs
+    assert "ordinary modification ends with" in obs
 
 
 # ---------------------------------------------------------------------------
@@ -2111,8 +3938,8 @@ async def test_frozen_cut_inherits_across_timeline_preserving_edits(monkeypatch)
         project, mentions=[SimpleNamespace(type="output", id=uuid4())]
     )
 
-    guards = _GuardStubs(live_version=3, marker_base_version=1)
-    _patch_world(monkeypatch, guards, resolve_base=None)
+    guards = _GuardStubs(marker_base_version=1)
+    _patch_world(monkeypatch, guards, resolve_base=None, project=project)
 
     import app.tools.film.edits as edits_mod
     import app.tools.film.storyboard as sb_mod
@@ -2136,7 +3963,7 @@ async def test_frozen_cut_inherits_across_timeline_preserving_edits(monkeypatch)
     result = await turn._design_storyboard(
         _edit_args(
             edits=[{"op": "set_music", "mood": "upbeat", "retime": "keep_cut"}],
-            base_ref=_base_ref(board, _PARAMS, version=1),
+            base_ref=_base_ref(board, _PARAMS, version=1, cut=film_base_cut(base)),
         ),
         "",
     )
@@ -2149,8 +3976,8 @@ async def test_frozen_cut_inherits_across_timeline_preserving_edits(monkeypatch)
     # 3) 第二刀 (live pending 道, 无 pin 无音乐 op): set_voiceover(false) —
     #    冻结切点作为版本状态继承, 不得清空.
     turn2 = _chat_turn(project)
-    guards2 = _GuardStubs(live_version=2, marker_base_version=2)
-    _patch_world(monkeypatch, guards2)
+    guards2 = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards2, project=project)
     _kill_switch(monkeypatch)
 
     result2 = await turn2._design_storyboard(
@@ -2160,6 +3987,7 @@ async def test_frozen_cut_inherits_across_timeline_preserving_edits(monkeypatch)
                 FilmStoryboard.model_validate(v2.film_storyboard),
                 v2.film_storyboard_params,
                 version=2,
+                cut=film_base_cut(v2),
             ),
         ),
         "",
@@ -2216,8 +4044,8 @@ async def test_recut_re_establishes_the_cut_on_the_new_grid(monkeypatch):
     turn = _chat_turn(
         project, mentions=[SimpleNamespace(type="output", id=uuid4())]
     )
-    guards = _GuardStubs(live_version=3, marker_base_version=1)
-    _patch_world(monkeypatch, guards, resolve_base=None)
+    guards = _GuardStubs(marker_base_version=1)
+    _patch_world(monkeypatch, guards, resolve_base=None, project=project)
 
     import app.tools.film.edits as edits_mod
     import app.tools.film.storyboard as sb_mod
@@ -2240,7 +4068,7 @@ async def test_recut_re_establishes_the_cut_on_the_new_grid(monkeypatch):
     result = await turn._design_storyboard(
         _edit_args(
             edits=[{"op": "set_music", "mood": "upbeat", "retime": "recut"}],
-            base_ref=_base_ref(board, _PARAMS, version=1),
+            base_ref=_base_ref(board, _PARAMS, version=1, cut=film_base_cut(base)),
         ),
         "",
     )
@@ -2289,11 +4117,16 @@ async def test_unreadable_executed_spec_rejects_timeline_keeping_edits(
                     _row_or_none((_run_ctx(board, _PARAMS), broken_spec)),
                 ]
             )
-            guards = _GuardStubs(live_version=None, marker_base_version=1)
-            _patch_world(monkeypatch, guards)  # resolve NOT stubbed — 真座
+            guards = _GuardStubs(marker_base_version=1)
+            _patch_world(monkeypatch, guards, project=project)  # resolve NOT stubbed — 真座
 
             result = await turn._design_storyboard(
-                _edit_args(edits=ops, base_ref=_base_ref(board, _PARAMS, version=1)),
+                _edit_args(
+                edits=ops,
+                base_ref=_base_ref(
+                    board, _PARAMS, version=1, cut=("unreadable", None, None)
+                ),
+            ),
                 "",
             )
             assert isinstance(result, str), (broken_spec, ops, result)
@@ -2340,8 +4173,8 @@ async def test_provenance_base_cut_state_distinguishes_draft_from_unreadable(
             _row_or_none(None),  # no film output row
         ]
     )
-    guards = _GuardStubs(live_version=None, marker_base_version=4)
-    _patch_world(monkeypatch, guards)
+    guards = _GuardStubs(marker_base_version=4)
+    _patch_world(monkeypatch, guards, project=project)
     _kill_switch(monkeypatch)
 
     result = await turn._design_storyboard(
@@ -2372,14 +4205,16 @@ async def test_provenance_base_cut_state_distinguishes_draft_from_unreadable(
             _row_or_none(({"scenes": [{"frames": 90}, {"noframes": 1}]},)),
         ]
     )
-    guards2 = _GuardStubs(live_version=None, marker_base_version=4)
-    _patch_world(monkeypatch, guards2)
+    guards2 = _GuardStubs(marker_base_version=4)
+    _patch_world(monkeypatch, guards2, project=project2)
     _kill_switch(monkeypatch)
 
     result2 = await turn2._design_storyboard(
         _edit_args(
             edits=[{"op": "set_music", "mood": "upbeat", "retime": "keep_cut"}],
-            base_ref=_base_ref(board, _PARAMS, version=4),
+            base_ref=_base_ref(
+                board, _PARAMS, version=4, cut=("unreadable", None, None)
+            ),
         ),
         "",
     )
@@ -2429,8 +4264,8 @@ async def test_frozen_version_recovers_from_run_context_before_any_output(
             _row_or_none(None),  # Output 尚未创建
         ]
     )
-    guards = _GuardStubs(live_version=None, marker_base_version=2)
-    _patch_world(monkeypatch, guards)  # resolve NOT stubbed — 真座
+    guards = _GuardStubs(marker_base_version=2)
+    _patch_world(monkeypatch, guards, project=project)  # resolve NOT stubbed — 真座
     _kill_switch(monkeypatch)
 
     from app.agents.tool_loop import ToolObservation
@@ -2439,7 +4274,10 @@ async def test_frozen_version_recovers_from_run_context_before_any_output(
     result = await turn._design_storyboard(
         _edit_args(
             edits=[{"op": "set_voiceover", "enabled": False}],
-            base_ref=_base_ref(board, v2_params, version=2),
+            base_ref=_base_ref(
+                board, v2_params, version=2,
+                cut=("kept", spec_a_frames, crashed_ctx["film_kept_reveal_onsets"]),
+            ),
         ),
         "",
     )
@@ -2521,13 +4359,15 @@ async def test_corrupt_frozen_state_in_run_context_never_degrades_to_draft(
                 _row_or_none(None),
             ]
         )
-        guards = _GuardStubs(live_version=None, marker_base_version=2)
-        _patch_world(monkeypatch, guards)
+        guards = _GuardStubs(marker_base_version=2)
+        _patch_world(monkeypatch, guards, project=project)
 
         result = await turn._design_storyboard(
             _edit_args(
                 edits=[{"op": "set_voiceover", "enabled": False}],
-                base_ref=_base_ref(board, _PARAMS, version=2),
+                base_ref=_base_ref(
+                    board, _PARAMS, version=2, cut=("unreadable", None, None)
+                ),
             ),
             "",
         )
@@ -2536,3 +4376,1244 @@ async def test_corrupt_frozen_state_in_run_context_never_degrades_to_draft(
         assert "recut" in result
         assert project.pending_brief == {}
         assert guards.cleared == ["draft-test"]
+
+
+# ---------------------------------------------------------------------------
+# Text-source film patch chain (素材源分派 — 文字片走完整编辑链)
+# ---------------------------------------------------------------------------
+
+_TEXT_COPY = (
+    "好的内容，不该只出现一次。\n"
+    "一场分享，可以长成文章、短片和讨论。\n"
+    "你把专业讲好，助手负责送到更多人面前。"
+)
+
+_TEXT_PARAMS = {
+    "text": _TEXT_COPY,
+    "verbatim": True,
+    "target_seconds": 14.0,
+    "voiceover": False,
+    "aspect": "9:16",
+}
+
+
+def _text_board() -> FilmStoryboard:
+    return FilmStoryboard.model_validate(
+        {
+            "name": None,
+            "language": "zh",
+            "scenes": [
+                {"type": "words", "seconds": 4.0, "dark": False,
+                 "lines": ["好的内容，不该只出现一次。"]},
+                {"type": "words", "seconds": 5.0, "dark": True,
+                 "lines": ["一场分享，可以长成文章、短片和讨论。"]},
+                {"type": "words", "seconds": 5.0, "dark": False,
+                 "lines": ["你把专业讲好，助手负责送到更多人面前。"]},
+            ],
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_text_film_patch_chain_never_consults_pages(monkeypatch):
+    """文字片编辑链 (素材源分派): a text film's patch grounds on its own
+    pinned copy — the page seat is NEVER consulted (no capture exists or is
+    needed), the real text-mode validator runs, an explicit copy edit
+    re-declares the version's corpus pin, motion/enter/seconds land, and
+    the published version's snapshot carries no pages."""
+    board = _text_board()
+    pending_before = _pending_with_film(board, _TEXT_PARAMS, version=1)
+    project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
+    turn = _chat_turn(project, text="第二幕换个说法，慢推，逐字出现")
+
+    guards = _GuardStubs(marker_base_version=1)
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    import app.tools.film.edits as edits_mod
+
+    async def _no_pages(db, project):
+        raise AssertionError("load_storyboard_pages on a text film patch")
+
+    monkeypatch.setattr(edits_mod, "load_storyboard_pages", _no_pages)
+
+    result = await turn._design_storyboard(
+        _edit_args(
+            edits=[
+                {
+                    "op": "update_scene",
+                    "scene_id": "s2",
+                    "copy_slots": {"lines": ["一次分享，也能持续长出新的讨论。"]},
+                    "motion": "push",
+                    "enter": "words",
+                    "seconds": 6.0,
+                }
+            ],
+            base_ref=_base_ref(board, _TEXT_PARAMS, version=1),
+        ),
+        "",
+    )
+    from app.agents.tool_loop import ToolObservation
+
+    assert isinstance(result, ToolObservation), result
+    pending = PendingPlan.model_validate(project.pending_brief)
+    assert pending.film_storyboard_version == 2
+    assert pending.film_created_via == "patch"
+    new_board = FilmStoryboard.model_validate(pending.film_storyboard)
+    scene = new_board.scenes[1]
+    assert scene.lines == ["一次分享，也能持续长出新的讨论。"]
+    assert scene.motion == "push" and scene.enter == "words"
+    assert scene.seconds == 6.0
+    # The corpus pin followed the explicit copy edit (新文案不再撞旧原稿校验);
+    # untouched scenes' words carry over byte-identical.
+    new_text = pending.film_storyboard_params["text"]
+    assert "一次分享，也能持续长出新的讨论。" in new_text
+    assert "一场分享" not in new_text
+    assert "好的内容，不该只出现一次。" in new_text
+    assert "你把专业讲好，助手负责送到更多人面前。" in new_text
+    # The change set reports the REAL delta (retime lands in retimed, never
+    # a silent whole-film re-layout).
+    change_set = pending.film_change_set
+    assert change_set["edited"] == [
+        {"scene_id": "s2", "fields": ["enter", "lines", "motion"], "notes": []}
+    ]
+    assert change_set["retimed"] == [
+        {"scene_id": "s2", "seconds_before": 5.0, "seconds_after": 6.0}
+    ]
+    # The new version's execution snapshot carries NO pages (text source).
+    assert pending.film_storyboard_execution["pages"] == []
+    # Fingerprint parity: the approval dock recomputes THIS key off the
+    # version's params (synced text included) + the frozen birth narrative →
+    # reuse, never redraft.
+    assert pending.film_storyboard_fingerprint == storyboard_fingerprint(
+        [{"tool": "launch_film", "params": pending.film_storyboard_params}],
+        pending.prompt,
+    )
+    # The presentation shows the computed change lines + the next base_ref.
+    assert "PATCH of version 1" in result.text
+    next_ref = _base_ref(new_board, dict(pending.film_storyboard_params), version=2)
+    assert next_ref in result.text
+
+
+@pytest.mark.asyncio
+async def test_text_film_patch_fast_pace_is_the_users_choice(monkeypatch):
+    """逐幕时间 = 用户法律 (2026-10-22 拍板 — 估计 = 建议非边界): an explicit
+    seconds patch below the reading-time estimate is the user's faster-pace
+    choice — it LANDS (never a gate, never a silent re-layout); the REAL
+    refusal that remains is a non-positive window (a zero scene renders
+    nothing)."""
+    board = _text_board()
+    pending_before = _pending_with_film(board, _TEXT_PARAMS, version=1)
+    project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
+    turn = _chat_turn(project, text="第三幕压到 1 秒")
+
+    guards = _GuardStubs(marker_base_version=1)
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    from app.agents.tool_loop import ToolObservation
+
+    result = await turn._design_storyboard(
+        _edit_args(
+            edits=[{"op": "update_scene", "scene_id": "s3", "seconds": 1.0}],
+            base_ref=_base_ref(board, _TEXT_PARAMS, version=1),
+        ),
+        "",
+    )
+    # 1s for a ~5s-read line: the explicit faster pace LANDS.
+    assert isinstance(result, ToolObservation), result
+    pending = PendingPlan.model_validate(project.pending_brief)
+    assert pending.film_storyboard_version == 2
+    new_board = FilmStoryboard.model_validate(pending.film_storyboard)
+    assert new_board.scenes[2].seconds == 1.0
+
+    # The REAL duration refusal: a zero window is illegal data — the edit
+    # layer's own positivity check names it (never the reading estimate).
+    # The follow-up edit rides the NEXT turn (同回合唯一设计闸: a same-turn
+    # second design is refused at the dispatch seat), so a fresh turn
+    # carries it against the v2 world the first patch left.
+    turn2 = _chat_turn(project, text="第三幕压到 0 秒")
+    result = await turn2._design_storyboard(
+        _edit_args(
+            edits=[{"op": "update_scene", "scene_id": "s3", "seconds": 0.0}],
+            base_ref=_base_ref(
+                new_board, dict(pending.film_storyboard_params), version=2
+            ),
+        ),
+        "",
+    )
+    assert isinstance(result, str)
+    assert "invalid_field" in result
+    assert "positive" in result
+
+
+# ---------------------------------------------------------------------------
+# Text-film compile→run journey (plan→step 参数投影契约 + 执行契约护栏)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_text_film_compiled_slot_carries_the_text_source_to_run(monkeypatch):
+    """参数投影契约全链: the REAL compiler's launch_film slot carries
+    text/verbatim/target_seconds/scene_count alongside voiceover/music/
+    aspect; the REAL LaunchFilm.run then consumes THAT compiled slot (never
+    a hand-built one) — the text path never consults the page seat, never
+    re-designs (the confirmed board is consumed), voiceover off = zero
+    synthesis, music off = no bed."""
+    from app.pipeline.orchestrator import TaskSpec, _compile_task_list
+
+    params = {
+        "text": _TEXT_COPY,
+        "verbatim": True,
+        "target_seconds": 14.0,
+        "voiceover": False,
+        "music_mood": "off",
+        "aspect": "9:16",
+        "language": "zh",
+    }
+    task = TaskSpec(
+        tasks=[{"tool": "launch_film", "params": params}],
+        target_language="zh",
+    )
+    nodes = _compile_task_list(task)
+    film_nodes = [n for n in nodes if n.kind == "launch_film"]
+    assert len(film_nodes) == 1
+    slot = film_nodes[0].spec["slot"]
+    # The projection carries the text source WHOLE (exclude_none keeps a
+    # web film's slot byte-clean of these keys — the web legs below).
+    assert slot["text"] == _TEXT_COPY
+    assert slot["verbatim"] is True
+    assert slot["target_seconds"] == 14.0
+    assert slot["voiceover"] is False
+    assert slot["music_mood"] == "off"
+    assert slot["aspect"] == "9:16"
+
+    board = _text_board()
+    _stub_run_peripherals(monkeypatch, [])
+
+    import app.tools.film.storyboard as sb_mod
+
+    async def _no_pages(db, project):
+        raise AssertionError("load_storyboard_pages on a text-film run")
+
+    async def _no_orchestration(*args, **kwargs):
+        raise AssertionError("the director ran on a confirmed text version")
+
+    monkeypatch.setattr(sb_mod, "load_storyboard_pages", _no_pages)
+    monkeypatch.setattr(sb_mod, "orchestrate_storyboard", _no_orchestration)
+    monkeypatch.setattr(sb_mod.film_text_director, "call", _no_orchestration)
+
+    node = SimpleNamespace(id=uuid4(), spec=film_nodes[0].spec)
+    ctx = {
+        "instruction": "用这段文字做一支短片",
+        "prepared_storyboard": board.model_dump(mode="json"),
+        "film_storyboard_content_digest": storyboard_content_digest(board),
+        "film_execution": build_film_execution_snapshot(pages=[], track=None),
+        "film_storyboard_params": params,
+    }
+    from app.tools.film.storyboard import LaunchFilm
+
+    run = SimpleNamespace(id=uuid4(), context=ctx)
+    db = _RunDB(None)
+    project = SimpleNamespace(id=uuid4(), language="zh")
+    ids = await LaunchFilm().run(db, run, node, project)
+    assert len(ids) == 1
+    output = db.added[0]
+    assert "music" not in output.render_spec  # music off: no bed
+    assert len(output.render_spec["scenes"]) == len(board.scenes)
+
+
+@pytest.mark.asyncio
+async def test_text_film_run_with_a_lost_text_source_fails_the_contract(
+    monkeypatch,
+):
+    """执行契约护栏: a run whose version PINNED a text source but whose
+    compiled slot lost it (the pre-fix projection's persisted shape) fails
+    honestly as a broken plan→step handoff — NEVER as a web capture
+    failure, NEVER pointing the user at a link. The page seat is not
+    consulted (the guard fires first)."""
+    from app.pipeline.orchestrator import TaskSpec, _compile_task_list
+
+    params = {
+        "text": _TEXT_COPY,
+        "verbatim": True,
+        "voiceover": False,
+        "music_mood": "off",
+        "aspect": "9:16",
+    }
+    task = TaskSpec(tasks=[{"tool": "launch_film", "params": params}])
+    nodes = _compile_task_list(task)
+    film_spec = [n for n in nodes if n.kind == "launch_film"][0].spec
+    # Replay the pre-fix damage: the persisted step whose slot lost the
+    # text source keys.
+    damaged = {
+        **film_spec,
+        "slot": {
+            k: v
+            for k, v in film_spec["slot"].items()
+            if k not in ("text", "verbatim", "target_seconds", "scene_count")
+        },
+    }
+    assert "text" not in damaged["slot"]
+
+    board = _text_board()
+    _stub_run_peripherals(monkeypatch, [])
+
+    import app.tools.film.storyboard as sb_mod
+
+    async def _no_pages(db, project):
+        raise AssertionError("the guard must fire before the page seat")
+
+    monkeypatch.setattr(sb_mod, "load_storyboard_pages", _no_pages)
+
+    node = SimpleNamespace(id=uuid4(), spec=damaged)
+    ctx = {
+        "prepared_storyboard": board.model_dump(mode="json"),
+        "film_storyboard_content_digest": storyboard_content_digest(board),
+        "film_execution": build_film_execution_snapshot(pages=[], track=None),
+        # The confirmed version's params still pin the text source — THAT
+        # mismatch is what makes this a broken execution contract.
+        "film_storyboard_params": params,
+    }
+    from app.tools.film.storyboard import LaunchFilm
+
+    run = SimpleNamespace(id=uuid4(), context=ctx)
+    with pytest.raises(ValueError) as exc_info:
+        await LaunchFilm().run(
+            _RunDB(None), run, node, SimpleNamespace(id=uuid4(), language="zh")
+        )
+    message = str(exc_info.value)
+    assert "TEXT film" in message
+    assert "never reached the production step" in message
+    assert "capture" not in message and "link" not in message.lower()
+
+
+@pytest.mark.asyncio
+async def test_web_film_slot_stays_byte_clean_of_text_keys():
+    """网页片回归: a web launch_film task's compiled slot carries NO text
+    keys (exclude_none drops them) — the projection extension never leaks
+    text-source fields onto the web chain."""
+    from app.pipeline.orchestrator import TaskSpec, _compile_task_list
+
+    task = TaskSpec(
+        tasks=[
+            {
+                "tool": "launch_film",
+                "params": {"voiceover": True, "music_mood": "calm",
+                           "aspect": "16:9", "focus": "product"},
+            }
+        ]
+    )
+    nodes = _compile_task_list(task)
+    slot = [n for n in nodes if n.kind == "launch_film"][0].spec["slot"]
+    assert slot["voiceover"] is True and slot["music_mood"] == "calm"
+    assert slot["aspect"] == "16:9" and slot["focus"] == "product"
+    for key in ("text", "verbatim", "target_seconds", "scene_count"):
+        assert key not in slot
+
+
+# ---------------------------------------------------------------------------
+# Batch B: timing survives the confirmed board → run → render_spec chain
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_consumes_prepared_board_timing_into_the_render_spec(monkeypatch):
+    """编译链证明 (Batch B): timing 是分镜内容, 不骑 launch slot 白名单 —
+    真 LaunchFilm.run 消费确认的 prepared_storyboard, render_spec 逐场携带
+    set 的时序字段 (explicit zero 在内), null 键不进 spec; 未设置的场保持
+    legacy 形态. 编译白名单不丢字段, 因为字段根本不经由它."""
+    board = _board()
+    raw = board.model_dump(mode="json")
+    raw["scenes"][0].update(
+        {"enter": "words", "enter_start": 0.3, "enter_interval": 0.12,
+         "enter_duration": 0.25}
+    )
+    raw["scenes"][7].update({"enter": "words", "enter_start": 0.0})
+    board = FilmStoryboard.model_validate(raw)
+
+    _stub_run_peripherals(monkeypatch, [_page()])
+    output = await _run_film(board, _track("calm", _OLD_BEATS), {})
+    scenes = output.render_spec["scenes"]
+    assert scenes[0]["enter"] == "words"
+    assert scenes[0]["enter_start"] == 0.3
+    assert scenes[0]["enter_interval"] == 0.12
+    assert scenes[0]["enter_duration"] == 0.25
+    assert "enter_hold_until" not in scenes[0]  # null stays out
+    assert scenes[7]["enter_start"] == 0.0  # explicit zero survives
+    # Untouched words scenes keep the legacy byte-shape.
+    assert "enter_start" not in scenes[8] and "enter" not in scenes[8]
+
+
+# ---------------------------------------------------------------------------
+# Batch B: Start stamping → compile → executor — the timing's full journey
+# ---------------------------------------------------------------------------
+
+
+class _StartDB:
+    """answer_question Start 链的会话 stand-in: get 按模型分派到夹具行,
+    execute 回空结果集 (项目行锁 / 素材唤醒 update / 活动 run 检查都用不
+    到结果), add 收集落库对象 (run + steps), commit/refresh 空转."""
+
+    def __init__(self, *, message, conversation, project, user):
+        from app.models.tables import Conversation, Message, Project, User
+
+        self._rows = {
+            Message: message,
+            Conversation: conversation,
+            Project: project,
+            User: user,
+        }
+        self.added: list = []
+
+    async def get(self, model, key, with_for_update=False):
+        return self._rows.get(model)
+
+    async def execute(self, *args, **kwargs):
+        return SimpleNamespace(
+            scalars=lambda: SimpleNamespace(all=lambda: []),
+            scalar_one_or_none=lambda: None,
+        )
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    async def flush(self):
+        return None
+
+    async def commit(self):
+        return None
+
+    async def refresh(self, obj):
+        return None
+
+
+@pytest.mark.asyncio
+async def test_start_stamping_carries_confirmed_timing_into_the_render_spec(
+    monkeypatch,
+):
+    """Start 全链 (Batch B 补环): 确认版分镜携带时序参数 → 真
+    answer_question(kind="start") 的 stamping 块把它钉进 run.context → 真
+    create_run / compile_graph 编译 → 真 LaunchFilm.run 消费那条
+    run.context 与编译出的 step → render_spec 逐场携带时序.
+
+    被验证环节全真 (stamping / 编译 / 执行器), 只有正交外设 stub: 生命周期
+    采集 (有独立门禁测试)、草稿图投影、计费扣划、图填充、页座. 永不手造
+    run.context —— context 由生产代码产出."""
+    import app.chat.service as chat_service
+    import app.pipeline.exploration_store as exploration_store
+    import app.pipeline.graph_fill as graph_fill
+    import app.pipeline.lifecycle as lifecycle
+    import app.pipeline.orchestrator as orchestrator
+    from app.chat.service import answer_question
+    from app.models.schemas import InferredIntent, PendingPlan, StartAnswerRequest
+    from app.models.tables import WorkflowRun, WorkflowStep
+
+    # 确认版分镜: 第二幕带用户参数例的时序.
+    raw = _text_board().model_dump(mode="json")
+    raw["scenes"][1].update(
+        {"enter": "words", "enter_start": 0.3, "enter_interval": 0.12,
+         "enter_duration": 0.25}
+    )
+    board = FilmStoryboard.model_validate(raw)
+    params = {**_TEXT_PARAMS, "music_mood": "off"}  # 无音乐无配音腿
+    intent = InferredIntent.model_validate(
+        {
+            "action": "draft",
+            "name": "文字片",
+            "tasks": [{"tool": "launch_film", "params": params}],
+        }
+    )
+    pending = PendingPlan(
+        prompt="用这段文字做一支短片",
+        intent=intent,
+        film_storyboard=board.model_dump(mode="json"),
+        film_storyboard_fingerprint="fp-v1",
+        film_storyboard_version=1,
+        film_storyboard_params=params,
+        film_storyboard_content_digest=storyboard_content_digest(board),
+        film_storyboard_execution=build_film_execution_snapshot(
+            pages=[], track=None
+        ),
+        film_review_hold=False,
+        film_draft_token="tok-b",
+        film_design_authorized_by="u1",
+    ).model_dump(mode="json")
+
+    uid, cid, pid = uuid4(), uuid4(), uuid4()
+    message = SimpleNamespace(
+        id=uuid4(),
+        conversation_id=cid,
+        question={
+            "kind": "task_book",
+            "question": "确认开始制作吗？",
+            "film_draft_token": "tok-b",
+            "film_storyboard_version": 1,
+        },
+        answer=None,
+        workflow_run_id=None,
+    )
+    conversation = SimpleNamespace(id=cid, user_id=uid, project_id=pid)
+    project = SimpleNamespace(
+        id=pid, user_id=uid, pending_brief=pending, status=None,
+        language="zh",
+    )
+    user = SimpleNamespace(id=uid, settings={})
+    db = _StartDB(
+        message=message, conversation=conversation, project=project, user=user
+    )
+
+    async def _noop_async(*args, **kwargs):
+        return None
+
+    async def _false_async(*args, **kwargs):
+        return False
+
+    async def _zero_async(*args, **kwargs):
+        return 0
+
+    async def _facts_async(*args, **kwargs):
+        return {}
+
+    async def _lifecycle_stamp(*args, **kwargs):
+        return lifecycle.LifecycleStamp(
+            state="ready",
+            material_ready=True,
+            plan_ready=True,
+            confirmation_scope_ready=True,
+            charge_semantics_ready=True,
+            no_active_conflicting_run=True,
+            confirmation_ready=True,
+        )
+
+    # Orthogonal peripherals only — the stamping block, the compiler and the
+    # executor under test stay real.
+    monkeypatch.setattr(lifecycle, "project_lifecycle", _lifecycle_stamp)
+    monkeypatch.setattr(graph_fill, "stamp_draft_graph", _noop_async)
+    monkeypatch.setattr(exploration_store, "mark_compiled", _noop_async)
+    monkeypatch.setattr(chat_service, "get_config", _noop_async)
+    monkeypatch.setattr(orchestrator, "has_active_run", _false_async)
+    monkeypatch.setattr(orchestrator, "_check_birthplace_requires", _noop_async)
+    monkeypatch.setattr(orchestrator, "_needs_stills_alignment", _false_async)
+    monkeypatch.setattr(orchestrator, "_materialize_profile", _noop_async)
+    monkeypatch.setattr(orchestrator, "_estimate_facts", _facts_async)
+    monkeypatch.setattr(orchestrator, "stamp_run_graph", _noop_async)
+    monkeypatch.setattr(orchestrator, "credits_for_cost", _zero_async)
+    monkeypatch.setattr(orchestrator, "check_hold", _noop_async)
+    monkeypatch.setattr(orchestrator, "hold_run", _noop_async)
+
+    answered, follow_up = await answer_question(
+        db, uid, message.id, StartAnswerRequest(kind="start")
+    )
+    assert follow_up is None
+
+    # ① stamping: run.context 由生产代码钉入, 确认版的时序逐字节在场.
+    run = next(o for o in db.added if isinstance(o, WorkflowRun))
+    stamped = run.context.get("prepared_storyboard")
+    assert stamped is not None, "Start stamping dropped the confirmed board"
+    stamped_scene = stamped["scenes"][1]
+    assert stamped_scene["enter_start"] == 0.3
+    assert stamped_scene["enter_interval"] == 0.12
+    assert stamped_scene["enter_duration"] == 0.25
+    # ② 编译: launch_film slot 不携带时序键 (时序是分镜内容, 不是 launch
+    # 参数) — 它骑 stamped board, 不经 slot 白名单.
+    step = next(
+        o for o in db.added
+        if isinstance(o, WorkflowStep) and o.kind == "launch_film"
+    )
+    slot = step.spec["slot"]
+    assert slot["text"] == params["text"]
+    for key in ("enter_start", "enter_interval", "enter_duration"):
+        assert key not in slot
+    assert project.pending_brief is None  # confirmed: the pending copy dropped
+
+    # ③ 执行器: 真 LaunchFilm.run 消费那条 run.context + 编译出的 step.
+    _stub_run_peripherals(monkeypatch, [])
+    import app.tools.film.storyboard as sb_mod
+
+    async def _no_pages(db, project):
+        raise AssertionError("load_storyboard_pages on a text-film run")
+
+    monkeypatch.setattr(sb_mod, "load_storyboard_pages", _no_pages)
+    from app.tools.film.storyboard import LaunchFilm
+
+    run.id = run.id or uuid4()  # the fake flush never fires the id default
+    run_db = _RunDB(None)
+    ids = await LaunchFilm().run(
+        run_db,
+        run,
+        step,
+        SimpleNamespace(id=pid, language="zh", persona_id=None, user_id=uid),
+    )
+    assert len(ids) == 1
+    spec_scene = run_db.added[0].render_spec["scenes"][1]
+    assert spec_scene["enter"] == "words"
+    assert spec_scene["enter_start"] == 0.3
+    assert spec_scene["enter_interval"] == 0.12
+    assert spec_scene["enter_duration"] == 0.25
+    assert "enter_hold_until" not in spec_scene  # null stays out
+    # 未设时序的场保持 legacy 形态.
+    assert "enter_start" not in run_db.added[0].render_spec["scenes"][0]
+
+
+@pytest.mark.asyncio
+async def test_start_stamping_carries_composite_elements_into_the_render_spec(
+    monkeypatch,
+):
+    """复审②: composite 元素经真实确认版 stamping → 编译 → run 消费到
+    render_spec 的全旅程 (ADR-140). 复用 Start 链 harness; 被验证环节全真
+    (answer_question 的 stamping 块 / create_run 编译 / LaunchFilm.run),
+    只有正交外设 stub (生命周期采集 / 图投影 / 计费 / 页座 / 素材行读取).
+    永不手造 run.context —— context 由生产代码产出."""
+    import app.chat.service as chat_service
+    import app.pipeline.exploration_store as exploration_store
+    import app.pipeline.graph_fill as graph_fill
+    import app.pipeline.lifecycle as lifecycle
+    import app.pipeline.orchestrator as orchestrator
+    from app.chat.service import answer_question
+    from app.models.schemas import InferredIntent, PendingPlan, StartAnswerRequest
+    from app.models.tables import WorkflowRun, WorkflowStep
+    from app.tools.film.edits import ensure_scene_ids
+
+    # 确认版分镜: 一个 composite 幕 (右半视频段 + 左半独立时序文字),
+    # 身份句柄经出生座铸好 (e1/e2).
+    board = ensure_scene_ids(_composite_text_board())
+    params = {**_TEXT_PARAMS, "music_mood": "off"}  # 无音乐无配音腿
+    media = _composite_media()
+    intent = InferredIntent.model_validate(
+        {
+            "action": "draft",
+            "name": "组合片",
+            "tasks": [{"tool": "launch_film", "params": params}],
+        }
+    )
+    pending = PendingPlan(
+        prompt="用我的素材片段做一支短片",
+        intent=intent,
+        film_storyboard=board.model_dump(mode="json"),
+        film_storyboard_fingerprint="fp-c1",
+        film_storyboard_version=1,
+        film_storyboard_params=params,
+        film_storyboard_content_digest=storyboard_content_digest(board),
+        # The design-time snapshot's media pins ride the version — the run's
+        # drift gate compares against THESE.
+        film_storyboard_execution=build_film_execution_snapshot(
+            pages=[], track=None, media=media
+        ),
+        film_review_hold=False,
+        film_draft_token="tok-c1",
+        film_design_authorized_by="u1",
+    ).model_dump(mode="json")
+
+    uid, cid, pid = uuid4(), uuid4(), uuid4()
+    message = SimpleNamespace(
+        id=uuid4(),
+        conversation_id=cid,
+        question={
+            "kind": "task_book",
+            "question": "确认开始制作吗？",
+            "film_draft_token": "tok-c1",
+            "film_storyboard_version": 1,
+        },
+        answer=None,
+        workflow_run_id=None,
+    )
+    conversation = SimpleNamespace(id=cid, user_id=uid, project_id=pid)
+    project = SimpleNamespace(
+        id=pid, user_id=uid, pending_brief=pending, status=None,
+        language="zh",
+    )
+    user = SimpleNamespace(id=uid, settings={})
+    db = _StartDB(
+        message=message, conversation=conversation, project=project, user=user
+    )
+
+    async def _noop_async(*args, **kwargs):
+        return None
+
+    async def _false_async(*args, **kwargs):
+        return False
+
+    async def _zero_async(*args, **kwargs):
+        return 0
+
+    async def _facts_async(*args, **kwargs):
+        return {}
+
+    async def _lifecycle_stamp(*args, **kwargs):
+        return lifecycle.LifecycleStamp(
+            state="ready",
+            material_ready=True,
+            plan_ready=True,
+            confirmation_scope_ready=True,
+            charge_semantics_ready=True,
+            no_active_conflicting_run=True,
+            confirmation_ready=True,
+        )
+
+    # Orthogonal peripherals only — the stamping block, the compiler and the
+    # executor under test stay real.
+    monkeypatch.setattr(lifecycle, "project_lifecycle", _lifecycle_stamp)
+    monkeypatch.setattr(graph_fill, "stamp_draft_graph", _noop_async)
+    monkeypatch.setattr(exploration_store, "mark_compiled", _noop_async)
+    monkeypatch.setattr(chat_service, "get_config", _noop_async)
+    monkeypatch.setattr(orchestrator, "has_active_run", _false_async)
+    monkeypatch.setattr(orchestrator, "_check_birthplace_requires", _noop_async)
+    monkeypatch.setattr(orchestrator, "_needs_stills_alignment", _false_async)
+    monkeypatch.setattr(orchestrator, "_materialize_profile", _noop_async)
+    monkeypatch.setattr(orchestrator, "_estimate_facts", _facts_async)
+    monkeypatch.setattr(orchestrator, "stamp_run_graph", _noop_async)
+    monkeypatch.setattr(orchestrator, "credits_for_cost", _zero_async)
+    monkeypatch.setattr(orchestrator, "check_hold", _noop_async)
+    monkeypatch.setattr(orchestrator, "hold_run", _noop_async)
+
+    answered, follow_up = await answer_question(
+        db, uid, message.id, StartAnswerRequest(kind="start")
+    )
+    assert follow_up is None
+
+    # ① stamping: run.context 由生产代码钉入, composite 元素逐字段在场
+    #    (身份句柄 / 源区间 / 摆放 / 时间窗), 执行快照的 media 钉随行.
+    run = next(o for o in db.added if isinstance(o, WorkflowRun))
+    stamped = run.context.get("prepared_storyboard")
+    assert stamped is not None, "Start stamping dropped the confirmed board"
+    stamped_scene = next(s for s in stamped["scenes"] if s["type"] == "composite")
+    assert [e["element_id"] for e in stamped_scene["elements"]] == ["e1", "e2"]
+    svideo = stamped_scene["elements"][0]
+    assert svideo["source_start"] == 10.0 and svideo["source_end"] == 18.0
+    assert svideo["rect"] == {"x": 0.5, "y": 0.0, "w": 0.5, "h": 1.0}
+    stext = stamped_scene["elements"][1]
+    assert stext["lines"] == ["一场分享", "持续被看见"]
+    assert stext["at"] == 1.0 and stext["until"] == 7.0
+    media_pins = run.context["film_execution"].get("media")
+    assert media_pins == [
+        {"asset_id": _COMPOSITE_ASSET_ID, "key": "u/demo/video.mp4"}
+    ]
+    # ② 编译: launch_film slot 不携带元素键 (元素是分镜内容, 不是 launch
+    #    参数) — 它骑 stamped board, 不经 slot 白名单.
+    step = next(
+        o for o in db.added
+        if isinstance(o, WorkflowStep) and o.kind == "launch_film"
+    )
+    slot = step.spec["slot"]
+    assert slot["text"] == params["text"]
+    for key in ("elements", "source_start", "source_end", "rect", "at", "until"):
+        assert key not in slot
+    assert project.pending_brief is None  # confirmed: the pending copy dropped
+
+    # ③ 执行器: 真 LaunchFilm.run 消费那条 run.context + 编译出的 step;
+    #    素材行读取 (load_storyboard_media) 是正交外设, stub 出同一 media
+    #    宇宙 (钉的 id+key 一致 → 漂移闸通过).
+    _stub_run_peripherals(monkeypatch, [])
+    import app.tools.film.storyboard as sb_mod
+
+    async def _no_pages(db, project):
+        raise AssertionError("load_storyboard_pages on a text-film run")
+
+    monkeypatch.setattr(sb_mod, "load_storyboard_pages", _no_pages)
+    _media_stub(monkeypatch, sb_mod, media)
+    from app.tools.film.storyboard import LaunchFilm
+
+    run.id = run.id or uuid4()  # the fake flush never fires the id default
+    run_db = _RunDB(None)
+    ids = await LaunchFilm().run(
+        run_db,
+        run,
+        step,
+        SimpleNamespace(id=pid, language="zh", persona_id=None, user_id=uid),
+    )
+    assert len(ids) == 1
+    spec = run_db.added[0].render_spec
+    spec_scene = next(s for s in spec["scenes"] if s["type"] == "composite")
+    assert spec_scene["frames"] == 240
+    rvideo = spec_scene["elements"][0]
+    assert rvideo["kind"] == "video" and rvideo["id"] == "e1"
+    # 素材身份在编译座解算: id → 存储 key (模型/版本永不写 URL).
+    assert rvideo["src"] == "u/demo/video.mp4"
+    assert rvideo["source_start"] == 10.0 and rvideo["source_end"] == 18.0
+    assert rvideo["rect"] == {"x": 0.5, "y": 0.0, "w": 0.5, "h": 1.0}
+    assert rvideo["keep_audio"] is False
+    rtext = spec_scene["elements"][1]
+    assert rtext["kind"] == "text" and rtext["id"] == "e2"
+    assert rtext["lines"] == ["一场分享", "持续被看见"]
+    assert rtext["at"] == 1.0 and rtext["until"] == 7.0
+    assert rtext["enter"] == "words" and rtext["enter_interval"] == 0.3
+    # 呈现稿 digest = run context digest = render spec digest (一处真值).
+    assert spec["provenance"]["storyboard_digest"] == storyboard_content_digest(
+        board
+    )
+
+
+@pytest.mark.asyncio
+async def test_pinned_read_threads_that_outputs_own_landed_bed():
+    """配乐事实座 (事故 7886d879, 真 resolve 座): 钉读旧 Output 时 base 携带
+    该 Output 自己交付 spec 里的床 — 钉恒胜, 永不借当前草稿的计划; 钉读的
+    交付无床时如实 None (cut_state="spec" 区分「spec 无床」与「草稿根本
+    没有 spec_music」)."""
+    from app.tools.film.storyboard import resolve_film_revision_base
+
+    board = _board()
+    track = _track("calm", _OLD_BEATS)
+    ctx = _run_ctx(board, _PARAMS, version=2, track=track)
+    scenes = [{"frames": 96}, {"frames": 270}, {"frames": 150}]
+    project = SimpleNamespace(id=uuid4(), pending_brief={})
+
+    spec = {
+        "scenes": scenes,
+        "music": {"url": f"music/{track.id}.mp3", "gain_db": -20.0, "bpm": 60.0},
+    }
+    db = _SeqDB([_row_or_none((ctx, spec))])
+    base = await resolve_film_revision_base(db, project, output_id=uuid4())
+    assert base is not None
+    assert base.film_cut_state == "spec"
+    assert base.film_render_spec_music == spec["music"]
+
+    # 钉读一个无床的交付: spec_music 如实 None, 不是草稿计划的替身.
+    db = _SeqDB([_row_or_none((ctx, {"scenes": scenes}))])
+    base = await resolve_film_revision_base(db, project, output_id=uuid4())
+    assert base is not None
+    assert base.film_cut_state == "spec"
+    assert base.film_render_spec_music is None
+
+
+@pytest.mark.asyncio
+async def test_run_fallback_read_threads_the_delivered_bed():
+    """配乐事实座 run 回退支路 (真座, 交付回合 get_output_spec 的读取路径):
+    最新 film run 的交付 Output 有床 ⇒ base 携带该 spec 的 music 块; 无床
+    ⇒ None (由 cut_state="spec" 与草稿区分)."""
+    from app.tools.film.storyboard import resolve_film_revision_base
+
+    board = _board()
+    track = _track("calm", _OLD_BEATS)
+    ctx = _run_ctx(board, _PARAMS, version=2, track=track)
+    spec = {
+        "scenes": [{"frames": 96}, {"frames": 270}, {"frames": 150}],
+        "music": {"url": f"music/{track.id}.mp3", "gain_db": -20.0, "bpm": 60.0},
+    }
+    project = SimpleNamespace(id=uuid4(), pending_brief={})
+    db = _SeqDB([_rows([(ctx, uuid4())]), _row_or_none((spec,))])
+    base = await resolve_film_revision_base(db, project)
+    assert base is not None
+    assert base.film_cut_state == "spec"
+    assert base.film_render_spec_music == spec["music"]
+
+    db = _SeqDB(
+        [_rows([(ctx, uuid4())]), _row_or_none(({"scenes": spec["scenes"]},))]
+    )
+    base = await resolve_film_revision_base(db, project)
+    assert base is not None
+    assert base.film_cut_state == "spec"
+    assert base.film_render_spec_music is None
+
+
+# ---------------------------------------------------------------------------
+# Composite scenes (ADR-140) — the media composition closed loop on the REAL
+# wiring: chat edit turn → patch beat → version publish; confirmed version →
+# LaunchFilm.run → render spec. All external seats stubbed, the composition
+# core real.
+# ---------------------------------------------------------------------------
+
+_COMPOSITE_ASSET_ID = "11111111-1111-1111-1111-111111111111"
+
+
+def _composite_text_board() -> FilmStoryboard:
+    """A text-source film carrying one composite scene (a video segment on
+    the right + an independently timed text element on the left)."""
+    return FilmStoryboard.model_validate(
+        {
+            "name": None,
+            "language": "zh",
+            "scenes": [
+                {"type": "words", "seconds": 4.0, "dark": False,
+                 "lines": ["好的内容，不该只出现一次。"]},
+                {
+                    "type": "composite",
+                    "seconds": 8.0,
+                    "elements": [
+                        {"kind": "video", "asset": _COMPOSITE_ASSET_ID,
+                         "source_start": 10.0, "source_end": 18.0, "at": 0.0,
+                         "rect": {"x": 0.5, "y": 0.0, "w": 0.5, "h": 1.0}},
+                        {"kind": "text", "lines": ["一场分享", "持续被看见"],
+                         "at": 1.0, "until": 7.0,
+                         "rect": {"x": 0.05, "y": 0.3, "w": 0.4, "h": 0.4},
+                         "enter": "words", "enter_interval": 0.3},
+                    ],
+                },
+                {"type": "words", "seconds": 5.0, "dark": False,
+                 "lines": ["你把专业讲好，助手负责送到更多人面前。"]},
+            ],
+        }
+    )
+
+
+def _composite_media(*, duration: float | None = 25.0, key: str = "u/demo/video.mp4"):
+    from app.tools.film.storyboard import StoryboardMedia, StoryboardMediaAsset
+
+    return StoryboardMedia(
+        assets={
+            _COMPOSITE_ASSET_ID: StoryboardMediaAsset(
+                id=_COMPOSITE_ASSET_ID, key=key, kind="video",
+                title="Demo clip", duration_seconds=duration,
+                width=1920, height=1080,
+            )
+        }
+    )
+
+
+def _media_stub(monkeypatch, mod, media, calls: list | None = None):
+    async def _load(db, project, board, *, probe_duration=False):
+        if calls is not None:
+            calls.append(probe_duration)
+        return media
+
+    monkeypatch.setattr(mod, "load_storyboard_media", _load)
+
+
+@pytest.mark.asyncio
+async def test_composite_patch_chain_update_element(monkeypatch):
+    """结构化编辑闭环: update_element ops on a composite scene ride the REAL
+    patch beat — presence semantics, per-element change set, media pins in
+    the new version's snapshot, the write seat's duration probing."""
+    board = _composite_text_board()
+    params = dict(_TEXT_PARAMS)
+    pending_before = _pending_with_film(board, params, version=1)
+    project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
+    turn = _chat_turn(project, text="左边文字从第 2 秒再开始，逐字间隔放慢一点")
+
+    guards = _GuardStubs(marker_base_version=1)
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    import app.tools.film.edits as edits_mod
+
+    probe_calls: list[bool] = []
+    _media_stub(monkeypatch, edits_mod, _composite_media(), probe_calls)
+
+    result = await turn._design_storyboard(
+        _edit_args(
+            edits=[
+                {"op": "update_element", "scene_id": "s2", "element_id": "e2",
+                 "at": 2.0, "enter_interval": 0.5},
+            ],
+            base_ref=_base_ref(board, params, version=1),
+        ),
+        "",
+    )
+    from app.agents.tool_loop import ToolObservation
+
+    assert isinstance(result, ToolObservation), result
+    pending = PendingPlan.model_validate(project.pending_brief)
+    assert pending.film_storyboard_version == 2
+    assert pending.film_created_via == "patch"
+    new_board = FilmStoryboard.model_validate(pending.film_storyboard)
+    old_scene = next(s for s in board.scenes if s.type == "composite")
+    new_scene = next(s for s in new_board.scenes if s.type == "composite")
+    el = new_scene.elements[1]
+    assert el.at == 2.0 and el.enter_interval == 0.5
+    # 未修改内容保持: the video element and the other scenes byte-identical
+    # (element_id excluded — the birth-assigned identity handle is never
+    # content, the digest law's own exclusion).
+    def _content(el: dict) -> dict:
+        return {k: v for k, v in el.items() if k != "element_id"}
+
+    assert _content(old_scene.elements[0].model_dump(mode="json")) == _content(
+        new_scene.elements[0].model_dump(mode="json")
+    )
+    assert new_board.scenes[0].lines == board.scenes[0].lines
+    assert new_board.scenes[2].lines == board.scenes[2].lines
+    # The system-computed change set reads per element.
+    assert pending.film_change_set["edited"] == [
+        {"scene_id": "s2",
+         "fields": ["elements.e2.at", "elements.e2.enter_interval"],
+         "notes": []}
+    ]
+    # The new version's execution snapshot carries the media identity pin.
+    assert pending.film_storyboard_execution["media"] == [
+        {"asset_id": _COMPOSITE_ASSET_ID, "key": "u/demo/video.mp4"}
+    ]
+    # The patch beat is a WRITE seat: unknown durations probe (flag on).
+    assert probe_calls == [True]
+    # The presentation shows the element NOW line.
+    assert "[e2] now: on screen 2s–7s" in result.text
+
+
+@pytest.mark.asyncio
+async def test_one_sentence_multi_change_rides_one_atomic_edits_batch(
+    monkeypatch,
+):
+    """同回合唯一设计闸的配套能力证 (2026-10-23 收尾拍板③): 闸把同回合第二
+    次设计拒在 dispatch 座, 因此一句话里的多个修改必须能放进**一个** edits
+    批次一次落全 — 文案 + 入场时机 + 视频位置三处变化骑同一批次出生一个
+    版本; 混入任一非法 op = 整批原子拒, 旧版本字节不动, 回声逐条点名违规
+    (部分完成永不宣称全部完成)."""
+    board = _composite_text_board()
+    params = dict(_TEXT_PARAMS)
+    pending_before = _pending_with_film(board, params, version=1)
+    project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
+    turn = _chat_turn(
+        project, text="左侧文字改成「下周三上线，记得来看」，从第 2 秒再出现；视频挪到左半边"
+    )
+
+    guards = _GuardStubs(marker_base_version=1)
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    import app.tools.film.edits as edits_mod
+
+    _media_stub(monkeypatch, edits_mod, _composite_media())
+
+    from app.agents.tool_loop import ToolObservation
+
+    result = await turn._design_storyboard(
+        _edit_args(
+            edits=[
+                {"op": "update_element", "scene_id": "s2", "element_id": "e2",
+                 "lines": ["下周三上线，", "记得来看"], "at": 2.0},
+                {"op": "update_element", "scene_id": "s2", "element_id": "e1",
+                 "rect": {"x": 0.0, "y": 0.0, "w": 0.5, "h": 1.0}},
+            ],
+            base_ref=_base_ref(board, params, version=1),
+        ),
+        "",
+    )
+    assert isinstance(result, ToolObservation), result
+    pending = PendingPlan.model_validate(project.pending_brief)
+    # ONE batch → ONE version, all three changes landed.
+    assert pending.film_storyboard_version == 2
+    assert len(guards.begin_calls) == 1
+    new_board = FilmStoryboard.model_validate(pending.film_storyboard)
+    scene = next(s for s in new_board.scenes if s.type == "composite")
+    video, text = scene.elements[0], scene.elements[1]
+    assert text.lines == ["下周三上线，", "记得来看"]
+    assert text.at == 2.0
+    assert video.rect.x == 0.0
+    # 逐字片的文字源随板走 (编辑后语料重声明, _sync_text_source 一座).
+    assert "下周三上线" in (pending.film_storyboard_params or {}).get("text", "")
+    # change_set 逐元素点名三处变化.
+    edited = pending.film_change_set["edited"]
+    fields = {f for e in edited for f in e["fields"]}
+    assert {"elements.e2.lines", "elements.e2.at", "elements.e1.rect"} <= fields
+
+    # 部分完成 = 整批原子拒: 一个合法 op + 一个越界 op 同批 → 零落笔,
+    # v2 字节不动, 修复回声点名违规 (真实校验器, 非 stub).
+    v2_brief = dict(project.pending_brief)
+    turn2 = _chat_turn(project, text="文字再快一点，视频源窗挪到第 24 到 30 秒")
+    result2 = await turn2._design_storyboard(
+        _edit_args(
+            edits=[
+                {"op": "update_element", "scene_id": "s2", "element_id": "e2",
+                 "enter_interval": 0.8},
+                {"op": "update_element", "scene_id": "s2", "element_id": "e1",
+                 "source_start": 24.0, "source_end": 30.0},
+            ],
+            base_ref=_base_ref(
+                new_board,
+                dict(pending.film_storyboard_params),
+                version=2,
+            ),
+        ),
+        "",
+    )
+    assert isinstance(result2, str), result2  # repair echo, not a version
+    assert "source" in result2 or "30" in result2
+    assert project.pending_brief == v2_brief  # nothing landed, not even the valid op
+
+
+@pytest.mark.asyncio
+async def test_composite_patch_media_gate_rejects_out_of_range_edit(
+    monkeypatch,
+):
+    """错误边界: an edit moving the source window past the probed duration
+    rejects as validation_failed — the version stands untouched."""
+    board = _composite_text_board()
+    params = dict(_TEXT_PARAMS)
+    pending_before = _pending_with_film(board, params, version=1)
+    project = SimpleNamespace(id=uuid4(), pending_brief=dict(pending_before))
+    turn = _chat_turn(project, text="素材往后挪到第 20 秒开始")
+
+    guards = _GuardStubs(marker_base_version=1)
+    _patch_world(monkeypatch, guards, project=project)
+    _kill_switch(monkeypatch)
+
+    import app.tools.film.edits as edits_mod
+
+    _media_stub(monkeypatch, edits_mod, _composite_media(duration=25.0))
+
+    result = await turn._design_storyboard(
+        _edit_args(
+            edits=[
+                # 20 + 8 = 28s > the asset's 25s — a concrete conflict.
+                {"op": "update_element", "scene_id": "s2", "element_id": "e1",
+                 "source_start": 20.0, "source_end": 28.0},
+            ],
+            base_ref=_base_ref(board, params, version=1),
+        ),
+        "",
+    )
+    from app.agents.tool_loop import ToolObservation
+
+    # The repair echo is plain model-facing text (never a dock, never a
+    # published version) and names the concrete conflict verbatim.
+    assert isinstance(result, str) and not isinstance(result, ToolObservation)
+    assert "runs 25" in result
+    # The live version stands byte-identical (v1, nothing published).
+    assert project.pending_brief["film_storyboard_version"] == 1
+
+
+@pytest.mark.asyncio
+async def test_composite_run_chain_builds_the_render_spec(monkeypatch):
+    """编译+执行闭环: a confirmed composite version runs the REAL
+    LaunchFilm.run — the spec's composite scene resolves asset id → storage
+    key, windows land on snapped frames, no audio promised."""
+    from app.pipeline.orchestrator import TaskSpec, _compile_task_list
+
+    board = _composite_text_board()
+    params = {
+        "text": _TEXT_COPY,
+        "verbatim": True,
+        "voiceover": False,
+        "music_mood": "off",
+        "aspect": "16:9",
+    }
+    task = TaskSpec(tasks=[{"tool": "launch_film", "params": params}])
+    film_spec = [n for n in _compile_task_list(task) if n.kind == "launch_film"][0].spec
+
+    media = _composite_media()
+    _stub_run_peripherals(monkeypatch, [])
+
+    import app.tools.film.storyboard as sb_mod
+
+    probe_calls: list[bool] = []
+    _media_stub(monkeypatch, sb_mod, media, probe_calls)
+
+    async def _no_orchestration(*args, **kwargs):
+        raise AssertionError("the director ran on a confirmed composite version")
+
+    monkeypatch.setattr(sb_mod, "orchestrate_storyboard", _no_orchestration)
+    monkeypatch.setattr(sb_mod.film_text_director, "call", _no_orchestration)
+
+    node = SimpleNamespace(id=uuid4(), spec=film_spec)
+    ctx = {
+        "instruction": "用这段文字和素材做一支短片",
+        "prepared_storyboard": board.model_dump(mode="json"),
+        "film_storyboard_content_digest": storyboard_content_digest(board),
+        "film_execution": build_film_execution_snapshot(
+            pages=[], track=None, media=media
+        ),
+        "film_storyboard_params": params,
+    }
+    from app.tools.film.storyboard import LaunchFilm
+
+    run = SimpleNamespace(id=uuid4(), context=ctx)
+    db = _RunDB(None)
+    ids = await LaunchFilm().run(
+        db, run, node, SimpleNamespace(id=uuid4(), language="zh")
+    )
+    assert len(ids) == 1
+    spec = db.added[0].render_spec
+    scene = next(s for s in spec["scenes"] if s["type"] == "composite")
+    assert scene["frames"] == 240  # 8s @30fps
+    video, text = scene["elements"]
+    assert video["src"] == "u/demo/video.mp4"
+    assert video["source_start"] == 10.0 and video["source_end"] == 18.0
+    assert video["keep_audio"] is False
+    assert text["lines"] == ["一场分享", "持续被看见"]
+    assert text["enter"] == "words" and text["enter_interval"] == 0.3
+    assert "enter_start" not in text  # null stays out of the spec
+    # No narration, no bed, no original sound → no audio promised anywhere.
+    assert "music" not in spec
+    assert all("audio" not in s for s in spec["scenes"])
+    assert probe_calls and probe_calls[0] is True  # the run seat probes
+
+
+@pytest.mark.asyncio
+async def test_composite_run_media_drift_fails_honestly(monkeypatch):
+    """快照漂移: the pinned media key changed since the design beat (asset
+    replaced) — the run fails honestly, never silently re-resolves."""
+    from app.pipeline.orchestrator import TaskSpec, _compile_task_list
+
+    board = _composite_text_board()
+    params = {
+        "text": _TEXT_COPY,
+        "verbatim": True,
+        "voiceover": False,
+        "music_mood": "off",
+        "aspect": "16:9",
+    }
+    task = TaskSpec(tasks=[{"tool": "launch_film", "params": params}])
+    film_spec = [n for n in _compile_task_list(task) if n.kind == "launch_film"][0].spec
+
+    stamped_media = _composite_media(key="u/demo/original.mp4")
+    current_media = _composite_media(key="u/demo/replaced.mp4")
+    _stub_run_peripherals(monkeypatch, [])
+
+    import app.tools.film.storyboard as sb_mod
+
+    _media_stub(monkeypatch, sb_mod, current_media)
+
+    node = SimpleNamespace(id=uuid4(), spec=film_spec)
+    ctx = {
+        "prepared_storyboard": board.model_dump(mode="json"),
+        "film_storyboard_content_digest": storyboard_content_digest(board),
+        "film_execution": build_film_execution_snapshot(
+            pages=[], track=None, media=stamped_media
+        ),
+        "film_storyboard_params": params,
+    }
+    from app.tools.film.storyboard import LaunchFilm
+
+    run = SimpleNamespace(id=uuid4(), context=ctx)
+    with pytest.raises(ValueError) as exc_info:
+        await LaunchFilm().run(
+            _RunDB(None), run, node, SimpleNamespace(id=uuid4(), language="zh")
+        )
+    assert "drifted" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_composite_run_probed_duration_gates_honestly(monkeypatch):
+    """两闸门律: the design seat saw an UNKNOWN duration (no rejection); the
+    run seat probes the truth (5s) and the 18s source window fails the
+    re-validation honestly — never a clamp, never a guess."""
+    from app.pipeline.orchestrator import TaskSpec, _compile_task_list
+
+    board = _composite_text_board()
+    params = {
+        "text": _TEXT_COPY,
+        "verbatim": True,
+        "voiceover": False,
+        "music_mood": "off",
+        "aspect": "16:9",
+    }
+    task = TaskSpec(tasks=[{"tool": "launch_film", "params": params}])
+    film_spec = [n for n in _compile_task_list(task) if n.kind == "launch_film"][0].spec
+
+    # Design-time stamp: duration unknown (dormant asset) — identity pinned.
+    stamped_media = _composite_media(duration=None)
+    # Run-time truth: the probe found 5s — source_end 18 overshoots.
+    probed_media = _composite_media(duration=5.0)
+    _stub_run_peripherals(monkeypatch, [])
+
+    import app.tools.film.storyboard as sb_mod
+
+    _media_stub(monkeypatch, sb_mod, probed_media)
+
+    node = SimpleNamespace(id=uuid4(), spec=film_spec)
+    ctx = {
+        "prepared_storyboard": board.model_dump(mode="json"),
+        "film_storyboard_content_digest": storyboard_content_digest(board),
+        "film_execution": build_film_execution_snapshot(
+            pages=[], track=None, media=stamped_media
+        ),
+        "film_storyboard_params": params,
+    }
+    from app.tools.film.storyboard import LaunchFilm
+
+    run = SimpleNamespace(id=uuid4(), context=ctx)
+    with pytest.raises(ValueError) as exc_info:
+        await LaunchFilm().run(
+            _RunDB(None), run, node, SimpleNamespace(id=uuid4(), language="zh")
+        )
+    # The honest refusal asks for a redesign (the validator named the
+    # overshoot upstream of it) — never a trimmed window.
+    assert "redesign" in str(exc_info.value)

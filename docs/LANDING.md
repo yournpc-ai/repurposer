@@ -1,7 +1,7 @@
 # LANDING — 落地页叙事工作文档
 
-> Status: 活跃工作文档（2026-08-19）——落地页叙事/结构的唯一事实源；竞品证据引用 `research/flora.md`，排期只引用 `PROGRESS.md`。
-> 读法：§1 现状结构，§2 叙事立场（已拍板），§3 待拍板（hero 文案），§4 迭代清单（含叙事骨架）。
+> Status: 活跃工作文档（2026-10-25）——落地页叙事/结构的唯一事实源；竞品证据引用 `research/flora.md`，排期只引用 `PROGRESS.md`。
+> 读法：§1 当前结构，§2 叙事立场，§3 当前 hero，§4 仍未实施的迭代方向。Studio chat/画布行为不在此复制，分别归 CHAT_ARCHITECTURE 与 UI_GUIDELINES。
 
 ## 1. 现状结构（滚动序）
 
@@ -17,34 +17,17 @@ Hero（标题对 + 副标题 + 双 CTA，ASCII 波场氛围）→ 对比滑块 V
 - **用户面自称**：assistant/助手，zh 代词"它"（NAMING N-25 不变）。
 - hero 标题对仗结构（You X / We do the rest）保留，文案可换。
 
-## 3. 待拍板：Hero 文案四方向
+## 3. 当前 Hero
 
-副标题重写稿随 A 走。
-
-- A：You did the hard part. / We do the rest.（难的部分你做完了 / 剩下的交给我们）——输入形态全包容 + 身份体面，推荐。
-- B：You did the work. —— 最通用最平。
-- C：You reached the room. / We reach the rest. —— 情绪最强，但属"更大的舞台"被否角度，待裁定。
-- D：You focus on your craft. / We handle the rest. —— 承诺句原文，中介套话感。
+- 英文：`You did the talking` / `We do the rest`；中文：`你讲完了` / `剩下的交给我们`。事实源 = `apps/web/src/lib/i18n/locales/en.ts` 与 `zh.ts` 的 `landing.heroTitle1/2`。
+- 副标题说明专家已有素材、助手给建议/计划/交付的风格与发布动作；修改时必须保持 multi-output 是能力而非固定套餐，且不虚构渠道、合规或质量承诺。
+- 后续文案迭代保留 You X / We do the rest 的对仗与单一 assistant 叙事；旧四方向候选不再是待拍板清单。新方向只有进入当前产品决策后才写入本节。
 
 ## 4. 迭代清单
 
-### 已落地
+### 当前实现边界
 
-- Gallery / Testimonials 隐藏 + 死链清理。
-- 落地页各 section 全屏化。
-- FlowView 边：无 lineage 品牌色（全边统一安静灰，语义仅存于数据）；active 边 = 单数据包动画（`flow-edge-packet`）。
-- 对比滑块 chrome（label/tags/静音钮）去滚动渐变，生长完成即常驻。
-- **FlowView 精致度包**（组件仍一个、差异走 props）：
-  - 名词节点：画布只渲染 素材 / 文本（任务书）/ 产物 三类节点；过程动词（select_clips / dub / add_music）不授予 `canvas_group`，步骤折叠进过程脊（干预通道 = 点产物卡注入 dock 焦点 / 展开脊点步骤 pill 走 @workflow_step）。新 run 唯一 artifact = 任务书；canvas_key 序列化时从节点类现算（从不入行）。
-  - 任务书（plan）= 雾面玻璃文本节点（`dock-surface` 配方——与 dock 同停一片点阵，点格透霜；260×200，六行 relaxed 正文）——对应 FLORA 的 GPT-5 文本节点。
-  - mention 锚点：folded 动词的指认改道脊内步骤 pill（锚定机制是步骤驱动的，零改码）。
-  - 配方 flow 与结果画布同组件同契约（配方 surface 无 artifact 节点，过程步骤是说明书内容，合法保留）。
-  - 结果画布顶栏：右上角不放 app chrome（主题/语言/通知归 studio shell，不进全屏画布世界；移动端同律，最近入口 = 退回 /projects），只放画布语境控件 = FlowView `controls` prop（explore 面专属）：雾面缩放 pill（− / 实时 % 点击归位 / +）。
-  - FlowView `groups` prop（区域框 = 大叙事分组框，FLORA technique workflow 形态；ViewportPortal 绘制、垫底于边与节点之下）：配方 surface 首用——策展步骤组包进署名「策展步骤」的圆角框（框只包步骤，不借配方名——头部标题已命名）。
-- **画布/chat 小件包**：
-  - "Jump to latest" 浮 pill 在 `ui/message-scroller`（`MessageScrollerButton`：live 几何可见性跟踪 + 平滑滚底）。
-  - dock 常驻诚实说明行：一体容器底部常驻一行耳语（`results.dock.honesty`，en "It can make mistakes…" / zh「它可能出错……」），对应 FLORA 的 FAUNA 免责行。
-  - 节点工具栏：磨砂条 44px 带（8px 缝 + 36px 条）——按钮 h-7 / 图标 h-3.5 / 信息 11px；不做 hover 化（小白可发现性优先）。
+当前 section 与隐藏状态以 §1 和 `apps/web/src/routes/index.tsx` 为准；落地页改动只更新该现状，不保留逐轮交付清单。FlowView、ChatDock、配方点击和项目工作区的长期规则分别归 `UI_GUIDELINES.md`、`CHAT_ARCHITECTURE.md` 与 `RECIPES.md`，不在本文维护第二份 Studio 规范。
 
 ### P2 — 叙事骨架：六幕 + 商务尾（缓做）
 
@@ -52,7 +35,7 @@ Hero（标题对 + 副标题 + 双 CTA，ASCII 波场氛围）→ 对比滑块 V
 
 | 幕 | 角色 | 内容 | 对现状的动作 |
 |---|---|---|---|
-| 1 | identity | Hero 一句话 + 双 CTA | 砍副标题堆叠；文案走 §3 四方向定稿 |
+| 1 | identity | Hero 一句话 + 双 CTA | 砍副标题堆叠；在 §3 当前 hero 与承诺边界内迭代 |
 | 2 | 证据 | 对比滑块 VideoShowcase（raw → result 真实产物对） | 保留。上限不独立成幕——我们的上限 = 产物本身，证据幕即上限幕 |
 | 3 | 过程 | How it works（四步） | 章节保留，叙事改写：从使用教程改为单助手视角（用户说 → 它做） |
 | 4 | 广度 | 渠道×语言矩阵 | 原样保留（轴与 FLORA 不同是有意的：行业×flow 服务专业创意人，渠道×语言服务欧洲知识专家） |
@@ -62,11 +45,7 @@ Hero（标题对 + 副标题 + 双 CTA，ASCII 波场氛围）→ 对比滑块 V
 - **商务尾（不计入叙事幕）**：Pricing、FAQ 保持原位（FLORA 九幕同样不含，它的定价在付费墙）。
 - **第七幕插槽 = 背书**：Testimonials 维持隐藏；真实可验证背书（用户数、机构名、可核查引语）到位后插幕 5/6 之间，不预留占位文案。
 - **文案纪律**：每幕标题 ≤8 词、正文 ≤25 词（`research/flora.md` §2 同款硬指标）。
-- **前置依赖**：配方真实产物密度（FlowView 精致度已备）——存量不到位撑不起证据铺满的骨架，故缓做。
-
-### P2 — 候选小件
-
-- chat dock 右侧面板化（dock/undock 改变布局）——缓，agent 叙事下 dock 是主角不收起。
+- **前置依赖**：真实样片与输入/输出证据密度、素材公开权限和对应制作链验收；占位片与不可验证背书不能撑起证据骨架。
 
 ### 不采纳（FLORA 对照）
 

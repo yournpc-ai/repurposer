@@ -45,6 +45,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.tool_loop import (
+    TerminalRefusal,
     ToolObservation,
     ToolRejected as LoopToolRejected,  # alias: app.tools.ToolRejected (the
     # chain-adjudication exception, imported below) shadows the loop event's
@@ -69,6 +70,7 @@ from app.chat.exploration_tools import (
 from app.chat.intent import intent_router
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.perception.executes import speaker_form_lines, understanding_digest_lines
+from app.chat.turn_tools import film_rejection_stop
 from app.chat.service import (
     _active_run_line,
     _ask_content,
@@ -79,6 +81,8 @@ from app.chat.service import (
     _compute_plan_reasons,
     _create_message,
     _derive_chat_caption_mode,
+    _design_blocked_text,
+    _design_no_progress_text,
     _dock_question,
     _draft_from_persona_echo,
     _needs_media,
@@ -104,6 +108,7 @@ from app.models.schemas import (
     BriefSlotSource,
     ChatRequest,
     DesignStoryboardArgs,
+    FilmStoryboard,
     InferredIntent,
     MaterialUnderstanding,
     PendingPlan,
@@ -192,6 +197,58 @@ class PlanTurn:
         # row's id onto film_presented_message_id — only after that row
         # actually persists, version-guarded (presentation_stamp_update).
         self._presentation_pending: dict | None = None
+        # 同回合纠正道 (7276ef13 修复批 ② — supersedes the 2026-10-23 T3
+        # one-design refusal): a successful design's version number; further
+        # design_storyboard calls THIS turn are CORRECTIONS of that standing
+        # version, not refusals — the user's「改完开工」change request must
+        # land in the same breath. A correction never re-begins (the turn's
+        # first begin's committed marker still stands: Start fails closed,
+        # any concurrent begin is refused; a second side-session NOWAIT
+        # would read the turn's OWN row lock — the self-lock the old gate
+        # pre-empted at the cost of blocking every same-turn fix), drafts
+        # against the IN-TURN version (self.stored — the committed world
+        # legitimately reads pre-turn), and publishes under the marker
+        # guard. Bounded by MAX_DESIGN_CORRECTIONS_PER_TURN (the repair-loop
+        # storm the old gate killed stays impossible); past the cap the
+        # refusal names the standing version and marks the shortfall.
+        self._designed_this_turn: int | None = None
+        # The turn's own committed in-flight marker's draft id (set by the
+        # first design's begin) — the correction publish guard compares
+        # against it (a lapsed-budget takeover discards honestly).
+        self._design_draft_id: str | None = None
+        # 首 begin 拒绝锁存 (the begin-refusal latch — the storm guard the
+        # correction cap cannot cover, since the cap only engages AFTER a
+        # success): a refused FIRST begin latches the refusal reason here
+        # ("in_flight" / "locked" / "gone"). The hold is a cross-request
+        # fact the product chooses not to poll within the turn, so every
+        # later design_storyboard call this turn ends the loop
+        # deterministically (TerminalRefusal) instead of re-hitting the
+        # row. finish() reads the latch to speak the busy/conflict line —
+        # never _cannot_do_text (an internal startup conflict is not an
+        # unsupported capability).
+        self._design_begin_refusal: str | None = None
+        # Corrections admitted this turn (counted at ADMISSION — a rejected
+        # draft's repair retry consumes budget too; the storm stays bounded).
+        self._design_corrections: int = 0
+        # 带条件授权守卫 (7276ef13 ③; 定点收尾①签名台账, 复审两度收紧销账
+        # 律): a record ledger of THIS turn's failed design calls — every
+        # failed exit (cap refusal / stale base_ref / superseded draft /
+        # edit-tool error echo / gate-off edits refusal / begin refused /
+        # exception path) appends its ``design_call_record`` (mechanical
+        # key = op + handles + present FIELDS; ``target`` = the requested
+        # normalized VALUES). Clearing has exactly ONE seat: a successful
+        # PATCH whose record is EXACTLY EQUIVALENT (key AND target) — a
+        # retry that swapped in a different target value, dropped a
+        # requested field, or can't prove equivalence never clears (「已经
+        # 呈现」≠ 用户接受; the user-sees-and-accepts path rides the
+        # existing confirmation mechanism). A COMPOSE success NEVER clears
+        # (重稿成功不证明原请求落实 — the incident's own shape). The dock
+        # seats pass ``bool(self._design_shortfalls)`` to confirmation_need
+        # as ``unmet_condition``: a conditional authorization (「修完开工
+        # 吧」) never auto-spends on the unfixed version; the user's LATER
+        # explicit start stays legal (a conscious acceptance — the gate's
+        # docked_this_turn conjunct scopes the hold).
+        self._design_shortfalls: list[dict] = []
         # Turn state (filled by the assembly below and the executions):
         self.text = ""
         self.stored: PendingPlan | None = None
@@ -708,7 +765,7 @@ class PlanTurn:
 
     # ---- the loop's execute dispatch ----------------------------------------
 
-    async def execute(self, name: str, params, prose: str) -> str | None | ToolObservation:
+    async def execute(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal:
         """The LoopExecute seat: validate → (reject: feedback, zero writes) →
         accept: writes + the outcome stashed → None (terminal stop). A
         PERCEPTION call short-circuits the seats above: reads are dispatched
@@ -827,7 +884,7 @@ class PlanTurn:
             self.project.pending_brief = updated
             self.stored = PendingPlan.model_validate(updated)
 
-    async def _design_storyboard(self, params: DesignStoryboardArgs, prose: str) -> str | ToolObservation:
+    async def _design_storyboard(self, params: DesignStoryboardArgs, prose: str) -> str | ToolObservation | TerminalRefusal:
         """design_storyboard → the film family's design beat (ADR-129 非终
         态): draft (or fingerprint-reuse) the storyboard, stamp the
         VERSIONED film state onto the PendingPlan (version / params /
@@ -838,6 +895,47 @@ class PlanTurn:
         the presentation; ``finish`` stamps its provenance once that row
         persists (``_stamp_presentation``). NO plan docks, NO run starts,
         NO program markdown row."""
+        # 同回合纠正道 (self._designed_this_turn — the flag's init comment
+        # carries the forensics): a further design call this turn is a
+        # CORRECTION of the standing version — admitted within the cap,
+        # drafted against the in-turn version under the turn's own standing
+        # marker (never a second begin — the self-lock). Past the cap the
+        # refusal names the standing version and marks the shortfall (the
+        # dock's confirmation law then holds the spend — a conditional
+        # authorization never auto-starts the unfixed version).
+        from app.chat.turn_tools import (  # deferred: same layer
+            MAX_DESIGN_CORRECTIONS_PER_TURN,
+            design_begin_refusal_feedback,
+            design_call_record,
+            design_correction_cap_refusal,
+        )
+
+        correction = self._designed_this_turn is not None
+        if correction:
+            if self._design_corrections >= MAX_DESIGN_CORRECTIONS_PER_TURN:
+                # 台账记账 (定点收尾①): the cap refusal is a FAILED design
+                # call — its signature joins the ledger so the dock's
+                # unmet_condition hold survives until a matching success.
+                entry = design_call_record(params)
+                if entry not in self._design_shortfalls:
+                    self._design_shortfalls.append(entry)
+                return design_correction_cap_refusal(self._designed_this_turn)
+            self._design_corrections += 1
+        if not correction and self._design_begin_refusal is not None:
+            # 入口锁存 (the latch's repeat seat): the begin was already
+            # refused this turn — the entry is closed, so this repeat never
+            # touches the database; it ends the loop deterministically
+            # (TerminalRefusal → the kernel emits the ToolRejected fact and
+            # stops). The first refusal's feedback already carried the one
+            # honest-close instruction. The failed call still joins the
+            # ledger — the requested change never landed.
+            entry = design_call_record(params)
+            if entry not in self._design_shortfalls:
+                self._design_shortfalls.append(entry)
+            return TerminalRefusal(
+                "design entry closed: the begin was already refused this "
+                "turn (a same-turn retry cannot recover it)"
+            )
         db, project = self.db, self.project
         stored = self._current_pending()
         # Non-terminal checkpoint law: with an on_checkpoint channel, the
@@ -848,9 +946,15 @@ class PlanTurn:
             begin_film_draft,
             clear_film_draft_marker,
             film_design_state,
+            film_draft_inflight_live,
+            film_text_drift_next,
+            film_text_source_birth_pin,
+            film_verbatim_birth_pin,
+            film_voiceover_birth_pin,
             prepare_dock_storyboard,
             read_committed_film_marker,
             resolve_film_revision_base,
+            text_source_drift_note,
         )
 
         # 修订基准 (ADR-129): 钉恒胜 — an explicit @output pin names THE
@@ -861,16 +965,21 @@ class PlanTurn:
         # live pending design wins; after a Start cleared pending_brief the
         # current board recovers from the latest film run's provenance
         # (read-only) so the revision continues its version line.
+        # A correction's base is fixed BY CONSTRUCTION: the version THIS
+        # turn just published (the in-memory pending below) — an @output
+        # pin never reroutes a same-turn correction onto another film.
         mentioned_output = next(
             (m for m in (self.request.mentions or []) if m.type == "output"),
             None,
-        )
+        ) if not correction else None
+        base_is_live_pending = False
         if mentioned_output is not None:
             design_base = await resolve_film_revision_base(
                 db, project, output_id=UUID(str(mentioned_output.id))
             )
         elif stored is not None and stored.film_storyboard:
             design_base = stored
+            base_is_live_pending = True
         else:
             design_base = await resolve_film_revision_base(db, project)
 
@@ -888,27 +997,74 @@ class PlanTurn:
             )
         ).scalar_one_or_none()
 
+        # The patch path (编辑拍): targeted ops against the resolved base —
+        # its own seat, never a director re-design. The capability is
+        # deployment-gated (settings.film_edits_enabled — internal-test
+        # while the edit journey closes up): with the gate OFF the model
+        # was never told about edits (the wire view prunes schema,
+        # description, prompt law and read-back hints), and a direct call
+        # still refuses here — declaration and enforcement gate together;
+        # the compose path is unaffected.
+        if params.edits:
+            from app.config import settings  # deferred: config leaf
+
+            if not settings.film_edits_enabled:
+                # 台账记账 (定点收尾①): the gate-off refusal is a FAILED
+                # design call — the requested edits never landed.
+                entry = design_call_record(params)
+                if entry not in self._design_shortfalls:
+                    self._design_shortfalls.append(entry)
+                return (
+                    "design_storyboard does not accept edits in this "
+                    "deployment — no change was made and the current "
+                    "version stands untouched. Re-issue the call WITHOUT "
+                    "edits: open feedback rides specific_instruction alone."
+                )
+            return await self._design_storyboard_patch(
+                params,
+                design_base=design_base,
+                stored=stored,
+                birth_prompt=stored.prompt if stored and stored.prompt else self.text,
+                authorized_by=authorized_by,
+                base_is_live_pending=base_is_live_pending,
+                base_is_pinned=mentioned_output is not None,
+                correction=correction,
+            )
+
         # 并发护栏 BEGIN: the in-flight marker lands COMMITTED before the
         # long draft — Start fails closed while it stands, a concurrent
         # design's begin is refused (never queued), and the publish below
         # only lands if the committed marker still names THIS draft. No
         # turn-transaction fallback: a marker the Start gate cannot see is
-        # worse than a refusal.
-        draft_id = await begin_film_draft(
-            db,
-            project,
-            base_version=(
-                design_base.film_storyboard_version if design_base else None
-            ),
-            user_message_id=str(authorized_by) if authorized_by else None,
-        )
-        if draft_id is None:
-            return (
-                "another storyboard design (or a production start) holds "
-                "this project right now — wait for it to settle, then call "
-                "design_storyboard again; never draft over an in-flight "
-                "design."
+        # worse than a refusal. A CORRECTION never re-begins: the turn's
+        # first begin's committed marker still stands (Start stays failed
+        # closed, concurrent begins stay refused) and a second side-session
+        # NOWAIT would read the turn's OWN row lock — the self-lock.
+        if correction:
+            draft_id = self._design_draft_id
+            assert draft_id is not None  # set by this turn's first begin
+        else:
+            begin = await begin_film_draft(
+                db,
+                project,
+                base_version=(
+                    design_base.film_storyboard_version if design_base else None
+                ),
+                user_message_id=str(authorized_by) if authorized_by else None,
             )
+            if begin.draft_id is None:
+                # 台账记账 (定点收尾①): the begin refusal is a FAILED design
+                # call — the requested change never landed. The refusal
+                # REASON latches (入口锁存): the entry closes for the rest
+                # of the turn, so this turn never polls the hold.
+                entry = design_call_record(params)
+                if entry not in self._design_shortfalls:
+                    self._design_shortfalls.append(entry)
+                refusal = begin.refusal or "locked"
+                self._design_begin_refusal = refusal
+                return design_begin_refusal_feedback(refusal)
+            draft_id = begin.draft_id
+            self._design_draft_id = draft_id
 
         try:
             # Declared-URL capture (the proposal seats' same absorb law):
@@ -926,19 +1082,95 @@ class PlanTurn:
 
             # The synthetic launch_film task carries ONLY the design params —
             # the approval dock's real task must repeat them verbatim (the
-            # fingerprint's params half), or it steers back here.
+            # fingerprint's params half), or it steers back here. Voiceover
+            # pins EXPLICITLY at birth (the propose path's mirror — the one
+            # seat is film_voiceover_birth_pin: a new film defaults off, a
+            # redraft inherits the base version's pinned setting).
+            # Text-source fields inherit at redraft (the one seat is
+            # film_text_source_birth_pin): an open-feedback redraft that
+            # does not re-paste the copy keeps the base version's source —
+            # never falls into the website chain.
+            _text_pin, _target_pin, _count_pin, _group_pin = film_text_source_birth_pin(
+                params.text,
+                params.target_seconds,
+                params.scene_count,
+                params.group_chars,
+                (
+                    design_base.film_storyboard_params
+                    if design_base
+                    else None
+                ),
+                base_present=design_base is not None,
+                target_seconds_present="target_seconds" in params.model_fields_set,
+                scene_count_present="scene_count" in params.model_fields_set,
+                group_chars_present="group_chars" in params.model_fields_set,
+            )
             design_params = {
                 k: v
                 for k, v in {
                     "focus": params.focus,
                     "language": params.language,
-                    "voiceover": params.voiceover,
+                    "voiceover": film_voiceover_birth_pin(
+                        params.voiceover,
+                        (
+                            design_base.film_storyboard_params
+                            if design_base
+                            else None
+                        ),
+                        base_present=design_base is not None,
+                    ),
                     "music_mood": params.music_mood,
                     "aspect": params.aspect,
+                    # Text source (ADR-138 §7.6): the copy pins verbatim with
+                    # its role — verbatim's birth pin (贴文 ≠ 逐字): an unset
+                    # verbatim inherits the base version's pinned mode; only a
+                    # first text version reads null as preserve (never a
+                    # re-guess from the mere fact text was pasted).
+                    "text": _text_pin,
+                    "verbatim": film_verbatim_birth_pin(
+                        params.verbatim,
+                        (
+                            design_base.film_storyboard_params
+                            if design_base
+                            else None
+                        ),
+                        base_present=design_base is not None,
+                        text_present=bool(_text_pin),
+                    ),
+                    "target_seconds": _target_pin,
+                    "scene_count": _count_pin,
+                    "group_chars": _group_pin,
                 }.items()
                 if v is not None
             }
+            # 抄录漂移注记 (7276ef13 v3 取证): a verbatim redraft that
+            # RE-PASTES the copy is trusted verbatim by law (the pin
+            # inherits only an OMITTED text) — when the re-pasted text
+            # drifts from the base version's pinned copy, the observation
+            # carries the honest clause-level note (never a silent «原文
+            # 一字未改», never a hard reject — a deliberate copy edit is
+            # legal).
+            drift_note = (
+                text_source_drift_note(
+                    params.text,
+                    (design_base.film_storyboard_params or {}).get("text")
+                    if design_base
+                    else None,
+                )
+                if design_params.get("verbatim") is True
+                and params.text is not None
+                else None
+            )
             tasks = [{"tool": "launch_film", "params": design_params}]
+            # Pinned media (ADR-140 发现面): the @asset selections on the
+            # request lead the director's candidate listing — a pick beyond
+            # the print cap still reaches its context (tenant scoping is
+            # enforced at the listing seat, never by trusting these ids).
+            pinned_asset_ids = [
+                str(m.id)
+                for m in (self.request.mentions or [])
+                if m.type == "asset"
+            ] or None
             # Birth-narrative freeze (present_plan's same law — stored.prompt
             # wins): the approval dock reads this same prompt back, so the
             # design beat's fingerprint IS the dock's.
@@ -952,26 +1184,60 @@ class PlanTurn:
                 fresh_instruction=params.specific_instruction or None,
                 cached_storyboard=design_base.film_storyboard if design_base else None,
                 cached_fingerprint=design_base.film_storyboard_fingerprint if design_base else None,
+                pinned_asset_ids=pinned_asset_ids,
             )
         except BaseException:
             # 并发护栏 step 3: failure/timeout/cancel — capture failures
             # included — clears ONLY this draft's marker (committed side
-            # channel; the turn holds no project lock on this path).
-            await clear_film_draft_marker(db, project, draft_id=draft_id)
+            # channel; the turn holds no project lock on this path). A
+            # CORRECTION's failure never clears: the marker belongs to the
+            # turn's first begin and must keep Start failed-closed until
+            # the turn commits.
+            if not correction:
+                await clear_film_draft_marker(db, project, draft_id=draft_id)
+            # 台账记账 (定点收尾①): the exception path is a failed design
+            # call too — if the turn survives to dock, the hold must stand.
+            entry = design_call_record(params)
+            if entry not in self._design_shortfalls:
+                self._design_shortfalls.append(entry)
             raise
         assert film is not None  # the synthetic task always carries launch_film
 
         # 并发护栏 PUBLISH (step 2): publish only while the COMMITTED marker
-        # still names THIS draft on ITS base version — a concurrent design's
-        # begin (or a Start that consumed the pending plan) since our begin
-        # discards this draft wholesale.
+        # still names THIS draft on ITS base version AND still LIVE (the
+        # patch branch's same liveness half — 定点收尾③ consistency fix: our
+        # own staleness = ownership expired by the protocol's own rules,
+        # fail closed, never overwrite a takeover's world) — a concurrent
+        # design's begin (or a Start that consumed the pending plan) since
+        # our begin discards this draft wholesale. A CORRECTION builds on
+        # THIS turn's own (still uncommitted) version, so the committed
+        # marker's base_version legitimately names the PRE-turn base — the
+        # guard then checks only that the marker still names this turn's
+        # draft (a lapsed-budget takeover discards honestly).
         live_marker = await read_committed_film_marker(UUID(str(project.id)))
-        if not (
+        marker_ok = (
             isinstance(live_marker, dict)
             and live_marker.get("draft_id") == draft_id
-            and live_marker.get("base_version")
-            == (design_base.film_storyboard_version if design_base else None)
-        ):
+            and film_draft_inflight_live(live_marker)
+        )
+        if marker_ok and not correction:
+            marker_ok = live_marker.get("base_version") == (
+                design_base.film_storyboard_version if design_base else None
+            )
+        if not marker_ok:
+            # The discard releases its OWN marker before answering (the
+            # clear is draft-scoped — a newer draft's marker is never
+            # touched); a leaked marker would block redesigns and Start
+            # until the staleness sweep. A CORRECTION's discard never
+            # clears: the marker it read belongs to the takeover (or is
+            # gone) — and the turn's own standing marker is not ours to
+            # lift here either way. Either path is a FAILED design call:
+            # the failure joins the ledger (定点收尾①).
+            if not correction:
+                await clear_film_draft_marker(db, project, draft_id=draft_id)
+            entry = design_call_record(params)
+            if entry not in self._design_shortfalls:
+                self._design_shortfalls.append(entry)
             logger.info(
                 "film_draft_publish_superseded",
                 project_id=str(project.id),
@@ -990,6 +1256,29 @@ class PlanTurn:
             review_hold=params.review_hold,
             authorized_by=str(authorized_by) if authorized_by else None,
         )
+        # 未接受文字漂移 (定点收尾②复审 — the A→B→继承 B hole): the drift
+        # state rides the VERSION ENVELOPE (never a turn-local flag — a
+        # rebuilt turn never loses the protection), computed against the
+        # LAST PROVABLY-ACCEPTED baseline, not the adjacent version: an
+        # inherited drifted copy CARRIES the hold; only restore /
+        # user-pasted / the dock's explicit confirm releases it.
+        if design_params.get("verbatim") is True and design_params.get("text"):
+            version_state["film_text_drift"] = film_text_drift_next(
+                getattr(design_base, "film_text_drift", None),
+                (design_base.film_storyboard_params or {}).get("text")
+                if design_base
+                else None,
+                design_params["text"],
+                self.text,
+            )
+        else:
+            # A non-verbatim / non-text version can't re-judge — carry a
+            # standing hold conservatively, never wash it.
+            version_state["film_text_drift"] = (
+                getattr(design_base, "film_text_drift", None)
+                if design_base
+                else None
+            )
         pending = PendingPlan(
             prompt=birth_prompt,
             intent=stored.intent if stored else None,
@@ -1013,6 +1302,12 @@ class PlanTurn:
         self._presentation_pending = {
             "version": version_state["film_storyboard_version"]
         }
+        self._designed_this_turn = version_state["film_storyboard_version"]
+        # 台账不销 (定点收尾复审①): a landed COMPOSE NEVER clears the
+        # ledger — 重稿成功不证明原请求落实 (the incident's own shape: the
+        # redraft landed, the fix didn't). The ledger's ONE clearing seat
+        # is the patch branch's matching-signature success; when resolution
+        # can't be proven, the dock's confirmation requirement stands.
         hold_fact = (
             "review hold ON — production waits for the user's explicit request"
             if version_state["film_review_hold"]
@@ -1023,29 +1318,426 @@ class PlanTurn:
             if film.reused
             else "new draft — any earlier film confirmation is void"
         )
+        # base 引用协议 step 1 (the read-time mint): the saved version's
+        # identity reference rides the observation — targeted edits to THIS
+        # version echo it back as base_ref. The mint is part of the gated
+        # edit capability: gate OFF = no reference line at all (the model
+        # is never invited to a patch the deployment refuses).
+        from app.config import settings  # deferred: config leaf
+
+        base_ref_line = ""
+        if settings.film_edits_enabled:
+            from app.tools.film.edits import (  # deferred: tool seam
+                film_base_cut,
+                film_version_identity_digest,
+            )
+
+            minted_base_ref = film_version_identity_digest(
+                FilmStoryboard.model_validate(version_state["film_storyboard"]),
+                version_state["film_storyboard_params"] or {},
+                version=version_state["film_storyboard_version"],
+                cut=film_base_cut(version_state),
+            )
+            base_ref_line = (
+                f"\nThis version's base_ref: {minted_base_ref} — targeted edits "
+                "(one scene's view or narration, a reorder, a removal, a music "
+                "or voiceover swap) ride design_storyboard's edits with this "
+                "reference echoed verbatim (re-read via get_output_spec if "
+                "lost); open feedback keeps riding specific_instruction "
+                "WITHOUT edits."
+            )
         return ToolObservation(
             f"Storyboard version {version_state['film_storyboard_version']} "
             f"designed and saved ({draft_fact}; {hold_fact}; no plan docked, "
-            "nothing started). Your next message is its ONLY presentation — "
-            "no system message carries the board. Present it per the "
-            "WEBSITE FILM CONVERSATION law: a short intro, the scene table "
-            "built from THESE facts verbatim, then ONE direct question — "
-            "whether to start making the film with THIS version (never an "
-            "internal-step question like 'shall I put the plan up').\n"
+            "no run started, and no film has been produced). Your next "
+            "message is its ONLY presentation — no system message carries "
+            "the board. Present a short intro, the COMPLETE scene table "
+            "built from THESE facts verbatim, then the cumulative production "
+            "settings and any concrete unresolved items. A storyboard is not "
+            "a rendered film: never say production is underway or complete "
+            "before a real run says so.\n"
             "SAVED BOARD (execution truth — the times ARE the render "
             "timeline, never recompute them):\n"
             + film.presentation
-            + "\nLaw: with production intent already present and review "
-            "hold off, present the board and continue to present_plan with "
-            "these design params verbatim; with review hold on, present "
-            "and wait for an explicit production request. The user's "
-            "APPROVAL of the presented board docks the proposal with the "
-            "same params and ONE honest setup line — it never re-designs, "
-            "never re-prints the table. Global confirmation settings govern "
-            "whether the docked plan starts. Board feedback re-enters "
-            "through design_storyboard's specific_instruction — the user's "
-            "change words only, never a restated direction; an explanation "
-            "question gets an answer, never a redraft."
+            + "\nLaw: the next step keys on the CURRENT request's production "
+            "intent, not on an older run or approval. With production intent "
+            "present, present the full board and continue to present_plan "
+            "with these design params verbatim; the existing review-hold "
+            "release and global confirmation settings govern starting, with "
+            "no extra approval question invented. Without production intent, "
+            "call answer: an ordinary design/revision asks the ONE direct "
+            "question whether to make THIS version, while an explicit "
+            "review-only request stops after the full presentation with no "
+            "production question. The user's later APPROVAL of the presented "
+            "board docks the proposal with the same params and ONE honest "
+            "setup line — it never re-designs or re-prints the table. Board "
+            "feedback re-enters through design_storyboard's "
+            "specific_instruction — the user's change words only, never a "
+            "restated direction; an explanation question gets an answer, "
+            "never a redraft."
+            + base_ref_line
+            + (f"\n{drift_note}" if drift_note else "")
+        )
+
+    async def _design_storyboard_patch(
+        self,
+        params: DesignStoryboardArgs,
+        *,
+        design_base,
+        stored,
+        birth_prompt: str,
+        authorized_by,
+        base_is_live_pending: bool,
+        base_is_pinned: bool,
+        correction: bool = False,
+    ) -> str | ToolObservation:
+        """The design beat's PATCH branch (the chat path's mirror): targeted
+        ops against the resolved base version — applied atomically by the
+        SYSTEM (``prepare_film_patch``), validated by the real validator,
+        published as a new version with the system-computed change_set. NO
+        director call lives here (闸 2: the edit path burns zero
+        orchestration), NO silent overwrite of the current version.
+
+        base 引用协议: ``params.base_ref`` is the READ-TIME reference the
+        model echoes verbatim — checked against the resolved base BEFORE the
+        begin marker (a stale read rejects without churn) and re-checked by
+        the apply seat; the publish beat then re-reads the COMMITTED state
+        and compares FULL identity (content + canonical params + ordered
+        scene ids + version + frozen cut — the same
+        ``film_version_identity_digest`` seats), never a version-number or
+        content-digest handshake: a base that rode the live pending must
+        still find it standing and identical; a provenance-recovered base
+        that met no pending at read time tolerates only a byte-identical
+        re-committed world (anything else, and any unprovable legacy
+        envelope, discards honestly). An explicit @output pin branches from
+        THAT version — the live pending's movement is then irrelevant by
+        design (永不静默换最新版)."""
+        db, project = self.db, self.project
+        from app.chat.turn_tools import (  # deferred
+            design_begin_refusal_feedback,
+            design_call_record,
+        )
+        from app.tools.film.edits import (  # deferred: tool seam
+            FilmEditError,
+            committed_film_state_identity,
+            film_base_cut,
+            film_edit_repair_echo,
+            film_version_identity_digest,
+            prepare_film_patch,
+        )
+        from app.tools.film.storyboard import (  # deferred: tool seam
+            begin_film_draft,
+            clear_film_draft_marker,
+            film_design_state,
+            film_draft_inflight_live,
+            film_text_drift_next,
+            read_committed_film_state,
+        )
+
+        if design_base is None or not getattr(design_base, "film_storyboard", None):
+            # 台账记账 (定点收尾①): a FAILED design call — no base exists and
+            # the requested edits never landed.
+            entry = design_call_record(params)
+            if entry not in self._design_shortfalls:
+                self._design_shortfalls.append(entry)
+            return (
+                "there is no film storyboard version to edit yet — design one "
+                "first (design_storyboard without edits), or @-mention the "
+                "film output whose version you mean."
+            )
+        # Fast stale reject (no marker churn): the reference must name the
+        # base AS RESOLVED NOW. A corrupt stored base rejects honestly too.
+        try:
+            current_ref = film_version_identity_digest(
+                FilmStoryboard.model_validate(design_base.film_storyboard),
+                design_base.film_storyboard_params or {},
+                version=design_base.film_storyboard_version,
+                cut=film_base_cut(design_base),
+            )
+        except (TypeError, ValueError):
+            entry = design_call_record(params)
+            if entry not in self._design_shortfalls:
+                self._design_shortfalls.append(entry)
+            return (
+                "the stored base version no longer parses — re-read the "
+                "current version (get_output_spec on the film output) before "
+                "editing."
+            )
+        if params.base_ref != current_ref:
+            # 台账记账 (定点收尾①): the stale-base_ref refusal is a FAILED
+            # design call — the edits were minted against a moved version.
+            entry = design_call_record(params)
+            if entry not in self._design_shortfalls:
+                self._design_shortfalls.append(entry)
+            return (
+                "the film's current version moved since these edits were "
+                "minted — re-read the current version (get_output_spec on the "
+                "film output) and re-issue the edits with its base_ref. The "
+                "current version stands untouched."
+            )
+        # 并发护栏 BEGIN (the compose branch's same law): the in-flight
+        # marker lands COMMITTED before the patch; Start fails closed while
+        # it stands, a concurrent begin is refused, and the publish below
+        # lands only while the committed marker still names THIS draft. A
+        # CORRECTION never re-begins — the turn's own marker still stands
+        # (the compose branch's comment carries the self-lock forensics).
+        if correction:
+            draft_id = self._design_draft_id
+            assert draft_id is not None  # set by this turn's first begin
+        else:
+            begin = await begin_film_draft(
+                db,
+                project,
+                base_version=design_base.film_storyboard_version,
+                user_message_id=str(authorized_by) if authorized_by else None,
+            )
+            if begin.draft_id is None:
+                # 台账记账 (定点收尾①): the begin refusal is a FAILED design
+                # call — the requested change never landed. The refusal
+                # REASON latches (入口锁存 — the compose branch's law): the
+                # entry closes for the rest of the turn.
+                entry = design_call_record(params)
+                if entry not in self._design_shortfalls:
+                    self._design_shortfalls.append(entry)
+                refusal = begin.refusal or "locked"
+                self._design_begin_refusal = refusal
+                return design_begin_refusal_feedback(refusal)
+            draft_id = begin.draft_id
+            self._design_draft_id = draft_id
+        try:
+            prepared = await prepare_film_patch(
+                db,
+                project,
+                base=design_base,
+                ops=params.edits,
+                base_ref=params.base_ref or "",
+                instruction=birth_prompt,
+            )
+        except FilmEditError as exc:
+            # A structured op rejection is LOOP FEEDBACK, not a turn failure:
+            # clear only this draft's marker and hand the model the repair
+            # echo — the base version stands untouched. A CORRECTION's
+            # rejection never clears: the marker belongs to the turn's first
+            # begin and keeps Start failed-closed until the turn commits.
+            if not correction:
+                await clear_film_draft_marker(db, project, draft_id=draft_id)
+            # 台账记账 (定点收尾①): the rejected ops never landed — the
+            # failure joins the ledger; the repair retry's matching
+            # signature is what clears it.
+            entry = design_call_record(params)
+            if entry not in self._design_shortfalls:
+                self._design_shortfalls.append(entry)
+            logger.info(
+                "film_patch_rejected",
+                project_id=str(project.id),
+                code=exc.code,
+                detail=exc.detail[:300],
+            )
+            return film_edit_repair_echo(exc)
+        except BaseException:
+            if not correction:
+                await clear_film_draft_marker(db, project, draft_id=draft_id)
+            # 台账记账 (定点收尾①): the exception path is a failed design
+            # call too — if the turn survives to dock, the hold must stand.
+            entry = design_call_record(params)
+            if entry not in self._design_shortfalls:
+                self._design_shortfalls.append(entry)
+            raise
+        # 并发护栏 PUBLISH (the propose path's mirror — the commit-time
+        # recheck): the COMMITTED marker must still name THIS draft on ITS
+        # base AND still be LIVE (our own staleness = ownership expired by
+        # the protocol's own rules — fail closed, never overwrite a
+        # takeover's world), and every NON-PINNED base must still BE the
+        # committed world — compared by FULL identity
+        # (``committed_film_state_identity`` vs the read-time reference:
+        # content + canonical params + ordered scene ids + version + frozen
+        # cut), never a version-number or content-digest handshake. A base
+        # that rode the live pending re-proves unconditionally (a vanished
+        # pending = a moved world); a provenance-recovered base that met NO
+        # pending at read time meets an appeared one here: byte-identical
+        # identity = the same version state re-committed (safe to build
+        # on), ANYTHING ELSE = a moved world — and an unprovable committed
+        # envelope (a legacy row whose board/params/version no longer
+        # parse) discards honestly rather than passing on a version number.
+        # An explicit @output pin is the ONE exemption (branch semantics —
+        # 钉恒胜). The residual check→commit window: the write rides the
+        # turn transaction (version + presentation commit atomically —
+        # deliberate), so a world moving strictly AFTER this read still
+        # lands under our commit; the marker protocol covers it while our
+        # marker is live (a concurrent begin is refused, Start fails
+        # closed), and the liveness precondition above fails our own
+        # publish closed once the design budget lapses — the straddle that
+        # remains needs a full concurrent turn nested inside this turn's
+        # final seconds after a near-exhausted budget, and is accepted over
+        # moving the version write out of the turn's atomicity.
+        live_marker, committed_film = await read_committed_film_state(
+            UUID(str(project.id))
+        )
+        superseded = not (
+            isinstance(live_marker, dict)
+            and live_marker.get("draft_id") == draft_id
+            and film_draft_inflight_live(live_marker)
+        )
+        # A CORRECTION's base is this turn's own (uncommitted) version, so
+        # the committed world legitimately reads PRE-turn: the marker's
+        # base_version and the committed-identity halves would discard
+        # every correction by construction — only the marker's draft
+        # ownership guards the correction's publish.
+        if not correction:
+            superseded = superseded or (
+                isinstance(live_marker, dict)
+                and live_marker.get("base_version")
+                != design_base.film_storyboard_version
+            )
+            if not superseded and not base_is_pinned:
+                if committed_film is None:
+                    superseded = base_is_live_pending
+                elif committed_film_state_identity(committed_film) != current_ref:
+                    superseded = True
+        if superseded:
+            # The discard releases its OWN marker before answering (the
+            # clear is draft-scoped: a marker already taken over by a newer
+            # draft is never touched) — a leaked marker would block later
+            # edits and Start until the staleness sweep. A CORRECTION's
+            # discard never clears (the standing marker is the turn's own
+            # or the takeover's — neither is this draft's to lift). Either
+            # way the requested change did NOT land: the failure joins the
+            # ledger (定点收尾① — a superseded publish is a failed design
+            # call on BOTH paths).
+            if not correction:
+                await clear_film_draft_marker(db, project, draft_id=draft_id)
+            entry = design_call_record(params)
+            if entry not in self._design_shortfalls:
+                self._design_shortfalls.append(entry)
+            logger.info(
+                "film_patch_publish_superseded",
+                project_id=str(project.id),
+                draft_id=draft_id,
+            )
+            return (
+                "a newer storyboard design (or a production start) landed "
+                "while this edit was in flight — this patch is discarded; "
+                "the current version stands. Re-read the current version and "
+                "re-issue the edits with its base_ref."
+            )
+        version_state = film_design_state(
+            design_base,
+            film=prepared.film,
+            design_params=prepared.params,
+            review_hold=params.review_hold,
+            authorized_by=str(authorized_by) if authorized_by else None,
+            created_via="patch",
+            change_set=prepared.change_set.model_dump(mode="json"),
+            kept_frames=prepared.kept_frames,
+            kept_reveal_onsets=prepared.kept_reveal_onsets,
+        )
+        # 未接受文字漂移 (定点收尾②复审 — the compose branch's same seat):
+        # a structured copy patch CAN create an unproven drift; it also
+        # carries an existing hold (an unrelated patch never clears it) and
+        # releases only on the provable paths (baseline restored / the user
+        # pasted the standing copy this turn). The exact before/after copy
+        # facts ride the patch presentation for review.
+        if (prepared.params or {}).get("verbatim") is True and (
+            prepared.params or {}
+        ).get("text"):
+            version_state["film_text_drift"] = film_text_drift_next(
+                getattr(design_base, "film_text_drift", None),
+                (design_base.film_storyboard_params or {}).get("text"),
+                prepared.params["text"],
+                self.text,
+            )
+        else:
+            version_state["film_text_drift"] = getattr(
+                design_base, "film_text_drift", None
+            )
+        pending = PendingPlan(
+            prompt=birth_prompt,
+            intent=stored.intent if stored else None,
+            brief=stored.brief if stored else Brief(),
+            reasons=stored.reasons if stored else [],
+            persona_id=(
+                self.request.persona_id
+                or (stored.persona_id if stored else None)
+            ),
+            derived=stored.derived if stored else [],
+            plans=stored.plans if stored else [],
+            plan_task_map=stored.plan_task_map if stored else None,
+            **version_state,
+            **self._role_pins(),
+        )
+        project.pending_brief = pending.model_dump(mode="json")
+        self.stored = pending
+        # 呈现挂号 (the compose branch's same seat): the model's ONE next
+        # message presents the change_set, finish stamps its provenance.
+        self._presentation_pending = {
+            "version": version_state["film_storyboard_version"]
+        }
+        self._designed_this_turn = version_state["film_storyboard_version"]
+        # 台账销账 (定点收尾①, 复审再收紧): a landed PATCH removes only the
+        # EXACTLY EQUIVALENT record (key AND requested target values — a
+        # retry that swapped in a different value or dropped a requested
+        # field never clears; an UNRELATED successful change never clears a
+        # failure it did not touch; the compose branch never clears at
+        # all). 「已经呈现」≠ 用户接受 — the user-sees-and-accepts path
+        # rides the confirmation mechanism, not this ledger.
+        _landed = design_call_record(params)
+        self._design_shortfalls = [
+            e for e in self._design_shortfalls if e != _landed
+        ]
+        hold_fact = (
+            "review hold ON — production waits for the user's explicit request"
+            if version_state["film_review_hold"]
+            else "review hold off"
+        )
+        drift_fact = ""
+        if isinstance(version_state.get("film_text_drift"), dict):
+            drift_fact = (
+                "\nCOPY REVIEW REQUIRED: this version still carries "
+                "unaccepted wording drift from the last accepted copy. "
+                "The exact before/after copy facts in CHANGES show this "
+                "patch's actual delta; the full current board below is the "
+                "wording to review. Never call it the original unchanged, "
+                "and never treat this notice as production authorization."
+            )
+        return ToolObservation(
+            f"Storyboard version {version_state['film_storyboard_version']} "
+            f"saved — a PATCH of version {design_base.film_storyboard_version} "
+            f"({len(params.edits)} ops applied atomically; {hold_fact}; no "
+            "plan docked, no run started, and no new film has been produced). "
+            "The previous film remains unchanged. Your next message is its "
+            "ONLY presentation — no system message carries the revision. "
+            "Say the STORYBOARD is updated, never that a new film is already "
+            "being made. Present BOTH the system-computed change summary "
+            "(including every exact before/after copy fact) and the COMPLETE "
+            "CURRENT SAVED BOARD as a Markdown scene table, followed by the "
+            "cumulative production settings and concrete unresolved items. "
+            "Use the facts below, not an old table plus an inferred diff; "
+            "scene_id, base_ref and digests are internal and never user copy.\n"
+            "CHANGES:\n"
+            + prepared.change_presentation
+            + "\nFULL CURRENT SAVED BOARD (execution truth — keep scene "
+            "order, time windows, copy, motion/camera and narration exactly "
+            "as given):\n"
+            + prepared.film.presentation
+            + f"\nEdits against THIS new version carry base_ref "
+            f"{prepared.next_base_ref} (echo it verbatim; re-read via "
+            "get_output_spec if lost).\n"
+            "The next step keys on the CURRENT request, never on an old "
+            "run's completion or an older version's approval. If this "
+            "message explicitly delegates making THIS revised version "
+            "(production_intent=true), present the full facts and continue "
+            "to present_plan with the same params; do not add a second "
+            "approval question, and the existing review-hold, drift, quote "
+            "and Start guards still decide execution. Otherwise call "
+            "answer, NOT present_plan: an ordinary modification ends with "
+            "the one question whether to remake this version, while an "
+            "explicit review-only request stops after the full presentation "
+            "with no production question. Review hold off never creates "
+            "production intent; review hold on still requires an explicit "
+            "production request. Open feedback on the board still rides "
+            "specific_instruction WITHOUT edits; the next targeted change "
+            "rides edits again with the new base_ref."
+            + drift_fact
         )
 
     async def _present_plan(self, params: PresentPlanArgs, prose: str) -> str | None:
@@ -1054,11 +1746,6 @@ class PlanTurn:
         出书门槛."""
         db, project = self.db, self.project
         stored = self._current_pending()
-        merged_brief = await self._absorb(
-            params.brief,
-            params.material_text,
-            getattr(params, "material_urls", None),
-        )
 
         # 空散文护栏 (ask_user 座的同形对称): the plan card carries no title
         # — the echo IS its introduction (three duties), so a silent dock
@@ -1079,6 +1766,20 @@ class PlanTurn:
                 "missing answer most decides quality, call ask_user; for a "
                 "purely informational reply, call answer."
             )
+        from app.chat.turn_tools import film_revision_proposal_guard
+
+        revision_guard = film_revision_proposal_guard(
+            designed_version=self._designed_this_turn,
+            tasks=params.tasks,
+            production_intent=params.production_intent,
+        )
+        if revision_guard is not None:
+            return revision_guard
+        merged_brief = await self._absorb(
+            params.brief,
+            params.material_text,
+            getattr(params, "material_urls", None),
+        )
         # Chain adjudication (ADR-043): the registry validates the proposed
         # task list — the rejection rides back as the loop's feedback (the
         # retired repair round's seat), then the call retries bounded. The
@@ -1207,7 +1908,20 @@ class PlanTurn:
         # regime's guardrail/unquotable trip carries the honest
         # correction) and the dock payload's stamp read the same object
         # (passed through below).
-        need = await resolve_confirmation_need(db, self.user_id, task_estimate)
+        from app.tools.film.storyboard import (
+            film_text_drift_held,
+        )  # deferred: tool seam
+
+        need = await resolve_confirmation_need(
+            db, self.user_id, task_estimate,
+            production_intent=params.production_intent,  # ADR-139
+            # 7276ef13 ③: a change refused THIS turn holds the auto start.
+            unmet_condition=bool(self._design_shortfalls),
+            # 定点收尾②复审: the drift hold reads the STANDING VERSION's
+            # persisted state (world truth — a rebuilt turn never loses it),
+            # never a turn-local flag.
+            copy_drift=film_text_drift_held(project.pending_brief),
+        )
 
         # The late-turn guard: a concurrent Start committed while this refine
         # was in flight — docking now would raise a plan over an active
@@ -1532,7 +2246,20 @@ class PlanTurn:
         # tailed echo rides intent.answer so the re-dock replay stays
         # single-tailed. The held clause (ADR-117 §4) keys on the stamped
         # reason — the auto regime's guardrail/unquotable trip only.
-        need = await resolve_confirmation_need(db, self.user_id, task_estimate)
+        from app.tools.film.storyboard import (
+            film_text_drift_held,
+        )  # deferred: tool seam
+
+        need = await resolve_confirmation_need(
+            db, self.user_id, task_estimate,
+            production_intent=params.production_intent,  # ADR-139
+            # 7276ef13 ③: a change refused THIS turn holds the auto start.
+            unmet_condition=bool(self._design_shortfalls),
+            # 定点收尾②复审: the drift hold reads the STANDING VERSION's
+            # persisted state (world truth — a rebuilt turn never loses it),
+            # never a turn-local flag.
+            copy_drift=film_text_drift_held(project.pending_brief),
+        )
         # The birth prompt freezes at the first dock (stored.prompt wins on
         # every later write) — the same preserve law as present_plan.
         birth_prompt = stored.prompt if stored and stored.prompt else self.text
@@ -1671,11 +2398,13 @@ class PlanTurn:
         # are PLAN feedback — they re-dock the package; a storyboard change
         # re-enters through design_storyboard (which revises the CURRENT
         # board), never through a dock-time redraft.
-        steering = await self._redock_journey_package(package, prose)
+        steering = await self._redock_journey_package(
+                package, prose, production_intent=params.production_intent
+            )
         return steering
 
     async def _redock_journey_package(
-        self, package, prose: str
+        self, package, prose: str, production_intent: bool | None = None
     ) -> str | None:
         """The decision package's re-dock tail (决策包可编辑律 — the SAME
         confirmation seat, never a new confirmation ritual: sync_plan_question
@@ -1713,7 +2442,20 @@ class PlanTurn:
         # re-dock's echo carries the code-composed estimate whisper too;
         # the held clause (ADR-117 §4) keys on the stamped reason — the
         # auto regime's guardrail/unquotable trip only.
-        need = await resolve_confirmation_need(db, self.user_id, task_estimate)
+        from app.tools.film.storyboard import (
+            film_text_drift_held,
+        )  # deferred: tool seam
+
+        need = await resolve_confirmation_need(
+            db, self.user_id, task_estimate,
+            production_intent=production_intent,  # ADR-139
+            # 7276ef13 ③: a change refused THIS turn holds the auto start.
+            unmet_condition=bool(self._design_shortfalls),
+            # 定点收尾②复审: the drift hold reads the STANDING VERSION's
+            # persisted state (world truth — a rebuilt turn never loses it),
+            # never a turn-local flag.
+            copy_drift=film_text_drift_held(project.pending_brief),
+        )
         birth_prompt = stored.prompt if stored and stored.prompt else self.text
         # 分镜节拍守卫 + dock 只读当前版本 (present_plan 的同座同律 — the
         # revision re-dock rides the SAME seat): the shared resolver first
@@ -1897,7 +2639,9 @@ class PlanTurn:
             )
         if isinstance(package, str):
             return package
-        return await self._redock_journey_package(package, prose)
+        return await self._redock_journey_package(
+                package, prose, production_intent=params.production_intent
+            )
 
     def _select_swap_note(self, revised) -> str:
         """The pre-dock swap's empty-prose floor (code-composed fact line,
@@ -2255,6 +2999,29 @@ class PlanTurn:
         # flushes (the queued prose IS the reply), a rejection-marked queue
         # drops (every queued word was rejected speech).
         await self._resolve_deferred()
+        if result.no_progress_tool is not None:
+            assistant_message = await _create_message(
+                self.db,
+                self.conversation_id,
+                "assistant",
+                _design_no_progress_text(
+                    self.text,
+                    version_saved=self._designed_this_turn is not None,
+                ),
+            )
+            return assistant_message, None, self.settled_pending, []
+        if result.ended_by is not None:
+            # The deterministic close (begin 锁存): the model spent its one
+            # honest-close chance on a re-entry, so the loop ended on the
+            # TerminalRefusal and the CODE line speaks the true failure
+            # class — a blocked design start, never a capability refusal.
+            assistant_message = await _create_message(
+                self.db,
+                self.conversation_id,
+                "assistant",
+                _design_blocked_text(self.text, self._design_begin_refusal),
+            )
+            return assistant_message, None, self.settled_pending, []
         if not result.exhausted:
             # The bare final reply (no tool called) — the read-tolerant
             # answer floor: the prose IS the reply.
@@ -2275,15 +3042,25 @@ class PlanTurn:
             # design beat without a further call — same association seat.
             await self._stamp_presentation(assistant_message)
             return assistant_message, None, self.settled_pending, []
-        # Exhaustion — every call rejected. When the rootless rejection was
-        # among them, the code-composed topic question docks (the asked roll
-        # stamped — the bound holds); anything else degrades to the
-        # cannot-do line. Never a docked broken plan.
+        # Exhaustion — every call rejected. A latched begin refusal speaks
+        # the busy/conflict line (never the capability refusal — the design
+        # entry was alive, its start was blocked). When the rootless
+        # rejection was among them, the code-composed topic question docks
+        # (the asked roll stamped — the bound holds); anything else degrades
+        # to the cannot-do line. Never a docked broken plan.
         logger.info(
             "plan_turn_loop_exhausted",
             calls=result.calls,
             rootless=self.saw_rootless_rejection,
         )
+        if self._design_begin_refusal is not None:
+            assistant_message = await _create_message(
+                self.db,
+                self.conversation_id,
+                "assistant",
+                _design_blocked_text(self.text, self._design_begin_refusal),
+            )
+            return assistant_message, None, self.settled_pending, []
         if self.saw_rootless_rejection:
             stored = self._current_pending()
             merged_brief = self.merged_brief or Brief()
@@ -2421,6 +3198,7 @@ async def run_plan_turn(
         on_tool_ready=on_tool_ready,
         on_checkpoint=checkpoint_hook,
         on_loop_event=on_loop_event,
+        should_stop_rejection=film_rejection_stop,
         **turn.infer_kwargs,
     )
     return await turn.finish(result)

@@ -547,6 +547,18 @@ def test_draft_span_settles_never_persist():
 
 STORYBOARD = "chat.activity.storyboard"
 STORYBOARD_DONE = "chat.activity.storyboardDone"
+STORYBOARD_EDIT = "chat.activity.storyboardEdit"
+STORYBOARD_EDIT_DONE = "chat.activity.storyboardEditDone"
+
+
+def _patch_params():
+    """A VALIDATED patch-path params instance (the real schema — the
+    variant bit reads the real ``edits`` field, never a lookalike)."""
+    from app.models.schemas import DesignStoryboardArgs
+
+    return DesignStoryboardArgs(
+        edits=[{"op": "set_voiceover", "enabled": False}], base_ref="ref-abc"
+    )
 
 
 def test_storyboard_span_settle_persists_with_honest_duration(monkeypatch):
@@ -617,6 +629,92 @@ def test_storyboard_span_persistence_mapping():
     assert frame_persistence(active) is None
     settled = _feed(p, ReadAccepted("design_storyboard"))[0]
     assert frame_persistence(settled) == "append"
+
+
+def test_storyboard_patch_span_speaks_the_edit_pair(monkeypatch):
+    """结构化编辑拍文案修正: a design_storyboard call whose VALIDATED params
+    carry ``edits`` opens the span with the ADJUST pair at execute entry —
+    the persisted receipt says 已调整分镜, never a fresh 已设计分镜. The
+    variant rides ReadExecuting.params (confirmed at execute entry — never
+    guessed at name_known, where the arguments are still streaming). The
+    span anatomy is unchanged: opens at execute entry, settle persists with
+    its honest duration."""
+    import app.chat.activity as activity_mod
+
+    ticks = iter([10.0, 42.5])  # ReadExecuting (open), settle
+    monkeypatch.setattr(activity_mod.time, "monotonic", lambda: next(ticks))
+    p = ActivityProjector()
+    assert p.name_known("design_storyboard") == []  # the silent slot, as ever
+    frames = _feed(
+        p,
+        ReadExecuting("design_storyboard", params=_patch_params()),
+        ReadAccepted("design_storyboard"),
+    )
+    assert _summary(frames) == [
+        ("a1", 1, "draft", STATUS_ACTIVE, STORYBOARD_EDIT),
+        ("a1", 2, "draft", STATUS_COMPLETED, STORYBOARD_EDIT_DONE),
+    ]
+    settled = p.settled_frames()
+    assert [(f.kind, f.status, f.key) for f in settled] == [
+        ("draft", STATUS_COMPLETED, STORYBOARD_EDIT_DONE)
+    ]
+    assert settled[0].duration_ms == 32500
+    from app.chat.activity import frame_persistence
+
+    assert frame_persistence(frames[0]) is None
+    assert frame_persistence(frames[1]) == "append"
+
+
+def test_storyboard_compose_variants_keep_the_design_pair():
+    """The compose path is byte-stable: params WITHOUT edits (an open
+    redraft / first draft) and params-less reads both keep the design pair
+    — the presence of params alone never flips the variant."""
+    from app.models.schemas import DesignStoryboardArgs
+
+    for params in (None, DesignStoryboardArgs(focus="a fresh draft")):
+        p = ActivityProjector()
+        frames = _feed(
+            p,
+            "design_storyboard",
+            ReadExecuting("design_storyboard", params=params),
+            ReadAccepted("design_storyboard"),
+        )
+        assert _summary(frames) == [
+            ("a1", 1, "draft", STATUS_ACTIVE, STORYBOARD),
+            ("a1", 2, "draft", STATUS_COMPLETED, STORYBOARD_DONE),
+        ], params
+
+
+def test_storyboard_patch_span_terminal_laws_hold():
+    """失败/取消/回合结束不留 active（patch 变体同法）: an execute-guardrail
+    rejection after the open settles the edit span CANCELLED reusing the
+    ACTIVE key; a failed turn's sweep settles it FAILED the same way — the
+    edit pair obeys the status-form law (terminal frames reuse the active
+    key, never the done form)."""
+    p = ActivityProjector()
+    frames = _feed(
+        p,
+        "design_storyboard",
+        ReadExecuting("design_storyboard", params=_patch_params()),
+        ToolRejected(
+            kind="execute_guardrail", tool_name="design_storyboard",
+            iteration=0, detail="base mismatch", duration_ms=5,
+        ),
+    )
+    assert _summary(frames) == [
+        ("a1", 1, "draft", STATUS_ACTIVE, STORYBOARD_EDIT),
+        ("a1", 2, "draft", STATUS_CANCELLED, STORYBOARD_EDIT),
+    ]
+    # The rejection's aggregated repair span is still tracked (silently) —
+    # the turn's closing sweep retires it: nothing stays active.
+    p.sweep("completed")
+    assert not p.has_active()
+
+    p2 = ActivityProjector()
+    _feed(p2, "design_storyboard", ReadExecuting("design_storyboard", params=_patch_params()))
+    sweep = p2.sweep("failed")
+    assert _summary(sweep) == [("a1", 2, "draft", STATUS_FAILED, STORYBOARD_EDIT)]
+    assert not p2.has_active()
 
 
 def test_storyboard_tool_lands_in_one_bucket():

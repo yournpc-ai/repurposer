@@ -47,7 +47,7 @@ const en = {
     permissions: "Permissions",
     execution: {
       label: "Taking action",
-      desc: "After a plan is presented, whether it waits for your go-ahead.",
+      desc: "After you ask for work to be made, whether it waits for one more go-ahead.",
     },
     spending: {
       label: "Spending credits",
@@ -529,6 +529,8 @@ const en = {
       subs: {
         all: "All",
         saas: "SaaS & Apps",
+        "text-anim": "Text Animation",
+        "product-demo": "Product Demos",
         brand: "Brand & Business",
         ugc: "UGC",
         product: "Products",
@@ -536,6 +538,8 @@ const en = {
       titles: {
         featured: "Featured Recipes",
         saas: "SaaS & Apps",
+        "text-anim": "Text Animation",
+        "product-demo": "Product Demos",
         brand: "Brand & Business",
         ugc: "UGC",
         product: "Products",
@@ -569,6 +573,35 @@ const en = {
         },
         "launch-film-zymix": {
           prompt: "Turn this website into a short 16:9 intro film: {{placeholder}}",
+        },
+        // Placeholder shelves (home 内容扩展批 — text-anim / product-demo):
+        // user-VOICE requests, no tool names, no locked craft parameters,
+        // no "make it look exactly like this video" (the shelf videos are
+        // reused placeholders, never the user's chosen reference). No
+        // {{placeholder}} blank — these prompts are complete as-is.
+        "text-anim-lines": {
+          prompt:
+            "I want to turn my copy into a text animation video where short lines appear one after another. Please first align with me on how the text is grouped, appears, and transitions, then show me the plan.",
+        },
+        "text-anim-brand": {
+          prompt:
+            "I want to make a text-led brand short — clean typography, subtle zoom, and key words carrying the core message. Please first help me organize the copy and pacing, then propose a plan.",
+        },
+        "text-anim-two-lines": {
+          prompt:
+            "I want a text short where the first line appears, then a second key line follows with a beat of emphasis, echoing it. Please first discuss the visuals and rhythm based on my copy.",
+        },
+        "product-demo-walkthrough": {
+          prompt:
+            "I want to turn my uploaded video or screen recording into an operation walkthrough — pick the key steps and add short explanations. Please look at my material first, align with me on the demo's focus, then propose a plan.",
+        },
+        "product-demo-highlights": {
+          prompt:
+            "I want to introduce my product's main features using my existing videos and images, with short text highlighting the key points. Please first suggest the content order and presentation based on my material.",
+        },
+        "product-demo-captioned": {
+          prompt:
+            "I want to add text captions onto my video clips, controlling when and where the text appears. Please first propose a plan based on my material and requirements.",
         },
       },
     },
@@ -1210,8 +1243,10 @@ const en = {
     },
     /** The now-line for the closing review's generation window (a terminal
      * run's closing speech is an LLM call the trigger poll picks up — an
-     * in-flight LLM call always owns a now-line). */
-    closingReview: "Wrapping up…",
+     * in-flight LLM call always owns a now-line). The copy says the results
+     * are being gathered — never that the video is still rendering or being
+     * watched. */
+    closingReview: "Gathering the results…",
     /** 分镜起草落定行（legacy 节拍回放）: the drafting span's
      * SETTLED row (a born-settled material beat) — the log register
      * (verb-object + fact, no progressive), the same 三寄存器 law as the
@@ -1287,6 +1322,7 @@ const en = {
       graph: "Reading the canvas…",
       segment: "Reading the segment…",
       asset: "Looking at the asset…",
+      projectMedia: "Listing the project's media…",
       craftSkeleton: "Reading the reference's style breakdown…",
       artifact: "Reading the card's details…",
       webPage: "Reading the page…",
@@ -1313,9 +1349,11 @@ const en = {
       less: "Show less",
     },
     /** The Activity Stream's milestone copy (ADR-087 §3 Phase 2): the active
-     * frame carries the progressive form, the completed frame the past-tense
-     * form; failed/cancelled reuse the active form (the ✗ / strikethrough
-     * says the rest). kind is a user-semantic category — never a tool name. */
+     * frame carries the progressive form and the completed frame the
+     * past-tense form. Failed rows keep their honest active-form key;
+     * cancelled attempts retire from the visible walk instead of becoming
+     * crossed-out history. kind is a user-semantic category — never a tool
+     * name. */
     /** 2026-09-25 copy batch (user ruling — the machine-status register
      * retired): plain words for the work in flight. The draft kind speaks
      * two faces by tool — proposing a plan / editing existing work (the
@@ -1339,9 +1377,13 @@ const en = {
       /** The storyboard span's pair (2026-10-17 user ruling — 分镜不是开工):
        * the ONE draft-family span whose settle persists (its markdown
        * message is the deliverable, no dock card absorbs the beat) — the
-       * done form renders in the fold's category decomposition. */
+       * done form renders in the fold's category decomposition. The EDIT
+       * pair is the patch variant (a targeted edit riding the same span):
+       * it says adjust, never a fresh design. */
       storyboard: "Designing the storyboard…",
       storyboardDone: "Designed the storyboard",
+      storyboardEdit: "Adjusting the storyboard…",
+      storyboardEditDone: "Adjusted the storyboard",
     },
     /** The activity row's bounded expand detail (iter-3 S7, E7 诚实边界):
      * only the wire whitelist's fields — the raw count rides as a labeled
@@ -1349,12 +1391,12 @@ const en = {
     activityMeta: {
       count: "Count: {{count}}",
     },
-    /** The aggregate row (ADR-110 段聚合, 修订 — Flora 解剖): a settled
-     * segment folds into ONE quiet total — `worked` carries the segment's
-     * wall clock (first row's birth → the prose's arrival) as the ONLY
-     * collapsed fact; the expanded view shows the category decomposition
-     * (foldCategories ×N rows). `actionCount` is the honest fallback when
-     * no measurable elapsed exists (legacy rows without stamps). */
+    /** The aggregate row (ADR-110 段聚合): a settled work segment folds
+     * into ONE quiet total. Live `worked` time runs from the real work
+     * boundary to first VISIBLE prose (or a prose-less terminal), then
+     * freezes; replay without that client fact reports only the observable
+     * activity span. Expanded rows are the foldCategories ×N decomposition.
+     * `actionCount` is the honest fallback when no wall clock exists. */
     activityFold: {
       worked: "Worked for {{elapsed}}",
       actionCount: "{{count}} actions",
@@ -1374,6 +1416,7 @@ const en = {
       graph: "Read the canvas",
       segment: "Read the segment",
       asset: "Looked at the asset",
+      projectMedia: "Listed the project's media",
       craftSkeleton: "Read the reference's style breakdown",
       artifact: "Read the card's details",
       webPage: "Read the page",
@@ -1398,6 +1441,24 @@ const en = {
      * settlement, so no error toast). */
     questionOutdated: "That question was replaced by a newer one — no answer needed.",
     questionAnswered: "That question was already answered.",
+    /** Start recovery copy (2026-10-22 — backend-accepted, receipt-lost):
+     * the Start answer's pipe died; the recovery re-reads the world
+     * ORIGINAL QUESTION ROW FIRST (a newer dock never proves the start
+     * failed) and says exactly ONE honest state — 已启动 / 尚未确认启动 /
+     * 暂时无法确定, never an absolute claim it can't prove and never an
+     * auto-retry (a second start is only ever the user's re-click, deduped
+     * server-side). started → the run surface attaches (info);
+     * unconfirmed → the pill restores (info — the request may still be
+     * mid-flight); unknown → the state is unconfirmable right now
+     * (error). */
+    startRecovery: {
+      started:
+        "The connection dropped, but production had already started — progress is below.",
+      unconfirmed:
+        "The connection dropped before the start could be confirmed — the request may still be processing. Wait a moment, or start again (a duplicate is safely ignored).",
+      unknown:
+        "The connection dropped — couldn't confirm whether production started. Retry, or refresh to check.",
+    },
     runFailed: "Run failed",
     /** Terminal completion lines retired 2026-09-24 (user ruling — they
      * duplicated the trigger turn's run_completed prose; ONE narrator now). */

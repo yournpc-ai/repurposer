@@ -203,10 +203,11 @@ async def list_transactions(
 
 
 async def held(db: AsyncSession, user_id: UUID) -> int:
-    """Currently frozen credits — Σ over runs with a hold but no release of
-    max(0, hold − Σcaptures): a settled run holds nothing; an over-captured
-    (NULL-estimate) run contributes 0, its excess is the negative-balance
-    charge, not something still frozen.
+    """Currently frozen credits = Σ max(0, holds − releases).
+
+    Capture releases the portion of the reservation it consumes atomically;
+    terminal settlement releases the rest. Captures themselves are actual
+    charges, so subtracting them again would double-count consumption.
 
     Aggregates in Python, not SQL: the group key is a JSONB extraction, and
     grouping by a parameterised JSONB expression trips Postgres's
@@ -224,16 +225,20 @@ async def held(db: AsyncSession, user_id: UUID) -> int:
         )
     ).all()
     per_run: dict[str, dict[str, int]] = {}
+    settled: set[str] = set()
     for kind, amount, ref in rows:
         run_id = (ref or {}).get("run_id")
         if not run_id:
             continue
+        if kind == "release" and not (ref or {}).get("step_id"):
+            settled.add(str(run_id))
         sums = per_run.setdefault(str(run_id), {})
         sums[kind] = sums.get(kind, 0) + int(amount)
     return sum(
-        max(0, abs(sums.get("hold", 0)) - abs(sums.get("capture", 0)))
-        for sums in per_run.values()
-        if "release" not in sums
+        # max also recognizes legacy captures made before atomic hold releases.
+        max(0, abs(sums.get("hold", 0)) - max(
+            sums.get("release", 0), abs(sums.get("capture", 0))))
+        for run_id, sums in per_run.items() if run_id not in settled
     )
 
 
@@ -294,6 +299,8 @@ async def capture_step(
     metered (cost NULL) or a credit amount that rounds to 0 writes no row —
     the ledger records money movement, and zero is not movement.
     """
+    # Serialize reservation consumption with other captures and finalization.
+    await db.execute(select(Wallet).where(Wallet.user_id == user_id).with_for_update())
     usd_total = cost_usd(node.cost)
     if usd_total <= 0:
         return None
@@ -307,6 +314,14 @@ async def capture_step(
         if prior == 0
         else f"step:{node.id}:capture:{node.attempt or 0}"
     )
+    held_amount, released = await _run_hold_release_sums(db, user_id=user_id, run_id=node.run_id)
+    covered = min(amount, max(0, held_amount - released))
+    if covered:
+        await _mutate(
+            db, user_id=user_id, kind="release", amount=covered,
+            ref={"run_id": str(node.run_id), "step_id": str(node.id)},
+            idem=f"{idem}:hold-release", note="Reservation applied to step charge",
+        )
     return await _mutate(
         db,
         user_id=user_id,
@@ -321,13 +336,14 @@ async def capture_step(
 async def release_run(
     db: AsyncSession, *, user_id: UUID, run_id: UUID
 ) -> CreditTransaction | None:
-    """Return the un-captured remainder of a run's hold at its terminal state
-    (idem ``run:{id}:release``): remainder = hold − Σcaptures, clamped at 0 —
-    NULL-estimate steps may capture past the hold, and that excess is the
-    user's real charge (negative-balance semantics), never a negative
-    release. Remainder 0 → no row."""
-    held, captured = await _run_hold_capture_sums(db, user_id=user_id, run_id=run_id)
-    remainder = max(0, held - captured)
+    """Release the remaining reservation, not the captured charge twice.
+
+    Every ledger amount changes the wallet. Capture already debits actual
+    cost and returns its covered reservation in the same transaction.
+    """
+    await db.execute(select(Wallet).where(Wallet.user_id == user_id).with_for_update())
+    held_amount, released = await _run_hold_release_sums(db, user_id=user_id, run_id=run_id)
+    remainder = max(0, held_amount - released)
     if remainder == 0:
         return None
     return await _mutate(
@@ -443,10 +459,10 @@ async def _capture_sum_for_step(db: AsyncSession, *, user_id: UUID, step_id: UUI
     return abs(int(total))
 
 
-async def _run_hold_capture_sums(
+async def _run_hold_release_sums(
     db: AsyncSession, *, user_id: UUID, run_id: UUID
 ) -> tuple[int, int]:
-    """(held, captured) credit totals for a run — release's settlement base."""
+    """(held, released) reservation totals; captures are actual charges."""
     rows = await db.execute(
         select(
             CreditTransaction.kind,
@@ -454,10 +470,10 @@ async def _run_hold_capture_sums(
         )
         .where(
             CreditTransaction.user_id == user_id,
-            CreditTransaction.kind.in_(["hold", "capture"]),
+            CreditTransaction.kind.in_(["hold", "release"]),
             CreditTransaction.ref["run_id"].as_string() == str(run_id),
         )
         .group_by(CreditTransaction.kind)
     )
     sums = {kind: int(total) for kind, total in rows}
-    return abs(sums.get("hold", 0)), abs(sums.get("capture", 0))
+    return abs(sums.get("hold", 0)), sums.get("release", 0)

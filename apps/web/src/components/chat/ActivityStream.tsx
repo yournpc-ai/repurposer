@@ -1,40 +1,23 @@
-/** ActivityRow — THE one row of the chat world's "现在" (2026-09-24 合一律,
- * user ruling): the agent turn's milestone stream AND the thinking empty
- * state are the same component with the same anatomy — the live dot +
- * shimmer label while live, kind glyph + duration whisper when settled.
- * Register (2026-09-25 user ruling): the row FULLY shares the RunTaskList
- * narrative row's quiet register (StatusLine quiet — "正在准备你的人设…
- * 7s" seat): text-xs, the same 6px live dot, 12px glyphs / chevron — one
- * glance reads one family. Thinking is the row's empty state (kind "think",
- * frontend-synthesized, never on the wire): it never settles and leaves
- * zero history — the next milestone's content simply replaces it in the
- * same mounted row.
+/** Chat activity presentation has two row families:
  *
- * Rows are the user-safe projection of the loop's internal events: terminal
- * rows settle static (✗ failed / cancelled struck through — 「被划掉的一
- * 步」, the RunTaskList no-op register's cousin) and stay in the flow as
- * the turn's static history (U9), replaced by the next turn's own. An
- * ACTIVE row never interleaves into the timeline — it is the now-line's
- * content (lib/chatTimeline holds the same law for the units walk).
+ * - WorkSegmentRow owns ONE continuous work segment in both poses: live
+ *   Thinking / current milestone, then the settled aggregate receipt at the
+ *   SAME timeline unit. Completed tools are facts inside that segment; their
+ *   settlement never seals it. The first visible following prose fragment
+ *   or a real terminal state does.
+ * - ActivityRow renders a standalone terminal failure fact. Cancelled
+ *   attempts retire in the timeline projection instead of leaving an error
+ *   carcass; a real failure keeps one calm, honest terminal row.
  *
- * This is a visibility surface ONLY — it never gates Canvas / Confirm /
- * Run (对账规则 8), never carries params / results / reasoning (the wire
- * whitelist is {activity_id, seq, kind, status, key, count, at,
- * duration_ms}), and its copy keys resolve through i18n with the
- * status-appropriate form (the server sends the active-form key on active
- * frames, the past-tense key on completed ones).
- *
- * S7/E7 row additions: a genuinely-active span's settle carries its real
- * duration (whisper at the label's left cluster — `formatElapsed` is the
- * ONE copy); a row
- * expands ONLY when it carries payload (the milestone's `count` — E7 诚实
- * 边界: a payload-less row never pretends to be expandable), and the
- * expanded detail stays inside the wire whitelist (the full untruncated
- * copy line + the raw count + the duration) — candidate CONTENT lives on
- * the canvas cards (R1/R3 seats), never copied onto an activity row. */
+ * Rows are the user-safe projection of the loop's internal events. They never
+ * gate Canvas / Confirm / Run, never carry params / results / reasoning, and
+ * resolve their copy through i18n. Tool duration_ms remains the tool's own
+ * duration; the work segment's separate client wall clock includes the model
+ * wait until visible reply and freezes at that display edge. */
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import {
   ChevronDown,
   ChevronRight,
@@ -42,14 +25,14 @@ import {
   PenLine,
   Play,
   RotateCcw,
-  X,
+  TriangleAlert,
   type LucideIcon,
 } from "lucide-react"
 
 import type { ActivityFramePayload } from "@/lib/chat-stream"
 import type { ActivityRowFrame } from "@/components/chat/historyReplay"
-import { activityCategoryKey, foldCategories } from "@/lib/chatTimeline"
-import { formatElapsed } from "@/components/chat/RunTaskList"
+import { activityCategoryKey, activityFailureKey, foldCategories } from "@/lib/chatTimeline"
+import { formatElapsed } from "@/components/chat/workTiming"
 import { cn } from "@/lib/utils"
 
 /** Per-kind glyphs (2026-09-24 user ruling, OriginCut parity — 查看项目资源
@@ -57,11 +40,12 @@ import { cn } from "@/lib/utils"
  * name), so its icon reads as WHAT the agent did, not as machinery. The
  * completed row's leading mark IS the kind glyph (the generic ✓ said
  * "success", which the settled register already says); live rows keep the
- * 6px dot (the RunTaskList narrative row's own live mark, 2026-09-25 对齐批),
- * failed/cancelled keep the ✗ seat. The `draft` glyph serves the settled
- * storyboard-drafting beat (a born-settled legacy material beat, not a
- * 落定即退役 plan-draft span; the timeline's draft filter keys on
- * chat.activity.* keys and never touches it). */
+ * 6px dot (the RunTaskList narrative row's own live mark, 2026-09-25 对齐批).
+ * A real failure keeps a quiet alert seat, never a struck-through live
+ * label. The `draft` glyph serves the settled storyboard-drafting beat (a
+ * born-settled legacy material beat, not a 落定即退役 plan-draft span; the
+ * timeline's draft filter keys on chat.activity.* keys and never touches
+ * it). */
 const KIND_ICONS: Record<ActivityFramePayload["kind"], LucideIcon> = {
   read: Eye,
   draft: PenLine,
@@ -69,14 +53,11 @@ const KIND_ICONS: Record<ActivityFramePayload["kind"], LucideIcon> = {
   repair: RotateCcw,
 }
 
-/** The now-line's payload (2026-09-24 user ruling — thinking and the
- * activity row are ONE component): a wire milestone, or the think empty
- * state. "think" is frontend-synthesized, NEVER on the wire (the wire
- * whitelist is unchanged); a think row is always active and never settles —
- * it leaves zero history, the next milestone simply replaces its content in
- * the same mounted row (a morph, never a new row). `seq` is the live
- * channel's bookkeeping — array rows (ADR-108) order by position and may
- * omit it. */
+/** The live label payload: a wire milestone, or the frontend-synthesized
+ * think empty state. "think" is NEVER on the wire and has no durable row of
+ * its own; it simply gives the current work segment its base label. `seq`
+ * is live-channel bookkeeping — array rows order by position and may omit
+ * it. */
 export type NowRowPayload = Omit<ActivityFramePayload, "kind" | "seq"> & {
   kind: ActivityFramePayload["kind"] | "think"
   seq?: number
@@ -92,35 +73,40 @@ export type NowRowPayload = Omit<ActivityFramePayload, "kind" | "seq"> & {
   assetType?: string
 }
 
+function activityText(activity: NowRowPayload, t: TFunction): string {
+  const { status } = activity
+  // 归档归类目: a COMPLETED row drops the instance name and speaks the
+  // category. A FAILED row uses terminal failure copy (an explicit failure
+  // mirror may keep the target's name), never the active progressive label.
+  const settled = status === "completed"
+  const labelKey = settled
+    ? activityCategoryKey(activity.key, activity.assetType)
+    : status === "failed"
+      ? activityFailureKey(activity.key)
+      : activity.key
+  return labelKey
+    ? t(labelKey, {
+        count: activity.count,
+        total: settled ? undefined : activity.total,
+        name: settled ? undefined : activity.name,
+        // Unknown keys degrade by status: active thinks, failed says so,
+        // and only a genuinely completed row may claim completion.
+        defaultValue: t(
+          status === "active"
+            ? "chat.thinking"
+            : status === "failed"
+              ? "chat.failed"
+              : "chat.completed",
+        ),
+      })
+    : t("chat.thinking")
+}
+
 export function ActivityRow({ activity }: { activity: NowRowPayload }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const { status } = activity
-  // 归档归类目 (ADR-110 修订): a COMPLETED row drops the instance name and
-  // speaks the category (the material reading family's keys remap to the
-  // name-free materialCategory form) — the filename was the live phase's
-  // speech. failed/cancelled rows keep the name: which file failed IS the
-  // failure's content.
-  const settled = status === "completed"
-  const labelKey = settled
-    ? activityCategoryKey(activity.key, activity.assetType)
-    : activity.key
-  const label = labelKey
-    ? // 工作会话里程碑 (iter-2 ⑥): count rides as the ONLY interpolation
-      // (the wire whitelist's one extension, N-57) — frames without it
-      // pass undefined and resolve exactly as before. `name` joins for the
-      // frontend-synthesized think beats (the material's filename), never
-      // for wire frames.
-      t(labelKey, {
-        count: activity.count,
-        total: settled ? undefined : activity.total,
-        name: settled ? undefined : activity.name,
-        // 未知键兜底分态：进行中的行回 "Thinking…" 诚实；已落定的行回
-        // 中性 "Done" —— 旧资源包遇到新键时若回 "Thinking…"，一条已完成
-        // 的行会谎称还在进行（素材待命完成帧实测事故）。
-        defaultValue: t(status === "active" ? "chat.thinking" : "chat.completed"),
-      })
-    : t("chat.thinking")
+  const label = activityText(activity, t)
   // E7 诚实边界: expandability IS the payload fact (a count-carrying
   // milestone) — never a chrome affordance on an empty row. Live rows never
   // expand (2026-09-24: the now-line's transient count — "reading N files" —
@@ -146,7 +132,7 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
           // pointer + click toggle, and hover only brightens the label text.
           // Row metrics = the Flora tools-row anatomy: min-h-8, gap-2.5.
           "-mx-1.5 -my-0.5 group/row flex min-h-8 w-full items-center gap-2.5 rounded-md px-1.5 py-0.5 text-xs transition-colors",
-          status === "failed" ? "text-destructive" : "text-muted-foreground",
+          "text-muted-foreground",
           expandable && "cursor-pointer select-none",
         )}
         role={expandable ? "button" : undefined}
@@ -166,17 +152,16 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
         ) : status === "completed" && KindIcon ? (
           <KindIcon className="h-3 w-3 shrink-0" />
         ) : (
-          // failed / cancelled share the ✗ seat — destructive says failure,
-          // the strike-through says the attempt was discarded.
-          <X className="h-3 w-3 shrink-0" />
+          // A real failure is a quiet terminal fact. Cancelled attempts
+          // normally retire before this component; none becomes a crossed-out
+          // live label.
+          <TriangleAlert className="h-3 w-3 shrink-0" />
         )}
         <span
           className={cn(
             "min-w-0 truncate",
             status === "active" && "shimmer",
-            status === "cancelled" && "line-through",
-            // Hover brightens the label only — no bg wash; failed rows keep
-            // their destructive ink.
+            // Hover brightens ordinary labels only; a failure stays quiet.
             status !== "failed" &&
               "transition-colors group-hover/row:text-foreground",
           )}
@@ -213,102 +198,144 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
   )
 }
 
-/** The aggregate row (ADR-110 段聚合, 修订: Flora 解剖 — 折叠说总量,
- * 展开说分解): a settled segment folds into ONE quiet total — 「工作了
- * 2m 7s」; the elapsed is the ONLY collapsed fact (never a fragment
- * digest — the truncated-URL pathology dies at the root, the single-line
- * truncate stays as the dormant guard). Expanded = the category
- * decomposition (foldCategories): rows sharing one copy key merge across
- * the whole segment into a ×N category line (已读网页 ×3) — glyph +
- * category text + ×N at the far right, NO per-row durations (telemetry
- * 不归消费面; the total already rode the header). Ink tiers: the category
- * rows muted, glyphs + counts meta — the header's resting pose reads
- * muted like all chrome (hover / expanded brightens it, never the resting
- * state). The chevron follows the OS disclosure convention (> collapsed,
- * label; the whole row is the tap target. Elapsed 不可测 (存量行无时间
- * 戳) falls back to the honest action count.
+/** One work segment in BOTH poses, shared by chat activities and background
+ * runs. The header owns the lifecycle; each adapter owns its details. Chat
+ * keeps latent tool rows while live and category rows when settled. A run
+ * may keep its live step tree visible, then fold the same tree at the seal.
  *
- * 物化时机律: this component only ever sees a CLOSED segment — a fold
- * whose boundary doesn't exist yet (the turn's prose hasn't landed) is
- * withheld by the renderer while the turn is busy and materializes with
- * the closing prose (the summary's clock ends where the summary
- * appears); an orphaned turn's tail arrives here once busy ends, on the
- * fallback clock. failed/cancelled rows never
- * reach here — they stay visible as their own struck-through rows. */
-export function FoldedActivityRow({
-  rows,
+ * Disclosure overrides are pose-scoped: a live user's toggle survives a
+ * running → reviewing handoff, but cannot keep the settled row expanded for
+ * one extra frame. A post-settle toggle belongs to the settled pose. */
+export function WorkSegmentRow({
+  rows = [],
   elapsedMs,
+  activity = null,
+  liveLabel,
+  liveTrailing = null,
+  liveDetails,
+  details,
+  settledLabel,
+  settledLeading = null,
+  failed = false,
 }: {
-  rows: ActivityRowFrame[]
+  rows?: ActivityRowFrame[]
   elapsedMs?: number | null
+  activity?: NowRowPayload | null
+  /** Run adapters already own a builder-written live label; chat passes an
+   * activity instead. Either fact makes the row live. */
+  liveLabel?: ReactNode
+  liveTrailing?: ReactNode
+  liveDetails?: ReactNode
+  /** Settled details default to chat's category projection. */
+  details?: ReactNode
+  /** Optional read fallback when a run has no honest elapsed span. */
+  settledLabel?: ReactNode
+  settledLeading?: ReactNode
+  failed?: boolean
 }) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const elapsed = elapsedMs != null ? formatElapsed(elapsedMs) : null
-  const label = elapsed
-    ? t("chat.activityFold.worked", { elapsed })
-    : t("chat.activityFold.actionCount", { count: rows.length })
+  const live = activity !== null || liveLabel != null
+  const hasLiveDetails = liveDetails != null
+  const expandable = live ? hasLiveDetails : details != null || rows.length > 0
+  const [openOverride, setOpenOverride] = useState<{
+    live: boolean
+    open: boolean
+  } | null>(null)
+  const open =
+    openOverride && openOverride.live === live
+      ? openOverride.open
+      : live && hasLiveDetails
+  const elapsed = !live && elapsedMs != null ? formatElapsed(elapsedMs) : null
+  const label = live
+    ? (liveLabel ?? (activity ? activityText(activity, t) : t("chat.thinking")))
+    : (settledLabel ??
+      (elapsed
+        ? t("chat.activityFold.worked", { elapsed })
+        : t("chat.activityFold.actionCount", { count: rows.length })))
   const cats = foldCategories(rows)
   return (
     <div className="flex w-full flex-col gap-1">
       <div
         className={cn(
-          // Flora 同构: the summary hugs its content (bare label + chevron
-          // adjacent — no glyph, never a full-width row with a far-right
-          // chevron); the button metrics are Flora's (h-7, gap-1.5); the
-          // expanded rows below keep the flow width.
-          "-mx-1.5 -my-0.5 group/row flex h-7 w-fit max-w-full cursor-pointer select-none items-center gap-1.5 rounded-md px-1.5 text-xs",
+          "-mx-1.5 -my-0.5 group/row flex items-center rounded-md px-1.5 text-xs text-muted-foreground transition-colors",
+          live
+            ? "min-h-8 w-full gap-2.5 py-0.5"
+            : "h-7 w-fit max-w-full gap-1.5",
+          expandable && "cursor-pointer select-none",
         )}
-        role="button"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        role={expandable ? "button" : undefined}
+        aria-expanded={expandable ? open : undefined}
+        onClick={
+          expandable
+            ? () => setOpenOverride({ live, open: !open })
+            : undefined
+        }
       >
-        {/* Resting quiet (muted — chrome, not prose); the brighten is the
-            hover / expanded state, never the resting pose. */}
+        {live ? (
+          <span className="flex h-3 w-3 shrink-0 items-center justify-center">
+            <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+          </span>
+        ) : (
+          settledLeading
+        )}
         <span
           className={cn(
-            "min-w-0 truncate text-muted-foreground transition-colors group-hover/row:text-foreground",
-            open && "text-foreground",
+            "min-w-0 truncate transition-colors",
+            live && "shimmer",
+            !live && failed
+              ? "text-destructive"
+              : "group-hover/row:text-foreground",
+            !live && expandable && open && !failed && "text-foreground",
           )}
         >
           {label}
         </span>
-        {open ? (
-          <ChevronDown className="h-3 w-3 shrink-0 text-meta-foreground" />
-        ) : (
-          <ChevronRight className="h-3 w-3 shrink-0 text-meta-foreground" />
-        )}
+        {live && liveTrailing ? (
+          <span className="shrink-0 tabular-nums text-meta-foreground">
+            · {liveTrailing}
+          </span>
+        ) : null}
+        {expandable &&
+          (open ? (
+            <ChevronDown className="h-3 w-3 shrink-0 text-meta-foreground" />
+          ) : (
+            <ChevronRight className="h-3 w-3 shrink-0 text-meta-foreground" />
+          ))}
       </div>
-      {open && (
-        <div className="flex w-full flex-col gap-1">
-          {cats.map((c, i) => {
-            const Glyph = KIND_ICONS[c.kind] ?? KIND_ICONS.read
-            const key = activityCategoryKey(c.key, c.assetType)
-            const catLabel = key
-              ? t(key, {
-                  count: c.count,
-                  defaultValue: t("chat.completed"),
-                })
-              : t("chat.completed")
-            return (
-              <div
-                key={i}
-                className="-mx-1.5 flex min-h-8 w-full items-center gap-2.5 rounded-md px-1.5 py-0.5 text-xs"
-              >
-                <Glyph className="h-3 w-3 shrink-0 text-meta-foreground" />
-                <span className="min-w-0 truncate text-muted-foreground">
-                  {catLabel}
-                </span>
-                {c.repeat > 1 && (
-                  <span className="ml-auto shrink-0 tabular-nums text-meta-foreground">
-                    ×{c.repeat}
-                  </span>
-                )}
+      {expandable && open
+        ? live
+          ? liveDetails
+          : (details ?? (
+              <div className="flex w-full flex-col gap-1">
+                {cats.map((c, i) => {
+                  const Glyph = KIND_ICONS[c.kind] ?? KIND_ICONS.read
+                  const key = activityCategoryKey(c.key, c.assetType)
+                  const catLabel = key
+                    ? t(key, {
+                        count: c.count,
+                        defaultValue: t("chat.completed"),
+                      })
+                    : t("chat.completed")
+                  return (
+                    <div
+                      key={i}
+                      className="-mx-1.5 flex min-h-8 w-full items-center gap-2.5 rounded-md px-1.5 py-0.5 text-xs"
+                    >
+                      <Glyph className="h-3 w-3 shrink-0 text-meta-foreground" />
+                      <span className="min-w-0 truncate text-muted-foreground">
+                        {catLabel}
+                      </span>
+                      {c.repeat > 1 && (
+                        <span className="ml-auto shrink-0 tabular-nums text-meta-foreground">
+                          ×{c.repeat}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })}
-        </div>
-      )}
+            ))
+        : null}
     </div>
   )
 }

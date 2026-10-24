@@ -10,7 +10,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, Sequence } from "remotion";
 
-import { Captions, Divider, End, Fade, Hero, Plate, Reveal, UiScene, Words } from "./components";
+import { Captions, CompositeScene, Divider, End, Fade, Hero, Plate, Reveal, UiScene, Words } from "./components";
 import type { FilmSpec } from "./schema";
 
 export const Film: React.FC<{ spec: FilmSpec }> = ({ spec }) => {
@@ -45,8 +45,71 @@ export const Film: React.FC<{ spec: FilmSpec }> = ({ spec }) => {
         return (
           <Sequence key={i} from={start} durationInFrames={dur}>
             {s.audio ? <Audio src={s.audio} /> : null}
-            <Fade dur={dur}>
-              {s.type === "words" && <Words lines={s.lines} dark={s.dark} theme={spec.theme} />}
+            {/* Words/composite scenes paint their polarity background at
+                CONSTANT opacity outside the veil — the Fade covers only the
+                content, so a dark scene's boundary never dips toward the
+                white root canvas (a polarity flip reads as a hard cut; the
+                text crossfades within its own scene). */}
+            {s.type === "words" && (
+              <AbsoluteFill
+                style={{ background: s.dark ? spec.theme.ink : spec.theme.canvas }}
+              />
+            )}
+            {s.type === "composite" && (
+              <AbsoluteFill
+                style={{ background: s.dark ? spec.theme.ink : spec.theme.canvas }}
+              />
+            )}
+            {/* Veil ownership: a words plane with an EXPLICIT entrance
+                (timing keys or enter_style) owns its in-edge, one with
+                exit_duration owns its out-edge — the scene veil never
+                doubles them. A composite scene's veil is PER-ELEMENT (inside
+                CompositeScene), so one element's exit fade never washes its
+                siblings; the scene-level veil steps aside there. */}
+            <Fade
+              dur={dur}
+              fadeIn={
+                s.type === "composite"
+                  ? 0
+                  : s.type === "words" &&
+                      (s.enter_start != null ||
+                        s.enter_interval != null ||
+                        s.enter_duration != null ||
+                        s.enter_hold_until != null ||
+                        s.enter_style != null)
+                    ? 0
+                    : 7
+              }
+              fadeOut={
+                s.type === "composite"
+                  ? 0
+                  : s.type === "words" && s.exit_duration != null
+                    ? 0
+                    : 7
+              }
+            >
+              {s.type === "words" && (
+                <Words
+                  lines={s.lines}
+                  dark={s.dark}
+                  theme={spec.theme}
+                  motion={s.motion}
+                  enterMode={s.enter}
+                  enterStart={s.enter_start}
+                  enterInterval={s.enter_interval}
+                  enterDuration={s.enter_duration}
+                  enterHoldUntil={s.enter_hold_until}
+                  motionStart={s.motion_start}
+                  motionEnd={s.motion_end}
+                  exitDuration={s.exit_duration}
+                  motionScale={s.motion_scale}
+                  align={s.align}
+                  size={s.size}
+                  accentStyle={s.accent_style}
+                  enterStyle={s.enter_style}
+                  dur={dur}
+                />
+              )}
               {s.type === "hero" && <Hero word={s.word} sub={s.sub} theme={spec.theme} />}
               {s.type === "ui" && (
                 <UiScene
@@ -66,6 +129,14 @@ export const Film: React.FC<{ spec: FilmSpec }> = ({ spec }) => {
               )}
               {s.type === "reveal" && (
                 <Reveal lead={s.lead} leadFrames={s.lead_frames} word={s.word} sub={s.sub} theme={spec.theme} beatFrames={beatFrames} />
+              )}
+              {s.type === "composite" && (
+                <CompositeScene
+                  dark={s.dark}
+                  elements={s.elements}
+                  theme={spec.theme}
+                  dur={dur}
+                />
               )}
               {s.type === "end" && (
                 <End name={s.name} tagline={s.tagline} url={s.url} logoUrl={s.logo_url} theme={spec.theme} />

@@ -352,9 +352,17 @@ export function streamAnswer<T>(
   messageId: string,
   body: AnswerTurnBody,
   handlers: {
+    /** The caller's dead-stream watchdog aborts through this (the chat
+     * turn's `signal` twin — answer turns share the server's keepalive
+     * guarantee, so silence means a dead pipe, never a slow model). */
+    signal?: AbortSignal
     onDelta?: (text: string) => void
     onThinking?: (payload: ThinkingPayload) => void
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
+    /** The answer continuation CAN carry checkpoint prose (a pick that
+     * resumes into a design beat speaks its expectation sentence first) —
+     * the chat turn's segmentation law applies verbatim. */
+    onCheckpoint?: StreamChatOptions["onCheckpoint"]
     onActivity?: StreamChatOptions["onActivity"]
     onCandidates?: StreamChatOptions["onCandidates"]
     onRowAppend?: StreamChatOptions["onRowAppend"]

@@ -262,3 +262,65 @@ def test_sidecar_empty_without_cues_is_a_valid_artifact(tmp_path: Path) -> None:
     empty = tmp_path / "empty.srt"
     empty.write_bytes(b"")
     assert probe_rendered_sidecar(empty, allow_empty=True) == []
+
+
+# ---- composite keep_audio (ADR-140) ------------------------------------------
+
+
+def test_composite_keep_audio_sets_the_audio_expectation() -> None:
+    """A composite element keeping its original sound means the rendered
+    container MUST carry an audio stream — the spec's own promise."""
+    spec = _film_spec([60])
+    spec["scenes"].append(
+        {
+            "type": "composite",
+            "frames": 90,
+            "elements": [
+                {"kind": "video", "src": "k/v.mp4", "source_start": 0.0,
+                 "source_end": 3.0, "keep_audio": True},
+            ],
+        }
+    )
+    assert probe_expectation_for(spec).audio is True
+
+
+def test_composite_muted_elements_assert_no_audio() -> None:
+    spec = _film_spec([60])
+    spec["scenes"].append(
+        {
+            "type": "composite",
+            "frames": 90,
+            "elements": [
+                {"kind": "video", "src": "k/v.mp4", "source_start": 0.0,
+                 "source_end": 3.0, "keep_audio": False},
+                {"kind": "text", "lines": ["x"], "at": 0.0},
+            ],
+        }
+    )
+    assert probe_expectation_for(spec).audio is None
+
+
+def test_composite_absolutize_resolves_element_src() -> None:
+    """The render seam absolutizes composite elements' src keys (the
+    ui.image law's twin); text elements carry no src."""
+    from app.pipeline.rendering import _absolutize_film
+
+    spec = _film_spec([60])
+    spec["scenes"].append(
+        {
+            "type": "composite",
+            "frames": 90,
+            "elements": [
+                {"kind": "video", "src": "k/v.mp4", "source_start": 0.0,
+                 "source_end": 3.0},
+                {"kind": "image", "src": "/api/v1/assets/x/file"},
+                {"kind": "text", "lines": ["x"], "at": 0.0},
+            ],
+        }
+    )
+    out = _absolutize_film(spec)
+    elements = out["scenes"][1]["elements"]
+    assert elements[0]["src"].startswith("http")  # bare key → public URL
+    assert elements[1]["src"].startswith("http")  # /api/ → api base
+    assert "/api/v1/assets/x/file" in elements[1]["src"]
+    assert "src" not in elements[2]

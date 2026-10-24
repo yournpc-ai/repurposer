@@ -28,7 +28,6 @@ contract:
 import pytest
 from pydantic import ValidationError
 
-from app.chat.perception import PERCEPTION_TOOLS
 from app.chat.intent import _speech_language_line
 from app.chat.service import _match_option
 from app.chat.trigger_turn import (
@@ -70,19 +69,30 @@ def test_whitelist_is_the_proactivity_boundary() -> None:
 
 
 def test_tool_set_is_the_reads_plus_one_terminal() -> None:
+    from app.chat.turn_tools import CHAT_READ_TOOLS
+
     by_name = {t.name: t for t in trigger_agent.tools}
-    assert set(by_name) == {"wrap_up", *PERCEPTION_TOOLS}
+    # The trigger set filters CHAT_READ_TOOLS (import-time built): the
+    # deployment-gated media discovery read (list_project_media) rides only
+    # when the film edit capability's gate was ON at process start — the
+    # expectation keys off the same source, never a frozen registry dump.
+    expected = {
+        "wrap_up",
+        *(t.name for t in CHAT_READ_TOOLS if t.name != "design_storyboard"),
+    }
+    assert set(by_name) == expected
     assert by_name["wrap_up"].terminal
     assert all(
-        by_name[name].terminal is False for name in PERCEPTION_TOOLS
+        by_name[name].terminal is False for name in expected if name != "wrap_up"
     )
     # 报价 = fold: the bound plus the reads-plus-one roster stays far under
     # the hallucination line (简报 §4 挂账① — Agno 的 20-tool 线). The budget
     # tracks the family's REGISTERED growth (16 reads + wrap_up after the
-    # web pair get_web_page/search_web, 2026-10-15) — bump it deliberately,
+    # web pair get_web_page/search_web, 2026-10-15; +1 with the gated media
+    # discovery read riding in gate-ON processes) — bump it deliberately,
     # never silently.
     assert trigger_agent.max_iterations == 6
-    assert len(trigger_agent.tools) <= 17
+    assert len(trigger_agent.tools) <= 18
 
 
 class TestWrapUpArgs:
@@ -175,7 +185,7 @@ class TestWrapUpGuardrail:
 
 class TestFailureFactLines:
     """The FAILURE FACTS pure core (ADR-135): one line per failed VERDICT
-    step (non-fanout — the run verdict's own predicate), the baked
+    step (including render/upload fan-out), the baked
     user-facing error line carried verbatim (never re-derived), bounded
     by the cap."""
 
@@ -195,14 +205,15 @@ class TestFailureFactLines:
             "有一句旁白调速后仍然放不下它的场景——让我重新设计分镜,把这句改短一点。"
         ]
 
-    def test_fanout_failures_never_enter_the_block(self) -> None:
-        # 判决同一谓词: fanout render failure = per-output canvas fact,
-        # never the run's cause.
+    def test_render_failures_enter_the_block(self) -> None:
+        # A render/upload failure is also the run's delivery failure.
         steps = [
             WorkflowStep(kind="render_clip", status="failed", error="视频渲染失败,请重试"),
             WorkflowStep(kind="dub", status="done"),
         ]
-        assert _failure_fact_lines(steps, frozenset({"render_clip"})) == []
+        assert _failure_fact_lines(steps, frozenset({"render_clip"})) == [
+            "FAILED STEP: render_clip — 视频渲染失败,请重试"
+        ]
 
     def test_missing_error_reads_honestly_and_the_cap_binds(self) -> None:
         steps = [
@@ -402,3 +413,66 @@ def test_pending_plan_silence_reads_is_pending_plan() -> None:
     )
     assert is_pending_plan(generic) is False
     assert is_pending_plan(None) is False
+
+
+# ---- 交付收敛 (7276ef13 ④ 修复批 B) ----------------------------------------------
+#
+# run_completed rides its own READLESS agent: the deterministic DELIVERY
+# FACTS block is the delivery's whole record, the review is written ONCE
+# and closed — the incident's pre-read narration prelude (「先读一下这支短片
+# 的当前分镜…」 merged ahead of the terminal speech) has no seat when no
+# read tool exists. run_failed / craft_decompiled keep the read-bearing
+# agent (their reads are the honesty base — nothing pre-assembled exists
+# for a failure's cause or a skeleton's gaps).
+
+
+def test_delivery_agent_holds_only_the_terminal() -> None:
+    """The run_completed roster: wrap_up alone (terminal), thrice-bounded —
+    a read-bearing delivery opened with process narration; with no reads
+    on the roster that prelude is structurally impossible."""
+    from app.chat.trigger_turn import delivery_agent
+
+    assert delivery_agent.name == "trigger_delivery"
+    assert [t.name for t in delivery_agent.tools] == ["wrap_up"]
+    assert delivery_agent.tools[0].terminal
+    assert delivery_agent.max_iterations == 3
+    # The read-bearing agent is untouched (the failure/skeleton turns keep
+    # their eyes — locked by test_tool_set_is_the_reads_plus_one_terminal).
+    assert any(t.name == "get_run_status" for t in trigger_agent.tools)
+
+
+def test_delivery_system_prompt_never_invites_a_read() -> None:
+    """run_completed has its own readless, outcome-branched prompt. The
+    failure/craft prompt keeps its read invitations instead of carrying a
+    second copy of the delivery law."""
+    from app.chat.prompts import delivery_system, trigger_system
+
+    delivery = delivery_system()
+    general = trigger_system()
+    for tool_name in ("get_output_spec", "get_run_status", "get_craft_skeleton"):
+        assert tool_name not in delivery
+    for tool_name in ("get_run_status", "get_craft_skeleton"):
+        assert tool_name in general
+    assert "READ TOOLS" in general
+    assert "READ TOOLS" not in delivery
+    assert "latest tool and run outcome" in delivery
+    assert "selects exactly ONE branch" in delivery
+    for branch in ("delivery=failed", "delivery=partial", "delivery=delivered"):
+        assert branch in delivery
+    assert "run_completed" not in general
+
+
+def test_delivery_event_line_carries_the_latest_outcome() -> None:
+    """The event line pairs conversation context with deterministic latest
+    tool/run facts and one matching reply branch. An empty block (a legacy
+    run / the fire-and-forget degrade) says so honestly."""
+    from app.chat.trigger_turn import _delivery_event_line
+
+    line = _delivery_event_line("run-1", ["LANDED film: x", "GAP: y"])
+    assert "DELIVERY FACTS" in line
+    assert "LANDED film: x" in line and "GAP: y" in line
+    assert "wrap_up" in line
+    assert "Review what it produced" not in line  # the retired read order
+    legacy = _delivery_event_line("run-2", [])
+    assert "never invent" in legacy
+    assert "DELIVERY FACTS" not in legacy

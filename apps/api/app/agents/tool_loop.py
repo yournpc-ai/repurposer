@@ -92,12 +92,19 @@ class ChatTool:
     call (``start_run``). ``terminal``: a terminal tool's accepted call ends
     the turn (终态工具一调即停); a non-terminal tool (the perception family's
     reads) returns a ``ToolObservation`` and the loop iterates.
+
+    ``wire_view``: an optional deployment-gate hook applied at spec time —
+    it rewrites the (description, parameters) pair the MODEL sees, so a
+    capability slice keyed to a deployment flag never reaches the wire while
+    the flag is off (the tool's execute branch refuses the same slice
+    independently — declaration and enforcement gate together).
     """
 
     name: str
     description: str
     params_model: type[BaseModel] | None
     terminal: bool = True
+    wire_view: Callable[[str, dict], tuple[str, dict]] | None = None
 
 
 def tool_spec(tool: ChatTool) -> dict:
@@ -108,14 +115,64 @@ def tool_spec(tool: ChatTool) -> dict:
         if tool.params_model is not None
         else {"type": "object", "properties": {}}
     )
+    description = tool.description
+    if tool.wire_view is not None:
+        description, parameters = tool.wire_view(description, parameters)
     return {
         "type": "function",
         "function": {
             "name": tool.name,
-            "description": tool.description,
+            "description": description,
             "parameters": parameters,
         },
     }
+
+
+def _defs_refs(node: object) -> set[str]:
+    """Every ``#/$defs/<name>`` reference reachable from a schema node."""
+    found: set[str] = set()
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "$ref" and isinstance(value, str) and value.startswith("#/$defs/"):
+                found.add(value.rsplit("/", 1)[-1])
+            else:
+                found |= _defs_refs(value)
+    elif isinstance(node, list):
+        for value in node:
+            found |= _defs_refs(value)
+    return found
+
+
+def prune_wire_parameters(parameters: dict, keys: set[str]) -> dict:
+    """A deployment gate's schema pruning (the wire_view hooks' shared
+    seat): drop the named properties (+ their ``required`` entries) from a
+    deep copy, then garbage-collect orphan ``$defs`` so the gated slice's
+    vocabulary (e.g. the edit op models) never leaks onto the wire."""
+    import copy
+
+    pruned = copy.deepcopy(parameters)
+    properties = pruned.get("properties")
+    if isinstance(properties, dict):
+        for key in keys:
+            properties.pop(key, None)
+    required = pruned.get("required")
+    if isinstance(required, list):
+        pruned["required"] = [k for k in required if k not in keys]
+    defs = pruned.get("$defs")
+    if isinstance(defs, dict):
+        body = {k: v for k, v in pruned.items() if k != "$defs"}
+        needed = _defs_refs(body)
+        frontier = list(needed)
+        while frontier:
+            name = frontier.pop()
+            for ref in _defs_refs(defs.get(name)):
+                if ref not in needed:
+                    needed.add(ref)
+                    frontier.append(ref)
+        pruned["$defs"] = {k: v for k, v in defs.items() if k in needed}
+        if not pruned["$defs"]:
+            del pruned["$defs"]
+    return pruned
 
 
 # 言语账本 (T2b) 见 ``call_loop``; ADR-085 的 checkpoint 通道与其分家——
@@ -127,9 +184,10 @@ MAX_CHECKPOINTS_PER_TURN = 4  # ADR-109 §2: 节奏护栏（防逐调用啰嗦�
 class LoopResult:
     """One turn's loop outcome.
 
-    ``tool_name=None`` + ``exhausted=False`` = the bare final reply (the
-    model spoke without calling a tool — read as the answer call, the
-    read-tolerant floor). ``exhausted=True`` = the iteration cap was hit
+    ``tool_name=None`` + ``exhausted=False`` + no ``ended_by`` /
+    ``no_progress_tool`` = the bare final reply (the model spoke without
+    calling a tool — read as the answer call, the read-tolerant floor).
+    ``exhausted=True`` = the iteration cap was hit
     with every call rejected — the caller degrades honestly (the cannot-do
     line or the code-composed topic question), never a fabricated success.
     ``calls`` = the tool sequence trace (the scenario suite's T4 assertion
@@ -142,6 +200,31 @@ class LoopResult:
     iterations: int
     calls: list[str] = field(default_factory=list)
     exhausted: bool = False
+    # Set when the loop ended on an execute's TerminalRefusal (below): the
+    # refusing tool's name. The caller maps it to its honest close — the
+    # loop itself never words user-facing meaning.
+    ended_by: str | None = None
+    # A caller-supplied rejection policy stopped a repeated, non-recovering
+    # tool call before max_iterations. This is distinct from both an execute
+    # TerminalRefusal and budget exhaustion so the chat layer can close with
+    # the truthful preservation/failure semantics.
+    no_progress_tool: str | None = None
+
+
+@dataclass
+class TerminalRefusal:
+    """An execute's deterministic TURN-ENDING refusal: the call is a
+    REJECTION (the loop emits the ToolRejected fact with the real
+    iteration + duration — speech retracts, the half-started activity
+    cancels) AND the loop ends here, with no further model iteration.
+
+    Seat law: only an entry that is STRUCTURALLY unrecoverable this turn
+    (the film design entry's begin latch — the hold is a cross-request
+    fact this turn must not poll) may end the loop this way; the rejection
+    echo's "one more iteration" would be a lie for it. A refused call
+    whose repair is possible keeps riding the plain feedback string."""
+
+    reason: str
 
 
 def _loop_echo(feedback: str) -> str:
@@ -195,10 +278,44 @@ class ToolObservation:
 
     ``ok`` (ADR-102 §5): False = the read's target is unreadable (the
     material failed processing) — the read's activity frame settles FAILED
-    with the honest failed-form key, never the done mirror's lie."""
+    with the honest failed-form key, never the done mirror's lie.
+
+    ``images`` (film 读取座, R3): compressed material screenshots the read
+    attaches for the model's creative judgment — MediaInput-shaped
+    (``type``/``data_url``/``caption``; typed loosely here because the
+    kernel never imports the domain layer, check_gates 5a), each caption
+    binding the image to its asset/scene references. They ride the SAME
+    tool message as content parts (the loop's observation seat projects
+    them); budget enforcement (count/size/over-budget honesty) is the
+    EXECUTE's job — by the time an observation exists, its image set is
+    already within budget (a breach would have been an explicit text error
+    instead)."""
 
     text: str
     ok: bool = True
+    images: tuple[Any, ...] = ()
+
+
+def _observation_wire_content(observation: ToolObservation) -> str | list[dict]:
+    """The role:tool message's content (ONE wire seat — both chat paths ride
+    this same loop). Plain text when the read carries no images (the
+    historical shape, byte-identical); with images, the standard content
+    parts: the observation text first, then per image its ``image_url``
+    part followed by its caption text part (the agents/base.py media
+    pairing law), so the model can bind each screenshot to its asset/scene
+    references. The MiniMax client passes messages verbatim — the parts
+    survive to the wire; the provider's acceptance of tool-role image
+    parts is the R3 spike's question (the synthetic-user fallback is the
+    designed answer if it refuses)."""
+    if not observation.images:
+        return observation.text
+    parts: list[dict] = [{"type": "text", "text": observation.text}]
+    for image in observation.images:
+        part_key = f"{image.type}_url"
+        parts.append({"type": part_key, part_key: {"url": image.data_url}})
+        if image.caption:
+            parts.append({"type": "text", "text": image.caption})
+    return parts
 
 
 # --- Internal loop events (ADR-087 §3 Phase 2, U1 裁定 2026-09-19) ---
@@ -263,9 +380,20 @@ class ReadExecuting:
     the persisted row's ``at``/``duration_ms`` measure LLM generation time
     instead of the real read work. Emitted after the checkpoint seat and
     before ``execute`` — sequential same-process stamps, never a clock
-    race."""
+    race.
+
+    ``params`` carries the call's VALIDATED params (None for a params-less
+    tool) — the one fact the projection needs to tell a tool's VARIANTS
+    apart at execute entry (design_storyboard's compose vs patch split
+    reads ``edits`` off it). name_known can never carry this bit: the name
+    surfaces mid-stream while the arguments are still arriving, so a
+    variant claimed there would be a guess. The kernel still reports WHAT
+    HAPPENED only — the params→user-vocabulary translation is entirely the
+    projector's, and activity frames never carry params (the wire
+    whitelist is unchanged)."""
 
     tool_name: str
+    params: BaseModel | None = None
 
 
 @dataclass(frozen=True)
@@ -279,6 +407,10 @@ class LoopExhausted:
 
 LoopEvent = ToolRejected | TerminalAccepted | ReadAccepted | ReadExecuting | LoopExhausted
 
+# A synchronous, caller-owned stop decision. The kernel supplies the real
+# rejection and the preceding history; it never imports chat/Film policy.
+RejectionStop = Callable[[ToolRejected, tuple[ToolRejected, ...]], bool]
+
 
 # Execute signature: (tool name, validated params, the turn's composed speech
 # so far) → None when a TERMINAL call is ACCEPTED (the stop), the structured
@@ -290,7 +422,8 @@ LoopEvent = ToolRejected | TerminalAccepted | ReadAccepted | ReadExecuting | Loo
 # the ACCUMULATED one: words spoken before a kept read are part of the reply.
 # All side effects belong to the executor; the loop writes nothing.
 LoopExecute = Callable[
-    [str, BaseModel | None, str], Awaitable[str | None | ToolObservation]
+    [str, BaseModel | None, str],
+    Awaitable[str | None | ToolObservation | TerminalRefusal],
 ]
 
 
@@ -344,15 +477,18 @@ class ToolLoopAgent:
         on_repair: _Hook | None = None,
         on_checkpoint: _Hook | None = None,
         on_loop_event: _Hook | None = None,
+        should_stop_rejection: RejectionStop | None = None,
         **ctx: Any,
     ) -> LoopResult:
         """Run the bounded loop: assemble → render → [generate_with_tools →
         execute → feedback/observation] × at most ``max_iterations``.
 
         ``execute`` returns None to accept a TERMINAL call (the stop), a
-        feedback string to reject (echoed, one more iteration), or a
+        feedback string to reject (echoed, one more iteration), a
         ToolObservation to accept a NON-terminal read (the loop continues
-        with the observation on the wire). The hooks:
+        with the observation on the wire), or a TerminalRefusal to reject
+        AND end the loop on the spot (an entry unrecoverable this turn —
+        ``LoopResult.ended_by`` names the refusing tool). The hooks:
 
         - ``on_delta``: prose fragments — iteration 0 only (a rejected
           iteration's speech is replaced speech; later iterations run quiet
@@ -400,6 +536,12 @@ class ToolLoopAgent:
           (retry-after-rejection / continuation-after-read) already ride
           ``on_repair`` / ``ReadAccepted`` — an event without a consumer is
           a lie waiting to drift.
+        - ``should_stop_rejection``: an optional synchronous, caller-owned
+          policy receiving the current ``ToolRejected`` and prior rejection
+          facts. It may stop a non-recovering retry before ``max_iterations``;
+          the result then carries ``no_progress_tool`` (not ``exhausted`` and
+          not ``ended_by``), emits no fake ``LoopExhausted``, and makes no
+          further model call. The chat caller owns the user-facing close.
         """
         capabilities = getattr(self.client, "capabilities", None)
         if capabilities is None or not capabilities.supports_native_tools:
@@ -451,6 +593,8 @@ class ToolLoopAgent:
                 outcome=(
                     "exhausted"
                     if result.exhausted
+                    else f"no_progress:{result.no_progress_tool}"
+                    if result.no_progress_tool is not None
                     else result.tool_name or "bare_reply"
                 ),
                 iterations=result.iterations,
@@ -467,6 +611,51 @@ class ToolLoopAgent:
         # paths below, cleared at each iteration's top — on_repair marks a
         # rejection's retry, never an accepted read's continuation.
         prev_rejected = False
+        rejections: list[ToolRejected] = []
+
+        async def _reject(
+            event: ToolRejected, *, feedback: str, iteration: int
+        ) -> LoopResult | None:
+            """Project one rejection, then either retry with feedback or stop.
+
+            The optional policy is caller-owned and synchronous. Returning a
+            result here never invents speech: the already-emitted rejection
+            retracts the failed iteration, and the chat finish seat writes
+            the honest terminal response.
+            """
+            nonlocal prev_rejected
+            await _emit(on_loop_event, event)
+            previous = tuple(rejections)
+            rejections.append(event)
+            if (
+                event.tool_name is not None
+                and should_stop_rejection is not None
+                and should_stop_rejection(event, previous)
+            ):
+                logger.info(
+                    "tool_loop_no_progress",
+                    agent=self.name,
+                    tool=event.tool_name,
+                    iteration=iteration,
+                    kind=event.kind,
+                )
+                return _finish(
+                    LoopResult(
+                        prose="",
+                        tool_name=None,
+                        params=None,
+                        iterations=iteration + 1,
+                        calls=calls,
+                        no_progress_tool=event.tool_name,
+                    )
+                )
+            base_messages[1] = {
+                "role": "user",
+                "content": user_prompt + _loop_echo(feedback),
+            }
+            prev_rejected = True
+            return None
+
         for iteration in range(self.max_iterations):
             if iteration and prev_rejected and on_repair is not None:
                 await _emit(on_repair)
@@ -507,8 +696,7 @@ class ToolLoopAgent:
                 )
                 # The name may never have become reliably known (the stream
                 # can sever inside the arguments) — None is the honest fact.
-                await _emit(
-                    on_loop_event,
+                stopped = await _reject(
                     ToolRejected(
                         kind="schema_truncation",
                         tool_name=None,
@@ -516,12 +704,11 @@ class ToolLoopAgent:
                         detail=str(e)[:200],
                         duration_ms=int((time.monotonic() - iteration_started) * 1000),
                     ),
+                    feedback=str(e),
+                    iteration=iteration,
                 )
-                base_messages[1] = {
-                    "role": "user",
-                    "content": user_prompt + _loop_echo(str(e)),
-                }
-                prev_rejected = True
+                if stopped is not None:
+                    return stopped
                 continue
             # Misplaced speech (an args-level "prose" habit key) reads as
             # speech when the content channel stayed empty (读容忍, below).
@@ -542,8 +729,7 @@ class ToolLoopAgent:
                         iteration=iteration,
                         kind="empty_bare_reply",
                     )
-                    await _emit(
-                        on_loop_event,
+                    stopped = await _reject(
                         ToolRejected(
                             kind="empty_bare_reply",
                             tool_name=None,
@@ -551,17 +737,15 @@ class ToolLoopAgent:
                             detail=None,
                             duration_ms=int((time.monotonic() - iteration_started) * 1000),
                         ),
-                    )
-                    base_messages[1] = {
-                        "role": "user",
-                        "content": user_prompt
-                        + _loop_echo(
+                        feedback=(
                             "your reply came back empty — nothing said, no tool "
                             "called. Answer the message now: speak the reply as "
                             "your text, or call exactly one tool."
                         ),
-                    }
-                    prev_rejected = True
+                        iteration=iteration,
+                    )
+                    if stopped is not None:
+                        return stopped
                     continue
                 # Bare final reply — the read-tolerant answer call (any
                 # kept read-iteration speech composes in front of it).
@@ -593,8 +777,7 @@ class ToolLoopAgent:
                     kind="unknown_tool",
                     tool=call.name,
                 )
-                await _emit(
-                    on_loop_event,
+                stopped = await _reject(
                     ToolRejected(
                         kind="unknown_tool",
                         tool_name=call.name,
@@ -602,16 +785,14 @@ class ToolLoopAgent:
                         detail=None,
                         duration_ms=int((time.monotonic() - iteration_started) * 1000),
                     ),
-                )
-                base_messages[1] = {
-                    "role": "user",
-                    "content": user_prompt
-                    + _loop_echo(
+                    feedback=(
                         f"unknown tool {call.name!r} — call exactly one of: "
                         + ", ".join(t.name for t in self.tools)
                     ),
-                }
-                prev_rejected = True
+                    iteration=iteration,
+                )
+                if stopped is not None:
+                    return stopped
                 continue
             # 读容忍 at the loop boundary (打字机律牙①'s loop form): the
             # retired wire habits drop silently — "type"/"kind" naming keys
@@ -638,8 +819,7 @@ class ToolLoopAgent:
                         tool=call.name,
                         detail=str(e)[:200],
                     )
-                    await _emit(
-                        on_loop_event,
+                    stopped = await _reject(
                         ToolRejected(
                             kind="params_validation",
                             tool_name=call.name,
@@ -647,12 +827,11 @@ class ToolLoopAgent:
                             detail=str(e)[:200],
                             duration_ms=int((time.monotonic() - iteration_started) * 1000),
                         ),
+                        feedback=str(e),
+                        iteration=iteration,
                     )
-                    base_messages[1] = {
-                        "role": "user",
-                        "content": user_prompt + _loop_echo(str(e)),
-                    }
-                    prev_rejected = True
+                    if stopped is not None:
+                        return stopped
                     continue
             # The read speech's routing is decided BEFORE execution (发射座
             # 前移, ADR-104 发射时点修订): a read was ACCEPTED the moment its
@@ -720,7 +899,7 @@ class ToolLoopAgent:
                 # waiter row is appended (and persisted) BEFORE the
                 # activity row's birth: 服务员话 → 读活动 → 读后回复 is
                 # array order, never a clock race.
-                await _emit(on_loop_event, ReadExecuting(tool_name=call.name))
+                await _emit(on_loop_event, ReadExecuting(tool_name=call.name, params=params))
             outcome = await execute(call.name, params, speech)
             if isinstance(outcome, ToolObservation):
                 if tool.terminal:
@@ -759,11 +938,46 @@ class ToolLoopAgent:
                         "role": "tool",
                         "tool_call_id": call_id,
                         "name": call.name,
-                        "content": outcome.text,
+                        "content": _observation_wire_content(outcome),
                     }
                 )
                 await _emit(on_loop_event, ReadAccepted(tool_name=call.name, ok=outcome.ok))
                 continue
+            if isinstance(outcome, TerminalRefusal):
+                # The deterministic turn-ending refusal: the REJECTION facts
+                # all ride the existing seat (ToolRejected — the speech
+                # retracts, the half-started activity cancels), then the
+                # loop ends instead of offering the echo's next iteration.
+                logger.info(
+                    "tool_loop_rejection",
+                    agent=self.name,
+                    iteration=iteration,
+                    kind="execute_terminal_refusal",
+                    tool=call.name,
+                    detail=outcome.reason[:200],
+                )
+                await _emit(
+                    on_loop_event,
+                    ToolRejected(
+                        kind="execute_guardrail",
+                        tool_name=call.name,
+                        iteration=iteration,
+                        detail=outcome.reason[:200],
+                        duration_ms=int(
+                            (time.monotonic() - iteration_started) * 1000
+                        ),
+                    ),
+                )
+                return _finish(
+                    LoopResult(
+                        prose="",
+                        tool_name=None,
+                        params=None,
+                        iterations=iteration + 1,
+                        calls=calls,
+                        ended_by=call.name,
+                    )
+                )
             if outcome is None:
                 if not tool.terminal:
                     raise RuntimeError(
@@ -789,8 +1003,7 @@ class ToolLoopAgent:
                 tool=call.name,
                 detail=outcome[:200],
             )
-            await _emit(
-                on_loop_event,
+            stopped = await _reject(
                 ToolRejected(
                     kind="execute_guardrail",
                     tool_name=call.name,
@@ -798,12 +1011,11 @@ class ToolLoopAgent:
                     detail=outcome[:200],
                     duration_ms=int((time.monotonic() - iteration_started) * 1000),
                 ),
+                feedback=outcome,
+                iteration=iteration,
             )
-            base_messages[1] = {
-                "role": "user",
-                "content": user_prompt + _loop_echo(outcome),
-            }
-            prev_rejected = True
+            if stopped is not None:
+                return stopped
         await _emit(on_loop_event, LoopExhausted(iterations=self.max_iterations))
         return _finish(
             LoopResult(

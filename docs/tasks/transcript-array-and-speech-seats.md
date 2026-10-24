@@ -1,87 +1,44 @@
-# Transcript 数组化 + 言语座位通用化 — 施工合同
+# Transcript 数组与言语座位——剩余验收合同
 
-> Status: **施工完成待验收（2026-10-07）**。W1 数组地基（`e01f7b9` seq + 计数器表 / `6aea321` 每帧一行 + SSE row 镜像）· W3 前端单渲染路径 + 折叠行（`678e2a2`）· W4 内核（`d5b924b` checkpoint 通用化 + cap 4）+ prompt 面（`cd35491` 相位叙事律 / echo 可见性戒律 / 模式承诺句 + TaskItem.params `''→{}` 读容忍）· W5 迁移脚本（`scripts/migrate_activity_log_rows.py`，dev 库已实证：旧聚合行清零、seq 重编 1..N、计数器对齐、取证母本会话 12bb1f29 物化正确）+ S25 回归座（`scripts/chat_scenarios.py`，行序 / wire 镜像一致 / 回放恒等 / 诚实 transcript 形态锁）+ CHAT_ARCHITECTURE §8.6 排序律→数组位置律改写。**待用户自跑验收**（合同 §5）：prompt_gate 全探针 / chat_scenarios 全量 / 取证母本 live 回放三件套。验收通过后本简报归 `docs/archive/tasks-done/`。
-> **candidates_log 结论（W1 论证保留分支）**：保留聚合行，不数组行化。取证：候选卡的消费面 = 单卡数据链（set 出生 + selection 重绘，卡片在原地 repaint，是「面」不是时间线行；chat 决策永不成节点同族）；其数组位偏差（live 中回合中途出生 vs 回放锚在回合末的聚合行位）是一回合内的秒级差，且卡片的回放位置在数组化前后一致（都锚聚合行）——数组化它只会把一张卡拆成多行，收益为零、折叠语义变浑。
-> 母法 = `docs/DECISIONS.md` ADR-108（数组化）+ ADR-109（言语座位）；行为律全文 = `docs/CHAT_ARCHITECTURE.md`（§8.6 已随批改写为数组位置律 + checkpoint 通用座位 + 折叠规格）。
-> 取证母本 = 项目 `3e333147-35e0-41ea-8c80-828d41c71893`（2026-10-07 live 取证，四事故：活动行消失 / 活动行刷屏 / 开工句顺序错乱 / echo 指向不可见工作空间）。
-> **挂账（parity 非回归）**：trigger 回合（`/event/sync` 类系统触发写口）不产出 activity 行——与批前行为一致，但基础设施（seq + 每帧一行）现已就位，下次排查勿重新取证。
-> **验收期缺陷修复（2026-10-08，`d4a986b`）**：新生会话首回合 seq 分配 FK 违反（`alloc_message_seq` 独立短事务不可见未提交的父行）——`_get_or_create_project_conversation` 出生时打 `db.info` 标记，首回合分配骑会话内事务，commit 后自动回独立短事务路径。dev 库实证：首回合 seq 1/2 + counter 对齐，第二回合独立路径正常。
+> Status: 代码层已落；prompt_gate、当前矩阵、目标环境迁移与真实回放仍开放。长期规则归 ADR-108/109/110 与 CHAT_ARCHITECTURE §8；本文只保留迁移、验证和未决差异。
 
-## 1. Product Goal
+## 1. 当前承重规则
 
-消息流 = append-only 类型化数组，持久化顺序即渲染顺序（对标 Claude Code / Codex 会话模型）；言语在工具边界的公共座位上按相位节奏出站。用户可见结果：① 看过的活动行永不消失；② 开工句/相位句永远出现在它该在的位置（读之前）；③ 连续同类活动行折叠为一行；④ echo 永不指向用户看不见的面。
+- 每个 conversation 的 `messages.seq` 单调分配；持久化数组顺序就是渲染顺序。append/open 定位置，update-in-place 改状态，live 与 replay 共用 reducer 语义；不得再用时间戳交织或锚点推导重排。
+- seq 允许有间隙，不要求永久连续。**首回合事务例外**：conversation 在当前未提交事务内出生时，第一条消息的 seq 必须在该事务内分配；后续分配回到专用计数器的独立短事务。
+- checkpoint 适用于有散文且参数合法的非终态调用，在 post-validation / pre-execute 发射；cap 4 只是节奏护栏，不是资格白名单。checkpoint 是 earned，不是配额；纯回答可以结构性为零。
+- 零 delta 散文只能在信封到达后追加，再经 typewriter 排干，数组位置不变；iteration≥1 的非流式结果只经 checkpoint/settle 出站。
+- WorkSegment 负责当前聚合。failed 行保留诚实告警；cancelled 行留作审计数据但从可见投影退役，不生成空 Worked 行。
+- echo 只能指向当前真实可见的面；plan-ready reveal 与 chat-only 布局按现行画布规则处理。
 
-## 2. Current State（核验于 2026-10-07 HEAD，行号会漂移，开工前重新定位）
+## 2. 未决形态差异
 
-- 活动行持久化 = 每回合一行聚合消息 `intent.type='activity_log'`（`app/chat/routes.py` `_persist_activity_log` / `app/chat/service.py` `record_activity_log`，once-only per ref 去重），帧在 `app/chat/activity.py` `ActivityProjector` 投影，SSE 经 `assistant.activity` 帧。
-- 前端渲染 = 运行时重算交织：`apps/web/src/lib/chatTimeline.ts:78-93`（walk key 混排）、`apps/web/src/components/chat/historyReplay.ts:141-177`（activity_log 解析，last-wins 只演最新回合）、`apps/web/src/components/chat/ChatDock.tsx`（`logDismissed` 闩 ~2441 / `latestLog` ~3672 / `finalizePreview` 重锚 ~2557 / `paceSettledProse` ~2571）。
-- checkpoint 通道：`app/agents/tool_loop.py:677-727`（`checkpoint_route` 白名单判定 + `MAX_CHECKPOINTS_PER_TURN=2` ~L127）；资格注册在 `app/chat/perception/__init__.py`（`checkpoint_eligible=True` 仅 `get_understanding`/`get_asset` 两席）；runner 座 `plan_turn.py` / `propose_turn.py` 的 `on_checkpoint_after_flush`；落库 `service.py` `_checkpoint_callback`，SSE `routes.py` 转发携 `created_at`。
-- 言语提交协议（ADR-099 §7）：`app/chat/deferred_frames.py`——本批不动。
-- `PresentPlanArgs` 校验座位：`tool_loop.py` params_validation 拒绝路径（~L651）。
+ADR-108 的“每个可见元素都是数组行”与当前 `candidates_log` 聚合行例外尚未统一。当前传输是 `assistant.candidates` SSE 帧族；turn settle 后把本回合 events 合写成一行 `intent.type="candidates_log"`，由 `historyReplay` 折叠成候选卡、原位更新同集并重绘选择。需要明确 adjudication：聚合行是数组合约的正式例外，还是应改成更细的持久行；不得静默写成豁免，也不得为数组化拆坏单卡 repaint 或制造空 selection 行。该决定不新增候选查询端点。
 
-## 3. Work Items
+验收时必须覆盖 set、同集幂等重发、纯 selection、revise 替换、失败回合零持久化、answer-turn 六类载荷，核对：live/replay 的数组位置一致；候选卡与前后散文/Activity/WorkSegment 的相对顺序一致；selection-only 不产生空行；失败回合客户端回滚与服务端记录一致；跨回合 replay 后仍能重选。若改持久形状，先保留旧 `candidates_log` 读容忍，再更新 ADR-108、CHAT §8.9 与本合同。
 
-### W1 — 数组地基：`seq` + activity 行即数组行（服务端写口）
+trigger `/event/sync` 回合目前不产 Activity 行，作为 parity 观察保留；它不是自动授权的新实施项，需先确认是否影响当前用户旅程。
 
-- `messages` 加 `seq`（per-conversation 单调 bigint，Alembic 迁移 + 存量按 `created_at` 回填；新写口单写者分配——chat 回合已序列化，trigger/answer 路径同 writer 纪律）。
-- activity 投影器改双写时点：open 时 `row.append`（`at` = execute 入口时刻，即 ADR-104 ReadExecuting 重锚点），settle/failed/cancelled 时 `row.update` 同行（`duration_ms` + 终态）。行形态 = `intent.type='activity'` 单帧行（kind/key/status/at/duration_ms/activity_id）。
-- `_persist_activity_log` 聚合行形态退役（删写口；旧数据由 W5 迁移脚本物化）。
-- 失败/中止回合：已 append 的 activity/checkpoint 行照常提交（不随回合回滚），终态 failed/cancelled 原地 update。
-- candidates_log 同法改造（数组行化）或论证保留——开工时先取证其消费面再定，结论写入简报 Status。
+## 3. 迁移与回放验收
 
-### W2 — SSE 镜像数组操作
+1. 在目标环境先 dry-run `migrate_activity_log_rows.py`，确认目标与影响，再获授权执行；验证计数器对齐、真实迁移后回放和首回合/后续回合两种 seq 分配路径。生产验证前不得删除迁移脚本。
+2. 在项目 `3e333147-35e0-41ea-8c80-828d41c71893` 重跑“竖屏切片”形态：读前散文先于读行；硬刷新/切 tab 后逐行一致；WorkSegment 可展开。
+3. failed 行刷新后仍诚实可见；cancelled 行只留审计，不出现在可见投影，也不产生空 Worked。
+4. 新 conversation 首回合与后续回合分别验证 seq 分配、计数器对齐和 FK 安全。
+5. 按 §2 的六类 Candidate 载荷验证聚合行位置、幂等、失败回滚与 answer-turn parity；先完成“正式例外还是改形”的裁决，再把结论写回 ADR/CHAT，不能仅以页面看起来一致关闭。
 
-- 帧形态收编为 `row.append` / `row.update` / `row.delta` / `row.settle`（可在现有 `assistant.*` 帧族上改造，不必另起事件名——开工时盘点现有帧，能承载就承载）。
-- checkpoint / activity / 散文首 delta / candidates 全部走同一数组语义：append 定位置，update 改内容。
+## 4. Checkpoint 五类路由覆盖
 
-### W3 — 前端单渲染路径 + 折叠行
+将以下检查归属当前承重纯函数套件，并保留 `tool_loop_checkpoint` / `tool_loop_checkpoint_capped` 计数读数：
 
-- 历史回放 = `ORDER BY seq` 直渲；`chatTimeline.ts` 的 walk key 混排、`historyReplay.ts` 的 activity_log 解析与 last-wins、ChatDock 的 `logDismissed`/`latestLog`/`finalizePreview` 重锚**整层删除**。
-- live SSE 消费与回放共用同一 reducer（数组 append/update/delta 语义）；散文气泡首 delta 到达即占位 append，settle 原地 finalize，位置不动。
-- 折叠渲染（呈现层纯函数）：连续同 kind completed activity 行折叠为「已检索转写 ×N · 共 Xs」聚合行，点击展开明细；进行态行不折叠（StatusLine 一座两行律不变）。
-- i18n en/zh 双写折叠行文案。
+1. 非终态 + 非空散文 + 合法参数 + 有 checkpoint channel：post-validation / pre-execute 发射，execute 不重复携带该段。
+2. 终态调用：散文只走 settled envelope，永不走 checkpoint。
+3. 参数校验拒绝：不发射 checkpoint，不执行工具，不留下 dock/言语残片。
+4. 无 checkpoint channel 的一次性路径：散文保留在 ledger，最终 envelope 不丢字、不重复。
+5. cap 已达：不再发射，记录 capped 计数，被截散文不合并回 ledger 造成延迟复读。
 
-### W4 — 言语座位通用化 + echo 戒律（loop 内核 + prompt 面）
+单读直出可以结构性零 checkpoint；只有实测系统性漏发“新且与用户理解相关”的 earned checkpoints 才重审路由，不能为追求计数放宽资格。
 
-- `checkpoint_route` 删白名单：任何非终态工具 + 散文非空 + 参数校验通过 → execute 前发射 checkpoint（iteration 不限；`checkpoint_eligible` 注册表键退役）。终态工具散文留账本守卫不动。
-- `MAX_CHECKPOINTS_PER_TURN` 2 → 4，注释重新定性为节奏护栏。
-- prompt 面三改（改完必过 `scripts/prompt_gate.py`，ADR-071 T2）：
-  - 相位叙事律：读前预期句 / 读后小结句合法且鼓励；逐调用旁白禁；
-  - echo 可见性戒律：dock 后 echo 禁指无 confirmed run 时的「工作空间/画布」；禁复述计划组成；歧义消息起始句先承诺模式；
-  - `_read_tools.j2` / intent 契约相关座位逐处核对（一部法只在一个座位说——checkpoint 座位通用化后，ADR-104 留在 prompt 里的资格措辞同步清扫）。
-- `PresentPlanArgs.tasks[].params` 空串读容忍（`''` → `{}` 归一后校验）；同类终态工具（ask_user / propose_candidates 等）盘点同牙补齐。
+## 5. 完成条件
 
-### W5 — 迁移 + 回归座
-
-- 一次性迁移脚本：存量 `activity_log` 行按帧时刻物化为单帧数组行并插 seq；物化不了的接受缺失（greenfield 口径）。脚本入 `apps/api/scripts/`，跑前先 dry-run 印目标（对齐 reset_db.py 纪律）。
-- 纯测试：`tests/` 新增数组语义套件（append/update/settle reducer、折叠纯函数、checkpoint_route 通用化判定矩阵、params 容忍）；既有 `test_tool_loop_pure.py` 的 checkpoint 路由用例按新律改写。
-- 剧本：`scripts/chat_scenarios.py` 增「多读回合 + 中途相位句」场景（断言：开工句行序 < 读行序 < 终答行序；刷新回放序恒等 live 序）。
-
-## 4. Prohibited Behaviors
-
-- 禁在渲染层再发明任何「重算顺序」的逻辑（时间戳混排 / 锚点推导 / 闩锁过滤）——数组序是唯一序。
-- 禁给 activity 行做「每回合聚合行」的兼容形态——旧形态整删，不做双写过渡（greenfield 验收口径）。
-- 禁把 checkpoint 资格以任何形式复活（白名单 / 工具元数据位 / prompt 措辞暗门）。
-- 禁动 DeferredFrames 言语提交协议、打字机两牙、口头确认律、StatusLine 一座两行、画布可见性闸（ADR-105；翻案归 ADR-111 批次，不在本批）——本批全部保留承重。
-- 禁在 echo/相位句里新增任何指向「工作空间/画布」的措辞模板；冻参模板永禁（ADR-058）不变。
-- checkpoint 发射座时点禁移到 execute 之后（ADR-104 撤回窗论证承重）。
-- 禁扩 scope：画布计划预览（讨论中已否）、活动行跨项目聚合、right-rail 时间线——均不在本批。
-
-## 5. Acceptance
-
-1. **取证母本回放**：项目 3e333147 的「竖屏切片」回合重跑（同素材同提问）——开工句先于一切读行出现；刷新/切 tab 后消息流逐行恒等（含【已完成理解】类历史活动行）；连续检索行折叠为一行可展开。
-2. **回放恒等性**：任意回合 live 结束后硬刷新，消息流顺序与内容逐行 diff 为零。
-3. **失败回合诚实**：回合中止/失败后，已发生的 activity/checkpoint 行以 failed/cancelled 态留存，刷新后仍在。
-4. **prompt 面**：`prompt_gate.py` 全探针 PASS；dock 后 echo 抽样无「工作空间/画布」指向、无计划组成旁白。
-5. 既有纯测试基线零 regression；chat_scenarios 受影响座同步修订后全绿（用户自跑，CLAUDE.md Testing 纪律）。
-
-## 6. Docs Update（随批收口）
-
-- `docs/CHAT_ARCHITECTURE.md`：排序律改写为「数组位置律」（walk key 段删除）；checkpoint 座位段按 ADR-109 重写；活动行折叠规格入 §渲染节。
-- `docs/PROGRESS.md` §0.2 状态回填 + commit 号。
-- 需求池「一回合多交付（ADR-085）」行标记已吸收（落档时先行注记）。
-- 本简报完成后归 `docs/archive/tasks-done/`。
-
-## 7. 工期估算
-
-W1+W2（服务端数组地基）≈ 3 天；W3（前端单路径 + 折叠）≈ 2.5 天；W4（内核 + prompt 面 + gate）≈ 1.5 天；W5（迁移 + 回归 + 验收缓冲）≈ 1.5 天。合计 **~8.5 工作日**（velocity 80% 口径）；依赖 = Agent Working Loop 迭代三 live 验收收口（共享 ChatDock 承重面，避免双线改同一文件）。
+当前纯 pytest、prompt_gate、当前注册矩阵、适用 web 检查与上述迁移/live 验收完成后，更新 PROGRESS 并删除本合同。旧测试计数、事故叙述和退役剧本不构成完成证据。

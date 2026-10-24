@@ -51,6 +51,7 @@ from app.tools.film.storyboard import (
     film_dock_state,
     film_draft_inflight_live,
     film_execution_snapshot_digest,
+    film_first_draft_unpresented,
     film_start_draft_match,
     resolve_film_dock_state,
     rewrite_film_task_params,
@@ -346,6 +347,25 @@ class TestFilmDesignState:
             authorized_by=None,
         )
         assert released["film_review_hold"] is False
+
+
+class TestFirstDraftReview:
+    def test_version_one_waits_until_its_presentation_persists(self) -> None:
+        pending = _versioned_pending(film_review_hold=False)
+        assert film_first_draft_unpresented(pending) is True
+        presented = pending.model_copy(
+            update={"film_presented_message_id": "presentation-1"}
+        )
+        assert film_first_draft_unpresented(presented) is False
+
+    def test_only_the_works_first_version_uses_this_gate(self) -> None:
+        later = _versioned_pending(
+            film_storyboard_version=2,
+            film_presented_message_id=None,
+        )
+        assert film_first_draft_unpresented(later) is False
+        assert film_first_draft_unpresented(None) is False
+        assert film_first_draft_unpresented(PendingPlan(prompt="p")) is False
 
 
 class TestFilmDockState:

@@ -80,7 +80,24 @@ export function spliceAnswerEnvelope(
       // Keep the optimistic block's KEY — a fresh id unmounts the DOM node
       // and replays the entrance animation (the 2026-09-08 post-typewriter
       // QA flicker). "At its own index" means same index AND same key.
-      return answeredRow ? [{ ...answeredRow, id: m.id }] : []
+      return answeredRow
+        ? [
+            {
+              ...answeredRow,
+              id: m.id,
+              // The option click's actual display edge belongs to the
+              // optimistic row; the envelope's question created_at is not a
+              // substitute for it (work-segment clock).
+              ...(m.clientVisibleAtMs != null ||
+              answeredRow.clientVisibleAtMs != null
+                ? {
+                    clientVisibleAtMs:
+                      m.clientVisibleAtMs ?? answeredRow.clientVisibleAtMs,
+                  }
+                : {}),
+            },
+          ]
+        : []
     if (m.id === previewId)
       return [
         {

@@ -53,6 +53,46 @@ const wordsScene = z.object({
   ...narration,
   dark: z.boolean(),
   lines: z.array(z.string()).min(1),
+  // Text-plane vocabulary (ADR-138 §7.6 — closed enums, renderer-implemented):
+  // motion = camera move on the text plane (absent = static); enter = the
+  // text's entrance rhythm ("lines" = per-line stagger, the pre-vocabulary
+  // default; "words" = word-by-word).
+  motion: z.enum(["static", "push", "pull"]).nullish(),
+  enter: z.enum(["lines", "words"]).nullish(),
+  // Batch B precise timing (scene-relative seconds, quantized to frames with
+  // floor(seconds * fps + 0.5 + 1e-9)). Absent keys keep the legacy formulas;
+  // explicit zero is a real value. enter_* schedules the selected unit:
+  // word tokens for enter="words", whole lines for enter="lines"/absent
+  // (unparameterized lines keep their legacy 8-frame stagger). The motion
+  // window requires motion push/pull (the backend validator owns the concrete
+  // conflict report). An explicit enter_hold_until is a HARD endpoint: the
+  // text leaves at that frame (with exit_duration it fades out across that
+  // final window; without it the hold simply ends);
+  // absent = hold to the scene end.
+  enter_start: z.number().finite().nonnegative().nullish(),
+  enter_interval: z.number().finite().nonnegative().nullish(),
+  enter_duration: z.number().finite().nonnegative().nullish(),
+  enter_hold_until: z.number().finite().nonnegative().nullish(),
+  motion_start: z.number().finite().nonnegative().nullish(),
+  motion_end: z.number().finite().nonnegative().nullish(),
+  // Exit fade (seconds, quantized with the same formula): the words fade
+  // out over this window ending at the hold endpoint (enter_hold_until,
+  // absent = the scene end). The BACKGROUND never fades — only the text.
+  exit_duration: z.number().finite().positive().nullish(),
+  // The push/pull move's scale amplitude (default 1.06; subtle ≈ 1.02–1.04).
+  // Requires motion push/pull (the backend validator owns the conflict).
+  motion_scale: z.number().gt(1).max(1.25).nullish(),
+  // Presentation knobs (absent = the legacy look): align "center" centers
+  // the text block; size picks the font tier (medium = the legacy 168px);
+  // accent_style "color" renders *emphasis* spans in the theme accent
+  // instead of the inverted chip.
+  align: z.enum(["left", "center"]).nullish(),
+  size: z.enum(["small", "medium", "large"]).nullish(),
+  accent_style: z.enum(["chip", "color"]).nullish(),
+  // The entrance EFFECT (orthogonal to enter's organization): "rise" = the
+  // legacy fade+rise+blur; "fade" = opacity only; "slide" = deterministic
+  // translate-only motion with exact endpoints, no opacity ramp or blur.
+  enter_style: z.enum(["rise", "fade", "slide"]).nullish(),
 });
 
 const heroScene = z.object({
@@ -121,6 +161,105 @@ const revealScene = z.object({
   sub: z.string(),
 });
 
+/**
+ * The composition scene (ADR-140): media elements (a video SOURCE range
+ * played inside an OUTPUT window / a placed image) plus independently timed
+ * text elements, composited over the scene's polarity background. Every
+ * element carries a placement rect (normalized canvas fractions) and a z
+ * (paint order, ascending). Two time spaces, never conflated: source
+ * seconds (source_start/source_end) vs scene-relative output seconds
+ * (at/until/duration). A text element's enter/motion timing is
+ * ELEMENT-WINDOW-relative seconds — quantized with the same
+ * seconds→frames formula as the words plane; its window's end (until,
+ * absent = scene end) IS the leave moment — with exit_duration the text
+ * fades out across that final window, without it the window simply ends
+ * (no enter_hold_until on an element — `until` plays that role). A video element whose play window ends LEAVES the
+ * screen — no freeze frame; keep_audio is the explicit original-sound
+ * switch (the source trim and the audio trim are one cut).
+ */
+const elementRect = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  w: z.number().positive().max(1),
+  h: z.number().positive().max(1),
+});
+const FULL_RECT = { x: 0, y: 0, w: 1, h: 1 };
+
+const videoElement = z.object({
+  kind: z.literal("video"),
+  id: z.string().nullish(),
+  // Absolute video URL (baked upstream from the asset); staged to loopback
+  // before render. Never a bundle-relative path.
+  src: z.string(),
+  source_start: z.number().min(0),
+  source_end: z.number().positive(),
+  // Scene-relative output start; duration = the play window (absent = the
+  // full source range).
+  at: z.number().min(0).default(0),
+  duration: z.number().positive().nullish(),
+  rect: elementRect.default(FULL_RECT),
+  fit: z.enum(["cover", "contain"]).default("cover"),
+  keep_audio: z.boolean().default(false),
+  z: z.number().int().default(0),
+});
+
+const imageElement = z.object({
+  kind: z.literal("image"),
+  id: z.string().nullish(),
+  src: z.string(),
+  at: z.number().min(0).default(0),
+  until: z.number().positive().nullish(),
+  rect: elementRect.default(FULL_RECT),
+  fit: z.enum(["cover", "contain"]).default("cover"),
+  z: z.number().int().default(0),
+});
+
+const textElement = z.object({
+  kind: z.literal("text"),
+  id: z.string().nullish(),
+  lines: z.array(z.string()).min(1),
+  // Ink polarity: light = light text over the composition (the words
+  // plane's dark-scene twin; accent chips invert the same way); accent =
+  // the whole block renders in the theme accent color.
+  tone: z.enum(["light", "dark", "accent"]).default("light"),
+  at: z.number().min(0).default(0),
+  until: z.number().positive().nullish(),
+  rect: elementRect.default(FULL_RECT),
+  enter: z.enum(["lines", "words"]).nullish(),
+  motion: z.enum(["static", "push", "pull"]).nullish(),
+  enter_start: z.number().finite().nonnegative().nullish(),
+  enter_interval: z.number().finite().nonnegative().nullish(),
+  enter_duration: z.number().finite().nonnegative().nullish(),
+  motion_start: z.number().finite().nonnegative().nullish(),
+  motion_end: z.number().finite().nonnegative().nullish(),
+  // The words plane's exit/motion-scale/style knobs, element-scoped
+  // (element-window-relative seconds; absent = the legacy look).
+  exit_duration: z.number().finite().positive().nullish(),
+  motion_scale: z.number().gt(1).max(1.25).nullish(),
+  align: z.enum(["left", "center"]).nullish(),
+  size: z.enum(["small", "medium", "large"]).nullish(),
+  accent_style: z.enum(["chip", "color"]).nullish(),
+  // The entrance EFFECT (orthogonal to enter's organization): "rise" = the
+  // legacy fade+rise+blur; "fade" = opacity only; "slide" = deterministic
+  // translate-only motion with exact endpoints, no opacity ramp or blur.
+  enter_style: z.enum(["rise", "fade", "slide"]).nullish(),
+  z: z.number().int().default(0),
+});
+
+const compositeElement = z.discriminatedUnion("kind", [
+  videoElement,
+  imageElement,
+  textElement,
+]);
+
+const compositeScene = z.object({
+  type: z.literal("composite"),
+  ...frames,
+  ...narration,
+  dark: z.boolean().default(false),
+  elements: z.array(compositeElement).min(1),
+});
+
 const endScene = z.object({
   type: z.literal("end"),
   ...frames,
@@ -139,6 +278,7 @@ export const filmSceneSchema = z.discriminatedUnion("type", [
   dividerScene,
   plateScene,
   revealScene,
+  compositeScene,
   endScene,
 ]);
 
@@ -180,6 +320,7 @@ export const filmSpecSchema = z.object({
 
 export type FilmSpec = z.infer<typeof filmSpecSchema>;
 export type FilmScene = z.infer<typeof filmSceneSchema>;
+export type CompositeElement = z.infer<typeof compositeElement>;
 export type FilmTheme = z.infer<typeof themeSchema>;
 
 /** Total duration in frames = Σ scene frames (allocation is upstream). */

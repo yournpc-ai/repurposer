@@ -1,8 +1,8 @@
 # Distribution — 分发模块设计
 
-> Status: Active（2026-08-18）——核心 = 直发（P1）：后端直发链路（OAuth：state nonce + Fernet token 加密 / 双平台 adapter / REST 路由 / worker 第四认领源）与前端（发布对话框 + 通知中心 + Settings Channels）已落地，待办 = 平台应用凭据联调；审核 / 调度 / 数据回流为边缘功能（P2）。事件流由通知中心承载，见 §11。
+> Status: Active（2026-10-25）——核心 = 直发：后端（OAuth state nonce + Fernet token 加密 / 双平台 adapter / REST 路由 / worker publication 认领源）与前端（发布对话框 + 通知中心 + Settings Channels）代码已落；平台应用凭据、审批与真实联调随 R1.1 挂起，不能写成生产已打通。机构审核 / 数据回流为后续边缘功能；定时能力按本文当前状态机与 UI 实际入口分别验收。事件流由通知中心承载，见 §11。
 >
-> 模块定位与边界见 `MODULE_ARCHITECTURE.md`（六层图 §2、闭环流转图 §2.1、表归属 §4）；排期见 `PROGRESS.md`（第十一周联调）；AI 标识分级见 ADR-026；战略理由（工作流闭环 / LinkedIn 单押风险）见 `STRATEGY.md` §3 牌 1、§4 风险 2。本文是 Distribution 模块设计与实现细节的**唯一事实源**——各文档只引用，不复述。
+> 模块定位与边界见 `MODULE_ARCHITECTURE.md`（六层图 §2、闭环流转图 §2.1、表归属 §4）；启动条件与排期见 `PROGRESS.md` §0.3；AI 标识分级见 ADR-026，合规实现仍是上线准备项；战略理由见 `STRATEGY.md` §3 牌 1、§4 风险 2。本文是 Distribution 模块设计与实现边界的**唯一事实源**——各文档只引用，不复述。
 
 ## 1. 模块职责与定位
 
@@ -14,7 +14,7 @@
 
 ### 1.1 命名约定
 
-- **模块 / 服务 / adapter / 文档 = `distribution`**（业务域）：`services/distribution.py`（长大可拆 `services/distribution/` 包，adapter 入包）、`routers/distribution.py`。
+- **模块 / 服务 / adapter / 文档 = `distribution`**（业务域）：`app/distribution/core.py`（状态机与发布单）、`channels.py`（OAuth/token）、`publishing.py`（worker 发布/轮询）、`routes.py`；平台 adapter 住 `app/distribution/adapters/`。
 - **表 = 资源名**：`publications` / `channel_accounts` / `publication_events`——表名 ≠ 模块名（先例：Pipeline 模块的表叫 `assets` / `workflow_runs`，不叫 pipeline）。
 - **REST 路径 = 资源名**：`/channels/*` / `/publications/*`，不加 `/distribution` 前缀（URL 命资源，不命模块）。
 - **不叫 `posts`**（与 derivative 类型 `post` 撞名）；**不叫 `social_accounts`**（P2 的 ESP 渠道不是 social）。
@@ -31,7 +31,7 @@
 
 ## 3. 数据模型
 
-表归属 Distribution（`MODULE_ARCHITECTURE.md` §4 已登记 📋）；**状态机迁移只由 Distribution 服务函数执行**，其他模块只读。
+表归属 Distribution（`MODULE_ARCHITECTURE.md` §4 已登记）；**状态机迁移只由 Distribution 服务函数执行**，其他模块只读。
 
 ### 3.1 `channel_accounts`（渠道账号 = OAuth token 生命周期）
 
@@ -166,8 +166,8 @@ created_at
 
 ## 6. 定时发布与 worker 认领
 
-- **不需要新 worker**：复用现有 worker 进程（`python -m app.worker`，ADR-017），publication 是**第四认领源**——与 Asset / WorkflowRun / Clip.render_status 并列，`FOR UPDATE SKIP LOCKED`。
-- **认领谓词只有 `due_at`**：`state=scheduled AND due_at <= now()` 发起发布；`state=publishing AND due_at <= now()` 继续状态轮询。首次 `due_at = scheduled_at`，失败退避与轮询间隔都改写 `due_at`——单一时间源，重试不会绕过退避窗口。
+- **不需要新 worker**：复用现有 worker 进程（`python -m app.worker`，ADR-017）。publication 与 Asset / ready `workflow_steps` / `outputs.render_status` 并列使用 `FOR UPDATE SKIP LOCKED`；generation 认领 ready steps，不是扫 `workflow_runs.status`。
+- **两类 publication 租约都到期才认领**：`state=scheduled AND due_at <= now()` 发起发布；`state=publishing AND due_at <= now()` 继续平台状态轮询。首次 `due_at = scheduled_at`，失败退避与轮询间隔都改写 `due_at`，重试不会绕过退避窗口。
 - **认领优先级**：每个 worker 循环先查 publication（通常为空表，成本可忽略）再查其他源——定时发布是**对用户的时刻承诺**（"周三 9:00 发"），不能被 ASR/渲染等重任务挤后。
 - 认领后 `state=publishing` 再调 adapter；进程崩溃由 `reap_stale` 回收（与 Asset/Run 同款语义）。
 - **未来拆解阀门**：发布量上来、或要对平台限流做进程级隔离时，可拆独立 worker 进程——调用方不变（仍是写表认领），P1 不拆。
@@ -183,7 +183,7 @@ created_at
 ## 8. AI 内容披露（ADR-026 落地）
 
 - `ai_disclosure` **由 clip-spec 分类器推导**（spec 含 dub 音轨 / AI 生成视觉 → `true`），不是用户勾选——用户永远不回答"这是不是 AI 生成"。
-- 文件层：合成轨道产物的 MP4 已嵌 C2PA（PROGRESS 第十一周合规标识），LinkedIn 端靠平台自动检测打 "CR" 标，我们零动作。
+- 文件层：机器可读 AI 标识 / C2PA 仍是 **PLANNED 上线准备项**，当前不得声称 MP4 已嵌标或 LinkedIn 会自动补标。实现范围、合成轨道与纯剪辑分级归 ADR-026 和 `PROGRESS.md` §1.3；完成前发布对话框与平台 API 的披露不能由文件层替代。
 - TikTok 端：voice-clone 内容属平台强制标记类，漏标的处罚落在用户账号上——`ai_disclosure` 徽标在**发布对话框**显式展示（个人模式）/ 机构审核页复核（机构模式）；API 披露字段是否暴露见 §14 开放问题。
 - 纯剪辑+字幕内容（真实素材标准编辑）：`ai_disclosure=false`，不嵌标、不提示（ADR-026 纯剪辑豁免）。
 
@@ -215,7 +215,7 @@ class PlatformAdapter(Protocol):
 ```
 
 - 为什么拆两段：两家平台的视频发布**都是异步的**（TikTok 上传后需轮询 publish 状态；LinkedIn 视频 initialize→upload→finalize 多步）。合并成一个 `publish()` 会把"等待"憋在 worker 里，且崩溃后无对账锚点。
-- 每平台一个 adapter（`linkedin.py` / `tiktok.py`）；平台特有逻辑（LinkedIn 视频多步、TikTok `creator_info` 前置查询可发时长/隐私档）封装在 adapter 内，不外泄到服务层。
+- 每平台一个 adapter（`app/distribution/adapters/linkedin.py` / `tiktok.py`）；平台特有逻辑（LinkedIn 视频多步、TikTok `creator_info` 前置查询可发时长/隐私档）封装在 adapter 内，不外泄到服务层。
 - 平台错误码 → 统一错误枚举（`token / rate_limit / content_policy / validation / unknown`），服务层只处理统一枚举。
 
 ### 10.2 REST 路由面（对外 API）

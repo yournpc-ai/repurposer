@@ -84,9 +84,17 @@ class Settings(BaseSettings):
     # render_timeout_seconds fences one render-service POST: the film baseline is
     # ≈46s for a 26s film (local spike, ~1.75× realtime), but the SAME fence
     # covers the clip family, where longer sources legitimately render for
-    # minutes — 900s keeps the historical fence, now tunable per deployment.
+    # minutes. 1800s includes two bounded upload attempts (up to 6min each).
     render_concurrency: int = 2
-    render_timeout_seconds: int = 900
+    render_timeout_seconds: int = 1800
+
+    # Film storyboard EDIT path (the patch beat) — internal-test gate,
+    # deployment-shaped like the knobs above. Default OFF: the model never
+    # sees the edits capability (wire schema / tool description / prompt law
+    # / read-back hints all prune it) AND the execution branch refuses a
+    # direct edits call; ON is for local/test verification only. The compose
+    # path (design + open feedback redraft) is unaffected either way.
+    film_edits_enabled: bool = False
 
     # ASR (faster-whisper, self-hosted — EU/GDPR; CTranslate2, no torch)
     asr_model: str = "base"  # tiny/base/small/medium/large-v3

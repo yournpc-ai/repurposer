@@ -6,16 +6,40 @@
 
 import type { ActivityRowFrame, OverlayMessage } from "@/components/chat/historyReplay"
 
-/** One unit of the conversation timeline. openTail marks position only;
- * completed folds are visible even while the next stage is still busy. */
+/** One unit of the conversation timeline. An unsealed trailing fold is a
+ * WORK SEGMENT, not a finished receipt: the dock lets its last current-turn
+ * fold carry the live now label in place. Tool settlement alone never seals
+ * that segment; the first visible prose fragment or the turn's real terminal
+ * state does.
+ *
+ * rowKey law (行身份): an activity frame's `activity_id` is PER-TURN scoped
+ * (two turns both have an "a1"), so it can never key the cross-turn list —
+ * the React identity is the HOST MESSAGE ROW's stable id (`birthKey ?? id`,
+ * the OverlayMessage render-key law), stamped here at projection time. A
+ * settle merges into the same host row, so the identity survives updates; a
+ * fold keys by its FIRST MEMBER's rowKey (the segment's head never changes
+ * when later members join or settle). The same host carries the client-only
+ * frozen work-segment clock; tool duration_ms remains the tool's own fact. */
 export type ConversationUnit =
   | { kind: "message"; message: OverlayMessage }
-  | { kind: "activity"; activity: ActivityRowFrame }
+  | {
+      kind: "activity"
+      activity: ActivityRowFrame
+      rowKey: string
+      workStartedAtMs?: number
+      workEndedAtMs?: number
+    }
   | {
       kind: "activityFold"
       rows: ActivityRowFrame[]
+      /** First host's own activity stamp, retained even while every member
+       * is still active and `rows` is empty (run receipt anchoring reads it). */
+      firstActivityAt: string | undefined
+      startedAtMs: number | null
+      endedAtMs: number | null
       elapsedMs: number | null
       openTail: boolean
+      rowKey: string
     }
 
 /** The draft span never enters the flow (2026-09-28 user ruling —
@@ -24,10 +48,19 @@ export type ConversationUnit =
  * filter is the defensive twin for legacy/migrated rows. The storyboard
  * span is the ONE exception (2026-10-17 user ruling — 分镜不是开工): its
  * settle DOES persist with its honest duration — the markdown message is
- * the deliverable, no dock card absorbs the beat. */
+ * the deliverable, no dock card absorbs the beat. The PATCH variant's pair
+ * (storyboardEdit/storyboardEditDone — a targeted edit, never a fresh
+ * design) rides the same exception. */
+const STORYBOARD_SPAN_KEYS = new Set([
+  "chat.activity.storyboard",
+  "chat.activity.storyboardDone",
+  "chat.activity.storyboardEdit",
+  "chat.activity.storyboardEditDone",
+])
+
 export function isDraftSpanRow(a: ActivityRowFrame): boolean {
   const key = a.key ?? ""
-  if (key === "chat.activity.storyboardDone" || key === "chat.activity.storyboard") {
+  if (STORYBOARD_SPAN_KEYS.has(key)) {
     return false
   }
   return a.kind === "draft" && key.startsWith("chat.activity.")
@@ -41,8 +74,12 @@ export function isRunSpanRow(a: ActivityRowFrame): boolean {
 
 /** Array map (ADR-108): each message row maps to ONE unit in place —
  * activity-carrying rows become activity units at their array position.
- * An ACTIVE activity never renders in the walk (the now-line owns it —
- * 合一律); draft/run span rows stay retired. */
+ * An ACTIVE activity enters the walk immediately: its host is the live work
+ * segment's seat, so a short first activity never depends on the bottom
+ * now-line becoming visible. A CANCELLED attempt retires from the visible
+ * walk (automatic retry / stop is not a finished work receipt); its forensic
+ * record remains server-side. Real FAILED rows stay visible. Retired draft /
+ * run spans keep their existing card / receipt evidence. */
 export function buildConversationUnits(
   messages: OverlayMessage[],
 ): ConversationUnit[] {
@@ -53,76 +90,243 @@ export function buildConversationUnits(
       units.push({ kind: "message", message: m })
       continue
     }
-    if (a.status === "active") continue // the now-line owns the live row
+    if (a.status === "cancelled") continue // abandoned attempt, not a work receipt
     if (isDraftSpanRow(a) || isRunSpanRow(a)) continue // 落定即退役
-    units.push({ kind: "activity", activity: a })
+    units.push({
+      kind: "activity",
+      activity: a,
+      rowKey: m.birthKey ?? m.id,
+      workStartedAtMs: m.workStartedAtMs,
+      workEndedAtMs: m.workEndedAtMs,
+    })
   }
   return units
 }
 
 /** 折叠投影 (呈现层纯函数, ADR-110 段聚合——Claude Code 式坍缩 +
- * Flora 解剖): 两条消息之间的连续 COMPLETED 落定活动行折成一条聚合行
- * 「工作了 2m 7s」——折叠态只说总耗时这一个事实(分解一击可达,永不带
- * fragment 摘要)。单行段同样收壳(2026-10-16 用户拍板——完成就收:
- * 裸单行在段尚未成形的窗口里是孤零遥测行,段成形后又原地翻成折叠壳,
- * 一次闪变比壳本身更吵)。failed/cancelled rows never fold: they pass
- * through as their own rows (the ✗ strike-through is the failure signal)
- * and break the run. Active rows are hard boundaries too (进行态不折叠 —
- * the now-line owns them; they never reach the walk anyway). The fold
- * never crosses a message boundary. Completed rows appear immediately,
- * including the tail while another stage runs. openTail records position
- * only; it does not gate visibility. The clock ends at the last completed
- * activity, never at later prose or a storyboard's completion. */
-export function foldActivityUnits(units: ConversationUnit[]): ConversationUnit[] {
+ * Flora 解剖): 两个用户可见散文段之间的活动行属于同一个工作段。
+ * COMPLETED rows are its durable evidence; an ACTIVE row joins immediately
+ * but supplies only the live seat until it settles. An active-only segment
+ * therefore has `rows=[]` and a stable host key, never an empty Worked
+ * receipt. FAILED rows pass through and break the run; CANCELLED attempts
+ * were retired by the array map and neither render nor split a segment.
+ *
+ * A fold is OPEN while no later user-visible prose / user / QA boundary
+ * exists and its client clock has not been sealed. The dock gives the last
+ * CURRENT-TURN open fold the live label; earlier failure-separated open
+ * fragments stay withheld, so a busy turn can never show a completed fold
+ * above a second thinking row. Empty streaming bubbles do not close a
+ * segment — received characters are not yet visible speech. A user message
+ * closes the previous segment structurally but never supplies its end
+ * clock (user think time is not assistant work). */
+export function foldActivityUnits(
+  units: ConversationUnit[],
+  defaultWorkStartedAtMs?: number,
+): ConversationUnit[] {
   const out: ConversationUnit[] = []
-  let run: ActivityRowFrame[] = []
-  const flush = (openTail = false) => {
+  let run: Extract<ConversationUnit, { kind: "activity" }>[] = []
+  const flush = () => {
     if (run.length > 0) {
+      // Active members own the live seat but are not durable evidence yet.
+      // They join `rows` in place when their host settles COMPLETED.
+      const rows = run
+        .filter((u) => u.activity.status === "completed")
+        .map((u) => u.activity)
+      const startedAtMs = workStart(out, run[0], defaultWorkStartedAtMs)
+      const endedAtMs = run[0].workEndedAtMs ?? null
       out.push({
         kind: "activityFold",
-        rows: run,
-        elapsedMs: foldElapsedMs(run),
-        openTail,
+        rows,
+        firstActivityAt: run[0].activity.at,
+        startedAtMs,
+        endedAtMs,
+        elapsedMs: foldElapsedMs(rows, startedAtMs, endedAtMs),
+        openTail: false, // stamped by the reverse boundary pass below
+        // The fold's identity is its first member's host-row id: the
+        // segment's head never changes when later members join or settle.
+        rowKey: run[0].rowKey,
       })
     }
     run = []
   }
   for (const unit of units) {
-    if (unit.kind === "activity" && unit.activity.status === "completed") {
-      run.push(unit.activity)
+    if (
+      unit.kind === "activity" &&
+      (unit.activity.status === "completed" || unit.activity.status === "active")
+    ) {
+      run.push(unit)
       continue
     }
     flush()
     out.push(unit)
   }
-  // The completed tail is visible even before the next message arrives.
-  flush(true)
+  flush()
+
+  let closedByLaterSpeech = false
+  for (let i = out.length - 1; i >= 0; i -= 1) {
+    const unit = out[i]
+    if (unit.kind === "message" && closesWorkSegment(unit.message)) {
+      closedByLaterSpeech = true
+      continue
+    }
+    if (unit.kind === "activityFold") {
+      out[i] = {
+        ...unit,
+        openTail: !closedByLaterSpeech && unit.endedAtMs == null,
+      }
+    }
+  }
   return out
 }
 
-/** Completed work's elapsed wall time, ending at its own final row.
- * Later generation or user think time never changes this settled fact. */
+/** Only following user-visible prose / a user / QA row closes a work segment
+ * structurally. An empty preview is a pinned array position, not visible
+ * prose; candidates and other empty structured rows still split the fold
+ * grouping without faking a display timestamp. A terminal ERROR row is a
+ * system fact, not following prose: the terminal seal owns its clock edge,
+ * so the grey row cannot make the preceding fold ineligible first. */
+function closesWorkSegment(m: OverlayMessage): boolean {
+  if (m.meta === "error") return false
+  return m.role === "user" || m.qa !== undefined || m.content.trim().length > 0
+}
+
+function validMs(value: number | undefined): value is number {
+  return value != null && Number.isFinite(value)
+}
+
+function parseMs(value: string | undefined): number | null {
+  const parsed = Date.parse(value ?? "")
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+/** Live start facts only. A user row's own stamp is the send gesture; a QA
+ * row uses the client's option-click display stamp; a prose boundary uses
+ * its DRAIN stamp so the previous bubble's playback is never billed to the
+ * next segment. Server assistant created_at is deliberately NOT a display
+ * timestamp. Without one of those facts, an explicit client work boundary
+ * (the Start pill's click) wins over the first tool's execute-entry `at`;
+ * with neither, that activity timestamp is the honest available start. */
+function workStart(
+  previous: ConversationUnit[],
+  first: Extract<ConversationUnit, { kind: "activity" }>,
+  defaultWorkStartedAtMs?: number,
+): number | null {
+  if (validMs(first.workStartedAtMs)) return first.workStartedAtMs
+  // A Start pill has no user / QA archive row. Its actual click can therefore
+  // supply the default without outranking a real preceding prose boundary.
+  const fallback = validMs(defaultWorkStartedAtMs)
+    ? defaultWorkStartedAtMs
+    : parseMs(first.activity.at)
+  for (let i = previous.length - 1; i >= 0; i -= 1) {
+    const unit = previous[i]
+    if (unit.kind !== "message") continue
+    const m = unit.message
+    if (m.role === "user") return parseMs(m.at) ?? fallback
+    if (m.qa) {
+      return validMs(m.clientVisibleAtMs) ? m.clientVisibleAtMs : fallback
+    }
+    if (m.content.trim()) {
+      return validMs(m.proseDrainedAtMs) ? m.proseDrainedAtMs : fallback
+    }
+    if (m.candidates || m.meta || m.runId) return fallback
+  }
+  return fallback
+}
+
+/** Completed work's elapsed wall time. A client-sealed segment includes
+ * tool work AND the following model wait, ending at the first visible reply
+ * fragment (or a prose-less terminal state), then freezes. Unsealed /
+ * replayed rows fall back to the observable activity span. Parallel tool
+ * durations are NEVER summed into a pretend wall clock; without timestamps
+ * the honest fallback is no elapsed (the row renders an action count). */
 function foldElapsedMs(
   rows: ActivityRowFrame[],
+  startedAtMs: number | null,
+  endedAtMs: number | null,
 ): number | null {
-  const start = Date.parse(rows[0]?.at ?? "")
-  if (!Number.isNaN(start)) {
+  if (endedAtMs != null) {
+    const liveStart = startedAtMs ?? parseMs(rows[0]?.at)
+    if (liveStart != null && endedAtMs > liveStart) {
+      return endedAtMs - liveStart
+    }
+  }
+  // Replay / legacy rows have no first-visible client fact. Preserve the
+  // observable ACTIVITY span rather than stretching it to an assistant
+  // created_at or a later user gesture.
+  const start = parseMs(rows[0]?.at)
+  if (start != null) {
     const last = rows[rows.length - 1]
-    const lastAt = Date.parse(last?.at ?? "")
-    if (!Number.isNaN(lastAt)) {
+    const lastAt = parseMs(last?.at)
+    if (lastAt != null) {
       const lastEnd = lastAt + (last.duration_ms ?? 0)
       if (lastEnd > start) return lastEnd - start
     }
   }
-  let sum = 0
-  let any = false
-  for (const r of rows) {
-    if (r.duration_ms != null) {
-      sum += r.duration_ms
-      any = true
+  return null
+}
+
+/** Seal the CURRENT turn's last open work segment at a real display /
+ * terminal timestamp. `currentRowKeys` contains HOST MESSAGE ids observed
+ * on this turn's row.append/update channel — never per-turn activity_ids,
+ * so an old segment with the same "a1" can neither be sealed nor reopened.
+ * The clock lives on the first host row, survives fold remounts and later
+ * frame merges, and is write-once. History has no such client fact and keeps
+ * its honest activity-span fallback. `defaultWorkStartedAtMs` is the actual
+ * client gesture for turns without a user / QA row (Start); it never
+ * outranks a preceding visible-prose drain boundary. A display-edge seal
+ * passes `beforeRowId`: only a fold BEFORE that exact prose row is eligible,
+ * so a preceding checkpoint can never seal the activity segment born after
+ * it. Terminal seals omit the boundary and close the current trailing fold. */
+export function closeWorkSegment(
+  messages: OverlayMessage[],
+  currentRowKeys: ReadonlySet<string>,
+  endedAtMs: number,
+  defaultWorkStartedAtMs?: number,
+  beforeRowId?: string,
+): OverlayMessage[] {
+  if (currentRowKeys.size === 0 || !Number.isFinite(endedAtMs)) return messages
+  if (beforeRowId != null && !messages.some((m) => m.id === beforeRowId)) {
+    return messages
+  }
+  const units = foldActivityUnits(
+    buildConversationUnits(messages),
+    defaultWorkStartedAtMs,
+  )
+  let fold: Extract<ConversationUnit, { kind: "activityFold" }> | undefined
+  let crossedBoundary = beforeRowId == null
+  for (let i = units.length - 1; i >= 0; i -= 1) {
+    const unit = units[i]
+    if (!crossedBoundary) {
+      if (unit.kind === "message" && unit.message.id === beforeRowId) {
+        crossedBoundary = true
+      }
+      continue
+    }
+    if (
+      unit.kind === "activityFold" &&
+      unit.rows.length > 0 && // an active-only attempt is not completed work
+      unit.openTail &&
+      currentRowKeys.has(unit.rowKey)
+    ) {
+      fold = unit
+      break
     }
   }
-  return any ? sum : null
+  if (!fold) return messages
+  let changed = false
+  const next = messages.map((m) => {
+    if ((m.birthKey ?? m.id) !== fold.rowKey || !m.activity) return m
+    if (m.workEndedAtMs != null) return m
+    changed = true
+    return {
+      ...m,
+      ...(m.workStartedAtMs == null && fold.startedAtMs != null
+        ? { workStartedAtMs: fold.startedAtMs }
+        : {}),
+      workEndedAtMs: endedAtMs,
+    }
+  })
+  return changed ? next : messages
 }
 
 /** The fold's expanded category rows (ADR-110 修订 — 归档归类目):
@@ -172,6 +376,17 @@ export function foldCategories(rows: ActivityRowFrame[]): FoldCategory[] {
     })
   }
   return cats
+}
+
+/** A FAILED row must speak a terminal fact, never the abandoned attempt's
+ * progressive label. Explicit failure mirrors keep their specific copy;
+ * every active-only / unknown key falls back to the existing honest failure
+ * line rather than claiming ongoing work at a terminal failure. */
+export function activityFailureKey(key: string | null): string {
+  if (key === "chat.activity.repair" || key?.startsWith("chat.inspectingFailed.")) {
+    return key
+  }
+  return "chat.failed"
 }
 
 /** The settled surface's category-form key (归档归类目 — 实例名归 live

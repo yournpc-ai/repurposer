@@ -1,79 +1,52 @@
-# UI 对齐批（冲刺版 · D4 一日包 + D5 顺手项）
+# Chat 自足、锚卡与 Home 交互——当前合同与剩余验收
 
-> Status: 施工中（2026-10-13 拍板插入；随 MG 批压缩至 4 天冲刺，UI 件集中在 D4 = 10-19，溢出滑 10-20 上午、不挤占 MG 验收）。web 半边已收口（锚卡组件按 !canvas_visible 渲染就绪）；API 装配半边已收口（环境双键入 `build_context` + 承接句窄门法条一座 = `trigger_system.j2` DELIVERY HANDOFF；能力位线缝 = `ChatTurnBody.canvas_available` 随每条请求送达 + `conversations.canvas_available` 会话行 last-wins 盖章）。形态原型 = `scratch/skill-mg-ui-proposal.html`（双端对照屏：页顶真值表 / 桌面 Split 对照组 / 移动端锚卡两帧 / MediaLightbox 过渡，深浅双主题）。
->
-> 压缩原则（2027 用户习惯尺）：用户习惯的是"对话里什么都能发生 + Flora 形体顺滑"，不是"货架很满"。冲刺只取体感权重最高的三件；货架作为顺手项收 D5（原型已数据驱动，转正成本低）。
+> Status: 环境谓词、终态锚卡、交付承接句、copy/免责声明与数据驱动货架已有代码层结果；移动端完整旅程、桌面对照、声音互斥和双主题 live 验收仍未全部销号。活动展示以当前 `WorkSegmentRow` 为准，不恢复旧 ActivityRow/StatusLine 形态。
 
-## 形态基座（本批先决，ADR-118）
+## 1. 形态与 chat 自足
 
-桌面 = **固定 Split**（对话 + 世界并排）；移动 = **纯 chat**。零切换控件、零 view-mode 持久化、零形态分叉门控、零切换触发相机节拍。宪法 = ADR-118：解耦律（图模型 = 唯一事实源，画布 = 一种投影）+ **chat 自足律**（画布完全隐藏时产品必须完整可用——本批锚卡是它的首个构造物，也是一切后续迭代的验收尺）。
+- 桌面工作区由当前 `workspace_layout=auto|chat` 与视口能力共同决定；移动端恒纯 chat。用户布局偏好只能力关闭画布，不能在移动端虚假强制开启。
+- **chat 自足律**：画布隐藏时仍能完成上传 → 计划/授权 → 生成 → 结果 → 修订，不需要用户打开画布寻找唯一按钮或唯一结果。
+- 图模型仍是世界事实源，锚卡只是交付消息的静态产品投影，不是第二 live 面或第二执行状态机。
+- 活动/工作段遵循 CHAT_ARCHITECTURE §8.6～§8.7：一行两态、真实工作、真实终态、failed 诚实告警、cancelled 从可见投影退役；本合同不另造折叠规则。
 
-## D4（10-19）：一日包三件（优先级序，活动行不滑出 D4）
+## 2. 环境谓词与交付言语
 
-**① 活动行体感**
-- `apps/web/src/components/chat/ActivityStream.tsx`：ActivityRow / FoldedActivityRow 补 hover `bg-accent`；折叠头对齐「Ran N tools」形（chevron 旋转）；registry 加 icon 字段（kind → lucide；**icon ≠ 工具名**；failed 永不折叠、落定即退役不变）。
+- 客户端唯一能力组成：`canvasAvailable = 视口可承载 && workspace_layout !== "chat"`；`canvasVisible = canvasAvailable && worldLive`。组件不得另按设备名、宽度或偏好推断第二套环境。
+- 能力位随 chat 请求送达并以 last-wins 盖章到 conversation；旧客户端未上报时为 unknown，不是 false。
+- 服务端 `canvas_visible = canvas_available ∧ world_live`；`world_live = hasRuns ∨ pending-plan`。unknown 时 Environment 行缺席，所有指向卡片的言语门恒闭。
+- 双键经 `build_context` 的结构化 Environment 事实行进入模型上下文；模型不得从用户语言或设备特征猜测环境。
+- 交付言语现行法座是 `prompts/chat/delivery_system.j2`：只有 delivered/partial、且事实确证对应产品已交付、且 `canvas_visible=false` 时才能指向紧随其后的卡片；failed 不得宣称有可点产品。
+- `canvas_visible=true` 时不写交付承接句，不提“右侧/画布/下方”等面。承接句仍是普通 assistant 散文，必须满足打字机两牙与刷新回放一致。
+- 代码内若仍把此法条指向旧 `trigger_system.j2`，以实际 delivery include 为准；不要因注释恢复第二座法条。
 
-**② 消息 copy + 免责声明**
-- 用户/助手消息动作条：copy = 纯客户端剪贴板（toast 静默档）。
-- AI 免责声明行（"Repurposer is AI and can make mistakes…"，i18n 双语）。
+## 3. 终态锚卡
 
-**③ 锚卡（本批主体）**
+- 渲染条件为 `!canvasVisible`，读取**渲染时刻**环境，不把历史移动/桌面快照钉进消息。
+- 数据只读终态收据已有 `output_refs`；顺序稳定、id 去重，只投影真实 ready 产品，缺 output/未 ready/失败项不伪造卡片。
+- N 个产物为数组平铺小卡，不建合集卡；单卡只显示世界自证的缩略图、名称、类型与真实规格。名缺用诚实类型/规格回退，不用冻参模板补名。
+- 锚卡唯一父座是终态收据行；无内联播放钮，点击打开 MediaLightbox；无新增 SSE 订阅，不脱离收据独挂。
+- 卡片解剖遵守 ring/圆角/零 in-flow shadow/lucide/i18n；复制按钮为纯客户端动作，免责声明为界面事实而非模型言语。
 
-*谓词与双键*
-- 语义谓词 `canvasVisible`（**禁设备名硬编码**——谓词一处定义，全站单源）。
-- chat 装配层注入两个**结构化上下文字段**：`canvas_available` / `canvas_visible`（进 context 装配，**不是 prompt 散文提示**）。
-- 真值表：桌面 = true/true → 零锚卡零承接句；移动端 = false/false → 锚卡渲染 + 承接句。锚卡渲染 ⟺ `!canvas_visible`（**渲染时刻状态**，非历史快照）。
+## 4. Home 货架衔接
 
-*形态*
-- 单卡 = 缩略图 + 产物名 + 时长 + 类型徽标；N 产物 = **数组平铺**（flex-wrap 小卡行，**禁合集卡组件**）。
-- 名缺 → null 容忍回退「类型词 + 时长」（无模板回填）；命名遵守展示文案二源律（世界自证，零冻参模板）。
+- Home 两级 tab 与货架是数据驱动注册表；卡片点击唯一归宿是 composer 预填，不发送、不建 run、不打开模板编辑器。
+- 空 shelf/sub/family 不上架；无真实动作的 Queue、mic、反馈等入口不得先摆死按钮。
+- 当前文字动画与产品演示货架仍是**占位样片**，其替换和真实能力边界归 `home-creation-entry-refresh.md`；SaaS 真片与占位片不得混称。
+- Queue chip 若未来重启必须先有真实队列读数；👍👎 若重启先决定持久化与用户利益；这些不是当前已完成能力。
 
-*不变量*
-- 指针语义；**无内联播放钮**；点击 = 开 MediaLightbox。
-- 数据只读骑消息载荷既有 `output_refs`（types.ts:293）——**零新 SSE 订阅**。
-- 挂在**终态收据行之下**，归收据所有（收据行 = 锚卡唯一父座）。
-- 单一渲染面律修订注同批落档（ADR-118）：锚卡 = 终态收据帧——静态、零订阅、不是第二个 live 面。
-- 解剖合规：rounded-md/lg、in-flow 零 shadow、`ring-foreground/10` 发丝线、文字三档、lucide、i18n 双语。
+## 5. 剩余验收
 
-*环境感知（翻案入档 ADR-118 §6）*
-- LLM 也消费环境上下文——但**只经结构化双键**；**禁 LLM 从用户语言/设备特征推断环境**。
-- 唯一言语消费 = **交付承接句**：iff `!canvas_visible`（锚卡将渲染），交付回合收尾散文带一句朴素承接句指向紧随其后的产物行；`canvas_visible` 时收尾散文**永不交接、永不提及任何面**。
-- 法条窄门：echo 防编造律（ADR-060）与展示文案二源律（ADR-058）只对「指向刚产出锚卡行的承接句」开这一处门，其余面指涉永禁。
-- 承接句 = 普通 assistant.delta 散文——打字机双牙同批检查（null 读容忍 + paceSettledProse 节拍释放）。
+1. 移动端不看画布完成上传 → 生成 → delivered/partial/failed → 接受或修订一次；只有实际 delivered/partial 有承接句与可点锚卡。
+2. 桌面 auto + world live：同一次交付零锚卡、零承接句，画布正常；切到 chat 后锚卡按渲染时刻出现，不错误重放历史环境。
+3. 能力位 unknown、无 world、pending plan、空 output_refs、重复 id、缺失 output、失败与部分交付分别验证，不出现假卡或假承诺。
+4. 多产物数组顺序/去重正确，名缺回退诚实；点击开 MediaLightbox 可播，刷新回放一致。
+5. MediaLightbox 与 Home/其他播放器遵守全局声音互斥；离屏暂停不释放错误的播放所有权。
+6. copy、免责声明、WorkSegment 展开/收段与深浅主题无回归；移动端无横向溢出，MentionEditor 不 remount，背景更新不动相机。
+7. 自动检查按改动面覆盖谓词真值表、锚卡投影、环境装配与交付分支；触及 prompt 面才运行 prompt_gate。live 结果未产生前保持“待验收”，不引用旧通过截图代替。
 
-## D5（10-20 上午，顺手项转正）：home 两级 tab 货架
+## Prohibited Behaviors
 
-- 原型屏①已是数据驱动实现：`components/home/RecipeTabs.tsx`（pill 轨 + 下划线子 tab）与 `RecipeShelf.tsx`（白容器横滑 + › 翻页）按原型转正；recipe 注册表加 `family` 字段 + `en.ts`/`zh.ts` 文案。
-- 「模板」族首货架复用 RecipeCard；MG 族货架 = demo 视频 loop/muted。
-- 纪律不变：**无真 demo 的族/卡不上架**；卡片唯一归宿 = composer 预填（永不是模板编辑器）；home 首次/回访双形态不变，货架在 composer 之下。
-
-## 延期清单（本批明确不做）
-
-- Queue chip（无真实队列读数 = 假数，世界自证门不过）/ 👍👎（存储决策未定，连摆位都不摆）/ assistant 行内节点 chip / Jump to latest / composer 24px 圆角例外 / mic 钮（死按钮永禁）。
-
-## 验收口径（用户视角）
-
-- **移动端**：跑完一个 run → 承接句 + 收据行 + 锚卡 → 点击锚卡开 MediaLightbox 可播；多产物 = 平铺小卡数组。
-- **桌面**：同一次 run → 零锚卡、零承接句，画布在侧（对照组 = 现状不变）。
-- **chat 自足律首次实证**：全程不看画布完成「上传 → 生成 → 接受 → 修订一次」闭环。
-- 深浅双主题走查。
-
-## 禁止事项
-
-1. **模式切换 UI 永禁**（ADR-118）：禁复活任何档位控件 / view-mode 持久化 / 形态分叉门控 / 切换触发相机节拍。
-2. **禁「Agent」字样**——N-25 禁令无例外适用；用户可见文案一律 assistant / 助手。
-3. **环境双键 = LLM 唯一合法环境源**：禁从用户语言/设备特征推断环境；**唯一合法面指涉 = 交付承接句**，其余平台/面引用永禁。
-4. 锚卡：禁内联播放钮 / 禁新 SSE 订阅 / 禁合集卡组件 / 禁脱离收据行独挂。
-5. **禁 MentionEditor remount**；**禁相机自动动**。
-6. 解剖合规：禁新增 rounded-full 例外；in-flow 面永不带 shadow；hover 一律 `bg-accent`。
-7. **禁工具名上屏**；禁死按钮/假数据（Queue、mic、👍👎 见延期清单——摆位都不摆）。
-8. 禁"模板编辑器"形态：卡片点击唯一归宿 = composer 预填。
-
-## 验证仪式链
-
-- vitest 纯套件：**谓词真值表**（双键 → 锚卡/承接句分支）+ 锚卡数组渲染 + fold 展开 + copy。
-- 装配层 = pytest 纯套件：`canvas_available`/`canvas_visible` 双键入 context 装配 + 承接句谓词分支单测。
-- **prompt_gate 重跑**（prompt 面变了：双键装配 + 承接句窄门——原「免跑」作废）。
-- 纯 pytest 基线 + tsc 零 error；仪式链同序。
-- **声音互斥检查**：MediaLightbox 播放是否接全局声音互斥——未接则本批接上。
-- live 验收用户自跑（移动端锚卡点播 / 桌面对照零锚卡 / 深浅双主题）。
+- 禁第二环境谓词、第二交付言语法座、从设备/语言猜环境。
+- 禁 failed 分支产品卡承诺、虚构可播放文件、锚卡新订阅或合集卡。
+- 禁死按钮/假队列数/无持久化反馈；禁 Agent 英文文案、工具名上屏。
+- 禁模式切换造成相机自动节拍或 MentionEditor remount；禁恢复旧 StatusLine/第二工作段。

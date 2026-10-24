@@ -152,32 +152,34 @@ wait_for_url "http://localhost:8000/health" "API" 60
 # Remotion render service (clip-spec -> MP4+SRT). Node/pnpm, headless Chrome +
 # bundled FFmpeg. Black box the api worker calls; not needed for text-only flows.
 #
-# Proxy: injected by default (2026-10-08 拍板). The direct TOS link from this
-# network is throttled (~12 KB/s measured) while the local proxy sustains MB/s
-# for both GET and PUT; the render service's staging/upload fetchers honor the
-# env, loopback exempt. The probe validates the REAL path (proxy → TOS), never
-# the bare port — a dead proxy falls back to direct LOUDLY instead of silently
-# breaking every render (the old nc-probe's sin). The probe cannot prove
-# large-PUT health; if PUTs stall, opt out with RENDER_PROXY=off. An
-# operator-exported HTTPS_PROXY is inherited as-is and never overridden.
-# Worker/API stay un-proxied: their TOS legs ride the shared source cache and
-# the LLM path is proven direct.
+# Only render receives the proxy; API/worker keep their existing networking.
+# Explicit opt-out wins over inherited variables. A transient probe failure
+# must not silently switch a configured proxy to the throttled direct path.
 echo "Starting render service on http://localhost:3001 ..."
 RENDER_PROXY_ENV=()
-if [ -n "$HTTPS_PROXY" ]; then
-  echo "  render proxy: inherited HTTPS_PROXY=$HTTPS_PROXY"
-elif [ "${RENDER_PROXY:-http://127.0.0.1:6152}" != "off" ]; then
-  RENDER_PROXY=${RENDER_PROXY:-http://127.0.0.1:6152}
-  if curl -s -o /dev/null --max-time 4 -x "$RENDER_PROXY" "https://repurposer.tos-ap-southeast-1.volces.com/"; then
-    RENDER_PROXY_ENV=("HTTPS_PROXY=$RENDER_PROXY")
-    echo "  render proxy: $RENDER_PROXY (probe ok)"
-  else
-    echo "  ✘ render proxy $RENDER_PROXY unreachable — starting WITHOUT proxy (direct TOS may crawl; RENDER_PROXY=off silences this probe)"
-  fi
+if [ "${RENDER_PROXY:-}" = "off" ]; then
+  RENDER_PROXY_ENV=(-u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy -u ALL_PROXY -u all_proxy)
+  echo "  render proxy: OFF (explicit)" | tee -a "$LOG_RENDER"
 else
-  echo "  render proxy: OFF (RENDER_PROXY=off)"
+  RENDER_PROXY_URL=${RENDER_PROXY:-${HTTPS_PROXY:-${https_proxy:-${HTTP_PROXY:-${http_proxy:-}}}}}
+  if [ -z "$RENDER_PROXY_URL" ] && command -v scutil >/dev/null 2>&1; then
+    RENDER_PROXY_URL=$(scutil --proxy | awk '
+      $1 == "HTTPSEnable" { enabled=$3 }
+      $1 == "HTTPSProxy" { host=$3 }
+      $1 == "HTTPSPort" { port=$3 }
+      END { if (enabled == 1 && host != "" && port != "") print "http://" host ":" port }
+    ')
+  fi
+  RENDER_PROXY_URL=${RENDER_PROXY_URL:-http://127.0.0.1:6152}
+  case "$RENDER_PROXY_URL" in *://*) ;; *) RENDER_PROXY_URL="http://$RENDER_PROXY_URL" ;; esac
+  RENDER_PROXY_ENV=("HTTPS_PROXY=$RENDER_PROXY_URL" "HTTP_PROXY=$RENDER_PROXY_URL")
+  if curl -s -o /dev/null --connect-timeout 3 --max-time 8 --noproxy '' -x "$RENDER_PROXY_URL" "https://repurposer.tos-ap-southeast-1.volces.com/"; then
+    echo "  render proxy: enabled (TOS connectivity probe passed)" | tee -a "$LOG_RENDER"
+  else
+    echo "  render proxy: enabled but TOS probe failed; keeping proxy. Check Surge or explicitly use RENDER_PROXY=off." | tee -a "$LOG_RENDER"
+  fi
 fi
-( cd "$ROOT/apps/render" && env "${RENDER_PROXY_ENV[@]}" pnpm dev 2>&1 | tee "$LOG_RENDER" ) &
+( cd "$ROOT/apps/render" && env "${RENDER_PROXY_ENV[@]}" pnpm dev 2>&1 | tee -a "$LOG_RENDER" ) &
 RENDER_PID=$!
 
 # --- frontend --------------------------------------------------------------

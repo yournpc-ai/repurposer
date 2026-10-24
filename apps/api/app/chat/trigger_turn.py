@@ -11,10 +11,9 @@ first):
   a partial failure with landed products (done + output_refs); a run where
   nothing landed fires ``run_failed`` instead (ADR-135). Iter-3 S5
   (ADR-088 §8 R21): the turn's event line carries the deterministic
-  DELIVERY FACTS block (``run_review``'s pure core — promised vs landed,
-  track/verify facts, captured vs quoted); the prose law (facts first,
-  zero subjective quality words, gaps → suggestions) lives in
-  ``trigger_system.j2``.
+  DELIVERY FACTS block (``run_review``'s pure core — the latest tool/run
+  outcome); the delivery turn's branch law lives in
+  ``delivery_system.j2``.
 - ``run_failed`` — a run FAILED and nothing landed
   (``orchestrator.maybe_finalize_run``; ADR-135). The receipt alone can
   carry neither the reason nor the next step, so the turn speaks: the
@@ -26,13 +25,15 @@ first):
 - ``craft_decompiled`` — the pinned reference video's craft skeleton
   landed (``decompile``; 旅程二④ the remix offer).
 
-The loop itself: the perception family's reads are the agent's eyes (look
-BEFORE speaking — read-before-speak is the reviewer's honesty base), and
-ONE terminal tool (``wrap_up``) closes the turn with the spoken review plus
-0-3 next-step option labels that dock as a REAL numbered options question
-on the review row (ADR-081 选项语法统一律 — the pill form is retired; the
-picked label rides the answer endpoint's generic continuation into the
-next chat turn as the user's own say).
+The loop itself: the perception family's reads are the agent's eyes for
+run_failed / craft_decompiled (look BEFORE speaking — read-before-speak is
+the reviewer's honesty base); run_completed rides the READLESS
+``delivery_agent`` and its dedicated ``delivery_system.j2`` (deterministic
+outcome facts + conversation context, one matching reply branch). ONE terminal tool (``wrap_up``) closes the turn with the
+spoken review plus 0-3 next-step option labels that dock as a REAL
+numbered options question on the review row (ADR-081 选项语法统一律 — the
+pill form is retired; the picked label rides the answer endpoint's generic
+continuation into the next chat turn as the user's own say).
 
 Worker-side seats: both fire points are pipeline code (no request context),
 so the turn opens its OWN session (the ``dock_interrupt_question``
@@ -63,7 +64,7 @@ from app.chat.context import build_context, recent_history_within_budget
 from app.agents.tool_loop import ChatTool, ToolLoopAgent
 from app.chat.intent import _speech_language_line
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
-from app.chat.prompts import trigger_system
+from app.chat.prompts import delivery_system, trigger_system
 from app.chat.service import (
     _create_message,
     _dock_question,
@@ -84,7 +85,6 @@ from app.models.tables import (
     WorkflowStep,
 )
 from app.pipeline.trigger_events import (
-    TRIGGER_CRAFT_DECOMPILED,
     TRIGGER_RUN_COMPLETED,
     TRIGGER_RUN_FAILED,
     TRIGGER_WHITELIST,
@@ -162,9 +162,10 @@ WRAP_UP = ChatTool(
     name="wrap_up",
     description=(
         "Close the proactive turn: your spoken message is the review; carry "
-        "0-3 next-step option labels grounded in what you actually read "
-        "(they dock as a numbered options question — ADR-081). Speak "
-        "first, then call this."
+        "0-3 next-step option labels grounded in the turn's own records "
+        "(the event line's facts block and anything you read — they dock "
+        "as a numbered options question — ADR-081). Speak first, then "
+        "call this."
     ),
     params_model=WrapUpArgs,
 )
@@ -270,18 +271,55 @@ trigger_agent = ToolLoopAgent(
     system=trigger_system(),
     temperature=0.3,
     assemble=_assemble_trigger_turn,
-    # The full perception family rides (the run-completed review reads runs
-    # and outputs; a mid-life re-warm may legitimately look at them too) —
-    # plus the ONE terminal. 7 tools, well under the hallucination line.
-    # design_storyboard is filtered OUT: it rides the plan/chat paths'
-    # non-terminal sets, but a system-initiated beat never launches the
-    # minutes-long design beat (the reads-plus-wrap_up contract holds).
+    # run_failed / craft_decompiled keep the perception reads plus the ONE
+    # terminal. design_storyboard is filtered OUT: a system-initiated beat
+    # never launches the minutes-long design beat. run_completed uses the
+    # separate readless delivery_agent below.
     tools=[
         WRAP_UP,
         *(t for t in CHAT_READ_TOOLS if t.name != "design_storyboard"),
     ],
     max_iterations=6,
 )
+
+# run_completed rides its OWN readless agent: conversation context supplies
+# the request and the deterministic DELIVERY FACTS supply the latest outcome.
+# The delivery= line selects one reply branch before the model speaks.
+# run_failed / craft_decompiled keep the read-bearing agent because their
+# causes and skeleton gaps are not pre-assembled facts.
+delivery_agent = ToolLoopAgent(
+    name="trigger_delivery",
+    prompt="trigger.j2",
+    system=delivery_system(),
+    temperature=0.3,
+    assemble=_assemble_trigger_turn,
+    tools=[WRAP_UP],
+    max_iterations=3,
+)
+
+
+def _delivery_event_line(ref: str, review_lines: list[str]) -> str:
+    """The delivery turn's latest-outcome payload.
+
+    The event names a delivery review, not a successful run: the facts'
+    ``delivery=`` line alone selects the failed / partial / delivered reply
+    branch. Conversation context supplies the original request; these lines
+    supply what the latest tools actually produced.
+    """
+    if review_lines:
+        return (
+            f"Delivery turn for run {ref}. Use the conversation context for "
+            "the user's request and the DELIVERY FACTS below for the latest "
+            "tool outcome. Reply with the one matching delivery branch, "
+            "then close with wrap_up."
+            "\n\nDELIVERY FACTS (deterministic world records, not user copy):\n"
+            + "\n".join(review_lines)
+        )
+    return (
+        f"Delivery turn for run {ref}. No deterministic delivery facts "
+        "could be assembled. Give only the plain completion the receipt "
+        "proves, never invent details you cannot see, then close with wrap_up."
+    )
 
 
 def _wrap_up_rejection(trigger: str, suggestions: list[SuggestionItem]) -> str | None:
@@ -354,12 +392,11 @@ async def _run_review_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
     the deterministic 兑现事实清单 for the run_completed turn — the world's
     self-evidence (the run's Confirmed Scope Snapshot, the landed outputs'
     baked specs), adjudicated by ``run_review``'s PURE core and bounded by
-    its rendering caps. Zero LLM here; the prose law (facts first, zero
-    subjective quality words, gaps → suggestions) lives in the prompt.
-    Spend is never a closing-beat fact (2026-09-24 用户拍板 — Claude/Codex
-    parity), so no capture query rides here. Any read failure degrades to
-    the empty block (the fire-and-forget doctrine — the review then speaks
-    from its own reads, exactly the pre-S5 posture)."""
+    its rendering caps. Zero LLM here; the branch-specific prose law lives
+    in ``delivery_system.j2``. Spend is never a closing-beat fact, so no
+    capture query rides here. Any read failure degrades to the empty block;
+    the delivery turn then gives only the plain receipt fallback and never
+    invents unseen details."""
     from app.pipeline.run_review import (  # deferred: pipeline weight
         compute_run_review,
         landed_fact,
@@ -385,9 +422,21 @@ async def _run_review_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
             .scalars()
             .all()
         )
+    ctx = run.context or {}
+    # The film confirmed-vs-landed check reads the version THIS run consumed
+    # (stamped on the context at Start) — never the current live draft
+    # (d08af2af: the closing beat fabricated a drift when no fact existed).
+    film_confirmed = None
+    if isinstance(ctx.get("prepared_storyboard"), dict):
+        film_confirmed = {
+            "board": ctx["prepared_storyboard"],
+            "params": ctx.get("film_storyboard_params") or {},
+            "version": ctx.get("film_storyboard_version"),
+            "digest": ctx.get("film_storyboard_content_digest"),
+        }
     review = compute_run_review(
-        confirmed_scope=(run.context or {}).get("confirmed_scope"),
-        landed=[landed_fact(o) for o in outputs],
+        confirmed_scope=ctx.get("confirmed_scope"),
+        landed=[landed_fact(o, film_confirmed=film_confirmed) for o in outputs],
     )
     return review_fact_lines(review)
 
@@ -399,16 +448,14 @@ def _failure_fact_lines(
     steps: list[WorkflowStep], fanout_kinds: frozenset[str]
 ) -> list[str]:
     """The FAILURE FACTS block's pure core (ADR-135): one line per failed
-    VERDICT step — the same predicate as the run verdict (non-fanout; a
-    fanout render failure is a per-output canvas fact, never the run's
-    cause). ``step.error`` is already the baked user-facing line in the
+    step, including render/upload fan-out failures. ``step.error`` is already the baked user-facing line in the
     run's UI locale (bake-at-write discipline, errors.py) — the turn
     narrates it verbatim, never re-derives a cause. Bounded by
     ``_FAILURE_FACT_CAP`` (a dying run rarely fails more steps than a
     reader should have to scan)."""
     lines: list[str] = []
     for step in steps:
-        if step.status != "failed" or step.kind in fanout_kinds:
+        if step.status != "failed":
             continue
         lines.append(
             f"FAILED STEP: {step.kind} — {step.error or 'no error recorded'}"
@@ -433,7 +480,7 @@ async def _run_failure_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
         .scalars()
         .all()
     )
-    return _failure_fact_lines(steps, runtime_fanout_kinds())
+    return _failure_fact_lines(steps, runtime_fanout_kinds()) or ([f"DELIVERY FAILED: {run.error}"] if run.error else [])
 
 
 async def run_trigger_turn(
@@ -535,22 +582,13 @@ async def run_trigger_turn(
             )
             language = _trigger_language(run, history, conversation)
             if trigger == TRIGGER_RUN_COMPLETED:
-                event_line = (
-                    f"Run {ref} just reached its terminal state. Review what "
-                    "it produced, then close with the delivery review and "
-                    "next steps."
+                # 交付收敛 (修复批 B): the event line IS the delivery's
+                # whole record (the deterministic fact block rides it —
+                # the world's self-evidence, bounded by review_fact_lines'
+                # own caps) and the readless delivery_agent writes once.
+                event_line = _delivery_event_line(
+                    ref, await _run_review_lines(db, run)
                 )
-                # 兑现审计注入 (iter-3 S5): the deterministic fact block rides
-                # the event line — the world's self-evidence, bounded by
-                # review_fact_lines' own caps.
-                review_lines = await _run_review_lines(db, run)
-                if review_lines:
-                    event_line += (
-                        "\n\nDELIVERY FACTS (deterministic, from the run's own "
-                        "records — narrate them, never contradict them; a GAP "
-                        "line names something promised that didn't land):\n"
-                        + "\n".join(review_lines)
-                    )
             elif trigger == TRIGGER_RUN_FAILED:
                 event_line = (
                     f"Run {ref} FAILED and nothing landed — the user got "
@@ -599,7 +637,16 @@ async def run_trigger_turn(
                 return None
 
             with bind_conversation_turn() as _usage_bind:
-                result = await trigger_agent.call_loop(
+                # run_completed rides the READLESS delivery agent (修复批 B)
+                # — the facts block is its whole record, so the review is
+                # written once and closed; the other triggers keep the
+                # read-bearing agent (look before you speak).
+                agent = (
+                    delivery_agent
+                    if trigger == TRIGGER_RUN_COMPLETED
+                    else trigger_agent
+                )
+                result = await agent.call_loop(
                     execute,
                     event_line=event_line,
                     context_text=context.get("text", ""),
@@ -741,6 +788,7 @@ __all__ = [
     "TRIGGER_DUMP_TYPE",
     "TRIGGER_RUN_COMPLETED",
     "WRAP_UP",
+    "delivery_agent",
     "fire_trigger",
     "run_trigger_turn",
     "trigger_agent",

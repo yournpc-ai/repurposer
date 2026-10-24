@@ -152,6 +152,20 @@ class ReviseSelectsArgs(BaseModel):
     # ProposePlansArgs / RevisePlanArgs: the chat path settles by it; the
     # plan path never reads it.
     pending_disposition: Literal["answer", "skip", "none"] = "none"
+    production_intent: bool | None = Field(
+        default=None,
+        description=(
+            "Does the user's message ask for this work to be MADE now? "
+            "True only for an explicit production request or delegation "
+            "('按这版制作' / 'go ahead' / '直接做，细节你决定'); false for a "
+            "pure modification, a review-only ask ('先给我看方案'), or a "
+            "discussion. The user's auto/ask settings only waive approval "
+            "beats — they never turn a message without a production "
+            "request into one: a package docked without it waits for the "
+            "user's word (the card keeps its start button). Never omit "
+            "this judgment."
+        ),
+    )
 
 
 class PlanItem(BaseModel):
@@ -211,6 +225,20 @@ class ProposePlansArgs(BaseModel):
     # The plan path never reads it (its pending settlement is the brief
     # machinery's); there it stays "none".
     pending_disposition: Literal["answer", "skip", "none"] = "none"
+    production_intent: bool | None = Field(
+        default=None,
+        description=(
+            "Does the user's message ask for this work to be MADE now? "
+            "True only for an explicit production request or delegation "
+            "('按这版制作' / 'go ahead' / '直接做，细节你决定'); false for a "
+            "pure modification, a review-only ask ('先给我看方案'), or a "
+            "discussion. The user's auto/ask settings only waive approval "
+            "beats — they never turn a message without a production "
+            "request into one: a package docked without it waits for the "
+            "user's word (the card keeps its start button). Never omit "
+            "this judgment."
+        ),
+    )
 
 
 class RevisePlanArgs(BaseModel):
@@ -251,6 +279,20 @@ class RevisePlanArgs(BaseModel):
     # ProposePlansArgs: the chat path settles by it; the plan path never
     # reads it.
     pending_disposition: Literal["answer", "skip", "none"] = "none"
+    production_intent: bool | None = Field(
+        default=None,
+        description=(
+            "Does the user's message ask for this work to be MADE now? "
+            "True only for an explicit production request or delegation "
+            "('按这版制作' / 'go ahead' / '直接做，细节你决定'); false for a "
+            "pure modification, a review-only ask ('先给我看方案'), or a "
+            "discussion. The user's auto/ask settings only waive approval "
+            "beats — they never turn a message without a production "
+            "request into one: a package docked without it waits for the "
+            "user's word (the card keeps its start button). Never omit "
+            "this judgment."
+        ),
+    )
 
 
 EXPLORATION_TOOLS: dict[str, ChatTool] = {

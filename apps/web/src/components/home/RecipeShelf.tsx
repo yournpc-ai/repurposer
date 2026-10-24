@@ -231,6 +231,32 @@ function DemoCard({
     setMuted(true)
   }, [soundActive])
 
+  // Visibility gate (home 内容扩展批): with three shelves stacked, offscreen
+  // videos must not keep decoding — pause below the fold, resume the loop on
+  // re-entry. Sound can't survive offscreen (a paused video is silent
+  // anyway), so ownership releases on exit and a resume is always muted
+  // (muted play() needs no user activation); hover/focus re-arms sound.
+  useEffect(() => {
+    const root = rootRef.current
+    const video = videoRef.current
+    if (!root || !video) return
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          void video.play().catch(() => {
+            // A refused resume leaves the paused frame — hover re-arms it.
+          })
+        } else {
+          video.pause()
+          if (soundActive) muteSound()
+        }
+      },
+      { threshold: 0 },
+    )
+    io.observe(root)
+    return () => io.disconnect()
+  }, [soundActive, muteSound])
+
   useEffect(
     () => () => {
       onSoundStop(demo.id)

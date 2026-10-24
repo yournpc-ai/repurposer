@@ -11,6 +11,7 @@ import {
   anchorCardsForRun,
   anchorLabel,
   approxWordCount,
+  isDeliveredOutput,
   runOutputRefs,
 } from "./anchorCards"
 
@@ -74,7 +75,7 @@ describe("anchorCardsForRun — N 产物 = 数组平铺投影", () => {
     step({ id: "b", output_refs: ["o3"] }),
   ]
   const outputs = [
-    output({ id: "o1", type: "clip", files: { video: "/v1.mp4" } }),
+    output({ id: "o1", type: "clip", render_status: "completed", files: { video: "/v1.mp4" } }),
     output({ id: "o2", type: "quotes", files: { image: "/q1.png" } }),
     output({ id: "o3", type: "article", payload: { content: "正文" } }),
   ]
@@ -87,6 +88,39 @@ describe("anchorCardsForRun — N 产物 = 数组平铺投影", () => {
   it("媒体族映射: video > image > text(读容忍降级)", () => {
     const cards = anchorCardsForRun(steps, outputs)
     expect(cards.map((c) => c.kind)).toEqual(["video", "image", "text"])
+  })
+
+  it("未交付的 film/clip 不进入产物卡;文本产物不受影响", () => {
+    const deliverySteps = [
+      step({ id: "delivery", output_refs: ["failed", "pending", "empty", "ready", "post"] }),
+    ]
+    const rows = [
+      output({ id: "failed", type: "film", render_status: "failed" }),
+      output({ id: "pending", type: "clip", render_status: "rendering" }),
+      output({ id: "empty", type: "film", render_status: "completed", files: {} }),
+      output({ id: "ready", type: "film", render_status: "completed", files: { video: "/film.mp4" } }),
+      output({ id: "post", type: "post", payload: { content: "正文" } }),
+    ]
+    expect(anchorCardsForRun(deliverySteps, rows).map((c) => c.outputId)).toEqual([
+      "ready",
+      "post",
+    ])
+  })
+})
+
+describe("isDeliveredOutput — 产物卡准入", () => {
+  it("render 完成且文件存在才交付 film/clip", () => {
+    expect(
+      isDeliveredOutput(
+        output({ type: "film", render_status: "completed", files: { video: "/v.mp4" } }),
+      ),
+    ).toBe(true)
+    for (const render_status of [null, "pending", "rendering", "failed"]) {
+      expect(isDeliveredOutput(output({ type: "clip", render_status }))).toBe(false)
+    }
+    expect(
+      isDeliveredOutput(output({ type: "clip", render_status: "completed", files: {} })),
+    ).toBe(false)
   })
 })
 

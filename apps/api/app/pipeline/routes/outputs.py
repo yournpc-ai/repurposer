@@ -11,7 +11,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.tools.revise.agents import reviser
 from app.providers.llm.base import LLMError
@@ -229,20 +228,22 @@ async def render_output_endpoint(
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> Output:
-    """Queue this clip for video rendering (worker claims render_status=PENDING).
+    """Queue this video for video rendering (worker claims render_status=PENDING).
 
     R1 B4a: the reset is ONE seat (``reset_output_render``) — status + token +
     error + attempt counter move together, so a capped-out FAILED render gets
     a genuinely fresh budget instead of instantly terminally failing again."""
     output = _require_active(
-        _require_clip(
-            await get_output_for_user(db, output_id, UUID(str(current_user.id)))
-        )
+        await get_output_for_user(db, output_id, UUID(str(current_user.id)))
     )
+    if output.type not in ("clip", "film"):
+        raise HTTPException(status_code=400, detail="Only clip and film outputs can render")
+    if output.render_status in (RenderStatus.PENDING, RenderStatus.RENDERING):
+        return output  # repeated clicks must not revoke an in-flight claim
     if not output.render_spec:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Clip has no render_spec (text-only project — no source video)",
+            detail="Video has no render_spec",
         )
     from app.pipeline.jobs import reset_output_render
 

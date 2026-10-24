@@ -1,73 +1,48 @@
-# Lifecycle Phase 6 施工合同——Hygiene（巨文件拆分与残留单主化；永不进关键路径）
+# Lifecycle——剩余验收与 Hygiene 合同
 
-> 拍板：2026-09-19（用户，Architecture Freeze）。架构合同 = `docs/DECISIONS.md` ADR-087（原则 5：每个产品概念只有一个 canonical definition）。
-> 前置：Phase 1~5 全闭环。**本批最后做，永不进关键路径**——任何 Phase 1~5 的工作不得依赖本批产出。
-> 范围纪律：hygiene 只做登记在册的四项；发现新项登记 PROGRESS 需求池，不顺手扩。
+> Status: 早期验证/对账开放；hygiene 为 PLANNED，未开工。架构原则归 ADR-087；hygiene 只做已登记的零行为变化清理，永不进入关键路径，其他工作不得依赖它。
+>
+> 启动前置仍未被当前证据证明：早期 lifecycle 验证尾项和旧 Phase 2 步⑤的状态冲突须先在 PROGRESS 对账。不得仅凭旧“CLOSED”记录认定前置已经满足。
 
-## Product goal
+## 0. 前置对账与早期验收欠账
 
-1. `service.py`（2416L）/ `schemas.py`（3547L）/ `graph_fill.py`（1534L）拆分——按既有职责缝拆，行为零变化。
-2. `Message.intent` typed union（JSONB astext 教训在册——新列/新读面一律强类型）。
-3. ~~`apply_edit_ops` commit 律对齐~~（该工具已随 Final Hardening B1 全退役 `9ddf3ec`；同一 flush-only 例外现在由 `edit_output` 的 operations 路径承载——回滚不对称问题本身留本项，对象改名）。
-4. 其余 threshold / 词汇单主残留清零（Phase 3 之后仍存的散点）。
+以下是启动 hygiene 前必须保留或关闭的 lifecycle 事项，不是新的施工批：
 
-## Current evidence
+- **当前验证**：compileall/冷导入、web 类型与纯函数检查、当前 lifecycle/material 旅程仍有验证尾项；旧移动端 plan-card 验收改为当前移动端纯 chat、plan echo 与刷新恢复，不复活已退役卡面。
+- **生命周期读面**：核对 `derived` / `reasons` 的最终分类与当前 canonical 行为；`PLAN_READY` 和 `CONFIRMATION_READY` 不可混用，缺失 stamp 是 unknown，估价完整性不是 PLAN_READY 前置。
+- **旧 Phase 2 步⑤**：旧合同仍标 HOLD，而后来的相位退役与 ADR-133 已改变实现。先记录并完成状态对账；既不要重做删除，也不要仅凭后续文档把 HOLD 写成已关闭。
+- **`_read_face` 删除条件**：只有生产 DB 守卫查询证明 `generator` / `processor` / `agent` / `modifier` / `materialize` 五类 legacy 节点与旧 toolset 行均为零后才可删除。开发库计数不能代替生产证据；此前一直是 DEFER。
+- **Disclosure 残留**：核对 prompt 中“when the card is shown”一类旧 plan-card 条件；若仍在，按 ADR-111 的现行呈现面清理并跑 prompt_gate，不把旧短语保留为法律。
+- **scope 安全缺口**：`delete_node + run` 的精确历史 scope 比较仍是未来领域能力；在可证明之前一律 unproven 并走安全授权路径。targeted `tasks=None` 与 legacy slot-run 整族重试可以是安全 false negative，不得静默改成直接执行；是否投入新能力需单独产品决策。
+- **approval provenance 文档/代码差异**：ADR-089 §4 要求有效 confirmed scope/approved provenance；当前 `scope_classifier.load_historical_chains` 仍会把带 `context.tasks` 的历史 run 纳入证明基线。生产 legacy 暴露面**尚未核实**，这不是已确认生产事故。关闭前必须二选一：让缺少有效 approved provenance 的 legacy run 不能授权 `/generate`，或明确重新裁决并同步 ADR/验收；不得只改文档掩盖差异。
+- **触发与依赖方向现行法**：当前 trigger kinds 为 `run_completed` / `run_failed` / `craft_decompiled`；ADR-087 若仍列 `understanding_warmed` 应同步删除。pipeline 永不 import chat，只经批准的 event seam、公开应用命令或显式只读协议回接。
 
-- 巨文件三座（审计实测行数）：`apps/api/app/chat/service.py` 2416L / `apps/api/app/models/schemas.py` 3547L / `apps/api/app/pipeline/graph_fill.py` 1534L。
-- `Message.intent` 是 generic JSON 列（无 `.astext`——`messages.intent` 曾致触发回合全静默，坑记录在册）。
-- `edit_output` 的 operations 路径（原 apply_edit_ops 座，B1 退役后由受控终态工具承载）：跳层且回合中 commit（`operations/service.py` flush-only 律唯一例外，回滚不对称）。
-- ChatDock.tsx 4877L：Phase 3 已抽 adapter；状态机/视图同居的拆留本批**评估**（非必做——拆与否以依赖方向理由为准，不为漂亮）。
+## 1. 已批准范围
 
-## Contract changes
+1. **按职责缝拆分巨文件**：`chat/service.py`、`models/schemas.py`、`pipeline/graph_fill.py`。只沿现有职责平移，不建立第二事实源，不顺手改产品语义。
+2. **`Message.intent` 强类型化**：改为明确 union，同时保持 NULL 与 legacy 行可读。迁移顺序为 tolerant reader → narrow writer → tightened type，并有序列化/反序列化覆盖。
+3. **`edit_output` 事务对称性**：使 operations 路径的 commit/rollback 与其他写口对称；若确有例外，必须在 ADR/模块合同记录具体理由，并有失败路径零残留测试。
+4. **ChatDock 仅评估**：是否继续拆分取决于依赖方向与承重结构，不为缩短文件而拆，不改变两形态机与草稿保活。
 
-- 无新合同。本批是原则 5 的残留清扫，不引入任何新语义。
+其余 threshold / 词汇单主化只有在形成具体清单后才可排入；新发现登记 PROGRESS，不在本批静默扩 scope。
 
-## Files（预判，施工时逐座定位）
+## 2. 实施与回退
 
-- `apps/api/app/chat/service.py`（按既有职责缝：dispatch / 命令族 / 相位词汇已出 Phase 3）。
-- `apps/api/app/models/schemas.py`（按域切分；输出契约 / 请求响应 / 内部模型）。
-- `apps/api/app/pipeline/graph_fill.py`（stamp / sync / 文档帧三族）。
-- `apps/api/app/models/tables.py` + 读面（Message.intent typed union）。
-- `apps/api/app/operations/service.py`（commit 律对齐）。
+- 一文件一批、一缝一提交，每步可独立回退。
+- 拆分必须是纯平移；compileall、冷导入探针与当前纯测试证明行为不变。
+- 数据/类型收紧先保证旧行读容忍，再收窄写面；不得直接清洗或重写历史消息。
+- 触及代码地图时同步 MODULE_ARCHITECTURE §7；普通平移不新增 ADR。
 
-## Tests（Claude 编写，用户自跑）
+## 3. 验收
 
-- 拆分 = 纯平移：compileall + import 探针 + 纯 pytest 全量回归（行为零变化是验收线）。
-- Message.intent typed union：序列化/反序列化用例（旧行读容忍——存量 intent=None / 旧形状行照读）。
-- commit 律对齐：回滚对称性用例（失败路径零残留）。
-
-## Migration strategy
-
-一文件一批、一缝一 commit；每 commit 冷启动自绿（import 探针 + 纯 pytest）。typed union 先加读容忍层，再收窄写面，最后收紧类型。
-
-## Rollback strategy
-
-逐 commit revert；拆分批内任意 commit 可独立回退（平移无行为依赖）。
-
-## Acceptance criteria
-
-- 行为零变化（纯 pytest 全量 + 剧本 S5 / S7 / S10 / S11 / S20A 保留）。
-- 三座巨文件按缝拆分，无第二事实源产生。
-- Message.intent typed union 落地，旧行读容忍。
-- edit_output operations 路径的 commit 律与其他写口对称（或登记为显式例外并附理由）。
+- 当前完整纯 pytest、check_gates、适用的 prompt_gate、当前注册旅程矩阵与 web 检查按改动面通过。
+- 三个拆分目标没有平行事实源，公开 import 与依赖方向不变。
+- `Message.intent` 新类型与 NULL/legacy 读容忍同时成立。
+- `edit_output` 失败注入后无部分提交、无孤儿副作用；或存在明确、已批准的例外合同。
+- 全部验收只写当前结果；旧文件行数、提交清单和退役剧本名不作为验收证据。
 
 ## Prohibited Behaviors
 
-- 禁止在本批引入任何产品语义变化（hygiene = 平移与收紧，发现语义问题登记上报）。
-- 禁止让 Phase 1~5 依赖本批产出（永不进关键路径）。
-- 禁止顺手扩登记外项目（新项进 PROGRESS 需求池）。
-- 禁止拆分中产生平行事实源（每拆一处，引用同源）。
-
-## 收尾报告格式（每 Phase 同律，§十六）
-
-Goal / Current evidence / Contract changes / Files / Tests / Migration strategy / Rollback strategy / Acceptance criteria / Status（日期 + commit 范围 + 验证状态——compileall / import 探针 / tsc / 剧本 = 用户自跑，报告标注「未跑验证」项）。
-
-## Docs update（同批）
-
-- ADR-087 Consequences Phase 6 行回填 + commit 范围。
-- `MODULE_ARCHITECTURE.md` §7.1 代码地图同步。
-- PROGRESS §0.2 状态行更新（本批闭环 = 整个 Lifecycle & Interaction Architecture 批次收口）。
-
-## Status
-
-PLANNED（2026-09-19 建档，未开工；前置 = Phase 1~5 全闭环）。
+- 禁产品语义变化、禁让其他 lifecycle 工作依赖本批、禁顺手扩项。
+- 禁为“整洁”破坏 ChatDock 恒渲染/恒定子索引、SSE、授权或唯一写口。
+- 禁把未执行的前置对账写成已完成。

@@ -1,6 +1,6 @@
 # ARCHITECTURE NORTH STAR — 目标架构与可靠性主线
 
-> Status: 活跃（最后更新 2026-09-16）。
+> Status: 活跃（最后更新 2026-10-25）。
 > 本文回答「我们正在把这个系统建设成什么」——**目标架构（North Star）与可靠性主线的唯一事实源**。现状架构归 `MODULE_ARCHITECTURE.md`；工程地图归 `AGENT_ARCHITECTURE.md`；概念架构归 `DIALOG_WORKFLOW.md`；决策归 `DECISIONS.md`。本文不替代它们，只给方向、边界与实施顺序。
 > **五态纪律（全文强制）**：`CURRENT` = 当前代码已存在并经代码验证；`TARGET` = 已明确决定要演进到；`PLANNED` = 已决定、未实施；`OPEN` = 未决定 / 待验证；`REJECTED` = 讨论过、明确不采用。判断优先级：**Current HEAD code > DB constraints / migrations > tests > ADR > 架构图 > 历史计划**。任何一行不得把 TARGET/PLANNED 写成 CURRENT。
 
@@ -24,7 +24,7 @@
 | Execution State Machine（run/task 生命周期 + HITL） | run/step 状态 + interrupt 提问机器 + fencing（R1 B2 ✅）+ run authority 仲裁（R1 B3 ✅）+ retry 封顶终态（R1 B4a ✅） | ✅ CURRENT |
 | Task / **Attempt** | step = ✅；attempt 计数器 = ✅（B4a）；**ExecutionAttempt = OPEN**（四证据点触发制，§8.5） | ⏳ OPEN |
 | **Artifact 层**（不可变 + parent/version/provenance） | **无统一模型**——其目标已被替代机制部分兑现：operations journal（ADR-032）/ `restore_version` 快照 / 变体并行（ADR-061）/ 内容寻址复用（understanding、skeleton）。统一模型 = 触发制 OPEN | ⏳ OPEN（部分能力 ✅） |
-| Structured Media 层（Media Program / AST） | clip-spec（ADR-016 唯一渲染契约）+ CraftSkeleton（ADR-078 首个工艺结构产物）；**Media IR = OPEN** | ✅ 雏形 / ⏳ 深化 OPEN |
+| Structured Media 层（Media Program / AST） | clip-spec + film-spec（平级 spec families，ADR-016/119）+ CraftSkeleton（ADR-078 首个工艺结构产物）；**Media IR = OPEN** | ✅ 雏形 / ⏳ 深化 OPEN |
 | Decompiler / Compiler | `craft_scan` + `Decompile` 节点（video→骨架，T5）/ renderer 确定性渲染（黑盒） | ✅ CURRENT |
 | Human-in-the-loop | interrupt/checkpoint 提问机器（S6 族）+ run authority（R1 B3 ✅） | ✅ CURRENT |
 
@@ -71,7 +71,7 @@
 | status | 行生命周期状态 | ✅ | `workflow_steps.status`（String 无枚举）——只做认领谓词 + execute_step 入口头卫（用过即弃） |
 | attempt counter | 认领次数计数 | ✅ | `workflow_steps.attempt`（Integer）——只喂 retry 预算与 billing idem key；**不是执行身份** |
 | worker identity | 哪个 worker 实例 | ❌ 不存在 | 无列、无实例 id |
-| execution identity | 哪一次执行 | ❌ 不存在 | 无 execution_id / claim_id |
+| execution identity | 哪一次执行拥有当前写权 | **完整 ExecutionAttempt 模型不存在**；当前只有短期 fencing token | 无独立 execution_id / attempt 表；当前写权由下一行 `claim_token` / `render_claim_token` 表达 |
 | fencing token | 使旧执行写必失败的令牌 | ✅（ADR-079） | `workflow_steps.claim_token` / `outputs.render_claim_token`——claim 铸、失势置 NULL、终态写 `WHERE … AND claim_token=:mine` 查 rowcount |
 
 ### 2.1 概念词典：内容世界六概念（CURRENT 存在性）
@@ -142,13 +142,13 @@ ADR-052 判词「实现层零 agent、全 workflow」维持；ADR-077 收编的�
 
 ## 7. SSE / Streaming 原则
 
-**Internal reasoning ≠ Product event**——CURRENT 已成立且比通用表述更严：think 方言封在 provider client（`_ThinkStripper`，ADR-066 方言归 client）；用户面只有打字机散文 + 相位帧（StatusLine 一座两行）+ 触发回合；整段瞬移永禁（打字机律，CHAT_ARCH §8.6）。新增散文通道 / 散文字段 / 提案工具时两牙同批检查的纪律不变。
+**Internal reasoning ≠ Product event**——think 方言封在 provider client（`_ThinkStripper`，ADR-066）；用户面只有打字机散文、用户安全 Activity/相位（统一由 `WorkSegmentRow` 承载）与触发回合。`assistant.thinking {}` 只保温，不展示 reasoning；整段瞬移永禁（CHAT_ARCH §8.6～§8.7）。新增散文通道 / 散文字段 / 提案工具时，null 读容忍与 settled-prose pacing 两牙同批检查。
 
 ## 8. Execution Kernel = 可靠性核心
 
 ### 8.1 当前基线（CURRENT）
 
-执行层六条现行不变量（证据归 `POST_T5_DELTA_AUDIT.md`，§12）：
+执行层六条现行不变量（合同归 ADR-079 / ADR-017；实现以当前代码为准，自动守卫包括 `apps/api/tests/test_execution_fencing_pure.py`；本列表不把旧审计截图当成当前回归证据）：
 
 1. **节点终态写带围栏（ADR-079）**：execute_step 四尾 = 条件 UPDATE `WHERE id=:id AND claim_token=:mine` + rowcount；fenced → rollback + 零副作用（不 capture / 不 sync / 不 cascade / 不写 run）。
 2. **渲染终态写带围栏（ADR-079）**：render 三处终态写谓词 = `render_claim_token=:mine`；全部 10 处 re-pend 置 NULL；入口 token NULL 提前 return。
@@ -159,7 +159,7 @@ ADR-052 判词「实现层零 agent、全 workflow」维持；ADR-077 收编的�
 
 ### 8.2 Race proof 的架构意义
 
-竞态根因：**写操作不携带「这次执行是谁」**。`A claim → A 停滞 → reap → B claim → B 完成 → A 醒来 → A 终态写` 全链路上，A 没有任何一个 DB predicate 会失败——不设围栏时 run 行第一写者赢（finalize 行锁是全库唯一真围栏）、step 行最后写者赢、钱包扣两次（ledger 设计上无法区分 zombie 与合法 QualityBounce 重跑）。
+竞态根因：**写操作不携带「这次执行是谁」**。`A claim → A 停滞 → reap → B claim → B 完成 → A 醒来 → A 终态写` 在无围栏时会让 step 最后写者赢、钱包重复 capture，run finalize 的行锁也不能证明 step/ledger 的执行身份。`POST_T5_DELTA_AUDIT.md` 只保留**围栏落地前**的这类竞态证据，用于解释机制动机；它不是当前 P0 仍存在或当前守卫已通过的证明。当前验收必须重跑 ADR-079 的竞态步骤并保留本轮结果。
 
 ### 8.3 根原则（TARGET，一切执行层工作的判据）
 
@@ -191,7 +191,7 @@ CURRENT：`_mutate` 双层 dedupe（NOT-EXISTS 门 + `on_conflict_do_nothing`）
 
 ### 9.1 CURRENT
 
-- **clip-spec = 现行 Structured Media 形态**：唯一渲染契约（ADR-016），renderer-agnostic（轨道模型 ADR-044，TRACK_REGISTRY 9 轨），渲染服务是可替换黑盒。
+- **clip-spec / film-spec = 平级 Structured Media spec families**：renderer-agnostic，按 `spec.family` 分派；clip 轨道模型由 ADR-044 / TRACK_REGISTRY 9 轨承载，film 由 ADR-119 承载，渲染服务是可替换黑盒。
 - **CraftSkeleton = 首个「工艺结构」内部产物**（ADR-078）：确定性字段零 LLM 是构造性保证（craft_scan 无 provider import + 三座位 schema + 测试看门）；内容寻址复用已成立。
 - **Decompiler CURRENT 限制**：latest-20 Python 扫描复用 / version 不进 cache key / warm 行无 lineage（三项归 R1.1 C1）；gaps 有确定性注入进 plan facts（`registry.py:166-178`），skeleton 时序结构有 prompt 侧消费者——但**确定性参数消费者仍只有 count/aspect/captions/music**，结构级 remix 未实现。
 
@@ -203,24 +203,15 @@ Structured Media 逐步成长为 **Media IR / AST**：timeline / clips / audio /
 
 「Structured Media 是领域核心」当前只覆盖**媒体族**（video/audio/image 轨）；**文本族**（post/article/table）是 schema'd payload，没有也没有必要立刻有 media IR。Media IR 主线 = 媒体族方向，不得反写成全产物统一 IR 的既有事实。
 
-## 10. 实施序列（PLANNED，顺序即裁定）
+## 10. 实施依赖（PLANNED / OPEN）
 
-> **现行批次与顺序的唯一事实源 = `docs/PROGRESS.md` §0**（产品旅程驱动：R1 = J2/J5/J6 must-have，R1.1 = B4b hold GC + B5 W11 + C1 并行）。本节只留技术依赖注记，不承担排期。
+> **当前批次、优先级与发布顺序的唯一事实源 = `docs/PROGRESS.md` §0**。本节只保留技术依赖，不复述 R1/R1.1 的完成史或另建排期。
 
-技术依赖注记：
-
-```
-R1 ✅ 已落地：B1 remix 旅程收口（J2）→ B2 claim fencing（§8.4 短期原语；ADR-079 + ADR-017/030/050 修订）——J5 收费诚实前提
-  → B3 run execution authority（resume/expire 第二出生通道执法）——J6
-  → B4a poison-pill 封顶——J5 卡死有终态
-  → R1.1：B4b hold GC（B4a 前置）→ B5 W11（硬前置 = B2：双扣路径封死再接真钱）∥ C1 cache identity
-  → ExecutionAttempt 演进（§8.5；独立批次，先裁定形态——四证据点门禁：fenced 频率 / 台账查询模式 / W11 对账 / postmortem 九问）
-  → 能力契约显式化（§4 四分注册属性——触发制：首例能力误挂事故或新能力族批量入场）
-  → AgentBudget（§6——触发制：跑飞事故 / 台账长尾数据 / 第二 provider）
-  → Structured Media 深化（结构级 remix 是产品承诺问题，先裁定再立项）
-```
-
-每批只解自己的题：B2 不解 ExecutionAttempt；ExecutionAttempt 不改写围栏语义（它消费围栏）。
+- 支付、订阅、权益、渠道联调、hold GC 与 cache identity 同属当前挂起的 Commercial / Distribution 范围；重启条件与依赖归 `PROGRESS.md` §0.3 及对应任务合同。任何真实收费扩张都必须保留 ADR-079 的 fenced-zero-side-effects 与 ADR-055 的账本约束。
+- ExecutionAttempt 只在独立批次先裁定形态。启动证据 = fenced 频率、台账查询模式、商业对账需求与事故取证需求；它消费围栏，不改写围栏语义，也不得与 claim token 互名。
+- 能力契约显式化是触发制：首例能力误挂或新能力族批量入场后再评审，不预先建立统一 Policy 大层。
+- AgentBudget 是 TARGET 契约，墙钟/token/side-effect 数值未拍板；启动依据为跑飞事故、台账长尾或第二 provider 的真实需求。当前迭代上限不能冒充墙钟预算。
+- Structured Media 深化与结构级 remix 先裁定产品承诺，再决定是否立项；统一 Artifact / 完整 Media IR 不由本节自动创建。
 
 ## 11. 不做清单（REJECTED / 缓做）
 
@@ -241,7 +232,8 @@ R1 ✅ 已落地：B1 remix 旅程收口（J2）→ B2 claim fencing（§8.4 短
 | 决策集 | `DECISIONS.md` |
 | 用户旅程 | `JOURNEYS.md` |
 | 命名 | `NAMING.md` |
-| **执行可靠性基线（P0 证据）** | `POST_T5_DELTA_AUDIT.md`（仓库根） |
+| **执行围栏合同与当前守卫** | `DECISIONS.md` ADR-079 + 当前执行代码 + `apps/api/tests/test_execution_fencing_pure.py` |
+| **围栏前竞态证据（仅机制动机）** | `POST_T5_DELTA_AUDIT.md`（仓库根；不证明当前状态） |
 | 排期 / 需求池 | `PROGRESS.md` |
 
 ## 13. 与现行 ADR 的关系

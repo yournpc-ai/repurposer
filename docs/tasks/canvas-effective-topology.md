@@ -1,79 +1,33 @@
-# 画布拓扑时间一致性 — 施工简报（ADR-098）
+# 画布拓扑时间一致性——剩余验收（ADR-098/113）
 
-> Status: 三批代码层收口——**B1 `7787ee4`**（effective_rank_edges 唯一拓扑层）/ **B2 `a4ee8ee`**（Z 冻结律门守卫 + 7b 对账内嵌同谓词）/ **B3 `042decd`**（legacy 混合岛读时归一，零迁移）。纯测试 862 绿 / 既有 11 基线失败不动；web `layout.test.ts` 10 绿（双镜像 fixture 入座）。
-> **未跑验证项（用户自跑）**：compileall / import 探针 / tsc / e2e 剧本；live 验收 = ① 存量项目 `/graph` 载荷与 B1 前恒等回归 ② 事故项目 `62594b0b` 读时归一确认（rank 0/1/2、无 reserved_bottom 幽灵）③ Start 主链（lineage 豁免承重——无豁免则每个 Start 死于门）④ 素材删除 reflow 走查。live 验收通过前简报留 tasks/ 不归档。
-> 合同措辞澄清（施工记录）：B2 施工点 1 的「rank 三值边…ctx 边豁免」未提 lineage——实现按 rank-relevant 谓词落地（rank 三值 ∧ 非 lineage 端口标记边），依据 = ADR-098 §1 既有「lineage rank 豁免」+ run fill 时序实证（`graph_fill` 复用节点先于门置 queued，lineage 盖章合法落进 queued deliverable）。
-> 架构母法 = ADR-098；Product Graph 地基 = ADR-086；artifact/lineage 边界 = ADR-097。
+> Status: effective rank、settled freeze 与 legacy 混合岛读时归一已有代码层结果；compileall/import、web 类型检查、当前 e2e 与 live 验收仍开放。本文只保留现行拓扑约束和验收，不记录分批施工。
 
-## 背景（取证定案）
+## 1. 当前拓扑契约
 
-走查实测：素材 → 转写稿 → 金句卡（write_quotes draft）三节点画布，两列水平净距 124px vs 708px（5.7×，活 payload 证实金句卡 rank=3、x=1572）。根因 = 两张图：岛出生（`_assign_islands`）吃写时拓扑（持久边，两节点同代，cols=2 廊道合法），rank 投影（`display_ranks`）吃读时拓扑（持久边 + A3-lite 读时合成 transcript→consumer，consumer 深度 2）——consumer 被自家廊道挤到 rank 3，廊道第二列结构性永远等不到住户（未来消费者同样被合成边推到深度 2），死列；岛在结果画布零可见 chrome，空隙无解释。另有 latent 交互：lineage 端口标记边（edge_type=text）会占合成去重三元组，artifact 盖章链的 deliverable 将被自己的血缘边顶掉合成边（存量库零行，律法先于首例）。
+- **一个 rank authority**：写时岛/帧分配与读时 `display_ranks` 使用同一 effective 拓扑层；出生帧和后续 `/graph` 不得各吃一张图。服务端 `display_ranks` 与客户端 `projectSettledFrames` 同 fixture 同数。
+- **effective 层只读**：纯函数返回投影，不落库、不进入 RunOp 闭包、stale 传播、工作流编译或 worker 认领。执行拓扑仍以 run 内编译事实为准。
+- **ADR-113 重基线**：新图没有 transcript 节点，也没有 synthetic transcript→consumer 边；transcript 是资产卡内容。legacy transcript 节点/边只允许在迁移与读兼容层归一，不得再被描述为目标 Effective Product Graph。
+- **去重只看 rank 合法边**：lineage/ctx 端口边不占 rank 合成边的去重位置，自环排除；lineage 继续只表达血缘，不产生调度语义。
+- **settled rank 冻结**：rank-relevant 的 video/audio/text 边 connect/disconnect 到非 draft 目标必须拒绝；ctx 与 lineage 按既有豁免。`graph_fill` 的对账使用同一谓词，内部操作不获额外豁免。
+- **legacy 混合岛读时归一**：跨 effective rank 的旧岛按 rank 拆 cohort，cohort 内序号重定基；单成员 cohort 不生成 corridor、不下发 island/reserved_bottom。存储帧不被裸 SQL 重写。
+- 新成员只按 append-only 规则影响自己的座位，既有卡不移动；不为“按实际占据”动态压缩廊道。
 
-施工 = 三批：B1 effective 拓扑唯一层 → B2 Z 门守卫 → B3 legacy 读时归一；总验收节后附。
+## 2. 自动与 live 验收
 
-## 批次 B1：Effective Product Graph 唯一层
+自动检查：compileall/冷导入、相关 product-graph 与 layout 纯测试、web tsc、当前受影响 e2e。未运行前不得写成通过。
 
-### 施工点
+live 至少覆盖：
 
-1. **抽纯函数** `effective_rank_edges(nodes, persisted_edges)` 入 `app/pipeline/product_graph.py`（投影规则 canonical home）：transcript 文档节点 + asset→consumer 物料流边（video/text）⇒ 合成 transcript→consumer text 边。三铁律：① 零图写入（纯数据返回，调用方永不 flush 合成行）；② 三元组去重**只看 rank 合法边**——lineage 端口标记边（`out:lineage`/`in:lineage`）永不占位；③ 自环排除。把 `routes/projects.py` 的内联合成段（A3-lite，~:483-533）整段替换为本函数调用——读面边载荷形状不变（合成行仍以 dict 出生，`from_port="out:text"`）。
-2. **写时同吃一层**：`graph_store._assign_layout`/`_assign_islands` 的 `depth_of`/`rank_parents_of` 改吃 `effective_rank_edges([*placed, *newborns], working_edges)` 的结果（~:756-840 与 :562-700，行号以 current HEAD 重核）。出生帧与读时投影同图：consumer 写时即深度 2，岛家庭按（effective 深度，effective 父签名）归组——transcript 与 consumer 天然不同家庭，消费者兄弟组自成岛，单成员家庭不生岛。**禁 transcript 特判**。
-3. **`display_ranks` docstring 改写**：构造假设 =「成员共享一个 effective rank 与一个 effective 父签名」。
-4. **执行侧零消费探针**：RunOp 闭包 / stale 传播 / 工作流编译不吃 effective 边——纯测试锁（对同一 fixture，执行拓扑输入前后一致）。
-
-### 验收
-
-- canonical fixture（asset + transcript + 1 consumer）：深度 0/1/2、x = 0/524/1048；两节点不同岛、无岛行出生（单成员家庭）。
-- transcript + 3 writers：三 writer 同 rank 2、同 x、同岛；transcript 无岛。
-- 读面行为恒等：同一存量项目 `/graph` 载荷（nodes/edges/rank）与 B1 前一致（回归即红）。
-
-## 批次 B2：Settled Rank 冻结律门守卫
-
-### 施工点
-
-1. **connect 守卫**（`apply_wiring_ops.add_edge`，~:1012-1051）：rank 三值边（video/audio/text）进 `to_node.state != "draft"` → `WiringRejected`；ctx 边豁免。
-2. **disconnect 守卫**（同门 DisconnectOp 落地点，~:1112-1127）：同一谓词。
-3. **7b 对账内嵌同谓词**（`graph_fill` ~:1341-1374）：rank 边进非 draft 目标的 disconnect 跳过并具名上报（log/warning 具名，不静默）——「内部」不是豁免理由。
-4. Z 两证明的实证查询入测试注释备查（draft→settled rank 边 = 0 的 DB 守卫查询形状）。
-
-### 验收（负向测试四条，纯函数/ stub 套件）
-
-- rank-connect 进 settled → 拒；ctx-connect 进 settled → 放；
-- rank-disconnect 进 settled → 拒；rank-connect/disconnect 进 draft → 放（provisional 机器不破）。
-
-## 批次 B3：Legacy mixed island 读时归一
-
-### 施工点
-
-1. `display_ranks`：检测成员跨 effective rank 的岛 → 按 rank 拆 cohort；cohort ≥ 2 享 corridor（slots 记该 cohort 所在带），**cohort 内 seq 重定基**（禁沿用跨 cohort 全局 seq）；单成员 cohort = corridor 全死。
-2. corridor 全死 = 三件事一并：`slots` 不记、节点 `spec.island` 不随读面戳出（冻结格 y 与 `reserved_bottom` 不下发，~projects.py:740-749）。存储帧 y 仍是该节点的 server 座位（append-only 不动），客户端对该节点回普通列律。
-3. 客户端零改动验证：`layout.ts projectSettledFrames` 机制不动（`x = rank × PITCH` 与 `spec.island` 两入口）；同一 fixture 服务端/客户端双镜像同数（layout.test.ts 加 fixture）。
-
-### 验收
-
-- 事故同构 fixture（asset + transcript + consumer + 混合岛 cols=2）：rank 0/1/2、x = 0/524/1048；`reserved_bottom` 幽灵死（两列无 2200 地板）；合成边 B→C 方向不变量成立。
-- legacy 混合岛（transcript + 3 writers）：transcript cohort 死（单成员），writers cohort 保 corridor（同 rank 2 同 x）。
-- 第 5 writer 到来：进 writers 岛第二列（rank 3），既有四卡 x 不动（append-only 回归断言）。
-
-## 总验收（几何断言 + 纪律）
-
-- **A**：事故 fixture rank/x 如上；A→B 净 gap 124、B→C 净 gap 184 = 帧宽分档纹理，**非缺陷**（验收不看像素等距，看 rank × PITCH 节奏）。
-- **B**：transcript + 3 writers 同列同 x。
-- **C**：5 writers 第 5 进下一列，既有不动。
-- **D**：货架岛（多素材）加第 5 成员，全部下游 x 不动。
-- **E**：方向不变量零违规、零豁免面（ctx/lineage 既有豁免不动）。
-- **F**：revealOrder 恒 from 先于 to。
-- **G**：服务端 `display_ranks` ≡ 客户端 `projectSettledFrames` 同 fixture 同数；移动端同 payload 无第二 rank 源。
-- **素材删除 reflow**：幸存消费者 rank 掉 0 左移 = 显式 lifecycle 后果，**非 regression**（测试只断言行为发生且被命名，不断言不动）。
+1. **存量载荷恒等**：同一未迁移项目 `/graph` 的 nodes/edges/rank 与现行读兼容预期一致；若有差异必须能归因到 ADR-113 的明确迁移，而非隐式重排。
+2. **legacy 混合岛**：项目 `62594b0b` 或等价夹具显示 rank 0/1/2，无 reserved_bottom 幽灵空列；legacy transcript 仅作读兼容，不被写成新节点。
+3. **Start 主链**：lineage/ctx 豁免真实有效，Start 不被 settled-rank 门误杀；执行闭包没有消费 display/effective 边。
+4. **素材删除 reflow**：幸存消费者 rank 下降与左移作为具名 lifecycle 后果出现，不被误报为随机布局回归。
+5. **多 writer / append-only**：同 rank、同父签名的 writer 归组；新增成员进入下一列时既有卡不动，revealOrder 恒为 from 先于 to。
+6. **双端一致与移动端**：服务端和客户端帧数值一致，移动端没有第二 rank 源。
 
 ## Prohibited Behaviors
 
-- 禁 effective 边进执行侧（RunOp 闭包 / stale 传播 / 工作流编译 / worker 认领）；
-- 禁 transcript 特判（`role == "transcript"` 类分支永禁——家庭归组只吃 effective rank + effective 父签名）；
-- 禁合成边落库（A3 永是读时纯投影，零 GraphEdge 写入；写时消费只在内存）；
-- 禁 lineage/ctx 边边界改动（rank 豁免面零 diff；lineage 只占它自己的血缘语义，永不占合成去重）；
-- 禁给岛内边开方向不变量豁免（方向律零豁免面新增）；
-- 禁拆 rank 双名（topology_rank / layout_rank 二元化永禁——一个 rank authority + 一条 freeze 律）；
-- 禁「按实际占据记账」类动态廊道（破 append-only，已否决入 ADR 备查）；
-- 禁裸 SQL 修复存量混合岛（读时归一，零迁移）；禁任何 migration 进本批；
-- 禁改 worker 认领机制与 claim token CAS（ADR-079 承重面零 diff）；
-- 禁动 prompt 面（本批零 prompt 面——prompt_gate 不需要；工作树里既有 prompt 改动属另一批，永不进本批 commit）。
+- 禁 effective/display 边落库或进入执行侧；禁恢复 transcript 特判和新 synthetic transcript 拓扑。
+- 禁 lineage/ctx 边界暗改，禁给岛内边新增方向豁免。
+- 禁拆 topology_rank / layout_rank 双名，禁动态压缩既有廊道。
+- 禁裸 SQL 修复存量混合岛，禁改变 worker 认领与 claim-token CAS。

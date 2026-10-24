@@ -72,7 +72,8 @@ def _resolve_url(value: str) -> str:
 def _absolutize_film(spec: dict[str, Any]) -> dict[str, Any]:
     """The film family's URL absolutization (no track registry — the
     film-spec's URL-bearing slots: ui.image / end.logo_url / per-scene
-    narration ``audio`` / the ``music`` bed)."""
+    narration ``audio`` / the ``music`` bed / composite elements' ``src``
+    (ADR-140))."""
     for scene in spec.get("scenes") or []:
         if scene.get("type") == "ui" and isinstance(scene.get("image"), str):
             scene["image"] = _resolve_url(scene["image"])
@@ -80,6 +81,10 @@ def _absolutize_film(spec: dict[str, Any]) -> dict[str, Any]:
             scene["logo_url"] = _resolve_url(scene["logo_url"])
         if isinstance(scene.get("audio"), str):
             scene["audio"] = _resolve_url(scene["audio"])
+        if scene.get("type") == "composite":
+            for element in scene.get("elements") or []:
+                if isinstance(element.get("src"), str):
+                    element["src"] = _resolve_url(element["src"])
     music = spec.get("music")
     if isinstance(music, dict) and isinstance(music.get("url"), str):
         music["url"] = _resolve_url(music["url"])
@@ -236,7 +241,7 @@ async def _mirror_render_node(
                     "finished_at = CASE WHEN CAST(:st AS varchar) IN ('done', 'failed') THEN now() "
                     "ELSE finished_at END, "
                     "spec = CASE WHEN CAST(:st AS varchar) = 'done' "
-                    "  THEN jsonb_set(spec, '{summary}', to_jsonb(CAST(:summary AS varchar)), true) "
+                    "  THEN jsonb_set(spec - 'failure', '{summary}', to_jsonb(CAST(:summary AS varchar)), true) "
                     "  ELSE spec END, "
                     "updated_at = now() "
                     "WHERE kind = 'render' "
@@ -328,7 +333,7 @@ async def render_output(output_id: UUID) -> None:
     message. Terminal state is mirrored onto the render workflow step when present.
 
     Session discipline (D9, 2026-08-27): a SHORT session snapshots the row,
-    NO session is held across the render-service POST (up to 900s — a session
+    NO session is held across the render-service POST (up to 1800s — a session
     parked idle-in-transaction there invites lock pileups), and a fresh short
     session lands the guarded terminal write.
     """
@@ -399,6 +404,7 @@ async def render_output(output_id: UUID) -> None:
             if source_asset is not None and source_asset.file_url:
                 source_key = str(source_asset.file_url)
 
+    failure = {"stage": "render", "codes": ["RENDER_FAILED"]}
     old_video_key = files.get("video")
     old_srt_key = files.get("srt")
     try:
@@ -414,15 +420,16 @@ async def render_output(output_id: UUID) -> None:
             else await get_output_path(project_id, user_id, f"{output_id}-{render_ts}.srt")
         )
         video_put_url = await presign_upload(
-            video_key, content_type="video/mp4", ttl=900
+            video_key, content_type="video/mp4", ttl=max(3600, settings.render_timeout_seconds + 600)
         )
         srt_put_url = (
             None
             if srt_key is None
-            else await presign_upload(srt_key, content_type="text/srt", ttl=900)
+            else await presign_upload(srt_key, content_type="text/srt", ttl=max(3600, settings.render_timeout_seconds + 600))
         )
         payload = {
             "spec": spec,
+            "render_id": str(output_id),
             **({"source_key": source_key} if source_key else {}),
             "outputs": {
                 "video": {
@@ -445,6 +452,17 @@ async def render_output(output_id: UUID) -> None:
         }
         async with httpx.AsyncClient(timeout=settings.render_timeout_seconds) as client:
             resp = await client.post(settings.render_url, json=payload)
+            if resp.is_error:
+                try:
+                    error_data = resp.json()
+                    stage = error_data.get("stage")
+                    if stage in ("render", "upload"):
+                        failure = {
+                            "stage": stage,
+                            "codes": [str(error_data.get("code") or "RENDER_FAILED")[:80]],
+                        }
+                except (ValueError, AttributeError):
+                    pass
             resp.raise_for_status()
             data = resp.json()
 
@@ -569,6 +587,9 @@ async def render_output(output_id: UUID) -> None:
             video=output_url(data["video"]),
         )
     except Exception as e:  # noqa: BLE001 — record any failure on the row
+        error_line = user_line(
+            "render_upload_failed" if failure["stage"] == "upload" else "render_failed", lang
+        )
         logger.error("render_output_failed", output_id=str(output_id), error=str(e))
         # Same token guard as the success path: a mid-render morph (or a
         # re-claim after reap) owns the row now — the stale failure must not
@@ -582,12 +603,13 @@ async def render_output(output_id: UUID) -> None:
                 )
                 .values(
                     render_status=RenderStatus.FAILED,
-                    render_error=user_line("render_failed", lang),
+                    render_error=error_line,
                 )
             )
             await db.commit()
         if failed.rowcount:
+            await _stamp_render_failure(output_id, failure)
             await _mirror_render_node(
-                output_id, "failed", user_line("render_failed", lang)
+                output_id, "failed", error_line
             )
             await _finalize_owning_run(output_id)

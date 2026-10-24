@@ -43,6 +43,7 @@ from app.chat.perception.executes import (
     GetOutputSpecParams,
     GetSegmentParams,
     GetWebPageParams,
+    ListProjectMediaParams,
     SearchMusicParams,
     SearchTranscriptParams,
     SearchWebParams,
@@ -66,8 +67,50 @@ class PerceptionTool:
     # nature, e.g. web search). A NEW fetch-capable tool without a seat
     # declaration is the repeat-fetch bug class reborn — declare one.
     seat: str | None = None
+    # The deployment-gate hook (same law as ChatTool.wire_view): rewrites
+    # the (description, parameters) pair at spec time so a gated capability
+    # slice (e.g. the film read's images, keyed to film_edits_enabled)
+    # never reaches the wire while the gate is off.
+    wire_view: Any = None  # Callable[[str, dict], tuple[str, dict]] | None
     # ADR-109: checkpoint 资格已通用化——任何非终态调用前的散文都走
     # checkpoint 座位（app/agents/tool_loop.py），注册表不再携带资格字段。
+
+
+def _output_spec_wire_view(description: str, parameters: dict) -> tuple[str, dict]:
+    """The film read's image slice rides the edit capability gate
+    (settings.film_edits_enabled): gate OFF = the base description and a
+    schema without ``views`` — the model is never told about an image
+    channel the observation would not attach. The read's execute side
+    simply never attaches images while gated (declaration and observation
+    gate together)."""
+    from app.config import settings  # deferred: config leaf
+
+    if settings.film_edits_enabled:
+        return description, parameters
+    from app.agents.tool_loop import prune_wire_parameters
+
+    return _OUTPUT_SPEC_DESCRIPTION, prune_wire_parameters(parameters, {"views"})
+
+
+_OUTPUT_SPEC_DESCRIPTION = (
+    "Read one output's current state (caption style, music, "
+    "aspect, the text body; a film output reads back its "
+    "storyboard version and per-scene ids) — "
+    "ALWAYS before a relative edit "
+    "('smaller', 'quieter', 'like before'): compose the change "
+    "from the current settings, never invent them. Omit the output "
+    "id to read the film's CURRENT storyboard version (the live "
+    "draft when one stands, else the latest delivered film) — the "
+    "re-read seat before continuing a targeted edit in a later turn."
+)
+_OUTPUT_SPEC_IMAGES_SENTENCE = (
+    " A film read also attaches the site's captured view screenshots "
+    "(the MATERIAL's views, never frames of the rendered film) and lists "
+    "the candidate views an update_scene edit may name — the response "
+    "carries up to 12 thumbnails with their camera-target inventories "
+    "(the element ids a focus may name), or name views (page/shot pairs) "
+    "for a specific set; one named view reads back in high resolution."
+)
 
 
 PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
@@ -75,15 +118,11 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
     for entry in [
         PerceptionTool(
             name="get_output_spec",
-            description=(
-                "Read one output's current state (caption style, music, "
-                "aspect, the text body) — ALWAYS before a relative edit "
-                "('smaller', 'quieter', 'like before'): compose the change "
-                "from the current settings, never invent them."
-            ),
+            description=_OUTPUT_SPEC_DESCRIPTION + _OUTPUT_SPEC_IMAGES_SENTENCE,
             params_model=GetOutputSpecParams,
             execute=executes.get_output_spec,
             activity_key="chat.inspecting.outputSpec",
+            wire_view=_output_spec_wire_view,
         ),
         PerceptionTool(
             name="get_node",
@@ -215,6 +254,22 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             activity_key="chat.inspecting.asset",
         ),
         PerceptionTool(
+            name="list_project_media",
+            description=(
+                "List the project's video/image assets a film may compose "
+                "with — stable ids, kind, duration (known or unknown), "
+                "dimensions, usability — BEFORE designing a film over "
+                "uploaded footage or images: cite only ids from this "
+                "project, never invent one. Pages newest-first (40 per "
+                "page — the note names the offset for older rows); pass "
+                "ids to read exact assets (the user's picks, past the "
+                "page cap or not)."
+            ),
+            params_model=ListProjectMediaParams,
+            execute=executes.list_project_media,
+            activity_key="chat.inspecting.projectMedia",
+        ),
+        PerceptionTool(
             name="get_craft_skeleton",
             description=(
                 "Read the pinned reference video's craft skeleton (aspect, "
@@ -284,6 +339,7 @@ def perception_chat_tools(*names: str) -> list[ChatTool]:
                 description=entry.description,
                 params_model=entry.params_model,
                 terminal=False,
+                wire_view=entry.wire_view,
             )
         )
     return tools
@@ -309,6 +365,11 @@ async def run_perception_tool(
         # FAILED with the honest failed-form key instead of the done lie.
         text, ok = await executes.understanding_observation(db, project)
         return ToolObservation(text, ok=ok)
+    if name == "get_output_spec":
+        # The film read's attached view screenshots ride the observation
+        # (R3 读取座) — the loop's wire seat projects them as content parts.
+        text, images = await executes.output_spec_observation(db, project, params)
+        return ToolObservation(text, images=tuple(images))
     return ToolObservation(text=await entry.execute(db, project, params))
 
 

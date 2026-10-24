@@ -6,9 +6,9 @@ BILLING §2 承诺「对账一条查出漂移」的工具版：四类检查，�
 
   1. 钱包链完整（per wallet）：Σ amount == balance，且最新
      (created_at, id) 行的 balance_after == balance。
-  2. run 结算恒等（per 有 hold 行的 run）：终态 run 必有 release 且
-     amount == max(0, hold − Σcaptures)；非终态 run 无 release（在途不
-     提前结清）；有 capture/release 却无 hold = 异常。被删 run 视为终态；
+  2. run 结算恒等：终态 Σrelease == hold；在途 Σrelease == min(hold, captures)。
+     capture 同事务释放所消耗预扣，避免重复扣费；无 hold 的 capture 合法。
+     被删 run 视为终态；
      其未结 hold 记 known-open（孤儿回收机制立项中，BILLING §8），不计漂移。
   3. 失败不扣费：failed/skipped 步骤零 capture（ref.step_id 命中 0 条）。
   4. step × 比例对账：done 且 cost 非空的步骤，Σ|capture 行| ==
@@ -117,63 +117,30 @@ async def check_run_settlement(db, txns: list[CreditTransaction]) -> None:
         captures = [r for r in rows if r.kind == "capture"]
         releases = [r for r in rows if r.kind == "release"]
         if not holds:
-            if captures or releases:
-                fail(
-                    f"run {run_id}: capture/release rows without a hold "
-                    f"({len(captures)} capture / {len(releases)} release)"
-                )
+            # Zero-estimate work legitimately captures without a reservation.
+            if releases:
+                fail(f"run {run_id}: release rows without a hold")
             continue
         checked["runs"] += 1
-        hold = sum(int(r.amount) for r in holds)  # signed: negative
-        if len(holds) > 1:
-            fail(f"run {run_id}: {len(holds)} hold rows (idem key should dedupe)")
-        for r in holds:
-            if int(r.amount) >= 0:
-                fail(f"run {run_id}: hold amount {int(r.amount)} not negative")
-        captured = sum(-int(r.amount) for r in captures)
-        expected_release = max(0, -hold - captured)
+        reserved = -sum(int(r.amount) for r in holds)
+        captured = -sum(int(r.amount) for r in captures)
+        released = sum(int(r.amount) for r in releases)
+        if len(holds) > 1 or any(int(r.amount) >= 0 for r in holds):
+            fail(f"run {run_id}: invalid/duplicate hold rows")
+        if any(int(r.amount) <= 0 for r in releases):
+            fail(f"run {run_id}: non-positive release")
         run = await db.get(WorkflowRun, uuid.UUID(run_id))
         if run is None:
-            # The ledger is append-only and outlives run rows (project
-            # deletion cascades runs; money history stays). A dead run is
-            # terminal-by-deletion: its hold must still have settled.
             checked["dead_runs"] += 1
-        label = "deleted" if run is None else run.status.value
-        if run is None or run.status in terminal:
-            if expected_release > 0 and not releases:
-                if run is None:
-                    # 豁免：被删 run 的未结 hold 归孤儿回收机制管辖
-                    # （project 删除即解冻 / reaper，BILLING §8 立项项）
-                    # ——记 known-open 不记漂移；活 run 未结 hold 仍硬判。
-                    checked["open_dead_holds"] += 1
-                    print(
-                        f"  ○ run {run_id} (deleted): unsettled hold "
-                        f"{expected_release} credits — orphan-hold recovery pending"
-                    )
-                else:
-                    fail(
-                        f"run {run_id} ({label}): terminal with an "
-                        f"un-settled hold (expected release {expected_release})"
-                    )
-            if expected_release == 0 and releases:
-                fail(
-                    f"run {run_id} ({label}): release row despite a "
-                    f"fully-captured hold (amount {int(releases[0].amount)})"
-                )
-            for r in releases:
-                if int(r.amount) <= 0:
-                    fail(f"run {run_id}: release amount {int(r.amount)} not positive")
-                if int(r.amount) != expected_release:
-                    fail(
-                        f"run {run_id}: release {int(r.amount)} != expected "
-                        f"{expected_release} (hold {-hold}, captured {captured})"
-                    )
-        else:
-            if releases:
-                fail(
-                    f"run {run_id} ({label}): release before the "
-                    f"terminal state"
-                )
+        settled = run is None or run.status in terminal
+        expected = reserved if settled else min(reserved, captured)
+        if released != expected:
+            if run is None and released == 0:
+                checked["open_dead_holds"] += 1
+                print(f"  ○ run {run_id} (deleted): unsettled hold {reserved}")
+            else:
+                fail(f"run {run_id}: total release {released} != {expected} "
+                     f"(reserved {reserved}, captured {captured}, terminal={settled})")
 
 
 async def check_failed_steps_zero_capture(db, txns: list[CreditTransaction]) -> None:

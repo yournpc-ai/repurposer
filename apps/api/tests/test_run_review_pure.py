@@ -16,6 +16,7 @@ from app.pipeline.run_review import (
     LandedFact,
     RunReview,
     compute_run_review,
+    delivery_state,
     landed_fact,
     review_fact_lines,
 )
@@ -40,7 +41,9 @@ class _OutputStub:
         self.language = language
         self.payload = payload or {}
         self.source_ref = source_ref or {}
-        self.render_spec = render_spec or {}
+        # render_spec 保持原样 (None 不塌缩成 {}) — 配乐三态要区分「记录
+        # 缺失」与「有效 spec 无 music」, stub 必须先诚实保留缺失.
+        self.render_spec = render_spec
         self.files = files or {}
         self.render_status = render_status
         self.quality = quality
@@ -283,18 +286,21 @@ class TestComputeRunReview:
         )
         assert review.gaps == ()
 
-    def test_file_missing_clip_line_carries_not_ready(self) -> None:
-        """The quiet lie's marker: a file-missing clip's line tells the
-        narrator NOT-READY, so the closing prose can't call it delivered."""
+    def test_file_missing_output_uses_failed_branch_not_a_landed_line(self) -> None:
+        """A file-missing render row has no product card or delivery audit;
+        the fact block carries only the failed-delivery branch and its gap."""
         review = compute_run_review(
             confirmed_scope=None,
             landed=[_clip(delivered=False, payload={"duration": 30})],
         )
         lines = review_fact_lines(review)
-        assert any("render=NOT-READY" in line for line in lines)
-        assert not any("render=FAILED" in line for line in lines)
+        assert delivery_state(review) == "failed"
+        assert lines[0] == "delivery=failed"
+        assert "GAP output_not_ready:clip" in lines
+        assert not any("landed clip" in line for line in lines)
+        assert not any("render=NOT-READY" in line for line in lines)
 
-    def test_render_failed_still_wins_over_not_ready(self) -> None:
+    def test_render_failed_does_not_also_report_not_ready(self) -> None:
         review = compute_run_review(
             confirmed_scope=None,
             landed=[
@@ -306,8 +312,49 @@ class TestComputeRunReview:
             ],
         )
         lines = review_fact_lines(review)
-        assert any("render=FAILED" in line for line in lines)
-        assert not any("render=NOT-READY" in line for line in lines)
+        assert delivery_state(review) == "failed"
+        assert lines[0] == "delivery=failed"
+        assert "GAP render_failed:clip" in lines
+        assert "GAP output_not_ready:clip" not in lines
+        assert not any("landed clip" in line for line in lines)
+
+
+class TestDeliveryState:
+    def test_failed_film_has_no_delivery_or_consistency_audit(self) -> None:
+        film = LandedFact(
+            output_type="film",
+            duration_s=88,
+            render="failed",
+            has_file=False,
+            music_bed=True,
+            film_check=("confirmed=v1 digest:match DRIFT", "drift:home.page"),
+        )
+        review = compute_run_review(confirmed_scope=None, landed=[film])
+        lines = review_fact_lines(review)
+        assert delivery_state(review) == "failed"
+        assert "film_drift:film" not in review.gaps
+        assert not any("landed film" in line or "drift:" in line for line in lines)
+        assert not any("duration=88s" in line or "music=bed" in line for line in lines)
+
+    def test_partial_delivery_shows_only_delivered_products_and_gaps(self) -> None:
+        review = compute_run_review(
+            confirmed_scope=None,
+            landed=[
+                landed_fact(_OutputStub("post", language="en")),
+                _film(delivered=False, render_status="failed"),
+            ],
+        )
+        lines = review_fact_lines(review)
+        assert delivery_state(review) == "partial"
+        assert lines[0] == "delivery=partial"
+        assert any("landed post" in line for line in lines)
+        assert not any("landed film" in line for line in lines)
+        assert "GAP render_failed:film" in lines
+
+    def test_empty_legacy_review_keeps_the_no_facts_fallback(self) -> None:
+        review = RunReview(has_snapshot=False)
+        assert delivery_state(review) == "unknown"
+        assert review_fact_lines(review) == []
 
 
 # ---- the bounded prompt-feed rendering ----------------------------------------------
@@ -366,3 +413,406 @@ class TestReviewFactLines:
         )
         lines = review_fact_lines(review)
         assert not any("charge" in line or "credit" in line for line in lines)
+
+
+# ---------------------------------------------------------------------------
+# film confirmed-vs-landed (ADR-139 sibling law — the d08af2af lesson: the
+# closing beat once claimed a drift no fact supported; the check is
+# deterministic, three-stated, and missing information NEVER reads as match)
+# ---------------------------------------------------------------------------
+
+from app.pipeline.run_review import film_delivery_check  # noqa: E402
+
+_CONFIRMED = {
+    "version": 3,
+    "digest": "digest-v3",
+    "board": {
+        "scenes": [
+            {"scene_id": "s1", "type": "words", "seconds": 4.0, "dark": False,
+             "lines": ["你把专业讲清楚"]},
+            {"scene_id": "s2", "type": "words", "seconds": 5.0, "dark": True,
+             "lines": ["好内容值得持续被看见"]},
+        ]
+    },
+    "params": {"aspect": "16:9", "music_mood": "off", "voiceover": False},
+}
+
+
+def _spec(**kw) -> dict:
+    spec = {
+        "fps": 30,
+        "aspect": "16:9",
+        "provenance": {"storyboard_digest": "digest-v3"},
+        "scenes": [
+            {"type": "words", "frames": 120, "dark": False,
+             "lines": ["你把专业讲清楚"]},
+            {"type": "words", "frames": 150, "dark": True,
+             "lines": ["好内容值得持续被看见"]},
+        ],
+    }
+    spec.update(kw)
+    return spec
+
+
+def test_film_check_match_when_the_landed_spec_proves_it() -> None:
+    lines = film_delivery_check(_CONFIRMED, _spec(), {})
+    assert lines == ("confirmed=v3 digest:match MATCH",)
+
+
+def test_film_check_drift_names_the_changed_fields() -> None:
+    spec = _spec()
+    spec["scenes"][1]["lines"] = ["被改写的内容"]
+    spec["aspect"] = "9:16"
+    lines = film_delivery_check(_CONFIRMED, spec, {})
+    assert lines[0] == "confirmed=v3 digest:match DRIFT"
+    assert "drift:s2.lines" in lines
+    assert any("aspect confirmed=16:9 landed=9:16" in l for l in lines)
+
+
+def test_film_check_digest_mismatch_is_drift() -> None:
+    spec = _spec(provenance={"storyboard_digest": "digest-v2"})
+    lines = film_delivery_check(_CONFIRMED, spec, {})
+    assert lines[0].endswith("DRIFT")
+    assert any("content digest differs" in l for l in lines)
+
+
+def test_film_check_ui_selector_resolution_is_not_drift() -> None:
+    # page/shot are draft-time selectors. Baking resolves them to url/image;
+    # their absence from the spec must not manufacture 2 drift fields per UI
+    # scene when the storyboard digest is identical.
+    confirmed = {
+        "version": 1,
+        "digest": "digest-ui",
+        "board": {
+            "scenes": [
+                {
+                    "scene_id": "home",
+                    "type": "ui",
+                    "seconds": 7.5,
+                    "page": 0,
+                    "shot": 0,
+                    "frame": True,
+                }
+            ]
+        },
+        "params": {"aspect": "16:9", "music_mood": "off", "voiceover": False},
+    }
+    spec = {
+        "fps": 30,
+        "aspect": "16:9",
+        "provenance": {"storyboard_digest": "digest-ui"},
+        "scenes": [
+            {
+                "type": "ui",
+                "frames": 225,
+                "url": "www.zymix.ai",
+                "image": "captures/home.png",
+                "frame": True,
+            }
+        ],
+    }
+    assert film_delivery_check(confirmed, spec, {}) == (
+        "confirmed=v1 digest:match MATCH",
+    )
+
+
+def test_film_check_missing_information_is_never_a_match() -> None:
+    # No confirmed stamp → not-comparable (the fabrication guard's core).
+    assert film_delivery_check(None, _spec(), {}) == (
+        "not-comparable:no-confirmed-storyboard",
+    )
+    # Confirmed stamp but the landed row carries no spec scenes.
+    assert film_delivery_check(_CONFIRMED, {"scenes": []}, {}) == (
+        "not-comparable:no-landed-spec",
+    )
+
+
+def test_film_check_timing_leg_undershoot_only_with_snap_tolerance() -> None:
+    # 4.0s @30fps = 120 frames; the beat snap's ±6-frame window is free.
+    spec = _spec()
+    spec["scenes"][0]["frames"] = 115
+    assert film_delivery_check(_CONFIRMED, spec, {})[0].endswith("MATCH")
+    spec["scenes"][0]["frames"] = 113  # beyond the tolerance → proven short
+    lines = film_delivery_check(_CONFIRMED, spec, {})
+    assert "drift:s1.frames" in lines
+
+
+def test_film_check_unexplained_growth_is_unverified_never_match() -> None:
+    # Over-tolerance growth is a legal allocator adjustment, but with no
+    # flex record it is UNEXPLAINED — it narrows the verdict to the checked
+    # scope and names the scene, never reads as verified-consistent.
+    spec = _spec()
+    spec["scenes"][0]["frames"] = 200
+    lines = film_delivery_check(_CONFIRMED, spec, {})
+    assert lines[0] == "confirmed=v3 digest:match MATCH-ON-CHECKED-SCOPE"
+    assert any("unchecked:" in l and "timing(unverified growth)" in l for l in lines)
+    assert any("timing-note:s1 frames 200 vs ~120" in l for l in lines)
+
+
+def test_film_check_narration_flex_stands_the_timing_leg_down() -> None:
+    # ADR-136's flex rebalances scene seconds by design — separately
+    # disclosed, so the timing leg stands down entirely: timing reads as
+    # UNCHECKED, never as verified.
+    spec = _spec()
+    spec["scenes"][0]["frames"] = 30
+    lines = film_delivery_check(
+        _CONFIRMED, spec, {"narration_flex": {"borrowed_s": 2.0}}
+    )
+    assert lines[0] == "confirmed=v3 digest:match MATCH-ON-CHECKED-SCOPE"
+    assert any("unchecked:" in l and "timing(narration-flex" in l for l in lines)
+
+
+def test_film_check_unavailable_digest_narrows_the_verdict() -> None:
+    spec = _spec(provenance={})
+    lines = film_delivery_check(_CONFIRMED, spec, {})
+    assert lines[0] == "confirmed=v3 digest:unavailable MATCH-ON-CHECKED-SCOPE"
+    assert any(l == "unchecked: digest" for l in lines)
+
+
+def test_film_check_missing_timing_fields_narrow_the_verdict() -> None:
+    spec = _spec()
+    del spec["scenes"][1]["frames"]
+    lines = film_delivery_check(_CONFIRMED, spec, {})
+    assert lines[0].endswith("MATCH-ON-CHECKED-SCOPE")
+    assert any("missing seconds/frames" in l for l in lines)
+
+
+def test_film_check_audio_param_legs() -> None:
+    # Confirmed voiceover off but narration audio landed.
+    spec = _spec()
+    spec["scenes"][0]["audio"] = "https://cdn/x.mp3"
+    lines = film_delivery_check(_CONFIRMED, spec, {})
+    assert any("audio landed but voiceover confirmed off" in l for l in lines)
+    # Confirmed music off but a bed landed.
+    spec2 = _spec(music={"mood": "calm"})
+    lines2 = film_delivery_check(_CONFIRMED, spec2, {})
+    assert any("music landed but confirmed off" in l for l in lines2)
+
+
+def test_landed_fact_reads_the_confirmed_stamp_not_the_live_draft() -> None:
+    """The comparison's board comes from the caller-stamped confirmed
+    version — landed_fact never reaches for anything live."""
+    fact = landed_fact(
+        _OutputStub("film", render_spec=_spec(), render_status="completed",
+                    files={"video": "k.mp4"}),
+        film_confirmed=_CONFIRMED,
+    )
+    assert fact.film_check == ("confirmed=v3 digest:match MATCH",)
+    # A clip row never carries the check.
+    clip = _clip()
+    assert clip.film_check is None
+
+
+def test_compute_run_review_flags_a_drifted_film() -> None:
+    drifted = _spec()
+    drifted["scenes"][1]["lines"] = ["被改写的内容"]
+    film = landed_fact(
+        _OutputStub("film", render_spec=drifted, render_status="completed",
+                    files={"video": "k.mp4"}),
+        film_confirmed=_CONFIRMED,
+    )
+    review = compute_run_review(
+        confirmed_scope={"compiled_scope": [{"tool": "launch_film", "params": {}}]},
+        landed=[film],
+    )
+    assert "film_drift:film" in review.gaps
+    # A matched film adds no gap.
+    matched = landed_fact(
+        _OutputStub("film", render_spec=_spec(), render_status="completed",
+                    files={"video": "k.mp4"}),
+        film_confirmed=_CONFIRMED,
+    )
+    review2 = compute_run_review(
+        confirmed_scope={"compiled_scope": [{"tool": "launch_film", "params": {}}]},
+        landed=[matched],
+    )
+    assert "film_drift:film" not in review2.gaps
+
+
+def test_review_fact_lines_render_the_check_headline_and_details() -> None:
+    drifted = _spec()
+    drifted["scenes"][1]["lines"] = ["被改写的内容"]
+    film = landed_fact(
+        _OutputStub("film", render_spec=drifted, render_status="completed",
+                    files={"video": "k.mp4"}),
+        film_confirmed=_CONFIRMED,
+    )
+    review = compute_run_review(confirmed_scope=None, landed=[film])
+    text = "\n".join(review_fact_lines(review))
+    assert "confirmed=v3 digest:match DRIFT" in text
+    assert "drift:s2.lines" in text
+
+
+def test_film_check_animation_timing_fields_participate_in_drift() -> None:
+    """Batch B: the confirmed-vs-landed adjudication compares the animation
+    timing fields — a spec that landed different timing is DRIFT, a null on
+    the board against an absent spec key reads equal (legacy boards stay
+    MATCH)."""
+    import copy
+
+    confirmed = copy.deepcopy(_CONFIRMED)
+    confirmed["board"]["scenes"][0].update(
+        {"enter": "words", "enter_start": 0.3, "enter_interval": 0.12,
+         "enter_duration": 0.25}
+    )
+    spec = _spec()
+    spec["scenes"][0].update(
+        {"enter": "words", "enter_start": 0.3, "enter_interval": 0.12,
+         "enter_duration": 0.25}
+    )
+    lines = film_delivery_check(confirmed, spec, {})
+    assert lines == ("confirmed=v3 digest:match MATCH",)
+
+    drifted = _spec()
+    drifted["scenes"][0].update(
+        {"enter": "words", "enter_start": 0.5, "enter_interval": 0.12,
+         "enter_duration": 0.25}
+    )
+    lines = film_delivery_check(confirmed, drifted, {})
+    assert lines[0].endswith("DRIFT")
+    assert "drift:s1.enter_start" in lines
+
+    # Null on the confirmed board == absent on the landed spec (no drift).
+    nulled = copy.deepcopy(_CONFIRMED)
+    nulled["board"]["scenes"][0].update(
+        {k: None for k in ("enter_start", "enter_interval", "enter_duration",
+                           "enter_hold_until", "motion_start", "motion_end")}
+    )
+    lines = film_delivery_check(nulled, _spec(), {})
+    assert lines == ("confirmed=v3 digest:match MATCH",)
+
+
+class TestFilmMusicBed:
+    """配乐三态 (事故 7886d879 + P2 未知态): DELIVERY FACTS 的落地床只读
+    烘焙 render_spec —— 有效 spec(带 scenes 锚) 有 music 块 = bed, 有效
+    spec 明确无 = none; 记录缺失/空记录/半写(无 scenes 锚) = unknown,
+    永不塌缩成 none/off; 未指定 mood 永不被读成「无音乐」; 非 film 产物
+    永不携带该字段。配置在场 ≠ 试听确认有声。"""
+
+    def test_extraction_reads_the_baked_spec(self) -> None:
+        # 有效音乐配置
+        f = _film(render_spec={"scenes": [{"frames": 96}], "music": {"url": "music/trk.mp3", "gain_db": -20.0}})
+        assert f.music_bed is True
+        # 有效 spec 明确无 music
+        f = _film(render_spec={"scenes": [{"frames": 96}]})
+        assert f.music_bed is False
+        # spec 缺失 (None) → unknown
+        f = _film(render_spec=None)
+        assert f.music_bed is None
+        # 空记录 ({}) → unknown
+        f = _film(render_spec={})
+        assert f.music_bed is None
+        # 半写记录 (有 music 但无 scenes 锚) → unknown, 不轻信
+        f = _film(render_spec={"music": {"url": "m.mp3"}})
+        assert f.music_bed is None
+        # 非 film 永不携带
+        assert _clip().music_bed is None
+
+    def test_fact_lines_carry_the_three_states(self) -> None:
+        review = compute_run_review(
+            confirmed_scope=None,
+            landed=[_film(render_spec={"scenes": [{}], "music": {"url": "m.mp3"}})],
+        )
+        assert any("music=bed" in line for line in review_fact_lines(review))
+        review = compute_run_review(
+            confirmed_scope=None,
+            landed=[_film(render_spec={"scenes": [{}]})],
+        )
+        assert any("music=none" in line for line in review_fact_lines(review))
+        # 缺失/空记录 → unknown, 永不印成 none
+        for thin in (None, {}, {"music": {"url": "m.mp3"}}):
+            review = compute_run_review(
+                confirmed_scope=None, landed=[_film(render_spec=thin)]
+            )
+            lines = review_fact_lines(review)
+            assert any("music=unknown" in line for line in lines), thin
+            assert not any("music=none" in line for line in lines), thin
+        # 非 film 行不出现该 token.
+        review = compute_run_review(confirmed_scope=None, landed=[_clip()])
+        assert not any("music=" in line for line in review_fact_lines(review))
+
+
+# ---- composite elements (ADR-140) ---------------------------------------------
+
+_CONFIRMED_COMPOSITE = {
+    "version": 1,
+    "digest": "digest-c1",
+    "board": {
+        "scenes": [
+            {
+                "scene_id": "s1",
+                "type": "composite",
+                "seconds": 8.0,
+                "dark": False,
+                "elements": [
+                    {"kind": "video", "element_id": "e1",
+                     "asset": "11111111-1111-1111-1111-111111111111",
+                     "source_start": 10.0, "source_end": 18.0, "at": 0.0,
+                     "duration": None, "keep_audio": False, "z": 0,
+                     "fit": "cover",
+                     "rect": {"x": 0.5, "y": 0.0, "w": 0.5, "h": 1.0}},
+                    {"kind": "text", "element_id": "e2", "tone": "light",
+                     "lines": ["逐字出现"], "at": 1.0, "until": 7.0,
+                     "enter": "words", "enter_interval": 0.3, "z": 0,
+                     "copy_text": "逐字出现",
+                     "rect": {"x": 0.05, "y": 0.3, "w": 0.4, "h": 0.4}},
+                ],
+            }
+        ]
+    },
+    "params": {"aspect": "16:9", "music_mood": "off", "voiceover": False},
+}
+
+
+def _composite_spec() -> dict:
+    """The landed spec for _CONFIRMED_COMPOSITE: asset id resolved to the
+    storage key, identity keys renamed, null stays out."""
+    return {
+        "fps": 30,
+        "aspect": "16:9",
+        "provenance": {"storyboard_digest": "digest-c1"},
+        "scenes": [
+            {
+                "type": "composite",
+                "frames": 240,
+                "dark": False,
+                "elements": [
+                    {"kind": "video", "id": "e1", "src": "u/demo/video.mp4",
+                     "source_start": 10.0, "source_end": 18.0, "at": 0.0,
+                     "keep_audio": False, "z": 0, "fit": "cover",
+                     "rect": {"x": 0.5, "y": 0.0, "w": 0.5, "h": 1.0}},
+                    {"kind": "text", "id": "e2", "tone": "light",
+                     "lines": ["逐字出现"], "at": 1.0, "until": 7.0,
+                     "enter": "words", "enter_interval": 0.3, "z": 0,
+                     "rect": {"x": 0.05, "y": 0.3, "w": 0.4, "h": 0.4}},
+                ],
+            }
+        ],
+    }
+
+
+def test_film_check_composite_match_normalized() -> None:
+    """Board asset ids vs spec src keys, element_id vs id, null-stays-out —
+    the normalized comparator reads them as the same composition."""
+    lines = film_delivery_check(_CONFIRMED_COMPOSITE, _composite_spec(), {})
+    assert lines == ("confirmed=v1 digest:match MATCH",)
+
+
+def test_film_check_composite_element_drift_named_per_element() -> None:
+    spec = _composite_spec()
+    spec["scenes"][0]["elements"][1]["lines"] = ["被改写的文字"]
+    spec["scenes"][0]["elements"][0]["source_start"] = 12.0
+    lines = film_delivery_check(_CONFIRMED_COMPOSITE, spec, {})
+    assert lines[0].endswith("DRIFT")
+    assert "drift:s1.e2.lines" in lines
+    assert "drift:s1.e1.source_start" in lines
+
+
+def test_film_check_composite_identity_rides_the_digest_leg() -> None:
+    """Without a matching digest the asset→key resolution cannot be proven
+    here — it lands in the UNCHECKED scope, named, never verified."""
+    spec = _composite_spec()
+    spec["provenance"] = {"storyboard_digest": "other"}
+    lines = film_delivery_check(_CONFIRMED_COMPOSITE, spec, {})
+    assert lines[0].endswith("DRIFT")
+    assert any("asset→key identity" in l for l in lines)

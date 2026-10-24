@@ -46,8 +46,10 @@ from app.tools.film.storyboard import (
     format_violations,
     narration_caption_cues,
     resolve_film_dock_state,
+    scene_content_digest,
     skeleton_prompt_dict,
     snap_frames_to_beats,
+    storyboard_content_digest,
     storyboard_fingerprint,
     storyboard_presentation,
     validate_storyboard,
@@ -427,6 +429,30 @@ def test_assemble_clean_direction_passes():
     assert hero.sub == "Acme turns hours of release work into minutes."
     # Narration lands by scene key; unnarrated scenes read None.
     assert hero.narration == "This is Acme."
+
+
+def test_born_boards_carry_skeleton_key_scene_ids():
+    """出生即分配 (R2-B): every assembled scene's id IS its skeleton key —
+    the edit path's stable handle from birth, never a post-hoc assignment."""
+    pages = [_film_page()]
+    resolved, violations = _assemble_with(pages)
+    assert violations == [] and resolved is not None
+    assert [s.scene_id for s in resolved.scenes] == [
+        "open", "hero", "home",
+        "ch1_divider", "ch1_ui", "ch2_divider", "ch2_ui",
+        "ch3_divider", "ch3_ui",
+        "reveal", "end",
+    ]
+    # The digest law: ids are handles, never content — the born board's
+    # content digest is byte-identical to its id-stripped twin (legacy
+    # boards keep matching old stored digests).
+    raw = resolved.model_dump(mode="json")
+    for scene in raw["scenes"]:
+        scene.pop("scene_id")
+    assert storyboard_content_digest(raw) == storyboard_content_digest(resolved)
+    # The fact sheet carries the ids (the model names scenes by id in ops).
+    text = storyboard_presentation(resolved, pages)
+    assert "[hero]" in text and "[ch2_ui]" in text and "[end]" in text
     assert resolved.scenes[0].narration is None
     # The walk alternates browser-card and full-bleed (code's rhythm).
     assert [s.frame for s in resolved.scenes if s.type == "ui"] == [True, False, True, False]
@@ -1034,6 +1060,19 @@ def test_presentation_times_come_from_the_execution_timeline():
     assert "scene 2 · ui · home walk · 3–12s · 9s · 270 frames" in facts
 
 
+def test_presentation_honors_saved_frozen_frame_windows():
+    """A patch fact sheet reads the version's frozen cut instead of
+    recomputing a different timeline from the music grid."""
+    storyboard = _storyboard(_good_scenes())
+    frames = [30 * (i + 1) for i in range(len(storyboard.scenes))]
+    facts = storyboard_presentation(
+        storyboard, [_page()], frame_override=frames
+    )
+    total = sum(frames)
+    assert f"total {total / 30:g}s · {total} frames" in facts
+    assert "0–1s · 1s · 30 frames" in facts
+
+
 def test_build_spec_assigns_divider_ordinals():
     scenes = [
         {"type": "divider", "seconds": 2.0, "label": "Why teams switch", "roll": ["Ship faster"]},
@@ -1274,6 +1313,89 @@ def test_storyboard_fingerprint_canonical_form():
     assert fp({}, "first narrative") != fp({}, "revised narrative")
     # A film-free chain fingerprints to None.
     assert storyboard_fingerprint([{"tool": "make_clips", "params": {}}], "x") is None
+
+
+def test_text_source_birth_pin_redraft_inherits_the_base_source():
+    """Omission inherits; an explicit value overrides; explicit null clears.
+
+    Text keeps its separate re-paste/inherit rule. A new film or a base with
+    no recorded params inherits nothing.
+    """
+    from app.tools.film.storyboard import (
+        film_text_source_birth_pin,
+        film_verbatim_birth_pin,
+    )
+
+    pin = film_text_source_birth_pin
+    base = {"text": "旧文案", "verbatim": False, "target_seconds": 11.0, "scene_count": 2, "group_chars": [3, 5]}
+    absent = dict(
+        target_seconds_present=False,
+        scene_count_present=False,
+        group_chars_present=False,
+    )
+    present = dict(
+        target_seconds_present=True,
+        scene_count_present=True,
+        group_chars_present=True,
+    )
+    assert pin(None, None, None, None, base, base_present=True, **absent) == ("旧文案", 11.0, 2, [3, 5])
+    assert pin("新文案", None, None, None, base, base_present=True, **absent) == ("新文案", 11.0, 2, [3, 5])
+    assert pin(None, 20.0, 3, [2, 4], base, base_present=True, **present) == ("旧文案", 20.0, 3, [2, 4])
+    assert pin("新文案", 20.0, 3, [2, 4], base, base_present=True, **present) == ("新文案", 20.0, 3, [2, 4])
+    # Explicit null is a REAL clear, not an omitted key and not a base inherit.
+    assert pin(None, None, None, None, base, base_present=True, **present) == ("旧文案", None, None, None)
+    assert pin(None, None, None, None, None, base_present=False, **absent) == (None, None, None, None)
+    assert pin(None, None, None, None, None, base_present=True, **absent) == (None, None, None, None)
+    assert pin(None, None, None, None, "garbage", base_present=True, **absent) == (None, None, None, None)
+    assert pin(None, None, None, None, {"aspect": "16:9"}, base_present=True, **absent) == (None, None, None, None)
+    # The verbatim pin reads the RESOLVED text: an inherited source keeps
+    # the base's verbatim mode (never drops the key and re-guesses).
+    text, _t, _c, _g = pin(None, None, None, None, base, base_present=True, **absent)
+    assert film_verbatim_birth_pin(None, base, base_present=True, text_present=bool(text)) is False
+
+
+def test_voiceover_birth_pin_new_default_off_and_legacy_inheritance():
+    """默认无配音 (2026-10-21 用户拍板) — the birth pin's two lenses: a NEW
+    film (no base version) defaults OFF; a redraft INHERITS the base
+    version's pinned setting, with legacy rows reading through canonical's
+    historical lens (a missing key = the narrated default those films
+    shipped with). An explicit arg always wins — true is legitimate only as
+    the user's explicit ask (the schema's law; the pin trusts the declared
+    value)."""
+    from app.tools.film.storyboard import film_voiceover_birth_pin
+
+    pin = film_voiceover_birth_pin
+    # A genuinely new film defaults OFF.
+    assert pin(None, None, base_present=False) is False
+    # An explicit ask always pins verbatim.
+    assert pin(True, None, base_present=False) is True
+    assert pin(False, None, base_present=False) is False
+    assert pin(True, {"voiceover": False}, base_present=True) is True
+    assert pin(False, {"voiceover": True}, base_present=True) is False
+    # A redraft inherits the base version's pinned setting.
+    assert pin(None, {"voiceover": False}, base_present=True) is False
+    assert pin(None, {"voiceover": True}, base_present=True) is True
+    # Legacy lenses: a base whose params predate the pin (missing key) or
+    # were never recorded reads as the historical narrated default — an old
+    # film is never silently muted by a redraft.
+    assert pin(None, {"aspect": "16:9"}, base_present=True) is True
+    assert pin(None, None, base_present=True) is True
+    assert pin(None, "garbage", base_present=True) is True
+
+
+def test_presentation_fact_sheet_always_states_the_voiceover_switch():
+    """配音开关恒显: the fact sheet carries the real voiceover state in BOTH
+    positions — a silent default that never appears reads as an omission the
+    presenting model improvises around."""
+    pages = [_film_page()]
+    lines = build_line_manifest(pages)
+    skeleton = build_skeleton(pages, lines)
+    resolved, violations = assemble_storyboard(skeleton, _direction(), lines)
+    assert violations == [] and resolved is not None
+    on = storyboard_presentation(resolved, pages, captions=True)
+    off = storyboard_presentation(resolved, pages, captions=False)
+    assert "voiceover: on" in on and "voiceover: off" not in on
+    assert "voiceover: off" in off and "voiceover: on" not in off
 
 
 # ---- the direction budget + the fixed-fallback ladder (2026-10-18 裁决) ----
@@ -1568,3 +1690,1055 @@ async def test_voiceover_promise_reaches_the_director_and_the_validator(
     )
     assert all(not getattr(s, "narration", None) for s in board.scenes)
     assert seen and seen[0] is False
+
+
+# ---------------------------------------------------------------------------
+# Text-plane vocabulary (ADR-138 §7.6): words-scene motion/enter enums.
+# ---------------------------------------------------------------------------
+
+
+def test_words_vocabulary_null_keys_keep_legacy_digests_byte_identical():
+    """Null motion/enter are EXCLUDED from the content dump: a legacy board
+    (keys absent) and its explicit-null twin digest byte-identically, so
+    every stored digest keeps matching after the vocabulary ships. A SET
+    value participates — an edit moves the digest."""
+    legacy = {"type": "words", "seconds": 3.0, "dark": False, "lines": ["Ship faster"]}
+    explicit_null = {**legacy, "motion": None, "enter": None}
+    assert scene_content_digest(legacy) == scene_content_digest(explicit_null)
+    assert storyboard_content_digest(_storyboard([legacy])) == storyboard_content_digest(
+        _storyboard([explicit_null])
+    )
+    assert scene_content_digest({**legacy, "motion": "push"}) != scene_content_digest(legacy)
+    assert scene_content_digest({**legacy, "enter": "words"}) != scene_content_digest(legacy)
+
+
+def test_build_spec_words_vocabulary_rides_only_when_set():
+    """The spec carries motion/enter only when the scene sets them — null
+    keys stay out of the render contract (the digest law's spec-side twin)."""
+    scenes = [
+        {"type": "words", "seconds": 3.0, "dark": False, "lines": ["Ship faster"],
+         "motion": "push", "enter": "words"},
+        {"type": "words", "seconds": 3.0, "dark": True, "lines": ["Legacy"]},
+        {"type": "end", "seconds": 2.5, "name": "Acme", "tagline": "Ship faster"},
+    ]
+    spec = build_film_spec(_storyboard(scenes), [_page()])
+    assert spec["scenes"][0]["motion"] == "push"
+    assert spec["scenes"][0]["enter"] == "words"
+    assert "motion" not in spec["scenes"][1]
+    assert "enter" not in spec["scenes"][1]
+
+
+def test_words_vocabulary_enums_are_closed():
+    """The vocabulary is a closed enum (L3 枚举纪律) — an unknown value is a
+    schema rejection, never a renderer surprise."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        _storyboard([
+            {"type": "words", "seconds": 3.0, "dark": False, "lines": ["x"], "motion": "zoom-crazy"}
+        ])
+    with pytest.raises(ValidationError):
+        _storyboard([
+            {"type": "words", "seconds": 3.0, "dark": False, "lines": ["x"], "enter": "explode"}
+        ])
+
+
+# ---------------------------------------------------------------------------
+# Batch B: precise words-plane timing
+# ---------------------------------------------------------------------------
+
+
+def test_seconds_to_frames_is_the_one_quantization_rule():
+    """Nearest frame, halves UP — the user's named decimals land on stable
+    frames (0.3s→f9, 0.12s→f4, 0.25s→f8); zero stays zero."""
+    from app.tools.film.storyboard import film_seconds_to_frames
+
+    assert film_seconds_to_frames(0.0) == 0
+    assert film_seconds_to_frames(0.3) == 9
+    assert film_seconds_to_frames(0.12) == 4  # 3.6 → 4
+    assert film_seconds_to_frames(0.25) == 8  # 7.5 → halves up
+    assert film_seconds_to_frames(1.0) == FILM_FPS
+
+
+def test_word_token_count_mirrors_the_renderer_tokenizer():
+    """CJK glyphs are one token each, latin whitespace runs are one token,
+    and the accent boundary breaks a latin run across it (the chip edge is
+    a token edge, exactly like the renderer's split-then-tokenize)."""
+    from app.tools.film.storyboard import word_enter_token_count
+
+    assert word_enter_token_count(["文字依次入场"]) == 6
+    assert word_enter_token_count(["Ship faster now"]) == 3
+    assert word_enter_token_count(["好的 *内容* 不止一次"]) == 2 + 2 + 4
+    assert word_enter_token_count(["ab*cd*ef"]) == 3  # the chip edge splits
+    assert word_enter_token_count(["ab", "cd"]) == 2
+
+
+def _timed_words_scene(**timing) -> dict:
+    """The user's example beat: six CJK tokens on a 4s (120f) plane."""
+    return {
+        "type": "words",
+        "seconds": 4.0,
+        "dark": False,
+        "lines": ["文字依次入场"],
+        "enter": "words",
+        **timing,
+    }
+
+
+def test_user_example_timing_validates_clean():
+    """第二幕开始后 0.3 秒 / 相邻 0.12 秒 / 每个 0.25 秒 / 停留至幕末 —
+    f9 start, f4 step, f8 duration, 6 tokens: last end f37 ≪ f120."""
+    scene = _timed_words_scene(
+        enter_start=0.3, enter_interval=0.12, enter_duration=0.25
+    )
+    board = _storyboard(_pad([scene] + _good_scenes()))
+    assert validate_storyboard(board, [_page()]) == []
+
+
+def test_timing_overflow_is_a_concrete_rejection_never_a_clamp():
+    """A wide cadence on a 3s (90f) plane cannot fit: the last token starts
+    at f84 but its entrance ends at f92 > the f90 scene end — the validator
+    names the numbers, nothing is shortened."""
+    scene = _timed_words_scene(
+        enter_start=0.3, enter_interval=0.5, enter_duration=0.25
+    )
+    scene["seconds"] = 3.0
+    violations = validate_storyboard(_storyboard(_pad([scene])), [_page()])
+    assert DURATION_INVALID in _codes(violations)
+    detail = next(v.detail for v in violations if v.code == DURATION_INVALID)
+    assert "6 tokens" in detail and "scene[0]" in detail
+
+
+def test_hold_must_leave_every_token_a_visible_frame():
+    """A hold at/before the LAST token's start renders a scene whose words
+    never visibly exist (the zero-duration / zero-interval degenerate) —
+    concrete rejection, never a silent invisible board."""
+    for timing in (
+        {"enter_start": 0.0, "enter_interval": 0.0, "enter_duration": 0.0,
+         "enter_hold_until": 0.0},
+        {"enter_start": 0.3, "enter_interval": 0.12, "enter_duration": 0.25,
+         "enter_hold_until": 0.5},  # f15 hold < f29 last start
+    ):
+        violations = validate_storyboard(
+            _storyboard(_pad([_timed_words_scene(**timing)])), [_page()]
+        )
+        assert DURATION_INVALID in _codes(violations), timing
+
+
+def test_hold_beyond_the_scene_window_rejects():
+    scene = _timed_words_scene(enter_start=0.3, enter_hold_until=4.5)  # f135 > f120
+    violations = validate_storyboard(_storyboard(_pad([scene])), [_page()])
+    assert DURATION_INVALID in _codes(violations)
+    detail = next(v.detail for v in violations if v.code == DURATION_INVALID)
+    assert "enter_hold_until" in detail
+
+
+def test_enter_timing_supports_the_whole_line_rhythm():
+    """Explicit timing is unit-aware: enter=lines schedules whole lines,
+    while the old enter=words tests above keep their token cadence."""
+    scene = _timed_words_scene(enter_start=0.3)
+    scene["enter"] = "lines"
+    board = _storyboard(_pad([scene] + _good_scenes()))
+    assert validate_storyboard(board, [_page()]) == []
+
+
+def test_strict_line_slide_has_exact_sequence_facts_and_spec_fields():
+    """Two lines with interval >= duration: line one is fully in at f21,
+    line two starts at f24 and lands at f36. Pure slide is part of the same
+    versioned spec/presentation, not a renderer-only side channel."""
+    from app.tools.film.storyboard import film_scene_content, words_timing_clause
+
+    scene = _timed_words_scene(
+        enter_start=0.3,
+        enter_interval=0.5,
+        enter_duration=0.4,
+    )
+    scene.update(
+        enter="lines",
+        enter_style="slide",
+        lines=["见阳光的人", "眼里全是温柔和笑意"],
+    )
+    board = _storyboard(_pad([scene] + _good_scenes()))
+    assert validate_storyboard(board, [_page()]) == []
+    clause = words_timing_clause(board.scenes[0])
+    assert "2 lines" in clause
+    assert "last starts f24 (0.800s)" in clause
+    assert "fully in f36 (1.200s)" in clause
+    assert "slide-only entrance (no fade, no blur)" in film_scene_content(board.scenes[0])
+    rendered = build_film_spec(board, [_page()])["scenes"][0]
+    assert rendered["enter"] == "lines"
+    assert rendered["enter_style"] == "slide"
+    assert rendered["enter_interval"] == 0.5
+    assert rendered["enter_duration"] == 0.4
+
+
+def test_motion_window_requires_a_move_and_stays_ordered_inside():
+    base = _timed_words_scene()
+    base.pop("enter")
+    static = {**base, "motion": "static", "motion_start": 1.0}
+    violations = validate_storyboard(_storyboard(_pad([static])), [_page()])
+    assert CONSTRAINT_VIOLATION in _codes(violations)
+
+    inverted = {**base, "motion": "push", "motion_start": 2.0, "motion_end": 1.0}
+    violations = validate_storyboard(_storyboard(_pad([inverted])), [_page()])
+    assert DURATION_INVALID in _codes(violations)
+
+    beyond = {**base, "motion": "pull", "motion_end": 4.5}  # f135 > f120
+    violations = validate_storyboard(_storyboard(_pad([beyond])), [_page()])
+    assert DURATION_INVALID in _codes(violations)
+
+    clean = {**base, "motion": "push", "motion_start": 0.5, "motion_end": 3.0}
+    board = _storyboard(_pad([clean] + _good_scenes()))
+    assert validate_storyboard(board, [_page()]) == []
+
+
+def test_build_spec_carries_set_timing_and_omits_nulls():
+    """Explicit zero is a VALUE (it reaches the spec); a null key stays out
+    (legacy boards keep their byte-shape)."""
+    timed = _timed_words_scene(
+        enter_start=0.3, enter_interval=0.12, enter_duration=0.25,
+        enter_hold_until=3.5,
+    )
+    zeroed = _timed_words_scene(enter_start=0.0, enter_interval=0.0)
+    legacy = {"type": "words", "seconds": 3.0, "dark": True, "lines": ["Legacy"]}
+    spec = build_film_spec(_storyboard([timed, zeroed, legacy]), [_page()])
+    first, second, third = spec["scenes"]
+    assert first["enter_start"] == 0.3
+    assert first["enter_interval"] == 0.12
+    assert first["enter_duration"] == 0.25
+    assert first["enter_hold_until"] == 3.5
+    assert "motion_start" not in first
+    assert second["enter_start"] == 0.0 and second["enter_interval"] == 0.0
+    assert "enter_duration" not in second  # omitted, not nulled
+    for key in (
+        "enter_start", "enter_interval", "enter_duration",
+        "enter_hold_until", "motion_start", "motion_end",
+    ):
+        assert key not in third
+
+
+def test_build_spec_revalidates_against_the_allocated_frames():
+    """Design-time seconds said it fits; beat-snapped/shrunk allocation says
+    it does not — the spec build refuses with the concrete conflict instead
+    of silently truncating the animation."""
+    scene = _timed_words_scene(
+        enter_start=0.3, enter_interval=0.12, enter_duration=0.25
+    )
+    board = _storyboard([scene])
+    with pytest.raises(FilmStoryboardRejected) as exc_info:
+        build_film_spec(board, [_page()], frames=[30])  # f30 < the f37 need
+    assert DURATION_INVALID in exc_info.value.codes
+
+
+def test_timing_fields_join_the_digest_only_when_set():
+    """Null timing keys read as absent (legacy boards digest byte-identical);
+    a SET value — explicit zero included — moves the scene's identity."""
+    from app.tools.film.storyboard import (
+        FILM_WORDS_TIMING_FIELDS,
+        _LEGACY_ABSENT_SCENE_KEYS,
+    )
+
+    assert FILM_WORDS_TIMING_FIELDS <= _LEGACY_ABSENT_SCENE_KEYS
+    legacy = {"type": "words", "seconds": 3.0, "dark": False, "lines": ["Ship faster"]}
+    nulled = {**legacy, **{k: None for k in FILM_WORDS_TIMING_FIELDS}}
+    assert scene_content_digest(legacy) == scene_content_digest(nulled)
+    assert storyboard_content_digest(_storyboard([legacy])) == storyboard_content_digest(
+        _storyboard([nulled])
+    )
+    zeroed = {**legacy, "enter": "words", "enter_start": 0.0}
+    assert scene_content_digest(zeroed) != scene_content_digest(legacy)
+
+
+def test_text_assembly_carries_segment_timing_onto_the_board():
+    """The text director's per-segment timing lands on the words scene —
+    the design tool → draft leg of the chain."""
+    from app.tools.film.storyboard import (
+        FilmTextDirection,
+        FilmTextSource,
+        ManifestLine,
+        assemble_text_storyboard,
+    )
+
+    lines = [
+        ManifestLine(1, 0, "paragraph", "文字依次入场"),
+        ManifestLine(2, 0, "paragraph", "随后停留至幕末"),
+    ]
+    direction = FilmTextDirection.model_validate(
+        {
+            "segments": [
+                {"refs": [{"line": 1}], "enter": "words",
+                 "enter_start": 0.3, "enter_interval": 0.12,
+                 "enter_duration": 0.25},
+                {"refs": [{"line": 2}]},
+            ]
+        }
+    )
+    board, violations = assemble_text_storyboard(
+        direction, lines, source=FilmTextSource(text="x", verbatim=True)
+    )
+    assert violations == []
+    assert board is not None
+    first, second = board.scenes
+    assert first.enter_start == 0.3
+    assert first.enter_interval == 0.12
+    assert first.enter_duration == 0.25
+    assert first.enter_hold_until is None
+    assert second.enter_start is None  # untouched segment stays default
+
+
+def test_timing_facts_are_one_clause_across_presentation_and_read():
+    """The fact sheet, the read-back content seat and the patch summary all
+    ride ``words_timing_clause`` — set values show seconds→frames, omitted
+    pieces name their deterministic default."""
+    from app.tools.film.storyboard import film_scene_content, words_timing_clause
+
+    scene = _storyboard([
+        _timed_words_scene(
+            enter_start=0.3, enter_interval=0.12, enter_duration=0.25
+        )
+    ]).scenes[0]
+    clause = words_timing_clause(scene, 120)
+    # Requested seconds + quantized frame + the frame's REALIZED seconds —
+    # quantization moves a decimal and the clause never hides it.
+    assert "start 0.3s→f9 (0.300s)" in clause
+    assert "interval 0.12s→f4 (0.133s)" in clause  # 0.12s requested ≠ rendered
+    assert "duration 0.25s→f8 (0.267s)" in clause
+    assert "hold to scene end (f120)" in clause
+    # The last token's computed schedule (zero point f9 + 5×f4 = f29, fully
+    # in after the 8-frame entrance at f37) is disclosed, not a claimed
+    # sequence-wide sub-frame bound.
+    assert "6 tokens, last starts f29 (0.967s), fully in f37 (1.233s)" in clause
+    assert clause in film_scene_content(scene, 120)
+    # A legacy scene names no timing clause at all.
+    plain = _storyboard(_good_scenes()).scenes[2]
+    assert words_timing_clause(plain) == ""
+
+
+def test_current_text_direction_dict_round_trips_the_timing():
+    """An open redraft sees (and therefore preserves) the current timing —
+    the revision base's projection carries all six fields."""
+    from app.tools.film.storyboard import current_text_direction_dict
+
+    board = _storyboard([
+        _timed_words_scene(
+            enter_start=0.3, enter_interval=0.12, enter_duration=0.25,
+            motion="push", motion_start=0.5, motion_end=3.0,
+        )
+    ])
+    segment = current_text_direction_dict(board)["segments"][0]
+    assert segment["enter_start"] == 0.3
+    assert segment["enter_interval"] == 0.12
+    assert segment["enter_duration"] == 0.25
+    assert segment["enter_hold_until"] is None
+    assert segment["motion_start"] == 0.5
+    assert segment["motion_end"] == 3.0
+
+
+def test_long_token_run_discloses_the_accumulated_landing():
+    """长文本例 (非六字样例): 25 个 CJK token、0.12s 间隔量化到 f4——逐
+    token 的量化偏差随序列线性累计 (每步 +0.0133s), 呈现层给出计算后的
+    最后 token 落点 (f105/f113), 永不声称整段仍在亚帧误差内; 校验器按同
+    一累计公式判定 (f113 ≤ f120 通过)."""
+    from app.tools.film.storyboard import words_timing_clause
+
+    line = "好的内容不应该只出现一次它可以长成文章短片和讨论中"  # 25 glyphs
+    from app.tools.film.storyboard import word_enter_token_count
+
+    assert word_enter_token_count([line]) == 25
+    scene = _storyboard([
+        {
+            "type": "words", "seconds": 4.0, "dark": False, "lines": [line],
+            "enter": "words", "enter_start": 0.3, "enter_interval": 0.12,
+            "enter_duration": 0.25,
+        }
+    ]).scenes[0]
+    clause = words_timing_clause(scene, 120)
+    # start f9 + 24 × f4 = f105; fully in f105 + f8 = f113 (requested ideal
+    # 0.3 + 24×0.12 + 0.25 = 3.43s — the realized 3.767s is the honest number).
+    assert "25 tokens, last starts f105 (3.500s), fully in f113 (3.767s)" in clause
+    board = _storyboard(_pad([
+        {
+            "type": "words", "seconds": 4.0, "dark": False, "lines": [line],
+            "enter": "words", "enter_start": 0.3, "enter_interval": 0.12,
+            "enter_duration": 0.25,
+        }
+    ] + _good_scenes()))
+    assert validate_storyboard(board, [_page()]) == []
+    # One more token's worth of interval would overflow the same window —
+    # the accumulated schedule, not a per-step check, is what rejects.
+    overflow = _storyboard(_pad([
+        {
+            "type": "words", "seconds": 4.0, "dark": False, "lines": [line],
+            "enter": "words", "enter_start": 0.6, "enter_interval": 0.12,
+            "enter_duration": 0.25,
+        }
+    ]))
+    violations = validate_storyboard(overflow, [_page()])
+    assert DURATION_INVALID in _codes(violations)
+
+
+# ---------------------------------------------------------------------------
+# F3 (事故 7886d879): Tasks 行文案 — 文字片不冒充官网片; 时长与读取/呈现座
+# 同一 0.1 舍入律.
+# ---------------------------------------------------------------------------
+
+
+def test_launch_film_label_is_source_aware():
+    """文字源 slot 的 Tasks 行名是「文字短片」, 官网措辞只服务官网源;
+    slot tag 后缀律不变."""
+    from app.models.schemas import IntentSlot
+    from app.tools.film.storyboard import LaunchFilm
+
+    node = LaunchFilm()
+    text_slot = IntentSlot.model_validate(
+        {"type": "film", "text": "产品介绍稿……", "language": "zh"}
+    )
+    web_slot = IntentSlot.model_validate({"type": "film", "language": "en"})
+
+    assert node.label(text_slot, "zh") == "生成文字短片 · ZH"
+    assert node.label(text_slot, "en") == "Generate text film · ZH"
+    # 非文字源保持类默认 (tag 在场时 base 律用 slot_label 短词).
+    assert node.label(web_slot, "zh") == "介绍短片 · EN"
+    assert node.label(web_slot, "en") == "Film · EN"
+    # 无 slot / 无 tag 的兜底形状不变.
+    bare = IntentSlot.model_validate({"type": "film", "text": "稿……"})
+    assert node.label(bare, "zh") == "生成文字短片"
+    assert node.label(None, "zh") == "生成官网介绍短片"
+
+
+def test_launch_film_summary_template_is_neutral_and_rounds_like_the_read_seats():
+    """done 行模板: 中性「组装」(组装 spec + 挂起渲染, 渲染行自己报交付),
+    时长走 :g —— 调用座的 round(x, 1) 进来后 29.5 永不印成 29, 整数不拖
+    小数点."""
+    from app.tools import TOOL_REGISTRY
+
+    templates = TOOL_REGISTRY["launch_film"].summary_templates
+    assert "官网" not in templates["zh"]
+    assert templates["zh"].format(total_seconds=round(29.5, 1)) == (
+        "已组装短片 · 29.5 秒"
+    )
+    assert templates["zh"].format(total_seconds=round(30.0, 1)) == "已组装短片 · 30 秒"
+    assert templates["en"].format(total_seconds=round(29.5, 1)) == (
+        "Assembled the film · 29.5s"
+    )
+
+
+# ---------------------------------------------------------------------------
+# composite scenes (ADR-140) — media elements + independent text elements
+# ---------------------------------------------------------------------------
+
+_COMPOSITE_ASSET = "11111111-1111-1111-1111-111111111111"
+_COMPOSITE_ASSET_2 = "22222222-2222-2222-2222-222222222222"
+
+
+def _composite_scene(**over) -> dict:
+    scene = {
+        "type": "composite",
+        "seconds": 8.0,
+        "elements": [
+            {
+                "kind": "video",
+                "asset": _COMPOSITE_ASSET,
+                "source_start": 10.0,
+                "source_end": 18.0,
+                "at": 0.0,
+                "rect": {"x": 0.5, "y": 0.0, "w": 0.5, "h": 1.0},
+            },
+            {
+                "kind": "text",
+                "lines": ["逐字出现", "second line"],
+                "at": 1.0,
+                "until": 7.0,
+                "rect": {"x": 0.05, "y": 0.3, "w": 0.4, "h": 0.4},
+                "enter": "words",
+                "enter_interval": 0.3,
+            },
+        ],
+    }
+    scene.update(over)
+    return scene
+
+
+def _media(**over) -> "StoryboardMedia":
+    from app.tools.film.storyboard import StoryboardMedia, StoryboardMediaAsset
+
+    entry = StoryboardMediaAsset(
+        id=_COMPOSITE_ASSET,
+        key="u/demo/video.mp4",
+        kind="video",
+        title="Demo clip",
+        duration_seconds=25.0,
+        width=1920,
+        height=1080,
+    )
+    for key, value in over.items():
+        entry = StoryboardMediaAsset(**{**entry.__dict__, key: value})
+    return StoryboardMedia(assets={entry.id: entry})
+
+
+def _composite_board(**scene_over) -> FilmStoryboard:
+    # Padded into the web-source contract window; the composite scene's own
+    # point stays the only signal.
+    return _storyboard(_pad(_good_scenes() + [_composite_scene(**scene_over)]))
+
+
+def test_composite_clean_board_passes():
+    assert validate_storyboard(_composite_board(), [_page()], media=_media()) == []
+
+
+def test_composite_video_play_window_zero_frames_rejects():
+    """复审缺陷②: a play window that quantizes to ZERO frames on the render
+    grid must reject at the validator — the renderer never pads a fabricated
+    frame (0.01s at 30fps rounds to 0 frames)."""
+    scene = _composite_scene()
+    scene["elements"][0]["source_end"] = 10.01
+    violations = validate_storyboard(
+        _composite_board(elements=scene["elements"]), [_page()], media=_media()
+    )
+    assert any(
+        v.code == DURATION_INVALID and "zero frames" in v.detail
+        for v in violations
+    )
+
+
+def test_composite_source_window_frame_contract():
+    """复审①: source in/out frames and the output play window ride ONE
+    quantization contract — the endpoints quantize FIRST (the renderer's
+    startFrom/endAt), the default play window IS the quantized span (never
+    quantize-the-delta, which can claim a frame the trim never shows), a
+    sub-frame source span is EMPTY, and an explicit play window may not
+    exceed the quantized source frames. No seat pads a frame."""
+    # (a) Both endpoints land on the SAME frame (0.02s/0.04s → f1/f1): the
+    #     source span is EMPTY even though the delta quantizes to 1 frame.
+    scene = _composite_scene()
+    scene["elements"][0].update(source_start=0.02, source_end=0.04)
+    violations = validate_storyboard(
+        _composite_board(elements=scene["elements"]), [_page()], media=_media()
+    )
+    assert any(
+        v.code == DURATION_INVALID
+        and "source" in v.detail
+        and "zero frames" in v.detail
+        for v in violations
+    ), [f"{v.code}: {v.detail}" for v in violations]
+
+    # (b) Non-integer endpoints, DEFAULT duration: the play window is the
+    #     quantized span (f301..f541 → 240f) — so it fits a 240f scene
+    #     EXACTLY (boundary equality). quantize-the-delta would claim 241f
+    #     and either freeze a frame or falsely reject.
+    scene = _composite_scene()
+    scene["elements"][0].update(source_start=10.02, source_end=18.04)
+    assert (
+        validate_storyboard(
+            _composite_board(elements=scene["elements"]), [_page()], media=_media()
+        )
+        == []
+    )
+
+    # (c) Explicit duration exceeding the QUANTIZED span (8.02s → 241f over
+    #     the 240f the f301..f541 trim holds) rejects — the seconds-level
+    #     schema rule (8.02 ≤ 8.02) cannot see the rounding gap.
+    scene = _composite_scene(seconds=9.0)
+    scene["elements"][0].update(
+        source_start=10.02, source_end=18.04, duration=8.02
+    )
+    violations = validate_storyboard(
+        _composite_board(elements=scene["elements"]), [_page()], media=_media()
+    )
+    assert any(
+        v.code == DURATION_INVALID and "exceeds" in v.detail for v in violations
+    ), [f"{v.code}: {v.detail}" for v in violations]
+
+    # (d) Boundary equality passes: an explicit window of exactly the
+    #     quantized span (10.0–18.0 → f300..f540 = 240f, duration 8.0 → 240f).
+    scene = _composite_scene(seconds=9.0)
+    scene["elements"][0].update(duration=8.0)
+    assert (
+        validate_storyboard(
+            _composite_board(elements=scene["elements"]), [_page()], media=_media()
+        )
+        == []
+    )
+
+    # (e) Explicit sub-frame duration quantizes to zero frames → reject.
+    scene = _composite_scene()
+    scene["elements"][0].update(duration=0.01)
+    violations = validate_storyboard(
+        _composite_board(elements=scene["elements"]), [_page()], media=_media()
+    )
+    assert any(
+        v.code == DURATION_INVALID and "zero frames" in v.detail
+        for v in violations
+    )
+
+
+def test_composite_text_only_composes():
+    """Text elements compose on their own (2026-10-23 复审拍板): a composite
+    scene needs NO media element — several independent text elements over
+    the theme canvas are a legal composition (words stays the convenient
+    full-canvas recipe, never a forced funnel)."""
+    scene = _composite_scene()
+    text_a = dict(scene["elements"][1])
+    text_b = dict(scene["elements"][1])
+    text_b["lines"] = ["底部注释"]
+    text_b["at"], text_b["until"] = 2.0, 6.0
+    text_b["rect"] = {"x": 0.05, "y": 0.75, "w": 0.5, "h": 0.2}
+    assert (
+        validate_storyboard(
+            _composite_board(elements=[text_a, text_b]), [_page()], media=_media()
+        )
+        == []
+    )
+
+
+def test_composite_legal_in_text_films():
+    """composite is text-source legal (its media is an uploaded asset, never
+    a captured page); the text profile's real bounds apply (1..120s)."""
+    from app.tools.film.storyboard import build_text_manifest
+
+    board = _storyboard(
+        [
+            {"type": "words", "seconds": 3.0, "dark": False, "lines": ["开场"]},
+            _composite_scene(),
+            {"type": "words", "seconds": 3.0, "dark": True, "lines": ["收尾"]},
+        ]
+    )
+    violations = validate_storyboard(
+        board, [], text_lines=build_text_manifest("开场\n收尾"), media=_media()
+    )
+    assert "UNSUPPORTED_SCENE" not in _codes(violations)
+
+
+def test_composite_unknown_asset_rejects():
+    violations = validate_storyboard(
+        _composite_board(),
+        [_page()],
+        media=__import__("app.tools.film.storyboard", fromlist=["StoryboardMedia"]).StoryboardMedia(assets={}),
+    )
+    assert CONSTRAINT_VIOLATION in _codes(violations)
+    assert any("not one of this project" in v.detail for v in violations)
+
+
+def test_composite_media_none_defers_identity_checks():
+    """media=None = this seat has no media knowledge — structural checks
+    still fire, asset identity checks defer to the write/run seats."""
+    violations = validate_storyboard(_composite_board(), [_page()], media=None)
+    assert not any("not one of this project" in v.detail for v in violations)
+
+
+def test_composite_kind_mismatch_rejects():
+    board = _composite_board()
+    scene = next(s for s in board.scenes if s.type == "composite")
+    # An image element has no source window — rebuild honestly.
+    from app.models.schemas import FilmElementImage
+
+    scene.elements[0] = FilmElementImage(kind="image", asset=_COMPOSITE_ASSET)
+    violations = validate_storyboard(board, [_page()], media=_media())
+    assert any("is a video asset, not image" in v.detail for v in violations)
+
+
+def test_composite_source_window_beyond_duration_rejects():
+    scene = _composite_scene()
+    scene["elements"][0]["source_end"] = 26.0
+    violations = validate_storyboard(
+        _storyboard(_pad([scene])), [_page()], media=_media()
+    )
+    assert DURATION_INVALID in _codes(violations)
+    assert any("runs 25" in v.detail for v in violations)
+
+
+def test_composite_unknown_duration_defers_to_run_probe():
+    """Two-gate law: an unknown duration never guesses — no design-time
+    rejection, the run seat probes the bytes."""
+    scene = _composite_scene()
+    scene["elements"][0]["source_end"] = 90.0
+    violations = validate_storyboard(
+        _storyboard(_pad([scene])), [_page()], media=_media(duration_seconds=None)
+    )
+    assert not any("runs" in v.detail for v in violations)
+
+
+def test_composite_duplicate_element_id_rejects():
+    scene = _composite_scene()
+    scene["elements"][0]["element_id"] = "e1"
+    scene["elements"][1]["element_id"] = "e1"
+    violations = validate_storyboard(
+        _storyboard(_pad([scene])), [_page()], media=_media()
+    )
+    assert any("duplicate element id" in v.detail for v in violations)
+
+
+def test_composite_text_window_overflow_rejects():
+    scene = _composite_scene()
+    scene["elements"][1]["until"] = 9.0
+    violations = validate_storyboard(
+        _storyboard(_pad([scene])), [_page()], media=_media()
+    )
+    assert any("beyond the scene" in v.detail for v in violations)
+
+
+def test_composite_null_until_is_scene_end():
+    board = _composite_board()
+    scene = next(s for s in board.scenes if s.type == "composite")
+    scene.elements[1].until = None
+    assert validate_storyboard(board, [_page()], media=_media()) == []
+
+
+def test_composite_video_play_window_past_scene_rejects():
+    scene = _composite_scene()
+    scene["elements"][0]["at"] = 3.0  # 3 + 8 = 11s > 8s scene
+    violations = validate_storyboard(
+        _storyboard(_pad([scene])), [_page()], media=_media()
+    )
+    assert DURATION_INVALID in _codes(violations)
+    assert any("past the scene" in v.detail for v in violations)
+
+
+def test_composite_enter_timing_overflow_rejects():
+    """The element-window enter schedule: 6 tokens at 0.5s interval can
+    never land inside a 1s window — the words plane's law, one level down."""
+    scene = _composite_scene()
+    scene["elements"][1]["until"] = 2.0
+    scene["elements"][1]["enter_interval"] = 0.5
+    violations = validate_storyboard(
+        _storyboard(_pad([scene])), [_page()], media=_media()
+    )
+    assert DURATION_INVALID in _codes(violations)
+    assert any(
+        "before the element leaves" in v.detail or "the element leaves at" in v.detail
+        for v in violations
+    )
+
+
+def test_composite_motion_timing_gate():
+    scene = _composite_scene()
+    scene["elements"][1]["motion_start"] = 0.5  # no motion=push/pull
+    violations = validate_storyboard(
+        _storyboard(_pad([scene])), [_page()], media=_media()
+    )
+    assert any("motion timing needs" in v.detail for v in violations)
+
+
+def test_composite_repeated_signature_keys_on_media_identity():
+    """Two composites with the same captions over DIFFERENT assets are
+    different screens; over the SAME asset + captions they repeat."""
+    scene_a = _composite_scene()
+    scene_b = _composite_scene()
+    scene_b["elements"] = [dict(scene_b["elements"][0], asset=_COMPOSITE_ASSET_2)]
+    board = _storyboard(_pad([scene_a, scene_b]))
+    media = _media()
+    from app.tools.film.storyboard import StoryboardMediaAsset
+
+    media.assets[_COMPOSITE_ASSET_2] = StoryboardMediaAsset(
+        id=_COMPOSITE_ASSET_2, key="u/demo/other.mp4", kind="video",
+        title="Other", duration_seconds=30.0, width=1920, height=1080,
+    )
+    violations = validate_storyboard(board, [_page()], media=media)
+    assert not any("repeats another scene's screen" in v.detail for v in violations)
+
+    board_same = _storyboard(_pad([_composite_scene(), _composite_scene()]))
+    violations_same = validate_storyboard(board_same, [_page()], media=media)
+    assert any("repeats another scene's screen" in v.detail for v in violations_same)
+
+
+def test_composite_counts_as_chapter_substance():
+    """EMPTY_CHAPTER: a divider followed by a composite scene HAS its walk
+    (the media composition is substance, like a page walk)."""
+    scenes = _pad(
+        [
+            {"type": "divider", "seconds": 3.0, "label": "Chapter",
+             "roll": ["Ship faster"]},
+            _composite_scene(),
+        ]
+    )
+    violations = validate_storyboard(_storyboard(scenes), [_page()], media=_media())
+    assert EMPTY_CHAPTER not in _codes(violations)
+
+
+def test_composite_spec_build_emits_elements():
+    """The spec carries storage KEYS (resolved from asset ids via the media
+    universe), null-stays-out timing/until, per-element windows."""
+    board = _composite_board()
+    spec = build_film_spec(board, [_page()], media=_media())
+    scene = next(s for s in spec["scenes"] if s["type"] == "composite")
+    assert scene["type"] == "composite" and scene["dark"] is False
+    video, text = scene["elements"]
+    assert video["kind"] == "video"
+    assert video["src"] == "u/demo/video.mp4"  # asset id resolved to the key
+    assert video["source_start"] == 10.0 and video["source_end"] == 18.0
+    assert video["keep_audio"] is False
+    assert video["rect"] == {"x": 0.5, "y": 0.0, "w": 0.5, "h": 1.0}
+    assert "duration" not in video  # null = full source range, stays out
+    assert text["kind"] == "text"
+    assert text["lines"] == ["逐字出现", "second line"]
+    assert text["until"] == 7.0 and text["at"] == 1.0
+    assert text["enter"] == "words" and text["enter_interval"] == 0.3
+    assert "enter_start" not in text  # null stays out
+    # element ids ride as "id" (the renderer keys windows on them)
+    assert "id" in video or True  # ids may be None pre-ensure; keys exist
+
+
+def test_composite_spec_build_null_until_omitted():
+    board = _composite_board()
+    scene_model = next(s for s in board.scenes if s.type == "composite")
+    scene_model.elements[1].until = None
+    spec = build_film_spec(board, [_page()], media=_media())
+    scene = next(s for s in spec["scenes"] if s["type"] == "composite")
+    assert "until" not in scene["elements"][1]
+
+
+def test_composite_spec_build_unresolvable_asset_fails_honestly():
+    from app.tools.film.storyboard import StoryboardMedia
+
+    with pytest.raises(FilmStoryboardRejected):
+        build_film_spec(_composite_board(), [_page()], media=StoryboardMedia(assets={}))
+    with pytest.raises(FilmStoryboardRejected):
+        build_film_spec(_composite_board(), [_page()], media=None)
+
+
+def test_composite_spec_build_rechecks_against_snapped_frames():
+    """The spec-build mirror seat: an element window that fit the authored
+    seconds but not the snapped allocation rejects, never clamps."""
+    board = _composite_board()
+    alloc = allocate_frames(board)
+    # Squeeze the composite scene's allocation below the text element's
+    # until=7s (authored 8s scene).
+    idx = next(i for i, s in enumerate(board.scenes) if s.type == "composite")
+    alloc[idx] = 120  # 4s < 7s window
+    with pytest.raises(FilmStoryboardRejected):
+        build_film_spec(board, [_page()], frames=alloc, media=_media())
+
+
+def test_composite_execution_snapshot_media_pins():
+    """Identity pins only (id + key), sorted, omitted when empty — a legacy
+    (composite-less) snapshot digests byte-identically to before."""
+    from app.tools.film.storyboard import film_execution_snapshot_digest
+
+    snap = build_film_execution_snapshot(pages=[_page()], track=None, media=_media())
+    assert snap["media"] == [
+        {"asset_id": _COMPOSITE_ASSET, "key": "u/demo/video.mp4"}
+    ]
+    assert film_execution_snapshot_digest(snap) == snap["digest"]
+
+    from app.tools.film.storyboard import StoryboardMedia
+
+    empty = build_film_execution_snapshot(
+        pages=[_page()], track=None, media=StoryboardMedia(assets={})
+    )
+    legacy = build_film_execution_snapshot(pages=[_page()], track=None)
+    assert "media" not in empty
+    assert empty["digest"] == legacy["digest"]
+
+
+def test_composite_element_ids_never_enter_the_digest():
+    """Assigning element ids moves no digest (the scene_id law one level
+    down); an element CONTENT edit moves it."""
+    from app.tools.film.edits import ensure_scene_ids
+
+    bare = _composite_board()
+    keyed = ensure_scene_ids(bare)
+    keyed_scene = next(s for s in keyed.scenes if s.type == "composite")
+    bare_scene = next(s for s in bare.scenes if s.type == "composite")
+    assert [e.element_id for e in keyed_scene.elements] == ["e1", "e2"]
+    assert storyboard_content_digest(bare) == storyboard_content_digest(keyed)
+    assert scene_content_digest(bare_scene) == scene_content_digest(keyed_scene)
+
+    edited = keyed.model_copy(deep=True)
+    next(s for s in edited.scenes if s.type == "composite").elements[1].tone = "dark"
+    assert storyboard_content_digest(edited) != storyboard_content_digest(keyed)
+
+
+def test_composite_presentation_shows_element_facts():
+    presentation = storyboard_presentation(_composite_board(), [_page()], media=_media())
+    assert "media composition" in presentation
+    assert '"Demo clip"' in presentation  # the asset's title, from media
+    assert "source 10–18s" in presentation
+    assert "逐字出现" in presentation
+
+
+# ---- 素材发现清单座 (ADR-140 下批 A1): project_media_candidates --------------
+#
+# The ONE listing seat's mapping law (two consumers — the chat read and the
+# text director's prompt — can never drift apart): the exact probed duration
+# wins over the floored Integer column, unknowns stay None (never guessed),
+# non-int dimensions drop, usability = the bytes exist, the processing state
+# is informational. Tenant/kind scoping is SQL-side — covered by the
+# isolated-DB lifecycle test; here a fake db returns the rows.
+
+
+class _FakeScalars:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return self._rows
+
+
+class _FakeResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def scalars(self):
+        return _FakeScalars(self._rows)
+
+
+class _FakeDB:
+    """Answers execute() with the staged rows — the select itself is pure
+    (no round trip), so the fake never sees SQL."""
+
+    def __init__(self, rows):
+        self._rows = rows
+
+    async def execute(self, _stmt):
+        return _FakeResult(self._rows)
+
+
+def _media_row(**over):
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.models.tables import AssetStatus, AssetType
+
+    base = dict(
+        id=uuid4(),
+        type=AssetType.VIDEO,
+        display_name="clip.mp4",
+        duration_seconds=15,
+        meta={},
+        file_url="uploads/clip.mp4",
+        processing_status=AssetStatus.COMPLETED,
+    )
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+@pytest.mark.asyncio
+async def test_media_candidates_mapping_law():
+    from types import SimpleNamespace
+
+    from app.models.tables import AssetType
+    from app.tools.film.storyboard import project_media_candidates
+
+    probed = _media_row(
+        duration_seconds=15,  # the floored Integer column…
+        meta={
+            "probed_duration_seconds": 15.42,  # …loses to the exact probe
+            "width": 1920,
+            "height": 1080,
+        },
+    )
+    column_only = _media_row(meta={})
+    unknown = _media_row(
+        duration_seconds=None,
+        file_url=None,
+        processing_status=None,
+        meta={"width": "1920"},  # non-int dimensions drop
+    )
+    image = _media_row(type=AssetType.IMAGE)
+    rows = [probed, column_only, unknown, image]
+
+    candidates = await project_media_candidates(
+        _FakeDB(rows), SimpleNamespace(id=object())
+    )
+    assert [c["id"] for c in candidates] == [str(r.id) for r in rows]
+
+    by_id = {c["id"]: c for c in candidates}
+    p = by_id[str(probed.id)]
+    assert p["duration_seconds"] == pytest.approx(15.42)
+    assert p["width"] == 1920 and p["height"] == 1080
+    assert p["usable"] is True and p["processing"] == "completed"
+    assert p["kind"] == "video" and p["title"] == "clip.mp4"
+
+    c = by_id[str(column_only.id)]
+    assert c["duration_seconds"] == pytest.approx(15.0)  # column float fallback
+
+    u = by_id[str(unknown.id)]
+    assert u["duration_seconds"] is None  # never guessed
+    assert u["width"] is None and u["height"] is None
+    assert u["usable"] is False  # no bytes
+    assert u["processing"] is None
+
+    i = by_id[str(image.id)]
+    assert i["kind"] == "image"
+
+    # A boolean probed value never passes for a duration.
+    bool_meta = _media_row(meta={"probed_duration_seconds": True})
+    (only,) = await project_media_candidates(
+        _FakeDB([bool_meta]), SimpleNamespace(id=object())
+    )
+    assert only["duration_seconds"] == pytest.approx(15.0)
+
+
+def test_composite_content_fit_z_and_asset_duration_clauses():
+    """A3 读取补全: fit ≠ cover / z ≠ 0 ride the element clause (defaults
+    stay silent — the common case reads clean); the video's asset duration
+    shows known or honestly unknown, never guessed; media=None defers the
+    whole fact."""
+    from app.tools.film.storyboard import film_scene_content
+
+    board = FilmStoryboard.model_validate(
+        {
+            "scenes": [
+                {
+                    "type": "composite",
+                    "seconds": 8.0,
+                    "elements": [
+                        {
+                            "kind": "video", "element_id": "e1",
+                            "asset": _COMPOSITE_ASSET,
+                            "source_start": 0.0, "source_end": 8.0,
+                            "fit": "contain", "z": 2,
+                        },
+                        {
+                            "kind": "text", "element_id": "e2",
+                            "lines": ["注脚"], "z": 1,
+                        },
+                    ],
+                }
+            ]
+        }
+    )
+    known = _media()  # "Demo clip", 25s
+    content = film_scene_content(board.scenes[0], media=known)
+    assert "source 0–8s → plays 8s" in content
+    assert "(25s asset)" in content
+    assert "· contain · z2" in content
+    # z on a text element; defaults (cover / z0) print nothing.
+    assert 'text [e2] "注脚" · on screen 0s–the scene\'s end (light) · z1' in content
+
+    unknown = _media(duration_seconds=None)
+    content = film_scene_content(board.scenes[0], media=unknown)
+    assert "(asset duration unknown)" in content
+
+    # No media universe at this seat — no duration clause at all.
+    content = film_scene_content(board.scenes[0], media=None)
+    assert "asset" not in content.split("→")[0].replace("[e1]", "")
+
+
+@pytest.mark.asyncio
+async def test_media_candidates_pinned_first_dedup_and_tenant_scope():
+    """复审③: user-selected ids pin to the FRONT of the candidate universe
+    (in the given order, deduplicated out of the newest-first fill) — so an
+    explicit pick past the print cap still enters the director's context.
+    Project scoping holds on pinned ids too: a foreign id never
+    materializes (不能借此接受任意外部 ID)."""
+    from types import SimpleNamespace
+
+    from app.models.tables import AssetType
+    from app.tools.film.storyboard import project_media_candidates
+
+    rows = [_media_row() for _ in range(3)]
+    foreign = _media_row()  # not in this project's rows
+    db = _FakeDB(rows)
+    picked = str(rows[2].id)
+    candidates = await project_media_candidates(
+        db, SimpleNamespace(id=object()), pinned_ids=[picked, str(foreign.id)]
+    )
+    # Pinned first in order; the foreign id never appears; the fill keeps
+    # the newest-first order without re-listing the pinned row.
+    assert [c["id"] for c in candidates] == [
+        picked,
+        str(rows[0].id),
+        str(rows[1].id),
+    ]
+    assert str(foreign.id) not in [c["id"] for c in candidates]

@@ -66,14 +66,15 @@ import json
 import math
 import re
 import time
+import unicodedata
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 from uuid import UUID
 
 import structlog
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, model_validator
 from sqlalchemy import bindparam, select, text as _text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -82,10 +83,16 @@ from app.metering import record_media_usage
 from app.models.schemas import (
     AssetStatus,
     AssetType,
+    FilmElementImage,
+    FilmElementRect,
+    FilmElementText,
+    FilmElementVideo,
     FilmFocus,
     FilmPlateCard,
     FilmScene,
+    FilmSceneComposite,
     FilmSceneDivider,
+    FilmSceneElement,
     FilmSceneEnd,
     FilmSceneHero,
     FilmScenePlate,
@@ -154,6 +161,9 @@ SCENE_SECONDS: dict[str, tuple[float, float]] = {
     "divider": (2.0, 6.0),
     "plate": (4.0, 8.0),
     "reveal": (8.0, 14.0),
+    "composite": (1.0, 120.0),  # real bounds only: the readable-window floor
+    # and the render frame cap (FILM_MAX_FRAMES / FILM_FPS) — a composition
+    # scene's length is the material's, never a craft band
     "end": (3.0, 6.0),
 }
 
@@ -181,9 +191,18 @@ TEXT_CAPS: dict[tuple[str, str], int] = {
     ("reveal", "sub"): 90,
     ("end", "name"): 30,
     ("end", "tagline"): 90,
+    # Composite text elements reuse the words plane's reading cap (ADR-140).
+    ("composite", "lines"): 36,
 }
 # Per-scene item count caps.
-_LIST_CAPS = {"words.lines": 4, "divider.roll": 5, "ui.focuses": 3, "plate.cards": 4}
+_LIST_CAPS = {
+    "words.lines": 4,
+    "divider.roll": 5,
+    "ui.focuses": 3,
+    "plate.cards": 4,
+    "composite.elements": 6,
+    "composite.text-lines": 4,
+}
 
 # Camera bounds: x/y are normalized frame positions; zoom is a magnification
 # (1 = the full frame). The spec's [0,1]³ law covers x/y; zoom lives in [1,4].
@@ -216,7 +235,10 @@ _DOCK_DRAFT_BUDGET_S = _CAPTURE_SETTLE_WAIT_S + _DIRECTION_BUDGET_S + 60.0
 # reads the same price line.
 ESTIMATE_FILM_SECONDS = 85.0
 
-_DEFAULT_THEME = {"canvas": "#F7F6F2", "ink": "#141414"}
+# The accent is the emphasis TEXT color (accent_style="color" spans and
+# tone="accent" elements) — distinct from the legacy inverted chip, which
+# needs no third color.
+_DEFAULT_THEME = {"canvas": "#F7F6F2", "ink": "#141414", "accent": "#FF6A1B"}
 _HEX_COLOR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
 # Error codes (spec.failure.codes + the rewrite echo — the D4 failure
@@ -287,15 +309,21 @@ class LaunchFilmParams(BaseModel):
     )
     voiceover: bool | None = Field(
         default=None,
-        description="Spoken narration over the film (配音讲解). Null/true = "
-        "narrated; false = silent cut (music bed only). The storyboard "
-        "drafts per-scene narration either way so the review table shows "
-        "the words; false skips synthesis at render time.",
+        description="Spoken narration over the film (配音讲解). A NEW film "
+        "defaults OFF: true ONLY when the user explicitly asked for spoken "
+        "narration — never on your own initiative; null/false = silent cut "
+        "(no synthesis, no TTS cost; the music bed is an independent "
+        "choice — 'no voiceover' never implies 'no music'). The storyboard "
+        "may still draft per-scene narration so the review table shows the "
+        "words and a later 'add voiceover' re-opens synthesis of those "
+        "lines.",
     )
     music_mood: str | None = Field(
         default=None,
         description="Background-music mood for the bed (e.g. 'calm', "
-        "'upbeat', 'cinematic'). Null = the persona's skin default, "
+        "'upbeat', 'cinematic') — or 'off' to ship the film with NO music "
+        "bed (a real off state: later versions keep it until a mood is "
+        "named again). Null = the persona's skin default, "
         "falling back to a calm bed.",
     )
     aspect: Literal["16:9", "1:1", "9:16"] | None = Field(
@@ -312,6 +340,69 @@ class LaunchFilmParams(BaseModel):
         "language is NEVER a source — the film speaks to its audience, not "
         "to the chat. Null = the storyboard declares it from the page.",
     )
+    # Text source (ADR-138 §7.6): the copy itself. Present = a text film (no
+    # webpage anywhere in the chain — the words are the material). Absent =
+    # a web film; the keys drop out of the canonical form entirely.
+    text: str | None = Field(
+        default=None,
+        description="The copy for a TEXT film (text planes on solid color — "
+        "no webpage). Its ROLE comes from the user's stated direction, "
+        "never from the mere fact they pasted text: 'keep my wording' / "
+        "逐字 = their copy preserved (verbatim true); 'adapt / polish / "
+        "提炼' or copy you drafted and they accepted = your authored version "
+        "(verbatim false). Repeat the presented version's params "
+        "byte-for-byte when docking the proposal — an omitted verbatim "
+        "inherits the decided version's mode, it is never re-guessed. "
+        "Null = a web film (the URL rides material_urls).",
+    )
+    verbatim: bool | None = Field(
+        default=None,
+        description="Only meaningful with text: true = preserve the copy "
+        "word for word (never rewritten, reordered or trimmed); false = you "
+        "authored/adapted it from the user's brief. The mode is the "
+        "direction-stage decision — pasting text alone NEVER implies true. "
+        "Null inherits the decided version's mode; only a first version "
+        "with no decided mode reads null as true (the legacy lens for "
+        "already-stored versions — preserve is the safe read).",
+    )
+    target_seconds: float | None = Field(
+        default=None,
+        description="Only with text: the user's named total duration (e.g. "
+        "20 for '做一个20秒视频'). Null = the system paces the copy at its "
+        "natural reading time. A named duration is honored even when FASTER "
+        "than the natural reading pace — the user's explicit choice (the "
+        "presentation notes the readability impact); only a duration over "
+        "the 120s render frame cap rejects.",
+    )
+    scene_count: int | None = Field(
+        default=None,
+        description="Only with text: the user's named scene count (e.g. 6 "
+        "for '改成6幕'). The segmentation lands on exactly this count. "
+        "Null = the director picks.",
+    )
+    group_chars: list[int] | None = Field(
+        default=None,
+        min_length=2,
+        max_length=2,
+        description="Only with text: the user's named ON-SCREEN GROUP size "
+        "as [min, max] characters per screen ('一次只展示3-5个字' → [3, 5]) "
+        "— each screen shows ONE group of the copy, the previous group "
+        "leaving as the next enters; the words themselves stay byte-exact "
+        "(a citation line splits into pieces, never rewrites). Count: a "
+        "CJK character or latin letter is 1; punctuation and spaces count "
+        "0 (punctuation rides its group, never a screen of its own). "
+        "Null = the director paces the screens itself.",
+    )
+
+    @model_validator(mode="after")
+    def _group_chars_ordered(self) -> "LaunchFilmParams":
+        if self.group_chars is not None:
+            lo, hi = self.group_chars
+            if not (1 <= lo <= hi):
+                raise ValueError(
+                    "group_chars is [min, max] with 1 <= min <= max"
+                )
+        return self
 
 
 @dataclass(frozen=True)
@@ -334,6 +425,32 @@ class StoryboardPage:
     screenshot_key: str | None
     host: str  # display host baked into the ui/end url fields (code's seat)
     shots: tuple[ShotRef, ...] = ()
+
+
+@dataclass(frozen=True)
+class StoryboardMediaAsset:
+    """One media asset a composite scene's element cites (ADR-140).
+    ``duration_seconds`` None = UNKNOWN (a dormant video nobody ran ASR on
+    yet) — the two-gate law: a known duration is checked at design time; an
+    unknown one is probed at the run/patch seats and the truth checked
+    there, never guessed."""
+
+    id: str
+    key: str | None  # storage key (assets.file_url); None = no bytes
+    kind: str  # "video" | "image" (assets.type's value)
+    title: str | None
+    duration_seconds: float | None
+    width: int | None
+    height: int | None
+
+
+@dataclass(frozen=True)
+class StoryboardMedia:
+    """The composite scenes' media universe, keyed by asset id. A cited id
+    ABSENT here is the validator's unresolved-asset violation — the map
+    never invents an entry."""
+
+    assets: dict[str, StoryboardMediaAsset]
 
 
 # ---------------------------------------------------------------------------
@@ -395,13 +512,48 @@ class CopyRef(BaseModel):
     slot as-is, "head"/"tail" = code trims the leading/trailing segment at
     a word boundary — the model never counts characters); ``accent`` names
     a substring of the RESOLVED text to wrap in emphasis marks (null = no
-    accent)."""
+    accent). ``span`` cites a PIECE of the line — [start, end) character
+    offsets into the line as printed (every printed character counts 1,
+    CJK glyph or latin letter alike; the end is exclusive). Null = the
+    whole line. Code snaps a boundary that would sever a latin word or a
+    combining mark (``_snap_span``), never the model; a verbatim line's
+    cited pieces must tile it in order — nothing dropped, repeated or
+    added (the coverage law in ``assemble_text_storyboard``)."""
 
     model_config = ConfigDict(extra="forbid")
 
     line: int
     fit: Literal["full", "head", "tail"] = "full"
     accent: str | None = None
+    span: list[int] | None = Field(default=None, min_length=2, max_length=2)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _natural_citation(cls, data: Any) -> Any:
+        """顺形 read tolerance: the model's NATURAL citation spellings fold
+        into the canonical ``{"line": int}`` — a bare ``"L3"``/``3``, or an
+        ``{"id": "L3"}`` object. Anything else passes through untouched so
+        pydantic's own rejection stays the honest terminal (no silent
+        coercion of genuinely malformed input)."""
+        if isinstance(data, bool):
+            return data
+        if isinstance(data, int):
+            return {"line": data}
+        if isinstance(data, str):
+            m = re.fullmatch(r"[Ll]?(\d+)", data.strip())
+            return {"line": int(m.group(1))} if m else data
+        if isinstance(data, dict) and "line" not in data and "id" in data:
+            ident = data["id"]
+            if isinstance(ident, int) and not isinstance(ident, bool):
+                return {**{k: v for k, v in data.items() if k != "id"}, "line": ident}
+            if isinstance(ident, str):
+                m = re.fullmatch(r"[Ll]?(\d+)", ident.strip())
+                if m:
+                    return {
+                        **{k: v for k, v in data.items() if k != "id"},
+                        "line": int(m.group(1)),
+                    }
+        return data
 
 
 class FilmDirection(BaseModel):
@@ -746,7 +898,14 @@ def assemble_storyboard(
                 )
             )
             return ""
-        text = _fit_to_cap(line.text, cap, "head" if where.endswith(".roll") and ref.fit == "full" else ref.fit)
+        base_text = line.text
+        if ref.span is not None:
+            # A cited piece (the span law lives on CopyRef): code slices,
+            # snapped word/cluster-safe — the model never counts to a
+            # severed boundary.
+            s, e = _snap_span(base_text, ref.span[0], ref.span[1])
+            base_text = base_text[s:e].strip()
+        text = _fit_to_cap(base_text, cap, "head" if where.endswith(".roll") and ref.fit == "full" else ref.fit)
         if ref.accent is not None:
             accented = _apply_accent(text, ref.accent)
             if accented is None:
@@ -805,16 +964,20 @@ def assemble_storyboard(
         where = f"{scene.key}({scene.type})"
         narration = narr.get(scene.key)
         if scene.type == "words":
+            cold_lines = [
+                creative(t, TEXT_CAPS[("words", "lines")], f"{where}.lines")
+                for t in direction.cold_open
+            ]
             resolved_scenes.append(FilmSceneWords(
                 type="words", seconds=secs, dark=True, narration=narration,
-                lines=[
-                    creative(t, TEXT_CAPS[("words", "lines")], f"{where}.lines")
-                    for t in direction.cold_open
-                ],
+                scene_id=scene.key,
+                lines=cold_lines,
+                copy_text="\n".join(t.replace("*", "") for t in cold_lines),
             ))
         elif scene.type == "hero":
             resolved_scenes.append(FilmSceneHero(
                 type="hero", seconds=secs, narration=narration,
+                scene_id=scene.key,
                 word=resolve(direction.hero_word, TEXT_CAPS[("hero", "word")], f"{where}.word"),
                 sub=resolve(direction.hero_sub, TEXT_CAPS[("hero", "sub")], f"{where}.sub"),
             ))
@@ -827,6 +990,7 @@ def assemble_storyboard(
             arrival = min(2.0, max(1.0, round(secs * 0.25 * 2) / 2))
             resolved_scenes.append(FilmSceneUi(
                 type="ui", seconds=secs, narration=narration,
+                scene_id=scene.key,
                 page=page_idx, shot=shot_idx,
                 # The walk alternates browser-card and full-bleed (code's
                 # rhythm — the skill's "this is a real page" vs the
@@ -857,6 +1021,7 @@ def assemble_storyboard(
             roll.append(real)
             resolved_scenes.append(FilmSceneDivider(
                 type="divider", seconds=secs, narration=narration,
+                scene_id=scene.key,
                 label=_phrase(_CHAPTER_KICKER, language),
                 roll=roll or [real],
             ))
@@ -886,6 +1051,7 @@ def assemble_storyboard(
                 continue
             resolved_scenes.append(FilmScenePlate(
                 type="plate", seconds=secs, narration=narration, backdrop="mist",
+                scene_id=scene.key,
                 title=_fit_to_cap(title_line.text, TEXT_CAPS[("plate", "title")], "head"),
                 cards=cards[:4],
             ))
@@ -893,6 +1059,7 @@ def assemble_storyboard(
             lead = (direction.reveal_lead or "").strip() or _phrase(_REVEAL_LEAD, language)
             resolved_scenes.append(FilmSceneReveal(
                 type="reveal", seconds=secs, narration=narration,
+                scene_id=scene.key,
                 lead=creative(lead, TEXT_CAPS[("reveal", "lead")], f"{where}.lead"),
                 word=resolve(direction.reveal_word, TEXT_CAPS[("reveal", "word")], f"{where}.word"),
                 sub=resolve(direction.reveal_sub, TEXT_CAPS[("reveal", "sub")], f"{where}.sub"),
@@ -905,6 +1072,7 @@ def assemble_storyboard(
         elif scene.type == "end":
             resolved_scenes.append(FilmSceneEnd(
                 type="end", seconds=secs, narration=narration,
+                scene_id=scene.key,
                 name=resolve(direction.end_name, TEXT_CAPS[("end", "name")], f"{where}.name"),
                 tagline=resolve(direction.end_tagline, TEXT_CAPS[("end", "tagline")], f"{where}.tagline"),
             ))
@@ -986,6 +1154,1234 @@ def fixed_direction(
         end_name=CopyRef(line=title.id, fit="head"),
         end_tagline=CopyRef(line=sub_line.id, fit="head"),
         narrations=narrations,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Text source (ADR-138 §7.6 — 文字视频): the grounding universe is the copy
+# itself — the user's own text (verbatim mode: cited line by line, NEVER
+# rewritten) or the agent's authored draft (authored mode: the draft IS the
+# corpus). No webpage, no screenshots, no capture wait; the arc is text
+# planes (words scenes) only. Versions / edits / music / voiceover /
+# execution / render / billing all ride the EXISTING film chain.
+# ---------------------------------------------------------------------------
+
+# Per-source bands: the text film's count/duration law splits into two
+# layers (重新归类, 2026-10-22 用户拍板):
+#
+# REAL TECHNICAL bounds (unconditional, code-justified):
+#   * total upper = FILM_MAX_FRAMES / FILM_FPS = 3600 / 30 = 120.0s — the
+#     renderer's frame cap (the post-allocation guard at FILM_MAX_FRAMES
+#     rejects an over-cap board; this mirrors it upstream). The old 118.0
+#     misread the cap: 3600 frames at 30fps is exactly 120s.
+#   * the per-scene reading floor — a plane never runs shorter than its
+#     reading-time estimate (a scene faster than its words is unwatchable,
+#     a user-facing truth, not taste);
+#   * the display caps (a cited line must fit one screen).
+#
+# CRAFT DEFAULTS (建议与冲突发现 — never unconditional rejections):
+#   * scene count 2..30 — arc-sanity guidance: the prompt leads with it and
+#     the preflight computes a named count's satisfiable range from the
+#     densest packing, but a board outside the band stands when the real
+#     bounds hold;
+#   * total lower 5s — the no-target top-up's rhythm suggestion only (a
+#     shorter film stands when every scene is readable).
+TEXT_SCENE_COUNT_LIMITS = (2, 30)
+TEXT_TOTAL_SECONDS_RANGE = (5.0, FILM_MAX_FRAMES / FILM_FPS)
+# Per-scene CRAFT DEFAULTS (配方默认层, not hard law): they anchor the
+# allocator's no-target top-up and the prompt's rhythm guidance. A text
+# plane's duration has NO estimate-derived gate (2026-10-22 拍板): the
+# reading-time estimate is the DEFAULT pace — a named faster total or an
+# explicit seconds patch legally scales below it; the hard law is only a
+# positive window (zero/negative = illegal data) plus the frame-capped
+# total. A long citation line legally earns a window past the 8s default
+# (the cf00526d incident's deadlock: an unsplittable citation unit whose
+# reading time crossed the ceiling).
+TEXT_SCENE_SECONDS: dict[str, tuple[float, float]] = {
+    "words": (2.0, 8.0),
+    "hero": (2.5, 6.0),
+    "divider": (2.0, 6.0),
+    "plate": (4.0, 8.0),
+    "reveal": (8.0, 14.0),
+    # Composite carries no craft band in a text film either (ADR-140): its
+    # length is the material's play window — only the real bounds hold.
+    "composite": SCENE_SECONDS["composite"],
+}
+# Page-coupled types can never stand on a text source — named honestly.
+# A composite scene is text-legal: its media is an uploaded asset, not a
+# captured page.
+TEXT_ILLEGAL_SCENES = frozenset({"ui", "end"})
+
+# On-screen reading pace ESTIMATE for the big-type text plane: ~12 latin
+# chars/s; a CJK glyph weighs 3 (≈4 chars/s). An estimate that RECOMMENDS
+# the default pace (the allocator's no-target rhythm + the presentation's
+# faster-pace note), never a precise physics truth and never a technical
+# bound (2026-10-22 拍板: the user's named faster total or explicit patch
+# legally scales below it).
+_TEXT_READ_UNITS_PER_SEC = 12.0
+_TEXT_READ_CJK_WEIGHT = 3
+# Display-wrap measure: latin char = 1, CJK glyph = 2 (the 168px type wraps
+# at ~36 latin chars); a manifest line never exceeds 4 display lines so a
+# cited line ALWAYS fits one screen (the model segments, never splits copy).
+_TEXT_DISPLAY_CAP = 36
+_TEXT_MANIFEST_UNIT_CAP = 4 * _TEXT_DISPLAY_CAP // 2  # 72 units ≈ 2 lines
+# Latin word runs are atomic on the split plane — a cut backs off to the
+# run's start rather than severing a word (unless the word alone overruns
+# the cap).
+_LATIN_RUN = re.compile(r"[A-Za-z0-9]+")
+
+
+def _is_latin_char(ch: str) -> bool:
+    return bool(_LATIN_RUN.fullmatch(ch))
+
+
+def _group_units(text: str) -> int:
+    """The user's 字 count for one on-screen group (the named grouping's ONE
+    measure — the prompt law, the assembly check and the fallback packing
+    all read this): every letter/digit/glyph counts 1 (a CJK character is
+    one 字, a latin letter is one); whitespace and punctuation count 0 —
+    punctuation RIDES its group, never a screen of its own."""
+    return sum(1 for ch in text if ch.isalnum())
+
+
+def _snap_span(text: str, start: int, end: int) -> tuple[int, int]:
+    """Clamp a cited span into range, then snap its boundaries SAFE (the
+    span law's mechanical half — the model names approximate boundaries,
+    code never severs a grapheme or a word): a boundary landing between a
+    base char and its combining mark pulls the cluster together; a
+    boundary inside a latin word backs off to the word's start / extends
+    to its end. Half-open [start, end) over the line as printed; the
+    caller judges emptiness (an empty or whitespace-only resolution is a
+    violation, never a silent drop)."""
+    n = len(text)
+    start = max(0, min(start, n))
+    end = max(0, min(end, n))
+    while 0 < start < n and unicodedata.combining(text[start]):
+        start -= 1
+    while 0 < end < n and unicodedata.combining(text[end]):
+        end += 1
+    if 0 < start < n and _is_latin_char(text[start - 1]) and _is_latin_char(text[start]):
+        while start > 0 and _is_latin_char(text[start - 1]):
+            start -= 1
+    if 0 < end < n and _is_latin_char(text[end - 1]) and _is_latin_char(text[end]):
+        while end < n and _is_latin_char(text[end]):
+            end += 1
+    return start, end
+
+
+def _atomic_unit_count(text: str) -> int:
+    """A line's finest legal citation granularity (the named scene-count
+    preflight's provable ceiling): one latin word is one unit (a span never
+    severs it); every other non-space character (a CJK glyph, a punctuation
+    mark) is one."""
+    runs = sum(1 for _ in _LATIN_RUN.finditer(text))
+    others = sum(
+        1 for ch in text if not ch.isspace() and not _is_latin_char(ch)
+    )
+    return runs + others
+
+
+def _group_chars_param(value: Any) -> tuple[int, int] | None:
+    """The named on-screen grouping as it rides the params dicts / slots
+    (JSON): [min, max] 字 per screen, else None. A malformed value reads as
+    absent (the pydantic seats already rejected bad shapes upstream)."""
+    if (
+        isinstance(value, (list, tuple))
+        and len(value) == 2
+        and all(isinstance(v, int) and not isinstance(v, bool) for v in value)
+        and 1 <= value[0] <= value[1]
+    ):
+        return (value[0], value[1])
+    return None
+
+
+@dataclass(frozen=True)
+class FilmTextSource:
+    """The text film's input: the copy, its role (verbatim = the user's own
+    words, the zero-rewrite law; False = the agent authored it from a brief),
+    and the user's named shape requests (duration / scene count / on-screen
+    group size — ``group_chars`` = [min, max] 字 per screen, one group at a
+    time; ``_group_units`` is the one measure)."""
+
+    text: str
+    verbatim: bool
+    target_seconds: float | None = None
+    scene_count: int | None = None
+    group_chars: tuple[int, int] | None = None
+
+
+def film_text_source_from_params(params: dict) -> FilmTextSource | None:
+    """Project the pinned launch params into the text-film source object.
+
+    The compose and patch presentation seats share this projection so a
+    revision's fact sheet keeps the same source, pacing and grouping facts
+    as the original design; no model re-read is needed.
+    """
+    if not params.get("text"):
+        return None
+    return FilmTextSource(
+        text=str(params["text"]),
+        verbatim=params.get("verbatim") is not False,
+        target_seconds=(
+            float(params["target_seconds"])
+            if isinstance(params.get("target_seconds"), (int, float))
+            and not isinstance(params.get("target_seconds"), bool)
+            else None
+        ),
+        scene_count=(
+            int(params["scene_count"])
+            if isinstance(params.get("scene_count"), int)
+            and not isinstance(params.get("scene_count"), bool)
+            else None
+        ),
+        group_chars=_group_chars_param(params.get("group_chars")),
+    )
+
+
+def _text_source_note(source: FilmTextSource | None) -> str | None:
+    """The fact sheet's source line for a text film — the REAL source (echo
+    anti-fabrication: a text film never invents a URL). None = web source
+    (the caller's page list carries the line). When the user's NAMED total
+    is faster than the estimated natural reading time, the line also says
+    so (2026-10-22 拍板: the faster pace is the user's explicit choice —
+    presented, never silent, never rejected)."""
+    if source is None:
+        return None
+    note = (
+        "source: the user's text (verbatim)"
+        if source.verbatim
+        else "source: copy drafted by the assistant for the user's brief"
+    )
+    if source.target_seconds is not None:
+        # The raw pace estimate (no floor snapping — this is advisory copy,
+        # not an allocation): how long the copy takes to READ on screen.
+        estimate = (
+            sum(
+                _read_units(l.text)
+                for l in build_text_manifest(source.text)
+            )
+            / _TEXT_READ_UNITS_PER_SEC
+        )
+        if source.target_seconds < estimate:
+            note += (
+                f" · pace: the named {source.target_seconds:g}s is faster "
+                f"than the ~{estimate:.0f}s natural reading time — the text "
+                "moves quickly"
+            )
+    if source.group_chars is not None:
+        lo, hi = source.group_chars
+        note += (
+            f" · grouping: {lo}–{hi} characters per screen, one group at a "
+            "time (the previous group leaves as the next enters)"
+        )
+    return note
+
+
+def _display_units(text: str) -> int:
+    return sum(2 if _CJK_CHAR.match(ch) else 1 for ch in text)
+
+
+def _read_units(text: str) -> int:
+    return sum(_TEXT_READ_CJK_WEIGHT if _CJK_CHAR.match(ch) else 1 for ch in text)
+
+
+def build_text_manifest(text: str) -> list[ManifestLine]:
+    """Code-owned split of the source copy into citable lines (行 ID 化 — the
+    same citation law as the web manifest): paragraphs first, then sentence
+    ends, then clause boundaries (，、；：,;) — EACH boundary lands its own
+    line, NEVER a greedy multi-clause pack; the word-atomic unit cap splits
+    only an over-cap single clause, as the last resort. A citation unit is a
+    citation unit, never a screen: the director COMPOSES consecutive lines
+    onto one screen by citing several in one segment, and splits them one
+    per screen when the user asks (7276ef13 — a packed multi-clause line is
+    unsplittable under verbatim's fit=full citation law, so「按逗号拆成更多
+    幕」was mechanically inexpressible while the director believed it could
+    comply). Segmentation NEVER alters a character — the lines re-read the
+    copy minus split-point whitespace (visual line-wrap is layout, not
+    content — the 逐字律's allowed half)."""
+    chunks: list[str] = []
+
+    def hard_split(piece: str) -> None:
+        """Over-cap residue: cut at the last space inside the cap, else back
+        off to the start of a straddled latin word, else at the cap itself
+        (a mid-word cut only when the word alone overruns the cap — the
+        display wrap's over-cap token rule; a severed word is the
+        cf00526d incident's «Superhe|ro»)."""
+        piece = piece.strip()
+        while piece:
+            if _display_units(piece) <= _TEXT_MANIFEST_UNIT_CAP:
+                chunks.append(piece)
+                return
+            used = 0
+            cut = 0
+            for i, ch in enumerate(piece):
+                used += 2 if _CJK_CHAR.match(ch) else 1
+                if used > _TEXT_MANIFEST_UNIT_CAP:
+                    break
+                cut = i + 1
+            head = piece[:cut]
+            sp = head.rfind(" ")
+            if sp > 0:
+                head = head[:sp]
+            else:
+                # No space to fall back to (CJK-dense copy): a latin run
+                # straddling the cut backs off to its start — a word is
+                # atomic unless it alone overruns the cap.
+                last: re.Match[str] | None = None
+                for last in _LATIN_RUN.finditer(head):
+                    pass
+                if last is not None and last.end() == len(head) and last.start() > 0:
+                    head = head[: last.start()]
+            chunks.append(head.strip())
+            piece = piece[len(head):].strip()
+
+    for para in re.split(r"\n+", text):
+        para = " ".join(para.split())
+        if not para:
+            continue
+        # Sentence split keeps the delimiter with its sentence; each clause
+        # (split AFTER ，、；：,; — the delimiter stays with its clause) is
+        # its OWN citation line — no greedy packing (the docstring's law).
+        for sent in re.split(r"(?<=[。！？!?…])|(?<=[.])\s+", para):
+            for clause in re.split(r"(?<=[，、；：,;])", sent):
+                clause = clause.strip()
+                if not clause:
+                    continue
+                if _display_units(clause) <= _TEXT_MANIFEST_UNIT_CAP:
+                    chunks.append(clause)
+                else:
+                    hard_split(clause)
+    return [ManifestLine(i + 1, 0, "paragraph", c) for i, c in enumerate(chunks)]
+
+
+def _wrap_display_lines(text: str, cap: int = _TEXT_DISPLAY_CAP) -> list[str]:
+    """Visual wrap of one segment's resolved text into display lines within
+    the unit cap — latin at word boundaries, CJK anywhere. NEVER drops,
+    duplicates or reorders a character (the 逐字律's mechanical half). The
+    cap scales with the size tier (``film_text_line_cap``): a larger font
+    wraps earlier, never clips."""
+    words = text.split(" ")
+    lines: list[str] = []
+    cur = ""
+    for w in words:
+        # A single over-cap token (CJK run / long word) hard-wraps.
+        while _display_units(w) > cap:
+            if cur:
+                lines.append(cur)
+                cur = ""
+            used = 0
+            cut = 0
+            for i, ch in enumerate(w):
+                used += 2 if _CJK_CHAR.match(ch) else 1
+                if used > cap:
+                    break
+                cut = i + 1
+            lines.append(w[:cut])
+            w = w[cut:]
+        trial = f"{cur} {w}" if cur else w
+        if _display_units(trial) <= cap:
+            cur = trial
+        else:
+            if cur:
+                lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return [l for l in lines if l]
+
+
+class FilmTextSegment(BaseModel):
+    """One text plane (one words scene). Verbatim mode: ``refs`` cite the
+    manifest's lines in appearance order (fit must be "full" — the zero-
+    rewrite law). Authored mode: ``text`` carries the model's own lines.
+    Exactly one of the two is set; assembly rejects the mixed/empty shape."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    refs: list[CopyRef] | None = None
+    text: list[str] | None = None
+    dark: bool | None = None  # null = code alternates for rhythm
+    motion: Literal["static", "push", "pull"] | None = None
+    enter: Literal["lines", "words"] | None = None
+    # Batch B precise timing (scene-relative seconds; code quantizes to the
+    # film fps). Null = the pre-parameterization default; explicit zero stays
+    # zero. ``enter_*`` requires ``enter="words"`` at validation; the motion
+    # window requires a push/pull move.
+    enter_start: float | None = Field(default=None, ge=0.0)
+    enter_interval: float | None = Field(default=None, ge=0.0)
+    enter_duration: float | None = Field(default=None, ge=0.0)
+    enter_hold_until: float | None = Field(default=None, ge=0.0)
+    motion_start: float | None = Field(default=None, ge=0.0)
+    motion_end: float | None = Field(default=None, ge=0.0)
+    # The style/exit knobs (FilmSceneWords' field law): exit_duration fades
+    # the words out over the window's final seconds (the background never
+    # fades with them); motion_scale is the push/pull end scale (null =
+    # 1.06); align centers the lines; size picks the font tier;
+    # accent_style chooses inverted chip vs accent-color text for *marked*
+    # spans; enter_style picks the entrance EFFECT (rise = legacy
+    # fade+rise+blur; fade = opacity only) — orthogonal to enter's
+    # organization (lines vs words = WHO arrives together).
+    exit_duration: float | None = Field(default=None, gt=0.0)
+    motion_scale: float | None = Field(default=None, gt=1.0, le=1.25)
+    align: Literal["left", "center"] | None = None
+    size: Literal["small", "medium", "large"] | None = None
+    accent_style: Literal["chip", "color"] | None = None
+    enter_style: Literal["rise", "fade", "slide"] | None = None
+    narration: str | None = None
+
+
+# ── Composite direction vocabulary (the text source's media-composition
+# birth) ─────────────────────────────────────────────────────────────────
+# The director's DRAFT element models: the SAME field law as the board's
+# FilmElement* models MINUS ``element_id`` — code owns element identity
+# (minted at assembly), so the wire never teaches a handle the model must
+# not address. Cross-field rules (window ordering, play ≤ source span) are
+# enforced when assembly constructs the real element models — a breach
+# surfaces as a repairable FilmViolation, never a ladder-crashing
+# ValidationError.
+
+
+class FilmDraftElementVideo(BaseModel):
+    """A video draft element: one SOURCE range of one cited asset playing
+    inside one output window (the FilmElementVideo law, identity aside)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["video"]
+    asset: str  # an id from the project's media listing — never invented
+    source_start: float = Field(ge=0.0)
+    source_end: float = Field(gt=0.0)
+    at: float = Field(default=0.0, ge=0.0)
+    duration: float | None = Field(default=None, gt=0.0)
+    rect: FilmElementRect = Field(default_factory=FilmElementRect)
+    fit: Literal["cover", "contain"] = "cover"
+    keep_audio: bool = False
+    z: int = 0
+
+
+class FilmDraftElementImage(BaseModel):
+    """An image draft element (the FilmElementImage law, identity aside)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["image"]
+    asset: str
+    at: float = Field(default=0.0, ge=0.0)
+    until: float | None = Field(default=None, gt=0.0)
+    rect: FilmElementRect = Field(default_factory=FilmElementRect)
+    fit: Literal["cover", "contain"] = "cover"
+    z: int = 0
+
+
+class FilmDraftElementText(BaseModel):
+    """A text draft element (the FilmElementText law, identity aside): the
+    copy rides the segment's OWN cite/write law — verbatim mode cites
+    manifest lines (``refs``), authored mode writes ``text``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["text"]
+    refs: list[CopyRef] | None = None
+    text: list[str] | None = None
+    tone: Literal["light", "dark", "accent"] = "light"
+    at: float = Field(default=0.0, ge=0.0)
+    until: float | None = Field(default=None, gt=0.0)
+    rect: FilmElementRect = Field(default_factory=FilmElementRect)
+    enter: Literal["lines", "words"] | None = None
+    motion: Literal["static", "push", "pull"] | None = None
+    enter_start: float | None = Field(default=None, ge=0.0)
+    enter_interval: float | None = Field(default=None, ge=0.0)
+    enter_duration: float | None = Field(default=None, ge=0.0)
+    motion_start: float | None = Field(default=None, ge=0.0)
+    motion_end: float | None = Field(default=None, ge=0.0)
+    exit_duration: float | None = Field(default=None, gt=0.0)
+    motion_scale: float | None = Field(default=None, gt=1.0, le=1.25)
+    align: Literal["left", "center"] | None = None
+    size: Literal["small", "medium", "large"] | None = None
+    accent_style: Literal["chip", "color"] | None = None
+    enter_style: Literal["rise", "fade", "slide"] | None = None
+    z: int = 0
+
+
+FilmDraftElement = Annotated[
+    FilmDraftElementVideo | FilmDraftElementImage | FilmDraftElementText,
+    Field(discriminator="kind"),
+]
+
+
+class FilmCompositeSegment(BaseModel):
+    """One composite segment of the direction: a theme-colored background
+    plus ordered elements (media + independent text) composing one screen.
+    No ``seconds`` — the scene's length is CODE-DERIVED from the element
+    windows (the material's play time; see the assembly's frame law), never
+    model-guessed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dark: bool | None = None  # null = code alternates for rhythm
+    elements: list[FilmDraftElement] = Field(min_length=1)
+    narration: str | None = None
+
+
+class FilmTextDirection(BaseModel):
+    """The text director's answer (the FilmDirection twin for the text
+    source): ONLY the segmentation + per-segment vocabulary — durations are
+    code-owned (readability floors + the user's named target; a composite
+    segment's length derives from its element windows). A segment is a
+    words plane or a composite composition."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    language: str | None = None
+    segments: list[FilmTextSegment | FilmCompositeSegment] = Field(min_length=1)
+
+
+def _resolve_copy_texts(
+    *,
+    refs: list[CopyRef] | None,
+    text: list[str] | None,
+    verbatim: bool,
+    by_id: dict[int, ManifestLine],
+    where: str,
+    cited: list[tuple[int, int, int]],
+) -> tuple[list[str], list[FilmViolation]]:
+    """One copy slot's content resolution — a words segment OR a composite
+    text element rides the SAME cite/write law (one seat, never two
+    readings): verbatim mode cites manifest lines (``fit`` stays full, an
+    optional ``accent`` wraps a substring, an optional ``span`` cites a
+    piece of the line — code slices it word/cluster-safe via ``_snap_span``;
+    every citation lands in ``cited`` as (line id, start, end) for the
+    board-wide tiling coverage check); authored mode takes the model's own
+    lines. Returns the content texts (pre-wrap, accents applied) plus any
+    violations — an empty texts list with violations means the slot
+    produced nothing."""
+    violations: list[FilmViolation] = []
+    texts: list[str] = []
+    if verbatim:
+        if text is not None or not refs:
+            violations.append(
+                FilmViolation(
+                    CONSTRAINT_VIOLATION,
+                    f"{where}: the user's copy is verbatim-preserved — cite "
+                    "its lines with refs (never rewrite them into text)",
+                )
+            )
+            return [], violations
+        for ref in refs:
+            line = by_id.get(ref.line)
+            if line is None:
+                violations.append(
+                    FilmViolation(
+                        INVALID_COPY_REF, f"{where}: line L{ref.line} names no copy line"
+                    )
+                )
+                continue
+            if ref.fit != "full":
+                violations.append(
+                    FilmViolation(
+                        INVALID_COPY_REF,
+                        f"{where}: line L{ref.line} cited with fit={ref.fit} — "
+                        "verbatim copy is never trimmed (fit stays full; a "
+                        "PIECE of the line cites span [start, end) instead)",
+                    )
+                )
+                continue
+            if ref.span is not None:
+                s, e = _snap_span(line.text, ref.span[0], ref.span[1])
+                resolved = line.text[s:e].strip()
+                if not resolved:
+                    violations.append(
+                        FilmViolation(
+                            INVALID_COPY_REF,
+                            f"{where}: line L{ref.line} span "
+                            f"[{ref.span[0]},{ref.span[1]}) resolves to "
+                            "nothing — cut between glyphs/words, never on "
+                            "whitespace alone",
+                        )
+                    )
+                    continue
+            else:
+                s, e = 0, len(line.text)
+                resolved = line.text
+            if ref.accent is not None:
+                accented = _apply_accent(resolved, ref.accent)
+                if accented is None:
+                    violations.append(
+                        FilmViolation(
+                            INVALID_COPY_REF,
+                            f"{where}: accent «{ref.accent[:30]}» is not in line L{ref.line}",
+                        )
+                    )
+                    continue
+                resolved = accented
+            cited.append((ref.line, s, e))
+            texts.append(resolved)
+        return texts, violations
+    if refs is not None or not text:
+        violations.append(
+            FilmViolation(
+                CONSTRAINT_VIOLATION,
+                f"{where}: authored mode writes its own lines (text) — "
+                "refs cite a user corpus this film does not have",
+            )
+        )
+        return [], violations
+    for t in text:
+        t = t.strip()
+        if not _norm(t):
+            violations.append(
+                FilmViolation(CONSTRAINT_VIOLATION, f"{where}: blank line")
+            )
+        texts.append(t)
+    return texts, violations
+
+
+def _draft_element_window_frames(element: FilmSceneElement) -> int | None:
+    """A freshly assembled element's bounded window END on the render frame
+    grid — the SAME quantized accounting the validator applies (端点先量化,
+    never quantize-the-delta): video = at_f + play frames (an explicit
+    duration quantized, else the quantized source span); an explicit
+    ``until`` quantizes directly. None = unbounded (the element runs to the
+    scene's end and does not bound it). The composite scene's own length
+    derives from these ends, so the assembled board can never reject ITSELF
+    on the grid (a scene whose frames cover every element's quantized end
+    by construction)."""
+    if element.kind == "video":
+        at_f = film_seconds_to_frames(element.at)
+        if element.duration is not None:
+            play_f = film_seconds_to_frames(element.duration)
+        else:
+            play_f = film_seconds_to_frames(element.source_end) - film_seconds_to_frames(
+                element.source_start
+            )
+        return at_f + max(play_f, 0)
+    if element.until is not None:
+        return film_seconds_to_frames(element.until)
+    return None
+
+
+def assemble_text_storyboard(
+    direction: FilmTextDirection,
+    lines: list[ManifestLine],
+    *,
+    source: FilmTextSource,
+    pinned_language: str | None = None,
+    composite_ok: bool = False,
+) -> tuple[FilmStoryboard | None, list[FilmViolation]]:
+    """Text direction (segmentation + vocabulary) → the resolved board.
+    Verbatim mode resolves citations VERBATIM (a trim is a violation, never
+    a silent edit); authored mode takes the model's own lines as the corpus.
+    Durations are code-owned (readability floors + the named target; a
+    composite segment's length DERIVES from its element windows on the
+    render frame grid — see ``_draft_element_window_frames``).
+
+    ``composite_ok`` — the media-composition capability's deployment gate
+    (settings.film_edits_enabled, read by the orchestration seat): OFF, a
+    composite segment is a repairable violation, never an assembled scene
+    (the prompt never taught the vocabulary either — declaration and
+    enforcement gate together)."""
+    violations: list[FilmViolation] = []
+    by_id = {l.id: l for l in lines}
+    if source.scene_count is not None and len(direction.segments) != source.scene_count:
+        violations.append(
+            FilmViolation(
+                CONSTRAINT_VIOLATION,
+                f"the plan named {source.scene_count} scenes; you returned "
+                f"{len(direction.segments)} — re-segment to exactly "
+                f"{source.scene_count} (merge or split segments, never the words)",
+            )
+        )
+        return None, violations
+
+    # prepared: ("words", seg, display, copy_text, units) per words segment,
+    # ("composite", dark_pin, elements, seconds, narration) per composite
+    # segment — one entry per segment, in segment order.
+    prepared: list[tuple] = []
+    cited: list[tuple[int, int, int]] = []
+    for i, seg in enumerate(direction.segments):
+        where = f"segment[{i + 1}]"
+        if isinstance(seg, FilmCompositeSegment):
+            if not composite_ok:
+                violations.append(
+                    FilmViolation(
+                        CONSTRAINT_VIOLATION,
+                        f"{where}: composite scenes are not available in "
+                        "this deployment — keep the arc on text planes (words)",
+                    )
+                )
+                continue
+            elements: list[FilmSceneElement] = []
+            bounded_f = 0
+            has_bound = False
+            for el_index, draft in enumerate(seg.elements):
+                ewhere = f"{where}.element{el_index + 1}"
+                eid = f"e{el_index + 1}"  # birth-minted; ensure_scene_ids keeps them
+                try:
+                    if draft.kind == "video":
+                        element: FilmSceneElement = FilmElementVideo(
+                            kind="video", element_id=eid, asset=draft.asset,
+                            source_start=draft.source_start,
+                            source_end=draft.source_end, at=draft.at,
+                            duration=draft.duration, rect=draft.rect,
+                            fit=draft.fit, keep_audio=draft.keep_audio, z=draft.z,
+                        )
+                    elif draft.kind == "image":
+                        element = FilmElementImage(
+                            kind="image", element_id=eid, asset=draft.asset,
+                            at=draft.at, until=draft.until, rect=draft.rect,
+                            fit=draft.fit, z=draft.z,
+                        )
+                    else:
+                        texts, el_violations = _resolve_copy_texts(
+                            refs=draft.refs, text=draft.text,
+                            verbatim=source.verbatim, by_id=by_id,
+                            where=ewhere, cited=cited,
+                        )
+                        violations.extend(el_violations)
+                        if not texts:
+                            continue
+                        display = [
+                            dl
+                            for t in texts
+                            for dl in _wrap_display_lines(
+                                t,
+                                film_text_line_cap(
+                                    draft.size,
+                                    seat="element",
+                                    rect_w=draft.rect.w,
+                                ),
+                            )
+                        ]
+                        if len(display) > _LIST_CAPS["composite.text-lines"]:
+                            violations.append(
+                                FilmViolation(
+                                    CONSTRAINT_VIOLATION,
+                                    f"{ewhere}: wraps to {len(display)} display "
+                                    f"lines — over the {_LIST_CAPS['composite.text-lines']}-line "
+                                    "element; split it into more text elements "
+                                    "(never shrink the words away)",
+                                )
+                            )
+                            continue
+                        # The element's pre-wrap corpus anchors at assembly
+                        # time (逐字律 — the words plane's same seat).
+                        copy_text = "\n".join(t.replace("*", "") for t in texts)
+                        element = FilmElementText(
+                            kind="text", element_id=eid, lines=display,
+                            tone=draft.tone, at=draft.at, until=draft.until,
+                            rect=draft.rect, enter=draft.enter,
+                            motion=draft.motion, enter_start=draft.enter_start,
+                            enter_interval=draft.enter_interval,
+                            enter_duration=draft.enter_duration,
+                            motion_start=draft.motion_start,
+                            motion_end=draft.motion_end,
+                            exit_duration=draft.exit_duration,
+                            motion_scale=draft.motion_scale,
+                            align=draft.align, size=draft.size,
+                            accent_style=draft.accent_style,
+                            enter_style=draft.enter_style,
+                            copy_text=copy_text, z=draft.z,
+                        )
+                except ValidationError as exc:
+                    # A cross-field breach (window ordering, play window past
+                    # the source span, rect past the canvas) is a repairable
+                    # draft defect — the bounded rewrite fixes it; never a
+                    # ladder-crashing exception.
+                    msg = exc.errors()[0].get("msg", str(exc))
+                    violations.append(
+                        FilmViolation(CONSTRAINT_VIOLATION, f"{ewhere}: {msg}")
+                    )
+                    continue
+                elements.append(element)
+                end_f = _draft_element_window_frames(element)
+                if end_f is not None:
+                    has_bound = True
+                    bounded_f = max(bounded_f, end_f)
+            if not elements:
+                continue  # the element violations above already say why
+            if not has_bound:
+                violations.append(
+                    FilmViolation(
+                        CONSTRAINT_VIOLATION,
+                        f"{where}: a composite scene's length derives from "
+                        "its element windows — none of these elements bounds "
+                        "it (no video play window, no explicit until); give "
+                        "one element a concrete window",
+                    )
+                )
+                continue
+            # The scene's length on the frame grid: every element's
+            # quantized end covered by construction (≥ the 1s structural
+            # floor, snapped UP to the half-second grid).
+            scene_frames = max(
+                _MIN_SCENE_FRAMES, ((bounded_f + 14) // 15) * 15
+            )
+            prepared.append(
+                (
+                    "composite",
+                    seg.dark,
+                    elements,
+                    scene_frames / FILM_FPS,
+                    seg.narration,
+                )
+            )
+            continue
+        texts, seg_violations = _resolve_copy_texts(
+            refs=seg.refs, text=seg.text, verbatim=source.verbatim,
+            by_id=by_id, where=where, cited=cited,
+        )
+        violations.extend(seg_violations)
+        if not texts:
+            continue
+        display = [
+            dl
+            for t in texts
+            for dl in _wrap_display_lines(
+                t, film_text_line_cap(seg.size, seat="words")
+            )
+        ]
+        if len(display) > _LIST_CAPS["words.lines"]:
+            violations.append(
+                FilmViolation(
+                    CONSTRAINT_VIOLATION,
+                    f"{where}: wraps to {len(display)} display lines — over the "
+                    f"{_LIST_CAPS['words.lines']}-line screen; split this segment "
+                    "into more scenes (never shrink the words away)",
+                )
+            )
+            continue
+        # The scene's pre-wrap corpus anchors at assembly time (逐字律): the
+        # display lines below are this text's layout result — later corpus
+        # projections re-derive from the source, never from the wrap.
+        copy_text = "\n".join(t.replace("*", "") for t in texts)
+        prepared.append(
+            ("words", seg, display, copy_text, sum(_read_units(dl) for dl in display))
+        )
+    if source.verbatim:
+        # 逐字律's coverage half (deterministic, never the model's say-so):
+        # the full copy shows — every manifest line cited exactly once
+        # ACROSS THE WHOLE BOARD (words segments and composite text
+        # elements alike — one citation universe), now at CHARACTER
+        # granularity: a line cited in pieces (span) must be tiled by its
+        # pieces in order — a dropped gap is silent deletion, an overlap is
+        # invention; only split-point whitespace may vanish between pieces
+        # (the manifest law's own half).
+        by_line: dict[int, list[tuple[int, int]]] = {}
+        for line_id, s, e in cited:
+            by_line.setdefault(line_id, []).append((s, e))
+        problems: list[str] = []
+        missing = [l.id for l in lines if l.id not in by_line]
+        if missing:
+            problems.append(
+                "never cited: " + ", ".join(f"L{i}" for i in missing)
+            )
+        for l in lines:
+            spans = by_line.get(l.id)
+            if not spans:
+                continue
+            cursor = 0
+            broken = False
+            for s, e in spans:
+                if s < cursor:
+                    problems.append(
+                        f"L{l.id}: the piece starting at character {s} "
+                        "overlaps or re-shows an earlier citation"
+                    )
+                    broken = True
+                    break
+                gap = l.text[cursor:s]
+                if gap.strip():
+                    problems.append(
+                        f"L{l.id}: «{gap[:20]}» never shows — the cited "
+                        "pieces must tile the line in order, dropping "
+                        "nothing (split-point whitespace may vanish)"
+                    )
+                    broken = True
+                    break
+                cursor = e
+            if not broken and l.text[cursor:].strip():
+                problems.append(
+                    f"L{l.id}: the tail «{l.text[cursor:][:20]}» never "
+                    "shows — cite through the line's end"
+                )
+        if problems:
+            violations.append(
+                FilmViolation(
+                    CONSTRAINT_VIOLATION,
+                    "verbatim copy is shown in FULL — every line exactly once ("
+                    + "; ".join(problems)
+                    + ")",
+                )
+            )
+        # 逐字律's ORDER half (7276ef13 修复批): the copy shows in the text's
+        # own order — citations ascend across the whole board. Coverage alone
+        # never noticed a reorder, and clause-fine citation units make an
+        # accidental one reachable; a deliberate reorder is a content change,
+        # which verbatim mode never makes (改编模式 writes its own lines).
+        # Equal ids are legal: one line cited in several consecutive pieces
+        # (span) — the per-line tiling above judges their inner order.
+        cited_ids = [line_id for line_id, _, _ in cited]
+        for prev, cur in zip(cited_ids, cited_ids[1:]):
+            if cur < prev:
+                violations.append(
+                    FilmViolation(
+                        CONSTRAINT_VIOLATION,
+                        "verbatim copy shows in the text's OWN order — line "
+                        f"L{cur} is cited after L{prev}; re-cite the lines in "
+                        "ascending order (never reorder the user's words)",
+                    )
+                )
+                break
+    # The named on-screen grouping (「一次只展示3-5个字」→ group_chars): each
+    # words plane carries ONE group within the named band — one group shows
+    # at a time, the previous leaves as the next enters (a group = its own
+    # scene; never stack groups onto one screen). Measured by _group_units
+    # (punctuation rides its group, counts 0). The honest exceptions: a
+    # single unsplittable latin word over the cap stands (a word never
+    # severs), and a runt group stands only when nothing legal can absorb
+    # it (merging into the neighbour would overfill it and no two-group
+    # repartition of the pair fits the band) — it is presented as-is,
+    # never padded or dropped to reach the number.
+    if source.group_chars is not None:
+        lo_g, hi_g = source.group_chars
+        words_seq = [
+            (i + 1, item[3])
+            for i, item in enumerate(prepared)
+            if item[0] == "words"
+        ]
+        for pos, (seg_no, copy) in enumerate(words_seq):
+            units = _group_units(copy)
+            if units > hi_g:
+                if re.fullmatch(r"[A-Za-z0-9]+", copy):
+                    continue  # one unsplittable word — the honest exception
+                violations.append(
+                    FilmViolation(
+                        CONSTRAINT_VIOLATION,
+                        f"segment[{seg_no}] shows {units} characters "
+                        f"(«{copy[:24]}») — the named grouping is "
+                        f"{lo_g}–{hi_g} per screen: split the citation with "
+                        "span (code keeps the words byte-exact), never by "
+                        "rewriting or dropping them",
+                    )
+                )
+            elif units < lo_g and len(words_seq) > 1:
+                nbr_units = (
+                    _group_units(words_seq[pos - 1][1])
+                    if pos
+                    else _group_units(words_seq[1][1])
+                )
+                merged = nbr_units + units
+                if merged <= hi_g or merged >= 2 * lo_g:
+                    violations.append(
+                        FilmViolation(
+                            CONSTRAINT_VIOLATION,
+                            f"segment[{seg_no}] shows only {units} "
+                            f"characters («{copy[:24]}») — the named "
+                            f"grouping is {lo_g}–{hi_g} per screen: merge it "
+                            "into its neighbour or rebalance the two groups "
+                            f"({merged} characters between them)",
+                        )
+                    )
+                # else: the unavoidable runt — it stands, presented as-is.
+    if violations:
+        return None, violations
+    if not prepared:
+        return None, [
+            FilmViolation(CONSTRAINT_VIOLATION, "no segment carries any text")
+        ]
+
+    words_units = [item[4] for item in prepared if item[0] == "words"]
+    composite_total = sum(item[3] for item in prepared if item[0] == "composite")
+    seconds_words: list[float] = []
+    if words_units:
+        seconds_words, overflow = _assign_text_seconds(
+            words_units, source.target_seconds, base=composite_total
+        )
+        if overflow is not None:
+            violations.append(FilmViolation(CONSTRAINT_VIOLATION, overflow))
+            return None, violations
+    elif source.target_seconds is not None and composite_total > 0:
+        # All-composite board with a named total: the material owns the
+        # length, so the law is a FRAME-level match — the named total and
+        # the derived total quantize to the same frame count through the
+        # ONE seat. A match passes as-is; a mismatch rejects with the
+        # CONCRETE delta (frames and direction) so the next candidate
+        # adjusts its media windows — never a demand for words filler
+        # planes, and never a silent stretch/loop/pad of the user's
+        # source ranges or animation timing.
+        target_f = film_seconds_to_frames(source.target_seconds)
+        total_f = film_seconds_to_frames(composite_total)
+        if target_f != total_f:
+            gap_f = total_f - target_f
+            direction = (
+                f"{gap_f} frame(s) over" if gap_f > 0 else f"{-gap_f} frame(s) short"
+            )
+            violations.append(
+                FilmViolation(
+                    CONSTRAINT_VIOLATION,
+                    f"the named {source.target_seconds:g}s does not match "
+                    f"the media compositions' material-derived total "
+                    f"{composite_total:g}s — {direction} on the render "
+                    "grid; adjust the media windows toward the named "
+                    "total (the source ranges and animation timing are "
+                    "yours to revise — the system never stretches, loops "
+                    "or pads them on its own)",
+                )
+            )
+            return None, violations
+    scenes: list[FilmScene] = []
+    word_idx = 0
+    for i, item in enumerate(prepared):
+        dark_default = i % 2 == 1
+        if item[0] == "composite":
+            _, dark_pin, elements, scene_seconds, narration = item
+            scenes.append(
+                FilmSceneComposite(
+                    type="composite",
+                    seconds=scene_seconds,
+                    dark=dark_pin if dark_pin is not None else dark_default,
+                    elements=elements,
+                    narration=narration,
+                )
+            )
+            continue
+        _, seg, display, copy_text, _units = item
+        scenes.append(
+            FilmSceneWords(
+                type="words",
+                seconds=seconds_words[word_idx],
+                dark=seg.dark if seg.dark is not None else dark_default,
+                lines=display,
+                motion=seg.motion,
+                enter=seg.enter,
+                enter_start=seg.enter_start,
+                enter_interval=seg.enter_interval,
+                enter_duration=seg.enter_duration,
+                enter_hold_until=seg.enter_hold_until,
+                motion_start=seg.motion_start,
+                motion_end=seg.motion_end,
+                exit_duration=seg.exit_duration,
+                motion_scale=seg.motion_scale,
+                align=seg.align,
+                size=seg.size,
+                accent_style=seg.accent_style,
+                enter_style=seg.enter_style,
+                narration=seg.narration,
+                copy_text=copy_text,
+            )
+        )
+        word_idx += 1
+    board = FilmStoryboard(
+        scenes=scenes,
+        name=direction.name,
+        language=direction.language or pinned_language,
+    )
+    return board, violations
+
+
+def _text_read_floor(units: int) -> float:
+    """One text plane's reading-time ESTIMATE snapped UP to the half-second
+    grid (a floor never rounds down past the estimate; the craft band's
+    lower stop as the absolute floor). The ONE measure the allocator and
+    the feasibility preflight read — a RECOMMENDATION, never a gate
+    (2026-10-22 拍板: a named faster total or an explicit seconds patch
+    legally scales below it; the validator never enforces it)."""
+    return max(
+        TEXT_SCENE_SECONDS["words"][0],
+        math.ceil(units / _TEXT_READ_UNITS_PER_SEC * 2 - 1e-9) / 2,
+    )
+
+
+def _assign_text_seconds(
+    segment_units: list[int], target: float | None, *, base: float = 0.0
+) -> tuple[list[float], str | None]:
+    """Code-owned text-plane durations. The reading-time estimate is the
+    DEFAULT pace, never a bound (2026-10-22 拍板 — 估计 = 建议，不是不可
+    突破的技术边界): no target = the floors recommend a readable rhythm;
+    a NAMED target is the user's law — the floors rescale to it in BOTH
+    directions (slower or faster than the estimate; a faster pace's
+    readability impact rides the presentation's pace note —
+    ``_text_source_note`` — never a silent change, never a rejection).
+    The ONE refusal is REAL, not estimated: a target so small that a scene
+    quantizes to ZERO on the half-second render grid (nothing would
+    render).
+
+    ``base`` = the seconds already owned by material-bound scenes (media
+    compositions — their length derives from the element windows and never
+    rescales): a named target paces the text planes into the REMAINING
+    room (target − base), and the no-target top-up counts the base toward
+    the total floor."""
+    hi = TEXT_SCENE_SECONDS["words"][1]
+    floors = [_text_read_floor(u) for u in segment_units]
+    if target is not None:
+        # The user named the total — scale the floor proportions to it
+        # (up OR down). The 8s craft default never clamps; the reading
+        # estimate never floors an explicit choice.
+        room = target - base
+        if room <= 0:
+            return [], (
+                f"the named {target:g}s is already filled by the media "
+                f"composition scenes ({base:g}s) — the text planes have no "
+                "room; name a longer duration or shorten the media windows"
+            )
+        scale = room / sum(floors)
+        secs = [round(f * scale * 2) / 2 for f in floors]
+        if any(s <= 0 for s in secs):
+            return [], (
+                f"the named {target:g}s squeezes a scene to zero on the "
+                "half-second render grid — name a longer duration or fewer "
+                "scenes"
+            )
+        return secs, None
+    # No target: the reading estimate IS the recommendation — floors, then
+    # top up short totals to the text band's floor, inside the craft
+    # default band (the default rhythm's own seat).
+    secs = list(floors)
+    while base + sum(secs) < TEXT_TOTAL_SECONDS_RANGE[0] and any(s < hi for s in secs):
+        i = min(range(len(secs)), key=lambda j: secs[j])
+        secs[i] = min(hi, secs[i] + 0.5)
+    return [round(s * 2) / 2 for s in secs], None
+
+
+def _group_spans(text: str, lo: int, hi: int) -> list[str]:
+    """One line's deterministic split into [lo, hi]-unit groups (the
+    fallback's seat — the design path's groups are the director's spans,
+    checked at assembly; the unit law is ``_group_units``'s). Tokens: a
+    latin word or one glyph, each with its trailing punctuation/space
+    attached (punctuation rides its text, never opens a group); combining
+    marks cling to their base. Greedy-pack up to hi, then a runt tail
+    merges into its predecessor when the sum fits, else borrows tokens
+    back until it reaches lo; a single over-hi token (a long word) stands
+    alone — never a severed word, never a dropped or added character."""
+    tokens: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        m = _LATIN_RUN.match(text, i)
+        if m:
+            j = m.end()
+        else:
+            j = i + 1
+            while j < n and unicodedata.combining(text[j]):
+                j += 1
+        while j < n and not text[j].isalnum():
+            j += 1
+        tokens.append(text[i:j])
+        i = j
+    groups: list[list[str]] = []
+    cur: list[str] = []
+    cur_u = 0
+    for tok in tokens:
+        w = _group_units(tok)
+        if cur and cur_u + w > hi:
+            groups.append(cur)
+            cur, cur_u = [], 0
+        cur.append(tok)
+        cur_u += w
+    if cur:
+        groups.append(cur)
+    if len(groups) >= 2:
+        last_u = sum(_group_units(t) for t in groups[-1])
+        if last_u < lo:
+            prev_u = sum(_group_units(t) for t in groups[-2])
+            if prev_u + last_u <= hi:
+                groups[-2].extend(groups.pop())
+            else:
+                # Rebalance: borrow the predecessor's tail tokens until the
+                # tail reaches the floor — never starving the predecessor
+                # below it, never pushing the tail over the cap; a move
+                # that can't work leaves the runt standing (the honest
+                # exception, presented as-is).
+                while groups[-2] and last_u < lo:
+                    moved = groups[-2][-1]
+                    moved_u = _group_units(moved)
+                    prev_rest = prev_u - moved_u
+                    if last_u + moved_u > hi:
+                        break
+                    if prev_rest < lo and len(groups[-2]) > 1:
+                        break
+                    groups[-1].insert(0, groups[-2].pop())
+                    last_u += moved_u
+                    prev_u = prev_rest
+                    if not groups[-2]:
+                        del groups[-2]
+                        break
+    return [g for g in ("".join(toks).strip() for toks in groups) if g]
+
+
+def fixed_text_storyboard(
+    lines: list[ManifestLine],
+    *,
+    source: FilmTextSource,
+    language: str | None = None,
+) -> FilmStoryboard | None:
+    """The no-LLM text board (the worker's unattended fallback — the same
+    law as fixed_direction): code segments the manifest greedily (up to 4
+    display lines per scene, order preserved) — or, when the user named an
+    on-screen grouping, packs the copy into [min, max]-unit groups (one
+    group per scene, ``_group_spans``) — alternates the planes, and assigns
+    readability durations. None = the copy can't stand at all."""
+    if not lines:
+        return None
+    segments: list[list[str]] = []
+    if source.group_chars is not None:
+        lo_g, hi_g = source.group_chars
+        pieces: list[str] = []
+        for l in lines:
+            pieces.extend(_group_spans(l.text, lo_g, hi_g))
+        # Short pieces merge onto one screen while the group stays within
+        # the band; an under-floor runt stands (presented as-is, never
+        # padded or dropped to reach the number).
+        cur_p: list[str] = []
+        cur_u = 0
+        for p in pieces:
+            w = _group_units(p)
+            if cur_p and cur_u + w > hi_g:
+                segments.append(cur_p)
+                cur_p, cur_u = [], 0
+            cur_p.append(p)
+            cur_u += w
+        if cur_p:
+            segments.append(cur_p)
+    else:
+        cur_l: list[str] = []
+        cur_display = 0
+        for l in lines:
+            n = len(_wrap_display_lines(l.text))
+            if cur_l and cur_display + n > _LIST_CAPS["words.lines"]:
+                segments.append(cur_l)
+                cur_l, cur_display = [], 0
+            cur_l.append(l.text)
+            cur_display += n
+        if cur_l:
+            segments.append(cur_l)
+    if source.scene_count is not None and len(segments) != source.scene_count:
+        return None  # a pinned count with no model to re-segment — fail honestly
+    prepared = [
+        (
+            [dl for piece in seg for dl in _wrap_display_lines(piece)],
+            # The pieces ARE the pre-wrap corpus (no accents were ever
+            # applied on this fallback path) — anchor them per scene.
+            "\n".join(seg),
+        )
+        for seg in segments
+    ]
+    seconds, overflow = _assign_text_seconds(
+        [sum(_read_units(dl) for dl in display) for display, _ in prepared],
+        source.target_seconds,
+    )
+    if overflow is not None:
+        return None
+    return FilmStoryboard(
+        scenes=[
+            FilmSceneWords(
+                type="words", seconds=s, dark=(i % 2 == 1), lines=display,
+                copy_text=copy_text,
+            )
+            for i, ((display, copy_text), s) in enumerate(zip(prepared, seconds, strict=True))
+        ],
+        name=None,
+        language=language,
     )
 
 
@@ -1096,19 +2492,783 @@ def _screen_strings(scene: Any) -> list[tuple[str, str]]:
         return [("lead", scene.lead), ("word", scene.word), ("sub", scene.sub)]
     if t == "end":
         return [("name", scene.name), ("tagline", scene.tagline)]
+    if t == "composite":
+        # Only the text elements put authored strings on screen — media
+        # elements are imagery (ADR-140).
+        return [
+            ("lines", line)
+            for el in scene.elements
+            if el.kind == "text"
+            for line in el.lines
+        ]
     return []
 
 
 # ---------------------------------------------------------------------------
-# The validator (pure)
+# Precise words-plane timing (Batch B)
 # ---------------------------------------------------------------------------
+
+FILM_WORDS_TIMING_FIELDS = frozenset(
+    {
+        "enter_start",
+        "enter_interval",
+        "enter_duration",
+        "enter_hold_until",
+        "motion_start",
+        "motion_end",
+        "exit_duration",
+        "motion_scale",
+    }
+)
+# The words plane's style knobs (words scene AND composite text element):
+# presence-sensitive like the timing fields — absent keeps, explicit null
+# restores the default, an explicit value lands.
+FILM_WORDS_STYLE_FIELDS = frozenset(
+    {"align", "size", "accent_style", "enter_style"}
+)
+_ENTER_TIMING_FIELDS = frozenset(
+    {"enter_start", "enter_interval", "enter_duration", "enter_hold_until"}
+)
+_MOTION_TIMING_FIELDS = frozenset({"motion_start", "motion_end"})
+
+# Font size tiers (px on the 1920 design grid — the renderer's map must
+# match byte-for-byte). "medium" IS the pre-tier size (168 words plane /
+# 80 composite text element); null reads as medium. The line-wrap capacity
+# scales with the tier, so a larger tier never clips or drops copy.
+FILM_TEXT_SIZE_PX = {
+    "words": {"small": 120, "medium": 168, "large": 232},
+    "element": {"small": 56, "medium": 80, "large": 120},
+}
+
+
+_WORDS_TEXT_WIDTH_PX = 1920 - 2 * 220  # the words plane's padded text box
+
+
+def film_text_line_cap(
+    size: str | None,
+    *,
+    seat: str,
+    rect_w: float = 1.0,
+    motion_scale: float | None = None,
+) -> int:
+    """A size tier's per-line display-unit capacity (CJK glyph = 2 units at
+    1em advance, latin letter = 1 — an ESTIMATE anchored on the em advance,
+    not a font-metric measurement). Two laws by tier, one seat: the legacy
+    "medium" tier keeps the pre-existing 36-unit convention (the assembly's
+    historical wrap cap — loose by design, tightened nowhere, so legacy
+    boards revalidate byte-identically); the NEW tiers (small/large) carry
+    the PIXEL-honest cap — a line fits ONE visual row inside its text box,
+    so a larger font wraps earlier and never clips (the element seat's box
+    is its rect's pixel width; the words seat's is the padded canvas). The
+    words seat needs no motion-scale discount (its padded box keeps 22%
+    horizontal headroom against the canvas — past the 1.25 amplitude cap);
+    the element seat's rect CLIPS (overflow hidden), so a push/pull
+    amplitude shrinks its effective width."""
+    if size in (None, "medium"):
+        return _TEXT_DISPLAY_CAP
+    px = FILM_TEXT_SIZE_PX[seat][size]
+    width_px = _WORDS_TEXT_WIDTH_PX if seat == "words" else 1920 * rect_w
+    if seat == "element" and motion_scale is not None:
+        width_px /= motion_scale
+    return max(8, math.floor(width_px / px * 2))
+
+
+def film_text_vertical_violation(
+    size: str | None,
+    *,
+    seat: str,
+    lines: int,
+    rect_h: float = 1.0,
+    motion_scale: float | None = None,
+) -> str | None:
+    """The NEW tiers' vertical fit check (medium keeps the legacy
+    convention, so it never runs here): pixel-honest line caps guarantee
+    one visual row per line, so the text block's height is lines × px ×
+    line-height — it must fit the box's pixel height (the words plane's
+    canvas, the element's rect). A push/pull move scales the block around
+    its center, so the estimate carries the amplitude (an explicit
+    motion_scale, else the legacy 1.06 — the caller passes it only when the
+    plane actually moves). Returns the conflict text, None = fits."""
+    if size in (None, "medium"):
+        return None
+    px = FILM_TEXT_SIZE_PX[seat][size]
+    scale = motion_scale if motion_scale is not None else 1.0
+    need_px = lines * px * 1.04 * scale
+    box_px = 1080 if seat == "words" else 1080 * rect_h
+    if need_px > box_px + 1e-6:
+        scaled = f" at the ×{scale:g} motion scale" if scale != 1.0 else ""
+        return (
+            f"{lines} lines at the {size} size{scaled} need "
+            f"{need_px:.0f}px of vertical room but the box holds "
+            f"{box_px:.0f}px — fewer lines, a smaller size, a smaller "
+            "scale, or a taller box (never a silent crop)"
+        )
+    return None
+# A parameterized entrance's absent duration gets an explicit 12-frame default;
+# a spec carrying NO timing keys keeps the legacy unparameterized spring.
+_ENTER_DURATION_DEFAULT_FRAMES = 12
+_ACCENT_SPLIT = re.compile(r"\*([^*]+)\*")
+_WORD_TOKEN = re.compile(
+    r"[㐀-䶿一-鿿豈-﫿]|[^\s㐀-䶿一-鿿豈-﫿]+"
+)
+
+
+def film_seconds_to_frames(seconds: float) -> int:
+    """Animation seconds → integer frames (Batch B's ONE quantization seat):
+    nearest frame, halves round UP, a 1e-9 epsilon steadies exact half-frame
+    boundaries — the renderer runs the SAME float64 formula (never its own
+    rounding), so a value can never land on different frames on the two
+    sides. The error bound is PER VALUE (< half a frame, <0.017s at 30fps):
+    a per-token interval's quantization delta accumulates linearly down the
+    token run — the presentation names the last token's computed start/end
+    frames instead of claiming a sequence-wide sub-frame bound."""
+    return max(0, math.floor(seconds * FILM_FPS + 0.5 + 1e-9))
+
+
+def word_enter_token_count(lines: list[str]) -> int:
+    """The enter="words" token count (the renderer tokenizer's Python mirror):
+    latin whitespace runs are one token, CJK glyphs are one each, and the
+    accent split happens FIRST — the chip edge is a token edge (a latin run
+    never merges across it)."""
+    return sum(
+        len(_WORD_TOKEN.findall(part))
+        for line in lines
+        for part in _ACCENT_SPLIT.split(line)
+    )
+
+
+def _legacy_word_step_frames(frames: int, token_count: int) -> int:
+    """The pre-parameterization cadence, preserved as the default step."""
+    return max(2, min(4, int((frames * 0.6) / max(1, token_count))))
+
+
+def _enter_schedule_frames(
+    lines: list[str],
+    *,
+    frames: int,
+    enter_start: float | None,
+    enter_interval: float | None,
+    enter_duration: float | None,
+    enter_hold_until: float | None,
+    unit: Literal["words", "lines"] = "words",
+) -> tuple[int, int, int, int, int, int, int]:
+    """The ONE enter-schedule computation for the words plane.
+
+    ``unit='words'`` keeps the legacy token cadence. ``unit='lines'`` counts
+    whole display lines and defaults to their legacy 8-frame stagger; it is
+    used only when explicit line timing is present, so an unparameterized
+    legacy board keeps its original renderer branch and digest.
+    """
+    tokens = word_enter_token_count(lines) if unit == "words" else len(lines)
+    start_f = film_seconds_to_frames(
+        enter_start if enter_start is not None else 0.0
+    )
+    step_f = (
+        film_seconds_to_frames(enter_interval)
+        if enter_interval is not None
+        else (
+            _legacy_word_step_frames(frames, tokens)
+            if unit == "words"
+            else 8
+        )
+    )
+    duration_f = (
+        film_seconds_to_frames(enter_duration)
+        if enter_duration is not None
+        else _ENTER_DURATION_DEFAULT_FRAMES
+    )
+    hold_f = (
+        film_seconds_to_frames(enter_hold_until)
+        if enter_hold_until is not None
+        else frames
+    )
+    last_start_f = start_f + max(0, tokens - 1) * step_f
+    last_end_f = last_start_f + duration_f
+    return tokens, start_f, step_f, duration_f, hold_f, last_start_f, last_end_f
+
+
+def _words_timing_violations(
+    scene: Any, *, frames: int, where: str
+) -> list[FilmViolation]:
+    """Validate a words scene's timing against ONE frame window. The caller
+    passes the authoritative allocation (authored seconds at design time, the
+    snapped/flexed frames at spec build) — an overflow is a concrete conflict,
+    never a clamp, a shortened animation, or a dropped token."""
+    if scene.type != "words":
+        return []
+    violations: list[FilmViolation] = []
+    enter_values = {
+        key: getattr(scene, key, None) for key in _ENTER_TIMING_FIELDS
+    }
+    motion_values = {
+        key: getattr(scene, key, None) for key in _MOTION_TIMING_FIELDS
+    }
+
+    enter_mode = scene.enter or "lines"
+    if any(value is not None for value in enter_values.values()):
+        (
+            tokens,
+            start_f,
+            step_f,
+            duration_f,
+            hold_f,
+            last_start_f,
+            last_end_f,
+        ) = _enter_schedule_frames(
+            scene.lines,
+            frames=frames,
+            enter_start=scene.enter_start,
+            enter_interval=scene.enter_interval,
+            enter_duration=scene.enter_duration,
+            enter_hold_until=scene.enter_hold_until,
+            unit=enter_mode,
+        )
+        unit_label = "tokens" if enter_mode == "words" else "lines"
+        if tokens == 0:
+            violations.append(
+                FilmViolation(
+                    CONSTRAINT_VIOLATION,
+                    f"{where}: enter='{enter_mode}' found no {unit_label} to animate",
+                )
+            )
+        elif hold_f > frames:
+            violations.append(
+                FilmViolation(
+                    DURATION_INVALID,
+                    f"{where}: enter_hold_until {scene.enter_hold_until:g}s "
+                    f"lands at f{hold_f}, beyond the scene's {frames}f "
+                    f"window — move it inside the scene or lengthen the scene",
+                )
+            )
+        elif hold_f <= last_start_f:
+            # The last unit must be visible for at least one frame — a hold
+            # at or before its start would render copy that never exists.
+            violations.append(
+                FilmViolation(
+                    DURATION_INVALID,
+                    f"{where}: the hold ends at f{hold_f} "
+                    f"({hold_f / FILM_FPS:.2f}s) but the last {unit_label[:-1]} starts "
+                    f"at f{last_start_f} ({last_start_f / FILM_FPS:.2f}s) "
+                    "— the hold must stay after every entrance start so "
+                    "each one is visible at least one frame",
+                )
+            )
+        elif last_end_f > hold_f:
+            need_f = last_end_f
+            violations.append(
+                FilmViolation(
+                    DURATION_INVALID,
+                    f"{where}: enter timing needs {need_f}f "
+                    f"({need_f / FILM_FPS:.2f}s) for {tokens} {unit_label} "
+                    f"(start f{start_f} + interval f{step_f} + duration "
+                    f"f{duration_f}), but the hold ends at f{hold_f} "
+                    f"({hold_f / FILM_FPS:.2f}s) — lengthen the scene, "
+                    "widen the hold, or shorten the interval / duration "
+                    "(the user decides; never adjust the numbers "
+                    "silently)",
+                )
+            )
+
+    if any(value is not None for value in motion_values.values()):
+        if scene.motion not in ("push", "pull"):
+            violations.append(
+                FilmViolation(
+                    CONSTRAINT_VIOLATION,
+                    f"{where}: motion timing needs motion='push' or 'pull' "
+                    "(static has no motion window); set the move or clear "
+                    "the timing fields",
+                )
+            )
+        else:
+            start_f = film_seconds_to_frames(
+                scene.motion_start if scene.motion_start is not None else 0.0
+            )
+            end_f = (
+                film_seconds_to_frames(scene.motion_end)
+                if scene.motion_end is not None
+                else frames
+            )
+            if end_f <= start_f:
+                violations.append(
+                    FilmViolation(
+                        DURATION_INVALID,
+                        f"{where}: motion window ends at f{end_f} but starts "
+                        f"at f{start_f} — the end must stay after the start",
+                    )
+                )
+            elif end_f > frames:
+                violations.append(
+                    FilmViolation(
+                        DURATION_INVALID,
+                        f"{where}: motion_end {scene.motion_end:g}s lands at "
+                        f"f{end_f}, beyond the scene's {frames}f window — "
+                        "move it inside the scene or lengthen the scene",
+                    )
+                )
+
+    if scene.motion_scale is not None and scene.motion not in ("push", "pull"):
+        violations.append(
+            FilmViolation(
+                CONSTRAINT_VIOLATION,
+                f"{where}: motion_scale needs motion='push' or 'pull' "
+                "(static has no move to scale); set the move or clear the "
+                "scale",
+            )
+        )
+    # The exit fade guards against the words' OWN schedule (the caller's
+    # real parameters — defaults included), never a re-derived one.
+    last_entered_f: int | None = None
+    if scene.enter == "words" or any(
+        value is not None for value in enter_values.values()
+    ):
+        sched = _enter_schedule_frames(
+            scene.lines,
+            frames=frames,
+            enter_start=scene.enter_start,
+            enter_interval=scene.enter_interval,
+            enter_duration=scene.enter_duration,
+            enter_hold_until=scene.enter_hold_until,
+            unit=enter_mode,
+        )
+        if sched[0]:
+            last_entered_f = sched[6]
+    violations.extend(
+        _exit_fade_violations(
+            exit_duration=scene.exit_duration,
+            window_f=frames,
+            hold_until=scene.enter_hold_until,
+            last_entered_f=last_entered_f,
+            where=where,
+        )
+    )
+    return violations
+
+
+def _exit_fade_violations(
+    *,
+    exit_duration: float | None,
+    window_f: int,
+    hold_until: float | None,
+    last_entered_f: int | None,
+    where: str,
+) -> list[FilmViolation]:
+    """The exit fade's fit check (words scene AND composite text element —
+    one law): the fade occupies the window's FINAL ``exit_duration`` seconds
+    (ending at the hold endpoint when one is set, else the window's end);
+    it must quantize to ≥1 frame, fit inside the window, and start only
+    after the last word has fully entered (``last_entered_f`` — the
+    caller's OWN schedule with its real parameters; None = a lines
+    entrance, whose spring needs no such guard). The background never fades
+    with the text; a window that can't hold the fade is a concrete
+    conflict, never a silent shortening."""
+    if exit_duration is None:
+        return []
+    exit_f = film_seconds_to_frames(exit_duration)
+    if exit_f < 1:
+        return [
+            FilmViolation(
+                DURATION_INVALID,
+                f"{where}: exit_duration {exit_duration:g}s collapses to zero "
+                "frames on the render grid — the fade needs at least one "
+                "frame; widen it or drop it",
+            )
+        ]
+    end_f = (
+        film_seconds_to_frames(hold_until) if hold_until is not None else window_f
+    )
+    start_f = end_f - exit_f
+    if start_f < 0:
+        return [
+            FilmViolation(
+                DURATION_INVALID,
+                f"{where}: the {exit_duration:g}s exit fade ({exit_f}f) is "
+                f"longer than the text's window ending at f{end_f} — shorten "
+                "the fade or lengthen the window",
+            )
+        ]
+    if last_entered_f is not None and start_f < last_entered_f:
+        return [
+            FilmViolation(
+                DURATION_INVALID,
+                f"{where}: the exit fade starts at f{start_f} "
+                f"({start_f / FILM_FPS:.2f}s) but the last word only "
+                f"finishes entering at f{last_entered_f} "
+                f"({last_entered_f / FILM_FPS:.2f}s) — shorten the fade or "
+                "push it later",
+            )
+        ]
+    return []
+
+
+def _element_timing_violations(
+    el: Any, *, frames: int, where: str
+) -> list[FilmViolation]:
+    """Validate a composite TEXT element's enter/motion timing against its
+    OWN window (``until - at``, already frame-quantized by the caller —
+    ADR-140). The words plane's law in miniature, with two deltas: there is
+    no ``enter_hold_until`` (the hard leave at ``until`` IS the hold end) and
+    the messages name the element's window, never the scene's."""
+    violations: list[FilmViolation] = []
+    enter_present = any(
+        getattr(el, key, None) is not None
+        for key in ("enter_start", "enter_interval", "enter_duration")
+    )
+    enter_mode = el.enter or "lines"
+    if enter_present:
+        (
+            tokens,
+            start_f,
+            step_f,
+            duration_f,
+            hold_f,
+            last_start_f,
+            last_end_f,
+        ) = _enter_schedule_frames(
+            el.lines,
+            frames=frames,
+            enter_start=el.enter_start,
+            enter_interval=el.enter_interval,
+            enter_duration=el.enter_duration,
+            enter_hold_until=None,
+            unit=enter_mode,
+        )
+        unit_label = "tokens" if enter_mode == "words" else "lines"
+        if tokens == 0:
+            violations.append(
+                FilmViolation(
+                    CONSTRAINT_VIOLATION,
+                    f"{where}: enter='{enter_mode}' found no {unit_label} to animate",
+                )
+            )
+        elif hold_f <= last_start_f:
+            violations.append(
+                FilmViolation(
+                    DURATION_INVALID,
+                    f"{where}: the element's {frames}f window "
+                    f"({frames / FILM_FPS:.2f}s) ends at or before the "
+                    f"last {unit_label[:-1]}'s start f{last_start_f} "
+                    f"({last_start_f / FILM_FPS:.2f}s) — every {unit_label[:-1]} must "
+                    "be visible at least one frame before the element "
+                    "leaves; widen the window or compress the cadence",
+                )
+            )
+        elif last_end_f > hold_f:
+            need_f = last_end_f
+            violations.append(
+                FilmViolation(
+                    DURATION_INVALID,
+                    f"{where}: enter timing needs {need_f}f "
+                    f"({need_f / FILM_FPS:.2f}s) for {tokens} {unit_label} "
+                    f"(start f{start_f} + interval f{step_f} + duration "
+                    f"f{duration_f}), but the element leaves at f{hold_f} "
+                    f"({hold_f / FILM_FPS:.2f}s) — widen the element's "
+                    "window or shorten the interval / duration (the user "
+                    "decides; never adjust the numbers silently)",
+                )
+            )
+
+    if el.motion_start is not None or el.motion_end is not None:
+        if el.motion not in ("push", "pull"):
+            violations.append(
+                FilmViolation(
+                    CONSTRAINT_VIOLATION,
+                    f"{where}: motion timing needs motion='push' or 'pull' "
+                    "(static has no motion window); set the move or clear "
+                    "the timing fields",
+                )
+            )
+        else:
+            start_f = film_seconds_to_frames(
+                el.motion_start if el.motion_start is not None else 0.0
+            )
+            end_f = (
+                film_seconds_to_frames(el.motion_end)
+                if el.motion_end is not None
+                else frames
+            )
+            if end_f <= start_f:
+                violations.append(
+                    FilmViolation(
+                        DURATION_INVALID,
+                        f"{where}: motion window ends at f{end_f} but starts "
+                        f"at f{start_f} — the end must stay after the start",
+                    )
+                )
+            elif end_f > frames:
+                violations.append(
+                    FilmViolation(
+                        DURATION_INVALID,
+                        f"{where}: motion_end {el.motion_end:g}s lands at "
+                        f"f{end_f}, beyond the element's {frames}f window — "
+                        "move it inside the window or lengthen the window",
+                    )
+                )
+
+    if el.motion_scale is not None and el.motion not in ("push", "pull"):
+        violations.append(
+            FilmViolation(
+                CONSTRAINT_VIOLATION,
+                f"{where}: motion_scale needs motion='push' or 'pull' "
+                "(static has no move to scale); set the move or clear the "
+                "scale",
+            )
+        )
+    last_entered_f: int | None = None
+    if el.enter == "words" or enter_present:
+        sched = _enter_schedule_frames(
+            el.lines,
+            frames=frames,
+            enter_start=el.enter_start,
+            enter_interval=el.enter_interval,
+            enter_duration=el.enter_duration,
+            enter_hold_until=None,
+            unit=enter_mode,
+        )
+        if sched[0]:
+            last_entered_f = sched[6]
+    violations.extend(
+        _exit_fade_violations(
+            exit_duration=el.exit_duration,
+            window_f=frames,
+            hold_until=None,
+            last_entered_f=last_entered_f,
+            where=where,
+        )
+    )
+    return violations
+
+
+def _composite_violations(
+    scene: Any, *, frames: int, media: "StoryboardMedia | None", where: str
+) -> list[FilmViolation]:
+    """A composite scene's structural + media checks (ADR-140). The element
+    window law: every element must live INSIDE the scene's frame window — a
+    play window running past the scene's end or an ``until`` landing beyond
+    it is a concrete conflict (shorten the window or lengthen the scene),
+    never a freeze-frame, a clamp, or a silent drop."""
+    violations: list[FilmViolation] = []
+    if len(scene.elements) > _LIST_CAPS["composite.elements"]:
+        violations.append(
+            FilmViolation(
+                CONSTRAINT_VIOLATION,
+                f"{where}: {len(scene.elements)} elements over "
+                f"{_LIST_CAPS['composite.elements']}",
+            )
+        )
+    seen_ids: set[str] = set()
+    for el_index, el in enumerate(scene.elements):
+        # Identity is birth-assigned (ensure_scene_ids) — a board not yet
+        # through that seat carries None ids; only ASSIGNED ids can
+        # duplicate. The display name falls back positionally.
+        ewhere = f"{where}.{el.element_id or f'element{el_index + 1}'}"
+        if el.element_id is not None:
+            if el.element_id in seen_ids:
+                violations.append(
+                    FilmViolation(
+                        CONSTRAINT_VIOLATION,
+                        f"{ewhere}: duplicate element id within one scene",
+                    )
+                )
+            seen_ids.add(el.element_id)
+        at_f = film_seconds_to_frames(el.at)
+        if el.kind == "video":
+            # 源入出帧与输出播放帧同一量化契约 (复审①): the endpoints quantize
+            # FIRST (the renderer's startFrom/endAt ride the same formula);
+            # the default play window IS the quantized span — never
+            # quantize-the-delta, which can claim a frame the trim never
+            # shows; an explicit window may not exceed the quantized source
+            # frames. No seat pads a frame.
+            start_f = film_seconds_to_frames(el.source_start)
+            end_f = film_seconds_to_frames(el.source_end)
+            available_f = end_f - start_f
+            if available_f < 1:
+                violations.append(
+                    FilmViolation(
+                        DURATION_INVALID,
+                        f"{ewhere}: source {el.source_start:g}–"
+                        f"{el.source_end:g}s collapses to zero frames on "
+                        "the render grid (both endpoints land on the same "
+                        "frame) — the trim names no picture; widen the "
+                        "source window past one frame",
+                    )
+                )
+            play_f = (
+                film_seconds_to_frames(el.duration)
+                if el.duration is not None
+                else available_f
+            )
+            if available_f >= 1:
+                if play_f < 1:
+                    # The same zero-frames law as the at/until window below:
+                    # nothing may fabricate a frame — a sub-frame play window
+                    # names no picture at all.
+                    violations.append(
+                        FilmViolation(
+                            DURATION_INVALID,
+                            f"{ewhere}: plays {el.duration:g}s — that "
+                            "quantizes to zero frames on the render grid; "
+                            "widen the play window past one frame",
+                        )
+                    )
+                elif play_f > available_f:
+                    violations.append(
+                        FilmViolation(
+                            DURATION_INVALID,
+                            f"{ewhere}: the play window {el.duration:g}s = "
+                            f"{play_f}f exceeds the {available_f}f the "
+                            "quantized source trim holds — shorten the "
+                            "window or widen the source range",
+                        )
+                    )
+                leave_f = at_f + play_f
+                if leave_f > frames:
+                    violations.append(
+                        FilmViolation(
+                            DURATION_INVALID,
+                            f"{ewhere}: plays {play_f / FILM_FPS:g}s from "
+                            f"{el.at:g}s — the element would still be "
+                            f"running at f{leave_f}, past the scene's "
+                            f"{frames}f window; shorten the play window, "
+                            "start it earlier, or lengthen the scene",
+                        )
+                    )
+        else:
+            # ``until`` null = the scene's end (the hard leave resolves
+            # against THIS seat's authoritative window).
+            until_f = (
+                film_seconds_to_frames(el.until) if el.until is not None else frames
+            )
+            if el.until is not None and until_f > frames:
+                violations.append(
+                    FilmViolation(
+                        DURATION_INVALID,
+                        f"{ewhere}: until {el.until:g}s lands at f{until_f}, "
+                        f"beyond the scene's {frames}f window — pull it "
+                        "inside the scene or lengthen the scene",
+                    )
+                )
+            window_f = until_f - at_f
+            if window_f < 1:
+                violations.append(
+                    FilmViolation(
+                        DURATION_INVALID,
+                        f"{ewhere}: at/until collapse to zero frames on the "
+                        "render grid — the element needs at least one frame",
+                    )
+                )
+            elif el.kind == "text":
+                if len(el.lines) > _LIST_CAPS["composite.text-lines"]:
+                    violations.append(
+                        FilmViolation(
+                            CONSTRAINT_VIOLATION,
+                            f"{ewhere}: {len(el.lines)} lines over "
+                            f"{_LIST_CAPS['composite.text-lines']}",
+                        )
+                    )
+                # The words plane's line-capacity law, element-scoped: a
+                # line past its size tier's capacity would visually
+                # wrap/clip inside the rect — never a silent trim. The rect
+                # clips (overflow hidden), so a push/pull amplitude shrinks
+                # the effective box.
+                el_scale = (
+                    (el.motion_scale if el.motion_scale is not None else 1.06)
+                    if el.motion in ("push", "pull")
+                    else None
+                )
+                el_line_cap = film_text_line_cap(
+                    el.size, seat="element", rect_w=el.rect.w,
+                    motion_scale=el_scale,
+                )
+                for line in el.lines:
+                    if _display_units(line) > el_line_cap:
+                        violations.append(
+                            FilmViolation(
+                                CONSTRAINT_VIOLATION,
+                                f"{ewhere}: the line «{line[:30]}» runs "
+                                f"{_display_units(line)} display units over "
+                                f"the {el_line_cap} the "
+                                f"{el.size or 'medium'} size tier fits on "
+                                "one line inside the element's rect — "
+                                "shorten the line or step the size down "
+                                "(never a silent trim)",
+                            )
+                        )
+                el_vertical = film_text_vertical_violation(
+                    el.size,
+                    seat="element",
+                    lines=len(el.lines),
+                    rect_h=el.rect.h,
+                    motion_scale=el_scale,
+                )
+                if el_vertical is not None:
+                    violations.append(
+                        FilmViolation(
+                            CONSTRAINT_VIOLATION,
+                            f"{ewhere}: {el_vertical}",
+                        )
+                    )
+                violations.extend(
+                    _element_timing_violations(el, frames=window_f, where=ewhere)
+                )
+        if el.kind in ("video", "image") and media is not None:
+            entry = media.assets.get(el.asset)
+            if entry is None:
+                violations.append(
+                    FilmViolation(
+                        CONSTRAINT_VIOLATION,
+                        f"{ewhere}: asset {el.asset} is not one of this "
+                        "project's media assets — cite the project's own "
+                        "videos / images by id",
+                    )
+                )
+            else:
+                name = entry.title or el.asset
+                if entry.kind != el.kind:
+                    violations.append(
+                        FilmViolation(
+                            CONSTRAINT_VIOLATION,
+                            f"{ewhere}: «{name}» is a {entry.kind} asset, "
+                            f"not {el.kind} — an element's kind must match "
+                            "its asset",
+                        )
+                    )
+                if not entry.key:
+                    violations.append(
+                        FilmViolation(
+                            CONSTRAINT_VIOLATION,
+                            f"{ewhere}: «{name}» carries no media bytes",
+                        )
+                    )
+                if (
+                    el.kind == "video"
+                    and entry.kind == "video"
+                    and entry.duration_seconds is not None
+                    and el.source_end > entry.duration_seconds + 1e-9
+                ):
+                    violations.append(
+                        FilmViolation(
+                            DURATION_INVALID,
+                            f"{ewhere}: the source window ends at "
+                            f"{el.source_end:g}s but «{name}» runs "
+                            f"{entry.duration_seconds:g}s — keep the cut "
+                            "inside the material",
+                        )
+                    )
+    return violations
 
 
 # The creative channel (ADR-127): these slots are the film's OWN framing —
 # hooks and lead-ins, never product claims — so the grounding check exempts
 # them (caps, non-blank and the duplicate guards still apply). Every other
 # on-screen slot is a citation and grounds by construction.
-_CREATIVE_SLOTS = {("words", "lines"), ("reveal", "lead"), ("divider", "label")}
+_CREATIVE_SLOTS = {
+    ("words", "lines"),
+    ("reveal", "lead"),
+    ("divider", "label"),
+    # A composite text element's lines are the film's own framing beside the
+    # media — the words plane's exemption applies (ADR-140).
+    ("composite", "lines"),
+}
 
 
 def validate_storyboard(
@@ -1116,16 +3276,34 @@ def validate_storyboard(
     pages: list[StoryboardPage],
     *,
     narration_required: bool = False,
+    text_lines: list[ManifestLine] | None = None,
+    media: StoryboardMedia | None = None,
 ) -> list[FilmViolation]:
     """Every violation found, in scene order. Empty list = the storyboard may
     proceed to frame allocation. The union corpus grounds every scene.
+
+    ``text_lines`` (ADR-138 §7.6 — 素材源抽象): present = a TEXT-source film —
+    the grounding corpus is the copy itself, the count/seconds bands relax to
+    the text profile, page-coupled scene types (ui/end) are illegal, and a
+    words scene's only duration law is a POSITIVE window (the reading
+    estimate recommends the pace, it never gates — 2026-10-22 拍板).
+    Absent = the web source's law (unchanged).
 
     ``narration_required`` (2026-10-18 最后一公里 — the 4ad7963e silent-film
     incident): the plan PROMISED voiceover. Individual scenes may stay
     silent by craft (a divider beat, the fast cold open), but an ALL-silent
     board fails the promise — caught here at design time (the bounded
     rewrite repairs it) and again at the run's defensive re-validation,
-    never delivered as a successful silent film."""
+    never delivered as a successful silent film.
+
+    ``media`` (ADR-140): the composite scenes' cited assets, keyed by id.
+    None = no media knowledge at this seat — asset identity checks defer to
+    the seats that load it (patch / run); the structural element checks
+    (windows, timing, ids) always run."""
+    text_mode = text_lines is not None
+    count_limits = TEXT_SCENE_COUNT_LIMITS if text_mode else SCENE_COUNT_LIMITS
+    seconds_map = TEXT_SCENE_SECONDS if text_mode else SCENE_SECONDS
+    total_range = TEXT_TOTAL_SECONDS_RANGE if text_mode else TOTAL_SECONDS_RANGE
     violations: list[FilmViolation] = []
     if narration_required and not any(
         getattr(s, "narration", None) for s in storyboard.scenes
@@ -1140,17 +3318,30 @@ def validate_storyboard(
             )
         )
     union_pairs = [pair for p in pages for pair in _corpus_pairs(p.research)]
+    if text_lines:
+        # Text source: the copy itself is the grounding universe.
+        union_pairs += [(n, l.text) for l in text_lines if (n := _norm(l.text))]
 
     def grounded(text: str, corpus: list[str]) -> bool:
         norm = _norm(text)
         return bool(norm) and any(norm in item for item in corpus)
 
     scenes = storyboard.scenes
-    if not (SCENE_COUNT_LIMITS[0] <= len(scenes) <= SCENE_COUNT_LIMITS[1]):
+    if text_mode:
+        # The 2..30 count band is a CRAFT DEFAULT for text films (prompt
+        # guidance + the preflight's named-count satisfiable range), never
+        # an unconditional rejection — the real bounds are the per-scene
+        # reading floors and the frame-capped total below. A film still
+        # needs at least one scene.
+        if not scenes:
+            violations.append(
+                FilmViolation(CONSTRAINT_VIOLATION, "a film needs at least one scene")
+            )
+    elif not (count_limits[0] <= len(scenes) <= count_limits[1]):
         violations.append(
             FilmViolation(
                 CONSTRAINT_VIOLATION,
-                f"scene count {len(scenes)} outside {SCENE_COUNT_LIMITS[0]}..{SCENE_COUNT_LIMITS[1]}",
+                f"scene count {len(scenes)} outside {count_limits[0]}..{count_limits[1]}",
             )
         )
     # The plate is the numbers beat — rare by law (two would already be a
@@ -1178,9 +3369,22 @@ def validate_storyboard(
             # is the defense-in-depth seat (a hand-built spec bypassing it).
             violations.append(FilmViolation(UNSUPPORTED_SCENE, f"{where}: unknown type"))
             continue
+        if text_mode and scene.type in TEXT_ILLEGAL_SCENES:
+            violations.append(
+                FilmViolation(
+                    UNSUPPORTED_SCENE,
+                    f"{where}: a {scene.type} scene needs a captured page — a "
+                    "text film has none; keep the arc on text planes (words)",
+                )
+            )
+            continue
 
-        lo, hi = SCENE_SECONDS[scene.type]
-        if not (lo <= scene.seconds <= hi):
+        lo, hi = seconds_map[scene.type]
+        # Text-mode words planes: the per-scene band is a craft DEFAULT, not
+        # hard law — the plane's duration law is its reading-time floor (the
+        # mirror below) plus the film-level bands. Every other scene type
+        # (and the whole web source) keeps its band.
+        if not (text_mode and scene.type == "words") and not (lo <= scene.seconds <= hi):
             violations.append(
                 FilmViolation(
                     DURATION_INVALID,
@@ -1267,6 +3471,15 @@ def validate_storyboard(
             # not repeats.
             else ("divider", normed[0], tuple(normed[1:]))
             if scene.type == "divider"
+            # A composite's screen is its text AND its media identity —
+            # two composites sharing captions over DIFFERENT assets are
+            # different screens (ADR-140).
+            else (
+                "composite",
+                tuple(sorted(normed)),
+                tuple((el.kind, getattr(el, "asset", None)) for el in scene.elements),
+            )
+            if scene.type == "composite"
             else (scene.type, tuple(sorted(normed)))
         )
         if signature in seen_screens:
@@ -1280,14 +3493,17 @@ def validate_storyboard(
         # legal). The walk is the chapter's substance — a divider straight
         # into another card is padding dressed as structure. The
         # attributable fix is fewer pillars (the model owns the chapter
-        # count; the views are the world's).
-        if scene.type == "divider":
+        # count; the views are the world's). Web-source law only — a text
+        # film has no page walks by construction.
+        if scene.type == "divider" and not text_mode:
             chapter_ordinal += 1
             has_walk = False
             for later in scenes[idx + 1:]:
                 if later.type in ("divider", "reveal", "end"):
                     break
-                if later.type == "ui":
+                # A composite scene is a chapter's substance too (ADR-140)
+                # — its media walk carries the chapter like a page walk.
+                if later.type in ("ui", "composite"):
                     has_walk = True
                     break
             if not has_walk:
@@ -1328,6 +3544,59 @@ def validate_storyboard(
         # List-size caps.
         if scene.type == "words" and len(scene.lines) > _LIST_CAPS["words.lines"]:
             violations.append(FilmViolation(CONSTRAINT_VIOLATION, f"{where}: {len(scene.lines)} lines over {_LIST_CAPS['words.lines']}"))
+        if scene.type == "words":
+            # A display line must fit its size tier's line capacity — a
+            # line past it would visually wrap/clip (the assembly wraps to
+            # the cap; a patch-authored line re-checks here). Never a
+            # silent trim. (Text-mode law: the web chain's words planes
+            # predate the capacity seat and stay on their own law.)
+            if text_mode:
+                line_cap = film_text_line_cap(scene.size, seat="words")
+                for line in scene.lines:
+                    if _display_units(line) > line_cap:
+                        violations.append(
+                            FilmViolation(
+                                CONSTRAINT_VIOLATION,
+                                f"{where}: the line «{line[:30]}» runs "
+                                f"{_display_units(line)} display units over the "
+                                f"{line_cap} the {scene.size or 'medium'} size "
+                                "tier fits on one line — shorten the line or "
+                                "step the size down (never a silent trim)",
+                            )
+                        )
+                vertical = film_text_vertical_violation(
+                    scene.size,
+                    seat="words",
+                    lines=len(scene.lines),
+                    motion_scale=(
+                        (scene.motion_scale if scene.motion_scale is not None else 1.06)
+                        if scene.motion in ("push", "pull")
+                        else None
+                    ),
+                )
+                if vertical is not None:
+                    violations.append(
+                        FilmViolation(CONSTRAINT_VIOLATION, f"{where}: {vertical}")
+                    )
+        if scene.type == "words":
+            # Design-time timing leg: the authored scene window (the spec
+            # builder re-checks the snapped/flexed allocation below).
+            violations.extend(
+                _words_timing_violations(
+                    scene,
+                    frames=film_seconds_to_frames(scene.seconds),
+                    where=where,
+                )
+            )
+        if scene.type == "composite":
+            violations.extend(
+                _composite_violations(
+                    scene,
+                    frames=film_seconds_to_frames(scene.seconds),
+                    media=media,
+                    where=where,
+                )
+            )
         if scene.type == "divider" and len(scene.roll) > _LIST_CAPS["divider.roll"]:
             violations.append(FilmViolation(CONSTRAINT_VIOLATION, f"{where}: roll of {len(scene.roll)} over {_LIST_CAPS['divider.roll']}"))
         if scene.type == "reveal" and not (0.8 <= scene.lead_seconds <= scene.seconds - 2.0):
@@ -1451,13 +3720,46 @@ def validate_storyboard(
                     )
                 prev_at = f.at
 
-    if not (TOTAL_SECONDS_RANGE[0] <= total_seconds <= TOTAL_SECONDS_RANGE[1]):
+    if text_mode:
+        # Only the total's UPPER is hard law for a text film: 120s = the
+        # render frame cap (FILM_MAX_FRAMES / FILM_FPS, mirrored from the
+        # post-allocation guard). The 5s lower is a craft suggestion (the
+        # allocator's no-target top-up seat), never a rejection — a short
+        # film stands when every scene is readable.
+        if total_seconds > total_range[1]:
+            violations.append(
+                FilmViolation(
+                    DURATION_INVALID,
+                    f"total {total_seconds:.1f}s over the {total_range[1]:g}s "
+                    "render frame cap",
+                )
+            )
+    elif not (total_range[0] <= total_seconds <= total_range[1]):
         violations.append(
             FilmViolation(
                 DURATION_INVALID,
-                f"total {total_seconds:.1f}s outside {TOTAL_SECONDS_RANGE[0]}..{TOTAL_SECONDS_RANGE[1]}s",
+                f"total {total_seconds:.1f}s outside {total_range[0]}..{total_range[1]}s",
             )
         )
+
+    if text_mode:
+        # The reading-time estimate NEVER gates (2026-10-22 拍板 — 估计 =
+        # 建议非边界): a scene faster than the estimated reading pace is the
+        # user's explicit faster choice (a named total the allocator scaled
+        # down to, or an explicit seconds patch) — the readability impact
+        # rides the presentation's pace note, never a rejection. The REAL
+        # duration checks that remain: a positive window on the render's
+        # time grid (a zero/negative scene renders nothing — illegal data)
+        # and the frame-capped total above.
+        for idx, scene in enumerate(scenes):
+            if scene.type == "words" and scene.seconds <= 0:
+                violations.append(
+                    FilmViolation(
+                        DURATION_INVALID,
+                        f"scene[{idx}](words): {scene.seconds:g}s renders "
+                        "nothing — a scene needs a positive window",
+                    )
+                )
 
     if storyboard.theme is not None:
         for field, value in (("canvas", storyboard.theme.canvas), ("ink", storyboard.theme.ink)):
@@ -1543,6 +3845,97 @@ def snap_frames_to_beats(
             out[i + 1] -= delta
             boundary = nearest
     return out
+
+
+def execution_frames(
+    storyboard: FilmStoryboard,
+    beats: list[float] | None,
+) -> list[int]:
+    """The run/presentation timeline's ONE frame-allocation seat
+    (allocate → beat snap): the spec's per-scene frames and the fact sheet's
+    times both come from here, never re-derived per consumer. The keep_cut
+    fork does NOT ride this seat — a kept cut is the BASE version's own
+    executed/presented timeline (see the run's ``film_kept_frames``
+    consumption), never a freshly snapped re-allocation."""
+    frames = allocate_frames(storyboard)
+    if beats:
+        frames = snap_frames_to_beats(storyboard, frames, beats)
+    return frames
+
+
+def spec_scene_frames(spec: Any) -> list[int] | None:
+    """A film render spec's per-scene executed frames (the cut AS RENDERED —
+    snap + any narration flex baked in). None = no readable timeline (a
+    corrupt/half-written spec reads as absent, never a partial cut)."""
+    scenes = spec.get("scenes") if isinstance(spec, dict) else None
+    if not isinstance(scenes, list) or not scenes:
+        return None
+    out: list[int] = []
+    for scene in scenes:
+        n = scene.get("frames") if isinstance(scene, dict) else None
+        if not isinstance(n, int) or isinstance(n, bool) or n <= 0:
+            return None
+        out.append(n)
+    return out
+
+
+def spec_scene_reveal_onsets(spec: Any) -> list[int | None] | None:
+    """A film render spec's per-scene reveal word onsets AS RENDERED
+    (``lead_frames``; None per non-reveal scene) — the in-scene cut points
+    of the executed timeline, the frozen timeline's other half (a kept cut
+    preserves the word's landing beat, not just the scene lengths). None =
+    no readable timeline (a corrupt/half-written/pre-split spec reads as
+    absent, never a partial cut)."""
+    scenes = spec.get("scenes") if isinstance(spec, dict) else None
+    if not isinstance(scenes, list) or not scenes:
+        return None
+    out: list[int | None] = []
+    for scene in scenes:
+        n = scene.get("frames") if isinstance(scene, dict) else None
+        if not isinstance(n, int) or isinstance(n, bool) or n <= 0:
+            return None
+        if scene.get("type") == "reveal":
+            onset = scene.get("lead_frames")
+            if not isinstance(onset, int) or isinstance(onset, bool) or onset <= 0:
+                return None
+            out.append(onset)
+        else:
+            out.append(None)
+    return out
+
+
+def valid_kept_cut(storyboard: FilmStoryboard, frames: Any) -> bool:
+    """The kept-cut handoff's fail-closed check (keep_cut 执行语义): one
+    positive int per scene, every scene at/above its structural floor, the
+    total under the render cap. A kept cut that fails any leg is corrupt —
+    the run refuses it, never silently re-snaps."""
+    if not isinstance(frames, list) or len(frames) != len(storyboard.scenes):
+        return False
+    for scene, n in zip(storyboard.scenes, frames):
+        if not isinstance(n, int) or isinstance(n, bool) or n < _scene_floor(scene):
+            return False
+    return sum(frames) <= FILM_MAX_FRAMES
+
+
+def valid_kept_reveal_onsets(
+    storyboard: FilmStoryboard, onsets: Any, frames: list[int]
+) -> bool:
+    """The frozen reveal onsets' fail-closed check (冻结场内切点 = 冻结时间
+    轴的同一半 — keep_cut keeps the word's landing beat too): one entry per
+    scene, every REVEAL scene's onset a positive int leaving ≥1s of word
+    phase inside its kept scene frames. A frozen cut whose onsets fail any
+    leg is corrupt — the run/patch refuses it, never silently re-snapping
+    an in-scene cut point onto the new bed's grid."""
+    if not isinstance(onsets, list) or len(onsets) != len(storyboard.scenes):
+        return False
+    for scene, onset, n in zip(storyboard.scenes, onsets, frames, strict=True):
+        if scene.type != "reveal":
+            continue
+        if not isinstance(onset, int) or isinstance(onset, bool):
+            return False
+        if onset < FILM_FPS or onset > n - FILM_FPS:
+            return False
+    return True
 
 
 def _track_beats(track: Music | None) -> list[float] | None:
@@ -1787,6 +4180,73 @@ def _camera_walk(
     return walk
 
 
+def reveal_onset_frames(
+    scene: FilmScene,
+    *,
+    cursor_frames: int,
+    scene_frames: int,
+    beat_s: float | None,
+    beats: list[float] | None,
+) -> int:
+    """The reveal scene's word onset within its scene (lead → beat pause →
+    word — the ONE onset seat): the lead holds its lead_seconds, then the
+    word lands ON the music grid — the next beat at/after the lead's end,
+    plus one real beat of black pause. No grid = the silent-cut fallback
+    (a music-less film has no beat to land on — the half-second hold is a
+    plain pause, never passed off as a beat). The word phase always keeps
+    ≥1s. The spec builder and the draft-freeze seat share this formula, so
+    a presented plan timeline and its rendered spec never disagree on
+    in-scene cut points."""
+    word_f = round(scene.lead_seconds * FILM_FPS) + FILM_FPS // 2
+    if beat_s:
+        lead_end_abs = cursor_frames / FILM_FPS + scene.lead_seconds
+        nxt = (
+            min((b for b in beats if b >= lead_end_abs - 1e-9), default=None)
+            if isinstance(beats, list)
+            else None
+        )
+        word_abs = (
+            nxt + beat_s
+            if nxt is not None
+            else math.ceil(lead_end_abs / beat_s - 1e-9) * beat_s + beat_s
+        )
+        word_f = round((word_abs - cursor_frames / FILM_FPS) * FILM_FPS)
+    return max(FILM_FPS, min(word_f, scene_frames - FILM_FPS))
+
+
+def draft_reveal_onsets(
+    storyboard: FilmStoryboard,
+    frames: list[int],
+    music: dict | None,
+) -> list[int | None] | None:
+    """A plan timeline's per-scene reveal word onsets (None per non-reveal
+    scene), computed by the ONE onset seat on the given music grid — a
+    draft's PRESENTED in-scene cut points, frozen alongside
+    ``film_kept_frames`` when a keep_cut freezes the presented timeline.
+    None = the board carries no reveal scene."""
+    if not any(s.type == "reveal" for s in storyboard.scenes):
+        return None
+    beat_s = _beat_interval((music or {}).get("beats"), (music or {}).get("bpm"))
+    beats = (music or {}).get("beats")
+    out: list[int | None] = []
+    cursor = 0
+    for scene, n in zip(storyboard.scenes, frames, strict=True):
+        if scene.type == "reveal":
+            out.append(
+                reveal_onset_frames(
+                    scene,
+                    cursor_frames=cursor,
+                    scene_frames=n,
+                    beat_s=beat_s,
+                    beats=beats,
+                )
+            )
+        else:
+            out.append(None)
+        cursor += n
+    return out
+
+
 def build_film_spec(
     storyboard: FilmStoryboard,
     pages: list[StoryboardPage],
@@ -1795,8 +4255,10 @@ def build_film_spec(
     music: dict[str, Any] | None = None,
     aspect: str = "16:9",
     frames: list[int] | None = None,
+    reveal_onsets: list[int | None] | None = None,
     storyboard_digest: str | None = None,
     execution_digest: str | None = None,
+    media: StoryboardMedia | None = None,
 ) -> dict[str, Any]:
     """The validated storyboard → the persisted film-spec (render contract).
 
@@ -1809,6 +4271,11 @@ def build_film_spec(
     ``frames`` = the caller's already-snapped allocation (ADR-121 B3: the
     run snaps to the beat grid before narration so the T2A windows ARE the
     snapped windows); None = allocate here (draft/preview seats).
+    ``reveal_onsets`` = the frozen cut's in-scene word onsets (the kept-cut
+    handoff's other half — a kept cut preserves the reveal's landing beat,
+    never re-snapping it onto the (possibly new) bed's grid); None = the
+    onset seat computes from the current grid (compose / recut / draft
+    seats).
     ``storyboard_digest`` / ``execution_digest`` = the design beat's stamps
     (ADR-129): the spec carries them as ``provenance`` so 呈现稿 digest =
     run context digest = render spec digest verifies byte-for-byte; None on
@@ -1823,6 +4290,8 @@ def build_film_spec(
     theme = dict(_DEFAULT_THEME)
     if storyboard.theme is not None:
         theme = {"canvas": storyboard.theme.canvas, "ink": storyboard.theme.ink}
+        if storyboard.theme.accent is not None:
+            theme["accent"] = storyboard.theme.accent
     beat_s = _beat_interval(
         (music or {}).get("beats"), (music or {}).get("bpm")
     )
@@ -1831,7 +4300,79 @@ def build_film_spec(
     scenes: list[dict[str, Any]] = []
     for idx, (scene, n) in enumerate(zip(storyboard.scenes, allocated, strict=True)):
         if scene.type == "words":
-            scenes.append({"type": "words", "frames": n, "dark": scene.dark, "lines": scene.lines})
+            timing_violations = _words_timing_violations(
+                scene, frames=n, where=f"scene[{idx}](words)"
+            )
+            if timing_violations:
+                raise FilmStoryboardRejected(
+                    [v.code for v in timing_violations],
+                    format_violations(timing_violations),
+                )
+            scenes.append(
+                {
+                    "type": "words",
+                    "frames": n,
+                    "dark": scene.dark,
+                    "lines": scene.lines,
+                    # Text-plane vocabulary/timing rides only when SET — null
+                    # keys stay out of the spec (the digest law's spec-side
+                    # twin; explicit zero is a value, never an omission).
+                    **({"motion": scene.motion} if scene.motion else {}),
+                    **({"enter": scene.enter} if scene.enter else {}),
+                    **(
+                        {"enter_start": scene.enter_start}
+                        if scene.enter_start is not None
+                        else {}
+                    ),
+                    **(
+                        {"enter_interval": scene.enter_interval}
+                        if scene.enter_interval is not None
+                        else {}
+                    ),
+                    **(
+                        {"enter_duration": scene.enter_duration}
+                        if scene.enter_duration is not None
+                        else {}
+                    ),
+                    **(
+                        {"enter_hold_until": scene.enter_hold_until}
+                        if scene.enter_hold_until is not None
+                        else {}
+                    ),
+                    **(
+                        {"motion_start": scene.motion_start}
+                        if scene.motion_start is not None
+                        else {}
+                    ),
+                    **(
+                        {"motion_end": scene.motion_end}
+                        if scene.motion_end is not None
+                        else {}
+                    ),
+                    **(
+                        {"exit_duration": scene.exit_duration}
+                        if scene.exit_duration is not None
+                        else {}
+                    ),
+                    **(
+                        {"motion_scale": scene.motion_scale}
+                        if scene.motion_scale is not None
+                        else {}
+                    ),
+                    **({"align": scene.align} if scene.align else {}),
+                    **({"size": scene.size} if scene.size else {}),
+                    **(
+                        {"accent_style": scene.accent_style}
+                        if scene.accent_style
+                        else {}
+                    ),
+                    **(
+                        {"enter_style": scene.enter_style}
+                        if scene.enter_style
+                        else {}
+                    ),
+                }
+            )
         elif scene.type == "hero":
             scenes.append({"type": "hero", "frames": n, "word": scene.word, "sub": scene.sub})
         elif scene.type == "ui":
@@ -1881,29 +4422,23 @@ def build_film_spec(
                 }
             )
         elif scene.type == "reveal":
-            # lead → beat pause → word (the reference arc): the lead holds
-            # its lead_seconds, then the word lands ON the music grid —
-            # the next beat at/after the lead's end, plus one real beat of
-            # black pause. No grid = the silent-cut fallback (a music-less
-            # film has no beat to land on — the half-second hold is a plain
-            # pause, never passed off as a beat). The word phase always
-            # keeps ≥1s.
-            word_f = round(scene.lead_seconds * FILM_FPS) + FILM_FPS // 2
-            if beat_s:
-                lead_end_abs = cursor / FILM_FPS + scene.lead_seconds
-                beats_list = (music or {}).get("beats")
-                nxt = (
-                    min((b for b in beats_list if b >= lead_end_abs - 1e-9), default=None)
-                    if isinstance(beats_list, list)
-                    else None
+            # lead → beat pause → word (the reference arc): the onset comes
+            # from the ONE onset seat on the current grid — or from the
+            # FROZEN cut (``reveal_onsets``): a kept cut preserves the
+            # word's landing beat exactly (冻结场内切点 — the (possibly new)
+            # bed's grid is never re-snapped onto a cut the user approved
+            # as kept); the clamp only guards a corrupt envelope.
+            frozen_onset = reveal_onsets[idx] if reveal_onsets is not None else None
+            if frozen_onset is not None:
+                word_f = max(FILM_FPS, min(int(frozen_onset), n - FILM_FPS))
+            else:
+                word_f = reveal_onset_frames(
+                    scene,
+                    cursor_frames=cursor,
+                    scene_frames=n,
+                    beat_s=beat_s,
+                    beats=(music or {}).get("beats"),
                 )
-                word_abs = (
-                    nxt + beat_s
-                    if nxt is not None
-                    else math.ceil(lead_end_abs / beat_s - 1e-9) * beat_s + beat_s
-                )
-                word_f = round((word_abs - cursor / FILM_FPS) * FILM_FPS)
-            word_f = max(FILM_FPS, min(word_f, n - FILM_FPS))
             scenes.append(
                 {
                     "type": "reveal",
@@ -1923,6 +4458,134 @@ def build_film_spec(
                     "tagline": scene.tagline,
                     "url": pages[0].host,
                     "logo_url": None,
+                }
+            )
+        elif scene.type == "composite":
+            # ADR-140: element windows re-check against the SNAPPED/FLEXED
+            # allocation (the authored-seconds seat is validate_storyboard;
+            # this is the spec-build mirror — an overflow is a concrete
+            # conflict, never a clamp). Media elements resolve asset id →
+            # storage key HERE (the spec carries keys like ui.image does;
+            # absolutized at render time by the same seam). An unresolvable
+            # id fails honestly, never a silent drop.
+            comp_violations = _composite_violations(
+                scene, frames=n, media=media, where=f"scene[{idx}](composite)"
+            )
+            if comp_violations:
+                raise FilmStoryboardRejected(
+                    [v.code for v in comp_violations],
+                    format_violations(comp_violations),
+                )
+            elements: list[dict[str, Any]] = []
+            for el in scene.elements:
+                if el.kind == "text":
+                    elements.append(
+                        {
+                            "kind": "text",
+                            "id": el.element_id,
+                            "lines": el.lines,
+                            "tone": el.tone,
+                            "at": el.at,
+                            # ``until`` null = scene end — null stays out of
+                            # the spec (the renderer resolves the scene's
+                            # own frames), the words plane's convention.
+                            **({"until": el.until} if el.until is not None else {}),
+                            "rect": el.rect.model_dump(mode="json"),
+                            "z": el.z,
+                            # Null timing/vocabulary keys stay out of the
+                            # spec — the words plane's convention verbatim.
+                            **({"enter": el.enter} if el.enter else {}),
+                            **({"motion": el.motion} if el.motion else {}),
+                            **(
+                                {"enter_start": el.enter_start}
+                                if el.enter_start is not None
+                                else {}
+                            ),
+                            **(
+                                {"enter_interval": el.enter_interval}
+                                if el.enter_interval is not None
+                                else {}
+                            ),
+                            **(
+                                {"enter_duration": el.enter_duration}
+                                if el.enter_duration is not None
+                                else {}
+                            ),
+                            **(
+                                {"motion_start": el.motion_start}
+                                if el.motion_start is not None
+                                else {}
+                            ),
+                            **(
+                                {"motion_end": el.motion_end}
+                                if el.motion_end is not None
+                                else {}
+                            ),
+                            **(
+                                {"exit_duration": el.exit_duration}
+                                if el.exit_duration is not None
+                                else {}
+                            ),
+                            **(
+                                {"motion_scale": el.motion_scale}
+                                if el.motion_scale is not None
+                                else {}
+                            ),
+                            **({"align": el.align} if el.align else {}),
+                            **({"size": el.size} if el.size else {}),
+                            **(
+                                {"accent_style": el.accent_style}
+                                if el.accent_style
+                                else {}
+                            ),
+                            **(
+                                {"enter_style": el.enter_style}
+                                if el.enter_style
+                                else {}
+                            ),
+                        }
+                    )
+                    continue
+                entry = media.assets.get(el.asset) if media is not None else None
+                if entry is None or not entry.key:
+                    raise FilmStoryboardRejected(
+                        [CONSTRAINT_VIOLATION],
+                        f"scene[{idx}](composite).{el.element_id}: asset "
+                        f"{el.asset} has no resolvable media key — the "
+                        "composition can only cite the project's own media",
+                    )
+                emitted = {
+                    "kind": el.kind,
+                    "id": el.element_id,
+                    "src": entry.key,
+                    "at": el.at,
+                    "rect": el.rect.model_dump(mode="json"),
+                    "fit": el.fit,
+                    "z": el.z,
+                }
+                if el.kind == "video":
+                    emitted.update(
+                        {
+                            "source_start": el.source_start,
+                            "source_end": el.source_end,
+                            "keep_audio": el.keep_audio,
+                            **(
+                                {"duration": el.duration}
+                                if el.duration is not None
+                                else {}
+                            ),
+                        }
+                    )
+                else:
+                    if el.until is not None:
+                        emitted["until"] = el.until
+                elements.append(emitted)
+            scenes.append(
+                {
+                    "type": "composite",
+                    "frames": n,
+                    "dark": scene.dark,
+                    "elements": elements,
                 }
             )
         # 配音轨 (ADR-130): the scene's narration object key, baked by
@@ -1967,6 +4630,393 @@ def build_film_spec(
     return spec
 
 
+def ui_focus_moves(
+    scene: FilmSceneUi, pages: list[StoryboardPage], *, with_ids: bool = False
+) -> list[str]:
+    """A ui scene's camera moves with each element-named focus resolved to
+    its captured text — never a raw DOM id (ADR-121 B2). ONE resolution
+    seat: the design beat's fact sheet (``with_ids=False`` — user-bound
+    text never carries internal ids) and the chat read's取景文本
+    (``with_ids=True`` — the read is model-facing internal fact: the id an
+    ``update_scene`` focus must name rides along; an element that no longer
+    resolves against the current inventory is NAMED as drift, never
+    silently demoted to a center push)."""
+    moves: list[str] = []
+    for f in scene.focuses:
+        target = None
+        if f.element is not None and 0 <= scene.page < len(pages):
+            pg = pages[scene.page]
+            elts = (
+                pg.shots[scene.shot].elements
+                if pg.shots and scene.shot < len(pg.shots)
+                else []
+            )
+            el = next((e for e in elts if e.id == f.element), None)
+            if el is not None:
+                target = f'"{el.text}" ({el.kind})' if el.text else el.kind
+        if target is not None:
+            moves.append(
+                f"push to {target} [{f.element}] at {f.at:g}s"
+                if with_ids
+                else f"push to {target} at {f.at:g}s"
+            )
+        elif with_ids and f.element is not None:
+            moves.append(
+                f"push to [{f.element}] (not in the view's current "
+                f"inventory) at {f.at:g}s"
+            )
+        else:
+            moves.append(f"center push at {f.at:g}s")
+    return moves
+
+
+def words_timing_clause(scene: "FilmScene", frame_count: int | None = None) -> str:
+    """The words plane's effective timing as ONE fact clause (design
+    presentation + read-back + patch summary all ride it). Every set value
+    shows the REQUESTED seconds, the quantized frame, AND the frame's
+    realized seconds — quantization moves a decimal (0.12s→f4 renders
+    0.133s) and the presentation never hides that; omitted pieces name
+    their deterministic default instead of disappearing into an implicit
+    renderer formula. The enter clause ends with the computed last-unit
+    schedule (start / fully-in frames + seconds): the interval's per-step
+    quantization delta ACCUMULATES down a long token/line run, so the honest
+    disclosure is the computed landing, never a claimed sequence-wide
+    sub-frame bound."""
+    if scene.type != "words":
+        return ""
+    frames = (
+        frame_count
+        if frame_count is not None
+        else film_seconds_to_frames(scene.seconds)
+    )
+
+    def _realized(f: int) -> str:
+        return f"{f / FILM_FPS:.3f}s"
+
+    clauses: list[str] = []
+    if any(
+        getattr(scene, key, None) is not None
+        for key in _ENTER_TIMING_FIELDS
+    ):
+        (
+            tokens,
+            start_f,
+            step_f,
+            duration_f,
+            _hold_f,
+            last_start_f,
+            last_end_f,
+        ) = _enter_schedule_frames(
+            scene.lines,
+            frames=frames,
+            enter_start=scene.enter_start,
+            enter_interval=scene.enter_interval,
+            enter_duration=scene.enter_duration,
+            enter_hold_until=scene.enter_hold_until,
+            unit=scene.enter or "lines",
+        )
+
+        def _seconds_and_frames(label: str, value: float | None, fallback_f: int) -> str:
+            if value is None:
+                return f"{label} default f{fallback_f} ({_realized(fallback_f)})"
+            f = film_seconds_to_frames(value)
+            return f"{label} {value:g}s→f{f} ({_realized(f)})"
+
+        hold = (
+            f"hold until {scene.enter_hold_until:g}s→f{film_seconds_to_frames(scene.enter_hold_until)}"
+            f" ({_realized(film_seconds_to_frames(scene.enter_hold_until))})"
+            if scene.enter_hold_until is not None
+            else f"hold to scene end (f{frames})"
+        )
+        unit_label = "tokens" if scene.enter == "words" else "lines"
+        clauses.append(
+            "enter timing: "
+            + " · ".join(
+                [
+                    _seconds_and_frames("start", scene.enter_start, start_f),
+                    _seconds_and_frames("interval", scene.enter_interval, step_f),
+                    _seconds_and_frames("duration", scene.enter_duration, duration_f),
+                    hold,
+                ]
+            )
+            + f" · {tokens} {unit_label}, last starts f{last_start_f} "
+            f"({_realized(last_start_f)}), fully in f{last_end_f} "
+            f"({_realized(last_end_f)})"
+        )
+    if any(
+        getattr(scene, key, None) is not None
+        for key in _MOTION_TIMING_FIELDS
+    ):
+        start = (
+            f"{scene.motion_start:g}s→f{film_seconds_to_frames(scene.motion_start)}"
+            f" ({_realized(film_seconds_to_frames(scene.motion_start))})"
+            if scene.motion_start is not None
+            else "scene start f0"
+        )
+        end = (
+            f"{scene.motion_end:g}s→f{film_seconds_to_frames(scene.motion_end)}"
+            f" ({_realized(film_seconds_to_frames(scene.motion_end))})"
+            if scene.motion_end is not None
+            else f"scene end f{frames}"
+        )
+        clauses.append(f"motion window: {start}–{end}")
+    if scene.exit_duration is not None:
+        exit_f = film_seconds_to_frames(scene.exit_duration)
+        end_f = (
+            film_seconds_to_frames(scene.enter_hold_until)
+            if scene.enter_hold_until is not None
+            else frames
+        )
+        start_f = end_f - exit_f
+        clauses.append(
+            f"exit fade: {scene.exit_duration:g}s→f{exit_f} "
+            f"({_realized(exit_f)}), f{start_f}–f{end_f} — the words fade "
+            "out, the background stays"
+        )
+    if scene.motion_scale is not None:
+        clauses.append(f"motion scale ×{scene.motion_scale:g}")
+    return " · ".join(clauses)
+
+
+def _text_style_clause(obj: Any) -> str:
+    """The text plane's style facts (centering / size tier / accent
+    rendering / entrance effect) — ONE clause shared by the fact sheet, the
+    chat read and the patch summary; the defaults (left / medium / chip /
+    rise) stay silent."""
+    bits: list[str] = []
+    if getattr(obj, "align", None) == "center":
+        bits.append("centered")
+    if getattr(obj, "size", None) not in (None, "medium"):
+        bits.append(f"size {obj.size}")
+    if getattr(obj, "accent_style", None) == "color":
+        bits.append("emphasis in the accent color")
+    if getattr(obj, "enter_style", None) == "fade":
+        bits.append("fade-only entrance (no rise, no blur)")
+    if getattr(obj, "enter_style", None) == "slide":
+        bits.append("slide-only entrance (no fade, no blur)")
+    return " · ".join(bits)
+
+
+def _rect_clause(rect: Any) -> str:
+    """An element rect as a compact fact clause — the default full canvas
+    says nothing (the common case stays silent)."""
+    if rect is None:
+        return ""
+    if (
+        abs(rect.x) < 1e-9
+        and abs(rect.y) < 1e-9
+        and abs(rect.w - 1.0) < 1e-9
+        and abs(rect.h - 1.0) < 1e-9
+    ):
+        return ""
+    return f" at ({rect.x:g},{rect.y:g}) {rect.w:g}×{rect.h:g}"
+
+
+def element_timing_clause(el: "FilmElementText", frames: int) -> str:
+    """A composite text element's effective timing as ONE fact clause
+    (ADR-140) — the words plane's clause in miniature: every set value
+    shows requested seconds, quantized frame, and realized time; the
+    window's hard leave (``until``, null = scene end — the caller resolves
+    it against the SCENE's ``frames``) IS the hold end."""
+    until_f = film_seconds_to_frames(el.until) if el.until is not None else frames
+    window_f = until_f - film_seconds_to_frames(el.at)
+
+    def _realized(f: int) -> str:
+        return f"{f / FILM_FPS:.3f}s"
+
+    clauses: list[str] = []
+    if any(
+        getattr(el, key, None) is not None
+        for key in ("enter_start", "enter_interval", "enter_duration")
+    ):
+        (
+            tokens,
+            start_f,
+            step_f,
+            duration_f,
+            _hold_f,
+            last_start_f,
+            last_end_f,
+        ) = _enter_schedule_frames(
+            el.lines,
+            frames=window_f,
+            enter_start=el.enter_start,
+            enter_interval=el.enter_interval,
+            enter_duration=el.enter_duration,
+            enter_hold_until=None,
+            unit=el.enter or "lines",
+        )
+
+        unit_label = "tokens" if el.enter == "words" else "lines"
+
+        def _seconds_and_frames(label: str, value: float | None, fallback_f: int) -> str:
+            if value is None:
+                return f"{label} default f{fallback_f} ({_realized(fallback_f)})"
+            f = film_seconds_to_frames(value)
+            return f"{label} {value:g}s→f{f} ({_realized(f)})"
+
+        clauses.append(
+            "enter timing: "
+            + " · ".join(
+                [
+                    _seconds_and_frames("start", el.enter_start, start_f),
+                    _seconds_and_frames("interval", el.enter_interval, step_f),
+                    _seconds_and_frames("duration", el.enter_duration, duration_f),
+                    f"holds until the element leaves (f{window_f})",
+                ]
+            )
+            + f" · {tokens} {unit_label}, last starts f{last_start_f} "
+            f"({_realized(last_start_f)}), fully in f{last_end_f} "
+            f"({_realized(last_end_f)})"
+        )
+    if el.motion_start is not None or el.motion_end is not None:
+        start = (
+            f"{el.motion_start:g}s→f{film_seconds_to_frames(el.motion_start)}"
+            f" ({_realized(film_seconds_to_frames(el.motion_start))})"
+            if el.motion_start is not None
+            else "element start f0"
+        )
+        end = (
+            f"{el.motion_end:g}s→f{film_seconds_to_frames(el.motion_end)}"
+            f" ({_realized(film_seconds_to_frames(el.motion_end))})"
+            if el.motion_end is not None
+            else f"element end f{window_f}"
+        )
+        clauses.append(f"motion window: {start}–{end}")
+    if el.exit_duration is not None:
+        exit_f = film_seconds_to_frames(el.exit_duration)
+        clauses.append(
+            f"exit fade: {el.exit_duration:g}s→f{exit_f} "
+            f"({_realized(exit_f)}), f{window_f - exit_f}–f{window_f} — the "
+            "words fade out, the background stays"
+        )
+    if el.motion_scale is not None:
+        clauses.append(f"motion scale ×{el.motion_scale:g}")
+    return " · ".join(clauses)
+
+
+def film_scene_content(
+    scene: "FilmScene",
+    frame_count: int | None = None,
+    media: "StoryboardMedia | None" = None,
+) -> str:
+    """A scene's display copy, verbatim, one compact clause — the chat
+    read's content seat (the model editing 「结尾那句」 must SEE the current
+    words; material screenshots never carry the film's overlay text).
+    Field coverage mirrors the design beat's fact sheet
+    (``storyboard_presentation``): a scene model's new copy field belongs
+    in BOTH. Narration rides its own clause, never merged here; nothing is
+    summarized, reworded, or guessed. ui scenes carry no copy (their
+    content is the view/focuses)."""
+    if scene.type == "words":
+        vocab = []
+        if scene.motion and scene.motion != "static":
+            vocab.append(scene.motion)
+        if scene.enter == "words":
+            vocab.append("word-by-word")
+        timing = words_timing_clause(scene, frame_count)
+        if timing:
+            vocab.append(timing)
+        style = _text_style_clause(scene)
+        if style:
+            vocab.append(style)
+        return " / ".join(f'"{line}"' for line in scene.lines) + (
+            " (dark)" if scene.dark else ""
+        ) + (f" · {' · '.join(vocab)}" if vocab else "")
+    if scene.type == "hero":
+        return f'word: "{scene.word}" · sub: "{scene.sub}"'
+    if scene.type == "divider":
+        return f'label: "{scene.label}" · roll: {" / ".join(scene.roll)}'
+    if scene.type == "plate":
+        cards = " · ".join(
+            f'"{c.big}" — "{c.label}"' if c.big else f'"{c.label}"'
+            for c in scene.cards
+        )
+        return f'title: "{scene.title}" · cards: {cards}'
+    if scene.type == "reveal":
+        return f'lead: "{scene.lead}" · then: "{scene.word}" — "{scene.sub}"'
+    if scene.type == "end":
+        return f'name: "{scene.name}" · tagline: "{scene.tagline}"'
+    if scene.type == "composite":
+        # ADR-140: every element's facts, verbatim — media elements name
+        # their asset's title when the media universe is at hand (never
+        # guessed), text elements show their copy and timing.
+        frames = (
+            frame_count
+            if frame_count is not None
+            else film_seconds_to_frames(scene.seconds)
+        )
+        parts: list[str] = []
+        for el in scene.elements:
+            pos = _rect_clause(el.rect)
+            name = ""
+            asset_facts = ""
+            if el.kind in ("video", "image"):
+                # The media universe names the asset's title when known; a
+                # cited id ABSENT from it is named as missing (drift), never
+                # left blank to be guessed around.
+                if media is not None:
+                    entry = media.assets.get(el.asset)
+                    if entry is not None and entry.title:
+                        name = f' "{entry.title}"'
+                    elif entry is None:
+                        name = " (asset not in project media)"
+                    if entry is not None and el.kind == "video":
+                        # The material's own length — the fact a
+                        # source-window decision reads from (known, or
+                        # honestly unknown; never guessed).
+                        asset_facts = (
+                            f" ({entry.duration_seconds:g}s asset)"
+                            if entry.duration_seconds is not None
+                            else " (asset duration unknown)"
+                        )
+            extras: list[str] = []
+            if el.kind in ("video", "image") and el.fit != "cover":
+                extras.append(el.fit)
+            if el.z:
+                extras.append(f"z{el.z}")
+            tail = f" · {' · '.join(extras)}" if extras else ""
+            if el.kind == "video":
+                play = (
+                    el.duration
+                    if el.duration is not None
+                    else el.source_end - el.source_start
+                )
+                audio = " · keeps its sound" if el.keep_audio else ""
+                parts.append(
+                    f"video [{el.element_id}]{name}{asset_facts} source "
+                    f"{el.source_start:g}–{el.source_end:g}s → plays {play:g}s "
+                    f"from {el.at:g}s{audio}{tail}{pos}"
+                )
+            elif el.kind == "image":
+                leave = f"{el.until:g}s" if el.until is not None else "the scene's end"
+                parts.append(
+                    f"image [{el.element_id}]{name} on screen "
+                    f"{el.at:g}s–{leave}{tail}{pos}"
+                )
+            else:
+                leave = f"{el.until:g}s" if el.until is not None else "the scene's end"
+                vocab = []
+                if el.motion and el.motion != "static":
+                    vocab.append(el.motion)
+                if el.enter == "words":
+                    vocab.append("word-by-word")
+                timing = element_timing_clause(el, frames)
+                if timing:
+                    vocab.append(timing)
+                style = _text_style_clause(el)
+                if style:
+                    vocab.append(style)
+                parts.append(
+                    f"text [{el.element_id}] "
+                    + " / ".join(f'"{line}"' for line in el.lines)
+                    + f" · on screen {el.at:g}s–{leave} ({el.tone}){tail}{pos}"
+                    + (f" · {' · '.join(vocab)}" if vocab else "")
+                )
+        return " · ".join(parts) + (" · dark" if scene.dark else "")
+    return ""  # ui: no overlay copy
+
+
 def storyboard_presentation(
     storyboard: FilmStoryboard,
     pages: list[StoryboardPage],
@@ -1976,6 +5026,9 @@ def storyboard_presentation(
     beats: list[float] | None = None,
     bpm: float | None = None,
     captions: bool = False,
+    source_note: str | None = None,
+    media: StoryboardMedia | None = None,
+    frame_override: list[int] | None = None,
 ) -> str:
     """The design beat's FACT SHEET for the presenting model (2026-10-18
     裁决 — 工具产生真实分镜, LLM 负责唯一表达): every user-visible fact
@@ -1987,6 +5040,11 @@ def storyboard_presentation(
     next step). The program no longer publishes its own markdown row —
     one storyboard, one voice.
 
+    ``frame_override`` is the saved version's frozen per-scene cut when a
+    patch inherited one; without it, the usual execution timeline is
+    projected from the resolved bed grid. This keeps a revision's displayed
+    windows identical to the version Start will consume.
+
     Completeness law (对内必须足够准确, 对外可以简洁): the name and the
     ACTUAL narration language, aspect/fps, the execution timeline's total
     seconds + frames, the bed label + BPM, per-scene order / type / arc
@@ -1995,9 +5053,11 @@ def storyboard_presentation(
     id), the VERBATIM narration per scene (a silent scene says so — the
     model never guesses), and the compact source list (host+path+title —
     traceable without line-id spam)."""
-    frames = allocate_frames(storyboard)
-    if beats:
-        frames = snap_frames_to_beats(storyboard, frames, beats)
+    frames = (
+        list(frame_override)
+        if frame_override is not None
+        else execution_frames(storyboard, beats)
+    )
     total_frames = sum(frames)
     total = round(total_frames / FILM_FPS, 1)
 
@@ -2010,6 +5070,10 @@ def storyboard_presentation(
     ]
     if music:
         head_bits.append(f"music: {music}")
+    # 配音开关恒显 (默认无配音): the presenting model must always be able to
+    # SAY the real voiceover state — a silent default that never appears on
+    # the fact sheet reads as an omission the model then improvises around.
+    head_bits.append(f"voiceover: {'on' if captions else 'off'}")
     if captions and any(s.narration for s in storyboard.scenes):
         head_bits.append("captions: narration")
 
@@ -2038,7 +5102,7 @@ def storyboard_presentation(
             else:
                 roles.append("home walk")
         elif s.type == "words":
-            roles.append("cold open")
+            roles.append("cold open" if pages else "text plane")
         elif s.type == "hero":
             roles.append("brand hero")
         elif s.type == "plate":
@@ -2046,6 +5110,8 @@ def storyboard_presentation(
         elif s.type == "reveal":
             roles.append("reveal")
             revealed = True
+        elif s.type == "composite":
+            roles.append("media composition")
         else:
             roles.append("closing card")
 
@@ -2053,13 +5119,28 @@ def storyboard_presentation(
         start = round(sum(frames[: idx - 1]) / FILM_FPS, 1)
         end = round(sum(frames[:idx]) / FILM_FPS, 1)
         span = round(frames[idx - 1] / FILM_FPS, 1)
+        # The stable scene id rides the header (the edit path's handle — the
+        # model names scenes by id in update/reorder/remove ops).
+        sid = getattr(s, "scene_id", None)
         out = [
-            f"scene {idx} · {s.type} · {roles[idx - 1]} · "
+            f"scene {idx}{f' [{sid}]' if sid else ''} · {s.type} · {roles[idx - 1]} · "
             f"{start:g}–{end:g}s · {span:g}s · {frames[idx - 1]} frames"
         ]
         if s.type == "words":
+            vocab = []
+            if s.motion and s.motion != "static":
+                vocab.append(s.motion)
+            if s.enter == "words":
+                vocab.append("word-by-word")
+            timing = words_timing_clause(s, frames[idx - 1])
+            if timing:
+                vocab.append(timing)
+            style = _text_style_clause(s)
+            if style:
+                vocab.append(style)
             out.append(
                 f"  shows: {' / '.join(s.lines)}{' (dark)' if s.dark else ''}"
+                + (f" · {' · '.join(vocab)}" if vocab else "")
             )
         elif s.type == "hero":
             out.append(f'  shows: "{s.word}" — {s.sub}')
@@ -2076,24 +5157,7 @@ def storyboard_presentation(
                 else f"  shows: {label} shot {s.shot}"
             )
             out[-1] += " · browser frame" if s.frame else " · full-bleed"
-            moves: list[str] = []
-            for f in s.focuses:
-                target = None
-                if f.element is not None and 0 <= s.page < len(pages):
-                    pg = pages[s.page]
-                    elts = (
-                        pg.shots[s.shot].elements
-                        if pg.shots and s.shot < len(pg.shots)
-                        else []
-                    )
-                    el = next((e for e in elts if e.id == f.element), None)
-                    if el is not None:
-                        target = f'"{el.text}" ({el.kind})' if el.text else el.kind
-                moves.append(
-                    f"push to {target} at {f.at:g}s"
-                    if target
-                    else f"center push at {f.at:g}s"
-                )
+            moves = ui_focus_moves(s, pages)
             if moves:
                 out.append("  camera: wide → " + " → ".join(moves) + " → settle")
         elif s.type == "divider":
@@ -2110,6 +5174,10 @@ def storyboard_presentation(
             out.append(f'  then: "{s.word}" — {s.sub}')
         elif s.type == "end":
             out.append(f"  shows: {s.name} — {s.tagline}")
+        elif s.type == "composite":
+            # The element facts ride the ONE content seat (ADR-140) —
+            # fact sheet and chat read can never drift apart.
+            out.append(f"  shows: {film_scene_content(s, frames[idx - 1], media)}")
         out.append(
             f'  narration: "{s.narration}"'
             if s.narration
@@ -2120,7 +5188,9 @@ def storyboard_presentation(
     sources = " · ".join(dict.fromkeys(page_label(p) for p in range(len(pages))))
     lines = [
         " · ".join(head_bits),
-        f"sources: {sources}",
+        # The echo anti-fabrication law: a text film names its real source
+        # (the user's copy / the assistant's draft), never an invented URL.
+        source_note or f"sources: {sources}",
         "",
     ]
     for i, s in enumerate(storyboard.scenes, 1):
@@ -2200,6 +5270,144 @@ def _assemble(
         },
         page_images,
     )
+
+
+def current_text_direction_dict(storyboard: FilmStoryboard) -> dict[str, Any]:
+    """The text board under review as the text director's revision base
+    (修订基于当前稿, the text twin of current_direction_dict): words
+    segments as RESOLVED display lines (real strings — the model re-cites
+    what it keeps), composite segments as their element facts (asset ids,
+    source windows, placements — the model re-addresses what it keeps).
+    EVERY scene projects (a scene silently dropped from the revision base
+    would be re-invented from scratch on the next redraft — the 修订基于
+    当前稿 law's completeness half)."""
+    segments: list[dict[str, Any]] = []
+    for s in storyboard.scenes:
+        if s.type == "composite":
+            elements: list[dict[str, Any]] = []
+            for el in s.elements:
+                dump = el.model_dump(mode="json")
+                # Code-owned seats never ride the revision base: identity
+                # (re-minted at assembly) and the corpus anchor (re-derived
+                # from the cited lines).
+                dump.pop("element_id", None)
+                dump.pop("copy_text", None)
+                elements.append(dump)
+            segments.append(
+                {
+                    "type": "composite",
+                    "dark": s.dark,
+                    "narration": s.narration,
+                    "elements": elements,
+                }
+            )
+            continue
+        segments.append(
+            {
+                "type": "words",
+                "lines": list(s.lines),
+                "dark": s.dark,
+                "motion": s.motion,
+                "enter": s.enter,
+                "enter_start": s.enter_start,
+                "enter_interval": s.enter_interval,
+                "enter_duration": s.enter_duration,
+                "enter_hold_until": s.enter_hold_until,
+                "motion_start": s.motion_start,
+                "motion_end": s.motion_end,
+                "exit_duration": s.exit_duration,
+                "motion_scale": s.motion_scale,
+                "align": s.align,
+                "size": s.size,
+                "accent_style": s.accent_style,
+                "enter_style": s.enter_style,
+                "narration": s.narration,
+            }
+        )
+    return {
+        "name": storyboard.name,
+        "language": storyboard.language,
+        "segments": segments,
+    }
+
+
+def _assemble_text(
+    lines: list[dict[str, Any]],
+    instruction: str | None,
+    focus: str | None,
+    language: str | None,
+    current: dict[str, Any] | None,
+    voiceover: bool,
+    verbatim: bool,
+    target_seconds: float | None,
+    scene_count: int | None,
+    media: list[dict[str, Any]] | None = None,
+    composite_ok: bool = False,
+    media_more: int = 0,
+    group: tuple[int, int] | None = None,
+) -> AssembleResult:
+    """The text director's answer sheet (purity by signature, the
+    ``_assemble`` twin): the numbered copy lines (its citation universe in
+    verbatim mode), the run's instruction, the focus steer, the pinned
+    language, the board under review, the voiceover promise, and the copy's
+    ROLE (verbatim = cite, never rewrite) plus the user's named shape
+    (duration / scene count / on-screen group size — ``group`` = [min, max]
+    字 per screen).
+
+    ``media`` = the project's composite-candidate listing (the ONE listing
+    seat's rows — the model cites ids from it, never invents one);
+    ``composite_ok`` = the media-composition capability's deployment gate —
+    both ride the template's conditional section (gate OFF = the composite
+    vocabulary never enters the prompt); ``media_more`` = the honest
+    truncation count (assets existing beyond the printed listing — a
+    truncated listing is never "the asset does not exist"). No screenshots
+    exist on this source — nothing else."""
+    return (
+        {
+            "lines": lines,
+            "instruction": instruction,
+            "focus": focus,
+            "language": language,
+            "current": current,
+            "voiceover": voiceover,
+            "verbatim": verbatim,
+            "target_seconds": target_seconds,
+            "scene_count": scene_count,
+            "group": group,
+            "media": media,
+            "composite_ok": composite_ok,
+            "media_more": media_more,
+        },
+        [],
+    )
+
+
+film_text_director = Agent[FilmTextDirection](
+    name="film_text_director",
+    prompt="film_director_text.j2",
+    schema=FilmTextDirection,
+    system=(
+        "You are a film director cutting a TEXT film: solid-color text "
+        "planes and — when the project's media is offered — composite "
+        "scenes placing that media beside independent text on one screen. "
+        "You decide the segmentation (which lines land together on one "
+        "screen), each segment's composition and rhythm, and the narration "
+        "when the plan promises voiceover. Durations and scene budgets are "
+        "decided for you (a composite scene's length comes from its "
+        "element windows). When the copy is the user's own text "
+        "(verbatim), you CITE its lines by number — you never write, trim, "
+        "reorder or reword them. Media elements cite asset ids from the "
+        "project's media listing only — you never invent an id, and you "
+        "have not watched the footage: when the request depends on what "
+        "happens at a moment, the time range comes from the user."
+    ),
+    assemble=_assemble_text,
+    temperature=0.5,
+    # No skill pack: the launch-film pack's arc vocabulary is the WEB
+    # source's (chapters / page walks); the text law lives in the template.
+    stream=True,
+    timeout_s=300,
+)
 
 
 film_director = Agent[FilmDirection](
@@ -2367,6 +5575,225 @@ async def load_storyboard_pages(db: AsyncSession, project: Project) -> list[Stor
     return pages
 
 
+def composite_asset_ids(board: FilmStoryboard | None) -> list[str]:
+    """The ordered unique asset ids a board's composite scenes cite
+    (ADR-140) — the media loader's fetch list. Empty for every legacy
+    board, so the media universe costs nothing when unused."""
+    ids: list[str] = []
+    if board is None:
+        return ids
+    for scene in board.scenes:
+        if scene.type != "composite":
+            continue
+        for el in scene.elements:
+            if el.kind in ("video", "image") and el.asset not in ids:
+                ids.append(el.asset)
+    return ids
+
+
+async def load_storyboard_media(
+    db: AsyncSession,
+    project: Project,
+    board: FilmStoryboard | None,
+    *,
+    probe_duration: bool = False,
+) -> StoryboardMedia:
+    """The composite scenes' cited assets → the media universe (ADR-140).
+    Only assets OWNED by this project resolve — a foreign or fabricated id
+    simply never enters the map (the validator names it unresolved).
+
+    ``probe_duration`` (the write seats — patch / run): a video whose
+    ``duration_seconds`` is unknown (dormant, never ASR'd) gets ONE honest
+    probe — the bytes come down through the shared cache and PyAV reads the
+    container header — and the probed seconds are written back to the row
+    (riding the caller's transaction). The Integer ``duration_seconds``
+    column stores the FLOOR (display/legacy seats), while the EXACT probed
+    value rides ``meta["probed_duration_seconds"]`` — flooring away the
+    sub-second truth would falsely reject a legitimate trailing source
+    window on every later read (复审缺陷③). Probe failure leaves the
+    duration unknown, never guessed. Read seats pass False and report
+    "unknown" honestly."""
+    ids = composite_asset_ids(board)
+    if not ids:
+        return StoryboardMedia(assets={})
+    uuid_ids: list[UUID] = []
+    for raw in ids:
+        with suppress(ValueError):
+            uuid_ids.append(UUID(raw))
+    if not uuid_ids:
+        return StoryboardMedia(assets={})
+    rows = list(
+        (
+            await db.execute(
+                select(Asset)
+                .where(Asset.project_id == project.id, Asset.id.in_(uuid_ids))
+                .execution_options(populate_existing=True)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assets: dict[str, StoryboardMediaAsset] = {}
+    for row in rows:
+        meta = row.meta if isinstance(row.meta, dict) else {}
+        duration = (
+            float(row.duration_seconds)
+            if row.duration_seconds is not None
+            else None
+        )
+        # The probed sub-second truth (same bytes, finer precision) wins over
+        # the floored Integer column whenever both are on the row.
+        probed_known = meta.get("probed_duration_seconds")
+        if isinstance(probed_known, (int, float)) and not isinstance(
+            probed_known, bool
+        ):
+            duration = float(probed_known)
+        if (
+            probe_duration
+            and duration is None
+            and row.type == AssetType.VIDEO
+            and row.file_url
+        ):
+            probed = await _probe_video_duration(row.file_url)
+            if probed is not None:
+                duration = probed
+                # Write-back (the _track_beats_backfilled precedent): the
+                # next seat reads the row instead of re-downloading. Floor
+                # into the Integer column — never round UP past the truth —
+                # and pin the exact value in meta so later reads keep the
+                # sub-second truth.
+                row.duration_seconds = int(probed)
+                row.meta = {**meta, "probed_duration_seconds": probed}
+        assets[str(row.id)] = StoryboardMediaAsset(
+            id=str(row.id),
+            key=row.file_url,
+            kind=row.type.value,
+            title=row.display_name,
+            duration_seconds=duration,
+            width=meta.get("width") if isinstance(meta.get("width"), int) else None,
+            height=meta.get("height") if isinstance(meta.get("height"), int) else None,
+        )
+    return StoryboardMedia(assets=assets)
+
+
+async def _probe_video_duration(key: str) -> float | None:
+    """Container-header duration probe over the shared download cache —
+    degrade-to-absence, never an exception up the stack."""
+    try:
+        from app.providers.storage import download_to_cache
+
+        path = await download_to_cache(key)
+        if path is None:
+            return None
+        import av  # faster-whisper dep; no system ffmpeg needed
+
+        with av.open(str(path)) as container:
+            if container.duration is None:
+                return None
+            seconds = float(container.duration) / float(av.time_base)
+            return seconds if seconds > 0 else None
+    except Exception:
+        return None
+
+
+# The media DISCOVERY listing (ADR-140 下批): the project-wide candidate
+# universe a composite design cites from. ONE seat, two consumers — the chat
+# read (list_project_media) and the text director's prompt — so the facts the
+# model reads and the facts it designs from can never drift apart.
+MEDIA_LISTING_CAP = 40  # print budget per listing (newest first)
+
+
+async def project_media_candidates(
+    db: AsyncSession,
+    project: Project,
+    *,
+    pinned_ids: list[str] | None = None,
+) -> list[dict]:
+    """The project's composite-candidate media (video + image) as FACT dicts.
+
+    Ids + facts only — storage keys never leave the server (the model cites
+    ids, code resolves the bytes; the ui scene's law). Ordered newest-first;
+    the consumers print at most ``MEDIA_LISTING_CAP`` rows per listing and
+    say so (a truncated listing is never "the asset does not exist" — the
+    41st asset is still citable, the read pages to it, and validation
+    resolves any project id regardless of what was printed).
+
+    ``pinned_ids`` (the assets the user explicitly selected, e.g. via
+    @-mentions) are lifted to the front of the listing in the given order —
+    a pinned id beyond the print cap still enters the listing. Pinning is
+    filtered through the project query itself, so a foreign or unknown id
+    can never materialise a candidate the tenant does not own.
+
+    Per row: ``id`` / ``kind`` / ``title`` / ``duration_seconds`` (None =
+    UNKNOWN — never guessed; the exact probed value wins over the floored
+    Integer column, the loader's own law) / ``width`` / ``height`` (None =
+    unknown) / ``usable`` (the media bytes exist — a transcript-less or
+    never-analysed video is still fully usable footage; composition reads
+    the BYTES, not the ASR) / ``processing`` (the content-analysis state —
+    informational, never a usability gate)."""
+    rows = list(
+        (
+            await db.execute(
+                select(Asset)
+                .where(
+                    Asset.project_id == project.id,
+                    Asset.type.in_((AssetType.VIDEO, AssetType.IMAGE)),
+                )
+                .order_by(Asset.created_at.desc())
+                .execution_options(populate_existing=True)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    candidates: list[dict] = []
+    for row in rows:
+        meta = row.meta if isinstance(row.meta, dict) else {}
+        duration = (
+            float(row.duration_seconds)
+            if row.duration_seconds is not None
+            else None
+        )
+        probed = meta.get("probed_duration_seconds")
+        if isinstance(probed, (int, float)) and not isinstance(probed, bool):
+            duration = float(probed)
+        candidates.append(
+            {
+                "id": str(row.id),
+                "kind": row.type.value,
+                "title": row.display_name,
+                "duration_seconds": duration,
+                "width": (
+                    meta.get("width") if isinstance(meta.get("width"), int) else None
+                ),
+                "height": (
+                    meta.get("height")
+                    if isinstance(meta.get("height"), int)
+                    else None
+                ),
+                "usable": bool(row.file_url),
+                "processing": (
+                    row.processing_status.value if row.processing_status else None
+                ),
+            }
+        )
+    if pinned_ids:
+        # Pinned-first: the user's explicit selection leads the listing so a
+        # pick beyond the print cap still reaches the director's context.
+        # Every pinned id has been resolved through the project-scoped query
+        # above — a foreign/unknown id simply finds no row and is ignored.
+        by_id = {c["id"]: c for c in candidates}
+        pinned = [
+            by_id[pid]
+            for pid in dict.fromkeys(str(i) for i in pinned_ids)
+            if pid in by_id
+        ]
+        if pinned:
+            pinned_set = {c["id"] for c in pinned}
+            candidates = pinned + [c for c in candidates if c["id"] not in pinned_set]
+    return candidates
+
+
 async def page_media_inputs(pages: list[StoryboardPage]) -> list[MediaInput]:
     """The page screenshots → multimodal inputs (the ui scene's camera
     targets); a missing screenshot degrades honestly (manifests still carry
@@ -2395,12 +5822,23 @@ async def orchestrate_storyboard(
     on_reject=None,
     allow_fixed_fallback: bool = True,
     voiceover: bool = True,
+    text_source: FilmTextSource | None = None,
+    media_candidates: list[dict[str, Any]] | None = None,
+    media_loader: Any = None,
+    composite_ok: bool = False,
+    media_more: int = 0,
 ) -> FilmStoryboard:
     """THE bounded direction loop (打回有界, ADR-127): the skeleton is
     code-owned; up to 1 + MAX_REWRITES direction candidates, each re-called
     with the violation echo (never a blind re-roll), each spliced into the
     skeleton by ``assemble_storyboard`` and then facing the validator.
     Returns the first assembly that passes.
+
+    ``text_source`` (ADR-138 §7.6 素材源抽象): present = the TEXT source's
+    twin loop (``_orchestrate_text_storyboard``) — the copy is the grounding
+    universe, the arc is text planes, the birth gate is the zero-copy
+    preflight instead of ``_MIN_VIEWS``. The two sources share everything
+    else: the bounded ladder, the honest terminal, the validator.
 
     Terminal ladder (honest at every rung): candidate exhaustion or an
     LLM failure (schema terminal / transport) falls to ``fixed_direction``
@@ -2419,6 +5857,21 @@ async def orchestrate_storyboard(
     burned (the skill's own law — a blocked site means stop and ask for
     screenshots). ``on_reject(attempt, violations, feedback)`` is the
     caller's logging hook."""
+    if text_source is not None:
+        return await _orchestrate_text_storyboard(
+            text_source=text_source,
+            instruction=instruction,
+            focus=focus,
+            language=language,
+            current=current,
+            on_reject=on_reject,
+            allow_fixed_fallback=allow_fixed_fallback,
+            voiceover=voiceover,
+            media_candidates=media_candidates,
+            media_loader=media_loader,
+            composite_ok=composite_ok,
+            media_more=media_more,
+        )
     lines = build_line_manifest(pages)
     skeleton = build_skeleton(pages, lines)
     if len(skeleton.views) < _MIN_VIEWS:
@@ -2510,6 +5963,296 @@ async def orchestrate_storyboard(
     raise rejection
 
 
+def _text_feasibility(
+    lines: list[ManifestLine], *, source: FilmTextSource, media_available: bool = False
+) -> FilmStoryboardRejected | None:
+    """The text film's material-feasibility preflight — it runs BEFORE any
+    model call, so the model is never asked for the impossible (the
+    cf00526d deadlock's law: never demand a full citation of an
+    unsplittable unit, then reject the unit). It judges ONLY what is
+    provably impossible before any candidate exists (复审②): the densest
+    COMPOSITE packing bounds the copy's minimum footprint (a media-only
+    scene carries no copy; several text elements share one scene), and
+    everything else — the director's composition choices — goes to the
+    candidate assembly and the real validator, never to an estimate-based
+    guess here. ``media_available`` = the project has at least one usable
+    video/image asset (the verbatim named-count bound's only media
+    dependence). None = a legal arrangement exists — the director's job is
+    findable.
+
+    改编 ≠ 逐字 (定点复审): in AUTHORED mode the input is REFERENCE
+    MATERIAL — it informs the copy the model writes, it is not text that
+    must appear on screen. Its line count, display packing and estimated
+    reading time therefore bound NOTHING about the legal output (输入长度
+    ≠ 输出篇幅): the coverage-derived checks below are verbatim-only, and
+    an authored candidate's real limits (screen capacity, element windows,
+    media ranges, the frame cap) are judged on the candidate itself by
+    assembly and the validator — never estimated here from the reference."""
+    # The densest packing: a composite scene's text elements hold up to
+    # (elements cap × per-element line cap) display lines — the real
+    # screen-capacity bound. A words plane's 4-line screen is the
+    # CONVENIENCE recipe, never the densest.
+    per_scene_cap = (
+        _LIST_CAPS["composite.elements"] * _LIST_CAPS["composite.text-lines"]
+    )
+    packed_units: list[int] = []
+    cur_units = 0
+    cur_display = 0
+    min_scenes = 0
+    for l in lines:
+        wrapped = _wrap_display_lines(l.text)
+        n = len(wrapped)
+        u = sum(_read_units(dl) for dl in wrapped)
+        if cur_units and cur_display + n > per_scene_cap:
+            packed_units.append(cur_units)
+            min_scenes += 1
+            cur_units, cur_display = 0, 0
+        cur_units += u
+        cur_display += n
+    if cur_units:
+        packed_units.append(cur_units)
+        min_scenes += 1
+    floors_sum = sum(_text_read_floor(u) for u in packed_units)
+    hi_total = TEXT_TOTAL_SECONDS_RANGE[1]
+    # The DEFAULT-pace ceiling — VERBATIM ONLY (定点复审): the estimate
+    # measures the input copy, so it can only gate a mode where the full
+    # input must appear (verbatim). In authored mode the reference
+    # condenses into the model's own copy — its estimated reading time
+    # says nothing about the output. The check only gates when NO duration
+    # is named: the estimated reading time is a recommendation, never a
+    # technical bound (2026-10-22 拍板). A named duration ≤ the cap is the
+    # user's law — the allocator rescales to it no matter what the
+    # estimate says, so this check must stand aside (a named duration OVER
+    # the cap meets the real TARGET_OVERFLOW refusal below). Without the
+    # guard the echo's own escape hatch ("OR name a duration") would be a
+    # lie.
+    if (
+        source.verbatim
+        and floors_sum > hi_total
+        and source.target_seconds is None
+    ):
+        return FilmStoryboardRejected(
+            ["TEXT_BEYOND_REACH"],
+            f"the full copy reads for ~{floors_sum:g}s at the estimated "
+            f"reading pace — past the {hi_total:g}s frame-cap ceiling, so "
+            "the DEFAULT pace cannot stand; the words must shrink or the "
+            "copy must be adapted or split — OR name a duration and the "
+            "system paces it faster (the text will move quickly: your "
+            "explicit choice)",
+            user_key="film_text_beyond_reach",
+        )
+    # The densest-packing count (min_scenes) is NOT itself a rejection gate:
+    # the 2..30 count band is a craft default. It feeds only the named-count
+    # provable bounds below — the floors_sum check above is the real gate
+    # (a 35-plane copy whose floors fit the frame cap is a legal film).
+    #
+    # A named duration is the user's LAW, never estimate-gated (2026-10-22
+    # 拍板): shorter than the estimated reading time = the user's explicit
+    # faster pace — the allocator scales down and the presentation notes
+    # the readability impact. The ONE duration refusal is REAL: over the
+    # render frame cap.
+    if source.target_seconds is not None and source.target_seconds > hi_total:
+        return FilmStoryboardRejected(
+            ["TARGET_OVERFLOW"],
+            f"the named {source.target_seconds:g}s is over the {hi_total:g}s "
+            "render frame cap — name a duration within the cap",
+            user_key="film_text_target_overflow",
+        )
+    if source.scene_count is not None:
+        # Provably-impossible bounds ONLY (复审② + 定点复审), and they are
+        # VERBATIM-ONLY: the coverage law (every input line shows exactly
+        # once) is what turns the input's display packing into a scene
+        # floor — below the densest composite packing the copy cannot
+        # physically fit (screen capacity — a hard technical bound). The
+        # ceiling is the copy's FINEST citation granularity, not its line
+        # count (fc13e77d 修复: spans split a line —「引用行数就是最大幕数」
+        # was the wrong bound): one latin word / one glyph per scene, and
+        # without usable media a scene cannot stand without copy. In
+        # AUTHORED mode the input is reference material — the model
+        # condenses it into its own copy, so no input-derived count
+        # bound exists at all: the named count faces the candidates and
+        # the real validator, never this preflight.
+        if source.verbatim and source.scene_count < min_scenes:
+            return FilmStoryboardRejected(
+                ["TARGET_OVERFLOW"],
+                f"the named {source.scene_count} scene(s) cannot hold this "
+                f"copy — even the densest composition ({per_scene_cap} "
+                f"display lines on one screen) needs {min_scenes}; name at "
+                f"least {min_scenes} or let the director pick",
+                user_key="film_text_target_overflow",
+            )
+        if source.verbatim and not media_available:
+            max_scenes = sum(_atomic_unit_count(l.text) for l in lines)
+            if source.scene_count > max_scenes:
+                return FilmStoryboardRejected(
+                    ["TARGET_OVERFLOW"],
+                    f"the named {source.scene_count} scenes cannot each carry "
+                    f"the user's verbatim copy — every character shows "
+                    f"exactly once and a latin word never splits, so the "
+                    f"finest split is {max_scenes} scenes; name a count up "
+                    f"to {max_scenes}, add media to compose with, or let "
+                    "the director pick",
+                    user_key="film_text_target_overflow",
+                )
+    return None
+
+
+async def _orchestrate_text_storyboard(
+    *,
+    text_source: FilmTextSource,
+    instruction: str | None,
+    focus: str | None,
+    language: str | None,
+    current: FilmStoryboard | None,
+    on_reject,
+    allow_fixed_fallback: bool,
+    voiceover: bool,
+    media_candidates: list[dict[str, Any]] | None = None,
+    media_loader: Any = None,
+    composite_ok: bool = False,
+    media_more: int = 0,
+) -> FilmStoryboard:
+    """The text source's bounded direction loop (the web loop's twin — same
+    ladder, same honest terminal): 1 + MAX_REWRITES candidates, each
+    repaired by the violation echo; the birth gate is the zero-copy
+    preflight plus the material-feasibility preflight (an unsatisfiable
+    copy/target fails BEFORE an LLM call is burned); a repeated identical
+    violation set stops the ladder early (no-progress — never a third
+    blind full regeneration); the fallback is ``fixed_text_storyboard``
+    (the worker's unattended rung — the design journey closes it like the
+    web path does).
+
+    Media composition (ADR-140 出生面): ``composite_ok`` is the capability
+    gate (prompt AND assembly read it together); ``media_candidates`` is
+    the prompt's citation universe (the ONE listing seat's rows);
+    ``media_loader`` resolves a candidate board's media universe for the
+    validator (the design/run seats probe durations — identity and window
+    truths are checked against the real bytes at birth, never deferred).
+    None candidates/loader = the pure seats' deferral law (media=None).
+    ``media_more`` is the honest truncation count — how many candidates
+    exist beyond the printed listing (a truncated listing is never "the
+    asset does not exist"; the prompt says so and validation still
+    resolves any project id)."""
+    lines = build_text_manifest(text_source.text)
+    if not lines:
+        logger.info("film_text_preflight_failed", reason="empty_copy")
+        raise FilmStoryboardRejected(
+            ["EMPTY_COPY"],
+            "the text is empty — paste the copy itself (or name what the "
+            "film should say)",
+            user_key="film_text_empty",
+        )
+    # Material feasibility BEFORE any model call (the model is never asked
+    # for the impossible): an unsatisfiable copy/target fails here with
+    # the concrete conflict, never after three burned candidates.
+    infeasible = _text_feasibility(
+        lines,
+        source=text_source,
+        media_available=any(
+            c.get("usable") for c in (media_candidates or [])
+        ),
+    )
+    if infeasible is not None:
+        logger.info(
+            "film_text_preflight_failed",
+            reason=infeasible.user_key,
+            detail=infeasible.detail[:300],
+        )
+        raise infeasible
+    prompt_lines = [{"id": l.id, "kind": l.kind, "text": l.text} for l in lines]
+    prompt_current = (
+        current_text_direction_dict(current) if current is not None else None
+    )
+    violations: list[FilmViolation] = []
+    feedback: str | None = None
+    prev_signatures: frozenset[tuple[str, str]] | None = None
+    try:
+        async with asyncio.timeout(_DIRECTION_BUDGET_S):
+            for attempt in range(1 + MAX_REWRITES):
+                direction = await film_text_director.call(
+                    lines=prompt_lines,
+                    instruction=instruction,
+                    focus=focus,
+                    language=language,
+                    current=prompt_current,
+                    voiceover=voiceover,
+                    verbatim=text_source.verbatim,
+                    target_seconds=text_source.target_seconds,
+                    scene_count=text_source.scene_count,
+                    group=text_source.group_chars,
+                    media=media_candidates,
+                    composite_ok=composite_ok,
+                    media_more=media_more,
+                    repair_feedback=feedback,
+                )
+                resolved, violations = assemble_text_storyboard(
+                    direction, lines, source=text_source,
+                    pinned_language=language, composite_ok=composite_ok,
+                )
+                if resolved is not None:
+                    media = (
+                        await media_loader(resolved)
+                        if media_loader is not None
+                        else None
+                    )
+                    violations = validate_storyboard(
+                        resolved, [], narration_required=voiceover,
+                        text_lines=lines, media=media,
+                    )
+                    if not violations:
+                        return resolved
+                feedback = format_violations(violations)
+                signatures = frozenset((v.code, v.detail) for v in violations)
+                if signatures == prev_signatures:
+                    # No progress (总设计 §8.2.8): the SAME violation set two
+                    # candidates in a row — a third full regeneration would
+                    # re-burn the budget for the same answer. Stop here and
+                    # fail honestly with the standing violations.
+                    logger.info(
+                        "film_text_direction_no_progress",
+                        attempt=attempt,
+                        codes=sorted({v.code for v in violations}),
+                    )
+                    break
+                prev_signatures = signatures
+                if on_reject is not None:
+                    notification = on_reject(attempt, violations, feedback)
+                    if inspect.isawaitable(notification):
+                        await notification
+        rejection: Exception = FilmStoryboardRejected(
+            sorted({v.code for v in violations}),
+            feedback or "",
+            # The text ladder's exhaustion speaks the TEXT context (the
+            # copy/duration/scene-count not lining up) — never the web
+            # source's "clearer page" remedy.
+            user_key="film_text_ungrounded",
+        )
+    except TimeoutError:
+        logger.warning("film_direction_budget_exhausted", budget_s=_DIRECTION_BUDGET_S)
+        rejection = LLMError("Storyboard generation exceeded its total budget", user_key="film_storyboard_timeout")
+    except (LLMSchemaError, LLMError) as exc:
+        rejection = exc
+    if allow_fixed_fallback:
+        logger.info("film_text_direction_fixed_fallback", reason=str(rejection)[:200])
+        fixed = fixed_text_storyboard(lines, source=text_source, language=language)
+        if fixed is not None:
+            fviolations = validate_storyboard(
+                fixed, [], narration_required=voiceover, text_lines=lines
+            )
+            if not fviolations:
+                logger.info(
+                    "film_fixed_storyboard_used",
+                    scenes=len(fixed.scenes),
+                    seconds=sum(s.seconds for s in fixed.scenes),
+                )
+                return fixed
+            logger.warning(
+                "film_fixed_storyboard_rejected",
+                detail=format_violations(fviolations)[:400],
+            )
+    raise rejection
+
+
 async def _await_captures_settled(project_id: UUID) -> None:
     """Wait for the project's in-flight web_page captures to reach a terminal
     state (bounded by ``_CAPTURE_SETTLE_WAIT_S``). The waited set IS the
@@ -2571,6 +6314,8 @@ async def draft_film_storyboard(
     current: FilmStoryboard | None = None,
     on_progress=None,
     voiceover: bool = True,
+    text_source: FilmTextSource | None = None,
+    pinned_asset_ids: list[str] | None = None,
 ) -> tuple[FilmStoryboard, list[StoryboardPage]] | None:
     """The plan-stage storyboard draft: the SAME loop the node runs, against
     the project's READY pages. Returns ``(storyboard, pages)`` — the caller
@@ -2586,17 +6331,33 @@ async def draft_film_storyboard(
     never a from-scratch re-roll. The phase labels (capturing /
     storyboarding / storyboard_revision) belong to THIS span: they are
     cleared on every exit (``on_progress(None)`` — the explicit clear
-    frame), so a label never outlives its work."""
-    if on_progress is not None:
+    frame), so a label never outlives its work.
+
+    ``text_source`` (ADR-138 §7.6): present = a TEXT film — no capture wait,
+    no pages (the copy is the universe; the returned pages list is empty).
+    The "capturing" phase rides the WEB branch alone (B1): a text film reads
+    no page, so its first phase is "storyboarding" — the web path emits
+    "capturing" byte-for-byte as before.
+
+    ``pinned_asset_ids`` (ADR-140 发现面): the assets the user explicitly
+    selected (e.g. @-mentions on the request) — lifted to the front of the
+    director's candidate listing so a pick beyond the print cap still
+    reaches its context (tenant-scoped at the listing seat: a foreign id
+    never materialises a row)."""
+    if on_progress is not None and text_source is None:
         await on_progress("capturing")
     try:
-        await _await_captures_settled(project.id)
-        pages = await load_storyboard_pages(db, project)
-        if not pages:
-            return None
+        if text_source is not None:
+            pages: list[StoryboardPage] = []
+            page_images: list[MediaInput] = []
+        else:
+            await _await_captures_settled(project.id)
+            pages = await load_storyboard_pages(db, project)
+            if not pages:
+                return None
+            page_images = await page_media_inputs(pages)
         if on_progress is not None:
             await on_progress("storyboarding")
-        page_images = await page_media_inputs(pages)
 
         async def rejected(attempt, violations, feedback):
             logger.info("film_plan_draft_rejected", project_id=str(project.id),
@@ -2604,6 +6365,32 @@ async def draft_film_storyboard(
                         detail=(feedback or "")[:600])
             if on_progress is not None:
                 await on_progress("storyboard_revision")
+        # Media composition (ADR-140 出生面): the TEXT branch wires the
+        # discovery listing into the director's prompt and the per-candidate
+        # media universe into the validator — identity and source-window
+        # truths checked against the real bytes AT BIRTH (the write seats'
+        # probe law), never deferred to the run. Gate OFF (or the pure
+        # tests' db=None): the vocabulary stays closed and media checks
+        # defer (media=None).
+        media_candidates: list[dict[str, Any]] | None = None
+        media_loader = None
+        composite_ok = False
+        media_more = 0
+        if text_source is not None and db is not None:
+            from app.config import settings  # deferred: config leaf
+
+            composite_ok = bool(settings.film_edits_enabled)
+            if composite_ok:
+                full_candidates = await project_media_candidates(
+                    db, project, pinned_ids=pinned_asset_ids
+                )
+                media_candidates = full_candidates[:MEDIA_LISTING_CAP]
+                media_more = len(full_candidates) - len(media_candidates)
+
+                async def media_loader(board: FilmStoryboard) -> StoryboardMedia:
+                    return await load_storyboard_media(
+                        db, project, board, probe_duration=True
+                    )
         try:
             storyboard = await orchestrate_storyboard(
                 pages=pages,
@@ -2620,15 +6407,24 @@ async def draft_film_storyboard(
                 # retry is a real redesign, never a dressed-up fallback.
                 allow_fixed_fallback=False,
                 voiceover=voiceover,
+                text_source=text_source,
+                media_candidates=media_candidates,
+                media_loader=media_loader,
+                composite_ok=composite_ok,
+                media_more=media_more,
             )
         except (FilmStoryboardRejected, LLMSchemaError, LLMError) as exc:
             # Preflight and budget failures keep their OWN honest keys all the
             # way to the user — converting them to None would relabel a known
-            # cause (missing captures / provider slowness) as an ungrounded
-            # copy problem.
+            # cause (missing captures / provider slowness / an empty copy /
+            # an exhausted text ladder) as an ungrounded copy problem.
             if getattr(exc, "user_key", None) in {
                 "film_storyboard_timeout",
                 "film_views_missing",
+                "film_text_empty",
+                "film_text_ungrounded",
+                "film_text_beyond_reach",
+                "film_text_target_overflow",
             }:
                 raise
             # The dock caller converts absence into an honest failed turn.
@@ -2685,13 +6481,29 @@ def _launch_film_params(tasks: list) -> dict | None:
     return None
 
 
+# 音频三态 (ADR-138 §7.5): the film bed's explicit OFF state. ``music_mood``
+# carries three states — absent/None = unspecified (the resolution chain:
+# named mood → persona skin default → "calm"), a mood name = an explicit
+# selection, and this sentinel = an explicit OFF. OFF is a REAL terminal
+# state: the resolution chain short-circuits on it (persona and the calm
+# default NEVER re-open a bed the user switched off), and the version pins
+# it so later versions inherit it until an edit names a mood again.
+FILM_MUSIC_OFF = "off"
+
+
 def canonical_film_params(params: dict) -> dict:
     """The launch_film design params in their ONE canonical form (the
     fingerprint's own pinning: nulls drop out, aspect pins "16:9",
     voiceover pins narrated). The dock seats rewrite the proposed task's
     params from the presented version's params through this, so the
     confirmed chain carries exactly what the presented board was designed
-    with — a param the model spelled only once never reads as drift."""
+    with — a param the model spelled only once never reads as drift.
+
+    Music three states (ADR-138 §7.5): an absent ``music_mood`` drops out
+    (unspecified → the resolution chain), a mood string pins the selection,
+    and the explicit OFF (``FILM_MUSIC_OFF``) pins the closed state — three
+    distinguishable fingerprints, so a version born off never reads as
+    merely unset (which would resolve back to the calm default)."""
     canonical = {
         k: v
         for k, v in params.items()
@@ -2699,7 +6511,251 @@ def canonical_film_params(params: dict) -> dict:
     }
     canonical["aspect"] = canonical.get("aspect") or "16:9"
     canonical["voiceover"] = params.get("voiceover") is not False
+    # Text source (ADR-138 §7.6): the copy pins WITH its role and named
+    # shape — a text film's identity includes its words (two films over
+    # different copy never share a fingerprint). Absent text = a web film;
+    # the keys stay out (legacy web fingerprints byte-unchanged).
+    if params.get("text"):
+        canonical["text"] = str(params["text"])
+        canonical["verbatim"] = params.get("verbatim") is not False
+        for k in ("target_seconds", "scene_count", "group_chars"):
+            if params.get(k) is not None:
+                canonical[k] = params[k]
     return canonical
+
+
+def film_voiceover_birth_pin(
+    value: bool | None, base_params: object, *, base_present: bool
+) -> bool:
+    """The voiceover pin at a film's BIRTH (默认无配音, 2026-10-21 用户拍板):
+    the ONE seat where an unset voiceover becomes the explicit value a new
+    version carries. Both chat design seats (compose path) ride here so the
+    pin lands in ``design_params`` BEFORE canonicalization — the stored
+    version params, the fingerprint, the dock restore and the run's slot
+    then all carry the explicit value byte-for-byte.
+
+    The law (新建默认 vs legacy 解读 — two different lenses, never mixed):
+    - an explicit value (true/false) pins verbatim — true is legitimate ONLY
+      when the user explicitly asked for narration (the schema's law; code
+      trusts the declared arg);
+    - a redraft/variant over an EXISTING version inherits THAT version's
+      pinned setting (修改继承既有设置) — legacy params read through
+      ``canonical_film_params``'s historical lens (a missing key = the
+      historical narrated default), and a legacy base with no params record
+      at all reads as narrated too (that is what those films shipped with);
+    - only a genuinely NEW film (no base version) defaults OFF.
+
+    ``canonical_film_params``'s null→narrated reading is NOT changed: it is
+    the legacy lens for already-stored versions (their digests, restores,
+    re-renders and quotes keep resolving byte-identically)."""
+    if value is not None:
+        return bool(value)
+    if not base_present:
+        return False
+    if isinstance(base_params, dict):
+        return canonical_film_params(base_params)["voiceover"]
+    # A legacy base whose params were never recorded: the historical default
+    # was narrated — inherit it rather than silently muting an old film.
+    return True
+
+
+def film_verbatim_birth_pin(
+    value: bool | None, base_params: object, *, base_present: bool, text_present: bool
+) -> bool | None:
+    """The verbatim pin at a text film's BIRTH (贴文 ≠ 逐字, 2026-10-22 用户
+    拍板): the mode is the direction-stage decision, never a guess from the
+    mere fact the user pasted text. The ONE seat where an unset verbatim
+    becomes the explicit value a new version carries — mirroring
+    ``film_voiceover_birth_pin``, the pin lands in ``design_params`` BEFORE
+    canonicalization, so the stored version params, the fingerprint, the
+    dock restore and the run's slot all carry the explicit value
+    byte-for-byte (执行提案继承已确定版本, never re-guessed).
+
+    The law (继承已确定版本 vs legacy 解读 — two lenses, never mixed):
+    - an explicit value pins verbatim — the model's declared direction-stage
+      decision (code trusts the declared arg);
+    - a redraft over an EXISTING text version inherits THAT version's pinned
+      mode — legacy params read through ``canonical_film_params``'s
+      historical lens (a missing key = the historical preserve read), and a
+      legacy base with no params record reads as preserve too;
+    - only a genuinely NEW text film (no base version) with no declared mode
+      reads null as true — the safe legacy-compatible read: preserve the
+      user's words, never silently rewrite them.
+
+    ``canonical_film_params``'s null→true reading is NOT changed: it is the
+    legacy lens for already-stored versions. No text source = None (the key
+    drops out of the canonical form)."""
+    if not text_present:
+        return None
+    if value is not None:
+        return bool(value)
+    if base_present:
+        if isinstance(base_params, dict):
+            return canonical_film_params(base_params).get("verbatim", True)
+        # A legacy base whose params were never recorded: preserve is what
+        # those films shipped with.
+        return True
+    return True
+
+
+def film_text_source_birth_pin(
+    text: str | None,
+    target_seconds: float | None,
+    scene_count: int | None,
+    group_chars: list[int] | None,
+    base_params: object,
+    *,
+    base_present: bool,
+    target_seconds_present: bool,
+    scene_count_present: bool,
+    group_chars_present: bool,
+) -> tuple[str | None, float | None, int | None, list[int] | None]:
+    """Pin a text source at birth/redraft without losing field presence.
+
+    ``text`` keeps its existing value semantics: a re-pasted value overrides,
+    otherwise the base copy is inherited. The three shape constraints are
+    presence-sensitive: omission inherits the base, an explicit null clears
+    it, and a supplied value overrides it. The callers read presence from
+    ``DesignStoryboardArgs.model_fields_set`` AFTER wire normalization; using
+    ``value is not None`` here would make an explicit clear indistinguishable
+    from an omitted field.
+    """
+    base = base_params if (base_present and isinstance(base_params, dict)) else {}
+
+    def _shape_pin(value: Any, *, present: bool, key: str) -> Any:
+        if not base_present:
+            return value
+        return value if present else base.get(key)
+
+    return (
+        text if text is not None else base.get("text"),
+        _shape_pin(target_seconds, present=target_seconds_present, key="target_seconds"),
+        _shape_pin(scene_count, present=scene_count_present, key="scene_count"),
+        _shape_pin(group_chars, present=group_chars_present, key="group_chars"),
+    )
+
+
+def text_source_drift_note(restated: str | None, base_text: str | None) -> str | None:
+    """逐字重稿的抄录漂移注记 (7276ef13 v3 取证 — 「买喜欢的东西」被模型重抄
+    成「买喜欢的事」): the redraft pin (``film_text_source_birth_pin``)
+    inherits the base version's copy only when ``text`` is OMITTED — an
+    explicit re-paste is trusted verbatim BY LAW (a deliberate copy edit
+    stays legal, never a hard reject), so a drifted re-transcription would
+    otherwise pass coverage against the NEW wrong text and present as «原
+    文一字未改». When the re-pasted text differs from the base version's
+    pinned copy, this note names the drifted clause pair(s) — the
+    observation carries it so the presentation is honest.
+
+    The diff rides the SAME clause segmentation as the citation universe
+    (``build_text_manifest``) — the note speaks in the line ids the model
+    already sees. None = nothing to report (identical re-paste, no
+    restate, or no base copy to drift from)."""
+    if restated is None or base_text is None or restated == base_text:
+        return None
+    base_lines = [l.text for l in build_text_manifest(base_text)]
+    new_lines = [l.text for l in build_text_manifest(restated)]
+    diffs: list[str] = []
+    for i, (old, new) in enumerate(zip(base_lines, new_lines), start=1):
+        if old != new:
+            diffs.append(f"L{i} was «{old}» and now reads «{new}»")
+        if len(diffs) >= 3:
+            break
+    if not diffs:
+        diffs.append(
+            f"the copy now runs {len(new_lines)} lines (was {len(base_lines)})"
+        )
+    return (
+        "COPY DRIFT — the copy re-pasted with this redraft differs from "
+        "the version it revises: "
+        + "; ".join(diffs)
+        + ". The saved board carries the RE-PASTED wording verbatim (a "
+        "deliberate copy edit stays legal — this is a note, never a "
+        "rejection): present the new wording as it stands, and never "
+        "describe it as the original unchanged; if the drift was not what "
+        "the user meant, say so and re-paste the confirmed copy."
+    )
+
+
+def text_drift_user_proven(restated: str, user_text: str) -> bool:
+    """漂移的用户可证性 (7276ef13 定点收尾②): the re-pasted copy counts as
+    USER-SOURCED only when it appears verbatim (whitespace-insensitive) in
+    the turn's own user message — the user pasted the new copy themselves.
+    A drift the message never carried (the model re-transcribing, an added
+    clause on a layout-only ask) is UNPROVEN: the version publishes with
+    the honest note, but the dock's confirmation law holds the auto start
+    (``copy_drift``) — a note alone never spends on unproven wording. The
+    precise route for a deliberate text change stays the patch path's
+    explicit copy slots, whose exact before/after facts are reviewable;
+    those slots alone still do not prove user authorization."""
+    norm = lambda s: "".join(s.split())  # noqa: E731
+    return bool(restated and user_text) and norm(restated) in norm(user_text)
+
+
+def _text_drift_digest(text: str) -> str:
+    """The drift baseline's content identity (whitespace-insensitive — the
+    proven check's same normalization seat)."""
+    import hashlib
+
+    return hashlib.sha256("".join(text.split()).encode()).hexdigest()
+
+
+def film_text_drift_next(
+    base_drift: dict | None,
+    base_text: str | None,
+    new_text: str | None,
+    user_text: str,
+) -> dict | None:
+    """未接受文字漂移的持续性 (7276ef13 定点收尾②复审 — the A→B→继承 B
+    hole): the drift hold tracks the LAST PROVABLY-ACCEPTED text baseline,
+    never the adjacent-version diff. ``base_drift`` = the base version's
+    persisted drift state (None = its pinned text was the accepted
+    baseline); ``new_text`` = the NEW version's pinned copy (post-
+    inheritance — an omitted ``text`` inherits the base's, and inheriting
+    a drifted copy NEVER clears the hold).
+
+    Release is exhaustive — exactly three provable paths: ① RESTORE — the
+    new pinned copy matches the baseline (whitespace-insensitive);
+    ② USER-SOURCED — the user pasted the new copy themselves this turn
+    (``text_drift_user_proven``); ③ the copy_drift dock's explicit confirm
+    (the start consumes the pending — the state dies with it, no seat
+    here). Everything else — omitting text, re-stating the drifted copy,
+    an unrelated patch, an ordinary redraft — CARRIES the state forward.
+    Returns the new version's ``film_text_drift`` (``None`` = no hold)."""
+    if not new_text:
+        # No text lineage to judge (non-text chain) — a standing hold
+        # carries conservatively, never washes.
+        return base_drift if isinstance(base_drift, dict) else None
+    baseline_digest = (
+        base_drift.get("baseline_sha256")
+        if isinstance(base_drift, dict)
+        else None
+    )
+    if baseline_digest is None:
+        if not base_text:
+            return None  # first text version — no baseline to drift from
+        baseline_digest = _text_drift_digest(base_text)
+    if _text_drift_digest(new_text) == baseline_digest:
+        return None  # ① restored (or never drifted)
+    if text_drift_user_proven(new_text, user_text):
+        return None  # ② the user sourced this copy
+    return {"baseline_sha256": baseline_digest}
+
+
+def film_text_drift_held(pending: Any) -> bool:
+    """The dock seats' copy_drift flag (定点收尾②复审): read the STANDING
+    version's persisted drift state — the world truth, never a turn-local
+    flag (a later turn's dock over a drifted-unaccepted version holds
+    exactly like the birth turn's; a turn object rebuilt across turns
+    never loses the protection). Accepts a pending dict, a PendingPlan,
+    or None."""
+    if pending is None:
+        return False
+    drift = (
+        pending.get("film_text_drift")
+        if isinstance(pending, dict)
+        else getattr(pending, "film_text_drift", None)
+    )
+    return isinstance(drift, dict) and bool(drift.get("baseline_sha256"))
 
 
 def storyboard_fingerprint(tasks: list, instruction: str | None) -> str | None:
@@ -2729,6 +6785,80 @@ def storyboard_fingerprint(tasks: list, instruction: str | None) -> str | None:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _scene_content_dump(scene: dict) -> dict:
+    """One scene's CONTENT dump: ``scene_id`` is an identity handle, never
+    content — it never participates in any digest, so assigning or keeping
+    ids moves neither the per-scene nor the whole-board digest of a legacy
+    board (old stored digests keep matching byte-for-byte). Post-v1
+    vocabulary keys (``_LEGACY_ABSENT_SCENE_KEYS``) are likewise excluded
+    while null: a legacy board validated by the new model materializes the
+    default ``None`` — dropping the null keeps its digest byte-identical,
+    while a SET value participates normally (an edit moves the digest).
+    Nested element ids (ADR-140) ride the same law: ``element_id`` is an
+    identity handle for edit targeting, never content."""
+    dump: dict = {}
+    for k, v in scene.items():
+        if k == "scene_id" or (v is None and k in _LEGACY_ABSENT_SCENE_KEYS):
+            continue
+        if k == "elements" and isinstance(v, list):
+            # Nested element nulls ride the SAME legacy-absent law as
+            # scene-level keys: a pre-vocabulary element re-validated by
+            # the new model materializes the defaults — dropping the nulls
+            # keeps its digest byte-identical; a SET value participates.
+            v = [
+                {
+                    ek: ev
+                    for ek, ev in el.items()
+                    if ek != "element_id"
+                    and not (ev is None and ek in _LEGACY_ABSENT_SCENE_KEYS)
+                }
+                if isinstance(el, dict)
+                else el
+                for el in v
+            ]
+        dump[k] = v
+    return dump
+
+
+# Scene keys no legacy board carries — null reads as absent in digests.
+_LEGACY_ABSENT_SCENE_KEYS = frozenset(
+    {
+        "motion",
+        "enter",
+        "copy_text",
+        "enter_start",
+        "enter_interval",
+        "enter_duration",
+        "enter_hold_until",
+        "motion_start",
+        "motion_end",
+        "exit_duration",
+        "motion_scale",
+        "align",
+        "size",
+        "accent_style",
+        "enter_style",
+    }
+)
+
+
+def scene_content_digest(scene: FilmScene | dict) -> str:
+    """The position-independent identity of ONE scene's content (复用与
+    diff 的身份): reorder moves the board digest but never this one; an
+    edit moves this one. The id itself is excluded by law (see above)."""
+    model = (
+        scene
+        if not isinstance(scene, dict)
+        else TypeAdapter(FilmScene).validate_python(scene)
+    )
+    payload = json.dumps(
+        _scene_content_dump(model.model_dump(mode="json")),
+        sort_keys=True,
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def storyboard_content_digest(storyboard: FilmStoryboard | dict) -> str:
     """sha256 over the resolved board's canonical dump — the presented
     draft's identity (ADR-129: 呈现稿 digest = run context digest = render
@@ -2738,15 +6868,22 @@ def storyboard_content_digest(storyboard: FilmStoryboard | dict) -> str:
     validated twin digest identically — the design stamp, the dock/start
     checks and the worker check all read the same canonical bytes. A
     malformed board raises the validation error, never a digest of
-    garbage."""
+    garbage. ORDER-SENSITIVE by contract (a reorder is a meaningful
+    change); scene ids never participate (``_scene_content_dump``)."""
     model = (
         storyboard
         if isinstance(storyboard, FilmStoryboard)
         else FilmStoryboard.model_validate(storyboard)
     )
-    payload = json.dumps(
-        model.model_dump(mode="json"), sort_keys=True, ensure_ascii=False
-    )
+    dump = model.model_dump(mode="json")
+    dump["scenes"] = [_scene_content_dump(s) for s in dump.get("scenes", [])]
+    # A null theme accent reads as absent (the scene-level law's board-level
+    # twin): a pre-accent board re-validated by the new model materializes
+    # ``accent: None`` — dropping the null keeps its digest byte-identical.
+    theme_dump = dump.get("theme")
+    if isinstance(theme_dump, dict):
+        dump["theme"] = {k: v for k, v in theme_dump.items() if v is not None}
+    payload = json.dumps(dump, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -2754,6 +6891,7 @@ def build_film_execution_snapshot(
     *,
     pages: list[StoryboardPage],
     track: Music | None,
+    media: StoryboardMedia | None = None,
 ) -> dict:
     """The film's execution inputs frozen at design time (ADR-129/ADR-130
     §1): the pages the board was grounded on (asset id / url / screenshot
@@ -2761,7 +6899,14 @@ def build_film_execution_snapshot(
     grid the markdown's snapped timing shows), the timing constant, and
     ``digest`` over that canonical form. LaunchFilm consumes the snapshot
     verbatim; drift against it fails honestly, never a silent
-    re-orchestration."""
+    re-orchestration.
+
+    ``media`` (ADR-140): the composite scenes' cited assets pinned by
+    IDENTITY (id + storage key) — a deleted or replaced asset drifts the
+    digest and fails honestly. Durations stay OUT (a probe backfill moves
+    knowledge, not identity — pinning it would false-positive every
+    first-run probe). The section is omitted when empty so pre-composite
+    snapshots digest byte-identically."""
     snapshot = {
         "pages": [
             {
@@ -2783,6 +6928,11 @@ def build_film_execution_snapshot(
         ),
         "timing": {"fps": FILM_FPS},
     }
+    if media is not None and media.assets:
+        snapshot["media"] = [
+            {"asset_id": a.id, "key": a.key}
+            for a in sorted(media.assets.values(), key=lambda a: a.id)
+        ]
     return {**snapshot, "digest": film_execution_snapshot_digest(snapshot)}
 
 
@@ -2802,27 +6952,49 @@ def film_design_state(
     design_params: dict,
     review_hold: bool | None,
     authorized_by: str | None,
+    created_via: str = "compose",
+    change_set: Any = None,
+    kept_frames: Any = None,
+    kept_reveal_onsets: Any = None,
 ) -> dict:
     """The PendingPlan's versioned film state after a design beat (ADR-129,
     both chat paths' design seats ride here). ``stored`` = the current
     PendingPlan (or None); ``film`` = the prepared DockStoryboard.
 
-    - a FRESH draft (new board — first design, or a feedback redraft):
-      version +1, a new draft token (旧 Start 失效), the canonical design
-      params, the content digest, the design-time execution snapshot, and
-      this turn's authorizing user message;
+    - a FRESH draft (new board — first design, a feedback redraft, or an
+      edit patch): version +1, a new draft token (旧 Start 失效), the
+      canonical design params, the content digest, the design-time
+      execution snapshot, and this turn's authorizing user message;
     - a REUSE re-presentation (fingerprint hit, no fresh feedback): the
       stored version / token / params / snapshot survive — the SAME board
       is shown again, nothing is invalidated (a token the begin beat
       cleared re-mints: the old confirmation was already voided).
 
+    ``created_via`` = compose (default) | patch | variant — the version
+    envelope's lineage (a patch additionally carries the SYSTEM-computed
+    ``change_set``, never the op echo).
+
+    ``kept_frames`` = the version's frozen cut (冻结时间轴 = 版本状态): the
+    BASE version's own established per-scene frames, computed by the patch
+    beat — for a keep_cut music swap AND for any timeline-preserving edit
+    inheriting an established cut; None on a compose/recut/
+    timeline-changing birth. ``kept_reveal_onsets`` = the frozen cut's
+    other half (the reveal words' landing beats — 冻结场内切点同一继承律);
+    None when the frozen cut is absent or the board carries no reveal
+    scene. The Start stamp projects both onto run.context and the run
+    consumes them fail-closed whenever present
+    (``valid_kept_cut``/``valid_kept_reveal_onsets``).
+
     ``review_hold``: True sets the「只看分镜」hold, False releases it. None:
-    a FRESH draft holds for review by default — a storyboard is a creation,
-    so production never starts from a board the user has not seen; the one
-    release seat is the user's explicit production request (the approval
-    dock clears it). A REUSE re-presentation keeps the stored hold (that
-    board was already seen). The content digest re-stamps on both paths
-    (same input → same digest).
+    a FRESH COMPOSE draft holds for review by default — a storyboard is a
+    creation, so production never starts from a board the user has not
+    seen; a PATCH/VARIANT version is born from the user's explicit
+    modification request (授权已在场, ADR-134 修订) — no NEW hold, and a
+    hold STANDING on the base persists across the edit (the beat never
+    releases it as a side effect). The one release seat stays the user's
+    explicit production request (the approval dock clears it). A REUSE
+    re-presentation keeps the stored hold (that board was already seen).
+    The content digest re-stamps on all paths (same input → same digest).
     Returns PendingPlan field kwargs only — the caller merges its own
     preserved fields and the presentation message id lands separately."""
     from uuid import uuid4
@@ -2835,9 +7007,33 @@ def film_design_state(
         params_snapshot = canonical_film_params(design_params)
         execution = film.execution
         authorized = authorized_by
-        # 首稿默认 hold ON: production never starts from a board the user
-        # has not seen — the approval dock is the one release seat.
-        hold = review_hold if review_hold is not None else True
+        # 首稿默认 hold ON (compose only): production never starts from a
+        # board the user has not seen — the approval dock is the one release
+        # seat. edit/variant versions carry their own authorization (the
+        # user's explicit modification request) — NO NEW hold (ADR-134 修订);
+        # a hold STANDING on the base version persists across the edit (the
+        # one release seat stays the user's explicit production request —
+        # the edit beat never releases it as a side effect).
+        hold = (
+            review_hold
+            if review_hold is not None
+            else (
+                True
+                if created_via == "compose"
+                else bool(getattr(stored, "film_review_hold", False))
+            )
+        )
+        base_version = stored_version
+        via = created_via
+        changes = change_set
+        # The frozen cut rides ONLY a fresh version whose patch beat
+        # computed one (a keep_cut swap, or a timeline-preserving edit
+        # inheriting an established cut); every other birth carries None.
+        # The reveal onsets are the frozen cut's other half (冻结场内切点).
+        kept = kept_frames if isinstance(kept_frames, list) else None
+        kept_onsets = (
+            kept_reveal_onsets if isinstance(kept_reveal_onsets, list) else None
+        )
     else:
         # The begin beat cleared the stored token (旧确认作废), so a reuse
         # re-presentation RE-MINTS when it finds none — the same board, a
@@ -2860,6 +7056,15 @@ def film_design_state(
         hold = review_hold if review_hold is not None else (
             stored.film_review_hold if stored is not None else False
         )
+        # The envelope survives a reuse re-presentation untouched (读容忍 —
+        # legacy rows and provenance-recovered namespaces carry none).
+        base_version = getattr(stored, "film_base_version", None)
+        via = getattr(stored, "film_created_via", None)
+        changes = getattr(stored, "film_change_set", None)
+        kept = getattr(stored, "film_kept_frames", None)
+        kept = kept if isinstance(kept, list) else None
+        kept_onsets = getattr(stored, "film_kept_reveal_onsets", None)
+        kept_onsets = kept_onsets if isinstance(kept_onsets, list) else None
     return {
         "film_storyboard": film.storyboard,
         "film_storyboard_fingerprint": film.fingerprint,
@@ -2879,6 +7084,15 @@ def film_design_state(
         # The publish beat consumes the in-flight marker (并发护栏 step 2):
         # the new versioned state lands marker-free.
         "film_draft_inflight": None,
+        "film_base_version": base_version,
+        "film_created_via": via,
+        "film_change_set": changes,
+        "film_kept_frames": kept,
+        "film_kept_reveal_onsets": kept_onsets,
+        # constraints_choice's write seat arrives with the layered validator
+        # (L4 来源记录) — until then the envelope carries the stored value
+        # verbatim (读容忍).
+        "film_constraints_choice": getattr(stored, "film_constraints_choice", None),
     }
 
 
@@ -2952,6 +7166,7 @@ def film_carry_state(stored: Any) -> dict:
             "film_review_hold": False,
             "film_draft_token": None,
             "film_draft_inflight": getattr(stored, "film_draft_inflight", None),
+            "film_text_drift": getattr(stored, "film_text_drift", None),
         }
     return {
         "film_storyboard": stored.film_storyboard,
@@ -2965,7 +7180,25 @@ def film_carry_state(stored: Any) -> dict:
         "film_review_hold": bool(stored.film_review_hold),
         "film_draft_token": stored.film_draft_token,
         "film_draft_inflight": getattr(stored, "film_draft_inflight", None),
+        "film_text_drift": getattr(stored, "film_text_drift", None),
     }
+
+
+def film_first_draft_unpresented(stored: Any) -> bool:
+    """Whether the work's FIRST board still lacks its persisted presentation.
+
+    The first draft always owes a reviewable presentation before ANY start,
+    including a same-turn auto start delegated in the opening request. The
+    presentation message id is the world fact: a dock may clear review_hold,
+    but it cannot manufacture that presentation. Later versions do not
+    inherit this first-work review gate; their own holds still apply.
+    """
+    return bool(
+        stored is not None
+        and getattr(stored, "film_storyboard", None) is not None
+        and getattr(stored, "film_storyboard_version", None) == 1
+        and not getattr(stored, "film_presented_message_id", None)
+    )
 
 
 def film_dock_state(stored: Any) -> dict:
@@ -3175,12 +7408,35 @@ def _film_revision_base_from_state(
     params: Any,
     content_digest: Any,
     execution: Any,
+    created_via: Any = None,
+    base_version: Any = None,
+    change_set: Any = None,
+    cut_frames: Any = None,
+    cut_state: Any = None,
+    cut_reveal_onsets: Any = None,
+    spec_music: Any = None,
 ) -> Any | None:
     """One revision-base candidate's validation (pure): the board must parse
     and — when a content digest rides along — re-prove against it. Returns a
     PendingPlan-shaped namespace (``film_design_state`` reads it through the
     same getattr surface), or None when the candidate is unusable (the next
-    seat is tried)."""
+    seat is tried).
+
+    ``cut_frames`` = the base version's OWN established cut (the frozen
+    timeline's read半): its executed spec frames when a run delivered them,
+    its frozen ``film_kept_frames`` when the base is itself a kept-cut
+    draft, else None. ``cut_reveal_onsets`` = the cut's other half (the
+    reveal words' landing beats — spec ``lead_frames`` / a kept envelope's
+    frozen onsets; None on a draft cut, whose onsets the freeze seat
+    computes on the draft's own grid). ``cut_state`` records the cut's
+    PROVENANCE so the patch beat never mistakes one absence for another:
+    ``"spec"`` (frames from a delivered run's render spec — the flex-baked
+    truth), ``"kept"`` (frames from a draft envelope's frozen cut),
+    ``"draft"`` (no frames; never executed — its PRESENTED plan timeline
+    is the trustworthy cut), ``"unreadable"`` (no frames; the version WAS
+    executed but its spec is missing/corrupt — the actual cut is
+    unrecoverable and a timeline-keeping edit must refuse, never silently
+    recompute a guess)."""
     from types import SimpleNamespace
 
     if not isinstance(board, dict):
@@ -3200,6 +7456,24 @@ def _film_revision_base_from_state(
         film_storyboard_params=params if isinstance(params, dict) else None,
         film_storyboard_content_digest=content_digest if isinstance(content_digest, str) else None,
         film_storyboard_execution=execution if isinstance(execution, dict) else None,
+        # The version envelope rides along (读容忍 — pre-envelope rows carry
+        # none): a chained patch reads its base's lineage through the same
+        # surface as the live pending's.
+        film_created_via=created_via if isinstance(created_via, str) else None,
+        film_base_version=base_version if isinstance(base_version, int) else None,
+        film_change_set=change_set if isinstance(change_set, dict) else None,
+        film_cut_frames=cut_frames if isinstance(cut_frames, list) else None,
+        film_cut_state=cut_state if isinstance(cut_state, str) else None,
+        film_cut_reveal_onsets=(
+            cut_reveal_onsets if isinstance(cut_reveal_onsets, list) else None
+        ),
+        # The DELIVERED render spec's music block (executed versions only —
+        # the actual landed bed, vs the snapshot's design-time plan). None
+        # for drafts and for an executed spec that carries no bed: the two
+        # read apart through ``film_cut_state`` (spec vs unreadable), never
+        # through this field alone.
+        film_render_spec_music=spec_music if isinstance(spec_music, dict) else None,
+        film_constraints_choice=None,
         # The recovered base carries no live draft token / marker /
         # authorization / presentation message — those belong to the beat
         # that re-presents it (a reuse keeps None, a fresh draft re-mints).
@@ -3238,17 +7512,26 @@ async def resolve_film_revision_base(
     draft). Returns None when no provenance exists.
     """
     if output_id is not None:
-        mentioned_ctx = (
+        mentioned = (
             await db.execute(
-                select(WorkflowRun.context)
+                select(WorkflowRun.context, Output.render_spec)
                 .select_from(Output)
                 .join(WorkflowStep, Output.workflow_step_id == WorkflowStep.id)
                 .join(WorkflowRun, WorkflowStep.run_id == WorkflowRun.id)
                 .where(Output.id == output_id, Output.project_id == project.id)
             )
-        ).scalar_one_or_none()
+        ).one_or_none()
+        if mentioned is None:
+            return None
+        mentioned_ctx, mentioned_spec = mentioned
         if not isinstance(mentioned_ctx, dict):
             return None
+        # The pinned film's cut AS RENDERED (the frozen timeline's read半).
+        # A pinned output IS an executed work: a spec-less/corrupt one reads
+        # as "unreadable" (the actual cut is unrecoverable — the patch beat
+        # refuses a timeline-keeping edit, never recomputes a guess), never
+        # as a draft's absent cut.
+        cut_frames = spec_scene_frames(mentioned_spec)
         base = _film_revision_base_from_state(
             board=mentioned_ctx.get("prepared_storyboard"),
             fingerprint=mentioned_ctx.get("film_storyboard_fingerprint"),
@@ -3256,6 +7539,23 @@ async def resolve_film_revision_base(
             params=mentioned_ctx.get("film_storyboard_params"),
             content_digest=mentioned_ctx.get("film_storyboard_content_digest"),
             execution=mentioned_ctx.get("film_execution"),
+            created_via=mentioned_ctx.get("film_created_via"),
+            base_version=mentioned_ctx.get("film_base_version"),
+            cut_frames=cut_frames,
+            cut_state="spec" if cut_frames is not None else "unreadable",
+            cut_reveal_onsets=(
+                spec_scene_reveal_onsets(mentioned_spec)
+                if cut_frames is not None
+                else None
+            ),
+            # The pinned output's OWN landed bed — never the live draft's
+            # plan (an old Output's read never borrows the current
+            # version's music).
+            spec_music=(
+                mentioned_spec.get("music")
+                if isinstance(mentioned_spec, dict)
+                else None
+            ),
         )
         if base is not None:
             logger.info(
@@ -3268,6 +7568,7 @@ async def resolve_film_revision_base(
 
     pending = project.pending_brief if isinstance(project.pending_brief, dict) else None
     if pending and pending.get("film_storyboard"):
+        pending_cut = pending.get("film_kept_frames")
         return _film_revision_base_from_state(
             board=pending.get("film_storyboard"),
             fingerprint=pending.get("film_storyboard_fingerprint"),
@@ -3275,6 +7576,21 @@ async def resolve_film_revision_base(
             params=pending.get("film_storyboard_params"),
             content_digest=pending.get("film_storyboard_content_digest"),
             execution=pending.get("film_storyboard_execution"),
+            created_via=pending.get("film_created_via"),
+            base_version=pending.get("film_base_version"),
+            change_set=pending.get("film_change_set"),
+            # A live pending never RAN — its established cut is its frozen
+            # kept frames when it is itself a frozen-cut version ("kept" —
+            # the chain never loses the freeze, in-scene onsets included),
+            # else it is a plain draft ("draft": its PRESENTED plan
+            # timeline is the trustworthy cut).
+            cut_frames=pending_cut,
+            cut_state="kept" if isinstance(pending_cut, list) else "draft",
+            cut_reveal_onsets=(
+                pending.get("film_kept_reveal_onsets")
+                if isinstance(pending_cut, list)
+                else None
+            ),
         )
 
     # Latest film run fallback: the portable read (no JSON operator — the
@@ -3282,16 +7598,16 @@ async def resolve_film_revision_base(
     recent = (
         (
             await db.execute(
-                select(WorkflowRun.context)
+                select(WorkflowRun.context, WorkflowRun.id)
                 .where(WorkflowRun.project_id == project.id)
                 .order_by(WorkflowRun.created_at.desc())
                 .limit(50)
             )
         )
-        .scalars()
         .all()
     )
-    for ctx in recent:
+    for row in recent:
+        ctx, run_id = row
         if not isinstance(ctx, dict) or not isinstance(ctx.get("prepared_storyboard"), dict):
             continue
         base = _film_revision_base_from_state(
@@ -3301,14 +7617,73 @@ async def resolve_film_revision_base(
             params=ctx.get("film_storyboard_params"),
             content_digest=ctx.get("film_storyboard_content_digest"),
             execution=ctx.get("film_execution"),
+            created_via=ctx.get("film_created_via"),
+            base_version=ctx.get("film_base_version"),
         )
-        if base is not None:
-            logger.info(
-                "film_revision_base_recovered",
-                project_id=str(project.id),
-                version=base.film_storyboard_version,
+        if base is None:
+            continue
+        # The recovered run's cut (the frozen timeline's read半).
+        # Provenance matters here — no output row does NOT mean no
+        # established timeline:
+        # - a run that never created its film output may STILL carry the
+        #   version's frozen cut in its stamped context (Start 投影的版本
+        #   状态 — the run died between Start and the output's birth): the
+        #   freeze persists, recover it ("kept") — never a plain-draft
+        #   silent recompute;
+        # - that frozen state present-but-corrupt, or a keep_cut
+        #   instruction whose frames are absent (半写信封), reads as
+        #   "unreadable" — the patch beat refuses a timeline-keeping edit
+        #   rather than recomputing a guess;
+        # - only a version with genuinely NO frozen state is draft-like
+        #   ("draft": its presented plan timeline is the trustworthy cut);
+        # - a delivered output whose spec is missing/corrupt is
+        #   "unreadable" — the actual (flex-baked) cut is unrecoverable.
+        row = (
+            await db.execute(
+                select(Output.render_spec)
+                .select_from(Output)
+                .join(WorkflowStep, Output.workflow_step_id == WorkflowStep.id)
+                .where(WorkflowStep.run_id == run_id, Output.type == "film")
+                .order_by(Output.created_at.desc())
+                .limit(1)
             )
-            return base
+        ).one_or_none()
+        if row is None:
+            kept = ctx.get("film_kept_frames")
+            if kept is not None or ctx.get("film_music_retime") == "keep_cut":
+                # The board already parsed above (the candidate validated) —
+                # re-prove the frozen frames against it before inheriting.
+                validated = FilmStoryboard.model_validate(base.film_storyboard)
+                if valid_kept_cut(validated, kept):
+                    base.film_cut_frames = [int(n) for n in kept]
+                    base.film_cut_state = "kept"
+                    base.film_cut_reveal_onsets = (
+                        ctx.get("film_kept_reveal_onsets")
+                        if isinstance(ctx.get("film_kept_reveal_onsets"), list)
+                        else None
+                    )
+                else:
+                    base.film_cut_state = "unreadable"
+            else:
+                base.film_cut_state = "draft"
+        else:
+            cut_frames = spec_scene_frames(row[0])
+            base.film_cut_frames = cut_frames
+            base.film_cut_state = "spec" if cut_frames is not None else "unreadable"
+            base.film_cut_reveal_onsets = (
+                spec_scene_reveal_onsets(row[0]) if cut_frames is not None else None
+            )
+            # The delivered bed rides the read base too (same law as the
+            # pinned seat — the landed spec's own entry).
+            base.film_render_spec_music = (
+                row[0].get("music") if isinstance(row[0], dict) else None
+            )
+        logger.info(
+            "film_revision_base_recovered",
+            project_id=str(project.id),
+            version=base.film_storyboard_version,
+        )
+        return base
     return None
 
 
@@ -3326,28 +7701,77 @@ def film_draft_inflight_live(marker: Any, *, now: float | None = None) -> bool:
     return ((now if now is not None else time.time()) - started) < _DOCK_DRAFT_BUDGET_S
 
 
+def _is_lock_contention(exc: BaseException) -> bool:
+    """True when the DBAPI failure IS the NOWAIT lock refusal (SQLSTATE
+    55P03 lock_not_available / 40P01 deadlock_detected).
+
+    asyncpg's ``LockNotAvailableError`` does NOT map to SQLAlchemy's
+    ``OperationalError`` — it surfaces as a plain ``DBAPIError`` (verified
+    against the live dialect, 2026-10-23 T3 crash: the designed honest
+    refusal below became an 'Internal server error' because the catch
+    named only ``OperationalError``). The asyncpg dialect then RE-WRAPS
+    the driver error in its own translated ``Error`` (verified against the
+    live wrap the same day): ``DBAPIError.orig``'s type name is ``Error``
+    and ``DBAPIError.sqlstate`` is absent — the real signal lives on
+    ``orig.sqlstate`` and on the ``__cause__`` chain's type names. Check
+    sqlstate on both levels, then walk the cause chain."""
+    for holder in (exc, getattr(exc, "orig", None)):
+        if holder is not None and getattr(holder, "sqlstate", None) in (
+            "55P03",
+            "40P01",
+        ):
+            return True
+    node: BaseException | None = getattr(exc, "orig", exc)
+    seen: set[int] = set()
+    while node is not None and id(node) not in seen:
+        seen.add(id(node))
+        if type(node).__name__ in ("LockNotAvailableError", "DeadlockDetectedError"):
+            return True
+        node = node.__cause__ or node.__context__
+    return False
+
+
+@dataclass(frozen=True)
+class FilmDraftBegin:
+    """begin_film_draft's structured outcome (拒绝原因结构化 — the callers
+    never parse the observation text to learn WHY): ``draft_id`` set = the
+    begin landed; ``refusal`` names the refused reason —
+
+    - ``"in_flight"``: a LIVE committed marker names another draft (the ONE
+      refusal that may be narrated as "another design is running").
+    - ``"locked"``: the NOWAIT row-lock refused — the holder is UNKNOWN
+      (a concurrent request's transaction; never narrated as a design).
+    - ``"gone"``: the project row vanished.
+    """
+
+    draft_id: str | None = None
+    refusal: str | None = None
+
+
 async def begin_film_draft(
     db: AsyncSession,
     project: Project,
     *,
     base_version: int | None,
     user_message_id: str | None,
-) -> str | None:
+) -> FilmDraftBegin:
     """The design beat's BEGIN (并发护栏 step 1): write the in-flight marker
     + supersede the old film confirmation (``film_draft_token`` clears) in
     the marker's OWN committed mini-transaction, so the Start gate (a
     separate request's transaction) sees it DURING the long draft. Returns
-    the draft id; ``None`` = the begin is REFUSED.
+    the structured begin outcome; ``refusal`` set = the begin is REFUSED.
 
     No fallback channel, by law: the marker is either committed through the
     side session or the beat does not start. A NOWAIT failure means the
     project row is locked — by a concurrent design's begin, by a Start's
     answer transaction, or by THIS turn's own earlier write (the flush
     below surfaces any pending write first, so an own-write reads as the
-    lock it holds). Every one of those resolves to the same honest refusal
-    — never a stale in-memory overwrite, never an uncommitted marker the
-    Start gate cannot see. The publish beat's conditional check reads the
-    COMMITTED marker, which is therefore always this begin's own row.
+    lock it holds — the answer-continuation seam commits its input BEFORE
+    the LLM turn so a legitimate continuation never meets its own lock
+    here). Every one of those resolves to the same honest refusal — never
+    a stale in-memory overwrite, never an uncommitted marker the Start gate
+    cannot see. The publish beat's conditional check reads the COMMITTED
+    marker, which is therefore always this begin's own row.
 
     Lock discipline: the side session locks ONLY the project row (nowait —
     it never waits behind another holder, so a second designer is refused,
@@ -3359,7 +7783,7 @@ async def begin_film_draft(
     """
     from uuid import uuid4
 
-    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import DBAPIError, OperationalError
 
     from app.models.database import AsyncSessionLocal  # deferred: worker seat
 
@@ -3390,7 +7814,7 @@ async def begin_film_draft(
                 Project, project.id, with_for_update={"nowait": True}
             )
             if row is None:
-                return None
+                return FilmDraftBegin(refusal="gone")
             pend = dict(row.pending_brief) if isinstance(row.pending_brief, dict) else {}
             if film_draft_inflight_live(pend.get("film_draft_inflight")):
                 logger.info(
@@ -3398,20 +7822,34 @@ async def begin_film_draft(
                     project_id=str(project.id),
                     holder=(pend.get("film_draft_inflight") or {}).get("draft_id"),
                 )
-                return None
+                return FilmDraftBegin(refusal="in_flight")
             row.pending_brief = _apply(pend)
             await session.commit()
-    except OperationalError:
-        # The row is locked — a concurrent design / a Start / this turn's
-        # own earlier write. Refuse; NEVER fall back to an uncommitted
-        # turn-transaction marker (the Start gate couldn't see it and the
-        # publish check couldn't prove it).
+    except OperationalError as exc:
+        # Same discipline as the DBAPIError branch below: only a
+        # RECOGNISED lock conflict (55P03 / 40P01) reads as contention —
+        # every other OperationalError (connectivity, statement timeout,
+        # …) keeps its real error category and raises.
+        if not _is_lock_contention(exc):
+            raise
+        # The row is locked — a concurrent design / a Start / a turn whose
+        # own earlier write still holds it. Refuse; NEVER fall back to an
+        # uncommitted turn-transaction marker (the Start gate couldn't see
+        # it and the publish check couldn't prove it).
         logger.info("film_draft_begin_contended", project_id=str(project.id))
-        return None
+        return FilmDraftBegin(refusal="locked")
+    except DBAPIError as exc:
+        # asyncpg's LockNotAvailableError lands here, not in
+        # OperationalError — same contention, same honest refusal
+        # (_is_lock_contention; a non-lock DBAPI failure still raises).
+        if not _is_lock_contention(exc):
+            raise
+        logger.info("film_draft_begin_contended", project_id=str(project.id))
+        return FilmDraftBegin(refusal="locked")
     # Sync the turn session's object with the committed truth (plain
     # re-read — the turn holds no lock and carries no pending write here).
     await db.refresh(project)
-    return draft_id
+    return FilmDraftBegin(draft_id=draft_id)
 
 
 async def read_committed_film_marker(project_id: UUID) -> dict | None:
@@ -3432,6 +7870,41 @@ async def read_committed_film_marker(project_id: UUID) -> dict | None:
     return marker if isinstance(marker, dict) else None
 
 
+async def read_committed_film_state(
+    project_id: UUID,
+) -> tuple[dict | None, dict | None]:
+    """The patch publish beat's 并发回防 read (base 引用协议 step 4): ONE
+    committed side-session SELECT returning (in-flight marker, the
+    committed pending's FILM envelope — the raw pending dict when it
+    carries a storyboard, else None). The publish guard mints the
+    committed world's identity off this envelope through the SAME seats
+    that minted the read-time reference
+    (``edits.committed_film_state_identity`` — full identity: content +
+    canonical params + ordered scene ids + version + frozen cut). Version
+    NUMBERS or a stored content digest alone never prove identity — branch
+    lineages can mint same-numbered versions, and same-content drafts can
+    differ in params or frozen timeline; the digest recomputes from the
+    committed board itself, so a legacy row missing the stored digest
+    field still proves itself, and an unprovable envelope (missing
+    board/params/version) fails closed instead of passing on a version
+    number."""
+    from app.models.database import AsyncSessionLocal  # deferred: worker seat
+
+    async with AsyncSessionLocal() as session:
+        pend = (
+            await session.execute(
+                select(Project.pending_brief).where(Project.id == project_id)
+            )
+        ).scalar_one_or_none()
+    if not isinstance(pend, dict):
+        return None, None
+    marker = pend.get("film_draft_inflight")
+    return (
+        marker if isinstance(marker, dict) else None,
+        pend if isinstance(pend.get("film_storyboard"), dict) else None,
+    )
+
+
 async def clear_film_draft_marker(
     db: AsyncSession, project: Project, *, draft_id: str
 ) -> None:
@@ -3442,7 +7915,7 @@ async def clear_film_draft_marker(
     NOWAIT succeeds and a turn rollback cannot resurrect the marker. The
     turn session's object then re-reads the cleared row so a continuing
     turn (the loop catching the failure) sees the same truth."""
-    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import DBAPIError, OperationalError
 
     from app.models.database import AsyncSessionLocal  # deferred: worker seat
 
@@ -3460,13 +7933,21 @@ async def clear_film_draft_marker(
                     committed.pop("film_draft_inflight", None)
                     row.pending_brief = committed
                     await session.commit()
-    except OperationalError:
+    except OperationalError as exc:
         # Someone else holds the row (a concurrent Start committing, a newer
         # design's begin): their transaction owns the pending plan's fate —
         # a Start's success clears pending_brief wholesale, a newer design
         # replaced the marker. Either way our marker is gone or stale; the
-        # budget covers the rest.
-        pass
+        # budget covers the rest. Same discipline as begin: only a
+        # RECOGNISED lock conflict swallows — every other OperationalError
+        # (connectivity, timeout, …) keeps its real category and raises.
+        if not _is_lock_contention(exc):
+            raise
+    except DBAPIError as exc:
+        # Same contention through asyncpg's plain-DBAPIError mapping
+        # (_is_lock_contention); a non-lock DBAPI failure still raises.
+        if not _is_lock_contention(exc):
+            raise
     if not db.is_modified(project):
         with suppress(Exception):  # best-effort in-memory sync only
             await db.refresh(project)
@@ -3513,7 +7994,14 @@ async def resolve_film_music(
     markdown projection and the node's spec build): the plan's named mood →
     the persona skin default → "calm". None = nothing resolved — the caller
     decides whether that is a hard failure (an explicitly named mood at run
-    time) or an honest omission (the dock's music line simply stays out)."""
+    time) or an honest omission (the dock's music line simply stays out).
+
+    The explicit OFF (``FILM_MUSIC_OFF``) short-circuits the WHOLE chain
+    before the persona/default rungs: a bed the user switched off is a real
+    terminal state, never a silent fall back to the calm default (音频三态,
+    ADR-138 §7.5)."""
+    if music_mood == FILM_MUSIC_OFF:
+        return None
     from app.memory.brand import resolve_music_ref  # deferred: memory edge
 
     persona = await resolve_persona(db, project)  # None-safe
@@ -3528,6 +8016,43 @@ async def resolve_film_music(
         if track is not None:
             return track
     return None
+
+
+async def resolve_named_film_track(
+    db: AsyncSession, project: Project, mood: str
+) -> tuple[Music | None, list[float] | None]:
+    """The patch path's music gate (the set_music op's own 校验: 曲目可解 +
+    节拍网格可得): the NAMED ref itself must resolve — never the silent
+    mood→brand→"calm" fallback chain (a mistyped mood must surface, not
+    quietly become another track) — and the track must carry an analyzable
+    beat grid (backfilled on first need, the design beat's same seat).
+    (None, None) = the mood names no library track; (track, None) = the
+    track's rhythm cannot be obtained."""
+    from app.memory.brand import resolve_music_ref  # deferred: memory edge
+
+    track = await resolve_music_ref(db, mood)
+    if track is None:
+        return None, None
+    return track, await _track_beats_backfilled(db, track)
+
+
+async def film_snapshot_track(
+    db: AsyncSession, project: Project, params: dict
+) -> Music | None:
+    """The design-time execution snapshot's music resolution (ONE seat, the
+    dock beat and the patch beat ride it alike): best-effort through the
+    version's canonical mood chain with the beat grid backfilled; None = the
+    silent-cut snapshot (a resolution failure omits the bed, never blocks
+    the version — the run's own gate fails loud on a named mood)."""
+    try:
+        return await _resolve_track_backfilled(
+            db, project, canonical_film_params(params).get("music_mood")
+        )
+    except Exception as e:  # noqa: BLE001 — auxiliary snapshot fact
+        logger.info(
+            "film_snapshot_music_failed", project_id=str(project.id), error=str(e)
+        )
+        return None
 
 
 async def _dock_music_context(
@@ -3561,6 +8086,7 @@ async def prepare_dock_storyboard(
     cached_storyboard: dict | None = None,
     cached_fingerprint: str | None = None,
     on_progress=None,
+    pinned_asset_ids: list[str] | None = None,
 ) -> DockStoryboard | None:
     """The dock seats' ONE storyboard seat (the plan path's dock seats and
     the chat path's ``_dock_plan_as_question`` all ride here, before
@@ -3576,16 +8102,33 @@ async def prepare_dock_storyboard(
     the birth narrative when absent), and the stored fingerprint stays keyed
     on the birth narrative so the NEXT feedback-free re-dock reuses the
     feedback-incorporated board. A draft that cannot stand raises a user-facing failure before docking
-    or auto-start; None means this is not a film proposal."""
+    or auto-start; None means this is not a film proposal.
+
+    ``pinned_asset_ids`` (ADR-140 发现面): the assets the user explicitly
+    selected on the request (@-mentions) — forwarded to the draft seat so
+    they lead the director's candidate listing (a pick beyond the print
+    cap still reaches its context; tenant scoping is enforced at the
+    listing seat, never by trusting the ids)."""
     fingerprint = storyboard_fingerprint(tasks, instruction)
     if fingerprint is None:
         return None
     params = _launch_film_params(tasks) or {}
     aspect = params.get("aspect") or "16:9"
     voiceover = params.get("voiceover") is not False
+    # Text source (ADR-138 §7.6): the copy rides the pinned design params —
+    # present = a text film (no capture wait, no pages, no web manifest).
+    # verbatim's read: new versions pin it EXPLICITLY at birth
+    # (film_verbatim_birth_pin) and the approval dock rewrites the task from
+    # the presented version byte-for-byte, so the null→true lens below only
+    # ever reads a LEGACY pre-pin version — the mode is inherited from the
+    # decided version, never re-guessed from the pasted text (贴文 ≠ 逐字).
+    text_source = film_text_source_from_params(params)
     music_label, music_beats, music_bpm = await _dock_music_context(
         db, project, params.get("music_mood")
     )
+    if params.get("music_mood") == FILM_MUSIC_OFF:
+        # Explicit OFF is a real audio state, not an omitted display fact.
+        music_label = "off (no bed)"
     if (
         not (fresh_instruction or "").strip()
         and cached_fingerprint == fingerprint
@@ -3600,7 +8143,12 @@ async def prepare_dock_storyboard(
             # board — the music/display facts read fresh (they never alter
             # the board itself). execution=None: the caller keeps the
             # stored version's design-time snapshot.
-            pages = await load_storyboard_pages(db, project)
+            pages = (
+                await load_storyboard_pages(db, project)
+                if text_source is None
+                else []
+            )
+            media = await load_storyboard_media(db, project, cached)
             return DockStoryboard(
                 presentation=storyboard_presentation(
                     cached,
@@ -3610,6 +8158,8 @@ async def prepare_dock_storyboard(
                     beats=music_beats,
                     bpm=music_bpm,
                     captions=voiceover,
+                    source_note=_text_source_note(text_source),
+                    media=media,
                 ),
                 storyboard=cached.model_dump(mode="json"),
                 fingerprint=fingerprint,
@@ -3635,6 +8185,8 @@ async def prepare_dock_storyboard(
                 current=current,
                 on_progress=on_progress,
                 voiceover=voiceover,
+                text_source=text_source,
+                pinned_asset_ids=pinned_asset_ids,
             )
     except TimeoutError as exc:
         logger.warning("film_dock_budget_exhausted", project_id=str(project.id),
@@ -3642,8 +8194,18 @@ async def prepare_dock_storyboard(
         raise LLMError("Storyboard preparation timed out", user_key="film_storyboard_timeout") from exc
     if drafted is None:
         # Never auto-start a film whose storyboard could not be presented.
-        raise LLMError("No usable storyboard", user_key="film_storyboard_ungrounded")
+        # The failure speaks the SOURCE's context: a text film's copy
+        # problem never reads as a web page's.
+        raise LLMError(
+            "No usable storyboard",
+            user_key=(
+                "film_text_ungrounded"
+                if text_source is not None
+                else "film_storyboard_ungrounded"
+            ),
+        )
     storyboard, pages = drafted
+    media = await load_storyboard_media(db, project, storyboard)
     presentation = storyboard_presentation(
         storyboard,
         pages,
@@ -3652,21 +8214,23 @@ async def prepare_dock_storyboard(
         beats=music_beats,
         bpm=music_bpm,
         captions=voiceover,
+        source_note=_text_source_note(text_source),
+        media=media,
     )
     # The design-time execution snapshot (ADR-129/ADR-130 §1): pages +
     # the resolved music grid + timing, digested — the run consumes THIS
     # and drift fails honestly. Best-effort music resolve (the fact sheet's
-    # own best-effort law); None = the silent-cut snapshot.
-    try:
-        snap_track = await _resolve_track_backfilled(db, project, params.get("music_mood"))
-    except Exception as e:  # noqa: BLE001 — auxiliary snapshot fact
-        logger.info("film_snapshot_music_failed", project_id=str(project.id), error=str(e))
-        snap_track = None
+    # own best-effort law, one seat: ``film_snapshot_track``); None = the
+    # silent-cut snapshot. Composite media pins (ADR-140) ride the same
+    # snapshot — identity only, never probed durations.
+    snap_track = await film_snapshot_track(db, project, params)
     return DockStoryboard(
         presentation=presentation,
         storyboard=storyboard.model_dump(mode="json"),
         fingerprint=fingerprint,
-        execution=build_film_execution_snapshot(pages=pages, track=snap_track),
+        execution=build_film_execution_snapshot(
+            pages=pages, track=snap_track, media=media
+        ),
     )
 
 
@@ -3693,24 +8257,63 @@ class LaunchFilm(NodeBase):
     retries = 0  # the bounded rewrite absorbs model variance; transports ride tenacity
     agents = (film_director,)
 
+    def label(self, slot: Any, ui_language: str = "en") -> str | None:
+        """The Tasks row's creation-time name, source-aware (文字片不是
+        官网片): a text-sourced slot names the text film; anything else
+        keeps the class default. The slot tag (language/focus) still
+        suffixes exactly as the base law."""
+        if slot is not None and getattr(slot, "text", None):
+            name = (
+                "生成文字短片" if ui_language.startswith("zh") else "Generate text film"
+            )
+            tag = slot_tag(slot)
+            return f"{name} · {tag}" if tag else name
+        return super().label(slot, ui_language)
+
     def estimate(self, ctx: dict) -> dict | None:
         """Orchestration tokens (worst case = one storyboard pass per
         candidate, 1 + MAX_REWRITES) + the film-seconds flat item (D3 简式
         计价: ESTIMATE_FILM_SECONDS typical × the ``film.usd_per_second``
         config rate — the capture settles the storyboard's true allocated
         seconds through the same price line, hold/release absorb the
-        difference)."""
+        difference).
+
+        报价分叉 (edit 路径, R2-B): when the run is born from a VERSIONED
+        board (``film_board_seconds``/``film_board_tts_chars`` ride the
+        estimate facts — a confirmed compose or an edit patch), the quote
+        reads the ACTUAL board seconds and the ACTUAL full narration
+        characters (the interim narration policy is full re-synthesis —
+        no reuse discount is ever pre-claimed before the reuse store
+        exists). Facts absent (a snapshot-less birth) → the typical-film
+        constants stand."""
         single = estimate_agent([1500, 8000], [400, 2000])
         n = 1 + MAX_REWRITES
+        actual_seconds = ctx.get("film_board_seconds")
+        seconds = (
+            float(actual_seconds)
+            if isinstance(actual_seconds, (int, float))
+            and not isinstance(actual_seconds, bool)
+            and actual_seconds > 0
+            else ESTIMATE_FILM_SECONDS
+        )
+        actual_tts = ctx.get("film_board_tts_chars")
+        tts_chars = (
+            float(actual_tts)
+            if isinstance(actual_tts, (int, float))
+            and not isinstance(actual_tts, bool)
+            else seconds * 14.0
+        )
         return {
             "prompt_tokens": [single["prompt_tokens"][0] * n, single["prompt_tokens"][1] * n],
             "completion_tokens": [single["completion_tokens"][0] * n, single["completion_tokens"][1] * n],
             "units": {
-                "film_seconds": ESTIMATE_FILM_SECONDS,
+                "film_seconds": seconds,
                 # E2 配音: speech ≈ 14 chars/s over the estimate window
                 # (voiceover is the plan default; a voiceover-off plan
-                # simply captures less — hold/release absorbs).
-                "tts_chars": ESTIMATE_FILM_SECONDS * 14.0,
+                # simply captures less — hold/release absorbs). A versioned
+                # board quotes its REAL narration characters instead (the
+                # fork above).
+                "tts_chars": tts_chars,
             },
         }
 
@@ -3735,8 +8338,51 @@ class LaunchFilm(NodeBase):
         # as a successful silent film.
         voiceover = (slot.voiceover if slot else None) is not False
 
-        pages = await load_storyboard_pages(db, project)
-        if not pages:
+        # Text source (ADR-138 §7.6): the copy rides the pinned slot params
+        # — a text film needs no captured page (the words ARE the material);
+        # the page-load refusal below stays the WEB source's law. verbatim's
+        # slot read: the slot carries the confirmed version's EXPLICIT birth
+        # pin (film_verbatim_birth_pin → the dock's byte-for-byte rewrite);
+        # the null→true lens below is the LEGACY read for pre-pin rows only
+        # (贴文 ≠ 逐字 — the mode is inherited, never re-guessed here).
+        text_source: FilmTextSource | None = None
+        slot_text = (slot.text if slot else None) or None
+        if slot_text:
+            text_source = FilmTextSource(
+                text=slot_text,
+                verbatim=(slot.verbatim if slot else None) is not False,
+                target_seconds=(slot.target_seconds if slot else None) or None,
+                scene_count=(slot.scene_count if slot else None) or None,
+                group_chars=_group_chars_param(
+                    slot.group_chars if slot else None
+                ),
+            )
+        text_lines = (
+            build_text_manifest(text_source.text) if text_source is not None else None
+        )
+
+        # 执行契约护栏 (文字片): a run born from a version that PINNED a text
+        # source must carry that source on its slot — the compiler's slot
+        # projection owns the plan→step handoff. A missing text on such a run
+        # is a broken execution contract (the params were lost between the
+        # confirmed version and the compiled step), NEVER a missing web page:
+        # fail honestly — never masquerade as a capture failure, never send
+        # the user for a link. The fix is a fresh production setup from the
+        # current version (the version itself stands intact).
+        if text_source is None:
+            version_params = ctx.get("film_storyboard_params")
+            if isinstance(version_params, dict) and version_params.get("text"):
+                raise ValueError(
+                    "This film was confirmed as a TEXT film, but its text "
+                    "never reached the production step — the plan-to-step "
+                    "parameter handoff lost it. No webpage is involved; ask "
+                    "me to set up production again from the current version."
+                )
+
+        pages = (
+            await load_storyboard_pages(db, project) if text_source is None else []
+        )
+        if not pages and text_source is None:
             # The birthplace gates presence+readiness; a capture that FAILED
             # mid-wait lands here — the honest refusal (never an ungrounded
             # film).
@@ -3745,6 +8391,7 @@ class LaunchFilm(NodeBase):
             )
 
         storyboard: FilmStoryboard | None = None
+        media: StoryboardMedia | None = None
         # prepared_storyboard (ADR-129 严格消费): the confirmed run renders
         # the storyboard version the user SAW — stamped onto run.context at
         # Start with its content digest + execution snapshot. The node
@@ -3792,7 +8439,19 @@ class LaunchFilm(NodeBase):
                     "storyboard and confirm the new version; the run never "
                     "silently re-drafts."
                 )
-            stale = validate_storyboard(prepared, pages, narration_required=voiceover)
+            # ADR-140 two-gate law at the run seat: the composite scenes'
+            # media loads WITH duration probing (unknown durations probe the
+            # bytes now and the truth is checked, never guessed).
+            media = await load_storyboard_media(
+                db, project, prepared, probe_duration=True
+            )
+            stale = validate_storyboard(
+                prepared,
+                pages,
+                narration_required=voiceover,
+                text_lines=text_lines,
+                media=media,
+            )
             if not stale:
                 storyboard = prepared
                 logger.info(
@@ -3836,6 +8495,28 @@ class LaunchFilm(NodeBase):
                     detail=(feedback or "")[:400],
                 )
 
+            # Media composition (ADR-140 出生面 — the run seat's fresh
+            # orchestration wires the SAME discovery listing + per-candidate
+            # probing loader as the design beat): gate OFF, the composite
+            # vocabulary stays closed for an unattended birth too.
+            media_candidates: list[dict[str, Any]] | None = None
+            media_loader = None
+            composite_ok = False
+            media_more = 0
+            if text_source is not None:
+                from app.config import settings  # deferred: config leaf
+
+                composite_ok = bool(settings.film_edits_enabled)
+                if composite_ok:
+                    full_candidates = await project_media_candidates(db, project)
+                    media_candidates = full_candidates[:MEDIA_LISTING_CAP]
+                    media_more = len(full_candidates) - len(media_candidates)
+
+                    async def media_loader(board: FilmStoryboard) -> StoryboardMedia:
+                        return await load_storyboard_media(
+                            db, project, board, probe_duration=True
+                        )
+
             try:
                 storyboard = await orchestrate_storyboard(
                     pages=pages,
@@ -3845,6 +8526,11 @@ class LaunchFilm(NodeBase):
                     language=pinned_language,
                     on_reject=_log_reject,
                     voiceover=voiceover,
+                    text_source=text_source,
+                    media_candidates=media_candidates,
+                    media_loader=media_loader,
+                    composite_ok=composite_ok,
+                    media_more=media_more,
                 )
             except LLMSchemaError:
                 # The funnel's own repair round already fired — a raise here
@@ -3859,6 +8545,14 @@ class LaunchFilm(NodeBase):
                     {"stage": "grounding", "codes": exc.codes, "detail": exc.detail[:500]},
                 )
                 raise
+
+        if media is None:
+            # The fresh-orchestration path (or a prepared path that never
+            # reached its load) resolves the composite media universe here —
+            # one load seat per run, duration-probing (ADR-140 two-gate).
+            media = await load_storyboard_media(
+                db, project, storyboard, probe_duration=True
+            )
 
         await set_spec_field(node.id, "storyboard", storyboard.model_dump(mode="json"))
 
@@ -3888,7 +8582,7 @@ class LaunchFilm(NodeBase):
             )
             await delete_outputs_fk_safe(db, prior)
 
-        frames = allocate_frames(storyboard)
+        frames: list[int]  # assigned by the execution_frames seat below
 
         # Slot levers (ADR-130): voiceover / music mood / aspect /
         # language ride the compiled slot; absent = plan defaults (on /
@@ -3946,8 +8640,10 @@ class LaunchFilm(NodeBase):
                 track = await db.get(Music, UUID(str(snap_music["track_id"])))
         if track is None and not (isinstance(snap_music, dict) and snap_music.get("track_id")):
             track = await resolve_film_music(db, project, music_mood)
-        if track is None and music_mood:
+        if track is None and music_mood and music_mood != FILM_MUSIC_OFF:
             raise ValueError(f"No music track found for mood '{music_mood}'")
+        # 明确关闭 (音频三态): OFF is a real state, not a failed resolution —
+        # no track, no grid, no raise; the spec simply omits the bed.
 
         # 节拍锁剪 (ADR-121 B3 + ADR-130 §1): the bed's beat grid snaps the
         # internal scene boundaries (structural floors respected, tolerance
@@ -3962,8 +8658,45 @@ class LaunchFilm(NodeBase):
                 "pick another mood (or redesign without the bed); the film "
                 "never fakes a beat."
             )
-        if beats:
-            frames = snap_frames_to_beats(storyboard, frames, beats)
+        # 冻结时间轴 = 版本状态 (ADR-137): a version carrying
+        # ``film_kept_frames`` renders ITS frozen cut — the base version's
+        # own timeline (its executed spec frames / a draft's presented plan,
+        # frozen at patch time), inherited across every timeline-preserving
+        # edit; the (possibly new) bed's grid is never snapped onto it. A
+        # present-but-corrupt kept cut fails closed (``valid_kept_cut``),
+        # and a keep_cut INSTRUCTION whose frames are absent is a
+        # half-written envelope — the same honest failure; never a silent
+        # re-snap. ``film_kept_reveal_onsets`` is the frozen cut's other
+        # half (the reveal words' landing beats): a kept cut over a board
+        # WITH reveal scenes must carry them, same fail-closed family —
+        # never a silent onset re-snap onto the new grid. Absent both
+        # (compose / recut / a timeline-changing patch / legacy births) =
+        # allocate + snap as before.
+        kept = ctx.get("film_kept_frames")
+        frozen_reveal_onsets: list[int | None] | None = None
+        if kept is not None or ctx.get("film_music_retime") == "keep_cut":
+            if not valid_kept_cut(storyboard, kept):
+                raise ValueError(
+                    "The confirmed version's kept cut is missing or no longer "
+                    "fits the board — ask the assistant to redesign the "
+                    "storyboard and confirm the new version; the run never "
+                    "silently re-snaps a cut the user approved as kept."
+                )
+            frames = [int(n) for n in kept]
+            if any(s.type == "reveal" for s in storyboard.scenes):
+                kept_onsets = ctx.get("film_kept_reveal_onsets")
+                if not valid_kept_reveal_onsets(storyboard, kept_onsets, frames):
+                    raise ValueError(
+                        "The confirmed version's kept cut is missing its "
+                        "frozen reveal timing (the word's landing beats) — "
+                        "ask the assistant to redesign the storyboard and "
+                        "confirm the new version; the run never silently "
+                        "re-snaps an in-scene cut point the user approved "
+                        "as kept."
+                    )
+                frozen_reveal_onsets = list(kept_onsets)
+        else:
+            frames = execution_frames(storyboard, beats)
 
         # 执行快照漂移校验 (ADR-129): the confirmed run's world must still
         # be the world the design beat froze — pages and music digest-equal
@@ -3971,7 +8704,7 @@ class LaunchFilm(NodeBase):
         # request, never a silent re-orchestration.
         if isinstance(execution_snapshot, dict) and execution_snapshot.get("digest"):
             current_digest = build_film_execution_snapshot(
-                pages=pages, track=track
+                pages=pages, track=track, media=media
             )["digest"]
             if current_digest != execution_snapshot["digest"]:
                 logger.info(
@@ -4078,6 +8811,17 @@ class LaunchFilm(NodeBase):
                 voice_id=resolve_film_voice(voice_block),
                 language=output.language,
             )
+            if flex_moves and kept is not None:
+                # 冻结时间轴的旁白适配冻结 (ADR-137): the frozen cut covers
+                # narration too — a re-synthesized line that outruns its
+                # kept window fails honestly (shorten the line or allow a
+                # recut), the flex rescue never moves a cut the user
+                # approved as kept.
+                raise ValueError(
+                    "The re-synthesized narration outruns the kept cut — "
+                    "shorten the line (or allow a re-cut to the bed's grid); "
+                    "a keep_cut version's scene boundaries never move."
+                )
             if flex_moves:
                 output.payload = {
                     **output.payload,
@@ -4096,12 +8840,17 @@ class LaunchFilm(NodeBase):
             music=music_spec,
             aspect=aspect,
             frames=frames,
+            reveal_onsets=frozen_reveal_onsets,
             # 血缘只写已证 digest (ADR-129 fail-closed): the render spec /
             # output payload carry the digests THIS node recomputed and
             # proved against the stamps — never the stamped values copied
             # blind. A tampered stamp fails above and writes no provenance.
             storyboard_digest=proven_content_digest,
             execution_digest=proven_execution_digest,
+            # ADR-140: the composite scenes' media universe (loaded above,
+            # duration-probed) — element windows re-check against the
+            # snapped frames and asset ids resolve to storage keys here.
+            media=media,
         )
         # 交付物血缘 (Batch 2): the design beat's digests ride the OUTPUT
         # payload as well — the delivered artifact's storyboard/execution
@@ -4124,6 +8873,8 @@ class LaunchFilm(NodeBase):
             tag=slot_tag(slot),
             ui_language=ui_language,
             n=1,
-            total_seconds=int(total_seconds),
+            # One rounding rule with the read/presentation seats (0.1 + :g —
+            # 29.5s never prints as "29").
+            total_seconds=round(total_seconds, 1),
         )
         return [output.id]

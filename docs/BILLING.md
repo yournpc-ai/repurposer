@@ -1,7 +1,7 @@
 # BILLING — 积分与计费架构
 
-> Status: 活跃（2026-09-05 建，ADR-055；积分层施工完成，支付 / 套餐经济随 W11 支付批）
-> 本文是积分 / 钱包 / 计费架构的**唯一事实源**：概念、表、扣费时序、比例参数、负余额语义、API、分期。排期只引用 PROGRESS；参数的当前生效值以 `app/platform/configs.py` 注册表为准（本文只写默认）。
+> Status: 当前规范（2026-10-25）。积分、钱包与 hold/capture/release 是当前能力；支付、套餐与订阅经济仍按 `PROGRESS.md` 挂起。
+> 本文是积分 / 钱包 / 计费架构的**唯一事实源**：概念、表、扣费时序、比例参数、负余额语义、API 与边界。参数的当前生效值以 `app/platform/configs.py` 注册表为准（本文只写默认）。
 
 ## 1. 概念层（三个词，两层货币）
 
@@ -63,19 +63,19 @@ class Config(Base):                       # configs — 公共运营参数表（
 注册/首登           create_run 出生地            execute_step 尾段（每 step）       run 终态
     │                     │                             │                        │
  grant(开户赠额)      fold estimate → hold(high 端)    成功 → capture(actual)     release(剩余 =
- 积分                 余额不足 → 422/灰行             失败/skipped → 不写行       H − Σcaptures)
+ 积分                 余额不足 → 422/灰行             失败/skipped → 不写行       H − Σrelease)
                      （用户级 shortfall）            ✅ 失败不扣费（§6）
 ```
 
 1. **授予（grant）**：开户赠额（默认 `wallet.signup_grant=100000`），`kind=grant, ref={source:"signup"}`。
 2. **预扣（hold）**：`create_run` 折完全图报价后按 **high 端**写 hold（idem `run:{id}:hold`）。余额 < hold → 出生地拒绝（422 `credits.insufficient` + 入流灰行；**用户级"积分不足"与 provider 级 MiniMax 402 严格两词**）。并发 run 各自 hold，`wallets.version` 乐观锁防超扣。
-3. **实扣（capture）**：在每个 step 收尾、metering 归并 `cost` 的**同一写入点**（ADR-050 会话纪律不破）按 actual 实扣（idem `step:{id}:capture`）。成功 step 收全量（含内部重试消耗——那是真实成本）；**failed/skipped 不写 capture 行**。provider cost 照记 `workflow_steps.cost` 供对账，不上用户账单。
-4. **释放（release）**：run 终态释放剩余（idem `run:{id}:release`）。
+3. **实扣（capture）**：先锁钱包，同一事务释放实际费用覆盖的预扣（`release`，idem `step:{id}:capture:hold-release`，增量 capture 使用对应增量键），再记实际扣费。两条台账同事务提交，余额只减少超出预扣的部分，禁止 hold 和 capture 重复扣款。在每个 step 收尾、metering 归并 `cost` 的**同一写入点**（ADR-050 会话纪律不破）按 actual 实扣（idem `step:{id}:capture`）。成功 step 收全量（含内部重试消耗——那是真实成本）；**failed/skipped 不写 capture 行**。provider cost 照记 `workflow_steps.cost` 供对账，不上用户账单。
+4. **释放（release）**：run 终态释放 `hold − Σrelease` 的剩余预扣（idem `run:{id}:release`）。终态恒等式：`Σrelease = hold`，净支出仅为 `Σcapture`；无预扣的实际扣费合法。历史重复扣款由 `scripts/repair_credit_reservations.py` 审计，默认只读，`--apply` 追加幂等释放行，不改旧记录。
 5. **购买（purchase，W11）**：payment adapter 收 webhook 确认 → 钱→积分换算（**购买比例**，W11 套餐定价时定，与消耗比例解耦）→ 写 `kind=purchase, idempotency_key=provider_event_id`。订阅周期额度 = `kind=grant, ref={source:"subscription", period:…}`。
 
 ### NULL 估价的诚实处理
 
-`estimate=None`（编译期量未知，如 dub fan-out）的 step：hold 按 0 计，结算按 actual 照扣——余额可能因此击穿为负，**允许负余额**（§5），方向是把 NULL 报价节点随校准闭环逐步消灭，不在钱包里打补丁。
+`estimate=None`（编译期量未知，如 runtime render fanout，或未出生 clips 上的 dub/translate）的 step：hold 按 0 计，结算按 actual 照扣——余额可能因此击穿为负，**允许负余额**（§5）。**含 NULL 不可报价族的方案在任何权限档都必须先带价说明并取得一次费用确认**；0 hold 不是免确认或免费承诺。这是当前报价能力边界，不是对“编译期精确总价”的隐性承诺；方向是把 NULL 报价节点随校准闭环逐步消灭，不在钱包里打补丁。
 
 ## 4. 消耗比例参数 + 公共 config 表
 
@@ -90,7 +90,7 @@ class Config(Base):                       # configs — 公共运营参数表（
 
 - 报价 fold 与实扣读同一个值，结构性同源；调消费比例 = 改 config 一行，不用发版。
 - **消耗比例 ≠ 购买比例**（钱→积分汇率是 W11 套餐定价的另一个决策，可独立做阶梯加赠）。
-- 调参不动历史账：transaction 的积分额落库即事实，USD 成本在 `workflow_steps.cost` 原样保留，两侧各自为真；只有估价贴数字随参数实时变（期望行为）。
+- 调参不改已经写入的 ledger 积分额；USD 成本仍保留在 `workflow_steps.cost`。**读面不是全部冻结**：历史 step 的 `cost_credits` 也由持久 USD × 当前比例重新序列化，估价贴同样随参数变化；只有已写 transaction 金额与幂等事实不随比例重写。
 - render_seconds 价目当前为 0（自家 infra）——估价贴不含渲染成本，诚实；将来定价只改 PRICING 一行。
 - **voice_clones 报价幂等**：声纹克隆按「每个新声一次」计费（provider 规则——首次 T2A 使用触发），一条链多站 dub 逐节点各自声明 would-be clone 时 fold 只收一次（钳制在 `fold_estimates` 一座，报价=fold 的唯一缝合点；与计量同律——`record_media_usage` 只在 voice_id 缺失时记账）——估价 ≡ 计量，多语言配音链的克隆费如实计一次。
 - **配方卡估价贴的可报价域**：translate / dub / reframe 挂在 materialize_source 上的链，live 任务书诚实 NULL（编译期片段未生——「估价随运行」），配方卡贴纸按 RECIPE_QUOTE_FACTS 声明的典型素材可报价（`quote_scope="recipe"` 单座豁免，传进 `compile_recipe_quote` 的 ctx）。
@@ -132,18 +132,23 @@ class Config(Base):                       # configs — 公共运营参数表（
 
 ## 7. API 与展示面
 
-**新增端点（本期仅两个）**：
+**当前端点**：
 
 ```
 GET /wallet                                → {balance, held}
-GET /wallet/transactions?limit&cursor      → 台账行（W11 计费中心的只读投影前身）
+GET /wallet/transactions?limit&cursor      → per-run/per-event 语义交易行
 ```
 
-**骑既有响应的派生字段（零新端点）**：credits 全部由 `outputs` 序列化层派生（fold × 比例），**不落列**——USD 继续住 `estimate` / `cost`：
+`/wallet/transactions` 不是裸台账查询：hold/capture/release 在服务端按 run 折叠为一条 spend，grant/refund/positive adjust 归为 grant，purchase 归为 topup。wire 字段为 `id / family / amount / label? / output_types / hint? / project_name? / created_at`；raw `kind / ref / balance_after / idempotency_key` 留在内部。keyset 在原始 append-only ledger 上分页，语义 fold 在每页内进行，跨页 run 显示该页净额。
 
-- 任务书 dock 载荷 + `estimate_credits: [low, high]`（合计 + 逐任务）；
-- `GET /runs/{id}` 每 step + `estimate_credits` / `cost_credits`；
-- `GET /recipes` 卡 + `estimate_credits`（配方预设图 fold × 比例 = 配方卡估价贴）。
+**跨读面的派生字段**：credits 在各自序列化边界以 fold × 当前比例派生，**不落重复列**；USD 继续住 `estimate` / `cost`。不是只有 `outputs` 一个序列化器：
+
+- 任务书 dock：`estimate_credits: {total, per_task}`；
+- `GET /runs/{id}`：每 step `estimate_credits [low, high]` / `cost_credits`，由该 read model 派生；
+- `GET /recipes`：固定量卡 `estimate_credits [low, high]`；按秒卡改发 `estimate_rate`，不再伪造固定总价；
+- graph 草稿节点在 projects read model 中做同样的 fold × live-ratio 投影。
+
+ledger 已写金额不变，历史 step 的 credits 读投影可随比例变化，二者不能混为“调参不动所有历史数字”。
 
 **错误形态**（API.md §4）：`422 {detail: {code: "credits.insufficient", balance, required}}`。
 
@@ -153,14 +158,15 @@ GET /wallet/transactions?limit&cursor      → 台账行（W11 计费中心的�
 
 **展示主轴抉择（ADR-117 同批拍板）**：积分余额是唯一的用户面数字——**百分比永不做主轴**（估价四面同源律：dock 总价 / 修改单价 / 估价贴 / 节点估价全说积分，余额讲 % 则用户无法对账；且 % 的分母在赠额+充值+订阅混合钱包下无意义）。ring 类可视化只是将来订阅落地后的可选 garnish（配额的可视化，不是第二货币）。**SettingsDialog「积分」section** = 余额与台账的全貌座位（概览卡 + 语义行 + 查看全部），与 CreditsPill / 账户控制台三面同源同一投影，零新端点。**确认闸形态**（ADR-117）：默认 auto 档无闸——方案呈现即开工；ask 档与守卫线触发时 Start 钮带价（`开始 · 约 N 积分` / NULL 族「估价随运行确定」），复用既有 pill 零新 chrome。
 
-## 8. 分期与边界
+## 8. 当前边界与支付延期
 
-| 期 | 内容 |
+| 范围 | 当前状态 |
 |---|---|
-| **W7 积分批（09-03~09-05）** | 三表 + migration + configs 注册表/reconcile + 开户 grant + hold/capture/release 真扣费 + 出生地 shortfall 判定 + 三面展示 + 灰行 + `/wallet` 端点。**积分从这批起就是真的**——只是还没有花钱买的入口 |
-| **W11 支付批** | `platform/payments.py` 适配器（三方对接 + webhook + 订阅生命周期）→ 只写 ledger；套餐语义（周期额度 vs 充值包、购买比例、档位）那时定，`kind`/`ref` 已留座位；用户计费中心 = 台账只读投影 |
+| 积分底座 | 三表、migration、configs reconcile、开户 grant、hold/capture/release、shortfall、钱包与多个估价读面是当前能力 |
+| 支付/订阅 | `platform/payments.py`、三方 webhook、订阅生命周期、购买比例与套餐档位仍是 PLANNED；启动时间归 `PROGRESS.md` R1.1 |
+| 计费中心扩展 | 当前 Settings/CreditsPill 共用语义交易投影；分桶余额、周期额度、fair-use 配额与 admin configs 写面按后续商业合同实施 |
 
-**显式不做（W11 座位已留）**：`/payments/*` 端点、webhook 接收器、admin 侧 configs 读写端点、分桶余额（三桶形状已定：**Subscription 周期额 / Purchased 充值包 / Bonus 赠额**——Pexo 实证的用户可读形态，spend 顺序 = 先扣先到期；订阅桶配「Resets on <date>」行——Flora 先例；ledger 加列而非改语义）、fair-use 会话配额（数据基础 = `conversation_usage` 台账）。auto-spend 闸已提前落地——ADR-117 默认 auto + 守卫线即其形态，W11 不再单独立项。
+**支付边界**：未来 `/payments/*` 与 webhook 只经适配器写 ledger；分桶余额若实施，应增加明确字段/语义而非篡改现有交易。三桶方向（Subscription / Purchased / Bonus）、到期顺序、fair-use 和 admin 写面都不是当前已实现能力。auto-spend 的当前法律仍是 ADR-117 默认 auto + 制作意图 + 守卫线，不由支付批另造一套授权。
 
 **孤儿 hold 回收**：run 被删（project 级联，台账 append-only 按设计存活）或永停非终态（WAITING_HUMAN 被弃）时，hold 的解冻走双路闭环：① **删除即退**——project 删除端点同事务对非 RUNNING run 调 `release_run`（RUNNING 在途 run 的捕获量仍在增长，提前退会与后落 capture 对不上账；它归 worker 收官路）；② **收官路台账自结算**——`maybe_finalize_run` 对 run 行已删 / 项目已删的残余调用走 `_release_orphaned_hold`（ledger hold 行自带 owner，remainder 从台账重算，幂等键防双退）；WAITING_HUMAN 被弃由 TTL 过期扫荡（`expire_stale_interrupts`）→ run 收官 → 正常 release 兜住。reconcile 尺子对「被删 run 的未结 hold」保留 ○ known-open 豁免，活 run 未结仍硬判。
 
@@ -182,4 +188,4 @@ app/platform/
 
 ## 10. 验收口径
 
-事前有预估（任务书 dock 总价 + 配方卡估价贴）、事后有明细（`GET /wallet/transactions` 逐笔 + run 逐步 `cost_credits`）、失败不扣费（failed/skipped 零 capture）、余额不足出生地拦截（422 + 灰行，用户级两词）、调比例参数三面同动。
+事前有预估（任务书 dock 总价 + 配方卡估价贴）、事后有语义明细（`GET /wallet/transactions` 的 per-run/per-event 行）与逐步成本（`GET /runs/{id}` 的 `cost_credits`）、失败不扣费（failed/skipped 零 capture）、余额不足出生地拦截（422 + 灰行，用户级两词）。调比例时，所有读面重新按同一 live ratio 投影，已写 ledger 不变；不得把语义交易行数与原始 hold/capture/release 行数混为同一验收口径。

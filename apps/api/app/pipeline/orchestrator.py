@@ -39,7 +39,8 @@ from app.models.schemas import (
 from app.models.tables import Asset, AssetStatus, CreditTransaction, Message, Output, WorkflowStep, Project, WorkflowRun
 from app.metering import bind_workflow_step, merge_accrued_cost
 from app.pipeline.derivative_dispatch import derivative_output_types
-from app.pipeline.errors import TransientNodeError, user_error_line
+from app.pipeline.errors import TransientNodeError, user_error_line, user_line
+from app.pipeline.run_review import output_is_delivered
 from app.pipeline.morph import (
     check_transform_targets,
 )
@@ -82,11 +83,6 @@ from app.platform.billing import (
 from app.tools import TOOL_REGISTRY, ToolEntry, strip_null_params, validate_task_list
 
 logger = structlog.get_logger()
-
-# Kinds whose terminal state is owned outside the worker topo walk (D2) —
-# node-declared (`runtime_fanout`), consumed here so a new fan-out kind needs
-# zero kernel edits.
-RUNTIME_FANOUT_KINDS = runtime_fanout_kinds()
 
 # Targeted-regen scopes: the generic "derivative" plus every copy-writer
 # output type (node-derived — a new writer package is targetable here with
@@ -429,7 +425,9 @@ def _compile_task_list(
                     # launch_film slot — clips already seat aspect at spec
                     # top-level; a generic whitelist would fork one fact
                     # into two seats (the pure cut-chain test guards this).
-                    or (node_cls.kind == "launch_film" and k in ("voiceover", "music_mood", "aspect"))
+                    # The text source (ADR-138 §7.6) rides the same seat:
+                    # exclude_none drops the keys for web films byte-clean.
+                    or (node_cls.kind == "launch_film" and k in ("voiceover", "music_mood", "aspect", "text", "verbatim", "target_seconds", "scene_count", "group_chars"))
                 },
             }
             spec = {
@@ -781,8 +779,18 @@ async def _check_birthplace_requires(
             owners = needs.setdefault(req.key, (req, []))[1]
             owners.append(entry.name.replace("_", " "))
     has_clips_slot = any(t.tool == "select_clips" for t in (task.tasks or []))
+    # Text-source film (ADR-138 §7.6): a launch_film task carrying the copy
+    # itself needs no captured page — the words are the material.
+    film_has_text = any(
+        t.tool == "launch_film"
+        and isinstance(t.params, dict)
+        and bool(t.params.get("text"))
+        for t in (task.tasks or [])
+    )
     for key in sorted(needs):
         req, owners = needs[key]
+        if key == WEB_PAGE.key and film_has_text:
+            continue
         if await req.missing(db, project):
             # The clips-media 422 keeps its own copy: it names the way out
             # ("deselect clips") in plan terms, not tool terms.
@@ -1802,7 +1810,7 @@ async def _release_orphaned_hold(db: AsyncSession, run_id: UUID) -> None:
     recovery (BILLING §8 known boundary → 支付批前落地).
 
     The ledger is append-only and its hold rows carry the owner, so the
-    remainder (release_run recomputes hold − captures from the ledger,
+    remainder (release_run recomputes hold − releases from the ledger,
     clamped at 0) can be returned without any run/project row. Idempotent:
     the release idem key dedupes against a prior settlement. No hold row →
     nothing was ever frozen → nothing to do.
@@ -1833,9 +1841,8 @@ async def maybe_finalize_run(run_id: UUID) -> None:
     continue after the run completes") let「做好了」land mid-render. Render
     mirrors settle through the render chain (D2: ``outputs.render_status``
     owns their lifecycle), so ``render_output`` re-invokes this finalizer
-    when a render lands. The fanout exemption survives ONLY in the failure
-    verdict below — a failed render is a per-output fact the canvas card
-    carries, never a run verdict.
+    when a render lands. Failed renders fail the run; partial delivery is
+    determined by usable outputs, not merely successful producer steps.
     """
     async with AsyncSessionLocal() as db:
         run = await db.get(
@@ -1888,31 +1895,26 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             await db.commit()
             return
 
-        # The verdict (2026-09-13 用户拍板 — the pre-fork rule retires): ANY
-        # failed non-fanout step fails the run. The retired generation-only
-        # predicate (2026-07-14, before forks existed) let a dead translate /
-        # dub fork ride its surviving siblings to a green receipt + a 收官句 —
-        # a red ✗ step under a ✓ run (the「有报错却显示完成」走查). Render
-        # fanout stays excluded from the FAILURE verdict (one step per output;
-        # a failed render is a per-output fact the canvas card carries, never
-        # a run verdict) — while the ACTIVE tally above no longer exempts it
-        # (ADR-074② 翻案: renders hold the run open to their own terminal).
-        failed_verdict = [
-            n
-            for n in nodes
-            if n.status == "failed" and n.kind not in RUNTIME_FANOUT_KINDS
-        ]
-        # "Partial" = products landed — a done step WITH output_refs. Prep
-        # steps (preprocess / understand / plan) done don't count: a run whose
-        # work all died but whose prelude ran has nothing on the canvas.
-        any_landed = any(
-            n.status == "done" and bool(n.output_refs) for n in nodes
-        )
+        # Render/upload failures are delivery failures, including fan-out.
+        failed_verdict = [n for n in nodes if n.status == "failed"]
+        output_ids = {UUID(str(oid)) for n in nodes for oid in (n.output_refs or [])}
+        outputs = list((await db.execute(
+            select(Output).where(Output.id.in_(output_ids))
+        )).scalars().all()) if output_ids else []
+        delivered = [o for o in outputs if output_is_delivered(o)]
+        any_landed = bool(delivered)
+        # A completed producer with no usable rendered file must not receive
+        # a green receipt, even when a render mirror is missing/corrupt.
+        missing_delivery = len(delivered) < len(output_ids)
         project = await db.get(Project, run.project_id)
 
-        if failed_verdict:
+        if failed_verdict or missing_delivery:
             run.status = WorkflowStatus.FAILED
-            run.error = failed_verdict[0].error or "All outputs failed"
+            run.error = (
+                (failed_verdict[0].error if failed_verdict else None)
+                or next((o.render_error for o in outputs if o.render_error), None)
+                or user_line("delivery_missing", (project.language if project else None) or "en")
+            )
             # Failed runs must NOT leave the project stuck in PROCESSING
             # (the frontend hides destructive ops while it's "live" — a run
             # that won't recover keeps the user from deleting or retrying,
@@ -1935,9 +1937,9 @@ async def maybe_finalize_run(run_id: UUID) -> None:
                 project.status = ProjectStatus.REVIEW
                 project.updated_at = datetime.now(UTC)
         run.progress = 100
-        # Credits (ADR-055): a terminal run releases the un-captured
-        # remainder of its hold — a failed run releases it whole
-        # (失败不扣费). A missing project settles from the ledger (its
+        # Release the unconsumed reservation. Successful steps retain their
+        # actual charges even when another step failed; failed steps have no
+        # capture. A missing project settles from the ledger (its
         # hold rows carry the owner), never skipped (orphan hold, BILLING §8).
         if project is not None:
             await release_run(db, user_id=project.user_id, run_id=run.id)

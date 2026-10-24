@@ -1,15 +1,12 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import os from "node:os";
-
 import type { ClipSpec } from "@repurposer/clip";
 import express from "express";
-import { fetch } from "undici";
 
 import { renderFilm } from "./film/render";
 import { filmSpecSchema, filmTotalFrames } from "./film/schema";
 import { renderClip } from "./render";
-import { CACHE_DIR, dispatcherFor } from "./stage";
+import { CACHE_DIR } from "./stage";
+import { renderArtifacts } from "./artifacts";
+import { uploadFile, UploadError } from "./upload";
 
 const app = express();
 app.use(express.json({ limit: "8mb" }));
@@ -33,27 +30,6 @@ const PORT = Number(process.env.RENDER_PORT ?? 3001);
 // 3600 = 120 s @ 30 fps.
 const FILM_MAX_FRAMES = Number(process.env.FILM_MAX_FRAMES ?? 3600);
 
-async function uploadFile(url: string, filePath: string, contentType?: string) {
-  const buffer = await fs.readFile(filePath);
-  const headers: Record<string, string> = {};
-  if (contentType) headers["Content-Type"] = contentType;
-  // The PUT upload rides the same proxy-aware dispatcher as source staging
-  // (2026-08-15: a 340s whole-video MP4 upload over the throttled direct
-  // TOS link died on undici's headersTimeout — the render had SUCCEEDED;
-  // only the upload failed). Global fetch ignores HTTPS_PROXY; the explicit
-  // dispatcher is what honors it.
-  const resp = await fetch(url, {
-    method: "PUT",
-    body: buffer,
-    headers,
-    dispatcher: dispatcherFor(url),
-  });
-  if (!resp.ok) {
-    const body = await resp.text().catch(() => "");
-    throw new Error(`Upload failed: ${resp.status} ${body}`);
-  }
-}
-
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
@@ -73,7 +49,8 @@ app.get("/health", (_req, res) => {
  * supplied presigned URLs, and returns the object keys.
  */
 app.post("/render", async (req, res) => {
-  const { spec, basename, outputs, source_key } = req.body as {
+  const { spec, outputs, source_key, render_id } = req.body as {
+    render_id?: string;
     spec?: ClipSpec;
     basename?: string;
     outputs?: {
@@ -111,17 +88,21 @@ app.post("/render", async (req, res) => {
     }
 
     try {
-      const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "repurposer-render-"));
-      const name = basename ?? `film-${Date.now()}`;
-      const { videoPath } = await renderFilm(parsed.data, outDir, name);
+      const { videoPath } = await renderArtifacts(
+        { id: render_id ?? outputs.video.key, spec: parsed.data },
+        (outDir) => renderFilm(parsed.data, outDir, "video"),
+      );
 
       await uploadFile(outputs.video.put_url, videoPath, outputs.video.content_type);
-      await fs.rm(outDir, { recursive: true, force: true }).catch(() => {});
 
       res.json({ ok: true, video: outputs.video.key });
     } catch (err) {
-      console.error("film_render_failed", err);
-      res.status(500).json({ error: String(err) });
+      console.error("film_render_failed", { render_id, error: err });
+      res.status(500).json({
+        error: err instanceof UploadError ? err.message : "Video rendering failed",
+        stage: err instanceof UploadError ? "upload" : "render",
+        code: err instanceof UploadError ? err.code : "RENDER_FAILED",
+      });
     }
     return;
   }
@@ -141,15 +122,15 @@ app.post("/render", async (req, res) => {
   }
 
   try {
-    const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "repurposer-render-"));
-    const name = basename ?? `clip-${Date.now()}`;
-    const { videoPath, srtPath } = await renderClip(spec, outDir, name, source_key);
+    const { videoPath, srtPath } = await renderArtifacts(
+      { id: render_id ?? outputs.video.key, spec, source_key },
+      (outDir) => renderClip(spec, outDir, "video", source_key),
+    );
 
     await uploadFile(outputs.video.put_url, videoPath, outputs.video.content_type);
     if (srtPath && outputs.srt?.put_url) {
       await uploadFile(outputs.srt.put_url, srtPath, outputs.srt.content_type);
     }
-    await fs.rm(outDir, { recursive: true, force: true }).catch(() => {});
 
     res.json({
       ok: true,
@@ -157,8 +138,12 @@ app.post("/render", async (req, res) => {
       ...(srtPath && outputs.srt ? { srt: outputs.srt.key } : {}),
     });
   } catch (err) {
-    console.error("render_failed", err);
-    res.status(500).json({ error: String(err) });
+    console.error("render_failed", { render_id, error: err });
+    res.status(500).json({
+      error: err instanceof UploadError ? err.message : "Video rendering failed",
+      stage: err instanceof UploadError ? "upload" : "render",
+      code: err instanceof UploadError ? err.code : "RENDER_FAILED",
+    });
   }
 });
 

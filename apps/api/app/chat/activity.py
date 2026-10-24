@@ -115,6 +115,12 @@ STATUS_CANCELLED = "cancelled"  # schema-complete; see the module docstring
 # family's 落定即退役 default: no docked plan card absorbs this beat — the
 # markdown message IS the deliverable, and the settled "Worked for Xs" row is
 # its evidence.
+# The span speaks TWO variants (结构化编辑拍文案修正): compose keeps the
+# design pair; a call carrying ``edits`` (the patch path) speaks the ADJUST
+# pair — the persisted receipt never claims a fresh design when the work
+# was a targeted edit. The variant is read off the VALIDATED params at
+# execute entry (ReadExecuting.params): knowable there, never guessed at
+# name_known (the arguments are still streaming at that beat).
 _DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "edit_graph", "revise_output", "edit_output", "design_storyboard"})
 _RUN_TOOLS = frozenset({"start_run"})
 _CONVERSATION_TOOLS = frozenset({"ask_user", "answer"})
@@ -151,10 +157,16 @@ _EDIT_KEYS = ("chat.activity.edit", "chat.activity.editDone")
 # persists (its markdown message is the deliverable, no dock card absorbs it).
 _STORYBOARD_TOOLS = frozenset({"design_storyboard"})
 _STORYBOARD_KEYS = ("chat.activity.storyboard", "chat.activity.storyboardDone")
+# The patch variant's pair (same span anatomy, its own vocabulary): a call
+# carrying edits reads as 调整, never as a fresh 设计.
+_STORYBOARD_EDIT_KEYS = (
+    "chat.activity.storyboardEdit",
+    "chat.activity.storyboardEditDone",
+)
 
 
 def _is_storyboard_key(key: str | None) -> bool:
-    return key in _STORYBOARD_KEYS
+    return key in _STORYBOARD_KEYS or key in _STORYBOARD_EDIT_KEYS
 
 
 def _active_key_for(kind: str, tool_name: str) -> str | None:
@@ -404,6 +416,8 @@ class ActivityProjector:
             return active_key + "Done"
         if active_key == _EDIT_KEYS[0]:
             return _EDIT_KEYS[1]
+        if active_key == _STORYBOARD_EDIT_KEYS[0]:
+            return _STORYBOARD_EDIT_KEYS[1]
         if _is_storyboard_key(active_key):
             return _STORYBOARD_KEYS[1]
         pair = _ACTIVITY_KEYS.get(kind)
@@ -582,14 +596,23 @@ class ActivityProjector:
           its activity now): the framing checkpoint has landed, so the
           「正在设计分镜」 line and its duration both measure the real draft
           — never the speech before it. Returns the open frame so the wire
-          sees the birth at this exact beat."""
+          sees the birth at this exact beat. The compose/patch VARIANT is
+          picked here too — off the validated params (``edits`` present →
+          the adjust pair): confirmed at this event phase, never guessed
+          at name_known."""
         if self._open_call is None:
             return []
         name, activity_id = self._open_call
         if activity_id is None:
             if name not in _STORYBOARD_TOOLS:
                 return []
-            activity_id, frame = self._start(KIND_DRAFT, _STORYBOARD_KEYS[0])
+            edits = (
+                getattr(event.params, "edits", None)
+                if event.params is not None
+                else None
+            )
+            keys = _STORYBOARD_EDIT_KEYS if edits else _STORYBOARD_KEYS
+            activity_id, frame = self._start(KIND_DRAFT, keys[0])
             self._open_call = (name, activity_id)
             return [frame]
         if activity_id not in self._active:

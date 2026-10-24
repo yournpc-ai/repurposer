@@ -650,6 +650,21 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                 )
             await queue.put(("completed", response.model_dump(mode="json")))
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash
+            # Server-side truth seat: the full stack + turn identifiers land
+            # in the log BEFORE anything else (a failed turn must never again
+            # be a stack-less "Internal server error" — the 14fa16b6 evidence
+            # hole). Identifiers only: no prompt text, no payload bodies.
+            logger.exception(
+                "chat_turn_failed",
+                conversation_id=(
+                    str(turn_conversation_id) if turn_conversation_id else None
+                ),
+                user_message_id=(
+                    str(turn_user_message_id) if turn_user_message_id else None
+                ),
+                project_id=str(data.project_id),
+                user_id=str(user_id),
+            )
             # Turn durability (交互完整性批 A): the user row committed in
             # prepare SURVIVES this failure — stamp it 'failed' (best-effort,
             # fresh session inside) and tell the client it persisted, so the
@@ -740,6 +755,18 @@ async def _answer_stream(
                         _sse("assistant.thinking", json.dumps({"phase": phase}))
                     )
 
+                async def on_checkpoint(text: str, at: str | None = None) -> None:
+                    # The checkpoint channel (the chat turn's seat, mirrored):
+                    # an answer continuation can open with expectation prose
+                    # before the design beat — the row persists runner-side,
+                    # this frame carries the full text live so the client
+                    # settles the current bubble segment and paces the
+                    # checkpoint into its own (the answer path's ordering
+                    # matches the chat path's: 服务员话 → 活动行 → 读后回复).
+                    await queue.put(
+                        _sse("assistant.checkpoint", json.dumps({"text": text, "at": at}))
+                    )
+
                 async def on_row_append(message: Message) -> None:
                     # ADR-129 (the _turn_stream hook's twin): an answer
                     # continuation can carry the film design beat (a "yes" to
@@ -759,6 +786,7 @@ async def _answer_stream(
                     on_phase=on_phase,
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
+                    on_checkpoint=on_checkpoint,
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
@@ -785,6 +813,14 @@ async def _answer_stream(
                 )
             )
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash
+            # Same server-side truth seat as the chat pump (stack + ids,
+            # never payload bodies) — answer continuations are LLM turns too.
+            logger.exception(
+                "answer_turn_failed",
+                conversation_id=str(conversation_id) if conversation_id else None,
+                message_id=str(message_id),
+                user_id=str(user_id),
+            )
             detail = _failure_detail(exc, ui_language)
             # Same durable failure line as the chat pump's seat — a refresh
             # after a failed answer continuation keeps the honest row.

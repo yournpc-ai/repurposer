@@ -22,6 +22,13 @@ logger = structlog.get_logger()
 _TTS_MODEL = "speech-2.6-hd"
 
 
+def tts_model() -> str:
+    """The synthesis model fact (the narration store's config-hash input —
+    a model move is a config change: old originals stop matching, never
+    silently reused under a new voice engine)."""
+    return _TTS_MODEL
+
+
 class VoiceError(Exception):
     """Voice provider failure (clone / T2A) — tools/ never imports the LLM
     client (N-29), so the voice wrapper speaks its own error; callers up the

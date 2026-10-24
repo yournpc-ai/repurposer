@@ -204,20 +204,34 @@ function Home() {
   }, [])
 
   // 卡片点击唯一归宿 (D5 禁则 8): composer 预填 — never a template editor.
-  // clear + insertText REPLACES the draft (prototype parity; the staged
-  // files ride untouched — the chips band is the valuable payload, the text
-  // is the recipe's launch template). A visible placeholder is the recipe's
-  // only blank: insert it selected so paste replaces it in one gesture; it
-  // never becomes a hidden field or a second input surface.
+  // 不静默覆盖 (home 内容扩展批): the draft is REPLACED only when it's empty
+  // or still IS the previous card prefill verbatim (clicking between cards
+  // swaps the template); a draft carrying the user's own text or @-mentions
+  // is kept — the new prompt appends below on a blank line. Staged chips
+  // never ride this path (they live outside the draft). A visible
+  // placeholder is the recipe's only blank: insert it selected so paste
+  // replaces it in one gesture; prompts without the blank simply skip the
+  // selection (selectText no-ops on a missing needle).
+  const lastPrefillRef = useRef<string | null>(null)
   const handlePrefill = useCallback(
     (prefillKey: string) => {
       const placeholder = t("recipes.shelf.urlPlaceholder")
-      editorRef.current?.clear()
-      editorRef.current?.insertText(t(prefillKey, { placeholder }))
+      const text = t(prefillKey, { placeholder })
+      const draft = prompt.trim()
+      const replaceable =
+        mentions.length === 0 &&
+        (draft === "" || draft === lastPrefillRef.current)
+      if (replaceable) {
+        editorRef.current?.clear()
+        editorRef.current?.insertText(text)
+      } else {
+        editorRef.current?.insertText(`\n\n${text}`)
+      }
+      lastPrefillRef.current = text.trim()
       editorRef.current?.selectText(placeholder)
       if (!docked) scrollComposerIntoView()
     },
-    [t, docked, scrollComposerIntoView],
+    [t, prompt, mentions, docked, scrollComposerIntoView],
   )
 
   // Two-level tab shelf (D5, prototype 屏①): families × subs × horizontal

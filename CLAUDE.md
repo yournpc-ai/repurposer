@@ -1,28 +1,39 @@
 # Repurposer — Claude Collaboration Guidelines
 
-> 协作规范与高频硬律。两个设计系统的**全文**各有其家：视觉/交互形态 = `docs/UI_GUIDELINES.md`；chat/画布行为 = `docs/CHAT_ARCHITECTURE.md`。本文只载最高频违规的硬律与指针——动一个子系统前先读它的全文文档。
+> 协作规范与高频硬律。两个设计系统的**全文**各有其家：视觉/交互形态 = `docs/UI_GUIDELINES.md`；chat/画布行为 = `docs/CHAT_ARCHITECTURE.md`。本文只载最高频违规的硬律与指针——动一个子系统时读其**相关章节**，不要求通读全部规范或历史。
 >
-> 文档卫生：本文与 docs 只承载**现行法**（现在时直陈）。不写日期、拍板过程、翻案链、退役史——历史在 git 与 `docs/DECISIONS.md`（ADR 编号）。
+> 文档卫生：本文与 docs 只承载**现行法**（现在时直陈）。只保留一个更新日期、当前规则、必要理由与开放事项；不记录拍板过程、翻案链、退役史或逐轮交付报告。**不创建或维护文档归档，不复制旧版本留底**。被替代内容直接删除，规则就地更新；仍有效的需求、未验证项与阻塞必须留在当前文档。
+
+## 默认阅读与收尾协议
+
+以下规则每个新会话自动执行，无需用户重复提醒；compact 后沿当前任务与交接继续，不重新通读项目历史。
+
+1. 先读本文与 `docs/PROGRESS.md` §0，再按本次任务选合同。先用 `rg -n '^#{1,4} ' 文件` 或关键词定位标题，再读取相关章节及必要上下文；不批量 `cat` 大型文档，不为“了解项目”遍历整个 docs。
+2. 局部修复只读相关合同、约束、风险与验收项。接手整个模块、排期或发布评估时才读该模块完整状态与欠账；Film 的三份主文档也不是每次全文必读。
+3. 只有当前契约不清、证据缺失或规则冲突时，才定点查对应现行 ADR 与代码、测试或当前运行证据。引用不是递归阅读指令；确认实现位置、适用约束与验收条件后即进入工作，不继续扩大阅读范围。
+4. 收尾修改既有事实源：状态覆盖旧快照，合同更新剩余范围；保留未完成需求、未验证项和上线阻塞。普通修复不新增 ADR、会话流水账或重复总结文档；历史叙述与已失效合同直接删除，不另建 archive、事故纪要、验收日志副本或历史索引；删除前把仍有效的开放事项并入当前事实源。
+5. 删除 scratch / 旧合同前逐份核对独有语义：未完成需求、负面禁令、标识符、操作数值、迁移资源条件、真实验证边界与仍存活的引用都必须有当前家。验收看“叙事已删、规则仍保留”的 diff，不以历史关键词清零为目标；研究证据与可执行诊断工具不因日期或事故编号删除。
+6. compact 交接只保留目标、当前结论、相关文件、已做/未做与下一步；无需重述历次事故。以上阅读节制不能省略本次变更适用的安全、授权、数据与并发约束。
 
 ## Key Docs
 
-Read these before touching a subsystem (check each doc's own status line — some describe proposed work not yet landed on `main`):
+**固定入口只有两层**：先读本文与 `docs/PROGRESS.md` §0，再读当前任务的状态/合同。随后只读下表命中的具体章节；完整导航与文档职责见 `docs/README.md`。不创建历史文档库；排障需要证据时查当前代码、测试与运行数据。
 
-- `docs/README.md` — **docs 索引与治理原则（单一事实源表）**，找文档先查这里。
-- `docs/PROGRESS.md` — 进展快照 + 排期 + 需求池的**唯一事实源**；排期/优先级只准引用它。
-- `docs/MODULE_ARCHITECTURE.md` — 六层模块图 + **表归属契约**（每张表只有一个 owner 模块）+ 跨模块通信规则 + §7 代码地图/队列机制/数据约定（现状架构唯一事实源）；新表/新模块/新认领源必须在此登记。
-- `docs/UI_GUIDELINES.md` — **studio 视觉/交互设计系统唯一事实源**：圆角/纵深/灰梯/hover/浮层冰霜/composer 视觉解剖/侧栏解剖/页面布局/画布形态。动 `_app` UI 前必读。
-- `docs/CHAT_ARCHITECTURE.md` — **chat/画布行为唯一事实源**：终态工具集 / plan path / QuestionDock / SSE / 打字机律 / 两形态机 / 词表 v3 / 相机律。动 chat、dock、画布行为前必读。
-- `docs/POSITIONING.md` — **定位根概念架构（运营层母文档，ADR-042，已拍板未实施）**：身份根 = 定位（positioning），人设收窄为表达分区，渠道/选题/素材挂根；施工排期 = PROGRESS 第八~十周运营端。动身份模块/渠道/选题/home 前先读它。
-- `docs/AGENT_ARCHITECTURE.md` — 四层工程地图（Model / Harness / Graph / Loop，ADR-039）：工具包 `app/tools/`（能力唯一家）+ agent registry `app/agents/`（一个 Agent 类 + 声明实例）+ `NodeBase` 图内核（报价=fold / 执行=topo / 校验=∀ / 对账=⊆）+ chat 治理环。agent 架构唯一事实源；outputs 可扩展（产物 = 工具的属性，注册表派生）。
-- `docs/DIALOG_WORKFLOW.md` — **对话→生产概念架构母文档（ADR-052）**：厚 agent = 产品层一个 agent、身体 = 一条 workflow（聊天 → 意图路由 → brief/计划 → 生产 DAG → 产出）；双引擎分离 / canonical 词汇（router·understand·plan·brief）/ 有界 loop 节点三护栏 / 施工切分 B1~B4。动 chat 意图层 / plan path / 多轮对话 / agent 概念前必读。
-- `docs/MUSIC_ARCHITECTURE.md` — AI-generated music library backed by a dedicated `Music` table. Implemented (Layer-4 music verification still future).
-- `docs/BILLING.md` — **积分/钱包/计费架构母文档（ADR-055）**：credit / wallet / credit_transactions 三词两层货币 + hold→capture→release 扣费时序 + configs 公共参数表 + 消耗比例参数 + 负余额语义；支付只留 W11 边界。动积分 / 钱包 / configs / 扣费 / 估价展示前先读它。
-- `docs/RENDERING.md` + ADR-016 — clip-spec is the **sole render contract**（字段级契约与渲染链架构的唯一事实源）; the renderer is a replaceable black box. Do not leak Remotion/React concepts into clip-spec. 编辑器交互与范围纪律在 `docs/VIDEO_EDITOR.md`。
-- `docs/DECISIONS.md` — ADRs，**只保留现行决策**：过时 / 被翻案的内容直接删除（历史在 git，不留痕）；新决策追加新编号，编号不连续属正常。
-- `docs/COMPETITIVE_ANALYSIS.md` + `docs/DECISION_MATRIX.md` + `docs/research/` — 竞品综合 / 采纳矩阵 / 原始证据三层，评估竞品功能时按此顺序查。
-- `docs/DATABASE_MIGRATIONS.md` — Alembic workflow; `migrations/versions/*.py` is part of the codebase and must be committed.
-- `docs/tasks/` — per-feature implementation briefs with acceptance criteria and explicit "Prohibited Behaviors"; read the relevant task before starting and respect its prohibitions. 已完成简报归 `docs/archive/tasks-done/`（历史记录，不再维护）。
+- **当前状态 / 排期**：`docs/PROGRESS.md` §0 是唯一事实源；局部任务可以维护实施状态，但不得复制全局排期。
+- **Film/MG**：先读 `docs/tasks/film-storyboard-orchestration-progress.md` §0，再定点读相关能力行、风险/欠账、execution 验收条目与总设计章节；接手整个 Film 或评估发布时才读完整 progress 与 execution §0～§1。只有实施延期项才读 execution §2～§4。
+- **模块 / 表 / 队列 / 代码地图**：`docs/MODULE_ARCHITECTURE.md` §4（表归属）、§5（跨模块规则）、§7（代码地图与队列）；新表、新模块、新认领源必须登记。
+- **Studio UI**：`docs/UI_GUIDELINES.md` 的相关组件/布局章节；只有改 chat 行为时才同时读 CHAT_ARCHITECTURE。
+- **Chat / dock / 画布**：`docs/CHAT_ARCHITECTURE.md` 按改动面选读——工具与 plan path §3、SSE/活动/打字机 §8、修订 §9、禁令 §12。活动行与 WorkSegment 改动脉冲 §8.6～§8.7 的现行规则。
+- **Chat 意图 / 多轮 / brief**：`docs/DIALOG_WORKFLOW.md` §2、§4 + CHAT_ARCHITECTURE §3；不读旧交互迁移报告代替现行法。
+- **Agent / tools / graph**：`docs/AGENT_ARCHITECTURE.md` §2（四层地图）、§4（Graph）、§5（Harness）、§7（工具包）；报价另读 §8。
+- **Rendering / spec families**：`docs/RENDERING.md` §1、§3、§6、§8；Film 组合与版本契约另读 Film 总设计，编辑器交互另读 `docs/VIDEO_EDITOR.md`。clip-spec 与 film-spec 是平级家族，renderer 概念不得泄漏进任一 spec。
+- **Billing / credits / configs**：`docs/BILLING.md` 对应扣费、报价或钱包章节；守卫线任何档都不能被 auto 绕过。
+- **定位 / 人设 / 渠道 / 选题 / home**：`docs/POSITIONING.md`（已拍板未实施）与当前任务合同；代码层落地前仍只使用 `persona`。
+- **音乐 / UI 文案以外的专门子系统**：按 `docs/README.md` 索引进入对应文档，不从 CLAUDE.md 复制第二份规范。
+- **ADR**：在 `docs/DECISIONS.md` 按主题索引和编号定点阅读。普通 bug 修复、字段接线、测试结果和会话汇报不新增 ADR；只有架构边界、产品语义或关键取舍变化才新增独立决策。
+- **任务合同**：`docs/tasks/` 只保留仍有实施或验收欠账的当前合同；已完成的长期约束并入对应母文档，剩余验收归当前状态，其余过程内容删除，不留跳转墓碑。
+
+每份文档头部注明其状态；`docs/README.md` 标注的是文档角色，不代表其中所有 PLANNED 内容已经落在 `main`。
 
 ## Tech Stack
 - Frontend framework: TanStack Router / TanStack Start (React 19 + SSR)
@@ -53,7 +64,7 @@ Correct:
 
 ## UI 硬律（全文 → `docs/UI_GUIDELINES.md`）
 
-- **小圆角**：默认 `rounded-md` / `rounded-lg`。`rounded-full` 仅四例外：真圆形图标钮 / 状态徽章红点 / home composer 钉顶单行 stadium 条 / gallery 筛选 pill 行。`Badge` 用于元数据恒 `className="rounded-md"` 覆盖。
+- **小圆角**：默认 `rounded-md` / `rounded-lg`。`rounded-full` 仅四例外：真圆形图标钮 / 状态徽章红点 / home composer 钉底单行 stadium 条 / gallery 筛选 pill 行。`Badge` 用于元数据恒 `className="rounded-md"` 覆盖。
 - **同排控件 `h-9` 中心线对齐**；pill / trigger 文字不加粗。
 - **浮层选型**：列表单选 = `DropdownMenu`；内联动作面板 / 多控件设置面板 = `Popover`；表单纯下拉 = `Select`。
 - **纵深**：卡 = 基座自带 `ring-foreground/10` 发丝线 + 填充阶浮起；**禁可见描边**（`border-border` / `ring-border` / 强于 /10 的 `ring-foreground/*`）；in-flow 面（卡/composer/媒体 tile）**永不带 shadow**，shadow 只属于浮层；填充优先——fill 已区分就零环零边。
@@ -67,7 +78,7 @@ Correct:
 
 ## Composer / Chat 行为硬律（全文 → `docs/CHAT_ARCHITECTURE.md`）
 
-- **Agent 北极星（ADR-088/089/117）**：Agent 持续生产与修订用户可理解的项目产物；不编译、不直接执行 workflow 内部语言；付费执行只从已呈现且已授权的范围开始（授权 = 常驻 auto 档默认或明示确认，守卫线以上恒问）。**确认只有两种**：执行确认（`confirm_execution`）与费用确认（`confirm_credits`），users.settings 两键默认全 auto，唯一座位 = SettingsDialog「助手」section——composer/dock 控制条永不出现确认偏好控件。
+- **Agent 北极星（ADR-088/089/117）**：Agent 持续生产与修订用户可理解的项目产物；不编译、不直接执行 workflow 内部语言；付费执行只从已呈现且已授权的范围开始（授权 = 制作意图在场 +（常驻 auto 档默认或明示确认），守卫线以上恒问——ADR-139）。**确认只有两种**：执行确认（`confirm_execution`）与费用确认（`confirm_credits`），users.settings 两键默认全 auto，唯一座位 = SettingsDialog「助手」section——composer/dock 控制条永不出现确认偏好控件。
 - **composer 零意图识别**：send = spinner（建项目 + 上传素材）→ 直达 `/projects/$id`（canvas + ChatDock 两形态机）。**`POST /chat` 是唯一意图面**——永不新增第二意图入口（如专用 `/intent` 端点）。
 - **Prompt 必填**：空提交本地 toast 拦截。纯 prompt 发送不建资产；intent router 判定消息是「用户自己的内容」还是「请求」（LLM 判定，**禁长度启发式**），是内容则提升为 transcript 资产（`create_transcript_asset_from_text`）；无资产无贴文的生成请求得到要素材的回答，永不无中生有计划。
 - **中途上传走 dock attach 钮**：选中文件暂存为输入组内生命周期 chips（uploading → done/error，× 删且删资产）；**只有 send 钮消费它们**，骑回合作消息 `attachments`（持久化，刷新重渲染）。选文件自身永不发送；附件单发合法；空消息永不自动作答 docked checkpoint。
@@ -76,13 +87,13 @@ Correct:
 - **展示文案二源律（ADR-058）**：用户可见命名类文案只有两个合法来源——① LLM 建图时命名（proposal 的 `name` 字段，null/空读容忍）；② 世界自证（产物徽标 / 节点状态 / 真实数字）。**冻参模板永禁**。**手改撤名**：计划卡任何手改即清空 `name`，回退读当前参数的诚实标签。
 - **echo 防编造律（ADR-060）**：回声只回述用户说过的（作品 / 语言 / 数量），**永不发明平台或场所**——a post is just a post until the user names where it lives；渠道合法来源 = 用户点名或渠道授权，永不是默认值。
 - **起始句 = LLM 言语（ADR-093）**：start_run 回合先说话再调用，开工句由模型说出并落库为普通 assistant 行；chrome/模板替说全形态永禁。
-- **口头确认律（ADR-092，ask 档法律）**：ask 档下方案 dock 后恒等确认——echo 收尾恒为一句朴素的方案判断问句（一词可答），口头 yes 走普通 chat 道到 start_run（与 Start 钮同一机器）；收尾永不带「成片出来后再调」式交付后修订预告。**auto 档（默认）无确认拍**——方案呈现即开工，同回合 propose→start_run 是标准道（ADR-117）；守卫线（`billing.always_confirm_above` / NULL 不可报价族）任何档恒带价问一次。**film 分镜拍（ADR-129/ADR-134）**：分镜设计 = `design_storyboard` 呈现，分镜不是开工也不是方案 dock；**首稿（含修订重稿）默认 review hold ON——用户没见过的稿永不开工，唯一释放座 = 用户明说生产（approval dock 清 hold），`start.review_hold` 是确定性兜底**；其余生产授权全走通用设置，版本闭环施工合同 = `docs/tasks/film-storyboard-journey-closure.md`。
-- **状态行一座两行**：消息流一切瞬态「现在在干什么」行 = 同一个 `components/chat/StatusLine.tsx`；label 恒为当下相位叙事，永不只是冻词 "Thinking"。thinking 行渲染门 = `chatBusy && !proseActive`。
+- **口头确认律（ADR-092，ask 档法律）**：ask 档下方案 dock 后恒等确认——echo 收尾恒为一句朴素的方案判断问句（一词可答），口头 yes 走普通 chat 道到 start_run（与 Start 钮同一机器）；收尾永不带「成片出来后再调」式交付后修订预告。**auto 档（默认）无确认拍**——方案呈现即开工，同回合 propose→start_run 是标准道（ADR-117）；但 auto 只免批准拍、**永不创造制作意图**（ADR-139）：dock 生于无制作请求的消息（纯修改/「先给我看方案」/讨论）任何档都等用户发话，`production_intent` 出生事实随六个 dock 工具入参，缺断言=安全侧挂起（Start 钮常驻）；开工确认**复述当前累计方案**（明说要求/已落实改动/建议未选项/未清项——未选项永不称「已确认」，旧版 yes 永不静默授权新稿）；守卫线（`billing.always_confirm_above` / NULL 不可报价族）任何档恒带价问一次。**film 分镜拍（ADR-129/ADR-134/ADR-144）**：分镜设计 = `design_storyboard` 呈现，分镜不是开工也不是方案 dock；fresh compose 首稿/开放重稿默认 review hold ON，唯一释放座 = 用户明说生产（approval dock 清 hold）。**作品首个分镜版本一律先完整呈现并等待——开场「直接做」、`review_hold=false` 与 auto 都不能同回合开工；只有用户看过之后明说生产或点击 Start 才放行，`film_presented_message_id` 未持久化时任何 Start 均由 `start.review_hold` 硬拦**。后续版本不继承这个首稿专用确认拍，其余生产授权全走通用设置，版本闭环现行契约 = `docs/tasks/film-storyboard-orchestration.md` §7/§11，实施与验证状态 = 同前缀 progress。
+- **Chat / Run 工作段一行两态**：chat 的 now line / Thinking 与工作记录折叠行、run 的制作 / 整理结果 / Worked 同由 `components/chat/ActivityStream.tsx:WorkSegmentRow` 承载；首条 active 从宿主行原位入段，前段打字不得吞掉当前活动；工具完成不收段，首个非空白正文经打字机实际释放或真实终态才原位收成工作记录，busy 时禁「工作了 X 秒 + 另一条 Thinking」。chat live Thinking / 里程碑恒无 chevron 且不可展开，只有收成工作记录后才开放；run 保留可展开的活步骤树，按 RUNNING → REVIEWING → SETTLED 以同一 runId key 原位过渡，terminal 不等于收段，匹配当前 run 的 delivery 首字实际释放才收 Worked，chip 由 terminal + 真实可交付 output 独立挂载。cancelled 尝试从可见投影退役，不留 ✗ / 删除线，真实 failed 保留一条安静告警；chat 与 run-delivery 各持工作段时钟，互不相加。
 - **Mentions**：@-entity chips 随消息 `mentions` 字段送达；注册表架构（前端 `MENTION_REGISTRY` + 服务端解算），已注册 = `asset`（请求族）/ `output`（指认族，钉 id 服务端确定性解出修订目标）。**配方永不是 mention**（配方 = 提示词，卡面预填模板即全部发射载荷）。**Chip 三律**：可见（inline + ×）/ 发送消费 / × 净化。方针全文 = `docs/MENTIONS.md`。
 - **修订 = 图变更**：chat 修订骑 `POST /chat` 的 `edit_graph`（wiring 提案）→ `apply_wiring_ops` 唯一写口；卡面 prompt 直改 = 确定性手势走 `POST /projects/{id}/graph/revise`，**dock 零消息**（节点状态周期就是全部反馈），卡面乐观回显永不回闪。
-- **画布只读**：FlowView 无 drag/connect/pan/zoom API；**相机只认用户发起节拍**（draft 图到来整链 fit / 新节点诞生 setCenter；背景 refetch 永不动相机）。
+- **画布只读**：FlowView 无 drag/connect/手动布局等结构编辑 API，消费面也没有供背景流程调用的第二套通用相机命令；组件内部 explore 可提供用户 pan/zoom。**程序相机只认用户发起节拍**（draft 图到来整链 fit / 新节点诞生 setCenter；背景 refetch 永不动相机）。
 - **Dock 两形态机**（full / panel；移动端恒 full 纯 chat）与保草稿承重结构（单一 root + 恒渲染容器 + 恒定子索引，MentionEditor 跨形态翻转永不 remount）：全文 CHAT_ARCH §1 关键形态事实。
-- **chat 修复禁补丁式加禁令（先取证后归因）**：chat bug 的修法 = 先取证再归因到源头，**永不用新增禁令压症状**——上下文盲的禁令（「禁应答粒子」「禁指导用户」式）在合法场景必然拆东墙补西墙。取证 = 回放真实 payload 与机制链：payload 是「代码 × 当时世界状态」的纯函数，无 LLM 台账也能用真实 assemble + 内存拨回世界状态字节级重建（先例 = ADR-101 时代的 `scratch/replay_material_wait_turn.py`，脚本已退役、存档在 git 历史）。源头只有四类：装配 / 工具观察文本 / 法条座位冲突（两部法打架或适用范围未声明）/ 一法多说（同一部法在多个座位各说一遍）。两条结构律：**一部法只在一个座位说**；**工具观察文本只携带世界事实 + 指回法条座位，永不携带可转述的言语草稿**（被复述的法 = 模型的言语草稿，必被 paraphrase 进回复）。
+- **chat 修复禁补丁式加禁令（先取证后归因）**：chat bug 的修法 = 先取证再归因到源头，**永不用新增禁令压症状**——上下文盲的禁令（「禁应答粒子」「禁指导用户」式）在合法场景必然拆东墙补西墙。取证 = 回放真实 payload 与机制链：payload 是「代码 × 当时世界状态」的纯函数，无 LLM 台账也能用真实 assemble + 内存拨回世界状态字节级重建。源头只有四类：装配 / 工具观察文本 / 法条座位冲突（两部法打架或适用范围未声明）/ 一法多说（同一部法在多个座位各说一遍）。两条结构律：**一部法只在一个座位说**；**工具观察文本只携带世界事实 + 指回法条座位，永不携带可转述的言语草稿**（被复述的法 = 模型的言语草稿，必被 paraphrase 进回复）。
 
 ## Product Positioning
 
@@ -159,11 +170,11 @@ t("home.allProjects", { count: projects.length })
 
 音频绑定 = 人设 `voice` JSONB：`{kind:"cloned",voice_id,sample_asset_id}` | `{kind:"stock",stock_id}` | `null` = Auto（dub 用项目自身素材声音）。**`voice` 词独占音频本义**（NAMING N-27/N-28），文风在风格六件 + `guidelines`。编辑 = 人设页 Voice 卡（`components/persona/voice-section.tsx`）展示当前绑定 + 上传/换样本（样本 = persona 素材 `type=voice_sample`），存 = PUT 只更 `voice` 块；文案只陈述绑定状态、不许诺效果。STOCK_VOICES 注册表 / 系统音色试听 / dub 链优先级改造 = 缓做项。
 
-## Video Editor & Rendering (Vertical Shorts)
+## Video Editor & Rendering
 
-**clip-spec 是唯一契约**（JSON 字段级 + 轨道模型 ADR-044），**renderer = 可替换黑盒**（首推 Remotion）。详见 `docs/RENDERING.md`（§3 字段契约 / §6 渲染层 / §7 替换路径 / §8 现行轨道契约）与 `docs/VIDEO_EDITOR.md`（编辑器形态 + L2/L3 范围纪律）。**泄漏禁令**：Remotion / React 概念永不入 clip-spec。
+**clip-spec 与 film-spec 是平级 spec families**（ADR-016 / ADR-119），**renderer = 可替换黑盒**（首推 Remotion）。详见 `docs/RENDERING.md`（§1 家族与渲染链 / §3 clip-spec 字段契约 / §6 渲染层 / §7 替换路径 / §8 现行轨道契约）与 `docs/VIDEO_EDITOR.md`（编辑器形态 + L2/L3 范围纪律）。**泄漏禁令**：Remotion / React 概念永不入任何 spec。
 
-**L3 铁律（每项否决不变）**：禁多轨时间线 / 层合成 / 转场效果 / B-roll 库 / 自动人脸重取景 / 客户端引擎——专业需求明确导出剪映 / Premiere。字幕样式仅枚举，不开放自由版式；styles 限定 CSS + libass 都能表达的子集（保 FFmpeg 替身成本）。硬前提：**多语言 ASR 词级时间戳 + 对象存储流式 / 寻址**（ADR-024）。
+**clip 编辑器 L3 铁律（每项否决不变）**：禁多轨时间线 / 自由层合成 / 转场效果 / B-roll 库 / 自动人脸重取景 / 客户端引擎——专业需求明确导出剪映 / Premiere；Film composite 的受控元素组合由 ADR-140 单独规定，不是自由 NLE。字幕样式仅枚举，不开放自由版式；styles 限定 CSS + libass 都能表达的子集（保 FFmpeg 替身成本）。硬前提：**多语言 ASR 词级时间戳 + 对象存储流式 / 寻址**（ADR-024）。
 
 ## Error Handling & Toasts
 
@@ -171,7 +182,7 @@ t("home.allProjects", { count: projects.length })
 
 ## Task Queue (Backend)
 
-重活（ASR / 渲染 / 生成）一律入 Postgres 队列（`FOR UPDATE SKIP LOCKED`），由独立 `python -m app.worker` 认领；**禁 FastAPI BackgroundTasks**、禁跨模块直调 service 执行重活。新增 processor → `app/pipeline/asset_processing.py:PROCESSORS`；新增认领源 → worker claim loop。详见 `MODULE_ARCHITECTURE.md §5 规则 1 / §7.2`（ADR-017 + ADR-039 队列与重试机制）。
+长任务与可重试生产链（ASR / 渲染 / 生成 / 发布）一律入 Postgres 队列（`FOR UPDATE SKIP LOCKED`），由独立 `python -m app.worker` 认领；**禁 FastAPI BackgroundTasks**、禁跨模块直调 service 执行重活。当前请求内联例外仅限既有 `POST /music/generate`、cover、revise、translate-captions、dub 路由，不得推广为新增重活的先例。新增 processor → `app/pipeline/asset_processing.py:PROCESSORS`；新增认领源 → worker claim loop。详见 `MODULE_ARCHITECTURE.md §5 规则 1 / §7.2`（ADR-017 + ADR-039 队列与重试机制）。
 
 ## Commit Messages
 - Use conventional commits, for example:
@@ -192,7 +203,7 @@ t("home.allProjects", { count: projects.length })
 1. 纯 pytest：`cd apps/api && uv run --extra dev python -m pytest tests/ -q`
 2. check_gates（静态架构门：boot 冒烟 / 依赖方向 / 盲重试禁令 / 退役节点 kind 不回魂）：`cd apps/api && uv run python scripts/check_gates.py`
 3. prompt_gate（仅当改动触及 prompt 面——`app/prompts/chat/`、`chat/prompts.py`、registry catalog lines）：`cd apps/api && uv run python scripts/prompt_gate.py`——10 探针（A–I 族，H 含 H4）绝对阈值，`--provider` 参数化（native-tool providers only，探的是工具 loop 线）。失败协议：复跑一次（provider 漂移在阈值内也存在），仍红则二分归因；**永不为放行回归调阈**。
-4. 剧本矩阵（唯一活 LLM 闸，需活 API + dev worker + MiniMax 配额）：`cd apps/api && uv run python scripts/chat_scenarios.py`——S1–S11 用户旅程矩阵对活 API 跑形态级断言（S11 = MG 贴链成片全旅程），harness 公共断言每本自动携带（SSE 工具 loop 线格式 / Activity 帧形态 / dock 形态 / 估价三断言）。永不锁 LLM 文案（代码强制文本例外）；客户端法律（打字机 / remount / 形态机）不进剧本断言——服务端真值才进。
+4. 剧本矩阵（唯一活 LLM 闸，需活 API + dev worker + MiniMax 配额）：`cd apps/api && uv run python scripts/chat_scenarios.py`——运行当前 `SCENARIOS` 注册表（目前 S1–S12；S11 = MG 贴链成片全旅程，S12 = 网站入口变体）对活 API 跑形态级断言，harness 公共断言每本自动携带（SSE 工具 loop 线格式 / Activity 帧形态 / dock 形态 / 估价三断言）。永不锁 LLM 文案（代码强制文本例外）；客户端法律（打字机 / remount / 形态机）不进剧本断言——服务端真值才进。
 
 **仪表层**（诊断尺子，非闸——读数供人工判读，不阻塞部署）：`scripts/reply_quality_probe.py` / `accept_quote_card_family.py` / `reconcile_credits.py` / `verify_beat_map.py` / `crop_track_parity.py` / `run_anatomy_matrix.py` / `craft_anatomy.py` / `film_stage_ledger.py`（film 链五段通过率 + failure codes 分布，ADR-119 D4）。
 

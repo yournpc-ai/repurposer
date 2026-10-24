@@ -35,6 +35,18 @@ export function runOutputRefs(steps: WorkflowStep[]): string[] {
   return [...new Set(steps.flatMap((s) => s.output_refs ?? []))]
 }
 
+/** Whether this row may appear as a delivered product card.
+ *
+ * A render-contracted row is not a playable product until BOTH the render
+ * completed and its video file exists. Failed / pending / half-written rows
+ * stay in the run's task and failure surfaces, never in delivery cards.
+ * Non-render products deliver through their ordinary payload.
+ */
+export function isDeliveredOutput(output: Output): boolean {
+  if (output.type !== "clip" && output.type !== "film") return true
+  return output.render_status === "completed" && Boolean(output.files.video)
+}
+
 /** One output row → its anchor card facts (读容忍: a row without media
  * files degrades to the text seat; a name-less row keeps null — the
  * fallback is the render's job, never a template backfill here). */
@@ -81,6 +93,7 @@ export function anchorCardsForRun(
   return runOutputRefs(steps)
     .map((id) => byId.get(id))
     .filter((o): o is Output => o != null)
+    .filter(isDeliveredOutput)
     .map(anchorCardOf)
 }
 

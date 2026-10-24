@@ -1,6 +1,6 @@
-# Rendering — 渲染链架构（clip-spec 契约 · 烘焙缝 · 渲染服务 · 共享包）
+# Rendering — 渲染链架构（spec families · 烘焙缝 · 渲染服务 · 共享包）
 
-> Status: 活跃（2026-08-18 更新）。本文是 **clip-spec 字段级契约与渲染链的唯一事实源**；轨道模型（§8）= **现行契约（ADR-044）**。
+> Status: 活跃（2026-10-25 更新）。本文是 **clip-spec / film-spec 契约与渲染链的唯一事实源**；clip 轨道模型（§8）= **现行契约（ADR-044）**，film-spec 是平级第二家族（ADR-119）。
 > 上游决策：ADR-016（契约锁定 / 渲染器黑盒）/ ADR-018（服务拆分 + 共享包）/ ADR-020（stills 第二源）/ ADR-023（音乐入库烘焙）/ ADR-024（存储缝）/ ADR-026（C2PA 读 spec）/ ADR-032（Operation Model 快照）/ ADR-044（轨道模型 + 操作集闭包）。
 > 分工：本文 = 契约 + 渲染链架构 + 函数地图 + 概念命名。编辑器交互形态与 L2/L3 分工线归 VIDEO_EDITOR.md；竞品渲染技术调研归 `research/RENDERING_TECH.md`（原始素材层）。
 
@@ -14,6 +14,7 @@ chat ops / editor 手势 ─────────┤  一切写经 operations
                                 ▼
                     outputs.render_spec（JSONB，锚定真相——段 id/锚/枚举）
                                 │  render_status PENDING（worker 认领谓词）
+                                │  claim 时铸 render_claim_token，终态写按 token 围栏
                                 ▼
                     pipeline/rendering.py 烘焙缝（URL fold 唯一发生地）
                       resolve_spec_urls：按注册表 url_fields 把相对键
@@ -32,7 +33,9 @@ preview == 成片 是结构性的，不是测试出来的。
 
 两条铁律（ADR-016）：**spec 只描述"是什么"，零 Remotion/React 概念**（渲染器可换，§7）；**渲染器是黑盒**——不读 DB、不吃相对 URL、不知项目/人设，一切在烘焙缝解析完毕。
 
-**film-spec 第二家族（ADR-119）**同受这两条铁律：`family="film"`，顶层自带 `aspect` + `fps`（现行恒 30）+ `music`（`url/gain_db`，可带 `bpm/beats` 作为幕边界 snap 的时序血缘）+ `scenes[]`，可带 `provenance`（设计拍 digest 血缘：`storyboard_digest`/`execution_digest`，ADR-129）。每幕自带整数 `frames`（总时长 = Σ frames，渲染器只求和）、可选 `audio`（逐幕配音对象）与同文本投影的 `captions` cue（`at/end/text`，句读/从句切分、语音单位加权——CJK 字 = 4 单位，末 cue 在真实配音时长处闭合；`subtitles` 是改名前的遗留键，渲染器读容忍）；ui 幕的 `focuses` 是完整 camera walk（wide → hold → glide → settle），reveal 幕的 `lead_frames` 是 split reveal 的 word onset 帧（lead 独占前半幕 → 一拍黑场 → word 压音乐网格进场；渲染器只在 onset 前一拍淡出 lead，永不自造锚点）。字幕烧录进画面，不产 SRT sidecar。时长法 = 70–118s（`TOTAL_SECONDS_RANGE` 一座）；probe 闸在视频形状外补音频流存在性（spec 承诺 music/narration 即须带音频流）。
+**film-spec 第二家族（ADR-119）**同受这两条铁律：`family="film"`，顶层自带 `aspect` + `fps`（现行恒 30）+ `music`（`url/gain_db`，可带 `bpm/beats` 作为幕边界 snap 的时序血缘）+ `scenes[]`，可带 `provenance`（设计拍 digest 血缘：`storyboard_digest`/`execution_digest`，ADR-129）。每幕自带整数 `frames`（总时长 = Σ frames，渲染器只求和）、可选 `audio`（逐幕配音对象）与同文本投影的 `captions` cue（`at/end/text`，句读/从句切分、语音单位加权——CJK 字 = 4 单位，末 cue 在真实配音时长处闭合；`subtitles` 是改名前的遗留键，渲染器读容忍）；ui 幕的 `focuses` 是完整 camera walk（wide → hold → glide → settle），reveal 幕的 `lead_frames` 是 split reveal 的 word onset 帧（lead 独占前半幕 → 一拍黑场 → word 压音乐网格进场；渲染器只在 onset 前一拍淡出 lead，永不自造锚点）。字幕烧录进画面，不产 SRT sidecar。**web 弧配方默认 70–118s；文字源允许用户点名更短目标，阅读估计不是技术边界；全家族真实技术帽为 120s（3600 帧 / 30fps）**。probe 闸在视频形状外补音频流存在性（spec 承诺 music/narration/keep_audio 元素即须带音频流）。family dispatch 覆盖 preview / retry / revision / recovery，不只首次 render。
+
+**film 组合幕（composite，ADR-140）**：`composite` 幕 = `dark` 背景极性 + 有序 `elements[]`（kind = video / image / text，`z` 定叠放）。**两个时间空间硬分离**：video 元素的 `source_start`/`source_end` 是源素材秒（渲染侧 OffthreadVideo `startFrom`/`endAt` 裁源），一切元素的 `at`/`until`/`duration` 是幕相对输出秒（渲染侧嵌套 Sequence 的窗），text 元素的 `enter_*`/`motion_*` 是**元素窗内**相对秒；元素窗尽即离场，无尾帧冻结。空间 = 归一化 `rect`{x,y,w,h} + `fit` cover/contain。文字元素与 words 幕同一 `TextPlane` 组件（tokenizer/accent/enter 时序单座，`fontSize` 为参数）；视频原声 = 元素 `keep_audio`（默认 false），只在元素窗内出现、源裁切即音频裁切。
 
 ## 2. 三个包与一个 API 侧
 
@@ -163,12 +166,17 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——下表的 family / t
 
 ### apps/render（Node 黑盒）
 
-- `server.ts` — `POST /render`：校验 → 临时目录 → `renderClip` → 预签名 PUT 上传 → 返回对象键。`/cache` 静态服务把本地落盘的源经 loopback 喂回 Remotion（CORS `*` 因 bundle-server 跨源 fetch）。
+- `server.ts` — `POST /render`：校验 → `artifacts.ts` 复用或生成成片 → `upload.ts` 预签名 PUT 上传 → 返回对象键。`/cache` 静态服务把本地落盘的源经 loopback 喂回 Remotion（CORS `*` 因 bundle-server 跨源 fetch）。
 - `render.ts`
   - `renderClip(spec, outDir, basename, preview?)` — 主流程：`stageRemoteSource`（源先落盘）→ 共享 bundle（一次构建复用）→ `selectComposition` → `renderMedia`（h264）→ SRT → `normalizeLoudness`。`preview` 在时提前返回（`srtPath: null`，两个后置 pass 全跳）。
   - `normalizeLoudness` — EBU R128 双 pass 响度归一（`-16 LUFS / TP -1.5`），ffmpeg 二进制取自 Remotion compositor 包（`resolveFfBinary`）；**增强不是正确性**——失败保留原音，永不翻车渲染；无声产物（stills 幻灯）跳过。
   - `stageRemoteSource`（stage.ts）— Remotion 内部 asset fetch 不走系统代理、整文件下载挤在取帧预算内（慢源 = delayRender 超时灾难）；staging 侧代理感知（`dispatcherFor` 读 HTTPS_PROXY）、按 URL 去重、LRU 驱逐。**异源段**：段的 donor url 同样经 staging（渲染器不知同质/异源之别）。
 - `srt.ts` — `captionTrackToSrt`：7 词成行、按 `clipStart`（首个保留段起点）重定基——SRT 与 MP4 同起点，交接 CapCut 的交付物。
+
+- **上传与恢复**：响应头等待 300 秒，每次上传总时限 360 秒，瞬时网络/5xx/408/429 最多尝试两次；鉴权失败不盲重试。API 请求默认上限 1800 秒，上传签名至少有效 3600 秒。生成与上传错误分别返回 `stage=render|upload`；上传失败提示已生成但未交付。
+- **成片缓存**：`artifacts.ts` 按 output ID + 规范化 spec + 渲染器缓存版本区分，完整文件生成后原子写 ready marker；上传失败或进程重启后，同配置使用新上传签名重传。修改 spec 重新渲染；缓存保留 24 小时并在请求时清理过期目录，重试时缓存已失效则重新渲染。升级渲染语义须更新缓存版本。clip 与 film 共用恢复机制，`POST /outputs/{id}/render` 均可重试，在途重复请求不撤销 claim。
+- **代理**：`dev.sh` 按显式 `RENDER_PROXY` → 已导出 HTTP(S) 代理 → macOS 系统 HTTPS 代理 → 本地 6152 默认值选择；`RENDER_PROXY=off` 明确关闭。探测失败保留配置并提示，不自动回退直连；选择结果写 render 日志。
+- **交付终态**：render/upload 子步骤失败也使 run FAILED；部分交付只计算实际可用产物。film/clip 须 `render_status=COMPLETED` 且 `files.video` 存在才算已交付；完整性 probe 仍为成功落库前置条件。
 
 ### apps/api/app/pipeline（Python 侧）
 
@@ -180,11 +188,11 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——下表的 family / t
   - 泳道投影 Python 孪生（dict 版）：`intro_seconds` / `outro_seconds` / `video_duration_seconds` / `video_timeline` / `source_time_at_output_time` / `output_time_at_source_time` / `project_layer_windows`。
   - `total_output_seconds` — 计价时长 = kept video + 头尾卡秒（坐上面的共享算术）。**已知边界**：时长贡献不随注册表自动收养——未来带时长的轨在此扩展算术（与其渲染件同批）。
 - `rendering.py`
-  - `render_output(output_id)` — 驱动主流程：读 spec → 烘焙缝 → 预签名 PUT URL → POST 渲染服务 → 写 `files` + COMPLETED。**竞态守卫**：条件 UPDATE（`render_status == RENDERING`）——渲染中途 morph 重排（re-pend）时本次产物为陈品，删孤键、镜像 superseded，永不覆盖新 spec。
+  - `render_output(output_id)` — 驱动主流程：读 spec → 烘焙缝 → 预签名 PUT URL → POST 渲染服务 → 写 `files` + COMPLETED。**竞态守卫**：三处终态写都以 `render_claim_token=:mine` 做身份谓词并检查 rowcount；claim 铸 token，re-pend/reap/resume 失势时置 NULL。渲染中途 morph 重排后，旧执行写不动，删孤键、镜像 superseded，永不覆盖新 spec；`render_status==RENDERING` 只是状态，不得代替执行身份。
   - `_absolutize(spec)` — **烘焙缝 = 注册表 fold**：`resolve_spec_urls` 按各轨声明的 `url_fields` 绝对化（source.url / image_urls / image_shots[*].image_url / segments[*].url / brand 卡 / music / dub / layers[*].media.url）——新轨注册即接管，无逐字段特判。
   - `_mirror_render_node` — 渲染生命周期镜像到 run 的 render 步骤（可见性 + 成本的家；run-less 重渲染路径不受影响）。
 - `app/operations/registry.py`（与 pipeline 平级） — op 注册表（ADR-032 + ADR-044）：`OpDef.writes` 声明写入字段（启动对账分区）；`llm_visible=False` 的六 op（reorder_segments / insert_segment / set_transition / add_layer / remove_layer / move_layer = 操作集闭包登记，LLM 词汇随技能批开放）——客户端可调、不进 chat 词表；载荷 = 实体引用（段 id / 锚 / 枚举 / 拍序号），寻址 =（轨, item_id, op）三元校验。ops 路由响应带 `stale_tracks`。
-- 认领谓词：`outputs.render_status`（NULL = 未请求 / PENDING 可认领），worker `FOR UPDATE SKIP LOCKED`（ADR-017）。
+- 认领谓词：`outputs.render_status`（NULL = 未请求 / PENDING 可认领），worker `FOR UPDATE SKIP LOCKED`（ADR-017）；认领原子铸 `render_claim_token`，后续终态写只认该 token（ADR-079）。
 
 ### 写纪律（Operation Model 联动）
 
@@ -214,7 +222,7 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——下表的 family / t
 
 ## 8. 轨道模型（现行契约，ADR-044）
 
-> 轨道模型的覆盖：注册表 + 双端自检 + segments widen + 锚/层/过渡契约 + 泳道投影 + 六 op 闭包（过渡封顶覆盖 insert_segment；段/层 id 契约级唯一；双端各守所执）。判据 = **操作集闭包**：registry 合法 op/skill 的任意序列（用户聊 N 轮）产出的 spec 仍可表示、可渲染、可继续改（12 操作走查全表 = 简报 `archive/tasks-done/track-model.md` 附录 §8）。弹性验收机械化：spec 顶层字段 ⊆ 轨道注册表（启动自检对账，⊆ 同款代数）+ phantom track 自检（注册一条假轨，烘焙缝/寻址/合规自动接管，消费方零改动；计价不在其列——时长算术坐 `clip_spec.total_output_seconds`，时长贡献轨到来时自带扩展）。
+> 轨道模型的覆盖：注册表 + 双端自检 + segments widen + 锚/层/过渡契约 + 泳道投影 + 六 op 闭包（过渡封顶覆盖 insert_segment；段/层 id 契约级唯一；双端各守所执）。判据 = **操作集闭包**：registry 合法 op/skill 的任意序列（用户聊 N 轮）产出的 spec 仍可表示、可渲染、可继续改（操作走查契约见本文件附录 §8）。弹性验收机械化：spec 顶层字段 ⊆ 轨道注册表（启动自检对账，⊆ 同款代数）+ phantom track 自检（注册一条假轨，烘焙缝/寻址/合规自动接管，消费方零改动；计价不在其列——时长算术坐 `clip_spec.total_output_seconds`，时长贡献轨到来时自带扩展）。
 
 ### 8.1 形态：锚定 = 存储格式，泳道 = 编译产物（存法 C）
 
@@ -263,4 +271,4 @@ family / timeline 分类是文档（§4 表），不进 schema；确定性工艺
 
 **加一条轨的成本** = TS 分区一项（tsc 强制）+ Python TrackDef 一条（启动对账强制）+ 一个渲染件（新 family 才有）。`crop_track` 是第一条按此成本进场的轨（reframe 能力批，ADR-045）。
 
-网站介绍片先读网页并商定方向，再在提案阶段设计分镜；明确直接设计可跳过方向询问。分镜生成含返工共用 180 秒预算，dock 含采集等待总预算 240 秒，无可用定稿时不自动开工。divider 的共享原文引用按自身 24 字符展示窗口做单词边界裁切，避免把可确定处理的长度问题交回模型整稿重写。对话行为详见 CHAT_ARCHITECTURE「网站介绍片的方向与分镜阶段」。
+网站介绍片先读网页并商定方向，再在提案阶段设计分镜；明确直接设计可跳过方向询问。对话候选生成与返工共享 1800 秒预算；无合法候选或超预算时诚实失败，不用固定分镜兜底。作品首稿必须完整呈现并等待用户释放 review hold；dock/Start/worker 各阶段不得重起草。divider 的共享原文引用按自身 24 字符展示窗口做单词边界裁切，避免把可确定处理的长度问题交回模型整稿重写。对话行为详见 CHAT_ARCHITECTURE「网站介绍片的方向与分镜阶段」与 Film 总设计。

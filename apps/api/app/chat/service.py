@@ -70,7 +70,7 @@ from app.chat.suggestions import (
     compose_suggestion_note,
     suggestion_stale_reasons,
 )
-from app.chat.turn_tools import strip_tool_echoes
+from app.chat.turn_tools import film_wiring_guard, strip_tool_echoes
 from app.metering import bind_conversation_turn, fold_conversation_usage
 from app.models.schemas import (
     AnswerPayload,
@@ -249,13 +249,50 @@ def _estimate_tail(
     high side (the threshold itself is ops-internal, never shown);
     ``unquotable`` leads with the deferred-pricing truth EVEN when a
     partial range exists (a NULL per-task with quotable siblings — the
-    pill's deferred label and the tail must say one thing). The prefs
+    pill's deferred label and the tail must say one thing);
+    ``unmet_condition`` (7276ef13 ③) says the requested change never
+    landed and the dock therefore waits — confirming starts the STANDING
+    (unfixed) version, so the tail states the choice honestly.
+    ``copy_drift`` (7276ef13 定点收尾②) says the published version's copy
+    drifted from what the user can verify (the drift note above names the
+    clauses) — confirming accepts the drifted copy, so the tail names the
+    two honest outs (accept / restore the original). The prefs
     family (execution_pref / credits_pref) keeps the standard
     estimate-only shape: there the model's own closing question IS the
     confirmation ask."""
     zh = _prefers_zh(text)
     if estimate is not None:
         low, high = estimate.total
+        if reason == "copy_drift":
+            if zh:
+                return (
+                    f"\n\n（估价 {low}–{high} 积分——注意：这版的文案与你提供的原文"
+                    "有出入（见上文标注）；确认即按这版开始，或说一句恢复原文。"
+                    "开始时按上限预扣，按实际用量结算，失败的步骤不收费，剩余退回）"
+                )
+            return (
+                f"\n\n(Estimated {low}–{high} credits — note: this "
+                "version's copy differs from the text you gave (marked "
+                "above); confirming starts THIS version, or say the word "
+                "and I'll restore your original. On start the high end is "
+                "held; you're charged only for what actually runs, failed "
+                "steps are free, and the remainder is returned.)"
+            )
+        if reason == "unmet_condition":
+            if zh:
+                return (
+                    f"\n\n（估价 {low}–{high} 积分——注意：你刚才要的修改没能落实，"
+                    "当前仍是修改前的版本；确认即按这个版本开始，或先说一句继续改。"
+                    "开始时按上限预扣，按实际用量结算，失败的步骤不收费，剩余退回）"
+                )
+            return (
+                f"\n\n(Estimated {low}–{high} credits — note: the change "
+                "you asked for did not land, so this is still the "
+                "pre-change version; confirming starts THIS version, or "
+                "say the word and I'll keep fixing. On start the high end "
+                "is held; you're charged only for what actually runs, "
+                "failed steps are free, and the remainder is returned.)"
+            )
         if reason == "unquotable":
             if zh:
                 return (
@@ -302,6 +339,32 @@ def _estimate_tail(
             "\n\n(Credits are priced when the run starts — this plan can't "
             "be quoted up front, so it starts once you confirm; billing "
             "begins only when you start, and failed steps are free.)"
+        )
+    if reason == "unmet_condition":
+        if zh:
+            return (
+                "\n\n（注意：你刚才要的修改没能落实，当前仍是修改前的版本；"
+                "确认即按这个版本开始，或先说一句继续改。开始后才计费，"
+                "失败的步骤不收费）"
+            )
+        return (
+            "\n\n(Note: the change you asked for did not land, so this is "
+            "still the pre-change version; confirming starts THIS version, "
+            "or say the word and I'll keep fixing. Billing begins only "
+            "when you start, and failed steps are free.)"
+        )
+    if reason == "copy_drift":
+        if zh:
+            return (
+                "\n\n（注意：这版的文案与你提供的原文有出入（见上文标注）；"
+                "确认即按这版开始，或说一句恢复原文。开始后才计费，"
+                "失败的步骤不收费）"
+            )
+        return (
+            "\n\n(Note: this version's copy differs from the text you "
+            "gave (marked above); confirming starts THIS version, or say "
+            "the word and I'll restore your original. Billing begins only "
+            "when you start, and failed steps are free.)"
         )
     if zh:
         return "\n\n（估价随运行确定——开始后才计费，失败的步骤不收费）"
@@ -562,6 +625,9 @@ async def _create_run_from_tasks(
     """
     from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 
+    film_guard = film_wiring_guard(tasks=tasks)
+    if film_guard is not None:
+        raise ValueError(film_guard)
     if not (name or "").strip():
         # 二源律的可观测座 (ADR-058): the fallback chain label is legal but
         # silent — count every run an LLM proposal SHOULD have named and
@@ -616,13 +682,30 @@ async def _safe_task_estimate(
 
 
 async def resolve_confirmation_need(
-    db: AsyncSession, user_id: UUID, estimate: PlanEstimate | None
+    db: AsyncSession,
+    user_id: UUID,
+    estimate: PlanEstimate | None,
+    production_intent: bool | None = True,
+    unmet_condition: bool = False,
+    copy_drift: bool = False,
 ) -> "ConfirmationNeed":
     """The dock's confirmation conjunct (ADR-117 §4): read the user's two
     prefs + the guardrail config, fold the quote, run the pure law. The
     result is stamped onto the docked question's payload at presentation
     time — the client's pill predicate and the start gate both read THAT
-    stamp, never a re-derivation."""
+    stamp, never a re-derivation.
+
+    ``production_intent`` (ADR-139): the dock seats pass the birth turn's
+    assertion verbatim (None = unasserted → the safe-side hold); the
+    fallback default ``True`` covers non-dock re-dock seats (the start_run
+    misfire re-dock never auto-starts, so its stamp only re-derives the
+    prefs law). ``unmet_condition`` (7276ef13 ③): the dock seats pass the
+    birth turn's design shortfall (a requested change was refused this
+    turn) — the conditional authorization never auto-spends on the
+    unfixed version. ``copy_drift`` (7276ef13 定点收尾②): the dock seats
+    pass the birth turn's drift hold (the published copy drifted from the
+    user-verifiable original) — auto start holds until the user sees the
+    drift note and chooses."""
     from app.pipeline.lifecycle import ConfirmationNeed, confirmation_need
 
     user = await db.get(User, user_id)
@@ -638,6 +721,9 @@ async def resolve_confirmation_need(
         quote_high=quote_high,
         unquotable=unquotable,
         always_confirm_above=guardrail,
+        production_intent=production_intent,
+        unmet_condition=unmet_condition,
+        copy_drift=copy_drift,
     )
 
 
@@ -661,6 +747,7 @@ def _film_gate_facts(
     from app.pipeline.lifecycle import FilmGateFacts  # deferred: chat → pipeline
     from app.tools.film.storyboard import (  # deferred
         film_draft_inflight_live,
+        film_first_draft_unpresented,
         film_start_draft_match,
     )
 
@@ -689,6 +776,7 @@ def _film_gate_facts(
         has_active_draft=has_draft,
         draft_match=match,
         review_hold=hold,
+        first_draft_unpresented=film_first_draft_unpresented(pending),
         draft_inflight=inflight,
     )
 
@@ -1125,6 +1213,72 @@ def _cannot_do_text(text: str) -> str:
     )
 
 
+def _design_blocked_text(text: str, refusal: str | None) -> str:
+    """The design-beat degrade line (both intent surfaces): the turn's
+    storyboard design never started because the begin was refused. The
+    refusal REASON selects the honesty class — ``in_flight`` is the only
+    one that may narrate a live design (a committed marker proved it);
+    everything else is a state conflict with an UNKNOWN holder. Never the
+    capability refusal (``_cannot_do_text``): an internal startup conflict
+    is not "text films unsupported", and no variant promises recovery —
+    the only next step on offer is a fresh message (a new turn re-reads
+    the world)."""
+    if _prefers_zh(text):
+        if refusal == "in_flight":
+            return (
+                "分镜还没有生成——另一个分镜设计还在进行中，这次没有开始制作。"
+                "等它落定后再跟我说一声即可。"
+            )
+        return (
+            "分镜尚未生成——启动设计时遇到状态冲突，本次没有开始制作。"
+            "你再发一句话，我会重新尝试设计。"
+        )
+    if refusal == "in_flight":
+        return (
+            "The storyboard isn't drafted — another storyboard design is "
+            "still in flight on this project, so this one never started. "
+            "Ask me again once it settles."
+        )
+    return (
+        "The storyboard isn't drafted — starting the design hit a state "
+        "conflict on the project, so nothing was produced this time. Send "
+        "me another message and I'll try the design again."
+    )
+
+
+def _design_no_progress_text(text: str, *, version_saved: bool) -> str:
+    """Honest close after the loop's Film rejection policy stops a retry.
+
+    The two states are deliberately different: a failed correction must not
+    erase the fact that an earlier version was saved this turn, while a
+    failed first design must not claim that any new storyboard exists.
+    """
+    if _prefers_zh(text):
+        if version_saved:
+            return (
+                "这次后续调整没有完成，我已停止重复尝试。最近保存的分镜版本"
+                "和已有成片都保留，本次没有开始新的制作。请再发一次，我会"
+                "从最近保存的版本继续。"
+            )
+        return (
+            "这次调整没有完成，我没有保存新的分镜，也没有开始制作。我已停止"
+            "重复尝试；此前保存的内容不会被这次失败覆盖。请再发一次，我会"
+            "重新尝试。"
+        )
+    if version_saved:
+        return (
+            "This follow-up change did not complete, so I stopped the repeated "
+            "attempts. The latest saved storyboard and existing films are "
+            "unchanged, and no new production started. Send the request again "
+            "and I'll continue from the latest saved version."
+        )
+    return (
+        "This change did not complete. I did not save a new storyboard or "
+        "start production, and I stopped the repeated attempts. Previously "
+        "saved work is unchanged. Send the request again and I'll retry."
+    )
+
+
 # ---- ask_user 机器 (the ask_user machinery): question / answer ------------
 #
 # One message row, two states: ``question`` payload present, ``answer`` NULL =
@@ -1356,6 +1510,21 @@ async def sync_plan_question(
     # passes it through — one computation per dock.
     if need is None:
         need = await resolve_confirmation_need(db, user_id, estimate)
+    # A work's first storyboard owes a post-presentation review in EVERY
+    # regime, including an opening '直接做' delegation. Keep this conjunct at
+    # the shared dock seat so all proposal tools carry the same Start-pill
+    # stamp; the Start gate independently enforces the same world fact.
+    from app.pipeline.lifecycle import first_draft_confirmation  # deferred
+    from app.tools.film.storyboard import film_first_draft_unpresented
+
+    pending_plan = (
+        PendingPlan.model_validate(project.pending_brief)
+        if isinstance(project.pending_brief, dict)
+        else None
+    )
+    need = first_draft_confirmation(
+        need, unpresented=film_first_draft_unpresented(pending_plan)
+    )
     _message, bailed_run_ids = await _dock_question(
         db,
         conversation_id,
@@ -1412,6 +1581,11 @@ async def _auto_start_docked_plan(
     project: Project,
 ) -> tuple[Message, UUID] | None:
     """ADR-117 §2 授权前移 — the auto regime's presentation-time start.
+
+    ADR-139: the auto 道 waives the approval beat, it never manufactures
+    the production request — a dock born from a message without production
+    intent carries the ``awaiting_production`` stamp and waits here like
+    any confirm-owing dock (the Start pill stays as the standing offer).
 
     Called right after a plan docks. The dock's presentation-time stamp
     (``requires_confirmation``/``quote_high``/``unquotable`` — computed once
@@ -1628,6 +1802,7 @@ async def _continue_chat_answer(
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
+    on_checkpoint=None,
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
@@ -1671,13 +1846,30 @@ async def _continue_chat_answer(
     # 滑动窗口装配 (ADR-117 D4): the scattered fixed-count slices converge
     # on the one budget predicate — world state never rides this window.
     recent = await recent_history_within_budget(db, history)
-    if question.slot == "asset_role" and project is not None:
-        # 资产角色消歧的答复落 pin (ADR-078 判词④): the pins settle by
-        # CODE (the option id IS the asset id — _settle_role_answer),
-        # never a brief backfill — asset_role has no Brief seat, and the
-        # generic backfill would setattr-crash on it. The plan path then
-        # resumes on the pinned plan, same shape as the brief branch.
+    # 输入耐久边界 (the answer continuation's ONE seam — prepare_chat_turn's
+    # input-durability commit's mirror): every settle write the answer
+    # implies — an asset_role pick's code-settled pins (ADR-078 判词④), a
+    # brief-slot answer's user-stated backfill (ADR-052 B2 D2-C1), and the
+    # answered row itself — lands in this ONE commit BEFORE the LLM
+    # continuation. Two laws ride it: ① the user's answer survives a
+    # continuation failure (a turn rollback never revokes a spoken answer);
+    # ② uncommitted, the settle write's flush holds the Project row lock to
+    # the request boundary, and the design beat's side-session NOWAIT begin
+    # reads THIS turn's own lock as contention — a refusal no in-turn retry
+    # can clear. The refresh restarts the continuation on committed truth:
+    # the seam released the row, and a concurrent request may have moved it
+    # in between, so nothing below decides on pre-commit state.
+    if project is not None and question.slot == "asset_role":
         await _settle_role_answer(db, project, data, say)
+    elif project is not None and question.slot is not None:
+        _backfill_brief_slot(project, question.slot, say)
+    await db.commit()
+    if project is not None:
+        await db.refresh(project)
+    if question.slot == "asset_role" and project is not None:
+        # 资产角色消歧的答复落 pin (ADR-078 判词④): the pins settled by
+        # CODE above (the option id IS the asset id — _settle_role_answer);
+        # the plan path resumes on the pinned plan.
         follow_up, run_id, answered, bailed = await _plan_turn(
             db,
             user_id,
@@ -1689,6 +1881,7 @@ async def _continue_chat_answer(
             on_phase=on_phase,
             on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready,
+            on_checkpoint=on_checkpoint,
             on_loop_event=on_loop_event,
             on_activity=on_activity,
             on_candidates=on_candidates,
@@ -1696,12 +1889,11 @@ async def _continue_chat_answer(
         )
         return follow_up, run_id, bailed, answered
     if question.slot is not None and project is not None:
-        # ask 一等动作的答复回填 (ADR-052 B2 D2-C1): the brief slot takes
-        # the answer user-stated, then the plan path resumes on the
+        # ask 一等动作的答复回填 (ADR-052 B2 D2-C1): the brief slot took
+        # the answer user-stated at the seam; the plan path resumes on the
         # enriched brief — draft the (now-rooted) plan or ask the next
         # deciding slot. The answer text rides as the turn's message so
         # the router sees it as the user's own words.
-        _backfill_brief_slot(project, question.slot, say)
         follow_up, run_id, answered, bailed = await _plan_turn(
             db,
             user_id,
@@ -1713,6 +1905,7 @@ async def _continue_chat_answer(
             on_phase=on_phase,
             on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready,
+            on_checkpoint=on_checkpoint,
             on_loop_event=on_loop_event,
             on_activity=on_activity,
             on_candidates=on_candidates,
@@ -1748,6 +1941,7 @@ async def _continue_chat_answer(
             on_phase=on_phase,
             on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready,
+            on_checkpoint=on_checkpoint,
             on_loop_event=on_loop_event,
             on_activity=on_activity,
             on_candidates=on_candidates,
@@ -1765,6 +1959,7 @@ async def _continue_chat_answer(
         on_phase=on_phase,
         on_tool_call=on_tool_call,
         on_tool_ready=on_tool_ready,
+        on_checkpoint=on_checkpoint,
         on_loop_event=on_loop_event,
         on_activity=on_activity,
         on_candidates=on_candidates,
@@ -1782,6 +1977,7 @@ async def answer_question(
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
+    on_checkpoint=None,
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
@@ -2152,6 +2348,10 @@ async def answer_question(
                     except (ValueError, TypeError):
                         prepared_storyboard = None
                     if prepared_storyboard is not None:
+                        from app.tools.film.edits import (  # deferred: tool seam
+                            film_music_retime_of,
+                        )
+
                         run.context = {
                             **(run.context or {}),
                             "prepared_storyboard": prepared_storyboard,
@@ -2182,6 +2382,46 @@ async def answer_question(
                             ),
                             "film_draft_token": (
                                 pending.film_draft_token
+                                if pending is not None
+                                else None
+                            ),
+                            # The version envelope (compose|patch|variant +
+                            # the base version) — provenance recovery reads
+                            # it back through the same keys.
+                            "film_created_via": (
+                                pending.film_created_via
+                                if pending is not None
+                                else None
+                            ),
+                            "film_base_version": (
+                                pending.film_base_version
+                                if pending is not None
+                                else None
+                            ),
+                            # The surviving set_music retime instruction
+                            # (keep_cut|recut — ADR-137): projected as the
+                            # instruction's PROVENANCE (and the
+                            # half-written-envelope tripwire: keep_cut
+                            # without frames fails closed).
+                            # ``film_kept_frames`` = the version's frozen
+                            # cut (版本状态 — frozen at patch time by a
+                            # keep_cut swap, or inherited by a
+                            # timeline-preserving edit): the run's frame
+                            # seat consumes it fail-closed whenever
+                            # present; None = allocate + snap to the bed's
+                            # grid as usual.
+                            "film_music_retime": film_music_retime_of(pending),
+                            "film_kept_frames": (
+                                pending.film_kept_frames
+                                if pending is not None
+                                else None
+                            ),
+                            # The frozen cut's other half (冻结场内切点):
+                            # the reveal words' landing beats — the run
+                            # consumes them fail-closed whenever the kept
+                            # cut covers a reveal scene.
+                            "film_kept_reveal_onsets": (
+                                pending.film_kept_reveal_onsets
                                 if pending is not None
                                 else None
                             ),
@@ -2251,6 +2491,7 @@ async def answer_question(
                         on_phase=on_phase,
                         on_tool_call=on_tool_call,
                         on_tool_ready=on_tool_ready,
+                        on_checkpoint=on_checkpoint,
                         on_loop_event=on_loop_event,
                         on_activity=on_activity,
                         on_candidates=on_candidates,
@@ -2281,6 +2522,7 @@ async def answer_question(
                     on_phase=on_phase,
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
+                    on_checkpoint=on_checkpoint,
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
@@ -2307,6 +2549,13 @@ async def answer_question(
                 # order — first video the material, the next the exemplar
                 # (the default_path copy's exact promise).
                 await _settle_default_role_pins(db, project)
+            # 输入耐久边界 (_continue_chat_answer's seam, the bail branch's
+            # seat): the bail answer + the default pins commit BEFORE the
+            # plan turn — the design beat's NOWAIT begin must never meet
+            # this turn's own row lock, and the user's bail survives a
+            # continuation failure.
+            await db.commit()
+            await db.refresh(project)
             history = await list_conversation_messages(db, UUID(str(conversation.id)))
             # 滑动窗口装配 (ADR-117 D4): one budget predicate, never a
             # fixed-count slice.
@@ -2329,6 +2578,7 @@ async def answer_question(
                     on_phase=on_phase,
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
+                    on_checkpoint=on_checkpoint,
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,

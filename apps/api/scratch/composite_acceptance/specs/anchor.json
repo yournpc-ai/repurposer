@@ -1,0 +1,72 @@
+{
+ "family": "film",
+ "name": "acceptance-anchor",
+ "theme": {
+  "canvas": "#F7F6F2",
+  "ink": "#141414"
+ },
+ "aspect": "16:9",
+ "fps": 30,
+ "scenes": [
+  {
+   "type": "words",
+   "frames": 90,
+   "dark": false,
+   "lines": [
+    "开场三秒"
+   ]
+  },
+  {
+   "type": "composite",
+   "frames": 240,
+   "dark": false,
+   "elements": [
+    {
+     "kind": "video",
+     "id": null,
+     "src": "http://127.0.0.1:8799/fixture/source_25s.mp4",
+     "at": 0.0,
+     "rect": {
+      "x": 0.5,
+      "y": 0.0,
+      "w": 0.5,
+      "h": 1.0
+     },
+     "fit": "cover",
+     "z": 0,
+     "source_start": 10.0,
+     "source_end": 18.0,
+     "keep_audio": false
+    },
+    {
+     "kind": "text",
+     "id": null,
+     "lines": [
+      "左边文字",
+      "逐字出现"
+     ],
+     "tone": "dark",
+     "at": 1.0,
+     "until": 7.0,
+     "rect": {
+      "x": 0.06,
+      "y": 0.2,
+      "w": 0.38,
+      "h": 0.6
+     },
+     "z": 0,
+     "enter": "words",
+     "enter_interval": 0.3
+    }
+   ]
+  },
+  {
+   "type": "words",
+   "frames": 90,
+   "dark": true,
+   "lines": [
+    "收尾"
+   ]
+  }
+ ]
+}

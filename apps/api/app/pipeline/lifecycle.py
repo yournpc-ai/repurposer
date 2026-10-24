@@ -271,14 +271,46 @@ class ConfirmationNeed:
     ``reason`` names the firing clause: ``execution_pref`` (执行确认=ask) /
     ``credits_pref`` (费用确认=ask ∧ a nonzero quote) / ``above_guardrail``
     (fold high end over ``billing.always_confirm_above``) / ``unquotable``
-    (a NULL-estimate node — an unquotable plan always asks once). Empty when
-    no confirmation is required. ``quote_high`` = the fold's high end the
-    priced pill's label interpolates (None when unquotable/deferred)."""
+    (a NULL-estimate node — an unquotable plan always asks once) /
+    ``unmet_condition`` (the dock's birth turn REFUSED a change the user
+    asked for — a conditional authorization like 「修完开工吧」 never
+    spends on the unfixed version without one explicit beat, 7276ef13) /
+    ``copy_drift`` (the standing version's copy drifted from the confirmed
+    one and the user's own message never carried the new wording —
+    unproven drift never auto-starts on a note alone, 7276ef13 定点
+    收尾②) /
+    ``awaiting_production`` (the dock's birth message carried no production
+    request — the auto/ask prefs waive approval beats, they never CREATE
+    one; the dock waits for the user's production word with the bare Start
+    pill standing, ADR-139) / ``first_draft_review`` (the work's first film
+    storyboard has not persisted its presentation yet; even an opening
+    direct-production delegation waits for a post-presentation gesture).
+    Empty when no confirmation is required. ``quote_high`` = the fold's high
+    end the priced pill's label interpolates (None when unquotable/deferred)."""
 
     requires_confirmation: bool
     reason: str = ""
     quote_high: int | None = None
     unquotable: bool = False
+
+
+def first_draft_confirmation(
+    confirmation: ConfirmationNeed, *, unpresented: bool
+) -> ConfirmationNeed:
+    """Add the first-film-review debt without displacing stronger reasons.
+
+    A work's first storyboard always waits for a post-presentation approval,
+    even when the opening request delegates production and both prefs are
+    auto. Existing pricing / preference / condition reasons keep precedence.
+    """
+    if not unpresented or confirmation.requires_confirmation:
+        return confirmation
+    return ConfirmationNeed(
+        requires_confirmation=True,
+        reason="first_draft_review",
+        quote_high=confirmation.quote_high,
+        unquotable=confirmation.unquotable,
+    )
 
 
 def confirmation_need(
@@ -288,18 +320,53 @@ def confirmation_need(
     quote_high: int | None,
     unquotable: bool,
     always_confirm_above: int,
+    production_intent: bool | None = True,
+    unmet_condition: bool = False,
+    copy_drift: bool = False,
 ) -> ConfirmationNeed:
-    """The pure law (ADR-117 D1/D6):
+    """The pure law (ADR-117 D1/D6 + ADR-139):
 
         needs_confirm = execution=="ask"
                      or (credits=="ask" and quote_high > 0)
                      or quote_high > always_confirm_above
                      or unquotable
+                     or unmet_condition
+                     or copy_drift
+                     or production_intent is not True
 
     A free plan (quote_high == 0) never triggers the credits pref; a
     deferred/absent quote reads as unquotable upstream, never as a price.
     Reason precedence names money first (the pill's priced label follows
-    it): unquotable > above_guardrail > credits_pref > execution_pref.
+    it): unquotable > above_guardrail > credits_pref > execution_pref
+    > unmet_condition > copy_drift > awaiting_production.
+
+    ``production_intent`` (ADR-139): whether the dock's birth message
+    carries the user's production request, judged by the model at the tool
+    call (never a keyword heuristic). ``None`` (unasserted) reads as
+    ABSENT — the safe side: the dock waits with its Start pill standing
+    rather than spending on unproven intent. The parameter default
+    ``True`` keeps non-dock callers (the pure law's other readers) at
+    their pre-ADR-139 behavior; the dock seats always pass the real
+    assertion.
+
+    ``unmet_condition`` (7276ef13 ③): the dock's birth turn refused a
+    change the user asked for (a failed design call — repair echo / stale
+    base_ref / superseded draft / the correction cap — that no matching
+    success resolved). A conditional authorization (「修完开工吧」) names
+    a fix as its CONDITION — when the fix never landed, starting the
+    unfixed version is never the auto regime's call: the dock owes one
+    explicit beat, and the user's later explicit start (a conscious
+    acceptance of the standing version) stays legal (the gate's
+    ``docked_this_turn`` conjunct scopes the hold to the dock's own turn).
+
+    ``copy_drift`` (7276ef13 定点收尾②): the version standing at the dock
+    carries copy that drifted from the confirmed version's pinned text AND
+    the user's own message never carried the new wording
+    (``text_drift_user_proven``) — an unproven drift publishes with its
+    honest note but never auto-starts on the note alone. A user-pasted
+    copy is proven (deliberate text change stays one-beat). Patch copy
+    edits are not automatically exempt: an unproven wording change holds,
+    while an unrelated patch carries any existing hold forward.
     """
     if unquotable:
         return ConfirmationNeed(True, "unquotable", quote_high, True)
@@ -309,6 +376,12 @@ def confirmation_need(
         return ConfirmationNeed(True, "credits_pref", quote_high)
     if execution == "ask":
         return ConfirmationNeed(True, "execution_pref", quote_high)
+    if unmet_condition:
+        return ConfirmationNeed(True, "unmet_condition", quote_high)
+    if copy_drift:
+        return ConfirmationNeed(True, "copy_drift", quote_high)
+    if production_intent is not True:
+        return ConfirmationNeed(True, "awaiting_production", quote_high, unquotable)
     return ConfirmationNeed(False, "", quote_high, False)
 
 
@@ -360,6 +433,10 @@ class FilmGateFacts:
     - ``review_hold`` — the active draft is review-only scoped (「只看分
       镜，先别制作」), the hold surviving across turns until an explicit
       production request re-docks → 422 ``start.review_hold``.
+    - ``first_draft_unpresented`` — the work's first board has no persisted
+      presentation message yet. Every start, including same-turn auto,
+      fails closed until that row exists; a later explicit Start is the
+      release beat.
     - ``draft_inflight`` — a storyboard redesign's in-flight marker stands
       (the design beat's BEGIN committed, the publish not yet landed). The
       dock's confirmation is void for the duration → 409
@@ -371,6 +448,7 @@ class FilmGateFacts:
     has_active_draft: bool = False
     draft_match: bool = True
     review_hold: bool = False
+    first_draft_unpresented: bool = False
     draft_inflight: bool = False
 
 
@@ -409,7 +487,9 @@ def evaluate_start_gate(
       ``start.stale_storyboard`` (the dock moved on — same family as
       scope_mismatch); an active review hold → 422 ``start.review_hold``
       (readiness family — the user scoped review only and never asked for
-      production).
+      production). A first film draft without its persisted presentation
+      uses the same 422 for EVERY start, including same-turn auto; the
+      later explicit Start after presentation is the release beat.
     - the authorization conjunct (ADR-117 §4): ``confirmation`` is the
       presentation-time-stamped need; ``docked_this_turn=True`` marks the
       auto regime's presentation-time start attempt → 422
@@ -429,6 +509,11 @@ def evaluate_start_gate(
     if not effective_tasks_nonempty:
         return StartGateVerdict(422, "start.empty_plan")
     if film is not None and film.film_chain and film.review_hold:
+        return StartGateVerdict(422, "start.review_hold")
+    if film is not None and film.film_chain and film.first_draft_unpresented:
+        # The first work's board must have a persisted presentation before
+        # ANY start. This includes same-turn auto: the proposal dock may
+        # clear review_hold, but it cannot fabricate the presentation row.
         return StartGateVerdict(422, "start.review_hold")
     if not stamp.confirmation_ready:
         return StartGateVerdict(422, "start.blocked", stamp.blockers)
@@ -504,9 +589,20 @@ async def project_lifecycle(
                 [_TaskShim(t) for t in plan_tasks]
             )
             keys: dict[str, None] = {}
+            # Text-source film (ADR-138 §7.6): a launch_film task carrying
+            # the copy itself never lists the page requirement — the words
+            # are the material (the birthplace ∀-check waives the same).
+            film_has_text = any(
+                isinstance(t, dict)
+                and t.get("tool") == "launch_film"
+                and bool((t.get("params") or {}).get("text"))
+                for t in plan_tasks
+            )
             for entry in entries:
                 node = NODE_KINDS.get(entry.name)
                 for req in node.requires if node else ():
+                    if film_has_text and req.key == "web_page":
+                        continue
                     keys.setdefault(req.key)
             required_inputs = tuple(sorted(keys))
         except (ToolRejected, ValueError) as e:

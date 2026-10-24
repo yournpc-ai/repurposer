@@ -299,8 +299,13 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
             behavior="probabilistic",
             params_model=LaunchFilmParams,
             summary_templates={
-                "en": "Directed an intro film · {total_seconds}s",
-                "zh": "生成了官网介绍短片 · {total_seconds} 秒",
+                # Source-neutral on purpose (文字片/网页片同链): the step
+                # ASSEMBLES the confirmed storyboard's spec and pends the
+                # render — the render step's own row reports the delivery,
+                # so this line never claims the finished video. Seconds ride
+                # the one 0.1-rounding rule the read/presentation seats use.
+                "en": "Assembled the film · {total_seconds:g}s",
+                "zh": "已组装短片 · {total_seconds:g} 秒",
             },
         ),
         ToolEntry(

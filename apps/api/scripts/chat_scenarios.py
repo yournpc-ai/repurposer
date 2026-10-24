@@ -832,6 +832,35 @@ def check_turn_stream_law(stream: "StreamTurn", content: str, question: dict, la
             f"{''.join(stream.deltas)[:120]!r} vs {content[:120]!r}",
         )
         return
+    if question.get("kind") == "task_book":
+        # 估价尾行 (ADR-111 §2 / BILLING §2.1 — 2026-10-23 T5/T7 取证):
+        # content = [iteration-0 ledger speech] + the dock echo (composed
+        # at the terminal call, never streamed) + the code-composed
+        # estimate whisper (appended at compose, blank-line join — the
+        # reminder tail's same doctrine; the settled envelope paces it out
+        # whole client-side). Iteration-0 read-first speech may instead
+        # ride the CHECKPOINT channel (ADR-104 — never enters the ledger).
+        streamed = "".join(stream.deltas).strip()
+        checkpointed = {c.strip() for c in stream.checkpoints}
+        check(
+            not streamed
+            or content.startswith(streamed)
+            or streamed in checkpointed,
+            f"{label}: task_book turn's iteration-0 speech prefixes the "
+            "content or rode the checkpoint channel (ADR-104)",
+            f"{streamed[:120]!r} vs {content[:120]!r}",
+        )
+        check(
+            "\n\n（估价" in content
+            or "\n\n(Estimated" in content
+            or "\n\n(From" in content
+            or "\n\n(Credits" in content
+            or content.strip().startswith(("（估价", "(Estimated", "(From", "(Credits")),
+            f"{label}: the dock echo carries the compose-appended estimate "
+            "whisper (blank-line join, never streamed)",
+            content[-120:],
+        )
+        return
     check_stream_law(stream, content, label)
 
 
@@ -1114,6 +1143,16 @@ def check_dock_shape(msg: dict, label: str) -> None:
                     f"{label}: label non-empty and ≤40",
                     text,
                 )
+                # shadow plan 负形的适用边界 (2026-10-23 T8 取证): the lints
+                # guard REGISTERED param slots — the param has a structured
+                # home, so prose must not smuggle it. A slot-less freeform
+                # disambiguation dock's SUBSTANCE may be a numeric tradeoff
+                # (「窗口前移到 17–25s 还是守 20s 起只剩 5s」——素材物理边界
+                # 的诚实控问), where naming the numbers in prose IS the
+                # question; linting those descriptions would ban the honest
+                # correction the 顾问姿态 requires.
+                if not q.get("slot"):
+                    continue
                 for pat in _INT_LABEL_LINT:
                     check(
                         not pat.search(text),
@@ -1143,6 +1182,17 @@ def check_turn_stream_laws(stream: "StreamTurn", label: str) -> None:
     # 放——收到的预览即权威件，与信封 dock 载荷逐字段一致）。文字类提问
     # 永不预览 dock（与 R1 文字问门禁同律）——只有选项问 dock 触发本律。
     if q.get("kind") == "question" and (q.get("options") or []):
+        # 言语提交协议 (ADR-099 §7) 的 retracted close 形豁免：回合中途被守卫
+        # 拒（如 bare ask 缺框架言语 → execute_guardrail 拒绝）→ retract →
+        # 收官 _resolve_deferred 走 drop——散文与预览帧全部不落线，信封整体
+        # pacing 出权威 dock（零 delta 路径既有法）。该形 = 零 delta 且零
+        # preview；干净收官（flush+disarm）的选项问恒有 preview 帧，零 delta
+        # 而 preview 缺席只在 retracted close 成立。（2026-10-23 下批 B 旅程
+        # T1 实证：intent_router 首 ask 被 guardrail 拒后重试接受，预览合法
+        # 缺席——此前本律未给该形豁免。）
+        if not stream.deltas and not stream.previews:
+            check_dock_shape(msg, label)
+            return
         check(
             len(stream.previews) >= 1,
             f"{label}: the ask's question.preview frame precedes the terminal envelope",

@@ -22,9 +22,14 @@ def intent_router_system() -> str:
     revise_script is excluded from the catalog — it targets an EXISTING
     output and the plan path runs before the project's first run, when none
     exist."""
+    from app.config import settings  # deferred: config leaf
+
     return jinja_env.get_template("chat/intent_router_system.j2").render(
         tool_lines=tool_catalog_lines(exclude={"revise_script"}),
         menu_lines=capability_menu_lines(),
+        # The film edit path's prompt law rides the same deployment gate as
+        # the tool wire view — gate off, the model is never told.
+        film_edits_enabled=settings.film_edits_enabled,
     )
 
 
@@ -41,6 +46,7 @@ def chat_intent_system() -> str:
     # same injection discipline as the tool catalog (registry entries stay
     # terse; the gate enumerations ride along).
     # Kept as a function-level import (cycle insurance, pre-split form).
+    from app.config import settings  # deferred: config leaf
     from app.pipeline.graph_store import wiring_catalog_lines
 
     return jinja_env.get_template("chat/chat_intent_system.j2").render(
@@ -51,17 +57,23 @@ def chat_intent_system() -> str:
         # framing (draft header / material_text bullets) and appends
         # the existing-project tail (ADR-071 ④ 单一化).
         chat_loop=True,
+        # The film edit path's prompt law rides the same deployment gate as
+        # the tool wire view — gate off, the model is never told.
+        film_edits_enabled=settings.film_edits_enabled,
     )
 
 
 def trigger_system() -> str:
-    """The proactive speaker's system prompt (ADR-077 判词③ — trigger
-    turns: run_completed / run_failed / craft_decompiled). No BUILDER catalog
-    rides here (the trigger turn's verbs are the read tools plus the one
-    terminal ``wrap_up``) — but the SPEAKER menu does: the user-language
-    capability menu is identity, it rides every surface (without it the
-    turn improvises deliverables and venues). The template teaches the
-    judgment law and the suggestions contract."""
+    """The read-bearing proactive speaker for run_failed/craft_decompiled.
+
+    run_completed is a separate DELIVERY turn with its own readless prompt;
+    the two turn families never share branch law.
+    """
     return jinja_env.get_template("chat/trigger_system.j2").render(
         menu_lines=capability_menu_lines(),
     )
+
+
+def delivery_system() -> str:
+    """The delivery turn's compact, outcome-branched system prompt."""
+    return jinja_env.get_template("chat/delivery_system.j2").render()

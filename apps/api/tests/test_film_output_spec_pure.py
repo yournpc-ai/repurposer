@@ -50,6 +50,7 @@ from app.models.schemas import (
 from app.tools.film.edits import film_version_identity_digest
 from app.tools.film.storyboard import (
     StoryboardPage,
+    build_film_execution_snapshot,
     execution_frames,
     storyboard_content_digest,
 )
@@ -134,6 +135,7 @@ def _base(
     cut_state: str | None = "spec",
     cut_frames: list[int] | None = None,
     snapshot: dict | None = None,
+    spec_music: dict | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         film_storyboard=board.model_dump(mode="json"),
@@ -145,6 +147,9 @@ def _base(
         film_created_via="compose",
         film_cut_frames=cut_frames,
         film_cut_state=cut_state,
+        # 配乐事实座 (7886d879): 已执行版本交付渲染里的实际床 — 草稿为
+        # None (床 = 冻结快照里的计划), 两者由 film_cut_state 区分.
+        film_render_spec_music=spec_music,
     )
 
 
@@ -234,23 +239,28 @@ async def test_facts_table_with_executed_cut(monkeypatch):
     )
     digest = storyboard_content_digest(board)
     assert f"content digest {digest[:12]}" in text
-    assert f"base_ref: {film_version_identity_digest(board, _PARAMS, version=2)}" in text
+    assert (
+        f"base_ref: {film_version_identity_digest(board, _PARAMS, version=2, cut=('spec', [96, 270, 150], None))}"
+        in text
+    )
     # 时间轴两时钟分行: authored = 设计值, actual = 权威帧数 ÷ fps (96f=3.2s,
     # 永不与 authored 4s 混为一谈); 总行随时间轴行
     assert "- Timeline: executed cut" in text and "total 17.2s (516f)" in text
     assert (
-        '[s1] words · authored 4s · actual 3.2s (96f) · shows: "Ship faster" '
-        "(dark) · silent"
+        '[s1] words · authored 4s · actual 3.2s (96f) · at 0–3.2s · shows: '
+        '"Ship faster" (dark) · silent'
     ) in text
     # 逐场: view 引用 + 取景文本带元素 id(内部读取可带 id, 呈现侧仍隐藏)
     assert (
-        '[s2] ui · authored 9s · actual 9s (270f) · view: page 0 shot 1 '
+        '[s2] ui · authored 9s · actual 9s (270f) · at 3.2–12.2s · view: '
+        'page 0 shot 1 '
         '"Section 1" · browser frame · camera: wide → push to "Start free" '
         '(button) [s1e1] at 1s → settle · narration: "The dashboard does the '
         'work."'
     ) in text
     assert (
-        '[s3] end · authored 5s · actual 5s (150f) · shows: name: "Acme" · '
+        '[s3] end · authored 5s · actual 5s (150f) · at 12.2–17.2s · shows: '
+        'name: "Acme" · '
         'tagline: "Ship faster" · silent'
     ) in text
     # 候选清单 + used-by 映射 + 随图同行的取景元素清单 (id · kind · text)
@@ -786,7 +796,7 @@ async def test_current_version_read_without_output_id(monkeypatch):
     )
     assert "- Storyboard version: 3 (created via compose)" in text
     assert (
-        f"base_ref: {film_version_identity_digest(board, _PARAMS, version=3)}"
+        f"base_ref: {film_version_identity_digest(board, _PARAMS, version=3, cut=('spec', [96, 270, 150], None))}"
         in text
     )
     assert "- Timeline: executed cut" in text
@@ -866,3 +876,287 @@ async def test_snapshotless_legacy_version_skips_the_drift_check(monkeypatch):
     assert "Materials drift" not in text
     assert 'view: page 0 shot 1 "Section 1"' in text
     assert "used by [s2]" in text
+
+
+@pytest.mark.asyncio
+async def test_read_facts_carry_the_words_timing_clause(monkeypatch):
+    """Batch B 读取事实座: 设了时序的 words 场在 get_output_spec 里展示
+    seconds→frames 落帧 (权威帧数), 未设的场不带时序子句 — 编辑前模型读到
+    的与呈现/spec 是同一组参数."""
+    board = FilmStoryboard.model_validate(
+        {
+            "scenes": [
+                {"type": "words", "seconds": 4.0, "dark": True,
+                 "lines": ["Ship faster"], "enter": "words",
+                 "enter_start": 0.3, "enter_interval": 0.12,
+                 "enter_duration": 0.25},
+                {"type": "words", "seconds": 4.0, "dark": False,
+                 "lines": ["Why teams switch"]},
+                {"type": "end", "seconds": 5.0, "name": "Acme",
+                 "tagline": "Ship faster"},
+            ]
+        }
+    )
+    base = _base(board, cut_state="spec", cut_frames=[120, 120, 150])
+    output = _output()
+    _patch_read(monkeypatch, base, [_page()])
+    text, _ = await _read(monkeypatch, output, _params(output))
+    assert "start 0.3s→f9" in text
+    assert "interval 0.12s→f4" in text
+    assert "duration 0.25s→f8" in text
+    assert "hold to scene end (f120)" in text
+    s2_line = next(l for l in text.splitlines() if l.strip().startswith("[s2]"))
+    assert "enter timing" not in s2_line
+
+
+# ---------------------------------------------------------------------------
+# 8. 配乐事实读取 (F1, 事故 7886d879) — params 行是「选择」, Music 行是该版本
+# 自己记录里的事实; 全部通过真实 output_spec_observation 读取路径检查.
+# ---------------------------------------------------------------------------
+
+
+def _bed_snapshot(mood: str = "calm", bpm: float = 66.3) -> dict:
+    """A frozen execution record carrying a resolved bed (真实座
+    build_film_execution_snapshot 的形状, 手搓免 Music 表)."""
+    return {
+        "pages": [],
+        "music": {"track_id": f"trk-{mood}", "mood": mood, "bpm": bpm,
+                  "beats": [0.0, 0.9]},
+        "timing": {"fps": 30},
+        "digest": "d" * 64,
+    }
+
+
+def _spec_music(track_id: str = "trk-calm", bpm: float = 66.3) -> dict:
+    """The delivered render spec's music block (build_film_spec 写入形状)."""
+    return {"url": f"music/{track_id}.mp3", "gain_db": -20.0, "bpm": bpm}
+
+
+@pytest.mark.asyncio
+async def test_music_incident_shape_unset_mood_with_landed_bed(monkeypatch):
+    """事故形状: 用户没指定 mood, 默认链解析出 calm 且床已落进交付渲染 —
+    params 行必须说 unset(不是 none/off), Music 行必须报 LANDED 床."""
+    board = _board()
+    base = _base(
+        board, cut_state="spec", cut_frames=[96, 270, 150],
+        snapshot=_bed_snapshot(), spec_music=_spec_music(),
+    )
+    output = _output()
+    _patch_read(monkeypatch, base, [_page()])
+    text, _ = await _read(monkeypatch, output, _params(output))
+    assert "music unset (not off" in text
+    assert 'music mood "none"' not in text
+    assert (
+        '- Music: a bed LANDED in the delivered render (mood "calm" · '
+        "66.3 BPM · gain -20 dB"
+    ) in text
+    assert "Music: no bed" not in text
+
+
+@pytest.mark.asyncio
+async def test_music_explicit_off_executed_confirms_no_bed(monkeypatch):
+    """用户明确 off + 交付渲染无床: 选择行与事实行一致地报 off-confirmed —
+    off 是合法确认事实, 不会被写成 unconfirmable."""
+    board = _board()
+    base = _base(board, cut_state="spec", cut_frames=[96, 270, 150])
+    base.film_storyboard_params = {**_PARAMS, "music_mood": "off"}
+    output = _output()
+    _patch_read(monkeypatch, base, [_page()])
+    text, _ = await _read(monkeypatch, output, _params(output))
+    assert 'music "off" (explicitly closed)' in text
+    assert (
+        "- Music: off — the user switched the bed OFF, and the delivered "
+        "render carries none (as confirmed)"
+    ) in text
+
+
+@pytest.mark.asyncio
+async def test_music_executed_without_bed_reports_no_bed(monkeypatch):
+    """已执行 + 交付 spec 无 music 块 + 未指定 mood: 如实报交付无床 (床缺位
+    是可确认事实, 因为 executed record 在场可读)."""
+    board = _board()
+    base = _base(
+        board, cut_state="spec", cut_frames=[96, 270, 150],
+        snapshot=_bed_snapshot(), spec_music=None,
+    )
+    output = _output()
+    _patch_read(monkeypatch, base, [_page()])
+    text, _ = await _read(monkeypatch, output, _params(output))
+    assert (
+        "- Music: no bed in the delivered render (the executed record "
+        "carries none)"
+    ) in text
+
+
+@pytest.mark.asyncio
+async def test_music_draft_reports_the_frozen_plan(monkeypatch):
+    """草稿版本: 事实行报冻结执行记录里的计划床, 永不冒充已落地."""
+    board = _board()
+    base = _base(board, cut_state="draft", snapshot=_bed_snapshot())
+    output = _output()
+    _patch_read(monkeypatch, base, [_page()])
+    text, _ = await _read(monkeypatch, output, _params(output))
+    assert (
+        '- Music: bed planned (mood "calm" · 66.3 BPM) — frozen into this '
+        "version's execution record at design time"
+    ) in text
+    assert "LANDED" not in text
+
+
+@pytest.mark.asyncio
+async def test_music_unreadable_executed_record_is_unconfirmable(monkeypatch):
+    """已执行但交付记录读不出来: unconfirmable, 永不默认成无床."""
+    board = _board()
+    base = _base(board, cut_state="unreadable", snapshot=_bed_snapshot())
+    output = _output()
+    _patch_read(monkeypatch, base, [_page()])
+    text, _ = await _read(monkeypatch, output, _params(output))
+    assert (
+        "- Music: unconfirmable — the version was executed but its "
+        "delivered record is unreadable"
+    ) in text
+
+
+@pytest.mark.asyncio
+async def test_music_legacy_snapshotless_version_is_unconfirmable(monkeypatch):
+    """快照前的历史版本: 记录缺失 = unconfirmable, 永不读成 off/无床."""
+    board = _board()
+    base = _base(board, cut_state="kept", snapshot=None)
+    output = _output()
+    _patch_read(monkeypatch, base, [_page()])
+    text, _ = await _read(monkeypatch, output, _params(output))
+    assert (
+        "- Music: unconfirmable — this version predates the frozen "
+        "execution record"
+    ) in text
+    assert "Music: no bed" not in text
+    assert "Music: off" not in text
+
+
+@pytest.mark.asyncio
+async def test_music_snapshot_mood_only_joins_when_track_matches(monkeypatch):
+    """混搭防护: 快照的 mood 只在其 track IS 交付 track 时并入事实行 —
+    track 对不上时只报 spec 自身的 bpm/gain, 永不拼两台记录."""
+    board = _board()
+    base = _base(
+        board, cut_state="spec", cut_frames=[96, 270, 150],
+        snapshot=_bed_snapshot(mood="calm"),
+        spec_music=_spec_music(track_id="trk-other"),
+    )
+    output = _output()
+    _patch_read(monkeypatch, base, [_page()])
+    text, _ = await _read(monkeypatch, output, _params(output))
+    assert '- Music: a bed LANDED in the delivered render (66.3 BPM' in text
+    assert 'mood "calm"' not in text
+
+
+# ---------------------------------------------------------------------------
+# composite scenes (ADR-140) — the read's element facts + media drift
+# ---------------------------------------------------------------------------
+
+_OBS_ASSET = "11111111-1111-1111-1111-111111111111"
+
+
+def _composite_board() -> FilmStoryboard:
+    return FilmStoryboard.model_validate(
+        {
+            "scenes": [
+                {"type": "words", "seconds": 4.0, "dark": True,
+                 "lines": ["Ship faster"]},
+                {
+                    "type": "composite",
+                    "seconds": 8.0,
+                    "elements": [
+                        {"kind": "video", "asset": _OBS_ASSET,
+                         "source_start": 10.0, "source_end": 18.0, "at": 0.0,
+                         "rect": {"x": 0.5, "y": 0.0, "w": 0.5, "h": 1.0},
+                         "keep_audio": True},
+                        {"kind": "text", "lines": ["逐字出现"], "at": 1.0,
+                         "until": 7.0,
+                         "rect": {"x": 0.05, "y": 0.3, "w": 0.4, "h": 0.4},
+                         "enter": "words", "enter_interval": 0.3},
+                    ],
+                },
+            ]
+        }
+    )
+
+
+def _composite_media(key: str = "u/demo/video.mp4"):
+    from app.tools.film.storyboard import StoryboardMedia, StoryboardMediaAsset
+
+    return StoryboardMedia(
+        assets={
+            _OBS_ASSET: StoryboardMediaAsset(
+                id=_OBS_ASSET, key=key, kind="video", title="Demo clip",
+                duration_seconds=25.0, width=1920, height=1080,
+            )
+        }
+    )
+
+
+def _media_pin(key: str = "u/demo/video.mp4") -> dict:
+    return {"asset_id": _OBS_ASSET, "key": key}
+
+
+@pytest.mark.asyncio
+async def test_composite_read_shows_element_facts(monkeypatch):
+    """The edit model's eyes (ADR-140): a composite scene reads every
+    element's facts — the asset's TITLE from the media universe, the source
+    window, the output window, the text copy + timing. The media seat is a
+    READ seat: no duration probing (probe_duration stays off)."""
+    import app.tools.film.storyboard as sb_mod
+
+    board = _composite_board()
+    snapshot = build_film_execution_snapshot(
+        pages=[_page()], track=None, media=_composite_media()
+    )
+    base = _base(board, cut_state="spec", cut_frames=[120, 240], snapshot=snapshot)
+    output = _output()
+    _patch_read(monkeypatch, base, [_page()])
+
+    probe_flags: list[bool] = []
+
+    async def _media(db, project, b, *, probe_duration=False):
+        probe_flags.append(probe_duration)
+        return _composite_media()
+
+    monkeypatch.setattr(sb_mod, "load_storyboard_media", _media)
+
+    text, _images = await _read(monkeypatch, output, _params(output))
+    assert probe_flags == [False]  # a read never downloads bytes
+    assert '"Demo clip"' in text
+    assert "source 10–18s → plays 8s from 0s" in text
+    assert "keeps its sound" in text
+    # A3 素材事实: the material's own length rides the video line (known);
+    # the scene header carries the film position (cut frames [120, 240] →
+    # the composite scene runs 4–12s).
+    assert "(25s asset)" in text
+    assert "· at 4–12s" in text
+    assert '"逐字出现"' in text and "word-by-word" in text
+    assert "interval 0.3s" in text
+
+
+@pytest.mark.asyncio
+async def test_composite_read_names_media_drift(monkeypatch):
+    """The snapshot pins the design-time media identity; a replaced asset
+    (key changed) is named as drift, never silently re-resolved."""
+    import app.tools.film.storyboard as sb_mod
+
+    board = _composite_board()
+    snapshot = build_film_execution_snapshot(
+        pages=[_page()], track=None, media=_composite_media(key="u/demo/original.mp4")
+    )
+    base = _base(board, cut_state="spec", cut_frames=[120, 240], snapshot=snapshot)
+    output = _output()
+    _patch_read(monkeypatch, base, [_page()])
+
+    async def _media(db, project, b, *, probe_duration=False):
+        return _composite_media(key="u/demo/replaced.mp4")
+
+    monkeypatch.setattr(sb_mod, "load_storyboard_media", _media)
+
+    text, _images = await _read(monkeypatch, output, _params(output))
+    assert "Media drift" in text
+    assert _OBS_ASSET in text
+    assert "cannot re-render as designed" in text

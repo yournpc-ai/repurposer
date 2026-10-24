@@ -1,687 +1,264 @@
-# PRD: Intelligent Talk Repurposing Platform
+# PRD: Repurposer
 
-> Status: Active（2026-08-18）
-
-## 1. Document Information
-
-| Item | Content |
-|:---|:---|
-| Product Name | Repurposer |
-| Target Audience | Product managers, tech leads, designers, Zuo, European market team |
-
----
-
-## 2. Product Overview
-
-### 2.1 One-Liner
-
-An AI agent for knowledge experts: it turns raw talk materials (video, audio, transcript, slides, photos) into the content each user asks for — social posts, articles, quote cards, vertical clips, multi-language versions for LinkedIn, institutional websites, and email newsletters — in the expert's own voice and style, and guides people with no editing or social-media background in growing their personal brand.
-
-### 2.2 Vision
-
-Enable thought leaders, subject-matter experts, and executives to **zero-edit** their **talks, meetings, podcasts, webinars, or interviews** into the content they need for LinkedIn, institutional websites, and email newsletters — with their viewpoints and style intact throughout.
-
-### 2.3 Core Value Proposition
-
-| Pain Point | Solution |
-|:---|:---|
-| Talk content is valuable but 90% goes dormant after the event | AI automatically analyzes the full talk, extracting the moments most worth posting first |
-| Manual short-form video editing is costly and slow | Agent workflow auto-scripts, self-reviews, and corrects, with a human review loop |
-| Multi-language adaptation is expensive | M3 native multi-language, one-click generation for 5 European languages |
-| Ghostwriters can't capture the expert's voice | Learns the expert's voice from past materials (books, articles, old talks) |
-| Unclear which segments are shareable | AI scores which clips are most worth posting first (with visible reasons), auto-generating 3 alternative hooks |
-| European institutions worry about data security | Optional EU data residency (Cast AI Kimchi), GDPR compliant |
-
-> 战略论证（2027 凭什么赢、品味/身份/信任三资产哲学）的唯一事实源是 [STRATEGY.md](./STRATEGY.md)；本表只做结论性陈述，不展开论证。
-
-### 2.4 Capability Doctrine（中心思想）
-
-剪辑操作深度与 AI 生成广度长在 **agent 的技能注册表**里——它是开放的、持续延伸的清单，是后续能力投资的中心。能力增长永不以新增用户操作面为代价：新增能力 = 新增技能注册项，不是新增 UI 面板；用户要会的东西不随能力变多。
-
-
----
-
-## 3. Background & Problem
-
-### 3.1 European Market Context
-
-- **Over 200 million LinkedIn users in Europe**, with Germany, UK, and Netherlands ranking among the top globally for knowledge-content engagement — the core B2B knowledge distribution channel
-- **3,000+ academic conferences per year in Europe**, tens of thousands of corporate summits, with post-event repurposing penetration < 5%
-- **OpusClip/Descript blind spots in Europe**: Core users are influencers/podcasters, shallow understanding of academic/technical content, and US-based data processing excludes them from European institutional procurement
-- **Multi-language is the entry ticket**: 24 official languages in Europe; an English talk without French/German/Spanish versions reaches only 30% of the audience
-- **GDPR is a sales weapon**: 73% of European enterprises lack AI governance structures, 64% of Fortune 500 companies operating in Europe face AI compliance pressure; legal risks of cross-border data transfers (Schrems II) put US cloud-processed AI tools at a disadvantage in regulated European procurement
-
-### 3.2 Key Insight
-
-> **Repurposer is not "another OpusClip" in Europe — it's the only AI content agent that understands expert material, writes natively in 5 European languages, and can keep data in the EU.**
-
-- **Core channels are LinkedIn + institutional websites + email newsletters**, not TikTok/Douyin
-- **Product positioning shifts from "clip short videos" to "an agent that delivers the content you name"**: social posts + articles + quote cards + vertical clips (optional)
-- **Multi-language is elevated to P0**: Chinese/English + German/French/Spanish/Italian, M3 native translation, no third-party API
-- **EU data residency as a premium differentiator**: GDPR compliance + optional EU data residency via Cast AI Kimchi
-
-### 3.3 User Pain Points
-
-1. **High editing barrier**: Professors/experts can't use editing software, assistants spend too much time editing
-2. **Hard to extract content**: Unclear which 30 seconds of a 1-hour talk are worth clipping
-3. **Inconsistent style**: Ghostwritten copy doesn't sound like the expert
-4. **High multi-language cost**: Want to take content overseas, but dubbing/translation is expensive
-5. **Tedious platform adaptation**: Same content needs manual resizing, subtitle restyling, and copy length adjustments
-
-### 3.4 Competitive Analysis
-
-> 竞品事实与决策的唯一入口：[COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md)（七家能力全景）+ [DECISION_MATRIX.md](./DECISION_MATRIX.md)（采纳/改造/放弃裁决）+ [research/](./research/)（单家卡片）。
-
----
-
-## 4. Target Users & Personas
-
-### 4.1 Primary Users (Europe Edition)
-
-| User Type | Characteristics | Use Case | Europe-Specific |
-|:---|:---|:---|:---|
-| **University Professors / Researchers** | Many academic talks, want to expand influence | Auto-generate distribution assets after conference talks | Need multi-language versions (German/French/Spanish) to reach European peers |
-| **Corporate Executives / Industry Experts** | Need thought leadership output, time is fragmented | Generate social content after summit talks | Need GDPR compliance proof for corporate procurement |
-| **Conference Organizers** | Large volume of talk video assets | Batch-generate conference promotional clips | European academic conferences (e.g. ECA, EMBO) have batch needs |
-| **Think Tanks / Research Institutes** | Policy talks need distribution | Turn talks into policy briefs + social content | UK/German think tanks (Chatham House, DIW Berlin) have strong content distribution needs |
-| **Corporate Universities / Training Depts** | Internal training content needs reuse | Turn internal training talks into reusable learning assets | Siemens, SAP, Bosch and other European enterprises have internal knowledge management needs |
-| **Expert Assistants / Operations Teams** | Actual executors | Upload materials, review AI output, publish | Need GDPR compliance to process internal company talk content |
-| **Cross-Border Knowledge Brokers** | Influence spans 2+ language/institutional worlds | Talk → multilingual thought-leadership assets; maintained public presence | Seed ICP — see §4.2 |
-
-### 4.2 Core Archetype: The Cross-Border Knowledge Broker (Seed ICP)
-
-> **Status: working hypothesis (2026-07-23)** — abstracted from seed-user research; a round of 3–5 interviews with similar users (varied language pairs) is planned to validate the trait weights before this hardens into targeting. The archetype is a **template, not a specific individual**: language pairs vary by instance (EN↔ZH, EN↔FR/DE, FR↔DE…); the kernel does not.
-
-**Definition.** Knowledge workers whose professional value *is* straddling two (or more) language/institutional worlds: diaspora professors and executives in Europe, European China-hand researchers, EU multilingual policy-circle members, international-organization experts, thought-leadership executives at multinationals. Their career is itself repurposing — re-expressing ideas from one context into another; the product automates what they already do by hand.
-
-**The kernel: their thought-leadership presence, maintained.** They need "self-media" only in the sense of a persistent public content presence — **not** creator-economy self-media. The distinction is load-bearing (mistaking them for creators rebuilds OpusClip):
-
-| | Creator-economy self-media | This archetype's presence |
-|:---|:---|:---|
-| Content is | the job itself | a tool of the job (reputation feeds the real career) |
-| Growth logic | virality, volume, trends | trust accumulation, network reach, institutional backing |
-| Failure cost | one post flops, post the next | one wrong / AI-sounding post = reputational damage |
-| Budget | personal, price-sensitive | institutional (faculty / think tank / corporate) |
-| Time available | full-time | **zero marginal time — acceptance only** |
-
-**Mental model: an on-call multilingual writing team; the expert is the editor-in-chief.** The product does the labour (cutting, writing, translating, formatting); the expert keeps the judgement (reading, tweaking, approving). Judgement is not friction to remove — it is the part they refuse to delegate.
-
-**Why this is the seed ICP:**
-- **Sharpest pain**: perishable talks × multilingual output = the highest manual conversion cost of any user group; today most of their talks end with zero output
-- **Strongest willingness to pay**: presence is their professional net worth, and institutional budgets exist
-- **Self-contained seed pool**: each broker is a node in a professional network (learned societies, conference circuits, policy networks) — one champion opens a cluster
-- **Richest persona cold-start**: years of publications, talks, and reports calibrate Voice DNA from day one; the back-catalog also unlocks self-archive search ("what did I say about X in 2024?") as a second value
-
-**Shared traits (requirement criteria):**
-1. Multilingual output **is** the influence model, not a bonus
-2. Voice fidelity is the entry ticket, not a premium — AI-tone content is a *negative* asset; risk appetite is negative (rather publish less than publish wrong)
-3. Scarcest asset = time; most perishable asset = the talk just given. Expert involvement = **acceptance (~10 min), not work**
-4. **Solo operation is the floor**: the entire loop must be completable by the expert alone — zero configuration, outputs ≥90% ready, fixes faster by direct edit than by description (§6.8). Assistant delegation is a *variant* on the same interface, not the assumption; the review queue exists only in institutional mode (ADR-027: personal instant-publish, institutional mandatory confirmation)
-5. Compliance gates "can we use it at all" (policy-sensitive material, institutional procurement, US-processed tools are non-starters)
-6. Fixed terminology translations are professional dignity → glossary is a **survival feature** for this group, not an enhancement (PROGRESS 可选需求)
-
-**Core scenario — the 48 hours after a talk (solo main path):**
-
-```
-Talk ends (policy summit / government event / webinar)
-  → He drops in the recording himself (or link ingestion takes over)
-  → Minutes later, the talk's full aftermath package is ready:
-      EN LinkedIn posts ×2 (his voice: academically restrained)
-      Native-language long article ×1 (paste-ready export for the
-        destination editor — WeChat has no API, export IS distribution)
-      Vertical clips ×2–3 (original audio + bilingual subtitles)
-      Quote cards (his persona skin)
-      Newsletter paragraph (society / institute circular)
-  → He reads everything: edits two sentences, kills one, keeps three
-  → One-click publish / export
-No queue, no approval stage, no assistant assumed.
-```
-
-**Explicit non-requirements:** virality optimization, TikTok-style expression, trend-chasing, fully-autopilot publishing. For this group "not AI-sounding" is the baseline (STRATEGY 牌 4), and control beats convenience (ADR-027).
-
-**Positioning implication.** Seed-phase ICP = this archetype; "European knowledge experts" remains the expansion narrative. When scheduling conflicts (e.g. polishing one language pair's quality vs. adding another EU language), the seed ICP wins — **language priority follows seed customers**, while the European-institution story is unchanged.
-
-### 4.3 User Persona Examples
-
-**Professor Zhang (Europe Edition)**
-- 55 years old, AI Research Institute Director at a university, frequently attends international conferences
-- Can't edit, but wants students/assistants to post his talks on LinkedIn and other professional networks
-- Has Twitter/LinkedIn, but posts infrequently
-- Wants content to maintain academic rigor while being accessible to non-specialists
-- **Europe-specific need**: Needs German version to reach German peers; needs GDPR compliance proof for school procurement approval
-
-**Sarah (UK Think Tank Operations Manager)**
-- 32 years old, Chatham House content operations
-- Processes 10+ policy talks per month, currently relies on manual editing and writing social posts and articles
-- Needs to convert English talks into French/German versions to reach European policy circles
-- **Europe-specific need**: All content must be processed in the EU, cannot be transferred to the US; needs native multi-language quality, not stiff machine translation
-
----
-
-## 5. Product Scope
-
-### 5.1 In Scope (This Cycle)
-
-**Core Features (P0):**
-
-- **Persona memory auto-persistence and optional management**: After task completion, extract user persona (style, preferences, voiceprint) from input; persist as Persona; user can view and edit multiple personas at `/personas`; can manually select during project creation, or leave unselected for auto-creation
-- Project-level talk material upload (video, audio, transcript, slides, images); input scenarios include talks / podcasts / webinars / interviews
-- Persona past materials upload (books, articles, old talks, social content) — **optional method** to supplement or calibrate persona (not the sole P0 source)
-- AI auto-analysis: content segmentation, recommendation scoring, and Persona memory extraction from task input
-- **AI Generation (P0 Core Outputs):**
-  - 3-5 highlight clip scripts (with Hook + subtitles + visual suggestions)
-  - Social post (matching the persona's voice)
-  - Quote cards / Carousel
-  - Article / newsletter content
-  - **Multi-language versions:** Chinese/English + German/French/Spanish/Italian, M3 native translation
-- **Video rendering (P0, hard prerequisite):** vertical 9:16 MP4 + SRT via Remotion, driven by a declarative `clip-spec(JSON)` contract
-- **ASR (word-level timestamps):** faster-whisper self-hosted processing for audio/video uploads
-- **Voice-clone dubbing:** MiniMax voice_clone + T2A for translating clip audio into target languages
-- Human review interface (script editing, hook selection, visual replacement, feedback regeneration)
-- Export: copy (Markdown/TXT), quote card images (PNG), ZIP archive
-- Project-scoped chat: natural-language instructions (translate, revise, render, music) dispatch to background runs
-
-**Deferred / Future Features:**
-
-- **EU data residency option:** GDPR-compliant deployment via Cast AI Kimchi or EU cloud region — product differentiator, not implemented in MVP
-- **GDPR compliance documentation and data deletion features:** future procurement requirement
-- **Link auto-fetch (YouTube / Vimeo / podcasts):** yt-dlp-style fetch to lower input barrier
-- **Multi-language UI:** English/German/French/Spanish/Italian interface localization
-- **Direct social publishing:** Professional network APIs (e.g. LinkedIn) integration
-- **Team collaboration, analytics, billing**
-
-**Out of Scope (This Cycle):**
-
-- Real-time live streaming processing
-- AI-generated virtual avatars
-- Complex team collaboration permissions (single-user first)
-- Entertainment/influencer viral short-form videos (we focus on knowledge content)
-- TikTok/Douyin/Xiaohongshu formats (not core channels in Europe)
-- Paid subscriptions and billing system
-
-### 5.3 Main Flow Finalized (v0.4 Update): Vertical Clip Output + Editable
-
-After technical review, **"vertical clip output" has been elevated from "P1 optional" to an MVP-mandatory main-flow output, and must be editable**. Detailed plan in [VIDEO_EDITOR.md](./VIDEO_EDITOR.md) and ADR-016. Key points:
-
-- **Category = OpusClip-style**: Server-side AI pipeline + browser **lean editing surface** + deep precision editing **handed off to CapCut/Premiere**. Not a client-side full-featured editor like CapCut Web.
-- **Editing form follows Descript**: transcript editing (delete sentence = cut video, non-destructive and recoverable) + word↔timestamp + **single-track trim**; **no** multi-track/layers/transition effects/B-roll library/auto face tracking.
-- **"Lighter and weaker" boundary**: Breadth-wise only one main flow, but polished to Descript-level quality (preview = final pixel match, multi-language subtitles editable, one-click export of publishable final output).
-- **Technical choice**: Lock in `clip-spec(JSON)` contract; first renderer uses **Remotion** (server-side headless Chrome + FFmpeg) as a replaceable black box; future swap to hand-rolled FFmpeg/client WebCodecs possible, contract unchanged.
-- **Dependency escalation**: **ASR (word-level timestamps)** upgraded from P1 to **hard prerequisite**, video needs streamable playback/seek (**local FS + Range endpoint is sufficient, object storage not required, deferred to scale**); therefore MVP input must support video/audio.
-
----
-
-## 6. Functional Requirements
-
-> 本节为**需求目录**（ID 稳定，供外部文档按 ID 引用）。优先级 / 排期 / 实现状态的唯一事实源是 [PROGRESS.md](./PROGRESS.md)；竞品溯源见 [DECISION_MATRIX.md](./DECISION_MATRIX.md)。
-> 注：FR-011 / FR-018 / FR-019 编号历史上重复出现（项目管理 / 素材上传 / persona 三节各有一份），保留原样以免打断外部引用。
-
-### 6.1 Persona Memory Management
-
-| ID | Requirement |
-|:---|:---|
-| FR-001 | Auto-create Persona memory from task input when none selected (after task completion) |
-| FR-002 | Manual Persona creation at `/personas` |
-| FR-003 | Edit Persona memory (basic info + AI-extracted style fields) |
-| FR-004 | View/edit AI-generated style persona |
-| FR-005 | Manage Persona past materials (books/articles/social) as calibration sources |
-| FR-006 | Manage Persona voice samples (upload/delete/preview cloning) |
-
-### 6.2 Project (Talk) Management
-
-| ID | Requirement |
-|:---|:---|
-| FR-007 | Create project (Persona optional; auto-created if unselected) |
-| FR-008 | Project list with Persona filter (`persona_id`) |
-| FR-009 | Soft-delete project |
-| FR-010 | Project status tracking (uploading/processing/review/completed) |
-| FR-011 | Optional EU data residency at project creation (future differentiator, not implemented) |
-
-### 6.3 Material Upload & Input Sources
-
-> **Understanding: Input sources have two first-class entry points — "upload file" and "paste link".**
-> In real scenarios, user content often already lives on YouTube / Zoom / Loom / podcasts; "paste link to auto-fetch" is much smoother than "download first, then upload", a key barrier-reducing entry point (industry standard, see OpusClip).
+> Status: 当前产品需求（2026-10-25）。实现与验收状态以 `PROGRESS.md` 和当前任务合同为准；技术规范以对应 ADR/子系统文档为准。
 >
-> **Understanding: Input scenarios are not limited to "talks".** Equally support talks / podcasts / webinars / interviews and other "knowledge-oriented oral long-form content".
->
-> **Understanding: Non-text input (video/audio/link) must go through ASR transcription.** ASR is not an optional nice-to-have, but a mandatory prerequisite to turn audio/video into "timestamped transcript", directly determining subsequent segment selection, subtitles, and generation. **ASR priority is determined by input ambition** — if P0 accepts video/audio/link, ASR must be elevated accordingly; if P0 only accepts transcripts, ASR can be deferred.
->
-> **Input processing pipeline:** `link/file → (yt-dlp-style fetch) → ASR transcription → normalized transcript (with timestamps) → persona understanding / content generation`.
-> **External dependencies (not covered by MiniMax, need third-party):** link fetching (yt-dlp-style, supports thousands of sites), ASR transcription (Whisper-style, multi-language).
+> 本文回答为谁做、解决什么、承诺哪些结果与哪些需求仍未完成。它不保存版本更新史，也不把规划能力写成已上线能力。
 
-| ID | Requirement |
-|:---|:---|
-| FR-011 | Upload video (common formats) |
-| FR-012 | Upload audio (common formats) |
-| FR-013 | Upload transcript (docx/txt/md or paste text) |
-| FR-014 | Upload slides (pdf/ppt/pptx) |
-| FR-015 | Upload event photos (jpg/png, multi-select) |
-| FR-016 | Upload Persona past materials (books/articles/old transcripts/social) |
-| FR-017 | Material preprocessing status display (fetching/transcribing/parsing/completed) |
-| FR-018 | Paste-link auto-fetch (YouTube/Vimeo/Zoom/Loom/Drive/podcast, yt-dlp-style, then ASR) |
-| FR-019 | Auto-transcription of non-text input (ASR, word-level timestamps, multi-language, faster-whisper) |
+## 1. 产品概述
 
-### 6.4 Persona Understanding & Style Persona
+### 1.1 一句话
 
-| ID | Requirement |
-|:---|:---|
-| FR-018 | Auto-extract Persona memory from task input (values/metaphors/sentence patterns/terminology/emotional tendencies) |
-| FR-019 | Manual edit of Persona memory (modify/supplement/disable expressions) |
-| FR-020 | Content segmentation & scoring: first-post recommendation score (1-100) + visible reason — answers "which clip is most worth posting first", never predicts reach |
-| FR-021 | Keyframe/slide-page recommendation from uploaded materials |
-| FR-022 | Quote extraction (5-10 most share-worthy quotes) |
+An AI agent for knowledge experts: it turns existing video, audio, transcripts, slides, photos and web material into the content each user names, while preserving the expert's ideas, terminology and style.
 
-### 6.5 Voice Settings
+### 1.2 愿景
 
-| ID | Requirement |
-|:---|:---|
-| FR-023 | Style sliders (academic↔casual / restrained↔passionate / concise↔detailed) |
-| FR-024 | Target audience selection (peers/practitioners/public/investors/policymakers) |
-| FR-025 | Catchphrases / fixed openers & closers |
-| FR-026 | Blocked words |
+让有专业知识但没有编辑或社交媒体运营时间的人，能够独立完成“素材 → 计划 → 产物 → 修改 → 导出/发布”。用户保留判断与授权，assistant 承担读取、剪辑、写作、翻译、排版和渲染劳动。
 
-### 6.6 Voice Samples
+核心承诺是 **the user names it, the agent makes it**。多产物是能力面，不是“一次输入自动生成全套”的打包承诺。
 
-| ID | Requirement |
-|:---|:---|
-| FR-027 | Upload voice sample (1-3 min clear recording) |
-| FR-028 | Preview cloned voice with sample text |
-| FR-029 | Toggle cloned voice for generation |
-| FR-030 | Multi-language voice mapping (e.g. ZH cloned, EN British/American) |
+### 1.3 价值与边界
 
-### 6.7 Content Generation
+| 用户问题 | 产品回答 |
+|---|---|
+| 演讲、会议、播客和文字成果沉淀后难以复用 | 从完整素材理解观点、证据和可分享片段，按用户目标制作 |
+| 不会剪辑、排版或平台适配 | 用对话和直接编辑完成，不要求学习专业 NLE |
+| 外包文案不像本人 | 用 persona、过往材料和用户修改校准风格与术语 |
+| 多语言制作成本高 | 用户点名语言后生成翻译、字幕、文案或配音版本 |
+| 没有时间管理发布 | 结果可导出；渠道连接与发布按当前 Distribution 能力和授权执行 |
+| 机构担心数据与合成内容合规 | 把驻留、披露、删除和版权作为明确需求；未实装前不作合规承诺 |
 
-| ID | Requirement |
-|:---|:---|
-| FR-031 | Highlight clip scripts (default 3-5: hook + script + subtitle timestamps + visual suggestions + music mood) |
-| FR-032 | 3 alternative hooks/titles per clip |
-| FR-033 | Social post in the persona's voice (Hook → Core insight → Personal take → CTA) |
-| FR-034 | Quote cards (3-5, 1:1 or 4:5, attribution + style templates) |
-| FR-035 | Carousel (multi-page image+text for social platforms) |
-| FR-036 | Multi-language versions (ZH/EN + DE/FR/ES/IT, M3 native translation preserving meaning and impact) |
-| FR-037 | Visual/B-roll prompts matched from uploaded materials |
-| FR-038 | Music suggestions by mood tags (calm/passionate/suspenseful/hopeful) |
+不做病毒流量承诺，不称用户为 influencer/creator，不提供 MCN、代运营或变现承诺，不以 TikTok 风娱乐内容为核心。
 
-### 6.8 Review & Editing (Iteration: Direct Edit First, Dialogue as Fallback)
+## 2. 能力原则
 
-> **Understanding: Output "will inevitably need changes", but "change" ≠ "must be multi-turn dialogue".** Making all changes into dialogue is slower, less controllable, and more token-consuming for the most common small edits. Choose the fastest interaction by edit type:
->
-> | What to change | Fastest way | Need dialogue? |
-> |:---|:---|:---|
-> | Change a word / delete a sentence / adjust word order | Edit directly in text (WYSIWYG) | No — describing is slower than direct editing |
-> | This one doesn't work, give me another version | One-click "regenerate" (triggers Reviser) | No — button is faster |
-> | Make it shorter / more formal / more casual | Quick actions (shorten / formal / casual…) | No — preset actions are faster |
-> | Vague broad direction adjustment ("less jargon, more storytelling") | Natural language sentence | Yes — this is where dialogue adds value |
-> | Change quote card template / subtitle style | Edit the persona skin (`/personas` skin tab; skin = `persona.brand`) | No |
->
-> **Conclusion: Iteration main force = direct editing + local regeneration + quick actions (covers ~80% of edits); free dialogue only as fallback for "vague broad direction adjustments", non-core, can be deferred (MVP can skip dialogue first).**
-> When dialogue fallback is used, agent context = talk materials + Persona memory + current output + necessary history.
->
-> **现状**：直改（edit ops）+ 局部重生成 + chat 三通道已落地（机制见 [CHAT_ARCHITECTURE.md](./CHAT_ARCHITECTURE.md)，现状见 PROGRESS §1）；内部 agent 架构 = 四层工程地图（Model / Harness / Graph / Loop，ADR-039），见 [AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md)，与这里的用户侧迭代交互是两回事。
+1. **能力增长在 tool registry，不在操作面板增长**。新增工具不应迫使用户学习新的编辑器；SKILL.md 指令包只补工艺知识，不替代代码能力。
+2. **画布是看得见、说得出的产品世界**，不是自由 NLE；选中、指认和对话修订优先于复杂手势。
+3. **直接修改与对话互补**。文字、参数和局部精确修改走确定性手势；模糊方向与跨产物修改走 Chat。
+4. **呈现与授权先于付费执行**。auto 只减少普通批准拍，不创造制作意图；守卫线和 Film 首稿规则不可绕过。
+5. **结果必须真实可交付**。已落码、测试通过、真实旅程通过、人工视听通过和可上线是不同证据层级。
+6. **渠道由用户点名或授权**，不由系统发明。LinkedIn、机构站和 newsletter 是核心方向，不是每条帖子的默认事实。
 
-| ID | Requirement |
-|:---|:---|
-| FR-039 | Script editing (subtitles/hooks/endings, timeline display) |
-| FR-040 | Title selection/editing (AI alternatives or custom) |
-| FR-041 | Visual replacement from uploaded materials |
-| FR-042 | BGM replacement by mood tags |
-| FR-043 | Local regeneration of a single clip/derivative (triggers Reviser) |
-| FR-044 | Structured feedback (hook/style/complexity/facts/expression) |
-| FR-045 | Multi-language sentence-by-sentence review |
+## 3. 背景与目标市场
 
-### 6.9 Export
+### 3.1 目标用户
 
-| ID | Requirement |
-|:---|:---|
-| FR-046 | Export copy (Markdown/TXT, all language versions) |
-| FR-047 | Export quote card images (PNG/JPG, multiple templates) |
-| FR-048 | Export video (MP4 via Remotion, preview = output pixel parity) |
-| FR-049 | Export subtitle files (SRT per clip) |
-| FR-050 | Batch export (ZIP of all project outputs) |
-| FR-051 | Export EU compliance certificate (future procurement feature) |
+- 欧洲高校教师、研究者、讲师；
+- 企业高管、行业专家与其助理；
+- 智库、研究机构、企业培训与会议组织方；
+- 需要在两个或更多语言/机构环境维持专业影响力的知识工作者。
 
-### 6.10 European Localization Features
+### 3.2 核心痛点
 
-| ID | Requirement |
-|:---|:---|
-| FR-052 | Multi-language UI (EN/DE/FR/ES/IT) |
-| FR-053 | European time format (24h, DD/MM/YYYY) |
-| FR-054 | European academic conference templates (ECA/EMBO style) |
-| FR-055 | European B2B marketing copy templates (German rigor / French elegance / British brevity) |
+- 素材有价值，但提取观点和证据耗时；
+- 编辑、排版和多语言制作门槛高；
+- AI 文案容易出现通用腔、术语错误或未经证实的事实；
+- 专家没有时间学习工具，只希望做最终判断和少量修改；
+- 机构使用还受授权、版权、数据跨境与合成内容披露约束。
 
----
+### 3.3 渠道与语言
 
-## 7. Non-Functional Requirements
+核心分发方向为 LinkedIn、机构网站和 email newsletter。多语言输出是入场券；中文/英文与 DE/FR/ES/IT 等语言按种子用户真实需求排优先级。产品 UI 当前语言与输出语言能力是两个范围，不得互相冒充。
 
-### 7.1 Performance
+### 3.4 竞品证据
 
-| ID | Requirement | Priority | Description |
-|:---|:---|:---|:---|
-| NFR-001 | Upload response | P0 | Immediate feedback after material upload, large file chunking |
-| NFR-002 | Generation time | P0 | Simple projects (transcript + images) initial draft within 5 minutes |
-| NFR-003 | Video rendering | P1 | Single clip render within 2 minutes |
-| NFR-004 | Concurrent processing | P1 | Support multiple projects queued for async processing |
+竞品事实与取舍分别归 `COMPETITIVE_ANALYSIS.md`、`DECISION_MATRIX.md` 和 `research/`。PRD 不复制竞品功能表，也不把竞品存在某能力当作本产品已实现的证据。
 
-### 7.2 Security & Privacy
+## 4. 用户与使用方式
 
-| ID | Requirement | Priority | Description |
-|:---|:---|:---|:---|
-| NFR-005 | User data isolation | P0 | Different users' data cannot be accessed by each other |
-| NFR-006 | Material secure storage | P0 | Uploaded files encrypted at rest |
-| NFR-007 | Voice sample authorization | P1 | Clearly inform users voice samples are only used for their own content generation |
-| NFR-008 | Copyright compliance notice | P1 | Provide copyright reminders for music, images, and other materials |
-| NFR-009 | EU data residency | P2 | For EU-selected projects, data storage and processing within EU region; future deployment differentiator |
-| NFR-010 | GDPR compliance | P2 | Provide data processing statements, user data deletion, export features; future procurement requirement |
-| NFR-011 | Cross-border data control | P2 | EU project data must not be transferred to non-EU regions for processing; future procurement requirement |
+### 4.1 使用角色
 
-### 7.3 Usability
+- **独立专家**：自己上传、判断、修改和导出，是完整闭环必须支持的最低形态。
+- **专家助理**：使用同一界面代执行，不以独立团队工作台为前提。
+- **机构运营者**：有批量素材、固定术语、授权与合规要求；团队协作和机构采购能力按后续排期实现。
 
-| ID | Requirement | Priority | Description |
-|:---|:---|:---|:---|
-| NFR-012 | Upload guidance | P0 | Clearly tell users "upload at least one type, more is better" |
-| NFR-013 | Status transparency | P0 | Show progress for each processing step |
-| NFR-014 | Review-friendly | P0 | Generated content displayed side-by-side for easy comparison |
-| NFR-015 | Mobile adaptation | P2 | Large file upload recommended on desktop |
+### 4.2 种子 ICP：跨语言知识中介
 
-### 7.4 Extensibility
+这是一个**仍待校准的工作假设**，不是已完成市场验证的结论。典型用户包括跨语言高校教师、欧洲中国研究者、国际组织专家、政策圈与跨国企业专家。
 
-| ID | Requirement | Priority | Description |
-|:---|:---|:---|:---|
-| NFR-016 | Module decoupling | P0 | Media processing, intelligent generation, rendering layer can be independently replaced |
-| NFR-017 | Multi-language extension | P1 | Add new languages without changing core logic |
-| NFR-018 | Output format extension | P1 | Add new platform formats without changing core logic |
+共同特征：
 
----
+1. 多语言表达本身就是职业影响力模型，不是附加功能；
+2. 声音/文风保真和术语准确是底线，错误公开内容的声誉成本高；
+3. 最稀缺的是时间，希望约 5–10 分钟完成验收，而不是学习编辑；
+4. 独立操作必须闭环，助理和机构审核是可扩展形态；
+5. 固定译法、授权、数据处理与机构采购可能决定“能不能用”。
 
-## 8. Technical Architecture
+他们需要的是持续的专业公共形象，不是 creator-economy 的流量职业。产品应承担制作劳动，把判断留给用户；不做自动 viral、追热点或未经确认的自动发布。
 
-> **已迁移**：技术架构的唯一事实源是 [MODULE_ARCHITECTURE.md](./MODULE_ARCHITECTURE.md)（六层模块图 / 表归属 / 代码地图 / 队列机制）；生成编排细节见 [AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md)；clip-spec 与编辑器见 [VIDEO_EDITOR.md](./VIDEO_EDITOR.md)。
+**未完成的验证**：用 3–5 名不同语言组合的相似用户访谈校准特征权重、语言优先级与付费环境。该研究未排期前不构成当前施工许可；结果回来前不得把种子 ICP 假设写成普遍市场事实。
 
----
+## 5. 产品范围
 
-## 9. Data Models
+### 5.1 当前产品能力目录
 
-> **已迁移**：表结构的唯一事实源是代码——`apps/api/app/models/tables.py` + `apps/api/migrations/`（文档不另维护字段表，以代码为准）。架构层面的数据约定（登录方式、租户隔离、存储 key、EU 驻留预留）见 [MODULE_ARCHITECTURE.md](./MODULE_ARCHITECTURE.md) §7.3。
+以下是当前代码/产品已有的能力面；具体通路与验收层级仍看 `PROGRESS.md`，不是“全部已上线”的声明。
 
----
+| 范围 | 当前需求与能力 |
+|---|---|
+| 素材 | 视频、音频、文字稿/贴文、幻灯片、图片等多素材输入；上传后有真实处理状态 |
+| 素材理解 | ASR 词级时间戳、文本提取、素材理解与派生事实；处理失败必须诚实呈现 |
+| Persona | 多实例 persona、风格与指导信息、过去材料、`brand` 皮肤、`voice` 声音绑定与 voice sample |
+| 对话生产 | Home composer 与项目 Chat 共用唯一意图面；提问、计划、修改、授权和恢复形成持续闭环 |
+| 文本产物 | 帖子、文章/newsletter 类文案、轮播、金句等按用户请求生成；无素材 copy-writer 有独立合法路径 |
+| 视频产物 | 高光切片、整条视频变换、多语言字幕、配音、重取景及 Film/MG 复合片，按各自 spec 与工具链执行 |
+| 多语言 | 文案、字幕与配音按用户点名语言生成；不默认同时生成所有语言 |
+| 编辑 | 文本直改、参数操作、局部重生成、chat 修订和 Film 分镜版本修订；保留真实版本与来源 |
+| 预览与导出 | 文本复制、图片、MP4、字幕及当前导出能力；预览与最终渲染必须共享契约 |
+| 交付 | Chat 与结果画布呈现真实 delivered/partial/failed 和费用事实；取消与失败不伪装成功 |
+| 计费 | credits、报价、hold/capture/release 与确认守卫按 BILLING 执行；支付订阅属于后续商业化 |
+| 分发 | 渠道连接与发布代码按 Distribution 现状存在；平台凭据、审批与联调未闭环前不是可用承诺 |
 
-## 10. Core User Flows
+**网页采集与通用链接导入不同**：Film 当前有受约束的网页 capture 链；YouTube/Zoom/Drive/RSS 等通用素材摄入仍是后续需求，不得混称已经支持。
 
-### 10.1 Create and Manage Persona Memory
+### 5.2 已拍板但未闭环的范围
 
-```
-1. User logs in
-2. Method A: Manually create Persona (optional)
-   ├── Enter name, title, language, primary activity field
-   ├── Optional avatar upload
-   └── Select target audience (peer scholars/industry practitioners/general public/investors/policymakers)
-3. Method B: Auto-create after task completion (default path)
-   ├── User doesn't select Persona on home page / during project creation
-   ├── System extracts style characteristics from materials + prompts during task processing
-   └── After task completion, persists as a Persona memory record
-4. User can view, edit, delete their Persona memory at /personas
-   ├── Modify basic info
-   └── Modify AI-extracted style fields (values, metaphors, sentence patterns, etc.)
-5. Optional upload of past materials or voice samples for persona calibration (P1 supports voice cloning)
-6. Set voice sliders (academic rigor ↔ casual spoken; rational restraint ↔ passionate; concise direct ↔ detailed expansion)
-```
+- R5 合成发言视频：`voice_gen` / `synth_visual` 目标能力，未实施；不创造第三套 spec/renderer，v1 不接唇形 avatar。
+- 定位根、选题、回访型运营 Home 与人设显化：概念已拍板，代码落地前仍使用 `persona`。
+- 支付、订阅、权益、渠道联调和商业化中心：排期挂起，依赖外部审批与业务输入。
+- AI 内容机器可读标识、披露、法务页面、数据生命周期与机构采购材料：按 ADR-026 和上线条件实施。
+- 术语表、跨语言风格校准、更多输入源与运营能力：触发条件归 `PROGRESS.md`。
 
-### 10.2 Home Page Task Creation & Content Generation
+### 5.3 当前不做
 
-```
-1. User enters home page, sees the composer (input box + Assets / Persona blocks)
-2. Provide input (choose one or multiple combinations)
-   ├── Drag/drop or select files: video/audio/transcript/slides/images
-   └── Paste text or enter prompt in input box (prompt required; files optional)
-3. Configure (optional)
-   └── Persona: select existing Persona or leave unselected (auto-create)
-   (outputs / target language 由管线意图识别推导，见 CHAT_ARCHITECTURE.md；composer 无 outputs/tone 控件；
-    身份控件只有可选的 Persona 块，ADR-038)
-4. Click send
-   ├── Frontend calls POST /projects to create the Project (persona_id 随建项目)
-   ├── Frontend uploads materials（upload-url → 直传对象存储 → POST /projects/{id}/assets 登记）
-   └── Frontend navigates to /projects/{id}（画布 + chat dock），草稿经 router state 交接
-5. 项目 dock 把草稿作为首条 POST /chat 消息发出（mentions + persona_id 随行）
-   ├── Book path 从消息推断任务书（技能链），计划确认 dock 呈现
-   └── 用户确认任务书后才创建 run（/generate 对无确认任务书的 full-scope 请求直接 422）
-6. System processes asynchronously
-   ├── Worker processes Asset: ASR transcription / text extraction / visual image reading
-   └── Worker runs Generation: 技能链逐节点执行（clips / post / quotes / article / carousel / dub …）
-7. 产物随 run 完成落在项目详情页的结果画布
-```
+- 无界自主执行、自动购买额度或未经确认的发布；
+- 多轨专业 NLE、自由层合成、转场画廊和客户端重型剪辑引擎；
+- 以娱乐网红、 viral/trending 为核心的产品叙事；
+- 数字人唇形 avatar 作为 R5 v1 的必要组成；
+- 本周期明确排除的 MCP、专业剪辑交接、团队审核、发布回流、newsletter 集成和 EU 驻留，具体以 `PROGRESS.md` 为准。
 
-### 10.3 Review & Export
+## 6. 功能需求目录
 
-```
-1. User views generated clips list (left list + right preview)
-   ├── Each clip displays: recommendation score, duration, language, status
-   └── Right preview: script + subtitle timestamps + visual suggestions
-2. Play/preview each clip
-3. Edit script, subtitles, hook (select from 3 alternatives or customize)
-4. Replace visuals or BGM (select from uploaded materials)
-5. View social post, quote cards, article, and multi-language versions
-6. Submit feedback (structured: hook/style/complexity/facts/expression)
-7. Trigger Reviser Agent local regeneration
-8. Confirm and export
-   ├── Copy (Markdown/TXT, including all language versions)
-   ├── Quote card images (PNG/JPG)
-   ├── Video (MP4 + SRT)
-   └── ZIP archive with all project outputs
+优先级、实现状态和排期不在这里复制，统一读 `PROGRESS.md`。
+
+### 6.1 Persona 与身份
+
+- 创建、查看、编辑和删除多实例 persona；默认回退不能被误读为“无人设”。
+- 从任务材料、过去材料和用户修改中学习时，来源与纠偏必须可检查；不得静默覆盖用户手改。
+- `brand` 只保存皮肤相关块；`voice` 只表达音频本义，文风仍属风格与 guidelines。
+- voice sample 上传、绑定、替换和删除需要明确授权与租户隔离。
+- 定位根升级后，persona 成为定位的表达分区；迁移不得破坏既有声音、皮肤和素材关系。
+
+### 6.2 项目与素材
+
+- 创建、列出、打开和软删除项目；项目内包含真实素材、对话、图、run 和 outputs。
+- 支持多素材组合、上传进度、处理状态和失败恢复；上传完成不等于已被某次制作消费。
+- 文字贴文可被判定为用户自己的内容并提升为 transcript 资产；普通 prompt 不因此建资产。
+- transcript 的编辑 overlay 必须保留；源文和用户修改不得互相覆盖。
+- **FR-018（保留外部引用）链接自动摄入**：YouTube/Vimeo/Zoom/Loom/Drive/podcast 等通用来源为后续需求。实施前处理平台反爬、授权、版权、失败回退与 ASR 接入；Film 网页 capture 不替代此需求。
+
+### 6.3 对话、计划与授权
+
+- 空提交本地拦截；`POST /chat` 是唯一意图面。
+- 模糊请求先帮助用户形成可判断方案；每轮至多一个决定质量的问题，可一词回答并可跳过。
+- 方案呈现真实任务、产物、成功定义、费用与未清项；不使用空表单或隐藏 recipe transport。
+- auto/ask、制作意图、守卫线、NULL 报价和 Film 首稿规则必须全链一致。
+- 拒绝、取消、断流、刷新和恢复后，消息、dock、计划和版本保持诚实。
+
+### 6.4 生成与编辑
+
+- 文本、图片、clip-spec 与 film-spec 产物使用各自当前契约，不新增平行执行面。
+- 用户点名的语言、数量、渠道与范围优先；未点名项使用诚实默认值，不回声成用户选择。
+- 直接编辑保存确定性 operation；自然语言修订更新图或当前 Film 分镜版本。
+- 普通修改与重新制作区分：局部修改不得无故重做整件作品；需要重做的范围、费用和版本必须明确。
+- Film 必须保留源片段时间、输出时间窗和元素局部动画时间的独立性，以及逐字、分组、动画和用户修改范围。
+- Start、drift、shortfall、render claim token 和版本绑定遵守 Film/RENDERING 当前合同。
+
+### 6.5 交付、导出与发布
+
+- 结果展示真实文件、版本、失败和部分完成状态；不得因 run 进程结束就宣称产物 ready。
+- 导出内容必须与用户看到的当前版本一致；字幕、声音、字体和画幅需要动态视听验收。
+- 发布只作用于用户授权的渠道与产物；删除已发布产物、撤销和失败语义按 Distribution 合同。
+- Home 样片只作入口证据；占位样片不得用于证明对应制作能力。
+
+## 7. 非功能需求
+
+### 7.1 性能与可靠性
+
+- 上传立即反馈，大文件使用当前直传/恢复机制；代理或网络失败不能造成假 100%。
+- 重活进入 Postgres 队列，多项目并发有界；worker、渲染与 LLM 调用各有超时、重试和诚实失败。
+- 简单文字/图片项目以约 5 分钟出首稿、单 clip 约 2 分钟渲染为初始性能目标，**不是当前实测 SLA**；真实基线回来后更新。
+- Film 有独立采集、设计、墙钟和统一 LLM 调用预算；任何局部上限不得替代统一预算。
+- 重复提交、并发恢复和终态写必须幂等；失败不扣不应收取的费用。
+
+### 7.2 安全、隐私与版权
+
+- 用户、项目、素材、outputs、voice samples 与渠道凭据必须租户隔离。
+- 存储与传输安全、静态加密、密钥管理、签名 URL 和公开 demo 前缀分别验收；公开演示不得引用私有用户内容。
+- 声音样本只用于用户授权的内容生成；克隆、替换与删除都有明确语义。
+- 音乐、图片、网页和用户素材需要版权/授权提示与来源记录。
+- GDPR、EU 驻留、跨境处理和完整删除/导出是后续合规需求，未实装前不宣称满足。
+- AI 生成/合成内容按 ADR-026 保留 provenance 与披露；法定披露不能被用户偏好关闭。
+
+### 7.3 可用性与可扩展性
+
+- 用户始终知道下一步、当前等待什么、失败原因和如何修改。
+- 桌面与移动端都可完成主闭环；移动端恒纯 chat，不强制开启画布。
+- 新旧消息和读模型需要读容忍，不能因旧字段/null 让整段回复瞬移或消失。
+- 新媒体形态优先通过注册表、现有 spec family 与 renderer 黑盒扩展，不为单卡复制系统。
+
+## 8. 技术与数据边界
+
+- 技术架构：`MODULE_ARCHITECTURE.md`；生成编排：`AGENT_ARCHITECTURE.md`。
+- Chat 与画布：`CHAT_ARCHITECTURE.md`；对话概念：`DIALOG_WORKFLOW.md`。
+- 渲染：`RENDERING.md`；编辑器：`VIDEO_EDITOR.md`；Film：其当前总设计与 execution/progress。
+- 表结构以 `apps/api/app/models/tables.py` 与 migrations 为代码事实源；新表、新模块和认领源必须登记。
+- API 规格以 `API.md` 与当前 FastAPI 路由/schema 为准。
+
+## 9. 核心用户旅程
+
+详细逐拍与缺口归 `JOURNEYS.md`。最低闭环为：
+
+```text
+登录 → 输入目标/素材 → assistant 读取并提问
+→ 呈现方案 → 用户授权（含费用/首稿规则）
+→ 后台制作并显示真实活动
+→ 查看产物 → 直接修改或对话修订
+→ 导出或授权发布 → 再次生产/回访
 ```
 
----
+每一步都必须有恢复和失败分支。Home 配方只是预填捷径，项目 Chat 不是唯一修改口，画布不是必须操作的编辑器。
 
-## 11. Output Specifications
+## 10. 输出要求
 
-### 11.1 Vertical Highlight Clips
+- **竖屏/横屏 clip**：画幅、时长、字幕、裁切和音乐由用户请求、配方与当前 spec 决定；不固定“默认 30 秒”作为所有产物的承诺。
+- **Film**：当前范围、幕数、时长、画幅、声音和元素动画以 Film 总设计为准；源时间、输出时间和元素局部时间不得混淆。
+- **帖子/文章**：长度与结构随渠道和用户目标；保持观点、证据、术语和 persona 风格，不默认生成所有语言或 hashtags。
+- **金句叠卡**：当前复合 PNG 由 3–7 条动态 strip 组成，保留来源与字体/换行约束；不是固定数量帧墙。
+- **轮播**：分页、文字与视觉必须真实可读、可导出、可继续修改。
+- **多语言版本**：用户点名才生成；需要对照审校、术语一致性和配音质量验收，不以机器返回成功代表自然度通过。
 
-| Attribute | Specification |
-|:---|:---|
-| Aspect ratio | 9:16 |
-| Resolution | 1080 × 1920 |
-| Duration | 15-60 seconds, default 30 seconds |
-| Subtitles | No more than 12 characters per line, bottom-centered |
-| Visuals | Speaker close-up / event photos / slide pages / dynamic text |
-| Music | Matched by mood tags |
+字段级输出规范不在 PRD 复制，分别归 `RENDERING.md`、`RECIPES.md` 和对应工具合同。
 
-### 11.2 Hook / Title
+## 11. 成功指标
 
-- Each clip provides 3 alternative titles
-- First 3 seconds of subtitles must have conflict, counter-intuition, or strong data
-- Title length suitable for display on all platforms
+以下是初始产品假设，不是已达成的运营数据；埋点地基尚未完成前不得编造读数。
 
-### 11.3 Social Post
+| 维度 | 指标与初始目标 |
+|---|---|
+| 激活 | 新用户能独立完成一次真实制作闭环；按上传 → 方案 → 授权 → 交付 → 导出/发布漏斗测量 |
+| 质量 | 用户修改率初始目标 <50%，保存/导出率 >80%，风格匹配评分 >7/10；按产物类型分层，不用单一平均掩盖失败 |
+| 效率 | 独立专家约 5–10 分钟可完成验收；相对纯手工节省时间需实测 |
+| 多语言 | 用户点名多语言后的采用、修改与退稿分别测量；不预设所有用户都需要全部语言 |
+| 持续价值 | 回访再生产、既有产物修订、渠道发布与角色/机构差异 |
+| 信任 | 错误事实、错误引用、未经确认执行/发布、费用争议与合成内容披露问题必须单独计数 |
 
-| Attribute | Specification |
-|:---|:---|
-| Length | 150-300 English words / 300-600 Chinese characters |
-| Structure | Hook → Core insight → Personal take → Call to action |
-| Voice | Maintain the persona's style, professional but readable |
-| Hashtags | Auto-generate 3-5 relevant topic tags |
-| Multi-language | Simultaneously generate German/French/Spanish/Italian versions |
+指标合同归规划中的 `METRICS.md`；建立前先登记事件、分母、隐私和真实数据来源。
 
-### 11.4 Article
+## 12. 风险与假设
 
-| Attribute | Specification |
-|:---|:---|
-| Length | 600-1,500 English words / 1,000-3,000 Chinese characters |
-| Structure | Title → Lead → Core arguments → Evidence/quotes → Conclusion/CTA |
-| Voice | Maintain the persona's style; suitable for institutional websites and newsletters |
-| Hashtags | Auto-generate 3-5 relevant topic tags |
-| Multi-language | Simultaneously generate German/French/Spanish/Italian versions |
+| 风险/假设 | 当前处理 |
+|---|---|
+| 素材音质、画面或文本结构不足 | 诚实报告并请求补充；不得生成无依据方案或固定兜底产物 |
+| 模型结构化输出与语言质量波动 | schema 读容忍、有界修复、真实模型矩阵与人工质量验收 |
+| 第三方链接平台反爬与版权 | 通用链接摄入延期评估；优先明确授权和稳定来源，保留手动上传 |
+| 声纹/音乐/肖像与网页素材授权 | 用户授权、来源谱系与披露先行；不把可抓取等同可任意使用 |
+| 外部支付、平台、法务审批 | 作为 R1.1/上线外部依赖管理，不倒灌成无关功能的完成条件 |
+| EU 机构合规与采购 | 实装驻留、删除、披露和文书后再作对应销售承诺 |
+| 种子 ICP 假设不准确 | 用跨语言访谈和真实闭环数据校准，语言优先级跟随种子客户证据 |
 
-### 11.5 Quote Cards
+## 13. 路线图与开放决策
 
-| Attribute | Specification |
-|:---|:---|
-| Aspect ratio | 1:1 (LinkedIn/Instagram) or 4:5 or 9:16 (Stories) |
-| Content | One quote + attribution + date |
-| Style | 3-5 template options (tech/academic/minimal/dark/warm) |
-| Output | PNG / JPG, high resolution |
-| Multi-language | Simultaneously generate multi-language versions |
-
-### 11.6 Carousel
-
-| Attribute | Specification |
-|:---|:---|
-| Pages | 5-8 pages |
-| First page | Title + visual |
-| Middle pages | Core arguments / quotes |
-| Last page | CTA + attribution + QR code/link |
-| Platforms | LinkedIn / Instagram |
-
-### 11.7 Multi-language Versions
-
-| Attribute | Specification |
-|:---|:---|
-| P0 languages | Chinese, English, German, French, Spanish, Italian |
-| Translation quality | M3 native translation, preserves original meaning, impact, and persona style |
-| Review support | Source + translation side-by-side, sentence-by-sentence editing |
-| Translation confidence | Low-confidence content highlighted for attention |
-| Dubbing | Voice-clone dubbing via MiniMax voice_clone + T2A (P0 implemented); general TTS fallback available |
-
----
-
-## 12. API Overview
-
-> API 规格的唯一事实源：[API.md](./API.md)。
-
----
-
-## 13. UI/UX Requirements
-
-### 13.1 Upload Page
-
-- Clear material type sections (video/audio/transcript/slides/photos)
-- Drag-and-drop upload + click upload
-- Display processing status for each material (transcribing/parsing/completed)
-- **Hint copy**: "Upload at least one type, more is better. Transcript + event photos can produce a first draft."
-
-### 13.2 Persona Page
-
-- Left: AI-generated persona
-- Right: User-editable fields
-- Provide "re-analyze" button
-
-### 13.3 Generation Results Page
-
-Reference OpusClip's "left list + right preview" layout:
-
-- **Left clip list**: Displays recommendation score, duration, current status
-- **Right preview area**: Video preview + subtitle timestamps + editing area
-- **Top tabs**: Clips / Post / Quotes / Article / Carousel
-- **Action buttons**: Export, regenerate, delete
-- **Sort/filter**: Filter by score, duration, status
-
-### 13.4 Review Page
-
-Reference Descript's text-editing experience:
-
-- **Script editor**: Display subtitles by timeline, each sentence independently editable
-- **Subtitles = video**: After editing subtitle copy, video subtitles sync update
-- **Visual replacement**: Thumbnail grid, select from uploaded materials
-- **BGM replacement**: Categorized by mood (calm/passionate/suspenseful/hopeful)
-- **Title selection**: A/B/C three alternatives + custom
-- **Feedback buttons**: Submit dissatisfaction reasons for clip overall, hook, subtitles, style separately
-
-### 13.5 UX Borrowed from Competitors
-
-> **已迁移**：竞品 UX 借鉴与采纳/不做决策的唯一事实源是 [DECISION_MATRIX.md](./DECISION_MATRIX.md)。
-
----
-
-## 14. Success Metrics
-
-### 14.1 Content Quality
-
-| Metric | Target | Measurement |
-|:---|:---|:---|
-| User edit rate | < 50% | Statistically proportion of clips where user modified the script |
-| User save rate | > 80% | Proportion of users who save/export after generation |
-| Multi-language adoption rate | > 60% | Proportion of users who export multi-language versions |
-| Style match score | > 7/10 | User rating "does this sound like me" |
-
-### 14.2 Efficiency Gains
-
-| Metric | Target |
-|:---|:---|
-| Single project processing time | < 10 minutes (excluding rendering) |
-| Human review time | < 15 minutes / project |
-| Compared to pure manual editing | Save 80%+ time |
-| Multi-language generation time | < 2 minutes / language |
-
-### 14.3 User Retention (European Market)
-
-| Metric | Target |
-|:---|:---|
-| European seed customers (Q3) | 5-10 paid trials |
-| Monthly projects per user | > 3 |
-| Multi-language feature usage | > 60% |
-| Revision/chat feature usage | > 30% |
-| NPS | > 40 |
-
----
-
-## 15. Risks & Assumptions
-
-### 15.1 Risks
-
-| Risk | Impact | Mitigation |
-|:---|:---|:---|
-| **Link fetching depends on third-party (yt-dlp-style)** | Site changes/anti-scraping cause fetch failures; copyright risk | On fetch failure, fallback to manual upload; clarify user authorization responsibility; defer non-core sources |
-| Copyright issues (music/images) | Legal risk | Use royalty-free materials, clarify user responsibility |
-| GDPR compliance audit | Legal risk (future) | Plan EU deployment via Cast AI Kimchi or EU cloud region; prepare compliance docs before institutional sales |
-| Cross-border data transfer risk (Schrems II) | European institutional procurement blocked (future) | EU project data stays in EU; provide data processing proof; not required for MVP seed customers |
-| European institutional procurement cycle is long | Slow commercialization | Early focus on seed customers and academic conference organizers |
-
-### 15.2 Assumptions
-
-- User-uploaded material audio/video quality is acceptable (or transcript provided)
-- Talk content has clear, shareable viewpoints and structure
-- User is willing to spend 5-10 minutes on final review
-- MiniMax M3 stably outputs structured JSON within 512K context
-- European institutional users accept the "AI generate + human review" workflow
-- For future EU institutional customers, an EU deployment option (e.g. Cast AI Kimchi or EU cloud region) will be available before sales engagement
-
----
-
-## 16. Roadmap
-
-> 工程排期 / 优先级 / 需求池的唯一事实源：[PROGRESS.md](./PROGRESS.md)。
-
-产品阶段方向（非排期）：
-
-- **P0 MVP（已完成）**：跑通"上传 → AI 生成 → 人工审核 → 导出"核心闭环。
-- **P1 产品化**：链接摄入（Zoom/Drive/RSS）、术语表、分发（LinkedIn 直发 / 审核队列 / 定时发布）、合规标识（EU AI Act Art.50，2026-08 生效）。
-- **P2 SaaS 化**：多租户与计费、EU 数据驻留、MCP 接入。GTM：欧洲本地销售（London/Berlin）、学术会议组织方合作批量获客。
-
----
-
-## 17. Glossary
-
-| Term | Description |
-|:---|:---|
-| Repurposing | Reprocessing existing content to adapt to different platforms and formats |
-| Persona | 人设：用户的风格记忆 + 声纹（voice sample / clone voice_id），多实例扁平（ADR-037/038） |
-| Clip | Generated highlight segment |
-| Hook | Attention-grabbing opening sentence for video/post |
-| Carousel | Multi-page images + text, common on LinkedIn/Instagram and other social platforms |
-| SRT | Subtitle file format |
-| B-roll | Supplementary visual material |
-| HITL | Human-in-the-Loop, human feedback closed loop |
-| EU data residency | Deployment in EU region (e.g. Cast AI Kimchi or EU cloud region), data stays in EU; future differentiator, not in MVP |
-| GDPR | EU General Data Protection Regulation |
-| GPAI | General Purpose AI, general AI model (EU AI Act term) |
-| Recommendation Score | First-post recommendation score (1-100): which clip is most worth posting first, with a visible reason; never predicts views/reach (supersedes the competitor "Virality Score" concept, 矩阵 §C) |
-
----
-
-## 18. Open Decisions
-
-| Item | Proposal | Decision Maker | Status |
-|:---|:---|:---|:---|
-| URL input support | 需求池（链接摄入，PROGRESS 可选需求） | Product/Tech | 已登记 |
-| Social media publishing API integration | LinkedIn/TikTok 双平台代码完成，联调排期见 PROGRESS | Product | 已排期 |
-| Pricing model | 定价设计与支付接入，排期见 PROGRESS | Zuo | 已排期 |
-| European company registration | Q3 launch UK Limited Company | Operations | TBD |
-| Academic conference partnerships | Q3 contact ECA, EMBO, London Tech Week | Marketing | TBD |
+- 当前优先级、后续能力、需求池、外部依赖和 go/no-go 决策只读 `PROGRESS.md`。
+- 定位根与运营层目标设计读 `POSITIONING.md`，未实施前代码层仍只使用 `persona`。
+- 支付商、公司主体、律师、定价和平台权限是开放业务决策；不在 PRD 复制另一张排期表。
+- 任何新需求必须指出目标用户、旅程拍点、完成证据和未授权边界；“竞品有”本身不是动工理由。

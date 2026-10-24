@@ -410,7 +410,7 @@ def test_d3_gate_precedence_structural_before_projection() -> None:
 
 # ---- ADR-129: the Start gate's film conjuncts ----
 
-from app.pipeline.lifecycle import FilmGateFacts  # noqa: E402
+from app.pipeline.lifecycle import ConfirmationNeed, FilmGateFacts  # noqa: E402
 
 
 def test_film_gate_no_active_draft_is_409() -> None:
@@ -476,6 +476,80 @@ def test_film_gate_review_hold_is_422() -> None:
     assert verdict.code == "start.review_hold"
 
 
+def test_first_draft_unpresented_blocks_same_turn_auto_start() -> None:
+    # Auto + production intent + a cleared review hold still cannot spend
+    # before the first board's presentation row exists.
+    verdict = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+        confirmation=ConfirmationNeed(requires_confirmation=False),
+        docked_this_turn=True,
+        film=FilmGateFacts(
+            film_chain=True,
+            has_active_draft=True,
+            first_draft_unpresented=True,
+        ),
+    )
+    assert verdict is not None
+    assert verdict.http_status == 422
+    assert verdict.code == "start.review_hold"
+
+
+def test_first_draft_unpresented_also_blocks_an_early_explicit_start() -> None:
+    verdict = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+        film=FilmGateFacts(
+            film_chain=True,
+            has_active_draft=True,
+            first_draft_unpresented=True,
+        ),
+    )
+    assert verdict is not None
+    assert verdict.code == "start.review_hold"
+
+
+def test_presented_first_draft_allows_the_later_explicit_start() -> None:
+    # The dock's review stamp does not become a second auto-start permit:
+    # after presentation, the user's explicit Start is the release beat.
+    verdict = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+        confirmation=ConfirmationNeed(
+            requires_confirmation=True,
+            reason="first_draft_review",
+        ),
+        docked_this_turn=False,
+        film=FilmGateFacts(
+            film_chain=True,
+            has_active_draft=True,
+            first_draft_unpresented=False,
+        ),
+    )
+    assert verdict is None
+
+
+def test_presented_first_draft_allows_auto_on_the_approval_redock() -> None:
+    # A post-presentation "就按这版做" may re-dock with production intent:
+    # the ordinary auto machine starts it without a second approval beat.
+    verdict = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+        confirmation=ConfirmationNeed(requires_confirmation=False),
+        docked_this_turn=True,
+        film=FilmGateFacts(
+            film_chain=True,
+            has_active_draft=True,
+            first_draft_unpresented=False,
+        ),
+    )
+    assert verdict is None
+
+
 def test_film_gate_matching_active_draft_is_allowed() -> None:
     verdict = evaluate_start_gate(
         has_pending_plan=True,
@@ -498,6 +572,7 @@ def test_film_gate_conjuncts_stay_dark_off_film_chains() -> None:
             has_active_draft=False,
             draft_match=False,
             review_hold=True,
+            first_draft_unpresented=True,
         ),
     )
     assert verdict is None
@@ -534,14 +609,14 @@ def test_film_gate_precedence_hold_before_projection_block() -> None:
 
 # ---- ADR-117 授权前移: confirmation_need + the gate's authorization conjunct ----
 
-from app.pipeline.lifecycle import confirmation_need  # noqa: E402
+from app.pipeline.lifecycle import confirmation_need, first_draft_confirmation  # noqa: E402
 
 GUARDRAIL = 5000
 
 
 def test_confirmation_need_auto_auto_under_guardrail_is_free() -> None:
     # The default regime: both prefs auto, a quotable plan under the
-    # guardrail — presentation IS the authorization, no beat owed.
+    # guardrail, production intent present — no beat owed.
     need = confirmation_need(
         execution="auto", credits="auto",
         quote_high=800, unquotable=False, always_confirm_above=GUARDRAIL,
@@ -550,6 +625,27 @@ def test_confirmation_need_auto_auto_under_guardrail_is_free() -> None:
     assert need.reason == ""
     assert need.quote_high == 800
     assert need.unquotable is False
+
+
+def test_first_draft_confirmation_adds_review_even_in_full_auto() -> None:
+    need = first_draft_confirmation(
+        ConfirmationNeed(requires_confirmation=False, quote_high=55),
+        unpresented=True,
+    )
+    assert need.requires_confirmation is True
+    assert need.reason == "first_draft_review"
+    assert need.quote_high == 55
+
+
+def test_first_draft_confirmation_preserves_stronger_reasons() -> None:
+    priced = ConfirmationNeed(
+        requires_confirmation=True,
+        reason="above_guardrail",
+        quote_high=9000,
+    )
+    assert first_draft_confirmation(priced, unpresented=True) is priced
+    ordinary = ConfirmationNeed(requires_confirmation=False)
+    assert first_draft_confirmation(ordinary, unpresented=False) is ordinary
 
 
 def test_confirmation_need_execution_ask_alone_holds() -> None:
@@ -694,6 +790,86 @@ def test_gate_authorization_conjunct_yields_to_structural_truth() -> None:
     assert verdict.code == "start.blocked"
 
 
+def test_confirmation_need_unmet_condition_holds_the_auto_regime() -> None:
+    """带条件制作授权 (7276ef13 ③ — 「修完开工吧」): a dock that rides a
+    turn where the user's requested change was REFUSED (correction cap /
+    a superseded correction draft) owes one explicit beat even under full
+    auto — the conditional authorization named a fix that never landed, so
+    starting the UNFIXED version is never the auto regime's call."""
+    need = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=120, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=True, unmet_condition=True,
+    )
+    assert need.requires_confirmation
+    assert need.reason == "unmet_condition"
+    assert need.quote_high == 120
+    # The default keeps the pre-existing law byte-for-byte (auto/auto under
+    # the guardrail with intent present starts free).
+    assert not confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=120, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=True,
+    ).requires_confirmation
+
+
+def test_confirmation_need_unmet_condition_precedence() -> None:
+    """Reason order: money first, then the unmet condition, then the bare
+    awaiting-production hold (the pill's label follows the money reasons;
+    an unmet fix outranks a missing production word)."""
+    money = confirmation_need(
+        execution="ask", credits="ask",
+        quote_high=120, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=True, unmet_condition=True,
+    )
+    assert money.reason == "credits_pref"
+    guardrail = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=9000, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=True, unmet_condition=True,
+    )
+    assert guardrail.reason == "above_guardrail"
+    unquotable = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=None, unquotable=True, always_confirm_above=GUARDRAIL,
+        production_intent=True, unmet_condition=True,
+    )
+    assert unquotable.reason == "unquotable"
+    intent = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=120, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=None, unmet_condition=True,
+    )
+    assert intent.reason == "unmet_condition"
+    # …and the same-turn start attempt trips the authorization conjunct.
+    need = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=120, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=True, unmet_condition=True,
+    )
+    blocked = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+        confirmation=need,
+        docked_this_turn=True,
+    )
+    assert blocked is not None and blocked.code == "start.needs_confirm"
+    assert blocked.reason == "unmet_condition"
+    # A LATER-turn explicit start (the user's own beat — a conscious
+    # acceptance of the standing version) never trips it.
+    assert (
+        evaluate_start_gate(
+            has_pending_plan=True,
+            effective_tasks_nonempty=True,
+            stamp=_READY_STAMP,
+            confirmation=need,
+            docked_this_turn=False,
+        )
+        is None
+    )
+
+
 # ---- the dock echo's estimate tail (ADR-111 §2) ------------------------------
 
 from app.chat.service import _estimate_tail  # noqa: E402
@@ -712,3 +888,152 @@ class TestEstimateTail:
         assert "Estimated" in _estimate_tail("go", _est(), reason="above_guardrail")
         assert "估价" in _estimate_tail("好", _est())
         assert "估价随运行确定" in _estimate_tail("好", None, reason="unquotable")
+
+
+# ---- ADR-139: auto 只免批准拍，不创造制作意图 ----
+
+
+def test_production_intent_absent_holds_in_the_full_auto_regime() -> None:
+    # A dock born from a message WITHOUT a production request waits in ANY
+    # regime — the settings only waive approval beats, they never turn a
+    # discussion into an authorization.
+    need = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=800, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=False,
+    )
+    assert need.requires_confirmation is True
+    assert need.reason == "awaiting_production"
+    # Unasserted (None) reads as absent — the safe side.
+    need_none = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=800, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=None,
+    )
+    assert need_none.requires_confirmation is True
+    assert need_none.reason == "awaiting_production"
+
+
+def test_production_intent_present_keeps_the_auto_fast_path() -> None:
+    need = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=800, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=True,
+    )
+    assert need.requires_confirmation is False
+    assert need.reason == ""
+
+
+def test_production_intent_money_reasons_win_the_label() -> None:
+    # A hold that exists for BOTH a money reason and missing intent names
+    # the money reason (the pill's priced label follows it).
+    need = confirmation_need(
+        execution="auto", credits="ask",
+        quote_high=120, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=False,
+    )
+    assert need.reason == "credits_pref"
+    need2 = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=9000, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=None,
+    )
+    assert need2.reason == "above_guardrail"
+
+
+def test_production_intent_default_true_preserves_non_dock_callers() -> None:
+    # The parameter default keeps the pure law's non-dock readers at their
+    # pre-ADR-139 behavior; the dock seats always pass the real assertion.
+    need = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=800, unquotable=False, always_confirm_above=GUARDRAIL,
+    )
+    assert need.requires_confirmation is False
+
+
+# ---- 7276ef13 定点收尾②: copy_drift — unproven drift holds the auto start ----
+
+
+def test_confirmation_need_copy_drift_holds_the_auto_regime() -> None:
+    """原文继承守卫 (7276ef13 定点收尾② — 「布局请求中模型误加一句」): a
+    dock that rides a turn whose published copy DRIFTED from the
+    user-verifiable original owes one explicit beat even under full auto —
+    the honest drift note informs, but never green-lights by itself."""
+    need = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=120, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=True, copy_drift=True,
+    )
+    assert need.requires_confirmation
+    assert need.reason == "copy_drift"
+    assert need.quote_high == 120
+    # The default keeps the pre-existing law byte-for-byte.
+    assert not confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=120, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=True,
+    ).requires_confirmation
+
+
+def test_confirmation_need_copy_drift_precedence() -> None:
+    """Reason order: money first, then an unmet condition, then the drift
+    hold, then the bare awaiting-production hold."""
+    money = confirmation_need(
+        execution="auto", credits="ask",
+        quote_high=120, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=True, copy_drift=True,
+    )
+    assert money.reason == "credits_pref"
+    unmet = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=120, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=True, unmet_condition=True, copy_drift=True,
+    )
+    assert unmet.reason == "unmet_condition"
+    intent = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=120, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=None, copy_drift=True,
+    )
+    assert intent.reason == "copy_drift"
+    # …and the same-turn start attempt trips the authorization conjunct;
+    # a LATER-turn explicit start (a conscious acceptance of the drifted
+    # copy) never trips it.
+    need = confirmation_need(
+        execution="auto", credits="auto",
+        quote_high=120, unquotable=False, always_confirm_above=GUARDRAIL,
+        production_intent=True, copy_drift=True,
+    )
+    blocked = evaluate_start_gate(
+        has_pending_plan=True,
+        effective_tasks_nonempty=True,
+        stamp=_READY_STAMP,
+        confirmation=need,
+        docked_this_turn=True,
+    )
+    assert blocked is not None and blocked.code == "start.needs_confirm"
+    assert blocked.reason == "copy_drift"
+    assert (
+        evaluate_start_gate(
+            has_pending_plan=True,
+            effective_tasks_nonempty=True,
+            stamp=_READY_STAMP,
+            confirmation=need,
+            docked_this_turn=False,
+        )
+        is None
+    )
+
+
+def test_estimate_tail_copy_drift_names_the_two_honest_outs() -> None:
+    """The drift tail states the choice honestly: confirm starts THIS
+    (drifted) version, or say the word and the original is restored."""
+    tail_en = _estimate_tail("go", _est(), reason="copy_drift")
+    assert "differs from the text you gave" in tail_en
+    assert "restore your original" in tail_en
+    tail_zh = _estimate_tail("好", _est(), reason="copy_drift")
+    assert "有出入" in tail_zh and "恢复原文" in tail_zh
+    # The estimate-absent half keeps the same choice statement.
+    tail_zh_none = _estimate_tail("好", None, reason="copy_drift")
+    assert "有出入" in tail_zh_none and "恢复原文" in tail_zh_none
+    assert "Estimate" not in tail_zh_none

@@ -13,6 +13,15 @@ engine = create_async_engine(
     settings.database_url,
     echo=False,
     future=True,
+    # Dead-connection detection at checkout: the 2026-10-19 incident window
+    # showed asyncpg `InterfaceError: connection is closed` surfacing on
+    # unrelated requests — stale pooled connections served as healthy.
+    # pre_ping runs a cheap liveness probe at checkout and transparently
+    # recycles dead connections. `pool_recycle` is deliberately NOT set: it
+    # only helps against a fixed server-side idle TTL, and no such TTL is
+    # evidenced in this deployment — a guessed value would churn healthy
+    # connections without addressing the observed failure mode.
+    pool_pre_ping=True,
 )
 
 AsyncSessionLocal = async_sessionmaker(

@@ -60,7 +60,7 @@ function proxyEnv(): string | undefined {
 export function dispatcherFor(url: string): Agent | ProxyAgent {
   // bodyTimeout is an idle (between-chunks) timeout, not a total one — slow
   // but flowing downloads survive; the AbortSignal above bounds the total.
-  const opts = { headersTimeout: 60_000, bodyTimeout: 300_000 };
+  const opts = { headersTimeout: 300_000, bodyTimeout: 300_000 };
   const host = new URL(url).hostname;
   const proxy = LOOPBACK_HOST.test(host) ? undefined : proxyEnv();
   return proxy ? new ProxyAgent({ uri: proxy, ...opts }) : new Agent(opts);

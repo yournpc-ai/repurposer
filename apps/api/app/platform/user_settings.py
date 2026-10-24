@@ -6,11 +6,17 @@ read tolerance (a missing/unknown value reads as the default — legacy rows
 and hand-edited JSON never 500) and the merge write (other keys survive a
 one-key PUT). Pure — the routes stay mechanical.
 
-授权前移 (ADR-117): confirmation comes in exactly two kinds — execution
+授权前移 (ADR-117 + ADR-139): confirmation comes in exactly two kinds — execution
 (whether the agent waits for a confirm beat before starting paid work) and
 credits (whether a priced plan gets one priced confirmation). Both default
-to ``auto`` (standing authorization): the presented plan starts on arrival.
+to ``auto`` (standing authorization): the presented plan starts on arrival,
+except that a work's first film storyboard always waits for a post-presentation
+approval.
 ``ask`` restores the per-beat confirm (ADR-092 口头确认律是 ask 档法律).
+The settings only ever waive the approval BEAT — they never create
+production intent: a message that does not ask for the work to be MADE now
+docks its plan holding in ANY regime (the dock's ``production_intent``
+birth fact decides; the card's start button stays the standing offer).
 
 工作区布局 (ADR-123): ``workspace_layout`` = the canvas capability bit's
 second judgment source — ``chat`` (default) pins the chat-first workspace on

@@ -1,0 +1,52 @@
+{
+  "user_message": "改文案",
+  "sse_event_kinds": [
+    "assistant.activity",
+    "assistant.thinking",
+    "assistant.delta",
+    "assistant.delta",
+    "assistant.delta",
+    "assistant.delta",
+    "assistant.delta",
+    "assistant.checkpoint",
+    "assistant.row.append",
+    "assistant.activity",
+    "assistant.row.update",
+    "assistant.thinking",
+    "assistant.checkpoint",
+    "assistant.activity",
+    "assistant.activity",
+    "assistant.row.append",
+    "turn.completed"
+  ],
+  "activities": [
+    {
+      "kind": "read",
+      "name": null,
+      "status": "active"
+    },
+    {
+      "kind": "read",
+      "name": null,
+      "status": "completed"
+    },
+    {
+      "kind": "draft",
+      "name": null,
+      "status": "active"
+    },
+    {
+      "kind": "draft",
+      "name": null,
+      "status": "completed"
+    }
+  ],
+  "checkpoints": [
+    "I'll read the current storyboard version before editing the text element.",
+    "左侧那行字换成新的，其余保持原样。"
+  ],
+  "assistant_text": "左侧换成「下周三上线，记得来看」，逐字出现的时间点和右侧视频播放都没动，仍是 11 秒、16:9、无声。\n\n要不要按这版开始制作？",
+  "run_id": null,
+  "answered_question_kind": null,
+  "failed": null
+}

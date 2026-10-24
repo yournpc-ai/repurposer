@@ -75,7 +75,7 @@
 - **用户赌注相反**：它一个界面同时伺候专业创作者与小白（ComfyUI 逃生舱 + 可操作画布 + Minimap）；我们禁可操作 DAG、只留只读 FlowView，用户全是小白。
 - **合规矩阵**：H3 开源权重许可排除 US/EU/UK/韩国；MiniMax = 中国厂商。EU 数据驻留是我们的楔子。
 
-## 6. 我们侧对照（仅事实，无拍板）
+## 6. 我们侧对照（2026-08-20 研究快照，不是当前状态源）
 
 - **配方卡**：我方 = 媒体 tile + 标题 + 元信息；对方多出版本号、taxonomy chips、路径行。我方卡面无"治理资产"信号。
 - **Tour**：我方 = 内容哈希版本化、data-tour 锚点；对方多出虚线牵引箭头、气泡内嵌真实技能 chips。两处可低成本移植。
@@ -160,4 +160,4 @@ intake（素材 + 时长/画幅/受众/推广重点，含"文案语言跟品牌�
 
 ## 12. 拍板落档索引
 
-本文件证据的拍板去向：**ADR-046**（studio 视觉骨架重塑——灰底填充阶 / 影子只属浮层 / 实体丸化 / 海报优先画廊 / 去全局 header）；施工简报 `docs/tasks/home-skeleton-revamp.md`（含"角色 → token × 双主题"色役对照表，作验收清单）；doctrine 修订 = 根 CLAUDE.md（Card Depth / Composer / Sidebar & Navigation 三节）。需求池登记两条后续：EU AI Act 内容标记偏好、demo teaser 封面重烘。
+本文件证据的现行落点：**ADR-046**（studio 视觉骨架决策）；当前视觉/交互法 = `docs/UI_GUIDELINES.md`，Home 配方、样片与 prompt-only 发射 = `docs/RECIPES.md`，根 `CLAUDE.md` 只保留高频硬律。EU AI Act 内容标识偏好、真实样片替换等未决项归 `docs/PROGRESS.md` 与对应当前任务合同；本研究快照不充当这些事项的实施或验收记录。

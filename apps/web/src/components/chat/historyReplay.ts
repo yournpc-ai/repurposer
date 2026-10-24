@@ -61,6 +61,20 @@ export interface OverlayMessage {
   /** Live SSE preview bubble: deltas append until the turn.completed
    * envelope replaces it (the envelope always wins). */
   streaming?: boolean
+  /** CLIENT DISPLAY facts (epoch ms, never loaded from or written to the
+   * server). clientVisibleAtMs is stamped when the first non-whitespace
+   * prose fragment is actually released (or an optimistic QA block renders);
+   * proseDrainedAtMs marks a checkpoint segment's own playback finishing.
+   * They are display-lifecycle facts, NOT created_at stand-ins. */
+  clientVisibleAtMs?: number
+  proseDrainedAtMs?: number
+  /** The CURRENT work segment's frozen wall clock, stamped on its first
+   * activity host row. Start = send / previous prose drained / first tool
+   * fallback; end = first visible following prose or a real terminal state.
+   * Tool duration_ms stays independent. Refresh replay has no client display
+   * facts and honestly falls back to the observable activity span. */
+  workStartedAtMs?: number
+  workEndedAtMs?: number
   /** Answered-question item (a settled question collapsing into the flow).
    * `questionId` = the settled row's id — the ask_user 不变量's join key:
    * a question whose QA archive is in the flow is DECIDED and must never

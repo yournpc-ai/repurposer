@@ -37,7 +37,7 @@ logger = structlog.get_logger()
 # (uvicorn / worker / ``asyncio.run`` scripts each own theirs — the pool
 # rebinds when the running loop changes); ``_pooled_client`` keeps the call
 # sites' ``async with`` shape while never closing the shared client.
-# Per-request timeouts ride the request call, not the client.
+# Default reads allow five minutes; explicit per-request overrides still apply.
 _client_pool: tuple[asyncio.AbstractEventLoop, httpx.AsyncClient] | None = None
 
 
@@ -52,7 +52,7 @@ def _shared_client() -> httpx.AsyncClient:
         _client_pool = (
             loop,
             httpx.AsyncClient(
-                timeout=120,
+                timeout=httpx.Timeout(120, read=300),
                 limits=httpx.Limits(
                     max_connections=20, max_keepalive_connections=10
                 ),
@@ -438,7 +438,7 @@ class MiniMaxClient:
     ) -> T:
         """Generate structured output from MiniMax M3.
 
-        ``timeout_s`` overrides the pool's 120s default for agents whose
+        ``timeout_s`` overrides the pool's 300s read default for agents whose
         prompt/generation is known to run long (the film storyboarder's
         20k-token call — 2026-10-15 取证: 成功样本 142s, 已两次撞穿 120s);
         None inherits the pool timeout."""

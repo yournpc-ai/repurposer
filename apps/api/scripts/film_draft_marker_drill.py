@@ -70,8 +70,9 @@ async def drill() -> None:
         #    (never queued, never an interleaved overwrite).
         s1, p1 = await _turn_session()
         try:
-            draft_a = await begin_film_draft(s1, p1, base_version=1, user_message_id=None)
-            check(draft_a is not None, "begin A lands")
+            begin_a = await begin_film_draft(s1, p1, base_version=1, user_message_id=None)
+            check(begin_a.draft_id is not None, "begin A lands")
+            draft_a = begin_a.draft_id
             assert draft_a is not None
             marker = await _marker(project_id)
             check(
@@ -93,8 +94,11 @@ async def drill() -> None:
 
             s2, p2 = await _turn_session()
             try:
-                draft_b = await begin_film_draft(s2, p2, base_version=1, user_message_id=None)
-                check(draft_b is None, "concurrent begin B is REFUSED while A is live")
+                begin_b = await begin_film_draft(s2, p2, base_version=1, user_message_id=None)
+                check(
+                    begin_b.draft_id is None and begin_b.refusal == "in_flight",
+                    "concurrent begin B is REFUSED while A is live (the live marker names it)",
+                )
                 marker = await _marker(project_id)
                 check(
                     (marker or {}).get("draft_id") == draft_a,
@@ -119,8 +123,9 @@ async def drill() -> None:
             assert p1 is not None
 
             # 3. after the clear, a retry begins immediately (no budget wait).
-            draft_c = await begin_film_draft(s1, p1, base_version=1, user_message_id=None)
-            check(draft_c is not None, "retry begins right after the clear")
+            begin_c = await begin_film_draft(s1, p1, base_version=1, user_message_id=None)
+            check(begin_c.draft_id is not None, "retry begins right after the clear")
+            draft_c = begin_c.draft_id
             assert draft_c is not None
 
             # 4. clear only touches its OWN marker: a newer marker survives.
@@ -154,8 +159,9 @@ async def drill() -> None:
                 not film_draft_inflight_live(stale),
                 "a marker older than the budget reads stale",
             )
-            draft_d = await begin_film_draft(s1, p1, base_version=3, user_message_id=None)
-            check(draft_d is not None, "a stale marker never blocks a fresh begin")
+            begin_d = await begin_film_draft(s1, p1, base_version=3, user_message_id=None)
+            check(begin_d.draft_id is not None, "a stale marker never blocks a fresh begin")
+            draft_d = begin_d.draft_id
 
             # 6. publish conditional read: once the pending plan is consumed
             #    (a Start) the marker read proves the draft superseded.

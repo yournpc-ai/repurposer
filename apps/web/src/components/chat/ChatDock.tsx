@@ -48,7 +48,9 @@ import {
 } from "lucide-react"
 
 import { apiFetch } from "@/lib/api"
+import { armAnswerWatchdog } from "@/lib/answerWatchdog"
 import { inferAssetType } from "@/lib/asset-type"
+import { reconcileStartAfterAbort, type StartRecoveryDeps } from "@/lib/startRecovery"
 import { streamAnswer, streamChat, StreamTurnError, questionSettledCode } from "@/lib/chat-stream"
 import { sseProbe } from "@/lib/sse-probe" // TEMPORARY forensics — delete with the probe
 import type { ActivityFramePayload } from "@/lib/chat-stream"
@@ -57,7 +59,12 @@ import type {
   CandidateEventPayload,
   RowAppendPayload,
 } from "@/lib/chatStreamFrames"
-import { buildConversationUnits, foldActivityUnits } from "@/lib/chatTimeline"
+import { buildConversationUnits, closeWorkSegment, foldActivityUnits, type ConversationUnit } from "@/lib/chatTimeline"
+import {
+  nextRunWorkSeal,
+  runStepEndMs,
+  type RunWorkSeal,
+} from "@/lib/runWorkSegment"
 import {
   asCreditsInsufficient,
   type CreditsInsufficientDetail,
@@ -106,6 +113,7 @@ import {
 import { RunCard } from "@/components/chat/RunCard"
 import { AnchorCards } from "@/components/chat/AnchorCards"
 import { anchorCardsForRun } from "@/lib/anchorCards"
+import { createSpeechSegments, isSpeechSegmentRow } from "@/lib/speechSegments"
 import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
 import { AnsweredQuestion, answeredQuestionText } from "@/components/chat/AnsweredQuestion"
 import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
@@ -121,7 +129,6 @@ import {
   triggerSuggestions,
   questionEcho,
   bareQuestion,
-  type ActivityRowFrame,
   type DerivedRow,
   type DecisionPlanRow,
   type HistoryRow,
@@ -136,6 +143,7 @@ import {
   planEnvelopePacing,
   spliceAnswerEnvelope,
 } from "./answerSettlement"
+import { shouldPaceStartEnvelopeProse } from "./startSettlement"
 import { matchOptionByText } from "./optionMatch"
 import {
   resetActivities,
@@ -153,7 +161,7 @@ import {
 import {
   RunTaskList,
 } from "@/components/chat/RunTaskList"
-import { ActivityRow, FoldedActivityRow, type NowRowPayload } from "@/components/chat/ActivityStream"
+import { ActivityRow, WorkSegmentRow, type NowRowPayload } from "@/components/chat/ActivityStream"
 import type { LifecycleStamp, Output } from "@/lib/types"
 import { isPlanReady } from "@/lib/lifecycleStamp"
 import {
@@ -265,6 +273,20 @@ const STREAM_SILENCE_DEAD_MS = 45_000
 const STREAM_WATCHDOG_TICK_MS = 10_000
 const RECONCILE_POLL_MS = 5_000
 const RECONCILE_CAP_MS = 5 * 60_000
+
+/** The answer turn's dead-stream watchdog (the chat turn's machinery twin,
+ * minimal form — the timing machine is the extracted pure seam
+ * lib/answerWatchdog.ts): the answer endpoint shares the server's keepalive
+ * guarantee (the pump's bare-{} thinking frame at least every 15s), so 45s
+ * of total frame silence is a dead pipe by construction — never a slow
+ * model. Answer turns have NO user stop and no reconcile (the
+ * archive-pacing machinery stays the chat turn's own): the abort routes
+ * into the caller's ordinary catch, which rolls the optimistic block back,
+ * restores the dock's beat and releases the composer — a retry self-heals
+ * (an answer that did land server-side settles the re-click quietly via the
+ * settled-question codes). Without it a silently dead pipe left chatBusy
+ * stuck forever: the now-line shimmered and the composer stayed dead until
+ * a manual refresh. */
 
 /** A file staged in the input group, mid-lifecycle: picked → uploading
  * (direct-to-storage, same 3-step flow as the composer — XHR-backed so the
@@ -954,6 +976,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // persisted array rows (assistant.row.append/update → `messages`,
   // ADR-108), and draft/run spans are live-only by law (落定即退役).
   const [activities, setActivities] = useState<ActivityFramePayload[]>([])
+  /** CURRENT-turn activity HOST ROW ids (not per-turn activity_ids). This
+   * set is replaced at each turn birth, so old segments cannot reopen or be
+   * sealed by a later turn that reuses the same "a1". Each turn keeps its
+   * own Set object for async terminal cleanup. */
+  const currentActivityRowKeysRef = useRef<Set<string>>(new Set())
   // The reducer pair is the extracted PURE seam (activityReducer.ts, Phase
   // 3 Batch A) — same upsert/sweep semantics, contract-tested.
   const handleActivityFrame = useCallback((frame: ActivityFramePayload) => {
@@ -1006,6 +1033,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       })
       return
     }
+    currentActivityRowKeysRef.current.add(row.id)
     setMessages((prev) => {
       if (prev.some((m) => m.id === row.id)) return prev
       return [
@@ -1022,6 +1050,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   }, [])
   const handleRowUpdate = useCallback(
     (id: string, frame: ActivityRowFramePayload) => {
+      currentActivityRowKeysRef.current.add(id)
       setMessages((prev) =>
         prev.map((m) =>
           m.id === id && m.activity
@@ -1029,6 +1058,36 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             : m
         ),
       )
+    },
+    [],
+  )
+
+  /** Freeze the current segment without touching any tool's duration_ms.
+   * The per-turn host-key Set is captured by the async turn that owns it. */
+  const sealCurrentWorkSegment = useCallback(
+    (rowKeys: ReadonlySet<string>, endedAtMs: number, startedAtMs?: number) => {
+      setMessages((prev) => closeWorkSegment(prev, rowKeys, endedAtMs, startedAtMs))
+    },
+    [],
+  )
+
+  /** speechSegments' FIRST-VISIBLE callback. It runs BEFORE the fragment is
+   * appended: the empty pinned row is still open, and `rowId` restricts the
+   * seal to segments BEFORE this exact prose row. A preceding checkpoint can
+   * therefore never seal a later activity segment; a server timestamp never
+   * substitutes for this client display fact. */
+  const noteSpeechVisible = useCallback(
+    (rowId: string, atMs: number, rowKeys?: ReadonlySet<string>) => {
+      setMessages((prev) => {
+        const target = prev.find((m) => m.id === rowId)
+        if (!target || target.clientVisibleAtMs != null) return prev
+        const marked = prev.map((m) =>
+          m.id === rowId ? { ...m, clientVisibleAtMs: atMs } : m,
+        )
+        return rowKeys
+          ? closeWorkSegment(marked, rowKeys, atMs, undefined, rowId)
+          : marked
+      })
     },
     [],
   )
@@ -1103,12 +1162,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const [input, setInput] = useState("")
   const [mentions, setMentions] = useState<ChatMention[]>([])
   const [chatBusy, setChatBusy] = useState(false)
-  // The typewriter's busy flag (2026-09-09 用户拍板——打字机途中不需要
-  // thinking): prose in motion IS the turn's activity evidence, so the
-  // status row renders only while the turn is busy AND no prose is visibly
-  // flowing (send → first delta, and the structured tail after the echo
-  // drains). The typewriter fires the busy/idle edge (idle after a grace,
-  // so burst gaps don't strobe the row).
+  // Typewriter busy/idle edge. The bottom now seat also requires an actually
+  // released non-whitespace fragment: buffered envelope text is not visible
+  // prose. An existing current fold owns the live label in place and seals
+  // on speechSegments' first-visible signal, not on this flag alone.
   const [proseActive, setProseActive] = useState(false)
   // The editor is DOM-owned (MentionEditor): `input`/`mentions` are its
   // onChange mirrors, kept only as the send payload; the live-text ref backs
@@ -1205,6 +1262,26 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   onDraftGraphChangeRef.current = onDraftGraphChange
 
   const { steps, status, terminal, createdAt: runCreatedAt } = useRunEvents(runId)
+  // The run-delivery segment has its own write-once clock. Run terminal opens
+  // the review phase; only this seal (or the bounded no-reply fallback) folds
+  // the row. Seals from older runs are ignored by both identity checks.
+  const [runWorkSeal, setRunWorkSeal] = useState<RunWorkSeal | null>(null)
+  const runWorkSealRef = useRef<RunWorkSeal | null>(null)
+  const [reviewExpiredRunId, setReviewExpiredRunId] = useState<string | null>(null)
+  useEffect(() => {
+    runWorkSealRef.current = null
+    setRunWorkSeal(null)
+    setReviewExpiredRunId(null)
+  }, [runId])
+  const sealRunWorkSegment = useCallback((targetRunId: string, endedAtMs: number) => {
+    const next = nextRunWorkSeal(runWorkSealRef.current, runIdRef.current, {
+      runId: targetRunId,
+      endedAtMs,
+    })
+    if (next === runWorkSealRef.current) return
+    runWorkSealRef.current = next
+    setRunWorkSeal(next)
+  }, [])
   // Ref mirror: sendChat's async continuation must read the live terminal
   // state, not a stale closure.
   const terminalRef = useRef(terminal)
@@ -1239,6 +1316,110 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       return null
     }
   }, [projectId])
+
+  /** One server-born speech path for trigger arrival and disconnect recovery.
+   * The first actually released non-whitespace fragment marks the message
+   * and seals ONLY the matching run-delivery segment. Buffered text, empty
+   * fragments and unrelated assistant rows never close it. */
+  const pacePersistedMessage = useCallback(
+    async (
+      row: {
+        id: string
+        content?: string | null
+        created_at?: string
+        workflow_run_id?: string | null
+      },
+      {
+        suggestions,
+        sealRunId = null,
+      }: {
+        suggestions?: SuggestionPill[]
+        sealRunId?: string | null
+      } = {},
+    ) => {
+      setMessages((prev) =>
+        prev.some((m) => m.id === row.id)
+          ? prev
+          : [
+              ...prev,
+              {
+                id: row.id,
+                role: "assistant" as const,
+                content: "",
+                streaming: true,
+                at: row.created_at,
+                runId: row.workflow_run_id,
+              },
+            ],
+      )
+      let sawVisible = false
+      const tw = createTypewriter((fragment) => {
+        if (!sawVisible && fragment.trim().length > 0) {
+          sawVisible = true
+          const atMs = Date.now()
+          noteSpeechVisible(row.id, atMs)
+          if (sealRunId) sealRunWorkSegment(sealRunId, atMs)
+        }
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === row.id ? { ...m, content: m.content + fragment } : m,
+          ),
+        )
+      }, setProseActive)
+      // Server-born prose still paces out; never flush the whole row.
+      tw.push((row.content ?? "").trim())
+      await tw.drain()
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === row.id
+            ? {
+                ...m,
+                streaming: false,
+                ...(suggestions === undefined ? {} : { suggestions }),
+              }
+            : m,
+        ),
+      )
+    },
+    [noteSpeechVisible, sealRunWorkSegment],
+  )
+
+  /** The Start recovery's read-only deps (2026-10-22 — backend-accepted,
+   * receipt-lost): the SAME two seats fetchPendingQuestion / reconcileTurn
+   * already read, with the error tri-state preserved (null = transport
+   * failure, never "no pending question" — the recovery's 暂时无法确定
+   * depends on the distinction). Read-only by construction: the recovery
+   * can never fire a second start (不自动重试制作). */
+  const startRecoveryDeps = useCallback(
+    (): StartRecoveryDeps => ({
+      fetchConversation: async () => {
+        try {
+          const res = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
+            toast: false,
+          })
+          if (!res.ok) return null
+          return (await res.json()) as {
+            id?: string
+            pending_question?: QuestionMessage | null
+          }
+        } catch {
+          return null
+        }
+      },
+      fetchMessages: async (convId) => {
+        try {
+          const res = await apiFetch(`/api/v1/chat/conversations/${convId}/messages`, {
+            toast: false,
+          })
+          if (!res.ok) return null
+          return ((await res.json()) as { items?: QuestionMessage[] }).items ?? []
+        } catch {
+          return null
+        }
+      },
+    }),
+    [projectId],
+  )
 
   /** The panel's task plan + reasons live on the project (pending_brief) —
    * refetched after every plan-path turn (first inference, refinements).
@@ -1445,37 +1626,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           continue
         }
         triggerInFlight.current.add(row.id)
-        const text = (row.content ?? "").trim()
         try {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: row.id,
-              role: "assistant" as const,
-              content: "",
-              streaming: true,
-              at: row.created_at,
-              runId: row.workflow_run_id,
-            },
-          ])
-          const tw = createTypewriter((fragment) => {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === row.id ? { ...m, content: m.content + fragment } : m
-              )
-            )
-          }, setProseActive)
-          // NO flush — server-born prose paces out under the typewriter's
-          // cadence (the zero-delta path's same law), never a blob.
-          tw.push(text)
-          await tw.drain()
-          // The pills follow the drained prose (散文在先、提问随后); the
-          // settle (streaming: false) fires the agent-speech recall.
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === row.id ? { ...m, streaming: false, suggestions } : m
-            )
-          )
+          await pacePersistedMessage(row, {
+            suggestions,
+            sealRunId: row.workflow_run_id,
+          })
           // 选项语法统一律 (ADR-081): a NEW-shape trigger row carries its
           // suggestions as a real options question (question payload) —
           // dock it once the prose has drained (提问随后, same law the
@@ -1492,7 +1647,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     } catch {
       /* server-born speech is best-effort — the replay rebuilds on refresh */
     }
-  }, [projectId, fetchPendingQuestion])
+  }, [projectId, fetchPendingQuestion, pacePersistedMessage])
 
   // Load the project's assets for the prompt attachments — once on mount,
   // and again after a chat turn when the project started empty: the plan
@@ -1575,35 +1730,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           for (const row of fresh) {
             if (gen !== reconcileGenRef.current) return
             reconciledIdsRef.current.add(row.id)
-            setMessages((prev) =>
-              prev.some((m) => m.id === row.id)
-                ? prev
-                : [
-                    ...prev,
-                    {
-                      id: row.id,
-                      role: "assistant" as const,
-                      content: "",
-                      streaming: true,
-                      at: row.created_at,
-                      runId: row.workflow_run_id,
-                    },
-                  ],
-            )
-            const tw = createTypewriter((fragment) => {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === row.id ? { ...m, content: m.content + fragment } : m,
-                ),
-              )
-            }, setProseActive)
-            tw.push((row.content ?? "").trim())
-            await tw.drain()
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === row.id ? { ...m, streaming: false } : m,
-              ),
-            )
+            await pacePersistedMessage(row, {
+              sealRunId:
+                triggerSuggestions(row.intent) !== undefined
+                  ? row.workflow_run_id
+                  : null,
+            })
           }
           // The turn's terminal artifacts are in — dock a pending ask if the
           // turn left one, refresh attachments, settle the line, release the
@@ -1630,6 +1762,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             at: new Date().toISOString(),
           },
         ])
+        // 假活跃禁令 (T16-B client twin — the cap's own seat): the turn is
+        // declared lost and the composer releases, so no live label may keep
+        // narrating work the client can no longer see. chatBusy gates the
+        // label; this sweep also settles the durable active frames so a
+        // later render cannot revive them. cancelled = the attempt was cut
+        // off — the server may still land it; a refresh replays its truth.
+        settleActivities("cancelled")
+        setThinkingPhase(null)
         abortRef.current = null
         setChatBusy(false)
       } finally {
@@ -1638,7 +1778,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
       }
     },
-    [projectId, fetchPendingQuestion, fetchAssets, settleActivities, t],
+    [projectId, fetchPendingQuestion, fetchAssets, settleActivities, pacePersistedMessage, t],
   )
   const reconcileTurnRef = useRef(reconcileTurn)
   useEffect(() => {
@@ -1744,36 +1884,47 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     return () => clearInterval(id)
   }, [assetsProcessing, fetchAssets, pollTriggerMessages])
 
-  // Watch window (run 完成 — the closing reviewer): the terminal frame
-  // just landed and no review row for this run is in the flow yet. The
-  // grace is bounded — if the reviewer never lands (its failure degrades to
-  // silence by design), the poll stops; the receipt stands alone.
+  // Watch window (run terminal → delivery reply). The row enters REVIEWING
+  // in the terminal render itself, then settles on the delivery's first
+  // visible fragment. The bounded no-reply exit seals at the observable run
+  // end so a late reply cannot rewrite the receipt or revive the shimmer.
   const reviewerLanded = messages.some(
     (m) => m.runId === runId && m.suggestions !== undefined,
   )
-  // 有 LLM 调用就必定要有 now-line (2026-10-19 用户拍板): the closing
-  // speech's generation is an LLM call the poll below picks up — while the
-  // watch is armed, the now-line narrates it. The state lives and dies with
-  // the watch window itself (lands → off, grace expires → off), so the row
-  // can never stick (假活跃禁令).
-  const [reviewPending, setReviewPending] = useState(false)
+  const reviewPending =
+    terminal &&
+    runId != null &&
+    !reviewerLanded &&
+    reviewExpiredRunId !== runId
+  const runWorkEndedAtMs =
+    runWorkSeal?.runId === runId ? runWorkSeal.endedAtMs : null
   useEffect(() => {
     if (!terminal || !runId || reviewerLanded) return
-    setReviewPending(true)
     const startedAt = Date.now()
+    void pollTriggerMessages()
     const id = setInterval(() => {
       if (Date.now() - startedAt > 60_000) {
         clearInterval(id)
-        setReviewPending(false)
+        if (runIdRef.current !== runId) return
+        setReviewExpiredRunId(runId)
+        sealRunWorkSegment(
+          runId,
+          runStepEndMs(runCreatedAt, steps) ?? startedAt,
+        )
         return
       }
       void pollTriggerMessages()
     }, 3000)
-    return () => {
-      clearInterval(id)
-      setReviewPending(false)
-    }
-  }, [terminal, runId, reviewerLanded, pollTriggerMessages])
+    return () => clearInterval(id)
+  }, [
+    terminal,
+    runId,
+    reviewerLanded,
+    pollTriggerMessages,
+    runCreatedAt,
+    steps,
+    sealRunWorkSegment,
+  ])
 
   // The output mention's candidate feed (reference family, MENTIONS §2): a
   // pinned output id resolves the revision target deterministically
@@ -2364,156 +2515,24 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setProseActive(false)
     setThinkingPhase(null)
     setActivities(resetActivities()) // the new turn's own now-line stream starts empty
+    currentActivityRowKeysRef.current = new Set()
+    const workRowKeys = currentActivityRowKeysRef.current
+    let terminalAtMs: number | null = null
     // C8-c: a new turn owns the candidate-rollback scope — rows committed
     // by earlier turns are no longer this turn's to roll back.
     liveCandidateRowsRef.current.clear()
     const streamId = crypto.randomUUID()
-    let streamedAny = false
-    // What the preview bubble currently shows (the typewriter-released text)
-    // — the suffix-pacing gate's reference (打字机律·工具线重述, see below).
-    let previewText = ""
-    // Checkpoint segments (ADR-085 判词 5 — 一键一段): the settled bubble
-    // keeps the bare streamId; each checkpoint frame drains whatever is
-    // typing, settles the current segment, and paces its full text into its
-    // OWN bubble (`${streamId}#cpN`). The typewriter's output target is
-    // mutable for that window; previewText tracks ONLY the settled bubble's
-    // prefix (checkpoint text never joins the suffix-pacing reference).
-    // 显式 string 标注: crypto.randomUUID() 的新 lib.dom 模板字面量类型
-    // (`${string}-${string}-...`) 会传染推断,让 `#cpN` 检查点 id 赋不上。
-    let typeTargetId: string = streamId
-    let checkpointCount = 0
-    let checkpointChain: Promise<void> = Promise.resolve()
-    // 出生钉位 (数组位置律的实时侧, 2026-10-08 后台 tab 竞态取证): a speech
-    // row's array position is pinned SYNCHRONOUSLY at its first wire fact
-    // (delta receipt / checkpoint frame) — the typewriter paces CONTENT
-    // only, it never births rows: its 24ms timer throttles to ≥1s in a
-    // hidden tab while SSE events keep landing, and a read's activity row
-    // (sync append) would otherwise claim the array position ahead of the
-    // not-yet-born speech bubble. `receivedAny` tracks RECEIPT (not the
-    // typewriter's release) for the current streamId segment.
-    let receivedAny = false
-    const ensureSpeechRow = (id: string, at?: string) => {
-      setMessages((prev) =>
-        prev.some((m) => m.id === id)
-          ? prev
-          : [
-              ...prev,
-              {
-                id,
-                // The render key (OverlayMessage law): unique per BIRTH (the
-                // checkpoint settle renames this row to `${streamId}#cpN` and
-                // the trailing speech re-births under the bare streamId —
-                // keying by id would collide; the uuid rides the rename's
-                // spread, so the promoted row never remounts).
-                birthKey: crypto.randomUUID(),
-                role: "assistant" as const,
-                content: "",
-                streaming: true,
-                at: at ?? new Date().toISOString(),
-              },
-            ],
-      )
-    }
-    const appendDelta = (delta: string) => {
-      // streamedAny / previewText are the SETTLED bubble's facts only —
-      // checkpoint segments (typeTargetId !== streamId) never flip them, so
-      // a checkpoint-only turn still takes the zero-delta envelope branch
-      // and the echo paces into its own bubble after the checkpoints
-      // (echoCarried ≡ streamedAny stays truthful, 2026-09-09 单派生).
-      if (typeTargetId === streamId) {
-        streamedAny = true
-        previewText += delta
-      }
-      setMessages((prev) =>
-        prev.some((m) => m.id === typeTargetId)
-          ? prev.map((m) =>
-              m.id === typeTargetId ? { ...m, content: m.content + delta } : m
-            )
-          : [
-              ...prev,
-              {
-                id: typeTargetId,
-                role: "assistant",
-                content: delta,
-                streaming: true,
-                at: new Date().toISOString(),
-              },
-            ]
-      )
-    }
-    const typewriter = createTypewriter(appendDelta, setProseActive)
-    /** One checkpoint's delivery (ADR-085/ADR-109): the frame carries the
-     * full text (quiet iterations stream nothing), so it paces out through
-     * the SAME typewriter — never a blob. Serialized on checkpointChain: SSE
-     * handlers are sync, and the per-turn rhythm cap (4, ADR-109 §2) must
-     * never interleave on one typewriter.
-     *
-     * The iteration-0 seat (ADR-104): prose before the turn's FIRST read has
-     * ALREADY streamed into the main bubble when its checkpoint frame
-     * arrives — settle it IN PLACE (rekey the bubble to a cp id, the frame's
-     * text wins) instead of re-typing it into a second bubble, and reset the
-     * main-bubble identity (streamId) to a fresh empty segment: the read's
-     * activity rows then sit BETWEEN the two speeches by array position
-     * (ADR-108 — the cp bubble keeps its birth index, the rows append after
-     * it, the next segment appends after them), and every downstream
-     * streamId law (the envelope's echoCarried / zero-delta /
-     * finalizePreview) reads only the new segment, untouched. */
-    /** Path A (the iteration-0 seat, ADR-104): prose before the turn's
-     * FIRST read has streamed into the main bubble — drain it, then settle
-     * IN PLACE (rekey the bubble to the cp id, the frame's text wins). The
-     * row's array position never moves: it was pinned at the first delta's
-     * receipt (ensureSpeechRow), before the read's activity rows exist. The
-     * main-bubble identity (streamId) resets to a fresh empty segment, so
-     * every downstream streamId law (the envelope's echoCarried /
-     * zero-delta / finalizePreview) reads only the new segment, untouched. */
-    const settleStreamedSegment = async (cpId: string, text: string, at?: string) => {
-      await typewriter.drain()
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === streamId
-            ? { ...m, id: cpId, content: text, streaming: false, at: at ?? m.at }
-            : m
-        )
-      )
-      previewText = ""
-      streamedAny = false
-      receivedAny = false
-    }
-    /** Path B: a checkpoint-only segment (quiet iterations stream nothing).
-     * Its row was PINNED at the frame's arrival (onCheckpoint — the birth
-     * never waits on the typewriter's drain: while this drain runs, a
-     * read's activity row-append lands synchronously and must find the
-     * checkpoint's position already taken); this paces the text into it. */
-    const deliverCheckpoint = async (cpId: string, text: string) => {
-      await typewriter.drain()
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === streamId && m.content ? { ...m, streaming: false } : m
-        )
-      )
-      typeTargetId = cpId
-      typewriter.push(text)
-      await typewriter.drain()
-      setMessages((prev) =>
-        prev.map((m) => (m.id === cpId ? { ...m, streaming: false } : m))
-      )
-      typeTargetId = streamId
-    }
-    const onCheckpoint = (text: string, at?: string) => {
-      if (!text.trim()) return
-      const cpId = `${streamId}#cp${++checkpointCount}`
-      if (typeTargetId === streamId && receivedAny) {
-        // Path A — the bubble's position was pinned at the first delta's
-        // receipt; the settle rides the chain (drain first) but never moves.
-        checkpointChain = checkpointChain.then(() =>
-          settleStreamedSegment(cpId, text, at),
-        )
-        return
-      }
-      // Path B — pin the row NOW (出生钉位), the chain paces the text in.
-      ensureSpeechRow(cpId, at)
-      checkpointChain = checkpointChain.then(() => deliverCheckpoint(cpId, text))
-    }
+    // Checkpoint segments (ADR-085 判词 5 — 一键一段): the ONE machine lives
+    // in lib/speechSegments.ts (P1 — segment ownership pins at the input
+    // event boundary; the typewriter's display progress never decides
+    // which segment a fragment belongs to). The answer stream's
+    // settleAnswerTurn rides the same module — one semantics, one seat.
+    const segments = createSpeechSegments({
+      baseId: streamId,
+      apply: setMessages,
+      setProseActive,
+      onVisible: (rowId, atMs) => noteSpeechVisible(rowId, atMs, workRowKeys),
+    })
     /** In-place finalize: the preview bubble becomes the settled message
      * under the SAME key (the envelope's content wins); never a remount.
      * 数组位置律 (ADR-108): the row's POSITION is its array index — the
@@ -2541,23 +2560,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       content: string,
       runId?: string | null,
     ) => {
-      setMessages((prev) =>
-        prev.some((m) => m.id === streamId)
-          ? prev
-          : [
-              ...prev,
-              {
-                id: streamId,
-                birthKey: crypto.randomUUID(), // the render-key law (OverlayMessage)
-                role: "assistant" as const,
-                content: "",
-                streaming: true,
-                at: new Date().toISOString(),
-              },
-            ],
-      )
-      typewriter.push(content)
-      await typewriter.drain()
+      // The machine pins the main row at push (出生钉位) and paces the
+      // content in — same key, no blob, no erase.
+      segments.push(content)
+      await segments.drain()
       finalizePreview(content, runId)
     }
     /** 打字机律·工具线重述牙③ (T2b 感知族): the loop's accumulated speech may
@@ -2569,13 +2575,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
      * AFTER the typewriter drains so previewText is the full streamed prefix. */
     const paceUnstreamedTail = async (content: string): Promise<void> => {
       if (
-        streamedAny &&
-        previewText &&
-        content.length > previewText.length &&
-        content.startsWith(previewText)
+        segments.streamedAny &&
+        segments.previewText &&
+        content.length > segments.previewText.length &&
+        content.startsWith(segments.previewText)
       ) {
-        typewriter.push(content.slice(previewText.length))
-        await typewriter.drain()
+        segments.push(content.slice(segments.previewText.length))
+        await segments.drain()
       }
     }
     try {
@@ -2609,13 +2615,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           signal: ctrl.signal,
           onDelta: (delta) => {
             poke()
-            // 出生钉位: the row is born at the delta's RECEIPT — never at
-            // the typewriter's first released fragment (a hidden tab
-            // throttles its timer while a read's activity row-append lands
+            // 出生钉位 + 归属钉位 (P1): the machine pins the row at the
+            // delta's RECEIPT and the segment at the same boundary — never
+            // at the typewriter's released fragment (a hidden tab throttles
+            // its timer while a read's activity row-append lands
             // synchronously and would claim the position first).
-            if (typeTargetId === streamId) receivedAny = true
-            ensureSpeechRow(typeTargetId)
-            typewriter.push(delta)
+            segments.onDelta(delta)
           },
           onThinking: (payload) => {
             poke()
@@ -2638,7 +2643,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           },
           onCheckpoint: (text, at) => {
             poke()
-            onCheckpoint(text, at)
+            segments.onCheckpoint(text, at)
           },
           onActivity: (frame) => {
             poke()
@@ -2659,6 +2664,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
       )
       sseProbe("turn.envelope", { dead: deadStreamRef.current })
+      terminalAtMs = Date.now()
       // 终帧缴械: the pipe is DONE — no frame ever follows turn.completed,
       // so the dead-stream machinery's domain ends here. Post-envelope the
       // only work left is the typewriter pacing data already in hand, and a
@@ -2673,9 +2679,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         return
       }
       // Envelope wins: any in-flight checkpoint delivery finishes FIRST
-      // (its drain waiters ride the same typewriter), then the buffered
+      // (its final writes ride the same release queue), then the buffered
       // prose PACES OUT before the turn lands.
-      await checkpointChain
       // 打字机律·G2 修律 (2026-10-04): the speech-commit protocol holds the
       // whole reply's deltas until adjudication, so they burst into this
       // queue right before the envelope — a flush() here would dump them
@@ -2683,7 +2688,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // burst at the typewriter's cadence (catch-up included) — prose
       // visibly LEADS, docks/receipts follow. flush() stays on the
       // failure/abort paths (rollback must not linger).
-      await typewriter.drain()
+      await segments.drain()
       // Second dead-stream bail: a continuation that hung INSIDE the drains
       // (a frozen page's timers) resumes here — if the reconcile already
       // owned the turn meanwhile, everything below is superseded.
@@ -2731,7 +2736,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // receipt's anchor no longer reads it (2026-09-13 时序拍板: the
         // receipt tombstones at the run's END, which postdates every
         // birthing row by construction).
-        if (streamedAny) {
+        if (segments.streamedAny) {
           // A read-tool turn's echo may EXTEND the streamed prefix (the
           // loop's accumulated speech): pace the unseen tail BEFORE the run
           // lands — the same law as the zero-delta start's paceSettledProse.
@@ -2744,18 +2749,19 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             data.run_id,
           )
         } else {
-          // Zero-delta start (the funnel's repair round never streams): the
-          // start speech paces through the typewriter BEFORE the run lands —
-          // the 打字机律's last gate holds on the start path too. The
-          // empty-prose degrade (the envelope's assistant_message IS the
-          // answered plan row) paces NOTHING: the plan's echo already lives
-          // in the flow — re-typing it would fake a second utterance no row
-          // persists (a start path with no speech stays honestly silent).
-          const settled = (data.assistant_message.content ?? "").trim()
-          const isAnsweredPlanRow =
-            data.answered_question != null &&
-            data.assistant_message.id === data.answered_question.id
-          if (settled && !isAnsweredPlanRow) {
+          // Zero-delta start: the settled speech still paces BEFORE the run
+          // lands. An answered plan row suppresses that pacing ONLY when its
+          // exact echo is already visible — the ordinary start of an earlier
+          // dock. A plan born and auto-started in THIS turn has no such echo
+          // yet; its first presentation must not be mistaken for a duplicate.
+          if (
+            shouldPaceStartEnvelopeProse({
+              content: data.assistant_message.content ?? "",
+              assistantMessageId: data.assistant_message.id,
+              answeredQuestionId: data.answered_question?.id,
+              messages: messagesRef.current,
+            })
+          ) {
             await paceSettledProse(
               data.assistant_message.content ?? "",
               data.run_id,
@@ -2809,7 +2815,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // collapses into a version chip anchored after the echo bubble that
         // produced it — the same anchor the inline card occupied while the
         // turn was in flight — and the fresh card pins bottom-most.
-        if (streamedAny) {
+        if (segments.streamedAny) {
           // The echo may extend the streamed prefix (read-tool turn) — pace
           // the tail, then the bubble carries the whole speech into the dock.
           // A non-prefix settled echo is REPLACED speech (a rejected
@@ -2852,7 +2858,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // (R1 early return, never docks) the preview must not linger.
         setPendingQuestion((prev) => (prev?.preview ? null : prev))
         await handleAssistantMessage(message, {
-          echoCarried: streamedAny,
+          echoCarried: segments.streamedAny,
         })
         // A click stashed on the PREVIEW pill fires NOW on the persisted row
         // (2026-09-09 用户拍板「选项该和这句话一起来」): the optimistic QA
@@ -2861,9 +2867,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // matching option — the override path retires it the same way.
         const stashed = stashedAnswerRef.current
         if (stashed) {
+          // A re-entrant answer owns a NEW key set. Seal this turn first so
+          // its prose-less tail cannot leak into the next turn's clock.
+          sealCurrentWorkSegment(workRowKeys, terminalAtMs ?? Date.now())
           await fireStashedAnswer(stashed, message)
         }
-      } else if (streamedAny) {
+      } else if (segments.streamedAny) {
         // Prose reply: the preview bubble IS the settled message (same key;
         // the envelope content + run id are authoritative). A read-tool
         // turn's unstreamed tail paces out first (打字机律·工具线重述).
@@ -2882,19 +2891,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             message.content ?? "",
             message.workflow_run_id,
           )
-          await handleAssistantMessage(message, { echoCarried: streamedAny })
+          await handleAssistantMessage(message, { echoCarried: segments.streamedAny })
         } else {
           setMessages((prev) => prev.filter((m) => m.id !== streamId))
           await handleAssistantMessage(message)
         }
       }
     } catch (e) {
+      terminalAtMs ??= Date.now()
       sseProbe("turn.error", {
         name: e instanceof Error ? e.name : "?",
         message: e instanceof Error ? e.message : String(e),
         dead: deadStreamRef.current,
       })
-      typewriter.flush()
+      segments.flush()
       discardPreviewArtifacts()
       rollbackCandidateRows()
       // 终帧律 (同上): a failed/aborted turn closes every phase too.
@@ -2914,7 +2924,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // readable.
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === streamId || m.id.startsWith(`${streamId}#cp`)
+            isSpeechSegmentRow(m.id, streamId)
               ? { ...m, streaming: false }
               : m
           )
@@ -2939,7 +2949,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // persisted them).
       setMessages((prev) =>
         prev.filter(
-          (m) => m.id !== streamId && !m.id.startsWith(`${streamId}#cp`)
+          (m) => !isSpeechSegmentRow(m.id, streamId)
         )
       )
       if (opts?.rollbackId && !persisted) {
@@ -2988,6 +2998,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
     } finally {
       sseProbe("turn.finally", { release: abortRef.current === ctrl })
+      sealCurrentWorkSegment(workRowKeys, terminalAtMs ?? Date.now())
       clearInterval(watchdog)
       if (abortRef.current === ctrl) {
         abortRef.current = null
@@ -3163,6 +3174,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           content: "",
           qa: buildQaBlock(question, option.label, false),
           at: new Date().toISOString(),
+          clientVisibleAtMs: Date.now(),
         },
       ])
       recallDock()
@@ -3204,6 +3216,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setProseActive(false)
     setThinkingPhase(null)
     setActivities(resetActivities()) // the answer continuation is its own turn — new stream
+    currentActivityRowKeysRef.current = new Set()
+    const workRowKeys = currentActivityRowKeysRef.current
+    let terminalAtMs: number | null = null
     setPendingQuestion(null)
     setMessages((prev) =>
       prev.some((m) => m.id === optimisticId)
@@ -3216,6 +3231,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               content: "",
               qa: buildQaBlock(question, displayText, false),
               at: new Date().toISOString(),
+              clientVisibleAtMs: Date.now(),
             },
           ],
     )
@@ -3224,58 +3240,42 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // Typewriter pacing (same reason as sendChat — 2026-08-05 fix): the
     // reasoning model tends to deliver the echo in one coarse chunk right
     // before the terminal frame; raw appends read as "popped in at once",
-    // which is the exact symptom this stream exists to kill.
-    let previewStreamed = false
-    // What the preview bubble shows (typewriter-released) — the read-tool
-    // tail-pacing gate's reference (打字机律·工具线重述, sendChat 同款).
-    let previewText = ""
-    const typewriter = createTypewriter((text) => {
-      previewStreamed = true
-      previewText += text
-      setMessages((prev) =>
-        prev.some((m) => m.id === previewId)
-          ? prev.map((m) =>
-              m.id === previewId ? { ...m, content: m.content + text } : m,
-            )
-          : [
-              ...prev,
-              {
-                id: previewId,
-                role: "assistant" as const,
-                content: text,
-                streaming: true,
-                at: new Date().toISOString(),
-              },
-            ],
-      )
-    }, setProseActive)
+    // which is the exact symptom this stream exists to kill. The checkpoint
+    // segmentation machine is the extracted shared seat (speechSegments.ts)
+    // — the answer continuation's pre-read speech and follow-up reply are
+    // SEPARATE bubbles with the design beat's activity rows between them,
+    // matching the persisted order (sendChat's inline law, one semantics).
+    const segments = createSpeechSegments({
+      baseId: previewId,
+      apply: setMessages,
+      setProseActive,
+      onVisible: (rowId, atMs) => noteSpeechVisible(rowId, atMs, workRowKeys),
+    })
+    // Dead-stream watchdog (the chat turn's machinery twin): answer turns
+    // have no user stop and no reconcile — a silently dead pipe would
+    // otherwise leave chatBusy stuck forever (the now-line shimmering, the
+    // composer dead until refresh). The abort lands in the catch below.
+    const answerWatchdog = armAnswerWatchdog(
+      STREAM_SILENCE_DEAD_MS,
+      STREAM_WATCHDOG_TICK_MS,
+    )
     try {
       const data = await streamAnswer<{
         answered_question: QuestionMessage
         follow_up: QuestionMessage | null
       }>(question.id, body, {
+        signal: answerWatchdog.signal,
         onDelta: (text) => {
-          // 出生钉位 (sendChat 同款): the preview row is born at the
-          // delta's RECEIPT — a hidden tab throttles the typewriter's
-          // timer while a read's row-append lands synchronously and would
-          // otherwise claim the array position ahead of the speech.
-          setMessages((prev) =>
-            prev.some((m) => m.id === previewId)
-              ? prev
-              : [
-                  ...prev,
-                  {
-                    id: previewId,
-                    role: "assistant" as const,
-                    content: "",
-                    streaming: true,
-                    at: new Date().toISOString(),
-                  },
-                ],
-          )
-          typewriter.push(text)
+          answerWatchdog.poke()
+          // 出生钉位 lives inside the segments machine: the preview row is
+          // born at the delta's RECEIPT — a hidden tab throttles the
+          // typewriter's timer while a read's row-append lands
+          // synchronously and would otherwise claim the array position
+          // ahead of the speech.
+          segments.onDelta(text)
         },
         onThinking: (payload) => {
+          answerWatchdog.poke()
           // Same protocol as the sendChat handler above: `"phase" in
           // payload` = a labelled hand-over or the explicit clear
           // (phase: null); bare keepalives leave the label untouched.
@@ -3283,16 +3283,39 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             setThinkingPhase(payload.phase ?? null)
           }
         },
+        // The answer continuation's checkpoint channel (the design beat
+        // rides this path): without it the pre-read speech merged into the
+        // follow-up bubble and the live order contradicted the persisted
+        // one (checkpoint → activity rows → reply).
+        onCheckpoint: (text, at) => {
+          answerWatchdog.poke()
+          segments.onCheckpoint(text, at)
+        },
         // Q2..N 对称 (2026-09-09): the continuation's follow-up ask closes
         // its object mid-stream just like the chat turn's first ask — dock
         // its pill NOW; the envelope re-docks authoritatively below.
-        onQuestionPreview: (payload) =>
-          dockQuestionPreview(`preview-answer-${optimisticId}`, payload),
-        onActivity: handleActivityFrame,
-        onCandidates: handleCandidatesFrame,
-        onRowAppend: handleRowAppend,
-        onRowUpdate: handleRowUpdate,
+        onQuestionPreview: (payload) => {
+          answerWatchdog.poke()
+          dockQuestionPreview(`preview-answer-${optimisticId}`, payload)
+        },
+        onActivity: (frame) => {
+          answerWatchdog.poke()
+          handleActivityFrame(frame)
+        },
+        onCandidates: (event) => {
+          answerWatchdog.poke()
+          handleCandidatesFrame(event)
+        },
+        onRowAppend: (row) => {
+          answerWatchdog.poke()
+          handleRowAppend(row)
+        },
+        onRowUpdate: (id, frame) => {
+          answerWatchdog.poke()
+          handleRowUpdate(id, frame)
+        },
       })
+      terminalAtMs = Date.now()
       // Envelope wins (2026-09-06 原地落定，与 sendChat 的 finalizePreview
       // 同一纪律): the optimistic block becomes the real answered row AT
       // ITS OWN INDEX and the streaming preview settles static under the
@@ -3303,8 +3326,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // 打字机律·G2 修律 (sendChat 同款): the speech-commit protocol's flush
       // burst lands in this queue right before the envelope — flush() would
       // teleport it whole; drain() paces it out at cadence before the
-      // archive splice (prose visibly leads, the settled rows follow).
-      await typewriter.drain()
+      // archive splice (prose visibly leads, the settled rows follow). The
+      // checkpoint chain drains FIRST (an in-flight checkpoint delivery
+      // finishes before the envelope's prose paces).
+      await segments.drain()
       setThinkingPhase(null)
       settleActivities("completed") // defensive twin of the server sweep
       const answeredRow = buildAnsweredQuestionRow(data.answered_question)
@@ -3321,12 +3346,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       if (followUp) {
         const pacing = planEnvelopePacing({
           envelopeProse: answerEnvelopeProse(followUp),
-          previewStreamed,
-          previewText,
+          previewStreamed: segments.streamedAny,
+          previewText: segments.previewText,
         })
         if (pacing) {
-          typewriter.push(pacing.paceText)
-          await typewriter.drain()
+          segments.push(pacing.paceText)
+          await segments.drain()
         }
       }
       setMessages((prev) =>
@@ -3339,12 +3364,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // plain prose and never docks) the preview must not linger (it has
         // no ×).
         setPendingQuestion((prev) => (prev?.preview ? null : prev))
-        // echoCarried ≡ previewStreamed (2026-09-09 单派生): a paced
-        // zero-delta follow-up rides the same typewriter, whose callback
-        // flips previewStreamed — `previewStreamed || followUpPaced` was the
-        // same fact said twice.
+        // echoCarried ≡ the settled bubble carries streamed prose
+        // (2026-09-09 单派生): a paced zero-delta follow-up rides the same
+        // typewriter, whose callback flips the flag — `streamedAny ||
+        // followUpPaced` was the same fact said twice.
         await handleAssistantMessage(followUp, {
-          echoCarried: previewStreamed,
+          echoCarried: segments.streamedAny,
         })
         // Run-landing parity with sendChat's `data.run_id` seat: a
         // run-bearing follow-up (the answered question's continuation
@@ -3369,6 +3394,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           optimisticId: string
         } | null
         if (stashed) {
+          sealCurrentWorkSegment(workRowKeys, terminalAtMs ?? Date.now())
           await fireStashedAnswer(stashed, followUp)
         }
       } else {
@@ -3377,22 +3403,31 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         discardPreviewArtifacts()
       }
     } catch (e) {
+      terminalAtMs ??= Date.now()
+      // A machinery abort (the answer watchdog — this path has NO user
+      // stop): the pipe went silently dead past the server's keepalive
+      // guarantee. The answer may still have landed server-side — the
+      // rollback + the restored dock below are the recovery, and a retry
+      // settles quietly if so (the settled-question codes).
+      const aborted = e instanceof DOMException && e.name === "AbortError"
       // The stream helper rejects with the server's detail (the JSON path's
       // toast semantics — manual here, apiFetch is not in the loop). flush
       // stops the pacing clock — a lingering tick would re-create the
       // preview right after the rollback removed it. A structured credits
       // shortfall skips the toast and lands as the in-flow grey row instead
       // (双路同语义 with the typed Start).
-      typewriter.flush()
+      segments.flush()
       setThinkingPhase(null)
-      settleActivities("failed") // T16-B: the failed answer leaves nothing spinning
+      settleActivities(aborted ? "cancelled" : "failed") // T16-B: the failed answer leaves nothing spinning
       // A failed turn retires every ask-preview artifact too — a stashed
       // next-click's optimistic block and the preview pill never existed
       // server-side (the original question restores just below).
       discardPreviewArtifacts()
       rollbackCandidateRows()
       setMessages((prev) =>
-        prev.filter((m) => m.id !== optimisticId && m.id !== previewId),
+        prev.filter(
+          (m) => m.id !== optimisticId && !isSpeechSegmentRow(m.id, previewId),
+        ),
       )
       const settledCode =
         e instanceof StreamTurnError ? questionSettledCode(e.detail) : null
@@ -3417,10 +3452,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         if (credits) {
           pushCreditsGreyRow(credits)
         } else {
-          toast.error(e instanceof Error ? e.message : t("chat.failed"))
+          // An aborted pipe never toasts the raw DOMException — the
+          // localized failure word + the restored dock say it (retry).
+          toast.error(
+            aborted
+              ? t("chat.failed")
+              : e instanceof Error
+                ? e.message
+                : t("chat.failed"),
+          )
         }
       }
     } finally {
+      sealCurrentWorkSegment(workRowKeys, terminalAtMs ?? Date.now())
+      answerWatchdog.disarm()
       setAnswering(false)
       setChatBusy(false)
     }
@@ -3741,9 +3786,25 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const handleConfirmPill = async () => {
     if (!confirmPillActive || chatBusy || answering || !planPill) return
     const question = planPill
+    // No user / QA row is born on Start. Keep the real click as this turn's
+    // client work boundary so the first model wait is not shaved off.
+    const turnStartMs = Date.now()
     setAnswering(true)
     setChatBusy(true)
+    setProseActive(false)
+    setThinkingPhase(null)
+    setActivities(resetActivities())
+    currentActivityRowKeysRef.current = new Set()
+    const workRowKeys = currentActivityRowKeysRef.current
+    let terminalAtMs: number | null = null
     setPendingQuestion(null) // the pill's beat is taken — failure restores it
+    // Dead-stream watchdog (the option path's same seat): the Start answer
+    // runs LLM windows whose only frames are the keepalives — onThinking is
+    // wired for the poke alone, or a healthy quiet turn would false-trip.
+    const answerWatchdog = armAnswerWatchdog(
+      STREAM_SILENCE_DEAD_MS,
+      STREAM_WATCHDOG_TICK_MS,
+    )
     try {
       const data = await streamAnswer<{
         answered_question: QuestionMessage
@@ -3752,12 +3813,28 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         question.id,
         { kind: "start", intent: confirmActive ? intent : undefined },
         {
-          onActivity: handleActivityFrame,
-          onCandidates: handleCandidatesFrame,
-          onRowAppend: handleRowAppend,
-          onRowUpdate: handleRowUpdate,
+          signal: answerWatchdog.signal,
+          onThinking: () => answerWatchdog.poke(),
+          onActivity: (frame) => {
+            answerWatchdog.poke()
+            handleActivityFrame(frame)
+          },
+          onCandidates: (event) => {
+            answerWatchdog.poke()
+            handleCandidatesFrame(event)
+          },
+          onRowAppend: (row) => {
+            answerWatchdog.poke()
+            handleRowAppend(row)
+          },
+          onRowUpdate: (id, frame) => {
+            answerWatchdog.poke()
+            handleRowUpdate(id, frame)
+          },
         },
       )
+      terminalAtMs = Date.now()
+      sealCurrentWorkSegment(workRowKeys, terminalAtMs, turnStartMs)
       settleActivities("completed") // defensive twin of the server sweep
       // The receipt titles the RUN by its birthing proposal (ADR-058, the
       // sendChat start branch's same seat): the answered plan row carries
@@ -3772,69 +3849,105 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         landOnStartedRun(data.answered_question.workflow_run_id)
       }
     } catch (e) {
-      settleActivities("failed")
-      const settledCode =
-        e instanceof StreamTurnError ? questionSettledCode(e.detail) : null
-      if (settledCode) {
-        // A settled question never re-docks (the option path's same grace):
-        // the click raced the plan's own settlement — the pill stays GONE.
-        setPendingQuestion(null)
-        toast.info(
-          t(
-            settledCode === "question.superseded"
-              ? "chat.questionOutdated"
-              : "chat.questionAnswered",
-          ),
+      terminalAtMs ??= Date.now()
+      // The transport turn is over; recovery below is read-only world
+      // reconciliation, not more assistant work. Stop the segment and its
+      // shimmer BEFORE any awaited recovery read.
+      sealCurrentWorkSegment(workRowKeys, terminalAtMs, turnStartMs)
+      setThinkingPhase(null)
+      setChatBusy(false)
+      // A machinery abort (the answer watchdog — this path has NO user
+      // stop): the pipe went silently dead. Backend-accepted, receipt-lost
+      // (2026-10-22 拍板): the connection's death says NOTHING about the
+      // production — re-read the world through the existing read-only seats
+      // and land on exactly one honest state. NEVER an auto-retry: a second
+      // start is only ever the user's re-click (the row lock dedups it
+      // server-side).
+      const aborted = e instanceof DOMException && e.name === "AbortError"
+      settleActivities(aborted ? "cancelled" : "failed")
+      if (aborted) {
+        const recovery = await reconcileStartAfterAbort(
+          question,
+          startRecoveryDeps(),
         )
-      } else {
-        // Failure restores the pill's beat — the dock still owes it. A
-        // structured credits shortfall lands as the in-flow grey row
-        // (双路同语义 with the option path), never a bare toast.
-        setPendingQuestion(question)
-        const credits =
-          e instanceof StreamTurnError ? asCreditsInsufficient(e.detail) : null
-        if (credits) {
-          pushCreditsGreyRow(credits)
+        if (recovery.state === "started") {
+          // 已启动: the run surface attaches — the RunTaskList IS the
+          // evidence; the pill never comes back.
+          settleActivities("completed")
+          landOnStartedRun(recovery.runId)
+          toast.info(t("chat.startRecovery.started"))
+        } else if (recovery.state === "unconfirmed") {
+          // 尚未确认启动: still pending with no run — the request may
+          // STILL be mid-flight server-side. The pill restores (the fresh
+          // server row, never the stale local one); the copy says
+          // UNCONFIRMED, never an absolute "not started". A re-click is
+          // the user's call, deduped server-side.
+          settleActivities("cancelled")
+          setPendingQuestion(recovery.question)
+          toast.info(t("chat.startRecovery.unconfirmed"))
+        } else if (recovery.state === "settled") {
+          // Settled without a run (bail / superseded / rejected): a settled
+          // question never re-docks (the dead-pill loop law).
+          settleActivities("cancelled")
+          setPendingQuestion(null)
+          toast.info(t("chat.questionAnswered"))
         } else {
-          toast.error(e instanceof Error ? e.message : t("chat.failed"))
+          // 暂时无法确定: the truth is unreadable right now — the pill
+          // restores (a redundant re-click settles quietly server-side) and
+          // the copy says the state could NOT be confirmed, never a guess.
+          settleActivities("cancelled")
+          setPendingQuestion(question)
+          toast.error(t("chat.startRecovery.unknown"))
+        }
+      } else {
+        settleActivities("failed")
+        const settledCode =
+          e instanceof StreamTurnError ? questionSettledCode(e.detail) : null
+        if (settledCode) {
+          // A settled question never re-docks (the option path's same grace):
+          // the click raced the plan's own settlement — the pill stays GONE.
+          setPendingQuestion(null)
+          toast.info(
+            t(
+              settledCode === "question.superseded"
+                ? "chat.questionOutdated"
+                : "chat.questionAnswered",
+            ),
+          )
+        } else {
+          // Failure restores the pill's beat — the dock still owes it. A
+          // structured credits shortfall lands as the in-flow grey row
+          // (双路同语义 with the option path), never a bare toast.
+          setPendingQuestion(question)
+          const credits =
+            e instanceof StreamTurnError ? asCreditsInsufficient(e.detail) : null
+          if (credits) {
+            pushCreditsGreyRow(credits)
+          } else {
+            toast.error(e instanceof Error ? e.message : t("chat.failed"))
+          }
         }
       }
     } finally {
+      sealCurrentWorkSegment(workRowKeys, terminalAtMs ?? Date.now(), turnStartMs)
+      answerWatchdog.disarm()
       setAnswering(false)
       setChatBusy(false)
     }
   }
 
-  // Message-flow chronology (ADR-108 数组位置律): the transcript is ONE
-  // append-only array — the persisted seq order IS the render order, and no
-  // layer ever re-sorts transcript rows (no timestamps, no walk keys, no
-  // latches). THE RUN SECTION (时序律, ADR-073 / ADR-093 §2): the start
-  // turn's speech (the work-start line — the start_run turn's own LLM prose,
-  // persisted as a plain assistant row) opens the section as a normal array
-  // row, just before the run's birth; mid-run life (the direction QA
-  // included) appends below it, and the task list's dynamic row pins
-  // bottom-most while the run is live (2026-09-13 时序拍板). Once terminal
-  // the task list settles as the run's tombstone AT THE RUN'S END (same
-  // 拍板 — mid-run life stays ABOVE the receipt, never below it): the
-  // tombstone is chrome, not a transcript row — its insertion point is the
-  // one derived position in the walk (the first row born after the run's
-  // end), and every transcript row keeps its own array position either way.
-  // A start path with NO LLM turn speaks nothing — the dynamic row carries
-  // the progress alone (honest absence, never a template stand-in).
-  const runStartAt = runCreatedAt ? Date.parse(runCreatedAt) : null
-  type RunStreamUnit =
-    | { kind: "taskList" }
-    | { kind: "message"; message: OverlayMessage }
-    | { kind: "activity"; activity: ActivityRowFrame }
-    | { kind: "activityFold"; rows: ActivityRowFrame[]; elapsedMs: number | null; openTail: boolean }
+  // Message-flow chronology: transcript rows keep their append-only array
+  // order. The run adapter pins bottom while the run is live; at terminal it
+  // anchors at the run's end and enters REVIEWING there. The matching
+  // delivery's first visible prose settles the SAME unit in place — terminal
+  // alone never moves or seals it. Mid-run messages therefore stay above the
+  // run unit, while the delivery reply follows it in transcript order.
+  type RunStreamUnit = ConversationUnit | { kind: "taskList" }
   const runStreamUnits = useMemo<RunStreamUnit[] | null>(() => {
-    // ONE render path for every window (2026-09-09 双渲染路收一——the legacy
-    // fixed block is dead): the pre-snapshot window (runStartAt == null —
-    // the run is attached but the SSE's first frame hasn't arrived) renders
-    // the SAME live pose with the chrome pinned bottom-most (+∞) and the
-    // task list's narrativeFallback standing in for the steps. Phase 3 Batch
-    // B: the gate is the run-ATTACH fact (runId), never a lifecycle phase —
-    // archive (terminal) runs render through this same path by design.
+    // The pre-snapshot window (runCreatedAt == null) renders the same live
+    // pose, pinned bottom-most with narrativeFallback standing in for steps.
+    // The gate is run attachment, never a lifecycle phase; terminal archive
+    // runs use this same path.
     if (runId == null) return null
     // 数组位置律: transcript rows render in array order (active / retired
     // span rows are already filtered inside buildConversationUnits);
@@ -3845,19 +3958,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       units.push({ kind: "taskList" })
       return units
     }
-    // The run's end: the receipt anchors at the run's END so everything that
-    // happened DURING the run — the direction QA, interleaved chat — stays
-    // above the receipt (2026-09-13 时序拍板; the birthing echo is mid-run
-    // life too, so the ADR-058 "receipt never above its birthing echo" law
-    // holds by construction). Steps that never started (cascade-skipped)
-    // fall back to the run's birth. Undated rows (a fresh optimistic send)
-    // are chronologically NOW — they land below the tombstone.
-    const lastStepT = Math.max(
-      runStartAt ?? 0,
-      ...steps.map((s) =>
-        Date.parse((s.finished_at ?? s.started_at ?? runCreatedAt) as string),
-      ),
-    )
+    // Terminal anchors the run unit at the run's end; undated optimistic
+    // rows land below it. The unit may still be REVIEWING here — anchoring
+    // is chronology, not settlement.
+    const lastStepT =
+      runStepEndMs(runCreatedAt, steps) ?? Number.POSITIVE_INFINITY
     const rowAt = (unit: RunStreamUnit): number => {
       const iso =
         unit.kind === "message"
@@ -3865,22 +3970,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           : unit.kind === "activity"
             ? unit.activity.at
             : unit.kind === "activityFold"
-              ? unit.rows[0]?.at
+              ? unit.firstActivityAt
               : undefined
       const t = iso ? Date.parse(iso) : NaN
       return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t
     }
     const insertAt = units.findIndex((unit) => rowAt(unit) > lastStepT)
     units.splice(insertAt === -1 ? units.length : insertAt, 0, { kind: "taskList" })
-    // The deterministic terminal line ("…做好了，结果在画布上") is RETIRED
-    // (2026-09-24 user ruling — 重复): it narrated the same landing the
-    // trigger turn's run_completed prose narrates seconds later, richer
-    // (quantified facts / gaps / credits). ONE narrator now: the receipt
-    // row is the instant deterministic surface, the trigger prose is the
-    // closing speech. The 2026-09-13 styling law (收官句 = 普通回复消息)
-    // survives — the trigger prose IS that ordinary AssistantText message.
+    // No deterministic terminal prose duplicates the delivery turn. The run
+    // unit is the immediate process surface; the delivery reply remains an
+    // ordinary AssistantText message.
     return units
-  }, [runId, runStartAt, runCreatedAt, steps, messages, terminal, status])
+  }, [runId, runCreatedAt, steps, messages, terminal, status])
 
   // The NON-run timeline (ADR-108): the same array map off a run — every
   // row renders at its array position; each completed activity segment
@@ -3890,6 +3991,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     () => foldActivityUnits(buildConversationUnits(messages)),
     [messages],
   )
+  const rowStreamUnits = runStreamUnits ?? conversationUnits
 
   // 锚卡投影 (flora-parity-ui ③ · ADR-118 §2 chat 自足律): 终态收据行下
   // 的静态产物数组 —— 只读既有 steps 的 output_refs × 既有 outputs 读数
@@ -3901,14 +4003,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     [steps, outputs],
   )
 
-  // The now-line (2026-09-24 用户拍板 — thinking 和 activity 是同一个组件):
-  // ONE mounted row owns the chat world's "现在", morphing in place — an
-  // active milestone's content while one runs, else the think empty state
-  // (spinner + shimmer label, zero glyph, never settles, never history).
-  // Label priority: the live milestone > mid-turn phase > the material
-  // reading rows (between turns: the asset still processing). Prose in
-  // motion IS the activity evidence (2026-09-09 用户拍板) — the row hides
-  // while the typewriter speaks.
+  // The now label is shared by the bottom seat (no current activity host
+  // yet) and the current open fold (from its FIRST active host onward).
+  // Thus previous-prose typing can hide the bottom Thinking seat, but it can
+  // never erase a newly-born activity's own timeline row. Buffered text
+  // alone does NOT hide the bottom seat: only a streaming row with actually-
+  // released non-whitespace content counts as visible prose. An unseen
+  // envelope tail cannot seal the segment or leave a blank status seat.
+  const visibleProseTyping =
+    proseActive &&
+    messages.some((m) => m.streaming && m.content.trim().length > 0)
   const activeActivity = activities.find((a) => a.status === "active")
   const processingAssets = assets.filter(
     (a) =>
@@ -3917,9 +4021,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         a.processing_status === "processing"),
   )
   const nowRow: NowRowPayload | null = (() => {
-    if (proseActive) return null
-    // Concrete film phases refine the generic plan activity.
-    if (activeActivity && !(activeActivity.kind === "draft" &&
+    // Concrete film phases refine the generic plan activity. A terminal
+    // sweep normally removes active frames; the chatBusy gate is the second
+    // guarantee that a dead / recovered turn cannot keep shimmering.
+    if (chatBusy && activeActivity && !(activeActivity.kind === "draft" &&
       ["capturing", "storyboarding", "storyboard_revision"].includes(thinkingPhase ?? ""))) {
       return activeActivity
     }
@@ -3966,14 +4071,28 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         lone.title ?? undefined,
       )
     }
-    // The closing review's generation window (run terminal → the speech row
-    // lands and types): an LLM call is in flight, so the now-line narrates
-    // it. proseActive still wins above — the typing speech IS the evidence.
-    if (reviewPending) {
-      return think("chat.closingReview")
-    }
     return null
   })()
+
+  /** The last open fold born on THIS turn owns the live segment in the
+   * timeline. Host-row identity (never activity_id) prevents a historical
+   * a1 from reopening. Earlier current-turn fragments separated by a failed
+   * row stay withheld while busy; the single owner and the bottom seat are
+   * mutually exclusive. conversation/runStream read this SAME owner key. */
+  let liveWorkFoldKey: string | null = null
+  if (chatBusy) {
+    for (const unit of conversationUnits) {
+      if (
+        unit.kind === "activityFold" &&
+        unit.openTail &&
+        currentActivityRowKeysRef.current.has(unit.rowKey)
+      ) {
+        liveWorkFoldKey = unit.rowKey
+      }
+    }
+  }
+  const bottomNowRow =
+    liveWorkFoldKey == null && !visibleProseTyping ? nowRow : null
 
   /** 点值改 (B3): an inferred slot's inline-edit commit IS a normal chat
    * send — the composed statement (「受众：X」 / "Audience: X") rides the one
@@ -4109,6 +4228,40 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     </Fragment>
   )
 
+  /** One activity renderer for BOTH walks. The current open fold and the
+   * bottom seat can never own the same segment; failure-separated earlier
+   * fragments wait for the seal instead of prematurely saying "Worked". */
+  const renderActivityUnit = (
+    unit: Exclude<ConversationUnit, { kind: "message" }>,
+  ) => {
+    if (unit.kind === "activity") {
+      return (
+        <MessageScrollerItem key={unit.rowKey}>
+          <ActivityRow activity={unit.activity} />
+        </MessageScrollerItem>
+      )
+    }
+    const currentOpen =
+      chatBusy &&
+      unit.openTail &&
+      currentActivityRowKeysRef.current.has(unit.rowKey)
+    if (currentOpen && unit.rowKey !== liveWorkFoldKey) return null
+    const live = unit.rowKey === liveWorkFoldKey
+    // An active-only host is a live seat, never an empty settled receipt.
+    // Once that attempt is cancelled its visible row retires; a later retry
+    // births its own host instead of leaving a struck-through failure row.
+    if (unit.rows.length === 0 && !live) return null
+    return (
+      <MessageScrollerItem key={unit.rowKey}>
+        <WorkSegmentRow
+          rows={unit.rows}
+          elapsedMs={unit.elapsedMs}
+          activity={live ? nowRow : null}
+        />
+      </MessageScrollerItem>
+    )
+  }
+
   const chatScroller = (
         <MessageScrollerProvider
           // autoScroll: the assistant's streaming reply's live edge
@@ -4138,123 +4291,58 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                     : "mx-auto w-full max-w-3xl gap-8 px-4 pb-8 pt-4"
                 }
               >
-                {/* The flow (#5 chronology): everything sorts into ONE
-                    timeline — the start turn's speech row (a plain assistant
-                    message, ADR-093 §2) at its real time ahead of the run's
-                    birth, mid-run life at its real time, the task list
-                    pinned bottom-most while live / tombstoned at the run's
-                    end once terminal. A mid-run QA lands between the start
-                    speech and the dynamic row while live, and above the
-                    receipt once terminal — the Claude Code reference.
-                    Activity rows (S7) sort into the same walk at their
-                    birth moments. */}
-                {runStreamUnits ? (
-                  <>
-                    {runStreamUnits.map((unit) => {
-                      if (unit.kind === "message") {
-                        return renderConversationMessage(unit.message)
-                      }
-                      if (unit.kind === "activity") {
-                        return (
-                          <MessageScrollerItem key={unit.activity.activity_id}>
-                            <ActivityRow activity={unit.activity} />
-                          </MessageScrollerItem>
-                        )
-                      }
-                      if (unit.kind === "activityFold") {
-                        // Completed evidence stays visible while later work runs.
-                        return (
-                          <MessageScrollerItem key={`fold-${unit.rows[0]?.activity_id}`}>
-                            <FoldedActivityRow
-                              rows={unit.rows}
-                              elapsedMs={unit.elapsedMs}
-                            />
-                          </MessageScrollerItem>
-                        )
-                      }
-                      // taskList — ONE persistent block (the CC anatomy):
-                      // the dynamic row + the rail tree flipping in place.
-                      if (unit.kind === "taskList") {
-                        return (
-                          <MessageScrollerItem key="run-task-list">
-                            <Message align="start">
-                              <MessageContent>
-                                <RunTaskList
-                                  steps={steps}
-                                  title={runTitle}
-                                  runStartedAt={runCreatedAt}
-                                  terminal={terminal}
-                                  failed={status === "failed"}
-                                  hasUploads={hasUploads}
-                                  narrativeFallback={
-                                    assets.some(
-                                      (a) =>
-                                        a.processing_status === "pending" ||
-                                        a.processing_status === "processing",
-                                    )
-                                      ? t("results.stepper.transcribing")
-                                      : t("results.stepper.queued")
-                                  }
-                                />
-                                {/* 锚卡 (ADR-118 真值表): ⟺ !canvasVisible
-                                    —— 桌面画布在侧 = 零锚卡(世界自证);移
-                                    动纯 chat = 收据行下的静态产物数组,点
-                                    击开 MediaLightbox。终态收据帧:落定才
-                                    挂,归收据所有。 */}
-                                {terminal && !canvasVisible ? (
-                                  <AnchorCards cards={anchorCards} />
-                                ) : null}
-                              </MessageContent>
-                            </Message>
-                          </MessageScrollerItem>
-                        )
-                      }
-                    })}
-                  </>
-                ) : (
-                  <>
-                {/* Conversation (non-running phases; the running phase renders
-                    through runStreamUnits — ONE path, the legacy fixed block
-                    is dead 2026-09-09). A superseded plan version's chip sits
-                    right after the echo bubble whose turn produced it; the
-                    live plan is the bottom-most card. ADR-108 数组位置律:
-                    every row renders at its array position; each completed
-                    activity segment between two messages folds into ONE
-                    aggregate summary row (ADR-110 段聚合). */}
-                {conversationUnits.map((unit) =>
-                  unit.kind === "message" ? (
-                    renderConversationMessage(unit.message)
-                  ) : unit.kind === "activityFold" ? (
-                    // Completed evidence remains visible while the next stage runs.
-                    (
-                    <MessageScrollerItem key={`fold-${unit.rows[0]?.activity_id}`}>
-                      <FoldedActivityRow
-                        rows={unit.rows}
-                        elapsedMs={unit.elapsedMs}
-                      />
+                {/* ONE row stream: transcript rows keep their array order;
+                    the run adapter pins bottom while live and anchors at the
+                    run end once terminal. */}
+                {rowStreamUnits.map((unit) => {
+                  if (unit.kind === "message") {
+                    return renderConversationMessage(unit.message)
+                  }
+                  if (unit.kind === "activity" || unit.kind === "activityFold") {
+                    return renderActivityUnit(unit)
+                  }
+                  return (
+                    <MessageScrollerItem key={`run-task-list:${runId ?? "attached"}`}>
+                      <Message align="start">
+                        <MessageContent>
+                          <RunTaskList
+                            steps={steps}
+                            title={runTitle}
+                            runStartedAt={runCreatedAt}
+                            terminal={terminal}
+                            failed={status === "failed"}
+                            reviewPending={reviewPending}
+                            workEndedAtMs={runWorkEndedAtMs}
+                            hasUploads={hasUploads}
+                            narrativeFallback={
+                              assets.some(
+                                (a) =>
+                                  a.processing_status === "pending" ||
+                                  a.processing_status === "processing",
+                              )
+                                ? t("results.stepper.transcribing")
+                                : t("results.stepper.queued")
+                            }
+                          />
+                          {/* Delivered chips follow world facts, never the
+                              delivery reply. Canvas-visible environments
+                              keep the canvas as the only product surface. */}
+                          {terminal && !canvasVisible ? (
+                            <AnchorCards cards={anchorCards} />
+                          ) : null}
+                        </MessageContent>
+                      </Message>
                     </MessageScrollerItem>
-                    )
-                  ) : (
-                    <MessageScrollerItem key={unit.activity.activity_id}>
-                      <ActivityRow activity={unit.activity} />
-                    </MessageScrollerItem>
-                  ),
-                )}
-                  </>
-                )}
+                  )
+                })}
 
-                {/* The now-line (2026-09-24 用户拍板 — thinking IS the
-                    activity row's empty state): ONE mounted ActivityRow owns
-                    the chat world's "现在" for both the run and non-run
-                    walks above — an active milestone morphs it in place, a
-                    settled milestone leaves it for its segment's fold (the
-                    fold materializes at this same bottom seat when the
-                    closing prose lands — 物化时机律) and the row falls back
-                    to think (or the material beats).
-                    Zero history for think: it unmounts, never settles. */}
-                {nowRow && (
+                {/* Bottom work-segment seat: used only until a current
+                    durable activity fold can own the live row in the
+                    timeline (and for pure, non-expandable Thinking). The
+                    SAME WorkSegmentRow covers both seats and both poses. */}
+                {bottomNowRow && (
                   <MessageScrollerItem>
-                    <ActivityRow activity={nowRow} />
+                    <WorkSegmentRow rows={[]} activity={bottomNowRow} />
                   </MessageScrollerItem>
                 )}
               </MessageScrollerContent>

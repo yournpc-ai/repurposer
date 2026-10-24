@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import (
     AssetType,
+    FilmStoryboard,
     MediaInput,
 )
 from app.models.tables import Asset, Output, Persona, Project
@@ -109,22 +110,34 @@ def _file_size_bytes(path: Path | None) -> int | None:
         return None
 
 
-async def media_input_for_image(file_url: str, caption: str | None = None):
+async def media_input_for_image(
+    file_url: str,
+    caption: str | None = None,
+    max_px: int | None = None,
+):
     """Build a MediaInput for an image file URL / storage key, or None if
     unreadable. Public seam: any node whose agent sees imagery (slides, stills,
     web-page screenshots) builds its inputs here — one download + data-URL
-    discipline, never re-rolled per caller."""
+    discipline, never re-rolled per caller.
+
+    ``max_px`` (the read-tools' budget form, film 读取座): bound the LONG
+    edge and re-encode as JPEG — a model reading a view for a creative
+    judgment needs a legible thumbnail, not the full 1440px capture. None =
+    the caller's bytes ride unchanged (the director's fold shots)."""
     path = await download_to_temp(file_url)
     if path is None:
         return None
     try:
-        data_url = file_to_data_url(path)
+        if max_px is not None:
+            data_url = _resized_data_url(path, max_px)
+            mime = "image/jpeg"
+        else:
+            data_url = file_to_data_url(path)
+            mime = mimetypes.guess_type(str(path))[0] or "image/png"
         if data_url is None:
             return None
         from app.models.schemas import MediaInputType
 
-        mime, _ = mimetypes.guess_type(str(path))
-        mime = mime or "image/png"
         return MediaInput(
             type=MediaInputType.IMAGE,
             mime=mime,
@@ -133,6 +146,26 @@ async def media_input_for_image(file_url: str, caption: str | None = None):
         )
     finally:
         path.unlink(missing_ok=True)
+
+
+def _resized_data_url(path: Path, max_px: int) -> str | None:
+    """Decode → long-edge-bound thumbnail → JPEG data URL (None when the
+    bytes don't decode — the caller reports an unreadable view, never a
+    silent drop)."""
+    import base64
+    import io
+
+    try:
+        from PIL import Image
+
+        with Image.open(path) as img:
+            img = img.convert("RGB")
+            img.thumbnail((max_px, max_px), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, "JPEG", quality=88)
+    except Exception:  # noqa: BLE001 — decode/encode failure = unreadable
+        return None
+    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 async def _media_input_for_video(asset: Asset):
@@ -260,4 +293,35 @@ async def _estimate_facts(db: AsyncSession, project: Project) -> dict:
         "voice_clone_needed": not voice_id,
         "clips": clips,
         "output_seconds": output_seconds,
+        **film_quote_facts_from_pending(project.pending_brief),
+    }
+
+
+def film_quote_facts_from_pending(pending_brief: object) -> dict:
+    """The film quote fork's facts (R2-B edit 报价分叉 — launch_film's
+    estimate reads these): when the pending plan carries a VERSIONED
+    storyboard (a confirmed compose or an edit patch — the run will consume
+    THAT board), ``film_board_seconds`` = the board's real total and
+    ``film_board_tts_chars`` = its real narration characters (the interim
+    narration policy is full re-synthesis — zero reuse discount until the
+    reuse store exists; a voiceover-off version quotes 0). An absent or
+    unparsable board contributes NO keys — the typical-film constants
+    stand."""
+    pending = pending_brief if isinstance(pending_brief, dict) else None
+    raw = pending.get("film_storyboard") if pending is not None else None
+    if pending is None or not isinstance(raw, dict):
+        return {}
+    try:
+        board = FilmStoryboard.model_validate(raw)
+    except (ValueError, TypeError):
+        return {}
+    params = pending.get("film_storyboard_params")
+    narrated = not (isinstance(params, dict) and params.get("voiceover") is False)
+    return {
+        "film_board_seconds": float(sum(s.seconds for s in board.scenes)),
+        "film_board_tts_chars": (
+            float(sum(len(s.narration) for s in board.scenes if s.narration))
+            if narrated
+            else 0.0
+        ),
     }

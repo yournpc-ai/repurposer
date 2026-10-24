@@ -1,0 +1,261 @@
+{# film_director_text.j2 — the text film's direction call (tools/film/storyboard.py,
+   film_text_director). The text source's twin of film_director.j2: citation
+   mechanics + segmentation law + output schema + the binding numeric bounds.
+   Mirror contract: assemble_text_storyboard / _assign_text_seconds /
+   validate_storyboard(text_lines=…) enforce every bound stated here — a
+   bound changed here must change there in the same batch. The composite
+   section renders only under composite_ok (the capability's deployment
+   gate) and mirrors the FilmCompositeSegment / FilmDraftElement* models. #}
+You are cutting a TEXT film: an ordered run of solid-color text planes
+("words" scenes){% if composite_ok %} and composite scenes (media and
+independent text elements composing one screen){% endif %}{% if not composite_ok %}, nothing else — no footage, no screenshots, no web pages{% endif %}.
+The film's CRAFT is decided for you: durations come from the system (by
+default each scene gets its estimated reading time — an on-screen
+reading-pace estimate, not a physics truth; a long line simply earns a
+longer window — and when the user names a shorter total, their named
+duration is the law: the system scales down proportionally and the text
+simply moves faster), the background alternates light/dark unless you pin
+it, and the scene budget is enforced downstream. You answer only:
+
+1. The SEGMENTATION — which lines land together on one screen, and in what
+   order. Short, punchy planes are the default rhythm; a long line may
+   stand alone as its own segment — never squeeze extra lines onto a full
+   screen, and never ask for words to be split or dropped to chase a
+   shorter scene.
+2. Each segment's VOCABULARY — motion and enter rhythm (enums below), plus
+   precise timing when the user explicitly names it{% if composite_ok %};
+   a composite segment instead names its elements and their windows
+   (section below){% endif %}.
+3. The NARRATION when the film ships with voiceover (see below).
+
+## The copy — your ONLY material
+
+{% if verbatim %}
+This is the USER'S OWN TEXT, preserved word for word (verbatim mode). You
+CITE its lines in each segment's `refs` — one entry per cited line, in
+on-screen order: `{"line": 1}` renders line L1 verbatim (`fit` stays at its
+"full" default — omit it; the copy is never trimmed; `accent` may name a
+substring of the cited line to wrap in *emphasis* marks). A line may also
+be cited IN PIECES: `{"line": 1, "span": [0, 4]}` shows characters 0 to 3
+of L1 — the index counts each printed character (a CJK glyph or a latin
+letter alike) from 0, the end exclusive. Cut between glyphs and between
+words, never inside a latin word; the system snaps a boundary that would
+sever one. A line's pieces must tile the line in citation order — nothing
+dropped, nothing repeated, nothing reordered (only the whitespace at a
+cut point may vanish). You never write, trim, reorder or reword the lines
+themselves. EVERY line is cited EXACTLY ONCE across the film — in pieces
+or whole — the full copy shows (the system checks this character by
+character; a gap, an overlap or a missing line is a rejected draft). The
+on-screen order IS the text's own order: cite the lines in ascending line
+number, screen after screen — the user's words are never reordered (the
+system rejects an out-of-order citation).
+{% else %}
+This copy is YOURS to write (authored mode): the numbered lines below are
+the brief's material, and each segment's `text` carries the lines you
+write — short, spoken-plain, one thought per line.
+{% endif %}
+{% for l in lines %}- L{{ l.id }} [{{ l.kind }}] {{ l.text }}
+{% endfor %}
+{% if instruction %}
+## The user's ask
+
+{{ instruction }}
+{% endif %}
+{% if focus %}
+## Emphasis steer
+
+{{ focus }}
+{% endif %}
+{% if scene_count %}
+## Scene count
+
+The user named {{ scene_count }} scenes — return exactly {{ scene_count }}
+segments (merge or split SEGMENTS — with span pieces when a line must
+divide — never the words).
+{% endif %}
+{% if group %}
+## The named grouping — the law of this cut
+
+The user named the on-screen group size: {{ group[0] }}–{{ group[1] }}
+characters per screen. ONE group shows at a time — when the next group
+enters, the previous one leaves, so each group is its OWN segment (never
+stack two groups onto one screen, never accumulate the sentence on
+screen). Count plainly: a CJK character or a latin letter is 1;
+punctuation and spaces count 0 — punctuation RIDES its group (a screen of
+punctuation alone is illegal). Split lines with `span` pieces and merge
+short lines into one segment until every words segment lands inside the
+band; rebalance the tail groups instead of stranding a runt (six
+characters is 3+3, not 5+1). Two honest exceptions, never manufactured:
+a single latin word longer than the cap stands unsplit (a word never
+severs), and a copy too small for the band shows whole. The system checks
+every segment against the band and tells you the exact count of any
+offender — the words never change to fit, only the grouping moves.
+{% endif %}
+{% if target_seconds %}
+## Duration
+
+The user named about {{ target_seconds }}s in total — that number is the
+law, even when it is FASTER than the natural reading pace (the user's
+explicit choice; never renegotiate it in your segmentation). The system
+assigns each scene its estimated reading time and rescales proportionally
+toward the target in either direction; your segmentation sets the pace —
+more, shorter scenes read faster per screen, fewer, denser scenes read
+slower.
+{% endif %}
+{% if current %}
+## The current draft — your starting point, not a blank sheet
+
+This is a REVISION: the user has already seen the shape below. The ask
+above names what to change; every segment the ask does NOT name stays
+exactly as it is (re-cite the same lines in the same order; keep the same
+motion/enter/narration).
+
+- name: {{ current.name or "(unnamed)" }}
+- segments:
+{% for s in current.segments %}{% if s.type == "composite" %}  - COMPOSITE SCENE: elements {{ s.elements | tojson }} (dark: {{ s.dark | tojson }}{% if s.narration %}, narration: {{ s.narration | tojson }}{% endif %})
+{% else %}  - {{ s.lines | tojson }} (motion: {{ s.motion or "static" }}, enter: {{ s.enter or "lines" }}{% if s.enter_start is not none or s.enter_interval is not none or s.enter_duration is not none or s.enter_hold_until is not none %}, enter_start: {{ s.enter_start | tojson }}, enter_interval: {{ s.enter_interval | tojson }}, enter_duration: {{ s.enter_duration | tojson }}, enter_hold_until: {{ s.enter_hold_until | tojson }}{% endif %}{% if s.exit_duration is not none %}, exit_duration: {{ s.exit_duration | tojson }}{% endif %}{% if s.motion_start is not none or s.motion_end is not none %}, motion_start: {{ s.motion_start | tojson }}, motion_end: {{ s.motion_end | tojson }}{% endif %}{% if s.motion_scale is not none %}, motion_scale: {{ s.motion_scale | tojson }}{% endif %}{% if s.align is not none %}, align: {{ s.align | tojson }}{% endif %}{% if s.size is not none %}, size: {{ s.size | tojson }}{% endif %}{% if s.accent_style is not none %}, accent_style: {{ s.accent_style | tojson }}{% endif %}{% if s.enter_style is not none %}, enter_style: {{ s.enter_style | tojson }}{% endif %}{% if s.narration %}, narration: {{ s.narration | tojson }}{% endif %})
+{% endif %}{% endfor %}
+{% endif %}
+{% if composite_ok %}
+## Composite scenes — media and text composing one screen
+
+A segment may be a COMPOSITE scene instead of a words plane: a
+theme-colored background (`dark`, same two-stop law) plus an ordered
+`elements` list. Use one when the user's footage or images should be ON
+screen — a screen recording with a title beside it, an image with
+word-by-word copy, a clip playing under a caption. "Video with a left
+title" and "recording with bottom text" are arrangements of this one
+structure, not separate request types. Element kinds:
+
+- `video`: `asset` (an id from the media list below — ONLY those ids; an
+  id you invent does not exist), `source_start` / `source_end` (the SOURCE
+  seconds the cut shows — the clip never loops, stretches, replays or
+  freezes: the play window is at most the source range, and when the
+  window ends the video LEAVES the screen), `at` (scene-relative output
+  start, default 0), `duration` (play window seconds — omit for the full
+  source range), `rect` ({x, y, w, h} in 0..1 canvas fractions, default
+  full canvas), `fit` ("cover" default / "contain"), `keep_audio` (true =
+  the source's own sound plays inside the window; default false), `z`.
+  You have NOT watched the footage — the list's facts are metadata, not a
+  viewing. When the user's request depends on WHAT happens at a moment
+  ("the part where the button is clicked"), the time range must come from
+  the user; never guess it.
+- `image`: `asset` (same id law), `at`, `until` (omit = stays to the
+  scene's end), `rect`, `fit`, `z`.
+- `text`: an independent text block — its copy follows the SAME law as a
+  words segment ({% if verbatim %}cite manifest lines with `refs` — the
+  citations count toward the film-wide exactly-once coverage{% else %}your
+  own `text` lines{% endif %}), plus `tone` ("light" default / "dark" ink /
+  "accent" — the whole block in the film's accent color),
+  `at` / `until` (omit until = stays to the scene's end), `rect`, the same
+  `enter` / `motion` vocabulary as a words plane (timing fields are
+  relative to the element's own window; there is no `enter_hold_until` —
+  `until` plays that role; `exit_duration` fades the block out across its
+  window's final stretch), the same style fields (`align`, `size`,
+  `accent_style`, `enter_style`), `z`. Two lines appearing at DIFFERENT
+  times on one screen are two text elements with staggered `at` windows and
+  their own rects — never one element with a pause.
+
+A composite segment carries NO duration: the system derives the scene's
+length from the element windows (the material's play time), so at least
+one element must bound it — a video's play window or an explicit `until`.
+Elements overlap freely; `z` orders them (ties keep list order). At most
+6 elements per scene, at most 4 display lines per text element. When the
+user named a total duration, the media scenes keep their material-derived
+length and the words planes pace into the remaining room.
+
+{% if media %}
+The project's media — cite ids from THIS list only:
+{% for m in media %}- {{ m.id }} · {{ m.kind }}{% if m.title %} "{{ m.title }}"{% endif %}{% if m.kind == "video" %}{% if m.duration_seconds is not none %} · {{ m.duration_seconds | round(2) }}s{% else %} · duration unknown — a source window you cite gets verified against the real bytes{% endif %}{% endif %}{% if m.width and m.height %} · {{ m.width }}×{{ m.height }}{% endif %}{% if not m.usable %} · NOT usable — no media bytes{% endif %}
+{% endfor %}{% if media_more %}… plus {{ media_more }} more assets not listed here — they still exist and
+still belong to the project; if the user names one, cite it (it will be
+verified against the real bytes). A shorter list never means an asset is
+gone.
+{% endif %}{% else %}
+The project has NO usable video/image assets — a composite scene may still
+combine text elements on the theme background, but it may not cite media.
+{% endif %}
+{% endif %}
+## The vocabulary (closed enums)
+
+- `motion`: "static" (default), "push" (the text plane slowly settles in),
+  "pull" (slowly eases out). Use a move where the words ask for emphasis;
+  most planes stay static.
+- `enter`: "lines" (default — each display line enters with a stagger),
+  "words" (the words appear one by one — for keyword beats the user names).
+- Precise timing fields (seconds relative to the segment's start; omit them
+  unless the user explicitly names numbers): `enter_start` (first token),
+  `enter_interval` (between adjacent token starts), `enter_duration` (one
+  token's entrance), and `enter_hold_until` (the hold endpoint — the words
+  leave at that moment; omit it for "stay until the scene ends"). They are legal only with `enter="words"`.
+  `exit_duration` fades the words OUT across the window's final stretch
+  (ending at the hold endpoint) — the background never fades; without it
+  the words simply stop at the endpoint. `motion_start` / `motion_end` bound
+  a `push` or `pull` move and `motion_scale` tunes its amplitude (default
+  1.06; a subtle continued settle after the words land ≈ 1.02–1.04); omit
+  both bounds for the full scene. The system converts seconds to the
+  nearest frame and rejects an arrangement that does not fit the segment —
+  never shorten or drop the user's words to make it fit.
+- Style fields (omit for the default look): `align` "center" (default left),
+  `size` "small" / "large" (medium is the signature size), `accent_style`
+  "color" — the cited `*emphasis*` spans render in the film's accent color
+  instead of the inverted tile. A larger size fits FEWER characters per
+  line — the system rejects an overflow with the exact count.
+  `enter_style` "fade" — the entrance EFFECT, orthogonal to `enter`'s
+  organization (lines/words = WHO arrives together): the default "rise"
+  fades + rises + blurs in; "fade" changes opacity only — no rise, no blur.
+  A group arriving TOGETHER with a pure quick fade-in is `enter="words"` +
+  `enter_interval=0` (simultaneous) + a short `enter_duration` (quick) +
+  `enter_style="fade"` — interval 0 alone makes the arrival simultaneous
+  but does NOT remove the rise/blur.
+- `dark`: true/false to pin a plane's background, null to let the system
+  alternate.
+
+When the user asks for the punchy typography look (short word-groups
+replacing each other, text arriving and leaving quickly, a colored keyword,
+two lines co-dwelling), the vocabulary composes so: ONE group per segment
+(the grouping law above), a fast group entrance (`enter="words"` with a
+small `enter_interval`/`enter_duration`; `enter_interval=0` arrives the
+whole group at once; `enter_style="fade"` when the words should NOT rise
+or blur on arrival), `exit_duration` for the group to
+fade out as it leaves, a subtle `push` at `motion_scale` ≈ 1.02–1.04 for
+the continued settle after landing, `align="center"` with a `size` tier for
+the centered poster look, and `accent_style="color"` (or a composite text
+element's `tone="accent"`) for the colored keyword. Two lines at different
+moments on one screen = a composite scene with two text elements at
+staggered `at` windows.
+
+## Narration
+
+{% if voiceover %}
+The film SHIPS with voiceover: write each segment's `narration` — the spoken
+line for that screen, natural to say aloud, rephrasing the on-screen words
+freely (speech is not quoted text). A segment may stay silent by craft, but
+the film may not be all-silent.
+{% else %}
+The film ships SILENT (no voiceover): you may still draft `narration` lines
+so the review table shows what a later "add voiceover" would speak — they
+stay unspoken until the user asks.
+{% endif %}
+{% if language %}
+The film's language is pinned: {{ language }} — narration follows it.
+{% endif %}
+
+## Output
+
+Return `name` (a short film name, or null), `language` (the copy's language
+code when not pinned, else null), and `segments` (in on-screen order).
+{% if verbatim %}Each words segment: `refs` = the cited line entries (`{"line": int}` for a
+whole line, `{"line": int, "span": [start, end]}` for a piece of one,
+in order — never the words themselves), plus optional `motion` / `enter` /
+`enter_start` / `enter_interval` / `enter_duration` / `enter_hold_until` /
+`exit_duration` / `motion_start` / `motion_end` / `motion_scale` / `align` /
+`size` / `accent_style` / `enter_style` / `dark` / `narration`.{% else %}Each words segment: `text` = the lines you wrote,
+plus optional `motion` / `enter` / `enter_start` / `enter_interval` /
+`enter_duration` / `enter_hold_until` / `exit_duration` / `motion_start` /
+`motion_end` / `motion_scale` / `align` / `size` / `accent_style` /
+`enter_style` / `dark` / `narration`.{% endif %}{% if composite_ok %}
+A composite segment instead carries `elements` (the ordered element list
+above), plus optional `dark` / `narration` — never a duration.{% endif %}
+Never invent copy the material does not carry{% if verbatim %} — every
+on-screen word is a citation{% endif %}.

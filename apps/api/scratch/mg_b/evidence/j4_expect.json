@@ -1,0 +1,33 @@
+{
+  "scene_start": 0.0,
+  "scene_end": 11.0,
+  "dark": true,
+  "video": {
+    "at": 3.0,
+    "end": 11.0,
+    "source_start": 10.0,
+    "source_end": 18.0,
+    "rect": {
+      "h": 1.0,
+      "w": 0.5,
+      "x": 0.5,
+      "y": 0.0
+    },
+    "keep_audio": false
+  },
+  "text": {
+    "at": 0.0,
+    "appear": 4.5,
+    "end": 11.0,
+    "rect": {
+      "h": 0.44,
+      "w": 0.42,
+      "x": 0.05,
+      "y": 0.28
+    },
+    "tone": "light",
+    "lines": [
+      "下周三上线，记得来看"
+    ]
+  }
+}

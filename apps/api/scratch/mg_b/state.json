@@ -1,0 +1,16 @@
+{
+  "user_id": "1ed68148-1038-4bb4-a060-7f4d2367b6ca",
+  "project_id": "d85eacce-d5c1-4bc7-b2bf-0cfea2ec8290",
+  "asset_id": "bd913b60-d5e5-4104-83b2-24df95b123a0",
+  "storage_key": "scenario/mg-b-9f3fb6d0/source_25s.mp4",
+  "fixture": {
+    "duration": 25.0,
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0
+  },
+  "run1_id": "66bfa1dd-632a-46ea-99d7-923d367bdb27",
+  "output1_id": "6bc871bf-1af6-4f5e-bd6d-2e61667ced61",
+  "run2_id": "1ca70633-86d7-4556-a3a0-51e9696632a9",
+  "output2_id": "1b8d290a-ae56-44c8-966d-6875cf159a50"
+}

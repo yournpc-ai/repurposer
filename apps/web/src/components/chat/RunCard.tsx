@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next"
 
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
 import { apiFetch } from "@/lib/api"
+import { isDeliveredOutput } from "@/lib/anchorCards"
 import { useRunEvents } from "@/lib/use-run-events"
 import type { Output, WorkflowStep } from "@/lib/types"
 
@@ -88,6 +89,7 @@ export function RunCard({ runId, onDone }: RunCardProps) {
   }, [terminal])
 
   const failed = status === "failed"
+  const deliveredOutputs = outputs?.filter(isDeliveredOutput) ?? null
 
   return (
     <div className="flex w-full flex-col gap-1.5">
@@ -104,9 +106,9 @@ export function RunCard({ runId, onDone }: RunCardProps) {
         </Marker>
       )}
 
-      {outputs && outputs.length > 0 && (
+      {deliveredOutputs && deliveredOutputs.length > 0 && (
         <div className="flex flex-wrap gap-3 pt-1.5">
-          {outputs.map((output) => (
+          {deliveredOutputs.map((output) => (
             <div key={output.id} className="w-40">
               <OutputChatCard output={output} />
             </div>

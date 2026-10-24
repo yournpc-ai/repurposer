@@ -306,6 +306,63 @@ def _read_tool(name: str = "lookup") -> ChatTool:
 
 
 @pytest.mark.asyncio
+async def test_read_observation_images_ride_the_tool_message_as_parts() -> None:
+    """R3 读取座 wire 形态: a read carrying images projects them as content
+    parts ON THE SAME tool message (option A — the loop's one wire seat,
+    shared by both chat paths): text first, then per image its image_url
+    part + caption part. The images stay on the wire for the turn's rest
+    (the observation tail survives a later rejection — a retry never pays
+    a second read)."""
+    from app.models.schemas import MediaInput, MediaInputType
+
+    read = _read_tool()
+    echo = ChatTool("echo", "Echo the text.", EchoArgs)
+    client = StubClient([
+        _call("lookup", {}, prose="let me look"),
+        _call("echo", {"text": "bad"}, prose=""),
+        _call("echo", {"text": "good"}, prose="done"),
+    ])
+
+    async def execute(name: str, params: Any, prose: str):
+        if name == "lookup":
+            return ToolObservation(
+                "the facts",
+                images=(
+                    MediaInput(
+                        type=MediaInputType.IMAGE,
+                        mime="image/jpeg",
+                        data_url="data:image/jpeg;base64,AAA",
+                        caption='page 0 · shot 0 "(top)" · example.com',
+                    ),
+                    MediaInput(
+                        type=MediaInputType.IMAGE,
+                        mime="image/jpeg",
+                        data_url="data:image/jpeg;base64,BBB",
+                        caption=None,  # caption-less: no text part follows
+                    ),
+                ),
+            )
+        if isinstance(params, EchoArgs) and params.text == "bad":
+            return "echo broke"
+        return None
+
+    agent = _make_agent("tl_read_images", client, tools=[read, echo])
+    result = await agent.call_loop(execute, on_delta=lambda t: None)
+    assert result.calls == ["lookup", "echo", "echo"]
+    tool_msg = client.seen_messages[1][3]
+    assert tool_msg["role"] == "tool" and tool_msg["name"] == "lookup"
+    assert tool_msg["content"] == [
+        {"type": "text", "text": "the facts"},
+        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,AAA"}},
+        {"type": "text", "text": 'page 0 · shot 0 "(top)" · example.com'},
+        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,BBB"}},
+    ]
+    # A later rejection rides the user-message echo; the image tail is
+    # byte-identical on the retry's wire (the read is never re-run).
+    assert client.seen_messages[2][3]["content"] == tool_msg["content"]
+
+
+@pytest.mark.asyncio
 async def test_read_observation_continues_the_loop_and_keeps_speech() -> None:
     """An accepted read feeds its observation back on the wire (assistant
     tool_call echo + role:tool result), KEEPS the iteration's speech, and the
@@ -889,6 +946,33 @@ async def test_loop_event_read_accepted_and_never_for_terminal() -> None:
 
 
 @pytest.mark.asyncio
+async def test_loop_event_read_executing_carries_validated_params() -> None:
+    """ReadExecuting carries the call's VALIDATED params (结构化编辑拍文案
+    修正的事实座): the projection picks a tool's VARIANT (design_storyboard
+    compose vs patch) off them at execute entry — name_known can never
+    carry the bit (the arguments are still streaming at that beat). A
+    params-less tool's event carries None."""
+    read_args = ChatTool("probe_args", "Probe with args.", EchoArgs, terminal=False)
+    echo = ChatTool("echo", "Echo the text.", EchoArgs)
+    client = StubClient([
+        _call("probe_args", {"text": "raw", "count": 2}),
+        _call("echo", {"text": "done"}),
+    ])
+    events: list[object] = []
+
+    async def execute(name: str, params: Any, prose: str):
+        if name == "probe_args":
+            return ToolObservation("world")
+        return None
+
+    agent = _make_agent("tl_ev_params", client, tools=[read_args, echo])
+    await agent.call_loop(execute, on_loop_event=lambda e: events.append(e))
+    assert events[0] == ReadExecuting(
+        tool_name="probe_args", params=EchoArgs(text="raw", count=2)
+    )
+
+
+@pytest.mark.asyncio
 async def test_loop_event_exhausted_fires_before_the_honest_degradation() -> None:
     client = StubClient([_call("echo", {"text": "x"})] * 3)
     events: list[object] = []
@@ -974,3 +1058,139 @@ async def test_item_wrapped_nested_object_validates() -> None:
     assert result.params is not None
     assert result.params.plans[0].members == ["x"]
     assert result.iterations == 1
+
+
+@pytest.mark.asyncio
+async def test_terminal_refusal_rejects_and_ends_the_loop() -> None:
+    """TerminalRefusal (the begin-latch's seat, 2026-10-24 d02bf85a 法): the
+    call is REJECTED — the ToolRejected fact rides with the real iteration
+    (speech retracts, the half-started activity cancels) — AND the loop
+    ends on the spot: no further model generation, ``ended_by`` names the
+    refusing tool, ``exhausted`` stays False (the budget was not burned;
+    the entry was closed)."""
+    from app.agents.tool_loop import TerminalRefusal
+
+    tools = [
+        ChatTool("design_storyboard", "Design the board.", None, terminal=False),
+        ChatTool("answer", "Close the turn.", None),
+    ]
+    client = StubClient([
+        _call("design_storyboard", {}, prose="我来设计"),
+        _call("design_storyboard", {}, prose="再试一次"),
+        _call("answer", {}, prose="NEVER-REACHED"),
+    ])
+    events: list[object] = []
+    calls: list[str] = []
+
+    async def execute(name: str, params: Any, prose: str):
+        calls.append(name)
+        if len(calls) == 1:
+            return "the begin was refused — the design entry is closed this turn"
+        return TerminalRefusal("design entry closed: begin already refused")
+
+    agent = _make_agent("tl_terminal_refusal", client, tools=tools)
+    result = await agent.call_loop(
+        execute, on_loop_event=lambda e: events.append(e)
+    )
+    assert calls == ["design_storyboard", "design_storyboard"]
+    assert client.entries == ["plain", "plain"]  # the third generation never ran
+    assert result.ended_by == "design_storyboard"
+    assert result.exhausted is False
+    assert result.tool_name is None
+    rejected = [e for e in events if isinstance(e, ToolRejected)]
+    assert [e.kind for e in rejected] == ["execute_guardrail", "execute_guardrail"]
+    assert rejected[1].tool_name == "design_storyboard"
+    assert rejected[1].iteration == 1  # the REAL iteration, not a fake
+    assert not any(isinstance(e, LoopExhausted) for e in events)
+
+
+def _stop_repeated_signature(
+    current: ToolRejected, previous: tuple[ToolRejected, ...]
+) -> bool:
+    return bool(previous) and (
+        previous[-1].tool_name,
+        previous[-1].kind,
+        previous[-1].detail,
+    ) == (current.tool_name, current.kind, current.detail)
+
+
+@pytest.mark.asyncio
+async def test_rejection_policy_stops_a_repeat_before_the_iteration_cap() -> None:
+    """The optional policy is a real terminal outcome, not exhaustion and
+    not another model roll. Both rejection facts remain observable."""
+    tools = [
+        ChatTool("design_storyboard", "Design the board.", EchoArgs, terminal=False),
+        ChatTool("answer", "Close the turn.", None),
+    ]
+    client = StubClient([
+        _call("design_storyboard", {}, prose="first rejected speech"),
+        _call("design_storyboard", {}, prose="second rejected speech"),
+        _call("answer", {}, prose="NEVER-REACHED"),
+    ])
+    events: list[object] = []
+    agent = _make_agent("tl_rejection_stop", client, tools=tools, max_iterations=6)
+    result = await agent.call_loop(
+        _always_accept,
+        on_loop_event=lambda e: events.append(e),
+        should_stop_rejection=_stop_repeated_signature,
+    )
+    assert result.no_progress_tool == "design_storyboard"
+    assert result.ended_by is None and result.exhausted is False
+    assert result.tool_name is None and result.prose == ""
+    assert result.iterations == 2 and result.calls == ["design_storyboard"] * 2
+    assert client.entries == ["plain", "plain"]
+    rejected = [e for e in events if isinstance(e, ToolRejected)]
+    assert len(rejected) == 2
+    assert not any(isinstance(e, LoopExhausted) for e in events)
+
+
+@pytest.mark.asyncio
+async def test_rejection_policy_lets_a_changed_error_repair() -> None:
+    """Only an exact repeated signature stops. A different validation error
+    is new evidence and keeps the existing bounded repair path alive."""
+    tools = [
+        ChatTool("design_storyboard", "Design the board.", EchoArgs, terminal=False),
+        ChatTool("answer", "Close the turn.", None),
+    ]
+    client = StubClient([
+        _call("design_storyboard", {}),
+        _call("design_storyboard", {"text": "x", "count": "not-an-int"}),
+        _call("answer", {}, prose="closed honestly"),
+    ])
+    agent = _make_agent("tl_rejection_changed", client, tools=tools)
+    result = await agent.call_loop(
+        _always_accept,
+        should_stop_rejection=_stop_repeated_signature,
+    )
+    assert result.tool_name == "answer"
+    assert result.no_progress_tool is None and result.exhausted is False
+    assert result.iterations == 3 and result.prose == "closed honestly"
+    assert client.entries == ["plain", "plain", "plain"]
+
+
+@pytest.mark.asyncio
+async def test_film_policy_bounds_changing_validation_errors() -> None:
+    """The incident shape is not one repeated error: three DIFFERENT malformed
+    design calls still terminate on the third, with no director fallback or
+    fourth model generation."""
+    from app.chat.turn_tools import film_rejection_stop
+
+    tools = [
+        ChatTool("design_storyboard", "Design the board.", EchoArgs, terminal=False),
+        ChatTool("answer", "Close the turn.", None),
+    ]
+    client = StubClient([
+        _call("design_storyboard", {}),
+        _call("design_storyboard", {"text": "x", "count": "not-an-int"}),
+        _call("design_storyboard", {"text": None}),
+        _call("answer", {}, prose="NEVER-REACHED"),
+    ])
+    agent = _make_agent("tl_film_rejection_budget", client, tools=tools, max_iterations=8)
+    result = await agent.call_loop(
+        _always_accept,
+        should_stop_rejection=film_rejection_stop,
+    )
+    assert result.no_progress_tool == "design_storyboard"
+    assert result.exhausted is False and result.iterations == 3
+    assert result.calls == ["design_storyboard"] * 3
+    assert client.entries == ["plain", "plain", "plain"]
