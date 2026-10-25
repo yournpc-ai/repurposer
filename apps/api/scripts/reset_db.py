@@ -64,6 +64,7 @@ from app.models.tables import (  # noqa: E402
     ChannelAccount,
     Config,
     Conversation,
+    ConversationUsage,
     CreditTransaction,
     Message,
     Music,
@@ -91,6 +92,14 @@ CASCADE_COVERED = {
     # graph_edges cascade with graph_nodes, both with projects (ADR-057).
     "graph_nodes",
     "graph_edges",
+    # The remaining project-scoped rows cascade when projects are wiped.
+    "page_readings",
+    "journeys",
+    "exploration_rows",
+    "graph_islands",
+    "film_narrations",
+    # Per-conversation sequence counters cascade with conversations.
+    "message_seq_counters",
 }
 
 
@@ -108,6 +117,9 @@ def _plan() -> list[tuple[str, object]]:
         # workflow_steps cascade away with workflow_runs (run_id FK ondelete=CASCADE).
         ("workflow_runs", WorkflowRun),
         ("assets", Asset),
+        # conversation_usage has NO ACTION FKs to projects/users — wipe it first.
+        ("conversation_usage", ConversationUsage),
+        # Project-scoped graph/exploration/reading/narration rows cascade here.
         ("projects", Project),
         ("personas", Persona),
         ("music", Music),
