@@ -930,7 +930,7 @@ class DesignStoryboardArgs(BaseModel):
     )
     music_mood: str | None = Field(
         default=None,
-        description="Background-music mood when one was agreed (launch_film's music_mood, verbatim — 'off' switches the bed off for good).",
+        description="Background-music mood for the bed (launch_film's music_mood, verbatim): on a first version, choose one library mood when the user has not named music; an explicit user choice or 'off' takes precedence. Later versions inherit the pinned choice unless the user asks for a change.",
     )
     aspect: Literal["16:9", "1:1", "9:16"] | None = Field(
         default=None,
