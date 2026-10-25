@@ -132,8 +132,8 @@ async def build_context(
     (ADR-118 §6 双键). The Environment line rides when the bit is known —
     canvas_visible = canvas_available ∧ world_live (world_live = hasRuns ∨
     pending-plan — 与客户端谓词同义单源, 互指 app/chat/canvas_visibility.py);
-    unknown → the line is omitted (未知恒闭, the handoff law's seat is
-    prompts/chat/trigger_system.j2).
+    unknown → the line is omitted. This is environment evidence only; no
+    delivery-speech interface guidance is derived from it.
 
     ``confirmation`` (ADR-117 D1) = the user's two confirmation prefs
     (execution, credits) — rendered as one fact line the system template's

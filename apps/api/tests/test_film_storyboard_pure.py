@@ -44,7 +44,7 @@ from app.tools.film.storyboard import (
     film_design_state,
     fixed_direction,
     format_violations,
-    narration_caption_cues,
+    narration_subtitle_cues,
     resolve_film_dock_state,
     scene_content_digest,
     skeleton_prompt_dict,
@@ -292,9 +292,9 @@ def test_narration_cap_is_cjk_aware():
 def test_caption_cues_split_latin_sentences_never_decimals():
     """The full stop ends a cue only when it ends a SENTENCE (whitespace or
     string end after it) — decimals and version strings survive intact."""
-    cues = narration_caption_cues("Version 2.4 ships today.", window_s=5.0, spoken_s=4.0)
+    cues = narration_subtitle_cues("Version 2.4 ships today.", window_s=5.0, spoken_s=4.0)
     assert [c["text"] for c in cues] == ["Version 2.4 ships today."]
-    cues = narration_caption_cues("First line. Second line.", window_s=8.0, spoken_s=6.0)
+    cues = narration_subtitle_cues("First line. Second line.", window_s=8.0, spoken_s=6.0)
     assert [c["text"] for c in cues] == ["First line.", "Second line."]
     assert cues[-1]["end"] == 6.0
 
@@ -317,7 +317,7 @@ def test_presentation_facts_carry_role_source_camera_and_verbatim_narration():
         music="calm — Bed · 120 BPM",
         beats=[i * 0.5 for i in range(240)],
         bpm=120,
-        captions=True,
+        voiceover=True,
     )
     assert 'sources: example.com/product "Acme — Ship faster"' in facts
     for role in (
@@ -1008,27 +1008,20 @@ def test_build_spec_bakes_chrome_and_stores_relative_keys():
     assert all(isinstance(s["frames"], int) for s in spec["scenes"])
 
 
-def test_build_spec_projects_narration_audio_and_caption_cues():
+def test_build_spec_narration_does_not_implicitly_add_subtitles():
     scenes = _good_scenes()
     scenes[0]["narration"] = "This is Acme. It ships the release."
     spec = build_film_spec(
-        _storyboard(scenes),
-        [_page()],
+        _storyboard(scenes), [_page()],
         narration={0: ("user/out/narr-0.mp3", 2.4)},
     )
-    hero = spec["scenes"][0]
-    assert hero["audio"] == "user/out/narr-0.mp3"
-    assert [c["text"] for c in hero["captions"]] == [
-        "This is Acme.",
-        "It ships the release.",
-    ]
-    assert hero["captions"][0]["at"] == 0
-    assert 0 < hero["captions"][1]["at"] < 2.4
-    assert hero["captions"][-1]["end"] == 2.4
+    assert spec["scenes"][0]["audio"] == "user/out/narr-0.mp3"
+    assert "subtitle_track" not in spec["scenes"][0]
+    assert "captions" not in spec["scenes"][0]
 
 
-def test_narration_caption_cues_split_and_fit_the_spoken_window():
-    cues = narration_caption_cues(
+def test_narration_subtitle_cues_split_and_fit_the_spoken_window():
+    cues = narration_subtitle_cues(
         "先说第一句，再接第二句。Then the closer lands!",
         window_s=5.0,
         spoken_s=4.0,
@@ -1053,7 +1046,7 @@ def test_presentation_times_come_from_the_execution_timeline():
         music="calm — Bed · 120 BPM",
         beats=beats,
         bpm=120,
-        captions=True,
+        voiceover=True,
     )
     assert "total 31s · 930 frames" in facts
     assert "music: calm — Bed · 120 BPM" in facts
@@ -1392,8 +1385,8 @@ def test_presentation_fact_sheet_always_states_the_voiceover_switch():
     skeleton = build_skeleton(pages, lines)
     resolved, violations = assemble_storyboard(skeleton, _direction(), lines)
     assert violations == [] and resolved is not None
-    on = storyboard_presentation(resolved, pages, captions=True)
-    off = storyboard_presentation(resolved, pages, captions=False)
+    on = storyboard_presentation(resolved, pages, voiceover=True)
+    off = storyboard_presentation(resolved, pages, voiceover=False)
     assert "voiceover: on" in on and "voiceover: off" not in on
     assert "voiceover: off" in off and "voiceover: on" not in off
 

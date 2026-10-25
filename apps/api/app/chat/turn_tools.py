@@ -391,6 +391,8 @@ _DESIGN_STORYBOARD_EDITS_PARAGRAPH = (
     "reorder_scenes (the full id "
     "permutation), remove_scene, set_music (mood + retime "
     "keep_cut|recut; mood 'off' switches the bed off for good), "
+    "set_subtitles (create/replace a scene's independent subtitle track; "
+    "track=null deletes it; all scene types including ui; no narration needed), "
     "set_voiceover (false = silent cut; true = re-open synthesis of the "
     "board's own narration lines — a board with none rejects: author the "
     "lines with update_scene first) — always with the "

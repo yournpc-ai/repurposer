@@ -113,14 +113,16 @@ describe("answered OPTIONS questions — echo first, then the QA archive", () =>
             options: [{ id: "en", label: "English" }],
           },
           answer: { kind: "option", option_id: "en" },
+          seq: 9,
         }),
       ],
       ctx,
     )
     expect(out).toHaveLength(2)
-    expect(out[0]).toMatchObject({ id: "m1-echo", content: "let me ask you something" })
+    expect(out[0]).toMatchObject({ id: "m1-echo", content: "let me ask you something", seq: 9 })
     expect(out[1]).toMatchObject({
       id: "m1",
+      seq: 9,
       qa: { question: "which language?", answer: "en", muted: false, questionId: "m1" },
     })
   })
@@ -255,6 +257,7 @@ describe("plain assistant rows + legacy trigger pills", () => {
         row({
           content: "review this",
           workflow_run_id: "run-9",
+          seq: 7,
           intent: {
             type: "trigger_review",
             suggestions: [
@@ -266,7 +269,7 @@ describe("plain assistant rows + legacy trigger pills", () => {
       ],
       ctx,
     )
-    expect(out[0]).toMatchObject({ runId: "run-9" })
+    expect(out[0]).toMatchObject({ runId: "run-9", seq: 7 })
     expect(out[0].suggestions).toEqual([
       { label: "post it", action: "send", text: "post it", output_id: null },
     ])
@@ -304,6 +307,7 @@ describe("no lifecycle derivation (恢复不推导 lifecycle)", () => {
       "role",
       "content",
       "runId",
+      "seq",
       "at",
       "assets",
       "streaming",

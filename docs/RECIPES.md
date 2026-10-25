@@ -16,9 +16,9 @@
 
 ## 1. 原则
 
-1. **配方 = 用户可编辑的提示词捷径**。发射载荷就是预填文本；没有 `recipe_id` transport、服务端播种或前端构造的隐式任务书。
+1. **配方 = 用户可编辑的提示词捷径**。发射载荷就是预填文本；没有 `recipe_id` transport、服务端播种或前端构造的隐式计划。
 2. **卡面承诺必须由当前能力兑现**。live、reserved、disabled、hidden 是不同状态，不得相互冒充；货架可点不等于真实制作旅程已验收。
-3. **能力扩展走注册表**。新技能、节点 kind、caption preset 或 mention 都登记到各自唯一注册表，不为单卡建立平行派发分支。
+3. **能力扩展走注册表**。新 tool、节点 kind、caption preset 或 mention 都登记到各自唯一注册表，不为单卡建立平行派发分支。
 4. **多产物是能力，不是打包承诺**。卡片只承诺一种具体结果；不做“一次输入生成全套”的预设卡。
 5. **用户点名的渠道才是渠道**。卡片和预填不得把默认平台写成用户已作出的选择；后续 chat 修改始终优先。
 6. **样片证据分级**。真实样片证明对应样例；布局占位只证明货架形态；二者都不能代替 Chat → 方案 → 授权 → 制作 → 交付全旅程验收。
@@ -27,7 +27,7 @@
 
 ```text
 服务端 RECIPE_REGISTRY       前端 RECIPE_FAMILIES          实际制作能力
-公共配方数据与状态      →     任务族 / 子 tab / 货架     →   技能注册表 + 持久图 + spec
+公共配方数据与状态      →     任务族 / 子 tab / 货架     →   TOOL_REGISTRY + 持久图 + spec
 声明式 flow/tasks 对账       demo URL 与预填 key             报价、授权、执行、交付
 ```
 
@@ -214,7 +214,7 @@ stacking
 - 禁恢复 overlay 内发射、隐藏 `recipe_id`、服务端播种或第二意图入口。
 - 禁自动发送、自动建 run、静默覆盖用户草稿或绕过制作意图/费用确认。
 - 禁为单配方新增表、renderer、spec family 或平行执行链。
-- 禁绕过 caption catalog、skill registry、mention registry 或唯一图写口。
+- 禁绕过 caption catalog、`TOOL_REGISTRY`、mention registry 或唯一图写口。
 - 禁把 stock/TTS 说成用户声纹；禁在 R5 缺声纹时静默换 stock。
 - 禁发明用户未点名的平台，禁“一次输入全套出”承诺。
 - 禁覆盖共享 demo key、使用私有素材作匿名展示、拉伸画幅或绕过离屏暂停与声音互斥。

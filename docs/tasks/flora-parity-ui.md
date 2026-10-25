@@ -1,6 +1,6 @@
 # Chat 自足、锚卡与 Home 交互——当前合同与剩余验收
 
-> Status: 环境谓词、终态锚卡、交付承接句、copy/免责声明与数据驱动货架已有代码层结果；移动端完整旅程、桌面对照、声音互斥和双主题 live 验收仍未全部销号。活动展示以当前 `WorkSegmentRow` 为准，不恢复旧 ActivityRow/StatusLine 形态。
+> Status: 环境谓词、终态锚卡、交付正文事实约束、copy/免责声明与数据驱动货架已有代码层结果；移动端完整旅程、桌面对照、声音互斥和双主题 live 验收仍未全部销号。活动展示以当前 `WorkSegmentRow` 为准，不恢复旧 ActivityRow/StatusLine 形态。
 
 ## 1. 形态与 chat 自足
 
@@ -13,11 +13,10 @@
 
 - 客户端唯一能力组成：`canvasAvailable = 视口可承载 && workspace_layout !== "chat"`；`canvasVisible = canvasAvailable && worldLive`。组件不得另按设备名、宽度或偏好推断第二套环境。
 - 能力位随 chat 请求送达并以 last-wins 盖章到 conversation；旧客户端未上报时为 unknown，不是 false。
-- 服务端 `canvas_visible = canvas_available ∧ world_live`；`world_live = hasRuns ∨ pending-plan`。unknown 时 Environment 行缺席，所有指向卡片的言语门恒闭。
+- 服务端 `canvas_visible = canvas_available ∧ world_live`；`world_live = hasRuns ∨ pending-plan`。unknown 时 Environment 行缺席；该行只是环境事实，不派生界面引导。
 - 双键经 `build_context` 的结构化 Environment 事实行进入模型上下文；模型不得从用户语言或设备特征猜测环境。
-- 交付言语现行法座是 `prompts/chat/delivery_system.j2`：只有 delivered/partial、且事实确证对应产品已交付、且 `canvas_visible=false` 时才能指向紧随其后的卡片；failed 不得宣称有可点产品。
-- `canvas_visible=true` 时不写交付承接句，不提“右侧/画布/下方”等面。承接句仍是普通 assistant 散文，必须满足打字机两牙与刷新回放一致。
-- 代码内若仍把此法条指向旧 `trigger_system.j2`，以实际 delivery include 为准；不要因注释恢复第二座法条。
+- 交付言语现行法座是 `prompts/chat/delivery_system.j2`：正文只说明实际交付结果、必要的失败或差异，以及当前分支明确允许的下一步；无论 `canvas_visible` 为 true、false 或缺失，都不介绍界面入口，不输出内部 ID。delivered/partial/failed 的事实约束不变。
+- 交付正文仍是普通 assistant 散文，必须满足打字机两牙与刷新回放一致；锚卡由客户端按 §3 独立渲染，不由正文触发或定位。
 
 ## 3. 终态锚卡
 
@@ -36,8 +35,8 @@
 
 ## 5. 剩余验收
 
-1. 移动端不看画布完成上传 → 生成 → delivered/partial/failed → 接受或修订一次；只有实际 delivered/partial 有承接句与可点锚卡。
-2. 桌面 auto + world live：同一次交付零锚卡、零承接句，画布正常；切到 chat 后锚卡按渲染时刻出现，不错误重放历史环境。
+1. 移动端不看画布完成上传 → 生成 → delivered/partial/failed → 接受或修订一次；只有实际 delivered/partial 有可点锚卡，交付正文始终无卡片引导或内部 ID。
+2. 桌面 auto + world live：同一次交付零锚卡，画布正常；切到 chat 后锚卡按渲染时刻出现，不错误重放历史环境；两种形态的交付正文都只讲交付事实。
 3. 能力位 unknown、无 world、pending plan、空 output_refs、重复 id、缺失 output、失败与部分交付分别验证，不出现假卡或假承诺。
 4. 多产物数组顺序/去重正确，名缺回退诚实；点击开 MediaLightbox 可播，刷新回放一致。
 5. MediaLightbox 与 Home/其他播放器遵守全局声音互斥；离屏暂停不释放错误的播放所有权。

@@ -17,7 +17,7 @@
                                   （钱→积分换算发生在适配器边界，台账不认识"钱"）
 ```
 
-- **credit（积分）**：用户面唯一计价单位。估价、扣费、余额、配方卡估价贴、任务书总价全部同一单位。en `credits` / zh `积分`。
+- **credit（积分）**：用户面唯一计价单位。估价、扣费、余额、配方卡估价贴、计划总价全部同一单位。en `credits` / zh `积分`。
 - **wallet（钱包）**：`wallets` 一行 = 一个用户的当前余额 + 判定接口。注册首登 lazy 开户。
 - **ledger（台账）**：`credit_transactions` 表，**append-only**，一切余额变动的事实源；`wallets.balance` 只是台账的物化缓存。
 
@@ -93,7 +93,7 @@ class Config(Base):                       # configs — 公共运营参数表（
 - 调参不改已经写入的 ledger 积分额；USD 成本仍保留在 `workflow_steps.cost`。**读面不是全部冻结**：历史 step 的 `cost_credits` 也由持久 USD × 当前比例重新序列化，估价贴同样随参数变化；只有已写 transaction 金额与幂等事实不随比例重写。
 - render_seconds 价目当前为 0（自家 infra）——估价贴不含渲染成本，诚实；将来定价只改 PRICING 一行。
 - **voice_clones 报价幂等**：声纹克隆按「每个新声一次」计费（provider 规则——首次 T2A 使用触发），一条链多站 dub 逐节点各自声明 would-be clone 时 fold 只收一次（钳制在 `fold_estimates` 一座，报价=fold 的唯一缝合点；与计量同律——`record_media_usage` 只在 voice_id 缺失时记账）——估价 ≡ 计量，多语言配音链的克隆费如实计一次。
-- **配方卡估价贴的可报价域**：translate / dub / reframe 挂在 materialize_source 上的链，live 任务书诚实 NULL（编译期片段未生——「估价随运行」），配方卡贴纸按 RECIPE_QUOTE_FACTS 声明的典型素材可报价（`quote_scope="recipe"` 单座豁免，传进 `compile_recipe_quote` 的 ctx）。
+- **配方卡估价贴的可报价域**：translate / dub / reframe 挂在 materialize_source 上的链，live 计划诚实 NULL（编译期片段未生——「估价随运行」），配方卡贴纸按 RECIPE_QUOTE_FACTS 声明的典型素材可报价（`quote_scope="recipe"` 单座豁免，传进 `compile_recipe_quote` 的 ctx）。
 
 **公共 config 表（configs）**——运营参数的统一家（admin 预备），三条防腐纪律：
 
@@ -143,7 +143,7 @@ GET /wallet/transactions?limit&cursor      → per-run/per-event 语义交易行
 
 **跨读面的派生字段**：credits 在各自序列化边界以 fold × 当前比例派生，**不落重复列**；USD 继续住 `estimate` / `cost`。不是只有 `outputs` 一个序列化器：
 
-- 任务书 dock：`estimate_credits: {total, per_task}`；
+- 计划 dock：`estimate_credits: {total, per_task}`；
 - `GET /runs/{id}`：每 step `estimate_credits [low, high]` / `cost_credits`，由该 read model 派生；
 - `GET /recipes`：固定量卡 `estimate_credits [low, high]`；按秒卡改发 `estimate_rate`，不再伪造固定总价；
 - graph 草稿节点在 projects read model 中做同样的 fold × live-ratio 投影。
@@ -152,7 +152,7 @@ ledger 已写金额不变，历史 step 的 credits 读投影可随比例变化�
 
 **错误形态**（API.md §4）：`422 {detail: {code: "credits.insufficient", balance, required}}`。
 
-**前端四面 + 两余额读面**（ADR-057）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴 / **节点卡空态估价**（草稿态产物区「运行后生成 · 约 N 积分」，逐节点 fold）+ 账户控制台 credits 槽 + 项目页左下角 **CreditsPill** + 余额不足入流灰行。**dock 总价的家**（ADR-111 §2——确认卡面退役后）：dock echo 的 code 组装估价尾行（present_plan / 探索包 / 修订 re-dock / chat 路径 `_dock_plan_as_question`；延迟报价如实说「估价随运行确定」）+ 画布草稿节点逐节点估价。**确认 = 节点锚定**（ADR-057）：确认卡锚在图上受影响节点旁、估价随行，取代抽象总价行——用户确认的是「这张图的这些节点要花这些积分」，不是一句话总价。估价四面同源（同一个 fold、同一份 PRICING、同一个比例），结构性不可能不一致。
+**前端四面 + 两余额读面**（ADR-057）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴 / **节点卡空态估价**（草稿态产物区「运行后生成 · 约 N 积分」，逐节点 fold）+ 账户控制台 credits 槽 + 项目页左下角 **CreditsPill** + 余额不足入流灰行。**生成前估价的家**：dock echo 的真实估价信息、需要确认时的 dock Start pill（服务端 `quote_high` / unquotable 标记）与画布草稿节点逐节点估价共同呈现；重型确认卡和第二总价面不再另建。执行与费用确认控件只住 dock，画布不放计划 Start/Confirm（ADR-070）；确认针对当前受影响节点、scope 与报价，不由客户端自行推导。估价四面同源（同一个 fold、同一份 PRICING、同一个比例），结构性不可能不一致。
 
 **语义账本塌缩**（ADR-057）：hold / release 永不上 UI——CreditsPill popover 的台账投影 = **per-run-event 语义行**（「Post 修订 −3」「初始生成 −42」：一次用户可感知动作 = 一行，hold/capture/release 内部时序折叠进该行净额）；用户面只显**花费 / 赠送 / 充值**三族。裸 kind 列表（`hold`/`capture`/`release` 逐行）是机器视角泄漏，不上 UI。
 
@@ -188,4 +188,4 @@ app/platform/
 
 ## 10. 验收口径
 
-事前有预估（任务书 dock 总价 + 配方卡估价贴）、事后有语义明细（`GET /wallet/transactions` 的 per-run/per-event 行）与逐步成本（`GET /runs/{id}` 的 `cost_credits`）、失败不扣费（failed/skipped 零 capture）、余额不足出生地拦截（422 + 灰行，用户级两词）。调比例时，所有读面重新按同一 live ratio 投影，已写 ledger 不变；不得把语义交易行数与原始 hold/capture/release 行数混为同一验收口径。
+事前有预估（计划 dock 总价 + 配方卡估价贴）、事后有语义明细（`GET /wallet/transactions` 的 per-run/per-event 行）与逐步成本（`GET /runs/{id}` 的 `cost_credits`）、失败不扣费（failed/skipped 零 capture）、余额不足出生地拦截（422 + 灰行，用户级两词）。调比例时，所有读面重新按同一 live ratio 投影，已写 ledger 不变；不得把语义交易行数与原始 hold/capture/release 行数混为同一验收口径。

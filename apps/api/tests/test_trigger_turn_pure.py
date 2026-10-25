@@ -462,6 +462,46 @@ def test_delivery_system_prompt_never_invites_a_read() -> None:
     assert "run_completed" not in general
 
 
+@pytest.mark.parametrize("canvas_visible", [True, False, None])
+def test_delivery_prompt_has_no_surface_handoff_and_keeps_output_ids_internal(
+    canvas_visible,
+) -> None:
+    """Every canvas state gets the same delivery-only speech law. The
+    assembled user context still carries output ids for internal location."""
+    from app.agents.base import jinja_env
+    from app.chat.trigger_turn import delivery_agent
+
+    output_id = "00000000-0000-0000-0000-000000000001"
+    environment = (
+        ""
+        if canvas_visible is None
+        else f"Environment: canvas_visible={str(canvas_visible).lower()}"
+    )
+    context_text = "\n".join(
+        part
+        for part in (environment, "Current outputs:", f"- film id={output_id}")
+        if part
+    )
+    template_kwargs, _ = delivery_agent.assemble(
+        event_line="Delivery turn. Use the DELIVERY FACTS.",
+        context_text=context_text,
+        language="en",
+    )
+    user_prompt = jinja_env.get_template(delivery_agent.prompt).render(
+        **template_kwargs
+    )
+    assert output_id in user_prompt
+
+    prompt = delivery_agent.system
+    lowered = prompt.lower()
+    for retired in ("canvas_visible", "card", "tappable", "handoff"):
+        assert retired not in lowered
+    assert "actual delivery outcome" in prompt
+    assert "interface entry points or navigation" in prompt
+    assert "Internal identifiers in the context never appear in the reply" in prompt
+    assert "`id=` values are lookup keys" in prompt
+
+
 def test_delivery_event_line_carries_the_latest_outcome() -> None:
     """The event line pairs conversation context with deterministic latest
     tool/run facts and one matching reply branch. An empty block (a legacy

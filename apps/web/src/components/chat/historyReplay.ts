@@ -51,6 +51,10 @@ export interface OverlayMessage {
   role: "user" | "assistant"
   content: string
   runId?: string | null
+  /** The persisted transcript position (messages.seq). Optimistic local rows
+   * have none until their envelope stamps it; ordering never substitutes the
+   * display timestamp for this server position. */
+  seq?: number
   /** Chronological anchor (ISO) — the flow interleaves run blocks and
    * mid-run QA archives by real time (#5: the stream never scrambles).
    * Server-rebuilt items carry the row's created_at; live pushes stamp now. */
@@ -457,6 +461,8 @@ export interface QuestionMessage {
    * stashes and fires at the envelope's authoritative dock; a flip or
    * turn.failed rolls the preview back. Never persisted anywhere. */
   preview?: boolean
+  /** Per-conversation transcript position; null only on legacy rows. */
+  seq?: number | null
   created_at?: string
 }
 
@@ -538,8 +544,14 @@ export function mapHistoryRows(
   // (the surface is one seat; rows never move).
   const cardBySetId = new Map<string, OverlayMessage>()
   for (const m of rows) {
+    // Every projection of one persisted row carries its transcript position,
+    // including an echo + QA pair. Recovered live rows can therefore find
+    // their existing successor without re-deriving order from timestamps.
+    const pushRow = (row: OverlayMessage) => {
+      history.push(m.seq == null ? row : { ...row, seq: m.seq })
+    }
     if (m.role === "user") {
-      history.push({
+      pushRow({
         id: m.id,
         role: "user",
         content: m.content ?? "",
@@ -566,7 +578,7 @@ export function mapHistoryRows(
           // option 选择——QA 块只归真问答（2026-09-05 用户拍板），
           // 薄书的记录 = echo + 用户原话 + run 收据行。
           if ((m.content ?? "").trim()) {
-            history.push({
+            pushRow({
               id: `${m.id}-echo`,
               role: "assistant",
               content: m.content ?? "",
@@ -585,7 +597,7 @@ export function mapHistoryRows(
           // live flow did.
           const echo = questionEcho(m)
           if (echo) {
-            history.push({
+            pushRow({
               id: `${m.id}-echo`,
               role: "assistant",
               content: echo,
@@ -597,7 +609,7 @@ export function mapHistoryRows(
             ctx.t,
             !!m.workflow_run_id,
           )
-          history.push({
+          pushRow({
             id: m.id,
             role: "assistant",
             content: "",
@@ -613,7 +625,7 @@ export function mapHistoryRows(
           // 形态律 (ADR-053 R1): an options-empty question's answered
           // form is the plain message pair — the question line stays a
           // plain assistant message, no AnsweredQuestion block.
-          history.push({
+          pushRow({
             id: m.id,
             role: "assistant",
             content: m.content ?? "",
@@ -628,7 +640,7 @@ export function mapHistoryRows(
         // revives through the pending-question fetch. No run stamp: the
         // run only exists once the dock is answered.
         if ((m.content ?? "").trim()) {
-          history.push({
+          pushRow({
             id: `${m.id}-echo`,
             role: "assistant",
             content: m.content ?? "",
@@ -639,7 +651,7 @@ export function mapHistoryRows(
         // 形态律 (ADR-053 R1): a pending TEXT question never docks —
         // it lives in the flow as a plain assistant message (only
         // options questions raise the pill).
-        history.push({
+        pushRow({
           id: m.id,
           role: "assistant",
           content: m.content ?? "",
@@ -652,7 +664,7 @@ export function mapHistoryRows(
         // flow message so the refresh reads like the live flow did.
         const echo = questionEcho(m)
         if (echo) {
-          history.push({
+          pushRow({
             id: `${m.id}-echo`,
             role: "assistant",
             content: echo,
@@ -677,7 +689,7 @@ export function mapHistoryRows(
       // failure's stage and its lawful next step instead of dropping them.
       if (intentType === "turn_failed") {
         if (!(m.content ?? "").trim()) continue // never an empty bubble
-        history.push({
+        pushRow({
           id: m.id,
           role: "assistant",
           content: m.content ?? "",
@@ -690,7 +702,7 @@ export function mapHistoryRows(
       // settled activity unit IN ITS ARRAY POSITION, never a bubble.
       const beat = materialBeat(m.intent)
       if (beat !== undefined) {
-        history.push({
+        pushRow({
           id: m.id,
           role: "assistant",
           content: "",
@@ -706,7 +718,7 @@ export function mapHistoryRows(
       // order — the walk never re-sorts).
       const frame = activityRowFrame(m.intent)
       if (frame !== undefined) {
-        history.push({
+        pushRow({
           id: m.id,
           role: "assistant",
           content: "",
@@ -744,7 +756,7 @@ export function mapHistoryRows(
               at: m.created_at,
               candidates: ev.surface,
             }
-            history.push(row)
+            pushRow(row)
             cardBySetId.set(ev.surface.candidateSetId, row)
           } else {
             const card = cardBySetId.get(ev.candidateSetId)
@@ -755,7 +767,7 @@ export function mapHistoryRows(
         }
         continue
       }
-      history.push({
+      pushRow({
         id: m.id,
         role: "assistant",
         content: m.content ?? "",

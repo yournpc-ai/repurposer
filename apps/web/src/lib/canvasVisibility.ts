@@ -30,8 +30,8 @@ export interface CanvasEnvironment {
 }
 
 /** canvas_visible = 可承载 ∧ 已揭幕。真值表两钉：桌面 true/true → 零锚
- * 卡零承接句；移动 false/false → 锚卡渲染 + 承接句。移动是世界已揭幕
- * （false/true）同样无画布 —— 画布在 768px 以下永不挂载。 */
+ * 卡；移动 false/false → 锚卡渲染。交付正文在各分支都不增加界面引导。
+ * 移动是世界已揭幕（false/true）同样无画布 —— 画布在 768px 以下永不挂载。 */
 export function canvasVisible(env: CanvasEnvironment): boolean {
   return env.canvasAvailable && env.worldLive
 }

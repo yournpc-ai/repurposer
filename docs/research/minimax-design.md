@@ -60,7 +60,7 @@
 |:---|:---|
 | Skill 卡陈列馆（版本号 + 分类标签 + 查看详情） | 配方库 / recipe gallery |
 | `@` 选文件和模型 | MentionEditor + MENTION_REGISTRY |
-| `/` 调技能 | 技能注册表 + intent prompt 枚举 |
+| `/` 调技能 | 当前工具注册表 + intent prompt 枚举；`SKILL.md` 指令包是另一层，不是运行时工具发现 |
 | Chat + Canvas 双区 + 底部 composer | 结果画布 + 底部 dock（ADR-041） |
 | 深色 tour 气泡 + 分步 Next | 4 步 Tour（内容哈希版本化） |
 | Credits pill | composer 底排 credits 信息 pill |

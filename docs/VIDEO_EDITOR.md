@@ -1,7 +1,7 @@
 # Portrait Video Editor — Design & Implementation Plan
 
 > Status: Implemented（L2 主流程已落地；undo 可用 = operations 端点 + chat 撤销，editor 内按钮/历史面板后置，见 ADR-032）
-> 编辑面分层（ADR-033）：本文的"编辑形式"= **editor 适配器**的形态，不是产品编辑面的全部——能力层（OP_REGISTRY ∪ SKILL_REGISTRY）唯一，editor / chat /（预留）mcp 是并存的薄适配器（chat 是正式编辑面）。
+> 编辑面分层（ADR-033）：本文的"编辑形式"= **editor 适配器**的形态，不是产品编辑面的全部——执行能力层由 `OP_REGISTRY ∪ TOOL_REGISTRY` 组成，`SKILL_REGISTRY` 只提供装配期指令包；editor / chat /（预留）mcp 是并存的薄适配器（chat 是正式编辑面）。
 > This document records the design plan for Repurposer's "portrait video output + editable" main pipeline (benchmarked against OpusClip / Descript / InVideo / CapCut Web).
 > See also: ADR-016 (decision record), ADR-017 (queue foundation, implemented).
 > **clip-spec 字段级契约、渲染链架构（烘焙缝 / 渲染服务 / 共享包 / 函数地图）、渲染器替换路径 → `RENDERING.md`；本文只载编辑器交互形态与范围纪律。**
@@ -24,7 +24,7 @@
 |:---|:---|:---|
 | **L1** | Text assets + subtitle correction + template graphics (quote cards) | Mostly built |
 | **L2** (main body of this doc) | Basic portrait video output: segment trimming + burned-in subtitles + brand styling + music + intro/outro → MP4 + SRT; transcript-style editing + single-track trim | **Implemented** |
-| **L3** | Multi-track / layer compositing / transition effects / B-roll library / auto face-tracking reframe / desktop offline / client-side engine | **Never; hand off to CapCut** |
+| **L3** | Free multi-track timeline / freeform layer compositing / transition gallery or freeform transition editor / stock B-roll library / generic face or object tracking / desktop offline / client-side engine | **Never; hand off to CapCut**. ADR-044's registered anchors/layers and entry-edge transition enum are not a free NLE |
 
 **Polished means**: (1) preview = output pixel parity; (2) multilingual subtitles are accurate and one-click editable; (3) one-click yields a publishable clip (editing is optional, not required); (4) deleting a sentence = trimming the video, undoable (undo 可用 = operations 端点 + chat 撤销按钮；editor 内 undo 按钮后置——见 ADR-032); (5) restrained, unified UI + honesty (clearly say "export to CapCut for fine-tuning" where we can't deliver).
 

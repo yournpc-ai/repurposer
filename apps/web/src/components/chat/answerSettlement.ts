@@ -108,6 +108,7 @@ export function spliceAnswerEnvelope(
           // text (a prose-less follow-up stamps identity only).
           content: prose || m.content,
           runId: followUp?.workflow_run_id ?? m.runId,
+          ...(followUp?.seq != null ? { seq: followUp.seq } : {}),
           // Re-anchor on the server row's created_at — the preview's client
           // clock was only a stand-in (finalizePreview parity).
           at: followUp?.created_at ?? m.at,

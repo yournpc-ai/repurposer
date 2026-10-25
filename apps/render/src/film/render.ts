@@ -2,7 +2,7 @@
 // render.ts / srt.ts / stage.ts are untouched; this module REUSES the shared
 // staging cache (stage.ts) and bundles its own entry (film/entry.tsx).
 //
-// A film's captions are burned into the picture from the narration cue list,
+// A film's independent subtitles are burned into the picture from its subtitle tracks,
 // so there is no SRT artifact — but it DOES carry audio (the narration
 // voiceover + the music bed, ADR-130), so the clip path's loudnorm
 // post-pass applies verbatim (shared seat, exported from ../render).

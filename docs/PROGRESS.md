@@ -109,16 +109,16 @@ R5 虚拟视频仍是已拍板的 AI 生成能力，先作为平台 tool 落位�
 
 | 需求 | 优先级 | 依赖 | 来源 / 备注 |
 |---|---|---|---|
-| 首发推荐分：维度明细 | P1 | 首发推荐分已持久化；与 `tasks/output-quality-verify.md` 的覆盖范围对账 | 结果网格展示评分维度与理由；规格来源 = DECISION_MATRIX §C、STRATEGY §2.1 |
-| persona 校准打分 | P1 | 内部源 = 用户选用行为 + operations 编辑痕迹；外部发布回流不在当前周期 | 定位根落地后校准对象为定位的人设分区；规格来源 = DECISION_MATRIX §C、STRATEGY §2.1/§2.2 |
+| 首发推荐分：维度明细 | P1 | 首发推荐分已持久化；与 `tasks/output-quality-verify.md` 的覆盖范围对账 | 结果网格展示评分维度与理由；规格来源 = DECISION_MATRIX §B、STRATEGY §2.1 |
+| persona 校准打分 | P1 | 内部源 = 用户选用行为 + operations 编辑痕迹；外部发布回流不在当前周期 | 定位根落地后校准对象为定位的人设分区；规格来源 = DECISION_MATRIX §G、STRATEGY §2.1/§2.2 |
 | LLM 滚动摘要（超长会话历史） | P2 | 先用 `scratch/context_budget_audit.py` 观察窗口折叠真实溢出率 | 当前仅滑动窗口折叠（`chat.context_budget_tokens`）；没有早期引用丢失的真实发生率证据前，不新增摘要生成 |
 | 结构化节拍图 + clip-spec motion 枚举 | P2 | 覆盖问责能力；仅限 video 源 crop 动态预设 | 实施前新增 ADR，划清与 stills Ken-Burns 拒绝边界；规格来源 = STRATEGY §2.5 |
-| 去静默 / 去口头禅 | P2 | 词级时间戳；随 editor 一键操作方向评估 | 保持专业知识表达密度，避免跳剪损害自然感；取舍来源 = DECISION_MATRIX §B |
+| 去静默 / 去口头禅 | P2 | 词级时间戳；随 editor 一键操作方向评估 | 保持专业知识表达密度，避免跳剪损害自然感；取舍来源 = DECISION_MATRIX §E |
 | LLM provider 抽象 | P1 | ADR-025 已决但未实施；触发 = EU 客户要求 Mistral/EU-hosted | 用户面是“优先 EU 托管模型”等策略开关，不是模型 SKU 货架；provider 失败在边界归一，消费方不猜异常来源（`research/deepseek-harness.md` §3） |
 | 字幕翻译 + 校对视图（side-by-side） | P1 | 多语言输出能力 | 对照校对交互来源 = DECISION_MATRIX §G |
 | 多语言文案质量（跨语言风格保真） | P1 | 术语表（见可选需求） | 保留用户写作风格，不把音频 voice 概念混入文风；规格来源 = DECISION_MATRIX §G、STRATEGY 牌 4 |
 | 产品度量地基 | P1 | 无 | 建立上传 → 生成 → 精修 → 发布 → 回流漏斗埋点；指标契约归规划中的 `METRICS.md` |
-| 真实 Gallery（公开项目流入 + remix） | P2 | `projects/outputs` 公开性字段先登记 MODULE_ARCH §4 并通过 ADR | 公开项目可序列化为 RECIPES §7.1 数据包并进入 remix；规格来源 = STRATEGY §5 Phase 2 |
+| 真实 Gallery（公开项目流入 + remix） | P2 | `projects/outputs` 公开性字段先登记 MODULE_ARCH §4 并通过 ADR | 公开项目可序列化为 RECIPES §7.1 数据包并进入 remix；启动条件与权限边界 = STRATEGY §5「当前边界与 deferred」 |
 | 虚拟视频卡（画廊候选） | P2 | §1.1 的 R5 能力 + 真实成对示例 + RECIPES §4.8 闸门重过 | 出列不等于否决；只有真实知识专家场景与产物证据成立才恢复画廊座位 |
 | 使用示例跑一遍（demo 素材试跑） | P2 | 试跑限次或免费额度；复用 `demo/uploads/demo_talk.mp4` | 用户显式点击示例后才进入同一 chat 主线；自动 Start 仍须制作意图与费用守卫，不建独立通道 |
 | 模型 EU-hosted 选项（Mistral 等） | P2 | LLM provider 抽象 | 与 EU 客户驻留要求联动 |
@@ -129,6 +129,7 @@ R5 虚拟视频仍是已拍板的 AI 生成能力，先作为平台 tool 落位�
 | run 收官散文兑现核对 | P2 | 先核对 `run_completed` 触发回合是否已兑现 | 目标行为 = 按 ADR-135/141 的当前分支只陈述确定性 delivered/partial/failed、真实产物与费用事实；不强制默认建议 pills 或唯一下一步，不伪造主观质量判断，不新增第二进度面。已兑现则关闭本行，未兑现则保留缺口 |
 | landing 叙事骨架重构（六幕 + 商务尾） | P2 | 足够真实产物密度；当前仍缓做 | 结构、背书插槽与文案纪律归 `LANDING.md` §4；证据归 `research/flora.md` §2 |
 | reframe per-clip 检测缓存 | P2 | `speaker_map` 素材级事实作缓存源 | 同素材多 clip 复用检测，避免每 clip 重复探测与计费 |
+| speaker_map 本人含量门禁 v2 | P2 | 多人话轮归属可靠性经过真实素材验证 | 只从用户本人话轮学风格；未实装，来源 = ADR-045 |
 | morph 罕见拓扑双渲染 | P2 | 无 | non-fork → fork → non-fork 且无 producer 的链形中，抑制与 rescue 可能重复支付一次渲染；需消除重复执行 |
 | pre-fail rescue 步骤标签纠偏 | P2 | 无 | rescue 重挂的 render 步骤不能误标 `skipped: upstream failed`；只修展示真值，不改变产物语义 |
 | reframe 检测窗残毫秒竞态 | P2 | 无 | 增量重放已覆盖主要并发编辑窗口，仍需关闭检测窗内残余竞态 |
@@ -139,7 +140,7 @@ R5 虚拟视频仍是已拍板的 AI 生成能力，先作为平台 tool 落位�
 | agent 调用台账（`agent_calls`） | P1 | 会话层已有 `conversation_usage`；本项补 run 层调用事实与取证 envelope | 每次 provider 调用（含空内容、max-tokens、校验失败首试）记录 agent/run/step/attempt/outcome/tokens/error/prompt 模板与 usage；可重建渲染后 prompt/schema/上下文哈希，大 prompt 走对象存储；同时支撑 repair、质检违规与 edit-ops 归因。作为 R1.1 成本校准前置，动工时补 ADR |
 | 闸门编目（invariants 登记表） | P2 | 无 | 登记出生地校验、启动自检与运行时数据闸的名字/位置/统一拒绝形态；无闸模块显式说明理由；闸只断言自有数据关系，不断言服务或方法存在 |
 | LLM 录制回放层 | P2 | agent 调用台账，共用 MiniMaxClient 边界 | 在适配器 seam 录真实 provider 流并无密钥回放，供确定性回归与 transcript diff；真实剧本矩阵继续承担行为探测 |
-| 执行中自适应重规划 | P1 | interrupt、任务书 refine、素材理解与 agent 调用台账 | 节点事实与任务书假设冲突时自动 interrupt，模型重 authoring，展示 diff 并经确认后续跑；信息超出理解 schema/单节点参数域或 retry 不中时升级，素材不足诚实降级。不是 tool-loop，模型驱动拓扑编排仍禁止 |
+| 执行中自适应重规划 | P1 | interrupt、计划 refine、素材理解与 agent 调用台账 | 节点事实与当前计划假设冲突时自动 interrupt，模型重 authoring，展示 diff 并经确认后续跑；信息超出理解 schema/单节点参数域或 retry 不中时升级，素材不足诚实降级。不是开放式 tool-loop，模型驱动拓扑编排仍禁止 |
 | “AI Generated”标识偏好与合规边界 | P2 | 合规包；先与 ADR-026 对账 | 可选视觉标识可采用默认开、设置可关并说明修改位置；自动分级、机器可读 C2PA 与法定披露不能被偏好关闭，也不依赖发布通道 |
 | TRANSCRIPT 资产生产侧语言印记 | P2 | 消费侧已读 `meta.language` | transcript/docx/pdf 等文本 processor 完工时写入语言探测或上传者声明，给纯文稿项目提供源语言锚 |
 | verify judge QuoteReadability schema 兼容 | P2 | agent 调用台账可提供 outcome 取证 | 兼容 MiniMax 可能返回的 per-quote 裸数组与 pydantic object：对齐 prompt/schema 或在边界归一 wrapper；judge 失败不得伪称质检完成 |

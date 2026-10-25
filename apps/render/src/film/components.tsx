@@ -994,62 +994,34 @@ export const End: React.FC<{
   );
 };
 
-/** Narration captions — one deterministic cue track per scene, the film's
- * ONLY on-screen text overlay: one solid pill at the canvas bottom, every
- * scene alike. */
-export const Captions: React.FC<{
-  cues: { at: number; end?: number; text: string }[];
-  dur: number;
-}> = ({ cues, dur }) => {
+/** Independent scene subtitles, outside the scene fade/camera transform. */
+export const Subtitles: React.FC<{
+  track: import("./schema").SubtitleTrack;
+}> = ({ track }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const s = useScale();
+  const seconds = frame / fps;
+  const cue = track.cues.find(c => seconds >= c.at && seconds < c.end);
+  if (!cue) return null;
+  const style = track.style;
+  const fade = Math.min(style.fade_seconds, (cue.end - cue.at) / 2);
+  const entrance = Math.min(1, Math.max(0, (seconds - cue.at) / fade));
+  const exit = Math.min(1, Math.max(0, (cue.end - seconds) / fade));
+  const opacity = (style.enter === "none" ? 1 : entrance) * (style.exit === "none" ? 1 : exit);
   return (
-    <>
-      {cues.map((cue, i) => {
-        const startF = cue.at * fps;
-        const endF = (cue.end ?? cues[i + 1]?.at ?? dur / fps - 0.05) * fps;
-        if (frame < startF - 1 || frame > endF) return null;
-        const p = spring({ frame: frame - startF, fps, config: { damping: 200 } });
-        const out = interpolate(frame, [endF - 8, endF], [0, 1], {
-          extrapolateLeft: "clamp",
-          extrapolateRight: "clamp",
-        });
-        return (
-          <div
-            key={i}
-            style={{
-              position: "absolute",
-              bottom: 44 * s,
-              left: 0,
-              right: 0,
-              display: "flex",
-              justifyContent: "center",
-              pointerEvents: "none",
-              opacity: p * (1 - out),
-              transform: `translateY(${(1 - p) * 30}px)`,
-            }}
-          >
-            <div
-              style={{
-                maxWidth: 1500 * s,
-                background: "#141414",
-                borderRadius: 999,
-                color: "#f7f6f2",
-                fontFamily: FONT,
-                fontSize: 34 * s,
-                fontWeight: 600,
-                lineHeight: 1.3,
-                padding: `${16 * s}px ${40 * s}px`,
-                textAlign: "center",
-              }}
-            >
-              {cue.text}
-            </div>
-          </div>
-        );
-      })}
-    </>
+    <div style={{ position: "absolute", bottom: `${style.bottom * 100}%`,
+      left: 0, right: 0, display: "flex", justifyContent: "center",
+      pointerEvents: "none", opacity,
+      transform: style.enter === "rise" ? `translateY(${(1 - entrance) * 30 * s}px)` : undefined }}>
+      <div style={{ maxWidth: `${style.width * 100}%`, boxSizing: "border-box",
+        background: style.background, color: style.color, borderRadius: 8 * s,
+        fontFamily: FONT, fontSize: style.font_size * s, fontWeight: style.font_weight,
+        lineHeight: 1.3, padding: `${12 * s}px ${24 * s}px`, textAlign: "center",
+        whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+        {cue.text}
+      </div>
+    </div>
   );
 };
 

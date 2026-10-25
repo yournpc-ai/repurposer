@@ -13,10 +13,10 @@
 
 | 任务范围 | 最小阅读路径 |
 |---|---|
-| Film/MG | `tasks/film-storyboard-orchestration-progress.md` §0 + 相关能力/风险/欠账 → execution 对应验收条目 → 总设计对应章节；整个模块接手才读完整 progress 与 execution §0～§1，延期施工才读 §2～§4 |
-| Chat 活动 / SSE / 打字机 / dock | `CHAT_ARCHITECTURE.md` §8（工作段重点 §8.6～§8.7）+ 当前任务合同；工具或修订改动再选 §3 / §9 |
+| 修 Film 编辑 / 分镜 / 版本 / Start | `tasks/film-storyboard-orchestration-progress.md` §0 与对应欠账 → 总设计 §7（编辑与时间契约）/ §11（授权）→ execution §1.1 对应验收；只有涉及 Chat dock/SSE 再加 `CHAT_ARCHITECTURE.md` §8 对应小节 |
+| 修 Chat 显示 bug（活动 / SSE / 打字机 / dock） | `CHAT_ARCHITECTURE.md` §8（工作段重点 §8.6～§8.7）→ 命中的当前任务合同只读对应验收；工具或修订改动再选 §3 / §9 |
 | UI 视觉 / 组件 / 布局 | `UI_GUIDELINES.md` 对应章节；只有涉及 chat 行为才加读 CHAT_ARCHITECTURE |
-| Home / 配方货架 / 样片 | `RECIPES.md` §4、§7 + `UI_GUIDELINES.md` §4.1；真实样片替换或入口欠账再看 `tasks/home-creation-entry-refresh.md` 当前状态 |
+| 改 Home 货架 / 配方卡 / 样片 | `RECIPES.md` §4、§7 + `UI_GUIDELINES.md` §4.1；替换真实样片或处理入口欠账再看 `tasks/home-creation-entry-refresh.md` §2～§5 |
 | 模块 / 表 / 队列 / worker | `MODULE_ARCHITECTURE.md` §4 / §5 / §7 的对应小节；迁移再加 `DATABASE_MIGRATIONS.md` |
 | Agent / tools / graph / 报价 | `AGENT_ARCHITECTURE.md` §2 / §4 / §5 / §7 / §8 中对应小节 |
 | 意图路由 / plan path / brief | `DIALOG_WORKFLOW.md` §2、§4 + `CHAT_ARCHITECTURE.md` §3 |
@@ -94,7 +94,7 @@
 | `MENTIONS.md` | @ 提及体系方针：请求 / 指认两族（当前 asset / output / workflow_step）+ 排除清单（配方、产出类型、自由参数、人设不新建成 mention）+ 判定三问 + @tool 立案方针 | 活跃 | 任何新 mention 类型立案前 |
 | `RECIPES.md` | 配方与 Home 货架母文档：prompt-only 发射、服务端 registry 与前端货架职责、caption catalog、dub/reframe/quote 链、样片证据分级与 R5 延期边界 | 当前规范；Home 真片/占位片与验收状态归 `tasks/home-creation-entry-refresh.md` | 动首页配方卡、字幕样式、dub/合成视频/分镜能力前 |
 | `COMPETITIVE_ANALYSIS.md` | 七家竞品综合（Round 1.2） | 活跃 | 竞品概览 |
-| `LANDING.md` | 落地页叙事工作文档：现状结构 + 叙事立场（单助手）+ 待拍板（hero 四方向）+ 迭代清单（含六幕叙事骨架，缓做） | 活跃 | 动落地页结构/hero/叙事前 |
+| `LANDING.md` | 落地页叙事工作文档：当前结构与 hero + 单助手叙事立场 + 隐藏面恢复条件 + 六幕叙事骨架（缓做） | 活跃 | 动落地页结构/hero/叙事前 |
 | `API.md` | API 参考 | 活跃 | 对接口前 |
 | `DATABASE_MIGRATIONS.md` | Alembic 工作流 | 活跃 | 写迁移前 |
 | `PRODUCTION_DEBUGGING.md` | 生产事故只读取证手册：分层日志 / 容器环境 / 网页采集签名 / 数据库只读检查 / 部署后验收 | 活跃 | 线上排障、部署验收前 |

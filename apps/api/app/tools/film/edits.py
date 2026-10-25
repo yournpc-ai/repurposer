@@ -55,6 +55,7 @@ from app.models.schemas import (
     FilmEditRemoveScene,
     FilmEditReorderScenes,
     FilmEditSetMusic,
+    FilmEditSetSubtitles,
     FilmEditSetVoiceover,
     FilmEditUpdateElement,
     FilmEditUpdateScene,
@@ -63,6 +64,7 @@ from app.models.schemas import (
 )
 from app.models.tables import Project
 from app.tools.film.storyboard import (
+    FILM_FPS,
     FILM_MUSIC_OFF,
     FILM_WORDS_STYLE_FIELDS,
     FILM_WORDS_TIMING_FIELDS,
@@ -853,6 +855,9 @@ def _apply_op(
 ) -> str | None:
     """One op onto the working copy. Returns the music retime directive when
     the op carried one (the change_set's music entry reports it)."""
+    if isinstance(op, FilmEditSetSubtitles):
+        work.scenes[_find(work, op.scene_id)].subtitle_track = op.track
+        return None
     if isinstance(op, FilmEditUpdateElement):
         _apply_update_element(work, op)
         return None
@@ -1154,6 +1159,11 @@ def apply_film_edits(
         retime = _apply_op(work, work_params, op)
         if retime is not None:
             music_retime = retime
+
+    try:
+        work = FilmStoryboard.model_validate(work.model_dump(mode="json"))
+    except ValidationError as exc:
+        raise FilmEditError("validation_failed", str(exc)) from exc
 
     # 文字来源同步 (逐字律版本侧): an explicit copy edit re-declares a text
     # film's corpus — the version's pinned text follows its board, so the
@@ -1710,6 +1720,13 @@ async def prepare_film_patch(
             music_label += f" · {bpm:g} BPM"
     else:
         music_label = None
+    subtitle_frames = kept_frames or execution_frames(result.board, _track_beats(track))
+    for scene, n in zip(result.board.scenes, subtitle_frames, strict=True):
+        if scene.subtitle_track and scene.subtitle_track.cues[-1].end > n / FILM_FPS:
+            raise FilmEditError(
+                "subtitle_window", "subtitle cues exceed the actual scene duration; "
+                "read its timeline and adjust cue times", scene_id=scene.scene_id,
+            )
     presentation = storyboard_presentation(
         result.board,
         pages,
@@ -1717,7 +1734,7 @@ async def prepare_film_patch(
         music=music_label,
         beats=_track_beats(track),
         bpm=_track_bpm(track),
-        captions=canonical["voiceover"],
+        voiceover=canonical["voiceover"],
         source_note=_text_source_note(film_text_source_from_params(result.params)),
         media=media,
         frame_override=kept_frames,

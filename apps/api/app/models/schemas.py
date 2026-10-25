@@ -985,6 +985,9 @@ class DesignStoryboardArgs(BaseModel):
             "{\"lines\":[\"A talk can become an article,\",\"and spark a wider "
             "discussion.\"]}}]}. Targeted edits to the version you just read or "
             "presented (the patch path — a new version, never a silent overwrite): "
+            "set_subtitles (create/replace a scene's independent subtitle_track; "
+            "track=null deletes it; works on ui and every other scene type, "
+            "without voiceover; read current track before replacing it), "
             "update_scene (one scene's view/seconds/focuses/narration/copy slots), "
             "update_element (ONE element inside a composite scene, addressed by "
             "scene_id + element_id — a text element's lines/tone/timing, "
@@ -3616,7 +3619,57 @@ class FilmFocus(BaseModel):
     zoom: float | None = None  # magnification (1 = full frame)
 
 
-class FilmSceneWords(BaseModel):
+class SubtitleCue(BaseModel):
+    """One subtitle, in seconds relative to its scene (independent of audio)."""
+
+    model_config = ConfigDict(extra="forbid")
+    at: float = Field(ge=0, allow_inf_nan=False)
+    end: float = Field(gt=0, allow_inf_nan=False)
+    text: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def ordered(self) -> SubtitleCue:
+        if self.end <= self.at or not self.text.strip():
+            raise ValueError("subtitle needs nonblank text and end > at")
+        return self
+
+
+class SubtitleStyle(BaseModel):
+    """Shared subtitle style; geometry is relative to the canvas."""
+
+    model_config = ConfigDict(extra="forbid")
+    color: str = Field(default="#FFFFFF", pattern=r"^#[0-9a-fA-F]{6}$")
+    background: str = Field(default="#000000", pattern=r"^#[0-9a-fA-F]{6}$")
+    font_size: float = Field(default=34, ge=12, le=120, allow_inf_nan=False,
+                             description="Font size on the 1920-wide design canvas.")
+    font_weight: Literal[400, 500, 600, 700, 800] = 600
+    bottom: float = Field(default=0.04, ge=0, le=0.8, allow_inf_nan=False)
+    width: float = Field(default=0.8, gt=0, le=1, allow_inf_nan=False)
+    enter: Literal["none", "fade", "rise"] = "fade"
+    exit: Literal["none", "fade"] = "fade"
+    fade_seconds: float = Field(default=0.2, gt=0, le=2, allow_inf_nan=False)
+
+
+class SubtitleTrack(BaseModel):
+    """An independent subtitle track; ordered, nonoverlapping cues."""
+
+    model_config = ConfigDict(extra="forbid")
+    cues: list[SubtitleCue] = Field(min_length=1)
+    style: SubtitleStyle = Field(default_factory=SubtitleStyle)
+
+    @model_validator(mode="after")
+    def nonoverlapping(self) -> SubtitleTrack:
+        if any(b.at < a.end for a, b in zip(self.cues, self.cues[1:])):
+            raise ValueError("subtitle cues must be ordered and nonoverlapping")
+        return self
+
+
+class FilmSceneBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    subtitle_track: SubtitleTrack | None = None
+
+
+class FilmSceneWords(FilmSceneBase):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["words"]
@@ -3689,7 +3742,7 @@ class FilmSceneWords(BaseModel):
     copy_text: str | None = None
 
 
-class FilmSceneHero(BaseModel):
+class FilmSceneHero(FilmSceneBase):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["hero"]
@@ -3703,7 +3756,7 @@ class FilmSceneHero(BaseModel):
     narration: str | None = None
 
 
-class FilmSceneUi(BaseModel):
+class FilmSceneUi(FilmSceneBase):
     """The page walk: the LLM names the page by its index in the presented
     manifest list; the screenshot URL / display URL are baked BY CODE (the
     model never invents URLs). ``shot`` picks WHICH captured view of the page
@@ -3737,7 +3790,7 @@ class FilmPlateCard(BaseModel):
     label: str
 
 
-class FilmScenePlate(BaseModel):
+class FilmScenePlate(FilmSceneBase):
     """The numbers beat: 2-4 glass cards over a calm procedural backdrop —
     the film's "proof by specs" moment. Only legal when the page actually
     carries numbers or very short labels (the grounding validator enforces
@@ -3758,7 +3811,7 @@ class FilmScenePlate(BaseModel):
     narration: str | None = None
 
 
-class FilmSceneDivider(BaseModel):
+class FilmSceneDivider(FilmSceneBase):
     """Section break with a rolling word list. The ordinal index ("01") is
     chrome — code assigns it, the model never writes it."""
 
@@ -3775,7 +3828,7 @@ class FilmSceneDivider(BaseModel):
     narration: str | None = None
 
 
-class FilmSceneReveal(BaseModel):
+class FilmSceneReveal(FilmSceneBase):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["reveal"]
@@ -3795,7 +3848,7 @@ class FilmSceneReveal(BaseModel):
     narration: str | None = None
 
 
-class FilmSceneEnd(BaseModel):
+class FilmSceneEnd(FilmSceneBase):
     """Closing brand card. The display URL is baked by code from the page's
     real URL; logo stays text-only in v1 (logo_url never LLM-written)."""
 
@@ -3976,7 +4029,7 @@ FilmSceneElement = Annotated[
 ]
 
 
-class FilmSceneComposite(BaseModel):
+class FilmSceneComposite(FilmSceneBase):
     """The composition scene (ADR-140): a theme-colored background (``dark``
     polarity, the words scene's two-stop vocabulary) plus an ordered element
     list — video/image media elements and independent text elements composing
@@ -4032,9 +4085,9 @@ class FilmStoryboard(BaseModel):
     null-read tolerant (打字机牙①).
 
     Per-scene ``narration`` (配音词) is SPOKEN copy — code synthesizes it and
-    projects the same words into deterministic subtitle cues at spec time; it
+    does not implicitly create a subtitle track; it
     is never grounding-checked verbatim (the director rephrases the page's
-    facts into speech), and reads as no-voiceover/no-captions when null
+    facts into speech), and reads as no-voiceover when null
     (打字机牙① applies to every prose field)."""
 
     model_config = ConfigDict(extra="forbid")
@@ -4048,6 +4101,13 @@ class FilmStoryboard(BaseModel):
     # to the run's legacy language chain.
     language: str | None = None
     scenes: list[FilmScene] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def subtitle_windows(self) -> FilmStoryboard:
+        for scene in self.scenes:
+            if scene.subtitle_track and scene.subtitle_track.cues[-1].end > scene.seconds:
+                raise ValueError("subtitle cues must fit within their scene duration")
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -4285,8 +4345,22 @@ class FilmEditUpdateElement(BaseModel):
     enter_style: Literal["rise", "fade", "slide"] | None = None
 
 
+class FilmEditSetSubtitles(BaseModel):
+    """Create or replace a scene's entire subtitle track; null deletes it.
+    Read the current track first when modifying cues/style, preserve everything
+    not requested. Times are scene-relative seconds. Works on ALL scene types,
+    without narration, audio synthesis, or redesign. Batch one op per scene.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    op: Literal["set_subtitles"]
+    scene_id: str
+    track: SubtitleTrack | None
+
+
 FilmEditOp = Annotated[
-    FilmEditUpdateScene
+    FilmEditSetSubtitles
+    | FilmEditUpdateScene
     | FilmEditUpdateElement
     | FilmEditReorderScenes
     | FilmEditRemoveScene

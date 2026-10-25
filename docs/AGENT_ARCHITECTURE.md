@@ -1,11 +1,11 @@
 # Repurposer Agent Architecture
 
-> Status: Active（最后更新 2026-09-14）。会话层 = ADR-077 有界工具 loop（读工具 + 门动作工具 + 终态工具停环，ToolLoopAgent），生产层 Graph/Harness/Model 脊柱；施工简报 现行规范 `CHAT_ARCHITECTURE.md`。
+> Status: Active（2026-10-25）。会话层 = ADR-077 有界工具 loop（读工具 + 终态工具停环，ToolLoopAgent），生产层 Graph/Harness/Model 脊柱；会话行为现行规范 = `CHAT_ARCHITECTURE.md`。
 > 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 工具包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29 起）；loop 层行为规格见 CHAT_ARCHITECTURE.md；行业座位映射见 §2.5；**概念层母文档（厚 agent 判词 / 双引擎 workflow / 有界 loop 节点）见 `DIALOG_WORKFLOW.md`（ADR-052）**。
 
 ## 1. 叙事
 
-Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自媒体规划 / 配乐……）。**技能内部，是 agent 调 LLM、用 tools 实现的。**
+Repurposer 对外是一个 AI assistant，可提供剪辑、配音、字幕、写作与配乐等能力。实现上，可派发能力统一住 `app/tools/` 工具包并由 `TOOL_REGISTRY` 登记；工具可包含确定性工序或声明式 agent。`app/skills/*/SKILL.md` 只是装配期注入的指令包，不是运行时能力注册表。
 
 架构一句话：**外层 loop（chat 治理环）编译出内层 graph（DAG 执行核）；图上每个节点自描述；每个 LLM 决策单元是同一个 Agent 类的声明实例，每次调用过同一个 harness 漏斗；模型经 client 单边界。**
 
@@ -83,7 +83,7 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 | **agent** | LLM 决策单元（N-29 正名）：一个 Agent 类的声明实例（N-30） |
 | **机械** | 无 LLM 决策的工具（"确定性工具"描述语）；providers/ 与确定性工具禁 import agents/LLM client |
 | **工具包** `tools/` | 能力的唯一家：节点类 + params + 私有工序 + 估价 + 展示键（+私有 agent 声明） |
-| **质检** `verify`（节点 kind） | 单产物/全片质量校验（Phase 3，未实现）；可寻址、可计价、可单独重跑 |
+| **质检** `verify`（内部节点 kind） | 当前可执行的确定性检查矩阵 + 声明式辅助 judge；有界 QualityBounce、best-not-last 与 needs_human；不是用户可提议 tool，全片深度看片仍开放 |
 | **施工图** `workflow_steps` | 计划+账簿一体的 DAG 内核：`inputs` 边表 / `spec` 参数 / `output_refs` 产物 / `estimate` 计划侧成本 / `cost` 账簿侧成本 |
 | **产物** `outputs` | 统一产物表；产物类型 = 工具的属性（N-32），注册表派生可扩展；用户可见的产物预告 = 干跑编译的派生预览 `derived`（ADR-043） |
 
@@ -95,7 +95,7 @@ Repurposer 是一个 AI 助手，身怀技能（剪辑 / 配音 / 字幕 / 自�
 
 ```python
 class NodeBase:
-    kind: str                           # 唯一键；技能节点 kind = 技能名（N-35）
+    kind: str                           # 唯一键；工具节点 kind = 工具名（N-35）
     # —— 类属性声明 ——
     output_type: str | None = None      # 产出型节点的产物（outputs 可扩展的家）
     after: tuple[str, ...] = ()         # 拓扑约束
@@ -115,7 +115,7 @@ class NodeBase:
 |---|---|
 | **报价** | fold：编译图逐节点 `estimate()` 求和——全图 = 生成前总价（dock 展示），子图 = 修改单价，配方预设图 = 配方卡估价贴 |
 | **执行** | topo 走图：worker `FOR UPDATE SKIP LOCKED` 认领 ready 节点 → `NODE_KINDS[kind].run()` → 收尾 `maybe_finalize_run` |
-| **校验** | ∀：出生地（`create_run`）对每个节点 `requires` 一次跑完，缺输入 422——链上技能直接携带其节点的 `requires` 声明，驱动器唯一（clips 需媒体 = SelectClips 自己的声明） |
+| **校验** | ∀：出生地（`create_run`）对每个节点 `requires` 一次跑完，缺输入 422——链上工具直接携带其节点的 `requires` 声明，驱动器唯一（clips 需媒体 = SelectClips 自己的声明） |
 | **对账** | ⊆：配方 flow keys ⊆ 编译图 kind 集，启动自检（`compile_graph` 是纯函数，直接编译配方比对），无需人肉评审 |
 | **重跑** | 子图词汇：只跑此节点 / 从这里跑 / 跑到这里（节点可寻址的免费获得） |
 
@@ -134,7 +134,7 @@ class NodeBase:
 
 ### 4.5 节点分两类
 
-> **（ADR-072 / ADR-076）** 本节「工具节点 / 内部节点」的实现视角分类不变（注册表准入与提议空间仍由它管辖）；**画布用户面 = 词表 v3 三轴**：图节点 `type` = 媒介五值（`text`/`table`/`image`/`video`/`audio`——`graph_nodes.type` 列，工具节点 kind = 工具名不动），`spec.prototype` = `generator`/`editor`/`manual`（程序区按它门控），业务身份 = `spec.summary` + `spec.tool`。工具节点类声明 `node_type` + `prototype`（`assert_runners_registered` 启动自检追齐）；`doc_station` 类声明驱动**两站**（captions/dub：asm = video×editor + doc 伴侣 = table×manual，估价 token/units stamp 侧拆分）；materialize_source 折叠为消费节点内部 step；research = 单节点（text×generator）；write_post/write_article = text×generator。旧行（generator/processor/agent 卡种、modifier（music/filler/reframe）/ materialize 旧词）永不迁移，读面 `_read_face` 一帧映射。modifier 收杠杆 / 分镜表表格档 / 书节点下线归后续批。
+> **（ADR-072 / ADR-076）** 本节「工具节点 / 内部节点」的实现视角分类不变（注册表准入与提议空间仍由它管辖）；**画布用户面 = 词表 v3 三轴**：图节点 `type` = 媒介五值（`text`/`table`/`image`/`video`/`audio`——`graph_nodes.type` 列，工具节点 kind = 工具名不动），`spec.prototype` = `generator`/`editor`/`manual`（程序区按它门控），业务身份 = `spec.summary` + `spec.tool`。工具节点类声明 `node_type` + `prototype`（`assert_runners_registered` 启动自检追齐）；`doc_station` 类声明驱动**两站**（captions/dub：asm = video×editor + doc 伴侣 = table×manual，估价 token/units stamp 侧拆分）；materialize_source 折叠为消费节点内部 step；research = 单节点（text×generator）；write_post/write_article = text×generator。旧媒介/prototype 词由读面 `_read_face` 归一；task_book、transcript 与探索行的物理迁移、删除或过滤分别按 `tasks/product-flow-alignment.md` 和 migration 合同执行，不得把“读面兼容”写成“所有 legacy 行永不迁移”。modifier 收杠杆、分镜表表格档与旧计划节点下线只按当前合同验收。
 
 - **工具节点**：工具包持有，LLM 可提议（dispatchable），kind = 工具名（`select_clips`/`write_post`/`dub_clip`/`translate_clip`/`remove_filler`/`add_music`/`align_stills`/`revise_script`/`research`…）。
 - **内部节点**：内核 crew，永不进提议空间（`preprocess`/`persona_bootstrap`/`understand`/`plan`/`checkpoint`/`render`），住 `pipeline/`。
@@ -169,7 +169,7 @@ class Agent[OutT]:
 ### 5.2 三条纪律
 
 1. **修复带反馈**：schema/裁决失败 → 错误结构化回显 → **一轮**自修复 → 再败才算节点失败（走图的重试语义）。不带反馈的重试只是掷两次骰子。
-2. **兜底声明化**：静默降级是例外不是常态——合法先例 = intent router 永不白屏（fallback 计划可确认可改）、多模态拒绝 → 文本降级；其余默认禁，声明处一眼可查。
+2. **兜底声明化**：静默降级是例外不是常态——合法兜底必须在 agent 声明处可见，例如多模态拒绝后的文本降级；其余默认禁。intent provider 故障不得用编造的默认计划“永不白屏”，而应进入当前失败形态。
 3. **纯度签名化**：禁注规则在类型层不可表示——`understand.call(asset_texts, media)` 的签名里没有 persona 参数；比任何 prompt 警告都硬，签名即文档、评审即测试。
 
 ### 5.3 花名册与声明归属
@@ -215,12 +215,14 @@ tools/dub/           配音工具
 - **计量（账簿侧）**：usage → `workflow_steps.cost`（ADR-025 不变）；媒体调用（TTS/克隆/图像/音乐）经 `record_media_usage` 记实际量（`cost.units`）并把价目折钱累进 `cost.fixed_cost`。
 - **价目住 Model 层**：`providers/llm/minimax.py` 的 `PRICING` 表 + `price_units`/`price_tokens` 是 MiniMax 价格的唯一事实源——节点报量、client 报价，报价 fold 与计量账簿读同一份价目（量×价两侧同源，校准才可比）。
 - **两列对称**：`workflow_steps.estimate`（nullable，NULL = 未估价）与 `cost`——施工图 = 计划+账簿一体。
-- **校准闭环**：actual（cost）与 estimate 偏差回归 → 收窄报价区间；报价长期可信的唯一路径。偏差读形已落地（`outputs.step_estimate_deviation` 单节点 / 同 docstring 内 SQL  twin 全舰队回归），呈现与收窄节奏随第七周积分批（ADR-055）。
-- 用户呈现（PROGRESS 第七周积分批，ADR-055 / `docs/BILLING.md`）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴。
+- **校准闭环**：actual（cost）与 estimate 偏差回归 → 收窄报价区间；报价长期可信的唯一路径。偏差读形已落地（`outputs.step_estimate_deviation` 单节点 / 同 docstring 内 SQL twin 全舰队回归）；呈现与收窄节奏按 `PROGRESS.md` 当前商业化与成本校准条目执行。
+- 用户呈现按 `BILLING.md` 当前合同：dock 生成前总价 / chat 修改单价 / 配方卡估价贴 / 草稿节点估价；NULL 不可报价与守卫线不得被总价展示吞掉。
 
-## 9. 质检方向（Phase 3，未实现）
+## 9. 当前质检边界
 
-verify 节点 kind：单产物质检（分数+理由落库，不合格带反馈打回上游 ≤2 次，再败标"待人工"不阻塞）+ 全片质检（跨产物矛盾/撞车）。Layer-4 的旧概念不是"层"，是图里的一种节点——可寻址、可计价、可单独重跑，失败只打回不合格分支。
+`verify` 是当前注册可执行的内部节点：编译时挂在相应生成执行器之后，确定性检查矩阵负责文件、保真、锚点、响度、数量与计划意图等校验；声明式 judge 只承担其注册的辅助检查，失败不得伪装成质检通过。QualityBounce 有界打回上游，支持 best-not-last 快照恢复与 needs_human 升级；在 Product Graph 中折叠进执行器家族，不成为用户可提议工具或独立产品节点。
+
+首发推荐分的四轴明细与版本一致展示归 `tasks/output-quality-verify.md`；全片跨产物矛盾检查、深度看片 reviewer 与更多 modifier 质检不随现有 verify 自动宣称完成，开放范围归 `PROGRESS.md`。
 
 ## 10. 验收器
 

@@ -26,9 +26,9 @@
 
 | 手艺 | 细节 | 我们的落点 |
 |---|---|---|
-| Composer 输入 slot 化 | 必需/可选标注，提交前缺什么一眼可见 | composer 契约的 UI 表达（outputs 必选标注） |
-| Gallery + Remix | 卡片 hover 出 CTA，一键带状态进 composer，零跳转 | STRATEGY §5 配方卡（Phase 1）；差异：他们 remix 风格，我们 remix 参数集 |
-| 新手 coachmark | 4 步气泡（审美/资源/声音/宽高比） | home 首次使用导览（随 Phase 1） |
+| Composer 输入 slot 化 | 必需/可选标注，提交前缺什么一眼可见 | 素材与目标需求的预填表达；最终任务由 Chat 计划判定，不恢复请求层 `outputs` 语法 |
+| Gallery + Remix | 卡片 hover 出 CTA，一键带状态进 composer，零跳转 | 当前只吸收 composer 预填；发射载荷是可编辑 prompt，不继承隐藏参数包。真实 Gallery/remix 仍 deferred，见 STRATEGY §5 当前边界 |
+| 新手 coachmark | 4 步气泡（审美/资源/声音/宽高比） | home 首次使用导览；当前内容与显示状态以实际 UI 合同为准 |
 | 快捷入口 chips | 脚本转视频/歌曲转视频/音频转视频/资产转广告/动态图形（任务型 recipe 入口） | 配方卡的另一种呈现 |
 | 通知中心 = 教育渠道 | what's-new + 功能 CTA，非流水账 | header 铃铛真实设计（PROGRESS 通知中心线） |
 | Credits 透明三件套 | 余额常显 + 分解 popover + 翻译成产出单位（"60 积分 = 2 个 30 秒视频"） | 套餐级数学；我们做**生成前真实预估**（更强，PROGRESS 成本预估线） |

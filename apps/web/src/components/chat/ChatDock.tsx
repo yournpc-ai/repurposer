@@ -144,6 +144,13 @@ import {
   spliceAnswerEnvelope,
 } from "./answerSettlement"
 import { shouldPaceStartEnvelopeProse } from "./startSettlement"
+import {
+  insertRecoveredMessage,
+  isFreshPolledRow,
+  observedMessageSeq,
+  prependMissingHistory,
+  shouldAdmitPolledTrigger,
+} from "./liveMessageReconcile"
 import { matchOptionByText } from "./optionMatch"
 import {
   resetActivities,
@@ -989,6 +996,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
 
   // Conversation below the pinned regions (plan card / progress).
   const [messages, setMessages] = useState<OverlayMessage[]>([])
+  /** Highest persisted transcript position observed from ANY server channel,
+   * including non-render rows. Polling compares against the value from before
+   * its response: a row merely unknown to this client is not automatically
+   * new work for the live edge. */
+  const observedSeqRef = useRef<number | null>(null)
+  const noteObservedSeq = useCallback((seq?: number | null) => {
+    if (seq != null && (observedSeqRef.current == null || seq > observedSeqRef.current)) {
+      observedSeqRef.current = seq
+    }
+  }, [])
   // The defensive sweep (T16-B's client twin — the server sweeps before the
   // envelope, this catches whatever the stream lost): a settling turn never
   // leaves an activity spinning forever (假活跃禁令). Sweeps BOTH seats: the
@@ -1016,6 +1033,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // markdown, so it lands atomically (never through the typewriter — the
   // law's atomic-landing twin), after its design activity's settle row.
   const handleRowAppend = useCallback((row: RowAppendPayload) => {
+    noteObservedSeq(row.seq)
     const frame = activityRowFrame(row.intent)
     if (!frame) {
       if (row.role !== "assistant" || !row.content) return
@@ -1027,6 +1045,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             id: row.id,
             role: "assistant" as const,
             content: row.content,
+            seq: row.seq ?? undefined,
             at: row.created_at ?? undefined,
           },
         ]
@@ -1042,12 +1061,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           id: row.id,
           role: "assistant" as const,
           content: "",
+          seq: row.seq ?? undefined,
           at: row.created_at ?? undefined,
           activity: frame,
         },
       ]
     })
-  }, [])
+  }, [noteObservedSeq])
   const handleRowUpdate = useCallback(
     (id: string, frame: ActivityRowFramePayload) => {
       currentActivityRowKeysRef.current.add(id)
@@ -1328,29 +1348,33 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         content?: string | null
         created_at?: string
         workflow_run_id?: string | null
+        seq?: number | null
       },
       {
         suggestions,
         sealRunId = null,
+        fresh = true,
       }: {
         suggestions?: SuggestionPill[]
         sealRunId?: string | null
+        fresh?: boolean
       } = {},
     ) => {
+      noteObservedSeq(row.seq)
       setMessages((prev) =>
-        prev.some((m) => m.id === row.id)
-          ? prev
-          : [
-              ...prev,
-              {
-                id: row.id,
-                role: "assistant" as const,
-                content: "",
-                streaming: true,
-                at: row.created_at,
-                runId: row.workflow_run_id,
-              },
-            ],
+        insertRecoveredMessage(
+          prev,
+          {
+            id: row.id,
+            role: "assistant" as const,
+            content: "",
+            streaming: true,
+            seq: row.seq ?? undefined,
+            at: row.created_at,
+            runId: row.workflow_run_id,
+          },
+          { fresh },
+        ),
       )
       let sawVisible = false
       const tw = createTypewriter((fragment) => {
@@ -1381,7 +1405,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         ),
       )
     },
-    [noteSpeechVisible, sealRunWorkSegment],
+    [noteObservedSeq, noteSpeechVisible, sealRunWorkSegment],
   )
 
   /** The Start recovery's read-only deps (2026-10-22 — backend-accepted,
@@ -1491,9 +1515,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // Phase 3 Batch A) — same branches, zero lifecycle derivation: a
         // refresh reads the archive, readiness comes from the stamp alone.
         const history = mapHistoryRows(data.items ?? [], { t })
-        // Prepend — anything pushed locally since mount is newer.
-        if (!cancelled && history.length > 0) {
-          setMessages((prev) => [...history, ...prev])
+        // Prepend only missing archive ids — anything pushed locally since
+        // mount is newer, and an already-live row keeps its typing state.
+        if (!cancelled) {
+          for (const row of data.items ?? []) noteObservedSeq(row.seq)
+          if (history.length > 0) {
+            setMessages((prev) => prependMissingHistory(prev, history))
+          }
         }
       } catch {
         /* the archive replay is best-effort */
@@ -1564,7 +1592,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   }, [messages])
   const triggerInFlight = useRef<Set<string>>(new Set())
 
-  const pollTriggerMessages = useCallback(async (): Promise<void> => {
+  const pollTriggerMessages = useCallback(async ({
+    includeActivityRows = true,
+    reviewRunId = null,
+  }: {
+    includeActivityRows?: boolean
+    reviewRunId?: string | null
+  } = {}): Promise<void> => {
     try {
       const convRes = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
         toast: false,
@@ -1579,38 +1613,64 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       const data = (await res.json()) as {
         items?: (QuestionMessage & { role: "user" | "assistant" | "system" })[]
       }
-      for (const row of data.items ?? []) {
+      const rows = data.items ?? []
+      const observedBefore = observedMessageSeq(
+        observedSeqRef.current,
+        messagesRef.current,
+      )
+      // The response advances the observation watermark immediately; each
+      // admission decision below still compares with the PRE-response tail.
+      for (const row of rows) noteObservedSeq(row.seq)
+      for (const row of rows) {
         if (row.role !== "assistant") continue
         // 永不渲染行 (ADR-108): the rejection forensics ledger / legacy
         // aggregate logs never enter the flow.
         if (isNonRenderIntent(row.intent)) continue
-        // 素材节拍 + activity 数组行 (ADR-108): a persisted activity entry
-        // lands in the flow as a settled unit AT ITS ARRAY POSITION — the
-        // now-line's live think row morphs away on its own facts, this is
-        // the durable gray row behind it. Dedup by the server row id (the
-        // poll repeats); append-only — the poll's list is seq-ordered, so a
-        // row new to this client is always a tail append.
-        const beat = materialBeat(row.intent) ?? activityRowFrame(row.intent)
+        const fresh = isFreshPolledRow(row.seq, observedBefore)
+        // 素材节拍 + activity 数组行 (ADR-108): polling is a LIVE-TAIL
+        // channel, not an archive backfill. A row old enough to precede the
+        // client's observed tail belongs to history replay; discovering it
+        // only during run review must not inject a homeless work row now.
+        // Run review has its own run-step surface and admits NO activity
+        // rows; the processing watch keeps fresh material beats.
+        const beat = includeActivityRows
+          ? materialBeat(row.intent) ?? activityRowFrame(row.intent)
+          : undefined
         if (beat !== undefined) {
+          if (!fresh) continue
           if (messagesRef.current.some((m) => m.id === row.id)) continue
           setMessages((prev) =>
-            prev.some((m) => m.id === row.id)
-              ? prev
-              : [
-                  ...prev,
-                  {
-                    id: row.id,
-                    role: "assistant" as const,
-                    content: "",
-                    at: row.created_at,
-                    activity: { ...beat, at: beat.at ?? row.created_at },
-                  },
-                ],
+            insertRecoveredMessage(
+              prev,
+              {
+                id: row.id,
+                role: "assistant" as const,
+                content: "",
+                seq: row.seq ?? undefined,
+                at: row.created_at,
+                activity: { ...beat, at: beat.at ?? row.created_at },
+              },
+              { fresh: true },
+            ),
           )
           continue
         }
+        // Current server rows always carry seq. A null-seq row is legacy
+        // archive, never a new live-tail arrival; mount replay still renders
+        // it with read tolerance.
+        if (row.seq == null) continue
         const suggestions = triggerSuggestions(row.intent)
         if (suggestions === undefined) continue
+        // A generic watch never backfills old speech. Run review admits only
+        // its own delivery/failure row; an unrelated trigger is not this
+        // window's to recover, even when it is new to this client.
+        if (!shouldAdmitPolledTrigger({
+          fresh,
+          reviewRunId,
+          rowRunId: row.workflow_run_id,
+        })) {
+          continue
+        }
         // Dedup by the SERVER row id — the archive replay and a previous
         // poll arrival land under the same id, so the row is known if it is
         // in the flow already or mid-typing. A PENDING options question
@@ -1630,6 +1690,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           await pacePersistedMessage(row, {
             suggestions,
             sealRunId: row.workflow_run_id,
+            fresh,
           })
           // 选项语法统一律 (ADR-081): a NEW-shape trigger row carries its
           // suggestions as a real options question (question payload) —
@@ -1647,7 +1708,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     } catch {
       /* server-born speech is best-effort — the replay rebuilds on refresh */
     }
-  }, [projectId, fetchPendingQuestion, pacePersistedMessage])
+  }, [projectId, fetchPendingQuestion, pacePersistedMessage, noteObservedSeq])
 
   // Load the project's assets for the prompt attachments — once on mount,
   // and again after a chat turn when the project started empty: the plan
@@ -1710,6 +1771,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             )
             if (!res.ok) continue
             rows = ((await res.json()) as { items?: typeof rows }).items ?? []
+            for (const row of rows) noteObservedSeq(row.seq)
           } catch {
             continue
           }
@@ -1778,7 +1840,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         }
       }
     },
-    [projectId, fetchPendingQuestion, fetchAssets, settleActivities, pacePersistedMessage, t],
+    [projectId, fetchPendingQuestion, fetchAssets, settleActivities, pacePersistedMessage, noteObservedSeq, t],
   )
   const reconcileTurnRef = useRef(reconcileTurn)
   useEffect(() => {
@@ -1877,6 +1939,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   )
   useEffect(() => {
     if (!assetsProcessing) return
+    // Open the observation baseline before the first tick; beats already in
+    // this snapshot are archive, beats extending it afterwards are live.
+    void pollTriggerMessages()
     const id = setInterval(() => {
       void fetchAssets()
       void pollTriggerMessages()
@@ -1901,7 +1966,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   useEffect(() => {
     if (!terminal || !runId || reviewerLanded) return
     const startedAt = Date.now()
-    void pollTriggerMessages()
+    void pollTriggerMessages({ includeActivityRows: false, reviewRunId: runId })
     const id = setInterval(() => {
       if (Date.now() - startedAt > 60_000) {
         clearInterval(id)
@@ -1913,7 +1978,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         )
         return
       }
-      void pollTriggerMessages()
+      void pollTriggerMessages({ includeActivityRows: false, reviewRunId: runId })
     }, 3000)
     return () => clearInterval(id)
   }, [
@@ -2269,6 +2334,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     return {
       role: "assistant",
       content: "",
+      seq: message.seq ?? undefined,
       at: message.created_at,
       qa: buildQaBlock(message, display.text, display.muted),
     }
@@ -2323,6 +2389,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             role: "assistant",
             content: message.content ?? "",
             runId: message.workflow_run_id,
+            seq: message.seq ?? undefined,
           })
         }
         return
@@ -2338,6 +2405,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           pushMessage({
             role: "assistant",
             content: echo,
+            seq: message.seq ?? undefined,
             at: message.created_at,
           })
         }
@@ -2537,7 +2605,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
      * under the SAME key (the envelope's content wins); never a remount.
      * 数组位置律 (ADR-108): the row's POSITION is its array index — the
      * envelope's created_at is never re-anchored (ordering never reads at). */
-    const finalizePreview = (content?: string, runId?: string | null) =>
+    const finalizePreview = (content?: string, runId?: string | null, seq?: number | null) =>
       setMessages((prev) =>
         prev.map((m) =>
           m.id === streamId
@@ -2545,6 +2613,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                 ...m,
                 content: content ?? m.content,
                 runId: runId === undefined ? m.runId : runId,
+                seq: seq == null ? m.seq : seq,
                 streaming: false,
               }
             : m
@@ -2559,12 +2628,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     const paceSettledProse = async (
       content: string,
       runId?: string | null,
+      seq?: number | null,
     ) => {
       // The machine pins the main row at push (出生钉位) and paces the
       // content in — same key, no blob, no erase.
       segments.push(content)
       await segments.drain()
-      finalizePreview(content, runId)
+      finalizePreview(content, runId, seq)
     }
     /** 打字机律·工具线重述牙③ (T2b 感知族): the loop's accumulated speech may
      * EXTEND the streamed preview — words spoken before a kept read call are
@@ -2586,6 +2656,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }
     try {
       const data = await streamChat<{
+        user_message: QuestionMessage
         assistant_message: QuestionMessage | null
         run_id: string | null
         answered_question?: QuestionMessage | null
@@ -2701,6 +2772,23 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // blind to what we are rendering unless the real row ids are
       // registered at the ownership handoff (symmetric to reconcile's own
       // registration). Any reconcile that still fires later skips them.
+      noteObservedSeq(data.user_message.seq)
+      noteObservedSeq(data.assistant_message?.seq)
+      noteObservedSeq(data.answered_question?.seq)
+      if (opts?.rollbackId) {
+        const optimisticId = opts.rollbackId
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === optimisticId
+              ? {
+                  ...m,
+                  seq: data.user_message.seq ?? m.seq,
+                  at: data.user_message.created_at ?? m.at,
+                }
+              : m,
+          ),
+        )
+      }
       if (data.assistant_message != null) {
         reconciledIdsRef.current.add(data.assistant_message.id)
       }
@@ -2747,6 +2835,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           finalizePreview(
             data.assistant_message.content ?? undefined,
             data.run_id,
+            data.assistant_message.seq,
           )
         } else {
           // Zero-delta start: the settled speech still paces BEFORE the run
@@ -2765,6 +2854,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             await paceSettledProse(
               data.assistant_message.content ?? "",
               data.run_id,
+              data.assistant_message.seq,
             )
           } else {
             setMessages((prev) => prev.filter((m) => m.id !== streamId))
@@ -2825,7 +2915,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           // dock branch used to keep the streamed orphan AND suppress the
           // real echo via echoCarried — the live view diverged from the DB).
           await paceUnstreamedTail(message.content ?? "")
-          finalizePreview(message.content || undefined)
+          finalizePreview(message.content || undefined, undefined, message.seq)
           if (message.question.kind === "task_book") {
             if (intentReady && livePlanMessageId) {
               setPlanVersions((prev) => [
@@ -2841,7 +2931,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           // drain, so the prose leads and the question follows (打字机律).
           const settledEcho = questionEcho(message)
           if (settledEcho) {
-            await paceSettledProse(settledEcho)
+            await paceSettledProse(settledEcho, undefined, message.seq)
           } else {
             setMessages((prev) => prev.filter((m) => m.id !== streamId))
           }
@@ -2881,6 +2971,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         finalizePreview(
           message.content ?? "",
           message.workflow_run_id,
+          message.seq,
         )
       } else {
         // Zero-delta prose reply: same last-gate pacing as the dock branch.
@@ -2890,6 +2981,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           await paceSettledProse(
             message.content ?? "",
             message.workflow_run_id,
+            message.seq,
           )
           await handleAssistantMessage(message, { echoCarried: segments.streamedAny })
         } else {
@@ -3332,6 +3424,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       await segments.drain()
       setThinkingPhase(null)
       settleActivities("completed") // defensive twin of the server sweep
+      noteObservedSeq(data.answered_question.seq)
+      noteObservedSeq(data.follow_up?.seq)
       const answeredRow = buildAnsweredQuestionRow(data.answered_question)
       const followUp = data.follow_up
       // 打字机律最后闸门 (sendChat 同款): a zero-delta follow-up (the

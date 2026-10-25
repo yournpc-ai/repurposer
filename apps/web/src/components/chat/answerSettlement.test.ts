@@ -170,6 +170,7 @@ describe("spliceAnswerEnvelope", () => {
       followUp: followUp({
         content: "Here is the plan.",
         workflow_run_id: "run1",
+        seq: 22,
       }),
     })
     expect(out.map((m) => m.id)).toEqual(["u1", "opt1", "prev1"])
@@ -180,6 +181,7 @@ describe("spliceAnswerEnvelope", () => {
     expect(out[2]).toMatchObject({
       content: "Here is the plan.",
       runId: "run1",
+      seq: 22,
       at: "2026-09-28T10:00:00Z",
       streaming: false,
     })

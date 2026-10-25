@@ -30,7 +30,7 @@
 ┌───────────────────┐   ┌─────────── Pipeline ✅（RunPlan 内核）────────┐
 │ Operation Model ✅ │   │ 摄入/预处理（ASR）✅ │ 两步/agent 花名册 ✅    │
 │ （操作日志层，      │   │ ┌── RunPlan 内核（施工图，ADR-028 ✅）───┐│
-│  三前端共用）      │   │ │ workflow_steps：前奏两步/技能节点/质检节点   ││
+│  三前端共用）      │   │ │ workflow_steps：前奏两步/工具节点/质检节点   ││
 └─────────┬─────────┘   │ │ orchestrator 走图 · worker 认领节点       ││
           │             │ │ 链：clip 链 ✅/文案链 ✅/Film 链 ✅/合成链 📋R5 ││
           │             │ └───────────────────────────────────────────┘│
@@ -122,7 +122,7 @@ Distribution ✅：channel_accounts ──► publications（直发状态机与�
 
 | 模块 | 职责 | 现状代码 | 状态 |
 |---|---|---|---|
-| **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、生成编排（understand/plan 两步 + 技能节点）、RunPlan 计划图（ADR-028 ✅）、渲染触发 | `pipeline/asset_processing.py`、`pipeline/orchestrator.py`、`pipeline/node_runners.py`（内部节点）、`app/skills/`（技能包）、`app/agents/`（花名册+harness 漏斗）、`pipeline/rendering.py`；agent 架构事实源 = AGENT_ARCHITECTURE（ADR-039 四层工程地图） | ✅ 已落地 |
+| **Pipeline** | 素材摄入（上传/未来的链接抓取）、ASR/提取预处理、生成编排（understand/plan 两步 + 工具节点）、RunPlan 计划图（ADR-028 ✅）、渲染触发 | `pipeline/asset_processing.py`、`pipeline/orchestrator.py`、`pipeline/node_runners.py`（内部节点）、`app/tools/`（工具包与 `TOOL_REGISTRY`）、`app/skills/`（SKILL.md 指令包）、`app/agents/`（花名册+harness 漏斗）、`pipeline/rendering.py`；agent 架构事实源 = AGENT_ARCHITECTURE（ADR-039 四层工程地图） | ✅ 已落地 |
 | **Operation Model** | 操作日志（每个操作 = clip-spec diff）、undo 语义、agent 可调用的操作 schema（原子/幂等/可检查/可撤销） | `operations/`（registry/service/routes；ADR-032 快照式 undo） | ✅ 地基落地（editor/chat 两前端已写入；校准消费端仍 📋） |
 | **Agent Interface** | chat 主交互、意图→计划/操作/run dispatch、有界 tool calling、mentions、SSE/activity；MCP 不在当前范围 | `chat/routes.py`、`chat/service.py`、`chat/plan_turn.py`、`chat/propose_turn.py`、`chat/turn_tools.py`、`chat/activity.py`、`chat/perception/`、`agents/tool_loop.py`；前端 `components/chat/` 与 `components/mentions/` | ✅ 当前主链；目标工具迁移与 MCP 分列后续 |
 | **Editor GUI** | transcript 编辑、单轨 trim、Remotion 预览——Operation Model 的前端之一 | `apps/web/src/routes/_app.projects.$id.clips.$clipId.tsx` | ✅ 主体落地 |
@@ -172,8 +172,8 @@ Distribution ✅：channel_accounts ──► publications（直发状态机与�
 | 行业通用词 | 本系统对应 | 说明 |
 |---|---|---|
 | Agents（LLM 决策单元） | `app/agents/`（一个 Agent 类 + 声明实例，N-29/N-30） | 与 Mastra/Agno 同词 |
-| Tools（确定性执行） | `app/tools/`（机械） | 同名同物；禁 import agents/LLM client |
-| Skills（组合能力） | `app/skills/` 技能包 + SKILL_REGISTRY | = Mastra Skills 的登记处；技能一词一义（N-29），用户语言同词 |
+| Tools（可调用能力） | `app/tools/` 工具包 + `TOOL_REGISTRY` | 工具可包含确定性工序或声明式 agent；同名节点类持有执行、拓扑、计量与估价知识，LLM/provider 依赖按当前依赖方向走 `app/providers/` |
+| Skills（指令包） | `app/skills/*/SKILL.md` + `SKILL_REGISTRY` | 装配期按声明注入写作/工艺知识；无运行时工具发现，不替代 `TOOL_REGISTRY`，不是另一套节点能力 |
 | Agent Harness（调用面脚手架） | `agents/base.py` 漏斗 + contexts 装配 + prompts | 装配/校验/修复一轮/计量/声明兜底（harness 单义 = 本调用面，N-48） |
 | Workflows（编排图+执行） | RunPlan 内核（orchestrator + workflow_steps + worker 认领） | Workflow State=run 状态机；Suspend/Resume=step `waiting` 座位；Snapshots=spec/context；HITL=variant_pick gate（📋） |
 | workflow run（执行实例） | `workflow_runs` 表 | 行业标准全名（每 run 自带其编译出的 workflow=步骤图） |
@@ -313,7 +313,7 @@ apps/api/
 │   │   │                        #   永不作契约面；clip：存在/非零/可读 + sidecar 存在即法、非零
 │   │   │                        #   当且仅当 caption_track 非空）；未过 = FAILED +
 │   │   │                        #   spec.failure{stage:probe} 盖 render 镜像节点（台账读单字段）
-│   │   ├── verify.py            # 质检环节点（期 3）：确定性矩阵裁决 + QualityBounce 打回 + best-not-last
+│   │   ├── verify.py            # 内部质检节点：确定性矩阵裁决 + QualityBounce 打回 + best-not-last
 │   │   │                        #   快照回退 + 双败 escalation（dock 提问 + Suspend）；quality.py = 检查矩阵
 │   │   │                        #   纯函数半边（fidelity 族 + craft 可测量项 + run_checks 按类型分派）
 │   ├── agents/          # agent 声明 + harness 漏斗（ADR-039）：base.py（Agent / StreamingAgent）/

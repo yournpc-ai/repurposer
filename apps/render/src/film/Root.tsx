@@ -33,7 +33,7 @@ const DEFAULT_SPEC: FilmSpec = {
       frames: FILM_FPS,
       dark: false,
       lines: ["Film"],
-      captions: [],
+      subtitle_track: null,
     },
   ],
 };

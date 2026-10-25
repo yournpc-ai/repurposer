@@ -31,20 +31,37 @@ const themeSchema = z.object({
 /** Integer frames for this scene (fps is fixed at 30 — see Root.tsx). */
 const frames = { frames: z.number().int().positive() };
 
-/**
- * The scene's spoken narration (配音): an absolute audio URL staged like the
- * imagery, played inside the scene's Sequence (the boundary trims honestly).
- * Absent = the scene plays silent. ``captions`` are the code-projected cue
- * list for that narration (``at``/``end`` seconds from scene start; a missing
- * ``end`` falls back to the next cue or scene end). No narration ⇒ no
- * caption cues. ``captions`` is the ONLY caption field — no legacy keys.
- */
-const captionCues = z.array(
-  z.object({ at: z.number(), end: z.number().optional(), text: z.string() }),
-);
+/** Independent scene-relative subtitle cues and shared visual style.
+ * Audio is optional and never creates subtitles implicitly. */
+export const subtitleTrackSchema = z.object({
+  cues: z.array(z.object({
+    at: z.number().finite().nonnegative(),
+    end: z.number().finite().positive(),
+    text: z.string().trim().min(1),
+  }).strict()).min(1),
+  style: z.object({
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#FFFFFF"),
+    background: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#000000"),
+    font_size: z.number().finite().min(12).max(120).default(34),
+    font_weight: z.union([z.literal(400), z.literal(500), z.literal(600), z.literal(700), z.literal(800)]).default(600),
+    bottom: z.number().finite().min(0).max(0.8).default(0.04),
+    width: z.number().finite().positive().max(1).default(0.8),
+    enter: z.enum(["none", "fade", "rise"]).default("fade"),
+    exit: z.enum(["none", "fade"]).default("fade"),
+    fade_seconds: z.number().finite().positive().max(2).default(0.2),
+  }).strict().default({}),
+}).strict().superRefine((track, ctx) => {
+  track.cues.forEach((cue, i) => {
+    if (cue.end <= cue.at || (i > 0 && cue.at < track.cues[i - 1].end)) {
+      ctx.addIssue({code: z.ZodIssueCode.custom, message: "Subtitle cues must be ordered, nonoverlapping, with end > at"});
+    }
+  });
+});
+export type SubtitleTrack = z.infer<typeof subtitleTrackSchema>;
+export type SubtitleCue = SubtitleTrack["cues"][number];
 const narration = {
   audio: z.string().nullish(),
-  captions: captionCues.default([]),
+  subtitle_track: subtitleTrackSchema.nullish(),
 };
 
 const wordsScene = z.object({
@@ -93,7 +110,7 @@ const wordsScene = z.object({
   // legacy fade+rise+blur; "fade" = opacity only; "slide" = deterministic
   // translate-only motion with exact endpoints, no opacity ramp or blur.
   enter_style: z.enum(["rise", "fade", "slide"]).nullish(),
-});
+}).strict();
 
 const heroScene = z.object({
   type: z.literal("hero"),
@@ -101,7 +118,7 @@ const heroScene = z.object({
   ...narration,
   word: z.string(),
   sub: z.string(),
-});
+}).strict();
 
 const uiScene = z.object({
   type: z.literal("ui"),
@@ -121,7 +138,7 @@ const uiScene = z.object({
   focuses: z
     .array(z.object({ at: z.number(), x: z.number(), y: z.number(), zoom: z.number() }))
     .min(1),
-});
+}).strict();
 
 const dividerScene = z.object({
   type: z.literal("divider"),
@@ -130,7 +147,7 @@ const dividerScene = z.object({
   index: z.string(),
   label: z.string(),
   roll: z.array(z.string()).min(1),
-});
+}).strict();
 
 /**
  * The numbers beat: 2–4 glass cards over a calm procedural backdrop. A
@@ -145,7 +162,7 @@ const plateScene = z.object({
   title: z.string(),
   cards: z.array(z.object({ big: z.string().nullable(), label: z.string() })).min(1),
   backdrop: z.enum(["aurora", "dunes", "mist", "tide"]),
-});
+}).strict();
 
 const revealScene = z.object({
   type: z.literal("reveal"),
@@ -159,7 +176,7 @@ const revealScene = z.object({
   lead_frames: z.number().int().positive().default(48),
   word: z.string(),
   sub: z.string(),
-});
+}).strict();
 
 /**
  * The composition scene (ADR-140): media elements (a video SOURCE range
@@ -258,7 +275,7 @@ const compositeScene = z.object({
   ...narration,
   dark: z.boolean().default(false),
   elements: z.array(compositeElement).min(1),
-});
+}).strict();
 
 const endScene = z.object({
   type: z.literal("end"),
@@ -269,7 +286,7 @@ const endScene = z.object({
   url: z.string(),
   // Absolute URL of the brand mark shown next to `name`; absent = text-only.
   logo_url: z.string().nullish(),
-});
+}).strict();
 
 export const filmSceneSchema = z.discriminatedUnion("type", [
   wordsScene,
@@ -280,7 +297,11 @@ export const filmSceneSchema = z.discriminatedUnion("type", [
   revealScene,
   compositeScene,
   endScene,
-]);
+]).superRefine((scene, ctx) => {
+  if (scene.subtitle_track?.cues.some(cue => cue.end > scene.frames / 30 + 1e-9)) {
+    ctx.addIssue({code: z.ZodIssueCode.custom, message: "Subtitle cues exceed the scene duration"});
+  }
+});
 
 export const filmSpecSchema = z.object({
   family: z.literal("film"),

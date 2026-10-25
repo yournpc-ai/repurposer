@@ -14,10 +14,10 @@ Gated here (no DB / no LLM / no HTTP — the _StubDb pattern):
   plan-ready term is dead weight for the delivery gate: anchor cards render
   only under a terminal receipt, and a receipt exists ⟹ hasRuns=true);
   the line is omitted when the capability is unreported.
-- **承接句谓词分支真值表** (the prompt-law gate's code-side pin — the law's
-  seat is prompts/chat/trigger_system.j2): desktop (available=true, world
-  live) → canvas_visible=true → 零承接句零锚卡; mobile (false) →
-  canvas_visible=false → 承接句 + 锚卡渲染。
+- **环境行分支真值表**：desktop (available=true, world
+  live) → canvas_visible=true → 零锚卡; mobile (false) →
+  canvas_visible=false → 锚卡渲染。交付正文在各分支使用同一套
+  无界面引导、无内部 ID 的言语规则。
 """
 
 from uuid import uuid4
@@ -92,12 +92,12 @@ def _pending_plan() -> Message:
 
 class TestCanvasVisibleTruthTable:
     def test_desktop_world_live_is_visible(self) -> None:
-        # 桌面钉 (true/true): 零锚卡零承接句。
+        # 桌面钉 (true/true): 零锚卡；交付正文不介绍界面入口。
         assert canvas_visible(True, True) is True
 
     def test_mobile_is_never_visible(self) -> None:
-        # 移动钉 (false/*): 锚卡渲染 + 承接句门开 — world_live 救不回
-        # 能力位（768px 以下画布永不挂载）。
+        # 移动钉 (false/*): 锚卡渲染 — world_live 救不回能力位
+        #（768px 以下画布永不挂载）；交付正文不随环境增加界面引导。
         assert canvas_visible(False, True) is False
         assert canvas_visible(False, False) is False
 
@@ -107,7 +107,7 @@ class TestCanvasVisibleTruthTable:
         assert canvas_visible(True, False) is False
 
     def test_unknown_capability_propagates_none(self) -> None:
-        # None 传播 — 未知不是 false: 承接句门对未知恒闭 (永不编造)。
+        # None 传播 — 未知不是 false: Environment 行缺席，不伪造环境事实。
         assert canvas_visible(None, True) is None
         assert canvas_visible(None, False) is None
 
@@ -141,8 +141,8 @@ class TestEnvironmentLine:
 class TestBuildContextEnvironment:
     @pytest.mark.asyncio
     async def test_desktop_delivery_line(self) -> None:
-        """桌面钉: available=true + 已有 run (world live) → visible=true
-        → 承接句门闭 (trigger_system.j2 的 DELIVERY HANDOFF 法条)。"""
+        """桌面钉: available=true + 已有 run (world live) → visible=true；
+        交付正文仍使用统一的无界面引导规则。"""
         ctx = await build_context(
             _StubDb(runs=[_run()]), _project(), [], [], None,
             canvas_available=True,
@@ -152,8 +152,8 @@ class TestBuildContextEnvironment:
 
     @pytest.mark.asyncio
     async def test_mobile_delivery_line(self) -> None:
-        """移动钉: available=false → visible=false → 承接句门开 + 锚卡渲染
-        (⟺ !canvas_visible)。"""
+        """移动钉: available=false → visible=false → 锚卡渲染；
+        交付正文不随环境分支增加界面引导。"""
         ctx = await build_context(
             _StubDb(runs=[_run()]), _project(), [], [], None,
             canvas_available=False,
@@ -183,8 +183,8 @@ class TestBuildContextEnvironment:
 
     @pytest.mark.asyncio
     async def test_unreported_capability_omits_the_line(self) -> None:
-        """未知恒闭: 能力位未上报 (旧客户端 / worker 路径无戳) → Environment
-        行缺席, 承接句门闭 — 永不编造指向可能不存在的产物行的句子。"""
+        """未知恒缺席: 能力位未上报 (旧客户端 / worker 路径无戳) → Environment
+        行缺席，不把未知能力伪报成 true 或 false。"""
         ctx = await build_context(
             _StubDb(runs=[_run()]), _project(), [], [], None,
         )

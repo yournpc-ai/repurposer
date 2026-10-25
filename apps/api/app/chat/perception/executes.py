@@ -1143,6 +1143,9 @@ async def _film_observation(
                 head += f" · shows: {content}"
         narration = getattr(s, "narration", None)
         head += f' · narration: "{narration}"' if narration else " · silent"
+        head += " · subtitle_track: " + (
+            s.subtitle_track.model_dump_json() if s.subtitle_track else "none"
+        )
         lines.append(head)
 
     if not gate:

@@ -511,7 +511,10 @@ class PlanTurn:
             attached = [a.get("name") for a in (m.attachments or []) if a.get("name")]
             if not m.content and not attached:
                 continue
-            line = f"- {m.role}: {(m.content or '')[:200]}"
+            # The caller already bounds history by its token budget. Keep
+            # each retained message whole: clipping a presented storyboard
+            # loses its settings and approval question on the very next turn.
+            line = f"- {m.role}: {m.content or ''}"
             if attached:
                 line += f" [attached: {', '.join(attached)}]"
             recent_lines.append(line)

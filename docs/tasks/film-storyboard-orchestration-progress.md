@@ -19,7 +19,7 @@
 | 文字源 film | 用户原文或创作需求；逐字 / 改编；words + composite；子句 manifest、`CopyRef.span`、`group_chars` | 一次真实文字源设计尝试在 25,077 ms 后由 draft active→failed：无 assistant 内容、`terminal=None`、`run_id=None`，失败消息为“没能为那个页面写出忠实的短片文案——换一页文案更清楚的，或告诉我先突出什么。”（原始证据：`apps/api/scratch/t2a-acceptance/transcript.md`）。**当前代码重跑仍开放**；旧失败不是已确认的现行缺陷，也不是成功旅程 |
 | composite 组合幕 | 通用 video/image/text 元素；源区间、输出窗、rect/fit/z、独立文字时序、keep_audio；不建录屏专属生成系统 | 仅文字源出生；≤6 元素/幕、文字 ≤4 行；不与 beat grid 联动；无变速/循环/补帧/重播 |
 | 精确动画与文字样式 | enter/exit/motion 时间参数；words/lines 双单位；rise/fade/slide；严格逐行纯滑动由 `interval>=duration` 表达；align/size/accent_style；背景恒透明度；Fade 罩按元素退让 | **slide 的真实动态像素与逐行帧级验收未做**；容量检查是估算，不是字体排版测量；真实模型稳定生成合法参数未验 |
-| 六个结构化 op | `update_scene`、`update_element`、`reorder_scenes`、`remove_scene`、`set_music`、`set_voiceover`；原子批次与 change_set；patch 顶层互斥、最小合法示例与 copy 字符/行数/文字片显示单位限制在真实 wire schema 可见，数字由校验常量现场投影；完整句子可按语义分行，保留原文不得为过校验截断或删改 | `set_aspect` 不存在；`update_element` 不能换素材；多处修改须一次原子批次；定向 schema/真实校验测试与单次隔离真实模型首次合法调用已通过，但完整 Chat 旅程、多次模型样本与过期 base_ref 真实旅程未跑 |
+| 结构化编辑 op | `update_scene`、`update_element`、`reorder_scenes`、`remove_scene`、`set_music`、`set_voiceover`、`set_subtitles`；原子批次与 change_set；patch 顶层互斥、最小合法示例与 copy 字符/行数/文字片显示单位限制在真实 wire schema 可见，数字由校验常量现场投影；完整句子可按语义分行，保留原文不得为过校验截断或删改 | `set_aspect` 不存在；`update_element` 不能换素材；多处修改须一次原子批次；定向 schema/真实校验测试与单次隔离真实模型首次合法调用已通过，但完整 Chat 旅程、多次模型样本与过期 base_ref 真实旅程未跑 |
 | 同回合纠正、失败停止与条件保护 | 同回合有界纠正不是产品总修订轮数上限；同签名第 2 次设计拒绝即停、同回合累计第 3 次设计拒绝必停；失败台账只由完全等价 patch 成功销账；unmet_condition / copy_drift 押住 auto 开工 | 每回合失败预算不是 R8-M 统一嵌套 LLM 上限；真实模型侧停止、活动终态和 dock 呈现未验；签名/相等不证明用户目标完成 |
 | 当前稿 / 旧 Output 读取 | `get_output_spec` 双形；run provenance 恢复基准；原版 Output 保留 | 画幅变体仍是 PLANNED；长设计回合中流失败的分镜可见性缺口仍挂单（`on_row_append` 无调用点） |
 | 素材发现 | `list_project_media` 分页、ids 选读、@钉选提首；真实时长探测 | 40 行打印帽需分页/选读；不能把截断当不存在；复杂浏览器操作不在当前能力内 |
@@ -27,10 +27,12 @@
 | Chat Film 版本执行与形状三态 | `edit_graph` 的 Film edit_prompt/generic run 在提交前拒绝，通用 dispatcher 后挡；EditGraph 制作意图接入内部 proposal；开放重稿的 target_seconds/scene_count/group_chars 省略继承、null 清除、给值覆盖 | 尚需隔离项目验证“确认版 = 实际 run 版”、旧 pending 正常消费，以及清除分组后的模型与成片事实；不复放事故项目 |
 | 多轮授权与 Start | production_intent 出生事实；累计方案呈现；作品首稿未持久化呈现时所有 Start 失败闭，dock 补 `first_draft_review`；review hold、shortfall、drift、费用与 Start 版本绑定分别校验 | **首条“直接做”与 auto 档真实 LLM 旅程未跑**；首稿只呈现不建 run、看后 Start/口头批准才开工未人工验收；unmet_condition / copy_drift、过期 base_ref 与断流恢复未跑 |
 | 音频三面与旁白复用 | 默认无配音；voiceover/music/keep_audio 独立；显式 off 不被默认重开；项目级旁白 store | 实际成片音轨未独立试听；voice 设计期钉版、STOCK_VOICES、试听未实现；本地音频速度派生未实现 |
-| Chat 活动与 WorkSegment | chat live Thinking/里程碑不可展开，首字实际释放或真实终态原位收 Worked；RunTaskList 与 chat 共用 `WorkSegmentRow`；run 按 RUNNING → REVIEWING → SETTLED 原地过渡，匹配 delivery 首显才收段，chip 不等回复 | 新增 `runWorkSegment` 纯测试已写、**未运行**；合并后的 tsc、纯 node 与浏览器逐拍均未验；live SSE、断网/停止/Start recovery 人工视觉仍开放 |
+| Chat 活动、轮询恢复与 WorkSegment | chat live Thinking/里程碑不可展开，首字实际释放或真实终态原位收 Worked；RunTaskList 与 chat 共用 `WorkSegmentRow`；run 按 RUNNING → REVIEWING → SETTLED 原地过渡，匹配 delivery 首显才收段，chip 不等回复；轮询恢复按 `seq` 决定准入与落位，run review 不补 activity 且只接当前 run 的 delivery/failure，挂载回放按行 id 去重 | `runWorkSegment` 与恢复/时间线定向纯测试通过，web tsc 通过；live SSE、迟到 delivery、断网/停止/Start recovery 与历史回放的人工逐拍视觉仍开放 |
 | 交付回合与 Chat 产物卡准入 | `run_completed` 使用独立零读 `delivery_agent`；代码先裁决 failed/partial/delivered，模型只写对应分支；film/clip 须 render completed 且视频文件存在才进入 delivered 事实与产物卡；仅已交付 film 做一致性对账 | **真实 LLM 的全未交付/部分/成功回复与浏览器空卡消失未验**；prompt_gate、剧本矩阵、全量 pytest 未跑；真实重试渲染/上传未执行 |
 | 回答入口与 begin 拒绝 | 回答/brief 先耐久提交；结构化 begin refusal；重复 begin 以 TerminalRefusal 终止而非误报能力缺失 | 原“逐字全片”入口真实旅程未复测；已答 dock 浏览器持久化未验；同步测试未运行 |
 | 执行与计费 | 单体 LaunchFilm + 真实单步 Tasks；render/probe；Output/work_id；hold→capture→release | R5/R6 宏阶段未实现；R8-M 统一 10 次调用上限未实现且是上线缺口；并发发布与完整上线条件未收口 |
+
+独立字幕：Film 场景持久化 `SubtitleTrack` / `SubtitleCue`，`set_subtitles` 支持创建、整体替换与删除，读面返回完整轨道。旁白与字幕独立，旧 `captions` 字段不兼容；clip 家族不在此次命名变更范围。后端定向测试、渲染 schema 测试、typecheck 与 check_gates 已运行；本地无音频双语字幕样片已渲染并检查关键帧。两个既有 Start stamping 测试仍被首稿 review_hold 门禁拦截；真实模型编辑、确认和交付旅程仍待验证。
 
 ## 2. 当前未验证项
 
@@ -53,7 +55,7 @@
 10. 多批 prompt/工具声明变化后的 prompt_gate 未终跑；需授权与配额，入口显式关闭 warmup。
 11. 剧本矩阵全量与 S11 网页链在本迭代后未重跑；真实付费面另行授权。画幅变体若实施还需 S11b。
 12. 当前工作区含多批未提交成果和并行修改；定向证据不等于 clean HEAD 全量基线。不得为放行放宽校验或断言。
-13. web 全量基线需在当前 HEAD 重跑；既有 `recipeFamilies` Ads 族供货断言失败须重新归因，不直接写成当前已确认缺陷，也不视为已消失。
+13. 当前工作区全量 web 纯测试已运行：251 项中 250 通过，唯一失败为 `recipeFamilies` Ads 族供货断言（期望仅 `saas`，实际还含 `text-anim` / `product-demo`）；该失败属于 Home 供货口径，本次 Chat 改动未触及 Home，仍需在 Home 任务中归因，不写成全绿或 Chat 回归。
 
 ### 2.3 视听与界面事实
 

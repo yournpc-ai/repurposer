@@ -3914,6 +3914,8 @@ def valid_kept_cut(storyboard: FilmStoryboard, frames: Any) -> bool:
     for scene, n in zip(storyboard.scenes, frames):
         if not isinstance(n, int) or isinstance(n, bool) or n < _scene_floor(scene):
             return False
+        if scene.subtitle_track and scene.subtitle_track.cues[-1].end > n / FILM_FPS:
+            return False
     return sum(frames) <= FILM_MAX_FRAMES
 
 
@@ -4033,7 +4035,7 @@ def _split_keep(text: str, pattern: re.Pattern) -> list[str]:
     return [p for p in (p.strip() for p in pieces) if p]
 
 
-def narration_caption_cues(
+def narration_subtitle_cues(
     text: str, *, window_s: float, spoken_s: float | None
 ) -> list[dict[str, Any]]:
     """Project one scene's narration into deterministic caption cues.
@@ -4396,8 +4398,6 @@ def build_film_spec(
                     "focuses": _camera_walk(
                         list(scene.focuses), page, scene.shot, n / FILM_FPS
                     ),
-                    # Legacy ui captions never serialize — the narration
-                    # caption track (below) owns the ``captions`` key.
                 }
             )
         elif scene.type == "divider":
@@ -4588,23 +4588,15 @@ def build_film_spec(
                     "elements": elements,
                 }
             )
-        # 配音轨 (ADR-130): the scene's narration object key, baked by
-        # code from the synthesis map — absent = the scene plays silent. The
-        # decoded spoken seconds also drive the deterministic caption cues,
-        # so the words on screen ride the same timing truth as the audio.
+        # Audio and subtitles are independent tracks. Never infer visible
+        # subtitles from the presence of synthesized narration.
         narration_entry = narration.get(idx)
         if narration_entry is not None:
-            audio_key, spoken_seconds = narration_entry
-            scenes[-1]["audio"] = audio_key
-            spoken_text = getattr(scene, "narration", None)
-            if spoken_text:
-                cues = narration_caption_cues(
-                    spoken_text,
-                    window_s=n / FILM_FPS,
-                    spoken_s=spoken_seconds,
-                )
-                if cues:
-                    scenes[-1]["captions"] = cues
+            scenes[-1]["audio"] = narration_entry[0]
+        if scene.subtitle_track is not None:
+            if scene.subtitle_track.cues[-1].end > n / FILM_FPS + 1e-9:
+                raise ValueError("subtitle cues exceed the allocated scene duration")
+            scenes[-1]["subtitle_track"] = scene.subtitle_track.model_dump(mode="json")
         cursor += n
     spec = {
         "family": "film",
@@ -5025,7 +5017,7 @@ def storyboard_presentation(
     music: str | None = None,
     beats: list[float] | None = None,
     bpm: float | None = None,
-    captions: bool = False,
+    voiceover: bool = False,
     source_note: str | None = None,
     media: StoryboardMedia | None = None,
     frame_override: list[int] | None = None,
@@ -5073,9 +5065,8 @@ def storyboard_presentation(
     # 配音开关恒显 (默认无配音): the presenting model must always be able to
     # SAY the real voiceover state — a silent default that never appears on
     # the fact sheet reads as an omission the model then improvises around.
-    head_bits.append(f"voiceover: {'on' if captions else 'off'}")
-    if captions and any(s.narration for s in storyboard.scenes):
-        head_bits.append("captions: narration")
+    head_bits.append(f"voiceover: {'on' if voiceover else 'off'}")
+    head_bits.append("subtitles: independent scene tracks")
 
     def page_label(p: int) -> str:
         if not 0 <= p < len(pages):
@@ -5126,6 +5117,9 @@ def storyboard_presentation(
             f"scene {idx}{f' [{sid}]' if sid else ''} · {s.type} · {roles[idx - 1]} · "
             f"{start:g}–{end:g}s · {span:g}s · {frames[idx - 1]} frames"
         ]
+        out.append("  subtitle_track: " + (
+            s.subtitle_track.model_dump_json() if s.subtitle_track else "none"
+        ))
         if s.type == "words":
             vocab = []
             if s.motion and s.motion != "static":
@@ -8157,7 +8151,7 @@ async def prepare_dock_storyboard(
                     music=music_label,
                     beats=music_beats,
                     bpm=music_bpm,
-                    captions=voiceover,
+                    voiceover=voiceover,
                     source_note=_text_source_note(text_source),
                     media=media,
                 ),
@@ -8213,7 +8207,7 @@ async def prepare_dock_storyboard(
         music=music_label,
         beats=music_beats,
         bpm=music_bpm,
-        captions=voiceover,
+        voiceover=voiceover,
         source_note=_text_source_note(text_source),
         media=media,
     )

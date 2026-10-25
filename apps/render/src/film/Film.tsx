@@ -5,12 +5,12 @@
 // Audio (ADR-130): the music bed sits at the root (loop, gain from the
 // spec — the clip family's ClipMusic semantics); each scene's narration
 // rides an <Audio> INSIDE its Sequence, so the scene boundary trims the
-// voiceover honestly. The narration's deterministic subtitle cues overlay
-// the same scene window (the spec carries the cue times; no ASR here).
+// voiceover honestly. Independent subtitle tracks overlay the same scene window, with or
+// without narration (the spec carries cue times; no ASR here).
 import React from "react";
 import { AbsoluteFill, Audio, Sequence } from "remotion";
 
-import { Captions, CompositeScene, Divider, End, Fade, Hero, Plate, Reveal, UiScene, Words } from "./components";
+import { Subtitles, CompositeScene, Divider, End, Fade, Hero, Plate, Reveal, UiScene, Words } from "./components";
 import type { FilmSpec } from "./schema";
 
 export const Film: React.FC<{ spec: FilmSpec }> = ({ spec }) => {
@@ -142,11 +142,7 @@ export const Film: React.FC<{ spec: FilmSpec }> = ({ spec }) => {
                 <End name={s.name} tagline={s.tagline} url={s.url} logoUrl={s.logo_url} theme={spec.theme} />
               )}
             </Fade>
-            {s.captions.length ? (
-              // ``captions`` IS the narration cue track — the one and only
-              // caption field (code-projected from the scene's narration).
-              <Captions cues={s.captions} dur={dur} />
-            ) : null}
+            {s.subtitle_track ? <Subtitles track={s.subtitle_track} /> : null}
           </Sequence>
         );
       })}
