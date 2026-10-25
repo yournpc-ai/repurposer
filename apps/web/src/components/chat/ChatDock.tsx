@@ -50,7 +50,6 @@ import {
 import { apiFetch } from "@/lib/api"
 import { armAnswerWatchdog } from "@/lib/answerWatchdog"
 import { inferAssetType } from "@/lib/asset-type"
-import { reconcileStartAfterAbort, type StartRecoveryDeps } from "@/lib/startRecovery"
 import { streamAnswer, streamChat, StreamTurnError, questionSettledCode } from "@/lib/chat-stream"
 import { sseProbe } from "@/lib/sse-probe" // TEMPORARY forensics — delete with the probe
 import type { ActivityFramePayload } from "@/lib/chat-stream"
@@ -63,6 +62,7 @@ import { buildConversationUnits, closeWorkSegment, foldActivityUnits, type Conve
 import {
   nextRunWorkSeal,
   runStepEndMs,
+  runWorkPhase,
   type RunWorkSeal,
 } from "@/lib/runWorkSegment"
 import {
@@ -522,8 +522,8 @@ interface ChatDockProps {
    * starts ~18% down and never reaches the pill). */
   onPanelStateChange?: (state: { hidden: boolean; docked: boolean }) => void
   /** 环境谓词 (ADR-118 §6 真值表 · lib/canvasVisibility 单源): 画布此刻在
-   * 屏——渲染时刻状态。锚卡渲染 ⟺ !canvasVisible（终态收据行下的静态产
-   * 物数组,chat 自足律首个构造物）;桌面 true → 零锚卡。 */
+   * 屏——渲染时刻状态。锚卡只在 !canvasVisible 环境允许挂载，实际展示
+   * 另等 run 工作段 settled；桌面 true → 零锚卡。 */
   canvasVisible: boolean
   /** 环境能力位 (ADR-118 §6 双键的客户端一半): 视口可承载画布（裸能力,
    * 非 panel 形态位——surface 座不动）,随每条 chat 请求送达; 服务端的
@@ -1406,43 +1406,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       )
     },
     [noteObservedSeq, noteSpeechVisible, sealRunWorkSegment],
-  )
-
-  /** The Start recovery's read-only deps (2026-10-22 — backend-accepted,
-   * receipt-lost): the SAME two seats fetchPendingQuestion / reconcileTurn
-   * already read, with the error tri-state preserved (null = transport
-   * failure, never "no pending question" — the recovery's 暂时无法确定
-   * depends on the distinction). Read-only by construction: the recovery
-   * can never fire a second start (不自动重试制作). */
-  const startRecoveryDeps = useCallback(
-    (): StartRecoveryDeps => ({
-      fetchConversation: async () => {
-        try {
-          const res = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
-            toast: false,
-          })
-          if (!res.ok) return null
-          return (await res.json()) as {
-            id?: string
-            pending_question?: QuestionMessage | null
-          }
-        } catch {
-          return null
-        }
-      },
-      fetchMessages: async (convId) => {
-        try {
-          const res = await apiFetch(`/api/v1/chat/conversations/${convId}/messages`, {
-            toast: false,
-          })
-          if (!res.ok) return null
-          return ((await res.json()) as { items?: QuestionMessage[] }).items ?? []
-        } catch {
-          return null
-        }
-      },
-    }),
-    [projectId],
   )
 
   /** The panel's task plan + reasons live on the project (pending_brief) —
@@ -3802,10 +3765,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // 确认 pill (ADR-117 §4 — 画板 C): the ONLY chrome the confirm beat keeps.
   // Render predicate = the dock's presentation-time stamp
   // (`requires_confirmation` — the client NEVER derives the need itself):
-  // auto+auto docks never show it (the run started on presentation); it
-  // appears exactly when a beat is owed — an ask regime, the guardrail, or
-  // an unquotable plan. Legacy rows predate the stamp → read as owed (读容忍
-  // in the conservative direction: a waiting dock keeps its affordance).
+  // auto without an independent confirmation debt hides it; the first Film
+  // draft's review wait adds no extra pill. Ask, awaiting-production,
+  // guardrail and unquotable stamps still show it. Legacy rows predate the
+  // stamp → read as owed (读容忍 in the conservative direction: a waiting
+  // dock keeps its affordance). A persisted first_draft_review stamp came
+  // only from the retired auto-only override, never from ask or a stronger
+  // debt; read it as no independent confirmation debt as well.
   // The beat gate (confirmActive) still rules — the pill never opens on a
   // frame the server hasn't named ready, and never over a live run.
   const planPill =
@@ -3813,7 +3779,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     !dockSettled &&
     pendingQuestion.question?.kind === "task_book" &&
     !pendingQuestion.answer &&
-    (pendingQuestion.question?.requires_confirmation ?? true)
+    (pendingQuestion.question?.requires_confirmation ?? true) &&
+    pendingQuestion.question?.confirm_reason !== "first_draft_review"
       ? pendingQuestion
       : null
   const confirmPillActive = confirmActive && planPill != null
@@ -3867,167 +3834,24 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if (confirmActive && !chatBusy) setDockHidden(false)
   }, [confirmActive, chatBusy])
 
-  // 确认 pill 点击 (ADR-117 §4 + ADR-129 typed answer transport): the pill
-  // IS the user pressing Start — it rides the TYPED answer machine
-  // (answer_question kind="start", the same seat the chat-path start_run
-  // funnels into), never a fabricated chat message: no optimistic user
-  // bubble, no canned text the router must re-read, no QA archive on any
-  // start path (the sendChat start branch's same 拍板 — the record = the
-  // run receipt). The panel's edits ride body.intent exactly like the
-  // chat channel's prior_intent (confirmActive ships it). Landing mirrors
-  // the start branch: the receipt titles the run by the answered plan's
-  // fresh intent, and the run id lands the dock on the run surface.
-  const handleConfirmPill = async () => {
-    if (!confirmPillActive || chatBusy || answering || !planPill) return
-    const question = planPill
-    // No user / QA row is born on Start. Keep the real click as this turn's
-    // client work boundary so the first model wait is not shaved off.
-    const turnStartMs = Date.now()
-    setAnswering(true)
-    setChatBusy(true)
-    setProseActive(false)
-    setThinkingPhase(null)
-    setActivities(resetActivities())
-    currentActivityRowKeysRef.current = new Set()
-    const workRowKeys = currentActivityRowKeysRef.current
-    let terminalAtMs: number | null = null
-    setPendingQuestion(null) // the pill's beat is taken — failure restores it
-    // Dead-stream watchdog (the option path's same seat): the Start answer
-    // runs LLM windows whose only frames are the keepalives — onThinking is
-    // wired for the poke alone, or a healthy quiet turn would false-trip.
-    const answerWatchdog = armAnswerWatchdog(
-      STREAM_SILENCE_DEAD_MS,
-      STREAM_WATCHDOG_TICK_MS,
-    )
-    try {
-      const data = await streamAnswer<{
-        answered_question: QuestionMessage
-        follow_up: QuestionMessage | null
-      }>(
-        question.id,
-        { kind: "start", intent: confirmActive ? intent : undefined },
-        {
-          signal: answerWatchdog.signal,
-          onThinking: () => answerWatchdog.poke(),
-          onActivity: (frame) => {
-            answerWatchdog.poke()
-            handleActivityFrame(frame)
-          },
-          onCandidates: (event) => {
-            answerWatchdog.poke()
-            handleCandidatesFrame(event)
-          },
-          onRowAppend: (row) => {
-            answerWatchdog.poke()
-            handleRowAppend(row)
-          },
-          onRowUpdate: (id, frame) => {
-            answerWatchdog.poke()
-            handleRowUpdate(id, frame)
-          },
-        },
-      )
-      terminalAtMs = Date.now()
-      sealCurrentWorkSegment(workRowKeys, terminalAtMs, turnStartMs)
-      settleActivities("completed") // defensive twin of the server sweep
-      // The receipt titles the RUN by its birthing proposal (ADR-058, the
-      // sendChat start branch's same seat): the answered plan row carries
-      // the fresh intent server-side — its LLM name leads, the chain label
-      // falls back.
-      const birthIntent = data.answered_question?.intent
-      if (birthIntent) {
-        const birthTitle = titleOf(normalizeIntent(birthIntent))
-        if (birthTitle) setRunTitleOverride(birthTitle)
-      }
-      if (data.answered_question?.workflow_run_id) {
-        landOnStartedRun(data.answered_question.workflow_run_id)
-      }
-    } catch (e) {
-      terminalAtMs ??= Date.now()
-      // The transport turn is over; recovery below is read-only world
-      // reconciliation, not more assistant work. Stop the segment and its
-      // shimmer BEFORE any awaited recovery read.
-      sealCurrentWorkSegment(workRowKeys, terminalAtMs, turnStartMs)
-      setThinkingPhase(null)
-      setChatBusy(false)
-      // A machinery abort (the answer watchdog — this path has NO user
-      // stop): the pipe went silently dead. Backend-accepted, receipt-lost
-      // (2026-10-22 拍板): the connection's death says NOTHING about the
-      // production — re-read the world through the existing read-only seats
-      // and land on exactly one honest state. NEVER an auto-retry: a second
-      // start is only ever the user's re-click (the row lock dedups it
-      // server-side).
-      const aborted = e instanceof DOMException && e.name === "AbortError"
-      settleActivities(aborted ? "cancelled" : "failed")
-      if (aborted) {
-        const recovery = await reconcileStartAfterAbort(
-          question,
-          startRecoveryDeps(),
-        )
-        if (recovery.state === "started") {
-          // 已启动: the run surface attaches — the RunTaskList IS the
-          // evidence; the pill never comes back.
-          settleActivities("completed")
-          landOnStartedRun(recovery.runId)
-          toast.info(t("chat.startRecovery.started"))
-        } else if (recovery.state === "unconfirmed") {
-          // 尚未确认启动: still pending with no run — the request may
-          // STILL be mid-flight server-side. The pill restores (the fresh
-          // server row, never the stale local one); the copy says
-          // UNCONFIRMED, never an absolute "not started". A re-click is
-          // the user's call, deduped server-side.
-          settleActivities("cancelled")
-          setPendingQuestion(recovery.question)
-          toast.info(t("chat.startRecovery.unconfirmed"))
-        } else if (recovery.state === "settled") {
-          // Settled without a run (bail / superseded / rejected): a settled
-          // question never re-docks (the dead-pill loop law).
-          settleActivities("cancelled")
-          setPendingQuestion(null)
-          toast.info(t("chat.questionAnswered"))
-        } else {
-          // 暂时无法确定: the truth is unreadable right now — the pill
-          // restores (a redundant re-click settles quietly server-side) and
-          // the copy says the state could NOT be confirmed, never a guess.
-          settleActivities("cancelled")
-          setPendingQuestion(question)
-          toast.error(t("chat.startRecovery.unknown"))
-        }
-      } else {
-        settleActivities("failed")
-        const settledCode =
-          e instanceof StreamTurnError ? questionSettledCode(e.detail) : null
-        if (settledCode) {
-          // A settled question never re-docks (the option path's same grace):
-          // the click raced the plan's own settlement — the pill stays GONE.
-          setPendingQuestion(null)
-          toast.info(
-            t(
-              settledCode === "question.superseded"
-                ? "chat.questionOutdated"
-                : "chat.questionAnswered",
-            ),
-          )
-        } else {
-          // Failure restores the pill's beat — the dock still owes it. A
-          // structured credits shortfall lands as the in-flow grey row
-          // (双路同语义 with the option path), never a bare toast.
-          setPendingQuestion(question)
-          const credits =
-            e instanceof StreamTurnError ? asCreditsInsufficient(e.detail) : null
-          if (credits) {
-            pushCreditsGreyRow(credits)
-          } else {
-            toast.error(e instanceof Error ? e.message : t("chat.failed"))
-          }
-        }
-      }
-    } finally {
-      sealCurrentWorkSegment(workRowKeys, terminalAtMs ?? Date.now(), turnStartMs)
-      answerWatchdog.disarm()
-      setAnswering(false)
-      setChatBusy(false)
-    }
+  // Start is an ordinary user message. The existing sendChat turn carries
+  // the panel's current intent; only the next LLM turn may call start_run.
+  const handleConfirmPill = () => {
+    const text = planPillLabel.trim()
+    if (!confirmPillActive || chatBusy || answering || !text) return
+    const rollbackId = crypto.randomUUID()
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: rollbackId,
+        role: "user",
+        content: text,
+        at: new Date().toISOString(),
+      },
+    ])
+    recallDock()
+    scrollerSendRef.current?.()
+    void sendChat(text, { rollbackId })
   }
 
   // Message-flow chronology: transcript rows keep their append-only array
@@ -4087,11 +3911,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   )
   const rowStreamUnits = runStreamUnits ?? conversationUnits
 
-  // 锚卡投影 (flora-parity-ui ③ · ADR-118 §2 chat 自足律): 终态收据行下
+  // 锚卡投影 (flora-parity-ui ③ · ADR-118 §2 chat 自足律): 工作段收据行下
   // 的静态产物数组 —— 只读既有 steps 的 output_refs × 既有 outputs 读数
-  // (mention feed 同一份,零新 SSE 订阅、零新拉取)。渲染 ⟺
-  // !canvasVisible(渲染时刻状态,lib/canvasVisibility 单源),挂载点在
-  // taskList 单元(收据行 = 锚卡唯一父座)。
+  // (mention feed 同一份,零新 SSE 订阅、零新拉取)。挂载点在 taskList
+  // 单元(收据行 = 锚卡唯一父座)，由 run settled × !canvasVisible 把守。
   const anchorCards = useMemo(
     () => anchorCardsForRun(steps, outputs),
     [steps, outputs],
@@ -4418,10 +4241,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                                 : t("results.stepper.queued")
                             }
                           />
-                          {/* Delivered chips follow world facts, never the
-                              delivery reply. Canvas-visible environments
-                              keep the canvas as the only product surface. */}
-                          {terminal && !canvasVisible ? (
+                          {/* Chips share the Worked edge: first delivery
+                              prose actually released, or the bounded settled
+                              fallback. Output readiness and canvas handoff
+                              stay independent. */}
+                          {runWorkPhase({
+                            terminal,
+                            reviewPending,
+                            workEndedAtMs: runWorkEndedAtMs,
+                          }) === "settled" && !canvasVisible ? (
                             <AnchorCards cards={anchorCards} />
                           ) : null}
                         </MessageContent>

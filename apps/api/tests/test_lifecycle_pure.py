@@ -512,15 +512,14 @@ def test_first_draft_unpresented_also_blocks_an_early_explicit_start() -> None:
 
 
 def test_presented_first_draft_allows_the_later_explicit_start() -> None:
-    # The dock's review stamp does not become a second auto-start permit:
-    # after presentation, the user's explicit Start is the release beat.
+    # After presentation, an ordinary execution-ask Start is the release beat.
     verdict = evaluate_start_gate(
         has_pending_plan=True,
         effective_tasks_nonempty=True,
         stamp=_READY_STAMP,
         confirmation=ConfirmationNeed(
             requires_confirmation=True,
-            reason="first_draft_review",
+            reason="execution_pref",
         ),
         docked_this_turn=False,
         film=FilmGateFacts(
@@ -609,7 +608,7 @@ def test_film_gate_precedence_hold_before_projection_block() -> None:
 
 # ---- ADR-117 授权前移: confirmation_need + the gate's authorization conjunct ----
 
-from app.pipeline.lifecycle import confirmation_need, first_draft_confirmation  # noqa: E402
+from app.pipeline.lifecycle import confirmation_need  # noqa: E402
 
 GUARDRAIL = 5000
 
@@ -625,27 +624,6 @@ def test_confirmation_need_auto_auto_under_guardrail_is_free() -> None:
     assert need.reason == ""
     assert need.quote_high == 800
     assert need.unquotable is False
-
-
-def test_first_draft_confirmation_adds_review_even_in_full_auto() -> None:
-    need = first_draft_confirmation(
-        ConfirmationNeed(requires_confirmation=False, quote_high=55),
-        unpresented=True,
-    )
-    assert need.requires_confirmation is True
-    assert need.reason == "first_draft_review"
-    assert need.quote_high == 55
-
-
-def test_first_draft_confirmation_preserves_stronger_reasons() -> None:
-    priced = ConfirmationNeed(
-        requires_confirmation=True,
-        reason="above_guardrail",
-        quote_high=9000,
-    )
-    assert first_draft_confirmation(priced, unpresented=True) is priced
-    ordinary = ConfirmationNeed(requires_confirmation=False)
-    assert first_draft_confirmation(ordinary, unpresented=False) is ordinary
 
 
 def test_confirmation_need_execution_ask_alone_holds() -> None:

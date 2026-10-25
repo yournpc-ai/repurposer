@@ -89,9 +89,10 @@ def test_estimate_fold_prices_film_seconds_on_both_sides() -> None:
     assert usd_low > film_usd  # tokens low + film
     assert usd_high > usd_low
     # The units share is exact — the low/high spread is tokens only.
+    n = 1 + MAX_REWRITES
     assert usd_high - usd_low == pytest.approx(
-        (8000 * 3 - 1500 * 3) / 1_000_000 * 0.30
-        + (2000 * 3 - 400 * 3) / 1_000_000 * 1.20
+        (8000 * n - 1500 * n) / 1_000_000 * 0.30
+        + (2000 * n - 400 * n) / 1_000_000 * 1.20
     )
 
 

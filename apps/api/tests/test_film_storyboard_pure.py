@@ -981,6 +981,43 @@ def test_snap_frames_to_beats_empty_grid_is_identity():
     assert snap_frames_to_beats(storyboard, frames, []) == frames
 
 
+@pytest.mark.parametrize("beat_frame", [176, 184, 386, 394])
+def test_beat_snap_preserves_both_composite_edges(beat_frame):
+    # A 7s text window must not become a 206f scene when a nearby beat
+    # moves either its opening or closing cut by four frames.
+    words = {"type": "words", "seconds": 3.0, "dark": False, "lines": ["Title"]}
+    board = _storyboard([
+        words, words,
+        {"type": "composite", "seconds": 7.0, "elements": [
+            {"kind": "text", "lines": ["First line"], "at": 0, "until": 7.0},
+            {"kind": "text", "lines": ["Second line"], "at": 0.4},
+        ]},
+        words,
+    ])
+    original = board.model_dump()
+    frames = snap_frames_to_beats(board, allocate_frames(board),
+                                  [86 / FILM_FPS, beat_frame / FILM_FPS])
+    # Ordinary cuts still snap; both composite boundaries stay fixed.
+    assert frames == [86, 94, 210, 90]
+    spec = build_film_spec(board, [], frames=frames)
+    assert spec["scenes"][2]["frames"] == 210
+    assert board.model_dump() == original
+
+
+def test_duration_rejection_has_timing_error_message():
+    from app.pipeline.errors import USER_ERROR_LINES
+
+    error = FilmStoryboardRejected([DURATION_INVALID], "element exceeds scene")
+    assert error.user_key == "film_timing_invalid"
+    assert "时间" in USER_ERROR_LINES[error.user_key]["zh"]
+    assert FilmStoryboardRejected(
+        [DURATION_INVALID], "detail", user_key="film_text_ungrounded"
+    ).user_key == "film_text_ungrounded"
+    assert FilmStoryboardRejected(
+        [TEXT_NOT_GROUNDED], "detail"
+    ).user_key == "film_storyboard_ungrounded"
+
+
 def test_build_spec_accepts_snapped_frames():
     pages = [_page()]
     storyboard = _storyboard(_good_scenes())

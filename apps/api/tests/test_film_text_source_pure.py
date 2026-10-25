@@ -992,7 +992,8 @@ async def test_text_ladder_stops_on_no_progress(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_text_ladder_progress_keeps_iterating(monkeypatch):
+@pytest.mark.parametrize("max_retries", [0, 2, 10])
+async def test_text_ladder_progress_keeps_iterating(monkeypatch, max_retries):
     """Different violations = real progress: the ladder keeps its full
     budget of candidates."""
     from app.tools.film.storyboard import (
@@ -1002,6 +1003,7 @@ async def test_text_ladder_progress_keeps_iterating(monkeypatch):
     )
 
     calls = 0
+    monkeypatch.setattr("app.tools.film.storyboard.MAX_REWRITES", max_retries)
 
     async def _shifting_direction(**kwargs):
         nonlocal calls
@@ -1023,7 +1025,7 @@ async def test_text_ladder_progress_keeps_iterating(monkeypatch):
             allow_fixed_fallback=False,
             voiceover=False,
         )
-    assert calls == 3  # 1 + MAX_REWRITES, each a distinct failure
+    assert calls == 1 + max_retries  # each candidate has a distinct failure
 
 
 # ---------------------------------------------------------------------------

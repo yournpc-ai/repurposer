@@ -36,8 +36,8 @@ export function canvasVisible(env: CanvasEnvironment): boolean {
   return env.canvasAvailable && env.worldLive
 }
 
-/** 锚卡渲染谓词 —— 渲染 ⟺ !canvas_visible（同一次 run 双端唯一的分支
- * 点；锚卡 = 终态收据帧，静态、零订阅）。 */
+/** 锚卡的环境分支 —— 只有 !canvas_visible 才允许挂载（同一次 run 双端唯一
+ * 的环境分支点）；实际展示时机另由 run 工作段 settled 把守。 */
 export function anchorCardsVisible(env: CanvasEnvironment): boolean {
   return !canvasVisible(env)
 }

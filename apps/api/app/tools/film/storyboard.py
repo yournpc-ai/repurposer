@@ -30,8 +30,8 @@ One file, four layers:
    camera focus bounds (INVALID_FOCUS), the closed scene vocabulary
    (UNSUPPORTED_SCENE), duration intents and content bounds
    (DURATION_INVALID / CONSTRAINT_VIOLATION). Bounded rewrite: the
-   orchestrator offers the model at most MAX_REWRITES repair rounds (3
-   candidates total) inside the 30-minute generation ceiling — never a
+   orchestrator offers the model at most MAX_REWRITES repair rounds
+   inside the 30-minute generation ceiling — never a
    blind retry (each rewrite rides the violation echo).
 
 3. THE ALLOCATOR (pure) — deterministic frame assignment. Scene seconds
@@ -79,6 +79,7 @@ from sqlalchemy import bindparam, select, text as _text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import Agent, AssembleResult
+from app.config import settings as app_settings
 from app.metering import record_media_usage
 from app.models.schemas import (
     AssetStatus,
@@ -208,7 +209,7 @@ _LIST_CAPS = {
 # (1 = the full frame). The spec's [0,1]³ law covers x/y; zoom lives in [1,4].
 _ZOOM_RANGE = (1.0, 4.0)
 
-MAX_REWRITES = 2  # at most three candidates, within ONE generation budget
+MAX_REWRITES = app_settings.film_storyboard_max_retries
 # 30-minute ceiling (2026-10-18 用户拍板): the user explicitly accepts a
 # long design beat — this is the ALLOWED ceiling for the whole candidate
 # ladder, never a fixed wait (a clean first candidate returns in seconds).
@@ -285,6 +286,8 @@ class FilmStoryboardRejected(Exception):
         # fix is a re-capture or user-supplied shots, never clearer copy).
         if user_key is not None:
             self.user_key = user_key
+        elif codes and set(codes) == {DURATION_INVALID}:
+            self.user_key = "film_timing_invalid"
 
 
 class FilmCaptureTimeout(Exception):
@@ -1500,6 +1503,7 @@ class FilmTextSegment(BaseModel):
 
     refs: list[CopyRef] | None = None
     text: list[str] | None = None
+    seconds: float | None = Field(default=None, ge=1.0, le=120.0, allow_inf_nan=False)
     dark: bool | None = None  # null = code alternates for rhythm
     motion: Literal["static", "push", "pull"] | None = None
     enter: Literal["lines", "words"] | None = None
@@ -2096,7 +2100,8 @@ def assemble_text_storyboard(
     seconds_words: list[float] = []
     if words_units:
         seconds_words, overflow = _assign_text_seconds(
-            words_units, source.target_seconds, base=composite_total
+            words_units, source.target_seconds, base=composite_total,
+            preferred=[item[1].seconds for item in prepared if item[0] == "words"],
         )
         if overflow is not None:
             violations.append(FilmViolation(CONSTRAINT_VIOLATION, overflow))
@@ -2194,7 +2199,8 @@ def _text_read_floor(units: int) -> float:
 
 
 def _assign_text_seconds(
-    segment_units: list[int], target: float | None, *, base: float = 0.0
+    segment_units: list[int], target: float | None, *, base: float = 0.0,
+    preferred: list[float | None] | None = None,
 ) -> tuple[list[float], str | None]:
     """Code-owned text-plane durations. The reading-time estimate is the
     DEFAULT pace, never a bound (2026-10-22 拍板 — 估计 = 建议，不是不可
@@ -2214,6 +2220,8 @@ def _assign_text_seconds(
     the total floor."""
     hi = TEXT_SCENE_SECONDS["words"][1]
     floors = [_text_read_floor(u) for u in segment_units]
+    if preferred is not None:
+        floors = [p if p is not None else f for p, f in zip(preferred, floors, strict=True)]
     if target is not None:
         # The user named the total — scale the floor proportions to it
         # (up OR down). The 8s craft default never clamps; the reading
@@ -2307,6 +2315,92 @@ def _group_spans(text: str, lo: int, hi: int) -> list[str]:
                         del groups[-2]
                         break
     return [g for g in ("".join(toks).strip() for toks in groups) if g]
+
+
+def text_capacity_plan(
+    lines: list[ManifestLine], source: FilmTextSource, *, size: str | None = None,
+) -> dict[str, Any] | None:
+    """A lossless citation proposal for the director, NEVER a deliverable.
+
+    Split at the same safe boundaries the citation resolver uses, then pack
+    within the real wrap gate. Named count/group/total constraints still
+    belong to assembly; a capacity proposal cannot silently override them.
+    Authored copy has no fixed corpus yet and therefore has no source seed.
+    """
+    if not source.verbatim or not lines:
+        return None
+    cap = film_text_line_cap(size, seat="words")
+    max_lines = _LIST_CAPS["words.lines"]
+    max_group = source.group_chars[1] if source.group_chars else None
+    groups: list[list[tuple[CopyRef, str]]] = []
+    current: list[tuple[CopyRef, str]] = []
+
+    def fits(texts: list[str]) -> bool:
+        rows = [row for text in texts for row in _wrap_display_lines(text, cap)]
+        if len(rows) > max_lines or any(not _norm(row) for row in rows):
+            return False
+        return max_group is None or sum(_group_units(t) for t in texts) <= max_group
+
+    for line in lines:
+        cursor = 0
+        while cursor < len(line.text):
+            while cursor < len(line.text) and line.text[cursor].isspace():
+                cursor += 1
+            # Keep whitespace in the citation, but don't make whitespace-only
+            # scenes. Every non-space source character is covered exactly once.
+            if not line.text[cursor:].strip():
+                break
+            ends = sorted({
+                _snap_span(line.text, cursor, end)[1]
+                for end in range(cursor + 1, len(line.text) + 1)
+            })
+            candidates = [
+                end for end in ends
+                if fits([line.text[cursor:end]])
+                # A cut cannot strand punctuation on the next screen.
+                and (not line.text[end:].strip() or line.text[end:].lstrip()[0].isalnum())
+            ]
+            if not candidates:
+                # A single word may exceed the named grouping size, but not
+                # the screen capacity. Never cut it or shrink it implicitly.
+                end = ends[0]
+                piece = line.text[cursor:end]
+                if (max_group is None or _atomic_unit_count(piece.strip()) != 1
+                        or len(_wrap_display_lines(piece, cap)) > max_lines):
+                    return None
+            else:
+                end = candidates[-1]
+                piece = line.text[cursor:end]
+            ref = CopyRef(line=line.id, span=[cursor, end])
+            if current and not fits([t for _, t in current] + [piece]):
+                groups.append(current)
+                current = []
+            current.append((ref, piece))
+            cursor = end
+    if current:
+        groups.append(current)
+    if not groups:
+        return None
+    displays = [
+        [row for _, text in group for row in _wrap_display_lines(text, cap)]
+        for group in groups
+    ]
+    seconds, error = _assign_text_seconds(
+        [sum(_read_units(row) for row in rows) for rows in displays],
+        source.target_seconds,
+    )
+    direction = FilmTextDirection(segments=[
+        FilmTextSegment(
+            refs=[ref for ref, _ in group], size=size,
+            seconds=seconds[i] if error is None and seconds[i] >= 1 else None,
+        )
+        for i, group in enumerate(groups)
+    ])
+    return {
+        "line_capacity": cap, "max_display_lines": max_lines,
+        "direction": direction.model_dump(mode="json", exclude_none=True),
+        "display_lines": displays,
+    }
 
 
 def fixed_text_storyboard(
@@ -3834,6 +3928,10 @@ def snap_frames_to_beats(
     boundary = 0
     for i in range(len(out) - 1):
         boundary += out[i]
+        # Composite windows are authored in seconds, independently of the
+        # music grid. Moving either edge changes their available window.
+        if any(s.type == "composite" for s in storyboard.scenes[i:i + 2]):
+            continue
         nearest = min(beat_frames, key=lambda b: abs(b - boundary))
         delta = nearest - boundary
         if (
@@ -5300,6 +5398,7 @@ def current_text_direction_dict(storyboard: FilmStoryboard) -> dict[str, Any]:
             {
                 "type": "words",
                 "lines": list(s.lines),
+                "seconds": s.seconds,
                 "dark": s.dark,
                 "motion": s.motion,
                 "enter": s.enter,
@@ -5339,6 +5438,8 @@ def _assemble_text(
     composite_ok: bool = False,
     media_more: int = 0,
     group: tuple[int, int] | None = None,
+    capacity_plan: dict[str, Any] | None = None,
+    previous_direction: dict[str, Any] | None = None,
 ) -> AssembleResult:
     """The text director's answer sheet (purity by signature, the
     ``_assemble`` twin): the numbered copy lines (its citation universe in
@@ -5371,6 +5472,8 @@ def _assemble_text(
             "media": media,
             "composite_ok": composite_ok,
             "media_more": media_more,
+            "capacity_plan": capacity_plan,
+            "previous_direction": previous_direction,
         },
         [],
     )
@@ -5386,7 +5489,7 @@ film_text_director = Agent[FilmTextDirection](
         "scenes placing that media beside independent text on one screen. "
         "You decide the segmentation (which lines land together on one "
         "screen), each segment's composition and rhythm, and the narration "
-        "when the plan promises voiceover. Durations and scene budgets are "
+        "when the plan promises voiceover. Propose scene durations; named totals and scene budgets are "
         "decided for you (a composite scene's length comes from its "
         "element windows). When the copy is the user's own text "
         "(verbatim), you CITE its lines by number — you never write, trim, "
@@ -6138,7 +6241,7 @@ async def _orchestrate_text_storyboard(
         )
     # Material feasibility BEFORE any model call (the model is never asked
     # for the impossible): an unsatisfiable copy/target fails here with
-    # the concrete conflict, never after three burned candidates.
+    # the concrete conflict, never after exhausting the candidate budget.
     infeasible = _text_feasibility(
         lines,
         source=text_source,
@@ -6160,6 +6263,8 @@ async def _orchestrate_text_storyboard(
     violations: list[FilmViolation] = []
     feedback: str | None = None
     prev_signatures: frozenset[tuple[str, str]] | None = None
+    capacity_plan = text_capacity_plan(lines, text_source)
+    previous_direction: dict[str, Any] | None = None
     try:
         async with asyncio.timeout(_DIRECTION_BUDGET_S):
             for attempt in range(1 + MAX_REWRITES):
@@ -6178,6 +6283,8 @@ async def _orchestrate_text_storyboard(
                     composite_ok=composite_ok,
                     media_more=media_more,
                     repair_feedback=feedback,
+                    capacity_plan=capacity_plan,
+                    previous_direction=previous_direction,
                 )
                 resolved, violations = assemble_text_storyboard(
                     direction, lines, source=text_source,
@@ -6196,6 +6303,14 @@ async def _orchestrate_text_storyboard(
                     if not violations:
                         return resolved
                 feedback = format_violations(violations)
+                previous_direction = direction.model_dump(mode="json", exclude_none=True)
+                # The rejected candidate may have chosen larger type than the
+                # initial seed. Recompute a lossless proposal at that capacity;
+                # the next MODEL call must author the repaired board.
+                sizes = [s.size for s in direction.segments if isinstance(s, FilmTextSegment)]
+                if sizes:
+                    size = min(sizes, key=lambda s: film_text_line_cap(s, seat="words"))
+                    capacity_plan = text_capacity_plan(lines, text_source, size=size)
                 signatures = frozenset((v.code, v.detail) for v in violations)
                 if signatures == prev_signatures:
                     # No progress (总设计 §8.2.8): the SAME violation set two

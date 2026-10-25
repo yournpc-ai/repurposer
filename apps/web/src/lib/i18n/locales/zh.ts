@@ -508,8 +508,7 @@ const zh: Resources = {
       },
       subs: {
         all: "全部",
-        saas: "SaaS 和应用",
-        "text-anim": "文字动画短片",
+        "text-short": "文字短片",
         "product-demo": "产品演示",
         brand: "品牌与业务",
         ugc: "UGC",
@@ -517,8 +516,7 @@ const zh: Resources = {
       },
       titles: {
         featured: "推荐配方",
-        saas: "SaaS 和应用",
-        "text-anim": "文字动画短片",
+        "text-short": "文字短片",
         "product-demo": "产品演示",
         brand: "品牌与业务",
         ugc: "UGC",
@@ -540,34 +538,20 @@ const zh: Resources = {
       // 一一对应）。prompt 即卡片的全部发射载荷（composer 预填，配方 =
       // 提示词）；{{placeholder}} 是发送前由用户替换的网站空位。
       demos: {
-        "launch-film-linear": {
-          prompt: "把这个网站做成一条 16:9 横屏官网介绍短片：{{placeholder}}",
-        },
-        "launch-film-snappify-code": {
-          prompt: "把这个网站做成一条 9:16 竖屏官网介绍短片：{{placeholder}}",
-        },
-        "launch-film-snappify-frame": {
-          prompt: "把这个网站做成一条 9:16 竖屏官网介绍短片：{{placeholder}}",
-        },
-        "launch-film-zymix": {
-          prompt: "把这个网站做成一条 16:9 横屏官网介绍短片：{{placeholder}}",
-        },
-        // 占位货架（home 内容扩展批——text-anim / product-demo）：
-        // 用户口吻的需求句——不写工具名、不锁工艺参数、不写"像这个视频
-        // 一模一样"（货架视频是复用占位，永不是用户选定的参考）。不带
-        // {{placeholder}} 空位——这些提示词自身完整。
-        "text-anim-lines": {
+        "text-short-gentle-close": {
           prompt:
-            "我想把文案做成短句依次出现的文字动画视频。请先和我确定文字如何分组、出现和切换，再给我看方案。",
+            "我想把一段文案做成文字短片，用简洁排版、轻微镜头运动和逐字入场表达内容。请先帮我梳理文案和节奏，再给出分镜。",
         },
-        "text-anim-brand": {
+        "text-short-genesis": {
           prompt:
-            "我想做一支以文字为主的品牌短片，用简洁排版、轻微缩放和重点文字表达核心信息。请先帮我梳理文案和节奏，再给出方案。",
+            "我想把一段英文文案逐字做成文字短片，保留原文，用简洁排版、轻微镜头运动和逐字入场呈现。请按原文帮我整理分镜。",
         },
-        "text-anim-two-lines": {
+        "product-demo-zymix": {
           prompt:
-            "我想做一支文字短片：先出现第一句话，再出现第二句重点文字，形成呼应。请先结合我的文案讨论画面和节奏。",
+            "把这个网站做成一支产品演示，展示主要功能并配上简洁的屏上说明：{{placeholder}}",
         },
+        // 其余 Product Demos 使用完整的用户口吻提示词；复用视频只是布局
+        // 占位，永不是用户选定的参考。这些提示词不带 {{placeholder}} 空位。
         "product-demo-walkthrough": {
           prompt:
             "我想用上传的视频或录屏做一支操作演示，选取关键步骤并配上简短说明。请先看素材，和我确定演示重点，再给出方案。",
@@ -1510,8 +1494,8 @@ const zh: Resources = {
     // 确认 pill（ADR-117 §4 — 画板 C）：确认拍仅剩的 chrome，只在 dock 戳记
     // 说欠一拍时出现。label 族：裸动词（执行=询问）/ 带价（费用=询问 · 守卫线
     // ——数字恒为服务端 fold 上限，客户端永不自算）/ 延期报价（NULL 族——永不
-    // 编数字）。点击走 typed answer 机（kind="start"），永不骑罐头 chat 文案
-    // （ADR-129）。
+    // 编数字）。点击把当前 label 作为普通用户消息交给 sendChat，下一轮 LLM
+    // 再决定是否调用 start_run。
     confirmPillStart: "开始",
     confirmPillStartPriced: "开始 · 约 {{n}} 积分",
     confirmPillStartDeferred: "开始 · 估价随运行确定",

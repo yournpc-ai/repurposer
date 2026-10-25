@@ -1510,21 +1510,6 @@ async def sync_plan_question(
     # passes it through — one computation per dock.
     if need is None:
         need = await resolve_confirmation_need(db, user_id, estimate)
-    # A work's first storyboard owes a post-presentation review in EVERY
-    # regime, including an opening '直接做' delegation. Keep this conjunct at
-    # the shared dock seat so all proposal tools carry the same Start-pill
-    # stamp; the Start gate independently enforces the same world fact.
-    from app.pipeline.lifecycle import first_draft_confirmation  # deferred
-    from app.tools.film.storyboard import film_first_draft_unpresented
-
-    pending_plan = (
-        PendingPlan.model_validate(project.pending_brief)
-        if isinstance(project.pending_brief, dict)
-        else None
-    )
-    need = first_draft_confirmation(
-        need, unpresented=film_first_draft_unpresented(pending_plan)
-    )
     _message, bailed_run_ids = await _dock_question(
         db,
         conversation_id,

@@ -47,7 +47,7 @@
 
 - 当前 120s 帧帽、屏容、正时长、素材真实区间、元素窗和动画窗都是硬约束；创作默认值与阅读估计不得冒充技术边界。
 - 网页片首稿不能直接携带精确时序/样式参数，需先出稿再 `update_scene`；web 导演词汇不含 composite，patch 也没有元素新增 op。
-- Composite 元素不与音乐 beat grid 联动；不支持变速、循环、尾帧填充、从头重播或自由 CSS。文字元素 ≤4 行、每幕 ≤6 元素等当前帽以 §7.8 为准。
+- Composite 元素不与音乐 beat grid 联动；节拍对齐跳过组合幕两侧切点，保留幕长和元素时间窗；不支持变速、循环、尾帧填充、从头重播或自由 CSS。文字元素 ≤4 行、每幕 ≤6 元素等当前帽以 §7.8 为准。
 - 图片输入用于素材截图/上传素材理解；已交付成片的自动逐帧评审不在当前能力内，人工动态看片与试听仍是独立验收。
 - 本地 `FILM_EDITS_ENABLED=true` 不是生产上线；生产默认关闭，启用与部署另行授权。
 
@@ -239,7 +239,7 @@ agent 能读取、修改并呈现**确定的动画时间安排**（「第二幕�
 | provider/transport | tenacity 3 次，指数退避 2-10s；流式只在首 delta 前重试 | 最内层 | — | `minimax.py:423-424,544,717-719` |
 | schema 解析 | 每次 agent 调用 1 轮修复（结构化回声） | 套在 transport 外 | 是（同 prompt+回声重新生成整篇） | `agents/base.py:267-284` |
 | 多模态降级 | 声明式 1 次纯文本重试（film_director 已声明） | 同上 | 是 | `agents/base.py:155-158,344-358` |
-| 语义校验（导演 repair） | 1+2 候选，总预算 1800s | 套在 agent 调用外 | **是——每候选整篇重新生成，回声只带违例文本不带前候选内容** | `orchestrate_storyboard` 2444-2471 |
+| 语义校验（导演 repair） | 首次 + 最多 `FILM_STORYBOARD_MAX_RETRIES` 次纠错，默认 10 次；总预算 1800s，文字源相同错误重复仍提前停止 | 套在 agent 调用外 | **是——每候选整篇重新生成，回声只带违例文本不带前候选内容** | 全局 Settings；文字/网页编排与估价共用 `MAX_REWRITES` |
 | chat tool loop | max_iterations=12（trigger 6） | 最外层（回合） | 守卫拒绝消耗迭代 | `chat/intent.py:325,361` |
 | worker 节点 | LaunchFilm retries=0；TransientNodeError 预算 = node.retries | run 层 | — | `storyboard.py:3689`；`orchestrator.py:1531` |
 | render | render_max_attempts=3（poison-pill 边界：cap 内可认领，越界终态）；render_concurrency=2；timeout 900s | 渲染链 | — | `config.py:77-89`；`jobs.py:37-43,272` |
@@ -384,7 +384,7 @@ edit 路径无需此循环：ops 拒纯以结构化错误回 chat loop（同字�
 - **生产意图 = dock 出生事实**：六个 dock 工具参数族（present_plan / propose_tasks / edit_graph / propose_plans / revise_plan / revise_selects）携带 `production_intent`（模型按法判断，禁关键词启发式）；auto 开工道放行 = dock 无确认债 **∧** 出生回合有制作意图；缺意图 stamped `awaiting_production`（复用确认 dock 形态，bare Start pill 常驻邀请，零新 chrome）；None 读安全侧 = 无意图。
 - **Film 分镜阶段门**：本回合 `design_storyboard` 已落新版本，而 `present_plan` / `propose_tasks` 的 `production_intent` 非 `true` 时，结构性拒绝其中的 `launch_film` 提案；完整呈现当前保存版本后走 `answer`，不建制作 dock。阶段门必须先于**所有提案副作用**，包括 URL capture、caption 与 dock 准备，不只是 run 创建。普通修改询问「要按这版重新制作吗？」；review-only 展示后停止、不问开工。当前消息明确「改完直接做」才以 `production_intent=true` 进入既有提案、报价与执行道；旧 run 完成或旧版批准不授权后续新版本。
 - **确认前呈现 = 累计方案复述**：制作确认拍在问句之前（同一消息，不新增拍）基于当前真实草稿复述累计状态（素材与文案 / 画幅 / 总时长 / 幕数 / 配音音乐 / 累计修改 / 保持不变的范围）；简洁摘要 + 当前分镜表即可，不机械四分类；用户未选的选项与未澄清事项永不复述为已确认；用户边等边改 = 更新草稿再呈现；版本/token 绑定（`start.stale_storyboard` 409）保证旧确认不授权新版本。
-- **作品首稿强制审阅（ADR-144）**：`film_storyboard_version == 1` 且 `film_presented_message_id` 尚未持久化时，任何 Start（含同回合 auto 与过早显式 Start）都由 `422 start.review_hold` 失败闭；approval dock 清 `review_hold` 不等于已呈现。提案可与首稿同回合 dock，但中央确认戳补 `first_draft_review`，只保留审阅与 Start 入口，不创建 run。呈现行落库后，用户明说生产或点击 Start 才放行；后续版本不继承这个首稿专用确认拍，仍走当前制作意图、auto/ask、review hold、费用与版本守卫。
+- **作品首稿强制审阅（ADR-144）**：`film_storyboard_version == 1` 且 `film_presented_message_id` 尚未持久化时，任何 Start（含同回合 auto 与过早显式 Start）都由 `422 start.review_hold` 失败闭。auto 无其他确认债时不显示首稿 approval dock，用户看过后的制作话走普通 sendChat；ask 可显示首稿 dock，Start 钮同样只发送用户消息，不直接创建 run。呈现行落库后，下一轮 LLM 才通过 `start_run` 放行；后续版本不继承这个首稿专用确认拍，仍走当前制作意图、auto/ask、review hold、费用与版本守卫。
 - **ADR-134 收窄不动**：fresh 稿 review_hold 默认 ON（①作品首稿；②compose 开放重编排）；edit/variant 不新增 hold——但其授权语义收窄为「授权这个版本的修改」，开工仍走出生事实。
 - 用户明示 review-only（「先让我看看」）仍挂 hold（`review_hold=true` 参数保留为唯一逃生门）；Start 门 `422 start.review_hold` 兜底不动。
 - ADR-129（批准 = 消费呈现版）不变。
@@ -394,7 +394,7 @@ edit 路径无需此循环：ops 拒纯以结构化错误回 chat loop（同字�
 
 ### 12.1 网页源
 
-贴链接 → 读取/讨论方向 → `design_storyboard` compose → 呈现完整当前保存版（首稿 review hold 默认 ON）→ **作品首稿一律等待用户看过后的制作话或 Start，开场“直接做”与 auto 也不同回合创建 run** → dock/Start → **单体 `launch_film`** → render/probe → 交付。交付后可以 run provenance 恢复基准并继续 patch；pending 清空不等于失去作品。
+贴链接 → 读取/讨论方向 → `design_storyboard` compose → 呈现完整当前保存版（首稿 review hold 默认 ON）→ **作品首稿一律等待用户看过后的制作话，开场“直接做”与 auto 也不同回合创建 run；auto 无其他确认债时不显示首稿 dock，ask 的 Start 同样只发送制作用户消息** → 下一轮 LLM `start_run` → **单体 `launch_film`** → render/probe → 交付。交付后可以 run provenance 恢复基准并继续 patch；pending 清空不等于失去作品。
 
 画幅修改当前诚实拒绝：没有 `set_aspect`，不得把“再来个 1:1”静默转成导演重设计。画幅变体的未来旅程与验收归 execution §2。
 

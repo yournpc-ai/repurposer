@@ -204,8 +204,8 @@ function parseMs(value: string | undefined): number | null {
  * its DRAIN stamp so the previous bubble's playback is never billed to the
  * next segment. Server assistant created_at is deliberately NOT a display
  * timestamp. Without one of those facts, an explicit client work boundary
- * (the Start pill's click) wins over the first tool's execute-entry `at`;
- * with neither, that activity timestamp is the honest available start. */
+ * wins over the first tool's execute-entry `at`; with neither, that activity
+ * timestamp is the honest available start. */
 function workStart(
   previous: ConversationUnit[],
   first: Extract<ConversationUnit, { kind: "activity" }>,

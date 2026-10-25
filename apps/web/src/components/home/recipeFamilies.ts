@@ -7,7 +7,7 @@
  * tabs answer "what can I get done", not "what file type comes out".
  * Three task families + a catch-all:
  *
- *   ads (Ads & UGC — first seat = the home default)   MG 旗舰: launch_film
+ *   ads (Ads & UGC — first seat = the home default)   文字短片 / 产品演示
  *   talks (Talks & interviews)   一段讲话 → 字幕 / 配音 / 竖屏剪辑 / 重构
  *   posts (Social media)         LinkedIn 核心: 贴文 / 轮播幻灯 (金句卡演示期隐藏)
  *   templates (More)             catch-all 座 — 未归类服务端新卡的兜底行,
@@ -16,10 +16,10 @@
  * 上架纪律: `resolveFamilies` drops empty shelves → empty subs → empty
  * families, so a family without demos never renders, not even a placeholder
  * seat (连摆位都不摆). A demo video SHOULD be a real render of the shelf's
- * capability; the text-anim / product-demo shelves temporarily ride REUSED
+ * capability; three reused product-demo entries temporarily ride REUSED
  * existing renders as pure layout placeholders (each entry's comment names
  * its source) — a placeholder proves the shelf's layout, never the
- * capability, and swapping in the real sample is a data-only edit.
+ * capability, and swapping in a real sample is a data-only edit.
  * Placeholders are recorded in data comments and the batch brief, never
  * bannered in the UI.
  *
@@ -118,96 +118,19 @@ export function recipeCardFamily(card: RecipePublic): string {
 /** The shelf registry — task families in display order (the first family
  * is the home's default tab). Ads' RESERVED seats (brand / ugc / product)
  * declare EMPTY demo lists until their renders land — invisible until then,
- * zero component changes to turn them on. The text-anim / product-demo subs
- * are LIVE placeholder shelves (see their entry comments). */
+ * zero component changes to turn them on. The product-demo / text-short subs
+ * are LIVE shelves. Any remaining placeholder entries are marked
+ * individually below; the text-short entries and the product-demo shelf's
+ * first entry are real film-chain renders. */
 export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
   {
-    // Ads — the MG flagship (launch_film: paste a link, get a
-    // film). First seat = the home default tab.
+    // Ads — Film-led text shorts and product demos. First seat = the home
+    // default tab.
     id: "ads",
     subs: [
       {
-        id: "saas",
-        shelves: [
-          {
-            id: "saas",
-            kind: "demos",
-            demos: [
-              {
-                // MG 批 D3 点亮: the launch_film pipeline's own render
-                // (linear.app → capture → storyboard → film-spec render,
-                // e2e run de3f5e89 — every on-screen word grounds to the
-                // captured page). Content-addressed into the demo/ tree.
-                id: "launch-film-linear",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-linear-6bc23a6a.mp4",
-                orientation: "wide",
-              },
-              {
-                // snappify → vertical launch film ("Code, animated.").
-                id: "launch-film-snappify-code",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-snappify-code-adc0737d.mp4",
-                orientation: "vertical",
-              },
-              {
-                // snappify → vertical launch film ("Frame by Frame").
-                id: "launch-film-snappify-frame",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-snappify-frame-0ef913dd.mp4",
-                orientation: "vertical",
-              },
-              {
-                // zymix.ai → launch film (run 8321463d — "One App",
-                // 26.6s/1080p, every word grounds to the site's own copy).
-                // Content-addressed into the demo/ tree.
-                id: "launch-film-zymix",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-zymix-9890ad58.mp4",
-                orientation: "wide",
-              },
-            ],
-          },
-        ],
-      },
-      {
-        // 文字动画短片 (home 内容扩展批) — PLACEHOLDER shelf: every card
-        // reuses one of the saas shelf's existing renders (source named per
-        // entry) so the layout/interaction ships before the real text-
-        // animation samples land. Replacing a video = swap the entry's url
-        // (+ orientation to the new file's real frame); the id and its
-        // prefill copy stay put.
-        id: "text-anim",
-        shelves: [
-          {
-            id: "text-anim",
-            kind: "demos",
-            demos: [
-              {
-                // 短句依次出现 — placeholder: reuses the snappify "Code"
-                // vertical launch film.
-                id: "text-anim-lines",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-snappify-code-adc0737d.mp4",
-                orientation: "vertical",
-              },
-              {
-                // 品牌文案短片 — placeholder: reuses the linear.app wide
-                // launch film.
-                id: "text-anim-brand",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-linear-6bc23a6a.mp4",
-                orientation: "wide",
-              },
-              {
-                // 两行错时强调 — placeholder: reuses the snappify "Frame"
-                // vertical launch film.
-                id: "text-anim-two-lines",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-snappify-frame-0ef913dd.mp4",
-                orientation: "vertical",
-              },
-            ],
-          },
-        ],
-      },
-      {
-        // 产品演示 (home 内容扩展批) — same placeholder discipline as
-        // text-anim above. The prompts name the user's OWN uploaded
-        // video/screen recording as the source — no auto-record promises.
+        // 产品演示 — the first entry is a real film-chain render. The
+        // remaining reused entries stay explicitly marked as placeholders.
         id: "product-demo",
         shelves: [
           {
@@ -215,10 +138,10 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
             kind: "demos",
             demos: [
               {
-                // 操作流程演示 — placeholder: reuses the zymix.ai wide
-                // launch film.
-                id: "product-demo-walkthrough",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-zymix-9890ad58.mp4",
+                // ZYMIX 产品演示 + 独立屏上说明字幕 — real render from the
+                // current film chain (project 8577f1ff, output 8beb17c9).
+                id: "product-demo-zymix",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/product-demo-zymix-one-way-in-41a917c7.mp4",
                 orientation: "wide",
               },
               {
@@ -234,6 +157,38 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
                 id: "product-demo-captioned",
                 url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-snappify-frame-0ef913dd.mp4",
                 orientation: "vertical",
+              },
+              {
+                // 操作流程演示 — placeholder: reuses the zymix.ai wide
+                // launch film.
+                id: "product-demo-walkthrough",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-zymix-9890ad58.mp4",
+                orientation: "wide",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        // 文字短片 — real text-source Film render (project 9345ddc2,
+        // output a9701fe0), content-addressed into the demo/ tree.
+        id: "text-short",
+        shelves: [
+          {
+            id: "text-short",
+            kind: "demos",
+            demos: [
+              {
+                id: "text-short-gentle-close",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/text-short-gentle-close-6c42705a.mp4",
+                orientation: "wide",
+              },
+              {
+                // Genesis 逐字英文文字短片 — real text-source Film render
+                // (project f52c489c, output 50a6b40d), 68.1s / 16:9.
+                id: "text-short-genesis",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/text-short-genesis-25aa61fa.mp4",
+                orientation: "wide",
               },
             ],
           },

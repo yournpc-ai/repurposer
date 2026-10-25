@@ -12,9 +12,9 @@
 
 **当前优先级**：完成人工试用及其反馈驱动的定点修复，不为追求分支一次全绿而无限推迟试用，也不借试用之名扩能力。
 
-Chat 活动、WorkSegment、修订呈现与版本执行的现行行为分别归 [CHAT_ARCHITECTURE §8](../CHAT_ARCHITECTURE.md) 和总设计 §7/§11；本文件 §1.1 集中维护它们的人工验收。真实 live SSE、断网/停止/Start recovery、真实 LLM/制作旅程与动态视听检查不得由代码层或定向纯测试代替。
+Chat 活动、WorkSegment、修订呈现与版本执行的现行行为分别归 [CHAT_ARCHITECTURE §8](../CHAT_ARCHITECTURE.md) 和总设计 §7/§11；本文件 §1.1 集中维护它们的人工验收。真实 live SSE、断网/停止恢复、真实 LLM/制作旅程与动态视听检查不得由代码层或定向纯测试代替。
 
-Home 当前 SaaS launch film 四张卡使用对应链真实样片；Text Animation 与 Product Demos 六张卡仍复用 SaaS 片作布局占位。真实样片由用户选定后只替换注册表数据，不把占位片当作能力验收产物；当前状态见 [Home 任务](home-creation-entry-refresh.md)。
+Home 当前只展示 Text Shorts 与 Product Demos 两个子 tab；Text Shorts 与 ZYMIX Product Demo 使用真实 Film 产物，Product Demos 其余三张仍复用既有片作布局占位。真实样片由用户选定后只替换注册表数据，不把占位片当作能力验收产物；当前状态见 [Home 任务](home-creation-entry-refresh.md)。
 
 ### 0.2 当前能力基线
 
@@ -41,7 +41,7 @@ Home 当前 SaaS launch film 四张卡使用对应链真实样片；Text Animati
 | 组 | 必须回答的问题 | 主要证据 |
 |---|---|---|
 | 授权与恢复 | auto 档是否保持“免批准拍但不创造制作意图”；过期 `base_ref`、断流恢复是否安全、诚实 | 真实 Chat/SSE、版本与 run 记录 |
-| 展示 | live now line / WorkSegment / 修订呈现是否与实际工具和世界状态一致；真实断网、停止、Start recovery、刷新回放是否无假状态 | 浏览器逐拍观察；不只靠回放或纯测试 |
+| 展示 | live now line / WorkSegment / 修订呈现是否与实际工具和世界状态一致；真实断网、停止恢复、刷新回放是否无假状态 | 浏览器逐拍观察；不只靠回放或纯测试 |
 | 双源与文字 | 网页源链在本迭代后是否仍通；纯文字零媒体、用户点名更快节奏、逐句子句与同回合纠正是否按真实需求工作；8 幕目标、末幕两行严格纯滑动、旧分组清除与“呈现版 = 实际 run 版”是否在隔离项目成立 | 真实 LLM 旅程 + 成片/帧检查；连续不同非法参数的第 3 次拒绝终态；不得复放事故项目 |
 | 回答入口 | 从问题选项进入首次设计的原始旅程是否成功，回答与 brief 回填是否耐久，首次 begin 拒绝是否终止重试而非误报能力缺失 | 原入口人工复测 + 受影响测试/诊断 |
 | 回归闸 | 累计 prompt 面是否通过 prompt_gate；受影响剧本矩阵是否通过；begin 结构化改动后的同步测试是否已跑 | 仪式链实际输出；授权与配额边界另记 |
@@ -50,7 +50,7 @@ Home 当前 SaaS launch film 四张卡使用对应链真实样片；Text Animati
 
 #### A. 授权、版本与证据包
 
-1. **首稿与 Start**：首条“直接做”也只能先完整呈现作品首版；无关问答不得解除 review hold。旧 Start 在新版本出生后失效，新 Start 只绑定新版本。分镜超时或模型失败必须收束活动与 draft 等待，不出现永久 busy。Film 与非 Film 各验证一条 typed Start，确认共用通道没有回归。
+1. **首稿与 Start**：首条“直接做”也只能先完整呈现作品首版；无关问答不得解除 review hold。auto 无其他确认债时不显示首稿 approval dock；ask 的 Start 与口头批准都发送普通消息，由下一轮 LLM 调 `start_run`。旧 Start 在新版本出生后失效，新 Start 只绑定新版本。分镜超时或模型失败必须收束活动与 draft 等待，不出现永久 busy。Film 与非 Film 各验证一条 typed Start，确认共用通道没有回归。
 2. **普通修订**：只保存新版本，不创建 run、不先出制作 dock；回复说明尚未重新制作，并展示系统变化摘要、完整当前保存表、累计设置与具体未解决项。用户表不得出现内部 `scene_id` / `base_ref` / digest。
 3. **后续明确制作**：不得重新设计；进入既有提案、报价与执行，旧 Output 保留。未释放 drift/shortfall、review hold、守卫线与费用确认继续生效。
 4. **“修改并制作”同回合委托**：完整呈现后进入既有提案，不机械增加第二轮批准；是否立即开工仍由设置与确认债决定。review-only 则完整呈现后停止，无开工问题、dock 或 run。
@@ -70,8 +70,8 @@ Home 当前 SaaS launch film 四张卡使用对应链真实样片；Text Animati
 1. 普通工具回合应在同一工作段原位经历 Thinking → 当前活动 → Worked → 正文；Worked 前无 chevron，且不存在第二条 Thinking。多工具回合按实际可见散文分段，首个正文字符释放时冻结耗时。
 2. cancelled 尝试不得显示为失败或成功；真实 failed 保留安静告警。纯 chat 不出现空工具框，刷新后无残留 shimmer，历史只显示可观察活动跨度。
 3. 首稿完整表格与独立开工句必须先排干再挂 run；旧方案普通 Start 不重复 echo，零正文 Start 不产生空泡。Path A checkpoint rekey 不得重复收段或改变 `birthKey` 身份。
-4. run 同一行经历制作中 → REVIEWING → 匹配当前 run 的 delivery 首字后 Worked；chip 由真实可交付 output 独立出现，不等回复。分别核对成功、部分失败、全败、60s 无回复、迟到回复与刷新历史。
-5. 真实断网、用户停止与 Start recovery 必须端到端复测。恢复只读且不自动重试制作：原问题行的 `workflow_run_id` 优先于新 pending dock；pending-without-run、settled-without-run、读取失败/超时与未知状态分别诚实呈现，恢复查询必须有界。
+4. run 同一行经历制作中 → REVIEWING → 匹配当前 run 的 delivery 首字后 Worked；chip 必须同时满足真实可交付 output 与 run 工作段 settled，REVIEWING 不提前出现。分别核对成功、部分失败、全败、60s 无回复、迟到回复与刷新历史。
+5. 真实断网、用户停止与 Start 普通消息的恢复必须端到端复测。chat 恢复只读且不自动重发：已落库回复经 `reconcileTurn` 接回，窗口内无回复显示 `connectionLost`，刷新归档补齐；answer 流的静默死管与停止也按既有路径收口，不出现永久 busy。
 
 #### D. 网页 / MG / 采集旅程
 
@@ -101,7 +101,7 @@ Home 当前 SaaS launch film 四张卡使用对应链真实样片；Text Animati
 | 项 | 剩余范围与依赖 | 最小验收 |
 |---|---|---|
 | 画幅变体 `set_aspect` | aspect 移出内容指纹；新增 op；逐幕取景重查；变体 run 产生同 `work_id` 的新 Output 且原片可访问；报价按真实秒数与复用范围 | 变体零导演调用；两 Output 并存；未改内容/音频复用正确；费用与授权分叉正确；新增 S11b 变体旅程，并用可证明 provenance 的旧作品同构 fixture 跑正腿回归；不可证时才走诚实负腿，不动原事故项目 |
-| Home 真实样片 | SaaS launch film 四张真片已上架；Text Animation / Product Demos 六张仍待用户制作并选定对应真片，仅替换 URL、orientation 与必要 prompt 数据 | 配方点击只预填 composer；不自动制作/扣费，不覆盖用户草稿或素材；不承诺尚未实现的自动录屏。占位片只验布局，不验制作能力 |
+| Home 真实样片 | Text Shorts 与 ZYMIX Product Demo 已使用真实 Film；Product Demos 其余三张仍待用户制作并选定对应真片，仅替换 URL、orientation 与必要 prompt 数据 | 配方点击只预填 composer；不自动制作/扣费，不覆盖用户草稿或素材；不承诺尚未实现的自动录屏。占位片只验布局，不验制作能力 |
 | `typeface` 排版枚举 | 当前字号档、对齐、强调样式已落；剩余是字体枚举与渲染镜像 vendor 字体，不重做已完成字段 | 逐档真实渲染；中文可用；未设档的 legacy spec 行为不变 |
 | 声音钉版与试听 | 设计期解析并钉 `voice_id` 到版本/执行快照；最小 STOCK_VOICES；补「制作设置」读取行，能说出真实 voice_id 与来源；真实可播放样例/音乐预览，与成片共用配置 | 制作设置读取与版本/快照一致；试听不是链接文本；优先已有样例，按需短句合成须先明示成本，禁止为试听生成整片旁白；先试听未选择前不开工；重开配音不重新设计整片 |
 | 网页录屏采集 | 沿现有 capture policy/隔离上下文增加有界录制，接既有资产与组合幕链；上传干净录屏仍是合法输入 | 真实动态录屏入资产链并可制作；时长/尺寸/格式边界明确；不得用截图推拉冒充录屏，不承诺系统声音或登录态/复杂操作 |

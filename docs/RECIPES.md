@@ -9,7 +9,7 @@
 - 服务端 `app/pipeline/recipes.py:RECIPE_REGISTRY` 注册八个配方：`multilingual-subs`、`voice-dub`、`highlight-clips`、`reframe`、`social-post`、`quote-cards`、`carousel` 为 `live`；`image-video` 为 `reserved`。`GET /api/v1/recipes` 提供公共只读投影。
 - Home 前端另以 `components/home/recipeFamilies.ts:RECIPE_FAMILIES` 组织用户任务货架。`ads` 是默认族；`talks` 与 `posts` 当前 `disabled`；`templates` 是未映射服务端卡片的 catch-all。
 - `DEMO_HIDDEN_CARDS` 当前隐藏 `quote-cards` 与 `image-video`。隐藏只影响货架曝光，不删除 live 能力、prompt 注册或公共 API。
-- SaaS launch film 四张卡使用对应链真实样片；Text Animation 与 Product Demos 六张卡仍复用 SaaS 片作布局占位。`brand` / `ugc` / `product` 是空货架，按规则不渲染。
+- Home 的 Ads 族只展示 Text Shorts（文字短片）与 Product Demos 两个子 tab。Text Shorts 使用项目 `9345ddc2` 与 `f52c489c` 的真实文字源 Film；Product Demos 首卡为 ZYMIX 真片，其余三张仍复用既有片作布局占位。`brand` / `ugc` / `product` 是空货架，按规则不渲染。
 - `RecipeCard` 只有 `status="live"` 才可点击；`reserved` 显示 Soon 且不可发射。点击不自动发送、不建项目或 run、不打开 overlay。
 - `packages/clip` 同时服务 editor preview 与 render service；clip-spec 与 film-spec 是平级 spec families，按 `spec.family` 分派。配方不得创建第三套 spec 或 renderer。
 - R5 合成发言视频是已拍板但未实施的能力，合同归 `tasks/synthetic-talk-video.md`；`voice_gen` / `synth_visual` 是目标能力名，不表示当前已注册。

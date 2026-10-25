@@ -326,9 +326,12 @@ export function HomeComposer({
   const docked = dockP >= 1
   const rest = dockP <= 0
   // Click-to-focus (the input-group addon contract): clicks on a band's
-  // padding focus the editor; clicks on real buttons pass through.
+  // padding focus the editor; clicks on real buttons pass through. Native
+  // clicks INSIDE the editable already place the caret — focusing again here
+  // would run MentionEditor.focus() and force that caret to the end.
   const focusEditor = (e: React.MouseEvent<HTMLElement>) => {
-    if ((e.target as HTMLElement).closest("button")) return
+    const target = e.target as HTMLElement
+    if (target.closest("button") || target.closest("[contenteditable]")) return
     editorRef.current?.focus()
   }
   // Content-driven band target: re-measured after every content change

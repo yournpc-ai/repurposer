@@ -816,7 +816,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 3. **配方 = 提示词**：卡片全部发射载荷是 `promptTemplate`/demo prompt，点击只预填 composer，不自动发送、不建项目/run、不打开模板编辑器；服务端不接收隐藏 recipe_id。
 4. 准入至少过三门：真实用户场景、当前能力或明确 PLANNED 边界、诚实且有辨识度的示例。卡可点、demo 可播与制作全旅程通过是三类不同证据，不能互相代替。
 5. 当前阵容、排序、显示/隐藏与 tab 归前端 `RECIPE_FAMILIES` 及服务端 `/api/v1/recipes` 各自注册职责；不在 ADR 冻结“八卡”或固定顺序。空 shelf/sub/family 不渲染，隐藏卡片不等于删除能力。
-6. SaaS launch film 真片与 Text Animation/Product Demos 占位片必须分开记录。占位只证明布局、画幅、播放与预填，不证明对应制作能力；替换真片后仍需独立走 Chat→方案→授权→制作→交付验收。
+6. 真片与布局占位片必须分开记录。占位只证明布局、画幅、播放与预填，不证明对应制作能力；替换真片后仍需独立走 Chat→方案→授权→制作→交付验收。
 7. 文案只写用户要点名的具体任务，不做“一次输入全套出”或传播效果承诺。已有用户草稿不得被预填静默覆盖；离屏暂停与声音单例是货架基本行为。
 
 **Related**: ADR-040/046/060；`docs/RECIPES.md` / `docs/tasks/home-creation-entry-refresh.md` / `docs/tasks/flora-parity-ui.md`。
@@ -1173,7 +1173,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 **Decision**:
 1. 执行确认与费用确认的唯一控件座位是 dock；canvas 不放计划 Start/Confirm。选项问也复用同一 OptionDock 机器，不新增第三确认面。
-2. Start 使用直接、具体的动作文案；口头 yes、typed answer 与按钮都进入服务端 `evaluate_start_gate`，客户端 disabled 不是安全边界。
+2. Start 使用直接、具体的动作文案；Start pill 化为普通用户消息走 sendChat，与口头 yes / typed answer 同进下一轮 LLM 的 `start_run` 与服务端 `evaluate_start_gate`，按钮不直接创建 run，客户端 disabled 不是安全边界。
 3. 是否显示 Start 由当前生产意图、ask/auto、费用守卫、材料、版本与 Film 首稿审阅决定。**不再按任务数量决定有没有 pill，也不存在“单任务只能口头”的规则。**
 4. dock placeholder 不按相位编造新文案；只说明当前真实可用的修改、上传和 @mention 能力，不提不存在的 slash 命令。
 5. echo 对评审面的指称必须与实际可见环境一致；dock、草稿图和消息流可以共同呈现，但不得声称用户看见了尚未 reveal 的面。
@@ -1230,7 +1230,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 1. **起始句独立锚**：run 的起始言语（ADR-093：start_run 回合的 LLM 言语，落库普通 message 行）序在 taskList 前；活态 mid-run QA / 插话按真实时间落在起始句与钉底动态行之间。
 2. **run 工作段锚在 run 结束刻**：terminal 后 taskList 锚 = lastStepT+1，delivery 回复随其后——mid-run 生活（QA / 对话）恒在该工作段之上，ADR-058「收据永不高于生产回声」由构造成立（回声必 mid-run）。`workflow_run_id` 章不再是排序锚，只剩 detached run 内联归档（RunCard）与 delivery 首显收口的归属关联。
 3. **无起始 banner**：确认拍的记录 = echo 散文 + 用户原话 + 开工句（ADR-093 §2，start_run 回合的 LLM 言语）+ run 收据行，机器块零增量——无「✓ 生成计划 · 题名」块、无 pre-run QA stand-in 抑制逻辑（`hasPreRunQaArchive`）、无 `generationOverlay.title` i18n 键。
-4. **run 工作段一行三态**：RunTaskList 与 chat 共用 `WorkSegmentRow`，同一 `runId` key 承载 RUNNING → REVIEWING → SETTLED。活态默认展开真实步骤导轨树，用户可手动切换，running → reviewing 保留其选择；terminal 只把原行切入「正在整理制作结果…」，匹配当前 run 的 delivery 首个非空白字符实际经打字机释放时才原位收成 Worked，settled 当拍默认折起、之后可再展开。无回复有界出口与历史回放使用 run 自身可观察跨度，chip 由真实可交付 output 独立挂载。
+4. **run 工作段一行三态**：RunTaskList 与 chat 共用 `WorkSegmentRow`，同一 `runId` key 承载 RUNNING → REVIEWING → SETTLED。活态默认展开真实步骤导轨树，用户可手动切换，running → reviewing 保留其选择；terminal 只把原行切入「正在整理制作结果…」，匹配当前 run 的 delivery 首个非空白字符实际经打字机释放时才原位收成 Worked，settled 当拍默认折起、之后可再展开。无回复有界出口与历史回放使用 run 自身可观察跨度，chat inline chip 复用同一 settled 边沿，在 delivery 首字实际释放或 Worked 收段后才挂载；产物就绪与画布交接仍独立读真实 output。
 
 **Consequences**: QA 归档律不变（选项问回答坍缩成已答问题双层消息入流、task_book start 永不入 QA 块）——变的只是排序锚；方向问答的记录双座照旧（流内 QA 块 + interrupt 步骤行「方向：…」量化重写）。
 
@@ -2539,11 +2539,11 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 **Decision**:
 
 1. **fresh COMPOSE 草稿（首稿；开放重编排——用户没见过的结构）默认 `film_review_hold=True`**——`film_design_state` fresh 分支 None 即 ON（`created_via="compose"`），不继承 stored hold；**edit/variant 版本生于用户的明确修改请求，不新增 hold**（默认 OFF）；修改请求授权的是这个版本的修改本身，不等于授权渲染（ADR-139 §3 收窄）。修订呈现系统变化摘要与当前保存版本的完整事实；普通修改没有 `production_intent=true` 时以 `answer` 收尾、不建 `launch_film` dock，当前请求明确制作委托时才进入既有提案、报价与执行道。REUSE 再呈现（同一稿）保持继承（稿已见过）。显式 `review_hold` 参数仍是双向逃生门（用户明说「先让我看看」挂 hold / 后续版本「不用看分镜，直接做」放行）；作品首稿不再由 `review_hold=false` 或开场直接制作委托跳过审阅，见 ADR-144。
-2. 释放座不变：approval dock（`film_dock_state`）是 hold 的唯一释放座；Start 门 `422 start.review_hold` 是确定性兜底。法条观察文案分叉不变（`hold_fact` 自适应）。
+2. 释放座不变：用户看过呈现后的制作话释放 hold；ask 可由 approval dock 的 Start 生成这条消息，auto 无其他确认债时直接输入。Start 门 `422 start.review_hold` 是确定性兜底，法条观察文案分叉不变（`hold_fact` 自适应）。
 3. **`rewrite_film_task_params` 改替换语义**：launch_film 的 params 整体变成呈现版参数（`dict(version_params)`），永不再 merge——确认链携带的恰好是呈现稿的设计参数，模型多写的 canonical 相关键不落盘。
-4. 剧本 S11 增放行拍：设计拍断言无 run（hold ON 呈现即停）→ 放行消息 dock + auto 开工；分镜呈现断言不锁信道（row.append 帧或终封筒 assistant_message 皆可——契约 = 用户看到分镜消息）。
+4. 剧本 S11 增放行拍：设计拍断言无 run（hold ON 呈现即停）→ 用户放行消息 → 下一回合 `start_run`；auto 无其他确认债时不显示首稿 dock，ask 的 dock Start 只发送这条消息。分镜呈现断言不锁信道（row.append 帧或终封筒 assistant_message 皆可——契约 = 用户看到分镜消息）。
 
-**Consequences**: 命令式入口变成两回合流（设计拍呈现即停 → 放行拍 dock 即开工）；compose 修订重稿同样等放行；普通 edit/variant 先完整呈现当前保存版本并以 `answer` 询问是否制作，不新增版本 hold，也不先建制作 dock；当前请求明确「改完直接做」时不机械增加第二轮批准，既有执行、费用、drift 与 Start 守卫继续生效。既有挂单（另立批处置，不在本决策）：① ADR-129 的 `on_row_append` 分镜发布座从未接线（零调用点）——分镜行目前只骑终封筒，长跨度窗口内流死即直播不可见、刷新 replay 才现身；② 无前置挂单时设计拍的 birth prompt 冻结为当回合文本（如 "ok"）而非原始求片句。
+**Consequences**: 命令式入口变成两回合流（设计拍呈现即停 → 用户放行消息 → 下一回合开工）；auto 无其他确认债时无首稿 dock，ask 的 Start 只生成同一条放行消息。compose 修订重稿同样等放行；普通 edit/variant 先完整呈现当前保存版本并以 `answer` 询问是否制作，不新增版本 hold，也不先建制作 dock；当前请求明确「改完直接做」时不机械增加第二轮批准，既有执行、费用、drift 与 Start 守卫继续生效。既有挂单（另立批处置，不在本决策）：① ADR-129 的 `on_row_append` 分镜发布座从未接线（零调用点）——分镜行目前只骑终封筒，长跨度窗口内流死即直播不可见、刷新 replay 才现身；② 无前置挂单时设计拍的 birth prompt 冻结为当回合文本（如 "ok"）而非原始求片句。
 
 **Related**: ADR-129（分镜拍与版本闭环）/ ADR-117 + ADR-139（auto 只在制作意图与确认债条件满足后开工；hold ON 时 dock 等待拍先行）/ ADR-131（呈现 = LLM 散文唯一座）/ ADR-137（edit/variant 的 ops 与版本信封——本条 hold 收窄的执行面）
 
@@ -2681,14 +2681,14 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-144: 作品首稿强制审阅——呈现持久化前任何 Start 均失败闭
 
-**Status**: Decided（2026-10-24 用户拍板；现行契约 = `docs/tasks/film-storyboard-orchestration.md` §11～§12；实现与验证状态 = 同前缀 progress）
+**Status**: Decided（2026-10-25 用户拍板；现行契约 = `docs/tasks/film-storyboard-orchestration.md` §11～§12；实现与验证状态 = 同前缀 progress）
 
 **Decision**:
 
 1. **作品首个分镜版本一律先审阅**：即使首条消息明确「直接做」、两个确认偏好均为 auto、或设计参数传 `review_hold=false`，首稿也只呈现并等待。提案可与首稿同回合 dock，但不得在同回合创建 run；只有呈现之后用户明说生产或点击 Start 才释放制作。此专用拍只针对 `film_storyboard_version == 1`，后续版本仍由当前制作意图、既有 hold、auto/ask、费用与版本守卫决定。
-2. **呈现事实独立于 hold**：`film_presented_message_id` 是首稿已经呈现的世界事实。该 id 未持久化而 Start 已到达时，`evaluate_start_gate` 一律返回 `422 start.review_hold`；同回合 auto 与过早显式调用同法。呈现行落库后的显式 Start 是释放拍，不再被这个首稿专用确认债拦住。
-3. **dock 与 Start 双保险**：共享 `sync_plan_question` 在确认戳上补 `first_draft_review`，让首稿保留既有 Start pill；既有价格、偏好与条件原因保持优先级，不新增确认 chrome 或第三种确认类型。auto 只免普通批准拍，永不跳过首稿审阅。
-4. **言语与世界状态同法**：两条意图路径及 Film family prompt 都要求首稿以审阅/制作问题收尾，不得宣称已经开工；schema 与设置说明同步。首稿正文仍按既有打字机律完整释放并排干，前端 Start 信封防重复逻辑不撤回。
+2. **呈现事实独立于 hold**：`film_presented_message_id` 是首稿已经呈现的世界事实。该 id 未持久化而 Start 已到达时，`evaluate_start_gate` 一律返回 `422 start.review_hold`；同回合 auto 与过早显式调用同法。呈现行落库后的显式 Start 是释放拍，不再被这个首稿呈现门拦住。
+3. **dock 按档呈现，Start 统一发消息**：auto 无其他确认债时不显示首稿 approval dock，用户以看过后的制作话继续；ask 仍由 `execution_pref` 呈现既有 Start pill，独立价格、偏好与条件原因在任何档照常呈现。所有 Start pill 都化为普通用户消息走 sendChat，由下一轮 LLM 调 `start_run`，不由按钮直接创建 run。
+4. **言语与世界状态同法**：两条意图路径及 Film family prompt 的首稿审阅措辞保持不变；auto 无 dock 不等于首稿自动开工。呈现正文仍按既有打字机律完整释放并排干，Start 消息复用 sendChat 的既有发送、恢复与结算路径。
 
 **Consequences**: 命令式首稿的路径恒为「完整呈现并等待 → 用户看后批准 → 开工」；批准后的 auto 道不机械追加第二次同义确认。非 Film、已呈现首稿的后续批准和后续版本的既有授权路径不变。真实 Chat 停等、Start 与口头批准仍须按 progress 单独验收，纯函数绿不冒充旅程证据。
 

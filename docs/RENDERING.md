@@ -173,7 +173,7 @@ spec 的顶层字段被 TRACK_REGISTRY 整划为 9 轨——下表的 family / t
   - `stageRemoteSource`（stage.ts）— Remotion 内部 asset fetch 不走系统代理、整文件下载挤在取帧预算内（慢源 = delayRender 超时灾难）；staging 侧代理感知（`dispatcherFor` 读 HTTPS_PROXY）、按 URL 去重、LRU 驱逐。**异源段**：段的 donor url 同样经 staging（渲染器不知同质/异源之别）。
 - `srt.ts` — `captionTrackToSrt`：7 词成行、按 `clipStart`（首个保留段起点）重定基——SRT 与 MP4 同起点，交接 CapCut 的交付物。
 
-- **上传与恢复**：响应头等待 300 秒，每次上传总时限 360 秒，瞬时网络/5xx/408/429 最多尝试两次；鉴权失败不盲重试。API 请求默认上限 1800 秒，上传签名至少有效 3600 秒。生成与上传错误分别返回 `stage=render|upload`；上传失败提示已生成但未交付。
+- **上传与恢复**：响应头等待 300 秒，单次上传最多 360 秒；每个文件最多尝试 4 次，共享 720 秒总预算（包含退避）。连接重置/断管/临时网络错误/超时及 HTTP 5xx/408/429 可重试；每次重建连接池，指数退避带抖动并遵守 `Retry-After`，等待超出剩余预算则结束。鉴权、证书及未知错误不盲重试；错误日志不含预签名 URL。API 请求默认上限 1800 秒，上传签名至少有效 3600 秒。生成与上传错误分别返回 `stage=render|upload`；上传失败提示已生成但未交付。断连恢复、重试上限、退避/预算与缓存复用已有本地回归；真实代理链路重传仍待验证。
 - **成片缓存**：`artifacts.ts` 按 output ID + 规范化 spec + 渲染器缓存版本区分，完整文件生成后原子写 ready marker；上传失败或进程重启后，同配置使用新上传签名重传。修改 spec 重新渲染；缓存保留 24 小时并在请求时清理过期目录，重试时缓存已失效则重新渲染。升级渲染语义须更新缓存版本。clip 与 film 共用恢复机制，`POST /outputs/{id}/render` 均可重试，在途重复请求不撤销 claim。
 - **代理**：`dev.sh` 按显式 `RENDER_PROXY` → 已导出 HTTP(S) 代理 → macOS 系统 HTTPS 代理 → 本地 6152 默认值选择；`RENDER_PROXY=off` 明确关闭。探测失败保留配置并提示，不自动回退直连；选择结果写 render 日志。
 - **交付终态**：render/upload 子步骤失败也使 run FAILED；部分交付只计算实际可用产物。film/clip 须 `render_status=COMPLETED` 且 `files.video` 存在才算已交付；完整性 probe 仍为成功落库前置条件。

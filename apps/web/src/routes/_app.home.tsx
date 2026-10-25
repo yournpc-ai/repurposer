@@ -454,11 +454,11 @@ function Home() {
                           soundOwner={demoSoundOwner}
                           onSoundStart={claimDemoSound}
                           onSoundStop={releaseDemoSound}
-                          // Tour step 3 anchors the launch-film demo card's
+                          // Tour step 3 anchors the first demo card's
                           // Use-prompt entry — the Ads family's first shelf
-                          // item, the flagship the home page opens on. The
-                          // tour's scrollIntoView block:"center" centers it in
-                          // the viewport between the pinned tabs and the bottom
+                          // item, where the home page opens. The tour's
+                          // scrollIntoView block:"center" centers it in the
+                          // viewport between the pinned tabs and the bottom
                           // dock; a missing demo asset → the step auto-skips.
                           tourAnchorIndex={
                             activeFamily.id === "ads" &&

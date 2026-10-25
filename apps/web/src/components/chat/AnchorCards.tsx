@@ -2,9 +2,8 @@
  * 终态收据帧 —— 静态、零订阅，挂在终态收据行之下、归收据所有（收据行
  * = 唯一父座）。N 产物 = 数组平铺（flex-wrap 小卡，禁合集卡组件）；
  * 无内联播放钮，点击 = 开 MediaLightbox（指针语义 —— 唯一展开目标，
- * lightbox 的声音互斥全局已接）。渲染 ⟺ !canvas_visible —— 环境分支由
- * ChatDock 的挂载点把守（lib/canvasVisibility 单源），组件自身不读环
- * 境。名缺 → 「类型词 · 规格」回退（anchorLabel，零模板回填）。 */
+ * lightbox 的声音互斥全局已接）。挂载 = run 工作段 settled + !canvas_visible
+ * —— 环境与展示时机由 ChatDock 把守，组件自身不读环境。名缺 → 「类型词 · 规格」回退（anchorLabel，零模板回填）。 */
 
 import { useState } from "react"
 import { useTranslation } from "react-i18next"

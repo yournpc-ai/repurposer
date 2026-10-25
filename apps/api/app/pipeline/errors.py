@@ -124,6 +124,10 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
         "en": "I couldn't draft a faithful film of that page — try a page with clearer copy, or tell me what to lead with.",
         "zh": "没能为那个页面写出忠实的短片文案——换一页文案更清楚的，或告诉我先突出什么。",
     },
+    "film_timing_invalid": {
+        "en": "The storyboard's timing failed validation. Adjust the scene or animation timing before retrying production.",
+        "zh": "分镜的时间设置未通过校验，需要调整幕长或动画时间后再制作。",
+    },
     # The TEXT source's ladder terminal (素材源抽象): every candidate failed
     # the checks. The copy itself already passed the feasibility preflight,
     # so this line never blames the user's words or their named numbers —

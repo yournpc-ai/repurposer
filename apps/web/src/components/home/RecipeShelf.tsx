@@ -38,9 +38,9 @@ export function RecipeShelf({
   items: ShelfItem[]
   onPrefill: (prefillKey: string) => void
   /** Index of the item that carries the `home-recipes` tour anchor (the
-   * Ads family's launch-film demo card — Tour skips the step when the
-   * anchor renders nothing). Demo cards stamp the anchor on their primary
-   * Use-prompt button, so the spotlight names the real click target. */
+   * Ads family's first demo card — Tour skips the step when the anchor
+   * renders nothing). Demo cards stamp the anchor on their primary Use-prompt
+   * button, so the spotlight names the real click target. */
   tourAnchorIndex?: number
   /** Home-global audible demo id. Videos keep playing when ownership moves;
    * only their sound is revoked. */
@@ -91,9 +91,8 @@ export function RecipeShelf({
               </div>
             ) : (
               // data-tour mirror of the recipe branch — tour step 3 anchors
-              // the Ads family's launch-film demo card (home 默认 tab
-              // 旗舰). Demo cards put the anchor on the primary Use-prompt
-              // button, not the decorative wrapper.
+              // the Ads family's first demo card. Demo cards put the anchor
+              // on the primary Use-prompt button, not the decorative wrapper.
               <div key={item.demo.id} className="flex-none">
                 <DemoCard
                   demo={item.demo}

@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -76,6 +77,9 @@ class Settings(BaseSettings):
     # schedule is invented here.
     asset_max_attempts: int = 3
     render_max_attempts: int = 3
+    # Semantic storyboard repairs after the initial candidate, shared by
+    # text/web design, production and cost estimation.
+    film_storyboard_max_retries: int = Field(default=10, ge=0)
     # Render execution knobs (MG D4 — engineering parameters, deployment-shaped,
     # so env Settings, NOT the configs table; boundary rule = platform/configs.py
     # header §3). render_concurrency caps simultaneous renders per worker process
@@ -84,7 +88,7 @@ class Settings(BaseSettings):
     # render_timeout_seconds fences one render-service POST: the film baseline is
     # ≈46s for a 26s film (local spike, ~1.75× realtime), but the SAME fence
     # covers the clip family, where longer sources legitimately render for
-    # minutes. 1800s includes two bounded upload attempts (up to 6min each).
+    # minutes. 1800s includes the shared 12-minute upload retry budget.
     render_concurrency: int = 2
     render_timeout_seconds: int = 1800
 

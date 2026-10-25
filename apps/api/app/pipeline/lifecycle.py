@@ -282,35 +282,14 @@ class ConfirmationNeed:
     ``awaiting_production`` (the dock's birth message carried no production
     request — the auto/ask prefs waive approval beats, they never CREATE
     one; the dock waits for the user's production word with the bare Start
-    pill standing, ADR-139) / ``first_draft_review`` (the work's first film
-    storyboard has not persisted its presentation yet; even an opening
-    direct-production delegation waits for a post-presentation gesture).
-    Empty when no confirmation is required. ``quote_high`` = the fold's high
-    end the priced pill's label interpolates (None when unquotable/deferred)."""
+    pill standing, ADR-139). Empty when no confirmation is required.
+    ``quote_high`` = the fold's high end the priced pill's label interpolates
+    (None when unquotable/deferred)."""
 
     requires_confirmation: bool
     reason: str = ""
     quote_high: int | None = None
     unquotable: bool = False
-
-
-def first_draft_confirmation(
-    confirmation: ConfirmationNeed, *, unpresented: bool
-) -> ConfirmationNeed:
-    """Add the first-film-review debt without displacing stronger reasons.
-
-    A work's first storyboard always waits for a post-presentation approval,
-    even when the opening request delegates production and both prefs are
-    auto. Existing pricing / preference / condition reasons keep precedence.
-    """
-    if not unpresented or confirmation.requires_confirmation:
-        return confirmation
-    return ConfirmationNeed(
-        requires_confirmation=True,
-        reason="first_draft_review",
-        quote_high=confirmation.quote_high,
-        unquotable=confirmation.unquotable,
-    )
 
 
 def confirmation_need(

@@ -20,7 +20,7 @@
 | 状态 | 工作 | 当前事实与下一步 | 状态 / 合同 |
 |---|---|---|---|
 | **当前** | **Film/MG 编排与持续修改** | 人工试用 + 反馈驱动修复；下一验收窗口覆盖 auto/ask 授权、双源旅程、live 展示、回答入口、prompt_gate/剧本矩阵和上线前条件。修订呈现与活动/恢复的人工验收统一定在 execution §1.1 A/C，未完成前不得写成已验收 | [局部状态](tasks/film-storyboard-orchestration-progress.md) → [执行与验收](tasks/film-storyboard-orchestration-execution.md) |
-| **当前** | Home 创作入口真实样片 | SaaS launch film 四张卡使用对应当前制作链的真实样片；Text Animation 与 Product Demos 共六张卡仍复用 SaaS 片作布局占位。下一步由用户选定对应链真实样片后替换注册表数据；配方点击只预填 composer，货架可点不等于制作能力通过 | [任务状态](tasks/home-creation-entry-refresh.md) |
+| **当前** | Home 创作入口真实样片 | Ads 族只展示 Product Demos 与 Text Shorts 两个子 tab；Text Shorts 使用项目 `9345ddc2` 与 `f52c489c` 的真实文字源 Film，Product Demos 首卡为 ZYMIX 真片，其余三张占位卡仍待用户选定对应链真片。配方点击只预填 composer，货架可点不等于制作能力通过 | [任务状态](tasks/home-creation-entry-refresh.md) |
 | 开放 | Product Flow Alignment | C-0/C-1/C-2 已有代码层结果，Greenfield 验收未闭环；task_book/transcript/exploration 还须在真实目标 DB 副本验证升级、备份恢复与零双写。C-3/D 是否继续由产品需求决定，不从旧“施工中”直接扩新批 | [合同](tasks/product-flow-alignment.md) |
 | 开放 | Lifecycle / Activity / Confirmation | 早期验证尾项、`derived/reasons` 读面对账与旧 Phase 2 步⑤状态冲突仍未关闭；`_read_face` 只能在生产 DB 守卫查询证明五类 legacy 节点与旧 toolset 均为零后删除。scope 不可证继续失败闭；approval provenance 还需核对 legacy `context.tasks` 是否被误当有效授权证明（生产暴露未核实）；hygiene 未动工且不进关键路径 | [剩余验收与 hygiene](tasks/lifecycle-phase-6-hygiene.md) |
 | 开放 | Agent Tools 修复批验收尾项 | 代码批已完成并落 main；需活 API + dev worker 运行当前注册旅程矩阵，覆盖长程序经 `get_node` 修订、distilled `specific_instruction`、pending-plan/run-history 读面；另需抓真实 SSE 验证 reasoning/think 永不进入用户 wire。完成证据出现前不关闭 | [验证登记](tasks/verification-contracts.md) / [六段走查](tasks/agent-working-loop-iter-3.md) |

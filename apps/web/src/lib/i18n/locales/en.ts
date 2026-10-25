@@ -528,8 +528,7 @@ const en = {
       },
       subs: {
         all: "All",
-        saas: "SaaS & Apps",
-        "text-anim": "Text Animation",
+        "text-short": "Text Shorts",
         "product-demo": "Product Demos",
         brand: "Brand & Business",
         ugc: "UGC",
@@ -537,8 +536,7 @@ const en = {
       },
       titles: {
         featured: "Featured Recipes",
-        saas: "SaaS & Apps",
-        "text-anim": "Text Animation",
+        "text-short": "Text Shorts",
         "product-demo": "Product Demos",
         brand: "Brand & Business",
         ugc: "UGC",
@@ -562,35 +560,21 @@ const en = {
       // launch payload (composer 预填, 配方 = 提示词); {{placeholder}} is the
       // visible website blank the user replaces before send.
       demos: {
-        "launch-film-linear": {
-          prompt: "Turn this website into a short 16:9 intro film: {{placeholder}}",
-        },
-        "launch-film-snappify-code": {
-          prompt: "Turn this website into a short 9:16 vertical intro film: {{placeholder}}",
-        },
-        "launch-film-snappify-frame": {
-          prompt: "Turn this website into a short 9:16 vertical intro film: {{placeholder}}",
-        },
-        "launch-film-zymix": {
-          prompt: "Turn this website into a short 16:9 intro film: {{placeholder}}",
-        },
-        // Placeholder shelves (home 内容扩展批 — text-anim / product-demo):
-        // user-VOICE requests, no tool names, no locked craft parameters,
-        // no "make it look exactly like this video" (the shelf videos are
-        // reused placeholders, never the user's chosen reference). No
-        // {{placeholder}} blank — these prompts are complete as-is.
-        "text-anim-lines": {
+        "text-short-gentle-close": {
           prompt:
-            "I want to turn my copy into a text animation video where short lines appear one after another. Please first align with me on how the text is grouped, appears, and transitions, then show me the plan.",
+            "I want to turn my copy into a text short with clean typography, subtle camera motion, and word-by-word entrances. Please first help me refine the copy and pacing, then propose a storyboard.",
         },
-        "text-anim-brand": {
+        "text-short-genesis": {
           prompt:
-            "I want to make a text-led brand short — clean typography, subtle zoom, and key words carrying the core message. Please first help me organize the copy and pacing, then propose a plan.",
+            "I want to turn an English script into a text short, preserving every word with clean typography, subtle camera motion, and word-by-word entrances. Please organize the original text into a storyboard.",
         },
-        "text-anim-two-lines": {
+        "product-demo-zymix": {
           prompt:
-            "I want a text short where the first line appears, then a second key line follows with a beat of emphasis, echoing it. Please first discuss the visuals and rhythm based on my copy.",
+            "Turn this website into a product demo that presents its key features with concise on-screen explanations: {{placeholder}}",
         },
+        // The remaining product-demo entries use complete user-VOICE prompts;
+        // their reused videos are layout placeholders, never references the
+        // user selected. No {{placeholder}} blank in these prompts.
         "product-demo-walkthrough": {
           prompt:
             "I want to turn my uploaded video or screen recording into an operation walkthrough — pick the key steps and add short explanations. Please look at my material first, align with me on the demo's focus, then propose a plan.",
@@ -1612,8 +1596,8 @@ const en = {
     // bare verb (execution ask) / priced (credits ask · guardrail — the
     // number is the server fold's high end, never client-computed) /
     // deferred (the NULL-estimate family — never a fabricated number). The
-    // click rides the typed answer machine (kind="start"), never a canned
-    // chat message (ADR-129).
+    // click sends this label as an ordinary chat message through sendChat;
+    // the next LLM turn decides whether to call start_run.
     confirmPillStart: "Start",
     confirmPillStartPriced: "Start · ~{{n}} credits",
     confirmPillStartDeferred: "Start · priced when it runs",

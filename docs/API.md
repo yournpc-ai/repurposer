@@ -42,8 +42,9 @@ POST /api/v1/projects/{project_id}/assets/from-staging
 
 POST /api/v1/chat
   → The first message enters the plan path and may dock a plan/question (§12)
-  → Confirming via POST /chat/messages/{id}/answer with kind="start", or a
-    prose production confirmation via /chat, enters the same Start machine
+  → A typed production confirmation or the Start pill sends an ordinary
+    message through /chat; the next LLM turn may call start_run, which enters
+    the same answer_question(kind="start") and evaluate_start_gate machine
 ```
 
 A prompt-only send creates no asset. If the router determines that the text is the user's own material, the server promotes it to a transcript asset later in the plan path; this is an LLM judgment, not a length heuristic. `AssetCreateRequest` requires a storage `key`; arbitrary prompt text is not an upload body.

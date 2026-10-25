@@ -418,10 +418,11 @@ export interface QuestionPayload {
    * at render — never baked into the row's content). */
   reasons?: string[]
   /** 授权前移 (ADR-117 §4): task_book only — the presentation-time
-   * confirmation stamp. `requires_confirmation` is the Start pill's ONLY
-   * render predicate (the client never derives the need itself); absent on
-   * rows docked before the stamp (读容忍 → treated as owed: those docks all
-   * predated the auto regime). `confirm_reason` keys the pill's label
+   * confirmation stamp. `requires_confirmation` is the Start pill's render
+   * source (the client never derives the need itself); absent on rows docked
+   * before the stamp (读容忍 → treated as owed: those docks all predated the
+   * auto regime). The legacy auto-only `first_draft_review` reason reads as
+   * no independent debt. Other `confirm_reason` values key the pill's label
    * family; `quote_high` feeds the priced label; `unquotable` forces the
    * deferred-pricing label (never a fabricated number). */
   requires_confirmation?: boolean

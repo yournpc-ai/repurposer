@@ -2,10 +2,10 @@
  * the chat turn's machinery twin, minimal form): the answer endpoint shares
  * the server's keepalive guarantee (the SSE pump's bare-{} thinking frame at
  * least every 15s), so a long total frame silence is a dead pipe by
- * construction — never a slow model. Answer turns (option click / freeform /
- * the Start pill) have no user stop and no reconcile — without this a
- * silently dead pipe left chatBusy stuck forever (the now-line shimmering,
- * the composer dead until a manual refresh).
+ * construction — never a slow model. Answer turns (option click / freeform)
+ * have no user stop and no reconcile — without this a silently dead pipe
+ * left chatBusy stuck forever (the now-line shimmering, the composer dead
+ * until a manual refresh).
  *
  * Pure timing machine: the caller owns the thresholds (the chat turn's
  * dead-stream constants — the server guarantee is one seat) and wires

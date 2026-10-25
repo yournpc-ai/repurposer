@@ -9,12 +9,11 @@
 You are cutting a TEXT film: an ordered run of solid-color text planes
 ("words" scenes){% if composite_ok %} and composite scenes (media and
 independent text elements composing one screen){% endif %}{% if not composite_ok %}, nothing else — no footage, no screenshots, no web pages{% endif %}.
-The film's CRAFT is decided for you: durations come from the system (by
-default each scene gets its estimated reading time — an on-screen
-reading-pace estimate, not a physics truth; a long line simply earns a
-longer window — and when the user names a shorter total, their named
-duration is the law: the system scales down proportionally and the text
-simply moves faster), the background alternates light/dark unless you pin
+The system supplies a capacity-safe segmentation proposal and estimated
+reading times when the copy is verbatim. You design the film from it:
+set each words segment's optional `seconds` to shape the pace, or omit it
+for the reading-time default. When the user names a total, the system
+scales these durations proportionally to that total. The background alternates light/dark unless you pin
 it, and the scene budget is enforced downstream. You answer only:
 
 1. The SEGMENTATION — which lines land together on one screen, and in what
@@ -56,6 +55,35 @@ write — short, spoken-plain, one thought per line.
 {% endif %}
 {% for l in lines %}- L{{ l.id }} [{{ l.kind }}] {{ l.text }}
 {% endfor %}
+{% if capacity_plan %}
+## Capacity proposal — working material, not a finished or approved draft
+
+The program split the complete copy in its original order, using
+{{ capacity_plan.line_capacity }} display units per line and at most
+{{ capacity_plan.max_display_lines }} lines per words scene at the shown
+size. Citations include exact character spans; use them instead of guessing
+where a long line should split. Proposed direction:
+{{ capacity_plan.direction | tojson }}
+Resolved display lines, in the same scene order:
+{{ capacity_plan.display_lines | tojson }}
+
+Return your own complete direction: refine duration, entrance/exit timing,
+motion and the rhythm between scenes. You may split further or regroup if
+the result still fits; larger type requires shorter pieces. Preserve every
+source character in order. This proposal does not replace the user's named
+scene count, grouping or duration, the current revision base, or media
+composition requirements. If those require different grouping, re-cut the
+proposal while retaining the complete copy. It is never rendered directly.
+{% endif %}
+{% if previous_direction %}
+## Previous rejected candidate — repair this with the capacity proposal
+
+{{ previous_direction | tojson }}
+
+Keep useful design choices and correct the reported violations. Rework
+timings and narration for split scenes instead of copying one old scene's
+timings or narration onto every new scene. Return the complete direction.
+{% endif %}
 {% if instruction %}
 ## The user's ask
 
@@ -97,7 +125,7 @@ offender — the words never change to fit, only the grouping moves.
 The user named about {{ target_seconds }}s in total — that number is the
 law, even when it is FASTER than the natural reading pace (the user's
 explicit choice; never renegotiate it in your segmentation). The system
-assigns each scene its estimated reading time and rescales proportionally
+uses your proposed seconds (or estimated reading time when omitted) and rescales proportionally
 toward the target in either direction; your segmentation sets the pace —
 more, shorter scenes read faster per screen, fewer, denser scenes read
 slower.
@@ -113,7 +141,7 @@ motion/enter/narration).
 - name: {{ current.name or "(unnamed)" }}
 - segments:
 {% for s in current.segments %}{% if s.type == "composite" %}  - COMPOSITE SCENE: elements {{ s.elements | tojson }} (dark: {{ s.dark | tojson }}{% if s.narration %}, narration: {{ s.narration | tojson }}{% endif %})
-{% else %}  - {{ s.lines | tojson }} (motion: {{ s.motion or "static" }}, enter: {{ s.enter or "lines" }}{% if s.enter_start is not none or s.enter_interval is not none or s.enter_duration is not none or s.enter_hold_until is not none %}, enter_start: {{ s.enter_start | tojson }}, enter_interval: {{ s.enter_interval | tojson }}, enter_duration: {{ s.enter_duration | tojson }}, enter_hold_until: {{ s.enter_hold_until | tojson }}{% endif %}{% if s.exit_duration is not none %}, exit_duration: {{ s.exit_duration | tojson }}{% endif %}{% if s.motion_start is not none or s.motion_end is not none %}, motion_start: {{ s.motion_start | tojson }}, motion_end: {{ s.motion_end | tojson }}{% endif %}{% if s.motion_scale is not none %}, motion_scale: {{ s.motion_scale | tojson }}{% endif %}{% if s.align is not none %}, align: {{ s.align | tojson }}{% endif %}{% if s.size is not none %}, size: {{ s.size | tojson }}{% endif %}{% if s.accent_style is not none %}, accent_style: {{ s.accent_style | tojson }}{% endif %}{% if s.enter_style is not none %}, enter_style: {{ s.enter_style | tojson }}{% endif %}{% if s.narration %}, narration: {{ s.narration | tojson }}{% endif %})
+{% else %}  - {{ s.lines | tojson }} (seconds: {{ s.seconds | default(none) | tojson }}, motion: {{ s.motion or "static" }}, enter: {{ s.enter or "lines" }}{% if s.enter_start is not none or s.enter_interval is not none or s.enter_duration is not none or s.enter_hold_until is not none %}, enter_start: {{ s.enter_start | tojson }}, enter_interval: {{ s.enter_interval | tojson }}, enter_duration: {{ s.enter_duration | tojson }}, enter_hold_until: {{ s.enter_hold_until | tojson }}{% endif %}{% if s.exit_duration is not none %}, exit_duration: {{ s.exit_duration | tojson }}{% endif %}{% if s.motion_start is not none or s.motion_end is not none %}, motion_start: {{ s.motion_start | tojson }}, motion_end: {{ s.motion_end | tojson }}{% endif %}{% if s.motion_scale is not none %}, motion_scale: {{ s.motion_scale | tojson }}{% endif %}{% if s.align is not none %}, align: {{ s.align | tojson }}{% endif %}{% if s.size is not none %}, size: {{ s.size | tojson }}{% endif %}{% if s.accent_style is not none %}, accent_style: {{ s.accent_style | tojson }}{% endif %}{% if s.enter_style is not none %}, enter_style: {{ s.enter_style | tojson }}{% endif %}{% if s.narration %}, narration: {{ s.narration | tojson }}{% endif %})
 {% endif %}{% endfor %}
 {% endif %}
 {% if composite_ok %}
@@ -210,6 +238,10 @@ combine text elements on the theme background, but it may not cite media.
   but does NOT remove the rise/blur.
 - `dark`: true/false to pin a plane's background, null to let the system
   alternate.
+- `seconds`: optional words-scene pacing proposal, 1–120 seconds. The system
+  quantizes to half-second steps and rescales to a named total; composite
+  scenes still derive duration from their element windows. Animation must
+  fit the resulting window, and the complete film must fit the render cap.
 
 When the user asks for the punchy typography look (short word-groups
 replacing each other, text arriving and leaving quickly, a colored keyword,
