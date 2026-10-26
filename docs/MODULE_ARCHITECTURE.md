@@ -1,6 +1,6 @@
 # Module Architecture — 模块划分与边界契约
 
-> Status: 当前系统架构（2026-10-25；模块、表归属、队列与代码地图事实源）
+> Status: 当前系统架构（2026-10-26；模块、表归属、队列与代码地图事实源）
 > 排期见 [PROGRESS.md](./PROGRESS.md)；决策见 [DECISIONS.md](./DECISIONS.md)（现行决策集）。
 
 本文回答三个问题：**有哪些模块、每张表归谁、模块之间怎么通信**。当前能力与 PLANNED 边界分行标记；未实施的子能力不回写成整个模块未建。
@@ -187,6 +187,19 @@ Distribution ✅：channel_accounts ──► publications（直发状态机与�
 
 反对照：`pipeline/` 模块 ≠ Mastra Workflows（我们的 Pipeline = 摄入+ASR+编排+渲染，大于 Workflows，不改名）；`chat/` ≈ Agno Interfaces。
 
+### 4.2 视频目标模块与表归属（TARGET，ADR-145，未实施）
+
+本节仅登记新架构准入，不改变 §4 与 §7 的当前实现事实；完整新旧目录/代码处置唯一合同 = [VIDEO_PROJECT §12](VIDEO_PROJECT.md#12-目标目录与新旧代码处置)。实施时同批更新实际表归属与代码地图。
+
+| 目标表 / 模块 | Owner 与写口 | 阶段与当前边界 |
+|---|---|---|
+| `compositions` / `composition_versions` | Editing（app/editing）；内容只经 apply_composition_edits，CAS/事务由 store 实现 | A 新建；不把 Project/Output 表转移到 Editing |
+| `source_snapshots` | Editing 的 sources 服务 | A 固定 owner/不可变资源与权限；原 Asset 处理状态仍归 Pipeline，不能变成第二 Asset 库 |
+| `video_narrations` | Tools（app/tools/video/narration_store.py） | B 承接原件复用/恢复；替代 film_narrations，设计用户权限与跨 Chat 复用，不搬旧业务行；旧表当前归属在退役前不变 |
+| `user_skills` / `skill_versions` | Skills 的 store/import 服务 | C 新建；用户显式版本绑定不替代 Tool 注册/执行授权，平台内置包仍沿现有注册表 |
+| `editing` 模块 | 内容/版本/快照的领域与应用服务，有独立表归属 | A/B；不认领 Run/render 队列，不创建第二 scheduler |
+| `tools/video` / `packages/video-spec` / renderer adapter | 分别为执行能力、纯渲染契约与具体引擎实现 | A/B；Render/Output/Run owner 继续按现行 Pipeline 合同 |
+
 ## 5. 跨模块通信规则
 
 1. **长任务与可重试生产链走队列**：生成写 `WorkflowRun`/`workflow_steps`，渲染写 `outputs.render_status`，发布写 `publications`，由 worker `FOR UPDATE SKIP LOCKED` 认领。**禁止 FastAPI BackgroundTasks**，禁止为新的跨模块重活直接调 service 绕开队列。当前有明确请求内联例外：`POST /music/generate`、cover、revise、translate-captions 与 dub 在各自路由内执行；这些例外不得被推广成“所有重活都可 inline”，新增或改为长任务时必须回到队列合同。
@@ -363,9 +376,9 @@ packages/clip/           # 共享 <Clip> 组件 + clip-spec TS 类型（镜像 P
 - **四个认领源**：
   1. **资产预处理**：`assets.processing_status=PENDING` 且 `processing_requested_at IS NOT NULL`；休眠上传不会被无条件加工，读取或 `create_run` 先登记真实处理请求。
   2. **生成节点**：ready `workflow_steps`，不是 `workflow_runs.status`。谓词要求 step pending、上游 inputs 全 done、非 runtime fanout，并遵守当前项目素材门；认领铸造 `claim_token`，同时把 owning run 从 PENDING 翻为 RUNNING。
-  3. **渲染**：`outputs.render_status=PENDING` 且 writer barrier 已满足；认领铸造 `render_claim_token`。状态本身不是终态写权，所有终态写都必须匹配 token。
+  3. **渲染**：`outputs.render_status=PENDING` 且 writer barrier 已满足；认领铸造 `render_claim_token`。状态本身不是终态写权，所有终态写都必须匹配 token。chat `retry_upload` 只复位同一 Output 行与原 render step，`upload_only` 骑内部请求 envelope，不新增认领源、不进入 clip-spec / film-spec。
   4. **发布**：`publications.due_at <= now` 且 state 为 `scheduled`（开始发布）或 `publishing`（poll lease 续轮询），不只认 scheduled。
-- **渲染执行形态（MG D4）**：渲染认领后跑 asyncio task（与节点同构），并发上限 `settings.render_concurrency`（默认 2，争用资源 = 渲染服务的 headless Chrome）、单渲染栅栏 `settings.render_timeout_seconds`（默认 900，历史 900s 栅栏可配化）——两者住 env Settings（工程参数座位，configs 边界律 = `platform/configs.py` 头 §3）；任务化同时消除了单渲染内联等待堵 tick 环的旧形态。产物落 COMPLETED 前必过 probe 闸（`render_probe.py`，见 §7.1）。
+- **渲染执行形态（MG D4）**：渲染认领后跑 asyncio task（与节点同构），并发上限 `settings.render_concurrency`（默认 2，争用资源 = 渲染服务的 headless Chrome）、单渲染栅栏 `settings.render_timeout_seconds`（默认 1800）——两者住 env Settings（工程参数座位，configs 边界律 = `platform/configs.py` 头 §3）；任务化同时消除了单渲染内联等待堵 tick 环的旧形态。产物落 COMPLETED 前必过 probe 闸（`render_probe.py`，见 §7.1）。
 - **孤儿回收**：worker 启动时 `reap_stale` 重置中断任务；失败写 `*_error` 列，认领循环不崩。
 - **step 级瞬时重试**：runner 把 provider/网络/存储瞬时故障抛为 `TransientNodeError`（`pipeline/errors.py`）；`execute_step` 按节点类 `retries` 预算（NodeBase 声明，dub/translate = 2）把节点复位 pending（worker 下一 tick 即退避），**不级联跳过下游**；确定性失败（缺输入/空批次）普通异常快速失败。LLM HTTP 层另有 client 内 tenacity，两层不叠加。
 - **morph 记账**：modifier runner（dub/translate/add_music/remove_filler）的 render_spec 改写一律经 `apply_precomputed` 入 operations 账（source 由 `messages.workflow_run_id` 反链派生 chat/system）——chat  morph 可撤销、hash 链不断、ADR-032 写纪律补齐。

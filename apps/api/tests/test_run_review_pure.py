@@ -459,6 +459,41 @@ def test_film_check_match_when_the_landed_spec_proves_it() -> None:
     assert lines == ("confirmed=v3 digest:match MATCH",)
 
 
+def test_film_check_compares_each_subtitle_track_and_the_confirmed_switch() -> None:
+    from copy import deepcopy
+
+    confirmed = deepcopy(_CONFIRMED)
+    confirmed["params"]["subtitles"] = True
+    spec = _spec()
+    track = {"cues": [{"at": 0, "end": 2, "text": "你把专业讲清楚"}]}
+    confirmed["board"]["scenes"][0]["subtitle_track"] = deepcopy(track)
+    spec["scenes"][0]["subtitle_track"] = deepcopy(track)
+    assert film_delivery_check(confirmed, spec, {}) == (
+        "confirmed=v3 digest:match MATCH",
+    )
+
+    spec["scenes"][0]["subtitle_track"]["cues"][0]["text"] = "被改写的字幕"
+    lines = film_delivery_check(confirmed, spec, {})
+    assert "drift:s1.subtitle_track" in lines
+
+    del spec["scenes"][0]["subtitle_track"]
+    lines = film_delivery_check(confirmed, spec, {})
+    assert "drift:subtitles confirmed on but no subtitle tracks landed" in lines
+
+
+def test_film_check_rejects_subtitles_when_confirmed_off() -> None:
+    confirmed = {
+        **_CONFIRMED,
+        "params": {**_CONFIRMED["params"], "subtitles": False},
+    }
+    spec = _spec()
+    spec["scenes"][0]["subtitle_track"] = {
+        "cues": [{"at": 0, "end": 2, "text": "不该出现的字幕"}]
+    }
+    lines = film_delivery_check(confirmed, spec, {})
+    assert "drift:subtitles landed but confirmed off" in lines
+
+
 def test_film_check_drift_names_the_changed_fields() -> None:
     spec = _spec()
     spec["scenes"][1]["lines"] = ["被改写的内容"]

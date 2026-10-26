@@ -33,11 +33,12 @@ from uuid import UUID
 import httpx
 import structlog
 from sqlalchemy import select, text, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.database import AsyncSessionLocal
-from app.models.schemas import RenderStatus
-from app.models.tables import Output, Project, WorkflowRun
+from app.models.schemas import ProjectStatus, RenderStatus, WorkflowStatus
+from app.models.tables import Output, Project, WorkflowRun, WorkflowStep
 from app.pipeline.errors import user_line
 from app.pipeline.render_probe import (
     PROBE_OUTPUT_MISSING,
@@ -222,26 +223,37 @@ async def _mirror_render_node(
             # locale comes off the run's pinned UI language (display chain).
             summary: str | None = None
             if node_status == "done":
-                run_id = (
+                mirror = (
                     await db.execute(
                         text(
-                            "SELECT run_id FROM workflow_steps WHERE kind = 'render' "
+                            "SELECT run_id, spec FROM workflow_steps WHERE kind = 'render' "
                             "AND spec->>'output_id' = :oid LIMIT 1"
                         ),
                         {"oid": str(output_id)},
                     )
-                ).scalar_one_or_none()
+                ).first()
+                run_id = mirror.run_id if mirror is not None else None
+                mirror_spec = mirror.spec if mirror is not None else {}
+                upload_only = bool(
+                    isinstance(mirror_spec, dict)
+                    and mirror_spec.get("upload_only") is True
+                )
                 run = await db.get(WorkflowRun, run_id) if run_id else None
                 ctx = run.context if run is not None and isinstance(run.context, dict) else {}
                 zh = str(ctx.get("ui_language") or "").startswith("zh")
-                summary = "渲染完成" if zh else "Rendered"
+                summary = (
+                    ("上传完成" if zh else "Uploaded")
+                    if upload_only
+                    else ("渲染完成" if zh else "Rendered")
+                )
             await db.execute(
                 text(
                     "UPDATE workflow_steps SET status = CAST(:st AS varchar), error = :err, "
                     "finished_at = CASE WHEN CAST(:st AS varchar) IN ('done', 'failed') THEN now() "
                     "ELSE finished_at END, "
                     "spec = CASE WHEN CAST(:st AS varchar) = 'done' "
-                    "  THEN jsonb_set(spec - 'failure', '{summary}', to_jsonb(CAST(:summary AS varchar)), true) "
+                    "  THEN jsonb_set(spec - 'failure' - 'upload_only', '{summary}', to_jsonb(CAST(:summary AS varchar)), true) "
+                    "  WHEN CAST(:st AS varchar) = 'failed' THEN spec - 'upload_only' "
                     "  ELSE spec END, "
                     "updated_at = now() "
                     "WHERE kind = 'render' "
@@ -325,6 +337,171 @@ async def _mirror_superseded_node(output_id: UUID, lang: str) -> None:
         )
 
 
+UploadRetryTarget = tuple[Output, WorkflowStep, WorkflowRun]
+UPLOAD_RETRY_AMBIGUOUS = (
+    "Several outputs in that run have failed uploads; pin or name one output."
+)
+
+
+def _upload_failure(step: WorkflowStep) -> bool:
+    failure = (step.spec or {}).get("failure") or {}
+    return step.kind == "render" and failure.get("stage") == "upload"
+
+
+async def resolve_upload_retry(
+    db: AsyncSession,
+    project: Project,
+    *,
+    output_id: UUID | None = None,
+    run_id: UUID | None = None,
+) -> UploadRetryTarget | str:
+    """Resolve the current upload failure without guessing across history.
+
+    An unqualified user request anchors to the newest run with an upload
+    failure. One eligible output is required; an @output pin or an explicit
+    run scope narrows it deterministically. Returned strings are tool-facing
+    world facts, never user-speech drafts.
+    """
+    stmt = (
+        select(WorkflowStep, WorkflowRun)
+        .join(WorkflowRun, WorkflowRun.id == WorkflowStep.run_id)
+        .where(
+            WorkflowRun.project_id == project.id,
+            WorkflowStep.kind == "render",
+            WorkflowStep.status == "failed",
+        )
+        .order_by(WorkflowStep.created_at.desc(), WorkflowStep.seq.desc())
+    )
+    if run_id is not None:
+        stmt = stmt.where(WorkflowRun.id == run_id)
+    rows = [
+        (step, run)
+        for step, run in (await db.execute(stmt)).all()
+        if _upload_failure(step) and (step.spec or {}).get("output_id")
+    ]
+    if output_id is not None:
+        rows = [
+            (step, run)
+            for step, run in rows
+            if (step.spec or {}).get("output_id") == str(output_id)
+        ][:1]
+    if not rows:
+        return "No failed upload is waiting for retry in this project."
+    if output_id is None and run_id is None:
+        latest_run_id = rows[0][0].run_id
+        rows = [(step, run) for step, run in rows if run.id == latest_run_id]
+
+    candidates: list[UploadRetryTarget] = []
+    for step, run in rows:
+        candidate_id = UUID(str((step.spec or {})["output_id"]))
+        output = await db.get(Output, candidate_id)
+        if (
+            output is None
+            or output.project_id != project.id
+            or output.archived_at is not None
+            or output.type not in ("clip", "film")
+            or output.render_spec is None
+            or output.render_status != RenderStatus.FAILED
+            or run.status != WorkflowStatus.FAILED
+        ):
+            continue
+        candidates.append((output, step, run))
+    if not candidates:
+        return "The matching upload failure has already been retried, replaced, or delivered."
+    if len(candidates) > 1:
+        return UPLOAD_RETRY_AMBIGUOUS
+    return candidates[0]
+
+
+async def queue_upload_retry(
+    db: AsyncSession,
+    project: Project,
+    target: UploadRetryTarget,
+) -> UUID | str:
+    """Reopen the failed run for a free, upload-only recovery attempt.
+
+    The existing Output queue remains the claim source. The one-shot
+    ``upload_only`` intent rides the render step envelope, never film-spec or
+    clip-spec. No new run or paid production step is born.
+    """
+    output, step, run = target
+    # Serialize explicit recovery against another recovery on this project;
+    # the lock is acquired only after the model's tool call, never across LLM.
+    await db.get(Project, project.id, with_for_update=True)
+    active_id = await db.scalar(
+        select(WorkflowRun.id)
+        .where(
+            WorkflowRun.project_id == project.id,
+            WorkflowRun.id != run.id,
+            WorkflowRun.status.in_(
+                [
+                    WorkflowStatus.PENDING,
+                    WorkflowStatus.RUNNING,
+                    WorkflowStatus.WAITING_HUMAN,
+                ]
+            ),
+        )
+        .limit(1)
+    )
+    if active_id is not None:
+        return f"Another run is active in this project ({active_id}); upload recovery has not been queued."
+
+    run = await db.get(WorkflowRun, run.id, with_for_update=True)
+    step = await db.get(WorkflowStep, step.id, with_for_update=True)
+    output = await db.get(Output, output.id, with_for_update=True)
+    if (
+        run is None
+        or step is None
+        or output is None
+        or run.status != WorkflowStatus.FAILED
+        or step.status != "failed"
+        or not _upload_failure(step)
+        or output.render_status != RenderStatus.FAILED
+        or output.archived_at is not None
+    ):
+        return "The upload failure changed before recovery could be queued; read the current run and output state."
+
+    from app.pipeline.jobs import reset_output_render  # deferred: jobs ↔ rendering
+
+    reset_output_render(output)
+    lang = display_language(
+        (run.context or {}).get("ui_language")
+        if isinstance(run.context, dict)
+        else None,
+        project.language,
+    )
+    step_spec = {k: v for k, v in (step.spec or {}).items() if k != "failure"}
+    step_spec.update({
+        "upload_only": True,
+        "summary": user_line("render_upload", lang),
+    })
+    step.spec = step_spec
+    step.status = "pending"
+    step.error = None
+    step.attempt = 0
+    step.claim_token = None
+    step.started_at = None
+    step.finished_at = None
+    run.status = WorkflowStatus.RUNNING
+    run.error = None
+    run.context = {
+        **(run.context or {}),
+        "upload_retry_count": int((run.context or {}).get("upload_retry_count") or 0) + 1,
+    }
+    project.status = ProjectStatus.PROCESSING
+    await db.flush()
+    statuses = list(
+        (await db.execute(select(WorkflowStep.status).where(WorkflowStep.run_id == run.id)))
+        .scalars()
+        .all()
+    )
+    settled = sum(s in ("done", "failed", "skipped") for s in statuses)
+    run.progress = int(settled / len(statuses) * 100) if statuses else 0
+    await db.flush()
+    logger.info("output_upload_retry_queued", output_id=str(output.id), run_id=str(run.id))
+    return UUID(str(run.id))
+
+
 async def render_output(output_id: UUID) -> None:
     """Render a claimed output via the render service; persist terminal state.
 
@@ -404,6 +581,23 @@ async def render_output(output_id: UUID) -> None:
             if source_asset is not None and source_asset.file_url:
                 source_key = str(source_asset.file_url)
 
+        request_step = (
+            await db.execute(
+                select(WorkflowStep)
+                .where(
+                    WorkflowStep.kind == "render",
+                    WorkflowStep.status.in_(["pending", "running"]),
+                    WorkflowStep.spec["output_id"].astext == str(output_id),
+                )
+                .order_by(WorkflowStep.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        upload_only = bool(
+            request_step is not None
+            and (request_step.spec or {}).get("upload_only") is True
+        )
+
     failure = {"stage": "render", "codes": ["RENDER_FAILED"]}
     old_video_key = files.get("video")
     old_srt_key = files.get("srt")
@@ -430,6 +624,7 @@ async def render_output(output_id: UUID) -> None:
         payload = {
             "spec": spec,
             "render_id": str(output_id),
+            **({"upload_only": True} if upload_only else {}),
             **({"source_key": source_key} if source_key else {}),
             "outputs": {
                 "video": {
@@ -456,7 +651,7 @@ async def render_output(output_id: UUID) -> None:
                 try:
                     error_data = resp.json()
                     stage = error_data.get("stage")
-                    if stage in ("render", "upload"):
+                    if stage in ("render", "upload", "recovery"):
                         failure = {
                             "stage": stage,
                             "codes": [str(error_data.get("code") or "RENDER_FAILED")[:80]],
@@ -588,7 +783,12 @@ async def render_output(output_id: UUID) -> None:
         )
     except Exception as e:  # noqa: BLE001 — record any failure on the row
         error_line = user_line(
-            "render_upload_failed" if failure["stage"] == "upload" else "render_failed", lang
+            "render_upload_failed"
+            if failure["stage"] == "upload"
+            else "render_recovery_required"
+            if failure["stage"] == "recovery"
+            else "render_failed",
+            lang,
         )
         logger.error("render_output_failed", output_id=str(output_id), error=str(e))
         # Same token guard as the success path: a mid-render morph (or a

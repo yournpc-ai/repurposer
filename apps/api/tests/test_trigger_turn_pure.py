@@ -25,6 +25,8 @@ contract:
 - the agent's tool set is the reads plus ONE terminal, bounded.
 """
 
+from uuid import UUID
+
 import pytest
 from pydantic import ValidationError
 
@@ -39,6 +41,7 @@ from app.chat.trigger_turn import (
     _trigger_admission,
     _trigger_dump,
     _trigger_language,
+    _with_upload_retry_suggestion,
     _wrap_up_rejection,
     trigger_agent,
 )
@@ -49,6 +52,8 @@ from app.pipeline.trigger_events import (
     TRIGGER_RUN_COMPLETED,
     TRIGGER_RUN_FAILED,
     TRIGGER_WHITELIST,
+    run_id_from_trigger_ref,
+    run_trigger_ref,
 )
 
 
@@ -66,6 +71,24 @@ def test_whitelist_is_the_proactivity_boundary() -> None:
     assert TRIGGER_RUN_COMPLETED in TRIGGER_WHITELIST
     assert TRIGGER_RUN_FAILED in TRIGGER_WHITELIST
     assert TRIGGER_CRAFT_DECOMPILED in TRIGGER_WHITELIST
+
+
+def test_upload_recovery_terminals_get_fresh_dedup_refs() -> None:
+    run_id = UUID("00000000-0000-0000-0000-000000000001")
+    assert run_trigger_ref(run_id, TRIGGER_RUN_FAILED, {}) == str(run_id)
+    first = run_trigger_ref(run_id, TRIGGER_RUN_FAILED, {"upload_retry_count": 1})
+    second = run_trigger_ref(run_id, TRIGGER_RUN_FAILED, {"upload_retry_count": 2})
+    assert first != second != str(run_id)
+    assert (
+        run_trigger_ref(run_id, TRIGGER_RUN_FAILED, {"upload_retry_count": 1})
+        == first
+    )
+    assert run_id_from_trigger_ref(first) == run_id
+    completed = run_trigger_ref(
+        run_id, TRIGGER_RUN_COMPLETED, {"upload_retry_count": 2}
+    )
+    assert completed == second
+    assert run_id_from_trigger_ref(completed) == run_id
 
 
 def test_tool_set_is_the_reads_plus_one_terminal() -> None:
@@ -270,6 +293,37 @@ class TestSuggestionsPayload:
         en_question = _suggestions_payload([SuggestionItem(label="a")], "en").question
         assert "next" in en_question.lower()
         assert "接下来" not in en_question
+
+
+class TestUploadRetrySuggestion:
+    """An upload-only recovery is a real user journey, not an LLM style
+    preference: a finished render's failed upload must always offer that
+    next step, recommended, with at most one honest fallback."""
+
+    def test_retry_is_localized_recommended_and_first(self) -> None:
+        for language, label in (("zh", "重新上传"), ("en", "Retry upload")):
+            items = _with_upload_retry_suggestion(
+                [SuggestionItem(label="重新渲染", recommended=True)], language
+            )
+            assert [item.label for item in items] == [label, "重新渲染"]
+            assert [item.recommended for item in items] == [True, False]
+            expected = "缓存" if language == "zh" else "cache"
+            assert expected in items[0].description
+
+    def test_retry_deduplicates_and_keeps_one_fallback(self) -> None:
+        items = _with_upload_retry_suggestion(
+            [
+                SuggestionItem(label="Retry upload", recommended=True),
+                SuggestionItem(label="Try a different format"),
+                SuggestionItem(label="Change the storyboard"),
+            ],
+            "en",
+        )
+        assert [item.label for item in items] == [
+            "Retry upload",
+            "Try a different format",
+        ]
+        assert len(items) == 2
 
 
 def test_trigger_dump_is_self_describing() -> None:

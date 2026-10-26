@@ -1,6 +1,6 @@
 # ARCHITECTURE NORTH STAR — 目标架构与可靠性主线
 
-> Status: 活跃（最后更新 2026-10-25）。
+> Status: 活跃（最后更新 2026-10-26）。
 > 本文回答「我们正在把这个系统建设成什么」——**目标架构（North Star）与可靠性主线的唯一事实源**。现状架构归 `MODULE_ARCHITECTURE.md`；工程地图归 `AGENT_ARCHITECTURE.md`；概念架构归 `DIALOG_WORKFLOW.md`；决策归 `DECISIONS.md`。本文不替代它们，只给方向、边界与实施顺序。
 > **五态纪律（全文强制）**：`CURRENT` = 当前代码已存在并经代码验证；`TARGET` = 已明确决定要演进到；`PLANNED` = 已决定、未实施；`OPEN` = 未决定 / 待验证；`REJECTED` = 讨论过、明确不采用。判断优先级：**Current HEAD code > DB constraints / migrations > tests > ADR > 架构图 > 历史计划**。任何一行不得把 TARGET/PLANNED 写成 CURRENT。
 
@@ -24,7 +24,7 @@
 | Execution State Machine（run/task 生命周期 + HITL） | run/step 状态 + interrupt 提问机器 + fencing（R1 B2 ✅）+ run authority 仲裁（R1 B3 ✅）+ retry 封顶终态（R1 B4a ✅） | ✅ CURRENT |
 | Task / **Attempt** | step = ✅；attempt 计数器 = ✅（B4a）；**ExecutionAttempt = OPEN**（四证据点触发制，§8.5） | ⏳ OPEN |
 | **Artifact 层**（不可变 + parent/version/provenance） | **无统一模型**——其目标已被替代机制部分兑现：operations journal（ADR-032）/ `restore_version` 快照 / 变体并行（ADR-061）/ 内容寻址复用（understanding、skeleton）。统一模型 = 触发制 OPEN | ⏳ OPEN（部分能力 ✅） |
-| Structured Media 层（Media Program / AST） | clip-spec + film-spec（平级 spec families，ADR-016/119）+ CraftSkeleton（ADR-078 首个工艺结构产物）；**Media IR = OPEN** | ✅ 雏形 / ⏳ 深化 OPEN |
+| Structured Media 层（Media Program / AST） | 当前代码 = clip-spec + film-spec + CraftSkeleton；**视频目标 = Project / Composition / CompositionVersion + video-spec（ADR-145，未实施）**；统一跨族 Media IR 仍为 OPEN | ✅ 当前雏形 / 🎯 视频目标已拍板 / ⏳ 跨族 IR OPEN |
 | Decompiler / Compiler | `craft_scan` + `Decompile` 节点（video→骨架，T5）/ renderer 确定性渲染（黑盒） | ✅ CURRENT |
 | Human-in-the-loop | interrupt/checkpoint 提问机器（S6 族）+ run authority（R1 B3 ✅） | ✅ CURRENT |
 
@@ -197,7 +197,9 @@ CURRENT：`_mutate` 双层 dedupe（NOT-EXISTS 门 + `on_conflict_do_nothing`）
 
 ### 9.2 TARGET
 
-Structured Media 逐步成长为 **Media IR / AST**：timeline / clips / audio / captions / transitions / effects / output spec / 语义结构信息 /（未来）provenance·lineage。Decompiler 当前谨慎定位 = observable facts + deterministic structure + selected semantic interpretation，逐步增加——不宣称已具备完整 semantic intent / editing grammar / style inference。
+视频 Structured Media 的已拍板目标归 [VIDEO_PROJECT](VIDEO_PROJECT.md)：Project 承载 Chat/执行上下文，Composition/CompositionVersion 承载可编辑作品及版本，全局素材/产物经权限校验跨 Chat @ 引用，Timeline 是版本内部结构，Track/Clip/Object 承接画面与声音，Animation/Transition 分家，Skill 实例化 VideoTemplate，最终编译为 renderer-neutral video-spec。它消费 Graph/Run/Output 的可靠执行缝，不建立统一 Artifact 大层。
+
+Decompiler 当前谨慎定位仍为 observable facts + deterministic structure + selected semantic interpretation；是否增加 structure-level remix 由独立需求裁定。这里的视频目标不等于全产物统一 Media IR / AST。
 
 ### 9.3 范围诚实注
 
@@ -211,12 +213,12 @@ Structured Media 逐步成长为 **Media IR / AST**：timeline / clips / audio /
 - ExecutionAttempt 只在独立批次先裁定形态。启动证据 = fenced 频率、台账查询模式、商业对账需求与事故取证需求；它消费围栏，不改写围栏语义，也不得与 claim token 互名。
 - 能力契约显式化是触发制：首例能力误挂或新能力族批量入场后再评审，不预先建立统一 Policy 大层。
 - AgentBudget 是 TARGET 契约，墙钟/token/side-effect 数值未拍板；启动依据为跑飞事故、台账长尾或第二 provider 的真实需求。当前迭代上限不能冒充墙钟预算。
-- Structured Media 深化与结构级 remix 先裁定产品承诺，再决定是否立项；统一 Artifact / 完整 Media IR 不由本节自动创建。
+- 视频 Structured Media 深化按 ADR-145 与 VIDEO_PROJECT 四阶段实施；统一 Artifact、跨文本/图片/视频的全产物 Media IR 与结构级 remix 仍为触发制，不因视频目标开工而自动创建。
 
 ## 11. 不做清单（REJECTED / 缓做）
 
 - **REJECTED**（常备否决，维持）：agent 框架（Agno/LangGraph/Mastra 依赖）、开放式自主 loop、LLM 塑形拓扑、静默降级、冻参模板当文案、自由 field ops、arbitrary 代码执行、chain-of-thought 上产品面。
-- **缓做（近期不做）**：重写 Agent Runtime、新建 Tool Framework、完整 Media IR、Billing 重构、旧工具改名运动、为「架构漂亮」加抽象层、personas 拆桌（挂 ADR-042 运营端批次）、用户 pause/cancel（产品裁定先行）。
+- **缓做（近期不做）**：重写 Agent Runtime、新建 Tool Framework、**跨产物统一 Media IR**（视频 CompositionVersion/video-spec 除外，归 ADR-145）、Billing 重构、旧工具改名运动、为「架构漂亮」加抽象层、personas 拆桌（挂 ADR-042 运营端批次）、用户 pause/cancel（产品裁定先行）。
 
 ## 12. 文档地图（每类真相只有一个家）
 
@@ -227,7 +229,8 @@ Structured Media 逐步成长为 **Media IR / AST**：timeline / clips / audio /
 | 工程地图（Model/Harness/Graph/Loop） | `AGENT_ARCHITECTURE.md` |
 | 对话→生产概念架构 | `DIALOG_WORKFLOW.md` |
 | chat 机器规格 / SSE / 打字机律 | `CHAT_ARCHITECTURE.md` |
-| 渲染契约（clip-spec / 轨道） | `RENDERING.md` |
+| 渲染契约（当前 clip/film-spec 与轨道） | `RENDERING.md` |
+| **视频作品目标架构 / CompositionVersion / Skill / video-spec** | `VIDEO_PROJECT.md` + `tasks/video-project-implementation.md`（ADR-145，未实施） |
 | 计费语义 | `BILLING.md` |
 | 决策集 | `DECISIONS.md` |
 | 用户旅程 | `JOURNEYS.md` |

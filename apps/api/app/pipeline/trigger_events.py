@@ -38,6 +38,24 @@ TRIGGER_WHITELIST = frozenset(
 # the speech layer degrades to silence, never to a pipeline failure).
 TriggerHandler = Callable[[UUID, str, str], None]
 
+
+def run_trigger_ref(run_id: UUID, trigger: str, context: dict | None = None) -> str:
+    """One event identity per real terminal transition.
+
+    Upload-only recovery reopens the SAME run. Its next terminal verdict
+    therefore needs a new ref, while duplicate fires of that verdict dedup.
+    """
+    retries = (context or {}).get("upload_retry_count") or 0
+    if trigger in (TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED) and retries > 0:
+        return f"{run_id}:upload-retry-{retries}"
+    return str(run_id)
+
+
+def run_id_from_trigger_ref(ref: str) -> UUID:
+    """Recover the owning run from either a plain or recovery-scoped ref."""
+    return UUID(ref.split(":", 1)[0])
+
+
 _handler: TriggerHandler | None = None
 
 

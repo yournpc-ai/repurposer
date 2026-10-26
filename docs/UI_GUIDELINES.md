@@ -45,7 +45,7 @@
 ### 4.1 配方货架与卡面（ADR-048 + RECIPES §4 / §4.8）
 
 - 封面是单色工艺示意图，**永不实拍**。rest = 内联 SVG 静态封面（`components/recipes/covers/<id>.svg`，foreground 灰阶自驱双主题反转，16:10，左输入→右输出）；hover 播 CSS keyframe 过程动画（零视频零声音零媒体请求）。
-- **卡没有真实成对示例 = 不进货架**（RECIPES §4.8 准入）；MG 族货架 = demo 视频 autoplay loop/muted（标准为真渲染；占位例外见下），hover / keyboard focus = 半透明灰色 `media-scrim` 操作显影（中央「使用提示词」+ 左下声音钮 + 右下纯视觉放大标记）并尽力开声（浏览器 autoplay 拒声则保持静音，声音钮的真实点击解锁）；声音 = home 全局单例，后一张开声只静音前一张、前一张视频继续播放；族/子 tab/货架空即整级不渲染（无 demo 连摆位都不摆）；离屏卡片暂停解码（可见性闸），回视口恢复静音循环。**占位例外**：Product Demos 的三张复用条目在对应真实样片落地前只作纯布局占位（数据注释逐卡标注来源，界面零占位标记；占位只验证货架形态，不作为对应能力的验收产物，真片落地仅在注册表数据层换 URL）。
+- **卡没有真实成对示例 = 不进货架**（RECIPES §4.8 准入）；MG 族货架 = demo 视频 autoplay loop/muted（标准为真渲染；占位例外见下），hover / keyboard focus = 半透明灰色 `media-scrim` 操作显影（中央「使用提示词」+ 左下声音钮 + 右下纯视觉放大标记）并尽力开声（浏览器 autoplay 拒声则保持静音，声音钮的真实点击解锁）；声音 = home 全局单例，后一张开声只静音前一张、前一张视频继续播放；族/子 tab/货架空即整级不渲染（无 demo 连摆位都不摆）；离屏卡片暂停解码（可见性闸），回视口恢复静音循环。**占位例外**：Product Promo 的三张复用条目在对应真实样片落地前只作纯布局占位（数据注释逐卡标注来源，界面零占位标记；占位只验证货架形态，不作为对应能力的验收产物，真片落地仅在注册表数据层换 URL）。
 - 货架解剖 = 两级 tab（一级 family pill 轨 + 下划线子 tab，子 tab 唯一时不渲染该行）+ 白容器横滑（`bg-card` + 发丝线 + `rounded-lg`，in-flow 零 shadow；‹ › 翻页钮按方向在真可翻时出现——禁死按钮）。
 - **卡片点击唯一归宿 = composer 预填** `promptTemplate`（配方 = 提示词，ADR-040）——永不是模板编辑器，无 inspect overlay 形态。预填同时把 composer 带回视口（钉底态零滚动，文档流态滚内部 scrollport 至居中）并聚焦；模板必填空位 = 提示词文本内的可见占位符（当前 MG demo = 网站链接），插入后即选中，未替换发送本地拦截；占位符永不变成隐藏字段或第二个输入面。
 - 三行卡下文字 = 菜名 / promise（2 行 clamp）/ 适用素材。卡面禁画幅 badge / 类别 chip / 渠道名（卡只承载 genre）；渠道是用户点名或渠道授权后的发布/排期变量，预填模板不得把默认平台写成用户选择，chat 修改恒胜。
@@ -137,3 +137,9 @@
 - 只用 shadcn 主题变量（`bg-background` / `text-foreground` / `text-muted-foreground` / `bg-card` / `ring-border` 等），禁硬编码色值（如 `#333`）。
 - 正文与控件保持常规字重；pill / 次级按钮文字不加粗。
 - **数据 vs 文案**：一切 UI 文案走 i18n；用户数据（人设名、项目标题等）原样显示——别因为中文就当「未国际化」；但**默认值不得回退到某个具体数据条目**（如 Persona 默认显示本地化占位，让用户主动选）。
+
+## 现有素材与成片检视面
+
+素材卡以 media/divider/transcript 共用 rounded-lg ring-foreground/10，medialess 不造空槽；StageSkin 底缘3px、cue/停顿/播放针与真实源时间一致，点击只 seek 不自动发声；overlay 时隐藏不可靠时间皮、恢复原文回归。成片NLE轴是检视面：34px视频道、22px连续字幕道、26px修饰道，字幕块不塞残字；NLE_AXIS_PX=116 与 graph_store 镜像、port base/lanes/handles 同批。L0结构常驻、L1唯一HoverChip portal/overlay-surface且不遮挡、L2既有inspector；空间不足用折叠点击，不用hover藏结构。血缘只cross-highlight，视频边锚视频道中心，不新建子元素边。
+
+这些是现有 Clip 检视合同，不要求新视频建设自由NLE或强制Canvas。环境只读唯一canvasAvailable/canvasVisible，锚卡挂真实终态收据、稳定数组/去重、点击MediaLightbox，无独立订阅或合集卡；切布局不remount MentionEditor、不以背景更新移动相机。新 Composition 预览走 VIDEO_PROJECT §10，现有面剩余验收归 VERIFICATION §5.4/§5.7。

@@ -129,7 +129,7 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
     id: "ads",
     subs: [
       {
-        // 产品演示 — the first entry is a real film-chain render. The
+        // 产品宣传 — the first entry is a real film-chain render. The
         // remaining reused entries stay explicitly marked as placeholders.
         id: "product-demo",
         shelves: [

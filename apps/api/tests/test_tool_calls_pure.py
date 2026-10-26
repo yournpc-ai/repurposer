@@ -135,3 +135,41 @@ def test_complete_object_form_shares_the_one_parse_law() -> None:
         {"function": {"name": "list_styles", "arguments": ""}}, "tool_calls"
     )
     assert zero_arg.arguments == {}
+
+
+@pytest.mark.asyncio
+async def test_stream_done_finishes_without_waiting_for_connection_close(monkeypatch):
+    """Provider completion is a protocol boundary, independent of Film."""
+    import asyncio
+    import json
+    from contextlib import asynccontextmanager
+
+    import httpx
+    from pydantic import BaseModel
+    from app.providers.llm import minimax
+
+    class Result(BaseModel):
+        ok: bool
+
+    class Stream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            event = {"choices": [{"delta": {"content": json.dumps({"ok": True})}}]}
+            yield ("data: " + json.dumps(event) + "\n\n").encode()
+            yield b"data: [DONE]\n\n"
+            await asyncio.sleep(10)
+
+    async def handle(request):
+        assert request.extensions["timeout"]["read"] == 7
+        return httpx.Response(200, stream=Stream())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        @asynccontextmanager
+        async def pool():
+            yield client
+
+        monkeypatch.setattr(minimax, "_pooled_client", pool)
+        async with asyncio.timeout(0.5):
+            result = await minimax.MiniMaxClient(
+                api_key="test", base_url="https://test.invalid"
+            ).generate_stream(messages=[], response_model=Result, timeout_s=7)
+    assert result.ok

@@ -1,6 +1,6 @@
 # BILLING — 积分与计费架构
 
-> Status: 当前规范（2026-10-25）。积分、钱包与 hold/capture/release 是当前能力；支付、套餐与订阅经济仍按 `PROGRESS.md` 挂起。
+> Status: 当前规范（2026-10-26）。积分、钱包与 hold/capture/release 是当前能力；支付、套餐与订阅经济仍按 `PROGRESS.md` 挂起。
 > 本文是积分 / 钱包 / 计费架构的**唯一事实源**：概念、表、扣费时序、比例参数、负余额语义、API 与边界。参数的当前生效值以 `app/platform/configs.py` 注册表为准（本文只写默认）。
 
 ## 1. 概念层（三个词，两层货币）
@@ -126,6 +126,7 @@ class Config(Base):                       # configs — 公共运营参数表（
 **会话层 LLM 调用（路由 / 理解 / 规划 / 应答 / 探索 / 触发回合）只计量、不收费。** 对话是产品界面本身——按回合计价 = 出租车计价器焦虑，无一主流 agent 产品这么做；但成本是真实的（m3 $0.30/$1.20 per 1M token，重度话痨项目的会话成本可超生产成本），必须入账可见。
 
 - **`conversation_usage` 表**（owner = 平台层）：每回合一行（user / project / prompt_tokens / completion_tokens / cached_tokens / cost_usd 写入时定型 / model / created_at）。chat 回合入口绑 `bind_conversation_turn()` contextvar，复用 `record_usage` 唯一咽喉（`minimax.py` provider 层），tool loop 多轮迭代聚合为一行；写纪律 = 与回合 assistant 消息同一 commit；计量永不打断生成。
+- 会话计量按真实调用聚合；空回合无调用时零 usage 行，记录失败不能打断回复。取证级 agent_calls envelope 是独立需求，不由 conversation_usage 冒充。真实 tokens/cache/cost/model/project 归属与窗口边界验收仍开放，见验证登记 §4.2。
 - **永不上用户账单、永不上 UI**。用途三：COGS 可见性（会话/生产成本比）/ W11 fair-use 配额的数据基础 / context 预算校准数据源。
 - **context 预算**（纯后端零 UI）：装配超 `chat.context_budget_tokens`（ops 参数）→ 消息历史滑动窗口收编（现有 `history[-n:]` 散座归一预算谓词）；世界状态（图快照 / 资产元数据）不走消息窗，天然幸存。LLM 滚动摘要 = 缓做项（真实溢出率由台账观察后再评）。prefix cache 友好装配顺序不动。
 - token 是内部计量单位，credit 是用户面唯一货币——token 数字与 USD 一样永不上 UI。
@@ -157,6 +158,8 @@ ledger 已写金额不变，历史 step 的 credits 读投影可随比例变化�
 **语义账本塌缩**（ADR-057）：hold / release 永不上 UI——CreditsPill popover 的台账投影 = **per-run-event 语义行**（「Post 修订 −3」「初始生成 −42」：一次用户可感知动作 = 一行，hold/capture/release 内部时序折叠进该行净额）；用户面只显**花费 / 赠送 / 充值**三族。裸 kind 列表（`hold`/`capture`/`release` 逐行）是机器视角泄漏，不上 UI。
 
 **展示主轴抉择（ADR-117 同批拍板）**：积分余额是唯一的用户面数字——**百分比永不做主轴**（估价四面同源律：dock 总价 / 修改单价 / 估价贴 / 节点估价全说积分，余额讲 % 则用户无法对账；且 % 的分母在赠额+充值+订阅混合钱包下无意义）。ring 类可视化只是将来订阅落地后的可选 garnish（配额的可视化，不是第二货币）。**SettingsDialog「积分」section** = 余额与台账的全貌座位（概览卡 + 语义行 + 查看全部），与 CreditsPill / 账户控制台三面同源同一投影，零新端点。**确认闸形态**（ADR-117）：默认 auto 档无闸——方案呈现即开工；ask 档与守卫线触发时 Start 钮带价（`开始 · 约 N 积分` / NULL 族「估价随运行确定」），复用既有 pill 零新 chrome。
+
+旧 `billing.confirm_large_threshold` 不再读取，不能建立第二套确认语义；目标环境是否残留与是否实际清理须分别记录。删除前执行只读查询 `SELECT * FROM configs WHERE key='billing.confirm_large_threshold'`，按已有目标环境授权处理；文档收敛不代表已执行 SQL。确认/计量/配置的剩余检查统一归 [验证登记 §4.2](VERIFICATION.md#42-授权会话计量与配置)。
 
 ## 8. 当前边界与支付延期
 

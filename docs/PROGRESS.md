@@ -10,7 +10,7 @@
 ### 0.1 里程碑状态
 
 - **R1 — Core Product Beta：已封板**。实现与验收已闭环；baseline LLM 方差族 S1 / S6f / S10 仍是登记的开放观察项，不作为新的 release regression 自动放大范围。验收以当前合同与验证登记为准。
-- **当前主线 — Film/MG 人工试用与定点收尾**：以真实对话、修改、确认、制作和交付后修订闭环为中心；局部实施状态与验证层级由 Film progress 维护，全局优先级只在这里登记。
+- **当前主线 — Video Project 新架构**：按 ADR-145 与四阶段合同建设 Project / Composition / CompositionVersion、Track/Clip/Object、Skill 和 video-spec；A 内先打通最小渲染纵向闭环，再补官网片/MG 对照；B 做 launch-film Skill 化与真实 CRUD 闭环。旧 Film 只作当前实现与对照，不再按旧 PLANNED 形态扩展。
 - **R1.1 — Commercial / Distribution：排期挂起**。启动条件与合同见 §0.3，不因旧批次已备而自动解冻。
 
 ### 0.2 Active batch 与开放事项
@@ -19,21 +19,17 @@
 
 | 状态 | 工作 | 当前事实与下一步 | 状态 / 合同 |
 |---|---|---|---|
-| **当前** | **Film/MG 编排与持续修改** | 人工试用 + 反馈驱动修复；下一验收窗口覆盖 auto/ask 授权、双源旅程、live 展示、回答入口、prompt_gate/剧本矩阵和上线前条件。修订呈现与活动/恢复的人工验收统一定在 execution §1.1 A/C，未完成前不得写成已验收 | [局部状态](tasks/film-storyboard-orchestration-progress.md) → [执行与验收](tasks/film-storyboard-orchestration-execution.md) |
-| **当前** | Home 创作入口真实样片 | Ads 族只展示 Product Demos 与 Text Shorts 两个子 tab；Text Shorts 使用项目 `9345ddc2` 与 `f52c489c` 的真实文字源 Film，Product Demos 首卡为 ZYMIX 真片，其余三张占位卡仍待用户选定对应链真片。配方点击只预填 composer，货架可点不等于制作能力通过 | [任务状态](tasks/home-creation-entry-refresh.md) |
-| 开放 | Product Flow Alignment | C-0/C-1/C-2 已有代码层结果，Greenfield 验收未闭环；task_book/transcript/exploration 还须在真实目标 DB 副本验证升级、备份恢复与零双写。C-3/D 是否继续由产品需求决定，不从旧“施工中”直接扩新批 | [合同](tasks/product-flow-alignment.md) |
-| 开放 | Lifecycle / Activity / Confirmation | 早期验证尾项、`derived/reasons` 读面对账与旧 Phase 2 步⑤状态冲突仍未关闭；`_read_face` 只能在生产 DB 守卫查询证明五类 legacy 节点与旧 toolset 均为零后删除。scope 不可证继续失败闭；approval provenance 还需核对 legacy `context.tasks` 是否被误当有效授权证明（生产暴露未核实）；hygiene 未动工且不进关键路径 | [剩余验收与 hygiene](tasks/lifecycle-phase-6-hygiene.md) |
-| 开放 | Agent Tools 修复批验收尾项 | 代码批已完成并落 main；需活 API + dev worker 运行当前注册旅程矩阵，覆盖长程序经 `get_node` 修订、distilled `specific_instruction`、pending-plan/run-history 读面；另需抓真实 SSE 验证 reasoning/think 永不进入用户 wire。完成证据出现前不关闭 | [验证登记](tasks/verification-contracts.md) / [六段走查](tasks/agent-working-loop-iter-3.md) |
+| **当前** | **Video Project 新架构** | **阶段 A 待开工**：独立 codex/ 分支内破坏性更新，生产无实际用户，不做旧业务兼容；生产就绪后合并 main。首批提示词见施工合同 §9。Composition 身份/版本、最小 render→Output 闭环，再补时间/动画/快照与两种样片对照；B 做同 Chat 多影片、跨 Chat @ 引用、launch-film Skill 化、固定切点旁白与 Chat→CRUD→Run→交付及最小预览。B 直接替换旧 Film 专用合同，并完成 Chat 正文/工具/产物集成与真实制作阶段回放；整合 block 呈现可并行调研，UIArc 尚未选定，既有布局仍须通过完整旅程；C 做个人 Skill；D1 显式删除清理并复验，切换只依赖 A+B 和 D2 生产许可门，不等待 C。完整素材库页面、Clip 内化与 Scrub 后置；不建设“复制确切作品”能力，不迁移既有业务数据。权限/删除保留、Output.work_id 接缝、量化与 TTS 边界在施工门前明确；未实施不得写成 CURRENT | [目标架构](VIDEO_PROJECT.md) → [四阶段施工](tasks/video-project-implementation.md) |
+| **当前** | Home 创作入口真实样片 | Ads 族只展示 Product Promo 与 Text Animation 两个子 tab；Text Animation 使用项目 `9345ddc2` 与 `f52c489c` 的真实文字源 Film，Product Promo 首卡为 ZYMIX 真片，其余三张占位卡仍待用户选定对应链真片。配方点击只预填 composer，货架可点不等于制作能力通过 | [任务状态](tasks/home-creation-entry-refresh.md) |
+| 开放 | 共享执行、图与产物验收 | render owner/并行写入/恢复、产物成员、staging、fresh graph、rank/RunOp 解耦、lifecycle/授权证明仍需真实验证。旧批次状态不作当前证据；无用户旧数据按本轮授权 reset，不再保留指定事故产物救援与业务搬运工单，reset 未执行不等于已清零 | [共享验收](VERIFICATION.md#5-共享机制与-ui-的当前验收) |
+| 开放 | Agent Tools 修复批验收尾项 | 代码批已完成并落 main；需活 API + dev worker 运行当前注册旅程矩阵，覆盖长程序经 `get_node` 修订、distilled `specific_instruction`、pending-plan/run-history 读面；另需抓真实 SSE 验证 reasoning/think 永不进入用户 wire。完成证据出现前不关闭 | [验证登记](VERIFICATION.md) / [六段走查](tasks/agent-working-loop-iter-3.md) |
 | 开放 | Agent Working Loop 持续闭环 | 代码层已落，六段 live 验收、Candidate Surface live/replay、CJK 长素材检索与探索存储真实 DB 迁移仍待完成；验收后才可按覆盖映射、当前矩阵、无回归证据与生产引用清点执行 `edit_graph` 退役小提交 | [合同与验收](tasks/agent-working-loop-iter-3.md) |
-| 开放 | 积分与视频交付修复验收 | 并发/幂等结算、上传缓存恢复、失败交付判定已有定向回归；历史预扣补偿尚未执行，Surge 大文件真实重传与浏览器端完整旅程仍待验收 | [账本](BILLING.md) / [渲染](RENDERING.md) |
-| 开放 | Render ownership / Artifact ontology | A/C 已验收，D/E 待 live 验收；B 的 D4 条件流程恢复仍挂账，F 已并入 C | [render ownership](tasks/render-ownership.md) / [artifact ontology](tasks/artifact-ontology.md) |
-| 开放 | Canvas effective topology | B1–B3 代码层已收口；存量载荷恒等、事故项目读时归一、Start 主链与素材删除 reflow 的 live 验收未销号 | [合同](tasks/canvas-effective-topology.md) |
+| 开放 | 积分与视频交付修复验收 | 并发/幂等结算、失败交付判定已有定向回归；单次上传 10 分钟、chat `retry_upload`、确定性重传建议与缓存 miss 失败闭已落码，新增/更新测试尚未运行；历史预扣补偿尚未执行，Surge 大文件真实重传、upload-only 与浏览器端完整旅程仍待验收 | [账本](BILLING.md) / [渲染](RENDERING.md) |
 | 开放 | Agent 交互与画布确认迁移 | DeferredFrames 现行规则已归 CHAT；仍需真实 rejected-turn 浏览器证据：零客户端散文/预览、零服务端 commit/dock 残片，并保留有序原始事件。ADR-111 仍欠等待态节点面原型与 live 走查；相机 fit 缩放夹、capture 前估价面和刷新重建面须在同一份新合同中定清；跨轮防复读需可复现证据后再升级 | CHAT §8；现行决策 ADR-099/111 |
-| 开放 | Transcript 数组化与言语座位 | prompt_gate、chat_scenarios、迁移后真实回放仍待完成；`candidates_log` 聚合行是否为数组合约正式例外尚需裁决，并验证 set/selection/revise/failure/answer-turn 的 live/replay 位置。checkpoint 还需覆盖五条路由纯测试与 `tool_loop_checkpoint` 计数探针。主路径单读直出可以结构性零 checkpoint，只有实测系统性过低才重审路由 | [合同](tasks/transcript-array-and-speech-seats.md) |
-| 开放 | 素材理解与对话面验收 | prompt_gate、全量剧本和 live 场景仍待完成：消息回放不丢且不重复叙事；不得创建独立转写节点/卡，资产卡只在真实处理状态出现后显示处理中；休眠期状态诚实；in-flight beat 不重复落；法条词汇不被复读。ASR GPU/云加速是独立运营项，不属于本验收 | [回合内前提与对话面](tasks/material-wait-in-turn.md) |
-| 开放 | Transcript 存储迁移与卡面解剖 | 代码层已收口；legacy edited_text → asset overlay 的目标环境迁移、取证母本 live 验收、深浅主题与受影响仪式链仍开放；edited-transcript→recut 等未决项保留在合同 | [迁移与卡面验收](tasks/media-card-anatomy.md) |
-| 开放 | Credits / permissions（ADR-117） | 代码层已收口；仪式链、conversation_usage 真实行检查和配置清理仍待用户验证 | [合同](tasks/credits-and-permissions.md) |
-| 开放 | 早期 Film/MG 与 UI 验收尾项 | 原 MG live 验收、分镜核对/旅程闭环、分镜丰富度 zymix demo 锚、fc13 真实对话及 UI 对齐末验仍有旧未销号记录。统一在当前 Film/Chat 验收窗口逐项核销；不得把“旧批已落码”当作这些证据已存在 | [Film 当前欠账](tasks/film-storyboard-orchestration-progress.md)；[UI 合同](tasks/flora-parity-ui.md) |
+| 开放 | 消息回放与素材检视 | seq/首回合事务、checkpoint五路、Candidate聚合例外裁决及live/replay，素材overlay/StageSkin/NLE轴和双主题仍待验证。新鲜数据重建不要求旧行回填，保留数据环境另守读容忍与迁移条件；re-cut等后续需求未取消 | [消息与UI验收](VERIFICATION.md#54-素材卡transcript-与精确编辑边界) |
+| 开放 | 素材理解与对话面验收 | prompt_gate、全量剧本和 live 场景仍待完成：消息回放不丢且不重复叙事；不得创建独立转写节点/卡，资产卡只在真实处理状态出现后显示处理中；休眠期状态诚实；in-flight beat 不重复落；法条词汇不被复读。ASR GPU/云加速是独立运营项，不属于本验收 | [验证登记 §4.3](VERIFICATION.md#43-素材理解与对话回放) |
+| 开放 | Credits / permissions（ADR-117） | 代码层已收口；仪式链、conversation_usage 真实行检查和配置清理仍待用户验证 | [验证登记 §4.2](VERIFICATION.md#42-授权会话计量与配置) |
+| 开放 | 新视频视听与现有 UI 验收 | 网页/MG双源、逐字保真、默认字幕/章节/reveal、严格slide与音轨要求归新视频B；纯Chat/锚卡/声音互斥/移动端/双主题仍需真实走查。旧实现测试与事故工单退出不代表新能力已通过 | [视频要求](VIDEO_PROJECT.md#15-新链必须承接的产品语义与验收缺口) / [UI验收](VERIFICATION.md#57-现有-ui-自足与锚卡) |
 
 ### 0.3 R1.1 — Commercial / Distribution（排期挂起）
 
@@ -54,7 +50,7 @@
 2. 阅读范围 = 本文件 §0 → 当前任务状态/合同的相关章节 → 适用规范。按 [CLAUDE 默认阅读与收尾协议](../CLAUDE.md#默认阅读与收尾协议) 先搜索定位再读取；局部修复不通读模块欠账，compact 后不重新通读历史。
 3. 一次只解决合同内 correctness/product gap；发现合同与代码或现行法不一致时先报告，不自行扩 scope。
 4. 每轮从代码与真实证据重新验证 DoD；旧测试计数、旧 audit 和其他会话的“基线绿”不能替代当前验证。
-5. migration、状态机、并发与授权改动必须有匹配覆盖；测试归属遵循 [Testing 规则](../CLAUDE.md) 与 [验证合同](tasks/verification-contracts.md)。
+5. migration、状态机、并发与授权改动必须有匹配覆盖；测试归属遵循 [Testing 规则](../CLAUDE.md) 与 [验证合同](VERIFICATION.md)。
 6. 验证按改动面执行；部署前仪式链与付费边界见 CLAUDE.md。未运行的 LLM/真实旅程检查必须写“未运行”，不得改写为通过。
 7. 触及 agent loop / 意图 / prompt 时，验收必须回答：Agent 看见了什么、对用户需求的内部表示是否一致、如何知道自己做对了。
 8. 状态更新覆盖旧快照；规则变化更新唯一事实源；普通修复不新增 ADR；不保存历史报告或归档，失效内容直接删除。
@@ -167,7 +163,7 @@ R5 虚拟视频仍是已拍板的 AI 生成能力，先作为平台 tool 落位�
 | 零探索退化形态 | P1 | ADR-089 §8 迁移弧与 edit_graph 退役证明 | 范围清晰的请求直接生成单 Content Plan，不经探索链；随后退役 `propose_tasks` 与 `select_clips` 的 LLM 可见性，不改变付费授权边界 |
 | 深度 reviewer / 看片复核 | P2 | 视频理解 provider 能力与成本评估 | 当前 reviewer 只做确定性 verify + plan 意图比对；内容级看片自审需先解决 ground truth 与成本模型 |
 | 常驻自主拨盘（standing autonomy dial） | P2 | R1.1 商业形态明确后评估 | 可设常驻额度信封并在设定时披露费用语义；不恢复 review 档，不创造制作意图，也不绕过 `always_confirm_above` / NULL 不可报价守卫 |
-| 选项唯一座位（消息流零选项，ADR-100） | P1 | 当前合同 `tasks/options-dock-only.md`；排期窗口待指认 | 固定选项全部归 dock，trigger 建议 dock 机器保留；收窄 ADR-099 的 suggestions/answer 面，probe I 改测新目标，路由安全零容忍与 substrate 排查方法随合同迁移 |
+| 选项唯一座位（消息流零选项，ADR-100） | P1 | 现行规则 = CHAT_ARCHITECTURE §8.5/§8.8；验收 = 验证登记 §4.1，排期窗口待指认 | 固定选项全部归 dock，trigger 建议 dock 机器保留；收窄 ADR-099 的 suggestions/answer 面，probe I 改测新目标，路由安全零容忍与 substrate 排查方法随合同迁移 |
 | Canvas 密度组织学（journey 分组 / 折叠 / 归档） | P2 | `journey_id` 身份前提（ADR-088 §10） | 多旅程候选、精选、方案与产物累积后提供呈现层分组/折叠/归档；不得为组织创造语义节点 |
 | FRAMING 默认参化 | P2 | 先验证 caption_mode 默认参化的同构性 | 访谈/单讲的镜头选择可改为推导默认 + 卡面事实 + 手改通道，减少 blocking ask；需保留用户显式选择 |
 | operations 用户级 undo/restore UI | P1 | 现有 REST undo/journal/restore 与归档 409 | 不新增 `undo_edit` chat 动词，不做完整 version UI；只在卡面 factsbar 或产物档案提供最小回滚入口 |

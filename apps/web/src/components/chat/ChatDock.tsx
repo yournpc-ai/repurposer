@@ -51,6 +51,7 @@ import { apiFetch } from "@/lib/api"
 import { armAnswerWatchdog } from "@/lib/answerWatchdog"
 import { inferAssetType } from "@/lib/asset-type"
 import { streamAnswer, streamChat, StreamTurnError, questionSettledCode } from "@/lib/chat-stream"
+import { StreamTransportError } from "@/lib/streamTransport"
 import { sseProbe } from "@/lib/sse-probe" // TEMPORARY forensics — delete with the probe
 import type { ActivityFramePayload } from "@/lib/chat-stream"
 import type {
@@ -2549,6 +2550,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     currentActivityRowKeysRef.current = new Set()
     const workRowKeys = currentActivityRowKeysRef.current
     let terminalAtMs: number | null = null
+    let speechStarted = false
     // C8-c: a new turn owns the candidate-rollback scope — rows committed
     // by earlier turns are no longer this turn's to roll back.
     liveCandidateRowsRef.current.clear()
@@ -2649,6 +2651,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           signal: ctrl.signal,
           onDelta: (delta) => {
             poke()
+            if (delta) speechStarted = true
             // 出生钉位 + 归属钉位 (P1): the machine pins the row at the
             // delta's RECEIPT and the segment at the same boundary — never
             // at the typewriter's released fragment (a hidden tab throttles
@@ -2677,6 +2680,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           },
           onCheckpoint: (text, at) => {
             poke()
+            if (text.trim()) speechStarted = true
             segments.onCheckpoint(text, at)
           },
           onActivity: (frame) => {
@@ -2954,29 +2958,25 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
     } catch (e) {
       terminalAtMs ??= Date.now()
+      const transportError = e instanceof StreamTransportError
+      // Reuse dead-stream recovery only before any speech preview exists.
+      // Once prose/checkpoints are live, their settlement stays unchanged.
+      const recoverTransport = transportError && !speechStarted
+      const aborted = e instanceof DOMException && e.name === "AbortError"
       sseProbe("turn.error", {
         name: e instanceof Error ? e.name : "?",
         message: e instanceof Error ? e.message : String(e),
         dead: deadStreamRef.current,
+        transport: transportError,
+        recover: recoverTransport,
       })
       segments.flush()
       discardPreviewArtifacts()
       rollbackCandidateRows()
       // 终帧律 (同上): a failed/aborted turn closes every phase too.
       setThinkingPhase(null)
-      // The activity stream settles the same way: a user stop marks the
-      // in-flight work cancelled, a failure marks it failed — nothing keeps
-      // spinning (假活跃禁令, T16-B client twin).
-      settleActivities(
-        e instanceof DOMException && e.name === "AbortError"
-          ? "cancelled"
-          : "failed",
-      )
-      if (e instanceof DOMException && e.name === "AbortError") {
-        // Stopped mid-stream: the partial preview settles as static text
-        // (the server may still finish the turn server-side). Checkpoint
-        // segments (ADR-085) settle the same way — what was delivered stays
-        // readable.
+      settleActivities(aborted || recoverTransport ? "cancelled" : "failed")
+      if (aborted || recoverTransport) {
         setMessages((prev) =>
           prev.map((m) =>
             isSpeechSegmentRow(m.id, streamId)
@@ -2984,10 +2984,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               : m
           )
         )
-        if (deadStreamRef.current) {
-          // A machinery abort (watchdog / visibility), never the user's
-          // stop: the reconcile pulls the turn's landed rows from the
-          // archive — the server commits the answer regardless.
+        if (deadStreamRef.current || recoverTransport) {
+          // Read the existing archive recovery; never repeat the user action.
           void reconcileTurn(turnStartMs, reconcileGen)
         }
         return

@@ -88,6 +88,7 @@ from app.pipeline.trigger_events import (
     TRIGGER_RUN_COMPLETED,
     TRIGGER_RUN_FAILED,
     TRIGGER_WHITELIST,
+    run_id_from_trigger_ref,
 )
 from app.platform.conversation_context import (
     is_pending_plan,
@@ -441,6 +442,33 @@ async def _run_review_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
     return review_fact_lines(review)
 
 
+def _with_upload_retry_suggestion(
+    items: list[SuggestionItem], language: str
+) -> list[SuggestionItem]:
+    """The upload recovery offer is code-stamped from the failure fact.
+
+    The model keeps at most one genuine fallback; it cannot omit the recovery
+    or mark a different option as the recommendation.
+    """
+    zh = language.startswith("zh")
+    retry = SuggestionItem(
+        label="重新上传" if zh else "Retry upload",
+        description=(
+            "只重传已生成的视频；缓存失效时会说明需要重新渲染。"
+            if zh
+            else "Upload the generated video only; if its cache expired, "
+            "the system will say a render is needed."
+        ),
+        recommended=True,
+    )
+    fallbacks = [
+        item.model_copy(update={"recommended": False})
+        for item in items
+        if item.label != retry.label
+    ]
+    return [retry, *fallbacks[:1]]
+
+
 _FAILURE_FACT_CAP = 6
 
 
@@ -525,8 +553,10 @@ async def run_trigger_turn(
             if project is None:
                 return None
             run: WorkflowRun | None = None
+            run_id: UUID | None = None
             if trigger in (TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED):
-                run = await db.get(WorkflowRun, UUID(ref))
+                run_id = run_id_from_trigger_ref(ref)
+                run = await db.get(WorkflowRun, run_id)
                 if run is None:
                     # The run row is gone (deleted mid-flight) — there is
                     # nothing truthful left to review.
@@ -581,17 +611,20 @@ async def run_trigger_turn(
                 canvas_available=conversation.canvas_available,
             )
             language = _trigger_language(run, history, conversation)
+            upload_retry_available = False
             if trigger == TRIGGER_RUN_COMPLETED:
+                assert run is not None
                 # 交付收敛 (修复批 B): the event line IS the delivery's
                 # whole record (the deterministic fact block rides it —
                 # the world's self-evidence, bounded by review_fact_lines'
                 # own caps) and the readless delivery_agent writes once.
                 event_line = _delivery_event_line(
-                    ref, await _run_review_lines(db, run)
+                    str(run_id), await _run_review_lines(db, run)
                 )
             elif trigger == TRIGGER_RUN_FAILED:
+                assert run is not None
                 event_line = (
-                    f"Run {ref} FAILED and nothing landed — the user got "
+                    f"Run {run_id} FAILED and nothing landed — the user got "
                     "no result. Read what happened, then close with the "
                     "honest reason and the one next step."
                 )
@@ -599,6 +632,22 @@ async def run_trigger_turn(
                 # user-facing lines ride the event line — deterministic,
                 # narrate-never-contradict, same doctrine as DELIVERY FACTS.
                 failure_lines = await _run_failure_lines(db, run)
+                from app.pipeline.rendering import (  # deferred
+                    UPLOAD_RETRY_AMBIGUOUS,
+                    resolve_upload_retry,
+                )
+
+                upload_target = await resolve_upload_retry(db, project, run_id=run.id)
+                upload_retry_available = (
+                    not isinstance(upload_target, str)
+                    or upload_target == UPLOAD_RETRY_AMBIGUOUS
+                )
+                if upload_retry_available:
+                    event_line += (
+                        "\n\nUPLOAD RETRY AVAILABLE: the finished video can be "
+                        "offered for upload-only recovery; the system appends "
+                        "that option after your turn."
+                    )
                 if failure_lines:
                     event_line += (
                         "\n\nFAILURE FACTS (deterministic, from the run's own "
@@ -690,6 +739,9 @@ async def run_trigger_turn(
                 )
                 return None
             suggestions: list[SuggestionItem] = outcome.get("suggestions", [])
+            chrome_language = _chrome_language(speech, language)
+            if upload_retry_available:
+                suggestions = _with_upload_retry_suggestion(suggestions, chrome_language)
             if suggestions:
                 # 选项语法统一律 (ADR-081): the next-step labels dock as a
                 # REAL options question on the review row (blocking 形态律,
@@ -700,11 +752,11 @@ async def run_trigger_turn(
                     db,
                     conversation_id,
                     speech,
-                    _suggestions_payload(suggestions, _chrome_language(speech, language)),
+                    _suggestions_payload(suggestions, chrome_language),
                     intent=_trigger_dump(trigger, ref, suggestions),
                 )
                 if trigger in (TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED):
-                    message.workflow_run_id = UUID(ref)
+                    message.workflow_run_id = run_id
                 # 建议谱系 provenance (ADR-099 §4 — the trigger path's
                 # pre-existing gap: a pick used to lose its source): the
                 # options stamp onto the SAME row's interaction block, so
@@ -722,7 +774,7 @@ async def run_trigger_turn(
                     "assistant",
                     speech,
                     workflow_run_id=(
-                        UUID(ref)
+                        run_id
                         if trigger in (TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED)
                         else None
                     ),

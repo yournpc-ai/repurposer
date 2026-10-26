@@ -25,7 +25,7 @@
 6. **持续修订与记忆**：plan_ref / @output 精确命中，legacy 诚实降级；确定族与部分覆盖说明真实；post-run 新发现开新 journey；exemplar 只作参考；历史摘要有界。
 7. **CJK 长素材检索**：`search_cues` 的子串匹配对按单字 token 化的中文可能大量 miss。统一 normalization 后，用真实中文长素材验证定位、派生 excerpt 与后续候选 range；未完成前不得宣称长素材搜索对 CJK 可靠。
 8. **探索存储迁移**：在含 legacy 探索行的真实目标 DB 副本上验证 upgrade/downgrade、备份/回退、读面过滤、编译与 replay；`exploration_rows` 不得出现在执行闭包、报价、rank 或媒体流边。零双写与旧行不回流都要取证。
-9. **Candidate Surface live/replay**：chat-born 候选卡默认三条推荐并可受控展开；ordinal/time/excerpt/speaker 事实、选择高亮、重选替换而非并集、失败回合回滚、跨轮 replay 与回答回合一致。`candidates_log` 的数组形态差异归 `transcript-array-and-speech-seats.md`，本项不新增查询端点。
+9. **Candidate Surface live/replay**：chat-born 候选卡默认三条推荐并可受控展开；ordinal/time/excerpt/speaker 事实、选择高亮、重选替换而非并集、失败回合回滚、跨轮 replay 与回答回合一致。`candidates_log` 的数组形态差异归 `VERIFICATION.md`，本项不新增查询端点。
 
 第 1～6 段使用一份 **≥60 秒、两个主题的真实源素材**：分别在 dock 前、dock 后和 run 后换选，核对同一 Decision Package 的 quote 刷新；覆盖 continuation/expansion/unproven × auto/ask、plan_ref 与 @output 指认、legacy 降级、delivered/partial/failed 事实收官与有界 reference-only memory。任何 instant prose、假成功、重复 WorkSegment、内部 UUID/wiring 泄漏或未经授权 hold/capture 都是红灯。不要恢复退役剧本或“恰好一次确认”的旧期望。
 

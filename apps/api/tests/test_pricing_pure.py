@@ -45,3 +45,24 @@ def test_table_is_model_keyed() -> None:
         assert isinstance(key, str)
         assert isinstance(line, dict)
         assert all(isinstance(v, int | float) for v in line.values())
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_config_peek_reads_default_or_override_without_database(monkeypatch, cached):
+    """Quote/meter configuration must share a deterministic sync read."""
+    from app.platform import configs
+
+    key = "credits.per_cost_usd"
+    if cached:
+        monkeypatch.setitem(configs._cache, key, 1234)
+    else:
+        monkeypatch.delitem(configs._cache, key, raising=False)
+    expected = 1234 if cached else configs.CONFIG_REGISTRY[key].default
+    assert configs.peek_config(key) == expected
+
+
+def test_config_peek_rejects_unregistered_keys():
+    from app.platform.configs import peek_config
+
+    with pytest.raises(KeyError, match="Unknown config key"):
+        peek_config("no_such_config_key")

@@ -36,6 +36,7 @@ from app.models.schemas import (
     PlanAskArgs,
     PresentPlanArgs,
     ProposeTasksArgs,
+    RetryUploadArgs,
     ReviseOutputArgs,
     StartRunArgs,
 )
@@ -393,7 +394,8 @@ _DESIGN_STORYBOARD_EDITS_PARAGRAPH = (
     "keep_cut|recut; mood 'off' switches the bed off for good), "
     "set_subtitles (create/replace a scene's independent subtitle track; "
     "track=null deletes it; all scene types including ui; no narration needed), "
-    "set_voiceover (false = silent cut; true = re-open synthesis of the "
+    "set_voiceover (false = no spoken narration; visible subtitles and the "
+    "music bed stay independent; true = re-open synthesis of the "
     "board's own narration lines — a board with none rejects: author the "
     "lines with update_scene first) — always with the "
     "base_ref echoed verbatim from the version's presentation or a "
@@ -520,6 +522,15 @@ CHAT_TOOLS = [
             "presentation or waits for the user's confirmation."
         ),
         params_model=EditGraphArgs,
+    ),
+    ChatTool(
+        name="retry_upload",
+        description=(
+            "Retry only the upload of a video whose rendering finished but "
+            "whose upload failed. Reuses the finished render cache; never "
+            "re-renders. A cache miss returns an honest render-again result."
+        ),
+        params_model=RetryUploadArgs,
     ),
     # iter-3 S3 (N-58, ADR-089 §6): the craft-level revision verb — product
     # semantics (a plan / an output + the user's words), NEVER wiring ops.

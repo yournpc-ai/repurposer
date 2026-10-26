@@ -27,6 +27,7 @@ services:
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - MINIMAX_MODEL=${MINIMAX_MODEL:-minimax-m3}
       - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.chat/v1}
+      - FILM_EDITS_ENABLED=${FILM_EDITS_ENABLED:-false}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - FROM_EMAIL=${FROM_EMAIL:-Repurposer <repurposer@yournpc.ai>}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
@@ -63,6 +64,7 @@ services:
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - MINIMAX_MODEL=${MINIMAX_MODEL:-minimax-m3}
       - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.chat/v1}
+      - FILM_EDITS_ENABLED=${FILM_EDITS_ENABLED:-false}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - FROM_EMAIL=${FROM_EMAIL:-Repurposer <repurposer@yournpc.ai>}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}

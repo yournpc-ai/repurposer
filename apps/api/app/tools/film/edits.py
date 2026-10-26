@@ -1004,7 +1004,7 @@ def compute_change_set(
                     # copy_text is lines' derived shadow (re-anchored by every
                     # copy edit) — it moves the DIGEST (the corpus anchor is
                     # content) but never gets its own change line.
-                    if k not in {"scene_id", "seconds", "copy_text"}
+                    if k not in {"scene_id", "seconds", "copy_text", "source_text"}
                     and base_dump.get(k) != result_dump.get(k)
                 )
                 notes = (
@@ -1159,6 +1159,29 @@ def apply_film_edits(
         retime = _apply_op(work, work_params, op)
         if retime is not None:
             music_retime = retime
+
+    before_has_subtitles = any(s.subtitle_track is not None for s in before.scenes)
+    has_subtitles = any(s.subtitle_track is not None for s in work.scenes)
+    content_changed = storyboard_content_digest(work) != storyboard_content_digest(before)
+    params_before = canonical_film_params(params)
+    params_after = canonical_film_params(work_params)
+    params_before.pop("subtitles", None)
+    params_after.pop("subtitles", None)
+    real_revision = (
+        content_changed
+        or params_before != params_after
+        or music_retime == "recut"
+    )
+    # The version pin follows the REAL track state after any actual targeted
+    # revision, including an unrelated edit on a legacy board and removing
+    # the last subtitled scene. A no-op on a legacy board keeps the key
+    # absent: upgrading the pin alone must not manufacture a new version.
+    if (
+        has_subtitles != before_has_subtitles
+        or work_params.get("subtitles") is not None
+        or real_revision
+    ):
+        work_params["subtitles"] = has_subtitles
 
     try:
         work = FilmStoryboard.model_validate(work.model_dump(mode="json"))

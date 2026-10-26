@@ -106,6 +106,7 @@ from app.models.schemas import (
     PendingPlan,
     RenderStatus,
     ShotRef,
+    SubtitleTrack,
     WebPageResearch,
 )
 from app.models.tables import (
@@ -183,7 +184,7 @@ TEXT_CAPS: dict[tuple[str, str], int] = {
     ("hero", "word"): 20,
     ("hero", "sub"): 90,
     ("divider", "label"): 48,
-    ("divider", "roll"): 30,
+    ("divider", "roll"): 20,
     ("plate", "title"): 48,
     ("plate", "big"): 12,
     ("plate", "label"): 30,
@@ -267,6 +268,7 @@ PADDING_SCENE = "PADDING_SCENE"
 # 4ad7963e board's voice).
 NARRATION_MISSING = "NARRATION_MISSING"
 NARRATION_KEY_UNKNOWN = "NARRATION_KEY_UNKNOWN"
+SUBTITLE_KEY_UNKNOWN = "SUBTITLE_KEY_UNKNOWN"
 
 
 class FilmStoryboardRejected(Exception):
@@ -314,12 +316,21 @@ class LaunchFilmParams(BaseModel):
         default=None,
         description="Spoken narration over the film (配音讲解). A NEW film "
         "defaults OFF: true ONLY when the user explicitly asked for spoken "
-        "narration — never on your own initiative; null/false = silent cut "
-        "(no synthesis, no TTS cost; the music bed is an independent "
-        "choice — 'no voiceover' never implies 'no music'). The storyboard "
+        "narration — never on your own initiative; null/false = no spoken "
+        "narration (no synthesis or TTS cost; subtitles and the music bed "
+        "stay independent — 'no voiceover' implies neither 'no subtitles' "
+        "nor 'no music'). The storyboard "
         "may still draft per-scene narration so the review table shows the "
         "words and a later 'add voiceover' re-opens synthesis of those "
         "lines.",
+    )
+    subtitles: bool | None = Field(
+        default=None,
+        description="Independent visible subtitles (字幕), whether or not the "
+        "film has spoken narration. A NEW film defaults ON; false only when "
+        "the user explicitly asks for no subtitles. Later versions inherit "
+        "the pinned setting. These are Film scene subtitle_tracks, not clip "
+        "caption styles; voiceover, subtitles and music are independent.",
     )
     music_mood: str | None = Field(
         default=None,
@@ -578,8 +589,13 @@ class FilmDirection(BaseModel):
     # model declares it verbatim; null-read tolerance (打字机牙①).
     language: str | None = None
     theme: FilmStoryboardTheme | None = None
-    # The chapters: 3-5 heading lines the site itself leads with, cited.
+    # The chapters: 3-5 heading lines the site itself leads with, cited for
+    # grounding. chapter_titles is the paired DISPLAY copy (≤20 chars each),
+    # so a long source heading never gets head-truncated into a残句.
+    # Null reads as an empty answer for the ordinary bounded repair path
+    # (打字机牙①), never as a schema-level iteration failure.
     pillars: list[CopyRef] = Field(min_length=3, max_length=5)
+    chapter_titles: list[str] | None = None
     hero_word: CopyRef
     hero_sub: CopyRef
     # Creative channel: 1-3 cold-open hook lines (≤3 words each, CJK ≤8
@@ -593,6 +609,10 @@ class FilmDirection(BaseModel):
     # Spoken lines keyed by the skeleton's scene keys (a missing key reads
     # as a silent scene — 读容忍).
     narrations: dict[str, str] = Field(default_factory=dict)
+    # Visible subtitle COPY keyed by the same scene keys. The model writes no
+    # timestamps: assembly splits and times the cues deterministically.
+    # Null / null entries read as omitted and take the grounded fallback.
+    subtitle_lines: dict[str, str | None] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -878,6 +898,7 @@ def assemble_storyboard(
     lines: list[ManifestLine],
     *,
     pinned_language: str | None = None,
+    subtitles: bool = True,
 ) -> tuple[FilmStoryboard | None, list[FilmViolation]]:
     """Direction (the model's slot answers) + skeleton (code's structure) →
     the resolved storyboard. Citation errors resolve with the same precise
@@ -890,7 +911,7 @@ def assemble_storyboard(
     violations: list[FilmViolation] = []
 
     def resolve(
-        ref: CopyRef, cap: int, where: str
+        ref: CopyRef, cap: int | None, where: str
     ) -> str:
         line = by_id.get(ref.line)
         if line is None:
@@ -908,7 +929,7 @@ def assemble_storyboard(
             # severed boundary.
             s, e = _snap_span(base_text, ref.span[0], ref.span[1])
             base_text = base_text[s:e].strip()
-        text = _fit_to_cap(base_text, cap, "head" if where.endswith(".roll") and ref.fit == "full" else ref.fit)
+        text = _fit_to_cap(base_text, cap, ref.fit) if cap is not None else base_text.strip()
         if ref.accent is not None:
             accented = _apply_accent(text, ref.accent)
             if accented is None:
@@ -939,6 +960,14 @@ def assemble_storyboard(
 
     language = direction.language or pinned_language
     pillars = direction.pillars[:_MAX_CHAPTERS]
+    chapter_titles = direction.chapter_titles or []
+    if len(chapter_titles) != len(pillars):
+        return None, [FilmViolation(
+            CONSTRAINT_VIOLATION,
+            f"chapter_titles: {len(chapter_titles)} titles for {len(pillars)} "
+            "pillars — write exactly one concise display title per pillar, "
+            "in the same order",
+        )]
     plan = _scene_plan(len(pillars), skeleton)
     seconds = _assign_seconds([s.type for s in plan])
     plan_keys = {s.key for s in plan}
@@ -960,6 +989,21 @@ def assemble_storyboard(
             )
             continue
         narr[k] = v.strip() or None
+
+    subtitle_text: dict[str, str] = {}
+    for k, v in (direction.subtitle_lines or {}).items():
+        if k not in plan_keys:
+            violations.append(FilmViolation(
+                SUBTITLE_KEY_UNKNOWN,
+                f"subtitle_lines.{k!r}: no scene owns this key — valid scene "
+                f"keys: {', '.join(s.key for s in plan)}",
+            ))
+            continue
+        if not isinstance(v, str):
+            continue
+        text = creative(v, 120, f"subtitle_lines.{k}")
+        if text:
+            subtitle_text[k] = text
 
     resolved_scenes: list[FilmScene] = []
     ui_count = 0
@@ -1005,21 +1049,18 @@ def assemble_storyboard(
         elif scene.type == "divider":
             assert scene.chapter is not None
             own = pillars[scene.chapter - 1]
-            # The roll: two decoys (the NEXT chapters' lines, cyclically —
-            # plausible alternatives by construction, the skill's law) then
-            # the real word last. The cyclic shift keeps every chapter's
-            # roll distinct (a shared set in a different landing order is a
-            # different screen — the validator's divider signature keys on
-            # the roll IN ORDER). Decoys that trim-collide with the real
-            # word drop.
+            # Pillars ground the chapter; chapter_titles own the DISPLAY.
+            # Never head-truncate a cited heading into a残句 for this slot.
             n = len(pillars)
-            decoys = [pillars[scene.chapter % n], pillars[(scene.chapter + 1) % n]]
+            decoys = [scene.chapter % n, (scene.chapter + 1) % n]
             roll_cap = TEXT_CAPS[("divider", "roll")]
-            real = resolve(own, roll_cap, f"{where}.roll")
+            real = creative(
+                chapter_titles[scene.chapter - 1], roll_cap, f"{where}.roll"
+            )
             roll: list[str] = []
             for decoy in decoys:
-                text = resolve(decoy, roll_cap, f"{where}.roll")
-                if _norm(text) != _norm(real):
+                text = creative(chapter_titles[decoy], roll_cap, f"{where}.roll")
+                if _norm(text) != _norm(real) and all(_norm(text) != _norm(r) for r in roll):
                     roll.append(text)
             roll.append(real)
             resolved_scenes.append(FilmSceneDivider(
@@ -1027,6 +1068,7 @@ def assemble_storyboard(
                 scene_id=scene.key,
                 label=_phrase(_CHAPTER_KICKER, language),
                 roll=roll or [real],
+                source_text=resolve(own, None, f"{where}.source_text").replace("*", ""),
             ))
         elif scene.type == "plate":
             title_line = next(
@@ -1081,12 +1123,15 @@ def assemble_storyboard(
             ))
     if violations:
         return None, violations
+    board = FilmStoryboard(
+        name=direction.name,
+        theme=direction.theme,
+        language=language,
+        scenes=resolved_scenes,
+    )
     return (
-        FilmStoryboard(
-            name=direction.name,
-            theme=direction.theme,
-            language=language,
-            scenes=resolved_scenes,
+        with_default_subtitles(
+            board, enabled=subtitles, subtitle_lines=subtitle_text
         ),
         [],
     )
@@ -1115,12 +1160,18 @@ def fixed_direction(
     pillar_lines: list[ManifestLine] = []
     for kind in ("h2", "h3", "h1", "button"):
         for l in by_kind.get(kind, []):
-            if len(pillar_lines) < _MAX_CHAPTERS and l not in pillar_lines:
+            if l not in pillar_lines:
                 pillar_lines.append(l)
-        if len(pillar_lines) >= 3:
-            break
+    # The fixed fallback cannot SUMMARIZE a long heading honestly. Use only
+    # complete headings that already fit the display cap; too few means an
+    # honest no-draft result rather than three truncated残句.
+    pillar_lines = [
+        l for l in pillar_lines
+        if 0 < len(l.text.strip()) <= TEXT_CAPS[("divider", "roll")]
+    ][:_MAX_CHAPTERS]
     if len(pillar_lines) < 3:
         return None
+    pillar_lines = pillar_lines[:3]
     title = first("title") or lines[0]
     sub_line = first("description", "h1", "paragraph") or title
     reveal_line = first("h2", "h1") or title
@@ -1148,6 +1199,7 @@ def fixed_direction(
         language=language,
         theme=None,
         pillars=[CopyRef(line=l.id, fit="head") for l in pillar_lines[:3]],
+        chapter_titles=[l.text.strip() for l in pillar_lines[:3]],
         hero_word=CopyRef(line=title.id, fit="head"),
         hero_sub=CopyRef(line=sub_line.id, fit="head"),
         cold_open=[cold],
@@ -3359,6 +3411,9 @@ _CREATIVE_SLOTS = {
     ("words", "lines"),
     ("reveal", "lead"),
     ("divider", "label"),
+    # Authored concise chapter titles, grounded through the paired pillar
+    # citation at assembly rather than required to be verbatim page copy.
+    ("divider", "roll"),
     # A composite text element's lines are the film's own framing beside the
     # media — the words plane's exemption applies (ADR-140).
     ("composite", "lines"),
@@ -3880,10 +3935,8 @@ def format_violations(violations: list[FilmViolation]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _scene_floor(scene: Any) -> int:
-    """One scene's structural frame minimum — the divider roll must fit its
-    cadence, the end card holds its floor (allocate_frames' clamp, factored
-    out so the beat snap respects the same floors)."""
+def _scene_structural_floor(scene: Any) -> int:
+    """The content-independent minimum: divider cadence and end-card hold."""
     n = _MIN_SCENE_FRAMES
     if scene.type == "divider":
         n = max(
@@ -3895,9 +3948,20 @@ def _scene_floor(scene: Any) -> int:
     return n
 
 
+def _scene_floor(scene: Any) -> int:
+    """One scene's executable frame minimum. Beat snap and narration flex
+    must both respect the subtitle track's last cue as well as the scene's
+    structural cadence; neither may shorten the picture under its subtitles."""
+    n = _scene_structural_floor(scene)
+    track = getattr(scene, "subtitle_track", None)
+    if track is not None and track.cues:
+        n = max(n, math.ceil(track.cues[-1].end * FILM_FPS))
+    return n
+
+
 def allocate_frames(storyboard: FilmStoryboard) -> list[int]:
-    """Seconds intent → integer frames (fixed fps; structural minimums clamp
-    UP — the divider roll must fit its cadence, the end card holds its floor).
+    """Seconds intent → integer frames (fixed fps; executable minimums clamp
+    UP — divider cadence, end-card hold and the last subtitle cue must fit).
     Total = Σ scene frames; the renderer only sums."""
     return [
         max(round(scene.seconds * FILM_FPS), _scene_floor(scene))
@@ -3915,10 +3979,10 @@ def snap_frames_to_beats(
     storyboard: FilmStoryboard, frames: list[int], beats: list[float]
 ) -> list[int]:
     """Snap internal scene boundaries to the music bed's beat grid. A snap
-    never pushes a scene under its structural floor and never moves a
-    boundary past the tolerance; the first scene still starts at 0, the
-    total floats within ±tolerance per boundary. No grid → the frames pass
-    through untouched (degrade-honest)."""
+    never pushes a scene under its executable floor (structure + subtitles)
+    and never moves a boundary past the tolerance; the first scene still
+    starts at 0, the total floats within ±tolerance per boundary. No grid →
+    the frames pass through untouched (degrade-honest)."""
     if not beats:
         return frames
     tol = round(_BEAT_SNAP_TOLERANCE_S * FILM_FPS)
@@ -4196,6 +4260,108 @@ def narration_subtitle_cues(
         end = starts[i + 1] if i + 1 < len(starts) else timeline
         cues.append({"at": start, "end": round(end, 2), "text": chunk})
     return cues
+
+
+_SUBTITLE_END_MARGIN_S = 0.25  # 0.2s beat-snap tolerance + frame rounding
+
+
+def _fallback_subtitle_text(
+    scene: FilmScene, by_id: dict[str, FilmScene]
+) -> str:
+    """Grounded scene copy for an omitted subtitle slot: existing narration
+    first, then the scene's own display copy. The director's concise
+    subtitle_lines lead; this is only the completeness fallback."""
+    narration = (getattr(scene, "narration", None) or "").strip()
+    if narration:
+        return narration
+    if scene.type == "words":
+        return " ".join(line.replace("*", "").strip() for line in scene.lines)
+    if scene.type == "hero":
+        return scene.sub
+    if scene.type == "divider":
+        return scene.roll[-1]
+    if scene.type == "plate":
+        return scene.title
+    if scene.type == "reveal":
+        return scene.sub
+    if scene.type == "end":
+        return scene.tagline
+    if scene.type == "composite":
+        return " ".join(
+            line.replace("*", "").strip()
+            for el in scene.elements
+            if el.kind == "text"
+            for line in el.lines
+        )
+    if scene.type == "ui":
+        key = scene.scene_id or ""
+        if key == "home":
+            hero = by_id.get("hero")
+            return hero.sub if hero is not None and hero.type == "hero" else ""
+        if key == "prove":
+            reveal = by_id.get("reveal")
+            return reveal.sub if reveal is not None and reveal.type == "reveal" else ""
+        if key.startswith("ch") and key.endswith("_ui"):
+            divider = by_id.get(key[:-3] + "_divider")
+            return (
+                divider.roll[-1]
+                if divider is not None and divider.type == "divider" and divider.roll
+                else ""
+            )
+    return ""
+
+
+def with_default_subtitles(
+    storyboard: FilmStoryboard,
+    *,
+    enabled: bool,
+    subtitle_lines: dict[str, str] | None = None,
+) -> FilmStoryboard:
+    """Birth the real independent SubtitleTrack objects for a composed film.
+
+    The director supplies COPY ONLY. Code owns cue splitting, scene-relative
+    timing and the black-background / white-text default style. A missing
+    subtitle line falls back to that scene's grounded display copy; no audio
+    or narration is required. OFF strips tracks on this fresh compose path.
+    """
+    by_id = {s.scene_id: s for s in storyboard.scenes if s.scene_id}
+    for scene in storyboard.scenes:
+        if not enabled:
+            scene.subtitle_track = None
+            continue
+        key = scene.scene_id or ""
+        text = ((subtitle_lines or {}).get(key) or "").strip()
+        if not text:
+            text = _fallback_subtitle_text(scene, by_id).strip()
+        if not text:
+            continue
+        # Explicitly fast text films can intend a sub-second scene while the
+        # allocator still enforces its one-second executable floor. Time the
+        # track against that real minimum, not the smaller intent value.
+        scene_window_s = max(
+            scene.seconds, _scene_structural_floor(scene) / FILM_FPS
+        )
+        window_s = round(scene_window_s - _SUBTITLE_END_MARGIN_S, 2)
+        if window_s <= 0:
+            continue
+        if window_s < 0.4:
+            # The general splitter has a 0.4s floor; a very short user-named
+            # text scene keeps its full copy in one honest cue instead.
+            cues = [{"at": 0, "end": round(window_s, 2), "text": text}]
+        else:
+            cues = narration_subtitle_cues(
+                text, window_s=window_s, spoken_s=None
+            )
+        if cues:
+            try:
+                scene.subtitle_track = SubtitleTrack.model_validate({"cues": cues})
+            except ValidationError:
+                # Dense user-timed copy must not make an otherwise legal
+                # scene invalid through cue rounding; keep one full-text cue.
+                scene.subtitle_track = SubtitleTrack.model_validate({
+                    "cues": [{"at": 0, "end": round(window_s, 2), "text": text}]
+                })
+    return storyboard
 
 
 def _resolve_focus(f: Any, page: StoryboardPage, shot_idx: int) -> dict[str, Any]:
@@ -5164,7 +5330,11 @@ def storyboard_presentation(
     # SAY the real voiceover state — a silent default that never appears on
     # the fact sheet reads as an omission the model then improvises around.
     head_bits.append(f"voiceover: {'on' if voiceover else 'off'}")
-    head_bits.append("subtitles: independent scene tracks")
+    subtitle_scenes = sum(s.subtitle_track is not None for s in storyboard.scenes)
+    head_bits.append(
+        f"subtitles: {'on' if subtitle_scenes else 'off'} "
+        f"({subtitle_scenes}/{len(storyboard.scenes)} scenes)"
+    )
 
     def page_label(p: int) -> str:
         if not 0 <= p < len(pages):
@@ -5306,29 +5476,40 @@ def current_direction_dict(storyboard: FilmStoryboard) -> dict[str, Any]:
     reveal: dict[str, str] = {}
     end: dict[str, str] = {}
     pillars: list[str] = []
+    chapter_titles: list[str] = []
     narrations: list[dict[str, Any]] = []
+    subtitle_lines: list[dict[str, Any]] = []
     for i, s in enumerate(storyboard.scenes, 1):
         if s.type == "words" and not cold_open:
             cold_open = list(s.lines)
         elif s.type == "hero":
             hero = {"hero_word": s.word, "hero_sub": s.sub}
         elif s.type == "divider":
-            pillars.append(s.label)
+            pillars.append(s.source_text or s.roll[-1])
+            chapter_titles.append(s.roll[-1])
         elif s.type == "reveal":
             reveal = {"reveal_lead": s.lead, "reveal_word": s.word, "reveal_sub": s.sub}
         elif s.type == "end":
             end = {"end_name": s.name, "end_tagline": s.tagline}
         if s.narration:
             narrations.append({"scene": i, "type": s.type, "text": s.narration})
+        if s.subtitle_track:
+            subtitle_lines.append({
+                "scene": i,
+                "type": s.type,
+                "text": " ".join(c.text for c in s.subtitle_track.cues),
+            })
     return {
         "name": storyboard.name,
         "language": storyboard.language,
         "pillars": pillars,
+        "chapter_titles": chapter_titles,
         **hero,
         "cold_open": cold_open,
         **reveal,
         **end,
         "narrations": narrations,
+        "subtitle_lines": subtitle_lines,
     }
 
 
@@ -5341,6 +5522,7 @@ def _assemble(
     current: dict[str, Any] | None,
     page_images: list[MediaInput],
     voiceover: bool = True,
+    subtitles: bool = True,
 ) -> AssembleResult:
     """Purity by signature: the model sees the manifests (its grounding
     universe), the code-built skeleton (its answer sheet — ADR-127), the
@@ -5359,6 +5541,7 @@ def _assemble(
             "language": language,
             "current": current,
             "voiceover": voiceover,
+            "subtitles": subtitles,
         },
         page_images,
     )
@@ -5517,9 +5700,9 @@ film_director = Agent[FilmDirection](
         "the creative slots: pick the chapters, cite every factual on-screen "
         "string from the page's own copy by line number (you never write "
         "those), and write the creative channel in your own words — the "
-        "cold-open hooks, the reveal's lead-in and the narration. Hooks, "
-        "never claims: the creative channel never states a product fact the "
-        "page does not state."
+        "cold-open hooks, the reveal's lead-in, concise chapter titles, "
+        "subtitle copy and the narration. Hooks, never claims: the creative "
+        "channel never states a product fact the page does not state."
     ),
     assemble=_assemble,
     temperature=0.5,
@@ -5919,6 +6102,7 @@ async def orchestrate_storyboard(
     on_reject=None,
     allow_fixed_fallback: bool = True,
     voiceover: bool = True,
+    subtitles: bool = True,
     text_source: FilmTextSource | None = None,
     media_candidates: list[dict[str, Any]] | None = None,
     media_loader: Any = None,
@@ -5964,6 +6148,7 @@ async def orchestrate_storyboard(
             on_reject=on_reject,
             allow_fixed_fallback=allow_fixed_fallback,
             voiceover=voiceover,
+            subtitles=subtitles,
             media_candidates=media_candidates,
             media_loader=media_loader,
             composite_ok=composite_ok,
@@ -6004,9 +6189,11 @@ async def orchestrate_storyboard(
                     page_images=page_images,
                     repair_feedback=feedback,
                     voiceover=voiceover,
+                    subtitles=subtitles,
                 )
                 resolved, violations = assemble_storyboard(
-                    skeleton, direction, lines, pinned_language=language
+                    skeleton, direction, lines, pinned_language=language,
+                    subtitles=subtitles,
                 )
                 if resolved is not None:
                     violations = validate_storyboard(
@@ -6040,7 +6227,8 @@ async def orchestrate_storyboard(
         fixed = fixed_direction(lines, language=language)
         if fixed is not None:
             resolved, fviolations = assemble_storyboard(
-                skeleton, fixed, lines, pinned_language=language
+                skeleton, fixed, lines, pinned_language=language,
+                subtitles=subtitles,
             )
             if resolved is not None:
                 fviolations = validate_storyboard(
@@ -6204,6 +6392,7 @@ async def _orchestrate_text_storyboard(
     on_reject,
     allow_fixed_fallback: bool,
     voiceover: bool,
+    subtitles: bool = True,
     media_candidates: list[dict[str, Any]] | None = None,
     media_loader: Any = None,
     composite_ok: bool = False,
@@ -6291,6 +6480,7 @@ async def _orchestrate_text_storyboard(
                     pinned_language=language, composite_ok=composite_ok,
                 )
                 if resolved is not None:
+                    resolved = with_default_subtitles(resolved, enabled=subtitles)
                     media = (
                         await media_loader(resolved)
                         if media_loader is not None
@@ -6345,6 +6535,7 @@ async def _orchestrate_text_storyboard(
         logger.info("film_text_direction_fixed_fallback", reason=str(rejection)[:200])
         fixed = fixed_text_storyboard(lines, source=text_source, language=language)
         if fixed is not None:
+            fixed = with_default_subtitles(fixed, enabled=subtitles)
             fviolations = validate_storyboard(
                 fixed, [], narration_required=voiceover, text_lines=lines
             )
@@ -6423,6 +6614,7 @@ async def draft_film_storyboard(
     current: FilmStoryboard | None = None,
     on_progress=None,
     voiceover: bool = True,
+    subtitles: bool = True,
     text_source: FilmTextSource | None = None,
     pinned_asset_ids: list[str] | None = None,
 ) -> tuple[FilmStoryboard, list[StoryboardPage]] | None:
@@ -6516,6 +6708,7 @@ async def draft_film_storyboard(
                 # retry is a real redesign, never a dressed-up fallback.
                 allow_fixed_fallback=False,
                 voiceover=voiceover,
+                subtitles=subtitles,
                 text_source=text_source,
                 media_candidates=media_candidates,
                 media_loader=media_loader,
@@ -6616,7 +6809,7 @@ def canonical_film_params(params: dict) -> dict:
     canonical = {
         k: v
         for k, v in params.items()
-        if v is not None and k in {"focus", "language", "music_mood", "aspect"}
+        if v is not None and k in {"focus", "language", "subtitles", "music_mood", "aspect"}
     }
     canonical["aspect"] = canonical.get("aspect") or "16:9"
     canonical["voiceover"] = params.get("voiceover") is not False
@@ -6666,6 +6859,38 @@ def film_voiceover_birth_pin(
     # A legacy base whose params were never recorded: the historical default
     # was narrated — inherit it rather than silently muting an old film.
     return True
+
+
+def film_subtitles_birth_pin(
+    value: bool | None,
+    base_params: object,
+    *,
+    base_present: bool,
+    base_storyboard: object = None,
+) -> bool:
+    """The subtitle pin at a Film version's birth.
+
+    A genuinely new Film defaults ON. A redraft inherits the base version's
+    explicit pin; a legacy base without that key reads its REAL tracks (or
+    the historical no-track state), never the new default by accident.
+    Canonicalization deliberately leaves an absent key absent so old version
+    fingerprints remain byte-stable; both compose seats store the explicit
+    result before fingerprinting.
+    """
+    if value is not None:
+        return bool(value)
+    if not base_present:
+        return True
+    if isinstance(base_params, dict) and base_params.get("subtitles") is not None:
+        return base_params["subtitles"] is not False
+    if isinstance(base_storyboard, dict):
+        try:
+            board = FilmStoryboard.model_validate(base_storyboard)
+        except (TypeError, ValueError):
+            board = None
+        if board is not None:
+            return any(s.subtitle_track is not None for s in board.scenes)
+    return False
 
 
 def film_verbatim_birth_pin(
@@ -6947,6 +7172,7 @@ _LEGACY_ABSENT_SCENE_KEYS = frozenset(
         "size",
         "accent_style",
         "enter_style",
+        "source_text",
     }
 )
 
@@ -7350,7 +7576,7 @@ _FILM_DOCK_NO_VERSION = (
     "no usable storyboard version is on record for this film chain "
     "({legs}). Re-present the CURRENT board WITHOUT redesigning it: call "
     "design_storyboard ONCE with the film's params (focus / language / "
-    "voiceover / music_mood / aspect) and NO specific_instruction — a bare "
+    "voiceover / subtitles / music_mood / aspect) and NO specific_instruction — a bare "
     "re-call re-presents or repairs the current board; it never creates a "
     "new version on its own. Redesign only on the user's change words."
 )
@@ -8224,6 +8450,7 @@ async def prepare_dock_storyboard(
     params = _launch_film_params(tasks) or {}
     aspect = params.get("aspect") or "16:9"
     voiceover = params.get("voiceover") is not False
+    subtitles = params.get("subtitles") is not False
     # Text source (ADR-138 §7.6): the copy rides the pinned design params —
     # present = a text film (no capture wait, no pages, no web manifest).
     # verbatim's read: new versions pin it EXPLICITLY at birth
@@ -8294,6 +8521,7 @@ async def prepare_dock_storyboard(
                 current=current,
                 on_progress=on_progress,
                 voiceover=voiceover,
+                subtitles=subtitles,
                 text_source=text_source,
                 pinned_asset_ids=pinned_asset_ids,
             )
@@ -8446,6 +8674,7 @@ class LaunchFilm(NodeBase):
         # promise with a voiceless board fails honestly; it never renders
         # as a successful silent film.
         voiceover = (slot.voiceover if slot else None) is not False
+        subtitles = (slot.subtitles if slot else None) is not False
 
         # Text source (ADR-138 §7.6): the copy rides the pinned slot params
         # — a text film needs no captured page (the words ARE the material);
@@ -8635,6 +8864,7 @@ class LaunchFilm(NodeBase):
                     language=pinned_language,
                     on_reject=_log_reject,
                     voiceover=voiceover,
+                    subtitles=subtitles,
                     text_source=text_source,
                     media_candidates=media_candidates,
                     media_loader=media_loader,
@@ -8877,8 +9107,9 @@ class LaunchFilm(NodeBase):
         # scene's SNAPPED window; the synthesis map bakes into the spec as
         # per-scene ``audio`` keys. Voice = persona voice block → house
         # narrator (the film has no source footage to clone from).
-        # Voiceover off = the silent cut (music bed only) — the reviewed
-        # narration words still stand in the storyboard, just unsynthesized.
+        # Voiceover off = no spoken narration (the music bed stays separate) —
+        # the reviewed narration words still stand in the storyboard, just
+        # unsynthesized.
         # 配音承诺最后一道防线 (2026-10-18 — the 4ad7963e silent delivery):
         # a voiceover-promised board with ZERO narrated scenes never slips
         # past as a successful silent film — the step fails honestly (the

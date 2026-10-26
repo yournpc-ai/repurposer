@@ -124,7 +124,7 @@
 |---|---|---|
 | 镜头/相机节拍 | 一⑥ / 二③ / 三修订 | 当前 ensure-in-view、draft fit 与缩放夹机制已存在；真实 live 视觉、遮挡补偿和刷新恢复归 PROGRESS §0.2 与 ADR-111 欠账，不另起 B4 施工座 |
 | op/契约覆盖度（字幕 size·color 等） | 三首行 | PROGRESS 覆盖度池（语料驱动排期） |
-| Agent Tools 长程序修订与读面 | 四②③横切 | 当前注册矩阵 + live 复跑；范围与证据归 `tasks/verification-contracts.md` |
+| Agent Tools 长程序修订与读面 | 四②③横切 | 当前注册矩阵 + live 复跑；范围与证据归 `VERIFICATION.md` |
 | SSE 实流 CoT 审计 | 横切 | 独立取证动作（零代码改动，抓真流验证 reasoning 永不入用户通道）；进度归 PROGRESS §0.2 |
 | 探索产物与 Candidate Surface | 四②③④⑤⑩ | 代码层已落；`exploration_rows` 真实 DB 迁移、live/replay、失败回滚与 CJK 检索归 Working Loop §2 |
 | 能力编译与修订 | 四⑥⑨ | 代码层渐进落地；approval provenance 差异与 scope 验收归 lifecycle §0 / verification-contracts |

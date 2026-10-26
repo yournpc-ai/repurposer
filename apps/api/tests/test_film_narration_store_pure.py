@@ -1,21 +1,8 @@
-"""Pure tests for the film narration reuse store's pure halves (ADR-138
-R4-A — 总设计 §10.1; no DB, no LLM, no HTTP).
+"""Narration reuse identity and bounded adaptation guards.
 
-The store's concurrency laws are DB-proven by
-``scratch/film_narration_store_check.py``; what belongs here are the
-deterministic identity/decision laws a refactor could silently drift:
-
-1. **复用键 = 实际合成配置** — ``narration_content_hash`` binds the
-   normalized text, the RESOLVED voice_id (never a display name, never an
-   unresolved Auto), the language, and the synthesis config; every one of
-   them moves the hash, and config key order never does.
-2. **store 只存 1.0 原速原件** — ``narration_synth_config`` pins
-   ``speed_base == 1.0`` and follows the provider model fact (a model move
-   is a config change: old originals stop matching).
-3. **适配是运行期变换** — ``adaptation_speed`` is the second gate on a hash
-   hit: the original's real duration against the target window; fit = no
-   adaptation, unfit = the capped provider speed (the caller's flex /
-   honest-failure law owns the terminal shape).
+The current implementation lives under tools/film until the video execution
+layer replaces it. These content/config identity guards remain valid; retarget
+imports in that implementation batch, without preserving old timeline flex.
 """
 
 from app.providers import voice

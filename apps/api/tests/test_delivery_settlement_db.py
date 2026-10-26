@@ -176,72 +176,211 @@ async def test_finalization_uses_real_delivery(database, monkeypatch, render_sta
         assert events[0][1] == ("run_completed" if successful or partial else "run_failed")
 
 
-async def test_upload_failure_is_preserved_and_retry_clears_it(database, monkeypatch):
+@pytest.mark.parametrize("recovery_succeeds", [True, False])
+async def test_upload_failure_recovers_without_rerendering(
+    database, monkeypatch, recovery_succeeds
+):
+    """The user's failed-delivery journey: the original run reopens, the
+    existing worker sends upload_only, and either delivery settles or a cache
+    miss honestly asks for a render. No paid regeneration step is created."""
     import httpx
-    from app.pipeline import rendering
+    from app.pipeline import jobs, orchestrator, rendering
+    from app.pipeline.trigger_events import run_id_from_trigger_ref
+
     uid = await owner(database)
     monkeypatch.setattr(rendering, "AsyncSessionLocal", database)
     monkeypatch.setattr(rendering, "_absolutize", lambda spec: spec)
+    monkeypatch.setattr(orchestrator, "AsyncSessionLocal", database)
+    events = []
+    monkeypatch.setattr(orchestrator, "fire_trigger", lambda *args: events.append(args))
+
+    async def resume(*args):
+        pass
+
+    monkeypatch.setattr(orchestrator, "_resume_parked_answered", resume)
+
     async def path(*args):
         return "output/video.mp4"
+
     async def presign(*args, **kwargs):
         return "https://storage.test/video"
-    async def finish(*args):
-        pass
+
     probes = []
+
     async def probe(*args):
         probes.append(args)
         return []
+
     monkeypatch.setattr(rendering, "get_output_path", path)
     monkeypatch.setattr(rendering, "presign_upload", presign)
-    monkeypatch.setattr(rendering, "_finalize_owning_run", finish)
     monkeypatch.setattr(rendering, "_probe_artifacts", probe)
     responses = [
         httpx.Response(500, json={"stage": "upload", "code": "UND_ERR_HEADERS_TIMEOUT"}),
-        httpx.Response(200, json={"video": "output/video.mp4"}),
+        (
+            httpx.Response(200, json={"video": "output/video.mp4"})
+            if recovery_succeeds
+            else httpx.Response(
+                409, json={"stage": "recovery", "code": "ARTIFACT_CACHE_MISS"}
+            )
+        ),
     ]
     requests = []
+
     def respond(request):
         import json
+
         requests.append(json.loads(request.content))
         return responses.pop(0)
+
     real_client = httpx.AsyncClient
-    monkeypatch.setattr(rendering.httpx, "AsyncClient", lambda **kwargs: real_client(
-        transport=httpx.MockTransport(respond), **kwargs))
+    monkeypatch.setattr(
+        rendering.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    async with database() as db:
+        project = Project(
+            user_id=uid, title="upload", language="zh", status=ProjectStatus.PROCESSING
+        )
+        db.add(project)
+        await db.flush()
+        run = WorkflowRun(
+            project_id=project.id,
+            status=WorkflowStatus.RUNNING,
+            context={"ui_language": "zh"},
+        )
+        db.add(run)
+        await db.flush()
+        output = Output(
+            project_id=project.id,
+            type="film",
+            render_status=RenderStatus.PENDING,
+            render_spec={"family": "film", "scenes": []},
+        )
+        db.add(output)
+        await db.flush()
+        producer = WorkflowStep(
+            run_id=run.id,
+            kind="launch_film",
+            status="done",
+            output_refs=[str(output.id)],
+        )
+        step = WorkflowStep(
+            run_id=run.id,
+            kind="render",
+            status="pending",
+            spec={"output_id": str(output.id)},
+        )
+        db.add_all([producer, step])
+        await db.commit()
+        oid, sid, rid, pid = output.id, step.id, run.id, project.id
+
+    async with database() as db:
+        assert await jobs.claim_pending_render(db) == oid
+    await rendering.render_output(oid)
+    async with database() as db:
+        output, step = await db.get(Output, oid), await db.get(WorkflowStep, sid)
+        run, project = await db.get(WorkflowRun, rid), await db.get(Project, pid)
+        assert output.render_status == RenderStatus.FAILED and not output.files
+        assert "上传失败" in output.render_error
+        assert step.spec["failure"] == {
+            "stage": "upload",
+            "codes": ["UND_ERR_HEADERS_TIMEOUT"],
+        }
+        assert run.status == WorkflowStatus.FAILED
+        assert project.status == ProjectStatus.DRAFT
+        assert "upload_only" not in requests[0]
+        assert not probes
+
+        target = await rendering.resolve_upload_retry(db, project, run_id=rid)
+        assert not isinstance(target, str)
+        assert await rendering.queue_upload_retry(db, project, target) == rid
+        await db.commit()
+        assert output.render_status == RenderStatus.PENDING
+        assert step.status == "pending" and step.spec["upload_only"] is True
+        assert run.status == WorkflowStatus.RUNNING
+        assert run.context["upload_retry_count"] == 1
+        assert project.status == ProjectStatus.PROCESSING
+        # A repeated request while recovery is queued cannot double-enqueue.
+        assert isinstance(
+            await rendering.resolve_upload_retry(db, project, run_id=rid), str
+        )
+
+    async with database() as db:
+        assert await jobs.claim_pending_render(db) == oid
+    await rendering.render_output(oid)
+    async with database() as db:
+        output, step = await db.get(Output, oid), await db.get(WorkflowStep, sid)
+        run = await db.get(WorkflowRun, rid)
+        assert requests[1]["upload_only"] is True
+        assert "upload_only" not in step.spec
+        assert len(events) == 2
+        if recovery_succeeds:
+            assert output.render_status == RenderStatus.COMPLETED
+            assert output.files["video"] and output.render_error is None
+            assert step.status == "done" and step.spec["summary"] == "上传完成"
+            assert "failure" not in step.spec
+            assert run.status == WorkflowStatus.COMPLETED
+            assert len(probes) == 1
+            assert events[1][1] == "run_completed"
+            assert events[1][2] != events[0][2]
+            assert run_id_from_trigger_ref(events[1][2]) == rid
+            project = await db.get(Project, pid)
+            assert project.status == ProjectStatus.REVIEW
+        else:
+            assert output.render_status == RenderStatus.FAILED
+            assert "缓存" in output.render_error
+            assert step.status == "failed"
+            assert step.spec["failure"]["stage"] == "recovery"
+            assert run.status == WorkflowStatus.FAILED
+            assert not probes
+            assert events[1][1] == "run_failed"
+            assert events[1][2] != events[0][2]
+            assert run_id_from_trigger_ref(events[1][2]) == rid
+            project = await db.get(Project, pid)
+            assert isinstance(
+                await rendering.resolve_upload_retry(db, project, run_id=rid), str
+            )
+
+
+async def test_typed_upload_retry_is_not_swallowed_by_trigger_run_anchor(database):
+    """Typing the docked option verbatim must reach the chat tool loop. The
+    trigger row's run id is a display anchor, not a parked-interrupt marker."""
+    from app.chat.service import (
+        _create_message,
+        _get_or_create_project_conversation,
+        prepare_chat_turn,
+    )
+    from app.chat.trigger_turn import _suggestions_payload
+    from app.models.schemas import ChatRequest, SuggestionItem
+
+    uid = await owner(database)
     async with database() as db:
         project = Project(user_id=uid, title="upload", language="zh")
         db.add(project)
         await db.flush()
-        run = WorkflowRun(project_id=project.id, context={"ui_language": "zh"})
+        run = WorkflowRun(project_id=project.id, status=WorkflowStatus.FAILED)
         db.add(run)
         await db.flush()
-        output = Output(project_id=project.id, type="film", render_status=RenderStatus.RENDERING,
-                        render_claim_token=uuid4(), render_spec={"family": "film", "scenes": []})
-        db.add(output)
-        await db.flush()
-        step = WorkflowStep(run_id=run.id, kind="render", status="running",
-                            spec={"output_id": str(output.id)})
-        db.add(step)
+        conversation = await _get_or_create_project_conversation(db, uid, project.id)
+        question = await _create_message(
+            db,
+            conversation.id,
+            "assistant",
+            "视频已生成，但上传失败。",
+            workflow_run_id=run.id,
+            question=_suggestions_payload(
+                [SuggestionItem(label="重新上传")], "zh"
+            ).model_dump(mode="json"),
+        )
         await db.commit()
-        oid, sid = output.id, step.id
-    await rendering.render_output(oid)
-    async with database() as db:
-        output, step = await db.get(Output, oid), await db.get(WorkflowStep, sid)
-        assert output.render_status == RenderStatus.FAILED and not output.files
-        assert "上传失败" in output.render_error
-        assert step.spec["failure"] == {"stage": "upload", "codes": ["UND_ERR_HEADERS_TIMEOUT"]}
-        assert not probes
-        output.render_status, output.render_claim_token = RenderStatus.RENDERING, uuid4()
-        step.status = "running"
-        await db.commit()
-    await rendering.render_output(oid)
-    async with database() as db:
-        output, step = await db.get(Output, oid), await db.get(WorkflowStep, sid)
-        assert output.render_status == RenderStatus.COMPLETED and output.files["video"]
-        assert output.render_error is None and step.error is None
-        assert "failure" not in step.spec
-        assert len(probes) == 1
-        assert requests[0]["render_id"] == requests[1]["render_id"] == str(oid)
+        prepared = await prepare_chat_turn(
+            db, uid, ChatRequest(project_id=project.id, message="重新上传")
+        )
+        assert prepared.interrupt_reply is None
+        assert prepared.answered_question is not None
+        assert prepared.answered_question.id == question.id
+        assert prepared.plan_path is False
 
 
 async def test_film_retry_endpoint_preserves_inflight_claim(database):

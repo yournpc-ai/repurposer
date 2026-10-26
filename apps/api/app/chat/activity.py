@@ -122,7 +122,7 @@ STATUS_CANCELLED = "cancelled"  # schema-complete; see the module docstring
 # execute entry (ReadExecuting.params): knowable there, never guessed at
 # name_known (the arguments are still streaming at that beat).
 _DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "edit_graph", "revise_output", "edit_output", "design_storyboard"})
-_RUN_TOOLS = frozenset({"start_run"})
+_RUN_TOOLS = frozenset({"start_run", "retry_upload"})
 _CONVERSATION_TOOLS = frozenset({"ask_user", "answer"})
 # The exploration proposal verbs (iter-2 ⑤/⑥, ADR-088 旅程四): their user
 # face is the milestone frame (``explore_milestone`` below) + the canvas

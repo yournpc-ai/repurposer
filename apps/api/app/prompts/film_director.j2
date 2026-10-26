@@ -52,25 +52,31 @@ exactly as it is — a revision never re-derives an unnamed slot, and
 - name: {{ current.name or "(unnamed)" }}
 - cold_open: {{ current.cold_open | tojson }}
 - hero: "{{ current.hero_word }}" / "{{ current.hero_sub }}"
-- pillars (in order): {{ current.pillars | tojson }}
+- pillars (in order, FULL cited source text): {{ current.pillars | tojson }}
+- chapter_titles (the condensed display copy, same order): {{ current.chapter_titles | tojson }}
 - reveal: lead {{ current.reveal_lead | tojson }}, "{{ current.reveal_word }}" / "{{ current.reveal_sub }}"
 - end: "{{ current.end_name }}" / "{{ current.end_tagline }}"
 - narrations:
 {% for n in current.narrations %}  - scene {{ n.scene }} ({{ n.type }}): {{ n.text | tojson }}
 {% else %}  - (none)
 {% endfor %}
+- subtitle_lines:
+{% for s in current.subtitle_lines %}  - scene {{ s.scene }} ({{ s.type }}): {{ s.text | tojson }}
+{% else %}  - (none)
+{% endfor %}
 
 The strings above are the RESOLVED text. To KEEP a cited slot, cite the
 numbered line whose text matches it (the same citation it was born from);
-to keep a free-text slot (cold_open, reveal_lead, narration), carry its
-text over verbatim. Only the slots the ask names get a new answer.
+to keep a free-text slot (cold_open, chapter_titles, reveal_lead, narration,
+subtitle_lines), carry its text over verbatim. Only the slots the ask names
+get a new answer.
 {% endif %}
 {% if language %}
 ## The film's language (pinned by the plan)
 
-{{ language }} — every creative line you write (hooks, reveal lead,
-narration) is in this language, and you declare it verbatim in the output's
-`language` field.
+{{ language }} — every creative line you write (hooks, chapter titles,
+reveal lead, subtitles, narration) is in this language, and you declare it
+verbatim in the output's `language` field.
 {% endif %}
 
 ## The film's fixed skeleton (your answer sheet)
@@ -85,9 +91,14 @@ Chapters 4-5 exist only if you pick that many pillars.
 
 ## Your slots
 
-1. **pillars** — {{ skeleton.min_chapters }}..{{ skeleton.max_chapters }} chapter headings, cited from heading lines
-   (h1/h2/h3): the things the site itself leads with. Each becomes a
-   chapter; their ORDER is your narrative.
+1. **pillars + chapter_titles** — choose {{ skeleton.min_chapters }}..{{ skeleton.max_chapters }}
+   chapter headings cited from heading lines (h1/h2/h3): the things the site
+   itself leads with. Each becomes a chapter; their ORDER is your narrative.
+   Then write exactly ONE `chapter_titles` entry per cited pillar, in the
+   same order: a complete, concise display title of at most 20 characters,
+   faithfully condensing that pillar. Never return a truncated heading,
+   unfinished clause or ellipsis; the citation keeps the full source fact,
+   the title is the short display copy.
 2. **hero** — `hero_word`: the product's name as the site writes it (cite a
    title/h1 line); `hero_sub`: the site's tagline (cite).
 3. **cold_open** — 1..3 short hook lines, FREE TEXT (your creative channel):
@@ -95,10 +106,13 @@ Chapters 4-5 exist only if you pick that many pillars.
    own framing — rhythm, a question, a tease. It is NEVER a product claim:
    no features, numbers, customers or promises the page does not state —
    anything factual must be cited, and this slot cannot cite.
-4. **reveal** — the "one more thing" beat: `reveal_lead` is FREE TEXT (null
-   = the system's standard lead-in); `reveal_word` (1-2 words) and
-   `reveal_sub` (one line) are cited — something true the site states but
-   does not lead with (a free tier, a number, an integration).
+4. **reveal** — a content-specific surprise beat: ALWAYS write `reveal_lead`
+   as a short, fresh lead-in suited to this film's tone and language. It is
+   FREE TEXT and non-factual (a transition, question or tease), not a product
+   claim. Do not leave it null and do not default to a stock catchphrase.
+   `reveal_word` (1-2 words) and `reveal_sub` (one line) are cited — something
+   true the site states but does not lead with (a free tier, a number, an
+   integration).
 5. **end** — `end_name` (the product's name) and `end_tagline`, both cited.
 6. **narration** — spoken voiceover, keyed by scene key: one or two natural
    sentences per scene, ≤ 13 latin chars per second of the scene's window
@@ -110,9 +124,8 @@ Chapters 4-5 exist only if you pick that many pillars.
    scenes that play better silent (a divider beat, the fast cold open);
    narrate the scenes where speech carries the story (hero, walks, reveal,
    end). A line too long for its scene is REJECTED — shorten it or leave
-   the scene silent; the window never stretches for the words. The narration
-   is spoken audio only. Independent subtitles are authored through the
-   storyboard's set_subtitles edit, not an invented field in FilmDirection.
+   the scene silent; the window never stretches for the words. Narration is
+   spoken audio only; visible subtitles are a separate channel below.
 {%- if voiceover %}
    THIS FILM SHIPS WITH VOICEOVER — the plan promised spoken narration.
    The speech-carrying scenes (hero, the chapter walks, reveal, end) MUST
@@ -121,10 +134,26 @@ Chapters 4-5 exist only if you pick that many pillars.
    ('visual-first' describes the pictures, never cancels the voice). On a
    revision, every narration the ask does not name stays as it is.
 {%- else %}
-   This film ships SILENT by plan (no voiceover) — narration is optional;
-   leave every scene silent unless a line genuinely earns its place.
+   THIS FILM SHIPS WITHOUT SPOKEN NARRATION by plan — narration is optional;
+   leave every scene without narration unless a line genuinely earns its place.
 {%- endif %}
-7. **name** — a short display name for the film (null if unsure); **theme** —
+7. **subtitle_lines** — visible subtitle COPY keyed by scene key, independent
+   of narration. Write one concise, complete sentence or phrase for every
+   scene, including ui walks and silent scenes; it must remain true to the
+   page and match the film's language. Do not merely repeat the large title
+   when a short supporting line would read better. Keep each entry within
+   120 characters and readable inside its scene. You supply TEXT ONLY — no
+   timestamps, cue objects, styles or track fields; the system splits and
+   times the cues and applies the default black background with white text.
+{%- if subtitles %}
+   THIS FILM SHIPS WITH SUBTITLES. Cover every scene with a nonblank entry;
+   a film without spoken narration still has visible subtitles. On a
+   revision, keep every subtitle the ask does not name unchanged.
+{%- else %}
+   THIS FILM SHIPS WITHOUT SUBTITLES by explicit choice; return an empty
+   object and do not re-enable them through copy or narration.
+{%- endif %}
+8. **name** — a short display name for the film (null if unsure); **theme** —
    canvas/ink hex pair from the site's look (null = default).
 
 ## Citations (binding for every factual slot)
@@ -154,15 +183,17 @@ Chapters 4-5 exist only if you pick that many pillars.
   "language": string,        // the film's spoken language (ISO code) — the pinned
                              // value when one is given above, else the page's own
   "pillars": [REF],          // 3..5 cited heading lines
+  "chapter_titles": [string], // one complete display title per pillar, each ≤20 chars
   "hero_word": REF,          // resolves to ≤20 chars
   "hero_sub": REF,           // ≤90
   "cold_open": [string],     // 1..3 free-text hooks, each ≤36 chars (≤3 words; CJK ≤8 chars)
-  "reveal_lead": string | null,  // free text, ≤72 chars; null = the system's lead-in
+  "reveal_lead": string,      // fresh non-factual lead-in, ≤72 chars; never a stock phrase
   "reveal_word": REF,        // ≤30
   "reveal_sub": REF,         // ≤90
   "end_name": REF,           // ≤30
   "end_tagline": REF,        // ≤90
-  "narrations": {"<scene key>": string}  // only the scenes you narrate
+  "narrations": {"<scene key>": string},  // only the scenes you narrate
+  "subtitle_lines": {"<scene key>": string}  // every scene when subtitles are on
 }
 
 `REF` = `{"line": int, "fit": "full"|"head"|"tail", "accent": string | null}`

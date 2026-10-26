@@ -71,6 +71,7 @@ from app.pipeline.trigger_events import (
     TRIGGER_RUN_COMPLETED,
     TRIGGER_RUN_FAILED,
     fire_trigger,
+    run_trigger_ref,
 )
 from app.platform.billing import (
     capture_step,
@@ -427,7 +428,7 @@ def _compile_task_list(
                     # into two seats (the pure cut-chain test guards this).
                     # The text source (ADR-138 §7.6) rides the same seat:
                     # exclude_none drops the keys for web films byte-clean.
-                    or (node_cls.kind == "launch_film" and k in ("voiceover", "music_mood", "aspect", "text", "verbatim", "target_seconds", "scene_count", "group_chars"))
+                    or (node_cls.kind == "launch_film" and k in ("voiceover", "subtitles", "music_mood", "aspect", "text", "verbatim", "target_seconds", "scene_count", "group_chars"))
                 },
             }
             spec = {
@@ -1975,11 +1976,15 @@ async def maybe_finalize_run(run_id: UUID) -> None:
             run.status == WorkflowStatus.COMPLETED or any_landed
         ):
             fire_trigger(
-                UUID(str(project.id)), TRIGGER_RUN_COMPLETED, str(run_id)
+                UUID(str(project.id)),
+                TRIGGER_RUN_COMPLETED,
+                run_trigger_ref(run_id, TRIGGER_RUN_COMPLETED, run.context),
             )
         elif project is not None and run.status == WorkflowStatus.FAILED:
             fire_trigger(
-                UUID(str(project.id)), TRIGGER_RUN_FAILED, str(run_id)
+                UUID(str(project.id)),
+                TRIGGER_RUN_FAILED,
+                run_trigger_ref(run_id, TRIGGER_RUN_FAILED, run.context),
             )
 
 

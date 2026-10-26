@@ -124,4 +124,4 @@ Single-screen layout (reference OpusClip/Descript, but only the main trunk):
 - 对 archived Version 的 operations、undo、PUT、regenerate 等写门都必须 409。`POST /outputs/{id}/restore` 在同 Work 内切换 active 指针：被恢复行可编辑，原 active 自动归档，至多一 active。
 - 精确编辑是版本内 operation，**“edit → V2”永禁**；Restore 才是跨 Version 换态。按当前定价 edit→render 为 $0，不能拿已退役的 `confirm_strategy` 或 composer 控件验收当前授权设置。
 
-自动覆盖归 `tasks/verification-contracts.md` 的精确编辑合同与当前注册的纯测试/旅程矩阵；不恢复退役剧本名或旧探针计数。既有 live 证据与剩余人工拍位见 `../scratch/precise-edit-walkthrough.md`，其旧结果不能替代当前 HEAD 复验。
+自动覆盖归 `VERIFICATION.md` 的精确编辑合同与当前注册的纯测试/旅程矩阵；不恢复退役剧本名或旧探针计数。既有 live 证据与剩余人工拍位见 `../scratch/precise-edit-walkthrough.md`，其旧结果不能替代当前 HEAD 复验。

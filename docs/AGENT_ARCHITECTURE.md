@@ -124,7 +124,7 @@ class NodeBase:
 - **拓扑代码定，LLM 永不塑形图**（ADR-028）：LLM 提议（task list = 意图面唯一语法，ADR-043），`compile_graph` 纯函数裁决与物化。
 - `create_run` 是 WorkflowRun 唯一出生地：clips-media 门、count 边界、requires 校验全部集中于此，入口点零门禁代码。
 - 失败语义：确定性失败快速失败 + 下游级联 skipped；provider/网络/存储瞬时故障抛 `TransientNodeError`，按节点 `retries` 预算复位 pending 不级联；`checkpoint` 瘦节点 `Suspend` 挂起等答（waiting / WAITING_HUMAN），bail 优雅退出永不标 failed。
-- 失败判决（ADR-074）：任一非 fanout 节点 failed 即判 run FAILED；render 节点计入 active（hold run 到自身渲染终态落地）但不参与失败判决——单输出失败的渲染是卡面事实，不是 run 判决。
+- 失败判决（ADR-074）：任一步骤 failed 即判 run FAILED；render 节点计入 active（hold run 到自身渲染终态落地），render/upload/recovery 失败同样是交付判决。上传失败的 chat `retry_upload` 不是新生产节点，也不进入 `TOOL_REGISTRY`：它重开原 run/render step，仍由 Output 渲染队列原座认领，不创建第二 scheduler 或付费生产步骤。
 
 ### 4.4 understand/plan 两步走（两次 LLM 调用，契约不变）
 
@@ -134,7 +134,7 @@ class NodeBase:
 
 ### 4.5 节点分两类
 
-> **（ADR-072 / ADR-076）** 本节「工具节点 / 内部节点」的实现视角分类不变（注册表准入与提议空间仍由它管辖）；**画布用户面 = 词表 v3 三轴**：图节点 `type` = 媒介五值（`text`/`table`/`image`/`video`/`audio`——`graph_nodes.type` 列，工具节点 kind = 工具名不动），`spec.prototype` = `generator`/`editor`/`manual`（程序区按它门控），业务身份 = `spec.summary` + `spec.tool`。工具节点类声明 `node_type` + `prototype`（`assert_runners_registered` 启动自检追齐）；`doc_station` 类声明驱动**两站**（captions/dub：asm = video×editor + doc 伴侣 = table×manual，估价 token/units stamp 侧拆分）；materialize_source 折叠为消费节点内部 step；research = 单节点（text×generator）；write_post/write_article = text×generator。旧媒介/prototype 词由读面 `_read_face` 归一；task_book、transcript 与探索行的物理迁移、删除或过滤分别按 `tasks/product-flow-alignment.md` 和 migration 合同执行，不得把“读面兼容”写成“所有 legacy 行永不迁移”。modifier 收杠杆、分镜表表格档与旧计划节点下线只按当前合同验收。
+> **（ADR-072 / ADR-076）** 本节「工具节点 / 内部节点」的实现视角分类不变（注册表准入与提议空间仍由它管辖）；**画布用户面 = 词表 v3 三轴**：图节点 `type` = 媒介五值（`text`/`table`/`image`/`video`/`audio`——`graph_nodes.type` 列，工具节点 kind = 工具名不动），`spec.prototype` = `generator`/`editor`/`manual`（程序区按它门控），业务身份 = `spec.summary` + `spec.tool`。工具节点类声明 `node_type` + `prototype`（`assert_runners_registered` 启动自检追齐）；`doc_station` 类声明驱动**两站**（captions/dub：asm = video×editor + doc 伴侣 = table×manual，估价 token/units stamp 侧拆分）；materialize_source 折叠为消费节点内部 step；research = 单节点（text×generator）；write_post/write_article = text×generator。旧媒介/prototype 词由读面 `_read_face` 归一；task_book、transcript 与探索行的物理迁移、删除或过滤分别按 `VERIFICATION.md` 和 migration 合同执行，不得把“读面兼容”写成“所有 legacy 行永不迁移”。modifier 收杠杆、分镜表表格档与旧计划节点下线只按当前合同验收。
 
 - **工具节点**：工具包持有，LLM 可提议（dispatchable），kind = 工具名（`select_clips`/`write_post`/`dub_clip`/`translate_clip`/`remove_filler`/`add_music`/`align_stills`/`revise_script`/`research`…）。
 - **内部节点**：内核 crew，永不进提议空间（`preprocess`/`persona_bootstrap`/`understand`/`plan`/`checkpoint`/`render`），住 `pipeline/`。
@@ -231,7 +231,7 @@ tools/dub/           配音工具
 - **剧本矩阵**：`scripts/chat_scenarios.py` S1–S10——每本 = 一种用户 × 一种创作流 × 全旅程，对活 API 真实 LLM 跑形态级断言（永不锁 LLM 文案），本架构的活 LLM 回归网。harness 公共断言每本自动携带：SSE 工具 loop 线格式 / Activity 帧形态 / dock 形态 / 估价三断言（fold 对账 / 报价单调性：子图 ≤ 全图、非负 / repair 恰一轮）。
 - **承重守卫**：`tests/*_pure.py` 纯函数套件（无 DB / LLM / HTTP）+ `scripts/check_gates.py` 静态架构门（boot 冒烟 / 依赖方向 / 盲重试禁令 / 退役节点 kind 不回魂）+ web vitest 十本组件旁置套件。
 - **启动自检**：runner 注册一致性（`assert_runners_registered` 同款）+ 节点→agent 引用存在 + 配方 flow 对账（§4.2）。
-- 部署前仪式链与仪表层登记归 CLAUDE.md Testing；fixture / worker 抢跑 / flake 处置纪律归 `docs/tasks/test-suite-convergence.md` §3.6 / §5；改 pipeline 代码必重启常驻 worker。
+- 部署前仪式链与仪表层登记归 CLAUDE.md Testing；fixture / worker 抢跑 / flake 处置纪律归 `docs/VERIFICATION.md` §3.6 / §5；改 pipeline 代码必重启常驻 worker。
 
 ## 11. Critical files
 

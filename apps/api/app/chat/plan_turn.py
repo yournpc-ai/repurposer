@@ -952,6 +952,7 @@ class PlanTurn:
             film_draft_inflight_live,
             film_text_drift_next,
             film_text_source_birth_pin,
+            film_subtitles_birth_pin,
             film_verbatim_birth_pin,
             film_voiceover_birth_pin,
             prepare_dock_storyboard,
@@ -1121,6 +1122,18 @@ class PlanTurn:
                             else None
                         ),
                         base_present=design_base is not None,
+                    ),
+                    "subtitles": film_subtitles_birth_pin(
+                        params.subtitles,
+                        (
+                            design_base.film_storyboard_params
+                            if design_base
+                            else None
+                        ),
+                        base_present=design_base is not None,
+                        base_storyboard=(
+                            design_base.film_storyboard if design_base else None
+                        ),
                     ),
                     "music_mood": params.music_mood,
                     "aspect": params.aspect,

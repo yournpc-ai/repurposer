@@ -105,6 +105,7 @@ from app.chat.service import (
     _dock_question,
     _estimate_tail,
     _prefers_zh,
+    _parked_interrupt_run,
     _resume_ack_line,
     _reminder_tail,
     _safe_task_estimate,
@@ -132,6 +133,7 @@ from app.models.schemas import (
     QuestionPayload,
     QuestionProposal,
     RenderStatus,
+    RetryUploadArgs,
     ReviseOutputArgs,
     SuggestionRef,
     WiringProposal,
@@ -449,22 +451,21 @@ class ChatTurn:
             if pending.workflow_run_id is not None:
                 from app.pipeline.orchestrator import resume_waiting_interrupt
 
-                outcome = "idle"
-                run = await db.get(WorkflowRun, pending.workflow_run_id)
+                run = await _parked_interrupt_run(db, pending.workflow_run_id)
                 if run is not None:
                     outcome = await resume_waiting_interrupt(db, run, pending.answer)
-                decided = (pending.answer or {}).get("text") or ""
-                # Same deterministic acknowledgment as the option-hit wake in
-                # prepare_chat_turn — R1 B3: a blocked arbitration (another
-                # run holds the authority) speaks the parked line instead.
-                assistant_message = await _create_message(
-                    db,
-                    self.conversation_id,
-                    "assistant",
-                    _resume_ack_line(decided, outcome),
-                )
-                self.outcome = (assistant_message, None, [], self.settled_question)
-                return True
+                    decided = (pending.answer or {}).get("text") or ""
+                    # Same deterministic acknowledgment as the option-hit wake in
+                    # prepare_chat_turn — R1 B3: a blocked arbitration (another
+                    # run holds the authority) speaks the parked line instead.
+                    assistant_message = await _create_message(
+                        db,
+                        self.conversation_id,
+                        "assistant",
+                        _resume_ack_line(decided, outcome),
+                    )
+                    self.outcome = (assistant_message, None, [], self.settled_question)
+                    return True
             return False
         # "skip" — an explicit decline settles bail (the text question's only
         # ×); the tool's own dispatch still runs.
@@ -527,6 +528,9 @@ class ChatTurn:
         if name == "edit_graph":
             assert isinstance(params, EditGraphArgs)
             return await self._edit_graph(params, prose)
+        if name == "retry_upload":
+            assert isinstance(params, RetryUploadArgs)
+            return await self._retry_upload(params, prose)
         if name == "revise_output":
             assert isinstance(params, ReviseOutputArgs)
             return await self._revise_output(params, prose)
@@ -713,6 +717,7 @@ class ChatTurn:
             film_draft_inflight_live,
             film_text_drift_next,
             film_text_source_birth_pin,
+            film_subtitles_birth_pin,
             film_verbatim_birth_pin,
             film_voiceover_birth_pin,
             prepare_dock_storyboard,
@@ -885,6 +890,18 @@ class ChatTurn:
                             else None
                         ),
                         base_present=design_base is not None,
+                    ),
+                    "subtitles": film_subtitles_birth_pin(
+                        params.subtitles,
+                        (
+                            design_base.film_storyboard_params
+                            if design_base
+                            else None
+                        ),
+                        base_present=design_base is not None,
+                        base_storyboard=(
+                            design_base.film_storyboard if design_base else None
+                        ),
                     ),
                     "music_mood": params.music_mood,
                     "aspect": params.aspect,
@@ -2246,6 +2263,47 @@ class ChatTurn:
             (prose or "") + (content_note or ""),
             workflow_run_id=run_id,
             intent=proposal.model_dump(mode="json"),
+        )
+        self.outcome = (assistant_message, run_id, [], self.settled_question)
+        return None
+
+    async def _retry_upload(self, params: RetryUploadArgs, prose: str) -> str | None:
+        """retry_upload → reopen only the failed render/upload stage.
+
+        This is recovery inside an already authorized run: no proposal, no
+        new paid work, no new run. The Output queue performs the upload after
+        this chat transaction commits.
+        """
+        if not prose.strip():
+            return (
+                "an empty recovery message says nothing — tell the user the "
+                "upload is being retried, then call retry_upload."
+            )
+        from app.pipeline.rendering import (  # deferred: chat → pipeline leaf
+            queue_upload_retry,
+            resolve_upload_retry,
+        )
+
+        output_id = pinned_output_id(
+            self.mentions,
+            str(params.output_id) if params.output_id is not None else None,
+        )
+        target = await resolve_upload_retry(
+            self.db,
+            self.project,
+            output_id=UUID(output_id) if output_id is not None else None,
+        )
+        if isinstance(target, str):
+            return target
+        run_id = await queue_upload_retry(self.db, self.project, target)
+        if isinstance(run_id, str):
+            return run_id
+        assistant_message = await _create_message(
+            self.db,
+            self.conversation_id,
+            "assistant",
+            prose,
+            workflow_run_id=run_id,
         )
         self.outcome = (assistant_message, run_id, [], self.settled_question)
         return None

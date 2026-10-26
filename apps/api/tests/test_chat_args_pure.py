@@ -36,6 +36,7 @@ from app.models.schemas import (
     PlanAskArgs,
     PresentPlanArgs,
     ProposeTasksArgs,
+    RetryUploadArgs,
     StartRunArgs,
     TaskItem,
     resolve_recommended_id,
@@ -244,6 +245,22 @@ class TestChatAskArgsCardFields:
         )
 
 
+class TestRetryUploadArgs:
+    def test_unqualified_recovery_and_null_pin_are_read_tolerant(self) -> None:
+        args = RetryUploadArgs.model_validate(
+            {"output_id": None, "pending_disposition": None}
+        )
+        assert args.output_id is None
+        assert args.pending_disposition == "none"
+        assert RetryUploadArgs.model_validate({}).output_id is None
+
+    def test_definite_output_pin_and_unknown_key_guard(self) -> None:
+        output_id = "00000000-0000-0000-0000-000000000001"
+        assert str(RetryUploadArgs.model_validate({"output_id": output_id}).output_id) == output_id
+        with pytest.raises(ValidationError):
+            RetryUploadArgs.model_validate({"run_id": output_id})
+
+
 class TestStartRunArgsWaiver:
     """start_run's retired waiver param: the film storyboard rides the dock
     echo now (generated before the dock), so no review gate remains to
@@ -289,6 +306,7 @@ class TestDesignStoryboardArgs:
         assert args.focus is None
         assert args.language is None
         assert args.voiceover is None
+        assert args.subtitles is None
         assert args.music_mood is None
         assert args.aspect is None
         assert args.specific_instruction is None
@@ -300,11 +318,12 @@ class TestDesignStoryboardArgs:
         # 打字机律牙①: a null never rejects the call (a rejected iteration
         # never streams — 整段瞬移永禁).
         args = DesignStoryboardArgs.model_validate(
-            {"focus": None, "voiceover": None, "material_urls": None,
+            {"focus": None, "voiceover": None, "subtitles": None, "material_urls": None,
              "specific_instruction": None, "review_hold": None,
              "pending_disposition": None}
         )
         assert args.focus is None and args.voiceover is None
+        assert args.subtitles is None
         assert args.material_urls is None
         assert args.review_hold is None
         assert args.pending_disposition == "none"
@@ -336,6 +355,8 @@ class TestDesignStoryboardArgs:
         DesignStoryboardArgs.model_validate(base)
         with pytest.raises(ValidationError, match="edits never mix with target_seconds"):
             DesignStoryboardArgs.model_validate({**base, "target_seconds": None})
+        with pytest.raises(ValidationError, match="edits never mix with subtitles"):
+            DesignStoryboardArgs.model_validate({**base, "subtitles": False})
 
     def test_values_ride_verbatim(self) -> None:
         args = DesignStoryboardArgs.model_validate(
@@ -343,6 +364,7 @@ class TestDesignStoryboardArgs:
                 "focus": "the social features",
                 "language": "en",
                 "voiceover": True,
+                "subtitles": False,
                 "aspect": "9:16",
                 "specific_instruction": "重点讲社交功能",
                 "review_hold": True,
@@ -350,6 +372,7 @@ class TestDesignStoryboardArgs:
             }
         )
         assert args.focus == "the social features"
+        assert args.subtitles is False
         assert args.aspect == "9:16"
         assert args.review_hold is True
         assert args.material_urls == ["https://example.com"]

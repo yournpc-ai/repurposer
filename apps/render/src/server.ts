@@ -5,7 +5,8 @@ import { renderFilm } from "./film/render";
 import { filmSpecSchema, filmTotalFrames } from "./film/schema";
 import { renderClip } from "./render";
 import { CACHE_DIR } from "./stage";
-import { renderArtifacts } from "./artifacts";
+import { renderArtifacts, cachedArtifacts, ArtifactCacheMiss } from "./artifacts";
+import type { Artifacts } from "./artifacts";
 import { uploadFile, UploadError } from "./upload";
 
 const app = express();
@@ -30,6 +31,38 @@ const PORT = Number(process.env.RENDER_PORT ?? 3001);
 // 3600 = 120 s @ 30 fps.
 const FILM_MAX_FRAMES = Number(process.env.FILM_MAX_FRAMES ?? 3600);
 
+async function artifactsForRequest(
+  identity: unknown,
+  uploadOnly: boolean,
+  render: (directory: string) => Promise<Artifacts>,
+): Promise<Artifacts> {
+  if (!uploadOnly) return renderArtifacts(identity, render);
+  const cached = await cachedArtifacts(identity);
+  if (!cached) throw new ArtifactCacheMiss();
+  return cached;
+}
+
+function failureBody(err: unknown) {
+  if (err instanceof ArtifactCacheMiss) {
+    return {
+      status: 409,
+      body: {
+        error: "Rendered files are no longer cached; render again before uploading",
+        stage: "recovery",
+        code: "ARTIFACT_CACHE_MISS",
+      },
+    };
+  }
+  return {
+    status: 500,
+    body: {
+      error: err instanceof UploadError ? err.message : "Video rendering failed",
+      stage: err instanceof UploadError ? "upload" : "render",
+      code: err instanceof UploadError ? err.code : "RENDER_FAILED",
+    },
+  };
+}
+
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
@@ -49,8 +82,9 @@ app.get("/health", (_req, res) => {
  * supplied presigned URLs, and returns the object keys.
  */
 app.post("/render", async (req, res) => {
-  const { spec, outputs, source_key, render_id } = req.body as {
+  const { spec, outputs, source_key, render_id, upload_only } = req.body as {
     render_id?: string;
+    upload_only?: boolean;
     spec?: ClipSpec;
     basename?: string;
     outputs?: {
@@ -88,8 +122,9 @@ app.post("/render", async (req, res) => {
     }
 
     try {
-      const { videoPath } = await renderArtifacts(
+      const { videoPath } = await artifactsForRequest(
         { id: render_id ?? outputs.video.key, spec: parsed.data },
+        upload_only === true,
         (outDir) => renderFilm(parsed.data, outDir, "video"),
       );
 
@@ -98,11 +133,8 @@ app.post("/render", async (req, res) => {
       res.json({ ok: true, video: outputs.video.key });
     } catch (err) {
       console.error("film_render_failed", { render_id, error: err });
-      res.status(500).json({
-        error: err instanceof UploadError ? err.message : "Video rendering failed",
-        stage: err instanceof UploadError ? "upload" : "render",
-        code: err instanceof UploadError ? err.code : "RENDER_FAILED",
-      });
+      const failure = failureBody(err);
+      res.status(failure.status).json(failure.body);
     }
     return;
   }
@@ -122,8 +154,9 @@ app.post("/render", async (req, res) => {
   }
 
   try {
-    const { videoPath, srtPath } = await renderArtifacts(
+    const { videoPath, srtPath } = await artifactsForRequest(
       { id: render_id ?? outputs.video.key, spec, source_key },
+      upload_only === true,
       (outDir) => renderClip(spec, outDir, "video", source_key),
     );
 
@@ -139,11 +172,8 @@ app.post("/render", async (req, res) => {
     });
   } catch (err) {
     console.error("render_failed", { render_id, error: err });
-    res.status(500).json({
-      error: err instanceof UploadError ? err.message : "Video rendering failed",
-      stage: err instanceof UploadError ? "upload" : "render",
-      code: err instanceof UploadError ? err.code : "RENDER_FAILED",
-    });
+    const failure = failureBody(err);
+    res.status(failure.status).json(failure.body);
   }
 });
 

@@ -1,6 +1,6 @@
 # Repurposer Docs 索引
 
-> Status: Active navigation（2026-10-24）。
+> Status: Active navigation（2026-10-26）。
 >
 > 文档治理原则：**单一事实源**——每类信息只有一个家，其他文档只引用、不复述。
 > **两类职责**：现行规范回答“现在必须怎样工作”；PROGRESS 与局部 progress 回答“做到哪、下一步做什么”。不维护历史、归档或逐轮报告，清理规则以 CLAUDE.md 为准。
@@ -13,7 +13,7 @@
 
 | 任务范围 | 最小阅读路径 |
 |---|---|
-| 修 Film 编辑 / 分镜 / 版本 / Start | `tasks/film-storyboard-orchestration-progress.md` §0 与对应欠账 → 总设计 §7（编辑与时间契约）/ §11（授权）→ execution §1.1 对应验收；只有涉及 Chat dock/SSE 再加 `CHAT_ARCHITECTURE.md` §8 对应小节 |
+| 新 Video Project / Film/MG 架构施工 | `VIDEO_PROJECT.md` 命中章节（Composition、全局 @ 引用、固定切点旁白）→ `tasks/video-project-implementation.md` 当前阶段、§6 开工顺序、§8 前置与 §9 首批提示词；涉及 Chat/Graph/Run 接缝再加 CHAT_ARCHITECTURE / AGENT_ARCHITECTURE 对应小节 |
 | 修 Chat 显示 bug（活动 / SSE / 打字机 / dock） | `CHAT_ARCHITECTURE.md` §8（工作段重点 §8.6～§8.7）→ 命中的当前任务合同只读对应验收；工具或修订改动再选 §3 / §9 |
 | UI 视觉 / 组件 / 布局 | `UI_GUIDELINES.md` 对应章节；只有涉及 chat 行为才加读 CHAT_ARCHITECTURE |
 | 改 Home 货架 / 配方卡 / 样片 | `RECIPES.md` §4、§7 + `UI_GUIDELINES.md` §4.1；替换真实样片或处理入口欠账再看 `tasks/home-creation-entry-refresh.md` §2～§5 |
@@ -60,7 +60,7 @@
 | 模块架构 / 表归属 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 跨模块契约 |
 | 身份/运营层概念架构 | `POSITIONING.md` | 定位根 / 人设分区 / 渠道 / 选题的概念树只住这里，其他文档只引用 |
 | 对话→生产概念架构 | `DIALOG_WORKFLOW.md` | 厚 agent 判词 / 双引擎 workflow / brief / canonical 词汇（router·understand·plan）只住这里，其他文档只引用 |
-| Film/MG 契约、执行与状态 | `tasks/film-storyboard-orchestration.md` / `tasks/film-storyboard-orchestration-execution.md` / `tasks/film-storyboard-orchestration-progress.md` | 总设计只载现行契约与明确标注的延期设计；execution 只载剩余范围、依赖与验收；progress 只载最新实施/验证快照。全局排期仍归 PROGRESS，不保留历史全文 |
+| Video Project 目标架构与施工 | `VIDEO_PROJECT.md` / `tasks/video-project-implementation.md` | 目标文档 §12 唯一定义新旧目录与逐项处置，其余章节载 Project / Composition / CompositionVersion、Track/Clip/Object、Skill、全局跨 Chat 引用、旁白/字幕、Run/Graph 接缝与 video-spec 的已拍板目标；施工文档只载四阶段范围、代码接缝与验收。未实施，不反写 CURRENT |
 | 用户旅程 | `JOURNEYS.md` | 旅程逐拍 / 分支树 / 体验规格横切 / 缺口登记只住这里；新功能开工先答「在哪条旅程哪一拍」 |
 | 积分 / 钱包 / 计费架构 | `BILLING.md` | credit / wallet / credit_transactions / hold→capture→release / configs / 比例参数 / 负余额语义只住这里，其他文档只引用 |
 | Lifecycle / Activity / Confirmation | `DECISIONS.md` ADR-087 + `CHAT_ARCHITECTURE.md` 对应章节 | 生命周期五态、活动投影与确认约束按 ADR 定点阅读；实施与验收欠账归 `PROGRESS.md`，不在导航中复制 |
@@ -79,6 +79,7 @@
 | `UI_GUIDELINES.md` | **Studio 视觉/交互设计系统**：圆角与按钮 / 图标 / 浮层选型 / 卡面纵深 / 灰梯 / 浮层冰霜 / composer 视觉解剖 / 侧栏解剖 / 页面布局 / 画布形态 | 活跃 | 动 `_app` UI / 共享组件前 |
 | `ARCHITECTURE_NORTH_STAR.md` | **目标架构与可靠性主线**（North Star）：Agent=Decision Producer / Execution Kernel=可靠性核心 / Structured Media=领域核心 + 执行概念词典 + 五态纪律 + 技术依赖 | 活跃 | 动执行内核、可靠性、agent 边界或 Media IR 方向时读对应章节；不是所有 coding 任务的通用全文前置 |
 | `POSITIONING.md` | 定位根概念架构（运营层母文档）：定位/人设/渠道/选题概念树 + 产品流程 + 实施范围 | 已拍板方向（ADR-042），未实施；启动条件与验收归 `PROGRESS.md` §1.1 | 动身份模块/渠道/选题/home 前 |
+| `VIDEO_PROJECT.md` | **视频作品目标架构**：Project / Composition / CompositionVersion、Scene/Storyboard、Track/Clip/Object、Animation/TextPart、Skill/VideoTemplate、SourceSnapshot、全局 @ 引用、旁白/字幕、Graph/Run 接缝与 video-spec | 已拍板目标（ADR-145），未实施；四阶段施工归 `tasks/video-project-implementation.md` | 新 Film/MG 架构、视频 CRUD、Skill、时间/动画或渲染替换施工前 |
 | `AGENT_ARCHITECTURE.md` | 四层工程地图（Model / Harness / Graph / Loop，ADR-039）+ 工具包/花名册/NodeBase/估价 | 活跃 | 动 generation/agents/tools 前 |
 | `DIALOG_WORKFLOW.md` | 对话→生产概念架构母文档：双引擎 workflow / canonical 词汇 / brief + ask_user / 有界 loop 节点 | 现行规范（实现状态以 `PROGRESS.md` 为准） | 动 chat 意图层 / plan path / 多轮对话 / agent 概念前 |
 | `VIDEO_EDITOR.md` | 编辑器交互形态 + L2/L3 范围纪律 | 已实现（undo 可用 = operations 端点 + chat 撤销；编辑面分层=能力层+适配层，ADR-033） | 动编辑器前 |
@@ -96,10 +97,11 @@
 | `COMPETITIVE_ANALYSIS.md` | 七家竞品综合（Round 1.2） | 活跃 | 竞品概览 |
 | `LANDING.md` | 落地页叙事工作文档：当前结构与 hero + 单助手叙事立场 + 隐藏面恢复条件 + 六幕叙事骨架（缓做） | 活跃 | 动落地页结构/hero/叙事前 |
 | `API.md` | API 参考 | 活跃 | 对接口前 |
+| `VERIFICATION.md` | 测试政策、fixture/配额、合同守卫映射与共享验收；新视频按 A/B 合同补覆盖，旧实现锁不作兼容目标 | 当前规范，未运行项明确保留 | 改测试、共享机制、验收或裁决退役测试前 |
 | `DATABASE_MIGRATIONS.md` | Alembic 工作流 | 活跃 | 写迁移前 |
 | `PRODUCTION_DEBUGGING.md` | 生产事故只读取证手册：分层日志 / 容器环境 / 网页采集签名 / 数据库只读检查 / 部署后验收 | 活跃 | 线上排障、部署验收前 |
 | `research/` | 竞品卡片（7 家）+ Opus 深拆 + ElevenCreative 调研 + FLORA 首页/工作台走查 + Lovart 落地页走查 + MiniMax Design 走查 + Agent Skills 规范生态 + 渲染技术调研 + dsh 架构调研 + craft 解剖证据表 | 原始素材层 | 引用证据时 |
-| `tasks/` | 仍有实施或验收欠账的单功能合同：当前范围、约束、依赖、禁止事项与可执行验收。`tasks/verification-contracts.md` 另作为验证合同登记表使用 | 活跃 | 只读当前任务命中的合同；完成后的长期约束归母文档，剩余验收归当前状态，过程内容删除，不留历史副本 |
+| `tasks/` | 仍有实施或验收欠账的单功能合同：当前范围、约束、依赖、禁止事项与可执行验收。`VERIFICATION.md` 另作为验证合同登记表与跨模块验收尾项的唯一座位使用 | 活跃 | 只读当前任务命中的合同；长期约束归母文档，共享验收归 VERIFICATION，tasks 只保留仍有独立实施范围的当前合同，不留过程副本 |
 
 ## 已规划的文档（尚未撰写）
 

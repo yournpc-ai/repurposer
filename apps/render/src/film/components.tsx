@@ -69,6 +69,41 @@ export const accentize = (
 /** The aspect scale: the 16:9 grid is the design base (1920 wide). */
 const useScale = () => useVideoConfig().width / 1920;
 
+/** Measure each rolling chapter title on the design canvas, then shrink it
+ * just enough to stay on ONE line inside the scroll mask. The mask remains
+ * the animation window; it must never become a second-line clipping bug. */
+const useDividerFontSizes = (roll: string[], scale: number) =>
+  React.useMemo(() => {
+    const designFontSize = 150;
+    const availableWidth = 1920 - 220 * 2;
+    let measure: (text: string) => number;
+    if (typeof document !== "undefined") {
+      const context = document.createElement("canvas").getContext("2d");
+      if (context) {
+        context.font = `800 ${designFontSize}px ${FONT}`;
+        measure = (text) => {
+          const letterSpacing = -0.03 * designFontSize;
+          return Math.max(
+            1,
+            context.measureText(text).width +
+              Math.max(0, Array.from(text).length - 1) * letterSpacing,
+          );
+        };
+      } else {
+        measure = (text) => Math.max(1, Array.from(text).length * designFontSize * 0.65);
+      }
+    } else {
+      // Non-browser composition probes have no canvas; Remotion's real render
+      // takes the measured branch above.
+      measure = (text) => Math.max(1, Array.from(text).length * designFontSize * 0.65);
+    }
+    return roll.map((text) => {
+      const width = measure(text);
+      const fitted = Math.min(designFontSize, designFontSize * (availableWidth * 0.96) / width);
+      return fitted * scale;
+    });
+  }, [roll, scale]);
+
 type EnterStyle = "rise" | "fade" | "slide";
 type EnterFrameStyle = React.CSSProperties & { opacity: number };
 
@@ -617,6 +652,7 @@ export const Divider: React.FC<{ index: string; label: string; roll: string[]; t
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const s = useScale();
+  const fontSizes = useDividerFontSizes(roll, s);
   const perWord = 13;
   return (
     <AbsoluteFill style={{ background: theme.ink }}>
@@ -652,9 +688,14 @@ export const Divider: React.FC<{ index: string; label: string; roll: string[]; t
               key={i}
               style={{
                 position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
                 fontFamily: FONT,
                 fontWeight: 800,
-                fontSize: 150 * s,
+                fontSize: fontSizes[i],
+                lineHeight: 1.2,
+                whiteSpace: "nowrap",
                 letterSpacing: "-0.03em",
                 color: isLast ? theme.canvas : "#777",
                 transform: `translateY(${y}px)`,
@@ -936,7 +977,21 @@ export const Reveal: React.FC<{
   const leadIn = enter(frame, 0, fps, s);
   return (
     <AbsoluteFill style={{ background: theme.canvas, justifyContent: "center", alignItems: "center" }}>
-      <div style={{ fontFamily: FONT, fontSize: 40 * s, color: "#8a8a8a", marginBottom: 30 * s, ...leadIn, opacity: leadIn.opacity * leadOut }}>
+      <div
+        style={{
+          fontFamily: FONT,
+          fontSize: 68 * s,
+          fontWeight: 600,
+          lineHeight: 1.2,
+          color: "#6b6b6b",
+          maxWidth: 1320 * s,
+          padding: `0 ${40 * s}px`,
+          textAlign: "center",
+          marginBottom: 36 * s,
+          ...leadIn,
+          opacity: leadIn.opacity * leadOut,
+        }}
+      >
         {lead}
       </div>
       <div
@@ -951,7 +1006,7 @@ export const Reveal: React.FC<{
       >
         {accentize(word, false, theme)}
       </div>
-      <div style={{ fontFamily: FONT, fontSize: 40 * s, color: "#6b6b6b", marginTop: 30 * s, ...enter(frame, wordAt + 10, fps, s) }}>
+      <div style={{ fontFamily: FONT, fontSize: 44 * s, lineHeight: 1.3, color: "#6b6b6b", maxWidth: 1440 * s, padding: `0 ${40 * s}px`, textAlign: "center", marginTop: 30 * s, ...enter(frame, wordAt + 10, fps, s) }}>
         {sub}
       </div>
     </AbsoluteFill>

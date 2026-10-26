@@ -526,9 +526,9 @@ class TestSegmentBody:
 # ---- 素材发现读 (ADR-140 下批 A1): list_project_media ------------------------
 #
 # The discovery read's honest-formatting law: the facts ride the ONE listing
-# seat (project_media_candidates — stubbed here; its own mapping law lives in
-# test_film_storyboard_pure.py, tenant scoping in the isolated-DB lifecycle
-# test). Gated here: the empty project's honest empty, the per-row fact
+# seat (project_media_candidates — stubbed here). Full content binding and
+# tenant isolation require the new video contract coverage in VIDEO_PROJECT.
+# Gated here: the empty project's honest empty, the per-row fact
 # bits (known vs UNKNOWN duration / dimensions, no-bytes unusable, the
 # failed-analysis-still-footage note), the cap's honest truncation line, and
 # the metadata-is-not-a-viewing trailer (the never-claim-watching law).

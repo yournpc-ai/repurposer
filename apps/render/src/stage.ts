@@ -57,10 +57,10 @@ function proxyEnv(): string | undefined {
 /** Proxy-aware dispatcher shared by source staging AND result upload —
  * loopback skips the proxy; a remote host rides HTTPS_PROXY when present
  * (the direct TOS link from this network is throttled to ~300 KB/s). */
-export function dispatcherFor(url: string): Agent | ProxyAgent {
+export function dispatcherFor(url: string, timeoutMs = 300_000): Agent | ProxyAgent {
   // bodyTimeout is an idle (between-chunks) timeout, not a total one — slow
-  // but flowing downloads survive; the AbortSignal above bounds the total.
-  const opts = { headersTimeout: 300_000, bodyTimeout: 300_000 };
+  // but flowing transfers survive; the caller's AbortSignal bounds the total.
+  const opts = { headersTimeout: timeoutMs, bodyTimeout: timeoutMs };
   const host = new URL(url).hostname;
   const proxy = LOOPBACK_HOST.test(host) ? undefined : proxyEnv();
   return proxy ? new ProxyAgent({ uri: proxy, ...opts }) : new Agent(opts);

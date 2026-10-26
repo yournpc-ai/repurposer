@@ -122,6 +122,7 @@ _SCENE_CONTENT_KEYS = (
     "enter_style",
     "lines", "word", "sub", "lead",
     "label", "roll", "title", "cards", "name", "tagline", "frame",
+    "subtitle_track",
 )
 _SNAP_TOLERANCE_FRAMES = 6  # beat snap moves a boundary by at most ±0.2s @30fps
 _MAX_DRIFT_LINES = 4
@@ -276,6 +277,17 @@ def film_delivery_check(
         )
         if board_has_narration:
             drift.append("voiceover confirmed on but no narration audio landed")
+    subtitles = params.get("subtitles")
+    has_subtitles = any(
+        isinstance(s, dict)
+        and isinstance(s.get("subtitle_track"), dict)
+        and bool(s["subtitle_track"].get("cues"))
+        for s in spec_scenes
+    )
+    if subtitles is False and has_subtitles:
+        drift.append("subtitles landed but confirmed off")
+    elif subtitles is True and not has_subtitles:
+        drift.append("subtitles confirmed on but no subtitle tracks landed")
 
     if drift:
         state = "DRIFT"

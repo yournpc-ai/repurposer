@@ -9,7 +9,7 @@
 以下规则每个新会话自动执行，无需用户重复提醒；compact 后沿当前任务与交接继续，不重新通读项目历史。
 
 1. 先读本文与 `docs/PROGRESS.md` §0，再按本次任务选合同。先用 `rg -n '^#{1,4} ' 文件` 或关键词定位标题，再读取相关章节及必要上下文；不批量 `cat` 大型文档，不为“了解项目”遍历整个 docs。
-2. 局部修复只读相关合同、约束、风险与验收项。接手整个模块、排期或发布评估时才读该模块完整状态与欠账；Film 的三份主文档也不是每次全文必读。
+2. 局部修复只读相关合同、约束、风险与验收项。接手整个模块、排期或发布评估时才读该模块完整状态与欠账；视频目标与施工合同也不是每次全文必读。
 3. 只有当前契约不清、证据缺失或规则冲突时，才定点查对应现行 ADR 与代码、测试或当前运行证据。引用不是递归阅读指令；确认实现位置、适用约束与验收条件后即进入工作，不继续扩大阅读范围。
 4. 收尾修改既有事实源：状态覆盖旧快照，合同更新剩余范围；保留未完成需求、未验证项和上线阻塞。普通修复不新增 ADR、会话流水账或重复总结文档；历史叙述与已失效合同直接删除，不另建 archive、事故纪要、验收日志副本或历史索引；删除前把仍有效的开放事项并入当前事实源。
 5. 删除 scratch / 旧合同前逐份核对独有语义：未完成需求、负面禁令、标识符、操作数值、迁移资源条件、真实验证边界与仍存活的引用都必须有当前家。验收看“叙事已删、规则仍保留”的 diff，不以历史关键词清零为目标；研究证据与可执行诊断工具不因日期或事故编号删除。
@@ -20,13 +20,13 @@
 **固定入口只有两层**：先读本文与 `docs/PROGRESS.md` §0，再读当前任务的状态/合同。随后只读下表命中的具体章节；完整导航与文档职责见 `docs/README.md`。不创建历史文档库；排障需要证据时查当前代码、测试与运行数据。
 
 - **当前状态 / 排期**：`docs/PROGRESS.md` §0 是唯一事实源；局部任务可以维护实施状态，但不得复制全局排期。
-- **Film/MG**：先读 `docs/tasks/film-storyboard-orchestration-progress.md` §0，再定点读相关能力行、风险/欠账、execution 验收条目与总设计章节；接手整个 Film 或评估发布时才读完整 progress 与 execution §0～§1。只有实施延期项才读 execution §2～§4。
+- **Video Project / Film/MG**：目标层级 = Project/Chat → Composition → CompositionVersion，同 Chat 多影片、全局 @ 引用；内容唯一写口 = `apply_composition_edits`，仍未实施。新架构施工先读 `docs/VIDEO_PROJECT.md` 的命中章节（目录/新旧代码处置唯一合同 = §12），再读 `docs/tasks/video-project-implementation.md` 当前阶段与验收；现状查 RENDERING 与实际代码，有效视听/创作要求归 VIDEO_PROJECT §15，不再维护旧 Film 施工三件套。
 - **模块 / 表 / 队列 / 代码地图**：`docs/MODULE_ARCHITECTURE.md` §4（表归属）、§5（跨模块规则）、§7（代码地图与队列）；新表、新模块、新认领源必须登记。
 - **Studio UI**：`docs/UI_GUIDELINES.md` 的相关组件/布局章节；只有改 chat 行为时才同时读 CHAT_ARCHITECTURE。
 - **Chat / dock / 画布**：`docs/CHAT_ARCHITECTURE.md` 按改动面选读——工具与 plan path §3、SSE/活动/打字机 §8、修订 §9、禁令 §12。活动行与 WorkSegment 改动脉冲 §8.6～§8.7 的现行规则。
 - **Chat 意图 / 多轮 / brief**：`docs/DIALOG_WORKFLOW.md` §2、§4 + CHAT_ARCHITECTURE §3；不读旧交互迁移报告代替现行法。
 - **Agent / tools / graph**：`docs/AGENT_ARCHITECTURE.md` §2（四层地图）、§4（Graph）、§5（Harness）、§7（工具包）；报价另读 §8。
-- **Rendering / spec families**：`docs/RENDERING.md` §1、§3、§6、§8；Film 组合与版本契约另读 Film 总设计，编辑器交互另读 `docs/VIDEO_EDITOR.md`。clip-spec 与 film-spec 是平级家族，renderer 概念不得泄漏进任一 spec。
+- **Rendering / spec families**：`docs/RENDERING.md` §1、§3、§6、§8；新视频内容与版本契约读 VIDEO_PROJECT，编辑器交互另读 `docs/VIDEO_EDITOR.md`。clip-spec 与 film-spec 是平级家族，renderer 概念不得泄漏进任一 spec。
 - **Billing / credits / configs**：`docs/BILLING.md` 对应扣费、报价或钱包章节；守卫线任何档都不能被 auto 绕过。
 - **定位 / 人设 / 渠道 / 选题 / home**：`docs/POSITIONING.md`（已拍板未实施）与当前任务合同；代码层落地前仍只使用 `persona`。
 - **音乐 / UI 文案以外的专门子系统**：按 `docs/README.md` 索引进入对应文档，不从 CLAUDE.md 复制第二份规范。
@@ -87,7 +87,7 @@ Correct:
 - **展示文案二源律（ADR-058）**：用户可见命名类文案只有两个合法来源——① LLM 建图时命名（proposal 的 `name` 字段，null/空读容忍）；② 世界自证（产物徽标 / 节点状态 / 真实数字）。**冻参模板永禁**。**手改撤名**：计划卡任何手改即清空 `name`，回退读当前参数的诚实标签。
 - **echo 防编造律（ADR-060）**：回声只回述用户说过的（作品 / 语言 / 数量），**永不发明平台或场所**——a post is just a post until the user names where it lives；渠道合法来源 = 用户点名或渠道授权，永不是默认值。
 - **起始句 = LLM 言语（ADR-093）**：start_run 回合先说话再调用，开工句由模型说出并落库为普通 assistant 行；chrome/模板替说全形态永禁。
-- **口头确认律（ADR-092，ask 档法律）**：ask 档下方案 dock 后恒等确认——echo 收尾恒为一句朴素的方案判断问句（一词可答），口头 yes 与 Start 钮都化为普通用户消息走 sendChat，下一轮 LLM 到 start_run（同一机器，按钮不直启 run）；收尾永不带「成片出来后再调」式交付后修订预告。**auto 档（默认）无确认拍**——方案呈现即开工，同回合 propose→start_run 是标准道（ADR-117）；但 auto 只免批准拍、**永不创造制作意图**（ADR-139）：dock 生于无制作请求的消息（纯修改/「先给我看方案」/讨论）任何档都等用户发话，`production_intent` 出生事实随六个 dock 工具入参，缺断言=安全侧挂起（Start 钮常驻）；开工确认**复述当前累计方案**（明说要求/已落实改动/建议未选项/未清项——未选项永不称「已确认」，旧版 yes 永不静默授权新稿）；守卫线（`billing.always_confirm_above` / NULL 不可报价族）任何档恒带价问一次。**film 分镜拍（ADR-129/ADR-134/ADR-144）**：分镜设计 = `design_storyboard` 呈现，分镜不是开工也不是方案 dock；fresh compose 首稿/开放重稿默认 review hold ON。**作品首个分镜版本一律先完整呈现并等待用户发话——开场「直接做」、`review_hold=false` 与 auto 都不能同回合开工，`film_presented_message_id` 未持久化时任何 Start 均由 `start.review_hold` 硬拦**。auto 无其他确认债时不显示首稿 approval dock，用户看过后的制作话走普通 sendChat；ask 可显示首稿 dock，Start 钮同样只发送用户消息。下一轮 LLM 调 `start_run` 才放行；后续版本不继承这个首稿专用确认拍，其余生产授权全走通用设置，版本闭环现行契约 = `docs/tasks/film-storyboard-orchestration.md` §7/§11，实施与验证状态 = 同前缀 progress。
+- **口头确认律（ADR-092，ask 档法律）**：ask 档下方案 dock 后恒等确认——echo 收尾恒为一句朴素的方案判断问句（一词可答），口头 yes 与 Start 钮都化为普通用户消息走 sendChat，下一轮 LLM 到 start_run（同一机器，按钮不直启 run）；收尾永不带「成片出来后再调」式交付后修订预告。**auto 档（默认）无确认拍**——方案呈现即开工，同回合 propose→start_run 是标准道（ADR-117）；但 auto 只免批准拍、**永不创造制作意图**（ADR-139）：dock 生于无制作请求的消息（纯修改/「先给我看方案」/讨论）任何档都等用户发话，`production_intent` 出生事实随六个 dock 工具入参，缺断言=安全侧挂起（Start 钮常驻）；开工确认**复述当前累计方案**（明说要求/已落实改动/建议未选项/未清项——未选项永不称「已确认」，旧版 yes 永不静默授权新稿）；守卫线（`billing.always_confirm_above` / NULL 不可报价族）任何档恒带价问一次。**film 分镜拍（ADR-129/ADR-134/ADR-144）**：分镜设计 = `design_storyboard` 呈现，分镜不是开工也不是方案 dock；fresh compose 首稿/开放重稿默认 review hold ON。**作品首个分镜版本一律先完整呈现并等待用户发话——开场「直接做」、`review_hold=false` 与 auto 都不能同回合开工，`film_presented_message_id` 未持久化时任何 Start 均由 `start.review_hold` 硬拦**。auto 无其他确认债时不显示首稿 approval dock，用户看过后的制作话走普通 sendChat；ask 可显示首稿 dock，Start 钮同样只发送用户消息。下一轮 LLM 调 `start_run` 才放行；后续版本不继承这个首稿专用确认拍，其余生产授权全走通用设置，新版本闭环目标 = `docs/VIDEO_PROJECT.md` §2/§8/§15，施工与实际验证状态 = `docs/tasks/video-project-implementation.md`；当前旧链事实查代码与 RENDERING。
 - **Chat / Run 工作段一行两态**：chat 的 now line / Thinking 与工作记录折叠行、run 的制作 / 整理结果 / Worked 同由 `components/chat/ActivityStream.tsx:WorkSegmentRow` 承载；首条 active 从宿主行原位入段，前段打字不得吞掉当前活动；工具完成不收段，首个非空白正文经打字机实际释放或真实终态才原位收成工作记录，busy 时禁「工作了 X 秒 + 另一条 Thinking」。chat live Thinking / 里程碑恒无 chevron 且不可展开，只有收成工作记录后才开放；run 保留可展开的活步骤树，按 RUNNING → REVIEWING → SETTLED 以同一 runId key 原位过渡，terminal 不等于收段，匹配当前 run 的 delivery 首字实际释放才收 Worked，chip 在真实可交付 output 就位后仍等匹配 delivery 首字实际释放或 Worked 收段才挂载，terminal 本身不提前暴露。cancelled 尝试从可见投影退役，不留 ✗ / 删除线，真实 failed 保留一条安静告警；chat 与 run-delivery 各持工作段时钟，互不相加。
 - **Mentions**：@-entity chips 随消息 `mentions` 字段送达；注册表架构（前端 `MENTION_REGISTRY` + 服务端解算），已注册 = `asset`（请求族）/ `output`（指认族，钉 id 服务端确定性解出修订目标）。**配方永不是 mention**（配方 = 提示词，卡面预填模板即全部发射载荷）。**Chip 三律**：可见（inline + ×）/ 发送消费 / × 净化。方针全文 = `docs/MENTIONS.md`。
 - **修订 = 图变更**：chat 修订骑 `POST /chat` 的 `edit_graph`（wiring 提案）→ `apply_wiring_ops` 唯一写口；卡面 prompt 直改 = 确定性手势走 `POST /projects/{id}/graph/revise`，**dock 零消息**（节点状态周期就是全部反馈），卡面乐观回显永不回闪。
@@ -209,8 +209,8 @@ t("home.allProjects", { count: projects.length })
 
 **Deterministic pure-function suites** (`apps/api/tests/*_pure.py`): no database, no LLM, no HTTP; sessions are in-memory stubs. They cover adjudication / pure-mapping layers where branch coverage matters and drift risk is low (the wiring door `apply_wiring_ops` + `_fill_key_for_step`, stream extraction, registry ↔ prompt enumeration consistency). If a behavior needs a real transaction or an LLM to verify, it belongs to the scenario matrix, not here. Run: `cd apps/api && uv run --extra dev python -m pytest tests/<file> -q`.
 
-**Web**：10 本 vitest 组件旁置纯函数套件（纯 node 零 DOM）：`cd apps/web && npm test`。
+**Web**：vitest 组件旁置纯函数套件（纯 node 零 DOM）：`cd apps/web && npm test`。
 
-fixture 纪律 / flake 处置 / 配额纪律归 `docs/tasks/test-suite-convergence.md` §3.6 / §5（剧本素材先拷 `scenario/` 前缀；常驻 worker 抢跑律；断言只锁形态，红先归因机制，禁调断言放行）。
+fixture 纪律 / flake 处置 / 配额纪律归 `docs/VERIFICATION.md` §1.3～§1.4（剧本素材先拷 `scenario/` 前缀；常驻 worker 抢跑律；断言只锁形态，红先归因机制，禁调断言放行）。
 
 **Prompt authoring law**: prompt files carry ONLY current-state law. Model-facing text never names dates / ADR numbers / batch or incident labels / retired forms — every law reads as if it was always the law. `{# #}` comment headers stay one-anchor-line: what the file is + operational constraints (include placement, mirror contracts) — no incident narratives; history lives in git and `docs/DECISIONS.md`. Prose-field schema changes still carry the two typewriter teeth (null-read tolerance + settled-prose pacing).

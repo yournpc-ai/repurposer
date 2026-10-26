@@ -509,7 +509,7 @@ const zh: Resources = {
       subs: {
         all: "全部",
         "text-short": "文字短片",
-        "product-demo": "产品演示",
+        "product-demo": "产品宣传",
         brand: "品牌与业务",
         ugc: "UGC",
         product: "产品",
@@ -517,7 +517,7 @@ const zh: Resources = {
       titles: {
         featured: "推荐配方",
         "text-short": "文字短片",
-        "product-demo": "产品演示",
+        "product-demo": "产品宣传",
         brand: "品牌与业务",
         ugc: "UGC",
         product: "产品",
@@ -550,7 +550,7 @@ const zh: Resources = {
           prompt:
             "把这个网站做成一支产品演示，展示主要功能并配上简洁的屏上说明：{{placeholder}}",
         },
-        // 其余 Product Demos 使用完整的用户口吻提示词；复用视频只是布局
+        // 其余 Product Promo 使用完整的用户口吻提示词；复用视频只是布局
         // 占位，永不是用户选定的参考。这些提示词不带 {{placeholder}} 空位。
         "product-demo-walkthrough": {
           prompt:

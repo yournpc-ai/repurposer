@@ -27,6 +27,7 @@ import { API_URL, UNAUTHORIZED_EVENT } from "@/lib/api"
 import { clearAuth, getToken } from "@/lib/auth"
 import i18n from "@/lib/i18n"
 import { routeStreamFrame } from "@/lib/chatStreamFrames"
+import { normalizeStreamError } from "@/lib/streamTransport"
 import { sseProbe } from "@/lib/sse-probe" // TEMPORARY forensics — delete with the probe
 import type { CandidateEventPayload } from "@/lib/chatStreamFrames"
 
@@ -150,8 +151,8 @@ export interface AnswerTurnBody {
  * URL, the body and the terminal event names differ, and those stay
  * explicit parameters, never inference). Resolves with the terminal
  * envelope; rejects with StreamTurnError(server detail) on pre-stream
- * failures and mid-stream `.failed` frames, and with the abort error on
- * stop (chat). */
+ * failures and mid-stream `.failed` frames, StreamTransportError on a
+ * post-open transport failure, and the abort error on stop (chat). */
 
 /** A turn failure carrying the server's raw `detail` — a string for plain
  * errors, the structured object for typed failures (credits.insufficient,
@@ -219,6 +220,8 @@ function streamTurn<T>(
     onRowUpdate?: StreamChatOptions["onRowUpdate"]
   },
 ): Promise<T> {
+  let streamOpened = false
+  let processingFrame = false
   return new Promise((resolve, reject) => {
     const token = getToken()
     if (!token) {
@@ -263,8 +266,12 @@ function streamTurn<T>(
             `stream: ${res.status}`,
           )
         }
+        streamOpened = true
       },
       onmessage: (msg) => {
+        // A synchronous dispatch/handler throw leaves this true until onerror,
+        // so its TypeError is never mistaken for a body-reader disconnect.
+        processingFrame = true
         // The dispatch is the extracted PURE router (chatStreamFrames.ts —
         // same event names, same JSON.parse-in-place failure semantics).
         const frame = routeStreamFrame(msg.event, msg.data, terminal)
@@ -315,6 +322,7 @@ function streamTurn<T>(
         // frames — routed above into onThinking, where the handler no-ops
         // them (liveness only; the frame cadence is the client watchdog's
         // dead-pipe signal).
+        processingFrame = false
       },
       onclose: () => {
         sseProbe("stream.close", { url })
@@ -323,12 +331,14 @@ function streamTurn<T>(
         throw new Error("stream closed")
       },
       onerror: (err) => {
+        const normalized = normalizeStreamError(err, streamOpened, processingFrame)
         sseProbe("stream.error", {
           url,
           message: err instanceof Error ? err.message : String(err),
         })
-        // Never retry (see the file header).
-        throw err
+        // Never retry (see the file header). A post-open transport failure is
+        // typed so the caller can reconcile the archive without re-POSTing.
+        throw normalized
       },
     }).catch((err) => {
       sseProbe("stream.reject", {

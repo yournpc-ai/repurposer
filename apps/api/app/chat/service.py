@@ -584,6 +584,27 @@ async def _create_message(
     return message
 
 
+async def _parked_interrupt_run(
+    db: AsyncSession, run_id: UUID
+) -> WorkflowRun | None:
+    """A run id on a question is only an anchor until a waiting step proves
+    it is a direction interrupt. Trigger suggestions share the same column."""
+    run = await db.get(WorkflowRun, run_id)
+    if run is None:
+        return None
+    parked_step_id = (
+        await db.execute(
+            select(WorkflowStep.id)
+            .where(
+                WorkflowStep.run_id == run.id,
+                WorkflowStep.status == "waiting",
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return run if parked_step_id is not None else None
+
+
 async def _load_project(db: AsyncSession, project_id: UUID) -> Project | None:
     return await db.get(Project, project_id)
 
@@ -2440,16 +2461,8 @@ async def answer_question(
         # through the interrupt seat used to no-op (resume → "idle" → zero
         # continuation — the live-acceptance dead-exit red 2026-09-24); the
         # pick now falls through to the generic 续聊 branch below.
-        run = await db.get(WorkflowRun, message.workflow_run_id)
-        parked = run is not None and (
-            await db.execute(
-                select(WorkflowStep.id).where(
-                    WorkflowStep.run_id == run.id,
-                    WorkflowStep.status == "waiting",
-                )
-            )
-        ).scalar_one_or_none() is not None
-        if parked:
+        run = await _parked_interrupt_run(db, message.workflow_run_id)
+        if run is not None:
             if data.kind == "bail":
                 if await bail_waiting_interrupt(db, run) is not None:
                     bailed_run_ids.append(UUID(str(run.id)))
@@ -2888,7 +2901,18 @@ async def prepare_chat_turn(
 
     interrupt_reply: Message | None = None
     plan_path = False
+    parked_interrupt_run: WorkflowRun | None = None
     if answered_question is not None and answered_question.workflow_run_id is not None:
+        # A run id alone is only a display anchor on trigger suggestions.
+        # Match the answer endpoint: only a genuinely PARKED step takes the
+        # interrupt wake; otherwise the user's words continue through chat.
+        candidate_run = await _parked_interrupt_run(
+            db, answered_question.workflow_run_id
+        )
+        if candidate_run is not None:
+            parked_interrupt_run = candidate_run
+    if parked_interrupt_run is not None:
+        assert answered_question is not None
         # Interrupt autoResume (期 4): a typed answer to the docked direction
         # question takes the same dispatch as the answer endpoint — wake the
         # parked run. No LLM turn on top: the wake IS the continuation (the
@@ -2897,10 +2921,9 @@ async def prepare_chat_turn(
         # holds the authority) speaks the parked line instead.
         from app.pipeline.orchestrator import resume_waiting_interrupt
 
-        outcome = "idle"
-        run = await db.get(WorkflowRun, answered_question.workflow_run_id)
-        if run is not None:
-            outcome = await resume_waiting_interrupt(db, run, answered_question.answer)
+        outcome = await resume_waiting_interrupt(
+            db, parked_interrupt_run, answered_question.answer
+        )
         decided = (answered_question.answer or {}).get("text") or (
             answered_question.answer or {}
         ).get("option_id") or ""

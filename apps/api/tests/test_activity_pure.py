@@ -805,6 +805,9 @@ def test_t17_every_declared_tool_classified():
     kinds = {name: kind_for_tool(name) for name in declared}
     assert kinds["ask_user"] is None and kinds["answer"] is None
     assert kinds["start_run"] == "run"
+    assert kinds["retry_upload"] == "run"
+    assert any(t.name == "retry_upload" for t in CHAT_TOOLS)
+    assert not any(t.name == "retry_upload" for t in PLAN_TOOLS)
     assert kinds["present_plan"] == "draft"
     assert kinds["search_music"] == "read"
 

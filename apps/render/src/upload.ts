@@ -10,7 +10,7 @@ export class UploadError extends Error {
 }
 
 const MAX_ATTEMPTS = 4;
-const ATTEMPT_TIMEOUT_MS = 6 * 60 * 1000;
+const ATTEMPT_TIMEOUT_MS = 10 * 60 * 1000;
 const TOTAL_TIMEOUT_MS = 12 * 60 * 1000;
 const TRANSIENT_CODES = new Set([
   "ECONNRESET", "EPIPE", "ECONNREFUSED", "ETIMEDOUT", "EAI_AGAIN",
@@ -51,7 +51,7 @@ export async function uploadFile(url: string, filePath: string, contentType?: st
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const remaining = Math.floor(deadline - performance.now());
     if (remaining <= 0) break;
-    const dispatcher = dispatcherFor(url);
+    const dispatcher = dispatcherFor(url, ATTEMPT_TIMEOUT_MS);
     let retryAfter: string | null = null;
     let retryable = false;
     try {

@@ -81,6 +81,14 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
         "en": "Video generated, but upload failed — retry to upload it again",
         "zh": "视频已生成，但上传失败，请重试上传",
     },
+    "render_upload": {
+        "en": "Upload video",
+        "zh": "上传视频",
+    },
+    "render_recovery_required": {
+        "en": "The generated video is no longer available for upload-only recovery — render it again",
+        "zh": "已生成的视频缓存已不可用，无法只重传——请重新渲染",
+    },
     "render_failed": {
         "en": "Video rendering failed — please try again",
         "zh": "视频渲染失败，请重试",

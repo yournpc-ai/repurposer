@@ -164,6 +164,33 @@
 
 **内容方案词汇现状（ADR-088/089）**：Content Plan（探索族产品语义方案）与 dock 计划书（task_book，plan path 义）在迁移弧期并行共存；ADR-089 §8 退役弧收口后 Content Plan 为唯一「方案」座位，dock 内容 = 编译的 Execution Scope。裸 plan 违规（N-11）不变；跨层引用带限定词（pipeline plan / dock plan / Content Plan 三主并立期尤其）。
 
+### 2.1 Video Project 目标词汇（ADR-145，未实施）
+
+以下名称只用于 `VIDEO_PROJECT.md` 与四阶段施工；代码落地时按本表全栈同词，不把 TARGET 写成当前已有实现。
+
+| 中文 | 英文（目标代码） | 定义 | 不是什么 |
+|---|---|---|---|
+| 影片 / 作品 | `Composition` | 一部视听作品持续修订的稳定身份，拥有 owner、origin_project_id 与 current_version；同一 Chat 可有多个 | 不是 Chat/Project、渲染器组件或 Output |
+| 作品版本 | `CompositionVersion` | Composition 的不可变编辑版本，直接承载 settings/sources/scenes/timeline/provenance/content_digest | 不是整个 Project 的快照、Run、Output 或 pending_brief 内的可变信封 |
+| 时间线 | `timeline` | CompositionVersion 内部的 Tracks/Clips/Transitions 与时间结构 | 不是独立作品根、独立表或 Composition/Sequence 的别名 |
+| 场景 | `Scene` | 输出时间上的叙事范围，含 intent、可空 visual_description 与 speech_clip_ids，脚本引用 SpeechObject.text | 不是 Track，不等于单个 Clip/镜头 |
+| 画面描述 | `Scene.visual_description` | LLM 对当前真实视觉元素与运动的用户可读摘要；视觉修改必须更新或清空 | 不是 renderer 输入、结构真相或可失实保留的旧文案 |
+| 片段 | `Clip` | Track 上有输出时间窗的编辑项，内含 Object，可引用 SourceSnapshot/source_range | 不再专指旧 clip-spec；不是 `is_clip` 布尔变体 |
+| 对象 | `Object` | Clip 内可渲染、可变换、可动画的内容 | 不自行决定 Track 和输出时间 |
+| 动画 | `Animation` | 所属 Clip 内针对 Object/TextPart 属性的关键帧序列与分段 easing | 不是 Clip 间 Transition，不是 Text 专属能力 |
+| 文字部件 | `TextPart` | 由 TextObject 派生的 line/word/grapheme/span 可寻址对象 | 默认不是独立 Clip，不按数组下标静默重指 |
+| 素材快照 | `SourceSnapshot` | 素材某次内容的不可变 digest、manifest/transcript/views 与存储引用 | 不是 refresh 会覆盖的“最新 Asset”或 page_readings 缓存别名 |
+| 视频模板 | `VideoTemplate` | 可确定性展开为 CompositionVersion 的结构、槽位、有界 repeat/variant | 不是 PromptTemplate、assistant 文案或执行脚本 |
+| 预设 | `Preset` | Animation/Caption/TextStyle/Audio 等局部参数组合，实例化后展开 | 不是整部 VideoTemplate，不是 Renderer 运行时查询依赖 |
+| 提示词模板 | `PromptTemplate` | composer 可见预填；当前 Recipe 的目标语义 | 不携带隐藏执行参数，不叫 VideoTemplate，不要求 UI 出现“配方” |
+| 视频渲染契约 | `video-spec` | CompositionVersion 编译出的 renderer-neutral 自足渲染输入 | 不含 React/Remotion/DOM/任意 CSS，不是 CompositionVersion 本身 |
+
+**命名裁决**：Project 是 Chat/执行上下文，Composition 是影片身份，CompositionVersion 是内容版本，Timeline 是内部时间结构。选 Composition 表达 MG/网页/文字/媒体的时空组合，不同时引入 Sequence、Work / WorkDocument。用户面沿用影片名称、画面、字幕、版本；工具仍叫 design_video/revise_video/produce_video。
+
+**目标目录与持久化词族**：`app/editing` 拥有 Composition/CompositionVersion/SourceSnapshot 内容服务；`app/tools/video` 拥有 produce_video 与 VideoNarration 制作能力。目标表 = `compositions` / `composition_versions` / `source_snapshots` / `video_narrations`，C 再增 `user_skills` / `skill_versions`。`video-spec` 是纯契约包；旧 Film schema 当前在 apps/render/src/film/schema.ts，不存在独立 packages/film-spec。目录去向与逐项删除条件只维护在 VIDEO_PROJECT §12，表 owner 归 MODULE_ARCHITECTURE §4.2（TARGET）。
+
+**版本词汇作用域**：N-59 的原地 edit/undo/restore 描述现行 Output 编辑器；新视频的内容修订经 apply_composition_edits 生成 CompositionVersion，制作成功才交付新 Output。新视频 Output.work_id = Composition.id，发布/归档继续锚该作品；跨 Chat @output 钉具体 Output/版本，不自动追随 head。Skill 保存创作方法，全局库负责素材/产物可引用性，不设“复制确切作品”能力。
+
 ## 3. 判例库（只保留现行裁决）
 
 | # | 判例 | 裁决 | 依据 |

@@ -25,11 +25,11 @@ reveal, a proof walk, the closing card, 70–118 seconds in all. Everything
 on screen is one of those elements — motion text, the brand hero, camera
 walks over the page's real screenshots, chapter cards, a numbers-evidence
 plate, the reveal and the closing card, plus the music bed, the spoken
-narration and its captions; the film never shows live-action footage,
+narration and independent visible subtitles; the film never shows live-action footage,
 staged scenes or camera work beyond these walks. You never
-arrange scenes. Your craft is fourfold: **which chapters the film tells,
-which lines carry the factual beats, what the creative channel says, and
-what the voiceover sounds like.**
+arrange scenes. Your craft is: **which chapters the film tells, which lines
+carry the factual beats, how their short display titles read, what the
+creative channel says, and what the narration and subtitles say.**
 
 ### Pillars (the chapters)
 
@@ -38,8 +38,10 @@ what the voiceover sounds like.**
   ideas, three chapters it is.
 - Their order is your narrative: strongest hook first, the most
   consequential claim last (the reveal lives right after).
-- A pillar heading that is long or flat still works — the divider trims it;
-  what matters is that the chapter's claim is the site's own.
+- A long or flat pillar heading still works: the citation preserves its full
+  source meaning, while your paired `chapter_titles` entry supplies a
+  complete display title of at most 20 characters. Condense faithfully;
+  never cut a heading into an unfinished clause.
 
 ### Citation craft (factual slots)
 
@@ -61,9 +63,9 @@ what the voiceover sounds like.**
   promises to resolve. It never states a product fact: no features,
   numbers, customers or promises. If a line could be fact-checked against
   the site, it does not belong here.
-- `reveal_lead` is a lead-in, not a claim ("One more thing." is the
-  standard — null picks it). A fresher phrasing is welcome when the film's
-  language calls for it; a factual tease is not.
+- `reveal_lead` is a lead-in, not a claim. Write a fresh, short transition
+  suited to this film's tone and language; never lean on a stock catchphrase
+  or leave the slot null. A factual tease is not a lead-in.
 - Accent sparingly: one emphasized word per resolved line, the word that
   carries the beat.
 
@@ -79,6 +81,16 @@ what the voiceover sounds like.**
   be read inside its scene's window is REJECTED at design time — write a
   shorter line or leave the scene silent; the scene's window never
   stretches for the words.
+
+### Subtitles (the independent visible channel)
+
+- New films default to subtitles ON, with or without voiceover. Write one
+  concise, complete `subtitle_lines` entry for every scene; silent scenes
+  and page walks need them too.
+- Subtitle copy supports the picture instead of mechanically repeating its
+  largest heading. Keep it true to the cited page and in the film's language.
+- Author text only. The system owns cue splitting, timing and the default
+  black-background / white-text style; never invent timestamps or tracks.
 
 ### Naming
 

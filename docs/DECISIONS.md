@@ -8,6 +8,7 @@
 - 只有架构边界、产品语义或关键取舍发生真实变化时才新增独立编号；稳定编号不随意重排。
 - 被取代的规则不作为现行法并列保留；失效叙述直接删除，不保存归档或专题历史副本。仍被引用的编号在下表保留替代去向。
 - 实施状态与未验证项归 `PROGRESS.md` / 局部 progress；ADR 的 Decided 不等于已实现或已验收。
+- 视频施工以 ADR-145 与 VIDEO_PROJECT 为准；旧 FilmStoryboard/pending 信封/固定骨架/legacy 指纹的具体实现条款不再构成兼容义务，仍有效的创作/授权/视听语义归 VIDEO_PROJECT §15，共享守卫与剩余验收归 VERIFICATION。旧编号不用于恢复已退役任务或实现锁。
 
 ## 主题索引
 
@@ -18,15 +19,15 @@
 | Chat、交互、言语、活动与授权 | 034、040–043、051–054、058–095、099–104、108–110、116–117、133–135、139 | `CHAT_ARCHITECTURE.md` / `DIALOG_WORKFLOW.md` / `BILLING.md` |
 | UI、画布、工作区与卡面 | 035–038、041–042、046、048、051、056–058、061–063、067–076、082、098、111–115、118、122、143 | `UI_GUIDELINES.md` / `CHAT_ARCHITECTURE.md` |
 | 身份、定位与国际化 | 013、037–038、042 | `POSITIONING.md` / `PRD.md` |
-| 渲染、clip-spec、媒体与音乐 | 016、018、020、023–024、044–045、096、113、115、130、136、140 | `RENDERING.md` / `MUSIC_ARCHITECTURE.md` |
-| Film/MG | 119、121、123、127、129–132、134–144 | `tasks/film-storyboard-orchestration.md`；执行与状态归同前缀 execution / progress |
-| 测试与验证治理 | 114 | `tasks/verification-contracts.md` / `PROGRESS.md` |
+| 渲染、clip-spec、媒体与音乐 | 016、018、020、023–024、044–045、096、113、115、130、136、140、145 | `RENDERING.md` / `MUSIC_ARCHITECTURE.md`；视频目标归 `VIDEO_PROJECT.md` |
+| Film/MG | 119、121、123、127、129–132、134–145 | 新目标与施工归 `VIDEO_PROJECT.md` / `tasks/video-project-implementation.md`；旧运行事实查代码/RENDERING，有效需求归 VIDEO_PROJECT §15，旧任务/结构锁退出 |
+| 测试与验证治理 | 114 | `VERIFICATION.md` / `PROGRESS.md` |
 
 ## 退役编号与别名解析
 
 | 引用 | 现行去向 |
 |---|---|
-| ADR-101（素材等待旧机制） | ADR-102；施工合同 `tasks/material-wait-in-turn.md` |
+| ADR-101（素材等待旧机制） | ADR-102；现行行为 CHAT_ARCHITECTURE §3.5，验收 VERIFICATION §4.3 |
 | ADR-105（画布确认/可见性旧形态） | ADR-111；行为契约 `CHAT_ARCHITECTURE.md` |
 | ADR-120（film 分镜核对旧条目） | 设计/版本闭环保留于 ADR-129，执行时序见 ADR-130；后续呈现与批准修订见 ADR-131/132 |
 | ADR-123（工作区布局旧代码注释） | 见 ADR-143。**单独出现的 ADR-123 在文档现行索引中默认指 Film 分镜丰富度**；工作区布局的旧代码注释由该别名解析 |
@@ -819,7 +820,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 6. 真片与布局占位片必须分开记录。占位只证明布局、画幅、播放与预填，不证明对应制作能力；替换真片后仍需独立走 Chat→方案→授权→制作→交付验收。
 7. 文案只写用户要点名的具体任务，不做“一次输入全套出”或传播效果承诺。已有用户草稿不得被预填静默覆盖；离屏暂停与声音单例是货架基本行为。
 
-**Related**: ADR-040/046/060；`docs/RECIPES.md` / `docs/tasks/home-creation-entry-refresh.md` / `docs/tasks/flora-parity-ui.md`。
+**Related**: ADR-040/046/060；`docs/RECIPES.md` / `docs/tasks/home-creation-entry-refresh.md` / `docs/VERIFICATION.md`。
 
 
 ## ADR-049: 渲染前评审边界——无 hook 预览闸，Film 分镜审阅独立
@@ -1074,12 +1075,12 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 4. 对账先撤回再连接，使环检查看到撤回后的工作集；同批瞬态对象与已持久化对象分别处理，不能把未入库行当数据库删除。
 5. rank-relevant 的 settled 边变更遵守 ADR-098 freeze；legacy transcript 迁移必须先保存 edited_text 到 asset overlay，再删除旧节点/边，不能借对账丢用户编辑。
 
-**Related**: ADR-057/061/086/098/113；`docs/tasks/product-flow-alignment.md`。
+**Related**: ADR-057/061/086/098/113；`docs/VERIFICATION.md`。
 
 
 ## ADR-063: 卡面诚实——动作就近、全文可读与估价不撒谎
 
-**Status**: Decided；卡面解剖详见 `UI_GUIDELINES.md` 与 `tasks/media-card-anatomy.md`。
+**Status**: Decided；卡面解剖详见 `UI_GUIDELINES.md` 与 `VERIFICATION.md`。
 
 **Decision**:
 1. 节点自己的动作住在节点当前解剖或明确详情面，不另造随视口漂浮的第二卡。执行/费用确认仍只在 dock；canvas 不设计划确认座。
@@ -1323,7 +1324,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-079: 执行围栏——终态写必须携带执行身份（claim token）+ fenced 零副作用纪律
 
-**Status**: Decided；当前不变量与运行边界 = `docs/ARCHITECTURE_NORTH_STAR.md` §8，守卫映射 = `docs/tasks/verification-contracts.md`。
+**Status**: Decided；当前不变量与运行边界 = `docs/ARCHITECTURE_NORTH_STAR.md` §8，守卫映射 = `docs/VERIFICATION.md`。
 
 **Decision**:
 
@@ -1377,7 +1378,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-082: 画布呈现纪律——可读性永不反噬语义
 
-**Status**: Decided；effective rank 与剩余可读性需求 = ADR-098 / `tasks/product-flow-alignment.md`。
+**Status**: Decided；effective rank 与剩余可读性需求 = ADR-098 / `VERIFICATION.md`。
 
 **Decision**:
 1. 永不为了排线新增语义节点、改变执行拓扑或补假边；特别不得恢复虚构 transcript 中继。合法工具只有呈现层的 rank 投影、frame 预留、分组、edge routing、锚点与视口。
@@ -1386,7 +1387,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 4. 既有节点稳定、append-only 与 settled freeze 不动；不引 dagre，不用 clamp、翻边、固定 x/y 或服务端重排旧帧掩盖错误。
 5. 背景 refetch 不改变相机；新 draft 与新节点只按用户发起节拍 fit/center。布局修复不能改变打字机、执行拓扑或版本语义。
 
-**Related**: ADR-036/057/067/086/098/111/113；`docs/tasks/product-flow-alignment.md`。
+**Related**: ADR-036/057/067/086/098/111/113；`docs/VERIFICATION.md`。
 
 
 ## ADR-083: 信任锚 echo——present_plan 的三语义职责 + grounding 四级证据链
@@ -1432,11 +1433,11 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 6. 覆盖至少五种路径：非终态+散文+合法参数+channel；终态只走 envelope；参数拒绝不发射/不执行；无 channel 时 ledger 不丢字；cap 后记录 capped。
 7. 禁逐调用汇报、禁展示推理/概率/候选腹稿、禁第二 writer；Activity 与 checkpoint 可以共存，但各自必须表达不同事实。
 
-**Related**: ADR-083/087/093/099/104/108/109/110；`tasks/transcript-array-and-speech-seats.md`。
+**Related**: ADR-083/087/093/099/104/108/109/110；`VERIFICATION.md`。
 
 ## ADR-086: 拓扑空间权威三律 + Product Canvas ≠ Execution Graph——Product Flow Alignment 的架构地基
 
-**Status**: Decided (2026-09-18)；施工合同 = `docs/tasks/product-flow-alignment.md`
+**Status**: Decided (2026-09-18)；施工合同 = `docs/VERIFICATION.md`
 
 **Decision**:
 
@@ -1449,7 +1450,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 **Consequences**: 布局算法的输入从「出生时刻的拓扑快照」改为「当前 Product DAG 的 rank」——帧错位五源（L1-L5）的视觉症状结构性消除；执行序与呈现解耦后，「帧错 → 执行错」的污染链断掉；Product Canvas 的边界从约定升级为带准入闸的 invariant。空帧处置细则：出生地保证每行必带合法帧；前端静默原点兜底删除——dev 显式失败 / prod graceful fallback（fallback = rank 投影，不是原点）。
 
-**落地座位**：契约模块 = `app/pipeline/product_graph.py`（pure）——判词 1 的准入闸落地为 type 层 membership 谓词（媒介五值可见 / `HIDDEN_ROLES` / `LEVER_TOOLS` 两显式枚举 / 未知 type default-deny，等效机制）；判词 2 的 rank = `product_ranks`（longest-path，rank 边集 = `{video, audio, text}`，ctx 引用流排除）；判词 3 的消费点 = `topological_order`（与 rank 同一事实源，RunOp 接入）；canonical fixture = `apps/api/tests/test_product_graph_pure.py`。legacy `materialize` 行的读面可见性与谓词不一致 = 已知残留；生产 DB 清零证据与删除条件归 `docs/tasks/product-flow-alignment.md` §4 和 `docs/tasks/lifecycle-phase-6-hygiene.md` §0，未满足前保留兼容。
+**落地座位**：契约模块 = `app/pipeline/product_graph.py`（pure）——判词 1 的准入闸落地为 type 层 membership 谓词（媒介五值可见 / `HIDDEN_ROLES` / `LEVER_TOOLS` 两显式枚举 / 未知 type default-deny，等效机制）；判词 2 的 rank = `product_ranks`（longest-path，rank 边集 = `{video, audio, text}`，ctx 引用流排除）；判词 3 的消费点 = `topological_order`（与 rank 同一事实源，RunOp 接入）；canonical fixture = `apps/api/tests/test_product_graph_pure.py`。legacy `materialize` 行的读面可见性与谓词不一致 = 已知残留；生产 DB 清零证据与删除条件归 `docs/VERIFICATION.md` §4 和 `docs/VERIFICATION.md` §0，未满足前保留兼容。
 
 **Related**: ADR-036（布局自算 + append-only）/ ADR-057（图即产品对象——判词① 的母体；K5 维持）/ ADR-062（边对账律——对账不再依赖帧一致性）/ ADR-067（出锚语义律——「呈现忠于语义」同族）/ ADR-082（呈现/语义隔离铁律 + 呈现层修法先例）
 
@@ -1457,7 +1458,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-087: Agent Interaction & Product Lifecycle Architecture——三条语义层 + Lifecycle / Activity / Confirmation 三合同 + 依赖方向冻结
 
-**Status**: Decided；当前剩余验收与 hygiene 前置 = `docs/tasks/lifecycle-phase-6-hygiene.md`，全局状态 = PROGRESS §0.2。
+**Status**: Decided；当前剩余验收与 hygiene 前置 = `docs/VERIFICATION.md`，全局状态 = PROGRESS §0.2。
 
 **Decision**:
 
@@ -2021,7 +2022,7 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 
 ## ADR-098: 画布拓扑时间一致性——单一 effective rank 与 settled freeze
 
-**Status**: Decided；当前验收 = `tasks/canvas-effective-topology.md`，transcript 边界 = ADR-113。
+**Status**: Decided；当前验收 = `VERIFICATION.md`，transcript 边界 = ADR-113。
 
 **Decision**:
 1. **一个 effective Product Graph / rank authority**：写时岛/帧分配与读时 `display_ranks` 使用同一纯拓扑层；服务端与客户端 settled projection 对同一 fixture 得同数。前端不得另算第二套 depth/rank。
@@ -2037,7 +2038,7 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 
 ## ADR-099: Agent 交互架构——世界事实、决策、言语与代码守卫
 
-**Status**: Decided；固定选项唯一座位 = ADR-100，trigger-only 建议合同 = `tasks/options-dock-only.md`。
+**Status**: Decided；固定选项唯一座位 = ADR-100，trigger-only 建议合同 = CHAT_ARCHITECTURE §8.5/§8.8，剩余验收 = VERIFICATION §4.1。
 
 **Decision**:
 1. **四层边界**：World Truth 由代码与世界状态盖章；Decision 由 LLM 在结构化产品语义形态中选择；Speech 由 LLM 自由表达；Code Guard 独立校验付费、权限、删除、参数和版本。工具观察只携带世界事实与法条座位，不携带可转述的言语草稿。
@@ -2053,7 +2054,7 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 
 ## ADR-100: 选项唯一座位——消息流零选项，固定选项全归 dock（ADR-081 恢复全强度）
 
-**Status**: Decided (2026-10-04)，已拍板待施工；施工合同 = `tasks/options-dock-only.md`
+**Status**: Decided；现行规则归 CHAT_ARCHITECTURE §8.5/§8.8；实现差异与剩余验收归 VERIFICATION.md §4.1
 
 **Decision**:
 
@@ -2069,7 +2070,7 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 
 ## ADR-102: 素材理解 = 回合内前提条件——能力声明 + 休眠素材 + 工具级终态等待（ADR-101 翻案，场景消除）
 
-**Status**: Decided (2026-10-05)，已拍板待施工；施工合同 = `tasks/material-wait-in-turn.md`
+**Status**: Decided；现行行为归 CHAT_ARCHITECTURE §3.5；剩余验收归 VERIFICATION.md §4.3
 
 **Decision**:
 
@@ -2160,7 +2161,7 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 
 **Consequences**: 【已完成理解】消失类、顺序跳位类、live/回放不一致类 bug 结构性不可能再发生——它们要解决的问题不再存在。打字机律两牙不动（散文字段读容忍 + settle 散文 drain 节拍释放：零 delta 回合的散文行 append 时点 = 信封到达后，内容照节拍放出，位置不受影响）。DB 写入次数略增（activity 每行 open+settle 两写）量级可忽略。旧 walk-key 重锚机制不再使用；checkpoint → 读活动 → 读后回复由数组位置表达。
 
-**Related**: ADR-104（checkpoint 发射座时点）/ ADR-099（DeferredFrames 与数组持久化正交）/ ADR-108 当前迁移合同 `tasks/transcript-array-and-speech-seats.md` / ADR-109/110/111。
+**Related**: ADR-104（checkpoint 发射座时点）/ ADR-099（DeferredFrames 与数组持久化正交）/ ADR-108 当前迁移合同 `VERIFICATION.md` / ADR-109/110/111。
 
 ## ADR-109: 言语座位通用化——checkpoint 无白名单，echo 不指不可见面
 
@@ -2207,7 +2208,7 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 8. `get_graph` 只提供计划/关系读法；模型无节点 CRUD，写仍只经唯一图写门。
 9. 等待态必须同时回答四件事：节点看起来是就绪而非损坏、capture 前估价可见、刷新后同形、dock/full-panel 与 reveal 联动一致。未验收前不得称 W3 完成。
 
-**Related**: ADR-036/058/087/092/100/109/117/118/122/139/143/144；CHAT_ARCH 与 `tasks/credits-and-permissions.md`。
+**Related**: ADR-036/058/087/092/100/109/117/118/122/139/143/144；CHAT_ARCH、BILLING 与 VERIFICATION.md §4.2。
 
 ## ADR-112: 画布卡面显示律——cue 行时间刻度 / facet strip 失败-only / factsbar 分面 / Top pick 抉择闸门
 
@@ -2227,17 +2228,17 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 
 ## ADR-113: Transcript 折叠——素材卡内容层 + 成片轨道栈 + 存储唯一座位
 
-**Status**: Decided；存储迁移与卡面验收 = `docs/tasks/media-card-anatomy.md`。
+**Status**: Decided；存储迁移与卡面验收 = `docs/VERIFICATION.md`。
 
 **Decision**:
 
 1. **存储唯一座位 = asset 行**：`assets.transcript` / `extracted_text`（真相）+ `assets.meta.words`（证据）+ 新增列 `assets.edited_transcript`（用户编辑 overlay，从 graph spec 搬家；C4 地板不动——永不反算时间码、证据与区间永不被编辑触碰）。graph spec 的 `text` / `cues` / `cued_text` 三件套随转写节点退役拆除。cue **永不落库**：一切展示面（素材卡时间条 / 成片文字轨 / chat search）从 words 经 `group_cues` 读面派生，label 服务端预格式化一法一座（ADR-112 继承）。`transcript ?? extracted_text` 的两种相反 fallback 顺序收编为同一座。
-2. **转写节点退役**：新图不再调用 `stamp_transcript_node`，也不创建相关合成边。legacy 迁移必须**先把 `edited_text` 完整复制到 `assets.edited_transcript`，再删除 legacy 节点/边**；未完成复制不得删除。读兼容只为迁移服务，不是新图目标。编辑写口 = 资产级端点，零 run 零积分语义不变；是否进入 Operation Model 账仍是开放项，归 `tasks/media-card-anatomy.md`。
+2. **转写节点退役**：新图不再调用 `stamp_transcript_node`，也不创建相关合成边。需要保留旧数据的迁移必须**先把 `edited_text` 完整复制到 `assets.edited_transcript`，再删除 legacy 节点/边**；本轮无用户且已授权reset的环境可重建，不承担旧业务回填；其他保留数据环境未复制不得删除。读兼容只为迁移服务，不是新图目标。编辑写口 = 资产级端点，零 run 零积分语义不变；是否进入 Operation Model 账仍是开放项，归 `VERIFICATION.md`。
 3. **素材卡解剖（卡即工作面）**：媒体区（click-to-play poster）+ **时间条**（cue 块宽 ∝ 时长、停顿诚实留白、播放头）+ 纵向 cue 流（hover 显时 chip——ADR-112 继承；定高卡内滚动，560 封顶同 DocumentCard 全文卡律）+ factsbar。点 cue / 条块 = **同卡 seek**（「文本驱动 seek」交互族入册）。paste / transcript 型资产 = 同组件去掉媒体区与时间条（无词轴即无时间面；估算词轴补强挂账）。转写处理态面（shimmer / 失败红行）收回素材卡承担。
 4. **成片卡轨道栈（检视，不是编排）**：完整视频（顶）+ **视频轨**（片段块，`render_spec.segments` 读面，源时间映射）+ **文字轨**（字幕句块，`caption_track` 经 `group_cues` 句级——词级是渲染细节不上卡）常驻；修饰轨（音乐 / 配音 / filler 划掉行）有内容才出现。轨道只读 + seek，**永不长拖把手、永不长「添加音轨」**——L3 铁律禁的是编排（合成语义），内容解剖的读视图不违反，形态上必须一眼是读视图。
 5. **锚点律修订（端口法则精确化）**：轨道可见时，入边锚 = **所喂轨道左缘 Y-center**（video 边锚视频轨）；锚座位恒为「媒体区正下方第一轨」，轨道栈展开 / 收起锚不跳动；修饰 presence 条骑轨栈**顶**（到来只压媒体 flex，钉死的轨座永不动）。无轨道时现行角律（ADR-067 一族）不变。边保持节点级——边落卡内片段（FLORA 形态）不收，片段级血缘归 §6。
 6. **血缘 = hover cross-highlight（数据驱动）**：hover 成片卡片段块 → 素材卡时间条与文本流中被 `segments[].start/end`（源时间）覆盖的区间亮起。片段块携带**源资产 id**（异源拼接段各指其 donor）+ 预格式化源区间标签（前端永不格式化时间）。**画布级共享 hover 态**是新增的合法跨卡通道（唯一一座，禁泛化）；两条装饰 text 边随转写节点退役不再出生，存量边由迁移硬删（不再有读面兼容）。
-7. **分界与不做**：多轨编排 / 拖片段 / 加轨 / 转场永禁（L3 不动）；改稿驱动重剪（edited transcript → 词轴对齐 → 影响产出）是 **PLANNED，未实现**；当前编辑只是资产层展示 overlay。时间条拖选区间、paste 资产估算词轴与编辑进入 Operation Model 账均为开放项，触发条件与验收归 `tasks/media-card-anatomy.md`，不得写成已交付。
+7. **分界与不做**：多轨编排 / 拖片段 / 加轨 / 转场永禁（L3 不动）；改稿驱动重剪（edited transcript → 词轴对齐 → 影响产出）是 **PLANNED，未实现**；当前编辑只是资产层展示 overlay。时间条拖选区间、paste 资产估算词轴与编辑进入 Operation Model 账均为开放项，触发条件与验收归 `VERIFICATION.md`，不得写成已交付。
 
 **Consequences**: 转写节点整族消失——画布每素材少一列（708px 族结构性不可能），graph refetch 不再搬运全文；cue 从「派生四次 + 白存一份」收敛为「一座派生」；互指成立（点句子跳画面，时间轴从装饰变导航）；血缘从「画的边」变「读的联动」；编辑 overlay 单座位且写口落资产层（语义更正）。代价：素材卡变重（定高内滚吸收）；存量 transcript 节点行迁移删除（edited_text 先搬家）。
 
@@ -2245,7 +2246,7 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 
 ## ADR-114: 测试体系——用户旅程矩阵与承重防漂移守卫
 
-**Status**: Decided；运行规范 = `tasks/test-suite-convergence.md`，合同映射 = `tasks/verification-contracts.md`。
+**Status**: Decided；运行规范与合同映射 = `VERIFICATION.md`。
 
 **Decision**:
 1. 只长期保留两类测试资产：**用户主流程全旅程矩阵**与**承重架构防漂移守卫**。事故回归锁、批次产物、死机制与镜像实现形态的锁不作为永久资产。
@@ -2256,13 +2257,13 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 6. fixture 使用 `scenario/` 前缀，防共享 key 被删除；常驻 worker 抢跑、进程组清理、配额与 round-robin 纪律是运行合同的一部分。
 7. 客户端法律（打字机、remount、形态机）不进服务端剧本断言；服务端真值才进。真实浏览器、动态视听与付费/生产路径仍需对应人工或专门验收。
 8. 当前已知未覆盖/观察面必须保留：S1/S6f/S10 方差归因、失败不扣费、孤儿 hold、run 执行权、turn durability、SSE reconnect、repair 泄漏。没有自动看护不等于已验收。
-9. harness 目录归位与验证母文档升格是 PLANNED P3；目标、未创建状态与迁移门见 `docs/tasks/verification-overhaul.md`。未启动前继续使用现有脚本路径，不提前创建或引用可用性未成立的文档。
+9. VERIFICATION.md 是当前验证母文档；harness 代码归位仍为 PLANNED，范围与收集/import验收见该文档 §6。当前脚本路径继续有效，不把文档升格当成代码已搬迁。
 
-**Related**: ADR-039/071/079/089/099/102/108/117/119/141/144；`docs/tasks/test-suite-convergence.md` / `docs/tasks/verification-overhaul.md`。
+**Related**: ADR-039/071/079/089/099/102/108/117/119/141/144；`docs/VERIFICATION.md`。
 
 ## ADR-115: 卡面解剖 v4——素材卡阅读型 + 成片卡 NLE 检视轴 + 信息秩三分
 
-**Status**: Decided（2026-10-09 用户拍板；形态原型 = `scratch/media-card-anatomy.html` 信息秩三分定稿，基于项目 1aeb9787 真实数据）；施工合同 = `docs/tasks/media-card-anatomy.md`
+**Status**: Decided（2026-10-09 用户拍板；形态原型 = `scratch/media-card-anatomy.html` 信息秩三分定稿，基于项目 1aeb9787 真实数据）；施工合同 = `docs/VERIFICATION.md`
 
 **Decision**:
 
@@ -2292,7 +2293,7 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 
 ## ADR-117: 授权前移——两档权限设置与确认教义默认值翻转
 
-**Status**: Decided（2026-10-12 用户拍板；竞品取证 = Pexo / ElevenLabs / Flora 截图走查 + 本产品哲学：用户最希望 agent 在不需要过问的情况下完成所有工作；施工合同 = `tasks/credits-and-permissions.md`）
+**Status**: Decided（2026-10-12 用户拍板；竞品取证 = Pexo / ElevenLabs / Flora 截图走查 + 本产品哲学：用户最希望 agent 在不需要过问的情况下完成所有工作；现行规则 = CHAT_ARCHITECTURE / BILLING；剩余验收 = VERIFICATION.md §4.2）
 
 **Decision**:
 
@@ -2334,11 +2335,11 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 7. **承接句窄门**：只有 delivered/partial 且 `canvas_visible=false` 才可指向实际交付卡片；visible 时不提面，failed 不承诺卡片。承接句是普通 LLM 散文，遵守打字机。
 8. 布局偏好唯一座位是 SettingsDialog「通用」的 `workspace_layout=auto|chat`；不得在 composer/dock 再造第二套 view-mode 控制或相机节拍。英文用户文案不出现 Agent。
 
-**Related**: ADR-058/060/111/122/143；`tasks/flora-parity-ui.md`。
+**Related**: ADR-058/060/111/122/143；`VERIFICATION.md`。
 
 ## ADR-119: film-spec 第二家族——storyboard 编排 + grounding validator + skill 接入装配线
 
-**Status**: Decided；实施与验证状态 = `docs/tasks/film-storyboard-orchestration-progress.md`，验收与上线条件 = 同前缀 execution。
+**Status**: Decided；新视频目标/有效需求 = `docs/VIDEO_PROJECT.md`，施工验收 = `docs/tasks/video-project-implementation.md`；旧实现事实查代码/RENDERING。
 
 **Decision**:
 
@@ -2459,14 +2460,14 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-129: film 分镜 = 设计拍普通工具调用——版本化呈现 / 全局生产授权 / 禁静默换稿
 
-**Status**: Decided（2026-10-16 用户拍板；2026-10-17 用户拍板修订；现行对话行为 = `docs/CHAT_ARCHITECTURE.md` Film 段与 `docs/tasks/film-storyboard-orchestration.md`，实现与验证状态 = 同前缀 progress）
+**Status**: Decided（2026-10-16 用户拍板；2026-10-17 用户拍板修订；现行对话行为 = `docs/CHAT_ARCHITECTURE.md` Film 段与 `docs/VIDEO_PROJECT.md`，施工与验证状态 = `docs/tasks/video-project-implementation.md`）
 
 **Decision**:
 
 1. **设计拍独立于生产拍**：`design_storyboard` 呈现分镜，不创建分镜专属确认控件；设计工具自身不创建 run。设计授权只授权设计，生产授权由当前对话的制作意图与全局 ask/auto/credit 规则共同决定。
 2. **版本化闭环**：已呈现分镜有版本、不可变内容 digest 与执行快照；方案座只引用当前版本，worker 只执行被引用的版本，漂移即停止并回到重新设计，永不静默换稿。
 3. **修订基于当前稿**：明确的修改请求本身就是对应修改的授权，但不等于授权渲染；修订保留用户未要求改变的内容并产生新版本。无关提问只解释当前稿，不设计、不启动。
-4. **现行正文与验收分座**：对话行为正文在 `CHAT_ARCHITECTURE.md`；Film 字段与版本契约在 `tasks/film-storyboard-orchestration.md`；剩余验收在 execution，实际状态在 progress。早期 journey-closure 尾项只由 `PROGRESS.md` §0.2 追踪，不再充当另一份行为法。
+4. **现行正文与验收分座**：对话行为正文在 `CHAT_ARCHITECTURE.md`；Film 字段与版本契约在 `VIDEO_PROJECT.md`；剩余验收在 execution，实际状态在 progress。早期 journey-closure 尾项只由 `PROGRESS.md` §0.2 追踪，不再充当另一份行为法。
 
 **Consequences**: 分镜不获得独立确认偏好座位；`confirmed_scope` 仍是生产授权快照座；旧确认失效与并发防护是版本闭环的一部分，但不删除无关任务或用户内容。
 
@@ -2481,7 +2482,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 1. **同一时序源**：分镜展示、执行快照与 film-spec 读同一 resolved music grid；曲目缺节奏信息时先走现有分析补齐，仍无法获得才诚实失败。
 2. **spec 自带执行血缘**：film-spec 携带 fps、帧数、音乐节奏信息、逐幕 narration audio 与同文本 captions、camera/reveal 的执行锚点。
 3. **真实 beat 律**：reveal 黑场是一拍真实 beat interval；固定 0.5s 不得被当作一拍。
-4. **字段契约一座**：字段级渲染契约只维护在 `docs/RENDERING.md`；Film 版本、音频与质量约束归 `tasks/film-storyboard-orchestration.md`，实际验证状态归同前缀 progress。
+4. **字段契约一座**：字段级渲染契约只维护在 `docs/RENDERING.md`；Film 版本、音频与质量约束归 `VIDEO_PROJECT.md`，实际验证状态归 `docs/tasks/video-project-implementation.md`。
 
 **Consequences**: 渲染器只求和、播放并消费 spec 中的锚点，不发明时长、字幕或 reveal 停顿；旧 spec 由 schema 读容忍处理。
 
@@ -2564,7 +2565,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-136: film 旁白窗口弹性——有界零和借帧 + 披露，永不静默改写分镜
 
-**Status**: Decided；字段级契约 = Film 总设计与 RENDERING。
+**Status**: Decided；字段级旧渲染事实 = RENDERING/代码；新内容合同 = VIDEO_PROJECT。
 
 **Decision**:
 
@@ -2580,7 +2581,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-137: film 编辑拍（patch path）——结构化 ops / 版本信封 / base 引用协议 / 报价分叉
 
-**Status**: Decided（2026-10-20；现行契约 = `docs/tasks/film-storyboard-orchestration.md` §7.1/§7.2/§11；实现与验证状态 = 同前缀 progress）
+**Status**: Decided（2026-10-20；现行契约 = `docs/VIDEO_PROJECT.md` §2/§6/§15；施工与验证状态 = `docs/tasks/video-project-implementation.md`）
 
 **Decision**:
 
@@ -2599,7 +2600,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-138: film 双链范围——文字视频为本期正式能力 / 音频三态与试听 / 完整知识视频移出本期
 
-**Status**: Decided（2026-10-21 用户拍板；施工组织 = `docs/tasks/film-storyboard-orchestration-execution.md`，设计契约 = `docs/tasks/film-storyboard-orchestration.md` §7.5/§7.6）
+**Status**: Decided（2026-10-21 用户拍板；施工组织 = `docs/VIDEO_PROJECT.md`，设计契约 = `docs/VIDEO_PROJECT.md` §2/§6/§15）
 
 **Decision**:
 
@@ -2607,16 +2608,16 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 2. **音频三态语义**（「参数可选」是产品语义，不是把执行字段全变 nullable）：**未指定** = 允许按配方选默认值，并在制作设置中如实呈现；**明确关闭** = 真实状态，persona 或默认值永不重开——音乐关闭必须有真实状态，不得回落为默认 calm（`resolve_film_music` 的 mood→brand→calm 链遇显式 off 短路）；**明确选定** = 版本与执行使用同一选择，后续读取能说明真实配置（voice 解析上移设计期钉入版本/执行快照，复用 `resolve_film_voice` 同座，先例 = 设计期解析音乐）。重新开启配音不强迫全片重设计——有现成旁白文字时直接走合成。
 3. **试听（PLANNED / 条件触发）**：声音目录、试听系统和设计期选声体系不是当前闭环前置；当前默认不配音，用户明确要求才走现有 TTS 链。用户重新提出“先听再决定”时启用以下合同：用户说「先听一下再决定」时，chat 提供真正可播放的声音样例或音乐预览并等待这次选择——只显示声音名/音乐名不算试听完成。优先已有样例、已有音乐或短样例（声音目录最小注册表 + 预生成短样例 reconcile 种子；音乐库曲目文件直接预览），不为试听生成整片旁白，并说明实际调用成本。试听与随后制作绑定同一音频配置——不能试听一种、成片换另一种。不对所有创作强制新增确认步骤（ADR-117 授权律不动）；用户明确要求先试听、先审阅时不得提前制作。试听 UI 骑结构化卡片面（助理消息 markdown 不渲染裸 HTML——只发链接文本不可播放）。
 4. **完整知识视频移出本期**：资料检索、事实核查、复杂知识图解、专业图表、自动教学结构不新增专项建设。已有能力自然支持的简单解释内容可以制作，但不据此宣称完整知识视频能力上线。不设「知识视频预备批」。
-5. **Chat 展示 = 交付面**：制作前的真实工具调用 = Activity 行；Start 后的真实执行 = Tasks。当前执行是单体 `launch_film`，Tasks 只显示这个真实步骤；R5 宏阶段是 PLANNED，重启合同见 `tasks/film-storyboard-orchestration-execution.md` §4.1。无配音或复用音频时不得虚报「正在生成配音」，不为显示进度伪造准备/配音/装配步骤。最终界面验收含浏览器人工核验，不以 SSE key 与 i18n 测试替代。
-6. **实施边界与状态座位**：画幅变体、声音设计期钉版与试听未实现；文字源、组合幕与编辑能力已在本地/测试门控下落地，生产默认仍关闭。当前优先级只读 `PROGRESS.md` §0；剩余能力与验收只读 `tasks/film-storyboard-orchestration-execution.md` §0～§4；验证层级只读同前缀 progress。旧 R 批次编号与冲刺估时不再是当前计划。
+5. **Chat 展示 = 交付面**：制作前的真实工具调用 = Activity 行；Start 后的真实执行 = Tasks。当前执行是单体 `launch_film`，Tasks 只显示这个真实步骤；R5 宏阶段是 PLANNED，重启合同见 `VIDEO_PROJECT.md` §4.1。无配音或复用音频时不得虚报「正在生成配音」，不为显示进度伪造准备/配音/装配步骤。最终界面验收含浏览器人工核验，不以 SSE key 与 i18n 测试替代。
+6. **实施边界与状态座位**：画幅变体、声音设计期钉版与试听未实现；文字源、组合幕与编辑能力已在本地/测试门控下落地，生产默认仍关闭。当前优先级只读 `PROGRESS.md` §0；剩余能力与验收只读 `VIDEO_PROJECT.md` §0～§4；验证层级只读 `docs/tasks/video-project-implementation.md`。旧 R 批次编号与冲刺估时不再是当前计划。
 
-**Consequences**: 文字排版/运动枚举遵守 L3 枚举纪律，不开放自由版式；字段级契约归 `tasks/film-storyboard-orchestration.md`，剩余验收与发布条件归 execution，实际验证状态归 progress。估时、旧冲刺顺序与逐轮测试数字不再充当决策条款。
+**Consequences**: 文字排版/运动枚举遵守 L3 枚举纪律，不开放自由版式；字段级契约归 `VIDEO_PROJECT.md`，剩余验收与发布条件归 execution，实际验证状态归 progress。估时、旧冲刺顺序与逐轮测试数字不再充当决策条款。
 
 **Related**: ADR-137（编辑拍——文字视频复用同一版本/编辑/复用能力）/ ADR-130（执行快照——voice_id 钉入同座）/ ADR-117（授权律——试听等待是用户明示的暂停，非新增确认拍）/ ADR-134（review hold——「先审阅」请求的覆盖语义）
 
 ## ADR-139: auto 只免批准、不创造制作意图——生产意图入 dock 出生事实 + 确认前呈现累计方案
 
-**Status**: Decided（2026-10-22 用户拍板；现行契约 = `docs/tasks/film-storyboard-orchestration.md` §11；实现与验证状态 = 同前缀 progress）
+**Status**: Decided（2026-10-22 用户拍板；现行契约 = `docs/VIDEO_PROJECT.md` §11；施工与验证状态 = `docs/tasks/video-project-implementation.md`）
 
 **Decision**:
 
@@ -2631,7 +2632,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-140: film 组合幕（composite）——视频/图片素材元素 + 独立文字元素的最小组合结构
 
-**Status**: Decided；现行契约 = `docs/tasks/film-storyboard-orchestration.md` §7.8；剩余实施与验收 = 同前缀 execution；实际状态 = 同前缀 progress。
+**Status**: Decided；现行契约 = `docs/VIDEO_PROJECT.md` §2/§6/§15；剩余实施、验收与实际状态 = `docs/tasks/video-project-implementation.md`。
 
 **Decision**:
 
@@ -2649,7 +2650,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-141: Film 逐字子句粒度 / 同回合纠正道 / 带条件授权守卫 / 交付收敛
 
-**Status**: Decided；现行契约 = `docs/tasks/film-storyboard-orchestration.md` §7.6、§11；剩余验收与实际状态 = 同前缀 execution / progress。
+**Status**: Decided；现行契约 = `docs/VIDEO_PROJECT.md` §2/§6/§15、§11；剩余验收与实际状态 = `docs/tasks/video-project-implementation.md`。
 
 **Decision**:
 
@@ -2666,7 +2667,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-142: 回答续聊输入耐久缝 + Film begin 拒绝锁存
 
-**Status**: Decided；当前实现与验证状态 = `docs/tasks/film-storyboard-orchestration-progress.md`，诊断工具留在 scratch 供复测。
+**Status**: Decided；当前实现与验证状态 = `docs/VIDEO_PROJECT.md`，诊断工具留在 scratch 供复测。
 
 **Decision**:
 
@@ -2681,7 +2682,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-144: 作品首稿强制审阅——呈现持久化前任何 Start 均失败闭
 
-**Status**: Decided（2026-10-25 用户拍板；现行契约 = `docs/tasks/film-storyboard-orchestration.md` §11～§12；实现与验证状态 = 同前缀 progress）
+**Status**: Decided（2026-10-25 用户拍板；现行契约 = `docs/VIDEO_PROJECT.md` §2/§8/§15；施工与验证状态 = `docs/tasks/video-project-implementation.md`）
 
 **Decision**:
 
@@ -2693,3 +2694,22 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 **Consequences**: 命令式首稿的路径恒为「完整呈现并等待 → 用户看后批准 → 开工」；批准后的 auto 道不机械追加第二次同义确认。非 Film、已呈现首稿的后续批准和后续版本的既有授权路径不变。真实 Chat 停等、Start 与口头批准仍须按 progress 单独验收，纯函数绿不冒充旅程证据。
 
 **Related**: ADR-134（首稿 review hold——本条收紧其显式逃生门对作品首稿的适用面）/ ADR-139（auto 不创造制作意图——本条另约束首稿的批准时点）/ ADR-117（确认戳与 auto Start 机器）/ ADR-129（版本化呈现与 Start 守卫）/ ADR-131（呈现行是唯一表达座）
+
+## ADR-145: 视频编辑本体——Composition / CompositionVersion / Track·Clip·Object / Skill / video-spec
+
+**Status**: Decided（2026-10-26 用户拍板；目标契约 = `docs/VIDEO_PROJECT.md`；四阶段施工 = `docs/tasks/video-project-implementation.md`；**未实施**）
+
+**Decision**:
+
+1. **Project 是 Chat/执行上下文，Composition 是持续编辑的影片身份，CompositionVersion 是不可变内容版本**。同一 Chat 可创建多部影片，通过 @asset/@output 分别修订；全局素材库支持跨 Chat 引用，服务端按 owner/权限解算，引用成片当素材与继续修改同一作品分开。Timeline 只在版本内部；不新增 Work / WorkDocument、Sequence 或独立 Timeline 根。新视频 Output.work_id 映射 Composition.id，承接既有发布/归档锚，旧 Clip/非视频语义不随之更改。
+2. **Track 上是 Clip，Clip 内是 Object**。Clip 拥有输出时间窗与可选 SourceSnapshot/source_range；Object 拥有内容、布局、样式和 transform。Animation 以关键帧 + 分段 easing 作用于 Object 属性；Transition 单独表达 Clip 间关系。TextPart 是可寻址的派生对象，只有独立编辑需要时才提升为 TextClip，不默认逐字持久化。
+3. **Storyboard 是 CompositionVersion 的服务端 canonical 投影**。Scene 持有可空 `visual_description`，由 LLM 描述真实画面元素与运动；精确时间、文字和旁白仍读结构。视觉修改必须更新或清空该描述，禁止旧摘要冒充新画面。呈现回执钉 `presented_message_id + presentation_digest + composition_version_id`，首稿强制审阅不变。Scene 引用 SpeechObject.text 这一份旁白原文，字幕记录派生关系，用户手改后不被旁白重生成覆盖。
+4. **Skill 是版本化创作包，不是执行工具**。VideoTemplate 表达结构，Preset 表达局部参数，PromptTemplate 只做 composer 可见预填。launch-film 在新链只是内置 Skill；通用 `design_video / revise_video / produce_video` 共用 CompositionVersion、CRUD、制作和渲染。`/skill + prompt` 仍走唯一 `POST /chat`，个人保存与外部导入不执行任意脚本、不授予权限。“保存创作方法”才是 Skill；既有素材/产物通过全局 @ 引用，不建设“复制确切作品”功能。Template/Preset 在保存版本前展开，渲染编译不重新查询可变注册表。
+5. **作品版本与执行图分家**。`apply_composition_edits` 是作品内容唯一写口；`apply_wiring_ops` 仍是执行图唯一写口。WorkflowRun/WorkflowStep、create_run、队列、fencing、计费、Output/render ownership 全部复用；produce 只消费钉住的 version_ref，缺版或漂移不得重新设计。内容、Start 执行输入、准备后的 execution_digest 与请求幂等按目标合同分开；默认固定切点，只允许有界语速适配，超界回到 Chat 修订，不借帧或静默截断。Graph 可先保留为隐藏血缘/修订拓扑，Canvas 可独立退役，Scene/Clip 不成为 graph nodes。
+6. **video-spec 是 Film 的继任渲染契约**。它只描述量化时间、Tracks/Clips/Objects、Animations/Transitions、样式、音频和解析后素材，不含 React/Remotion/DOM/任意 CSS。RenderAdapter 与 PreviewAdapter 都必须可替换并声明能力；Remotion 商业许可或替代实现须在生产前收口。
+7. **素材绑定不可变快照**。CompositionVersion 引用 SourceSnapshot 与 content digest；多轮修订不依赖聊天历史恢复素材，不因同一快照重复读取/采集，显式 refresh 才更换绑定。
+8. **独立分支内破坏性替换，不迁移既有业务数据**。生产无实际用户，允许停机与本应用旧数据 reset，执行仍核对目标和 dry-run；生产就绪后合并 main。新链先做网页宣传片/MG，验收后删除旧 Film 专用实现，不建设 FilmStoryboard/film-spec 数据适配器。Clip 迁移与删除后置，完整 Scrub/Inspector 最后实施；B 先提供纯 Chat 最小预览，属性组件经统一编辑写口提交。A 内先打通最小渲染闭环，再补官网片/MG 对照；默认切换以 A+B 和生产许可门为前提，不等待个人 Skill 或完整素材库页面。B 在开发期直接替换旧 Film 专用合同，不建设兼容双链；共享可靠性机制与授权/计费/交付不变量保留。D 必须完成旧链残留、依赖、测试与文档的一轮显式删除清理和清理后旅程验收。现有 Chat 外观可保持，必要前端协议接线纳入 B，UI 改版可并行。
+
+**Consequences**: ADR-016/119 的 clip/film 两家族仍是当前代码事实，但不再是长期视频本体上限；迁移期的 video-spec 是 Film 继任而非永久第三套架构。ADR-127 的“模型只填创意槽、代码保证结构”继续成立，但固定结构改由内置 VideoTemplate + 确定性实例化承载。ADR-140 的 composite 不作为长期特殊 Scene 类型，能力由通用 Track/Clip/Object 承接。旧 Film 任务与旧结构锁退出；现行实现查代码与 RENDERING，有效需求归 VIDEO_PROJECT §15，新施工以 ADR-145 两份合同为准，测试退役不代表新链完成。
+
+**Related**: ADR-016（renderer-neutral spec 与黑盒）/ ADR-119（Film storyboard 与 skill 接入）/ ADR-127（固定骨架与创意槽）/ ADR-129（版本身份与执行钉版）/ ADR-137（结构化编辑与 base_ref）/ ADR-139（制作意图）/ ADR-140（组合元素）/ ADR-144（首稿审阅）

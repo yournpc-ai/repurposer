@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { renderArtifacts } from "./artifacts";
+import { cachedArtifacts, renderArtifacts } from "./artifacts";
 
 test("upload recovery reuses finished bytes; changes and users cannot reuse them", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "render-recovery-test-"));
@@ -36,6 +36,26 @@ test("upload recovery reuses finished bytes; changes and users cannot reuse them
     const recovered = await renderArtifacts({ id: "a", spec: { fps: 30, scenes: [1] } }, render, root);
     assert.equal(renders, 5);
     assert.equal(await fs.readFile(recovered.videoPath, "utf8"), "rendered bytes");
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
+test("upload-only cache reads never regenerate missing bytes", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "render-upload-only-test-"));
+  const identity = { id: "a", spec: { fps: 30, scenes: [1] } };
+  let renders = 0;
+  const render = async (directory: string) => {
+    renders++;
+    const videoPath = path.join(directory, "video.mp4");
+    await fs.writeFile(videoPath, "rendered bytes");
+    return { videoPath };
+  };
+  try {
+    const first = await renderArtifacts(identity, render, root);
+    assert.deepEqual(await cachedArtifacts(identity, root), first);
+    assert.equal(renders, 1);
+    await fs.unlink(first.videoPath);
+    assert.equal(await cachedArtifacts(identity, root), null);
+    assert.equal(renders, 1);
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
 

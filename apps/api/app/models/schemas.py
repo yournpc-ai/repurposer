@@ -879,7 +879,7 @@ class DesignStoryboardArgs(BaseModel):
         # an omitted key inherits on redraft, while an explicit null clears
         # the base constraint. Do not pass them through tolerate_null_keys.
         return tolerate_null_keys(
-            data, "focus", "language", "voiceover", "music_mood", "aspect", "specific_instruction", "material_urls", "pending_disposition", "review_hold", "edits", "base_ref", "text", "verbatim"
+            data, "focus", "language", "voiceover", "subtitles", "music_mood", "aspect", "specific_instruction", "material_urls", "pending_disposition", "review_hold", "edits", "base_ref", "text", "verbatim"
         )
 
     @model_validator(mode="after")
@@ -887,7 +887,7 @@ class DesignStoryboardArgs(BaseModel):
         """The patch path's arg discipline: ``edits`` rides ONLY with
         ``base_ref`` (mandatory — the read-time reference), ``review_hold``
         and conversation-level ``pending_disposition`` (never a design
-        parameter). Every design param (focus/language/voiceover/
+        parameter). Every design param (focus/language/voiceover/subtitles/
         music_mood/aspect) belongs to the BASE version + the ops themselves
         (set_music / set_voiceover), and open redraft feedback rides
         ``specific_instruction`` — mixing the two paths is never legal."""
@@ -902,7 +902,7 @@ class DesignStoryboardArgs(BaseModel):
             mixed = [
                 name
                 for name in (
-                    "focus", "language", "voiceover", "music_mood", "aspect",
+                    "focus", "language", "voiceover", "subtitles", "music_mood", "aspect",
                     "specific_instruction", "material_urls", "text", "verbatim",
                     "target_seconds", "scene_count", "group_chars",
                 )
@@ -926,7 +926,11 @@ class DesignStoryboardArgs(BaseModel):
     )
     voiceover: bool | None = Field(
         default=None,
-        description="Spoken narration (launch_film's voiceover, verbatim). A NEW film defaults OFF: pass true ONLY when the user explicitly asked for spoken narration — never on your own initiative; null/false = silent cut (no synthesis, no TTS cost). Independent of the music bed: 'no voiceover' never implies 'no music'. Revising an existing version inherits its pinned setting unless the user names a change.",
+        description="Spoken narration (launch_film's voiceover, verbatim). A NEW film defaults OFF: pass true ONLY when the user explicitly asked for spoken narration — never on your own initiative; null/false = no spoken narration (no synthesis, no TTS cost). Subtitles and the music bed are independent: 'no voiceover' implies neither 'no subtitles' nor 'no music'. Revising an existing version inherits its pinned setting unless the user names a change.",
+    )
+    subtitles: bool | None = Field(
+        default=None,
+        description="Independent visible subtitle tracks (launch_film's subtitles, verbatim). A NEW film defaults ON, with or without voiceover; pass false only when the user asks for no subtitles. Revising an existing version inherits its pinned setting unless the user names a change. This is separate from spoken narration and from clip caption styles.",
     )
     music_mood: str | None = Field(
         default=None,
@@ -973,7 +977,7 @@ class DesignStoryboardArgs(BaseModel):
         description=(
             "PATCH TOP-LEVEL CONTRACT: with a non-empty edits array, base_ref is "
             "required; review_hold and pending_disposition are the only optional "
-            "top-level companions. Omit focus, language, voiceover, music_mood, "
+            "top-level companions. Omit focus, language, voiceover, subtitles, music_mood, "
             "aspect, specific_instruction, material_urls, text, verbatim, "
             "target_seconds, scene_count and group_chars entirely — none of them "
             "expresses a targeted patch. Change speech with a set_voiceover op "
@@ -997,12 +1001,13 @@ class DesignStoryboardArgs(BaseModel):
             "the cited asset itself never swaps), reorder_scenes (the full id "
             "permutation), remove_scene, set_music (mood + retime keep_cut|recut; "
             "mood 'off' switches the bed off for good), set_voiceover (enabled "
-            "false = silent cut; enabled true = re-open synthesis of the board's "
-            "OWN existing narration lines — a board with zero narration lines "
-            "rejects, author the lines first). The system applies them atomically "
-            "against the base version; a stale or fabricated base_ref, an "
-            "empty-effect batch, or a violated constraint rejects the WHOLE batch "
-            "with the reason. Omit for a first draft or an open feedback redraft."
+            "false = no spoken narration; enabled true = re-open synthesis of "
+            "the board's OWN existing narration lines — a board with zero "
+            "narration lines rejects, author the lines first). The system "
+            "applies them atomically against the base version; a stale or "
+            "fabricated base_ref, an empty-effect batch, or a violated "
+            "constraint rejects the WHOLE batch with the reason. Omit for a "
+            "first draft or an open feedback redraft."
         ),
     )
     base_ref: str | None = Field(
@@ -1284,6 +1289,26 @@ class ChatAnswerArgs(BaseModel):
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
         description="Pending-question settlement for this turn: 'answer' = the message ENGAGES the question (answers it, hands the choice back to you, or discusses its options) and it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
+    )
+
+
+class RetryUploadArgs(BaseModel):
+    """``retry_upload`` params: recover a finished render whose upload failed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "output_id", "pending_disposition")
+
+    output_id: UUID | None = Field(
+        default=None,
+        description="The @output pin's definite id. Omit it when the latest failed run has exactly one upload failure; the system resolves that output. Never invent an id.",
+    )
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="Pending-question settlement for this turn: 'answer' = the message ENGAGES it (answers it, hands the choice back to you, or discusses its options) and it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
     )
 
 
@@ -1747,9 +1772,10 @@ class IntentSlot(BaseModel):
     focus: str | None = None
     language: str | None = None
     tone_override: str | None = None
-    # Film-family slots (launch_film): voiceover toggle / BGM mood / canvas
-    # aspect — None = plan default (on / mood default / 16:9).
+    # Film-family slots (launch_film): spoken narration / independent visible
+    # subtitles / BGM mood / canvas aspect — None = plan default.
     voiceover: bool | None = None
+    subtitles: bool | None = None
     music_mood: str | None = None
     aspect: str | None = None
     # Text-source films (ADR-138 §7.6): the copy + its role + the user's
@@ -2379,7 +2405,7 @@ class PendingPlan(BaseModel):
     # redraft; a reuse (same fingerprint, no fresh feedback) keeps it.
     film_storyboard_version: int | None = None
     # The design params that produced the current version (focus / language /
-    # voiceover / music_mood / aspect as named — nulls preserved): the dock
+    # voiceover / subtitles / music_mood / aspect as named — nulls preserved): the dock
     # seats rewrite the launch_film task's params from THIS, so the confirmed
     # chain carries exactly what the presented board was designed with.
     film_storyboard_params: dict | None = None
@@ -3825,6 +3851,9 @@ class FilmSceneDivider(FilmSceneBase):
     seconds: float
     label: str
     roll: list[str] = Field(min_length=1)
+    # Grounding memory for later compose revisions: the full cited pillar,
+    # not the condensed display title in roll[-1]. Never emitted to film-spec.
+    source_text: str | None = None
     narration: str | None = None
 
 
