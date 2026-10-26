@@ -51,10 +51,12 @@ export function isDeliveredOutput(output: Output): boolean {
  * files degrades to the text seat; a name-less row keeps null — the
  * fallback is the render's job, never a template backfill here). */
 export function anchorCardOf(output: Output): AnchorCardData {
+  // film carries its display name in payload.name (no hook/title fields).
   const name =
     output.publishing.title?.trim() ||
     (output.payload.title as string | undefined)?.trim() ||
     (output.payload.hook as string | undefined)?.trim() ||
+    (output.payload.name as string | undefined)?.trim() ||
     null
   const videoUrl = output.files.video ?? null
   const imageUrl = output.files.image ?? null
@@ -72,7 +74,8 @@ export function anchorCardOf(output: Output): AnchorCardData {
     imageUrl,
     poster: output.publishing.cover_image_url ?? null,
     durationSec:
-      output.type === "clip" && typeof output.payload.duration === "number"
+      (output.type === "clip" || output.type === "film") &&
+      typeof output.payload.duration === "number"
         ? output.payload.duration
         : null,
     aspect: output.aspect ?? null,

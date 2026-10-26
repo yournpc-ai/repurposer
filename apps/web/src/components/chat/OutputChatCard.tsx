@@ -15,6 +15,8 @@ import type { Output } from "@/lib/types"
 export function OutputChatCard({ output }: { output: Output }) {
   switch (output.type) {
     case "clip":
+    // A film is a rendered video product like a clip — same card.
+    case "film":
       return <ClipCard output={output} />
     case "post":
       return <PostCard output={output} />

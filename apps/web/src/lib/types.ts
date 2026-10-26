@@ -105,6 +105,8 @@ export interface OutputPayload {
   attribution?: string
   // carousel
   slides?: { title: string; body?: string }[]
+  // film
+  name?: string
   // article extras
   tldr?: string
   key_points?: string[]

@@ -2285,7 +2285,10 @@ function GraphCard({
   const [displayId, setDisplayId] = useState<string | null>(null)
   // 版本累积 (the version lineage): a re-fill landing NEW products flips
   // the display to the newest version — the revision's arrival is seen in
-  // place (原型 C's 2/2). Mount keeps the first (the chain's birth order).
+  // place (原型 C's 2/2). Mount also opens on the newest version (null =
+  // the LAST row — a revision's re-render must be what the card plays by
+  // default, matching DocumentCard's convention); a flip pins an older
+  // version by id.
   const seenOutputIdsRef = useRef<Set<string> | null>(null)
   useEffect(() => {
     const ids = new Set(outputs.map((o) => o.id))
@@ -2295,7 +2298,9 @@ function GraphCard({
     const added = outputs.filter((o) => !prev.has(o.id))
     if (added.length > 0) setDisplayId(added[added.length - 1].id)
   }, [outputs])
-  const output = (displayId ? outputs.find((o) => o.id === displayId) : null) ?? outputs[0]
+  const output =
+    (displayId ? outputs.find((o) => o.id === displayId) : null) ??
+    outputs[outputs.length - 1]
   // The surface tracks the shown member — a node click selects what the
   // user is LOOKING at (mount + flip both report).
   useEffect(() => {
@@ -2510,7 +2515,10 @@ function GraphCard({
             total={outputs.length}
             onFlip={(delta) => {
               const next = outputs[shownIdx + delta]
-              if (next) setDisplayId(next.id === outputs[0]?.id ? null : next.id)
+              if (next)
+                setDisplayId(
+                  next.id === outputs[outputs.length - 1]?.id ? null : next.id,
+                )
             }}
           />
         )}

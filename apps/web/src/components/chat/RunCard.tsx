@@ -1,22 +1,27 @@
 /** RunCard — the DAG's linear projection inside a chat message (chat-loop-v2).
  *
- * Renders a run's step checklist live (SSE via useRunEvents — snapshot first,
- * so historical messages rehydrate through the exact same path), then the
- * produced outputs as the same cards the results page uses. Never renders
- * the graph itself ("用户不见图").
+ * The run's work segment renders through the shared RunTaskList (SSE via
+ * useRunEvents — snapshot first, so historical messages rehydrate through
+ * the exact same path): the live checklist collapses into the one Worked
+ * receipt row, expandable back to the step details. Replay has no delivery
+ * seal, so the segment honestly settles on the run's observable step span
+ * (runWorkElapsedMs fallback). Terminal also inlines the produced outputs
+ * as the same cards the results page uses. Never renders the graph itself
+ * ("用户不见图").
  */
 
 import { useEffect, useRef, useState } from "react"
-import { Check, CircleHelp, Loader2, Minus, X } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
 import { apiFetch } from "@/lib/api"
 import { isDeliveredOutput } from "@/lib/anchorCards"
 import { useRunEvents } from "@/lib/use-run-events"
-import type { Output, WorkflowStep } from "@/lib/types"
+import type { Output } from "@/lib/types"
 
 import { OutputChatCard } from "./OutputChatCard"
+import { RunTaskList } from "./RunTaskList"
 
 interface RunCardProps {
   runId: string
@@ -25,44 +30,13 @@ interface RunCardProps {
   onDone?: () => void
 }
 
-function StepRow({ step }: { step: WorkflowStep }) {
-  const { t } = useTranslation()
-  const icon =
-    step.status === "running" ? (
-      <Loader2 className="animate-spin text-primary" />
-    ) : step.status === "done" ? (
-      <Check className="text-muted-foreground" />
-    ) : step.status === "failed" ? (
-      <X className="text-destructive" />
-    ) : step.status === "waiting" ? (
-      // Interrupt parked for a human answer (期 4) — same glyph as the
-      // generation overlay's StepMarker.
-      <CircleHelp className="text-primary" />
-    ) : (
-      <Minus className="text-muted-foreground/50" />
-    )
-  const label =
-    step.summary ||
-    (step.stage ? t(`results.stepper.${step.stage}`, { defaultValue: "" }) : "") ||
-    t(`chat.stepKinds.${step.kind}`, { defaultValue: step.kind })
-  return (
-    <Marker>
-      <MarkerIcon>{icon}</MarkerIcon>
-      <MarkerContent className={step.status === "running" ? "shimmer" : undefined}>
-        {label}
-        {step.status === "failed" && step.error ? ` — ${step.error}` : ""}
-      </MarkerContent>
-    </Marker>
-  )
-}
-
 export function RunCard({ runId, onDone }: RunCardProps) {
   const { t } = useTranslation()
   const [outputs, setOutputs] = useState<Output[] | null>(null)
   const onDoneRef = useRef(onDone)
   onDoneRef.current = onDone
 
-  const { steps, status, terminal } = useRunEvents(runId)
+  const { steps, status, createdAt, terminal } = useRunEvents(runId)
 
   // Terminal → inline the produced outputs (from steps' output_refs). Fires
   // once; `outputs !== null` guards the loaded state (empty list included).
@@ -93,9 +67,21 @@ export function RunCard({ runId, onDone }: RunCardProps) {
 
   return (
     <div className="flex w-full flex-col gap-1.5">
-      {steps.map((step) => (
-        <StepRow key={step.id} step={step} />
-      ))}
+      {/* Quiet until the first snapshot lands — a stream still connecting
+          must not flash a live-looking row on every historical run. */}
+      {(steps.length > 0 || terminal) && (
+        <RunTaskList
+          steps={steps}
+          title=""
+          runStartedAt={createdAt}
+          terminal={terminal}
+          failed={failed}
+          reviewPending={false}
+          workEndedAtMs={null}
+          narrativeFallback={t("results.stepper.queued")}
+          hasUploads={false}
+        />
+      )}
 
       {terminal && outputs === null && (
         <Marker>

@@ -115,7 +115,7 @@ base_ref(composition_id, version_id, content_digest) + request_id + edits
 
 `storyboard_payload(version)` 由服务端从保存后的 CompositionVersion 确定性生成，包含完整分镜表和回退事实标签。Chat 呈现这份 canonical payload 并补充解释，不要求 LLM 把整张表重新转录一遍。
 
-成功呈现时持久化 `presented_message_id + presentation_digest + composition_version_id`。首稿 Start 同时校验版本与呈现摘要；仅有“消息曾提到某版”不等于用户看过当前完整分镜。结构化表格、组件和 LLM 散文字段的释放都遵守现有打字机律，不能借 canonical payload 整段瞬移。
+呈现记录持久化 `presented_message_id + presentation_digest + composition_version_id`。首稿 Start 同时校验版本、完整呈现记录与后续用户批准；仅有“消息曾提到某版”或服务端生成了 payload 不算完成呈现。B 明确发送、客户端释放与中断时的回执边界；该记录证明承载内容与版本的关联，不证明用户主观已读，不新增阅读追踪系统。结构化表格、组件和 LLM 散文字段的释放都遵守现有打字机律，不能借 canonical payload 整段瞬移。
 
 ### 2.4 内容、执行与产物身份
 
@@ -148,6 +148,8 @@ Clip 可带可空 `scene_id` 表示叙事归属：
 - Scene 与 Clip 的范围一致性由 validator 和编辑操作共同维护。
 
 一个 Scene 可含多个镜头和多个素材切片；“一个视频 Clip 切一刀”不自动产生新 Scene。
+
+Scene 的移动、复制和删除以同一批原子编辑维护归属 Clips、动画、旁白引用与受影响 Transition；移动不改变源区间，复制按 §4.2 重映射 ID，删除不能留下悬空引用。跨幕/全局 Clip 不因时间上与该 Scene 相交就被连带修改；跨组关联不能可靠保留时明确冲突，不隐式 ripple 或挪动其他 Scene。首批实现实际 CRUD 所需操作，不扩展成磁吸时间线编辑器。
 
 ### 3.2 `visual_description` 是独立的导演表达字段
 
@@ -199,6 +201,7 @@ Track
 - 音频 Track 进入混音；role 支持组织、定点修改和未来分轨导出。
 - Track 横贯整片，Scene 只标记叙事范围；跨幕音乐不复制到每个 Scene。
 - 首批只创建实际能力需要的 Tracks，不开放自由 NLE 轨道编辑器。
+- Layer 不再作为另一套持久容器；需要此词时仅表示视觉投影或 UI 分组，不与 Track 各存一份 Clips/Objects。Track、Clip、Object、Animation 是版本内容中的结构化实体，不按元素各建数据库表。
 
 ### 4.2 Clip
 
@@ -207,7 +210,7 @@ Clip
 ├── clip_id
 ├── range                 全片输出时间窗
 ├── scene_id?             叙事归属，可空
-├── source?               SourceSnapshot + 源素材时间区间
+├── source?               固定 SourceSnapshot + 可选源素材时间区间
 ├── object
 └── animations[]
 ```
@@ -215,12 +218,27 @@ Clip
 | Clip | Object | Source |
 |---|---|---|
 | VideoClip | VideoObject | 视频快照 + source_range |
-| AudioClip | AudioObject / SpeechObject | 音频快照，或待合成旁白信息 |
+| AudioClip | AudioObject / SpeechObject | 音频快照；待合成 Speech 不伪造媒体 source，脚本/声音绑定归 Object |
 | ImageClip | ImageObject | 图片快照 |
 | TextClip | TextObject | 无源素材 |
 | WebClip | WebObject | 网页快照、页面视图或录屏 |
 
-同一 Asset 可由多个 Clips 引用不同 `source_range`；每个 Clip 有自己的 id、输出窗、对象与动画。`source` 明确包含 `asset_id + snapshot_digest + source_range`，不使用含义模糊的 `clip_source_id`。
+同一 Asset 可由多个 Clips 引用不同 `source_range`；每个 Clip 有自己的 id、输出窗、对象与动画。Clip 是统一编辑项契约，不要求为表中每一行建设继承类或数据表；对象 kind 与轨道能力共同校验，不另加 `is_clip`。
+
+源引用结构为：
+
+```text
+source?: {
+  asset_id,
+  snapshot_digest,
+  source_range?: { start, end }   // 源时间，采用 §6 的时间表示
+}
+```
+
+- 有 source 时 asset_id 与 snapshot_digest 必须解算到本版绑定的同一不可变快照，不使用含义模糊的 `clip_source_id`。
+- 视频、音频、网页录屏等有时间轴的素材使用 source_range；图片和静态网页视图不伪造源时间窗，显示时长由 Clip.range 决定。Text 无需媒体 source；待合成 Speech 的原文与声音绑定归 Object，真实合成音频归执行 manifest，不能在制作后回写不可变版本来补 source。
+- 例如 Clip A/B/C 分别引用 asset X 同一快照的 00:10–00:18、00:32–00:41、01:03–01:09；各自的全片输出位置独立指定。源窗不等于输出窗，移动 Clip 不重新裁源。
+- Scene/Track/Clip/Object/Animation 的 ID 在版本内按各自类型唯一；同一实体跨版本保持 ID。新增或复制实体生成新 ID，并原子重映射内部动画、Scene 和 Transition 等引用；复制可继续共享同一 SourceSnapshot，不复制源媒体。移动/改属性不换 ID；TextPart 身份另按 §5.2 的文本派生规则处理。
 
 ### 4.3 Object
 
@@ -230,6 +248,10 @@ Object 负责内容、布局和表现，Clip 负责时间与轨道。
 - AudioObject：gain、pan 与音频 effects。
 - WebObject：网页快照/视图引用及取景、相机所需的结构化参数。
 - SpeechObject：`text` 是旁白原文唯一来源，另存声音绑定与合成 provenance；Scene 和分镜表引用该文本，制作后才解析成可渲染音频。
+
+每个 Object 有稳定 `object_id` 和类型 `kind`。视觉属性明确 layout box、transform origin、相对 position/scale/rotation、opacity、style/effects；音频使用 gain/pan/effects，不强套视觉 transform。素材绑定由 Clip.source 与版本 sources 共同确定；WebObject 的 view/元素/取景选择必须属于该快照，不另存会独立漂移的素材身份。
+
+ASR words/segments、翻译与字幕对齐、speaker_map、crop_track 等上游事实属于素材快照或带输入 provenance 的派生结果，不粗暴塞进通用 Object，也不丢弃其高层语义。需要显示/播放的结果再编译为 Text/Video/Audio Clips。旧 Clip 的这些能力仍后置逐项承接；本轮不会为了通用模型重写 ASR 或提前删除旧 Clip。
 
 Layout 与 Transform 不得形成双真相：layout 决定静态盒，transform 只表达相对盒的位移、缩放、旋转与透明度。相同位置不得同时由 `rect.x` 和 `transform.x` 两套值决定。
 
@@ -272,10 +294,12 @@ Animation 存在所属 Clip 内并随 Clip 移动、复制和删除；target 必
 
 基础是**关键帧 + 每段 easing**，不是单一贝塞尔：
 
-- `linear`、`cubic-bezier`、`hold` 是基础枚举；
+- `linear`、`cubic-bezier`、`hold` 是基础枚举；easing 归前一关键帧到后一关键帧的插值段，hold 保持前值直到后一关键帧时跳变，不等于整段都瞬时完成；
 - 多段关键帧表达“先变大、迅速回缩一点、再稳定”等 overshoot；
 - 现有 spring 行为可先作为受支持 easing 或确定性烘焙输入保留，不在首批强行重写；
 - AnimationPreset 只在实例化时展开为属性和关键帧，Renderer 不查 Preset 注册表。
+
+插值求值还须冻结首关键帧之前、末关键帧之后与 Clip 边界的行为，重复时间键与非法目标/属性明确拒绝；按 §6.5 的共享 fixtures 对照 Preview/Render。首批只提供实际使用的属性与 easing，不预建通用动画编辑器。
 
 Effect 描述模糊、颜色等处理；Animation 描述属性随时间如何变化。两者可组合，但不合并概念。
 
@@ -310,6 +334,8 @@ TextObject
 | **Clip-local time** | Animation keyframes；随 Clip 移动 |
 
 同名字段不得跨时间域换义。Clip 在输出时间移动时，源区间不变、内部动画随动；Scene 移动只带动明确归属的 Clips。
+
+有时间轴的源素材还须明确源窗到输出窗的播放映射。默认 1×；源不足不能静默循环、冻结末帧、拉伸或截断。非 1× 仅在有显式参数且 adapter 支持时开放，不支持即冲突；本轮不要求实现通用变速引擎。旁白有界适配按 §6.4 的独立制作政策处理，不改变已审阅切点。
 
 ### 6.2 时间表示与帧
 
@@ -364,7 +390,7 @@ launch-film/
 │   ├── 章节、hook、reveal、旁白与命名工艺
 │   └── 引用与事实纪律中的创作部分
 └── video-template.json
-    ├── cold open / hero / home walk
+    ├── cold open / hero / home 静态定场卡
     ├── 3–5 章有界 repeat
     ├── divider / chapter walk / optional plate
     ├── reveal / proof / end
@@ -401,7 +427,8 @@ capture、SSRF、citation resolver、grounding、素材权限、容量、报价�
 → Storyboard 完整呈现与首稿审阅
 → 既有制作意图 / 报价 / 授权 / Start
 → produce_video 钉 composition_id + composition_version_id + content_digest
-→ CompositionVersion 编译为 video-spec
+→ 固定执行输入，准备旁白等派生素材（无需时跳过）
+→ 编译最终 video-spec，固化执行 manifest / execution_digest
 → Renderer 黑盒
 → Output(type=video)
 ```
@@ -486,6 +513,8 @@ Chat 内组件通过结构化 block 引用 `composition_id + composition_version
 - Canvas 若保留，是同类可视化组件/Graph 投影，不再是所有项目的默认归宿。
 
 [Scrub Input](https://uiarc.dev/components/scrub-input) 是 Chat 内的对象属性输入，支持位置、字号、旋转和透明度等值；它不要求时间线编辑器。完整 Scrub Inspector 后置，数据与写口在 A/B 预留。`onValueChange` 只做本地预览，`onValueCommit` 才提交一次编辑；其连续拖动只做本地预览，commit 才携带 base_ref 经 `apply_composition_edits`；不为 mousemove 调 LLM、建版本或触发付费渲染。字幕组件可采用左侧真实画面、右侧参数的形式。
+
+Inspector 的内容/来源、位置/尺寸、文字样式、Clip 时间与动画分组均读同一版本 DTO。提交携带 base_ref、稳定 clip/object 标识与受限 edits；Escape 取消、双击复位、键盘步进及冲突时预览回滚在 D4 实现。旧消息卡片钉旧版本，只读历史不追随 current；继续修改旧版须走 §9.1 的显式选择与当前 head 条件提交，不静默用旧卡覆盖新版。
 
 ### 10.1 Chat 创作、工具过程与交付
 

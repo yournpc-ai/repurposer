@@ -66,6 +66,7 @@
 - Scene 保存 range、intent、可空 visual_description 与 speech_clip_ids；旁白原文只保存在 SpeechObject.text，Storyboard 读取其投影；Clip 的 scene_id 可空。
 - 定义视频/原声音频关联，split/trim/move 不造成非预期声画脱离；不做完整 NLE 联动编辑器。
 - Source time、Output time、Clip-local time 三个时间域在 schema 命名和 validator 中分开。
+- 按 VIDEO_PROJECT §3–4 冻结 source 的静态/动态/待合成差异、实体 ID 的保留/复制重映射与 Scene 原子操作；Layer 不建平行持久列表，元素不逐个建表。只实现当前样片/CRUD 需要的操作，不预建继承体系。
 - Transition 先定义关系、输出覆盖窗、source handles 与余量不足即拒绝；只实现当前对照样片需要的封闭枚举。同轨非转场重叠拒绝。
 - 按母文档 §6.5 冻结 split/trim 的关键帧裁剪、端点取样与重新定基；同对象/属性重叠动画拒绝。
 
@@ -74,6 +75,7 @@
 - Animation 挂在所属 Clip 内，target 只能指向该 Clip 的 Object/TextPart。
 - 属性首批：opacity、position、scale、rotation、audio.gain 与网页取景所需属性。
 - Easing 首批：linear、cubic-bezier、hold；现有 spring 对照行为选择受支持 easing 或确定性烘焙，不静默改观感。
+- 冻结 easing 的段归属、hold 跳变与首末关键帧外求值；共享 fixtures 覆盖 Clip 边界，非法目标/属性与重复时间键拒绝。
 - TextPart 由完整 TextObject 派生 line/word/grapheme/span；支持 stagger，不默认落独立 Clip。
 - 固定字体资源 digest、分词/排版版本与父子变换组合规则；中文、英文、Emoji 与换行 fixtures 校验 Preview/Render 一致性。
 - 文本修改后的 part 映射失败必须拒绝；不得按数组下标静默错配。
@@ -106,6 +108,7 @@ A 内按三次可验证交付推进，不先造齐全量框架：
 - [ ] 两个 Chat 基于同一 Composition/base_ref 并发修改不能覆盖；同请求超时重试得到同一结果，失败整批无新版本。
 - [ ] owner/引用/删除保留合同闭环；跨 Chat 同 owner 访问可用，跨 owner 的 asset/output/composition/version 引用均被拒绝。
 - [ ] 同一 Web/Video/Image/Text/Audio Clip 可在统一输出时间对齐，源裁切与 Clip 移动不混时钟。
+- [ ] 同源多 Clip 的源窗和输出窗独立；静态源无伪造 source_range，未合成 Speech 不占假音频引用；实体复制重映射内部 ID，Scene 操作不移动全局音乐或留下悬空引用。默认 1× 源不足明确拒绝。
 - [ ] 整体 Object 动画和 TextPart stagger 使用同一 Animation schema；复杂 scale 可由多段关键帧 + Bezier/hold 表达。
 - [ ] 30fps 与既有秒→帧 golden cases 一致；BPM/BeatGrid 不错用源时间。
 - [ ] video-spec 不含 Remotion/React/DOM/任意 CSS；静态架构门覆盖依赖方向。
@@ -143,6 +146,7 @@ A 内按三次可验证交付推进，不先造齐全量框架：
 - `storyboard_payload(version)` 由服务端生成完整表格：时间/帧、visual_description、精确屏上文字、旁白、素材和音频事实。
 - Chat 不再让 LLM 转录唯一分镜真相；结构化 payload + 组件/确定性表格负责呈现，LLM 只补充解释和下一步。
 - 持久化 `presented_message_id + presentation_digest + composition_version_id` 到通用确认状态；首稿 Start 校验三者。
+- 按 VIDEO_PROJECT §2.3 明确完整呈现与中断的回执边界；生成 payload 不冒充已呈现，回执不冒充用户已读，首稿另需呈现之后的批准。
 - 保留“首版先完整呈现并等待”、普通修订不重制、明确“改完直接做”才进入制作、auto/ask 与守卫线规则。
 - 所有 assistant 散文与 LLM 散文字段继续满足 null 读容忍和打字机节拍；结构化组件不得成为瞬移旁路。
 
@@ -301,6 +305,8 @@ D 是独立依赖门集合，不是等待 C 全部完成后的大批次。D1 依
 ### 4.3 D3：Clip 后置
 
 Composition/Track/Clip/Object 在 MG 与官网片稳定后，才逐项评估 reframe、segments、ASR/caption/translation、dub/music/intro/outro。每项独立验证读写、渲染、真实旅程和费用；旧 Clip 只有在全部仍需能力有等价承接后才删除。本四阶段不以删除 Clip 为完成条件。
+
+保留能力映射：reframe/crop_track → 视频取景与源时间派生数据；segments → 源窗和选段决策；title → TextClip；caption/translation → 语义/对齐结果及其 TextClips；dub/music → AudioClips；intro/outro → Scene 预设。ASR words、speaker_map 等仍保留上游事实与 provenance，不为统一 Object 丢弃高层操作或重写理解链。
 
 ### 4.4 D4：Scrub 与 Inspector 最后实施
 

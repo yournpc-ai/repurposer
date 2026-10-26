@@ -364,11 +364,13 @@ export function ResultsCanvas({
     }
 
     // The pager's flipped display: the lightbox follows the SHOWN product,
-    // not the node's first row.
+    // not the node's first row. Unreported fallback = the card's own mount
+    // default — the NEWEST row.
     const output =
       (outputId ? outputById.get(outputId) : undefined) ??
       (node.outputs?.length
-        ? outputById.get(displayedRef.current.get(nodeId) ?? "") ?? node.outputs[0]
+        ? outputById.get(displayedRef.current.get(nodeId) ?? "") ??
+          node.outputs[node.outputs.length - 1]
         : undefined)
     if (output) {
       const url = toAbsoluteUrl(output.files.video ?? output.files.image ?? null)
@@ -479,7 +481,8 @@ export function ResultsCanvas({
         return
       }
       // A graph card: click = dock focus (D8) + the dossier swap-in, on the
-      // product the pager is SHOWING (fallback = the node's first). The
+      // product the pager is SHOWING (fallback = the card's mount default —
+      // the node's NEWEST row). The
       // dossier opens for video products too (2026-09-13 二轮拍板——右侧
       // 档案保留；退役的只有居中播放器 modal)。Document-family nodes
       // without products (transcript / doc stations) are read on the card —
@@ -487,7 +490,8 @@ export function ResultsCanvas({
       const outputs = node.outputs ?? []
       if (outputs.length === 0) return
       const output =
-        outputById.get(displayedRef.current.get(id) ?? "") ?? outputs[0]
+        outputById.get(displayedRef.current.get(id) ?? "") ??
+        outputs[outputs.length - 1]
       setInspectedId(output.id)
       onOutputClick?.(output)
     },

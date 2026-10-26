@@ -73,7 +73,9 @@ export function ClipCard({ output, isTopPick }: ClipCardProps) {
   }, [isPlaying])
 
   const videoUrl = clipState.files.video ?? null
-  const title = clipState.publishing.title || clipState.payload.hook || ""
+  // film products carry their display name in payload.name (no hook field).
+  const title =
+    clipState.publishing.title || clipState.payload.hook || clipState.payload.name || ""
   const coverUrl = clipState.publishing.cover_image_url ?? null
   // The frame keeps the clip's own aspect (2026-08-14 三档画幅 ruling — no
   // forced square): the media already renders object-contain, so the frame

@@ -855,7 +855,11 @@ _JS_ELEMENTS = r"""() => {
         const t = textOf(e);
         if (!t || t.length > 220) continue;
         const fs = parseFloat(getComputedStyle(e).fontSize);
-        out.push({kind: inChrome(e) ? 'pinned' : 'text', text: t, size: Math.round(fs), ...box(r), ...(covered(e, r) ? {covered: true} : {})});
+        // Real heading tags (or ARIA heading roles) earn the "heading" kind —
+        // the camera's default picker prefers the section's subject copy over
+        // controls; styled-div display copy still lands in the text tier.
+        const heading = /^H[1-6]$/.test(e.tagName) || e.getAttribute('role') === 'heading';
+        out.push({kind: inChrome(e) ? 'pinned' : heading ? 'heading' : 'text', text: t, size: Math.round(fs), ...box(r), ...(covered(e, r) ? {covered: true} : {})});
     }
     for (const m of document.querySelectorAll('img,video,canvas,svg,picture')) {
         if (m.closest('svg') && m.tagName.toLowerCase() !== 'svg' || m.tagName === 'IMG' && m.closest('picture')) continue;

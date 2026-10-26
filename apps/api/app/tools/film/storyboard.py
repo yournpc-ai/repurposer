@@ -169,6 +169,21 @@ SCENE_SECONDS: dict[str, tuple[float, float]] = {
     "end": (3.0, 6.0),
 }
 
+# The home overview (the first ui scene, the fold in the browser card) is a
+# STATIC establishing card, not a walk: its only job is "this is the real
+# site" — a fixed beat-length window, no camera at all (assembly issues the
+# static-wide focus form; the walk expander holds the wide frame). The ui
+# band's 4s floor would already be a linger for it, so it carries its own
+# beat band (a named revision may stretch it inside this range).
+_HOME_SCENE_SECONDS = 3.0
+_HOME_SECONDS_RANGE = (2.0, 6.0)
+
+# The reveal's lead is a one-line setup, never half the scene: uncapped,
+# `seconds / 2` held a lone gray line for 7s+ on a max-band reveal before
+# the word landed. The cap keeps the split reveal's rhythm (lead → beat
+# pause → word) without the dead air.
+_REVEAL_LEAD_MAX_SECONDS = 3.0
+
 # Structural frame minimums (the allocator clamps UP to these — code's seat):
 _MIN_SCENE_FRAMES = 30  # 1s — the 7+7 fade veil plus one readable beat
 _END_MIN_FRAMES = 75  # 2.5s — the closing card's floor
@@ -209,6 +224,10 @@ _LIST_CAPS = {
 # Camera bounds: x/y are normalized frame positions; zoom is a magnification
 # (1 = the full frame). The spec's [0,1]³ law covers x/y; zoom lives in [1,4].
 _ZOOM_RANGE = (1.0, 4.0)
+# Element-derived arrivals preserve surrounding context even when the target
+# is a tiny control. Raw/legacy triples keep the wider validator range; the
+# deterministic tail settle may still add its 0.05 push.
+_ELEMENT_ZOOM_MAX = 1.6
 
 MAX_REWRITES = app_settings.film_storyboard_max_retries
 # 30-minute ceiling (2026-10-18 用户拍板): the user explicitly accepts a
@@ -571,15 +590,16 @@ class CopyRef(BaseModel):
 
 
 class FilmDirection(BaseModel):
-    """The director's answer — the ONLY thing the LLM produces (ADR-127,
-    2026-10-16 用户拍板): the scene STRUCTURE (order/types/durations/camera)
+    """The director's answer — the ONLY thing the LLM produces (ADR-127):
+    the scene STRUCTURE (order/types/durations plus camera timing/geometry)
     is code-owned, aligned with the launch-film skill's fixed template; the
-    model answers only the slots. Factual slots stay citations (``CopyRef``
-    — product name, taglines, chapter headings); the creative
-    channel is free text (cold-open hooks, the reveal lead, per-scene
-    narration) — hooks, never claims (GPT 任务书法: 创作交给 LLM，正确性
-    与执行交给代码). Never persisted: ``assemble_storyboard`` splices it
-    into the code-built skeleton and resolves citations into the persisted
+    model answers the creative/citation slots and may override each UI
+    scene's camera target with a captured element id. Factual slots stay
+    citations (``CopyRef`` — product name, taglines, chapter headings); the
+    creative channel is free text (cold-open hooks, the reveal lead,
+    per-scene narration) — hooks, never claims. Never persisted:
+    ``assemble_storyboard`` splices the answer into the code-built skeleton
+    and resolves citations and element targets into the persisted
     FilmStoryboard shape."""
 
     model_config = ConfigDict(extra="forbid")
@@ -611,8 +631,21 @@ class FilmDirection(BaseModel):
     narrations: dict[str, str] = Field(default_factory=dict)
     # Visible subtitle COPY keyed by the same scene keys. The model writes no
     # timestamps: assembly splits and times the cues deterministically.
-    # Null / null entries read as omitted and take the grounded fallback.
+    # Null / null entries read as omitted. Web fallback covers only the
+    # explanatory plan scenes; an explicit line can still add any scene.
     subtitle_lines: dict[str, str | None] | None = None
+    # UI scene key → captured element id for that scene's push target. The
+    # model chooses semantics from the actual shot; code still owns every
+    # coordinate, zoom and camera beat. Null/missing entries inherit the
+    # skeleton's deterministic default.
+    camera_focuses: dict[str, str | None] | None = Field(
+        default=None,
+        description=(
+            "Camera target overrides keyed by UI scene key. Each value is an "
+            "element id from that scene's assigned page and shot; null or an "
+            "omitted entry inherits the skeleton target."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -666,26 +699,34 @@ def _phrase(table: dict[str, str], language: str | None) -> str:
 @dataclass(frozen=True)
 class _Skeleton:
     """The code-owned half of the film: the usable page views (page, shot)
-    in preference order, each view's code-picked camera focus, and the
-    plate verdict (number-ish manifest lines the cards are split from, plus
-    the page they live on — the plate hangs off THAT page's chapter)."""
-
+    in preference order, each view's deterministic default camera focus,
+    and the plate verdict (number-ish manifest lines the cards are split
+    from, plus the page they live on — the plate hangs off THAT page's
+    chapter)."""
     views: tuple[tuple[int, int], ...]
     focuses: dict[tuple[int, int], FilmFocus]
     plate_lines: tuple[int, ...]  # manifest ids, number-ish lines (empty = no plate)
     plate_page: int | None  # the page the plate lines came from
 
 
-_FOCUS_KINDS = ("heading", "button", "image", "video")  # camera preference order
+# Camera default preference: the view's DOMINANT CONTENT first — the display
+# headline, then media, then the largest copy block; controls (buttons) are
+# the last resort. (A tiny utility badge must never win the walk's only
+# arrival over the section's subject: pre-fix, a 3%-wide "Copy" chip beat
+# every card on the connectors shot because "heading" was never emitted
+# capture-side and buttons outranked text.)
+_FOCUS_KINDS = ("heading", "video", "image", "text", "button")
 
 
 def build_skeleton(pages: list[StoryboardPage], lines: list[ManifestLine]) -> _Skeleton:
     """Derive the deterministic half from the captured world. Views = every
     captured (page, shot) with imagery, fold first per page (pages without
     any screenshot contribute nothing — a ui scene there is illegal by
-    validator law). Each view's camera names its best uncovered element
-    (headings/buttons/imagery first, largest area wins); a view with no
-    element inventory falls back to the honest raw center push-in."""
+    validator law). Each view's default camera names its best uncovered
+    element (headings/media/copy first, largest area wins — controls last);
+    a view with no element inventory falls back to the honest raw center
+    push-in. The director may override that default with another element
+    from the same shot."""
     views: list[tuple[int, int]] = []
     focuses: dict[tuple[int, int], FilmFocus] = {}
     for page_idx, page in enumerate(pages):
@@ -745,17 +786,19 @@ def _split_card(text: str) -> tuple[str, str] | None:
     big, label = parts[0].strip(), parts[1].strip(" —-·")
     if not big or not label:
         return None
-    return big[: TEXT_CAPS[("plate", "big")]], _fit_to_cap(
-        label, TEXT_CAPS[("plate", "label")], "head"
+    return big[: TEXT_CAPS[("plate", "big")]], _strip_edge_connectors(
+        _fit_to_cap(label, TEXT_CAPS[("plate", "label")], "head")
     )
 
 
 def _pick_focus(elements: list) -> FilmFocus:
-    """One camera beat for a view: the best uncovered element by kind
-    preference then area (its ``at`` is re-derived at assembly once the
-    scene's window exists — the skill counts arrivals in beats). No
-    inventory = the raw center push-in (the two legal focus forms,
-    ADR-121 B2)."""
+    """One default camera beat for a view: the best uncovered element by kind
+    preference then area — the view's dominant content (heading / media /
+    copy block), never a utility control while content exists (its ``at`` is
+    re-derived at assembly once the scene's window exists — the skill counts
+    arrivals in beats). The director may replace it with another element
+    from the same shot. No inventory = the raw center push-in (the two legal
+    focus forms, ADR-121 B2)."""
     candidates = [e for e in elements if not e.covered]
     for kind in _FOCUS_KINDS:
         pool = [e for e in candidates if e.kind == kind]
@@ -771,19 +814,43 @@ def _pick_focus(elements: list) -> FilmFocus:
 def _fit_to_cap(text: str, cap: int, fit: str) -> str:
     """Apply a ref's fit to its slot cap. "full" returns the line as-is
     (an over-cap line then surfaces as a CONSTRAINT_VIOLATION downstream —
-    the echo tells the model to fit or cite a shorter line). "head"/"tail"
-    trim at a word boundary when one exists inside the window (CJK and
-    single-word lines hard-cut at the cap)."""
+    the echo tells the model to fit or cite a shorter line). "head" prefers
+    the last complete sentence inside the window, then a word boundary;
+    "tail" trims at a word boundary (CJK and single-word lines hard-cut at
+    the cap)."""
     text = text.strip()
     if len(text) <= cap or fit == "full":
         return text
     if fit == "head":
         cut = text[:cap]
+        # Prefer the last COMPLETE sentence inside the window (the same
+        # sentence-ender law as the cue splitter's): a bare word-boundary
+        # cut can strand a clause stub at the cap ("…Team and Enterprise
+        # add"). The ender must close a real share of the window — an early
+        # "Mr." is an abbreviation, not a sentence to keep.
+        enders = list(_SENTENCE_END.finditer(cut))
+        if enders and enders[-1].end() >= cap * 0.4:
+            return cut[: enders[-1].end()].strip()
         sp = cut.rfind(" ")
         return (cut[:sp] if sp > 0 else cut).strip()
     cut = text[-cap:]
     sp = cut.find(" ")
     return (cut[sp + 1:] if 0 < sp < len(cut) - 1 else cut).strip()
+
+
+# Edge characters no on-screen slot may begin or end with: dangling
+# connectors a span snap or a head/tail fit can leave behind ("AgentVeil —"
+# from the page <title> renders as a giant lone dash next to the hero
+# word). Sentence enders (. ! ? …) are legitimate edges and stay; interior
+# hyphens (Coca-Cola) are never touched, and a LEADING "-" is never
+# stripped — it can be a minus sign ("-40%").
+_EDGE_LEAD_CONNECTORS = "—–:;,·•|/"
+_EDGE_TRAIL_CONNECTORS = "—–-:;,·•|/"
+
+
+def _strip_edge_connectors(text: str) -> str:
+    t = text.strip().lstrip(_EDGE_LEAD_CONNECTORS).lstrip()
+    return t.rstrip(_EDGE_TRAIL_CONNECTORS).rstrip()
 
 
 def _apply_accent(text: str, accent: str) -> str | None:
@@ -930,6 +997,9 @@ def assemble_storyboard(
             s, e = _snap_span(base_text, ref.span[0], ref.span[1])
             base_text = base_text[s:e].strip()
         text = _fit_to_cap(base_text, cap, ref.fit) if cap is not None else base_text.strip()
+        # No cited display copy begins or ends with a dangling connector
+        # (a head-fit landing after "AgentVeil —" keeps the dash stub).
+        text = _strip_edge_connectors(text)
         if ref.accent is not None:
             accented = _apply_accent(text, ref.accent)
             if accented is None:
@@ -945,8 +1015,9 @@ def assemble_storyboard(
 
     def creative(text: str, cap: int, where: str) -> str:
         """A free-text slot's only law: non-blank, within its cap (hooks,
-        never claims — the prompt's law, not machine-checkable)."""
-        t = text.strip()
+        never claims — the prompt's law, not machine-checkable). Edge
+        connectors ride the same display law as citations."""
+        t = _strip_edge_connectors(text)
         if not _norm(t):
             violations.append(FilmViolation(CONSTRAINT_VIOLATION, f"{where}: blank"))
         elif len(t) > cap:
@@ -970,7 +1041,34 @@ def assemble_storyboard(
         )]
     plan = _scene_plan(len(pillars), skeleton)
     seconds = _assign_seconds([s.type for s in plan])
+    # The home overview is the static establishing card: a fixed beat-length
+    # window assigned AFTER the allocator, so it neither eats the walk
+    # scenes' top-up nor gets inflated toward the total target.
+    seconds = [
+        _HOME_SCENE_SECONDS if s.key == "home" else v
+        for s, v in zip(plan, seconds, strict=True)
+    ]
     plan_keys = {s.key for s in plan}
+    ui_plan_keys = {s.key for s in plan if s.type == "ui"}
+    camera_focuses: dict[str, str] = {}
+    for k, v in (direction.camera_focuses or {}).items():
+        if k == "home":
+            violations.append(FilmViolation(
+                INVALID_FOCUS,
+                "camera_focuses.'home': the home overview is a static "
+                "establishing card — it takes no camera target",
+            ))
+            continue
+        if k not in ui_plan_keys:
+            violations.append(FilmViolation(
+                INVALID_FOCUS,
+                f"camera_focuses.{k!r}: no UI scene owns this key — valid "
+                f"UI scene keys: {', '.join(s.key for s in plan if s.type == 'ui')}",
+            ))
+            continue
+        if v and v.strip():
+            camera_focuses[k] = v.strip()
+
     narr: dict[str, str | None] = {}
     for k, v in (direction.narrations or {}).items():
         if not isinstance(v, str):
@@ -1031,10 +1129,31 @@ def assemble_storyboard(
         elif scene.type == "ui":
             assert scene.view is not None  # the plan only builds ui with a view
             page_idx, shot_idx = scene.view
+            if scene.key == "home":
+                # The static establishing card: one raw wide beat at the
+                # scene's start — the walk expander reads this form as
+                # "hold the wide frame" (no glide, no settle push) and the
+                # browser card carries the "this is a real page" beat.
+                resolved_scenes.append(FilmSceneUi(
+                    type="ui", seconds=secs, narration=narration,
+                    scene_id=scene.key,
+                    page=page_idx, shot=shot_idx,
+                    frame=True,
+                    focuses=[FilmFocus(at=0.0, x=0.5, y=0.5, zoom=1.0)],
+                ))
+                ui_count += 1
+                continue
             # The camera arrival scales with the scene's window (the skill
             # counts arrivals in BEATS, never a fixed 2s): a quarter of the
             # scene, snapped to the half-second grid, 1s..2s.
             arrival = min(2.0, max(1.0, round(secs * 0.25 * 2) / 2))
+            camera_focus = skeleton.focuses[scene.view]
+            if scene.key in camera_focuses:
+                camera_focus = FilmFocus(
+                    at=arrival, element=camera_focuses[scene.key]
+                )
+            else:
+                camera_focus = camera_focus.model_copy(update={"at": arrival})
             resolved_scenes.append(FilmSceneUi(
                 type="ui", seconds=secs, narration=narration,
                 scene_id=scene.key,
@@ -1043,7 +1162,7 @@ def assemble_storyboard(
                 # rhythm — the skill's "this is a real page" vs the
                 # immersive push).
                 frame=(ui_count % 2 == 0),
-                focuses=[skeleton.focuses[scene.view].model_copy(update={"at": arrival})],
+                focuses=[camera_focus],
             ))
             ui_count += 1
         elif scene.type == "divider":
@@ -1086,7 +1205,7 @@ def assemble_storyboard(
                     cards.append(
                         FilmPlateCard(
                             big=None,
-                            label=_fit_to_cap(line.text, TEXT_CAPS[("plate", "label")], "head"),
+                            label=_strip_edge_connectors(_fit_to_cap(line.text, TEXT_CAPS[("plate", "label")], "head")),
                         )
                     )
             if len(cards) < 2:
@@ -1097,7 +1216,7 @@ def assemble_storyboard(
             resolved_scenes.append(FilmScenePlate(
                 type="plate", seconds=secs, narration=narration, backdrop="mist",
                 scene_id=scene.key,
-                title=_fit_to_cap(title_line.text, TEXT_CAPS[("plate", "title")], "head"),
+                title=_strip_edge_connectors(_fit_to_cap(title_line.text, TEXT_CAPS[("plate", "title")], "head")),
                 cards=cards[:4],
             ))
         elif scene.type == "reveal":
@@ -1109,10 +1228,11 @@ def assemble_storyboard(
                 word=resolve(direction.reveal_word, TEXT_CAPS[("reveal", "word")], f"{where}.word"),
                 sub=resolve(direction.reveal_sub, TEXT_CAPS[("reveal", "sub")], f"{where}.sub"),
                 # Split reveal (the reference arc's emotional peak): the
-                # lead holds the FIRST HALF alone, a one-beat black pause,
-                # then the word lands (the spec builder snaps the word's
-                # onset onto the music grid).
-                lead_seconds=round(secs) / 2,
+                # lead holds alone (a one-line setup — capped so a max-band
+                # reveal never strands it on screen for half the scene), a
+                # one-beat black pause, then the word lands (the spec
+                # builder snaps the word's onset onto the music grid).
+                lead_seconds=min(round(secs) / 2, _REVEAL_LEAD_MAX_SECONDS),
             ))
         elif scene.type == "end":
             resolved_scenes.append(FilmSceneEnd(
@@ -1129,9 +1249,17 @@ def assemble_storyboard(
         language=language,
         scenes=resolved_scenes,
     )
+    automatic_subtitle_scenes = frozenset(
+        scene.key
+        for scene in plan
+        if scene.type == "plate" or (scene.type == "ui" and scene.key != "home")
+    )
     return (
         with_default_subtitles(
-            board, enabled=subtitles, subtitle_lines=subtitle_text
+            board,
+            enabled=subtitles,
+            subtitle_lines=subtitle_text,
+            automatic_scene_ids=automatic_subtitle_scenes,
         ),
         [],
     )
@@ -1175,7 +1303,7 @@ def fixed_direction(
     title = first("title") or lines[0]
     sub_line = first("description", "h1", "paragraph") or title
     reveal_line = first("h2", "h1") or title
-    cold = _fit_to_cap(title.text, TEXT_CAPS[("words", "lines")], "head")
+    cold = _strip_edge_connectors(_fit_to_cap(title.text, TEXT_CAPS[("words", "lines")], "head"))
     if not _norm(cold):
         return None
     # 配音兜底 (填全槽的另一半 — voiceover 承诺不随 LLM 耗尽而沉默): speech
@@ -3529,6 +3657,14 @@ def validate_storyboard(
             continue
 
         lo, hi = seconds_map[scene.type]
+        if (
+            scene.type == "ui"
+            and not text_mode
+            and getattr(scene, "scene_id", None) == "home"
+        ):
+            # The home establishing card's own beat band — the walk band's
+            # 4s floor would already be a linger for a static wide card.
+            lo, hi = _HOME_SECONDS_RANGE
         # Text-mode words planes: the per-scene band is a craft DEFAULT, not
         # hard law — the plane's duration law is its reading-time floor (the
         # mirror below) plus the film-level bands. Every other scene type
@@ -4197,6 +4333,19 @@ def _split_keep(text: str, pattern: re.Pattern) -> list[str]:
     return [p for p in (p.strip() for p in pieces) if p]
 
 
+_EMPHASIS_MARK = re.compile(r"\*([^*]+)\*")
+
+
+def _strip_emphasis(text: str) -> str:
+    """Subtitle cue text has NO emphasis channel — the ``*word*`` marker is
+    the big-type planes' accent vocabulary (accentize chips); inside a
+    subtitle pill it renders as a literal asterisk. Strip the marks, keep
+    the words. Applied at cue birth (assembly) and again at the render
+    contract's boundary (spec build), so persisted boards authored before
+    this law heal on their next render."""
+    return _EMPHASIS_MARK.sub(r"\1", text)
+
+
 def narration_subtitle_cues(
     text: str, *, window_s: float, spoken_s: float | None
 ) -> list[dict[str, Any]]:
@@ -4316,6 +4465,7 @@ def with_default_subtitles(
     *,
     enabled: bool,
     subtitle_lines: dict[str, str] | None = None,
+    automatic_scene_ids: frozenset[str] | None = None,
 ) -> FilmStoryboard:
     """Birth the real independent SubtitleTrack objects for a composed film.
 
@@ -4323,6 +4473,11 @@ def with_default_subtitles(
     timing and the black-background / white-text default style. A missing
     subtitle line falls back to that scene's grounded display copy; no audio
     or narration is required. OFF strips tracks on this fresh compose path.
+
+    ``automatic_scene_ids`` bounds only that fallback. Web compose passes
+    its explanatory scene ids so the brand intro and typography-led beats
+    stay clean by default; an explicit director line still creates a track
+    on any scene. None preserves the caller's existing all-scene fallback.
     """
     by_id = {s.scene_id: s for s in storyboard.scenes if s.scene_id}
     for scene in storyboard.scenes:
@@ -4331,8 +4486,18 @@ def with_default_subtitles(
             continue
         key = scene.scene_id or ""
         text = ((subtitle_lines or {}).get(key) or "").strip()
+        if (
+            not text
+            and automatic_scene_ids is not None
+            and key not in automatic_scene_ids
+        ):
+            scene.subtitle_track = None
+            continue
         if not text:
             text = _fallback_subtitle_text(scene, by_id).strip()
+        # The director's line or a grounded fallback can both carry emphasis
+        # marks (the fallback may BE a big-type slot like reveal.sub).
+        text = _strip_emphasis(text)
         if not text:
             continue
         # Explicitly fast text films can intend a sub-second scene while the
@@ -4365,10 +4530,10 @@ def with_default_subtitles(
 
 
 def _resolve_focus(f: Any, page: StoryboardPage, shot_idx: int) -> dict[str, Any]:
-    """One focus beat → the spec's {at, x, y, zoom} (ADR-121 B2). An
-    element-named beat resolves deterministically: the element's box center,
-    zoom framing the box at ~half the canvas (clamped to the zoom law —
-    a small button never gets a 4x push). Raw triples pass through. The
+    """One focus beat → the spec's {at, x, y, zoom}. An element-named beat
+    resolves deterministically: zoom follows the element's relative size but
+    stays within the context-preserving element cap, and the center clamps
+    to keep the scaled window inside the shot. Raw triples pass through. The
     validator bounded both forms; an unresolvable id here means a hand-built
     storyboard bypassed it — degrade to the shot's center, never crash the
     render seat."""
@@ -4379,8 +4544,28 @@ def _resolve_focus(f: Any, page: StoryboardPage, shot_idx: int) -> dict[str, Any
     ) if page.shots and shot_idx < len(page.shots) else None
     if el is None:
         return {"at": f.at, "x": 0.5, "y": 0.5, "zoom": 1.0}
-    zoom = min(2.6, max(1.2, 0.5 / max(el.w, el.h, 0.02)))
-    return {"at": f.at, "x": el.x, "y": el.y, "zoom": round(zoom, 3)}
+    zoom = round(
+        min(_ELEMENT_ZOOM_MAX, max(1.2, 0.5 / max(el.w, el.h, 0.02))), 3
+    )
+    half_window = 0.5 / zoom
+    x = min(1.0 - half_window, max(half_window, el.x))
+    y = min(1.0 - half_window, max(half_window, el.y))
+    return {
+        "at": f.at,
+        "x": round(x, 4),
+        "y": round(y, 4),
+        "zoom": zoom,
+    }
+
+
+def _is_static_wide(focuses: list[FilmFocus]) -> bool:
+    """The static establishing form: exactly ONE raw wide beat at the
+    scene's start (assembly issues it for the home overview). Content-based,
+    never id-based — any scene carrying this form plays static."""
+    if len(focuses) != 1:
+        return False
+    f = focuses[0]
+    return f.element is None and f.at <= 0.05 and f.zoom == 1.0
 
 
 def _camera_walk(
@@ -4390,8 +4575,19 @@ def _camera_walk(
     wide, hold, glide to each target, then settle with a small push. The
     storyboard stays compact (one code-picked arrival per view today); the
     render contract carries the full camera path so the renderer never
-    invents easing anchors."""
+    invents easing anchors. The static establishing form holds the wide
+    frame for the whole scene — no glide and no settle push (the "tail
+    never freezes" law governs WALKS; a scene whose only beat IS the wide
+    frame has no walk)."""
     arrivals = [_resolve_focus(f, page, shot_idx) for f in focuses]
+    if _is_static_wide(focuses):
+        # Two identical keyframes = an honestly constant camera path (the
+        # renderer only interpolates between them).
+        pt = {"x": arrivals[0]["x"], "y": arrivals[0]["y"], "zoom": 1.0}
+        return [
+            {"at": 0.0, **pt},
+            {"at": round(max(seconds, 0.1), 3), **pt},
+        ]
     if not arrivals:
         arrivals = [{"at": 2.0, "x": 0.5, "y": 0.45, "zoom": 1.6}]
     walk: list[dict[str, Any]] = [
@@ -4405,8 +4601,8 @@ def _camera_walk(
         walk.append(
             {
                 "at": at,
-                "x": round(float(point["x"]), 3),
-                "y": round(float(point["y"]), 3),
+                "x": round(float(point["x"]), 4),
+                "y": round(float(point["y"]), 4),
                 "zoom": round(float(point["zoom"]), 3),
             }
         )
@@ -4420,8 +4616,8 @@ def _camera_walk(
             # then the walk honestly STARTS there instead of dropping it.
             walk[0] = {
                 "at": 0.0,
-                "x": round(float(target["x"]), 3),
-                "y": round(float(target["y"]), 3),
+                "x": round(float(target["x"]), 4),
+                "y": round(float(target["y"]), 4),
                 "zoom": round(float(target["zoom"]), 3),
             }
             previous = walk[0]
@@ -4860,7 +5056,13 @@ def build_film_spec(
         if scene.subtitle_track is not None:
             if scene.subtitle_track.cues[-1].end > n / FILM_FPS + 1e-9:
                 raise ValueError("subtitle cues exceed the allocated scene duration")
-            scenes[-1]["subtitle_track"] = scene.subtitle_track.model_dump(mode="json")
+            # Render-contract normalization: cue text never carries emphasis
+            # marks (boards persisted before the strip law heal here on
+            # re-render — the spec is rebuilt from the board every run).
+            track = scene.subtitle_track.model_dump(mode="json")
+            for cue in track["cues"]:
+                cue["text"] = _strip_emphasis(cue["text"])
+            scenes[-1]["subtitle_track"] = track
         cursor += n
     spec = {
         "family": "film",
@@ -5419,9 +5621,12 @@ def storyboard_presentation(
                 else f"  shows: {label} shot {s.shot}"
             )
             out[-1] += " · browser frame" if s.frame else " · full-bleed"
-            moves = ui_focus_moves(s, pages)
-            if moves:
-                out.append("  camera: wide → " + " → ".join(moves) + " → settle")
+            if _is_static_wide(s.focuses):
+                out.append("  camera: static wide (the establishing card)")
+            else:
+                moves = ui_focus_moves(s, pages)
+                if moves:
+                    out.append("  camera: wide → " + " → ".join(moves) + " → settle")
         elif s.type == "divider":
             out.append(f"  shows: {s.label} — {' · '.join(s.roll)}")
         elif s.type == "plate":
@@ -5467,16 +5672,18 @@ def storyboard_presentation(
 
 def current_direction_dict(storyboard: FilmStoryboard) -> dict[str, Any]:
     """The board under review as the director's revision base (ADR-129 修
-    订基于当前稿): the resolved creative slots keyed like the direction's
-    own output — real strings, never citations. The model re-cites whatever
-    it keeps from the manifest (its citation universe) and rewrites only
-    what the feedback names."""
+    订基于当前稿): the resolved creative slots and each UI scene's first
+    element-named camera arrival keyed like the direction's own output — real
+    strings, never citations. The model re-cites whatever it keeps from the
+    manifest (its citation universe) and rewrites only what the feedback
+    names."""
     cold_open: list[str] = []
     hero: dict[str, str] = {}
     reveal: dict[str, str] = {}
     end: dict[str, str] = {}
     pillars: list[str] = []
     chapter_titles: list[str] = []
+    camera_focuses: dict[str, str] = {}
     narrations: list[dict[str, Any]] = []
     subtitle_lines: list[dict[str, Any]] = []
     for i, s in enumerate(storyboard.scenes, 1):
@@ -5491,6 +5698,15 @@ def current_direction_dict(storyboard: FilmStoryboard) -> dict[str, Any]:
             reveal = {"reveal_lead": s.lead, "reveal_word": s.word, "reveal_sub": s.sub}
         elif s.type == "end":
             end = {"end_name": s.name, "end_tagline": s.tagline}
+        if s.type == "ui" and s.scene_id and s.scene_id != "home":
+            # The home overview is the static establishing card now — a
+            # legacy board's home camera element is NOT echoed as a
+            # carryable target (carrying it would earn an INVALID_FOCUS).
+            element = next(
+                (f.element for f in s.focuses if f.element is not None), None
+            )
+            if element is not None:
+                camera_focuses[s.scene_id] = element
         if s.narration:
             narrations.append({"scene": i, "type": s.type, "text": s.narration})
         if s.subtitle_track:
@@ -5508,6 +5724,7 @@ def current_direction_dict(storyboard: FilmStoryboard) -> dict[str, Any]:
         "cold_open": cold_open,
         **reveal,
         **end,
+        "camera_focuses": camera_focuses,
         "narrations": narrations,
         "subtitle_lines": subtitle_lines,
     }
@@ -5528,10 +5745,9 @@ def _assemble(
     universe), the code-built skeleton (its answer sheet — ADR-127), the
     run's instruction, the slot's focus steer, the plan's pinned film
     language (None = declare it from the page), the board under review when
-    the call is a feedback revision (None = a first design), the page
-    screenshots, and the plan's VOICEOVER promise (2026-10-18 — the silent
-    v2 incident: the director never knew the film ships with voice, so a
-    'visual-first' steer read as all-silent) — nothing else."""
+    the call is a feedback revision (None = a first design), the fold and
+    assigned UI-scene screenshots, and the plan's VOICEOVER promise — nothing
+    else."""
     return (
         {
             "pages": pages,
@@ -5695,14 +5911,15 @@ film_director = Agent[FilmDirection](
     prompt="film_director.j2",
     schema=FilmDirection,
     system=(
-        "You are a film director. The film's structure is fixed — scene "
-        "order, durations and camera are decided for you; you answer only "
-        "the creative slots: pick the chapters, cite every factual on-screen "
-        "string from the page's own copy by line number (you never write "
-        "those), and write the creative channel in your own words — the "
-        "cold-open hooks, the reveal's lead-in, concise chapter titles, "
-        "subtitle copy and the narration. Hooks, never claims: the creative "
-        "channel never states a product fact the page does not state."
+        "You are a film director. The film's scene order and durations are "
+        "fixed — you answer the creative slots and the page walks' camera "
+        "targets: pick the chapters, choose captured elements to emphasize, "
+        "cite every factual on-screen string from the page's own copy by "
+        "line number (you never write those), and write the creative "
+        "channel in your own words — the cold-open hooks, the reveal's "
+        "lead-in, concise chapter titles, subtitle copy and the narration. "
+        "Hooks, never claims: the creative channel never states a product "
+        "fact the page does not state."
     ),
     assemble=_assemble,
     temperature=0.5,
@@ -5774,9 +5991,10 @@ def skeleton_prompt_dict(
 ) -> dict[str, Any]:
     """The skeleton's prompt block (ADR-127): the maximal 5-chapter arc the
     j2 prints as the answer sheet — scene keys (the narration dictionary's
-    lookup), types, and each ui scene's assigned view + code-picked camera
-    target. Durations are deliberately NOT printed (code-owned and trimmed
-    at assembly; a printed number would read as a writable slot)."""
+    lookup), types, and each ui scene's assigned view + deterministic
+    default camera target. Durations are deliberately NOT printed (code-owned
+    and trimmed at assembly; a printed number would read as a writable
+    slot)."""
     plan = _scene_plan(_MAX_CHAPTERS, skeleton)
     scenes = []
     for s in plan:
@@ -5790,7 +6008,9 @@ def skeleton_prompt_dict(
             entry["shot"] = shot_idx
             entry["host"] = pages[page_idx].host
             entry["camera"] = (
-                {"element": focus.element}
+                {"static": True}
+                if s.key == "home"
+                else {"element": focus.element}
                 if focus.element is not None
                 else {"x": focus.x, "y": focus.y, "zoom": focus.zoom}
             )
@@ -6075,16 +6295,56 @@ async def project_media_candidates(
 
 
 async def page_media_inputs(pages: list[StoryboardPage]) -> list[MediaInput]:
-    """The page screenshots → multimodal inputs (the ui scene's camera
-    targets); a missing screenshot degrades honestly (manifests still carry
-    the copy)."""
+    """The fold screenshots ground the page inventory. Section images for
+    the exact UI assignments join through ``ui_scene_media_inputs`` so the
+    director can choose a target from the view that will actually render."""
     items: list[MediaInput] = []
     for i, page in enumerate(pages):
         if page.screenshot_key is None:
             continue
         item = await media_input_for_image(
             page.screenshot_key,
-            caption=f"Screenshot of page {i} ({page.host}) — the ui scene's camera target.",
+            caption=f"Screenshot of page {i}, shot 0 (fold) ({page.host}).",
+        )
+        if item is not None:
+            items.append(item)
+    return items
+
+
+async def ui_scene_media_inputs(
+    pages: list[StoryboardPage], scenes: list[dict[str, Any]]
+) -> list[MediaInput]:
+    """Attach the assigned UI shots not already present as fold images.
+
+    ``scenes`` is the code-built prompt skeleton, so media follows the real
+    page/shot assignment instead of uploading every unused capture. A missing
+    or unreadable image degrades to the existing text inventory.
+    """
+    items: list[MediaInput] = []
+    seen_keys = {p.screenshot_key for p in pages if p.screenshot_key is not None}
+    for scene in scenes:
+        if scene.get("type") != "ui":
+            continue
+        page_idx = scene.get("page")
+        shot_idx = scene.get("shot")
+        if not isinstance(page_idx, int) or not isinstance(shot_idx, int):
+            continue
+        if not (0 <= page_idx < len(pages) and 0 <= shot_idx):
+            continue
+        page = pages[page_idx]
+        if shot_idx >= len(page.shots):
+            continue
+        shot = page.shots[shot_idx]
+        if shot.key in seen_keys:
+            continue
+        seen_keys.add(shot.key)
+        item = await media_input_for_image(
+            shot.key,
+            caption=(
+                f"Screenshot of page {page_idx}, shot {shot_idx} "
+                f"({shot.heading or 'captured view'}) — the assigned camera "
+                f"view for UI scene {scene['key']}."
+            ),
         )
         if item is not None:
             items.append(item)
@@ -6170,6 +6430,10 @@ async def orchestrate_storyboard(
         )
     prompt_pages = [page_prompt_dict(p, i, lines) for i, p in enumerate(pages)]
     prompt_skeleton = skeleton_prompt_dict(skeleton, pages)
+    page_images = [
+        *page_images,
+        *await ui_scene_media_inputs(pages, prompt_skeleton["scenes"]),
+    ]
     # 修订基于当前稿 (ADR-129): a feedback redraft shows the director the
     # board under review — its slots are the revision base (keep whatever
     # the feedback does not name), never a from-scratch re-roll.

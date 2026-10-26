@@ -634,10 +634,10 @@ export const Hero: React.FC<{ word: string; sub: string; theme: FilmTheme }> = (
           transform: `scale(${settle})`,
         }}
       >
-        {word}
+        {accentize(word, false, theme)}
       </div>
       <div style={{ fontFamily: FONT, fontSize: 44 * s, color: "#6b6b6b", marginTop: 26 * s, ...enter(frame, 10, fps, s) }}>
-        {sub}
+        {accentize(sub, false, theme)}
       </div>
     </AbsoluteFill>
   );
@@ -1007,7 +1007,7 @@ export const Reveal: React.FC<{
         {accentize(word, false, theme)}
       </div>
       <div style={{ fontFamily: FONT, fontSize: 44 * s, lineHeight: 1.3, color: "#6b6b6b", maxWidth: 1440 * s, padding: `0 ${40 * s}px`, textAlign: "center", marginTop: 30 * s, ...enter(frame, wordAt + 10, fps, s) }}>
-        {sub}
+        {accentize(sub, false, theme)}
       </div>
     </AbsoluteFill>
   );
@@ -1036,11 +1036,11 @@ export const End: React.FC<{
             color: theme.ink,
           }}
         >
-          {name}
+          {accentize(name, false, theme)}
         </div>
       </div>
       <div style={{ fontFamily: FONT, fontSize: 40 * s, color: "#6b6b6b", marginTop: 26 * s, ...enter(frame, 8, fps, s) }}>
-        {tagline}
+        {accentize(tagline, false, theme)}
       </div>
       <div style={{ fontFamily: FONT, fontSize: 30 * s, color: "#9a9a9a", marginTop: 54 * s, ...enter(frame, 16, fps, s) }}>
         {url}

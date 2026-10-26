@@ -558,7 +558,7 @@ const zh: Resources = {
         },
         "product-demo-highlights": {
           prompt:
-            "把这个网站做成一支产品演示，展示主要功能并配上简洁的屏上说明：{{placeholder}}",
+            "把这个网站做成一支产品演示，展示主要功能，配上简洁的说明字幕，不要旁白；用适度的镜头运动和文字动画引导视线：{{placeholder}}",
         },
         "product-demo-captioned": {
           prompt:
@@ -1421,6 +1421,7 @@ const zh: Resources = {
       view: "查看{{name}}",
       types: {
         clip: "短片",
+        film: "影片",
         post: "社交帖子",
         quotes: "金句卡",
         quote_frame: "金句卡",

@@ -580,7 +580,7 @@ const en = {
         },
         "product-demo-highlights": {
           prompt:
-            "Turn this website into a product demo that presents its key features with concise on-screen explanations: {{placeholder}}",
+            "Turn this website into a product demo that presents its key features, with concise explanatory subtitles, no voiceover, and subtle camera moves and text animations that guide attention: {{placeholder}}",
         },
         "product-demo-captioned": {
           prompt:
@@ -1513,6 +1513,7 @@ const en = {
       view: "View {{name}}",
       types: {
         clip: "Clip",
+        film: "Film",
         post: "Social post",
         quotes: "Quote card",
         quote_frame: "Quote card",

@@ -22,8 +22,8 @@
 
 - 卡片点击唯一归宿是 composer 预填 `promptTemplate`/demo prompt；不自动发送、不建项目/run、不打开模板编辑器。
 - 草稿为空或仍等于上次预填原文时，点另一卡可替换预填；已有用户文字或 @-mention 时保留原文并换行追加，不静默清空。
-- prompt 是完整用户口吻需求，不暴露工具/spec/版本，不锁死画幅、幕数、时长或配音；缺素材由正常 Chat 补问。
-- `product-demo-zymix` 与 `product-demo-highlights` 的 prompt 使用网站入口，按 Film 的网站 capture 合同执行与验收；其余 Product Promo 的 prompt 只承诺使用用户上传的视频/录屏，不承诺自动打开网站录屏。
+- prompt 是完整用户口吻需求，不暴露工具/spec/版本，不锁死用户未要求的画幅、幕数、时长或配音；卡片明确写出的制作要求仍可编辑，后续 chat 修改优先，缺素材由正常 Chat 补问。
+- `product-demo-zymix` 与 `product-demo-highlights` 的 prompt 使用网站入口，按 Film 的网站 capture 合同执行与验收；AgentVeil 第二卡预填明确“说明字幕 + 无旁白 + 适度运镜和文字动画”，对应该样片的制作请求。其余 Product Promo 的 prompt 只承诺使用用户上传的视频/录屏，不承诺自动打开网站录屏。
 - Demo 视频静音循环；IntersectionObserver 离屏暂停、回视口恢复，声音遵循全局单例互斥。每个货架独立滚动，画幅按真实文件，不拉伸。
 - en/zh 同步；窄屏无页面级横向溢出。组件复用现有 RecipeTabs/RecipeShelf，不为每条货架复制实现。
 
@@ -40,6 +40,8 @@
 Text Animation 两片均已核对项目 Output、1920×1080 / 30fps、实际时长与多个时间点画面，并分别复制为新的内容寻址 `demo/` 对象，两个公开 URL 均已返回 200；ZYMIX 首卡此前已核对真实文件与画面。Product Promo 第二卡已核对项目 `79450192` 的 Output `462fe8fc`、1920×1080 / 30fps、86.058 秒与六个时间点画面，复制为新的内容寻址 `demo/` 对象且 MD5 与原文件一致，公开 URL 已返回 200。
 
 当前两 tab 阵容、第二卡替换、重命名、预填和 composer 光标修复只有代码层结果，**尚未做浏览器货架/播放与光标回归、tsc/vitest 或新预填对应的真实 Chat 全旅程复验**。这些证据不覆盖 Product Promo 其余两张占位卡的制作能力，也不代替任何新卡对应制作链的完整验收。
+
+网页 Film 相机取景已改为 director 从实际 UI shot 的元素清单选择 `camera_focuses`，代码负责 section 截图输入、元素盒解析、主推 1.6× 上限与防露边 camera walk；默认字幕改为只在 Chapter 的 `ch*_ui`、`prove` 与 `plate` 缺槽时自动补轨，`open` / `hero` / `home` / `divider` / `reveal` / `end` 默认无轨但允许显式覆盖，文字源默认不变；Hero、reveal 副文案和 closing card 的引用 accent 星号改由 renderer 消费为强调样式。项目 `0400185c` 样片评审后又落一批确定性修复：home 概览幕改为静态定场卡（3s 固定窗口、修订带 2–6s、无运镜，`camera_focuses` 拒收 home）；`_pick_focus` 默认选择器改为 heading → video/image → text → button（修复"heading 死 kind 导致 Copy 徽章赢过卡片主题"），capture 端开始给 h1–h6/role=heading 发 `heading` kind（存量 capture 库存无此 kind，靠 text 层兜底改善）；字幕 cue 文本在装配与 spec 构建两处剥除 `*...*` 强调标记（字幕无强调通道，存量 storyboard 重渲染自愈）；reveal 引子 `lead_seconds` 封顶 3s（修复 14s 幕 8.4s 单行静止）。项目 `b7530c00` 样片（已吃到第一批修复：home 静态 2.9s、reveal 引子 4.5s、字幕无星号）评审后再落引用文案两条确定性守则：所有上屏槽位（引用与创作 alike）剥离首尾悬挂连接符（"AgentVeil —" 的页标题 head-fit 残段曾在 hero 大字旁烧出一根孤"—"；前导 "-" 永不剥——可能是负号）；`fit:"head"` 截断优先取窗口内最后一个完整句子（修复 reveal 副文案 "…Team and Enterprise add" 断句残段）。交付可见性一批（项目 `b7530c00` v2 换 BGM 后用户仍看到 v1 的取证结论）：画布媒体节点挂载默认从"首版（出生序）"改为"最新版"（null = 最后一行，与 DocumentCard 同约定；灯箱与 dossier 的未上报回退同步改为最新行），消息列表 RunCard 交付收据的 `OutputChatCard` 补 `film` case（复用 ClipCard，film payload 无 `hook`，标题回退链补 `payload.name`）——此前 film 交付在消息列表渲染为 null，桌面端锚卡又被 canvasVisible 门禁压住，唯一可见播放器只有画布节点且默认 v1。同批再收口两处同族缺口：锚卡 `anchorCardOf` 名字回退链补 `payload.name`、时长规格覆盖 film（此前 chip 只剩裸类型词 + 黑首帧空方块；en/zh 补 `chat.anchorCards.types.film`）；历史 detached run 收据 `RunCard` 从展开逐步骤行改为复用 `RunTaskList`/`WorkSegmentRow`（终态收成一条可展开的「Worked for Xm」工作记录，回放无 delivery seal 时诚实回退到 run 可观察步骤跨度），rich 产物卡不变——attached 活 run 的收据形态仍是锚卡 chip（ADR-118 单一渲染面律），detached 历史行的档案形态仍是 rich 卡。以上仅有代码与现行合同结果，**尚未运行 pytest/check_gates、prompt_gate、tsc、真实分镜/revision 或新渲染对照**。既有 AgentVeil Output 与第二位 demo 仍是旧版画面，不因代码修复自动更新；`0400185c` 这部影片需在 chat 走一次 revision（不要 keep_cut，否则冻结时间轴保留旧 home 时长）再重渲染才能吃到修复。
 
 真实样片到位前，Film progress 与 PROGRESS 必须继续保留此欠账；不要因“首页已能点”关闭。
 

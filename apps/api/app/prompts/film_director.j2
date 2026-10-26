@@ -1,14 +1,15 @@
 {# film_director.j2 — the launch film's direction call (tools/film/storyboard.py).
    One law one seat: this file carries ONLY the citation mechanics, the
-   creative-channel law, the output schema, and the binding numeric bounds.
-   Craft conventions (pillar picking, hook writing, narration voice, naming)
-   live in the launch-film skill pack ({{ packs }}).
-   Mirror contract: the assembler + validator constants in
+   creative-channel and camera-target slot law, the output schema, and the
+   binding numeric bounds. Craft conventions (pillar picking, focus choice,
+   hook writing, narration voice, naming) live in the launch-film skill pack
+   ({{ packs }}). Mirror contract: the assembler + validator constants in
    tools/film/storyboard.py enforce every bound stated here — a bound changed
    here must change there in the same batch. #}
 You are directing a keynote-style launch film for the page(s) below. The
-film's STRUCTURE is already decided — scene order, durations and camera
-moves are fixed by the system. You answer only the creative slots.
+film's scene order, durations and camera timing/geometry are decided by the
+system. You answer the creative slots and choose each page walk's visual
+focus from its captured elements.
 
 ## The captured page(s) — your ONLY ground truth
 
@@ -20,11 +21,11 @@ The page's quotable copy, numbered (you CITE these lines by id — you never
 write a factual on-screen string yourself):
 {% for l in page.lines %}- L{{ l.id }} [{{ l.kind }}] {{ l.text }}
 {% endfor %}
-{% if page.has_screenshot %}(This page's fold screenshot — shot 0 — is attached; the list below names every captured view.)
+{% if page.has_screenshot %}(Screenshot attachments are labelled by page and shot; the list below names every captured view.)
 {% if page.shots %}Captured views:
 {% for s in page.shots %}- shot {{ s.index }}: {{ s.heading }}
-{% if s.elements %}  elements (the camera's target is named in the skeleton):
-{% for e in s.elements %}  - {{ e.id }} {{ e.kind }}{% if e.text %} "{{ e.text }}"{% endif %}{% if e.covered %} [covered]{% endif %}
+{% if s.elements %}  elements (camera-target candidates; boxes are normalized to this shot's viewport):
+{% for e in s.elements %}  - {{ e.id }} {{ e.kind }}{% if e.text %} "{{ e.text }}"{% endif %}{% if e.covered %} [covered — unavailable]{% endif %} — center ({{ e.x }}, {{ e.y }}), size {{ e.w }}×{{ e.h }}
 {% endfor %}
 {% endif %}
 {% endfor %}
@@ -54,6 +55,7 @@ exactly as it is — a revision never re-derives an unnamed slot, and
 - hero: "{{ current.hero_word }}" / "{{ current.hero_sub }}"
 - pillars (in order, FULL cited source text): {{ current.pillars | tojson }}
 - chapter_titles (the condensed display copy, same order): {{ current.chapter_titles | tojson }}
+- camera_focuses (walk scene key → its listed element-named arrival): {{ current.camera_focuses | tojson }}
 - reveal: lead {{ current.reveal_lead | tojson }}, "{{ current.reveal_word }}" / "{{ current.reveal_sub }}"
 - end: "{{ current.end_name }}" / "{{ current.end_tagline }}"
 - narrations:
@@ -81,12 +83,16 @@ verbatim in the output's `language` field.
 
 ## The film's fixed skeleton (your answer sheet)
 
-Scene order, durations and camera targets below are FINAL — you do not
-arrange scenes. The arc: a quiet cold open, the hero card, a walk of the
-home page, then one chapter per pillar you pick (a divider, then a walk){% if skeleton.has_plate %}, with a numbers plate after chapter {{ skeleton.plate_chapter }} (the chapter whose page the numbers came from){% endif %}, then the reveal, a proof walk, and the closing card.
+Scene order and durations are FINAL — you do not arrange scenes. Camera
+targets below are the deterministic defaults; your `camera_focuses` slot may
+replace one with another element from the SAME page and shot. The home
+overview is a static establishing card (a short wide hold of the fold — no
+camera, no target to choose). The arc: a
+quiet cold open, the hero card, the static home overview, then one chapter
+per pillar you pick (a divider, then a walk){% if skeleton.has_plate %}, with a numbers plate after chapter {{ skeleton.plate_chapter }} (the chapter whose page the numbers came from){% endif %}, then the reveal, a proof walk, and the closing card.
 Chapters 4-5 exist only if you pick that many pillars.
 {% for s in skeleton.scenes %}
-- `{{ s.key }}`: {{ s.type }}{% if s.chapter %} (chapter {{ s.chapter }}){% endif %}{% if s.page is defined %} — page {{ s.page }} ({{ s.host }}), shot {{ s.shot }}, camera → {% if s.camera.element %}{{ s.camera.element }}{% else %}center push{% endif %}{% endif %}
+- `{{ s.key }}`: {{ s.type }}{% if s.chapter %} (chapter {{ s.chapter }}){% endif %}{% if s.page is defined %} — page {{ s.page }} ({{ s.host }}), shot {{ s.shot }}, {% if s.camera.static %}static wide establishing card (no camera target){% else %}default camera → {% if s.camera.element %}{{ s.camera.element }}{% else %}center push{% endif %}{% endif %}{% endif %}
 {% endfor %}
 
 ## Your slots
@@ -138,22 +144,38 @@ Chapters 4-5 exist only if you pick that many pillars.
    leave every scene without narration unless a line genuinely earns its place.
 {%- endif %}
 7. **subtitle_lines** — visible subtitle COPY keyed by scene key, independent
-   of narration. Write one concise, complete sentence or phrase for every
-   scene, including ui walks and silent scenes; it must remain true to the
-   page and match the film's language. Do not merely repeat the large title
-   when a short supporting line would read better. Keep each entry within
-   120 characters and readable inside its scene. You supply TEXT ONLY — no
-   timestamps, cue objects, styles or track fields; the system splits and
-   times the cues and applies the default black background with white text.
+   of narration. By default write one concise, complete sentence or phrase
+   for every chapter walk, the proof walk and any numbers plate. The
+   cold-open words, hero, home overview, chapter dividers, reveal and closing
+   card already carry the introduction or typography as the picture; omit
+   those keys by default so no extra subtitle layer covers them. Add a line
+   for one of those scenes only when the user explicitly asks for subtitles
+   there. Each line must remain true to the page and match the film's
+   language. Do not merely repeat the large title when a short supporting
+   line would read better. Keep each entry within 120 characters and
+   readable inside its scene. You supply TEXT ONLY — no timestamps, cue
+   objects, styles or track fields; the system splits and times the cues and
+   applies the default black background with white text.
 {%- if subtitles %}
-   THIS FILM SHIPS WITH SUBTITLES. Cover every scene with a nonblank entry;
-   a film without spoken narration still has visible subtitles. On a
-   revision, keep every subtitle the ask does not name unchanged.
+   THIS FILM SHIPS WITH SUBTITLES. Cover every chapter/proof walk and any
+   plate with a nonblank entry; the introduction and typography-led scenes
+   above stay blank by default. A film without spoken narration still has
+   these visible explanations. On a revision, keep every subtitle the ask
+   does not name unchanged.
 {%- else %}
    THIS FILM SHIPS WITHOUT SUBTITLES by explicit choice; return an empty
    object and do not re-enable them through copy or narration.
 {%- endif %}
-8. **name** — a short display name for the film (null if unsure); **theme** —
+8. **camera_focuses** — walk scene key → captured element id. On a first
+   design, give one target for every page walk (the chapter walks and the
+   proof walk); on a revision, carry every
+   listed current target the ask does not change. Each id must come from that
+   scene's assigned page and shot and must be uncovered. Null or an omitted
+   entry inherits the skeleton default. You choose the semantic target;
+   the system derives its coordinates, zoom and camera timing. The `home`
+   overview is the static establishing card — it takes no target, never
+   name it.
+9. **name** — a short display name for the film (null if unsure); **theme** —
    canvas/ink hex pair from the site's look (null = default).
 
 ## Citations (binding for every factual slot)
@@ -164,7 +186,9 @@ Chapters 4-5 exist only if you pick that many pillars.
   yourself is wrong by construction — the resolver only accepts ids.
 - Over-long lines: when the line you want exceeds its slot's character cap,
   set `"fit": "head"` (keep the leading segment) or `"fit": "tail"` (keep
-  the trailing one) — the system trims at a word boundary. With `"fit"`
+  the trailing one) — the system trims at the last complete sentence inside
+  the window when one exists, otherwise at a word boundary, and never keeps
+  a dangling connector (a trailing "—" / ":" / ",") at an edge. With `"fit"`
   omitted ("full") the line must fit the cap as-is, so cite a shorter line
   instead of forcing a long one.
 - Accent: `"accent": "<substring>"` wraps one substring of the RESOLVED
@@ -193,7 +217,8 @@ Chapters 4-5 exist only if you pick that many pillars.
   "end_name": REF,           // ≤30
   "end_tagline": REF,        // ≤90
   "narrations": {"<scene key>": string},  // only the scenes you narrate
-  "subtitle_lines": {"<scene key>": string}  // every scene when subtitles are on
+  "subtitle_lines": {"<scene key>": string},  // chapter/proof walks + any plate by default when on
+  "camera_focuses": {"<walk scene key>": "<captured element id>"}  // never "home"
 }
 
 `REF` = `{"line": int, "fit": "full"|"head"|"tail", "accent": string | null}`
