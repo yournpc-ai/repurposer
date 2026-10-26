@@ -1,6 +1,6 @@
 # RECIPES — 配方与 Home 货架
 
-> Status: 当前规范（2026-10-25）。本文描述配方、Home 货架及其兑现能力的现行边界；样片与入口的最新验收状态归 `tasks/home-creation-entry-refresh.md`，排期归 `PROGRESS.md`。
+> Status: 当前规范（2026-10-27）。本文描述配方、Home 货架及其兑现能力的现行边界；样片与入口的最新验收状态归 `tasks/home-creation-entry-refresh.md`，排期归 `PROGRESS.md`。
 >
 > 配方是提示词，不是 mention、模板编辑器或隐藏执行通道。点击卡片只预填 composer；用户随后编辑并发送，才进入唯一的 `POST /chat` 意图面。
 
@@ -9,7 +9,7 @@
 - 服务端 `app/pipeline/recipes.py:RECIPE_REGISTRY` 注册八个配方：`multilingual-subs`、`voice-dub`、`highlight-clips`、`reframe`、`social-post`、`quote-cards`、`carousel` 为 `live`；`image-video` 为 `reserved`。`GET /api/v1/recipes` 提供公共只读投影。
 - Home 前端另以 `components/home/recipeFamilies.ts:RECIPE_FAMILIES` 组织用户任务货架。`ads` 是默认族；`talks` 与 `posts` 当前 `disabled`；`templates` 是未映射服务端卡片的 catch-all。
 - `DEMO_HIDDEN_CARDS` 当前隐藏 `quote-cards` 与 `image-video`。隐藏只影响货架曝光，不删除 live 能力、prompt 注册或公共 API。
-- Home 的 Ads 族只展示 Text Animation（文字短片）与 Product Promo 两个子 tab。Text Animation 使用项目 `9345ddc2` 与 `f52c489c` 的真实文字源 Film；Product Promo 首卡为 ZYMIX 真片，其余三张仍复用既有片作布局占位。`brand` / `ugc` / `product` 是空货架，按规则不渲染。
+- Home 的 Ads 族只展示 Text Animation（文字短片）与 Product Promo 两个子 tab。Text Animation 使用项目 `9345ddc2` 与 `f52c489c` 的真实文字源 Film；Product Promo 前两张为 ZYMIX / AgentVeil 真片，其余两张仍复用既有片作布局占位。`brand` / `ugc` / `product` 是空货架，按规则不渲染。
 - `RecipeCard` 只有 `status="live"` 才可点击；`reserved` 显示 Soon 且不可发射。点击不自动发送、不建项目或 run、不打开 overlay。
 - `packages/clip` 同时服务 editor preview 与 render service；clip-spec 与 film-spec 是平级 spec families，按 `spec.family` 分派。配方不得创建第三套 spec 或 renderer。
 - R5 合成发言视频是已拍板但未实施的能力，合同归 `tasks/synthetic-talk-video.md`；`voice_gen` / `synth_visual` 是目标能力名，不表示当前已注册。

@@ -16,7 +16,7 @@
  * 上架纪律: `resolveFamilies` drops empty shelves → empty subs → empty
  * families, so a family without demos never renders, not even a placeholder
  * seat (连摆位都不摆). A demo video SHOULD be a real render of the shelf's
- * capability; three reused product-demo entries temporarily ride REUSED
+ * capability; two reused product-demo entries temporarily ride REUSED
  * existing renders as pure layout placeholders (each entry's comment names
  * its source) — a placeholder proves the shelf's layout, never the
  * capability, and swapping in a real sample is a data-only edit.
@@ -121,7 +121,7 @@ export function recipeCardFamily(card: RecipePublic): string {
  * zero component changes to turn them on. The product-demo / text-short subs
  * are LIVE shelves. Any remaining placeholder entries are marked
  * individually below; the text-short entries and the product-demo shelf's
- * first entry are real film-chain renders. */
+ * first two entries are real film-chain renders. */
 export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
   {
     // Ads — Film-led text shorts and product demos. First seat = the home
@@ -129,8 +129,8 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
     id: "ads",
     subs: [
       {
-        // 产品宣传 — the first entry is a real film-chain render. The
-        // remaining reused entries stay explicitly marked as placeholders.
+        // 产品宣传 — the first two entries are real film-chain renders. The
+        // remaining two reused entries stay explicitly marked as placeholders.
         id: "product-demo",
         shelves: [
           {
@@ -145,11 +145,12 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
                 orientation: "wide",
               },
               {
-                // 功能亮点介绍 — placeholder: reuses the snappify "Code"
-                // vertical launch film.
+                // AgentVeil 产品演示 + 独立屏上说明字幕 — real render from
+                // the current film chain (project 79450192, output 462fe8fc),
+                // 86.1s / 16:9.
                 id: "product-demo-highlights",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-snappify-code-adc0737d.mp4",
-                orientation: "vertical",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/product-demo-agentveil-490350de.mp4",
+                orientation: "wide",
               },
               {
                 // 视频配文字说明 — placeholder: reuses the snappify "Frame"

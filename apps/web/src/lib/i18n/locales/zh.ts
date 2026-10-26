@@ -550,15 +550,15 @@ const zh: Resources = {
           prompt:
             "把这个网站做成一支产品演示，展示主要功能并配上简洁的屏上说明：{{placeholder}}",
         },
-        // 其余 Product Promo 使用完整的用户口吻提示词；复用视频只是布局
-        // 占位，永不是用户选定的参考。这些提示词不带 {{placeholder}} 空位。
+        // 网站来源的 demo 使用 capture 链；其余两个复用视频保留上传素材
+        // 提示词，仅作布局占位。
         "product-demo-walkthrough": {
           prompt:
             "我想用上传的视频或录屏做一支操作演示，选取关键步骤并配上简短说明。请先看素材，和我确定演示重点，再给出方案。",
         },
         "product-demo-highlights": {
           prompt:
-            "我想用已有视频和图片介绍产品的主要功能，用简短文字突出亮点。请先结合素材建议内容顺序和表达方式。",
+            "把这个网站做成一支产品演示，展示主要功能并配上简洁的屏上说明：{{placeholder}}",
         },
         "product-demo-captioned": {
           prompt:

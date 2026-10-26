@@ -572,16 +572,15 @@ const en = {
           prompt:
             "Turn this website into a product demo that presents its key features with concise on-screen explanations: {{placeholder}}",
         },
-        // The remaining product-demo entries use complete user-VOICE prompts;
-        // their reused videos are layout placeholders, never references the
-        // user selected. No {{placeholder}} blank in these prompts.
+        // Website-source demos use the capture flow. The two remaining reused
+        // videos keep upload-based prompts and are layout placeholders only.
         "product-demo-walkthrough": {
           prompt:
             "I want to turn my uploaded video or screen recording into an operation walkthrough — pick the key steps and add short explanations. Please look at my material first, align with me on the demo's focus, then propose a plan.",
         },
         "product-demo-highlights": {
           prompt:
-            "I want to introduce my product's main features using my existing videos and images, with short text highlighting the key points. Please first suggest the content order and presentation based on my material.",
+            "Turn this website into a product demo that presents its key features with concise on-screen explanations: {{placeholder}}",
         },
         "product-demo-captioned": {
           prompt:
