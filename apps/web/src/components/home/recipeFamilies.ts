@@ -146,10 +146,10 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
               },
               {
                 // AgentVeil 产品演示 + 独立屏上说明字幕 — real render from
-                // the current film chain (project 79450192, output 462fe8fc),
-                // 86.1s / 16:9.
+                // the current film chain (project b7530c00, output 8cac9bf1),
+                // 81.0s / 16:9.
                 id: "product-demo-highlights",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/product-demo-agentveil-490350de.mp4",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/product-demo-agentveil-28f35353.mp4",
                 orientation: "wide",
               },
               {
