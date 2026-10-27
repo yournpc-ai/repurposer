@@ -143,7 +143,7 @@ Distribution ✅：channel_accounts ──► publications（直发状态机与�
 | `assets` | Pipeline | 其他模块只读；处理状态只由 worker 的 asset_processing 写。**transcript = 资产行的内容层（ADR-113）**：`transcript`/`extracted_text` = 源层唯一座（读口 `pipeline/assets.py:asset_text_content`），`edited_transcript` = 用户改稿覆盖层（写口 = `PUT /projects/{id}/assets/{id}/transcript`，零 run 零积分；C4 双层不变量——改稿只写覆盖层，源层与 `meta.words` 永不动）；cues 永不持久化（读时 `group_cues`/`display_cues` 一法推导） |
 | `projects` | Pipeline | 各模块只读 |
 | `workflow_runs` | Pipeline | **创建收口于 `orchestrator.create_run`**（/generate、chat dispatch 全部经它，全库无旁路）；状态只由 orchestrator/worker 写。run 级成本 = `workflow_steps.cost` 聚合（API 序列化时计算，不落列） |
-| `outputs` | Pipeline | 创建 + `render_status`/`files` 归 Pipeline；`payload`/`render_spec` 由 Operation Model 与受控产物工具按各自写门修改，`publishing` 归 Distribution 表单；payload 三规则（ADR-030）；`workflow_step_id` 为只读血统；`quality` 由 verify 节点写，NULL = 未质检；内部类型（`material_understanding`/`storyboard`/`craft_skeleton`）与 legacy `content_plan` 行经 `visible_outputs_stmt()` 统一过滤 |
+| `outputs` | Pipeline | 创建 + `render_status`/`files` 归 Pipeline；`payload`/`render_spec` 由 Operation Model 与受控产物工具按各自写门修改，`publishing` 归 Distribution 表单；payload 三规则（ADR-030）；`workflow_step_id` 为只读血统；`quality` 由 verify 节点写，NULL = 未质检；内部类型（`material_understanding`/`storyboard`/`craft_skeleton`）与 legacy `content_plan` 行经 `visible_outputs_stmt()` 统一过滤；`composition_id`/`composition_version_id`（ADR-145，A 批 1 已建列）= video 家族钉版血缘（配 `work_id = Composition.id`），只由 tools/video 制作缝写入 |
 | `conversations` / `messages` | Agent Interface | Pipeline 只读（run 关联展示） |
 | `message_seq_counters` | Agent Interface | transcript 数组序计数器（ADR-108）：计数器刻意不住 conversations 行，避免长回合行锁自死锁。新 conversation 首回合的 seq 必须在父用户行所在的同一未提交事务中分配；后续活动/散文行回到 `alloc_message_seq` 独立短事务。seq 单调但允许间隙，不得用时间戳重建第二顺序 |
 | `personas` | Memory | 各模块注入用只读；用户经 Memory/persona 路由显式编辑，persona agent 只走受控学习写口。终态 schema（ADR-038）：身份卡 + 风格六件 flat + 策略三件（audience/guidelines/cta）+ `voice` JSONB（声纹块，NULL=Auto）+ `brand` JSONB（皮肤块，NULL=系统默认皮肤）+ `learned_from` JSONB + `calibrated_at` + `auto_created_at`（可空时间戳替代 is_default；默认解析链 = run.context pin > 项目挂载 > auto_created_at 非空 > 最早创建）。【定位根方向：`positionings`、人设表达分区、`topics` 与 `channel_accounts` 挂根仍 PLANNED——ADR-042 / `POSITIONING.md`；启动与验收归 PROGRESS，未实施前不得改写代码词】 |
@@ -162,6 +162,8 @@ Distribution ✅：channel_accounts ──► publications（直发状态机与�
 | `configs` | （平台层，暂不属于任何模块） | 公共运营参数表（key 点号命名空间）；`CONFIG_REGISTRY` 是唯一事实源，一切读取走 `platform/configs.get_config()` 漏斗，模块禁直查表 |
 | `page_readings` | Tools（world 座位层，`app/tools/world.py`） | 项目级页面读本（ADR-124：(project_id, url) 主键 + text + fetched_at，快照语义，随项目级联）；读收口于 `world.page_reading_for_url` 一座，写只经 `world.upsert_page_reading`（chat 读工具写穿走 `world.write_page_reading` 独立短事务；capture 链在 `process_asset` 会话内写） |
 | `film_narrations` | Tools（film 座位层，`app/tools/film/narration_store.py`） | 旁白复用库（ADR-138 §10.1）：`(project_id, content_hash)` 唯一，一行 = 一条旁白词的 speed-1.0 原速原件（storage_key + duration_s；适配产物是 run 级 staging，永不住本表）；复用键 = 归一化文本｜已解 voice_id｜语言｜合成配置；一切读写经 `narration_store` 一座（resolve / finalize / fail——原子占位 + 有界接管 + owner 条件写，全独立短会话，run 回滚不带走已完成的行）；消费面 = `narration.py` 合成链，随项目级联删除 |
+| `compositions` / `composition_versions` | Editing（ADR-145，A 批 1 已建表） | 内容只经 `app/editing/store.apply_composition_edits`（Composition 行锁序列化 + base_ref CAS + request_id 幂等 + 整批原子）；版本行 append-only 不可改写，`version` 在 Composition 内单调递增；其他模块只读；`origin_project_id` 记来源 Chat 但 SET NULL——删 Chat 不级联毁作品；Composition 删除是未来的显式 op（本批无删除口） |
+| `source_snapshots` | Editing（A 批 1 已建表） | 不可变内容快照（owner + asset_id SET NULL 溯源 + storage_key + digest + duration_ticks @SOURCE_TIMEBASE）；行不可原地改写，refresh/换素材 = 新行；登记写口为 editing/sources.register_snapshot；tools/video/preparation 负责从既有 Asset 冻结资源并调用登记，Chat 素材接入在 B 完成 |
 
 **outputs 共享聚合的细则**：Pipeline/worker 负责创建、渲染状态、执行身份与产物文件；Operation Model 负责其注册范围内的 payload/render_spec 编辑与 operation journal；Distribution 只写 publishing 表单。任何写者只碰自己的字段子集，终态渲染写必须匹配 `render_claim_token`。Operation Model 覆盖的内容修改必须产生 operation 记录；Film 版本编辑、系统反写和发布字段不得被伪装成 clip operation。
 
@@ -187,18 +189,18 @@ Distribution ✅：channel_accounts ──► publications（直发状态机与�
 
 反对照：`pipeline/` 模块 ≠ Mastra Workflows（我们的 Pipeline = 摄入+ASR+编排+渲染，大于 Workflows，不改名）；`chat/` ≈ Agno Interfaces。
 
-### 4.2 视频目标模块与表归属（TARGET，ADR-145，未实施）
+### 4.2 视频目标模块与表归属（ADR-145）
 
-本节仅登记新架构准入，不改变 §4 与 §7 的当前实现事实；完整新旧目录/代码处置唯一合同 = [VIDEO_PROJECT §12](VIDEO_PROJECT.md#12-目标目录与新旧代码处置)。实施时同批更新实际表归属与代码地图。
+本节登记新架构准入与其落地阶段；完整新旧目录/代码处置唯一合同 = [VIDEO_PROJECT §12](VIDEO_PROJECT.md#12-目标目录与新旧代码处置)。A 批 1 已把 `compositions` / `composition_versions` / `source_snapshots` 与 `editing` 模块落进 §4 当前表（上方）；下表剩余行为仍 TARGET。
 
 | 目标表 / 模块 | Owner 与写口 | 阶段与当前边界 |
 |---|---|---|
-| `compositions` / `composition_versions` | Editing（app/editing）；内容只经 apply_composition_edits，CAS/事务由 store 实现 | A 新建；不把 Project/Output 表转移到 Editing |
-| `source_snapshots` | Editing 的 sources 服务 | A 固定 owner/不可变资源与权限；原 Asset 处理状态仍归 Pipeline，不能变成第二 Asset 库 |
+| `compositions` / `composition_versions` | Editing（app/editing）；内容只经 apply_composition_edits，CAS/事务由 store 实现 | **A 批 1 已落地**（见 §4 当前表）；不把 Project/Output 表转移到 Editing |
+| `source_snapshots` | Editing 的 sources 服务 | **A 批 1 已建表**；生产写口（素材链快照采集）归后续 A 批；原 Asset 处理状态仍归 Pipeline，不能变成第二 Asset 库 |
 | `video_narrations` | Tools（app/tools/video/narration_store.py） | B 承接原件复用/恢复；替代 film_narrations，设计用户权限与跨 Chat 复用，不搬旧业务行；旧表当前归属在退役前不变 |
 | `user_skills` / `skill_versions` | Skills 的 store/import 服务 | C 新建；用户显式版本绑定不替代 Tool 注册/执行授权，平台内置包仍沿现有注册表 |
-| `editing` 模块 | 内容/版本/快照的领域与应用服务，有独立表归属 | A/B；不认领 Run/render 队列，不创建第二 scheduler |
-| `tools/video` / `packages/video-spec` / renderer adapter | 分别为执行能力、纯渲染契约与具体引擎实现 | A/B；Render/Output/Run owner 继续按现行 Pipeline 合同 |
+| `editing` 模块 | 内容/版本/快照的领域与应用服务，有独立表归属 | **A 批 1 已落地**（schemas/timing/edits/validators/store/video_spec/storyboard）；service/director/grounding/templates 归 B；不认领 Run/render 队列，不创建第二 scheduler |
+| `tools/video` / `packages/video-spec` / renderer adapter | 分别为执行能力、纯渲染契约与具体引擎实现 | **A 批 1 已落地最小缝**（produce.py 队列缝 + 契约包 + Remotion adapter）；produce_video run 节点/估价/计费归 B；Render/Output/Run owner 继续按现行 Pipeline 合同 |
 
 ## 5. 跨模块通信规则
 
@@ -325,10 +327,22 @@ apps/api/
 │   │   │                        #   （film：h264/1920×1080/流帧计数 ±1 帧——容器时长有 muxer 衬垫，
 │   │   │                        #   永不作契约面；clip：存在/非零/可读 + sidecar 存在即法、非零
 │   │   │                        #   当且仅当 caption_track 非空）；未过 = FAILED +
-│   │   │                        #   spec.failure{stage:probe} 盖 render 镜像节点（台账读单字段）
+│   │   │                        #   spec.failure{stage:probe} 盖 render 镜像节点（台账读单字段）；
+│   │   │                        #   video 家族（ADR-145）：spec 自带 width/height/duration_frames/
+│   │   │                        #   有理数 fps 为契约面，任一 audio clip → 容器必须带音频流
 │   │   ├── verify.py            # 内部质检节点：确定性矩阵裁决 + QualityBounce 打回 + best-not-last
 │   │   │                        #   快照回退 + 双败 escalation（dock 提问 + Suspend）；quality.py = 检查矩阵
 │   │   │                        #   纯函数半边（fidelity 族 + craft 可测量项 + run_checks 按类型分派）
+│   ├── editing/       # Editing（ADR-145，A 批 1 已落地）：Composition 内容领域——
+│   │                    #   schemas（CompositionContent：settings/sources/scenes/timeline）/
+│   │                    #   timing（整数 ticks + 有理数 fps 唯一量化座，与 packages/video-spec
+│   │                    #   共享 golden fixtures）/ edits（op 词汇 + 纯 apply + duplicate_clip
+│   │                    #   重映射）/ validators（整候选校验：引用/三时间域/同轨重叠/动画目标）/
+│   │                    #   store（apply_composition_edits 唯一内容写口：行锁序列化 +
+│   │                    #   base_ref CAS + request_id 幂等 + 整事务原子；get_video_version 读面）/
+│   │                    #   video_spec（编译 family="video" 自足 spec）/ storyboard（canonical
+│   │                    #   分镜读面）/ sources（快照登记）/ fonts（纯资源描述）；
+│   │                    #   存储/字体发布 IO 在 tools/video/preparation，依赖方向由 gate 6a 检查
 │   ├── agents/          # agent 声明 + harness 漏斗（ADR-039）：base.py（Agent / StreamingAgent）/
 │   │                    #   registry.py（共享 crew：understand·plan/persona/translator 等）/
 │   │                    #   contexts.py（GenerationContext + output_one_liner 装配层；
@@ -347,7 +361,9 @@ apps/api/
 │   │                    #   _PolicyProxy 是唯一浏览器拦截座，截图失败可 degrade-honest，manifest 仍是本体
 │   │                    #   stills/beats.py = 节拍方案代码半（期 2）：backing 表装配 + 拍锚吸附平铺 +
 │   │                    #   coherence_violations 跨拍连贯性检查 + 两段式编排（大纲→逐拍，handoff 交接）；
-│   │                    #   stills/agents.py = 剪辑师双件声明（stills_editor / stills_editor_outline）
+│   │                    #   stills/agents.py = 剪辑师双件声明（stills_editor / stills_editor_outline）；
+│   │                    #   video（ADR-145，A 批 1）：produce.py = CompositionVersion → video-spec →
+│   │                    #   Output 血缘 + render 队列 pend 的最小制作缝（run 节点/估价/计费归 B）
 │   ├── skills/          # 指令包（SKILL.md 领域知识即数据，装配期注入，模型无感）：SKILL_REGISTRY 收编；
 │   │                    #   linkedin-longform / stills-editing-craft（期 2 剪辑工艺先验表）
 │   ├── providers/       # 外部服务包装（禁 import agents/LLM 决策层）：
@@ -366,8 +382,14 @@ apps/api/
 │   └── metering.py      # 逐节点计量（usage → workflow_steps.cost，ADR-025）
 ├── migrations/          # Alembic
 apps/web/                # TanStack Start 前端
-apps/render/             # Remotion 渲染服务（Node）
+apps/render/             # Remotion 渲染服务（Node）：server.ts 按 spec.family 三分派
+                         #   （clip 缺省 / film / video——ADR-145）；src/video/ = video 家族
+                         #   adapter（capabilities 声明 + Remotion 实现限 src/video/remotion/）；
+                         #   scripts/render-video-local.ts = 本地渲染调试入口
 packages/clip/           # 共享 <Clip> 组件 + clip-spec TS 类型（镜像 Pydantic）
+packages/video-spec/     # video-spec 契约包（ADR-145，A 批 1）：zod schema + 纯量化/插值
+                         #   求值 + golden fixtures（与 app/editing/timing.py 共享）；零
+                         #   React/Remotion 依赖（check_gates gate 6b）
 ```
 
 ### 7.2 队列机制（ADR-017）

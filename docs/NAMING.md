@@ -164,9 +164,9 @@
 
 **内容方案词汇现状（ADR-088/089）**：Content Plan（探索族产品语义方案）与 dock 计划书（task_book，plan path 义）在迁移弧期并行共存；ADR-089 §8 退役弧收口后 Content Plan 为唯一「方案」座位，dock 内容 = 编译的 Execution Scope。裸 plan 违规（N-11）不变；跨层引用带限定词（pipeline plan / dock plan / Content Plan 三主并立期尤其）。
 
-### 2.1 Video Project 目标词汇（ADR-145，未实施）
+### 2.1 Video Project 目标词汇（ADR-145）
 
-以下名称只用于 `VIDEO_PROJECT.md` 与四阶段施工；代码落地时按本表全栈同词，不把 TARGET 写成当前已有实现。
+以下名称是代码落地时的全栈同词标准。A 批 1 已落地：`Composition`/`CompositionVersion`/`SourceSnapshot` 表与 `app/editing`、`app/tools/video`、`packages/video-spec`、video-spec 家族（`family="video"`）；Skill/VideoTemplate/Preset、TextPart、Scene 完整职责仍 TARGET。
 
 | 中文 | 英文（目标代码） | 定义 | 不是什么 |
 |---|---|---|---|

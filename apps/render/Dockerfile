@@ -29,12 +29,14 @@ WORKDIR /repo
 # graph, even though --filter only installs the render branch.
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/clip/package.json packages/clip/package.json
+COPY packages/video-spec/package.json packages/video-spec/package.json
 COPY apps/render/package.json apps/render/package.json
 COPY apps/web/package.json apps/web/package.json
 RUN pnpm install --filter @repurposer/render... --frozen-lockfile
 
 # Source for the render branch only.
 COPY packages/clip packages/clip
+COPY packages/video-spec packages/video-spec
 COPY apps/render apps/render
 
 # Vendored CJK font (the D12 precedent — same SIL OFL Noto Sans SC the

@@ -539,6 +539,109 @@ class GraphIsland(Base):
     created_at = Column(DateTime(timezone=True), default=now_utc)
 
 
+class SourceSnapshot(Base):
+    """One immutable capture of an asset's content (ADR-145, VIDEO_PROJECT §9).
+
+    The permission + identity anchor for CompositionVersion source bindings:
+    a refresh / re-transcript / replacement produces a NEW row; existing
+    versions keep pinning the old digest. Rows are content-addressed facts —
+    never updated in place. ``asset_id`` is nullable provenance (SET NULL:
+    deleting the asset never destroys snapshots bound into works).
+    """
+
+    __tablename__ = "source_snapshots"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    owner_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    asset_id = Column(
+        UUID(as_uuid=True), ForeignKey("assets.id", ondelete="SET NULL"), nullable=True
+    )
+    kind = Column(String(20), nullable=False)  # image | audio | web (video/speech later)
+    # Immutable object key; the digest is of the bytes behind it.
+    storage_key = Column(String(512), nullable=False)
+    digest = Column(String(64), nullable=False)
+    # Real media duration in source-time ticks (editing.timing.SOURCE_TIMEBASE);
+    # NULL for static sources (images) — a static snapshot HAS no duration.
+    duration_ticks = Column(BigInteger, nullable=True)
+    meta = Column(JSONB, nullable=False, default=dict)
+    captured_at = Column(DateTime(timezone=True), default=now_utc)
+
+
+class Composition(Base):
+    """A work's durable identity (ADR-145): one continuously-edited film.
+
+    ``origin_project_id`` records the birth Chat but is NOT a permission or
+    editing boundary (SET NULL: deleting the origin Chat never cascades into
+    a work other Chats may still reference). ``current_version_id`` points at
+    the head CompositionVersion; the FK is added post-hoc (circular with
+    composition_versions) and the write door maintains it under the row lock.
+    Composition deletion is a future explicit op — nothing in this slice
+    deletes or cascades these rows.
+    """
+
+    __tablename__ = "compositions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    owner_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    origin_project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    name = Column(String(255), nullable=False, default="")
+    current_version_id = Column(UUID(as_uuid=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+
+class CompositionVersion(Base):
+    """One immutable content version of a Composition (§2.1).
+
+    Content lives in the four JSONB columns (settings/sources/scenes/
+    timeline — shapes = app.editing.schemas.CompositionContent). Versions are
+    append-only: ``version`` increments monotonically within a Composition,
+    rows are never rewritten. ``request_id``+``request_digest`` are the write
+    door's idempotency pair: a retry of the same request returns THIS row; the
+    same key under a different payload is rejected (request_id is globally
+    unique when present, so a create retry can never double-birth a work).
+    """
+
+    __tablename__ = "composition_versions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    composition_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("compositions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version = Column(Integer, nullable=False)
+    base_version_id = Column(UUID(as_uuid=True), nullable=True)
+    schema_version = Column(Integer, nullable=False, default=1)
+    settings = Column(JSONB, nullable=False, default=dict)
+    sources = Column(JSONB, nullable=False, default=list)
+    scenes = Column(JSONB, nullable=False, default=list)
+    timeline = Column(JSONB, nullable=False, default=dict)
+    skill_provenance = Column(JSONB, nullable=True)
+    content_digest = Column(String(64), nullable=False)
+    request_id = Column(String(64), nullable=True)
+    request_digest = Column(String(64), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint("composition_id", "version", name="uq_composition_versions_version"),
+        Index(
+            "uq_composition_versions_request_id",
+            "request_id",
+            unique=True,
+            postgresql_where=text("request_id IS NOT NULL"),
+        ),
+    )
+
+
 class Output(Base):
     """Unified product row (ADR-030): clips and derivatives became types.
 
@@ -616,6 +719,17 @@ class Output(Base):
     # here, so a rerun never orphans them. Legacy rows backfilled work_id=id
     # (singleton works — their pre-ADR history already evaporated, honest).
     work_id = Column(UUID(as_uuid=True), nullable=False, default=uuid4, index=True)
+    # Composition lineage (ADR-145): a video-family output pins the exact
+    # CompositionVersion it was produced from (work_id = Composition.id).
+    # NULL on every non-video row. Version rows are immutable and never
+    # deleted, so the pins need no ondelete behavior; composition deletion is
+    # a future explicit op that must reckon with delivered Outputs first.
+    composition_id = Column(
+        UUID(as_uuid=True), ForeignKey("compositions.id"), nullable=True, index=True
+    )
+    composition_version_id = Column(
+        UUID(as_uuid=True), ForeignKey("composition_versions.id"), nullable=True
+    )
     # 归档不变量 (ADR-091 §2, 可空时间戳律): NULL = active; stamped = archived
     # (read faces default-filter it; the row + its files + its journal chain
     # survive — 交付后的产物历史不可销毁，只可归档). Physical delete survives

@@ -47,6 +47,14 @@ grep-provable):
       ``hasDraftGraph``-style artifact-existence derivations (retired with
       Phase 1) and local planReady/confirmationReady/materialReady
       derivations that don't read the stamp must never reappear.
+
+Gate 6 (ADR-145 video architecture boundaries):
+  6a ``app/editing/`` is the content domain — it never imports the
+     Presentation/execution/LLM layers (``app.chat`` / ``app.pipeline`` /
+     ``app.tools`` / ``app.agents`` / ``app.providers``); the data layer
+     (``app.models``) is its only legal app dependency.
+  6b ``packages/video-spec/`` is renderer-neutral by contract — its sources
+     never import React/Remotion (adapter code lives in apps/render).
 """
 
 import re
@@ -63,6 +71,10 @@ PROVIDERS_DIR = APP_DIR / "providers"
 KERNEL_FILE = APP_DIR / "agents" / "tool_loop.py"
 LIFECYCLE_FILE = APP_DIR / "pipeline" / "lifecycle.py"
 WEB_SRC = API_ROOT.parent / "web" / "src"
+
+# ADR-145 (gate 6).
+EDITING_DIR = APP_DIR / "editing"
+VIDEO_SPEC_SRC = API_ROOT.parent.parent / "packages" / "video-spec" / "src"
 
 # Module-level or deferred — an import is an import wherever it sits.
 BANNED_DECISION_IMPORT = re.compile(r"^\s*(from|import)\s+app\.(agents|clients)\b")
@@ -114,6 +126,14 @@ BANNED_CHECKPOINT_KIND = re.compile(
     r"kind\s*(?:=|==)\s*[\"']checkpoint[\"']",
     re.IGNORECASE,
 )
+
+# 6a: the content domain's only legal app dependency is the data layer.
+BANNED_EDITING_IMPORT = re.compile(
+    r"^\s*(from|import)\s+app\.(chat|pipeline|tools|agents|providers)\b"
+)
+# 6b: renderer-neutral contract — no React/Remotion imports in the spec
+# package (bare, scoped or deep imports all banned).
+BANNED_SPEC_IMPORT = re.compile(r"""^\s*import\s+.*["'](?:react|react-dom|remotion|@remotion/)""")
 
 
 def _deterministic_scan_targets() -> list[Path]:
@@ -249,6 +269,32 @@ def check_client_lifecycle_reads() -> list[str]:
     return violations
 
 
+def check_editing_boundary() -> list[str]:
+    """Gate 6a (ADR-145): app/editing is the content domain — it consumes
+    app.models (data) and never imports Presentation/execution/LLM seats."""
+    violations: list[str] = []
+    if not EDITING_DIR.exists():
+        return [f"{EDITING_DIR}: editing module not found (gate 6a needs it)"]
+    for path in sorted(EDITING_DIR.rglob("*.py")):
+        for lineno, line in enumerate(path.read_text().splitlines(), start=1):
+            if BANNED_EDITING_IMPORT.match(line):
+                violations.append(f"{path.relative_to(API_ROOT)}:{lineno}: {line.strip()}")
+    return violations
+
+
+def check_video_spec_purity() -> list[str]:
+    """Gate 6b (ADR-145): packages/video-spec is renderer-neutral — no
+    React/Remotion import may appear in its sources."""
+    violations: list[str] = []
+    if not VIDEO_SPEC_SRC.exists():
+        return [f"{VIDEO_SPEC_SRC}: video-spec package not found (gate 6b needs it)"]
+    for path in sorted(VIDEO_SPEC_SRC.rglob("*.ts")):
+        for lineno, line in enumerate(path.read_text().splitlines(), start=1):
+            if BANNED_SPEC_IMPORT.match(line):
+                violations.append(f"{path}:{lineno}: {line.strip()}")
+    return violations
+
+
 def main() -> int:
     smoke = check_import_smoke()
     if smoke:
@@ -286,9 +332,19 @@ def main() -> int:
         print("client-lifecycle gate FAILED (固定不等式: lifecycle is server-named — read the results/graph `lifecycle.*` stamp; never infer readiness from artifact/run/graph existence):")
         for failure in client:
             print(f"  {failure}")
-    if failures or blind or checkpoint or kernel or lifecycle or client:
+    editing = check_editing_boundary()
+    if editing:
+        print("editing-boundary gate FAILED (ADR-145: app/editing never imports chat/pipeline/tools/agents/providers — the data layer is its only app dependency):")
+        for failure in editing:
+            print(f"  {failure}")
+    spec_pure = check_video_spec_purity()
+    if spec_pure:
+        print("video-spec purity gate FAILED (ADR-145: packages/video-spec is renderer-neutral — no React/Remotion imports):")
+        for failure in spec_pure:
+            print(f"  {failure}")
+    if failures or blind or checkpoint or kernel or lifecycle or client or editing or spec_pure:
         return 1
-    print("check_gates: OK (gate 0 boot smoke, providers/+deterministic purity, no blind retries, no checkpoint-kind resurrection, ADR-087 kernel/lifecycle/client boundaries)")
+    print("check_gates: OK (gate 0 boot smoke, providers/+deterministic purity, no blind retries, no checkpoint-kind resurrection, ADR-087 kernel/lifecycle/client boundaries, ADR-145 editing boundary + video-spec purity)")
     return 0
 
 

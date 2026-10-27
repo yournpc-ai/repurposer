@@ -149,6 +149,8 @@ Clip 可带可空 `scene_id` 表示叙事归属：
 
 一个 Scene 可含多个镜头和多个素材切片；“一个视频 Clip 切一刀”不自动产生新 Scene。
 
+当前原语：`move_scene(start)` 平移 Scene 及所属 Clips；`remove_scene` 删除该幕所属内容，不隐式 ripple。`update_scene.range` 不对带内容的幕做静默移动/缩放；非平移改时长当前未支持，需由后续显式编辑操作承接。
+
 Scene 的移动、复制和删除以同一批原子编辑维护归属 Clips、动画、旁白引用与受影响 Transition；移动不改变源区间，复制按 §4.2 重映射 ID，删除不能留下悬空引用。跨幕/全局 Clip 不因时间上与该 Scene 相交就被连带修改；跨组关联不能可靠保留时明确冲突，不隐式 ripple 或挪动其他 Scene。首批实现实际 CRUD 所需操作，不扩展成磁吸时间线编辑器。
 
 ### 3.2 `visual_description` 是独立的导演表达字段
@@ -599,9 +601,10 @@ apps/api/
 │   │   ├── director.py                  创意调用装配；复用 agents harness，B
 │   │   ├── grounding.py                 引用/事实与网页视图绑定校验，B
 │   │   └── templates.py                 VideoTemplate 实例化与 Preset 展开，B
-│   ├── tools/video/                     通用付费执行，不拥有作品内容，A/B
+│   ├── tools/video/                     资源准备与制作执行，不拥有作品内容，A/B
 │   │   ├── __init__.py / node.py         produce_video 声明、估价、准备与执行
 │   │   ├── params.py                    版本引用与制作输入参数
+│   │   ├── preparation.py               素材冻结/上传、字体发布；调用 editing 快照登记
 │   │   ├── narration.py                 固定切点、有界语速、真实音频准备
 │   │   └── narration_store.py           合成复用、占位/接管/完成与失败恢复
 │   ├── skills/

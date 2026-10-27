@@ -1,0 +1,257 @@
+{
+  "comment": "Unicode-scalar TextPart golden fixtures; ranges and layout units manually reviewed. Pinned by both Python and TypeScript suites.",
+  "cases": [
+    {
+      "name": "english explicit lines and lexical words",
+      "text": "Make it\nmove",
+      "parts": [
+        {
+          "part_id": "line:0:7:c496931a6bf90b45",
+          "kind": "line",
+          "text": "Make it",
+          "text_range": {
+            "start": 0,
+            "end": 7
+          },
+          "layout_range": {
+            "start": 0,
+            "end": 7
+          }
+        },
+        {
+          "part_id": "line:8:12:270e0464de1b1ec2",
+          "kind": "line",
+          "text": "move",
+          "text_range": {
+            "start": 8,
+            "end": 12
+          },
+          "layout_range": {
+            "start": 8,
+            "end": 12
+          }
+        },
+        {
+          "part_id": "word:0:4:66fe53167eee3098",
+          "kind": "word",
+          "text": "Make",
+          "text_range": {
+            "start": 0,
+            "end": 4
+          },
+          "layout_range": {
+            "start": 0,
+            "end": 7
+          }
+        },
+        {
+          "part_id": "word:5:7:4b4df2d239e1f967",
+          "kind": "word",
+          "text": "it",
+          "text_range": {
+            "start": 5,
+            "end": 7
+          },
+          "layout_range": {
+            "start": 0,
+            "end": 7
+          }
+        },
+        {
+          "part_id": "word:8:12:60e234dea9608c38",
+          "kind": "word",
+          "text": "move",
+          "text_range": {
+            "start": 8,
+            "end": 12
+          },
+          "layout_range": {
+            "start": 8,
+            "end": 12
+          }
+        }
+      ]
+    },
+    {
+      "name": "CJK emoji modifier and newline",
+      "text": "逐字 👋🏽\nOK",
+      "parts": [
+        {
+          "part_id": "line:0:5:d4356269117eb402",
+          "kind": "line",
+          "text": "逐字 👋🏽",
+          "text_range": {
+            "start": 0,
+            "end": 5
+          },
+          "layout_range": {
+            "start": 0,
+            "end": 5
+          }
+        },
+        {
+          "part_id": "line:6:8:345f62ac2bca28e5",
+          "kind": "line",
+          "text": "OK",
+          "text_range": {
+            "start": 6,
+            "end": 8
+          },
+          "layout_range": {
+            "start": 6,
+            "end": 8
+          }
+        },
+        {
+          "part_id": "grapheme:0:1:898ddfe0a0f7c500",
+          "kind": "grapheme",
+          "text": "逐",
+          "text_range": {
+            "start": 0,
+            "end": 1
+          },
+          "layout_range": {
+            "start": 0,
+            "end": 5
+          }
+        },
+        {
+          "part_id": "grapheme:1:2:20e6adb1082d8d02",
+          "kind": "grapheme",
+          "text": "字",
+          "text_range": {
+            "start": 1,
+            "end": 2
+          },
+          "layout_range": {
+            "start": 0,
+            "end": 5
+          }
+        },
+        {
+          "part_id": "grapheme:2:3:662e2f1048b6309b",
+          "kind": "grapheme",
+          "text": " ",
+          "text_range": {
+            "start": 2,
+            "end": 3
+          },
+          "layout_range": {
+            "start": 0,
+            "end": 5
+          }
+        },
+        {
+          "part_id": "grapheme:3:5:b8166442a546a82f",
+          "kind": "grapheme",
+          "text": "👋🏽",
+          "text_range": {
+            "start": 3,
+            "end": 5
+          },
+          "layout_range": {
+            "start": 0,
+            "end": 5
+          }
+        },
+        {
+          "part_id": "grapheme:6:7:c112ea661052e42f",
+          "kind": "grapheme",
+          "text": "O",
+          "text_range": {
+            "start": 6,
+            "end": 7
+          },
+          "layout_range": {
+            "start": 6,
+            "end": 8
+          }
+        },
+        {
+          "part_id": "grapheme:7:8:5f569fb8a899d2a5",
+          "kind": "grapheme",
+          "text": "K",
+          "text_range": {
+            "start": 7,
+            "end": 8
+          },
+          "layout_range": {
+            "start": 6,
+            "end": 8
+          }
+        }
+      ]
+    },
+    {
+      "name": "ZWJ family regional indicator and trailing empty line",
+      "text": "A👨‍👩‍👧‍👦🇨🇳\n",
+      "parts": [
+        {
+          "part_id": "line:0:10:5e0b64910e97b367",
+          "kind": "line",
+          "text": "A👨‍👩‍👧‍👦🇨🇳",
+          "text_range": {
+            "start": 0,
+            "end": 10
+          },
+          "layout_range": {
+            "start": 0,
+            "end": 10
+          }
+        },
+        {
+          "part_id": "line:11:11:0bf258fac7414699",
+          "kind": "line",
+          "text": "",
+          "text_range": {
+            "start": 11,
+            "end": 11
+          },
+          "layout_range": {
+            "start": 11,
+            "end": 11
+          }
+        },
+        {
+          "part_id": "grapheme:0:1:6fc0d091a5437a4c",
+          "kind": "grapheme",
+          "text": "A",
+          "text_range": {
+            "start": 0,
+            "end": 1
+          },
+          "layout_range": {
+            "start": 0,
+            "end": 10
+          }
+        },
+        {
+          "part_id": "grapheme:1:8:7ce92cfaaace0194",
+          "kind": "grapheme",
+          "text": "👨‍👩‍👧‍👦",
+          "text_range": {
+            "start": 1,
+            "end": 8
+          },
+          "layout_range": {
+            "start": 0,
+            "end": 10
+          }
+        },
+        {
+          "part_id": "grapheme:8:10:5393c6c4cffbe439",
+          "kind": "grapheme",
+          "text": "🇨🇳",
+          "text_range": {
+            "start": 8,
+            "end": 10
+          },
+          "layout_range": {
+            "start": 0,
+            "end": 10
+          }
+        }
+      ]
+    }
+  ]
+}

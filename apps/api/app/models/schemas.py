@@ -4515,6 +4515,37 @@ class FilmSpecEnvelope(BaseModel):
     family: Literal["film"]
 
 
+class VideoSpecEnvelope(BaseModel):
+    """video-spec read envelope (ADR-145) — the third spec family's read side.
+
+    Same posture as FilmSpecEnvelope: the contract lives in
+    ``packages/video-spec`` (zod) and the API never re-validates content;
+    the envelope exists so a video output's render_spec round-trips
+    ``OutputResponse`` serialization without impersonating ClipSpec.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    family: Literal["video"]
+
+
+class VideoPayload(BaseModel):
+    """Payload for ``outputs[type=video]`` (ADR-145) — a Composition render.
+
+    Timeline semantics ride the pinned CompositionVersion (the output's
+    ``composition_id`` / ``composition_version_id`` columns);
+    ``composition_digest`` completes the §2.2 three-fact pin. The render
+    pipeline rides ``render_spec``/``render_status`` exactly like clips and
+    films (ADR-030 rules 2/3).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = ""  # the Composition's name at queue time
+    duration_seconds: float = 0
+    composition_digest: str = ""
+
+
 # Internal types are node artifacts, not user-facing products. Every read path
 # must exclude them via ``services.outputs.visible_outputs`` — never hand-roll a
 # type filter (results/library/export, and future MCP/gallery surfaces).
@@ -4782,6 +4813,7 @@ class CraftSkeleton(BaseModel):
 OUTPUT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "clip": ClipPayload,
     "film": FilmPayload,
+    "video": VideoPayload,
     "post": Post,
     "quotes": Quotes,
     "quote_frame": QuoteFrame,
@@ -4930,9 +4962,12 @@ class OutputResponse(BaseModel):
     payload: dict
     files: dict = Field(default_factory=dict)
     source_ref: dict | None = None
-    render_spec: ClipSpec | FilmSpecEnvelope | None = None
+    render_spec: ClipSpec | FilmSpecEnvelope | VideoSpecEnvelope | None = None
     render_status: RenderStatus | None = None
     render_error: str | None = None
+    # Composition lineage (ADR-145): set on video-family outputs only.
+    composition_id: UUID | None = None
+    composition_version_id: UUID | None = None
     score: dict | None = None
     # 质检裁决 (期 3): verify 节点的 {status, checks, attempt, checked_at};
     # None = 未质检（旧行 / 无 verify 的图）。

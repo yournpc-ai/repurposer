@@ -1,6 +1,6 @@
 # Video Project 四阶段施工与验收
 
-> Status: 待开工（2026-10-26）。目标架构唯一事实源 = [VIDEO_PROJECT](../VIDEO_PROJECT.md)；本文只维护四阶段范围、代码接缝、依赖与验收。当前入口 = **阶段 A**。实现状态就地更新，不追加施工日记；全局优先级归 [PROGRESS §0](../PROGRESS.md)。
+> Status: 施工中（2026-10-27）。目标架构唯一事实源 = [VIDEO_PROJECT](../VIDEO_PROJECT.md)；本文只维护四阶段范围、代码接缝、依赖与验收。当前入口 = **阶段 B 的最小 Chat 制作闭环**；A 按最小内容基座收口，完整能力与人工产品验收仍未完成，见 §1.2–1.3。实现状态就地更新，不追加施工日记；全局优先级归 [PROGRESS §0](../PROGRESS.md)。
 >
 > **数据边界：不迁移既有业务数据。**新表、新列、索引和约束仍需 Alembic；旧 Film 数据适配器、旧板 digest 迁移和全库回填均不建设。生产环境无实际用户；用户已授权为本轮重构破坏旧业务数据，必要时可清理/reset 本应用开发与生产数据，无需为同一范围重复确认。执行前核对目标实例、数据范围和 dry-run，不扩大到其他项目或基础设施；本次文档更新不执行清库。
 
@@ -27,7 +27,7 @@
 
 ### 0.2 分支、环境与合并策略
 
-- 本轮在独立 `codex/` 分支内完成破坏性更新，生产无实际用户，不要求旧 Film API、旧数据或过渡期持续可用；不因此豁免新链正确性与生产验收。
+- 本轮在用户指定的 `feat/mg` 分支内完成破坏性更新，生产无实际用户，不要求旧 Film API、旧数据或过渡期持续可用；不因此豁免新链正确性与生产验收。
 - 建分支前核对当前 HEAD、工作区和与 main 的差异；保留本轮必要的未提交成果和并行 UI 工作，不用 reset/checkout/stash 清场，也不把无关改动批量提交。基础分支取包含必要现有成果的状态，不盲目从 main 起步丢掉已完成工作。
 - 分支内按 A/B/C/D 的依赖拆小批提交；合并前同步 main、处理冲突并对最终候选重验。首批 A+B+D1/D2 达标即可合并；C 若同批交付则须一并验收，否则留后续独立批次。
 - main 合并与环境部署分开处理：生产就绪需 schema/reset 路径、API/worker/render/web 配套版本、旧任务处理及失败后重部署路径明确。无用户环境可停机/reset，不建设旧业务恢复兼容层；Git 分支不会隔离数据库和队列。
@@ -94,27 +94,38 @@
 - `apps/render/src/video/` 实现第一 adapter；现有 `POST /render`、staging、上传、probe、render fencing 复用。
 - PreviewAdapter 单独定义；Chat 组件不直接散落 Remotion Player。
 - 建立 renderer capability 声明与不支持即失败的入口。
-- 选一部代表性结构做替代 Renderer 技术 spike，只评成本与能力缺口，不在 A 隐式承诺已完成替换。
+- 替代 Renderer 的能力/成本 spike 归 D2 生产门，不阻塞 B 开发；生产前仍必须有明确许可或替代结论，不把 adapter 隔离当作替换完成。
 
 A 内按三次可验证交付推进，不先造齐全量框架：
 
 1. **最小纵向闭环**：冻结作品身份、范围/量化、版本写口；用最小 Text/Image + 固定音频版本打通 worker → MP4 → probe，证明权限、版本、Output 血缘与实际渲染成立。
 2. **代表性表达**：扩到 Web/Video、逐字动画、多段 scale/Bezier、字幕和音轨关联，手工重建一支官网片与一支 MG；先验证内容表达，不接 LLM。
-3. **可靠性收口**：跨 Chat 身份/权限、并发/幂等、素材快照、字体/预览一致性、失败恢复与 adapter 能力/替代 spike。只有本阶段出口全部通过才进入 B。
+3. **最小基座收口**：内容写口、关联操作、资源边界和必要回归成立后进入 B；不为清空全部未来能力清单阻塞产品闭环。B 在具体消费者接入前补其依赖，生产前仍须通过完整可靠性与 D 门。
 
-### 1.3 A 阶段验收
+**A 当前状态——最小内容基座已收口，完整能力未齐**：
 
-- [ ] 同一 Project 有两个独立 Composition/current_version；改 A 不影响 B。无 Work/Document 包装层或独立 Timeline 作品根。
-- [ ] 两个 Chat 基于同一 Composition/base_ref 并发修改不能覆盖；同请求超时重试得到同一结果，失败整批无新版本。
-- [ ] owner/引用/删除保留合同闭环；跨 Chat 同 owner 访问可用，跨 owner 的 asset/output/composition/version 引用均被拒绝。
-- [ ] 同一 Web/Video/Image/Text/Audio Clip 可在统一输出时间对齐，源裁切与 Clip 移动不混时钟。
-- [ ] 同源多 Clip 的源窗和输出窗独立；静态源无伪造 source_range，未合成 Speech 不占假音频引用；实体复制重映射内部 ID，Scene 操作不移动全局音乐或留下悬空引用。默认 1× 源不足明确拒绝。
-- [ ] 整体 Object 动画和 TextPart stagger 使用同一 Animation schema；复杂 scale 可由多段关键帧 + Bezier/hold 表达。
-- [ ] 30fps 与既有秒→帧 golden cases 一致；BPM/BeatGrid 不错用源时间。
-- [ ] video-spec 不含 Remotion/React/DOM/任意 CSS；静态架构门覆盖依赖方向。
-- [ ] 最小手工版本经真实 worker 产出可播放 MP4；一支代表性官网片与一支 MG 完成结构、多个时间点画面、动态动画、时长/帧率、独立音轨和听感对照。字体、换行与 TextPart 预览/导出一致。
-- [ ] 对照失败项明确到能力/参数，不用“产出了 MP4”代替样片承接验收。
-- [ ] 未迁移任何旧 Film 业务数据，旧 Film/Clip 行为未因新注册入口改变。
+- 已实现 Composition/不可变版本、owner/来源 Chat 校验、行锁/CAS、完整请求幂等与并发重放；Output 钉版、video-spec 与 Remotion adapter 已接既有渲染基础设施。已有批 1 worker→上传→probe 实测；内部 run-less 接缝不开放为产品制作入口。
+- 当前支持 Text/Image/Web 静帧/Audio、固定字体 digest、TextPart line/word/grapheme、整体/分段动画、scale/Bezier。四个 base/edited 样片位于 `artifacts/video-project-a2/{website,mg}/`，Git 忽略；它们证明内容表达与局部版本编辑，不代表 Chat 可用或人工审美验收通过。
+- `move_scene` 原子平移所属 Clips，源窗/Clip-local 动画与全局音乐不动；`remove_scene` 删除所属内容并清理旁白引用。带内容 Scene 的范围重设不能静默只改标记：移动走 move_scene，缩放/改时长当前明确不支持。复制 Scene、split/trim、Transition 等仍未实现，不宣称完整 NLE CRUD。
+- SourceSnapshot 登记/绑定与字体描述归 editing；资源读取、冻结上传及字体发布归 `tools/video/preparation.py`，editing 不依赖 providers。快照当前消费已有 Asset/采集结果，尚未接入 Chat 素材流程。
+- 收口验证：受影响 editing/DB/animation/spec/样片契约测试 **44 项通过**，check_gates 通过；只新增 Scene 移动/删除两项承重用例，未扩写验收脚本。未复跑全量 API/web/render，未重渲染或人工播放验收样片；已有样片与批 1 渲染证据不升级为本次新证据。
+- 旧 Film 入口/Clip 链不切换。所有改动仍在 feat/mg 未提交；开发基座收口不等于生产就绪。
+
+### 1.3 A 出口与保留的能力欠账
+
+A 的最小出口：版本写口与权限/幂等成立、代表性静态网页/MG 内容可编译渲染、Scene 移动/删除语义明确、内容/存储/renderer 边界检查通过。上述出口已达到，可以进入 B；停止增加同类样片与通用检查脚本。
+
+以下能力不因 A 收口取消，也不标成已完成：
+
+| 剩余项 | 实施 / 验收位置 |
+|---|---|
+| Video/Speech、旁白准备、两阶段执行 manifest/digest | B 在具体设计/制作消费者接入前实现；付费合成仍受预算授权约束 |
+| launch-film 模板所需的 Scene/Clip/Object CRUD、split/trim、转场与 BeatGrid | B 按内置模板和真实修改需要补齐；模板不得静默省略不支持能力。自由 NLE/完整转场库后置 |
+| 源时间 Video/原声联动、同源多切片完整对照 | B 出现相应媒体输入时实现并验证，不能用静态网页样片冒充 |
+| 跨 Chat 引用/删除保留、素材 refresh/生产接入、重试/恢复 | B 的真实用户链路；已有 DB 验证不替代端到端权限与恢复验证 |
+| PreviewAdapter | B 先用隔离的服务端 MP4 预览，复用现有播放器；交互式预览后续扩展 |
+| 字体/排版与预览导出一致性、动态画面、独立音轨听感 | B 最小闭环接通后集中人工验收；只对实际失败补定向回归 |
+| 替代 renderer spike / 商业许可 / 能力矩阵 | D2，生产前必须收口 |
 
 ## 2. 阶段 B——launch-film Skill 化、Chat 分镜与 CRUD 制作闭环
 
@@ -318,7 +329,7 @@ Composition/Track/Clip/Object 在 MG 与官网片稳定后，才逐项评估 ref
 
 ## 5. 跨阶段验证与交付纪律
 
-1. 纯函数：先按改动运行 editing/timing/版本并发/模板/spec 定向套件；阶段出口与全量回归使用 `cd apps/api && uv run --extra dev python -m pytest tests/ -q`。
+1. 纯函数：按实际改动运行必要定向套件，不为覆盖率扩张测试/脚本；集中回归在 B 完整闭环与发布候选执行，命令为 `cd apps/api && uv run --extra dev python -m pytest tests/ -q`。
 2. 架构门：`cd apps/api && uv run python scripts/check_gates.py`，新增依赖方向、唯一写口、renderer-neutral 与退役节点检查。
 3. Prompt 面变化：`cd apps/api && uv run python scripts/prompt_gate.py`；付费与配额先获授权，失败不为放行调阈。
 4. 真实旅程：更新当前 `chat_scenarios.py` 的网页/MG 旅程或登记新的主流程旅程，断言版本/工具/授权/交付形态，不锁 LLM 文案。
@@ -335,7 +346,7 @@ Composition/Track/Clip/Object 在 MG 与官网片稳定后，才逐项评估 ref
 4. 用最小内容与固定素材绑定打通 video-spec → render worker → probe → Output 血缘；不等所有对象/模板类写齐。
 5. 扩 SourceSnapshot、Animation/TextPart、字体与 PreviewAdapter，手工构造官网片/MG 对照 fixtures。
 6. 补完整素材权限、快照 refresh、split/trim/音频关联、失败恢复、两阶段 digest 与架构门。
-7. 完成代表性视听对照与替代 Renderer spike；A 出口未闭环，不暴露新 Chat 入口。
+7. A 最小出口后转 B 的真实 Chat 闭环；完整视听人工验收在 B 集中做，替代 renderer 归 D2，不继续扩充独立样片与检查脚本。未授权/未接费用机制的内部渲染入口仍不得暴露。
 
 ## 7. 不做清单
 
@@ -357,28 +368,24 @@ Composition/Track/Clip/Object 在 MG 与官网片稳定后，才逐项评估 ref
 | 内容摘要、执行输入摘要、准备产物 manifest、请求幂等与恢复 | A 出口 / B Start 接入前 | 模拟超时/重试/并发，证明无重复落版、无执行漂移；实际收费在 B 验证 |
 | Chat 正文/活动/产物关联、实际阶段与 attempt 回放 | A 最小 DTO fixtures / B 过程接入前 | 冻结关联与事件最小形状，核对真实阶段发射点；B 用关闭/缓存/失败/重连旅程验证，不用组件演示进度冒充执行事实 |
 | TTS 语速上下界、尝试次数、超长/可懂度判定与成本上限 | B 合成接入前 | 使用当前合成能力确定有界制作政策；超界回到修订，不偷改切点 |
-| 替代 Renderer 的能力与成本、Remotion 商业方案 | A spike / D2 生产前 | A 产差异表，D2 作明确选择；不以“已隔离 adapter”冒充已替换 |
+| 替代 Renderer 的能力与成本、Remotion 商业方案 | D2 生产前 | 实测能力与成本差异并作明确选择；不以“已隔离 adapter”冒充已替换 |
 
-**依赖顺序**：A → B → D1（且通过 D2）；B → C；B → 后续 D3/D4。D2 从 A spike 起推进。所有实现/真实旅程仍待运行，本文更新不代表 A 已完成，也不启动付费验证、清库或上线。
+**依赖顺序**：A 最小基座 → B → D1（且通过 D2）；B → C；B → 后续 D3/D4。A 收口与剩余能力边界见 §1.2–1.3；B 开发不得提前切生产流量，也不自动授权付费验证、清库或上线。
 
-## 9. 新会话第一步提示词
-
-本提示词启动阶段 A 的最小纵向闭环；不是要求一次完成全部 A–D，也不是只产出计划。正式开工时先核对实际工作区。
+## 9. 下一批新会话提示词
 
 ```text
-开始实施 Video Project 重构，执行阶段 A 的第一批：最小 CompositionVersion → video-spec → 本地 MP4 → Output 血缘闭环。
+在 feat/mg 开始阶段 B 的最小 Chat 制作闭环，直接开发，不再扩充 A 的独立样片、测试框架或检查脚本。
 
-先读 CLAUDE.md、docs/PROGRESS.md §0，再定点读 docs/VIDEO_PROJECT.md §0–2、§6、§8–13，以及 docs/tasks/video-project-implementation.md §0、§1、§6、§8；其余合同按实际改动定位读取。目标文档是已决定的方向，不再重新讨论命名。
+先读 CLAUDE.md、PROGRESS §0、施工合同 §1.2–2，再按改动读 VIDEO_PROJECT §7–10、§12。A 最小基座已收口，完整能力清单并未全部实现；复用已有代码，不重做版本内核或重新讨论命名。保留所有未提交与并行成果，不 reset/stash、不覆盖无关改动，不擅自提交/部署。
 
-核对当前 HEAD、git status 和与 main 的差异。在保留必要现有成果的基础上创建 codex/video-composition 分支；若该分支已存在则检查后复用。保留所有未提交和并行成果，不 reset、stash 或批量提交无关文件。生产无实际用户，允许破坏旧 Film 合同，不做旧业务数据迁移或兼容双链；数据 reset 的范围与执行纪律遵循施工合同 §0。
+优先打通一条真实 Chat 路径：已有网页素材或文字需求 → design_video 保存 CompositionVersion → canonical 分镜完整呈现 → 用户审阅/修改 → 已有制作授权与费用机制 → produce_video 固定版本 → 真实 Output 交付 → @继续修改。先交付最早可操作的闭环，不等全部 B 齐备才给用户试。
 
-本批直接写代码并验证：
-1. 冻结最小身份/权限/删除保留合同，建立 Composition、CompositionVersion 和必要的 schema migration。Project 仍是 Chat；同 Chat 可有多个 Composition，跨 Chat 同 owner 可引用。
-2. 实现最小 schemas/timing、content_digest 与 apply_composition_edits：原子落版、当前版本条件更新、request_id 幂等和权限校验。冻结最小 UI DTO/事件与 fixtures，支持 UI 并行施工。
-3. 按目标文档 §12 的目录归属逐批创建文件，不先建空框架。用手工 Text/Image + 固定音频版本，打通 renderer-neutral video-spec、首个 adapter、本地渲染与 probe；以最小必要接线验证 Output/版本血缘，不接 LLM 或 TTS，不提前做 launch-film Skill 化、个人 Skill、Scrub 或完整素材库页面。
-4. 先验证同 Chat 两部作品互不影响、同作品跨 Chat 并发冲突、请求重试不重复落版、非法引用拒绝及本地 MP4 的时长/帧率/音轨。复用通用 Run/render/计费基础设施，不新建第二执行引擎。
+按实际依赖接内置 launch-film 声明模板和通用设计/修订/制作能力。当前只支持 Text/Image/Web 静帧/Audio；Video、Speech、Transition 等按具体消费者需要补，未支持不得假装完成或静默删掉模板内容。资源准备走 tools/video/preparation，快照登记与版本绑定归 editing；run-less 仅用于内部验证，不绕过产品授权/计费/幂等。
 
-按当前代码解决常规实现细节，不停在方案或再次请求开工确认；如遇实质合同冲突，报告具体证据并继续独立可做部分。外部付费调用遵循现有预算授权。
+预览先复用已有播放器和服务端 MP4，隔离 renderer；不做交互式 Preview、完整 NLE、个人 Skill、Scrub 或旧 Clip 迁移。UIArc 仍只是调研候选，不安装或默认采用；后端按 §10.3 提供关联明确、可恢复的事实，兼容后续整合 block。
 
-完成后更新既有施工合同和 PROGRESS 的当前状态，准确区分本批完成与阶段 A 剩余验收；交付代码位置、运行过的检查、未运行项及下一批。不要因为最小 MP4 成功就宣布整个 A 或生产就绪。
+以用户能操作、能修改、能收到成片为完成标准。实现过程只跑必要编译/类型检查、受影响核心守卫和首次实际链路验证；没有真实失败证据不扩充边界用例或通用脚本。完整体验让用户在闭环接通后集中验收。付费模型/TTS/采集仍遵守既有预算授权，不以开工指令扩张费用范围。
+
+完成后更新既有施工合同与 PROGRESS，给出实际操作入口、可测能力、运行过的检查及未完成项，不把内部 fixture 或半接通链路称为产品可用。
 ```

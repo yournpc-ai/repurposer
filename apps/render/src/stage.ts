@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { createWriteStream } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -98,20 +98,32 @@ function toLoopbackUrl(filePath: string): string {
 export async function stageRemoteSource(
   url: string,
   cacheKey?: string,
+  expectedSha256?: string,
 ): Promise<string> {
   if (!/^https?:\/\//i.test(url)) return url;
-  const pending = inflight.get(cacheKey ?? url);
+  const requestKey = `${cacheKey ?? url}:${expectedSha256 ?? ""}`;
+  const pending = inflight.get(requestKey);
   if (pending) return pending;
-  const p = doStage(url, cacheKey).finally(() => inflight.delete(cacheKey ?? url));
-  inflight.set(cacheKey ?? url, p);
+  const p = doStage(url, cacheKey, expectedSha256).finally(() => inflight.delete(requestKey));
+  inflight.set(requestKey, p);
   return p;
 }
 
-async function doStage(url: string, cacheKey?: string): Promise<string> {
+async function verifyDigest(filePath: string, expectedSha256?: string): Promise<void> {
+  if (!expectedSha256) return;
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  if (hash.digest("hex") !== expectedSha256) {
+    throw new Error(`staged source ${filePath} does not match its pinned sha256`);
+  }
+}
+
+async function doStage(url: string, cacheKey?: string, expectedSha256?: string): Promise<string> {
   await fs.mkdir(CACHE_DIR, { recursive: true });
   const dest = cachePathFor(url, cacheKey);
   const existing = await fs.stat(dest).catch(() => null);
   if (existing && existing.size > 0) {
+    await verifyDigest(dest, expectedSha256);
     // LRU touch — eviction sorts by mtime.
     await fs.utimes(dest, new Date(), new Date()).catch(() => {});
     return toLoopbackUrl(dest);
@@ -131,8 +143,10 @@ async function doStage(url: string, cacheKey?: string): Promise<string> {
       createWriteStream(tmp),
     );
     await fs.rename(tmp, dest);
+    await verifyDigest(dest, expectedSha256);
   } catch (err) {
     await fs.rm(tmp, { force: true }).catch(() => {});
+    if (expectedSha256) await fs.rm(dest, { force: true }).catch(() => {});
     throw err;
   }
 

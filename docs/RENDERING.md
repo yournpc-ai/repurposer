@@ -1,6 +1,6 @@
 # Rendering — 渲染链架构（spec families · 烘焙缝 · 渲染服务 · 共享包）
 
-> Status: 活跃（2026-10-26 更新）。本文描述**当前代码**的 clip-spec / film-spec 契约与渲染链；Film 的已拍板继任架构 = [VIDEO_PROJECT](VIDEO_PROJECT.md)（Project / Composition / CompositionVersion → video-spec，ADR-145，未实施），施工归 [四阶段合同](tasks/video-project-implementation.md)。在新链切换前，本文的当前 family 分派与黑盒约束继续有效。
+> Status: 活跃（2026-10-27 更新）。本文描述**当前代码**的 clip-spec / film-spec / video-spec 契约与渲染链；Film 的已拍板继任架构 = [VIDEO_PROJECT](VIDEO_PROJECT.md)（Project / Composition / CompositionVersion → video-spec，ADR-145），施工归 [四阶段合同](tasks/video-project-implementation.md)。video-spec 家族已随 A 批 1 进场（最小 Text/Image/Audio 切片，见下）；旧 clip/film 家族行为不变。
 > 上游决策：ADR-016（契约锁定 / 渲染器黑盒）/ ADR-018（服务拆分 + 共享包）/ ADR-020（stills 第二源）/ ADR-023（音乐入库烘焙）/ ADR-024（存储缝）/ ADR-026（C2PA 读 spec）/ ADR-032（Operation Model 快照）/ ADR-044（轨道模型 + 操作集闭包）。
 > 分工：本文 = 契约 + 渲染链架构 + 函数地图 + 概念命名。编辑器交互形态与 L2/L3 分工线归 VIDEO_EDITOR.md；竞品渲染技术调研归 `research/RENDERING_TECH.md`（原始素材层）。
 
@@ -37,14 +37,17 @@ preview == 成片 是结构性的，不是测试出来的。
 
 **film 组合幕（composite，ADR-140）**：`composite` 幕 = `dark` 背景极性 + 有序 `elements[]`（kind = video / image / text，`z` 定叠放）。**两个时间空间硬分离**：video 元素的 `source_start`/`source_end` 是源素材秒（渲染侧 OffthreadVideo `startFrom`/`endAt` 裁源），一切元素的 `at`/`until`/`duration` 是幕相对输出秒（渲染侧嵌套 Sequence 的窗），text 元素的 `enter_*`/`motion_*` 是**元素窗内**相对秒；元素窗尽即离场，无尾帧冻结。空间 = 归一化 `rect`{x,y,w,h} + `fit` cover/contain。文字元素与 words 幕同一 `TextPlane` 组件（tokenizer/accent/enter 时序单座，`fontSize` 为参数）；视频原声 = 元素 `keep_audio`（默认 false），只在元素窗内出现、源裁切即音频裁切。
 
-## 2. 三个包与一个 API 侧
+**video-spec 第三家族（ADR-145，A 批 1 已进场）**：`family="video"`，CompositionVersion 的编译产物。顶层 = `fps`（有理数 `{num,den}`）+ `width/height/background/sample_rate` + `duration_frames` + `tracks[]` + `provenance`（composition_id / composition_version_id / content_digest，身份事实非权限）。一切时间已量化成整数帧（量化唯一座 = `app/editing/timing.py`，渲染器永不重 round）；Track = `kind(visual|audio)/role/order` + clips，视觉 order 定叠放；Clip = `{start_frame, end_frame}` 输出窗 + 可选 `source`（`url` 烘焙缝绝对化；audio 带源窗 `start_frame/end_frame`，1× 律锁等长；静态图片无源窗）+ object（text/image/audio）+ clip-local 帧关键帧动画（linear/hold/cubic_bezier，求值唯一座 = `packages/video-spec` animation.ts）。schema = `packages/video-spec`（zod，零 React/Remotion，check_gates gate 6b）；adapter = `apps/render/src/video/`（capabilities 声明，不支持即失败——当前分数 fps 明确拒绝）；无字幕 sidecar（字幕将烧录进画面）。probe 闸读 spec 自带 width/height/duration_frames/有理 fps，任一 audio clip → 容器必须带音频流。字幕/Transition/Video/Web/Speech 对象、分数 fps 渲染属后续批次。
+
+## 2. 四个包与一个 API 侧
 
 | 家 | 角色 |
 |---|---|
 | `packages/clip`（@repurposer/clip） | **单一画笔**：`<Clip>` 组件 + spec TS 镜像 + 字幕样式目录；web `<Player>` 与 render 服务共用——parity 之根（ADR-018） |
-| `apps/render` | Remotion 渲染服务（express + @remotion/bundler + @remotion/renderer + 内置 ffmpeg，pnpm 独立于 uv），`POST /render` 黑盒：渲染到临时目录 → 预签名 PUT 上传，无共享卷 |
+| `packages/video-spec`（@repurposer/video-spec，ADR-145） | video-spec 唯一 TS 契约 + 纯量化/插值求值 + golden fixtures；零 React/Remotion——renderer 可换的契约面 |
+| `apps/render` | Remotion 渲染服务（express + @remotion/bundler + @remotion/renderer + 内置 ffmpeg，pnpm 独立于 uv），`POST /render` 黑盒：渲染到临时目录 → 预签名 PUT 上传，无共享卷；`spec.family` 三分派（clip 缺省 / film / video），video adapter 住 `src/video/` |
 | `apps/web` | 编辑器预览（`<Player>` 包 `<Clip>`），手势 → ops HTTP |
-| `apps/api/app/pipeline/` | spec 构建（`clip_spec.py`）+ 烘焙与驱动（`rendering.py`）；写纪律在 `apps/api/app/operations/`（与 pipeline 平级） |
+| `apps/api/app/pipeline/` | spec 构建（`clip_spec.py`）+ 烘焙与驱动（`rendering.py`）；写纪律在 `apps/api/app/operations/`（与 pipeline 平级）；video 家族的 spec 编译在 `app/editing/video_spec.py`（内容域），pipeline 只做烘焙与驱动 |
 
 ## 3. clip-spec 字段级契约
 

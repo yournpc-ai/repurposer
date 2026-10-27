@@ -15,6 +15,8 @@ detail}`` 盖在 render 镜像节点上（与 storyboard 的 schema/grounding �
 家族分派（``probe_expectation_for`` 只读 spec 自身字段）：
 - film：h264 + 1920×1080 + 实际时长 = Σ场景帧（流帧计数 ±1 帧）+ 首帧可解码；
   spec 承诺声音（music 或逐幕 audio）时容器必须带音频流（PROBE_AUDIO_MISSING）。
+- video（ADR-145）：h264 + spec 自带 width/height + 流帧计数 = duration_frames
+  （±1 帧）+ spec 自带 fps（有理数）+ 任一 audio clip 存在时容器必须带音频流。
 - clip（family 缺省）：存在 + 非零 + 容器可读 + 有视频流 + 首帧可解码——
   clip 的时长/分辨率语义跨段拼接，不在本闸断言；caption sidecar 存在即法，
   非零当且仅当 caption_track 非空（空轨的零字节 srt 是合法产物）。
@@ -75,6 +77,8 @@ def probe_expectation_for(spec: dict[str, Any]) -> ProbeExpectation:
     """Dispatch reads only ``spec.family`` (never node type/name). The film
     expectation's frame count IS Σ scene frames off the spec — the renderer
     only sums, so that sum is the contract duration."""
+    if spec.get("family") == "video":
+        return _video_expectation(spec)
     if spec.get("family") != "film":
         return ProbeExpectation()
     frames = 0
@@ -117,6 +121,40 @@ def probe_expectation_for(spec: dict[str, Any]) -> ProbeExpectation:
         codec=FILM_CODEC,
         width=width,
         height=height,
+        frames=frames or None,
+        fps=fps,
+        audio=True if expects_audio else None,
+    )
+
+
+def _video_expectation(spec: dict[str, Any]) -> ProbeExpectation:
+    """video family (ADR-145): the spec's own quantized facts are the
+    contract — duration_frames, width/height and the rational fps all come
+    off the spec; any audio clip means the container must carry sound."""
+    fps_raw = spec.get("fps") or {}
+    try:
+        fps = float(fps_raw["num"]) / float(fps_raw["den"])
+    except (TypeError, KeyError, ZeroDivisionError):
+        fps = FILM_FPS
+    try:
+        frames = int(spec["duration_frames"])
+    except (TypeError, KeyError, ValueError):
+        frames = 0
+    try:
+        width = int(spec["width"])
+        height = int(spec["height"])
+    except (TypeError, KeyError, ValueError):
+        width = height = 0
+    expects_audio = any(
+        isinstance(t, dict)
+        and t.get("kind") == "audio"
+        and bool(t.get("clips"))
+        for t in spec.get("tracks") or []
+    )
+    return ProbeExpectation(
+        codec=FILM_CODEC,
+        width=width or None,
+        height=height or None,
         frames=frames or None,
         fps=fps,
         audio=True if expects_audio else None,

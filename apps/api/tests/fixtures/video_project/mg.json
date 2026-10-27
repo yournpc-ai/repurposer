@@ -1,0 +1,232 @@
+{
+  "format_version": 1,
+  "sample_id": "mg",
+  "name": "Video Project A2 — text motion sample",
+  "sources": {},
+  "create_ops": [
+    {
+      "op": "set_settings",
+      "settings": {
+        "width": 1280,
+        "height": 720,
+        "fps": { "num": 30, "den": 1 },
+        "timebase": 90000,
+        "sample_rate": 48000,
+        "channels": 2,
+        "background": "#0B1020"
+      }
+    },
+    {
+      "op": "add_scene",
+      "scene": {
+        "scene_id": "scn_whole",
+        "range": { "start": 0, "end": 270000 },
+        "intent": "Animate the complete text object",
+        "visual_description": null,
+        "speech_clip_ids": []
+      }
+    },
+    {
+      "op": "add_scene",
+      "scene": {
+        "scene_id": "scn_lines",
+        "range": { "start": 270000, "end": 540000 },
+        "intent": "Stagger two explicit text lines",
+        "visual_description": null,
+        "speech_clip_ids": []
+      }
+    },
+    {
+      "op": "add_scene",
+      "scene": {
+        "scene_id": "scn_graphemes",
+        "range": { "start": 540000, "end": 810000 },
+        "intent": "Compose grapheme entrances with a multi-keyframe parent scale",
+        "visual_description": null,
+        "speech_clip_ids": []
+      }
+    },
+    {
+      "op": "add_track",
+      "track": {
+        "track_id": "trk_mg_whole",
+        "kind": "visual",
+        "role": "title",
+        "order": 0,
+        "clips": [
+          {
+            "clip_id": "clp_mg_whole",
+            "range": { "start": 0, "end": 270000 },
+            "scene_id": "scn_whole",
+            "source": null,
+            "object": {
+              "kind": "text",
+              "object_id": "obj_mg_whole",
+              "text": "Ideas\nin motion",
+              "layout": { "x": 90, "y": 180, "width": 1100, "height": 300 },
+              "style": { "font_size": 124, "color": "#F8FAFC", "background": null, "weight": 700, "align": "center", "line_height": 1.05 },
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": [
+              {
+                "animation_id": "anm_mg_whole_opacity",
+                "target_object_id": "obj_mg_whole",
+                "text_part": null,
+                "property": "opacity",
+                "keyframes": [
+                  { "at": 0, "value": 0, "easing": { "kind": "linear", "params": null } },
+                  { "at": 27000, "value": 1, "easing": { "kind": "linear", "params": null } }
+                ]
+              },
+              {
+                "animation_id": "anm_mg_whole_position",
+                "target_object_id": "obj_mg_whole",
+                "text_part": null,
+                "property": "transform.position",
+                "keyframes": [
+                  { "at": 0, "value": [0, 64], "easing": { "kind": "cubic_bezier", "params": [0.16, 1, 0.3, 1] } },
+                  { "at": 81000, "value": [0, 0], "easing": { "kind": "linear", "params": null } }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "add_track",
+      "track": {
+        "track_id": "trk_mg_lines",
+        "kind": "visual",
+        "role": "title",
+        "order": 1,
+        "clips": [
+          {
+            "clip_id": "clp_mg_lines",
+            "range": { "start": 270000, "end": 540000 },
+            "scene_id": "scn_lines",
+            "source": null,
+            "object": {
+              "kind": "text",
+              "object_id": "obj_mg_lines",
+              "text": "Plan clearly.\nPublish confidently.",
+              "layout": { "x": 100, "y": 220, "width": 1080, "height": 220 },
+              "style": { "font_size": 76, "color": "#93C5FD", "background": null, "weight": 700, "align": "center", "line_height": 1.25 },
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": [
+              {
+                "animation_id": "anm_mg_line_opacity",
+                "target_object_id": "obj_mg_lines",
+                "text_part": {
+                  "kind": "line",
+                  "part_ids": ["line:0:13:2831f2da90ff9488", "line:14:34:2495ddb944d6e3e7"],
+                  "stagger": 40500
+                },
+                "property": "opacity",
+                "keyframes": [
+                  { "at": 0, "value": 0, "easing": { "kind": "linear", "params": null } },
+                  { "at": 54000, "value": 1, "easing": { "kind": "linear", "params": null } }
+                ]
+              },
+              {
+                "animation_id": "anm_mg_line_position",
+                "target_object_id": "obj_mg_lines",
+                "text_part": {
+                  "kind": "line",
+                  "part_ids": ["line:0:13:2831f2da90ff9488", "line:14:34:2495ddb944d6e3e7"],
+                  "stagger": 40500
+                },
+                "property": "transform.position",
+                "keyframes": [
+                  { "at": 0, "value": [0, 48], "easing": { "kind": "cubic_bezier", "params": [0.22, 1, 0.36, 1] } },
+                  { "at": 54000, "value": [0, 0], "easing": { "kind": "linear", "params": null } }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "add_track",
+      "track": {
+        "track_id": "trk_mg_graphemes",
+        "kind": "visual",
+        "role": "title",
+        "order": 2,
+        "clips": [
+          {
+            "clip_id": "clp_mg_graphemes",
+            "range": { "start": 540000, "end": 810000 },
+            "scene_id": "scn_graphemes",
+            "source": null,
+            "object": {
+              "kind": "text",
+              "object_id": "obj_mg_graphemes",
+              "text": "逐字 👋🏽\nMOVE",
+              "layout": { "x": 100, "y": 210, "width": 1080, "height": 270 },
+              "style": { "font_size": 96, "color": "#FDE68A", "background": null, "weight": 700, "align": "center", "line_height": 1.25 },
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": [
+              {
+                "animation_id": "anm_mg_glyph_opacity",
+                "target_object_id": "obj_mg_graphemes",
+                "text_part": {
+                  "kind": "grapheme",
+                  "part_ids": [
+                    "grapheme:0:1:898ddfe0a0f7c500",
+                    "grapheme:1:2:20e6adb1082d8d02",
+                    "grapheme:3:5:b8166442a546a82f",
+                    "grapheme:6:7:4b5a0769b0c72f8e",
+                    "grapheme:7:8:c84f351aeba2bb4a",
+                    "grapheme:8:9:4d3d9c78ac7deecd",
+                    "grapheme:9:10:11b98cef4c6a5fef"
+                  ],
+                  "stagger": 10800
+                },
+                "property": "opacity",
+                "keyframes": [
+                  { "at": 0, "value": 0, "easing": { "kind": "linear", "params": null } },
+                  { "at": 32400, "value": 1, "easing": { "kind": "linear", "params": null } }
+                ]
+              },
+              {
+                "animation_id": "anm_mg_parent_scale",
+                "target_object_id": "obj_mg_graphemes",
+                "text_part": null,
+                "property": "transform.scale",
+                "keyframes": [
+                  { "at": 0, "value": 0.65, "easing": { "kind": "cubic_bezier", "params": [0.16, 1, 0.3, 1] } },
+                  { "at": 81000, "value": 1.12, "easing": { "kind": "hold", "params": null } },
+                  { "at": 135000, "value": 1.12, "easing": { "kind": "linear", "params": null } },
+                  { "at": 216000, "value": 1, "easing": { "kind": "linear", "params": null } }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "edit_ops": [
+    {
+      "op": "update_clip",
+      "clip_id": "clp_mg_whole",
+      "object": {
+        "kind": "text",
+        "object_id": "obj_mg_whole",
+        "text": "Ideas\nstay editable",
+        "layout": { "x": 90, "y": 180, "width": 1100, "height": 300 },
+        "style": { "font_size": 124, "color": "#F8FAFC", "background": null, "weight": 700, "align": "center", "line_height": 1.05 },
+        "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+        "opacity": 1
+      }
+    }
+  ],
+  "edit_target": "clp_mg_whole"
+}

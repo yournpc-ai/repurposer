@@ -1,4 +1,5 @@
 import type { ClipSpec } from "@repurposer/clip";
+import { videoSpecSchema } from "@repurposer/video-spec";
 import express from "express";
 
 import { renderFilm } from "./film/render";
@@ -8,6 +9,7 @@ import { CACHE_DIR } from "./stage";
 import { renderArtifacts, cachedArtifacts, ArtifactCacheMiss } from "./artifacts";
 import type { Artifacts } from "./artifacts";
 import { uploadFile, UploadError } from "./upload";
+import { renderVideo } from "./video";
 
 const app = express();
 app.use(express.json({ limit: "8mb" }));
@@ -30,6 +32,10 @@ const PORT = Number(process.env.RENDER_PORT ?? 3001);
 // render. fps is fixed at 30, so this is also the duration cap — the default
 // 3600 = 120 s @ 30 fps.
 const FILM_MAX_FRAMES = Number(process.env.FILM_MAX_FRAMES ?? 3600);
+
+// Video family resource cap (same role, separate dial): the spec carries its
+// own fps, so this is a pure frame budget, not a seconds claim.
+const VIDEO_MAX_FRAMES = Number(process.env.VIDEO_MAX_FRAMES ?? 3600);
 
 async function artifactsForRequest(
   identity: unknown,
@@ -133,6 +139,48 @@ app.post("/render", async (req, res) => {
       res.json({ ok: true, video: outputs.video.key });
     } catch (err) {
       console.error("film_render_failed", { render_id, error: err });
+      const failure = failureBody(err);
+      res.status(failure.status).json(failure.body);
+    }
+    return;
+  }
+
+  // --- video family fork --------------------------------------------------
+  if ((spec as unknown as { family?: unknown } | undefined)?.family === "video") {
+    const parsed = videoSpecSchema.safeParse(spec);
+    if (!parsed.success) {
+      const issues = parsed.error.issues
+        .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+        .join("; ");
+      res.status(400).json({ error: `invalid video spec: ${issues}` });
+      return;
+    }
+
+    // A video renders to video alone (subtitles burn into the picture).
+    if (!outputs?.video?.put_url) {
+      res.status(400).json({ error: "outputs.video.put_url is required" });
+      return;
+    }
+
+    if (parsed.data.duration_frames > VIDEO_MAX_FRAMES) {
+      res
+        .status(400)
+        .json({ error: `video spec ${parsed.data.duration_frames} frames exceeds cap ${VIDEO_MAX_FRAMES}` });
+      return;
+    }
+
+    try {
+      const { videoPath } = await artifactsForRequest(
+        { id: render_id ?? outputs.video.key, spec: parsed.data },
+        upload_only === true,
+        (outDir) => renderVideo(parsed.data, outDir, "video"),
+      );
+
+      await uploadFile(outputs.video.put_url, videoPath, outputs.video.content_type);
+
+      res.json({ ok: true, video: outputs.video.key });
+    } catch (err) {
+      console.error("video_render_failed", { render_id, error: err });
       const failure = failureBody(err);
       res.status(failure.status).json(failure.body);
     }

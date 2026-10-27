@@ -93,3 +93,35 @@ def test_5c_stamp_reads_stay_legal():
     assert not gates.BANNED_CLIENT_LIFECYCLE_LOCAL.match(
         "  const confirmActive = intentReady && isPlanReady(lifecycle) && !runAttached"
     )
+
+
+# --- 6a: app/editing never imports Presentation/execution/LLM layers --------
+
+
+def test_6a_bites_on_cross_layer_import():
+    assert gates.BANNED_EDITING_IMPORT.match("from app.chat import service")
+    assert gates.BANNED_EDITING_IMPORT.match("  import app.pipeline.jobs")
+    assert gates.BANNED_EDITING_IMPORT.match("from app.tools.video import produce")
+    assert gates.BANNED_EDITING_IMPORT.match("from app.agents.base import AGENTS")
+    assert gates.BANNED_EDITING_IMPORT.match("from app.providers.storage import public_url")
+
+
+def test_6a_legal_editing_surface_passes():
+    # The data layer and the editing package's own modules are legal.
+    assert not gates.BANNED_EDITING_IMPORT.match("from app.models.tables import Composition")
+    assert not gates.BANNED_EDITING_IMPORT.match("from app.editing.timing import ticks_to_frames")
+    assert not gates.BANNED_EDITING_IMPORT.match("from sqlalchemy import select")
+
+
+# --- 6b: packages/video-spec never imports React/Remotion ---------------------
+
+
+def test_6b_bites_on_renderer_import():
+    assert gates.BANNED_SPEC_IMPORT.match('import React from "react"')
+    assert gates.BANNED_SPEC_IMPORT.match('import { Composition } from "remotion"')
+    assert gates.BANNED_SPEC_IMPORT.match('import { bundle } from "@remotion/bundler"')
+
+
+def test_6b_legal_spec_surface_passes():
+    assert not gates.BANNED_SPEC_IMPORT.match('import { z } from "zod"')
+    assert not gates.BANNED_SPEC_IMPORT.match('import type { VideoClip } from "./schema"')

@@ -1,0 +1,425 @@
+{
+  "format_version": 1,
+  "sample_id": "website",
+  "name": "Video Project A2 — website source film",
+  "sources": {
+    "web": {
+      "kind": "web",
+      "title": "agentveil.dev — existing capture fixture",
+      "canonical_url": "https://agentveil.dev/",
+      "captured_at": "2026-10-26T20:06:21.458344+00:00",
+      "origin": {
+        "kind": "existing_web_page_asset",
+        "asset_id": "130b4000-9872-4af2-ad69-9e266fbd618e"
+      },
+      "views": [
+        {
+          "view_id": "hero",
+          "file": "web-hero.png",
+          "source_y": 0,
+          "heading": "(top)",
+          "elements": []
+        },
+        {
+          "view_id": "decide",
+          "file": "web-decide.png",
+          "source_y": 534,
+          "heading": "Watch an agent hit a risky action and keep working.",
+          "elements": []
+        },
+        {
+          "view_id": "proof",
+          "file": "web-proof.png",
+          "source_y": 2961,
+          "heading": "Know when it's yours to decide.",
+          "elements": []
+        }
+      ]
+    },
+    "music": {
+      "kind": "audio",
+      "title": "Corporate — fixed 16 second excerpt",
+      "file": "music-corporate-16s.wav",
+      "origin": {
+        "kind": "existing_music_excerpt",
+        "music_id": "7bef6dd1-6f27-5281-a579-8011792360bd",
+        "source_sha256": "ed26d671bfb1371ed5a53fff9c60fcbfedf632938855ad3cac39e2978b3e2884",
+        "excerpt_start_seconds": 0,
+        "excerpt_duration_seconds": 16
+      }
+    }
+  },
+  "create_ops": [
+    {
+      "op": "set_settings",
+      "settings": {
+        "width": 1280,
+        "height": 720,
+        "fps": { "num": 30, "den": 1 },
+        "timebase": 90000,
+        "sample_rate": 48000,
+        "channels": 2,
+        "background": "#0B1020"
+      }
+    },
+    { "op": "bind_source", "snapshot_id": "$web" },
+    { "op": "bind_source", "snapshot_id": "$music" },
+    {
+      "op": "add_scene",
+      "scene": {
+        "scene_id": "scn_capture",
+        "range": { "start": 0, "end": 360000 },
+        "intent": "Introduce the immutable webpage capture",
+        "visual_description": null,
+        "speech_clip_ids": []
+      }
+    },
+    {
+      "op": "add_scene",
+      "scene": {
+        "scene_id": "scn_decide",
+        "range": { "start": 360000, "end": 720000 },
+        "intent": "Move the output camera over a static source view",
+        "visual_description": null,
+        "speech_clip_ids": []
+      }
+    },
+    {
+      "op": "add_scene",
+      "scene": {
+        "scene_id": "scn_prove",
+        "range": { "start": 720000, "end": 1080000 },
+        "intent": "Show editable chapter and caption clips",
+        "visual_description": null,
+        "speech_clip_ids": []
+      }
+    },
+    {
+      "op": "add_track",
+      "track": {
+        "track_id": "trk_web",
+        "kind": "visual",
+        "role": "main",
+        "order": 0,
+        "clips": [
+          {
+            "clip_id": "clp_web_hero",
+            "range": { "start": 0, "end": 360000 },
+            "scene_id": "scn_capture",
+            "source": { "snapshot_id": "$web", "snapshot_digest": "$web.digest", "source_range": null },
+            "object": {
+              "kind": "web",
+              "object_id": "obj_web_hero",
+              "view_id": "hero",
+              "layout": { "x": 0, "y": 0, "width": 1280, "height": 720 },
+              "fit": "cover",
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": [
+              {
+                "animation_id": "anm_hero_scale",
+                "target_object_id": "obj_web_hero",
+                "text_part": null,
+                "property": "transform.scale",
+                "keyframes": [
+                  { "at": 0, "value": 1, "easing": { "kind": "linear", "params": null } },
+                  { "at": 360000, "value": 1.08, "easing": { "kind": "linear", "params": null } }
+                ]
+              },
+              {
+                "animation_id": "anm_hero_pan",
+                "target_object_id": "obj_web_hero",
+                "text_part": null,
+                "property": "transform.position",
+                "keyframes": [
+                  { "at": 0, "value": [0, 0], "easing": { "kind": "linear", "params": null } },
+                  { "at": 360000, "value": [-42, -20], "easing": { "kind": "linear", "params": null } }
+                ]
+              }
+            ]
+          },
+          {
+            "clip_id": "clp_web_decide",
+            "range": { "start": 360000, "end": 720000 },
+            "scene_id": "scn_decide",
+            "source": { "snapshot_id": "$web", "snapshot_digest": "$web.digest", "source_range": null },
+            "object": {
+              "kind": "web",
+              "object_id": "obj_web_decide",
+              "view_id": "decide",
+              "layout": { "x": 0, "y": 0, "width": 1280, "height": 720 },
+              "fit": "cover",
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": [
+              {
+                "animation_id": "anm_decide_scale",
+                "target_object_id": "obj_web_decide",
+                "text_part": null,
+                "property": "transform.scale",
+                "keyframes": [
+                  { "at": 0, "value": 1.06, "easing": { "kind": "linear", "params": null } },
+                  { "at": 360000, "value": 1, "easing": { "kind": "linear", "params": null } }
+                ]
+              },
+              {
+                "animation_id": "anm_decide_pan",
+                "target_object_id": "obj_web_decide",
+                "text_part": null,
+                "property": "transform.position",
+                "keyframes": [
+                  { "at": 0, "value": [36, 16], "easing": { "kind": "linear", "params": null } },
+                  { "at": 360000, "value": [0, 0], "easing": { "kind": "linear", "params": null } }
+                ]
+              }
+            ]
+          },
+          {
+            "clip_id": "clp_web_proof",
+            "range": { "start": 720000, "end": 1080000 },
+            "scene_id": "scn_prove",
+            "source": { "snapshot_id": "$web", "snapshot_digest": "$web.digest", "source_range": null },
+            "object": {
+              "kind": "web",
+              "object_id": "obj_web_proof",
+              "view_id": "proof",
+              "layout": { "x": 0, "y": 0, "width": 1280, "height": 720 },
+              "fit": "cover",
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": [
+              {
+                "animation_id": "anm_proof_scale",
+                "target_object_id": "obj_web_proof",
+                "text_part": null,
+                "property": "transform.scale",
+                "keyframes": [
+                  { "at": 0, "value": 1, "easing": { "kind": "cubic_bezier", "params": [0.22, 1, 0.36, 1] } },
+                  { "at": 360000, "value": 1.07, "easing": { "kind": "linear", "params": null } }
+                ]
+              },
+              {
+                "animation_id": "anm_proof_pan",
+                "target_object_id": "obj_web_proof",
+                "text_part": null,
+                "property": "transform.position",
+                "keyframes": [
+                  { "at": 0, "value": [-24, 12], "easing": { "kind": "linear", "params": null } },
+                  { "at": 360000, "value": [24, -12], "easing": { "kind": "linear", "params": null } }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "add_track",
+      "track": {
+        "track_id": "trk_chapter",
+        "kind": "visual",
+        "role": "title",
+        "order": 1,
+        "clips": [
+          {
+            "clip_id": "clp_chapter_capture",
+            "range": { "start": 0, "end": 360000 },
+            "scene_id": "scn_capture",
+            "source": null,
+            "object": {
+              "kind": "text",
+              "object_id": "obj_chapter_capture",
+              "text": "01 / CAPTURE",
+              "layout": { "x": 40, "y": 36, "width": 430, "height": 68 },
+              "style": { "font_size": 38, "color": "#F8FAFC", "background": "#111827", "weight": 700, "align": "center", "line_height": 1.2 },
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": []
+          },
+          {
+            "clip_id": "clp_chapter_decide",
+            "range": { "start": 360000, "end": 720000 },
+            "scene_id": "scn_decide",
+            "source": null,
+            "object": {
+              "kind": "text",
+              "object_id": "obj_chapter_decide",
+              "text": "02 / DECIDE",
+              "layout": { "x": 40, "y": 36, "width": 430, "height": 68 },
+              "style": { "font_size": 38, "color": "#F8FAFC", "background": "#111827", "weight": 700, "align": "center", "line_height": 1.2 },
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": []
+          },
+          {
+            "clip_id": "clp_chapter_prove",
+            "range": { "start": 720000, "end": 1080000 },
+            "scene_id": "scn_prove",
+            "source": null,
+            "object": {
+              "kind": "text",
+              "object_id": "obj_chapter_prove",
+              "text": "03 / PROVE",
+              "layout": { "x": 40, "y": 36, "width": 430, "height": 68 },
+              "style": { "font_size": 38, "color": "#F8FAFC", "background": "#111827", "weight": 700, "align": "center", "line_height": 1.2 },
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": []
+          }
+        ]
+      }
+    },
+    {
+      "op": "add_track",
+      "track": {
+        "track_id": "trk_caption",
+        "kind": "visual",
+        "role": "caption",
+        "order": 2,
+        "clips": [
+          {
+            "clip_id": "clp_caption_source",
+            "range": { "start": 27000, "end": 180000 },
+            "scene_id": "scn_capture",
+            "source": null,
+            "object": {
+              "kind": "text",
+              "object_id": "obj_caption_source",
+              "text": "The page is preserved as an immutable source.",
+              "layout": { "x": 100, "y": 620, "width": 1080, "height": 72 },
+              "style": { "font_size": 32, "color": "#F8FAFC", "background": "#111827", "weight": 600, "align": "center", "line_height": 1.2 },
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": []
+          },
+          {
+            "clip_id": "clp_caption_digest",
+            "range": { "start": 180000, "end": 360000 },
+            "scene_id": "scn_capture",
+            "source": null,
+            "object": {
+              "kind": "text",
+              "object_id": "obj_caption_digest",
+              "text": "Every view keeps its own bytes and digest.",
+              "layout": { "x": 100, "y": 620, "width": 1080, "height": 72 },
+              "style": { "font_size": 32, "color": "#F8FAFC", "background": "#111827", "weight": 600, "align": "center", "line_height": 1.2 },
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": []
+          },
+          {
+            "clip_id": "clp_caption_camera",
+            "range": { "start": 387000, "end": 540000 },
+            "scene_id": "scn_decide",
+            "source": null,
+            "object": {
+              "kind": "text",
+              "object_id": "obj_caption_camera",
+              "text": "Camera motion guides attention without rewriting the page.",
+              "layout": { "x": 100, "y": 620, "width": 1080, "height": 72 },
+              "style": { "font_size": 32, "color": "#F8FAFC", "background": "#111827", "weight": 600, "align": "center", "line_height": 1.2 },
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": []
+          },
+          {
+            "clip_id": "clp_caption_static",
+            "range": { "start": 540000, "end": 720000 },
+            "scene_id": "scn_decide",
+            "source": null,
+            "object": {
+              "kind": "text",
+              "object_id": "obj_caption_static",
+              "text": "The source stays still while the output frame moves.",
+              "layout": { "x": 100, "y": 620, "width": 1080, "height": 72 },
+              "style": { "font_size": 32, "color": "#F8FAFC", "background": "#111827", "weight": 600, "align": "center", "line_height": 1.2 },
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": []
+          },
+          {
+            "clip_id": "clp_caption_clips",
+            "range": { "start": 747000, "end": 900000 },
+            "scene_id": "scn_prove",
+            "source": null,
+            "object": {
+              "kind": "text",
+              "object_id": "obj_caption_clips",
+              "text": "Chapters and captions remain editable clips.",
+              "layout": { "x": 100, "y": 620, "width": 1080, "height": 72 },
+              "style": { "font_size": 32, "color": "#F8FAFC", "background": "#111827", "weight": 600, "align": "center", "line_height": 1.2 },
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": []
+          },
+          {
+            "clip_id": "clp_caption_future",
+            "range": { "start": 900000, "end": 1080000 },
+            "scene_id": "scn_prove",
+            "source": null,
+            "object": {
+              "kind": "text",
+              "object_id": "obj_caption_future",
+              "text": "A local edit creates a new immutable version.",
+              "layout": { "x": 100, "y": 620, "width": 1080, "height": 72 },
+              "style": { "font_size": 32, "color": "#F8FAFC", "background": "#111827", "weight": 600, "align": "center", "line_height": 1.2 },
+              "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+              "opacity": 1
+            },
+            "animations": []
+          }
+        ]
+      }
+    },
+    {
+      "op": "add_track",
+      "track": {
+        "track_id": "trk_music",
+        "kind": "audio",
+        "role": "music",
+        "order": 0,
+        "clips": [
+          {
+            "clip_id": "clp_music",
+            "range": { "start": 0, "end": 1080000 },
+            "scene_id": null,
+            "source": {
+              "snapshot_id": "$music",
+              "snapshot_digest": "$music.digest",
+              "source_range": { "start": 0, "end": 1080000 }
+            },
+            "object": { "kind": "audio", "object_id": "obj_music", "gain_db": -18 },
+            "animations": []
+          }
+        ]
+      }
+    }
+  ],
+  "edit_ops": [
+    {
+      "op": "update_clip",
+      "clip_id": "clp_caption_future",
+      "object": {
+        "kind": "text",
+        "object_id": "obj_caption_future",
+        "text": "Edited locally — source views and music stay pinned.",
+        "layout": { "x": 100, "y": 620, "width": 1080, "height": 72 },
+        "style": { "font_size": 32, "color": "#F8FAFC", "background": "#111827", "weight": 600, "align": "center", "line_height": 1.2 },
+        "transform": { "x": 0, "y": 0, "scale": 1, "rotation": 0, "origin": "center" },
+        "opacity": 1
+      }
+    }
+  ],
+  "edit_target": "clp_caption_future"
+}

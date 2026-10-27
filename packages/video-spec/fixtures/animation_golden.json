@@ -1,0 +1,97 @@
+{
+  "comment": "Golden evaluation law for keyframe interpolation (clip-local frames). Pinned by packages/video-spec/src/animation.test.ts. Reference values computed by an independent exact/bisection implementation, not by the shipped code.",
+  "cases": [
+    {
+      "name": "linear scalar, constant extrapolation at both ends",
+      "keyframes": [
+        { "at": 0, "value": 0, "easing": { "kind": "linear" } },
+        { "at": 10, "value": 100, "easing": { "kind": "linear" } }
+      ],
+      "points": [
+        { "frame": 0, "value": 0 },
+        { "frame": 3, "value": 30 },
+        { "frame": 5, "value": 50 },
+        { "frame": 10, "value": 100 },
+        { "frame": 25, "value": 100 }
+      ]
+    },
+    {
+      "name": "hold keeps the from-value until the next keyframe, then jumps",
+      "keyframes": [
+        { "at": 0, "value": 0, "easing": { "kind": "hold" } },
+        { "at": 10, "value": 50, "easing": { "kind": "linear" } }
+      ],
+      "points": [
+        { "frame": 0, "value": 0 },
+        { "frame": 9, "value": 0 },
+        { "frame": 10, "value": 50 },
+        { "frame": 12, "value": 50 }
+      ]
+    },
+    {
+      "name": "cubic_bezier ease-in-out (0.42, 0, 0.58, 1)",
+      "keyframes": [
+        { "at": 0, "value": 0, "easing": { "kind": "cubic_bezier", "params": [0.42, 0, 0.58, 1] } },
+        { "at": 10, "value": 100, "easing": { "kind": "linear" } }
+      ],
+      "points": [
+        { "frame": 1, "value": 1.9722 },
+        { "frame": 2, "value": 8.166 },
+        { "frame": 5, "value": 50.0 },
+        { "frame": 8, "value": 91.834 },
+        { "frame": 9, "value": 98.0278 }
+      ],
+      "tolerance": 0.001
+    },
+    {
+      "name": "vec2 position lerp",
+      "keyframes": [
+        { "at": 0, "value": [0, 0], "easing": { "kind": "linear" } },
+        { "at": 8, "value": [40, -20], "easing": { "kind": "linear" } }
+      ],
+      "points": [
+        { "frame": 0, "value": [0, 0] },
+        { "frame": 4, "value": [20, -10] },
+        { "frame": 8, "value": [40, -20] }
+      ]
+    },
+    {
+      "name": "multi-segment overshoot (grow, snap back, settle)",
+      "keyframes": [
+        { "at": 0, "value": 1, "easing": { "kind": "linear" } },
+        { "at": 6, "value": 1.3, "easing": { "kind": "linear" } },
+        { "at": 9, "value": 1.15, "easing": { "kind": "linear" } },
+        { "at": 12, "value": 1.2, "easing": { "kind": "linear" } }
+      ],
+      "points": [
+        { "frame": 3, "value": 1.15 },
+        { "frame": 6, "value": 1.3 },
+        { "frame": 8, "value": 1.2 },
+        { "frame": 9, "value": 1.15 },
+        { "frame": 12, "value": 1.2 },
+        { "frame": 20, "value": 1.2 }
+      ],
+      "tolerance": 0.000001
+    },
+    {
+      "name": "multi-keyframe scale with Bezier, hold and settle",
+      "keyframes": [
+        { "at": 0, "value": 0.5, "easing": { "kind": "cubic_bezier", "params": [0, 0, 1, 1] } },
+        { "at": 10, "value": 1.2, "easing": { "kind": "hold" } },
+        { "at": 20, "value": 0.9, "easing": { "kind": "linear" } },
+        { "at": 30, "value": 1, "easing": { "kind": "linear" } }
+      ],
+      "points": [
+        { "frame": 0, "value": 0.5 },
+        { "frame": 5, "value": 0.85 },
+        { "frame": 10, "value": 1.2 },
+        { "frame": 19, "value": 1.2 },
+        { "frame": 20, "value": 0.9 },
+        { "frame": 25, "value": 0.95 },
+        { "frame": 30, "value": 1 },
+        { "frame": 40, "value": 1 }
+      ],
+      "tolerance": 0.000001
+    }
+  ]
+}

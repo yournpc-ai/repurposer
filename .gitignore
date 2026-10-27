@@ -252,3 +252,6 @@ Thumbs.db
 # Local tool caches (Playwright MCP snapshots/logs, Remotion Chrome download)
 .playwright-mcp/
 .remotion/
+
+# Local rendered sample films
+/artifacts/video-project-a2/

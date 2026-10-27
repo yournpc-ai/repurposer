@@ -1,0 +1,27 @@
+{
+  "comment": "Golden law for ticks<->seconds<->frames. Pinned by BOTH implementations: apps/api/tests/test_editing_timing_pure.py (Python) and packages/video-spec/src/timing.test.ts (TS). Computed by exact rational math (round-half-up), not by either implementation.",
+  "seconds_to_ticks": [
+    { "seconds": 0.0, "rate": 90000, "ticks": 0 },
+    { "seconds": 0.3, "rate": 90000, "ticks": 27000 },
+    { "seconds": 0.4, "rate": 90000, "ticks": 36000 },
+    { "seconds": 0.5, "rate": 90000, "ticks": 45000 },
+    { "seconds": 1.234, "rate": 90000, "ticks": 111060 },
+    { "seconds": 0.0001, "rate": 90000, "ticks": 9 },
+    { "seconds": 139.5, "rate": 90000, "ticks": 12555000 }
+  ],
+  "ticks_to_frames": [
+    { "ticks": 0, "rate": 90000, "fps_num": 30, "fps_den": 1, "frames": 0 },
+    { "ticks": 750, "rate": 90000, "fps_num": 30, "fps_den": 1, "frames": 0 },
+    { "ticks": 1500, "rate": 90000, "fps_num": 30, "fps_den": 1, "frames": 1 },
+    { "ticks": 27000, "rate": 90000, "fps_num": 30, "fps_den": 1, "frames": 9 },
+    { "ticks": 36000, "rate": 90000, "fps_num": 30, "fps_den": 1, "frames": 12 },
+    { "ticks": 45000, "rate": 90000, "fps_num": 30, "fps_den": 1, "frames": 15 },
+    { "ticks": 30000, "rate": 90000, "fps_num": 30, "fps_den": 1, "frames": 10 },
+    { "ticks": 90000, "rate": 90000, "fps_num": 30, "fps_den": 1, "frames": 30 },
+    { "ticks": 90000, "rate": 90000, "fps_num": 30000, "fps_den": 1001, "frames": 30 },
+    { "ticks": 1500, "rate": 90000, "fps_num": 30000, "fps_den": 1001, "frames": 0 },
+    { "ticks": 3003, "rate": 90000, "fps_num": 30000, "fps_den": 1001, "frames": 1 },
+    { "ticks": 90000, "rate": 90000, "fps_num": 24, "fps_den": 1, "frames": 24 },
+    { "ticks": 1875, "rate": 90000, "fps_num": 24, "fps_den": 1, "frames": 1 }
+  ]
+}

@@ -11,6 +11,9 @@ Two spec families (dispatch reads only ``spec.family``, ADR-016/ADR-119):
   the render yields video + srt.
 - film: ``ui.image`` / ``end.logo_url`` resolve here (the film-spec has no
   track registry); the render yields video alone.
+- video (ADR-145): every clip's ``source.url`` resolves here (the video-spec
+  carries storage keys, never absolute URLs, off the compiler); the render
+  yields video alone.
 
 Output keys carry a per-render timestamp suffix (``<output_id>-<ts>.mp4``) so a
 re-render never overwrites the object a browser may have cached under the same
@@ -92,6 +95,19 @@ def _absolutize_film(spec: dict[str, Any]) -> dict[str, Any]:
     return spec
 
 
+def _absolutize_video(spec: dict[str, Any]) -> dict[str, Any]:
+    """Absolutize every video source/font key; digests stay unchanged."""
+    for font in spec.get("fonts") or []:
+        if isinstance(font.get("url"), str):
+            font["url"] = _resolve_url(font["url"])
+    for track in spec.get("tracks") or []:
+        for clip in track.get("clips") or []:
+            source = clip.get("source")
+            if isinstance(source, dict) and isinstance(source.get("url"), str):
+                source["url"] = _resolve_url(source["url"])
+    return spec
+
+
 def _absolutize(spec: dict[str, Any]) -> dict[str, Any]:
     """Make storage-relative URLs absolute so the render service can fetch them.
 
@@ -103,11 +119,13 @@ def _absolutize(spec: dict[str, Any]) -> dict[str, Any]:
       public base URL; those endpoints redirect to object storage.
 
     Any URL that is already absolute is left untouched. Dispatch reads only
-    ``spec.family`` (never node type/name): film → its own walk; everything
-    else → the clip track registry.
+    ``spec.family`` (never node type/name): film/video → their own walks;
+    everything else → the clip track registry.
     """
     if spec.get("family") == "film":
         return _absolutize_film(spec)
+    if spec.get("family") == "video":
+        return _absolutize_video(spec)
     # Registry fold (ADR-044): the slots to resolve are each track's declared
     # url_fields — a newly registered track's URLs absolutize with zero changes
     # here.
@@ -465,9 +483,7 @@ async def queue_upload_retry(
 
     reset_output_render(output)
     lang = display_language(
-        (run.context or {}).get("ui_language")
-        if isinstance(run.context, dict)
-        else None,
+        run.context if isinstance(run.context, dict) else None,
         project.language,
     )
     step_spec = {k: v for k, v in (step.spec or {}).items() if k != "failure"}
@@ -564,7 +580,9 @@ async def render_output(output_id: UUID) -> None:
         # Snapshot everything the render + terminal write need as plain data —
         # the ORM objects die with this session.
         spec = _absolutize(copy.deepcopy(output.render_spec))
-        is_film = spec.get("family") == "film"
+        # film + video both render to video alone (subtitles burn into the
+        # picture; no caption sidecar artifact).
+        no_sidecar = spec.get("family") in ("film", "video")
         files = dict(output.files or {})
         project_id = output.project_id
         # 素材源缓存桥 (2026-10-07): the render service stages sources into the
@@ -606,11 +624,12 @@ async def render_output(output_id: UUID) -> None:
         video_key = await get_output_path(
             project_id, user_id, f"{output_id}-{render_ts}.mp4"
         )
-        # A film renders to video alone (no caption track → no SRT artifact;
-        # the render service's film branch likewise requires only video).
+        # film + video render to video alone (no caption track → no SRT
+        # artifact; the render service's film/video branches likewise
+        # require only video).
         srt_key = (
             None
-            if is_film
+            if no_sidecar
             else await get_output_path(project_id, user_id, f"{output_id}-{render_ts}.srt")
         )
         video_put_url = await presign_upload(
