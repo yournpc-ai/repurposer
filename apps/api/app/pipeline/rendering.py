@@ -417,7 +417,7 @@ async def resolve_upload_retry(
             output is None
             or output.project_id != project.id
             or output.archived_at is not None
-            or output.type not in ("clip", "film")
+            or output.type not in ("clip", "film", "video")
             or output.render_spec is None
             or output.render_status != RenderStatus.FAILED
             or run.status != WorkflowStatus.FAILED
@@ -664,7 +664,13 @@ async def render_output(output_id: UUID) -> None:
                 ),
             },
         }
-        async with httpx.AsyncClient(timeout=settings.render_timeout_seconds) as client:
+        # trust_env=False: httpx otherwise adopts the macOS SYSTEM proxy
+        # (getproxies) even with no shell env, and the local proxy kills the
+        # long-lived render request mid-render ("Server disconnected"). The
+        # render service is a local loopback peer by construction.
+        async with httpx.AsyncClient(
+            timeout=settings.render_timeout_seconds, trust_env=False
+        ) as client:
             resp = await client.post(settings.render_url, json=payload)
             if resp.is_error:
                 try:
@@ -748,6 +754,11 @@ async def render_output(output_id: UUID) -> None:
         # its product is STALE and must be discarded, never clobber the row
         # (the re-pend renders the fresh spec on a later claim).
         async with AsyncSessionLocal() as db:
+            if spec.get("family") == "video":
+                from app.models.tables import Composition
+                await db.execute(select(Composition).where(
+                    Composition.id == UUID(spec["provenance"]["composition_id"])
+                ).with_for_update())
             claimed = await db.execute(
                 update(Output)
                 .where(
@@ -764,6 +775,9 @@ async def render_output(output_id: UUID) -> None:
                     render_error=None,
                 )
             )
+            if claimed.rowcount and spec.get("family") == "video":
+                from app.tools.video.production import capture_video_render
+                await capture_video_render(db, output_id)
             await db.commit()
         if claimed.rowcount == 0:
             logger.info("render_superseded", output_id=str(output_id))

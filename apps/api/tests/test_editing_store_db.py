@@ -51,6 +51,94 @@ from test_editing_edits_pure import (
 
 pytestmark = pytest.mark.asyncio
 
+
+async def test_video_production_pins_reviewed_version_and_uses_run_render_billing(database, monkeypatch):
+    """One production seam: receipt, real Run/hold, render barrier and lineage."""
+    from unittest.mock import AsyncMock
+    from app.chat.video_turn_seats import stamp_video_presentation
+    from app.editing.service import video_version_read
+    from app.models.schemas import TaskItem
+    from app.models.tables import Conversation, CreditTransaction, Message, WorkflowRun, WorkflowStep
+    from app.pipeline.orchestrator import TaskSpec, create_run, derive_task_estimates
+    from app.tools.video.production import pin_video_production
+    from app.tools.video.production.node import ProduceVideo
+    from app.pipeline import step_display
+    from app.tools.video import preparation
+
+    monkeypatch.setattr(settings, "video_project_enabled", True)
+    monkeypatch.setattr(step_display, "AsyncSessionLocal", database)
+    monkeypatch.setattr(preparation, "ensure_font_resources", AsyncMock())
+    uid = await _user(database)
+    pid = await _project(database, uid)
+    await _snapshots(database, uid)
+    comp, version, _ = await _create(database, uid, pid)
+    async with database() as db:
+        project = await db.get(Project, pid)
+        conversation = Conversation(user_id=uid, project_id=pid)
+        db.add(conversation)
+        await db.flush()
+        shown = Message(conversation_id=conversation.id, role="assistant", content="Storyboard", seq=1)
+        approved = Message(conversation_id=conversation.id, role="user", content="Make it", seq=2)
+        db.add_all([shown, approved])
+        await db.flush()
+        read = await video_version_read(db, owner_id=uid, version_id=version.id)
+        stamp_video_presentation(project, shown, read)
+        task = TaskItem(tool="produce_video", params={"version_ref": read["base_ref"]})
+        with pytest.raises(ValueError, match="finished presenting"):
+            await pin_video_production(db, project, [task], approved.id)
+        project.pending_brief = {**project.pending_brief, "video_presentation": {
+            **project.pending_brief["video_presentation"], "presentation_complete": True,
+        }}
+        with pytest.raises(ValueError, match="later user approval"):
+            await pin_video_production(db, project, [task], shown.id)
+        quote = await derive_task_estimates(db, project, [task])
+        assert quote is not None and quote.total[1] > 0
+        run = await create_run(db, project, TaskSpec(tasks=[task], video_authorized_by=approved.id))
+        assert run.context["version_ref"] == read["base_ref"]
+        steps = list((await db.scalars(select(WorkflowStep).where(WorkflowStep.run_id == run.id))).all())
+        assert [s.kind for s in steps] == ["produce_video"]
+        hold = await db.scalar(select(CreditTransaction).where(CreditTransaction.kind == "hold"))
+        assert hold is not None and hold.amount == -quote.total[1]
+        await db.commit()
+        run_id, step_id = run.id, steps[0].id
+    # Editing while production exists cannot change the worker's input.
+    async with database() as db:
+        await apply_composition_edits(db, owner_id=uid, composition_id=comp.id,
+            base_version_id=version.id, ops=[set_intent("later draft")])
+    async with database() as db:
+        run = await db.get(WorkflowRun, run_id)
+        step = await db.get(WorkflowStep, step_id)
+        project = await db.get(Project, pid)
+        ids = await ProduceVideo().run(db, run, step, project)
+        assert len(ids) == 1
+        output = await db.get(Output, ids[0])
+        assert output.composition_version_id == version.id
+        assert output.render_barrier == [str(step.id)]
+        assert output.render_spec["provenance"] == run.context["version_ref"]
+        mirrors = list((await db.scalars(select(WorkflowStep).where(
+            WorkflowStep.run_id == run.id, WorkflowStep.kind == "render"))).all())
+        assert len(mirrors) == 1
+        await db.commit()
+    async with database() as db:
+        read_output = await video_version_read(db, owner_id=uid, output_id=ids[0])
+        assert read_output["composition_version_id"] == str(version.id)
+        assert read_output["is_current"] is False
+        assert await db.scalar(select(WorkflowRun.id).where(
+            WorkflowRun.context["version_ref"]["composition_id"].as_string() == str(comp.id),
+        )) == run_id
+        from app.tools.video.production import capture_video_render
+        from app.models.schemas import RenderStatus
+        await capture_video_render(db, ids[0])
+        assert await db.scalar(select(CreditTransaction.id).where(CreditTransaction.kind == "capture")) is None
+        output = await db.get(Output, ids[0])
+        output.render_status = RenderStatus.COMPLETED
+        output.files = {"video": "acceptance.mp4"}
+        await db.flush()
+        await capture_video_render(db, ids[0])
+        await capture_video_render(db, ids[0])
+        captures = list((await db.scalars(select(CreditTransaction).where(CreditTransaction.kind == "capture"))).all())
+        assert len(captures) == 1 and captures[0].amount == -quote.total[1]
+
 OP = TypeAdapter(Op)
 
 

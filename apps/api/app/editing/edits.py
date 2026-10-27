@@ -201,6 +201,9 @@ def _apply_one(content: CompositionContent, op: Op, bound_digests: dict[UUID, st
     resolved from the snapshot rows by the store (the version pins THAT
     digest, never a caller-supplied one)."""
     if isinstance(op, SetSettings):
+        if content.settings != op.settings:
+            for scene in content.scenes:
+                scene.visual_description = None
         content.settings = op.settings
     elif isinstance(op, BindSource):
         if op.snapshot_id not in bound_digests:

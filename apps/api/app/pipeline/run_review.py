@@ -43,12 +43,13 @@ _WRITER_TOOL_TO_TYPE = {
     "write_quotes": "quotes",
     "write_carousel": "carousel",
     "launch_film": "film",
+    "produce_video": "video",
 }
 
 # Render-contracted row types (a render_status lifecycle + files.video prove
 # delivery, ADR-096 §4): the clip family and the film family share the one
 # render chain (ADR-119) — "delivered" means the same thing for both.
-_RENDER_CONTRACTED = frozenset({"clip", "film"})
+_RENDER_CONTRACTED = frozenset({"clip", "film", "video"})
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,7 @@ class LandedFact:
     """One landed output's user-checkable facts (never a quality opinion)."""
 
     output_type: str
+    video_version_matches: bool | None = None
     language: str | None = None
     duration_s: int | None = None  # clips: the planned clip length
     cut_range_s: tuple[float, float] | None = None  # clips: the source span
@@ -305,7 +307,8 @@ def film_delivery_check(
     return tuple(lines)
 
 
-def landed_fact(output: Any, film_confirmed: dict[str, Any] | None = None) -> LandedFact:
+def landed_fact(output: Any, film_confirmed: dict[str, Any] | None = None,
+                video_confirmed: dict[str, Any] | None = None) -> LandedFact:
     """Extract one landed output's facts from its row (reads only — pure).
     Clip track facts read the BAKED render_spec (the sole render contract,
     ADR-016): the caption/translation tracks' presence and the dub block.
@@ -335,8 +338,21 @@ def landed_fact(output: Any, film_confirmed: dict[str, Any] | None = None) -> La
         if isinstance(start, (int, float)) and isinstance(end, (int, float)):
             cut_range = (float(start), float(end))
     flex = payload.get("narration_flex")
+    video_matches = None
+    if getattr(output, "type", None) == "video":
+        pinned = {
+            "composition_id": str(getattr(output, "composition_id", "") or ""),
+            "composition_version_id": str(getattr(output, "composition_version_id", "") or ""),
+            "content_digest": payload.get("composition_digest"),
+        }
+        video_matches = bool(
+            all(pinned.values()) and spec.get("family") == "video"
+            and spec.get("provenance") == pinned
+            and (video_confirmed is None or video_confirmed == pinned)
+        )
     return LandedFact(
         output_type=str(getattr(output, "type", "") or "unknown"),
+        video_version_matches=video_matches,
         language=getattr(output, "language", None),
         duration_s=(
             int(payload["duration"])
@@ -425,7 +441,7 @@ def _is_delivered(fact: LandedFact) -> bool:
     Render-contracted outputs need BOTH a completed render and the video
     file. Every other output family delivers through its ordinary payload.
     """
-    return fact.render != "failed" and (
+    return fact.video_version_matches is not False and fact.render != "failed" and (
         fact.output_type not in _RENDER_CONTRACTED
         or (fact.render == "completed" and bool(fact.has_file))
     )

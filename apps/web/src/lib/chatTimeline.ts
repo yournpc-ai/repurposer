@@ -56,6 +56,13 @@ const STORYBOARD_SPAN_KEYS = new Set([
   "chat.activity.storyboardDone",
   "chat.activity.storyboardEdit",
   "chat.activity.storyboardEditDone",
+  // The video family's pairs (Video Project phase B) ride the same
+  // exception: the storyboard card is the deliverable, no dock card
+  // absorbs the beat, so the settle persists with its honest duration.
+  "chat.activity.videoDesign",
+  "chat.activity.videoDesignDone",
+  "chat.activity.videoRevise",
+  "chat.activity.videoReviseDone",
 ])
 
 export function isDraftSpanRow(a: ActivityRowFrame): boolean {

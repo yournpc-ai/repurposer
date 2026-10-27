@@ -44,6 +44,7 @@ const fontResourceSchema = z
     format: z.enum(["opentype", "truetype"]),
     url: z.string().min(1),
     digest: z.string().length(64),
+    unicode_range: z.string().min(1).optional(),
   })
   .strict();
 

@@ -108,6 +108,7 @@ from app.models.schemas import (
     BriefSlotSource,
     ChatRequest,
     DesignStoryboardArgs,
+    DesignVideoArgs,
     FilmStoryboard,
     InferredIntent,
     MaterialUnderstanding,
@@ -117,6 +118,7 @@ from app.models.schemas import (
     PresentPlanArgs,
     QuestionPayload,
     QuestionProposal,
+    ReviseVideoArgs,
     StartAnswerRequest,
     StartRunArgs,
     resolve_recommended_id,
@@ -197,6 +199,18 @@ class PlanTurn:
         # row's id onto film_presented_message_id — only after that row
         # actually persists, version-guarded (presentation_stamp_update).
         self._presentation_pending: dict | None = None
+        # 视频呈现挂号 (ADR-145 phase B): a successful design_video /
+        # revise_video execute stashes the saved version's READ dict here;
+        # finish stamps the receipt (pending_brief.video_presentation, with
+        # the terminal row's id) and attaches the storyboard block to that
+        # row — only after the row actually persists. The write door
+        # committed on its own session already; this turn's transaction
+        # carries only the receipt + the message block.
+        self._video_presentation_pending: dict | None = None
+        # Per-turn idempotency counter for the video write door's
+        # request_id (a repair-loop retry of the SAME call replays; distinct
+        # calls mint distinct ids).
+        self._video_call_counter: int = 0
         # 同回合纠正道 (7276ef13 修复批 ② — supersedes the 2026-10-23 T3
         # one-design refusal): a successful design's version number; further
         # design_storyboard calls THIS turn are CORRECTIONS of that standing
@@ -507,6 +521,8 @@ class PlanTurn:
             )
 
         recent_lines: list[str] = []
+        from app.chat.video_turn_seats import video_context_lines
+        recent_lines.extend(await video_context_lines(db, project, request.mentions))
         for m in recent or []:
             attached = [a.get("name") for a in (m.attachments or []) if a.get("name")]
             if not m.content and not attached:
@@ -775,6 +791,12 @@ class PlanTurn:
         to the family registry and ride back as a ToolObservation (the loop
         iterates — 终态工具一调即停 covers the terminal tools only)."""
         if name in PERCEPTION_TOOLS:
+            if name == "get_video_version" and params.present:
+                from app.chat.video_turn_seats import read_video_for_presentation
+                read, feedback = await read_video_for_presentation(self.db, self.project, params)
+                if read is not None:
+                    self._video_presentation_pending = read
+                return feedback
             return await run_perception_tool(
                 self.db,
                 self.project,
@@ -816,6 +838,12 @@ class PlanTurn:
         if name == "design_storyboard":
             assert isinstance(params, DesignStoryboardArgs)
             return await self._design_storyboard(params, prose)
+        if name == "design_video":
+            assert isinstance(params, DesignVideoArgs)
+            return await self._design_video(params)
+        if name == "revise_video":
+            assert isinstance(params, ReviseVideoArgs)
+            return await self._revise_video(params)
         if name == "ask_user":
             assert isinstance(params, PlanAskArgs)
             return await self._ask_user(params, prose)
@@ -870,6 +898,7 @@ class PlanTurn:
         ``presentation_stamp_update`` (a newer draft owns its own
         presentation); the write rides the turn's one transaction, so a
         failed/cancelled turn never leaves a phantom "presented" mark."""
+        await self._stamp_video_presentation(message)
         pending = self._presentation_pending
         self._presentation_pending = None
         if pending is None or message is None:
@@ -886,6 +915,68 @@ class PlanTurn:
         if updated is not None:
             self.project.pending_brief = updated
             self.stored = PendingPlan.model_validate(updated)
+
+    async def _stamp_video_presentation(self, message) -> None:
+        """The video family's presentation association (ADR-145 phase B):
+        delegates to the shared seat (video_turn_seats) — the receipt on
+        pending_brief.video_presentation + the storyboard block on the
+        persisted terminal row, never on a degrade row."""
+        pending = self._video_presentation_pending
+        self._video_presentation_pending = None
+        from app.chat.video_turn_seats import (  # deferred: same layer
+            stamp_video_presentation,
+        )
+
+        updated = stamp_video_presentation(self.project, message, pending)
+        if updated is not None:
+            self.stored = updated
+
+    async def _design_video(self, params: DesignVideoArgs) -> str | ToolObservation:
+        """design_video → the video family's design beat (ADR-145 phase B,
+        非终态): the shared seat saves the version through the write door
+        on its OWN session; the model's ONE next message presents the saved
+        facts (finish stamps the receipt + the storyboard block). NO plan
+        docks, NO run starts."""
+        from app.chat.video_turn_seats import (  # deferred: same layer
+            design_video_seat,
+            video_request_id,
+        )
+
+        self._video_call_counter += 1
+        read, feedback = await design_video_seat(
+            project=self.project,
+            args=params,
+            request_id=await video_request_id(self.db, self.conversation_id, self._video_call_counter),
+        )
+        if read is None:
+            return feedback
+        self._video_presentation_pending = read
+        return feedback
+
+    async def _revise_video(self, params: ReviseVideoArgs) -> str | ToolObservation:
+        """revise_video → the targeted-revision beat (ADR-145 phase B):
+        the shared seat applies the ops through the write door (own
+        session); the observation carries the system-computed change set +
+        the full current facts. The revision alone never starts
+        production."""
+        from app.chat.video_turn_seats import (  # deferred: same layer
+            revise_video_seat,
+            video_request_id,
+        )
+        from app.chat.video_turn_seats import video_mention_guard
+        guard = await video_mention_guard(self.db, self.project, self.request.mentions, params.base_ref.composition_id)
+        if guard:
+            return guard
+        self._video_call_counter += 1
+        read, feedback = await revise_video_seat(
+            project=self.project,
+            args=params,
+            request_id=await video_request_id(self.db, self.conversation_id, self._video_call_counter),
+        )
+        if read is None:
+            return feedback
+        self._video_presentation_pending = read
+        return feedback
 
     async def _design_storyboard(self, params: DesignStoryboardArgs, prose: str) -> str | ToolObservation | TerminalRefusal:
         """design_storyboard → the film family's design beat (ADR-129 非终
@@ -1295,6 +1386,7 @@ class PlanTurn:
                 if design_base
                 else None
             )
+        from app.editing.service import video_carry_state  # deferred: editing seam
         pending = PendingPlan(
             prompt=birth_prompt,
             intent=stored.intent if stored else None,
@@ -1308,6 +1400,7 @@ class PlanTurn:
             plans=stored.plans if stored else [],
             plan_task_map=stored.plan_task_map if stored else None,
             **version_state,
+            **video_carry_state(stored),
             **self._role_pins(),
         )
         project.pending_brief = pending.model_dump(mode="json")
@@ -1666,6 +1759,7 @@ class PlanTurn:
             version_state["film_text_drift"] = getattr(
                 design_base, "film_text_drift", None
             )
+        from app.editing.service import video_carry_state  # deferred: editing seam
         pending = PendingPlan(
             prompt=birth_prompt,
             intent=stored.intent if stored else None,
@@ -1679,6 +1773,7 @@ class PlanTurn:
             plans=stored.plans if stored else [],
             plan_task_map=stored.plan_task_map if stored else None,
             **version_state,
+            **video_carry_state(stored),
             **self._role_pins(),
         )
         project.pending_brief = pending.model_dump(mode="json")
@@ -1762,6 +1857,11 @@ class PlanTurn:
         出书门槛."""
         db, project = self.db, self.project
         stored = self._current_pending()
+        from app.chat.video_turn_seats import video_proposal_guard
+        video_guard = await video_proposal_guard(db, project, params.tasks,
+            pending_read=self._video_presentation_pending, production_intent=params.production_intent, mentions=self.request.mentions)
+        if video_guard is not None:
+            return video_guard
 
         # 空散文护栏 (ask_user 座的同形对称): the plan card carries no title
         # — the echo IS its introduction (three duties), so a silent dock
@@ -1847,7 +1947,7 @@ class PlanTurn:
                 "or paste their transcript to unlock them, or ask for the "
                 "text work only."
             )
-        has_root = (
+        has_root = any(t.tool == "produce_video" for t in params.tasks) or (
             bool((merged_brief.topic.value or "").strip())
             # S2 语义缝 (2026-09-12): a topic the model INFERRED after the
             # user skipped the topic ask is not a root — the skip chose
@@ -2028,6 +2128,7 @@ class PlanTurn:
         # to fire here — the draft ACTIVITY frame (opened at this call's
         # name-known beat, settled at its acceptance) is the work's only
         # user-safe face now (三通道分家).
+        from app.editing.service import video_carry_state  # deferred: editing seam
         project.pending_brief = PendingPlan(
             prompt=birth_prompt,
             intent=intent,
@@ -2039,6 +2140,7 @@ class PlanTurn:
             persona_id=persona_id,
             derived=derived,
             **film_state,
+            **video_carry_state(stored),
             **self._role_pins(),
         ).model_dump(mode="json")
         self._fire_mention_warm()
@@ -2327,6 +2429,7 @@ class PlanTurn:
         # envelope) — one stamp, two seats. The R20 router substrate
         # (plan_task_map, re-keyed onto the born rows) rides with them.
         package_plans = decision_package_plans(born)
+        from app.editing.service import video_carry_state  # deferred: editing seam
         project.pending_brief = PendingPlan(
             prompt=birth_prompt,
             intent=intent,
@@ -2337,6 +2440,7 @@ class PlanTurn:
             plans=package_plans,
             plan_task_map=package.plan_task_map,
             **film_state,
+            **video_carry_state(stored),
             **self._role_pins(),
         ).model_dump(mode="json")
         self._fire_mention_warm()
@@ -2526,6 +2630,7 @@ class PlanTurn:
             or (UUID(str(self.persona.id)) if self.persona is not None else None)
         )
         package_plans = decision_package_plans(plans)
+        from app.editing.service import video_carry_state  # deferred: editing seam
         project.pending_brief = PendingPlan(
             prompt=birth_prompt,
             intent=intent,
@@ -2536,6 +2641,7 @@ class PlanTurn:
             plans=package_plans,
             plan_task_map=package.plan_task_map,
             **film_state,
+            **video_carry_state(stored),
             **self._role_pins(),
         ).model_dump(mode="json")
         self._fire_mention_warm()
@@ -2774,6 +2880,7 @@ class PlanTurn:
             )
         from app.tools.film.storyboard import film_carry_state  # deferred
 
+        from app.editing.service import video_carry_state  # deferred: editing seam
         self.project.pending_brief = PendingPlan(
             # The birth prompt stays frozen (stored.prompt wins) — the
             # accumulated narrative retired with the brief switch.
@@ -2791,6 +2898,7 @@ class PlanTurn:
             # The versioned storyboard survives an interjection ask verbatim
             # (review hold included — only a proposal dock releases it).
             **film_carry_state(stored),
+            **video_carry_state(stored),
             **self._role_pins(),
         ).model_dump(mode="json")
         self._fire_mention_warm()
@@ -3083,6 +3191,7 @@ class PlanTurn:
             merged_brief.asked = [*merged_brief.asked, "topic"]
             from app.tools.film.storyboard import film_carry_state  # deferred
 
+            from app.editing.service import video_carry_state  # deferred: editing seam
             self.project.pending_brief = PendingPlan(
                 prompt=stored.prompt if stored and stored.prompt else self.text,
                 intent=stored.intent if stored else None,
@@ -3096,6 +3205,7 @@ class PlanTurn:
                 plans=stored.plans if stored else [],
                 plan_task_map=stored.plan_task_map if stored else None,
                 **film_carry_state(stored),
+                **video_carry_state(stored),
                 **self._role_pins(),
             ).model_dump(mode="json")
             self._fire_mention_warm()

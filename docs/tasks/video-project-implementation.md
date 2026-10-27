@@ -1,13 +1,13 @@
 # Video Project 四阶段施工与验收
 
-> Status: 施工中（2026-10-27）。目标架构唯一事实源 = [VIDEO_PROJECT](../VIDEO_PROJECT.md)；本文只维护四阶段范围、代码接缝、依赖与验收。当前入口 = **阶段 B 的最小 Chat 制作闭环**；A 按最小内容基座收口，完整能力与人工产品验收仍未完成，见 §1.2–1.3。实现状态就地更新，不追加施工日记；全局优先级归 [PROGRESS §0](../PROGRESS.md)。
+> Status: 施工中（2026-10-28）。目标架构唯一事实源 = [VIDEO_PROJECT](../VIDEO_PROJECT.md)；本文维护 A/B/C/D 阶段及 B 内增量批次、依赖与验收。当前入口 = **B-III 混合合成底座**；MG/跨 Chat 与官网片真实主链已通过，B-II 保留听感、循环接缝、付费 prompt_gate 等未验收项，完整 B 未封板。新增混合合成/程序画面/生成媒体批次见 §2.5；A 最小基座及剩余能力见 §1.2–1.3。状态就地更新，全局优先级归 [PROGRESS §0](../PROGRESS.md)。
 >
 > **数据边界：不迁移既有业务数据。**新表、新列、索引和约束仍需 Alembic；旧 Film 数据适配器、旧板 digest 迁移和全库回填均不建设。生产环境无实际用户；用户已授权为本轮重构破坏旧业务数据，必要时可清理/reset 本应用开发与生产数据，无需为同一范围重复确认。执行前核对目标实例、数据范围和 dry-run，不扩大到其他项目或基础设施；本次文档更新不执行清库。
 
 ## 0. 开工规则与总边界
 
 1. 新链为 Project/Chat → Composition → CompositionVersion；同一 Chat 可分别持续修订多部影片，全局 @ 引用不受来源 Chat 限制。不引入 Work / WorkDocument、Sequence 或独立 Timeline 作品根。
-2. A–C 只服务网页宣传片与 MG。旧 Film 用作行为/画面对照，旧 Clip 不迁移、不删除。
+2. A/B 建立服务官网片、MG与混合内容视频的共同底座；B 的程序化/生成媒体按 §2.5 分批交付，不与当前官网片修复混做。C 提供个人创作方法复用。旧 Film 用作行为/画面对照，旧 Clip 产品迁移/删除仍后置。
 3. 开发期不承担旧 Film API、旧数据或旧内部结构的兼容承诺。A 保留旧链作样片对照；B 集中替换注册表→prompt→工具菜单→Start/Run→Output 的 Film 专用接缝，只保留一个有效设计/制作家族，不长期双写、双读或保留自动 fallback。临时 feature flag 仅服务开发隔离，D 必须清理。
 4. Graph/Run/worker/render ownership 复用，不建第二执行引擎。Scene、Track、Clip、TextPart 不成为执行图节点。
 5. `pending_brief` 只保留通用计划/问题/确认状态；CompositionVersion 是唯一作品内容真相。
@@ -29,7 +29,7 @@
 
 - 本轮在用户指定的 `feat/mg` 分支内完成破坏性更新，生产无实际用户，不要求旧 Film API、旧数据或过渡期持续可用；不因此豁免新链正确性与生产验收。
 - 建分支前核对当前 HEAD、工作区和与 main 的差异；保留本轮必要的未提交成果和并行 UI 工作，不用 reset/checkout/stash 清场，也不把无关改动批量提交。基础分支取包含必要现有成果的状态，不盲目从 main 起步丢掉已完成工作。
-- 分支内按 A/B/C/D 的依赖拆小批提交；合并前同步 main、处理冲突并对最终候选重验。首批 A+B+D1/D2 达标即可合并；C 若同批交付则须一并验收，否则留后续独立批次。
+- 分支内按 A/B/C/D 的依赖拆小批提交；合并前同步 main、处理冲突并对最终候选重验。首个限定能力发布须 A、B-I～III 与所声明功能的验收、D1/D2 达标才可合并；后续 B-IV～VI 与 C 可分批交付，未完成项继续登记；完整 B 不因限定能力发布而标为完成。C 若同批交付则须一并验收，否则留后续独立批次。
 - main 合并与环境部署分开处理：生产就绪需 schema/reset 路径、API/worker/render/web 配套版本、旧任务处理及失败后重部署路径明确。无用户环境可停机/reset，不建设旧业务恢复兼容层；Git 分支不会隔离数据库和队列。
 
 ## 1. 阶段 A——CompositionVersion、时间/对象模型与 video-spec
@@ -129,9 +129,25 @@ A 的最小出口：版本写口与权限/幂等成立、代表性静态网页/M
 
 ## 2. 阶段 B——launch-film Skill 化、Chat 分镜与 CRUD 制作闭环
 
+### 2.0 B 当前状态（2026-10-28）
+
+上下半批均已落码于 `feat/mg`，具体提交状态以 git 为准；**真实 MG 制作/交付/播放与跨 Chat 修订闭环均已通过，B 主链收口，仍未封板**（欠账见下）。不要按旧提示词重做上半批或生产链。
+
+- **已有实现**：`editing/service.py`、`chat/video_turn_seats.py` 共用 plan/propose，canonical 卡片、真实消息 id、完整呈现 ACK、首稿批准守卫、明确后续修订并制作的延迟启动与现有确认/费用设置接线。补齐版本上下文、幕数/时长/背景约束、背景修订、全局 @asset/@output owner 读面。新增 `tools/video/params.py`、`tools/video/production/`，produce_video 经既有图写口/create_run 固定版本、估价/hold、manifest、渲染/上传/probe、成功 capture、交付；成功才归档同作品旧完成产物。
+- **环境**：默认闸仍 false，本机忽略的 `.env` 已开 `VIDEO_PROJECT_ENABLED=true`；DB head `z5d8f1b3a7c2`。API8000、web3000、render3001；worker/render 不热加载，改执行代码后无活跃任务再重启。日志 `/tmp/rep-api.log`、`/tmp/rep-video-b-worker.log`、`/tmp/rep-video-b-render.log`。
+- **真实成功（同 Chat）**：Chat `2cce4c18`，Composition `05c66c6f`；Run `e32ed9f2` COMPLETED，Output `94ccf1d8`（v3）。
+- **真实成功（跨 Chat，2026-10-27 收尾通过）**：Chat `1b89291a` @output 引用成片，仅改第三幕为 Keep editing 并直接制作；保存 v4 `0d6df014`，浏览器回放卡片完整呈现 → ACK → 延迟启动 Run `f6b64fb6`（version_ref 钉 v4）→ 渲染/上传/probe → Output `36383c3f` COMPLETED，hold→release→capture 各一次（-12 积分），旧片在新片成功后才归档；浏览器真实播放，5.2s 帧确认第三幕为 Keep editing、其余不变（"in focus" 是 v2 的用户修订，非串改）。成片存 `artifacts/video-project-b/`（已 git 忽略）。
+- **本批修复**：① 回放洞——pending/已答 task_book 行的 video_storyboard blocks 不进历史流，刷新后卡片不再呈现、ACK 永不再发、授权延迟启动永久卡死；`historyReplay.ts` 两条分支现携带 blocks 回放（已答 echo 行与 pending echo 行），旧无 blocks 的 plan dock 行为不变。② `_video_project.j2` REVISION 律补状态真言：改版卡片呈现完成前制作未开始，禁称"渲染已在后台进行"。③ 三个守卫测试随门控世界更新（工具桶 XOR 断言、plan stub 补 user_id、trigger 工具预算 18→21 注明出处）。
+- **检查（本批末轮改动后实测）**：API pytest 1310 全绿、check_gates 通过、apps/render tsc 干净（web 未改动，沿用上半批 web257/web-tsc 绿）。完整付费 prompt_gate 未跑（prompt 面有改动：SKILL.md v1.3.0 重写 + `DesignVideoArgs.music`，部署前须补）。
+- **真实成功（官网片，同 Chat 全闭环，2026-10-27 独立复验）**：项目 `bd2b2f2e` / Chat `9ee217bc` / Composition `79035790`。首稿 v1 `e09d8509` 完整呈现 → ACK `run_id=None`（呈现不动工）→ 用户批准 → Run 钉 v1 digest；首 Run `98a70678` FAILED（render POST 被系统代理截断，hold 176 全额 release），重试 `b943bf22` COMPLETED（capture 一次）。局部修订「hero 副标题补空格」→ v2 `dc75f1ba`（settings/sources 逐字节相同，timeline 仅 `clp_hero_text1` 文本变，零重新采集、零重新设计费），普通修订零 Run；「改完直接做」→ Run `3f3262f5` 钉 v2 → Output `31e444aa`。同版再产 → Run `59762ae8` → Output `558c6547`（终片，88s/1920×1080）。每次 Run hold→release→capture 恰各一次；ACK 重放 `accepted: false` 不产生新 Run；渲染中 Output `files={}` 不冒充完成。帧级核验：屏幕文字取页面原文且字体正常、hero 文案空格已复、章节字幕正确、音乐床全程约 -20dB 且 88s 处淡出至静音、无旁白（内容模型无语音对象，结构性保证）。
+- **本批修复（官网片链，均有真实证据）**：① `SKILL.md` 陈旧槽位词汇（法条座位冲突，首设计回合 29 个 schema 错误的根因）全文重写为 v1.3.0；② `CiteLine._fold` 从未注册为 validator → 接上 `model_validator` 并扩拼写（非法引用仍 raise，纯函数实测）；③ 字幕 `{text,citation}`/片段列表 fold 成纯文本（不丢词不乱序，不可解析结构 raise 不静默置空，纯函数实测）；④ 音乐床：`video-template.json` 增 `trk_music` + `MusicBed` 平铺 + gain 关键帧淡入淡出 + `resolve_bed_track` 三态（off 终态无人 reopen，实测 `off→None` 且不建空音轨）+ `snapshot_music_track` 内容寻址冻结；⑤ `storage.py` S3 client 显式 `proxies={}`（urllib3 隐式走 macOS 系统代理吞大 PUT 响应，boto3 全项目仅此一座）；⑥ `rendering.py` render POST `trust_env=False`（长渲染请求被代理中途切断）；⑦ 字体缺陷：`fonts.py`/`schema.ts`/`Video.tsx` 给 emoji 字体资源加 `unicode_range`（Noto Emoji 含拉丁字形且 family 排序在前，整行拉丁渲染成 emoji 面、词距崩塌；修复后帧实测正常）；⑧ `capture.py` 研究清单把 `<br>` 视为词边界（`actions.<br>Not` 空格被吞，真实页面 HTML 实测修复）；⑨ `grounding.py`：focus 取元素**可见部分**（视口裁剪截图的元素坐标可越界 >1）+ camera 平移钳制在 cover 余量内（聚焦越界元素会把画面推出画布露黑；真实 view-1 库存上纯函数实测钳到界内）。
+- **本次代码审查与必要修复（2026-10-28）**：相机原钳制把 cover 图片的额外像素误作实际 Img 盒子的可移动余量，且忽略起点/末段漂移；改为按 renderer 的画布大小盒子与各关键点实际 scale 限位，并由模板透传起始 scale。CiteLine canonical `line` 改 strict integer，拒绝此前会被折叠成1的 bool/整值float；字幕空/空白片段列表不再静默变成 null，而交字段校验拒绝。增加12个现有套件参数用例；API1322、web257、web/render tsc、video-spec9、check_gates 通过。用现有本地入口实际渲染4秒/120帧边缘聚焦白底短片，全部边缘RGB=255；这是针对裁切盒边界的真实 renderer 验证，不冒充原官网片重渲染或音乐试听。样片位于 `artifacts/video-project-b/camera-review/camera-coverage.mp4`，未调用付费模型。
+- **未验收欠账**：原官网片 v1/v2 为修复前烘焙键帧，未用新内容重渲染；新的相机限位已通过独立 renderer 120帧边界验证，真实网页视觉取景随下一首稿核验；音乐未亲耳试听（结构与电平核验，听感不冒充验收）；音乐多瓦片循环接缝未真实渲染（本素材单瓦片即够长）；`run_failed` 触发回合沉默一次（FAILURE FACTS 装配正确但模型读满预算未发声，同机制其余回合正常，登记为 LLM 漫游方差未修）；完整付费 prompt_gate；§2.4 剩余条目（TTS 有界适配、多作品同 Chat 并行、移动端/双主题/reduced-motion 等）。
+- **预算**：本轮授权累计人民币30元；ConversationUsage 累计 LLM USD1.62（上一批 USD1.12 + 本批 USD0.50，≈¥11.6）；本批真实 Run capture 176×3=528 积分（dev 额度）；无超额。当前 Text/Image/Web静帧/Audio；Video/Speech/Transition、完整NLE/交互式Preview 未实现，保留合同欠账。UIArc/ReUI仅调研；C/D不在本批扩张。
+
 ### 2.1 目标
 
-新链完整支持“网页/MG → 分镜 → 首稿审阅 → 授权 → 制作 → 交付 → 持续修改”。launch-film 在新链只是 Skill，不再拥有专用设计或生产链。
+新链按 §2.5 分批支持“网页/MG/混合内容 → 分镜 → 首稿审阅 → 授权 → 制作 → 交付 → 持续修改”，逐步接入程序画面、生成媒体与旁白；不能把文字动画的阶段成果称为全部画面能力。launch-film 在新链只是 Skill，不再拥有专用设计或生产链。
 
 ### 2.2 施工范围
 
@@ -214,8 +230,8 @@ A 的最小出口：版本写口与权限/幂等成立、代表性静态网页/M
 - [ ] 无 Skill 的 MG 与有 Skill 的官网片共用 CompositionVersion、CRUD、produce、render 和交付。
 - [ ] 分镜“画面与动作”列使用真实 visual_description；无虚构元素，视觉手改后旧摘要失效。
 - [ ] 首条“直接做”仍只完整呈现首版；呈现回执未持久化时 Start 失败闭。
-- [ ] 实际 Run 的 version_ref 等于刚呈现版本；worker 不重新设计，Output 可回溯同一版本。
-- [ ] 普通修订只落版；“改完直接做”按当前消息制作意图与 auto/ask/费用规则执行。
+- [x] 实际 Run 的 version_ref 等于刚呈现版本；worker 不重新设计，Output 可回溯同一版本。（官网片旅程实测：Run 钉 v1/v2 digest，Output provenance 回溯同版）
+- [x] 普通修订只落版；“改完直接做”按当前消息制作意图与 auto/ask/费用规则执行。（实测：文本修订只落 v2 零 Run；「改完直接做」176<守卫线 auto 档直接开工）
 - [ ] 网页 Scene 可新增黑底白字说明而不改相机；同一 Object 可修改位置/文字/动画后删除；同一动画 Preset 可作用于 Text/Image/Video。
 - [ ] 连续多轮修改不需要重复网页采集或重复读取同一快照；显式 refresh 才产生新绑定。
 - [ ] 同 Chat 两部影片分别 @ 修订，各自生成正确新版本/新交付；跨 Chat @ 旧产物能明确继续修订或作为素材，不建“复制确切作品”流程。
@@ -223,10 +239,33 @@ A 的最小出口：版本写口与权限/幂等成立、代表性静态网页/M
 - [ ] 纯 Chat 无 Canvas 时可完成设计、审阅、Start、交付和修订；Graph/Run 状态不依赖布局坐标。
 - [ ] 正文、工具活动、版本与成片卡顺序一致；刷新/重连不丢失、不重复、不串作品；拒绝回合不泄漏未接受的预览或产物。
 - [ ] 同一后端数据可驱动既有 Chat 与整合 block 呈现原型；异步 Run 跨回合仍可准确关联，刷新不重启执行，停止接收流不误作后台取消。原型验证不代表 UIArc 选型通过。
-- [ ] 旁白关闭、准备缓存命中、渲染后交付检查、失败恢复与重试均呈现真实阶段；旧 attempt 不覆盖新状态，未交付不提前显示完成。live 与回放对应同一执行事实。
+- [x] 旁白关闭、准备缓存命中、渲染后交付检查、失败恢复与重试均呈现真实阶段；旧 attempt 不覆盖新状态，未交付不提前显示完成。live 与回放对应同一执行事实。（实测：无旁白为内容模型结构性保证；失败 Run 全额 release + 诚实文案；重试 capture 恰一次；渲染中 Output files={} 不冒充完成；ACK 重放 accepted:false）
 - [ ] 默认布局与选定呈现组件均保持授权、工作段收口、打字机、中英文、移动端、键盘可用性及 reduced-motion；不依赖模型整块汇报才知道进度。
 - [ ] 完整动态看片与独立音轨试听通过；配置、probe 或静帧不冒充动态/听感验收。
 - [ ] 有界失败、统一 LLM 调用预算、报价/实扣、重试幂等和过期 base_ref 均有真实旅程证据。
+
+- [ ] **B-III**：动态背景、中央录像、独立标题/字幕、原声/音乐可混合；源窗/输出窗与声画同步正确，Chat 局部修订不串改其他层，真实播放与试听通过。
+- [ ] **B-IV**：至少一条原生图形动画可精确修订；至少一条程序画面通过固定程序/资源/参数生产并入片，渲染重试不重新创作，不虚构烘焙媒体内部可编辑性。
+- [ ] **B-V**：至少一个明确声明的图片或视频生成用例，经请求/费用授权、真实生成、固定结果、合成与交付；失败/重试/明确重新生成的身份与收费边界正确。单一用例不等于两类生成均支持。
+
+### 2.5 B 的增量批次与出口
+
+下列罗马编号标识增量批次，依赖按 §8，§2.2 的 B1–B7 仍为职责清单。批次分开不取消原合同；每次仅实施一个明确出口，不要求一次 compact 完成全部 B。
+
+| 批次 | 内容与出口 | 当前层级 |
+|---|---|---|
+| **B-I 基础 Chat 闭环** | MG 设计/呈现/批准/制作/播放，同作品多轮与跨 Chat @output 修订；唯一写口、固定版本、计费/交付可靠性 | 主链真实通过，剩余过程/恢复守卫持续按实际缺口补 |
+| **B-II 官网片与过程收口** | 官网模板/grounding/快照/镜头/字幕/音乐；真实 Chat 首稿审阅→制作→播放/试听→局部修订；刷新恢复、真实阶段和剩余 prompt 检查 | 真实 Chat 闭环、修订同一性、刷新恢复与帧级播放核验已通过（证据见 §2.0）；欠账：听感试听、付费 prompt_gate、运镜修复像素级复验（随下一首稿）、音乐循环接缝真实渲染 |
+| **B-III 混合合成底座** | VideoObject 的 schema→source/probe→编译→adapter→Chat 全链；源窗与输出窗、原声同步/音量/静音、画面位置/尺寸/裁切；与原生标题/字幕、动态背景/音乐同时合成 | 待施工；原计划 Video/源时间欠账在此兑现，不推到 D3 |
+| **B-IV 原生 MG 与程序画面** | 先按代表场景补最少必要图元/路径及动画，支持原生参数修改；再以一条真实 2D 或 3D 程序画面证明程序/资源/参数固定、受控生产、缓存复用及媒体合成 | 待施工；可分两个纵向小批，不先建设全量图形引擎或代码平台 |
+| **B-V 模型生成媒体** | 从一个确切 provider 与图片或视频用例开始，显式生成请求/参考输入/费用批准→生成→固定媒体/血缘→同一 Composition 合成；重试复用成功结果，明确重新生成另立执行身份 | 待施工；先单模型单用例，不预建全供应商框架；图片与视频分别声明支持 |
+| **B-VI 旁白与原合同余项** | Speech/TTS 固定切点、有界语速、超长冲突、字幕派生及手改保护；剩余 split/trim/必要转场/BeatGrid 按真实消费者实施与验收 | 原有欠账保留；Speech 为独立消费者，不因本轮重新分批取消 |
+
+**B-III 的代表性验收**：动态背景 + 中央真实录像 + 独立顶部标题 + 定时字幕 + 原声/音乐，在同一 Scene/Composition 混合；通过 Chat 只改一处字幕或中央录像布局，未改内容/源窗保持，再制作交付。背景可先用已有动态素材或受支持对象动画，不把复杂自由 MG 当作混合合成的前置。此后 B-IV 再验证原生/程序画面替换背景，B-V 再验证生成媒体替换其中一段；不为每次接入重复建设生产链。
+
+**声明与发布门**：§2.4 逐项按证据更新，未实现/未验收不勾选。首个限定能力发布可以只声明 B-I～III 中实际通过的内容，但仍需完整授权/收费/恢复/交付和 D1/D2 发布门；明确不支持的旁白、代码画面、生成媒体等继续留在合同，不标完整 B 完成。需要这些能力的产品承诺必须先完成对应批次。不因新增 B-IV/V 批次自动授权外部模型费用、安装依赖或部署。
+
+**实现纪律**：一次代表性真实旅程驱动必要功能及少量承重守卫；不提前创建未来模块/表/空目录，不建立另一份目录树。新增文件/模块按 VIDEO_PROJECT §12 及模块图同批登记。用户可用入口、版本和成片优先于样片脚本数量；仅对实际修改运行必要检查，最终集中回归。
 
 ## 3. 阶段 C——个人 Skill 保存、调用与外部导入
 
@@ -284,7 +323,7 @@ A 的最小出口：版本写口与权限/幂等成立、代表性静态网页/M
 
 ## 4. 阶段 D——切换、旧 Film 退役与后续扩展
 
-D 是独立依赖门集合，不是等待 C 全部完成后的大批次。D1 依赖 A+B 验收与 D2 生产许可结论；个人 Skill 的 C 可独立推进，不阻塞内置 Skill/MG 切换。D3/D4 为后续扩展，不计入首批 A+B+D1/D2 的完成条件。
+D 是独立依赖门集合，不是等待 C 全部完成后的大批次。D1 依赖 A 与所声明发布范围的 B 验收（首批至少 B-I～III）及 D2 生产许可结论；个人 Skill 的 C 可独立推进，不阻塞内置 Skill/MG 切换。D3/D4 为后续扩展，不计入首个限定能力发布条件；B-IV～VI 的未完成项继续独立存在，不能借 D1 清理抹掉需求。
 
 ### 4.1 D1：新链切换、旧 Film 删除与最终清理验收
 
@@ -315,16 +354,17 @@ D 是独立依赖门集合，不是等待 C 全部完成后的大批次。D1 依
 
 ### 4.3 D3：Clip 后置
 
-Composition/Track/Clip/Object 在 MG 与官网片稳定后，才逐项评估 reframe、segments、ASR/caption/translation、dub/music/intro/outro。每项独立验证读写、渲染、真实旅程和费用；旧 Clip 只有在全部仍需能力有等价承接后才删除。本四阶段不以删除 Clip 为完成条件。
+B-III 的 Video/原声混合合成不等待 D3。D3 在共同底座稳定后逐项承接旧 Clip 产品的 reframe、segments、ASR/caption/translation、dub/music/intro/outro 等高层能力；原生字幕/音频基础能力与整套旧产品迁移分开。每项独立验证读写、渲染、真实旅程和费用；旧 Clip 只有在全部仍需能力有等价承接后才删除。本四阶段不以删除 Clip 为完成条件。
 
 保留能力映射：reframe/crop_track → 视频取景与源时间派生数据；segments → 源窗和选段决策；title → TextClip；caption/translation → 语义/对齐结果及其 TextClips；dub/music → AudioClips；intro/outro → Scene 预设。ASR words、speaker_map 等仍保留上游事实与 provenance，不为统一 Object 丢弃高层操作或重写理解链。
 
 ### 4.4 D4：Scrub 与 Inspector 最后实施
 
 - 在稳定 CompositionVersion、Clip/Object id、PreviewAdapter 和 `apply_composition_edits` 上构建。
-- Chat 正文后可附字幕 Inspector：左侧真实画面，右侧位置/样式/动画；推荐文案由当前真实状态产生。
-- 连续 scrub 只本地预览；commit 携带 base_ref 形成一次原子编辑；Escape 取消、双击复位、键盘可访问。
-- mousemove 不调 LLM、不建版本、不触发付费渲染；冲突与失败回滚乐观预览。
+- 首版 = Chat 内局部编辑窗口（参考 UIArc Scrub Input 示例）：默认编辑一个明确的 Clip/Object；预览保持影片宽高比与准确位置，可显示场景背景或干净背景；不要求轨道、多选或完整视频播放。字幕 Inspector 可采用左侧真实画面、右侧位置/样式/动画；推荐文案由当前真实状态产生。
+- 连续调整与 `onValueCommit` 都只更新本地草稿；用户点击「应用」才携带 base_ref、稳定目标标识与批量 edits 经唯一内容写口形成一个新版本。Escape/取消、冲突处理与失败回滚乐观预览保留；键盘可访问。
+- mousemove/commit 不调 LLM、不建版本、不触发付费渲染。
+- 多对象批量编辑与整片预览留作后续扩展，不是首版前置。
 - 旧消息组件钉旧版本，只有当前版本可编辑；重制与授权仍走现有 Run 机器。
 
 ## 5. 跨阶段验证与交付纪律
@@ -353,13 +393,13 @@ Composition/Track/Clip/Object 在 MG 与官网片稳定后，才逐项评估 ref
 - 不做旧业务数据迁移、旧 FilmStoryboard 兼容读或全库回填。
 - 不做第二执行引擎、Scene/Clip 执行图节点或 Canvas 版本库。
 - 不做自由 NLE、任意 CSS、任意关键帧 UI、转场画廊或每字符独立编辑器。
-- 不做第三方脚本执行、Skill 市场、多 Skill 自由叠加或隐藏 recipe 执行参数。
+- 不执行导入的第三方 Skill 脚本，不做 Skill 市场、多 Skill 自由叠加或隐藏 recipe 执行参数；B-IV 显式受控的程序画面生产不等于授权执行外部任意脚本。
 - 不做 production-time 缺版重设计、LLM 转录 canonical 分镜或视觉修改后保留失实描述。
 - 不在 A–C 迁移/删除 Clip，不提前实施完整 Scrub；不建设“复制确切作品”或通用分支合并功能。
 
 ## 8. 施工评估与开工前置
 
-**判断：主干可施工，采用 A 内纵向切片 + B 开发期直接替换与产品闭环 + D 显式删除清理和独立发布门。**不重写 Chat/Run 内核，不先建设完整 NLE、全局素材库页面或通用模板语言。UI 可并行施工，既有 Chat 布局也是必验路径；Chat 旅程、正文/工具/产物集成和真实阶段回放纳入 B，不归后续美化。首批成功标准是两种影片共享同一内容内核、可精确修订并可靠交付，不以目录/类/名词齐备为完成。
+**判断：主干可施工，采用 A 内纵向切片 + B 开发期直接替换与产品闭环 + D 显式删除清理和独立发布门。**不重写 Chat/Run 内核，不先建设完整 NLE、全局素材库页面或通用模板语言。UI 可并行施工，既有 Chat 布局也是必验路径；Chat 旅程、正文/工具/产物集成和真实阶段回放纳入 B，不归后续美化。首批成功标准是官网片、文字 MG 与混合实拍内容共享同一内容内核、可精确修订并可靠交付，不以目录/类/名词齐备为完成。
 
 | 必须明确的接缝 | 截止门 | 交付物与失败处理 |
 |---|---|---|
@@ -370,22 +410,14 @@ Composition/Track/Clip/Object 在 MG 与官网片稳定后，才逐项评估 ref
 | TTS 语速上下界、尝试次数、超长/可懂度判定与成本上限 | B 合成接入前 | 使用当前合成能力确定有界制作政策；超界回到修订，不偷改切点 |
 | 替代 Renderer 的能力与成本、Remotion 商业方案 | D2 生产前 | 实测能力与成本差异并作明确选择；不以“已隔离 adapter”冒充已替换 |
 
-**依赖顺序**：A 最小基座 → B → D1（且通过 D2）；B → C；B → 后续 D3/D4。A 收口与剩余能力边界见 §1.2–1.3；B 开发不得提前切生产流量，也不自动授权付费验证、清库或上线。
+**依赖顺序**：A → B-I → B-II → B-III；B-III 后优先按代表需求推进 B-IV/B-V，B-VI 保留独立实施出口。C 在稳定且已声明的内容能力上复用创作方法，不阻塞首批发布；遇未支持的程序/生成能力必须列缺口。D2 可并行研究，生产前通过；所声明 B 能力验收 + D2 → D1。B-III 后可安排 D4 首版，不依赖 C 或全部 B-IV～VI；程序/生成媒体仅暴露实际支持参数。D3 后置且不阻塞 B-III。任何限定发布均不把完整 B 或全部 ABCD 标为完成。
 
-## 9. 下一批新会话提示词
+## 9. 新会话接手入口
 
-```text
-在 feat/mg 开始阶段 B 的最小 Chat 制作闭环，直接开发，不再扩充 A 的独立样片、测试框架或检查脚本。
+当前执行 **B-III 混合合成底座**，范围与出口见 §2.5；先读 §2.0 的真实状态，不重做 B-I/B-II，不把 B-II 余项写成通过。B-II 原官网片仍需听感、循环接缝及付费 prompt_gate 等发布前验证，保持登记；当前用户仅授权接手新批，不自动增加外部调用预算。
 
-先读 CLAUDE.md、PROGRESS §0、施工合同 §1.2–2，再按改动读 VIDEO_PROJECT §7–10、§12。A 最小基座已收口，完整能力清单并未全部实现；复用已有代码，不重做版本内核或重新讨论命名。保留所有未提交与并行成果，不 reset/stash、不覆盖无关改动，不擅自提交/部署。
+阅读顺序：CLAUDE.md → PROGRESS §0 → 本文 §1.3/§2.0/§2.4/§2.5 → VIDEO_PROJECT §4/§6/§8/§10/§11/§12/§15 中的相关内容；按实际修改补读 Chat/Rendering/Billing 和适用 AGENTS.md，不通读整个 docs。代码先查 editing schemas/validators/video_spec、素材快照写口、video-spec契约、renderer adapter、video design/revision/production 共座。
 
-优先打通一条真实 Chat 路径：已有网页素材或文字需求 → design_video 保存 CompositionVersion → canonical 分镜完整呈现 → 用户审阅/修改 → 已有制作授权与费用机制 → produce_video 固定版本 → 真实 Output 交付 → @继续修改。先交付最早可操作的闭环，不等全部 B 齐备才给用户试。
+本批把已有视频素材通过真实 Chat 放进 Composition：动态背景 + 中央录像 + 独立标题/字幕 + 原声/音乐，支持明确源窗、位置/尺寸/裁切、静音/音量与局部修订。同 owner @asset/@output 按媒体使用时固定确切文件，不与继续编辑原作品混淆；原声随视频源窗/输出窗同步，无新增轨道UI。先保持1×、无转场，使用已有动态素材/对象动画作背景，不提前做 B-IV/V/VI。
 
-按实际依赖接内置 launch-film 声明模板和通用设计/修订/制作能力。当前只支持 Text/Image/Web 静帧/Audio；Video、Speech、Transition 等按具体消费者需要补，未支持不得假装完成或静默删掉模板内容。资源准备走 tools/video/preparation，快照登记与版本绑定归 editing；run-less 仅用于内部验证，不绕过产品授权/计费/幂等。
-
-预览先复用已有播放器和服务端 MP4，隔离 renderer；不做交互式 Preview、完整 NLE、个人 Skill、Scrub 或旧 Clip 迁移。UIArc 仍只是调研候选，不安装或默认采用；后端按 §10.3 提供关联明确、可恢复的事实，兼容后续整合 block。
-
-以用户能操作、能修改、能收到成片为完成标准。实现过程只跑必要编译/类型检查、受影响核心守卫和首次实际链路验证；没有真实失败证据不扩充边界用例或通用脚本。完整体验让用户在闭环接通后集中验收。付费模型/TTS/采集仍遵守既有预算授权，不以开工指令扩张费用范围。
-
-完成后更新既有施工合同与 PROGRESS，给出实际操作入口、可测能力、运行过的检查及未完成项，不把内部 fixture 或半接通链路称为产品可用。
-```
+沿用不可变版本、固定执行身份、唯一内容/图/Run写口、既有授权/计费/交付/fencing。不得把所有 Clip 变成图节点，不新建执行引擎或通用插件层。主要时间写功能，沿真实主流程补少量必要守卫，不新增独立样片/检查框架；完成后集中适用回归，真实操作证据与未验收项分别记录。保留工作树，禁止 reset/stash/擅自部署；提交按本次用户明确授权执行。付费沿用本轮累计人民币30元并先核实已消费，不重置预算。worker/render 不热加载，无活跃任务再重启。

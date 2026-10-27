@@ -317,6 +317,7 @@ describe("no lifecycle derivation (恢复不推导 lifecycle)", () => {
       "suggestions",
       "beat",
       "milestones",
+      "blocks",
     ])
     for (const m of out) {
       for (const key of Object.keys(m)) {

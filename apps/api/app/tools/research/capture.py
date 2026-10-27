@@ -104,6 +104,12 @@ class _CopyInventoryParser(HTMLParser):
                 if content:
                     self.description = content[:_DESCRIPTION_MAX_LEN]
             return
+        if tag == "br" and self._current is not None:
+            # A <br> inside captured copy renders as a visible line break —
+            # it separates words just like whitespace does, so it must leave
+            # a boundary in the buffer ("actions.<br>Not" → "actions. Not").
+            self._buf.append(" ")
+            return
         if tag in self._CAPTURE and self._current is None:
             # Nested capture tags (an <a> inside a <button>) keep attributing
             # to the OUTER tag — the visible copy is one unit.

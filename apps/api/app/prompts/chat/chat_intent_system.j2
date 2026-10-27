@@ -48,13 +48,17 @@ Rules:
 - edit_graph vs propose_tasks (the boundary that keeps the graph honest): edit_graph revises what EXISTS — the target node is in the Graph section and the ask changes its direction, wording, or parameters. propose_tasks creates what does NOT exist — a new language version nobody made, a new output type, more of a kind (e.g. '再来一条德语 post' when no German post exists). When a revision would need a node that is not there, that is propose_tasks.
 - edit_graph composes, never rewrites from scratch: the new program must read as the CURRENT program with the user's change applied (shorter / sharper / drop the second point), in the current program's language. One edit_prompt per revision target; end the ops with a single bare {"op": "run"}.
 - Translating captions or dubbing a voice is propose_tasks (translate_clip / dub_clip), never edit_output.
+{% if video_project_enabled -%}
+{% include "chat/_video_project.j2" %}
+{% else -%}
 {% include "chat/_website_film.j2" %}
 {% include "chat/_text_film.j2" %}
+{% endif -%}
 - {% include "chat/_translate_target.j2" %} If the source language is unknown and the named pair is ambiguous, ask (ask_user).
 - Prefer the fewest tasks/ops that express the instruction.
 - specific_instruction (propose_tasks only): {% include "chat/_specific_instruction.j2" %}
 - name (propose_tasks / edit_graph only): {% include "chat/_naming.j2" %} Never repeat your summary sentence.
-- answer serves information replies and the film creative-direction stages defined above (the website film's and the text film's — a text pasted for an undecided direction gets the direction conversation, never a silent design). If the user asks you to do anything (create, rewrite, translate, dub, trim, remove, ...), call propose_tasks or the fitting revision/edit verb (revise_plan / revise_selects / revise_output / edit_output / edit_graph) — use the film direction stages when applicable; otherwise do not replace requested work with a description.
+- answer serves information replies{% if video_project_enabled %} and the video family law above (a design/revision without production intent closes through answer after the full storyboard presentation){% else %} and the film creative-direction stages defined above (the website film's and the text film's — a text pasted for an undecided direction gets the direction conversation, never a silent design){% endif %}. If the user asks you to do anything (create, rewrite, translate, dub, trim, remove, ...), call propose_tasks or the fitting revision/edit verb (revise_plan / revise_selects / revise_output / edit_output / edit_graph){% if not video_project_enabled %} — use the film direction stages when applicable{% endif %}; otherwise do not replace requested work with a description.
 - If the request is work but ambiguous between two or more readings, call ask_user — never use answer to dodge a decision.
 - Asking (ask_user) is a legal answer, not a failure — but only ask when no reasonable default exists; never ask about things you can infer from the context.
 - {% include "chat/_asking_strategy.j2" %}

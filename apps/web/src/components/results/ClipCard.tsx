@@ -81,7 +81,7 @@ export function ClipCard({ output, isTopPick }: ClipCardProps) {
   // forced square): the media already renders object-contain, so the frame
   // simply stops letterboxing it into a square.
   const clipAspect =
-    (clipState.render_spec as { aspect?: string } | null)?.aspect || "9:16"
+    clipState.aspect || (clipState.render_spec as { aspect?: string } | null)?.aspect || "9:16"
   const frameAspect =
     clipAspect === "1:1"
       ? "aspect-square"

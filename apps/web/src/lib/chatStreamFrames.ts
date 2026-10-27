@@ -11,6 +11,8 @@
  * Surface channel) + the terminal pair. Unknown events route to
  * "ignored" (heartbeat comment frames never reach onmessage at all). */
 
+import type { VideoStoryboardBlock } from "@/components/chat/historyReplay"
+
 /** One user-safe activity frame (ADR-087 §3 Phase 2 — the append-oriented
  * Activity Stream). Status flips arrive as NEW frames carrying the same
  * `activity_id` (append-only wire; the client keeps an ordered map keyed by
@@ -109,6 +111,9 @@ export interface RowAppendPayload {
   seq?: number | null
   /** The row's intent dump — activity rows carry {type:"activity", frame}. */
   intent?: unknown
+  /** Structured presentation blocks (Video Project phase B) — the
+   * storyboard card's resolve references on the presenting row. */
+  blocks?: VideoStoryboardBlock[]
   created_at?: string | null
 }
 

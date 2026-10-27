@@ -94,7 +94,7 @@ export interface MentionContext {
   files?: { name: string; kind: MentionFileKind }[]
   /** A project's settled assets (chat surfaces) — same asset family, named
    * by title. */
-  assets?: { name: string; kind: MentionFileKind }[]
+  assets?: { id?: string; name: string; kind: MentionFileKind }[]
   /** A project's outputs (chat surfaces) — id is the real UUID: the server
    * resolves it into `target_output_id` deterministically. */
   outputs?: { id: string; label: string; kind: string }[]
@@ -119,7 +119,7 @@ export interface MentionTypeDef {
  * file the instruction points at. */
 async function assetSource(ctx: MentionContext): Promise<MentionCandidate[]> {
   return [...(ctx.files ?? []), ...(ctx.assets ?? [])].map((f) => ({
-    id: f.name,
+    id: ("id" in f && typeof f.id === "string" ? f.id : undefined) || f.name,
     label: f.name,
     hint: i18n.t(`mentions.fileType.${f.kind}`),
   }))
@@ -133,7 +133,7 @@ async function outputSource(ctx: MentionContext): Promise<MentionCandidate[]> {
   return (ctx.outputs ?? []).map((o) => ({
     id: o.id,
     label: o.label,
-    icon: o.kind === "clip" ? Clapperboard : FileText,
+    icon: ["clip", "film", "video"].includes(o.kind) ? Clapperboard : FileText,
   }))
 }
 

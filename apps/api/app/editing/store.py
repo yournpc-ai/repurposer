@@ -73,19 +73,25 @@ def content_of(version: CompositionVersion) -> CompositionContent:
     )
 
 
-def content_digest_of(content: CompositionContent) -> str:
+def content_digest_of(
+    content: CompositionContent, *, skill_provenance: dict | None = None
+) -> str:
     """The version's content identity (§2.4): settings + sources + scenes +
-    timeline, canonical-JSON hashed. Presentation receipts and other
-    out-of-content state never feed it."""
-    return canonical_json_hash(
-        {
-            "schema_version": content.schema_version,
-            "settings": content.settings.model_dump(mode="json"),
-            "sources": [b.model_dump(mode="json") for b in content.sources],
-            "scenes": [s.model_dump(mode="json") for s in content.scenes],
-            "timeline": content.timeline.model_dump(mode="json"),
-        }
-    )
+    timeline, canonical-JSON hashed — plus the creation provenance when one
+    was pinned (§2.1: the digest covers 创作 provenance). Presentation
+    receipts and other out-of-content state never feed it. Versions written
+    before provenance existed keep their digest shape (the key joins only
+    when present)."""
+    parts: dict = {
+        "schema_version": content.schema_version,
+        "settings": content.settings.model_dump(mode="json"),
+        "sources": [b.model_dump(mode="json") for b in content.sources],
+        "scenes": [s.model_dump(mode="json") for s in content.scenes],
+        "timeline": content.timeline.model_dump(mode="json"),
+    }
+    if skill_provenance is not None:
+        parts["skill_provenance"] = skill_provenance
+    return canonical_json_hash(parts)
 
 
 async def snapshot_facts(
@@ -185,6 +191,7 @@ async def apply_composition_edits(
     base_digest: str | None = None,
     origin_project_id: UUID | None = None,
     name: str = "",
+    skill_provenance: dict | None = None,
 ) -> tuple[Composition, CompositionVersion, bool]:
     """The single content write door. Returns (composition, version, replayed)
     — ``replayed=True`` means the request_id matched a committed version and
@@ -204,6 +211,7 @@ async def apply_composition_edits(
             "base_digest": base_digest,
             "origin_project_id": origin_project_id,
             "name": name,
+            "skill_provenance": skill_provenance,
             "ops": [op.model_dump(mode="json") for op in ops],
         })
         if request_id is not None
@@ -300,8 +308,8 @@ async def apply_composition_edits(
             sources=[b.model_dump(mode="json") for b in candidate.sources],
             scenes=[s.model_dump(mode="json") for s in candidate.scenes],
             timeline=candidate.timeline.model_dump(mode="json"),
-            skill_provenance=None,
-            content_digest=content_digest_of(candidate),
+            skill_provenance=skill_provenance,
+            content_digest=content_digest_of(candidate, skill_provenance=skill_provenance),
             request_id=request_id,
             request_digest=request_digest,
         )

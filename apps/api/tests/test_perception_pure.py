@@ -39,6 +39,7 @@ _PROMPTS = Path(__file__).resolve().parents[1] / "app" / "prompts" / "chat"
 def test_registry_shape_and_naming_law() -> None:
     assert set(PERCEPTION_TOOLS) == {
         "get_output_spec",
+        "get_video_version",
         "get_node",
         "get_understanding",
         "list_caption_styles",

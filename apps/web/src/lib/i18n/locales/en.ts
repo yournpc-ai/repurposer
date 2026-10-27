@@ -1310,6 +1310,7 @@ const en = {
       artifact: "Reading the card's details…",
       webPage: "Reading the page…",
       webSearch: "Searching the web…",
+      videoVersion: "Reading the saved version…",
     },
     /** The work-session family (iter-2 ⑥, N-57): the discovery chain's
      * user-safe beats — `searching` rides the read frame (active + done
@@ -1367,6 +1368,13 @@ const en = {
       storyboardDone: "Designed the storyboard",
       storyboardEdit: "Adjusting the storyboard…",
       storyboardEditDone: "Adjusted the storyboard",
+      /** The video family's pairs (ADR-145 phase B): the same span anatomy
+       * as the storyboard span — design and revision speak their own
+       * vocabularies. */
+      videoDesign: "Designing the video storyboard…",
+      videoDesignDone: "Designed the video storyboard",
+      videoRevise: "Adjusting the video storyboard…",
+      videoReviseDone: "Adjusted the video storyboard",
     },
     /** The activity row's bounded expand detail (iter-3 S7, E7 诚实边界):
      * only the wire whitelist's fields — the raw count rides as a labeled
@@ -1383,6 +1391,27 @@ const en = {
     activityFold: {
       worked: "Worked for {{elapsed}}",
       actionCount: "{{count}} actions",
+    },
+    /** The video family's storyboard card (Video Project phase B): the
+     * canonical saved-version table a message block resolves to — the
+     * server DTO is the truth, never a re-transcribed table. */
+    videoStoryboard: {
+      video: "Video",
+      savedSource: "Saved source material",
+      audio: "Audio",
+      motion: "Motion",
+      motionProperty: { opacity: "Fade", transform_position: "Movement", transform_scale: "Scale", transform_rotation: "Rotation" },
+      noNarration: "Narration off",
+      musicOn: "Music set",
+      musicOff: "No music",
+      webScene: "Captured webpage",
+      textScene: "Visual content and on-screen text",
+      title: "Storyboard",
+      version: "v{{n}}",
+      duration: "{{s}}s",
+      view: "Page: {{heading}}",
+      loading: "Loading the saved storyboard…",
+      unavailable: "This storyboard version is no longer available.",
     },
     /** Past-tense mirrors of the inspecting family — a read activity's
      * completed frames (chat.inspecting.* stays the active form; the keys
@@ -1404,6 +1433,7 @@ const en = {
       artifact: "Read the card's details",
       webPage: "Read the page",
       webSearch: "Searched the web",
+      videoVersion: "Read the saved version",
     },
     /** The inspecting family's failed-form mirror (ADR-102 §5): the read
      * activity's failed-frame label when the read's target is unreadable —

@@ -891,6 +891,11 @@ class Message(Base):
     # stamp time — directed validation, zero version counters). NEVER a
     # question (blocking = the question payload); lifecycle = the row's.
     suggestions = Column(JSONB, nullable=False, default=list, server_default="[]")
+    # Structured presentation blocks (ADR-145 phase B): server-generated
+    # references a chat component resolves to its DTO (e.g.
+    # {kind:"video_storyboard", composition_version_id, …}) — never model
+    # prose, never a spec dump. Read-tolerant default [] on legacy rows.
+    blocks = Column(JSONB, nullable=False, default=list, server_default="[]")
     # 点选引用 (ADR-099 §4): a user row that IS a suggestion pick carries
     # its structured ref {source_turn, suggestion_id} — the visible content
     # stays the picked label, the ref rides structured (mentions 模式同构).

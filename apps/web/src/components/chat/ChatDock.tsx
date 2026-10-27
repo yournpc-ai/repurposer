@@ -116,6 +116,7 @@ import { AnchorCards } from "@/components/chat/AnchorCards"
 import { anchorCardsForRun } from "@/lib/anchorCards"
 import { createSpeechSegments, isSpeechSegmentRow } from "@/lib/speechSegments"
 import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
+import { StoryboardCard } from "@/components/chat/video/StoryboardCard"
 import { AnsweredQuestion, answeredQuestionText } from "@/components/chat/AnsweredQuestion"
 import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
 import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
@@ -209,6 +210,7 @@ const TOOL_META: Record<
     captionMode?: boolean
   }
 > = {
+  produce_video: { Icon: Video, labelKey: "chat.videoStoryboard.video" },
   select_clips: {
     Icon: Video,
     labelKey: "results.tabs.clips",
@@ -1048,6 +1050,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             content: row.content,
             seq: row.seq ?? undefined,
             at: row.created_at ?? undefined,
+            blocks: row.blocks?.length ? row.blocks : undefined,
           },
         ]
       })
@@ -1960,6 +1963,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // server-side. Refresh on mount and when a run lands terminal (new
   // outputs exist only then).
   const [outputs, setOutputs] = useState<Output[]>([])
+  const [globalReferences, setGlobalReferences] = useState<{
+    assets: { id: string; title: string; type: string }[]
+    outputs: { id: string; name: string; type: string }[]
+  }>({ assets: [], outputs: [] })
   const fetchOutputs = useCallback(async () => {
     try {
       const res = await apiFetch(`/api/v1/projects/${projectId}/results`, {
@@ -1978,23 +1985,38 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     void fetchOutputs()
   }, [fetchOutputs, terminal])
 
+  useEffect(() => {
+    let cancelled = false
+    void apiFetch("/api/v1/chat/references", { toast: false }).then(async (res) => {
+      if (res.ok) {
+        const data = await res.json()
+        if (!cancelled) setGlobalReferences(data)
+      }
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [projectId, terminal])
+
   // Registry feeds handed to the editor's picker (memoized — the picker
   // reloads when the identity changes).
   const mentionContext = useMemo<MentionContext>(
     () => ({
-      assets: assets
+      assets: [...new Map([...globalReferences.assets, ...assets].map((a) => [a.id, a])).values()]
         .filter((a) => a.title)
         .map((a) => ({
+          id: a.id,
           name: a.title as string,
           kind: assetTypeKind(a.type),
         })),
-      outputs: outputs.map((o) => ({
+      outputs: [...new Map([
+        ...globalReferences.outputs.map((o) => ({ id: o.id, label: o.name || t("chat.videoStoryboard.title"), kind: o.type })),
+        ...outputs.map((o) => ({
         id: o.id,
         label: outputMentionLabel(o, t(`chat.derivativeTypes.${o.type}`)),
         kind: o.type,
       })),
+      ].map((o) => [o.id, o])).values()],
     }),
-    [assets, outputs, t],
+    [assets, outputs, globalReferences, t],
   )
 
   // Terminal (ADR-051 — the dock is the sole shell): failure stays put —
@@ -2354,6 +2376,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             content: message.content ?? "",
             runId: message.workflow_run_id,
             seq: message.seq ?? undefined,
+            blocks: message.blocks?.length ? message.blocks : undefined,
           })
         }
         return
@@ -2413,6 +2436,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         role: "assistant",
         content: message.content ?? "",
         runId: message.workflow_run_id,
+        blocks: message.blocks?.length ? message.blocks : undefined,
       })
     }
   }
@@ -2618,6 +2642,22 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         segments.push(content.slice(segments.previewText.length))
         await segments.drain()
       }
+    }
+    /** The presenting row's structured blocks (Video Project phase B): the
+     * completed envelope's assistant_message carries the server-stamped
+     * references; the VISIBLE row is the finalized preview bubble (same
+     * key, streamId) — a pushed echo row instead carries them via
+     * handleAssistantMessage's own threading. Stamps only after the prose
+     * landed (散文永远在先 — the card follows the speech). */
+    const stampEnvelopeBlocks = (message: QuestionMessage) => {
+      if (!message.blocks?.length) return
+      const blocks = message.blocks
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === streamId)) {
+          return prev.map((m) => (m.id === streamId ? { ...m, blocks } : m))
+        }
+        return prev.map((m) => (m.id === message.id ? { ...m, blocks } : m))
+      })
     }
     try {
       const data = await streamChat<{
@@ -2883,6 +2923,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           // real echo via echoCarried — the live view diverged from the DB).
           await paceUnstreamedTail(message.content ?? "")
           finalizePreview(message.content || undefined, undefined, message.seq)
+          stampEnvelopeBlocks(message)
           if (message.question.kind === "task_book") {
             if (intentReady && livePlanMessageId) {
               setPlanVersions((prev) => [
@@ -2899,6 +2940,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           const settledEcho = questionEcho(message)
           if (settledEcho) {
             await paceSettledProse(settledEcho, undefined, message.seq)
+            stampEnvelopeBlocks(message)
           } else {
             setMessages((prev) => prev.filter((m) => m.id !== streamId))
           }
@@ -2940,6 +2982,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           message.workflow_run_id,
           message.seq,
         )
+        stampEnvelopeBlocks(message)
       } else {
         // Zero-delta prose reply: same last-gate pacing as the dock branch.
         discardPreviewArtifacts()
@@ -2950,6 +2993,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             message.workflow_run_id,
             message.seq,
           )
+          stampEnvelopeBlocks(message)
           await handleAssistantMessage(message, { echoCarried: segments.streamedAny })
         } else {
           setMessages((prev) => prev.filter((m) => m.id !== streamId))
@@ -4118,6 +4162,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             {m.candidates ? (
               <CandidateSurfaceCard surface={m.candidates} />
             ) : null}
+            {/* Structured presentation blocks (Video Project phase B):
+                the storyboard card resolves its server DTO from the
+                block's reference — unknown kinds render nothing (读容忍). */}
+            {m.blocks?.map((block, index) =>
+              block.kind === "video_storyboard" ? (
+                <Message key={`${m.id}-b${index}`} align="start">
+                  <MessageContent>
+                    <StoryboardCard block={block} messageId={m.id} onRunStarted={landOnStartedRun} />
+                  </MessageContent>
+                </Message>
+              ) : null,
+            )}
           </>
         )}
       </MessageScrollerItem>

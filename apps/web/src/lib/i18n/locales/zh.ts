@@ -1247,6 +1247,7 @@ const zh: Resources = {
       artifact: "正在读卡片的详情…",
       webPage: "正在读网页…",
       webSearch: "正在搜网页…",
+      videoVersion: "正在读已存版本…",
     },
     /** 工作会话族（迭代二⑥，N-57）：发现链的用户安全节拍——searching 骑
      * 读帧（进行态 + 完成态镜像，与 inspecting→inspectingDone 同律的
@@ -1290,6 +1291,12 @@ const zh: Resources = {
       storyboardDone: "已设计分镜",
       storyboardEdit: "正在调整分镜…",
       storyboardEditDone: "已调整分镜",
+      /** 视频设计族两对（ADR-145 阶段 B）：与分镜跨度同构——设计与修订各
+       * 说各的话。 */
+      videoDesign: "正在设计视频分镜…",
+      videoDesignDone: "已设计视频分镜",
+      videoRevise: "正在调整视频分镜…",
+      videoReviseDone: "已调整视频分镜",
     },
     /** 活动行的有界展开明细（迭代三 S7，E7 诚实边界）：只有 wire 白名单
      * 字段——原始计数带标签成行（耗时内联同行，formatElapsed 是唯一措辞）。 */
@@ -1303,6 +1310,26 @@ const zh: Resources = {
     activityFold: {
       worked: "工作了 {{elapsed}}",
       actionCount: "{{count}} 项操作",
+    },
+    /** 视频族分镜卡（Video Project 阶段 B）：消息 block 解出的已存版本
+     * canonical 分镜表——服务端 DTO 是真相，永不重抄。 */
+    videoStoryboard: {
+      video: "短片",
+      savedSource: "已固定的源素材",
+      audio: "音轨",
+      motion: "动效",
+      motionProperty: { opacity: "淡入淡出", transform_position: "移动", transform_scale: "缩放", transform_rotation: "旋转" },
+      noNarration: "旁白关闭",
+      musicOn: "已设置音乐",
+      musicOff: "未设置音乐",
+      webScene: "已采集网页画面",
+      textScene: "画面与屏上文字",
+      title: "分镜",
+      version: "v{{n}}",
+      duration: "{{s}} 秒",
+      view: "页面：{{heading}}",
+      loading: "正在读取已存分镜…",
+      unavailable: "这个分镜版本已不可用。",
     },
     /** inspecting 族的完成态镜像——读活动 completed 帧的文案（键随服务端
      * 注册表，本族按前缀交换镜像）。 */
@@ -1323,6 +1350,7 @@ const zh: Resources = {
       artifact: "已读卡片的详情",
       webPage: "已读网页",
       webSearch: "已搜网页",
+      videoVersion: "已读已存版本",
     },
     /** inspecting 族的失败态镜像（ADR-102 §5）——读目标不可读时读活动
      * failed 帧的文案（与 done 族互为诚实对偶，永不默谎）。 */

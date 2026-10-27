@@ -1,0 +1,484 @@
+{
+  "template_id": "launch-film",
+  "template_version": 1,
+  "settings": {
+    "width": 1920,
+    "height": 1080,
+    "fps": {
+      "num": 30,
+      "den": 1
+    },
+    "background": "#0B1020"
+  },
+  "duration": {
+    "target_seconds": 88,
+    "min_seconds": 70,
+    "max_seconds": 118
+  },
+  "chapters": {
+    "min": 3,
+    "max": 5
+  },
+  "min_views": 4,
+  "tracks": [
+    {
+      "track_id": "trk_web",
+      "kind": "visual",
+      "role": "main",
+      "order": 0
+    },
+    {
+      "track_id": "trk_title",
+      "kind": "visual",
+      "role": "title",
+      "order": 1
+    },
+    {
+      "track_id": "trk_caption",
+      "kind": "visual",
+      "role": "caption",
+      "order": 2
+    },
+    {
+      "track_id": "trk_music",
+      "kind": "audio",
+      "role": "music",
+      "order": 10
+    }
+  ],
+  "arc": [
+    {
+      "type": "scene",
+      "key": "cold_open",
+      "intent": "Open with tension in the film's own voice — no product facts",
+      "seconds": {
+        "base": 3.0,
+        "min": 2.0,
+        "max": 6.0
+      },
+      "clips": [
+        {
+          "track": "trk_title",
+          "slot": "cold_open",
+          "layout": {
+            "x": 160,
+            "y": 340,
+            "width": 1600,
+            "height": 340
+          },
+          "style": {
+            "font_size": 92,
+            "color": "#F8FAFC",
+            "weight": 800,
+            "align": "center",
+            "line_height": 1.15
+          },
+          "preset": "line_rise",
+          "preset_params": {
+            "stagger_s": 0.5,
+            "dur_s": 0.9,
+            "dy": 56
+          }
+        }
+      ]
+    },
+    {
+      "type": "scene",
+      "key": "hero",
+      "intent": "Name the product — the brand moment",
+      "seconds": {
+        "base": 5.0,
+        "min": 3.0,
+        "max": 6.0
+      },
+      "clips": [
+        {
+          "track": "trk_title",
+          "slot": "hero.word",
+          "layout": {
+            "x": 160,
+            "y": 400,
+            "width": 1600,
+            "height": 220
+          },
+          "style": {
+            "font_size": 150,
+            "color": "#F8FAFC",
+            "weight": 800,
+            "align": "center",
+            "line_height": 1.1
+          },
+          "preset": "settle_scale",
+          "preset_params": {
+            "from": 1.12,
+            "dur_s": 0.9
+          }
+        },
+        {
+          "track": "trk_title",
+          "slot": "hero.sub",
+          "layout": {
+            "x": 260,
+            "y": 660,
+            "width": 1400,
+            "height": 120
+          },
+          "style": {
+            "font_size": 44,
+            "color": "#94A3B8",
+            "weight": 500,
+            "align": "center",
+            "line_height": 1.2
+          },
+          "preset": "fade_in",
+          "preset_params": {
+            "delay_s": 0.7,
+            "dur_s": 0.6
+          }
+        }
+      ]
+    },
+    {
+      "type": "scene",
+      "key": "home",
+      "intent": "Establish the real product — the wide fold, held still",
+      "seconds": {
+        "base": 6.0,
+        "min": 4.0,
+        "max": 8.0
+      },
+      "clips": [
+        {
+          "track": "trk_web",
+          "view": "home",
+          "layout": {
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080
+          },
+          "fit": "cover"
+        }
+      ],
+      "caption": true
+    },
+    {
+      "type": "repeat",
+      "repeat": "chapters",
+      "scenes": [
+        {
+          "type": "scene",
+          "key": "divider",
+          "intent": "Mark the chapter — ordinal plus its short display title",
+          "seconds": {
+            "base": 2.5,
+            "min": 2.0,
+            "max": 6.0
+          },
+          "clips": [
+            {
+              "track": "trk_title",
+              "slot": "divider.kicker",
+              "layout": {
+                "x": 160,
+                "y": 380,
+                "width": 1600,
+                "height": 80
+              },
+              "style": {
+                "font_size": 42,
+                "color": "#64748B",
+                "weight": 600,
+                "align": "center",
+                "line_height": 1.2
+              },
+              "preset": "fade_in",
+              "preset_params": {
+                "delay_s": 0.0,
+                "dur_s": 0.4
+              }
+            },
+            {
+              "track": "trk_title",
+              "slot": "divider.title",
+              "layout": {
+                "x": 160,
+                "y": 470,
+                "width": 1600,
+                "height": 160
+              },
+              "style": {
+                "font_size": 96,
+                "color": "#F8FAFC",
+                "weight": 800,
+                "align": "center",
+                "line_height": 1.15
+              },
+              "preset": "line_rise",
+              "preset_params": {
+                "stagger_s": 0.3,
+                "dur_s": 0.7,
+                "dy": 40
+              }
+            }
+          ]
+        },
+        {
+          "type": "scene",
+          "key": "walk",
+          "intent": "Walk the chapter's page view — the camera proves the claim",
+          "seconds": {
+            "base": 8.0,
+            "min": 6.0,
+            "max": 12.0
+          },
+          "when_view_available": true,
+          "clips": [
+            {
+              "track": "trk_web",
+              "view": "chapter",
+              "layout": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover",
+              "preset": "camera",
+              "preset_params": {
+                "arrival_frac": 0.45,
+                "start_scale": 1.08
+              }
+            }
+          ],
+          "caption": true
+        },
+        {
+          "type": "scene",
+          "key": "plate",
+          "intent": "Show the numbers the page itself carries",
+          "seconds": {
+            "base": 6.0,
+            "min": 4.0,
+            "max": 8.0
+          },
+          "when": "plate_here",
+          "clips": [
+            {
+              "track": "trk_title",
+              "slot": "plate.cards",
+              "card_layout": {
+                "width": 460,
+                "big_height": 160,
+                "label_height": 90,
+                "big_y": 400,
+                "label_y": 580,
+                "step": 520
+              },
+              "big_style": {
+                "font_size": 110,
+                "color": "#F8FAFC",
+                "weight": 800,
+                "align": "center",
+                "line_height": 1.1
+              },
+              "label_style": {
+                "font_size": 36,
+                "color": "#94A3B8",
+                "weight": 500,
+                "align": "center",
+                "line_height": 1.2
+              },
+              "preset": "fade_in",
+              "preset_params": {
+                "delay_step_s": 0.25,
+                "dur_s": 0.5
+              }
+            }
+          ],
+          "caption": true
+        }
+      ]
+    },
+    {
+      "type": "scene",
+      "key": "reveal",
+      "intent": "The emotional peak — lead-in, beat, then the word lands",
+      "seconds": {
+        "base": 12.0,
+        "min": 8.0,
+        "max": 14.0
+      },
+      "clips": [
+        {
+          "track": "trk_title",
+          "slot": "reveal.lead",
+          "window": [
+            0.0,
+            0.38
+          ],
+          "layout": {
+            "x": 260,
+            "y": 380,
+            "width": 1400,
+            "height": 100
+          },
+          "style": {
+            "font_size": 48,
+            "color": "#94A3B8",
+            "weight": 500,
+            "align": "center",
+            "line_height": 1.2
+          },
+          "preset": "fade_in_out",
+          "preset_params": {
+            "in_s": 0.4,
+            "out_s": 0.4
+          }
+        },
+        {
+          "track": "trk_title",
+          "slot": "reveal.word",
+          "window": [
+            0.34,
+            1.0
+          ],
+          "layout": {
+            "x": 120,
+            "y": 400,
+            "width": 1680,
+            "height": 240
+          },
+          "style": {
+            "font_size": 170,
+            "color": "#F8FAFC",
+            "weight": 800,
+            "align": "center",
+            "line_height": 1.1
+          },
+          "preset": "settle_scale",
+          "preset_params": {
+            "from": 1.18,
+            "dur_s": 0.8
+          }
+        },
+        {
+          "track": "trk_title",
+          "slot": "reveal.sub",
+          "window": [
+            0.5,
+            1.0
+          ],
+          "layout": {
+            "x": 260,
+            "y": 680,
+            "width": 1400,
+            "height": 110
+          },
+          "style": {
+            "font_size": 44,
+            "color": "#94A3B8",
+            "weight": 500,
+            "align": "center",
+            "line_height": 1.2
+          },
+          "preset": "fade_in",
+          "preset_params": {
+            "delay_s": 0.2,
+            "dur_s": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "type": "scene",
+      "key": "proof",
+      "intent": "Close the argument on the product's own evidence",
+      "seconds": {
+        "base": 8.0,
+        "min": 6.0,
+        "max": 12.0
+      },
+      "clips": [
+        {
+          "track": "trk_web",
+          "view": "proof",
+          "layout": {
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080
+          },
+          "fit": "cover",
+          "preset": "camera",
+          "preset_params": {
+            "arrival_frac": 0.5,
+            "start_scale": 1.06
+          }
+        }
+      ],
+      "caption": true
+    },
+    {
+      "type": "scene",
+      "key": "end",
+      "intent": "Land the name and where to go next",
+      "seconds": {
+        "base": 5.0,
+        "min": 3.0,
+        "max": 6.0
+      },
+      "clips": [
+        {
+          "track": "trk_title",
+          "slot": "end.name",
+          "layout": {
+            "x": 160,
+            "y": 420,
+            "width": 1600,
+            "height": 150
+          },
+          "style": {
+            "font_size": 96,
+            "color": "#F8FAFC",
+            "weight": 800,
+            "align": "center",
+            "line_height": 1.1
+          },
+          "preset": "settle_scale",
+          "preset_params": {
+            "from": 1.06,
+            "dur_s": 0.7
+          }
+        },
+        {
+          "track": "trk_title",
+          "slot": "end.tagline",
+          "layout": {
+            "x": 260,
+            "y": 600,
+            "width": 1400,
+            "height": 110
+          },
+          "style": {
+            "font_size": 44,
+            "color": "#94A3B8",
+            "weight": 500,
+            "align": "center",
+            "line_height": 1.2
+          },
+          "preset": "fade_in",
+          "preset_params": {
+            "delay_s": 0.5,
+            "dur_s": 0.5
+          }
+        }
+      ]
+    }
+  ],
+  "music": {
+    "gain_db": -20.0,
+    "fade_in_s": 1.0,
+    "fade_out_s": 2.0
+  }
+}

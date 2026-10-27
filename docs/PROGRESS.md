@@ -10,7 +10,7 @@
 ### 0.1 里程碑状态
 
 - **R1 — Core Product Beta：已封板**。实现与验收已闭环；baseline LLM 方差族 S1 / S6f / S10 仍是登记的开放观察项，不作为新的 release regression 自动放大范围。验收以当前合同与验证登记为准。
-- **当前主线 — Video Project 新架构**：按 ADR-145 与四阶段合同建设 Project / Composition / CompositionVersion、Track/Clip/Object、Skill 和 video-spec；A 内先打通最小渲染纵向闭环，再补官网片/MG 对照；B 做 launch-film Skill 化与真实 CRUD 闭环。旧 Film 只作当前实现与对照，不再按旧 PLANNED 形态扩展。
+- **当前主线 — Video Project 新架构**：按 ADR-145 与四阶段合同建设 Project / Composition / CompositionVersion、Track/Clip/Object、Skill 和 video-spec；A 最小基座已落地；B 按基础闭环、官网片、混合合成、程序画面、生成媒体、旁白余项分批实施，批次合同见施工文档 §2.5；C 为个人 Skill，D 为发布清理与独立扩展门。旧 Film 只作当前实现与对照，不再按旧 PLANNED 形态扩展。
 - **R1.1 — Commercial / Distribution：排期挂起**。启动条件与合同见 §0.3，不因旧批次已备而自动解冻。
 
 ### 0.2 Active batch 与开放事项
@@ -19,7 +19,7 @@
 
 | 状态 | 工作 | 当前事实与下一步 | 状态 / 合同 |
 |---|---|---|---|
-| **当前** | **Video Project 新架构** | **A 最小内容基座已收口，进入 B 最小 Chat 制作闭环**（feat/mg，未提交）：版本写口/权限/幂等、video-spec/Remotion 与内部渲染、Web 静帧/文字动画/固定音轨及 base/edited 样片已具备。Scene 移动/删除与资源 IO 边界已修复，收口定向测试 44 项和架构门通过。完整能力欠账归施工合同 §1.3；Video/Speech/模板所需 CRUD 与执行身份随 B 具体消费者接入，预览先复用服务端 MP4，替代 renderer 归 D2。下一步让用户在 Chat 完成设计→审阅/修改→授权→制作→交付，不继续扩同类样片/检查脚本；完整人工产品验收待闭环。旧链未切换，不等于生产就绪 | [目标架构](VIDEO_PROJECT.md) → [四阶段施工](tasks/video-project-implementation.md) |
+| **当前** | **Video Project 新架构** | **B-I 与 B-II 真实主链已通过；当前转 B-III 混合合成（尚未实施）。**官网片已完成首稿批准、制作播放、同作品局部修订与再交付；审查补修相机实际盒边界/起末漂移、严格引用整数、空字幕片段拒绝。实测 API1322/web257/web与render tsc/video-spec9/check_gates 通过；120帧相机边界短片无黑边，未重渲染原官网片。B-II仍欠音乐亲耳试听/循环接缝、完整付费prompt_gate及失败回合沉默观察。下一批实现视频源窗/原声/布局与标题字幕动态背景混合，B-IV/V/VI、C与D仍按合同独立推进；完整B与生产未封板。付费仍沿用本轮累计¥30并核实余量 | [目标架构](VIDEO_PROJECT.md) → [四阶段施工](tasks/video-project-implementation.md)（§2.0 / §2.5 / §9） |
 | **当前** | Home 创作入口真实样片 | Ads 族只展示 Product Promo 与 Text Animation 两个子 tab；Text Animation 使用项目 `9345ddc2` 与 `f52c489c` 的真实文字源 Film，Product Promo 前两张为 ZYMIX / AgentVeil 真片，其余两张占位卡仍待用户选定对应链真片。网页 Film 相机、默认字幕落点与强调标记渲染修复待 prompt/live/render 复验，既有 AgentVeil demo 未重渲染。配方点击只预填 composer，货架可点不等于制作能力通过 | [任务状态](tasks/home-creation-entry-refresh.md) |
 | 开放 | 共享执行、图与产物验收 | render owner/并行写入/恢复、产物成员、staging、fresh graph、rank/RunOp 解耦、lifecycle/授权证明仍需真实验证。旧批次状态不作当前证据；无用户旧数据按本轮授权 reset，不再保留指定事故产物救援与业务搬运工单，reset 未执行不等于已清零 | [共享验收](VERIFICATION.md#5-共享机制与-ui-的当前验收) |
 | 开放 | Agent Tools 修复批验收尾项 | 代码批已完成并落 main；需活 API + dev worker 运行当前注册旅程矩阵，覆盖长程序经 `get_node` 修订、distilled `specific_instruction`、pending-plan/run-history 读面；另需抓真实 SSE 验证 reasoning/think 永不进入用户 wire。完成证据出现前不关闭 | [验证登记](VERIFICATION.md) / [六段走查](tasks/agent-working-loop-iter-3.md) |

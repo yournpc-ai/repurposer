@@ -20,7 +20,7 @@
 **固定入口只有两层**：先读本文与 `docs/PROGRESS.md` §0，再读当前任务的状态/合同。随后只读下表命中的具体章节；完整导航与文档职责见 `docs/README.md`。不创建历史文档库；排障需要证据时查当前代码、测试与运行数据。
 
 - **当前状态 / 排期**：`docs/PROGRESS.md` §0 是唯一事实源；局部任务可以维护实施状态，但不得复制全局排期。
-- **Video Project / Film/MG**：目标层级 = Project/Chat → Composition → CompositionVersion，同 Chat 多影片、全局 @ 引用；内容唯一写口 = `apply_composition_edits`，仍未实施。新架构施工先读 `docs/VIDEO_PROJECT.md` 的命中章节（目录/新旧代码处置唯一合同 = §12），再读 `docs/tasks/video-project-implementation.md` 当前阶段与验收；现状查 RENDERING 与实际代码，有效视听/创作要求归 VIDEO_PROJECT §15，不再维护旧 Film 施工三件套。
+- **Video Project / Film/MG**：目标层级 = Project/Chat → Composition → CompositionVersion，同 Chat 多影片、全局 @ 引用；内容唯一写口 = `apply_composition_edits`；A 最小基座已落地，B 当前接线与验收状态见施工合同。新架构施工先读 `docs/VIDEO_PROJECT.md` 的命中章节（目录/新旧代码处置唯一合同 = §12），再读 `docs/tasks/video-project-implementation.md` 当前阶段与验收；现状查 RENDERING 与实际代码，有效视听/创作要求归 VIDEO_PROJECT §15，不再维护旧 Film 施工三件套。
 - **模块 / 表 / 队列 / 代码地图**：`docs/MODULE_ARCHITECTURE.md` §4（表归属）、§5（跨模块规则）、§7（代码地图与队列）；新表、新模块、新认领源必须登记。
 - **Studio UI**：`docs/UI_GUIDELINES.md` 的相关组件/布局章节；只有改 chat 行为时才同时读 CHAT_ARCHITECTURE。
 - **Chat / dock / 画布**：`docs/CHAT_ARCHITECTURE.md` 按改动面选读——工具与 plan path §3、SSE/活动/打字机 §8、修订 §9、禁令 §12。活动行与 WorkSegment 改动脉冲 §8.6～§8.7 的现行规则。

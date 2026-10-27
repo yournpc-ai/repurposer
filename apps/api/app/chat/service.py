@@ -656,6 +656,7 @@ async def _create_run_from_tasks(
         # template quietly coming back.
         logger.info("unnamed_proposal", path="chat_dispatch", project_id=str(project.id))
     try:
+        from app.tools.video.production import latest_video_approval
         run = await create_run(
             db,
             project,
@@ -668,6 +669,7 @@ async def _create_run_from_tasks(
                 source_asset_id=source_asset_id,
                 exemplar_asset_id=exemplar_asset_id,
                 name=name or None,
+                video_authorized_by=await latest_video_approval(db, project),
             ),
         )
     except CreditsInsufficientError as exc:
@@ -1618,6 +1620,15 @@ async def _auto_start_docked_plan(
     if not is_pending_plan(pending_question):
         return None
     assert pending_question is not None  # is_pending_plan guarantees the row
+    pending_video = (project.pending_brief or {}).get("video_presentation") or {}
+    raw_tasks = (pending_question.intent or {}).get("tasks") or []
+    for raw_task in raw_tasks:
+        if raw_task.get("tool") == "produce_video":
+            ref = (raw_task.get("params") or {}).get("version_ref") or {}
+            if (not pending_video.get("presentation_complete") or any(
+                    pending_video.get(k) != ref.get(k)
+                    for k in ("composition_id", "composition_version_id", "content_digest"))):
+                return None
     payload = QuestionPayload.model_validate(pending_question.question)
     # Read tolerance (PendingPlan._drop_legacy_flags 同款): _create_message
     # stamps every assistant intent with INTERACTION_POLICY_VERSION — an
@@ -2237,11 +2248,13 @@ async def answer_question(
                         "unnamed_proposal", path="plan_start",
                         project_id=str(project.id),
                     )
+                from app.tools.video.production import latest_video_approval
                 run = await create_run(
                     db,
                     project,
                     TaskSpec(
                         tasks=tasks,
+                        video_authorized_by=await latest_video_approval(db, project),
                         target_language=(
                             first_task_language(tasks)
                             or project.language

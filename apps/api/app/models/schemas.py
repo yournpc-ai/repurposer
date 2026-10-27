@@ -446,6 +446,10 @@ class ChatMessageResponse(BaseModel):
     # assistant row offered, provenance included — the OptionDock renders
     # them under the prose; a pick rides back as suggestion_ref.
     suggestions: list[SuggestionRecord] = Field(default_factory=list)
+    # Structured presentation blocks (ADR-145 phase B): server-stamped
+    # component references (video_storyboard cards); absent/[] on legacy
+    # rows (读容忍).
+    blocks: list[dict] = Field(default_factory=list)
     # 点选引用 (ADR-099 §4): a user row that IS a suggestion pick carries
     # its structured ref — the visible content stays the picked label.
     suggestion_ref: SuggestionRef | None = None
@@ -1030,6 +1034,277 @@ class DesignStoryboardArgs(BaseModel):
         default="none",
         description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — the question settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
     )
+
+
+# ---------------------------------------------------------------------------
+# Video Project (ADR-145 phase B): the CompositionVersion chain's chat tools.
+# design_video / revise_video are NON-terminal beats — the system designs /
+# revises inside the call, saves an immutable CompositionVersion through the
+# content write door, and hands the canonical storyboard payload back; the
+# model's ONE next message presents it (the structured card carries the
+# table — the model introduces, never re-transcribes it).
+# ---------------------------------------------------------------------------
+
+
+class VideoVersionRef(BaseModel):
+    """The explicit revision base (§2.2): which work, which version, and the
+    content identity read at design time. Echoed verbatim from the version's
+    own presentation line or a get_video_version read."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    composition_id: UUID
+    composition_version_id: UUID
+    content_digest: str = Field(min_length=64, max_length=64)
+
+
+class DesignVideoArgs(BaseModel):
+    """``design_video`` params (both paths). A website promo (a URL's
+    captured pages) instantiates the launch-film skill's template; a text
+    input (``text``) designs a free motion-graphics piece with no template.
+    ``composition_id`` + ``specific_instruction`` redraft an existing work's
+    direction into a new child version."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scene_count: int | None = Field(default=None, ge=1, le=6, description="MG: exact scene count when the user names it.")
+    target_seconds: float | None = Field(default=None, gt=0, le=118, description="MG: exact total duration when named.")
+    aspect: Literal["16:9", "9:16", "1:1"] | None = Field(default=None, description="MG canvas aspect when named; absent = 16:9.")
+    background: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$",
+        description="MG exact canvas background when named, e.g. black=#000000, white=#FFFFFF.")
+    material_asset_ids: list[UUID] | None = Field(default=None, max_length=12,
+        description="Owned captured webpage assets explicitly @referenced, including from another Chat; reuse their snapshots without recapturing.")
+    music: Literal["off"] | None = Field(default=None,
+        description='"off" ONLY when the user explicitly asks for no background music; absent = the default bed law (persona skin, then the calm catalog default).')
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(
+            data,
+            "focus",
+            "language",
+            "material_urls",
+            "text",
+            "specific_instruction",
+            "composition_id",
+            "pending_disposition",
+            "music",
+        )
+
+    focus: str | None = Field(
+        default=None,
+        description="The agreed creative direction / emphasis steer for this design, in the user's words.",
+    )
+    material_urls: list[str] | None = Field(
+        default=None,
+        description="Website promo only: the site's URL(s), copied verbatim from the conversation, when the project has no captured page for the site yet — the system captures BEFORE drafting so the storyboard is grounded in the real page. Omit when the project's captured pages already cover the site.",
+    )
+    text: str | None = Field(
+        default=None,
+        description="Motion-graphics video only (no webpage): the exact on-screen copy — the user's own words, or the copy you distilled from their brief. Present = an MG video; absent = a website promo. Never both in one call.",
+    )
+    language: str | None = Field(
+        default=None,
+        description="The video's language when one was agreed or named. Null = the material's own.",
+    )
+    composition_id: UUID | None = Field(
+        default=None,
+        description="Redraft only: the composition to redesign (from its storyboard card or a get_video_version read). Omit for a new work.",
+    )
+    specific_instruction: str | None = Field(
+        default=None,
+        description="Explicit requirements for this design: colors, timing, layout or open direction. With composition_id it redesigns that work; a named-element edit uses revise_video.",
+    )
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="When the context shows a pending question: 'answer' = this message ENGAGES it; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
+    )
+
+    @model_validator(mode="after")
+    def _shape(self) -> "DesignVideoArgs":
+        if self.material_urls and self.material_asset_ids:
+            raise ValueError("name captured asset ids or new URLs, not both in one design")
+        if self.text and (self.material_urls or self.material_asset_ids):
+            raise ValueError("text and material_urls never mix — an MG video or a website promo")
+        if self.composition_id is None and not (self.text or self.material_urls or self.material_asset_ids):
+            raise ValueError(
+                "a new design needs its material: text for an MG video, "
+                "material_urls for a website promo (omit only when the "
+                "project's captured pages already cover the site)"
+            )
+        if self.composition_id is not None and not self.specific_instruction and not self.focus:
+            raise ValueError(
+                "a redraft needs the new direction: specific_instruction "
+                "(open feedback) or focus"
+            )
+        return self
+
+
+class VideoEditUpdateText(BaseModel):
+    """Replace one text clip's copy (and optionally its style knobs). The
+    clip_id comes from the storyboard read; fields absent keep their values."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["update_text"]
+    clip_id: str = Field(min_length=1)
+    text: str | None = None
+    font_size: int | None = Field(default=None, gt=0, le=400)
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    background: str | None = Field(
+        default=None,
+        pattern=r"^#[0-9a-fA-F]{6}$",
+        description="Explicit null clears the chip background; absent keeps it.",
+    )
+    align: Literal["left", "center", "right"] | None = None
+    weight: Literal[400, 500, 600, 700, 800] | None = None
+
+
+class VideoEditAddText(BaseModel):
+    """Add one text clip inside a named scene's window (a new title/caption
+    beat). The system owns the layout for the chosen track role."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["add_text"]
+    scene_id: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    track: Literal["title", "caption"] = "caption"
+    at_seconds: float | None = Field(
+        default=None, ge=0, description="Start inside the scene; absent = the scene's start."
+    )
+    duration_seconds: float | None = Field(
+        default=None, gt=0, description="How long it shows; absent = to the scene's end."
+    )
+    size: Literal["small", "medium", "large"] = "medium"
+    align: Literal["left", "center", "right"] = "center"
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+
+
+class VideoEditRemoveClip(BaseModel):
+    """Remove one text clip (a caption or title beat) by its clip_id."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["remove_clip"]
+    clip_id: str = Field(min_length=1)
+
+
+class VideoEditKeyframe(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    at_seconds: float = Field(ge=0, description="Clip-local time of this keyframe.")
+    value: float | list[float] = Field(description="Scalar, or [x, y] for transform.position.")
+    easing: Literal["linear", "hold", "ease_out"] = "linear"
+
+
+class VideoEditUpdateAnimation(BaseModel):
+    """Replace one existing animation's keyframes (the target object and
+    animated property never move — a different property is a different
+    animation). The animation_id comes from the storyboard read."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["update_animation"]
+    animation_id: str = Field(min_length=1)
+    keyframes: list[VideoEditKeyframe] = Field(min_length=1)
+
+
+class VideoEditMoveScene(BaseModel):
+    """Move one scene (and everything belonging to it) to a new start time."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["move_scene"]
+    scene_id: str = Field(min_length=1)
+    start_seconds: float = Field(ge=0)
+
+
+class VideoEditRemoveScene(BaseModel):
+    """Remove one scene and the content belonging to it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["remove_scene"]
+    scene_id: str = Field(min_length=1)
+
+
+class VideoEditBackground(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    op: Literal["set_background"]
+    color: str = Field(pattern=r"^#[0-9a-fA-F]{6}$", description="Exact canvas background, e.g. black=#000000.")
+
+
+VideoEditOp = Annotated[
+    VideoEditUpdateText
+    | VideoEditAddText
+    | VideoEditRemoveClip
+    | VideoEditUpdateAnimation
+    | VideoEditMoveScene
+    | VideoEditRemoveScene
+    | VideoEditBackground,
+    Field(discriminator="op"),
+]
+
+
+class ReviseVideoArgs(BaseModel):
+    """``revise_video`` params (both paths): targeted edits against an
+    explicitly-named base version. The system applies the batch atomically
+    through the content write door and returns the computed change set plus
+    the new version's canonical storyboard."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "visual_descriptions", "pending_disposition")
+
+    base_ref: VideoVersionRef
+    edits: list[VideoEditOp] = Field(min_length=1)
+    visual_descriptions: list[dict[str, str]] | None = Field(
+        default=None,
+        description=(
+            "For every scene whose VISUAL content your edits changed: the "
+            "rewritten user-readable 'what the viewer sees' summary of the "
+            "scene's CURRENT content ([{scene_id, text}]) — the edit clears "
+            "the stale one; leave a scene out only when its picture did not "
+            "change. Never describe elements that are not in the version."
+        ),
+    )
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="When the context shows a pending question: 'answer' = this message ENGAGES it; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
+    )
+
+
+class GetVideoVersionParams(BaseModel):
+    """``get_video_version`` params — the explicit version read (§2.2)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "version_id", "composition_id", "output_id", "present")
+
+    version_id: UUID | None = Field(
+        default=None, description="Read this exact version (from a storyboard card or a previous read)."
+    )
+    composition_id: UUID | None = Field(
+        default=None, description="Read the CURRENT version of this work."
+    )
+    output_id: UUID | None = Field(
+        default=None, description="Resolve an owned @output to the EXACT version it delivered, across Chats."
+    )
+    present: bool = Field(default=False, description="Show this saved version's canonical storyboard card again for review/recovery.")
+
+    @model_validator(mode="after")
+    def _one_address(self) -> "GetVideoVersionParams":
+        if sum(v is not None for v in (self.version_id, self.composition_id, self.output_id)) != 1:
+            raise ValueError("name exactly one of version_id / composition_id / output_id")
+        return self
 
 
 # 建议谱系 (ADR-100): one wire shape, one seat — the trigger dock's wrap_up
@@ -2468,6 +2743,13 @@ class PendingPlan(BaseModel):
     film_created_via: str | None = None
     film_change_set: dict | None = None
     film_kept_frames: list[int] | None = None
+    # Video Project presentation receipt (ADR-145 phase B, §2.3): the
+    # canonical storyboard presentation's proof — which composition version
+    # was presented, its content + presentation digests, and the presenting
+    # message (null until that row persists). Read-tolerant: absent on
+    # pre-video rows; carried verbatim across PendingPlan rewrites by
+    # editing/service.video_carry_state.
+    video_presentation: dict | None = None
     # The frozen cut's other half (冻结场内切点 = 冻结时间轴同一继承律):
     # the reveal words' landing beats, one entry per scene (None per
     # non-reveal scene); consumed fail-closed by the run whenever the kept
@@ -4543,6 +4825,9 @@ class VideoPayload(BaseModel):
 
     name: str = ""  # the Composition's name at queue time
     duration_seconds: float = 0
+    duration: float = 0
+    aspect: str | None = None
+    execution_digest: str | None = None
     composition_digest: str = ""
 
 

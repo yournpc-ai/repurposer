@@ -43,7 +43,11 @@ const FontResources: React.FC<{ fonts: VideoSpec["fonts"] }> = ({ fonts }) => {
         const face = new FontFace(
           resource.family,
           `url(${JSON.stringify(resource.url)}) format("${resource.format}")`,
-          { style: "normal", weight: String(resource.weight) },
+          {
+            style: "normal",
+            weight: String(resource.weight),
+            ...(resource.unicode_range ? { unicodeRange: resource.unicode_range } : {}),
+          },
         );
         await face.load();
         if (active) {

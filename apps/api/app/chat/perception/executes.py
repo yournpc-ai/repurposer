@@ -31,6 +31,7 @@ from app.models.schemas import (
     AssetType,
     ClipSpec,
     CraftSkeleton,
+    GetVideoVersionParams,
     MaterialUnderstanding,
     MediaInput,
     PendingPlan,
@@ -1789,7 +1790,10 @@ async def get_asset(db: AsyncSession, project: Project, params: GetAssetParams) 
     one project-scoped query, the membership check is the tenant law."""
     assets = list(
         (
-            await db.execute(select(Asset).where(Asset.project_id == project.id))
+            await db.execute(select(Asset).where(
+                Asset.user_id == project.user_id,
+                Asset.id == params.asset_id if params.asset_id else Asset.project_id == project.id,
+            ))
         )
         .scalars()
         .all()
@@ -1798,6 +1802,7 @@ async def get_asset(db: AsyncSession, project: Project, params: GetAssetParams) 
     if isinstance(resolved, str):
         return resolved
     asset = resolved
+    source_url = (asset.meta or {}).get("capture_url")
     lines = [
         f"Asset {asset.id} — type={asset.type}, status={asset.processing_status}"
     ]
@@ -1807,6 +1812,8 @@ async def get_asset(db: AsyncSession, project: Project, params: GetAssetParams) 
     name = asset.display_name
     if name:
         lines.append(f"- Name: {name}")
+    if source_url:
+        lines.append(f"- Source URL: {source_url}")
     if asset.duration_seconds:
         lines.append(f"- Duration: {asset.duration_seconds}s")
     excerpt = asset_text_content(asset).strip()
@@ -2185,3 +2192,30 @@ async def search_web(db: AsyncSession, project: Project, params: SearchWebParams
         if snippet:
             lines.append(f"  {snippet}")
     return "\n".join(lines)
+
+
+async def get_video_version(db: AsyncSession, project: Project, params: GetVideoVersionParams) -> str:
+    """The video chain's explicit version read (ADR-145 §2.2): one
+    Composition's current version or one exact version, with the canonical
+    storyboard's full facts — the re-read seat before revise_video and the
+    answer seat for 'what does the storyboard look like now'."""
+    from app.editing.service import (  # deferred: domain seat
+        format_storyboard_text,
+        video_version_read,
+    )
+    from app.editing.store import CompositionNotFound, PermissionDenied
+
+    try:
+        read = await video_version_read(
+            db,
+            owner_id=project.user_id,
+            version_id=params.version_id,
+            composition_id=params.composition_id,
+            output_id=params.output_id,
+        )
+    except (CompositionNotFound, PermissionDenied):
+        return (
+            "No such video version in your works — name a version_id or "
+            "composition_id from a storyboard card or an earlier read."
+        )
+    return format_storyboard_text(read)

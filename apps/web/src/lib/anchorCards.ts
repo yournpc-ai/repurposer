@@ -43,7 +43,7 @@ export function runOutputRefs(steps: WorkflowStep[]): string[] {
  * Non-render products deliver through their ordinary payload.
  */
 export function isDeliveredOutput(output: Output): boolean {
-  if (output.type !== "clip" && output.type !== "film") return true
+  if (output.type !== "clip" && output.type !== "film" && output.type !== "video") return true
   return output.render_status === "completed" && Boolean(output.files.video)
 }
 
@@ -74,7 +74,7 @@ export function anchorCardOf(output: Output): AnchorCardData {
     imageUrl,
     poster: output.publishing.cover_image_url ?? null,
     durationSec:
-      (output.type === "clip" || output.type === "film") &&
+      (output.type === "clip" || output.type === "film" || output.type === "video") &&
       typeof output.payload.duration === "number"
         ? output.payload.duration
         : null,

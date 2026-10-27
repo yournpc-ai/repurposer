@@ -191,6 +191,33 @@ async def get_music_by_mood(db: AsyncSession, mood: str) -> Music | None:
     return result.scalar_one_or_none()
 
 
+async def resolve_bed_track(
+    db: AsyncSession, project: Any, requested: str | None
+) -> Music | None:
+    """The new video chain's music-bed resolution (音频三态, VIDEO_PROJECT
+    §15): an explicit ``off`` is terminal (never re-opened by a default);
+    absent a choice the persona skin's ``musicId``/``musicMood`` leads, then
+    the ``calm`` catalog default. ``None`` = no bed.
+    """
+    if requested == "off":
+        return None
+    from app.memory.brand import resolve_music_ref  # deferred: memory edge
+    from app.platform.project_context import resolve_persona  # deferred: cycle
+
+    persona = await resolve_persona(db, project)  # None-safe
+    brand_ref: Any = None
+    if persona is not None:
+        block = persona.brand or {}
+        brand_ref = block.get("musicId") or block.get("musicMood")
+    for ref in (brand_ref, "calm"):
+        if not ref:
+            continue
+        track = await resolve_music_ref(db, ref)
+        if track is not None:
+            return track
+    return None
+
+
 async def create_music_from_generation(
     db: AsyncSession,
     *,
@@ -416,6 +443,7 @@ __all__ = [
     "get_music_by_mood",
     "is_music_in_use",
     "list_music",
+    "resolve_bed_track",
     "seed_default_music",
     "update_music_metadata",
 ]

@@ -58,6 +58,8 @@ from app.tools.align_stills.node import AlignStills  # noqa: F401
 from app.tools.research.node import ResearchNode  # noqa: F401
 from app.tools.research.params import ResearchParams
 from app.tools.film.storyboard import LaunchFilm, LaunchFilmParams  # noqa: F401
+from app.tools.video.production.node import ProduceVideo  # noqa: F401
+from app.tools.video.params import ProduceVideoParams
 
 from app.pipeline.graph import NODE_KINDS
 
@@ -132,6 +134,15 @@ class ToolEntry(BaseModel):
 TOOL_REGISTRY: dict[str, ToolEntry] = {
     entry.name: entry
     for entry in [
+        ToolEntry(
+            name="produce_video",
+            description="Render an existing, fully presented and approved video version. "
+            "Use design_video first; never design or change content during production.",
+            behavior="deterministic",
+            params_model=ProduceVideoParams,
+            summary_templates={"en": "Prepared video · {total_seconds:g}s",
+                               "zh": "已准备短片 · {total_seconds:g} 秒"},
+        ),
         ToolEntry(
             name="select_clips",
             description="Cut highlight clips from the source media (batch re-cut)",
@@ -334,10 +345,12 @@ MAX_TASKS_PER_RUN = 10
 def dispatchable_tools() -> list[ToolEntry]:
     """Tools the intent agent may propose: a live node exists in
     ``NODE_KINDS``. Seats (synthesize) are excluded automatically."""
+    from app.config import settings
+    excluded = {"launch_film"} if settings.video_project_enabled else {"produce_video"}
     return [
         entry
         for entry in TOOL_REGISTRY.values()
-        if not entry.seat and entry.name in NODE_KINDS
+        if not entry.seat and entry.name in NODE_KINDS and entry.name not in excluded
     ]
 
 
@@ -382,6 +395,7 @@ def tool_catalog_lines(*, exclude: frozenset[str] = frozenset()) -> str:
 # venue-free too (a venue word in it once surfaced in user speech as 通讯稿,
 # 批5 v2); venues are the user's to name.
 _MENU_PHRASES: list[tuple[str, str]] = [
+    ("produce_video", "website walkthrough videos and text motion graphics from saved storyboards"),
     ("select_clips", "highlight clips cut from the source media"),
     ("write_post", "social posts"),
     ("write_article", "long-form articles"),
@@ -404,7 +418,7 @@ def capability_menu_lines() -> str:
     """The menu every chat surface speaks from (the identity partial's data
     seat): one user-language deliverable phrase per dispatchable, visible,
     non-seat tool, in ``_MENU_PHRASES`` order."""
-    registry = TOOL_REGISTRY
+    registry = {entry.name: entry for entry in dispatchable_tools()}
     return "\n".join(
         f"- {phrase}"
         for name, phrase in _MENU_PHRASES

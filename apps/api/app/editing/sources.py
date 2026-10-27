@@ -25,22 +25,30 @@ async def register_snapshot(
     db: AsyncSession,
     *,
     owner_id: UUID,
-    asset: Asset,
+    asset: Asset | None,
     kind: str,
     storage_key: str,
     digest: str,
     duration_ticks: int | None,
     meta: dict[str, Any],
     captured_at: datetime,
+    identity: UUID | None = None,
 ) -> SourceSnapshot:
-    if asset.user_id != owner_id:
+    """Register one immutable snapshot. ``asset`` is the provenance anchor
+    for user assets; platform-owned sources (the default music catalog)
+    carry ``asset=None`` and a stable ``identity`` for id derivation
+    instead (the catalog piece's own id)."""
+    if asset is not None and asset.user_id != owner_id:
         raise PermissionError("snapshot source belongs to another user")
-    snapshot_id = _snapshot_id(owner_id, asset.id, kind, digest)
+    anchor = asset.id if asset is not None else identity
+    if anchor is None:
+        raise ValueError("an asset-less snapshot requires a stable identity")
+    snapshot_id = _snapshot_id(owner_id, anchor, kind, digest)
     existing = await db.get(SourceSnapshot, snapshot_id)
     if existing is not None:
         expected = (
             existing.owner_id == owner_id
-            and existing.asset_id == asset.id
+            and existing.asset_id == (asset.id if asset is not None else None)
             and existing.kind == kind
             and existing.storage_key == storage_key
             and existing.digest == digest
@@ -53,7 +61,7 @@ async def register_snapshot(
     row = SourceSnapshot(
         id=snapshot_id,
         owner_id=owner_id,
-        asset_id=asset.id,
+        asset_id=asset.id if asset is not None else None,
         kind=kind,
         storage_key=storage_key,
         digest=digest,

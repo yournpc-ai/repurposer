@@ -38,7 +38,13 @@ _s3_download_client: Any | None = None
 
 
 def _get_s3_client() -> boto3.client:
-    """Return a cached boto3 S3 client configured for Volcengine TOS."""
+    """Return a cached boto3 S3 client configured for Volcengine TOS.
+
+    ``proxies={}`` is explicit: urllib3 otherwise adopts the macOS SYSTEM
+    proxy (getproxies), and the local proxy intermittently swallows large
+    PUT responses — uploads stay direct by construction, as the download
+    client's docstring already states.
+    """
     global _s3_client  # noqa: PLW0603
     if _s3_client is None:
         _s3_client = boto3.client(
@@ -50,6 +56,7 @@ def _get_s3_client() -> boto3.client:
             config=Config(
                 signature_version="s3v4",
                 s3={"addressing_style": "virtual"},
+                proxies={},
             ),
         )
     return _s3_client

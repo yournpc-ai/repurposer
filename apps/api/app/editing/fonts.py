@@ -18,6 +18,16 @@ FONT_SET_DIGEST = "11c92f6b5efd1a6b91ed87e04d82ddbf961fd40a6d5d6be2e36d33b2e0d27
 SEGMENTATION_VERSION = "scalar-grapheme-v1"
 LAYOUT_VERSION = "explicit-line-inline-v1"
 
+# The emoji face joins every text family stack as fallback coverage for emoji
+# codepoints. Its build also contains Latin glyphs (with a broken space
+# advance), so it must be fenced by unicode-range: without the fence Chromium
+# matches it first (its family sorts ahead of "Noto Sans SC") and whole Latin
+# lines render word-spread in the emoji face.
+_EMOJI_UNICODE_RANGE = (
+    "U+2190-21FF, U+2300-23FF, U+25A0-25FF, U+2600-27BF, "
+    "U+2B00-2BFF, U+1F000-1FAFF, U+FE0F"
+)
+
 FONT_FILES = (
     {
         "family": FONT_FAMILY,
@@ -39,6 +49,7 @@ FONT_FILES = (
         "filename": "NotoEmoji-Regular.ttf",
         "format": "truetype",
         "digest": "988621dc5c9a75eb6144f28faae30317a8e3421b68b28740747b3d739e2326b8",
+        "unicode_range": _EMOJI_UNICODE_RANGE,
     },
 )
 
@@ -67,15 +78,16 @@ def font_resources(font_id: str, set_digest: str, weights: set[int]) -> list[dic
             continue
         filename = str(item["filename"])
         digest = str(item["digest"])
-        resources.append(
-            {
-                "font_id": FONT_ID,
-                "font_set_digest": FONT_SET_DIGEST,
-                "family": item["family"],
-                "weight": weight,
-                "format": item["format"],
-                "url": font_storage_key(filename, digest),
-                "digest": digest,
-            }
-        )
+        resource: dict[str, Any] = {
+            "font_id": FONT_ID,
+            "font_set_digest": FONT_SET_DIGEST,
+            "family": item["family"],
+            "weight": weight,
+            "format": item["format"],
+            "url": font_storage_key(filename, digest),
+            "digest": digest,
+        }
+        if "unicode_range" in item:
+            resource["unicode_range"] = item["unicode_range"]
+        resources.append(resource)
     return resources

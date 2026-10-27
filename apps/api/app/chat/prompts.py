@@ -30,6 +30,9 @@ def intent_router_system() -> str:
         # The film edit path's prompt law rides the same deployment gate as
         # the tool wire view — gate off, the model is never told.
         film_edits_enabled=settings.film_edits_enabled,
+        # The video family's law replaces the film partials under its own
+        # deployment gate (same law as the tool declarations).
+        video_project_enabled=settings.video_project_enabled,
     )
 
 
@@ -60,6 +63,9 @@ def chat_intent_system() -> str:
         # The film edit path's prompt law rides the same deployment gate as
         # the tool wire view — gate off, the model is never told.
         film_edits_enabled=settings.film_edits_enabled,
+        # The video family's law replaces the film partials under its own
+        # deployment gate (same law as the tool declarations).
+        video_project_enabled=settings.video_project_enabled,
     )
 
 

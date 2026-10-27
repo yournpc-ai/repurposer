@@ -141,6 +141,8 @@ async def build_context(
     lines = [
         f"Project: {project.title} (id={project.id}, language={project.language})",
     ]
+    from app.chat.video_turn_seats import video_context_lines
+    lines.extend(await video_context_lines(db, project, mentions))
     if confirmation is not None:
         # The FACT seat — the mode-conditional LAW stays in the static
         # system template (一法一座; the static prompt's prefix cache

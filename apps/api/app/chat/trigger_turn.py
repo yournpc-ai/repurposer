@@ -437,7 +437,8 @@ async def _run_review_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
         }
     review = compute_run_review(
         confirmed_scope=ctx.get("confirmed_scope"),
-        landed=[landed_fact(o, film_confirmed=film_confirmed) for o in outputs],
+        landed=[landed_fact(o, film_confirmed=film_confirmed,
+                            video_confirmed=ctx.get("version_ref")) for o in outputs],
     )
     return review_fact_lines(review)
 

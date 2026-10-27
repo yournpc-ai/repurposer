@@ -24,11 +24,43 @@ from app.editing.sources import register_snapshot
 from app.editing.timing import SOURCE_TIMEBASE
 from app.models.schemas import AssetType
 from app.models.tables import Asset, SourceSnapshot
+from app.pipeline.music import AUDIO_EXT, music_file_path
 from app.providers import storage
 
 _FONT_ROOT = Path(__file__).resolve().parents[3] / "assets" / "fonts"
 
 _SUFFIX = re.compile(r"^\.[a-z0-9]{1,8}$", re.IGNORECASE)
+
+# The citation manifest's field order (title first — the page's own lead;
+# links last — navigation chrome is the weakest citation).
+_RESEARCH_FIELDS = ("title", "description", "h1", "h2", "h3", "paragraphs", "buttons", "links")
+
+
+def _research_lines(research: Any) -> list[dict[str, str]]:
+    """Freeze the capture's research manifest into citable lines (kind/text).
+    Read-tolerant: a capture without research freezes an empty list (the
+    design's grounding then fails honestly on having nothing to cite)."""
+    if not isinstance(research, dict):
+        return []
+    kind_of = {
+        "title": "title",
+        "description": "description",
+        "h1": "h1",
+        "h2": "h2",
+        "h3": "h3",
+        "paragraphs": "paragraph",
+        "buttons": "button",
+        "links": "link",
+    }
+    lines: list[dict[str, str]] = []
+    for field_name in _RESEARCH_FIELDS:
+        value = research.get(field_name)
+        items = value if isinstance(value, list) else ([value] if value else [])
+        for item in items:
+            text = str(item or "").strip()
+            if text:
+                lines.append({"kind": kind_of[field_name], "text": text})
+    return lines
 
 
 def _round_half_up(value: Fraction) -> int:
@@ -61,7 +93,12 @@ async def store_source_bytes(data: bytes, suffix: str, content_type: str) -> tup
 
 
 async def snapshot_web_asset(db: AsyncSession, asset: Asset, *, owner_id: UUID) -> SourceSnapshot:
-    """Freeze every captured view and the page manifest of a WEB_PAGE Asset."""
+    """Freeze every captured view and the page manifest of a WEB_PAGE Asset.
+
+    The manifest also freezes the capture's citable text lines (from
+    ``meta.research``) — the design chain's grounding reads the SNAPSHOT,
+    never a live page read (§9: the bound manifest is the design's world).
+    """
     if asset.user_id != owner_id:
         raise PermissionError("web snapshot source belongs to another user")
     if asset.type != AssetType.WEB_PAGE:
@@ -107,6 +144,7 @@ async def snapshot_web_asset(db: AsyncSession, asset: Asset, *, owner_id: UUID) 
         "canonical_url": canonical_url,
         "captured_at": captured_at.isoformat(),
         "views": views,
+        "lines": _research_lines(source_meta.get("research")),
     }
     origin = source_meta.get("origin")
     if origin is not None:
@@ -169,6 +207,46 @@ async def snapshot_audio_asset(db: AsyncSession, asset: Asset, *, owner_id: UUID
         duration_ticks=duration_ticks,
         meta=meta,
         captured_at=_captured_at(asset.created_at),
+    )
+
+
+async def snapshot_music_track(db: AsyncSession, track: Any, *, owner_id: UUID) -> SourceSnapshot:
+    """Freeze a music-library piece as an audio SourceSnapshot.
+
+    The catalog's bytes already live in object storage under
+    ``music/{id}.mp3``; the snapshot re-stores them under the immutable
+    content-addressed key (idempotent) so a version pins BYTES, never a
+    mutable library row. The snapshot carries no Asset anchor — the Music
+    row's id is the stable identity (platform-owned source).
+    """
+    data = await storage.read(music_file_path(track.id))
+    key, digest = await store_source_bytes(data, f".{AUDIO_EXT}", "audio/mpeg")
+
+    container = av.open(io.BytesIO(data), mode="r")
+    try:
+        stream = container.streams.audio[0]
+        if stream.duration is not None and stream.time_base is not None:
+            duration = Fraction(stream.duration) * Fraction(stream.time_base)
+        elif container.duration is not None:
+            duration = Fraction(container.duration, av.time_base)
+        else:
+            raise ValueError("music source has no decodable duration")
+        duration_ticks = _round_half_up(duration * SOURCE_TIMEBASE)
+        media = {"sample_rate": int(stream.rate), "channels": int(stream.channels)}
+    finally:
+        container.close()
+
+    return await register_snapshot(
+        db,
+        owner_id=owner_id,
+        asset=None,
+        identity=track.id,
+        kind="audio",
+        storage_key=key,
+        digest=digest,
+        duration_ticks=duration_ticks,
+        meta={"media": media, "music": {"music_id": str(track.id), "title": track.title}},
+        captured_at=_captured_at(getattr(track, "created_at", None)),
     )
 
 

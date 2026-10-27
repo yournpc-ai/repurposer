@@ -29,7 +29,7 @@ def test_storyboard_payload_is_canonical_and_factual():
     assert payload["composition_id"] == str(COMP_ID)
     assert payload["composition_version_id"] == str(VER_ID)
     assert payload["version"] == 1
-    assert payload["settings"] == {"width": 1920, "height": 1080, "fps": 30.0}
+    assert payload["settings"] == {"width": 1920, "height": 1080, "fps": 30.0, "background": "#000000"}
 
     (scene,) = payload["scenes"]
     assert scene["scene_id"] == "scn_open"

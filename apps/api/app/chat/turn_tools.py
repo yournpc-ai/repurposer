@@ -30,6 +30,7 @@ from app.models.schemas import (
     ChatAnswerArgs,
     ChatAskArgs,
     DesignStoryboardArgs,
+    DesignVideoArgs,
     EditGraphArgs,
     EditOutputArgs,
     PlanAnswerArgs,
@@ -38,6 +39,7 @@ from app.models.schemas import (
     ProposeTasksArgs,
     RetryUploadArgs,
     ReviseOutputArgs,
+    ReviseVideoArgs,
     StartRunArgs,
 )
 
@@ -445,6 +447,70 @@ _DESIGN_STORYBOARD_TOOL = ChatTool(
     wire_view=_design_storyboard_wire_view,
 )
 
+# ── Video Project 设计家族 (ADR-145 phase B, video_project_enabled 门) ──────
+# 与 design_storyboard 同级的非终态设计拍：design_video 诞生/重设计一个
+# CompositionVersion（唯一写口 apply_composition_edits，design 层不直写），
+# revise_video 对已存版本做局部修订。两门同闸：gate ON 时 video 家族上岗、
+# design_storyboard 从 wire 摘除（两套分镜词汇永不同席）；gate OFF 时保持
+# 旧 film 链。执行侧独立拒同一闸（plan/propose 派发分支各自检查）。
+_DESIGN_VIDEO_DESCRIPTION = (
+    "Design a video work and SAVE its first storyboard version — a website "
+    "walkthrough film from page urls, or a text-driven motion-graphics "
+    "piece from a written brief. Cite the project's own materials "
+    "(material_urls the user named or that exist in this project; text for "
+    "the MG path) — never invent a source. The system designs, saves and "
+    "answers with the complete saved storyboard facts; your next message "
+    "presents them fully and waits for the user's word — a first version "
+    "never starts production. With composition_id set this is a REDRAFT of "
+    "that work (the saved material snapshots are reused, never recaptured): "
+    "say what to change in specific_instruction, and the new full version "
+    "replaces the draft while history stays."
+)
+_REVISE_VIDEO_DESCRIPTION = (
+    "Apply a targeted revision to a saved video version — base_ref echoed "
+    "VERBATIM from the version's storyboard card or a get_video_version "
+    "read, plus the edits (change a scene's on-screen text, add/remove a "
+    "text object, change an existing animation's keyframes, move/remove a "
+    "scene). The system applies the ops atomically as ONE new version and "
+    "answers with the computed change summary plus the complete current "
+    "storyboard facts. The revision alone never starts production. What "
+    "the ops cannot express (a new scene, a restructured arc) is a "
+    "design_video redraft — say so honestly, never fake equivalence."
+)
+
+_DESIGN_VIDEO_TOOL = ChatTool(
+    name="design_video",
+    terminal=False,
+    description=_DESIGN_VIDEO_DESCRIPTION,
+    params_model=DesignVideoArgs,
+)
+_REVISE_VIDEO_TOOL = ChatTool(
+    name="revise_video",
+    terminal=False,
+    description=_REVISE_VIDEO_DESCRIPTION,
+    params_model=ReviseVideoArgs,
+)
+
+
+def _video_project_tools() -> list[ChatTool]:
+    """The video family's wire seats ride the deployment gate
+    (settings.video_project_enabled, internal-test while the journey
+    closes): gate ON = design_video/revise_video replace design_storyboard
+    on both paths (one storyboard vocabulary on the wire at a time) and
+    the version read joins the perception set; gate OFF = the film chain's
+    original shape. The loop's tool sets are built ONCE at import, so the
+    gate reads at process start — declaration and enforcement gate
+    together."""
+    from app.config import settings  # deferred: config leaf
+
+    if not settings.video_project_enabled:
+        return [_DESIGN_STORYBOARD_TOOL]
+    return [
+        _DESIGN_VIDEO_TOOL,
+        _REVISE_VIDEO_TOOL,
+        *perception_chat_tools("get_video_version"),
+    ]
+
 PLAN_TOOLS = [
     ChatTool(
         name="present_plan",
@@ -650,7 +716,7 @@ PLAN_READ_TOOLS = [
         "search_web",
     ),
     *_film_composite_read_tools(),
-    _DESIGN_STORYBOARD_TOOL,
+    *_video_project_tools(),
 ]
 CHAT_READ_TOOLS = [
     *perception_chat_tools(
@@ -672,7 +738,7 @@ CHAT_READ_TOOLS = [
         "search_web",
     ),
     *_film_composite_read_tools(),
-    _DESIGN_STORYBOARD_TOOL,
+    *_video_project_tools(),
 ]
 
 

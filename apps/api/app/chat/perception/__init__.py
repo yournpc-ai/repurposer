@@ -48,6 +48,7 @@ from app.chat.perception.executes import (
     SearchTranscriptParams,
     SearchWebParams,
 )
+from app.models.schemas import GetVideoVersionParams
 
 
 @dataclass(frozen=True)
@@ -309,6 +310,20 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             execute=executes.get_web_page,
             activity_key="chat.inspecting.webPage",
             seat="page_reading_for_url",
+        ),
+        PerceptionTool(
+            name="get_video_version",
+            description=(
+                "Read one video work's saved version with its canonical "
+                "storyboard (per-scene window, exact on-screen text, "
+                "camera/animation ids) — ALWAYS re-read through this before "
+                "a revise_video patch, and never guess a work: name the "
+                "composition_id (its CURRENT version) or an exact "
+                "version_id from a storyboard card or a previous read."
+            ),
+            params_model=GetVideoVersionParams,
+            execute=executes.get_video_version,
+            activity_key="chat.inspecting.videoVersion",
         ),
         PerceptionTool(
             name="search_web",

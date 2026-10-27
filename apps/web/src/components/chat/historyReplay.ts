@@ -36,6 +36,19 @@ export type ActivityRowFrame = Omit<ActivityFramePayload, "seq"> & {
   assetType?: string
 }
 
+/** A structured presentation block stamped on an assistant row (Video
+ * Project phase B): a REFERENCE the named component resolves to its server
+ * DTO — never the payload itself. Unknown kinds render nothing (读容忍). */
+export interface VideoStoryboardBlock {
+  presented_message_id?: string
+  kind: "video_storyboard"
+  composition_id: string
+  composition_version_id: string
+  version: number
+  content_digest?: string
+  presentation_digest?: string
+}
+
 /** One message row in the dock's flow (live-pushed or replayed). */
 export interface OverlayMessage {
   id: string
@@ -114,6 +127,10 @@ export interface OverlayMessage {
    * it in place (chat 决策永不成节点 — the card is the selection state's
    * one seat). */
   candidates?: CandidateSurface
+  /** Structured presentation blocks (Video Project phase B): the
+   * storyboard card's resolve references, stamped on the presenting row
+   * server-side. Absent/empty on every legacy row (读容忍). */
+  blocks?: VideoStoryboardBlock[]
 }
 
 /** The candidate card's data (C8-c): ordinal = the member's array index
@@ -456,6 +473,9 @@ export interface QuestionMessage {
   /** 建议谱系交互块 (ADR-099 §4): the row's persisted non-blocking
    * suggestion records (empty on every older row — 读容忍). */
   suggestions?: unknown
+  /** Structured presentation blocks (Video Project phase B): the
+   * storyboard card's resolve references on the presenting row. */
+  blocks?: VideoStoryboardBlock[]
   /** ask 预览帧的乐观 dock (2026-09-09): the ask object closed stream-side
    * but the turn's tail — and with it the row's server-side birth — is
    * still generating, so this id does NOT exist server-side yet. A click
@@ -589,6 +609,10 @@ export function mapHistoryRows(
               // (inline RunCard) reads.
               runId: m.workflow_run_id,
               at: m.created_at,
+              // The answered video dock's canonical storyboard block
+              // replays with its echo (Video Project phase B) — the card
+              // resolves the SAVED version's DTO, never the prose.
+              blocks: m.blocks?.length ? m.blocks : undefined,
             })
           }
         } else if (hasOptions) {
@@ -658,6 +682,19 @@ export function mapHistoryRows(
           content: m.content ?? "",
           runId: m.workflow_run_id,
           at: m.created_at,
+        })
+      } else if (m.question.kind === "task_book" && (m.blocks?.length ?? 0) > 0) {
+        // Video Project phase B: a PENDING produce dock's turn replays its
+        // reply prose AND its canonical storyboard block — the revived card
+        // re-presents after a refresh/reconnect, and its presentation
+        // completion ACK is the authorized delayed-start's only trigger.
+        // Without this row the held start could never fire post-refresh.
+        pushRow({
+          id: `${m.id}-echo`,
+          role: "assistant",
+          content: m.content ?? "",
+          at: m.created_at,
+          blocks: m.blocks,
         })
       } else if (m.question.kind === "question") {
         // A pending OPTIONS question docks (the pill revives via the
@@ -777,6 +814,9 @@ export function mapHistoryRows(
         // 触发回合回放 (T3): a proactive review row's pills rebuild
         // from its intent dump — undefined on every other shape.
         suggestions: triggerSuggestions(m.intent),
+        // The presenting row's storyboard block references replay with it
+        // (the card resolves its DTO client-side; absent on legacy rows).
+        blocks: m.blocks?.length ? m.blocks : undefined,
       })
     }
   }

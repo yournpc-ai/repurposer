@@ -718,15 +718,30 @@ def test_storyboard_patch_span_terminal_laws_hold():
 
 
 def test_storyboard_tool_lands_in_one_bucket():
-    """U6 同律: design_storyboard is a declared NON-terminal tool on BOTH
-    paths (the read tools' seat — the design beat observes and iterates like
-    a read; ADR-129) and lands in exactly one projector bucket (draft)."""
-    assert "design_storyboard" in all_known_tool_names()
-    assert kind_for_tool("design_storyboard") == "draft"
-    assert any(t.name == "design_storyboard" for t in PLAN_READ_TOOLS)
-    assert any(t.name == "design_storyboard" for t in CHAT_READ_TOOLS)
-    assert not any(t.name == "design_storyboard" for t in PLAN_TOOLS)
-    assert not any(t.name == "design_storyboard" for t in CHAT_TOOLS)
+    """U6 同律: the storyboard design beat is a declared NON-terminal tool
+    on BOTH paths (the read tools' seat — the design beat observes and
+    iterates like a read; ADR-129) and lands in exactly one projector
+    bucket (draft). ADR-145 phase B: the deployment gate swaps the
+    vocabulary — video_project_enabled ON puts design_video/revise_video
+    on the wire and pulls design_storyboard off it (两套分镜词汇永不同席);
+    OFF keeps the film chain's original shape. The assertion keys off the
+    same gate, never a frozen registry dump."""
+    from app.config import settings
+
+    if settings.video_project_enabled:
+        wired, unwired = ("design_video", "revise_video"), ("design_storyboard",)
+    else:
+        wired, unwired = ("design_storyboard",), ("design_video", "revise_video")
+    for name in wired:
+        assert name in all_known_tool_names()
+        assert kind_for_tool(name) == "draft"
+        assert any(t.name == name for t in PLAN_READ_TOOLS)
+        assert any(t.name == name for t in CHAT_READ_TOOLS)
+        assert not any(t.name == name for t in PLAN_TOOLS)
+        assert not any(t.name == name for t in CHAT_TOOLS)
+    for name in unwired:
+        assert not any(t.name == name for t in PLAN_READ_TOOLS)
+        assert not any(t.name == name for t in CHAT_READ_TOOLS)
 
 
 def test_run_span_settles_never_persist():

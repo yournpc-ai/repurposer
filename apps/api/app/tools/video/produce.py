@@ -13,6 +13,7 @@ undo/redo and manual renders already use).
 """
 
 from __future__ import annotations
+from math import gcd
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,6 +53,7 @@ async def queue_composition_render(
         content_digest=version.content_digest,
     )
     duration_seconds = spec["duration_frames"] * spec["fps"]["den"] / spec["fps"]["num"]
+    divisor = gcd(spec["width"], spec["height"])
 
     output = Output(
         project_id=project.id,
@@ -62,6 +64,8 @@ async def queue_composition_render(
         payload={
             "name": composition.name,
             "duration_seconds": duration_seconds,
+            "duration": duration_seconds,
+            "aspect": f"{spec['width'] // divisor}:{spec['height'] // divisor}",
             # §2.2: the Output pins all three identity facts; the digest is
             # the payload's job (the columns pin the rows).
             "composition_digest": version.content_digest,

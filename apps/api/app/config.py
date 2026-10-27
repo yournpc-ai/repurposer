@@ -100,6 +100,14 @@ class Settings(BaseSettings):
     # path (design + open feedback redraft) is unaffected either way.
     film_edits_enabled: bool = False
 
+    # Video Project Chat path (ADR-145 phase B) — internal-test gate,
+    # deployment-shaped like the film edit gate above. Default OFF: the
+    # design_video / revise_video / get_video_version tools never reach the
+    # wire and the old launch_film conversation law stays. ON: the new-chain
+    # tools join both chat paths and the launch-film film's design beat rides
+    # the CompositionVersion chain instead of design_storyboard.
+    video_project_enabled: bool = False
+
     # ASR (faster-whisper, self-hosted — EU/GDPR; CTranslate2, no torch)
     asr_model: str = "base"  # tiny/base/small/medium/large-v3
     asr_device: str = "cpu"  # cpu | cuda

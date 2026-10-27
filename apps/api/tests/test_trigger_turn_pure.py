@@ -112,10 +112,12 @@ def test_tool_set_is_the_reads_plus_one_terminal() -> None:
     # the hallucination line (简报 §4 挂账① — Agno 的 20-tool 线). The budget
     # tracks the family's REGISTERED growth (16 reads + wrap_up after the
     # web pair get_web_page/search_web, 2026-10-15; +1 with the gated media
-    # discovery read riding in gate-ON processes) — bump it deliberately,
-    # never silently.
+    # discovery read riding in gate-ON processes; +3 with the ADR-145 video
+    # family — design_video/revise_video replace the filtered
+    # design_storyboard and get_video_version joins as the version read,
+    # gate-ON processes) — bump it deliberately, never silently.
     assert trigger_agent.max_iterations == 6
-    assert len(trigger_agent.tools) <= 18
+    assert len(trigger_agent.tools) <= 21
 
 
 class TestWrapUpArgs:

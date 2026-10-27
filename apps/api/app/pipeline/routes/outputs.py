@@ -236,8 +236,8 @@ async def render_output_endpoint(
     output = _require_active(
         await get_output_for_user(db, output_id, UUID(str(current_user.id)))
     )
-    if output.type not in ("clip", "film"):
-        raise HTTPException(status_code=400, detail="Only clip and film outputs can render")
+    if output.type not in ("clip", "film", "video"):
+        raise HTTPException(status_code=400, detail="This output cannot render")
     if output.render_status in (RenderStatus.PENDING, RenderStatus.RENDERING):
         return output  # repeated clicks must not revoke an in-flight claim
     if not output.render_spec:

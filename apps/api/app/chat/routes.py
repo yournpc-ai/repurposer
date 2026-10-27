@@ -235,6 +235,7 @@ def _row_payload(message: Message) -> dict:
         "content": message.content or "",
         "seq": message.seq,
         "intent": message.intent,
+        "blocks": message.blocks or [],
         "created_at": message.created_at.isoformat() if message.created_at else None,
     }
 
@@ -894,6 +895,114 @@ async def list_chat_messages(
         )
     messages = await list_conversation_messages(db, id)
     return MessageListResponse(items=[ChatMessageResponse.model_validate(m) for m in messages])
+
+
+@chat_router.get("/references")
+async def list_chat_references(
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> dict:
+    """The existing mention picker gets a small owner-scoped global feed."""
+    from app.models.tables import Asset, Output
+    from app.pipeline.outputs import visible_outputs_stmt
+    from app.pipeline.run_review import output_is_delivered
+    assets = (await db.scalars(select(Asset).where(Asset.user_id == current_user.id)
+        .order_by(Asset.created_at.desc()).limit(100))).all()
+    outputs = (await db.scalars(visible_outputs_stmt().join(Project, Output.project_id == Project.id)
+        .where(Project.user_id == current_user.id)
+        .order_by(Output.created_at.desc()).limit(100))).all()
+    return {
+        "assets": [{"id": str(a.id), "title": a.title or a.display_name or str(a.id),
+                    "type": a.type.value} for a in assets],
+        "outputs": [{"id": str(o.id), "type": o.type,
+                     "name": (o.payload or {}).get("name") or output_one_liner(o) or o.type}
+                    for o in outputs if output_is_delivered(o)],
+    }
+
+
+@chat_router.get("/video/versions/{version_id}/storyboard")
+async def read_video_storyboard(
+    version_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> dict:
+    """The canonical storyboard DTO a message block's StoryboardCard
+    resolves (ADR-145 phase B): the SAVED version's payload — the server
+    is the truth, a card never re-derives the table from prose. Owner-
+    scoped; an unknown/foreign version reads 404, never a leak."""
+    from app.editing.service import video_version_read  # deferred: editing seam
+    from app.editing.store import (  # deferred: write door
+        CompositionNotFound,
+        PermissionDenied,
+    )
+
+    try:
+        return await video_version_read(
+            db, owner_id=UUID(str(current_user.id)), version_id=version_id
+        )
+    except (CompositionNotFound, PermissionDenied):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video version not found",
+        ) from None
+
+
+class VideoPresentationComplete(BaseModel):
+    composition_version_id: UUID
+    presentation_digest: str
+
+
+@chat_router.post("/messages/{message_id}/video-presentation")
+async def complete_video_presentation(
+    message_id: UUID,
+    data: VideoPresentationComplete,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> dict:
+    """Client completed the canonical card; this is not user approval."""
+    message = await db.get(Message, message_id)
+    conversation = await db.get(Conversation, message.conversation_id) if message else None
+    if conversation is None:
+        raise HTTPException(404, "Presentation not found")
+    project = await get_project_for_user(db, conversation.project_id, current_user.id)
+    await db.refresh(project, with_for_update=True)
+    from app.models.schemas import PendingPlan
+    from app.editing.service import video_version_read
+    stored = PendingPlan.model_validate(project.pending_brief or {})
+    receipt = stored.video_presentation or {}
+    expected = str(data.composition_version_id)
+    read = await video_version_read(db, owner_id=current_user.id,
+                                    version_id=data.composition_version_id)
+    block = next((b for b in message.blocks or []
+                  if b.get("composition_version_id") == expected
+                  and b.get("kind") == "video_storyboard"), None)
+    if (not block or block.get("presentation_digest") != data.presentation_digest
+            or read["presentation_digest"] != data.presentation_digest):
+        raise HTTPException(409, "Presentation does not match the saved version")
+    message.blocks = [
+        {**b, "presentation_complete": True} if b is block else b
+        for b in message.blocks
+    ]
+    # Completion belongs to the message even when another work is now active.
+    if receipt.get("presented_message_id") != str(message_id):
+        await db.commit()
+        return {"accepted": False}
+    if receipt.get("composition_version_id") != expected or receipt.get("presentation_digest") != data.presentation_digest:
+        raise HTTPException(409, "Presentation receipt is stale")
+    receipt = {**receipt, "presentation_complete": True}
+    project.pending_brief = stored.model_copy(
+        update={"video_presentation": receipt}
+    ).model_dump(mode="json")
+    await db.commit()
+    run_id = None
+    if receipt.get("authorized_revision_message_id") and stored.intent is not None:
+        from app.chat.service import _auto_start_docked_plan
+        started = await _auto_start_docked_plan(db, user_id=current_user.id,
+            conversation_id=conversation.id, project=project)
+        if started is not None:
+            run_id = str(started[1])
+        await db.commit()
+    return {"accepted": True, "run_id": run_id}
 
 
 @chat_router.post("/messages/{id}/answer", response_model=AnswerResponse)

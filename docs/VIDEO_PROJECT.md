@@ -1,8 +1,8 @@
 # Video Project — 视频作品、Skill 与渲染目标架构
 
-> Status: 已拍板目标架构（2026-10-26），**未实施**。本文是 Film/MG 新架构的唯一目标事实源；四阶段施工与验收归 [video-project-implementation](tasks/video-project-implementation.md)。当前代码仍由 `clip-spec` / `film-spec`、FilmStoryboard 与 `launch_film` 承载，现行实现事实仍读对应代码与 RENDERING，不得把本文目标写成 CURRENT。
+> Status: 已拍板目标架构，开发中（2026-10-27）。本文是新架构唯一目标事实源；施工与验收归 [video-project-implementation](tasks/video-project-implementation.md)。A 最小基座已落地，B 开发闸下真实 MG 制作/交付已通，但尚未封板；旧 Film 链仍存在，默认配置未切换。目标能力与单条旅程通过不代表全量实施或生产就绪，现行实现查代码与 RENDERING。
 >
-> 范围：先把网页宣传片与 MG 的创建、分镜、CRUD、版本、制作和交付做通；个人 Skill 随后开放；Clip 能力内化与 Scrub Inspector 后置。**不迁移既有业务数据**；新表、新列和索引仍须走 Alembic schema migration。
+> 范围：先把网页宣传片与 MG 的创建、分镜、CRUD、版本、制作和交付做通；混合合成、程序化画面与生成媒体按施工合同分批接入；个人 Skill 随后开放；旧 Clip 高层能力内化与 Scrub Inspector 后置。**不迁移既有业务数据**；新表、新列和索引仍须走 Alembic schema migration。
 
 ## 0. 核心决策
 
@@ -14,6 +14,7 @@
 6. **Chat 是唯一意图面**，`/skill + prompt` 只是确定调用语法；Graph/Run 继续负责执行，Canvas 不再是作品成立或审阅的前提。
 7. **video-spec 是 Film 的继任渲染契约**，renderer-neutral；迁移期是明确的新旧替换，不建设第三套永久视频架构。
 8. **不为旧 FilmStoryboard、film-spec 或旧项目数据建设迁移层**。新链验收后删除旧 Film 实现；Clip 的迁移与删除另行评估。
+9. **同一作品允许混合画面来源**：原生文字/图形动画、已有实拍/图片、模型生成媒体及程序化画面可共同参与合成。内容类型与生产方式分开；支持范围以当前能力声明为准，文字动画不冒充自由 2D/3D 创作。
 
 ## 1. 行业坐标与名词
 
@@ -257,6 +258,24 @@ ASR words/segments、翻译与字幕对齐、speaker_map、crop_track 等上游�
 
 Layout 与 Transform 不得形成双真相：layout 决定静态盒，transform 只表达相对盒的位移、缩放、旋转与透明度。相同位置不得同时由 `rect.x` 和 `transform.x` 两套值决定。
 
+### 4.3.1 混合画面与生产来源
+
+Scene 只组织叙事范围，不限定为“文字幕/网页幕/视频幕”，也不拥有独立执行引擎。视觉 Track 的 order 表达叠放，跨幕背景可与跨幕音乐一样不绑定单个 Scene。目标允许在同一场景组合以下内容：
+
+| 内容 | 领域承载 | 生产方式与可编辑性 |
+|---|---|---|
+| 标题、字幕 | TextObject + Clip | 原生内容，可精确改字/样式/动画；已烧录进素材的字不是独立 TextObject |
+| 实拍、生成视频、程序渲染的视频 | VideoObject + 源快照/源时间窗 | 来源各异，入片后共享布局、裁切、时间和外部动画；不承诺编辑烘焙视频内部元素 |
+| 上传图片、生成图片、装饰图 | ImageObject + 源快照 | 来源不决定新 Object 类型 |
+| 可编辑图形 MG | 原生图形/路径与 Animation | 按代表场景添加最小受支持图元，参数可编辑；不预建完整矢量设计系统 |
+| 自由 2D/3D 程序画面 | 固定程序及参数生产出的媒体 | 通过显式生产步骤渲染，再绑定媒体；内部修改需改参数/程序并重新生产 |
+
+**目标不等于已实现**：当前原生 Object 为 text/image/web/audio；Video、基础图形、程序化生产和生成图片/视频的完整接线按施工合同分批实现。现阶段“自由 MG”仅指已支持对象范围内的自由编排，不承诺任意 2D/3D 画面。
+
+代表性出口为“动态背景 + 中央实拍 + 独立标题/定时字幕 + 原声/音乐”，经 Chat 设计、审阅、制作与局部修订完成。平台播放器按钮、账号与弹幕不属于该作品内容。不能以静态网页或纯文字片通过替代此混合合成能力。
+
+视觉布局与时间编辑继续落到 Clip/Object；已有原声关联、字幕对齐等上游事实保留来源。原生对象可由后续 Inspector 编辑；生成或程序媒体只能编辑对外暴露的参数及布局/裁切等外部属性，不虚构内部元素可编辑性。
+
 ### 4.4 Transition
 
 ```text
@@ -437,6 +456,15 @@ capture、SSRF、citation resolver、grounding、素材权限、容量、报价�
 
 修订走 `revise_video(base_ref, edits)` 产生新 CompositionVersion；只有当前消息具备制作意图时才进入后续制作，普通修订不自动重制。
 
+### 8.1.1 生成媒体与程序化画面的生产边界（目标，待实施）
+
+- 制作请求可包含模型生成图片/视频或程序化画面，但不能把“待生成”伪装成已存在的 SourceSnapshot。内容版本保存可审阅的生成请求或程序引用/参数及其明确状态；具体字段在对应批次的首个真实消费者接入时冻结，不现在预建全套任务体系。
+- 生成输入须固定用户素材/参考、请求参数、供应商及模型版本（可获得时）、程序与依赖资源身份、尺寸/时长等输出约束；相关费用与授权进入既有 Run 机制。供应商私有参数留在 provider 边界，不进入通用 VideoObject。
+- 本地受控的程序生产与导入外部 Skill 脚本分开：外部 scripts/ 不因引入程序画面而获得执行权限。代码画面运行须隔离可用能力、依赖、时间/资源与外部访问；只围绕实际样例建立最小执行边界，不开发通用插件平台。
+- 生成成功后将实际媒体、资源 digest 与请求/执行血缘固定在执行 manifest，编译为 renderer 可消费的资源；不得回写原不可变版本。后续内容版本若复用结果，应通过正常内容写口显式绑定快照。
+- 准备/渲染重试复用已成功结果，不重新随机采样或更换模型/程序。用户明确重新生成属于新的制作请求与执行身份，若改变内容要求则先形成新内容版本；失败保持已有作品与成片，不伪造可交付结果。
+- 程序化生产可以输出烘焙媒体，不把 React/Three.js/回调注入 video-spec。需要精确内部编辑的内容优先采用支持的原生图元；两条路径共享最终合成与交付，但不能声称编辑粒度等价。
+
 ### 8.2 Graph / Run / Node 的保留与解耦
 
 **Graph 是执行图，不是视频时间线。**Scene、Track、Clip、TextPart 不逐个成为 graph node。
@@ -514,7 +542,7 @@ Chat 内组件通过结构化 block 引用 `composition_id + composition_version
 - Clip/ObjectInspector：后续定点修改；
 - Canvas 若保留，是同类可视化组件/Graph 投影，不再是所有项目的默认归宿。
 
-[Scrub Input](https://uiarc.dev/components/scrub-input) 是 Chat 内的对象属性输入，支持位置、字号、旋转和透明度等值；它不要求时间线编辑器。完整 Scrub Inspector 后置，数据与写口在 A/B 预留。`onValueChange` 只做本地预览，`onValueCommit` 才提交一次编辑；其连续拖动只做本地预览，commit 才携带 base_ref 经 `apply_composition_edits`；不为 mousemove 调 LLM、建版本或触发付费渲染。字幕组件可采用左侧真实画面、右侧参数的形式。
+[Scrub Input](https://uiarc.dev/components/scrub-input) 是 Chat 内的对象属性输入，支持位置、字号、旋转和透明度等值；它不要求时间线编辑器。完整 Scrub Inspector 后置，数据与写口在 A/B 预留。D4 首版形态是 **Chat 内局部编辑窗口**：默认编辑一个明确的 Clip/Object；预览保持影片宽高比与准确位置，可显示场景背景或干净背景；不要求轨道、多选或完整视频播放。连续调整与 `onValueCommit` 都只更新本地草稿——用户点击「应用」才提交一次批量编辑（携带 base_ref、稳定目标标识与 edits 经 `apply_composition_edits` 产生一个新版本），取消与冲突处理保留；不为 mousemove/commit 调 LLM、建版本或触发付费渲染。多对象批量编辑与整片预览是后续扩展，不是首版前置。字幕组件可采用左侧真实画面、右侧参数的形式。
 
 Inspector 的内容/来源、位置/尺寸、文字样式、Clip 时间与动画分组均读同一版本 DTO。提交携带 base_ref、稳定 clip/object 标识与受限 edits；Escape 取消、双击复位、键盘步进及冲突时预览回滚在 D4 实现。旧消息卡片钉旧版本，只读历史不追随 current；继续修改旧版须走 §9.1 的显式选择与当前 head 条件提交，不静默用旧卡覆盖新版。
 
@@ -563,7 +591,7 @@ A 定义最小关联与 fixtures，B 实现真实读写、推送和回放。接�
 `video-spec` 是 CompositionVersion 的不可变渲染编译产物：
 
 - 只含 JSON、量化时间、Tracks/Clips/Objects、Animations/Transitions、样式、音频参数和已解析素材 URL；
-- 不含 React、Remotion、DOM、任意 CSS、回调或 Renderer 私有参数；
+- 不含 React、Remotion、DOM、任意 CSS、回调或 Renderer 私有参数；该限制针对最终合成契约，不禁止上游显式、受控的程序化画面生产。新增原生图形需同步 schema、编译、adapter 能力与预览语义；烘焙媒体则按图片/视频资源消费；
 - 不含 Project/Skill 权限与数据库读取需求；provenance digest 仅作身份事实；
 - Renderer 不读 DB、不知用户/Project/Skill，不决定内容；
 - preview、首次渲染、重试和交付 probe 使用同一家族语义。
@@ -616,10 +644,10 @@ apps/api/
 │   │   └── import_skill.py              不可信文档包解析与能力差异报告，C
 │   ├── prompts/
 │   │   ├── video_director.j2            通用导演输入/输出合同，B
-│   │   └── chat/                       原地收敛通用设计/修订/呈现/授权规则
-│   ├── models/tables.py                 原地新增/退役 ORM 行，不复制第二套 Base
+│   │   └── chat/                       原地收敛通用设计/修订/呈现/授权规则（B 上半批新增 _video_project.j2 门控替换 _website_film/_text_film）
+│   ├── models/tables.py                 原地新增/退役 ORM 行，不复制第二套 Base（B 上半批：messages.blocks）
 │   ├── models/schemas.py                共用 Chat/Output DTO；领域模型引用 editing
-│   ├── chat/                           保留服务与双入口，共用 editing service
+│   ├── chat/                           保留服务与双入口，共用 editing service（B 上半批：video_turn_seats.py 两路径共座；分镜 DTO 读口住 chat/routes.py）
 │   ├── pipeline/                       保留执行/渲染/交付机制，改视频分派与版本引用
 │   └── platform/                       保留费用与存储能力，更新视频配置/计量接缝
 ├── migrations/versions/                增量 schema 迁移；不删除已应用迁移历史
@@ -713,7 +741,7 @@ apps/web/src/
 
 ## 15. 新链必须承接的产品语义与验收缺口
 
-本节是旧影片需求的当前归位，不保存旧实现方案。旧 Film 任务与专属实现测试退出不代表能力已完成；A/B 仍待施工，新视频没有覆盖的能力不能因为剩余测试通过而宣称生产就绪。
+本节是有效影片需求的当前归位，不保存旧实现方案。混合内容与生成/程序化生产的目标边界见 §4.3.1、§8.1.1；当前实现与分批出口归施工合同，不因列入目标就声称可用。旧 Film 任务与专属实现测试退出不代表能力已完成；A/B 仍待施工，新视频没有覆盖的能力不能因为剩余测试通过而宣称生产就绪。
 
 - **输入与意图**：网页源与文字源走同一作品链；用户原文、创作要求、生成稿区分来源。未决定逐字展示还是改编时问最影响方向的一题，不一次收齐参数；明确委托/明确方向直接设计。零原文但有创作要求的自由 MG 合法，不伪造来源。verbatim 模式每段恰好一次、按原文顺序、零改写增删，换行不丢字；容量不足点名段落/差额/处置，不无限缩字硬塞。
 - **用户约束与技术政策**：用户要求、agent 选择和默认值分别记录来源。当前 120s/3600帧等仍运行的政策只作旧链事实；新链以设置/制作政策冻结，139s 若不支持就明确拒绝，不截断。画幅变体、字体枚举/vendor 字体、网页录屏与声音选择/试听的需求继续保留；不建设旧 set_aspect/指纹迁移兼容路径。

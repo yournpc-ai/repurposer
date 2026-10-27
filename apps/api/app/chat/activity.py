@@ -121,7 +121,7 @@ STATUS_CANCELLED = "cancelled"  # schema-complete; see the module docstring
 # was a targeted edit. The variant is read off the VALIDATED params at
 # execute entry (ReadExecuting.params): knowable there, never guessed at
 # name_known (the arguments are still streaming at that beat).
-_DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "edit_graph", "revise_output", "edit_output", "design_storyboard"})
+_DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "edit_graph", "revise_output", "edit_output", "design_storyboard", "design_video", "revise_video"})
 _RUN_TOOLS = frozenset({"start_run", "retry_upload"})
 _CONVERSATION_TOOLS = frozenset({"ask_user", "answer"})
 # The exploration proposal verbs (iter-2 ⑤/⑥, ADR-088 旅程四): their user
@@ -155,7 +155,7 @@ _EDIT_KEYS = ("chat.activity.edit", "chat.activity.editDone")
 # as its own span — 「正在设计分镜」/「正在调整分镜」 ride the phase channel
 # (on_phase) inside it; the span's settle is the ONE draft-family frame that
 # persists (its markdown message is the deliverable, no dock card absorbs it).
-_STORYBOARD_TOOLS = frozenset({"design_storyboard"})
+_STORYBOARD_TOOLS = frozenset({"design_storyboard", "design_video", "revise_video"})
 _STORYBOARD_KEYS = ("chat.activity.storyboard", "chat.activity.storyboardDone")
 # The patch variant's pair (same span anatomy, its own vocabulary): a call
 # carrying edits reads as 调整, never as a fresh 设计.
@@ -163,10 +163,21 @@ _STORYBOARD_EDIT_KEYS = (
     "chat.activity.storyboardEdit",
     "chat.activity.storyboardEditDone",
 )
+# The video family's own pairs (ADR-145 phase B): same span anatomy —
+# silent name_known, open at execute entry, settle persists. Compose and
+# targeted revision speak their own vocabularies from the tool itself (the
+# two calls are already distinct verbs, no params probe needed).
+_VIDEO_DESIGN_KEYS = ("chat.activity.videoDesign", "chat.activity.videoDesignDone")
+_VIDEO_REVISE_KEYS = ("chat.activity.videoRevise", "chat.activity.videoReviseDone")
 
 
 def _is_storyboard_key(key: str | None) -> bool:
-    return key in _STORYBOARD_KEYS or key in _STORYBOARD_EDIT_KEYS
+    return key in (
+        _STORYBOARD_KEYS
+        + _STORYBOARD_EDIT_KEYS
+        + _VIDEO_DESIGN_KEYS
+        + _VIDEO_REVISE_KEYS
+    )
 
 
 def _active_key_for(kind: str, tool_name: str) -> str | None:
@@ -418,6 +429,10 @@ class ActivityProjector:
             return _EDIT_KEYS[1]
         if active_key == _STORYBOARD_EDIT_KEYS[0]:
             return _STORYBOARD_EDIT_KEYS[1]
+        if active_key == _VIDEO_DESIGN_KEYS[0]:
+            return _VIDEO_DESIGN_KEYS[1]
+        if active_key == _VIDEO_REVISE_KEYS[0]:
+            return _VIDEO_REVISE_KEYS[1]
         if _is_storyboard_key(active_key):
             return _STORYBOARD_KEYS[1]
         pair = _ACTIVITY_KEYS.get(kind)
@@ -606,12 +621,17 @@ class ActivityProjector:
         if activity_id is None:
             if name not in _STORYBOARD_TOOLS:
                 return []
-            edits = (
-                getattr(event.params, "edits", None)
-                if event.params is not None
-                else None
-            )
-            keys = _STORYBOARD_EDIT_KEYS if edits else _STORYBOARD_KEYS
+            if name == "design_video":
+                keys = _VIDEO_DESIGN_KEYS
+            elif name == "revise_video":
+                keys = _VIDEO_REVISE_KEYS
+            else:
+                edits = (
+                    getattr(event.params, "edits", None)
+                    if event.params is not None
+                    else None
+                )
+                keys = _STORYBOARD_EDIT_KEYS if edits else _STORYBOARD_KEYS
             activity_id, frame = self._start(KIND_DRAFT, keys[0])
             self._open_call = (name, activity_id)
             return [frame]

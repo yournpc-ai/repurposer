@@ -36,7 +36,7 @@ async def test_approval_prompt_keeps_budgeted_storyboard_and_final_question(monk
     recent = bounded_history([old, presentation], estimate_message_tokens(presentation))
     turn = module.PlanTurn(
         db, uuid4(), SimpleNamespace(id=uuid4()),
-        SimpleNamespace(id=uuid4(), pending_brief=None, persona_id=None),
+        SimpleNamespace(id=uuid4(), user_id=uuid4(), pending_brief=None, persona_id=None),
         ChatRequest(project_id=uuid4(), message="开始做"),
     )
     await turn.assemble(recent)

@@ -172,6 +172,8 @@ class TaskSpec(BaseModel):
     # reversible between runs (the next plan may swap them).
     source_asset_id: str | None = None
     exemplar_asset_id: str | None = None
+    # Server-resolved Chat turn authorizing saved-version production.
+    video_authorized_by: UUID | None = None
 
 
 def first_task_language(tasks: list[TaskItem] | None) -> str | None:
@@ -453,7 +455,7 @@ def _compile_task_list(
                 spec["summary"] = label
             if entry.name == "select_clips" and params_dict.get("aspect"):
                 spec["aspect"] = params_dict["aspect"]
-            if entry.name == "cut_segments":
+            if entry.name in ("cut_segments", "produce_video"):
                 # The span list IS the payload (N-56): the slot projection
                 # above takes none of these params by construction (its
                 # filter reads count/focus/language/tone_override), so the
@@ -694,6 +696,8 @@ async def derive_task_estimates(
     spec = TaskSpec(tasks=list(tasks))
     profile = await _materialize_profile(db, project, spec)
     facts = await _estimate_facts(db, project)
+    from app.tools.video.production import video_quote_facts
+    facts.update(await video_quote_facts(db, project, tasks))
 
     async def prefix_credits(prefix: list[TaskItem]) -> list[int]:
         node_specs = _compile_task_list(
@@ -1052,6 +1056,10 @@ async def create_run(
             if (task.ui_language or "").startswith("zh")
             else RUN_ALREADY_ACTIVE
         )
+    from app.tools.video.production import pin_video_production
+    video_context = await pin_video_production(
+        db, project, task.tasks, task.video_authorized_by
+    )
     target_type: str | None = None
     if task.scope in _TARGETED_DERIVATIVE_SCOPES and task.target_id is not None:
         target = await db.get(Output, task.target_id)
@@ -1088,7 +1096,7 @@ async def create_run(
     run = WorkflowRun(
         project_id=project.id,
         status=WorkflowStatus.PENDING,
-        context=task.model_dump(mode="json"),
+        context={**task.model_dump(mode="json"), **video_context},
         progress=0,
     )
     db.add(run)
@@ -1110,6 +1118,8 @@ async def create_run(
     # 报价 = 图 fold 的存储侧 (P4, N-34): each compile-time node quotes
     # itself from the shared facts; an unquotable node keeps NULL (未估价).
     estimate_facts = await _estimate_facts(db, project)
+    from app.tools.video.production import video_quote_facts
+    estimate_facts.update(await video_quote_facts(db, project, task.tasks))
     nodes: list[WorkflowStep] = []
     for ns in node_specs:
         spec = dict(ns.spec or {})
