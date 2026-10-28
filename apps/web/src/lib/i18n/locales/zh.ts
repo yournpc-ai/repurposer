@@ -550,8 +550,7 @@ const zh: Resources = {
           prompt:
             "把这个网站做成一支产品演示，展示主要功能并配上简洁的屏上说明：{{placeholder}}",
         },
-        // 网站来源的 demo 使用 capture 链；其余两个复用视频保留上传素材
-        // 提示词，仅作布局占位。
+        // 网站来源的 demo 使用 capture 链；视频素材入口保留上传素材提示词。
         "product-demo-walkthrough": {
           prompt:
             "我想用上传的视频或录屏做一支操作演示，选取关键步骤并配上简短说明。请先看素材，和我确定演示重点，再给出方案。",
