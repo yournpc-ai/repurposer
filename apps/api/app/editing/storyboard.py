@@ -7,9 +7,9 @@ StoryboardCard component and carries the stable ids (scene / clip /
 animation) that a revision names.
 
 Columns (§3.3): scene number / time / frames, the visual description (or
-the honest fact fallback), the exact on-screen text, the narration state,
-and the source/audio facts. Speech objects are not yet a content capability
-— the narration column says so plainly instead of pretending.
+the honest fact fallback), the exact on-screen text, the saved narration
+and voice, and the source/audio facts. Pending Speech is reviewed as text;
+only authorized production resolves its actual audio and cue timings.
 
 Pure function over typed content — safe as the UI's parallel-build fixture
 source.
@@ -24,11 +24,15 @@ from app.editing.schemas import (
     AudioObject,
     Clip,
     CompositionContent,
+    GeneratorObject,
     ImageObject,
+    ShapeObject,
+    SpeechObject,
     TextObject,
+    VideoObject,
     WebObject,
 )
-from app.editing.timing import ticks_to_frames
+from app.editing.timing import SOURCE_TIMEBASE, ticks_to_frames
 
 
 def _kf_summary(kf: Any, timebase: int, fps_num: int, fps_den: int) -> dict[str, Any]:
@@ -77,6 +81,13 @@ def _clip_summary(
         ],
     }
     obj = clip.object
+    if clip.source is not None:
+        summary["snapshot_id"] = str(clip.source.snapshot_id)
+        if clip.source.source_range is not None:
+            summary["source_range_seconds"] = {
+                "start": clip.source.source_range.start / SOURCE_TIMEBASE,
+                "end": clip.source.source_range.end / SOURCE_TIMEBASE,
+            }
     if isinstance(obj, TextObject):
         summary["text"] = obj.text
         summary["style"] = {
@@ -87,6 +98,17 @@ def _clip_summary(
             "align": obj.style.align,
         }
         summary["layout"] = obj.layout.model_dump(mode="json")
+        if obj.caption is not None:
+            summary["caption"] = obj.caption.model_dump(mode="json")
+    elif isinstance(obj, ShapeObject):
+        summary["shape"] = obj.shape
+        summary["fill"] = obj.fill
+        summary["stroke"] = obj.stroke
+        summary["stroke_width"] = obj.stroke_width
+        summary["corner_radius"] = obj.corner_radius
+        summary["path"] = obj.path
+        summary["layout"] = obj.layout.model_dump(mode="json")
+        summary["opacity"] = obj.opacity
     elif isinstance(obj, WebObject):
         view = view_facts.get((clip.source.snapshot_id, obj.view_id)) if clip.source else None
         summary["view_id"] = obj.view_id
@@ -94,6 +116,31 @@ def _clip_summary(
             summary["view"] = view
     elif isinstance(obj, ImageObject):
         summary["layout"] = obj.layout.model_dump(mode="json")
+    elif isinstance(obj, VideoObject):
+        summary["layout"] = obj.layout.model_dump(mode="json")
+        summary["fit"] = obj.fit
+        summary["gain_db"] = obj.gain_db
+        summary["muted"] = obj.muted
+    elif isinstance(obj, GeneratorObject):
+        summary["runtime"] = obj.runtime
+        summary["code"] = obj.code
+        summary["prompt"] = obj.prompt
+        summary["provider"] = obj.provider
+        summary["model"] = obj.model
+        summary["parameters"] = obj.parameters
+        summary["output"] = obj.output.model_dump(mode="json")
+        summary["program_digest"] = obj.program_digest()
+        summary["layout"] = obj.layout.model_dump(mode="json")
+        summary["fit"] = obj.fit
+        summary["opacity"] = obj.opacity
+    elif isinstance(obj, SpeechObject):
+        summary["text"] = obj.text
+        summary["provider"] = obj.provider
+        summary["model"] = obj.model
+        summary["voice_id"] = obj.voice_id
+        summary["language"] = obj.language
+        summary["gain_db"] = obj.gain_db
+        summary["role"] = track_role
     elif isinstance(obj, AudioObject):
         summary["gain_db"] = obj.gain_db
         summary["role"] = track_role
@@ -139,31 +186,44 @@ def storyboard_payload(
     scenes = []
     for index, scene in enumerate(content.scenes):
         scene_clips = [c for c in all_clips if c.scene_id == scene.scene_id]
-        scenes.append(
-            {
-                "scene_id": scene.scene_id,
-                "number": index + 1,
-                "range_seconds": {
-                    "start": scene.range.start / timebase,
-                    "end": scene.range.end / timebase,
-                },
-                "range_frames": {
-                    "start": ticks_to_frames(scene.range.start, timebase, fps_num, fps_den),
-                    "end": ticks_to_frames(scene.range.end, timebase, fps_num, fps_den),
-                },
-                "intent": scene.intent,
-                "visual_description": scene.visual_description,
-                # §3.3 narration column: Speech is not a content capability
-                # yet — the column states the fact, never a fabricated line.
-                "narration": None,
-                "clips": [
-                    _clip_summary(
-                        c, content, track_role=clip_tracks[c.clip_id], view_facts=view_facts
-                    )
-                    for c in scene_clips
-                ],
-            }
-        )
+        by_id = {c.clip_id: c for c in scene_clips}
+        speech = [
+            by_id[ref].object
+            for ref in scene.speech_clip_ids
+            if ref in by_id and isinstance(by_id[ref].object, SpeechObject)
+        ]
+        scene_payload: dict[str, Any] = {
+            "scene_id": scene.scene_id,
+            "number": index + 1,
+            "range_seconds": {
+                "start": scene.range.start / timebase,
+                "end": scene.range.end / timebase,
+            },
+            "range_frames": {
+                "start": ticks_to_frames(scene.range.start, timebase, fps_num, fps_den),
+                "end": ticks_to_frames(scene.range.end, timebase, fps_num, fps_den),
+            },
+            "intent": scene.intent,
+            "visual_description": scene.visual_description,
+            "narration": "\n".join(obj.text for obj in speech) if speech else None,
+            "clips": [
+                _clip_summary(
+                    c, content, track_role=clip_tracks[c.clip_id], view_facts=view_facts
+                )
+                for c in scene_clips
+            ],
+        }
+        if speech:
+            scene_payload["narration_voices"] = [
+                {
+                    "provider": obj.provider,
+                    "model": obj.model,
+                    "voice_id": obj.voice_id,
+                    "language": obj.language,
+                }
+                for obj in speech
+            ]
+        scenes.append(scene_payload)
     return {
         "composition_id": str(composition_id),
         "composition_version_id": str(version_id),

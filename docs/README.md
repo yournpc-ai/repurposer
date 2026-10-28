@@ -13,7 +13,7 @@
 
 | 任务范围 | 最小阅读路径 |
 |---|---|
-| 新 Video Project / Film/MG 架构施工 | `VIDEO_PROJECT.md` 命中章节（Composition、全局 @ 引用、固定切点旁白）→ `tasks/video-project-implementation.md` 当前阶段、§6 开工顺序、§8 前置与 §9 首批提示词；涉及 Chat/Graph/Run 接缝再加 CHAT_ARCHITECTURE / AGENT_ARCHITECTURE 对应小节 |
+| 新 Video Project / Film/MG 架构施工 | `VIDEO_PROJECT.md` §0 长期创作方针 → `tasks/video-project-implementation.md` 当前阶段/§9 接手入口 → 目标文档命中章节；Generator 读 §4.3.2/§8.1.1，综合验收作品读施工合同 §5.1；涉及 Chat/Graph/Run 接缝再加 CHAT_ARCHITECTURE / AGENT_ARCHITECTURE 对应小节 |
 | 修 Chat 显示 bug（活动 / SSE / 打字机 / dock） | `CHAT_ARCHITECTURE.md` §8（工作段重点 §8.6～§8.7）→ 命中的当前任务合同只读对应验收；工具或修订改动再选 §3 / §9 |
 | UI 视觉 / 组件 / 布局 | `UI_GUIDELINES.md` 对应章节；只有涉及 chat 行为才加读 CHAT_ARCHITECTURE |
 | 改 Home 货架 / 配方卡 / 样片 | `RECIPES.md` §4、§7 + `UI_GUIDELINES.md` §4.1；替换真实样片或处理入口欠账再看 `tasks/home-creation-entry-refresh.md` §2～§5 |
@@ -60,7 +60,7 @@
 | 模块架构 / 表归属 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 跨模块契约 |
 | 身份/运营层概念架构 | `POSITIONING.md` | 定位根 / 人设分区 / 渠道 / 选题的概念树只住这里，其他文档只引用 |
 | 对话→生产概念架构 | `DIALOG_WORKFLOW.md` | 厚 agent 判词 / 双引擎 workflow / brief / canonical 词汇（router·understand·plan）只住这里，其他文档只引用 |
-| Video Project 目标架构与施工 | `VIDEO_PROJECT.md` / `tasks/video-project-implementation.md` | 目标文档 §12 唯一定义新旧目录与逐项处置，其余章节载 Project / Composition / CompositionVersion、Track/Clip/Object、Skill、全局跨 Chat 引用、旁白/字幕、Run/Graph 接缝与 video-spec 的已拍板目标；施工文档只载四阶段范围、代码接缝与验收。阶段 A 批 1（最小纵向闭环）已落地，其余仍 TARGET |
+| Video Project 目标架构与施工 | `VIDEO_PROJECT.md` / `tasks/video-project-implementation.md` | 目标文档 §12 唯一定义新旧目录与逐项处置，其余章节载 Project / Composition / CompositionVersion、Track/Clip/Object、Skill、全局跨 Chat 引用、旁白/字幕、Run/Graph 接缝与 video-spec 的已拍板目标；施工文档只载四阶段范围、代码接缝与验收。当前状态只见 PROGRESS §0 与施工合同；Generator 是 B-IV/V 目标，不因命名已登记而视为已实现 |
 | 用户旅程 | `JOURNEYS.md` | 旅程逐拍 / 分支树 / 体验规格横切 / 缺口登记只住这里；新功能开工先答「在哪条旅程哪一拍」 |
 | 积分 / 钱包 / 计费架构 | `BILLING.md` | credit / wallet / credit_transactions / hold→capture→release / configs / 比例参数 / 负余额语义只住这里，其他文档只引用 |
 | Lifecycle / Activity / Confirmation | `DECISIONS.md` ADR-087 + `CHAT_ARCHITECTURE.md` 对应章节 | 生命周期五态、活动投影与确认约束按 ADR 定点阅读；实施与验收欠账归 `PROGRESS.md`，不在导航中复制 |
@@ -79,11 +79,11 @@
 | `UI_GUIDELINES.md` | **Studio 视觉/交互设计系统**：圆角与按钮 / 图标 / 浮层选型 / 卡面纵深 / 灰梯 / 浮层冰霜 / composer 视觉解剖 / 侧栏解剖 / 页面布局 / 画布形态 | 活跃 | 动 `_app` UI / 共享组件前 |
 | `ARCHITECTURE_NORTH_STAR.md` | **目标架构与可靠性主线**（North Star）：Agent=Decision Producer / Execution Kernel=可靠性核心 / Structured Media=领域核心 + 执行概念词典 + 五态纪律 + 技术依赖 | 活跃 | 动执行内核、可靠性、agent 边界或 Media IR 方向时读对应章节；不是所有 coding 任务的通用全文前置 |
 | `POSITIONING.md` | 定位根概念架构（运营层母文档）：定位/人设/渠道/选题概念树 + 产品流程 + 实施范围 | 已拍板方向（ADR-042），未实施；启动条件与验收归 `PROGRESS.md` §1.1 | 动身份模块/渠道/选题/home 前 |
-| `VIDEO_PROJECT.md` | **视频作品目标架构**：Project / Composition / CompositionVersion、Scene/Storyboard、Track/Clip/Object、Animation/TextPart、Skill/VideoTemplate、SourceSnapshot、全局 @ 引用、旁白/字幕、Graph/Run 接缝与 video-spec | 已拍板目标（ADR-145），A 批 1（Composition/版本写口/video-spec/首 adapter/最小渲染闭环）已落地，其余未实施；四阶段施工归 `tasks/video-project-implementation.md` | 新 Film/MG 架构、视频 CRUD、Skill、时间/动画或渲染替换施工前 |
+| `VIDEO_PROJECT.md` | **视频作品目标架构**：Project / Composition / CompositionVersion、Scene/Storyboard、Track/Clip/Object、Animation/TextPart、Skill/VideoTemplate、SourceSnapshot、全局 @ 引用、旁白/字幕、Graph/Run 接缝与 video-spec | 已拍板目标（ADR-145）；§0 为各阶段必读方针，当前实现/欠账归 PROGRESS 与 `tasks/video-project-implementation.md`，不以目标目录冒充实现 | 新 Film/MG 架构、视频 CRUD、Skill、时间/动画或渲染替换施工前 |
 | `AGENT_ARCHITECTURE.md` | 四层工程地图（Model / Harness / Graph / Loop，ADR-039）+ 工具包/花名册/NodeBase/估价 | 活跃 | 动 generation/agents/tools 前 |
 | `DIALOG_WORKFLOW.md` | 对话→生产概念架构母文档：双引擎 workflow / canonical 词汇 / brief + ask_user / 有界 loop 节点 | 现行规范（实现状态以 `PROGRESS.md` 为准） | 动 chat 意图层 / plan path / 多轮对话 / agent 概念前 |
 | `VIDEO_EDITOR.md` | 编辑器交互形态 + L2/L3 范围纪律 | 已实现（undo 可用 = operations 端点 + chat 撤销；编辑面分层=能力层+适配层，ADR-033） | 动编辑器前 |
-| `RENDERING.md` | **clip-spec / film-spec 双家族契约** + 渲染链架构（烘焙缝 / 渲染服务 / 共享包 / 函数地图）+ clip-spec 轨道模型（§8 = 现行契约，ADR-044） | 活跃 | 动渲染链、任一 spec family、轨道或渲染服务前 |
+| `RENDERING.md` | **clip-spec / film-spec / video-spec 迁移期家族契约** + 渲染链架构（烘焙缝 / 渲染服务 / 共享包 / 函数地图）+ clip-spec 轨道模型（§8 = 现行契约，ADR-044） | 活跃 | 动渲染链、任一 spec family、轨道或渲染服务前 |
 | `MUSIC_ARCHITECTURE.md` | 音乐库、人设音乐选择、自定义生成与启动 reconcile | 当前实现： persona 皮肤面板可自定义生成，Chat `add_music` 只选库；prompt 缓存、配额、上传与更多入口 deferred | 动音乐前 |
 | `BILLING.md` | 积分/钱包/计费架构母文档（ADR-055）：credit / wallet / credit_transactions + hold→capture→release + configs + live ratio + 负余额语义；支付/订阅随 R1.1 挂起 | 活跃 | 动积分 / 钱包 / configs / 扣费 / 估价展示前 |
 | `DECISIONS.md` | 现行架构决策集（ADR；编号不连续，主题索引 + 定点阅读；退役引用保留替代去向） | 活跃 | 新决策 / 架构约束变化时按编号读；普通 bug 修复、字段接线、测试结果不新增 ADR，不要求通读全文 |

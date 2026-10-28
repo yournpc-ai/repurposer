@@ -13,7 +13,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import TypeAdapter
 
-from app.editing.director import MgDirection
+from app.editing.director import MgDirection, ProgramDirection
 from app.editing.edits import Op, apply_ops
 from app.editing.grounding import (
     CiteLine,
@@ -22,7 +22,7 @@ from app.editing.grounding import (
     fit_to_cap,
     resolve_citation,
 )
-from app.editing.schemas import CompositionContent
+from app.editing.schemas import CompositionContent, TimeRange, VideoObject, WebObject
 from app.editing.service import (
     VideoServiceError,
     compute_change_set,
@@ -35,6 +35,7 @@ from app.editing.templates import (
     DesignSlots,
     ViewFact,
     instantiate_mg,
+    instantiate_program,
     instantiate_template,
     load_template,
 )
@@ -165,6 +166,74 @@ def test_remove_clip_is_text_only():
         translate_revision(
             valid_content(), _args({"op": "remove_clip", "clip_id": "clp_bg"})
         )
+
+
+def test_focus_web_recomputes_camera_from_frozen_element_without_model_numbers():
+    base = valid_content()
+    clip = next(c for t in base.timeline.tracks for c in t.clips if c.clip_id == "clp_bg")
+    clip.object = WebObject(
+        kind="web", object_id="obj_bg", view_id="view-1", layout=clip.object.layout,
+    )
+    snapshot_id = clip.source.snapshot_id
+    facts = {**SNAPSHOT_FACTS, snapshot_id: {
+        **SNAPSHOT_FACTS[snapshot_id],
+        "kind": "web",
+        "meta": {"views": [{
+            "view_id": "view-1", "width": 2880, "height": 1800,
+            "storage_key": "snapshots/view-1.png", "digest": "d" * 64,
+            "elements": [{
+                "id": "s1e8", "kind": "heading",
+                "x": 0.3423, "y": 0.2564, "w": 0.4374, "h": 0.1045,
+            }],
+        }]},
+    }}
+    args = _args({"op": "focus_web", "clip_id": "clp_bg", "element_id": "s1e8"})
+    updated = apply_ops(base, translate_revision(base, args, snapshots=facts), {})
+    validate_content(updated, facts)
+    revised = next(c for t in updated.timeline.tracks for c in t.clips if c.clip_id == "clp_bg")
+    assert revised.source == clip.source
+    assert revised.object == clip.object
+    scale = next(a for a in revised.animations if a.property == "transform.scale")
+    position = next(a for a in revised.animations if a.property == "transform.position")
+    assert scale.keyframes[1].value == 1.257
+    assert position.keyframes[1].value == (246.7, 138.7)
+
+    # Repeating the semantic focus replaces the camera in place, preserving
+    # animation identities rather than appending a second camera.
+    repeated = apply_ops(updated, translate_revision(updated, args, snapshots=facts), {})
+    repeated_clip = next(c for t in repeated.timeline.tracks for c in t.clips if c.clip_id == "clp_bg")
+    assert [a.animation_id for a in repeated_clip.animations] == [
+        a.animation_id for a in revised.animations
+    ]
+
+
+def test_update_video_changes_only_that_layer_and_keeps_output_duration():
+    base = valid_content()
+    clip = next(c for t in base.timeline.tracks for c in t.clips if c.clip_id == "clp_bg")
+    clip.object = VideoObject(
+        kind="video", object_id="obj_bg", layout=clip.object.layout, fit="contain"
+    )
+    clip.source.source_range = TimeRange(start=0, end=360000)
+    snapshot_id = clip.source.snapshot_id
+    facts = {**SNAPSHOT_FACTS, snapshot_id: {
+        **SNAPSHOT_FACTS[snapshot_id], "kind": "video", "duration_ticks": 540000,
+    }}
+    music_before = next(c for t in base.timeline.tracks for c in t.clips if c.clip_id == "clp_bed")
+    ops = translate_revision(base, _args({
+        "op": "update_video", "clip_id": "clp_bg", "scale": 0.8,
+        "muted": True, "source_start_seconds": 0.5, "source_end_seconds": 4.5,
+    }))
+    updated = apply_ops(base, ops, {})
+    validate_content(updated, facts)
+    changed = next(c for t in updated.timeline.tracks for c in t.clips if c.clip_id == "clp_bg")
+    music_after = next(c for t in updated.timeline.tracks for c in t.clips if c.clip_id == "clp_bed")
+    assert changed.object.transform.scale == 0.8 and changed.object.muted is True
+    assert changed.source.source_range == TimeRange(start=45000, end=405000)
+    assert changed.range == clip.range
+    assert music_after == music_before
+    assert compute_change_set(base, updated)["clips"]["updated"] == [
+        {"clip_id": "clp_bg", "changes": ["object", "source"]}
+    ]
 
 
 def test_update_animation_replaces_keyframes_clip_local():
@@ -356,6 +425,28 @@ def test_mg_direction_instantiates_into_valid_content():
                     "lines": ["Ship the work.", "Skip the busywork."],
                     "size": "large",
                     "enter": "lines",
+                    "shapes": [
+                        {
+                            "shape": "rect",
+                            "x": 0.08,
+                            "y": 0.12,
+                            "width": 0.3,
+                            "height": 0.18,
+                            "fill": "#3366FF",
+                            "opacity": 0.8,
+                            "corner_radius": 24,
+                            "motion": "scale",
+                        },
+                        {
+                            "type": "ellipse",
+                            "x": 0.62,
+                            "y": 0.58,
+                            "width": 0.22,
+                            "height": 0.16,
+                            "fill": "#22CCFF",
+                            "motion": "rise",
+                        }
+                    ],
                 },
                 {
                     "intent": "close",
@@ -378,6 +469,97 @@ def test_mg_direction_instantiates_into_valid_content():
         if c.scene_id == "scn_mg_1" and c.object.kind == "text"
     ]
     assert first_texts == ["Ship the work.\nSkip the busywork."]
+    shapes = [c for t in content.timeline.tracks for c in t.clips if c.object.kind == "shape"]
+    assert len(shapes) == 2
+    shape = shapes[0]
+    assert shape.object.shape == "rect"
+    assert shape.object.layout.width == 576
+    assert shape.animations[0].property == "transform.scale"
+    shape_tracks = [t.track_id for t in content.timeline.tracks if any(c.object.kind == "shape" for c in t.clips)]
+    assert shape_tracks == ["trk_shape", "trk_shape_2"]
+
+
+def test_native_shape_and_animation_revision_preserve_other_layers():
+    direction = MgDirection.model_validate(
+        {
+            "scenes": [
+                {
+                    "duration_seconds": 2.0,
+                    "lines": ["Keep this title"],
+                    "shapes": [
+                        {
+                            "shape": "rect", "x": 0.1, "y": 0.1, "width": 0.3, "height": 0.2,
+                            "fill": "#3366FF", "corner_radius": 12, "motion": "scale",
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+    ops = [ADAPT.validate_python(o) for o in instantiate_mg(direction)]
+    base = apply_ops(CompositionContent(settings={"width": 1920, "height": 1080}), ops, {})
+    revision = translate_revision(
+        base,
+        _args(
+            {
+                "op": "update_shape", "clip_id": "clp_mg_1_shape_1",
+                "fill": "#FF3300", "corner_radius": 32,
+            },
+            {
+                "op": "update_animation", "animation_id": "anm_mg_1_shape_1_transform_scale",
+                "keyframes": [
+                    {"at_seconds": 0, "value": 0.5},
+                    {"at_seconds": 1.0, "value": 1.2, "easing": "ease_out"},
+                ],
+            },
+        ),
+    )
+    updated = apply_ops(base, revision, {})
+    validate_content(updated, {})
+    shape = next(c for t in updated.timeline.tracks for c in t.clips if c.object.kind == "shape")
+    title = next(c for t in updated.timeline.tracks for c in t.clips if c.object.kind == "text")
+    assert shape.object.fill == "#FF3300" and shape.object.corner_radius == 32
+    assert shape.animations[0].keyframes[-1].value == 1.2
+    assert title.object.text == "Keep this title"
+    assert title.animations == next(
+        c for t in base.timeline.tracks for c in t.clips if c.object.kind == "text"
+    ).animations
+
+
+def test_generator_source_revision_changes_digest_and_preserves_native_title():
+    direction = ProgramDirection.model_validate(
+        {
+            "title": "Independent title",
+            "intent": "moving field",
+            "duration_seconds": 2.0,
+            "background": "#101828",
+            "parameters": {"color": "#3366FF"},
+            "code": "function render(ctx) { return [{kind:'rect',x:ctx.frame,y:0,width:20,height:20,fill:ctx.parameters.color}]; }",
+        }
+    )
+    ops = [ADAPT.validate_python(o) for o in instantiate_program(direction)]
+    base = apply_ops(CompositionContent(settings={"width": 1920, "height": 1080}), ops, {})
+    validate_content(base, {})
+    before = next(c for t in base.timeline.tracks for c in t.clips if c.object.kind == "generator")
+    revision = translate_revision(
+        base,
+        _args({
+            "op": "update_generator", "clip_id": "clp_generator",
+            "code": "function render(ctx) { return [{kind:'ellipse',x:ctx.frame * 2,y:10,width:30,height:30,fill:ctx.parameters.color}]; }",
+            "parameters": {"color": "#FF3300"},
+        }),
+    )
+    updated = apply_ops(base, revision, {})
+    validate_content(updated, {})
+    generator = next(c for t in updated.timeline.tracks for c in t.clips if c.object.kind == "generator")
+    title = next(c for t in updated.timeline.tracks for c in t.clips if c.object.kind == "text")
+    assert generator.object.program_digest() != before.object.program_digest()
+    assert generator.object.parameters == {"color": "#FF3300"}
+    assert "ellipse" in generator.object.code
+    assert title.object.text == "Independent title"
+    assert title.animations == next(
+        c for t in base.timeline.tracks for c in t.clips if c.object.kind == "text"
+    ).animations
 
 
 # ---- grounding helpers ------------------------------------------------------
@@ -507,6 +689,20 @@ def test_subtitle_fragments_do_not_silently_disappear(value):
     folded = LaunchFilmDirection._fold_subtitle_values({"home": value})
     with pytest.raises(ValidationError):
         TypeAdapter(dict[str, str | None]).validate_python(folded)
+
+
+def test_focus_treats_capture_coordinates_as_center_and_clips_visible_part():
+    from app.editing.grounding import resolve_focus
+
+    centered = resolve_focus([
+        {"id": "heading", "kind": "heading", "x": 0.5, "y": 0.5, "w": 0.4, "h": 0.2},
+    ], "heading")
+    assert centered == pytest.approx({"cx": 0.5, "cy": 0.5, "w": 0.4, "h": 0.2})
+
+    clipped = resolve_focus([
+        {"id": "edge", "kind": "heading", "x": 0.95, "y": 0.5, "w": 0.2, "h": 0.4},
+    ], "edge")
+    assert clipped == pytest.approx({"cx": 0.925, "cy": 0.5, "w": 0.15, "h": 0.4})
 
 
 @pytest.mark.parametrize("view", [(1280, 2000), (2400, 900), (1920, 1080)])

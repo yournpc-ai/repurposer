@@ -21,6 +21,8 @@ from app.editing.store import PermissionDenied, content_of, snapshot_facts
 from app.editing.video_spec import compile_video_spec
 from app.models.schemas import RenderStatus
 from app.models.tables import Composition, CompositionVersion, Output, Project
+from app.tools.video.params import NarrationPolicy
+from app.tools.video.programs import prepare_generator_media
 
 
 async def queue_composition_render(
@@ -29,6 +31,9 @@ async def queue_composition_render(
     project: Project,
     composition: Composition,
     version: CompositionVersion,
+    execution_id: str | None = None,
+    regenerate_media: bool = False,
+    narration_policy: NarrationPolicy | None = None,
 ) -> Output:
     """Birth the video Output for one pinned version and pend its render.
 
@@ -45,12 +50,28 @@ async def queue_composition_render(
     facts = await snapshot_facts(
         db, {b.snapshot_id for b in content.sources}
     )
+    generator_media = await prepare_generator_media(
+        content,
+        execution_id=execution_id,
+        composition_id=str(composition.id),
+        regenerate_media=regenerate_media,
+    )
+    from app.tools.video.narration import prepare_speech_media
+
+    speech_media = await prepare_speech_media(
+        content,
+        user_id=project.user_id,
+        execution_id=execution_id,
+        policy=narration_policy or NarrationPolicy(max_tts_characters=0),
+    )
     spec = compile_video_spec(
         content,
         facts,
         composition_id=composition.id,
         version_id=version.id,
         content_digest=version.content_digest,
+        generator_media=generator_media,
+        speech_media=speech_media,
     )
     duration_seconds = spec["duration_frames"] * spec["fps"]["den"] / spec["fps"]["num"]
     divisor = gcd(spec["width"], spec["height"])
@@ -69,6 +90,11 @@ async def queue_composition_render(
             # §2.2: the Output pins all three identity facts; the digest is
             # the payload's job (the columns pin the rows).
             "composition_digest": version.content_digest,
+            "generator_media": generator_media,
+            "speech_media": speech_media,
+            "narration_policy": (
+                narration_policy or NarrationPolicy(max_tts_characters=0)
+            ).model_dump(mode="json"),
         },
         render_spec=spec,
         render_status=RenderStatus.PENDING,

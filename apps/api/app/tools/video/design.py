@@ -31,10 +31,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.editing.director import (
     DirectionRejected,
     LaunchFilmDirection,
+    MixedDirection,
+    ProgramDirection,
     resolve_launch_direction,
+    resolve_mixed_direction,
+    validate_generated_image_direction,
     validate_mg_direction,
+    validate_program_direction,
 )
-from app.editing.edits import Op
+from app.editing.edits import AddClip, Op
+from app.editing.schemas import SpeechObject
 from app.editing.service import (
     compute_change_set,
     redraft_batch,
@@ -52,15 +58,31 @@ from app.editing.templates import (
     MusicBed,
     TemplateError,
     ViewFact,
+    instantiate_generated_image,
     instantiate_mg,
+    instantiate_mixed,
+    instantiate_program,
     instantiate_template,
     load_template,
 )
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import AssetStatus, AssetType, DesignVideoArgs
-from app.models.tables import Asset, Project, SourceSnapshot
-from app.tools.video.agents import mg_director, video_director
-from app.tools.video.preparation import snapshot_music_track, snapshot_web_asset
+from app.models.tables import Asset, Output, Project, SourceSnapshot
+from app.tools.video.agents import (
+    image_director,
+    mg_director,
+    mixed_director,
+    program_director,
+    video_director,
+)
+from app.tools.video.narration import narration_synth_config, resolve_video_voice
+from app.tools.video.programs import ensure_generator_clip
+from app.tools.video.preparation import (
+    snapshot_music_track,
+    snapshot_video_asset,
+    snapshot_video_output,
+    snapshot_web_asset,
+)
 
 logger = structlog.get_logger()
 
@@ -182,6 +204,16 @@ def _views_text(views: list[ViewFact]) -> str:
         elements = []
         for e in view.elements[:24]:
             flags = " covered" if e.get("covered") else ""
+            if e.get("storage_key"):
+                flags += " +element-image"
+                css = e.get("css_box")
+                if isinstance(css, dict):
+                    flags += (
+                        " CSS(" + ",".join(
+                            f"{float(css.get(key) or 0):g}"
+                            for key in ("x", "y", "width", "height")
+                        ) + f")@{float(e.get('device_scale_factor') or 1):g}x"
+                    )
             label = str(e.get("text") or "")[:60]
             elements.append(f"{e.get('id')}:{e.get('kind')}{flags} {label!r}")
         rows.append(
@@ -190,6 +222,75 @@ def _views_text(views: list[ViewFact]) -> str:
             + ("; ".join(elements) if elements else "(no element inventory)")
         )
     return "\n".join(rows)
+
+
+def _video_materials_text(snapshots: list[SourceSnapshot]) -> str:
+    """Compact frozen media facts for source-window and caption decisions."""
+    rows: list[str] = []
+    for snapshot in snapshots:
+        meta = snapshot.meta or {}
+        media = meta.get("media") or {}
+        rows.append(
+            f"snapshot_id={snapshot.id} · title={str(meta.get('title') or '').strip()!r} · "
+            f"duration={(snapshot.duration_ticks or 0) / 90000:.3f}s · "
+            f"{media.get('width')}x{media.get('height')} · has_audio={bool(media.get('has_audio'))}"
+        )
+        transcript = str(meta.get("transcript") or "").strip()
+        if transcript:
+            rows.append("transcript: " + transcript[:12000])
+        timed: list[str] = []
+        for word in (meta.get("words") or [])[:600]:
+            text = str(word.get("word") or word.get("text") or "").strip()
+            if text:
+                timed.append(f"{float(word.get('start') or 0):.2f}-{float(word.get('end') or 0):.2f}:{text}")
+        if timed:
+            rows.append("word timings (SOURCE seconds): " + " ".join(timed))
+    return "\n".join(rows)
+
+
+async def _directed_mixed(
+    *,
+    snapshots: list[SourceSnapshot],
+    focus: str | None,
+    instruction: str | None,
+    language: str | None,
+    current: str | None,
+    target_seconds: float | None,
+) -> MixedDirection:
+    facts = {
+        snapshot.id: {
+            "kind": snapshot.kind,
+            "digest": snapshot.digest,
+            "duration_ticks": snapshot.duration_ticks,
+            "storage_key": snapshot.storage_key,
+            "meta": snapshot.meta or {},
+        }
+        for snapshot in snapshots
+    }
+    materials_text = _video_materials_text(snapshots)
+    feedback: str | None = None
+    last_violations: list[str] = []
+    for _attempt in range(_MAX_DIRECTION_ATTEMPTS):
+        direction = await mixed_director.call(
+            materials_text=materials_text,
+            focus=focus,
+            instruction=instruction,
+            language=language,
+            current=current,
+            target_seconds=target_seconds,
+            repair_feedback=feedback,
+        )
+        try:
+            return resolve_mixed_direction(
+                direction, snapshot_facts=facts, target_seconds=target_seconds
+            )
+        except DirectionRejected as exc:
+            last_violations = exc.violations
+            feedback = "\n".join(f"- {item}" for item in exc.violations)
+    raise DesignError(
+        "the mixed-video director's answer stayed invalid after "
+        f"{_MAX_DIRECTION_ATTEMPTS} attempts: " + "; ".join(last_violations)
+    )
 
 
 async def _view_media_inputs(snapshots: list[SourceSnapshot], views: list[ViewFact]) -> list[Any]:
@@ -214,6 +315,22 @@ async def _view_media_inputs(snapshots: list[SourceSnapshot], views: list[ViewFa
         )
         if item is not None:
             items.append(item)
+        if i <= 4:
+            element = next(
+                (candidate for candidate in view.elements if candidate.get("storage_key")),
+                None,
+            )
+            if element is not None:
+                crop = await media_input_for_image(
+                    str(element["storage_key"]),
+                    caption=(
+                        f"V{i} element {element.get('id')} — the captured target crop; "
+                        "its CSS box and pixel mapping are listed in the view inventory"
+                    ),
+                    max_px=1280,
+                )
+                if crop is not None:
+                    items.append(crop)
     return items
 
 
@@ -229,6 +346,7 @@ def _current_design_summary(content_scenes: list[dict[str, Any]]) -> str:
         rows.append(
             f"- {scene['scene_id']}: {scene.get('intent') or ''}"
             + (" | " + "; ".join(texts) if texts else "")
+            + (" | narration: " + str(scene["narration"]).replace("\n", " / ") if scene.get("narration") else "")
         )
     return "\n".join(rows)
 
@@ -325,6 +443,52 @@ async def _resolve_bed(
     )
 
 
+def _base_narration(content: Any) -> tuple[str | None, dict[str, Any] | None]:
+    clips = sorted(
+        (
+            clip
+            for track in content.timeline.tracks
+            for clip in track.clips
+            if isinstance(clip.object, SpeechObject)
+        ),
+        key=lambda clip: clip.range.start,
+    )
+    if not clips:
+        return None, None
+    voices = [
+        {
+            "provider": clip.object.provider,
+            "model": clip.object.model,
+            "voice_id": clip.object.voice_id,
+            "language": clip.object.language,
+        }
+        for clip in clips
+    ]
+    if any(voice != voices[0] for voice in voices[1:]):
+        raise DesignError("an open redraft of per-scene voice changes is ambiguous; use update_speech")
+    return "\n".join(clip.object.text for clip in clips), voices[0]
+
+
+async def _resolve_narration_voice(
+    db: AsyncSession,
+    *,
+    project_id: UUID,
+    base_content: Any,
+) -> dict[str, Any] | None:
+    if base_content is not None:
+        return _base_narration(base_content)[1]
+    from app.platform.project_context import resolve_persona
+
+    project = await db.get(Project, project_id)
+    persona = await resolve_persona(db, project) if project is not None else None
+    config = narration_synth_config()
+    return {
+        "provider": config["provider"],
+        "model": config["model"],
+        "voice_id": resolve_video_voice((persona.voice or None) if persona is not None else None),
+    }
+
+
 async def _design_locked(
     db: AsyncSession,
     *,
@@ -346,7 +510,56 @@ async def _design_locked(
         )
         base_content = content_of(base_version)
 
-    if args.text:
+    mixed_design = False
+    if not args.text:
+        mixed_design = bool(args.material_output_ids)
+        if base_content is not None:
+            mixed_design = any(
+                clip.object.kind == "video"
+                for track in base_content.timeline.tracks
+                for clip in track.clips
+            )
+        if args.material_asset_ids:
+            asset_types = list((await db.scalars(select(Asset.type).where(
+                Asset.id.in_(args.material_asset_ids), Asset.user_id == owner_id
+            ))).all())
+            mixed_design = mixed_design or AssetType.VIDEO in asset_types
+
+    if args.mode == "program":
+        # ---- controlled visual program: Agent source → exact preview → version ----
+        direction: ProgramDirection = await program_director.call(
+            text=args.text or "",
+            focus=args.focus,
+            instruction=args.specific_instruction or "",
+            language=args.language,
+            target_seconds=args.target_seconds,
+        )
+        validate_program_direction(
+            direction, source_text=args.text, target_seconds=args.target_seconds
+        )
+        raw_ops = instantiate_program(
+            direction, aspect=args.aspect or "16:9", background=args.background
+        )
+        provenance = {"skill": None, "mode": "program"}
+        name = (direction.name or "").strip()[:24] or ""
+    elif args.mode == "image":
+        # ---- model image: save the request now; authorized production generates later ----
+        image_direction = await image_director.call(
+            text=args.text or "",
+            focus=args.focus,
+            instruction=args.specific_instruction or "",
+            language=args.language,
+            target_seconds=args.target_seconds,
+        )
+        validate_generated_image_direction(
+            image_direction, source_text=args.text, target_seconds=args.target_seconds
+        )
+        raw_ops = instantiate_generated_image(
+            image_direction, aspect=args.aspect or "16:9", background=args.background
+        )
+        provenance = {"skill": None, "mode": "image"}
+        name = (image_direction.name or "").strip()[:24] or ""
+    elif args.text:
         # ---- the MG path: no capture, no snapshot — copy in, scenes out ----
         if args.composition_id is not None and args.material_urls:
             raise DesignError("a redraft keeps its material; new URLs start a new work")
@@ -361,6 +574,19 @@ async def _design_locked(
                     content_digest=base_version.content_digest,
                 )["scenes"]
             )
+        base_narration = _base_narration(base_content)[0] if base_content is not None else None
+        narration_enabled = args.narration_enabled is not False and (
+            args.narration is not None or args.narration_enabled is True or base_narration is not None
+        )
+        narration_text = (
+            args.narration if args.narration is not None else base_narration
+        ) if narration_enabled else None
+        if narration_enabled and not narration_text:
+            raise DesignError("a narrated redraft needs exact spoken copy or an existing SpeechObject")
+        narration_voice = (
+            await _resolve_narration_voice(db, project_id=project_id, base_content=base_content)
+            if narration_enabled else None
+        )
         direction = await mg_director.call(
             text=args.text,
             focus=args.focus,
@@ -369,12 +595,109 @@ async def _design_locked(
             current=current,
             scene_count=args.scene_count,
             target_seconds=args.target_seconds,
+            narration=narration_text,
         )
-        validate_mg_direction(direction, source_text=args.text,
-                              scene_count=args.scene_count, target_seconds=args.target_seconds)
-        raw_ops = instantiate_mg(direction, aspect=args.aspect or "16:9", background=args.background)
+        validate_mg_direction(
+            direction,
+            source_text=args.text,
+            scene_count=args.scene_count,
+            target_seconds=args.target_seconds,
+            narration_text=narration_text,
+        )
+        if narration_voice is not None:
+            narration_voice["language"] = (
+                args.language or direction.language or narration_voice.get("language") or "en"
+            ).split("-")[0].split("_")[0].lower()
+        bed = await _resolve_bed(
+            db,
+            owner_id=owner_id,
+            project_id=project_id,
+            requested=args.music,
+            base_content=base_content,
+        )
+        raw_ops = instantiate_mg(
+            direction,
+            aspect=args.aspect or "16:9",
+            background=args.background,
+            narration_voice=narration_voice,
+            music_bed=bed,
+        )
         provenance = {"skill": None, "mode": "mg"}
         name = (direction.name or "").strip()[:24] or ""
+    elif mixed_design:
+        # ---- mixed media: frozen real video → native title/captions + sound ----
+        if composition is not None and (args.material_urls or args.material_asset_ids or args.material_output_ids):
+            raise DesignError("a redraft keeps its bound snapshots; new material starts a new work")
+        if composition is not None:
+            snapshot_ids = [b.snapshot_id for b in base_content.sources]  # type: ignore[union-attr]
+            snapshots = [
+                row
+                for row in (await db.execute(select(SourceSnapshot).where(SourceSnapshot.id.in_(snapshot_ids)))).scalars().all()
+                if row.kind == "video"
+            ]
+            snapshots.sort(key=lambda row: snapshot_ids.index(row.id))
+        else:
+            snapshots = []
+            asset_ids = args.material_asset_ids or []
+            if asset_ids:
+                assets = list((await db.scalars(select(Asset).where(
+                    Asset.id.in_(asset_ids),
+                    Asset.user_id == owner_id,
+                    Asset.type == AssetType.VIDEO,
+                    Asset.processing_status == AssetStatus.COMPLETED,
+                ))).all())
+                if len(assets) != len(set(asset_ids)):
+                    raise DesignError("every mixed-design asset must be an accessible, processed video")
+                assets.sort(key=lambda item: asset_ids.index(item.id))
+                snapshots.extend([await snapshot_video_asset(db, item, owner_id=owner_id) for item in assets])
+            output_ids = args.material_output_ids or []
+            if output_ids:
+                outputs = list((await db.scalars(select(Output).join(Project, Output.project_id == Project.id).where(
+                    Output.id.in_(output_ids), Project.user_id == owner_id
+                ))).all())
+                if len(outputs) != len(set(output_ids)):
+                    raise DesignError("every mixed-design output must be accessible to this user")
+                outputs.sort(key=lambda item: output_ids.index(item.id))
+                snapshots.extend([await snapshot_video_output(db, item, owner_id=owner_id) for item in outputs])
+        if not snapshots:
+            raise DesignError("the base version binds no real video — choose a recording as material")
+        await db.flush()
+        current = None
+        if base_content is not None:
+            current = _current_design_summary(
+                storyboard_payload(
+                    base_content,
+                    composition_id=composition.id,
+                    version_id=base_version.id,
+                    version=base_version.version,
+                    content_digest=base_version.content_digest,
+                )["scenes"]
+            )
+        direction = await _directed_mixed(
+            snapshots=snapshots,
+            focus=args.focus,
+            instruction=args.specific_instruction,
+            language=args.language,
+            current=current,
+            target_seconds=args.target_seconds,
+        )
+        selected = next(snapshot for snapshot in snapshots if snapshot.id == direction.source_snapshot_id)
+        bed = await _resolve_bed(
+            db,
+            owner_id=owner_id,
+            project_id=project_id,
+            requested=args.music,
+            base_content=base_content,
+        )
+        raw_ops = instantiate_mixed(
+            direction,
+            snapshot_digest=selected.digest,
+            aspect=args.aspect or "16:9",
+            background=args.background,
+            music_bed=bed,
+        )
+        provenance = {"skill": None, "mode": "mixed"}
+        name = (direction.name or "").strip()[:24] or str((selected.meta or {}).get("title") or "")[:24]
     else:
         # ---- the website-promo path: capture → snapshot → template --------
         if composition is not None and (args.material_urls or args.material_asset_ids):
@@ -467,6 +790,16 @@ async def _design_locked(
         name = slots.name or _fallback_name(snapshot_metas)
 
     ops = _OPS.validate_python(raw_ops)
+    for op in ops:
+        if (
+            isinstance(op, AddClip)
+            and op.clip.object.kind == "generator"
+            and op.clip.object.runtime == "drawing-v1"
+        ):
+            # Preview is a bounded candidate preflight. Orphaned content-
+            # addressed media from a later validation rejection is reusable;
+            # it never becomes a SourceSnapshot or a delivered Output.
+            await ensure_generator_clip(op.clip)
     if composition is None:
         composition, version, replayed = await apply_composition_edits(
             db,

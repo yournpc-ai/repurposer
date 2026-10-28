@@ -23,7 +23,7 @@ from app.editing.fonts import FONT_FILES, font_storage_key
 from app.editing.sources import register_snapshot
 from app.editing.timing import SOURCE_TIMEBASE
 from app.models.schemas import AssetType
-from app.models.tables import Asset, SourceSnapshot
+from app.models.tables import Asset, Output, Project, SourceSnapshot
 from app.pipeline.music import AUDIO_EXT, music_file_path
 from app.providers import storage
 
@@ -33,7 +33,7 @@ _SUFFIX = re.compile(r"^\.[a-z0-9]{1,8}$", re.IGNORECASE)
 
 # The citation manifest's field order (title first — the page's own lead;
 # links last — navigation chrome is the weakest citation).
-_RESEARCH_FIELDS = ("title", "description", "h1", "h2", "h3", "paragraphs", "buttons", "links")
+_RESEARCH_FIELDS = ("title", "description", "h1", "h2", "h3", "paragraphs", "body", "buttons", "links")
 
 
 def _research_lines(research: Any) -> list[dict[str, str]]:
@@ -49,6 +49,7 @@ def _research_lines(research: Any) -> list[dict[str, str]]:
         "h2": "h2",
         "h3": "h3",
         "paragraphs": "paragraph",
+        "body": "text",
         "buttons": "button",
         "links": "link",
     }
@@ -92,6 +93,18 @@ async def store_source_bytes(data: bytes, suffix: str, content_type: str) -> tup
     return key, digest
 
 
+async def _freeze_png(source_key: str) -> dict[str, Any]:
+    """Copy one captured PNG to its immutable source identity and retain
+    the actual pixel dimensions used by CSS-to-image mappings."""
+    data = await storage.read(source_key)
+    key, digest = await store_source_bytes(data, ".png", "image/png")
+    with Image.open(io.BytesIO(data)) as image:
+        if image.format != "PNG":
+            raise ValueError(f"web capture {source_key} is not a PNG")
+        width, height = image.size
+    return {"storage_key": key, "digest": digest, "width": width, "height": height}
+
+
 async def snapshot_web_asset(db: AsyncSession, asset: Asset, *, owner_id: UUID) -> SourceSnapshot:
     """Freeze every captured view and the page manifest of a WEB_PAGE Asset.
 
@@ -120,24 +133,35 @@ async def snapshot_web_asset(db: AsyncSession, asset: Asset, *, owner_id: UUID) 
         source_key = shot.get("key")
         if not isinstance(source_key, str) or not source_key:
             raise ValueError(f"web view {view_id} has no captured image")
-        data = await storage.read(source_key)
-        key, digest = await store_source_bytes(data, ".png", "image/png")
-        with Image.open(io.BytesIO(data)) as image:
-            if image.format != "PNG":
-                raise ValueError(f"web view {view_id} is not a PNG capture")
-            width, height = image.size
-        views.append(
-            {
-                "view_id": view_id,
-                "storage_key": key,
-                "digest": digest,
-                "width": width,
-                "height": height,
-                "source_y": int(shot.get("y") or 0),
-                "heading": str(shot.get("heading") or ""),
-                "elements": shot.get("elements") or [],
-            }
-        )
+        frozen = await _freeze_png(source_key)
+        elements: list[dict[str, Any]] = []
+        for raw_element in shot.get("elements") or []:
+            element = dict(raw_element)
+            element.pop("image_width", None)
+            element.pop("image_height", None)
+            element_image_key = element.pop("image_key", None)
+            if isinstance(element_image_key, str) and element_image_key:
+                element_image = await _freeze_png(element_image_key)
+                element["storage_key"] = element_image["storage_key"]
+                element["digest"] = element_image["digest"]
+                element["image_width"] = element_image["width"]
+                element["image_height"] = element_image["height"]
+            elements.append(element)
+        view = {
+            "view_id": view_id,
+            "storage_key": frozen["storage_key"],
+            "digest": frozen["digest"],
+            "width": frozen["width"],
+            "height": frozen["height"],
+            "source_y": int(shot.get("y") or 0),
+            "heading": str(shot.get("heading") or ""),
+            "elements": elements,
+            "device_scale_factor": float(shot.get("device_scale_factor") or 1.0),
+        }
+        for field_name in ("css_width", "css_height"):
+            if shot.get(field_name) is not None:
+                view[field_name] = int(shot[field_name])
+        views.append(view)
 
     manifest: dict[str, Any] = {
         "schema_version": 1,
@@ -146,6 +170,12 @@ async def snapshot_web_asset(db: AsyncSession, asset: Asset, *, owner_id: UUID) 
         "views": views,
         "lines": _research_lines(source_meta.get("research")),
     }
+    source_page = source_meta.get("page")
+    if isinstance(source_page, dict) and isinstance(source_page.get("key"), str):
+        frozen_page = await _freeze_png(source_page["key"])
+        manifest["page"] = {
+            key: value for key, value in source_page.items() if key != "key"
+        } | frozen_page
     origin = source_meta.get("origin")
     if origin is not None:
         manifest["origin"] = origin
@@ -207,6 +237,107 @@ async def snapshot_audio_asset(db: AsyncSession, asset: Asset, *, owner_id: UUID
         duration_ticks=duration_ticks,
         meta=meta,
         captured_at=_captured_at(asset.created_at),
+    )
+
+
+async def snapshot_video_asset(db: AsyncSession, asset: Asset, *, owner_id: UUID) -> SourceSnapshot:
+    """Freeze real video bytes, dimensions, duration and available ASR facts."""
+    if asset.user_id != owner_id:
+        raise PermissionError("video snapshot source belongs to another user")
+    if asset.type != AssetType.VIDEO or not asset.file_url:
+        raise ValueError("video snapshots require a VIDEO asset with stored bytes")
+    source_meta = asset.meta or {}
+    meta: dict[str, Any] = {
+        "title": asset.display_name,
+        "transcript": asset.transcript,
+        "words": source_meta.get("words") or [],
+        "language": source_meta.get("language"),
+    }
+    origin = source_meta.get("origin")
+    if origin is not None:
+        meta["origin"] = origin
+    return await _snapshot_video_bytes(
+        db,
+        owner_id=owner_id,
+        storage_key=asset.file_url,
+        asset=asset,
+        meta=meta,
+        captured_at=_captured_at(asset.created_at),
+    )
+
+
+async def snapshot_video_output(db: AsyncSession, output: Output, *, owner_id: UUID) -> SourceSnapshot:
+    """Use a delivered Output as material without targeting its Composition.
+
+    Editing the original work remains the separate @output revision path.
+    """
+    project = await db.get(Project, output.project_id)
+    if project is None or project.user_id != owner_id:
+        raise PermissionError("video output belongs to another user")
+    storage_key = (output.files or {}).get("video")
+    if not isinstance(storage_key, str) or not storage_key:
+        raise ValueError("video output has no delivered video bytes")
+    return await _snapshot_video_bytes(
+        db,
+        owner_id=owner_id,
+        storage_key=storage_key,
+        asset=None,
+        identity=output.id,
+        meta={"title": (output.payload or {}).get("name"), "origin": {"output_id": str(output.id)}},
+        captured_at=_captured_at(output.created_at),
+    )
+
+
+async def _snapshot_video_bytes(
+    db: AsyncSession,
+    *,
+    owner_id: UUID,
+    storage_key: str,
+    asset: Asset | None,
+    meta: dict[str, Any],
+    captured_at: datetime,
+    identity: UUID | None = None,
+) -> SourceSnapshot:
+    data = await storage.read(storage_key)
+    suffix = Path(storage_key).suffix.lower() or ".mp4"
+    content_type = "video/quicktime" if suffix == ".mov" else "video/mp4"
+    key, digest = await store_source_bytes(data, suffix, content_type)
+
+    container = av.open(io.BytesIO(data), mode="r")
+    try:
+        if not container.streams.video:
+            raise ValueError("video source has no video stream")
+        stream = container.streams.video[0]
+        if stream.duration is not None and stream.time_base is not None:
+            duration = Fraction(stream.duration) * Fraction(stream.time_base)
+        elif container.duration is not None:
+            duration = Fraction(container.duration, av.time_base)
+        else:
+            raise ValueError("video source has no decodable duration")
+        duration_ticks = _round_half_up(duration * SOURCE_TIMEBASE)
+        width = int(stream.codec_context.width or 0)
+        height = int(stream.codec_context.height or 0)
+        if duration_ticks <= 0 or width <= 0 or height <= 0:
+            raise ValueError("video source has invalid media dimensions or duration")
+        media = {
+            "width": width,
+            "height": height,
+            "has_audio": bool(container.streams.audio),
+        }
+    finally:
+        container.close()
+
+    return await register_snapshot(
+        db,
+        owner_id=owner_id,
+        asset=asset,
+        identity=identity,
+        kind="video",
+        storage_key=key,
+        digest=digest,
+        duration_ticks=duration_ticks,
+        meta={**meta, "media": media},
+        captured_at=captured_at,
     )
 
 

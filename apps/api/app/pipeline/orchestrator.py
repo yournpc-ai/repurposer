@@ -1123,6 +1123,10 @@ async def create_run(
     nodes: list[WorkflowStep] = []
     for ns in node_specs:
         spec = dict(ns.spec or {})
+        if ns.kind == "produce_video":
+            # The paid-fit ceiling is authorized with the Run, then pinned
+            # into its executable step; neither side may drift on resume.
+            spec["narration_policy"] = video_context.get("narration_policy")
         if "summary" not in spec:
             # Builder-written task name (the task list's pending-row text —
             # label() carries the static name, or the slot-tagged sibling

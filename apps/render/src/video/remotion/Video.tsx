@@ -6,6 +6,7 @@ import {
   AbsoluteFill,
   Audio,
   Img,
+  OffthreadVideo,
   Sequence,
   cancelRender,
   continueRender,
@@ -229,6 +230,68 @@ const TextObjectView: React.FC<{
   );
 };
 
+const VideoObjectView: React.FC<{ clip: VideoClip; frame: number }> = ({ clip, frame }) => {
+  if (clip.object.kind !== "video" || !clip.source) return null;
+  const object = clip.object;
+  const base = gainLinear(object.gain_db);
+  const gainAnim = clip.animations.find(
+    (animation) =>
+      animation.target_object_id === object.object_id &&
+      animation.target_text_part_id === null &&
+      animation.property === "audio.gain",
+  );
+  return (
+    <div style={wholeObjectStyle(clip, frame)}>
+      <OffthreadVideo
+        src={clip.source.url}
+        startFrom={clip.source.start_frame ?? 0}
+        endAt={clip.source.end_frame}
+        muted={object.muted}
+        volume={
+          gainAnim
+            ? (localFrame) =>
+                base *
+                scalar(
+                  evaluateProperty(clip.animations, object.object_id, "audio.gain", localFrame),
+                  1,
+                )
+            : base
+        }
+        style={{ width: "100%", height: "100%", objectFit: object.fit }}
+      />
+    </div>
+  );
+};
+
+const ShapeObjectView: React.FC<{ clip: VideoClip; frame: number }> = ({ clip, frame }) => {
+  if (clip.object.kind !== "shape") return null;
+  const object = clip.object;
+  const { width, height } = object.layout;
+  const paint = {
+    fill: object.fill ?? "none",
+    stroke: object.stroke ?? "none",
+    strokeWidth: object.stroke_width,
+  };
+  return (
+    <div style={wholeObjectStyle(clip, frame)}>
+      <svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${width} ${height}`}
+        role="presentation"
+      >
+        {object.shape === "rect" ? (
+          <rect x={0} y={0} width={width} height={height} rx={object.corner_radius} {...paint} />
+        ) : object.shape === "ellipse" ? (
+          <ellipse cx={width / 2} cy={height / 2} rx={width / 2} ry={height / 2} {...paint} />
+        ) : (
+          <path d={object.path ?? ""} {...paint} />
+        )}
+      </svg>
+    </div>
+  );
+};
+
 const VisualObjectView: React.FC<{ clip: VideoClip; fonts: VideoSpec["fonts"] }> = ({
   clip,
   fonts,
@@ -238,6 +301,12 @@ const VisualObjectView: React.FC<{ clip: VideoClip; fonts: VideoSpec["fonts"] }>
   if (obj.kind === "audio") return null;
   if (obj.kind === "text") {
     return <TextObjectView clip={clip as VideoClip & { object: VideoTextObject }} fonts={fonts} frame={frame} />;
+  }
+  if (obj.kind === "video") {
+    return <VideoObjectView clip={clip} frame={frame} />;
+  }
+  if (obj.kind === "shape") {
+    return <ShapeObjectView clip={clip} frame={frame} />;
   }
   if (!clip.source) throw new Error(`${obj.kind} clip ${clip.clip_id} carries no source`);
   return (

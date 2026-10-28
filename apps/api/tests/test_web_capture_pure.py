@@ -1,28 +1,41 @@
 """Web capture pure tests (MG film 批 D1 — 网页采集资产化).
 
-No DB, no network, no browser. Two layers:
+No DB, no network, no browser. Three layers:
 
-1. ``extract_research`` — the HTML → grounding-manifest mapping: title /
-   meta description / h1-h3 / button and link copy, with the skip-set
-   (script/style/svg), entity unescape, dedup, length filter and per-field
-   cap all locked.
-2. The SSRF static gate boundary table — ``check_url_policy`` /
+1. ``extract_research`` / ``extract_rendered_research`` — HTML + rendered
+   body text → grounding-manifest mapping, with structured-copy dedup,
+   entity unescape and bounded lines.
+2. Asset → SourceSnapshot freezing and Director media assembly — rendered
+   lines, full-page/view/element PNGs, CSS→pixel mapping and immutable keys.
+3. The SSRF static gate boundary table — ``check_url_policy`` /
    ``_parse_ip_literal`` / ``_ip_allowed``: scheme whitelist, hostname law,
    the inet_aton spelling launderers, and the IP classification truth table
    (incl. tunnel-embedded v4: mapped / NAT64 / 6to4 / Teredo). The DNS and
    proxy halves are network seams and live outside the pure suite.
 """
 
-import pytest
+import io
+from uuid import uuid4
 
+import pytest
+from PIL import Image
+
+from app.models.schemas import AssetType
+from app.models.tables import Asset, SourceSnapshot
 from app.tools.research.capture import (
     CaptureBlocked,
     _ip_allowed,
     _parse_ip_literal,
+    _stamp_elements,
     check_url_policy,
+    css_pixel_box,
+    extract_rendered_research,
     extract_research,
     render_manifest_text,
 )
+from app.tools.video import preparation
+from app.tools.video.design import _view_media_inputs
+from app.editing.templates import ViewFact
 
 # ---------------------------------------------------------------------------
 # Extraction
@@ -112,6 +125,130 @@ def test_render_manifest_text_dedupes_and_caps():
         "<title>T</title><h1>T</h1>", "https://x.example/"
     )
     assert render_manifest_text(dup).count("T") == 1
+
+
+def test_rendered_body_copy_becomes_citable_text():
+    research = extract_rendered_research(
+        "<title>Agent</title><h1>Ship safely</h1>",
+        "https://agent.example/",
+        "Ship safely\nApproval is ready\nApproval is ready\nDynamic detail loaded",
+    )
+    assert research.body == ["Approval is ready", "Dynamic detail loaded"]
+    assert "Approval is ready" in render_manifest_text(research)
+    lines = preparation._research_lines(research.model_dump())
+    assert {"kind": "text", "text": "Approval is ready"} in lines
+    assert {"kind": "text", "text": "Dynamic detail loaded"} in lines
+
+
+def test_element_css_box_maps_to_full_page_pixels():
+    element = _stamp_elements([{
+        "kind": "heading", "text": "A target", "x": 0.5, "y": 0.4, "w": 0.4, "h": 0.2,
+        "css": {"x": 10.25, "y": 20.5, "width": 100.5, "height": 40.25},
+    }], 0)[0]
+    assert element["css_box"] == {"x": 10.25, "y": 20.5, "width": 100.5, "height": 40.25}
+    assert css_pixel_box(element["css_box"], 2.0) == {
+        "x": 20.5, "y": 41.0, "width": 201.0, "height": 80.5,
+    }
+
+
+def _png(width: int, height: int) -> bytes:
+    output = io.BytesIO()
+    Image.new("RGB", (width, height), "#336699").save(output, format="PNG")
+    return output.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_snapshot_freezes_rendered_lines_page_and_element_images(monkeypatch):
+    sources = {"view": _png(200, 100), "element": _png(80, 40), "page": _png(200, 400)}
+    objects: dict[str, bytes] = {}
+
+    async def read(key):
+        return sources[key] if key in sources else objects[key]
+
+    async def exists(key):
+        return key in objects
+
+    async def save(key, data, content_type):
+        objects[key] = data
+
+    async def register(_db, **kwargs):
+        return kwargs["meta"]
+
+    monkeypatch.setattr(preparation.storage, "read", read)
+    monkeypatch.setattr(preparation.storage, "exists", exists)
+    monkeypatch.setattr(preparation.storage, "save", save)
+    monkeypatch.setattr(preparation, "register_snapshot", register)
+    owner_id = uuid4()
+    asset = Asset(
+        user_id=owner_id,
+        type=AssetType.WEB_PAGE,
+        meta={
+            "capture_url": "https://agent.example/",
+            "research": {
+                "url": "https://agent.example/", "body": ["Client-only approval state"],
+            },
+            "page": {
+                "key": "page", "css_width": 100, "css_height": 200,
+                "device_scale_factor": 2.0,
+            },
+            "shots": [{
+                "key": "view", "y": 0, "heading": "Ready",
+                "css_width": 100, "css_height": 50, "device_scale_factor": 2.0,
+                "elements": [{
+                    "id": "s0e0", "kind": "heading", "text": "Approval",
+                    "x": 0.5, "y": 0.5, "w": 0.8, "h": 0.8,
+                    "css_box": {"x": 10, "y": 5, "width": 40, "height": 20},
+                    "pixel_box": {"x": 20, "y": 10, "width": 80, "height": 40},
+                    "device_scale_factor": 2.0, "image_key": "element",
+                }],
+            }],
+        },
+    )
+    manifest = await preparation.snapshot_web_asset(None, asset, owner_id=owner_id)
+    assert manifest["lines"] == [{"kind": "text", "text": "Client-only approval state"}]
+    assert manifest["page"]["storage_key"] in objects
+    assert (manifest["page"]["width"], manifest["page"]["height"]) == (200, 400)
+    view = manifest["views"][0]
+    assert (view["width"], view["height"], view["css_width"]) == (200, 100, 100)
+    element = view["elements"][0]
+    assert element["storage_key"] in objects
+    assert element["digest"]
+    assert (element["image_width"], element["image_height"]) == (80, 40)
+    assert element["pixel_box"]["width"] == 80
+
+
+@pytest.mark.asyncio
+async def test_director_media_inputs_include_the_frozen_element_crop(monkeypatch):
+    calls = []
+
+    async def media_input(key, caption, max_px):
+        calls.append((key, caption, max_px))
+        return {"storage_key": key, "caption": caption}
+
+    from app.pipeline import step_context
+    monkeypatch.setattr(step_context, "media_input_for_image", media_input)
+    snapshot_id = uuid4()
+    elements = [{
+        "id": "s0e0", "kind": "heading", "storage_key": "snapshots/element.png",
+        "css_box": {"x": 10, "y": 5, "width": 40, "height": 20},
+        "device_scale_factor": 2.0,
+    }]
+    view = {
+        "view_id": "view-0", "storage_key": "snapshots/view.png",
+        "width": 200, "height": 100, "elements": elements,
+    }
+    snapshot = SourceSnapshot(
+        id=snapshot_id, digest="d" * 64, kind="web", meta={"views": [view]},
+    )
+    facts = ViewFact(
+        snapshot_id=snapshot_id, snapshot_digest="d" * 64, view_id="view-0",
+        width=200, height=100, elements=elements, heading="Ready", page=0,
+    )
+    items = await _view_media_inputs([snapshot], [facts])
+    assert [item["storage_key"] for item in items] == [
+        "snapshots/view.png", "snapshots/element.png",
+    ]
+    assert "s0e0" in calls[1][1]
 
 
 # ---------------------------------------------------------------------------

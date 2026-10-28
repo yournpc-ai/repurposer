@@ -9,7 +9,7 @@
 以下规则每个新会话自动执行，无需用户重复提醒；compact 后沿当前任务与交接继续，不重新通读项目历史。
 
 1. 先读本文与 `docs/PROGRESS.md` §0，再按本次任务选合同。先用 `rg -n '^#{1,4} ' 文件` 或关键词定位标题，再读取相关章节及必要上下文；不批量 `cat` 大型文档，不为“了解项目”遍历整个 docs。
-2. 局部修复只读相关合同、约束、风险与验收项。接手整个模块、排期或发布评估时才读该模块完整状态与欠账；视频目标与施工合同也不是每次全文必读。
+2. 局部修复只读相关合同、约束、风险与验收项。所有 Video Project 阶段施工先读 `docs/VIDEO_PROJECT.md` §0 的长期创作方针，再读当前批次；接手整个模块、排期或发布评估时才读该模块完整状态与欠账，不要求全文通读。
 3. 只有当前契约不清、证据缺失或规则冲突时，才定点查对应现行 ADR 与代码、测试或当前运行证据。引用不是递归阅读指令；确认实现位置、适用约束与验收条件后即进入工作，不继续扩大阅读范围。
 4. 收尾修改既有事实源：状态覆盖旧快照，合同更新剩余范围；保留未完成需求、未验证项和上线阻塞。普通修复不新增 ADR、会话流水账或重复总结文档；历史叙述与已失效合同直接删除，不另建 archive、事故纪要、验收日志副本或历史索引；删除前把仍有效的开放事项并入当前事实源。
 5. 删除 scratch / 旧合同前逐份核对独有语义：未完成需求、负面禁令、标识符、操作数值、迁移资源条件、真实验证边界与仍存活的引用都必须有当前家。验收看“叙事已删、规则仍保留”的 diff，不以历史关键词清零为目标；研究证据与可执行诊断工具不因日期或事故编号删除。
@@ -20,7 +20,7 @@
 **固定入口只有两层**：先读本文与 `docs/PROGRESS.md` §0，再读当前任务的状态/合同。随后只读下表命中的具体章节；完整导航与文档职责见 `docs/README.md`。不创建历史文档库；排障需要证据时查当前代码、测试与运行数据。
 
 - **当前状态 / 排期**：`docs/PROGRESS.md` §0 是唯一事实源；局部任务可以维护实施状态，但不得复制全局排期。
-- **Video Project / Film/MG**：目标层级 = Project/Chat → Composition → CompositionVersion，同 Chat 多影片、全局 @ 引用；内容唯一写口 = `apply_composition_edits`；A 最小基座已落地，B 当前接线与验收状态见施工合同。新架构施工先读 `docs/VIDEO_PROJECT.md` 的命中章节（目录/新旧代码处置唯一合同 = §12），再读 `docs/tasks/video-project-implementation.md` 当前阶段与验收；现状查 RENDERING 与实际代码，有效视听/创作要求归 VIDEO_PROJECT §15，不再维护旧 Film 施工三件套。
+- **Video Project / Film/MG**：目标层级 = Project/Chat → Composition → CompositionVersion，同 Chat 多影片、全局 @ 引用；内容唯一写口 = `apply_composition_edits`；A 最小基座已落地，B 当前接线与验收状态见施工合同。新架构施工先读 `docs/VIDEO_PROJECT.md` §0，再读命中章节（目录/新旧代码处置唯一合同 = §12），再读 `docs/tasks/video-project-implementation.md` 当前阶段与验收；现状查 RENDERING 与实际代码，有效视听/创作要求归 VIDEO_PROJECT §15，不再维护旧 Film 施工三件套。
 - **模块 / 表 / 队列 / 代码地图**：`docs/MODULE_ARCHITECTURE.md` §4（表归属）、§5（跨模块规则）、§7（代码地图与队列）；新表、新模块、新认领源必须登记。
 - **Studio UI**：`docs/UI_GUIDELINES.md` 的相关组件/布局章节；只有改 chat 行为时才同时读 CHAT_ARCHITECTURE。
 - **Chat / dock / 画布**：`docs/CHAT_ARCHITECTURE.md` 按改动面选读——工具与 plan path §3、SSE/活动/打字机 §8、修订 §9、禁令 §12。活动行与 WorkSegment 改动脉冲 §8.6～§8.7 的现行规则。
@@ -90,7 +90,7 @@ Correct:
 - **口头确认律（ADR-092，ask 档法律）**：ask 档下方案 dock 后恒等确认——echo 收尾恒为一句朴素的方案判断问句（一词可答），口头 yes 与 Start 钮都化为普通用户消息走 sendChat，下一轮 LLM 到 start_run（同一机器，按钮不直启 run）；收尾永不带「成片出来后再调」式交付后修订预告。**auto 档（默认）无确认拍**——方案呈现即开工，同回合 propose→start_run 是标准道（ADR-117）；但 auto 只免批准拍、**永不创造制作意图**（ADR-139）：dock 生于无制作请求的消息（纯修改/「先给我看方案」/讨论）任何档都等用户发话，`production_intent` 出生事实随六个 dock 工具入参，缺断言=安全侧挂起（Start 钮常驻）；开工确认**复述当前累计方案**（明说要求/已落实改动/建议未选项/未清项——未选项永不称「已确认」，旧版 yes 永不静默授权新稿）；守卫线（`billing.always_confirm_above` / NULL 不可报价族）任何档恒带价问一次。**film 分镜拍（ADR-129/ADR-134/ADR-144）**：分镜设计 = `design_storyboard` 呈现，分镜不是开工也不是方案 dock；fresh compose 首稿/开放重稿默认 review hold ON。**作品首个分镜版本一律先完整呈现并等待用户发话——开场「直接做」、`review_hold=false` 与 auto 都不能同回合开工，`film_presented_message_id` 未持久化时任何 Start 均由 `start.review_hold` 硬拦**。auto 无其他确认债时不显示首稿 approval dock，用户看过后的制作话走普通 sendChat；ask 可显示首稿 dock，Start 钮同样只发送用户消息。下一轮 LLM 调 `start_run` 才放行；后续版本不继承这个首稿专用确认拍，其余生产授权全走通用设置，新版本闭环目标 = `docs/VIDEO_PROJECT.md` §2/§8/§15，施工与实际验证状态 = `docs/tasks/video-project-implementation.md`；当前旧链事实查代码与 RENDERING。
 - **Chat / Run 工作段一行两态**：chat 的 now line / Thinking 与工作记录折叠行、run 的制作 / 整理结果 / Worked 同由 `components/chat/ActivityStream.tsx:WorkSegmentRow` 承载；首条 active 从宿主行原位入段，前段打字不得吞掉当前活动；工具完成不收段，首个非空白正文经打字机实际释放或真实终态才原位收成工作记录，busy 时禁「工作了 X 秒 + 另一条 Thinking」。chat live Thinking / 里程碑恒无 chevron 且不可展开，只有收成工作记录后才开放；run 保留可展开的活步骤树，按 RUNNING → REVIEWING → SETTLED 以同一 runId key 原位过渡，terminal 不等于收段，匹配当前 run 的 delivery 首字实际释放才收 Worked，chip 在真实可交付 output 就位后仍等匹配 delivery 首字实际释放或 Worked 收段才挂载，terminal 本身不提前暴露。cancelled 尝试从可见投影退役，不留 ✗ / 删除线，真实 failed 保留一条安静告警；chat 与 run-delivery 各持工作段时钟，互不相加。
 - **Mentions**：@-entity chips 随消息 `mentions` 字段送达；注册表架构（前端 `MENTION_REGISTRY` + 服务端解算），已注册 = `asset`（请求族）/ `output`（指认族，钉 id 服务端确定性解出修订目标）。**配方永不是 mention**（配方 = 提示词，卡面预填模板即全部发射载荷）。**Chip 三律**：可见（inline + ×）/ 发送消费 / × 净化。方针全文 = `docs/MENTIONS.md`。
-- **修订 = 图变更**：chat 修订骑 `POST /chat` 的 `edit_graph`（wiring 提案）→ `apply_wiring_ops` 唯一写口；卡面 prompt 直改 = 确定性手势走 `POST /projects/{id}/graph/revise`，**dock 零消息**（节点状态周期就是全部反馈），卡面乐观回显永不回闪。
+- **修订按所属领域走唯一写口**：业务执行图修订骑 `POST /chat` 的 `edit_graph`（wiring 提案）→ `apply_wiring_ops`；视频内容修订经 `revise_video` → `apply_composition_edits` 生成不可变版本，不把每个 Object/Clip 的内容改动当成图拓扑变更。旧图卡面 prompt 直改仍走 `POST /projects/{id}/graph/revise`，**dock 零消息**，卡面乐观回显永不回闪。受控视觉程序创作与执行图编排的边界见 VIDEO_PROJECT §0/§8.1.1。
 - **画布只读**：FlowView 无 drag/connect/手动布局等结构编辑 API，消费面也没有供背景流程调用的第二套通用相机命令；组件内部 explore 可提供用户 pan/zoom。**程序相机只认用户发起节拍**（draft 图到来整链 fit / 新节点诞生 setCenter；背景 refetch 永不动相机）。
 - **Dock 两形态机**（full / panel；移动端恒 full 纯 chat）与保草稿承重结构（单一 root + 恒渲染容器 + 恒定子索引，MentionEditor 跨形态翻转永不 remount）：全文 CHAT_ARCH §1 关键形态事实。
 - **chat 修复禁补丁式加禁令（先取证后归因）**：chat bug 的修法 = 先取证再归因到源头，**永不用新增禁令压症状**——上下文盲的禁令（「禁应答粒子」「禁指导用户」式）在合法场景必然拆东墙补西墙。取证 = 回放真实 payload 与机制链：payload 是「代码 × 当时世界状态」的纯函数，无 LLM 台账也能用真实 assemble + 内存拨回世界状态字节级重建。源头只有四类：装配 / 工具观察文本 / 法条座位冲突（两部法打架或适用范围未声明）/ 一法多说（同一部法在多个座位各说一遍）。两条结构律：**一部法只在一个座位说**；**工具观察文本只携带世界事实 + 指回法条座位，永不携带可转述的言语草稿**（被复述的法 = 模型的言语草稿，必被 paraphrase 进回复）。

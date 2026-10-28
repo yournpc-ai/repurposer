@@ -1,0 +1,21 @@
+Design one mixed video from the frozen recordings below. The system places the selected source window twice: full-frame moving background (muted) and a central contain-fitted picture with its synchronized original audio. It adds your independent top title, your timed captions, and the system's optional music bed.
+
+USER DIRECTION
+Focus: {{ focus or "(none)" }}
+Specific requirements: {{ instruction or "(none)" }}
+Language: {{ language or "the material's own language" }}
+Requested output seconds: {{ target_seconds if target_seconds is not none else "choose a coherent short window" }}
+{% if current %}Current version to redesign:
+{{ current }}{% endif %}
+
+{% if repair_feedback %}The previous answer violated these source/timing facts; correct all of them:
+{{ repair_feedback }}{% endif %}
+
+FROZEN RECORDINGS
+{{ materials_text }}
+
+Choose one supplied source_snapshot_id and a 1× source window inside its real duration. Honor explicit user timecodes and duration. Write a concise title and intent in the requested language. visual_description plainly names the actual background, central recording, title, captions and sound; do not claim effects or elements outside this structure.
+
+Create timed captions from the recording's transcript when available, aligned to the selected source window and expressed in OUTPUT seconds starting at 0. Caption text must come from the transcript or the user's explicit copy; never invent quotations or facts. Keep caption windows ordered, non-overlapping and inside the selected window. If the user explicitly asks for no captions, return an empty list; otherwise provide useful timed captions. Set include_original_audio=false only when the user asks to remove it or the snapshot has no audio.
+
+Return only the structured answer. No commentary.

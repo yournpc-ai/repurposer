@@ -178,16 +178,22 @@ def pick_focus(elements: list[dict[str, Any]]) -> str | None:
 
 
 def _visible_part(element: dict[str, Any]) -> dict[str, float] | None:
-    """Intersect an element's normalized rect with the view ([0,1]²).
+    """Intersect a center/extent element rect with the view ([0,1]²).
+
+    Capture stores ``x/y`` as the element center and ``w/h`` as its extent.
 
     Viewport-cropped captures legitimately carry elements that extend past
     the fold (x/w or y/h beyond 1); only the visible part is a lawful camera
     target. None = entirely outside the captured view.
     """
-    x0 = max(0.0, float(element["x"]))
-    y0 = max(0.0, float(element["y"]))
-    x1 = min(1.0, float(element["x"]) + float(element["w"]))
-    y1 = min(1.0, float(element["y"]) + float(element["h"]))
+    cx = float(element["x"])
+    cy = float(element["y"])
+    half_w = float(element["w"]) / 2
+    half_h = float(element["h"]) / 2
+    x0 = max(0.0, cx - half_w)
+    y0 = max(0.0, cy - half_h)
+    x1 = min(1.0, cx + half_w)
+    y1 = min(1.0, cy + half_h)
     if x1 <= x0 or y1 <= y0:
         return None
     return {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0}

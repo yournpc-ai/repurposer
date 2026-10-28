@@ -71,12 +71,33 @@ async def read_video_for_presentation(db, project, params):
             output_id=params.output_id)
     except (CompositionNotFound, PermissionDenied, ValueError):
         return None, "No accessible video version at this reference."
-    return read, ToolObservation(format_storyboard_text(read))
+    from app.tools.video.programs import enrich_generator_previews, generator_preview_images
+    read = await enrich_generator_previews(read)
+    return read, ToolObservation(
+        format_storyboard_text(read), images=tuple(await generator_preview_images(read))
+    )
 
 
 async def video_proposal_guard(db, project, tasks, *, pending_read=None, production_intent=None, mentions=()):
     if not any(t.tool == "produce_video" for t in tasks):
         return None
+    # Native tool loops occasionally serialize a nested object as JSON text.
+    # Normalize that one bounded shape BEFORE any guard reads it; malformed
+    # values become repair feedback, never a 500 or an implicit redesign.
+    import json
+    for task in tasks:
+        if task.tool != "produce_video":
+            continue
+        params = dict(task.params or {})
+        ref = params.get("version_ref")
+        if isinstance(ref, str):
+            try:
+                ref = json.loads(ref)
+            except (TypeError, ValueError):
+                return "Video production held: version_ref must be the saved base_ref object, not opaque text. Re-read the version and relay its base_ref."
+            if not isinstance(ref, dict):
+                return "Video production held: version_ref must be the saved base_ref object. Re-read the version and relay its base_ref."
+            task.params = {**params, "version_ref": ref}
     from app.tools.video.production import pin_video_production, latest_video_approval
     from app.editing.store import CompositionNotFound, PermissionDenied
     # A later revision may carry this turn's explicit "change and make".
@@ -196,6 +217,7 @@ async def design_video_seat(
         PermissionDenied,
     )
     from app.tools.video.design import DesignError, design_video  # deferred: tool seam
+    from app.tools.video.programs import enrich_generator_previews, generator_preview_images
 
     try:
         read = await design_video(
@@ -213,6 +235,13 @@ async def design_video_seat(
     except (DesignError, EditError, ValueError) as exc:
         return None, f"design_video rejected: {exc}"
     redraft = read.get("change_set") is not None
+    read = await enrich_generator_previews(read)
+    preview_images = tuple(await generator_preview_images(read))
+    preview_note = (
+        "\nExact drawing-v1 preview media is stored; the attached image is its real middle frame. "
+        "The user card carries the playable MP4 for this same program digest. Do not claim aesthetic approval."
+        if read.get("generator_previews") else ""
+    )
     return read, ToolObservation(
         f"Video version {read['version']} designed and saved "
         f"(composition {read['composition_id']}; "
@@ -228,8 +257,10 @@ async def design_video_seat(
         + "\nFeedback re-enters through design_video's "
         "specific_instruction (open direction) or revise_video's edits "
         "(targeted ops with base_ref echoed verbatim). What this chain "
-        "cannot express yet — spoken narration, video clips, "
-        "transitions — is said honestly, never faked."
+        "cannot express yet — arbitrary speed changes and transitions — "
+        "is said honestly, never faked."
+        + preview_note,
+        images=preview_images,
     )
 
 
@@ -260,6 +291,11 @@ async def revise_video_seat(
         PermissionDenied,
     )
     from app.models.database import AsyncSessionLocal  # deferred: db seam
+    from app.tools.video.programs import (
+        enrich_generator_previews,
+        generator_preview_images,
+        prepare_generator_media,
+    )
 
     try:
         async with AsyncSessionLocal() as video_db:
@@ -268,6 +304,7 @@ async def revise_video_seat(
                 owner_id=project.user_id,
                 args=args,
                 request_id=request_id,
+                prepare_candidate=prepare_generator_media,
             )
     except (CompositionNotFound, PermissionDenied):
         return None, (
@@ -279,6 +316,13 @@ async def revise_video_seat(
         return None, f"revise_video rejected: {exc}"
     import json
 
+    read = await enrich_generator_previews(read)
+    preview_images = tuple(await generator_preview_images(read))
+    preview_note = (
+        "\nThe revised exact program preview is attached; its MP4 and representative frame share the new digest. "
+        "Internal code/parameter changes require this reproduction; external layout alone reuses the fixed media."
+        if read.get("generator_previews") else ""
+    )
     return read, ToolObservation(
         f"Video version {read['version']} saved as a revision "
         "(no run started, nothing has been produced). The SYSTEM computed "
@@ -288,6 +332,8 @@ async def revise_video_seat(
         + "\nThe system attaches the complete saved storyboard card; introduce it briefly without repeating its scenes. Canonical "
         "facts (internal ids stay internal):\n"
         + format_storyboard_text(read)
+        + preview_note,
+        images=preview_images,
     )
 
 

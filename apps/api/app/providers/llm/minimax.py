@@ -1005,22 +1005,18 @@ class MiniMaxClient:
                 cleaned = cleaned[4:].strip()
         return cleaned
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        reraise=True,
-    )
     async def generate_image(
         self,
         prompt: str,
         aspect_ratio: str = "1:1",
         response_format: str = "base64",
     ) -> list[str]:
-        """Generate images with MiniMax image-01.
+        """Generate one image-01 request with a single non-idempotent POST.
 
-        Returns a list of base64 strings or URLs depending on ``response_format``.
-        Defaults to ``base64`` so images can be persisted locally instead of
-        relying on MiniMax's expiring URLs.
+        MiniMax documents no idempotency key or prior-result lookup. Transport
+        or response-decoding failures therefore have an unconfirmed outcome:
+        surface that fact instead of blindly submitting another paid request.
+        Returns base64 strings or URLs depending on ``response_format``.
         """
         if not self.api_key:
             raise LLMError("MINIMAX_API_KEY not configured")
@@ -1033,17 +1029,28 @@ class MiniMaxClient:
             "response_format": response_format,
         }
 
-        async with _pooled_client() as client:
-            response = await client.post(
-                f"{self.base_url}/image_generation",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
+        try:
+            async with _pooled_client() as client:
+                response = await client.post(
+                    f"{self.base_url}/image_generation",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+                _raise_for_status(response)
+                data = response.json()
+        except (httpx.RequestError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "minimax_image_outcome_unknown",
+                error=f"{type(exc).__name__}: {str(exc)[:200]}",
             )
-            _raise_for_status(response)
-            data = response.json()
+            raise LLMError(
+                "MiniMax image generation outcome is unconfirmed; "
+                "the request was not retried",
+                user_key="provider_image_outcome_unknown",
+            ) from exc
 
         base_resp = data.get("base_resp") or {}
         if base_resp.get("status_code") != 0:

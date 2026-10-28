@@ -113,6 +113,21 @@ class WebPageResearch(BaseModel):
     # Longer per-item bound than CTA copy (capture.py _PARAGRAPH_MAX_LEN);
     # absent on pre-paragraphs captures (read tolerance).
     paragraphs: list[str] = Field(default_factory=list)
+    # Visible rendered-body lines that the structured HTML inventory missed.
+    # Dynamic clients can therefore ground copy in the DOM the user actually saw.
+    body: list[str] = Field(default_factory=list)
+    body_truncated: bool = False
+
+
+class CaptureBox(BaseModel):
+    """A rectangle in either CSS-page or image-pixel coordinates."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    x: float
+    y: float
+    width: float
+    height: float
 
 
 class PageElement(BaseModel):
@@ -131,6 +146,15 @@ class PageElement(BaseModel):
     w: float
     h: float
     covered: bool = False
+    # Absolute CSS-page box of the visible element region. ``pixel_box`` is
+    # the same region in the full-page image; the element crop starts at its
+    # own (0, 0). Old captures carry neither enhancement.
+    css_box: CaptureBox | None = None
+    pixel_box: CaptureBox | None = None
+    device_scale_factor: float = 1.0
+    image_key: str | None = None
+    image_width: int | None = None
+    image_height: int | None = None
 
 
 class ShotRef(BaseModel):
@@ -145,6 +169,22 @@ class ShotRef(BaseModel):
     y: int = 0  # page-absolute scroll offset the shot was taken at
     heading: str = ""  # the anchor's text ("(top)"/"(step)" = code seats)
     elements: list[PageElement] = Field(default_factory=list)
+    css_width: int | None = None
+    css_height: int | None = None
+    device_scale_factor: float = 1.0
+
+
+class PageImageRef(BaseModel):
+    """The settled full-page image and its CSS-to-pixel mapping."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    width: int
+    height: int
+    css_width: int
+    css_height: int
+    device_scale_factor: float
 
 
 class WebPageMeta(BaseModel):
@@ -163,6 +203,7 @@ class WebPageMeta(BaseModel):
     research: WebPageResearch | None = None
     screenshot_key: str | None = None
     shots: list[ShotRef] = Field(default_factory=list)
+    page: PageImageRef | None = None
 
 
 class ProjectStatus(StrEnum):
@@ -1061,21 +1102,37 @@ class VideoVersionRef(BaseModel):
 class DesignVideoArgs(BaseModel):
     """``design_video`` params (both paths). A website promo (a URL's
     captured pages) instantiates the launch-film skill's template; a text
-    input (``text``) designs a free motion-graphics piece with no template.
+    input (``text``) designs a free motion-graphics piece; video assets or
+    delivered Outputs used as material design a mixed real-recording piece.
     ``composition_id`` + ``specific_instruction`` redraft an existing work's
     direction into a new child version."""
 
     model_config = ConfigDict(extra="forbid")
 
+    mode: Literal["auto", "motion_graphics", "program", "image"] = Field(
+        default="auto",
+        description="Use program for Agent-authored drawing-v1 motion, image for one MiniMax image-01 still background, motion_graphics for native text/shapes; auto preserves the material-based default.",
+    )
     scene_count: int | None = Field(default=None, ge=1, le=6, description="MG: exact scene count when the user names it.")
     target_seconds: float | None = Field(default=None, gt=0, le=118, description="MG: exact total duration when named.")
     aspect: Literal["16:9", "9:16", "1:1"] | None = Field(default=None, description="MG canvas aspect when named; absent = 16:9.")
     background: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$",
         description="MG exact canvas background when named, e.g. black=#000000, white=#FFFFFF.")
     material_asset_ids: list[UUID] | None = Field(default=None, max_length=12,
-        description="Owned captured webpage assets explicitly @referenced, including from another Chat; reuse their snapshots without recapturing.")
+        description="Owned source assets explicitly @referenced, including from another Chat. Video assets make a mixed recording composition; captured webpages make a website walkthrough.")
+    material_output_ids: list[UUID] | None = Field(default=None, max_length=12,
+        description="Delivered video Outputs explicitly used AS MATERIAL for a NEW mixed composition. Never use this to continue editing the original work; that path is revise_video with its saved base_ref.")
     music: Literal["off"] | None = Field(default=None,
         description='"off" ONLY when the user explicitly asks for no background music; absent = the default bed law (persona skin, then the calm catalog default).')
+    narration: str | None = Field(
+        default=None,
+        max_length=9000,
+        description="MG only: exact spoken copy to pace across scenes. Supplying it explicitly enables narration; the voice is resolved and pinned by code, never synthesized during design.",
+    )
+    narration_enabled: bool | None = Field(
+        default=None,
+        description="MG only: true ONLY when the user explicitly asks for spoken narration; false explicitly turns it off. Null inherits a redraft's setting and defaults a fresh design to off.",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -1085,11 +1142,15 @@ class DesignVideoArgs(BaseModel):
             "focus",
             "language",
             "material_urls",
+            "material_output_ids",
             "text",
             "specific_instruction",
             "composition_id",
             "pending_disposition",
             "music",
+            "mode",
+            "narration",
+            "narration_enabled",
         )
 
     focus: str | None = Field(
@@ -1123,16 +1184,46 @@ class DesignVideoArgs(BaseModel):
 
     @model_validator(mode="after")
     def _shape(self) -> "DesignVideoArgs":
-        if self.material_urls and self.material_asset_ids:
-            raise ValueError("name captured asset ids or new URLs, not both in one design")
-        if self.text and (self.material_urls or self.material_asset_ids):
-            raise ValueError("text and material_urls never mix — an MG video or a website promo")
-        if self.composition_id is None and not (self.text or self.material_urls or self.material_asset_ids):
+        if self.material_urls and (self.material_asset_ids or self.material_output_ids):
+            raise ValueError("name captured asset/output ids or new URLs, not both in one design")
+        if self.text and (self.material_urls or self.material_asset_ids or self.material_output_ids):
+            raise ValueError("text and media materials never mix — use an MG video or a media composition")
+        if self.narration_enabled is False and self.narration is not None:
+            raise ValueError("narration text and narration_enabled=false conflict")
+        if (self.narration is not None or self.narration_enabled is not None) and not self.text:
+            raise ValueError("the first narration consumer is an MG design with exact on-screen text")
+        if self.composition_id is None and self.narration_enabled and not self.narration:
+            raise ValueError("a fresh narrated design needs the exact spoken copy")
+        if self.mode in {"program", "image"} and (
+            self.narration is not None or self.narration_enabled is not None
+        ):
+            raise ValueError("narration currently belongs to the MG design path")
+        if self.mode == "program":
+            if self.composition_id is not None:
+                raise ValueError("revise an existing GeneratorObject with revise_video, not a redraft")
+            if self.material_urls or self.material_asset_ids or self.material_output_ids:
+                raise ValueError("the first drawing-v1 program consumer takes no media materials")
+            if not self.specific_instruction:
+                raise ValueError("a visual program needs the requested picture in specific_instruction")
+        if self.mode == "image":
+            if self.composition_id is not None:
+                raise ValueError("revise an existing GeneratorObject with revise_video, not a redraft")
+            if self.material_urls or self.material_asset_ids or self.material_output_ids:
+                raise ValueError("the first image-v1 consumer takes no media materials")
+            if not self.specific_instruction:
+                raise ValueError("a generated image needs the requested picture in specific_instruction")
+            if self.aspect not in (None, "16:9"):
+                raise ValueError("the first image-v1 consumer supports a 16:9 background")
+        if self.mode == "motion_graphics" and not self.text:
+            raise ValueError("native motion graphics needs exact on-screen text")
+        if self.composition_id is None and self.mode not in {"program", "image"} and not (self.text or self.material_urls or self.material_asset_ids or self.material_output_ids):
             raise ValueError(
                 "a new design needs its material: text for an MG video, "
-                "material_urls for a website promo (omit only when the "
-                "project's captured pages already cover the site)"
+                "video asset/output ids for a mixed composition, or "
+                "material_urls for a website promo"
             )
+        if len(self.material_asset_ids or []) + len(self.material_output_ids or []) > 12:
+            raise ValueError("a design accepts at most 12 referenced media items")
         if self.composition_id is not None and not self.specific_instruction and not self.focus:
             raise ValueError(
                 "a redraft needs the new direction: specific_instruction "
@@ -1159,6 +1250,28 @@ class VideoEditUpdateText(BaseModel):
     )
     align: Literal["left", "center", "right"] | None = None
     weight: Literal[400, 500, 600, 700, 800] | None = None
+
+
+class VideoEditUpdateSpeech(BaseModel):
+    """Revise one SpeechObject without moving its reviewed output window."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["update_speech"]
+    clip_id: str = Field(min_length=1)
+    text: str | None = Field(default=None, min_length=1, max_length=9000)
+    voice_id: str | None = Field(default=None, min_length=1, max_length=255)
+    language: str | None = Field(default=None, min_length=2, max_length=16)
+    gain_db: float | None = Field(default=None, ge=-60, le=12)
+
+
+class VideoEditSyncCaptions(BaseModel):
+    """Explicitly replace captions linked to one SpeechClip with its current text."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["sync_captions"]
+    clip_id: str = Field(min_length=1, description="The SpeechClip id from the storyboard read.")
 
 
 class VideoEditAddText(BaseModel):
@@ -1189,6 +1302,81 @@ class VideoEditRemoveClip(BaseModel):
 
     op: Literal["remove_clip"]
     clip_id: str = Field(min_length=1)
+
+
+class VideoEditUpdateVideo(BaseModel):
+    """Adjust one VideoObject or its source window without touching other layers."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["update_video"]
+    clip_id: str = Field(min_length=1)
+    snapshot_id: UUID | None = Field(default=None, description="Another snapshot ALREADY BOUND to this version; absent keeps the current source.")
+    source_start_seconds: float | None = Field(default=None, ge=0)
+    source_end_seconds: float | None = Field(default=None, gt=0)
+    x: float | None = None
+    y: float | None = None
+    width: float | None = Field(default=None, gt=0)
+    height: float | None = Field(default=None, gt=0)
+    scale: float | None = Field(default=None, gt=0, le=10)
+    fit: Literal["cover", "contain"] | None = None
+    gain_db: float | None = Field(default=None, ge=-60, le=12)
+    muted: bool | None = None
+
+
+class VideoEditFocusWeb(BaseModel):
+    """Recompute one webpage clip's camera from a frozen element id.
+
+    The server owns all coordinates and keyframe numbers; a revision never
+    asks the model to transcribe camera math.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["focus_web"]
+    clip_id: str = Field(min_length=1)
+    element_id: str = Field(min_length=1)
+
+
+class VideoEditUpdateShape(BaseModel):
+    """Adjust one native shape without turning its geometry into baked media."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["update_shape"]
+    clip_id: str = Field(min_length=1)
+    shape: Literal["rect", "ellipse", "path"] | None = None
+    fill: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    stroke: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    stroke_width: float | None = Field(default=None, ge=0, le=200)
+    corner_radius: float | None = Field(default=None, ge=0, le=1000)
+    path: str | None = Field(default=None, max_length=4096)
+    opacity: float | None = Field(default=None, ge=0, le=1)
+    x: float | None = None
+    y: float | None = None
+    width: float | None = Field(default=None, gt=0)
+    height: float | None = Field(default=None, gt=0)
+    scale: float | None = Field(default=None, gt=0, le=10)
+    rotation: float | None = None
+
+
+class VideoEditUpdateGenerator(BaseModel):
+    """Rewrite a visual program or model-image request, or adjust external layout."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["update_generator"]
+    clip_id: str = Field(min_length=1)
+    code: str | None = Field(default=None, min_length=1, max_length=24000)
+    prompt: str | None = Field(default=None, min_length=1, max_length=2000)
+    parameters: dict[str, str | float | bool] | None = Field(default=None, max_length=24)
+    x: float | None = None
+    y: float | None = None
+    width: float | None = Field(default=None, gt=0)
+    height: float | None = Field(default=None, gt=0)
+    scale: float | None = Field(default=None, gt=0, le=10)
+    fit: Literal["cover", "contain"] | None = None
+    opacity: float | None = Field(default=None, ge=0, le=1)
 
 
 class VideoEditKeyframe(BaseModel):
@@ -1238,8 +1426,14 @@ class VideoEditBackground(BaseModel):
 
 VideoEditOp = Annotated[
     VideoEditUpdateText
+    | VideoEditUpdateSpeech
+    | VideoEditSyncCaptions
     | VideoEditAddText
     | VideoEditRemoveClip
+    | VideoEditUpdateVideo
+    | VideoEditFocusWeb
+    | VideoEditUpdateShape
+    | VideoEditUpdateGenerator
     | VideoEditUpdateAnimation
     | VideoEditMoveScene
     | VideoEditRemoveScene
@@ -4829,6 +5023,10 @@ class VideoPayload(BaseModel):
     aspect: str | None = None
     execution_digest: str | None = None
     composition_digest: str = ""
+    generator_media: dict[str, dict[str, Any]] = {}
+    # Actual execution media, never back-written into the immutable version.
+    speech_media: dict[str, dict[str, Any]] = {}
+    narration_policy: dict[str, Any] | None = None
 
 
 # Internal types are node artifacts, not user-facing products. Every read path

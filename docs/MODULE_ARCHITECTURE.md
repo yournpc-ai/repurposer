@@ -163,7 +163,7 @@ Distribution ✅：channel_accounts ──► publications（直发状态机与�
 | `page_readings` | Tools（world 座位层，`app/tools/world.py`） | 项目级页面读本（ADR-124：(project_id, url) 主键 + text + fetched_at，快照语义，随项目级联）；读收口于 `world.page_reading_for_url` 一座，写只经 `world.upsert_page_reading`（chat 读工具写穿走 `world.write_page_reading` 独立短事务；capture 链在 `process_asset` 会话内写） |
 | `film_narrations` | Tools（film 座位层，`app/tools/film/narration_store.py`） | 旁白复用库（ADR-138 §10.1）：`(project_id, content_hash)` 唯一，一行 = 一条旁白词的 speed-1.0 原速原件（storage_key + duration_s；适配产物是 run 级 staging，永不住本表）；复用键 = 归一化文本｜已解 voice_id｜语言｜合成配置；一切读写经 `narration_store` 一座（resolve / finalize / fail——原子占位 + 有界接管 + owner 条件写，全独立短会话，run 回滚不带走已完成的行）；消费面 = `narration.py` 合成链，随项目级联删除 |
 | `compositions` / `composition_versions` | Editing（ADR-145，A 批 1 已建表） | 内容只经 `app/editing/store.apply_composition_edits`（Composition 行锁序列化 + base_ref CAS + request_id 幂等 + 整批原子）；版本行 append-only 不可改写，`version` 在 Composition 内单调递增；其他模块只读；`origin_project_id` 记来源 Chat 但 SET NULL——删 Chat 不级联毁作品；Composition 删除是未来的显式 op（本批无删除口） |
-| `source_snapshots` | Editing（A 批 1 已建表） | 不可变内容快照（owner + asset_id SET NULL 溯源 + storage_key + digest + duration_ticks @SOURCE_TIMEBASE）；行不可原地改写，refresh/换素材 = 新行；登记写口为 editing/sources.register_snapshot；tools/video/preparation 负责从既有 Asset 冻结资源并调用登记，Chat 素材接入在 B 完成 |
+| `source_snapshots` | Editing（A 批 1 已建表） | 不可变内容快照（owner + asset_id SET NULL 溯源 + storage_key + digest + duration_ticks @SOURCE_TIMEBASE）；行不可原地改写，refresh/换素材 = 新行；登记写口为 editing/sources.register_snapshot；tools/video/preparation 负责从既有 Asset/Output 冻结资源并调用登记，B-III 已接视频 Chat 素材 |
 
 **outputs 共享聚合的细则**：Pipeline/worker 负责创建、渲染状态、执行身份与产物文件；Operation Model 负责其注册范围内的 payload/render_spec 编辑与 operation journal；Distribution 只写 publishing 表单。任何写者只碰自己的字段子集，终态渲染写必须匹配 `render_claim_token`。Operation Model 覆盖的内容修改必须产生 operation 记录；Film 版本编辑、系统反写和发布字段不得被伪装成 clip operation。
 
@@ -191,16 +191,20 @@ Distribution ✅：channel_accounts ──► publications（直发状态机与�
 
 ### 4.2 视频目标模块与表归属（ADR-145）
 
-本节登记新架构准入与其落地阶段；完整新旧目录/代码处置唯一合同 = [VIDEO_PROJECT §12](VIDEO_PROJECT.md#12-目标目录与新旧代码处置)。A 批 1 已把 `compositions` / `composition_versions` / `source_snapshots` 与 `editing` 模块落进 §4 当前表（上方）；下表剩余行为仍 TARGET。
+本节登记新架构准入与其落地阶段；完整新旧目录/代码处置唯一合同 = [VIDEO_PROJECT §12](VIDEO_PROJECT.md#12-目标目录与新旧代码处置)。A/B 已落地项与 TARGET 按下表分别标记，提交与验收状态以 PROGRESS 和施工合同为准，不能把工作树实现视为已发布。
 
 | 目标表 / 模块 | Owner 与写口 | 阶段与当前边界 |
 |---|---|---|
 | `compositions` / `composition_versions` | Editing（app/editing）；内容只经 apply_composition_edits，CAS/事务由 store 实现 | **A 批 1 已落地**（见 §4 当前表）；不把 Project/Output 表转移到 Editing |
-| `source_snapshots` | Editing 的 sources 服务 | **A 批 1 已建表**；生产写口（素材链快照采集）归后续 A 批；原 Asset 处理状态仍归 Pipeline，不能变成第二 Asset 库 |
-| `video_narrations` | Tools（app/tools/video/narration_store.py） | B 承接原件复用/恢复；替代 film_narrations，设计用户权限与跨 Chat 复用，不搬旧业务行；旧表当前归属在退役前不变 |
+| `source_snapshots` | Editing 的 sources 服务 | 已建表与登记写口；tools/video/preparation 从 Asset/Output 冻结资源，B-III 已接视频；原 Asset 处理状态仍归 Pipeline，不能变成第二 Asset 库 |
+| `video_narrations` | Tools（app/tools/video/narration_store.py） | `(user_id, content_hash)` 唯一的 speed-1.0 原速原件与真实句级对齐；复用键 = 归一化文本｜voice｜语言｜完整合成配置。pre-submit 占位、`synthesizing/aligning/done/unknown`、owner/lease 与音频/对齐 digest 均经 narration_store 的独立短会话写；Run 回滚不删除已确认结果，未知结果失败闭，音频已确认时只恢复字幕下载。加速适配与执行 manifest 住 Run 命名空间，不住共享原件行 |
 | `user_skills` / `skill_versions` | Skills 的 store/import 服务 | C 新建；用户显式版本绑定不替代 Tool 注册/执行授权，平台内置包仍沿现有注册表 |
 | `editing` 模块 | 内容/版本/快照的领域与应用服务，有独立表归属 | **A 批 1 + B 上半批已落地**（A：schemas/timing/edits/validators/store/video_spec/storyboard；B 上半批：service/director/grounding/templates）；不认领 Run/render 队列，不创建第二 scheduler |
-| `tools/video` / `packages/video-spec` / renderer adapter | 分别为执行能力、纯渲染契约与具体引擎实现 | **A 批 1 已落地最小缝**（produce.py 队列缝 + 契约包 + Remotion adapter）；produce_video run 节点/估价/计费归 B；Render/Output/Run owner 继续按现行 Pipeline 合同 |
+| `tools/video` / `packages/video-spec` / renderer adapter | 分别为执行能力、纯渲染契约与具体引擎实现 | A/B 已接 produce_video、Run/估价/计费/交付、B-III 混合视频、B-IV 原生图形/drawing-v1 固定媒体、B-V image-v1 单图固定媒体及 B-VI 首个 MG Speech/TTS 消费者；Speech 在执行层解析为普通 audio 与真实句级 TextClip，renderer 不调用模型；Render/Output/Run owner 继续按现行 Pipeline 合同 |
+| `GeneratorObject`（版本内 Object，非新表） | editing 按 runtime 保存可审阅来源、参数与 digest；tools/video 组织创作调用、受限运行或授权模型请求、预览和固定媒体，provider/受控运行时承担实际生产 | B-IV drawing-v1 与 B-V MiniMax image-01 单图消费者已接；复用既有 Run/队列/计量，renderer 只消费已解析媒体，不建独立 Generator 数据库、全供应商框架或调度链 |
+| 镜头素材采集（TARGET，无新增表） | Research 采集；Pipeline 写 Asset；tools/video 冻结 SourceSnapshot，editing 只登记/绑定不可变事实 | B 支撑增量待施工；按选定镜头补正文与高清素材，元素/状态采集按实际需要扩展；规则归 VIDEO_PROJECT §9.2，复用既有处理链 |
+| 时间点预览与帧证据（TARGET，无新增作品根） | editing 解算版本/时间/权限；tools/video 准备固定资源与证据；video-spec 纯投影；adapter 输出画面 | D4 从单个版本/时间点/对象的实际编辑需求起步；B reviewer 可直接抽帧，不以通用时间点接口为前置。规则归 VIDEO_PROJECT §11.3 |
+| 视频内容 reviewer（TARGET，无独立调度链） | tools/video + 既有 Agent harness；Output.quality/交付读面承接报告，verify 沿既有职责裁决 | B 支撑增量待施工；run_review 只做事实聚合，render_probe 保留文件硬门，主观模型判决不替代交付事实；规则归 VIDEO_PROJECT §8.5 |
 
 ## 5. 跨模块通信规则
 
@@ -339,7 +343,8 @@ apps/api/
 │   │   │                        #   快照回退 + 双败 escalation（dock 提问 + Suspend）；quality.py = 检查矩阵
 │   │   │                        #   纯函数半边（fidelity 族 + craft 可测量项 + run_checks 按类型分派）
 │   ├── editing/       # Editing（ADR-145，A 批 1 + B 上半批已落地）：Composition 内容领域——
-│   │                    #   schemas（CompositionContent：settings/sources/scenes/timeline）/
+│   │                    #   schemas（CompositionContent：settings/sources/scenes/timeline；
+│   │                    #   Object 含 Text/Image/Web/Video/Audio/Shape/Generator）/
 │   │                    #   timing（整数 ticks + 有理数 fps 唯一量化座，与 packages/video-spec
 │   │                    #   共享 golden fixtures）/ edits（op 词汇 + 纯 apply + duplicate_clip
 │   │                    #   重映射）/ validators（整候选校验：引用/三时间域/同轨重叠/动画目标）/
@@ -349,7 +354,7 @@ apps/api/
 │   │                    #   分镜读面）/ sources（快照登记）/ fonts（纯资源描述）；
 │   │                    #   B 上半批：service（design/revise/read 共用应用服务 + 修订翻译 +
 │   │                    #   change_set + 呈现回执/blocks）/ templates（VideoTemplate 声明式骨架
-│   │                    #   实例化 + MG 实例化）/ grounding（引用/焦点校验 + 相机数学）/
+│   │                    #   实例化 + MG/混合/drawing-v1/image-v1 实例化）/ grounding（引用/焦点校验 + 相机数学）/
 │   │                    #   director（导演答复 schema + 违例裁决，纯数据无 LLM 调用）；
 │   │                    #   存储/字体发布 IO 在 tools/video/preparation，依赖方向由 gate 6a 检查
 │   ├── agents/          # agent 声明 + harness 漏斗（ADR-039）：base.py（Agent / StreamingAgent）/
@@ -371,11 +376,14 @@ apps/api/
 │   │                    #   stills/beats.py = 节拍方案代码半（期 2）：backing 表装配 + 拍锚吸附平铺 +
 │   │                    #   coherence_violations 跨拍连贯性检查 + 两段式编排（大纲→逐拍，handoff 交接）；
 │   │                    #   stills/agents.py = 剪辑师双件声明（stills_editor / stills_editor_outline）；
-│   │                    #   video（ADR-145，A 批 1 + B 上半批）：produce.py = CompositionVersion →
-│   │                    #   video-spec → Output 血缘 + render 队列 pend 的最小制作缝（run 节点/
-│   │                    #   估价/计费归 B 下半批）；design.py = design_video 编排座（采集/快照/
+│   │                    #   video（ADR-145，A/B）：produce.py = 固定 CompositionVersion →
+│   │                    #   video-spec → Output 血缘 + render 队列，已接 Run/估价/计费；
+│   │                    #   design.py = design_video 编排座（采集/快照/
 │   │                    #   导演调用/写门驱动，专用事务会话）；agents.py = video_director /
-│   │                    #   mg_director 声明（复用 agents harness，packs 织入 launch-film SKILL）
+│   │                    #   mg_director / mixed_director / program_director / image_director 声明（复用 agents
+│   │                    #   harness，packs 织入 launch-film SKILL）；programs.py + program_runner.mjs =
+│   │                    #   drawing-v1 命令校验、权限受限执行、MP4/PNG 固定、预览与 digest 复用；
+│   │                    #   generated_images.py = image-v1 授权单图生产、执行 manifest 与最新媒体复用指针
 │   ├── skills/          # 指令包（SKILL.md 领域知识即数据，装配期注入，模型无感）：SKILL_REGISTRY 收编；
 │   │                    #   linkedin-longform / stills-editing-craft（期 2 剪辑工艺先验表）/
 │   │                    #   launch-film（ADR-145 B 上半批：SKILL.md 创作工艺 + video-template.json

@@ -51,6 +51,17 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
         "en": "Couldn't reach the AI service — please try again in a moment",
         "zh": "暂时连不上 AI 服务，请稍后重试",
     },
+    "provider_image_outcome_unknown": {
+        "en": (
+            "The image request may have been processed, but its result is unconfirmed. "
+            "No second request was sent and no image was delivered. Check AI service "
+            "usage before explicitly regenerating."
+        ),
+        "zh": (
+            "图片请求可能已执行，但结果未确认。系统未再次提交，也未交付图片；"
+            "请核对 AI 服务用量后，再决定是否明确重新生成。"
+        ),
+    },
     "ai_unreadable": {
         # 第一人称认领 (2026-09-11 服务感): the two-strike schema rejection's
         # terminal line owns the failure instead of blaming "the AI" as a
@@ -61,6 +72,18 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
     "voice_unavailable": {
         "en": "The voice service is unavailable right now — please try again later",
         "zh": "配音服务暂时不可用，请稍后重试",
+    },
+    "narration_window_conflict": {
+        "en": "This scene's narration is too long for its reviewed cut. The cut and text were not changed; shorten the narration before producing again.",
+        "zh": "这一幕的旁白超过了已确认的镜头长度。镜头和文字均未改动；请缩短旁白后再制作。",
+    },
+    "narration_budget_exceeded": {
+        "en": "This production needs more narration characters than its authorized quote. No extra synthesis was submitted; revise the narration or explicitly authorize a new production.",
+        "zh": "本次制作需要的旁白字符数超出已授权报价。系统未提交额外合成；请修改旁白，或明确授权一次新的制作。",
+    },
+    "provider_narration_outcome_unknown": {
+        "en": "The narration request may have been processed, but its result is unconfirmed. No second request was sent and no audio was delivered. Check voice-service usage before explicitly trying again.",
+        "zh": "旁白请求可能已执行，但结果未确认。系统未再次提交，也未交付音频；请核对配音服务用量后，再决定是否明确重试。",
     },
     # A film narration line does not fit its scene even after the bounded
     # speed ladder — a design problem (the line is too long), never an

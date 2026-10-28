@@ -27,6 +27,11 @@ async def reviewed_output_ref(db, project, output_id):
     return ref if ref == (output.render_spec or {}).get("provenance") else None
 
 
+def _render_capture_units(payload: dict) -> dict[str, float]:
+    """The mirror bills render time only; ProduceVideo captures actual TTS."""
+    return {"film_seconds": float((payload or {}).get("duration_seconds") or 0)}
+
+
 async def capture_video_render(db, output_id):
     """Capture only after upload/probe, in the fenced Output success transaction.
 
@@ -52,7 +57,7 @@ async def capture_video_render(db, output_id):
             Output.archived_at.is_(None), Output.render_status == RenderStatus.COMPLETED,
         ).values(archived_at=now_utc()))
     project = await db.get(Project, output.project_id)
-    units = {"film_seconds": float((output.payload or {}).get("duration_seconds") or 0)}
+    units = _render_capture_units(output.payload or {})
     usd = estimate_usd_range({"prompt_tokens": [0, 0], "completion_tokens": [0, 0], "units": units})[1]
     mirror.cost = {"prompt_tokens": 0, "completion_tokens": 0,
                    "units": units, "fixed_cost": usd}
@@ -61,10 +66,17 @@ async def capture_video_render(db, output_id):
 
 async def video_quote_facts(db, project, tasks):
     seconds = {}
+    images = {}
+    tts_characters = {}
+    from app.editing.schemas import GeneratorObject
+    from app.tools.video.generated_images import has_fixed_generated_image
+    from app.tools.video.narration import narration_quote_characters
+
     for task in tasks or []:
         if task.tool != "produce_video":
             continue
-        ref = ProduceVideoParams.model_validate(task.params).version_ref
+        production = ProduceVideoParams.model_validate(task.params)
+        ref = production.version_ref
         composition, version = await get_video_version(
             db, owner_id=project.user_id, version_id=ref.composition_version_id
         )
@@ -74,7 +86,26 @@ async def video_quote_facts(db, project, tasks):
         seconds[str(version.id)] = max(
             (c.range.end for t in content.timeline.tracks for c in t.clips), default=0
         ) / content.settings.timebase
-    return {"video_seconds": seconds}
+        missing = 0
+        for track in content.timeline.tracks:
+            for clip in track.clips:
+                if not isinstance(clip.object, GeneratorObject) or clip.object.runtime != "image-v1":
+                    continue
+                if production.regenerate_media or not await has_fixed_generated_image(
+                    clip, composition_id=str(composition.id)
+                ):
+                    missing += 1
+        if production.regenerate_media and missing == 0:
+            raise ValueError("This saved video has no model-generated image to regenerate")
+        images[str(version.id)] = missing
+        tts_characters[str(version.id)] = await narration_quote_characters(
+            content, user_id=project.user_id
+        )
+    return {
+        "video_seconds": seconds,
+        "video_images": images,
+        "video_tts_characters": tts_characters,
+    }
 
 
 async def latest_video_approval(db, project):
@@ -95,7 +126,8 @@ async def pin_video_production(db, project, tasks, approved_by):
         raise ValueError("Video production is disabled")
     if len(video_tasks) != 1:
         raise ValueError("Produce one saved video per run")
-    ref = ProduceVideoParams.model_validate(video_tasks[0].params).version_ref
+    production = ProduceVideoParams.model_validate(video_tasks[0].params)
+    ref = production.version_ref
     composition = await db.scalar(select(Composition).where(
         Composition.id == ref.composition_id,
         Composition.owner_id == project.user_id,
@@ -106,6 +138,17 @@ async def pin_video_production(db, project, tasks, approved_by):
                                     version_id=ref.composition_version_id)
     if read["base_ref"] != ref.model_dump(mode="json"):
         raise ValueError("Video version identity mismatch")
+    storyboard = read["storyboard"]
+    clips = [
+        clip
+        for scene in storyboard["scenes"]
+        for clip in scene["clips"]
+    ] + list(storyboard["unassigned_clips"])
+    if production.regenerate_media and not any(
+        clip.get("object_kind") == "generator" and clip.get("runtime") == "image-v1"
+        for clip in clips
+    ):
+        raise ValueError("This saved video has no model-generated image to regenerate")
     pending = PendingPlan.model_validate(project.pending_brief or {})
     receipt = pending.video_presentation or {}
     for key in ("composition_id", "composition_version_id", "content_digest", "presentation_digest"):
@@ -147,6 +190,19 @@ async def pin_video_production(db, project, tasks, approved_by):
     ).limit(1))
     if active:
         raise ValueError("This video already has a production in progress")
+    from app.tools.video.narration import narration_quote_characters
+    from app.tools.video.params import narration_policy
+
+    _, pinned_version = await get_video_version(
+        db, owner_id=project.user_id, version_id=ref.composition_version_id
+    )
+    policy = narration_policy(
+        await narration_quote_characters(
+            content_of(pinned_version), user_id=project.user_id
+        )
+    )
     return {"version_ref": ref.model_dump(mode="json"),
+            "regenerate_media": production.regenerate_media,
+            "narration_policy": policy.model_dump(mode="json"),
             "video_authorized_by": str(approval.id),
             "video_presentation": receipt}

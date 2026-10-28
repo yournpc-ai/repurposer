@@ -93,6 +93,8 @@ class Config(Base):                       # configs — 公共运营参数表（
 - 调参不改已经写入的 ledger 积分额；USD 成本仍保留在 `workflow_steps.cost`。**读面不是全部冻结**：历史 step 的 `cost_credits` 也由持久 USD × 当前比例重新序列化，估价贴同样随参数变化；只有已写 transaction 金额与幂等事实不随比例重写。
 - render_seconds 价目当前为 0（自家 infra）——估价贴不含渲染成本，诚实；将来定价只改 PRICING 一行。
 - **voice_clones 报价幂等**：声纹克隆按「每个新声一次」计费（provider 规则——首次 T2A 使用触发），一条链多站 dub 逐节点各自声明 would-be clone 时 fold 只收一次（钳制在 `fold_estimates` 一座，报价=fold 的唯一缝合点；与计量同律——`record_media_usage` 只在 voice_id 缺失时记账）——估价 ≡ 计量，多语言配音链的克隆费如实计一次。
+- **image-v1 图片报价与计量同源**：produce_video 只按本次缺失的固定图片数报价；普通恢复、原生内容修订与缓存命中为 0 张，明确重生成的新 Run 为 1 张，同 Run 重试复用其固定结果。供应商返回图片后按实际返回数 `record_media_usage`，随后仍走既有 step actual capture 与 run release，不在设计/修订阶段生成或收费。请求可能已提交但结果未确认时，不写 `images=0` 或 `images=1` 冒充确定消耗；失败信息明确结果未确认，须核对供应商用量后再由用户决定是否明确重生成。
+- **Speech/TTS 报价只覆盖授权 Run 的剩余付费合成**：缺原速原件时按归一化文本的 MiniMax 计费字符上界预留至多两次；已有原件只在确需有界加速时按其实际 `usage_characters` 预留一次，缓存命中为 0。`NarrationPolicy.max_tts_characters` 同时钉入 Run context 与 produce step spec；实际供应商用量经 `record_media_usage` 由 produce step capture，render mirror 只计 `film_seconds`，永不重复计 TTS。失败 Run 保留真实媒体成本事实但不 capture，未用 hold 按既有规则 release。
 - **配方卡估价贴的可报价域**：translate / dub / reframe 挂在 materialize_source 上的链，live 计划诚实 NULL（编译期片段未生——「估价随运行」），配方卡贴纸按 RECIPE_QUOTE_FACTS 声明的典型素材可报价（`quote_scope="recipe"` 单座豁免，传进 `compile_recipe_quote` 的 ctx）。
 
 **公共 config 表（configs）**——运营参数的统一家（admin 预备），三条防腐纪律：

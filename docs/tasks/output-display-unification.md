@@ -25,6 +25,7 @@
 
 ### 2.2 表面收敛
 
+- Chat 的跨消息产物平铺与共享查看器按 `VIDEO_PROJECT.md` §10.4 与四阶段施工 §2.5.2 接入；本合同提供共享类型/画幅/媒体原语，不另建一套查看器或版本分组。
 - `OutputInspector` / `MediaLightbox` / `AnchorCards`：document 产物由 Output/payload 类型与 `doc_format` 驱动，post=文本、carousel=分页文档；删除任何残留 recipe/card id 分支。Home 配方仍是 prompt-only，**不得为统一展示恢复 RecipeInspectOverlay 或第二发射面**。
 - 结果网格、ClipDetailModal、MediaLightbox：统一 Output.aspect 与 media-frame，quotes/quote-frame 不再各写画幅映射。
 - FlowNodeCard：保留布局数学，但画幅归一只走共享解析；播放器与图标复用脊柱。

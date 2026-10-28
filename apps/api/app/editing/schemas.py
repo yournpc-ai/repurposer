@@ -3,9 +3,10 @@
 The four JSONB columns of a ``composition_versions`` row (settings / sources
 / scenes / timeline) serialize from ``CompositionContent`` — this module is
 the single shape law for what a version may carry. Current scope: Text /
-Image / Web / Audio objects over visual + audio tracks; Transitions are a
-declared empty list (a non-empty one is an honest "unsupported", not silent
-data loss). Video / Speech objects remain explicitly unsupported.
+Shape / Image / Web / Video / Audio / Speech objects over visual + audio
+tracks; Transitions are a declared empty list (a non-empty one is an honest
+"unsupported", not silent data loss). Pending Speech carries its reviewed
+script and voice, never fabricated source media.
 
 Three time domains stay name-separated (§6.1):
 - Output time:  ``Scene.range`` / ``Clip.range`` — ticks at ``settings.timebase``.
@@ -16,6 +17,9 @@ Three time domains stay name-separated (§6.1):
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -148,6 +152,27 @@ class TextStyle(BaseModel):
     font: FontRef = FontRef()
 
 
+class CaptionDerivation(BaseModel):
+    """A caption's editable link to the reviewed SpeechObject text.
+
+    Actual cue times are execution facts, not version mutations. ``derived``
+    captions follow Speech edits; ``independent`` preserves a user's manual
+    text until an explicit sync operation re-links it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    speech_object_id: str = _ID
+    source_text_digest: str = Field(min_length=64, max_length=64)
+    alignment: Literal["minimax-t2a-v2-sentence-v1"]
+    state: Literal["derived", "independent"] = "derived"
+
+
+def speech_text_digest(text: str) -> str:
+    """Exact reviewed-text identity (whitespace is content, not normalized away)."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 class TextObject(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -160,6 +185,7 @@ class TextObject(BaseModel):
     opacity: float = Field(default=1.0, ge=0, le=1)
     segmentation_version: str = SEGMENTATION_VERSION
     layout_version: str = LAYOUT_VERSION
+    caption: CaptionDerivation | None = None
 
 
 class ImageObject(BaseModel):
@@ -191,6 +217,149 @@ class WebObject(BaseModel):
     opacity: float = Field(default=1.0, ge=0, le=1)
 
 
+class VideoObject(BaseModel):
+    """One real video window and its synchronized original audio.
+
+    The picture and source audio share this Clip's source/output windows;
+    muting never creates or removes a second audio clip.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["video"]
+    object_id: str = _ID
+    layout: LayoutBox
+    fit: Literal["cover", "contain"] = "contain"
+    transform: Transform = Transform()
+    opacity: float = Field(default=1.0, ge=0, le=1)
+    gain_db: float = Field(default=0.0, ge=-60, le=12)
+    muted: bool = False
+
+
+class ShapeObject(BaseModel):
+    """One native vector primitive; path data is geometry, never renderer code."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["shape"]
+    object_id: str = _ID
+    shape: Literal["rect", "ellipse", "path"]
+    layout: LayoutBox
+    fill: str | None = Field(default="#FFFFFF", pattern=r"^#[0-9a-fA-F]{6}$")
+    stroke: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    stroke_width: float = Field(default=0.0, ge=0, le=200)
+    corner_radius: float = Field(default=0.0, ge=0, le=1000)
+    path: str | None = Field(default=None, max_length=4096)
+    transform: Transform = Transform()
+    opacity: float = Field(default=1.0, ge=0, le=1)
+
+    @model_validator(mode="after")
+    def _geometry_matches_shape(self) -> ShapeObject:
+        if self.shape == "path":
+            if not self.path or not re.fullmatch(
+                r"[MmLlHhVvCcQqZz0-9eE+\-.,\s]+", self.path
+            ):
+                raise ValueError("path shapes need numeric M/L/H/V/C/Q/Z path data")
+        elif self.path is not None:
+            raise ValueError("only path shapes carry path data")
+        if self.shape != "rect" and self.corner_radius:
+            raise ValueError("corner_radius belongs to rect shapes")
+        return self
+
+
+class ProgramOutput(BaseModel):
+    """Fixed raster constraints for one short controlled visual program."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    width: int = Field(ge=16, le=1920)
+    height: int = Field(ge=16, le=1920)
+    fps: int = Field(default=15, gt=0, le=60)
+    duration_frames: int = Field(gt=0, le=180)
+    background: str = _HEX_COLOR
+
+    @model_validator(mode="after")
+    def _even_raster(self) -> ProgramOutput:
+        if self.width % 2 or self.height % 2:
+            raise ValueError("program output dimensions must be even for H.264")
+        return self
+
+
+class GeneratedImageOutput(BaseModel):
+    """The single image-generation output constraint consumed by B-V."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    aspect_ratio: Literal["16:9"] = "16:9"
+
+
+class GeneratorObject(BaseModel):
+    """A reviewable program or model request; production resolves fixed media."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["generator"]
+    object_id: str = _ID
+    runtime: Literal["drawing-v1", "image-v1"] = "drawing-v1"
+    code: str | None = Field(default=None, min_length=1, max_length=24000)
+    prompt: str | None = Field(default=None, min_length=1, max_length=2000)
+    provider: Literal["minimax"] | None = None
+    model: Literal["image-01"] | None = None
+    parameters: dict[str, str | float | bool] = Field(default={}, max_length=24)
+    output: ProgramOutput | GeneratedImageOutput
+    layout: LayoutBox
+    fit: Literal["cover", "contain"] = "cover"
+    transform: Transform = Transform()
+    opacity: float = Field(default=1.0, ge=0, le=1)
+
+    @model_validator(mode="after")
+    def _bounded_parameters(self) -> GeneratorObject:
+        for key, value in self.parameters.items():
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,39}", key):
+                raise ValueError("program parameter keys use letters, digits and underscores")
+            if isinstance(value, str) and len(value) > 128:
+                raise ValueError("program string parameters stay within 128 characters")
+        if self.runtime == "drawing-v1":
+            if self.code is None or not isinstance(self.output, ProgramOutput):
+                raise ValueError("drawing-v1 needs code and program output constraints")
+            if self.prompt is not None or self.provider is not None or self.model is not None:
+                raise ValueError("drawing-v1 does not take model-generation fields")
+        else:
+            if (
+                self.prompt is None
+                or self.provider != "minimax"
+                or self.model != "image-01"
+                or not isinstance(self.output, GeneratedImageOutput)
+            ):
+                raise ValueError("image-v1 needs a MiniMax image-01 prompt and image output")
+            if self.code is not None or self.parameters:
+                raise ValueError("image-v1 exposes only its prompt and declared image output")
+        return self
+
+    def program_digest(self) -> str:
+        if self.runtime == "drawing-v1":
+            # Preserve the drawing-v1 identity byte-for-byte across the image extension.
+            payload = {
+                "runtime": self.runtime,
+                "code": self.code,
+                "parameters": self.parameters,
+                "output": self.output.model_dump(mode="json"),
+            }
+        else:
+            payload = {
+                "runtime": self.runtime,
+                "prompt": self.prompt,
+                "provider": self.provider,
+                "model": self.model,
+                "parameters": self.parameters,
+                "output": self.output.model_dump(mode="json"),
+            }
+        encoded = json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+
 class AudioObject(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -199,7 +368,32 @@ class AudioObject(BaseModel):
     gain_db: float = Field(default=0.0, ge=-60, le=12)
 
 
-Object = Annotated[TextObject | ImageObject | WebObject | AudioObject, Field(discriminator="kind")]
+class SpeechObject(BaseModel):
+    """Reviewed narration; production resolves it into ordinary audio."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["speech"]
+    object_id: str = _ID
+    text: str = Field(min_length=1, max_length=9000)
+    provider: Literal["minimax"] = "minimax"
+    model: Literal["speech-2.6-hd"] = "speech-2.6-hd"
+    voice_id: str = Field(min_length=1, max_length=255)
+    language: str = Field(min_length=2, max_length=16)
+    gain_db: float = Field(default=0.0, ge=-60, le=12)
+
+    @model_validator(mode="after")
+    def _nonblank_script(self) -> SpeechObject:
+        if not self.text.strip():
+            raise ValueError("speech text must not be blank")
+        return self
+
+
+Object = Annotated[
+    TextObject | ShapeObject | ImageObject | WebObject | VideoObject
+    | GeneratorObject | AudioObject | SpeechObject,
+    Field(discriminator="kind"),
+]
 
 
 class Easing(BaseModel):

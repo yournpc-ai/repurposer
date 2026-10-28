@@ -937,9 +937,11 @@ async def read_video_storyboard(
     )
 
     try:
-        return await video_version_read(
+        read = await video_version_read(
             db, owner_id=UUID(str(current_user.id)), version_id=version_id
         )
+        from app.tools.video.programs import enrich_generator_previews
+        return await enrich_generator_previews(read)
     except (CompositionNotFound, PermissionDenied):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

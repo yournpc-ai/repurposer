@@ -65,6 +65,17 @@ def test_silent_cut_asserts_no_audio():
     assert probe_expectation_for(_spec(audio=False)).audio is None
 
 
+def test_unmuted_video_object_promises_original_audio_without_an_audio_track():
+    spec = _spec(audio=False)
+    spec["tracks"][0]["clips"] = [{
+        "clip_id": "clp_video",
+        "object": {"kind": "video", "muted": False},
+    }]
+    assert probe_expectation_for(spec).audio is True
+    spec["tracks"][0]["clips"][0]["object"]["muted"] = True
+    assert probe_expectation_for(spec).audio is None
+
+
 def test_fractional_fps_expectation():
     expect = probe_expectation_for({**_spec(), "fps": {"num": 30000, "den": 1001}})
     assert abs(expect.fps - 29.970) < 0.001

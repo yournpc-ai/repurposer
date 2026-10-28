@@ -1,0 +1,24 @@
+{# program_director.j2 — Agent-authored drawing-v1 source; fields mirror editing/director.py ProgramDirection. #}
+Create an original short animated 2D picture for this request:
+
+{{ instruction }}
+
+{% if text %}NATIVE TITLE (kept as a separate editable TextObject, exact copy): {{ text }}{% endif %}
+{% if language %}Language: {{ language }}.{% endif %}
+{% if focus %}Creative direction: {{ focus }}{% endif %}
+{% if target_seconds %}Required duration: {{ target_seconds }} seconds.{% endif %}
+
+Write real JavaScript for the `drawing-v1` runtime. Define exactly this entry point:
+
+function render(ctx) { /* return drawing commands for this frame */ }
+
+`ctx` is a frozen plain object: `{ frame, time, durationFrames, fps, width, height, parameters }`. `time` is seconds. Compute motion from `time`/`frame`; a static result is rejected. `ctx.parameters` is the same `parameters` object you output. Use ordinary arithmetic, loops and `Math`; return plain JSON data only. The runtime supplies no imports, filesystem, network, timers, DOM, random source or external resources. Do not use pseudocode, comments instead of implementation, or a preset identifier.
+
+The returned value is an array of at most 512 commands, painted in order:
+- `{ kind: "rect", x, y, width, height, fill, opacity? }`
+- `{ kind: "ellipse", x, y, width, height, fill, stroke?, stroke_width?, opacity? }`
+- `{ kind: "polygon", points: [[x,y], ...], fill, stroke?, stroke_width?, opacity? }`
+- `{ kind: "line", points: [[x,y], ...], stroke, stroke_width, opacity? }`
+Colors are `#RRGGBB`; opacity is 0–1; coordinates are program-canvas pixels. Keep all numbers finite. Use the canvas dimensions rather than assuming a particular aspect ratio. Draw a deliberate moving composition, not a generic loader or a static logo.
+
+Answer JSON with: `name` (short or null), `language`, `title` (the native title exactly when supplied, otherwise null), `intent`, `visual_description` (only what the program and native title actually show), `duration_seconds` (up to 6), `background` (hex), `parameters` (meaningful scalar knobs the program reads), and `code` (the complete function source). Do not include markdown fences.

@@ -130,7 +130,7 @@ def probe_expectation_for(spec: dict[str, Any]) -> ProbeExpectation:
 def _video_expectation(spec: dict[str, Any]) -> ProbeExpectation:
     """video family (ADR-145): the spec's own quantized facts are the
     contract — duration_frames, width/height and the rational fps all come
-    off the spec; any audio clip means the container must carry sound."""
+    off the spec; audio clips or unmuted VideoObjects require a sound stream."""
     fps_raw = spec.get("fps") or {}
     try:
         fps = float(fps_raw["num"]) / float(fps_raw["den"])
@@ -147,8 +147,16 @@ def _video_expectation(spec: dict[str, Any]) -> ProbeExpectation:
         width = height = 0
     expects_audio = any(
         isinstance(t, dict)
-        and t.get("kind") == "audio"
-        and bool(t.get("clips"))
+        and (
+            (t.get("kind") == "audio" and bool(t.get("clips")))
+            or any(
+                isinstance(c, dict)
+                and isinstance(c.get("object"), dict)
+                and c["object"].get("kind") == "video"
+                and not c["object"].get("muted", False)
+                for c in t.get("clips") or []
+            )
+        )
         for t in spec.get("tracks") or []
     )
     return ProbeExpectation(

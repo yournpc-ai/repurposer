@@ -558,7 +558,7 @@ class SourceSnapshot(Base):
     asset_id = Column(
         UUID(as_uuid=True), ForeignKey("assets.id", ondelete="SET NULL"), nullable=True
     )
-    kind = Column(String(20), nullable=False)  # image | audio | web (video/speech later)
+    kind = Column(String(20), nullable=False)  # image | audio | web | video (speech later)
     # Immutable object key; the digest is of the bytes behind it.
     storage_key = Column(String(512), nullable=False)
     digest = Column(String(64), nullable=False)
@@ -1027,6 +1027,45 @@ class FilmNarration(Base):
         UniqueConstraint(
             "project_id", "content_hash", name="uq_film_narrations_project_hash"
         ),
+    )
+
+
+class VideoNarration(Base):
+    """User-scoped speed-1.0 narration original and its measured alignment.
+
+    A pre-submit occupancy row prevents duplicate calls across Chats. Fixed
+    audio and subtitle facts commit independently of a Run transaction; an
+    outcome-unknown row never replays the provider request automatically.
+    """
+
+    __tablename__ = "video_narrations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    content_hash = Column(String(64), nullable=False)
+    voice_id = Column(String(255), nullable=False)
+    language = Column(String(16), nullable=False)
+    config_hash = Column(String(64), nullable=False)
+    text = Column(Text, nullable=False)
+    storage_key = Column(String(512), nullable=True)
+    audio_digest = Column(String(64), nullable=True)
+    duration_s = Column(Float, nullable=True)
+    subtitle_file = Column(Text, nullable=True)
+    subtitles = Column(JSONB, nullable=True)
+    alignment_digest = Column(String(64), nullable=True)
+    usage_characters = Column(Integer, nullable=True)
+    trace_id = Column(String(255), nullable=True)
+    status = Column(String(24), nullable=False, default="synthesizing")
+    owner_token = Column(String(128), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "content_hash", name="uq_video_narrations_user_hash"),
     )
 
 

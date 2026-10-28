@@ -11,9 +11,11 @@ can't run at the chain head here — a web_page is born with no file and no
 text, so this processor stamps ``meta.content_sha256`` from its own yield.
 """
 
+import io
 from typing import Any
 
 import structlog
+from PIL import Image
 
 from app.models.schemas import WebPageMeta
 from app.models.tables import Asset
@@ -22,10 +24,18 @@ from app.tools.research.capture import (
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
     capture_page,
+    css_pixel_box,
     manifest_content_hash,
 )
 
 logger = structlog.get_logger()
+
+
+def _png_size(data: bytes) -> tuple[int, int]:
+    with Image.open(io.BytesIO(data)) as image:
+        if image.format != "PNG":
+            raise ValueError("web capture did not produce a PNG")
+        return image.size
 
 
 async def web_capture_processor(asset: Asset, _prior: Any) -> "Any":
@@ -68,8 +78,26 @@ async def web_capture_processor(asset: Asset, _prior: Any) -> "Any":
         meta["screenshot_key"] = key
         # The viewport's real pixels — the card's aspect truth (same law as
         # the chain-head probe's meta.width/height).
-        meta["width"] = WINDOW_WIDTH
-        meta["height"] = WINDOW_HEIGHT
+        meta["width"], meta["height"] = _png_size(outcome.screenshot)
+
+    if outcome.page is not None:
+        if asset.project_id is None:
+            raise ValueError("web_page asset without project_id")
+        page = outcome.page
+        page_key = (
+            f"{get_project_output_dir(asset.project_id, asset.user_id)}"
+            f"/web-capture-{asset.id}-page.png"
+        )
+        await save(page_key, page.png, content_type="image/png")
+        width, height = _png_size(page.png)
+        meta["page"] = {
+            "key": page_key,
+            "width": width,
+            "height": height,
+            "css_width": page.css_width,
+            "css_height": page.css_height,
+            "device_scale_factor": page.device_scale_factor,
+        }
 
     # ADR-121 B1: the fold + section shots (shots[0] IS the fold — its key
     # doubles as screenshot_key above). Each section shot gets its own
@@ -85,12 +113,33 @@ async def web_capture_processor(asset: Asset, _prior: Any) -> "Any":
             else:
                 shot_key = f"{out_dir}/web-capture-{asset.id}-s{i}.png"
                 await save(shot_key, shot.png, content_type="image/png")
+            elements: list[dict] = []
+            for raw_element in shot.elements:
+                element = dict(raw_element)
+                css_box = element.get("css_box")
+                if isinstance(css_box, dict):
+                    element["device_scale_factor"] = shot.device_scale_factor
+                    element["pixel_box"] = css_pixel_box(
+                        css_box, shot.device_scale_factor
+                    )
+                image = outcome.element_images.get(str(element.get("id")))
+                if image is not None:
+                    image_key = (
+                        f"{out_dir}/web-capture-{asset.id}-{element['id']}.png"
+                    )
+                    await save(image_key, image, content_type="image/png")
+                    element["image_key"] = image_key
+                    element["image_width"], element["image_height"] = _png_size(image)
+                elements.append(element)
             shots_meta.append(
                 {
                     "key": shot_key,
                     "y": shot.y,
                     "heading": shot.heading,
-                    "elements": shot.elements,
+                    "elements": elements,
+                    "css_width": WINDOW_WIDTH,
+                    "css_height": WINDOW_HEIGHT,
+                    "device_scale_factor": shot.device_scale_factor,
                 }
             )
         meta["shots"] = shots_meta

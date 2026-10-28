@@ -126,6 +126,35 @@ const webObjectSchema = z
   })
   .strict();
 
+const videoObjectSchema = z
+  .object({
+    kind: z.literal("video"),
+    object_id: z.string().min(1),
+    layout: layoutBoxSchema,
+    fit: z.enum(["cover", "contain"]),
+    transform: transformSchema,
+    opacity: z.number().min(0).max(1),
+    gain_db: z.number().finite().min(-60).max(12),
+    muted: z.boolean(),
+  })
+  .strict();
+
+const shapeObjectSchema = z
+  .object({
+    kind: z.literal("shape"),
+    object_id: z.string().min(1),
+    shape: z.enum(["rect", "ellipse", "path"]),
+    layout: layoutBoxSchema,
+    fill: hexColor.nullable(),
+    stroke: hexColor.nullable(),
+    stroke_width: z.number().finite().min(0).max(200),
+    corner_radius: z.number().finite().min(0).max(1000),
+    path: z.string().min(1).max(4096).nullable(),
+    transform: transformSchema,
+    opacity: z.number().min(0).max(1),
+  })
+  .strict();
+
 const audioObjectSchema = z
   .object({
     kind: z.literal("audio"),
@@ -138,6 +167,8 @@ const objectSchema = z.discriminatedUnion("kind", [
   textObjectSchema,
   imageObjectSchema,
   webObjectSchema,
+  videoObjectSchema,
+  shapeObjectSchema,
   audioObjectSchema,
 ]);
 
@@ -213,14 +244,14 @@ const clipSchema = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "end_frame must exceed start_frame" });
     }
     const hasWindow = clip.source?.start_frame !== undefined || clip.source?.end_frame !== undefined;
-    if (clip.object.kind === "audio" && !hasWindow) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "audio clips need a source window" });
+    if (["audio", "video"].includes(clip.object.kind) && !hasWindow) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "time-based clips need a source window" });
     }
     if (["image", "web"].includes(clip.object.kind) && hasWindow) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "static sources carry no source window" });
     }
-    if (clip.object.kind === "text" && clip.source) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "text objects take no media source" });
+    if (["text", "shape"].includes(clip.object.kind) && clip.source) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "native objects take no media source" });
     }
   });
 

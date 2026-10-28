@@ -7,9 +7,11 @@ future EU-local MiniMax deployment handles residency.
 """
 
 import binascii
+import math
 import os
 import tempfile
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
@@ -110,17 +112,29 @@ def clone_voice(audio_path: Path) -> str | None:
         raise VoiceError(f"Voice clone failed: {e}") from e
 
 
-def synthesize(text: str, voice_id: str, language: str = "en", speed: float = 1.0) -> bytes:
-    """Synthesize ``text`` in the cloned ``voice_id`` -> MP3 bytes.
+@dataclass(frozen=True)
+class T2AResult:
+    audio: bytes
+    subtitle_file: str | None
+    usage_characters: int
+    trace_id: str | None
 
-    ``speed`` is the provider's voice-level rate (MiniMax voice_setting.speed,
-    0.5–2.0) — the cue-aligned dub uses it for per-unit timing fit (no pitch
-    shift, unlike a resample)."""
+
+def _synthesize_t2a(
+    text: str,
+    voice_id: str,
+    language: str,
+    speed: float,
+    *,
+    subtitles: bool,
+) -> T2AResult:
     if not settings.minimax_api_key:
         raise VoiceError("MINIMAX_API_KEY not configured")
+    if not 0.5 <= speed <= 2.0:
+        raise VoiceError(f"T2A speed {speed} is outside the provider's 0.5–2.0 range")
     payload = {
         "model": _TTS_MODEL,
-        "text": text[:9000],
+        "text": text,
         "stream": False,
         "language_boost": _LANG_BOOST.get(language, "auto"),
         "output_format": "hex",
@@ -131,7 +145,10 @@ def synthesize(text: str, voice_id: str, language: str = "en", speed: float = 1.
             "format": "mp3",
             "channel": 1,
         },
+        "subtitle_enable": subtitles,
     }
+    if subtitles:
+        payload["subtitle_type"] = "sentence"
     try:
         with httpx.Client(timeout=180) as client:
             resp = client.post(
@@ -141,15 +158,104 @@ def synthesize(text: str, voice_id: str, language: str = "en", speed: float = 1.
             )
             resp.raise_for_status()
             data = resp.json()
+        base_resp = data.get("base_resp") or {}
+        if base_resp.get("status_code") != 0:
+            raise VoiceError(
+                f"MiniMax T2A failed: {base_resp.get('status_msg')} "
+                f"(code {base_resp.get('status_code')})"
+            )
         audio_hex = (data.get("data") or {}).get("audio")
         if not audio_hex:
-            raise VoiceError(f"T2A returned no audio: {data.get('base_resp')}")
-        return binascii.unhexlify(audio_hex)
+            raise VoiceError(f"T2A returned no audio: {base_resp}")
+        usage = (data.get("extra_info") or {}).get("usage_characters")
+        if not isinstance(usage, int) or isinstance(usage, bool) or usage < 0:
+            raise VoiceError("T2A returned no valid usage_characters")
+        return T2AResult(
+            audio=binascii.unhexlify(audio_hex),
+            subtitle_file=(data.get("data") or {}).get("subtitle_file"),
+            usage_characters=usage,
+            trace_id=data.get("trace_id"),
+        )
     except VoiceError:
         raise
     except Exception as e:  # noqa: BLE001
         logger.error("t2a_failed", error=str(e))
         raise VoiceError(f"T2A synthesis failed: {e}") from e
+
+
+def synthesize(text: str, voice_id: str, language: str = "en", speed: float = 1.0) -> bytes:
+    """Existing audio-only caller; one non-idempotent POST and no hidden retry."""
+    return _synthesize_t2a(text[:9000], voice_id, language, speed, subtitles=False).audio
+
+
+def synthesize_detailed(
+    text: str, voice_id: str, language: str = "en", speed: float = 1.0
+) -> T2AResult:
+    """One narrated synthesis with sentence-timing metadata, never truncated."""
+    if not text or len(text) > 9000:
+        raise VoiceError("T2A narration takes 1–9000 characters without truncation")
+    return _synthesize_t2a(text, voice_id, language, speed, subtitles=True)
+
+
+def _parse_subtitle_cues(payload: object, *, source_text: str) -> list[dict]:
+    entries = payload
+    if isinstance(payload, dict):
+        entries = payload.get("subtitles") or payload.get("results")
+        if entries is None:
+            data = payload.get("data")
+            entries = data if isinstance(data, list) else (data or {}).get("subtitles")
+    if not isinstance(entries, list) or not entries:
+        raise VoiceError("T2A subtitle file has no sentence entries")
+    cues: list[dict] = []
+    expected_begin = 0
+    previous_time_end = 0.0
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise VoiceError("T2A subtitle entry is not an object")
+        begin, end = entry.get("text_begin"), entry.get("text_end")
+        start, finish = entry.get("time_begin"), entry.get("time_end")
+        if any(isinstance(v, bool) or not isinstance(v, int) for v in (begin, end)):
+            raise VoiceError("T2A subtitle text offsets must be integers")
+        if any(
+            isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
+            for v in (start, finish)
+        ):
+            raise VoiceError("T2A subtitle times must be finite millisecond numbers")
+        if begin != expected_begin or end <= begin or end > len(source_text):
+            raise VoiceError("T2A subtitles do not cover the exact narration text contiguously")
+        original = source_text[begin:end]
+        if "".join(str(entry.get("text") or "").split()) != "".join(original.split()):
+            raise VoiceError("T2A subtitle text differs from the reviewed narration")
+        if start < 0 or start < previous_time_end or finish <= start:
+            raise VoiceError("T2A subtitle times are not ordered and non-overlapping")
+        cues.append({
+            "text": original,
+            "text_begin": begin,
+            "text_end": end,
+            "time_begin": float(start),
+            "time_end": float(finish),
+        })
+        expected_begin = end
+        previous_time_end = float(finish)
+    if expected_begin != len(source_text):
+        raise VoiceError("T2A subtitles omit part of the reviewed narration")
+    return cues
+
+
+def fetch_subtitle_cues(subtitle_file: str, *, source_text: str) -> list[dict]:
+    """Download and validate MiniMax sentence timing against the exact script."""
+    if not subtitle_file.startswith("https://"):
+        raise VoiceError("T2A subtitle file is not an HTTPS resource")
+    try:
+        with httpx.Client(timeout=60) as client:
+            response = client.get(subtitle_file)
+            response.raise_for_status()
+            payload = response.json()
+    except VoiceError:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise VoiceError(f"T2A subtitle download failed: {e}") from e
+    return _parse_subtitle_cues(payload, source_text=source_text)
 
 
 def extract_audio(video_path: Path) -> Path | None:

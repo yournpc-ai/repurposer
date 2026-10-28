@@ -19,7 +19,7 @@
 
 | 状态 | 工作 | 当前事实与下一步 | 状态 / 合同 |
 |---|---|---|---|
-| **当前** | **Video Project 新架构** | **B-I 与 B-II 真实主链已通过；当前转 B-III 混合合成（尚未实施）。**官网片已完成首稿批准、制作播放、同作品局部修订与再交付；审查补修相机实际盒边界/起末漂移、严格引用整数、空字幕片段拒绝。实测 API1322/web257/web与render tsc/video-spec9/check_gates 通过；120帧相机边界短片无黑边，未重渲染原官网片。B-II仍欠音乐亲耳试听/循环接缝、完整付费prompt_gate及失败回合沉默观察。下一批实现视频源窗/原声/布局与标题字幕动态背景混合，B-IV/V/VI、C与D仍按合同独立推进；完整B与生产未封板。付费仍沿用本轮累计¥30并核实余量 | [目标架构](VIDEO_PROJECT.md) → [四阶段施工](tasks/video-project-implementation.md)（§2.0 / §2.5 / §9） |
+| **当前** | **Video Project 新架构** | **B-I～B-VI 各自限定出口及增强网页采集首个静态镜头已有真实 Chat 证据，完整 B 仍未封板。**字幕浮点毫秒量化已修；AgentVeil 正常 Chat 已完成增强采集 → 首稿 → `focus_web` 相机修订 → 制作 → 标题修订再交付 → 浏览器硬刷新，未改快照复用且 Run 不重复，证据归施工文档 §2.0 与 `artifacts/video-project-b/web-capture/`。全量 API1348、`check_gates` 通过；web/render 既有结果本轮未重跑。仍欠亲耳试听/音乐循环接缝、真实加速第二 pass、完整付费 prompt_gate 与剧本矩阵、多轮/Director 稳定性、长页补读/空底板/交互状态、内容审片、B-UI 及 §2.4 其余条目；B-VI 剩余 split/trim/必要转场/BeatGrid 未取消。C/D 未开始，综合验收作品未提前制作 | [目标架构](VIDEO_PROJECT.md) → [四阶段施工](tasks/video-project-implementation.md)（§2.0 / §2.5 / §9；综合验收作品见 §5.1） |
 | **当前** | Home 创作入口真实样片 | Ads 族只展示 Product Promo 与 Text Animation 两个子 tab；Text Animation 使用项目 `9345ddc2` 与 `f52c489c` 的真实文字源 Film，Product Promo 前两张为 ZYMIX / AgentVeil 真片，其余两张占位卡仍待用户选定对应链真片。网页 Film 相机、默认字幕落点与强调标记渲染修复待 prompt/live/render 复验，既有 AgentVeil demo 未重渲染。配方点击只预填 composer，货架可点不等于制作能力通过 | [任务状态](tasks/home-creation-entry-refresh.md) |
 | 开放 | 共享执行、图与产物验收 | render owner/并行写入/恢复、产物成员、staging、fresh graph、rank/RunOp 解耦、lifecycle/授权证明仍需真实验证。旧批次状态不作当前证据；无用户旧数据按本轮授权 reset，不再保留指定事故产物救援与业务搬运工单，reset 未执行不等于已清零 | [共享验收](VERIFICATION.md#5-共享机制与-ui-的当前验收) |
 | 开放 | Agent Tools 修复批验收尾项 | 代码批已完成并落 main；需活 API + dev worker 运行当前注册旅程矩阵，覆盖长程序经 `get_node` 修订、distilled `specific_instruction`、pending-plan/run-history 读面；另需抓真实 SSE 验证 reasoning/think 永不进入用户 wire。完成证据出现前不关闭 | [验证登记](VERIFICATION.md) / [六段走查](tasks/agent-working-loop-iter-3.md) |
@@ -30,6 +30,9 @@
 | 开放 | 素材理解与对话面验收 | prompt_gate、全量剧本和 live 场景仍待完成：消息回放不丢且不重复叙事；不得创建独立转写节点/卡，资产卡只在真实处理状态出现后显示处理中；休眠期状态诚实；in-flight beat 不重复落；法条词汇不被复读。ASR GPU/云加速是独立运营项，不属于本验收 | [验证登记 §4.3](VERIFICATION.md#43-素材理解与对话回放) |
 | 开放 | Credits / permissions（ADR-117） | 代码层已收口；仪式链、conversation_usage 真实行检查和配置清理仍待用户验证 | [验证登记 §4.2](VERIFICATION.md#42-授权会话计量与配置) |
 | 开放 | 新视频视听与现有 UI 验收 | 网页/MG双源、逐字保真、默认字幕/章节/reveal、严格slide与音轨要求归新视频B；纯Chat/锚卡/声音互斥/移动端/双主题仍需真实走查。旧实现测试与事故工单退出不代表新能力已通过 | [视频要求](VIDEO_PROJECT.md#15-新链必须承接的产品语义与验收缺口) / [UI验收](VERIFICATION.md#57-现有-ui-自足与锚卡) |
+| 开放 | B-UI：Chat 产物平铺与共享查看器 | 待施工；B-VI 首个旁白出口已通过，下一功能批为 B 支撑增量（按需采集与审片），其后为 B-UI。本项作为 B 最后一个功能批次，其后集中核对 §2.4 欠账，不因查看器完成便标完整 B 封板。不等待 C/D4。每个 Output 独立浏览、版本仅作字段标识；消息行分散入口，共享翻页与缩略导航，包含历史归档交付 | [产品合同](VIDEO_PROJECT.md#104-chat-产物平铺与共享查看器) / [施工与验收](tasks/video-project-implementation.md#252-b-ui产物平铺与共享查看器待施工) |
+| 开放 | B 支撑：按需采集与内容审片 | 增强网页采集首个静态镜头已通过真实 Chat 制作、局部修订再交付与硬刷新；只代表该切片。长页补读、空底板与交互状态按后续镜头需要保留，内容审片待施工，其后为 B-UI；D4 时间点编辑按独立消费者实施，不先建共享帧平台 | [施工与验收](tasks/video-project-implementation.md#253-b-支撑增量按需采集与内容质检采集首个静态镜头已通过内容审片待施工) / VIDEO_PROJECT §8.5、§9.2 |
+| 开放 | C：真实加载 video-shotcraft 与最终自我介绍视频 | 待施工；C4 固定外部来源、选择声明镜头范围，真实加载并换产品素材复用；仅导入指令或报告缺口不算本消费者通过。最终产物为产品自我介绍视频，展示真实创作、审片与修订；不代替各阶段及 D 发布门 | [C4 与验收](tasks/video-project-implementation.md#3-阶段-c个人-skill-保存调用与外部导入) / 同文 §5.1 |
 
 ### 0.3 R1.1 — Commercial / Distribution（排期挂起）
 
@@ -47,7 +50,7 @@
 
 **执行规则**：
 1. 开工先看 `git status`、current HEAD 与并行归属；工作树可以有未提交成果，禁止用 reset / checkout / stash 制造“干净基线”。
-2. 阅读范围 = 本文件 §0 → 当前任务状态/合同的相关章节 → 适用规范。按 [CLAUDE 默认阅读与收尾协议](../CLAUDE.md#默认阅读与收尾协议) 先搜索定位再读取；局部修复不通读模块欠账，compact 后不重新通读历史。
+2. 阅读范围 = 本文件 §0 → 当前任务状态/合同的相关章节 → 适用规范。视频阶段施工固定先读 VIDEO_PROJECT §0 创作方针，Generator 的目标/现状按 §4.3.2 与施工合同区分。按 [CLAUDE 默认阅读与收尾协议](../CLAUDE.md#默认阅读与收尾协议) 先搜索定位再读取；局部修复不通读模块欠账，compact 后不重新通读历史。
 3. 一次只解决合同内 correctness/product gap；发现合同与代码或现行法不一致时先报告，不自行扩 scope。
 4. 每轮从代码与真实证据重新验证 DoD；旧测试计数、旧 audit 和其他会话的“基线绿”不能替代当前验证。
 5. migration、状态机、并发与授权改动必须有匹配覆盖；测试归属遵循 [Testing 规则](../CLAUDE.md) 与 [验证合同](VERIFICATION.md)。
@@ -110,7 +113,7 @@ R5 虚拟视频仍是已拍板的 AI 生成能力，先作为平台 tool 落位�
 | LLM 滚动摘要（超长会话历史） | P2 | 先用 `scratch/context_budget_audit.py` 观察窗口折叠真实溢出率 | 当前仅滑动窗口折叠（`chat.context_budget_tokens`）；没有早期引用丢失的真实发生率证据前，不新增摘要生成 |
 | 结构化节拍图 + clip-spec motion 枚举 | P2 | 覆盖问责能力；仅限 video 源 crop 动态预设 | 实施前新增 ADR，划清与 stills Ken-Burns 拒绝边界；规格来源 = STRATEGY §2.5 |
 | 去静默 / 去口头禅 | P2 | 词级时间戳；随 editor 一键操作方向评估 | 保持专业知识表达密度，避免跳剪损害自然感；取舍来源 = DECISION_MATRIX §E |
-| LLM provider 抽象 | P1 | ADR-025 已决但未实施；触发 = EU 客户要求 Mistral/EU-hosted | 用户面是“优先 EU 托管模型”等策略开关，不是模型 SKU 货架；provider 失败在边界归一，消费方不猜异常来源（`research/deepseek-harness.md` §3） |
+| LLM provider 抽象 | P1 | ADR-025 边界；第二 provider 的触发可为代码/视觉能力、成本或 EU 驻留，按实际消费者接入 | 用户面是“优先 EU 托管模型”等策略开关，不是模型 SKU 货架；provider 失败在边界归一，消费方不猜异常来源（`research/deepseek-harness.md` §3） |
 | 字幕翻译 + 校对视图（side-by-side） | P1 | 多语言输出能力 | 对照校对交互来源 = DECISION_MATRIX §G |
 | 多语言文案质量（跨语言风格保真） | P1 | 术语表（见可选需求） | 保留用户写作风格，不把音频 voice 概念混入文风；规格来源 = DECISION_MATRIX §G、STRATEGY 牌 4 |
 | 产品度量地基 | P1 | 无 | 建立上传 → 生成 → 精修 → 发布 → 回流漏斗埋点；指标契约归规划中的 `METRICS.md` |
@@ -144,11 +147,11 @@ R5 虚拟视频仍是已拍板的 AI 生成能力，先作为平台 tool 落位�
 | 步骤级 LLM 命名（per-task `name`） | P2 | ADR-058；排期窗口待指认 | `name` 进入 TaskItem 与 builder 写口，RunTaskList/打勾流读取；`taskLabel` 推导只作回退，手改仍撤名 |
 | stub 塌缩（“No source material”行） | P2 | 无 | 无素材 writer-only run 的 stub 行不渲染 |
 | mobile OutputChatCard 核对 | P2 | 无 | 核对移动端产物卡在 `runTitle` 章名与当前锚卡机制下的读法一致性 |
-| MG 动画工具（`generate_motion_graphics` 类） | P2 | 两站机制、clip-spec `motion_graphic`/`text_callout` 枚举与 Remotion 渲染面 | MG 脚本（table×manual，行 = 场景时间窗/文案/动效）→ MG 成片（video×generator）；文字直改重渲染或 chat 修订形成版本，不新增画布架构 |
+| MG 与代码画面创作 | P2 | 已归 Video Project B-I～IV | 原生对象动画与 Generator 程序画面沿 design_video/revise_video/produce_video 共链；范围与出口见施工合同，不另建 generate_motion_graphics 产品链 |
 | 刀 A overlay 词汇扩展 | P2 | 现有 ASR / speaker_map / beat_map 与 overlay 契约；逐项验收后上架 | 按“一行扩展配方类型”增加词汇，不把 film-spec 的全幅生成链复制成第二套 overlay 系统 |
 | Film 帧级精细估价 | P2 | 当前秒级简式估价与确定性帧分配 | 报价使用实际帧/复用范围，保留 NULL 不可报价与守卫线；不得为精确总价伪报未出生的渲染 fanout |
 | Film 独立 prompt_gate 探针族 | P1 | 现有 prompt_gate 与 Film 工具注册表 | 增加 Film 专属的呈现、版本、拒绝、grounding 与授权形态探针；先校准读数，绝对阈值不得为放行回归下调 |
-| 非代码用户自建 skill | P2 | 运营端排期；engine / skill / recipe 三层治理 | 用户只配置参数与模板；渲染组件永远人工拥有，不允许用户提交或执行渲染代码 |
+| 个人创作 Skill | P2 | Video Project 阶段 C，依赖已声明内容能力 | 保存/调用/导入创作方法，可包含已支持的 Generator 来源和参数；外部脚本不自动执行，受控视觉程序按 VIDEO_PROJECT §8.1.1 生产，业务引擎与权限仍由系统掌握 |
 | 对话剪辑工具族（cut / stitch / reorder） | P2 | 两站机制；复核 L3 边界 | 以 video×editor + chat 修订提供对话剪辑；只扩 agent 工具，不建设多轨 NLE，专业需求仍导出剪映/Premiere |
 | 能力画廊 generate/edit 分组徽标 | P2 | 节点 prototype 属性 | 从注册表与媒体入边派生 generator/editor 展示分组；不把该轴变成节点 type |
 | quotes/carousel 两站拆分 | P2 | 两站机制 | 拆为文案稿 table×manual + 图装配站；改文案不重新购买图渲染，billing 应显示 renderer capture 为 0 |
@@ -161,7 +164,7 @@ R5 虚拟视频仍是已拍板的 AI 生成能力，先作为平台 tool 落位�
 | turn 级事件可观测性落库 | P2 | agent 调用台账 | 将拒绝轨迹、异常类与耗时剖面落 DB，使回合中途死亡可诊断；不是另存一份 stdout 日志文件 |
 | 画布可读性（同族链分组 + 长边路由 + 居中） | P1 | Product Flow Alignment Batch C | 剩余 = 项目页 groups、asset→asm 跨列长边路由、settled 路径居中；不得为排线创造语义节点，验收用 5 秒三问；若合同已完整吸收则关闭本行 |
 | 零探索退化形态 | P1 | ADR-089 §8 迁移弧与 edit_graph 退役证明 | 范围清晰的请求直接生成单 Content Plan，不经探索链；随后退役 `propose_tasks` 与 `select_clips` 的 LLM 可见性，不改变付费授权边界 |
-| 深度 reviewer / 看片复核 | P2 | 视频理解 provider 能力与成本评估 | 当前 reviewer 只做确定性 verify + plan 意图比对；内容级看片自审需先解决 ground truth 与成本模型 |
+| 深度 reviewer / 看片复核 | P1 | Video Project B 支撑增量；规则见 VIDEO_PROJECT §8.5 / §11.3 | 先直接抽取成片关键帧，跑通一次问题发现/修订/复核；复用现有机制，模型意见不作为未经校准的新审批门 |
 | 常驻自主拨盘（standing autonomy dial） | P2 | R1.1 商业形态明确后评估 | 可设常驻额度信封并在设定时披露费用语义；不恢复 review 档，不创造制作意图，也不绕过 `always_confirm_above` / NULL 不可报价守卫 |
 | 选项唯一座位（消息流零选项，ADR-100） | P1 | 现行规则 = CHAT_ARCHITECTURE §8.5/§8.8；验收 = 验证登记 §4.1，排期窗口待指认 | 固定选项全部归 dock，trigger 建议 dock 机器保留；收窄 ADR-099 的 suggestions/answer 面，probe I 改测新目标，路由安全零容忍与 substrate 排查方法随合同迁移 |
 | Canvas 密度组织学（journey 分组 / 折叠 / 归档） | P2 | `journey_id` 身份前提（ADR-088 §10） | 多旅程候选、精选、方案与产物累积后提供呈现层分组/折叠/归档；不得为组织创造语义节点 |

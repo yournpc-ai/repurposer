@@ -6,7 +6,7 @@ from app.models.tables import Output
 from app.pipeline.graph import NodeBase, Requirement
 from app.pipeline.render_ownership import pend_outputs_for_render
 from app.pipeline.step_display import fill_summary, set_spec_field, set_stage, ui_lang_of
-from app.tools.video.params import VideoVersionRef
+from app.tools.video.params import NarrationPolicy, ProduceVideoParams
 from app.tools.video.produce import queue_composition_render
 
 
@@ -28,6 +28,9 @@ class ProduceVideo(NodeBase):
     task_name = "Prepare video"
     task_name_zh = "准备短片"
     produces_outputs = True
+    # A submitted model-image request has an unconfirmed outcome after failure;
+    # never give this preparation step a blind TransientNodeError retry budget.
+    retries = 0
     requires = (SavedVideoRequirement(),)
 
     def estimate(self, ctx):
@@ -35,13 +38,30 @@ class ProduceVideo(NodeBase):
         seconds = (ctx.get("video_seconds") or {}).get(str(ref.get("composition_version_id")))
         if seconds is None:
             return None
-        return {"prompt_tokens": [0, 0], "completion_tokens": [0, 0],
-                "units": {"film_seconds": seconds}}
+        units = {"film_seconds": seconds}
+        tts_characters = (ctx.get("video_tts_characters") or {}).get(
+            str(ref.get("composition_version_id")), 0
+        )
+        if tts_characters:
+            units["tts_chars"] = float(tts_characters)
+        images = (ctx.get("video_images") or {}).get(str(ref.get("composition_version_id")), 0)
+        if images:
+            units["images"] = images
+        return {"prompt_tokens": [0, 0], "completion_tokens": [0, 0], "units": units}
 
     async def run(self, db, run, node, project):
-        ref = VideoVersionRef.model_validate((run.context or {}).get("version_ref"))
+        production = ProduceVideoParams.model_validate({
+            "version_ref": (run.context or {}).get("version_ref"),
+            "regenerate_media": (run.context or {}).get("regenerate_media", False),
+        })
+        ref = production.version_ref
+        policy = NarrationPolicy.model_validate((run.context or {}).get("narration_policy"))
         if node.spec.get("version_ref") != ref.model_dump(mode="json"):
             raise ValueError("The production step does not match its authorized version")
+        if bool(node.spec.get("regenerate_media", False)) != production.regenerate_media:
+            raise ValueError("The production step does not match its authorized media-regeneration request")
+        if node.spec.get("narration_policy") != policy.model_dump(mode="json"):
+            raise ValueError("The production step does not match its authorized narration policy")
         await set_stage(node.id, "preparing_video")
         composition, version = await get_video_version(
             db, owner_id=project.user_id, version_id=ref.composition_version_id
@@ -54,11 +74,27 @@ class ProduceVideo(NodeBase):
             from app.tools.video.preparation import ensure_font_resources
             await ensure_font_resources()
             output = await queue_composition_render(
-                db, project=project, composition=composition, version=version
+                db,
+                project=project,
+                composition=composition,
+                version=version,
+                execution_id=str(run.id),
+                regenerate_media=production.regenerate_media,
+                narration_policy=policy,
             )
             output.workflow_step_id = node.id
             output.payload = {**output.payload, "duration": output.payload["duration_seconds"]}
-        manifest = {"version_ref": ref.model_dump(mode="json"), "render_spec": output.render_spec}
+        if (output.payload or {}).get("narration_policy") != policy.model_dump(mode="json"):
+            raise ValueError("The prepared output does not match its authorized narration policy")
+        manifest = {
+            "version_ref": ref.model_dump(mode="json"),
+            "narration_policy": policy.model_dump(mode="json"),
+            "generator_media": (output.payload or {}).get("generator_media") or {},
+            "speech_media": (output.payload or {}).get("speech_media") or {},
+            "render_spec": output.render_spec,
+        }
+        if production.regenerate_media:
+            manifest["regenerate_media"] = True
         if output.render_spec.get("provenance") != ref.model_dump(mode="json"):
             raise ValueError("The prepared output belongs to another video version")
         from app.models.schemas import canonical_json_hash

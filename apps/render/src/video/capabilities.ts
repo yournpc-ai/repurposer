@@ -6,7 +6,7 @@ import {
 
 /** Explicit capability court: schema-valid but unimplemented input fails. */
 export const VIDEO_CAPABILITIES = {
-  objects: ["text", "image", "web", "audio"],
+  objects: ["text", "shape", "image", "web", "video", "audio"],
   text_parts: ["line", "word", "grapheme"],
   segmentation_versions: [SEGMENTATION_VERSION] as readonly string[],
   layout_versions: [LAYOUT_VERSION] as readonly string[],

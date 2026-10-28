@@ -13,7 +13,7 @@ on models+editing imports only; what arrives here is already prepared.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Awaitable, Callable
 from uuid import UUID, uuid4, uuid5, NAMESPACE_URL
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,14 +36,21 @@ from app.editing.edits import (
 from app.editing.schemas import (
     Animation,
     Clip,
+    ClipSource,
     CompositionContent,
     Easing,
+    GeneratorObject,
     Keyframe,
     LayoutBox,
+    ShapeObject,
+    SpeechObject,
     TextObject,
     TextStyle,
     TimeRange,
     Track,
+    VideoObject,
+    WebObject,
+    speech_text_digest,
 )
 from app.editing.store import (
     apply_composition_edits,
@@ -51,17 +58,25 @@ from app.editing.store import (
     get_video_version,
     snapshot_facts,
 )
+from app.editing.grounding import resolve_focus
 from app.editing.storyboard import storyboard_payload
-from app.editing.timing import seconds_to_ticks
+from app.editing.templates import ClipBlueprint, ViewFact, _camera_animations
+from app.editing.timing import SOURCE_TIMEBASE, seconds_to_ticks
 from app.models.schemas import (
     ReviseVideoArgs,
     VideoEditAddText,
     VideoEditBackground,
+    VideoEditFocusWeb,
     VideoEditMoveScene,
     VideoEditRemoveClip,
     VideoEditRemoveScene,
+    VideoEditSyncCaptions,
     VideoEditUpdateAnimation,
+    VideoEditUpdateGenerator,
+    VideoEditUpdateShape,
+    VideoEditUpdateSpeech,
     VideoEditUpdateText,
+    VideoEditUpdateVideo,
     canonical_json_hash,
 )
 from app.models.tables import Composition, CompositionVersion
@@ -167,6 +182,25 @@ def _find_scene(content: CompositionContent, scene_id: str):
     raise VideoServiceError(f"scene {scene_id!r} does not exist in the base version")
 
 
+def _updated_text_clip(clip: Clip, obj: TextObject) -> Op:
+    """Persist text and retarget only animations that covered the whole old text."""
+    if obj.text != clip.object.text:
+        from app.editing.animation import derive_text_parts
+        animations = []
+        for anim in clip.animations:
+            target = anim.text_part
+            if target is not None and set(target.part_ids) == {
+                p.part_id for p in derive_text_parts(clip.object.text, target.kind)
+            }:
+                target = target.model_copy(update={"part_ids": [
+                    p.part_id for p in derive_text_parts(obj.text, target.kind)
+                ]})
+                anim = anim.model_copy(update={"text_part": target})
+            animations.append(anim)
+        return UpdateClip(op="update_clip", clip_id=clip.clip_id, object=obj, animations=animations)
+    return UpdateClip(op="update_clip", clip_id=clip.clip_id, object=obj)
+
+
 def _translate_update_text(content: CompositionContent, op: VideoEditUpdateText) -> Op:
     clip = _find_clip(content, op.clip_id)
     if not isinstance(clip.object, TextObject):
@@ -187,21 +221,63 @@ def _translate_update_text(content: CompositionContent, op: VideoEditUpdateText)
         obj.style.align = op.align
     if op.weight is not None:
         obj.style.weight = op.weight
-    if op.text is not None and op.text != clip.object.text:
-        from app.editing.animation import derive_text_parts
-        animations = []
-        for anim in clip.animations:
-            target = anim.text_part
-            if target is not None and set(target.part_ids) == {
-                p.part_id for p in derive_text_parts(clip.object.text, target.kind)
-            }:
-                target = target.model_copy(update={"part_ids": [
-                    p.part_id for p in derive_text_parts(obj.text, target.kind)
-                ]})
-                anim = anim.model_copy(update={"text_part": target})
-            animations.append(anim)
-        return UpdateClip(op="update_clip", clip_id=op.clip_id, object=obj, animations=animations)
-    return UpdateClip(op="update_clip", clip_id=op.clip_id, object=obj)
+    if op.text is not None and op.text != clip.object.text and obj.caption is not None:
+        obj.caption.state = "independent"
+    return _updated_text_clip(clip, obj)
+
+
+def _linked_caption_clips(content: CompositionContent, speech_object_id: str) -> list[Clip]:
+    return [
+        clip
+        for track in content.timeline.tracks
+        for clip in track.clips
+        if isinstance(clip.object, TextObject)
+        and clip.object.caption is not None
+        and clip.object.caption.speech_object_id == speech_object_id
+    ]
+
+
+def _translate_update_speech(content: CompositionContent, op: VideoEditUpdateSpeech) -> list[Op]:
+    clip = _find_clip(content, op.clip_id)
+    if not isinstance(clip.object, SpeechObject):
+        raise VideoServiceError("update_speech only targets a SpeechClip")
+    if not (set(op.model_fields_set) - {"op", "clip_id"}):
+        raise VideoServiceError("update_speech needs at least one changed field")
+    speech = clip.object.model_copy(deep=True)
+    for field in ("text", "voice_id", "language", "gain_db"):
+        value = getattr(op, field)
+        if value is not None:
+            setattr(speech, field, value)
+    ops: list[Op] = [UpdateClip(op="update_clip", clip_id=clip.clip_id, object=speech)]
+    for caption_clip in _linked_caption_clips(content, speech.object_id):
+        caption = caption_clip.object
+        assert isinstance(caption, TextObject) and caption.caption is not None
+        if caption.caption.state != "derived":
+            continue
+        revised = caption.model_copy(deep=True)
+        revised.text = speech.text
+        revised.caption.source_text_digest = speech_text_digest(speech.text)
+        ops.append(_updated_text_clip(caption_clip, revised))
+    return ops
+
+
+def _translate_sync_captions(content: CompositionContent, op: VideoEditSyncCaptions) -> list[Op]:
+    clip = _find_clip(content, op.clip_id)
+    if not isinstance(clip.object, SpeechObject):
+        raise VideoServiceError("sync_captions targets the SpeechClip whose captions should refresh")
+    linked = _linked_caption_clips(content, clip.object.object_id)
+    if not linked:
+        raise VideoServiceError(f"speech clip {op.clip_id!r} has no linked captions")
+    ops: list[Op] = []
+    for caption_clip in linked:
+        caption = caption_clip.object
+        assert isinstance(caption, TextObject) and caption.caption is not None
+        revised = caption.model_copy(deep=True)
+        revised.text = clip.object.text
+        revised.caption.source_text_digest = speech_text_digest(clip.object.text)
+        revised.caption.state = "derived"
+        ops.append(_updated_text_clip(caption_clip, revised))
+    return ops
 
 
 def _translate_add_text(content: CompositionContent, op: VideoEditAddText, token: str | None = None) -> list[Op]:
@@ -286,6 +362,124 @@ def _translate_remove_clip(content: CompositionContent, op: VideoEditRemoveClip)
     return RemoveClip(op="remove_clip", clip_id=op.clip_id)
 
 
+def _translate_update_video(content: CompositionContent, op: VideoEditUpdateVideo) -> Op:
+    clip = _find_clip(content, op.clip_id)
+    if not isinstance(clip.object, VideoObject):
+        raise VideoServiceError(
+            f"clip {op.clip_id!r} is a {clip.object.kind} clip, not video — "
+            "update_video only targets real video objects"
+        )
+    changed = set(op.model_fields_set) - {"op", "clip_id"}
+    if not changed:
+        raise VideoServiceError("update_video needs at least one changed field")
+    obj = clip.object.model_copy(deep=True)
+    for field in ("x", "y", "width", "height"):
+        value = getattr(op, field)
+        if value is not None:
+            setattr(obj.layout, field, value)
+    if op.scale is not None:
+        obj.transform.scale = op.scale
+    if op.fit is not None:
+        obj.fit = op.fit
+    if op.gain_db is not None:
+        obj.gain_db = op.gain_db
+    if op.muted is not None:
+        obj.muted = op.muted
+
+    kwargs: dict[str, Any] = {"op": "update_clip", "clip_id": op.clip_id, "object": obj}
+    if changed & {"snapshot_id", "source_start_seconds", "source_end_seconds"}:
+        if clip.source is None or clip.source.source_range is None:
+            raise VideoServiceError("the video clip has no editable source window")
+        snapshot_id = op.snapshot_id or clip.source.snapshot_id
+        binding = next((b for b in content.sources if b.snapshot_id == snapshot_id), None)
+        if binding is None:
+            raise VideoServiceError(
+                "the requested snapshot is not bound to this version; add it through design first"
+            )
+        start_seconds = (
+            op.source_start_seconds
+            if op.source_start_seconds is not None
+            else clip.source.source_range.start / SOURCE_TIMEBASE
+        )
+        end_seconds = (
+            op.source_end_seconds
+            if op.source_end_seconds is not None
+            else clip.source.source_range.end / SOURCE_TIMEBASE
+        )
+        source_range = TimeRange(
+            start=seconds_to_ticks(start_seconds, SOURCE_TIMEBASE),
+            end=seconds_to_ticks(end_seconds, SOURCE_TIMEBASE),
+        )
+        if source_range.duration != clip.range.duration:
+            raise VideoServiceError(
+                "a targeted source-window change keeps the current output duration; "
+                "choose a segment of the same length so the other layers stay unchanged"
+            )
+        kwargs["source"] = ClipSource(
+            snapshot_id=snapshot_id,
+            snapshot_digest=binding.snapshot_digest,
+            source_range=source_range,
+        )
+    return UpdateClip.model_validate(kwargs)
+
+
+def _translate_update_shape(content: CompositionContent, op: VideoEditUpdateShape) -> Op:
+    clip = _find_clip(content, op.clip_id)
+    if not isinstance(clip.object, ShapeObject):
+        raise VideoServiceError(
+            f"clip {op.clip_id!r} is a {clip.object.kind} clip, not a native shape"
+        )
+    changed = set(op.model_fields_set) - {"op", "clip_id"}
+    if not changed:
+        raise VideoServiceError("update_shape needs at least one changed field")
+    obj = clip.object.model_copy(deep=True)
+    for field in (
+        "shape", "fill", "stroke", "stroke_width", "corner_radius", "path", "opacity",
+    ):
+        if field in op.model_fields_set:
+            setattr(obj, field, getattr(op, field))
+    for field in ("x", "y", "width", "height"):
+        value = getattr(op, field)
+        if value is not None:
+            setattr(obj.layout, field, value)
+    if op.scale is not None:
+        obj.transform.scale = op.scale
+    if op.rotation is not None:
+        obj.transform.rotation = op.rotation
+    obj = ShapeObject.model_validate(obj.model_dump(mode="json"))
+    return UpdateClip(op="update_clip", clip_id=op.clip_id, object=obj)
+
+
+def _translate_update_generator(content: CompositionContent, op: VideoEditUpdateGenerator) -> Op:
+    clip = _find_clip(content, op.clip_id)
+    if not isinstance(clip.object, GeneratorObject):
+        raise VideoServiceError(
+            f"clip {op.clip_id!r} is a {clip.object.kind} clip, not a GeneratorObject"
+        )
+    changed = set(op.model_fields_set) - {"op", "clip_id"}
+    if not changed:
+        raise VideoServiceError("update_generator needs changed code, prompt, parameters or external layout")
+    obj = clip.object.model_copy(deep=True)
+    if op.code is not None:
+        obj.code = op.code
+    if op.prompt is not None:
+        obj.prompt = op.prompt
+    if op.parameters is not None:
+        obj.parameters = op.parameters
+    for field in ("x", "y", "width", "height"):
+        value = getattr(op, field)
+        if value is not None:
+            setattr(obj.layout, field, value)
+    if op.scale is not None:
+        obj.transform.scale = op.scale
+    if op.fit is not None:
+        obj.fit = op.fit
+    if op.opacity is not None:
+        obj.opacity = op.opacity
+    obj = GeneratorObject.model_validate(obj.model_dump(mode="json"))
+    return UpdateClip(op="update_clip", clip_id=op.clip_id, object=obj)
+
+
 def _translate_update_animation(
     content: CompositionContent, op: VideoEditUpdateAnimation
 ) -> Op:
@@ -328,7 +522,114 @@ def _translate_update_animation(
     )
 
 
-def translate_revision(content: CompositionContent, args: ReviseVideoArgs, *, request_id: str | None = None) -> list[Op]:
+def _translate_focus_web(
+    content: CompositionContent,
+    op: VideoEditFocusWeb,
+    snapshots: dict[UUID, dict[str, Any]],
+) -> Op:
+    """Resolve a frozen webpage element into the template's camera animations.
+
+    Only the target WebObject's scale/position animations change. Its source,
+    view, layout, timing and every unrelated animation stay byte-identical.
+    """
+    clip = _find_clip(content, op.clip_id)
+    if not isinstance(clip.object, WebObject) or clip.source is None:
+        raise VideoServiceError(f"clip {op.clip_id!r} is not a sourced webpage clip")
+    facts = snapshots.get(clip.source.snapshot_id)
+    if facts is None or facts["digest"] != clip.source.snapshot_digest:
+        raise VideoServiceError(f"clip {op.clip_id!r} has no resolved bound webpage snapshot")
+    view = next(
+        (
+            item
+            for item in (facts.get("meta") or {}).get("views") or []
+            if item.get("view_id") == clip.object.view_id
+        ),
+        None,
+    )
+    if view is None:
+        raise VideoServiceError(
+            f"clip {op.clip_id!r} has no frozen view {clip.object.view_id!r}"
+        )
+    try:
+        focus = resolve_focus(view.get("elements") or [], op.element_id)
+    except ValueError as exc:
+        raise VideoServiceError(str(exc)) from exc
+
+    old_scale = next(
+        (
+            animation
+            for animation in clip.animations
+            if animation.target_object_id == clip.object.object_id
+            and animation.property == "transform.scale"
+        ),
+        None,
+    )
+    old_position = next(
+        (
+            animation
+            for animation in clip.animations
+            if animation.target_object_id == clip.object.object_id
+            and animation.property == "transform.position"
+        ),
+        None,
+    )
+    start_scale = 1.08
+    if old_scale and old_scale.keyframes and isinstance(old_scale.keyframes[0].value, float | int):
+        start_scale = float(old_scale.keyframes[0].value)
+    clip_ticks = clip.range.duration
+    arrival_frac = 0.45
+    if old_position and len(old_position.keyframes) > 1:
+        arrival_frac = old_position.keyframes[1].at / clip_ticks
+    blueprint = ClipBlueprint(
+        track="visual",
+        preset="camera",
+        preset_params={"start_scale": start_scale, "arrival_frac": arrival_frac},
+    )
+    view_fact = ViewFact(
+        snapshot_id=clip.source.snapshot_id,
+        snapshot_digest=clip.source.snapshot_digest,
+        view_id=clip.object.view_id,
+        width=int(view["width"]),
+        height=int(view["height"]),
+        elements=view.get("elements") or [],
+        heading=str(view.get("heading") or ""),
+        page=0,
+    )
+    fresh = [
+        Animation.model_validate(item)
+        for item in _camera_animations(
+            blueprint,
+            object_id=clip.object.object_id,
+            view=view_fact,
+            focus=focus,
+            clip_ticks=clip_ticks,
+            canvas=(content.settings.width, content.settings.height),
+            animation_prefix=f"{clip.clip_id}_camera",
+        )
+    ]
+    fresh_by_property = {animation.property: animation for animation in fresh}
+    replaced: set[str] = set()
+    animations: list[Animation] = []
+    for existing in clip.animations:
+        replacement = fresh_by_property.get(existing.property)
+        if existing.target_object_id == clip.object.object_id and replacement is not None:
+            animations.append(replacement.model_copy(update={"animation_id": existing.animation_id}))
+            replaced.add(existing.property)
+        else:
+            animations.append(existing)
+    animations.extend(
+        animation for animation in fresh if animation.property not in replaced
+    )
+    return UpdateClip(op="update_clip", clip_id=clip.clip_id, animations=animations)
+
+
+def translate_revision(
+    content: CompositionContent,
+    args: ReviseVideoArgs,
+    *,
+    request_id: str | None = None,
+    snapshots: dict[UUID, dict[str, Any]] | None = None,
+) -> list[Op]:
     """The LLM-facing revision vocabulary → the write door's op batch. Any
     failure rejects the WHOLE batch with a model-readable reason."""
     ops: list[Op] = []
@@ -336,11 +637,25 @@ def translate_revision(content: CompositionContent, args: ReviseVideoArgs, *, re
         current = apply_ops(content, ops, {})
         if isinstance(edit, VideoEditUpdateText):
             ops.append(_translate_update_text(current, edit))
+        elif isinstance(edit, VideoEditUpdateSpeech):
+            ops.extend(_translate_update_speech(current, edit))
+        elif isinstance(edit, VideoEditSyncCaptions):
+            ops.extend(_translate_sync_captions(current, edit))
         elif isinstance(edit, VideoEditAddText):
             token = uuid5(NAMESPACE_URL, f"video-text:{request_id}:{index}").hex if request_id else None
             ops.extend(_translate_add_text(current, edit, token))
         elif isinstance(edit, VideoEditRemoveClip):
             ops.append(_translate_remove_clip(current, edit))
+        elif isinstance(edit, VideoEditUpdateVideo):
+            ops.append(_translate_update_video(current, edit))
+        elif isinstance(edit, VideoEditFocusWeb):
+            if snapshots is None:
+                raise VideoServiceError("focus_web needs the base version's resolved snapshots")
+            ops.append(_translate_focus_web(current, edit, snapshots))
+        elif isinstance(edit, VideoEditUpdateShape):
+            ops.append(_translate_update_shape(current, edit))
+        elif isinstance(edit, VideoEditUpdateGenerator):
+            ops.append(_translate_update_generator(current, edit))
         elif isinstance(edit, VideoEditUpdateAnimation):
             ops.append(_translate_update_animation(current, edit))
         elif isinstance(edit, VideoEditMoveScene):
@@ -378,6 +693,7 @@ async def revise_video(
     owner_id: UUID,
     args: ReviseVideoArgs,
     request_id: str | None = None,
+    prepare_candidate: Callable[[CompositionContent], Awaitable[Any]] | None = None,
 ) -> dict[str, Any]:
     """The targeted-revision seat (B2): explicit base_ref → translated op
     batch → the write door → the new version's canonical read + the
@@ -398,7 +714,15 @@ async def revise_video(
             "re-read the version with get_video_version and echo its base_ref"
         )
     base_content = content_of(base_version)
-    ops = translate_revision(base_content, args, request_id=request_id)
+    facts = await snapshot_facts(db, {b.snapshot_id for b in base_content.sources})
+    ops = translate_revision(
+        base_content, args, request_id=request_id, snapshots=facts
+    )
+    if prepare_candidate is not None:
+        # The tools layer may execute a bounded preflight (Generator preview)
+        # against the pure candidate; only the write door below persists it.
+        candidate = apply_ops(base_content, ops, {})
+        await prepare_candidate(candidate)
     _, version, replayed = await apply_composition_edits(
         db,
         owner_id=owner_id,
@@ -453,6 +777,8 @@ def compute_change_set(
             changes.append("animations")
         if before.scene_id != after.scene_id:
             changes.append("scene_id")
+        if before.source != after.source:
+            changes.append("source")
         return changes
 
     return {
@@ -575,7 +901,49 @@ def format_storyboard_text(read: dict[str, Any]) -> str:
             if clip.get("view_id") is not None:
                 view = clip.get("view") or {}
                 desc += f" view={clip['view_id']} {view.get('heading') or ''}".rstrip()
-            lines.append(desc)
+            if clip.get("source_range_seconds") is not None:
+                source_range = clip["source_range_seconds"]
+                desc += f" source={source_range['start']:.2f}s–{source_range['end']:.2f}s"
+            if clip.get("layout") is not None:
+                box = clip["layout"]
+                desc += (
+                    f" layout=({box['x']:g},{box['y']:g},{box['width']:g},{box['height']:g})"
+                )
+            if clip["object_kind"] == "video":
+                desc += f" fit={clip.get('fit')} gain={clip.get('gain_db')}dB muted={clip.get('muted')}"
+            if clip["object_kind"] == "speech":
+                desc += (
+                    f" voice={clip.get('voice_id')} language={clip.get('language')} "
+                    f"provider={clip.get('provider')} model={clip.get('model')} gain={clip.get('gain_db')}dB"
+                )
+            if clip.get("caption") is not None:
+                desc += f" caption_state={clip['caption'].get('state')}"
+            if clip["object_kind"] == "shape":
+                desc += (
+                    f" shape={clip.get('shape')} fill={clip.get('fill')} "
+                    f"stroke={clip.get('stroke')} opacity={clip.get('opacity')}"
+                )
+                if clip.get("path"):
+                    desc += f" path={clip['path']!r}"
+            if clip["object_kind"] == "generator":
+                desc += (
+                    f" runtime={clip.get('runtime')} digest={clip.get('program_digest')} "
+                    f"output={json.dumps(clip.get('output'), sort_keys=True)} "
+                    f"parameters={json.dumps(clip.get('parameters'), ensure_ascii=False, sort_keys=True)}"
+                )
+                lines.append(desc)
+                if clip.get("runtime") == "image-v1":
+                    lines.append(
+                        f"    IMAGE REQUEST provider={clip.get('provider')} model={clip.get('model')} "
+                        "(change prompt with update_generator; internal pixels are not native objects):"
+                    )
+                    lines.append(str(clip.get("prompt") or ""))
+                else:
+                    lines.append("    PROGRAM SOURCE (rewrite with update_generator; never a preset id):")
+                    lines.append(str(clip.get("code") or ""))
+                desc = None
+            if desc is not None:
+                lines.append(desc)
             for anim in clip["animations"]:
                 kfs = ", ".join(
                     f"{kf['at_seconds']:.2f}s→{kf['value']}" for kf in anim["keyframes"]
@@ -588,7 +956,19 @@ def format_storyboard_text(read: dict[str, Any]) -> str:
         lines.append(
             f"\nglobal clip {clip['clip_id']} ({clip['object_kind']}, {clip['track_role']})"
         )
-    lines.append("\nNarration: none — spoken narration is not supported by this chain yet.")
+    speech_clips = [
+        clip
+        for scene in payload["scenes"]
+        for clip in scene["clips"]
+        if clip["object_kind"] == "speech"
+    ]
+    if speech_clips:
+        lines.append(
+            "\nNarration: reviewed SpeechObjects above; actual audio and sentence-aligned "
+            "captions are prepared only by authorized production inside each fixed clip window."
+        )
+    else:
+        lines.append("\nNarration: off.")
     return "\n".join(lines)
 
 

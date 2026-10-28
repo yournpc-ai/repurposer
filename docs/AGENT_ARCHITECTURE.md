@@ -53,7 +53,7 @@ Repurposer 对外是一个 AI assistant，可提供剪辑、配音、字幕、�
 | 我们 | 行业座位（参照） | 差异注记 |
 |---|---|---|
 | Loop（chat 治理环） | agent loop（dsh agent-loop / Mastra AgentController 的 Session） | 我们的 loop = 有界工具 loop（ToolLoopAgent：终态工具停环 + 迭代上界 + 只读感知），只做意图治理，执行下沉 Graph；dsh loop 的工具循环无界 |
-| Graph（DAG 执行核） | workflow / orchestration（LangGraph graph·node / Agno Workflow） | 拓扑代码定（ADR-028）；dsh 反面 = 模型写编排脚本，永拒 |
+| Graph（DAG 执行核） | workflow / orchestration（LangGraph graph·node / Agno Workflow） | 业务执行拓扑由系统代码定（ADR-028），不接受模型编写业务编排脚本；受控视觉程序属于内容生产，边界见 §4.3 |
 | Harness（Agent 漏斗） | agent harness 调用面（dsh core spine：system-prompt + tools + llm） | harness 单义 = 本调用面（N-48）；我们漏斗固定，无插件拦截 |
 | Model（MiniMaxClient） | provider seam（dsh `ctx.llm` 适配器注册表） | 单边界（家 = `providers/llm/`）；政策开关座位在 PROGRESS 池 |
 | agent | agent（五源同词，N-29） | 一个类 + 声明实例（N-30） |
@@ -119,9 +119,10 @@ class NodeBase:
 | **对账** | ⊆：配方 flow keys ⊆ 编译图 kind 集，启动自检（`compile_graph` 是纯函数，直接编译配方比对），无需人肉评审 |
 | **重跑** | 子图词汇：只跑此节点 / 从这里跑 / 跑到这里（节点可寻址的免费获得） |
 
-### 4.3 拓扑铁律（不变）
+### 4.3 业务执行图的拓扑边界
 
-- **拓扑代码定，LLM 永不塑形图**（ADR-028）：LLM 提议（task list = 意图面唯一语法，ADR-043），`compile_graph` 纯函数裁决与物化。
+- **业务执行拓扑由系统代码裁决**（ADR-028）：LLM 通过受支持的意图/修订工具提出请求，`compile_graph` 等确定性编译与校验处理，持久图只经 `apply_wiring_ops` 写入，Run 只经 `create_run` 创建；不允许模型脚本接管调度、授权或计费。
+- **视觉程序与模型请求是内容，不是业务编排**：GeneratorObject 允许 Agent 编写/修改受控程序或可审阅模型请求，当前 runtime 为 drawing-v1 与 image-v1；内容仍只经 `apply_composition_edits` 落版。drawing-v1 在权限受限 Node 进程中只返回绘图命令；image-v1 只在授权 produce Run 内请求 MiniMax image-01 并固定单图。二者都不能访问业务数据库、改图或自行发起 Run，来源、预览、固定媒体与复用合同归 [VIDEO_PROJECT §4.3.2/§8.1.1](VIDEO_PROJECT.md#432-generatorobject可再次生产的画面drawing-v1--image-v1-已接)。GeneratorObject 与执行节点的 `prototype="generator"` 分属不同层，不一一映射。
 - `create_run` 是 WorkflowRun 唯一出生地：clips-media 门、count 边界、requires 校验全部集中于此，入口点零门禁代码。
 - 失败语义：确定性失败快速失败 + 下游级联 skipped；provider/网络/存储瞬时故障抛 `TransientNodeError`，按节点 `retries` 预算复位 pending 不级联；`checkpoint` 瘦节点 `Suspend` 挂起等答（waiting / WAITING_HUMAN），bail 优雅退出永不标 failed。
 - 失败判决（ADR-074）：任一步骤 failed 即判 run FAILED；render 节点计入 active（hold run 到自身渲染终态落地），render/upload/recovery 失败同样是交付判决。上传失败的 chat `retry_upload` 不是新生产节点，也不进入 `TOOL_REGISTRY`：它重开原 run/render step，仍由 Output 渲染队列原座认领，不创建第二 scheduler 或付费生产步骤。
@@ -186,11 +187,14 @@ class Agent[OutT]:
 - **无界 tool-call loop 脚手架**（loop detection / steering / 运行期工具发现）：开放式自主永拒。有界形态全仓库只有两座，各守一层——会话层 = `agents/tool_loop.py` 的 **ToolLoopAgent**（终态工具一调即停 + 迭代上界 + 只读感知族，ADR-077）；生产层 = §4.6 的 **BoundedLoopNode**（三护栏：迭代上限 / 报价=fold / 对外=DAG 单节点）。
 - **Memory 写入冲突管理**：agent 无共享可变状态（中间产物落库、单写者），结构性规避。
 
+视觉程序的设计/预览/修订复用既有声明式 Agent 与有界机制，在首个消费者明确预算和停止条件，不另建第三套 loop/harness。内容已确认后的制作/恢复不得调用 Director 重新设计；用户反馈引发的新创作走显式修订，细则归 VIDEO_PROJECT §8.1.1。
+
 ## 6. Model 层
 
 - `MiniMaxClient` 单边界：`generate(response_model=T)` / `generate_stream`——结构化输出在边界单点强制（`model_validate_json`）；usage 捕获点 → `app/metering.py` → `workflow_steps.cost`（ADR-025 不变）。
 - 多模态 / 图像 / 音乐生成同边界（`generate_image` / `generate_music`）。
-- **provider 政策开关**（未来）：第二 provider 的真实需求（EU 客户要求 EU-hosted）出现时，在 harness 漏斗按 policy 路由，用户-facing 形态 = 策略开关（"优先 EU 托管模型"），不是模型 SKU 货架；现在不预留接口（单边界已够）。
+- **模型无关的领域边界**：Composition、Skill 和内容编辑操作不绑定 MiniMax 或其他品牌；上文是当前实现，不是永久供应商限制。文本/代码创作与媒体生产可使用不同模型，provider 私有配置、能力差异、错误与用量在适配边界处理，不泄漏进通用对象语义。
+- **provider 扩展按真实需求实施**：触发可为代码/视觉创作能力、成本或 EU 驻留，不仅限于 EU 客户。在既有调用边界增补实际需要的能力声明/适配；用户政策与底层模型 SKU 分开，不预建全供应商框架。每个接入分别验证工具调用、结构化输出、视觉输入和计量等所需能力，模型可替换不等于所有模型已支持或质量等价。
 
 ## 7. 工具包（`app/tools/`）
 
@@ -222,7 +226,7 @@ tools/dub/           配音工具
 
 `verify` 是当前注册可执行的内部节点：编译时挂在相应生成执行器之后，确定性检查矩阵负责文件、保真、锚点、响度、数量与计划意图等校验；声明式 judge 只承担其注册的辅助检查，失败不得伪装成质检通过。QualityBounce 有界打回上游，支持 best-not-last 快照恢复与 needs_human 升级；在 Product Graph 中折叠进执行器家族，不成为用户可提议工具或独立产品节点。
 
-首发推荐分的四轴明细与版本一致展示归 `tasks/output-quality-verify.md`；全片跨产物矛盾检查、深度看片 reviewer 与更多 modifier 质检不随现有 verify 自动宣称完成，开放范围归 `PROGRESS.md`。
+首发推荐分的四轴明细与版本一致展示归 `tasks/output-quality-verify.md`。视频内容级 reviewer 已纳入 Video Project B 支撑增量，目标规则归 VIDEO_PROJECT §8.5，D4 时间点预览归 §11.3；具体代码归属只在该文 §12 登记。模型审片能力归 tools/video 与既有 Agent harness，verify 负责既有检查/裁决，run_review 保持纯事实聚合；三者不互相替代。全片跨产物矛盾检查与更多 modifier 质检不随此增量自动完成，实施状态归 PROGRESS 与四阶段施工合同。
 
 ## 10. 验收器
 

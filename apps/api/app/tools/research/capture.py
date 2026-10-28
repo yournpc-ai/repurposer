@@ -3,12 +3,14 @@
 The capture half of the "URL → web_page asset" recipe (MG film batch D1).
 Two layers:
 
-- ``extract_research`` — PURE: HTML → the grounding manifest (title / meta
-  description / h1-h3 / button and link copy). Parser-based (stdlib
-  HTMLParser, malformed-HTML tolerant); the spike's regexes mis-fired on
-  attribute order and are retired.
+- ``extract_research`` / ``extract_rendered_research`` — PURE: settled HTML
+  and visible DOM text → the grounding manifest (title / meta description /
+  h1-h3 / paragraph, button and link copy, plus otherwise-unrepresented
+  rendered body lines). Parser-based (stdlib HTMLParser, malformed-HTML
+  tolerant).
 - ``capture_page`` — NETWORK: fetch the HTML (per-hop redirect policy,
-  byte cap) and take a headless-Chrome viewport screenshot.
+  byte cap), then use headless Chrome for settled DOM copy, 2× full-page and
+  viewport PNGs, and the selected camera candidates' element crops/CSS boxes.
 
 SSRF is enforced at BROWSER level (禁止事项 11 — one policy for top-level
 navigation, redirects and sub-resources alike): the screenshot rides an
@@ -62,8 +64,10 @@ _DESCRIPTION_MAX_LEN = 500
 _PARAGRAPH_MAX_LEN = 240
 
 # The extracted_text rendering of the manifest — the prompt-budget twin of
-# web.py's FETCH_TEXT_CAP.
-MANIFEST_TEXT_CAP = 6000
+# web.py's FETCH_TEXT_CAP. Rendered body lines remain separately bounded below.
+MANIFEST_TEXT_CAP = 20000
+_RENDERED_BODY_LINE_CAP = 500
+_RENDERED_BODY_LINES_CAP = 80
 
 
 class _CopyInventoryParser(HTMLParser):
@@ -172,6 +176,41 @@ def extract_research(html: str, url: str) -> WebPageResearch:
     )
 
 
+def extract_rendered_research(html: str, url: str, body_text: str) -> WebPageResearch:
+    """Ground copy in the settled DOM, then add visible body lines the
+    structured inventory could not represent (including client-only copy)."""
+    research = extract_research(html, url)
+    seen = {
+        text
+        for value in (
+            research.title,
+            research.description,
+            *research.h1,
+            *research.h2,
+            *research.h3,
+            *research.paragraphs,
+            *research.buttons,
+            *research.links,
+        )
+        for text in [value]
+    }
+    body: list[str] = []
+    truncated = False
+    for raw in body_text.splitlines():
+        text = " ".join(raw.split())
+        if len(text) < 2 or text in seen:
+            continue
+        if len(text) > _RENDERED_BODY_LINE_CAP:
+            text = text[:_RENDERED_BODY_LINE_CAP].rstrip()
+            truncated = True
+        if len(body) >= _RENDERED_BODY_LINES_CAP:
+            truncated = True
+            break
+        body.append(text)
+        seen.add(text)
+    return research.model_copy(update={"body": body, "body_truncated": truncated})
+
+
 def render_manifest_text(research: WebPageResearch) -> str:
     """The manifest as plain text — the asset's ``extracted_text`` seat, so
     a web_page counts as text material for the material predicates and the
@@ -182,9 +221,10 @@ def render_manifest_text(research: WebPageResearch) -> str:
         research.h1,
         research.h2,
         research.h3,
+        research.paragraphs,
+        research.body,
         research.buttons,
         research.links,
-        research.paragraphs,
     ):
         parts.extend(listing)
     text = "\n".join(dict.fromkeys(p for p in parts if p))
@@ -608,6 +648,8 @@ class _PolicyProxy:
 # element inventory cap — meta size stays bounded at the birthplace.
 _SECTION_SHOT_MAX = 5
 _ELEMENTS_PER_SHOT = 30
+_ELEMENT_IMAGES_PER_SHOT = 2
+_CAPTURE_DEVICE_SCALE = 2.0
 # Scroll-preload step/rhythm and the page-height cap (skill values).
 _PRELOAD_STEP_PX = 400
 _PRELOAD_STEP_MS = 180
@@ -832,12 +874,21 @@ _JS_ELEMENTS = r"""() => {
         for (const [fx, fy] of pts) if (!partOf(document.elementFromPoint(c.left + c.width * fx, c.top + c.height * fy), e, r)) hidden++;
         return hidden >= 4;
     };
-    const box = r => (r = clip(r), {
-        x: +((r.left + r.width / 2) / W).toFixed(4),
-        y: +((r.top + r.height / 2) / H).toFixed(4),
-        w: +(r.width / W).toFixed(4),
-        h: +(r.height / H).toFixed(4)
-    });
+    const box = r => {
+        const c = clip(r);
+        return {
+            x: +((c.left + c.width / 2) / W).toFixed(4),
+            y: +((c.top + c.height / 2) / H).toFixed(4),
+            w: +(c.width / W).toFixed(4),
+            h: +(c.height / H).toFixed(4),
+            css: {
+                x: +(c.left + scrollX).toFixed(3),
+                y: +(c.top + scrollY).toFixed(3),
+                width: +c.width.toFixed(3),
+                height: +c.height.toFixed(3)
+            }
+        };
+    };
     const blockOf = n => {
         let e = n.parentElement;
         while (e && e !== document.body && getComputedStyle(e).display.startsWith('inline')) e = e.parentElement;
@@ -878,6 +929,16 @@ _JS_ELEMENTS = r"""() => {
 
 
 @dataclass
+class PageCapture:
+    """A settled full-page PNG and its CSS-page dimensions."""
+
+    png: bytes
+    css_width: int
+    css_height: int
+    device_scale_factor: float
+
+
+@dataclass
 class ShotCapture:
     """One captured view of the page: the fold (index 0) or a section stop.
     ``elements`` = the viewport-relative inventory at this stop (element ids
@@ -887,6 +948,18 @@ class ShotCapture:
     heading: str
     png: bytes
     elements: list[dict] = field(default_factory=list)
+    device_scale_factor: float = 1.0
+
+
+@dataclass
+class BrowserCapture:
+    """The enhanced products of one settled browser session."""
+
+    research: WebPageResearch
+    shots: list[ShotCapture]
+    page: PageCapture | None
+    element_images: dict[str, bytes]
+    discovered: list[str]
 
 
 def _stamp_elements(raw: list[dict], shot_idx: int) -> list[dict]:
@@ -905,8 +978,63 @@ def _stamp_elements(raw: list[dict], shot_idx: int) -> list[dict]:
         }
         if e.get("covered"):
             item["covered"] = True
+        css = e.get("css")
+        if isinstance(css, dict) and all(
+            isinstance(css.get(key), (int, float)) for key in ("x", "y", "width", "height")
+        ):
+            item["css_box"] = {
+                key: round(float(css[key]), 3) for key in ("x", "y", "width", "height")
+            }
         out.append(item)
     return out
+
+
+def css_pixel_box(css_box: dict[str, float], device_scale_factor: float) -> dict[str, float]:
+    """Map an absolute CSS-page rectangle into full-page image pixels."""
+    return {
+        key: round(float(css_box[key]) * device_scale_factor, 3)
+        for key in ("x", "y", "width", "height")
+    }
+
+
+async def _capture_element_images(page: Any, elements: list[dict]) -> dict[str, bytes]:
+    """Capture only the dominant camera candidates, using their absolute
+    CSS-page boxes so the same crop is addressable in the full-page image."""
+    candidates: list[dict] = []
+    for kind in ("heading", "video", "image", "text", "button"):
+        pool = [
+            element for element in elements
+            if element.get("kind") == kind
+            and not element.get("covered")
+            and isinstance(element.get("css_box"), dict)
+            and float(element["css_box"].get("width") or 0) >= 8
+            and float(element["css_box"].get("height") or 0) >= 8
+        ]
+        if pool:
+            candidates.append(max(
+                pool,
+                key=lambda element: float(element["css_box"]["width"])
+                * float(element["css_box"]["height"]),
+            ))
+        if len(candidates) >= _ELEMENT_IMAGES_PER_SHOT:
+            break
+    images: dict[str, bytes] = {}
+    for element in candidates:
+        try:
+            images[str(element["id"])] = await page.screenshot(
+                type="png",
+                clip=element["css_box"],
+                full_page=True,
+                animations="disabled",
+                caret="hide",
+                scale="device",
+                timeout=30000,
+            )
+        except Exception as exc:  # one crop never discards the settled page
+            logger.warning(
+                "web_capture_element_failed", element=element.get("id"), error=str(exc)
+            )
+    return images
 
 
 def _choose_stops(anchors: list[dict], page_height: int) -> list[tuple[int, str]]:
@@ -1010,6 +1138,11 @@ async def _preload(page: Any) -> int:
             " i.onload = i.onerror = r; }))),"
             " new Promise(r => setTimeout(r, 5000))])"
         )
+    with contextlib.suppress(Exception):
+        await page.evaluate(
+            "() => Promise.race([document.fonts ? document.fonts.ready : Promise.resolve(),"
+            " new Promise(r => setTimeout(r, 5000))])"
+        )
     await page.evaluate("() => window.scrollTo(0, 0)")
     await page.wait_for_timeout(400)
     return await page.evaluate("() => document.documentElement.scrollHeight")
@@ -1017,12 +1150,9 @@ async def _preload(page: Any) -> int:
 
 async def _capture_visuals_with_policy(
     url: str, chrome: str
-) -> tuple[list[ShotCapture], list[str]]:
-    """fold + per-section screenshots of ``url`` behind the policy proxy, in
-    a throwaway credential-free context (playwright contexts are ephemeral
-    by construction — no cookies, no sync), plus the same-host sub-page
-    discovery list (B4). The visuals half is best-effort by contract: the
-    caller wraps failures and degrades to ``shots=[]``."""
+) -> BrowserCapture:
+    """Capture settled DOM copy, 2× page/view images and camera candidates
+    behind the policy proxy, in a throwaway credential-free context."""
     proxy = _PolicyProxy(
         max_requests=settings.web_capture_max_requests,
         max_bytes=settings.web_capture_max_bytes,
@@ -1045,7 +1175,8 @@ async def _capture_visuals_with_policy(
             )
             try:
                 page = await browser.new_page(
-                    viewport={"width": WINDOW_WIDTH, "height": WINDOW_HEIGHT}
+                    viewport={"width": WINDOW_WIDTH, "height": WINDOW_HEIGHT},
+                    device_scale_factor=_CAPTURE_DEVICE_SCALE,
                 )
                 # Navigation waits only for the EARLY commit signal, never
                 # `load`: one stalled sub-resource (a font / analytics chunk
@@ -1055,17 +1186,47 @@ async def _capture_visuals_with_policy(
                 # Settling is the ladder's job below: best-effort networkidle
                 # (suppressed) + fixed beats + scroll preloading.
                 await page.goto(
-                    url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS
+                    url, wait_until="commit", timeout=_NAV_TIMEOUT_MS
                 )
                 await _settle(page)
                 consent = await _dismiss_consent(page)
                 overlays = await _dismiss_overlays(page)
                 page_height = await _preload(page)
+                # Grounding follows the DOM after client rendering and lazy
+                # loading, not the earlier server-HTML response.
+                rendered_html = await page.content()
+                body_text = await page.evaluate(
+                    "() => document.body ? document.body.innerText : ''"
+                )
+                research = extract_rendered_research(rendered_html, page.url, body_text)
+                page_capture: PageCapture | None = None
+                try:
+                    full_png = await page.screenshot(
+                        type="png",
+                        full_page=True,
+                        animations="disabled",
+                        caret="hide",
+                        scale="device",
+                        timeout=60000,
+                    )
+                    css_size = await page.evaluate(
+                        "() => ({width: document.documentElement.scrollWidth,"
+                        " height: document.documentElement.scrollHeight})"
+                    )
+                    page_capture = PageCapture(
+                        png=full_png,
+                        css_width=int(css_size["width"]),
+                        css_height=int(css_size["height"]),
+                        device_scale_factor=_CAPTURE_DEVICE_SCALE,
+                    )
+                except Exception as exc:  # viewport shots still carry the shot
+                    logger.warning("web_capture_full_page_failed", url=url, error=str(exc))
                 anchors: list[dict] = []
                 with contextlib.suppress(Exception):
                     anchors = await page.evaluate(_JS_ANCHORS)
                 stops = _choose_stops(anchors, page_height)
                 shots: list[ShotCapture] = []
+                element_images: dict[str, bytes] = {}
                 for i, (anchor_y, heading) in enumerate(stops):
                     if anchor_y == 0:
                         y = 0
@@ -1088,8 +1249,15 @@ async def _capture_visuals_with_policy(
                         elements = _stamp_elements(
                             await page.evaluate(_JS_ELEMENTS), i
                         )
+                    element_images.update(await _capture_element_images(page, elements))
                     shots.append(
-                        ShotCapture(y=y, heading=heading, png=png, elements=elements)
+                        ShotCapture(
+                            y=y,
+                            heading=heading,
+                            png=png,
+                            elements=elements,
+                            device_scale_factor=_CAPTURE_DEVICE_SCALE,
+                        )
                     )
                 logger.info(
                     "web_capture_visuals",
@@ -1108,7 +1276,13 @@ async def _capture_visuals_with_policy(
                     )
                 if discovered:
                     logger.info("web_capture_discovered", url=url, pages=discovered)
-                return shots, discovered
+                return BrowserCapture(
+                    research=research,
+                    shots=shots,
+                    page=page_capture,
+                    element_images=element_images,
+                    discovered=discovered,
+                )
             finally:
                 await browser.close()
     finally:
@@ -1135,6 +1309,8 @@ class CaptureOutcome:
     shots: list[ShotCapture] = field(default_factory=list)
     discovered: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    page: PageCapture | None = None
+    element_images: dict[str, bytes] = field(default_factory=dict)
 
 
 async def capture_page(url: str) -> CaptureOutcome:
@@ -1151,6 +1327,8 @@ async def capture_page(url: str) -> CaptureOutcome:
     shots: list[ShotCapture] = []
     discovered: list[str] = []
     warnings: list[str] = []
+    page_capture: PageCapture | None = None
+    element_images: dict[str, bytes] = {}
     chrome = resolve_chrome_path()
     if chrome is None:
         logger.warning("web_capture_chrome_missing", url=url)
@@ -1159,15 +1337,23 @@ async def capture_page(url: str) -> CaptureOutcome:
         try:
             # Chrome navigates the ORIGINAL url: redirect hops are exercised
             # under the proxy, each policy-checked at connect time.
-            shots, discovered = await asyncio.wait_for(
+            browser_capture = await asyncio.wait_for(
                 _capture_visuals_with_policy(url, chrome),
                 timeout=settings.web_capture_timeout_seconds,
             )
+            research = browser_capture.research
+            text = render_manifest_text(research)
+            shots = browser_capture.shots
+            discovered = browser_capture.discovered
+            page_capture = browser_capture.page
+            element_images = browser_capture.element_images
         except Exception as e:  # noqa: BLE001 — the visuals half degrades
             logger.warning("web_capture_screenshot_failed", url=url, error=str(e))
             shots, discovered = [], []
         if not shots:
             warnings.append("screenshot_failed")
+    if research.body_truncated:
+        warnings.append("rendered_body_truncated")
     return CaptureOutcome(
         research=research,
         text=text,
@@ -1176,6 +1362,8 @@ async def capture_page(url: str) -> CaptureOutcome:
         shots=shots,
         discovered=discovered,
         warnings=warnings,
+        page=page_capture,
+        element_images=element_images,
     )
 
 

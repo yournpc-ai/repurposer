@@ -1,0 +1,13 @@
+{# image_director.j2 — One image-v1 background request; fields mirror editing/director.py GeneratedImageDirection. #}
+Design one still 16:9 background for this request:
+
+{{ instruction }}
+
+{% if text %}NATIVE TITLE (a separate editable TextObject, exact copy): {{ text }}{% endif %}
+{% if language %}Language: {{ language }}.{% endif %}
+{% if focus %}Creative direction: {{ focus }}{% endif %}
+{% if target_seconds %}Required video duration: {{ target_seconds }} seconds.{% endif %}
+
+Write a precise visual-generation prompt for the background alone. Describe the subject, environment, composition, lighting, color and depth needed by the request. Keep the central or lower title area readable when a native title is supplied. The image must contain no words, lettering, captions, logos, interface elements or watermark; the native title is never part of the generated pixels. Request one still image, not a sequence or animation.
+
+Answer JSON with: `name` (short or null), `language`, `title` (the native title exactly when supplied, otherwise null), `intent`, `visual_description` (one plain sentence, at most 240 characters, covering only the generated background and separate native title), `duration_seconds` (up to 6), and `prompt` (the complete image request). Do not include markdown fences or provider parameters.

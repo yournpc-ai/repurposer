@@ -177,6 +177,7 @@
 | 画面描述 | `Scene.visual_description` | LLM 对当前真实视觉元素与运动的用户可读摘要；视觉修改必须更新或清空 | 不是 renderer 输入、结构真相或可失实保留的旧文案 |
 | 片段 | `Clip` | Track 上有输出时间窗的编辑项，内含 Object，可引用 SourceSnapshot/source_range | 不再专指旧 clip-spec；不是 `is_clip` 布尔变体 |
 | 对象 | `Object` | Clip 内可渲染、可变换、可动画的内容 | 不自行决定 Track 和输出时间 |
+| 生成对象 | `GeneratorObject`（`kind="generator"`） | 创作层保留程序或模型请求及参数，受控生产固定媒体后参与合成；当前已接 drawing-v1 与 image-v1 单图消费者，语义与生命周期见 VIDEO_PROJECT §4.3.2/§8.1.1 | 不是执行节点 `prototype="generator"`、Run 或每供应商子类，不向 video-spec 注入可执行代码或模型请求 |
 | 动画 | `Animation` | 所属 Clip 内针对 Object/TextPart 属性的关键帧序列与分段 easing | 不是 Clip 间 Transition，不是 Text 专属能力 |
 | 文字部件 | `TextPart` | 由 TextObject 派生的 line/word/grapheme/span 可寻址对象 | 默认不是独立 Clip，不按数组下标静默重指 |
 | 素材快照 | `SourceSnapshot` | 素材某次内容的不可变 digest、manifest/transcript/views 与存储引用 | 不是 refresh 会覆盖的“最新 Asset”或 page_readings 缓存别名 |

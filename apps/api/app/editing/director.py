@@ -15,8 +15,9 @@ streamed half-answer (打字机牙①).
 from __future__ import annotations
 
 from typing import Any, Literal
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from app.editing.grounding import (
     CiteLine,
@@ -29,6 +30,7 @@ from app.editing.grounding import (
     strip_edge_connectors,
 )
 from app.editing.templates import DesignSlots, ViewFact
+from app.editing.timing import SOURCE_TIMEBASE
 
 # On-screen copy caps (one law for the factual slots — the launch-film
 # craft's reading-time bounds).
@@ -127,6 +129,22 @@ class LaunchFilmDirection(BaseModel):
         return {key: fold_one(value) for key, value in data.items()}
 
 
+class MgShapeAnswer(BaseModel):
+    """One native decorative primitive in normalized canvas coordinates."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    shape: Literal["rect", "ellipse"] = Field(validation_alias=AliasChoices("shape", "type"))
+    x: float = Field(ge=-0.25, le=1.0)
+    y: float = Field(ge=-0.25, le=1.0)
+    width: float = Field(gt=0, le=1.5)
+    height: float = Field(gt=0, le=1.5)
+    fill: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
+    opacity: float = Field(default=1.0, gt=0, le=1)
+    corner_radius: float = Field(default=0.0, ge=0, le=200)
+    motion: Literal["fade", "rise", "scale", "rotate"] = "fade"
+
+
 class MgSceneAnswer(BaseModel):
     """One motion-graphics scene (the no-skill free design)."""
 
@@ -136,10 +154,16 @@ class MgSceneAnswer(BaseModel):
     visual_description: str | None = Field(default=None, max_length=240)
     duration_seconds: float = Field(gt=0, le=30)
     lines: list[str] = Field(min_length=1, max_length=3)
+    narration: str | None = Field(
+        default=None,
+        max_length=9000,
+        description="Exact spoken copy for this scene; null only when narration is off.",
+    )
     size: Literal["medium", "large", "hero"] = "large"
     color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
     enter: Literal["fade", "rise", "lines", "words", "graphemes"] = "rise"
     align: Literal["left", "center", "right"] = "center"
+    shapes: list[MgShapeAnswer] = Field(default=[], max_length=4)
 
 
 class MgDirection(BaseModel):
@@ -151,6 +175,61 @@ class MgDirection(BaseModel):
     language: str | None = None
     background: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
     scenes: list[MgSceneAnswer] = Field(min_length=1, max_length=6)
+
+
+class ProgramDirection(BaseModel):
+    """The first controlled visual-program consumer (drawing-v1)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, max_length=24)
+    language: str | None = None
+    title: str | None = Field(default=None, max_length=100)
+    intent: str = Field(min_length=1, max_length=120)
+    visual_description: str | None = Field(default=None, max_length=240)
+    duration_seconds: float = Field(gt=0, le=6)
+    background: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
+    parameters: dict[str, str | float | bool] = Field(default={}, max_length=24)
+    code: str = Field(min_length=1, max_length=24000)
+
+
+class GeneratedImageDirection(BaseModel):
+    """The first model-image consumer: one background request plus native copy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, max_length=24)
+    language: str | None = None
+    title: str | None = Field(default=None, max_length=100)
+    intent: str = Field(min_length=1, max_length=120)
+    visual_description: str | None = Field(default=None, max_length=240)
+    duration_seconds: float = Field(gt=0, le=6)
+    prompt: str = Field(min_length=1, max_length=2000)
+
+
+class MixedCaptionAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=120)
+    start_seconds: float = Field(ge=0)
+    end_seconds: float = Field(gt=0)
+
+
+class MixedDirection(BaseModel):
+    """A real recording with native title/captions and synchronized sound."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, max_length=24)
+    language: str | None = None
+    source_snapshot_id: UUID
+    source_start_seconds: float = Field(ge=0)
+    source_end_seconds: float = Field(gt=0)
+    title: str = Field(min_length=1, max_length=100)
+    intent: str = Field(min_length=1, max_length=120)
+    visual_description: str | None = Field(default=None, max_length=240)
+    captions: list[MixedCaptionAnswer] = Field(default=[], max_length=16)
+    include_original_audio: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +390,8 @@ def resolve_launch_direction(
 
 
 def validate_mg_direction(direction: MgDirection, *, source_text: str | None = None,
-                          scene_count: int | None = None, target_seconds: float | None = None) -> None:
+                          scene_count: int | None = None, target_seconds: float | None = None,
+                          narration_text: str | None = None) -> None:
     """The MG answer's whole-answer bounds (total duration cap); scene-level
     shapes are the schema's own job."""
     total = sum(scene.duration_seconds for scene in direction.scenes)
@@ -325,6 +405,14 @@ def validate_mg_direction(direction: MgDirection, *, source_text: str | None = N
         )
         if actual != "".join(source_text.split()):
             raise DirectionRejected(["on-screen copy must preserve every source character in order"])
+    if narration_text is not None:
+        actual_narration = "".join(
+            "".join((scene.narration or "").split()) for scene in direction.scenes
+        )
+        if actual_narration != "".join(narration_text.split()):
+            raise DirectionRejected(["narration must preserve every supplied character in order"])
+    elif any(scene.narration is not None for scene in direction.scenes):
+        raise DirectionRejected(["narration is off for this design"])
     if total > 118:
         raise DirectionRejected(
             [f"the scenes total {total:.1f}s — over the 118s cap; shorten or drop a scene"]
@@ -335,3 +423,86 @@ def validate_mg_direction(direction: MgDirection, *, source_text: str | None = N
                 raise DirectionRejected(
                     [f"scene {i} line is {len(line)} chars (cap 40 — split it into another scene)"]
                 )
+
+
+def validate_program_direction(
+    direction: ProgramDirection,
+    *,
+    source_text: str | None = None,
+    target_seconds: float | None = None,
+) -> None:
+    if source_text is not None and (direction.title or "").strip() != source_text.strip():
+        raise DirectionRejected(
+            ["the native title must preserve the supplied on-screen copy exactly"]
+        )
+    if target_seconds is not None and abs(direction.duration_seconds - target_seconds) > 1 / 15:
+        raise DirectionRejected(
+            [f"the user requested {target_seconds:g}s, not {direction.duration_seconds:g}s"]
+        )
+
+
+def validate_generated_image_direction(
+    direction: GeneratedImageDirection,
+    *,
+    source_text: str | None = None,
+    target_seconds: float | None = None,
+) -> None:
+    if source_text is not None and (direction.title or "").strip() != source_text.strip():
+        raise DirectionRejected(
+            ["the native title must preserve the supplied on-screen copy exactly"]
+        )
+    if target_seconds is not None and abs(direction.duration_seconds - target_seconds) > 1 / 15:
+        raise DirectionRejected(
+            [f"the user requested {target_seconds:g}s, not {direction.duration_seconds:g}s"]
+        )
+
+
+def resolve_mixed_direction(
+    direction: MixedDirection,
+    *,
+    snapshot_facts: dict[UUID, dict],
+    target_seconds: float | None = None,
+) -> MixedDirection:
+    """Resolve a mixed design against the frozen source's real media facts."""
+    violations: list[str] = []
+    facts = snapshot_facts.get(direction.source_snapshot_id)
+    if facts is None or facts.get("kind") != "video":
+        violations.append("source_snapshot_id must name one of the supplied video snapshots")
+        duration = 0.0
+    else:
+        duration = float(facts.get("duration_ticks") or 0) / SOURCE_TIMEBASE
+        if duration <= 0:
+            violations.append("the selected video snapshot has no probed duration")
+    output_seconds = direction.source_end_seconds - direction.source_start_seconds
+    if output_seconds <= 0:
+        violations.append("source_end_seconds must be after source_start_seconds")
+    if direction.source_end_seconds > duration + 1 / SOURCE_TIMEBASE:
+        violations.append(f"the source window ends past the recording's real {duration:.3f}s duration")
+    if output_seconds > 118:
+        violations.append("the selected source window exceeds the 118s production limit")
+    if target_seconds is not None and abs(output_seconds - target_seconds) > 1 / 30:
+        violations.append(f"the user requested {target_seconds:g}s, not {output_seconds:g}s")
+    if not direction.title.strip():
+        violations.append("title must not be blank")
+    captions = sorted(direction.captions, key=lambda item: (item.start_seconds, item.end_seconds))
+    previous_end = 0.0
+    for index, caption in enumerate(captions, start=1):
+        if not caption.text.strip():
+            violations.append(f"caption {index} is blank")
+        if caption.end_seconds <= caption.start_seconds:
+            violations.append(f"caption {index} has a reversed window")
+        if caption.start_seconds < previous_end:
+            violations.append(f"caption {index} overlaps the previous caption")
+        if caption.end_seconds > output_seconds + 1 / SOURCE_TIMEBASE:
+            violations.append(f"caption {index} ends past the selected source window")
+        previous_end = caption.end_seconds
+    if violations:
+        raise DirectionRejected(violations)
+    has_audio = bool(((facts or {}).get("meta") or {}).get("media", {}).get("has_audio"))
+    return direction.model_copy(
+        update={
+            "title": direction.title.strip(),
+            "captions": captions,
+            "include_original_audio": direction.include_original_audio and has_audio,
+        }
+    )

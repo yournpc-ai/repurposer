@@ -38,12 +38,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.editing.schemas import (
     Animation,
+    AudioObject,
     Clip,
     ClipSource,
     CompositionContent,
     Object,
     Scene,
     SourceBinding,
+    SpeechObject,
     TimeRange,
     Track,
     VersionSettings,
@@ -283,7 +285,10 @@ def _apply_one(content: CompositionContent, op: Op, bound_digests: dict[UUID, st
     elif isinstance(op, UpdateClip):
         clip = _find_clip(content, op.clip_id)
         old_scene_id = clip.scene_id
-        if op.model_fields_set & {"range", "scene_id", "source", "object", "animations"}:
+        audio_only = isinstance(clip.object, (AudioObject, SpeechObject)) and (
+            op.object is None or isinstance(op.object, (AudioObject, SpeechObject))
+        )
+        if not audio_only and op.model_fields_set & {"range", "scene_id", "source", "object", "animations"}:
             _invalidate_visual_description(content, old_scene_id)
         if "range" in op.model_fields_set and op.range is not None:
             clip.range = op.range

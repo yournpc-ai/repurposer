@@ -8,9 +8,20 @@ clip window in output frames, keyframes clip-local), the static-source law
 
 from __future__ import annotations
 
+import json
 import pytest
 
 from app.editing.video_spec import CompileError, compile_video_spec
+from app.editing.schemas import (
+    Clip,
+    GeneratorObject,
+    LayoutBox,
+    ProgramOutput,
+    ShapeObject,
+    TimeRange,
+    Track,
+    VideoObject,
+)
 from test_editing_edits_pure import SNAPSHOT_FACTS, valid_content
 
 COMP_ID = "33333333-3333-3333-3333-333333333333"
@@ -19,12 +30,50 @@ VER_ID = "44444444-4444-4444-4444-444444444444"
 
 def compile_sample():
     content = valid_content()
+    content.timeline.tracks.append(
+        Track(
+            track_id="trk_shape", kind="visual", role="effect", order=2,
+            clips=[Clip(
+                clip_id="clp_shape", range=TimeRange(start=0, end=360000), scene_id=None,
+                source=None,
+                object=ShapeObject(
+                    kind="shape", object_id="obj_shape", shape="rect",
+                    layout=LayoutBox(x=40, y=50, width=320, height=180),
+                    fill="#3366FF", corner_radius=24,
+                ),
+                animations=[],
+            )],
+        )
+    )
+    generator = GeneratorObject(
+        kind="generator", object_id="obj_generator", runtime="drawing-v1",
+        code="function render(ctx) { return []; }",
+        output=ProgramOutput(
+            width=640, height=360, fps=15, duration_frames=60, background="#000000"
+        ),
+        layout=LayoutBox(x=0, y=0, width=1920, height=1080),
+    )
+    content.timeline.tracks.append(
+        Track(
+            track_id="trk_generator", kind="visual", role="main", order=3,
+            clips=[Clip(
+                clip_id="clp_generator", range=TimeRange(start=0, end=360000), scene_id=None,
+                source=None, object=generator, animations=[],
+            )],
+        )
+    )
     return compile_video_spec(
         content,
         SNAPSHOT_FACTS,
         composition_id=COMP_ID,
         version_id=VER_ID,
         content_digest="c" * 64,
+        generator_media={
+            "obj_generator": {
+                "program_digest": generator.program_digest(),
+                "media": {"storage_key": "generated/program.mp4", "digest": "d" * 64},
+            }
+        },
     )
 
 
@@ -64,6 +113,17 @@ def test_spec_shape_and_quantization():
 
     # Text clip: an explicit null source, never an absent key.
     assert clips["clp_title"]["source"] is None
+    assert clips["clp_shape"]["object"]["shape"] == "rect"
+    assert clips["clp_shape"]["object"]["fill"] == "#3366FF"
+    assert clips["clp_shape"]["source"] is None
+    assert clips["clp_generator"]["object"]["kind"] == "video"
+    assert clips["clp_generator"]["object"]["muted"] is True
+    assert clips["clp_generator"]["source"] == {
+        "url": "generated/program.mp4", "digest": "d" * 64,
+        "start_frame": 0, "end_frame": 120,
+    }
+    assert "drawing-v1" not in json.dumps(clips["clp_generator"])
+    assert "function render" not in json.dumps(clips["clp_generator"])
 
 
 def test_provenance_is_identity_not_renderer_state():
@@ -76,11 +136,54 @@ def test_provenance_is_identity_not_renderer_state():
         assert banned not in blob
 
 
+def test_video_source_window_preserves_one_x_output_frames_and_audio_controls():
+    content = valid_content()
+    clip = next(c for t in content.timeline.tracks for c in t.clips if c.clip_id == "clp_bg")
+    snapshot_id = clip.source.snapshot_id
+    clip.object = VideoObject(
+        kind="video", object_id="obj_bg", layout=clip.object.layout,
+        fit="contain", gain_db=-6.0, muted=True,
+    )
+    clip.source.source_range = TimeRange(start=45000, end=405000)  # 0.5–4.5s
+    facts = {**SNAPSHOT_FACTS, snapshot_id: {
+        **SNAPSHOT_FACTS[snapshot_id], "kind": "video", "duration_ticks": 540000,
+        "storage_key": "snapshots/video.mp4",
+    }}
+    spec = compile_video_spec(
+        content, facts, composition_id=COMP_ID, version_id=VER_ID, content_digest="c" * 64
+    )
+    compiled = next(c for t in spec["tracks"] for c in t["clips"] if c["clip_id"] == "clp_bg")
+    assert compiled["source"]["start_frame"] == 15
+    assert compiled["source"]["end_frame"] == 135  # exact 120-frame output window
+    assert compiled["object"]["fit"] == "contain"
+    assert compiled["object"]["gain_db"] == -6.0
+    assert compiled["object"]["muted"] is True
+
+
 def test_missing_snapshot_facts_fail_compile():
     content = valid_content()
     with pytest.raises(CompileError, match="not resolved"):
         compile_video_spec(
             content, {}, composition_id=COMP_ID, version_id=VER_ID, content_digest="c" * 64
+        )
+
+
+def test_generator_requires_media_for_the_exact_program():
+    content = valid_content()
+    clip = next(c for t in content.timeline.tracks for c in t.clips if c.clip_id == "clp_bg")
+    clip.object = GeneratorObject(
+        kind="generator", object_id="obj_bg", runtime="drawing-v1",
+        code="function render(ctx) { return []; }",
+        output=ProgramOutput(
+            width=640, height=360, fps=15, duration_frames=60, background="#000000"
+        ),
+        layout=clip.object.layout,
+    )
+    clip.source = None
+    with pytest.raises(CompileError, match="exact program"):
+        compile_video_spec(
+            content, SNAPSHOT_FACTS, composition_id=COMP_ID, version_id=VER_ID,
+            content_digest="c" * 64,
         )
 
 

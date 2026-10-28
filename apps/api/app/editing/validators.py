@@ -17,9 +17,14 @@ from app.editing.schemas import (
     AudioObject,
     Clip,
     CompositionContent,
+    GeneratorObject,
     ImageObject,
+    ShapeObject,
+    SpeechObject,
     TextObject,
+    VideoObject,
     WebObject,
+    speech_text_digest,
 )
 from app.editing.timing import source_ticks_to_output_ticks, ticks_to_frames
 
@@ -39,9 +44,25 @@ def _validate_clip_source(
 ) -> None:
     obj = clip.object
     src = clip.source
-    if isinstance(obj, TextObject):
+    if isinstance(obj, GeneratorObject):
         if src is not None:
-            _fail(problems, f"clip {clip.clip_id}: text objects take no media source")
+            _fail(problems, f"clip {clip.clip_id}: generator sources are prepared, not bound media")
+        if obj.runtime == "drawing-v1":
+            expected_ticks = obj.output.duration_frames * content.settings.timebase // obj.output.fps
+            if (
+                expected_ticks * obj.output.fps != obj.output.duration_frames * content.settings.timebase
+                or expected_ticks != clip.range.duration
+            ):
+                _fail(
+                    problems,
+                    f"clip {clip.clip_id}: program output frames/fps must exactly match its output window",
+                )
+        return
+    if isinstance(obj, (TextObject, ShapeObject)):
+        if src is not None:
+            _fail(problems, f"clip {clip.clip_id}: {obj.kind} objects take no media source")
+        if isinstance(obj, ShapeObject):
+            return
         if obj.segmentation_version != SEGMENTATION_VERSION:
             _fail(problems, f"clip {clip.clip_id}: unsupported text segmentation version")
         if obj.layout_version != LAYOUT_VERSION:
@@ -50,6 +71,10 @@ def _validate_clip_source(
             font_resources(obj.style.font.font_id, obj.style.font.digest, {obj.style.weight})
         except ValueError as exc:
             _fail(problems, f"clip {clip.clip_id}: {exc}")
+        return
+    if isinstance(obj, SpeechObject):
+        if src is not None:
+            _fail(problems, f"clip {clip.clip_id}: pending speech has no bound media source")
         return
     if src is None:
         _fail(problems, f"clip {clip.clip_id}: {obj.kind} objects require a source")
@@ -96,16 +121,21 @@ def _validate_clip_source(
                 )
         return
 
-    if isinstance(obj, AudioObject):
-        if facts["kind"] != "audio":
+    if isinstance(obj, (AudioObject, VideoObject)):
+        expected_kind = "audio" if isinstance(obj, AudioObject) else "video"
+        if facts["kind"] != expected_kind:
             _fail(
-                problems, f"clip {clip.clip_id}: audio object bound to a {facts['kind']} snapshot"
+                problems,
+                f"clip {clip.clip_id}: {expected_kind} object bound to a {facts['kind']} snapshot",
             )
         if src.source_range is None:
-            _fail(problems, f"clip {clip.clip_id}: audio sources require a source_range")
+            _fail(problems, f"clip {clip.clip_id}: {expected_kind} sources require a source_range")
             return
         duration = facts.get("duration_ticks")
-        if duration is not None and src.source_range.end > duration:
+        if duration is None:
+            _fail(problems, f"clip {clip.clip_id}: source snapshot has no probed duration")
+            return
+        if src.source_range.end > duration:
             _fail(
                 problems,
                 f"clip {clip.clip_id}: source_range ends past the source's real duration "
@@ -145,9 +175,9 @@ def _validate_animation(
             f"animation {anim.animation_id}: target {anim.target_object_id} is not an object "
             f"of its owning clip {clip.clip_id} (cross-clip targets never resolve)",
         )
-    if anim.property == "audio.gain" and not isinstance(obj, AudioObject):
+    if anim.property == "audio.gain" and not isinstance(obj, (AudioObject, SpeechObject, VideoObject)):
         _fail(problems, f"animation {anim.animation_id}: audio.gain on a non-audio object")
-    if anim.property != "audio.gain" and isinstance(obj, AudioObject):
+    if anim.property != "audio.gain" and isinstance(obj, (AudioObject, SpeechObject)):
         _fail(problems, f"animation {anim.animation_id}: visual property on an audio object")
 
     seen_at: set[int] = set()
@@ -240,7 +270,7 @@ def validate_content(content: CompositionContent, snapshots: SnapshotFacts) -> N
 
     total_ticks = 0
     scene_ids = {scene.scene_id for scene in content.scenes}
-    clip_ids: set[str] = set()
+    clips_by_id: dict[str, Clip] = {}
 
     for track in content.timeline.tracks:
         seen_orders = [item.order for item in content.timeline.tracks if item.kind == track.kind]
@@ -258,12 +288,17 @@ def validate_content(content: CompositionContent, snapshots: SnapshotFacts) -> N
                     "overlap on one track",
                 )
         for clip in track.clips:
-            clip_ids.add(clip.clip_id)
+            clips_by_id[clip.clip_id] = clip
             total_ticks = max(total_ticks, clip.range.end)
-            if track.kind == "audio" and not isinstance(clip.object, AudioObject):
+            if track.kind == "audio" and not isinstance(clip.object, (AudioObject, SpeechObject)):
                 _fail(problems, f"clip {clip.clip_id}: non-audio object on an audio track")
-            if track.kind == "visual" and isinstance(clip.object, AudioObject):
+            if track.kind == "visual" and isinstance(clip.object, (AudioObject, SpeechObject)):
                 _fail(problems, f"clip {clip.clip_id}: audio object on a visual track")
+            if isinstance(clip.object, SpeechObject) and track.role != "dialogue":
+                _fail(problems, f"clip {clip.clip_id}: speech requires a dialogue track")
+            if isinstance(clip.object, TextObject) and clip.object.caption is not None:
+                if track.kind != "visual" or track.role != "caption":
+                    _fail(problems, f"clip {clip.clip_id}: derived captions require a visual caption track")
             if clip.scene_id is not None and clip.scene_id not in scene_ids:
                 _fail(problems, f"clip {clip.clip_id}: scene {clip.scene_id} does not exist")
             _validate_clip_source(clip, content, snapshots, problems)
@@ -289,6 +324,31 @@ def validate_content(content: CompositionContent, snapshots: SnapshotFacts) -> N
                     seen_targets.add(key)
                 _validate_animation(clip, anim, content, problems)
 
+    speech_clips = {
+        clip.object.object_id: clip
+        for clip in clips_by_id.values()
+        if isinstance(clip.object, SpeechObject)
+    }
+    for clip in clips_by_id.values():
+        if not isinstance(clip.object, TextObject) or clip.object.caption is None:
+            continue
+        derivation = clip.object.caption
+        speech_clip = speech_clips.get(derivation.speech_object_id)
+        if speech_clip is None:
+            _fail(problems, f"clip {clip.clip_id}: caption speech source does not exist")
+            continue
+        if clip.scene_id != speech_clip.scene_id:
+            _fail(problems, f"clip {clip.clip_id}: caption and speech must belong to the same scene")
+        if derivation.state == "derived" and clip.range != speech_clip.range:
+            _fail(problems, f"clip {clip.clip_id}: derived caption must share its speech window")
+        speech = speech_clip.object
+        assert isinstance(speech, SpeechObject)
+        if derivation.state == "derived" and (
+            clip.object.text != speech.text
+            or derivation.source_text_digest != speech_text_digest(speech.text)
+        ):
+            _fail(problems, f"clip {clip.clip_id}: derived caption does not match its speech text")
+
     for scene in content.scenes:
         if total_ticks and scene.range.end > total_ticks:
             _fail(
@@ -296,8 +356,18 @@ def validate_content(content: CompositionContent, snapshots: SnapshotFacts) -> N
                 f"scene {scene.scene_id}: range ends past the timeline's last clip",
             )
         for ref in scene.speech_clip_ids:
-            if ref not in clip_ids:
+            speech_clip = clips_by_id.get(ref)
+            if speech_clip is None:
                 _fail(problems, f"scene {scene.scene_id}: speech clip {ref} does not exist")
+            elif not isinstance(speech_clip.object, SpeechObject):
+                _fail(problems, f"scene {scene.scene_id}: clip {ref} is not a SpeechClip")
+            elif speech_clip.scene_id != scene.scene_id:
+                _fail(problems, f"scene {scene.scene_id}: speech clip {ref} belongs to another scene")
+            elif (
+                speech_clip.range.start < scene.range.start
+                or speech_clip.range.end > scene.range.end
+            ):
+                _fail(problems, f"scene {scene.scene_id}: speech clip {ref} escapes the reviewed scene window")
 
     if content.timeline.transitions:
         _fail(problems, "transitions are not supported in this slice")

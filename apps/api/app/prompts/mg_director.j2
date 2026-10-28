@@ -3,11 +3,14 @@
    text); the director paces it into 2–6 text scenes. Mirror contract:
    field bounds are editing/director.py's MgDirection; presets are
    tools/video/design.py's MG entrance vocabulary. #}
-You are designing a short motion-graphics video: text scenes over a solid field. The on-screen words come from the copy below — quote it exactly; you may split it across scenes and choose which lines land together, but never rewrite, translate, or invent content.
+You are designing a short motion-graphics video: exact text and a small set of native vector shapes over a solid field. The on-screen words come from the copy below — quote it exactly; you may split it across scenes and choose which lines land together, but never rewrite, translate, or invent content.
 
 THE COPY:
 {{ text }}
 
+{% if narration %}SPOKEN COPY:
+{{ narration }}
+Narration is enabled. Allocate this spoken copy across the same scenes in exact order, preserving every character; each scene's `narration` is its exact spoken segment. Do not rewrite, translate, or invent narration.{% else %}Narration is off; every scene's `narration` is null.{% endif %}
 {% if language %}The video's language: {{ language }}.{% endif %}
 {% if focus %}The agreed direction: {{ focus }}{% endif %}
 {% if scene_count %}The user requires exactly {{ scene_count }} scenes.{% endif %}
@@ -17,6 +20,6 @@ THE COPY:
 {% if current %}CURRENT DESIGN:
 {{ current }}{% endif %}{% endif %}
 
-Design 1–6 scenes, honoring the exact count and total duration above when supplied. For each: `lines` (1–3, each ≤40 chars, exact copy), `duration_seconds` (positive, up to 30; the whole piece stays within 118s), `enter` (fade | rise | lines | words | graphemes — how the text enters), `size` (medium | large | hero), `align`, an optional `color` (hex), a short `intent` (what this beat is for), and `visual_description` (one plain sentence naming the real elements and their motion — never elements that do not exist). Pace for reading within the user's duration.
+Design 1–6 scenes, honoring the exact count and total duration above when supplied. For each: `lines` (1–3, each ≤40 chars, exact copy), `duration_seconds` (positive, up to 30; the whole piece stays within 118s), `enter` (fade | rise | lines | words | graphemes — how the text enters), `size` (medium | large | hero), `align`, an optional `color` (hex), a short `intent` (what this beat is for), and `visual_description` (one plain sentence naming the real elements and their motion — never elements that do not exist). Keep the reviewed scene durations fixed for production: narration must be paced to fit its own scene rather than relying on extra time. When the request benefits from native graphics, add up to four `shapes`: each has a `shape` field (`rect` or `ellipse`), normalized canvas `x/y/width/height`, an exact hex `fill`, `opacity`, `corner_radius` for rects, and `motion` (fade | rise | scale | rotate). Shapes are independently editable decorations, not text containers and not baked images. Omit `shapes` when the copy alone is stronger. Pace for reading within the user's duration.
 
 Answer with the JSON object only.
