@@ -1,27 +1,25 @@
 # LANDING — 落地页叙事工作文档
 
-> Status: 活跃工作文档（2026-10-25）——落地页叙事/结构的唯一事实源；竞品证据引用 `research/flora.md`，排期只引用 `PROGRESS.md`。
-> 读法：§1 当前结构，§2 叙事立场，§3 当前 hero，§4 仍未实施的迭代方向。Studio chat/画布行为不在此复制，分别归 CHAT_ARCHITECTURE 与 UI_GUIDELINES。
+> Status: 活跃工作文档（2026-10-29）——落地页叙事/结构的唯一事实源；排期只引用 `PROGRESS.md`。
 
-## 1. 现状结构（滚动序）
+## 1. 当前结构
 
-Hero（标题对 + 副标题 + 双 CTA，ASCII 波场氛围）→ 对比滑块 VideoShowcase（sticky 生长，raw → result 真实产物对）→ Manifesto（宣言一段）→ How it works（AppShowcase 四步）→ Channels（渠道×语言矩阵）→ Pricing → FAQ → FinalCta。
+首页为一屏：LandingHeader + LandingHero，保留原有 ASCII 波场、字体、主题/语言切换、按钮和入场动效。Hero 内容容器最大 1152px，说明最大 768px；桌面标题两行，每行不额外折行，小屏自适应。页面不挂载 SmoothScroll，首屏扣除导航高度。
 
-- **隐藏中（注释于 `routes/index.tsx`，未删除）**：Gallery（"Made from one source"——产物卡全是虚构文案，实物感不达标）与 Testimonials（"In their own words"——引语不可验证）。锚点死链已清（header Features 下拉 posts 项、footer features.l3）。恢复 = 取消注释并补回两个菜单项。
-- 每个 section 占满视口（`min-h-svh` + 垂直居中）；滚动层级感知 = 一屏一幕。
+VideoShowcase、Manifesto、AppShowcase、Channels、Pricing、FAQ、FinalCta、Footer、Gallery 与 Testimonials 不挂载，组件源码保留。导航移除对应锚点，保留 App、社群和开发计划入口；社群与开发计划当前为明确标注的 mock 弹窗，真实链接待接入。App 沿用既有登录及 `/home` 链路。
 
-## 2. 叙事立场（已拍板）
+## 2. 叙事立场
 
-- **单助手（agent 叙事），口吻永久单数**：用户只说话、工具素养不可假设——这是定位推导，不是文案偏好。FLORA 的"器物主角/工具叙事"不适用（它默认用户懂工具，卖画布给专业创意人）。
-- **角色署名（导演/音乐等内部子 agent 落到用户面）**：讨论封存，不做。对话层与感知层都保持"它"一个。
-- **用户面自称**：assistant/助手，zh 代词"它"（NAMING N-25 不变）。
-- hero 标题对仗结构（You X / We do the rest）保留，文案可换。
+- 定位为内容创作 Agent，不以演讲再利用或知识专家人群定义产品。
+- 单助手叙事：用户提出目标，通过对话完成创作与修订；内部工具与子 agent 不承担品牌主语。
+- 不虚构发布、合规、渠道或质量承诺。多形态是能力，不是一次输入固定生成全套的承诺。
+- 隐藏的作品区仍须满足真实产物、公开权限和制作链验收；Testimonials 仍须具备真实可核查背书才可恢复。
 
 ## 3. 当前 Hero
 
-- 英文：`You did the talking` / `We do the rest`；中文：`你讲完了` / `剩下的交给我们`。事实源 = `apps/web/src/lib/i18n/locales/en.ts` 与 `zh.ts` 的 `landing.heroTitle1/2`。
-- 副标题说明专家已有素材、助手给建议/计划/交付的风格与发布动作；修改时必须保持 multi-output 是能力而非固定套餐，且不虚构渠道、合规或质量承诺。
-- 后续文案迭代保留 You X / We do the rest 的对仗与单一 assistant 叙事；旧四方向候选不再是待拍板清单。新方向只有进入当前产品决策后才写入本节。
+- 英文：`Your content` / `creation agent`；说明：`Create videos with motion graphics, rich animation, and precise editing—all through conversation.`
+- 中文：`你的内容` / `创作 Agent`；说明：`通过对话，轻松制作融合动态图形、丰富动画与精细剪辑的视频。`
+- 文案事实源为 `en.ts` / `zh.ts` 的 `landing.heroTitle1/2` 与 `heroSubtitle`，页面 metadata 同步。Hero 主按钮为 Go to app / 前往应用，次按钮为加入社群。
 
 ## 4. 迭代清单
 
@@ -29,7 +27,7 @@ Hero（标题对 + 副标题 + 双 CTA，ASCII 波场氛围）→ 对比滑块 V
 
 当前 section 与隐藏状态以 §1 和 `apps/web/src/routes/index.tsx` 为准；落地页改动只更新该现状，不保留逐轮交付清单。FlowView、ChatDock、配方点击和项目工作区的长期规则分别归 `UI_GUIDELINES.md`、`CHAT_ARCHITECTURE.md` 与 `RECIPES.md`，不在本文维护第二份 Studio 规范。
 
-### P2 — 叙事骨架：六幕 + 商务尾（缓做）
+### 长页证据叙事（未排期，不在当前首页呈现）
 
 映射原则：hero 一句话 + 产物证据铺满各幕。FLORA 九幕弧线（identity → 新模块 → 上限 → 过程 → 行业 → 起步 → 价值 → 背书 → 愿景，证据见 `research/flora.md` §2）收敛为**六幕叙事 + 商务尾**；砍掉的三幕均服务专业工具叙事，见本节不采纳清单。
 

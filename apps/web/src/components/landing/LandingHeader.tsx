@@ -12,6 +12,7 @@ import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
 import { useAuth } from "@/lib/auth-context"
+import { LandingInfoDialog } from "@/components/landing/LandingInfoDialog"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { useReducedMotion } from "@/components/landing/motion"
 import { LogoMark } from "@/components/LogoMark"
@@ -25,6 +26,9 @@ import { Button } from "@/components/ui/button"
  * header level for smooth cross-item travel. Styled to our conventions:
  * overlay-surface (no border), rounded-lg panel, regular-weight triggers.
  */
+// The long-form menus stay available with the hidden landing sections.
+const SHOW_LONG_FORM_NAV = false
+
 const MENU_EASE = [0.23, 1, 0.32, 1] as const
 
 type NavMenu = {
@@ -227,10 +231,10 @@ export function LandingHeader() {
   }, [])
 
   return (
-    <header className="sticky top-0 z-50 backdrop-blur-md">
+    <header className="relative z-50 shrink-0 backdrop-blur-md">
       {/* Equal flex-1 side slots keep the nav optically centered — no
           absolute left-1/2 hack, so centering holds at any content width. */}
-      <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center px-5 sm:px-8 lg:px-10">
+      <div className="mx-auto flex min-h-16 w-full max-w-[1440px] flex-wrap items-center gap-y-1 py-2 px-5 sm:px-8 lg:px-10">
         <div className="flex flex-1 items-center">
           <a href="#top" className="flex items-center gap-2">
             <LogoMark />
@@ -238,8 +242,8 @@ export function LandingHeader() {
           </a>
         </div>
 
-        <nav className="hidden items-center gap-1 md:flex">
-          {NAV_ITEMS.map((item) =>
+        <nav aria-label={t("landing.entry.navigation")} className="order-last flex w-full items-center justify-center gap-1 md:order-none md:w-auto">
+          {SHOW_LONG_FORM_NAV ? NAV_ITEMS.map((item) =>
             item.menu ? (
               <NavDropdown
                 key={item.id}
@@ -260,6 +264,10 @@ export function LandingHeader() {
                 {t(item.labelKey)}
               </a>
             )
+          ) : (
+            <>
+              <LandingInfoDialog kind="roadmap" className="inline-flex h-9 items-center rounded-md px-3 text-sm text-muted-foreground transition-colors hover:text-foreground" />
+            </>
           )}
         </nav>
 
@@ -269,7 +277,7 @@ export function LandingHeader() {
           {isAuthenticated ? (
             <Button render={<Link to="/home" />}>{t("landing.openStudio")}</Button>
           ) : (
-            <Button onClick={() => setLoginOpen(true)}>{t("landing.signIn")}</Button>
+            <Button onClick={() => setLoginOpen(true)}>{t("landing.openStudio")}</Button>
           )}
         </div>
       </div>
