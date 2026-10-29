@@ -572,8 +572,8 @@ const en = {
           prompt:
             "Turn this website into a product demo that presents its key features with concise on-screen explanations: {{placeholder}}",
         },
-        // Website-source demos use the capture flow. The two remaining reused
-        // videos keep upload-based prompts and are layout placeholders only.
+        // Website-source demos use the capture flow; video-source entries keep
+        // upload-based prompts.
         "product-demo-walkthrough": {
           prompt:
             "I want to turn my uploaded video or screen recording into an operation walkthrough — pick the key steps and add short explanations. Please look at my material first, align with me on the demo's focus, then propose a plan.",

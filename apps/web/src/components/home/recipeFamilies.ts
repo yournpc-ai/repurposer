@@ -16,7 +16,7 @@
  * 上架纪律: `resolveFamilies` drops empty shelves → empty subs → empty
  * families, so a family without demos never renders, not even a placeholder
  * seat (连摆位都不摆). A demo video SHOULD be a real render of the shelf's
- * capability; two reused product-demo entries temporarily ride REUSED
+ * capability; one reused product-demo entry temporarily rides REUSED
  * existing renders as pure layout placeholders (each entry's comment names
  * its source) — a placeholder proves the shelf's layout, never the
  * capability, and swapping in a real sample is a data-only edit.
@@ -121,7 +121,7 @@ export function recipeCardFamily(card: RecipePublic): string {
  * zero component changes to turn them on. The product-demo / text-short subs
  * are LIVE shelves. Any remaining placeholder entries are marked
  * individually below; the text-short entries and the product-demo shelf's
- * first two entries are real film-chain renders. */
+ * first three entries are real video-chain renders. */
 export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
   {
     // Ads — Film-led text shorts and product demos. First seat = the home
@@ -129,8 +129,8 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
     id: "ads",
     subs: [
       {
-        // 产品宣传 — the first two entries are real film-chain renders. The
-        // remaining two reused entries stay explicitly marked as placeholders.
+        // 产品宣传 — the first three entries are real video-chain renders.
+        // The remaining reused entry stays explicitly marked as a placeholder.
         id: "product-demo",
         shelves: [
           {
@@ -153,11 +153,11 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
                 orientation: "wide",
               },
               {
-                // 视频配文字说明 — placeholder: reuses the snappify "Frame"
-                // vertical launch film.
+                // AgentVeil in Motion — latest delivered video from project
+                // bd2b2f2e, output 558c6547; 88.1s / 16:9.
                 id: "product-demo-captioned",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-snappify-frame-0ef913dd.mp4",
-                orientation: "vertical",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/product-demo-agentveil-in-motion-420b7ffe.mp4",
+                orientation: "wide",
               },
               {
                 // 操作流程演示 — placeholder: reuses the zymix.ai wide
